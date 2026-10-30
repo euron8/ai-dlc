@@ -380,24 +380,23 @@ trap 'kill '"$LOCKPID"' 2>/dev/null; rm -rf "$WORK"' EXIT
 #      the caller judges it as it stands. The owner is a pid the subject or a stub RECORDED (the status
 #      file's `pid`, a stub's own `$$`), never the lock's line 1: the lock-writer mutants make that a
 #      live process that never releases anything.
-#   2  NO PROGRESS: a signature of the subject's observable state (files it writes, the liveness of
-#      what it recorded, a group's members with their state and CPU time) printed the same thing for
-#      AW_STALL consecutive polls. Callers that wait for a hang to END treat this as a REFUSAL --
-#      the line goes to AW_STALL_LOG and aw_gate turns it into FIXTURE BROKEN, exit 2 -- and never as
-#      a FAIL. The two callers that wait to see whether a process LEAKED read it as the leak itself:
-#      a member that outlived its leader and moved nothing for AW_STALL polls is a leak by definition.
-# THE WINDOW IS COUNTED IN POLLS, AND EVERY POLL FORKS, so a loaded box polls more slowly and the
-# window widens with the load instead of shrinking under it. A correct subject that is slow but
-# advancing resets the count on every poll that sees it move; nothing is ever judged on elapsed time.
-# AW_STALL=100 IS a margin over one observed step, not a measurement; a refusal costs a re-run, never a
-# verdict.
-AW_LIB="$WORK/aw.sh"; AW_STALL_LOG="$WORK/aw.stall"; AW_STALL="${AW_STALL:-100}"
-export AW_LIB AW_STALL_LOG AW_STALL
+#   2  FINAL: the caller's final predicate holds -- a fact about KERNEL STATE that no amount of waiting
+#      changes, never a count of polls: aw_group_settled (every live member of a group is blocked with
+#      no signal pending, so the group will never empty on its own -- the leak itself) or aw_overslept (the
+#      watchdog's own timer, blocked, has outlived the promised ceiling by its kernel-kept elapsed time).
+# NO WAIT HERE ENDS ON A WINDOW OF POLLS OR ON ELAPSED TIME (BL-868). The no-progress net this replaced
+# read "nothing moved for 100 polls" as a stall, so a loaded box read a dying member as a survivor and
+# a slow trace as a hang, and refused the run. A process that was signalled is runnable, exiting or
+# carries the signal pending -- never blocked with nothing pending -- so the predicates cannot fire on
+# one that is still ending, at any load. A wait whose subject never reaches either state blocks until
+# the gate's own watchdog takes the run, which is a hang to read, never a verdict.
+AW_LIB="$WORK/aw.sh"; AW_STALL_LOG="$WORK/aw.stall"
+export AW_LIB AW_STALL_LOG
 cat > "$AW_LIB" <<'AW'
 # Every local is `_aw_`-prefixed: the three commands are eval'd in the CALLER's scope, and the drivers'
 # own names (`o`, `lk`, `tp`, `pid`) must not be shadowed while they are read.
-aw_wait() { # <event cmd> <owner cmd, may be empty> <signature cmd>; 0 event, 1 owner gone, 2 no progress
-  local _aw_ev="$1" _aw_ow="$2" _aw_sg="$3" _aw_last="" _aw_cur _aw_pid _aw_still=0
+aw_wait() { # <event cmd> <owner cmd, may be empty> <final cmd, may be empty>; 0 event, 1 owner gone, 2 final
+  local _aw_ev="$1" _aw_ow="$2" _aw_fi="$3" _aw_pid
   while :; do
     eval "$_aw_ev" && return 0
     if [ -n "$_aw_ow" ]; then
@@ -407,23 +406,56 @@ aw_wait() { # <event cmd> <owner cmd, may be empty> <signature cmd>; 0 event, 1 
         *) if ! kill -0 "$_aw_pid" 2>/dev/null; then eval "$_aw_ev" && return 0; return 1; fi ;;
       esac
     fi
-    _aw_cur="$(eval "$_aw_sg")"
-    if [ "$_aw_cur" = "$_aw_last" ]; then _aw_still=$((_aw_still + 1)); else _aw_still=0; _aw_last="$_aw_cur"; fi
-    [ "$_aw_still" -ge "${AW_STALL:-100}" ] && return 2
+    if [ -n "$_aw_fi" ] && eval "$_aw_fi"; then eval "$_aw_ev" && return 0; return 2; fi
     ${AW_SLEEP:-sleep} 0.1
   done
 }
-# A pgid of 0 is refused: BSD `pgrep -g 0` means pgrep's OWN group, whose forks move every poll, so the
-# wait could never stall. The member list is printed itself as well as fed to `ps`, so a `ps` that is
-# refused (under sandbox-exec the setuid /bin/ps is not exec'd) still leaves a signature that moves when
-# a member starts or dies -- the net degrades to membership, it does not go dead.
-aw_group_sig() { # <pgid>: every live member, with its state and CPU time where ps answers
-  local l
-  case "$1" in ''|0|*[!0-9]*) return 0 ;; esac
-  l="$(pgrep -g "$1" 2>/dev/null | tr '\n' ',')"; l="${l%,}"
-  printf '%s;' "$l"
-  [ -n "$l" ] && ps -o pid=,stat=,time= -p "$l" 2>/dev/null | tr -s ' \n' '  '
-  :
+# aw_blocked <pid>: 0 when <pid> is alive, BLOCKED (state S, I or T) and has NO signal pending -- a process
+# nothing is going to end: it will not run until something signals it. A process that was signalled is R, E or Z
+# with the signal taken, or still shows it pending, and reads 1, as does a gone one. A pid alive whose state `ps`
+# will not give (a sandbox refuses the setuid /bin/ps) is a refusal in AW_STALL_LOG and reads 0, so the wait ends.
+aw_blocked() {
+  local _ab_st _ab_pd
+  kill -0 "$1" 2>/dev/null || return 1
+  _ab_st="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; _ab_pd="$(ps -o pending= -p "$1" 2>/dev/null | tr -d ' ')"
+  if [ -z "$_ab_st" ]; then
+    kill -0 "$1" 2>/dev/null || return 1
+    printf 'aw_blocked: ps gives no state for live pid %s, so whether it will end cannot be read\n' "$1" >> "$AW_STALL_LOG"; return 0
+  fi
+  case "$_ab_st" in S*|I*|T*) ;; *) return 1 ;; esac
+  case "$_ab_pd" in ''|*[!0]*) return 1 ;; esac
+  return 0
+}
+# aw_group_settled <pgid>: 0 when the group has a live member and EVERY live member is aw_blocked -- the group
+# will never empty on its own. THIS REPLACES THE NO-PROGRESS NET, which read "nothing moved for AW_STALL polls"
+# and so read a dying member on a loaded box as a survivor. A member that was signalled is never blocked with
+# nothing pending, so a group that is emptying never settles, at any load; one that a missing kill left behind does.
+aw_group_settled() {
+  local _ag_l _ag_p _ag_n=0
+  case "$1" in ''|0|*[!0-9]*) return 1 ;; esac
+  _ag_l="$(pgrep -g "$1" 2>/dev/null)"
+  for _ag_p in $_ag_l; do
+    kill -0 "$_ag_p" 2>/dev/null || continue
+    aw_blocked "$_ag_p" || return 1
+    _ag_n=$((_ag_n + 1))
+  done
+  [ "$_ag_n" -gt 0 ]
+}
+# aw_overslept <pgid> <seconds>: 0 when the group holds a `sl``eep` that is aw_blocked and has run longer than
+# <seconds> by its own kernel-kept elapsed time -- a timer longer than the promise. A timer that has run out is
+# runnable (R) or gone, never blocked, so no load makes a correct ceiling read here.
+aw_overslept() {
+  local _ao_p _ao_c _ao_e
+  case "$1" in ''|0|*[!0-9]*) return 1 ;; esac
+  for _ao_p in $(pgrep -g "$1" 2>/dev/null); do
+    _ao_c="$(ps -o comm= -p "$_ao_p" 2>/dev/null)"; _ao_c="${_ao_c##*/}"
+    [ "$_ao_c" = "sl""eep" ] || continue
+    aw_blocked "$_ao_p" || continue
+    _ao_e="$(ps -o etime= -p "$_ao_p" 2>/dev/null | tr -d ' ' | awk -F'[-:]' '{ n = NF; t = $n + $(n - 1) * 60; if (n >= 3) t += $(n - 2) * 3600; if (n >= 4) t += $(n - 3) * 86400; print t }')"
+    case "$_ao_e" in ''|*[!0-9]*) continue ;; esac
+    [ "$_ao_e" -gt "$2" ] && return 0
+  done
+  return 1
 }
 aw_status_pid() { sed -n 's/^pid //p' "$1" 2>/dev/null; } # the trace subshell's pid, as IT wrote it
 aw_stalled() { printf '%s\n' "$1" >> "$AW_STALL_LOG"; } # <subject neither exited nor advanced <marker>>
@@ -637,6 +669,52 @@ f2b_world() { # <seed fn> <dst> [seed args]
   [ ! -e "$dst" ] || return 1
   mkdir -p "$(dirname "$dst")" && cp -Rp "$k" "$dst"
 }
+
+# inproc [-i] [-u VAR]... [VAR=val]... -- <script> [args]: run <script> IN PROCESS, in the CALLER'S subshell, the way
+# `env [-i] [-u VAR]... [VAR=val]... bash <script> [args]` runs it in a new process. Call it inside `( ... )`: it
+# replaces the subshell's state. A new bash inherits only EXPORTED variables, no function and no trap of its parent,
+# so this unsets every non-exported variable the fixture set (bash's own specials kept), every function, and the
+# subshell's traps; `-i` also unsets every exported one but HOME and PATH unless re-set. Then the script is SOURCED:
+# a program behind a BASH_SOURCE guard (the deriver) loads its definitions and returns at the guard, and its main
+# (rs_main) is called with the args; a plain script (hermetic-run.sh, a decision driver) simply runs. `exit` in either
+# ends this subshell with the status a process would have returned. Its output, files and exit are compared with the
+# CLI's in the equivalence cell beside the tracer unit, which is what makes this a stand-in rather than a model.
+# STATED DIFFERENCE: `$$` in the script is the fixture's pid (bash 3.2 has no BASHPID), so the deriver's
+# `pkill -P $$ -x fs_usage` cannot reach a stub fs_usage forked from this subshell; every stub world reaps its stubs
+# by recorded pid (stub_reap), so no verdict reads it. The --tracer both stub world's fs_usage reaping waits are
+# injected (READSET_SLEEP_CMD) and keyed on the capture holding the stub's last line, not on the clock.
+inproc() {
+  local _ip_v _ip_keep
+  _ip_keep=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) for _ip_v in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p'); do
+            case "$_ip_v" in HOME|PATH) ;; *) unset "$_ip_v" 2>/dev/null ;; esac
+          done; shift ;;
+      -u) unset "$2"; shift 2 ;;
+      --) shift; break ;;
+      *=*) export "$1"; shift ;;
+      *) echo "inproc: not an env word: '$1'" >&2; return 97 ;;
+    esac
+  done
+  [ -f "$1" ] || { echo "inproc: no script '$1'" >&2; return 97; }
+  trap - EXIT INT TERM HUP
+  for _ip_v in $(compgen -A function); do unset -f "$_ip_v"; done
+  _ip_keep=" $(compgen -e | tr '\n' ' ') "
+  for _ip_v in $(compgen -v); do
+    case "$_ip_v" in
+      BASH*|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE|IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELLOPTS|SHLVL|UID|_ip_v|_ip_keep) continue ;;
+    esac
+    case "$_ip_keep" in *" $_ip_v "*) continue ;; esac
+    unset "$_ip_v" 2>/dev/null
+  done
+  unset _ip_keep
+  set +u +e +m; set +o pipefail
+  . "$@"
+  if declare -F rs_main >/dev/null; then shift; rs_main "$@"; fi
+}
+# rs_drive [env words] -- <deriver> [args]: the deriver, in process. Call inside `( cd <repo> && rs_drive ... )`.
+rs_drive() { inproc "$@"; }
 
 if sg arms; then
 # ------------------------------------------------------------------------- arm 1-6 ----
@@ -1399,8 +1477,7 @@ sha_of() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
 # correct launcher. The owner is the status file's `pid`, written by the subshell itself.
 lt_wait() { # <lock dir>
   local lw="$1"
-  aw_wait '[ ! -d "$lw" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lw" 2>/dev/null)"'
+  aw_wait '[ ! -d "$lw" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
   [ "$?" = 2 ] && aw_stalled "the live trace neither released $lw nor advanced its status file"
   :
 }
@@ -1410,9 +1487,12 @@ lt_wait() { # <lock dir>
 # the process that will write it, is alive. One launch can never write GO while the stub waits: a
 # SYNCHRONOUS one (mutant `sync`), whose caller is blocked on this very stub. That launch is told apart
 # by an order fact, not a clock: a detached launcher writes `<lock>/pid` right after the fork, while
-# the stub waits; a synchronous one cannot write it until the stub has returned. The stub leaves when
-# that file has been absent for AW_STALL consecutive polls and records why it left in <GO>.left:
-# `go`, `orphan` (its owner died) or `nolockpid` -- which the unmutated (a) arm refuses on.
+# the stub waits; a synchronous one cannot write it until the stub has returned, and meanwhile the
+# owner is BLOCKED (state S, nothing pending) waiting on a child that is this stub's own ancestor, with
+# no other child alive. A detached owner is running, or blocked on some other child (a command
+# substitution inside readset_lock_write), so that state is never read for it. The stub leaves on that
+# fact and records why it left in <GO>.left: `go`, `orphan` (its owner died) or `nolockpid` -- which the
+# unmutated (a) arm refuses on.
 # ONLY THE DETACHED TRACE WAITS. The in-pool trace invokes this stub with `--in-pool` and no
 # `--local-map`, inside run_fixtures, where no lock exists to hold; it skips the wait and writes no
 # `.left`, so the record is the detached stub's alone.
@@ -1422,11 +1502,17 @@ if [ -n "${STUB_PPID:-}" ]; then printf "%s\n" "$PPID" > "$STUB_PPID"; fi
 lm=""; ls=""
 while [ $# -gt 0 ]; do case "$1" in --local-map) lm="$2"; shift ;; --list) ls="$2"; shift ;; esac; shift; done
 if [ -n "${STUB_GO:-}" ] && [ -n "$lm" ]; then
-  n=0; why=go
+  why=go; anc=" "; a="$$"
+  while [ -n "$a" ] && [ "$a" -gt 1 ] 2>/dev/null; do anc="$anc$a "; a="$(ps -o ppid= -p "$a" 2>/dev/null | tr -d " ")"; done
   while [ ! -f "$STUB_GO" ]; do
     if [ -n "${STUB_GO_OWNER:-}" ] && ! kill -0 "$STUB_GO_OWNER" 2>/dev/null; then why=orphan; break; fi
-    if [ -f "$lm.lock/pid" ]; then n=0; else n=$((n + 1)); fi
-    if [ "$n" -ge "${AW_STALL:-100}" ]; then why=nolockpid; break; fi
+    if [ ! -f "$lm.lock/pid" ] && [ -n "${STUB_GO_OWNER:-}" ]; then
+      st="$(ps -o stat= -p "$STUB_GO_OWNER" 2>/dev/null | tr -d " ")"; pd="$(ps -o pending= -p "$STUB_GO_OWNER" 2>/dev/null | tr -d " ")"
+      case "$st:$pd" in S*:0|I*:0)
+        sync=1; for c in $(pgrep -P "$STUB_GO_OWNER" 2>/dev/null); do case "$anc" in *" $c "*) ;; *) sync=0 ;; esac; done
+        [ -f "$lm.lock/pid" ] || { [ "$sync" = 1 ] && { why=nolockpid; break; }; } ;;
+      esac
+    fi
     sleep 0.1
   done
   printf "%s\n" "$why" > "$STUB_GO.left"
@@ -1768,8 +1854,7 @@ sleep 1.1
 readset_live_trace "$o" > "$o/msg" 2>&1
 # THE STUB'S PPID, OR THE TRACE SUBSHELL'S DEATH. Nothing to wait for when no trace started.
 if grep -q 'started detached' "$o/msg"; then
-  aw_wait '[ -s "$o/ppid" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$([ -f "$o/args" ] && echo a)" "$(ls "$lk" 2>/dev/null)"'
+  aw_wait '[ -s "$o/ppid" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
   [ "$?" = 2 ] && aw_stalled "(k) the trace subshell neither wrote the stub's ppid nor advanced its status file or lock"
 fi
 cp "$lk/pid" "$o/pidfile" 2>/dev/null
@@ -1781,8 +1866,7 @@ if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "n
 ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" > "$o/judge" 2>&1; echo "$?" > "$o/rc" )
 : > "$STUB_GO"
 # THE LOCK GONE, OR THE SUBSHELL THAT OWES ITS RELEASE GONE -- either way `after` is final, and is read now.
-aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-  'printf "%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lk" 2>/dev/null)"'
+aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
 [ "$?" = 2 ] && aw_stalled "(k) the trace subshell neither released $lk nor advanced its status file after GO"
 if [ ! -d "$lk" ]; then echo gone > "$o/after"
 elif ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" ) >/dev/null 2>&1; then echo stale > "$o/after"
@@ -1844,7 +1928,7 @@ exit 0'
 pool="$1"; t="$2"; o="$3"; ceil="$4"; mode="$5"; hk="$6"
 cd "$t" || exit 1
 mkdir -p "$o/tmp" "$o/.log"
-export STUB_GC="$o/gc" STUB_SELF="$o/self" STUB_GO="$o/go" STUB_GO_OWNER="$$" STUB_MODE="$mode" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING="$ceil" TMPDIR="$o/tmp/"
+export STUB_GC="$o/gc" STUB_SELF="$o/self" STUB_GO="$o/go" STUB_GO_OWNER="$(exec bash -c 'printf %s "$PPID"')" STUB_MODE="$mode" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING="$ceil" TMPDIR="$o/tmp/"
 . "$AW_LIB"
 . "$pool" 2>/dev/null
 printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
@@ -1857,8 +1941,7 @@ tp="$(sed -n 1p "$lk/pid" 2>/dev/null | cut -d' ' -f1)"
 # THE STUB'S THREE RECORDS, OR THE TRACE SUBSHELL'S DEATH. The live controls below are read only once all
 # three exist, so a slow stub start no longer reads as a dead one.
 if grep -q 'started detached' "$o/msg"; then
-  aw_wait '[ -s "$o/gc" ] && [ -s "$o/self" ] && ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s|%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(cat "$o/gc" "$o/self" 2>/dev/null)" "$(ls "$READSET_LOCAL".tmp.* 2>/dev/null)" "$(ls "$o/tmp" 2>/dev/null)"'
+  aw_wait '[ -s "$o/gc" ] && [ -s "$o/self" ] && ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1' 'aw_status_pid "$READSET_LOCAL.status"' ''
   [ "$?" = 2 ] && aw_stalled "(t) the stub deriver neither wrote its gc, self and map-temp records nor advanced"
 fi
 gc="$(cat "$o/gc" 2>/dev/null)"; dp="$(cat "$o/self" 2>/dev/null)"
@@ -1879,24 +1962,9 @@ printf '%s,%s,%s,%s,%s' "$(al "-$tp")" "$(al "-$dp")" "$(al "$gc")" "$([ -n "$tr
 # `start + ceiling + 5`, the 5 being its own TERM-to-KILL grace. Neither is a fixture constant; a stall
 # inside the promise is the watchdog asleep in its `sleep "$cl"`, and the wait goes on. That is how
 # noceil (the watchdog sleeping 600s against a 3s promise) still reads `held`.
-ct_sig() { printf '%s|%s|%s' "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lk" 2>/dev/null)" "$(aw_group_sig "$tp")"; }
-ct_final() {
-  local s c
-  [ "$dp" = 0 ] && return 0
-  kill -0 -- "-$dp" 2>/dev/null || return 0
-  s="$(sed -n 's/^start //p' "$READSET_LOCAL.status" 2>/dev/null)"; c="$(sed -n 's/^ceiling //p' "$READSET_LOCAL.status" 2>/dev/null)"
-  case "$s" in ''|*[!0-9]*) return 0 ;; esac; case "$c" in ''|*[!0-9]*) return 0 ;; esac
-  [ "$(date +%s)" -gt $(( s + c + 5 )) ]
-}
-while :; do
-  aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' ct_sig
-  [ "$?" = 2 ] || break
-  ct_final && break
-done
-# THE SUBSHELL EXITS JUST AFTER IT RELEASES THE LOCK, and only then does group $tp empty (the hook says a
-# reader must not assume it at the release). This replaces a fixed 0.2s settle: wait for the group to be
-# gone; a member that stays alive and moves nothing for AW_STALL polls is read as the leak it is.
-[ "$tp" != 0 ] && aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_sig "$tp"'
+ct_cl="$(sed -n 's/^ceiling //p' "$READSET_LOCAL.status" 2>/dev/null)"; case "$ct_cl" in ''|*[!0-9]*) ct_cl="$ceil" ;; esac
+aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' 'aw_overslept "$tp" "$ct_cl"'
+[ "$tp" != 0 ] && aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_settled "$tp"'
 printf '%s,%s,%s,%s,%s,%s,%s' "$([ -d "$lk" ] && echo held || echo released)" "$(al "-$tp")" "$(al "-$dp")" "$(al "$gc")" \
   "$([ -n "$tr" ] && [ -d "$tr" ] && echo tr || echo notr)" "$(ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1 && echo tmp || echo notmp)" \
   "$(cmp -s "$o/map.before" "$READSET_LOCAL" && echo same || echo moved)" > "$o/after"
@@ -1916,7 +1984,7 @@ CT
     local t="$WORK/ct.$2" o="$WORK/cto.$2" rp
     f2b_world seed_ct "$t" || { printf 'SEED FAILED'; return 1; }
     mkdir -p "$o"
-    bash "$CT_DRIVER" "$1" "$t" "$o" "$3" "$4" "${5:-}" > "$o/driver.out" 2>&1
+    ( inproc -- "$CT_DRIVER" "$1" "$t" "$o" "$3" "$4" "${5:-}" ) > "$o/driver.out" 2>&1
     rp=other
     grep -qF 'TIMED OUT at the 3s ceiling' "$o/rep" 2>/dev/null && grep -qF 'WARN  trace-report warning: the last trace TIMED OUT' "$o/rep" && rp=timed
     grep -qF 'finished, exit timeout' "$o/rep" 2>/dev/null && rp=finished-timeout
@@ -1961,15 +2029,12 @@ while [ "$i" -lt "$reps" ]; do
   # still has a member after $tp itself is gone and that member, with its state and CPU time, moves
   # nothing for AW_STALL polls. The watchdog's leaked `sleep` is exactly that. A member that is dying or
   # still running changes the signature and resets the count. The two waits before it end on events.
-  aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lk" 2>/dev/null)"'
-  [ "$?" = 2 ] && aw_stalled "(t4) the fast trace neither released $lk nor advanced its status file"
+  aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
   tp="$(sed -n 's/^pid //p' "$READSET_LOCAL.status" 2>/dev/null)"
   case "$tp" in ''|*[!0-9]*) continue ;; esac
   grep -qx 'exit 0' "$READSET_LOCAL.status" && fin=$((fin + 1))
-  aw_wait '! kill -0 "$tp" 2>/dev/null' '' 'aw_group_sig "$tp"'
-  [ "$?" = 2 ] && aw_stalled "(t4) the trace subshell $tp neither exited nor advanced its group"
-  aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_sig "$tp"'
+  aw_wait '! kill -0 "$tp" 2>/dev/null' '' ''
+  aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_settled "$tp"'
   if kill -0 -- "-$tp" 2>/dev/null; then
     leaks=$((leaks + 1))
     kill -- "-$tp" 2>/dev/null
@@ -2003,7 +2068,7 @@ FX
     local t="$WORK/fx.$2" o="$WORK/fxo.$2"
     f2b_world seed_fxw "$t" || { printf 'SEED FAILED'; return 1; }
     mkdir -p "$o"
-    bash "$FX_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
+    ( inproc -- "$FX_DRIVER" "$1" "$t" "$o" "$3" "$4" ) > "$o/driver.out" 2>&1
     cat "$o/res" 2>/dev/null
   }
   RT4="$(fx_drive "$POOL" t4 "$FX_REPS" 0)"; lt_arm
@@ -2039,15 +2104,15 @@ FX
   # The driver's waits are aw_wait's polls, which sleep through AW_SLEEP; FX_DRIVER pins it to /bin/sleep,
   # and the wait library must carry no other sleep, or a poll would walk the absent PATH entries too.
   sed -e 's|sleep 30 |/bin/sleep 30 |' "$FX_DRIVER" > "$FW_DRIVER"
-  _aws="$(grep -c 'sleep' "$AW_LIB")" || _aws=0
+  _aws="$(grep -cE '(^|[^-_A-Za-z"/])sleep[[:space:]]+[0-9$]' "$AW_LIB")" || _aws=0
   grep -q '^set -m; /bin/sleep 30 ' "$FW_DRIVER" && grep -qx 'AW_SLEEP=/bin/sleep' "$FW_DRIVER" \
-    && [ "$_aws" -eq 1 ] && grep -qF '${AW_SLEEP:-sleep} 0.1' "$AW_LIB" \
+    && [ "$_aws" -eq 0 ] && [ "$(grep -cF '${AW_SLEEP:-sleep} 0.1' "$AW_LIB")" -eq 1 ] \
     || broken "(t4w) the forced-window driver did not take /bin/sleep at its control and its waits (wait-library sleep sites: $_aws, want 1)"
   fw_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
     local t="$WORK/fw.$2" o="$WORK/fwo.$2"
     f2b_world seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
     mkdir -p "$o"
-    PATH="$FW_PATH" bash "$FW_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
+    ( inproc PATH="$FW_PATH" -- "$FW_DRIVER" "$1" "$t" "$o" "$3" "$4" ) > "$o/driver.out" 2>&1
     cat "$o/res" 2>/dev/null
   }
   RT4W="$(fw_drive "$POOL" t4w "$FW_REPS" 0)"; lt_arm
@@ -2730,7 +2795,13 @@ stub_reap() {
   cat "$d/pids" > "$d/pids.last"; cat "$d/pids" >> "$d/pids.all"; : > "$d/pids"
   if [ "${REAP_MUT:-0}" != 1 ]; then
     while read -r p; do [ -n "$p" ] && kill "$p" 2>/dev/null; done < "$d/pids.last"
-    while [ "$i" -lt 30 ]; do live="$(stub_live "$d/pids.last")"; [ "$live" = 0 ] && break; sleep 0.1; i=$((i+1)); done
+    # GONE, OR NEVER GOING: a killed stub is dying and never reads blocked; one the kill missed blocks forever.
+    while :; do
+      live=0; i=1
+      while read -r p; do [ -n "$p" ] && kill -0 "$p" 2>/dev/null || continue; live=1; aw_blocked "$p" || i=0; done < "$d/pids.last"
+      [ "$live" = 0 ] || [ "$i" = 1 ] && break
+      sleep 0.1
+    done
   fi
   # A reaped stream's STUB_STREAM registration goes with it, so a later reuse of its pid cannot pass for a live
   # stream. The stub of one world may have registered under another world's feed (sbx_run uses $SB's stubs on $SX's feed).
@@ -2739,51 +2810,6 @@ stub_reap() {
   printf '%s %s\n' "$n" "$live" >> "$d/reap.log"
 }
 
-# inproc [-i] [-u VAR]... [VAR=val]... -- <script> [args]: run <script> IN PROCESS, in the CALLER'S subshell, the way
-# `env [-i] [-u VAR]... [VAR=val]... bash <script> [args]` runs it in a new process. Call it inside `( ... )`: it
-# replaces the subshell's state. A new bash inherits only EXPORTED variables, no function and no trap of its parent,
-# so this unsets every non-exported variable the fixture set (bash's own specials kept), every function, and the
-# subshell's traps; `-i` also unsets every exported one but HOME and PATH unless re-set. Then the script is SOURCED:
-# a program behind a BASH_SOURCE guard (the deriver) loads its definitions and returns at the guard, and its main
-# (rs_main) is called with the args; a plain script (hermetic-run.sh, a decision driver) simply runs. `exit` in either
-# ends this subshell with the status a process would have returned. Its output, files and exit are compared with the
-# CLI's in the equivalence cell beside the tracer unit, which is what makes this a stand-in rather than a model.
-# STATED DIFFERENCE: `$$` in the script is the fixture's pid (bash 3.2 has no BASHPID), so the deriver's
-# `pkill -P $$ -x fs_usage` cannot reach a stub fs_usage forked from this subshell; every stub world reaps its stubs
-# by recorded pid (stub_reap), so no verdict reads it. The --tracer both stub world's fs_usage reaping waits are
-# injected (READSET_SLEEP_CMD) and keyed on the capture holding the stub's last line, not on the clock.
-inproc() {
-  local _ip_v _ip_keep
-  _ip_keep=""
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      -i) for _ip_v in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p'); do
-            case "$_ip_v" in HOME|PATH) ;; *) unset "$_ip_v" 2>/dev/null ;; esac
-          done; shift ;;
-      -u) unset "$2"; shift 2 ;;
-      --) shift; break ;;
-      *=*) export "$1"; shift ;;
-      *) echo "inproc: not an env word: '$1'" >&2; return 97 ;;
-    esac
-  done
-  [ -f "$1" ] || { echo "inproc: no script '$1'" >&2; return 97; }
-  trap - EXIT INT TERM HUP
-  for _ip_v in $(compgen -A function); do unset -f "$_ip_v"; done
-  _ip_keep=" $(compgen -e | tr '\n' ' ') "
-  for _ip_v in $(compgen -v); do
-    case "$_ip_v" in
-      BASH*|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE|IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELLOPTS|SHLVL|UID|_ip_v|_ip_keep) continue ;;
-    esac
-    case "$_ip_keep" in *" $_ip_v "*) continue ;; esac
-    unset "$_ip_v" 2>/dev/null
-  done
-  unset _ip_keep
-  set +u +e +m; set +o pipefail
-  . "$@"
-  if declare -F rs_main >/dev/null; then shift; rs_main "$@"; fi
-}
-# rs_drive [env words] -- <deriver> [args]: the deriver, in process. Call inside `( cd <repo> && rs_drive ... )`.
-rs_drive() { inproc "$@"; }
 
 # ------------------------------------------------------- the deriver's map merge ----
 # `--list` exists so refreshing ONE fixture costs its own runtime instead of a full
@@ -5158,9 +5184,7 @@ STUB
         # fxw3 REACHED, OR THE DERIVER GONE. A 60s tick count used to end this wait and score `at=no`, so
         # a deriver slowed past it by load read as a run that never reached fxw3. The net is no progress:
         # its output, the map and the trace root all unchanged for AW_STALL polls is a refusal.
-        aw_wait '[ -e "$SX/kill.at" ]' 'printf %s "$pid"' \
-          'printf "%s|%s|%s" "$(wc -c < "$WORK/iw.out" 2>/dev/null)" "$(cksum < "$BR/.ai-dlc-fixture-readsets.tsv" 2>/dev/null)" "$(ls -R "$SX_TR" 2>/dev/null | cksum)"'
-        [ "$?" = 2 ] && aw_stalled "INTERRUPTED: the deriver neither reached fxw3 nor advanced its output, map or trace root"
+        aw_wait '[ -e "$SX/kill.at" ]' 'printf %s "$pid"' ''
         [ -e "$SX/kill.at" ] && at=yes
         pkill -9 -P "$pid" 2>/dev/null; kill -9 "$pid" 2>/dev/null
         wait "$pid" 2>/dev/null; r=sigkill

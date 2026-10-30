@@ -731,39 +731,48 @@ wrap_ok() {
   return "$f"
 }
 
-# THE WAITS BELOW ARE KEYED ON NO PROGRESS, NEVER ON ELAPSED TIME. Each waits for one event the
-# wrapper or its stub produces (a `ready` file, a pgid file, a process exiting), and between start
-# and that event both write files under the run's own `$R`: the wrapper's map snapshot, ledger
-# line, pgid and deriver.log, the stub's env dump, map copy and pid list. `await` polls the event;
-# it gives up only when the process that should produce it has EXITED first (a binary fact) or
-# when nothing under `$R` has changed for STALL_IDLE seconds, and the caller then refuses -- exit
-# 2, never a FAIL. The wrapper's load sampler appends `load.tsv` every 15s whatever else happens,
-# so that file (and the sampler's pid file) is not progress, or a wedged run would never refuse.
-# The 120s wall bounds these replaced turned a loaded box into a stub that "never started".
-# STALL_IDLE is a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict.
-STALL_IDLE=30
+# THE WAITS BELOW END ON AN EVENT OR ON A FACT, NEVER ON ELAPSED TIME OR A WINDOW OF POLLS (BL-868). Each
+# waits for one event the wrapper or its stub produces (a `ready` file, a pgid file, a process exiting);
+# `await` gives up only when the process that should produce it has EXITED first, or -- for a wait on a
+# process ENDING -- when every process it waits on is BLOCKED WITH NO SIGNAL PENDING (st_settled): it was
+# never signalled and nothing will end it. A signalled process is runnable, exiting or carries the signal
+# pending, so a slow death on a loaded box never reads settled. The idle-seconds window this replaced
+# refused a correct run whenever the box was slow enough. A wait that reaches neither blocks until the
+# gate's own watchdog takes the run: a hang to read, never a verdict.
+# st_blocked <pid>: 0 when alive, in state S/I/T and with no signal pending. A pid `ps` gives no state for
+# is a refusal, exit 2, never a pass or a FAIL.
+st_blocked() {
+  local st pd
+  kill -0 "$1" 2>/dev/null || return 1
+  st="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; pd="$(ps -o pending= -p "$1" 2>/dev/null | tr -d ' ')"
+  # No state (the read-set tracer's sandbox refuses the setuid /bin/ps): not known blocked, so the wait goes on
+  # until the pid is gone. Only a survivor then hangs, and the tracer's own ceiling ends that run.
+  [ -n "$st" ] || return 1
+  case "$st" in S*|I*|T*) ;; *) return 1 ;; esac
+  case "$pd" in ''|*[!0]*) return 1 ;; esac
+}
+# st_settled <pid file>: 0 when at least one recorded pid is alive and every live one is st_blocked.
+st_settled() { local p n=0; while IFS= read -r p; do case "$p" in ''|*[!0-9]*) continue ;; esac; kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done < "$1"; [ "$n" -gt 0 ]; }
+# st_group_settled <pgid>: the same over a process group's live members.
+st_group_settled() { local p n=0; for p in $(pgrep -g "$1" 2>/dev/null); do kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done; [ "$n" -gt 0 ]; }
 AWAIT_WHY=""
-# await <scope-dir> <watch-pid | -> <what> <test...>: 0 once <test> holds; 1 with AWAIT_WHY set.
+# await <scope-dir> <watch-pid | -> <what> <test...> [-- <final test...>]: 0 once <test> holds; 1 with AWAIT_WHY
+# set when the watched pid exited first, or when the optional final test holds (the awaited thing will never come).
 await() {
-  local sc="$1" wpid="$2" what="$3" mk="$WORK/await.mark" n=0 idle=0
+  local sc="$1" wpid="$2" what="$3" t=() f=()
   shift 3
-  : > "$mk"
-  while ! "$@"; do
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do t+=("$1"); shift; done
+  [ "${1:-}" = -- ] && { shift; f=("$@"); }
+  while ! "${t[@]}"; do
     if [ "$wpid" != - ] && ! kill -0 "$wpid" 2>/dev/null; then
-      "$@" && return 0
+      "${t[@]}" && return 0
       AWAIT_WHY="process $wpid exited before $what"; return 1
     fi
-    sleep 0.1; n=$((n + 1))
-    [ "$((n % 10))" -eq 0 ] || continue
-    : > "$mk.next"
-    if [ -n "$(find "$sc" -newer "$mk" ! -name load.tsv ! -name sampler.pid -print -quit 2>/dev/null)" ]; then
-      mv "$mk.next" "$mk"; idle=0
-    else
-      idle=$((idle + 1))
-      if [ "$idle" -ge "$STALL_IDLE" ]; then
-        AWAIT_WHY="neither $what nor any file under $sc (load.tsv aside) advanced for ${STALL_IDLE}s"; return 1
-      fi
+    if [ "${#f[@]}" -gt 0 ] && "${f[@]}"; then
+      "${t[@]}" && return 0
+      AWAIT_WHY="$what will never happen: every process it waits on is blocked with no signal pending"; return 1
     fi
+    sleep 0.1
   done
 }
 is_file() { [ -f "$1" ]; }
@@ -786,7 +795,8 @@ wrap_term() {
     || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready: $AWAIT_WHY"; }
   cat "$R/pids" >> "$ORPHANS"
   kill -TERM "$wp"
-  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" \
+  printf '%s\n' "$wp" > "$R/wp.pid"
+  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_settled "$R/wp.pid" \
     || { kill -KILL "$wp" 2>/dev/null; broken "[$t] the TERMed wrapper did not exit: $AWAIT_WHY"; }
   wait "$wp"; rc=$?
   # THE ONE WALL BOUND, AND WHY IT CANNOT BE PROGRESS. The wrapper's finish() TERMs the stub's whole
@@ -796,8 +806,9 @@ wrap_term() {
   # (every recorded pid gone, or one alive), and the bound only says how long a pid may take to
   # die. It replaces a fixed `sleep 0.5`, which read a loaded box as a surviving tree. It must stay
   # far below the children's 300s, or a group kill that never happened would pass once they exit
-  # on their own.
-  n=0; while ! all_gone "$R/pids" && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  # on their own. NOW A FACT, NOT A BOUND: wait until every pid is gone or every survivor is blocked with
+  # no signal pending (st_settled) -- a child the kill never reached; a TERMed one is never read so.
+  while ! all_gone "$R/pids" && ! st_settled "$R/pids"; do sleep 0.1; done
   [ "$rc" = 143 ] || { echo "    [$t] the TERMed wrapper exited $rc, not 143"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map was not restored after TERM"; f=1; }
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] the stub never rewrote the map"; f=1; }
@@ -868,7 +879,7 @@ wrap_kill9() {
   # (b) end the orphan's two children: its `wait` returns, it writes the map LAST and exits.
   sed -n '1,2p' "$R/pids" | while IFS= read -r p; do kill "$p" 2>/dev/null; done
   # Its progress between here and its exit is the map write: `root/w/map.written` and the repo map.
-  await "$R" - "the orphaned group $pg's exit" group_gone "$pg" \
+  await "$R" - "the orphaned group $pg's exit" group_gone "$pg" -- st_group_settled "$pg" \
     || broken "[$t] the orphaned process group $pg did not exit after its children were ended: $AWAIT_WHY"
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] (b) the orphan never reached its final map write"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] (b) the map is clean after the orphan exited, so the dirty-tree refusal proves nothing"; f=1; }
@@ -997,14 +1008,14 @@ ic_groupkill() { # finish() TERMs the deriver's whole process group: a trap-less
     DPID=$!
     set +m
     echo "$DPID" >> "$2/pids"
-    n=0; while [ "$(grep -c . "$2/pids")" -lt 3 ] && [ "$n" -lt 3000 ]; do sleep 0.01; n=$((n + 1)); done
+    while [ "$(grep -c . "$2/pids")" -lt 3 ] && kill -0 "$DPID" 2>/dev/null; do sleep 0.01; done
     [ "$(grep -c . "$2/pids")" = 3 ] || { echo "control: the seeded deriver group recorded $(grep -c . "$2/pids") pids, not 3"; exit 1; }
     finish > /dev/null 2>&1 )
   local r=$? p alive="" n=0
   cat "$2/pids" >> "$ORPHANS"
   [ "$r" = 0 ] || { echo "finish failed in the group-kill world (rc $r)"; return 1; }
-  # Bounded as wrap_term's is: a TERMed pid takes a step to die, the property read is binary.
-  while ! all_gone "$2/pids" && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  # As wrap_term's: gone, or every survivor blocked with no signal pending -- one the kill never reached.
+  while ! all_gone "$2/pids" && ! st_settled "$2/pids"; do sleep 0.1; done
   while IFS= read -r p; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done < "$2/pids"
   [ -z "$alive" ] || { echo "the deriver's process tree survived the TERM:$alive"; return 1; }
 }
@@ -1102,7 +1113,11 @@ n=0; until child="$(pgrep -P $$ -x "$PKN")"; do n=$((n + 1)); [ "$n" -gt 3000 ] 
 [ -n "$child" ] || { echo "child=none"; exit 0; }
 echo "$child" >> "$ORPHANS"
 eval "$(cat "$PKD/line")"
-n=0; while kill -0 "$child" 2>/dev/null && [ "$n" -lt 100 ]; do n=$((n + 1)); sleep 0.01; done
+while kill -0 "$child" 2>/dev/null; do
+  st="$(ps -o stat= -p "$child" 2>/dev/null | tr -d ' ')"; pd="$(ps -o pending= -p "$child" 2>/dev/null | tr -d ' ')"
+  case "$st:$pd" in [SIT]*:0) break ;; esac
+  sleep 0.01
+done
 if kill -0 "$child" 2>/dev/null; then printf 'child=alive '; else printf 'child=dead '; fi
 kill "$child" "$fs_pid" 2>/dev/null
 PK_EOF
@@ -1174,15 +1189,17 @@ orphans_gone() {
     while IFS= read -r p; do
       case "$p" in ''|*[!0-9]*) continue ;; esac
       kill -0 "$p" 2>/dev/null || continue
-      # `ps` is NOT in tools.decl: /bin/ps is setuid and a sandbox refuses it. Refused, st is empty, a
+      # `ps` is in tools.decl, but /bin/ps is setuid and the read-set tracer's sandbox refuses it. Refused, st is empty, a
       # zombie reads live, and the arm can only REFUSE (exit 2) on it -- never pass a survivor, never FAIL.
       st="$(ps -o stat= -p "$p" 2>/dev/null)"
       case "$st" in *Z*) continue ;; esac
       live="$live $p"
     done < "$pf"
     [ -z "$live" ] && return 0
-    if [ "$live" = "$last" ]; then still=$((still + 1)); else still=0; last="$live"; fi
-    if [ "$still" -ge "$lim" ]; then ORPHANS_WHY="recorded pid(s)$live alive and the alive set unchanged for $lim polls"; return 2; fi
+    # FINAL ON A FACT (BL-868): every live recorded pid blocked with no signal pending will never die; a
+    # just-killed one is runnable, exiting or carries the signal, at any load. <lim> is unused, kept for callers.
+    for p in $live; do echo "$p"; done > "$WORK/og.live"
+    if st_settled "$WORK/og.live"; then ORPHANS_WHY="recorded pid(s)$live alive, each blocked with no signal pending"; return 2; fi
     sleep 0.01
   done
 }
@@ -1198,8 +1215,8 @@ if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then B_og=1; ok "orphans_gone refuses on 
 # MUTANT: the decision on a stall replaced by a pass, built as a copy of the function and scored by the same probe.
 OGM="$MD/og-pass.sh"
 awk '/^orphans_gone\(\) \{$/,/^}$/' "$HERE/run.sh" > "$OGM.src" 2>/dev/null
-export MUT_OLD='    if [ "$still" -ge "$lim" ]; then ORPHANS_WHY="recorded pid(s)$live alive and the alive set unchanged for $lim polls"; return 2; fi' \
-  MUT_NEW='    if [ "$still" -ge "$lim" ]; then return 0; fi'
+export MUT_OLD='    if st_settled "$WORK/og.live"; then ORPHANS_WHY="recorded pid(s)$live alive, each blocked with no signal pending"; return 2; fi' \
+  MUT_NEW='    if st_settled "$WORK/og.live"; then return 0; fi'
 mut "$OGM.src" "$OGM" \
   || broken "orphans_gone mutant og-pass DID NOT APPLY"
 sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
@@ -1214,7 +1231,7 @@ NREC="$(grep -c '^[0-9][0-9]*$' "$ORPHANS")" || NREC=0
 if [ "$NREC" -lt 1 ]; then
   bad "the pid file records no stub or sampler pid, so the orphan check reads nothing"
 else
-  orphans_gone "$ORPHANS" "$((STALL_IDLE * 100))" || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
+  orphans_gone "$ORPHANS" 0 || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
   ok "no stub or sampler pid is alive: 0 of $NREC recorded in the pid file"
 fi
 
