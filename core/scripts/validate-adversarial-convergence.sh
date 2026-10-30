@@ -147,7 +147,7 @@ while [ $# -gt 0 ]; do
         case "$_ac_a" in K|K2|K3|L|H|J2|J3) ;; *) echo "--arms: unknown arm '$_ac_a' (known: K,K2,K3,L,H,J2,J3)" >&2; exit 1 ;; esac
       done
       shift 2 ;;
-    -h|--help) sed -n '2,80p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,80p' "${BASH_SOURCE[0]}"; exit 0 ;;
     -*) echo "unknown argument: $1" >&2; exit 1 ;;
     *) FILES+=("$1"); shift ;;
   esac
@@ -157,7 +157,7 @@ done
 # The sibling steering-budget validator owns THE genuine-operator predicate (Check B
 # and its --cite mode). Resolve it relative to $0 so this works in both the
 # distribution layout (core/scripts/) and the consumer layout (scripts/).
-STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"
+STEER_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-steering-budget.sh"
 
 # -----------------------------------------------------------------------------
 # --cycle-state: adjudicate a RUNNING cycle, for the hooks.
@@ -2107,7 +2107,7 @@ fi
 # including a SILENT one -- so a verdict read off the wrong program is never indistinguishable
 # from one read off the right program.
 K2_RELEASE="0.665.0"
-K2_PD="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+K2_PD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/partition-document.sh"
 K2_PD_AMBIG=""
 
 k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at  $3 terminal pass file
@@ -3331,7 +3331,7 @@ EOF
     l_pending="no sprint-status.yaml beside ${l_sd} declares sprint ${l_n} with a validation_intensity"
   elif [ "$l_int" = "full" ] && [ "$l_k" -ge 2 ] && [ "$l_dir" -eq 1 ]; then
     # The want set, from its owners. Absence of either sibling is never a failure (K2's rule).
-    l_merge="$(cd "$(dirname "$0")" && pwd)/merge-adversarial-shards.sh"
+    l_merge="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
     l_pd="$K2_PD"   # the self-located sibling K2 and K3 resolve; never a walk up (I33)
     if [ ! -f "$l_merge" ] || [ ! -f "$l_pd" ]; then
       l_pending="merge-adversarial-shards.sh or partition-document.sh is not installed beside this validator"
