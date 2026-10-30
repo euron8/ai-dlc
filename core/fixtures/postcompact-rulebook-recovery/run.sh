@@ -72,15 +72,49 @@ skip() { # skip <what> <why> — tolerated only where the subject legitimately h
 # split a single wrong figure fails four arms and three of them are vacuous.
 defer() { printf '  ----  %s -- stands down; %s owns this finding\n' "$1" "$2"; }
 
+# IN PROCESS. Every subject here -- the recovery hook, the gate, the postcompact hook and the budget
+# validator -- is a whole script that reads its payload on stdin (or its arguments) and EXITS, so
+# each call SOURCES the subject in a subshell of its own with the payload piped in: the content-seal
+# recorder pattern. `exit` ends that subshell and never this script; BASH_SOURCE inside the sourced
+# file is the subject's own path, so its sibling libraries resolve exactly as under `bash <file>`.
+# Shell options are reset to what a fresh `bash` starts with (this script runs `set -uo pipefail`;
+# a fresh bash has neither), and each subject then sets its own. Env knobs (`RECOVER_GATE_NET`, a
+# shim `PATH`, `AI_DLC_PROJECT_ROOT`) are given as assignments before the call, which bash keeps in
+# effect for the function and its subshell. A subshell's `$$` is THIS script's pid; the gate spells
+# its stage and owed-file temps with `$$`, which is harmless because no two calls ever run at once in
+# one project (the BL-730 background predicates each own a project). The equivalence cells below
+# hold the in-process answer byte-identical to the CLI's, `bash <file>`, on a refusing and a passing
+# input of each subject.
+hook_run() { # hook_run <subject> <project> [args...] -- stdin is the payload
+  _hr_f="$1"; _hr_p="$2"; shift 2
+  # `hash -r`: a shim PATH given for this call (the sed and sleep shims) must win over a command this
+  # script already looked up, exactly as it does in a fresh bash that has looked up nothing.
+  ( set +u +e +o pipefail; hash -r; CLAUDE_PROJECT_DIR="$_hr_p"; export CLAUDE_PROJECT_DIR; . "$_hr_f" "$@" )
+}
+val_run() { # val_run [args...] -- the budget validator, in process; stdout, stderr and the exit are its own
+  ( set +u +e +o pipefail; hash -r; . "$VAL" "$@" )
+}
+# THE PAYLOADS ARE BUILT WITH printf, NOT jq, and they carry only fixture-chosen ids and paths under
+# $WORK. A $WORK that a JSON string could not carry verbatim is refused here, once, so a TMPDIR with a
+# quote or a backslash breaks the run loudly instead of handing a hook a malformed payload that would
+# read as a stand-down.
+case "$WORK" in *'"'*|*'\'*) echo "FIXTURE BROKEN: \$WORK ($WORK) carries a quote or a backslash; printf-built payloads cannot carry it" >&2; exit 2 ;; esac
+# ctx_of / dec_of: the one jq read of a hook's stdout, and no read at all when it printed nothing.
+# They replace a python3 reader: dec_of answers `|` (allowed) for an empty or unparseable output,
+# exactly as that reader's `except` did.
+ctx_of() { [ -n "$1" ] || return 0; printf '%s' "$1" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
+dec_of() {
+  [ -n "$1" ] || { printf '|\n'; return 0; }
+  printf '%s' "$1" | jq -r '(.hookSpecificOutput // {}) | ((.permissionDecision // "") + "|" + ((.permissionDecisionReason // "") | gsub("\n"; " ")))' 2>/dev/null \
+    || printf '|\n'
+}
+
 # Drive the hook exactly as the harness does: JSON on stdin, source=compact. `fire` is the
 # seeded project; `fire_at` is any project, and `fire` is written in terms of it so the two
 # cannot come to drive the hook differently.
 fire_at() { # fire_at <hook-path> <project> -> prints additionalContext
-  printf '{"source":"compact","session_id":"sess-A"}' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
-    | python3 -c 'import sys,json
-try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
-except Exception: pass'
+  _fo="$(printf '{"source":"compact","session_id":"sess-A"}' | hook_run "$1" "$2" 2>/dev/null)"
+  ctx_of "$_fo"
 }
 fire() { # <hook-path> -> prints additionalContext
   fire_at "$1" "$PROJECT"
@@ -216,7 +250,7 @@ fi
 # --- Assertion 6: the SHIPPED SKILL.md carries the mandate in its protocol ----
 # The validator's new arm, run against the real file. This is the half that survives a
 # consumer whose hooks are disabled.
-if bash "$VAL" --skill "$SKILL" --quiet >/dev/null 2>&1; then
+if val_run --skill "$SKILL" --quiet >/dev/null 2>&1; then
   ok "validate-reattach-budget.sh passes the shipped SKILL.md (budget AND mandate)"
 else
   bad "the shipped SKILL.md fails its own re-attach budget validator"
@@ -230,7 +264,7 @@ fi
 # TWO INDEPENDENTLY DERIVED VALUES, COMPARED. The fixture takes `wc -c` of the file itself and
 # the validator prints its own; reading the number back off the validator's rendering and
 # declaring it correct would be a count read off a rendering, which is not a derived count.
-VB_OUT="$(bash "$VAL" --skill "$SKILL" 2>&1)"
+VB_OUT="$(val_run --skill "$SKILL" 2>&1)"
 whole_of() { # whole_of <validator output> -> the reported whole-file byte figure, or empty
   sed -n 's/^whole file  *: \([0-9][0-9]*\) bytes.*/\1/p' <<<"$1" | head -1
 }
@@ -303,7 +337,7 @@ BARE_P="$(mktemp -d "$WORK/bare.XXXXXX")"
 mkdir -p "$BARE_P/.claude/skills/ai-dlc"
 cp "$SKILL" "$BARE_P/.claude/skills/ai-dlc/SKILL.md"
 BARE_REAL="$(wc -c < "$BARE_P/.claude/skills/ai-dlc/SKILL.md" | tr -d ' ')"
-BARE_OUT="$(AI_DLC_PROJECT_ROOT="$BARE_P" bash "$VAL" 2>&1)"; bare_rc=$?
+BARE_OUT="$(AI_DLC_PROJECT_ROOT="$BARE_P" val_run 2>&1)"; bare_rc=$?
 BARE_WHOLE="$(whole_of "$BARE_OUT")"
 if [ "$vb_owns" = 1 ]; then
   defer "the bare invocation's byte figure" "assertion 6b"
@@ -323,7 +357,7 @@ fi
 # every arm above -- the loud and quiet halves are one property seen from two sides, and
 # 6b/6b2/6b3 can only ever see the loud one. --quiet is what a caller uses to read the exit
 # code alone, and a validator that prints anyway breaks that contract for every caller.
-Q_OUT="$(bash "$VAL" --skill "$SKILL" --quiet 2>&1)"; q_rc=$?
+Q_OUT="$(val_run --skill "$SKILL" --quiet 2>&1)"; q_rc=$?
 q_lines="$(printf '%s' "$Q_OUT" | grep -c '')" || q_lines=0
 [ -z "$Q_OUT" ] && q_lines=0
 if [ "$q_rc" -ne 0 ]; then
@@ -357,7 +391,7 @@ if [ "$vb_owns" = 1 ]; then
 elif cmp -s "$SKILL" "$MUT_BIG"; then
   bad "FIXTURE STALE: the appended copy is byte-identical to SKILL.md, so the whole-file figure has nothing to move and assertion 6b is unproven"
 else
-  MB_OUT="$(bash "$VAL" --skill "$MUT_BIG" 2>&1)"; mb_rc=$?
+  MB_OUT="$(val_run --skill "$MUT_BIG" 2>&1)"; mb_rc=$?
   MB_WHOLE="$(whole_of "$MB_OUT")"
   MB_PROTO="$(proto_of "$MB_OUT")"
   VB_PROTO="$(proto_of "$VB_OUT")"
@@ -389,7 +423,7 @@ sed 's|\.claude/skills/ai-dlc/postcompact-digest\.md|the rulebook digest|' \
 if cmp -s "$SKILL" "$MUT_SKILL"; then
   bad "FIXTURE STALE: the mandate sentence was reworded, so the mutant is a byte-identical copy and assertion 6 proves nothing"
 else
-  out="$(bash "$VAL" --skill "$MUT_SKILL" --quiet 2>&1)"; rc=$?
+  out="$(val_run --skill "$MUT_SKILL" --quiet 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ] && grep -q 'does not tell the lead how to recover' <<<"$out"; then
     ok "mutant: a protocol without the mandate FAILS, on the mandate arm specifically"
   elif [ "$rc" -ne 0 ]; then
@@ -427,7 +461,7 @@ if [ "$(proto_count "$SKILL")" -eq 0 ]; then
 elif [ "$(proto_count "$MUT_ROUTE")" -ne 0 ]; then
   bad "FIXTURE STALE: the mutation left $(proto_count "$MUT_ROUTE") router path(s) inside the protocol section, so the mutant does not remove the whole property"
 else
-  out="$(bash "$VAL" --skill "$MUT_ROUTE" --quiet 2>&1)"; rc=$?
+  out="$(val_run --skill "$MUT_ROUTE" --quiet 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
     ok "mutant: a protocol that names no router FAILS, on the router arm specifically"
   elif [ "$rc" -ne 0 ]; then
@@ -447,7 +481,7 @@ sed 's|`{project-root}/\.claude/skills/ai-dlc/steps/route\.md`|<!-- .claude/skil
 if cmp -s "$SKILL" "$MUT_ROUTE_C"; then
   bad "FIXTURE STALE: the protocol's router mention was reworded, so the commented-out mutant is byte-identical and the comment guard is unproven"
 else
-  out="$(bash "$VAL" --skill "$MUT_ROUTE_C" --quiet 2>&1)"; rc=$?
+  out="$(val_run --skill "$MUT_ROUTE_C" --quiet 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
     ok "mutant: a router path present only inside an HTML comment FAILS the router arm"
   elif [ "$rc" -ne 0 ]; then
@@ -470,7 +504,7 @@ awk '
 if cmp -s "$SKILL" "$MUT_ROUTE_M"; then
   bad "FIXTURE STALE: the protocol's router mention was reworded, so the multi-line-comment mutant is byte-identical and the comment guard is unproven for the house-style form"
 else
-  out="$(bash "$VAL" --skill "$MUT_ROUTE_M" --quiet 2>&1)"; rc=$?
+  out="$(val_run --skill "$MUT_ROUTE_M" --quiet 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
     ok "mutant: a router path present only inside a MULTI-LINE HTML comment FAILS the router arm"
   elif [ "$rc" -ne 0 ]; then
@@ -487,7 +521,7 @@ MUT_ROUTE_B="$WORK/skill-router-bracketed.md"
 sed 's|`{project-root}/\.claude/skills/ai-dlc/steps/route\.md`|<!-- a --> `{project-root}/.claude/skills/ai-dlc/steps/route.md` <!-- b -->|' "$SKILL" > "$MUT_ROUTE_B"
 if cmp -s "$SKILL" "$MUT_ROUTE_B"; then
   bad "FIXTURE STALE: the protocol's router mention was reworded, so the bracketed control is byte-identical and proves nothing"
-elif bash "$VAL" --skill "$MUT_ROUTE_B" --quiet >/dev/null 2>&1; then
+elif val_run --skill "$MUT_ROUTE_B" --quiet >/dev/null 2>&1; then
   ok "control: a live router path bracketed by two one-line comments still PASSES — the stripper removes only the comments"
 else
   bad "CONTROL FAILED — a live router path between two one-line comments was stripped with them, so the arm refuses a compliant protocol"
@@ -629,14 +663,8 @@ else
 # One gate invocation per call, because a call MUTATES gate state (the snapshot Read advances
 # it). Reading the decision and the reason with two runs would double every transition.
 gate_call() { # gate_call <gate> <project> <json> -> "<decision>|<reason on one line>"
-  printf '%s' "$3" \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
-    | python3 -c 'import sys,json
-try:
-    o = json.load(sys.stdin)["hookSpecificOutput"]
-    print(o.get("permissionDecision","") + "|" + o.get("permissionDecisionReason","").replace("\n"," "))
-except Exception:
-    print("|")'
+  _go="$(printf '%s' "$3" | hook_run "$1" "$2" 2>/dev/null)"
+  dec_of "$_go"
 }
 allowed() { case "$1" in "|"*) return 0 ;; *) return 1 ;; esac; }
 
@@ -694,11 +722,44 @@ arm_marker() { # arm_marker <recover-hook> <project>
   # The session id is `sess-A`, the one the advisor battery's calls carry: the gate's read stages
   # stand down for a call from a session other than the one the marker records, so a marker owned
   # by a different id would be invisible to every call below that names its session.
-  printf '{"source":"compact","session_id":"sess-A"}' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+  printf '{"source":"compact","session_id":"sess-A"}' | hook_run "$1" "$2" >/dev/null 2>&1
 }
 mk="_bmad-output/.recover-fired"
 pg="_bmad-output/.recover-gate-progress"
+
+# ONE ARMED WORLD PER SHAPE, COPIED PER CELL (fixture-mutants.md clause 4). A cell whose subject is
+# the GATE (or postcompact) needs a project the real producer armed, and arming is a producer run;
+# the same few shapes were armed afresh by every predicate of every mutant pass. So each shape is
+# armed ONCE by the real producer and copied. KEYED ON CONTENT, NOT ON A PATH: the template is used
+# only when the producer handed in is byte-identical to $HOOK, so a producer MUTANT (the legacy
+# producer, a whose-recovery or BL-684/BL-688 producer edit) always arms its own world live and is
+# scored on what it writes. Cells whose subject IS the arming (the producer battery, a re-arm, the
+# updater stand-down) never come through here. Every path the marker records is relative to the
+# project, so a copy is the armed state of the project it lands in.
+# The optional fourth argument adds files BEFORE arming, exactly where the inline seeds put them:
+# `digest` the installed postcompact digest (the advisor battery), `rc` the digest plus a
+# same-basename decoy under x/ (the BL-658..687 battery).
+armed_proj() { # armed_proj <producer> <step-file-name|-> <consumer|flat|none> [digest|rc] -> a fresh armed project
+  if cmp -s "$1" "$HOOK"; then
+    _ak="$WORK/tpl/arm.$2.$3.${4:-plain}"
+    if [ ! -d "$_ak" ]; then
+      _ab="$(newproj "$2" "$3")"; proj_extra "$_ab" "${4:-}"; arm_marker "$HOOK" "$_ab"
+      [ -f "$_ab/$mk" ] || { echo "FIXTURE BROKEN: the real producer armed no template for $2/$3/${4:-plain}" >&2; exit 2; }
+      mkdir -p "$WORK/tpl"; mv "$_ab" "$_ak"
+    fi
+    _ap="$(mktemp -d "$WORK/proj.XXXXXX")" && cp -R "$_ak/." "$_ap/" && printf '%s\n' "$_ap"
+  else
+    _ap="$(newproj "$2" "$3")"; proj_extra "$_ap" "${4:-}"; arm_marker "$1" "$_ap"; printf '%s\n' "$_ap"
+  fi
+}
+proj_extra() { # proj_extra <project> <''|digest|rc>
+  case "$2" in
+    digest) mkdir -p "$1/.claude/skills/ai-dlc"; printf 'digest\n' > "$1/.claude/skills/ai-dlc/postcompact-digest.md" ;;
+    rc) mkdir -p "$1/.claude/skills/ai-dlc" "$1/x"
+        printf 'digest body\n' > "$1/.claude/skills/ai-dlc/postcompact-digest.md"
+        printf 'not the digest\n' > "$1/x/postcompact-digest.md" ;;
+  esac
+}
 
 # --- the seven predicates ---------------------------------------------------
 # Each prints PASS, or FAIL:<what it saw>. The arm prints the detail; the mutant arms keep
@@ -719,7 +780,7 @@ p_inert() {
 #    filed incident was a lead "continuing straight into in-flight edit work" and a gate that
 #    only understood Read calls would have waved it through.
 p_deny_first() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   for _c in "Edit:$_p/decoy.md" "Bash:-" "Read:$_p/decoy.md"; do
     d="$(gate_call "$1" "$_p" "$(jcall "${_c%%:*}" "${_c#*:}")")"
     allowed "$d" && { printf 'FAIL:%s was allowed as the first post-compact call\n' "${_c%%:*}"; return; }
@@ -741,10 +802,9 @@ p_deny_first() {
 #    Its step path is taken from the MARKER, never recomputed here.
 p_ladder() { # p_ladder <gate> <abs|rel|consumer>
   case "$2" in
-    consumer) _p="$(newproj architecture.md consumer)" ;;
-    *)        _p="$(newproj architecture.md flat)" ;;
+    consumer) _p="$(armed_proj "$HOOK" architecture.md consumer)" ;;
+    *)        _p="$(armed_proj "$HOOK" architecture.md flat)" ;;
   esac
-  arm_marker "$HOOK" "$_p"
   case "$2" in
     abs) s="$_p/_bmad-output/pipeline-snapshot.md"; f="$_p/architecture.md" ;;
     rel) s="_bmad-output/pipeline-snapshot.md";     f="architecture.md" ;;
@@ -779,7 +839,7 @@ p_ladder() { # p_ladder <gate> <abs|rel|consumer>
 #    the gate could demand, so it must not arm — and it must LEAVE the marker, which is
 #    ai-dlc-postcompact.sh's record that the injection happened.
 p_standdown_r0() {
-  _p="$(newproj - none)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" - none)"
   grep -q '^step_file_resolved=0$' "$_p/$mk" 2>/dev/null \
     || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — this snapshot still resolved a step file\n'; return; }
   d="$(gate_call "$1" "$_p" "$(jcall Edit "$_p/decoy.md")")"
@@ -802,7 +862,7 @@ p_standdown_r0() {
 #    can create. So the seed arms on a file that IS there and then removes it, which is the only
 #    tree that reaches this branch and is also the one the guard's own comment describes.
 p_standdown_missing() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   grep -q '^step_file_resolved=1$' "$_p/$mk" 2>/dev/null \
     || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the step file did not resolve at arming time, so this is the r0 case\n'; return; }
   rm -f "$_p/architecture.md"
@@ -820,7 +880,7 @@ p_standdown_missing() {
 #    mandate it never recorded, and a consumer mid-upgrade has exactly one of these on disk.
 p_legacy() {
   [ -n "${LEGACY_PRODUCER:-}" ] || { printf 'FAIL:FIXTURE STALE — no legacy producer was built\n'; return; }
-  _p="$(newproj architecture.md flat)"; arm_marker "$LEGACY_PRODUCER" "$_p"
+  _p="$(armed_proj "$LEGACY_PRODUCER" architecture.md flat)"
   grep -qE '^(snapshot_path|step_file|step_file_resolved)=' "$_p/$mk" 2>/dev/null \
     && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the legacy marker still carries the new keys\n'; return; }
   grep -q '^fired_at=' "$_p/$mk" 2>/dev/null \
@@ -885,7 +945,7 @@ p_fastpath() {
 #    line 1 is a full read and must be allowed, so a test widened to "any offset field is a
 #    partial" fails here rather than passing as a stricter gate.
 p_full_snapshot() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   for _b in "1:-" "-:800"; do
     d="$(gate_call "$1" "$_p" "$(jbounded "$_p/_bmad-output/pipeline-snapshot.md" "${_b%%:*}" "${_b#*:}")")"
     allowed "$d" && { printf 'FAIL:a snapshot Read bounded by {limit=%s offset=%s} was allowed as the mandated FIRST call\n' "${_b%%:*}" "${_b#*:}"; return; }
@@ -901,7 +961,7 @@ p_full_snapshot() {
 }
 
 p_full_step() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   gate_call "$1" "$_p" "$(jcall Read "$_p/_bmad-output/pipeline-snapshot.md")" >/dev/null
   [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] \
     || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the full snapshot Read did not reach stage two\n'; return; }
@@ -927,13 +987,13 @@ p_full_step() {
 #    unrefused and read its step file two minutes later). `jmate` is `jcall` plus `agent_id`, so
 #    each teammate cell and its lead twin are one property apart and cannot drift.
 jmate() { # jmate <tool> <file_path|-> <agent_id> -- jcall's call, made inside a teammate
-  jcall "$1" "$2" | jq -c --arg a "$3" '. + {agent_id:$a}'
+  _jm="$(jcall "$1" "$2")"; printf '%s,"agent_id":"%s"}' "${_jm%\}}" "$3"
 }
 #    11. A teammate's Write/Bash/Agent while armed is allowed, and the LEAD's identical call in
 #        the same state is still refused naming the first Read -- the twin that a gate exiting
 #        for every caller fails.
 p_mate_calls() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   for _c in "Write:$_p/decoy.md" "Bash:-" "Agent:-"; do
     d="$(gate_call "$1" "$_p" "$(jmate "${_c%%:*}" "${_c#*:}" agent-m1)")"
     allowed "$d" || { printf 'FAIL:a teammate %s was refused during the lead recovery window\n' "${_c%%:*}"; return; }
@@ -948,7 +1008,7 @@ p_mate_calls() {
 #    12. A teammate's two mandated Reads, full, leave the lead's gate armed at stage one; the
 #        lead's same two Reads then advance and disarm it (the near-miss, one property apart).
 p_mate_reads() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   s="$_p/_bmad-output/pipeline-snapshot.md"; f="$_p/architecture.md"
   d="$(gate_call "$1" "$_p" "$(jmate Read "$s" agent-m1)")"
   allowed "$d" || { printf 'FAIL:a teammate Read of the snapshot was refused\n'; return; }
@@ -1454,17 +1514,15 @@ OW="_bmad-output/.recover-advisor-owed"
 # aproj [nodigest] -> a consumer-layout project, recovery armed by the REAL producer and both
 # mandated Reads issued by the lead in session `sess-A`; the digest exists unless `nodigest`.
 aproj() {
-  _p="$(newproj architecture.md consumer)"
-  [ "${1:-}" = nodigest ] || { mkdir -p "$_p/.claude/skills/ai-dlc"; printf 'digest\n' > "$_p/.claude/skills/ai-dlc/postcompact-digest.md"; }
-  arm_marker "$HOOK" "$_p"
-  printf '%s\n' "$_p"
+  if [ "${1:-}" = nodigest ]; then armed_proj "$HOOK" architecture.md consumer
+  else armed_proj "$HOOK" architecture.md consumer digest; fi
 }
 # areads <gate> <project> [agent_id] -- the two mandated Reads, full, from the lead or a mate.
 areads() {
   _sf="$(marker_step "$2")"
   for _f in "$2/_bmad-output/pipeline-snapshot.md" "$2/$_sf"; do
-    jq -n --arg f "$_f" --arg a "${3:-}" '{tool_name:"Read",session_id:"sess-A",tool_input:{file_path:$f}} + (if $a == "" then {} else {agent_id:$a} end)' \
-      | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+    if [ -n "${3:-}" ]; then _aj="$(jmate Read "$_f" "$3")"; else _aj="$(jcall Read "$_f")"; fi
+    printf '%s' "$_aj" | hook_run "$1" "$2" >/dev/null 2>&1
   done
 }
 # tline <kind> <project> -> one transcript line in the harness's shape
@@ -1484,15 +1542,10 @@ tline() {
 acall() {
   _id="tin-$RANDOM$RANDOM"
   printf '{"type":"assistant","message":{"id":"m-%s","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$_id" "$_id" "$3" >> "$4"
-  jq -n --arg t "$3" --arg tp "$4" --arg id "$_id" --arg a "${5:-}" --arg s "${6:-sess-A}" \
-    '{tool_name:$t,session_id:$s,transcript_path:$tp,tool_use_id:$id,tool_input:{file_path:"x.md",command:"ls"}} + (if $a == "" then {} else {agent_id:$a} end)' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
-    | python3 -c 'import sys,json
-try:
-    o = json.load(sys.stdin)["hookSpecificOutput"]
-    print(o.get("permissionDecision","") + "|" + o.get("permissionDecisionReason","").replace("\n"," "))
-except Exception:
-    print("|")'
+  _aa=""; [ -n "${5:-}" ] && _aa=",\"agent_id\":\"$5\""
+  _ao="$(printf '{"tool_name":"%s","session_id":"%s","transcript_path":"%s","tool_use_id":"%s","tool_input":{"file_path":"x.md","command":"ls"}%s}' \
+      "$3" "${6:-sess-A}" "$4" "$_id" "$_aa" | hook_run "$1" "$2" 2>/dev/null)"
+  dec_of "$_ao"
 }
 # ONE SEEDED WORLD PER GATE PER PASS, COPIED PER PREDICATE. Seeding a world costs a producer run
 # and two gate Reads (~0.6s at load 60) against ~0.02s for a copy, and the battery builds 17 worlds
@@ -1566,9 +1619,9 @@ a_nogrant_run() { # a_nogrant_run <gate> <project> <counter> -> decision on stdo
   _sd="$(mktemp -d "$WORK/sleepshim.XXXXXX")"
   printf '#!/bin/bash\necho x >> "%s"\nexit 0\n' "$3" > "$_sd/sleep"; chmod +x "$_sd/sleep"
   : > "$3"
-  jq -n --arg tp "$2/t.jsonl" '{tool_name:"Agent",session_id:"sess-A",transcript_path:$tp,tool_use_id:"toolu_nogrant_never",tool_input:{}}' \
-    | PATH="$_sd:$PATH" RECOVER_GATE_NET=8 CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
-    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null
+  _no="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"toolu_nogrant_never","tool_input":{}}' "$2/t.jsonl" \
+    | PATH="$_sd:$PATH" RECOVER_GATE_NET=8 hook_run "$1" "$2" 2>/dev/null)"
+  _nd="$(dec_of "$_no")"; printf '%s\n' "${_nd%%|*}"
 }
 a_nogrant() {
   _p="$(a_world "$1" boundary digest)"
@@ -1749,13 +1802,30 @@ stx() { # stx <upd|pipe> <path> -- a transcript whose LAST ai-dlc marker is the 
   } > "$2"
 }
 sarm() { # sarm <recover-hook> <project> <session> <transcript> -- the producer, driven as SessionStart:compact
-  jq -n --arg s "$3" --arg t "$4" '{source:"compact",session_id:$s,transcript_path:$t}' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+  printf '{"source":"compact","session_id":"%s","transcript_path":"%s"}' "$3" "$4" | hook_run "$1" "$2" >/dev/null 2>&1
 }
 sdec() { # sdec <gate> <project> <session> <transcript> -> deny | silent, for a Bash call
-  _o="$(jq -n --arg s "$3" --arg t "$4" '{tool_name:"Bash",session_id:$s,transcript_path:$t,tool_input:{command:"ls"}}' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
-  if [ "$_o" = deny ]; then printf 'deny\n'; else printf 'silent\n'; fi
+  _o="$(printf '{"tool_name":"Bash","session_id":"%s","transcript_path":"%s","tool_input":{"command":"ls"}}' "$3" "$4" \
+    | hook_run "$1" "$2" 2>/dev/null)"
+  _o="$(dec_of "$_o")"
+  if [ "${_o%%|*}" = deny ]; then printf 'deny\n'; else printf 'silent\n'; fi
+}
+# armed_sa <producer> <transcript name> -> a consumer project whose pipeline transcript is <name>,
+# armed by <producer> as session S-A. The same content-keyed template rule as armed_proj: a copy of
+# the real producer's world when <producer> is byte-identical to $HOOK, a live arming otherwise. The
+# marker records no transcript path, so the copy is the armed state of the project it lands in.
+armed_sa() {
+  if cmp -s "$1" "$HOOK"; then
+    _sk2="$WORK/tpl/sa.$2"
+    if [ ! -d "$_sk2" ]; then
+      _sb="$(newproj architecture.md consumer)"; stx pipe "$_sb/$2"; sarm "$HOOK" "$_sb" S-A "$_sb/$2"
+      grep -qx 'session_id=S-A' "$_sb/$mk" 2>/dev/null || { echo "FIXTURE BROKEN: the real producer armed no S-A template" >&2; exit 2; }
+      mkdir -p "$WORK/tpl"; mv "$_sb" "$_sk2"
+    fi
+    _sp="$(mktemp -d "$WORK/proj.XXXXXX")" && cp -R "$_sk2/." "$_sp/" && printf '%s\n' "$_sp"
+  else
+    _sp="$(newproj architecture.md consumer)"; stx pipe "$_sp/$2"; sarm "$1" "$_sp" S-A "$_sp/$2"; printf '%s\n' "$_sp"
+  fi
 }
 sunowned() { # sunowned <project> -- the marker as the previous revision wrote it: no owner
   grep -v '^session_id=' "$1/$mk" > "$1/$mk.n" 2>/dev/null; mv "$1/$mk.n" "$1/$mk"
@@ -1780,8 +1850,7 @@ sp_pipe_compact() {
 }
 # C3. A stale marker from session A, no compaction in B, and B is an update session: silent, marker kept.
 sp_stale_upd() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tB.jsonl"
-  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  _p="$(armed_sa "$1" tA.jsonl)"; stx upd "$_p/tB.jsonl"
   grep -qx 'session_id=S-A' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker owned by session A\n'; return; }
   [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:an update session was denied on a marker another session left\n'; return; }
   [ -e "$_p/$mk" ] || { printf 'FAIL:the stand-down deleted a marker that is another session'"'"'s pending recovery\n'; return; }
@@ -1789,8 +1858,7 @@ sp_stale_upd() {
 }
 # C4. A stale marker from session A, B is a PIPELINE session: only the owner test can stand down.
 sp_stale_pipe() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
-  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  _p="$(armed_sa "$1" tA.jsonl)"; stx pipe "$_p/tB.jsonl"
   grep -qx 'session_id=S-A' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker owned by session A\n'; return; }
   [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:session B was denied on a recovery owed to session A\n'; return; }
   [ -e "$_p/$mk" ] || { printf 'FAIL:the stand-down deleted session A'"'"'s marker\n'; return; }
@@ -1798,15 +1866,13 @@ sp_stale_pipe() {
 }
 # C5. THE SAME-SESSION CONTROL for C3/C4: the owner, a pipeline session, is denied.
 sp_same_sess() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"
-  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  _p="$(armed_sa "$1" tA.jsonl)"
   [ "$(sdec "$2" "$_p" S-A "$_p/tA.jsonl")" = deny ] || { printf 'FAIL:the session that owns the marker was let through\n'; return; }
   printf 'PASS\n'
 }
 # C6. BACK-COMPAT: a marker with no session_id (an older hook wrote it) still gates a pipeline session.
 sp_legacy_pipe() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
-  sarm "$1" "$_p" S-A "$_p/tA.jsonl"; sunowned "$_p"
+  _p="$(armed_sa "$1" tA.jsonl)"; stx pipe "$_p/tB.jsonl"; sunowned "$_p"
   grep -q '^session_id=' "$_p/$mk" 2>/dev/null && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker still carries an owner\n'; return; }
   grep -q '^step_file_resolved=1$' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker is not armable\n'; return; }
   [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = deny ] || { printf 'FAIL:an ownerless marker stopped gating a pipeline session\n'; return; }
@@ -1814,8 +1880,7 @@ sp_legacy_pipe() {
 }
 # C7. An ownerless marker and an UPDATE session: only the updater test can stand down. Marker kept.
 sp_legacy_upd() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tB.jsonl"
-  sarm "$1" "$_p" S-A "$_p/tA.jsonl"; sunowned "$_p"
+  _p="$(armed_sa "$1" tA.jsonl)"; stx upd "$_p/tB.jsonl"; sunowned "$_p"
   grep -q '^session_id=' "$_p/$mk" 2>/dev/null && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker still carries an owner\n'; return; }
   [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:an update session was denied on an ownerless marker\n'; return; }
   [ -e "$_p/$mk" ] || { printf 'FAIL:the updater stand-down deleted a marker that may be a real lead'"'"'s pending recovery\n'; return; }
@@ -1829,28 +1894,24 @@ sp_legacy_upd() {
 # second project proving the seed reaches the readability block (the same-owner / pipeline call
 # there stands down AND clears the marker).
 sp_ord_pipe() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
-  sarm "$1" "$_p" S-A "$_p/tA.jsonl"
+  _p="$(armed_sa "$1" tA.jsonl)"; stx pipe "$_p/tB.jsonl"
   grep -qx 'session_id=S-A' "$_p/$mk" 2>/dev/null || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker owned by session A\n'; return; }
   rm -f "$_p/_bmad-output/pipeline-snapshot.md"
   [ -e "$_p/_bmad-output/pipeline-snapshot.md" ] && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the snapshot did not vanish\n'; return; }
   [ "$(sdec "$2" "$_p" S-B "$_p/tB.jsonl")" = silent ] || { printf 'FAIL:session B was denied on a recovery owed to session A\n'; return; }
   [ -e "$_p/$mk" ] || { printf 'FAIL:a non-owner call cleared the lead'"'"'s pending recovery through the readability block\n'; return; }
-  _q="$(newproj architecture.md consumer)"; stx pipe "$_q/tA.jsonl"
-  sarm "$1" "$_q" S-A "$_q/tA.jsonl"; rm -f "$_q/_bmad-output/pipeline-snapshot.md"
+  _q="$(armed_sa "$1" tA.jsonl)"; rm -f "$_q/_bmad-output/pipeline-snapshot.md"
   sdec "$2" "$_q" S-A "$_q/tA.jsonl" >/dev/null
   [ -e "$_q/$mk" ] && { printf 'FAIL:CONTROL — the owner'"'"'s call on a vanished snapshot left the marker, so the seed never reaches the readability block\n'; return; }
   printf 'PASS\n'
 }
 sp_ord_upd() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tU.jsonl"
-  sarm "$1" "$_p" S-A "$_p/tA.jsonl"; sunowned "$_p"
+  _p="$(armed_sa "$1" tA.jsonl)"; stx upd "$_p/tU.jsonl"; sunowned "$_p"
   grep -q '^session_id=' "$_p/$mk" 2>/dev/null && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the marker still carries an owner\n'; return; }
   rm -f "$_p/_bmad-output/pipeline-snapshot.md"
   [ "$(sdec "$2" "$_p" S-U "$_p/tU.jsonl")" = silent ] || { printf 'FAIL:an update session was denied on an ownerless marker\n'; return; }
   [ -e "$_p/$mk" ] || { printf 'FAIL:an update session'"'"'s call cleared a lead'"'"'s pending recovery through the readability block\n'; return; }
-  _q="$(newproj architecture.md consumer)"; stx pipe "$_q/tA.jsonl"
-  sarm "$1" "$_q" S-A "$_q/tA.jsonl"; sunowned "$_q"; rm -f "$_q/_bmad-output/pipeline-snapshot.md"
+  _q="$(armed_sa "$1" tA.jsonl)"; sunowned "$_q"; rm -f "$_q/_bmad-output/pipeline-snapshot.md"
   sdec "$2" "$_q" S-B "$_q/tA.jsonl" >/dev/null
   [ -e "$_q/$mk" ] && { printf 'FAIL:CONTROL — a pipeline call on a vanished snapshot left the marker, so the seed never reaches the readability block\n'; return; }
   printf 'PASS\n'
@@ -1978,9 +2039,9 @@ a_net() {
   [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
   _d0="$(sed -n 's/^denies=//p' "$_p/$OW")"
   _e="$_p/net.err"
-  d="$(jq -n --arg tp "$_p/t.jsonl" '{tool_name:"Agent",session_id:"sess-A",transcript_path:$tp,tool_use_id:"tin-never",tool_input:{}}' \
-    | RECOVER_GATE_NET=2 CLAUDE_PROJECT_DIR="$_p" bash "$1" 2>"$_e" \
-    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  d="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"tin-never","tool_input":{}}' "$_p/t.jsonl" \
+    | RECOVER_GATE_NET=2 hook_run "$1" "$_p" 2>"$_e")"
+  d="$(dec_of "$d")"; d="${d%%|*}"
   [ "$d" = deny ] && { printf 'FAIL:an unseen call was denied when the safety net expired\n'; return; }
   grep -q 'did not land within the' "$_e" || { printf 'FAIL:the stand-down gave no stderr reason\n'; return; }
   [ -e "$_p/$OW" ] || { printf 'FAIL:the stand-down removed the owed file, so R is forgotten for the next dispatch\n'; return; }
@@ -2017,9 +2078,9 @@ fi
 
 # rcall <gate> <project> <tool_use_id> <net> [stderr file] -> deny | empty, for an Agent call
 rcall() {
-  jq -n --arg tp "$2/t.jsonl" --arg id "$3" '{tool_name:"Agent",session_id:"sess-A",transcript_path:$tp,tool_use_id:$id,tool_input:{}}' \
-    | RECOVER_GATE_NET="$4" CLAUDE_PROJECT_DIR="$2" bash "$1" 2>"${5:-/dev/null}" \
-    | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null
+  _rco="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"%s","tool_input":{}}' "$2/t.jsonl" "$3" \
+    | RECOVER_GATE_NET="$4" hook_run "$1" "$2" 2>"${5:-/dev/null}")"
+  _rco="$(dec_of "$_rco")"; printf '%s\n' "${_rco%%|*}"
 }
 # mline <message id> <tool_use id...> -> ONE assistant line carrying those Agent tool_use blocks,
 # which is the shape a parallel dispatch is recorded in.
@@ -2249,7 +2310,7 @@ race_edit() {
 }
 # race_world <gate> -> project; the third Read's answer is in <project>/race.d
 race_world() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   gate_call "$GATE" "$_p" "$(jcall Read "$_p/_bmad-output/pipeline-snapshot.md")" >/dev/null
   if [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] && [ -e "$_p/$mk" ]; then
     gate_call "$1" "$_p" "$(jcall Read "$_p/decoy.md")" > "$_p/race.d"
@@ -2260,7 +2321,7 @@ race_world() {
 }
 # race_first <gate> -> project; the genuine first call (marker present, no progress file yet)
 race_first() {
-  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" architecture.md flat)"
   if [ -e "$_p/$mk" ] && [ ! -e "$_p/$pg" ]; then
     gate_call "$1" "$_p" "$(jcall Read "$_p/decoy.md")" > "$_p/race.d"
   else
@@ -2424,11 +2485,7 @@ fi
   # rc_proj <hooks-dir> <first|step> -> a project armed by that directory's own producer, at the
   # named stage, carrying the digest and a same-basename decoy; empty when the world did not form.
   rc_proj() {
-    _rq="$(newproj architecture.md flat)"
-    mkdir -p "$_rq/.claude/skills/ai-dlc" "$_rq/x"
-    printf 'digest body\n' > "$_rq/$RC_DIGREL"
-    printf 'not the digest\n' > "$_rq/x/postcompact-digest.md"
-    arm_marker "$1/$RC_RH" "$_rq"
+    _rq="$(armed_proj "$1/$RC_RH" architecture.md flat rc)"
     { [ -e "$_rq/$mk" ] && [ ! -e "$_rq/$pg" ]; } || return 0
     if [ "$2" = step ]; then
       gate_call "$1/$RG" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")" >/dev/null
@@ -3348,11 +3405,9 @@ elif [ -z "${GATE:-}" ] || ! command -v jq >/dev/null 2>&1; then
 else
 
 p_sequence() { # p_sequence <postcompact-hook> -> PASS | FAIL:<what it saw>
-  _p="$(newproj route.md consumer)"
-  arm_marker "$HOOK" "$_p"
+  _p="$(armed_proj "$HOOK" route.md consumer)"
   [ -f "$_p/$mk" ] || { printf 'FAIL:SEED — the producer wrote no marker, so the sequence has nothing to lose\n'; return; }
-  printf '{"trigger":"auto","session_id":"sess-A","compact_summary":"seeded"}' \
-    | CLAUDE_PROJECT_DIR="$_p" bash "$1" >/dev/null 2>&1
+  printf '{"trigger":"auto","session_id":"sess-A","compact_summary":"seeded"}' | hook_run "$1" "$_p" >/dev/null 2>&1
   grep -q 'recovery_injected: yes' "$_p/_bmad-output/compaction-log.md" 2>/dev/null \
     || { printf 'FAIL:postcompact did not log the injection, so it never read the marker and this arm measured nothing\n'; return; }
   [ -f "$_p/$mk" ] || { printf 'FAIL:postcompact DELETED the marker the gate arms on, one event before the gate can read it\n'; return; }
@@ -3396,8 +3451,7 @@ fi
 if grep -qF 'mval session_id' "$GATE" && grep -qF 'printf '"'"'session_id=%s' "$HOOK"; then
 
 pcall() { # pcall <postcompact> <project> <session> <transcript> -> its stdout
-  jq -n --arg s "$3" --arg t "$4" '{trigger:"auto",session_id:$s,transcript_path:$t,compact_summary:"seeded"}' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null
+  printf '{"trigger":"auto","session_id":"%s","transcript_path":"%s","compact_summary":"seeded"}' "$3" "$4" | hook_run "$1" "$2" 2>/dev/null
 }
 plog() { cat "$1/_bmad-output/compaction-log.md" 2>/dev/null || true; }
 
@@ -3412,8 +3466,7 @@ pc_upd_nomark() {
 }
 # P6. A lead's marker for session A is on disk and an update session compacts: still nothing.
 pc_upd_foreign() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx upd "$_p/tU.jsonl"
-  sarm "$HOOK" "$_p" S-A "$_p/tA.jsonl"
+  _p="$(armed_sa "$HOOK" tA.jsonl)"; stx upd "$_p/tU.jsonl"
   [ -e "$_p/$mk" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — no marker\n'; return; }
   _o="$(pcall "$1" "$_p" S-U "$_p/tU.jsonl")"
   [ -z "$_o" ] || { printf 'FAIL:printed into an update session: %s\n' "$_o"; return; }
@@ -3423,8 +3476,7 @@ pc_upd_foreign() {
 # P6b. A PIPELINE session compacts and the marker is another session's: the report is `no`, with
 # no byte count -- never `yes` for a recovery that was not this session's.
 pc_foreign() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tA.jsonl"; stx pipe "$_p/tB.jsonl"
-  sarm "$HOOK" "$_p" S-A "$_p/tA.jsonl"
+  _p="$(armed_sa "$HOOK" tA.jsonl)"; stx pipe "$_p/tB.jsonl"
   _o="$(pcall "$1" "$_p" S-B "$_p/tB.jsonl")"
   _l="$(plog "$_p")"
   grep -qx -- '- recovery_injected: no' <<<"$_l" || { printf 'FAIL:did not log `no` for a marker owned by another session\n'; return; }
@@ -3433,8 +3485,7 @@ pc_foreign() {
 }
 # P6c. CONTROL / BACK-COMPAT: an ownerless marker and a pipeline session still log `yes` with bytes.
 pc_legacy() {
-  _p="$(newproj architecture.md consumer)"; stx pipe "$_p/tB.jsonl"
-  sarm "$HOOK" "$_p" S-A "$_p/tB.jsonl"; sunowned "$_p"
+  _p="$(armed_sa "$HOOK" tB.jsonl)"; sunowned "$_p"
   pcall "$1" "$_p" S-B "$_p/tB.jsonl" >/dev/null
   _l="$(plog "$_p")"
   grep -qx -- '- recovery_injected: yes' <<<"$_l" || { printf 'FAIL:an ownerless marker stopped reading as an injection\n'; return; }
@@ -3476,6 +3527,105 @@ pcmutant "postcompact reads another session's marker as its own" \
 
 fi
 
+fi
+
+# =============================================================================
+# EQUIVALENCE -- the in-process answer is the CLI's, byte for byte, and these are the end-to-end runs
+#
+# Every cell above sources its subject in a subshell (hook_run / val_run). These cells run each
+# subject ONCE MORE as the harness does, `bash <file>` with the payload on stdin, on a REFUSING and a
+# PASSING input that differ, and require the two answers identical. They are also the fixture's
+# end-to-end runs, one per distinct CLI outcome (fixture-mutants.md clauses 5-6). Each pair is taken on
+# two `cp -R` copies of ONE seeded world, because a call mutates the state it is judged on.
+# Normalised only where the subject is nondeterministic BY DESIGN: the recovery hook mints a fresh
+# provenance nonce on every SessionStart (dropped with `demark`, and the marker's `fired_at=` line),
+# and postcompact stamps its log heading with the time (its `## ` line dropped).
+# =============================================================================
+eqv() { # eqv <label> <cli answer> <in-process answer>
+  if [ "$2" = "$3" ]; then return 0; fi
+  bad "EQUIVALENCE: $1 -- the in-process answer differs from the CLI's: cli [$(printf '%s' "$2" | head -c 300)] in-process [$(printf '%s' "$3" | head -c 300)]"
+  return 1
+}
+cp_world() { _cw="$(mktemp -d "$WORK/eq.XXXXXX")" && cp -R "$1/." "$_cw/" && printf '%s\n' "$_cw"; }
+# recover: <project> <mode cli|inproc> -> the demarked context, the exit, and the marker without fired_at
+eq_rec() {
+  if [ "$2" = cli ]; then
+    _eo="$(printf '{"source":"compact","session_id":"sess-A"}' | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>&1)"; _er=$?
+  else
+    _eo="$(printf '{"source":"compact","session_id":"sess-A"}' | hook_run "$HOOK" "$1" 2>&1)"; _er=$?
+  fi
+  printf 'rc=%s\n%s\n--marker--\n%s' "$_er" "$(demark "$(ctx_of "$_eo")")" "$(grep -v '^fired_at=' "$1/$mk" 2>/dev/null)"
+}
+eq_gate() { # <project> <cli|inproc> <json> -> raw stdout, exit, and the gate state left on disk
+  if [ "$2" = cli ]; then
+    _eo="$(printf '%s' "$3" | CLAUDE_PROJECT_DIR="$1" bash "$GATE" 2>&1)"; _er=$?
+  else
+    _eo="$(printf '%s' "$3" | hook_run "$GATE" "$1" 2>&1)"; _er=$?
+  fi
+  printf 'rc=%s\n%s\n--state--\nmarker=%s progress=%s' "$_er" "$_eo" "$([ -e "$1/$mk" ] && echo y || echo n)" "$(cat "$1/$pg" 2>/dev/null)"
+}
+eq_pc() { # <project> <cli|inproc> <session> -> stdout, exit, and the log without its time heading
+  _ej="$(printf '{"trigger":"auto","session_id":"%s","compact_summary":"seeded"}' "$3")"
+  if [ "$2" = cli ]; then
+    _eo="$(printf '%s' "$_ej" | CLAUDE_PROJECT_DIR="$1" bash "$POSTCOMPACT" 2>&1)"; _er=$?
+  else
+    _eo="$(printf '%s' "$_ej" | hook_run "$POSTCOMPACT" "$1" 2>&1)"; _er=$?
+  fi
+  printf 'rc=%s\n%s\n--log--\n%s' "$_er" "$_eo" "$(grep -v '^## ' "$1/_bmad-output/compaction-log.md" 2>/dev/null)"
+}
+eq_val() { # <cli|inproc> <skill> -> stdout+stderr and exit of the validator
+  if [ "$1" = cli ]; then _eo="$(bash "$VAL" --skill "$2" 2>&1)"; _er=$?
+  else _eo="$(val_run --skill "$2" 2>&1)"; _er=$?; fi
+  printf 'rc=%s\n%s' "$_er" "$_eo"
+}
+eq_n=0
+# recovery hook: PASSING = a resolvable single position (a mandate naming the file); REFUSING = two
+# live position bullets (no mandate path, step_file_resolved=0).
+_ew_pass="$(posproj eqp "$POS_LIVE")"; _ew_ref="$(posproj eqr '- **Current step file:** stale.md' "$POS_LIVE")"
+_a="$(cp_world "$_ew_pass")"; _b="$(cp_world "$_ew_pass")"; _c="$(cp_world "$_ew_ref")"; _d="$(cp_world "$_ew_ref")"
+_rp_cli="$(eq_rec "$_a" cli)"; _rp_in="$(eq_rec "$_b" inproc)"; _rr_cli="$(eq_rec "$_c" cli)"; _rr_in="$(eq_rec "$_d" inproc)"
+if [ "$_rp_cli" = "$_rr_cli" ] || ! grep -q '^step_file_resolved=1$' <<<"$_rp_cli" || ! grep -q '^step_file_resolved=0$' <<<"$_rr_cli"; then
+  bad "EQUIVALENCE: recover -- the passing and refusing inputs did not separate under the CLI (resolved=1 vs 0), so the comparison below measures nothing"
+else
+  eqv "recover, passing input" "$_rp_cli" "$_rp_in" && eqv "recover, refusing input" "$_rr_cli" "$_rr_in" && eq_n=$((eq_n + 1))
+fi
+if [ -n "${GATE:-}" ] && command -v jq >/dev/null 2>&1; then
+  # gate: one armed world; REFUSING = an Edit as the first call (deny), PASSING = the full snapshot Read
+  # (allow, advances the stage). Each answer on its own copy, CLI and in process.
+  # The payload names a RELATIVE path, which the gate resolves against CLAUDE_PROJECT_DIR, so one
+  # payload is the same call in every copy (an absolute path would name the template, not the copy).
+  _ew="$(armed_proj "$HOOK" architecture.md flat)"
+  _jd="$(jcall Edit decoy.md)"; _ja="$(jcall Read _bmad-output/pipeline-snapshot.md)"
+  _gd_cli="$(eq_gate "$(cp_world "$_ew")" cli "$_jd")"; _gd_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_jd")"
+  _ga_cli="$(eq_gate "$(cp_world "$_ew")" cli "$_ja")"; _ga_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_ja")"
+  if [ "$_gd_cli" = "$_ga_cli" ] || ! grep -q '"permissionDecision": *"deny"' <<<"$_gd_cli" || ! grep -q 'progress=step$' <<<"$_ga_cli"; then
+    bad "EQUIVALENCE: gate -- the deny and the allow did not separate under the CLI, so the comparison below measures nothing"
+  else
+    eqv "gate, refusing input" "$_gd_cli" "$_gd_in" && eqv "gate, passing input" "$_ga_cli" "$_ga_in" && eq_n=$((eq_n + 1))
+  fi
+  if [ -n "${POSTCOMPACT:-}" ]; then
+    # postcompact: the marker's owner compacts -> `yes`; another session compacts -> `no`.
+    _ew="$(armed_proj "$HOOK" architecture.md flat)"
+    _py_cli="$(eq_pc "$(cp_world "$_ew")" cli sess-A)"; _py_in="$(eq_pc "$(cp_world "$_ew")" inproc sess-A)"
+    _pn_cli="$(eq_pc "$(cp_world "$_ew")" cli sess-Z)"; _pn_in="$(eq_pc "$(cp_world "$_ew")" inproc sess-Z)"
+    if [ "$_py_cli" = "$_pn_cli" ] || ! grep -q 'recovery_injected: yes' <<<"$_py_cli" || ! grep -q 'recovery_injected: no' <<<"$_pn_cli"; then
+      bad "EQUIVALENCE: postcompact -- the owner's and a foreign session's compaction did not separate under the CLI"
+    else
+      eqv "postcompact, owner" "$_py_cli" "$_py_in" && eqv "postcompact, foreign session" "$_pn_cli" "$_pn_in" && eq_n=$((eq_n + 1))
+    fi
+  fi
+fi
+# validator: PASSING = the shipped SKILL.md; REFUSING = the no-mandate copy assertion 7 built.
+_vp_cli="$(eq_val cli "$SKILL")"; _vp_in="$(eq_val inproc "$SKILL")"
+_vr_cli="$(eq_val cli "$MUT_SKILL")"; _vr_in="$(eq_val inproc "$MUT_SKILL")"
+if [ "$_vp_cli" = "$_vr_cli" ] || [ "${_vp_cli%%$'\n'*}" != rc=0 ] || [ "${_vr_cli%%$'\n'*}" != rc=1 ]; then
+  bad "EQUIVALENCE: validator -- the shipped and the no-mandate SKILL.md did not separate under the CLI (rc 0 vs 1)"
+else
+  eqv "validator, passing input" "$_vp_cli" "$_vp_in" && eqv "validator, refusing input" "$_vr_cli" "$_vr_in" && eq_n=$((eq_n + 1))
+fi
+_eq_want=2; [ -n "${GATE:-}" ] && _eq_want=3; [ -n "${GATE:-}" ] && [ -n "${POSTCOMPACT:-}" ] && _eq_want=4
+if [ "$eq_n" = "$_eq_want" ]; then
+  ok "equivalence: for each of the ${eq_n} subjects, \`bash <file>\` and the in-process call give byte-identical answers on a refusing and a passing input that differ"
 fi
 
 echo
