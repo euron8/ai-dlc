@@ -56,10 +56,12 @@ pd_refuse() { # pd_refuse <message>
   exit 2
 }
 
+pd_sec_init() {
 command -v shasum >/dev/null 2>&1 || pd_refuse "no shasum on PATH, so no block can be digested; refusing rather than drain blocks whose refusal could not be looked up"
 
 PD_T="$(mktemp -d "${TMPDIR:-/tmp}/push-drain.XXXXXX")" || pd_refuse "could not create a staging directory"
 trap 'rm -rf "$PD_T"' EXIT
+}
 
 # pd_split <file> <out> -- one line per block: index TAB heading TAB collapsed text.
 # rc 0 split it; 3 unterminated frontmatter; anything else the file could not be read.
@@ -123,6 +125,7 @@ pd_out() {
   printf '%s\n' "$1" || pd_refuse "a row could not be written to stdout; the output is INCOMPLETE and nothing from this run may be drained"
 }
 
+pd_sec_digest() {
 if [ "${1:-}" = "--digest" ]; then
   [ $# -eq 2 ] || pd_refuse "usage: push-drain.sh --digest <file>"
   [ -f "$2" ] || pd_refuse "--digest: $2 is not a file"
@@ -133,7 +136,9 @@ if [ "${1:-}" = "--digest" ]; then
   done < "$PD_T/blocks"
   exit 0
 fi
+}
 
+pd_sec_drain() {
 [ $# -eq 3 ] || pd_refuse "usage: push-drain.sh <dist-repo> <theirs-ref> <consumer-root> | push-drain.sh --digest <file>"
 DIST="$1"; THEIRS="$2"
 CONSUMER="$(cd "$3" 2>/dev/null && pwd)" || pd_refuse "consumer root $3 is not a directory"
@@ -208,3 +213,13 @@ done < "$PD_T/files"
 
 [ "$n" -gt 0 ] || echo "push-drain: NOTE — $EXT holds no push_candidate: true extension, so there is nothing to drain" >&2
 exit 0
+}
+
+# THE SOURCE GUARD. Sourced, this file defines its functions and stops; pd_main is the whole CLI.
+pd_main() {
+pd_sec_init
+pd_sec_digest "$@"
+pd_sec_drain "$@"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+pd_main "$@"

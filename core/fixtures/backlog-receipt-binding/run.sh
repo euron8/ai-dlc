@@ -91,6 +91,13 @@
 # MUTANT-MATRIX c5-m4-open decides=c5_open twins=c5_m4
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
+# IN PROCESS. Every validator run goes through vin: the world's own copy of the validator (mutated
+# or not) is SOURCED in a subshell and its CLI entry vbr_main called with the CLI's argv; the copy's
+# root, siblings and --score-one workers resolve from BASH_SOURCE, so they are the world's own. The
+# kept end-to-end runs are VEQ's four (`bash <copy>` on the control, m1's refusal, ef-good and
+# ef-noclose), each compared byte-for-byte with the in-process answer. The seeded repository is built
+# once and copied into each world (seed / seed_build).
+#
 # Usage: run.sh
 # Exit:  0 = every probe holds, 1 = one regressed, 2 = fixture broken.
 set -u
@@ -337,7 +344,18 @@ all_arms() { declare -F | awk '$3 ~ /^arm_/ { sub(/^arm_/, "", $3); print $3 }';
 # and on the real ledger they take a correct nine findings to six and to three, silently, in
 # the direction that reads as a cleaner ledger. Neither literal is present at base, so the
 # receipt reproduces at 1 and can only reach 0 when both halves of the seed arrive.
+# seed <dir> -- THE WORLD IS BUILT ONCE AND COPIED (fixture-mutants.md clause 4). seed_build makes the
+# repository below exactly once, under $TMP/.seed-tpl; every seed after that copies it, history and
+# all, preserving mtimes so the copy's index is as clean as the original's. Only the counter reset
+# runs per world, because BL-808 reads it from outside every checkout.
 seed() { # seed <dir>
+  local d="$1" t="$TMP/.seed-tpl"
+  [ -d "$t/.git" ] || seed_build "$t"
+  mkdir -p "$d" && cp -Rp "$t/." "$d/" || { echo "FIXTURE BROKEN: could not copy the seeded world into $d" >&2; exit 2; }
+  printf 0 > "$BL_UNSTABLE_COUNTER"
+  [ -d "$d/.git" ] || { echo "FIXTURE BROKEN: the probe repository at $d has no .git" >&2; exit 2; }
+}
+seed_build() { # seed_build <dir>
   local d="$1"
   mkdir -p "$d/scripts" "$d/docs" "$d/core/skills/ai-dlc-update/reconcile" "$d/probe"
   echo "0.0.0" > "$d/VERSION"
@@ -401,7 +419,29 @@ bl_seed_ledger() { # bl_seed_ledger <file>
 # arms above R7's own (c5-*, which drive the subject without run_v) are about other ceilings.
 run_v() { # run_v <env-string-or-empty> <dir> [<extra-args>...]
   local e="$1" d="$2"; shift 2
-  ( cd "$d" && env $e bash scripts/validate-backlog-receipts.sh --max-cannot-measure 99 "$@" 2>&1 )
+  vin "$d" "$d/scripts/validate-backlog-receipts.sh" "$e" --max-cannot-measure 99 "$@"
+}
+# vin <cwd> <validator copy> <env-words> [<args>...] -- THE IN-PROCESS DRIVE. The world's own copy
+# of the validator (mutated or not) is SOURCED in a subshell -- its BASH_SOURCE guard stops it after
+# the definitions -- and its own CLI entry, vbr_main, is called with the argv the CLI would get, so
+# every `exit` ends the subshell and its status is the run's. The validator reads its own path from
+# BASH_SOURCE, which inside vbr_main names the sourced copy, so its root, its siblings and the
+# `bash "$SELF" --score-one` workers resolve in the world exactly as under the CLI. The env words are
+# exported inside the subshell, which is what `env <words> bash` handed the CLI.
+# VEQ (below) proves this drive answers byte-for-byte what `bash <copy>` does.
+vin() {
+  local c="$1" v="$2" e="$3"; shift 3
+  ( cd "$c" || exit 2
+    for _w in $e; do export "$_w"; done
+    # shellcheck source=/dev/null
+    . "$v" || exit 2
+    declare -F vbr_main >/dev/null || { echo "FIXTURE BROKEN: $v defined no vbr_main when sourced" >&2; exit 3; }
+    vbr_main "$@" ) 2>&1
+}
+# cli_v <cwd> <validator copy> <env-words> [<args>...] -- the same run through the CLI, for VEQ only.
+cli_v() {
+  local c="$1" v="$2" e="$3"; shift 3
+  ( cd "$c" && env $e bash "$v" "$@" 2>&1 )
 }
 
 # The default arguments every probe uses unless it is pinning something. The seeded ledger has
@@ -549,6 +589,32 @@ seed "$TMP/m1"
 if mut "$TMP/m1" 's|^  GENERIC_LINE="# probe"|  GENERIC_LINE="# probe"; SEED_LINE="# probe"|'; then
   drive m1 "$TMP/m1" "" $DEF
   score m1 "$B_CTRL" "m1 -- a token-free seed is refused by the self-probe, before the corpus"
+fi
+
+# ===== VEQ. THE IN-PROCESS DRIVE IS THE CLI, BYTE FOR BYTE. ===================================
+# Every cell in this file drives the validator through vin (sourced, vbr_main in a subshell). These
+# are the END-TO-END runs kept, one per distinct CLI outcome: `bash <copy>` on the control world
+# (exit 0, the full corpus), on m1's world (exit 2, a self-probe refusal), and through
+# --efficiency-only on ef-good (exit 0) and ef-noclose (exit 1, defined below). Each is compared
+# with the in-process answer on the SAME world -- merged stdout+stderr and the exit code -- and the
+# compared outcomes must differ, so a drive that printed nothing on both sides cannot pass.
+# BL-808's counter is reset first: the control's in-process run advanced it, and an advanced counter
+# is a second reading, which is a different world.
+veq_ok=1; veq_why=""
+printf 0 > "$BL_UNSTABLE_COUNTER"
+# shellcheck disable=SC2086
+veq_cli="$(cli_v "$TMP/control" "$TMP/control/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 $DEF)"; veq_crc=$?
+[ "$veq_crc" = "$CTL_RC" ] && [ "$veq_cli" = "$CTL_OUT" ] || { veq_ok=0; veq_why="$veq_why control(cli=$veq_crc unit=$CTL_RC)"; }
+if [ -f "$REC/m1.out" ]; then
+  # shellcheck disable=SC2086
+  veq_cli="$(cli_v "$TMP/m1" "$TMP/m1/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 $DEF)"; veq_crc=$?
+  [ "$veq_crc" = "$(r_rc m1)" ] && [ "$veq_cli" = "$(cat "$REC/m1.out")" ] || { veq_ok=0; veq_why="$veq_why m1(cli=$veq_crc unit=$(r_rc m1))"; }
+  [ "$(r_rc m1)" = 2 ] && [ "$CTL_RC" = 0 ] || { veq_ok=0; veq_why="$veq_why outcomes-do-not-differ"; }
+else veq_ok=0; veq_why="$veq_why m1-uncaptured"; fi
+if [ "$veq_ok" = 1 ]; then
+  note "ok    VEQ -- the in-process vbr_main answers byte-for-byte what bash <copy> prints and exits with, on the control (rc 0) and on m1's self-probe refusal (rc 2)"
+else
+  note "FAIL  VEQ -- the in-process drive differs from the CLI:$veq_why"; rc=1
 fi
 
 # ===== M2. THE CEILING COMPARISON IS `-ge`. ================================================
@@ -1366,11 +1432,23 @@ seed_memo() { # seed_memo <dir>
 }
 MEMO_ARGS="--max-prose-closable 1 --max-unscorable 9 --max-out-of-population 9 --max-unstable 0 --min-sh-receipts 4 --min-entries 4"
 MEMO_IN="$TMP/inbound-memo"; mkdir -p "$MEMO_IN"
-# memo_drive <dir> <none|caller> -> "BL-821=... BL-822=... BL-823=... BL-824=... rc=N"
+# memo_drive <dir> <none|caller> [vin|cli] -> "BL-821=... BL-822=... BL-823=... BL-824=... rc=N"
+# The CALLER drive runs in process (vin): its memo is exported by the caller before lib.sh runs, at
+# any subshell level. The NONE drive's subject is lib.sh's OWN memo, which lib.sh makes and exports
+# ONLY when sourced in the process's main shell (lib.sh: `if [ "${BASH_SUBSHELL:-0}" -eq 0 ]`, the
+# source-time block, and ai_dlc_memo_dir's `[ "${BASH_SUBSHELL:-0}" -gt 0 ] && return 1`). An
+# in-process cell is a subshell by construction (it is what isolates the validator's `exit`s), so
+# there lib.sh exports no memo, BL-822 cannot leak, and memo-leak-none would pass without a subject;
+# measured, m-memo-unset read NONE BL-822=ALREADY-PASSING in process and SURVIVED. So the NONE drive
+# runs the CLI wherever BL-822's leg decides (memo-leak-none, m-memo-unset). m-memo-derive's NONE
+# drive decides on BL-823 alone -- LIBPROBE_EXPORTED is exported at every level -- and passes vin.
 memo_drive() {
-  local d="$1" e="" o r id s
+  local d="$1" e="" o r id s m="${3:-}"
   [ "$2" = caller ] && e="AI_DLC_RECONCILE_MEMO=$MEMO_IN"
-  o="$(run_v "$e" "$d" $MEMO_ARGS)"; r=$?
+  [ -n "$m" ] || { m=vin; [ "$2" = none ] && m=cli; }
+  # shellcheck disable=SC2086
+  if [ "$m" = cli ]; then o="$(cli_v "$d" "$d/scripts/validate-backlog-receipts.sh" "$e" --max-cannot-measure 99 $MEMO_ARGS)"; r=$?
+  else o="$(run_v "$e" "$d" $MEMO_ARGS)"; r=$?; fi
   s=""
   for id in BL-821 BL-822 BL-823 BL-824; do s="$s$id=$(cls "$o" "$id") "; done
   printf '%src=%s' "$s" "$r"
@@ -1404,12 +1482,13 @@ B_MEMO=0; [ "$rc" = "$memo_rc0" ] && B_MEMO=1
 
 # THREE MUTANTS, one per half of the fix, each scored on BOTH drives against its own expected cells.
 # memo_mut <name> <sed> <deciding drive: none|caller>. The deciding drive runs per push; --matrix runs both.
+# A fourth argument forces the NONE drive's mode (see memo_drive); empty takes memo_drive's default.
 memo_mut() {
-  local n="$1" expr="$2" cell="$3"
+  local n="$1" expr="$2" cell="$3" nm="${4:-}"
   seed_memo "$TMP/$n"
   mut "$TMP/$n" "$expr" || return
   record "$n" 0 "ARGS memo"
-  if [ "$cell" = none ] || [ "$MATRIX" = 1 ]; then printf 'NONE %s\n' "$(memo_drive "$TMP/$n" none)" >> "$REC/$n.out"; fi
+  if [ "$cell" = none ] || [ "$MATRIX" = 1 ]; then printf 'NONE %s\n' "$(memo_drive "$TMP/$n" none "$nm")" >> "$REC/$n.out"; fi
   if [ "$cell" = caller ] || [ "$MATRIX" = 1 ]; then printf 'CALLER %s\n' "$(memo_drive "$TMP/$n" caller)" >> "$REC/$n.out"; fi
   score "$n" "${B_MEMO:-0}" "$n -- the drive this half of the fix owns reads the leaked cells, so the half is load-bearing"
 }
@@ -1421,7 +1500,8 @@ memo_mut m-memo-unset 's|^  \[ -n "\${BR_LIB_VARS:-}" \] \&\& unset \$BR_LIB_VAR
 # The outright name dropped: only a CALLER's memo leaks, because lib.sh's own is new to the diff.
 memo_mut m-memo-name 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added |BR_LIB_VARS="$(_br_added |' caller
 # The derivation dropped: only the synthesised export leaks.
-memo_mut m-memo-derive 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added .*$|BR_LIB_VARS="AI_DLC_RECONCILE_MEMO"|' none
+# Its NONE drive decides on BL-823 (LIBPROBE_EXPORTED, exported at every subshell level), so in process.
+memo_mut m-memo-derive 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added .*$|BR_LIB_VARS="AI_DLC_RECONCILE_MEMO"|' none vin
 
 # ===== THE EFFICIENCY ARMS (BL-817): E1 close, E2 shape, E3 filing. =========================
 # Driven through `--efficiency-only` on seeded ledgers, which runs the subject's own E0 self-probe
@@ -1486,7 +1566,7 @@ Section prose citing docs/analysis/x.md.
 ef_world() { # ef_world <name> <dir> <ledger> <want-rows> <want-rc>
   local out rc_v got
   ef_seed "$2" "$3"
-  out="$( (cd "$2" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  out="$(vin "$2" "$2/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   got="$(ef_rows "$out")"
   if [ "$rc_v" -eq "$5" ] && [ "$got" = "$4" ] && { [ "$5" -ne 0 ] || grep -qF 'OK: validate-backlog-receipts --efficiency-only' <<<"$out"; }; then
     note "ok    $1 -- rc $rc_v, rows [${got}]"; eval "B_${1//-/_}=1"
@@ -1504,6 +1584,19 @@ ef_world ef-noclose "$TMP/efnc" "# probe
 
 **LANDED (v0.1.0, verified abc1234).**
 " "NO-OUTCOME BL-975|" 1
+# VEQ-eff: the --efficiency-only CLI on the same two worlds, exit 0 and exit 1 (see VEQ above).
+veq_e_ok=1; veq_e_why=""
+for _vw in efgood efnc; do
+  _vu="$(vin "$TMP/$_vw" "$TMP/$_vw/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; _vur=$?
+  _vc="$(cli_v "$TMP/$_vw" "$TMP/$_vw/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; _vcr=$?
+  [ "$_vur" = "$_vcr" ] && [ "$_vu" = "$_vc" ] || { veq_e_ok=0; veq_e_why="$veq_e_why $_vw(cli=$_vcr unit=$_vur)"; }
+  eval "veq_rc_$_vw=\$_vcr"
+done
+if [ "$veq_e_ok" = 1 ] && [ "$veq_rc_efgood" = 0 ] && [ "$veq_rc_efnc" = 1 ]; then
+  note "ok    VEQ-eff -- --efficiency-only in process equals the CLI byte-for-byte on ef-good (rc 0) and ef-noclose (rc 1)"
+else
+  note "FAIL  VEQ-eff -- in-process vs CLI:$veq_e_why (ef-good cli rc ${veq_rc_efgood:-?}, ef-noclose cli rc ${veq_rc_efnc:-?})"; rc=1
+fi
 ef_world ef-sprintless "$TMP/efsl" "# probe
 
 ## BL-976
@@ -1562,7 +1655,7 @@ ef_mut() { # ef_mut <name> <sed> <world-dir-name> <ledger>
   local d="$TMP/$1" out rc_v bf
   ef_seed "$d" "$4"
   mut "$d" "$2" || return
-  out="$( (cd "$d" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  out="$(vin "$d" "$d/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   record "$1" "$rc_v" "$out"
   side "$1" "world=$3"
   eval "bf=\${B_${3//-/_}:-0}"
@@ -1592,7 +1685,7 @@ Outcome measured: the cost fell.
 # the world turning red. ef_mut scores rc 0 as a kill, so this one is scored here instead.
 d_pn="$TMP/m-nopathnarrow"; ef_seed "$d_pn" "$EF_PATHSPRINT"
 if mut "$d_pn" 's/^  _t="\$(sed -e .*$/  _t="$1"/'; then
-  out="$( (cd "$d_pn" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  out="$(vin "$d_pn" "$d_pn/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   record m-nopathnarrow "$rc_v" "$out"
   side m-nopathnarrow "rows=$(ef_rows "$out")"
   score m-nopathnarrow "${B_ef_pathsprint:-0}" "m-nopathnarrow -- refused by the subject's own E0 self-probe (BL-966), or the ef-pathsprint world reads SHAPE BL-979 with the narrowing reverted"
@@ -1662,7 +1755,7 @@ ef_filing() { # ef_filing <name> <dir> <with-origin 0|1> <want-rows> <want-rc> <
   ( cd "$2" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m base >/dev/null 2>&1 )
   [ "$3" = 1 ] && git -C "$2" update-ref refs/remotes/origin/main HEAD
   printf '%s' "$EF_FADDED" > "$2/docs/backlog.md"
-  out="$( (cd "$2" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  out="$(vin "$2" "$2/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   got="$(ef_rows "$out")"
   if [ "$rc_v" -eq "$5" ] && [ "$got" = "$4" ] && grep -qF -- "$6" <<<"$out"; then
     note "ok    $1 -- rc $rc_v, rows [${got}], scope [$6]"; eval "B_${1//-/_}=1"
@@ -1682,7 +1775,7 @@ ef_mut0() { # ef_mut0 <name> <sed> <ledger>
   local d="$TMP/$1" out rc_v f wf
   ef_seed "$d" "$3"
   mut "$d" "$2" || return
-  out="$( (cd "$d" && bash scripts/validate-backlog-receipts.sh --efficiency-only 2>&1) )"; rc_v=$?
+  out="$(vin "$d" "$d/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   record "$1" "$rc_v" "$out"
   case "$1" in m-noscript) f=ef_noscript ;; m-nofigs) f=ef_nofigs ;; *) f=ef_filing ;; esac
   eval "wf=\${B_$f:-0}"
@@ -1861,7 +1954,8 @@ c5_seed() { # c5_seed <dir>
 C5_ARGS="--max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 --max-unstable 0 --min-sh-receipts 0 --min-entries 0"
 c5_run() { # c5_run <dir> -> output with rc on the last line
   local d="$1"
-  ( cd "$TMP" && bash "$d/scripts/validate-backlog-receipts.sh" "$d/docs/backlog.md" --root "$d" --base "$(cat "$d/.c5base")" $C5_ARGS 2>&1; echo "rc=$?" )
+  # shellcheck disable=SC2086
+  vin "$TMP" "$d/scripts/validate-backlog-receipts.sh" "" "$d/docs/backlog.md" --root "$d" --base "$(cat "$d/.c5base")" $C5_ARGS; echo "rc=$?"
 }
 c5_rows() { # c5_rows <output> -> "R8:<ids> R7:<ids>"
   printf 'R8:%s R7:%s' \

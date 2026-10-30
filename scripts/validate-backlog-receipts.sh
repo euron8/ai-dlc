@@ -176,6 +176,7 @@
 #          STATUS <TAB> ENTRY <TAB> paths=... <TAB> tokens=...
 # Exit:  0 = at or under every ceiling; 1 = over one, or nothing was scored;
 #        2 = usage, environment, or a self-probe that did not fire.
+vbr_sec_env() {
 set -uo pipefail
 
 # SCRUB THE REPOSITORY ENVIRONMENT BEFORE ANYTHING ELSE, AND FOR THE WHOLE PROCESS.
@@ -207,6 +208,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 # as `git -c core.hooksPath=X push` set X in the probe repository below, its post-checkout never ran,
 # and the BL-906 arm read PROSE-CLOSABLE: a false red on a clean tree.
 unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+}
 
 # ---------------------------------------------------------------------------
 # THE PATH-SPLIT CHARACTER CLASS. This is the ONE grammar in this file that also exists
@@ -257,6 +259,7 @@ PROVENANCE='detached checkout of HEAD'
 # rather than a second script so the scoring logic has exactly one implementation -- a
 # hand-written second copy is a second implementation whose bugs nobody finds.
 # ===========================================================================
+vbr_worker() {
 if [ "${1:-}" = "--score-one" ] || [ "${1:-}" = "--closed-one" ]; then
   WMODE="$1"
   REC="${2:-}"
@@ -598,10 +601,12 @@ EOF
   wr PROSE-CLOSABLE "seed-exit=0" "paths=${PL:-none}" "tokens=${TL:-none}"
   exit 0
 fi
+}
 
 # ===========================================================================
 # PARENT MODE
 # ===========================================================================
+vbr_sec_args() {
 QUIET=0; LEDGER=""; ROOT_ARG=""; EFF_MODE=""; BASE_REF="origin/main"
 MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MAX_UNSTABLE=""; MIN_SH=""; MIN_ENTRIES=""; MAX_CM=""
 usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--archive | --efficiency-only] [--root <dir>] [--base <ref>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--max-cannot-measure N] [--min-sh-receipts N] [--min-entries N]" >&2; }
@@ -623,14 +628,20 @@ while [ "$#" -gt 0 ]; do
     *)  LEDGER="$1"; shift ;;
   esac
 done
+}
 
+vbr_sec_setup() {
 # Resolve THIS script's own root by walking UP for a marker, never by counting `..` hops -- a
 # validator that counts hops answers differently from the repo root, from a subdirectory, and
 # from a fixture sandbox that copied it, and the sandbox answer is the silent one.
-SELF_ROOT="$(cd "$(dirname "$0")" && pwd)"
+# THE SELF PATH IS THIS FILE'S OWN, READ FROM BASH_SOURCE, which equals `$0` on every CLI run and,
+# inside a function, names the file that DEFINED the function -- so a fixture that sourced a copy of
+# this file and calls vbr_main gets that copy's root, siblings and workers, exactly as the CLI would.
+_vbr_self="${BASH_SOURCE[0]}"
+SELF_ROOT="$(cd "$(dirname "$_vbr_self")" && pwd)"
 while [ "$SELF_ROOT" != "/" ] && [ ! -f "$SELF_ROOT/VERSION" ]; do SELF_ROOT="$(dirname "$SELF_ROOT")"; done
-[ -f "$SELF_ROOT/VERSION" ] || { echo "$(me): FAIL -- no VERSION marker above $0" >&2; exit 2; }
-SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+[ -f "$SELF_ROOT/VERSION" ] || { echo "$(me): FAIL -- no VERSION marker above $_vbr_self" >&2; exit 2; }
+SELF="$(cd "$(dirname "$_vbr_self")" && pwd)/$(basename "$_vbr_self")"
 
 LIB="$SELF_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 [ -f "$LIB" ] || { echo "$(me): FAIL -- reconcile/lib.sh missing; refusing to fall back to a private copy of the entry-boundary rule" >&2; exit 2; }
@@ -897,6 +908,9 @@ AWK
 class_of() { # class_of <file> -> the class inside <CLASS_FUNC>()'s `tr -c`
   sed -n "s/^${CLASS_FUNC}().*tr -c '\\(.*\\)' '.*/\\1/p" "$1" 2>/dev/null | sed -n '1p'
 }
+}
+
+vbr_probe_r0() {
 r0_probe="$WORK/r0"; mkdir -p "$r0_probe"
 printf "%s\n" "${CLASS_FUNC}() { printf '%s\\n' \"\$1\" | tr -c 'A-Za-z0-9_./\$-' '\\n' || true; }" > "$r0_probe/good.sh"
 printf "%s\n" "${CLASS_FUNC}() { printf '%s\\n' \"\$1\" | tr -c 'A-Za-z0-9_.-' '\\n' || true; }" > "$r0_probe/bad.sh"
@@ -916,7 +930,9 @@ fi
 if [ -n "$r0_wrong" ]; then
   echo "$(me): SELF-PROBE FAILED -- R0's extractor matched a DIFFERENT function carrying the same class. Anchored that loosely it reads a near-miss elsewhere in the tree and reports a binding it did not make." >&2; exit 2
 fi
+}
 
+vbr_sec_r0() {
 R0_SRC="$SELF_ROOT/$CLASS_SOURCE"
 if [ ! -f "$R0_SRC" ]; then
   echo "$(me): FAIL -- R0: $CLASS_SOURCE is absent, so the path-split class cannot be bound to its other copy. This refuses rather than scoring a corpus with an unbound grammar." >&2; exit 2
@@ -1248,7 +1264,9 @@ eff_added_labels() {
     || { echo "$(me): FAIL -- could not derive the entries added since merge-base ${_base}; refusing rather than judging the filing shape against an empty set." >&2; rm -f "$3"; return 2; }
   echo "against merge-base ${_base}"
 }
+}
 
+vbr_probe_e0() {
 # E0 -- THE SELF-PROBE, BEFORE ANY CORPUS, BOTH DIRECTIONS. One seeded ledger, every case one
 # entry; the expected finding SET is compared whole, so a case that stops firing and a case that
 # starts firing both fail it. BL-959 is the second spelling of a valid line (bold label, `sprint
@@ -1337,7 +1355,9 @@ read -r EP_ENT EP_POP EP_NS EP_FADD < "$WORK/eff.counts"
   echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch / $EP_FADD judged by the filing-shape arms, expected 46 / 31 / 2 / 7. BL-995 (not added) and BL-996 (no-step) must stay out of the filing-shape population. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint; BL-982's prose bold must stay out of the close population." >&2; exit 2; }
 EP_ARCH="$(eff_corpus "$EP/backlog.md" "$EP" archive "$EP/added" | cut -f1 | grep -c '^F-')" || EP_ARCH=0
 [ "$EP_ARCH" -eq 0 ] || { echo "$(me): SELF-PROBE FAILED -- E0: --archive applied a FILING arm ($EP_ARCH row(s)); filing is judged on the live ledger only." >&2; exit 2; }
+}
 
+vbr_sec_eff() {
 EFF_ADDED=""; EFF_SCOPE="not evaluated under --archive"
 if [ "${EFF_MODE:-live}" = live ]; then
   EFF_SCOPE="$(eff_added_labels "$LEDGER" "$SUBJECT_ROOT" "$WORK/eff.added")" || exit 2
@@ -1357,6 +1377,7 @@ if [ -n "$EFF_MODE" ]; then
   echo "OK: validate-backlog-receipts --$([ "$EFF_MODE" = archive ] && echo archive || echo efficiency-only) -- E0 fired both directions over ${EP_ENT} seeded entries; ${EFF_ENT} entries in ${LEDGER}, ${EFF_POP} in the efficiency close population, every one carrying a valid outcome line (${EFF_NS} on the no-graph-pipeline-step branch); filing shape: ${EFF_FADD} added entr(y/ies) judged, ${EFF_SCOPE}."
   exit 0
 fi
+}
 
 # ---------------------------------------------------------------------------
 # score_ledger <ledger> <subject-root> -> result rows on stdout; the `sh` receipt count and
@@ -1577,6 +1598,7 @@ read_counts() {
 #   BL-912 the same script `&&` one PRESENT in the checkout but UNTRACKED, at base 1: NOT a
 #          driver, so UNSCORABLE -- and BL-911 plus BL-904 must still FAIL R2's all-driver test
 # ---------------------------------------------------------------------------
+vbr_probe_r1() {
 P="$WORK/probe"
 mkdir -p "$P/probe" "$P/docs"
 echo "0.0.0" > "$P/VERSION"
@@ -1786,7 +1808,9 @@ read_counts
 if [ "$(cut -f1 "$WORK/unrec" | tr '\n' ' ')" != "BL-951 " ] || [ "$MANUAL_RECEIPTS" -ne 2 ] || [ "$ENTRIES" -ne 3 ]; then
   echo "$(me): SELF-PROBE FAILED -- the unrecognised-value arm did not name exactly BL-951 (named: $(cut -f1 "$WORK/unrec" | tr '\n' ' '); manual $MANUAL_RECEIPTS of $ENTRIES), so a clean corpus below would mean only that it ran." >&2; exit 2
 fi
+}
 
+vbr_probe_r7r8() {
 # ---------------------------------------------------------------------------
 # R7 / R8 SELF-PROBE (BL-836), BOTH DIRECTIONS, BEFORE THE CORPUS, THROUGH THE SAME FUNCTIONS.
 # The OPEN half: a seeded ledger of receipts whose exits sit either side of the FAIL set --
@@ -1935,7 +1959,9 @@ R8_SKIP=0
 [ -z "$R8_SKIPPED_OUT" ] || r7_fail "a re-entered run executed closed receipts: $R8_SKIPPED_OUT"
 case "$(closed_line 0)" in "CLOSED-POPULATION: SKIPPED "*) ;; *) r7_fail "a re-entered run was reported as '$(closed_line 0)', not SKIPPED." ;; esac
 R7_PROBED="R7 fired both directions over 8 seeded open receipts and R8 over 9 seeded closed-population entries and the re-entry skip"
+}
 
+vbr_sec_corpus() {
 # ---------------------------------------------------------------------------
 # THE CORPUS.
 # ---------------------------------------------------------------------------
@@ -2121,3 +2147,23 @@ else
   echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 fi
 exit 0
+}
+
+# THE SOURCE GUARD. Sourced, this file defines its functions and its constants and stops; vbr_main
+# is the whole CLI, in the order the file always ran: scrub, worker dispatch, arguments, parent.
+# core/fixtures/backlog-receipt-binding/unit-arms.sh sources it and calls vbr_main in a subshell.
+vbr_main() {
+vbr_sec_env
+vbr_worker "$@"
+vbr_sec_args "$@"
+vbr_sec_setup
+vbr_probe_r0
+vbr_sec_r0
+vbr_probe_e0
+vbr_sec_eff
+vbr_probe_r1
+vbr_probe_r7r8
+vbr_sec_corpus
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vbr_main "$@"
