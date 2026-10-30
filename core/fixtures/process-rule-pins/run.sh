@@ -480,7 +480,7 @@ sts-hardgate-map|S|steps/stories-test-strategy.md|### 2b.|### 3. Sprint Planning
 dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
 r11a-effects|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|INCLUDING the value it leaves in force
 r11a-unbadged|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|none marked `(Recommended)` and none placed first as the pick
-r11a-pointer|S|SKILL.md|### Rule 11 |### Rule 12 |**One shape for every operator decision|para|apply both to every question you put to the operator
+r11a-pointer|S|SKILL.md|### Rule 11 |### Rule 12 |**One shape for every operator decision|para|apply all three to every question you put to the operator
 r11a-four-things|S|SKILL.md|### Rule 11 |### Rule 12 |**Before any question reaches the operator, do|para|four things to it
 r11a-lanes-dispatch|S|SKILL.md|### Rule 11 |### Rule 12 |**Before any question reaches the operator, do|para|Dispatch ready actions on free lanes, arm their joins, and name the lanes held
 r11a-one-shape|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|gives every option with its effect and the consequence of choosing it
