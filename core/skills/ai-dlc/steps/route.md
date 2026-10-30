@@ -632,8 +632,8 @@ catch. Present the options flat and let the operator choose.
 steps `SKILL.md` Rule 11(a) puts on every operator question: a value already
 answered in `operator-answers-history.md`, the requests history or the
 LOCKED block is applied with its citation; a value the tree or config can
-give is derived and offered for veto, UNBADGED when it is a config leaf (a value no operator words fix), a
-money threshold or literal, an address, or an `LR-` or `D-<n>` value; every check number, band or `LR-`,
+give is derived and offered for veto, UNBADGED when it is a config leaf, a
+money threshold or literal, an address, or an `LR-` or `D-<n>` value (a value no operator words fix); every check number, band or `LR-`,
 `D-<n>` id in the question carries a plain-language gloss.
 
 **No pause flag here.** Rule 3 tells you to `touch
