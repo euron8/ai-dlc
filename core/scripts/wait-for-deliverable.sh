@@ -908,9 +908,8 @@ $MK_OUT
     exit 0 ;;
 esac
 }
-[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
-wfd_mark_main "$@"
 
+wfd_beat_main() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1; shift ;;
@@ -2496,3 +2495,7 @@ else
 fi
 
 exit "$RC"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+wfd_mark_main "$@"
+wfd_beat_main "$@"
