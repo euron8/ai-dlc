@@ -553,6 +553,95 @@ check_header() {
   return 0
 }
 
+# ---- THE PHASES, asked in process (core/fixtures/content-seal/merge-arms.sh). Each is a pure move of
+# the lines that stood at its call site below; the call sites run them in the same order.
+merge_locate() {
+SHARD_DIR="${1%/}"
+[ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
+SHARD_DIR="$(cd "$SHARD_DIR" && pwd)" || refuse "shard directory $1 is not enterable"
+
+SHARD_BASE="$(basename "$SHARD_DIR")"
+SHARDS_PARENT="$(dirname "$SHARD_DIR")"
+[ "$(basename "$SHARDS_PARENT")" = "shards" ] \
+  || refuse "$SHARD_DIR is not under a shards/ directory (placement: s<N>/shards/<artifact>-p<M>/)"
+SPRINT_DIR="$(dirname "$SHARDS_PARENT")"
+case "$(basename "$SPRINT_DIR")" in
+  s[0-9]*) ;;
+  *) refuse "$SPRINT_DIR is not a sprint directory s<N>" ;;
+esac
+}
+merge_rec_paths() {
+REC_PLAN="$(dirname "$SPRINT_DIR")"
+[ "$(basename "$REC_PLAN")" = "planning-artifacts" ] \
+  || refuse "$SPRINT_DIR is not under a planning-artifacts/ directory; each shard's writer is read from <state>/planning-artifacts/.artifact-writes.jsonl, so the shard dir is <state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/"
+REC_STATE="$(dirname "$REC_PLAN")"
+REC_WRITES="$REC_PLAN/.artifact-writes.jsonl"
+REC_SPAWNS="$REC_STATE/spawn-ledger.jsonl"
+REC_PROBES="$REC_STATE/subagent-context.jsonl"
+REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR")/shards/$SHARD_BASE/"
+}
+merge_seal_path() { SEAL="$(cd "$(dirname "$1")" && pwd)/content-seal.sh"; }
+merge_seal_phase() {
+if [ -f "$SEAL" ]; then
+  cut -f2 "$T/shards" | bash "$SEAL" --check "$REC_STATE" - > "$T/seal" 2> "$T/seal.err"; SEAL_RC=$?
+  case "$SEAL_RC" in
+    0) ;;
+    1) while IFS= read -r _sl; do [ -n "$_sl" ] && collect "$_sl"; done < "$T/seal" ;;
+    *) refuse "the content-seal check over $REC_WRITES did not run (exit $SEAL_RC): $(head -1 "$T/seal.err")" ;;
+  esac
+  phase_barrier
+  # THE LAST TOOL WRITE (BL-669): a shard whose last agent/session seal row is the top-level session's
+  # carries the lead's bytes, re-sealed. Program rows are skipped by content-seal.sh, so a --mark after
+  # the session's Edit cannot hide it. One call over every shard, as --check.
+  _us="$(printf '\037')"
+  cut -f2 "$T/shards" | bash "$SEAL" --last-tool-row "$REC_STATE" - > "$T/ltr" 2> "$T/ltr.err" \
+    || refuse "the content-seal last-tool-row read over $REC_WRITES did not run: $(head -1 "$T/ltr.err")"
+  while IFS="$_us" read -r _lf _la _laid _lt _lts; do
+    [ "$_la" = session ] && collect "$_lf was last written by the top-level session (${_lt:-tool} at ${_lts:-<no ts>}), which carries no agent_id; only an adversary writes an adversary shard, so the lead's bytes would merge as the adversary's -- re-dispatch the adversary for $(basename "$_lf") and merge with --rerun $(basename "$_lf")@<the re-dispatch's ISO start>"
+  done < "$T/ltr"
+  phase_barrier
+elif [ -f "$REC_WRITES" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$REC_WRITES"; then
+  refuse "$REC_WRITES carries content-seal rows but $SEAL is absent, so no shard's bytes can be compared with its seal; reinstall ai-dlc"
+fi
+}
+merge_complete_scan() {
+: > "$T/sc" || refuse "cannot stage the completion check"
+while IFS="$(printf '\t')" read -r sk sf_; do
+  # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
+  if ends_in_marker "$sf_"; then
+    printf 'Y\t%s\t%s\n' "$sk" "$(marker_n "$sf_")" >> "$T/sc"
+  else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi
+done < "$T/shards"
+if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
+  sc_bad="$(awk -F'\t' '$1 == "N" { print $3; exit }' "$T/sc")"
+  refuse "$sc_bad does not end in 'seat-complete: ' while another shard in $SHARD_DIR does; that shard is unfinished (its last non-blank line must be 'seat-complete: <step> <adversary> <shard>')"
+fi
+}
+merge_admission_phase() {
+if grep -q '^Y' "$T/sc"; then
+  [ -f "$SEAL" ] || refuse "a shard in $SHARD_DIR ends in 'seat-complete: ' and $SEAL is absent, so its marker cannot be admitted; reinstall ai-dlc"
+  # The path list is staged in files with every producer's status checked: a failed read must never hand
+  # the admission an empty or partial list, which it would answer with success.
+  awk -F'\t' '$1 == "Y" { print $2 }' "$T/sc" > "$T/admit-keys" || refuse "cannot list the marked shards of $SHARD_DIR for the marker admission"
+  : > "$T/admit-in" || refuse "cannot stage the marker admission input"
+  while IFS= read -r _sk; do
+    awk -F'\t' -v k="$_sk" '$1 == k { print $2; exit }' "$T/shards" >> "$T/admit-in" || refuse "cannot resolve the path of shard $_sk for the marker admission"
+  done < "$T/admit-keys"
+  # The count join: one resolved path per marked shard. A lookup that printed nothing for a key is not a failed
+  # command, so the producer checks above cannot see it, and the admission would judge a shorter list.
+  _nk="$(grep -c . "$T/admit-keys")" || _nk=0
+  _ni="$(grep -c . "$T/admit-in")" || _ni=0
+  [ "$_nk" = "$_ni" ] || refuse "the marker admission input holds $_ni path(s) for $_nk marked shard(s) in $SHARD_DIR; a shard's path was not resolved, so its marker was not admitted"
+  bash "$SEAL" --admit-marker - < "$T/admit-in" > "$T/admit" 2>&1; _arc=$?
+  case "$_arc" in
+    0) ;;
+    1) while IFS= read -r _al; do [ -n "$_al" ] && collect "$_al"; done < "$T/admit"; phase_barrier ;;
+    *) refuse "the marker admission over $SHARD_DIR did not run (exit $_arc): $(head -1 "$T/admit")" ;;
+  esac
+fi
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+
 USAGE="usage: merge-adversarial-shards.sh [--dry-run] [--rerun <shard>.md@<ISO> ...] [--map | --document <path> | --subject <N> [--base <sha>] [--elicitation]] <planning>/s<N>/shards/<artifact>-p<M>"
 MAP_ONLY=0; DOCUMENT=""; SUBJECT=""; SUBJ_BASE=""; ELICIT=0
 # --rerun is taken out of the argument list wherever it sits, so the mode parse below is unchanged
@@ -625,19 +714,7 @@ if [ -n "$SUBJECT" ]; then NOUN=part; fi
 # The header axis check_header reads: elicitation carries no verdict, every other merge one.
 if [ "$ELICIT" -eq 1 ]; then AXIS=elicitation; else AXIS=convergence; fi
 
-SHARD_DIR="${1%/}"
-[ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
-SHARD_DIR="$(cd "$SHARD_DIR" && pwd)" || refuse "shard directory $1 is not enterable"
-
-SHARD_BASE="$(basename "$SHARD_DIR")"
-SHARDS_PARENT="$(dirname "$SHARD_DIR")"
-[ "$(basename "$SHARDS_PARENT")" = "shards" ] \
-  || refuse "$SHARD_DIR is not under a shards/ directory (placement: s<N>/shards/<artifact>-p<M>/)"
-SPRINT_DIR="$(dirname "$SHARDS_PARENT")"
-case "$(basename "$SPRINT_DIR")" in
-  s[0-9]*) ;;
-  *) refuse "$SPRINT_DIR is not a sprint directory s<N>" ;;
-esac
+merge_locate "$1"
 if [ -n "$SUBJECT" ] && [ "$ELICIT" -eq 1 ]; then
   [ "$SHARD_BASE" = "requirements-elicitation" ] \
     || refuse "an elicitation merge reads s<N>/shards/requirements-elicitation/, not $SHARD_BASE"
@@ -921,14 +998,7 @@ phase_barrier
 # loop below, naming the file), or a single `REFUSE\t<reason>` row.
 command -v jq >/dev/null 2>&1 \
   || refuse "jq is not on PATH; each shard's dispatch id is derived from the harness's JSON records and cannot be read without it"
-REC_PLAN="$(dirname "$SPRINT_DIR")"
-[ "$(basename "$REC_PLAN")" = "planning-artifacts" ] \
-  || refuse "$SPRINT_DIR is not under a planning-artifacts/ directory; each shard's writer is read from <state>/planning-artifacts/.artifact-writes.jsonl, so the shard dir is <state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/"
-REC_STATE="$(dirname "$REC_PLAN")"
-REC_WRITES="$REC_PLAN/.artifact-writes.jsonl"
-REC_SPAWNS="$REC_STATE/spawn-ledger.jsonl"
-REC_PROBES="$REC_STATE/subagent-context.jsonl"
-REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR")/shards/$SHARD_BASE/"
+merge_rec_paths
 # ---- THE CONTENT SEAL (BL-530): a shard amended after its last sealed write is refused ---------
 # `content-seal.sh`, beside this script, owns the sealed set, the row and the comparison; this site
 # only hands it the shard files. Its seal rows (`kind: "content-seal"`) are read there with no
@@ -937,28 +1007,8 @@ REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR"
 # recorder existed merges as it did. With the sibling absent the merge refuses only when the ledger
 # holds a TOOL seal row (`"actor":"agent"` or `"session"`; only seal rows carry `actor`); otherwise
 # there is nothing it could have compared, and a program row alone is record-only.
-SEAL="$(cd "$(dirname "$0")" && pwd)/content-seal.sh"
-if [ -f "$SEAL" ]; then
-  cut -f2 "$T/shards" | bash "$SEAL" --check "$REC_STATE" - > "$T/seal" 2> "$T/seal.err"; SEAL_RC=$?
-  case "$SEAL_RC" in
-    0) ;;
-    1) while IFS= read -r _sl; do [ -n "$_sl" ] && collect "$_sl"; done < "$T/seal" ;;
-    *) refuse "the content-seal check over $REC_WRITES did not run (exit $SEAL_RC): $(head -1 "$T/seal.err")" ;;
-  esac
-  phase_barrier
-  # THE LAST TOOL WRITE (BL-669): a shard whose last agent/session seal row is the top-level session's
-  # carries the lead's bytes, re-sealed. Program rows are skipped by content-seal.sh, so a --mark after
-  # the session's Edit cannot hide it. One call over every shard, as --check.
-  _us="$(printf '\037')"
-  cut -f2 "$T/shards" | bash "$SEAL" --last-tool-row "$REC_STATE" - > "$T/ltr" 2> "$T/ltr.err" \
-    || refuse "the content-seal last-tool-row read over $REC_WRITES did not run: $(head -1 "$T/ltr.err")"
-  while IFS="$_us" read -r _lf _la _laid _lt _lts; do
-    [ "$_la" = session ] && collect "$_lf was last written by the top-level session (${_lt:-tool} at ${_lts:-<no ts>}), which carries no agent_id; only an adversary writes an adversary shard, so the lead's bytes would merge as the adversary's -- re-dispatch the adversary for $(basename "$_lf") and merge with --rerun $(basename "$_lf")@<the re-dispatch's ISO start>"
-  done < "$T/ltr"
-  phase_barrier
-elif [ -f "$REC_WRITES" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$REC_WRITES"; then
-  refuse "$REC_WRITES carries content-seal rows but $SEAL is absent, so no shard's bytes can be compared with its seal; reinstall ai-dlc"
-fi
+merge_seal_path "$0"
+merge_seal_phase
 # One jq per record. Write rows: `<file under the shard dir>\t<agent_id>\t<meta path, empty when
 # the row carries no transcript_path>`.
 : > "$T/wrows" && : > "$T/spawns" && : > "$T/probes" && : > "$T/metas" || refuse "cannot stage the harness records"
@@ -1218,42 +1268,12 @@ RE_REAL_TUID="$(read_grammar DISPATCH_ID_ERE)"
 
 # ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
 # If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
-: > "$T/sc" || refuse "cannot stage the completion check"
-while IFS="$(printf '\t')" read -r sk sf_; do
-  # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
-  if ends_in_marker "$sf_"; then
-    printf 'Y\t%s\t%s\n' "$sk" "$(marker_n "$sf_")" >> "$T/sc"
-  else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi
-done < "$T/shards"
-if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
-  sc_bad="$(awk -F'\t' '$1 == "N" { print $3; exit }' "$T/sc")"
-  refuse "$sc_bad does not end in 'seat-complete: ' while another shard in $SHARD_DIR does; that shard is unfinished (its last non-blank line must be 'seat-complete: <step> <adversary> <shard>')"
-fi
+merge_complete_scan
 # THE MARKER ADMISSION (BL-750; content-seal.sh header "THE MARKER ADMISSION" owns the rule): every
 # marked shard is handed to `content-seal.sh --admit-marker`, one call. A bare marker outside the
 # legacy window, or a sha= marker whose digest is not the body above it, is REFUSED with its line. The
 # sibling absent, or any exit but 0 and 1, refuses: an admission that could not run never acquits.
-if grep -q '^Y' "$T/sc"; then
-  [ -f "$SEAL" ] || refuse "a shard in $SHARD_DIR ends in 'seat-complete: ' and $SEAL is absent, so its marker cannot be admitted; reinstall ai-dlc"
-  # The path list is staged in files with every producer's status checked: a failed read must never hand
-  # the admission an empty or partial list, which it would answer with success.
-  awk -F'\t' '$1 == "Y" { print $2 }' "$T/sc" > "$T/admit-keys" || refuse "cannot list the marked shards of $SHARD_DIR for the marker admission"
-  : > "$T/admit-in" || refuse "cannot stage the marker admission input"
-  while IFS= read -r _sk; do
-    awk -F'\t' -v k="$_sk" '$1 == k { print $2; exit }' "$T/shards" >> "$T/admit-in" || refuse "cannot resolve the path of shard $_sk for the marker admission"
-  done < "$T/admit-keys"
-  # The count join: one resolved path per marked shard. A lookup that printed nothing for a key is not a failed
-  # command, so the producer checks above cannot see it, and the admission would judge a shorter list.
-  _nk="$(grep -c . "$T/admit-keys")" || _nk=0
-  _ni="$(grep -c . "$T/admit-in")" || _ni=0
-  [ "$_nk" = "$_ni" ] || refuse "the marker admission input holds $_ni path(s) for $_nk marked shard(s) in $SHARD_DIR; a shard's path was not resolved, so its marker was not admitted"
-  bash "$SEAL" --admit-marker - < "$T/admit-in" > "$T/admit" 2>&1; _arc=$?
-  case "$_arc" in
-    0) ;;
-    1) while IFS= read -r _al; do [ -n "$_al" ] && collect "$_al"; done < "$T/admit"; phase_barrier ;;
-    *) refuse "the marker admission over $SHARD_DIR did not run (exit $_arc): $(head -1 "$T/admit")" ;;
-  esac
-fi
+merge_admission_phase
 
 # ---- per-shard parse ----------------------------------------------------------------------
 # parse_shard, field, digits, RE_ISO and the header checks are defined above the argument parse
