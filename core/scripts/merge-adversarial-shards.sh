@@ -640,7 +640,11 @@ if grep -q '^Y' "$T/sc"; then
   esac
 fi
 }
-[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+# THE MAIN, asked in process (core/fixtures/adversarial-shard-merge/lib.sh mx). The lines below are the
+# script's top level, moved unchanged into one function; siblings are found from MERGE_SELF, which is $0
+# when the script is run and the sourced file's path when it is sourced.
+MERGE_SELF="${BASH_SOURCE[0]}"
+merge_main() {
 
 USAGE="usage: merge-adversarial-shards.sh [--dry-run] [--rerun <shard>.md@<ISO> ...] [--map | --document <path> | --subject <N> [--base <sha>] [--elicitation]] <planning>/s<N>/shards/<artifact>-p<M>"
 MAP_ONLY=0; DOCUMENT=""; SUBJECT=""; SUBJ_BASE=""; ELICIT=0
@@ -662,14 +666,14 @@ set -- ${_rest[@]+"${_rest[@]}"}
 # never from $VALIDATOR, so the answer is the installed tree's own.
 pair_sep() {
   local d
-  d="$(cd "$(dirname "$0")" && pwd)" || { printf '='; return 0; }
+  d="$(cd "$(dirname "$MERGE_SELF")" && pwd)" || { printf '='; return 0; }
   [ "$(grep -cxF "PAIR_SEP='[=@]'" "$d/validate-adversarial-convergence.sh" 2>/dev/null)" = 1 ] || { printf '='; return 0; }
   [ "$(grep -cxF "PAIR_SEP='[=@]'" "$d/partition-subject.sh" 2>/dev/null)" = 1 ] || { printf '='; return 0; }
   bash "$d/validate-provenance-block.sh" --accepts-at-pair >/dev/null 2>&1 || { printf '='; return 0; }
   printf '@'
 }
 case "${1:-}" in
-  -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
+  -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$MERGE_SELF"; exit 0 ;;
   --pair-sep)
     [ $# -eq 1 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "REFUSED: --pair-sep takes no other argument"; exit 2; }
     pair_sep; exit 0 ;;
@@ -775,7 +779,7 @@ if [ -n "$SUBJECT" ]; then
 # The manifest is found beside the series (s<N>/requirements-subject.md); partition-subject.sh
 # reads the base and the four paths from it alone (--manifest), so this merge derives no root,
 # no trunk and no base, and a missing manifest refuses rather than being written here.
-SUBJ_PS="$(cd "$(dirname "$0")" && pwd)/partition-subject.sh"
+SUBJ_PS="$(cd "$(dirname "$MERGE_SELF")" && pwd)/partition-subject.sh"
 [ -f "$SUBJ_PS" ] || refuse "cannot read the subject partition: $SUBJ_PS is absent"
 SUBJ_MF="$SPRINT_DIR/requirements-subject.md"
 [ -f "$SUBJ_MF" ] || refuse "no subject manifest at $SUBJ_MF; the subject's first partition-subject.sh --map writes it"
@@ -824,7 +828,7 @@ elif [ -n "$DOCUMENT" ]; then
 # partition-document.sh is the ONLY speller of the section grammar; its --map is read here and
 # never re-derived, and never replaced by a listing of the shard directory -- a listing is the
 # set of shards that ARRIVED, not the set that was owed.
-PARTITION="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+PARTITION="$(cd "$(dirname "$MERGE_SELF")" && pwd)/partition-document.sh"
 [ -f "$PARTITION" ] || refuse "cannot read the section partition: $PARTITION is absent"
 bash "$PARTITION" --map "$DOCUMENT" > "$T/map" 2> "$T/map.err"; prc=$?
 if [ "$prc" -eq 3 ]; then
@@ -884,7 +888,7 @@ norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
 # In EVERY mode the cross shards are the rows of `partition-document.sh --cross-groups <K>`, the
 # sibling this merge already resolves for section mode. CROSS_KEYS is `cross` when the table has
 # one row (K=2) and `cross-1 .. cross-<G>` otherwise; nothing here restates the construction.
-XPART="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+XPART="$(cd "$(dirname "$MERGE_SELF")" && pwd)/partition-document.sh"
 [ -f "$XPART" ] || refuse "cannot read the cross groups: $XPART is absent"
 bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?
 [ "$grc" -eq 0 ] || refuse "partition-document.sh --cross-groups $K exited $grc: $(head -1 "$T/groups.err")"
@@ -910,7 +914,7 @@ cross_shape() { # <grouped|lone>
 cross_shape grouped
 
 # ---- the exit ceilings, read from their one declaration ----------------------------------
-VALIDATOR="$(cd "$(dirname "$0")" && pwd)/validate-adversarial-convergence.sh"
+VALIDATOR="$(cd "$(dirname "$MERGE_SELF")" && pwd)/validate-adversarial-convergence.sh"
 [ -f "$VALIDATOR" ] || refuse "cannot read the exit ceilings: $VALIDATOR is absent"
 read_ceiling() { # $1 name -> the value, or empty unless declared exactly once as an integer
   local hits
@@ -1007,7 +1011,7 @@ merge_rec_paths
 # recorder existed merges as it did. With the sibling absent the merge refuses only when the ledger
 # holds a TOOL seal row (`"actor":"agent"` or `"session"`; only seal rows carry `actor`); otherwise
 # there is nothing it could have compared, and a program row alone is record-only.
-merge_seal_path "$0"
+merge_seal_path "$MERGE_SELF"
 merge_seal_phase
 # One jq per record. Write rows: `<file under the shard dir>\t<agent_id>\t<meta path, empty when
 # the row carries no transcript_path>`.
@@ -1671,3 +1675,6 @@ printf 'MERGED: %s verdict=%s shards=%s critical=%s major=%s underived=%s blocki
   "$OUT" "$VERDICT" "$(wc -l < "$T/shards" | tr -d ' ')" "$S_CRIT" "$S_MAJOR" "$S_UNDER" "$BLOCKING" "$MAJOR_CEIL" \
   "$([ -z "$RERUN" ] || printf ' superseded=%s' "$RR_SUPERSEDED")"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+merge_main "$@"
