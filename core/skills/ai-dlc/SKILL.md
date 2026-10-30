@@ -456,6 +456,8 @@ When a later event shows an outcome an earlier authorization relied on did
 not occur, the question returns to the operator — `escalations.md`
 "Authorization-premise invalidation disclosure".
 
+**Carrier:** `Check 2` -- the gate reads `docs/escalations/pending.md` and fails on an unresolved HARD_BLOCK or a Status outside the tier vocabulary. Whether an escalation that was due got written at all is not observed by any gate.
+
 #### Operator decisions: one shape (Rule 11(a))
 
 **Every decision put to the operator has one shape, wherever it is
