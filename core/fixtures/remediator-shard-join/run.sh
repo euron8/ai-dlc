@@ -443,30 +443,12 @@ p_sibstale "$JOIN" && ok "EC18: the joined fence, its text later rewritten -> th
   || bad "EC18: the siblings fence is replayed by the derivations validator, or the derived control did not go stale (rc=$RC dv=${DV_RC:-}): $(cat "$JO" "$SB_W/dv.out" 2>/dev/null | head -20)"
 p_escpath "$JOIN" && ok "EC19: an escalated entry naming the sibling's path on edit:, beside the shard that repairs that file -> JOINED (the escalated path is no citation)" \
   || bad "EC19: an escalated entry's edit: path collided with another shard's citation (rc=$RC): $(cat "$JO")"
-p_escopen "$JOIN" && ok "EC20: --escalations, no seat dir, one escalation open and one closed -> rc 0, the open one reported, ESCALATED-COUNT: 1, no SERIAL-REQUIRED" \
-  || bad "EC20: --escalations did not report an open escalation on a non-party record (rc=$RC): $(cat "$JO")"
-p_escclosed "$JOIN" && ok "EC21: --escalations, every escalation closed and a shard fence whose text the serial pass rewrote -> rc 0, ESCALATED-COUNT: 0" \
-  || bad "EC21: --escalations did not pass a fully closed record (rc=$RC): $(cat "$JO")"
-p_dispkey "$JOIN" && ok "EC22: an entry carrying edit: under a renamed key (outcome:) -> REFUSED, NODISP named; the dispositioned entry beside it is not" \
-  || bad "EC22: an entry with edit: and no disposition: was not refused (rc=$RC): $(cat "$JO")"
-p_dispvocab "$JOIN" && ok "EC23: a disposition outside the vocabulary in era -> REFUSED; not-reproduced and the pre-era value accepted" \
-  || bad "EC23: the disposition vocabulary did not discriminate (rc=$RC): $(cat "$JO")"
-p_dispruling "$JOIN" && ok "EC24: operator-ruling resolves by ISO heading and by SHA256 line with no source:; an unresolved and a missing cite REFUSED" \
-  || bad "EC24: the operator-ruling cite did not discriminate (rc=$RC): $(cat "$JO")"
+bash "$HERE/unit-record.sh"; _ur=$?
+case "$_ur" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-record.sh exited $_ur (FIXTURE BROKEN); nothing was asserted" ;; esac
 p_srcparts "$JOIN" && ok "EC25: --sources on a record citing only part tokens, seats present -> ONE refusal naming --escalations; a seat-token record resolves" \
   || bad "EC25: --sources did not refuse a part-token record by name, or refused the party control (rc=$RC): $(cat "$JO")"
-p_gapfill "$JOIN" && ok "EC26: a repaired claim calling the fix a gap fill for veto -> REPORTED after the escalation count, rc 0; the escalated entry in the same words is counted open, not reported" \
-  || bad "EC26: the gap-fill tripwire did not discriminate (rc=$RC): $(cat "$JO")"
 p_chkpart "$JOIN" && ok "EC27: parts mode -- a part stating derivations not replayed and a part with no derivations: line -> REFUSED by name; the stamped part beside them is not" \
   || bad "EC27: the check-fields arm did not discriminate in parts mode (rc=$RC): $(cat "$JO")"
-p_chkrec "$JOIN" && ok "EC28: --escalations -- a record with neither field is outside the era (rc 0); one that opened it without derivations: is REFUSED" \
-  || bad "EC28: the check-fields era did not discriminate in record mode (rc=$RC): $(cat "$JO")"
-p_rulingedit "$JOIN" && ok "EC29: an operator-ruling entry with a real edit and no siblings: in the era -> REFUSED as a repaired edit is; the ruling with edit: n/a beside it is not" \
-  || bad "EC29: an operator-ruling edit escaped the repaired-edit checks (rc=$RC): $(cat "$JO")"
-p_rulingtab "$JOIN" && ok "EC30: a TAB in a heading is not read as the ruling cite (the cite-less entry refused for that); a CRLF cite resolves" \
-  || bad "EC30: a tab-split heading or a CRLF cite was misread (rc=$RC): $(cat "$JO")"
-p_chkjoined "$JOIN" && ok "EC31: --escalations over a joined record -- an unrepaired shard's not replayed is exempt as the join exempted it; the repaired shard's is REFUSED" \
-  || bad "EC31: the check fields were not judged per shard segment (rc=$RC): $(cat "$JO")"
 p_partsilent "$JOIN" && ok "EC32: a REFUSED parts join prints no ESCALATED: line and no count -- nothing was joined (record mode prints through a refusal; parts mode by design does not)" \
   || bad "EC32: a refused parts join printed an escalation report, or did not refuse (rc=$RC): $(cat "$JO")"
 p_specstale "$JOIN" && ok "SP1: --escalations, a spec memlog with a decision AFTER its last phrased Render -> rc 2, REFUSED naming the memlog and '1 (decision) entry(ies) after the last render'" \
@@ -642,8 +624,6 @@ if [ "$jrc" -eq 0 ] && [ "$h2" -eq 0 ] && ! has "$WORK/h2.out" "H -- REPAIR-RECO
 else
   bad "H2: after the join (rc=$jrc) the convergence gate did not pass (rc=$h2): $(cat "$WORK/h2.out")"
 fi
-p_chkserial "$JOIN" && ok "EC33: --escalations over a joined record with two serial blocks -- the second omitting both check lines is REFUSED naming its own terminator, the count still printed; stating both, rc 0" || bad "EC33: the serial blocks were not segmented by their terminators (rc=$RC): $(cat "$JO")"
-p_supchain "$JOIN" && ok "EC34: --escalations, a supersedes: chain counts once under its latest member, the superseded one on its own ESCALATED-SUPERSEDED line; a closes: leaving a member open is FLAGGED after the count; a link to a later escalation is REFUSED as dangling" || bad "EC34: the supersedes chain did not dedupe, flag or refuse as specified (rc=$RC): $(cat "$JO")"
 p_fencenest "$JOIN" && ok "EC36: the record readers close a four-backtick fence only on a run at least as long -- content after its inner three-backtick block is no entry, no check line, no source token and no heading" || bad "EC36: a record reader closed a four-backtick fence on its inner three-backtick line (rc=$RC): $(cat "$JO")"
 p_partmark "$JOIN" && ok "EC37: a part closed by the real --mark joins beside an unmarked one, its seat-complete: line kept in the record; a serial block appended after the LAST marked part is segmented at its own triple -- stating both check lines rc 0, stating neither REFUSED naming its repair-complete: serial line and never a seat-complete: line" || bad "EC37: a marked part broke the joined record or its serial block (rc=$RC): $(cat "$JO")"
 if p_markderive "$SRCDIR/wait-for-deliverable.sh"; then ok "EC40: --mark on a remediator part derives the words from the path -- coe-repair-p1/2.md written coe remediator 2, the shifted call coe 7 remediator 7 written coe remediator 7, requirements-party-repair/05.md called with wrong words written requirements-party remediator 05 and 03.md keeps its correct spelling, coe-party-serial-repair-p1/lane-1.md keeps lane-1, a 1/8 brief shard becomes the file name; a plain/ file keeps the caller's words"; B_EC40=1
@@ -805,7 +785,6 @@ for _m in summary reword; do
     fi
   fi
 done
-p_gaploc "$JOIN" && ok "EC35:--escalations, a gap-fill edit's location is REPORTED after the count, rc 0 -- a section citing D-5 named, the adjacent section of the same file not, a dead section copy mapped through its manifest span, an unresolvable cite said so" || bad "EC35: the gap-fill location did not resolve as specified (rc=$RC): $(cat "$JO")"
 p_advname "$JOIN" && ok "EC38: an artifact ending in -adversarial is REFUSED in document and files mode, naming <artifact>-repair-p<M> and arm H, nothing written; shards/x-repair-p1/ joins and shards/adversarial-notes-repair-p1/ draws no such refusal" \
   || bad "EC38: an -adversarial artifact was not refused as specified, or a -repair-p dir drew the refusal (rc=$RC): $(cat "$JO")"
 
