@@ -669,6 +669,11 @@ seal_of() {
 #      lies inside that range; a FAIL in any other segment is left to the join, and n is not compared.
 #      A FAIL line that names no line of the copy refuses, and any exit but 0 or 1 refuses as no verdict.
 # ---------------------------------------------------------------------------
+# THE SEAM. Everything from here down, the --mark/--mark-repair writer and the beat itself, is the body of
+# wfd_main, called with the original arguments from the one site after its closing brace. Run as a program
+# it is the same commands in the same order as before; sourced, the guard below defines wfd_main and returns,
+# so a fixture can ask for a --mark or --status answer in a subshell without starting another interpreter.
+wfd_main() {
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
 case "${1:-}" in
   --mark|--mark-repair)
@@ -2489,3 +2494,6 @@ else
 fi
 
 exit "$RC"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+wfd_main "$@"
