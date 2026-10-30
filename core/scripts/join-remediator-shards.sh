@@ -332,237 +332,6 @@ lane_name() {
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
 SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; SRC_MORE=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
 PARTMODE=0; CHKPART=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --check-part) [ $# -ge 2 ] || die "--check-part needs <part.md>"; CHKPART="$2"; PARTMODE=1; shift 2 ;;
-    --rerun) [ $# -ge 2 ] || die "--rerun needs <part>.md@<ISO>"
-             RERUN="${RERUN}${2}
-"; shift 2 ;;
-    --agent-writes) AGENT_ID="${2:-}"; AGENTMODE=1; SRCMODE=2; shift 2 ;;
-    --sources|--escalations)
-      _m=1; [ "$1" = --escalations ] && _m=2
-      [ "$SRCMODE" = 0 ] || [ "$SRCMODE" = "$_m" ] || die "--sources and --escalations are two modes; pass one, once per record"
-      if [ -z "$SRC_REC" ]; then SRC_REC="${2:-}"; else SRC_MORE="${SRC_MORE}${2:-}
-"; fi
-      SRCMODE="$_m"; shift 2 ;;
-    --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
-    --base) SUBJ_BASE="${2:-}"; shift 2 ;;
-    --sprint) SPRINT="${2:-}"; shift 2 ;;
-    --artifact) ARTIFACT="${2:-}"; shift 2 ;;
-    --pass) PASS="${2:-}"; shift 2 ;;
-    --artifact-path) APATH="${2:-}"; shift 2 ;;
-    --since) SINCE="${2:-}"; shift 2 ;;
-    --until) UNTIL="${2:-}"; shift 2 ;;
-    --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
-    -h|--help) awk 'NR == 1 { next } !/^#/ { exit } { print }' "$0"; exit 0 ;;
-    -*) die "unknown argument '$1' (see --help)" ;;
-    *) { [ "$DOCMODE" = 1 ] || [ "$SUBJMODE" = 1 ]; } && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
-       REPDIR="$1"; shift ;;
-  esac
-done
-# A party repair: its entries must each name the seat finding they apply.
-PARTY=0
-if [ "$AGENTMODE" = 1 ]; then
-  [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
-    || die "--agent-writes prints one agent's ledger writes and takes only --since <ISO>"
-  case "$AGENT_ID" in ''|*[!A-Za-z0-9_-]*) die "--agent-writes needs an agent id of letters, digits, _ and - (got '${AGENT_ID}')" ;; esac
-  case "$SINCE" in ''|[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${SINCE}')" ;; esac
-  command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
-fi
-if [ "$PARTMODE" = 1 ]; then
-  [ "$DOCMODE$SUBJMODE$SRCMODE" = 000 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
-    || die "--check-part checks one part file and takes no other flag"
-  [ -n "$CHKPART" ] && [ -f "$CHKPART" ] || die "--check-part needs an existing part file (got '${CHKPART}')"
-  SPRINT=0
-fi
-if [ "$SRCMODE" != 0 ] && [ "$AGENTMODE" = 0 ]; then
-  [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
-    || die "--sources and --escalations check one record and take only --sprint <N>"
-  [ -z "$RERUN" ] || die "--rerun narrows a join's ledger window; --sources and --escalations read no ledger"
-  [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources and --escalations need an existing record (got '${SRC_REC}')"
-  [ "$SRCMODE" = 1 ] && PARTY=1
-  # A LANE ROUND'S RECORD IS READ WITH ITS ROUND-1 RECORD, AFTER IT (BL-716). Lane remediators close
-  # round-1 escalations in `<stem>-serial-repair-p<M>.md`, so a call over either record alone reads
-  # a closed escalation open, or never sees an open one. Closure is positional across the records
-  # given, so the round-1 record comes first; when its lane-round sibling is on disk it must follow.
-  _sb="${SRC_REC##*/}"; _sd="${SRC_REC%/*}"; [ "$_sd" = "$SRC_REC" ] && _sd="."
-  case "$_sb" in
-    *-serial-repair-p*.md) die "${SRC_REC} is a lane round's record; pass the round-1 record it repairs first, then this one" ;;
-  esac
-  _sib=""
-  if _ln="$(lane_name "$_sb")"; then _sib="${_ln%%	*}-repair-p${_ln##*	}.md"; fi
-  SRC_ALL="${SRC_REC}
-${SRC_MORE}"
-  while IFS= read -r _r; do
-    [ -n "$_r" ] || continue
-    [ -f "$_r" ] || die "--sources and --escalations need an existing record (got '${_r}')"
-  done <<SMEOF
-$SRC_MORE
-SMEOF
-  if [ -n "$_sib" ] && [ -f "${_sd}/${_sib}" ]; then
-    _hit=0
-    while IFS= read -r _r; do [ "${_r##*/}" = "$_sib" ] && _hit=1; done <<SMEOF
-$SRC_MORE
-SMEOF
-    [ "$_hit" = 1 ] || die "${_sd}/${_sib} is the lane round's record for ${SRC_REC}, and its entries close this record's escalations; pass it after this one"
-  fi
-fi
-[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1
-if [ "$SUBJMODE" = 1 ]; then
-  [ "$DOCMODE" = 0 ] || die "--subject and --document are two modes; pass one"
-  GATE_ART=""
-  case "$ARTIFACT" in
-    "") ;;
-    gate-?*) case "${ARTIFACT#gate-}" in *[!a-z0-9-]*) die "--artifact ${ARTIFACT} is not gate-<type> (lowercase, digits, hyphens)" ;; esac
-             GATE_ART="$ARTIFACT" ;;
-    *) die "--artifact applies with --subject only as gate-<type>, the requirements gate's failure repair; the artifact is the requirements subject" ;;
-  esac
-  [ -z "$APATH" ] || die "--artifact-path does not apply with --subject; the file set is the subject's"
-  case "$PASS" in
-    party) SUBJ_DIRNAME="requirements-party-repair"; SUBJ_RECNAME="requirements-party-repair.md" ;;
-    elicitation) SUBJ_DIRNAME="requirements-elicitation-repair"; SUBJ_RECNAME="requirements-elicitation-repair.md" ;;
-    ''|*[!0-9]*) die "--pass must be a pass number, party or elicitation in subject mode (got '${PASS}')" ;;
-    *) SUBJ_DIRNAME="requirements-repair-p${PASS}"; SUBJ_RECNAME="requirements-repair-p${PASS}.md" ;;
-  esac
-  if [ -n "$GATE_ART" ]; then
-    case "$PASS" in ''|*[!0-9]*) die "--artifact ${GATE_ART} names a gate repair, which needs a numeric --pass (got '${PASS}')" ;; esac
-    SUBJ_DIRNAME="${GATE_ART}-repair-p${PASS}"; SUBJ_RECNAME="${GATE_ART}-repair-p${PASS}.md"
-  fi
-  ARTIFACT="requirements"
-fi
-
-# Document mode may name the repair dir instead of the three flags: `.../s<N>/shards/<artifact>-repair-p<M>`.
-if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
-  _rb="$(basename "${REPDIR%/}")"; _rs="$(basename "$(dirname "$(dirname "${REPDIR%/}")")")"
-  case "$_rb" in *-repair-p*) ;; *) die "the repair dir ${REPDIR} is not named <artifact>-repair-p<M>" ;; esac
-  [ -n "$ARTIFACT" ] || ARTIFACT="${_rb%-repair-p*}"
-  [ -n "$PASS" ] || PASS="${_rb##*-repair-p}"
-  [ -n "$SPRINT" ] || SPRINT="$_rs"
-fi
-SPRINT="${SPRINT#s}"
-# --escalations reads one record and no seat directory, so its --sprint is optional.
-[ "$SRCMODE" = 2 ] && [ -z "$SPRINT" ] && SPRINT=0
-case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPRINT}')" ;; esac
-case "$ARTIFACT" in *-party|*-party-serial) PARTY=1 ;; esac
-# Set before the mode split: the record modes read it too (an operator-ruling cite is an ISO stamp).
-ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
-if [ "$SRCMODE" != 0 ] || [ "$PARTMODE" = 1 ]; then
-  :
-else
-[ "$SUBJMODE" = 1 ] || case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
-case "$ARTIFACT" in ''|*/*) die "--artifact must be a bare artifact name (got '${ARTIFACT}')" ;; esac
-if [ "$SUBJMODE" = 0 ]; then
-  case "$ARTIFACT" in
-    *-adversarial)
-      _owed="${ARTIFACT%-adversarial}-repair-p${PASS}"; _given="--artifact ${ARTIFACT}"
-      [ -z "$REPDIR" ] || _given="$REPDIR"
-      die "the artifact '${ARTIFACT}' ends in -adversarial (given as ${_given}): the adversarial repair record carries no round word. Name the shard dir shards/${_owed}/ and the record ${_owed}.md; arm H of validate-adversarial-convergence.sh reads only that name" ;;
-  esac
-fi
-if [ "$SUBJMODE" = 1 ]; then
-  :
-elif [ "$DOCMODE" = 1 ]; then
-  [ -n "$DOCUMENT" ] || die "--document needs a path"
-  [ -z "$APATH" ] || die "--artifact-path does not apply with --document; the file set is the repair dir's sections/"
-else
-  [ -n "$APATH" ] || die "--artifact-path is required"
-fi
-APATH="${APATH%/}"
-# shellcheck disable=SC2254
-case "$SINCE" in $ISO) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${SINCE}')" ;; esac
-# shellcheck disable=SC2254
-case "$UNTIL" in $ISO) ;; *) die "--until must be YYYY-MM-DDTHH:MM:SSZ (got '${UNTIL}')" ;; esac
-[ "$SINCE" \> "$UNTIL" ] && die "--since ${SINCE} is after --until ${UNTIL}"
-command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
-# A FUTURE --until (BL-807). The window's upper bound is a time the lanes have already reported by, so
-# one later than this join's own clock is an estimate used as fact. 120s of slack absorbs clock skew.
-# The answer is read as the literal `true`/`false`: a jq that cannot evaluate refuses, never acquits.
-# Both sides go through fromdateiso8601, so a jq whose parser applies a local DST offset applies it to
-# both and the skew cancels (`now` alone is epoch seconds and would not carry it).
-_fut="$(jq -n --arg u "$UNTIL" '($u | fromdateiso8601) > ((now | todateiso8601 | fromdateiso8601) + 120)' 2>/dev/null)" || _fut=""
-case "$_fut" in
-  false) ;;
-  true) die "--until ${UNTIL} is later than this join's clock ($(date -u +%Y-%m-%dT%H:%M:%SZ)) by more than 120s: take --until from \`date -u\` after the last lane reports; a hand-chosen future time mis-scopes the window" ;;
-  *) die "--until ${UNTIL} could not be compared with this join's clock (jq fromdateiso8601 did not answer); take --until from \`date -u\` after the last lane reports" ;;
-esac
-fi
-
-# --- AI_DLC_ROOT ------------------------------------------------------------
-# Walk UP for a marker, never count `..` hops. The canonical block, precedence bound by I75:
-# override -> walk up from this script -> CLAUDE_PROJECT_DIR -> walk up from cwd -> exit 2.
-# Inline on purpose: locating a shared lib is the same unsolved problem.
-ai_dlc_resolve_root() {
-  local d="$1"
-  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
-    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
-      printf '%s\n' "$d"; return 0
-    fi
-    d="$(dirname "$d")"
-  done
-  return 1
-}
-JR_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JR_ROOT="${AI_DLC_PROJECT_ROOT:-}"
-[ -n "$JR_ROOT" ] || JR_ROOT="$(ai_dlc_resolve_root "$JR_SCRIPT_DIR" || true)"
-[ -n "$JR_ROOT" ] || JR_ROOT="${CLAUDE_PROJECT_DIR:-}"
-[ -n "$JR_ROOT" ] || JR_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
-[ -n "$JR_ROOT" ] || {
-  echo "REFUSED: cannot resolve the project root from ${JR_SCRIPT_DIR} (no .git or" >&2
-  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
-  exit 2
-}
-# --- end AI_DLC_ROOT --------------------------------------------------------
-
-_STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
-case "$_STATE_DIR" in /*) STATE="$_STATE_DIR" ;; *) STATE="${JR_ROOT}/${_STATE_DIR}" ;; esac
-STATE="${STATE%/}"
-# The state dir's PARENT, logical and physical, slash-terminated: an absolute citation under it
-# is cut to the ledger's `<state-dir-name>/...` spelling (the token loop below). Never the root:
-# a nested or absolute state dir has a parent that is not the root. `pwd` collapses the `//` a
-# trailing-slash root leaves in STATE; `pwd -P` is the spelling a resolved symlink gives.
-STATE_PARENT="${STATE%/*}/"; STATE_PARENT_P="$STATE_PARENT"
-if _sl="$(cd "$STATE" 2>/dev/null && pwd)"; then STATE_PARENT="${_sl%/*}/"; fi
-if _sp="$(cd "$STATE" 2>/dev/null && pwd -P)"; then STATE_PARENT_P="${_sp%/*}/"; fi
-PA="${STATE}/planning-artifacts"
-LEDGER="${PA}/.artifact-writes.jsonl"
-if [ "$AGENTMODE" = 1 ]; then
-  if [ -f "$LEDGER" ]; then
-    [ -r "$LEDGER" ] || die "the write ledger ${LEDGER} is not readable"
-    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]' "$LEDGER" 2>/dev/null)" \
-      || die "the write ledger ${LEDGER} does not parse as JSON lines"
-    [ -z "$_aw" ] || printf '%s\n' "$_aw"
-  fi
-  echo "not covered: Bash writes, and writes outside planning-artifacts/, specs/s<N>/, gate-adjudication part files and sections-split documents"
-  exit 0
-fi
-
-# --- THE CONTENT SEAL ON A RECORD (BL-530). `--sources` and `--escalations` read one joined record,
-# which is in the sealed set: this join's own write leaves a program row, and the serial remediator's
-# Edit append fires the recorder, whose newer row is the one compared. A record whose bytes differ
-# from its newest seal row -- a python3 rewrite, a `sed -i`, a Bash append -- is REFUSED here, at mode
-# entry, before any body reads it, naming that row's writer. A record with no seal row is not
-# compared. `content-seal.sh`, beside this script, owns the set and the comparison. A tree with NO
-# state dir has no ledger and so no seal row: it is not compared, exactly as before seals existed,
-# because the library refuses a missing state dir (exit 2) and that would refuse correct input.
-SEAL="${JR_SCRIPT_DIR}/content-seal.sh"
-if [ "$SRCMODE" != 0 ] && [ -d "$STATE" ]; then
-  if [ -f "$SEAL" ]; then
-    while IFS= read -r _r; do
-      [ -n "$_r" ] || continue
-      _seal_out="$(bash "$SEAL" --check "$STATE" "$_r" 2>&1)"; _seal_rc=$?
-      case "$_seal_rc" in
-        0) ;;
-        1) die "$_seal_out" ;;
-        *) die "the content-seal check over ${LEDGER} did not run (exit ${_seal_rc}): $(printf '%s\n' "$_seal_out" | head -1)" ;;
-      esac
-    done <<SLEOF
-$SRC_ALL
-SLEOF
-  elif [ -f "$LEDGER" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$LEDGER"; then
-    die "${LEDGER} carries content-seal rows but ${SEAL} is absent, so the record's bytes cannot be compared with its seal; reinstall ai-dlc"
-  fi
-fi
-
 # --- THE DISPOSITION KEY (BL-823). ONE predicate, read by every site that recognises the key: src_check,
 # contract_check (whose `dfull` BADDISP reads), checks_field's no-edit-line and repaired counts, the
 # --escalations entry count, part_cites and esc_cites. Each awk takes it as `-v DK="$DISP_KEY_ERE"` and
@@ -579,7 +348,6 @@ DISP_KEY_ERE='^([[:space:]-]*[*_`]*disposition|[[:space:]]*-[[:space:]]*[*_`]*[D
 
 # --- PARTY SOURCES (BL-462). Every applied entry names `source: <seat-file>#<finding-id>`, and the
 # pair resolves against the sprint's seat files -- never the id alone, which collides across seats.
-SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
 # src_ids <seat file>... -> "<basename>\t<finding id>" per finding heading (grammar: the header).
 src_ids() {
   awk '
@@ -1584,34 +1352,10 @@ checks_refusals() {  # <checks_field output>
 $1
 CKEOF
 }
-# THE SPEC IS NOT STALE AGAINST ITS MEMLOG (BL-560, BL-546). A SPEC part appends a `(decision)` entry
-# to the spec's `.memlog.md` and re-derives `SPEC.md` whole from it, then appends one
-# `- (event) Render <pass>: re-derived from memlog through <last decision>` line; a change applied with
-# Edit is recorded `(event) Hand-edit`, never Render (requirements.md, "The SPEC is repaired through its
-# own render path"). A `(decision)` entry AFTER the last such Render line is a SPEC that does not carry
-# its own decisions, and the adversary and the gate would read it. Refused here, so the stale state
-# cannot pass the join that hands the subject on.
-# AN ORDER TEST, NEVER A DATE TEST. Memlog entries carry no timestamp (memlog.py writes the frontmatter
-# `updated` only), so "dated after the last render" is unimplementable; line order is the record.
-# THE KEY IS THE FULL PHRASE `re-derived from memlog through` ON AN `(event) Render` LINE. The reference
-# consumer carries exactly one `(event) Render` line across 19 memlogs, and it is the disclosure of a
-# hand edit ("loaded instructions only and ran no renderer ... applied to SPEC.md by hand"): a key on
-# the word Render alone acquits the very case this arm exists for. The tag grammar is the producer
-# grammar validate-spec-join.sh reads at its `(capability)` predicate: an optional qualifier after the
-# type word is legal.
-# A MEMLOG WITH NO SUCH LINE IS SKIPPED, VISIBLY. Measured over the reference consumer 19 committed
-# memlogs: 0 carry the phrase, so all 19 SKIP and 0 fire; the unskipped form (every decision is after a
-# render that never happened) fires on 18 of 19. So the firing arm has NO corpus instance; its receipt
-# is the seeded self-probe below and the fixture, never this zero. A memlog joins this arm from its
-# first phrased Render line onward. Stated residue: a piecemeal Edit to SPEC.md followed by a phrased
-# Render line passes -- whether the rewrite was whole has no checker.
-# WHERE: --sources and --escalations judge a record ONLY when it cites `specs/s<N>/` (it repaired the
-# SPEC), and then resolve the sprint memlog from --sprint, `specs/s<N>/*/.memlog.md`,
-# exactly one (requirements.md: the kernel is exactly one match); none or several SKIP. A refusal here
-# still prints the record's ESCALATED: lines and count before its exit, as every record_tail refusal does
-# (only SPEC-RENDER: is withheld). Those modes run
-# AFTER the serial remediator appends, which is the case BL-560 was filed on. --subject reads it only
-# when the split gave the SPEC a part (SUBJ_SET carries its memlog), the part-remediator shape.
+ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
+
+# Sourced (the remediator-shard-join fixture's unit arms), the file stops here: everything above defines
+# the entry contract's functions and constants; nothing below runs.
 SPEC_RENDER_PHRASE="re-derived from memlog through"
 # spec_render_scan <memlog> -> "<last render line> <decisions after it> <first such line>", 0 0 0 with no render.
 spec_render_scan() {
@@ -1713,6 +1457,267 @@ record_tail() {  # <record> [<lane round's record>...] -- closure is positional 
   printf '%s\n' "$SPEC_LINE"
   exit 0
 }
+
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check-part) [ $# -ge 2 ] || die "--check-part needs <part.md>"; CHKPART="$2"; PARTMODE=1; shift 2 ;;
+    --rerun) [ $# -ge 2 ] || die "--rerun needs <part>.md@<ISO>"
+             RERUN="${RERUN}${2}
+"; shift 2 ;;
+    --agent-writes) AGENT_ID="${2:-}"; AGENTMODE=1; SRCMODE=2; shift 2 ;;
+    --sources|--escalations)
+      _m=1; [ "$1" = --escalations ] && _m=2
+      [ "$SRCMODE" = 0 ] || [ "$SRCMODE" = "$_m" ] || die "--sources and --escalations are two modes; pass one, once per record"
+      if [ -z "$SRC_REC" ]; then SRC_REC="${2:-}"; else SRC_MORE="${SRC_MORE}${2:-}
+"; fi
+      SRCMODE="$_m"; shift 2 ;;
+    --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
+    --base) SUBJ_BASE="${2:-}"; shift 2 ;;
+    --sprint) SPRINT="${2:-}"; shift 2 ;;
+    --artifact) ARTIFACT="${2:-}"; shift 2 ;;
+    --pass) PASS="${2:-}"; shift 2 ;;
+    --artifact-path) APATH="${2:-}"; shift 2 ;;
+    --since) SINCE="${2:-}"; shift 2 ;;
+    --until) UNTIL="${2:-}"; shift 2 ;;
+    --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
+    -h|--help) awk 'NR == 1 { next } !/^#/ { exit } { print }' "$0"; exit 0 ;;
+    -*) die "unknown argument '$1' (see --help)" ;;
+    *) { [ "$DOCMODE" = 1 ] || [ "$SUBJMODE" = 1 ]; } && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
+       REPDIR="$1"; shift ;;
+  esac
+done
+# A party repair: its entries must each name the seat finding they apply.
+PARTY=0
+if [ "$AGENTMODE" = 1 ]; then
+  [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
+    || die "--agent-writes prints one agent's ledger writes and takes only --since <ISO>"
+  case "$AGENT_ID" in ''|*[!A-Za-z0-9_-]*) die "--agent-writes needs an agent id of letters, digits, _ and - (got '${AGENT_ID}')" ;; esac
+  case "$SINCE" in ''|[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${SINCE}')" ;; esac
+  command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
+fi
+if [ "$PARTMODE" = 1 ]; then
+  [ "$DOCMODE$SUBJMODE$SRCMODE" = 000 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
+    || die "--check-part checks one part file and takes no other flag"
+  [ -n "$CHKPART" ] && [ -f "$CHKPART" ] || die "--check-part needs an existing part file (got '${CHKPART}')"
+  SPRINT=0
+fi
+if [ "$SRCMODE" != 0 ] && [ "$AGENTMODE" = 0 ]; then
+  [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
+    || die "--sources and --escalations check one record and take only --sprint <N>"
+  [ -z "$RERUN" ] || die "--rerun narrows a join's ledger window; --sources and --escalations read no ledger"
+  [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources and --escalations need an existing record (got '${SRC_REC}')"
+  [ "$SRCMODE" = 1 ] && PARTY=1
+  # A LANE ROUND'S RECORD IS READ WITH ITS ROUND-1 RECORD, AFTER IT (BL-716). Lane remediators close
+  # round-1 escalations in `<stem>-serial-repair-p<M>.md`, so a call over either record alone reads
+  # a closed escalation open, or never sees an open one. Closure is positional across the records
+  # given, so the round-1 record comes first; when its lane-round sibling is on disk it must follow.
+  _sb="${SRC_REC##*/}"; _sd="${SRC_REC%/*}"; [ "$_sd" = "$SRC_REC" ] && _sd="."
+  case "$_sb" in
+    *-serial-repair-p*.md) die "${SRC_REC} is a lane round's record; pass the round-1 record it repairs first, then this one" ;;
+  esac
+  _sib=""
+  if _ln="$(lane_name "$_sb")"; then _sib="${_ln%%	*}-repair-p${_ln##*	}.md"; fi
+  SRC_ALL="${SRC_REC}
+${SRC_MORE}"
+  while IFS= read -r _r; do
+    [ -n "$_r" ] || continue
+    [ -f "$_r" ] || die "--sources and --escalations need an existing record (got '${_r}')"
+  done <<SMEOF
+$SRC_MORE
+SMEOF
+  if [ -n "$_sib" ] && [ -f "${_sd}/${_sib}" ]; then
+    _hit=0
+    while IFS= read -r _r; do [ "${_r##*/}" = "$_sib" ] && _hit=1; done <<SMEOF
+$SRC_MORE
+SMEOF
+    [ "$_hit" = 1 ] || die "${_sd}/${_sib} is the lane round's record for ${SRC_REC}, and its entries close this record's escalations; pass it after this one"
+  fi
+fi
+[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1
+if [ "$SUBJMODE" = 1 ]; then
+  [ "$DOCMODE" = 0 ] || die "--subject and --document are two modes; pass one"
+  GATE_ART=""
+  case "$ARTIFACT" in
+    "") ;;
+    gate-?*) case "${ARTIFACT#gate-}" in *[!a-z0-9-]*) die "--artifact ${ARTIFACT} is not gate-<type> (lowercase, digits, hyphens)" ;; esac
+             GATE_ART="$ARTIFACT" ;;
+    *) die "--artifact applies with --subject only as gate-<type>, the requirements gate's failure repair; the artifact is the requirements subject" ;;
+  esac
+  [ -z "$APATH" ] || die "--artifact-path does not apply with --subject; the file set is the subject's"
+  case "$PASS" in
+    party) SUBJ_DIRNAME="requirements-party-repair"; SUBJ_RECNAME="requirements-party-repair.md" ;;
+    elicitation) SUBJ_DIRNAME="requirements-elicitation-repair"; SUBJ_RECNAME="requirements-elicitation-repair.md" ;;
+    ''|*[!0-9]*) die "--pass must be a pass number, party or elicitation in subject mode (got '${PASS}')" ;;
+    *) SUBJ_DIRNAME="requirements-repair-p${PASS}"; SUBJ_RECNAME="requirements-repair-p${PASS}.md" ;;
+  esac
+  if [ -n "$GATE_ART" ]; then
+    case "$PASS" in ''|*[!0-9]*) die "--artifact ${GATE_ART} names a gate repair, which needs a numeric --pass (got '${PASS}')" ;; esac
+    SUBJ_DIRNAME="${GATE_ART}-repair-p${PASS}"; SUBJ_RECNAME="${GATE_ART}-repair-p${PASS}.md"
+  fi
+  ARTIFACT="requirements"
+fi
+
+# Document mode may name the repair dir instead of the three flags: `.../s<N>/shards/<artifact>-repair-p<M>`.
+if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
+  _rb="$(basename "${REPDIR%/}")"; _rs="$(basename "$(dirname "$(dirname "${REPDIR%/}")")")"
+  case "$_rb" in *-repair-p*) ;; *) die "the repair dir ${REPDIR} is not named <artifact>-repair-p<M>" ;; esac
+  [ -n "$ARTIFACT" ] || ARTIFACT="${_rb%-repair-p*}"
+  [ -n "$PASS" ] || PASS="${_rb##*-repair-p}"
+  [ -n "$SPRINT" ] || SPRINT="$_rs"
+fi
+SPRINT="${SPRINT#s}"
+# --escalations reads one record and no seat directory, so its --sprint is optional.
+[ "$SRCMODE" = 2 ] && [ -z "$SPRINT" ] && SPRINT=0
+case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPRINT}')" ;; esac
+case "$ARTIFACT" in *-party|*-party-serial) PARTY=1 ;; esac
+# Set before the mode split: the record modes read it too (an operator-ruling cite is an ISO stamp).
+if [ "$SRCMODE" != 0 ] || [ "$PARTMODE" = 1 ]; then
+  :
+else
+[ "$SUBJMODE" = 1 ] || case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
+case "$ARTIFACT" in ''|*/*) die "--artifact must be a bare artifact name (got '${ARTIFACT}')" ;; esac
+if [ "$SUBJMODE" = 0 ]; then
+  case "$ARTIFACT" in
+    *-adversarial)
+      _owed="${ARTIFACT%-adversarial}-repair-p${PASS}"; _given="--artifact ${ARTIFACT}"
+      [ -z "$REPDIR" ] || _given="$REPDIR"
+      die "the artifact '${ARTIFACT}' ends in -adversarial (given as ${_given}): the adversarial repair record carries no round word. Name the shard dir shards/${_owed}/ and the record ${_owed}.md; arm H of validate-adversarial-convergence.sh reads only that name" ;;
+  esac
+fi
+if [ "$SUBJMODE" = 1 ]; then
+  :
+elif [ "$DOCMODE" = 1 ]; then
+  [ -n "$DOCUMENT" ] || die "--document needs a path"
+  [ -z "$APATH" ] || die "--artifact-path does not apply with --document; the file set is the repair dir's sections/"
+else
+  [ -n "$APATH" ] || die "--artifact-path is required"
+fi
+APATH="${APATH%/}"
+# shellcheck disable=SC2254
+case "$SINCE" in $ISO) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${SINCE}')" ;; esac
+# shellcheck disable=SC2254
+case "$UNTIL" in $ISO) ;; *) die "--until must be YYYY-MM-DDTHH:MM:SSZ (got '${UNTIL}')" ;; esac
+[ "$SINCE" \> "$UNTIL" ] && die "--since ${SINCE} is after --until ${UNTIL}"
+command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
+# A FUTURE --until (BL-807). The window's upper bound is a time the lanes have already reported by, so
+# one later than this join's own clock is an estimate used as fact. 120s of slack absorbs clock skew.
+# The answer is read as the literal `true`/`false`: a jq that cannot evaluate refuses, never acquits.
+# Both sides go through fromdateiso8601, so a jq whose parser applies a local DST offset applies it to
+# both and the skew cancels (`now` alone is epoch seconds and would not carry it).
+_fut="$(jq -n --arg u "$UNTIL" '($u | fromdateiso8601) > ((now | todateiso8601 | fromdateiso8601) + 120)' 2>/dev/null)" || _fut=""
+case "$_fut" in
+  false) ;;
+  true) die "--until ${UNTIL} is later than this join's clock ($(date -u +%Y-%m-%dT%H:%M:%SZ)) by more than 120s: take --until from \`date -u\` after the last lane reports; a hand-chosen future time mis-scopes the window" ;;
+  *) die "--until ${UNTIL} could not be compared with this join's clock (jq fromdateiso8601 did not answer); take --until from \`date -u\` after the last lane reports" ;;
+esac
+fi
+
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Walk UP for a marker, never count `..` hops. The canonical block, precedence bound by I75:
+# override -> walk up from this script -> CLAUDE_PROJECT_DIR -> walk up from cwd -> exit 2.
+# Inline on purpose: locating a shared lib is the same unsolved problem.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+JR_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+JR_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$JR_ROOT" ] || JR_ROOT="$(ai_dlc_resolve_root "$JR_SCRIPT_DIR" || true)"
+[ -n "$JR_ROOT" ] || JR_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$JR_ROOT" ] || JR_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$JR_ROOT" ] || {
+  echo "REFUSED: cannot resolve the project root from ${JR_SCRIPT_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 2
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
+_STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
+case "$_STATE_DIR" in /*) STATE="$_STATE_DIR" ;; *) STATE="${JR_ROOT}/${_STATE_DIR}" ;; esac
+STATE="${STATE%/}"
+# The state dir's PARENT, logical and physical, slash-terminated: an absolute citation under it
+# is cut to the ledger's `<state-dir-name>/...` spelling (the token loop below). Never the root:
+# a nested or absolute state dir has a parent that is not the root. `pwd` collapses the `//` a
+# trailing-slash root leaves in STATE; `pwd -P` is the spelling a resolved symlink gives.
+STATE_PARENT="${STATE%/*}/"; STATE_PARENT_P="$STATE_PARENT"
+if _sl="$(cd "$STATE" 2>/dev/null && pwd)"; then STATE_PARENT="${_sl%/*}/"; fi
+if _sp="$(cd "$STATE" 2>/dev/null && pwd -P)"; then STATE_PARENT_P="${_sp%/*}/"; fi
+PA="${STATE}/planning-artifacts"
+LEDGER="${PA}/.artifact-writes.jsonl"
+if [ "$AGENTMODE" = 1 ]; then
+  if [ -f "$LEDGER" ]; then
+    [ -r "$LEDGER" ] || die "the write ledger ${LEDGER} is not readable"
+    _aw="$(jq -rn --arg a "$AGENT_ID" --arg s "$SINCE" '[inputs | select(type == "object") | select(.kind == "artifact-write" and .agent_id == $a and (.path | type) == "string" and ($s == "" or .ts >= $s)) | .path] | unique | .[]' "$LEDGER" 2>/dev/null)" \
+      || die "the write ledger ${LEDGER} does not parse as JSON lines"
+    [ -z "$_aw" ] || printf '%s\n' "$_aw"
+  fi
+  echo "not covered: Bash writes, and writes outside planning-artifacts/, specs/s<N>/, gate-adjudication part files and sections-split documents"
+  exit 0
+fi
+
+# --- THE CONTENT SEAL ON A RECORD (BL-530). `--sources` and `--escalations` read one joined record,
+# which is in the sealed set: this join's own write leaves a program row, and the serial remediator's
+# Edit append fires the recorder, whose newer row is the one compared. A record whose bytes differ
+# from its newest seal row -- a python3 rewrite, a `sed -i`, a Bash append -- is REFUSED here, at mode
+# entry, before any body reads it, naming that row's writer. A record with no seal row is not
+# compared. `content-seal.sh`, beside this script, owns the set and the comparison. A tree with NO
+# state dir has no ledger and so no seal row: it is not compared, exactly as before seals existed,
+# because the library refuses a missing state dir (exit 2) and that would refuse correct input.
+SEAL="${JR_SCRIPT_DIR}/content-seal.sh"
+if [ "$SRCMODE" != 0 ] && [ -d "$STATE" ]; then
+  if [ -f "$SEAL" ]; then
+    while IFS= read -r _r; do
+      [ -n "$_r" ] || continue
+      _seal_out="$(bash "$SEAL" --check "$STATE" "$_r" 2>&1)"; _seal_rc=$?
+      case "$_seal_rc" in
+        0) ;;
+        1) die "$_seal_out" ;;
+        *) die "the content-seal check over ${LEDGER} did not run (exit ${_seal_rc}): $(printf '%s\n' "$_seal_out" | head -1)" ;;
+      esac
+    done <<SLEOF
+$SRC_ALL
+SLEOF
+  elif [ -f "$LEDGER" ] && grep -qE '"actor":[[:space:]]*"(agent|session)"' "$LEDGER"; then
+    die "${LEDGER} carries content-seal rows but ${SEAL} is absent, so the record's bytes cannot be compared with its seal; reinstall ai-dlc"
+  fi
+fi
+
+SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
+# THE SPEC IS NOT STALE AGAINST ITS MEMLOG (BL-560, BL-546). A SPEC part appends a `(decision)` entry
+# to the spec's `.memlog.md` and re-derives `SPEC.md` whole from it, then appends one
+# `- (event) Render <pass>: re-derived from memlog through <last decision>` line; a change applied with
+# Edit is recorded `(event) Hand-edit`, never Render (requirements.md, "The SPEC is repaired through its
+# own render path"). A `(decision)` entry AFTER the last such Render line is a SPEC that does not carry
+# its own decisions, and the adversary and the gate would read it. Refused here, so the stale state
+# cannot pass the join that hands the subject on.
+# AN ORDER TEST, NEVER A DATE TEST. Memlog entries carry no timestamp (memlog.py writes the frontmatter
+# `updated` only), so "dated after the last render" is unimplementable; line order is the record.
+# THE KEY IS THE FULL PHRASE `re-derived from memlog through` ON AN `(event) Render` LINE. The reference
+# consumer carries exactly one `(event) Render` line across 19 memlogs, and it is the disclosure of a
+# hand edit ("loaded instructions only and ran no renderer ... applied to SPEC.md by hand"): a key on
+# the word Render alone acquits the very case this arm exists for. The tag grammar is the producer
+# grammar validate-spec-join.sh reads at its `(capability)` predicate: an optional qualifier after the
+# type word is legal.
+# A MEMLOG WITH NO SUCH LINE IS SKIPPED, VISIBLY. Measured over the reference consumer 19 committed
+# memlogs: 0 carry the phrase, so all 19 SKIP and 0 fire; the unskipped form (every decision is after a
+# render that never happened) fires on 18 of 19. So the firing arm has NO corpus instance; its receipt
+# is the seeded self-probe below and the fixture, never this zero. A memlog joins this arm from its
+# first phrased Render line onward. Stated residue: a piecemeal Edit to SPEC.md followed by a phrased
+# Render line passes -- whether the rewrite was whole has no checker.
+# WHERE: --sources and --escalations judge a record ONLY when it cites `specs/s<N>/` (it repaired the
+# SPEC), and then resolve the sprint memlog from --sprint, `specs/s<N>/*/.memlog.md`,
+# exactly one (requirements.md: the kernel is exactly one match); none or several SKIP. A refusal here
+# still prints the record's ESCALATED: lines and count before its exit, as every record_tail refusal does
+# (only SPEC-RENDER: is withheld). Those modes run
+# AFTER the serial remediator appends, which is the case BL-560 was filed on. --subject reads it only
+# when the split gave the SPEC a part (SUBJ_SET carries its memlog), the part-remediator shape.
 # --sources ON A RECORD THAT IS NOT A PARTY REPAIR (BL-561). The seat dir's existence says only that
 # a party round ran this sprint, never that THIS record applies one, so a non-party record resolved
 # against it and read as 138 refused sources (graph s319 elicitation repair). Keyed on token SHAPE:
