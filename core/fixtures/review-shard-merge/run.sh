@@ -10,6 +10,13 @@
 # script directory and only in the DISTRIBUTION layout: a consumer cannot edit core's scripts, so it
 # keeps every correctness arm and loses only that proof.
 #
+# IN PROCESS. Every cell asks its subject in process through lib.sh's ip_run: the merge, the partition and
+# partition-document.sh each hold their program in a *_main function behind a BASH_SOURCE guard, content-seal.sh
+# (seal_main) and wait-for-deliverable.sh (wfd_mark_main) already did, and the recorder hook is sourced in a
+# subshell with its payload on stdin. The merge is sourced ONCE per script directory (ip_load), a mutant's copy
+# included. The end-to-end runs kept are EQ1-EQ8, one per distinct CLI outcome of each subject, each the same CLI
+# line run both ways and compared byte for byte, with EQ0 proving the comparison can see a difference.
+#
 # WHAT IS AT STAKE. Check 1 in gate-validation.md reads ONE verdict line from ONE review file. A
 # sharded review is N part reviewers plus one cross reviewer per cross group, and the merge writes that file. Its
 # load-bearing claims are invisible to anything that only reads a finished review:
@@ -147,6 +154,80 @@ echo "HERMETIC-CONSUMED core/scripts/record-only-diff.sh"
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
 seed_controls
+
+# ---------------------------------------------------------------- the in-process seam (EQ1-EQ8)
+# Every arm below asks its subject IN PROCESS (lib.sh ip_run). These are the end-to-end runs kept, one per
+# distinct CLI outcome of each subject: the same CLI line run in process and as a process must answer
+# byte-identically (stdout, stderr, exit code, the files it writes), and the outcomes of one subject must
+# differ from each other, so a seam that answered one fixed thing cannot pass.
+eq_arm() { # <id> <label> <pair names...>: each pair passed eq_pair (EQP_<name>=1) and their answers pairwise differ
+  local id="$1" lbl="$2" a b w=""; shift 2
+  for a in "$@"; do eval "[ \"\${EQP_$a:-0}\" = 1 ]" || w="$w $a{$(eval "printf %s \"\${EQW_$a:-not run}\"")}"; done
+  for a in "$@"; do for b in "$@"; do
+    [ "$a" \< "$b" ] || continue
+    ! cmp -s "$WORK/eq-$a.ans" "$WORK/eq-$b.ans" || w="$w $a=$b"
+  done; done
+  if [ -z "$w" ]; then ok "$id: $lbl"; else bad "$id: the in-process seam differs from the CLI, or two outcomes answered alike:$w"; fi
+}
+eqp() { # <name> <want rc> eq_pair-args... -> EQP_<name>, EQW_<name>
+  local n="$1" want="$2"; shift 2
+  if eq_pair "$n" "$@" && [ "$EQ_RC" = "$want" ]; then eval "EQP_$n=1"; else eval "EQP_$n=0; EQW_$n=\"rc=\$EQ_RC want $want\$EQ_WHY\""; fi
+}
+_eqd="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)"; _eqo="$(out_of "$_eqd")"
+EQ_FILES="$_eqo" eqp mrg_ok 0 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main "$_eqd" --gate code-review --out "$_eqo"
+ip_run -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main "$_eqd" --gate code-review --out "$_eqo" > /dev/null 2>&1 < /dev/null
+EQ_FILES="$_eqo" eqp mrg_same 0 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main "$_eqd" --gate code-review --out "$_eqo"
+rm -f "$_eqo"
+EQ_FILES="$_eqo" eqp chk_ok 0 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main "$_eqd" --gate code-review --check-shard "$_eqd/1.md"
+shard "$_eqd" 2 APPROVED 3
+EQ_FILES="$_eqo" eqp chk_no 2 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main "$_eqd" --gate code-review --check-shard "$_eqd/2.md"
+EQ_FILES="$_eqo" eqp mrg_no 2 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main "$_eqd" --gate code-review --out "$_eqo"
+eq_arm EQ1 "merge-review-shards.sh in process answers byte-for-byte what the CLI does: MERGED (rc 0, the review written), UNCHANGED over its own output (rc 0), REFUSED on a part citing another part (rc 2, nothing written)" mrg_ok mrg_same mrg_no
+eq_arm EQ2 "--check-shard in process answers byte-for-byte what the CLI does: SHARD-OK on a clean shard, REFUSED on a part citing another part" chk_ok chk_no
+_eqs="$WORK/eq-serial-1-code-review.md"
+{ printf '# Code Review: 1\n\n'; adv_l; printf '\n## Summary\nSerial.\n\n## Verdict\nAPPROVED\n\n## Findings\n\nNone.\n'; } > "$_eqs"
+eqp ser_ok 0 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main --check-serial "$_eqs" --gate code-review
+printf '\n## Verdict\nBLOCKED\n' >> "$_eqs"
+eqp ser_no 2 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$MERGE" mrs_main --check-serial "$_eqs" --gate code-review
+eq_arm EQ3 "--check-serial in process answers byte-for-byte what the CLI does: SERIAL-OK on one APPROVED verdict, REFUSED on two different verdict values" ser_ok ser_no
+_eqw="$(mktemp -d "$WORK/eqp.XXXXXX")"
+EQ_FILES="$_eqw/sd/.manifest" eqp prt_ok 0 "$PART" prd_main --map "$REPO_B" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 3 --shard-dir "$_eqw/sd"
+eqp prt_ser 3 -e "$KEY=0" "$PART" prd_main --map "$REPO_B" "$B_BASE" "$B_SHA"
+eqp prt_no 2 "$PART" prd_main --map "$REPO_B" "$B_BASE" "$B_SHA" --max-parts 1
+eq_arm EQ4 "partition-review-diff.sh in process answers byte-for-byte what the CLI does: a map and its manifest (rc 0), SERIAL with the key at 0 (rc 3), REFUSED on --max-parts 1 (rc 2)" prt_ok prt_ser prt_no
+eqp pdc_ok 0 "$SRCDIR/partition-document.sh" pdoc_main --cross-groups 3
+eqp pdc_no 64 "$SRCDIR/partition-document.sh" pdoc_main --cross-groups 1
+eq_arm EQ5 "partition-document.sh --cross-groups in process answers byte-for-byte what the CLI does: the K=3 table (rc 0), the USAGE refusal at K=1 (rc 64)" pdc_ok pdc_no
+_eqm="$(world4 "$SRCDIR" APPROVED APPROVED APPROVED APPROVED)"
+fire "$_eqm/1.md" agent && fire "$_eqm/2.md" agent || bad "EQ6-EQ8: FIXTURE BROKEN -- the recorder wrote no row for the seam world"
+EQ_FILES="$_eqm/1.md $LEDGER" eqp mk_ok 0 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$WFD_SRC" wfd_mark_main --mark "$_eqm/1.md" implementation code-reviewer 1 findings=1
+EQ_FILES="$_eqm/2.md $LEDGER" eqp mk_no 64 -e "AI_DLC_PROJECT_ROOT=$PROJ" "$WFD_SRC" wfd_mark_main --mark "$_eqm/2.md" implementation code-reviewer 3 findings=1
+eq_arm EQ6 "wait-for-deliverable.sh --mark on a review shard in process (wfd_mark_main) answers byte-for-byte what the CLI does: marked (rc 0, the marker and its ledger row written), refused on a <shard> that is not the file key (rc 64, nothing written)" mk_ok mk_no
+eqp seal_ok 0 "$SEAL_SRC" seal_main --review-shard "$_eqm/2.md"
+sed -i.bak -e 's/^## Summary$/## Overview/' "$_eqm/2.md" && rm -f "$_eqm/2.md.bak"
+eqp seal_no 1 "$SEAL_SRC" seal_main --review-shard "$_eqm/2.md"
+eq_arm EQ7 "content-seal.sh --review-shard in process (seal_main) answers byte-for-byte what the CLI does: SEAL-OK on a sealed shard (rc 0), SEAL-REFUSED once a Bash rewrite moved it (rc 1)" seal_ok seal_no
+# EQ7b, --first-tool-ts (FT1's mode): a state dir with a gate-part row prints its ts (rc 0); one that does not
+# exist is refused (rc 2). The ledger row's ts is fixed so the answer names no clock.
+_eqf="$(mktemp -d "$WORK/eqf.XXXXXX")"; mkdir -p "$_eqf/_bmad-output/planning-artifacts"
+printf '{"v":1,"kind":"content-seal","ts":"2001-02-03T04:05:06Z","path":"gate-adjudication/g1.part-1.jsonl","actor":"agent","agent_id":"a0123456789abcdef","session":"s","tool":"Write","tool_use_id":"t","transcript_path":"/dev/null","root":"%s","sha256":"0"}\n' \
+  "$(cd "$_eqf" && pwd -P)" > "$_eqf/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
+eqp fts_ok 0 "$SEAL_SRC" seal_main --first-tool-ts "$_eqf/_bmad-output"
+eqp fts_no 2 "$SEAL_SRC" seal_main --first-tool-ts "$_eqf/absent"
+eq_arm EQ7b "content-seal.sh --first-tool-ts in process (seal_main) answers byte-for-byte what the CLI does: the earliest tool row's ts (rc 0), and a missing state dir refused (rc 2)" fts_ok fts_no
+printf '{"tool_name":"Write","tool_input":{"file_path":"%s"},"session_id":"fixture-session","tool_use_id":"toolu_fixture","transcript_path":"/dev/null","agent_id":"a0123456789abcdef","agent_type":"code-reviewer"}\n' "$_eqm/3.md" > "$WORK/eq-hook-row.json"
+printf '{"tool_name":"Write","tool_input":{"file_path":"%s"},"session_id":"fixture-session","tool_use_id":"toolu_fixture","transcript_path":"/dev/null"}\n' "$WORK/eq-not-sealed.md" > "$WORK/eq-hook-none.json"
+EQ_IN="$WORK/eq-hook-row.json" EQ_FILES="$LEDGER" eqp hk_row 0 -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" -
+EQ_IN="$WORK/eq-hook-none.json" EQ_FILES="$LEDGER" eqp hk_none 0 -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" -
+cp "$WORK/eq-hk_row.ans" "$WORK/eq-hk_row.ans.o"; { cat "$WORK/eq-hk_row.ans.o"; grep -c . "$LEDGER"; } > "$WORK/eq-hk_row.ans"
+_hk1="$(grep -c . "$LEDGER")"; EQ_IN="$WORK/eq-hook-row.json" ip_run -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" - < "$WORK/eq-hook-row.json"; _hk2="$(grep -c . "$LEDGER")"
+[ "$_hk2" = $((_hk1 + 1)) ] || EQP_hk_row=0 EQW_hk_row="the in-process recorder appended $((_hk2 - _hk1)) row(s), want 1"
+# EQ0, the comparison's own control: the same partition pair with ONE argument added on the CLI side only
+# (EQ_CLI_TAIL) must be reported as differing, so a comparison that cannot see a difference cannot pass EQ1-EQ8.
+if EQ_CLI_TAIL="--max-parts=junk" eq_pair eq0 "$PART" prd_main --map "$REPO_B" "$B_BASE" "$B_SHA"; then
+  bad "EQ0: FIXTURE BROKEN -- eq_pair called a CLI run with an extra argument byte-equal to the in-process run"
+else ok "EQ0: eq_pair reports a CLI run given one extra argument as differing from the in-process run (${EQ_WHY# })"; fi
+eq_arm EQ8 "the recorder hook sourced in process answers byte-for-byte what the CLI does on a review-shard Write (one ledger row appended) and on a path outside the sealed set (no row)" hk_row hk_none
 
 arm() { # <predicate> <label-ok> <label-bad>
   if "p_$1" "$SRCDIR"; then ok "$2"; eval "ARMOK_$1=1"; else bad "$3 (rc=${RC:-?}): $(cat "$MO" 2>/dev/null | head -3)"; fi
@@ -479,7 +560,15 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   mx_line() { awk -v id="$1" '$1 == "#" && $2 == "MUTANT-MATRIX" && $3 == id { print; n++ } END { exit n != 1 }' "$HERE/run.sh"; }
   mx_field() { printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p"; } # <header line> <decides|twins>
   TWIN_N=0; MX_CELLS=0; MX_ROWS="$WORK/mx-rows"; : > "$MX_ROWS"
-  mut_run() { # <id> <file> <old> <new> <predicate> <reason token> <label>; CS_ONLY names the cell
+  # IN PROCESS (lib.sh ip_load): each mutant's copy of the merge is SOURCED ONCE into this shell before its
+  # cells run, so every in-process ask of "$md/merge-review-shards.sh" (its deciding cell and its twins) forks
+  # a subshell holding the mutant's functions; SRCDIR's merge is loaded back after it. Only the owning cell
+  # and the named twins run per mutant, never the fixture.
+  mut_run() {
+    mut_run_one "$@"
+    ip_load "$SRCDIR/merge-review-shards.sh" || bad "$1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the mutant"
+  }
+  mut_run_one() { # <id> <file> <old> <new> <predicate> <reason token> <label>; CS_ONLY names the cell
     local id="$1" md="$WORK/mut-$1" hl dec tw a tp tc
     B_rsm_ctl=0
     [ -n "${CS_ONLY:-}" ] || { bad "$id: FIXTURE ERROR -- no CS_ONLY selector names the cell this mutant is scored on"; return; }
@@ -497,6 +586,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
       || { bad "$id: FIXTURE ERROR -- a sibling is absent from $md"; return; }
     mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
+    ip_load "$md/merge-review-shards.sh" || { bad "$id: FIXTURE ERROR -- the mutant copy's merge could not be loaded in process"; return; }
     WHY=""; CS_RAN=0
     if "p_$5" "$md"; then bad "$id: SURVIVED -- $7 ($5 passed over $md/$2)"
     elif case "$WHY" in *"$6"*) true ;; *) false ;; esac; then mutant_killed "${B_rsm_ctl:-0}" "$id" "$id: killed -- $7 ($5:${WHY})"
@@ -519,6 +609,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # fewer than two cells, the deciding cell of every other mutant of the same file. Each cell is scored
   # over the mutant copy and over the unmutated control copy (one control per cell, memoised).
   mx_state() { # <predicate> <cell> <script-dir> -> RED|GREEN|SKIP; the predicate's own stdout is dropped
+    ip_load "$3/merge-review-shards.sh" || { echo SKIP; return; }
     WHY=""; CS_RAN=0
     if CS_ONLY="$2" "p_$1" "$3" > /dev/null 2>&1 < /dev/null; then [ "$CS_RAN" = 1 ] && echo GREEN || echo SKIP
     else [ "$CS_RAN" = 1 ] && echo RED || echo SKIP; fi
@@ -712,6 +803,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   _mx_n="$(grep -c . "$MX_ROWS")" || _mx_n=0
   if [ "$RSM_MATRIX" = 1 ]; then
     : > "$WORK/mx-log"; matrix_score
+    ip_load "$SRCDIR/merge-review-shards.sh" || bad "MX1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the matrix"
     reuse_proof
     if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 50 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"

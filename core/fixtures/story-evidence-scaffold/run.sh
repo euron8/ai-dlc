@@ -32,6 +32,15 @@
 # loader does, and only then looks. The mutants that MOVE the text into a shadowed section
 # still leave it in the file, which a whole-file grep would accept; these arms must not.
 #
+# IN PROCESS. validate-handoff-evidence.sh, record-only-diff.sh and sprint-status.sh are loadable (each ends in a
+# BASH_SOURCE guard before its one main call), and every cell asks them through he-inproc.sh's he_run: the
+# validator's he_main in a subshell, its record-only-diff.sh and sprint-status.sh calls answered by THOSE FILES'
+# own ro_main / ss_main in further subshells, so no bash is started per verdict. A mutant is a copy of the
+# subject sourced the same way. The receipts are sourced too (rcpt_run), and each seeds its git world ONCE into
+# $WORK/rw-<receipt>; a mutant call reads that world and runs only the cells it names. EQUIV is the one
+# end-to-end run per distinct CLI outcome (fixture-mutants.md clauses 5-6) and holds the in-process answer
+# byte-identical to `bash <subject>`; INPROC asserts no subject call fell back to a process.
+#
 # Exit 0 iff every arm holds; 1 on a finding; 2 (FIXTURE BROKEN) when a subject file cannot
 # be located. An absent subject is never green.
 set -u
@@ -64,6 +73,8 @@ else echo "story-evidence-scaffold: FIXTURE BROKEN -- record-only-diff.sh is not
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/story-evidence.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
+# he-inproc.sh appends every subject call it could NOT answer in process here; the INPROC arm reads it.
+export UT_FALLBACK_LOG="$WORK/.fallback"; : > "$UT_FALLBACK_LOG"
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
@@ -318,6 +329,51 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   else
     bad "HANDOFF/STRATEGY: verdict vector differs -- want [$WANT] got [$got] for [$CASES]"
   fi
+  # EQUIV: every cell below asks the subjects IN PROCESS (he-inproc.sh). This arm is the seam's proof and the
+  # fixture's one END-TO-END run per distinct CLI outcome (fixture-mutants.md clauses 5-6): each row runs
+  # `bash <subject> <args>` and he_run/ro_run/ss_run on the SAME input, and stdout+stderr and the exit code
+  # must be byte-identical. Rows: the validator's handoff refusal (1), pass (0) and UNEVALUABLE (2), strategy
+  # 1/0, --gate2, --list-captures, --render-dar and its --check refusal, --smoke; record-only-diff.sh's paths
+  # 1/0 and none-reason 0/1/2; sprint-status.sh's story-status over a mismatching and an untracked story.
+  # Each refusing row's output must differ from its passing twin's, so the comparison cannot pass on two
+  # identical answers.
+  RO_SH="$(dirname "$HECTL")/record-only-diff.sh"; SS_SH="$(dirname "$HECTL")/sprint-status.sh"
+  eq_row() { # <label> <fn> <subject> <args...>  -> appends "<label> <rc>" or "<label> DIFF" to $WORK/eq.rows
+    local l="$1" fn="$2" urc crc
+    shift 2
+    "$fn" "$@" > "$WORK/eq.$l.u" 2>&1; urc=$?
+    bash "$@" > "$WORK/eq.$l.c" 2>&1; crc=$?
+    if cmp -s "$WORK/eq.$l.u" "$WORK/eq.$l.c" && [ "$urc" = "$crc" ]; then echo "$l $urc" >> "$WORK/eq.rows"
+    else echo "$l DIFF($urc/$crc)" >> "$WORK/eq.rows"; fi
+  }
+  : > "$WORK/eq.rows"
+  wc_="$WORK/world-clean"; wn_="$WORK/world-nocmd"; wy_="$WORK/world-yamlmis"; we_="$WORK/world-empty"; wf_="$WORK/world-fccode"
+  eq_row h-refuse he_run "$HECTL" -C "$wn_" "$STORY" "$(cat "$wn_/.B")" "$(cat "$wn_/.T")"
+  eq_row h-pass he_run "$HECTL" -C "$wc_" "$STORY" "$(cat "$wc_/.B")" "$(cat "$wc_/.T")"
+  eq_row h-uneval he_run "$HECTL" -C "$wc_" "$STORY" "$(cat "$wc_/.B")" no-such-ref
+  eq_row s-refuse he_run "$HECTL" -C "$we_" --strategy "$(cat "$we_/.T")" "$STORY"
+  eq_row s-pass he_run "$HECTL" -C "$wc_" --strategy "$(cat "$wc_/.T")" "$STORY"
+  eq_row g2 he_run "$HECTL" -C "$wy_" --gate2 "$STORY" "$(cat "$wy_/.B")" "$(cat "$wy_/.T")"
+  eq_row lc he_run "$HECTL" -C "$wc_" --list-captures "$STORY" "$(cat "$wc_/.T")"
+  eq_row rd he_run "$HECTL" -C "$wc_" --render-dar "$STORY" "$(cat "$wc_/.T")"
+  eq_row rdc-refuse he_run "$HECTL" -C "$wc_" --render-dar "$STORY" "$(cat "$wc_/.T")" --check
+  eq_row sm he_run "$HECTL" -C "$wc_" --smoke "$STORY" "$(cat "$wc_/.B")" "$(cat "$wc_/.T")"
+  eq_row ro-paths-refuse ro_run "$RO_SH" paths -C "$wf_" "$STORY" "$(cat "$wf_/.B")" "$(cat "$wf_/.T")"
+  eq_row ro-paths-pass ro_run "$RO_SH" paths -C "$wf_" "$STORY" "$(cat "$wf_/.T")" "$(cat "$wf_/.T")"
+  eq_row ro-none-reason ro_run "$RO_SH" none-reason 'none, a record-only rework'
+  eq_row ro-none-bare ro_run "$RO_SH" none-reason 'none'
+  eq_row ro-none-not ro_run "$RO_SH" none-reason 'see dev report'
+  eq_row ss-mismatch ss_run "$SS_SH" story-status --ref "$(cat "$wy_/.T")" --root "$wy_" "$STORY"
+  eq_row ss-untracked ss_run "$SS_SH" story-status --ref "$(cat "$WORK/world-untracked/.T")" --root "$WORK/world-untracked" "$STORY"
+  EQWANT='h-refuse 1 h-pass 0 h-uneval 2 s-refuse 1 s-pass 0 g2 0 lc 0 rd 0 rdc-refuse 1 sm 0 ro-paths-refuse 1 ro-paths-pass 0 ro-none-reason 0 ro-none-bare 1 ro-none-not 2 ss-mismatch 0 ss-untracked 0'
+  got="$(tr '\n' ' ' < "$WORK/eq.rows")"; got="${got% }"
+  if [ "$got" = "$EQWANT" ] && ! cmp -s "$WORK/eq.h-refuse.c" "$WORK/eq.h-pass.c" && ! cmp -s "$WORK/eq.s-refuse.c" "$WORK/eq.s-pass.c" \
+     && ! cmp -s "$WORK/eq.ro-paths-refuse.c" "$WORK/eq.ro-paths-pass.c" && ! cmp -s "$WORK/eq.ss-mismatch.c" "$WORK/eq.ss-untracked.c" \
+     && grep -q '^REFUSED no-command ' "$WORK/eq.h-refuse.c" && grep -q '^row	ready-for-dev	' "$WORK/eq.ss-mismatch.c"; then
+    ok "EQUIV: in process and by CLI, byte-identical output and exit on every row, each refusal differing from its pass (handoff 1/0/2, strategy 1/0, --gate2, --list-captures, --render-dar and its --check refusal, --smoke; record-only-diff.sh paths 1/0 and none-reason 0/1/2; sprint-status.sh story-status twice)"; B_eq=1
+  else
+    bad "EQUIV: want [$EQWANT] with each refusal differing from its pass, got [$got]"
+  fi
   # The SHIPPED validator, in place, beside its real sibling: the control tree above is a copy.
   got="$(verdict "$HE" "$WORK/world-yamlmis" h) $(verdict "$HE" "$WORK/world-noyaml" h)"
   if [ "$got" = "1:status-yaml-mismatch,:W 0::W:S" ]; then
@@ -330,8 +386,8 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # then the unflagged control's. A mutant that ignores the flag leaves the flagged run refused.
   g2_vec() { # <script> [unflagged] -> the flagged run's "<rc>:<refusals>:<SKIP STATUS (--gate2 line seen y/n)>"; with a 2nd arg, the unflagged control's
     local s="$1" w="$WORK/world-yamlmis" o rc
-    if [ -n "${2:-}" ]; then o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
-    else o="$(bash "$s" -C "$w" --gate2 "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?; fi
+    if [ -n "${2:-}" ]; then o="$(he_run "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
+    else o="$(he_run "$s" -C "$w" --gate2 "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?; fi
     printf '%s:%s:%s' "$rc" "$(awk '/^REFUSED /{print $2}' <<<"$o" | tr '\n' ',')" "$(grep -qF 'SKIP STATUS (--gate2' <<<"$o" && echo y || echo n)"
   }
   # The unflagged control is read once, on the control validator: the gate2-ignored mutant edits only the flagged branch.
@@ -348,11 +404,11 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # (exit 0, never a refusal); the normal range carries neither. Each mutant silences one.
   range_vec() { # <script> -> "<eq rc>:<eq kinds> <rev rc>:<rev kinds> <normal kinds>"
     local s="$1" w="$WORK/world-clean" o rc a b n
-    o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.T")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
+    o="$(he_run "$s" -C "$w" "$STORY" "$(cat "$w/.T")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
     a="$rc:$(awk '/^WARN range-/{print $2}' <<<"$o" | tr '\n' ',')"
-    o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.T")" "$(cat "$w/.B")" 2>/dev/null)"; rc=$?
+    o="$(he_run "$s" -C "$w" "$STORY" "$(cat "$w/.T")" "$(cat "$w/.B")" 2>/dev/null)"; rc=$?
     b="$rc:$(awk '/^WARN range-/{print $2}' <<<"$o" | tr '\n' ',')"
-    o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"
+    o="$(he_run "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"
     n="n:$(awk '/^WARN range-/{print $2}' <<<"$o" | tr '\n' ',')"
     printf '%s %s %s' "$a" "$b" "$n"
   }
@@ -378,7 +434,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # one above it is read (head-tree), never head-missing.
   rp_vec() { # <script>
     local s="$1" o w="$WORK/world-rphead" hh hf
-    o="$(bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"
+    o="$(he_run "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"
     hh="$(awk '$1=="WARN" && $3=="test-results/rp-red-head.txt:"{print $2}' <<<"$o" | tr '\n' ',')"
     hf="$(awk '$1=="WARN" && $3=="test-results/rp-red-fallback.txt:"{print $2}' <<<"$o" | tr '\n' ',')"
     printf '%s %s %s %s head=%s fallback=%s u8=%s' "$(verdict "$s" "$WORK/world-rpfirst" h)" "$(verdict "$s" "$WORK/world-rps319" h)" \
@@ -433,13 +489,13 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       # <repo> <story>: the main world physical and aliased, the linked worktree's own absolute path,
       # and the main world's absolute path handed to the linked worktree (outside its toplevel).
       for a in "$c|$pc/$STORY" "$c|$WORK/alias-clean/$STORY" "$WORK/wt-clean|$pw/$STORY" "$WORK/wt-clean|$pc/$STORY"; do
-        o="$(bash "$s" -C "${a%%|*}" "${a#*|}" "$(cat "$c/.B")" "$(cat "$c/.T")" 2>/dev/null)"; rc=$?
+        o="$(he_run "$s" -C "${a%%|*}" "${a#*|}" "$(cat "$c/.B")" "$(cat "$c/.T")" 2>/dev/null)"; rc=$?
         out="$out $rc:$(awk '/^REFUSED /{print $2}' <<<"$o" | tr '\n' ',')"
       done
-      bash "$s" -C "$c" "stories/../../x.md" "$(cat "$c/.B")" "$(cat "$c/.T")" >/dev/null 2>&1; out="$out climb=$?"
-      bash "$s" -C "$ABSW" "$ABSW/lnk/../x.md" "$(cat "$ABSW/.B")" "$(cat "$ABSW/.T")" >/dev/null 2>&1; out="$out lnk=$?"
-      bash "$s" -C "$ABSW" --strategy "$(cat "$ABSW/.T")" "$(cd -P "$ABSW" && pwd -P)/$STORY" >/dev/null 2>&1; out="$out sdirty=$?"
-      bash "$s" -C "$WORK/world-empty" --strategy "$(cat "$WORK/world-empty/.T")" "$pe/$STORY" >/dev/null 2>&1; out="$out scommit=$?"
+      he_run "$s" -C "$c" "stories/../../x.md" "$(cat "$c/.B")" "$(cat "$c/.T")" >/dev/null 2>&1; out="$out climb=$?"
+      he_run "$s" -C "$ABSW" "$ABSW/lnk/../x.md" "$(cat "$ABSW/.B")" "$(cat "$ABSW/.T")" >/dev/null 2>&1; out="$out lnk=$?"
+      he_run "$s" -C "$ABSW" --strategy "$(cat "$ABSW/.T")" "$(cd -P "$ABSW" && pwd -P)/$STORY" >/dev/null 2>&1; out="$out sdirty=$?"
+      he_run "$s" -C "$WORK/world-empty" --strategy "$(cat "$WORK/world-empty/.T")" "$pe/$STORY" >/dev/null 2>&1; out="$out scommit=$?"
       printf '%s' "${out# }"
     }
     ABSWANT='0: 0: 0: 2: climb=2 lnk=2 sdirty=0 scommit=1'
@@ -477,10 +533,10 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       sym_vec() { # <script>
         local s="$1" pa out=""
         pa="$(cd -P "$ABSW" && pwd -P)"
-        bash "$s" -C "$ABSW" --strategy HEAD stories/untrk.md >/dev/null 2>&1; out="$out out=$?"
-        bash "$s" -C "$ABSW" --strategy HEAD "$pa/stories/untrk.md" >/dev/null 2>&1; out="$out outabs=$?"
-        bash "$s" -C "$ABSW" --strategy HEAD stories/inlink.md >/dev/null 2>&1; out="$out in=$?"
-        bash "$s" -C "$ABSW" --strategy HEAD stories/tlink.md >/dev/null 2>&1; out="$out tracked=$?"
+        he_run "$s" -C "$ABSW" --strategy HEAD stories/untrk.md >/dev/null 2>&1; out="$out out=$?"
+        he_run "$s" -C "$ABSW" --strategy HEAD "$pa/stories/untrk.md" >/dev/null 2>&1; out="$out outabs=$?"
+        he_run "$s" -C "$ABSW" --strategy HEAD stories/inlink.md >/dev/null 2>&1; out="$out in=$?"
+        he_run "$s" -C "$ABSW" --strategy HEAD stories/tlink.md >/dev/null 2>&1; out="$out tracked=$?"
         printf '%s' "${out# }"
       }
       SYMWANT='out=2 outabs=2 in=0 tracked=0'
@@ -505,13 +561,25 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # written into the control tree (so record-only-diff.sh is its sibling) and must move only its own
   # cells. The partition and grammar mutants edit the HELPER copy, in a tree of their own.
   FCWANT='0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-missing, 1:dependency-setup-missing,:W 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:dependency-setup-none,:W 0: 1:dependency-setup-missing,full-collection-missing, 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W'
-  fc_vec() { # <script>
-    local s="$1" o="" v
-    for v in fcrec fccode fcbare fcgone dsgone dsbare devold devnew fcevil fcna fctbd fcempty fcnext dsna diskold disknew fcfence fcinvoc fcbold fcnonebt fcmake dsvenv; do o="$o $(verdict "$s" "$WORK/world-$v" h)"; done
+  # fc_vec <script> [<want>]: with a <want> vector (a mutant's), only the worlds whose cell it MOVES are run, and
+  # every other cell is reported as FCWANT's value -- a mutant runs the worlds its arm decides (fixture-mutants.md
+  # clause 2). Without one, every world runs (the control). "Only its own cells" is established at authoring by
+  # the full run the MUTANT-MATRIX-REMEASURE line names (FC_FULL=1).
+  FC_WORLDS='fcrec fccode fcbare fcgone dsgone dsbare devold devnew fcevil fcna fctbd fcempty fcnext dsna diskold disknew fcfence fcinvoc fcbold fcnonebt fcmake dsvenv'
+  fc_vec() { # <script> [<want>]
+    local s="$1" w="${2:-}" o="" v i=0 a b
+    for v in $FC_WORLDS; do
+      i=$((i + 1))
+      if [ -n "$w" ] && [ -z "${FC_FULL:-}" ]; then
+        a="$(awk -v n="$i" '{print $n}' <<<"$FCWANT")"; b="$(awk -v n="$i" '{print $n}' <<<"$w")"
+        if [ "$a" = "$b" ]; then o="$o $a"; continue; fi
+      fi
+      o="$o $(verdict "$s" "$WORK/world-$v" h)"
+    done
     printf '%s' "${o# }"
   }
   got="$(fc_vec "$HECTL")"
-  if [ "$got" = "$FCWANT" ]; then ok "RUN-RECORD: a reasoned none over a story+yamls+docs/reviews+test-results diff accepted, over a diff touching a test refused full-collection-none, a bare none refused, a missing line refused, a dependency-setup none with no reason refused, dev.md without the label prescription is LEGACY and with it refuses both missing lines; a .py under test-results/ and a conftest.py under docs/reviews/ make a record diff non-record; N/A, TBD and an empty value over a code diff each refused, an empty value continued by the invocation accepted, a dependency-setup N/A refused; dev.md untracked at <frozen> but on disk keys LEGACY both ways; an empty value over a fenced run and over `- Invocation:` accepted, over a bold label refused; a none carrying a runner span and a two-word span naming no runner refused; a venv interpreter with its packages accepted as a setup"; B_fc=1
+  if [ "$got" = "$FCWANT" ]; then ok "RUN-RECORD: a reasoned none over a story+yamls+docs/reviews+test-results diff accepted, over a diff touching a test refused full-collection-none, a bare none refused, a missing line refused, a dependency-setup none with no reason refused, dev.md without the label prescription is LEGACY and with it refuses both missing lines; a .py under test-results/ and a conftest.py under docs/reviews/ make a record diff non-record; N/A, TBD and an empty value over a code diff each refused, an empty value continued by the invocation accepted, a dependency-setup N/A refused; dev.md untracked at <frozen> but on disk keys LEGACY both ways; an empty value over a fenced run and over \`- Invocation:\` accepted, over a bold label refused; a none carrying a runner span and a two-word span naming no runner refused; a venv interpreter with its packages accepted as a setup"; B_fc=1
   else bad "RUN-RECORD: want [$FCWANT] got [$got]"; fi
   fc_mutant() { # <name> <he|ro> <from> <to> <want> <label>
     local m got t
@@ -522,7 +590,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       if cmp -s "$(dirname "$HE")/record-only-diff.sh" "$(dirname "$t")/record-only-diff.sh.tmp"; then bad "FIXTURE ERROR: run-record mutation '$1' matched nothing"; return; fi
       mv "$(dirname "$t")/record-only-diff.sh.tmp" "$(dirname "$t")/record-only-diff.sh"; m="$t"
     elif ! m="$(mkmut "$1" he "$3" "$4")" || [ -z "$m" ]; then bad "FIXTURE ERROR: run-record mutation '$1' matched nothing"; return; fi
-    got="$(fc_vec "$m")"
+    got="$(fc_vec "$m" "$5")"
     if [ "$got" = "$5" ]; then mutant_killed "${B_fc:-0}" "$1" "MUTATION '$1' killed, moving its own cells only: $6"
     elif [ "$got" = "$FCWANT" ]; then bad "MUTATION '$1' SURVIVED -- $6"
     else bad "MUTATION '$1' moved [$got], want [$5] -- the cells are entangled"; fi
@@ -597,6 +665,31 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     else bad "FIXTURE ERROR: mutation 'fc-no-conv' matched nothing"; fi
   else bad "FIXTURE BROKEN: could not seed the conventions worlds"; fi
 
+  # POINTER: run-shape's pointer-word refusal, in a world only it decides (fcsee: `see` opens a value that carries a
+  # runner span and a count and is no none form), with its near-miss (fcseenm: the same span and count, `see` not
+  # opening). Mutant ro-no-pointer drops the pointer rule from record-only-diff.sh in a tree of its own and moves
+  # fcsee only, to accepted.
+  if build_world "$WORK/world-fcsee" fcsee && build_world "$WORK/world-fcseenm" fcseenm; then
+    pt_vec() { printf '%s %s' "$(verdict "$1" "$WORK/world-fcsee" h)" "$(verdict "$1" "$WORK/world-fcseenm" h)"; }
+    PTWANT='1:full-collection-none, 0:'
+    got="$(pt_vec "$HECTL")"
+    if [ "$got" = "$PTWANT" ]; then ok "POINTER: a value opening with see, carrying a runner span and a count, is refused full-collection-none over a code diff; the same span and count with see later in the value is a run"; B_pt=1
+    else bad "POINTER: want [$PTWANT] got [$got]"; fi
+    if pt_t="$(mk_tree ro-no-pointer)"; then
+      FROM="    grep -qE '^(see|refer|n/a|na|tbd|todo|deferred|pending)([^a-z0-9]|\$)' <<<\"\$rs_lc\" && exit 1" TO='    :' \
+        awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' \
+        "$(dirname "$HE")/record-only-diff.sh" > "$(dirname "$pt_t")/record-only-diff.sh.tmp"
+      if cmp -s "$(dirname "$HE")/record-only-diff.sh" "$(dirname "$pt_t")/record-only-diff.sh.tmp"; then bad "FIXTURE ERROR: mutation 'ro-no-pointer' matched nothing"
+      else
+        mv "$(dirname "$pt_t")/record-only-diff.sh.tmp" "$(dirname "$pt_t")/record-only-diff.sh"
+        got="$(verdict "$pt_t" "$WORK/world-fcsee" h)"
+        if [ "$got" = '0:' ]; then mutant_killed "${B_pt:-0}" ro-no-pointer "MUTATION 'ro-no-pointer' killed by cell fcsee: without the pointer rule a see-opened value is read as a run"
+        elif [ "$got" = '1:full-collection-none,' ]; then bad "MUTATION 'ro-no-pointer' SURVIVED -- the pointer-word rule dropped"
+        else bad "MUTATION 'ro-no-pointer' moved fcsee to [$got], want [0:]"; fi
+      fi
+    else bad "FIXTURE ERROR: run-record mutation 'ro-no-pointer' could not build its tree"; fi
+  else bad "FIXTURE BROKEN: could not seed the pointer worlds"; fi
+
   # The story line is parsed WHATEVER sprint-status.sh exits. No yaml makes the shipped
   # story-status exit non-zero portably after its story line, so the sibling's exit is
   # synthesised: two trees whose sprint-status.sh is a wrapper that runs the real one, writes one
@@ -608,14 +701,17 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     v="$(mk_tree "$1")" || return 1
     d="$(dirname "$v")"
     mv "$d/sprint-status.sh" "$d/sprint-status.real.sh" || return 1
-    printf '#!/usr/bin/env bash\nbash "$(dirname "$0")/sprint-status.real.sh" "$@"\necho "sprint-status: synthetic failure after the story line" >&2\nexit %s\n' "$2" > "$d/sprint-status.sh" || return 1
+    # The wrapper is LOADABLE as the real one is (an ss_main, then the source guard), so the validator's
+    # `bash <dir>/sprint-status.sh` reaches it in process (he-inproc.sh); run by bash it answers the same.
+    printf '#!/usr/bin/env bash\nss_main() {\n  ( . "${BASH_SOURCE[0]%%/*}/sprint-status.real.sh" || exit 2; ss_main "$@" )\n  echo "sprint-status: synthetic failure after the story line" >&2\n  exit %s\n}\n%s\nss_main "$@"\n' \
+      "$2" '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' > "$d/sprint-status.sh" || return 1
     printf '%s\n' "$v"
   }
   if RC3="$(rc_tree ssrc3 3)" && RC0="$(rc_tree ssrc0 0)"; then
     RCWANT='1:status-not-review,:W:S 1:status-not-review,:W'
     rc_vec() { printf '%s %s' "$(verdict "$1" "$WORK/world-notreview" k)" "$(verdict "$2" "$WORK/world-notreview" k)"; }
     got="$(rc_vec "$RC3" "$RC0")"
-    skip_line="$(bash "$RC3" -C "$WORK/world-notreview" "$STORY" "$(cat "$WORK/world-notreview/.B")" "$(cat "$WORK/world-notreview/.T")" 2>/dev/null | grep -c '^SKIP STATUS (implementation-view row .*exited 3: sprint-status: synthetic failure')" || skip_line=0
+    skip_line="$(he_run "$RC3" -C "$WORK/world-notreview" "$STORY" "$(cat "$WORK/world-notreview/.B")" "$(cat "$WORK/world-notreview/.T")" 2>/dev/null | grep -c '^SKIP STATUS (implementation-view row .*exited 3: sprint-status: synthetic failure')" || skip_line=0
     if [ "$got" = "$RCWANT" ] && [ "$skip_line" -eq 1 ]; then
       ok "SIBLING EXIT: a sprint-status.sh exiting 3 after its story line still lets (g) refuse status-not-review, and the row half prints one SKIP STATUS naming the exit; the same wrapper at exit 0 prints none"; B_rc3=1
     else
@@ -654,14 +750,16 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # --list-captures lists the toplevel spellings; and cell xr holds BOTH readers to one answer on one
   # `./` token. Every mutant is written beside record-only-diff.sh in the control tree and must FAIL
   # its own named cell and leave the ctl cell standing.
-  cn_run() { bash "$DIR/receipt-bl815.sh" "$1" 2>&1; }
+  # Every receipt below is SOURCED in a fresh subshell (rcpt_run), and its world is seeded ONCE into
+  # $WORK/rw-<receipt> by the control call and read by every mutant call (no call writes into it).
+  cn_run() { rcpt_run "$WORK/rw-bl815" "$DIR/receipt-bl815.sh" "$1" ${2:+"$2"} 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell
   cn_out="$(cn_run "$HECTL")"; cn_rc=$?
   if [ "$cn_rc" -eq 0 ]; then ok "CAPTURE NORMALISATION: inner ../, absolute and aliased spellings of a tracked capture are judged (no-command), a leading ../ is outside the repository (WARN, or red-untracked when RED), untracked and outside citations WARN capture-unresolved with their reasons, a frozen-.gitignore'd one prints nothing, the exit is unchanged, --list-captures lists the toplevel spellings, and both readers agree on one ./ token"; B_cn=1
   else bad "CAPTURE NORMALISATION: receipt-bl815.sh exited $cn_rc on the shipped validator: $(tr '\n' ' ' <<<"$cn_out")"; fi
   cn_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
     local m o mrc
     if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
-    o="$(cn_run "$m")"; mrc=$?
+    o="$(cn_run "$m" "$4")"; mrc=$?
     if [ "$mrc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
     elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the toplevel control cell -- $5"
     elif [ "$mrc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_cn:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
@@ -689,14 +787,14 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # `<redacted>` and `<base-worktree>` are quiet; the placeholder WARN never moves the exit; a capture
   # with no command line is the unchanged no-command control (cell ctl). Every mutant is written beside
   # record-only-diff.sh in the control tree and must FAIL its own named cell and leave ctl standing.
-  b9_run() { bash "$DIR/receipt-bl809.sh" "$1" 2>&1; }
+  b9_run() { rcpt_run "$WORK/rw-bl809" "$DIR/receipt-bl809.sh" "$1" ${2:+"$2"} 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell
   b9_out="$(b9_run "$HECTL")"; b9_rc=$?
   if [ "$b9_rc" -eq 0 ]; then ok "BL-809 ARMS: an unquoted multi-word -k is REFUSED k-unquoted, quoted and single-word -k are quiet, a <tree> placeholder WARNs without moving the exit, <redacted> and <base-worktree> are quiet"; B_b9=1
   else bad "BL-809 ARMS: receipt-bl809.sh exited $b9_rc on the shipped validator: $(tr '\n' ' ' <<<"$b9_out")"; fi
   b9_mutant() { # <name> <from> <to> <cell that must FAIL> <label>
     local m o mrc
     if ! m="$(mkmut "$1" he "$2" "$3")" || [ -z "$m" ]; then bad "FIXTURE ERROR: mutation '$1' matched nothing"; return; fi
-    o="$(b9_run "$m")"; mrc=$?
+    o="$(b9_run "$m" "$4")"; mrc=$?
     if [ "$mrc" -eq 9 ]; then bad "FIXTURE BROKEN: mutation '$1' -- the receipt could not run ($(tr '\n' ' ' <<<"$o"))"
     elif grep -q '^FAIL ctl:' <<<"$o"; then bad "MUTATION '$1' moved the no-command control cell -- $5"
     elif [ "$mrc" -eq 1 ] && grep -q "^FAIL $4:" <<<"$o"; then mutant_killed "${B_b9:-0}" "$1" "MUTATION '$1' killed by cell $4: $5"
@@ -728,7 +826,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # the validator, never a world). A copy taken right after seeding is compared with `diff -r` after the
   # last mutant, so a call that wrote into a world fails the arm instead of skewing the later cells.
   SMW="$WORK/sm-worlds"
-  sm_run() { bash "$DIR/receipt-bl845.sh" "$1" "$SMW" "${2:-}" 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell (plus clean)
+  sm_run() { rcpt_run - "$DIR/receipt-bl845.sh" "$1" "$SMW" "${2:-}" 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell (plus clean)
   sm_out="$(sm_run "$HECTL")"; sm_rc=$?
   [ -f "$SMW/.seeded" ] && cp -R "$SMW" "$WORK/sm-worlds.snap" || { sm_rc=9; sm_out="$sm_out (the worlds were not seeded once into $SMW)"; }
   if [ "$sm_rc" -eq 0 ]; then ok "BL-845 SMOKE ARMS: an untracked listed test file is REFUSED smoke-listed-absent and a removed one is not; directory, trailing-slash and extensionless tokens are ignored by m1; /api, KEY=URL and glob tokens are not paths, :line and ::node suffixes are stripped; the s320 4.2 body over a UI diff is REFUSED smoke-not-updated, an empty body over a non-UI diff is quiet, and an :(exclude) or :! surface line removes a generated file from the surface; an absent surface prints SKIP undeclared and no SMOKE OK, none prints NO-SURFACE, an empty one SKIP empty, a capitalised None NO-SURFACE, a surface line git rejects and a surface matching nothing at base (none., a backticked none, a typo) REFUSED smoke-surface-unevaluable with exit 1 while a matching glob the range misses is quiet and a surface directory the story creates is not refused, a corrupt base tree under the surface is UNEVALUABLE (exit 2) and not a rejected pathspec, an unevaluable range diff with nothing refused exits 2, a refusal outranks a later unevaluable diff (exit 1, never 2) in both modes, an :(exclude,glob) line drops a top-level test file that :(exclude) keeps, and -C <subdirectory> refuses as -C <toplevel> does; an edited surface is REFUSED and read at base; fences, CRLF and the next heading bound the section; handoff mode runs the same arms"; B_sm=1
@@ -805,7 +903,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   # lists them: ctl r1-r9, esc, cmd, d3, cnt and its near-misses cntnb/cntpl, rp, trim, und). Every mutant is
   # written beside record-only-diff.sh in the control tree and must FAIL its own named cell and leave
   # the ctl cell (a story citing nothing renders the two markers, --check 0) standing.
-  b43_run() { bash "$DIR/receipt-bl843.sh" "$1" "${2:-}" 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell (plus ctl)
+  b43_run() { rcpt_run "$WORK/rw-bl843" "$DIR/receipt-bl843.sh" "$1" "${2:-}" 2>&1; } # <validator> [<cells>]: a mutant run names its one deciding cell (plus ctl)
   b43_out="$(b43_run "$HECTL")"; b43_rc=$?
   if [ "$b43_rc" -eq 0 ]; then ok "CAPTURE-HEADS: --render-dar renders each capture's head (+dirty kept, the replay block's own), its (a)-arm command (a backtick in a double-backtick span) and the full-collection capture's last count only; --check accepts the pasted block, refuses one retyped head stale, a missing block (post-epoch) and two blocks; a pre-epoch or undecidable story WARNs; the block's own paths are never citations; counts: capture-heads block is a run only with a fresh counted block"; B_b43=1
   else bad "CAPTURE-HEADS: receipt-bl843.sh exited $b43_rc on the shipped validator: $(tr '\n' ' ' <<<"$b43_out")"; fi
@@ -907,7 +1005,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   else
     lc_cell() { # <script> <frozen> -> "rc:<line>,<line>,..."
       local o rc
-      o="$(bash "$1" -C "$LC_W" --list-captures docs/stories/s.md "$2" 2>/dev/null)"; rc=$?
+      o="$(he_run "$1" -C "$LC_W" --list-captures docs/stories/s.md "$2" 2>/dev/null)"; rc=$?
       printf '%s:%s' "$rc" "$(printf '%s\n' "$o" | grep . | tr '\n' ',')"
     }
     lc_vec() { # <script> -> L1 | L2 (disk carries cap5) | L3 (cap5 committed)
@@ -943,6 +1041,15 @@ if [ "$WORLDS_OK" -eq 1 ]; then
       "0:${E}cap1.txt,${E}cap2.txt, | 0:${E}cap1.txt,${E}cap2.txt,x/y.txt, | 0:${E}cap1.txt,${E}cap2.txt,${E}cap5.txt,x/y.txt," \
       "--list-captures drops the bare-basename resolution, so cap3.txt is lost"
   fi
+fi
+
+# INPROC: every subject call the cells above made through he-inproc.sh was answered in process. A subject file the
+# runner had to hand to the real bash (no source guard) is logged; only the EQUIV arm's CLI rows run bash by design,
+# and they do not pass through the runner. Positive conjunct: the log exists, so an unset variable cannot pass.
+if [ -f "$UT_FALLBACK_LOG" ] && [ ! -s "$UT_FALLBACK_LOG" ]; then
+  ok "INPROC: every validator, record-only-diff.sh and sprint-status.sh call the cells made was answered in process"
+else
+  bad "INPROC: subject calls ran as processes: $(sort "$UT_FALLBACK_LOG" 2>/dev/null | uniq -c | tr '\n' ' ')"
 fi
 
 echo

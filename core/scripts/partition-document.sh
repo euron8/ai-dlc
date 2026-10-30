@@ -162,15 +162,14 @@
 #
 # Portability: bash 3.2, BSD awk/tail/head, LC_ALL=C so awk's length() counts BYTES.
 set -u
-export LC_ALL=C
-PART_CAP=8
-MAX_SHARE_PCT=50
 
 refuse() { printf 'partition-document: REFUSED — %s\n' "$*" >&2; exit 2; }
+
 sha_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
   else sha256sum "$1" | cut -d' ' -f1; fi
 }
+
 abs_path() { # <existing file> -> physical absolute path
   local d
   d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
@@ -280,9 +279,7 @@ manifest_field() { # <manifest> <key> -> the first value of that key
   awk -F'\t' -v k="$2" '$1 == k { print $2; exit }' "$1"
 }
 
-SCOPE_TMP=""
 scope_cleanup() { if [ -n "$SCOPE_TMP" ]; then rm -f "$SCOPE_TMP" "$SCOPE_TMP.base" "$SCOPE_TMP.diff"; fi; return 0; }
-trap scope_cleanup EXIT
 
 scope_lines() { # <doc> <ref> -> SCOPE_TMP holds the in-scope line numbers, SCOPE_SHA the resolved commit
   local dir top pre rel drc
@@ -332,6 +329,7 @@ scoped_map() { # <doc> <ref> -> M and MRC, the scoped answer
 }
 
 usage64() { printf 'partition-document: USAGE — %s\n' "$*" >&2; exit 64; }
+
 cross_of() { # <K> [<ordinal list>] -> the group table (no list) or the owning g (list); awk rc
   awk -v K="$1" -v O="${2:-}" 'BEGIN {
     n = 0; s = 1
@@ -367,10 +365,25 @@ cross_of() { # <K> [<ordinal list>] -> the group table (no list) or the owning g
     print "partition-document: USAGE — no group holds ordinals " s1 " and " s2 > "/dev/stderr"; exit 64
   }'
 }
+
 cross_k() { # <K> -> refuses (64) unless an integer >= 2
   case "$1" in ''|*[!0-9]*) usage64 "K must be an integer >= 2 (got '$1')" ;; esac
   [ "${#1}" -le 6 ] && [ "$1" -ge 2 ] || usage64 "K must be an integer >= 2 and at most 6 digits (got '$1')"
 }
+
+pdoc_main() {
+export LC_ALL=C
+PART_CAP=8
+MAX_SHARE_PCT=50
+
+
+
+
+SCOPE_TMP=""
+trap scope_cleanup EXIT
+
+
+
 
 case "${1:-}" in
   --cross-groups)
@@ -552,3 +565,8 @@ EOF
 
   *) refuse "usage: partition-document.sh --map <doc> [--scope-ref <sha>] | --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>] | --assemble <dir>" ;;
 esac
+}
+# The program runs only when executed; sourced (a fixture asking a decision in process), it defines
+# the functions above and pdoc_main, and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+pdoc_main "$@"

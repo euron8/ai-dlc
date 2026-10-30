@@ -78,6 +78,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 [ "$#" -ge 1 ] && [ "$#" -le 3 ] && [ -f "$1" ] \
   || { echo "REFUSED: usage: bash receipt-bl845.sh <path to validate-handoff-evidence.sh> [<worlds dir> [<cells>]]" >&2; exit 9; }
 HE="$1"; CELLS="${3:-}"
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
 want() { [ -z "$CELLS" ] || case " clean $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 if [ -n "${2:-}" ]; then
@@ -212,7 +213,7 @@ W="$R/edited"; [ "$(g cat-file -t "$(cat "$W/.T"):web")" = tree ] && [ -d "$W/we
   || { echo "REFUSED: the edited world has no web/ subdirectory for the sub cell" >&2; exit 9; }
 run() { # <cell> [<subdirectory of the world to pass as -C>] -> "<rc>:<kinds>:<flags>"
   local w="$R/$1" o rc f=""
-  o="$(bash "$HE" -C "$w${2:+/$2}" --smoke stories/s.md "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
+  o="$(he_run "$HE" -C "$w${2:+/$2}" --smoke stories/s.md "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
   grep -q '^SMOKE OK ' <<<"$o" && f="${f}O"
   grep -q '^SMOKE NO-SURFACE (declared none' <<<"$o" && f="${f}N"
   grep -q '^SKIP SMOKE-SURFACE (undeclared' <<<"$o" && f="${f}U"
@@ -265,14 +266,14 @@ cell exclctl  1:smoke-not-updated:
 cell grammar  0::O
 W="$R/s320"
 if want hand; then
-o="$(bash "$HE" -C "$W" stories/s.md "$(cat "$W/.B")" "$(cat "$W/.T")" 2>/dev/null)"
+o="$(he_run "$HE" -C "$W" stories/s.md "$(cat "$W/.B")" "$(cat "$W/.T")" 2>/dev/null)"
 grep -q '^REFUSED smoke-not-updated stories/s.md: ' <<<"$o" \
   || { echo "FAIL hand: handoff mode did not print the smoke-not-updated refusal"; fails=$((fails + 1)); }
 fi
 hand_rc() { # <cell> <world> <REFUSED kind that must print> -> FAIL unless handoff mode exits 1 with it
   local w="$R/$2" o rc
   want "$1" || return 0
-  o="$(bash "$HE" -C "$w" stories/s.md "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
+  o="$(he_run "$HE" -C "$w" stories/s.md "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
   { [ "$rc" -eq 1 ] && grep -q "^REFUSED $3 stories/s.md: " <<<"$o"; } \
     || { echo "FAIL $1: handoff mode on the $2 world exited $rc, want 1 with REFUSED $3"; fails=$((fails + 1)); }
 }

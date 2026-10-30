@@ -931,9 +931,8 @@ $MK_OUT
     exit 0 ;;
 esac
 }
-[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
-wfd_mark_main "$@"
 
+wfd_beat_main() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1; shift ;;
@@ -1167,11 +1166,15 @@ wfd_start_of() {  # $1 = pid -> its start time, whitespace-normalised; empty whe
 }
 fi
 
+# THE LEASE'S HOLDER IS THIS BEAT'S PID. Run as a program that is $$. A fixture that sources this
+# file and runs wfd_beat_main in a background subshell sets WFD_SELF_PID to that subshell's pid,
+# which $$ (the sourcing shell's pid) cannot report; unset, it is exactly $$.
+WD_SELF_PID="${WFD_SELF_PID:-$$}"
 LEASE_HOME="${WD_ROOT}/_bmad-output"
 LEASE_DIR="${LEASE_HOME}/.wait-beats"
 [ "$STATUS" -eq 1 ] || mkdir -p "$LEASE_DIR" 2>/dev/null || true
 BEAT_MARKER="${LEASE_HOME}/.beat-inflight"
-LEASE_SELF="${LEASE_DIR}/.lease-$$"
+LEASE_SELF="${LEASE_DIR}/.lease-$WD_SELF_PID"
 lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
   ld_r_="$(cat "${LEASE_DIR}/.lease-$1" 2>/dev/null || echo '')"
   case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
@@ -1179,7 +1182,7 @@ lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
   kill -0 "$1" 2>/dev/null && return 1
   return 0
 }
-LEASE_TMP="${LEASE_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
+LEASE_TMP="${LEASE_DIR}/.beat-inflight.$WD_SELF_PID"   # inside the ignored .wait-beats/, same filesystem
 lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
   { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
     || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
@@ -1190,22 +1193,22 @@ beat_alive() {
   ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
   ba_ep_="${ba_cur_%% *}"
   case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
-  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$$"; return 0; fi
+  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$WD_SELF_PID"; return 0 ;; esac
+  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$WD_SELF_PID"; return 0 ;; esac
+  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$WD_SELF_PID"; return 0; fi
   [ -n "$ba_pid_" ] || return 0                     # a live pre-upgrade lease: not ours to take
-  if [ "$ba_pid_" = "$$" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$$"; fi
+  if [ "$ba_pid_" = "$WD_SELF_PID" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$WD_SELF_PID"; fi
   return 0
 }
 lease_release() {
   lr_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
   case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
-  if [ "$lr_pid_" = "$$" ]; then
+  if [ "$lr_pid_" = "$WD_SELF_PID" ]; then
     lr_now_="$(date +%s)"; lr_heir_=""
     for lr_f_ in "$LEASE_DIR"/.lease-*; do
       [ -f "$lr_f_" ] || continue
       lr_p_="${lr_f_##*/.lease-}"
-      [ "$lr_p_" = "$$" ] && continue
+      [ "$lr_p_" = "$WD_SELF_PID" ] && continue
       lr_e_="$(cat "$lr_f_" 2>/dev/null || echo '')"
       case "$lr_p_$lr_e_" in *[!0-9]*|'') rm -f "$lr_f_" 2>/dev/null; continue ;; esac
       if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
@@ -2519,3 +2522,7 @@ else
 fi
 
 exit "$RC"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+wfd_mark_main "$@"
+wfd_beat_main "$@"

@@ -64,10 +64,12 @@ probe, the one unit it edited. The gate runs everything else; a hand re-running 
 Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule, never a cause outside its
 control. Pushes take the lead's slot one at a time; every other run goes in parallel.
 
-## No timing runs
+## No needless timing runs
 
-None are taken. Cost evidence is the counts the gate records: invocations.decl, exec, fork and
-render counts. Reading a duration off a pre-push log stays allowed.
+"Stop timing things that don't need to be timed." Cost evidence for a routine change is the counts
+the gate records: invocations.decl, exec, fork and render counts. Where the operator's stated goal
+IS wall clock or box load, measure that: wall and CPU, old against new, interleaved. A count is a
+proxy there, and one understated a measured saving by half. Never ask to reconfirm a stated goal.
 
 ## Zero tests depend on load (BL-868)
 

@@ -70,7 +70,6 @@ pause-hook-origin	no MUTANT-MATRIX block; floor: S1 b_mut(),S2 cmp -s + mutant,M
 plan-rotate	no MUTANT-MATRIX block; floor: S1 mutant_root(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 plan-shape	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 post-write-gates	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
-postcompact-rulebook-recovery	no MUTANT-MATRIX block; floor: S1 mutant_arm(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 preclassify-mode-bucket	no MUTANT-MATRIX block; floor: S1 run_mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 process-rule-pins	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 procsub-staged-refusal-boot	no MUTANT-MATRIX block; floor: S1 mutbad(),S2 cmp -s + mutant,MKA mutant-kills allowlist row

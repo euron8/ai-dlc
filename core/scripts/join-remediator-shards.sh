@@ -1458,7 +1458,7 @@ record_tail() {  # <record> [<lane round's record>...] -- closure is positional 
   exit 0
 }
 
-[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+join_main() {  # everything below: argument parsing, ledger, window, writers, lanes, assembly, record write
 while [ $# -gt 0 ]; do
   case "$1" in
     --check-part) [ $# -ge 2 ] || die "--check-part needs <part.md>"; CHKPART="$2"; PARTMODE=1; shift 2 ;;
@@ -2883,3 +2883,6 @@ echo "SERIAL-REQUIRED: ${SERIAL_N}"
 case "$ARTIFACT" in *-serial) ;; *) lane_report ;; esac
 [ -z "$SPEC_LINE" ] || printf '%s\n' "$SPEC_LINE"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+join_main "$@"

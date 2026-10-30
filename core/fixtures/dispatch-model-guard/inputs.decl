@@ -5,6 +5,8 @@ core/hooks/
 # sibling it runs for repair_field, its verdict schema and the enforcement map.
 !core/scripts/validate-spawn-ledger.sh
 !core/scripts/validate-gate-adjudication.sh
+# every decision the validator makes is in the module beside it; it exits 2 without it.
+!core/scripts/gate_adjudication.py
 core/scripts/validate-adversarial-convergence.sh
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml
