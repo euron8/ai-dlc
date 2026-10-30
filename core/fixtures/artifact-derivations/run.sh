@@ -125,6 +125,9 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 [ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found in $HERE" >&2; exit 2; }
 . "$HERE/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/artifact-derivations/matrix.sh"
+[ -f "$HERE/unit.sh" ] || { echo "FIXTURE ERROR: unit.sh not found in $HERE" >&2; exit 2; }
+. "$HERE/unit.sh"
+echo "HERMETIC-CONSUMED core/fixtures/artifact-derivations/unit.sh"
 
 # The tree the derivations are ABOUT. Self-contained: the fixture owns the facts it
 # asserts, so the case cannot go red because the repo around it changed.
@@ -144,7 +147,7 @@ emit() { # $1 file  $2 recorded-output-for-the-count
   } > "$1"
 }
 
-run() { AI_DLC_PROJECT_ROOT="$WORK" bash "$VALIDATOR" "$@" 2>&1; }
+run() { vad_call "$VALIDATOR" AI_DLC_PROJECT_ROOT="$WORK" -- "$@" 2>&1; }
 
 echo "artifact-derivations fixture"
 
@@ -354,7 +357,7 @@ exec_contained() { # $1 label  $2 command
   fi
   rm -f "$WORK/h/canary"*
   { printf '```derived\n$ %s\n0\n```\n' "$2"; } > "$WORK/h/story.md"
-  ( cd "$WORK/h" && AI_DLC_PROJECT_ROOT="$WORK/h" bash "$VALIDATOR" "$WORK/h/story.md" ) >/dev/null 2>&1
+  ( cd "$WORK/h" && vad_call "$VALIDATOR" AI_DLC_PROJECT_ROOT="$WORK/h" -- "$WORK/h/story.md" ) >/dev/null 2>&1
   if ls "$WORK/h/canary"* >/dev/null 2>&1; then
     bad "h-$1 EXECUTED through the validator -- the allowlist was bypassed: $2"
   else
@@ -431,7 +434,7 @@ abs_contained() { # $1 label  $2 command-with-$ABS  (ABS is the absolute canary 
   fi
   rm -f "$ABS"
   { printf '```derived\n$ %s\n0\n```\n' "$c"; } > "$WORK/h-abs/story.md"
-  ( cd "$WORK/h-abs" && AI_DLC_PROJECT_ROOT="$WORK/h-abs" bash "$VALIDATOR" "$WORK/h-abs/story.md" ) >/dev/null 2>&1
+  ( cd "$WORK/h-abs" && vad_call "$VALIDATOR" AI_DLC_PROJECT_ROOT="$WORK/h-abs" -- "$WORK/h-abs/story.md" ) >/dev/null 2>&1
   if [ -e "$ABS" ]; then
     bad "h-$1 WROTE an ABSOLUTE path through the validator: $c"
   else
@@ -480,7 +483,7 @@ inplace_contained() { # $1 label  $2 command
   printf 'a\nb\nc\n' > "$WORK/h2/data.txt"
   cp "$WORK/h2/data.txt" "$WORK/h2/.orig"
   { printf '```derived\n$ %s\n0\n```\n' "$2"; } > "$WORK/h2/story.md"
-  ( cd "$WORK/h2" && AI_DLC_PROJECT_ROOT="$WORK/h2" bash "$VALIDATOR" "$WORK/h2/story.md" ) >/dev/null 2>&1
+  ( cd "$WORK/h2" && vad_call "$VALIDATOR" AI_DLC_PROJECT_ROOT="$WORK/h2" -- "$WORK/h2/story.md" ) >/dev/null 2>&1
   if cmp -s "$WORK/h2/.orig" "$WORK/h2/data.txt"; then
     ok "h2-$1            bash rewrites data.txt in place; the checker does not"
   else
@@ -506,7 +509,7 @@ sed_refused() { # $1 command  [$2 expected refusal text, default the write/exec 
   mkdir -p "$WORK/h3"
   printf 'a\nb\nc\n' > "$WORK/h3/data.txt"
   { printf '```derived\n$ %s\n0\n```\n' "$1"; } > "$WORK/h3/story.md"
-  out="$(AI_DLC_PROJECT_ROOT="$WORK/h3" bash "$VALIDATOR" "$WORK/h3/story.md" 2>&1)"; rc=$?
+  out="$(vad_call "$VALIDATOR" AI_DLC_PROJECT_ROOT="$WORK/h3" -- "$WORK/h3/story.md" 2>&1)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -qF "${2:-writes a file or runs a command}" <<< "$out"; then
     ok "h3-verdict             exit=1  refused by verdict ($1)"
   else
@@ -825,8 +828,8 @@ bmut() {
 # 1 STALE), a POSITIVE conjunct a copy that never ran cannot print. Every kill below is gated on it.
 mkdir -p "$WORK/mx0"
 cp "$VALIDATOR" "$WORK/mx0/$VBASE"
-mx0_t="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$WORK/mx0/$VBASE" "$WORK/a-true/story.md" 2>&1)"; mx0_tr=$?
-mx0_s="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$WORK/mx0/$VBASE" "$WORK/a-stale/story.md" 2>&1)"; mx0_sr=$?
+mx0_t="$(vad_call "$WORK/mx0/$VBASE" AI_DLC_PROJECT_ROOT="$WORK" -- "$WORK/a-true/story.md" 2>&1)"; mx0_tr=$?
+mx0_s="$(vad_call "$WORK/mx0/$VBASE" AI_DLC_PROJECT_ROOT="$WORK" -- "$WORK/a-stale/story.md" 2>&1)"; mx0_sr=$?
 if cmp -s "$VALIDATOR" "$WORK/mx0/$VBASE" && [ "$mx0_tr" -eq 0 ] && [ "$mx0_sr" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$mx0_s"; then
   ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the validator, a-true exits 0 and a-stale exits 1 STALE"; B_MX0=1
 else
@@ -843,7 +846,7 @@ k_arms() { # <validator> <quiet> -> ARMS_FAILED
   # k-allow: THE MUST-ALLOW HALF. The unmutated validator ALLOWS the seed; without this the kill
   # below passes against a validator that refuses everything for any reason at all.
   if want k-allow; then
-    out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$V" "$WORK/k/m1w/story.md" 2>&1)"; rc=$?
+    out="$(vad_call "$V" AI_DLC_PROJECT_ROOT="$WORK" -- "$WORK/k/m1w/story.md" 2>&1)"; rc=$?
     [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out"
     arm k-allow $? "exit=0  the validator ALLOWS the must-allow \`sed -n '/w/p'\` (a blanket sed deny refuses it)"
   fi
@@ -852,7 +855,7 @@ k_arms() { # <validator> <quiet> -> ARMS_FAILED
   # not simply broken, and that deleting the predicate re-opens the write.
   if want k-exec; then
     rm -f "$WORK/k/m1e/canary"*
-    ( cd "$WORK/k/m1e" && AI_DLC_PROJECT_ROOT="$WORK/k/m1e" bash "$V" "$WORK/k/m1e/story.md" ) >/dev/null 2>&1
+    ( cd "$WORK/k/m1e" && vad_call "$V" AI_DLC_PROJECT_ROOT="$WORK/k/m1e" -- "$WORK/k/m1e/story.md" ) >/dev/null 2>&1
     if ls "$WORK/k/m1e/canary"* >/dev/null 2>&1; then kx=1; else kx=0; fi
     rm -f "$WORK/k/m1e/canary"*
     out="canary-present=$kx"; rc=$kx
@@ -901,7 +904,7 @@ lemit() { # $1 file  $2 first command  $3 its recorded output ("" = none)  $4 se
 lemit "$WORK/l/reader.md" "grep -c WRONG" 0 1
 lemit "$WORK/l/pipe.md"   "grep needle src/two-needles.txt | wc -l" "       2" 2
 lemit "$WORK/l/cat.md"    "cat" "" 2
-l_run() { AI_DLC_PROJECT_ROOT="$WORK" bash "$1" "$2" 2>&1; } # $1 validator  $2 artifact
+l_run() { vad_call "$1" AI_DLC_PROJECT_ROOT="$WORK" -- "$2" 2>&1; } # $1 validator  $2 artifact
 l_arms() { # <validator> <quiet> -> ARMS_FAILED
   local V="$1" q="$2" nfail
   arm_begin "$q"
@@ -976,7 +979,7 @@ mshim() { # $1 body of the shasum shim
   printf '#!/bin/sh\n%s\n' "$1" > "$WORK/m/bin/shasum"; chmod +x "$WORK/m/bin/shasum"
 }
 mrun() { # $1 validator  $2 story -> sets out, rc
-  out="$(cd "$WORK" && PATH="$WORK/m/bin:$PATH" AI_DLC_PROJECT_ROOT="$WORK" bash "$1" "$2" 2>&1)"; rc=$?
+  out="$(cd "$WORK" && vad_call "$1" PATH="$WORK/m/bin:$PATH" AI_DLC_PROJECT_ROOT="$WORK" -- "$2" 2>&1)"; rc=$?
 }
 { printf '```derived\n$ shasum src/m-data.txt\nfeedface  src/m-data.txt\n```\n\n'
   printf '```derived\n$ grep -c needle src/two-needles.txt\n2\n```\n'; } > "$WORK/m/fault.md"
@@ -1056,13 +1059,13 @@ m_arms() { # <validator> <quiet> -> ARMS_FAILED
   mnear_arm() { # $1 label  $2 command  $3 true output ("" = none)  $4 wrong output
     if want "m-$1-verdict"; then
       { printf '```derived\n$ %s\n' "$2"; [ -n "$3" ] && printf '%s\n' "$3"; printf '```\n'; } > "$WORK/m/repo/$1-true.md"
-      out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$V" "$WORK/m/repo/$1-true.md" 2>&1)"; rc=$?
+      out="$(cd "$WORK/m/repo" && vad_call "$V" AI_DLC_PROJECT_ROOT="$WORK/m/repo" -- "$WORK/m/repo/$1-true.md" 2>&1)"; rc=$?
       [ "$rc" -eq 0 ] && ! grep -q 'UNRUN' <<< "$out"
       arm "m-$1-verdict" $? "  exit=0  a status the command produced itself is not UNRUN" "m-$1 (verdict)"
     fi
     if want "m-$1-twin"; then
       { printf '```derived\n$ %s\n%s\n```\n' "$2" "$4"; } > "$WORK/m/repo/$1-stale.md"
-      out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$V" "$WORK/m/repo/$1-stale.md" 2>&1)"; rc=$?
+      out="$(cd "$WORK/m/repo" && vad_call "$V" AI_DLC_PROJECT_ROOT="$WORK/m/repo" -- "$WORK/m/repo/$1-stale.md" 2>&1)"; rc=$?
       [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && ! grep -q 'UNRUN' <<< "$out"
       arm "m-$1-twin" $? "  exit=1  STALE, not UNRUN -- the verdict path is live" "m-$1 (twin)"
     fi
@@ -1195,7 +1198,7 @@ nstub_side "$N/side-pass" 0
 
 nrun() { # $1 validator  $2 stub dir  $3 target -> sets out, rc
   : > "$2/SENT" 2>/dev/null
-  out="$(cd "$WORK" && PATH="$2:$PATH" AI_DLC_PROJECT_ROOT="$WORK" bash "$1" "$3" 2>&1)"; rc=$?
+  out="$(cd "$WORK" && vad_call "$1" PATH="$2:$PATH" AI_DLC_PROJECT_ROOT="$WORK" -- "$3" 2>&1)"; rc=$?
 }
 sent() { [ -s "$1/SENT" ]; }
 # n_arms <validator> <quiet> -> ARMS_FAILED. Each group is one validator invocation and gates on the
@@ -1348,7 +1351,7 @@ o_emit "$O/true.md" "$O80"
 o_emit "$O/at60.md" "$O60"
 o_emit "$O/stale.md" "$(printf '%s\n' "$O80" | sed 's/ \([0-9][0-9]*\) insertion/ 9\1 insertion/')"
 o_run() { # $1 validator  $2 artifact  $3 COLUMNS -- a width the block was NOT recorded at
-  out="$(COLUMNS="$3" AI_DLC_PROJECT_ROOT="$O/w" bash "$1" "$2" 2>&1)"; rc=$?
+  out="$(vad_call "$1" COLUMNS="$3" AI_DLC_PROJECT_ROOT="$O/w" -- "$2" 2>&1)"; rc=$?
 }
 o_arms() { # <validator> <quiet> -> ARMS_FAILED
   local V="$1" q="$2" _w
@@ -1419,7 +1422,7 @@ pfence _bmad-output/planning-artifacts/prd-repair-p1.md 2
 
 prun() { # $1 validator  $2.. args -> out, rc
   local v="$1"; shift
-  out="$(cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$v" "$@" 2>&1)"; rc=$?
+  out="$(cd "$P" && vad_call "$v" AI_DLC_PROJECT_ROOT="$P" -- "$@" 2>&1)"; rc=$?
 }
 p_arms() { # <validator> <quiet> -> ARMS_FAILED
   local V="$1" q="$2" total seen exc
@@ -1544,7 +1547,7 @@ QTEXT
 
 qrun() { # $1 validator  $2.. args -> out, rc
   local v="$1"; shift
-  out="$(cd "$Q" && AI_DLC_PROJECT_ROOT="$Q" bash "$v" "$@" 2>&1)"; rc=$?
+  out="$(cd "$Q" && vad_call "$v" AI_DLC_PROJECT_ROOT="$Q" -- "$@" 2>&1)"; rc=$?
 }
 q_arms() { # <validator> <quiet> -> ARMS_FAILED
   local V="$1" q="$2" f nsup
@@ -1698,7 +1701,7 @@ R_BT="it carries a backtick outside single quotes, which bash runs as command su
 r_run() { # $1 validator  $2 label  $3 command  $4 recorded output -> out, rc
   { printf '# r\n\n```derived\n$ %s\n%s\n```\n' "$3" "$4"; } > "$RP/$2.md"
   rm -f "$RP/canary" "$R/canary-nested" "$R/canary-bare" "$R/canary-sym"
-  out="$(cd "$RP" && AI_DLC_PROJECT_ROOT="$RP" bash "$1" "$2.md" 2>&1)"; rc=$?
+  out="$(cd "$RP" && vad_call "$1" AI_DLC_PROJECT_ROOT="$RP" -- "$2.md" 2>&1)"; rc=$?
 }
 r_arms() { # <validator> <quiet> -> ARMS_FAILED
   local V="$1" q="$2"
@@ -1954,7 +1957,7 @@ s_argv_bash() { ( c="$1"; cd "$S" && set -- && eval "set -- $c" && printf '%s\0'
 s_argv_split() { ( c="$1"; set -f; set -- $c; printf '%s\0' "$@" ); }
 s_argv_walker() { # $1 validator  $2 command
   local all line
-  all="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$1" --explain-cmd "$2" 2>/dev/null)"
+  all="$(cd "$S" && vad_call "$1" AI_DLC_PROJECT_ROOT="$S" -- --explain-cmd "$2" 2>/dev/null)"
   line="$(grep -m1 "^-	ARGV	" <<< "$all")" || return 1
   line="${line#*	ARGV	}"
   ( eval "set -- $line" && printf '%s\0' "$@" )
@@ -1969,7 +1972,7 @@ fi
 
 s_run() { # $1 validator  $2 label  $3 command  $4 recorded -> out, rc
   { printf '# s\n\n```derived\n$ %s\n%s\n```\n' "$3" "$4"; } > "$S/$2.md"
-  out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$1" "$2.md" 2>&1)"; rc=$?
+  out="$(cd "$S" && vad_call "$1" AI_DLC_PROJECT_ROOT="$S" -- "$2.md" 2>&1)"; rc=$?
 }
 s_arms() { # <validator> <quiet> -> ARMS_FAILED
   local V="$1" q="$2" lbl exp line nv c need=0 sdiff_bad=0
@@ -1979,7 +1982,7 @@ s_arms() { # <validator> <quiet> -> ARMS_FAILED
   if [ -z "$WANT" ] || want s-batch; then need=1
   else for lbl in $WANT; do grep -q "^$lbl	" "$S/expect.tsv" && need=1; done; fi
   if [ "$need" -eq 1 ]; then
-    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$V" --explain-cmd - < "$S/cases.tsv" 2>&1)"; rc=$?
+    out="$(cd "$S" && vad_call "$V" AI_DLC_PROJECT_ROOT="$S" -- --explain-cmd - < "$S/cases.tsv" 2>&1)"; rc=$?
     nv="$(grep -c '	VERDICT	' <<< "$out")" || nv=0
     if want s-batch; then
       [ "$rc" -eq 0 ] && [ "$nv" -eq "$S_NCASES" ] && [ "$nv" -gt 0 ]
@@ -2025,7 +2028,7 @@ s_arms() { # <validator> <quiet> -> ARMS_FAILED
   # unmutated validator runs the same invocation clean. The row mutated in is the FIRST row of
   # OPT_NEVER, read out of the script, so no NEVER token is typed here.
   if want s-never; then
-    out="$(cd "$S" && AI_DLC_PROJECT_ROOT="$S" bash "$V" --explain-cmd 'sort -r d.txt' 2>&1)"; rc=$?
+    out="$(cd "$S" && vad_call "$V" AI_DLC_PROJECT_ROOT="$S" -- --explain-cmd 'sort -r d.txt' 2>&1)"; rc=$?
     [ "$rc" -eq 0 ] && ! grep -q '^REFUSED: ' <<< "$out" && grep -q '	VERDICT	OK$' <<< "$out"
     arm s-never $? "exit=0  the option table admits no NEVER-set option: the same invocation runs clean, VERDICT OK"
   fi
@@ -2237,7 +2240,7 @@ t-cd-awk^cd scripts && awk 1 f.txt^cd scripts^
 t-cd-tail^cd web && tail -n 1 f.txt^cd web^
 t-cd-sort^cd web && sort f.txt^cd web^
 t-cd-drec^cd scripts && grep -drecurse ai-dlc x.txt && grep -Dread ai-dlc y.txt^cd scripts^"
-t_ex() { ( cd "$2" && AI_DLC_PROJECT_ROOT="$2" bash "$1" --explain-cmd "$3" 2>&1 ); } # validator root cmd
+t_ex() { ( cd "$2" && vad_call "$1" AI_DLC_PROJECT_ROOT="$2" -- --explain-cmd "$3" 2>&1 ); } # validator root cmd
 t_argvs() { grep -c '^-	ARGV	' <<< "$1" || true; }
 if mut_copy "$TREF" '/^      \[ "\$EXPLAIN" = 1 \] && explain_chain "\$c"$/d'; then
   ok "t-ref                  the reference copy (explain_chain's call line deleted) was built"
@@ -2344,8 +2347,8 @@ t_arms() { # <validator> <quiet> -> ARMS_FAILED
     i=0; fc_bad=0; out=""
     while IFS= read -r c; do
       i=$((i + 1)); printf '# t\n\n```derived\n$ %s\n1\n```\n' "$c" > "$T/a1-$i.md"
-      ro="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$V" "a1-$i.md" 2>&1)"; rr=$?
-      r="$(cd "$T" && AI_DLC_PROJECT_ROOT="$T" bash "$TREF" "a1-$i.md" 2>&1)"
+      ro="$(cd "$T" && vad_call "$V" AI_DLC_PROJECT_ROOT="$T" -- "a1-$i.md" 2>&1)"; rr=$?
+      r="$(cd "$T" && vad_call "$TREF" AI_DLC_PROJECT_ROOT="$T" -- "a1-$i.md" 2>&1)"
       if [ "$rr|$ro" != "1|$r" ] || ! grep -q '^FAIL (ALLOWLIST): ' <<< "$r"; then
         fc_bad=1; out="the check path differs from the reference for: $c"
       fi
@@ -2404,6 +2407,68 @@ bmut t-m14 t-cd-orleft t-cd-andleft "t-cd-orleft t-cd-orleft2 t-cd-orleft3" \
 bmut t-m15 t-cd-dash t-cd-core "t-cd-dash" \
   's/ && \[ "\$1" = operand \] && \[ "\$w" != - \]; then$/ \&\& [ "$1" = operand ]; then/'
 
+
+# --- U. THE IN-PROCESS CALL IS THE CLI ---------------------------------------------------------
+# Every cell above asks the validator through vad_call (unit.sh): the file sourced in a subshell,
+# vad_load, one vad_invoke. That is only the same question as `bash validate-artifact-derivations.sh
+# <args>` if the two answer alike, so this section runs ONE CLI call per outcome the validator has --
+# OK, STALE, UNRUN, a refused walk, a refused startup, a missing file, usage, --list and --explain-cmd --
+# beside its in-process call and asserts the merged output and the status equal. The nine outcomes must
+# also differ from one another, or equal answers would be one answer nine times. A recording `bash`
+# shim on PATH then shows the CLI side executed `bash` and the in-process side executed none.
+U="$WORK/u"; mkdir -p "$U/bin"
+UREAL_BASH="$(command -v bash)"
+printf '#!/bin/sh\necho call >> "%s/bash.log"\nexec "%s" "$@"\n' "$U" "$UREAL_BASH" > "$U/bin/bash"; chmod +x "$U/bin/bash"
+u_norm() { sed -e "s#$U_VALP#VAL#g" -e "s#$0#VAL#g"; }
+u_pair() { # $1 validator  $2 cwd  $3 root  $4 PATH prefix ("" = none)  $5.. args -> UP_IN UP_CLI UP_RIN UP_RCLI
+  local val="$1" cwd="$2" root="$3" pp="$4"; shift 4
+  U_VALP="$val"
+  UP_IN="$(cd "$cwd" && vad_call "$val" AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" -- "$@" 2>&1 | u_norm)"
+  UP_RIN="$(cd "$cwd" && vad_call "$val" AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" -- "$@" >/dev/null 2>&1; echo $?)"
+  UP_CLI="$(cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" "$UREAL_BASH" "$val" "$@" 2>&1 | u_norm)"
+  UP_RCLI="$(cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" "$UREAL_BASH" "$val" "$@" >/dev/null 2>&1; echo $?)"
+}
+mshim 'kill -9 $$'
+U_SNEVER="$S/s-m-never-$VBASE"
+U_ALL=""; U_RCS=""; u_bad=0
+while IFS="|" read -r u_lbl u_val u_cwd u_root u_pp u_args; do
+  [ -n "$u_lbl" ] || continue
+  eval "set -- $u_args"
+  u_pair "$u_val" "$u_cwd" "$u_root" "$u_pp" "$@"
+  if [ "$UP_IN" = "$UP_CLI" ] && [ "$UP_RIN" = "$UP_RCLI" ] && [ -n "$UP_IN" ]; then
+    ok "u-$u_lbl  the in-process call and the CLI give the same output and status ($UP_RIN)"
+  else
+    bad "u-$u_lbl the in-process call (rc $UP_RIN) and the CLI (rc $UP_RCLI) differ: [$UP_IN] against [$UP_CLI]"; u_bad=1
+  fi
+  U_ALL="$U_ALL$UP_RIN:$(printf '%s' "$UP_IN" | cksum)
+"; U_RCS="$U_RCS $UP_RIN"
+done <<EOF
+ok|$VALIDATOR|$WORK|$WORK||"$WORK/a-true/story.md"
+stale|$VALIDATOR|$WORK|$WORK||"$WORK/a-stale/story.md"
+unrun|$VALIDATOR|$WORK|$WORK|$WORK/m/bin|"$WORK/m/fault.md"
+walk|$VALIDATOR|$WORK|$WORK|$N/find-fail|"$N/dir"
+startup|$U_SNEVER|$S|$S||--explain-cmd 'sort -r d.txt'
+missing|$VALIDATOR|$WORK|$WORK||"$WORK/u-no-such-file.md"
+usage|$VALIDATOR|$WORK|$WORK||
+list|$VALIDATOR|$WORK|$WORK||--list "$WORK/a-true/story.md"
+explain|$VALIDATOR|$S|$S||--explain-cmd 'sort -r d.txt'
+EOF
+[ -f "$U_SNEVER" ] || bad "u-startup FIXTURE BROKEN: $U_SNEVER (the NEVER-row mutant) was not built"
+u_distinct="$(printf '%s' "$U_ALL" | sed '/^$/d' | sort -u | grep -c .)"
+case " $U_RCS " in *" 0 "*" 1 "*|*" 1 "*" 0 "*) u_rcs=ok ;; *) u_rcs=no ;; esac
+[ "$u_distinct" -ge 8 ] && [ "$u_rcs" = ok ] && case " $U_RCS " in *" 2 "*) true ;; *) false ;; esac \
+  && ok "u-distinct  the nine outcomes give $u_distinct distinct answers and statuses 0, 1 and 2 all occur, so the equalities above compare different things" \
+  || bad "u-distinct the nine outcomes gave only $u_distinct distinct answers or lack a status of 0, 1 or 2 (statuses:$U_RCS)"
+# The recording shim: the CLI side calls `bash` through PATH once per run, the in-process side never.
+rm -f "$U/bash.log"
+( cd "$WORK" && AI_DLC_PROJECT_ROOT="$WORK" PATH="$U/bin:$PATH" bash "$VALIDATOR" "$WORK/a-true/story.md" ) >/dev/null 2>&1
+u_cli_calls="$(grep -c call "$U/bash.log" 2>/dev/null)" || u_cli_calls=0
+rm -f "$U/bash.log"
+( cd "$WORK" && vad_call "$VALIDATOR" AI_DLC_PROJECT_ROOT="$WORK" PATH="$U/bin:$PATH" -- "$WORK/a-true/story.md" ) >/dev/null 2>&1
+u_in_calls="$(grep -c call "$U/bash.log" 2>/dev/null)" || u_in_calls=0
+[ "$u_cli_calls" -ge 1 ] && [ "$u_in_calls" -eq 0 ] \
+  && ok "u-noproc  the recording bash shim saw the CLI run call bash and saw the in-process call make no bash call" \
+  || bad "u-noproc the recording bash shim saw $u_cli_calls call(s) from the CLI run (want at least 1) and $u_in_calls from the in-process call (want 0)"
 
 [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
   && ok "$n_kill of $n_mut mutants scored dead" \

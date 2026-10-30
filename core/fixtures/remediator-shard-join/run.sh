@@ -50,14 +50,14 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX DX1 decides=D5 twins=D6
 # MUTANT-MATRIX EC40m decides=EC40 twins=- why=the --mark derivation is read by EC40 alone
 # MUTANT-MATRIX EC40m2 decides=EC40 twins=- why=the --mark derivation is read by EC40 alone
-# MUTANT-MATRIX EC41m-drop decides=EC41.a twins=- why=p_replay stops at its first failing case, so one cell is read
-# MUTANT-MATRIX EC41m-forge decides=EC41.b twins=- why=p_replay stops at its first failing case, so one cell is read
-# MUTANT-MATRIX EC42m-attr decides=EC42.b twins=- why=p_claim stops at its first failing case, so one cell is read
-# MUTANT-MATRIX EC42m-invert decides=EC42.c twins=- why=p_claim stops at its first failing case, so one cell is read
-# MUTANT-MATRIX EC42m-late decides=EC42.c twins=- why=p_claim stops at its first failing case, so one cell is read
-# MUTANT-MATRIX EC42m-early decides=EC42.d twins=- why=p_claim stops at its first failing case, so one cell is read
-# MUTANT-MATRIX EC43m-summary decides=EC43.crash-serial twins=- why=p_vcrash stops at its first failing case, so one cell is read
-# MUTANT-MATRIX EC43m-reword decides=EC43.ctl-stale twins=- why=p_vcrash stops at its first failing case, so one cell is read
+# MUTANT-MATRIX EC41m-drop decides=EC41.a twins=- why=p_replay is run on that one case alone (R_ONLY), so one cell is read
+# MUTANT-MATRIX EC41m-forge decides=EC41.b twins=- why=p_replay is run on that one case alone (R_ONLY), so one cell is read
+# MUTANT-MATRIX EC42m-attr decides=EC42.b twins=- why=p_claim is run on that one case alone (R_ONLY), so one cell is read
+# MUTANT-MATRIX EC42m-invert decides=EC42.c twins=- why=p_claim is run on that one case alone (R_ONLY), so one cell is read
+# MUTANT-MATRIX EC42m-late decides=EC42.c twins=- why=p_claim is run on that one case alone (R_ONLY), so one cell is read
+# MUTANT-MATRIX EC42m-early decides=EC42.d twins=- why=p_claim is run on that one case alone (R_ONLY), so one cell is read
+# MUTANT-MATRIX EC43m-summary decides=EC43.crash-serial twins=- why=p_vcrash is run on that one case alone (R_ONLY), so one cell is read
+# MUTANT-MATRIX EC43m-reword decides=EC43.ctl-stale twins=- why=p_vcrash is run on that one case alone (R_ONLY), so one cell is read
 # MUTANT-MATRIX EC39m decides=EC39a twins=- why=the record-mode BADSIB classification is read by EC39a alone
 # MUTANT-MATRIX LN3m decides=LN3 twins=- why=the lane partition drive reads LN3 alone
 # MUTANT-MATRIX LN6m decides=LN6 twins=- why=the lane-record drive reads LN6 alone
@@ -158,6 +158,9 @@ else
 fi
 
 
+# ---- unit-mark.sh: MK0, the in-process --mark seam pinned to the CLI. EC37 and EC40-EC43 below drive the same seam.
+bash "$HERE/unit-mark.sh"; _um=$?
+case "$_um" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-mark.sh exited $_um (FIXTURE BROKEN); nothing was asserted" ;; esac
 if p_markderive "$SRCDIR/wait-for-deliverable.sh"; then ok "EC40: --mark on a remediator part derives the words from the path -- coe-repair-p1/2.md written coe remediator 2, the shifted call coe 7 remediator 7 written coe remediator 7, requirements-party-repair/05.md called with wrong words written requirements-party remediator 05 and 03.md keeps its correct spelling, coe-party-serial-repair-p1/lane-1.md keeps lane-1, a 1/8 brief shard becomes the file name; a plain/ file keeps the caller's words"; B_EC40=1
 else bad "EC40: --mark did not derive the remediator part marker words (BL-796)"; fi
 # EC40m: the derivation removed must be KILLED by EC40. The unmutated control is EC40's own live pass
@@ -210,7 +213,10 @@ for _m in drop forge; do
     drop) _want=a; awk '$0 != "          MK_SRC=\"$MK_RW\""' "$SRCDIR/wait-for-deliverable.sh" > "$EM41/wfd.mut" ;;
     forge) _want=b; awk -v k='bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?' '{ i = index($0, k)
         if (i && substr($0, i + length(k)) == "") $0 = substr($0, 1, i - 1) "echo \"OK: 2 derivation(s) in 1 block(s) across 1 file(s) reproduce at HEAD.\" > \"$MK_VO\"; mk_vrc_=0"
-        print }' "$SRCDIR/wait-for-deliverable.sh" > "$EM41/wfd.mut" ;;
+        print }' "$SRCDIR/wait-for-deliverable.sh" \
+        | awk -v k='vad_invoke "$MK_SRC" ) > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?' '{ i = index($0, k)
+        if (i && substr($0, i + length(k)) == "") $0 = substr($0, 1, i - 1) "true ) ; echo \"OK: 2 derivation(s) in 1 block(s) across 1 file(s) reproduce at HEAD.\" > \"$MK_VO\"; mk_vrc_=0"
+        print }' > "$EM41/wfd.mut" ;;
   esac || { echo "FIXTURE BROKEN: EC41m ($_m) could not write the mutant" >&2; exit 2; }
   if cmp -s "$SRCDIR/wait-for-deliverable.sh" "$EM41/wfd.mut"; then
     bad "EC41m ($_m): FIXTURE STALE -- the mutation matched nothing in $SRCDIR/wait-for-deliverable.sh; re-anchor it, never relax the assertion"
@@ -221,7 +227,7 @@ for _m in drop forge; do
   else
     if [ "${B_EC41c:-0}" != 1 ]; then ok "EC41 copy control: the unmutated scripts in a copy of the dir pass EC41"; B_EC41c=1; fi
     mv -f "$EM41/wfd.mut" "$EM41/wait-for-deliverable.sh"
-    if p_replay "$EM41/wait-for-deliverable.sh"; then
+    if R_ONLY="$_want" p_replay "$EM41/wait-for-deliverable.sh"; then
       mrow "EC41m-$_m" "EC41.$_want=0"
       bad "EC41m ($_m): SURVIVED -- EC41 holds against it"
     elif [ "$R804" = "$_want" ]; then
@@ -265,7 +271,7 @@ for _m in attr invert late early; do
   else
     if [ "${B_EC42c:-0}" != 1 ]; then ok "EC42 copy control: the unmutated scripts in a copy of the dir pass EC42"; B_EC42c=1; fi
     mv -f "$EM42/mut" "$EM42/$_t"
-    if p_claim "$EM42/wait-for-deliverable.sh"; then
+    if R_ONLY="$_want" p_claim "$EM42/wait-for-deliverable.sh"; then
       mrow "EC42m-$_m" "EC42.$_want=0"
       bad "EC42m ($_m): SURVIVED -- EC42 holds against it"
     elif [ "$R816" = "$_want" ]; then
@@ -302,7 +308,7 @@ for _m in summary reword; do
   else
     if [ "${B_EC43c:-0}" != 1 ]; then ok "EC43 copy control: the unmutated scripts in a copy of the dir pass EC43"; B_EC43c=1; fi
     mv -f "$EM43/mut" "$EM43/$_t"
-    if p_vcrash "$EM43"; then
+    if R_ONLY="$_want" p_vcrash "$EM43"; then
       mrow "EC43m-$_m" "EC43.$_want=0"
       bad "EC43m ($_m): SURVIVED -- EC43 holds against it"
     elif [ "$RVC" != "$_want" ]; then

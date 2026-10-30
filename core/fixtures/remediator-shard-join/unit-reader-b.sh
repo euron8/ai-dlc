@@ -89,7 +89,11 @@ bash() {
       jcopy) ub_scrub "" ""; . "$UB_F"; join_main "$@" ;;
       hook) ub_scrub "" ""; set --; . "$UB_F"; hook_pretool_head ;;
       cap) ub_scrub "" ""; set --; . "$UB_F" ;;
-      dval) ub_scrub "" ""; . "$UB_F" "$@" ;;
+      dval) ub_scrub "" ""
+        case "$UB_F" in
+          */validate-artifact-derivations.sh) . "$UB_F"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
+          *) . "$UB_F" "$@" ;;
+        esac ;;
     esac
   )
 }
