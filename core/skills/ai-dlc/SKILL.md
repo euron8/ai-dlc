@@ -333,9 +333,10 @@ in force** -- on the option itself, not only in the question: *"inherit
 the offramp leaves: swap skipped for balances <= 0.01 token0"*, not
 *"inherit and say so"*. **A question is UNBADGED -- options presented
 neutrally, none marked `(Recommended)` and none placed first as the
-pick -- when any option sets, relaxes, inherits or leaves in force a
-config leaf, a threshold or literal on a money path, a byte-pin, an `LR-`
-or `LRC-` id, or a `D-<n>` operator decision in the spine.** Those values
+pick -- when it decides a value the operator alone owns and no operator
+words fix: its options set, relax, inherit or leave in force a config
+leaf, a threshold or literal on a money path, a byte-pin, an `LR-` or
+`LRC-` id, or a `D-<n>` operator decision in the spine.** Those values
 are the operator's to own, and a badge on one hands the
 operator's decision back to the lead under the operator's name. A question typed as prose at the end
 of a reply, followed by ending the turn, reads as narration: the
@@ -344,17 +345,49 @@ take, and the decision is never taken. The tool holds the turn open, so
 the Stop hook never runs and a flag set here is a pause nobody clears --
 the same reason Rule 3 gives for (d).
 
+**Sort every question three ways before it is asked.** (i) **A design
+choice a source settles is decided, not asked.** The sources are the
+operator's own words -- a prior answer of any length in
+`_bmad-output/operator-answers-history.md`, a request in
+`_bmad-output/operator-requests-history.md`, or an operator quote inside
+a `LOCKED_REQUIREMENTS` entry -- and, for WHERE and HOW only (a code
+path, a check's placement, which component reads what), the tree. It is
+a HOW decision under Rule 13 (`rule-bodies/rule-13.md`): record it as a
+Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a
+one-line reason, add one veto line for it to the next `AskUserQuestion`
+you send, and it reaches the operator under `### For Your Information`
+at the checkpoint (`steps/deploy-validate.md` §5). This holds on a money
+path, a config leaf or a pinned span, PROVIDED the choice leaves every
+operator-owned value in force or sets it to the operator's verbatim
+value. A choice that otherwise sets, relaxes or widens a value, a limit
+or an authority is settled by no source. (ii) **A design choice no
+source settles is asked with one option `(Recommended)`.** (iii) **Only
+a value the operator alone owns and no operator words fix is asked
+UNBADGED, as above** -- a number, an address, a limit, an enable flag, a
+secret, wallet or security config. **The tree never settles a value**: a
+literal found in config, code or a staged artifact is a derivation to
+put for veto under item (2) below, not a source; and words a lead wrote
+into a `LOCKED_REQUIREMENTS` entry are no source for what they add.
+**Outside this sort, each asked as its own rule says:** the sprint-scope
+confirmation (`steps/route.md` Step 6), operator relief (above,
+`bug-investigation.md` §2b), a choice that moves a locked requirement's
+boundary (Rule 13) or contradicts an operator-approved decision (Rule 12
+Tier 1), and a gate STOP adjudication (`steps/_gate-procedures.md`).
+
 **Before any question reaches the operator, do four things to it.**
 (1) Search for a prior answer in the sprint's `LOCKED_REQUIREMENTS`
 block, `_bmad-output/operator-requests-history.md` (the operator's typed
 words, the initial prompt included) and
 `_bmad-output/operator-answers-history.md`; a value found there is
-applied with its citation, not asked again. (2) Derive what the tree,
+applied with its citation, not asked again; a prior answer of any
+length is applied, and a design choice it settles is decided per the
+sort above. (2) Derive what the tree,
 the config or a read-only chain or API read can give -- an address, a
 band, a list of entries -- and put the derivation to the operator for
 veto instead of asking for the value; when the derived value is a config
 leaf, a money threshold or literal, an address, or an `LR-` or `D-<n>`
-value, that veto question goes out UNBADGED, as above. (3) Gloss every project-internal
+value, that veto question goes out UNBADGED, as above; a derived design
+choice goes to the sort above instead. (3) Gloss every project-internal
 term in the question text itself: a check number, a band, a gap or
 evaluation id, a `D-<n>`, `LR-` or `FR-` id gets a plain-language clause
 saying what it is, because the operator reads the question, not the
