@@ -184,7 +184,7 @@ die() { echo "ERROR: $*" >&2; exit "$DIE_RC"; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
 rs_top_parse() {
-USAGE="usage: bash $0 [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>] [--in-pool <dir> | --merge-pool <dir>]   (fs_usage and both need sudo)"
+USAGE="usage: bash ${BASH_SOURCE[0]} [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>] [--in-pool <dir> | --merge-pool <dir>]   (fs_usage and both need sudo)"
 MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""; RECONCILE=0; IN_POOL=""; MERGE_POOL=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -802,7 +802,7 @@ command -v python3  >/dev/null || die "python3 not found (path normalisation)"
 # everything root writes that the child must READ -- the profile, the marker directory, the
 # markers -- is created under umask 022.
 if [ "$TRACER" = fs_usage ] || [ "$TRACER" = both ]; then
-  [ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE${LIST_ARG:+ \"$LIST_ARG\"} --tracer $TRACER"
+  [ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash ${BASH_SOURCE[0]} $MODE${LIST_ARG:+ \"$LIST_ARG\"} --tracer $TRACER"
   command -v fs_usage >/dev/null || die "fs_usage not found; this derivation is macOS-only"
   if [ "$TRACER" = both ]; then
     command -v sandbox-exec >/dev/null || die "sandbox-exec not found; --tracer both is macOS-only"
@@ -2151,7 +2151,7 @@ say "wrote $MAP -- $M_FIX fixtures, $M_ENT entries, $M_PATH distinct paths (this
 exit 0
 }
 
-[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rs_main() {
 rs_top_root "$@"
 rs_top_parse "$@"
 rs_top_reconcile
@@ -2163,3 +2163,7 @@ rs_top_tree
 rs_top_loopinit
 rs_top_loop
 rs_top_finish
+}
+
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rs_main "$@"

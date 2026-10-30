@@ -241,6 +241,14 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # The per-fixture checksum-key section (contract k1) is four units: ckw its worlds, ckm1..ckm3 its fifteen mutants dealt in
 # three runs. Each mutant drives its own world and one twin world, so the mutants carry the cost and are what is dealt.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
+# IN PROCESS. The deriver carries a BASH_SOURCE guard over its top level (rs_main); hermetic-run.sh and the decision
+# drivers are plain scripts. Every world that ran one as `env ... bash <script>` now runs it through inproc (defined beside
+# stub_reap): a subshell stripped to what a new process would inherit, the script sourced, its main called. The
+# tracer unit's EQUIVALENCE cell drives two worlds both ways and compares output, set and exit. STILL PROCESSES, each
+# because its decision IS process identity: the live-trace drivers (RT, CT, FX, FW: readset_live_trace names its trace
+# root and judges its ceiling by `$$` and process groups), the lock start-time judge (PJ: `ps -o lstart= -p $$`), the
+# derivers slot-world starts (the slot's holder is the deriver's `$$`), the (args) self-invocations, and the one
+# end-to-end CLI run per outcome in the equivalence cell.
 SHARDS="a b c d"
 UNITS_a="arms ign man merge ckm1 slot"
 UNITS_b="loc hr tk dg ckm2"
@@ -2731,6 +2739,52 @@ stub_reap() {
   printf '%s %s\n' "$n" "$live" >> "$d/reap.log"
 }
 
+# inproc [-i] [-u VAR]... [VAR=val]... -- <script> [args]: run <script> IN PROCESS, in the CALLER'S subshell, the way
+# `env [-i] [-u VAR]... [VAR=val]... bash <script> [args]` runs it in a new process. Call it inside `( ... )`: it
+# replaces the subshell's state. A new bash inherits only EXPORTED variables, no function and no trap of its parent,
+# so this unsets every non-exported variable the fixture set (bash's own specials kept), every function, and the
+# subshell's traps; `-i` also unsets every exported one but HOME and PATH unless re-set. Then the script is SOURCED:
+# a program behind a BASH_SOURCE guard (the deriver) loads its definitions and returns at the guard, and its main
+# (rs_main) is called with the args; a plain script (hermetic-run.sh, a decision driver) simply runs. `exit` in either
+# ends this subshell with the status a process would have returned. Its output, files and exit are compared with the
+# CLI's in the equivalence cell beside the tracer unit, which is what makes this a stand-in rather than a model.
+# STATED DIFFERENCE: `$$` in the script is the fixture's pid (bash 3.2 has no BASHPID), so the deriver's
+# `pkill -P $$ -x fs_usage` cannot reach a stub fs_usage forked from this subshell; every stub world reaps its stubs
+# by recorded pid (stub_reap), so no verdict reads it. The --tracer both stub world's fs_usage reaping waits are
+# injected (READSET_SLEEP_CMD) and keyed on the capture holding the stub's last line, not on the clock.
+inproc() {
+  local _ip_v _ip_keep
+  _ip_keep=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) for _ip_v in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p'); do
+            case "$_ip_v" in HOME|PATH) ;; *) unset "$_ip_v" 2>/dev/null ;; esac
+          done; shift ;;
+      -u) unset "$2"; shift 2 ;;
+      --) shift; break ;;
+      *=*) export "$1"; shift ;;
+      *) echo "inproc: not an env word: '$1'" >&2; return 97 ;;
+    esac
+  done
+  [ -f "$1" ] || { echo "inproc: no script '$1'" >&2; return 97; }
+  trap - EXIT INT TERM HUP
+  for _ip_v in $(compgen -A function); do unset -f "$_ip_v"; done
+  _ip_keep=" $(compgen -e | tr '\n' ' ') "
+  for _ip_v in $(compgen -v); do
+    case "$_ip_v" in
+      BASH*|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE|IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELLOPTS|SHLVL|UID|_ip_v|_ip_keep) continue ;;
+    esac
+    case "$_ip_keep" in *" $_ip_v "*) continue ;; esac
+    unset "$_ip_v" 2>/dev/null
+  done
+  unset _ip_keep
+  set +u +e +m; set +o pipefail
+  . "$@"
+  if declare -F rs_main >/dev/null; then shift; rs_main "$@"; fi
+}
+# rs_drive [env words] -- <deriver> [args]: the deriver, in process. Call inside `( cd <repo> && rs_drive ... )`.
+rs_drive() { inproc "$@"; }
+
 # ------------------------------------------------------- the deriver's map merge ----
 # `--list` exists so refreshing ONE fixture costs its own runtime instead of a full
 # re-derivation. Its first version rewrote the map from only the fixtures it had just traced,
@@ -2882,7 +2936,7 @@ else
       cat "$wl"
     } > "$DG/pipe.sh"
     rm -f "$DG/w/dgfx.set"
-    ( TREE="$DG/r" WORK="$DG/w" fx=dgfx bash "$DG/pipe.sh" ) >/dev/null 2>&1
+    ( inproc TREE="$DG/r" WORK="$DG/w" fx=dgfx -- "$DG/pipe.sh" ) >/dev/null 2>&1
     cat "$DG/w/dgfx.set" 2>/dev/null
   }
   dg_verdict() { if [ "$(LC_ALL=C sort "$1" 2>/dev/null | tr '\n' ' ')" = "$(LC_ALL=C sort "$DG/want" | tr '\n' ' ')" ]; then echo exact; else echo wrong; fi; }
@@ -3961,7 +4015,7 @@ MUT
       || broken "could not seed the --tracer both repo"
     drive_in() { # $1 dir; rest = args. prints "<rc>|<first ERROR line>"
       local d="$1" r; shift
-      ( cd "$d" && bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$WORK/br.out" 2>&1; r=$?
+      ( cd "$d" && rs_drive -- core/scripts/derive-fixture-readsets.sh "$@" ) > "$WORK/br.out" 2>&1; r=$?
       printf '%s|%s' "$r" "$(grep -m1 'ERROR' "$WORK/br.out")"
     }
     V1="$(drive_in "$BR" --all --tracer both)"
@@ -4042,8 +4096,23 @@ echo $$ >> "${0%/*}/pids"   # the world reaps this pid by number (stub_reap); ex
 emit() { printf '%s\n' "$1" || exit 0; }
 emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.readset-sentinel  0.000010  cat.1"
 while IFS= read -r p; do [ -n "$p" ] && emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/t/$p  0.000010  bash.2"; done < "$STUB_FS"
+# The last line it will ever report, under the marker dir so the capture keeps it and no set does: stubflush waits on it.
+emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.stub-fs-done  0.000010  cat.1"
 n=0; while [ "$n" -lt 300 ]; do sleep 0.2; emit heartbeat; n=$((n+1)); done
 STUB
+    # THE INJECTED WAIT (the deriver's rs_sleep, READSET_SLEEP_CMD). The deriver's fixed `sleep 1` before it kills
+    # fs_usage stands for "the tracer's last events have reached the capture". This stub's last event is its
+    # .stub-fs-done line, so the wait ends when the capture holds it: an event, not a clock. Bounded at 3000 polls,
+    # past which it returns and the arm reads whatever the capture holds (the S1 arm then fails on a short set).
+    cat > "$SB/stubflush" <<'STUB'
+#!/bin/bash
+i=0
+until grep -q '/m/\.stub-fs-done ' "$STUB_ROOT"/w/*.raw.fsu 2>/dev/null; do
+  [ "$i" -ge 3000 ] && exit 0
+  /bin/sleep 0.01; i=$((i+1))
+done
+STUB
+    chmod +x "$SB/stubflush"
     # The stream stub registers its capture (the STUB_STREAM span) and blocks until the deriver stops it.
     cat > "$SB/logstream" <<'STUB'
 #!/bin/bash
@@ -4080,9 +4149,9 @@ d/-p'
       local before after r
       cp "$1" "$STUB_DERIVER"
       before="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
-          STUB_FS="$SB/fs.list" STUB_SB="$2" AI_DLC_READSET_TRACE_ROOT="$BOTH_TR" \
-          bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer both ) > "$WORK/stub.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
+          STUB_FS="$SB/fs.list" STUB_SB="$2" READSET_SLEEP_CMD=stubflush AI_DLC_READSET_TRACE_ROOT="$BOTH_TR" \
+          -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer both ) > "$WORK/stub.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SB:-}"
       after="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
@@ -4318,8 +4387,9 @@ d/-p'
     sbx_run() { # $1 deriver copy  $2 stream list; prints "<fxa line>|<drop notices>"
       local d
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/sbx.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/sbx.out" 2>&1 </dev/null
+      echo "$?" > "$WORK/sbx.rc"
       stub_reap "${SB:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       d="$(grep -c 'dropped during' "$SX_TR/w/fxa.win" 2>/dev/null)" || d=0
@@ -4327,8 +4397,37 @@ d/-p'
     }
     sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$SB/deriver.sh" > "$SX/deriver.nocanary.sh"
     CL="$(sbx_run "$SB/deriver.sh" "$SX/lossy.list")"
+    cp "$WORK/sbx.out" "$WORK/eq.l.in"; cp "$WORK/sbx.rc" "$WORK/eq.l.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.l.in.set" 2>/dev/null || : > "$WORK/eq.l.in.set"
     CW="$(sbx_run "$SB/deriver.sh" "$SX/whole.list")"
     cp "$SX_TR/w/fxa.log" "$WORK/width.log" 2>/dev/null || : > "$WORK/width.log"
+    cp "$WORK/sbx.out" "$WORK/eq.w.in"; cp "$WORK/sbx.rc" "$WORK/eq.w.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.w.in.set" 2>/dev/null || : > "$WORK/eq.w.in.set"
+    # THE EQUIVALENCE CELL, and the tracer unit's end-to-end runs (one per distinct outcome: fxa OMITTED, fxa
+    # MAPPED). The same two worlds driven through the CLI as a PROCESS must print the same output (the `[hh:mm:ss]`
+    # stamps of say() masked), write the same set and leave the same rc as the in-process drive above. The two
+    # worlds' answers differ (control), so an in-process path that answered both alike could not pass.
+    eq_cli() { # <stream list> <tag>
+      cp "$SB/deriver.sh" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$1" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/eq.$2.cli" 2>&1 </dev/null
+      echo "$?" > "$WORK/eq.$2.cli.rc"
+      stub_reap "${SB:-}"
+      cp "$SX_TR/w/fxa.set" "$WORK/eq.$2.cli.set" 2>/dev/null || : > "$WORK/eq.$2.cli.set"
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+    }
+    eq_mask() { sed 's/^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\] /[--:--:--] /' "$1"; }
+    eq_cli "$SX/lossy.list" l; eq_cli "$SX/whole.list" w
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    _eqd=""
+    for _t in l w; do
+      [ "$(eq_mask "$WORK/eq.$_t.in")" = "$(eq_mask "$WORK/eq.$_t.cli")" ] || _eqd="$_eqd $_t:output"
+      cmp -s "$WORK/eq.$_t.in.set" "$WORK/eq.$_t.cli.set" || _eqd="$_eqd $_t:set"
+      cmp -s "$WORK/eq.$_t.in.rc" "$WORK/eq.$_t.cli.rc" || _eqd="$_eqd $_t:rc=$(cat "$WORK/eq.$_t.in.rc")/$(cat "$WORK/eq.$_t.cli.rc")"
+    done
+    if [ -z "$_eqd" ] && [ "$(eq_mask "$WORK/eq.l.cli")" != "$(eq_mask "$WORK/eq.w.cli")" ] && grep -q '^  fxa .* OMITTED' "$WORK/eq.l.cli" && grep -q '^  fxa .* paths$' "$WORK/eq.w.cli"; then
+      ok "EQUIVALENCE: the in-process deriver and the CLI print the same output, write the same set and exit alike (lossy $(cat "$WORK/eq.l.cli.rc"), whole $(cat "$WORK/eq.w.cli.rc")) on the lossy world (fxa OMITTED) and the whole world (fxa MAPPED), two distinct answers"
+    else
+      bad "EQUIVALENCE: the in-process deriver and the CLI differ:${_eqd:- the two worlds read alike} — $(diff <(eq_mask "$WORK/eq.l.in") <(eq_mask "$WORK/eq.l.cli") | head -4 | tr '\n' ' ')"
+    fi
     TRACE_ARMS=$((TRACE_ARMS+1))
     case "$CL" in
       " fxa OMITTED ("*"LOSS CANARY: 1 path(s)"*"|0") ok "CANARY: a sandbox-tracer window that lost a read with NO drop notice OMITS the fixture, naming 'LOSS CANARY: 1 path(s)'"; B_canary=1 ;;
@@ -4406,9 +4505,9 @@ d/-p'
       local p="$WORK/pf.profiles" t s d
       : > "$p"
       cp "$SB/deriver.sh" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
           STUB_PROFILES="$p" ${1:+AI_DLC_READSET_SANDBOX_PROFILE="$1"} AI_DLC_READSET_TRACE_ROOT="$SX_TR" \
-          bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/pf.out" 2>&1 </dev/null
+          -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/pf.out" 2>&1 </dev/null
       stub_reap "${SB:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       t="$(grep -c 'readset-skip-profile-token' "$p")" || t=0
@@ -4479,8 +4578,8 @@ d/-p'
     omit_run() { # $1 deriver copy; prints "<stale rows>|<other rows>|<OMITTED header rows>"
       local s o h
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/omit.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/omit.out" 2>&1 </dev/null
       stub_reap "${SB:-}"
       s="$(grep -c 'STALE-ROW' "$BR/.ai-dlc-fixture-readsets.tsv")" || s=0
       o="$(grep -c '^other	' "$BR/.ai-dlc-fixture-readsets.tsv")" || o=0
@@ -4540,8 +4639,8 @@ d/-p'
     all_run() { # $1 deriver copy  $2 stream list  $3 header name; prints "<rc>|<header rows>|<presence>|<skip>|<merge dropped>"
       local r h p k m
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --all --tracer sandbox ) > "$WORK/all.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --all --tracer sandbox ) > "$WORK/all.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SB:-}"
       h="$(grep -cx "# OMITTED by the last run (always run): $3" "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
@@ -4630,8 +4729,8 @@ d/-p'
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxu ) >/dev/null 2>&1 || broken "could not seed fxu"
     unread_run() { # $1 deriver copy; prints the fxu line
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/fxu.list" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxu --tracer sandbox ) > "$WORK/unread.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/fxu.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxu --tracer sandbox ) > "$WORK/unread.out" 2>&1 </dev/null
       stub_reap "${SB:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       grep -m1 -E '^  fxu ' "$WORK/unread.out" | tr -s ' '
@@ -4722,8 +4821,8 @@ STUB
         diff) printf '  ok    one\n  FAIL  two\n' > "$LMF.logs/fxl" ;;
         none) rm -f "$LMF.logs/fxl" ;;
       esac
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
-          AI_DLC_READSET_TRACE_ROOT="$SL_TR" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$LMF" ) > "$WORK/lm.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
+          AI_DLC_READSET_TRACE_ROOT="$SL_TR" -- core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$LMF" ) > "$WORK/lm.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SL:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
@@ -4850,7 +4949,7 @@ STUB
     fi
     ( cd "$BR" && git worktree add -q "$WORK/lmwt" -b lmwt ) >/dev/null 2>&1 || broken "could not add a linked worktree for the --local-map arm"
     TRACE_ARMS=$((TRACE_ARMS+1))
-    LW_R="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$WORK/lmwt.local" ) 2>&1 )"; LW_RC=$?
+    LW_R="$( ( cd "$WORK/lmwt" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$WORK/lmwt.local" ) 2>&1 )"; LW_RC=$?
     stub_reap "${SL:-}"
     if [ "$LW_RC" -eq 1 ] && grep -q 'LINKED worktree' <<< "$LW_R" && [ ! -e "$WORK/lmwt.local" ]; then
       ok "LOCAL: from a LINKED worktree --local-map refuses at the worktree gate and writes no local map"
@@ -4862,9 +4961,9 @@ STUB
     # print once the linked-worktree gate above has let it through. The --local-map refusal is the control.
     TRACE_ARMS=$((TRACE_ARMS+1))
     mkdir -p "$WORK/lmwt.mp" || broken "mkdir failed"
-    LW_M="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --merge-pool "$WORK/lmwt.mp" --local-map "$WORK/lmwt.mpl" ) 2>&1 )"; LW_MRC=$?
+    LW_M="$( ( cd "$WORK/lmwt" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --merge-pool "$WORK/lmwt.mp" --local-map "$WORK/lmwt.mpl" ) 2>&1 )"; LW_MRC=$?
     stub_reap "${SL:-}"
-    LW_I="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list "fxl fxa" --tracer sandbox --in-pool "$WORK/lmwt.ip" ) 2>&1 )"; LW_IRC=$?
+    LW_I="$( ( cd "$WORK/lmwt" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --list "fxl fxa" --tracer sandbox --in-pool "$WORK/lmwt.ip" ) 2>&1 )"; LW_IRC=$?
     stub_reap "${SL:-}"
     if [ "$LW_MRC" -eq 0 ] && grep -q 'no in-pool trace to merge' <<< "$LW_M" && ! grep -q 'LINKED worktree' <<< "$LW_M$LW_I" \
        && [ "$LW_IRC" -eq 1 ] && grep -q 'needs --list with exactly ONE fixture' <<< "$LW_I"; then
@@ -4939,8 +5038,8 @@ STUB
       cp "$dv" "$STUB_DERIVER"; rm -rf "$IPP" "$SL_TR"; mkdir -p "$d.logs-seed" || broken "mkdir failed"
       rm -rf "$d.logs-seed"; mkdir -p "$d"
       mkdir -p "$d/local.logs" && printf '  ok    one\n  ok    two\n' > "$d/local.logs/fxl" || broken "could not seed the in-pool normal-run log"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
-          AI_DLC_READSET_TRACE_ROOT="$SL_TR" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --in-pool "$d" ) > "$WORK/ip.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
+          AI_DLC_READSET_TRACE_ROOT="$SL_TR" -- core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --in-pool "$d" ) > "$WORK/ip.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SL:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
@@ -4956,7 +5055,7 @@ STUB
     }
     mp_run() { # prints the merge's effect on $LMF; the pool under $IPP stays as ip_run left it
       local r fr dok dn zz ot
-      ( cd "$BR" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --merge-pool "$IPP" --local-map "$LMF" ) > "$WORK/mp.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --merge-pool "$IPP" --local-map "$LMF" ) > "$WORK/mp.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SL:-}"
       fr="$(grep -c '^fxl	[^#]' "$LMF" 2>/dev/null)" || fr=0
@@ -5052,8 +5151,8 @@ STUB
       cp "$dv" "$STUB_DERIVER"
       rm -f "$SX/kill" "$SX/kill.at"
       [ "$k" = yes ] && { kf="$SX/kill"; : > "$kf"; }
-      ( cd "$BR" && exec env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$sl" STUB_KILLFLAG="$kf" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list "fxw1 fxw2 fxw3" --tracer sandbox ) > "$WORK/iw.out" 2>&1 </dev/null &
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$sl" STUB_KILLFLAG="$kf" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list "fxw1 fxw2 fxw3" --tracer sandbox ) > "$WORK/iw.out" 2>&1 </dev/null &
       pid=$!
       if [ "$k" = yes ]; then
         # fxw3 REACHED, OR THE DERIVER GONE. A 60s tick count used to end this wait and score `at=no`, so
@@ -5140,8 +5239,8 @@ STUB
     dw_run() { # <deriver copy>; prints "<rc>|<keep digest>|<fxa digests>|<stale fxa digest>|<note>|<mapped count>"
       local r k a s n c
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/dw.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/dw.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SB:-}"
       cp "$BR/.ai-dlc-fixture-readsets.tsv" "$WORK/dw.map"
@@ -5851,7 +5950,7 @@ printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
   'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
   'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$CKD_DRV" || broken "could not write the stale-declared decision driver"
 ckd_dec() { # <pool> <t> <tag> -> the decision dir $t.dd.<tag>
-  mkdir -p "$2.dd.$3" && env AI_DLC_READSET_LIVE_TRACE=0 PATH="$2.bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$CKD_DRV" "$1" "$2" "$2.dd.$3"
+  mkdir -p "$2.dd.$3" && ( inproc AI_DLC_READSET_LIVE_TRACE=0 PATH="$2.bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" -- "$CKD_DRV" "$1" "$2" "$2.dd.$3" )
 }
 ckd_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s:%s:%s", $2, $4, $5 }' "$1/.kdec" 2>/dev/null; }
 ckd_world() { local p="$1" x="$2" t="$3" k kd
@@ -6104,10 +6203,10 @@ tk_w_inv() { local p="$1" x="$2" t="$3" e r=""
   ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm tools ) >/dev/null 2>&1 || { printf SEED; return; }
   tk_push "$p" "$t" 1 canon
   mkdir -p "$t.d.ref" "$t.d.hook" "$t.d.envi" "$t.d.dev" || { printf SEED; return; }
-  env -u GIT_EXEC_PATH -u DEVELOPER_DIR PATH="$TK_PLAIN" bash "$TK_DRV" "$p" "$t" "$t.d.ref"
-  env -u DEVELOPER_DIR PATH="$TK_FX:$PATH" GIT_EXEC_PATH="$TK_FX" bash "$TK_DRV" "$p" "$t" "$t.d.hook"
-  env -i HOME="$HOME" PATH=/usr/bin:/bin bash "$TK_DRV" "$p" "$t" "$t.d.envi"
-  env -u GIT_EXEC_PATH DEVELOPER_DIR="$TK_DEV" bash "$TK_DRV" "$p" "$t" "$t.d.dev"
+  ( inproc -u GIT_EXEC_PATH -u DEVELOPER_DIR PATH="$TK_PLAIN" -- "$TK_DRV" "$p" "$t" "$t.d.ref" )
+  ( inproc -u DEVELOPER_DIR PATH="$TK_FX:$PATH" GIT_EXEC_PATH="$TK_FX" -- "$TK_DRV" "$p" "$t" "$t.d.hook" )
+  ( inproc -i HOME="$HOME" PATH=/usr/bin:/bin -- "$TK_DRV" "$p" "$t" "$t.d.envi" )
+  ( inproc -u GIT_EXEC_PATH DEVELOPER_DIR="$TK_DEV" -- "$TK_DRV" "$p" "$t" "$t.d.dev" )
   for e in hook envi dev; do r="$r $e=$(tk_same "$t.d.ref" "$t.d.$e")"; done
   printf 'git=%s:%s tools=%s skip=%s%s' "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -c '/git$')" \
     "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -cxF "$TK_EXP")" \
@@ -6577,8 +6676,8 @@ else
   RC_TR="$(cd "$WORK" && pwd -P)/rc.tr"
   rc_run() { # <repo> <trace root>; prints "<rc>|<announce>|<listed>|<traced>"
     local r="$1" x
-    ( cd "$r" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$WORK/rc.sb" \
-        AI_DLC_READSET_TRACE_ROOT="$2" bash core/scripts/derive-fixture-readsets.sh --reconcile ) > "$WORK/rc.out" 2>&1 </dev/null
+    ( cd "$r" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$WORK/rc.sb" \
+        AI_DLC_READSET_TRACE_ROOT="$2" -- core/scripts/derive-fixture-readsets.sh --reconcile ) > "$WORK/rc.out" 2>&1 </dev/null
     x=$?
     stub_reap "${SB:-}"
     ( cd "$r" && git checkout -q -- . ) >/dev/null 2>&1
@@ -6718,11 +6817,11 @@ printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
   'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
   'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$VS_DRV" || broken "could not write the verdict-store decision driver"
 vs_dec() { # <pool> <t> <store> <tag> -> decision dir $t.vd.<tag>
-  mkdir -p "$2.vd.$4" && env AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$3" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$VS_DRV" "$1" "$2" "$2.vd.$4"
+  mkdir -p "$2.vd.$4" && ( inproc AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$3" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" -- "$VS_DRV" "$1" "$2" "$2.vd.$4" )
 }
 vs_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s", $2 }' "$1/.kdec" 2>/dev/null; }
 vs_hr() { # <runner> <root> <fx> <store>: runs the declared fixture; prints its exit code
-  env AI_DLC_VERDICT_STORE="$4" bash "$1" --root "$2" "$3" >/dev/null 2>&1; printf '%s' "$?"
+  ( inproc AI_DLC_VERDICT_STORE="$4" -- "$1" --root "$2" "$3" ) >/dev/null 2>&1; printf '%s' "$?"
 }
 vs_n() { find "$1" -maxdepth 1 -type f ! -name '.tmp*' 2>/dev/null | grep -c . || :; }
 vs_mk() { # <t> <fixture root> <runner file>: a git repo holding the hook, the runner and four fixtures
@@ -6806,7 +6905,7 @@ vs_world() { # <pool> <fixture root> <runner file> <t> [<cells>]: one vector
   case "$cs" in *" f "*)
   : > "$t.notadir"
   rcs="$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$t.notadir")"
-  v="$v f=$rcs/$(env -u HOME -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" decl >/dev/null 2>&1; printf '%s' "$?")/$([ -f "$t.notadir" ] && [ ! -s "$t.notadir" ] && echo intact)" ;; esac
+  v="$v f=$rcs/$( ( inproc -u HOME -u AI_DLC_VERDICT_STORE -- "$A/$rd/hermetic-run.sh" --root "$A" decl ) >/dev/null 2>&1; printf '%s' "$?")/$([ -f "$t.notadir" ] && [ ! -s "$t.notadir" ] && echo intact)" ;; esac
   case "$cs" in *" p "*)
   mkdir -p "$t/C2" && cp -R "$A/." "$t/C2/" && rm -rf "$t/C2/.git" \
     && ( cd "$t/C2" && git init -q . && git add -A && git -c user.email=f@f -c user.name=g commit -qm other ) >/dev/null 2>&1
@@ -6915,7 +7014,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     # VS_KO_FROM=<census world>: the runner side is SHARED from that world's run rather than re-run -- only for a
     # mutant that edits the pool alone, whose world, hook file and runner are that world's byte for byte.
     if [ -n "${VS_KO_FROM:-}" ]; then for f in $fl; do cp "$VS_KO_FROM.cd/d1/ko.$f" "$o/d1/ko.$f" 2>/dev/null; done
-    else for f in $fl; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d1/ko.$f" 2>/dev/null; done; fi
+    else for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d1/ko.$f" 2>/dev/null; done; fi
     mkdir -p "$KEYS_DIR" || exit 1
     for f in "$o/d1/.k"/*; do [ -f "$f" ] || continue; b="${f##*/}"
       { sed -n 1p "$f"; printf '#state ok\n'; sed -n 3p "$f"; tail -n +4 "$f"; printf 'zz-foreign/%s\t0000\n' "$b"; } > "$KEYS_DIR/$b.key"; done
@@ -6926,7 +7025,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     printf 'v2\n' > src/a.sh
     readset_manifest "$o/d2" && readset_local_validate "$o/list" "$o/d2" && readset_keys "$o/list" "$o/d2" || exit 1
     if [ -n "${VS_KO_FROM:-}" ]; then for f in $fl; do cp "$VS_KO_FROM.cd/d2/ko.$f" "$o/d2/ko.$f" 2>/dev/null; done
-    else for f in $fl; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d2/ko.$f" 2>/dev/null; done; fi ) >/dev/null 2>&1
+    else for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d2/ko.$f" 2>/dev/null; done; fi ) >/dev/null 2>&1
 }
 vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ctl=<fresh>/<carry> cen=<fresh>/<carry>"
   local p="$1" x="$2" t="$4" W="$4/W" rd f ps v n c
@@ -7240,11 +7339,11 @@ vs_skew() { # <runner file> <t> <strip 0|1>: "rc=<n> ran=<n> off=<n> n=<entries>
     cp "$t/hk" "$A/.githooks/pre-push"
   fi
   ra="$(cd "$A" && git rev-list --max-parents=0 HEAD | sed -n 1p)"
-  o="$(env AI_DLC_VERDICT_STORE="$S" bash "$A/$rd/hermetic-run.sh" --root "$A" decl 2>&1)"; rc=$?
-  k="$(env -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl 2>/dev/null)"
+  o="$( ( inproc AI_DLC_VERDICT_STORE="$S" -- "$A/$rd/hermetic-run.sh" --root "$A" decl ) 2>&1)"; rc=$?
+  k="$( ( inproc -u AI_DLC_VERDICT_STORE -- "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl ) 2>/dev/null)"
   printf 'rc=%s ran=%s off=%s n=%s ko=%s/%s' "$rc" "$(grep -c '^hermetic-run: decl: rc=0 sandbox_files=' <<< "$o")" \
     "$(grep -c 'verdict store OFF: .* carries no READSET_KEYROWS span' <<< "$o")" "$(vs_n "$S/$ra")" \
-    "$(env -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl >/dev/null 2>&1; printf '%s' "$?")" "$(grep -c . <<< "$k")"
+    "$( ( inproc -u AI_DLC_VERDICT_STORE -- "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl ) >/dev/null 2>&1; printf '%s' "$?")" "$(grep -c . <<< "$k")"
 }
 if [ -n "${VS_X1:-}" ]; then
   VS_ARMS=$((VS_ARMS+1)); _c="$(vs_skew "$VS_RUN" "$WORK/vs.sk0" 0 2>/dev/null)"
@@ -7344,7 +7443,10 @@ SLOT_T="$WORK/slot"; mkdir -p "$SLOT_T" || broken "mkdir failed"
 SLOT_WV="$SLOT_W"   # the slot-world program a score runs; the noreap mutant points it at a copy
 slot_score() { # <deriver copy> [scenario ...] -> "<rc>|<failed scenarios, sorted, space-joined>"
   local o r d="$1"; shift
-  o="$(TMPDIR="$SLOT_T" bash "$SLOT_WV" "$d" "$HOOK" "$@" 2>/dev/null)"; r=$?
+  # slot-world itself runs in process; the derivers IT starts stay processes: the slot's decisions are keyed on the
+  # holder's `$$` (readset_lock_write records it, rs_slot_release and readset_lock_stale judge it) and on reaping a
+  # deriver's process group, so two derivers in one process would share the identity the slot exists to separate.
+  o="$( ( inproc TMPDIR="$SLOT_T" -- "$SLOT_WV" "$d" "$HOOK" "$@" ) 2>/dev/null)"; r=$?
   printf '%s|%s' "$r" "$(printf '%s\n' "$o" | sed -n 's/^FAIL \([a-z]*\):.*/\1/p' | sort | tr '\n' ' ' | sed 's/ $//')"
   printf '%s\n' "$o" > "$SLOT_T/last.out"
 }
