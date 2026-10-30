@@ -350,14 +350,12 @@ the same reason Rule 3 gives for (d).
 block, `_bmad-output/operator-requests-history.md` (the operator's typed
 words, the initial prompt included) and
 `_bmad-output/operator-answers-history.md`; a value found there is
-applied with its citation, not asked again, whatever its length. (2)
-Derive what the tree,
+applied with its citation, not asked again. (2) Derive what the tree,
 the config or a read-only chain or API read can give -- an address, a
 band, a list of entries -- and put the derivation to the operator for
 veto instead of asking for the value; when the derived value is a config
 leaf, a money threshold or literal, an address, or an `LR-` or `D-<n>`
-value, that veto question goes out UNBADGED, as above; a derived design
-choice is sorted instead. (3) Gloss every project-internal
+value, that veto question goes out UNBADGED, as above. (3) Gloss every project-internal
 term in the question text itself: a check number, a band, a gap or
 evaluation id, a `D-<n>`, `LR-` or `FR-` id gets a plain-language clause
 saying what it is, because the operator reads the question, not the
