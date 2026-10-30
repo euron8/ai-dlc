@@ -100,26 +100,39 @@ else bad "CS-M6: a suffix-less elicitation shard rewritten by an in-place sed wa
 
 # ---- --mark: THE ONE SANCTIONED BASH WRITE to a shard (wait-for-deliverable.sh, "THE CONTENT SEAL").
 mark_one() { # <engine> <shard file> -> MRC, $WORK/mark.out; marked with the shard's own finding count
+  # IN PROCESS: the engine is sourced in a subshell (its BASH_SOURCE guard returns before wfd_main) and wfd_main is
+  # called with the arguments the CLI takes; its `exit` ends the subshell. pipefail is off, as the CLI runs it.
   local n; n="$(grep -c '^### ' "$2")" || n=0
-  bash "$1" --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" > "$WORK/mark.out" 2>&1; MRC=$?
+  ( set +o pipefail; . "$1"; wfd_main --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" ) > "$WORK/mark.out" 2>&1; MRC=$?
 }
+sk() { ( . "$SEAL"; "$@" ); } # the library function a reader's mode calls, asked in a subshell: sk seal_check <state> <files>
 PROW='"actor":"program:wait-for-deliverable"'
+# ONE SEALED WORLD, BUILT ONCE, restored per cell. Seal rows record the world's physical root, so a copy at another
+# path would be foreign to the ledger; the dirty world is moved aside and the pristine copy put back at the SAME path.
+kw_build() { # -> KW (the shard dir), KWR (its root); a pristine copy sits beside it
+  KW="$(clean_world)"; seal_all "$KW"; KWR="$(world_root "$KW")"; KWN=0
+  cp -Rp "$KWR" "$KWR.pristine" || { echo "FIXTURE BROKEN: cannot copy the sealed world" >&2; exit 2; }
+}
+kw_restore() { # puts the pristine sealed world back at $KWR; the dirty one is moved aside, never removed
+  KWN=$((KWN + 1)); mv "$KWR" "$KWR.dirty$KWN" && cp -Rp "$KWR.pristine" "$KWR" || { echo "FIXTURE BROKEN: cannot restore the sealed world" >&2; exit 2; }
+}
 
 # CS-K1: every shard sealed by its writer, then closed with --mark -> each file's newest row is the
-# program's, --check passes on all of them, and the merge takes the marked set.
-dk1="$(clean_world)"; seal_all "$dk1"; stk1="$(hr_state "$dk1/1.md")"; mk1=0
+# program's, --check passes on all of them, and the marked set is admitted and was last written by its adversaries.
+kw_build; dk1="$KW"; stk1="$(hr_state "$dk1/1.md")"; mk1=0
 for f in "$dk1"/*.md; do mark_one "$WFD" "$f"; [ "$MRC" = 0 ] || mk1="$MRC"; done
-bash "$SEAL" --check "$stk1" "$dk1"/*.md > /dev/null 2>&1; ck1=$?
-rk1="$(bash "$SEAL" --row "$stk1" "$dk1/1.md" 2>/dev/null)"
-run_merge "$MERGE" "$dk1"
+sk seal_check "$stk1" "$dk1"/*.md > /dev/null 2>&1; ck1=$?
+rk1="$(sk seal_row "$stk1" "$dk1/1.md" 2>/dev/null)"
+sk seal_admit_marker "$dk1"/*.md > "$WORK/k1.adm" 2>&1; ak1=$?
+sk seal_last_tool_row "$stk1" "$dk1"/*.md > "$WORK/k1.ltr" 2>&1; lk1=$?
 if [ "$mk1" = 0 ] && [ "$ck1" = 0 ] && grep -qF "$PROW" <<<"$rk1" && grep -q '^seat-complete: stories adversary 1 sha=' "$dk1/1.md" \
-   && [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then
-  ok "CS-K1: sealed shards closed with --mark: the program re-seals each, --check passes, MERGED"
-else bad "CS-K1: --mark over sealed shards: mark rc=$mk1, --check rc=$ck1, newest row ${rk1:-none}, merge rc=$RC: $(head -2 "$MO")"; fi
+   && [ "$ak1" = 0 ] && [ "$lk1" = 0 ] && [ "$(grep -c . "$WORK/k1.ltr")" = "$(ls "$dk1"/*.md | grep -c .)" ] && ! grep -q "session" "$WORK/k1.ltr"; then
+  ok "CS-K1: sealed shards closed with --mark: the program re-seals each, --check passes, the marked set is admitted and last written by its adversaries"
+else bad "CS-K1: --mark over sealed shards: mark rc=$mk1, --check rc=$ck1, newest row ${rk1:-none}, admission rc=$ak1 [$(head -1 "$WORK/k1.adm")], last-tool-row rc=$lk1"; fi
 
 # CS-K2: a sealed shard amended through Bash (the motivating perl -0pi), then --mark -> refused (64),
 # the file untouched, and no row appended: --mark never launders amended bytes into a seal.
-dk2="$(clean_world)"; seal_all "$dk2"; patch_shard "$dk2/2.md"; cp "$dk2/2.md" "$WORK/k2.before"
+kw_restore; dk2="$KW"; patch_shard "$dk2/2.md"; cp "$dk2/2.md" "$WORK/k2.before"
 nb2="$(seal_count "$(ledger_of "$dk2")")"; mark_one "$WFD" "$dk2/2.md"; na2="$(seal_count "$(ledger_of "$dk2")")"
 if [ "$MRC" = 64 ] && cmp -s "$dk2/2.md" "$WORK/k2.before" && [ "$na2" = "$nb2" ] && has "$WORK/mark.out" "changed through Bash after its last Write or Edit"; then
   ok "CS-K2: a Bash-amended sealed shard: --mark refuses (64), writes nothing, appends no row"
@@ -129,24 +142,24 @@ else bad "CS-K2: --mark over a Bash-amended sealed shard: rc=$MRC, rows $nb2 -> 
 # marks it and leaves it with no row: an unsealed file never becomes a sealed one.
 dk3="$(clean_world)"; seal_hook "$(world_root "$dk3")" Write "$dk3/2.md" ""; stk3="$(hr_state "$dk3/1.md")"
 nb3="$(seal_count "$(ledger_of "$dk3")")"; mark_one "$WFD" "$dk3/1.md"; na3="$(seal_count "$(ledger_of "$dk3")")"
-rk3="$(bash "$SEAL" --row "$stk3" "$dk3/1.md" 2>/dev/null)"
+rk3="$(sk seal_row "$stk3" "$dk3/1.md" 2>/dev/null)"
 if [ "$MRC" = 0 ] && [ "$rk3" = null ] && [ "$na3" = "$nb3" ] && [ "$nb3" -ge 1 ] && grep -q '^seat-complete: stories adversary 1 sha=' "$dk3/1.md"; then
   ok "CS-K3: a shard with no seal row is marked and stays with none (rows $nb3 -> $na3)"
 else bad "CS-K3: --mark on an unsealed shard: rc=$MRC, its row ${rk3:-none}, rows $nb3 -> $na3"; fi
 
 # CS-K4: a Bash write lands between --mark's move and its seal row (the stub sibling forces it) -> no
 # program row is recorded, --mark exits 64, and the merge refuses the shard on its writer's seal.
-dk4="$(clean_world)"; seal_all "$dk4"; re4="$(race_engine "$WORK/race-m")" || { echo "FIXTURE BROKEN: CS-K4 race engine" >&2; exit 2; }
+kw_restore; dk4="$KW"; re4="$(race_engine "$WORK/race-m")" || { echo "FIXTURE BROKEN: CS-K4 race engine" >&2; exit 2; }
 mark_one "$re4" "$dk4/2.md"
 # The race is forced only when the shard carries a seal row, so --mark reaches --record-expect and the
 # stub fires. Its absence is a verdict on this arm (a mutant that leaves no row), never a broken fixture.
 if grep -q 'written through Bash after the move' "$dk4/2.md"; then ok "CS-K4r: race forced: the shard carried a seal row and the stub wrote after --mark's move"
 else bad "CS-K4r: race not forced: no seal row, so --mark never reached --record-expect and the stub never wrote"; fi
-run_merge "$MERGE" "$dk4"
+sk seal_check "$(hr_state "$dk4/1.md")" "$dk4"/*.md > "$WORK/k4.chk" 2>&1; RC=$?
 if [ "$MRC" = 64 ] && has "$WORK/mark.out" "changed again before its content-seal row" && ! grep -qF "$PROW" "$(ledger_of "$dk4")" \
-   && [ "$RC" -eq 2 ] && has "$MO" "2.md $TOKEN"; then
+   && [ "$RC" -eq 1 ] && has "$WORK/k4.chk" "2.md $TOKEN"; then
   ok "CS-K4: a write between --mark's move and its row: no row recorded, --mark 64, the merge refuses 2.md"
-else bad "CS-K4: the write after --mark's move was sealed or not refused: mark rc=$MRC, merge rc=$RC: $(head -2 "$MO")"; fi
+else bad "CS-K4: the write after --mark's move was sealed or not refused: mark rc=$MRC, seal_check rc=$RC: $(head -2 "$WORK/k4.chk")"; fi
 
 # CS-K6: a SYMLINKED state dir. The recorder names a row by the state dir as spelled (`_bmad-output`),
 # so --mark must derive it the same way, never through `pwd -P` to the target's name, or it reads no
@@ -161,11 +174,26 @@ if [ -L "$r6/_bmad-output" ] && [ "$(cd "$r6/_bmad-output" && pwd -P)" != "$(cd 
 else bad "CS-K6s: symlink not set up: _bmad-output is not a link to a differently named dir, or the shard path does not pass through it ($dk6)"; fi
 seal_all "$dk6"; nb6="$(seal_count "$(ledger_of "$dk6")")"
 for f in "$dk6"/*.md; do mark_one "$WFD" "$f"; done
-bash "$SEAL" --check "$r6/_bmad-output" "$dk6"/*.md > /dev/null 2>&1; ck6=$?
-run_merge "$MERGE" "$dk6"
-if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] && [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then
+sk seal_check "$r6/_bmad-output" "$dk6"/*.md > /dev/null 2>&1; ck6=$?
+sk seal_admit_marker "$dk6"/*.md > "$WORK/k6.adm" 2>&1; ak6=$?
+if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] && [ "$ak6" -eq 0 ]; then
   ok "CS-K6: through a symlinked _bmad-output, --mark re-seals each shard by the spelled name: --check passes, MERGED"
-else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, merge rc=$RC: $(head -2 "$MO")"; fi
+else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, admission rc=$ak6: $(head -2 "$WORK/k6.adm")"; fi
+
+# CS-K7: THE SEAM. The in-process wfd_main answers byte-for-byte (stdout, stderr, exit code) what the CLI does, on a
+# REFUSING input (a marker call with a missing field) and a PASSING one (a file outside the sealed set, marked), and the
+# two answers differ. The passing file is restored between the two runs so both mark the same bytes at the same path.
+sm="$WORK/seam"; mkdir -p "$sm"; printf '# stories -- adversarial shard 1\n\n### M1 -- MAJOR -- a finding\n\nBody.\n' > "$sm/1.md"; cp "$sm/1.md" "$sm/1.orig"
+seam_cli() { bash "$WFD" "$@" > "$sm/cli.out" 2> "$sm/cli.err"; echo $? > "$sm/cli.rc"; }
+seam_inp() { ( set +o pipefail; . "$WFD"; wfd_main "$@" ) > "$sm/inp.out" 2> "$sm/inp.err"; echo $? > "$sm/inp.rc"; }
+seam_same() { cmp -s "$sm/cli.out" "$sm/inp.out" && cmp -s "$sm/cli.err" "$sm/inp.err" && cmp -s "$sm/cli.rc" "$sm/inp.rc"; }
+seam_cli --mark "$sm/1.md" stories adversary; cp "$sm/cli.out" "$sm/ref.out"; cp "$sm/cli.err" "$sm/ref.err"; cp "$sm/cli.rc" "$sm/ref.rc"
+seam_inp --mark "$sm/1.md" stories adversary; sk1=0; seam_same && sk1=1; rr="$(cat "$sm/inp.rc")"; cp "$sm/inp.err" "$sm/refuse.err"
+seam_cli --mark "$sm/1.md" stories adversary 1 findings=1; cp "$sm/1.orig" "$sm/1.md"
+seam_inp --mark "$sm/1.md" stories adversary 1 findings=1; sk2=0; seam_same && sk2=1; rp="$(cat "$sm/inp.rc")"
+if [ "$sk1" = 1 ] && [ "$sk2" = 1 ] && [ "$rr" = 64 ] && [ "$rp" = 0 ] && grep -q '^FAIL: --mark: ' "$sm/refuse.err" && grep -q '^MARKED ' "$sm/inp.out" && ! cmp -s "$sm/ref.err" "$sm/inp.err"; then
+  ok "CS-K7: wfd_main in process answers byte-for-byte what the CLI does on a refusing and a passing --mark (rc 64 / 0), and the two differ"
+else bad "CS-K7: in-process wfd_main differs from the CLI: refuse same=$sk1 rc=$rr, pass same=$sk2 rc=$rp"; fi
 
 # ---- BL-750: THE MARKER ADMISSION (content-seal.sh header "THE MARKER ADMISSION"). A bare marker in the
 # sealed set merges only while the world's installed adversary role file is LEGACY; every world from
@@ -248,7 +276,8 @@ perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$dF/1.md"
 # CURRENT and NONE files are UNFINISHED naming the admission, the LEGACY one and the epics part are
 # UNSETTLED (the settle path, unchanged), and the epics world carries no role file anywhere.
 a2_status() { # <world root> <target> -> the --status line for it
-  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 bash "$WFD" --status --complete --since 1 "$2" 2>&1 ) | grep -F -- "$2" | head -1
+  # IN PROCESS: the engine's settings are read at wfd_main time, so the environment is set inside the subshell.
+  ( cd "$1" && export AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 && set +o pipefail && . "$WFD" && wfd_main --status --complete --since 1 "$2" 2>&1 ) | grep -F -- "$2" | head -1
 }
 eP="$rN/_bmad-output/planning-artifacts/s1/epics"; mkdir -p "$eP"
 printf '# Epic 1\n\nBody.\n\nseat-complete: stories-epic-1 pm none findings=0\n' > "$eP/part-1.md"

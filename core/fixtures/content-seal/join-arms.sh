@@ -85,10 +85,21 @@ else bad "CS-J5: a python3 rewrite of the program-written joined record was not 
 PROW='"actor":"program:wait-for-deliverable"'
 ST=_bmad-output
 joined() { # -> a world whose record the join wrote and sealed with its program row; RW, RREC
-  RW="$(world3)"; seal3 "$RW"; run_join "$JOIN" "$RW"; RREC="$(out_of "$RW")"
-  [ "$RC" -eq 0 ] && [ -f "$RREC" ] || { echo "FIXTURE BROKEN: the join wrote no record (rc=$RC)" >&2; exit 2; }
+  # ONE joined world, built once (the real recorder and the real join) and restored per call: seal rows record the
+  # world's physical root, so the dirty copy is moved aside and the pristine one put back at the SAME path.
+  if [ -z "${JW:-}" ]; then
+    JW="$(world3)"; seal3 "$JW"; run_join "$JOIN" "$JW"
+    [ "$RC" -eq 0 ] && [ -f "$(out_of "$JW")" ] || { echo "FIXTURE BROKEN: the join wrote no record (rc=$RC)" >&2; exit 2; }
+    cp -Rp "$JW" "$JW.pristine" || { echo "FIXTURE BROKEN: cannot copy the joined world" >&2; exit 2; }
+    JN=0
+  else
+    JN=$((JN + 1)); mv "$JW" "$JW.dirty$JN" && cp -Rp "$JW.pristine" "$JW" || { echo "FIXTURE BROKEN: cannot restore the joined world" >&2; exit 2; }
+  fi
+  RW="$JW"; RREC="$(out_of "$RW")"
 }
-mark_rep() { bash "$1" --mark-repair "$2" 1 > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
+# IN PROCESS: the engine is sourced in a subshell (its guard returns before wfd_main); wfd_main takes the CLI's arguments.
+mark_rep() { ( set +o pipefail; . "$1"; wfd_main --mark-repair "$2" 1 ) > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
+sk() { ( . "$SEAL"; "$@" ); } # a library function a reader's mode calls, asked in a subshell
 
 # CS-J6: the program-sealed record closed with --mark-repair -> the program re-seals it and
 # --escalations reads it. The serial remediator first appends its OWN block with Edit -- its sha
@@ -98,12 +109,12 @@ mark_rep() { bash "$1" --mark-repair "$2" 1 > "$WORK/mark.out" 2>&1; MRC=$?; } #
 joined
 printf '\n- artifact: _bmad-output/planning-artifacts/s305/stories/story-2.1.md\n- artifact_sha_before: 0\n- artifact_sha_after: 0\n- advisor: called\n- derivations: replayed 0\n' >> "$RREC"
 seal_hook "$RW" Edit "$RREC" "$AG4"
-mark_rep "$WFD" "$RREC"; r6="$(bash "$SEAL" --row "$RW/$ST" "$RREC" 2>/dev/null)"
-run_esc "$RW" "$RREC"
+mark_rep "$WFD" "$RREC"; r6="$(sk seal_row "$RW/$ST" "$RREC" 2>/dev/null)"
+sk seal_check "$RW/$ST" "$RREC" > "$WORK/j6.chk" 2>&1; RC=$?
 if [ "$MRC" = 0 ] && grep -qF "$PROW" <<<"$r6" && tail -1 "$RREC" | grep -q '^repair-complete: serial 1 sha=' \
-   && [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT:" && ! has "$JO" "$TOKEN"; then
+   && [ "$RC" -eq 0 ] && ! has "$WORK/j6.chk" "$TOKEN"; then
   ok "CS-J6: a sealed joined record closed with --mark-repair: re-sealed by the program, --escalations reads it"
-else bad "CS-J6: --mark-repair on a sealed record: mark rc=$MRC, newest row ${r6:-none}, --escalations rc=$RC: $(head -2 "$JO")"; fi
+else bad "CS-J6: --mark-repair on a sealed record: mark rc=$MRC, newest row ${r6:-none}, seal check rc=$RC: $(head -2 "$WORK/j6.chk")"; fi
 
 # CS-J7: the record rewritten through python3, then --mark-repair -> refused (64), untouched, no row.
 joined; python3 -c "import sys;p=sys.argv[1];open(p,'a').write('\n- appended through python3\n')" "$RREC"
@@ -133,10 +144,10 @@ n9="$(grep -c called "$WORK/race-j/validator.calls" 2>/dev/null)" || n9=0; m9="$
 # As CS-K4r: the race is forced only when the record carries a seal row. Its absence is this arm's verdict.
 if grep -q 'written through Bash after the move' "$RREC"; then ok "CS-J9r: race forced: the record carried a seal row and the stub wrote after --mark-repair's move"
 else bad "CS-J9r: race not forced: no seal row, so --mark-repair never reached --record-expect and the stub never wrote"; fi
-run_esc "$RW" "$RREC"
-if [ "$MRC" = 64 ] && ! grep -qF "$PROW" "$RW/$ST/planning-artifacts/.artifact-writes.jsonl" && [ "$RC" -eq 2 ] && has "$JO" "$TOKEN"; then
+sk seal_check "$RW/$ST" "$RREC" > "$WORK/j9.chk" 2>&1; RC=$?
+if [ "$MRC" = 64 ] && ! grep -qF "$PROW" "$RW/$ST/planning-artifacts/.artifact-writes.jsonl" && [ "$RC" -eq 1 ] && has "$WORK/j9.chk" "$TOKEN"; then
   ok "CS-J9: a write between --mark-repair's move and its row: no row recorded, 64, --escalations refuses the record"
-else bad "CS-J9: the write after --mark-repair's move was sealed or not refused: mark rc=$MRC, --escalations rc=$RC: $(head -2 "$JO")"; fi
+else bad "CS-J9: the write after --mark-repair's move was sealed or not refused: mark rc=$MRC, seal check rc=$RC: $(head -2 "$WORK/j9.chk")"; fi
 
 # CS-J9v: the BL-816 replay RAN on CS-J9's mark (the engine copy's validator sibling was invoked), and the
 # same engine reads 0 calls on a record the prefilter skips (no `derivations: replayed` line).
