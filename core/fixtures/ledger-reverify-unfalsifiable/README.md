@@ -53,6 +53,14 @@ Any verdict difference is attributable to consumer reachability and nothing else
    `STILL-LIVE` plus `reachability NOT checked`, never an accusation. A missing input is
    not evidence of a bad predicate.
 
+## How it runs the subject
+
+`ledger-reverify.sh` is loadable: `run.sh` sources it once through `core/fixtures/lib/inproc.sh` and
+asks `lr_main` in a fresh-bash subshell, one run per distinct world state; every cell about one state
+reads that run's output. The second world is a `cp -R` of the first, taken before any cell mutates
+it. `EQ0` is the end-to-end CLI run kept: the CLI and the in-process answer, byte-compared on the
+seeded world (rc 0) and on a refusal (rc 2).
+
 ## Notes for future edits
 
 The scan set is `git ls-files` at the consumer, which drops untracked `.claude/worktrees/`
