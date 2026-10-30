@@ -795,7 +795,11 @@ wrap_term() {
     || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready: $AWAIT_WHY"; }
   cat "$R/pids" >> "$ORPHANS"
   kill -TERM "$wp"
-  printf '%s\n' "$wp" > "$R/wp.pid"
+  # The wrapper's finish() TERMs the stub's group and then WAITS on the stub, so the wrapper alone is briefly
+  # blocked with nothing pending while its child is still dying: read alone that is a false settle at any
+  # load. The settle set is the wrapper plus every pid the stub recorded, which are not all blocked until
+  # the group kill has truly not reached them.
+  { printf '%s\n' "$wp"; cat "$R/pids"; } > "$R/wp.pid"
   await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_settled "$R/wp.pid" \
     || { kill -KILL "$wp" 2>/dev/null; broken "[$t] the TERMed wrapper did not exit: $AWAIT_WHY"; }
   wait "$wp"; rc=$?
@@ -1109,7 +1113,7 @@ pk_probe() {
   cat > "$d/deriver.sh" <<'PK_EOF'
 "$PKN" 60 2>/dev/null </dev/null | grep --line-buffered -F x > /dev/null &
 fs_pid=$!
-n=0; until child="$(pgrep -P $$ -x "$PKN")"; do n=$((n + 1)); [ "$n" -gt 3000 ] && break; sleep 0.01; done
+until child="$(pgrep -P $$ -x "$PKN")"; do kill -0 "$fs_pid" 2>/dev/null || break; sleep 0.01; done
 [ -n "$child" ] || { echo "child=none"; exit 0; }
 echo "$child" >> "$ORPHANS"
 eval "$(cat "$PKD/line")"

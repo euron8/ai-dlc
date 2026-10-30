@@ -477,9 +477,9 @@ aw_gate() { # refuse, in the fixture's own shell, on any no-progress net that fi
 # delivered it asynchronously, and the iteration count -- one sandbox-exec start each -- followed load.
 # Delivery is otherwise what the tail gave: every live stream gets every line written after it registered.
 # A `deaf` registration satisfies the wait and receives nothing: a stream that never delivers.
-# THE WAIT IS ON A CONDITION, AND ITS SAFETY BOUND IS NO VERDICT: 3000 polls with no registered stream of
-# that root appends a refusal naming the stub to AW_STALL_LOG, which fails the run FIXTURE BROKEN at
-# aw_gate (stderr when slot-world runs standalone); the read then returns with nothing delivered.
+# THE WAIT IS ON A CONDITION AND HAS NO BOUND (BL-868): it ends when a stream of that root registers. A stream that
+# never registers blocks the stub until the gate's own watchdog takes the run -- a hang to read, never a verdict
+# and never a count of polls or a clock.
 ss_register() { # <live|deaf>: record this stream ($$) and the file its stdout is
   local d="$STUB_FEED.streams" out="" f m p
   mkdir -p "$d" 2>/dev/null || return 1
@@ -512,7 +512,7 @@ ss_wait() { # <path read through the profile>: a marker read waits for its own w
   { read -r c; } < "$a" 2>/dev/null
   case "$c" in sentinel-?*) c="${c#sentinel-}" ;; end-?*) c="${c#end-}" ;; liveness) ;; *) c="" ;; esac
   want="$root/w/$c.raw"
-  while [ "$i" -lt 3000 ]; do
+  while :; do
     for f in "$d"/[0-9]*; do
       [ -f "$f" ] || continue
       kill -0 "${f##*/}" 2>/dev/null || continue
@@ -521,12 +521,8 @@ ss_wait() { # <path read through the profile>: a marker read waits for its own w
       else case "$p" in "$root"/w/*) got="$m $p"; break ;; esac; fi
     done
     [ -n "$got" ] && break
-    /bin/sleep 0.1; i=$((i + 1))
+    /bin/sleep 0.1
   done
-  if [ -z "$got" ]; then
-    printf 'stub sandbox-exec %s: no live stream of %s registered in 3000 polls\n' "$0" "$root" >> "${AW_STALL_LOG:-/dev/stderr}"
-    return 1
-  fi
   # `--tracer both` (the stub world that sets STUB_FS) settles on the fs_usage capture as well: a sentinel
   # read waits for the stub fs_usage's sentinel line there, so that half of the settle also holds on the
   # first iteration. Keyed on STUB_FS, not on the capture existing, which its pipeline may not have opened yet.
@@ -535,11 +531,7 @@ ss_wait() { # <path read through the profile>: a marker read waits for its own w
       p="${got#live }"; i=0
       if [ -n "${STUB_FS:-}" ]; then
         until grep -q readset-sentinel "$p.fsu" 2>/dev/null; do
-          if [ "$i" -ge 3000 ]; then
-            printf 'stub sandbox-exec %s: no sentinel in %s.fsu in 3000 polls\n' "$0" "$p" >> "${AW_STALL_LOG:-/dev/stderr}"
-            return 1
-          fi
-          /bin/sleep 0.1; i=$((i + 1))
+          /bin/sleep 0.1
         done
       fi ;;
   esac
@@ -2052,15 +2044,14 @@ FX
   # parent's process group (the trace subshell leads that group). Exiting at once, the stop could land before
   # the watchdog had forked its sleep, so that launch had nothing to leak and nosweep's stop-at-first-leak drive
   # ran a load-dependent number of launches. Ordered on the sleep, every launch leaves one to sweep: nosweep
-  # leaks on the first and the shipped sweep is exercised on all FX_REPS. The wait is bounded; its bound is a
-  # refusal in AW_STALL_LOG (FIXTURE BROKEN at aw_gate), never a verdict. (t4w) keeps the at-once deriver,
+  # leaks on the first and the shipped sweep is exercised on all FX_REPS. The wait has no bound: a deriver that
+  # never shows the sleep hangs until the gate's watchdog, a hang to read and never a verdict. (t4w) keeps the at-once deriver,
   # because its forced window needs the stop to race the watchdog's fork.
   seed_fxw() { # <t>: seed() plus a TRACKED deriver stub that exits once the watchdog's sleep is up
     f2b_world seed "$1" || return 1
     mkdir -p "$1/core/scripts" && printf '%s\n' '#!/bin/bash' \
-      'i=0; until pgrep -g "$PPID" -x sleep >/dev/null 2>&1; do' \
-      '  [ "$i" -ge 3000 ] && { printf "(t4) the stub deriver saw no watchdog sleep in group %s in 3000 polls\n" "$PPID" >> "$AW_STALL_LOG"; exit 0; }' \
-      '  /bin/sleep 0.01; i=$((i + 1))' \
+      'until pgrep -g "$PPID" -x sleep >/dev/null 2>&1; do' \
+      '  /bin/sleep 0.01' \
       'done' 'exit 0' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
     ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fastw ) >/dev/null 2>&1
   }
@@ -4128,14 +4119,12 @@ n=0; while [ "$n" -lt 300 ]; do sleep 0.2; emit heartbeat; n=$((n+1)); done
 STUB
     # THE INJECTED WAIT (the deriver's rs_sleep, READSET_SLEEP_CMD). The deriver's fixed `sleep 1` before it kills
     # fs_usage stands for "the tracer's last events have reached the capture". This stub's last event is its
-    # .stub-fs-done line, so the wait ends when the capture holds it: an event, not a clock. Bounded at 3000 polls,
-    # past which it returns and the arm reads whatever the capture holds (the S1 arm then fails on a short set).
+    # .stub-fs-done line, so the wait ends when the capture holds it: an event, not a clock. It has no bound (BL-868): a capture that never holds the line
+    # hangs until the gate's watchdog, never a verdict.
     cat > "$SB/stubflush" <<'STUB'
 #!/bin/bash
-i=0
 until grep -q '/m/\.stub-fs-done ' "$STUB_ROOT"/w/*.raw.fsu 2>/dev/null; do
-  [ "$i" -ge 3000 ] && exit 0
-  /bin/sleep 0.01; i=$((i+1))
+  /bin/sleep 0.01
 done
 STUB
     chmod +x "$SB/stubflush"
