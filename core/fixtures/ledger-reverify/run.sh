@@ -223,6 +223,38 @@ done
 [ -n "$CLOSER" ] || { printf 'FAIL: cannot locate ledger-reverify.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$CLOSER")" && pwd)/$(basename "$CLOSER")"
 
+# --- THE SUBJECT IS ASKED IN PROCESS ---------------------------------------------------------------
+# ledger-reverify.sh is loadable: sourcing it defines functions and runs nothing (its source guard stops
+# before `lr_main`). It is sourced ONCE here, and `lr_eng <engine> <args>` answers what `bash <engine>
+# <args>` prints, in a subshell made to look like a fresh bash (core/fixtures/lib/inproc.sh). <engine> is
+# $CLOSER, whose loaded definitions are used, or a MUTANT COPY of the reconcile/ directory, which is
+# sourced inside that run's own subshell -- so a mutant is the only engine present in its run. Prefix
+# assignments (`TMPDIR=… lr_eng`, `PATH=<shim>:$PATH lr_eng`) reach the run as they reached the child.
+#
+# THE BLOB MEMO. A CLI run sources lib.sh at the top of its own process and so builds a private memo for
+# that one run; in a subshell lib.sh does not (it keys on `$BASH_SUBSHELL` 0). So `lr_eng` hands each run a
+# FRESH memo, exactly as private to that run as the CLI's, unless the caller exported one (as `u_run`
+# does). A memo shared across runs would let a fetch mutant read the unmutated engine's cache.
+#
+# KEPT END TO END, and why: the baseline `OUT` (the CLI's rc-0 outcome), the cells of `inproc-seam` (the
+# CLI against the in-process answer on every distinct CLI outcome), and `memo_standalone`, whose property
+# -- a run with no memo handed to it builds one and removes it -- is decided by lib.sh at `$BASH_SUBSHELL`
+# 0, the top of a process, which no subshell is.
+# shellcheck source=/dev/null
+. "$DIR/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $DIR" >&2; exit 2; }
+inproc_load "$CLOSER" || { echo "FIXTURE BROKEN: sourcing $CLOSER defined nothing" >&2; exit 2; }
+declare -F lr_main >/dev/null || { echo "FIXTURE BROKEN: $CLOSER defined no lr_main when sourced" >&2; exit 2; }
+lr_eng() { # <engine> [args...] -> what `bash <engine> [args...]` prints and exits with
+  local _m _rc
+  case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
+    "declare -x"*) inproc_run "$1" lr_main "${@:2}"; return ;;
+  esac
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$1" lr_main "${@:2}"; _rc=$?
+  rm -rf "$_m"
+  return "$_rc"
+}
+
 # fd 3 is the run's own stderr, saved before any unit redirects it. The single EXIT trap
 # replays a unit's captured stderr there: a unit that exits from inside its body (`exit 2` on
 # a FIXTURE ERROR) runs this trap with the unit's `2>` still in force, so a replay to fd 2
@@ -428,9 +460,9 @@ dp_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg
     return
   fi
   if [ -n "$led" ]; then
-    out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$led" 2>&1)"
+    out="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$led" 2>&1)"
   else
-    out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+    out="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
   fi
   if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
     FAILURES=$((FAILURES + 1))
@@ -555,6 +587,38 @@ row_is "Entry D" ABSENT          "no verify: line AND a prose label, not an entr
 row_is "PC-FIXTURE-ENTRY-E-DECLARES-MANUAL" HAND-REVIEW     "verify: manual is a declaration, not a malformed line"
 row_is "PC-FIXTURE-ENTRY-F-MANUAL-BACKTICK" HAND-REVIEW     "trailing backtick on the verb is a formatting slip, not a different verb"
 
+lr_unit_inproc_seam() {
+# THE IN-PROCESS ANSWER IS THE CLI'S, on every distinct CLI outcome: the seeded ledger (rc 0, rows), the
+# swapped-argument caller error (rc 0, one INPUT-UNRESOLVED row), the absent default ledger (rc 0, silent)
+# and a refusal (no writable TMPDIR, rc 2). stdout+stderr and the exit status are compared byte for byte,
+# and the four outcomes must be pairwise distinct, or one of them proves nothing about another.
+local _w="$(dirname "$DIST")/inproc-seam" _k _ok=1 _seen=""
+mkdir -p "$_w/noled"
+for _k in seeded swapped noledger refusal; do
+  case "$_k" in
+    seeded)   (cd / && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS") > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+              (cd / && lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS") > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
+    swapped)  bash "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+              lr_eng "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
+    noledger) bash "$CLOSER" "$DIST" "$BASE" "$_w/noled" "$THEIRS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+              lr_eng "$CLOSER" "$DIST" "$BASE" "$_w/noled" "$THEIRS" > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
+    refusal)  TMPDIR="$_w/no-such-dir" bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+              TMPDIR="$_w/no-such-dir" AI_DLC_RECONCILE_MEMO="$_w" lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
+  esac
+  cmp -s "$_w/$_k.cli" "$_w/$_k.in" || { _ok=0; printf '          | %s differs\n' "$_k"; }
+  case " $_seen " in *" $(cksum < "$_w/$_k.cli" | tr ' ' _) "*) _ok=0; printf '          | %s is not a distinct outcome\n' "$_k" ;; esac
+  _seen="$_seen $(cksum < "$_w/$_k.cli" | tr ' ' _)"
+done
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$_ok" = 1 ] && [ "$(tail -1 "$_w/seeded.cli")" = 0 ] && [ "$(tail -1 "$_w/refusal.cli")" = 2 ] \
+   && [ "$(grep -c . "$_w/noledger.cli")" = 1 ] && grep -q '^INPUT-UNRESOLVED' "$_w/swapped.cli" && [ "$(cmp -s "$_w/seeded.cli" <(printf '%s\n%s\n' "$OUT" "$OUT_RC") && echo same)" = same ]; then
+  printf '  ok    %-22s in process equals the CLI byte for byte, rc included, on the seeded ledger (rc 0), swapped arguments (INPUT-UNRESOLVED), an absent ledger (silent) and a refusal (rc 2)\n' "inproc-seam"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the in-process run differs from the CLI on an outcome above, or the outcomes are not distinct\n' "inproc-seam"
+fi
+} # end lr_unit_inproc_seam
+
 lr_unit_cwd_invariance() {
 # --- CWD INVARIANCE, and it is asserted here because it is not free -------------------------
 # A `verify: sh` receipt names CONSUMER-RELATIVE paths and used to be run with `bash -c` from
@@ -579,7 +643,7 @@ lr_unit_cwd_invariance() {
 # passed. One side is now the CONSUMER ROOT itself -- the only directory where a
 # consumer-relative path resolves -- which is what makes the two sides able to disagree.
 cwd_probe="$OUT"   # the baseline, taken from `/`
-cwd_atcons="$(cd "$CONS" && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+cwd_atcons="$(cd "$CONS" && lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$cwd_probe" = "$cwd_atcons" ]; then
   printf '  ok    %-22s byte-identical from `/` and from the CONSUMER root — a receipt is evaluated at the consumer root, not wherever the caller stands
@@ -809,7 +873,7 @@ tc_plain=0; git -C "$TCD" diff --quiet "${tc_bump}^" "$tc_bump" -- VERSION 2>/de
 tc_raw=0;   git -C "$TCD" diff --quiet --no-textconv "${tc_bump}^" "$tc_bump" -- VERSION 2>/dev/null || tc_raw=$?
 # Entry B is the only row this arm reads, so the run is over a sub-ledger holding Entry B alone.
 tc_led="$(lr_subledger textconv 'Entry B was live')" || tc_led="$DIST/no-such-sub-ledger"
-tc_out="$(bash "$CLOSER" "$TCD" "$BASE" "$CONS" "$THEIRS" "$tc_led" 2>/dev/null)"
+tc_out="$(lr_eng "$CLOSER" "$TCD" "$BASE" "$CONS" "$THEIRS" "$tc_led" 2>/dev/null)"
 tc_b="$(printf '%s\n' "$tc_out" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
 if [ -z "$tc_bump" ] || [ "$tc_plain" -ne 0 ] || [ "$tc_raw" -ne 1 ]; then
   FAILURES=$((FAILURES + 1))
@@ -863,7 +927,7 @@ if cmp -s "$CLOSER" "$MUTV/ledger-reverify.sh"; then
 else
   # Entry V (the kill) and Entry B (the must-not-move control) are the only rows read.
   mv_led="$(lr_subledger mut-version 'Entry V was absorbed' 'Entry B was live')" || mv_led="$DIST/no-such-sub-ledger"
-  mv_out="$(bash "$MUTV/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mv_led" 2>/dev/null)"
+  mv_out="$(lr_eng "$MUTV/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mv_led" 2>/dev/null)"
   mv_v="$(printf '%s\n' "$mv_out" | awk -F'\t' '$2 ~ /Entry V/ {print $3; exit}')"
   mv_b="$(printf '%s\n' "$mv_out" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
   if [ -z "$mv_out" ]; then
@@ -909,7 +973,7 @@ mkdir -p "$(dirname "$btick")"
   printf -- '- **Entry BV** — only the verb wrapped, as markdown prose invites.\n'
   printf -- '  verify: `theirs_lacks` core/skills/ai-dlc/SKILL.md "MARKER_B"\n'
 } > "$btick"
-bt_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$btick" 2>&1)"
+bt_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$btick" 2>&1)"
 for probe in "Entry BT:whole receipt in one code span (trailing backtick on the directive)" \
              "Entry BV:only the verb backticked (a backtick on each end of the verb)"; do
   ASSERTIONS=$((ASSERTIONS + 1))
@@ -946,7 +1010,7 @@ mkdir -p "$(dirname "$anch")"
   printf -- '- **Entry BR** — a real receipt written after an HTML break, as the ledger body does.\n'
   printf -- '  <br>verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"\n'
 } > "$anch"
-an_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$anch" 2>&1)"
+an_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$anch" 2>&1)"
 pm="$(printf '%s\n' "$an_out" | awk -F'\t' '$2 ~ /Entry PM/ {print $1; exit}')"
 br="$(printf '%s\n' "$an_out" | awk -F'\t' '$2 ~ /Entry BR/ {print $1; exit}')"
 if [ "$pm" = "CLOSE-CANDIDATE" ]; then
@@ -1027,7 +1091,7 @@ lr_unit_caller_error() {
 ASSERTIONS=$((ASSERTIONS + 1))
 NOLED="$(dirname "$DIST")/consumer-with-no-ledger"
 rm -rf "$NOLED"; mkdir -p "$NOLED"
-empty="$(bash "$CLOSER" "$DIST" "$BASE" "$NOLED" "$THEIRS" 2>&1)"; empty_rc=$?
+empty="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$NOLED" "$THEIRS" 2>&1)"; empty_rc=$?
 if [ -z "$empty" ] && [ "$empty_rc" -eq 0 ]; then
   printf '  ok    %-22s silent, exit 0  (real consumer root, default ledger absent -> genuinely nothing to re-verify)\n' "no-ledger"
 else
@@ -1040,7 +1104,7 @@ fi
 # Measured at 0.300.0 on the reference consumer: bogus arg 5 gave 0 rows, rc=0 and ZERO bytes of
 # stderr, against 74 rows for the correct invocation.
 ASSERTIONS=$((ASSERTIONS + 1))
-bad5="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null)"; b5_rc=$?
+bad5="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null)"; b5_rc=$?
 bad5_n="$(printf '%s\n' "$bad5" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
 if [ "$bad5_n" -eq 1 ] && grep -qF 'nonexistent-ledger.md' <<<"$bad5"; then
   printf '  ok    %-22s one INPUT-UNRESOLVED row naming the arg-5 path\n' "bad-arg5"
@@ -1057,7 +1121,7 @@ fi
 # root that does not exist and an arg-5-only check never fires. The consumer root is therefore
 # checked on its own.
 ASSERTIONS=$((ASSERTIONS + 1))
-swapped="$(bash "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; sw_rc=$?
+swapped="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; sw_rc=$?
 sw_n="$(printf '%s\n' "$swapped" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
 if [ "$sw_n" -eq 1 ]; then
   printf '  ok    %-22s swapped args report, though the ledger path is the DEFAULT one\n' "swapped-args"
@@ -1090,7 +1154,7 @@ lr_unit_consumer_root() {
 # is that the form of the argument does not decide any row. Measured on the reference consumer
 # at 0.300.0 — 74 rows either way, ONE differing, a CLOSE-CANDIDATE against a STILL-LIVE.
 ASSERTIONS=$((ASSERTIONS + 1))
-rel_out="$(cd "$CONS" && bash "$CLOSER" "$DIST" "$BASE" . "$THEIRS" 2>/dev/null | sort)"
+rel_out="$(cd "$CONS" && lr_eng "$CLOSER" "$DIST" "$BASE" . "$THEIRS" 2>/dev/null | sort)"
 abs_out="$(printf '%s\n' "$OUT" | sort)"
 rel_n="$(printf '%s\n' "$rel_out" | grep -c . )"
 abs_n="$(printf '%s\n' "$abs_out" | grep -c . )"
@@ -1122,8 +1186,8 @@ if cmp -s "$CLOSER" "$MUTN/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the normalization assertions are unproven\n' "mutation-normalize"
 else
-  mn_rel="$(cd "$CONS" && bash "$MUTN/ledger-reverify.sh" "$DIST" "$BASE" . "$THEIRS" 2>/dev/null | sort)"
-  mn_abs="$(bash "$MUTN/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null | sort)"
+  mn_rel="$(cd "$CONS" && lr_eng "$MUTN/ledger-reverify.sh" "$DIST" "$BASE" . "$THEIRS" 2>/dev/null | sort)"
+  mn_abs="$(lr_eng "$MUTN/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null | sort)"
   mn_cwd="$(printf '%s\n' "$mn_rel" | awk -F'\t' '$2 ~ /Entry SH-CWD/ {print $1; exit}')"
   # THE "NOTHING ELSE MOVED" ARM COMPARES VERDICTS, NOT RENDERED TEXT, AND THE REASON IS
   # MEASURED. `$CONSUMER` is printed verbatim into the reachability DETAIL, and this seed's own
@@ -1189,7 +1253,7 @@ if cmp -s "$CLOSER" "$MUTP/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the anchoring assertion is unproven\n' "mutation-prefix"
 else
-  mp_out="$(bash "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null)"
+  mp_out="$(lr_eng "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null)"
   mp_dist="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-DIST-BARE-CORE/ {print $1; exit}')"
   mp_gone="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-SUBJECT-GONE/ {print $1; exit}')"
   mp_hook="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-GITHOOK-GONE/ {print $1; exit}')"
@@ -1228,7 +1292,7 @@ if cmp -s "$CLOSER" "$MUTG/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the `.git/` prefix assertion is unproven\n' "mutation-nogit"
 else
-  mg2_out="$(bash "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null)"
+  mg2_out="$(lr_eng "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null)"
   mg2_hook="$(printf '%s\n' "$mg2_out" | awk -F'\t' '$2 ~ /Entry SH-GITHOOK-GONE/ {print $1; exit}')"
   mg2_gone="$(printf '%s\n' "$mg2_out" | awk -F'\t' '$2 ~ /Entry SH-SUBJECT-GONE/ {print $1; exit}')"
   if [ -z "$mg2_out" ]; then
@@ -1264,7 +1328,7 @@ if cmp -s "$CLOSER" "$MUTD/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the over-fire controls are unproven\n' "mutation-dotfile"
 else
-  md_out="$(bash "$MUTD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null)"
+  md_out="$(lr_eng "$MUTD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null)"
   md_ext="$(printf '%s\n' "$md_out" | awk -F'\t' '$2 ~ /Entry SH-GLOB-BARE-EXT/ {print $1; exit}')"
   md_bare="$(printf '%s\n' "$md_out" | awk -F'\t' '$2 ~ /Entry SH-GIT-BARE-TOKEN/ {print $1; exit}')"
   md_hook="$(printf '%s\n' "$md_out" | awk -F'\t' '$2 ~ /Entry SH-GITHOOK-GONE/ {print $1; exit}')"
@@ -1306,9 +1370,9 @@ if cmp -s "$CLOSER" "$MUTL/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the caller-error arms are unproven\n' "mutation-bail"
 else
-  ml_sw="$(bash "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c . )"
-  ml_b5="$(bash "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null | grep -c . )"
-  ml_ok="$(bash "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null | grep -c . )"
+  ml_sw="$(lr_eng "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c . )"
+  ml_b5="$(lr_eng "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null | grep -c . )"
+  ml_ok="$(lr_eng "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$CR_SH_LED" 2>/dev/null | grep -c . )"
   if [ "$ml_sw" -ne 0 ] || [ "$ml_b5" -ne 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the unconditional bail still reported (swapped=%s arg5=%s) — the arms above are vacuous\n' "mutation-bail" "$ml_sw" "$ml_b5"
@@ -1367,7 +1431,7 @@ ASSERTIONS=$((ASSERTIONS + 1))
 zled="$CONS/_bmad-output/ai-dlc-update/well-anchored-ledger.md"
 mkdir -p "$(dirname "$zled")"
 printf -- '- **Entry ZA** — anchored on a token that arrived inside base..theirs.\n  verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_B"\n' > "$zled"
-z_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$zled" 2>/dev/null)"
+z_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$zled" 2>/dev/null)"
 z_n="$(printf '%s\n' "$z_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 z_live="$(printf '%s\n' "$z_out" | awk -F'\t' '$1=="STILL-LIVE"{c++} END{print c+0}')"
 if [ "$z_n" -eq 0 ] && [ "$z_live" -eq 1 ]; then
@@ -1392,7 +1456,7 @@ if cmp -s "$CLOSER" "$MUTU/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the tally assertions are unproven\n' "mutation-undecided"
 else
-  mu_out="$(bash "$MUTU/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  mu_out="$(lr_eng "$MUTU/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
   mu_det="$(printf '%s\n' "$mu_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
   mu_rest="$(printf '%s\n' "$mu_out" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"' | sort)"
   ok_rest="$(printf '%s\n' "$OUT" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"' | sort)"
@@ -1524,7 +1588,7 @@ SBC_LED="$SBC/probe-ledger.md"
   printf 'verify: sh %s\n' "$SBC_EXNEITHER"
 } > "$SBC_LED"
 
-sbc_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
+sbc_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
 sbc_det="$(printf '%s\n' "$sbc_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
 sbc_row() { # <label> <want-status>
   ASSERTIONS=$((ASSERTIONS + 1))
@@ -1599,7 +1663,7 @@ SBC_MOV_LED="$SBC/movers-only.md"
   printf '## PC-PROBE-MOVER-B - the close direction, also moved in range\n\n'
   printf 'verify: sh %s\n' "$SBC_CMOVED"
 } > "$SBC_MOV_LED"
-sbc_mv="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SBC_MOV_LED" 2>/dev/null)"
+sbc_mv="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SBC_MOV_LED" 2>/dev/null)"
 sbc_mv_u="$(printf '%s\n' "$sbc_mv" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 sbc_mv_r="$(printf '%s\n' "$sbc_mv" | awk -F'\t' '$1=="STILL-LIVE" || $1=="CLOSE-CANDIDATE"{c++} END{print c+0}')"
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -1616,7 +1680,7 @@ fi
 # SILENCE, ARM TWO: THE NULL DIFFERENTIAL. Driven with base == theirs, every receipt answers the
 # same at both sides BY CONSTRUCTION and a 100% count would be a fact about the invocation. The
 # same probe ledger is used, so the two silences differ in the REFS and in nothing else.
-sbc_nl="$(bash "$CLOSER" "$DIST" "$THEIRS" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
+sbc_nl="$(lr_eng "$CLOSER" "$DIST" "$THEIRS" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
 sbc_nl_u="$(printf '%s\n' "$sbc_nl" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 sbc_nl_r="$(printf '%s\n' "$sbc_nl" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -1693,7 +1757,7 @@ sbc_kill() { # <name> <dir> <ledger> <want-substring-in-detail> <must-be-absent-
     printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, changed nothing, or did not parse) -- the arm it targets is unproven\n' "$n"
     return
   fi
-  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$led" 2>/dev/null)"
+  out="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$led" 2>/dev/null)"
   ctl="$(printf '%s\n' "$out" | awk -F'\t' '$1=="STILL-LIVE" || $1=="CLOSE-CANDIDATE"{c++} END{print c+0}')"
   det="$(printf '%s\n' "$out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
   if [ "$ctl" -eq 0 ]; then
@@ -1724,7 +1788,7 @@ if [ -z "$sbc_m1" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation DID NOT APPLY, so the null-differential silence is unproven\n' "sbc-mut-refs-guard"
 else
-  m1_out="$(bash "$sbc_m1/ledger-reverify.sh" "$DIST" "$THEIRS" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
+  m1_out="$(lr_eng "$sbc_m1/ledger-reverify.sh" "$DIST" "$THEIRS" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
   m1_u="$(printf '%s\n' "$m1_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
   m1_r="$(printf '%s\n' "$m1_out" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
   if [ "$m1_r" -eq 0 ]; then
@@ -1836,7 +1900,7 @@ si_ledger "$SI_EVAL_LED" 'cat >/dev/null; true'
 si_ledger "$SI_BASE_LED" "[ \"\$THEIRS\" = \"$BASE\" ] && cat >/dev/null; git -C \"\$DIST\" cat-file -e \"\${THEIRS}:VERSION\""
 si_verdicts() { # <engine> <ledger> -> "<reader> <next> <last>" statuses, "-" where no row
   local o
-  o="$(bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$2" 2>/dev/null)"
+  o="$(lr_eng "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$2" 2>/dev/null)"
   printf '%s\n' "$o" | awk -F'\t' '
     index($2,"PC-STDIN-READER ")==1{r=$1} index($2,"PC-STDIN-NEXT-LIVE ")==1{n=$1} index($2,"PC-STDIN-LAST-CLOSE ")==1{l=$1}
     END{printf "%s %s %s", (r?r:"-"), (n?n:"-"), (l?l:"-")}'
@@ -1942,7 +2006,7 @@ elif cmp -s "$CLOSER" "$MUTD/ledger-reverify.sh"; then
   printf '  FAIL  %-22s the mutation matched nothing, so the anchor assertions above are unproven\n' "mutation"
 else
   ca_led="$(lr_subledger close-anchor PROSE-MENTIONS-THE-VOCABULARY BOLD-ANNOTATION-WITH-A-PREFIX "Entry A still lacked")" || ca_led="$DIST/no-such-sub-ledger"
-  mut_out="$(bash "$MUTD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ca_led" 2>&1)"
+  mut_out="$(lr_eng "$MUTD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ca_led" 2>&1)"
   mut_live="$(printf '%s\n' "$mut_out" | awk -F'\t' '$2 ~ /Entry A still lacked/ && $1 == "STILL-LIVE" {f=1} END{print f+0}')"
   mut_prose="$(printf '%s\n' "$mut_out" | awk -F'\t' '$2 ~ /PROSE-MENTIONS-THE-VOCABULARY/ {print $1; exit}')"
   mut_bold="$(printf '%s\n' "$mut_out" | awk -F'\t' '$2 ~ /BOLD-ANNOTATION-WITH-A-PREFIX/ {print $1; exit}')"
@@ -2013,7 +2077,7 @@ if cmp -s "$CLOSER" "$MUTS/ledger-reverify.sh"; then
   printf '  FAIL  %-22s the mutation matched nothing, so the accumulation assertions are unproven\n' "mutation-scalar"
 else
   er_led="$(lr_subledger every-receipt PC-FIXTURE-TWO-RECEIPTS)" || er_led="$DIST/no-such-sub-ledger"
-  ms="$(bash "$MUTS/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$er_led" 2>&1)"
+  ms="$(lr_eng "$MUTS/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$er_led" 2>&1)"
   ms_live="$(printf '%s\n' "$ms" | awk -F'\t' '$2 ~ /TWO-RECEIPTS/ && $1 == "STILL-LIVE" {c++} END{print c+0}')"
   ms_close="$(printf '%s\n' "$ms" | awk -F'\t' '$2 ~ /TWO-RECEIPTS/ && $1 == "CLOSE-CANDIDATE" {c++} END{print c+0}')"
   if [ "$ms_live" -eq 0 ] && [ "$ms_close" -gt 0 ]; then
@@ -2169,7 +2233,7 @@ reach_mut() { # <tag> <awk-anchor-line> <replacement-line> -> path of the mutant
     "$CLOSER" > "$_d/ledger-reverify.sh" || return 0
   cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
 }
-reach_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$RCH/ledger.md" 2>/dev/null; }
+reach_rows() { lr_eng "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$RCH/ledger.md" 2>/dev/null; }
 reach_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-OFF-SUBJECT)?$/ {print $1; exit}'; }
 rc_ctl="$(reach_rows "$CLOSER")"
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -2287,7 +2351,7 @@ co_mut() { # <tag> <exact line> <replacement line> -> path of the mutant, or emp
   bash -n "$_d/ledger-reverify.sh" 2>/dev/null || return 0
   cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
 }
-co_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null; }
+co_rows() { lr_eng "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null; }
 co_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT)?$/ {print $1; exit}'; }
 CO_IDS="PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS PC-S959-INLINE-FORM-CITATION"
 CO_WANT="NAMED-UPSTREAM-CITED-ONLY NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-CITED-ONLY NAMED-UPSTREAM-DOCS-ONLY NAMED-UPSTREAM"
@@ -2361,7 +2425,7 @@ chmod +x "$CO_SHIM/git"
 co_failopen() { # <engine> -> S955's kind with the filter's git call failing, or BROKEN
   rm -f "$CO_SHIM/fired"
   local _r
-  _r="$(PATH="$CO_SHIM:$PATH" bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null)"
+  _r="$(PATH="$CO_SHIM:$PATH" lr_eng "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null)"
   [ -f "$CO_SHIM/fired" ] || { printf 'BROKEN'; return; }
   co_kind "$_r" PC-S955-FORM-ONLY-CITATION
 }
@@ -2557,7 +2621,7 @@ cat > "$OSW/ledger.md" <<'OSLED'
 - **PC-S970-MANUAL-RECEIPT** — no path receipt at all.
   verify: manual
 OSLED
-os_rows() { bash "$1" "$OSD" "$OSB" "$CONS" "$OST" "$OSW/ledger.md" 2>/dev/null; }
+os_rows() { lr_eng "$1" "$OSD" "$OSB" "$CONS" "$OST" "$OSW/ledger.md" 2>/dev/null; }
 os_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT)?$/ {print $1; exit}'; }
 OS_IDS="PC-S960-THIRD-CLASS PC-S961-SQUASH-RELEASE PC-S962-BRANCH-RELEASE PC-S963-MERGE-RELEASE PC-S964-OVER-EXPANSION PC-S965-TWO-PATHS-SECOND-TOUCHED PC-S966-CONSUMER-PATH-TOUCHED PC-S967-CONSUMER-PATH-UNTOUCHED PC-S968-AMBIGUOUS-BASENAME PC-S969-LISTING-FAILURE PC-S970-MANUAL-RECEIPT"
 OS_WANT="NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM"
@@ -2957,7 +3021,7 @@ cat > "$SBW/push-candidate-ledger.archive.md" <<'SBARC'
 
 verify: theirs_lacks core/scripts/sb-D.sh "ANCHY_D_"
 SBARC
-sb_rows() { bash "$1" "$SBD" "$SBB" "$CONS" "$SBT" "$SBW/ledger.md" 2>/dev/null; }
+sb_rows() { lr_eng "$1" "$SBD" "$SBB" "$CONS" "$SBT" "$SBW/ledger.md" 2>/dev/null; }
 sb_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT|-SIBLING-ATTRIBUTED)?$/ {print $1; exit}'; }
 SB_IDS="PC-S1001-OFFENDER PC-S1003-DIFFERENT-FILE PC-S1005-INCOMMIT-X PC-S1007-ARCHIVE-ONLY PC-S1009-SPAN-NEIGHBOUR PC-S1011-SPANOFF-X PC-S1013-SHORT-ID-X PC-S1015-WHOLE-DIFF-X PC-S1017-TWO-COMMITS-X PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1023-MERGE-CONCAT-X PC-S1025-PREFIX-X PC-S1027-PIPE-X PC-S1029-BACKSLASH-X PC-S1031-TWO-PATH-X PC-S1033-MULTI-SUB-X PC-S1035-HEADER-X PC-S1037-ID-CONT-X PC-S1039-DOT-CONT-X PC-S1041-OFFENDER-OPEN"
 SA=NAMED-UPSTREAM-SIBLING-ATTRIBUTED; NU=NAMED-UPSTREAM
@@ -3158,7 +3222,7 @@ else
   u_run() { # <engine> <world> -> "rc<TAB>rows"; a fresh memo per run unless U_MEMO is set
     local w="$UW/$2" m="${U_MEMO:-}" o rc
     [ -n "$m" ] || m="$(mktemp -d "$w/m/r.XXXX")"
-    o="$(AI_DLC_RECONCILE_MEMO="$m" bash "$1" "$w/d" "$(cat "$w/B")" "$w/c" "$(cat "$w/T")" "$w/c/ledger.md" 2>"$w/err")"; rc=$?
+    o="$(AI_DLC_RECONCILE_MEMO="$m" lr_eng "$1" "$w/d" "$(cat "$w/B")" "$w/c" "$(cat "$w/T")" "$w/c/ledger.md" 2>"$w/err")"; rc=$?
     printf '%s\n%s' "$rc" "$o"
   }
   u_row() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" 'NR > 1 && $2 == l {print $1 "|" $3; exit}'; }
@@ -3258,7 +3322,7 @@ if cmp -s "$CLOSER" "$MUTG/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the id-shape guard assertion is unproven\n' "mutation-guard"
 else
-  mg_out="$(bash "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$UR_LED" 2>&1)"
+  mg_out="$(lr_eng "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$UR_LED" 2>&1)"
   if printf '%s\n' "$mg_out" | awk -F'\t' '$2 ~ /Entry A/ && $1 == "NAMED-UPSTREAM" {f=1} END{exit !f}'; then
     lr_mx "mutation-guard" "$MUTG"
     printf '  ok    %-22s without the guard a prose label word-matches — the guard is load-bearing\n' "mutation-guard"
@@ -3311,7 +3375,7 @@ elif [ "${MUTB_LEFT:-1}" -ne 0 ]; then
   printf '  FAIL  %-22s %s search(es) left UNBOUNDED by the mutation (%s bounded) — a partial revert proves the layer left in place\n' \
     "mutation-bound" "$MUTB_LEFT" "${MUTB_HITS:-0}"
 else
-  mb_out="$(bash "$MUTB/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$UR_LED" 2>&1)"
+  mb_out="$(lr_eng "$MUTB/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$UR_LED" 2>&1)"
   mb_named="$(printf '%s\n' "$mb_out" | awk -F'\t' '$1 == "NAMED-UPSTREAM" {c++} END{print c+0}')"
   mb_still="$(printf '%s\n' "$mb_out" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK/ && $1 == "STILL-LIVE" {f=1} END{print f+0}')"
   if [ "$mb_named" -ne 0 ]; then
@@ -3334,7 +3398,7 @@ CTLD="$(dirname "$DIST")/ctl-closer"
 rm -rf "$CTLD"; mkdir -p "$CTLD"
 cp "$(dirname "$CLOSER")"/*.sh "$CTLD/" 2>/dev/null
 cp "$CLOSER" "$CTLD/ledger-reverify.sh"
-ctl_named="$(bash "$CTLD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$UR_LED" 2>&1 | awk -F'\t' '$1 == "NAMED-UPSTREAM" {c++} END{print c+0}')"
+ctl_named="$(lr_eng "$CTLD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$UR_LED" 2>&1 | awk -F'\t' '$1 == "NAMED-UPSTREAM" {c++} END{print c+0}')"
 # COMPARED TO THE IN-PLACE RUN, NOT TO A LITERAL, and with a FLOOR beside it. The literal was 3
 # and it went stale the moment the seed grew the PC-S904/905/906 trio below; a hand-written total
 # in a control is a number that decays silently and then reads as a real kill. Equality is the
@@ -3535,7 +3599,7 @@ named_mutant() {
     $0 == anchor { print substr($0, 1, length($0) - 2) " " pipe ")\""; next }
     { print }' "$CLOSER" > "$_d/ledger-reverify.sh"
   cmp -s "$CLOSER" "$_d/ledger-reverify.sh" && return 1
-  bash "$_d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$NC_LED" 2>&1
+  lr_eng "$_d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$NC_LED" 2>&1
 }
 
 # MUTANT A — `| head -1`, the newest-only election. PC-S906 must lose its OLDER sha and KEEP its
@@ -3643,7 +3707,7 @@ fi
 ASSERTIONS=$((ASSERTIONS + 1))
 # The unmutated side is the shipped engine over the SAME sub-ledger, one small run: $OUT was rendered
 # over the whole ledger and would differ from every mutant for that reason alone.
-mdist_ctl="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$NC_LED" 2>&1)"
+mdist_ctl="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$NC_LED" 2>&1)"
 mdist_dupe=""
 [ "$ma_out"  = "$mb2_out"   ] && mdist_dupe="${mdist_dupe} head=tail"
 [ "$ma_out"  = "$mc2_out"   ] && mdist_dupe="${mdist_dupe} head=head2"
@@ -3718,7 +3782,7 @@ elif [ -z "$mc_led" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the sub-ledger cut was refused, so the colon discriminator is unproven\n' "mutation-colon"
 else
-  mc_out="$(bash "$MUTC/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mc_led" 2>&1)"
+  mc_out="$(lr_eng "$MUTC/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mc_led" 2>&1)"
   # BOTH HALVES. Without the second the arm scores a kill for a mutant that broke the whole
   # ENTRY-SWALLOWED block — an emitter that died prints no prose row either, and "no row for
   # a-real-entry" would then read as the colon test doing its job.
@@ -3802,7 +3866,7 @@ elif [ -z "$mi_led" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the sub-ledger cut was refused, so the id rule is unproven\n' "mutation-idrule"
 else
-  mi_out="$(bash "$MUTI/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mi_led" 2>&1)"
+  mi_out="$(lr_eng "$MUTI/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mi_led" 2>&1)"
   mi_hit="$(printf '%s\n' "$mi_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-ID_WITH.PUNCT/{f=1} END{print f+0}')"
   mi_ctl="$(printf '%s\n' "$mi_out" | awk -F'\t' '$2 ~ /Entry B/ && $1=="CLOSE-CANDIDATE"{f=1} END{print f+0}')"
   if [ "$mi_ctl" != 1 ]; then
@@ -3835,7 +3899,7 @@ elif [ -z "$mp_led" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the sub-ledger cut was refused, so the !prev_id_closed clause is unproven\n' "mutation-prevclosed"
 else
-  mp_out="$(bash "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mp_led" 2>&1)"
+  mp_out="$(lr_eng "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mp_led" 2>&1)"
   mp_hit="$(printf '%s\n' "$mp_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /legacy-entry/{f=1} END{print f+0}')"
   mp_tp="$(printf '%s\n' "$mp_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /False CLOSE-CANDIDATE/{f=1} END{print f+0}')"
   if [ "$mp_tp" != 1 ]; then
@@ -3865,7 +3929,7 @@ elif [ -z "$mh_led" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the sub-ledger cut was refused, so the !prev_id_hadv clause is unproven\n' "mutation-prevhadv"
 else
-  mh_out="$(bash "$MUTH/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mh_led" 2>&1)"
+  mh_out="$(lr_eng "$MUTH/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mh_led" 2>&1)"
   mh_hit="$(printf '%s\n' "$mh_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /Second no-colon prose bullet/{f=1} END{print f+0}')"
   mh_tp="$(printf '%s\n' "$mh_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /False CLOSE-CANDIDATE/{f=1} END{print f+0}')"
   if [ "$mh_tp" != 1 ]; then
@@ -3895,8 +3959,8 @@ ctl_led="$(lr_subledger swallow-control 'PC-FIXTURE-SWALLOWED-BY-ANNOTATION' 'Th
   'PC-FIXTURE-CLOSED-BEFORE-PROSE' 'legacy-entry.sh' 'PC-FIXTURE-NO-ROW-ABOVE' 'PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0')"
 ctl_sw=0; own_sw=0
 if [ -n "$ctl_led" ]; then
-  ctl_sw="$(bash "$CTLS/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ctl_led" 2>&1 | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
-  own_sw="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ctl_led" 2>&1 | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
+  ctl_sw="$(lr_eng "$CTLS/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ctl_led" 2>&1 | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
+  own_sw="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ctl_led" 2>&1 | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
 fi
 if [ -n "$ctl_led" ] && [ "$ctl_sw" = "$own_sw" ] && [ "$own_sw" -ge 2 ]; then
   printf '  ok    %-22s unmutated copy emits the same %s ENTRY-SWALLOWED rows (the four mutants above ran a working harness)\n' "swallow-control" "$own_sw"
@@ -4051,7 +4115,7 @@ fi
 ML_CTL="$(dirname "$DIST")/ctl-midline"
 rm -rf "$ML_CTL"; mkdir -p "$ML_CTL"
 cp "$(dirname "$CLOSER")"/*.sh "$ML_CTL/" 2>/dev/null
-ml_ctl_out="$(bash "$ML_CTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ML_TINY" 2>&1)"
+ml_ctl_out="$(lr_eng "$ML_CTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ML_TINY" 2>&1)"
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$ml_ctl_out" | awk -F'\t' '$2=="Entry ORPHAN-RECEIPT-MIDLINE" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{a=1} $2 ~ /Entry A still lacked/ && $1=="STILL-LIVE"{b=1} END{exit !(a && b)}'; then
   # TWO expected rows on this corpus, and they are ENUMERATED rather than counted: the subject,
@@ -4089,7 +4153,7 @@ ml_kill() { # <name> <dir-or-empty> <kill-awk> <kill-msg>
     printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, or awk died), so the arm it targets is unproven\n' "$n"
     return
   fi
-  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ML_TINY" 2>&1)"
+  out="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ML_TINY" 2>&1)"
   # THE DEAD-COPY CONTROL, IN THE SAME RUN. Entry A is unrelated to this pass, so a mutant that
   # broke the closer rather than the guard loses it and its verdict is wreckage rather than a kill.
   if ! printf '%s\n' "$out" | awk -F'\t' '$2 ~ /Entry A still lacked/ && $1=="STILL-LIVE"{f=1} END{exit !f}'; then
@@ -4179,7 +4243,7 @@ elif [ -z "$mg_led" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the sub-ledger cut was refused, so the moved-subject assertion is unproven\n' "mutation-subject"
 else
-  mg="$(bash "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mg_led" 2>&1)"
+  mg="$(lr_eng "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mg_led" 2>&1)"
   mg_gone="$(printf '%s\n' "$mg" | awk -F'\t' '$2 ~ /SH-SUBJECT-GONE/ {print $1; exit}')"
   mg_real="$(printf '%s\n' "$mg" | awk -F'\t' '$2 ~ /SH-REAL/ {print $1; exit}')"
   if [ "$mg_gone" = "CLOSE-CANDIDATE" ] && [ "$mg_real" = "CLOSE-CANDIDATE" ]; then
@@ -4336,7 +4400,7 @@ elif [ -z "$mu_led" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the sub-ledger cut was refused, so the escape arm is unproven\n' "mutation-uescape"
 else
-  mu_out="$(bash "$MUTE/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mu_led" 2>&1)"
+  mu_out="$(lr_eng "$MUTE/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$mu_led" 2>&1)"
   read -r mu_off mu_rows mu_sw mu_nm < <(printf '%s\n' "$mu_out" | uescape_scan)
   if [ "$mu_off" -gt 0 ] && [ "$mu_sw" -gt 0 ] && [ "$mu_nm" -gt 0 ]; then
     lr_mx "mutation-uescape" "$MUTE"
@@ -4448,7 +4512,7 @@ fence_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-
     printf '  FAIL  %-22s the sub-ledger cut was refused, so the arm it targets is unproven\n' "$n"
     return
   fi
-  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$led" 2>&1)"
+  out="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$led" 2>&1)"
   if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the parser rather than the clause, so its verdict is wreckage\n' "$n" "$cmsg"
@@ -4588,11 +4652,11 @@ SFX_LB=""; SFX_BASE_A=""
 if [ -n "$SFX_LA" ]; then
   SFX_LB="$(dirname "$SFX_LA")/sub-suffix-b.md"
   grep -vE 'verify: (theirs_has|sh)' "$SFX_LA" > "$SFX_LB"
-  SFX_BASE_A="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
+  SFX_BASE_A="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
 fi
 LED_NOUND="$SFX_LB"
 nou_out=""
-[ -n "$SFX_LB" ] && nou_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LB" 2>/dev/null)"
+[ -n "$SFX_LB" ] && nou_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LB" 2>/dev/null)"
 nou_und="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 nou_sw="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
 nou_leak="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
@@ -4693,8 +4757,8 @@ sfx_kill() { # <name> <dir-or-empty> <why-this-fix-is-wrong>
     printf '  FAIL  %-22s the suffix sub-ledger or its unmutated baseline is missing, so this wrong fix was never scored\n' "$n"
     return
   fi
-  ma="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
-  mb="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LB" 2>/dev/null)"
+  ma="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
+  mb="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LB" 2>/dev/null)"
   # WRECKAGE GUARD, and it is the control the anchor note above demands: the mutant must still
   # produce the baseline's row COUNT on shape A. A crash under set -u prints nothing at all.
   if sfx_wrecked "$ma"; then
@@ -4796,8 +4860,8 @@ elif ! bash -n "$wr_dir/ledger-reverify.sh" 2>/dev/null; then
 else
   # Both sides over `$SFX_LA`, the sub-ledger whose unmutated run `$SFX_BASE_A` is the baseline
   # `sfx_wrecked` compares against; a run over any other ledger differs in row count for that reason.
-  wr_out="$(bash "$wr_dir/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
-  wr_ship="$(bash "$SFX_SHIPPED/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
+  wr_out="$(lr_eng "$wr_dir/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
+  wr_ship="$(lr_eng "$SFX_SHIPPED/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
   wr_fired=1; sfx_wrecked "$wr_out"  && wr_fired=0
   wr_quiet=1;  sfx_wrecked "$wr_ship" && wr_quiet=0
   # POSITIVE CONJUNCT ON THE CONTROL. A shipped copy that died is "not wrecked" only if it emitted
@@ -4860,8 +4924,8 @@ sfx_pass() { # <name> <dir-or-empty> <what-this-fix-is>
     return
   fi
   # The same two sub-ledgers sfx_kill reads, so an acquittal and a kill are scored on one population.
-  pa="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
-  pb="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LB" 2>/dev/null)"
+  pa="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LA" 2>/dev/null)"
+  pb="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SFX_LB" 2>/dev/null)"
   a_leak="$(printf '%s\n' "$pa" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
   a_ctl="$(printf '%s\n' "$pa" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
   b_und="$(printf '%s\n' "$pb" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
@@ -5013,7 +5077,7 @@ tl_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg
     printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, or awk died), so the arm it targets is unproven\n' "$n"
     return
   fi
-  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$TL_LED" 2>&1)"
+  out="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$TL_LED" 2>&1)"
   if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the closer rather than the guard, so its verdict is wreckage\n' "$n" "$cmsg"
@@ -5096,7 +5160,7 @@ else
 fi
 # THE UNMUTATED CONTROL, with a positive conjunct: the same tiny ledger through the shipped closer
 # must produce the refusal row AND the close, or every kill below is scored against wreckage.
-tiny_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$TINY" 2>&1)"
+tiny_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$TINY" 2>&1)"
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$tiny_out" | awk -F'\t' '$2 ~ /PC-FIXTURE-ESCAPED-BACKTICK/ && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0 {a=1} $2 ~ /PC-FIXTURE-BARE-BACKTICK/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && b)}'; then
   printf '  ok    %-22s unmutated closer on the tiny ledger: escaped refused with the backslash reason, bare closes\n' "tiny-control"
@@ -5121,7 +5185,7 @@ bs_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg
     printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, or awk died), so the arm it targets is unproven\n' "$n"
     return
   fi
-  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$TINY" 2>&1)"
+  out="$(lr_eng "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$TINY" 2>&1)"
   if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the closer rather than the guard, so its verdict is wreckage\n' "$n" "$cmsg"
@@ -5326,7 +5390,7 @@ fi
 # controls read, cut from the seeded ledger; SH-THEIRS-TREE-LEAK is in it so the tree materializes.
 DC_LED="$(lr_subledger dist-checkout 'Entry SH-THEIRS-TREE reads' 'Entry SH-THEIRS-TREE-BRACED is' 'Entry SH-THEIRS-TREE-BRACED-SUBJECT' 'Entry SH-THEIRS-TREE-LEAK' 'Entry SH-DIST-AS-PATH reads' 'Entry SH-DIST-AS-ENV' 'Entry SH-DIST-AS-PATH-ZERO' 'Entry SH-DIST-REVSPEC hands' 'Entry SH-DIST-CD-BARE')" || DC_LED="$DIST/no-such-sub-ledger"
 if [ -n "$dp_base" ]; then
-  dp_out="$(bash "$dp_base/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DC_LED" 2>&1)"
+  dp_out="$(lr_eng "$dp_base/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DC_LED" 2>&1)"
   ASSERTIONS=$((ASSERTIONS + 1))
   if printf '%s\n' "$dp_out" | awk -F'\t' '$2 ~ /SH-DIST-AS-PATH / && $1=="CLOSE-CANDIDATE" {a=1} $2 ~ /SH-DIST-AS-ENV/ && $1=="CLOSE-CANDIDATE" {b=1} $2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {c=1} END{exit !(a && b && c)}'; then
     printf '  ok    %-22s without the refusal BOTH $DIST-path receipts read CLOSE-CANDIDATE — the measured false close, reproduced — while the git -C control stays STILL-LIVE\n' "dist-base-reading"
@@ -5371,7 +5435,7 @@ LED_NOTREE="$(dirname "$DIST")/no-theirs-tree-ledger.md"
 lz_verdict() { # <closer>
   local c="$1" before after delta out
   before="$(tt_count)"
-  out="$(TMPDIR="$LZ_TMP" bash "$c" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOTREE" 2>&1)"
+  out="$(TMPDIR="$LZ_TMP" lr_eng "$c" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOTREE" 2>&1)"
   after="$(tt_count)"
   delta=$((after - before))
   if ! printf '%s\n' "$out" | awk -F'\t' '$2 ~ /NOTREE-B/ && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
@@ -5418,7 +5482,7 @@ LED_INTREE="$(dirname "$DIST")/in-lz-tmp-ledger.md"
   printf 'verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; echo "$THEIRS_TREE" > "$CONSUMER/lz-tree-path.txt"; test -d "$THEIRS_TREE"\n'
 } > "$LED_INTREE"
 rm -f "$CONS/lz-tree-path.txt"
-TMPDIR="$LZ_TMP" bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_INTREE" >/dev/null 2>&1
+TMPDIR="$LZ_TMP" lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_INTREE" >/dev/null 2>&1
 lz_live="$(cat "$CONS/lz-tree-path.txt" 2>/dev/null)"
 rm -f "$CONS/lz-tree-path.txt"
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -5535,7 +5599,7 @@ if [ -z "$dp_mut_leak" ]; then
   printf '  FAIL  %-22s the no-cleanup mutation DID NOT APPLY, so the cleanup arm is unproven\n' "mutation-tt-no-cleanup"
 else
   rm -f "$CONS/theirs-tree-path.txt"
-  leak_out="$(bash "$dp_mut_leak/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DC_LED" 2>&1)"
+  leak_out="$(lr_eng "$dp_mut_leak/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DC_LED" 2>&1)"
   leak_path="$(cat "$CONS/theirs-tree-path.txt" 2>/dev/null)"
   if ! printf '%s\n' "$leak_out" | awk -F'\t' '$2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
     FAILURES=$((FAILURES + 1))
@@ -5578,8 +5642,8 @@ if [ -z "$dp_mut_eager" ]; then
   printf '  FAIL  %-22s the eager mutation DID NOT APPLY, so the laziness arm is unproven\n' "mutation-tt-eager"
 else
   eg_badref=0000000000000000000000000000000000000000
-  eg_out="$(bash "$dp_mut_eager/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
-  eg_ctl="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
+  eg_out="$(lr_eng "$dp_mut_eager/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
+  eg_ctl="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
   if grep -q 'could not be materialized' <<<"$eg_ctl"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the SHIPPED closer also reports a materialization failure on a ledger naming no $THEIRS_TREE receipt — it is not lazy, so this arm cannot attribute the mutant'"'"'s row to the mutation\n' "mutation-tt-eager"
@@ -5701,7 +5765,7 @@ if [ -n "$BOOT_DIR" ]; then
     printf '## PC-FIXTURE-BOOT-UNGUARDED — the same read WITHOUT the guard: the false close\n\n'
     printf 'verify: sh [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]\n'
   } > "$LED_BOOT"
-  boot_out="$(bash "$BOOT_DIR/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_BOOT" 2>&1)"
+  boot_out="$(lr_eng "$BOOT_DIR/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_BOOT" 2>&1)"
   ASSERTIONS=$((ASSERTIONS + 1))
   if printf '%s\n' "$boot_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-UNGUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && b)}'; then
     printf '  ok    %-22s on an engine that does not export $THEIRS_TREE the GUARDED receipt reads NEEDS-REVIEW while the UNGUARDED one reads CLOSE-CANDIDATE — the guard is what stops the bootstrapping false close\n' "boot-guard"
@@ -5714,7 +5778,7 @@ if [ -n "$BOOT_DIR" ]; then
   # rather than scoring its non-zero exit. Driven by pointing the closer at a ref that does not
   # resolve in this dist, which is the only reachable materialization failure.
   ASSERTIONS=$((ASSERTIONS + 1))
-  badref_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "0000000000000000000000000000000000000000" "$LED_BOOT" 2>&1)"
+  badref_out="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "0000000000000000000000000000000000000000" "$LED_BOOT" 2>&1)"
   if printf '%s\n' "$badref_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-GUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && !b)}'; then
     printf '  ok    %-22s with the tree unmaterializable the receipt is NEEDS-REVIEW, never CLOSE — a tool failure must not manufacture the verdict that loses data\n' "theirs-tree-unavailable"
   else
@@ -6252,7 +6316,7 @@ done
 IDW="$(dirname "$DIST")/id-class"; mkdir -p "$IDW"
 awk '/^<!-- id-class block:/ {p=1; next} /^<!-- end id-class block -->/ {p=0} p' \
   "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$IDW/ledger.md"
-idc_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$IDW/ledger.md" 2>/dev/null; }
+idc_rows() { lr_eng "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$IDW/ledger.md" 2>/dev/null; }
 
 # THE sh CLOSE-CANDIDATE DETAIL CELLS. An `sh` receipt that ALREADY exited non-zero at base was not
 # absorbed by base..theirs, so its close must not hand the operator v<theirs>: it names the commits
@@ -6572,7 +6636,7 @@ else
   # subshell (its counters cannot leak). One line per cell: MATRIX <mutant> <unit> <helper> <label> ok|FAIL.
   echo "MATRIX-BEGIN arms=$(grep -c . "$LR_MX_DIR/arms") mutants=$(ls "$LR_MX_DIR/stash" | grep -c .)"
   for _k in $(ls "$LR_MX_DIR/stash"); do
-    _mo="$(cd / && bash "$LR_MX_DIR/stash/$_k/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+    _mo="$(cd / && lr_eng "$LR_MX_DIR/stash/$_k/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
     echo "MATRIX-RUN	$_k	rows=$(printf '%s\n' "$_mo" | grep -c '	')"
     while IFS="$(printf '\037')" read -r _au _af _a1 _a2 _a3; do
       _r="$(OUT="$_mo"; LR_MX_REPLAY=1; "$_af" "$_a1" "$_a2" "$_a3" 2>/dev/null | head -1)"
