@@ -130,58 +130,9 @@
 #
 # Portability: bash 3.2, BSD awk, LC_ALL=C so every sort and comparison is bytewise.
 set -u
-export LC_ALL=C
 
 refuse() { printf 'partition-review-diff: REFUSED — %s\n' "$*" >&2; exit 2; }
-USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>] | --route <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]"
 
-# ---- shared by --route and --gate1-rerun (header: THE CODE CLASS, THE LINE FILTER) -----------------
-# THE TEST NAME: the three basename expressions of THE PART SET step 3, the one test grammar here.
-TEST_NAME_AWK='function is_test_name(p,   b) { b = p; sub(/.*\//, "", b); return (b ~ /^test_.+\.[^.]+$/ || b ~ /.+_test\.[^.]+$/ || b ~ /.+\.(test|spec)\.[^.]+$/) }'
-# code_paths <roots file> <captures file or empty> < `<status>\t<path>` rows -> the CODE rows, unchanged.
-CODE_CLASS_AWK='
-  FILENAME == ARGV[1] { if ($0 != "") { sub(/\/+$/, ""); R[++nr] = $0 }; next }
-  FILENAME == ARGV[2] { sub(/\r$/, ""); if ($0 != "") X[$0] = 1; next }
-  {
-    p = $2; if (p == "") next
-    for (i = 1; i <= nr; i++) if (p == R[i] || index(p, R[i] "/") == 1) next
-    if ((p in X) && p ~ /\.(txt|log|out)$/) next
-    if (p ~ /\.md$/) next
-    if (p ~ /\.(txt|log|out)$/) {
-      n = split(p, c, "/"); td = 0
-      for (i = 1; i < n; i++) if (c[i] ~ /^(test|tests|__tests__|spec|specs|e2e|fixtures)$/) td = 1
-      if (!td) next
-    }
-    print
-  }'
-# The per-language classifier: prints the line numbers of a blob that are CODE (not blank, not a
-# comment, not a docstring). LANG is py, c, hash or plain. No apostrophe anywhere in this program.
-LINE_CODE_AWK='
-  BEGIN { L = ENVIRON["PR_LANG"]; Q3D = sprintf("%c%c%c", 34, 34, 34); Q3S = sprintf("%c%c%c", 39, 39, 39) }
-  function cnt(s, d,   n, i) { n = 0; while ((i = index(s, d)) > 0) { n++; s = substr(s, i + 3) }; return n }
-  {
-    t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t)
-    if (L == "py") {
-      if (ds != "") { if (index(t, ds) > 0) { if (dk == "code") { print NR; lc = substr(t, length(t)) }; ds = ""; dk = "" } else if (dk == "code") print NR; next }
-      if (t == "" || substr(t, 1, 1) == "#") next
-      u = t; sub(/^[rRuUbBfF]{1,2}/, "", u)
-      # A DOCSTRING opens a statement: the previous code line does not leave an expression open.
-      if ((substr(u, 1, 3) == Q3D || substr(u, 1, 3) == Q3S) && lc !~ /[([{,=+%*\\-]/) {
-        d = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next
-      }
-      print NR; lc = substr(t, length(t))
-      if (cnt(t, Q3D) % 2 == 1) { ds = Q3D; dk = "code" } else if (cnt(t, Q3S) % 2 == 1) { ds = Q3S; dk = "code" }
-      next
-    }
-    if (L == "c") {
-      if (bc) { if (index(t, "*/") > 0) bc = 0; next }
-      if (t == "" || substr(t, 1, 2) == "//") next
-      if (substr(t, 1, 2) == "/*") { r = substr(t, 3); if (index(r, "*/") == 0) bc = 1; next }
-      print NR; next
-    }
-    if (L == "hash") { if (t == "" || substr(t, 1, 1) == "#") next; print NR; next }
-    if (t != "") print NR
-  }'
 lang_of() {
   case "$1" in
     *.py) echo py ;;
@@ -190,6 +141,7 @@ lang_of() {
     *) echo plain ;;
   esac
 }
+
 # mode_setup <worktree> -> WT_ABS, T, the roots file at $T/roots; returns 1 with MS_WHY on any failure.
 mode_setup() {
   MS_WHY=""
@@ -198,17 +150,15 @@ mode_setup() {
   git -C "$WT_ABS" rev-parse --git-dir >/dev/null 2>&1 || { MS_WHY="$WT_ABS is not inside a git repository"; return 1; }
   T="$(mktemp -d "${TMPDIR:-/tmp}/partition-review-diff.XXXXXX")" || { MS_WHY="mktemp failed"; return 1; }
   trap 'rm -rf "$T"' EXIT
-  CFG="$(cd "$(dirname "$0")" && pwd)/artifact-path-config.sh"
+  CFG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/artifact-path-config.sh"
   [ -f "$CFG" ] || { MS_WHY="$CFG is absent, so the scan roots cannot be read"; return 1; }
   bash "$CFG" --scan-roots --root "$WT_ABS" > "$T/roots" 2>/dev/null && grep -q . "$T/roots" \
     || { MS_WHY="artifact-path-config.sh --scan-roots --root $WT_ABS printed no scan root"; return 1; }
   return 0
 }
+
 full_sha_ok() { case "$1" in *[!0-9a-f]*|"") return 1 ;; esac; [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]; }
 
-# ---- --route (header: THE RECORD-ONLY ROUTE) --------------------------------------------------------
-# The classes that route. A subset of code-reviewer.md's template set (I129 binds the two).
-ROUTE_CLASSES="EVIDENCE BOOKKEEPING"
 route_mode() {
   full() { printf 'FULL: %s\n' "$*"; exit 1; }
   [ "$#" -eq 3 ] || [ "$#" -eq 5 ] || full "usage: partition-review-diff.sh --route <worktree> <pass M-1 review file> <frozen-sha> [--exclude-captures <file>]"
@@ -222,7 +172,7 @@ route_mode() {
   full_sha_ok "$RS" || full "frozen sha '$RS' is not a full lowercase hex object name"
   RS_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${RS}^{commit}")" || full "frozen sha $RS names no commit in $WT_ABS"
   # (a) the classes, through the sibling's own reader of the prior's findings.
-  VCF="$(cd "$(dirname "$0")" && pwd)/validate-carried-findings.sh"
+  VCF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-carried-findings.sh"
   [ -f "$VCF" ] || full "$VCF is absent, so the prior's classes cannot be read"
   bash "$VCF" --classes "$RP" > "$T/classes" 2> "$T/classes.err" || full "validate-carried-findings.sh --classes $RP exited non-zero: $(head -1 "$T/classes.err")"
   nfind="$(grep -c . "$T/classes")" || nfind=0
@@ -319,6 +269,64 @@ gate1_rerun_mode() {
   exit 0
 }
 
+prd_main() {
+export LC_ALL=C
+
+USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>] | --route <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]"
+
+# ---- shared by --route and --gate1-rerun (header: THE CODE CLASS, THE LINE FILTER) -----------------
+# THE TEST NAME: the three basename expressions of THE PART SET step 3, the one test grammar here.
+TEST_NAME_AWK='function is_test_name(p,   b) { b = p; sub(/.*\//, "", b); return (b ~ /^test_.+\.[^.]+$/ || b ~ /.+_test\.[^.]+$/ || b ~ /.+\.(test|spec)\.[^.]+$/) }'
+# code_paths <roots file> <captures file or empty> < `<status>\t<path>` rows -> the CODE rows, unchanged.
+CODE_CLASS_AWK='
+  FILENAME == ARGV[1] { if ($0 != "") { sub(/\/+$/, ""); R[++nr] = $0 }; next }
+  FILENAME == ARGV[2] { sub(/\r$/, ""); if ($0 != "") X[$0] = 1; next }
+  {
+    p = $2; if (p == "") next
+    for (i = 1; i <= nr; i++) if (p == R[i] || index(p, R[i] "/") == 1) next
+    if ((p in X) && p ~ /\.(txt|log|out)$/) next
+    if (p ~ /\.md$/) next
+    if (p ~ /\.(txt|log|out)$/) {
+      n = split(p, c, "/"); td = 0
+      for (i = 1; i < n; i++) if (c[i] ~ /^(test|tests|__tests__|spec|specs|e2e|fixtures)$/) td = 1
+      if (!td) next
+    }
+    print
+  }'
+# The per-language classifier: prints the line numbers of a blob that are CODE (not blank, not a
+# comment, not a docstring). LANG is py, c, hash or plain. No apostrophe anywhere in this program.
+LINE_CODE_AWK='
+  BEGIN { L = ENVIRON["PR_LANG"]; Q3D = sprintf("%c%c%c", 34, 34, 34); Q3S = sprintf("%c%c%c", 39, 39, 39) }
+  function cnt(s, d,   n, i) { n = 0; while ((i = index(s, d)) > 0) { n++; s = substr(s, i + 3) }; return n }
+  {
+    t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t\r]+$/, "", t)
+    if (L == "py") {
+      if (ds != "") { if (index(t, ds) > 0) { if (dk == "code") { print NR; lc = substr(t, length(t)) }; ds = ""; dk = "" } else if (dk == "code") print NR; next }
+      if (t == "" || substr(t, 1, 1) == "#") next
+      u = t; sub(/^[rRuUbBfF]{1,2}/, "", u)
+      # A DOCSTRING opens a statement: the previous code line does not leave an expression open.
+      if ((substr(u, 1, 3) == Q3D || substr(u, 1, 3) == Q3S) && lc !~ /[([{,=+%*\\-]/) {
+        d = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next
+      }
+      print NR; lc = substr(t, length(t))
+      if (cnt(t, Q3D) % 2 == 1) { ds = Q3D; dk = "code" } else if (cnt(t, Q3S) % 2 == 1) { ds = Q3S; dk = "code" }
+      next
+    }
+    if (L == "c") {
+      if (bc) { if (index(t, "*/") > 0) bc = 0; next }
+      if (t == "" || substr(t, 1, 2) == "//") next
+      if (substr(t, 1, 2) == "/*") { r = substr(t, 3); if (index(r, "*/") == 0) bc = 1; next }
+      print NR; next
+    }
+    if (L == "hash") { if (t == "" || substr(t, 1, 1) == "#") next; print NR; next }
+    if (t != "") print NR
+  }'
+
+# ---- --route (header: THE RECORD-ONLY ROUTE) --------------------------------------------------------
+# The classes that route. A subset of code-reviewer.md's template set (I129 binds the two).
+ROUTE_CLASSES="EVIDENCE BOOKKEEPING"
+
+
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
   --map) shift ;;
@@ -386,7 +394,7 @@ T="$(mktemp -d "${TMPDIR:-/tmp}/partition-review-diff.XXXXXX")" || refuse "mktem
 trap 'rm -rf "$T"' EXIT
 
 # The exclusion roots. The sibling resolves the grammar inside <worktree>; its failure is ours.
-CFG="$(cd "$(dirname "$0")" && pwd)/artifact-path-config.sh"
+CFG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/artifact-path-config.sh"
 [ -f "$CFG" ] || refuse "cannot read the scan roots: $CFG is absent"
 bash "$CFG" --scan-roots --root "$WT_ABS" > "$T/roots" 2> "$T/roots.err" \
   || refuse "artifact-path-config.sh --scan-roots --root $WT_ABS failed: $(head -1 "$T/roots.err")"
@@ -545,3 +553,8 @@ if [ -n "$SDIR" ]; then
 fi
 cat "$T/map"
 exit 0
+}
+# The program runs only when executed; sourced (a fixture asking a decision in process), it defines
+# the functions above and prd_main, and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+prd_main "$@"

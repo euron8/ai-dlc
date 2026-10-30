@@ -388,90 +388,12 @@
 #   SEAL-UNAVAILABLE and the merge is REFUSED `[owner: lead]` -- an environment the lead repairs,
 #   never a shard a reviewer rewrites.
 set -u
-export LC_ALL=C
 
-# Every refusal names the shard whose file must CHANGE (header: OWNER TAILS). OWNER is `lead`
-# outside the per-shard function and that shard's key inside it; refuse_to names it explicitly.
-OWNER="lead"
 refuse() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; exit 2; }
+
 refuse_to() { OWNER="$1"; shift; refuse "$*${CG_NOTE:-}"; }
-# collect_dup: the owner-duplicate refusal, printed in refuse's exact form but not exiting; every shard
-# is still checked, and the run exits 2 at the DUP barrier after the per-shard loop (and after the one
-# --check-shard target), so one pass names every duplicate (header: OWNER TAILS).
-DUP_N=0
+
 collect_dup() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; DUP_N=$((DUP_N + 1)); }
-CG_NOTE=""
-USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>]"
-
-SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""; STORY_F=""; R_BASE=""; R_FROZEN=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
-    --gate) [ "$#" -ge 2 ] || refuse "$USAGE"; GATE="$2"; shift 2 ;;
-    --out) [ "$#" -ge 2 ] || refuse "$USAGE"; OUT="$2"; shift 2 ;;
-    --check-serial) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; SERIAL="$2"; shift 2 ;;
-    --check-shard) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; CHECK="$2"; shift 2 ;;
-    --findings) [ "$#" -ge 2 ] || refuse "$USAGE"; CHECK_N="$2"; CHECK_N_SET=1; shift 2 ;;
-    --story) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; STORY_F="${2#./}"; shift 2 ;;
-    --range) [ "$#" -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] || refuse "$USAGE"; R_BASE="$2"; R_FROZEN="$3"; shift 3 ;;
-    --*) refuse "unknown flag $1; $USAGE" ;;
-    *) [ -z "$SDIR" ] || refuse "unexpected argument $1; $USAGE"; SDIR="$1"; shift ;;
-  esac
-done
-if [ -n "$SERIAL" ]; then
-  OWNER="serial"
-  [ -z "$SDIR" ] && [ -z "$OUT" ] && [ -z "$CHECK" ] && [ "$CHECK_N_SET" = 0 ] && [ -n "$GATE" ] \
-    || refuse "--check-serial takes only --gate, --story and --range; $USAGE"
-  [ -f "$SERIAL" ] || refuse "$SERIAL is not a regular file; write the review file, then check it"
-elif [ -n "$CHECK" ]; then
-  [ -n "$SDIR" ] && [ -n "$GATE" ] && [ -z "$OUT" ] || refuse "--check-shard takes no --out; $USAGE"
-  [ -z "$STORY_F$R_BASE" ] || refuse "--story and --range are read only by the qa merge and --check-serial; $USAGE"
-  if [ "$CHECK_N_SET" = 1 ]; then
-    case "$CHECK_N" in ""|*[!0-9]*|??????????*) refuse "--findings '$CHECK_N' is not a non-negative integer" ;; esac
-    CHECK_N="$((10#$CHECK_N))"
-  fi
-else
-  [ "$CHECK_N_SET" = 0 ] || refuse "--findings is read only with --check-shard; $USAGE"
-  [ -n "$SDIR" ] && [ -n "$GATE" ] && [ -n "$OUT" ] || refuse "$USAGE"
-fi
-# The per-gate table in the header, as data. RANKED is the worst-of order, best first; WANT_VSET
-# is the same set sorted the way the lift below sorts it.
-case "$GATE" in
-  code-review) ROLE_NAME="code-reviewer.md"; DSUF="code-review"; TITLE="Code Review"
-               RANKED="APPROVED NEEDS_REWORK BLOCKED"; WANT_VSET="APPROVED BLOCKED NEEDS_REWORK "; NWORD="three" ;;
-  qa)          ROLE_NAME="qa.md"; DSUF="qa-validation"; TITLE="QA Validation"
-               RANKED="PASS NEEDS_REWORK"; WANT_VSET="NEEDS_REWORK PASS "; NWORD="two" ;;
-  *) refuse "--gate '$GATE' is not code-review or qa" ;;
-esac
-[ "$GATE" = qa ] || [ -z "$STORY_F$R_BASE" ] || refuse "--story and --range are read only under --gate qa; $USAGE"
-# The merge decides the exemption over the manifest's base..sha, the whole story on every pass; a
-# caller-supplied range could only narrow it.
-[ -n "$SERIAL" ] || [ -z "$R_BASE" ] || refuse "--range is read only by --check-serial; the merge decides the record-only exemption over the manifest's base and sha (the whole story's range on every pass); $USAGE"
-if [ -n "$SERIAL" ]; then :
-else
-SDIR="${SDIR%/}"
-[ -d "$SDIR" ] || refuse "shard directory $SDIR does not exist"
-SDIR="$(cd "$SDIR" && pwd -P)" || refuse "shard directory is not enterable"
-if [ -z "$CHECK" ]; then
-case "$OUT" in */) refuse "--out $OUT names a directory" ;; esac
-OUT_DIR="$(dirname "$OUT")"
-[ -d "$OUT_DIR" ] || refuse "the directory of --out ($OUT_DIR) does not exist"
-OUT="$(cd "$OUT_DIR" && pwd -P)/$(basename "$OUT")" || refuse "the directory of --out is not enterable"
-case "$OUT" in "$SDIR"/*) refuse "--out $OUT is inside the shard directory" ;; esac
-else
-  # The target's KEY is its basename alone. A target inside the shard directory is spelled exactly as
-  # the merge's own staging spells it (the physical SDIR), so a refusal text is byte-equal to the
-  # full merge's. A target OUTSIDE it is --mark's pre-write snapshot: it is checked against this
-  # directory's map and siblings, and its content seal is --mark's own call on the real file.
-  CHECK_DIR="$(cd "$(dirname "$CHECK")" 2>/dev/null && pwd -P)" || refuse "the directory of --check-shard $CHECK is not enterable"
-  CHECK="$CHECK_DIR/$(basename "$CHECK")"
-  CHECK_IN=0; [ "$CHECK_DIR" = "$SDIR" ] && CHECK_IN=1
-fi
-fi # end the shard-directory resolution (skipped by --check-serial)
-
-T="$(mktemp -d "${TMPDIR:-/tmp}/merge-review-shards.XXXXXX")" || refuse "mktemp failed"
-trap 'rm -rf "$T"' EXIT
-TAB="$(printf '\t')"
 
 # ---- the project root and the two files the merge derives from --------------------------
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -489,46 +411,7 @@ ai_dlc_resolve_root() {
   done
   return 1
 }
-AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
-[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
-[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
-[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
-[ -n "$AI_DLC_ROOT" ] || {
-  echo "REFUSED: cannot resolve the project root from ${AI_DLC_SELF_DIR} (no .git or"
-  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root."
-  exit 2
-}
-# --- end AI_DLC_ROOT --------------------------------------------------------
-SELF_DIR="$AI_DLC_SELF_DIR"; ROOT="$AI_DLC_ROOT"
-GATE_MD=""
-for c in "$ROOT/.claude/skills/ai-dlc/steps/gate-validation.md" "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"; do
-  [ -r "$c" ] && { GATE_MD="$c"; break; }
-done
-[ -n "$GATE_MD" ] || refuse "gate-validation.md is not readable in either layout under $ROOT"
-ROLE_MD=""
-for c in "$ROOT/.claude/team-roles/$ROLE_NAME" "$ROOT/core/team-roles/$ROLE_NAME"; do
-  [ -r "$c" ] && { ROLE_MD="$c"; break; }
-done
-[ -n "$ROLE_MD" ] || refuse "$ROLE_NAME is not readable in either layout under $ROOT"
 
-PATS="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$GATE_MD")"
-n_pat="$(printf '%s\n' "$PATS" | grep -c .)" || n_pat=0
-[ "$n_pat" = "1" ] || refuse "found $n_pat \`grep -inE '<pattern>' <review-file>\` directives in $GATE_MD (want exactly 1); Check 1's pattern is derived, never retyped"
-PAT="$PATS"
-
-# Byte-identical to vocab_extract_review_verdicts in scripts/render-vocabulary-index.sh.
-VSET="$(awk '/^## Verdict$/ { on = 1; next }
-       on && /^[A-Z_]+( \| [A-Z_]+)+$/ { n = split($0, m, /[[:blank:]]*\|[[:blank:]]*/)
-                                         for (i = 1; i <= n; i++) print m[i]; exit }' "$ROLE_MD" \
-    | LC_ALL=C sort -u | tr '\n' ' ')"
-[ "$VSET" = "$WANT_VSET" ] \
-  || refuse "$ROLE_NAME's ## Verdict template declares '${VSET% }', not exactly $RANKED; the worst-of ranking orders only those $NWORD"
-# THE FINDING-CLASS SET (header: SHARD GRAMMAR, THE CLASS LINE). Byte-identical to CLASS_SET_AWK in
-# scripts/render-vocabulary-index.sh (I129). Lifted for BOTH gates from the gate's own role file;
-# empty when the installed role file declares none.
-CLASS_SET_AWK='/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { n = split(substr($0, 8), m, /[[:blank:]]*\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'
-CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD" | LC_ALL=C sort -u | tr '\n' ' ')"
 # THE SEVERITY CONTAINERS, lifted from the same template the verdict set is (the role file's
 # `## Findings` block after its first `## Verdict`, to the next `## `), never retyped: the first word
 # of each `### ` heading, in order -- the first is the Critical class, the second the Important
@@ -543,17 +426,7 @@ lift_containers() { # <role file> -> the first word of each `### ` heading in it
        on && /^### / { s = $0; sub(/^###[ \t]+/, "", s); sub(/[^A-Za-z].*$/, "", s); print s }' "$1" \
     | tr '\n' ' '
 }
-CRIT_NAME=""; IMP_NAME=""; SUG_NAME=""; SEV=1
-CNAMES="$(lift_containers "$ROLE_MD")"
-set -f; set -- $CNAMES; set +f
-if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then
-  SEV=0
-  printf 'LEGACY: %s declares no severity containers; QA verdict backing is count-only\n' "$ROLE_MD"
-else
-  [ "$#" -eq 3 ] && [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] \
-    || refuse "$ROLE_NAME's ## Findings template declares $# severity container(s) ('${CNAMES% }'), not exactly three; the verdict-backing rule reads the first two as the Critical and Important classes"
-  CRIT_NAME="$1"; IMP_NAME="$2"; SUG_NAME="$3"
-fi
+
 rank() {
   case "$GATE:$1" in
     code-review:APPROVED) echo 1 ;;
@@ -564,6 +437,7 @@ rank() {
     *) echo 0 ;;
   esac
 }
+
 # ---- THE CHECK 1 READ-BACK, ONE value reader for the merge and --check-serial; each caller applies its
 # own count policy (the merge: exactly one match; --check-serial: every match reads the same value,
 # gate-validation.md Check 1's "two matches reading the same value are one verdict").
@@ -628,6 +502,7 @@ fail_rows() {
       if (match(a, /^[A-Za-z0-9][A-Za-z0-9._-]*/)) a = substr(a, 1, RLENGTH); else a = "-"
       print NR, a }' "$1"
 }
+
 # ac_named <AC-id> <file> -> 0 when a `#### ` finding under the file's `## Findings`, outside fences,
 # names the id as a WHOLE token (no letter, digit or `.` on either side, so `AC-4.1` does not name
 # `AC-4`), in its heading or its body. Its `parts:`, `handover:` and `handover-run:` lines are the
@@ -649,6 +524,7 @@ ac_named() {
     inx && tok($0, ENVIRON["AC_"]) { hit = 1; exit }
     END { exit !hit }' "$2"
 }
+
 # fail_gate <table file> <owner> <list of files whose findings may name the AC>: the FAIL ROWS rules
 # over <table file>'s per-AC table, against the verdict in WORST. One function for the merge and
 # --check-serial.
@@ -666,14 +542,9 @@ fail_gate() {
       || refuse_to "$fg_o_" "$fg_x_:$fg_n_ per-AC row $fg_a_ reads FAIL but no '#### ' finding names $fg_a_; a FAIL row is backed by a finding. File one naming $fg_a_ where its cause is owned -- a part shard under its own ordinal, a cross shard under a 'parts:' set it owns (partition-document.sh --cross-owner), or name $fg_a_ in the finding the owning shard already carries -- or correct the row with the evidence that $fg_a_ passes"
   done < "$T/failrows"
 }
-# ---- CANONICAL RUN (header). canon_gate <file> <owner> <repo or empty> <base or empty> <frozen or empty>:
-# under a PASS in WORST, the file must carry QA's own canonical run and its summary with counts, or the
-# record-only exemption over <base>..<frozen>. The partition and both grammars are record-only-diff.sh's.
-CANON_SENTINEL='column-0 `Canonical run:`'
-# THE ADVISOR LINE's era sentinel (header: SHARD GRAMMAR, ADVISOR LINE), matched as CANON_SENTINEL is.
-ADVISOR_SENTINEL='column-0 `advisor:`'
+
 adv_has() { grep -qF -- "$ADVISOR_SENTINEL" "$1"; } # <role file> -> 0 when it prescribes the line
-RO="$AI_DLC_SELF_DIR/record-only-diff.sh"
+
 canon_gate() {
   cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"
   [ "$WORST" = PASS ] || return 0
@@ -708,13 +579,7 @@ canon_gate() {
     || refuse_to "$cg_o_" "$cg_f_ 'Canonical result: $cg_res_' carries no count; copy the run's summary line (e.g. '812 passed, 3 skipped')"
   return 0
 }
-# ---- THE ADVISOR LINE (header: SHARD GRAMMAR). adv_gate <file>: one function for the per-shard check
-# and --check-serial. The caller sets ADV_AT (`legacy` acquits an absent line; any other value holds
-# it), ADV_AT_PATH (named in the LEGACY line) and ADV_WHY (appended to the absence refusal) first.
-# The label is matched CASE-SENSITIVELY: graph's s319 shards carry 8 prose lines opening `Advisor:` or
-# `- Advisor:` and 0 lowercase ones, so a case-insensitive malformed-line refusal would refuse a
-# legacy shard in every era (BL-790 body).
-ADV_LEG=""
+
 adv_gate() {
   ad_o_="$(awk '
     f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
@@ -742,6 +607,7 @@ adv_gate() {
   else refuse "$1 carries no column-0 'advisor:' line${ADV_WHY}: write 'advisor: called' when an advisor call returned a result, 'advisor: unavailable' when the tool was absent or every call errored or was rate-limited"
   fi
 }
+
 # ---- THE CLASS LINE (header: SHARD GRAMMAR, THE CLASS LINE). class_gate <file>: one function for the
 # per-shard check and --check-serial, both gates. Fences are read as adv_gate reads them.
 class_gate() {
@@ -767,90 +633,14 @@ class_gate() {
     esac
   done <<<"$cg_o_"
 }
-# ---- --check-serial (header: CHECK-SERIAL). The merge's own Check 1 read-back and set membership on
-# ONE serial file, then, under --gate qa, the FAIL ROWS rules over its own table and findings.
-if [ -n "$SERIAL" ]; then
-  check1_read "$SERIAL"
-  [ "$C1N" -ge 1 ] \
-    || refuse "$SERIAL matches Check 1's verdict pattern 0 time(s); write the verdict as '## Verdict' with the value alone on the next non-blank line, or as one 'Verdict: <VALUE>' line"
-  [ "$C1D" = 1 ] \
-    || refuse "$SERIAL matches Check 1's verdict pattern $C1N time(s) reading $C1D different values ($C1L); matches reading one value are one verdict, different values fail Check 1. Write the verdict in one form, never both, and keep every other line off that pattern (per-AC results go in a pipe-led table)"
-  case " $RANKED " in
-    *" $C1V "*) ;;
-    *) refuse "Check 1 reads '$C1V' from $SERIAL, which is not one of $RANKED ($ROLE_NAME's ## Verdict set); write the value alone, a member of that set" ;;
-  esac
-  # THE ADVISOR LINE, both gates, keyed on the INSTALLED role file (the seat runs this before it returns).
-  ADV_AT_PATH="$ROLE_MD"; ADV_WHY="; $ROLE_MD prescribes it"
-  if adv_has "$ROLE_MD"; then ADV_AT="present"; else ADV_AT="legacy"; fi
-  adv_gate "$SERIAL"
-  class_gate "$SERIAL"
-  if [ "$GATE" = qa ]; then
-    WORST="$C1V"
-    printf '%s\n' "$SERIAL" > "$T/serialfiles" || refuse "cannot stage the serial file"
-    fail_gate "$SERIAL" serial "$T/serialfiles"
-    if grep -qF -- "$CANON_SENTINEL" "$ROLE_MD"; then
-      sr_repo_="$(git -C "$(dirname "$SERIAL")" rev-parse --show-toplevel 2>/dev/null < /dev/null)" || sr_repo_=""
-      [ -z "$R_BASE" ] || [ -n "$sr_repo_" ] || refuse "--range was given and $SERIAL is not inside a git worktree to read it in"
-      sr_conv_=""; [ -z "$sr_repo_" ] || [ ! -r "$sr_repo_/docs/coding-conventions.md" ] || sr_conv_="$sr_repo_/docs/coding-conventions.md"
-      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_"
-    else
-      printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$ROLE_MD" "$CANON_SENTINEL"
-    fi
-  fi
-  printf 'SERIAL-OK: %s verdict=%s\n' "$SERIAL" "$C1V"
-  exit 0
-fi
 
-# ---- the manifest, and the re-derived part map ------------------------------------------
-MF="$SDIR/.manifest"
-[ -f "$MF" ] || refuse "no manifest at $MF (partition-review-diff.sh --map ... --shard-dir writes it)"
-for k in worktree base sha min-files max-parts; do
-  n="$(awk -F'\t' -v k="$k" '$1 == k { n++ } END { print n + 0 }' "$MF")"
-  [ "$n" = "1" ] || refuse "$MF carries $n '$k' line(s); want exactly 1"
-done
 mf() { awk -F'\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); print; exit }' "$MF"; }
-M_WT="$(mf worktree)"; M_BASE="$(mf base)"; M_SHA="$(mf sha)"; M_MIN="$(mf min-files)"; M_MAX="$(mf max-parts)"
-case "$M_SHA" in *[!0-9a-f]*|"") refuse "$MF sha '$M_SHA' is not a full hex object name" ;; esac
-[ "${#M_SHA}" -eq 40 ] || [ "${#M_SHA}" -eq 64 ] || refuse "$MF sha '$M_SHA' is not a FULL object name (40 or 64)"
-awk -F'\t' '$1 == "part" { sub(/^part\t/, ""); print }' "$MF" > "$T/mfmap" || refuse "cannot stage the manifest map"
-grep -q . "$T/mfmap" || refuse "$MF lists no part"
-SB="$(basename "$SDIR")"
-S12="$(printf '%s' "$M_SHA" | cut -c1-12)"
-DPASS=""
-case "$SB" in
-  *-"$DSUF-$S12") IDX="${SB%-"$DSUF-$S12"}" ;;
-  *-"$DSUF-$S12"-p*) IDX="${SB%-"$DSUF-$S12"-p*}"; DPASS="${SB##*-"$DSUF-$S12"-p}" ;;
-  *) refuse "shard directory $SB is not <idx>-$DSUF-<sha12> for the manifest's sha $M_SHA (a later pass appends -p<M>)" ;;
-esac
-[ -n "$IDX" ] || refuse "shard directory $SB names no story index"
+
 # A pass marker is a decimal integer >= 2 with no leading zero; pass 1 carries none.
 pass_ok() { case "$1" in ""|0*|1|*[!0-9]*) return 1 ;; esac; return 0; }
-[ -z "$DPASS" ] || pass_ok "$DPASS" \
-  || refuse "shard directory $SB carries pass marker -p$DPASS; a pass marker is -p<M> with M an integer >= 2 (pass 1 carries none)"
-if [ -z "$CHECK" ]; then
-OB="$(basename "$OUT")"
-OPASS=""
-case "$OB" in
-  "$IDX-$DSUF.md") ;;
-  "$IDX-$DSUF"-p*.md) OPASS="${OB#"$IDX-$DSUF"-p}"; OPASS="${OPASS%.md}"
-    pass_ok "$OPASS" \
-      || refuse "--out $OB carries pass marker -p$OPASS; a pass marker is -p<M> with M an integer >= 2 (pass 1 carries none)" ;;
-  *) refuse "--out $OB is not $IDX-$DSUF.md or $IDX-$DSUF-p<M>.md, the --gate $GATE review file for shard directory $SB" ;;
-esac
-pass_name() { if [ -n "$1" ]; then printf 'pass %s' "$1"; else printf 'pass 1 (no marker)'; fi; }
-[ "$OPASS" = "$DPASS" ] \
-  || refuse "pass marker mismatch: shard directory $SB is $(pass_name "$DPASS") and --out $OB is $(pass_name "$OPASS"); a shard directory is merged only into its own pass's review file"
-fi
 
-PART="$SELF_DIR/partition-review-diff.sh"
-[ -f "$PART" ] || refuse "cannot re-derive the part map: $PART is absent"
-bash "$PART" --map "$M_WT" "$M_BASE" "$M_SHA" --min-files "$M_MIN" --max-parts "$M_MAX" > "$T/map" 2> "$T/map.err"; prc=$?
-[ "$prc" -eq 0 ] || refuse "partition-review-diff.sh --map re-run exited $prc: $(head -1 "$T/map") $(head -1 "$T/map.err")"
-cmp -s "$T/map" "$T/mfmap" || refuse "the part map re-derived from $MF's inputs differs from the map it records; the shards were briefed on another partition"
-K="$(grep -c . "$T/map")" || K=0
-[ "$K" -ge 2 ] || refuse "the part map has $K part(s); a merge needs two or more"
-W=${#K}
-ORDINALS="$(cut -f1 "$T/map" | tr '\n' ' ')"; ORDINALS="${ORDINALS% }"
+pass_name() { if [ -n "$1" ]; then printf 'pass %s' "$1"; else printf 'pass 1 (no marker)'; fi; }
+
 norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
   case "$1" in ""|*[!0-9]*) return 0 ;; esac
   local n=$((10#$1))
@@ -858,23 +648,6 @@ norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
   printf '%0*d' "$W" "$n"
 }
 
-# ---- the cross groups, read from their one speller ----------------------------------------
-# CROSS_KEYS is `cross` when the table has one row (K=2) and `cross-1 .. cross-<G>` otherwise;
-# nothing here restates the construction. CROSS_FIRST is the execution owner (header).
-XPART="$SELF_DIR/partition-document.sh"
-[ -f "$XPART" ] || refuse "cannot read the cross groups: $XPART is absent"
-bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err" < /dev/null; grc=$?
-[ "$grc" -eq 0 ] || refuse "partition-document.sh --cross-groups $K exited $grc: $(head -1 "$T/groups.err")"
-G="$(grep -c . "$T/groups")" || G=0
-[ "$G" -ge 1 ] || refuse "partition-document.sh --cross-groups $K printed no group"
-i=0
-while IFS="$TAB" read -r gg gl; do
-  i=$((i + 1))
-  [ "$gg" = "$i" ] && [[ $gl =~ ^[0-9]+(,[0-9]+)+$ ]] \
-    || refuse "partition-document.sh --cross-groups $K printed row $i as '$gg	$gl'; want <g>\\t<ordinal,ordinal,...> with g = 1..G in order"
-done < "$T/groups"
-if [ "$G" -eq 1 ]; then XTABLE_KEYS="cross"
-else XTABLE_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
 # THE DELIVERED SHAPE (header: THE CROSS SHARDS). XTABLE_KEYS is the table's grouped spelling and
 # names what a `cross-<g>` may be; CROSS_KEYS, CROSS_FIRST and XG are the shape the set DELIVERED --
 # the table's until the staging (or --check-shard's target) reads a lone `cross.md`, then `cross`,
@@ -883,7 +656,7 @@ cross_shape() { # <grouped|lone>
   if [ "$1" = lone ]; then CROSS_KEYS="cross"; XG=1; else CROSS_KEYS="$XTABLE_KEYS"; XG="$G"; fi
   CROSS_FIRST="${CROSS_KEYS%% *}"
 }
-cross_shape grouped
+
 is_cross() { case "$1" in cross|cross-*) return 0 ;; esac; return 1; }
 
 # ---- THE SHARD KEY: one grammar, read by the staging below, by --check-shard's target and by the
@@ -904,16 +677,12 @@ key_of_name() {
   esac
   return 0
 }
+
 key_refuse() { # <rc of key_of_name> <path> -- the staging's own refusal texts, owner lead
   if [ "$1" -eq 2 ]; then b_="$(basename "$2")"; refuse "$2 names ordinal ${b_%.md}, outside 1..$K"; fi
   refuse "$2 is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)"
 }
 
-# ---- THE SEAL READER, for the owner-duplicate check under --check-shard ---------------------
-# Copied, not sourced: wait-for-deliverable.sh executes on load and exports no library. Each body
-# is byte-identical to its definition there (has_marker, content_hash, seal_body, seal_of); the
-# byte-compare that binds the copies is owed by the fixture (header: SEAT-COMPLETE).
-MARK_TOKEN="seat-complete: "
 has_marker() {  # $1 = path
   MT_="$MARK_TOKEN" awk '
     # A fence opens on a run of 3+ backticks (info string carrying no backtick) or 3+ tildes; it closes only on a run of the SAME
@@ -926,14 +695,17 @@ has_marker() {  # $1 = path
     NF { l = $0 }
     END { exit ((fc == "" && l !~ /\r/ && index(l, ENVIRON["MT_"]) == 1) ? 0 : 1) }' "$1" 2>/dev/null
 }
+
 content_hash() {  # $1 = path -> a content hash, empty when unreadable
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
   elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" 2>/dev/null | cut -d' ' -f1
   else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
 }
+
 seal_body() {  # $1 = path, $2 = 1 to keep the last non-blank line -> bytes on stdout
   awk -v k="${2:-0}" 'NF { L = NR } { a[NR] = $0 } END { if (k == 1) L++; for (i = 1; i < L; i++) print a[i] }' "$1" 2>/dev/null
 }
+
 seal_of() {
   so_s_="$(awk 'NF { l = $0 } END { n = split(l, w, /[ \t]+/); f = "N"
     for (i = 1; i <= n; i++) if (w[i] ~ /^sha=/) { f = "Y"; s = substr(w[i], 5) }; print f s }' "$1" 2>/dev/null)"
@@ -946,12 +718,6 @@ seal_of() {
   SEAL_V="broken"; return 1
 }
 
-# ---- THE KEY= ENGINE AT THE FROZEN SHA (the legacy rule, header: SEAT-COMPLETE) ---------------
-# Set-level, so read once and memoised. ENGINE is `present` (the frozen tree's wait-for-deliverable.sh
-# carries the sentinel the key= writer carries), `absent` (the file is there without it: the tree
-# predates the key= engine) or `unreadable` (no commit, or the file in neither layout) -- which
-# never acquits.
-ENGINE=""; ENGINE_AT=""
 engine_at_sha() {
   [ -z "$ENGINE" ] || return 0
   ENGINE="unreadable"
@@ -966,13 +732,7 @@ engine_at_sha() {
   done
   return 0
 }
-# ---- qa.md AT THE FROZEN SHA (the SEVERITY BOUNDARY, header: VERDICT BACKING) -------------------
-# Set-level, memoised. QA_AT is `legacy` when the frozen tree's installed qa.md (consumer layout
-# first, then the distribution's) lifts NO severity container -- the shards were briefed on a qa.md
-# that never asked for one; `severity` when it lifts any; `unreadable` when the commit or the file in
-# both layouts cannot be read. Only `legacy` acquits; `unreadable` never does, as the key= rule's
-# `unreadable` engine never acquits a marker. The rule that judges stays the CURRENT qa.md's.
-QA_AT=""; QA_AT_PATH=""
+
 qa_at_sha() {
   [ -z "$QA_AT" ] || return 0
   QA_AT="unreadable"
@@ -987,14 +747,7 @@ qa_at_sha() {
   done
   return 0
 }
-# ---- THE GATE'S ROLE FILE AT THE FROZEN SHA (the ADVISOR LINE's era, header: SHARD GRAMMAR) --------
-# Set-level, memoised, one reader for both gates (ROLE_NAME). ADV_AT is `legacy` when the role file the
-# shards were written under carries no ADVISOR_SENTINEL, `present` when it carries it, `disk` when the
-# file is untracked at the frozen sha and the ON-DISK installed copy in the manifest's worktree carries
-# it, `unreadable` when neither the commit nor either layout on disk can be read. Only `legacy`
-# acquits an absent line. The on-disk read is the canonical-run arm's own fallback, taken only when the
-# file is tracked in neither layout at the sha; a copy found there decides, as there.
-ADV_AT=""; ADV_AT_PATH=""; ADV_WHY=""
+
 adv_at_sha() {
   [ -z "$ADV_AT" ] || return 0
   ADV_AT="unreadable"
@@ -1020,58 +773,6 @@ adv_at_sha() {
   done
   return 0
 }
-SEAL_SH="$SELF_DIR/content-seal.sh"
-
-# ---- the shard set ----------------------------------------------------------------------
-# --check-shard skips this staging: its one shard's key is taken from the target's own name.
-if [ -z "$CHECK" ]; then
-: > "$T/shards" || refuse "cannot stage the shard set"
-for f in "$SDIR"/*; do
-  [ -e "$f" ] || continue
-  b="$(basename "$f")"
-  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and the cross shards ($CROSS_KEYS)"
-  key_of_name "$b" || key_refuse "$?" "$f"
-  key="$KEY_OF"
-  printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
-done
-dup="$(cut -f1 "$T/shards" | sort | uniq -d | head -1)"
-[ -z "$dup" ] || refuse_to "$(awk -F'\t' -v k="$dup" '$1 == k { b = $2; sub(/.*\//, "", b); printf "%s%s", (n++ ? " " : ""), b }' "$T/shards")" \
-  "shard $dup was delivered more than once in $SDIR"
-# The cross shards delivered are ONE of two shapes at any K: a lone `cross.md`, or EXACTLY the
-# table's `cross-1..G` (`cross.md` again when G=1). A mix of the two, a `cross-<g>` the table does
-# not print, and a partial `cross-<g>` set (the missing-shard loop) are each refused by name.
-x_plain=0; x_num=0
-while IFS="$TAB" read -r xk xf; do
-  case "$xk" in
-    cross) x_plain=1 ;;
-    cross-*) x_num=1
-      case " $XTABLE_KEYS " in *" $xk "*) ;; *) refuse "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $XTABLE_KEYS, or one cross.md)" ;; esac ;;
-  esac
-done < "$T/shards"
-[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \
-  && refuse "$SDIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: one cross.md, or $XTABLE_KEYS)"
-if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi
-x_alt=""; [ "$XTABLE_KEYS" = cross ] || [ "$CROSS_KEYS" = cross ] || x_alt=", or one cross.md in place of the groups"
-for idx in $ORDINALS $CROSS_KEYS; do
-  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] \
-    || refuse_to "$idx" "shard $idx is missing from $SDIR (expected: $ORDINALS and $CROSS_KEYS$x_alt)"
-done
-
-# ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
-# If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
-: > "$T/sc" || refuse "cannot stage the completion check"
-while IFS="$TAB" read -r sk sf_; do
-  # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
-  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then
-    printf 'Y\t%s\t%s\n' "$sk" "$(awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$sf_")" >> "$T/sc"
-  else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi || refuse "cannot stage the completion check"
-done < "$T/shards"
-if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
-  sc_bad="$(awk -F'\t' '$1 == "N" { print $3; exit }' "$T/sc")"
-  refuse_to "$(awk -F'\t' '$1 == "N" { print $2; exit }' "$T/sc")" \
-    "$sc_bad does not end in 'seat-complete: ' while another shard in $SDIR does; that shard is unfinished (its last non-blank line must be 'seat-complete: <step> <seat> <shard>')"
-fi
-fi # end the shard-set staging (skipped by --check-shard)
 
 # ---- per-shard parse --------------------------------------------------------------------
 # Emits: R <n> <first value>   V <n> <first value>   X <line> <n-parts-lines> <parts>   C <findings>
@@ -1121,8 +822,7 @@ parse_shard() {
           printf "A %d\n", nac + 0; printf "D %d\n", nda + 0; printf "K %d %d %d\n", ncrit + 0, nimp + 0, unc + 0 }
   ' "$1"
 }
-RE_CITED='^[0-9]+(,[0-9]+)*$'
-RE_AC='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+
 # same_set <file> <label> <ordinals, blank-separated> -> 0 when a column-0 `<label>:` line outside
 # a fence in <file> cites exactly that set of ordinals (order, padding and repeats free).
 same_set() {
@@ -1136,10 +836,7 @@ same_set() {
       if (ok && ng == nw) { hit = 1; exit } }
     END { exit !hit }' "$1"
 }
-WORST=""; WORST_R=0; NFIND=0; FORCE=""
-: > "$T/hand" && : > "$T/runs" && : > "$T/runords" && : > "$T/htable" || refuse "cannot stage the hand-over set"
-: > "$T/body" || refuse "cannot stage the merged body"
-: > "$T/vtable" || refuse "cannot stage the verdict table"
+
 # ---- THE PER-SHARD CHECK: one function, called by the merge for every shard in key order and by
 # --check-shard for its one target, so the two cannot apply different grammars. Reads the globals
 # `key` and `sf` (never positional parameters: the body re-binds them with `set --`), and `scn`, the
@@ -1376,6 +1073,358 @@ check_shard() {
   OWNER="lead"
 }
 
+# The owner of a multi-match: every shard whose body matches PAT outside a fence, else the lead.
+pat_owners() {
+  po_=""
+  for key in $ORDINALS $CROSS_KEYS; do
+    sf="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/shards")"
+    PAT_="$PAT" awk '
+      f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
+      !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
+      f || /^seat-complete: / { next }
+      tolower($0) ~ tolower(ENVIRON["PAT_"]) { hit = 1; exit }
+      END { exit !hit }' "$sf" && po_="$po_${po_:+ }$key"
+  done
+  printf '%s' "${po_:-lead}"
+}
+
+mrs_main() {
+export LC_ALL=C
+
+# Every refusal names the shard whose file must CHANGE (header: OWNER TAILS). OWNER is `lead`
+# outside the per-shard function and that shard's key inside it; refuse_to names it explicitly.
+OWNER="lead"
+# collect_dup: the owner-duplicate refusal, printed in refuse's exact form but not exiting; every shard
+# is still checked, and the run exits 2 at the DUP barrier after the per-shard loop (and after the one
+# --check-shard target), so one pass names every duplicate (header: OWNER TAILS).
+DUP_N=0
+CG_NOTE=""
+USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>]"
+
+SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""; STORY_F=""; R_BASE=""; R_FROZEN=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
+    --gate) [ "$#" -ge 2 ] || refuse "$USAGE"; GATE="$2"; shift 2 ;;
+    --out) [ "$#" -ge 2 ] || refuse "$USAGE"; OUT="$2"; shift 2 ;;
+    --check-serial) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; SERIAL="$2"; shift 2 ;;
+    --check-shard) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; CHECK="$2"; shift 2 ;;
+    --findings) [ "$#" -ge 2 ] || refuse "$USAGE"; CHECK_N="$2"; CHECK_N_SET=1; shift 2 ;;
+    --story) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; STORY_F="${2#./}"; shift 2 ;;
+    --range) [ "$#" -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] || refuse "$USAGE"; R_BASE="$2"; R_FROZEN="$3"; shift 3 ;;
+    --*) refuse "unknown flag $1; $USAGE" ;;
+    *) [ -z "$SDIR" ] || refuse "unexpected argument $1; $USAGE"; SDIR="$1"; shift ;;
+  esac
+done
+if [ -n "$SERIAL" ]; then
+  OWNER="serial"
+  [ -z "$SDIR" ] && [ -z "$OUT" ] && [ -z "$CHECK" ] && [ "$CHECK_N_SET" = 0 ] && [ -n "$GATE" ] \
+    || refuse "--check-serial takes only --gate, --story and --range; $USAGE"
+  [ -f "$SERIAL" ] || refuse "$SERIAL is not a regular file; write the review file, then check it"
+elif [ -n "$CHECK" ]; then
+  [ -n "$SDIR" ] && [ -n "$GATE" ] && [ -z "$OUT" ] || refuse "--check-shard takes no --out; $USAGE"
+  [ -z "$STORY_F$R_BASE" ] || refuse "--story and --range are read only by the qa merge and --check-serial; $USAGE"
+  if [ "$CHECK_N_SET" = 1 ]; then
+    case "$CHECK_N" in ""|*[!0-9]*|??????????*) refuse "--findings '$CHECK_N' is not a non-negative integer" ;; esac
+    CHECK_N="$((10#$CHECK_N))"
+  fi
+else
+  [ "$CHECK_N_SET" = 0 ] || refuse "--findings is read only with --check-shard; $USAGE"
+  [ -n "$SDIR" ] && [ -n "$GATE" ] && [ -n "$OUT" ] || refuse "$USAGE"
+fi
+# The per-gate table in the header, as data. RANKED is the worst-of order, best first; WANT_VSET
+# is the same set sorted the way the lift below sorts it.
+case "$GATE" in
+  code-review) ROLE_NAME="code-reviewer.md"; DSUF="code-review"; TITLE="Code Review"
+               RANKED="APPROVED NEEDS_REWORK BLOCKED"; WANT_VSET="APPROVED BLOCKED NEEDS_REWORK "; NWORD="three" ;;
+  qa)          ROLE_NAME="qa.md"; DSUF="qa-validation"; TITLE="QA Validation"
+               RANKED="PASS NEEDS_REWORK"; WANT_VSET="NEEDS_REWORK PASS "; NWORD="two" ;;
+  *) refuse "--gate '$GATE' is not code-review or qa" ;;
+esac
+[ "$GATE" = qa ] || [ -z "$STORY_F$R_BASE" ] || refuse "--story and --range are read only under --gate qa; $USAGE"
+# The merge decides the exemption over the manifest's base..sha, the whole story on every pass; a
+# caller-supplied range could only narrow it.
+[ -n "$SERIAL" ] || [ -z "$R_BASE" ] || refuse "--range is read only by --check-serial; the merge decides the record-only exemption over the manifest's base and sha (the whole story's range on every pass); $USAGE"
+if [ -n "$SERIAL" ]; then :
+else
+SDIR="${SDIR%/}"
+[ -d "$SDIR" ] || refuse "shard directory $SDIR does not exist"
+SDIR="$(cd "$SDIR" && pwd -P)" || refuse "shard directory is not enterable"
+if [ -z "$CHECK" ]; then
+case "$OUT" in */) refuse "--out $OUT names a directory" ;; esac
+OUT_DIR="$(dirname "$OUT")"
+[ -d "$OUT_DIR" ] || refuse "the directory of --out ($OUT_DIR) does not exist"
+OUT="$(cd "$OUT_DIR" && pwd -P)/$(basename "$OUT")" || refuse "the directory of --out is not enterable"
+case "$OUT" in "$SDIR"/*) refuse "--out $OUT is inside the shard directory" ;; esac
+else
+  # The target's KEY is its basename alone. A target inside the shard directory is spelled exactly as
+  # the merge's own staging spells it (the physical SDIR), so a refusal text is byte-equal to the
+  # full merge's. A target OUTSIDE it is --mark's pre-write snapshot: it is checked against this
+  # directory's map and siblings, and its content seal is --mark's own call on the real file.
+  CHECK_DIR="$(cd "$(dirname "$CHECK")" 2>/dev/null && pwd -P)" || refuse "the directory of --check-shard $CHECK is not enterable"
+  CHECK="$CHECK_DIR/$(basename "$CHECK")"
+  CHECK_IN=0; [ "$CHECK_DIR" = "$SDIR" ] && CHECK_IN=1
+fi
+fi # end the shard-directory resolution (skipped by --check-serial)
+
+T="$(mktemp -d "${TMPDIR:-/tmp}/merge-review-shards.XXXXXX")" || refuse "mktemp failed"
+trap 'rm -rf "$T"' EXIT
+TAB="$(printf '\t')"
+
+AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$AI_DLC_ROOT" ] || {
+  echo "REFUSED: cannot resolve the project root from ${AI_DLC_SELF_DIR} (no .git or"
+  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root."
+  exit 2
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+SELF_DIR="$AI_DLC_SELF_DIR"; ROOT="$AI_DLC_ROOT"
+GATE_MD=""
+for c in "$ROOT/.claude/skills/ai-dlc/steps/gate-validation.md" "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"; do
+  [ -r "$c" ] && { GATE_MD="$c"; break; }
+done
+[ -n "$GATE_MD" ] || refuse "gate-validation.md is not readable in either layout under $ROOT"
+ROLE_MD=""
+for c in "$ROOT/.claude/team-roles/$ROLE_NAME" "$ROOT/core/team-roles/$ROLE_NAME"; do
+  [ -r "$c" ] && { ROLE_MD="$c"; break; }
+done
+[ -n "$ROLE_MD" ] || refuse "$ROLE_NAME is not readable in either layout under $ROOT"
+
+PATS="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$GATE_MD")"
+n_pat="$(printf '%s\n' "$PATS" | grep -c .)" || n_pat=0
+[ "$n_pat" = "1" ] || refuse "found $n_pat \`grep -inE '<pattern>' <review-file>\` directives in $GATE_MD (want exactly 1); Check 1's pattern is derived, never retyped"
+PAT="$PATS"
+
+# Byte-identical to vocab_extract_review_verdicts in scripts/render-vocabulary-index.sh.
+VSET="$(awk '/^## Verdict$/ { on = 1; next }
+       on && /^[A-Z_]+( \| [A-Z_]+)+$/ { n = split($0, m, /[[:blank:]]*\|[[:blank:]]*/)
+                                         for (i = 1; i <= n; i++) print m[i]; exit }' "$ROLE_MD" \
+    | LC_ALL=C sort -u | tr '\n' ' ')"
+[ "$VSET" = "$WANT_VSET" ] \
+  || refuse "$ROLE_NAME's ## Verdict template declares '${VSET% }', not exactly $RANKED; the worst-of ranking orders only those $NWORD"
+# THE FINDING-CLASS SET (header: SHARD GRAMMAR, THE CLASS LINE). Byte-identical to CLASS_SET_AWK in
+# scripts/render-vocabulary-index.sh (I129). Lifted for BOTH gates from the gate's own role file;
+# empty when the installed role file declares none.
+CLASS_SET_AWK='/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { n = split(substr($0, 8), m, /[[:blank:]]*\|[[:blank:]]*/); for (i = 1; i <= n; i++) print m[i]; exit }'
+CLASS_SET="$(awk "$CLASS_SET_AWK" "$ROLE_MD" | LC_ALL=C sort -u | tr '\n' ' ')"
+CRIT_NAME=""; IMP_NAME=""; SUG_NAME=""; SEV=1
+CNAMES="$(lift_containers "$ROLE_MD")"
+set -f; set -- $CNAMES; set +f
+if [ "$GATE" = qa ] && [ "$#" -eq 0 ]; then
+  SEV=0
+  printf 'LEGACY: %s declares no severity containers; QA verdict backing is count-only\n' "$ROLE_MD"
+else
+  [ "$#" -eq 3 ] && [ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] \
+    || refuse "$ROLE_NAME's ## Findings template declares $# severity container(s) ('${CNAMES% }'), not exactly three; the verdict-backing rule reads the first two as the Critical and Important classes"
+  CRIT_NAME="$1"; IMP_NAME="$2"; SUG_NAME="$3"
+fi
+
+# ---- CANONICAL RUN (header). canon_gate <file> <owner> <repo or empty> <base or empty> <frozen or empty>:
+# under a PASS in WORST, the file must carry QA's own canonical run and its summary with counts, or the
+# record-only exemption over <base>..<frozen>. The partition and both grammars are record-only-diff.sh's.
+CANON_SENTINEL='column-0 `Canonical run:`'
+# THE ADVISOR LINE's era sentinel (header: SHARD GRAMMAR, ADVISOR LINE), matched as CANON_SENTINEL is.
+ADVISOR_SENTINEL='column-0 `advisor:`'
+RO="$AI_DLC_SELF_DIR/record-only-diff.sh"
+# ---- THE ADVISOR LINE (header: SHARD GRAMMAR). adv_gate <file>: one function for the per-shard check
+# and --check-serial. The caller sets ADV_AT (`legacy` acquits an absent line; any other value holds
+# it), ADV_AT_PATH (named in the LEGACY line) and ADV_WHY (appended to the absence refusal) first.
+# The label is matched CASE-SENSITIVELY: graph's s319 shards carry 8 prose lines opening `Advisor:` or
+# `- Advisor:` and 0 lowercase ones, so a case-insensitive malformed-line refusal would refuse a
+# legacy shard in every era (BL-790 body).
+ADV_LEG=""
+# ---- --check-serial (header: CHECK-SERIAL). The merge's own Check 1 read-back and set membership on
+# ONE serial file, then, under --gate qa, the FAIL ROWS rules over its own table and findings.
+if [ -n "$SERIAL" ]; then
+  check1_read "$SERIAL"
+  [ "$C1N" -ge 1 ] \
+    || refuse "$SERIAL matches Check 1's verdict pattern 0 time(s); write the verdict as '## Verdict' with the value alone on the next non-blank line, or as one 'Verdict: <VALUE>' line"
+  [ "$C1D" = 1 ] \
+    || refuse "$SERIAL matches Check 1's verdict pattern $C1N time(s) reading $C1D different values ($C1L); matches reading one value are one verdict, different values fail Check 1. Write the verdict in one form, never both, and keep every other line off that pattern (per-AC results go in a pipe-led table)"
+  case " $RANKED " in
+    *" $C1V "*) ;;
+    *) refuse "Check 1 reads '$C1V' from $SERIAL, which is not one of $RANKED ($ROLE_NAME's ## Verdict set); write the value alone, a member of that set" ;;
+  esac
+  # THE ADVISOR LINE, both gates, keyed on the INSTALLED role file (the seat runs this before it returns).
+  ADV_AT_PATH="$ROLE_MD"; ADV_WHY="; $ROLE_MD prescribes it"
+  if adv_has "$ROLE_MD"; then ADV_AT="present"; else ADV_AT="legacy"; fi
+  adv_gate "$SERIAL"
+  class_gate "$SERIAL"
+  if [ "$GATE" = qa ]; then
+    WORST="$C1V"
+    printf '%s\n' "$SERIAL" > "$T/serialfiles" || refuse "cannot stage the serial file"
+    fail_gate "$SERIAL" serial "$T/serialfiles"
+    if grep -qF -- "$CANON_SENTINEL" "$ROLE_MD"; then
+      sr_repo_="$(git -C "$(dirname "$SERIAL")" rev-parse --show-toplevel 2>/dev/null < /dev/null)" || sr_repo_=""
+      [ -z "$R_BASE" ] || [ -n "$sr_repo_" ] || refuse "--range was given and $SERIAL is not inside a git worktree to read it in"
+      sr_conv_=""; [ -z "$sr_repo_" ] || [ ! -r "$sr_repo_/docs/coding-conventions.md" ] || sr_conv_="$sr_repo_/docs/coding-conventions.md"
+      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_"
+    else
+      printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$ROLE_MD" "$CANON_SENTINEL"
+    fi
+  fi
+  printf 'SERIAL-OK: %s verdict=%s\n' "$SERIAL" "$C1V"
+  exit 0
+fi
+
+# ---- the manifest, and the re-derived part map ------------------------------------------
+MF="$SDIR/.manifest"
+[ -f "$MF" ] || refuse "no manifest at $MF (partition-review-diff.sh --map ... --shard-dir writes it)"
+for k in worktree base sha min-files max-parts; do
+  n="$(awk -F'\t' -v k="$k" '$1 == k { n++ } END { print n + 0 }' "$MF")"
+  [ "$n" = "1" ] || refuse "$MF carries $n '$k' line(s); want exactly 1"
+done
+M_WT="$(mf worktree)"; M_BASE="$(mf base)"; M_SHA="$(mf sha)"; M_MIN="$(mf min-files)"; M_MAX="$(mf max-parts)"
+case "$M_SHA" in *[!0-9a-f]*|"") refuse "$MF sha '$M_SHA' is not a full hex object name" ;; esac
+[ "${#M_SHA}" -eq 40 ] || [ "${#M_SHA}" -eq 64 ] || refuse "$MF sha '$M_SHA' is not a FULL object name (40 or 64)"
+awk -F'\t' '$1 == "part" { sub(/^part\t/, ""); print }' "$MF" > "$T/mfmap" || refuse "cannot stage the manifest map"
+grep -q . "$T/mfmap" || refuse "$MF lists no part"
+SB="$(basename "$SDIR")"
+S12="$(printf '%s' "$M_SHA" | cut -c1-12)"
+DPASS=""
+case "$SB" in
+  *-"$DSUF-$S12") IDX="${SB%-"$DSUF-$S12"}" ;;
+  *-"$DSUF-$S12"-p*) IDX="${SB%-"$DSUF-$S12"-p*}"; DPASS="${SB##*-"$DSUF-$S12"-p}" ;;
+  *) refuse "shard directory $SB is not <idx>-$DSUF-<sha12> for the manifest's sha $M_SHA (a later pass appends -p<M>)" ;;
+esac
+[ -n "$IDX" ] || refuse "shard directory $SB names no story index"
+[ -z "$DPASS" ] || pass_ok "$DPASS" \
+  || refuse "shard directory $SB carries pass marker -p$DPASS; a pass marker is -p<M> with M an integer >= 2 (pass 1 carries none)"
+if [ -z "$CHECK" ]; then
+OB="$(basename "$OUT")"
+OPASS=""
+case "$OB" in
+  "$IDX-$DSUF.md") ;;
+  "$IDX-$DSUF"-p*.md) OPASS="${OB#"$IDX-$DSUF"-p}"; OPASS="${OPASS%.md}"
+    pass_ok "$OPASS" \
+      || refuse "--out $OB carries pass marker -p$OPASS; a pass marker is -p<M> with M an integer >= 2 (pass 1 carries none)" ;;
+  *) refuse "--out $OB is not $IDX-$DSUF.md or $IDX-$DSUF-p<M>.md, the --gate $GATE review file for shard directory $SB" ;;
+esac
+[ "$OPASS" = "$DPASS" ] \
+  || refuse "pass marker mismatch: shard directory $SB is $(pass_name "$DPASS") and --out $OB is $(pass_name "$OPASS"); a shard directory is merged only into its own pass's review file"
+fi
+
+PART="$SELF_DIR/partition-review-diff.sh"
+[ -f "$PART" ] || refuse "cannot re-derive the part map: $PART is absent"
+bash "$PART" --map "$M_WT" "$M_BASE" "$M_SHA" --min-files "$M_MIN" --max-parts "$M_MAX" > "$T/map" 2> "$T/map.err"; prc=$?
+[ "$prc" -eq 0 ] || refuse "partition-review-diff.sh --map re-run exited $prc: $(head -1 "$T/map") $(head -1 "$T/map.err")"
+cmp -s "$T/map" "$T/mfmap" || refuse "the part map re-derived from $MF's inputs differs from the map it records; the shards were briefed on another partition"
+K="$(grep -c . "$T/map")" || K=0
+[ "$K" -ge 2 ] || refuse "the part map has $K part(s); a merge needs two or more"
+W=${#K}
+ORDINALS="$(cut -f1 "$T/map" | tr '\n' ' ')"; ORDINALS="${ORDINALS% }"
+
+# ---- the cross groups, read from their one speller ----------------------------------------
+# CROSS_KEYS is `cross` when the table has one row (K=2) and `cross-1 .. cross-<G>` otherwise;
+# nothing here restates the construction. CROSS_FIRST is the execution owner (header).
+XPART="$SELF_DIR/partition-document.sh"
+[ -f "$XPART" ] || refuse "cannot read the cross groups: $XPART is absent"
+bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err" < /dev/null; grc=$?
+[ "$grc" -eq 0 ] || refuse "partition-document.sh --cross-groups $K exited $grc: $(head -1 "$T/groups.err")"
+G="$(grep -c . "$T/groups")" || G=0
+[ "$G" -ge 1 ] || refuse "partition-document.sh --cross-groups $K printed no group"
+i=0
+while IFS="$TAB" read -r gg gl; do
+  i=$((i + 1))
+  [ "$gg" = "$i" ] && [[ $gl =~ ^[0-9]+(,[0-9]+)+$ ]] \
+    || refuse "partition-document.sh --cross-groups $K printed row $i as '$gg	$gl'; want <g>\\t<ordinal,ordinal,...> with g = 1..G in order"
+done < "$T/groups"
+if [ "$G" -eq 1 ]; then XTABLE_KEYS="cross"
+else XTABLE_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
+cross_shape grouped
+
+
+# ---- THE SEAL READER, for the owner-duplicate check under --check-shard ---------------------
+# Copied, not sourced: wait-for-deliverable.sh executes on load and exports no library. Each body
+# is byte-identical to its definition there (has_marker, content_hash, seal_body, seal_of); the
+# byte-compare that binds the copies is owed by the fixture (header: SEAT-COMPLETE).
+MARK_TOKEN="seat-complete: "
+
+# ---- THE KEY= ENGINE AT THE FROZEN SHA (the legacy rule, header: SEAT-COMPLETE) ---------------
+# Set-level, so read once and memoised. ENGINE is `present` (the frozen tree's wait-for-deliverable.sh
+# carries the sentinel the key= writer carries), `absent` (the file is there without it: the tree
+# predates the key= engine) or `unreadable` (no commit, or the file in neither layout) -- which
+# never acquits.
+ENGINE=""; ENGINE_AT=""
+# ---- qa.md AT THE FROZEN SHA (the SEVERITY BOUNDARY, header: VERDICT BACKING) -------------------
+# Set-level, memoised. QA_AT is `legacy` when the frozen tree's installed qa.md (consumer layout
+# first, then the distribution's) lifts NO severity container -- the shards were briefed on a qa.md
+# that never asked for one; `severity` when it lifts any; `unreadable` when the commit or the file in
+# both layouts cannot be read. Only `legacy` acquits; `unreadable` never does, as the key= rule's
+# `unreadable` engine never acquits a marker. The rule that judges stays the CURRENT qa.md's.
+QA_AT=""; QA_AT_PATH=""
+# ---- THE GATE'S ROLE FILE AT THE FROZEN SHA (the ADVISOR LINE's era, header: SHARD GRAMMAR) --------
+# Set-level, memoised, one reader for both gates (ROLE_NAME). ADV_AT is `legacy` when the role file the
+# shards were written under carries no ADVISOR_SENTINEL, `present` when it carries it, `disk` when the
+# file is untracked at the frozen sha and the ON-DISK installed copy in the manifest's worktree carries
+# it, `unreadable` when neither the commit nor either layout on disk can be read. Only `legacy`
+# acquits an absent line. The on-disk read is the canonical-run arm's own fallback, taken only when the
+# file is tracked in neither layout at the sha; a copy found there decides, as there.
+ADV_AT=""; ADV_AT_PATH=""; ADV_WHY=""
+SEAL_SH="$SELF_DIR/content-seal.sh"
+
+# ---- the shard set ----------------------------------------------------------------------
+# --check-shard skips this staging: its one shard's key is taken from the target's own name.
+if [ -z "$CHECK" ]; then
+: > "$T/shards" || refuse "cannot stage the shard set"
+for f in "$SDIR"/*; do
+  [ -e "$f" ] || continue
+  b="$(basename "$f")"
+  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and the cross shards ($CROSS_KEYS)"
+  key_of_name "$b" || key_refuse "$?" "$f"
+  key="$KEY_OF"
+  printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
+done
+dup="$(cut -f1 "$T/shards" | sort | uniq -d | head -1)"
+[ -z "$dup" ] || refuse_to "$(awk -F'\t' -v k="$dup" '$1 == k { b = $2; sub(/.*\//, "", b); printf "%s%s", (n++ ? " " : ""), b }' "$T/shards")" \
+  "shard $dup was delivered more than once in $SDIR"
+# The cross shards delivered are ONE of two shapes at any K: a lone `cross.md`, or EXACTLY the
+# table's `cross-1..G` (`cross.md` again when G=1). A mix of the two, a `cross-<g>` the table does
+# not print, and a partial `cross-<g>` set (the missing-shard loop) are each refused by name.
+x_plain=0; x_num=0
+while IFS="$TAB" read -r xk xf; do
+  case "$xk" in
+    cross) x_plain=1 ;;
+    cross-*) x_num=1
+      case " $XTABLE_KEYS " in *" $xk "*) ;; *) refuse "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $XTABLE_KEYS, or one cross.md)" ;; esac ;;
+  esac
+done < "$T/shards"
+[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \
+  && refuse "$SDIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: one cross.md, or $XTABLE_KEYS)"
+if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi
+x_alt=""; [ "$XTABLE_KEYS" = cross ] || [ "$CROSS_KEYS" = cross ] || x_alt=", or one cross.md in place of the groups"
+for idx in $ORDINALS $CROSS_KEYS; do
+  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] \
+    || refuse_to "$idx" "shard $idx is missing from $SDIR (expected: $ORDINALS and $CROSS_KEYS$x_alt)"
+done
+
+# ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
+# If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
+: > "$T/sc" || refuse "cannot stage the completion check"
+while IFS="$TAB" read -r sk sf_; do
+  # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
+  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then
+    printf 'Y\t%s\t%s\n' "$sk" "$(awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$sf_")" >> "$T/sc"
+  else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi || refuse "cannot stage the completion check"
+done < "$T/shards"
+if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
+  sc_bad="$(awk -F'\t' '$1 == "N" { print $3; exit }' "$T/sc")"
+  refuse_to "$(awk -F'\t' '$1 == "N" { print $2; exit }' "$T/sc")" \
+    "$sc_bad does not end in 'seat-complete: ' while another shard in $SDIR does; that shard is unfinished (its last non-blank line must be 'seat-complete: <step> <seat> <shard>')"
+fi
+fi # end the shard-set staging (skipped by --check-shard)
+
+RE_CITED='^[0-9]+(,[0-9]+)*$'
+RE_AC='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+WORST=""; WORST_R=0; NFIND=0; FORCE=""
+: > "$T/hand" && : > "$T/runs" && : > "$T/runords" && : > "$T/htable" || refuse "cannot stage the hand-over set"
+: > "$T/body" || refuse "cannot stage the merged body"
+: > "$T/vtable" || refuse "cannot stage the verdict table"
+
 if [ -n "$CHECK" ]; then
   # --check-shard: the one target, keyed by its own name; the set-level joins are the merge's.
   key_of_name "$(basename "$CHECK")" || key_refuse "$?" "$CHECK"
@@ -1497,20 +1546,6 @@ fi
 n_out="$(parse_shard "$T/out" | awk '$1 == "C" { print $2 }')"
 [ "$n_out" = "$NFIND" ] || refuse "the merged review carries $n_out finding heading(s) where the shards carry $NFIND; a finding was lost or invented"
 check1_read "$T/out"; n1="$C1N"
-# The owner of a multi-match: every shard whose body matches PAT outside a fence, else the lead.
-pat_owners() {
-  po_=""
-  for key in $ORDINALS $CROSS_KEYS; do
-    sf="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/shards")"
-    PAT_="$PAT" awk '
-      f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
-      !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
-      f || /^seat-complete: / { next }
-      tolower($0) ~ tolower(ENVIRON["PAT_"]) { hit = 1; exit }
-      END { exit !hit }' "$sf" && po_="$po_${po_:+ }$key"
-  done
-  printf '%s' "${po_:-lead}"
-}
 [ "$n1" = "1" ] || refuse_to "$(pat_owners)" "the merged review matches Check 1's verdict pattern $n1 time(s), want exactly 1 (a shard body carrying a verdict line such as '## Verdict' is the usual cause; shards write 'shard-verdict:')"
 READ="$C1V"
 [ "$READ" = "$WORST" ] || refuse "Check 1 would read '$READ' from the merged review, not the recomputed $WORST"
@@ -1522,3 +1557,8 @@ fi
 cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || { rm -f "$OUT.merge-tmp.$$"; refuse "writing $OUT failed"; }
 printf 'MERGED: %s verdict=%s parts=%s findings=%s sha=%s\n' "$OUT" "$WORST" "$K" "$NFIND" "$M_SHA"
 exit 0
+}
+# The program runs only when executed; sourced (a fixture asking a decision in process), it defines
+# the functions above and mrs_main, and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+mrs_main "$@"
