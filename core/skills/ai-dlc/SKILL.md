@@ -442,8 +442,10 @@ you send, and it reaches the operator under `### For Your Information`
 at the checkpoint (`steps/deploy-validate.md` §5). This holds on a money
 path, a config leaf or a pinned span, PROVIDED the choice leaves every
 operator-owned value in force or sets it to the operator's verbatim
-value. A choice that otherwise sets, relaxes or widens a value, a limit
-or an authority is settled by no source. (ii) **A design choice no
+value or that value exactly converted between units. Such a choice
+decides no value, so Rule 11(a)'s UNBADGED trigger does not reach it. A
+choice that otherwise sets, relaxes or widens a value, a limit or an
+authority is settled by no source. (ii) **A design choice no
 source settles is asked with one option `(Recommended)`.** (iii) **Only
 a value the operator alone owns and no operator words fix is asked
 UNBADGED, as Rule 11(a) says** -- a number, an address, a limit, an
