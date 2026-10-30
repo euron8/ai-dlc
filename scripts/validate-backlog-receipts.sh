@@ -2151,7 +2151,7 @@ exit 0
 
 # THE SOURCE GUARD. Sourced, this file defines its functions and its constants and stops; vbr_main
 # is the whole CLI, in the order the file always ran: scrub, worker dispatch, arguments, parent.
-# core/fixtures/backlog-receipt-binding/unit-arms.sh sources it and calls vbr_main in a subshell.
+# core/fixtures/backlog-receipt-binding/run.sh (its vin helper) sources it and calls vbr_main in a subshell.
 vbr_main() {
 vbr_sec_env
 vbr_worker "$@"

@@ -91,12 +91,13 @@
 # MUTANT-MATRIX c5-m4-open decides=c5_open twins=c5_m4
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
-# IN PROCESS. Every validator run goes through vin: the world's own copy of the validator (mutated
-# or not) is SOURCED in a subshell and its CLI entry vbr_main called with the CLI's argv; the copy's
-# root, siblings and --score-one workers resolve from BASH_SOURCE, so they are the world's own. The
-# kept end-to-end runs are VEQ's four (`bash <copy>` on the control, m1's refusal, ef-good and
-# ef-noclose), each compared byte-for-byte with the in-process answer. The seeded repository is built
-# once and copied into each world (seed / seed_build).
+# IN PROCESS. Validator runs go through vin: the world's own copy of the validator (mutated or not)
+# is SOURCED in a subshell and its CLI entry vbr_main called with the CLI's argv; the copy's root,
+# siblings and --score-one workers resolve from BASH_SOURCE, so they are the world's own. The runs
+# kept end to end are VEQ's four (`bash <copy>` on the control, m1's refusal, ef-good and ef-noclose),
+# each compared byte-for-byte with the in-process answer, and the memo NONE drive wherever BL-822
+# decides (see memo_drive: its subject exists only at BASH_SUBSHELL 0). The seeded repository is
+# built once and copied into each world (seed / seed_build).
 #
 # Usage: run.sh
 # Exit:  0 = every probe holds, 1 = one regressed, 2 = fixture broken.

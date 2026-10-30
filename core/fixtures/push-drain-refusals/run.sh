@@ -365,7 +365,19 @@ if grep -q '^ok    A19 ' "$WORK/real/arms"; then B_A19=1; fi
 # The digest leg also asserts the reader carries the guard: on an unguarded reader pdx IS the CLI,
 # and the comparison would be one program against itself.
 pe_ok=1; pe_why=""
-grep -q '^pd_main() {$' "$RD" || { pe_ok=0; pe_why="$pe_why no-pd_main-in-$RD"; }
+# A reader with no guard is legal ONLY in the consumer layout, one pull behind this fixture: pdx drove
+# every arm through the CLI there, so there is no in-process answer to compare and PEQ is not evaluated.
+# In the distribution layout the reader IS this release's, and a missing guard is a regression.
+pe_skip=0
+if ! grep -q '^pd_main() {$' "$RD"; then
+  case "$RD" in
+    "$ROOT/.claude/skills/"*) pe_skip=1 ;;
+    *) pe_ok=0; pe_why="$pe_why no-pd_main-in-$RD" ;;
+  esac
+fi
+if [ "$pe_skip" = 1 ]; then
+  echo "NOTE  PEQ  not evaluated -- $RD predates the source guard (no pd_main), so every drive above was the CLI and there is no in-process answer to compare"
+else
 pe_D="$WORK/real/dist"; pe_C="$WORK/real/c"; pe_good="$(cat "$WORK/real/.ref.good")"
 pe_cmp() { # pe_cmp <tag> <args...>
   local t="$1" ur=0 cr=0; shift
@@ -384,6 +396,7 @@ pe_cmp digest --digest "$pe_C/$X/x-push.md"
   && [ "$(grep -c . "$WORK/pe.digest.co" || true)" -eq 2 ] || { pe_ok=0; pe_why="$pe_why outcomes"; }
 if [ "$pe_ok" = 1 ]; then ok "PEQ  the in-process pd_main equals bash <reader> byte-for-byte on a drain (rc 0), a refusal (rc 2) and a --digest (rc 0)"
 else bad "PEQ  the in-process drive differs from the CLI:$pe_why"; fi
+fi
 
 # ============================================================================
 # MUTANTS. Each is a COPY of the resolved reader, edited by awk keyed on exactly one line
