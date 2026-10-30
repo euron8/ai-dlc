@@ -125,6 +125,10 @@
 # gives attribution with no pid bookkeeping. Even so the trace is filtered by PROCESS as well:
 # measured, fseventsd walked the fresh copy and put 203 spurious `.git/**` paths into one
 # fixture's set.
+# THE TOP-LEVEL SECTIONS ARE FUNCTIONS (rs_top_*, and the per-fixture phases rs_fx_*), CALLED IN THEIR ORIGINAL
+# ORDER BELOW A BASH_SOURCE GUARD AT THE END OF THIS FILE, so core/fixtures/readset-skip can source a copy and ask
+# one phase in process. Run as a program, nothing changes; sourced, only definitions and constants load.
+rs_top_root() {
 set -uo pipefail
 
 # THE ROOT IS RESOLVED, NEVER COUNTED IN `..` HOPS. This file sits at `core/scripts/` here and
@@ -161,6 +165,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -n "$REPO_ROOT" ] && { [ -d "$REPO_ROOT/.git" ] || [ -f "$REPO_ROOT/.git" ]; } || {
   echo "ERROR: not inside a git work tree. A read-set trace runs in the main checkout, detached at the commit to trace; there is nothing to derive from here." >&2; exit "$DIE_RC"; }
 MAP="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
+}
 
 # System daemons that walk the filesystem on their own schedule and are never part of a
 # fixture's work. Deliberately NOT a general noise list: a fixture's own helpers (bash, git,
@@ -178,6 +183,7 @@ LOG_BIN=/usr/bin/log
 die() { echo "ERROR: $*" >&2; exit "$DIE_RC"; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
+rs_top_parse() {
 USAGE="usage: bash $0 [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>] [--in-pool <dir> | --merge-pool <dir>]   (fs_usage and both need sudo)"
 MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""; RECONCILE=0; IN_POOL=""; MERGE_POOL=""
 while [ $# -gt 0 ]; do
@@ -250,7 +256,7 @@ if [ -n "$LOCAL_MAP" ]; then
   case "$LOCAL_MAP" in /*) ;; *) LOCAL_MAP="$PWD/$LOCAL_MAP" ;; esac
   command -v shasum >/dev/null || die "shasum not found; --local-map keys every row on a sha256"
 fi
-DERIVER_SHA="$(shasum -a 256 -- "$0" 2>/dev/null | cut -d' ' -f1)"
+DERIVER_SHA="$(shasum -a 256 -- "${BASH_SOURCE[0]}" 2>/dev/null | cut -d' ' -f1)"
 
 # EACH TRACER HAS ITS OWN TRACE ROOT. The fs_usage run creates its tree as root and then chowns
 # only the tree, so a root-owned TRACE_ROOT is left behind; a later sandbox run -- unprivileged by
@@ -325,6 +331,7 @@ READSET_MAP="$MAP_REL"
 GITCOMMON="$(cd "$REPO_ROOT" && git rev-parse --git-common-dir 2>/dev/null)"
 case "$GITCOMMON" in ''|/*) ;; *) GITCOMMON="$REPO_ROOT/$GITCOMMON" ;; esac
 READSET_LOCAL="${GITCOMMON:-$REPO_ROOT/.git}/ai-dlc-fixture-readsets.local"
+}
 
 # READSET_RECONCILE_BEGIN
 # `--reconcile`'s list: one `<fx>\t<reason>` line per fixture that needs a trace, first reason wins.
@@ -369,6 +376,7 @@ readset_reconcile_list() {
 }
 # READSET_RECONCILE_END
 
+rs_top_reconcile() {
 if [ "$RECONCILE" = 1 ]; then
   [ "$HAVE_UNIVERSE" = 1 ] || die "--reconcile needs the READSET_UNIVERSE span of $RUNNER to judge a changed read set, and it has none -- update the hook first"
   RC_S="$(mktemp -d "${TMPDIR:-/tmp}/readset-reconcile.XXXXXX")" || die "mktemp failed"
@@ -382,6 +390,7 @@ if [ "$RECONCILE" = 1 ]; then
   sed 's/^/  /' "$RC_S/list"
   MODE="--list"; LIST_ARG="$(cut -f1 "$RC_S/list" | tr '\n' ' ' | sed 's/ $//')"
 fi
+}
 
 # READSET_MERGE_BEGIN
 # Merge a run's newly-derived entries into the existing map and print the result.
@@ -782,6 +791,7 @@ if miss: print("note: %d listed path(s) absent on disk, not cloned" % miss)
   [ -d "$src/.git" ] || readset_git_standalone "$src" "$dst" || return 1
 }
 
+rs_top_tracer() {
 command -v python3  >/dev/null || die "python3 not found (path normalisation)"
 # THE ROOT CHECK BELONGS TO fs_usage, NOT TO THE DERIVATION. The sandbox tracer is unprivileged
 # end to end, and it REFUSES root instead: its fixtures run as whoever invoked it, and a fixture
@@ -811,6 +821,7 @@ else
   [ -x "$LOG_BIN" ] || die "$LOG_BIN not found; --tracer sandbox reads the kernel's Sandbox reports through 'log stream'"
   RUN_AS="$(id -un)"
 fi
+}
 
 # READSET_NORM_BEGIN
 norm() {
@@ -1100,6 +1111,7 @@ readset_local_present() {
 # `--merge-pool` ENDS HERE, before any trace root, profile, stream or copy: it only writes. A fixture
 # directory with neither `rows` nor `discard` was not traced (its worker fell back to a plain run) and is
 # left out of the traced list, so its existing local rows stand.
+rs_top_setup() {
 if [ -n "$MERGE_POOL" ]; then
   MP_W="$(mktemp -d "${TMPDIR:-/tmp}/readset-merge.XXXXXX")" || die "mktemp failed"
   trap 'rm -rf "$MP_W"' EXIT
@@ -1136,6 +1148,7 @@ mkdir -p "$TRACE_ROOT/t" "$TRACE_ROOT/w" || die "cannot create $TRACE_ROOT"
 # `/private/tmp/...`; a `/tmp/...` root would make the sandbox's `subpath` and the stream
 # predicate match nothing, and every fixture would come back with an atime-only read-set.
 TRACE_ROOT="$(cd "$TRACE_ROOT" && pwd -P)" || die "cannot resolve $TRACE_ROOT"
+}
 # THE TRACE-WINDOW SLOT (BL-584). Every `--local-map` and `--in-pool` window adds to ONE box-wide pool of
 # kernel Sandbox reports, so a heavy fixture's window drives `dropped during` notices into every window
 # that overlaps it, and each of those discards its fixture below. Forced, with `small` (40 tagged reads)
@@ -1171,9 +1184,11 @@ TRACE_ROOT="$(cd "$TRACE_ROOT" && pwd -P)" || die "cannot resolve $TRACE_ROOT"
 # exit from this loop spins. Before this, an old regular file at the slot path spun about 300 lines a second
 # and never acquired, an old directory holding a stray file cycled break and HELD with no end, and a missing
 # parent read HELD forever; under `--in-pool` the waiter's growing log also kept POOL_STALL from refusing it.
+rs_top_slotstate() {
 RS_SLOT_HELD=""
 RS_SLOT_MARK="${READSET_SLOT_HOLDER:-}"
 [ -z "$LOCAL_MAP" ] || [ "$HAVE_LOCK" = 1 ] || say "note: $RUNNER has no READSET_LOCK span, so the trace windows are NOT slotted and may overlap another deriver's"
+}
 rs_slot_acquire() {
   local hp rp w=0 b=0 rmrc why=""
   RS_SLOT_HELD=""
@@ -1232,6 +1247,7 @@ rs_slot_release() {
   [ "$rp" = "$$" ] || return 0
   rm -f "$RS_SLOT/pid"; rmdir "$RS_SLOT" 2>/dev/null
 }
+rs_top_trace() {
 [ -z "$LOCAL_MAP" ] || trap 'rs_slot_release' EXIT
 # `--local-map` removes the trace root it created on EVERY exit, a refusal included. `--in-pool` does
 # not: its worker removes the root in the background once the verdict is recorded, off the pool's path.
@@ -1302,6 +1318,7 @@ RS_POOL_DEPTH=$((10#$RS_POOL_DEPTH + 1))
 # plainly would see, so the traced fixture gets exactly that depth: one more here would put a fixture that
 # nests the hook at the refused depth 2 only when traced, and its verdict would differ for that reason alone.
 [ -z "$IN_POOL" ] || RS_POOL_DEPTH=$((RS_POOL_DEPTH - 1))
+}
 sandboxed() {
   if [ "$TRACER" = both ]; then
     sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"
@@ -1315,6 +1332,7 @@ readset_trip_set() {
   find /usr/bin /bin /usr/sbin /sbin /usr/libexec -maxdepth 1 -type f \( -perm -4000 -o -perm -2000 \) 2>/dev/null
   printf '%s\n' /usr/bin/log "$(command -v sandbox-exec)"
 }
+rs_top_tree() {
 if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
   PROFILE="$WORK/sandbox.sb"
   if [ -n "${AI_DLC_READSET_SANDBOX_PROFILE:-}" ]; then
@@ -1439,6 +1457,7 @@ case "$MODE" in
 esac
 N_SUBJECT="$(echo "$LIST" | wc -w | tr -d ' ')"
 [ "$N_SUBJECT" -gt 0 ] || die "no drivable fixtures found -- an empty map would skip the entire suite"
+}
 
 reset_atimes() {
   find "$TREE" -type f -print0 2>/dev/null | xargs -0 -P 8 -n 500 touch -a -t 200101010000 2>/dev/null
@@ -1515,11 +1534,13 @@ readset_both_verdict() {
 }
 # READSET_BOTH_END
 
+rs_top_loopinit() {
 OMITTED=""; MAPPED=0; TOTAL_PATHS=0; DONE=""
 : > "$WORK/map"
 : > "$WORK/digest.rows"
 : > "$WORK/both.results"
 : > "$WORK/both.missed"
+}
 
 # THE SANDBOX TRACER'S EXTRACTION. One kernel report per line:
 #   ... Sandbox: <proc>(<pid>) allow <op> <TREE>/<path>
@@ -1744,7 +1765,17 @@ if [ -e "$MAP" ]; then cp -p "$MAP" "$MAP_TMP" || die "could not stage $MAP_TMP 
 mv -f "$MAP_TMP" "$MAP" || { rm -f "$MAP_TMP"; die "could not move $MAP_TMP over $MAP -- $MAP is unchanged"; }
 }
 
-for fx in $LIST; do
+# THE INJECTED WAIT. The fs_usage reaping waits in the per-fixture loop (`sleep 1` before the kill, `sleep 0.5`
+# after the pkill, in the fs_usage and the --tracer both branches) go through rs_sleep. Unset, READSET_SLEEP_CMD
+# is `sleep` and nothing changes. core/fixtures/readset-skip's stub worlds, whose fake fs_usage has nothing in
+# flight to flush, set it to `:` on the command, or redefine rs_sleep in a sourced copy. No AI_DLC_ prefix:
+# fixtures scrub it. The settle, flush, liveness and slot polls end on events and do not use it.
+rs_sleep() { ${READSET_SLEEP_CMD:-sleep} "$@"; }
+
+# THE PER-FIXTURE LOOP IS THREE PHASES, called in order for each fixture: rs_fx_run (slot, streams, the
+# fixture's run, the flush), rs_fx_judge (the scan, the window cut, every fail-closed reason, the verdict) and
+# rs_fx_record (the --in-pool / --local-map write). Each reads and sets the same globals the loop body did.
+rs_fx_run() {
   DONE="${DONE}${DONE:+ }$fx"
   [ -z "$LOCAL_MAP" ] || { : > "$WORK/local.ok"; : > "$WORK/local.discards"; }
   raw="$WORK/$fx.raw"
@@ -1855,7 +1886,7 @@ for fx in $LIST; do
 
   flushed=1
   if [ "$TRACER" = fs_usage ]; then
-    sleep 1
+    rs_sleep 1
     # `$!` names the LAST element of the pipeline -- grep, not fs_usage. Killing only that
     # orphans the tracer, and orphans accumulate across a hundred fixtures until every later
     # trace drops events. That failure looks like a small read-set, not like a fault.
@@ -1864,7 +1895,7 @@ for fx in $LIST; do
     # killed tracer reads as a small read-set (BL-466). A pipeline moved inside `( ... ) &` would
     # parent its tracer to that subshell and escape `-P $$`.
     kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
-    pkill -P $$ -x fs_usage 2>/dev/null; sleep 0.5
+    pkill -P $$ -x fs_usage 2>/dev/null; rs_sleep 0.5
   else
     # THE END SENTINEL IS THE FLUSH CONTROL. The stream delivers asynchronously, so the fixture
     # exiting says nothing about whether its last reports have arrived. Its own tail is read
@@ -1887,12 +1918,14 @@ for fx in $LIST; do
     rs_slot_release
     if [ -n "$fsu_pid" ]; then
       # Same reaping as the fs_usage mode: `$!` is grep, so the tracer itself is named too.
-      sleep 1
+      rs_sleep 1
       kill "$fsu_pid" 2>/dev/null; wait "$fsu_pid" 2>/dev/null
-      pkill -P $$ -x fs_usage 2>/dev/null; sleep 0.5
+      pkill -P $$ -x fs_usage 2>/dev/null; rs_sleep 0.5
     fi
   fi
+}
 
+rs_fx_judge() {
   # atime moved off the forced epoch == the file was READ.
   #
   # THE SCAN RUNS BEFORE THE DIRTY CHECK BELOW, NEVER AFTER IT. `git status` reads `.git/index`,
@@ -2058,6 +2091,9 @@ for fx in $LIST; do
         || say "  per-fixture map write refused after $fx (the previous map stands): $(tail -1 "$WORK/$fx.write")"
     fi
   fi
+}
+
+rs_fx_record() {
   # `--in-pool` writes NO local map: it leaves its one fixture's rows or discard for `--merge-pool`.
   if [ -n "$IN_POOL" ]; then
     { [ ! -s "$WORK/local.ok" ] || cp "$WORK/local.ok" "$IN_POOL/rows"; } \
@@ -2069,8 +2105,17 @@ for fx in $LIST; do
     readset_local_write "$LOCAL_MAP" "$MAP" "$WORK/local.ok" "$WORK/local.discards" "$fx" "$DERIVER_SHA" "$WORK/local.present" \
       || die "could not write $LOCAL_MAP after tracing $fx -- that fixture's rows are unchanged"
   fi
-done
+}
 
+rs_top_loop() {
+for fx in $LIST; do
+  rs_fx_run
+  rs_fx_judge
+  rs_fx_record
+done
+}
+
+rs_top_finish() {
 # `--local-map` ENDS HERE. It never reaches the controls or the committed map's write: those judge
 # a full map, and a one-fixture local trace would fail the plan-shape pair and the discrimination
 # control by construction. Its own conditions were applied, and its file written, per fixture above.
@@ -2104,3 +2149,17 @@ readset_write_map
 say "wrote $MAP -- $M_FIX fixtures, $M_ENT entries, $M_PATH distinct paths (this run traced $MAPPED)"
 [ -n "$OMITTED" ] && say "OMITTED and therefore always run: $OMITTED"
 exit 0
+}
+
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rs_top_root "$@"
+rs_top_parse "$@"
+rs_top_reconcile
+rs_top_tracer
+rs_top_setup
+rs_top_slotstate
+rs_top_trace
+rs_top_tree
+rs_top_loopinit
+rs_top_loop
+rs_top_finish
