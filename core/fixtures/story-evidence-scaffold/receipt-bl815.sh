@@ -31,16 +31,30 @@
 # 0 = every cell answered as above. 1 = a cell did not (one `FAIL <cell>` line each). 9 = the receipt could not run.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-[ "$#" -eq 1 ] && [ -f "$1" ] \
-  || { echo "REFUSED: usage: bash receipt-bl815.sh <path to validate-handoff-evidence.sh>" >&2; exit 9; }
-HE="$1"
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] && [ -f "$1" ] \
+  || { echo "REFUSED: usage: bash receipt-bl815.sh <path to validate-handoff-evidence.sh> [<cells>]" >&2; exit 9; }
+HE="$1"; CELLS="${2:-}"
+# With <cells> (space-separated cell names) only the validator calls those cells read run, plus story-1's, which
+# carries the ctl cell: a mutant run names the one cell that decides it. Without it every cell runs.
+want() { [ -z "$CELLS" ] || case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
-R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl815.XXXXXX")" || exit 9
-trap 'rm -rf "$R"' EXIT
+# With RCPT_WORLD set (run.sh's rcpt_run), the world is seeded ONCE into that directory and every later call
+# reads it (no call writes into it: the validator reads its repository and writes only under its own mktemp;
+# the gu cell's shim is written beside the world, never in it).
+if [ -n "${RCPT_WORLD:-}" ]; then
+  R="$RCPT_WORLD"; mkdir -p "$R" || exit 9
+else
+  R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl815.XXXXXX")" || exit 9
+  trap 'rm -rf "$R"' EXIT
+fi
 R="$(cd -P "$R" && pwd -P)" || exit 9
 W="$R/w"
 g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$W" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+if [ -f "$R/.seeded" ]; then
+  B="$(cat "$R/.B")"; T="$(cat "$R/.T")"
+else
 mkdir -p "$W/stories" "$W/test-results" "$R/other-wt/test-results" || exit 9
 ln -s "$W" "$R/alias" || exit 9
 g init -q || exit 9
@@ -72,7 +86,9 @@ for p in test-results/cn-dd.txt test-results/cn-dd-mutation-red.txt test-results
   g cat-file -e "${T}:$p" 2>/dev/null || { echo "REFUSED: seed $p is not tracked" >&2; exit 9; }
 done
 g cat-file -e "${T}:stories/test-results/cn-x.txt" 2>/dev/null && { echo "REFUSED: seed stories/test-results/cn-x.txt is tracked" >&2; exit 9; }
-o="$(bash "$HE" -C "$W" stories/story-1.md "$B" "$T" 2>/dev/null)"
+printf '%s\n' "$B" > "$R/.B" && printf '%s\n' "$T" > "$R/.T" && : > "$R/.seeded" || exit 9
+fi
+o="$(he_run "$HE" -C "$W" stories/story-1.md "$B" "$T" 2>/dev/null)"
 [ -n "$o" ] || { echo "REFUSED: the validator printed nothing for story-1" >&2; exit 9; }
 fails=0
 # cell <name> <token as printed> <want: the kinds of every REFUSED/WARN line naming that token, `-` for none>
@@ -104,29 +120,37 @@ grep -qxF "WARN capture-unresolved $R/other-wt/test-results/cn-ow.txt: resolves 
   || { echo "FAIL ow-reason: no 'resolves outside the repository' line"; fails=$((fails + 1)); }
 grep -qF "REFUSED red-untracked $R/other-wt/cn-ow-mutation-red.txt: cited as a mutation-RED capture by a spelling that resolves outside the repository" <<<"$o" \
   || { echo "FAIL owred-reason: the refusal does not name the outside spelling"; fails=$((fails + 1)); }
-o2="$(bash "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc=$?
+if want rc || want gu; then
+o2="$(he_run "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc=$?
 { [ "$rc" -eq 0 ] && grep -qxF "WARN capture-unresolved evidence/cn-never.txt: not tracked at ${T:0:12}" <<<"$o2"; } \
   || { echo "FAIL rc: want exit 0 with the un WARN, got exit $rc"; fails=$((fails + 1)); }
-lc="$(bash "$HE" -C "$W" --list-captures stories/story-1.md "$T" 2>/dev/null | tr '\n' ' ')"
-want='test-results/cn-abs.txt test-results/cn-al.txt test-results/cn-ctl.txt test-results/cn-in.txt '
-[ "$lc" = "$want" ] || { echo "FAIL lc: want [$want] got [$lc]"; fails=$((fails + 1)); }
+fi
+if want lc; then
+lc="$(he_run "$HE" -C "$W" --list-captures stories/story-1.md "$T" 2>/dev/null | tr '\n' ' ')"
+lcw='test-results/cn-abs.txt test-results/cn-al.txt test-results/cn-ctl.txt test-results/cn-in.txt '
+[ "$lc" = "$lcw" ] || { echo "FAIL lc: want [$lcw] got [$lc]"; fails=$((fails + 1)); }
+fi
 # xr: both readers over ONE story and ONE `./` token, each asserted as an exact value.
-xl="$(bash "$HE" -C "$W" --list-captures stories/story-3.md "$T" 2>/dev/null | tr '\n' ' ')"
-xh="$(bash "$HE" -C "$W" stories/story-3.md "$B" "$T" 2>/dev/null | awk '($1 == "REFUSED" || $1 == "WARN") && $2 !~ /^dar-heads-/' | cut -d: -f1 | tr '\n' ' ')"
+if want xr; then
+xl="$(he_run "$HE" -C "$W" --list-captures stories/story-3.md "$T" 2>/dev/null | tr '\n' ' ')"
+xh="$(he_run "$HE" -C "$W" stories/story-3.md "$B" "$T" 2>/dev/null | awk '($1 == "REFUSED" || $1 == "WARN") && $2 !~ /^dar-heads-/' | cut -d: -f1 | tr '\n' ' ')"
 [ "$xl|$xh" = "test-results/cn-x.txt |REFUSED no-command test-results/cn-x.txt " ] \
   || { echo "FAIL xr: the readers disagree on ./test-results/cn-x.txt: list-captures [$xl] handoff [$xh]"; fails=$((fails + 1)); }
+fi
 # gu: a git shim refusing only the exemption reader's ls-tree spelling; every other git call passes through.
+if want gu; then
 RG="$(command -v git)" || exit 9
 mkdir -p "$R/shim" || exit 9
 printf '#!/bin/sh\ncase " $* " in *" ls-tree -r --name-only --full-tree "*) echo "shim: ls-tree refused" >&2; exit 128 ;; esac\nexec "%s" "$@"\n' "$RG" > "$R/shim/git" \
   && chmod +x "$R/shim/git" || exit 9
 gw="WARN gitignore-unreadable ${T:0:12}: exemption set unknown"
-o3="$(PATH="$R/shim:$PATH" bash "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc3=$?
+o3="$(he_run_env "PATH=$R/shim:$PATH" "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc3=$?
 gn="$(grep -cxF "$gw" <<<"$o3")" || gn=0
 { [ "$rc3" -eq 0 ] && [ "$gn" -eq 1 ] \
   && grep -qxF "WARN capture-unresolved evidence/cn-never.txt: not tracked at ${T:0:12}" <<<"$o3" \
   && grep -qxF "WARN capture-unresolved test-results/cn-ignored.txt: not tracked at ${T:0:12}" <<<"$o3" \
   && ! grep -q 'gitignore-unreadable' <<<"$o2"; } \
   || { echo "FAIL gu: want exit 0, one [$gw], un and ign WARN not-tracked, none unshimmed; got exit $rc3, $gn cause line(s): $(tr '\n' ' ' <<<"$o3")"; fails=$((fails + 1)); }
+fi
 [ "$fails" -eq 0 ] || exit 1
 exit 0

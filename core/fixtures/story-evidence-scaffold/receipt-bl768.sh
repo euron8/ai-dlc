@@ -19,6 +19,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 [ "$#" -eq 1 ] && [ -f "$1" ] && [ "$(basename "$1")" = validate-handoff-evidence.sh ] \
   || { echo "REFUSED: usage: bash receipt-bl768.sh <path to validate-handoff-evidence.sh>" >&2; exit 9; }
 HE="$1"
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl768.XXXXXX")" || exit 9
 trap 'rm -rf "$R"' EXIT
@@ -47,7 +48,7 @@ DS='Dependency setup: none, system pytest'
 fails=0
 one() { # <case> <want rc> <want token or empty>
   local o rc
-  o="$(bash "$HE" -C "$R/w" "$S" "$B" "$(g rev-parse HEAD)" 2>/dev/null)"; rc=$?
+  o="$(he_run "$HE" -C "$R/w" "$S" "$B" "$(g rev-parse HEAD)" 2>/dev/null)"; rc=$?
   if [ "$rc" = "$2" ] && { [ -z "$3" ] || grep -q "^REFUSED $3 " <<<"$o"; }; then :
   else echo "FAIL $1: rc=$rc $(grep '^REFUSED' <<<"$o" | head -2 | tr '\n' ' ')"; fails=$((fails + 1)); fi
 }
@@ -74,7 +75,7 @@ g add -A && g add -f test-results/test_evil.py && g commit -qm evil || exit 9
 one evil 1 full-collection-none
 story '' ''; mkdir -p "$R/w/.claude/team-roles" && printf '# Dev\n\nRecord the full-collection run.\n' > "$R/w/.claude/team-roles/dev.md"
 g add -A && g commit -qm legacy || exit 9
-o="$(bash "$HE" -C "$R/w" "$S" "$B" "$(g rev-parse HEAD)" 2>/dev/null)"; rc=$?
+o="$(he_run "$HE" -C "$R/w" "$S" "$B" "$(g rev-parse HEAD)" 2>/dev/null)"; rc=$?
 { [ "$rc" = 0 ] && grep -q '^LEGACY: full-collection and dependency-setup lines not checked' <<<"$o"; } \
   || { echo "FAIL legacy: rc=$rc $(head -2 <<<"$o" | tr '\n' ' ')"; fails=$((fails + 1)); }
 [ "$fails" -eq 0 ] || exit 1

@@ -119,8 +119,6 @@
 # Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — hence JSON for the schema, and a line
 # parser for the flat YAML envelope, matching validate-audit-anchors.sh).
 
-set -uo pipefail
-
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of
 # `..` hops. This script runs from three layouts:
@@ -143,6 +141,9 @@ ai_dlc_resolve_root() {
   done
   return 1
 }
+ss_main() {
+set -uo pipefail
+
 AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 [ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
@@ -1633,3 +1634,6 @@ elif mode == "list-stories":
 else:
     fail("unknown mode '%s'" % mode, code=2)
 PY
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ss_main "$@"
