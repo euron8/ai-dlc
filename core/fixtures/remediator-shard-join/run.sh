@@ -382,15 +382,14 @@ p_sjgate "$JOIN" && ok "SJ7: --subject --artifact gate-planning --pass 1 -> JOIN
 p_sjgatenear "$JOIN" && ok "SJ8: near-misses -- --artifact stories, and --artifact gate-planning with --pass party -> REFUSED, nothing written" || bad "SJ8: $(cat "$JO")"
 p_sjnest "$JOIN" && ok "SJ9: a nested AI_DLC_STATE_DIR (out/bmad) -> map, split and join agree and the record is the manifest's root-relative path (SJ1 is the default-layout control)" || bad "SJ9: $(cat "$JO")"
 
+# ---- unit-parts.sh: the parts-mode and --sources ENTRY-CONTRACT cells (EC1-EC13, EC15-EC17, EC27, PS2-PS4, PS10, PS11) asked in
+# process against the sourced join. One end to end run per mode stays here: EC32 (parts refusal), PS1 (parts join), PS8
+# (--sources refusal), PS7 (--sources pass). One literal call line, never a loop variable.
+bash "$HERE/unit-parts.sh"; _up=$?
+case "$_up" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-parts.sh: FIXTURE BROKEN, exit $_up" ;; esac
 # ---- party repairs (BL-462). Each refusal has its ALLOW twin one property apart in the same run.
 p_party "$JOIN" && ok "PS1: a party repair (--artifact stories-party), sources keyed on (seat file, id) -- F-1 in BOTH dev-1 and tea-1, and graph's \`## Finding D4-1\` form -> JOINED, the tokens carried into the record" \
   || bad "PS1: a party repair with resolving sources did not join (rc=$RC): $(cat "$JO")"
-p_partyunres "$JOIN" && ok "PS2: the same world with F-4 cited under dev-1 (only tea-1 carries F-4) -> REFUSED 'is UNRESOLVED', naming the seat that does, nothing written" \
-  || bad "PS2: a source whose id only another seat carries was not refused as UNRESOLVED (rc=$RC): $(cat "$JO")"
-p_partynosrc "$JOIN" && ok "PS3: a party part entry with a disposition and no source line -> REFUSED naming the entry, nothing written" \
-  || bad "PS3: a sourceless party entry was not refused (rc=$RC): $(cat "$JO")"
-p_partyforeign "$JOIN" && ok "PS4: a source naming the same seat file under party-mode/s304 (another sprint) -> REFUSED 'names a file outside', nothing written" \
-  || bad "PS4: another sprint's seat file was accepted as a source (rc=$RC): $(cat "$JO")"
 p_partydoc "$JOIN" && ok "PS5: seats x sections -- a document split into prd-party-repair-p1, joined with --document -> JOINED, sources resolved" \
   || bad "PS5: a section-sharded party repair did not join (rc=$RC): $(cat "$JO")"
 p_sjpartysrc "$JOIN" && ok "PS6: --subject --pass party, every part citing a seat file sprint 9 lacks -> REFUSED 'names no seat file' (SJ5 is its ALLOW twin)" \
@@ -401,44 +400,12 @@ p_srcunres "$JOIN" && ok "PS8: --sources, one property apart (F-4 under dev-1) -
   || bad "PS8: --sources accepted an id only another seat carries (rc=$RC): $(cat "$JO")"
 p_partymarked "$JOIN" && ok "PS9: every CITED seat file ends in seat-complete:, the uncited architect-1 does not -> JOINED (the belt is scoped to cited seats)" \
   || bad "PS9: a party repair over finished cited seats did not join (rc=$RC): $(cat "$JO")"
-p_partyunmarked "$JOIN" && ok "PS10: PS9 one property apart, the cited dev-4 unmarked -> REFUSED naming dev-4, nothing written" \
-  || bad "PS10: a cited unfinished seat file beside finished ones was not refused (rc=$RC): $(cat "$JO")"
-p_partyx1 "$JOIN" && ok "PS11: the only cited seat (architect-1) unmarked, its step's uncited siblings marked -> REFUSED (the era is per step over the dir)" \
-  || bad "PS11: a lone cited unmarked seat whose step is in the marker era was joined (rc=$RC): $(cat "$JO")"
 p_partyx4 "$JOIN" && ok "PS12: an earlier step's pre-marker seat cited beside marked architecture seats -> JOINED (its step has no marker)" \
   || bad "PS12: a pre-marker seat of another step was refused (rc=$RC): $(cat "$JO")"
 
 # ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
-p_sibtotal "$JOIN" && ok "EC1: every part omits siblings: (total omission) -> REFUSED, each repaired edit named, no PENDING (the era is the install, not the parts)" \
-  || bad "EC1: a part set omitting siblings: everywhere was not refused (rc=$RC): $(cat "$JO")"
-p_sibok "$JOIN" && ok "EC2: every part carries siblings: -> JOINED, no PENDING, each escalated entry printed by part, ESCALATED-COUNT: 3 and SERIAL-REQUIRED: 3 (the edit: n/a repairs not counted)" \
-  || bad "EC2: a post-rule part set did not join, or its escalated entries were not printed (rc=$RC): $(cat "$JO")"
-p_sibmissing "$JOIN" && ok "EC3: EC2 one property apart, part 03 a repaired MAJOR with an edit and no siblings: -> REFUSED by name, nothing written" \
-  || bad "EC3: a repaired edit with no siblings: beside post-rule parts was not refused (rc=$RC): $(cat "$JO")"
-p_setaside "$JOIN" && ok "EC4: graph's s318 sm-05 F-3 entry, a repaired MAJOR set aside as outside this shard and not required -> REFUSED at its heading" \
-  || bad "EC4: a set-aside MAJOR was not refused (rc=$RC): $(cat "$JO")"
-p_handoff "$JOIN" && ok "EC5: the same entry split, the remainder escalated under the same source -> JOINED, ESCALATED: 01.md ... (remainder), ESCALATED-COUNT: 1" \
-  || bad "EC5: a handed-off split pair did not join with its escalated line (rc=$RC): $(cat "$JO")"
-p_srcsetaside "$JOIN" && ok "EC6: --sources on a record whose resolving entry sets a MAJOR aside -> rc 2, the set-aside refusal named (PS7 is its ALLOW twin)" \
-  || bad "EC6: --sources did not apply the set-aside arm (rc=$RC): $(cat "$JO")"
-p_srcpending "$JOIN" && ok "EC7: --sources over a pre-rule record (a repaired edit, no siblings: anywhere) -> rc 0, one PENDING line" \
-  || bad "EC7: a pre-rule --sources record did not pass with one PENDING line (rc=$RC): $(cat "$JO")"
-p_srcera "$JOIN" && ok "EC8: --sources positional era: pre-rule entry, carrier, omitting entry -> rc 2 naming only the entry after the carrier" \
-  || bad "EC8: the --sources positional era did not bind from its first carrier (rc=$RC): $(cat "$JO")"
-p_srcclosed "$JOIN" && ok "EC9: --sources: an escalated entry a later repaired entry names on closes: is printed ESCALATED-CLOSED; the open one and the split remainder are printed, count 2, no SERIAL-REQUIRED" \
-  || bad "EC9: --sources escalated-entry closure answered wrongly (rc=$RC): $(cat "$JO")"
-p_srchalf "$JOIN" && ok "EC12: --sources over a joined record: a LATER half-repair under the same source token in another part, and a closes: written BEFORE the escalation -> the escalation stays open (graph s318 dev-05#F-3)" \
-  || bad "EC12: a token-sharing half repair or an earlier closes: closed an escalation (rc=$RC): $(cat "$JO")"
-p_srccross "$JOIN" && ok "EC13: --sources: one heading escalated in 01.md AND 02.md, closes: names 01.md -> 01.md CLOSED, 02.md open, count 1" \
-  || bad "EC13: a closes: line did not close exactly the part it names (rc=$RC): $(cat "$JO")"
 p_sibdoc "$JOIN" && ok "EC14: --document, one section part omitting siblings: -> REFUSED naming it with the pre-install re-dispatch remedy, the document not assembled" \
   || bad "EC14: a --document part omitting siblings: was not refused (rc=$RC): $(cat "$JO")"
-p_sibforms "$JOIN" && ok "EC15: five wrong siblings spellings (checked, an empty value with no fence, a derived fence, a text fence missing its grep -rn, a control count of 0) -> each REFUSED as none of the four forms" \
-  || bad "EC15: a wrong siblings spelling was accepted, or refused under another reason (rc=$RC): $(cat "$JO")"
-p_sibprose "$JOIN" && ok "EC16: no siblings: field, the word sibling in the claim prose -> REFUSED as a missing field (the reader keys on the field, never the word)" \
-  || bad "EC16: an entry mentioning a sibling only in prose was not refused as NOSIB (rc=$RC): $(cat "$JO")"
-p_sibnever "$JOIN" && ok "EC17: a text fence whose control text was never written to the file -> REFUSED at the join, 0 times" \
-  || bad "EC17: a siblings control naming absent text was not refused (rc=$RC): $(cat "$JO")"
 p_sibstale "$JOIN" && ok "EC18: the joined fence, its text later rewritten -> the slot-wide derivations re-run reads no STALE; the same fence re-labelled derived reads STALE" \
   || bad "EC18: the siblings fence is replayed by the derivations validator, or the derived control did not go stale (rc=$RC dv=${DV_RC:-}): $(cat "$JO" "$SB_W/dv.out" 2>/dev/null | head -20)"
 p_escpath "$JOIN" && ok "EC19: an escalated entry naming the sibling's path on edit:, beside the shard that repairs that file -> JOINED (the escalated path is no citation)" \
@@ -457,8 +424,6 @@ p_srcparts "$JOIN" && ok "EC25: --sources on a record citing only part tokens, s
   || bad "EC25: --sources did not refuse a part-token record by name, or refused the party control (rc=$RC): $(cat "$JO")"
 p_gapfill "$JOIN" && ok "EC26: a repaired claim calling the fix a gap fill for veto -> REPORTED after the escalation count, rc 0; the escalated entry in the same words is counted open, not reported" \
   || bad "EC26: the gap-fill tripwire did not discriminate (rc=$RC): $(cat "$JO")"
-p_chkpart "$JOIN" && ok "EC27: parts mode -- a part stating derivations not replayed and a part with no derivations: line -> REFUSED by name; the stamped part beside them is not" \
-  || bad "EC27: the check-fields arm did not discriminate in parts mode (rc=$RC): $(cat "$JO")"
 p_chkrec "$JOIN" && ok "EC28: --escalations -- a record with neither field is outside the era (rc 0); one that opened it without derivations: is REFUSED" \
   || bad "EC28: the check-fields era did not discriminate in record mode (rc=$RC): $(cat "$JO")"
 p_rulingedit "$JOIN" && ok "EC29: an operator-ruling entry with a real edit and no siblings: in the era -> REFUSED as a repaired edit is; the ruling with edit: n/a beside it is not" \
@@ -491,10 +456,6 @@ p_sjspecfresh "$JOIN" && ok "SP7: --subject, the same memlog rendered through it
   || bad "SP7: subject mode refused or did not report a rendered-through SPEC memlog (rc=$RC): $(cat "$JO")"
 p_sjspecnone "$JOIN" && ok "SP8: --subject, the SPEC part's memlog does not exist -> JOINED, SPEC-RENDER: SKIP naming that it does not exist" \
   || bad "SP8: subject mode did not skip a missing SPEC memlog visibly (rc=$RC): $(cat "$JO")"
-p_setasideshard "$JOIN" && ok "EC10: a repaired MAJOR set aside only as 'outside this shard' -> REFUSED (the regex's first half)" \
-  || bad "EC10: an 'outside this shard' set-aside was not refused (rc=$RC): $(cat "$JO")"
-p_setasidenr "$JOIN" && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \
-  || bad "EC11: a 'not required' set-aside was not refused (rc=$RC): $(cat "$JO")"
 
 # ---- re-run of one part (--rerun <part>.md@<ISO>): graph's S319 shape, its refusals, and every mode.
 p_rrgraph "$JOIN" && ok "RR1: six sections, section 2 by its original writer, an orphan and the original again, then a NEW agent after S_P -> REFUSED without --rerun; JOINED with it, the rerun: line naming both superseded ids (3 rows), the outer window kept, 'in its window', '3 superseded rows'" \
