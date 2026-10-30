@@ -469,14 +469,19 @@ self_probe() {
   case "$P" in */readset-stage1-probe.??????) rm -rf "$P" ;; esac
 }
 
+# THE TWO TOP-LEVEL SECTIONS ARE FUNCTIONS, CALLED BELOW THE SOURCE GUARD, so a fixture can source this file and
+# ask stage1_score (the scoring the CLI runs after its self-probe) in process. Sourced, nothing below the guard runs.
+stage1_entry() {
 self_probe
 if [ "${1:-}" = --self-probe ]; then
   echo "self-probe: $PROBE_N probes answered as expected"
   exit 0
 fi
 [ $# -eq 0 ] || refuse "usage: bash $0 [--self-probe] -- the scorer takes no roots; it reads the last three ledger lines"
+}
 
 # ------------------------------------------------------------------ the ledger ----
+stage1_score() {
 resolve_root() {
   local d="$1"
   while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
@@ -558,3 +563,8 @@ done
 if [ "$FAILED" -ne 0 ]; then exit 1; fi
 echo "MET: stage 1 -- three consecutive sandbox runs ($RD1, $RD2, $RD3), every subject mapped with no drop notice and a clean canary, peak load >= $LOAD_FLOOR inside every window, identical present-path sets"
 exit 0
+}
+
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+stage1_entry "$@"
+stage1_score
