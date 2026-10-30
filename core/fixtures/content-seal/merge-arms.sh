@@ -306,9 +306,23 @@ perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$dF/1.md"
 # OUTSIDE-set epics part (graph s319's `epics/part-<n>.md` shape) with no role file at all: the in-set
 # CURRENT and NONE files are UNFINISHED naming the admission, the LEGACY one and the epics part are
 # UNSETTLED (the settle path, unchanged), and the epics world carries no role file anywhere.
-a2_status() { # <world root> <target> -> the --status line for it
-  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 bash "$WFD" --status --complete --since 1 "$2" 2>&1 ) | grep -F -- "$2" | head -1
+# IN PROCESS: the subject is sourced in a subshell and its wfd_beat_main is called with the --status argv
+# (pipefail off, as the CLI runs it); --status writes nothing, so the world is the same for the next call.
+a2_raw() { # <world root> <target> -> the whole --status answer, stdout and stderr
+  ( cd "$1" && export AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 && set +o pipefail && . "$WFD" && wfd_beat_main --status --complete --since 1 "$2" ) 2>&1
 }
+a2_status() { # <world root> <target> -> the --status line for it
+  a2_raw "$1" "$2" | grep -F -- "$2" | head -1
+}
+# CS-A2s: THE SEAM. The CLI's --status answer equals a2_raw's byte for byte on the CURRENT world (UNFINISHED)
+# and on the LEGACY one (UNSETTLED), and the two answers differ.
+a2_cli() { ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 bash "$WFD" --status --complete --since 1 "$2" 2>&1 ); }
+a2s_ca="$(a2_cli "$rA" "${dA#"$rA"/}/1.md"; echo "rc=$?")"; a2s_ia="$(a2_raw "$rA" "${dA#"$rA"/}/1.md"; echo "rc=$?")"
+a2s_cl="$(a2_cli "$rL" "${dL#"$rL"/}/1.md"; echo "rc=$?")"; a2s_il="$(a2_raw "$rL" "${dL#"$rL"/}/1.md"; echo "rc=$?")"
+if [ "$a2s_ca" = "$a2s_ia" ] && [ "$a2s_cl" = "$a2s_il" ] && [ "$a2s_ca" != "$a2s_cl" ] \
+   && case "$a2s_ca" in *"UNFINISHED "*) true ;; *) false ;; esac && case "$a2s_cl" in *"UNSETTLED "*) true ;; *) false ;; esac; then
+  ok "CS-A2s: wfd_beat_main --status in process answers byte-for-byte what the CLI does on the CURRENT (UNFINISHED) and LEGACY (UNSETTLED) worlds, and the two differ"
+else bad "CS-A2s: in-process --status differs from the CLI: current cli=[$a2s_ca] inp=[$a2s_ia] legacy cli=[$a2s_cl] inp=[$a2s_il]"; fi
 eP="$rN/_bmad-output/planning-artifacts/s1/epics"; mkdir -p "$eP"
 printf '# Epic 1\n\nBody.\n\nseat-complete: stories-epic-1 pm none findings=0\n' > "$eP/part-1.md"
 in_set "planning-artifacts/s1/epics/part-1.md" && eset=yes || eset=no
