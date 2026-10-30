@@ -214,7 +214,7 @@ drive() {
   # gets a copy of that world (history, refs and all) instead of a rebuild. A digest-keying mutant
   # (M1, M5, M6, M7) produces its own set and builds its own world, which is the point of seeding
   # through its --digest.
-  local key="$WORK/tpl-$(printf '%s' "$dA$dB$dC$dD" | shasum -a 1 | cut -c1-16)"
+  local key="$WORK/tpl-$(printf '%s' "$dA$dB$dC$dD" | shasum -a 1 | sed 's/^\(................\).*/\1/')"
   if [ -d "$key" ]; then
     # Every file the template holds overwrites its version-1 twin written above; nothing else is in $W.
     cp -Rp "$key/." "$W/" || return 2

@@ -25,6 +25,7 @@ trap 'rm -rf "$WORK"' EXIT
 # The REQUIRED input of inputs.decl: every assertion below drives this validator, and seed.sh
 # has already run it (--expected) to derive the escalated set, so this is the point of first use.
 echo "HERMETIC-CONSUMED $VALIDATOR"
+[ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(dirname "$VALIDATOR")/gate_adjudication.py"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

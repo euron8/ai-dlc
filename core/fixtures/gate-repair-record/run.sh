@@ -52,6 +52,7 @@ if [ -z "$VALIDATOR" ]; then
 fi
 
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
+[ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/gate_adjudication.py"
 
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 if [ -z "$ROOT" ] || [ ! -d "$ROOT" ]; then
