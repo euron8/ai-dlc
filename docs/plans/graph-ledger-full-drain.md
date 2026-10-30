@@ -67,25 +67,28 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 245 IS CLOSED: ELEVEN RELEASES, `v0.959.0` THROUGH `v0.969.0`. THE NEXT SESSION STARTS BATCH 246.**
-This block replaces the batch-244 record. Lead was ai-dlc-8e; integrator was ai-dlc-8a. No `graph-*` session was messaged. No graph watch ran.
-- **Landed** (squash, PR, closes, NET as each release message or CHANGELOG derives it):
-  - `v0.959.0` `6ce240470`: BL-685 D-r9b-1 progress, still PARTIAL. NET 0.
-  - `v0.960.0` `011853d19`: BL-848 filed and closed; BL-836 and BL-817 progress, both PARTIAL. NET 0.
-  - `v0.961.0` `0325bab9a` #1330: BL-850 filed PARTIAL, BL-828 progress. NET +1.
-  - `v0.962.0` `7deec27d9` #1331: BL-679 and BL-685 retired (the recorded `--verify` PASS cache is deleted). NET −2.
-  - `v0.963.0` `233794d68` #1332: BL-851 closed (prevention mechanisms); BL-850 progress.
-  - `v0.964.0` `70490c80e` #1334: BL-866 and BL-867 closed; BL-868 filed; BL-850 progress.
-  - `v0.965.0` `5f949d6f2` #1338: BL-850 progress.
-  - `v0.966.0` `be4736a50` #1339: BL-837 closed. NET −1.
-  - `v0.967.0` `9159a2064` #1341: BL-842 PARTIAL (its close waits on BL-817's `Outcome measured:` line).
-  - `v0.968.0` `909249c28` #1342: BL-849 closed; BL-828 M5 shipped; BL-868 and BL-850 progress; its CHANGELOG text closes PC-S320-HERMETIC-RUNNER-XR-ARM-FAILS-AGAINST-THE-SHIPPED-CONSUMER-HOOK, but no commit message names it (git log -F --grep returns 0).
-  - `v0.969.0` `42badbf66` #1343: BL-868 item 3 closed; BL-850 progress.
-  Every batch-245 LANDED line in the archive is re-anchored on its squash and each is an ancestor of `origin/main`.
-- **Operator rulings this batch.** The durable ones live in `.claude/rules/operator-rulings.md` (pushes take the lead's slot one at a time, every other run in parallel; no timing runs; zero load-dependent tests) and in `CLAUDE.md` (a unit's push is its gate). BL-850's worklist was dropped from this batch by ruling and is recorded in that entry. BL-868 B1 sh-stub: "File for next batch".
-- **Backlog.** Filed at this close: BL-869 (no pre-push arm refuses an unseeded release push), BL-870 (pre-suite not content-keyed), BL-871 (shipped-rule-version-floor read-set), BL-872 (backlog-real-ledger count follows the live ledger), BL-873 (six unexplained count rises), BL-874 (pre-squash LANDED shas), BL-875 (readset-skip `logstream` processes). Live at close: 49; archive 797. **The next free id is BL-876.** Incidental closes (action 5, diffed by ID, base `cb1486eac` against the close tip): none. The exit-0 set was empty at base and `BL-868` only at the tip, which is its own subject's receipt.
-- **Not built, with reasons**, each as its entry says: BL-850's dropped worklist, BL-868 items 6 and 7, BL-828's 52 owed sites, BL-843's c3+c4 cut, and BL-869 through BL-875 (filed at this close).
-- **Graph at close**: installed 0.964.0 on the checked-out branch `ai-dlc-update/self-update-0.966.0-20261029T102405Z` (5 releases behind) and 0.924.0 on `main` (45 behind, WIDE). Shipped 0.969.0. Derive block at `42badbf66`: live 5, archive 382; PENDING 1 (`PC-S319-CHECK-17-…`, UNNAMED, consumer-only BL-791) plus 3 live ids with no release naming them (`PC-S320-APPLY-SH-…`, `PC-S320-SUPPRESSION-LIFETIME-…`, `PC-S320-HERMETIC-RUNNER-XR-…`, each 0 commit-message hits) and `PC-S320-HANDOFF-…` named in 0.953.0. No `preclassify.sh`, `apply.sh`, `ledger-reverify.sh` or `ai-dlc-update/SKILL.md` in the range `70490c80e..origin/main`; mode-only 0 of 157 raw rows. Action 7's differential on a `file://` clone at graph's HEAD, `cmp -s` asserting the binaries differ: `validate-spawn-ledger.sh` and `validate-carried-findings.sh` agree on their usage refusal (exit 2), `validate-ac-falsifiability.sh` differs only in its usage line (the new `--stories-dir`), and on 40 story files both exit 2 with identical one-line output, so that run did not reach a finding set. Not covered: the other changed engines, which need seeded inputs. The pull is not preapproved; no runbook.
+**BATCH 246 IS CLOSED: ONE RELEASE, `v0.970.0`. THE NEXT SESSION STARTS BATCH 247.**
+This block replaces the batch-245 record. Lead was ai-dlc-b5, in the no-owner shape: `ListAgents` showed no other `ai-dlc-*` session. No `graph-*` session was messaged. No graph watch ran.
+- **Operator scope ruling, this batch only:** "PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE is the only item allowed in this batch." Nothing else was scoped.
+- **Landed:** `v0.970.0` `aa6675b8f` #1345: BL-876 filed and closed. It closes PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE, which the squash message names. NET 0. BL-876's LANDED line in the archive is re-anchored on the squash.
+- **What it changed.**
+  - Rule 11(a)'s UNBADGED trigger is now a question deciding a value the operator alone owns that no operator words fix.
+  - A new Rule 12 subsection, `#### Operator decisions: sort before asking (Rule 11(a))`, sorts every question three ways.
+  - Rule 12 declares `**Carrier:** \`Check 2\``, because it now sits past I79's 20000-byte band.
+  - The continue hook's block reason and `steps/route.md` agree with the sort.
+  - Twelve `process-rule-pins` rows pin it.
+  - BL-876's receipt is the driver `core/fixtures/process-rule-pins/receipt-bl876.sh`.
+- **Facts for the next batch.**
+  - Rule 11(b)'s `**Absolute.**` paragraph ends at byte 20044 of `core/skills/ai-dlc/SKILL.md`. That is 77 bytes inside the measured 20121-byte re-attach cut, so any growth in Rules 1-11 pushes Rule 11(b) out of the re-attached head.
+  - `validator-fork-budget` reads 3467 of `FORK_BUDGET=3472`.
+  - The 0.970.0 gate's pole was `backlog-receipt-binding` at 344s loaded.
+- **Backlog.** Live at close: 49. Archive: 798. **The next free id is BL-877.** Nothing was filed at this close.
+- **Graph at close.**
+  - Installed 0.969.0 on its checked-out branch `ai-dlc/feature/per-chain-rebalancer-instances` and on `main`, so it is 1 release behind after 0.970.0.
+  - The derive block at `d48335d52` found: qualifying refs 1; live 9, archive 382; DISCHARGED 1 (`PC-S319-CHECK-17-…`, consumer-only BL-791); and 8 live ids no backlog entry cites. Those 8 are the 7 `PC-S320-…` ids plus this batch's PC-S321, which 0.970.0 now names.
+  - The seven S320 ids were out of scope by the operator's ruling and remain live.
+  - The ledger's md5 was unchanged across the batch (`08be313c0f0b8d189c58c1a9d1a2de96`).
+  - The pull is not preapproved, and no runbook was written.
 
 ### Derive the state; do not trust the numbers below
 
