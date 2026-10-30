@@ -1994,7 +1994,7 @@ FIDELITY CHECK: Do NOT pattern-match on prior sprint execution. Re-read the curr
 if pq_fire; then
   REASON="RULE 11(a) -- THE LAST LINE OF YOUR REPLY IS A QUESTION AND THIS TURN CARRIES NO AskUserQuestion. A question left in prose with no pause flag is not a pause: the pipeline blocks, you are told to create the flag, and a flag on its own does not make the question visible. Take whichever of the two readings you are in.
 
-(i) A Rule 11(a) AMBIGUITY QUESTION: put it with AskUserQuestion, every option stating its effect and the value it leaves in force, recommended option first unless an option sets or leaves in force an operator-owned value (a config leaf, a money-path threshold, a byte-pin, an LR-/LRC- id, a D-<n> decision) -- then no option is badged -- and set NO pause flag -- the tool holds the turn open, so a flag there is a pause nobody clears.
+(i) A Rule 11(a) AMBIGUITY QUESTION: put it with AskUserQuestion, every option stating its effect and the value it leaves in force, recommended option first unless an option sets or leaves in force an operator-owned value (a value the operator alone owns and no operator answer fixes: a config leaf, a money-path threshold, a byte-pin, an LR-/LRC- id, a D-<n> decision) -- then no option is badged; a design choice a source settles that leaves every such value in force decides no value, so it is decided and listed for veto, not asked unbadged -- and set NO pause flag -- the tool holds the turn open, so a flag there is a pause nobody clears.
 
 (ii) The PRODUCTION VALIDATION CHECKPOINT or the RETRO COMMENTARY PROMPT: those are asked in prose, so touch _bmad-output/pipeline-paused.flag and end the turn again (Rule 3).
 

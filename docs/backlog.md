@@ -1788,3 +1788,4 @@ verify: manual
 **NOTE.** Observed at the batch b245 close: `stub/logstream stream` processes from readset-skip's slot worlds survive their run. Not yet measured: count and cause. Owed: a measured census and a teardown. The related pre-push pool TERM defect is already filed (the entry carrying "a TERM to .githooks/pre-push does not tear down its fixture pool"). Provenance: batch b245 close filing.
 
 verify: manual
+

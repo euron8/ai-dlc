@@ -333,9 +333,10 @@ in force** -- on the option itself, not only in the question: *"inherit
 the offramp leaves: swap skipped for balances <= 0.01 token0"*, not
 *"inherit and say so"*. **A question is UNBADGED -- options presented
 neutrally, none marked `(Recommended)` and none placed first as the
-pick -- when any option sets, relaxes, inherits or leaves in force a
-config leaf, a threshold or literal on a money path, a byte-pin, an `LR-`
-or `LRC-` id, or a `D-<n>` operator decision in the spine.** Those values
+pick -- when it decides a value the operator alone owns and no operator
+words fix: its options set, relax, inherit or leave in force a config
+leaf, a threshold or literal on a money path, a byte-pin, an `LR-` or
+`LRC-` id, or a `D-<n>` operator decision in the spine.** Those values
 are the operator's to own, and a badge on one hands the
 operator's decision back to the lead under the operator's name. A question typed as prose at the end
 of a reply, followed by ending the turn, reads as narration: the
@@ -361,7 +362,7 @@ saying what it is, because the operator reads the question, not the
 artifact behind it. (4) Dispatch ready actions on free lanes, arm their joins, and
 name the lanes held.
 
-**One shape for every operator decision, and no re-ask of an attested act** -- stated in full under Rule 12's two `#### Operator decisions` subsections; apply both to every question you put to the operator.
+**One shape for every operator decision, the sort before asking, and no re-ask of an attested act** -- stated in full under Rule 12's three `#### Operator decisions` subsections; apply all three to every question you put to the operator.
 
 **(b) In-flight interpretation preamble.** The first line of the
 agent's response to ANY user message that arrives during or after an
@@ -422,6 +423,42 @@ disclose the change for explicit operator acknowledgement — mechanism in
 When a later event shows an outcome an earlier authorization relied on did
 not occur, the question returns to the operator — `escalations.md`
 "Authorization-premise invalidation disclosure".
+
+**Carrier:** `Check 2` -- the gate reads `docs/escalations/pending.md` and fails on an unresolved HARD_BLOCK or a Status outside the tier vocabulary. Whether an escalation that was due got written at all is not observed by any gate.
+
+#### Operator decisions: sort before asking (Rule 11(a))
+
+**Sort every question three ways before it is asked.** (i) **A design
+choice a source settles is decided, not asked.** The sources are the
+operator's own words -- a prior answer of any length in
+`_bmad-output/operator-answers-history.md`, a request in
+`_bmad-output/operator-requests-history.md`, or an operator quote inside
+a `LOCKED_REQUIREMENTS` entry -- and, for WHERE and HOW only (a code
+path, a check's placement, which component reads what), the tree. It is
+a HOW decision under Rule 13 (`rule-bodies/rule-13.md`): record it as a
+Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a
+one-line reason, add one veto line for it to the next `AskUserQuestion`
+you send, and it reaches the operator under `### For Your Information`
+at the checkpoint (`steps/deploy-validate.md` §5). This holds on a money
+path, a config leaf or a pinned span, PROVIDED the choice leaves every
+operator-owned value in force or sets it to the operator's verbatim
+value or that value exactly converted between units. Such a choice
+decides no value, so Rule 11(a)'s UNBADGED trigger does not reach it. A
+choice that otherwise sets, relaxes or widens a value, a limit or an
+authority is settled by no source. (ii) **A design choice no
+source settles is asked with one option `(Recommended)`.** (iii) **Only
+a value the operator alone owns and no operator words fix is asked
+UNBADGED, as Rule 11(a) says** -- a number, an address, a limit, an
+enable flag, a secret, wallet or security config. **The tree never
+settles a value**: a literal found in config, code or a staged artifact
+is a derivation to put for veto under Rule 11(a)'s item (2), not a
+source; and words a lead wrote into a `LOCKED_REQUIREMENTS` entry are no
+source for what they add. **Outside this sort, each asked as its own
+rule says:** the sprint-scope confirmation (`steps/route.md` Step 6),
+operator relief (Rule 11(a), `bug-investigation.md` §2b), a choice that
+moves a locked requirement's boundary (Rule 13) or contradicts an
+operator-approved decision (Rule 12 Tier 1), and a gate STOP
+adjudication (`steps/_gate-procedures.md`).
 
 #### Operator decisions: one shape (Rule 11(a))
 

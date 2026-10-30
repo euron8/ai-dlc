@@ -109,6 +109,39 @@ Two observable requirements.
 Write escalations to `docs/escalations/pending.md`. Escalations have
 three tiers that determine whether work blocks or continues.
 
+#### Operator decisions: sort before asking (Rule 11(a))
+**Sort every question three ways before it is asked.** (i) **A design
+choice a source settles is decided, not asked.** The sources are the
+operator's own words -- a prior answer of any length in
+`_bmad-output/operator-answers-history.md`, a request in
+`_bmad-output/operator-requests-history.md`, or an operator quote inside
+a `LOCKED_REQUIREMENTS` entry -- and, for WHERE and HOW only (a code
+path, a check's placement, which component reads what), the tree. It is
+a HOW decision under Rule 13 (`rule-bodies/rule-13.md`): record it as a
+Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a
+one-line reason, add one veto line for it to the next `AskUserQuestion`
+you send, and it reaches the operator under `### For Your Information`
+at the checkpoint (`steps/deploy-validate.md` §5). This holds on a money
+path, a config leaf or a pinned span, PROVIDED the choice leaves every
+operator-owned value in force or sets it to the operator's verbatim
+value or that value exactly converted between units. Such a choice
+decides no value, so Rule 11(a)'s UNBADGED trigger does not reach it. A
+choice that otherwise sets, relaxes or widens a value, a limit or an
+authority is settled by no source. (ii) **A design choice no
+source settles is asked with one option `(Recommended)`.** (iii) **Only
+a value the operator alone owns and no operator words fix is asked
+UNBADGED, as Rule 11(a) says** -- a number, an address, a limit, an
+enable flag, a secret, wallet or security config. **The tree never
+settles a value**: a literal found in config, code or a staged artifact
+is a derivation to put for veto under Rule 11(a)'s item (2), not a
+source; and words a lead wrote into a `LOCKED_REQUIREMENTS` entry are no
+source for what they add. **Outside this sort, each asked as its own
+rule says:** the sprint-scope confirmation (`steps/route.md` Step 6),
+operator relief (Rule 11(a), `bug-investigation.md` §2b), a choice that
+moves a locked requirement's boundary (Rule 13) or contradicts an
+operator-approved decision (Rule 12 Tier 1), and a gate STOP
+adjudication (`steps/_gate-procedures.md`).
+
 #### Operator decisions: one shape (Rule 11(a))
 **Every decision put to the operator has one shape, wherever it is
 asked** -- an `AskUserQuestion`, a checkpoint's `### Decisions for You`

@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.970.0] - 2026-10-30
+
+Batch b246. Rule 11(a) asks a value unbadged and decides the design choices a source settles (BL-876), closing the consumer's PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE.
+
+Rulebook and engine changes: `core/skills/ai-dlc/SKILL.md` (Rule 11(a) trigger, a new Rule 12 `#### Operator decisions: sort before asking (Rule 11(a))` subsection, Rule 12's `**Carrier:**` declaration), its rendered `postcompact-digest.md`, `core/skills/ai-dlc/steps/route.md` Step 6, and the block reason in `core/hooks/ai-dlc-continue.sh`. Fixture changes: `core/fixtures/process-rule-pins` (`run.sh`, and a new `receipt-bl876.sh`). Packaging: none. Backlog: `docs/backlog.md`, `docs/backlog.archive.md`.
+
+### Rule 11(a) asks a value unbadged and decides the design choices a source settles (BL-876)
+
+Consumer filing PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE. Rule 11(a)'s unbadged trigger reached nearly every design choice on a money-path sprint: in the consumer's session 29 of 30 operator questions went out unbadged and 4 drew objections, because the lead sent recommendation-free option lists for choices its sources already settled.
+
+For a consumer lead, the UNBADGED trigger is now a question that decides a value the operator alone owns and no operator words fix. A new subsection under Rule 12, `#### Operator decisions: sort before asking (Rule 11(a))`, sorts every question three ways before it is asked: a design choice a source settles (the operator's own words, or the tree for WHERE and HOW only) is decided, recorded as a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry with a one-line reason, listed for veto on the next `AskUserQuestion` and surfaced under `### For Your Information`, provided it leaves every operator-owned value in force or sets it to the operator's verbatim value or that value exactly converted between units. Such a choice decides no value, so the UNBADGED trigger does not reach it. A design choice no source settles is asked with one `(Recommended)` option, and only a value the operator alone owns is asked unbadged. The tree never settles a value, and words a lead wrote into a `LOCKED_REQUIREMENTS` entry are no source for what they add. The sprint-scope confirmation, operator relief, a locked-boundary move, a contradiction of an operator-approved decision and a gate STOP adjudication are still asked as before. The block reason in `core/hooks/ai-dlc-continue.sh` names the narrowed trigger and says a sourced choice that leaves every value in force is decided and listed for veto. `steps/route.md` Step 6 names a config leaf as a value no operator words fix. `process-rule-pins` pins each clause with a para row.
+
+The subsection sits under Rule 12, not inside Rule 11, so Rule 11(b) stays inside the measured re-attach cut, and `postcompact-digest.md` carries the new subsection whole. Rule 12 now sits past the cut and declares `Check 2` as its carrier, which observes the escalation file's shape but not whether a due escalation was written.
+
+BL-876's receipt is the driver `core/fixtures/process-rule-pins/receipt-bl876.sh`. It extracts the Rule 11 span and the sort subsection with HTML comments stripped and whitespace collapsed, and requires the value-trigger clause and every sort clause, using the pin keys as its clause list. It scores 0 at the fix, 1 at base, 1 with the WHERE/HOW and lead-words clauses deleted, 1 with every clause inside an HTML comment, and 0 with both paragraphs reflowed.
+
+In the contract adversary's walk of the consumer's real sprint, the 4 objected questions flip to decide-and-list, and 6 stay asked. The close is a structural trace plus the pins, with no behavioural replay.
+
+NET 0: BL-876 was filed and closed in this release.
+
 ## [0.969.0] - 2026-10-29
 
 Batch b245. It ships the `wait-beat-liveness` fixture on an injected clock, the fix for the fixture hang that held the unit out of 0.968.0, and the removal of the last two `±` rows in the tree (BL-868 item 3, BL-850 progress). BL-850 stays open where its line in `docs/backlog.md` says so.
