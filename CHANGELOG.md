@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.971.0] - 2026-10-30
+
+Fixtures-to-unit-tests conversion (BL-878, BL-868). Fifteen fixtures ask their subjects in process, as sourced functions, rather than as one separate program per cell. BL-878 stays open: the fixtures not converted here remain on its list, and BL-879, which seeds that list, ships first.
+
+Rulebook and engine changes. None to a rule or a step. Seams in shipped scripts, each a pure move behind a source guard unless stated: `core/scripts/content-seal.sh`, `core/scripts/merge-adversarial-shards.sh`, `core/scripts/merge-review-shards.sh`, `core/scripts/join-remediator-shards.sh`, `core/scripts/wait-for-deliverable.sh`, `core/scripts/validate-artifact-derivations.sh`, `core/scripts/validate-adversarial-convergence.sh`, `core/scripts/derive-fixture-readsets.sh` and `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh`. Packaging: `core/scripts/gate_adjudication.py` is a new shipped file, picked up by `scripts/install.sh`, which derives its copy loop from `core/scripts/`. Pre-push: `.githooks/pre-push`. Backlog: `docs/backlog.md`.
+
+### Fifteen fixtures converted to in-process cells (BL-878)
+
+- Converted: content-seal, gate-adjudication, adversarial-shard-merge, review-shard-merge, wait-beat-liveness, artifact-derivations, remediator-shard-join (reader-a, reader-b and `--mark`), story-evidence-scaffold, ledger-reverify, ledger-reverify-unfalsifiable, backlog-receipt-binding, push-drain-refusals, postcompact-rulebook-recovery, readset-skip and readset-stage1-verdict.
+- `core/fixtures/lib/inproc.sh` runs a loadable subject in process as a fresh bash would.
+- Subjects made loadable: `wait-for-deliverable.sh` (`wfd_main`, `wfd_mark_main`, `wfd_beat_main`, and `WFD_SELF_PID` naming the lease holder, default `$$`), `validate-artifact-derivations.sh` (`vad_cli`, `vad_load`, `vad_invoke`), `ledger-reverify.sh` (`lr_main_*` and `lr_init_*`, self-location from `BASH_SOURCE`), `derive-fixture-readsets.sh` (its top level a set of phases, `READSET_SLEEP_CMD` as the injected wait), `join-remediator-shards.sh` (`join_main`, `hook_pretool_head`). `validate-gate-adjudication.sh`'s embedded python moved verbatim into `core/scripts/gate_adjudication.py`. `validate-adversarial-convergence.sh` resolves its siblings from `${BASH_SOURCE[0]}`.
+- Where a subject cannot be driven in a subshell the cell stays end to end with its reason beside it: `reconcile/lib.sh` exports its memo only at `BASH_SUBSHELL` 0, so one memo drive each in backlog-receipt-binding and ledger-reverify stays a separate program.
+- Sibling-script process starts moved in process: `merge-review-shards.sh` runs its partition, `--cross-groups`, `--cross-owner`, content-seal and `record-only-diff.sh` steps in process; `wait-for-deliverable.sh --mark` runs its `--check-shard` and seal checks in process.
+- Mutants are scored against one sourced copy each, on their owning cells only; seeded worlds are built once and copied. Two coverage gaps found on the way are closed: `r-pointer` in story-evidence-scaffold and `drop-strip` in ledger-reverify-unfalsifiable.
+
+### BL-868: no wait decides on a count of polls or on elapsed time
+
+The readset fixtures and wait-beat-liveness replace their load-dependent poll and elapsed-time bounds with event waits and process-state checks that load cannot move (`aw_group_settled`, `aw_overslept`); the remaining 3000-poll bounds in the readset family are removed.
+
+wait-stale-deliverable's two-beats cell (C40, owning mutant `no-join-memo`) set up its world under bounds load could exhaust: beat 1's 12s quantum, a 10s counter wait, a 10-try freeze loop and a 6000-poll resolution backstop. When one ran out, the cell exited 2 and failed the gate. The defect predates this release, and a forced 13s delay before the seal reproduces it at origin/main. Beat 1 now runs with the same 600s quantum as beat 2, and every setup wait waits on its event with no count or time cap.
+
+### Pre-suite per-step skip
+
+`.githooks/pre-push` runs a pre-suite step only when something it read has moved, and keys the absent paths a step tests (traced with `sandbox-exec`).
+
+### Fixture costs
+
+`invocations.decl` is re-measured by counted hermetic runs for every converted fixture, and for readset-skip-b, readset-skip-c, readset-skip-d and review-reroute, whose counts moved with the subjects they share, at the tree of this release. wait-stale-deliverable's `lease-always-put` mutant is re-aimed on the lease line that now names the `WD_SELF_PID` seam.
+
+### Facts recorded
+
+- The `content-seal` measurement on a loaded box, origin/main against d3945157b, four alternating runs per side: wall 52.2s to 32.8s, CPU 44.6s to 28.7s, with no range overlap.
+
 ## [0.970.0] - 2026-10-30
 
 Batch b246. Rule 11(a) asks a value unbadged and decides the design choices a source settles (BL-876), closing the consumer's PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE.

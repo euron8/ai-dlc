@@ -1,4 +1,6 @@
-# Fixtures to in-process unit tests: handoff
+# Fixtures to in-process unit tests: handoff — DISCHARGED by 0.971.0, DO NOT EXECUTE
+
+**Discharged.** Release 0.971.0 merged every branch below, finished the two WIP units, re-measured invocations.decl, re-traced the read sets and removed the action 6 process starts. The plan is not handed on. The remaining conversion work is backlog entries BL-878 to BL-881, picked up by the batches of docs/plans/graph-ledger-full-drain.md. Everything below is the record as it stood at handoff.
 
 ## RESUME HERE
 

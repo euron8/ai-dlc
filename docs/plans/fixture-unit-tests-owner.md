@@ -1,4 +1,10 @@
-# Fixtures to in-process unit tests: owner brief
+# Fixtures to in-process unit tests: owner brief — DISCHARGED by 0.971.0, DO NOT EXECUTE
+
+**Discharged.** Its three units shipped in 0.971.0, built through hands by the lead session after the operator ruled that the lead owns the work when no other session exists. Everything below is the record as written.
+
+## Start here
+
+Nothing is left to execute. Read this file, never write it: it is a closed record. It wrote only this repo (`/Users/n8/git/ai-dlc`), on `exp/*` branches. If asked to act on it, report to the operator that it is discharged and ping the operator on any question about what remains.
 
 ## RESUME HERE
 

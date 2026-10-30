@@ -1857,6 +1857,8 @@ No timing runs and no per-fixture before/after measurement are taken (operator r
 
 **The reference set**, converted on `exp/fixture-unit-tests` (some still landing): content-seal, remediator-shard-join, story-evidence-scaffold, ledger-reverify, backlog-receipt-binding, push-drain-refusals, postcompact-rulebook-recovery, the readset family (readset-sandbox-root-clause, readset-skip, readset-skip-b, readset-skip-c, readset-skip-d, readset-stage1-verdict), adversarial-shard-merge, review-shard-merge, wait-beat-liveness and artifact-derivations. `content-seal/unit-arms.sh` and `remediator-shard-join/unit-parts.sh` are the in-process cell files to copy from; BL-850 carries the two pilots' measurements.
 
+**Progress (0.971.0; the entry stays OPEN, `verify: sh` unchanged, no LANDED line).** Fifteen fixtures were converted in that release: content-seal, gate-adjudication, adversarial-shard-merge, review-shard-merge, wait-beat-liveness, artifact-derivations, remediator-shard-join, story-evidence-scaffold, ledger-reverify, ledger-reverify-unfalsifiable, backlog-receipt-binding, push-drain-refusals, postcompact-rulebook-recovery, readset-skip and readset-stage1-verdict. BL-879 ships first, because this entry's population is the allowlist BL-879 seeds.
+
 **Close condition.** The allowlist is empty and BL-879's check passes over the whole suite. The receipt runs that check in its completion mode, which exits non-zero while any allowlist row remains, so the entry cannot close the day the check lands. Today the checker does not exist, and the receipt exits 127 (STILL-LIVE).
 
 verify: sh bash scripts/validate-fixture-inprocess.sh --complete
