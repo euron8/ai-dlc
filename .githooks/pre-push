@@ -116,11 +116,367 @@ ssh_keepalive_warn "${1:-}" "${2:-}"
 fail=0
 # AI_DLC_PRESUITE_SKIP=1 skips every check before the fixture suite: for a re-push of a tree
 # whose checks already passed. The suite and its judges still run. The operator's switch.
+#
+# PRE-SUITE STEP KEYS: A STEP RUNS ONLY WHEN SOMETHING IT READ MOVED SINCE ITS LAST PASS. Each
+# pre-suite step (every `step` before PRESUITE_DONE=1) is keyed the way a fixture is, in the same
+# record grammar (`#format k1`, `#state ok`, `#tools canonical`, `<path>\t<sha256>`,
+# `<dir>/\t#listing:<sha256>`, `<tool path>\t<sha256>`), one record per step under
+# `<git common dir>/ai-dlc-presuite-keys/<step slug>.key`, and skipped on a recorded pass when
+# every key still holds. A skipped step prints `skipped on a recorded pass` and then PASS, the way
+# the suite's content-key skip prints SKIPPED and then PASS, so the verdict count per step is
+# unchanged; one `pre-suite keys:` line at PRESUITE_DONE names every step skipped.
+#
+# THE KEY SET IS TRACED ON EVERY RECORDED RUN, NEVER WRITTEN BY HAND. A step that runs is traced
+# by two instruments with disjoint blind spots, and its record is the union:
+#   * FILES: every path under the work tree (outside `.git`) is forced to an atime of 2000 before
+#     the step, and every path whose atime moved during it was READ (the `-newerat` technique of
+#     derive-fixture-readsets.sh; APFS is relatime-like, so the forced epoch is what makes a second
+#     read visible). A read file is keyed on its `.now` hash from the hook's own READSET_UNIVERSE
+#     span (readset_manifest, with the content key's excluded tops put BACK: docs/, VERSION,
+#     CHANGELOG.md and CLAUDE.md are read by these steps and must move their keys); a read file
+#     outside that universe (git-ignored) is hashed directly; a read directory is keyed on its
+#     listing (readset_listings), and so is every ANCESTOR of every read path, so a file created
+#     beside one the step read moves the key. Tools are keyed through readset_tools' `.ftools` for
+#     every read `.sh` file and every word of the step's argv.
+#   * GIT: the step runs with GIT_TRACE2_EVENT pointed at a directory, and every git process whose
+#     repository is THIS work tree is replayed after the step with GIT_OPTIONAL_LOCKS=0; the key is
+#     the sha256 of its exit code and stdout. So `git show HEAD:x` keys the blob, `rev-list
+#     origin/main..HEAD` keys the range, `ls-files` keys the tracked set. A `worktree add <dir>
+#     <rev>` is keyed as `rev-parse --verify <rev>^{tree}`; object construction on a private index
+#     (hash-object, commit-tree, write-tree, and read-tree/update-index under GIT_INDEX_FILE) and
+#     worktree housekeeping are not keyed. ANY OTHER git subcommand against this repository, or a
+#     git command elsewhere that names it, makes the step UNRECORDABLE: it runs on every push and
+#     says why.
+#   * COMMAND: the step's argv, a PRESUITE_DECLARE line set on the line before it, and the body of
+#     the wrapper function it calls, so a ceiling edited in this hook moves that step's key.
+# NEVER RECORDED: a step that failed or was interrupted; a step during which any path under the
+# work tree changed mtime (and then no later step on this push is skipped or recorded either,
+# because the manifest every decision reads is the pre-run one); any run whose controls failed --
+# the atime canary (a read file moves, an unread one stays) or the trace sentinel (a git call
+# writes a trace file). Without python3, or when the tree cannot be hashed, nothing is skipped and
+# the hook says so. AI_DLC_FIXTURE_NO_SKIP=1 runs every step (and still records).
+# KNOWN BLIND SPOT, MEASURED: an existence test of an ABSENT path (`[ -f x ]` on nothing) moves no
+# atime and runs no git. It is covered when x would land in a directory the step read or that is an
+# ancestor of a path it read (its listing is keyed); otherwise only a PRESUITE_DECLARE line covers it.
+PK_ON=""; PK_TR=""; PK_DIRTY=0; PK_NSKIP=0; PK_NSTEP=0; PK_SKIPPED=""; PRESUITE_DECLARE=""
+pk_off() { PK_ON=0; printf '   ..    pre-suite keys OFF: %s -- every step runs\n' "$1"; return 1; }
+pk_init() {
+  [ -z "$PK_ON" ] || { [ "$PK_ON" = 1 ]; return; }
+  local gcd
+  command -v python3 >/dev/null 2>&1 || { pk_off "python3 not found"; return 1; }
+  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" && gcd="$(cd "$gcd" 2>/dev/null && pwd -P)" && [ -n "$gcd" ] \
+    || { pk_off "the git common dir did not resolve"; return 1; }
+  PK_DIR="$gcd/ai-dlc-presuite-keys"
+  mkdir -p "$PK_DIR" 2>/dev/null || { pk_off "cannot create $PK_DIR"; return 1; }
+  PK_TOP="$(pwd -P)"
+  PK_W="$(mktemp -d "${TMPDIR:-/tmp}/presuite-keys.XXXXXX")" && PK_W="$(cd "$PK_W" && pwd -P)" \
+    || { pk_off "no scratch dir"; return 1; }
+  pk_py > "$PK_W/pk.py"
+  # THE HOOK'S OWN SPANS, SOURCED OUT OF THIS FILE as hermetic-run.sh sources them, so there is one universe filter,
+  # one listing grammar and one tool resolver. The content key's excluded tops are put back by overriding the one
+  # function that drops them, inside this subshell only.
+  # A PREFIX of this hook run alone (scripts/pregate-self-check.sh cuts it at the fixture suite) carries neither span,
+  # so the work tree's own hook is read instead.
+  PK_SELF="$0"
+  { grep -q '^# READSET_UNIVERSE_END$' "$PK_SELF" && grep -q '^readset_tools() {' "$PK_SELF"; } 2>/dev/null || PK_SELF=.githooks/pre-push
+  { grep -q '^# READSET_UNIVERSE_END$' "$PK_SELF" && grep -q '^readset_tools() {' "$PK_SELF"; } 2>/dev/null \
+    || { pk_off "neither this hook nor .githooks/pre-push carries the READSET_UNIVERSE span and readset_tools"; return 1; }
+  sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$PK_SELF" > "$PK_W/universe.sh"
+  { sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$PK_SELF"
+    awk '/^readset_tools\(\) \{/ { on = 1 } on { print } on && /^\}$/ { exit }' "$PK_SELF"; } > "$PK_W/tools.sh"
+  ( READSET_MAP=/dev/null; READSET_LOCAL=/dev/null
+    . "$PK_W/universe.sh" && . "$PK_W/tools.sh" || exit 1
+    readset_drop_excluded() { cat; }
+    mkdir -p "$PK_W/u" && readset_manifest "$PK_W/u" || exit 1
+    [ -s "$PK_W/u/.now" ] || { cat "$PK_W/u/.now.why" 2>/dev/null; exit 1; }
+    # readset_tools' exit is its last pipeline's, which the fixture path ignores too; its files are the answer.
+    cut -f1 "$PK_W/u/.now" > "$PK_W/u/.is" && readset_listings "$PK_W/u/.is" "$PK_W/u/.ls.now" || exit 1
+    readset_tools "$PK_W/u"
+    [ -s "$PK_W/u/.ls.now" ] && [ -s "$PK_W/u/.pathcmds" ] && [ -f "$PK_W/u/.ftools" ] && [ -f "$PK_W/u/.tools" ] \
+      || { echo "the listing or tool tables came out empty"; exit 1; }
+  ) > "$PK_W/init.log" 2>&1 || { pk_off "could not hash the working tree ($(head -1 "$PK_W/init.log"))"; return 1; }
+  PK_ON=1
+  [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = 1 ] && printf '   ..    pre-suite keys: skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- every step runs and is recorded on a pass\n'
+  return 0
+}
+# EVERY WALK OF THE TREE IS A READDIR, AND A READDIR MOVES A DIRECTORY'S ATIME. So the reset runs immediately before
+# each traced step and nothing walks the tree between it and the step; after the step the atime scan walks FIRST
+# (find tests an entry before it descends into it), and only then the mtime check. A verification walk after the
+# reset would itself mark every directory read.
+pk_reset_all() { # force every work-tree atime to the epoch
+  /usr/bin/find . -path ./.git -prune -o -exec touch -a -h -t 200001010000 {} + 2>/dev/null
+}
+pk_trace_init() { # the two controls, once per push; true when a traced run can be recorded
+  [ -z "$PK_TR" ] || { [ "$PK_TR" = 1 ]; return; }
+  PK_TR=0
+  touch -t 200001010001 "$PK_W/mark" || return 1
+  mkdir -p "$PK_DIR/.probe" && printf 'r\n' > "$PK_DIR/.probe/read" && printf 'u\n' > "$PK_DIR/.probe/unread" \
+    && touch -a -t 200001010000 "$PK_DIR/.probe/read" "$PK_DIR/.probe/unread" && cat "$PK_DIR/.probe/read" > /dev/null \
+    && [ -n "$(/usr/bin/find "$PK_DIR/.probe/read" -neweram "$PK_W/mark" 2>/dev/null)" ] \
+    && [ -z "$(/usr/bin/find "$PK_DIR/.probe/unread" -neweram "$PK_W/mark" 2>/dev/null)" ] \
+    || { printf '   ..    pre-suite keys: the atime canary failed (a read did not move atime, or an unread file moved) -- nothing is recorded on this push\n'; return 1; }
+  mkdir -p "$PK_W/t2.probe" && GIT_TRACE2_EVENT="$PK_W/t2.probe" git rev-parse --git-dir > /dev/null 2>&1
+  [ -n "$(ls "$PK_W/t2.probe" 2>/dev/null)" ] \
+    || { printf '   ..    pre-suite keys: the git trace sentinel wrote no trace file -- nothing is recorded on this push\n'; return 1; }
+  PK_TR=1
+}
+pk_step() { # <title> <cmd...>: the keyed form of step(); prints the verdict and sets fail
+  local title="$1" decl="$PRESUITE_DECLARE" slug rec cmdsha why rc moved
+  shift; PRESUITE_DECLARE=""; PK_NSTEP=$((PK_NSTEP + 1))
+  if ! pk_init || [ "$PK_DIRTY" = 1 ]; then
+    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+    return 0
+  fi
+  slug="$(printf '%s' "$title" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c1-80)"
+  rec="$PK_DIR/$slug.key"
+  cmdsha="$( { printf '%s\n' "$@"; printf '#declare %s\n' "$decl"; declare -f "$1" 2>/dev/null; } | shasum -a 256 | cut -d' ' -f1)"
+  if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" != 1 ] && [ -f "$rec" ]; then
+    why="$(python3 -I "$PK_W/pk.py" check "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" 2>&1)"; rc=$?
+    if [ "$rc" = 0 ]; then
+      printf '   skipped on a recorded pass: none of its %s changed\n   PASS\n' "$why"
+      PK_NSKIP=$((PK_NSKIP + 1)); PK_SKIPPED="$PK_SKIPPED $slug"
+      return 0
+    fi
+    printf '   ..    runs: %s\n' "$why"
+  fi
+  if ! pk_trace_init; then
+    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+    return 0
+  fi
+  mkdir "$PK_W/t2.$slug" && touch "$PK_W/mmark" && pk_reset_all
+  ( export GIT_TRACE2_EVENT="$PK_W/t2.$slug" GIT_TRACE2_ENV_VARS="PWD,GIT_INDEX_FILE"; "$@" ); rc=$?
+  if [ "$rc" = 0 ]; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+  /usr/bin/find . -path ./.git -prune -o -neweram "$PK_W/mark" -print 2>/dev/null | sed 's|^\./||' > "$PK_W/r.$slug"
+  moved="$(/usr/bin/find . -path ./.git -prune -o -newer "$PK_W/mmark" -print 2>/dev/null | sed -n 1,3p | tr '\n' ' ')"
+  # A RED OR UNRECORDABLE RUN DELETES THE OLD RECORD: a pass recorded on these same keys would otherwise
+  # skip the step next time over a verdict this run just contradicted.
+  if [ -n "$moved" ]; then
+    PK_DIRTY=1; rm -f "$rec"
+    printf '   ..    not recorded: the step changed the work tree (%s); no later step is skipped or recorded on this push\n' "$moved"
+  elif [ "$rc" = 0 ]; then
+    why="$(python3 -I "$PK_W/pk.py" record "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" "$PK_W/r.$slug" "$PK_W/t2.$slug" "$decl" "$@" 2>&1)" \
+      || { rm -f "$rec"; printf '   ..    not recorded: %s\n' "$why"; }
+  else
+    rm -f "$rec"
+  fi
+  return 0
+}
+pk_finish() { # the one summary line, and the scratch dir
+  if [ "$PK_ON" = 1 ]; then
+    printf '\n   ..    pre-suite keys: %s of %s step(s) skipped on a recorded pass%s\n' "$PK_NSKIP" "$PK_NSTEP" "${PK_SKIPPED:+:$PK_SKIPPED}"
+  fi
+  case "${PK_W:-}" in */presuite-keys.*) rm -rf -- "$PK_W" ;; esac
+  return 0
+}
+pk_py() { cat <<'PK_PY_END'
+import hashlib, json, os, subprocess, sys
+REPLAY = set("rev-parse show cat-file ls-files ls-tree log rev-list merge-base grep diff status symbolic-ref for-each-ref diff-files diff-index diff-tree check-ignore show-ref describe name-rev var".split())
+CFG_READ = set(["--get", "--get-all", "--get-regexp", "--list", "-l"])
+IGNORED = set(["maintenance", "hash-object", "commit-tree", "write-tree", "mktree"])
+TOK = "@TOP@"
+def h(b):
+    return hashlib.sha256(b).hexdigest()
+def totop(s, top, rtop):
+    for t in (rtop, top):
+        if s == t or s.startswith(t + "/") or ("=" + t) in s:
+            return s.replace(t, TOK)
+    return s
+def untop(s, top):
+    return s.replace(TOK, top)
+def hfile(p):
+    try:
+        with open(p, "rb") as f:
+            return h(f.read())
+    except OSError:
+        return "-"
+def rows(path):
+    out = {}
+    for l in open(path, encoding="utf-8", errors="surrogateescape"):
+        l = l.rstrip("\n")
+        if "\t" in l:
+            k, v = l.split("\t", 1)
+            out[k] = v
+    return out
+class Tree:
+    def __init__(self, u, top):
+        self.top = top
+        self.now = rows(os.path.join(u, ".now"))
+        self.ls = rows(os.path.join(u, ".ls.now"))
+        self.tools = rows(os.path.join(u, ".tools"))
+        names = sorted(set(p.split("/", 1)[0] for p in self.now))
+        self.ls["./"] = "#listing:" + h("".join(n + "\n" for n in names).encode("utf-8", "surrogateescape"))
+        self.git = {}
+    def cur(self, k):
+        if k.startswith("/"):
+            return self.tools.get(k) or hfile(k)
+        if k.endswith("/"):
+            return self.ls.get(k, "-")
+        if k in self.now:
+            return self.now[k]
+        p = os.path.join(self.top, k)
+        return hfile(p) if os.path.isfile(p) else "-"
+    def replay(self, spec):
+        if spec not in self.git:
+            gitbin, cwd, argv = json.loads(spec)
+            # ROOT-RELATIVE IN THE RECORD: the key dir is the COMMON dir, shared by every worktree, so a replay
+            # answers about the work tree pushing now, never the one that recorded.
+            cwd = untop(cwd, self.top); argv = [untop(a, self.top) for a in argv]
+            env = dict((a, b) for a, b in os.environ.items() if not a.startswith("GIT_TRACE2"))
+            env["GIT_OPTIONAL_LOCKS"] = "0"
+            try:
+                r = subprocess.run([gitbin] + argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                self.git[spec] = h(str(r.returncode).encode() + b"\n" + r.stdout)
+            except OSError:
+                self.git[spec] = "-"
+        return self.git[spec]
+def check(rec, u, top, cmdsha):
+    t = Tree(u, top)
+    lines = open(rec, encoding="utf-8", errors="surrogateescape").read().split("\n")
+    if lines[:3] != ["#format k1", "#state ok", "#tools canonical"]:
+        print("malformed record"); return 1
+    if len(lines) < 4 or lines[3] != "#cmd " + cmdsha:
+        print("the command, its declaration or its wrapper body changed"); return 1
+    specs = {}; n = 0
+    for l in lines[4:]:
+        if l.startswith("#gitcmd "):
+            k, s = l[8:].split("\t", 1); specs[k] = s; continue
+        if not l or l.startswith("#"):
+            continue
+        k, v = l.split("\t", 1); n += 1
+        if k.startswith("@git:"):
+            if k[5:] not in specs:
+                print("malformed record"); return 1
+            if t.replay(specs[k[5:]]) != v:
+                print("git " + " ".join(json.loads(specs[k[5:]])[2])[:160] + " answers differently"); return 1
+        elif t.cur(k) != v:
+            print("changed " + k); return 1
+    if n == 0:
+        print("empty record"); return 1
+    print("%d key(s)" % n)
+    return 0
+def anc(p):
+    out = ["./"]
+    parts = p.split("/")
+    for i in range(1, len(parts)):
+        out.append("/".join(parts[:i]) + "/")
+    return out
+def trace(t2, top):
+    procs = {}
+    for f in sorted(os.listdir(t2)):
+        for l in open(os.path.join(t2, f), encoding="utf-8", errors="surrogateescape"):
+            try:
+                e = json.loads(l)
+            except ValueError:
+                continue
+            d = procs.setdefault(e.get("sid"), {"env": {}})
+            ev = e.get("event")
+            if ev == "start": d["argv"] = e.get("argv") or []
+            elif ev == "def_repo": d["wt"] = e.get("worktree")
+            elif ev == "cmd_name": d["name"] = e.get("name")
+            elif ev == "cmd_ancestry": d["anc"] = e.get("ancestry") or []
+            elif ev == "def_param": d["env"][e.get("param")] = e.get("value")
+    specs = set(); bad = []
+    rtop = os.path.realpath(top)
+    for d in procs.values():
+        argv = d.get("argv")
+        if not argv:
+            continue
+        mine = d.get("wt") is not None and os.path.realpath(d["wt"]) == rtop
+        if not mine:
+            if any(rtop in a or top in a for a in argv[1:]):
+                bad.append("a git command in another repository names this one: git " + " ".join(argv[1:])[:120])
+            continue
+        if (d.get("anc") or [""])[0] == "git":
+            continue
+        name = d.get("name") or ""
+        args = argv[1:]
+        cwd = d["env"].get("PWD") or top
+        if name in IGNORED:
+            continue
+        if name in ("read-tree", "update-index"):
+            if d["env"].get("GIT_INDEX_FILE"):
+                continue
+            bad.append("git " + name + " on the real index"); continue
+        if name == "worktree":
+            i = args.index("worktree") if "worktree" in args else -1
+            sub = args[i + 1] if 0 <= i < len(args) - 1 else ""
+            if sub in ("list", "prune", "remove"):
+                continue
+            if sub == "add":
+                specs.add(json.dumps([argv[0], totop(cwd, top, rtop), [totop(a, top, rtop) for a in args[:i]] + ["rev-parse", "--verify", "-q", args[-1] + "^{tree}"]])); continue
+            bad.append("git worktree " + sub); continue
+        if name == "config" and not CFG_READ.intersection(args):
+            bad.append("git config without a read option"); continue
+        if name not in REPLAY and name != "config":
+            bad.append("git " + name + " against this repository"); continue
+        # A command naming a scratch path that is gone (a probe config under mktemp) reads that scratch, not this tree.
+        if any(a.startswith("/") and not a.startswith(rtop) and not a.startswith(top) and not os.path.exists(a) for a in args):
+            continue
+        if not os.path.isdir(cwd):
+            if "-C" in args and args[args.index("-C") + 1:][:1] and args[args.index("-C") + 1].startswith("/"):
+                cwd = top
+            else:
+                bad.append("git " + name + " ran from a directory that is gone"); continue
+        specs.add(json.dumps([argv[0], totop(cwd, top, rtop), [totop(a, top, rtop) for a in args]]))
+    return specs, bad
+def record(rec, u, top, cmdsha, readlist, t2, decl, argv):
+    t = Tree(u, top)
+    specs, bad = trace(t2, top)
+    if bad:
+        print("unrecordable, it runs on every push: " + bad[0]); return 3
+    keys = set()
+    ftools = {}
+    for l in open(os.path.join(u, ".ftools"), encoding="utf-8", errors="surrogateescape"):
+        l = l.rstrip("\n")
+        if "\t" in l:
+            a, b = l.split("\t", 1); ftools.setdefault(a, set()).add(b)
+    reads = [l.rstrip("\n") for l in open(readlist, encoding="utf-8", errors="surrogateescape") if l.strip()]
+    reads += [p for p in decl.split() if p]
+    for p in reads:
+        if p == ".":
+            keys.add("./"); continue
+        keys.update(anc(p))
+        if os.path.isdir(os.path.join(top, p)) and not os.path.islink(os.path.join(top, p)):
+            keys.add(p + "/")
+        else:
+            keys.add(p)
+            keys.update(ftools.get(p, ()))
+    tl = {}
+    for l in open(os.path.join(u, ".pathcmds"), encoding="utf-8", errors="surrogateescape"):
+        l = l.rstrip("\n")
+        if "\t" in l:
+            a, b = l.split("\t", 1); tl.setdefault(b, a + "/" + b)
+    for w in argv:
+        if w in tl: keys.add(tl[w])
+        elif w.startswith("/") and os.path.isfile(w): keys.add(w)
+    out = ["#format k1", "#state ok", "#tools canonical", "#cmd " + cmdsha]
+    body = []
+    for i, s in enumerate(sorted(specs)):
+        out.append("#gitcmd %d\t%s" % (i, s))
+        body.append("@git:%d\t%s" % (i, t.replay(s)))
+    for k in sorted(keys):
+        body.append(k + "\t" + t.cur(k))
+    tmp = rec + ".tmp.%d" % os.getpid()
+    with open(tmp, "w", encoding="utf-8", errors="surrogateescape") as f:
+        f.write("\n".join(out + body) + "\n")
+    os.replace(tmp, rec)
+    print("%d key(s), %d git" % (len(body), len(specs)))
+    return 0
+m = sys.argv[1]
+if m == "check":
+    sys.exit(check(*sys.argv[2:6]))
+if m == "record":
+    sys.exit(record(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9:]))
+sys.exit(2)
+PK_PY_END
+}
 step() {
   if [ "${AI_DLC_PRESUITE_SKIP:-0}" = 1 ] && [ "${PRESUITE_DONE:-0}" = 0 ]; then
-    printf '\n── %s\n   SKIPPED (AI_DLC_PRESUITE_SKIP=1)\n' "$1"; return 0
+    printf '\n── %s\n   SKIPPED (AI_DLC_PRESUITE_SKIP=1)\n' "$1"; PRESUITE_DECLARE=""; return 0
   fi
-  printf '\n── %s\n' "$1"; shift
+  printf '\n── %s\n' "$1"
+  if [ "${PRESUITE_DONE:-0}" = 0 ]; then pk_step "$@"; return 0; fi
+  shift
   if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
 }
 
@@ -380,6 +736,9 @@ agent_definitions_dist() {
     *) return 1 ;;
   esac
 }
+# Its subject, .claude/settings.json, is git-ignored and ABSENT here, and an absent file is only
+# existence-tested: no atime moves and no listing of .claude/ is read, so the trace cannot see it.
+PRESUITE_DECLARE=".claude/settings.json"
 step "agent definitions (the shipped renderer runs, and says which of its three states this tree is in)" \
   agent_definitions_dist
 
@@ -2798,6 +3157,7 @@ syntax_all() {
 }
 # SYNTAX_GLOB_END
 step "shell syntax (every shipped script and hook)" syntax_all
+pk_finish
 PRESUITE_DONE=1
 
 # 2f. THE INVOCATION BUDGET. Every declared fixture's bash starts are counted by an rc generated into a private run
