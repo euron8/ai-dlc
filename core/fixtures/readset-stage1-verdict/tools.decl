@@ -28,3 +28,4 @@ sleep
 sort
 tail
 tr
+sysctl
