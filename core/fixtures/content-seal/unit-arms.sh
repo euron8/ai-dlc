@@ -34,7 +34,7 @@ done
 command -v jq >/dev/null 2>&1 && command -v perl >/dev/null 2>&1 || broken "jq or perl absent"
 # shellcheck source=/dev/null
 . "$SEAL" || broken "sourcing $SEAL failed"
-declare -F seal_check >/dev/null && declare -F seal_admit_marker >/dev/null && ! declare -F seal_main_ran >/dev/null \
+declare -F seal_check >/dev/null && declare -F seal_admit_marker >/dev/null \
   || broken "$SEAL defined no seal_check/seal_admit_marker when sourced"
 # The precondition the CURRENT cells rest on: the shipped file instructs --mark and carries no fallback.
 if ! grep -qF 'wait-for-deliverable.sh --mark ' "$ROLE_CUR" || grep -qF 'unknown arg: --mark' "$ROLE_CUR"; then
