@@ -1356,6 +1356,108 @@ ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]
 
 # Sourced (the remediator-shard-join fixture's unit arms), the file stops here: everything above defines
 # the entry contract's functions and constants; nothing below runs.
+SPEC_RENDER_PHRASE="re-derived from memlog through"
+# spec_render_scan <memlog> -> "<last render line> <decisions after it> <first such line>", 0 0 0 with no render.
+spec_render_scan() {
+  awk -v ph="$SPEC_RENDER_PHRASE" '
+    /^[[:space:]]*[-*][[:space:]]*\(event([[:space:]][^)]*)?\)[[:space:]]+Render/ && index($0, ph) { r = NR; n = 0; f = 0; next }
+    /^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (r) { n++; if (!f) f = NR } }
+    END { print r + 0, n + 0, f + 0 }' "$1"
+}
+# spec_render_check <memlog or empty> <why empty> -> SPEC_LINE (one SPEC-RENDER: line), or a refusal.
+# NEVER CALLED INSIDE $( ): refuse() counts in this shell, and a subshell would drop the count.
+spec_render_check() {
+  local m="$1" s r n f
+  SPEC_LINE=""
+  if [ -z "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- $2"; return 0; fi
+  # A SPEC part whose memlog does not exist yet has recorded no render and no decision to compare.
+  if [ ! -f "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- ${m} does not exist"; return 0; fi
+  s="$(spec_render_scan "$m")" || { refuse "${m}: the memlog could not be read; no render verdict"; return 0; }
+  r="${s%% *}"; s="${s#* }"; n="${s%% *}"; f="${s#* }"
+  if [ "$r" = 0 ]; then
+    SPEC_LINE="SPEC-RENDER: SKIP -- ${m} carries no '(event) Render ... ${SPEC_RENDER_PHRASE}' line, so no render is recorded to compare against"
+  elif [ "$n" -gt 0 ]; then
+    refuse "${m}:${f}: ${n} (decision) entry(ies) after the last render (line ${r}), so SPEC.md does not carry them; re-derive SPEC.md whole from .memlog.md under bmad-spec and append '- (event) Render <pass>: ${SPEC_RENDER_PHRASE} <last decision>' (a change applied with Edit is '(event) Hand-edit', never Render)"
+  else
+    SPEC_LINE="SPEC-RENDER: ${m} -- rendered through its last decision (line ${r})"
+  fi
+}
+# spec_memlog_of_sprint -> sets SPEC_MEMLOG to the one specs/s<N>/*/.memlog.md, or empty with SPEC_WHY.
+spec_memlog_of_sprint() {
+  local g c=0 hit=""
+  SPEC_MEMLOG=""; SPEC_WHY=""
+  if [ -z "$SPRINT" ] || [ "$SPRINT" = 0 ]; then SPEC_WHY="no --sprint, so no spec memlog is named"; return 0; fi
+  for g in "${STATE}/specs/s${SPRINT}"/*/.memlog.md; do [ -f "$g" ] && { c=$((c + 1)); hit="$g"; }; done
+  case "$c" in
+    1) SPEC_MEMLOG="$hit" ;;
+    0) SPEC_WHY="no ${STATE}/specs/s${SPRINT}/*/.memlog.md" ;;
+    *) SPEC_WHY="${c} memlogs under ${STATE}/specs/s${SPRINT}/; the kernel is exactly one" ;;
+  esac
+}
+# The self-probe, before any corpus is read, in both directions: a phrased render then a decision fires;
+# a decision then a phrased render is quiet; no render skips; and THE ACQUITTAL GUARD -- an
+# `(event) Render` line WITHOUT the phrase, then a decision, skips rather than reading as rendered.
+spec_render_probe() {
+  local d o
+  d="$(mktemp -d "${TMPDIR:-/tmp}/join-specprobe.XXXXXX")" || die "mktemp failed; the SPEC render arm cannot be probed"
+  printf -- '- (decision) a\n- (event) Render p1: %s a\n- (decision by pm) b\n' "$SPEC_RENDER_PHRASE" > "$d/stale.md"
+  printf -- '- (decision) a\n- (event) Render p1: %s a\n' "$SPEC_RENDER_PHRASE" > "$d/fresh.md"
+  printf -- '- (decision) a\n- (decision) b\n' > "$d/none.md"
+  printf -- '- (event) Render (fold): ran no renderer; applied to SPEC.md by hand\n- (decision) a\n' > "$d/hand.md"
+  o="$(spec_render_scan "$d/stale.md")"; [ "$o" = "2 1 3" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a decision after a render read '${o}'; no verdict"; }
+  o="$(spec_render_scan "$d/fresh.md")"; [ "$o" = "2 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a render after its decision read '${o}'; no verdict"; }
+  o="$(spec_render_scan "$d/none.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a memlog with no render read '${o}'; no verdict"; }
+  o="$(spec_render_scan "$d/hand.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: an unphrased Render line read '${o}', acquitting a hand edit; no verdict"; }
+  rm -rf "$d"
+}
+# record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
+# shared by --sources and --escalations, so each line below exists once.
+record_tail() {  # <record> [<lane round's record>...] -- closure is positional across them, in this order
+  local _r _sp=0
+  contract_probe
+  contract_refusals 1 "$(contract_check 1 "$@")"
+  for _r in "$@"; do
+    checks_refusals "$(checks_field 1 "$_r")"
+    grep -q -F "specs/s${SPRINT}/" "$_r" && _sp=1
+  done
+  spec_render_probe
+  # ONLY A RECORD THAT REPAIRED THE SPEC IS JUDGED. Without this, a stale SPEC refuses an architecture or
+  # stories record, which repaired no SPEC, and its refusal hides that record's escalation list. The test is
+  # the record citing the sprint's spec dir at all (its edit: lines name `.memlog.md` or `SPEC.md` there).
+  if [ "$_sp" = 1 ]; then
+    spec_memlog_of_sprint
+    spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"
+  else
+    SPEC_LINE="SPEC-RENDER: SKIP -- ${1} cites no specs/s${SPRINT}/ file, so it repaired no SPEC"
+  fi
+  # The header lines assert that the record checked out, so they print only on a pass.
+  if [ "$refuse_n" -eq 0 ]; then
+    [ "$SRCMODE" = 1 ] && echo "SOURCES: ${1} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
+    [ "$SRCMODE" = 2 ] && echo "ESCALATIONS: ${1} -- every escalated entry, open or closed by a closes: line"
+  fi
+  # THE ESCALATION REPORT PRINTS WHETHER OR NOT THE RECORD REFUSED. These are the LEAD's to
+  # adjudicate, never a re-dispatch of the serial remediator: the record may be the serial
+  # remediator's own, appended after the join, so no SERIAL-REQUIRED line is printed here. A refusal
+  # of any arm is a defect in the record, never a reason to stop reporting what is still open in it.
+  # THIS HOLDS IN RECORD MODE ONLY. A refused PARTS join prints no ESCALATED: line and no count, by
+  # design: the refusal writes no record, so the parts it read are not a joined set and a count from
+  # them may be wrong; the escalations print on the re-run that joins (arm EC32 pins the silence).
+  # In record mode:
+  # exiting first, as this mode once did, let one prose check line in a bound record hide every open
+  # escalation from the lead (a joined record whose serial block wrote graph's own s317 prose
+  # `- derivations: the validator reports OK ...` printed no count at all). The exit code still
+  # carries the refusal.
+  printf '%s' "$ESC_LINES"
+  printf '%s' "$ESC_CLOSED"
+  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
+  # The supersedes chains (3b) and the gap-fill tripwire (7) REPORT: neither gates the count above.
+  printf '%s' "$CHAIN_LINES"
+  printf '%s' "$GAP_LINES"
+  [ "$refuse_n" -eq 0 ] || exit 2
+  printf '%s\n' "$SPEC_LINE"
+  exit 0
+}
+
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -1616,107 +1718,6 @@ SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
 # (only SPEC-RENDER: is withheld). Those modes run
 # AFTER the serial remediator appends, which is the case BL-560 was filed on. --subject reads it only
 # when the split gave the SPEC a part (SUBJ_SET carries its memlog), the part-remediator shape.
-SPEC_RENDER_PHRASE="re-derived from memlog through"
-# spec_render_scan <memlog> -> "<last render line> <decisions after it> <first such line>", 0 0 0 with no render.
-spec_render_scan() {
-  awk -v ph="$SPEC_RENDER_PHRASE" '
-    /^[[:space:]]*[-*][[:space:]]*\(event([[:space:]][^)]*)?\)[[:space:]]+Render/ && index($0, ph) { r = NR; n = 0; f = 0; next }
-    /^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (r) { n++; if (!f) f = NR } }
-    END { print r + 0, n + 0, f + 0 }' "$1"
-}
-# spec_render_check <memlog or empty> <why empty> -> SPEC_LINE (one SPEC-RENDER: line), or a refusal.
-# NEVER CALLED INSIDE $( ): refuse() counts in this shell, and a subshell would drop the count.
-spec_render_check() {
-  local m="$1" s r n f
-  SPEC_LINE=""
-  if [ -z "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- $2"; return 0; fi
-  # A SPEC part whose memlog does not exist yet has recorded no render and no decision to compare.
-  if [ ! -f "$m" ]; then SPEC_LINE="SPEC-RENDER: SKIP -- ${m} does not exist"; return 0; fi
-  s="$(spec_render_scan "$m")" || { refuse "${m}: the memlog could not be read; no render verdict"; return 0; }
-  r="${s%% *}"; s="${s#* }"; n="${s%% *}"; f="${s#* }"
-  if [ "$r" = 0 ]; then
-    SPEC_LINE="SPEC-RENDER: SKIP -- ${m} carries no '(event) Render ... ${SPEC_RENDER_PHRASE}' line, so no render is recorded to compare against"
-  elif [ "$n" -gt 0 ]; then
-    refuse "${m}:${f}: ${n} (decision) entry(ies) after the last render (line ${r}), so SPEC.md does not carry them; re-derive SPEC.md whole from .memlog.md under bmad-spec and append '- (event) Render <pass>: ${SPEC_RENDER_PHRASE} <last decision>' (a change applied with Edit is '(event) Hand-edit', never Render)"
-  else
-    SPEC_LINE="SPEC-RENDER: ${m} -- rendered through its last decision (line ${r})"
-  fi
-}
-# spec_memlog_of_sprint -> sets SPEC_MEMLOG to the one specs/s<N>/*/.memlog.md, or empty with SPEC_WHY.
-spec_memlog_of_sprint() {
-  local g c=0 hit=""
-  SPEC_MEMLOG=""; SPEC_WHY=""
-  if [ -z "$SPRINT" ] || [ "$SPRINT" = 0 ]; then SPEC_WHY="no --sprint, so no spec memlog is named"; return 0; fi
-  for g in "${STATE}/specs/s${SPRINT}"/*/.memlog.md; do [ -f "$g" ] && { c=$((c + 1)); hit="$g"; }; done
-  case "$c" in
-    1) SPEC_MEMLOG="$hit" ;;
-    0) SPEC_WHY="no ${STATE}/specs/s${SPRINT}/*/.memlog.md" ;;
-    *) SPEC_WHY="${c} memlogs under ${STATE}/specs/s${SPRINT}/; the kernel is exactly one" ;;
-  esac
-}
-# The self-probe, before any corpus is read, in both directions: a phrased render then a decision fires;
-# a decision then a phrased render is quiet; no render skips; and THE ACQUITTAL GUARD -- an
-# `(event) Render` line WITHOUT the phrase, then a decision, skips rather than reading as rendered.
-spec_render_probe() {
-  local d o
-  d="$(mktemp -d "${TMPDIR:-/tmp}/join-specprobe.XXXXXX")" || die "mktemp failed; the SPEC render arm cannot be probed"
-  printf -- '- (decision) a\n- (event) Render p1: %s a\n- (decision by pm) b\n' "$SPEC_RENDER_PHRASE" > "$d/stale.md"
-  printf -- '- (decision) a\n- (event) Render p1: %s a\n' "$SPEC_RENDER_PHRASE" > "$d/fresh.md"
-  printf -- '- (decision) a\n- (decision) b\n' > "$d/none.md"
-  printf -- '- (event) Render (fold): ran no renderer; applied to SPEC.md by hand\n- (decision) a\n' > "$d/hand.md"
-  o="$(spec_render_scan "$d/stale.md")"; [ "$o" = "2 1 3" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a decision after a render read '${o}'; no verdict"; }
-  o="$(spec_render_scan "$d/fresh.md")"; [ "$o" = "2 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a render after its decision read '${o}'; no verdict"; }
-  o="$(spec_render_scan "$d/none.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a memlog with no render read '${o}'; no verdict"; }
-  o="$(spec_render_scan "$d/hand.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: an unphrased Render line read '${o}', acquitting a hand edit; no verdict"; }
-  rm -rf "$d"
-}
-# record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
-# shared by --sources and --escalations, so each line below exists once.
-record_tail() {  # <record> [<lane round's record>...] -- closure is positional across them, in this order
-  local _r _sp=0
-  contract_probe
-  contract_refusals 1 "$(contract_check 1 "$@")"
-  for _r in "$@"; do
-    checks_refusals "$(checks_field 1 "$_r")"
-    grep -q -F "specs/s${SPRINT}/" "$_r" && _sp=1
-  done
-  spec_render_probe
-  # ONLY A RECORD THAT REPAIRED THE SPEC IS JUDGED. Without this, a stale SPEC refuses an architecture or
-  # stories record, which repaired no SPEC, and its refusal hides that record's escalation list. The test is
-  # the record citing the sprint's spec dir at all (its edit: lines name `.memlog.md` or `SPEC.md` there).
-  if [ "$_sp" = 1 ]; then
-    spec_memlog_of_sprint
-    spec_render_check "$SPEC_MEMLOG" "$SPEC_WHY"
-  else
-    SPEC_LINE="SPEC-RENDER: SKIP -- ${1} cites no specs/s${SPRINT}/ file, so it repaired no SPEC"
-  fi
-  # The header lines assert that the record checked out, so they print only on a pass.
-  if [ "$refuse_n" -eq 0 ]; then
-    [ "$SRCMODE" = 1 ] && echo "SOURCES: ${1} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
-    [ "$SRCMODE" = 2 ] && echo "ESCALATIONS: ${1} -- every escalated entry, open or closed by a closes: line"
-  fi
-  # THE ESCALATION REPORT PRINTS WHETHER OR NOT THE RECORD REFUSED. These are the LEAD's to
-  # adjudicate, never a re-dispatch of the serial remediator: the record may be the serial
-  # remediator's own, appended after the join, so no SERIAL-REQUIRED line is printed here. A refusal
-  # of any arm is a defect in the record, never a reason to stop reporting what is still open in it.
-  # THIS HOLDS IN RECORD MODE ONLY. A refused PARTS join prints no ESCALATED: line and no count, by
-  # design: the refusal writes no record, so the parts it read are not a joined set and a count from
-  # them may be wrong; the escalations print on the re-run that joins (arm EC32 pins the silence).
-  # In record mode:
-  # exiting first, as this mode once did, let one prose check line in a bound record hide every open
-  # escalation from the lead (a joined record whose serial block wrote graph's own s317 prose
-  # `- derivations: the validator reports OK ...` printed no count at all). The exit code still
-  # carries the refusal.
-  printf '%s' "$ESC_LINES"
-  printf '%s' "$ESC_CLOSED"
-  echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
-  # The supersedes chains (3b) and the gap-fill tripwire (7) REPORT: neither gates the count above.
-  printf '%s' "$CHAIN_LINES"
-  printf '%s' "$GAP_LINES"
-  [ "$refuse_n" -eq 0 ] || exit 2
-  printf '%s\n' "$SPEC_LINE"
-  exit 0
-}
 # --sources ON A RECORD THAT IS NOT A PARTY REPAIR (BL-561). The seat dir's existence says only that
 # a party round ran this sprint, never that THIS record applies one, so a non-party record resolved
 # against it and read as 138 refused sources (graph s319 elicitation repair). Keyed on token SHAPE:
