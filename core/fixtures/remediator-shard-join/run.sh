@@ -339,7 +339,7 @@ else
 fi
 
 # ---- unit-parts.sh: the parts-mode and --sources ENTRY-CONTRACT cells (EC1-EC13, EC15-EC17, EC27, PS2-PS4, PS10, PS11) asked in
-# process against the sourced join. One end to end run per mode stays here: EC32 (parts refusal), PS1 (parts join), PS8
+# process against the sourced join. One end to end run per mode stays: EC32 (parts refusal, CLI-A in unit-reader-a.sh), PS1 (parts join), PS8
 # (--sources refusal), PS7 (--sources pass). One literal call line, never a loop variable.
 bash "$HERE/unit-parts.sh"; _up=$?
 case "$_up" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-parts.sh: FIXTURE BROKEN, exit $_up" ;; esac

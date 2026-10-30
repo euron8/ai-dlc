@@ -19,7 +19,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # included, plus the join's own measured top-level names; `set +o pipefail`, which lib.sh sets and no subject does;
 # and LC_ALL as the subject itself sets it (the join exports C, the hook inherits the caller's).
 #
-# WORLDS BUILT ONCE. Each hook-written world builder (g6_world, r5_world, al_world, nest_world, nl_world, subj_world,
+# WORLDS BUILT ONCE. Each hook-written world builder used more than once (g6_world, r5_world, nl_world, subj_world,
 # doc_world) builds its world once per key and restores a byte copy AT THE SAME PATH for every later call: the
 # ledger's root and transcript_path and the split manifests are absolute. three_writers appends a template's three
 # hook rows with root rewritten. SEAM-A-TPL holds a restored world equal to a freshly built one.
@@ -138,14 +138,13 @@ ua_tpl() {
   fi
   printf '%s' "$w"
 }
-for _f in g6_world r5_world al_world nest_world nl_world subj_world doc_world three_writers; do
+for _f in g6_world r5_world nl_world subj_world doc_world three_writers; do
   declare -F "$_f" > /dev/null || { echo "FIXTURE BROKEN: lib.sh defines no $_f" >&2; exit 2; }
   eval "_ua_orig_$(declare -f "$_f")"
 done
 g6_world() { ua_tpl g6 _ua_orig_g6_world; }
 r5_world() { ua_tpl r5 _ua_orig_r5_world; }
-al_world() { ua_tpl "al-$1" _ua_orig_al_world "$1"; }
-nest_world() { ua_tpl "nest-$1" _ua_orig_nest_world "$1"; }
+# al_world and nest_world are built once per variant already, so they are not snapshotted (a copy would only add work).
 nl_world() { ua_tpl "nl-$1" _ua_orig_nl_world "$1"; }
 doc_world() { ua_tpl doc _ua_orig_doc_world; }
 # subj_world reads SJRD SJPA SPECREL SJSD and AI_DLC_STATE_DIR, which p_sjgate and p_sjnest override: all in the key.
@@ -623,7 +622,11 @@ ua_cli window-refuse p_nlcites
 fi
 
 # LEAD-A: no hook drive above fell past arm 2 (a lead or non-edit payload), where in process and CLI part ways.
-if [ ! -e "$UA_LEADF" ]; then ok "LEAD-A: every in-process hook drive was a dispatched edit that ended inside hook_pretool_head"
+# Its self-probe first: one lead drive in process, with the marker pointed at a scratch path, must write it.
+_lp="$WORK/ua.lead-probe"
+( UA_LEADF="$_lp"; _w="$(new_world)"; drive "$_w" Edit "$_w/$REL/$S21" "" )
+if [ ! -e "$_lp" ]; then bad "LEAD-A: FIXTURE BROKEN -- the self-probe's lead drive wrote no marker, so LEAD-A cannot fire"
+elif [ ! -e "$UA_LEADF" ]; then ok "LEAD-A: every in-process hook drive was a dispatched edit that ended inside hook_pretool_head"
 else bad "LEAD-A: a hook drive returned from hook_pretool_head (a lead or non-edit payload); its later arms ran in no process"; fi
 # PLAIN-A: a plain run of this file prints no matrix-only cell; --matrix prints one row per mutant.
 if [ "$MATRIX" = 1 ]; then echo "  (matrix mode, unit-reader-a.sh: $N_MROWS MATRIX row(s) printed)"
