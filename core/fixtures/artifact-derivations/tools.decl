@@ -28,3 +28,4 @@ touch
 tr
 wc
 xargs
+cksum

@@ -755,6 +755,16 @@ st_blocked() {
 st_settled() { local p n=0; while IFS= read -r p; do case "$p" in ''|*[!0-9]*) continue ;; esac; kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done < "$1"; [ "$n" -gt 0 ]; }
 # st_group_settled <pgid>: the same over a process group's live members.
 st_group_settled() { local p n=0; for p in $(pgrep -g "$1" 2>/dev/null); do kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done; [ "$n" -gt 0 ]; }
+# st_tree_settled <pid file> <leader pid>: st_settled over the file's pids PLUS every live descendant of the
+# leader. The TERMed wrapper's finish() also waits on its load sampler (stop_sampler: kill, then wait) and
+# the sampler's own sleep, and neither is a pid the stub recorded: with the stub's tree already gone the
+# wrapper alone sits blocked in that wait with nothing pending while the sampler dies, which reads settled
+# although the wrapper is about to exit. Only a settled tree, sampler included, is a wrapper nothing will end.
+st_tree_settled() {
+  local t="$1.tree" p c g
+  { cat "$1"; for p in $(pgrep -P "$2" 2>/dev/null); do echo "$p"; for c in $(pgrep -P "$p" 2>/dev/null); do echo "$c"; for g in $(pgrep -P "$c" 2>/dev/null); do echo "$g"; done; done; done; } > "$t"
+  st_settled "$t"
+}
 AWAIT_WHY=""
 # await <scope-dir> <watch-pid | -> <what> <test...> [-- <final test...>]: 0 once <test> holds; 1 with AWAIT_WHY
 # set when the watched pid exited first, or when the optional final test holds (the awaited thing will never come).
@@ -800,7 +810,7 @@ wrap_term() {
   # load. The settle set is the wrapper plus every pid the stub recorded, which are not all blocked until
   # the group kill has truly not reached them.
   { printf '%s\n' "$wp"; cat "$R/pids"; } > "$R/wp.pid"
-  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_settled "$R/wp.pid" \
+  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_tree_settled "$R/wp.pid" "$wp" \
     || { kill -KILL "$wp" 2>/dev/null; broken "[$t] the TERMed wrapper did not exit: $AWAIT_WHY"; }
   wait "$wp"; rc=$?
   # THE ONE WALL BOUND, AND WHY IT CANNOT BE PROGRESS. The wrapper's finish() TERMs the stub's whole
