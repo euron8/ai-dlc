@@ -280,6 +280,12 @@ EOS
     # BL-833/BL-834: which LINE marks a capture RED. ONE world, CLEAN plus one line per RED LINE cell (rv_line
     # below), each citing its own token from RVCELLS. Driven by run.sh, not CASES.
     rvall) for c in $RVCELLS; do rv_line "${c%%:*}" >> "$w/$STORY" || return 2; done ;;
+    # The pointer-word grammar ALONE: a value opening with `see` that is no none form (none-reason exits 2) and
+    # carries a runner span and a count, over the work commit's code diff -- refused full-collection-none, and only
+    # the pointer rule can refuse it. fcseenm: the same span and count with the pointer word NOT opening the value
+    # -- accepted. Driven by run.sh's POINTER arm, not CASES.
+    fcsee) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: see `pytest -q` from the root, 1 passed"); print }' || return 2 ;;
+    fcseenm) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest -q` from the root, see the log, 1 passed"); print }' || return 2 ;;
     fcbare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none"); print }' || return 2 ;;
     fcgone) story_awk "$w" '/^Full-collection run: /{next} {print}' || return 2 ;;
     dsgone) story_awk "$w" '/^Dependency setup: /{next} {print}' || return 2 ;;

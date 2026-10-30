@@ -665,6 +665,31 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     else bad "FIXTURE ERROR: mutation 'fc-no-conv' matched nothing"; fi
   else bad "FIXTURE BROKEN: could not seed the conventions worlds"; fi
 
+  # POINTER: run-shape's pointer-word refusal, in a world only it decides (fcsee: `see` opens a value that carries a
+  # runner span and a count and is no none form), with its near-miss (fcseenm: the same span and count, `see` not
+  # opening). Mutant ro-no-pointer drops the pointer rule from record-only-diff.sh in a tree of its own and moves
+  # fcsee only, to accepted.
+  if build_world "$WORK/world-fcsee" fcsee && build_world "$WORK/world-fcseenm" fcseenm; then
+    pt_vec() { printf '%s %s' "$(verdict "$1" "$WORK/world-fcsee" h)" "$(verdict "$1" "$WORK/world-fcseenm" h)"; }
+    PTWANT='1:full-collection-none, 0:'
+    got="$(pt_vec "$HECTL")"
+    if [ "$got" = "$PTWANT" ]; then ok "POINTER: a value opening with see, carrying a runner span and a count, is refused full-collection-none over a code diff; the same span and count with see later in the value is a run"; B_pt=1
+    else bad "POINTER: want [$PTWANT] got [$got]"; fi
+    if pt_t="$(mk_tree ro-no-pointer)"; then
+      FROM="    grep -qE '^(see|refer|n/a|na|tbd|todo|deferred|pending)([^a-z0-9]|\$)' <<<\"\$rs_lc\" && exit 1" TO='    :' \
+        awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' \
+        "$(dirname "$HE")/record-only-diff.sh" > "$(dirname "$pt_t")/record-only-diff.sh.tmp"
+      if cmp -s "$(dirname "$HE")/record-only-diff.sh" "$(dirname "$pt_t")/record-only-diff.sh.tmp"; then bad "FIXTURE ERROR: mutation 'ro-no-pointer' matched nothing"
+      else
+        mv "$(dirname "$pt_t")/record-only-diff.sh.tmp" "$(dirname "$pt_t")/record-only-diff.sh"
+        got="$(verdict "$pt_t" "$WORK/world-fcsee" h)"
+        if [ "$got" = '0:' ]; then mutant_killed "${B_pt:-0}" ro-no-pointer "MUTATION 'ro-no-pointer' killed by cell fcsee: without the pointer rule a see-opened value is read as a run"
+        elif [ "$got" = '1:full-collection-none,' ]; then bad "MUTATION 'ro-no-pointer' SURVIVED -- the pointer-word rule dropped"
+        else bad "MUTATION 'ro-no-pointer' moved fcsee to [$got], want [0:]"; fi
+      fi
+    else bad "FIXTURE ERROR: run-record mutation 'ro-no-pointer' could not build its tree"; fi
+  else bad "FIXTURE BROKEN: could not seed the pointer worlds"; fi
+
   # The story line is parsed WHATEVER sprint-status.sh exits. No yaml makes the shipped
   # story-status exit non-zero portably after its story line, so the sibling's exit is
   # synthesised: two trees whose sprint-status.sh is a wrapper that runs the real one, writes one
