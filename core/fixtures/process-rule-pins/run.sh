@@ -110,6 +110,9 @@
 #     lead is the bold opening of the paragraph under them. route.md Step 6's **Option labels carry
 #     no recommendation.** paragraph says in the question why its options carry none
 #     (route-say-why). All five are para rows; each token sits on ONE line of its subject.
+#   - Rule 11(a)'s sort-before-asking: the unbadged trigger names a value the operator alone owns
+#     (r11a-value-trigger), and the `Sort every question three ways` paragraph pins its decide, provided-value,
+#     no-widen, badged, tree-never-settles and outside-the-sort clauses (r11a-sort-*). All para rows.
 #   - SKILL.md Rule 32 touchpoint I cites the advisor gate's window, so one consult covers a run
 #     of pushes, merges and deploys inside it (r32-i-window, a line-mode `contains` pin: keep the
 #     phrase on ONE line, and not on the `- **I --` line itself, which opens the span). Section 4g
@@ -487,6 +490,13 @@ r11a-one-shape|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the 
 r11a-say-why|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|says so in its own text, with the reason,
 r11a-attested-act|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|no later step puts it back to the operator:
 r11a-premise|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|shows the act did not occur is an authorization-premise invalidation
+r11a-value-trigger|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|decides a value the operator alone owns and no operator words fix
+r11a-sort-decide|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|record it as a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a one-line reason, add one veto line for it to the next `AskUserQuestion` you send
+r11a-sort-provided|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|leaves every operator-owned value in force or sets it to the operator's verbatim value
+r11a-sort-no-widen|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|A choice that otherwise sets, relaxes or widens a value, a limit or an authority is settled by no source
+r11a-sort-badged|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|A design choice no source settles is asked with one option `(Recommended)`
+r11a-sort-tree-no-value|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|The tree never settles a value
+r11a-sort-outside|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|Outside this sort, each asked as its own rule says:
 sts-part-mark|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 2a.|**Per-epic part agents close their part with `--mark`.**|para|<lead engine>/wait-for-deliverable.sh --mark <part path> stories-epic-<n> pm none findings=0
 sts-part-nohand|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 2a.|**Per-epic part agents close their part with `--mark`.**|para|never a hand-appended `seat-complete:` line
 sts-part-remark|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 2a.|**Per-epic part agents close their part with `--mark`.**|para|is marked again with the same `--mark` call before any `--complete` join reads it
