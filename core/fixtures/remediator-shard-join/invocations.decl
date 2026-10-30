@@ -1,5 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run; the rows follow unit-record.sh and unit-parts.sh, which ask the entry contract's answers in process.
-1905 *
+678 *
 44 core/scripts/join-remediator-shards.sh
 64 core/hooks/ai-dlc-gate-remediation-guard.sh
 2 core/hooks/ai-dlc-derivation-capture.sh
