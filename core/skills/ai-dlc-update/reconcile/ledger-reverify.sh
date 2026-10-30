@@ -159,17 +159,26 @@
 #         never blocks. 2 is a REFUSAL, never a verdict: the close grammar could not be lifted
 #         (`CLOSE_AWK`), or a receipt's path tokens could not be split (`lr_refuse`), and rows
 #         printed before it are partial. `emit-report.sh` renders any non-zero as DETECTOR-REFUSED.
+#
+# LOADABLE. Every top-level section is a `lr_main_*` function, run in file order by `lr_main` at the
+# foot of this file; sourcing the file defines everything and runs nothing, which is how
+# core/fixtures/ledger-reverify*/ ask a verdict in process. Run as a program it is unchanged.
+lr_main_opts() {
 set -uo pipefail
 # GLOBBING OFF: every consumer path is read through consumer-read.sh, and an unquoted expansion
 # (a receipt's token list, say) must never resolve names against the caller's cwd.
 set -f
+}
 
 # ledger_entry_shape() — THE entry-boundary rule, from lib.sh. See that file for why it is not
 # copied here: rotate's copy of this block drifted within one release.
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
+lr_main_self() {
 case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
+}
+lr_main_boot() {
 . "$SELF/consumer-read.sh" || { echo "ledger-reverify: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "ledger-reverify: cannot source $SELF/lib.sh" >&2; exit 1; }
@@ -196,11 +205,13 @@ CLOSE_AWK="$(ledger_close_awk)" || exit 2
 # `ledger_entry_line_closes` itself -- concatenating both into one variable would define that
 # function twice there, which is an awk error.
 ELC_AWK="$(ledger_entry_line_close_awk)" || exit 2
+}
 
 # `--receipt-tokens`: print `SUBJECT<TAB><path>` for every consumer-relative path every OPEN entry's
 # `verify: sh` receipt names, PRESENT OR NOT, by the same split `receipt_absent_subjects` applies,
 # then exit 0. Decides nothing and runs no receipt. Its one shipped reader, emit-report.sh's retired
 # verify cache, is gone; the reconcile-emit-report fixture still drives it.
+lr_main_args() {
 LR_TOKENS_MODE=""
 if [ "${1:-}" = "--receipt-tokens" ]; then LR_TOKENS_MODE=1; shift; fi
 
@@ -295,6 +306,7 @@ esac
 # having parsed an entry, and a diagnostic printed through a second, hand-rolled printf is a
 # second output grammar for the same reader.
 RSFX=""
+}
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3$RSFX"; }
 
 # A CALLER ERROR MUST NOT READ AS A CLEAN CORPUS.
@@ -336,6 +348,7 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3$RSFX"; }
 # stderr would be correct and unread: `emit-report.sh` discards this tool's stderr, and its row
 # filter is a denylist (`$1!="STILL-LIVE"`), so a status added here reaches the operator's report
 # with no change there.
+lr_main_input() {
 if ! cr_test "$CONSUMER" -d .; then
   emit INPUT-UNRESOLVED "$CONSUMER" "unresolved: the consumer root is not a directory, so no ledger can be found under it and every 'verify: sh' receipt would resolve its paths against the wrong tree. This tool takes <dist> <base> CONSUMER <theirs> — consumer THIRD, theirs FOURTH — which is the opposite of every sibling in reconcile/. Check the argument order, then re-run. Nothing was re-verified; a zero row count here is not a clean corpus."
 fi
@@ -354,6 +367,7 @@ if [ "$_lr_lt" -ne 0 ]; then
   # exactly as before — a consumer that never filed a candidate has nothing to re-verify.
   exit 0
 fi
+}
 
 # --- BLOB MEMO: the same blob is read once per ENTRY, and there are few distinct blobs ------
 #
@@ -1802,7 +1816,9 @@ core_map_cleanup() {
   command -v ai_dlc_memo_cleanup >/dev/null 2>&1 && ai_dlc_memo_cleanup
   return 0
 }
+lr_main_trap() {
 trap core_map_cleanup EXIT
+}
 
 # --- $THEIRS_TREE: THE DISTRIBUTION AT `theirs`, AS A DIRECTORY A RECEIPT MAY READ -------------
 #
@@ -2026,7 +2042,9 @@ theirs_basename_matches() {
 # read reachable and the unfalsifiable check would go silently vacuous. Trading the false
 # accusation for a false all-clear is the worse half of the same bug. `$LEDGER_DEFAULT` is the
 # same expression the subject defaults to, so the two never drift.
+lr_main_selfbase() {
 SELF_BASE="${0##*/}"
+}
 ledger_top_dir() { # <path> -> its top-level dir relative to the consumer root, or "" if outside
   local _p="$1" _root _abs
   [ -n "$_p" ] || return 0
@@ -2040,8 +2058,10 @@ ledger_top_dir() { # <path> -> its top-level dir relative to the consumer root, 
     *)          : ;;
   esac
 }
+lr_main_ledgertop() {
 LEDGER_TOP="$(ledger_top_dir "$LEDGER")"
 [ -n "$LEDGER_TOP" ] || LEDGER_TOP="$(ledger_top_dir "$LEDGER_DEFAULT")"
+}
 
 # THE SCAN IS `git grep`, NOT A FILE LIST PIPED INTO xargs.
 #
@@ -2201,6 +2221,7 @@ consumer_reachable() {
 # fails, each per-entry path then refuses as `unreadable`, and a `$THEIRS_TREE` receipt refuses at
 # materialization -- the fixture's `theirs-tree-unavailable` arm drives exactly that. Refusing the
 # whole run here would replace those per-row findings with one line naming the wrong cause.
+lr_main_version() {
 _tv_s=0; TV="$(theirs_show VERSION)" || _tv_s=$?
 if [ "$_tv_s" -ne 0 ]; then
   _tv_h=0; theirs_has_path VERSION || _tv_h=$?
@@ -2230,6 +2251,7 @@ TV="$(printf '%s' "$TV" | tr -d '[:space:]')"
 # empties the WHOLE set, so every dist-only naming scored `code` again.
 LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \
   | LC_ALL=C sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p')" || LR_DIST_ONLY=""
+}
 
 # Extract (label<TAB>ordinal<TAB>directive) for each OPEN entry carrying a verify: line, plus
 # ONE `0/0` row (directive `-`) for each OPEN id-keyed entry carrying none -- that row reaches
@@ -2419,6 +2441,7 @@ lr_entries() { # <ledger-file> -> label TAB ord TAB directive, one row per recei
 # run. It is NOT copied into the staging directory
 # first: a whole-ledger copy is the largest write this run makes, and under a file-size limit it
 # failed BEFORE the entries staging below, replacing that write's named refusal with a generic one.
+lr_main_entries() {
 lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the ledger could not be read"
 LR_LEDGER_COPY="$LEDGER"
 ENTRIES="$(lr_entries "$LR_LEDGER_COPY")"
@@ -3509,3 +3532,11 @@ awk -v DASH=' — ' "$(ledger_entry_awk)${CLOSE_AWK}${ELC_AWK}"'
   done
 
 exit 0   # classifier — the while-pipe's status is irrelevant; a close never blocks
+}
+
+lr_main() {
+  lr_main_opts; lr_main_self; lr_main_boot; lr_main_args "$@"; lr_main_input; lr_main_trap
+  lr_main_selfbase; lr_main_ledgertop; lr_main_version; lr_main_entries
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+lr_main "$@"
