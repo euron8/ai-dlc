@@ -337,53 +337,9 @@ if [ -n "$SJW" ]; then
 else
   bad "SJ0: FIXTURE BROKEN -- the subject world did not build"
 fi
-p_sjoin "$JOIN" && ok "SJ1: --subject, one writer per part -> JOINED; prd assembled, SPEC edited in place, the unchanged brief untouched; per-stem <stem>@<sha> before/after lists, artifact: the manifest" \
-  || bad "SJ1: the subject join (rc=$RC): $(cat "$JO")"
-# SJ1o: the join asks the SIBLING merge's --pair-sep and writes `@` only on exit 0 with exactly `@`.
-# A copy of the join's scripts dir with an OLD merge beside it must write `=`. The old merge is a
-# stub this fixture writes, never a vendored copy of core's own script: it does what a merge before
-# --pair-sep does with that flag (measured), printing REFUSED on stdout and exiting 2. The
-# unmodified copy, driven the same way, writes `@`: the merge sibling is what moved the record.
-SJO_OLD="$WORK/sjo-old-merge.sh"
-printf '%s\n' '#!/bin/bash' "printf 'REFUSED: shard directory --pair-sep does not exist\\n'" 'exit 2' > "$SJO_OLD"
-sjo_cur="$(mktemp -d "$WORK/sjo-cur.XXXXXX")/scripts"; sjo_old="$(mktemp -d "$WORK/sjo-old.XXXXXX")/scripts"
-# The merge's key (c) asks validate-provenance-block.sh, which finds the schema at ../schemas beside
-# its own dir when the world carries none, so each copy carries the schema there. It is found by
-# walking up from the join for either layout's schema dir, never by counting `..`.
-SJO_SCH=""
-_d="$SRCDIR"
-while [ -n "$_d" ] && [ "$_d" != "/" ]; do
-  for _c in "$_d/core/schemas/provenance-block.json" "$_d/.claude/schemas/provenance-block.json"; do
-    [ -f "$_c" ] && { SJO_SCH="$_c"; break 2; }
-  done
-  _d="$(dirname "$_d")"
-done
-if [ ! -s "$SJO_OLD" ] || [ ! -f "$SRCDIR/merge-adversarial-shards.sh" ] || [ -z "$SJO_SCH" ]; then
-  bad "SJ1o: FIXTURE BROKEN -- $SJO_OLD, $SRCDIR/merge-adversarial-shards.sh or provenance-block.json above $SRCDIR is absent; nothing was asserted"
-elif ! { cp -Rp "$SRCDIR" "$sjo_cur" && cp -Rp "$SRCDIR" "$sjo_old" && cp "$SJO_OLD" "$sjo_old/merge-adversarial-shards.sh" \
-         && mkdir "$sjo_cur/../schemas" "$sjo_old/../schemas" \
-         && cp "$SJO_SCH" "$sjo_cur/../schemas/" && cp "$SJO_SCH" "$sjo_old/../schemas/"; }; then
-  bad "SJ1o: FIXTURE BROKEN -- the scripts-dir copies did not build"
-elif cmp -s "$sjo_cur/merge-adversarial-shards.sh" "$sjo_old/merge-adversarial-shards.sh"; then
-  bad "SJ1o: FIXTURE BROKEN -- the old merge is byte-identical to the current one"
-else
-  p_sjoin "$sjo_old/join-remediator-shards.sh" "=" && r_o=0 || r_o=1; o_rc=$RC
-  p_sjoin "$sjo_cur/join-remediator-shards.sh" "@" && r_c=0 || r_c=1
-  [ "$r_o" -eq 0 ] && [ "$r_c" -eq 0 ] \
-    && ok "SJ1o: the join beside an old merge sibling (REFUSED on --pair-sep) writes <stem>=<sha> before/after lists; the same copy with the current merge writes <stem>@<sha>" \
-    || bad "SJ1o: old-merge join matched '=' -> $r_o (rc=$o_rc), current-merge copy matched '@' -> $r_c (want 0 0): $(cat "$JO")"
-fi
-p_sjspec2 "$JOIN" && ok "SJ2: the whole-file SPEC part written by two agents -> REFUSED 'more than one agent', no record" || bad "SJ2: (rc=$RC) $(cat "$JO")"
-p_sjoos "$JOIN" && ok "SJ3: prd.md written IN PLACE while its sections were out (out-of-scope text) -> REFUSED naming the file, no record" || bad "SJ3: (rc=$RC) $(cat "$JO")"
-p_sjnopart "$JOIN" && ok "SJ4: the unchanged brief (no part) written in the window -> REFUSED, no record" || bad "SJ4: (rc=$RC) $(cat "$JO")"
-p_sjnames "$JOIN" && ok "SJ5: --pass party reads shards/requirements-party-repair/ and writes requirements-party-repair.md, never a *-repair-p<M>.md" || bad "SJ5: (rc=$RC) $(cat "$JO")"
-p_sjbase "$JOIN" && ok "SJ6: --base other than the manifest's -> REFUSED, no record" || bad "SJ6: (rc=$RC) $(cat "$JO")"
-p_sjgate "$JOIN" && ok "SJ7: --subject --artifact gate-planning --pass 1 -> JOINED as gate-planning-repair-p1.md from shards/gate-planning-repair-p1/, and no requirements-repair-p1.md" || bad "SJ7: $(cat "$JO")"
-p_sjgatenear "$JOIN" && ok "SJ8: near-misses -- --artifact stories, and --artifact gate-planning with --pass party -> REFUSED, nothing written" || bad "SJ8: $(cat "$JO")"
-p_sjnest "$JOIN" && ok "SJ9: a nested AI_DLC_STATE_DIR (out/bmad) -> map, split and join agree and the record is the manifest's root-relative path (SJ1 is the default-layout control)" || bad "SJ9: $(cat "$JO")"
 
 # ---- unit-parts.sh: the parts-mode and --sources ENTRY-CONTRACT cells (EC1-EC13, EC15-EC17, EC27, PS2-PS4, PS10, PS11) asked in
-# process against the sourced join. One end to end run per mode stays here: EC32 (parts refusal), PS1 (parts join), PS8
+# process against the sourced join. One end to end run per mode stays: EC32 (parts refusal, CLI-A in unit-reader-a.sh), PS1 (parts join), PS8
 # (--sources refusal), PS7 (--sources pass). One literal call line, never a loop variable.
 bash "$HERE/unit-parts.sh"; _up=$?
 case "$_up" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-parts.sh: FIXTURE BROKEN, exit $_up" ;; esac
@@ -404,18 +360,11 @@ p_partyx4 "$JOIN" && ok "PS12: an earlier step's pre-marker seat cited beside ma
   || bad "PS12: a pre-marker seat of another step was refused (rc=$RC): $(cat "$JO")"
 
 # ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
-p_sibdoc "$JOIN" && ok "EC14: --document, one section part omitting siblings: -> REFUSED naming it with the pre-install re-dispatch remedy, the document not assembled" \
-  || bad "EC14: a --document part omitting siblings: was not refused (rc=$RC): $(cat "$JO")"
-p_sibstale "$JOIN" && ok "EC18: the joined fence, its text later rewritten -> the slot-wide derivations re-run reads no STALE; the same fence re-labelled derived reads STALE" \
-  || bad "EC18: the siblings fence is replayed by the derivations validator, or the derived control did not go stale (rc=$RC dv=${DV_RC:-}): $(cat "$JO" "$SB_W/dv.out" 2>/dev/null | head -20)"
-p_escpath "$JOIN" && ok "EC19: an escalated entry naming the sibling's path on edit:, beside the shard that repairs that file -> JOINED (the escalated path is no citation)" \
-  || bad "EC19: an escalated entry's edit: path collided with another shard's citation (rc=$RC): $(cat "$JO")"
 bash "$HERE/unit-record.sh"; _ur=$?
 case "$_ur" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-record.sh exited $_ur (FIXTURE BROKEN); nothing was asserted" ;; esac
-p_srcparts "$JOIN" && ok "EC25: --sources on a record citing only part tokens, seats present -> ONE refusal naming --escalations; a seat-token record resolves" \
-  || bad "EC25: --sources did not refuse a part-token record by name, or refused the party control (rc=$RC): $(cat "$JO")"
-p_partsilent "$JOIN" && ok "EC32: a REFUSED parts join prints no ESCALATED: line and no count -- nothing was joined (record mode prints through a refusal; parts mode by design does not)" \
-  || bad "EC32: a refused parts join printed an escalation report, or did not refuse (rc=$RC): $(cat "$JO")"
+# ---- unit-reader.sh: SEAM-JOIN and SEAM-HOOK, the in-process (join_main, hook_pretool_head) answers pinned byte-identical to the CLI's.
+bash "$HERE/unit-reader.sh"; _urd=$?
+case "$_urd" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-reader.sh exited $_urd (FIXTURE BROKEN); nothing was asserted" ;; esac
 p_specstale "$JOIN" && ok "SP1: --escalations, a spec memlog with a decision AFTER its last phrased Render -> rc 2, REFUSED naming the memlog and '1 (decision) entry(ies) after the last render'" \
   || bad "SP1: a decision after the last re-derived render was not refused (rc=$RC): $(cat "$JO")"
 p_specfresh "$JOIN" && ok "SP2: the same memlog with its last decision before the phrased Render -> rc 0, 'rendered through its last decision', ESCALATED-COUNT still printed" \
@@ -439,57 +388,6 @@ p_sjspecfresh "$JOIN" && ok "SP7: --subject, the same memlog rendered through it
 p_sjspecnone "$JOIN" && ok "SP8: --subject, the SPEC part's memlog does not exist -> JOINED, SPEC-RENDER: SKIP naming that it does not exist" \
   || bad "SP8: subject mode did not skip a missing SPEC memlog visibly (rc=$RC): $(cat "$JO")"
 
-# ---- re-run of one part (--rerun <part>.md@<ISO>): graph's S319 shape, its refusals, and every mode.
-p_rrgraph "$JOIN" && ok "RR1: six sections, section 2 by its original writer, an orphan and the original again, then a NEW agent after S_P -> REFUSED without --rerun; JOINED with it, the rerun: line naming both superseded ids (3 rows), the outer window kept, 'in its window', '3 superseded rows'" \
-  || bad "RR1: the graph-shape re-run did not refuse-then-join as specified (rc=$RC): $(cat "$JO")"
-p_rrout "$JOIN" && ok "RR2: section 3's owner also wrote section 2 before S_P -> REFUSED, a superseded writer with a row outside the re-run part's files" \
-  || bad "RR2: a superseded writer that owns another section was not refused (rc=$RC): $(cat "$JO")"
-p_rrlate "$JOIN" && ok "RR3: the original still writing after S_P outside F_P -> REFUSED in both spellings (still writing, and outside the part's files)" \
-  || bad "RR3: a superseded writer writing after S_P outside F_P was not refused in both spellings (rc=$RC): $(cat "$JO")"
-p_rrlatein "$JOIN" && ok "RR4: the original still writing after S_P inside F_P, beside the new writer -> REFUSED with the new-id line" \
-  || bad "RR4: a superseded writer writing after S_P inside F_P was not refused by the new-id line (rc=$RC): $(cat "$JO")"
-p_rrsame "$JOIN" && ok "RR5: the same id both sides of S_P, the orphan before, no new writer -> REFUSED: the re-run is a NEW dispatch" \
-  || bad "RR5: a re-run by the superseded writer itself was not refused (rc=$RC): $(cat "$JO")"
-p_rrspan "$JOIN" && ok "RR6: the re-run writer also writes section 4 -> REFUSED, section 4 has two writers" \
-  || bad "RR6: a re-run writer writing another section was not refused (rc=$RC): $(cat "$JO")"
-p_rrprlate "$JOIN" && ok "RR10: the original writes 2.md's own part record after S_P -> REFUSED, a superseded writer writing an account" \
-  || bad "RR10: a superseded writer's part-record row after S_P was not refused (rc=$RC): $(cat "$JO")"
-p_rrprout "$JOIN" && ok "RR11: the original wrote another part's record (3.md) before S_P -> REFUSED, it was not only 2.md's writer" \
-  || bad "RR11: a superseded writer's row on another part's record was not refused (rc=$RC): $(cat "$JO")"
-p_rrprforeign "$JOIN" && ok "RR12: another agent writes 2.md's record after S_P beside the re-run's -> REFUSED, the account is the re-run writer's alone" \
-  || bad "RR12: a foreign row on the re-run part's record after S_P was not refused (rc=$RC): $(cat "$JO")"
-p_rrprnone "$JOIN" && ok "RR13: the re-run never writes 2.md's record -> REFUSED, the covering account is not the re-run's" \
-  || bad "RR13: a re-run with no part-record row was not refused (rc=$RC): $(cat "$JO")"
-p_rrreuse "$JOIN" && ok "RR14: section 3's finished owner does the section-2 re-run -> REFUSED on its section-3 file and its 3.md record" \
-  || bad "RR14: a finished part's agent re-running another part was not refused (rc=$RC): $(cat "$JO")"
-p_rrargs "$JOIN" && ok "RR7: --rerun argument refusals -- an unknown part, a part named twice, a start outside the window, a malformed start, no @, a part citing no written file, and --rerun with --escalations" \
-  || bad "RR7: a --rerun argument refusal did not fire as named (rc=$RC): $(cat "$JO")"
-p_rrfiles "$JOIN" && ok "RR8: FILES mode -- story 2.1 re-run by a new agent -> REFUSED without --rerun, JOINED with it, its rerun: line and '1 superseded rows'" \
-  || bad "RR8: a files-mode re-run did not refuse-then-join (rc=$RC): $(cat "$JO")"
-p_rrsubj "$JOIN" && ok "RR9: SUBJECT mode -- one sectioned part re-run by a new agent -> REFUSED without --rerun, JOINED with it, 'in its window'" \
-  || bad "RR9: a subject-mode re-run did not refuse-then-join (rc=$RC): $(cat "$JO")"
-
-# ---- the alias rule: a no-transcript id whose tool_use_id is ONE assistant tool_use in another writer's transcript.
-p_alias "$JOIN" && ok "AL1: the orphan row's tool_use_id is one assistant tool_use in the other writer's transcript, the orphan has none -> JOINED, '1 alias rows', the alias: line in the record" \
-  || bad "AL1: a transcript-evidenced alias did not join (rc=$RC): $(cat "$JO")"
-p_alnokeys "$JOIN" && ok "AL2: AL1's ledger with the three keys stripped (pre-upgrade) -> REFUSED as before, no evidence line" \
-  || bad "AL2: a keyless ledger was not judged as before (rc=$RC): $(cat "$JO")"
-p_alresult "$JOIN" && ok "AL3: the id appears only inside a tool_result -> REFUSED, 'held by no writer's transcript'" \
-  || bad "AL3: an id quoted in a tool_result was read as a tool_use (rc=$RC): $(cat "$JO")"
-p_alown "$JOIN" && ok "AL4: the orphan has its own transcript -> REFUSED, the transcript named as existing" \
-  || bad "AL4: an agent with its own transcript was aliased (rc=$RC): $(cat "$JO")"
-p_alsecond "$JOIN" && ok "AL5: a genuine second remediator sharing the parent transcript_path -> REFUSED (a shared transcript_path is never evidence)" \
-  || bad "AL5: a second remediator sharing transcript_path was aliased (rc=$RC): $(cat "$JO")"
-p_alother "$JOIN" && ok "AL6: the orphan id has a second row in the file set -> REFUSED, '2 row(s)' named" \
-  || bad "AL6: an id with another row was aliased (rc=$RC): $(cat "$JO")"
-p_alsess "$JOIN" && ok "AL7: the holding tool_use is in the transcript of a writer whose rows are in ANOTHER session -> REFUSED" \
-  || bad "AL7: an alias across sessions was accepted (rc=$RC): $(cat "$JO")"
-p_altwo "$JOIN" && ok "AL8: the id is held by TWO tool_use blocks -> REFUSED, '2 block(s)' named" \
-  || bad "AL8: an id held by two tool_use blocks was aliased (rc=$RC): $(cat "$JO")"
-p_altool "$JOIN" && ok "AL9: the one tool_use holding the id is a Read -> REFUSED" \
-  || bad "AL9: an id held by a non-write tool_use was aliased (rc=$RC): $(cat "$JO")"
-p_rronly "$JOIN" && ok "RR15: a record-only re-run of 5.md -> JOINED with 'record-only', nothing on sections/5.md dropped; writing nothing -> PRNONE; the original rewriting 5.md, or two agents writing it -> REFUSED; a nested child of the re-run writer writing sections/5.md -> the re-run writer" || bad "RR15: the record-only re-run did not hold (rc=$RC): $(cat "$JO")"
-p_nested "$JOIN" && ok "NW1: a nested writer (its probe row and a spawn row naming its dispatcher) on its dispatcher's file -> JOINED as one writer with the nested: line; a lead-issued spawn, a key-less spawn row and a missing probe row -> REFUSED naming the ledger" || bad "NW1: the nested-writer fold did not hold (rc=$RC): $(cat "$JO")"
 
 p_agentwrites "$JOIN" && ok "AW1: --agent-writes <subject> over a ledger where a joined writer edited A, B and (earlier) D, a post-join non-subject edited F and the subject edited C and D -> exactly C, D and the not-covered trailer; an unknown agent -> the trailer alone, rc 0; an extra flag -> REFUSED rc 2" \
   || bad "AW1: --agent-writes did not print exactly the subject's paths plus the trailer, or the zero-row and extra-flag cases failed (rc=$RC): $(cat "$JO")"
@@ -585,8 +483,6 @@ if [ "$jrc" -eq 0 ] && [ "$h2" -eq 0 ] && ! has "$WORK/h2.out" "H -- REPAIR-RECO
 else
   bad "H2: after the join (rc=$jrc) the convergence gate did not pass (rc=$h2): $(cat "$WORK/h2.out")"
 fi
-p_fencenest "$JOIN" && ok "EC36: the record readers close a four-backtick fence only on a run at least as long -- content after its inner three-backtick block is no entry, no check line, no source token and no heading" || bad "EC36: a record reader closed a four-backtick fence on its inner three-backtick line (rc=$RC): $(cat "$JO")"
-p_partmark "$JOIN" && ok "EC37: a part closed by the real --mark joins beside an unmarked one, its seat-complete: line kept in the record; a serial block appended after the LAST marked part is segmented at its own triple -- stating both check lines rc 0, stating neither REFUSED naming its repair-complete: serial line and never a seat-complete: line" || bad "EC37: a marked part broke the joined record or its serial block (rc=$RC): $(cat "$JO")"
 if p_markderive "$SRCDIR/wait-for-deliverable.sh"; then ok "EC40: --mark on a remediator part derives the words from the path -- coe-repair-p1/2.md written coe remediator 2, the shifted call coe 7 remediator 7 written coe remediator 7, requirements-party-repair/05.md called with wrong words written requirements-party remediator 05 and 03.md keeps its correct spelling, coe-party-serial-repair-p1/lane-1.md keeps lane-1, a 1/8 brief shard becomes the file name; a plain/ file keeps the caller's words"; B_EC40=1
 else bad "EC40: --mark did not derive the remediator part marker words (BL-796)"; fi
 # EC40m: the derivation removed must be KILLED by EC40. The unmutated control is EC40's own live pass
@@ -746,8 +642,6 @@ for _m in summary reword; do
     fi
   fi
 done
-p_advname "$JOIN" && ok "EC38: an artifact ending in -adversarial is REFUSED in document and files mode, naming <artifact>-repair-p<M> and arm H, nothing written; shards/x-repair-p1/ joins and shards/adversarial-notes-repair-p1/ draws no such refusal" \
-  || bad "EC38: an -adversarial artifact was not refused as specified, or a -repair-p dir drew the refusal (rc=$RC): $(cat "$JO")"
 
 # EC39 (BL-734): a closing entry appended to a joined record -- the BADSIB refusal line, its two accepted
 # near-misses, then the writer paragraphs of both role files, then the mutant that scores the first.
@@ -799,201 +693,11 @@ else
   fi
 fi
 
-# ---- serial lanes (BL-716): one serial remediator per lane of FILES, then one fan-in. LN3 is the world that
-# kills "one LANE per part": its three prd parts share prd.md, and a MOVED-CITE joins architecture-impact to it.
-[ -f "$SRCDIR/serial-remediation-worklist.sh" ] || { echo "FIXTURE BROKEN: serial-remediation-worklist.sh is not beside the join; the lane arms would read every edge UNASSESSED" >&2; exit 2; }
-echo "HERMETIC-CONSUMED core/scripts/serial-remediation-worklist.sh"
-p_lanefiles "$JOIN" && ok "LN1: files mode, three disjoint parts -> 3 lanes, each file-less escalation and the sweep to FANIN, no worklist edge" \
-  || bad "LN1: files-mode lanes answered wrongly (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
-p_lanedoc "$JOIN" && ok "LN2: document mode, three section parts of one document -> ONE lane (a shared file), the worklist ran, FANIN-COUNT: 0" \
-  || bad "LN2: section parts of one document were not one lane (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
-if p_lanesubj "$JOIN"; then ok "LN3: subject mode, prd's three sections one lane and a MOVED-CITE joining architecture-impact to it -> 2 lanes, the cite that lane's item"; B_LN3=1
-else bad "LN3: the shared-file or MOVED-CITE edge did not join lanes (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"; fi
-p_lanesubjnear "$JOIN" && ok "LN4: LN3 one property apart, no cite -> 3 lanes" \
-  || bad "LN4: lanes joined with no edge (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
-p_lanehit "$JOIN" && ok "LN5: a replaced line still standing in two other lanes' files -> 3 lanes, ONE FANIN HIT item (a HIT never joins lanes)" \
-  || bad "LN5: a cross-lane HIT joined lanes or was not one fan-in item (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
-p_laneround "$JOIN" && ok "LN7: the lane round's own join (--artifact stories-serial) JOINS its lane parts and prints no LANE or FANIN line" \
-  || bad "LN7: the lane round's join did not join or printed lanes (rc=$RC): $(cat "$JO")"
-# LN3m: one LANE per part with no edge computation (each cited file keyed per part) must be KILLED by LN3. Built in a copy of
-# the join's whole directory, so the worklist sibling is present and the mutant cannot score by reading every edge UNASSESSED.
-EM3="$(mktemp -d "$WORK/ln3m.XXXXXX")" || exit 2
-cp "$(dirname "$JOIN")"/*.sh "$EM3/" || { echo "FIXTURE BROKEN: LN3m could not copy the join's sibling scripts into $EM3" >&2; exit 2; }
-sed 's/\$1 == "C" { k = wkey(\$3); if (k == "") next;/$1 == "C" { k = wkey($3); if (k == "") next; k = k "#" $2; isk[k] = 1;/' "$JOIN" > "$EM3/join-remediator-shards.sh" \
-  || { echo "FIXTURE BROKEN: LN3m could not write the mutated join into $EM3" >&2; exit 2; }
-if cmp -s "$JOIN" "$EM3/join-remediator-shards.sh"; then
-  bad "LN3m: FIXTURE STALE -- the one-lane-per-part mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
-elif [ ! -f "$EM3/serial-remediation-worklist.sh" ]; then
-  bad "LN3m: the worklist is absent in the copy"
-elif p_lanesubj "$EM3/join-remediator-shards.sh"; then
-  mrow LN3m LN3=0
-  bad "LN3m: SURVIVED -- LN3 holds against a join that keys one lane per part and computes no edge"
-elif ! has "$JO" "LANE-COUNT: "; then
-  bad "LN3m: the mutant printed no LANE-COUNT line; it died rather than partitioned wrongly"
-else
-  mrow LN3m LN3=1
-  mutant_killed "${B_LN3:-0}" LN3m "LN3m one LANE per part, no edge computation: KILLED by [LN3]"
-fi
-if p_lanerec "$JOIN"; then ok "LN6: --escalations reads the lane round's record after round 1 and closes by it; either record alone REFUSED; the subject party record owes requirements-party-serial-repair-p1.md; no LANE/FANIN line in a record mode"; B_LN6=1
-else bad "LN6: the lane round's record was not read with round 1 (rc=$RC): $(cat "$JO")"; fi
-p_lanename "$JOIN" && ok "LN8: the subject party join prints LANE-ARTIFACT: requirements-party-serial --pass 1, derived from its record" \
-  || bad "LN8: the lane round's name was not derived from the record (rc=$RC): $(grep -E '^LANE-ARTIFACT' "$JO")"
-# LN6m: the lane name derived from the subject's artifact (`requirements-serial`, the name a lead inferring it
-# writes) instead of from the record must be KILLED by LN6's subject party case (and LN8).
-EM6="$(mktemp -d "$WORK/ln6m.XXXXXX")" || exit 2
-cp "$(dirname "$JOIN")"/*.sh "$EM6/" || { echo "FIXTURE BROKEN: LN6m could not copy the join's sibling scripts into $EM6" >&2; exit 2; }
-sed 's/    \*-repair\.md) printf .%s-serial\\t1\\n. "\${1%-repair\.md}" ;;/    *-repair.md) printf "%s-serial\\t1\\n" "${1%%-*}" ;;/' "$JOIN" > "$EM6/join-remediator-shards.sh" \
-  || { echo "FIXTURE BROKEN: LN6m could not write the mutated join into $EM6" >&2; exit 2; }
-if cmp -s "$JOIN" "$EM6/join-remediator-shards.sh"; then
-  bad "LN6m: FIXTURE STALE -- the artifact-derived lane-name mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
-elif ! bash -n "$EM6/join-remediator-shards.sh" 2>/dev/null; then
-  bad "LN6m: the mutant is not valid shell"
-elif ! p_lanerec "$EM6/join-remediator-shards.sh"; then
-  mrow LN6m LN6=1
-  mutant_killed "${B_LN6:-0}" LN6m "LN6m lane name derived from the subject artifact, not the record: KILLED by [LN6]"
-else
-  mrow LN6m LN6=0
-  bad "LN6m: SURVIVED -- LN6 holds against a join that names the subject party round's lane record requirements-serial-repair-p1.md"
-fi
-
-
-# LN9: esc_cites is an awk over the part file and its status is captured before the heredoc that consumes it. An
-# esc_cites forced non-zero in the lanes path (a copy of the join whose esc_cites returns 1 after printing) must
-# REFUSE, exit 2, naming the part; the unforced join over the same world joins (the control).
-p_laneescrc() { # <join> -> RC, $JO of the lanes world run through <join>
-  local w; w="$(new_world)"; three_writers "$w"
-  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
-  run_join "$1" "$w"
-}
-EM9="$(mktemp -d "$WORK/ln9m.XXXXXX")" || exit 2
-cp "$(dirname "$JOIN")"/*.sh "$EM9/" || { echo "FIXTURE BROKEN: LN9 could not copy the join's sibling scripts into $EM9" >&2; exit 2; }
-sed "/^esc_cites() {/,/^}/ s/^    END { emit() }' \"\$1\"\$/    END { emit() }' \"\$1\"; return 1/" "$JOIN" > "$EM9/join-remediator-shards.sh" \
-  || { echo "FIXTURE BROKEN: LN9 could not write the forced-failure join into $EM9" >&2; exit 2; }
-if cmp -s "$JOIN" "$EM9/join-remediator-shards.sh"; then
-  bad "LN9: FIXTURE STALE -- the forced esc_cites failure matched nothing in $JOIN; re-anchor it, never relax the assertion"
-elif [ ! -f "$EM9/serial-remediation-worklist.sh" ] || ! p_laneescrc "$JOIN" || [ "$RC" -ne 0 ] || ! has "$JO" "LANE-COUNT: 3"; then
-  bad "LN9: the unforced control did not join three lanes (rc=$RC) or the worklist is absent in the copy"
-else
-  p_laneescrc "$EM9/join-remediator-shards.sh"
-  if [ "$RC" -eq 2 ] && has "$JO" "REFUSED: could not read the escalated entries of 01.md for the serial lanes" && ! has "$JO" "LANE-COUNT"; then
-    ok "LN9: esc_cites failing in the lanes path -> REFUSED naming the part, exit 2, no lane report (the unforced join beside it joins 3 lanes)"
-  else
-    bad "LN9: a failing esc_cites was not refused (rc=$RC): $(head -3 "$JO")"
-  fi
-fi
-
-# ---- the lane path (BL-802): the round-one join prints LANE-ARTIFACT-PATH, the lane join copies it, and the
-# ledger holds exactly one row for the lane writer's in-place edit of the assembled document. p_lc in lib.sh.
-LP_OUT=docs/design-notes.md; LP_COE=_bmad-output/planning-artifacts/s305/coe.md
-p_lc "$HOOK" "$JOIN" _bmad-output "$LP_OUT"
-if lc_joined "$LP_OUT"; then ok "LP1: a sections document outside the state dir ($LP_OUT): LANE-ARTIFACT-PATH prints it project-relative, the lane join given that path JOINS 1 part / 1 writer, ONE row at that path"; B_LP1=1
-else bad "LP1: the out-of-state lane did not join on the copied path ($(lc_why))"; fi
-p_lc "$HOOK" "$JOIN" x/_bmad-output "x/$LP_OUT"
-lc_joined "x/$LP_OUT" && ok "LP2: the same under AI_DLC_STATE_DIR=x/_bmad-output: the row and LANE-ARTIFACT-PATH are x/$LP_OUT (project-relative, not relative to the state dir's parent) and JOINED" \
-  || bad "LP2: the nested out-of-state lane did not join ($(lc_why))"
-p_lc "$HOOK" "$JOIN" _bmad-output "$LP_COE"
-if lc_joined "$LP_COE"; then ok "LP3: an in-state (coe) document: LANE-ARTIFACT-PATH prints the state spelling $LP_COE, ONE row, JOINED"; B_LP3=1
-else bad "LP3: the in-state lane did not join ($(lc_why))"; fi
-p_lc "$HOOK" "$JOIN" x/_bmad-output "x/$LP_COE"
-if lc_joined "$LP_COE"; then ok "LP4: the in-state (coe) document under x/_bmad-output: LANE-ARTIFACT-PATH prints $LP_COE (the state basename, not x/...), ONE row, JOINED"; B_LP4=1
-else bad "LP4: the nested in-state lane did not join ($(lc_why))"; fi
-p_lc "$HOOK" "$JOIN" _bmad-output "$LP_OUT" "$AG2"
-if [ "$LC_LAP" = "$LP_OUT" ] && [ "$RC" = 2 ] && has "$JO" "$LP_OUT was written by more than one agent in the window" && [ ! -e "$LC_OUT" ]; then
-  ok "LP5: LP1 one property apart, a second dispatched agent also edits the document in the window -> the lane join REFUSES (exit 2) naming it, no record"
-else
-  bad "LP5: two writers of the lane's document were not refused ($(lc_why))"
-fi
-# LPm1: the recorder's manifest arm removed (the `*)` returns 0 as before the fix) -> LP1 dies with the consumer's
-# REFUSED line; LP3 (the in-state document, recorded by the planning-artifacts arm) is the control that must not move.
-# LPm4: LANE-ARTIFACT-PATH printed by root_rel (project-relative) for a sections document -> LP4 dies; LP3 and LP1
-# (where the two spellings agree) must not move. Each mutant is a copy in a copy of its program's directory, guarded by cmp -s.
-LPM="$(mktemp -d "$WORK/lpm.XXXXXX")" || exit 2
-mkdir -p "$LPM/h" "$LPM/j" || exit 2
-sed 's@^    \*) manifest_doc_rel "\$1" || return 0; _raw_rel="\$_mdr_rel" ;;$@    *) return 0 ;;@' "$HOOK" > "$LPM/h/ai-dlc-gate-remediation-guard.sh" \
-  || { echo "FIXTURE BROKEN: LPm1 could not write the mutated hook" >&2; exit 2; }
-if cmp -s "$HOOK" "$LPM/h/ai-dlc-gate-remediation-guard.sh"; then
-  bad "LPm1: FIXTURE STALE -- the manifest-arm mutation matched nothing in $HOOK; re-anchor it, never relax the assertion"
-elif ! bash -n "$LPM/h/ai-dlc-gate-remediation-guard.sh" 2>/dev/null; then
-  bad "LPm1: the mutated hook does not parse"
-else
-  p_lc "$LPM/h/ai-dlc-gate-remediation-guard.sh" "$JOIN" _bmad-output "$LP_OUT"
-  if lc_joined "$LP_OUT"; then mrow LPm1 LP1=0; bad "LPm1: SURVIVED -- LP1 holds against a hook with no manifest arm"
-  elif [ "$RC" = 2 ] && has "$JO" "the ledger records no dispatched write under $LP_OUT in" && [ "$LC_NA" = 0 ]; then
-    p_lc "$LPM/h/ai-dlc-gate-remediation-guard.sh" "$JOIN" _bmad-output "$LP_COE"
-    if lc_joined "$LP_COE"; then
-      mrow LPm1 LP1=1 LP3=0
-      mutant_killed "$(( ${B_LP1:-0} && ${B_LP3:-0} ))" LPm1 "LPm1 the manifest arm removed: KILLED by [LP1] with the consumer's 'records no dispatched write' REFUSED line, and LP3 is UNCHANGED"
-    else
-      mrow LPm1 LP1=1 LP3=1
-      bad "LPm1: the in-state control LP3 also moved under the mutant ($(lc_why)) -- the arms are entangled"
-    fi
-  else
-    bad "LPm1: LP1 failed for another reason than the missing row ($(lc_why))"
-  fi
-fi
-cp "$(dirname "$JOIN")"/*.sh "$LPM/j/" || { echo "FIXTURE BROKEN: LPm4 could not copy the join's sibling scripts" >&2; exit 2; }
-sed 's@^    elif \[ "\$DOCMODE" = 1 \]; then echo "LANE-ARTIFACT-PATH: \$(ledger_rel "\$DOC_ABS")"$@    elif [ "$DOCMODE" = 1 ]; then echo "LANE-ARTIFACT-PATH: $(root_rel "$DOC_ABS")"@' "$JOIN" > "$LPM/j/join-remediator-shards.sh" \
-  || { echo "FIXTURE BROKEN: LPm4 could not write the mutated join" >&2; exit 2; }
-if cmp -s "$JOIN" "$LPM/j/join-remediator-shards.sh"; then
-  bad "LPm4: FIXTURE STALE -- the LANE-ARTIFACT-PATH mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
-elif [ ! -f "$LPM/j/partition-document.sh" ] || ! bash -n "$LPM/j/join-remediator-shards.sh" 2>/dev/null; then
-  bad "LPm4: the splitter is absent from the copy or the mutated join does not parse"
-else
-  p_lc "$HOOK" "$LPM/j/join-remediator-shards.sh" x/_bmad-output "x/$LP_COE"
-  if lc_joined "$LP_COE"; then mrow LPm4 LP4=0; bad "LPm4: SURVIVED -- LP4 holds against a join printing the project-relative spelling for an in-state document"
-  elif [ "$LC_LAP" = "x/$LP_COE" ]; then
-    p_lc "$HOOK" "$LPM/j/join-remediator-shards.sh" _bmad-output "$LP_COE"; _c3=0; lc_joined "$LP_COE" && _c3=1
-    p_lc "$HOOK" "$LPM/j/join-remediator-shards.sh" _bmad-output "$LP_OUT"; _c1=0; lc_joined "$LP_OUT" && _c1=1
-    mrow LPm4 LP4=1 "LP3=$((1 - _c3))" "LP1=$((1 - _c1))"
-    if [ "$_c3$_c1" = 11 ]; then
-      mutant_killed "$(( ${B_LP4:-0} && ${B_LP3:-0} && ${B_LP1:-0} ))" LPm4 "LPm4 LANE-ARTIFACT-PATH by root_rel: KILLED by [LP4] (it printed x/$LP_COE), and LP3 and LP1 are UNCHANGED"
-    else
-      bad "LPm4: a control moved under the mutant (LP3=$_c3 LP1=$_c1, want 1 1)"
-    fi
-  else
-    bad "LPm4: LP4 failed for another reason than the spelling ($(lc_why))"
-  fi
-fi
-
-# ---- BL-807, claim 1: a round in which no lane wrote the subject joins; a lane that cited a file, a lane agent with a
-# subject row outside the window, or a part record with no row still refuses. Predicates in lib.sh (p_nl*).
-if p_nl2lane "$JOIN"; then ok "NL1: the lane round's two lanes, both \`edit: n/a\`, an empty ledger window -> JOINED (2 parts, 0 writers), the header's no-lane line REPLACING the one-writer sentence, no lane report (-serial)"; B_NL1=1
-else bad "NL1: the two-lane no-edit round did not join with the no-lane header (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
-p_nlesc "$JOIN" && ok "NL2: a round-one record, one lane \`edit: n/a\` and one ESCALATED entry naming a story -> JOINED, ESCALATED-COUNT 1, LANE-COUNT 0, the escalation to the fan-in" \
-  || bad "NL2: the n/a + escalated round did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"
-if p_nlcites "$JOIN"; then ok "NL3: one lane cites a file it never ledgered, the window empty -> REFUSED with the 'records no dispatched write' line verbatim AND the coverage join's UNWRITTEN line"; B_NL3=1
-else bad "NL3: a lane citing an unledgered edit was not refused with both lines (rc=$RC): $(grep -m2 REFUSED "$JO" | tr '\n' ' ')"; fi
-if p_nloutside "$JOIN"; then ok "NL4: a lane agent's only subject write lies BEFORE --since and is cited by no part -> REFUSED naming the row"; B_NL4=1
-else bad "NL4: a lane agent's out-of-window subject write was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"; fi
-if p_nlnorow "$JOIN"; then ok "NL5: a part record with no ledger row -> REFUSED (its writer is unknown), never accepted over an empty lane set"; B_NL5=1
-else bad "NL5: a part with no ledger row was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"; fi
-p_nldoc "$JOIN" && ok "NL6: --document, every section part \`edit: n/a\`, no section copy written -> JOINED, assembled, the section sentence replaced by the no-lane line" \
-  || bad "NL6: the no-edit document round did not join with the no-lane header (rc=$RC): $(grep -m1 REFUSED "$JO")"
-# NL7: key 2 judges the edit: VALUE, not its tokens. The same world (a Bash write to the subject, no ledger row)
-# refuses with an extension-less cite and joins with the ALLOW twin `` `n/a` (escalated) ``, one property apart.
-if p_nlnoext "$JOIN"; then
-  _nl7=$RC; p_nlnoext "$JOIN" '`n/a` (escalated)'
-  if [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then
-    ok "NL7: a lane citing the subject with no extension (\`.../story-2.1-positions-on-demand\` line 3), its write unledgered -> REFUSED 'records no dispatched write' (rc=$_nl7); the same world with \`n/a\` (escalated) -> JOINED"; B_NL7=1
-  else bad "NL7: the ALLOW twin \`n/a\` (escalated) did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
-else
-  bad "NL7: a lane citing the subject with no extension was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
-fi
-# NL8: an absent edit: line is not a no-edit value. A part whose second entry is repaired with NO edit: line refuses;
-# the same part with that entry `skipped (nit)` (graph's only no-edit-line shape) joins, one property apart.
-# The operator-ruling case also draws the missing-ruling-cite refusal; NL8 requires the key-2 line beside it.
-if p_nlnoedit "$JOIN" && p_nlnoedit "$JOIN" 'operator-ruling (F-3 is ruled)'; then
-  _nl8=$RC; p_nlnoedit "$JOIN" 'skipped (nit)'
-  if [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then
-    ok "NL8: a lane's repaired entry, and an operator-ruling entry, with no edit: line -> REFUSED 'records no dispatched write' (rc=$_nl8); the same entry \`skipped (nit)\` -> JOINED"; B_NL8=1
-  else bad "NL8: the ALLOW twin \`skipped (nit)\` with no edit: line did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
-else
-  bad "NL8: a lane's repaired or operator-ruling entry with no edit: line was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
-fi
-# NLm: each acceptance key removed in a copy of the join's whole directory, cmp -s guarded; each must die on its own arm
-# and leave NL1 (the accepted round) joined. (a) accept on the empty ledger alone; (b) no any-time clause; (c) no cites
-# test; (d) no part-row test. (a) and (c) still exit 2 through the coverage join's UNWRITTEN line -- the two guards
-# cover each other on the exit code, so NL3 kills them on the 'records no dispatched write' line it requires.
+# ---- unit-reader-a.sh: SJ1-SJ9/SJ1o, EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38, RR1-RR15, AL1-AL9, NW1, LN1-LN9 with
+# LN3m/LN6m, LP1-LP5 with LPm1/LPm4, NL1-NL8c with NLma-NLmh, asked in process through the same lib.sh predicates;
+# its SEAM-A and CLI-A cells keep one CLI pass and refusal per join mode it owns. One literal call line.
+bash "$HERE/unit-reader-a.sh" ${1:+"$1"}; _ura=$?
+case "$_ura" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-reader-a.sh exited $_ura (FIXTURE BROKEN); nothing was asserted" ;; esac
 NLM="$(mktemp -d "$WORK/nlm.XXXXXX")" || exit 2
 nl_mut() { # <tag> <sed expr> -> the mutant's path, or empty when it did not apply
   mkdir -p "$NLM/$1" && cp "$(dirname "$JOIN")"/*.sh "$NLM/$1/" || return 1
@@ -1002,45 +706,6 @@ nl_mut() { # <tag> <sed expr> -> the mutant's path, or empty when it did not app
   bash -n "$NLM/$1/join-remediator-shards.sh" 2>/dev/null || return 1
   printf '%s' "$NLM/$1/join-remediator-shards.sh"
 }
-nl_score() { # <tag> <killing predicate> <deciding arm> <base flag of that arm> <label>
-  local m; m="$(nl_mut "$1" "$NL_SED")"
-  if [ -z "$m" ]; then bad "NLm$1: FIXTURE STALE -- the mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"; return; fi
-  p_nl2lane "$m"
-  if [ "$RC" -ne 0 ] || ! has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then
-    mrow "NLm$1" NL1=1
-    bad "NLm$1: the accepted round NL1 did not join under the mutant (rc=$RC) -- the copy did not run or the arms are entangled"; return
-  fi
-  if "$2" "$m"; then mrow "NLm$1" "$3=0" NL1=0; bad "NLm$1: SURVIVED -- $5"
-  else mrow "NLm$1" "$3=1" NL1=0; mutant_killed "$(( $4 && ${B_NL1:-0} ))" "NLm$1" "NLm$1 $5: KILLED by [$3] ($2, rc=$RC), NL1 still joins"; fi
-}
-NL_SED='s/^  if \[ -n "\$CITES" \] || \[ -n "\$EDITS" \]; then$/  if false; then/; s/^        WROTE) refuse /        WROTE) : /; s/^        NOROW) refuse /        NOROW) : /'
-nl_score a p_nlcites NL3 "${B_NL3:-0}" "acceptance on the empty ledger alone (the cites, lane-agent and part-row keys all skipped)"
-NL_SED='s/^        WROTE) refuse /        WROTE) : /'
-nl_score b p_nloutside NL4 "${B_NL4:-0}" "the any-time lane-agent clause dropped"
-NL_SED='s/^  if \[ -n "\$CITES" \] || \[ -n "\$EDITS" \]; then$/  if false; then/'
-nl_score c p_nlcites NL3 "${B_NL3:-0}" "the cites test dropped"
-NL_SED='s/^  if \[ -n "\$CITES" \] || \[ -n "\$EDITS" \]; then$/  if [ -n "$CITES" ]; then/'
-nl_score e p_nlnoext NL7 "${B_NL7:-0}" "key 2 reverted to CITES empty (tokens, not edit: values)"
-NL_SED='s/^        NOROW) refuse /        NOROW) : /'
-nl_score d p_nlnorow NL5 "${B_NL5:-0}" "the part-row test dropped"
-NL_SED='/^      if (edp ~ \/^(repaired|operator-ruling)\/ && !esaw) print "EDT\\t(no edit: line)"$/d'
-nl_score f p_nlnoedit NL8 "${B_NL8:-0}" "the no-edit-line emit dropped (an absent edit: line read as no edit)"
-p_nlnoedit_ruling() { p_nlnoedit "$1" 'operator-ruling (F-3 is ruled)'; }
-NL_SED='s/^      if (edp ~ \/^(repaired|operator-ruling)\/ && !esaw)/      if (edp ~ \/^(repaired)\/ \&\& !esaw)/'
-nl_score g p_nlnoedit_ruling NL8 "${B_NL8:-0}" "operator-ruling dropped from the no-edit-line emit"
-# NL8 twin: the KEY is matched case-insensitively. `- Disposition: Repaired` with no edit: line refuses exactly as the
-# lowercase spelling does; the ALLOW twin is the same capitalised key with `Skipped (nit)`.
-p_nlnoedit_cap() { p_nlnoedit "$1" 'Repaired' 'Disposition'; }
-if p_nlnoedit_cap "$JOIN"; then
-  _nl8c=$RC; p_nlnoedit "$JOIN" 'Skipped (nit)' 'Disposition'
-  if [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)"; then
-    ok "NL8c: a lane's \`- Disposition: Repaired\` entry with no edit: line -> REFUSED 'records no dispatched write' (rc=$_nl8c); the same capitalised key \`Skipped (nit)\` -> JOINED"; B_NL8c=1
-  else bad "NL8c: the ALLOW twin \`Disposition: Skipped (nit)\` did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
-else
-  bad "NL8c: a capitalised \`Disposition: Repaired\` entry with no edit: line was not refused (rc=$RC): $(grep -m1 -E 'REFUSED|JOINED' "$JO")"
-fi
-NL_SED='s/^    ed == 1 && \$0 ~ DK {/    ed == 1 \&\& \/^[[:space:]-]*[*_`]*disposition[*_`]*:\/ {/'
-nl_score h p_nlnoedit_cap NL8c "${B_NL8c:-0}" "the eflush disposition key match reverted to case-sensitive"
 
 # ---- BL-823: one disposition-key predicate (DISP_KEY_ERE) at every site. A capitalised LIST ITEM is the key, so an
 # out-of-set value under it is refused BADDISP; a capitalised column-0 summary is not, so it neither refuses nor
