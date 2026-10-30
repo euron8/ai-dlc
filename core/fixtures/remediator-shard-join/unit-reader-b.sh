@@ -191,6 +191,40 @@ else
 fi
 three_writers() { ub_tw_copy "$1"; }
 
+# WORLDS BUILT ONCE (fixture-mutants.md clause 4). The world each mutant's owning predicate joins is built by one
+# lib.sh builder (unwm_build, uw_build, uwamb_build, uwshard_build, sibw_build, untilfut_build, deriv_world,
+# subj_world); the predicate itself is unchanged and the join it runs is the mutant's. ub_tpl builds a world the
+# first time its key is asked and snapshots it beside it; every later ask moves the used world aside and restores the
+# snapshot AT THE SAME PATH, because the ledger's root and transcript_path and the split manifests are absolute. A CLI-B
+# run (UB_CLI set) builds every world afresh, so its hook rows come from the CLI hook.
+ub_tpl() { # <key> <builder> [args] -> the world path
+  local f="$WORK/ub-tpl.$1" b="$2" w; shift 2
+  if [ -n "${UB_CLI:-}" ]; then "$b" "$@"; return; fi
+  if [ -s "$f" ]; then
+    w="$(cat "$f")"
+    if [ -e "$w" ]; then mv "$w" "$(mktemp -d "$WORK/ub-used.XXXXXX")/w" || return 1; fi
+    cp -Rp "$w.tpl" "$w" || return 1
+  else
+    w="$("$b" "$@")" && [ -n "$w" ] && [ -d "$w" ] || return 1
+    cp -Rp "$w" "$w.tpl" || return 1
+    printf '%s' "$w" > "$f"
+  fi
+  printf '%s' "$w"
+}
+for _f in unwm_build uw_build uwamb_build uwshard_build sibw_build untilfut_build deriv_world subj_world; do
+  declare -F "$_f" > /dev/null || { echo "FIXTURE BROKEN: lib.sh defines no $_f" >&2; exit 2; }
+  eval "_ub_orig_$(declare -f "$_f")"
+done
+unwm_build() { ub_tpl unwm _ub_orig_unwm_build; }
+uw_build() { ub_tpl "uw-$(printf '%s|' "$@" | cksum | cut -d' ' -f1)" _ub_orig_uw_build "$@"; }
+uwamb_build() { ub_tpl uwamb _ub_orig_uwamb_build; }
+uwshard_build() { ub_tpl uwshard _ub_orig_uwshard_build; }
+sibw_build() { ub_tpl "sib-$(printf '%s|' "$@" | cksum | cut -d' ' -f1)" _ub_orig_sibw_build "$@"; }
+untilfut_build() { ub_tpl untilfut _ub_orig_untilfut_build; }
+deriv_world() { ub_tpl deriv _ub_orig_deriv_world; }
+# subj_world reads SJRD SJPA SPECREL SJSD and AI_DLC_STATE_DIR: all in the key.
+subj_world() { ub_tpl "sj-$(printf '%s|' "$SJRD" "$SJPA" "$SPECREL" "$SJSD" "${AI_DLC_STATE_DIR-}" | cksum | cut -d' ' -f1)" _ub_orig_subj_world; }
+
 # L1-L3: the ledger, as the REAL hook writes it.
 w="$(new_world)"; three_writers "$w"
 drive "$w" Edit "$w/$REL/$S21" ""                     # the LEAD: no agent_id

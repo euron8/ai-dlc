@@ -453,6 +453,9 @@ fi
 # REFUSED line; LP3 (the in-state document, recorded by the planning-artifacts arm) is the control that must not move.
 # LPm4: LANE-ARTIFACT-PATH printed by root_rel (project-relative) for a sections document -> LP4 dies; LP3 and LP1
 # (where the two spellings agree) must not move. Each mutant is a copy in a copy of its program's directory, guarded by cmp -s.
+# LPm1 is scored by driving the mutated HOOK, so its copy cannot be sourced once (header: the hook binds CLAUDE_PROJECT_DIR,
+# AI_DLC_STATE_DIR and TIMESTAMP, through the drive's pinned `date`, per call); each drive sources the copy in its own
+# subshell, in process, and the join it drives is the unmutated one, also in process.
 LPM="$(mktemp -d "$WORK/lpm.XXXXXX")" || exit 2
 mkdir -p "$LPM/h" "$LPM/j" || exit 2
 sed 's@^    \*) manifest_doc_rel "\$1" || return 0; _raw_rel="\$_mdr_rel" ;;$@    *) return 0 ;;@' "$HOOK" > "$LPM/h/ai-dlc-gate-remediation-guard.sh" \
@@ -486,11 +489,22 @@ elif [ ! -f "$LPM/j/partition-document.sh" ] || ! bash -n "$LPM/j/join-remediato
   bad "LPm4: the splitter is absent from the copy or the mutated join does not parse"
 else
   _lj="$LPM/j/join-remediator-shards.sh"
-  ua_inmut "$_lj" p_lc "$HOOK" "$_lj" x/_bmad-output "x/$LP_COE"
-  if lc_joined "$LP_COE"; then mrow LPm4 LP4=0; bad "LPm4: SURVIVED -- LP4 holds against a join printing the project-relative spelling for an in-state document"
-  elif [ "$LC_LAP" = "x/$LP_COE" ]; then
-    ua_inmut "$_lj" p_lc "$HOOK" "$_lj" _bmad-output "$LP_COE"; _c3=0; lc_joined "$LP_COE" && _c3=1
-    ua_inmut "$_lj" p_lc "$HOOK" "$_lj" _bmad-output "$LP_OUT"; _c1=0; lc_joined "$LP_OUT" && _c1=1
+  # ONE subshell sources the copy once and runs LP4 (the owning cell) and then LP3 and LP1 (the controls the matrix row
+  # prints); UA_MSG carries LP4's verdict, its printed spelling, the controls and LP4's why out.
+  lpm4_cells() { # <mutant join copy>
+    local c4=0 c3=0 c1=0 lap4 why4
+    p_lc "$HOOK" "$1" x/_bmad-output "x/$LP_COE"; lc_joined "$LP_COE" && c4=1; lap4="$LC_LAP"; why4="$(lc_why)"
+    if [ "$c4" = 0 ] && [ "$lap4" = "x/$LP_COE" ]; then
+      p_lc "$HOOK" "$1" _bmad-output "$LP_COE"; lc_joined "$LP_COE" && c3=1
+      p_lc "$HOOK" "$1" _bmad-output "$LP_OUT"; lc_joined "$LP_OUT" && c1=1
+    fi
+    UA_MSG="$c4|$lap4|$c3$c1|$why4"
+  }
+  ua_inmut "$_lj" lpm4_cells "$_lj"
+  _m4_c4="${UA_MSG%%|*}"; _m4_r="${UA_MSG#*|}"; _m4_lap="${_m4_r%%|*}"; _m4_r="${_m4_r#*|}"; _m4_cc="${_m4_r%%|*}"; _m4_why="${_m4_r#*|}"
+  _c3="${_m4_cc%?}"; _c1="${_m4_cc#?}"
+  if [ "$_m4_c4" = 1 ]; then mrow LPm4 LP4=0; bad "LPm4: SURVIVED -- LP4 holds against a join printing the project-relative spelling for an in-state document"
+  elif [ "$_m4_lap" = "x/$LP_COE" ]; then
     mrow LPm4 LP4=1 "LP3=$((1 - _c3))" "LP1=$((1 - _c1))"
     if [ "$_c3$_c1" = 11 ]; then
       mutant_killed "$(( ${B_LP4:-0} && ${B_LP3:-0} && ${B_LP1:-0} ))" LPm4 "LPm4 LANE-ARTIFACT-PATH by root_rel: KILLED by [LP4] (it printed x/$LP_COE), and LP3 and LP1 are UNCHANGED"
@@ -498,7 +512,7 @@ else
       bad "LPm4: a control moved under the mutant (LP3=$_c3 LP1=$_c1, want 1 1)"
     fi
   else
-    bad "LPm4: LP4 failed for another reason than the spelling ($(lc_why))"
+    bad "LPm4: LP4 failed for another reason than the spelling ($_m4_why)"
   fi
 fi
 fi

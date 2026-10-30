@@ -670,6 +670,10 @@ seal_of() {
 #      A FAIL line that names no line of the copy refuses, and any exit but 0 or 1 refuses as no verdict.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
+# mk_sibling_ <file> <entry function>: 0 when <file> defines the entry function at a line start, so it holds
+# its program behind a BASH_SOURCE guard and can be sourced and asked in process (read with builtins, no
+# process). A sibling that does not (a stand-in script) is run as a process, as it always was.
+mk_sibling_() { local _t; IFS= read -r -d '' _t < "$1" || true; [[ "$_t" == *$'\n'"$2() {"* ]]; }
 # wfd_mark_main holds the --mark / --mark-repair dispatch below, unchanged. It is a function so a
 # fixture can source this file (the guard after it) and run the writer in a subshell; run as a
 # program it is called at once, from the same place, with the script's own arguments.
@@ -742,11 +746,19 @@ case "${1:-}" in
       [ -f "$MK_SEAL" ] || mark_refuse "a review shard is sealed by content-seal.sh, which is not beside this script ($MK_SEAL); reinstall ai-dlc."
       MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
       cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
-      MK_OUT="$(bash "$MK_MERGE" "$MK_PDIR" --gate "$MK_GATE" --check-shard "$MK_FILE" --findings "${MK_N#findings=}" 2>&1)" \
+      if mk_sibling_ "$MK_MERGE" mrs_main; then
+        MK_OUT="$( ( . "$MK_MERGE" && mrs_main "$MK_PDIR" --gate "$MK_GATE" --check-shard "$MK_FILE" --findings "${MK_N#findings=}" ) 2>&1 )"
+      else
+        MK_OUT="$(bash "$MK_MERGE" "$MK_PDIR" --gate "$MK_GATE" --check-shard "$MK_FILE" --findings "${MK_N#findings=}" 2>&1)"
+      fi \
         || { rm -f "$MK_SRC"; mark_refuse "merge-review-shards.sh --check-shard refused the shard; fix every line below, then mark again:
 $MK_OUT
 "; }
-      MK_OUT="$(bash "$MK_SEAL" --review-shard "$MK_FILE" 2>&1)"; MK_SRC_RC=$?
+      if mk_sibling_ "$MK_SEAL" seal_main; then
+        MK_OUT="$( ( . "$MK_SEAL" && seal_main --review-shard "$MK_FILE" ) 2>&1 )"; MK_SRC_RC=$?
+      else
+        MK_OUT="$(bash "$MK_SEAL" --review-shard "$MK_FILE" 2>&1)"; MK_SRC_RC=$?
+      fi
       # Exit 4 is the ENVIRONMENT (SEAL-UNAVAILABLE: jq, git placement, the ledger): relayed as is,
       # since re-dispatching the reviewer cannot repair it.
       [ "$MK_SRC_RC" -ne 4 ] \
@@ -786,7 +798,11 @@ $MK_OUT
     elif [ -n "$MK_STATE" ] && [ -f "$MK_SEAL" ]; then
       MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
       cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
-      MK_ROW="$(bash "$MK_SEAL" --row "$MK_STATE" "$MK_FILE" 2>&1)" \
+      if mk_sibling_ "$MK_SEAL" seal_main; then
+        MK_ROW="$( ( . "$MK_SEAL" && seal_main --row "$MK_STATE" "$MK_FILE" ) 2>&1 )"
+      else
+        MK_ROW="$(bash "$MK_SEAL" --row "$MK_STATE" "$MK_FILE" 2>&1)"
+      fi \
         || { rm -f "$MK_SRC"; mark_refuse "its content-seal row could not be read: $(printf '%s\n' "$MK_ROW" | head -1)"; }
       if [ "$MK_ROW" != null ]; then
         MK_ROWED=1

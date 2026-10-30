@@ -354,10 +354,14 @@ p_basecite() { # the control: a bare basename citation still resolves -> JOINED
   run_join "$1" "$w"
   joined_one "$(out_of "$w")"
 }
-p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch, and never hand-assembly
-  local w l; w="$(new_world)"
+unwm_build() { # -> the world p_unwrittenmsg joins
+  local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
   part "$w" 01 2.1; part "$w" 03 3.1
+  printf '%s' "$w"
+}
+p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch, and never hand-assembly
+  local w l; w="$(unwm_build)"
   run_join "$1" "$w"
   l="$(grep -F "which no dispatched agent wrote" "$JO")" || return 1
   grep -qF "written through Bash or another tool that reaches no Edit matcher" <<<"$l" \
@@ -379,13 +383,17 @@ uw_line() { # -> the refusal line for part 01 citing S21, or rc 1
   [ "$RC" -eq 2 ] || return 1
   grep -F "01.md cites $REL/$S21, which no dispatched agent wrote under $SLOT in the window -- " "$JO"
 }
-uw_world() { # <join> <ts@agent>... -> RC, $JO: S21 written only at the given ts, part 01 citing it;
-  # S22 written in the window by AG2 and cited by part 02 (an empty window dies before the join)
-  local w j="$1" r; shift; w="$(new_world)"
+uw_build() { # <ts@agent>... -> the world uw_world joins
+  local w r; w="$(new_world)"
   for r in "$@"; do drive "$w" Edit "$w/$REL/$S21" "${r##*@}" "" "" "${r%@*}"; done
   drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
   part "$w" 01 2.1; part "$w" 02 2.2
   drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:11:00Z
+  printf '%s' "$w"
+}
+uw_world() { # <join> <ts@agent>... -> RC, $JO: S21 written only at the given ts, part 01 citing it;
+  # S22 written in the window by AG2 and cited by part 02 (an empty window dies before the join)
+  local w j="$1"; shift; w="$(uw_build "$@")"
   run_join_w "$j" "$w"
 }
 UW_BEFORE="the ledger's last write of $REL/$S21 was at"
@@ -427,24 +435,32 @@ p_uwaside() { # a --rerun part citing two files, the re-run rewriting only one: 
 # found, so a mutant loop can tell a moved remedy (UW_L set) from a world that never refused (empty).
 UW_NONE="the file was written through Bash or another tool that reaches no Edit matcher, or it was never written; re-dispatch that shard writing through Edit, Write or MultiEdit"
 UW_L=""
-p_uwamb() { # the cited basename resolves to TWO paths once the time filter is dropped ($REL/S21 and
-  # $SLOT/epics/S21, both written only before --since) -> the NONE clause, no ledger row named
-  local w; UW_L=""; w="$(new_world)"
+uwamb_build() { # -> the world p_uwamb joins
+  local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG3" "" "" 2026-05-20T00:00:00Z
   drive "$w" Edit "$w/$SLOT/epics/$S21" "$AG3" "" "" 2026-05-21T00:00:00Z
   drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
   abspart "$w/$UW_PD" "$S21"; part "$w" 02 2.2
+  printf '%s' "$w"
+}
+p_uwamb() { # the cited basename resolves to TWO paths once the time filter is dropped ($REL/S21 and
+  # $SLOT/epics/S21, both written only before --since) -> the NONE clause, no ledger row named
+  local w; UW_L=""; w="$(uwamb_build)"
   run_join_w "$1" "$w"
   [ "$RC" -eq 2 ] || return 1
   UW_L="$(grep -F "01.md cites $S21, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
   [ "${UW_L#*in the window -- }" = "$UW_NONE" ]
 }
-p_uwshard() { # the cited token is a `/`-suffix only of the part's OWN record under shards/, written in
-  # the window: files mode never counts a shards/ row, so the lookup must not either -> the NONE clause
-  local w; UW_L=""; w="$(new_world)"
+uwshard_build() { # -> the world p_uwshard joins
+  local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
   abspart "$w/$UW_PD" "shards/stories-repair-p1/01.md"; part "$w" 02 2.2
   drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:11:00Z
+  printf '%s' "$w"
+}
+p_uwshard() { # the cited token is a `/`-suffix only of the part's OWN record under shards/, written in
+  # the window: files mode never counts a shards/ row, so the lookup must not either -> the NONE clause
+  local w; UW_L=""; w="$(uwshard_build)"
   run_join_w "$1" "$w"
   [ "$RC" -eq 2 ] || return 1
   UW_L="$(grep -F "01.md cites shards/stories-repair-p1/01.md, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
@@ -900,11 +916,15 @@ p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source,
 # The prose world carries NO field and mentions a sibling in its claim: a reader keyed on the word
 # acquits it, a reader keyed on the field refuses it as NOSIB.
 SIBW_EDIT="- edit: $REL/$S21:4"
-sibworld() { # <join> <siblings text, printf %b> -> RC, $JO, SB_W: one writer, one part
+sibw_build() { # <siblings text, printf %b> -> the world sibworld joins
   local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
   printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n%b- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n' \
-    "$SIBW_EDIT" "$2" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+    "$SIBW_EDIT" "$1" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  printf '%s' "$w"
+}
+sibworld() { # <join> <siblings text, printf %b> -> RC, $JO, SB_W: one writer, one part
+  local w; w="$(sibw_build "$2")"
   run_join "$1" "$w"; SB_W="$w"
 }
 # CP1: --check-part runs the join's own entry contract over one part. The near-miss `siblings: checked`
@@ -2386,10 +2406,14 @@ p_nldoc() { # document mode: three section parts, every `edit: n/a`, no section 
 # ---- A FUTURE --until (BL-807, claim 2): the join refuses an --until later than its own clock + 120s.
 FUT_TXT="by more than 120s: take --until from \`date -u\` after the last lane reports; a hand-chosen future time mis-scopes the window"
 utc_plus() { jq -nr --argjson s "$1" 'now + $s | strftime("%Y-%m-%dT%H:%M:%SZ")'; }
-p_untilfut() { # <join> <offset seconds> -> RC, $JO of the three-writer world closed at now + offset
+untilfut_build() { # -> the three-writer world p_untilfut closes
   local w; w="$(new_world)"; three_writers "$w"
   part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
   stamp "$w"
+  printf '%s' "$w"
+}
+p_untilfut() { # <join> <offset seconds> -> RC, $JO of the three-writer world closed at now + offset
+  local w; w="$(untilfut_build)"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
     --since 2000-01-01T00:00:00Z --until "$(utc_plus "$2")" > "$JO" 2>&1
   RC=$?
