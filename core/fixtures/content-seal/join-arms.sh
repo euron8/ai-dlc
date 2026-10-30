@@ -97,8 +97,8 @@ joined() { # -> a world whose record the join wrote and sealed with its program 
   fi
   RW="$JW"; RREC="$(out_of "$RW")"
 }
-# IN PROCESS: the engine is sourced in a subshell (its guard returns before wfd_main); wfd_main takes the CLI's arguments.
-mark_rep() { ( set +o pipefail; . "$1"; wfd_main --mark-repair "$2" 1 ) > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
+# IN PROCESS: the engine is sourced in a subshell (its guard returns before wfd_mark_main); wfd_mark_main takes the CLI's arguments.
+mark_rep() { ( set +o pipefail; . "$1"; wfd_mark_main --mark-repair "$2" 1 ) > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
 sk() { ( . "$SEAL"; "$@" ); } # a library function a reader's mode calls, asked in a subshell
 
 # CS-J6: the program-sealed record closed with --mark-repair -> the program re-seals it and

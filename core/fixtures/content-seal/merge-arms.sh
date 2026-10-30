@@ -100,10 +100,10 @@ else bad "CS-M6: a suffix-less elicitation shard rewritten by an in-place sed wa
 
 # ---- --mark: THE ONE SANCTIONED BASH WRITE to a shard (wait-for-deliverable.sh, "THE CONTENT SEAL").
 mark_one() { # <engine> <shard file> -> MRC, $WORK/mark.out; marked with the shard's own finding count
-  # IN PROCESS: the engine is sourced in a subshell (its BASH_SOURCE guard returns before wfd_main) and wfd_main is
+  # IN PROCESS: the engine is sourced in a subshell (its BASH_SOURCE guard returns before wfd_mark_main) and wfd_mark_main is
   # called with the arguments the CLI takes; its `exit` ends the subshell. pipefail is off, as the CLI runs it.
   local n; n="$(grep -c '^### ' "$2")" || n=0
-  ( set +o pipefail; . "$1"; wfd_main --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" ) > "$WORK/mark.out" 2>&1; MRC=$?
+  ( set +o pipefail; . "$1"; wfd_mark_main --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" ) > "$WORK/mark.out" 2>&1; MRC=$?
 }
 sk() { ( . "$SEAL"; "$@" ); } # the library function a reader's mode calls, asked in a subshell: sk seal_check <state> <files>
 PROW='"actor":"program:wait-for-deliverable"'
@@ -180,20 +180,20 @@ if [ "$nb6" -ge 4 ] && grep -qF "$PROW" "$(ledger_of "$dk6")" && [ "$ck6" = 0 ] 
   ok "CS-K6: through a symlinked _bmad-output, --mark re-seals each shard by the spelled name: --check passes, MERGED"
 else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: rows $nb6, --check rc=$ck6, admission rc=$ak6: $(head -2 "$WORK/k6.adm")"; fi
 
-# CS-K7: THE SEAM. The in-process wfd_main answers byte-for-byte (stdout, stderr, exit code) what the CLI does, on a
+# CS-K7: THE SEAM. The in-process wfd_mark_main answers byte-for-byte (stdout, stderr, exit code) what the CLI does, on a
 # REFUSING input (a marker call with a missing field) and a PASSING one (a file outside the sealed set, marked), and the
 # two answers differ. The passing file is restored between the two runs so both mark the same bytes at the same path.
 sm="$WORK/seam"; mkdir -p "$sm"; printf '# stories -- adversarial shard 1\n\n### M1 -- MAJOR -- a finding\n\nBody.\n' > "$sm/1.md"; cp "$sm/1.md" "$sm/1.orig"
 seam_cli() { bash "$WFD" "$@" > "$sm/cli.out" 2> "$sm/cli.err"; echo $? > "$sm/cli.rc"; }
-seam_inp() { ( set +o pipefail; . "$WFD"; wfd_main "$@" ) > "$sm/inp.out" 2> "$sm/inp.err"; echo $? > "$sm/inp.rc"; }
+seam_inp() { ( set +o pipefail; . "$WFD"; wfd_mark_main "$@" ) > "$sm/inp.out" 2> "$sm/inp.err"; echo $? > "$sm/inp.rc"; }
 seam_same() { cmp -s "$sm/cli.out" "$sm/inp.out" && cmp -s "$sm/cli.err" "$sm/inp.err" && cmp -s "$sm/cli.rc" "$sm/inp.rc"; }
 seam_cli --mark "$sm/1.md" stories adversary; cp "$sm/cli.out" "$sm/ref.out"; cp "$sm/cli.err" "$sm/ref.err"; cp "$sm/cli.rc" "$sm/ref.rc"
 seam_inp --mark "$sm/1.md" stories adversary; sk1=0; seam_same && sk1=1; rr="$(cat "$sm/inp.rc")"; cp "$sm/inp.err" "$sm/refuse.err"
 seam_cli --mark "$sm/1.md" stories adversary 1 findings=1; cp "$sm/1.orig" "$sm/1.md"
 seam_inp --mark "$sm/1.md" stories adversary 1 findings=1; sk2=0; seam_same && sk2=1; rp="$(cat "$sm/inp.rc")"
 if [ "$sk1" = 1 ] && [ "$sk2" = 1 ] && [ "$rr" = 64 ] && [ "$rp" = 0 ] && grep -q '^FAIL: --mark: ' "$sm/refuse.err" && grep -q '^MARKED ' "$sm/inp.out" && ! cmp -s "$sm/ref.err" "$sm/inp.err"; then
-  ok "CS-K7: wfd_main in process answers byte-for-byte what the CLI does on a refusing and a passing --mark (rc 64 / 0), and the two differ"
-else bad "CS-K7: in-process wfd_main differs from the CLI: refuse same=$sk1 rc=$rr, pass same=$sk2 rc=$rp"; fi
+  ok "CS-K7: wfd_mark_main in process answers byte-for-byte what the CLI does on a refusing and a passing --mark (rc 64 / 0), and the two differ"
+else bad "CS-K7: in-process wfd_mark_main differs from the CLI: refuse same=$sk1 rc=$rr, pass same=$sk2 rc=$rp"; fi
 
 # ---- BL-750: THE MARKER ADMISSION (content-seal.sh header "THE MARKER ADMISSION"). A bare marker in the
 # sealed set merges only while the world's installed adversary role file is LEGACY; every world from
@@ -276,8 +276,7 @@ perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$dF/1.md"
 # CURRENT and NONE files are UNFINISHED naming the admission, the LEGACY one and the epics part are
 # UNSETTLED (the settle path, unchanged), and the epics world carries no role file anywhere.
 a2_status() { # <world root> <target> -> the --status line for it
-  # IN PROCESS: the engine's settings are read at wfd_main time, so the environment is set inside the subshell.
-  ( cd "$1" && export AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 && set +o pipefail && . "$WFD" && wfd_main --status --complete --since 1 "$2" 2>&1 ) | grep -F -- "$2" | head -1
+  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 bash "$WFD" --status --complete --since 1 "$2" 2>&1 ) | grep -F -- "$2" | head -1
 }
 eP="$rN/_bmad-output/planning-artifacts/s1/epics"; mkdir -p "$eP"
 printf '# Epic 1\n\nBody.\n\nseat-complete: stories-epic-1 pm none findings=0\n' > "$eP/part-1.md"
