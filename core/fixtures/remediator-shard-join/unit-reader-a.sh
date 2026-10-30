@@ -176,8 +176,8 @@ if ua_on SEAM; then
   _tc="$(g6_world)"; gsec "$_tc" 4 "$G_NEW" 19:52:00; _tC="$(ua_tree "$_tc")"
   _tw1="$(new_world)"; _ua_orig_three_writers "$_tw1"; _tw2="$(new_world)"; ua_tw_copy "$_tw2"; _tw3="$(new_world)"; ua_tw_copy "$_tw3" keep
   _w1="$(ua_tree "$_tw1" | sed 's/"ts":"[^"]*"/"ts":"TS"/')"; _w2="$(ua_tree "$_tw2" | sed 's/"ts":"[^"]*"/"ts":"TS"/')"; _w3="$(ua_tree "$_tw3" | sed 's/"ts":"[^"]*"/"ts":"TS"/')"
-  if [ "$_tA" = "$_tB" ] && [ "$_tA" != "$_tC" ] && printf '%s' "$_tA" | grep -qF 'sections/.manifest' \
-     && [ "$_w1" = "$_w2" ] && [ "$_w1" != "$_w3" ] && printf '%s' "$_w1" | grep -qF '"root":"WORLD"'; then
+  if [ "$_tA" = "$_tB" ] && [ "$_tA" != "$_tC" ] && grep -qF 'sections/.manifest' <<<"$_tA" \
+     && [ "$_w1" = "$_w2" ] && [ "$_w1" != "$_w3" ] && grep -qF '"root":"WORLD"' <<<"$_w1"; then
     ok "SEAM-A-TPL: a g6 world restored from its template equals one the builder drove afresh, whole tree, and one more drive differs; three template rows with root rewritten equal three hook drives (ts aside), and root left unrewritten differs"
   else
     bad "SEAM-A-TPL: g6 restored=fresh $([ "$_tA" = "$_tB" ] && echo y || echo n), control differs $([ "$_tA" != "$_tC" ] && echo y || echo n); three-writer copied=driven $([ "$_w1" = "$_w2" ] && echo y || echo n), root-kept differs $([ "$_w1" != "$_w3" ] && echo y || echo n)"
@@ -192,8 +192,8 @@ if ua_on SEAM; then
   }
   _hi="$(ua_hook 0 "$AG1" 2026-10-15T19:25:00Z)"; _hc="$(ua_hook 1 "$AG1" 2026-10-15T19:25:00Z)"
   _gi="$(ua_hook 0 "$G_NEW" 2026-10-15T19:50:00Z)"; _gc="$(ua_hook 1 "$G_NEW" 2026-10-15T19:50:00Z)"
-  if [ "$_hi" = "$_hc" ] && [ "$_gi" = "$_gc" ] && [ "$_hc" != "$_gc" ] && printf '%s' "$_hc" | grep -qF '"ts":"2026-10-15T19:25:00Z"' \
-     && printf '%s' "$_hc" | grep -qF '"tool_use_id":"toolu_SEAM"'; then
+  if [ "$_hi" = "$_hc" ] && [ "$_gi" = "$_gc" ] && [ "$_hc" != "$_gc" ] && grep -qF '"ts":"2026-10-15T19:25:00Z"' <<<"$_hc" \
+     && grep -qF '"tool_use_id":"toolu_SEAM"' <<<"$_hc"; then
     ok "SEAM-A-HOOK: hook_pretool_head in process writes the CLI hook's row byte-for-byte (root aside), the shim's pinned ts and the payload's tool_use_id included, for two agents and two ts, and the two rows differ"
   else
     bad "SEAM-A-HOOK: AG1 in=[$_hi] cli=[$_hc]; G_NEW in=[$_gi] cli=[$_gc]"
@@ -210,7 +210,7 @@ if ua_on SEAM; then
   }
   _pi="$(ua_sj 0 pass)"; _pc="$(ua_sj 1 pass)"; _ri="$(ua_sj 0 refuse)"; _rc="$(ua_sj 1 refuse)"
   if [ "${_pc%%|*}" = 0 ] && [ "${_rc%%|*}" = 2 ] && [ "$_pi" = "$_pc" ] && [ "$_ri" = "$_rc" ] && [ "$_pc" != "$_rc" ] \
-     && printf '%s' "$_pc" | grep -qF -- '- artifact: '; then
+     && grep -qF -- '- artifact: ' <<<"$_pc"; then
     ok "SEAM-A-SUBJ: join_main in process answers --subject byte-identically to the CLI (output and record) on a join (rc 0) and a two-writer refusal (rc 2), and the two differ"
   else
     bad "SEAM-A-SUBJ: pass cli rc=${_pc%%|*} equal=$([ "$_pi" = "$_pc" ] && echo y || echo n); refuse cli rc=${_rc%%|*} equal=$([ "$_ri" = "$_rc" ] && echo y || echo n)"

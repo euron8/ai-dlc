@@ -54,7 +54,7 @@ hk_row() { # <mode cli|inproc> <world> <agent> -> prints the ledger rows with ts
 a="$(new_world)"; b="$(new_world)"; c="$(new_world)"; d="$(new_world)"
 hc="$(hk_row cli "$a" "$AG1")"; hi="$(hk_row inproc "$b" "$AG1")"
 lc="$(hk_row cli "$c" "")"; li="$(hk_row inproc "$d" "")"
-if [ "$hc" = "$hi" ] && [ "$lc" = "$li" ] && [ "$hc" != "$lc" ] && printf '%s' "$hc" | grep -q "\"agent_id\":\"$AG1\""; then
+if [ "$hc" = "$hi" ] && [ "$lc" = "$li" ] && [ "$hc" != "$lc" ] && grep -q "\"agent_id\":\"$AG1\"" <<<"$hc"; then
   ok "SEAM-HOOK: hook_pretool_head called in process records the same ledger row as the CLI hook for a dispatched agent's Edit, and none (as the CLI) for the lead's, and the two differ"
 else
   bad "SEAM-HOOK: dispatched cli=[$hc] inproc=[$hi]; lead cli=[$lc] inproc=[$li]"

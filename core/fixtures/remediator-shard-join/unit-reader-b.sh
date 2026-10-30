@@ -130,7 +130,7 @@ ub_hook() { # <cli 0|1> <agent> [ts] -> the world's ledger rows (ts and root rem
 }
 _hi="$(ub_hook 0 "$AG1" 2026-06-01T00:05:00Z)"; _hc="$(ub_hook 1 "$AG1" 2026-06-01T00:05:00Z)"
 _ui="$(ub_hook 0 "$AG2")"; _uc="$(ub_hook 1 "$AG2")"
-if [ "$_hi" = "$_hc" ] && [ "$_ui" = "$_uc" ] && [ "$_hc" != "$_uc" ] && printf '%s' "$_hc" | grep -qF '"ts":"2026-06-01T00:05:00Z"'; then
+if [ "$_hi" = "$_hc" ] && [ "$_ui" = "$_uc" ] && [ "$_hc" != "$_uc" ] && grep -qF '"ts":"2026-06-01T00:05:00Z"' <<<"$_hc"; then
   ok "SEAM-B-HOOK: the override's in-process hook writes the CLI hook's ledger row byte-for-byte (root aside) with the date shim's pinned ts reaching the hook's TIMESTAMP, and the same for an unpinned drive"
 else
   bad "SEAM-B-HOOK: pinned in=[$_hi] cli=[$_hc]; unpinned in=[$_ui] cli=[$_uc]"
@@ -146,7 +146,7 @@ ub_cap() { # <cli 0|1> -> the D5 world's stale control (rc 2) and accepted docum
   printf '%s:%s|%s|%s' "$r1" "$r2" "$e1" "$e2"
 }
 _ci="$(ub_cap 0)"; _cc="$(ub_cap 1)"
-if [ "${_cc%%|*}" = "2:0" ] && [ "$_ci" = "$_cc" ] && printf '%s' "$_cc" | grep -qF "is not backed by"; then
+if [ "${_cc%%|*}" = "2:0" ] && [ "$_ci" = "$_cc" ] && grep -qF "is not backed by" <<<"$_cc"; then
   ok "SEAM-B-CAPTURE: the derivation-capture hook sourced in process refuses D5's stale control (rc 2, the same stderr) and accepts the document-naming part (rc 0, silent), byte-identically to the CLI hook"
 else
   bad "SEAM-B-CAPTURE: in=[${_ci%%|*}] cli=[${_cc%%|*}] equal=$([ "$_ci" = "$_cc" ] && echo y || echo n)"
@@ -184,7 +184,7 @@ ub_tree() { # <world> -> every file's relative path and bytes, the ledger's ts a
 }
 _ta="$(new_world)"; three_writers "$_ta"; _tb="$(new_world)"; ub_tw_copy "$_tb"; _tc="$(new_world)"; ub_tw_copy "$_tc" keep
 _tA="$(ub_tree "$_ta")"; _tB="$(ub_tree "$_tb")"; _tC="$(ub_tree "$_tc")"
-if [ "$_tA" = "$_tB" ] && [ "$_tA" != "$_tC" ] && printf '%s' "$_tA" | grep -qF '"root":"WORLD"'; then
+if [ "$_tA" = "$_tB" ] && [ "$_tA" != "$_tC" ] && grep -qF '"root":"WORLD"' <<<"$_tA"; then
   ok "SEAM-B-TPL: a world given the template's three rows (root rewritten) equals a world the hook drove three times, whole tree, ts aside; the same copy with root left as the template's differs"
 else
   bad "SEAM-B-TPL: driven=copied $([ "$_tA" = "$_tB" ] && echo y || echo n); control (root kept) differs $([ "$_tA" != "$_tC" ] && echo y || echo n)"
