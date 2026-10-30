@@ -724,9 +724,9 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # handed to the serial check, so a declared path root refuses. M30 the no-run inversion reverted, so
   # 'N/A' reads as a run. M31 the record-dir code-suffix exclusion dropped (record-only-diff.sh). M32 the
   # serial LEGACY branch forced off. M33 the merge's on-disk qa.md read dropped.
-  CS_ONLY=cr-filter-k mut_run M23 merge-review-shards.sh '  cg_rf_="$(bash "$RO" run-filter "$cg_run_" ${cg_c_:+"$cg_c_"})" \' '  cg_rf_="$(true)" \' \
+  CS_ONLY=cr-filter-k mut_run M23 merge-review-shards.sh '  cg_rf_="$(mrs_sib "$RO" ro_main run-filter "$cg_run_" ${cg_c_:+"$cg_c_"})" \' '  cg_rf_="$(true)" \' \
     canon "cr-filter-k{" "a filtered canonical run accepted"
-  CS_ONLY=cr-exempt-code mut_run M24 merge-review-shards.sh '    cg_ro_="$(bash "$RO" paths' '    cg_ro_="$(true' canon "cr-exempt-code{" \
+  CS_ONLY=cr-exempt-code mut_run M24 merge-review-shards.sh '    cg_ro_="$(mrs_sib "$RO" ro_main paths' '    cg_ro_="$(true' canon "cr-exempt-code{" \
     "the record-only exemption accepted whatever the diff"
   CS_ONLY=crm-legacy mut_run M25 merge-review-shards.sh '  if [ "$cr_held_" = 0 ]; then' '  if false; then' canon_merge "crm-legacy{" \
     "the merge's installed-qa.md LEGACY gate dropped"
@@ -734,11 +734,11 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     "a NEEDS_REWORK with no canonical run refused"
   CS_ONLY=crm-norun mut_run M27 merge-review-shards.sh '    canon_gate "$(awk' '    : "$(awk' canon_merge "crm-norun{" \
     "the merge's canonical-run call removed"
-  CS_ONLY=cr-exempt-narrow mut_run M28 merge-review-shards.sh '      cg_sb_="$(bash "$RO" story-base' '      cg_sb_="$(true' canon "cr-exempt-narrow{" \
+  CS_ONLY=cr-exempt-narrow mut_run M28 merge-review-shards.sh '      cg_sb_="$(mrs_sib "$RO" ro_main story-base' '      cg_sb_="$(true' canon "cr-exempt-narrow{" \
     "the serial exemption decided over a seat-narrowed range"
   CS_ONLY=cr-path-conv mut_run M29 merge-review-shards.sh '      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_"' '      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" ""' \
     canon "cr-path-conv{" "the consumer's declared canonical path refused"
-  CS_ONLY=cr-norun-na mut_run M30 merge-review-shards.sh '  if ! bash "$RO" run-shape "$cg_run_" ${cg_c_:+"$cg_c_"}; then' '  if bash "$RO" none-reason "$cg_run_" 2>/dev/null; [ $? -ne 2 ]; then' \
+  CS_ONLY=cr-norun-na mut_run M30 merge-review-shards.sh '  if ! mrs_sib "$RO" ro_main run-shape "$cg_run_" ${cg_c_:+"$cg_c_"}; then' '  if mrs_sib "$RO" ro_main none-reason "$cg_run_" 2>/dev/null; [ $? -ne 2 ]; then' \
     canon "cr-norun-na{" "a no-run claim spelled other than none read as a run"
   CS_ONLY=cr-exempt-evil mut_run M31 record-only-diff.sh '            *.py|*.sh|*.toml|*.cfg|conftest.py|pytest.ini) first="$p" ;;' '            NEVER-A-SUFFIX) first="$p" ;;' \
     canon "cr-exempt-evil{" "a collectable module under a record directory classed record-only"
@@ -760,7 +760,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     canon "cr-filter-dd{" "a path handed to the runner after -- accepted"
   CS_ONLY=cr-path-super mut_run M38 record-only-diff.sh ' || substr($2, 1, length(v) + 1) == v "/")' ')' \
     canon "cr-path-super{" "a path root containing the declared one refused"
-  CS_ONLY=cr-norun-nonebt mut_run M39 record-only-diff.sh '    bash "$0" none-reason "$2" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1' '    :' \
+  CS_ONLY=cr-norun-nonebt mut_run M39 record-only-diff.sh '    (ro_none_reason none-reason "$2") >/dev/null 2>&1; [ $? -eq 2 ] || exit 1' '    :' \
     canon "cr-norun-nonebt{" "a none carrying a runner span read as a run"
   # M40 the conventions' declared canonical command no longer read as a runner, so `tox -e all` is a no-run claim.
   CS_ONLY=cr-conv-runner mut_run M40 record-only-diff.sh '        rs_rn="$rs_rn|$(printf' '        : "$(printf' \

@@ -239,7 +239,7 @@ ro_story_base() {
       || { echo "$ME: UNEVALUABLE — base does not resolve: $2" >&2; exit 2; }
     git -C "$REPO" cat-file -e "$2:${1#./}" 2>/dev/null || exit 0
     sb_t="$(git -C "$REPO" show "$2:${1#./}" 2>/dev/null)"
-    if bash "$0" label 'Full-collection run:' <<<"$sb_t" >/dev/null; then
+    if (ro_label label 'Full-collection run:') <<<"$sb_t" >/dev/null; then
       printf 'the story at %s already carries a Full-collection run: line\n' "$2"; exit 1
     fi
     sb_s="$(printf '%s\n' "$sb_t" | awk 'NR == 1 && /^---/ { fm = 1; next } fm && /^---/ { exit } fm && /^status:/ { sub(/^status:[[:space:]]*/, ""); print $1; exit }')"
@@ -250,7 +250,7 @@ ro_shape() {
     [ $# -eq 2 ] || { [ "$1" = run-shape ] && [ $# -eq 3 ]; } || { echo "usage: $ME run-shape <value> [<conventions file>] | $ME setup-shape <value>" >&2; exit 64; }
     # The no-run reading is decided FIRST: a value opening with a none form or a pointer word is
     # never a run, whatever spans or counts follow it.
-    bash "$0" none-reason "$2" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1
+    (ro_none_reason none-reason "$2") >/dev/null 2>&1; [ $? -eq 2 ] || exit 1
     rs_v="$2"; rs_v="${rs_v#"${rs_v%%[!	 *\`]*}"}"
     rs_lc="$(printf '%s' "$rs_v" | tr '[:upper:]' '[:lower:]')"
     grep -qE '^(see|refer|n/a|na|tbd|todo|deferred|pending)([^a-z0-9]|$)' <<<"$rs_lc" && exit 1

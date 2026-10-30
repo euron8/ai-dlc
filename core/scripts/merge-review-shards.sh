@@ -393,6 +393,11 @@ refuse() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; exit 2; }
 
 refuse_to() { OWNER="$1"; shift; refuse "$*${CG_NOTE:-}"; }
 
+# A sibling script asked in process: <sibling path> <its entry function> <its arguments>. The sibling is sourced
+# (its BASH_SOURCE guard returns before it runs) and its entry called inside a subshell, so its `exit`, its
+# EXIT trap and every variable it sets end with the call; stdin, stdout and stderr are the caller's redirections.
+mrs_sib() { ( _sib_s="$1"; _sib_f="$2"; shift 2; . "$_sib_s" && "$_sib_f" "$@" ); }
+
 collect_dup() { printf 'REFUSED: %s [owner: %s]\n' "$*" "$OWNER"; DUP_N=$((DUP_N + 1)); }
 
 # ---- the project root and the two files the merge derives from --------------------------
@@ -549,11 +554,11 @@ canon_gate() {
   cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"
   [ "$WORST" = PASS ] || return 0
   [ -f "$RO" ] || refuse_to lead "record-only-diff.sh is not beside this script at $AI_DLC_SELF_DIR; the canonical-run check reads its grammar there"
-  cg_run_="$(bash "$RO" label 'Canonical run:' < "$cg_f_")" \
+  cg_run_="$(mrs_sib "$RO" ro_main label 'Canonical run:' < "$cg_f_")" \
     || refuse_to "$cg_o_" "$cg_f_ reads PASS and carries no 'Canonical run:' line; a PASS waits for QA's own canonical full-collection run: write 'Canonical run: <invocation and working directory>' and 'Canonical result: <its summary line with counts>' (or 'Canonical run: none, <reason>' when the story's diff is record-only). A consumer whose overrides/ entry shadows qa.md's Validation Checklist adopts these two lines into it (the reconcile's HARD-OVERRIDE-DRIFT-SECTION adjudication)"
   # A value that is not a run (record-only-diff.sh RUN-SHAPE) is a no-run claim, however it is spelled.
-  if ! bash "$RO" run-shape "$cg_run_" ${cg_c_:+"$cg_c_"}; then
-    bash "$RO" none-reason "$cg_run_" 2>/dev/null; cg_nr_=$?
+  if ! mrs_sib "$RO" ro_main run-shape "$cg_run_" ${cg_c_:+"$cg_c_"}; then
+    mrs_sib "$RO" ro_main none-reason "$cg_run_" 2>/dev/null; cg_nr_=$?
     [ "$cg_nr_" -ne 1 ] \
       || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' gives no reason; write 'none, <reason>' (accepted only on a record-only diff) or the run itself"
     [ -n "$STORY_F" ] && [ -n "$cg_b_" ] && [ -n "$cg_z_" ] \
@@ -562,16 +567,16 @@ canon_gate() {
       # The seat supplies its own range, so its base is held to a gate-1 base's shape (header).
       git -C "$cg_r_" merge-base --is-ancestor "$cg_b_" "$cg_z_" 2> /dev/null < /dev/null \
         || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not an ancestor of $cg_z_; pass the base gate 1 used"
-      cg_sb_="$(bash "$RO" story-base -C "$cg_r_" "$STORY_F" "$cg_b_" 2>&1)" \
+      cg_sb_="$(mrs_sib "$RO" ro_main story-base -C "$cg_r_" "$STORY_F" "$cg_b_" 2>&1)" \
         || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not the story's gate-1 base ($cg_sb_); the exemption is decided over the WHOLE story, from the base gate 1 used, on every pass"
     fi
-    cg_ro_="$(bash "$RO" paths -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \
+    cg_ro_="$(mrs_sib "$RO" ro_main paths -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \
       || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' claims the record-only exemption, and $cg_b_..$cg_z_ is not record-only for $STORY_F (${cg_ro_}); run the canonical full collection and record it"
     return 0
   fi
-  cg_rf_="$(bash "$RO" run-filter "$cg_run_" ${cg_c_:+"$cg_c_"})" \
+  cg_rf_="$(mrs_sib "$RO" ro_main run-filter "$cg_run_" ${cg_c_:+"$cg_c_"})" \
     || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' $cg_rf_; the canonical run is the full collection the project's conventions declare${cg_c_:+ ($cg_c_)}"
-  cg_res_="$(bash "$RO" label 'Canonical result:' < "$cg_f_")" \
+  cg_res_="$(mrs_sib "$RO" ro_main label 'Canonical result:' < "$cg_f_")" \
     || refuse_to "$cg_o_" "$cg_f_ reads PASS with no 'Canonical result:' line; a PASS waits for the canonical run's summary line: write 'Canonical result: <its counts>'"
   grep -qiE 'not[[:space:]]+finished|in[[:space:]]+progress|still[[:space:]]+running' <<<"$cg_res_" \
     && refuse_to "$cg_o_" "$cg_f_ 'Canonical result: $cg_res_' says the run has not finished; a PASS waits for the run's summary line"
@@ -963,7 +968,7 @@ check_shard() {
     if is_cross "$key"; then
       [ $# -ge 2 ] || refuse "$sf:$line (cross shard) cites only$distinct; a cross finding cites two or more parts, a one-part finding belongs to that part's shard"
       # THE OWNER RULE: the one group --cross-owner names, never any other that also covers it.
-      own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err" < /dev/null)" \
+      own="$(mrs_sib "$XPART" pdoc_main --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err" < /dev/null)" \
         || refuse "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"
       if [ "$XG" -eq 1 ]; then ownk="cross"; else ownk="cross-$own"; fi
       # A cross reviewer reads the whole diff and may cite any part, so a finding outside its
@@ -1060,7 +1065,7 @@ check_shard() {
   # runs `content-seal.sh --review-shard` (non-legacy) itself over the pre-write bytes (B4).
   if [ -z "$CHECK" ] || { [ "$CHECK_IN" = 1 ] && [ "$CHECK_N_SET" = 0 ]; }; then
   [ -f "$SEAL_SH" ] || refuse_to lead "cannot read the content seal of $sf: $SEAL_SH is absent; reinstall ai-dlc"
-  seal_out_="$(bash "$SEAL_SH" --review-shard "$sf" $SEAL_MODE 2>&1 < /dev/null)"; seal_rc_=$?
+  seal_out_="$(mrs_sib "$SEAL_SH" seal_main --review-shard "$sf" $SEAL_MODE 2>&1 < /dev/null)"; seal_rc_=$?
   seal_out_="$(printf '%s' "$seal_out_" | tr '\n' ' ')"; seal_out_="${seal_out_% }"
   case "$seal_rc_:$SEAL_MODE" in
     0:*|3:--legacy) ;;
@@ -1310,7 +1315,7 @@ fi
 
 PART="$SELF_DIR/partition-review-diff.sh"
 [ -f "$PART" ] || refuse "cannot re-derive the part map: $PART is absent"
-bash "$PART" --map "$M_WT" "$M_BASE" "$M_SHA" --min-files "$M_MIN" --max-parts "$M_MAX" > "$T/map" 2> "$T/map.err"; prc=$?
+mrs_sib "$PART" prd_main --map "$M_WT" "$M_BASE" "$M_SHA" --min-files "$M_MIN" --max-parts "$M_MAX" > "$T/map" 2> "$T/map.err"; prc=$?
 [ "$prc" -eq 0 ] || refuse "partition-review-diff.sh --map re-run exited $prc: $(head -1 "$T/map") $(head -1 "$T/map.err")"
 cmp -s "$T/map" "$T/mfmap" || refuse "the part map re-derived from $MF's inputs differs from the map it records; the shards were briefed on another partition"
 K="$(grep -c . "$T/map")" || K=0
@@ -1323,7 +1328,7 @@ ORDINALS="$(cut -f1 "$T/map" | tr '\n' ' ')"; ORDINALS="${ORDINALS% }"
 # nothing here restates the construction. CROSS_FIRST is the execution owner (header).
 XPART="$SELF_DIR/partition-document.sh"
 [ -f "$XPART" ] || refuse "cannot read the cross groups: $XPART is absent"
-bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err" < /dev/null; grc=$?
+mrs_sib "$XPART" pdoc_main --cross-groups "$K" > "$T/groups" 2> "$T/groups.err" < /dev/null; grc=$?
 [ "$grc" -eq 0 ] || refuse "partition-document.sh --cross-groups $K exited $grc: $(head -1 "$T/groups.err")"
 G="$(grep -c . "$T/groups")" || G=0
 [ "$G" -ge 1 ] || refuse "partition-document.sh --cross-groups $K printed no group"
