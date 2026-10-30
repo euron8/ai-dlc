@@ -225,6 +225,23 @@ else
   bad "PC-BARESWAP was not reported mis-anchored, so the bare-swap generator is unproven: $_bs"
 fi
 
+# THE STRIP ALONE. PC-COLONSTRIP's anchor has no separator, so its composed variant equals its stripped
+# one and a build dropping the strip but keeping the composition passed every arm above. Here only the
+# strip reaches the fix.
+_so="$(detail PC-STRIPONLY)"
+if [ "$(verdict PC-STRIPONLY)" = "NEEDS-REVIEW" ] && grep -qF 'mis-anchored predicate:' <<<"$_so" && grep -qF '"strip_only_flag"' <<<"$_so"; then
+  ok "PC-STRIPONLY (only the colon strip reaches the fix) → mis-anchored naming strip_only_flag (kills a no-strip arm)"
+else
+  bad "PC-STRIPONLY was not reported mis-anchored naming strip_only_flag, so the strip generator is unproven: $_so"
+fi
+# Its twin, one property apart: the stripped spelling is at BASE, so it is disqualified and nothing closes.
+_st="$(detail PC-STRIPTWIN)"
+if ! grep -qF 'mis-anchored' <<<"$_st" && grep -qF 'unfalsifiable predicate:' <<<"$_st"; then
+  ok "PC-STRIPTWIN (stripped spelling already at base) → unfalsifiable, not accused of a mis-anchor"
+else
+  bad "PC-STRIPTWIN was accused of a mis-anchor or lost its unfalsifiable verdict, but its stripped spelling is at base: $_st"
+fi
+
 # THE VERDICT CLASS IS LOAD-BEARING AND NO ARM ABOVE READS IT. `SKILL.md` step 8 closes
 # `CLOSE-CANDIDATE` rows and says a `NEEDS-REVIEW` row is never a close, whatever its detail
 # says. An implementation emitting the near-miss finding as CLOSE-CANDIDATE therefore puts a

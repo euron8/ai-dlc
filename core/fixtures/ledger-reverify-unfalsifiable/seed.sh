@@ -74,6 +74,14 @@ cat > core/scripts/bare-swap-subject.sh <<'EOS'
 # the composed variant is present at BASE, so only the bare swap can close
 bare-swap-flag() { :; }
 EOS
+# THE STRIP-ONLY TWIN'S SUBJECT, present at BASE already carrying the STRIPPED spelling. Its anchor
+# `strip_twin_flag:` is absent at both refs, and its only closing candidate (the strip,
+# `strip_twin_flag`) is disqualified by being at base -- so nothing closes and the receipt must NOT
+# be accused of a mis-anchor. One property apart from PC-STRIPONLY below: where the strip lives.
+cat > core/scripts/strip-twin-subject.sh <<'EOS'
+#!/bin/bash
+# present at BASE already: strip_twin_flag value
+EOS
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm base
 BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 printf '0.2.0\n' > VERSION
@@ -122,6 +130,17 @@ cat > core/scripts/composed-variant-subject.sh <<'EOS'
 #!/bin/bash
 # theirs introduces the fix: hyphen AND no trailing colon. Neither transform alone reaches it.
 emit_combo() { printf '%s\n' "combo-flag is the shipped spelling"; }
+EOS
+# THE STRIP-ONLY SUBJECT, the world where the colon strip ALONE decides. PC-COLONSTRIP's anchor has
+# no separator, so its composed variant equals its stripped one and an arm that drops the strip but
+# keeps the composition still reaches the fix there -- measured: that mutant survived every arm. Here
+# the anchor `strip_only_flag:` carries an underscore, theirs adds `strip_only_flag` (underscore, no
+# colon): the strip reaches it, while the swap (`strip-only-flag:`) and the composition
+# (`strip-only-flag`) are both absent at theirs.
+cat > core/scripts/strip-only-subject.sh <<'EOS'
+#!/bin/bash
+# theirs introduces the fix, underscored and without the trailing colon
+emit_strip() { printf '%s\n' "strip_only_flag value"; }
 EOS
 # THE BARE-SWAP SUBJECT, the mirror. An implementation dropping the SWAP but keeping the strip
 # and the composition also survives everything above. It needs a world where the composed variant
@@ -286,6 +305,26 @@ in this fixture carries a multi-substring predicate, so without this world the s
 and its removal is a silent widening.
 
 verify: theirs_lacks core/scripts/near-miss-subject.sh "multi_alpha_x" "multi_beta_y"
+
+---
+
+## PC-STRIPONLY — only the colon strip reaches the fix; the composition does not
+
+ISOLATES THE STRIP GENERATOR. `strip_only_flag:` strips to `strip_only_flag`, which theirs carries and
+base does not; its swap and its composition are hyphenated and absent at theirs. An implementation
+that drops the strip and keeps the composition reports `unfalsifiable` here. Must be NEEDS-REVIEW
+naming `strip_only_flag`.
+
+verify: theirs_lacks core/scripts/strip-only-subject.sh "strip_only_flag:"
+
+---
+
+## PC-STRIPTWIN — the stripped spelling is at BASE too, so nothing closes
+
+THE NEAR-MISS TWIN of PC-STRIPONLY, one property apart: the stripped spelling is already at base, so
+upstream did not move under it. Must NOT be claimed by the near-miss arm.
+
+verify: theirs_lacks core/scripts/strip-twin-subject.sh "strip_twin_flag:"
 
 ---
 
