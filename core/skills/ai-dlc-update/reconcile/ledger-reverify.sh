@@ -175,7 +175,9 @@ set -f
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
 lr_main_self() {
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+# `${BASH_SOURCE[0]}`, not `$0`: inside a function it names THIS file, which is `$0` whenever the
+# file is executed and the subject's own path when a fixture sources it, where `$0` is the fixture.
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 }
 lr_main_boot() {
@@ -1537,6 +1539,7 @@ receipt_absent_subjects() {
 # live false-close rate this removes; the trade is recorded here rather than argued each time.
 # `receipt_reads_dist_as_path` is DOWNGRADE-ONLY, so every one of those five costs a review and
 # none of them costs an entry.
+lr_init_rd() {
 _RD_GITC1='git -C "${DIST}"'
 _RD_GITC2='git -C ${DIST}'
 _RD_GITC3='git -C "$DIST"'
@@ -1545,6 +1548,7 @@ _RD_CD1='cd "${DIST}" && git '
 _RD_CD2='cd "${DIST}"; git '
 _RD_CD3='cd "$DIST" && git '
 _RD_CD4='cd "$DIST"; git '
+}
 receipt_reads_dist_as_path() {
   local t="$1"
   # `cd` FORMS FIRST: each carries the `git ` that the `git -C` strips below would otherwise
@@ -1608,7 +1612,9 @@ receipt_reads_dist_as_path() {
 # same tree, every receipt would answer SAME, and a 100% undecided count would be a fact about the
 # invocation rather than about the ledger. A pull that moved nothing at all is a different claim,
 # and this block makes it by saying nothing.
+lr_init_shdiff() {
 SH_DIFF_STATE=""       # "" not attempted | yes | no
+}
 refs_differ() { # 0 = base..theirs is a real, non-empty differential; 1 = there is nothing to read
   case "$SH_DIFF_STATE" in
     yes) return 0 ;;
@@ -1762,9 +1768,11 @@ sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, 
 # the cause into the row: a message asserting the lift failed, printed on a run where the lift
 # worked and the REF was wrong, sends the reader to the wrong file. This file's own header already
 # records the cost of a status whose name asserts more than it observed.
+lr_init_coremap() {
 CORE_MAP=""          # <consumer-path><TAB><core-path> for every core file at THEIRS
 CORE_MAP_STATE=""    # "" not attempted yet | ok | unavailable
 CORE_MAP_WHY=""      # why it is unavailable, rendered verbatim into the undecidable row
+}
 # THE ONE EXIT HANDLER, AND IT CLEANS BOTH TEMPORARIES. The materialized theirs tree is removed
 # here rather than by a second `trap … EXIT`: bash traps REPLACE each other, so a second
 # registration would silently delete this one and leak the consumer->core table on every run.
@@ -1777,7 +1785,9 @@ CORE_MAP_WHY=""      # why it is unavailable, rendered verbatim into the undecid
 # and six arms downstream failed with symptoms that pointed at the guard rather than at the
 # `rm`. `THEIRS_TREE_OWNED` is written ONLY beside the `mktemp -d` that created the directory, so
 # the handler can only ever remove a directory this process made.
+lr_init_ttowned() {
 THEIRS_TREE_OWNED=""
+}
 # THE STAGING DIRECTORY for every producer this file used to read through `< <( )`, and for every
 # here-string and heredoc it used to read. ONE per run, made ONLY in the main shell, and no longer
 # lazy: the entry loop stages its own input here, so every run makes it once, just before that
@@ -1785,8 +1795,10 @@ THEIRS_TREE_OWNED=""
 # caller's `$( )`, where a directory made on first use would be forgotten when the subshell ends,
 # so the caller calls `lr_stage_ready` first. Removed by `core_map_cleanup`, through
 # `LR_STAGE_OWNED`, for the reason `THEIRS_TREE_OWNED` records.
+lr_init_stage() {
 LR_STAGE=""
 LR_STAGE_OWNED=""
+}
 lr_stage_ready() { # 0 = $LR_STAGE is a directory this run made; 1 = it could not be made
   [ -n "$LR_STAGE" ] && return 0
   local _d
@@ -1861,9 +1873,11 @@ trap core_map_cleanup EXIT
 # there rather than one this release would have to deliver. The residual window is a receipt
 # written WITHOUT the guard between this release and a consumer's pull of it; nothing in this
 # file can close that, because the engine that would refuse it is the one not yet installed.
+lr_init_theirstree() {
 THEIRS_TREE=""       # the materialized tree, or "" when not built
 THEIRS_TREE_STATE="" # "" not attempted | ok | unavailable
 THEIRS_TREE_WHY=""   # why it is unavailable, rendered verbatim into the refusal row
+}
 theirs_tree() { # 0 = $THEIRS_TREE holds a tree at THEIRS; 1 = UNAVAILABLE, nothing was built
   case "$THEIRS_TREE_STATE" in
     ok)          return 0 ;;
@@ -2043,7 +2057,7 @@ theirs_basename_matches() {
 # accusation for a false all-clear is the worse half of the same bug. `$LEDGER_DEFAULT` is the
 # same expression the subject defaults to, so the two never drift.
 lr_main_selfbase() {
-SELF_BASE="${0##*/}"
+SELF_BASE="${BASH_SOURCE[0]##*/}"
 }
 ledger_top_dir() { # <path> -> its top-level dir relative to the consumer root, or "" if outside
   local _p="$1" _root _abs
@@ -2084,7 +2098,9 @@ LEDGER_TOP="$(ledger_top_dir "$LEDGER")"
 # per SUBSTRING of every absent-at-both entry. MEASURED by xtrace on the fixture's own ledger:
 # 35 identical `rev-parse --is-inside-work-tree` probes per invocation, all of one directory.
 # A scalar, not a file: the answer is one bit and needs no cache directory to survive.
+lr_init_scannable() {
 CONSUMER_SCANNABLE=""   # "" not asked | 0 scannable | 1 not
+}
 consumer_scannable() {
   if [ -z "$CONSUMER_SCANNABLE" ]; then
     CONSUMER_SCANNABLE=1
@@ -3535,8 +3551,9 @@ exit 0   # classifier — the while-pipe's status is irrelevant; a close never b
 }
 
 lr_main() {
-  lr_main_opts; lr_main_self; lr_main_boot; lr_main_args "$@"; lr_main_input; lr_main_trap
-  lr_main_selfbase; lr_main_ledgertop; lr_main_version; lr_main_entries
+  lr_main_opts; lr_main_self; lr_main_boot; lr_main_args "$@"; lr_main_input
+  lr_init_rd; lr_init_shdiff; lr_init_coremap; lr_init_ttowned; lr_init_stage; lr_main_trap
+  lr_init_theirstree; lr_main_selfbase; lr_main_ledgertop; lr_init_scannable; lr_main_version; lr_main_entries
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 lr_main "$@"
