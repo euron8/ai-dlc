@@ -31,6 +31,78 @@
 # that reason. Its mutants are copies OUTSIDE the tree: I113 binds the count grammar
 # byte-identically across three files, so a mutation applied in place would trip that invariant
 # as well and the fixture's verdict would no longer be attributable to the fixture.
+#
+# THE MUTANT MATRIX, measured by the REMEASURE command below: every MATRIX line read measured = decides.
+# An ordinary run scores each mutant on its decides set plus these twins only.
+# MUTANT-MATRIX G-allow-all decides=deny_first,full_snapshot,full_step,mate_calls twins=ladder_abs,standdown_r0
+# MUTANT-MATRIX G-arms-r0 decides=standdown_r0 twins=deny_first,standdown_missing
+# MUTANT-MATRIX G-no-standdown decides=inert,ladder_abs,ladder_rel,ladder_consumer,standdown_r0,standdown_missing,legacy,fastpath twins=full_snapshot,full_step
+# MUTANT-MATRIX G-one-spelling decides=ladder_rel twins=ladder_abs
+# MUTANT-MATRIX G-no-readability decides=standdown_missing twins=standdown_r0
+# MUTANT-MATRIX G-no-fastpath decides=fastpath twins=inert
+# MUTANT-MATRIX G-dead decides=deny_first,ladder_abs,ladder_rel,ladder_consumer,standdown_missing,fastpath,full_snapshot,full_step,mate_calls,mate_reads twins=inert,standdown_r0,legacy
+# MUTANT-MATRIX G-partial-ok decides=full_snapshot,full_step twins=ladder_abs
+# MUTANT-MATRIX G-partial-ok-snapshot decides=full_snapshot twins=full_step
+# MUTANT-MATRIX G-partial-ok-step decides=full_step twins=full_snapshot
+# MUTANT-MATRIX G-no-mate-exit decides=mate_calls,mate_reads twins=deny_first
+# MUTANT-MATRIX G-exit-every-caller decides=deny_first,ladder_abs,ladder_rel,ladder_consumer,standdown_missing,fastpath,full_snapshot,full_step,mate_calls,mate_reads twins=inert,standdown_r0,legacy
+# MUTANT-MATRIX P-raw-basename decides=consumer,assurance twins=- why=the-battery-has-two-predicates-and-the-mutant-decides-both
+# MUTANT-MATRIX P-no-resolve decides=consumer twins=assurance
+# MUTANT-MATRIX P-flag-blind decides=assurance twins=consumer
+# MUTANT-MATRIX P-assurance-always decides=assurance twins=consumer
+# MUTANT-MATRIX A-noarm decides=deny,before,nogrant,mate,bound twins=after
+# MUTANT-MATRIX A-mate decides=mate twins=deny
+# MUTANT-MATRIX A-order decides=before twins=after
+# MUTANT-MATRIX A-unavail decides=unavail twins=before
+# MUTANT-MATRIX A-grant decides=nogrant twins=deny
+# MUTANT-MATRIX A-digest decides=nodigest twins=deny
+# MUTANT-MATRIX A-bound decides=bound twins=deny
+# MUTANT-MATRIX A-session decides=session twins=deny
+# MUTANT-MATRIX W-a decides=upd_compact twins=pipe_compact
+# MUTANT-MATRIX W-b decides=legacy_upd,ord_upd twins=stale_upd,legacy_pipe
+# MUTANT-MATRIX W-c decides=stale_pipe,ord_pipe twins=stale_upd,same_sess
+# MUTANT-MATRIX W-d decides=stale_upd,stale_pipe,legacy_upd,ord_pipe,ord_upd twins=same_sess,pipe_compact
+# MUTANT-MATRIX W-e decides=ord_pipe,ord_upd twins=stale_pipe,stale_upd
+# MUTANT-MATRIX M-730-net10 decides=rflush twins=rflush_ctl
+# MUTANT-MATRIX M-730-noreread decides=rflush,rwithdraw twins=rmsg
+# MUTANT-MATRIX M-730-count decides=rmsg twins=rmsg_ctl
+# MUTANT-MATRIX M-730-grant decides=rwithdraw twins=rflush_ctl
+# MUTANT-MATRIX M5-drop decides=d_step,d_first twins=d_decoy
+# MUTANT-MATRIX M6-widen decides=d_decoy,d_base,d_bounded twins=d_step
+# MUTANT-MATRIX M7-advance__stage_ decides=d_first twins=d_step
+# MUTANT-MATRIX M7-advance__marker_ decides=d_step,d_first twins=d_decoy
+# MUTANT-MATRIX M7-advance__advisor-owed_ decides=d_step,d_first twins=d_decoy
+# MUTANT-MATRIX M8-step-only decides=d_first twins=d_step
+# MUTANT-MATRIX M-base decides=d_base twins=d_step
+# MUTANT-MATRIX M-nofull decides=d_bounded twins=d_step
+# MUTANT-MATRIX M9-inplace decides=s_inode,s_killed,s_struct twins=s_garbage
+# MUTANT-MATRIX M10-no-rename decides=s_inode,s_struct twins=s_killed
+# MUTANT-MATRIX M-unlink decides=s_killed,s_struct twins=s_inode
+# MUTANT-MATRIX M-fixedname decides=s_struct twins=s_inode
+# MUTANT-MATRIX M-684 decides=r_clear twins=r_owed
+# MUTANT-MATRIX M-730 decides=r_owed twins=r_clear
+# MUTANT-MATRIX M-688-drop decides=w_snap,w_step twins=w_ctl
+# MUTANT-MATRIX M-688-A decides=w_snap,w_step twins=w_ctl
+# MUTANT-MATRIX M-688-B decides=w_snap,w_step twins=w_ctl
+# MUTANT-MATRIX M-725-pre decides=s_fail twins=s_fail_ctl
+# MUTANT-MATRIX M-725-always decides=s_fail_ctl twins=s_fail
+# MUTANT-MATRIX M-687-nofull decides=f_bound twins=f_allow
+# MUTANT-MATRIX M-687-adv decides=f_allow twins=f_seq
+# MUTANT-MATRIX M-687-sat decides=f_allow twins=f_seq
+# MUTANT-MATRIX M-687-widen decides=f_bound,f_decoy,f_hand twins=f_allow
+# MUTANT-MATRIX M-687-nohand decides=f_hand twins=f_allow
+# MUTANT-MATRIX M-687-drop decides=f_allow twins=f_seq
+# MUTANT-MATRIX M1-first-match decides=S1,S1b,S4 twins=S2
+# MUTANT-MATRIX M2-head1 decides=S1,S1b twins=S2,S4
+# MUTANT-MATRIX M3-tail1 decides=S1,S1b twins=S2
+# MUTANT-MATRIX M4-no-label decides=S3,S4 twins=S2
+# MUTANT-MATRIX M5-mandate-anyway decides=S1,S1b twins=S2
+# MUTANT-MATRIX M6-strict-key decides=S1b,S2b,S2c,S7 twins=S2
+# MUTANT-MATRIX M7-no-bullet-clause decides=S6 twins=S2
+# MUTANT-MATRIX M8-agreement-dup decides=S5 twins=S2
+# MUTANT-MATRIX PC-f decides=upd_nomark,upd_foreign twins=foreign
+# MUTANT-MATRIX PC-g decides=foreign twins=legacy
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix
 set -uo pipefail
 
 # The pre-push gate inherits every AI_DLC_* tunable a consumer set in settings.json. A fixture
