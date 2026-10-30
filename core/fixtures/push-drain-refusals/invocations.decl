@@ -1,3 +1,3 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-183 *
-14 core/skills/ai-dlc-update/reconcile/push-drain.sh
+4 *
+3 core/skills/ai-dlc-update/reconcile/push-drain.sh
