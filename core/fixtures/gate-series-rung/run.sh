@@ -275,11 +275,12 @@ else
   # the --waivers owner. Without the second, every FAIL_WAIVED would read as unresolvable in the
   # copy and W1 would fail for a reason that has nothing to do with the mutation.
   mkdir -p "$WM/ctl" "$WM/mk" "$WM/ma"
-  for s in validate-gate-adjudication.sh validate-adversarial-convergence.sh validate-suppression-lifetime.sh; do
+  for s in validate-gate-adjudication.sh gate_adjudication.py validate-adversarial-convergence.sh validate-suppression-lifetime.sh; do
     cp "$VD/$s" "$WM/ctl/" && cp "$VD/$s" "$WM/mk/" && cp "$VD/$s" "$WM/ma/"; done
   # W-MK keeps FAIL_WAIVED in the run (the pre-D1 predicate); W-MA breaks the run on ANY
   # FAIL_WAIVED, resolved or not (the first D1 cut, before the ruling).
-  python3 - "$WM/mk/validate-gate-adjudication.sh" "$WM/ma/validate-gate-adjudication.sh" <<'PY'
+  # The mutations edit gate_adjudication.py, where the program text lives since the heredoc moved out.
+  python3 - "$WM/mk/gate_adjudication.py" "$WM/ma/gate_adjudication.py" <<'PY'
 import sys
 for p, old, new in (
     (sys.argv[1],
@@ -294,11 +295,11 @@ for p, old, new in (
         open(p, "w", encoding="utf-8").write(t.replace(old, new))
 PY
   if [ -z "$W_SCHEMA" ] || [ -z "$W_MAP" ] || [ ! -f "$WM/ctl/validate-adversarial-convergence.sh" ] \
-     || [ ! -f "$WM/ctl/validate-suppression-lifetime.sh" ]; then
+     || [ ! -f "$WM/ctl/validate-suppression-lifetime.sh" ] || [ ! -f "$WM/ctl/gate_adjudication.py" ]; then
     note_fail "W-MK/W-MA harness broken: schema '$W_SCHEMA', map '$W_MAP', the repair-arm sibling or the --waivers sibling is missing from the copy"
-  elif cmp -s "$WM/ctl/validate-gate-adjudication.sh" "$WM/mk/validate-gate-adjudication.sh"; then
+  elif cmp -s "$WM/ctl/gate_adjudication.py" "$WM/mk/gate_adjudication.py"; then
     note_fail "W-MK DID NOT APPLY: the run predicate anchor is absent or not unique, so the mutant is byte-identical to the control"
-  elif cmp -s "$WM/ctl/validate-gate-adjudication.sh" "$WM/ma/validate-gate-adjudication.sh"; then
+  elif cmp -s "$WM/ctl/gate_adjudication.py" "$WM/ma/gate_adjudication.py"; then
     note_fail "W-MA DID NOT APPLY: the waiver_covers anchor is absent or not unique, so the mutant is byte-identical to the control"
   else
     export AI_DLC_VERDICT_SCHEMA="$W_SCHEMA" AI_DLC_ENFORCEMENT_MAP="$W_MAP"
