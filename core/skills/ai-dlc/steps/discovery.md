@@ -137,7 +137,7 @@ this sprint's block and nothing else:
 <!-- END LOCKED_REQUIREMENTS -->
 ```
 
-**THE BRIEF USED TO ACCUMULATE ONE BLOCK PER SPRINT AND THAT WAS THE DEFECT, NOT A
+**A BRIEF THAT ACCUMULATES ONE BLOCK PER SPRINT IS A DEFECT, NOT A
 CONVENTION.** A durable artifact carries no sprint token by rule 3 of the artifact
 path grammar, and that is what makes it durable — so a per-sprint block appended to
 it is sprint-scoped content at a sprint-independent path. Measured on the reference
@@ -163,7 +163,7 @@ the union across slots; no block is copied here.
 
 **Every block MUST be closed.** `validate-locked-anchor.sh` (Check 3b) parses
 blocks by their sentinels, and an opener it cannot pair extracts as nothing —
-which used to reach the PASS line reporting `0 block(s), 0 claim(s) verified`,
+which reaches the PASS line reporting `0 block(s), 0 claim(s) verified`,
 so a fabricated requirement passed a `hard_block` check on one word's difference
 in a comment. Measured across one consumer: SEVEN sentinel spellings, three
 story files with an opener and no closer at all. The parser now accepts every
