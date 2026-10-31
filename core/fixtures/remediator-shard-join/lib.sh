@@ -354,10 +354,14 @@ p_basecite() { # the control: a bare basename citation still resolves -> JOINED
   run_join "$1" "$w"
   joined_one "$(out_of "$w")"
 }
-p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch, and never hand-assembly
-  local w l; w="$(new_world)"
+unwm_build() { # -> the world p_unwrittenmsg joins
+  local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
   part "$w" 01 2.1; part "$w" 03 3.1
+  printf '%s' "$w"
+}
+p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch, and never hand-assembly
+  local w l; w="$(unwm_build)"
   run_join "$1" "$w"
   l="$(grep -F "which no dispatched agent wrote" "$JO")" || return 1
   grep -qF "written through Bash or another tool that reaches no Edit matcher" <<<"$l" \
@@ -379,13 +383,17 @@ uw_line() { # -> the refusal line for part 01 citing S21, or rc 1
   [ "$RC" -eq 2 ] || return 1
   grep -F "01.md cites $REL/$S21, which no dispatched agent wrote under $SLOT in the window -- " "$JO"
 }
-uw_world() { # <join> <ts@agent>... -> RC, $JO: S21 written only at the given ts, part 01 citing it;
-  # S22 written in the window by AG2 and cited by part 02 (an empty window dies before the join)
-  local w j="$1" r; shift; w="$(new_world)"
+uw_build() { # <ts@agent>... -> the world uw_world joins
+  local w r; w="$(new_world)"
   for r in "$@"; do drive "$w" Edit "$w/$REL/$S21" "${r##*@}" "" "" "${r%@*}"; done
   drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
   part "$w" 01 2.1; part "$w" 02 2.2
   drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:11:00Z
+  printf '%s' "$w"
+}
+uw_world() { # <join> <ts@agent>... -> RC, $JO: S21 written only at the given ts, part 01 citing it;
+  # S22 written in the window by AG2 and cited by part 02 (an empty window dies before the join)
+  local w j="$1"; shift; w="$(uw_build "$@")"
   run_join_w "$j" "$w"
 }
 UW_BEFORE="the ledger's last write of $REL/$S21 was at"
@@ -427,24 +435,32 @@ p_uwaside() { # a --rerun part citing two files, the re-run rewriting only one: 
 # found, so a mutant loop can tell a moved remedy (UW_L set) from a world that never refused (empty).
 UW_NONE="the file was written through Bash or another tool that reaches no Edit matcher, or it was never written; re-dispatch that shard writing through Edit, Write or MultiEdit"
 UW_L=""
-p_uwamb() { # the cited basename resolves to TWO paths once the time filter is dropped ($REL/S21 and
-  # $SLOT/epics/S21, both written only before --since) -> the NONE clause, no ledger row named
-  local w; UW_L=""; w="$(new_world)"
+uwamb_build() { # -> the world p_uwamb joins
+  local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG3" "" "" 2026-05-20T00:00:00Z
   drive "$w" Edit "$w/$SLOT/epics/$S21" "$AG3" "" "" 2026-05-21T00:00:00Z
   drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
   abspart "$w/$UW_PD" "$S21"; part "$w" 02 2.2
+  printf '%s' "$w"
+}
+p_uwamb() { # the cited basename resolves to TWO paths once the time filter is dropped ($REL/S21 and
+  # $SLOT/epics/S21, both written only before --since) -> the NONE clause, no ledger row named
+  local w; UW_L=""; w="$(uwamb_build)"
   run_join_w "$1" "$w"
   [ "$RC" -eq 2 ] || return 1
   UW_L="$(grep -F "01.md cites $S21, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
   [ "${UW_L#*in the window -- }" = "$UW_NONE" ]
 }
-p_uwshard() { # the cited token is a `/`-suffix only of the part's OWN record under shards/, written in
-  # the window: files mode never counts a shards/ row, so the lookup must not either -> the NONE clause
-  local w; UW_L=""; w="$(new_world)"
+uwshard_build() { # -> the world p_uwshard joins
+  local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
   abspart "$w/$UW_PD" "shards/stories-repair-p1/01.md"; part "$w" 02 2.2
   drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:11:00Z
+  printf '%s' "$w"
+}
+p_uwshard() { # the cited token is a `/`-suffix only of the part's OWN record under shards/, written in
+  # the window: files mode never counts a shards/ row, so the lookup must not either -> the NONE clause
+  local w; UW_L=""; w="$(uwshard_build)"
   run_join_w "$1" "$w"
   [ "$RC" -eq 2 ] || return 1
   UW_L="$(grep -F "01.md cites shards/stories-repair-p1/01.md, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
@@ -900,11 +916,15 @@ p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source,
 # The prose world carries NO field and mentions a sibling in its claim: a reader keyed on the word
 # acquits it, a reader keyed on the field refuses it as NOSIB.
 SIBW_EDIT="- edit: $REL/$S21:4"
-sibworld() { # <join> <siblings text, printf %b> -> RC, $JO, SB_W: one writer, one part
+sibw_build() { # <siblings text, printf %b> -> the world sibworld joins
   local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
   printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n%b- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n' \
-    "$SIBW_EDIT" "$2" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+    "$SIBW_EDIT" "$1" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  printf '%s' "$w"
+}
+sibworld() { # <join> <siblings text, printf %b> -> RC, $JO, SB_W: one writer, one part
+  local w; w="$(sibw_build "$2")"
   run_join "$1" "$w"; SB_W="$w"
 }
 # CP1: --check-part runs the join's own entry contract over one part. The near-miss `siblings: checked`
@@ -1213,8 +1233,8 @@ p_partmark() {
   part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
   stamp "$w"
   sd="$w/$SLOT/shards/stories-repair-p1"
-  bash "$WFD" --mark "$sd/01.md" stories remediator 01 findings=1 > /dev/null 2>&1 || return 1
-  bash "$WFD" --mark "$sd/03.md" stories remediator 03 findings=1 > /dev/null 2>&1 || return 1
+  wfd_run "$WFD" --mark "$sd/01.md" stories remediator 01 findings=1 > /dev/null 2>&1 || return 1
+  wfd_run "$WFD" --mark "$sd/03.md" stories remediator 03 findings=1 > /dev/null 2>&1 || return 1
   run_join "$1" "$w"
   r="$(out_of "$w")"
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$r" ] || return 1
@@ -1244,25 +1264,25 @@ p_markderive() { # <wfd>
     printf '# part\n\nbody\n' > "$sd/$f.md" || return 1
   done
   mk_last() { last="$(tail -n 1 "$1")"; }
-  bash "$1" --mark "$sd/coe-repair-p1/2.md" carry-over-evaluation remediator 2 findings=1 > /dev/null 2>&1 || return 1
+  wfd_run "$1" --mark "$sd/coe-repair-p1/2.md" carry-over-evaluation remediator 2 findings=1 > /dev/null 2>&1 || return 1
   mk_last "$sd/coe-repair-p1/2.md"
   case "$last" in "seat-complete: coe remediator 2 sha="*" findings=1") ;; *) return 1 ;; esac
-  bash "$1" --mark "$sd/coe-repair-p1/7.md" coe 7 remediator 7 findings=1 > /dev/null 2>&1 || return 1
+  wfd_run "$1" --mark "$sd/coe-repair-p1/7.md" coe 7 remediator 7 findings=1 > /dev/null 2>&1 || return 1
   mk_last "$sd/coe-repair-p1/7.md"
   case "$last" in "seat-complete: coe remediator 7 sha="*" findings=1") ;; *) return 1 ;; esac
-  bash "$1" --mark "$sd/requirements-party-repair/05.md" requirements-party-elicitation x 9 findings=0 > /dev/null 2>&1 || return 1
+  wfd_run "$1" --mark "$sd/requirements-party-repair/05.md" requirements-party-elicitation x 9 findings=0 > /dev/null 2>&1 || return 1
   mk_last "$sd/requirements-party-repair/05.md"
   case "$last" in "seat-complete: requirements-party remediator 05 sha="*" findings=0") ;; *) return 1 ;; esac
-  bash "$1" --mark "$sd/requirements-party-repair/03.md" requirements-party remediator 03 findings=0 > /dev/null 2>&1 || return 1
+  wfd_run "$1" --mark "$sd/requirements-party-repair/03.md" requirements-party remediator 03 findings=0 > /dev/null 2>&1 || return 1
   mk_last "$sd/requirements-party-repair/03.md"
   case "$last" in "seat-complete: requirements-party remediator 03 sha="*" findings=0") ;; *) return 1 ;; esac
-  bash "$1" --mark "$sd/coe-party-serial-repair-p1/lane-1.md" coe-party-serial remediator lane-1 findings=2 > /dev/null 2>&1 || return 1
+  wfd_run "$1" --mark "$sd/coe-party-serial-repair-p1/lane-1.md" coe-party-serial remediator lane-1 findings=2 > /dev/null 2>&1 || return 1
   mk_last "$sd/coe-party-serial-repair-p1/lane-1.md"
   case "$last" in "seat-complete: coe-party-serial remediator lane-1 sha="*" findings=2") ;; *) return 1 ;; esac
-  bash "$1" --mark "$sd/coe-repair-p1/3.md" coe-party remediator 1/8 findings=1 > /dev/null 2>&1 || return 1
+  wfd_run "$1" --mark "$sd/coe-repair-p1/3.md" coe-party remediator 1/8 findings=1 > /dev/null 2>&1 || return 1
   mk_last "$sd/coe-repair-p1/3.md"
   case "$last" in "seat-complete: coe remediator 3 sha="*" findings=1") ;; *) return 1 ;; esac
-  bash "$1" --mark "$sd/plain/4.md" custom seat 1/8 findings=1 > /dev/null 2>&1 || return 1
+  wfd_run "$1" --mark "$sd/plain/4.md" custom seat 1/8 findings=1 > /dev/null 2>&1 || return 1
   mk_last "$sd/plain/4.md"
   case "$last" in "seat-complete: custom seat 1/8 sha="*" findings=1") ;; *) return 1 ;; esac
 }
@@ -1287,6 +1307,9 @@ r804_sealed() { # <file> -> 0 when the marker's sha= is the digest of the body a
   have="$(awk 'NF { L = NR } { a[NR] = $0 } END { for (i = 1; i < L; i++) print a[i] }' "$1" | shasum -a 256 | cut -d' ' -f1)"
   [ -n "$want" ] && [ "$want" = "$have" ]
 }
+# r_only <case>: 0 when no owning case is named (R_ONLY empty: the whole predicate runs) or <case> is the named one.
+# A mutant is scored by `R_ONLY=<its own case> p_x <copy>`, so it runs that one case and no other.
+r_only() { [ -z "${R_ONLY:-}" ] || [ "$R_ONLY" = "$1" ]; }
 p_replay() { # <wfd>
   local w pa sd st f o rc
   R804=setup
@@ -1295,40 +1318,54 @@ p_replay() { # <wfd>
   mkdir -p "$sd/stories-repair-p1" "$sd/prd-repair-p1/sections" "$sd/plain" || return 1
   printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
   : > "$sd/prd-repair-p1/sections/.manifest"
+  if r_only a; then
   f="$sd/stories-repair-p1/01.md"; r804_part "$f" 'not replayed' 2
-  bash "$SRCDIR/content-seal.sh" --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
-  R804=a; bash "$1" --mark "$f" stories remediator 01 findings=1 > "$w/a.out" 2>&1 || return 1
+  cs_run --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
+  R804=a; wfd_run "$1" --mark "$f" stories remediator 01 findings=1 > "$w/a.out" 2>&1 || return 1
   [ "$(grep -c '^- derivations: replayed 2$' "$f")" = 1 ] && [ "$(grep -ci 'not replayed' "$f")" = 0 ] || return 1
   case "$(tail -n 1 "$f")" in "seat-complete: stories remediator 01 sha="*" findings=1") ;; *) return 1 ;; esac
   r804_sealed "$f" || return 1
-  o="$(bash "$SRCDIR/content-seal.sh" --check "$st" "$f" 2>&1)"; rc=$?
+  o="$(cs_run --check "$st" "$f" 2>&1)"; rc=$?
   [ "$rc" = 0 ] && [ -z "$o" ] || return 1
+  fi
+  if r_only b; then
   f="$sd/stories-repair-p1/02.md"; r804_part "$f" 'not replayed' 3
-  bash "$SRCDIR/content-seal.sh" --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
+  cs_run --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
   cp "$f" "$w/b.before"
-  R804=b; bash "$1" --mark "$f" stories remediator 02 findings=1 > "$w/b.out" 2>&1; rc=$?
+  R804=b; wfd_run "$1" --mark "$f" stories remediator 02 findings=1 > "$w/b.out" 2>&1; rc=$?
   [ "$rc" = 64 ] && cmp -s "$f" "$w/b.before" && has "$w/b.out" 'FAIL: 1 stale' \
     && has "$w/b.out" 'fix the stale derivation' && ! has "$w/b.out" 'deferred to the join' || return 1
+  fi
+  if r_only b2; then
   f="$sd/prd-repair-p1/01.md"; r804_part "$f" 'not replayed' 3; cp "$f" "$w/b2.before"
-  R804=b2; bash "$1" --mark "$f" prd remediator 01 findings=1 > "$w/b2.out" 2>&1; rc=$?
+  R804=b2; wfd_run "$1" --mark "$f" prd remediator 01 findings=1 > "$w/b2.out" 2>&1; rc=$?
   [ "$rc" = 64 ] && cmp -s "$f" "$w/b2.before" && has "$w/b2.out" "write 'derivations: deferred to the join" || return 1
+  fi
+  if r_only c; then
   f="$sd/stories-repair-p1/03.md"; r804_part "$f" 'deferred to the join (section shard)' 3
-  R804=c; bash "$1" --mark "$f" stories remediator 03 findings=1 > "$w/c.out" 2>&1 || return 1
+  R804=c; wfd_run "$1" --mark "$f" stories remediator 03 findings=1 > "$w/c.out" 2>&1 || return 1
   [ "$(grep -c '^- \*\*derivations:\*\* deferred to the join (section shard)$' "$f")" = 1 ] || return 1
+  fi
+  if r_only d; then
   f="$sd/plain/04.md"; r804_part "$f" 'not replayed' 3
-  R804=d; bash "$1" --mark "$f" review seat 04 findings=1 > "$w/d.out" 2>&1 || return 1
+  R804=d; wfd_run "$1" --mark "$f" review seat 04 findings=1 > "$w/d.out" 2>&1 || return 1
   [ "$(grep -c '^- \*\*derivations:\*\* not replayed$' "$f")" = 1 ] || return 1
+  fi
+  if r_only e; then
   f="$sd/stories-repair-p1/05.md"; r804_part "$f" 'not replayed' 3 escalated
-  R804=e; bash "$1" --mark "$f" stories remediator 05 findings=1 > "$w/e.out" 2>&1 || return 1
+  R804=e; wfd_run "$1" --mark "$f" stories remediator 05 findings=1 > "$w/e.out" 2>&1 || return 1
   [ "$(grep -c '^- \*\*derivations:\*\* not replayed$' "$f")" = 1 ] || return 1
+  fi
+  if r_only f; then
   f="$pa/s9/stories-repair-p1.md"
   { printf '# Repair record\n\n<!-- shard: 01 -->\n'; r804_part /dev/stdout 'not replayed' 2
     printf '\n- artifact: _bmad-output/planning-artifacts/s9/data.txt\n- artifact_sha_before: y\n- artifact_sha_after: z\n- advisor: called\n- derivations: not replayed\n\n### S-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n\n```derived\n$ grep -c . _bmad-output/planning-artifacts/s9/data.txt\n3\n```\n'; } > "$f"
-  bash "$SRCDIR/content-seal.sh" --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
-  R804=f; bash "$1" --mark-repair "$f" 1 > "$w/f.out" 2>&1 || return 1
+  cs_run --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
+  R804=f; wfd_run "$1" --mark-repair "$f" 1 > "$w/f.out" 2>&1 || return 1
   [ "$(grep -c '^- \*\*derivations:\*\* not replayed$' "$f")" = 1 ] && [ "$(grep -c '^- derivations: replayed 3$' "$f")" = 1 ] || return 1
   case "$(tail -n 1 "$f")" in "repair-complete: serial 1 sha="*) ;; *) return 1 ;; esac
   r804_sealed "$f" || return 1
+  fi
   R804=ok
 }
 
@@ -1355,9 +1392,9 @@ r816_rec() { # <file> <shard 0|1> <first 0|1> <last 0|1> [label]
 # `content-seal.sh --check` clean; refuse = rc 64, the file byte-identical, the message naming the claim.
 r816_mark() {
   local o rc; R816="$1"
-  bash "$SRCDIR/content-seal.sh" --record "$R816_ST" program:fixture "$3" > /dev/null 2>&1 || return 1
+  cs_run --record "$R816_ST" program:fixture "$3" > /dev/null 2>&1 || return 1
   cp "$3" "$3.before" || return 1
-  bash "$2" --mark-repair "$3" 1 > "$3.out" 2>&1; rc=$?
+  wfd_run "$2" --mark-repair "$3" 1 > "$3.out" 2>&1; rc=$?
   if [ "$4" = refuse ]; then
     [ "$rc" = 64 ] && cmp -s "$3" "$3.before" && has "$3.out" "states 'derivations: replayed <n>' in the block this call seals" \
       && has "$3.out" 'fix the stale fence'
@@ -1366,7 +1403,7 @@ r816_mark() {
   [ "$rc" = 0 ] || return 1
   case "$(tail -n 1 "$3")" in "repair-complete: serial 1 sha="*) ;; *) return 1 ;; esac
   sed '$d' "$3" | cmp -s - "$3.before" && r804_sealed "$3" || return 1
-  o="$(bash "$SRCDIR/content-seal.sh" --check "$R816_ST" "$3" 2>&1)"; rc=$?
+  o="$(cs_run --check "$R816_ST" "$3" 2>&1)"; rc=$?
   [ "$rc" = 0 ] && [ -z "$o" ]
 }
 # p_claim <wfd>: (a) clean record -> marked; (a2) a part claiming `replayed 7` over 2 reproducing fences -> marked
@@ -1381,18 +1418,30 @@ p_claim() { # <wfd>
   R816_ST="$w/_bmad-output"; pa="$R816_ST/planning-artifacts"; sd="$pa/s9/shards"
   mkdir -p "$sd/stories-repair-p1" || return 1
   printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
+  if r_only a; then
   f="$pa/s9/a-repair-p1.md"; r816_rec "$f" 0 0 0; r816_mark a "$1" "$f" pass || return 1
+  fi
+  if r_only a2; then
   f="$sd/stories-repair-p1/01.md"; r804_part "$f" 'replayed 7' 2
-  R816=a2; bash "$1" --mark "$f" stories remediator 01 findings=1 > "$w/a2.out" 2>&1 || return 1
+  R816=a2; wfd_run "$1" --mark "$f" stories remediator 01 findings=1 > "$w/a2.out" 2>&1 || return 1
   [ "$(grep -c '^- \*\*derivations:\*\* replayed 7$' "$f")" = 1 ] && r804_sealed "$f" || return 1
+  fi
+  if r_only c; then
   f="$pa/s9/c-repair-p1.md"; r816_rec "$f" 0 1 0; r816_mark c "$1" "$f" refuse || return 1
   has "$f.out" '(lines 18-' && has "$f.out" ':20 records an output' || return 1
+  fi
+  if r_only d; then
   f="$pa/s9/d-repair-p1.md"; r816_rec "$f" 0 0 1; r816_mark d "$1" "$f" refuse || return 1
   has "$f.out" ":$(( $(wc -l < "$f") - 1 )) records an output" || return 1
+  fi
+  if r_only a3; then
   f="$sd/stories-repair-p1/02.md"; r804_part "$f" 'replayed 2' 3; cp "$f" "$w/a3.before"
-  R816=a3; bash "$1" --mark "$f" stories remediator 02 findings=1 > "$w/a3.out" 2>&1
+  R816=a3; wfd_run "$1" --mark "$f" stories remediator 02 findings=1 > "$w/a3.out" 2>&1
   [ "$?" = 64 ] && cmp -s "$f" "$w/a3.before" && has "$w/a3.out" ':12 records an output' || return 1
+  fi
+  if r_only b; then
   f="$pa/s9/b-repair-p1.md"; r816_rec "$f" 1 0 0; r816_mark b "$1" "$f" pass || return 1
+  fi
   R816=ok
 }
 # p_vcrash <dir holding the scripts under test>: an exit 1 is a verdict only beside the validator's
@@ -1411,16 +1460,24 @@ p_vcrash() {
   R816_ST="$w/_bmad-output"; pa="$R816_ST/planning-artifacts"; sd="$pa/s9/shards"
   mkdir -p "$sd/stories-repair-p1" || return 1
   printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
+  if r_only ctl-clean; then
   f="$pa/s9/a-repair-p1.md"; r816_rec "$f" 0 0 0; RVC=ctl-clean; r816_mark a "$1/wait-for-deliverable.sh" "$f" pass || return 1
+  fi
+  if r_only ctl-stale; then
   f="$pa/s9/c-repair-p1.md"; r816_rec "$f" 0 1 0; RVC=ctl-stale; r816_mark c "$1/wait-for-deliverable.sh" "$f" refuse || return 1
+  fi
+  if r_only crash-serial; then
   f="$pa/s9/k-repair-p1.md"; r816_rec "$f" 0 1 0; cp "$f" "$f.before"; RVC=crash-alone
   AI_DLC_PROJECT_ROOT="$w" bash "$c/validate-artifact-derivations.sh" "$f" > /dev/null 2> "$w/k.verr"; rc=$?
   [ "$rc" = 1 ] && has "$w/k.verr" 'AI_DLC_NO_SUCH_VAR_X' && ! grep -q '^FAIL' "$w/k.verr" || return 1
-  RVC=crash-serial; bash "$c/wait-for-deliverable.sh" --mark-repair "$f" 1 > "$f.out" 2>&1; rc=$?
+  RVC=crash-serial; wfd_run "$c/wait-for-deliverable.sh" --mark-repair "$f" 1 > "$f.out" 2>&1; rc=$?
   [ "$rc" = 64 ] && cmp -s "$f" "$f.before" && has "$f.out" "states 'derivations: replayed', and the replay this call ran gave no verdict (exit 1)" || return 1
+  fi
+  if r_only crash-part; then
   f="$sd/stories-repair-p1/01.md"; r804_part "$f" 'not replayed' 2; cp "$f" "$f.before"; RVC=crash-part
-  bash "$c/wait-for-deliverable.sh" --mark "$f" stories remediator 01 findings=1 > "$f.out" 2>&1; rc=$?
+  wfd_run "$c/wait-for-deliverable.sh" --mark "$f" stories remediator 01 findings=1 > "$f.out" 2>&1; rc=$?
   [ "$rc" = 64 ] && cmp -s "$f" "$f.before" && has "$f.out" "states 'derivations: not replayed', and the replay this call ran gave no verdict (exit 1)" || return 1
+  fi
   RVC=ok
 }
 
@@ -2349,11 +2406,37 @@ p_nldoc() { # document mode: three section parts, every `edit: n/a`, no section 
 # ---- A FUTURE --until (BL-807, claim 2): the join refuses an --until later than its own clock + 120s.
 FUT_TXT="by more than 120s: take --until from \`date -u\` after the last lane reports; a hand-chosen future time mis-scopes the window"
 utc_plus() { jq -nr --argjson s "$1" 'now + $s | strftime("%Y-%m-%dT%H:%M:%SZ")'; }
-p_untilfut() { # <join> <offset seconds> -> RC, $JO of the three-writer world closed at now + offset
+untilfut_build() { # -> the three-writer world p_untilfut closes
   local w; w="$(new_world)"; three_writers "$w"
   part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
   stamp "$w"
+  printf '%s' "$w"
+}
+p_untilfut() { # <join> <offset seconds> -> RC, $JO of the three-writer world closed at now + offset
+  local w; w="$(untilfut_build)"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
     --since 2000-01-01T00:00:00Z --until "$(utc_plus "$2")" > "$JO" 2>&1
   RC=$?
+}
+
+
+# ---- the in-process seams for the --mark cells (unit-mark.sh pins them to the CLI). wfd_run is
+# `wait-for-deliverable.sh <args>` for --mark / --mark-repair: the file is sourced in a SUBSHELL, its
+# source guard stops it before the flag loop, and wfd_mark_main (the dispatch the script calls at once
+# when run) is called, so `exit` and every MK_* global end with the cell. pipefail is off, as the CLI
+# runs. cs_run is content-seal.sh's own seal_main the same way. <wfd> is the file to drive, so a mutant
+# copy is sourced, never re-implemented.
+wfd_run() { # <wfd> <--mark|--mark-repair> args... -> the CLI's stdout, stderr and exit status
+  local _w="$1"; shift
+  ( set +o pipefail; . "$_w" || exit 125
+    # The validator beside <wfd> is sourced and loaded in this same subshell, so the replay --mark runs
+    # (wait-for-deliverable.sh takes its VAD_LOADED branch only when the loaded functions came from
+    # that very $MK_VAL) is vad_invoke in process. A mutant directory's own validator is therefore the
+    # one loaded, and each call reloads it: EC43's `mv -f` of a mutated validator is read on the next call.
+    . "$(dirname "$_w")/validate-artifact-derivations.sh" || exit 125
+    vad_load
+    wfd_mark_main "$@" )
+}
+cs_run() { # <mode> args... -> content-seal.sh <mode> args...
+  ( set +o pipefail; . "$SRCDIR/content-seal.sh" || exit 125; seal_main "$@" )
 }

@@ -105,12 +105,7 @@
 # blanks, `*` and backticks are skipped. Exit 1 when the claim carries no reason (`none`,
 # `none.`, `` `none` ``). Exit 2 when <value> is not a none form at all (an invocation, a pointer
 # such as `see dev report`, `nonexistent`).
-set -u
-export LC_ALL=C
-ME=record-only-diff
-
-case "${1:-}" in
-  label)
+ro_label() {
     [ $# -eq 2 ] && [ -n "$2" ] || { echo "usage: $ME label <label> < <document>" >&2; exit 64; }
     RO_L="$2" awk '
       function islabel(t) { return t ~ /^[A-Za-z][A-Za-z0-9 _-]*:([ \t]|$)/ || t ~ /^\*\*[A-Za-z][A-Za-z0-9 _-]*(:\*\*|\*\*:)/ }
@@ -132,8 +127,8 @@ case "${1:-}" in
         cont = 1; next }
       END { if (hit && !done) print ((post || inf) ? fb : ""); exit !hit }'
     exit $?
-    ;;
-  run-filter)
+}
+ro_run_filter() {
     [ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $ME run-filter <value> [<conventions file>]" >&2; exit 64; }
     rf_span() { # <text> -> the invocation span
       local t="$1" s
@@ -231,8 +226,8 @@ case "${1:-}" in
       esac
     done <<<"$RF_RUN"
     exit 0
-    ;;
-  story-base)
+}
+ro_story_base() {
     shift
     REPO=.
     if [ "${1:-}" = "-C" ]; then
@@ -244,18 +239,18 @@ case "${1:-}" in
       || { echo "$ME: UNEVALUABLE — base does not resolve: $2" >&2; exit 2; }
     git -C "$REPO" cat-file -e "$2:${1#./}" 2>/dev/null || exit 0
     sb_t="$(git -C "$REPO" show "$2:${1#./}" 2>/dev/null)"
-    if bash "$0" label 'Full-collection run:' <<<"$sb_t" >/dev/null; then
+    if (ro_label label 'Full-collection run:') <<<"$sb_t" >/dev/null; then
       printf 'the story at %s already carries a Full-collection run: line\n' "$2"; exit 1
     fi
     sb_s="$(printf '%s\n' "$sb_t" | awk 'NR == 1 && /^---/ { fm = 1; next } fm && /^---/ { exit } fm && /^status:/ { sub(/^status:[[:space:]]*/, ""); print $1; exit }')"
     case "$sb_s" in review|done) printf 'the story at %s is already status: %s\n' "$2" "$sb_s"; exit 1 ;; esac
     exit 0
-    ;;
-  run-shape|setup-shape)
+}
+ro_shape() {
     [ $# -eq 2 ] || { [ "$1" = run-shape ] && [ $# -eq 3 ]; } || { echo "usage: $ME run-shape <value> [<conventions file>] | $ME setup-shape <value>" >&2; exit 64; }
     # The no-run reading is decided FIRST: a value opening with a none form or a pointer word is
     # never a run, whatever spans or counts follow it.
-    bash "$0" none-reason "$2" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1
+    (ro_none_reason none-reason "$2") >/dev/null 2>&1; [ $? -eq 2 ] || exit 1
     rs_v="$2"; rs_v="${rs_v#"${rs_v%%[!	 *\`]*}"}"
     rs_lc="$(printf '%s' "$rs_v" | tr '[:upper:]' '[:lower:]')"
     grep -qE '^(see|refer|n/a|na|tbd|todo|deferred|pending)([^a-z0-9]|$)' <<<"$rs_lc" && exit 1
@@ -283,8 +278,8 @@ case "${1:-}" in
     grep -qE "^([^[:space:]]*/)?($rs_rn|python[0-9.]* -m pytest)([[:space:]]|\$)" <<<"$rs_v" && exit 0
     grep -qE '[0-9]+[[:space:]]+(passed|failed)([^A-Za-z]|$)' <<<"$2"
     exit $?
-    ;;
-  none-reason)
+}
+ro_none_reason() {
     [ $# -eq 2 ] || { echo "usage: $ME none-reason <value>" >&2; exit 64; }
     v="$2"
     v="${v#"${v%%[!	 *\`]*}"}"
@@ -299,8 +294,8 @@ case "${1:-}" in
     [ -n "$rest" ] || exit 2
     case "$rest" in *[A-Za-z0-9]*) exit 0 ;; esac
     exit 1
-    ;;
-  paths)
+}
+ro_paths() {
     shift
     REPO=.
     if [ "${1:-}" = "-C" ]; then
@@ -336,9 +331,36 @@ case "${1:-}" in
     fi
     printf 'RECORD-ONLY: %s changed path(s)\n' "$n"
     exit 0
+}
+ro_main() {
+set -u
+export LC_ALL=C
+ME=record-only-diff
+
+case "${1:-}" in
+  label)
+    ro_label "$@"
+    ;;
+  run-filter)
+    ro_run_filter "$@"
+    ;;
+  story-base)
+    ro_story_base "$@"
+    ;;
+  run-shape|setup-shape)
+    ro_shape "$@"
+    ;;
+  none-reason)
+    ro_none_reason "$@"
+    ;;
+  paths)
+    ro_paths "$@"
     ;;
   *)
     echo "usage: $ME paths [-C <repo>] <story-file> <base> <frozen> | $ME none-reason <value>" >&2
     exit 64
     ;;
 esac
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ro_main "$@"

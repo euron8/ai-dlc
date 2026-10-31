@@ -28,6 +28,13 @@
 # with the shipping scorer on every world. Each mutation must replace exactly one line, and the copy
 # must differ from its source (`cmp -s` non-zero), or the mutant is reported DID NOT APPLY.
 #
+# IN PROCESS, ONE END-TO-END RUN PER CLI OUTCOME. Both subjects carry a BASH_SOURCE guard over sections that are
+# functions (scorer: stage1_entry, stage1_score; wrapper: stage1_preflight .. stage1_launch, sample, finish). Every
+# world and every mutant is asked in process -- the copy sourced in a subshell, the section called -- and the CLI
+# runs as a process only once per distinct outcome: the scorer's MET/NOT-MET/REFUSED (the equivalence cell, which
+# also proves the two paths byte-identical) and --self-probe; the wrapper's exit 0, 1, 143 (TERM), 137 (SIGKILL)
+# and one exit-2 refusal.
+#
 # THE WRAPPER IS DRIVEN AGAINST A STUB DERIVER in a fresh scratch repo per arm: the wrapper runs
 # `<root>/core/scripts/derive-fixture-readsets.sh` from the root it walks up to, so the stub sits at
 # that path. The stub REWRITES the map and leaves a copy of what it wrote, so the restore arm is
@@ -76,13 +83,13 @@
 # MUTANT-MATRIX probe-r2-first-only decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
 # MUTANT-MATRIX probe-rl-no-pairing decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
 # MUTANT-MATRIX probe-rl-pair-unchecked decides=selfprobe twins=- why=dead in every cell: the mutated scorer's own self-probe refuses before any world is scored, so every world cell reads 1 (all printed in the matrix log)
-# MUTANT-MATRIX load-under-root decides=ok twins=term
-# MUTANT-MATRIX load-5min decides=ok twins=term
-# MUTANT-MATRIX profile-passed-through decides=ok twins=term
-# MUTANT-MATRIX no-started-line decides=kill9 twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
-# MUTANT-MATRIX no-orphan-check decides=kill9 twins=ok
-# MUTANT-MATRIX no-restore decides=ok,term twins=- why=dead in every cell: the matrix log prints ok:1 term:1 kill9:1; the mutation removes a property every wrapper run depends on
-# MUTANT-MATRIX single-pid-kill decides=term twins=ok
+# MUTANT-MATRIX load-under-root decides=sample twins=profile
+# MUTANT-MATRIX load-5min decides=sample twins=profile
+# MUTANT-MATRIX profile-passed-through decides=profile twins=sample
+# MUTANT-MATRIX no-started-line decides=started twins=sample
+# MUTANT-MATRIX no-orphan-check decides=orphan-live twins=orphan-dead
+# MUTANT-MATRIX no-restore decides=restore twins=groupkill
+# MUTANT-MATRIX single-pid-kill decides=groupkill twins=restore
 # MUTANT-MATRIX pk-bare decides=pk-site1,pk-site2 twins=clause-count
 # MUTANT-MATRIX pk-wrong-parent decides=pk-site1,pk-site2 twins=clause-count
 # MUTANT-MATRIX sb-one-emitter decides=clause-count twins=pk-sites
@@ -225,10 +232,25 @@ w_of() { printf '%s\n' "$WORK/w/$1"; }
 log_sub() { ENV_OLD="$2" ENV_NEW="$3" awk 'index($0, ENVIRON["ENV_OLD"]) { print ENVIRON["ENV_NEW"]; next } { print }' "$1" > "$1.new" && mv "$1.new" "$1"; }
 log_del_paths() { awk -v f="$2" '!($1 == f && $3 == "paths")' "$1" > "$1.new" && mv "$1.new" "$1"; }
 
-# verdict <scorer> <world> [cwd] -> `rc|spec`. spec: MET / sorted tuples / the refusal line.
+# score_in <scorer copy> <world> <cwd> [probe]: the scoring the CLI runs, ASKED IN PROCESS. The copy is sourced in a
+# subshell (its BASH_SOURCE guard keeps the CLI body from running; its own `set -uo pipefail` stays inside the
+# subshell, as it is inside the CLI) and stage1_score is called -- the function the CLI calls after its self-probe.
+# `probe` runs stage1_entry first, the self-probe path the CLI takes. A per-cell subshell rather than one top-level
+# source: the scorer defines a seed_run of its own that would replace this file's, and every mutant is its own copy.
+score_in() {
+  ( cd "$3" || exit 2
+    TMPDIR="$2/tmp"; AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export TMPDIR AI_DLC_READSET_STAGE1_LEDGER
+    . "$1" || exit 2
+    [ "${4:-}" = probe ] && stage1_entry
+    stage1_score ) 2>&1
+}
+# score_cli <scorer> <world> <cwd>: the same question through the CLI, for the equivalence cell and one run per outcome.
+score_cli() { ( cd "$3" && TMPDIR="$2/tmp" AI_DLC_READSET_STAGE1_LEDGER="$2/ledger" bash "$1" 2>&1 ); }
+# verdict <scorer> <world> [cwd] [probe|cli] -> `rc|spec`. spec: MET / sorted tuples / the refusal line.
 verdict() {
   local s="$1" w="$2" cwd="${3:-$WORK}" out rc
-  out="$(cd "$cwd" && TMPDIR="$w/tmp" AI_DLC_READSET_STAGE1_LEDGER="$w/ledger" bash "$s" 2>&1)"; rc=$?
+  if [ "${4:-}" = cli ]; then out="$(score_cli "$s" "$w" "$cwd")"; rc=$?
+  else out="$(score_in "$s" "$w" "$cwd" "${4:-}")"; rc=$?; fi
   printf '%s\n' "$out" > "$w/raw.$(basename "$s")"
   case "$rc" in
     0) case "$out" in MET:*) printf '0|MET\n' ;; *) printf '0|?%s\n' "$out" ;; esac ;;
@@ -409,6 +431,22 @@ while IFS="$(printf '\t')" read -r name wrc wspec; do
   if matches "$got" "$wrc" "$wspec"; then ok "$name -> $got"; eval "B_w_${name//-/_}=1"; else bad "$name -> $got (want $wrc|$wspec)"; fi
 done < "$TABLE"
 
+# THE EQUIVALENCE CELL, and the one end-to-end run per distinct CLI outcome (exit 0 MET, exit 1 NOT-MET, exit 2
+# REFUSED): the CLI, run as a process, prints byte-for-byte what the in-process stage1_score printed for the same
+# world, with the same exit. The three worlds differ (control: their outputs are pairwise distinct), so an
+# in-process path that answered every world alike could not pass.
+eqv=""; eqo=""
+for name in met a1 r1; do
+  W="$(w_of "$name")"
+  ip="$(score_in "$SCORER" "$W" "$WORK")"; iprc=$?
+  cl="$(score_cli "$SCORER" "$W" "$WORK")"; clrc=$?
+  [ "$iprc|$ip" = "$clrc|$cl" ] || eqv="$eqv $name[in-process rc=$iprc, cli rc=$clrc]"
+  eqo="$eqo$clrc:$(printf '%s' "$cl" | cksum | cut -d' ' -f1) "
+done
+neq="$(printf '%s\n' $eqo | sort -u | grep -c .)" || neq=0
+if [ -z "$eqv" ] && [ "$neq" = 3 ]; then ok "equivalence: the CLI and the in-process stage1_score print byte-identical output with the same exit on met (0), a1 (1) and r1 (2), three distinct answers"
+else bad "equivalence: in-process and CLI differ:$eqv (distinct answers $neq of 3)"; fi
+
 # THE MET LINE NAMES THE SEEDED RUN DIRS -- the ledger override was delivered, not the default.
 W="$(w_of met)"
 out="$(cat "$W/raw.$(basename "$SCORER")")"
@@ -453,11 +491,12 @@ dn_same="$(diff "$SCORER" "$SCORER" | grep -c '^[<>]')" || dn_same=0
 dn_ctl="$(diff "$SCORER" "$CTL" | grep -c '^[<>]')" || dn_ctl=0
 if [ "$dn_same" = 0 ] && [ "$dn_ctl" = 2 ]; then ok "the control copy differs from the shipping scorer in exactly one line (diff: $dn_ctl changed lines; the scorer against itself: $dn_same)"; else bad "the control copy differs from the shipping scorer in $dn_ctl diff line(s) (want 2); self-diff $dn_same (want 0)"; fi
 
-# world_hit <script> <world>: 1 when the script answers the world differently from the table, else 0.
+# world_hit <script> <world> [probe]: 1 when the script answers the world differently from the table, else 0.
+# `probe` asks it the way the CLI does, self-probe first (the self-probe mutants' matrix rows need that path).
 world_hit() {
   local wrc wspec got
   wrc="$(awk -F'\t' -v n="$2" '$1 == n { print $2 }' "$TABLE")"; wspec="$(awk -F'\t' -v n="$2" '$1 == n { print $3 }' "$TABLE")"
-  got="$(verdict "$1" "$(w_of "$2")")"
+  got="$(verdict "$1" "$(w_of "$2")" "$WORK" "${3:-}")"
   if matches "$got" "$wrc" "$wspec"; then echo 0; else echo 1; fi
 }
 # mx_judge <name> <decides csv> <killed csv>: the measured killed set equals the declared deciding set.
@@ -580,10 +619,11 @@ pmut() { # pmut <flag> <name> <old> <new>: decides selfprobe alone (the self-pro
   local flag="$1" name="$2" rc sp m w
   export MUT_OLD="$3" MUT_NEW="$4"
   if mut "$SCORER" "$MD/$name.sh"; then
-    sp="$(TMPDIR="$MD" bash "$MD/$name.sh" --self-probe 2>&1)"; rc=$?
+    # IN PROCESS: the mutated copy sourced in a subshell and asked stage1_entry --self-probe, the path `--self-probe` takes.
+    sp="$( ( TMPDIR="$MD"; export TMPDIR; . "$MD/$name.sh" || exit 9; stage1_entry --self-probe ) 2>&1)"; rc=$?
     if [ "$rc" = 2 ]; then mutant_killed "$flag" "$name" "the scorer's --self-probe refuses $name (rc 2)"; else bad "the scorer's --self-probe passed $name (rc $rc: $sp)"; fi
     if [ "$MATRIX" = 1 ]; then
-      m=""; while IFS= read -r w; do MCELLS=$((MCELLS + 1)); m="$m $w:$(world_hit "$MD/$name.sh" "$w")"; done < "$WORLDS"
+      m=""; while IFS= read -r w; do MCELLS=$((MCELLS + 1)); m="$m $w:$(world_hit "$MD/$name.sh" "$w" probe)"; done < "$WORLDS"
       echo "MATRIX $name selfprobe:$([ "$rc" = 2 ] && echo 1 || echo 0)$m"
     fi
   else
@@ -691,39 +731,58 @@ wrap_ok() {
   return "$f"
 }
 
-# THE WAITS BELOW ARE KEYED ON NO PROGRESS, NEVER ON ELAPSED TIME. Each waits for one event the
-# wrapper or its stub produces (a `ready` file, a pgid file, a process exiting), and between start
-# and that event both write files under the run's own `$R`: the wrapper's map snapshot, ledger
-# line, pgid and deriver.log, the stub's env dump, map copy and pid list. `await` polls the event;
-# it gives up only when the process that should produce it has EXITED first (a binary fact) or
-# when nothing under `$R` has changed for STALL_IDLE seconds, and the caller then refuses -- exit
-# 2, never a FAIL. The wrapper's load sampler appends `load.tsv` every 15s whatever else happens,
-# so that file (and the sampler's pid file) is not progress, or a wedged run would never refuse.
-# The 120s wall bounds these replaced turned a loaded box into a stub that "never started".
-# STALL_IDLE is a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict.
-STALL_IDLE=30
+# THE WAITS BELOW END ON AN EVENT OR ON A FACT, NEVER ON ELAPSED TIME OR A WINDOW OF POLLS (BL-868). Each
+# waits for one event the wrapper or its stub produces (a `ready` file, a pgid file, a process exiting);
+# `await` gives up only when the process that should produce it has EXITED first, or -- for a wait on a
+# process ENDING -- when every process it waits on is BLOCKED WITH NO SIGNAL PENDING (st_settled): it was
+# never signalled and nothing will end it. A signalled process is runnable, exiting or carries the signal
+# pending, so a slow death on a loaded box never reads settled. The idle-seconds window this replaced
+# refused a correct run whenever the box was slow enough. A wait that reaches neither blocks until the
+# gate's own watchdog takes the run: a hang to read, never a verdict.
+# st_blocked <pid>: 0 when alive, in state S/I/T and with no signal pending. A pid `ps` gives no state for
+# is a refusal, exit 2, never a pass or a FAIL.
+st_blocked() {
+  local st pd
+  kill -0 "$1" 2>/dev/null || return 1
+  st="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; pd="$(ps -o pending= -p "$1" 2>/dev/null | tr -d ' ')"
+  # No state (the read-set tracer's sandbox refuses the setuid /bin/ps): not known blocked, so the wait goes on
+  # until the pid is gone. Only a survivor then hangs, and the tracer's own ceiling ends that run.
+  [ -n "$st" ] || return 1
+  case "$st" in S*|I*|T*) ;; *) return 1 ;; esac
+  case "$pd" in ''|*[!0]*) return 1 ;; esac
+}
+# st_settled <pid file>: 0 when at least one recorded pid is alive and every live one is st_blocked.
+st_settled() { local p n=0; while IFS= read -r p; do case "$p" in ''|*[!0-9]*) continue ;; esac; kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done < "$1"; [ "$n" -gt 0 ]; }
+# st_group_settled <pgid>: the same over a process group's live members.
+st_group_settled() { local p n=0; for p in $(pgrep -g "$1" 2>/dev/null); do kill -0 "$p" 2>/dev/null || continue; st_blocked "$p" || return 1; n=$((n + 1)); done; [ "$n" -gt 0 ]; }
+# st_tree_settled <pid file> <leader pid>: st_settled over the file's pids PLUS every live descendant of the
+# leader. The TERMed wrapper's finish() also waits on its load sampler (stop_sampler: kill, then wait) and
+# the sampler's own sleep, and neither is a pid the stub recorded: with the stub's tree already gone the
+# wrapper alone sits blocked in that wait with nothing pending while the sampler dies, which reads settled
+# although the wrapper is about to exit. Only a settled tree, sampler included, is a wrapper nothing will end.
+st_tree_settled() {
+  local t="$1.tree" p c g
+  { cat "$1"; for p in $(pgrep -P "$2" 2>/dev/null); do echo "$p"; for c in $(pgrep -P "$p" 2>/dev/null); do echo "$c"; for g in $(pgrep -P "$c" 2>/dev/null); do echo "$g"; done; done; done; } > "$t"
+  st_settled "$t"
+}
 AWAIT_WHY=""
-# await <scope-dir> <watch-pid | -> <what> <test...>: 0 once <test> holds; 1 with AWAIT_WHY set.
+# await <scope-dir> <watch-pid | -> <what> <test...> [-- <final test...>]: 0 once <test> holds; 1 with AWAIT_WHY
+# set when the watched pid exited first, or when the optional final test holds (the awaited thing will never come).
 await() {
-  local sc="$1" wpid="$2" what="$3" mk="$WORK/await.mark" n=0 idle=0
+  local sc="$1" wpid="$2" what="$3" t=() f=()
   shift 3
-  : > "$mk"
-  while ! "$@"; do
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do t+=("$1"); shift; done
+  [ "${1:-}" = -- ] && { shift; f=("$@"); }
+  while ! "${t[@]}"; do
     if [ "$wpid" != - ] && ! kill -0 "$wpid" 2>/dev/null; then
-      "$@" && return 0
+      "${t[@]}" && return 0
       AWAIT_WHY="process $wpid exited before $what"; return 1
     fi
-    sleep 0.1; n=$((n + 1))
-    [ "$((n % 10))" -eq 0 ] || continue
-    : > "$mk.next"
-    if [ -n "$(find "$sc" -newer "$mk" ! -name load.tsv ! -name sampler.pid -print -quit 2>/dev/null)" ]; then
-      mv "$mk.next" "$mk"; idle=0
-    else
-      idle=$((idle + 1))
-      if [ "$idle" -ge "$STALL_IDLE" ]; then
-        AWAIT_WHY="neither $what nor any file under $sc (load.tsv aside) advanced for ${STALL_IDLE}s"; return 1
-      fi
+    if [ "${#f[@]}" -gt 0 ] && "${f[@]}"; then
+      "${t[@]}" && return 0
+      AWAIT_WHY="$what will never happen: every process it waits on is blocked with no signal pending"; return 1
     fi
+    sleep 0.1
   done
 }
 is_file() { [ -f "$1" ]; }
@@ -746,7 +805,12 @@ wrap_term() {
     || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready: $AWAIT_WHY"; }
   cat "$R/pids" >> "$ORPHANS"
   kill -TERM "$wp"
-  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" \
+  # The wrapper's finish() TERMs the stub's group and then WAITS on the stub, so the wrapper alone is briefly
+  # blocked with nothing pending while its child is still dying: read alone that is a false settle at any
+  # load. The settle set is the wrapper plus every pid the stub recorded, which are not all blocked until
+  # the group kill has truly not reached them.
+  { printf '%s\n' "$wp"; cat "$R/pids"; } > "$R/wp.pid"
+  await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_tree_settled "$R/wp.pid" "$wp" \
     || { kill -KILL "$wp" 2>/dev/null; broken "[$t] the TERMed wrapper did not exit: $AWAIT_WHY"; }
   wait "$wp"; rc=$?
   # THE ONE WALL BOUND, AND WHY IT CANNOT BE PROGRESS. The wrapper's finish() TERMs the stub's whole
@@ -756,8 +820,9 @@ wrap_term() {
   # (every recorded pid gone, or one alive), and the bound only says how long a pid may take to
   # die. It replaces a fixed `sleep 0.5`, which read a loaded box as a surviving tree. It must stay
   # far below the children's 300s, or a group kill that never happened would pass once they exit
-  # on their own.
-  n=0; while ! all_gone "$R/pids" && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  # on their own. NOW A FACT, NOT A BOUND: wait until every pid is gone or every survivor is blocked with
+  # no signal pending (st_settled) -- a child the kill never reached; a TERMed one is never read so.
+  while ! all_gone "$R/pids" && ! st_settled "$R/pids"; do sleep 0.1; done
   [ "$rc" = 143 ] || { echo "    [$t] the TERMed wrapper exited $rc, not 143"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map was not restored after TERM"; f=1; }
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] the stub never rewrote the map"; f=1; }
@@ -787,10 +852,6 @@ fi
 
 if wrap_term "$WRAPPER" term; then B_wr_term=1; ok "TERM: exit 143, map restored, ledger says $KILLTOK, and every pid in the stub's tree is gone"; else bad "the TERM run"; fi
 
-R="$WORK/wr/default"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo default"
-STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
-n="$(grep -c . "$R/repo/.git/ai-dlc-readset-stage1.ledger" 2>/dev/null)" || n=0
-if [ "$rc" = 0 ] && [ "$n" = 2 ]; then ok "with no override the ledger is the git common dir's (2 lines)"; else bad "default ledger: rc=$rc lines=$n"; fi
 
 # wrap_kill9 <wrapper-source> <tag>: SIGKILL, which no trap sees, against a stub that writes the
 # map LAST, as the real deriver does. Three phases, in order:
@@ -832,7 +893,7 @@ wrap_kill9() {
   # (b) end the orphan's two children: its `wait` returns, it writes the map LAST and exits.
   sed -n '1,2p' "$R/pids" | while IFS= read -r p; do kill "$p" 2>/dev/null; done
   # Its progress between here and its exit is the map write: `root/w/map.written` and the repo map.
-  await "$R" - "the orphaned group $pg's exit" group_gone "$pg" \
+  await "$R" - "the orphaned group $pg's exit" group_gone "$pg" -- st_group_settled "$pg" \
     || broken "[$t] the orphaned process group $pg did not exit after its children were ended: $AWAIT_WHY"
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] (b) the orphan never reached its final map write"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] (b) the map is clean after the orphan exited, so the dirty-tree refusal proves nothing"; f=1; }
@@ -848,18 +909,24 @@ wrap_kill9() {
 }
 if wrap_kill9 "$WRAPPER" kill9; then B_wr_kill9=1; ok "SIGKILL: exit 137, the started line alone; (a) map clean, orphan alive, next run refuses on the orphan; (b) orphan writes the map and exits, next run refuses on the dirty tree; (c) map clean and orphan gone, next run proceeds"; else bad "the SIGKILL run"; fi
 
-# The refusals: exit 2, the reason, and NOTHING recorded or created.
-refusal() { # refusal <tag> <reason> <rundir> <wrapper> -- run with the ledger override
+# The refusals: exit 2, the reason, and NOTHING recorded or created. ONE refusal runs end to end (the exit-2 CLI
+# outcome, so the wiring of the guarded entry stays tested); the rest ask stage1_preflight IN PROCESS -- the
+# function the CLI calls first -- from the repo's own copy of the wrapper, sourced in a subshell, so the
+# root it resolves is the copy's, exactly as the CLI's BASH_SOURCE walk resolves it.
+# pre_in <wrapper copy> <ledger> <rundir>: stage1_preflight in process; prints its output, returns its exit.
+pre_in() { ( AI_DLC_READSET_STAGE1_LEDGER="$2"; export AI_DLC_READSET_STAGE1_LEDGER; . "$1" || exit 9; stage1_preflight "$3" ) 2>&1; }
+refusal() { # refusal <tag> <reason> <rundir> <wrapper> [cli] -- run with the ledger override
   local L="$WORK/wr/$1.ledger" out rc
-  out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$4" "$3" 2>&1)"; rc=$?
+  if [ "${5:-}" = cli ]; then out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$4" "$3" 2>&1)"; rc=$?
+  else out="$(pre_in "$4" "$L" "$3")"; rc=$?; fi
   if [ "$rc" = 2 ] && case "$out" in *"$2"*) true ;; *) false ;; esac && [ ! -e "$L" ]; then
-    ok "refuses $1: exit 2, '$2', no ledger line"
+    ok "refuses $1: exit 2, '$2', no ledger line${5:+ (end to end)}"
   else
     bad "refusal $1: rc=$rc out=$out ledger=$([ -e "$L" ] && echo present || echo absent)"
   fi
 }
 R="$WORK/wr/dirty"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo dirty"; printf 'x\n' > "$R/repo/dirt"
-refusal dirty-tree "has uncommitted changes" "$R/run" "$R/repo/scripts/readset-stage1-run.sh"
+refusal dirty-tree "has uncommitted changes" "$R/run" "$R/repo/scripts/readset-stage1-run.sh" cli
 [ ! -e "$R/run" ] && ok "dirty-tree refusal created no RUN_DIR" || bad "dirty-tree refusal created RUN_DIR"
 R="$WORK/wr/exists"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo exists"; mkdir -p "$R/run"; printf 'mine\n' > "$R/run/keep"
 refusal existing-run-dir "already exists; RUN_DIR must be new" "$R/run" "$R/repo/scripts/readset-stage1-run.sh"
@@ -870,12 +937,120 @@ git -C "$R/repo" worktree add -q --detach "$R/wt" 2>/dev/null || broken "git wor
 refusal linked-worktree "is a LINKED worktree" "$R/run" "$R/wt/scripts/readset-stage1-run.sh"
 R="$WORK/wr/inside"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo inside"
 refusal run-dir-inside-checkout "is inside the checkout" "$R/repo/run" "$R/repo/scripts/readset-stage1-run.sh"
+# THE DEFAULT LEDGER, in process: with no override, stage1_preflight resolves the ledger to the git common dir's
+# file, and stage1_started writes its started line there (control: the override cell above wrote to its own file).
+R="$WORK/wr/default"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo default"
+out="$( ( unset AI_DLC_READSET_STAGE1_LEDGER; . "$R/repo/scripts/readset-stage1-run.sh" || exit 9
+          stage1_preflight "$R/run" && stage1_state && stage1_started && printf 'LEDGER=%s\n' "$LEDGER" ) 2>&1)"; rc=$?
+n="$(grep -c . "$R/repo/.git/ai-dlc-readset-stage1.ledger" 2>/dev/null)" || n=0
+want="$(cd "$R/repo/.git" && pwd -P)/ai-dlc-readset-stage1.ledger"
+if [ "$rc" = 0 ] && [ "$n" = 1 ] && [ "$out" = "LEDGER=$want" ]; then ok "with no override the ledger is the git common dir's (stage1_preflight resolves it; stage1_started writes its line there)"
+else bad "default ledger: rc=$rc lines=$n out=[$out] want LEDGER=$want"; fi
 
 # ------------------------------------------------------------------ wrapper mutants ----
-# wcell <script> <cell> <name>: 0 when the cell's run holds its properties under the script, else 1; the
-# why-lines land in $WORK/wr/m-<name>-<cell>.why. The cells are the three stub-deriver runs.
+# THE WRAPPER'S PROPERTIES, ASKED IN PROCESS. Each cell sources a wrapper copy (the shipping one, or a mutant) in a
+# subshell -- its BASH_SOURCE guard keeps the launch from running -- and calls the ONE section the property lives in:
+# sample (the load sampler), stage1_profile (the profile unset), stage1_started (the started line), stage1_preflight
+# (the live-orphan refusal and its ALLOW twin), and finish (the map restore, and the deriver's process-group kill).
+# The end-to-end runs above (exit 0, 1, 143, 137 and one refusal) keep the wiring between those sections tested; a
+# mutant runs only the in-process cell its property decides, plus its twin.
+# ic_<cell> <wrapper copy> <dir>: 0 when the property holds, else 1 with the why on stdout.
+ic_repo() { mkrepo "$1" "$2" >/dev/null 2>&1 || broken "mkrepo $1"; }
+ic_sample() { # sample() appends `<epoch>\t<1-min load>` to RUN_DIR/load.tsv, never under root/
+  ( RUN_DIR="$2/run"; mkdir -p "$RUN_DIR/root"; PATH="$SBIN:$PATH"; . "$1" || exit 9
+    sample; sample
+    awk -F'\t' 'NF == 2 && $1 ~ /^[0-9]+$/ && $2 == "1.11" { n++ } END { exit !(n == 2 && NR == 2) }' "$RUN_DIR/load.tsv" 2>/dev/null \
+      || { echo "load.tsv column 2 is not the stub's 1-minute load 1.11 on both samples, beside root/: $(cut -f2 "$RUN_DIR/load.tsv" 2>/dev/null | tr '\n' ' ')"; exit 1; }
+    [ ! -e "$RUN_DIR/root/load.tsv" ] || { echo "load.tsv was written under root/"; exit 1; } )
+}
+ic_profile() { # stage1_profile removes an inherited AI_DLC_READSET_SANDBOX_PROFILE from what the deriver inherits
+  ( AI_DLC_READSET_SANDBOX_PROFILE="$WORK/narrow.sb"; export AI_DLC_READSET_SANDBOX_PROFILE; . "$1" || exit 9
+    [ -n "${AI_DLC_READSET_SANDBOX_PROFILE:-}" ] || { echo "control: the profile variable was not set before the call"; exit 1; }
+    stage1_profile
+    ! env | grep -q '^AI_DLC_READSET_SANDBOX_PROFILE=' || { echo "AI_DLC_READSET_SANDBOX_PROFILE reached the deriver's environment"; exit 1; } )
+}
+ic_started() { # stage1_started writes exactly `<rd> started <epoch> <HEAD>` before any launch
+  ic_repo "$2/repo" "$1"
+  ( L="$2/ledger"; AI_DLC_READSET_STAGE1_LEDGER="$L"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
+    stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    stage1_state; stage1_started
+    awk -F'\t' -v rd="$RUN_DIR" -v sha="$HEAD_SHA" -v s="$START" \
+        'NR == 1 && NF == 4 && $1 == rd && $2 == "started" && $3 == s && $4 == sha { n++ } END { exit !(n == 1 && NR == 1) }' "$L" 2>/dev/null \
+      || { echo "the ledger does not hold exactly the started line after stage1_started"; exit 1; } )
+}
+# THE ORPHAN WORLD: a ledger whose last line is an open `started` line, its RUN_DIR/pgid naming a process group
+# this cell started under `set -m` (a sleeping leader). orphan-live: the group is alive, preflight must refuse on
+# it; orphan-dead: the same ledger with the group gone, preflight must pass (the ALLOW twin, one property apart).
+ic_orphan() { # <wrapper copy> <dir> <live|dead>
+  local pg rc out
+  ic_repo "$2/repo" "$1"
+  mkdir -p "$2/open"; printf '%s\tstarted\t%s\t%s\n' "$2/open" "$(date +%s)" deadbeef > "$2/ledger"
+  set -m; sleep 300 </dev/null >/dev/null 2>&1 & pg=$!; set +m
+  echo "$pg" >> "$ORPHANS"; printf '%s\n' "$pg" > "$2/open/pgid"
+  if [ "$3" = dead ]; then kill "$pg" 2>/dev/null; wait "$pg" 2>/dev/null; fi
+  if [ "$3" = live ] && ! kill -0 -- "-$pg" 2>/dev/null; then echo "control: the seeded orphan group $pg is not alive"; return 1; fi
+  out="$(pre_in "$2/repo/scripts/readset-stage1-run.sh" "$2/ledger" "$2/run")"; rc=$?
+  kill "$pg" 2>/dev/null; wait "$pg" 2>/dev/null
+  if [ "$3" = live ]; then
+    case "$rc|$out" in 2*"(process group $pg) is still alive"*) return 0 ;; esac
+    echo "(a) the run beside the live orphan did not refuse on it: rc=$rc $out"; return 1
+  fi
+  [ "$rc" = 0 ] || { echo "with the orphan gone the preflight did not proceed: rc=$rc $out"; return 1; }
+}
+ic_restore() { # finish() copies map.before back over a map the deriver rewrote, byte-identically
+  ic_repo "$2/repo" "$1"
+  ( AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
+    stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    stage1_state
+    printf 'stub-wrote\n' >> "$MAP"; cmp -s "$SNAP" "$MAP" && { echo "control: the map rewrite changed nothing"; exit 1; }
+    finish > /dev/null 2>&1
+    cmp -s "$2/repo.map.orig" "$MAP" || { echo "the map was not restored by finish"; exit 1; } )
+  local r=$?
+  [ "$r" = 3 ] && echo "finish exited 3: the map was not restored by finish"
+  [ "$r" = 0 ]
+}
+ic_groupkill() { # finish() TERMs the deriver's whole process group: a trap-less leader and its two children all end
+  ic_repo "$2/repo" "$1"
+  : > "$2/pids"
+  ( AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
+    stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    stage1_state
+    # The leader is a fresh trap-less bash with two background children, as the stub deriver is; `set -m` around
+    # its launch gives it its own process group, exactly as stage1_launch does.
+    set -m
+    PF="$2/pids" bash -c 'sleep 300 </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; sleep 300 </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; wait' </dev/null >/dev/null 2>&1 &
+    DPID=$!
+    set +m
+    echo "$DPID" >> "$2/pids"
+    while [ "$(grep -c . "$2/pids")" -lt 3 ] && kill -0 "$DPID" 2>/dev/null; do sleep 0.01; done
+    [ "$(grep -c . "$2/pids")" = 3 ] || { echo "control: the seeded deriver group recorded $(grep -c . "$2/pids") pids, not 3"; exit 1; }
+    finish > /dev/null 2>&1 )
+  local r=$? p alive="" n=0
+  cat "$2/pids" >> "$ORPHANS"
+  [ "$r" = 0 ] || { echo "finish failed in the group-kill world (rc $r)"; return 1; }
+  # As wrap_term's: gone, or every survivor blocked with no signal pending -- one the kill never reached.
+  while ! all_gone "$2/pids" && ! st_settled "$2/pids"; do sleep 0.1; done
+  while IFS= read -r p; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done < "$2/pids"
+  [ -z "$alive" ] || { echo "the deriver's process tree survived the TERM:$alive"; return 1; }
+}
+IC_CELLS="sample profile started orphan-live orphan-dead restore groupkill"
+# wcell <script> <cell> <name>: 0 when the in-process cell holds under the script, else 1; the why-lines land in
+# $WORK/wr/m-<name>-<cell>.why.
 WCN=0
-wcell() { WCN=$((WCN + 1)); "wrap_$2" "$1" "m-$3-$2-$WCN" > "$WORK/wr/m-$3-$2.why" 2>&1; }
+wcell() {
+  local d
+  WCN=$((WCN + 1)); d="$WORK/wr/ic-$3-$2-$WCN"; mkdir -p "$d"
+  case "$2" in
+    orphan-live) ic_orphan "$1" "$d" live ;;
+    orphan-dead) ic_orphan "$1" "$d" dead ;;
+    *) "ic_$2" "$1" "$d" ;;
+  esac > "$WORK/wr/m-$3-$2.why" 2>&1
+}
+echo " the wrapper's sections, in process (the shipping wrapper):"
+for c in $IC_CELLS; do
+  if wcell "$WRAPPER" "$c" shipping; then ok "in process: $c holds under the shipping wrapper"; eval "B_ic_${c//-/_}=1"
+  else bad "in process: $c fails under the shipping wrapper: $(head -1 "$WORK/wr/m-shipping-$c.why")"; fi
+done
 # wmut <flag> <name> <decides csv> <twin cell | -> <old> <new> [<expected killed csv>]: KILLED iff a deciding
 # cell's properties fail under the mutant; the twin cell is GREEN under it. Matrix mode runs the remaining
 # cells and prints every one; <expected> overrides the deciding set for a row dead in every cell.
@@ -889,37 +1064,37 @@ wmut() {
   done
   if [ "$twin" != - ]; then wcell "$dst" "$twin" "$name" && ok "wrapper mutant $name leaves its twin $twin green" || bad "wrapper mutant $name is not confined: its twin $twin fails under it"; fi
   if [ "$MATRIX" = 1 ]; then
-    for c in ok term kill9; do
+    for c in $IC_CELLS; do
       MCELLS=$((MCELLS + 1))
       if wcell "$dst" "$c" "$name"; then cells="$cells $c:0"; else cells="$cells $c:1"; ks="$ks,$c"; fi
       reap
     done
     echo "MATRIX $name$cells"
-    mx_judge "$name" "${7:-${ks#,}}" "${ks#,}"
+    mx_judge "$name" "${7:-$decides}" "${ks#,}"
   fi
 }
 echo " wrapper mutants:"
 S1="sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/load.tsv\"; }"
-wmut "${B_wr_ok:-0}" load-under-root ok term "$S1" \
+wmut "${B_ic_sample:-0}" load-under-root sample profile "$S1" \
   "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/root/load.tsv\"; }"
-wmut "${B_wr_ok:-0}" load-5min ok term "$S1" \
+wmut "${B_ic_sample:-0}" load-5min sample profile "$S1" \
   "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$3 }')\" >> \"\$RUN_DIR/load.tsv\"; }"
-wmut "${B_wr_ok:-0}" profile-passed-through ok term 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment'
-wmut "${B_wr_kill9:-0}" no-started-line kill9 - "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \' ok,term,kill9
+wmut "${B_ic_profile:-0}" profile-passed-through profile sample 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment'
+wmut "${B_ic_started:-0}" no-started-line started sample "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \'
 reap
 # No orphan check: the run beside a live SIGKILLed deriver proceeds, which (a) refuses. The mutated line is
 # read from the wrapper itself, whole, so the fixture restates none of the wrapper's refusal vocabulary.
 OPEN_LINE="$(awk 'index($0, "if [ -n \"$OPEN_PG\" ] && kill -0 --") == 1 { print; exit }' "$WRAPPER")"
 [ -n "$OPEN_LINE" ] || broken "no orphan-check line in $WRAPPER"
-wmut "${B_wr_kill9:-0}" no-orphan-check kill9 ok "$OPEN_LINE" ': orphan check removed'
-if grep -q '(a) the run beside the live orphan did not refuse' "$WORK/wr/m-no-orphan-check-kill9.why" 2>/dev/null; then mutant_killed "${B_wr_kill9:-0}" no-orphan-check "the no-orphan-check mutant died on arm (a), the live-orphan refusal"; else bad "the no-orphan-check mutant did not die on arm (a)"; fi
+wmut "$(( ${B_ic_orphan_live:-0} && ${B_ic_orphan_dead:-0} ))" no-orphan-check orphan-live orphan-dead "$OPEN_LINE" ': orphan check removed'
+if grep -q '(a) the run beside the live orphan did not refuse' "$WORK/wr/m-no-orphan-check-orphan-live.why" 2>/dev/null; then mutant_killed "${B_ic_orphan_live:-0}" no-orphan-check "the no-orphan-check mutant died on arm (a), the live-orphan refusal"; else bad "the no-orphan-check mutant did not die on arm (a)"; fi
 reap
 RESTORE='  cp -p "$SNAP" "$MAP" 2>/dev/null'
-wmut "$(( ${B_wr_ok:-0} && ${B_wr_term:-0} ))" no-restore ok,term - "$RESTORE" '  :' ok,term,kill9
-wmut "${B_wr_term:-0}" single-pid-kill term ok \
+wmut "${B_ic_restore:-0}" no-restore restore groupkill "$RESTORE" '  :'
+wmut "${B_ic_groupkill:-0}" single-pid-kill groupkill restore \
   '  if [ -n "$DPID" ]; then kill -TERM -- "-$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi' \
   '  if [ -n "$DPID" ]; then kill "$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi'
-if grep -q 'process tree survived' "$WORK/wr/m-single-pid-kill-term.why" 2>/dev/null; then mutant_killed "${B_wr_term:-0}" single-pid-kill "the single-pid-kill mutant died on the process-tree arm (orphans: $(grep 'process tree' "$WORK/wr/m-single-pid-kill-term.why" | sed 's/.*TERM://'))"; else bad "the single-pid-kill mutant did not die on the process-tree arm"; fi
+if grep -q 'process tree survived' "$WORK/wr/m-single-pid-kill-groupkill.why" 2>/dev/null; then mutant_killed "${B_ic_groupkill:-0}" single-pid-kill "the single-pid-kill mutant died on the process-tree arm (orphans: $(grep 'process tree' "$WORK/wr/m-single-pid-kill-groupkill.why" | sed 's/.*TERM://'))"; else bad "the single-pid-kill mutant did not die on the process-tree arm"; fi
 reap
 
 # ------------------------------------------------------------------ the deriver's tracer reaping (BL-466) ----
@@ -948,11 +1123,15 @@ pk_probe() {
   cat > "$d/deriver.sh" <<'PK_EOF'
 "$PKN" 60 2>/dev/null </dev/null | grep --line-buffered -F x > /dev/null &
 fs_pid=$!
-n=0; until child="$(pgrep -P $$ -x "$PKN")"; do n=$((n + 1)); [ "$n" -gt 3000 ] && break; sleep 0.01; done
+until child="$(pgrep -P $$ -x "$PKN")"; do kill -0 "$fs_pid" 2>/dev/null || break; sleep 0.01; done
 [ -n "$child" ] || { echo "child=none"; exit 0; }
 echo "$child" >> "$ORPHANS"
 eval "$(cat "$PKD/line")"
-n=0; while kill -0 "$child" 2>/dev/null && [ "$n" -lt 100 ]; do n=$((n + 1)); sleep 0.01; done
+while kill -0 "$child" 2>/dev/null; do
+  st="$(ps -o stat= -p "$child" 2>/dev/null | tr -d ' ')"; pd="$(ps -o pending= -p "$child" 2>/dev/null | tr -d ' ')"
+  case "$st:$pd" in [SIT]*:0) break ;; esac
+  sleep 0.01
+done
 if kill -0 "$child" 2>/dev/null; then printf 'child=alive '; else printf 'child=dead '; fi
 kill "$child" "$fs_pid" 2>/dev/null
 PK_EOF
@@ -1024,15 +1203,17 @@ orphans_gone() {
     while IFS= read -r p; do
       case "$p" in ''|*[!0-9]*) continue ;; esac
       kill -0 "$p" 2>/dev/null || continue
-      # `ps` is NOT in tools.decl: /bin/ps is setuid and a sandbox refuses it. Refused, st is empty, a
+      # `ps` is in tools.decl, but /bin/ps is setuid and the read-set tracer's sandbox refuses it. Refused, st is empty, a
       # zombie reads live, and the arm can only REFUSE (exit 2) on it -- never pass a survivor, never FAIL.
       st="$(ps -o stat= -p "$p" 2>/dev/null)"
       case "$st" in *Z*) continue ;; esac
       live="$live $p"
     done < "$pf"
     [ -z "$live" ] && return 0
-    if [ "$live" = "$last" ]; then still=$((still + 1)); else still=0; last="$live"; fi
-    if [ "$still" -ge "$lim" ]; then ORPHANS_WHY="recorded pid(s)$live alive and the alive set unchanged for $lim polls"; return 2; fi
+    # FINAL ON A FACT (BL-868): every live recorded pid blocked with no signal pending will never die; a
+    # just-killed one is runnable, exiting or carries the signal, at any load. <lim> is unused, kept for callers.
+    for p in $live; do echo "$p"; done > "$WORK/og.live"
+    if st_settled "$WORK/og.live"; then ORPHANS_WHY="recorded pid(s)$live alive, each blocked with no signal pending"; return 2; fi
     sleep 0.01
   done
 }
@@ -1048,8 +1229,8 @@ if [ "$ogr1" = 2 ] && [ "$ogr2" = 0 ]; then B_og=1; ok "orphans_gone refuses on 
 # MUTANT: the decision on a stall replaced by a pass, built as a copy of the function and scored by the same probe.
 OGM="$MD/og-pass.sh"
 awk '/^orphans_gone\(\) \{$/,/^}$/' "$HERE/run.sh" > "$OGM.src" 2>/dev/null
-export MUT_OLD='    if [ "$still" -ge "$lim" ]; then ORPHANS_WHY="recorded pid(s)$live alive and the alive set unchanged for $lim polls"; return 2; fi' \
-  MUT_NEW='    if [ "$still" -ge "$lim" ]; then return 0; fi'
+export MUT_OLD='    if st_settled "$WORK/og.live"; then ORPHANS_WHY="recorded pid(s)$live alive, each blocked with no signal pending"; return 2; fi' \
+  MUT_NEW='    if st_settled "$WORK/og.live"; then return 0; fi'
 mut "$OGM.src" "$OGM" \
   || broken "orphans_gone mutant og-pass DID NOT APPLY"
 sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
@@ -1064,7 +1245,7 @@ NREC="$(grep -c '^[0-9][0-9]*$' "$ORPHANS")" || NREC=0
 if [ "$NREC" -lt 1 ]; then
   bad "the pid file records no stub or sampler pid, so the orphan check reads nothing"
 else
-  orphans_gone "$ORPHANS" "$((STALL_IDLE * 100))" || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
+  orphans_gone "$ORPHANS" 0 || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
   ok "no stub or sampler pid is alive: 0 of $NREC recorded in the pid file"
 fi
 

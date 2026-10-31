@@ -1,9 +1,9 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 reduction over the unit's count log), once, then verified by a second counted run.
 # 1869 and 141 include the 10 gate starts under `ulimit -f 0` (s_killed at run.sh:2506, the race at :2799), which the counter
 # recorded only once it learned to count a start whose log append the file-size limit refuses: 2 of them are the real gate.
-1869 *
-302 core/hooks/ai-dlc-recover.sh
-141 core/hooks/ai-dlc-recover-gate.sh
-9 core/hooks/ai-dlc-postcompact.sh
-11 core/scripts/validate-reattach-budget.sh
+83 *
+3 core/hooks/ai-dlc-recover.sh
+2 core/hooks/ai-dlc-recover-gate.sh
+3 core/hooks/ai-dlc-postcompact.sh
+3 core/scripts/validate-reattach-budget.sh
 1 core/scripts/verdict.sh

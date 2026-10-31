@@ -17,15 +17,28 @@
 # 0 = every cell answered as above. 1 = a cell did not (one `FAIL <cell>` line each). 9 = the receipt could not run.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
-[ "$#" -eq 1 ] && [ -f "$1" ] \
-  || { echo "REFUSED: usage: bash receipt-bl809.sh <path to validate-handoff-evidence.sh>" >&2; exit 9; }
-HE="$1"
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] && [ -f "$1" ] \
+  || { echo "REFUSED: usage: bash receipt-bl809.sh <path to validate-handoff-evidence.sh> [<cells>]" >&2; exit 9; }
+HE="$1"; CELLS="${2:-}"
+# With <cells> only story-1's run (every cell but rc, and the ctl cell) and, for rc, story-2's run: a mutant run
+# names the one cell that decides it. Without it every cell runs.
+want() { [ -z "$CELLS" ] || case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
-R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl809.XXXXXX")" || exit 9
-trap 'rm -rf "$R"' EXIT
+# With RCPT_WORLD set (run.sh's rcpt_run), the world is seeded ONCE into that directory and every later call
+# reads it (no call writes into it: the validator reads its repository and writes only under its own mktemp).
+if [ -n "${RCPT_WORLD:-}" ]; then
+  R="$RCPT_WORLD"; mkdir -p "$R" || exit 9
+else
+  R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl809.XXXXXX")" || exit 9
+  trap 'rm -rf "$R"' EXIT
+fi
 W="$R/w"
 g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$W" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+if [ -f "$R/.seeded" ]; then
+  B="$(cat "$R/.B")"; T="$(cat "$R/.T")"
+else
 mkdir -p "$W/stories" "$W/test-results" || exit 9
 g init -q || exit 9
 LABELS='Full-collection run: `pytest -q` from the root, 1 passed.
@@ -49,7 +62,9 @@ printf 'no command line here\n1 passed\n' > "$W/test-results/bm-ctl.txt"
 printf -- '---\nstatus: review\n---\n# Story 2\n\n%s\n\nLint: `test-results/bm-ph.txt`.\n' "$LABELS" > "$W/stories/story-2.md"
 g add -A && g commit -qm frozen || exit 9
 T="$(g rev-parse HEAD)"
-o="$(bash "$HE" -C "$W" stories/story-1.md "$B" "$T" 2>/dev/null)"
+printf '%s\n' "$B" > "$R/.B" && printf '%s\n' "$T" > "$R/.T" && : > "$R/.seeded" || exit 9
+fi
+o="$(he_run "$HE" -C "$W" stories/story-1.md "$B" "$T" 2>/dev/null)"
 [ -n "$o" ] || { echo "REFUSED: the validator printed nothing for story-1" >&2; exit 9; }
 fails=0
 cell() { # <name> <want>
@@ -69,8 +84,10 @@ cell ctl  no-command
 { grep -q '^REFUSED k-unquoted test-results/bm-kunq.txt: ' <<<"$o" \
   && grep -q '^WARN placeholder test-results/bm-ph.txt: line 1 carries <tree>' <<<"$o"; } \
   || { echo "FAIL lvl: want k-unquoted REFUSED and placeholder WARN naming <tree>"; fails=$((fails + 1)); }
-o2="$(bash "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc=$?
+if want rc; then
+o2="$(he_run "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc=$?
 { [ "$rc" -eq 0 ] && grep -q '^WARN placeholder test-results/bm-ph.txt: ' <<<"$o2"; } \
   || { echo "FAIL rc: want exit 0 with the placeholder WARN, got exit $rc"; fails=$((fails + 1)); }
+fi
 [ "$fails" -eq 0 ] || exit 1
 exit 0

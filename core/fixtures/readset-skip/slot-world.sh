@@ -129,10 +129,10 @@ down() {
     if [ "$rp" != "$PPID" ]; then
       n0="$(grep -c -e '-stream-up$' "$SW_ORDER")" || n0=0
       i=0
-      while [ "$i" -lt 300 ]; do
+      while kill -0 "$PPID" 2>/dev/null; do
         n="$(grep -c -e '-stream-up$' "$SW_ORDER")" || n=0
         [ "$n" -gt "$n0" ] && break
-        /bin/sleep 0.1; i=$((i + 1))
+        /bin/sleep 0.1
       done
     fi
   fi
@@ -195,12 +195,11 @@ if [ -n "${SW_B_MODE:-}" ]; then
   ( cd "$SW_R" && exec env READSET_SLOT_HOLDER="$m" STUB_FEED="$SW_FEEDB" AI_DLC_READSET_TRACE_ROOT="$SW_TRB" \
       bash core/scripts/derive-fixture-readsets.sh --list fb --tracer sandbox --in-pool "$SW_IPB" ) > "$SW_BOUT" 2>&1 </dev/null &
   echo "$!" > "$SW_BPID"
-  i=0
-  while [ "$i" -lt 3000 ]; do
+  while :; do
     grep -q 'slot: waiting' "$SW_BOUT" 2>/dev/null && { echo b-waited >> "$O"; break; }
     grep -qx b-stream-down "$O" && break
     bp="$(cat "$SW_BPID" 2>/dev/null)"; [ -n "$bp" ] && ! kill -0 "$bp" 2>/dev/null && break
-    /bin/sleep 0.1; i=$((i + 1))
+    /bin/sleep 0.1
   done
 fi
 echo a-out >> "$O"
@@ -215,18 +214,16 @@ kill -0 "$DEAD" 2>/dev/null && { echo "slot-world: the dead-pid control $DEAD is
 
 # wait_for <pid> <file> <ERE> -- poll until <file> matches or <pid> exits; bounded, never measured.
 wait_for() {
-  local i=0
-  while [ "$i" -lt 3000 ]; do
+  while :; do
     grep -Eq "$3" "$2" 2>/dev/null && return 0
     kill -0 "$1" 2>/dev/null || { grep -Eq "$3" "$2" 2>/dev/null; return; }
-    /bin/sleep 0.1; i=$((i + 1))
+    /bin/sleep 0.1
   done
-  return 1
 }
-# reap <pid> -- wait a bounded while for a deriver to finish on its own, then kill it by its recorded pid.
+# reap <pid> -- wait for a deriver to finish on its own (no count of polls: a deriver still working is not a leak
+# at any load), then kill it by its recorded pid in case it left a member behind.
 reap() {
-  local i=0
-  while kill -0 "$1" 2>/dev/null && [ "$i" -lt 600 ]; do /bin/sleep 0.1; i=$((i + 1)); done
+  while kill -0 "$1" 2>/dev/null; do /bin/sleep 0.1; done
   kill -0 "$1" 2>/dev/null && kill_tree "$1"
   wait "$1" 2>/dev/null
   return 0
@@ -275,18 +272,18 @@ cp "$R/core/scripts/derive-fixture-readsets.sh" "$W/deriver.in.sh" || exit 9
 # line naming the slot and exactly this reason, never wait, and run its window unslotted. Bounded by the
 # deriver exiting, by the line, or by 20 `broke` lines (a regressed loop that breaks forever), never a clock.
 failopen() {
-  local s="$1" sl="$2" why="$3" d="$W/$1" i=0 n
+  local s="$1" sl="$2" why="$3" d="$W/$1" n
   run_a "$s" "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
-  while [ "$i" -lt 3000 ] && kill -0 "$APID" 2>/dev/null; do
+  while kill -0 "$APID" 2>/dev/null; do
     grep -Eq 'slot: (UNSLOTTED|waiting)' "$d/aout" 2>/dev/null && break
     n="$(grep -c 'slot: broke' "$d/aout")" || n=0
     [ "$n" -ge 20 ] && break
-    /bin/sleep 0.1; i=$((i + 1))
+    /bin/sleep 0.1
   done
   # A rebreak waiter (a mutant that never breaks) is killed only once its first wait sleep has BLOCKED, so the
   # number of sleeps it took is one whatever the load. Bounded; the bound reads as the waiter's own exit.
   if [ "$s" = rebreak ] && grep -q 'slot: waiting' "$d/aout"; then
-    i=0; while [ ! -e "$d/aout.blocked" ] && [ "$i" -lt 3000 ] && kill -0 "$APID" 2>/dev/null; do /bin/sleep 0.1; i=$((i + 1)); done
+    while [ ! -e "$d/aout.blocked" ] && kill -0 "$APID" 2>/dev/null; do /bin/sleep 0.1; done
   fi
   grep -q 'slot: UNSLOTTED' "$d/aout" || kill_tree "$APID"
   reap "$APID"
@@ -353,10 +350,10 @@ for s in $SCEN; do
       run_a beat "$d" "$W/deriver.beat.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
       # The beat sleep blocks at its third call (SW_SLEEP_CAP=3), so A makes exactly three wait polls.
       if wait_for "$APID" "$d/aout" 'slot: waiting'; then
-        i=0; while [ "$i" -lt 3000 ] && kill -0 "$APID" 2>/dev/null; do
+        while kill -0 "$APID" 2>/dev/null; do
           n="$(grep -c . "$d/sleeps")" || n=0
           [ "$n" -ge 3 ] && break
-          /bin/sleep 0.1; i=$((i + 1))
+          /bin/sleep 0.1
         done
       fi
       kill_tree "$APID"; reap "$APID"
@@ -384,14 +381,28 @@ for s in $SCEN; do
     *) echo "slot-world: unknown scenario '$s'" >&2; exit 9 ;;
   esac
 done
-# REAPED: no member of any group this world recorded is alive. A kill is asynchronous, so a member gets a
-# bounded number of polls to go; a member still there after them leaked. At least one group must have been
-# recorded, or this line reads clean over a world that started nothing.
+# REAPED: no member of any group this world recorded is alive. A kill is asynchronous, so the read waits
+# until the group is EMPTY or every live member is BLOCKED WITH NO SIGNAL PENDING -- one the kill never
+# reached, which will never go. A killed member is runnable, exiting or carries the signal pending, so it is
+# never read as a leak at any load (BL-868; a fixed count of polls was the verdict here). At least one group
+# must have been recorded, or this line reads clean over a world that started nothing.
+sw_settled() { # <pgid>: 0 when it has a live member and every live member is blocked with nothing pending
+  local p st pd n=0
+  for p in $(pgrep -g "$1" 2>/dev/null); do
+    kill -0 "$p" 2>/dev/null || continue
+    st="$(ps -o stat= -p "$p" 2>/dev/null | tr -d ' ')"; pd="$(ps -o pending= -p "$p" 2>/dev/null | tr -d ' ')"
+    [ -n "$st" ] || return 0
+    case "$st" in S*|I*|T*) ;; *) return 1 ;; esac
+    case "$pd" in ''|*[!0]*) return 1 ;; esac
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ]
+}
 ng=0; live=""
 if [ -f "$W/pgids" ]; then
   while IFS= read -r g; do
-    ng=$((ng + 1)); i=0
-    while [ "$i" -lt 50 ] && pgrep -g "$g" >/dev/null 2>&1; do /bin/sleep 0.1; i=$((i + 1)); done
+    ng=$((ng + 1))
+    while pgrep -g "$g" >/dev/null 2>&1 && ! sw_settled "$g"; do /bin/sleep 0.1; done
     m="$(pgrep -g "$g" 2>/dev/null | tr '\n' ',')"
     [ -z "$m" ] || live="$live group $g: ${m%,};"
   done < "$W/pgids"

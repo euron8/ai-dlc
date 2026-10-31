@@ -670,6 +670,14 @@ seal_of() {
 #      A FAIL line that names no line of the copy refuses, and any exit but 0 or 1 refuses as no verdict.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
+# mk_sibling_ <file> <entry function>: 0 when <file> defines the entry function at a line start, so it holds
+# its program behind a BASH_SOURCE guard and can be sourced and asked in process (read with builtins, no
+# process). A sibling that does not (a stand-in script) is run as a process, as it always was.
+mk_sibling_() { local _t; IFS= read -r -d '' _t < "$1" || true; [[ "$_t" == *$'\n'"$2() {"* ]]; }
+# wfd_mark_main holds the --mark / --mark-repair dispatch below, unchanged. It is a function so a
+# fixture can source this file (the guard after it) and run the writer in a subshell; run as a
+# program it is called at once, from the same place, with the script's own arguments.
+wfd_mark_main() {
 case "${1:-}" in
   --mark|--mark-repair)
     MK_MODE="$1"; shift
@@ -738,11 +746,19 @@ case "${1:-}" in
       [ -f "$MK_SEAL" ] || mark_refuse "a review shard is sealed by content-seal.sh, which is not beside this script ($MK_SEAL); reinstall ai-dlc."
       MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
       cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
-      MK_OUT="$(bash "$MK_MERGE" "$MK_PDIR" --gate "$MK_GATE" --check-shard "$MK_FILE" --findings "${MK_N#findings=}" 2>&1)" \
+      if mk_sibling_ "$MK_MERGE" mrs_main; then
+        MK_OUT="$( ( . "$MK_MERGE" && mrs_main "$MK_PDIR" --gate "$MK_GATE" --check-shard "$MK_FILE" --findings "${MK_N#findings=}" ) 2>&1 )"
+      else
+        MK_OUT="$(bash "$MK_MERGE" "$MK_PDIR" --gate "$MK_GATE" --check-shard "$MK_FILE" --findings "${MK_N#findings=}" 2>&1)"
+      fi \
         || { rm -f "$MK_SRC"; mark_refuse "merge-review-shards.sh --check-shard refused the shard; fix every line below, then mark again:
 $MK_OUT
 "; }
-      MK_OUT="$(bash "$MK_SEAL" --review-shard "$MK_FILE" 2>&1)"; MK_SRC_RC=$?
+      if mk_sibling_ "$MK_SEAL" seal_main; then
+        MK_OUT="$( ( . "$MK_SEAL" && seal_main --review-shard "$MK_FILE" ) 2>&1 )"; MK_SRC_RC=$?
+      else
+        MK_OUT="$(bash "$MK_SEAL" --review-shard "$MK_FILE" 2>&1)"; MK_SRC_RC=$?
+      fi
       # Exit 4 is the ENVIRONMENT (SEAL-UNAVAILABLE: jq, git placement, the ledger): relayed as is,
       # since re-dispatching the reviewer cannot repair it.
       [ "$MK_SRC_RC" -ne 4 ] \
@@ -782,7 +798,11 @@ $MK_OUT
     elif [ -n "$MK_STATE" ] && [ -f "$MK_SEAL" ]; then
       MK_SRC="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || mark_refuse "cannot take a snapshot of $MK_FILE."
       cp "$MK_FILE" "$MK_SRC" || { rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
-      MK_ROW="$(bash "$MK_SEAL" --row "$MK_STATE" "$MK_FILE" 2>&1)" \
+      if mk_sibling_ "$MK_SEAL" seal_main; then
+        MK_ROW="$( ( . "$MK_SEAL" && seal_main --row "$MK_STATE" "$MK_FILE" ) 2>&1 )"
+      else
+        MK_ROW="$(bash "$MK_SEAL" --row "$MK_STATE" "$MK_FILE" 2>&1)"
+      fi \
         || { rm -f "$MK_SRC"; mark_refuse "its content-seal row could not be read: $(printf '%s\n' "$MK_ROW" | head -1)"; }
       if [ "$MK_ROW" != null ]; then
         MK_ROWED=1
@@ -828,10 +848,34 @@ $MK_OUT
       if [ -n "${MK_NRL# }" ] || [ -n "$MK_RPL" ]; then
         MK_VO="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" && MK_VE="$(mktemp "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" \
           || { mk_rdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+        # IN PROCESS ONLY WHEN THE CALLER LOADED THIS VERY VALIDATOR. A caller that sourced
+        # validate-artifact-derivations.sh and ran its vad_load (a fixture driving --mark in process)
+        # gets the same run as `bash "$MK_VAL"` from `( vad_invoke ... )`, its documented in-process
+        # equal. Taken only when VAD_LOADED and the files vad_invoke, vad_load and vad_run were
+        # DEFINED from (extdebug) are all $MK_VAL itself, so a function imported from the environment,
+        # which names no file, never stands in for the validator. Otherwise the lines below run as
+        # they always have.
+        mk_vin_=0
+        if [ -n "${VAD_LOADED:-}" ] && [ "$VAD_LOADED" -ef "$MK_VAL" ] && declare -F vad_invoke > /dev/null 2>&1; then
+          mk_vin_=1
+          mk_vdf_="$(shopt -s extdebug; declare -F vad_invoke vad_load vad_run 2>/dev/null)" || mk_vdf_='x 0 '
+          while IFS= read -r mk_vdl_; do
+            mk_vdl_="${mk_vdl_#* }"; mk_vdl_="${mk_vdl_#* }"
+            [ -n "$mk_vdl_" ] && [ "$mk_vdl_" != "(null)" ] && [ "$mk_vdl_" -ef "$MK_VAL" ] || mk_vin_=0
+          done <<< "$mk_vdf_"
+        fi
+        if [ "$mk_vin_" = 1 ]; then
+          if [ -n "$MK_STATE" ]; then
+            ( AI_DLC_PROJECT_ROOT="$(dirname "$MK_STATE")" AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" vad_invoke "$MK_SRC" ) > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+          else
+            ( AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" vad_invoke "$MK_SRC" ) > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+          fi
+        else
         if [ -n "$MK_STATE" ]; then
           AI_DLC_PROJECT_ROOT="$(dirname "$MK_STATE")" AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
         else
           AI_DLC_DERIV_SUPERSEDE_FROM="$MK_FILE" bash "$MK_VAL" "$MK_SRC" > "$MK_VO" 2> "$MK_VE"; mk_vrc_=$?
+        fi
         fi
         mk_vn_="$(sed -n 's/^OK: \([0-9][0-9]*\) derivation(s) .*/\1/p' "$MK_VO" | tail -1)"
         # BL-816: a block claiming `replayed <n>` is refused only on a FAIL whose `<copy>:<line>` lies in
@@ -903,7 +947,9 @@ $MK_OUT
     echo "MARKED $MK_FILE -- $MK_LINE"
     exit 0 ;;
 esac
+}
 
+wfd_beat_main() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1; shift ;;
@@ -1137,11 +1183,15 @@ wfd_start_of() {  # $1 = pid -> its start time, whitespace-normalised; empty whe
 }
 fi
 
+# THE LEASE'S HOLDER IS THIS BEAT'S PID. Run as a program that is $$. A fixture that sources this
+# file and runs wfd_beat_main in a background subshell sets WFD_SELF_PID to that subshell's pid,
+# which $$ (the sourcing shell's pid) cannot report; unset, it is exactly $$.
+WD_SELF_PID="${WFD_SELF_PID:-$$}"
 LEASE_HOME="${WD_ROOT}/_bmad-output"
 LEASE_DIR="${LEASE_HOME}/.wait-beats"
 [ "$STATUS" -eq 1 ] || mkdir -p "$LEASE_DIR" 2>/dev/null || true
 BEAT_MARKER="${LEASE_HOME}/.beat-inflight"
-LEASE_SELF="${LEASE_DIR}/.lease-$$"
+LEASE_SELF="${LEASE_DIR}/.lease-$WD_SELF_PID"
 lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
   ld_r_="$(cat "${LEASE_DIR}/.lease-$1" 2>/dev/null || echo '')"
   case "$ld_r_" in ''|*[!0-9]*) return 0 ;; esac
@@ -1149,7 +1199,7 @@ lease_holder_dead() {  # $1 = holder pid -> 0 when no live beat stands behind it
   kill -0 "$1" 2>/dev/null && return 1
   return 0
 }
-LEASE_TMP="${LEASE_DIR}/.beat-inflight.$$"   # inside the ignored .wait-beats/, same filesystem
+LEASE_TMP="${LEASE_DIR}/.beat-inflight.$WD_SELF_PID"   # inside the ignored .wait-beats/, same filesystem
 lease_put() {  # $1 = epoch, $2 = pid -- whole-file replace, never a partial line for the hook to read
   { printf '%s %s' "$1" "$2" > "$LEASE_TMP" 2>/dev/null && mv -f "$LEASE_TMP" "$BEAT_MARKER" 2>/dev/null; } \
     || echo "WARN: wait-for-deliverable: could not write the lease $BEAT_MARKER; the stop hook will not see this beat" >&2
@@ -1160,22 +1210,22 @@ beat_alive() {
   ba_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
   ba_ep_="${ba_cur_%% *}"
   case "$ba_cur_" in *' '*) ba_pid_="${ba_cur_#* }" ;; *) ba_pid_="" ;; esac
-  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$$"; return 0 ;; esac
-  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$$"; return 0; fi
+  case "$ba_ep_" in ''|*[!0-9]*) lease_put "$ba_e_" "$WD_SELF_PID"; return 0 ;; esac
+  case "$ba_pid_" in *[!0-9]*) lease_put "$ba_e_" "$WD_SELF_PID"; return 0 ;; esac
+  if [ "$ba_ep_" -le "$(date +%s)" ]; then lease_put "$ba_e_" "$WD_SELF_PID"; return 0; fi
   [ -n "$ba_pid_" ] || return 0                     # a live pre-upgrade lease: not ours to take
-  if [ "$ba_pid_" = "$$" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$$"; fi
+  if [ "$ba_pid_" = "$WD_SELF_PID" ] || lease_holder_dead "$ba_pid_"; then lease_put "$ba_e_" "$WD_SELF_PID"; fi
   return 0
 }
 lease_release() {
   lr_cur_="$(cat "$BEAT_MARKER" 2>/dev/null || echo '')"
   case "$lr_cur_" in *' '*) lr_pid_="${lr_cur_#* }" ;; *) lr_pid_="" ;; esac
-  if [ "$lr_pid_" = "$$" ]; then
+  if [ "$lr_pid_" = "$WD_SELF_PID" ]; then
     lr_now_="$(date +%s)"; lr_heir_=""
     for lr_f_ in "$LEASE_DIR"/.lease-*; do
       [ -f "$lr_f_" ] || continue
       lr_p_="${lr_f_##*/.lease-}"
-      [ "$lr_p_" = "$$" ] && continue
+      [ "$lr_p_" = "$WD_SELF_PID" ] && continue
       lr_e_="$(cat "$lr_f_" 2>/dev/null || echo '')"
       case "$lr_p_$lr_e_" in *[!0-9]*|'') rm -f "$lr_f_" 2>/dev/null; continue ;; esac
       if [ "$lr_e_" -gt "$lr_now_" ] && kill -0 "$lr_p_" 2>/dev/null; then lr_heir_="$lr_e_ $lr_p_"; break; fi
@@ -2489,3 +2539,7 @@ else
 fi
 
 exit "$RC"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+wfd_mark_main "$@"
+wfd_beat_main "$@"

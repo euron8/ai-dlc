@@ -27,3 +27,4 @@ touch
 tr
 uniq
 wc
+cksum

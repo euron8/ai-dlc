@@ -61,6 +61,9 @@ resolve_root() {
   done
   return 1
 }
+# THE TOP-LEVEL SECTIONS ARE FUNCTIONS, CALLED IN ORDER BELOW THE SOURCE GUARD, so a fixture can source this file and
+# ask one section (the refusals, the started line, the profile unset, sample, finish) in process. Sourced, nothing runs.
+stage1_preflight() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || refuse "cannot resolve the script directory"
 ROOT="$(resolve_root "$SCRIPT_DIR")" || refuse "no .git above $SCRIPT_DIR"
 [ -d "$ROOT/.git" ] || refuse "$ROOT is a LINKED worktree (its .git is a file); run from the main checkout"
@@ -109,8 +112,11 @@ RUN_DIR="$(cd "$1" && pwd -P)" || refuse "cannot resolve $1"
 
 SNAP="$RUN_DIR/map.before"
 cp -p "$MAP" "$SNAP" && cmp -s "$MAP" "$SNAP" || refuse "cannot snapshot $MAP"
+}
 
+stage1_state() {
 DPID=""; SPID_FILE="$RUN_DIR/sampler.pid"; START=""; RC="killed"; RECORDED=0; FINAL=0
+}
 
 sample() { printf '%s\t%s\n' "$(date +%s)" "$(sysctl -n vm.loadavg | awk '{ print $2 }')" >> "$RUN_DIR/load.tsv"; }
 
@@ -153,12 +159,15 @@ finish() {
     exit 3
   fi
 }
+stage1_traps() {
 trap 'finish' EXIT
 trap 'finish; exit 130' INT
 trap 'finish; exit 143' TERM
+}
 
 # THE SAMPLER is stopped by the pid it wrote, never by a process-table grep. Its sleep is a child
 # it waits on, so a TERM interrupts the wait and the sleep is reaped with it.
+stage1_sampler() {
 (
   sp=""
   trap '[ -n "$sp" ] && kill "$sp" 2>/dev/null; exit 0' TERM
@@ -170,22 +179,28 @@ trap 'finish; exit 143' TERM
 ) &
 echo "$!" > "$SPID_FILE"
 sample
+}
 
 # THE STARTED LINE IS WRITTEN BEFORE THE DERIVER LAUNCHES, so a `kill -9` of this wrapper -- which
 # no trap sees -- still leaves the run in the ledger, as a started line with no terminal, and the
 # scorer refuses it. If it cannot be written the run does not start: START is still empty, so
 # finish() records no terminal for a run the ledger never saw begin.
+stage1_started() {
 S_EPOCH="$(date +%s)"
 printf '%s\tstarted\t%s\t%s\n' "$RUN_DIR" "$S_EPOCH" "$HEAD_SHA" >> "$LEDGER" \
   || refuse "could not append the started line to the ledger $LEDGER"
 START="$S_EPOCH"
+}
 # THE PROFILE IS THE DERIVER'S DEFAULT. AI_DLC_READSET_SANDBOX_PROFILE replaces it (deriver :684),
 # and a narrower profile reports fewer operations, so an inherited one could score MET for a trace
 # the stage-1 criterion was not written about. The scorer's R0 refuses any other profile too.
+stage1_profile() {
 unset AI_DLC_READSET_SANDBOX_PROFILE
+}
 # `set -m` ONLY AROUND THIS LAUNCH: the deriver's job gets its own process group (pgid = $DPID) so
 # finish() can kill the whole tree. The sampler above was launched with it OFF and stays in the
 # wrapper's group, stopped by its own pid.
+stage1_launch() {
 set -m
 (
   cd "$ROOT" || exit 2
@@ -207,3 +222,13 @@ RECORDED=1
 echo "readset-stage1-run: deriver exited $RC; recorded $RUN_DIR in $LEDGER"
 finish
 exit "$RC"
+}
+
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+stage1_preflight "$@"
+stage1_state
+stage1_traps
+stage1_sampler
+stage1_started
+stage1_profile
+stage1_launch

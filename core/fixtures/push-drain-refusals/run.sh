@@ -25,6 +25,13 @@
 # ahead of its subject on a consumer pull, so absence is expected for one pull; the line says in
 # words that nothing was checked, because exit 0 alone reads exactly like a pass.
 #
+# IN PROCESS. Every reader call goes through pdx: push-drain.sh is SOURCED in a subshell (its
+# BASH_SOURCE guard stops it after the definitions) and its CLI entry pd_main is called with the
+# CLI's argv. The kept end-to-end runs are PEQ's three (`bash <reader>` on a drain, a refusal and a
+# --digest), each compared byte-for-byte with the in-process answer. A reader that predates the guard
+# is driven through `bash` by pdx itself, so this file reaches a consumer one pull behind safely.
+# The world is built once per --digest answer set and copied; only a digest-keying mutant rebuilds.
+#
 # THE MUTANT MATRIX. A cell is one arm of the drive (A0-A19), RED on a mutant when that arm prints FAIL in the
 # mutant's own world and GREEN when it prints ok. A mutant's row names the arm that kills it (decides) and the arm it
 # could plausibly co-trip but must leave GREEN (twins). Every twin here is A11, the exit-2 arm: it sits before every
@@ -133,13 +140,42 @@ field_of() { LC_ALL=C awk -F'\t' -v r="$2" -v i="$3" -v k="$4" '$2 == r && $3 ==
 rows_for() { LC_ALL=C awk -F'\t' -v r="$2" '$2 == r { n++ } END { print n + 0 }' "$1"; }
 
 CUR=""
+# DRIVE_ARMS: the arms one drive scores, space-separated; EMPTY means every arm. A plain-run mutant
+# drives only its owner arm and its twin A11 (fixture-mutants.md clause 2): each reader run below is
+# gated on whether any arm it feeds is wanted, so an unwanted run never starts. The shipped reader,
+# the control and every --matrix drive leave it empty and score all 21.
+DRIVE_ARMS=""
+want() { # want <arm>... -- 0 when any named arm is in DRIVE_ARMS, or DRIVE_ARMS is empty
+  local a
+  [ -z "$DRIVE_ARMS" ] && return 0
+  for a in "$@"; do case " $DRIVE_ARMS " in *" $a "*) return 0 ;; esac; done
+  return 1
+}
 chk() { # chk <arm-id> <text> <command...>  -- ok when the command exits 0
   local id="$1" t="$2"; shift 2
+  want "$id" || return 0
   if "$@"; then echo "ok    $id  $t" >> "$CUR"; else echo "FAIL  $id  $t" >> "$CUR"; fi
+}
+# pdx <reader> [<args>...] -- THE IN-PROCESS DRIVE. The reader (shipped, control copy or mutant) is
+# SOURCED in a subshell -- its BASH_SOURCE guard stops it after the definitions -- and its own CLI
+# entry, pd_main, is called with the argv the CLI would get, so its `exit`, its EXIT trap and its
+# `set -uo pipefail` all end with the subshell. A reader that predates the guard (a consumer one pull
+# behind this fixture) has no pd_main and would RUN on being sourced, so it is driven through
+# `bash <reader>` instead; that is the CLI, and the arms read the same rows either way.
+# PEQ below proves the two drives answer byte-for-byte alike.
+pdx() {
+  local r="$1"; shift
+  if grep -q '^pd_main() {$' "$r"; then
+    ( # shellcheck source=/dev/null
+      . "$r" || exit 2
+      pd_main "$@" )
+  else
+    bash "$r" "$@"
+  fi
 }
 dg() { # dg <reader> <file> <heading> -- that block's digest per the reader's own --digest
   local o
-  o="$(bash "$1" --digest "$2" 2>/dev/null)" || return 1
+  o="$(pdx "$1" --digest "$2" 2>/dev/null)" || return 1
   LC_ALL=C awk -F'\t' -v h="$3" '$3 == h { print $2; exit }' <<<"$o"
 }
 gcommit() { git -C "$1" -c user.email=f@f -c user.name=f -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -qam "$2" >/dev/null 2>&1; }
@@ -172,6 +208,21 @@ drive() {
   dD="$(dg "$R" "$E/m-push.md" "## D moved")"
   dB="$(dg "$R" "$E/x-push.md" "## B unnamed")"
   [ -n "$dA" ] && [ -n "$dB" ] && [ -n "$dC" ] && [ -n "$dD" ] || return 2
+  # THE WORLD IS BUILT ONCE PER DIGEST SET AND COPIED (fixture-mutants.md clause 4). Everything below
+  # this point -- the version-2 files, the four records, the dist repository and its four commits --
+  # is a function of the four digests alone, so a reader whose --digest agrees with one already built
+  # gets a copy of that world (history, refs and all) instead of a rebuild. A digest-keying mutant
+  # (M1, M5, M6, M7) produces its own set and builds its own world, which is the point of seeding
+  # through its --digest.
+  local key="$WORK/tpl-$(printf '%s' "$dA$dB$dC$dD" | shasum -a 1 | sed 's/^\(................\).*/\1/')"
+  if [ -d "$key" ]; then
+    # Every file the template holds overwrites its version-1 twin written above; nothing else is in $W.
+    cp -Rp "$key/." "$W/" || return 2
+    CUR="$W/arms"; : > "$CUR" || return 2
+    C="$(cd "$W/c" && pwd)" || return 2
+    E="$C/$X"; D="$W/dist"; O="$W/out"
+    good="$(cat "$W/.ref.good")"; mal="$(cat "$W/.ref.mal")"; dup="$(cat "$W/.ref.dup")"; alt="$(cat "$W/.ref.alt")"
+  else
   printf '%s\n' "$dA" "$dC" "$dD" > "$W/.digests"
   printf -- '---\nid: w-push\npush_candidate: true\n---\n\n## C kept title\n\ngamma body TWO.\n' > "$E/w-push.md"
   printf -- '---\nid: m-push\npush_candidate: true\n---\n\n## E new\n\nepsilon body.\n\n## D moved\n\ndelta body.\n' > "$E/m-push.md"
@@ -195,13 +246,22 @@ drive() {
   cp "$W/rec.alt" "$D/$RECREL" && gcommit "$D" alt || return 2
   alt="$(git -C "$D" rev-parse HEAD)" || return 2
   printf '%s\n' "$good" > "$W/.ref.good"; printf '%s\n' "$mal" > "$W/.ref.mal"; printf '%s\n' "$dup" > "$W/.ref.dup"
+  printf '%s\n' "$alt" > "$W/.ref.alt"
   # The working tree holds the record of whichever ref is being read, so a reader of the WORKING
   # TREE fails only the arm built to separate the two (A10).
   cp "$W/rec.good" "$D/$RECREL" || return 2
+  # The one-shape consumers the refusal arms read, part of the world so they are copied with it.
+  mkdir -p "$W/cu/$X" "$W/cn/.claude/skills/ai-dlc" "$W/cz/$X" || return 2
+  printf -- '---\nid: u-open\npush_candidate: true\n\n## U never closed\n\nupsilon body.\n' > "$W/cu/$X/u-open.md"
+  cp "$E/z-off.md" "$W/cz/$X/z-off.md" || return 2
+  cp -Rp "$W" "$key" || return 2
+  fi
 
   # ---- A0: cwd-invariance, and the main run.
-  rc=0; (cd / && bash "$R" "$D" "$good" "$C") > "$O" 2> "$W/err" || rc=$?
-  local rc2=0; (cd "$HERE" && bash "$R" "$D" "$good" "$C") > "$W/out.here" 2>/dev/null || rc2=$?
+  local rc2=0
+  if want A0 A1 A2 A3 A3b A4 A5 A6 A7 A8 A9 A16 A17; then
+  rc=0; (cd / && pdx "$R" "$D" "$good" "$C") > "$O" 2> "$W/err" || rc=$?
+  want A0 && { (cd "$HERE" && pdx "$R" "$D" "$good" "$C") > "$W/out.here" 2>/dev/null || rc2=$?; }
   chk A0 "the main run exits 0 with rows, byte-identical driven from / and from the fixture dir" \
     eval '[ "$rc" -eq 0 ] && [ "$rc2" -eq 0 ] && [ -s "$O" ] && cmp -s "$O" "$W/out.here"'
 
@@ -229,10 +289,11 @@ drive() {
     eval '[ "$(rows_for "$O" "$X/g-push.md")" -eq 1 ] && has_row "$O" PUSH-CANDIDATE "$X/g-push.md" 1 "*" "## Group" && [ -n "$(field_of "$O" "$X/g-push.md" 1 4)" ] && [ "$(field_of "$O" "$X/g-push.md" 1 4)" != "$(field_of "$O" "$X/h-push.md" 1 4)" ]'
   chk A17 "a run with candidates prints no zero-candidate NOTE" \
     eval '! grep -qF "push-drain: NOTE —" "$W/err"'
+  fi
 
   # ---- A10: the record is read at THEIRS, not from the working tree.
   : > "$D/$RECREL"
-  rc=0; bash "$R" "$D" "$good" "$C" > "$W/out.a10" 2>/dev/null || rc=$?
+  rc=0; want A10 && { pdx "$R" "$D" "$good" "$C" > "$W/out.a10" 2>/dev/null || rc=$?; }
   chk A10 "an EMPTY working-tree record still refuses x-push block 1 at theirs" \
     eval '[ "$rc" -eq 0 ] && has_row "$W/out.a10" PUSH-REFUSED "$X/x-push.md" 1 "$dA" "## A refused"'
   cp "$W/rec.good" "$D/$RECREL" || return 2
@@ -243,35 +304,32 @@ drive() {
   local recH recG
   recH="$(git -C "$D" show "HEAD:$RECREL")" || return 2
   recG="$(git -C "$D" show "${good}:$RECREL")" || return 2
-  rc=0; bash "$R" "$D" "$good" "$C" > "$W/out.a19" 2>/dev/null || rc=$?
+  rc=0; want A19 && { pdx "$R" "$D" "$good" "$C" > "$W/out.a19" 2>/dev/null || rc=$?; }
   chk A19 "a dist HEAD carrying a different well-formed record does not refuse x-push block 2 at theirs" \
     eval '[ "$alt" != "$good" ] && [ "$(git -C "$D" rev-parse HEAD)" = "$alt" ] && grep -qF "$dB" <<<"$recH" && ! grep -qF "$dB" <<<"$recG" && [ "$rc" -eq 0 ] && has_row "$W/out.a19" PUSH-CANDIDATE "$X/x-push.md" 2 "*" "## B unnamed"'
 
   # ---- exit-2 arms; the main run (A0) is their exit-0 twin.
-  rc=0; bash "$R" "$D" refs/heads/no-such-ref "$C" > "$W/out.a11" 2> "$W/err.a11" || rc=$?
+  rc=0; want A11 && { pdx "$R" "$D" refs/heads/no-such-ref "$C" > "$W/out.a11" 2> "$W/err.a11" || rc=$?; }
   chk A11 "a theirs ref resolving to no commit exits 2 with a REFUSED line and no rows" \
     eval '[ "$rc" -eq 2 ] && grep -qF "push-drain: REFUSED —" "$W/err.a11" && [ ! -s "$W/out.a11" ]'
   cp "$W/rec.mal" "$D/$RECREL" || return 2
-  rc=0; bash "$R" "$D" "$mal" "$C" > "$W/out.a12" 2> "$W/err.a12" || rc=$?
+  rc=0; want A12 && { pdx "$R" "$D" "$mal" "$C" > "$W/out.a12" 2> "$W/err.a12" || rc=$?; }
   chk A12 "a malformed record row exits 2 with a REFUSED line and no rows" \
     eval '[ "$rc" -eq 2 ] && grep -qF "push-drain: REFUSED —" "$W/err.a12" && grep -qF malformed "$W/err.a12" && [ ! -s "$W/out.a12" ]'
   cp "$W/rec.dup" "$D/$RECREL" || return 2
-  rc=0; bash "$R" "$D" "$dup" "$C" > "$W/out.a13" 2> "$W/err.a13" || rc=$?
+  rc=0; want A13 && { pdx "$R" "$D" "$dup" "$C" > "$W/out.a13" 2> "$W/err.a13" || rc=$?; }
   chk A13 "a duplicate record digest exits 2 with a REFUSED line and no rows" \
     eval '[ "$rc" -eq 2 ] && grep -qF "push-drain: REFUSED —" "$W/err.a13" && grep -qF duplicate "$W/err.a13" && [ ! -s "$W/out.a13" ]'
   cp "$W/rec.good" "$D/$RECREL" || return 2
 
-  # Consumers of one shape each, so a refusal cannot be preceded by another file's rows.
-  mkdir -p "$W/cu/$X" "$W/cn/.claude/skills/ai-dlc" "$W/cz/$X" || return 2
-  printf -- '---\nid: u-open\npush_candidate: true\n\n## U never closed\n\nupsilon body.\n' > "$W/cu/$X/u-open.md"
-  cp "$E/z-off.md" "$W/cz/$X/z-off.md" || return 2
-  rc=0; bash "$R" "$D" "$good" "$W/cu" > "$W/out.a14" 2> "$W/err.a14" || rc=$?
+  # Consumers of one shape each (built with the world), so a refusal cannot be preceded by another file's rows.
+  rc=0; want A14 && { pdx "$R" "$D" "$good" "$W/cu" > "$W/out.a14" 2> "$W/err.a14" || rc=$?; }
   chk A14 "an unterminated frontmatter on a candidate exits 2 with a REFUSED line and no rows" \
     eval '[ "$rc" -eq 2 ] && grep -qF "push-drain: REFUSED —" "$W/err.a14" && [ ! -s "$W/out.a14" ]'
-  rc=0; bash "$R" "$D" "$good" "$W/cn" > "$W/out.a15" 2> "$W/err.a15" || rc=$?
+  rc=0; want A15 && { pdx "$R" "$D" "$good" "$W/cn" > "$W/out.a15" 2> "$W/err.a15" || rc=$?; }
   chk A15 "a consumer with no extensions dir exits 2 with a REFUSED line and no rows" \
     eval '[ "$rc" -eq 2 ] && grep -qF "push-drain: REFUSED —" "$W/err.a15" && [ ! -s "$W/out.a15" ]'
-  rc=0; bash "$R" "$D" "$good" "$W/cz" > "$W/out.a18" 2> "$W/err.a18" || rc=$?
+  rc=0; want A18 && { pdx "$R" "$D" "$good" "$W/cz" > "$W/out.a18" 2> "$W/err.a18" || rc=$?; }
   chk A18 "zero candidates with the dir present exits 0, no rows, and the NOTE" \
     eval '[ "$rc" -eq 0 ] && [ ! -s "$W/out.a18" ] && grep -qF "push-drain: NOTE —" "$W/err.a18" && grep -qF "holds no push_candidate" "$W/err.a18"'
   return 0
@@ -299,6 +357,46 @@ if grep -q '^ok    A7 ' "$WORK/real/arms"; then B_A7=1; fi
 if grep -q '^ok    A10 ' "$WORK/real/arms"; then B_A10=1; fi
 if grep -q '^ok    A12 ' "$WORK/real/arms"; then B_A12=1; fi
 if grep -q '^ok    A19 ' "$WORK/real/arms"; then B_A19=1; fi
+
+# PEQ -- THE END-TO-END RUNS KEPT, one per distinct CLI outcome: `bash <reader>` on the shipped world's
+# drain (exit 0, rows), its no-such-ref refusal (exit 2, REFUSED), and one --digest (exit 0). Each is
+# compared byte-for-byte, stdout and stderr and exit apart, with the in-process pd_main on the same
+# input, and the drain and the refusal must differ, so two empty drives cannot agree into a pass.
+# The digest leg also asserts the reader carries the guard: on an unguarded reader pdx IS the CLI,
+# and the comparison would be one program against itself.
+pe_ok=1; pe_why=""
+# A reader with no guard is legal ONLY in the consumer layout, one pull behind this fixture: pdx drove
+# every arm through the CLI there, so there is no in-process answer to compare and PEQ is not evaluated.
+# In the distribution layout the reader IS this release's, and a missing guard is a regression.
+pe_skip=0
+if ! grep -q '^pd_main() {$' "$RD"; then
+  case "$RD" in
+    "$ROOT/.claude/skills/"*) pe_skip=1 ;;
+    *) pe_ok=0; pe_why="$pe_why no-pd_main-in-$RD" ;;
+  esac
+fi
+if [ "$pe_skip" = 1 ]; then
+  echo "NOTE  PEQ  not evaluated -- $RD predates the source guard (no pd_main), so every drive above was the CLI and there is no in-process answer to compare"
+else
+pe_D="$WORK/real/dist"; pe_C="$WORK/real/c"; pe_good="$(cat "$WORK/real/.ref.good")"
+pe_cmp() { # pe_cmp <tag> <args...>
+  local t="$1" ur=0 cr=0; shift
+  pdx "$RD" "$@" > "$WORK/pe.$t.uo" 2> "$WORK/pe.$t.ue" || ur=$?
+  bash "$RD" "$@" > "$WORK/pe.$t.co" 2> "$WORK/pe.$t.ce" || cr=$?
+  # The staging dir's name is in no output; a REFUSED line names only inputs, so stderr compares exactly.
+  cmp -s "$WORK/pe.$t.uo" "$WORK/pe.$t.co" && cmp -s "$WORK/pe.$t.ue" "$WORK/pe.$t.ce" && [ "$ur" = "$cr" ] \
+    || { pe_ok=0; pe_why="$pe_why $t(unit=$ur cli=$cr)"; }
+  echo "$cr" > "$WORK/pe.$t.rc"
+}
+pe_cmp pass "$pe_D" "$pe_good" "$pe_C"
+pe_cmp refuse "$pe_D" refs/heads/no-such-ref "$pe_C"
+pe_cmp digest --digest "$pe_C/$X/x-push.md"
+[ "$(cat "$WORK/pe.pass.rc")" = 0 ] && [ -s "$WORK/pe.pass.co" ] && [ "$(cat "$WORK/pe.refuse.rc")" = 2 ] \
+  && grep -qF 'push-drain: REFUSED —' "$WORK/pe.refuse.ce" && [ "$(cat "$WORK/pe.digest.rc")" = 0 ] \
+  && [ "$(grep -c . "$WORK/pe.digest.co" || true)" -eq 2 ] || { pe_ok=0; pe_why="$pe_why outcomes"; }
+if [ "$pe_ok" = 1 ]; then ok "PEQ  the in-process pd_main equals bash <reader> byte-for-byte on a drain (rc 0), a refusal (rc 2) and a --digest (rc 0)"
+else bad "PEQ  the in-process drive differs from the CLI:$pe_why"; fi
+fi
 
 # ============================================================================
 # MUTANTS. Each is a COPY of the resolved reader, edited by awk keyed on exactly one line
@@ -435,9 +533,13 @@ while IFS='|' read -r mid owner what; do
   if [ "$mrc" -ne 0 ] || [ -z "$MP" ]; then
     echo "FAIL  $mid  DID NOT APPLY (mkmut exit $mrc) -- $what"; fails=$((fails + 1)); continue
   fi
+  # Plain run: only the owner arm and the twin A11 are driven. --matrix scores every arm, so it drives all.
+  DRIVE_ARMS="$owner A11"; [ "$MODE" = matrix ] && DRIVE_ARMS=""
   if ! drive "$MP" "$WORK/w-$mid"; then
+    DRIVE_ARMS=""
     echo "FAIL  $mid  its world could not be built -- $what"; fails=$((fails + 1)); continue
   fi
+  DRIVE_ARMS=""
   fset="$(LC_ALL=C awk '$1 == "FAIL" { printf "%s ", $2 }' "$WORK/w-$mid/arms")"
   mmsg="$mid  by $owner (fail set: ${fset% }) -- $what"
   if grep -q '^ok    A11 ' "$WORK/w-$mid/arms" && grep -q "^FAIL  $owner " "$WORK/w-$mid/arms"; then

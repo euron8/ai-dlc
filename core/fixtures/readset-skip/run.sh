@@ -241,6 +241,14 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # The per-fixture checksum-key section (contract k1) is four units: ckw its worlds, ckm1..ckm3 its fifteen mutants dealt in
 # three runs. Each mutant drives its own world and one twin world, so the mutants carry the cost and are what is dealt.
 # `rc` rides with `tracer` because it drives the stub `sandbox-exec` and deriver copy that `tracer` builds.
+# IN PROCESS. The deriver carries a BASH_SOURCE guard over its top level (rs_main); hermetic-run.sh and the decision
+# drivers are plain scripts. Every world that ran one as `env ... bash <script>` now runs it through inproc (defined beside
+# stub_reap): a subshell stripped to what a new process would inherit, the script sourced, its main called. The
+# tracer unit's EQUIVALENCE cell drives two worlds both ways and compares output, set and exit. STILL PROCESSES, each
+# because its decision IS process identity: the live-trace drivers (RT, CT, FX, FW: readset_live_trace names its trace
+# root and judges its ceiling by `$$` and process groups), the lock start-time judge (PJ: `ps -o lstart= -p $$`), the
+# derivers slot-world starts (the slot's holder is the deriver's `$$`), the (args) self-invocations, and the one
+# end-to-end CLI run per outcome in the equivalence cell.
 SHARDS="a b c d"
 UNITS_a="arms ign man merge ckm1 slot"
 UNITS_b="loc hr tk dg ckm2"
@@ -372,24 +380,23 @@ trap 'kill '"$LOCKPID"' 2>/dev/null; rm -rf "$WORK"' EXIT
 #      the caller judges it as it stands. The owner is a pid the subject or a stub RECORDED (the status
 #      file's `pid`, a stub's own `$$`), never the lock's line 1: the lock-writer mutants make that a
 #      live process that never releases anything.
-#   2  NO PROGRESS: a signature of the subject's observable state (files it writes, the liveness of
-#      what it recorded, a group's members with their state and CPU time) printed the same thing for
-#      AW_STALL consecutive polls. Callers that wait for a hang to END treat this as a REFUSAL --
-#      the line goes to AW_STALL_LOG and aw_gate turns it into FIXTURE BROKEN, exit 2 -- and never as
-#      a FAIL. The two callers that wait to see whether a process LEAKED read it as the leak itself:
-#      a member that outlived its leader and moved nothing for AW_STALL polls is a leak by definition.
-# THE WINDOW IS COUNTED IN POLLS, AND EVERY POLL FORKS, so a loaded box polls more slowly and the
-# window widens with the load instead of shrinking under it. A correct subject that is slow but
-# advancing resets the count on every poll that sees it move; nothing is ever judged on elapsed time.
-# AW_STALL=100 IS a margin over one observed step, not a measurement; a refusal costs a re-run, never a
-# verdict.
-AW_LIB="$WORK/aw.sh"; AW_STALL_LOG="$WORK/aw.stall"; AW_STALL="${AW_STALL:-100}"
-export AW_LIB AW_STALL_LOG AW_STALL
+#   2  FINAL: the caller's final predicate holds -- a fact about KERNEL STATE that no amount of waiting
+#      changes, never a count of polls: aw_group_settled (every live member of a group is blocked with
+#      no signal pending, so the group will never empty on its own -- the leak itself) or aw_overslept (the
+#      watchdog's own timer, blocked, has outlived the promised ceiling by its kernel-kept elapsed time).
+# NO WAIT HERE ENDS ON A WINDOW OF POLLS OR ON ELAPSED TIME (BL-868). The no-progress net this replaced
+# read "nothing moved for 100 polls" as a stall, so a loaded box read a dying member as a survivor and
+# a slow trace as a hang, and refused the run. A process that was signalled is runnable, exiting or
+# carries the signal pending -- never blocked with nothing pending -- so the predicates cannot fire on
+# one that is still ending, at any load. A wait whose subject never reaches either state blocks until
+# the gate's own watchdog takes the run, which is a hang to read, never a verdict.
+AW_LIB="$WORK/aw.sh"; AW_STALL_LOG="$WORK/aw.stall"
+export AW_LIB AW_STALL_LOG
 cat > "$AW_LIB" <<'AW'
 # Every local is `_aw_`-prefixed: the three commands are eval'd in the CALLER's scope, and the drivers'
 # own names (`o`, `lk`, `tp`, `pid`) must not be shadowed while they are read.
-aw_wait() { # <event cmd> <owner cmd, may be empty> <signature cmd>; 0 event, 1 owner gone, 2 no progress
-  local _aw_ev="$1" _aw_ow="$2" _aw_sg="$3" _aw_last="" _aw_cur _aw_pid _aw_still=0
+aw_wait() { # <event cmd> <owner cmd, may be empty> <final cmd, may be empty>; 0 event, 1 owner gone, 2 final
+  local _aw_ev="$1" _aw_ow="$2" _aw_fi="$3" _aw_pid
   while :; do
     eval "$_aw_ev" && return 0
     if [ -n "$_aw_ow" ]; then
@@ -399,23 +406,56 @@ aw_wait() { # <event cmd> <owner cmd, may be empty> <signature cmd>; 0 event, 1 
         *) if ! kill -0 "$_aw_pid" 2>/dev/null; then eval "$_aw_ev" && return 0; return 1; fi ;;
       esac
     fi
-    _aw_cur="$(eval "$_aw_sg")"
-    if [ "$_aw_cur" = "$_aw_last" ]; then _aw_still=$((_aw_still + 1)); else _aw_still=0; _aw_last="$_aw_cur"; fi
-    [ "$_aw_still" -ge "${AW_STALL:-100}" ] && return 2
+    if [ -n "$_aw_fi" ] && eval "$_aw_fi"; then eval "$_aw_ev" && return 0; return 2; fi
     ${AW_SLEEP:-sleep} 0.1
   done
 }
-# A pgid of 0 is refused: BSD `pgrep -g 0` means pgrep's OWN group, whose forks move every poll, so the
-# wait could never stall. The member list is printed itself as well as fed to `ps`, so a `ps` that is
-# refused (under sandbox-exec the setuid /bin/ps is not exec'd) still leaves a signature that moves when
-# a member starts or dies -- the net degrades to membership, it does not go dead.
-aw_group_sig() { # <pgid>: every live member, with its state and CPU time where ps answers
-  local l
-  case "$1" in ''|0|*[!0-9]*) return 0 ;; esac
-  l="$(pgrep -g "$1" 2>/dev/null | tr '\n' ',')"; l="${l%,}"
-  printf '%s;' "$l"
-  [ -n "$l" ] && ps -o pid=,stat=,time= -p "$l" 2>/dev/null | tr -s ' \n' '  '
-  :
+# aw_blocked <pid>: 0 when <pid> is alive, BLOCKED (state S, I or T) and has NO signal pending -- a process
+# nothing is going to end: it will not run until something signals it. A process that was signalled is R, E or Z
+# with the signal taken, or still shows it pending, and reads 1, as does a gone one. A pid alive whose state `ps`
+# will not give (a sandbox refuses the setuid /bin/ps) is a refusal in AW_STALL_LOG and reads 0, so the wait ends.
+aw_blocked() {
+  local _ab_st _ab_pd
+  kill -0 "$1" 2>/dev/null || return 1
+  _ab_st="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; _ab_pd="$(ps -o pending= -p "$1" 2>/dev/null | tr -d ' ')"
+  if [ -z "$_ab_st" ]; then
+    kill -0 "$1" 2>/dev/null || return 1
+    printf 'aw_blocked: ps gives no state for live pid %s, so whether it will end cannot be read\n' "$1" >> "$AW_STALL_LOG"; return 0
+  fi
+  case "$_ab_st" in S*|I*|T*) ;; *) return 1 ;; esac
+  case "$_ab_pd" in ''|*[!0]*) return 1 ;; esac
+  return 0
+}
+# aw_group_settled <pgid>: 0 when the group has a live member and EVERY live member is aw_blocked -- the group
+# will never empty on its own. THIS REPLACES THE NO-PROGRESS NET, which read "nothing moved for AW_STALL polls"
+# and so read a dying member on a loaded box as a survivor. A member that was signalled is never blocked with
+# nothing pending, so a group that is emptying never settles, at any load; one that a missing kill left behind does.
+aw_group_settled() {
+  local _ag_l _ag_p _ag_n=0
+  case "$1" in ''|0|*[!0-9]*) return 1 ;; esac
+  _ag_l="$(pgrep -g "$1" 2>/dev/null)"
+  for _ag_p in $_ag_l; do
+    kill -0 "$_ag_p" 2>/dev/null || continue
+    aw_blocked "$_ag_p" || return 1
+    _ag_n=$((_ag_n + 1))
+  done
+  [ "$_ag_n" -gt 0 ]
+}
+# aw_overslept <pgid> <seconds>: 0 when the group holds a `sl``eep` that is aw_blocked and has run longer than
+# <seconds> by its own kernel-kept elapsed time -- a timer longer than the promise. A timer that has run out is
+# runnable (R) or gone, never blocked, so no load makes a correct ceiling read here.
+aw_overslept() {
+  local _ao_p _ao_c _ao_e
+  case "$1" in ''|0|*[!0-9]*) return 1 ;; esac
+  for _ao_p in $(pgrep -g "$1" 2>/dev/null); do
+    _ao_c="$(ps -o comm= -p "$_ao_p" 2>/dev/null)"; _ao_c="${_ao_c##*/}"
+    [ "$_ao_c" = "sl""eep" ] || continue
+    aw_blocked "$_ao_p" || continue
+    _ao_e="$(ps -o etime= -p "$_ao_p" 2>/dev/null | tr -d ' ' | awk -F'[-:]' '{ n = NF; t = $n + $(n - 1) * 60; if (n >= 3) t += $(n - 2) * 3600; if (n >= 4) t += $(n - 3) * 86400; print t }')"
+    case "$_ao_e" in ''|*[!0-9]*) continue ;; esac
+    [ "$_ao_e" -gt "$2" ] && return 0
+  done
+  return 1
 }
 aw_status_pid() { sed -n 's/^pid //p' "$1" 2>/dev/null; } # the trace subshell's pid, as IT wrote it
 aw_stalled() { printf '%s\n' "$1" >> "$AW_STALL_LOG"; } # <subject neither exited nor advanced <marker>>
@@ -437,9 +477,9 @@ aw_gate() { # refuse, in the fixture's own shell, on any no-progress net that fi
 # delivered it asynchronously, and the iteration count -- one sandbox-exec start each -- followed load.
 # Delivery is otherwise what the tail gave: every live stream gets every line written after it registered.
 # A `deaf` registration satisfies the wait and receives nothing: a stream that never delivers.
-# THE WAIT IS ON A CONDITION, AND ITS SAFETY BOUND IS NO VERDICT: 3000 polls with no registered stream of
-# that root appends a refusal naming the stub to AW_STALL_LOG, which fails the run FIXTURE BROKEN at
-# aw_gate (stderr when slot-world runs standalone); the read then returns with nothing delivered.
+# THE WAIT IS ON A CONDITION AND HAS NO BOUND (BL-868): it ends when a stream of that root registers. A stream that
+# never registers blocks the stub until the gate's own watchdog takes the run -- a hang to read, never a verdict
+# and never a count of polls or a clock.
 ss_register() { # <live|deaf>: record this stream ($$) and the file its stdout is
   local d="$STUB_FEED.streams" out="" f m p
   mkdir -p "$d" 2>/dev/null || return 1
@@ -472,7 +512,7 @@ ss_wait() { # <path read through the profile>: a marker read waits for its own w
   { read -r c; } < "$a" 2>/dev/null
   case "$c" in sentinel-?*) c="${c#sentinel-}" ;; end-?*) c="${c#end-}" ;; liveness) ;; *) c="" ;; esac
   want="$root/w/$c.raw"
-  while [ "$i" -lt 3000 ]; do
+  while :; do
     for f in "$d"/[0-9]*; do
       [ -f "$f" ] || continue
       kill -0 "${f##*/}" 2>/dev/null || continue
@@ -481,12 +521,8 @@ ss_wait() { # <path read through the profile>: a marker read waits for its own w
       else case "$p" in "$root"/w/*) got="$m $p"; break ;; esac; fi
     done
     [ -n "$got" ] && break
-    /bin/sleep 0.1; i=$((i + 1))
+    /bin/sleep 0.1
   done
-  if [ -z "$got" ]; then
-    printf 'stub sandbox-exec %s: no live stream of %s registered in 3000 polls\n' "$0" "$root" >> "${AW_STALL_LOG:-/dev/stderr}"
-    return 1
-  fi
   # `--tracer both` (the stub world that sets STUB_FS) settles on the fs_usage capture as well: a sentinel
   # read waits for the stub fs_usage's sentinel line there, so that half of the settle also holds on the
   # first iteration. Keyed on STUB_FS, not on the capture existing, which its pipeline may not have opened yet.
@@ -495,11 +531,7 @@ ss_wait() { # <path read through the profile>: a marker read waits for its own w
       p="${got#live }"; i=0
       if [ -n "${STUB_FS:-}" ]; then
         until grep -q readset-sentinel "$p.fsu" 2>/dev/null; do
-          if [ "$i" -ge 3000 ]; then
-            printf 'stub sandbox-exec %s: no sentinel in %s.fsu in 3000 polls\n' "$0" "$p" >> "${AW_STALL_LOG:-/dev/stderr}"
-            return 1
-          fi
-          /bin/sleep 0.1; i=$((i + 1))
+          /bin/sleep 0.1
         done
       fi ;;
   esac
@@ -629,6 +661,52 @@ f2b_world() { # <seed fn> <dst> [seed args]
   [ ! -e "$dst" ] || return 1
   mkdir -p "$(dirname "$dst")" && cp -Rp "$k" "$dst"
 }
+
+# inproc [-i] [-u VAR]... [VAR=val]... -- <script> [args]: run <script> IN PROCESS, in the CALLER'S subshell, the way
+# `env [-i] [-u VAR]... [VAR=val]... bash <script> [args]` runs it in a new process. Call it inside `( ... )`: it
+# replaces the subshell's state. A new bash inherits only EXPORTED variables, no function and no trap of its parent,
+# so this unsets every non-exported variable the fixture set (bash's own specials kept), every function, and the
+# subshell's traps; `-i` also unsets every exported one but HOME and PATH unless re-set. Then the script is SOURCED:
+# a program behind a BASH_SOURCE guard (the deriver) loads its definitions and returns at the guard, and its main
+# (rs_main) is called with the args; a plain script (hermetic-run.sh, a decision driver) simply runs. `exit` in either
+# ends this subshell with the status a process would have returned. Its output, files and exit are compared with the
+# CLI's in the equivalence cell beside the tracer unit, which is what makes this a stand-in rather than a model.
+# STATED DIFFERENCE: `$$` in the script is the fixture's pid (bash 3.2 has no BASHPID), so the deriver's
+# `pkill -P $$ -x fs_usage` cannot reach a stub fs_usage forked from this subshell; every stub world reaps its stubs
+# by recorded pid (stub_reap), so no verdict reads it. The --tracer both stub world's fs_usage reaping waits are
+# injected (READSET_SLEEP_CMD) and keyed on the capture holding the stub's last line, not on the clock.
+inproc() {
+  local _ip_v _ip_keep
+  _ip_keep=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) for _ip_v in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p'); do
+            case "$_ip_v" in HOME|PATH) ;; *) unset "$_ip_v" 2>/dev/null ;; esac
+          done; shift ;;
+      -u) unset "$2"; shift 2 ;;
+      --) shift; break ;;
+      *=*) export "$1"; shift ;;
+      *) echo "inproc: not an env word: '$1'" >&2; return 97 ;;
+    esac
+  done
+  [ -f "$1" ] || { echo "inproc: no script '$1'" >&2; return 97; }
+  trap - EXIT INT TERM HUP
+  for _ip_v in $(compgen -A function); do unset -f "$_ip_v"; done
+  _ip_keep=" $(compgen -e | tr '\n' ' ') "
+  for _ip_v in $(compgen -v); do
+    case "$_ip_v" in
+      BASH*|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE|IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELLOPTS|SHLVL|UID|_ip_v|_ip_keep) continue ;;
+    esac
+    case "$_ip_keep" in *" $_ip_v "*) continue ;; esac
+    unset "$_ip_v" 2>/dev/null
+  done
+  unset _ip_keep
+  set +u +e +m; set +o pipefail
+  . "$@"
+  if declare -F rs_main >/dev/null; then shift; rs_main "$@"; fi
+}
+# rs_drive [env words] -- <deriver> [args]: the deriver, in process. Call inside `( cd <repo> && rs_drive ... )`.
+rs_drive() { inproc "$@"; }
 
 if sg arms; then
 # ------------------------------------------------------------------------- arm 1-6 ----
@@ -1391,8 +1469,7 @@ sha_of() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
 # correct launcher. The owner is the status file's `pid`, written by the subshell itself.
 lt_wait() { # <lock dir>
   local lw="$1"
-  aw_wait '[ ! -d "$lw" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lw" 2>/dev/null)"'
+  aw_wait '[ ! -d "$lw" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
   [ "$?" = 2 ] && aw_stalled "the live trace neither released $lw nor advanced its status file"
   :
 }
@@ -1402,9 +1479,12 @@ lt_wait() { # <lock dir>
 # the process that will write it, is alive. One launch can never write GO while the stub waits: a
 # SYNCHRONOUS one (mutant `sync`), whose caller is blocked on this very stub. That launch is told apart
 # by an order fact, not a clock: a detached launcher writes `<lock>/pid` right after the fork, while
-# the stub waits; a synchronous one cannot write it until the stub has returned. The stub leaves when
-# that file has been absent for AW_STALL consecutive polls and records why it left in <GO>.left:
-# `go`, `orphan` (its owner died) or `nolockpid` -- which the unmutated (a) arm refuses on.
+# the stub waits; a synchronous one cannot write it until the stub has returned, and meanwhile the
+# owner is BLOCKED (state S, nothing pending) waiting on a child that is this stub's own ancestor, with
+# no other child alive. A detached owner is running, or blocked on some other child (a command
+# substitution inside readset_lock_write), so that state is never read for it. The stub leaves on that
+# fact and records why it left in <GO>.left: `go`, `orphan` (its owner died) or `nolockpid` -- which the
+# unmutated (a) arm refuses on.
 # ONLY THE DETACHED TRACE WAITS. The in-pool trace invokes this stub with `--in-pool` and no
 # `--local-map`, inside run_fixtures, where no lock exists to hold; it skips the wait and writes no
 # `.left`, so the record is the detached stub's alone.
@@ -1414,11 +1494,17 @@ if [ -n "${STUB_PPID:-}" ]; then printf "%s\n" "$PPID" > "$STUB_PPID"; fi
 lm=""; ls=""
 while [ $# -gt 0 ]; do case "$1" in --local-map) lm="$2"; shift ;; --list) ls="$2"; shift ;; esac; shift; done
 if [ -n "${STUB_GO:-}" ] && [ -n "$lm" ]; then
-  n=0; why=go
+  why=go; anc=" "; a="$$"
+  while [ -n "$a" ] && [ "$a" -gt 1 ] 2>/dev/null; do anc="$anc$a "; a="$(ps -o ppid= -p "$a" 2>/dev/null | tr -d " ")"; done
   while [ ! -f "$STUB_GO" ]; do
     if [ -n "${STUB_GO_OWNER:-}" ] && ! kill -0 "$STUB_GO_OWNER" 2>/dev/null; then why=orphan; break; fi
-    if [ -f "$lm.lock/pid" ]; then n=0; else n=$((n + 1)); fi
-    if [ "$n" -ge "${AW_STALL:-100}" ]; then why=nolockpid; break; fi
+    if [ ! -f "$lm.lock/pid" ] && [ -n "${STUB_GO_OWNER:-}" ]; then
+      st="$(ps -o stat= -p "$STUB_GO_OWNER" 2>/dev/null | tr -d " ")"; pd="$(ps -o pending= -p "$STUB_GO_OWNER" 2>/dev/null | tr -d " ")"
+      case "$st:$pd" in S*:0|I*:0)
+        sync=1; for c in $(pgrep -P "$STUB_GO_OWNER" 2>/dev/null); do case "$anc" in *" $c "*) ;; *) sync=0 ;; esac; done
+        [ -f "$lm.lock/pid" ] || { [ "$sync" = 1 ] && { why=nolockpid; break; }; } ;;
+      esac
+    fi
     sleep 0.1
   done
   printf "%s\n" "$why" > "$STUB_GO.left"
@@ -1760,8 +1846,7 @@ sleep 1.1
 readset_live_trace "$o" > "$o/msg" 2>&1
 # THE STUB'S PPID, OR THE TRACE SUBSHELL'S DEATH. Nothing to wait for when no trace started.
 if grep -q 'started detached' "$o/msg"; then
-  aw_wait '[ -s "$o/ppid" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$([ -f "$o/args" ] && echo a)" "$(ls "$lk" 2>/dev/null)"'
+  aw_wait '[ -s "$o/ppid" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
   [ "$?" = 2 ] && aw_stalled "(k) the trace subshell neither wrote the stub's ppid nor advanced its status file or lock"
 fi
 cp "$lk/pid" "$o/pidfile" 2>/dev/null
@@ -1773,8 +1858,7 @@ if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "n
 ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" > "$o/judge" 2>&1; echo "$?" > "$o/rc" )
 : > "$STUB_GO"
 # THE LOCK GONE, OR THE SUBSHELL THAT OWES ITS RELEASE GONE -- either way `after` is final, and is read now.
-aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-  'printf "%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lk" 2>/dev/null)"'
+aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
 [ "$?" = 2 ] && aw_stalled "(k) the trace subshell neither released $lk nor advanced its status file after GO"
 if [ ! -d "$lk" ]; then echo gone > "$o/after"
 elif ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" ) >/dev/null 2>&1; then echo stale > "$o/after"
@@ -1836,7 +1920,7 @@ exit 0'
 pool="$1"; t="$2"; o="$3"; ceil="$4"; mode="$5"; hk="$6"
 cd "$t" || exit 1
 mkdir -p "$o/tmp" "$o/.log"
-export STUB_GC="$o/gc" STUB_SELF="$o/self" STUB_GO="$o/go" STUB_GO_OWNER="$$" STUB_MODE="$mode" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING="$ceil" TMPDIR="$o/tmp/"
+export STUB_GC="$o/gc" STUB_SELF="$o/self" STUB_GO="$o/go" STUB_GO_OWNER="$(exec bash -c 'printf %s "$PPID"')" STUB_MODE="$mode" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING="$ceil" TMPDIR="$o/tmp/"
 . "$AW_LIB"
 . "$pool" 2>/dev/null
 printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
@@ -1849,8 +1933,7 @@ tp="$(sed -n 1p "$lk/pid" 2>/dev/null | cut -d' ' -f1)"
 # THE STUB'S THREE RECORDS, OR THE TRACE SUBSHELL'S DEATH. The live controls below are read only once all
 # three exist, so a slow stub start no longer reads as a dead one.
 if grep -q 'started detached' "$o/msg"; then
-  aw_wait '[ -s "$o/gc" ] && [ -s "$o/self" ] && ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s|%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(cat "$o/gc" "$o/self" 2>/dev/null)" "$(ls "$READSET_LOCAL".tmp.* 2>/dev/null)" "$(ls "$o/tmp" 2>/dev/null)"'
+  aw_wait '[ -s "$o/gc" ] && [ -s "$o/self" ] && ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1' 'aw_status_pid "$READSET_LOCAL.status"' ''
   [ "$?" = 2 ] && aw_stalled "(t) the stub deriver neither wrote its gc, self and map-temp records nor advanced"
 fi
 gc="$(cat "$o/gc" 2>/dev/null)"; dp="$(cat "$o/self" 2>/dev/null)"
@@ -1871,24 +1954,9 @@ printf '%s,%s,%s,%s,%s' "$(al "-$tp")" "$(al "-$dp")" "$(al "$gc")" "$([ -n "$tr
 # `start + ceiling + 5`, the 5 being its own TERM-to-KILL grace. Neither is a fixture constant; a stall
 # inside the promise is the watchdog asleep in its `sleep "$cl"`, and the wait goes on. That is how
 # noceil (the watchdog sleeping 600s against a 3s promise) still reads `held`.
-ct_sig() { printf '%s|%s|%s' "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lk" 2>/dev/null)" "$(aw_group_sig "$tp")"; }
-ct_final() {
-  local s c
-  [ "$dp" = 0 ] && return 0
-  kill -0 -- "-$dp" 2>/dev/null || return 0
-  s="$(sed -n 's/^start //p' "$READSET_LOCAL.status" 2>/dev/null)"; c="$(sed -n 's/^ceiling //p' "$READSET_LOCAL.status" 2>/dev/null)"
-  case "$s" in ''|*[!0-9]*) return 0 ;; esac; case "$c" in ''|*[!0-9]*) return 0 ;; esac
-  [ "$(date +%s)" -gt $(( s + c + 5 )) ]
-}
-while :; do
-  aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' ct_sig
-  [ "$?" = 2 ] || break
-  ct_final && break
-done
-# THE SUBSHELL EXITS JUST AFTER IT RELEASES THE LOCK, and only then does group $tp empty (the hook says a
-# reader must not assume it at the release). This replaces a fixed 0.2s settle: wait for the group to be
-# gone; a member that stays alive and moves nothing for AW_STALL polls is read as the leak it is.
-[ "$tp" != 0 ] && aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_sig "$tp"'
+ct_cl="$(sed -n 's/^ceiling //p' "$READSET_LOCAL.status" 2>/dev/null)"; case "$ct_cl" in ''|*[!0-9]*) ct_cl="$ceil" ;; esac
+aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' 'aw_overslept "$tp" "$ct_cl"'
+[ "$tp" != 0 ] && aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_settled "$tp"'
 printf '%s,%s,%s,%s,%s,%s,%s' "$([ -d "$lk" ] && echo held || echo released)" "$(al "-$tp")" "$(al "-$dp")" "$(al "$gc")" \
   "$([ -n "$tr" ] && [ -d "$tr" ] && echo tr || echo notr)" "$(ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1 && echo tmp || echo notmp)" \
   "$(cmp -s "$o/map.before" "$READSET_LOCAL" && echo same || echo moved)" > "$o/after"
@@ -1908,7 +1976,7 @@ CT
     local t="$WORK/ct.$2" o="$WORK/cto.$2" rp
     f2b_world seed_ct "$t" || { printf 'SEED FAILED'; return 1; }
     mkdir -p "$o"
-    bash "$CT_DRIVER" "$1" "$t" "$o" "$3" "$4" "${5:-}" > "$o/driver.out" 2>&1
+    ( inproc -- "$CT_DRIVER" "$1" "$t" "$o" "$3" "$4" "${5:-}" ) > "$o/driver.out" 2>&1
     rp=other
     grep -qF 'TIMED OUT at the 3s ceiling' "$o/rep" 2>/dev/null && grep -qF 'WARN  trace-report warning: the last trace TIMED OUT' "$o/rep" && rp=timed
     grep -qF 'finished, exit timeout' "$o/rep" 2>/dev/null && rp=finished-timeout
@@ -1953,15 +2021,12 @@ while [ "$i" -lt "$reps" ]; do
   # still has a member after $tp itself is gone and that member, with its state and CPU time, moves
   # nothing for AW_STALL polls. The watchdog's leaked `sleep` is exactly that. A member that is dying or
   # still running changes the signature and resets the count. The two waits before it end on events.
-  aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' \
-    'printf "%s|%s" "$(cat "$READSET_LOCAL.status" 2>/dev/null)" "$(ls "$lk" 2>/dev/null)"'
-  [ "$?" = 2 ] && aw_stalled "(t4) the fast trace neither released $lk nor advanced its status file"
+  aw_wait '[ ! -d "$lk" ]' 'aw_status_pid "$READSET_LOCAL.status"' ''
   tp="$(sed -n 's/^pid //p' "$READSET_LOCAL.status" 2>/dev/null)"
   case "$tp" in ''|*[!0-9]*) continue ;; esac
   grep -qx 'exit 0' "$READSET_LOCAL.status" && fin=$((fin + 1))
-  aw_wait '! kill -0 "$tp" 2>/dev/null' '' 'aw_group_sig "$tp"'
-  [ "$?" = 2 ] && aw_stalled "(t4) the trace subshell $tp neither exited nor advanced its group"
-  aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_sig "$tp"'
+  aw_wait '! kill -0 "$tp" 2>/dev/null' '' ''
+  aw_wait '! kill -0 -- "-$tp" 2>/dev/null' '' 'aw_group_settled "$tp"'
   if kill -0 -- "-$tp" 2>/dev/null; then
     leaks=$((leaks + 1))
     kill -- "-$tp" 2>/dev/null
@@ -1979,15 +2044,14 @@ FX
   # parent's process group (the trace subshell leads that group). Exiting at once, the stop could land before
   # the watchdog had forked its sleep, so that launch had nothing to leak and nosweep's stop-at-first-leak drive
   # ran a load-dependent number of launches. Ordered on the sleep, every launch leaves one to sweep: nosweep
-  # leaks on the first and the shipped sweep is exercised on all FX_REPS. The wait is bounded; its bound is a
-  # refusal in AW_STALL_LOG (FIXTURE BROKEN at aw_gate), never a verdict. (t4w) keeps the at-once deriver,
+  # leaks on the first and the shipped sweep is exercised on all FX_REPS. The wait has no bound: a deriver that
+  # never shows the sleep hangs until the gate's watchdog, a hang to read and never a verdict. (t4w) keeps the at-once deriver,
   # because its forced window needs the stop to race the watchdog's fork.
   seed_fxw() { # <t>: seed() plus a TRACKED deriver stub that exits once the watchdog's sleep is up
     f2b_world seed "$1" || return 1
     mkdir -p "$1/core/scripts" && printf '%s\n' '#!/bin/bash' \
-      'i=0; until pgrep -g "$PPID" -x sleep >/dev/null 2>&1; do' \
-      '  [ "$i" -ge 3000 ] && { printf "(t4) the stub deriver saw no watchdog sleep in group %s in 3000 polls\n" "$PPID" >> "$AW_STALL_LOG"; exit 0; }' \
-      '  /bin/sleep 0.01; i=$((i + 1))' \
+      'until pgrep -g "$PPID" -x sleep >/dev/null 2>&1; do' \
+      '  /bin/sleep 0.01' \
       'done' 'exit 0' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
     ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fastw ) >/dev/null 2>&1
   }
@@ -1995,7 +2059,7 @@ FX
     local t="$WORK/fx.$2" o="$WORK/fxo.$2"
     f2b_world seed_fxw "$t" || { printf 'SEED FAILED'; return 1; }
     mkdir -p "$o"
-    bash "$FX_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
+    ( inproc -- "$FX_DRIVER" "$1" "$t" "$o" "$3" "$4" ) > "$o/driver.out" 2>&1
     cat "$o/res" 2>/dev/null
   }
   RT4="$(fx_drive "$POOL" t4 "$FX_REPS" 0)"; lt_arm
@@ -2031,15 +2095,15 @@ FX
   # The driver's waits are aw_wait's polls, which sleep through AW_SLEEP; FX_DRIVER pins it to /bin/sleep,
   # and the wait library must carry no other sleep, or a poll would walk the absent PATH entries too.
   sed -e 's|sleep 30 |/bin/sleep 30 |' "$FX_DRIVER" > "$FW_DRIVER"
-  _aws="$(grep -c 'sleep' "$AW_LIB")" || _aws=0
+  _aws="$(grep -cE '(^|[^-_A-Za-z"/])sleep[[:space:]]+[0-9$]' "$AW_LIB")" || _aws=0
   grep -q '^set -m; /bin/sleep 30 ' "$FW_DRIVER" && grep -qx 'AW_SLEEP=/bin/sleep' "$FW_DRIVER" \
-    && [ "$_aws" -eq 1 ] && grep -qF '${AW_SLEEP:-sleep} 0.1' "$AW_LIB" \
+    && [ "$_aws" -eq 0 ] && [ "$(grep -cF '${AW_SLEEP:-sleep} 0.1' "$AW_LIB")" -eq 1 ] \
     || broken "(t4w) the forced-window driver did not take /bin/sleep at its control and its waits (wait-library sleep sites: $_aws, want 1)"
   fw_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
     local t="$WORK/fw.$2" o="$WORK/fwo.$2"
     f2b_world seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
     mkdir -p "$o"
-    PATH="$FW_PATH" bash "$FW_DRIVER" "$1" "$t" "$o" "$3" "$4" > "$o/driver.out" 2>&1
+    ( inproc PATH="$FW_PATH" -- "$FW_DRIVER" "$1" "$t" "$o" "$3" "$4" ) > "$o/driver.out" 2>&1
     cat "$o/res" 2>/dev/null
   }
   RT4W="$(fw_drive "$POOL" t4w "$FW_REPS" 0)"; lt_arm
@@ -2722,7 +2786,13 @@ stub_reap() {
   cat "$d/pids" > "$d/pids.last"; cat "$d/pids" >> "$d/pids.all"; : > "$d/pids"
   if [ "${REAP_MUT:-0}" != 1 ]; then
     while read -r p; do [ -n "$p" ] && kill "$p" 2>/dev/null; done < "$d/pids.last"
-    while [ "$i" -lt 30 ]; do live="$(stub_live "$d/pids.last")"; [ "$live" = 0 ] && break; sleep 0.1; i=$((i+1)); done
+    # GONE, OR NEVER GOING: a killed stub is dying and never reads blocked; one the kill missed blocks forever.
+    while :; do
+      live=0; i=1
+      while read -r p; do [ -n "$p" ] && kill -0 "$p" 2>/dev/null || continue; live=1; aw_blocked "$p" || i=0; done < "$d/pids.last"
+      [ "$live" = 0 ] || [ "$i" = 1 ] && break
+      sleep 0.1
+    done
   fi
   # A reaped stream's STUB_STREAM registration goes with it, so a later reuse of its pid cannot pass for a live
   # stream. The stub of one world may have registered under another world's feed (sbx_run uses $SB's stubs on $SX's feed).
@@ -2730,6 +2800,7 @@ stub_reap() {
   live="$(stub_live "$d/pids.last")"; n="$(grep -c . "$d/pids.last")" || n=0
   printf '%s %s\n' "$n" "$live" >> "$d/reap.log"
 }
+
 
 # ------------------------------------------------------- the deriver's map merge ----
 # `--list` exists so refreshing ONE fixture costs its own runtime instead of a full
@@ -2882,7 +2953,7 @@ else
       cat "$wl"
     } > "$DG/pipe.sh"
     rm -f "$DG/w/dgfx.set"
-    ( TREE="$DG/r" WORK="$DG/w" fx=dgfx bash "$DG/pipe.sh" ) >/dev/null 2>&1
+    ( inproc TREE="$DG/r" WORK="$DG/w" fx=dgfx -- "$DG/pipe.sh" ) >/dev/null 2>&1
     cat "$DG/w/dgfx.set" 2>/dev/null
   }
   dg_verdict() { if [ "$(LC_ALL=C sort "$1" 2>/dev/null | tr '\n' ' ')" = "$(LC_ALL=C sort "$DG/want" | tr '\n' ' ')" ]; then echo exact; else echo wrong; fi; }
@@ -3961,7 +4032,7 @@ MUT
       || broken "could not seed the --tracer both repo"
     drive_in() { # $1 dir; rest = args. prints "<rc>|<first ERROR line>"
       local d="$1" r; shift
-      ( cd "$d" && bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$WORK/br.out" 2>&1; r=$?
+      ( cd "$d" && rs_drive -- core/scripts/derive-fixture-readsets.sh "$@" ) > "$WORK/br.out" 2>&1; r=$?
       printf '%s|%s' "$r" "$(grep -m1 'ERROR' "$WORK/br.out")"
     }
     V1="$(drive_in "$BR" --all --tracer both)"
@@ -4042,8 +4113,21 @@ echo $$ >> "${0%/*}/pids"   # the world reaps this pid by number (stub_reap); ex
 emit() { printf '%s\n' "$1" || exit 0; }
 emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.readset-sentinel  0.000010  cat.1"
 while IFS= read -r p; do [ -n "$p" ] && emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/t/$p  0.000010  bash.2"; done < "$STUB_FS"
+# The last line it will ever report, under the marker dir so the capture keeps it and no set does: stubflush waits on it.
+emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.stub-fs-done  0.000010  cat.1"
 n=0; while [ "$n" -lt 300 ]; do sleep 0.2; emit heartbeat; n=$((n+1)); done
 STUB
+    # THE INJECTED WAIT (the deriver's rs_sleep, READSET_SLEEP_CMD). The deriver's fixed `sleep 1` before it kills
+    # fs_usage stands for "the tracer's last events have reached the capture". This stub's last event is its
+    # .stub-fs-done line, so the wait ends when the capture holds it: an event, not a clock. It has no bound (BL-868): a capture that never holds the line
+    # hangs until the gate's watchdog, never a verdict.
+    cat > "$SB/stubflush" <<'STUB'
+#!/bin/bash
+until grep -q '/m/\.stub-fs-done ' "$STUB_ROOT"/w/*.raw.fsu 2>/dev/null; do
+  /bin/sleep 0.01
+done
+STUB
+    chmod +x "$SB/stubflush"
     # The stream stub registers its capture (the STUB_STREAM span) and blocks until the deriver stops it.
     cat > "$SB/logstream" <<'STUB'
 #!/bin/bash
@@ -4080,9 +4164,9 @@ d/-p'
       local before after r
       cp "$1" "$STUB_DERIVER"
       before="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
-          STUB_FS="$SB/fs.list" STUB_SB="$2" AI_DLC_READSET_TRACE_ROOT="$BOTH_TR" \
-          bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer both ) > "$WORK/stub.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
+          STUB_FS="$SB/fs.list" STUB_SB="$2" READSET_SLEEP_CMD=stubflush AI_DLC_READSET_TRACE_ROOT="$BOTH_TR" \
+          -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer both ) > "$WORK/stub.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SB:-}"
       after="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
@@ -4318,8 +4402,9 @@ d/-p'
     sbx_run() { # $1 deriver copy  $2 stream list; prints "<fxa line>|<drop notices>"
       local d
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/sbx.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/sbx.out" 2>&1 </dev/null
+      echo "$?" > "$WORK/sbx.rc"
       stub_reap "${SB:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       d="$(grep -c 'dropped during' "$SX_TR/w/fxa.win" 2>/dev/null)" || d=0
@@ -4327,8 +4412,37 @@ d/-p'
     }
     sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$SB/deriver.sh" > "$SX/deriver.nocanary.sh"
     CL="$(sbx_run "$SB/deriver.sh" "$SX/lossy.list")"
+    cp "$WORK/sbx.out" "$WORK/eq.l.in"; cp "$WORK/sbx.rc" "$WORK/eq.l.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.l.in.set" 2>/dev/null || : > "$WORK/eq.l.in.set"
     CW="$(sbx_run "$SB/deriver.sh" "$SX/whole.list")"
     cp "$SX_TR/w/fxa.log" "$WORK/width.log" 2>/dev/null || : > "$WORK/width.log"
+    cp "$WORK/sbx.out" "$WORK/eq.w.in"; cp "$WORK/sbx.rc" "$WORK/eq.w.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.w.in.set" 2>/dev/null || : > "$WORK/eq.w.in.set"
+    # THE EQUIVALENCE CELL, and the tracer unit's end-to-end runs (one per distinct outcome: fxa OMITTED, fxa
+    # MAPPED). The same two worlds driven through the CLI as a PROCESS must print the same output (the `[hh:mm:ss]`
+    # stamps of say() masked), write the same set and leave the same rc as the in-process drive above. The two
+    # worlds' answers differ (control), so an in-process path that answered both alike could not pass.
+    eq_cli() { # <stream list> <tag>
+      cp "$SB/deriver.sh" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$1" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/eq.$2.cli" 2>&1 </dev/null
+      echo "$?" > "$WORK/eq.$2.cli.rc"
+      stub_reap "${SB:-}"
+      cp "$SX_TR/w/fxa.set" "$WORK/eq.$2.cli.set" 2>/dev/null || : > "$WORK/eq.$2.cli.set"
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+    }
+    eq_mask() { sed 's/^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\] /[--:--:--] /' "$1"; }
+    eq_cli "$SX/lossy.list" l; eq_cli "$SX/whole.list" w
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    _eqd=""
+    for _t in l w; do
+      [ "$(eq_mask "$WORK/eq.$_t.in")" = "$(eq_mask "$WORK/eq.$_t.cli")" ] || _eqd="$_eqd $_t:output"
+      cmp -s "$WORK/eq.$_t.in.set" "$WORK/eq.$_t.cli.set" || _eqd="$_eqd $_t:set"
+      cmp -s "$WORK/eq.$_t.in.rc" "$WORK/eq.$_t.cli.rc" || _eqd="$_eqd $_t:rc=$(cat "$WORK/eq.$_t.in.rc")/$(cat "$WORK/eq.$_t.cli.rc")"
+    done
+    if [ -z "$_eqd" ] && [ "$(eq_mask "$WORK/eq.l.cli")" != "$(eq_mask "$WORK/eq.w.cli")" ] && grep -q '^  fxa .* OMITTED' "$WORK/eq.l.cli" && grep -q '^  fxa .* paths$' "$WORK/eq.w.cli"; then
+      ok "EQUIVALENCE: the in-process deriver and the CLI print the same output, write the same set and exit alike (lossy $(cat "$WORK/eq.l.cli.rc"), whole $(cat "$WORK/eq.w.cli.rc")) on the lossy world (fxa OMITTED) and the whole world (fxa MAPPED), two distinct answers"
+    else
+      bad "EQUIVALENCE: the in-process deriver and the CLI differ:${_eqd:- the two worlds read alike} — $(diff <(eq_mask "$WORK/eq.l.in") <(eq_mask "$WORK/eq.l.cli") | head -4 | tr '\n' ' ')"
+    fi
     TRACE_ARMS=$((TRACE_ARMS+1))
     case "$CL" in
       " fxa OMITTED ("*"LOSS CANARY: 1 path(s)"*"|0") ok "CANARY: a sandbox-tracer window that lost a read with NO drop notice OMITS the fixture, naming 'LOSS CANARY: 1 path(s)'"; B_canary=1 ;;
@@ -4406,9 +4520,9 @@ d/-p'
       local p="$WORK/pf.profiles" t s d
       : > "$p"
       cp "$SB/deriver.sh" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
           STUB_PROFILES="$p" ${1:+AI_DLC_READSET_SANDBOX_PROFILE="$1"} AI_DLC_READSET_TRACE_ROOT="$SX_TR" \
-          bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/pf.out" 2>&1 </dev/null
+          -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/pf.out" 2>&1 </dev/null
       stub_reap "${SB:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       t="$(grep -c 'readset-skip-profile-token' "$p")" || t=0
@@ -4479,8 +4593,8 @@ d/-p'
     omit_run() { # $1 deriver copy; prints "<stale rows>|<other rows>|<OMITTED header rows>"
       local s o h
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/omit.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/omit.out" 2>&1 </dev/null
       stub_reap "${SB:-}"
       s="$(grep -c 'STALE-ROW' "$BR/.ai-dlc-fixture-readsets.tsv")" || s=0
       o="$(grep -c '^other	' "$BR/.ai-dlc-fixture-readsets.tsv")" || o=0
@@ -4540,8 +4654,8 @@ d/-p'
     all_run() { # $1 deriver copy  $2 stream list  $3 header name; prints "<rc>|<header rows>|<presence>|<skip>|<merge dropped>"
       local r h p k m
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --all --tracer sandbox ) > "$WORK/all.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --all --tracer sandbox ) > "$WORK/all.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SB:-}"
       h="$(grep -cx "# OMITTED by the last run (always run): $3" "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
@@ -4630,8 +4744,8 @@ d/-p'
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxu ) >/dev/null 2>&1 || broken "could not seed fxu"
     unread_run() { # $1 deriver copy; prints the fxu line
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/fxu.list" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxu --tracer sandbox ) > "$WORK/unread.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/fxu.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxu --tracer sandbox ) > "$WORK/unread.out" 2>&1 </dev/null
       stub_reap "${SB:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       grep -m1 -E '^  fxu ' "$WORK/unread.out" | tr -s ' '
@@ -4722,8 +4836,8 @@ STUB
         diff) printf '  ok    one\n  FAIL  two\n' > "$LMF.logs/fxl" ;;
         none) rm -f "$LMF.logs/fxl" ;;
       esac
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
-          AI_DLC_READSET_TRACE_ROOT="$SL_TR" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$LMF" ) > "$WORK/lm.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
+          AI_DLC_READSET_TRACE_ROOT="$SL_TR" -- core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$LMF" ) > "$WORK/lm.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SL:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
@@ -4850,7 +4964,7 @@ STUB
     fi
     ( cd "$BR" && git worktree add -q "$WORK/lmwt" -b lmwt ) >/dev/null 2>&1 || broken "could not add a linked worktree for the --local-map arm"
     TRACE_ARMS=$((TRACE_ARMS+1))
-    LW_R="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$WORK/lmwt.local" ) 2>&1 )"; LW_RC=$?
+    LW_R="$( ( cd "$WORK/lmwt" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$WORK/lmwt.local" ) 2>&1 )"; LW_RC=$?
     stub_reap "${SL:-}"
     if [ "$LW_RC" -eq 1 ] && grep -q 'LINKED worktree' <<< "$LW_R" && [ ! -e "$WORK/lmwt.local" ]; then
       ok "LOCAL: from a LINKED worktree --local-map refuses at the worktree gate and writes no local map"
@@ -4862,9 +4976,9 @@ STUB
     # print once the linked-worktree gate above has let it through. The --local-map refusal is the control.
     TRACE_ARMS=$((TRACE_ARMS+1))
     mkdir -p "$WORK/lmwt.mp" || broken "mkdir failed"
-    LW_M="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --merge-pool "$WORK/lmwt.mp" --local-map "$WORK/lmwt.mpl" ) 2>&1 )"; LW_MRC=$?
+    LW_M="$( ( cd "$WORK/lmwt" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --merge-pool "$WORK/lmwt.mp" --local-map "$WORK/lmwt.mpl" ) 2>&1 )"; LW_MRC=$?
     stub_reap "${SL:-}"
-    LW_I="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list "fxl fxa" --tracer sandbox --in-pool "$WORK/lmwt.ip" ) 2>&1 )"; LW_IRC=$?
+    LW_I="$( ( cd "$WORK/lmwt" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --list "fxl fxa" --tracer sandbox --in-pool "$WORK/lmwt.ip" ) 2>&1 )"; LW_IRC=$?
     stub_reap "${SL:-}"
     if [ "$LW_MRC" -eq 0 ] && grep -q 'no in-pool trace to merge' <<< "$LW_M" && ! grep -q 'LINKED worktree' <<< "$LW_M$LW_I" \
        && [ "$LW_IRC" -eq 1 ] && grep -q 'needs --list with exactly ONE fixture' <<< "$LW_I"; then
@@ -4939,8 +5053,8 @@ STUB
       cp "$dv" "$STUB_DERIVER"; rm -rf "$IPP" "$SL_TR"; mkdir -p "$d.logs-seed" || broken "mkdir failed"
       rm -rf "$d.logs-seed"; mkdir -p "$d"
       mkdir -p "$d/local.logs" && printf '  ok    one\n  ok    two\n' > "$d/local.logs/fxl" || broken "could not seed the in-pool normal-run log"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
-          AI_DLC_READSET_TRACE_ROOT="$SL_TR" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --in-pool "$d" ) > "$WORK/ip.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
+          AI_DLC_READSET_TRACE_ROOT="$SL_TR" -- core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --in-pool "$d" ) > "$WORK/ip.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SL:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
@@ -4956,7 +5070,7 @@ STUB
     }
     mp_run() { # prints the merge's effect on $LMF; the pool under $IPP stays as ip_run left it
       local r fr dok dn zz ot
-      ( cd "$BR" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --merge-pool "$IPP" --local-map "$LMF" ) > "$WORK/mp.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive PATH="$SL:$PATH" -- core/scripts/derive-fixture-readsets.sh --merge-pool "$IPP" --local-map "$LMF" ) > "$WORK/mp.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SL:-}"
       fr="$(grep -c '^fxl	[^#]' "$LMF" 2>/dev/null)" || fr=0
@@ -5052,16 +5166,14 @@ STUB
       cp "$dv" "$STUB_DERIVER"
       rm -f "$SX/kill" "$SX/kill.at"
       [ "$k" = yes ] && { kf="$SX/kill"; : > "$kf"; }
-      ( cd "$BR" && exec env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$sl" STUB_KILLFLAG="$kf" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list "fxw1 fxw2 fxw3" --tracer sandbox ) > "$WORK/iw.out" 2>&1 </dev/null &
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$sl" STUB_KILLFLAG="$kf" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list "fxw1 fxw2 fxw3" --tracer sandbox ) > "$WORK/iw.out" 2>&1 </dev/null &
       pid=$!
       if [ "$k" = yes ]; then
         # fxw3 REACHED, OR THE DERIVER GONE. A 60s tick count used to end this wait and score `at=no`, so
         # a deriver slowed past it by load read as a run that never reached fxw3. The net is no progress:
         # its output, the map and the trace root all unchanged for AW_STALL polls is a refusal.
-        aw_wait '[ -e "$SX/kill.at" ]' 'printf %s "$pid"' \
-          'printf "%s|%s|%s" "$(wc -c < "$WORK/iw.out" 2>/dev/null)" "$(cksum < "$BR/.ai-dlc-fixture-readsets.tsv" 2>/dev/null)" "$(ls -R "$SX_TR" 2>/dev/null | cksum)"'
-        [ "$?" = 2 ] && aw_stalled "INTERRUPTED: the deriver neither reached fxw3 nor advanced its output, map or trace root"
+        aw_wait '[ -e "$SX/kill.at" ]' 'printf %s "$pid"' ''
         [ -e "$SX/kill.at" ] && at=yes
         pkill -9 -P "$pid" 2>/dev/null; kill -9 "$pid" 2>/dev/null
         wait "$pid" 2>/dev/null; r=sigkill
@@ -5140,8 +5252,8 @@ STUB
     dw_run() { # <deriver copy>; prints "<rc>|<keep digest>|<fxa digests>|<stale fxa digest>|<note>|<mapped count>"
       local r k a s n c
       cp "$1" "$STUB_DERIVER"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/dw.out" 2>&1 </dev/null
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/dw.out" 2>&1 </dev/null
       r=$?
       stub_reap "${SB:-}"
       cp "$BR/.ai-dlc-fixture-readsets.tsv" "$WORK/dw.map"
@@ -5851,7 +5963,7 @@ printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
   'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
   'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$CKD_DRV" || broken "could not write the stale-declared decision driver"
 ckd_dec() { # <pool> <t> <tag> -> the decision dir $t.dd.<tag>
-  mkdir -p "$2.dd.$3" && env AI_DLC_READSET_LIVE_TRACE=0 PATH="$2.bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$CKD_DRV" "$1" "$2" "$2.dd.$3"
+  mkdir -p "$2.dd.$3" && ( inproc AI_DLC_READSET_LIVE_TRACE=0 PATH="$2.bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" -- "$CKD_DRV" "$1" "$2" "$2.dd.$3" )
 }
 ckd_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s:%s:%s", $2, $4, $5 }' "$1/.kdec" 2>/dev/null; }
 ckd_world() { local p="$1" x="$2" t="$3" k kd
@@ -6104,10 +6216,10 @@ tk_w_inv() { local p="$1" x="$2" t="$3" e r=""
   ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm tools ) >/dev/null 2>&1 || { printf SEED; return; }
   tk_push "$p" "$t" 1 canon
   mkdir -p "$t.d.ref" "$t.d.hook" "$t.d.envi" "$t.d.dev" || { printf SEED; return; }
-  env -u GIT_EXEC_PATH -u DEVELOPER_DIR PATH="$TK_PLAIN" bash "$TK_DRV" "$p" "$t" "$t.d.ref"
-  env -u DEVELOPER_DIR PATH="$TK_FX:$PATH" GIT_EXEC_PATH="$TK_FX" bash "$TK_DRV" "$p" "$t" "$t.d.hook"
-  env -i HOME="$HOME" PATH=/usr/bin:/bin bash "$TK_DRV" "$p" "$t" "$t.d.envi"
-  env -u GIT_EXEC_PATH DEVELOPER_DIR="$TK_DEV" bash "$TK_DRV" "$p" "$t" "$t.d.dev"
+  ( inproc -u GIT_EXEC_PATH -u DEVELOPER_DIR PATH="$TK_PLAIN" -- "$TK_DRV" "$p" "$t" "$t.d.ref" )
+  ( inproc -u DEVELOPER_DIR PATH="$TK_FX:$PATH" GIT_EXEC_PATH="$TK_FX" -- "$TK_DRV" "$p" "$t" "$t.d.hook" )
+  ( inproc -i HOME="$HOME" PATH=/usr/bin:/bin -- "$TK_DRV" "$p" "$t" "$t.d.envi" )
+  ( inproc -u GIT_EXEC_PATH DEVELOPER_DIR="$TK_DEV" -- "$TK_DRV" "$p" "$t" "$t.d.dev" )
   for e in hook envi dev; do r="$r $e=$(tk_same "$t.d.ref" "$t.d.$e")"; done
   printf 'git=%s:%s tools=%s skip=%s%s' "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -c '/git$')" \
     "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -cxF "$TK_EXP")" \
@@ -6577,8 +6689,8 @@ else
   RC_TR="$(cd "$WORK" && pwd -P)/rc.tr"
   rc_run() { # <repo> <trace root>; prints "<rc>|<announce>|<listed>|<traced>"
     local r="$1" x
-    ( cd "$r" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$WORK/rc.sb" \
-        AI_DLC_READSET_TRACE_ROOT="$2" bash core/scripts/derive-fixture-readsets.sh --reconcile ) > "$WORK/rc.out" 2>&1 </dev/null
+    ( cd "$r" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$WORK/rc.sb" \
+        AI_DLC_READSET_TRACE_ROOT="$2" -- core/scripts/derive-fixture-readsets.sh --reconcile ) > "$WORK/rc.out" 2>&1 </dev/null
     x=$?
     stub_reap "${SB:-}"
     ( cd "$r" && git checkout -q -- . ) >/dev/null 2>&1
@@ -6718,11 +6830,11 @@ printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
   'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
   'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$VS_DRV" || broken "could not write the verdict-store decision driver"
 vs_dec() { # <pool> <t> <store> <tag> -> decision dir $t.vd.<tag>
-  mkdir -p "$2.vd.$4" && env AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$3" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" bash "$VS_DRV" "$1" "$2" "$2.vd.$4"
+  mkdir -p "$2.vd.$4" && ( inproc AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$3" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin" -- "$VS_DRV" "$1" "$2" "$2.vd.$4" )
 }
 vs_cell() { awk -F'\t' -v f="$2" '$1 == f && ($2 == "run" || $2 == "skip") { printf "%s", $2 }' "$1/.kdec" 2>/dev/null; }
 vs_hr() { # <runner> <root> <fx> <store>: runs the declared fixture; prints its exit code
-  env AI_DLC_VERDICT_STORE="$4" bash "$1" --root "$2" "$3" >/dev/null 2>&1; printf '%s' "$?"
+  ( inproc AI_DLC_VERDICT_STORE="$4" -- "$1" --root "$2" "$3" ) >/dev/null 2>&1; printf '%s' "$?"
 }
 vs_n() { find "$1" -maxdepth 1 -type f ! -name '.tmp*' 2>/dev/null | grep -c . || :; }
 vs_mk() { # <t> <fixture root> <runner file>: a git repo holding the hook, the runner and four fixtures
@@ -6806,7 +6918,7 @@ vs_world() { # <pool> <fixture root> <runner file> <t> [<cells>]: one vector
   case "$cs" in *" f "*)
   : > "$t.notadir"
   rcs="$(vs_hr "$A/$rd/hermetic-run.sh" "$A" decl "$t.notadir")"
-  v="$v f=$rcs/$(env -u HOME -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" decl >/dev/null 2>&1; printf '%s' "$?")/$([ -f "$t.notadir" ] && [ ! -s "$t.notadir" ] && echo intact)" ;; esac
+  v="$v f=$rcs/$( ( inproc -u HOME -u AI_DLC_VERDICT_STORE -- "$A/$rd/hermetic-run.sh" --root "$A" decl ) >/dev/null 2>&1; printf '%s' "$?")/$([ -f "$t.notadir" ] && [ ! -s "$t.notadir" ] && echo intact)" ;; esac
   case "$cs" in *" p "*)
   mkdir -p "$t/C2" && cp -R "$A/." "$t/C2/" && rm -rf "$t/C2/.git" \
     && ( cd "$t/C2" && git init -q . && git add -A && git -c user.email=f@f -c user.name=g commit -qm other ) >/dev/null 2>&1
@@ -6915,7 +7027,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     # VS_KO_FROM=<census world>: the runner side is SHARED from that world's run rather than re-run -- only for a
     # mutant that edits the pool alone, whose world, hook file and runner are that world's byte for byte.
     if [ -n "${VS_KO_FROM:-}" ]; then for f in $fl; do cp "$VS_KO_FROM.cd/d1/ko.$f" "$o/d1/ko.$f" 2>/dev/null; done
-    else for f in $fl; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d1/ko.$f" 2>/dev/null; done; fi
+    else for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d1/ko.$f" 2>/dev/null; done; fi
     mkdir -p "$KEYS_DIR" || exit 1
     for f in "$o/d1/.k"/*; do [ -f "$f" ] || continue; b="${f##*/}"
       { sed -n 1p "$f"; printf '#state ok\n'; sed -n 3p "$f"; tail -n +4 "$f"; printf 'zz-foreign/%s\t0000\n' "$b"; } > "$KEYS_DIR/$b.key"; done
@@ -6926,7 +7038,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     printf 'v2\n' > src/a.sh
     readset_manifest "$o/d2" && readset_local_validate "$o/list" "$o/d2" && readset_keys "$o/list" "$o/d2" || exit 1
     if [ -n "${VS_KO_FROM:-}" ]; then for f in $fl; do cp "$VS_KO_FROM.cd/d2/ko.$f" "$o/d2/ko.$f" 2>/dev/null; done
-    else for f in $fl; do env -u AI_DLC_VERDICT_STORE bash "$3" --root "$2" --key-only "$f" > "$o/d2/ko.$f" 2>/dev/null; done; fi ) >/dev/null 2>&1
+    else for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d2/ko.$f" 2>/dev/null; done; fi ) >/dev/null 2>&1
 }
 vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ctl=<fresh>/<carry> cen=<fresh>/<carry>"
   local p="$1" x="$2" t="$4" W="$4/W" rd f ps v n c
@@ -7240,11 +7352,11 @@ vs_skew() { # <runner file> <t> <strip 0|1>: "rc=<n> ran=<n> off=<n> n=<entries>
     cp "$t/hk" "$A/.githooks/pre-push"
   fi
   ra="$(cd "$A" && git rev-list --max-parents=0 HEAD | sed -n 1p)"
-  o="$(env AI_DLC_VERDICT_STORE="$S" bash "$A/$rd/hermetic-run.sh" --root "$A" decl 2>&1)"; rc=$?
-  k="$(env -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl 2>/dev/null)"
+  o="$( ( inproc AI_DLC_VERDICT_STORE="$S" -- "$A/$rd/hermetic-run.sh" --root "$A" decl ) 2>&1)"; rc=$?
+  k="$( ( inproc -u AI_DLC_VERDICT_STORE -- "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl ) 2>/dev/null)"
   printf 'rc=%s ran=%s off=%s n=%s ko=%s/%s' "$rc" "$(grep -c '^hermetic-run: decl: rc=0 sandbox_files=' <<< "$o")" \
     "$(grep -c 'verdict store OFF: .* carries no READSET_KEYROWS span' <<< "$o")" "$(vs_n "$S/$ra")" \
-    "$(env -u AI_DLC_VERDICT_STORE bash "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl >/dev/null 2>&1; printf '%s' "$?")" "$(grep -c . <<< "$k")"
+    "$( ( inproc -u AI_DLC_VERDICT_STORE -- "$A/$rd/hermetic-run.sh" --root "$A" --key-only decl ) >/dev/null 2>&1; printf '%s' "$?")" "$(grep -c . <<< "$k")"
 }
 if [ -n "${VS_X1:-}" ]; then
   VS_ARMS=$((VS_ARMS+1)); _c="$(vs_skew "$VS_RUN" "$WORK/vs.sk0" 0 2>/dev/null)"
@@ -7344,7 +7456,10 @@ SLOT_T="$WORK/slot"; mkdir -p "$SLOT_T" || broken "mkdir failed"
 SLOT_WV="$SLOT_W"   # the slot-world program a score runs; the noreap mutant points it at a copy
 slot_score() { # <deriver copy> [scenario ...] -> "<rc>|<failed scenarios, sorted, space-joined>"
   local o r d="$1"; shift
-  o="$(TMPDIR="$SLOT_T" bash "$SLOT_WV" "$d" "$HOOK" "$@" 2>/dev/null)"; r=$?
+  # slot-world itself runs in process; the derivers IT starts stay processes: the slot's decisions are keyed on the
+  # holder's `$$` (readset_lock_write records it, rs_slot_release and readset_lock_stale judge it) and on reaping a
+  # deriver's process group, so two derivers in one process would share the identity the slot exists to separate.
+  o="$( ( inproc TMPDIR="$SLOT_T" -- "$SLOT_WV" "$d" "$HOOK" "$@" ) 2>/dev/null)"; r=$?
   printf '%s|%s' "$r" "$(printf '%s\n' "$o" | sed -n 's/^FAIL \([a-z]*\):.*/\1/p' | sort | tr '\n' ' ' | sed 's/ $//')"
   printf '%s\n' "$o" > "$SLOT_T/last.out"
 }

@@ -373,6 +373,97 @@ mk_work() {  # a fresh join tree on the injected clock; prints its path
 }
 
 # ---------------------------------------------------------------------------
+# THE SUBJECT, IN PROCESS. wbl_ip runs wait-for-deliverable.sh IN THE CALLING SHELL, which is always a
+# subshell the caller opened: it sources the subject (whose BASH_SOURCE guard returns before either main
+# runs) and calls wfd_mark_main then wfd_beat_main with the argv the CLI gets -- the two lines the
+# script's own tail runs. The subject's `exit` ends that subshell and its EXIT trap runs there, so a
+# call costs a subshell, not a bash start. It is sourced once per call because it reads its AI_DLC_*
+# tuning at source time and the callers vary that tuning per call. The CLI itself is still run, once
+# per distinct outcome, by wiring_e2e (below), which also holds the two answers byte-identical.
+#   pipefail is off, as the CLI runs it. wfd_start_of is unset first: S26 defines the helper's copy in
+#   this shell, and a lone mutant copy must take its own inline fallback, as its CLI run did.
+#   date and sleep are FUNCTIONS here -- THE INJECTED CLOCK in process. The same arithmetic as the PATH
+#   shims above, keyed on the same clock file: `date +%s` is base + offset, `sleep N` adds N and then
+#   sources the world's poll hook in a subshell (so the hook's `exit` ends only the hook). A world with
+#   no clock falls through to the real date and to `command sleep` (a gated stub, where a cell put one
+#   first on PATH). Children the subject starts (the merge's --check-header, the seal's
+#   --admit-marker) still see the PATH shims.
+#   THE PARENT SHELL. The CLI ran every beat with a fresh parent pid, so a beat never found a
+#   `.shell-<its PPID>` marker it had not been chained behind. In process every call shares this
+#   fixture's $PPID, so a beat call first removes `.shell-$PPID` from its counter dir -- a fresh shell
+#   -- unless WBL_CHAIN=1 (the chained cases, which write or keep that marker on purpose). --status,
+#   --dispatch-ts and --mark write nothing, and nothing is removed for them.
+#   THE LEASE HOLDER. A background beat exports WFD_SELF_PID as its own subshell's pid, read INLINE as
+#   `$("$WBL_BASH" -c 'echo $PPID')` (bash 3.2 has no BASHPID; through a function the substitution
+#   forks once more and reads a pid one level down). That is the `$!` its caller holds; a foreground
+#   call leaves it unset and holds as $$.
+# ---------------------------------------------------------------------------
+wbl_ip() {  # $1 = subject; rest = its argv. Call it inside a subshell.
+  wi_s_="$1"; shift
+  set +o pipefail
+  unset -f wfd_start_of
+  wbl_clock_fns
+  case " $* " in *" --status "*|*" --dispatch-ts "*|" --mark "*|" --mark-repair "*) ;;
+    *) if [ "${WBL_CHAIN:-0}" != 1 ] && [ -n "${AI_DLC_PROJECT_ROOT:-}" ]; then
+         case "${AI_DLC_STATE_DIR:-}" in
+           /*) wi_sd_="$AI_DLC_STATE_DIR" ;;
+           *) wi_sd_="$AI_DLC_PROJECT_ROOT/${AI_DLC_STATE_DIR:-_bmad-output}" ;;
+         esac
+         rm -f "$wi_sd_/.wait-beats/.shell-$PPID"
+       fi ;;
+  esac
+  # shellcheck disable=SC1090
+  . "$wi_s_"
+  wfd_mark_main "$@"
+  wfd_beat_main "$@"
+}
+wbl_clock_fns() {  # defines date and sleep as the in-process clock, in the calling (sub)shell
+  date() {
+    if [ "$#" -eq 1 ] && [ "$1" = "+%s" ] && [ -n "${AI_DLC_PROJECT_ROOT:-}" ]; then
+      wck_f_="$WBL_CLOCK_DIR/${AI_DLC_PROJECT_ROOT//\//_}"
+      if [ -f "$wck_f_" ]; then wck_o_=0; read -r wck_o_ < "$wck_f_"; read -r wck_r_ < "$wck_f_.base"; printf '%s\n' "$(( wck_r_ + wck_o_ ))"; return 0; fi
+    fi
+    "$WBL_REAL_DATE" "$@"
+  }
+  sleep() {
+    if [ "$#" -eq 1 ] && [ -n "${AI_DLC_PROJECT_ROOT:-}" ]; then
+      case "$1" in ""|*[!0-9]*) ;; *)
+        wck_f_="$WBL_CLOCK_DIR/${AI_DLC_PROJECT_ROOT//\//_}"
+        if [ -f "$wck_f_" ]; then
+          wck_o_=0; read -r wck_o_ < "$wck_f_"; printf '%s' "$(( wck_o_ + $1 ))" > "$wck_f_"
+          read -r wck_r_ < "$wck_f_.base"; wck_n_=$(( wck_r_ + wck_o_ + $1 ))
+          [ -f "$wck_f_.onsleep" ] && ( set +u
+            fx_vtouch() { touch -t "$("$WBL_REAL_DATE" -r "$wck_n_" +%Y%m%d%H%M.%S 2>/dev/null || "$WBL_REAL_DATE" -d "@$wck_n_" +%Y%m%d%H%M.%S)" "$1"; }
+            . "$wck_f_.onsleep" )
+          return 0
+        fi ;;
+      esac
+    fi
+    command sleep "$@"
+  }
+}
+# THE IN-PROCESS CLOCK'S OWN PROBE, BOTH DIRECTIONS, beside clock_probe: in a clocked world the
+# functions answer `sleep 60` at once and move `date +%s` by 60, and run the poll hook; with the clock
+# off the same world reads the real clock and a 1s sleep is real.
+clock_probe_ip() {
+  cpi_w_="$TMPROOT/clock-probe-ip"; mkdir -p "$cpi_w_"; fx_clock_on "$cpi_w_"
+  fx_onsleep "$cpi_w_" ": > '$cpi_w_/hooked'"
+  cpi_t0_="$("$WBL_REAL_DATE" +%s)"
+  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; wbl_clock_fns; a=$(date +%s); sleep 60; b=$(date +%s); printf '%s %s %s' "$(type -t sleep)" "$a" "$b" )"
+  cpi_t1_="$("$WBL_REAL_DATE" +%s)"
+  set -- $cpi_out_
+  if [ "${1:-}" = function ] && [ $(( ${3:-0} - ${2:-0} )) -eq 60 ] && [ $(( cpi_t1_ - cpi_t0_ )) -le 2 ] && [ -e "$cpi_w_/hooked" ]; then
+    ok "clock: in process, a clocked world's sleep 60 returns at once, date +%s moves exactly 60, and the poll hook ran"
+  else broken "clock: the in-process clock did not engage (sleep=${1:-?}, date moved $(( ${3:-0} - ${2:-0} ))s, real ${cpi_t1_}-${cpi_t0_}, hook=$([ -e "$cpi_w_/hooked" ] && echo ran || echo no))"; fi
+  fx_clock_off "$cpi_w_"; fx_shims_on
+  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; wbl_clock_fns; a=$(date +%s); sleep 1; b=$(date +%s); printf '%s %s' "$a" "$b" )"
+  set -- $cpi_out_
+  if [ $(( ${2:-0} - ${1:-0} )) -ge 1 ] && [ $(( ${2:-0} - ${1:-0} )) -le 3 ]; then
+    ok "clock: in process, CONTROL — the same world with its clock off reads the real clock and really sleeps"
+  else broken "clock: in process, CONTROL FAILED — with the clock off date moved $(( ${2:-0} - ${1:-0} ))s across a 1s sleep"; fi
+}
+
+# ---------------------------------------------------------------------------
 # ONE BEAT. The quantum is 2s with a 1s poll and a 1s margin: RESERVE is max(MARGIN,
 # POLL) = 1, so the deadline lands one second out and a waiting beat costs ~1-2s. The
 # margin is load-bearing and easy to miss — at its default of 10 the deadline would
@@ -390,36 +481,34 @@ mk_work() {  # a fresh join tree on the injected clock; prints its path
 # ---------------------------------------------------------------------------
 beat() {  # $1=subject $2=workdir $3=idle_secs $4=teammate_dir ; rest = extra argv
   b_subj="$1" b_w="$2" b_idle="$3" b_td="$4"; shift 4
-  ( cd "$b_w" && env -u CLAUDE_CODE_SESSION_ID \
+  ( cd "$b_w" && unset CLAUDE_CODE_SESSION_ID && export \
         AI_DLC_WAIT_BEAT_SECS=2 \
         AI_DLC_WAIT_POLL_SECS=1 \
         AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS="${MAXB:-6}" \
         AI_DLC_TEAMMATE_IDLE_SECS="$b_idle" \
         AI_DLC_TEAMMATE_DIR="$b_td" \
-        AI_DLC_PROJECT_ROOT="$PWD" bash "$b_subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$b_subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
 
 # A chained sibling: the marker is keyed on the PID of the shell that INVOKES the
-# subject, so it must be written by that very shell. The trailing `exit $?` is the
-# whole mechanism — bash EXECs the last command of a `-c` string when it is a simple
-# command, which would make the subject's parent the wrapper's own parent and leave
-# the marker naming a PID the subject never looks up. Section 7b asserts it landed.
+# subject, so it must be written by that very shell. In process that shell's pid is
+# this fixture's $PPID (a subshell keeps it), so the marker is `.shell-$PPID`, stamped
+# with the real clock and no start time -- the one-field marker the CLI wrapper wrote
+# -- and WBL_CHAIN keeps wbl_ip from clearing it. Section 7b asserts it landed.
 chained_beat() {  # $1=subject $2=workdir $3=idle_secs $4=teammate_dir
   c_subj="$1" c_w="$2" c_idle="$3" c_td="$4"
-  ( cd "$c_w" && env -u CLAUDE_CODE_SESSION_ID \
+  ( cd "$c_w" && unset CLAUDE_CODE_SESSION_ID && export \
         AI_DLC_WAIT_BEAT_SECS=60 \
         AI_DLC_WAIT_POLL_SECS=1 \
         AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS="${MAXB:-6}" \
         AI_DLC_TEAMMATE_IDLE_SECS="$c_idle" \
         AI_DLC_TEAMMATE_DIR="$c_td" \
-    bash -c 'printf "%s" "$(date +%s)" > "_bmad-output/.wait-beats/.shell-$$" || exit 3
-             s="$1"; shift
-             AI_DLC_PROJECT_ROOT="$PWD" bash "$s" "$@"
-             exit $?' _ "$c_subj" deliv.md ) > "$BEATOUT" 2>&1
+    && { printf "%s" "$("$WBL_REAL_DATE" +%s)" > "_bmad-output/.wait-beats/.shell-$PPID" || exit 3; } \
+    && export AI_DLC_PROJECT_ROOT="$PWD" WBL_CHAIN=1 && wbl_ip "$c_subj" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -744,20 +833,20 @@ S9_auto_resolve() {
   mk_transcript "$H/.claude/projects/aaa-first-project/other-session/subagents" 0 agent-adecoy-9.jsonl
   mk_transcript "$H/.claude/projects/zzz-second-project/$SID/subagents" 7200 agent-aone-1.jsonl
 
-  ( cd "$W" && env HOME="$H" CLAUDE_CODE_SESSION_ID="$SID" \
+  ( cd "$W" && export HOME="$H" CLAUDE_CODE_SESSION_ID="$SID" \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_IDLE_SECS=60 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"
   if has "$IDLE_BANNER"; then ok "auto-resolve: the sensor finds THIS session's subagents dir from CLAUDE_CODE_SESSION_ID alone, past a project holding a live decoy session"
   else bad "auto-resolve: no banner with only the session id set — the shipped resolution path does not work, and every other section here drives an override that hides that: $OUT"; fi
 
   # THE CONTROL. Same HOME, same tree, a session id that names nothing. It must fall
   # to NO SIGNAL, not to the first directory it can reach.
-  ( cd "$W" && env HOME="$H" CLAUDE_CODE_SESSION_ID="99999999-0000-0000-0000-000000000000" \
+  ( cd "$W" && export HOME="$H" CLAUDE_CODE_SESSION_ID="99999999-0000-0000-0000-000000000000" \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_IDLE_SECS=60 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$SUBJ" deliv.md ) > "$BEATOUT" 2>&1
   OUT="$(cat "$BEATOUT")"
   if has "$UNAVAIL_LINE"; then ok "auto-resolve: CONTROL — an unknown session id resolves to NO SIGNAL, not to whatever directory sorts first"
   else bad "auto-resolve: CONTROL FAILED — an unknown session id did not report no signal, so the resolver is matching something it should not: $OUT"; fi
@@ -913,10 +1002,10 @@ M7_session_id_ignored() {
   SID="11111111-2222-3333-4444-555555555555"
   mk_transcript "$H/.claude/projects/aaa-first-project/other-session/subagents" 0 agent-adecoy-9.jsonl
   mk_transcript "$H/.claude/projects/zzz-second-project/$SID/subagents" 7200 agent-aone-1.jsonl
-  ( cd "$W" && env HOME="$H" CLAUDE_CODE_SESSION_ID="$SID" \
+  ( cd "$W" && export HOME="$H" CLAUDE_CODE_SESSION_ID="$SID" \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_IDLE_SECS=60 \
-    AI_DLC_PROJECT_ROOT="$PWD" bash "$MUT" deliv.md ) > "$BEATOUT" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$MUT" deliv.md ) > "$BEATOUT" 2>&1
   OUT="$(cat "$BEATOUT")"
   if has "$LIVE_LINE" && ! has "$IDLE_BANNER"; then
     mutant_killed "${B_s9:-0}" session-id-ignored "MUTANT session-id-ignored: a resolver that wildcards the session lands on another session's live decoy and reports it as this join's teammate — section 9 catches it"
@@ -982,14 +1071,14 @@ CBEAT_SINCE=""
 CB_BEAT=2
 cbeat() {  # $1=subject $2=workdir ; rest = argv (targets relative to the workdir)
   cb_subj="$1" cb_w="$2"; shift 2
-  ( cd "$cb_w" && env -u CLAUDE_CODE_SESSION_ID \
+  ( cd "$cb_w" && unset CLAUDE_CODE_SESSION_ID && export \
         AI_DLC_WAIT_BEAT_SECS="$CB_BEAT" \
         AI_DLC_WAIT_SETTLE_SECS="${CB_SETTLE:-1}" \
         AI_DLC_WAIT_POLL_SECS=1 \
         AI_DLC_WAIT_MARGIN_SECS=0 \
         AI_DLC_MAX_WAIT_BEATS="${CB_MAXB:-1}" \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        AI_DLC_PROJECT_ROOT="$PWD" bash "$cb_subj" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$cb_subj" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -1125,9 +1214,9 @@ S13c_complete_marker_must_settle() {
   W3="$(mk_work)"; CBEAT_SINCE=""
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W3/old.md"
   fx_backdate "$W3/old.md" 3600 || broken "cannot backdate old.md"
-  cb2() { ( cd "$W3" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+  cb2() { ( cd "$W3" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --complete old.md ) > "$BEATOUT" 2>&1; RC=$?; OUT="$(cat "$BEATOUT")"; }
+      AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$SUBJ" --complete old.md ) > "$BEATOUT" 2>&1; RC=$?; OUT="$(cat "$BEATOUT")"; }
   cb2; cb2
   if has "UNCHANGED old.md -- present (" && ! has "absent after" && ! has "UNSETTLED old.md" \
      && ! has "Re-dispatch the" && [ "$RC" -eq 1 ]; then
@@ -1256,10 +1345,10 @@ M18_settle_is_poll() {
   W="$(mk_work)"
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/slow.md"
   for s in "$SUBJ" "$MUT"; do
-    ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=5 AI_DLC_WAIT_SETTLE_SECS=600 \
+    ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=5 AI_DLC_WAIT_SETTLE_SECS=600 \
         AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=3 \
         AI_DLC_STATE_DIR="_bmad-output/$(basename "$s")" AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        AI_DLC_PROJECT_ROOT="$PWD" bash "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1
   done
   OUT="$(cat "$BEATOUT.$(basename "$SUBJ")")"; o_s="$OUT"
   OUT="$(cat "$BEATOUT.$(basename "$MUT")")"
@@ -1303,9 +1392,11 @@ S13g_no_flag_output_byte_identical() {
     printf 'stale\n' > "$d/x.md"; fx_backdate "$d/x.md" 3600 || broken "cannot backdate"
     # BOTH beats carry the short quantum: an env prefix binds one command, and a bare second
     # `bash` would sleep the 600s default.
+    # Two calls from ONE shell, as the CLI pair shared a parent: the second is chained (WBL_CHAIN keeps
+    # the marker the first wrote).
     ( cd "$d" && export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
-        AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" && unset CLAUDE_CODE_SESSION_ID \
-        && { AI_DLC_PROJECT_ROOT="$PWD" bash "$s" x.md y.md; AI_DLC_PROJECT_ROOT="$PWD" bash "$s" x.md y.md; } ) > "$d.raw" 2>&1
+        AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" AI_DLC_PROJECT_ROOT="$PWD" && unset CLAUDE_CODE_SESSION_ID \
+        && { ( wbl_ip "$s" x.md y.md ); ( WBL_CHAIN=1 wbl_ip "$s" x.md y.md ); } ) > "$d.raw" 2>&1
     sed -E 's/[0-9]+[smhd] (old|since|ago)/N \1/g' "$d.raw" > "$d.out"
   done
   a="$(cat "$W/$(basename "$SUBJ" .sh).out")"; b="$(cat "$W/old-subject.out")"
@@ -1495,25 +1586,30 @@ M25_mark_name_fixed() {
 # ===========================================================================
 scall() {  # $1=subject $2=workdir ; rest = argv after --status. CB_SETTLE honoured.
   sc_subj="$1" sc_w="$2"; shift 2
-  ( cd "$sc_w" && env -u CLAUDE_CODE_SESSION_ID \
+  ( cd "$sc_w" && unset CLAUDE_CODE_SESSION_ID && export \
         AI_DLC_WAIT_SETTLE_SECS="${CB_SETTLE:-1}" \
         AI_DLC_WAIT_POLL_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS="${CB_MAXB:-1}" \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        AI_DLC_PROJECT_ROOT="$PWD" bash "$sc_subj" --status "$@" ) > "$BEATOUT" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$sc_subj" --status "$@" ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
 # A beat in its OWN parent shell, so a second beat in one case sleeps instead of returning as a
-# chained sibling. The trailing `exit $?` stops bash exec-ing the subject in place of the wrapper.
-# OB_PATH, when set, is the beat's PATH (the gated sleep stub, section 16); unset, the fixture's own.
+# chained sibling: wbl_ip clears `.shell-$PPID` first (WBL_CHAIN unset), which is the fresh shell.
 obeat() {  # $1=subject $2=workdir $3=outfile $4=beat secs $5=settle secs $6=since ; rest = argv
   ob_subj="$1" ob_w="$2" ob_o="$3" ob_b="$4" ob_st="$5" ob_si="$6"; shift 6
-  ( cd "$ob_w" && env -u CLAUDE_CODE_SESSION_ID PATH="${OB_PATH:-$PATH}" \
+  ( cd "$ob_w" && unset CLAUDE_CODE_SESSION_ID && export \
         AI_DLC_WAIT_BEAT_SECS="$ob_b" AI_DLC_WAIT_SETTLE_SECS="$ob_st" \
         AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 \
         AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-    AI_DLC_PROJECT_ROOT="$PWD" bash -c '"$@"; exit $?' _ bash "$ob_subj" --since "$ob_si" "$@" ) > "$ob_o" 2>&1
+    AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$ob_subj" --since "$ob_si" "$@" ) > "$ob_o" 2>&1
+}
+# A --reset beat whose output nobody reads (sections 15d and 16b).
+reset_beat() {  # $1 = subject, $2 = workdir, $3 = target
+  ( cd "$2" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$1" --reset --complete "$3" ) >/dev/null 2>&1
 }
 SIBLING_NOTE='a sibling beat already ran in this same Bash call'
 PARITY_FILES="p-fenced.md p-crlf.md p-notlast.md p-trail.md p-closed.md"
@@ -1632,9 +1728,7 @@ status_after_delivery() {  # $1 = subject -> sets SAD_* from one world
   CB_SETTLE=60 scall "$1" "$W" --complete --since "$SI" done.md; SAD_SINCE="$OUT"
   printf '%s\n- edited after consumption\n%s\n' "$SKELETON" "$MARKER" > "$W/later.md"
   CB_SETTLE=60 scall "$1" "$W" --complete --since "$SI" later.md; SAD_CHANGED="$OUT"
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
-      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash -c '"$@"; exit $?' _ bash "$1" --reset --complete done.md ) >/dev/null 2>&1
+  reset_beat "$1" "$W" done.md
   CB_SETTLE=60 scall "$1" "$W" --complete done.md; SAD_RESET="$OUT"
   rm -rf "$W"
 }
@@ -1750,9 +1844,7 @@ revised_survives() {  # $1 = subject -> RS_BEAT, RS_AFTER, RS_RESET
   fx_onsleep_off "$W"
   RS_BEAT="$(cat "$BEATOUT")"
   RS_AFTER="$(cat "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" 2>/dev/null || echo ABSENT)"
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
-      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash -c '"$@"; exit $?' _ bash "$1" --reset --complete rv.md ) >/dev/null 2>&1
+  reset_beat "$1" "$W" rv.md
   RS_RESET="$( [ -e "$W/_bmad-output/.wait-beats/$(fx_key rv.md).revised" ] && echo PRESENT || echo ABSENT )"
   rm -rf "$W"
 }
@@ -1913,8 +2005,8 @@ S15c_status_read_only() {
   else bad "status: --status created _bmad-output or did not answer: $OUT"; fi
   # `--progress-path .` names an ancestor of the state dir, so the subject refuses it (exit 64)
   # AFTER its mkdir and before any sleep: the control costs no beat.
-  ( cd "$W2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" --progress-path . f.md ) > "$BEATOUT" 2>&1
+  ( cd "$W2" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$SUBJ" --progress-path . f.md ) > "$BEATOUT" 2>&1
   if [ -d "$W2/_bmad-output" ]; then ok "status: CONTROL — the same tree without --status DOES get _bmad-output created"
   else bad "status: CONTROL FAILED — the subject never creates the state dir here, so its absence above proves nothing: $(cat "$BEATOUT")"; fi
   rm -rf "$W" "$W2"
@@ -2287,9 +2379,9 @@ pid_gone() { ! kill -0 "$1" 2>/dev/null; }
 heir_world() {  # $1 = subject (in a sibling dir); leaves W, sets HEIR_*
   W="$(mk_work)"; fx_clock_off "$W"; HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
   mk_ledger_row "$W" toolu_wbl661heir $(( $(date +%s) - 30 ))
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --dispatch toolu_wbl661heir b.md ) > "$BEATOUT.B" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" --dispatch toolu_wbl661heir b.md ) > "$BEATOUT.B" 2>&1 &
   hw_bg_=$!
   until_ok 300 marker_present "$W" || broken "heir: the --dispatch beat never wrote the marker"
   HEIR_B_PID="$(marker_pid "$W")"
@@ -2340,8 +2432,8 @@ call_world() {  # $1 = subject -> W, OUT, RC; a --status read of a path written 
   mk_ledger_row "$W" toolu_wbl649epoch $(( cw_e_ - 600 ))
   mk_ledger_row "$W" "$CALL_ID" "$cw_e_"
   printf 'x\n' > "$W/deliv.md"
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status --dispatch "$CALL_ID" deliv.md ) > "$BEATOUT" 2>&1
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$1" --status --dispatch "$CALL_ID" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"
 }
 S19a_dispatch_call_prefix() {
@@ -2354,8 +2446,9 @@ S19a_dispatch_call_prefix() {
   mk_ledger_row "$W" "$CALL_ID" $(( $(date +%s) - 60 ))
   printf '{"agentType":"dev","toolUseId":"%s"}' "$CALL_ID" > "$TD/agent-a649beef.meta.json"
   printf 'x\n' > "$W/deliv.md"
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TD" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$(sib_dir "$SUBJ")/wait-for-deliverable.sh" --status --dispatch a649beef deliv.md ) > "$BEATOUT" 2>&1
+  s19a_sd_="$(sib_dir "$SUBJ")"
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_TEAMMATE_DIR="$TD" \
+      AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$s19a_sd_/wait-for-deliverable.sh" --status --dispatch a649beef deliv.md ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"
   if [ "$RC" -eq 0 ] && has "DELIVERED deliv.md"; then ok "dispatch-call: CONTROL — a bare-hex agentId still resolves through its meta.json"
   else bad "dispatch-call: CONTROL FAILED — the agentId arm no longer resolves (rc=$RC): $OUT"; fi
@@ -2369,8 +2462,8 @@ S19b_dispatch_grammar_missing_refuses() {
   rm -rf "$W"
   # CONTROL: the same lone copy without --dispatch still runs, so the refusal is the grammar's.
   W="$(mk_work)"
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$LONE649/wait-for-deliverable.sh" --status --since "$(( $(date +%s) - 60 ))" deliv.md ) > "$BEATOUT" 2>&1
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$LONE649/wait-for-deliverable.sh" --status --since "$(( $(date +%s) - 60 ))" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"
   if [ "$RC" -eq 0 ] && has "STATUS --"; then ok "dispatch-call: CONTROL — the same lone copy without --dispatch runs"
   else bad "dispatch-call: CONTROL FAILED — the lone copy does not run at all (rc=$RC): $OUT"; fi
@@ -2403,10 +2496,10 @@ M39_dispatch_toolu_only() {
 S19C_WARN="WARN: wait-for-deliverable: --since without --dispatch"
 s19c_beat() {  # $1 = subject, $2 = workdir; rest = argv (the targets are named by the caller)
   s19c_subj="$1" s19c_w="$2"; shift 2
-  ( cd "$s19c_w" && env -u CLAUDE_CODE_SESSION_ID \
+  ( cd "$s19c_w" && unset CLAUDE_CODE_SESSION_ID && export \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
         AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-        AI_DLC_PROJECT_ROOT="$PWD" bash "$s19c_subj" "$@" ) > "$BEATOUT" 2>&1
+        AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$s19c_subj" "$@" ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"
   s19c_n="$(grep -cF "$S19C_WARN" "$BEATOUT")" || s19c_n=0
 }
@@ -2505,9 +2598,9 @@ ledger_fifo_world() {  # $1 = subject (in a sibling dir); leaves W, sets BLK_MAR
   mkfifo "$W/_bmad-output/spawn-ledger.jsonl" || broken "cannot make the ledger a FIFO"
   fifo_hold "$W/_bmad-output/spawn-ledger.jsonl" "$W/reached" "$W/release" \
     "{\"v\":1,\"ts\":\"$(fx_iso $(( $(date +%s) - 30 )))\",\"name\":\"wbl\",\"tool_use_id\":\"toolu_wbl541\"}"
-  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 \
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --dispatch toolu_wbl541 deliv.md ) > "$BEATOUT" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" --dispatch toolu_wbl541 deliv.md ) > "$BEATOUT" 2>&1 &
   BLK_PID=$!
   blocked_lease "$W" "$W/reached" "$W/release"
   OUT="$(cat "$BEATOUT")"
@@ -2527,9 +2620,9 @@ S20b_lease_before_shard_check() {
   printf '#!/usr/bin/env bash\n: > "%s/reached"\nIFS= read -r _ < "%s/hdr.fifo"\nexit 0\n' "$W" "$W" > "$SD/merge-adversarial-shards.sh"
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/s.md"
   fifo_hold "$W/hdr.fifo" "$W/held" "$W/release" go
-  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$SD/wait-for-deliverable.sh" --since "$(( $(date +%s) - 30 ))" --complete --shard-header convergence s.md ) > "$BEATOUT" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$SD/wait-for-deliverable.sh" --since "$(( $(date +%s) - 30 ))" --complete --shard-header convergence s.md ) > "$BEATOUT" 2>&1 &
   BLK_PID=$!
   blocked_lease "$W" "$W/reached" "$W/release"
   OUT="$(cat "$BEATOUT")"
@@ -2559,9 +2652,9 @@ M40_lease_after_dispatch() {
 cs_counter_written() { for cw_ in "$1"/_bmad-output/seat-q/.wait-beats/*; do [ -f "$cw_" ] && return 0; done; return 1; }
 custom_state_world() {  # $1 = subject; leaves W, sets CS_MARK (holder pid at root, or ''), CS_LEASE, CS_CTR
   W="$(mk_work)"; fx_clock_off "$W"; CS_MARK=""; CS_LEASE=0; CS_CTR=0
-  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=40 \
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=40 \
       AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" deliv.md ) > "$BEATOUT" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" deliv.md ) > "$BEATOUT" 2>&1 &
   cs_p_=$!
   until_ok 300 cs_counter_written "$W" \
     || { kill "$cs_p_" 2>/dev/null; broken "custom-state: the beat never wrote a counter in its state dir"; }
@@ -2592,14 +2685,14 @@ cross_heir_world() {  # $1 = subject; leaves W, sets XH_A, XH_B, XH_AFTER
   W="$(mk_work)"; fx_clock_off "$W"; XH_A=""; XH_B=""; XH_AFTER=""
   gate_stub "$(mktemp -d "$TMPROOT/xhstub.XXXXXX")"; : > "$STUB_GATE"   # a plain logging stub for A
   A_STUB_LOG="$STUB_LOG"; A_STUB_PATH="$STUB_PATH"
-  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" b.md ) > "$BEATOUT.B" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" b.md ) > "$BEATOUT.B" 2>&1 &
   XH_B=$!
   until_ok 300 marker_present "$W" || { kill "$XH_B" 2>/dev/null; broken "cross-heir: beat B never wrote the marker"; }
-  ( cd "$W" && exec env -u CLAUDE_CODE_SESSION_ID PATH="$A_STUB_PATH" AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export PATH="$A_STUB_PATH" AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
       AI_DLC_WAIT_POLL_SECS=30 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" a.md ) > "$BEATOUT.A" 2>&1 &
+      AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" a.md ) > "$BEATOUT.A" 2>&1 &
   XH_A=$!
   until_ok 300 cs_counter_written "$W" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never reached its sweep"; }
   until_ok 300 [ -s "$A_STUB_LOG" ] || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never entered its poll sleep"; }
@@ -2645,42 +2738,35 @@ M41_lease_in_state_dir() {
 #     from the same wrapper must then not sleep, and the control must. The trailing `exit $?`
 #     keeps bash from exec-ing the subject, so both beats' $PPID is the wrapper.
 # ===========================================================================
-aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other, [$4 = a dir put first on PATH for the SECOND beat only]
-  ( cd "$2" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_POLL_SECS=1 \
+# In process both beats run in ONE subshell, whose parent shell -- the subject's $PPID -- is this
+# fixture's parent: one real process with a real start time, so the first beat writes the marker
+# in the subject's own format and the second, from the same shell, reads it (WBL_CHAIN keeps it).
+# Both run on the world's injected clock. A sleeping second beat would run its whole 60s quantum;
+# its first poll sleep delivers deliv.md (the poll hook, set only after the first beat), so the arm
+# reads which return it TOOK -- the chained NOTE, or DELIVERED after a sleep -- never how long it took.
+aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other, [$4 = a dir put first on PATH for the SECOND beat only] -> OUT, RC
+  ( cd "$2" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
-      AG_MODE="$3" AG_PATH2="${4:-}" AI_DLC_PROJECT_ROOT="$2" bash -c '
-        s="$1"
-        AI_DLC_WAIT_BEAT_SECS=2 bash "$s" first.md > /dev/null 2>&1
-        m="_bmad-output/.wait-beats/.shell-$$"; [ -f "$m" ] || exit 3
-        r="$(cat "$m")"; r="$(( $(date +%s) - 120 ))${r#"${r%% *}"}"
-        [ "$AG_MODE" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
-        printf "%s" "$r" > "$m" || exit 3
-        touch -t "$(date -v-300S +%Y%m%d%H%M.%S 2>/dev/null || date -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
-        case "$AG_PATH2" in "") ;; =*) PATH="${AG_PATH2#=}" ;; *) PATH="$AG_PATH2:$PATH" ;; esac
-        AI_DLC_WAIT_BEAT_SECS=60 bash "$s" deliv.md
-        exit $?' _ "$1" ) > "$BEATOUT" 2>&1 &
-  AG_PID=$!
+      AI_DLC_PROJECT_ROOT="$2" || exit 3
+    ( AI_DLC_WAIT_BEAT_SECS=2 wbl_ip "$1" first.md ) > /dev/null 2>&1
+    m="_bmad-output/.wait-beats/.shell-$PPID"; [ -f "$m" ] || exit 3
+    r="$(cat "$m")"; r="$(( $(fx_now "$2") - 120 ))${r#"${r%% *}"}"
+    [ "$3" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
+    printf "%s" "$r" > "$m" || exit 3
+    touch -t "$("$WBL_REAL_DATE" -v-300S +%Y%m%d%H%M.%S 2>/dev/null || "$WBL_REAL_DATE" -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
+    fx_onsleep "$2" "[ -e '$2/deliv.md' ] || { printf 'x\n' > '$2/deliv.md'; fx_vtouch '$2/deliv.md'; }"
+    case "${4:-}" in "") ;; =*) PATH="${4#=}" ;; *) PATH="$4:$PATH" ;; esac
+    WBL_CHAIN=1 AI_DLC_WAIT_BEAT_SECS=60 wbl_ip "$1" deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"
+  [ "$RC" -ne 3 ] || broken "chained: the first beat left no .shell marker for its shell"
 }
-# A sleeping beat would run its whole 60s quantum; the non-sleeping one returns at once. The arm
-# reads which return it TOOK -- the chained NOTE or a charged beat -- not how long it took: the
-# sleeping control is released by delivering its target once it has registered its sleep.
-ag_wait() {  # $1 = workdir -> OUT, RC
-  ag_n_=0
-  while kill -0 "$AG_PID" 2>/dev/null; do
-    if ag_counter_charged "$1"; then printf 'x\n' > "$1/deliv.md"; fi
-    ag_n_=$(( ag_n_ + 1 )); [ "$ag_n_" -lt 600 ] || { kill "$AG_PID" 2>/dev/null; broken "chained: the beat neither returned nor charged a beat"; }
-    "$WBL_REAL_SLEEP" 0.1
-  done
-  wait "$AG_PID"; RC=$?; OUT="$(cat "$BEATOUT")"
-}
-ag_counter_charged() { [ "$(cat "$1/_bmad-output/.wait-beats/$(printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16)" 2>/dev/null)" = 1 ]; }
 S22_chained_by_shell_identity() {
-  W="$(mk_work)"; fx_clock_off "$W"; aged_shell_beat "$SUBJ" "$W" same; ag_wait "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same
   if [ "$RC" -eq 0 ] && has "a sibling beat already ran in this same Bash call"; then
     ok "chained: a same-shell sibling stamped 2 x BUDGET ago still reads as chained — the beat does not sleep"
   else bad "chained: a same-shell sibling older than BUDGET let the beat sleep a second quantum (rc=$RC): $OUT"; fi
   rm -rf "$W"
-  W="$(mk_work)"; fx_clock_off "$W"; aged_shell_beat "$SUBJ" "$W" other; ag_wait "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" other
   if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
     ok "chained: CONTROL — a marker naming another start time (a recycled pid) sleeps"
   else bad "chained: CONTROL FAILED — a different-shell marker was read as chained (rc=$RC): $OUT"; fi
@@ -2738,12 +2824,12 @@ fb_skip() {  # $1 = case name: 0 (SKIP printed, or FAIL under the anti-SKIP prec
 S22b_start_time_without_ps() {
   fb_skip S22b_start_time_without_ps && return
   nops_stubs
-  W="$(mk_work)"; fx_clock_off "$W"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_"; ag_wait "$W"
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_"
   if [ "$RC" -eq 0 ] && has "a sibling beat already ran in this same Bash call"; then
     ok "chained: with ps refused (PATH stub, as sandbox-exec refuses the setuid /bin/ps) the perl fallback reads the start ps wrote -- still chained, no second quantum"
   else bad "chained: with ps refused, a same-shell sibling stamped past BUDGET let the beat sleep (rc=$RC): $OUT"; fi
   rm -rf "$W"
-  W="$(mk_work)"; fx_clock_off "$W"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_/both"; ag_wait "$W"
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$SUBJ" "$W" same "$sb_d_/both"
   if [ "$RC" -eq 0 ] && ! has "a sibling beat already ran in this same Bash call" && has "DELIVERED deliv.md"; then
     ok "chained: CONTROL — with ps AND perl refused there is no start time, the clock decides, and the aged marker sleeps"
   else bad "chained: CONTROL FAILED — with ps and perl both refused the aged marker still read as chained (rc=$RC): $OUT"; fi
@@ -2771,13 +2857,13 @@ noperl_path() {  # -> $TMPROOT/noperl: links to every tools.decl tool except per
 np_count() { printf '%s\n' "$OUT" | grep -cF -- "$NOPERL_LINE" || true; }
 S22c_no_perl_states_clock_fallback() {
   noperl_path
-  W="$(mk_work)"; fx_clock_off "$W"; aged_shell_beat "$SUBJ" "$W" same "=$TMPROOT/noperl"; ag_wait "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same "=$TMPROOT/noperl"
   np_n_="$(np_count)"
   if [ "$RC" -eq 0 ] && [ "$np_n_" = 1 ] && has "DELIVERED deliv.md"; then
     ok "no perl: with ps empty and perl absent from PATH the beat states its clock fallback exactly once on stderr"
   else bad "no perl: the clock-fallback line appeared $np_n_ time(s), want 1 (rc=$RC): $OUT"; fi
   rm -rf "$W"
-  W="$(mk_work)"; fx_clock_off "$W"; aged_shell_beat "$SUBJ" "$W" same; ag_wait "$W"
+  W="$(mk_work)"; aged_shell_beat "$SUBJ" "$W" same
   np_n_="$(np_count)"
   if [ "$np_n_" = 0 ] && has "a sibling beat already ran in this same Bash call"; then
     ok "no perl: CONTROL — with ps working the line is absent and identity decides"
@@ -2786,7 +2872,7 @@ S22c_no_perl_states_clock_fallback() {
 }
 M51_silent_clock_fallback() {
   noperl_path; mutant silent-clock-fallback -e '/^\[ -n "\$SHELL_START" \] || printf .NOTE: start time of shell/d' || return
-  W="$(mk_work)"; fx_clock_off "$W"; aged_shell_beat "$MUT" "$W" same "=$TMPROOT/noperl"; ag_wait "$W"
+  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same "=$TMPROOT/noperl"
   if [ "$(np_count)" != 1 ]; then
     mutant_killed "${B_s22c:-0}" silent-clock-fallback "MUTANT silent-clock-fallback: a beat with no start time that falls back silently -- section 22c catches it"
   else bad "MUTANT silent-clock-fallback: section 22c survives the fallback line being removed: $OUT"; fi
@@ -2795,7 +2881,7 @@ M51_silent_clock_fallback() {
 M49_start_time_no_fallback() {
   fb_skip M49_start_time_no_fallback && return
   nops_stubs; mutant start-time-no-fallback -e 's@^  \[ -n "\$ss_" \] || ss_="\$(perl -e@  [ -n "$ss_" ] || ss_="$(false -e@' || return
-  W="$(mk_work)"; fx_clock_off "$W"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"
   if ! has "a sibling beat already ran in this same Bash call"; then
     mutant_killed "${B_s22b:-0}" start-time-no-fallback "MUTANT start-time-no-fallback: with no perl fallback a refused ps sleeps a same-shell sibling -- section 22b catches it"
   else bad "MUTANT start-time-no-fallback: section 22b survives the fallback being removed: $OUT"; fi
@@ -2804,7 +2890,7 @@ M49_start_time_no_fallback() {
 M50_start_time_unpinned() {
   fb_skip M50_start_time_unpinned && return
   nops_stubs; mutant start-time-unpinned -e 's@^  ss_="\$(LC_ALL=C ps -o lstart=@  ss_="$(ps -o lstart=@' || return
-  W="$(mk_work)"; fx_clock_off "$W"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"; ag_wait "$W"
+  W="$(mk_work)"; LC_ALL=de_DE.UTF-8 aged_shell_beat "$MUT" "$W" same "$TMPROOT/nops"
   if ! has "a sibling beat already ran in this same Bash call"; then
     mutant_killed "${B_s22b:-0}" start-time-unpinned "MUTANT start-time-unpinned: an unpinned ps writes a German marker the English fallback cannot match -- section 22b catches it"
   else bad "MUTANT start-time-unpinned: section 22b survives ps losing its LC_ALL=C pin: $OUT"; fi
@@ -2812,7 +2898,7 @@ M50_start_time_unpinned() {
 }
 M43_chained_by_clock() {
   mutant chained-by-clock -e 's@^  if \[ -n "\$LAST_START" \] && \[ -n "\$SHELL_START" \]; then$@  if false; then@' || return
-  W="$(mk_work)"; fx_clock_off "$W"; aged_shell_beat "$MUT" "$W" same; ag_wait "$W"
+  W="$(mk_work)"; aged_shell_beat "$MUT" "$W" same
   if ! has "a sibling beat already ran in this same Bash call"; then
     mutant_killed "${B_s22:-0}" chained-by-clock "MUTANT chained-by-clock: deciding by age alone sleeps a same-shell sibling stamped past BUDGET — section 22 catches it"
   else bad "MUTANT chained-by-clock: section 22 survives the identity test being removed: $OUT"; fi
@@ -2954,11 +3040,15 @@ M47_run_never_resets() {
 #     WAITING is the seal's verdict and not a beat too short to settle.
 # ===========================================================================
 SEAL_BROKEN='-- its seat-complete: line carries sha= but the file changed after it was marked'
+# --mark / --mark-repair in process: the subject's wfd_mark_main, which the writer's `exit` ends.
+markcall() {  # $1 = subject; rest = argv -> output in BEATOUT, returns the rc
+  ( wbl_ip "$@" ) > "$BEATOUT" 2>&1
+}
 seal_world() {  # $1 = subject, $2 = workdir -> s.md sealed, x.md sealed then edited, b.md bare
   printf '%s\n' "$SKELETON" > "$2/s.md"; printf '%s\n' "$SKELETON" > "$2/x.md"
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$2/b.md"
-  bash "$1" --mark "$2/s.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused s.md: $(cat "$BEATOUT")"
-  bash "$1" --mark "$2/x.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused x.md: $(cat "$BEATOUT")"
+  markcall "$1" --mark "$2/s.md" requirements pm cross-1 findings=1 || broken "--mark refused s.md: $(cat "$BEATOUT")"
+  markcall "$1" --mark "$2/x.md" requirements pm cross-1 findings=1 || broken "--mark refused x.md: $(cat "$BEATOUT")"
   awk 'NR == 3 { print "- a finding rewritten after the marker"; next } { print }' "$2/x.md" > "$2/x.tmp" && mv "$2/x.tmp" "$2/x.md"
 }
 
@@ -2981,7 +3071,7 @@ S24a_seal_decides() {
   CB_SETTLE=600 scall "$SUBJ" "$W" --complete --since "$CBEAT_SINCE" s.md x.md
   if has "DELIVERED s.md" && has "UNFINISHED x.md $SEAL_BROKEN"; then ok "seal: --status reads sealed DELIVERED and broken UNFINISHED, with no beat run"
   else bad "seal: --status disagrees with the beat on a sealed or broken file: $OUT"; fi
-  bash "$SUBJ" --mark "$W/x.md" requirements pm cross-1 findings=1 > "$BEATOUT" 2>&1 || broken "re-mark refused"
+  markcall "$SUBJ" --mark "$W/x.md" requirements pm cross-1 findings=1 || broken "re-mark refused"
   n_mk="$(grep -c '^seat-complete: ' "$W/x.md")" || n_mk=0
   CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete x.md
   if has "DELIVERED x.md" && [ "$n_mk" = 1 ]; then ok "seal: re-marked, the edited file DELIVERS at once and carries one marker"
@@ -2992,16 +3082,16 @@ S24a_seal_decides() {
 S24b_mark_refusals() {
   W="$(mk_work)"
   printf '%s\n```text\nan open fence\n' "$SKELETON" > "$W/f.md"; cp "$W/f.md" "$W/f.orig"
-  bash "$SUBJ" --mark "$W/f.md" requirements pm cross-1 findings=0 > "$BEATOUT" 2>&1; rc=$?
+  markcall "$SUBJ" --mark "$W/f.md" requirements pm cross-1 findings=0; rc=$?
   if [ "$rc" -eq 64 ] && cmp -s "$W/f.md" "$W/f.orig"; then ok "seal: --mark on a body ending inside an open fence refuses (64) and writes nothing"
   else bad "seal: --mark into an open fence rc=$rc, file changed or accepted"; fi
   # Four fields on a clean file, so the refusal is the findings= check and not the arity or a fence.
   printf '%s\n' "$SKELETON" > "$W/c.md"
-  bash "$SUBJ" --mark "$W/c.md" requirements pm cross-1 count=1 > "$BEATOUT" 2>&1; rc=$?
+  markcall "$SUBJ" --mark "$W/c.md" requirements pm cross-1 count=1; rc=$?
   if [ "$rc" -eq 64 ] && grep -qF 'the last field must be findings=<n>' "$BEATOUT"; then ok "seal: --mark whose last field is not findings=<n> refuses (64)"
   else bad "seal: --mark with a malformed findings field rc=$rc: $(cat "$BEATOUT")"; fi
   printf '### e\n- edit: x\n' > "$W/r.md"
-  bash "$SUBJ" --mark-repair "$W/r.md" requirements > "$BEATOUT" 2>&1; rc=$?
+  markcall "$SUBJ" --mark-repair "$W/r.md" requirements; rc=$?
   case "$rc $(tail -1 "$W/r.md")" in
     "0 repair-complete: serial requirements sha="*) ok "seal: --mark-repair appends 'repair-complete: serial <pass> sha=<hex>'" ;;
     *) bad "seal: --mark-repair rc=$rc wrote '$(tail -1 "$W/r.md")'" ;;
@@ -3027,8 +3117,8 @@ M46_seal_ignored() {
 repair_world() {  # $1 = subject, $2 = workdir -> rs.md sealed, rx.md sealed then edited, rb.md bare
   printf '### e\n- edit: x\n' > "$2/rs.md"; printf '### e\n- edit: x\n' > "$2/rx.md"
   printf '### e\n- edit: x\n%s\n' "$REPAIR_MARKER" > "$2/rb.md"
-  bash "$1" --mark-repair "$2/rs.md" requirements > "$BEATOUT" 2>&1 || broken "--mark-repair refused rs.md: $(cat "$BEATOUT")"
-  bash "$1" --mark-repair "$2/rx.md" requirements > "$BEATOUT" 2>&1 || broken "--mark-repair refused rx.md: $(cat "$BEATOUT")"
+  markcall "$1" --mark-repair "$2/rs.md" requirements || broken "--mark-repair refused rs.md: $(cat "$BEATOUT")"
+  markcall "$1" --mark-repair "$2/rx.md" requirements || broken "--mark-repair refused rx.md: $(cat "$BEATOUT")"
   awk 'NR == 1 { print "### a repair entry added after the marker" } { print }' "$2/rx.md" > "$2/rx.tmp" && mv "$2/rx.tmp" "$2/rx.md"
 }
 S24c_mark_repair_seals() {
@@ -3051,7 +3141,7 @@ M48_mark_repair_seat_token() {
   mutant mark-repair-seat-token -e 's@MARK_TOKEN="repair-complete: serial "; MK_F="\$1"; MK_TAIL=""@MARK_TOKEN="seat-complete: "; MK_F="$1"; MK_TAIL=""@' || return
   W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
   printf '### e\n- edit: x\n' > "$W/rs.md"
-  bash "$MUT" --mark-repair "$W/rs.md" requirements > "$BEATOUT" 2>&1
+  markcall "$MUT" --mark-repair "$W/rs.md" requirements
   CB_SETTLE=600 cbeat "$SUBJ" "$W" --complete-repair rs.md
   if ! has "DELIVERED rs.md"; then mutant_killed "${B_s24c:-0}" mark-repair-seat-token "MUTANT mark-repair-seat-token: a repair record sealed under the seat token is not delivered -- section 24c catches it"
   else bad "MUTANT mark-repair-seat-token: section 24c survives --mark-repair writing seat-complete: $OUT"; fi
@@ -3082,7 +3172,7 @@ S25_part_marked_join() {
   scall "$SUBJ" "$W" --complete --since "$CBEAT_SINCE" 04.md
   if has "UNFINISHED 04.md" && ! has "DELIVERED 04.md"; then ok "part: the same unmarked part under --complete is UNFINISHED"
   else bad "part: an unmarked repair part was delivered under --complete: $OUT"; fi
-  bash "$SUBJ" --mark "$W/04.md" stories remediator 04 findings=1 > "$BEATOUT" 2>&1 || broken "--mark refused the part: $(cat "$BEATOUT")"
+  markcall "$SUBJ" --mark "$W/04.md" stories remediator 04 findings=1 || broken "--mark refused the part: $(cat "$BEATOUT")"
   case "$(tail -1 "$W/04.md")" in
     "seat-complete: stories remediator 04 sha="*" findings=1") ok "part: --mark appends 'seat-complete: <step> remediator <shard> sha=<hex> findings=<n>'" ;;
     *) bad "part: --mark wrote '$(tail -1 "$W/04.md")'" ;;
@@ -3166,9 +3256,9 @@ r27_cap() {  # $1 = workdir, $2 = grants already spent ('' none) -- the counters
 }
 r27_beat() {  # $1 = subject (in a sibling dir), $2 = workdir ; rest = argv
   r7_s_="$1" r7_w_="$2"; shift 2
-  ( cd "$r7_w_" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS="${R27_BUDGET:-30}" AI_DLC_WAIT_POLL_SECS=1 \
+  ( cd "$r7_w_" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS="${R27_BUDGET:-30}" AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=2 AI_DLC_TEAMMATE_IDLE_SECS="${R27_IDLE:-3600}" \
-      AI_DLC_TEAMMATE_DIR="$PWD/td" AI_DLC_PROJECT_ROOT="$PWD" bash "$r7_s_" "$@" ) > "$BEATOUT" 2>&1
+      AI_DLC_TEAMMATE_DIR="$PWD/td" AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$r7_s_" "$@" ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -3293,9 +3383,9 @@ r27d_world() {  # $1 = age of the transcript's last turn (s) -> W
 }
 r27d_beat() {  # $1 = subject (in a sibling dir); rest = argv -> OUT, RC
   rd_s_="$1"; shift
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=30 AI_DLC_WAIT_POLL_SECS=1 \
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=30 AI_DLC_WAIT_POLL_SECS=1 \
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_IDLE_SECS=1200 \
-      AI_DLC_TEAMMATE_DIR="$PWD/td" AI_DLC_PROJECT_ROOT="$PWD" bash "$rd_s_" "$@" ) > "$BEATOUT" 2>&1
+      AI_DLC_TEAMMATE_DIR="$PWD/td" AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$rd_s_" "$@" ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
 }
@@ -3382,7 +3472,7 @@ r28_argv() {  # $1 = subject, $2 = teammate dir ('' = none, and no session id), 
   r28_s_="$1"; r28_t_="$2"; shift 2
   ( cd "$W" && if [ -n "$r28_t_" ]; then export AI_DLC_TEAMMATE_DIR="$r28_t_"; else unset AI_DLC_TEAMMATE_DIR; fi
     if [ -n "${R28_STATE:-}" ]; then export AI_DLC_STATE_DIR="$R28_STATE"; fi
-    env -u CLAUDE_CODE_SESSION_ID AI_DLC_PROJECT_ROOT="$PWD" bash "$r28_s_" "$@" ) \
+    unset CLAUDE_CODE_SESSION_ID; export AI_DLC_PROJECT_ROOT="$PWD"; wbl_ip "$r28_s_" "$@" ) \
     > "$TMPROOT/r28.out" 2> "$TMPROOT/r28.err"
   RC=$?
   R28_OUT="$(cat "$TMPROOT/r28.out")"; R28_ERR="$(cat "$TMPROOT/r28.err")"
@@ -3503,6 +3593,74 @@ M58_dispatch_ts_multi_id() {
 }
 
 # ---------------------------------------------------------------------------
+# THE WIRING, END TO END: ONE CLI RUN PER DISTINCT OUTCOME, EACH HELD BYTE-IDENTICAL TO wbl_ip.
+# Every cell above calls the subject in process. This is where `bash wait-for-deliverable.sh` still
+# runs -- once per outcome the CLI has (fixture-mutants.md clauses 5 and 6) -- and where the two
+# answers are compared: the world is snapshotted, the CLI runs on it, the world and its virtual
+# clock are restored to the snapshot, and wbl_ip runs on it at the same path, the same instant. Its
+# stdout, its stderr and its exit code must be equal byte for byte, and the six outcomes must be six
+# different answers, so the equality is shown able to fail. Not an S function: it runs once, in the
+# driver, never under a mutant.
+# ---------------------------------------------------------------------------
+wr_env() {  # the tuning both sides run under
+  unset CLAUDE_CODE_SESSION_ID
+  export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+    AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="${WR_TD:-$TMPROOT/does-not-exist}" AI_DLC_PROJECT_ROOT="$PWD"
+}
+wr_pair() {  # $1 = label, $2 = world; rest = argv -> WR_<label> = "rc|<stdout cksum>|<stderr cksum>"; 1 on a mismatch
+  wp_l_="$1" wp_w_="$2"; shift 2
+  wp_s_="$TMPROOT/wr-snap.$wp_l_"; rm -rf "$wp_s_"; cp -Rp "$wp_w_" "$wp_s_" || broken "wiring: cannot snapshot $wp_w_"
+  wp_o_="$(fx_offset "$wp_w_")"
+  ( cd "$wp_w_" && wr_env && bash "$SUBJ" "$@" ) > "$TMPROOT/wr.$wp_l_.cli.out" 2> "$TMPROOT/wr.$wp_l_.cli.err"; wp_rc1_=$?
+  rm -rf "$wp_w_" && cp -Rp "$wp_s_" "$wp_w_" || broken "wiring: cannot restore $wp_w_"
+  printf '%s' "$wp_o_" > "$(fx_clock_file "$wp_w_")"
+  ( cd "$wp_w_" && wr_env && wbl_ip "$SUBJ" "$@" ) > "$TMPROOT/wr.$wp_l_.ip.out" 2> "$TMPROOT/wr.$wp_l_.ip.err"; wp_rc2_=$?
+  eval "WR_$wp_l_=\"$wp_rc1_|$(cksum < "$TMPROOT/wr.$wp_l_.cli.out" | tr -d ' \t')|$(cksum < "$TMPROOT/wr.$wp_l_.cli.err" | tr -d ' \t')\""
+  [ "$wp_rc1_" = "$wp_rc2_" ] && cmp -s "$TMPROOT/wr.$wp_l_.cli.out" "$TMPROOT/wr.$wp_l_.ip.out" \
+    && cmp -s "$TMPROOT/wr.$wp_l_.cli.err" "$TMPROOT/wr.$wp_l_.ip.err"
+}
+wiring_e2e() {
+  wr_bad_=""
+  # (1) beat rc 0, DELIVERED: a fresh file written after the --since epoch.
+  W="$(mk_work)"; printf 'answer\n' > "$W/deliv.md"
+  wr_pair del "$W" --since "$(( $(fx_now "$W") - 30 ))" deliv.md || wr_bad_="$wr_bad_ del"
+  grep -q '^DELIVERED deliv.md' "$TMPROOT/wr.del.cli.out" || wr_bad_="$wr_bad_ del-shape"
+  rm -rf "$W"
+  # (2) beat rc 1, NON-DELIVERY: the only beat already charged (the bound file and the counter at 1).
+  W="$(mk_work)"; mkdir -p "$W/_bmad-output/.wait-beats"
+  printf '1' > "$W/_bmad-output/.wait-beats/.bound"; printf '1' > "$W/_bmad-output/.wait-beats/$(fx_key deliv.md)"
+  wr_pair nondel "$W" deliv.md || wr_bad_="$wr_bad_ nondel"
+  grep -q '^NON-DELIVERY deliv.md' "$TMPROOT/wr.nondel.cli.out" || wr_bad_="$wr_bad_ nondel-shape"
+  rm -rf "$W"
+  # (3) rc 64, an argv refusal (one that prints no $0).
+  W="$(mk_work)"
+  wr_pair refuse "$W" --complete --progress-path . deliv.md || wr_bad_="$wr_bad_ refuse"
+  grep -q 'cannot be combined' "$TMPROOT/wr.refuse.cli.err" || wr_bad_="$wr_bad_ refuse-shape"
+  rm -rf "$W"
+  # (4) --status rc 0.
+  W="$(mk_work)"; printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/s.md"
+  wr_pair status "$W" --status --complete --since "$(( $(fx_now "$W") - 30 ))" s.md gone.md || wr_bad_="$wr_bad_ status"
+  grep -q '^STATUS -- ' "$TMPROOT/wr.status.cli.out" || wr_bad_="$wr_bad_ status-shape"
+  rm -rf "$W"
+  # (5) --dispatch-ts rc 0 (beside its sibling grammar).
+  r28_world; WR_SD="$(sib_dir "$SUBJ")"
+  ( SUBJ="$WR_SD/wait-for-deliverable.sh"; WR_TD="$W/sub" wr_pair dts "$W" --dispatch-ts "$R28_TUI" ) || wr_bad_="$wr_bad_ dts"
+  [ "$(cat "$TMPROOT/wr.dts.cli.out")" = "$R28_D" ] || wr_bad_="$wr_bad_ dts-shape"
+  eval "WR_dts=\"0|$(cksum < "$TMPROOT/wr.dts.cli.out" | tr -d ' \t')|x\""
+  rm -rf "$W"
+  # (6) --mark rc 0 (a relative path, so the MARKED line names the same file on both sides).
+  W="$(mk_work)"; printf '%s\n' "$SKELETON" > "$W/m.md"
+  wr_pair mark "$W" --mark m.md requirements pm cross-1 findings=1 || wr_bad_="$wr_bad_ mark"
+  grep -q '^MARKED m.md' "$TMPROOT/wr.mark.cli.out" || wr_bad_="$wr_bad_ mark-shape"
+  rm -rf "$W"
+  wr_all_="$(printf '%s\n' "$WR_del" "$WR_nondel" "$WR_refuse" "$WR_status" "$WR_dts" "$WR_mark")"
+  wr_n_="$(printf '%s\n' "$wr_all_" | sort -u | grep -c .)" || wr_n_=0
+  if [ -z "$wr_bad_" ] && [ "$wr_n_" -eq 6 ]; then
+    ok "wiring: the CLI and wbl_ip answer byte-for-byte alike (stdout, stderr, rc) on six distinct outcomes: DELIVERED rc 0, NON-DELIVERY rc 1, refusal rc 64, --status, --dispatch-ts, --mark"
+  else bad "wiring: CLI and in-process answers differ, or an outcome is missing [${wr_bad_# }] (distinct answers: $wr_n_ of 6) -- see $TMPROOT/wr.*"; fi
+}
+
+# ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
 if [ "${1:-}" = "--run-one" ]; then
@@ -3522,6 +3680,8 @@ else echo "wait-beat-liveness: mode PUSH"; fi
 
 probe
 clock_probe
+clock_probe_ip
+wiring_e2e
 
 # THE CASE LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order, with a
 # zero guard. A hand-written list is the defect the subject itself is about: a case

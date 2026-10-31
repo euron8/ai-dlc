@@ -770,6 +770,7 @@ lpe_lex() { # $1 absolute path -> the same path with `.`, `..` and empty segment
   printf '%s' "${_ll_out:-/}"
 }
 
+hook_pretool_head() {  # arms 0, 1, 1b and 2: parse the payload, record a dispatched agent write, exit
 # --- 0. jq. Everything below parses JSON; without it nothing can be adjudicated.
 if ! command -v jq >/dev/null 2>&1; then
   SESSION_ID=""
@@ -855,6 +856,10 @@ if [ -n "$AGENT_ID" ]; then
   record_artifact_write "$FP"
   exit 0
 fi
+
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+hook_pretool_head
 
 # --- 3. Only edits.
 case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) exit 0 ;; esac

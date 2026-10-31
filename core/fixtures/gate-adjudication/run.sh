@@ -25,6 +25,7 @@ trap 'rm -rf "$WORK"' EXIT
 # The REQUIRED input of inputs.decl: every assertion below drives this validator, and seed.sh
 # has already run it (--expected) to derive the escalated set, so this is the point of first use.
 echo "HERMETIC-CONSUMED $VALIDATOR"
+[ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(dirname "$VALIDATOR")/gate_adjudication.py"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -1335,7 +1336,7 @@ cv_mutdir() { # cv_mutdir <name> — the validator AND the siblings it resolves 
   # carries, and the copy is ASSERTED below rather than assumed.
   local d="$WORK/cv-mut-$1" s
   rm -rf "$d"; mkdir -p "$d"
-  for s in validate-gate-adjudication.sh validate-suppression-lifetime.sh \
+  for s in validate-gate-adjudication.sh gate_adjudication.py validate-suppression-lifetime.sh \
            validate-steering-budget.sh validate-adversarial-convergence.sh; do
     [ -f "$CV_SRCDIR/$s" ] && cp "$CV_SRCDIR/$s" "$d/"
   done
@@ -1385,7 +1386,7 @@ cv_score() { # cv_score <label> <validator> <expected-dead: MISSING|NONCE|BINDIN
 # MISSING and NONCE by construction and cannot pass this.
 CV_M0="$(cv_mutdir m0)"
 cv_m0_missing=""
-for _s in validate-gate-adjudication.sh validate-suppression-lifetime.sh \
+for _s in validate-gate-adjudication.sh gate_adjudication.py validate-suppression-lifetime.sh \
           validate-steering-budget.sh validate-adversarial-convergence.sh; do
   [ -f "$CV_M0/$_s" ] || cv_m0_missing="$cv_m0_missing $_s"
 done
@@ -1400,12 +1401,12 @@ fi
 # The shape anybody writes when wiring a new mode: run the envelope, print the line, never ask
 # the question. Owned by C3.
 CV_MA="$(cv_mutdir ma)"
-if ! cv_apply "$CV_MA/validate-gate-adjudication.sh" \
+if ! cv_apply "$CV_MA/gate_adjudication.py" \
      '    _cov_fails = coverage_arms()
 ' '    _cov_fails = []
 '; then
   bad "CV-MA: the mutation DID NOT APPLY — its anchor is absent from the validator or appears more than once. A mutant that was never built produces a green run that reads exactly like a surviving arm."
-elif cmp -s "$VALIDATOR" "$CV_MA/validate-gate-adjudication.sh"; then
+elif cmp -s "$CV_SRCDIR/gate_adjudication.py" "$CV_MA/gate_adjudication.py"; then
   bad "CV-MA: the mutated copy is byte-identical to the subject — that mutant discriminates nothing"
 else
   cv_score "CV-MA (--coverage skips the join: _cov_fails = [])" "$CV_MA/validate-gate-adjudication.sh" MISSING
@@ -1415,12 +1416,12 @@ fi
 # The wrong-path hole: with it gone, an adjudicator that self-checks a NEIGHBOURING verdict
 # gets exit 0 about the neighbour. Owned by C6.
 CV_MB="$(cv_mutdir mb)"
-if ! cv_apply "$CV_MB/validate-gate-adjudication.sh" \
+if ! cv_apply "$CV_MB/gate_adjudication.py" \
      'if V["gate_nonce"] != stem:
 ' 'if mode != "coverage" and V["gate_nonce"] != stem:
 '; then
   bad "CV-MB: the mutation DID NOT APPLY — the nonce/stem anchor is absent or not unique"
-elif cmp -s "$VALIDATOR" "$CV_MB/validate-gate-adjudication.sh"; then
+elif cmp -s "$CV_SRCDIR/gate_adjudication.py" "$CV_MB/gate_adjudication.py"; then
   bad "CV-MB: the mutated copy is byte-identical to the subject"
 else
   cv_score "CV-MB (--coverage returns before the nonce/stem arm)" "$CV_MB/validate-gate-adjudication.sh" NONCE
@@ -1437,33 +1438,34 @@ fi
 # `fails = coverage_arms()` appears TWICE in the file — measured, 2 — and the bare form would
 # edit whichever came first.
 CV_MC="$(cv_mutdir mc)"
-CV_MC_BLOCK='if mode == "coverage":
-    # The envelope arms above have already run, the nonce/stem arm among them, so the path
-    # named below is a path whose file agrees with its own filename about which gate pass it
-    # reports. Everything after this point is the LEAD'"'"'s question, not the adjudicator'"'"'s.
-    _cov_fails = coverage_arms()
-    print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
-          f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
-          f"adjudicated by this mode)")
-    sys.exit(0)
+# Both texts sit inside gate_adjudication.py's main(), so every line carries main()'s 4-space indent.
+CV_MC_BLOCK='    if mode == "coverage":
+        # The envelope arms above have already run, the nonce/stem arm among them, so the path
+        # named below is a path whose file agrees with its own filename about which gate pass it
+        # reports. Everything after this point is the LEAD'"'"'s question, not the adjudicator'"'"'s.
+        _cov_fails = coverage_arms()
+        print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
+              f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
+              f"adjudicated by this mode)")
+        sys.exit(0)
 '
-CV_MC_LATE='if mode == "coverage":
-    _cov_fails = coverage_arms()
-    print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
-          f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
-          f"adjudicated by this mode)")
-    sys.exit(0)
+CV_MC_LATE='    if mode == "coverage":
+        _cov_fails = coverage_arms()
+        print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
+              f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
+              f"adjudicated by this mode)")
+        sys.exit(0)
 '
-if ! cv_apply "$CV_MC/validate-gate-adjudication.sh" "$CV_MC_BLOCK" ""; then
+if ! cv_apply "$CV_MC/gate_adjudication.py" "$CV_MC_BLOCK" ""; then
   bad "CV-MC: the DELETE half did not apply — the coverage block is absent from the validator or appears more than once"
-elif ! cv_apply "$CV_MC/validate-gate-adjudication.sh" '
-fails = coverage_arms()
+elif ! cv_apply "$CV_MC/gate_adjudication.py" '
+    fails = coverage_arms()
 ' "
 $CV_MC_LATE
-fails = coverage_arms()
+    fails = coverage_arms()
 "; then
   bad "CV-MC: the INSERT half did not apply — the full mode's coverage_arms() call site is absent or not unique. A half-applied mutation is a different mutant from the one declared."
-elif cmp -s "$VALIDATOR" "$CV_MC/validate-gate-adjudication.sh"; then
+elif cmp -s "$CV_SRCDIR/gate_adjudication.py" "$CV_MC/gate_adjudication.py"; then
   bad "CV-MC: the mutated copy is byte-identical to the subject"
 else
   cv_score "CV-MC (--coverage runs the dispatch-binding arm)" "$CV_MC/validate-gate-adjudication.sh" BINDING
@@ -1637,11 +1639,11 @@ if [ "$D4_OK" -eq 1 ]; then
   }
   d4_score "D4-M0 control (unmutated copy)" "$(cv_mutdir d4m0)/validate-gate-adjudication.sh" NONE
   D4_MU="$(cv_mutdir d4mu)"
-  if cv_apply "$D4_MU/validate-gate-adjudication.sh" '    if got != want:' '    if False:'; then
+  if cv_apply "$D4_MU/gate_adjudication.py" '        if got != want:' '        if False:'; then
     d4_score "D4-MU (the union-equality refusal removed)" "$D4_MU/validate-gate-adjudication.sh" union
   else bad "D4-MU: FIXTURE STALE -- the union anchor is not in the validator exactly once"; fi
   D4_MD="$(cv_mutdir d4md)"
-  if cv_apply "$D4_MD/validate-gate-adjudication.sh" '    if twice:' '    if False:'; then
+  if cv_apply "$D4_MD/gate_adjudication.py" '        if twice:' '        if False:'; then
     d4_score "D4-MD (the duplicate-id refusal removed)" "$D4_MD/validate-gate-adjudication.sh" dup
   else bad "D4-MD: FIXTURE STALE -- the duplicate anchor is not in the validator exactly once"; fi
 
@@ -1716,9 +1718,9 @@ open(p, "w", encoding="utf-8").write("".join(json.dumps(r) + "\n" for r in rows)
   }
   d5_score "D5-M0 control (unmutated copy)" "$(cv_mutdir d5m0)/validate-gate-adjudication.sh" NONE
   D5_MK="$(cv_mutdir d5mk)"
-  if cv_apply "$D5_MK/validate-gate-adjudication.sh" '    cp_nonce, _, _ = part_name(cp_part, "--check-part")' \
-       '    PART_LINE_KEYS = {"gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id", "check_id", "verdict"}
-    cp_nonce, _, _ = part_name(cp_part, "--check-part")'; then
+  if cv_apply "$D5_MK/gate_adjudication.py" '        cp_nonce, _, _ = part_name(cp_part, "--check-part")' \
+       '        PART_LINE_KEYS = {"gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id", "check_id", "verdict"}
+        cp_nonce, _, _ = part_name(cp_part, "--check-part")'; then
     d5_score "D5-MK (--check-part on a hand-listed key set missing evidence)" "$D5_MK/validate-gate-adjudication.sh" "cpok cp10 cpenum"
   else bad "D5-MK: FIXTURE STALE -- the check-part anchor is not in the validator exactly once"; fi
 fi
@@ -1727,8 +1729,8 @@ fi
 # --check-part cannot each carry their own copy. A count of exactly 1, so an absent one fails too;
 # the D5-MK copy (a second, hand-listed assignment) must count 2, which proves the pin can fire.
 d5_sites() { local n; n="$(grep -cE '^[[:space:]]*PART_LINE_KEYS[[:space:]]*=' "$1")" || n=0; printf '%s' "$n"; }
-D5_SITES="$(d5_sites "$VALIDATOR")"
-D5_MSITES=0; [ "$D4_OK" -eq 1 ] && [ -f "${D5_MK:-}/validate-gate-adjudication.sh" ] && D5_MSITES="$(d5_sites "$D5_MK/validate-gate-adjudication.sh")"
+D5_SITES="$(d5_sites "$CV_SRCDIR/gate_adjudication.py")"
+D5_MSITES=0; [ "$D4_OK" -eq 1 ] && [ -f "${D5_MK:-}/gate_adjudication.py" ] && D5_MSITES="$(d5_sites "$D5_MK/gate_adjudication.py")"
 [ "$D5_SITES" -eq 1 ] && [ "$D5_MSITES" -eq 2 ] \
   && ok "D5-one-site: PART_LINE_KEYS is assigned at exactly one site in the validator, and at two in the D5-MK copy (the pin can fire)" \
   || bad "D5-one-site: PART_LINE_KEYS assigned $D5_SITES time(s) (expected 1), $D5_MSITES in the D5-MK copy (expected 2) -- the key set has a second copy or none, or the pin cannot see one"
@@ -1959,21 +1961,21 @@ else
   # FW-MP: FAIL_WAIVED read as PASS by the coverage arm. A waived FAIL then reaches no carve-out
   # and the gate prints all-PASS, so every arm that needs it to be failing dies.
   FW_MP="$(cv_mutdir fwmp)"
-  if cv_apply "$FW_MP/validate-gate-adjudication.sh" '        if vd in ("FAIL", "FAIL_WAIVED"):
+  if cv_apply "$FW_MP/gate_adjudication.py" '        if vd in ("FAIL", "FAIL_WAIVED"):
             fails.append(cid)' '        if vd == "FAIL":
             fails.append(cid)'; then
     fw_score "FW-MP (FAIL_WAIVED read as PASS)" "$FW_MP/validate-gate-adjudication.sh" "1 2 5 6 7 8 9 10"
   else bad "FW-MP DID NOT APPLY: the coverage arm's fails anchor is absent or not unique"; fi
   # FW-MR: waiver resolution skipped — any FAIL_WAIVED passes. FW2, FW5 and FW10 die; FW1 and FW9 hold.
   FW_MR="$(cv_mutdir fwmr)"
-  if cv_apply "$FW_MR/validate-gate-adjudication.sh" \
+  if cv_apply "$FW_MR/gate_adjudication.py" \
        '    return bool(w) and waiver_sprint_ok(wid, vsprint) and (' \
        '    return True or bool(w) and waiver_sprint_ok(wid, vsprint) and ('; then
     fw_score "FW-MR (waiver resolution skipped)" "$FW_MR/validate-gate-adjudication.sh" "2 5 6 7 8 10"
   else bad "FW-MR DID NOT APPLY: the waiver-resolution anchor is absent or not unique"; fi
   # FW-MS: the sprint join dropped. FW6, FW7 and FW8 die; FW1 (right sprint) and FW2/FW5 hold.
   FW_MS="$(cv_mutdir fwms)"
-  if cv_apply "$FW_MS/validate-gate-adjudication.sh" \
+  if cv_apply "$FW_MS/gate_adjudication.py" \
        '    return vsprint is not None and re.search(r"[Ss]%s(?![0-9])" % vsprint, wid) is not None' \
        '    return True'; then
     fw_score "FW-MS (sprint join dropped)" "$FW_MS/validate-gate-adjudication.sh" "6 7 8"
@@ -1981,8 +1983,8 @@ else
   # FW-MU: both sibling-row readers restored to splitlines(). The header is cut at the U+2028, so FW9
   # (full header) goes UNWAIVED and FW10 (the fragment) is waived; every other arm holds.
   FW_MU="$(cv_mutdir fwmu)"
-  if cv_apply "$FW_MU/validate-gate-adjudication.sh" '    for line in raw.split("\n"):' '    for line in raw.splitlines():' \
-     && cv_apply "$FW_MU/validate-gate-adjudication.sh" 'os.environ.get("GA_IN_FORCE", "").split("\n"):' 'os.environ.get("GA_IN_FORCE", "").splitlines():'; then
+  if cv_apply "$FW_MU/gate_adjudication.py" '    for line in raw.split("\n"):' '    for line in raw.splitlines():' \
+     && cv_apply "$FW_MU/gate_adjudication.py" 'os.environ.get("GA_IN_FORCE", "").split("\n"):' 'os.environ.get("GA_IN_FORCE", "").splitlines():'; then
     FW_PREDS_SAVE="$FW_PREDS"; FW_PREDS="9 10"
     fw_score "FW-MU (sibling rows split with splitlines)" "$FW_MU/validate-gate-adjudication.sh" "9 10"
     FW_PREDS="$FW_PREDS_SAVE"

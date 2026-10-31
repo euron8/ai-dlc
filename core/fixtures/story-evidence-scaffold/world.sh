@@ -10,6 +10,9 @@
 # The sourcing script defines WORK (a scratch dir), ok, bad and DIR before calling anything here, and
 # must not already own any of these names.
 SE_WDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# he_run / he_run_env / ro_run / ss_run: the subjects asked in process (header of he-inproc.sh).
+# shellcheck source=/dev/null
+. "$SE_WDIR/he-inproc.sh"
 
 locate() { # <core-relative path under core/> -> the first layout that has it
   local rel="$1" cand
@@ -277,6 +280,12 @@ EOS
     # BL-833/BL-834: which LINE marks a capture RED. ONE world, CLEAN plus one line per RED LINE cell (rv_line
     # below), each citing its own token from RVCELLS. Driven by run.sh, not CASES.
     rvall) for c in $RVCELLS; do rv_line "${c%%:*}" >> "$w/$STORY" || return 2; done ;;
+    # The pointer-word grammar ALONE: a value opening with `see` that is no none form (none-reason exits 2) and
+    # carries a runner span and a count, over the work commit's code diff -- refused full-collection-none, and only
+    # the pointer rule can refuse it. fcseenm: the same span and count with the pointer word NOT opening the value
+    # -- accepted. Driven by run.sh's POINTER arm, not CASES.
+    fcsee) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: see `pytest -q` from the root, 1 passed"); print }' || return 2 ;;
+    fcseenm) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest -q` from the root, see the log, 1 passed"); print }' || return 2 ;;
     fcbare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none"); print }' || return 2 ;;
     fcgone) story_awk "$w" '/^Full-collection run: /{next} {print}' || return 2 ;;
     dsgone) story_awk "$w" '/^Dependency setup: /{next} {print}' || return 2 ;;
@@ -326,14 +335,15 @@ EOS
 # :W is the head-tree WARN on full.txt; :E is any stderr line other than the script's own
 # verdict line (an `awk: newline in string` abort is how the multi-line `-v` defect showed).
 verdict() {
-  local s="$1" w="$2" m="$3" o rc k e="$WORK/.stderr" lc=""
+  local s="$1" w="$2" m="$3" o rc k e="$WORK/.stderr" lc="-"
   # A world carrying `.LC` is driven under that locale: with no locale set (`env -i`, or an
   # inherited C locale) BSD awk never aborts, so a world about the abort must force one itself.
-  [ -f "$w/.LC" ] && lc="$(cat "$w/.LC")"
+  [ -f "$w/.LC" ] && lc="LC_ALL=$(cat "$w/.LC")"
   # One line per validator invocation: the RED LINE block's count arm (and BL-834's receipt) read it.
   printf '1\n' >> "$WORK/.vcalls"
-  if [ "$m" = s ]; then o="$(env ${lc:+LC_ALL="$lc"} bash "$s" -C "$w" --strategy "$(cat "$w/.T")" "$STORY" 2>"$e")"; rc=$?
-  else o="$(env ${lc:+LC_ALL="$lc"} bash "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>"$e")"; rc=$?; fi
+  # In process (he-inproc.sh): the validator's own he_main, asked what `bash <validator> <args>` is asked.
+  if [ "$m" = s ]; then o="$(he_run_env "$lc" "$s" -C "$w" --strategy "$(cat "$w/.T")" "$STORY" 2>"$e")"; rc=$?
+  else o="$(he_run_env "$lc" "$s" -C "$w" "$STORY" "$(cat "$w/.B")" "$(cat "$w/.T")" 2>"$e")"; rc=$?; fi
   k="$(awk '/^REFUSED /{print $2}' <<<"$o" | sort | tr '\n' ',')"
   # The program-level flags, kept apart so a caller sharing this shell (rv_vec) can broadcast them.
   VERDICT_FLAGS=""

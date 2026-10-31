@@ -2163,6 +2163,7 @@ VSL=""; for _c in "$REM_ROOT/core/scripts/validate-spawn-ledger.sh" "$REM_ROOT/s
 VGA=""; for _c in "$REM_ROOT/core/scripts/validate-gate-adjudication.sh" "$REM_ROOT/scripts/ai-dlc/validate-gate-adjudication.sh"; do
   [ -f "$_c" ] && { VGA="$_c"; break; }; done
 [ -n "$VSL" ] && echo "HERMETIC-CONSUMED $VSL" || bad "15q FIXTURE BROKEN: validate-spawn-ledger.sh not found beside $HOOK"
+[ -n "$VGA" ] && [ -f "$(dirname "$VGA")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(dirname "$VGA")/gate_adjudication.py"
 [ -n "$VGA" ] && echo "HERMETIC-CONSUMED $VGA" || bad "15q FIXTURE BROKEN: validate-gate-adjudication.sh not found beside $HOOK"
 REM_V=toolu_01REMINV000000000000001
 REM_R=toolu_01REMR00000000000000001

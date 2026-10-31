@@ -1,8 +1,8 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once.
-3718 *
-391 core/scripts/partition-review-diff.sh
-425 core/scripts/merge-review-shards.sh
-696 core/scripts/content-seal.sh
-34 core/scripts/wait-for-deliverable.sh
-43 core/hooks/ai-dlc-content-seal.sh
-364 core/scripts/record-only-diff.sh
+511 *
+4 core/scripts/partition-review-diff.sh
+7 core/scripts/merge-review-shards.sh
+21 core/scripts/content-seal.sh
+2 core/scripts/wait-for-deliverable.sh
+2 core/hooks/ai-dlc-content-seal.sh
+0 core/scripts/record-only-diff.sh
