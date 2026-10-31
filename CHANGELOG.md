@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.983.0] - 2026-10-31
+
+### I83 and I84 read their corpus with one grep per predicate, and refuse an unreadable file and a self-reader (BL-898)
+
+- **Fix.** `scripts/validate-enforcement-map.sh` I83 and I84 run one `grep -l` per predicate over the sorted corpus instead of one grep per file. TOTAL forks go from 3471 to 2946 and `FORK_BUDGET` from 3475 to 2948. I84 no longer counts the validator as a reader of `stories_dir`. Both arms refuse an unreadable corpus file (grep exit 2), with a mode-000 self-probe.
+- **Why.** Each new file under `core/*.sh`, `scripts/` or `.githooks/` cost three forks, and batch b247 hit the budget three times. The reader guard could never fire. An unreadable file read clean.
+- **Held by.** `core/fixtures/validator-fork-budget/receipt-bl898.sh` (equal grep-exec counts at K=0 and K=6 extra files, the unread refusal, and the validator-only-reader refusal) and mutants m16-m19.
+- **Consumer reach.** None. The validator and fixture are distribution-only.
+
 ## [0.982.0] - 2026-10-31
 
 Batch b247. The self-update slice check accepts a support directory upstream ships with no `run.sh`, so a self-update can deliver a change to the shared fixtures `lib/` (BL-894).

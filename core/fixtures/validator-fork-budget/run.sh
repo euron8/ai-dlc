@@ -29,6 +29,9 @@
 #                    and A3's red, which A3 alone cannot see. It FAILS, never warns, because a
 #                    passing fixture's stdout is hidden by the hook
 #   A4  stale-high   measured >= 70% of FORK_BUDGET, or the budget has ratcheted out of reach
+#   A6  BL-898       receipt-bl898.sh against the shipped validator: I83/I84's grep count does not
+#                    move with the corpus, an unreadable corpus file errs, and the validator is not
+#                    its own `stories_dir` reader
 #
 # A1 AND A5 ARE THE TWO THAT MAKE THE OTHERS MEAN ANYTHING. A validator that dies at line 400
 # forks almost nothing and sails under any ceiling; an unbounded-below gate reads that as an
@@ -91,8 +94,12 @@
 # MUTANT-MATRIX m13-marker-widened decides=Psplice twins=Pbase
 # MUTANT-MATRIX m14-displaced decides=Adisp twins=Agap
 # MUTANT-MATRIX m15-A3b-headroom decides=Jhead twins=Jstale
+# MUTANT-MATRIX m16-i84-reads-per-file decides=Rcount twins=Rsel
+# MUTANT-MATRIX m17-unread-flag-dropped decides=Runread twins=Rsel
+# MUTANT-MATRIX m18-self-reader decides=Rsel twins=Runread
+# MUTANT-MATRIX m19-unread-probe-return decides=Rprobe twins=Rcount
 # Every mutant reaches mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all sixteen mutants and every name keeps its own row
+# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all twenty mutants and every name keeps its own row
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/validator-fork-budget/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -427,7 +434,7 @@ esac
 # ---- matrix plumbing. The header rows are the only source of a mutant's deciding cells and twin. ----
 # MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
 MXL="$TMP/mx.ledger"; : > "$MXL"
-MX_CELLS="Jfloor Jexit Jlast Jceil Jhead Jstale Agap Adisp Psplice Passign Pbase Mpipe"
+MX_CELLS="Jfloor Jexit Jlast Jceil Jhead Jstale Agap Adisp Psplice Passign Pbase Mpipe Rcount Runread Rsel Rprobe"
 mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
   awk -v n="$1" -v f="$2" '
     $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
@@ -453,6 +460,11 @@ mx_red() {
     Pbase)    grep -qE 'positive probe|fork-free probe' "$f" ;;
     # The PIPELINE BROKEN disjunct was removed: it reads true on an UNMUTATED profiler, because `--section total` reports LASTARM 0.
     Mpipe)    grep -qF 'SELF-PROBE FAILED' "$f" ;;
+    # The receipt cells read RED on the receipt's own FAIL line for that cell; a cell the run never printed is GREEN.
+    Rcount)   grep -q '^CELL count FAIL' "$f" ;;
+    Runread)  grep -q '^CELL unread FAIL' "$f" ;;
+    Rsel)     grep -q '^CELL selfreader FAIL' "$f" ;;
+    Rprobe)   grep -q '^CELL clean FAIL' "$f" && grep -qF "own probe: i84_reads scored a corpus holding one unreadable file as fully read" "$f" ;;
     *) return 2 ;;
   esac
 }
@@ -690,6 +702,54 @@ else
   sed 's/^/      /' "$TMP/asgctl.err" | head -3
 fi
 
+# ==========================================================================================
+# A6 -- BL-898's RECEIPT, against the SHIPPED validator. I83 and I84 read their corpus with one grep
+# per predicate, so a corpus file added under scripts/ costs no grep (`count`, with `control`
+# proving the added files are in the corpus); a mode-000 corpus file is an error in both arms
+# (`unread`); and the validator does not score itself a reader of `stories_dir` (`selfreader`).
+# The receipt builds ONE scratch copy and prints a `CELL <name> PASS|FAIL` line per cell; its exit
+# 9 is a refusal to measure, scored here as FIXTURE BROKEN rather than as a red.
+# ==========================================================================================
+RCPT="$DIR/receipt-bl898.sh"
+[ -f "$RCPT" ] || { echo "FIXTURE ERROR: missing $RCPT" >&2; exit 2; }
+# NECESSITY: the receipt runs the validator once per distinct world (unseeded, K plain files, K restating files,
+# a mode-000 file, readers stripped); no cheaper call shows a fork count that does not move with the corpus.
+bash "$RCPT" "$VAL" > "$TMP/rcpt.out" 2>"$TMP/rcpt.err"; rcpt_rc=$?
+if [ "$rcpt_rc" = 0 ] && [ "$(grep -c '^CELL [a-z]* PASS' "$TMP/rcpt.out")" = 5 ]; then
+  note "ok    A6 BL-898      -- $(grep '^CELL count ' "$TMP/rcpt.out" | cut -d' ' -f4-); the unread and self-reader cells pass"; B_rcpt=1
+elif [ "$rcpt_rc" = 9 ]; then
+  bad "FIXTURE BROKEN: receipt-bl898.sh refused to measure: $(head -1 "$TMP/rcpt.err")"
+else
+  bad "A6 BL-898 -- receipt-bl898.sh exited $rcpt_rc against the shipped validator: $(grep '^CELL [a-z]* FAIL' "$TMP/rcpt.out" | head -2 | tr '\n' ' ')"
+fi
+
+# m16-m19 -- each a copy of the validator with ONE layer of the BL-898 fix reverted, scored by the receipt on its
+# deciding cell and its twin only. Every copy is cmp -s guarded, so a sed that matched nothing is DID NOT APPLY.
+#   m16  i84_reads back to one grep per corpus file, with the same interface -> the count cell alone
+#   m17  the corpus-level unread flag dropped in both arms (the functions still return 2) -> the unread cell alone
+#   m18  the self-reader exemption removed -> the selfreader cell alone
+#   m19  i84_reads returns 0 whatever grep answered, so a read failure is lost -> the validator's own unread probe,
+#        read off the clean cell
+rcpt_mut() { # <mutant> <cells> <copy> <message>
+  local n="$1" c="$2" f="$3" msg="$4"
+  if [ ! -s "$f" ] || cmp -s "$VAL" "$f"; then bad "$n DID NOT APPLY -- the copy is empty or identical to the validator; no mutation occurred, so nothing was proven"; return; fi
+  # NECESSITY: each mutant is a different validator copy, and the receipt runs only its deciding and twin worlds.
+  bash "$RCPT" --cells "$c" "$f" > "$TMP/mx.$n.txt" 2>&1
+  mx_score "$n" "${B_rcpt:-0}" "$msg"
+}
+awk '
+/^  grep -lE "\^\[\[:blank:\]\]\*\(\[\^#\[:blank:\]\]\.\*\)\?stories_dir" -- "\$@"$/ {
+  print "  i84_r=0; for i84_g in \"$@\"; do grep -qE \"^[[:blank:]]*([^#[:blank:]].*)?stories_dir\" \"$i84_g\"; i84_s=$?; [ \"$i84_s\" -eq 0 ] && printf \"%s\\n\" \"$i84_g\"; [ \"$i84_s\" -ge 2 ] && i84_r=2; done; return \"$i84_r\""; n++; next }
+{ print } END { if (n != 1) exit 3 }' "$VAL" > "$TMP/m16.sh" || : > "$TMP/m16.sh"
+rcpt_mut m16-i84-reads-per-file count,selfreader "$TMP/m16.sh" "m16-i84-reads-per-file: one grep per file for i84_reads makes the count move with the corpus"
+sed -e 's/^    i83_extracts "\${i83_list\[@\]}" > "\$i83_probe_dir\/hits" || i83_unread=1$/    i83_extracts "${i83_list[@]}" > "$i83_probe_dir\/hits"/' \
+    -e 's/^\(      i84_[a-z]*s "\${i84_list\[@\]}" > "\$i84_probe_dir\/[a-z]*"\) || i84_unread=1$/\1/' "$VAL" > "$TMP/m17.sh" || : > "$TMP/m17.sh"
+rcpt_mut m17-unread-flag-dropped unread,selfreader "$TMP/m17.sh" "m17-unread-flag-dropped: a corpus with a mode-000 file reads clean"
+sed '/^        \[ "\${i84_f#"\$REPO_ROOT\/"}" = "\$I84_SELF" \] && continue$/d' "$VAL" > "$TMP/m18.sh" || : > "$TMP/m18.sh"
+rcpt_mut m18-self-reader selfreader,unread "$TMP/m18.sh" "m18-self-reader: the validator counted as its own reader hides a tree with none"
+sed '/^i84_reads() {/,/^}/s/^  \[ "\$?" -le 1 \] || return 2$/  return 0/' "$VAL" > "$TMP/m19.sh" || : > "$TMP/m19.sh"
+rcpt_mut m19-unread-probe-return clean,count "$TMP/m19.sh" "m19-unread-probe-return: an i84_reads that loses grep's read failure is refused by the validator's own unread probe"
+
 # RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
 # empty matrix count cannot come from a ledger nothing writes.
 mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
@@ -705,13 +765,13 @@ fi
 # reads when a refactor deletes the mutants -- two inert runs compare equal. The floor is the
 # count this file is known to carry; it rises with a new mutant and refuses a run that
 # silently lost one.
-EXPECTED_MUTANTS=16
+EXPECTED_MUTANTS=20
 if [ "$rc" -eq 0 ] && [ "$N_SCORED" -lt "$EXPECTED_MUTANTS" ]; then
   note "FAIL  validator-fork-budget -- only $N_SCORED of $EXPECTED_MUTANTS mutants were scored. A battery that lost a mutant reports the same green line as one that scored them all."
   rc=1
 fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 7 arms green, $N_SCORED/$EXPECTED_MUTANTS mutants scored"
+  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 8 arms green, $N_SCORED/$EXPECTED_MUTANTS mutants scored"
 fi
 exit "$rc"
