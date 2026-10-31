@@ -313,7 +313,7 @@ Two arms, either satisfies (dual-arm OR):
   Findings" section AND ≥1 numbered marker matching regex
   `^(- |### )?\*{0,2}R[0-9]+\s+[—–-]\s`. The `\*{0,2}` optionally
   accepts bold-marker prefix `**R1 — ...**` which is the dominant
-  style in real PRDs authored via `/bmad-technical-research`. Single
+  style in real PRDs authored via `/bmad-deep-recon type=technical`. Single
   match satisfies arm (b). At the requirements gate, arm (b) is ALSO
   satisfied by a "Research Findings" section containing a skip record
   matching regex `^(- )?\*{0,2}Research skipped\*{0,2}:[[:space:]]+\S`,
@@ -1401,7 +1401,7 @@ does not account for.
 
 **Scope.** Runs at the retro gate unconditionally. Also runs at any
 gate where a validation evaluation (bmad-party-mode,
-bmad-advanced-elicitation, bmad-review-adversarial-general,
+bmad-advanced-elicitation, bmad-review with the adversarial lens,
 bmad-validate-prd, ai-dlc-adversary-review) was required by the current
 phase. Also runs at EVERY implementation gate for each declared folded
 bug-fix story (the implementation gate arm below): that obligation is keyed
@@ -1488,8 +1488,8 @@ to a caller that has decided this artifact class carries none.
   gate below is the one place a legacy one-shot is read, and it reads it only
   to refuse the name in a variant that runs an architecture step.
   The stories cycle is a CONVERGENCE cycle, so it stamps the native
-  identifier. A consumer whose override pins the superseded
-  `bmad-review-adversarial-general` name — dev/qa/code-reviewer pre-submission
+  identifier. A consumer whose override pins a bmad one-shot name here (the superseded
+  `bmad-review-adversarial-general`, or its successor `bmad-review`) — dev/qa/code-reviewer pre-submission
   checks are the usual site — MUST update it in the same pull, or the pinned
   check fails at runtime on the first story of the next sprint.
 
@@ -1508,8 +1508,8 @@ to a caller that has decided this artifact class carries none.
   passes the shape validator. Use the SAME `--series` prefix Check 24 takes.
 
 - **Bug-fix story readiness gate (bug-investigation):** run
-  `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill
-  bmad-review-adversarial-general`, then the CROSS-CHECK
+  `scripts/ai-dlc/validate-provenance-block.sh <story-file>
+  --require-skill bmad-review`, then the CROSS-CHECK
   `scripts/ai-dlc/stamp-story-provenance.sh --terminal
   _bmad-output/planning-artifacts/s<N>/bug-fix-oneshot-<slug>.md --profile
   bug-story-provenance --check <story-file>`, where `<story-file>` is the story
@@ -1537,7 +1537,7 @@ to a caller that has decided this artifact class carries none.
   every implementation gate `implementation.md` runs (gate1, gate2, gate3), for
   each declared folded bug-fix story, run exactly two things: the shape
   validator on the story,
-  `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill bmad-review-adversarial-general`,
+  `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill bmad-review`,
   and the fold architecture gate below. Both exit 0. Never run the
   bug-fix arm's CROSS-CHECK here. `implementation.md` has the dev write Scope
   Verification, the Dev Agent Record and `Status:` into that story before gate1,
@@ -1563,7 +1563,7 @@ to a caller that has decided this artifact class carries none.
   `scripts/ai-dlc/validate-spawn-ledger.sh --fold-architect <residue> <one-shot> --ledger _bmad-output/spawn-ledger.jsonl --route .claude/skills/ai-dlc/steps/route.md`;
   exit 0 required. Run nothing else on the residue: the script runs the residue's provenance
   shape check itself, its sibling `validate-provenance-block.sh` with
-  `--require-skill bmad-review-adversarial-general`, and ONLY when the fold is
+  `--require-skill bmad-review`, and ONLY when the fold is
   owed and its join has passed, so a variant that owes no fold never reads a
   residue it never writes. Do not pass `--variant`: the script reads
   `pipeline_variant` from `_bmad-output/pipeline-snapshot.md` itself, and with
@@ -2998,8 +2998,8 @@ which is not a traceability surface at all: the strings `CAP` and `LR-` appear
 nowhere in that skill, and its instructed output is literally
 `FR1: Epic 1 - [Brief description]`. Whether a given run preserves a richer FR label
 is the author's discretion, not the tool's contract, so a check reading that map is
-non-deterministic by construction. FR-to-epic coverage is
-`bmad-check-implementation-readiness` step 03's job); every story `capabilities:`
+non-deterministic by construction. FR-to-epic traceability is judged by the readiness gate,
+`bmad-sprint-planning`'s `readiness` intent, and is advisory there); every story `capabilities:`
 entry resolves to a
 capability `SPEC.md` defines. The `LR → CAP` leg admits THREE dispositions, not two: map
 the requirement to a capability, record it SUPERSEDED/AMENDED, or — for a requirement that

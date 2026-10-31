@@ -1,3 +1,10 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-227 *
+# Re-measured on the BMAD 6.11 engine (* 227->294), attributed per arm by counter rows against base 6c70d332e (green at 227).
+# All +67 are validate-provenance-block.sh starts. Per END-TO-END fold run (the 14 E2E drives, B1-bug/B1-idless twice): +3, the
+# self-probe's two alias-join worlds (newone, newstamp) through the reader's shape check, and one --accepted-skills memo that
+# both share. Per drive whose one-shot cites the old name over a stamp the writer normalised (A-vii-near, A-viii-near, D1-2,
+# D5-dot, Da-repoint): +1, the live --accepted-skills ask the mixed-alias join needs. A-ii-pb-old: +1, its own reader run.
+# Cut from 348: the memo on probe-skipping drives (-46), the alias ask on exact-name and unstamped joins, and the lens-less
+# probe world the reader's own lens self-probe covers.
+294 *
 65 core/scripts/validate-spawn-ledger.sh

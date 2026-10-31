@@ -76,6 +76,14 @@ if [[ "${1:-}" == "--accepts-at-pair" ]]; then
     # `<stem>@<sha>` artifact_sha list, else 1. merge-adversarial-shards.sh --pair-sep keys on it.
     [[ $# -eq 1 ]] || { echo "ERROR: --accepts-at-pair takes no other argument" >&2; exit 2; }
     MODE="accepts-at-pair"
+elif [[ "${1:-}" == "--accepted-skills" ]]; then
+    # Print, one per line, every skill name a block may cite to satisfy `--require-skill <name>`,
+    # resolved through the schema THIS validator loads (superseded_skills, both directions). It is
+    # the same set the pin below accepts, from the same function, so a caller that joins on a
+    # skill name (validate-spawn-ledger.sh's story-stamp join) never restates the alias table.
+    [[ $# -eq 2 && -n "${2:-}" ]] || { echo "ERROR: --accepted-skills takes exactly one skill name" >&2; exit 2; }
+    MODE="accepted-skills"
+    REQUIRE_SKILL="$2"
 elif [[ "${1:-}" == "--strays" ]]; then
     MODE="strays"
     shift
@@ -191,6 +199,16 @@ p = json.load(open(sys.argv[1]))["patterns"]["artifact_sha"]
 h = "0" * 64
 sys.exit(0 if re.match(p, "a@" + h + " b@" + h) else 1)' "$SCHEMA" 2>/dev/null && exit 0
     exit 1
+fi
+
+if [ "$MODE" = "accepted-skills" ]; then
+    python3 -c 'import json,sys
+S = json.load(open(sys.argv[1]))
+r = sys.argv[2]
+sup = {k: v for k, v in S.get("superseded_skills", {}).items() if not k.startswith("$")}
+acc = {r} | {v for k, v in sup.items() if k == r} | {k for k, v in sup.items() if v == r}
+print("\n".join(sorted(acc)))' "$SCHEMA" "$REQUIRE_SKILL" || exit 2
+    exit 0
 fi
 
 # Consumer-extension point for known_skills. The core list names the skills the DISTRIBUTION
@@ -909,8 +927,72 @@ for idx, raw_block in enumerate(blocks, start=1):
                 f"({FIELDS['transcript_path']['placeholder']})"
             )
 
+_SUP = {k: v for k, v in S.get("superseded_skills", {}).items() if not k.startswith("$")}
+_LENS = {k: v for k, v in S.get("lens_pins", {}).items() if not k.startswith("$")}
+
+
+def lens_unmet(req, blocks_fields):
+    """THE LENS RULE. Returns None when the pin needs no lens or a block satisfies it, else the
+    message stem. A pin on a skill named in `lens_pins` -- or on a superseded name for it -- is met
+    by a block citing a SUPERSEDED name (the old skill ran exactly that evaluation, so the lens is
+    implied) or by a block citing the CURRENT name with `lens: <value>` exactly. A block citing the
+    current name alone proves only that some lens of a many-lens skill ran."""
+    cur = req if req in _LENS else _SUP.get(req)
+    if cur not in _LENS:
+        return None
+    want = _LENS[cur]
+    olds = {k for k, v in _SUP.items() if v == cur}
+    for f in blocks_fields:
+        s = f.get("skill")
+        if s in olds:
+            return None
+        if s == cur and f.get("lens") == want:
+            return None
+    if not any(f.get("skill") == cur for f in blocks_fields):
+        return None  # no block cites the current name: the "no block cites it" rung owns this
+    return (
+        f"--require-skill {req} is met only by a block citing {cur} with lens: {want} (or one citing "
+        f"{', '.join(sorted(olds))}, which implies it), and every {cur} block here is missing "
+        f"lens: {want}. {cur} runs many lenses; without the lens field the block does not say the "
+        f"{want} evaluation ran. Add `lens: {want}` to the block the {want} lens wrote."
+    )
+
+
+# LENS SELF-PROBE, IN-PROCESS, BEFORE THE REAL INPUT, BOTH DIRECTIONS. Offenders: a lens-less
+# current-name block, a wrong-case lens. Near-misses: the current name with the lens, the old name
+# with no lens. Skipped only when the schema declares no lens pin, which is itself refused HERE
+# for the one pin that needs it: a schema that lost `lens_pins` would otherwise switch the lens
+# rule off for the one-shot evaluation and every lens-less bmad-review block would pass.
+if require_skill in ("bmad-review", "bmad-review-adversarial-general") and _LENS.get("bmad-review") != "adversarial":
+    sys.stderr.write(
+        f"validate-provenance-block: FAIL — --require-skill {require_skill} needs the schema's "
+        f"lens_pins to map bmad-review to adversarial, and {schema_path} does not "
+        f"(lens_pins: {_LENS}). Without it the lens rule cannot fire; refusing to give a verdict.\n")
+    sys.exit(2)
+if _LENS:
+    _lp_cur = sorted(_LENS)[0]
+    _lp_want = _LENS[_lp_cur]
+    _lp_old = sorted(k for k, v in _SUP.items() if v == _lp_cur)
+    _lp_fail = []
+    if lens_unmet(_lp_cur, [{"skill": _lp_cur}]) is None:
+        _lp_fail.append(f"a lens-less {_lp_cur} block satisfied the pin")
+    if lens_unmet(_lp_cur, [{"skill": _lp_cur, "lens": _lp_want.capitalize()}]) is None:
+        _lp_fail.append(f"lens: {_lp_want.capitalize()} satisfied the pin")
+    if lens_unmet(_lp_cur, [{"skill": _lp_cur, "lens": _lp_want}]) is not None:
+        _lp_fail.append(f"a {_lp_cur} block with lens: {_lp_want} was refused")
+    for _o in _lp_old:
+        if lens_unmet(_lp_cur, [{"skill": _o}]) is not None or lens_unmet(_o, [{"skill": _o}]) is not None:
+            _lp_fail.append(f"an old-name {_o} block with no lens was refused")
+        if lens_unmet(_o, [{"skill": _lp_cur}]) is None:
+            _lp_fail.append(f"a pin on {_o} accepted a lens-less {_lp_cur} block")
+    if _lp_fail:
+        sys.stderr.write("validate-provenance-block: FAIL — the lens self-probe did not hold: "
+                         + "; ".join(_lp_fail) + ". A verdict on the real artifact would establish only that the rule ran.\n")
+        sys.exit(2)
+
 if require_skill:
-    cited = {f.get("skill") for _, f in [(i, parse_block(b)[0] or {}) for i, b in enumerate(blocks, 1)]}
+    _bfields = [parse_block(b)[0] or {} for b in blocks]
+    cited = {f.get("skill") for f in _bfields}
     # An UPSTREAM RENAME does not invalidate the artifacts stamped before it. `superseded_skills`
     # in the schema maps <old name> -> <name it now runs under> for evaluations that were renamed
     # rather than replaced, and the pin accepts either name in either direction: a pin on the new
@@ -918,7 +1000,7 @@ if require_skill:
     # must not fail on a current block. The relation is DATA in the schema, not a branch here —
     # the hardcoded special case below is what this replaces the general form of, and it is kept
     # only because it is a different relation (see the schema's own note).
-    _sup = {k: v for k, v in S.get("superseded_skills", {}).items() if not k.startswith("$")}
+    _sup = _SUP
     accepted = {require_skill}
     accepted |= {v for k, v in _sup.items() if k == require_skill}
     accepted |= {k for k, v in _sup.items() if v == require_skill}
@@ -927,6 +1009,10 @@ if require_skill:
             f"--require-skill {require_skill} was specified, but no block cites it "
             f"(blocks cite: {sorted(s for s in cited if s)})"
         )
+    else:
+        _lm = lens_unmet(require_skill, _bfields)
+        if _lm:
+            failures.append(_lm)
     # v0.58.0: the Rule 8 convergence cycle is ai-dlc-native. A pin on the retired bmad skill
     # can never be satisfied by a compliant pass, so it fails as a RETIRED PIN, not as a
     # missing block — the remedy is to repoint the pin, not to forge the provenance.
@@ -934,19 +1020,24 @@ if require_skill:
     # the architect bug-investigation.md section 4 dispatches RUNS the one-shot skill on the fix
     # story. There the native citation is the defect, and "repoint the pin" would misdirect the
     # remedy onto Check 17's correct invocation. Keyed on the path, one case.
-    if require_skill == "bmad-review-adversarial-general" and "ai-dlc-adversary-review" in cited:
+    # Either pin name fires it: bmad-review is the one-shot's current name (BMAD 6.11 renamed
+    # bmad-review-adversarial-general into its adversarial lens), and a consumer override can still
+    # carry the old one. The messages name the CURRENT skill and lens whichever was pinned.
+    if require_skill in ("bmad-review", "bmad-review-adversarial-general") and "ai-dlc-adversary-review" in cited:
         if os.path.basename(artifact_path).startswith("fold-architecture-"):
             failures.append(
-                f"--require-skill bmad-review-adversarial-general is CORRECT for a fold "
+                f"--require-skill {require_skill} is CORRECT for a fold "
                 f"architecture residue, and the RESIDUE is wrong: it cites ai-dlc-adversary-review. "
-                f"The fold architect runs the one-shot skill (bmad-review-adversarial-general) on "
-                f"the fix story, so its block must cite that skill. Do not repoint the pin."
+                f"The fold architect runs the one-shot skill (bmad-review, lens adversarial) on "
+                f"the fix story, so its block must cite skill: bmad-review with lens: adversarial. "
+                f"Do not repoint the pin."
             )
         else:
             failures.append(
-                f"--require-skill bmad-review-adversarial-general is a RETIRED PIN. This artifact "
+                f"--require-skill {require_skill} is a RETIRED PIN. This artifact "
                 f"correctly cites ai-dlc-adversary-review (the native convergence review). Repoint "
-                f"the pin — an override or a step file still names the retired skill."
+                f"the pin — an override or a step file still names the one-shot skill (bmad-review, "
+                f"lens adversarial) where the convergence review runs."
             )
 
 if is_retro and not party_mode_blocks:

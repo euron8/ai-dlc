@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.975.0] - 2026-10-31
+
+Batch b247. The rulebook invokes the BMAD skills that exist in BMAD 6.11 and later, and the provenance pin follows the rename (BL-884).
+
+**BREAKING: requires BMAD Method 6.11.0 or later.** BMAD 6.10.0 ships no `bmad-review`, no `bmad-deep-recon` and no sprint-planning readiness gate. A consumer on an older BMAD must upgrade (`npx bmad-method install`) before pulling this release.
+
+Rulebook and engine changes: call sites in `core/skills/ai-dlc/rule-bodies/rule-20.md`, nine files under `core/skills/ai-dlc/steps/` (`_gate-procedures.md`, `architecture.md`, `bug-investigation.md`, `gate-validation.md`, `implementation.md`, `requirements.md`, `research-requirements.md`, `sprint-review.md`, `stories-test-strategy.md`) and `core/team-roles/` (`adversary.md`, `analyst.md`, `architect.md`, `dev.md`); `core/schemas/provenance-block.json`; `core/scripts/validate-bmad-invocations.sh`, `validate-provenance-block.sh`, `validate-spawn-ledger.sh`, `stamp-story-provenance.sh`, `check-owed-derivations.sh`, `validate-spec-join.sh`. Fixtures: `core/fixtures/bmad-invocation-resolve/` adds the BMAD 6.11 arms (a 6.11 skills tree passes; an old slash call, a `bmad-review` with no adversarial lens, and a `bmad-sprint-planning` with no readiness gate each fail with the 6.11.0 floor); `core/fixtures/check-17-counts/` gives `bmad-review` its lens in the refusal and adds an accept twin; `core/fixtures/check-24-adversarial-convergence/` makes the §5 absence arm match the current `bmad-review` name and adds a new-form mutant (no shards are touched); `core/fixtures/fold-architect-ledger-join/` writes the current `bmad-review` plus `lens: adversarial` residue and adds the old-name pin and read-only arms; `core/fixtures/process-rule-pins/` pins the 6.11 call-site spellings (readiness intent and clause, sprint-planning intent, adversarial lens, deep-recon type); `core/fixtures/story-provenance/` adds the F13 cells that the old-name alias is read-only. Packaging: `scripts/install.sh` states the floor; `templates/QUICKSTART.md.template` is retargeted. Backlog: `docs/backlog.md`. Receipt: `core/fixtures/bmad-invocation-resolve/receipt-bl884.sh`, the BL-884 receipt driver.
+
+### The five BMAD skills removed in 6.11 are retargeted (BL-884)
+
+- Removed names and their replacements:
+  - `bmad-market-research`, `bmad-domain-research`, `bmad-technical-research` become `/bmad-deep-recon` with the type stated at the call (`type=market`, `type=domain`, `type=technical`) and the `run` intent. Each deep-recon run writes its own folder, `{planning_artifacts}/s<N>/research/{type}-{topic}-{date}/research.md`; research-notes and the brief cite those three paths.
+  - `bmad-review-adversarial-general` becomes `/bmad-review lenses=adversarial`.
+  - `bmad-check-implementation-readiness` becomes `/bmad-sprint-planning` with the `readiness` intent and an explicit clause that `sprint-status.yaml` is neither created nor modified. A readiness CONCERNS or FAIL verdict is a finding the lead routes to the pm or architect, never an operator question.
+- The old skill name `bmad-review-adversarial-general` is accepted ON READ ONLY. Blocks stamped before the upgrade still satisfy `--require-skill bmad-review` (`superseded_skills` maps the old name to the new one). New stamps write `skill: bmad-review` together with `lens: adversarial`; `stamp-story-provenance.sh` normalises an old-name one-shot to those two fields and never writes the old name. A block citing `bmad-review` without `lens: adversarial` fails the pin, because `bmad-review` runs many lenses and the name alone does not prove the adversarial one ran.
+- Check 32 (`validate-bmad-invocations.sh`) gains capability probes. `bmad-sprint-planning` must carry `references/readiness-gate.md`, and `bmad-review` must carry an uncommented `code = "adversarial"` lens in `customize.toml`. A probe miss exits 1 and every Check 32 FAIL now names the 6.11.0 floor.
+- A consumer whose own overrides still invoke a removed name stays red on Check 32 until it edits them. The reference consumer's override for the team-roles dev bug-class sweep is one such file; this release does not touch consumer overrides.
+
 ## [0.974.0] - 2026-10-31
 
 Batch b247. The Check 22 shard-ordinal parser ignores a prose suffix after the list (BL-887), and a Check 22 waiver is owned by the entry it names (BL-889).

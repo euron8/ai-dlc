@@ -214,9 +214,13 @@ do not treat the returned offer as an instruction to hand it the update.
 ```
 The Architect seat in section 5 challenges every line reading `none`.
 
-**Research sub-skills.** `/bmad-domain-research`, `/bmad-market-research`,
-`/bmad-technical-research` run inside this same dispatch, and ONLY when a SPEC
-`open_questions[]` entry bears on a `LOCKED_REQUIREMENTS` bullet, scoped to that question. An
+**Research runs.** `/bmad-deep-recon type=domain`, `/bmad-deep-recon type=market` and
+`/bmad-deep-recon type=technical`, each with `intent=run subagents=none research_output_path={planning_artifacts}/s<N>/research`, run inside this same
+dispatch, and ONLY when a SPEC
+`open_questions[]` entry bears on a `LOCKED_REQUIREMENTS` bullet, scoped to that question. Each
+run's plan gate is auto-approved, never an operator question. Leave each run folder
+deep-recon writes under `{planning_artifacts}/s<N>/research` in place, uncopied, and cite
+its `research.md` path in the PRD's `Research Findings` section. An
 entry research does not resolve is a Rule 11 ambiguity escalated as a Rule 12 HARD_BLOCK
 before the gate (as (b) above). Otherwise, write a skip record into the PRD's `Research
 Findings` section naming the `open_questions[]` state that justified the skip, matching:

@@ -693,21 +693,21 @@ planning artifacts. Do not implement."
 /workflow-status           -- check project phase and progress
 /bmad-brainstorming        -- CIS structured ideation
 /bmad-create-product-brief -- Phase 1 discovery
-/bmad-domain-research      -- domain deep dive
-/bmad-market-research      -- competitive analysis
-/bmad-technical-research   -- technology research
+/bmad-deep-recon type=domain     -- domain deep dive (formerly bmad-domain-research)
+/bmad-deep-recon type=market     -- competitive analysis (formerly bmad-market-research)
+/bmad-deep-recon type=technical  -- technology research (formerly bmad-technical-research)
 /bmad-create-prd           -- Phase 2 requirements
 /bmad-validate-prd         -- PRD completeness check
 /bmad-create-architecture  -- Phase 2 system design
-/bmad-check-implementation-readiness -- PRD/arch completeness for stories
+/bmad-sprint-planning intent=readiness -- PRD/arch completeness for stories; do not create or modify sprint-status.yaml (formerly bmad-check-implementation-readiness)
 /bmad-create-epics-and-stories  -- Phase 2 story breakdown
-/bmad-sprint-planning      -- Phase 2 sprint selection
+/bmad-sprint-planning intent=sprint-planning -- Phase 2 sprint selection
 ```
 
 ### Quality and Validation
 ```
 /bmad-party-mode                   -- multi-agent debate
-/bmad-review-adversarial-general   -- cynical review, ONE-SHOT only
+/bmad-review lenses=adversarial    -- cynical review, ONE-SHOT only (formerly bmad-review-adversarial-general)
 /bmad-advanced-elicitation         -- probe until zero ambiguity
 /bmad-agent-tea-tea                -- TEA test strategy
 ```

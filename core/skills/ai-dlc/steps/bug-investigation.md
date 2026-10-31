@@ -106,9 +106,10 @@ held back behind any review between section 2 and section 3, §2c included.
 
 **The root-cause claim gets an adversarial pass before section 3.** Dispatch ONE
 `adversary` (Agent tool, bound to `.claude/team-roles/adversary.md` per SKILL.md
-Rule 19) to run `/bmad-review-adversarial-general` on
-`_bmad-output/planning-artifacts/bug-analysis.md`, one-shot and `mode: subagent`,
-targeting the SOUNDNESS of the root cause:
+Rule 19) to run `/bmad-review lenses=adversarial` on
+`_bmad-output/planning-artifacts/bug-analysis.md`, one-shot and `mode: subagent`, with the lens
+run inline in the adversary's own context and no per-lens subagent; the review's plan is
+auto-approved, never an operator question. It targets the SOUNDNESS of the root cause:
 - For each falsification-ladder rung, does the evidence rule the layer out?
 - Is a layer missing from the ladder?
 - Does the evidence fit another cause equally well, and what observation would
@@ -118,7 +119,7 @@ targeting the SOUNDNESS of the root cause:
 
 It writes findings to `_bmad-output/planning-artifacts/bug-analysis-adversarial.md`.
 The file carries a `SKILL_INVOCATION_PROVENANCE v1` block with
-`skill: bmad-review-adversarial-general`, `mode: subagent`, `artifact:` naming
+`skill: bmad-review` plus `lens: adversarial`, `mode: subagent`, `artifact:` naming
 `_bmad-output/planning-artifacts/bug-analysis.md`, and the three `findings_*` counts
 — and **no `verdict`**, which a one-shot never stamps.
 
@@ -148,9 +149,10 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/s<N>/stories/`:
 ### 4. Validation
 
 Dispatch ONE `adversary` (Agent tool, bound to `.claude/team-roles/adversary.md`
-per SKILL.md Rule 19) to run `/bmad-review-adversarial-general` on the fix story, which is
+per SKILL.md Rule 19) to run `/bmad-review lenses=adversarial` on the fix story, which is
 one document. A bmad one-shot stamps no `sections:` lines, so no section join exists for it
-and it is one agent.
+and it is one agent. The lens runs inline in the adversary's own context, with no per-lens
+subagent, and the review's plan is auto-approved, never an operator question.
 **ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
 counted exit condition; the skill's ≥10 floor buys a cynical sweep and costs
 nothing). The native `adversary` review is for CONVERGENCE cycles only.
@@ -165,7 +167,7 @@ nothing). The native `adversary` review is for CONVERGENCE cycles only.
 It writes findings to `_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot-<slug>.md`,
 where `<slug>` is the fix story's own slug, so each bug in a sprint has its own
 one-shot. The file carries a `SKILL_INVOCATION_PROVENANCE v1` block with
-`skill: bmad-review-adversarial-general`, `mode: subagent`, `artifact:` naming
+`skill: bmad-review` plus `lens: adversarial`, `mode: subagent`, `artifact:` naming
 the fix story, and the three `findings_*` counts — and **no `verdict`**, which a
 one-shot never stamps. That `artifact:` line is what routes the story to Check
 17's bug-fix arm. The path must not carry an `-adversarial-p<M>` suffix: Check 24
@@ -189,17 +191,18 @@ sprint's architecture assessment predates the fold and says nothing about it.
 After the remediation above lands (serial exception 3: it reads the repaired story), dispatch ONE `architect` (Agent tool, bound to
 `.claude/team-roles/architect.md` per SKILL.md Rule 19) over the fix story and
 the files it changes. The architect:
-1. Runs `/bmad-review-adversarial-general` on the fix story, scoped to
+1. Runs `/bmad-review lenses=adversarial` on the fix story, scoped to
    architecture fidelity: does the change stay inside the sprint's existing ADs
    and component boundaries, and does the story's `capabilities:` name the
-   capability the changed files implement.
+   capability the changed files implement. The lens runs inline in the architect's
+   own context, with no per-lens subagent, and the review's plan is auto-approved.
 2. Dispositions that capability from what the review found: an AD extension
    binding it, or a `- **No-AD:** CAP-<n> — REASON: …` line.
 3. Writes the residue
    `_bmad-output/planning-artifacts/s<N>/fold-architecture-<slug>.md` (the same
    `<slug>` as the one-shot), carrying its review's findings and one
    `SKILL_INVOCATION_PROVENANCE v1` block with these fields:
-   - `skill: bmad-review-adversarial-general`, the skill step 1 ran;
+   - `skill: bmad-review` plus `lens: adversarial`, the skill and lens step 1 ran;
    - `invoked_at:` when it ran, ISO 8601 UTC;
    - `tool_use_id:` the id of the Agent dispatch that spawned the architect, never
      the Skill call's id, because the gate joins it to that dispatch's spawn-ledger
@@ -245,7 +248,10 @@ the cross-check.
 
 ### 5. Sprint Setup
 
-Run `/bmad-sprint-planning` to set up a single-story sprint.
+Run `/bmad-sprint-planning intent=sprint-planning` to set up a single-story sprint. The
+`sprint-planning` intent runs the readiness gate first and generates sprint-status.yaml only on
+PASS. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
+the `pm` or the `architect`, role-bound per Rule 19, then re-invoke ONCE after they land; a second CONCERNS or FAIL verdict is a HARD_BLOCK the lead routes.
 
 ### 6. Gate Validation and Proceed
 

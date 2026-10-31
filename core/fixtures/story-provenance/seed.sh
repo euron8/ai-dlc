@@ -48,11 +48,17 @@ EOF
 # every bug-fix one-shot the reference consumer holds, each a project-root-relative path to the
 # story it reviewed — and it is what Check 17 routes a folded story by. An earlier seed wrote
 # the one-shot's OWN basename there, which the writer then accepted because it read nothing.
-mk_oneshot() { # $1 file  $2 extra-lines  $3 artifact (the story reviewed)
+# The CURRENT producer (BMAD 6.11+) runs the one-shot as `/bmad-review lenses=adversarial` and writes
+# `skill: bmad-review` with `lens: adversarial`. $4 = old writes the pre-rename block the reference
+# consumer still carries ~510 of: `skill: bmad-review-adversarial-general`, no lens line.
+mk_oneshot() { # $1 file  $2 extra-lines  $3 artifact (the story reviewed)  [$4 old]
+  local sk="skill: bmad-review
+lens: adversarial"
+  [ "${4:-}" = old ] && sk="skill: bmad-review-adversarial-general"
   cat > "$1" <<EOF
 # bug-fix one-shot cynical sweep
 <!-- SKILL_INVOCATION_PROVENANCE v1
-skill: bmad-review-adversarial-general
+$sk
 invoked_at: 2026-01-02T05:06:07Z
 tool_use_id: $REAL_TID
 mode: subagent
@@ -149,5 +155,9 @@ mk_oneshot "$ROOT/oneshot/s1-bug-fix-oneshot.md" "" "$ROOT/oneshot/stories/story
 mk_oneshot "$ROOT/oneshot/s1-bug-fix-oneshot-with-verdict.md" "verdict: EXIT_CONDITION_MET
 " "$ROOT/oneshot/stories/story-bug-1.md"
 mk_story_plain "$ROOT/oneshot/stories/story-bug-1.md"
+# The pre-rename one-shot and the story it reviewed: the F13 arms stamp from it and read the bytes
+# written, and the historical-read arm checks a pre-rename stamp against it.
+mk_oneshot "$ROOT/oneshot/s1-bug-fix-oneshot-oldname.md" "" "$ROOT/oneshot/stories/story-bug-old.md" old
+mk_story_plain "$ROOT/oneshot/stories/story-bug-old.md"
 
 echo "$ROOT"

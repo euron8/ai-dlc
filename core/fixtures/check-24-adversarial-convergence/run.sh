@@ -430,12 +430,13 @@ fi
 # MUTANT-MATRIX MUTATION-cdiv-terminal-silent decides=MUTATION-cdiv-terminal-silent.cdiv-terminal-resolved twins=MUTATION-cdiv-terminal-silent.cdiv-verified-unresolved
 # MUTANT-MATRIX MUTATION-sha-key decides=MUTATION-sha-key.sharded-revert-reordered twins=MUTATION-sha-key.sharded-revert-partial
 # MUTANT-MATRIX MUTATION-ts-bmad-restored decides=MUTATION-ts-bmad-restored.cell2 twins=MUTATION-ts-bmad-restored.cell1,MUTATION-ts-bmad-restored.cell3
+# MUTANT-MATRIX MUTATION-ts-bmad-restored-new decides=MUTATION-ts-bmad-restored-new.cell2 twins=MUTATION-ts-bmad-restored-new.cell1,MUTATION-ts-bmad-restored-new.cell3
 # MUTANT-MATRIX MUTATION-ts-gate-prefix-dropped decides=MUTATION-ts-gate-prefix-dropped.cell1 twins=MUTATION-ts-gate-prefix-dropped.cell2,MUTATION-ts-gate-prefix-dropped.cell3
 # MUTANT-MATRIX MUTATION-ts-precondition-deleted decides=MUTATION-ts-precondition-deleted.cell3 twins=MUTATION-ts-precondition-deleted.cell1,MUTATION-ts-precondition-deleted.cell2
 # MUTANT-MATRIX K3WX6-b-K3B-conjunct-dropped decides=K3WX6-b-K3B-conjunct-dropped.k3w-subj twins=K3WX6-applied-discriminates.kept-binding
 # MUTANT-MATRIX live-series-unfiltered decides=live-series-unfiltered.decoy-world twins=live-series-control-unfiltered.no-decoy-world
 # MUTANT-MATRIX live-series-unscoped decides=live-series-unscoped.two-sprint-world twins=live-series-control-unscoped.one-sprint-world
-# The twelve rows above are measured row-whole: each row is 2-3 cells, its deciding cell plus its twins ARE
+# The thirteen rows above are measured row-whole: each row is 2-3 cells, its deciding cell plus its twins ARE
 # the row, and the whole row runs on every push, so the per-push match IS the matrix measurement.
 # MUTANT-MATRIX-CONTROL CONTROL-chrono-copy why=the unmutated copy beside the arm-G mutants must reproduce the shipped row
 # MUTANT-MATRIX-CONTROL CONTROL-third-state-copy why=the unmutated copy in the third-state mutants' directory must reproduce the shipped row
@@ -4296,7 +4297,7 @@ echo
 #           and the SHIPPING validator runs with Check 24's prefix: exit 0 on a terminal MET pass at
 #           0 CRITICAL and 3 derived MAJOR, exit 1 with rung A on a verdict-less pass. An empty
 #           extraction is a FAIL naming the token; a prefix §5 does not write matches nothing.
-#   absent  §5 (`### 5.` to `### 6.`) names no bmad-review-adversarial-general, against a
+#   absent  §5 (`### 5.` to `### 6.`) names no bmad-review (nor its old name), against a
 #           same-invocation control that bug-investigation.md does (control zero is BROKEN).
 #   names   §5 names test-strategy-adversarial-p, "Adversarial review dispatch", "Adversarial repair
 #           dispatch", and step 3's precondition (the highest pass "does not stamp
@@ -4315,7 +4316,11 @@ done
 [ -n "$TS_GATE" ] || broken "BL-723: gate-validation.md, stories-test-strategy.md and bug-investigation.md are not together under either layout from $DIR"
 TS_TOKEN='_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p'
 TS_RE='_bmad-output/planning-artifacts/s<N>/test-strategy[A-Za-z0-9_-]*-p'
-TS_BMAD='bmad-review-adversarial-general'
+# The one-shot runs under its current name, `bmad-review` (BMAD 6.11 renamed it from
+# bmad-review-adversarial-general). The current name is a SUBSTRING of the old one, so one fixed-string
+# count sees both spellings: the old-name mutant below still kills, and the new-form mutant beside it
+# proves the absence arm reads the current call-site spelling too.
+TS_BMAD='bmad-review'
 ts_span() { awk -v s="$2" -v e="$3" 'index($0, s) == 1 { f = 1; next } index($0, e) == 1 { f = 0 } f' "$1"; }
 ts_prefixes() { ts_span "$1" "$2" "$3" | grep -oE -- "$TS_RE" | sort -u; }
 ts_count() { local n; n="$(ts_span "$1" "$2" "$3" | grep -cF -- "$4")" || n=0; printf '%s\n' "$n"; }
@@ -4433,7 +4438,7 @@ fi
 # --- MUTATION: one per cell the subject fix carries, each built as a COPY, cmp -s guarded ----------
 #                               bind  absent  names
 #   shipped (control)           ok    ok      ok
-#   bmad restored in §5 step 2  ok    FAIL    ok
+#   bmad restored in §5 step 2  ok    FAIL    ok   (old name, and again in the current lenses= form)
 #   Check 24 drops the prefix   FAIL  ok      ok
 #   step 3 precondition deleted ok    ok      FAIL
 ts_score() { # <label> <gate doc> <step doc> <expected row>
@@ -4471,6 +4476,13 @@ if ts_mut ts-bmad-restored '(?m)^2\. \*\*Converge the test strategy\.\*\*' \
      '2. `/bmad-review-adversarial-general` — review test strategy. **Converge the test strategy.**' \
      "$TS_STEP" "$TSM/stories-test-strategy.m1.md"; then
   ts_score "MUTATION ts-bmad-restored" "$TS_GATE" "$TSM/stories-test-strategy.m1.md" "ok FAIL ok"
+fi
+# M1b: the same step restored in the CURRENT call-site spelling, the directive form the rulebook now
+# writes everywhere else. Without this the absence arm is proven only against the old name.
+if ts_mut ts-bmad-restored-new '(?m)^2\. \*\*Converge the test strategy\.\*\*' \
+     '2. `/bmad-review lenses=adversarial` — review test strategy. **Converge the test strategy.**' \
+     "$TS_STEP" "$TSM/stories-test-strategy.m1b.md"; then
+  ts_score "MUTATION ts-bmad-restored-new" "$TS_GATE" "$TSM/stories-test-strategy.m1b.md" "ok FAIL ok"
 fi
 # M2: Check 24 stops naming the series. Keyed on the extractor's own grammar over the whole file, and
 # the copy must carry ZERO matches against a non-zero original.

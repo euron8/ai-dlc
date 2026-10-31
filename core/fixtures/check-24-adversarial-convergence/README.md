@@ -261,7 +261,7 @@ rather than through a typed copy of the prefix:
 | Cell | What it runs | Must |
 |---|---|---|
 | `ts-bind` | the prefix EXTRACTED from Check 24's section (`### 24.` to `### 25.`), `s<N>` resolved to a seeded sprint, over a terminal MET pass (0C, 3 derived MAJOR) and a verdict-less one | exit 0, then exit 1 with `FAIL (A -- VOCABULARY)`; an empty extraction FAILs naming the token |
-| `ts-absent` | the §5 span (`### 5.` to `### 6.`) | no `bmad-review-adversarial-general`; control: `bug-investigation.md` names it, and a zero control is BROKEN |
+| `ts-absent` | the §5 span (`### 5.` to `### 6.`) | no `bmad-review` (a substring of its old name `bmad-review-adversarial-general`, so both spellings count); control: `bug-investigation.md` names it, and a zero control is BROKEN |
 | `ts-names` | the §5 span | names `test-strategy-adversarial-p`, `Adversarial review dispatch`, `Adversarial repair dispatch`, and step 3's precondition (``does not stamp `verdict: EXIT_CONDITION_MET` ``) |
 | `ts-arm-l-silent` | the MET run's output | no elicitation line — a characterization, not a kill |
 

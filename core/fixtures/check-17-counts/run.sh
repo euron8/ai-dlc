@@ -91,14 +91,21 @@ echo "check-17-counts"
 # --- 1. THE RULE FIRES on every sub-skill that used to report nothing ---------
 # Each of these is a real invocation shape from the reference consumer: well-formed
 # in every other respect, and silent about what it found.
-for sk in bmad-party-mode bmad-advanced-elicitation bmad-review-adversarial-general bmad-validate-prd bmad-prd; do
-  emit "silent-$sk.md" "$sk"
+for sk in bmad-party-mode bmad-advanced-elicitation bmad-review-adversarial-general bmad-review bmad-validate-prd bmad-prd; do
+  # bmad-review carries its lens here, as the producer writes it, so its refusal and the accept
+  # twin below differ in the three counts alone.
+  if [ "$sk" = bmad-review ]; then emit "silent-$sk.md" "$sk" 'lens: adversarial'; else emit "silent-$sk.md" "$sk"; fi
   expect "silent-$sk.md" refuse "$sk with no residue is refused"
 done
 
 # --- 2. Recording the residue is all it takes ---------------------------------
 emit counted.md bmad-party-mode 'findings_critical: 0' 'findings_major: 1' 'findings_minor: 3'
 expect counted.md accept "the same block with its three counts is accepted"
+# The ALLOW twin of the bmad-review refusal above, one property apart: the block the one-shot now
+# writes (current name, its lens, three counts) is accepted, so that refusal was the missing counts
+# and never an unknown skill name.
+emit counted-review.md bmad-review 'lens: adversarial' 'findings_critical: 0' 'findings_major: 2' 'findings_minor: 1'
+expect counted-review.md accept "  bmad-review with lens: adversarial and its three counts is accepted (the twin of its refusal)"
 
 # ZERO is a reading, not an omission. A party-mode pass that genuinely surfaced
 # nothing must be able to SAY so — if reporting zero were refused, the only way to

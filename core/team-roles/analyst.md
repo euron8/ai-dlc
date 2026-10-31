@@ -143,7 +143,7 @@ of the MAJOR findings raised after the first adversarial pass are counts, enumer
   gate outcome, requirement tradeoff), record it in the `## Gaps` section of the artifact and let the
   lead resolve it.
 - **Do NOT run validation evaluations** (`/bmad-party-mode`,
-  `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
+  `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`,
   `/bmad-prd`, or the native `ai-dlc-adversary-review`). Rule 20 routes
   every one of them to an independent subagent — the single-voice skills and the
   convergence review to the `adversary` role. Your draft is the input they

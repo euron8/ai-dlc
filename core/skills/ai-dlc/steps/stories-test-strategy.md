@@ -15,10 +15,17 @@ and test strategy with full validation cycle.
 
 ### 1. Implementation Readiness
 
-Invoke `/bmad-check-implementation-readiness` — validate PRD + architecture
-have everything needed for stories. Dispatch the `pm` (PRD gaps) and the
+Invoke `/bmad-sprint-planning intent=readiness` and do not create or modify sprint-status.yaml.
+It validates that PRD + architecture have everything needed for stories. State both at the call:
+the skill's full flow generates the tracking file after a PASS, and §3 below owns that write. Dispatch the `pm` (PRD gaps) and the
 `architect` (architecture gaps), role-bound per Rule 19, to fix them directly
 in the source artifacts. The lead owns the routing, not the edit.
+
+**The verdict is a finding, never an operator question.** On PASS, proceed. On CONCERNS or FAIL,
+write the verdict and its findings to
+`_bmad-output/planning-artifacts/s<N>/implementation-readiness-stories.md`, route each finding as
+above, then proceed. The gate's own "proceed anyway or fix first?" prompt is answered "fix first"
+by that routing; it is never put to the operator (Rules 9/10).
 
 ### Story Routing Tags
 
@@ -511,7 +518,10 @@ and place all carry-over stories in a single sprint. Carry-over items are
 already scoped and ≤2 stories are trivially plannable; the sprint-planning
 sub-skill adds overhead without value. Proceed to Story Validation Cycle.
 
-Invoke `/bmad-sprint-planning` — select stories for the sprint.
+Invoke `/bmad-sprint-planning intent=sprint-planning` — select stories for the sprint. The
+`sprint-planning` intent runs the readiness gate again and generates sprint-status.yaml only on
+PASS. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
+the `pm` or the `architect` as §1 does, then re-invoke ONCE after they land; a second CONCERNS or FAIL verdict is a HARD_BLOCK the lead routes.
 
 The lead writes `planned_close: <ISO-8601 UTC>` into the canonical
 sprint-status yaml's sprint block.

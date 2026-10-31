@@ -275,7 +275,7 @@ Before starting any task, read these files in order:
           results logged in the story file. Mocked-timing unit tests and a
           single live run do not satisfy the AC; mocked tests MAY supplement.
 - When a story requires a validation evaluation (`/bmad-party-mode`,
-  `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
+  `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`,
   `/bmad-prd`, or the native `ai-dlc-adversary-review` convergence
   review), the artifact produced MUST carry a
   `SKILL_INVOCATION_PROVENANCE v1` block (schema in SKILL.md Rule 3).
