@@ -1786,6 +1786,8 @@ verify: sh bash scripts/check-no-provisional-invocations.sh
 
 **PARTIAL.** `scripts/seed-verdict-store.sh` and its CLAUDE.md sentence landed in v0.968.0. Owed: a pre-push arm refusing a release-commit push whose exact tree has no seeded passes. Operator, on prose-only carriers: "One clause in CLAUDE.md, that is it?" Provenance: batch b245 close filing.
 
+**Progress (batch b247): a sound guard needs three corrections, and its premise is with the operator.** (1) "OMITTED" is not a decision state. `readset-stage1-verdict` is declared and decided like any other fixture: the shared verdict store holds recorded entries for it (2 when the lead first looked, 15 `#fixture readset-stage1-verdict` entries on 2026-10-31, against 0 for an impossible name), and the 0.973.0 push log names it 0 times, against 2 for `prepush-pool-depth`. (2) Five fixtures declare `+VERSION` in their `inputs.decl`: backlog-ledger, enforcement-map-sites, enforcement-map-sites-b, enforcement-map-sites-c and schema-install-fallback. They run on every release push, so the guard must exempt fixtures keyed on `VERSION` or `CHANGELOG.md` (no `inputs.decl` declares `+CHANGELOG.md` today). (3) An I66 line inside the FIXTURE_POOL block needs its own `return 1`, because the hook runs without `set -e`. The premise conflicts with the batch ruling that a release push is its own gate. The guard would have refused the 0.973.0 push, which ran 74 fixtures (its log's `ok <fixture>` rows). Seeding those serially costs their summed loaded duration against one pool push. That was 4144s when the lead measured it, and it reads 4784s in `.git/ai-dlc-fixture-durations` on 2026-10-31, where all 74 have a row. Both figures are LOADED costs, measured under the pool. Whether the guard is wanted at all is the operator's decision.
+
 verify: manual
 
 ## BL-870 — the pre-suite phase is not content-keyed, so its 24 checks re-run in full on every push
@@ -1899,7 +1901,9 @@ verify: manual
 
 **DEFECT.** Found while building BL-850 (lead filing, at batch close): a TERM to .githooks/pre-push does not tear down its fixture pool. Each unit leads its own process group, and the hook is blocked in xargs, so a cancelled push leaves the suite running. Measured on a stopped counting sweep: 38 of 116 descendants and 14 of 18 groups were still live 120s after the TERM; TERM to each pool worker reaped its unit through pool_abort.
 
-verify: manual
+**Fix.** Both pre-push hooks start xargs in the background under `set -m`, so it and its workers lead a group of their own, and the hook waits on it. INT, TERM and HUP go to `pool_stop`, which writes `.pr/.stop`, reads each worker's `.pr/<unit>.k` record, TERMs each recorded pid only while that pid is in xargs' process group (a stale record of a SIGKILLed worker can name a reused pid), waits for xargs, and exits 130, 143 or 129. A worker writes its `.k` after its trap is set and checks `.stop` after that; finding it, it exits 255, which stops xargs dispatching the queue. Measured basis: BSD xargs on macOS, where a plain `&` started the workers with SIGINT ignored (the INT trap fired in 0 of 2 workers, against 2 of 2 under `set -m`) and an exit of 255 stops dispatch. GNU xargs is unmeasured. The receipt drives the hook's own FIXTURE_POOL block over four barrier-held stubs at width 2, TERMs the parent, and requires exit 143, no recorded stub alive, no queued stub started, and the pool root removed. The base traps (`trap 'exit 143' TERM`) leave both stubs alive, and a plain `&` leaves the parent and both stubs alive.
+
+verify: sh bash scripts/receipt-bl881-pool-teardown.sh
 
 ## BL-875 — readset-skip's slot-world `stub/logstream stream` processes outlive their run
 
