@@ -1442,11 +1442,10 @@ run_two_beats() { # <subject> -> TB_* ; leaves W
   tree_signal "$p2" CONT
   # Beat 2 now resolves by an EVENT, never a clock: it exits (delivered, from its memo), or it
   # re-creates .since after the seal -- the re-arm a memo-less beat performs, after which it can never
-  # deliver and would otherwise poll out its 600s quantum. The 6000-tenth cap is only a backstop, and a
-  # hit on it is a void case (TB_RESOLVED=0, rc 2 below), never a count: reaping a beat that had not
-  # resolved reads TB_N as 1 and would score a harness timeout as a regression of the subject.
-  TB_RESOLVED=1
-  until_true 6000 beat2_resolved "$p2" "$W/_bmad-output/.wait-beats/$(fx_key x.md).since" || TB_RESOLVED=0
+  # deliver and would otherwise poll out its 600s quantum. The wait carries no count and no time cap
+  # because it always terminates: beat 2 runs with a 600s quantum and exits on delivery, on re-arm or on
+  # expiry, so one of the two events beat2_resolved tests is certain to occur and no load can void it.
+  until_event beat2_resolved "$p2" "$W/_bmad-output/.wait-beats/$(fx_key x.md).since"
   reap_tree "$p2"
   wait "$p2" 2>/dev/null || true
   TB_N=0
@@ -1462,8 +1461,7 @@ C40_two_beats_one_path() {
 run_two_beats "$SUBJ"
 say_shells "two-beats-one-path"
 say_ordered "two-beats-one-path"
-if [ "$TB_RESOLVED" -eq 0 ]; then pre_bad "two-beats-one-path: beat 2 never resolved within the backstop (it neither exited nor re-created .since) — this case is void and decides no verdict"
-elif [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed file"
+if [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed file"
 else bad "two-beats-one-path: $TB_N of 2 beats delivered — the second re-armed after the first deleted the shared .since"; fi
 rm -rf "$W"
 }
