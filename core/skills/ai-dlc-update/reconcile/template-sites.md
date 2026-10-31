@@ -95,6 +95,14 @@ regions, no full rebuild needed. The decommission of the Context-Mode Usage
 section is exactly this shape: a boilerplate block removed, every token
 region untouched.
 
+`apply.sh` and `--finish` verify that the transform was done from a record, not from the
+file's content. The ordinary run hands each `TEMPLATE-PROSE-MERGE` file back as a
+`WORKLIST template-prose-merge` row and records its blob and mode in `.claude/.ai-dlc-applying`
+on a `template:` line; `--finish` withholds the stamp while the file still matches that record.
+Nothing compares the file to the template, because a correctly merged file keeps consumer
+edits. If leaving the file unchanged is the disposition, delete that file's own `template:` line
+and re-run `--finish`.
+
 ## settings.json reconcile (json-merge)
 
 `settings.json` has no tokens. **Do not hand-write the jq.** Run the script —

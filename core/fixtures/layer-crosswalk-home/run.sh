@@ -37,6 +37,7 @@
 # MUTANT-MATRIX refuse decides=REFUSE twins=S0
 # MUTANT-MATRIX union decides=S2 twins=S1
 # MUTANT-MATRIX apply-scaffold decides=PSCAF twins=PPRES
+# MUTANT-MATRIX ss-overwrite decides=SSPRES twins=SSCAF
 # MUTANT-MATRIX-DYNAMIC mscore why=every mutant is passed to mutant_killed by name from the one mscore() driver, and each name keeps its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-crosswalk-home/run.sh --matrix
 #
@@ -72,7 +73,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 fails=0
 made=0
-B_S0=0; B_S1=0; B_S2=0; B_REFUSE=0; B_PSCAF=0; B_PPRES=0; MUT_APPLY_READY=0
+B_S0=0; B_S1=0; B_S2=0; B_REFUSE=0; B_PSCAF=0; B_PPRES=0; B_SSCAF=0; B_SSPRES=0; MUT_APPLY_READY=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 
@@ -83,10 +84,11 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # 2 premises + 2 state vectors + 1 message content + 1 difference + 1 declaration-is-read + 1 refusal
 # + 2 core-yields-zero (claim + control)
 # + 4 pull-side (scaffold, preserve, refusal, mutant)
+# + 3 smoke-surface pull-side (scaffold, preserve, undeclared) + 1 smoke-surface mutant (overwrite)
 # + 1 unmutated control + 5 mutants (4 linter + the pull scaffold) + 1 plain-run arm.
 # The 2 installer arms (scaffold + preserve) moved to schema-install-fallback, which declares
 # scripts/install.sh; this fixture ships and cannot.
-EXPECTED_ASSERTIONS=20
+EXPECTED_ASSERTIONS=24
 
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found at $MUT_LIB" >&2; exit 2; }
@@ -111,6 +113,17 @@ CW_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' \
   "$(pick "$HERE/../../skills/ai-dlc/layer-contract.yaml" \
           "$HERE/../../../core/skills/ai-dlc/layer-contract.yaml" \
           "$HERE/../../../.claude/skills/ai-dlc/layer-contract.yaml")" | head -1 | sed 's/[[:space:]]*$//')"
+# The smoke surface (BL-845): its declared path out of the same shipped contract, and the REAL template
+# the pull scaffolds it from, so the scaffold arm compares against the bytes a consumer receives.
+SS_REL="$(sed -n 's/^consumer_smoke_surface_file:[[:space:]]*//p' \
+  "$(pick "$HERE/../../skills/ai-dlc/layer-contract.yaml" \
+          "$HERE/../../../core/skills/ai-dlc/layer-contract.yaml" \
+          "$HERE/../../../.claude/skills/ai-dlc/layer-contract.yaml")" | head -1 | sed 's/[[:space:]]*$//')"
+SS_TPL="$(pick "$HERE/../../skills/ai-dlc/templates/smoke-surface.txt" \
+               "$HERE/../../../core/skills/ai-dlc/templates/smoke-surface.txt" \
+               "$HERE/../../../.claude/skills/ai-dlc/templates/smoke-surface.txt")"
+[ -n "$SS_REL" ] && [ -n "$SS_TPL" ] \
+  || { echo "FIXTURE ERROR: the shipped contract declares no consumer_smoke_surface_file:, or templates/smoke-surface.txt is absent" >&2; exit 2; }
 
 # The row that resolves the seed's retired id, in the shape the message asks for.
 ROW='| 33 | `[ext:domain]` | Cross-story test-strategy deliverable presence | pre-migration gate logs | became 934 |'
@@ -301,12 +314,15 @@ else
     git -C "$d" init -q 2>/dev/null || return 1
     printf '1.0.0\n' > "$d/VERSION"
     printf '#!/usr/bin/env bash\necho v1\n' > "$d/core/scripts/validate-synthetic.sh"
+    # The yes world declares the smoke surface too, so one pull exercises both scaffolds; the no world
+    # ships the SAME smoke template undeclared, so "nothing written" there is about the declaration.
     if [ "$1" = yes ]; then
-      printf 'contract_version: 1\nconsumer_crosswalk_file: %s\n' "$CW_REL" > "$d/core/skills/ai-dlc/layer-contract.yaml"
+      printf 'contract_version: 1\nconsumer_crosswalk_file: %s\nconsumer_smoke_surface_file: %s\n' "$CW_REL" "$SS_REL" > "$d/core/skills/ai-dlc/layer-contract.yaml"
     else
       printf 'contract_version: 1\n' > "$d/core/skills/ai-dlc/layer-contract.yaml"
     fi
     printf '# Catalog crosswalk\n\n%s\n' "$TABLE_HEAD" > "$d/core/skills/ai-dlc/templates/$(basename "$CW_REL")"
+    cp "$SS_TPL" "$d/core/skills/ai-dlc/templates/$(basename "$SS_REL")" || return 1
     git -C "$d" -c user.email=f@f -c user.name=fixture add -A >/dev/null 2>&1
     git -C "$d" -c user.email=f@f -c user.name=fixture commit -qm base >/dev/null 2>&1
     local b; b="$(git -C "$d" rev-parse HEAD)"
@@ -330,13 +346,28 @@ else
     bad "apply left '$CW_REL' absent or unlike the template — this is the defect the 0.227.0 pull shipped: a declared path nothing creates"
   fi
 
+  # The smoke surface (BL-845), scaffolded by the same pull: bytes are the shipped template's, and the
+  # pull says so with its RESOLVED row.
+  if [ -f "$SC/$SS_REL" ] && cmp -s "$SC/$SS_REL" "$SS_TPL" \
+     && [ "$(awk -F'\t' -v p="$SS_REL" '$1=="RESOLVED" && $2=="smoke-surface-scaffold" && $3==p' "$WORK/apply1.out" | grep -c .)" = 1 ]; then
+    B_SSCAF=1; ok "the PULL scaffolds the declared smoke surface ($SS_REL), byte-identical to the shipped template, with RESOLVED smoke-surface-scaffold"
+  else
+    bad "apply left the declared smoke surface '$SS_REL' absent, unlike the template, or unreported: $(grep 'smoke-surface' "$WORK/apply1.out" | tr '\n' ' ' | cut -c1-200)"
+  fi
+
   # --- and it is the consumer's from there ----------------------------------------------
   printf '%s\n' "$ROW" >> "$SC/$CW_REL"
   SUM="$(cksum < "$SC/$CW_REL")"
-  bash "$APPLY" "$SD" "$SB" "$SC" "$ST" >/dev/null 2>&1
+  printf 'web/src/**\n' >> "$SC/$SS_REL"; cp "$SC/$SS_REL" "$WORK/ss.kept"
+  bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1b.out" 2>&1
   [ "$(cksum < "$SC/$CW_REL")" = "$SUM" ] \
     && { B_PPRES=1; ok "a SECOND pull preserves a populated crosswalk file — the rows are the consumer's"; } \
     || bad "a second pull overwrote the populated crosswalk file, which is the whole ownership claim"
+  if cmp -s "$SC/$SS_REL" "$WORK/ss.kept" && ! grep -q 'smoke-surface-scaffold' "$WORK/apply1b.out"; then
+    B_SSPRES=1; ok "a SECOND pull leaves a smoke surface the consumer wrote byte-for-byte unchanged, and reports no scaffold"
+  else
+    bad "a second pull rewrote the consumer's smoke surface '$SS_REL' or reported scaffolding it again"
+  fi
 
   # --- an undeclared path is REFUSED, and the refusal withholds the stamp ----------------
   # A pull that quietly declares a path it did not create hands the next migration a
@@ -350,6 +381,14 @@ else
     ok "THEIRS declaring no crosswalk file is REFUSED by name and withholds the re-stamp, rather than guessing a path"
   else
     bad "an undeclared crosswalk file did not produce 'DECISION crosswalk-undeclared' plus a withheld re-stamp: $(tr '\n' ' ' < "$WORK/apply2.out" | cut -c1-200)"
+  fi
+  # The same undeclaring THEIRS ships the smoke template: with no declaration nothing is written and no
+  # smoke-surface row of any kind is printed (the smoke arms fall back to their default and SKIP).
+  if [ ! -e "$NC/$SS_REL" ] && ! grep -q 'smoke-surface' "$WORK/apply2.out" \
+     && git -C "$ND" cat-file -e "${NT}:core/skills/ai-dlc/templates/$(basename "$SS_REL")" 2>/dev/null; then
+    ok "THEIRS shipping the smoke template WITHOUT the declaration writes no smoke surface and prints no smoke-surface row"
+  else
+    bad "an undeclared smoke surface was written, reported, or the world did not ship the template it must ignore"
   fi
 
   # --- MUTANT: the write itself. Without it every reading above still looks like a pull ---
@@ -478,6 +517,37 @@ if [ "$MUT_APPLY_READY" = 1 ]; then
     mutant_killed "$(( ${B_PSCAF:-0} && ${B_PPRES:-0} ))" apply-scaffold "MUTANT killed: with the scaffold removed the pull completes and the declared path stays EMPTY — which is exactly what shipped"
   else
     bad "MUTANT apply-scaffold: scaffold arm failed=$([ "$m_sc" = 0 ] && echo yes || echo no), preserve twin held=$m_pp — the file appeared anyway or the arms are entangled"
+  fi
+fi
+
+# M6 — the smoke-surface scaffold overwrites a present file: its own guard (the one `$SS_REL` line;
+# M5's sed reaches every `elif [ ! -f ... ]` and so cannot isolate it) made always-true. The scaffold
+# twin still holds on the first pull; the preserve arm must fail on the second.
+SSMUT="$WORK/ss-mut"
+if [ -n "$APPLY" ]; then
+  cp -R "$(dirname "$APPLY")" "$SSMUT" 2>/dev/null
+  SS_A='elif [ ! -f "$CONSUMER/$SS_REL" ]; then'
+  if [ "$(grep -cF -- "$SS_A" "$APPLY")" = 1 ] \
+     && SS_A="$SS_A" awk '{ i = index($0, ENVIRON["SS_A"]); if (i) $0 = "elif true; then"; print }' "$APPLY" > "$SSMUT/apply.sh" \
+     && ! cmp -s "$APPLY" "$SSMUT/apply.sh" && bash -n "$SSMUT/apply.sh" 2>/dev/null && [ -f "$SSMUT/preclassify.sh" ]; then
+    read -r MD MB MC MT <<<"$(synth yes)"
+    bash "$SSMUT/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
+    m_sc=0; [ -f "$MC/$SS_REL" ] && cmp -s "$MC/$SS_REL" "$SS_TPL" && m_sc=1
+    printf 'web/src/**\n' >> "$MC/$SS_REL"; cp "$MC/$SS_REL" "$WORK/ss.mkept"
+    bash "$SSMUT/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
+    m_pp=0; cmp -s "$MC/$SS_REL" "$WORK/ss.mkept" && m_pp=1
+    if [ "$MATRIX" = 1 ]; then
+      printf 'MATRIX\tss-overwrite\tSSCAF\t%s\nMATRIX\tss-overwrite\tSSPRES\t%s\n' \
+        "$([ "$m_sc" = 1 ] && echo ok || echo FAIL)" "$([ "$m_pp" = 1 ] && echo ok || echo FAIL)"
+      MATRIX_CELLS=$((MATRIX_CELLS + 2))
+    fi
+    if [ "$m_pp" = 0 ] && [ "$m_sc" = 1 ]; then
+      mutant_killed "$(( ${B_SSCAF:-0} && ${B_SSPRES:-0} ))" ss-overwrite "MUTANT killed: a smoke-surface scaffold that ignores a present file overwrites the consumer's surface on the second pull"
+    else
+      bad "MUTANT ss-overwrite: preserve arm failed=$([ "$m_pp" = 0 ] && echo yes || echo no), scaffold twin held=$m_sc"
+    fi
+  else
+    bad "MUTANT ss-overwrite did not apply (the smoke-surface guard is not in apply.sh exactly once, or the copy does not parse)"
   fi
 fi
 

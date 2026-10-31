@@ -42,7 +42,50 @@
 # MUTANT-MATRIX sited-marker decides=ss-apply twins=ss-finish
 # MUTANT-MATRIX sited-finish decides=ss-finish twins=ss-apply
 # MUTANT-MATRIX shim-removed decides=old-extract twins=ss-apply
+# BL-886's cells are receipt-bl886.sh's (its header lists them); each mutant is a whole copy of reconcile/.
+# MUTANT-MATRIX tp-after-stamp decides=pa twins=pg
+# MUTANT-MATRIX tp-unrecorded decides=pa twins=ja
+# MUTANT-MATRIX tp-rerecord decides=pf twins=pa
+# MUTANT-MATRIX tp-finish-blind decides=pb twins=pa
+# MUTANT-MATRIX tp-no-sentinel decides=pb twins=ja
+# MUTANT-MATRIX tp-refusal-silent decides=pe twins=pa
+# MUTANT-MATRIX tj-equal-owed decides=jn twins=ja
+# MUTANT-MATRIX tj-blob decides=jb2 twins=jc
+# MUTANT-MATRIX tj-unrecorded decides=ja twins=pa
+# MUTANT-MATRIX c3-both decides=c3a twins=c3c
+# MUTANT-MATRIX c3-always decides=c3c twins=c3a
+# MUTANT-MATRIX c3-finish decides=c3b twins=c3a
+# MUTANT-MATRIX tp-refused-as-unrec decides=pe2 twins=pa
+# MUTANT-MATRIX tp-unreadable-silent decides=pu twins=pv
+# MUTANT-MATRIX cl-unreadable-silent decides=pv twins=pu
+# MUTANT-MATRIX tj-refused-unowed decides=c3d twins=c3a
+# MUTANT-MATRIX tp-refused-writer decides=pe4 twins=pe3
+# MUTANT-MATRIX tj-finish-refused-unowed decides=c3e twins=c3b
+# MUTANT-MATRIX-DYNAMIC tp_score-name why=tp_score() passes its first argument "$n" to mutant_killed; every tp_case call names a literal mutant that carries its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-restamp-theirs/run.sh --matrix
+# WHY EACH MUTANT STAYS: one apply.sh site each, no two the same line to the same effect, and no carrier among
+# apply-restamp-worklist(-b,-c), apply-worklist-rows, apply-drift-refile or apply-machinery-stamp mutates any of these sites.
+#   sited-marker       ap_write_marker's `_sited="$(setup_sited_paths)" || _rc=$?` status read; killed by ss-apply
+#   sited-finish       --finish's `_fv_sited="$(setup_sited_paths)" || _fv_rc=$?` status read; killed by ss-finish
+#   shim-removed       preclassify.sh's one-line SETUP_SITED_PATHS compatibility shim; killed by old-extract
+#   tp-after-stamp     template_scan's place in ap_write_marker, ahead of write_stamp; killed by pa
+#   tp-unrecorded      template_scan's TP_LINES append after the prose WORKLIST row; killed by pa
+#   tp-rerecord        ap_write_marker's same-base `_tkeep` (first write wins); killed by pf alone
+#   tp-finish-blind    write_stamp's call of finish_template_unmerged; killed by pb (pg is its alone)
+#   tp-no-sentinel     ap_write_marker's `template-hashes:` sentinel printf; killed by pb
+#   tp-refusal-silent  template_scan's detector_refused on a failed --templates fork; killed by pe (pe2, pe3 too)
+#   tj-equal-owed      tp_json_test's cmp of the merged copy (the equal branch); killed by jn (jc too)
+#   tj-blob            tp_finish_read's `_k=json` manifest kind; killed by jb2
+#   tj-unrecorded      template_scan's TP_LINES append after the json WORKLIST row; killed by ja
+#   c3-both            hook_registration_row's TP_JSON_OWED stand-down, removed; killed by c3a
+#   c3-always          the same condition made always-false (the opposite fault); killed by c3c alone
+#   c3-finish          tp_finish_read's TP_JSON_OWED=1 on a recorded json line that is not equal, removed; killed by c3b
+#   tp-refused-as-unrec  ap_write_marker's kept `template-hashes: refused` arm AND tp_finish_read's refused case, both read as no sentinel; killed by pe2 (pe3 too)
+#   tp-unreadable-silent tp_finish_read's `[ -r "$APPLYING" ]` unreadable-marker state, reverted to a silent return; killed by pu
+#   cl-unreadable-silent finish_classify_unmerged's `[ -r "$APPLYING" ]` unreadable-marker row, removed; killed by pv
+#   tj-refused-unowed    template_scan's TP_JSON_OWED=1 on a template-json-refused row, removed; killed by c3d
+#   tp-refused-writer    ap_write_marker's kept `template-hashes: refused` arm alone, removed (the writer-only partial fix); killed by pe4
+#   tj-finish-refused-unowed tp_finish_read's `!= equal` owed test narrowed back to `= differs`; killed by c3e
 
 set -uo pipefail
 # MODE is "matrix" only under the positional `--matrix`; an AI_DLC_* name would be scrubbed by the suite. Any other
@@ -337,20 +380,34 @@ ssg add -A && ssg commit -qm theirs; SS_T="$(git -C "$SSD" rev-parse HEAD)"
 printf '#!/usr/bin/env bash\n# driver v1\n' > "$SSC/.claude/session-driver/ai-dlc-session-driver.sh"
 printf '#!/usr/bin/env bash\necho v\n' > "$SSC/scripts/ai-dlc/validate-synthetic.sh"
 printf 'version: 1.0.0\ncommit: %s\n' "$SS_B" > "$SSC/.claude/.ai-dlc-version"
+# EACH CALL IS IDENTIFIED BY ITS CALLER'S ARGV, NOT ONLY COUNTED. The stub logs one class per call,
+# read off the parent process's command line: `pc` preclassify.sh without `--templates` (phase 0's
+# core run), `pct` preclassify.sh WITH `--templates` (template_scan's fork), `ap` apply.sh itself,
+# `?` anything else. A count alone cannot tell the templates fork from an unrelated new preclassify
+# call; the sequence can, so the cells below compare it.
 cat > "$SS/sh/awk" <<SH
 #!/bin/sh
 case "\$*" in *'file:[ \\t]*core'*)
-  n=\$(( \$(wc -l < "$SS/sh/LOG") + 1 )); printf '%s\n' "\$n" >> "$SS/sh/LOG"
+  n=\$(( \$(wc -l < "$SS/sh/LOG") + 1 ))
+  pa="\$(ps -o args= -p "\$PPID" 2>/dev/null)"
+  case "\$pa" in
+    *preclassify.sh*--templates*) k=pct ;;
+    *preclassify.sh*) k=pc ;;
+    *apply.sh*) k=ap ;;
+    *) k='?' ;;
+  esac
+  printf '%s %s\n' "\$n" "\$k" >> "$SS/sh/LOG"
   [ "\$n" = 2 ] && exit 2 ;;
 esac
 exec "$(command -v awk)" "\$@"
 SH
 chmod +x "$SS/sh/awk"
-ss_apply() { # ss_apply <apply.sh> -> "calls=<n> unwritten=<n> stamp=<v>" for an ordinary apply, call 2 failed
+ss_seq() { awk '{print $2}' "$SS/sh/LOG" | paste -sd, -; }
+ss_apply() { # ss_apply <apply.sh> -> "calls=<n> seq=<classes> unwritten=<n> stamp=<v>" for an ordinary apply, call 2 failed
   local c="$SS/c.$RANDOM" o
   cp -R "$SSC" "$c"; : > "$SS/sh/LOG"
   o="$(PATH="$SS/sh:$PATH" bash "$1" "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
-  printf 'calls=%s unwritten=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" \
+  printf 'calls=%s seq=%s unwritten=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" "$(ss_seq)" \
     "$(printf '%s\n' "$o" | awk -F'\t' '$1=="DECISION" && $2=="applying-marker-unwritten" && index($4,"setup_sited_paths")' | grep -c .)" \
     "$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"
 }
@@ -360,12 +417,18 @@ ss_finish() { # ss_finish <apply.sh> -> "calls=<n> unverified=<n> stamp=<v>" for
   git -C "$SSD" show "$SS_T:core/session-driver/ai-dlc-session-driver.sh" > "$c/.claude/session-driver/ai-dlc-session-driver.sh"
   printf 'base: %s\ntheirs: %s\n' "$SS_B" "$SS_T" > "$c/.claude/.ai-dlc-applying"
   o="$(PATH="$SS/sh:$PATH" bash "$1" --finish "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
-  printf 'calls=%s unverified=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" \
+  printf 'calls=%s seq=%s unverified=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" "$(ss_seq)" \
     "$(printf '%s\n' "$o" | awk -F'\t' '$1=="WORKLIST" && $2=="finish-unverified-tree" && index($4,"setup_sited_paths")' | grep -c .)" \
     "$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"
 }
-WANT_SS_APPLY="calls=2 unwritten=1 stamp=1.0.0"
-WANT_SS_FINISH="calls=2 unverified=1 stamp=1.0.0"
+WANT_SS_APPLY="calls=2 seq=pc,ap unwritten=1 stamp=1.0.0"
+WANT_SS_FINISH="calls=2 seq=pc,ap unverified=1 stamp=1.0.0"
+# Under the sited-marker mutant the failed load is not read, so the ordinary run goes on to
+# template_scan, whose `preclassify.sh --templates` fork loads the sited set once more at its top
+# level: the third call must be THAT fork (`pct`), never another preclassify or apply.sh call.
+# `--finish` never forks `--templates`, so its sequence stays two calls under its mutant.
+WANT_MUT_APPLY="calls=3 seq=pc,ap,pct unwritten=0 stamp=2.0.0"
+WANT_MUT_FINISH="calls=2 seq=pc,ap unverified=0 stamp=2.0.0"
 r="$(ss_apply "$APPLY")"
 if [ "$r" = "$WANT_SS_APPLY" ]; then
   ok "a sited set apply.sh cannot load withholds the in-flight marker and the stamp ($r)"; B_ss_apply=1
@@ -472,10 +535,10 @@ mx_score() {
 }
 if m="$(ss_mut marker '_sited="$(setup_sited_paths)" || _rc=$?' '_sited="$(setup_sited_paths)" || :')"; then
   r="$(ss_apply "$m")"
-  if [ "$r" = "calls=2 unwritten=0 stamp=2.0.0" ]; then
+  if [ "$r" = "$WANT_MUT_APPLY" ]; then
     mutant_killed "${B_ss_apply:-0}" sited-marker "mutant sited-marker (marker's sited status unread) killed: the marker is written over an empty sited set and the stamp advances ($r)"
   else
-    bad "mutant sited-marker (marker's sited status unread) SURVIVED: got [$r], want [calls=2 unwritten=0 stamp=2.0.0]"
+    bad "mutant sited-marker (marker's sited status unread) SURVIVED: got [$r], want [$WANT_MUT_APPLY]"
   fi
   mx_twins sited-marker "${m%/apply.sh}"
   if [ "$MODE" = matrix ]; then mx_score sited-marker "${m%/apply.sh}"; fi
@@ -484,10 +547,10 @@ else
 fi
 if m="$(ss_mut finish '_fv_sited="$(setup_sited_paths)" || _fv_rc=$?' '_fv_sited="$(setup_sited_paths)" || :')"; then
   r="$(ss_finish "$m")"
-  if [ "$r" = "calls=2 unverified=0 stamp=2.0.0" ]; then
+  if [ "$r" = "$WANT_MUT_FINISH" ]; then
     mutant_killed "${B_ss_finish:-0}" sited-finish "mutant sited-finish (--finish's sited status unread) killed: the stamp advances having verified no sited file ($r)"
   else
-    bad "mutant sited-finish (--finish's sited status unread) SURVIVED: got [$r], want [calls=2 unverified=0 stamp=2.0.0]"
+    bad "mutant sited-finish (--finish's sited status unread) SURVIVED: got [$r], want [$WANT_MUT_FINISH]"
   fi
   mx_twins sited-finish "${m%/apply.sh}"
   if [ "$MODE" = matrix ]; then mx_score sited-finish "${m%/apply.sh}"; fi
@@ -556,6 +619,118 @@ else
 fi
 fi
 
+# --- BL-886: TEMPLATE-DERIVED FILES ARE HANDED BACK, RECORDED, AND RE-CHECKED BY --finish ---------
+# receipt-bl886.sh beside this file owns the worlds and the cells (its header lists them): the prose
+# claim (pa..pg, pe), the json claim (ja..jd, jn) and one row per remedy (c3a..c3c), each read off the
+# STAMP and the MARKER, never off a row name alone. The shipped reconcile directory must answer every
+# cell; each mutant is a whole copy of that directory with ONE change, driven on its deciding cell and
+# its twin (the header's MUTANT-MATRIX rows), and must fail the first and hold the second.
+if [ -f "$HERE/receipt-bl886.sh" ]; then
+  TP_REC="$(dirname "$APPLY")"
+  # BUILD ONCE: the shipped run fills TP_WC with the distribution and the four consumer worlds before
+  # any cell touches them; every mutant drive copies them out of it. Each mutant changes apply.sh
+  # only, and the worlds read no reconcile file but settings-merge.sh, so one cache serves them all.
+  TP_WC="$WORK/bl886-worlds"
+  tp_out="$(bash "$HERE/receipt-bl886.sh" "$TP_REC" "" "$TP_WC" 2>&1)"; tp_rc=$?
+  if [ "$tp_rc" -eq 0 ]; then
+    ok "BL-886: a changed prose template hands its file back (stamp at base, template: line recorded), --finish withholds while it is untouched and stamps once it changes or its line is deleted, a same-base re-run keeps the pre-merge record, an older engine's marker stamps with a NOTE, a --templates refusal withholds; a settings.json the merge would change is handed back and recorded, --finish re-tests it by merging a copy (an edit that is not the merge still withholds) and stamps after the merge or the line's deletion, one the merge would not change is neither handed back nor recorded; the settings-merge hook row stands down while the json row owns the remedy and returns when its line is deleted"
+    B_tp=1
+  else
+    bad "BL-886: receipt-bl886.sh exited $tp_rc on the shipped reconcile directory: $(printf '%s\n' "$tp_out" | head -12 | tr '\n' ' ')"
+  fi
+  # tp_mut <name> <anchor> <replacement> [...] -> a copy of reconcile/ with each anchor (exactly once)
+  # replaced; an anchor spelled `DROPNEXT:<text>` deletes the line after the unique line holding <text>.
+  tp_mut() {
+    local n="$1" d; shift
+    d="$WORK/tpm-$n"; mkdir -p "$d" && cp "$TP_REC"/* "$d/" 2>/dev/null || return 1
+    python3 - "$d/apply.sh" "$@" <<'PY' || return 1
+import sys
+p = sys.argv[1]; s = open(p).read(); a = sys.argv[2:]
+for i in range(0, len(a), 2):
+    k, v = a[i], a[i + 1]
+    if k.startswith("DROPNEXT:"):
+        k = k[len("DROPNEXT:"):]
+        if s.count(k) != 1: sys.exit(3)
+        j = s.index("\n", s.index(k)) + 1; e = s.index("\n", j) + 1
+        s = s[:j] + v + s[e:]
+    else:
+        if s.count(k) != 1: sys.exit(3)
+        s = s.replace(k, v, 1)
+open(p, "w").write(s)
+PY
+    ! cmp -s "$TP_REC/apply.sh" "$d/apply.sh" && bash -n "$d/apply.sh" 2>/dev/null \
+      && [ -f "$d/preclassify.sh" ] && [ -f "$d/settings-merge.sh" ] && [ -f "$d/template-sites.md" ] || return 1
+    printf '%s' "$d"
+  }
+  # tp_score <name> <reconcile copy>: the deciding cell must FAIL and the twin must hold; --matrix runs
+  # every cell and prints the failing set.
+  tp_score() {
+    local n="$1" d="$2" dec tw o rc
+    dec="$(mx_row "$n" decides)"; tw="$(mx_row "$n" twins)"
+    if [ -z "$dec" ] || [ -z "$tw" ]; then BROKEN=$((BROKEN + 1)); printf 'FIXTURE BROKEN %s: no single MUTANT-MATRIX row\n' "$n"; return; fi
+    if [ "$MODE" = matrix ]; then
+      printf 'mx-score %s\n' "$n" >> "$MXL"
+      o="$(bash "$HERE/receipt-bl886.sh" "$d" "" "$TP_WC" 2>&1)"
+      printf 'MATRIX %s failing=%s\n' "$n" "$(printf '%s\n' "$o" | sed -n 's/^FAIL \([a-z0-9]*\):.*/\1/p' | paste -sd, -)"
+    else
+      printf 'plain-twins %s\n' "$n" >> "$MXL"
+    fi
+    o="$(bash "$HERE/receipt-bl886.sh" "$d" "$dec $tw" "$TP_WC" 2>&1)"; rc=$?
+    if [ "$rc" -eq 9 ]; then bad "BL-886 mutant $n: the receipt could not run ($(printf '%s' "$o" | head -3 | tr '\n' ' '))"
+    elif grep -q "^FAIL $tw:" <<<"$o"; then bad "BL-886 mutant $n: its twin $tw also failed, so the kill is not confined to $dec: $(printf '%s' "$o" | tr '\n' ' ')"
+    elif [ "$rc" -eq 1 ] && grep -q "^FAIL $dec:" <<<"$o"; then mutant_killed "${B_tp:-0}" "$n" "BL-886 mutant $n killed by cell $dec ($(grep "^FAIL $dec:" <<<"$o"))"
+    else bad "BL-886 mutant $n SURVIVED: cell $dec did not fail (rc=$rc)"; fi
+  }
+  tp_case() { # <name> <description> <anchor> <replacement> [...]
+    local n="$1" why="$2" d; shift 2
+    if d="$(tp_mut "$n" "$@")" && [ -n "$d" ]; then tp_score "$n" "$d"
+    else bad "BL-886 mutant $n ($why) DID NOT APPLY -- an anchor is not in apply.sh exactly once, or the copy does not parse"; fi
+  }
+  NLX='
+'
+  tp_case tp-after-stamp 'template rows emitted after write_stamp in the ordinary branch' \
+    "  # load took that slot, so the stub failed the templates scan instead and the load went unprobed.${NLX}  template_scan${NLX}" \
+    "  # load took that slot, so the stub failed the templates scan instead and the load went unprobed.${NLX}" \
+    "else${NLX}  write_stamp${NLX}  hook_registration_row" "else${NLX}  write_stamp${NLX}  template_scan${NLX}  hook_registration_row"
+  tp_case tp-unrecorded 'the prose row emitted, its template: line never recorded' \
+    'DROPNEXT:        say WORKLIST template-prose-merge "$_c"' "        : ;;${NLX}"
+  tp_case tp-rerecord 'the record rewritten on a same-base re-run (the merged copy becomes the reference)' \
+    '_thave=1; _tkeep="$(printf' '_thave=1; : "$(printf'
+  tp_case tp-finish-blind '--finish ignores the template: lines' \
+    '  [ -z "$finish_id_mismatch" ] && finish_template_unmerged' '  :'
+  tp_case tp-no-sentinel 'the template-hashes: sentinel never written' \
+    "      printf 'template-hashes: %s\\n' \"\$_tn\"" '      :'
+  tp_case tp-refusal-silent 'a --templates refusal is silent' \
+    '    detector_refused template-prose "preclassify.sh --templates" "-" "$_rc" tpl' '    :'
+  tp_case tj-equal-owed 'a settings.json the merge would not change is handed back anyway' \
+    'if cmp -s "$_d/settings.json" "$CONSUMER/$2"; then TP_JT=equal; else TP_JT=differs; fi' 'TP_JT=differs'
+  tp_case tj-blob '--finish judges settings.json by its blob, not by the merge test' \
+    '        _k=json ;;' '        _k=prose ;;'
+  tp_case tj-unrecorded 'the json row emitted, its template: line never recorded' \
+    'DROPNEXT:            say WORKLIST template-json-merge "$_c"' "            : ;;${NLX}"
+  tp_case c3-both 'the settings-merge hook row does not stand down for the json row' \
+    'if [ -n "$hr_what" ] && [ "${TP_JSON_OWED:-0}" != 1 ]; then' 'if [ -n "$hr_what" ]; then'
+  tp_case c3-always 'the settings-merge hook row stands down unconditionally' \
+    'if [ -n "$hr_what" ] && [ "${TP_JSON_OWED:-0}" != 1 ]; then' 'if [ -n "$hr_what" ] && false; then'
+  tp_case c3-finish '--finish never tells the hook row that the json row owns the remedy' \
+    '        [ "$TP_JT" != equal ] && TP_JSON_OWED=1' '        :'
+  tp_case tp-refused-as-unrec 'a refused scan sentinel read as no sentinel, by the same-base writer and by --finish' \
+    '        *"${NL_CH}template-hashes: refused${NL_CH}"*) : ;;' '        *"${NL_CH}template-hashes: refused${NL_CH}"*) _tunrec=1 ;;' \
+    '      "template-hashes: refused") _ref=1 ;;' '      "template-hashes: refused") : ;;'
+  tp_case tp-unreadable-silent '--finish over an unreadable marker skips the template record silently' \
+    '  [ -r "$APPLYING" ] || { TP_F_STATE=unreadable; return 0; }' '  [ -r "$APPLYING" ] || return 0'
+  tp_case cl-unreadable-silent '--finish over an unreadable marker reads the classify record as an older engine marker' \
+    "  [ -r \"\$APPLYING\" ] || {${NLX}    say WORKLIST finish-classify-unverified" "  true || {${NLX}    say WORKLIST finish-classify-unverified"
+  tp_case tj-refused-unowed 'a json row that could not be tested does not own the settings-merge remedy' \
+    "          *)${NLX}            TP_JSON_OWED=1${NLX}" "          *)${NLX}"
+  tp_case tp-refused-writer 'a kept refused sentinel read by the same-base writer as a completed record (the reader still knows refused)' \
+    "        *\"\${NL_CH}template-hashes: refused\${NL_CH}\"*) : ;;${NLX}" ''
+  tp_case tj-finish-refused-unowed '--finish does not tell the hook row that a recorded json line it could not test owns the remedy' \
+    '        [ "$TP_JT" != equal ] && TP_JSON_OWED=1' '        [ "$TP_JT" = differs ] && TP_JSON_OWED=1'
+elif [ "$IS_DIST" = 1 ]; then
+  bad "BL-886: receipt-bl886.sh is not beside this fixture in the distribution"
+fi
+
 # RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
 # anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL: it
 # must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes. The ledger exists
@@ -569,7 +744,7 @@ if [ -n "${MXL:-}" ] && [ -f "$MXL" ]; then
     else ok "rule-9 a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
   else
     mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-    [ "$mx_hdr" = "shim-removed sited-finish sited-marker " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
+    [ "$mx_hdr" = "c3-always c3-both c3-finish cl-unreadable-silent shim-removed sited-finish sited-marker tj-blob tj-equal-owed tj-finish-refused-unowed tj-refused-unowed tj-unrecorded tp-after-stamp tp-finish-blind tp-no-sentinel tp-refusal-silent tp-refused-as-unrec tp-refused-writer tp-rerecord tp-unreadable-silent tp-unrecorded " ] || { BROKEN=$((BROKEN + 1)); echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; }
     echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
     fails=$((fails + MX_FAILS))
   fi

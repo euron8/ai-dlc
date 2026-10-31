@@ -150,6 +150,7 @@ core_manifest:
   - artifact-path-grammar.md
   - postcompact-digest.md
   - templates/*.md
+  - templates/smoke-surface.txt
   - team-roles/*.md
   - hooks/ai-dlc-*.sh
   - session-driver/*.sh
@@ -373,6 +374,7 @@ machinery:
   - layer-contract.yaml
   - git-hooks/pre-push
   - templates/*.md
+  - templates/smoke-surface.txt
   - postcompact-digest.md
   - hooks/ai-dlc-*.sh
   - session-driver/*.sh

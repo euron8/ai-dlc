@@ -986,12 +986,16 @@ if [ "$V_RUN" = 1 ]; then
         bad "BL-413 $l DID NOT APPLY -- its anchor is not in apply.sh exactly once, or the copy does not parse"
       fi
     }
+    # ANCHORED INSIDE finish_classify_unmerged ONLY. Its `elif [ "$_now" = "$_h" ] && …` line is
+    # byte-identical to finish_template_unmerged's, so that line is no longer unique and cannot carry
+    # a mutation; v-M1 drops the row itself, v-M3 and y-M1 rewrite the record line the classify loop
+    # alone parses (`classify: ` prefix strip), which reaches the same comparison.
     v_mut v-M1 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' vU vM 'withhold row removed: Vu stamps over the unmerged schema' \
-      '    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then' '    elif false; then'
+      '      say WORKLIST finish-classify-unmerged "$_c"' '      : WORKLIST finish-classify-unmerged "$_c"'
     v_mut v-M2 'WITHHELD|UNMERGED|STAMPED|WITHHELD|STAMPED|NOTE' vR vU 'first write lost: the re-run records the merged copy and Vr withholds forever' \
       ' _keep="$(printf' ' : "$(printf'
     v_mut v-M3 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' vU vM 'compared to theirs, not the record: an untouched CLASSIFY file never equals theirs, so Vu stamps' \
-      '    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then' '    elif [ "$_now" = "$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/${_c#.claude/}" 2>/dev/null)" ]; then'
+      '    _l="${_l#classify: }"' '    _l="${_l#classify: }"; _l="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/${_l#*"$_tab"}" 2>/dev/null)${_tab}${_l#*"$_tab"}"'
   }
 fi
 
@@ -1176,7 +1180,7 @@ if [ "$Y_RUN" = 1 ]; then
       fi
     }
     y_mut y-M1 "$(vset "$Y_WANT" 1 WITHHELD)" yM yL 'mode ignored: the chmod-only merge withholds forever' \
-      '    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then' '    elif [ "$_now" = "$_h" ]; then'
+      '    _l="${_l#classify: }"' '    _l="${_l#classify: }"; _l="${_l%% *}${_tab}${_l#*"$_tab"}"'
     y_mut y-M2 "$(vset "$Y_WANT" 2 WITHHELD)" yP yM 'record reset on base AND theirs, as base shipped: the re-pointed pull adopts a merged copy and withholds' \
       '       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ]; then' \
       '       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ] && grep -qx "theirs: ${THEIRS}" "$APPLYING"; then' \

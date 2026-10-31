@@ -211,6 +211,7 @@ done
 if [ -d "$SCRIPT_DIR/../core/skills/ai-dlc/templates" ]; then
   mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/templates"
   cp "$SCRIPT_DIR/../core/skills/ai-dlc/templates/"*.md \
+     "$SCRIPT_DIR/../core/skills/ai-dlc/templates/"*.txt \
      "$PROJECT_ROOT/.claude/skills/ai-dlc/templates/" 2>/dev/null || true
 fi
 # Rule bodies: the full text of the six phase-bound rules whose SKILL.md stubs
@@ -325,6 +326,22 @@ if [ ! -f "$PROJECT_ROOT/$ARTPATH_REL" ]; then
   echo "  $ARTPATH_REL scaffolded"
 else
   echo "  $ARTPATH_REL preserved (consumer-owned)"
+fi
+
+# The smoke surface validate-handoff-evidence.sh's smoke arms read. Same rule as the five above:
+# scaffolded once, never overwritten, path read from the declaration rather than spelled here.
+SMOKES_REL="$(sed -n 's/^consumer_smoke_surface_file:[[:space:]]*//p' \
+  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[[:space:]]*$//')"
+if [ -z "$SMOKES_REL" ]; then
+  echo "  ERROR: layer-contract.yaml declares no 'consumer_smoke_surface_file:' — cannot scaffold the smoke surface." >&2
+  exit 1
+fi
+mkdir -p "$PROJECT_ROOT/$(dirname "$SMOKES_REL")"
+if [ ! -f "$PROJECT_ROOT/$SMOKES_REL" ]; then
+  cp "$SCRIPT_DIR/../core/skills/ai-dlc/templates/smoke-surface.txt" "$PROJECT_ROOT/$SMOKES_REL"
+  echo "  $SMOKES_REL scaffolded"
+else
+  echo "  $SMOKES_REL preserved (consumer-owned)"
 fi
 
 # Copy setup skill (always overwrite with AI/DLC versions)

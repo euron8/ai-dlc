@@ -262,6 +262,25 @@ consumer_story_fields_file: .claude/skills/ai-dlc/story-fields.md
 # `contract_version` line.
 consumer_artifact_paths_file: .claude/skills/ai-dlc/artifact-paths.md
 
+# THE CONSUMER'S SMOKE SURFACE. Sixth declaration on the same terms as the five above: core
+# declares the PATH, the installer and the pull driver scaffold it once from a template, core
+# never overwrites it, and every reader derives the location from here.
+#
+# WHAT READS IT. `validate-handoff-evidence.sh`'s smoke arms — SMOKE-SURFACE-EDITED and (m2)
+# SMOKE-NOT-UPDATED — at every gate-1 handoff and at the gate-2 go-signal. The file lists the git
+# pathspecs whose change obliges a story to update its smoke test. Which paths are this project's
+# smoke surface is a fact about the project, exactly as the PR-class taxonomy is, so core cannot
+# state it. The reader reads THIS declaration at the story's base through git, and falls back to
+# `docs/smoke-surface.txt` only where the contract or the key is absent at that base.
+#
+# THE PATH IS NOT UNDER `.claude/`, unlike the five above, because the reader predates the
+# declaration: `docs/smoke-surface.txt` was the reader's literal, and a consumer that already wrote
+# a surface there keeps it with no move. The scaffolded template is comments only, which the reader
+# scores `SKIP SMOKE-SURFACE (empty ...)` — a SKIP, never an OK — until the consumer writes
+# pathspecs or a lone `none`. NO LC- CLAUSE GOVERNS ITS CONTENTS and `contract_version` does not
+# move, on the precedent stated for `consumer_artifact_paths_file:` above.
+consumer_smoke_surface_file: docs/smoke-surface.txt
+
 # THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
 # codes any of them names are held to their clauses by I62.
 #

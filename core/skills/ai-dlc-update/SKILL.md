@@ -2210,6 +2210,13 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      base-template token/marker not locatable in the consumer file), STOP and
      flag that file for operator adjudication — never best-effort-place a
      preserved value.
+     `apply.sh` hands each such file back as a `WORKLIST template-prose-merge` row, which
+     withholds the re-stamp, and records the file as the pull found it on a `template:` line
+     (under a `template-hashes:` line) in `.claude/.ai-dlc-applying`. `--finish` re-checks the
+     record: the file's bytes or its mode must have moved, or it prints
+     `WORKLIST finish-template-unmerged` and withholds. A file deleted since the record clears
+     it, because a deletion is a disposition. The deliberate-no-op exit is deleting that file's
+     own `template:` line.
    - `TEMPLATE-JSON-MERGE` (from step 3b, same section) → run
      `t=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"`
      then `reconcile/settings-merge.sh --consumer .claude/settings.json --template
@@ -2226,6 +2233,13 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      not the consumer's right to keep it enabled — the consumer's
      `enabledPlugins` is preserved in full. Disabling a plugin is the
      consumer's decision, not the reconcile's.
+     `apply.sh` hands this back too, as a `WORKLIST template-json-merge` row that withholds
+     the re-stamp, after running `settings-merge.sh` on a copy of the file: a copy that
+     changes means the merge is owed, a copy that does not means it is done and no row is
+     printed. A file that is owed is recorded on a `template:` line, and `--finish` re-checks
+     it by running `settings-merge.sh` on a copy again, which must change nothing, or it
+     prints `WORKLIST finish-template-json-unmerged` and withholds. The deliberate-no-op
+     exit is deleting that file's own `template:` line.
    - (The skill's OWN files are NOT touched here — they were already refreshed by
      the autonomous self-update cycle in step 2.)
 
@@ -2471,8 +2485,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
         recorded file whose blob and mode both still match is `WORKLIST finish-classify-unmerged`:
         the merge was never done. Do it and re-run `--finish`. A file you merged by hand differs
         from the record in its bytes or its mode (a merge that is only `chmod +x` counts), so it
-        does not hold the finisher up; one you deleted does not either. An unreadable record or
-        file is `WORKLIST finish-classify-unverified`.
+        does not hold the finisher up; one you deleted does not either. A marker that exists and
+        could not be read, an unreadable record, or an unreadable file is
+        `WORKLIST finish-classify-unverified`.
 
         The record is written once per BASE: a later ordinary run from the same `base:` — the
         re-run a withheld row prescribes, a pull re-pointed at a newer `<theirs>`, a second pull
@@ -2498,7 +2513,39 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
         `SELF-UPDATE-DEFER` or a leftover same-base marker; when step 2's self-update lands, step 7
         runs the new apply and the check is live. A path carrying a TAB or a `"` reaches the record C-quoted by
         `preclassify.sh` and is not recorded either; confirm such a file's merge by hand.
-     5. **The two remedies only a fresh ordinary run performs are done.** A known_skills entry
+     5. **No template-derived file handed back as a merge is still untouched.** The ordinary
+        run records, under its own `template-hashes: <n>` line, the consumer blob AND exec bit of
+        every `TEMPLATE-PROSE-MERGE` file, and the path of every `TEMPLATE-JSON-MERGE` file whose
+        merge is owed or could not be tested, as `template: <blob> <755|644><TAB><path>`. A prose
+        file whose blob and mode both still match is `WORKLIST finish-template-unmerged`; a change
+        to either clears it, and so does deleting the file, because a deletion is a disposition. A
+        recorded `settings.json` is
+        judged by `settings-merge.sh` run on a copy, never by its blob, and a copy that still
+        changes is `WORKLIST finish-template-json-unmerged`. A marker that exists and could not be
+        read, a record that could not be read, or a recorded file that could not, is
+        `WORKLIST finish-template-unverified`; an absent marker is not checked. An ordinary run
+        whose `preclassify.sh --templates` scan refused records nothing and writes
+        `template-hashes: refused`; `--finish` withholds on that with
+        `WORKLIST finish-template-unscanned`, which a fresh ordinary run with the same four
+        arguments clears, once the cause of the refusal is fixed. That run's completed scan
+        replaces the `refused` line with the record. Deleting the `template-hashes: refused`
+        line from `.claude/.ai-dlc-applying` and re-running `--finish` is the LAST resort: it
+        stamps with only `NOTE finish-template-unrecorded`, forfeiting this check for this pull,
+        so every template-derived file's merge is then confirmed by hand. `--finish` does
+        not re-run the template classification, which reads the same on a merged tree as on an
+        untouched one. The record is written once per base, exactly as in check 4. Nothing
+        compares file content to the template, because a correctly merged file keeps consumer
+        edits that any such comparison would count against it.
+
+        **If leaving the file as it is IS the disposition**, delete that file's own
+        `template: … <path>` line from `.claude/.ai-dlc-applying` and re-run `--finish`. Every
+        other check still runs.
+
+        A marker written by an apply that predates the record carries no `template-hashes:`
+        line, and a later run from the same base leaves it that way. `--finish` then says so on a
+        `NOTE finish-template-unrecorded` and does not withhold, so this check cannot fire on
+        that marker.
+     6. **The two remedies only a fresh ordinary run performs are done.** A known_skills entry
         the consumer added in place and never refiled is `WORKLIST finish-refile-owed`; a refile
         check that could not run is `WORKLIST finish-refile-unverified`; a shipped file whose
         exec bit disagrees with upstream is `WORKLIST finish-exec-owed`.
@@ -2520,7 +2567,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which
      `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-marker-directory` (the marker's path is a directory), `finish-base-unverified`,
      `finish-unverified-tree`, `finish-unapplied`, `finish-classify-unmerged`,
-     `finish-classify-unverified`, `finish-refile-owed`, `finish-refile-unverified`,
+     `finish-classify-unverified`, `finish-template-unmerged`, `finish-template-json-unmerged`,
+     `finish-template-unverified`, `finish-template-unscanned`, `finish-refile-owed`,
+     `finish-refile-unverified`,
      `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,
      `settings-local-dangling`, `transient-ignore`, `transient-ignore-tracked`,
      `agent-definitions`. Three `DECISION` rows stop it without stamping, because they write
