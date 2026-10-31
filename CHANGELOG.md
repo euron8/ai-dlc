@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.972.0] - 2026-10-31
+
+Batch b247. `readset-stage1-verdict` sets its wrapper-mutant flags where `validate-mutant-kills.sh` can read them (BL-891).
+
+Rulebook and engine changes: none. Fixture changes: `core/fixtures/readset-stage1-verdict/run.sh`. Packaging: none. Backlog: `docs/backlog.md`, `docs/backlog.archive.md`.
+
+### readset-stage1-verdict's wrapper-mutant flags are literal assignments (BL-891)
+
+On clean main, `bash scripts/validate-mutant-kills.sh` exited 1 with three M5 rows in `core/fixtures/readset-stage1-verdict/run.sh`: the fixture set its in-process wrapper-mutant flags through `eval`, so the scorer read flags nothing visibly set. The flags are now literal assignments in the pass branch, which the scorer reads.
+
 ## [0.971.0] - 2026-10-30
 
 Fixtures-to-unit-tests conversion (BL-878, BL-868). Fifteen fixtures ask their subjects in process, as sourced functions, rather than as one separate program per cell. BL-878 stays open: the fixtures not converted here remain on its list, and BL-879, which seeds that list, ships first.

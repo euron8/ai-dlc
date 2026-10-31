@@ -1048,7 +1048,17 @@ wcell() {
 }
 echo " the wrapper's sections, in process (the shipping wrapper):"
 for c in $IC_CELLS; do
-  if wcell "$WRAPPER" "$c" shipping; then ok "in process: $c holds under the shipping wrapper"; eval "B_ic_${c//-/_}=1"
+  if wcell "$WRAPPER" "$c" shipping; then
+    ok "in process: $c holds under the shipping wrapper"
+    case "$c" in
+      sample) B_ic_sample=1 ;;
+      profile) B_ic_profile=1 ;;
+      started) B_ic_started=1 ;;
+      orphan-live) B_ic_orphan_live=1 ;;
+      orphan-dead) B_ic_orphan_dead=1 ;;
+      restore) B_ic_restore=1 ;;
+      groupkill) B_ic_groupkill=1 ;;
+    esac
   else bad "in process: $c fails under the shipping wrapper: $(head -1 "$WORK/wr/m-shipping-$c.why")"; fi
 done
 # wmut <flag> <name> <decides csv> <twin cell | -> <old> <new> [<expected killed csv>]: KILLED iff a deciding
