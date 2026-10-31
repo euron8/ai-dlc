@@ -1780,7 +1780,7 @@ Close condition: every item above is closed, and the receipt below returns 0 mat
 
 **Progress (batch b245 close).** Item 6, removing the provisional `±` judge form, is still owed. New item 7, B1 sh-stub (operator ruling: "File for next batch"): 39 fixtures execute `#!/bin/sh` stubs, which the counter does not count, so their `invocations.decl` rows under-count. The fix is per fixture: change the shebang to bash and re-count the decl; then add an H3 extension refusing an executed sh stub. Source census: H-b1 at fx2 1eb08f8b2, 71 stubs across 40 fixtures; `readset-skip`'s 3 are already fixed.
 
-**Progress (batch b247).** Item 9, owed: `core/fixtures/prepush-pool-depth/run.sh` carries pre-existing wall-clock ceilings that load can stretch, and none carries a `±` row: `PD_BARRIER_CEIL` (the barrier stubs' self-exit, default 30 with a +10 cap, `:71-73`, `:133`, `:178`), `PF_DEADLINE=40` and `PF_MIN=6` in the pf_ cells (`:627-637`), and the 60s and 90s loops near the pn_ cells (`:523`, `:542`, with a further 60s loop at `:813`).
+**Progress (batch b247).** Item 9, owed: `core/fixtures/prepush-pool-depth/run.sh` carries pre-existing wall-clock ceilings that load can stretch, and none carries a `±` row: `PD_BARRIER_CEIL` (the barrier stubs' self-exit, default 30 with a +10 cap, `:71-73`, `:133`, `:178`), `PF_DEADLINE=40` and `PF_MIN=6` in the pf_ cells (`:627-637`), and the 60s and 90s loops near the pn_ cells (`:523`, `:542`).
 
 verify: sh bash scripts/check-no-provisional-invocations.sh
 
