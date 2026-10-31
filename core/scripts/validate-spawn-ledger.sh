@@ -984,7 +984,15 @@ matches_pin() {
 #       whether the agent then read every section is not observable here. K is the brief's own
 #       declared part count; the ledger carries no document, so no `--map` call is made and the
 #       arm adds no fork -- it is one more branch in shard_scan's single awk pass. It reads only
-#       the trailing ordinals, so a change to the `g<g>/<G>` token does not move it. SCOPE: G=1
+#       the ordinal list after `g1/1`, so a change to the `g<g>/<G>` token does not move it. THE
+#       LIST is the longest leading run of digits, commas, blanks and tabs; anything after it is
+#       a prose suffix and is ignored, so `1,2,3,4 (you are the ONE cross QA)` and
+#       `1,2,3,4. Step test-strategy-p3` both cover 1..4. A suffix glued to a digit
+#       (`1,2,3rd`) is truncated at the first non-list character and so reads as `1,2,3`. A
+#       trailing comma before the suffix (`1,2,3,4, all`) or a digit-led suffix
+#       (`1,2,3,4 2 reviewers`) leaves an empty or non-digit token inside the run, and the
+#       brief is refused, as a bare `1,2,3,4,` is. A value with no list at all
+#       (`all sections`) truncates to empty and reports every ordinal missing. SCOPE: G=1
 #       only. A per-group cross (G>1, every row measured on graph's s317-s320 ledgers before the
 #       one-cross dispatch) covers a subset by design and is not an S4 subject; `cross/<K> cross`
 #       rows carry no ordinals and are not judged.
@@ -1154,13 +1162,16 @@ shard_scan() {
   printf '%s\n%s' "$ss_rows" "$ss_files" | awk -F'\t' -v roles="$1" -v sprint="$ss_sp" -v classes="$REMEDIABLE_CLASSES" \
       -v declared=" ${SS_DECLARED} " '
 # --- SHARED WITH core/hooks/ai-dlc-dispatch-guard.sh, byte-identical (I56) ------
-# Arm S4: the ordinals of 1..K a one-cross (G=1) shard value fails to name, comma-joined. Every
-# ordinal is missing when any token is malformed; empty when coverage is complete or the value
-# is not a `cross/<K> g1/1 <ordinals>` line, which is outside the arm.
+# Arm S4: the ordinals of 1..K a one-cross (G=1) shard value fails to name, comma-joined. The
+# list is the longest leading run of digits, commas, blanks and tabs after `g1/1 `; any suffix
+# after it is ignored. Every ordinal is missing when any token of that run is malformed or the
+# run is empty; empty when coverage is complete or the value is not a `cross/<K> g1/1 <ordinals>`
+# line, which is outside the arm.
 function cover_missing(cv_v,    cv_k, cv_l, cv_n, cv_i, cv_t, cv_s, cv_p, cv_ok, cv_out) {
   if (cv_v !~ /^cross\/[0-9]+ g1\/1 /) return ""
   cv_k = cv_v; sub(/^cross\//, "", cv_k); sub(/ .*/, "", cv_k); cv_k += 0
   cv_l = cv_v; sub(/^cross\/[0-9]+ g1\/1 /, "", cv_l)
+  match(cv_l, /^[0-9, \t]*/); cv_l = substr(cv_l, 1, RLENGTH)
   cv_ok = 1; cv_s = ","
   cv_n = split(cv_l, cv_p, ",")
   for (cv_i = 1; cv_i <= cv_n; cv_i++) {
@@ -1208,10 +1219,12 @@ function cover_missing(cv_v,    cv_k, cv_l, cv_n, cv_i, cv_t, cv_s, cv_p, cv_ok,
       else if ($4 == "__NULL__") print "U\t" $2 "\t" $3
       else if ($4 == "invalid-exception") print "X\t" $2 "\t" $3 "\t" $5 "\t" $6 "\t" $8
       # S4: the ONE cross agent of a dispatch (G=1) must name every section ordinal 1..K. The
-      # predicate is cover_missing above, shared with the dispatch guard. Each ordinal is
-      # NORMALISED (blanks and leading zeros stripped: `partition-document.sh --map` zero-pads at
-      # K>=10), and one bad token (empty, a lone 0, non-digit) refuses the brief. Legacy
-      # per-group crosses (G>1) cover a subset by design and answer empty.
+      # predicate is cover_missing above, shared with the dispatch guard. The list is the
+      # leading run of digits, commas, blanks and tabs, so a prose suffix after it is ignored.
+      # Each ordinal is NORMALISED (blanks and leading zeros stripped: `partition-document.sh
+      # --map` zero-pads at K>=10), and one bad token in the run (empty, a lone 0, non-digit)
+      # or an empty run refuses the brief. Legacy per-group crosses (G>1) cover a subset by
+      # design and answer empty.
       else if (cover_missing($4) != "") print "C\t" $2 "\t" $3 "\t" $4 "\t" $6 "\t" $8
       else print "S\t" $2 "\t" $4
     }

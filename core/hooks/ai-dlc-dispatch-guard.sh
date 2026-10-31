@@ -1264,14 +1264,18 @@ fi
 # THE COVER DENY (see THE COVER DENY in the CONTRACT header). The predicate below is the ONE
 # definition shared with validate-spawn-ledger.sh arm S4: byte-identical in both files and bound by
 # the enforcement map. It takes the canonical shard value and prints the missing ordinals of 1..K
-# comma-separated (all of 1..K when the ordinal list is malformed), or nothing when the cover is
-# complete or the value is not a G=1 cross. FAIL-OPEN: a nonzero rc or empty output allows.
+# comma-separated (all of 1..K when the ordinal list is malformed or empty), or nothing when the
+# cover is complete or the value is not a G=1 cross. The ordinal list is the longest leading run
+# of digits, commas, blanks and tabs after `g1/1 `, so a prose suffix after it is ignored. A
+# trailing comma or a digit-led suffix leaves a bad token inside that run and stays refused.
+# FAIL-OPEN: a nonzero rc or empty output allows.
 dg_cover_missing() {
   printf '%s\n' "$1" | LC_ALL=C awk '
 function cover_missing(cv_v,    cv_k, cv_l, cv_n, cv_i, cv_t, cv_s, cv_p, cv_ok, cv_out) {
   if (cv_v !~ /^cross\/[0-9]+ g1\/1 /) return ""
   cv_k = cv_v; sub(/^cross\//, "", cv_k); sub(/ .*/, "", cv_k); cv_k += 0
   cv_l = cv_v; sub(/^cross\/[0-9]+ g1\/1 /, "", cv_l)
+  match(cv_l, /^[0-9, \t]*/); cv_l = substr(cv_l, 1, RLENGTH)
   cv_ok = 1; cv_s = ","
   cv_n = split(cv_l, cv_p, ",")
   for (cv_i = 1; cv_i <= cv_n; cv_i++) {

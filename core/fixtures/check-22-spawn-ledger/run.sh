@@ -1604,6 +1604,58 @@ else
   fi
 fi
 
+# --- S4S. A PROSE SUFFIX AFTER THE ORDINAL LIST IS NOT PART OF IT (BL-887) ----------------------------
+# The ordinal list is the longest leading run of digits, commas, blanks and tabs after `g1/1 `; the
+# rest of the line is a suffix and is ignored. The two suffix shapes are the ones a consumer ledger
+# recorded on one-cross dispatches: ` (you are the ONE cross QA ...)` and `. Step <step>. Brief: ...`.
+# Each complete cell has a gap twin one property apart (the last ordinal dropped), so a reader that
+# accepts any suffixed line cannot pass. The DECIDED EDGES are cells too: a trailing comma before the
+# suffix and a digit-led suffix leave a bad token inside the run and stay REFUSED (a bare `1,2,3,4,`
+# is refused, and accepting the suffixed form would accept it too); a suffix glued to the last digit
+# (`1,2,3rd`) truncates to `1,2,3` and is ACCEPTED.
+s4n_ledger cp-s4s-paren.jsonl 'cross/4 g1/1 1,2,3,4 (you are the ONE cross QA for this pass)' toolu_S4SP
+s4n_ledger cp-s4s-parengap.jsonl 'cross/4 g1/1 1,2,3 (you are the ONE cross QA for this pass)' toolu_S4SQ
+s4n_ledger cp-s4s-step.jsonl 'cross/8 g1/1 1,2,3,4,5,6,7,8. Step test-strategy-p3. Brief: cross QA' toolu_S4SS
+s4n_ledger cp-s4s-stepgap.jsonl 'cross/8 g1/1 1,2,3,4,5,6,7. Step test-strategy-p3. Brief: cross QA' toolu_S4ST
+s4n_ledger cp-s4s-tcomma.jsonl 'cross/4 g1/1 1,2,3,4, all sections' toolu_S4SC
+s4n_ledger cp-s4s-digit.jsonl 'cross/4 g1/1 1,2,3,4 2 reviewers' toolu_S4SD
+s4n_ledger cp-s4s-glued.jsonl 'cross/3 g1/1 1,2,3rd' toolu_S4SG
+s4s_vec() { # script -> paren=..;parengap=..;step=..;stepgap=..;tcomma=..;digit=..;glued=..
+  local c v=""
+  for c in paren parengap step stepgap tcomma digit glued; do v="$v${v:+;}$c=$(s4nv "$1" "cp-s4s-$c.jsonl")"; done
+  printf '%s' "$v"
+}
+S4S_WANT='paren=PASS;parengap=REFUSE;step=PASS;stepgap=REFUSE;tcomma=REFUSE;digit=REFUSE;glued=PASS'
+S4S_TIP="$(s4s_vec "$VSL")"
+B_s4s=0
+if [ "$S4S_TIP" = "$S4S_WANT" ]; then
+  ok "S4S suffix: complete+suffix PASS and gap+suffix REFUSE for both shapes, trailing comma and digit-led suffix REFUSE, glued 1,2,3rd PASS [$S4S_TIP]"; B_s4s=1
+else
+  _old_ifs="$IFS"; IFS=';'
+  for _c in $S4S_WANT; do
+    case ";$S4S_TIP;" in *";$_c;"*) ;; *) bad "S4S ${_c%%=*}: expected ${_c#*=}, got vector [$S4S_TIP]" ;; esac
+  done
+  IFS="$_old_ifs"
+fi
+# S4S MUTANT: the truncation line deleted, so the whole remainder is split on commas again. The
+# self-probe seeds no suffixed value, so the mutant reaches the corpus. It runs only its deciding
+# cells (paren, step, glued: each flips PASS to REFUSE) and two twins (the parengap gap stays
+# REFUSE, and the S4N spaced list, which carries no suffix, still PASSes).
+S4S="$(s3mut s4s '/^  match(cv_l, \/^\[0-9, \\t]\*\/); cv_l = substr(cv_l, 1, RLENGTH)$/d')"
+if [ -z "$S4S" ]; then
+  bad "FIXTURE BROKEN: S4S mutant did not apply -- the truncation line was renamed"
+elif ! need_base "$B_s4s" "S4S (unmutated vector [$S4S_TIP])"; then :
+else
+  s_vec=""
+  for _c in paren step glued parengap; do s_vec="$s_vec${s_vec:+;}$_c=$(s4nv "$S4S" "cp-s4s-$_c.jsonl")"; done
+  s_sp="$(s4nv "$S4S" cp-s4n-space.jsonl)"
+  if [ "$s_vec" = 'paren=REFUSE;step=REFUSE;glued=REFUSE;parengap=REFUSE' ] && [ "$s_sp" = PASS ]; then
+    mutant_killed "$B_s4s" S4S "S4S MUTANT killed: a validator that splits the whole remainder refuses the complete one-cross briefs carrying a suffix (paren, step, glued) while the unsuffixed spaced brief still passes"
+  else
+    bad "S4S MUTANT: vector [$s_vec] spaced [$s_sp]; expected paren, step, glued and parengap REFUSE and spaced PASS"
+  fi
+fi
+
 # --- S4X. THE EMITTER'S OWN SPELLING IS IN S4's SCOPE (BL-811, cross-unit) ----------------------------
 # S4 keys on `cross/<K> g1/1 <ordinals>`. The role, step and rule files every cross agent is briefed
 # from teach the shard line; if they spelled it any other way (`cross/<K> <ordinals>`, `cross/<K>
