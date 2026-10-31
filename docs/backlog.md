@@ -1907,7 +1907,7 @@ verify: manual
 
 **Fix.** Both pre-push hooks start xargs in the background under `set -m`, so it and its workers lead a group of their own, and the hook waits on it. INT, TERM and HUP go to `pool_stop`, which writes `.pr/.stop`, reads each worker's `.pr/<unit>.k` record, TERMs each recorded pid only while that pid is in xargs' process group (a stale record of a SIGKILLed worker can name a reused pid), waits for xargs, and exits 130, 143 or 129. A worker writes its `.k` after its trap is set and checks `.stop` after that; finding it, it exits 255, which stops xargs dispatching the queue. Measured basis: BSD xargs on macOS, where a plain `&` started the workers with SIGINT ignored (the INT trap fired in 0 of 2 workers, against 2 of 2 under `set -m`) and an exit of 255 stops dispatch. GNU xargs is unmeasured. The receipt drives the hook's own FIXTURE_POOL block over four barrier-held stubs at width 2, TERMs the parent, and requires exit 143, no recorded stub alive, no queued stub started, and the pool root removed. The base traps (`trap 'exit 143' TERM`) leave both stubs alive, and a plain `&` leaves the parent and both stubs alive.
 
-verify: sh bash scripts/receipt-bl881-pool-teardown.sh
+verify: sh bash core/fixtures/prepush-pool-depth/receipt-bl881.sh
 
 ## BL-875 — readset-skip's slot-world `stub/logstream stream` processes outlive their run
 

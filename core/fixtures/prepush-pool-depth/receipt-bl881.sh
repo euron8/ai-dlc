@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/receipt-bl881-pool-teardown.sh [<hook>] -- the BL-881 backlog receipt: a TERM to the pre-push
+# core/fixtures/prepush-pool-depth/receipt-bl881.sh [<hook>] -- the BL-881 backlog receipt: a TERM to the pre-push
 # hook tears down its fixture pool.
 #
 # Drives the hook's OWN FIXTURE_POOL block (extracted between its BEGIN/END markers, the way
