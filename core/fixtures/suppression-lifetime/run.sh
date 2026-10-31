@@ -36,16 +36,18 @@
 # re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
 # decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments above, not driven per push.
 # a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
-# c_ifs_delimiter also trips 35 further arms in the measured matrix (wholesale delimiter break).
+# c_ifs_delimiter also trips 38 further arms in the measured matrix (wholesale delimiter break).
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
 # k_ts_dropped also trips t18b and t18d in the measured matrix (the dropped ts is seen through three timelines; t18a is the one it targets).
 # d_identity_lines_deleted and e_identity_nonce also trip cand in the measured matrix (the candidate-walk identity reads the same block).
 # f_attempt_demoted also trips att20 in the measured matrix (the RESOLVED branch world).
 # i_join_guard_removed also trips s16, s17 and t18b in the measured matrix (a dropped catalog join moves every join world; s14 is the one it targets).
-# w_resolve also trips w7, c1u, c2a and c2x in the measured matrix (each world reaches the skipped resolution).
+# w_resolve also trips w7, c1u, c2a, c2x, c2xi, c2xu and c2xt in the measured matrix (each world reaches the skipped resolution).
 # w_overridden also trips c1, c2ab and c2ba in the measured matrix (each carries an OVERRIDDEN waiver 6c reads).
-# c2_noprepass also trips w7, c2a, c2s and c2x in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass).
-# c2_any also trips c2x in the measured matrix (any FAIL_WAIVED stands down, so the expired archived suppression does too).
+# c2_noprepass also trips w7, c2a, c2s, c2x, c2xi, c2xu and c2xt in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass).
+# c2_any also trips c2x, c2xu and c2xt in the measured matrix (any FAIL_WAIVED stands down, so the expired or unreadable archived suppression does too).
+# c2_exact also trips c2xi in the measured matrix (the in-force archived suppression no longer stands the OVERRIDDEN entry down).
+# c2_nolife also trips c2xu and c2xt in the measured matrix (with the lifetime gone an unreadable lifetime acquits too).
 # MUTANT-MATRIX k_ts_dropped decides=t18a twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
 # MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
@@ -77,6 +79,8 @@
 # MUTANT-MATRIX c2_resolved decides=w2 twins=c2u
 # MUTANT-MATRIX c2_noprepass decides=c2ba twins=c2ab
 # MUTANT-MATRIX c2_nolife decides=c2x twins=c2s
+# MUTANT-MATRIX c2_srclive decides=c2xi twins=c2s
+# MUTANT-MATRIX c2_noguard decides=c2xu,c2xt twins=c2x
 # MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
 set -uo pipefail
@@ -216,6 +220,9 @@ drive_run() { # <validator path> <drive> -> O E RC X
     c2a)     c=c2-archived; gm="$GM_W_C2" ;;
     c2s)     c=c2-suppressed-32; gm="$GM_W_C2" ;;
     c2x)     c=c2-archived-expired; gm="$GM_W_C2" ;;
+    c2xi)    c=c2-archived-inforce; gm="$GM_W_C2" ;;
+    c2xu)    c=c2-archived-noexpiry; gm="$GM_W_C2" ;;
+    c2xt)    c=c2-archived-nots; gm="$GM_W_C2" ;;
     c2u)     c=c2-unresolvable; gm="$GM_W_C2" ;;
     c2r)     c=c2-resolved; gm="$GM_W_C2" ;;
     c2m)     c=c2-mistargeted; gm="$GM_W_C2" ;;
@@ -440,12 +447,15 @@ ar_c2ba() { dv "$1" c2ba; ! hasF 'recorded FAILING' && hasF 'terminal_naming_che
 ar_c2a()  { dv "$1" c2a;  ! hasF 'recorded FAILING' && has 'names an entry archived' && w_quiet 1; }
 ar_c2s()  { dv "$1" c2s;  ! hasF 'recorded FAILING' && hasF 'suppressed=1 ' && w_quiet 1; }
 ar_c2x()  { dv "$1" c2x;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
+ar_c2xi() { dv "$1" c2xi; ! hasF "$C2_HIT" && has 'names an entry archived' && w_quiet 1; }
+ar_c2xu() { dv "$1" c2xu; [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
+ar_c2xt() { dv "$1" c2xt; [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
 ar_c2u()  { dv "$1" c2u;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_c2r()  { dv "$1" c2r;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_c2m()  { dv "$1" c2m;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_wsd()  { dv "$1" wsd;  ! hasF 'recorded FAILING' && has 'neither OVERRIDDEN nor SUPPRESSED'; }
 
-ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2u c2r c2m wsd"
+ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2xi c2xu c2xt c2u c2r c2m wsd"
 
 reg() { printf -v "OK_$1" '%s' "$2"; printf -v "BAD_$1" '%s' "$3"; }
 reg s1 "a SUPPRESSED entry inside its lifetime does not fire (exit 0)" "in-force suppression FAILED — the arm has no green state and would wedge every gate"
@@ -525,6 +535,9 @@ reg c2ba "C2: the same, with the waiver BELOW it -- resolution reads the pre-pas
 reg c2a "C2: the same, with the OVERRIDDEN waiver archived to pending-archive.md" "C2: an archived OVERRIDDEN waiver did not stand the naming entry down"
 reg c2s "C2: an OVERRIDDEN entry naming 32 is quiet when 32 is waived by a SUPPRESSED entry targeting [core] 32" "C2: a matching SUPPRESSED waiver did not stand the OVERRIDDEN entry down"
 reg c2x "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an ARCHIVED SUPPRESSED entry of 32 past its own lifetime" "C2: an expired archived suppression stood an OVERRIDDEN entry down -- its lifetime was never checked"
+reg c2xi "C2: an OVERRIDDEN entry naming 32 is quiet when the row's waiver is an ARCHIVED SUPPRESSED entry of 32 still inside its own lifetime" "C2: an archived in-force suppression did not stand the OVERRIDDEN entry down -- the lifetime clause was read as a live-file test"
+reg c2xu "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an archived SUPPRESSED entry of 32 with NO Expires after line" "C2: a suppression whose expiry cannot be read stood an OVERRIDDEN entry down -- the lifetime guard fails open"
+reg c2xt "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an archived SUPPRESSED entry of 32 with NO authorization timestamp" "C2: a suppression whose authorization cannot be dated stood an OVERRIDDEN entry down -- the lifetime guard fails open"
 reg c2u "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver resolves nowhere" "C2: an unresolvable waiver stood an OVERRIDDEN entry down"
 reg c2r "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a RESOLVED entry" "C2: a RESOLVED waiver stood an OVERRIDDEN entry down"
 reg c2m "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a SUPPRESSED entry of another check" "C2: a mis-targeted SUPPRESSED waiver stood an OVERRIDDEN entry down"
@@ -775,6 +788,12 @@ build_c2_noprepass() {
 # c2_nolife: C2 resolves through a SUPPRESSED waiver without asking its lifetime (tip adversary N5).
 SL_C2L='&& [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ] && ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;'
 build_c2_nolife() { mk_sub "$1" "$SL_C2L" '; then continue; fi ;;'; }
+# c2_srclive: the lifetime clause replaced by a LIVE-FILE source test -- a wrong fix every
+# expired-archived world agrees with; only the archived in-force waiver (c2xi) separates them.
+build_c2_srclive() { mk_sub "$1" "$SL_C2L" '&& [ "$LK_SRC" = P ]; then continue; fi ;;'; }
+# c2_noguard: the fail-closed guard dropped, the lifetime predicate kept. An empty expiry makes
+# `[ N -gt "" ]` error, the negation acquits; an empty timestamp counts every gate and acquits.
+build_c2_noguard() { mk_sub "$1" "$SL_C2L" '&& ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;'; }
 build_w_overridden() { mk_sub "$1" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; }
 
 # ===== mutants =====================================================================================
@@ -831,6 +850,8 @@ defm c2_any c2u,c2r,c2m c2ab
 defm c2_resolved w2 c2u
 defm c2_noprepass c2ba c2ab
 defm c2_nolife c2x c2s
+defm c2_srclive c2xi c2s
+defm c2_noguard c2xu,c2xt c2x
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
 # The unmutated control: a lone copy. This validator resolves no sibling beside itself and its root by

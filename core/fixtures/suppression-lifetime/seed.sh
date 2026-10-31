@@ -434,6 +434,18 @@ f="$(mkcase c2-unresolvable)";  c2_name > "$f"
 # has run out (three gates recorded since its authorization). An expired suppression acquits nothing.
 f="$(mkcase c2-archived-expired)"; c2_name > "$f"
 { printf '# Escalation archive\n\n'; c2_sup 32 1; } > "$WORK/cases/c2-archived-expired/pending-archive.md"
+# The archived SUPPRESSED waiver of 32 STILL INSIDE its three-gate lifetime (three gates recorded,
+# not past three): the case the ruling says acquits. Separates the lifetime clause from a source
+# test (live file only), which every other C2 world agrees with.
+f="$(mkcase c2-archived-inforce)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 3; } > "$WORK/cases/c2-archived-inforce/pending-archive.md"
+# The archived SUPPRESSED waiver of 32 whose lifetime CANNOT BE READ: no **Expires after:** line in
+# one, no authorization timestamp in the other. Unreadable is expired, so both fire; without the
+# fail-closed guard the lifetime test errors and the waiver acquits.
+f="$(mkcase c2-archived-noexpiry)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 3 | grep -v '^\*\*Expires after:\*\*'; } > "$WORK/cases/c2-archived-noexpiry/pending-archive.md"
+f="$(mkcase c2-archived-nots)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 3 | sed 's/^\*\*Operator authorization:\*\* [^ ]* |/**Operator authorization:** at the gate |/'; } > "$WORK/cases/c2-archived-nots/pending-archive.md"
 f="$(mkcase c2-resolved)";      { c2_name; c2_res; } > "$f"
 f="$(mkcase c2-mistargeted)";   { c2_name; c2_sup 16; } > "$f"
 f="$(mkcase own-standdown)"
