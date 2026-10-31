@@ -1460,7 +1460,11 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      answers: the first measured nothing and the second measured something.
    - `PREDICATE-UNDECIDABLE` → the differential could not attribute an answer — an absent or
      unparsable manifest, a corpus pattern matching no file, a verdict grammar matching no
-     output, or a corpus that moved mid-run because the consumer's own pipeline is live. Every
+     output, one-sided silence (on a site that declares `pass:`, one side yields no verdict token
+     and no pass line on any series while the other side does; the row names the silent side, and
+     a `pass: -` site abstains because a fail-only grammar cannot tell "every series now passes"
+     from "the predicate crashed"), or a corpus that moved mid-run because the consumer's own
+     pipeline is live. Every
      one of those produces no reclassification row while having measured nothing, so it is
      reported rather than folded into `PREDICATE-STABLE`. **A detector that cannot read its own
      subject must not return clean.**

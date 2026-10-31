@@ -2,3 +2,5 @@
 !core/skills/ai-dlc-update/reconcile/predicate-differential.sh
 core/fixtures/lib/
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
+# Part 17 drives the SHIPPED manifest beside the subject; it is REQUIRED, and run.sh names it consumed.
+!core/skills/ai-dlc-update/reconcile/predicate-sites.md

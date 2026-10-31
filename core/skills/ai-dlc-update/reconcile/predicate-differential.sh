@@ -190,8 +190,12 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
     # per-member listings, and each file is written to its own path, so the order is immaterial.
     # quotePath=false: a non-ASCII member is otherwise listed C-quoted, `git show` is handed a
     # path that names nothing, and the side reads as unmaterializable.
+    # THE LISTING IS THE REF'S TREE ALONE. `--with-tree` UNIONS the index into the listing, so on a
+    # NON-BARE dist a member staged but absent from the ref is listed, `git show` of it fails, and
+    # the side reads as unmaterializable. An index path that does not exist is an empty index: it
+    # still globs, creates no file, and works on a bare dist. Not `ls-tree`, which does not glob.
     # shellcheck disable=SC2086 -- P_READS is a member LIST, deliberately split.
-    pd_files="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$ref" -- $P_READS 2>/dev/null)"
+    pd_files="$(GIT_INDEX_FILE="$TMP/no-index" git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$ref" -- $P_READS 2>/dev/null)"
     # Every directory the files need below the root, made by ONE `mkdir -p`. `${f%/*}` stands in
     # for `dirname`; a slashless path lives in the root, which is what `dirname`'s `.` named.
     pd_dirs=""
@@ -277,12 +281,23 @@ $TMP/root-$side/${f%/*}" ;; esac
     AI_DLC_PROJECT_ROOT="$TMP/root-theirs" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" cr_run "$CONSUMER" bash "$TMP/root-theirs/$P_ENTRY" $inv > "$TMP/out-theirs" 2>&1
     a_base="$(sed -nE "$P_VERDICT" "$TMP/out-base" | sort -u | tr '\n' ',')"
     a_theirs="$(sed -nE "$P_VERDICT" "$TMP/out-theirs" | sort -u | tr '\n' ',')"
+    # WHETHER EACH SIDE SPOKE ON THIS SERIES, recorded per side in columns 4 and 5 of the pairs
+    # file for the one-sided-silence arm below. A side spoke if it yielded a verdict token, or, on
+    # a site whose `pass:` is a sed expression, printed its pass line. The pass line is looked for
+    # only on a side with no token, so a series is never read twice for the same answer.
+    sp_b=0; sp_t=0
+    [ -z "$a_base" ] || sp_b=1
+    [ -z "$a_theirs" ] || sp_t=1
+    if [ "$P_PASS" != - ] && [ "$P_PASS" != in-verdict ]; then
+      [ "$sp_b" -eq 1 ] || [ -z "$(sed -nE "$P_PASS" "$TMP/out-base")" ] || sp_b=2
+      [ "$sp_t" -eq 1 ] || [ -z "$(sed -nE "$P_PASS" "$TMP/out-theirs")" ] || sp_t=2
+    fi
     if [ -n "$a_base" ] || [ -n "$a_theirs" ]; then
       n_parsed=$((n_parsed + 1))
-    elif [ "$P_PASS" != - ] && [ "$P_PASS" != in-verdict ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-base")" ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-theirs")" ]; then
+    elif [ "$sp_b" -eq 2 ] && [ "$sp_t" -eq 2 ]; then
       n_passed=$((n_passed + 1))
     fi
-    printf '%s\t%s\t%s\n' "$a_base" "$a_theirs" "$rel" >> "$TMP/pairs"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$a_base" "$a_theirs" "$rel" "$sp_b" "$sp_t" >> "$TMP/pairs"
   done < "$TMP/series"
 
   _pdw=0; pd_records "$TMP/records2" || _pdw=$?
@@ -319,6 +334,29 @@ $TMP/root-$side/${f%/*}" ;; esac
   if [ "$n_parsed" -eq 0 ]; then
     emit PREDICATE-UNDECIDABLE "$p_name" "the verdict grammar extracted NO token from either side across all ${n_series} series, so nothing was compared. A grammar that cannot spell its own subject scores every series as unchanged. This is a floor of unknown depth, not a clean result. ${p_pop}; ${p_counts}."
     continue
+  fi
+
+  # ONE SIDE SPOKE AND THE OTHER NEVER DID. A side that yields no verdict on ANY series did not
+  # render a verdict that differs; it rendered none, and scoring every series changed on that
+  # reads a broken probe as a mass reclassification. Measured: when gate_adjudication.py was
+  # missing from the gate-adjudication site's read-set, the incoming side printed a NOTE line and
+  # exited 2 on every series, and the row read "AT LEAST 14 of 14" RECLASSIFIES.
+  # Keyed on the per-side `spoke` columns (verdict token, or a sed `pass:` line), never on an exit
+  # code (a predicate may exit 0 having printed nothing) and never on empty output (the defect
+  # printed a line). Fires only when one side spoke on ZERO series and the other on at least one;
+  # a side silent on SOME series is ordinary per-series data and stays with the comparison below.
+  # Either side may be the silent one: a base side whose grammar or read-set no longer reaches its
+  # output is named "base", never folded into the incoming direction.
+  # A `pass: -` site ABSTAINS: its grammar spells failures only, so a side that passes every
+  # series and a side that crashed on every series both yield nothing, and a real mixed->all-pass
+  # reclassification would read as silence here.
+  if [ "$P_PASS" != - ]; then
+    pd_silent="$(awk -F'\t' '$4!=0 {b=1} $5!=0 {t=1} END { if (b && !t) print "incoming"; else if (t && !b) print "base" }' "$TMP/pairs")"
+    if [ -n "$pd_silent" ]; then
+      [ "$pd_silent" = incoming ] && pd_ref="$THEIRS" || pd_ref="$BASE"
+      emit PREDICATE-UNDECIDABLE "$p_name" "the ${pd_silent} side yielded no verdict on any series (no verdict token and no pass line at ${pd_ref}) while the other side yielded one on at least one series. A side that renders nothing has not rendered a different verdict: it did not run to a verdict at all. Either its read-set or invocation is broken at that ref, or the site's verdict or pass grammar no longer matches what that side prints (one way to get there is a DEFERred pull running the old manifest against the new predicate). Scoring every series changed would report a broken probe as a reclassification. ${p_pop}; ${p_counts}."
+      continue
+    fi
   fi
 
   n_changed="$(awk -F'\t' '$1!=$2' "$TMP/pairs" | grep -c . || true)"
