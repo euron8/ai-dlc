@@ -1037,6 +1037,10 @@ until_true() { # <tenths> <command...> -- 0 once the command succeeds, 1 on time
   while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.02; n=$((n - 1)); done
   return 1
 }
+until_event() { # <command...> -- returns once the command succeeds; NO count and NO time cap. A hang
+                # here is a hang to read, never a verdict: load can only make it slower.
+  while ! "$@"; do sleep 0.02; done
+}
 now_at_least() { [ "$(date +%s)" -ge "$1" ]; }   # re-reads the clock on every call
 marker_of() { # <work> -> the marker's bytes, empty when absent. `read`, not `cat`: a builtin,
               # so a 50ms sampling loop does not fork. The marker carries no newline, so read
@@ -1390,25 +1394,33 @@ rm -rf "$W"
 # continued. Its next check is therefore after the deletion, every run, whatever the load; it must
 # still deliver from its memoised epoch. TB_ORDERED records that the order was imposed, so a
 # forcing that silently failed cannot read as a kill.
+counter_or_gone() { counter_is "$1" "$2" "$3" || ! kill -0 "$4" 2>/dev/null || ! kill -0 "$5" 2>/dev/null; }   # <work> <file> <n> <pid> <pid>
+sleep_or_gone() { tree_has_sleep "$1" || ! kill -0 "$1" 2>/dev/null; }   # <pid>
 beat2_resolved() { ! kill -0 "$1" 2>/dev/null || [ -e "$2" ]; }   # <pid> <since file>
 run_two_beats() { # <subject> -> TB_* ; leaves W
   W="$( bash "$SEED" two-beats-one-path )"
   local p1 p2 mt
-  bg_beat "$1" "$W" "$W/1.out" 12 1 --complete x.md; p1=$BG
+  # BEAT 1 CANNOT EXPIRE BEFORE THE SEAL EITHER. Its quantum is 600s, the same subject parameter as
+  # beat 2's below, so the seal wait further down can take as long as load makes it and beat 1 is
+  # still inside its quantum when the seal lands; it exits by DELIVERING, not by its clock.
+  bg_beat "$1" "$W" "$W/1.out" 600 1 --complete x.md; p1=$BG
   # BEAT 2 CANNOT EXPIRE WHILE FROZEN. Its quantum is 600s against a POLL of 1, so no freeze this
   # harness can hold uses it up (at 12s a long freeze under load spent it: beat 2 woke past its
   # deadline, exited WAITING, and the subject was blamed for a beat it never dropped). It wakes on its
   # own 1s poll once continued, so the passing path stays fast and nothing is killed or stubbed.
   bg_beat "$1" "$W" "$W/2.out" 600 1 --complete x.md; p2=$BG
   # Both past the sweep: each sleeping beat charges the one shared counter.
-  until_true 100 counter_is "$W" x.md 2 || true
+  # Or either beat is already gone (a mutant can end one before the sweep): then the counter never
+  # reaches 2, and what follows scores the case void on TB_ORDERED.
+  until_event counter_or_gone "$W" x.md 2 "$p1" "$p2"
   # Freeze beat 2 inside its poll sleep. A sleep still present AFTER the stop proves the beat was
   # parked in it, not mid-check; otherwise continue it and try again at its next sleep. This loop
-  # decides no verdict: TB_ORDERED below is what a void case scores on.
-  TB_FROZEN=0; tries=0
-  while [ "$TB_FROZEN" -eq 0 ] && [ "$tries" -lt 10 ]; do
-    tries=$((tries + 1))
-    until_true 30 tree_has_sleep "$p2" || continue
+  # decides no verdict: TB_ORDERED below is what a void case scores on. It retries on the EVENT (beat 2
+  # parked in a poll sleep, which recurs at every poll) with no count; it ends only when the freeze
+  # holds or beat 2 is gone, and a gone beat leaves TB_FROZEN=0, a void case.
+  TB_FROZEN=0
+  while [ "$TB_FROZEN" -eq 0 ] && kill -0 "$p2" 2>/dev/null; do
+    until_event sleep_or_gone "$p2"
     tree_signal "$p2" STOP
     if tree_has_sleep "$p2"; then TB_FROZEN=1; else tree_signal "$p2" CONT; fi
   done
@@ -1418,7 +1430,7 @@ run_two_beats() { # <subject> -> TB_* ; leaves W
   # seal's own second would re-arm at that second and accept the file on that alone. Continue
   # only once the clock has left it, and make that part of the control.
   mt="$(fx_mtime "$W/x.md")"
-  until_true 30 now_at_least "$(( mt + 1 ))" || true
+  until_event now_at_least "$(( mt + 1 ))"
   # THE PROPERTY TB_N NEEDS: beat 2 is ALIVE and STOPPED in a sleep (its quantum unspent, its next
   # check still ahead of it) when beat 1 has delivered and deleted .since. A beat that had expired
   # or exited reads here as a void case (rc 2), never as a kill or a failure.
