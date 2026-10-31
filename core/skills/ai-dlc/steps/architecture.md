@@ -259,15 +259,25 @@ ADRs.
 
 ### 3. Solutioning Gate
 
-Invoke `/bmad-check-implementation-readiness` — validate design coherence
-against the PRD. Fix any misalignment found.
+Invoke `/bmad-sprint-planning intent=readiness` and do not create or modify sprint-status.yaml.
+It validates design coherence against the PRD. State both at the call: the skill's full flow
+generates the tracking file after a PASS, and only the `readiness` intent stops at the verdict.
 
-**Invoke it, do not approximate it.** Its step 03 IS an epic-coverage
-validation whose stated purpose is requirements traceability: it checks each
-PRD functional requirement against epic coverage and identifies the FRs no
-epic covers. An inline "style check" re-derives that by judgement and reaches
-a different answer every run. Its findings are advisory on their own —
-gate-validation Check 30 is what makes an uncovered requirement fail.
+**Invoke it, do not approximate it.** The readiness gate asks whether a developer could build
+the plan without inventing decisions nothing records, and flags requirements that trace to no
+story and stories that trace to no requirement. Epics and stories do not exist yet at this step,
+so read only its design-coherence findings here (architecture decisions the PRD relies on,
+conflicts between the two); its missing-epic findings are expected and are answered at
+`stories-test-strategy.md` §1. The gate is a judgement, not a deterministic coverage count, and
+its findings are advisory on their own — gate-validation Check 30 is what makes an uncovered
+requirement fail.
+
+**The verdict is a finding, never an operator question.** On PASS, proceed. On CONCERNS or FAIL,
+write the verdict and its findings to
+`_bmad-output/planning-artifacts/s<N>/implementation-readiness-architecture.md` and route each
+design-coherence finding to the `architect` (architecture gaps) or the `pm` (PRD gaps),
+role-bound per Rule 19, then proceed. A missing-epic or missing-story finding is not routed here. The gate's own "proceed anyway or fix first?" prompt is answered "fix first" by
+that routing; it is never put to the operator (Rules 9/10).
 
 ### 4. Validation Cycle (Rule 8)
 

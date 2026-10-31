@@ -158,7 +158,7 @@
 #   `artifact:` must name the story the one-shot names, by full path. The story itself must carry
 #   the stamp, and the stamp's `tool_use_id` must EQUAL the one-shot's. Only once all of that
 #   holds is the residue's own shape checked, by running the sibling
-#   `validate-provenance-block.sh <residue> --require-skill bmad-review-adversarial-general` --
+#   `validate-provenance-block.sh <residue> --require-skill bmad-review` --
 #   the fold gate is ONE command, and NOT-OWED and SKIP never read the residue at all.
 #   The variant resolves in order: `--variant`; else the `pipeline_variant:` line of the snapshot
 #   (default `_bmad-output/pipeline-snapshot.md`, fenced code blocks and HTML comments skipped);
@@ -615,10 +615,33 @@ EOF
   # THE STORY'S STAMP, keyed on the one-shot's own skill so a convergence block the story may
   # also carry is not read as the stamp. See the header: equality catches an edit to the one-shot
   # alone; a re-stamp, or a hand-written block carrying the new id, restores agreement.
-  oskill="$(fa_field "$one" skill)"; [ -n "$oskill" ] || oskill="bmad-review-adversarial-general"
+  # The join accepts EITHER alias on EITHER side: a one-shot written under the pre-6.11 name
+  # (bmad-review-adversarial-general) is stamped under bmad-review, because the writer never emits
+  # a superseded name, and a story stamped before the rename carries the old one. The accepted set
+  # comes from the sibling reader's --accepted-skills, the same superseded_skills resolution its
+  # --require-skill uses, so the alias table is never restated here.
+  oskill="$(fa_field "$one" skill)"; [ -n "$oskill" ] || oskill="bmad-review"
   [ -f "$story" ] || { echo "FAIL: story not stamped -- the one-shot's artifact: ${story} does not exist, so no stamp can be read." >&2; return 1; }
   [ -r "$story" ] || { echo "FAIL: cannot read the story ${story}" >&2; return 2; }
-  stids="$(fa_story_blocks "$story" | awk -F'\t' -v k="$oskill" '$1 == k { print $2 }')"
+  # FAST PATH FIRST: a stamp citing the one-shot's OWN name needs no alias table, and the name
+  # itself is always in the accepted set, so the exact join is exact and costs no reader start.
+  # Only when it finds nothing is the alias set consulted -- FA_ACC_MEMO (filled ONCE at fold-mode
+  # entry when the self-probe runs, which calls this inside command substitutions where a memo set
+  # here would be lost), else the sibling reader, live.
+  sblocks="$(fa_story_blocks "$story")"
+  stids="$(awk -F'\t' -v k="$oskill" '$1 == k { print $2 }' <<<"$sblocks")"
+  # A story carrying NO block has no alias to resolve: it is unstamped whatever the one-shot's name.
+  if [ -z "$stids" ] && [ -n "$sblocks" ]; then
+    case " ${FA_ACC_MEMO:-} " in
+      *" $oskill "*) oacc="$FA_ACC_MEMO" ;;
+      *)
+        [ -r "$FA_VPB" ] || { echo "FAIL: the sibling validate-provenance-block.sh is not at ${FA_VPB}, so the one-shot's skill aliases cannot be resolved." >&2; return 2; }
+        oacc="$(bash "$FA_VPB" --accepted-skills "$oskill" 2>/dev/null)" || { echo "FAIL: validate-provenance-block.sh --accepted-skills ${oskill} did not answer; the stamp join cannot be keyed." >&2; return 2; } ;;
+    esac
+    [ -n "$oacc" ] || { echo "FAIL: validate-provenance-block.sh --accepted-skills ${oskill} answered nothing; the stamp join cannot be keyed." >&2; return 2; }
+    oacc="$(printf '%s\n' "$oacc" | tr '\n' ' ')"
+    stids="$(awk -F'\t' -v ks="$oacc" 'BEGIN { n = split(ks, a, " "); for (i = 1; i <= n; i++) if (a[i] != "") acc[a[i]] = 1 } ($1 in acc) { print $2 }' <<<"$sblocks")"
+  fi
   if [ -z "$stids" ]; then
     echo "FAIL: story not stamped -- ${story} carries no provenance block citing ${oskill}, so" >&2
     echo "      stamp-story-provenance.sh --profile bug-story-provenance never ran on it from ${onebase}." >&2
@@ -633,7 +656,7 @@ EOF
 
   # THE RESIDUE'S SHAPE, by the reader that owns it, and only here: owed, joined, stamped.
   [ -r "$FA_VPB" ] || { echo "FAIL: the sibling validate-provenance-block.sh is not at ${FA_VPB}, so the residue's shape cannot be checked." >&2; return 2; }
-  vout="$(bash "$FA_VPB" "$res" --require-skill bmad-review-adversarial-general 2>&1)"; vrc=$?
+  vout="$(bash "$FA_VPB" "$res" --require-skill bmad-review 2>&1)"; vrc=$?
   if [ "$vrc" -ne 0 ]; then
     echo "FAIL: residue $(basename "$res") fails its shape check (validate-provenance-block.sh rc=${vrc}):" >&2
     printf '%s\n' "$vout" >&2
@@ -659,14 +682,22 @@ EOF
 # the story stamp (absent -> FAIL; carrying another id -> FAIL; equal -> the passing world),
 # the residue's shape through the sibling reader (wrong skill -> FAIL), the fence- and
 # comment-blind snapshot reader, the sprint-status reader, and the variant cross-check.
-fa_probe_block() {  # <file> <invoked_at> <tool_use_id> <artifact>
-  printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' 'skill: bmad-review-adversarial-general' \
+fa_probe_block() {  # <file> <invoked_at> <tool_use_id> <artifact> [skill]
+  # A current-name (bmad-review) block carries `lens: adversarial`, as the one-shot writes it.
+  if [ "${5:-bmad-review-adversarial-general}" = bmad-review ]; then
+    printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' 'skill: bmad-review' 'lens: adversarial' \
+      "invoked_at: $2" "tool_use_id: $3" 'mode: subagent' \
+      "artifact: $4" 'SKILL_INVOCATION_PROVENANCE_END -->' > "$1"
+    return
+  fi
+  printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' "skill: ${5:-bmad-review-adversarial-general}" \
     "invoked_at: $2" "tool_use_id: $3" 'mode: subagent' \
     "artifact: $4" 'SKILL_INVOCATION_PROVENANCE_END -->' > "$1"
 }
-fa_probe_res() {  # <file> <tool_use_id> <artifact> [skill] -- every field the reader requires
+fa_probe_res() {  # <file> <tool_use_id> <artifact> [skill] [lens line] -- every field the reader requires
   printf '%s\n' '# Fold architecture disposition' '' '- **No-AD:** CAP-1 -- REASON: probe.' '' \
     '<!-- SKILL_INVOCATION_PROVENANCE v1' "skill: ${4:-bmad-review-adversarial-general}" \
+    "${5:-# no lens}" \
     'invoked_at: 2000-01-02T11:00:05Z' "tool_use_id: $2" 'mode: subagent' \
     'lead_role: bug-investigation.md' "artifact: $3" \
     'findings_critical: 0' 'findings_major: 0' 'findings_minor: 0' \
@@ -696,7 +727,7 @@ fa_self_probe() {
   local pd rc bad=0 side sides d S
   pd="$(mktemp -d 2>/dev/null)" || return 1
   [ -n "$pd" ] && [ -d "$pd" ] || return 1
-  sides="pos neg role dup pre back backok part full leg legpre art artdot oid oidpart unst repoint shape"
+  sides="pos neg role dup pre back backok part full leg legpre art artdot oid oidpart unst repoint shape newone newstamp"
   for side in $sides; do mkdir -p "$pd/$side/s900" "$pd/$side/s901" "$pd/$side/s902" || return 1; done
   mkdir -p "$pd/stories" || return 1
   cat > "$pd/ledger.jsonl" <<'JSONL'
@@ -718,6 +749,20 @@ JSONL
     'tool_use_id: toolu_probeoneshot' 'mode: subagent' "artifact: $S" \
     'SKILL_INVOCATION_PROVENANCE_END -->' > "$S"
   printf '%s\n' '# Story unstamped' '' 'Status: ready-for-dev' > "$SU"
+  # SN carries the stamp as the current writer emits it: the current name plus the lens.
+  SN="$pd/stories/probe-new.md"
+  printf '%s\n' '# Story probe new' '' 'Status: ready-for-dev' '' '<!-- SKILL_INVOCATION_PROVENANCE v1' \
+    'skill: bmad-review' 'lens: adversarial' 'invoked_at: 2000-01-02T10:00:05Z' \
+    'tool_use_id: toolu_probeoneshot' 'mode: subagent' "artifact: $SN" \
+    'SKILL_INVOCATION_PROVENANCE_END -->' > "$SN"
+  # newone: a NEW-name one-shot over an OLD-name story stamp, new-name residue with the lens -> PASS.
+  # newstamp: an OLD-name one-shot over a NEW-name story stamp (the writer normalises) -> PASS.
+  # No lens-less world here: the lens rule is the sibling reader's, self-probed in-process there in
+  # both directions, and the `shape` world already proves this caller passes the residue to it.
+  fa_probe_block "$pd/newone/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$S" bmad-review
+  fa_probe_block "$pd/newstamp/s900/bug-fix-oneshot-p.md" 2000-01-02T10:00:05Z toolu_probeoneshot "$SN"
+  fa_probe_res "$pd/newone/s900/fold-architecture-p.md" toolu_probelate0 "$S" bmad-review 'lens: adversarial'
+  fa_probe_res "$pd/newstamp/s900/fold-architecture-p.md" toolu_probelate0 "$SN"
   # The one-shot's invoked_at is written 5s AFTER its ledger row everywhere but `back`/`backok`,
   # where it is backdated a year -- before every row of the sprint, which is what the old
   # invoked_at ordering read as SKIP.
@@ -857,6 +902,11 @@ JSONL
     "$pd/shape/s900/fold-architecture-p.md" "$pd/shape/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
   fa_probe_rc 0 "whose stamp carries the one-shot's id" "the passing world did not PASS through the stamp and shape clauses" \
     "$pd/pos/s900/fold-architecture-p.md" "$pd/pos/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
+  # The alias join, both directions, and the lens through the sibling reader.
+  fa_probe_rc 0 "whose stamp carries the one-shot's id" "a bmad-review one-shot over a story stamped under bmad-review-adversarial-general did not join" \
+    "$pd/newone/s900/fold-architecture-p.md" "$pd/newone/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
+  fa_probe_rc 0 "whose stamp carries the one-shot's id" "a bmad-review-adversarial-general one-shot over a story stamped under bmad-review did not join" \
+    "$pd/newstamp/s900/fold-architecture-p.md" "$pd/newstamp/s900/bug-fix-oneshot-p.md" "$pd/ledger.jsonl" || bad=1
 
   for side in $sides; do
     for d in s900 s901 s902; do rm -f "$pd/$side/$d"/*.md 2>/dev/null; rmdir "$pd/$side/$d" 2>/dev/null; done
@@ -864,7 +914,7 @@ JSONL
   done
   rm -f "$pd/ledger.jsonl" "$pd/route.md" "$pd/snap-plain.md" "$pd/snap-bold.md" "$pd/snap-none.md" "$pd/snap-legacy.md" \
     "$pd/snap-decoy.md" "$pd/snap-tail.md" "$pd/ss-plain.yaml" "$pd/ss-quoted.yaml" "$pd/ss-none.yaml" \
-    "$pd/stories/probe.md" "$pd/stories/unstamped.md" 2>/dev/null
+    "$pd/stories/probe.md" "$pd/stories/unstamped.md" "$pd/stories/probe-new.md" 2>/dev/null
   rmdir "$pd/stories" 2>/dev/null
   rmdir "$pd" 2>/dev/null
   return "$bad"
@@ -872,9 +922,15 @@ JSONL
 
 if [ "$MODE" = "fold" ]; then
   command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is not on PATH; the ledger cannot be joined. Exit 2, not a pass." >&2; exit 2; }
+  # The one-shot's accepted skill names. Resolved ONCE, here, only for the self-probe, whose many
+  # fa_judge calls reach the stamp join inside command substitutions where a memo set in fa_judge is
+  # lost. A run that skips the probe leaves it empty, and fa_judge asks the sibling reader live only
+  # if it REACHES the join -- so a run that exits before the join pays no reader start for it.
+  FA_ACC_MEMO=""
   if [ "${FA_SKIP_PROBE:-0}" = 1 ]; then
     echo "PROBE-SKIPPED-BY-CALLER: the fold-architect self-probe did not run (--probe-from-caller); this is not a gate verdict."
   else
+    [ -r "$FA_VPB" ] && FA_ACC_MEMO="$(bash "$FA_VPB" --accepted-skills bmad-review 2>/dev/null | tr '\n' ' ')"
     fa_self_probe || { echo "FAIL: the fold-architect self-probe did not hold, so a verdict on the real input would establish only that the join ran." >&2; exit 2; }
   fi
   [ -n "$LEDGER" ] || LEDGER="_bmad-output/spawn-ledger.jsonl"

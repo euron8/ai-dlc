@@ -141,6 +141,16 @@
 #     dev records their run or why they could not run, and when they could not run the lead runs them
 #     against the redeployed instance and records that run as the `playwright` evidence (the ff-specs
 #     rows, para pins: the §4 list is ONE paragraph whose lead is its first line).
+#   - the BMAD 6.11 call-site spellings that Check 32 cannot score, because it reads skill NAMES
+#     only: each readiness site (architecture.md §3, stories-test-strategy.md §1) states
+#     `intent=readiness` AND "do not create or modify sprint-status.yaml" (the *-ready-* rows, two
+#     line-mode `contains` pins on the one line, neither lead a prefix of the other; two named m3
+#     mutants drop the intent and the clause in turn, each with the other row as its twin); each
+#     sprint-planning site states `intent=sprint-planning` (sts-plan-intent, bug-plan-intent); each one-shot dispatch site names the adversarial
+#     lens (bug-2c-lens, bug-4-lens-*, srev-lens, arch-role-fold-lens); and each deep-recon call
+#     states its type (rr-recon-*, req-recon-*). The two §4 one-shot rows are led by text unique
+#     to their own line, so one site losing its lens cannot be covered by the other. Keep each
+#     pinned phrase on ONE line.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -594,6 +604,22 @@ ff-specs-brief|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If 
 ff-specs-record|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|records either their run (invocation, pass/fail counts) or why they could not run
 ff-specs-lead|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|When they could not run, the lead runs them against the redeployed instance before re-verifying
 ff-specs-evidence|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|as the `playwright` evidence this section already names. A could-not-run record is not a pass.
+arch-ready-intent|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|Invoke `/bmad-sprint-planning intent=readiness`|contains
+arch-ready-nostatus|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|and do not create or modify sprint-status.yaml.|contains
+sts-ready-intent|S|steps/stories-test-strategy.md|### 1. Implementation Readiness|### Story Routing Tags|Invoke `/bmad-sprint-planning intent=readiness`|contains
+sts-ready-nostatus|S|steps/stories-test-strategy.md|### 1. Implementation Readiness|### Story Routing Tags|and do not create or modify sprint-status.yaml.|contains
+sts-plan-intent|S|steps/stories-test-strategy.md|### 3. Sprint Planning|### 3a.|Invoke `/bmad-sprint-planning intent=sprint-planning`|contains
+bug-plan-intent|S|steps/bug-investigation.md|### 5. Sprint Setup|### 6.|Run `/bmad-sprint-planning intent=sprint-planning`|contains
+bug-2c-lens|S|steps/bug-investigation.md|### 2c.|### 3.|Rule 19) to run `/bmad-review lenses=adversarial` on|prefix
+bug-4-lens-adv|S|steps/bug-investigation.md|### 4. Validation|### 5. Sprint Setup|per SKILL.md Rule 19) to run `/bmad-review lenses=adversarial` on the fix story|prefix
+bug-4-lens-arch|S|steps/bug-investigation.md|### 4. Validation|### 5. Sprint Setup|1. Runs `/bmad-review lenses=adversarial` on the fix story, scoped to|prefix
+srev-lens|S|steps/sprint-review.md|### 1. Sprint-Level Adversarial Review|### 2. Sprint-Level Party Mode|`/bmad-review lenses=adversarial` — final adversarial pass on the|prefix
+arch-role-fold-lens|R|architect.md|## A fold architecture dispatch|## As a party seat|1. **Run `/bmad-review lenses=adversarial` yourself, via the Skill tool**|prefix
+rr-recon-domain|S|steps/research-requirements.md|### 1. Research|### 2. PRD Creation|1. `/bmad-deep-recon type=domain intent=run|prefix
+rr-recon-market|S|steps/research-requirements.md|### 1. Research|### 2. PRD Creation|2. `/bmad-deep-recon type=market intent=run|prefix
+rr-recon-technical|S|steps/research-requirements.md|### 1. Research|### 2. PRD Creation|3. `/bmad-deep-recon type=technical intent=run|prefix
+req-recon-dommkt|S|steps/requirements.md|### 4. Authoring Dispatch|### 5.|**Research runs.** `/bmad-deep-recon type=domain`, `/bmad-deep-recon type=market` and|prefix
+req-recon-technical|S|steps/requirements.md|### 4. Authoring Dispatch|### 5.|`/bmad-deep-recon type=technical`, each with `intent=run|prefix
 PINS
 }
 
@@ -1111,6 +1137,8 @@ pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repo
 def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains||and carries that AC's predicate text copied from the verdict file the gate-2 check read|and cites the verdict file the gate-2 check read, which holds that AC's predicate
 ff-specs-lead-run|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|If `is_ui_epic == true`:|para|When they could not run, the lead runs them against the redeployed instance before re-verifying|When they could not run, the lead runs them against the redeployed instance before re-verifying, and records that run's invocation, counts and `.zip` trace path in the Deploy Status Report row as the `playwright` evidence this section already names. A could-not-run record is not a pass.|When they could not run, the dev's record of why stands and is accepted.
 rem-serial-replay|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|The two lines after each triple you write say which checks this dispatch ran.|para|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The record is replayed by `--mark` and `--mark-repair` themselves.
+arch-ready-nostatus|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|and do not create or modify sprint-status.yaml.|contains|| and do not create or modify sprint-status.yaml.|.
+arch-ready-intent|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|Invoke `/bmad-sprint-planning intent=readiness`|contains||`/bmad-sprint-planning intent=readiness`|`/bmad-sprint-planning`
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1136,7 +1164,21 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   [ "${out%% *}" = "0" ] && ok "$id/named: rewritten to '$new' — killed" \
                          || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 8 ] || bad "named: $n_named named mutant(s) read, wanted 8"
+[ "$n_named" -eq 10 ] || bad "named: $n_named named mutant(s) read, wanted 10"
+# m3's TWINS. The two readiness rows share architecture.md §3's one line, so each named rewrite must
+# move ONLY its own row: the clause dropped leaves the intent pinned, the intent dropped leaves the
+# clause pinned. Otherwise the two rows are one row spelled twice and either kill is unearned.
+ar_twin() { # <named copy> <lead> -> in-span count of the OTHER row in that copy
+  local o; o="$(pin_scan "$1" '### 3. Solutioning Gate' '### 4.' "$2" contains)"; printf '%s' "${o%% *}"
+}
+t1="$(ar_twin "$M/arch-ready-nostatus.named.md" 'Invoke `/bmad-sprint-planning intent=readiness`')"
+t2="$(ar_twin "$M/arch-ready-intent.named.md" 'and do not create or modify sprint-status.yaml.')"
+if [ -f "$M/arch-ready-nostatus.named.md" ] && [ "$t1" = 1 ]; then
+  ok "arch-ready-nostatus/named twin: the readiness intent still pins in its copy (in-span=1)"
+else bad "arch-ready-nostatus/named twin: the intent row reads in-span=$t1 in that copy, wanted 1"; fi
+if [ -f "$M/arch-ready-intent.named.md" ] && [ "$t2" = 1 ]; then
+  ok "arch-ready-intent/named twin: the no-sprint-status clause still pins in its copy (in-span=1)"
+else bad "arch-ready-intent/named twin: the clause row reads in-span=$t2 in that copy, wanted 1"; fi
 
 # --- 4a1. the qa class-sweep pin survives the consumer's Validation Checklist shadow ---------
 # graph shadows `team-roles/qa.md#Validation Checklist`, so a rule that lives there is replaced on

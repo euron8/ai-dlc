@@ -6,15 +6,19 @@
 #        ./scripts/ai-dlc/stamp-story-provenance.sh --terminal <pass> --check <story-file> ...
 #
 # Check 17's story-readiness gate REQUIRES a SKILL_INVOCATION_PROVENANCE block on EVERY story
-# file (validate-provenance-block.sh --require-skill ai-dlc-adversary-review, per story). That
+# file (validate-provenance-block.sh --require-skill ai-dlc-adversary-review, per story; a folded
+# bug-fix story's one-shot stamp is read under --require-skill bmad-review). That
 # block used to be TRANSCRIBED ONTO the story BY HAND, "per the S290/S291 precedent" — and it
 # drifted exactly as a hand-copied schema always does: sprint 291's stories dropped artifact_sha,
 # sprint 292's kept it, and each carried a different free-text `#` comment the parser silently
 # ignores. A mandated, machine-READ artifact with a precedent-AUTHORED write side.
 #
 # This is the write side, made mechanical. Every batch-invariant field
-# (skill/invoked_at/tool_use_id/mode/lead_role/findings_*/verdict) is COPIED VERBATIM from the
-# terminal pass — the single source of truth for what the convergence cycle concluded. The only
+# (invoked_at/tool_use_id/mode/lead_role/findings_*/verdict) is COPIED VERBATIM from the
+# terminal pass — the single source of truth for what the convergence cycle concluded. The
+# `skill` field is the one exception: it is written under its CURRENT name, normalised through
+# the schema's superseded_skills, and a lens-pinned current name also gets the lens its old name
+# implied (`lens_pins`). A superseded name is accepted on READ only and is never written. The only
 # per-story fields are `artifact` (the story path) and `artifact_sha` (computed here). Nothing is
 # authored; the lead invents nothing. Re-running is idempotent: the sha is taken over the story
 # BODY with any existing provenance block stripped, so a stamp never notarizes itself.
@@ -36,8 +40,10 @@ set -u
 #   story-provenance      (default) the CONVERGENCE cycle's terminal-pass residue. Pinned to
 #                         ai-dlc-adversary-review, and `verdict` is batch-invariant, so the
 #                         EXIT_CONDITION_MET guard below applies exactly as it always has.
-#   bug-story-provenance  the ONE-SHOT residue for a bug-fix story. Pinned to
-#                         bmad-review-adversarial-general, and carries NO `verdict` — a one-shot
+#   bug-story-provenance  the ONE-SHOT residue for a bug-fix story. Pinned to bmad-review (its
+#                         adversarial lens; stamped `lens: adversarial`). A terminal pass citing
+#                         the pre-6.11 name bmad-review-adversarial-general is accepted and
+#                         stamped under bmad-review. It carries NO `verdict` — a one-shot
 #                         stamps none (team-roles/adversary.md; Check 24 self-skips
 #                         bug-investigation for the same reason), so requiring EXIT_CONDITION_MET
 #                         would demand a field the producer is forbidden to write.
@@ -252,8 +258,55 @@ if tfields is None:
     print(f"FAIL: terminal pass {terminal_path}'s provenance block is malformed.", file=sys.stderr)
     sys.exit(1)
 
-if tfields.get("skill") != PIN["skill"]:
-    print(f"FAIL: terminal pass cites skill '{tfields.get('skill')}', expected '{PIN['skill']}'.", file=sys.stderr)
+# THE PIN COMPARE IS ALIAS-AWARE, THROUGH THE SCHEMA'S superseded_skills, IN BOTH DIRECTIONS --
+# the same set validate-provenance-block.sh's `--require-skill` accepts. A terminal pass written
+# under the pre-rename name is a correct record of a correct run, and a profile pinned on the old
+# name (a consumer override) must accept a current-name pass.
+_SUP = {k: v for k, v in S.get("superseded_skills", {}).items() if not k.startswith("$")}
+_LENS = {k: v for k, v in S.get("lens_pins", {}).items() if not k.startswith("$")}
+
+
+def accepted_skills(name):
+    return {name} | {v for k, v in _SUP.items() if k == name} | {k for k, v in _SUP.items() if v == name}
+
+
+def canonical_skill(name):
+    """The name a NEW record is written under: a superseded name maps to its current one."""
+    return _SUP.get(name, name)
+
+
+if tfields.get("skill") not in accepted_skills(PIN["skill"]):
+    print(
+        f"FAIL: terminal pass cites skill '{tfields.get('skill')}', expected '{PIN['skill']}'"
+        f" (or a superseded name for it: {', '.join(sorted(accepted_skills(PIN['skill']) - {PIN['skill']})) or 'none'}).",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+# A SCHEMA THAT LOST ITS LENS PIN IS REFUSED HERE EXACTLY AS THE READER REFUSES IT, with the same
+# exit (2) and the same message stem. Without the pin this writer stamped `skill: bmad-review` with
+# no lens -- a block validate-provenance-block.sh declines to judge under that same schema.
+if PIN["skill"] in ("bmad-review", "bmad-review-adversarial-general") and _LENS.get("bmad-review") != "adversarial":
+    print(
+        f"FAIL: profile '{profile_name}' pins {PIN['skill']}, which needs the schema's lens_pins to "
+        f"map bmad-review to adversarial, and {schema_path} does not (lens_pins: {_LENS}). Refusing "
+        f"to stamp a block the reader would refuse to judge.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+# THE LENS, WHERE THE CURRENT SKILL RUNS MANY. The writer refuses exactly what the reader refuses
+# (see tool_use_id below): a current-name pass with no `lens: <value>` would stamp a story block
+# validate-provenance-block.sh then fails under the lens rule, which is a wedge rather than a loop.
+_t_canon = canonical_skill(tfields.get("skill"))
+if _t_canon in _LENS and tfields.get("skill") == _t_canon and tfields.get("lens") != _LENS[_t_canon]:
+    print(
+        f"FAIL: terminal pass cites {_t_canon} with lens '{tfields.get('lens', '')}', and a pin on "
+        f"{_t_canon} requires lens: {_LENS[_t_canon]}. {_t_canon} runs many lenses; a block that "
+        f"does not name the {_LENS[_t_canon]} lens does not say that evaluation ran. Add "
+        f"`lens: {_LENS[_t_canon]}` to the terminal pass's block, then re-stamp.",
+        file=sys.stderr,
+    )
     sys.exit(1)
 # The verdict rule is DERIVED from the profile, not from a flag — see the --profile comment
 # above. A profile carrying `verdict` in batch_invariant is a CONVERGENCE profile and demands
@@ -279,8 +332,26 @@ elif tfields.get("verdict"):
     )
     sys.exit(1)
 
-# The batch-invariant values, copied verbatim from the terminal pass.
+# The batch-invariant values, copied verbatim from the terminal pass -- EXCEPT the skill name.
 invariant = {k: tfields[k] for k in PROFILE["batch_invariant"] if k in tfields and tfields[k] != ""}
+
+# THE ALIAS IS READ-ONLY BY CONSTRUCTION: no new record is written under a superseded name. A
+# terminal pass citing the old name is stamped with the CURRENT name, and where the current name
+# is a lens pin, with the lens the old name implied. This is the one line that turns an accepted
+# alias into a written one, so it is the line to mutate (a verbatim copy here re-emits the old name).
+def normalise_skill(inv):
+    if "skill" in inv:
+        inv["skill"] = canonical_skill(inv["skill"])
+        if inv["skill"] in _LENS and "lens" in PROFILE["batch_invariant"]:
+            inv["lens"] = _LENS[inv["skill"]]
+    return inv
+
+
+# The verbatim copy is kept ONLY for --check's read side: a story stamped before the rename
+# carries the old name, and re-deriving it under the current name would read a correct historical
+# stamp as drift. It is never rendered for writing.
+legacy_invariant = dict(invariant)
+invariant = normalise_skill(invariant)
 
 # tool_use_id is the one batch-invariant field the terminal pass often CANNOT self-report: a
 # subagent cannot observe the Agent tool_use_id that spawned it, so the pass file may carry a
@@ -396,8 +467,11 @@ if "verdict" not in PROFILE.get("batch_invariant", []):
         sys.exit(1)
 
 
-def render(story_path, sha):
-    vals = dict(invariant)
+legacy_invariant["tool_use_id"] = tid
+
+
+def render(story_path, sha, inv=None):
+    vals = dict(invariant if inv is None else inv)
     vals["artifact"] = story_path
     vals["artifact_sha"] = sha
     lines = [OPEN]
@@ -424,6 +498,11 @@ for sp in story_paths:
     block = render(sp, sha)
     body = WHOLE_RE.sub("", content).rstrip() + "\n"
     new_content = body + "\n" + block + "\n"
+
+    # A story stamped BEFORE the rename, from the same terminal pass, carries the verbatim old name
+    # and is current too: --check accepts that rendering on READ, and this writer never emits it.
+    if check_only and content == body + "\n" + render(sp, sha, legacy_invariant) + "\n":
+        continue
 
     if check_only:
         # Missing every required field, wrong value, or a stale sha all read as drift.

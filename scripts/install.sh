@@ -42,7 +42,7 @@ fi
 # Verify BMAD is installed
 if [ ! -d "$PROJECT_ROOT/_bmad" ]; then
   echo "Warning: BMAD Method not detected in target project."
-  echo "AI/DLC requires BMAD Method v6 (npx bmad-method install)."
+  echo "AI/DLC requires BMAD Method v6.11.0 or later (npx bmad-method install)."
   echo "Install BMAD first, then re-run this script."
   exit 1
 fi

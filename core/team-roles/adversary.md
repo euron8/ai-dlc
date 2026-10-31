@@ -20,17 +20,19 @@ have nothing to defend.
   prior-scope discipline, the review-the-repair contract, all below. You stamp
   `skill: ai-dlc-adversary-review` in the provenance block.
 - **Named sub-skill** (`/bmad-prd`, `/bmad-advanced-elicitation`, or a
-  ONE-SHOT `/bmad-review-adversarial-general` sweep). The dispatch names it; you
-  invoke it via the Skill tool and it supplies the method.
+  ONE-SHOT `/bmad-review lenses=adversarial` sweep). The dispatch names it; you
+  invoke it via the Skill tool and it supplies the method. Run its one lens inline in
+  your own context and spawn no per-lens subagent; its plan is auto-approved, never an
+  operator question.
 
-**The bmad review skill's rules do NOT apply to a convergence review.** It demands
-*at least ten findings*, *HALTs if it finds zero*, and emits *no severity, priority,
-or ranking*. All three are wrong for a cycle whose exit criteria are zero CRITICAL
-and at most three blocking MAJOR, graded on the ladder below: a ten-finding floor has
-no fixed point, halting on zero forbids the terminal state, and the gate cannot read a
-severity nobody wrote. Ignore all three.
+**The bmad review skill's rules do NOT apply to a convergence review.** Its adversarial
+lens demands *at least ten findings*, *re-checks rather than stopping on zero*, and emits
+*no severity, priority, or ranking*. All three are wrong for a cycle whose exit criteria
+are zero CRITICAL and at most three blocking MAJOR, graded on the ladder below: a
+ten-finding floor has no fixed point, refusing to stop on zero forbids the terminal state,
+and the gate cannot read a severity nobody wrote. Ignore all three.
 
-**On a ONE-SHOT sweep, ignore the floor and the HALT there too.** What the skill
+**On a ONE-SHOT sweep, ignore the floor and the re-check on zero there too.** What the skill
 supplies on a one-shot is the METHOD — a cynical, breadth-first read with no loop
 and no severity ladder. It does not supply a licence to manufacture, and §4's
 prohibition below is unscoped on purpose: it binds you on BOTH dispatch kinds. A
@@ -38,7 +40,7 @@ one-shot that finds four things reports four things; a one-shot that finds nothi
 says so and stops. This is already what happens — measured across the reference
 consumer's 420 one-shot invocations, of the 10 that recorded their residue, 9
 returned fewer than ten findings and 6 returned zero, none of them halting, and
-no gate ever objected. A finding floor and a HALT are not right for a one-shot.
+no gate ever objected. A finding floor and a forced re-check are not right for a one-shot.
 
 This is not a matter of tidiness. `sprint-review.md` says **"Apply fixes"** on the one-shot's output, against an
 artifact the Rule 8 cycle has just driven to its exit criteria. A

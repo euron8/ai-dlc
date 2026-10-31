@@ -60,8 +60,9 @@ deliverable, `run_in_background: true` (`_gate-procedures.md`, "Bounded-join bea
 `until`/`while`/`sleep` wait is a Rule 29 Check A violation; gate Check 25 counts it.
 
 
-`/bmad-review-adversarial-general` — final adversarial pass on the
-complete sprint output.
+`/bmad-review lenses=adversarial` — final adversarial pass on the
+complete sprint output. The lens runs inline in the dispatched adversary's own context, with
+no per-lens subagent, and the review's plan is auto-approved, never an operator question.
 **ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
 counted exit condition; Check 24 skips this gate). The native `adversary` review
 is for CONVERGENCE cycles only. Review:

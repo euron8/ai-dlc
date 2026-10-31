@@ -30,12 +30,28 @@ SKILL.md Rule 24.
 ### 1. Research
 
 Run all applicable research back-to-back (skip none unless clearly
-irrelevant). **Do not pause between research sub-skills:**
+irrelevant). **Do not pause between research runs:**
 
-1. `/bmad-domain-research` — problem domain deep dive
-2. `/bmad-market-research` — competitive landscape (skip for internal
+1. `/bmad-deep-recon type=domain intent=run subagents=none research_output_path={planning_artifacts}/s<N>/research` — problem domain deep dive
+2. `/bmad-deep-recon type=market intent=run subagents=none research_output_path={planning_artifacts}/s<N>/research` — competitive landscape (skip for internal
    tools or infrastructure work where no market exists)
-3. `/bmad-technical-research` — technology options, constraints, risks
+3. `/bmad-deep-recon type=technical intent=run subagents=none research_output_path={planning_artifacts}/s<N>/research` — technology options, constraints, risks
+
+**State the type, the intent and the output path at every call.** An explicit type wins over the skill's own
+inference, and the `run` intent is the native research loop; a bare call can instead draft a
+prompt for the operator to run elsewhere, which produces no research. `research_output_path` is
+a pre-resolved customization field that deep-recon honors verbatim, so the sprint slot is
+placed by this call and not left to the skill's slotless default. `subagents=none` runs the
+rounds inline and sequentially: the analyst that runs this section is a leaf and spawns nothing.
+
+**The plan gate is auto-approved.** deep-recon holds one plan gate before it researches. Approve
+the plan it builds and proceed; it is never an operator question (Rules 9/10).
+
+**Leave each run folder where deep-recon writes it.** Each run writes its own folder under
+`{planning_artifacts}/s<N>/research`, named for the type, the topic slug and the date, and
+holding `research.md`, its digests and its memlog. Do not copy or move them: the digests are the evidence every claim in
+`research.md` cites. `research-notes.md` cites each run's `research.md` path under that folder, one line per type
+that ran, and the product brief cites the same paths.
 
 Synthesize research findings into the product brief. When research surfaces
 new constraints or opportunities, dispatch the `pm` (Agent tool, bound to
@@ -70,8 +86,9 @@ the pass that adds the tokens is the only thing that can make it pass.
 The citation belongs on the FR entry and **NOT** in the `FR Coverage Map`. That map
 is `/bmad-create-epics-and-stories`' artifact and its template emits
 `FR1: Epic 1 - <description>` — an FR-to-epic mapping that carries no capability
-token. Requiring one there would fail a correct map. FR-to-epic coverage is
-`/bmad-check-implementation-readiness` step 03's job; do not restate it.
+token. Requiring one there would fail a correct map. FR-to-epic traceability is judged by
+the readiness gate (`bmad-sprint-planning`'s `readiness` intent, run at `architecture.md` §3
+and `stories-test-strategy.md` §1); do not restate it.
 
 Gate-validation Check 30 FAILS on a capability no FR cites: a capability with no
 functional requirement behind it is specified and unplanned, so it reaches no epic,

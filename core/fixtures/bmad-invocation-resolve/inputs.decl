@@ -1,3 +1,5 @@
-# Reads one file outside its own directory: the validator under test. Map rows under core/ and
-# core/scripts, and the walk-up markers, are probes and not reads.
+# Reads two things outside its own directory: the validator under test, and the installed ai-dlc
+# rulebook, which the G611 arms copy (less overrides/ and extensions/) and resolve against a BMAD 6.11
+# skills tree. Map rows under core/ and core/scripts, and the walk-up markers, are probes and not reads.
 !core/scripts/validate-bmad-invocations.sh
+!core/skills/ai-dlc/

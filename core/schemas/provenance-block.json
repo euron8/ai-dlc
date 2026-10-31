@@ -58,6 +58,7 @@
     "bmad-party-mode",
     "bmad-advanced-elicitation",
     "bmad-review-adversarial-general",
+    "bmad-review",
     "bmad-validate-prd",
     "bmad-prd",
     "ai-dlc-adversary-review"
@@ -75,13 +76,31 @@
       "carries 74 blocks citing the old name under _bmad-output/ (72 of them in",
       "planning-artifacts/) across 30+ sprints; every one is a correct record of a correct run.",
       "",
+      "bmad-review-adversarial-general is an UPSTREAM RENAME too: BMAD 6.11 consolidated it into",
+      "bmad-review, where it runs as the `adversarial` lens (directive `lenses=adversarial`). Because",
+      "bmad-review runs MANY lenses, the skill name alone no longer proves the adversarial lens ran,",
+      "so a block citing bmad-review carries `lens: adversarial` and validate-provenance-block.sh",
+      "requires it whenever the pin is either name; a block citing the old name implies the lens.",
+      "",
       "THIS IS NOT THE RETIRED-PIN RELATION, and conflating them would be the bug.",
-      "validate-provenance-block.sh separately diagnoses a pin on bmad-review-adversarial-general",
-      "where a CONVERGENCE review ran. That skill is not retired — it is live and correct for the",
-      "one-shot sweeps in bug-investigation and sprint-review. Only the",
-      "PIN is wrong, and only in that one position, so it is a diagnostic and not an alias."
+      "validate-provenance-block.sh separately diagnoses a pin on bmad-review (or its old name)",
+      "where a CONVERGENCE review ran. The one-shot evaluation is live and correct for the sweeps",
+      "in bug-investigation and sprint-review; only the PIN is wrong, and only in that one",
+      "position, so it is a diagnostic and not an alias."
     ],
-    "bmad-validate-prd": "bmad-prd"
+    "bmad-validate-prd": "bmad-prd",
+    "bmad-review-adversarial-general": "bmad-review"
+  },
+  "lens_pins": {
+    "$comment": [
+      "<current skill name>: <the lens a pin on it requires>. A pin (`--require-skill`) on such a",
+      "skill, or on any superseded name for it, is satisfied only by a block citing the current",
+      "name WITH `lens: <value>`, or by a block citing a superseded name, which IMPLIES the lens,",
+      "because the old skill ran exactly that evaluation and nothing else. stamp-story-provenance.sh",
+      "reads the same map: it writes the current name plus this lens and never the old name, so",
+      "the alias is accepted on READ only and no new record carries the superseded name."
+    ],
+    "bmad-review": "adversarial"
   },
   "stray_scan": {
     "$comment": [
@@ -150,8 +169,14 @@
       "name": "skill",
       "required": true,
       "enum_ref": "known_skills",
-      "placeholder": "<bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|bmad-prd|ai-dlc-adversary-review>",
+      "placeholder": "<bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-review|bmad-validate-prd|bmad-prd|ai-dlc-adversary-review>",
       "doc": "the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block."
+    },
+    {
+      "name": "lens",
+      "required": false,
+      "placeholder": "adversarial",
+      "doc": "the bmad-review lens that ran; `adversarial` for the one-shot evaluation."
     },
     {
       "name": "invoked_at",
@@ -441,8 +466,9 @@
         "story-provenance — it differs in exactly two ways, and both follow from the bug variant",
         "running a ONE-SHOT rather than a convergence cycle.",
         "",
-        "(1) `pin.skill` is bmad-review-adversarial-general, the evaluation steps/bug-investigation.md",
-        "actually dispatches. (2) `verdict` is absent from every list here. A one-shot stamps NO",
+        "(1) `pin.skill` is bmad-review (its adversarial lens, recorded as `lens: adversarial`), the",
+        "evaluation steps/bug-investigation.md actually dispatches; a terminal pass citing the",
+        "pre-6.11 name bmad-review-adversarial-general is accepted through superseded_skills. (2) `verdict` is absent from every list here. A one-shot stamps NO",
         "verdict — team-roles/adversary.md says so, and gate-validation.md Check 24 self-skips",
         "bug-investigation by name for the same reason — so demanding EXIT_CONDITION_MET here would",
         "be demanding a field the producer is forbidden to write. The writer reads that absence as",
@@ -456,7 +482,7 @@
       ],
       "title": "a one-shot review residue stamped onto a bug-fix story file",
       "pin": {
-        "skill": "bmad-review-adversarial-general",
+        "skill": "bmad-review",
         "mode": "subagent"
       },
       "require": [
@@ -465,6 +491,7 @@
       ],
       "batch_invariant": [
         "skill",
+        "lens",
         "invoked_at",
         "tool_use_id",
         "mode",
@@ -479,6 +506,7 @@
       ],
       "fields": [
         "skill",
+        "lens",
         "invoked_at",
         "tool_use_id",
         "mode",

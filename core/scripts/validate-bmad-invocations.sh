@@ -37,8 +37,11 @@
 #
 # EXIT CODES
 #   0  -- every invoked name resolves to a skill whose load targets exist
-#   1  -- a dangling name, or a shim whose load target is absent
-#   2  -- DISARMED or usage error: no skills root, or ZERO call sites enumerated.
+#   1  -- a dangling name, a shim whose load target is absent, or a capability probe miss
+#         (bmad-sprint-planning without references/readiness-gate.md; bmad-review without a
+#         `code = "adversarial"` lens in customize.toml). Every FAIL names the BMAD floor, 6.11.0.
+#   2  -- DISARMED or usage error: no skills root, ZERO call sites enumerated, or the
+#         capability self-probe did not hold.
 #         A scan that found no call sites prints the same clean line as a scan that
 #         found them all healthy, so it must not be able to exit 0.
 
@@ -155,6 +158,64 @@ NAMES="$(grep -rhoE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)' "$R
   | grep -oE '/bmad-[a-z0-9-]+' \
   | sed 's#^/##' | sed 's/-$//' | sort -u)"
 
+# THE BMAD VERSION FLOOR, stated once and named by every FAIL below. 6.10.0 ships no bmad-review,
+# no bmad-deep-recon and no sprint-planning readiness gate; 6.11.0 ships all three, the `lenses=`
+# directive and the `readiness` intent included. A dangling name on a consumer is therefore most
+# often an install below the floor, and the remedy has to say so beside "correct the name".
+FLOOR="This rulebook requires BMAD Method 6.11.0 or later; on an older BMAD install, upgrade BMAD (npx bmad-method install)."
+
+# CAPABILITY PROBES. A directory that exists is not a skill that can do what the rulebook asks of
+# it: the readiness call sites depend on sprint-planning's readiness gate, and the one-shot
+# evaluation depends on bmad-review's adversarial lens. A BMAD older than the floor can carry a
+# same-named skill without either, and the directory check above passes it.
+#   bmad-sprint-planning  -> <skill>/references/readiness-gate.md must be a file
+#   bmad-review           -> <skill>/customize.toml must carry an UNCOMMENTED `code = "adversarial"`
+# The toml line is anchored at both ends: BMAD's own customize.toml carries commented lens
+# examples shaped `#   code = "accessibility"`, so an unanchored match would accept a commented
+# adversarial example and a longer code such as `adversarial-x`.
+cap_probe() {  # <skill dir> <name> -> 0 capable (or not probed); 1 with a FAIL line on stderr
+  case "$2" in
+    bmad-sprint-planning)
+      [ -f "$1/references/readiness-gate.md" ] && return 0
+      echo "FAIL: the pipeline invokes '/$2' with the readiness intent, and $1/references/readiness-gate.md is absent: this BMAD install has no readiness gate. $FLOOR" >&2
+      return 1 ;;
+    bmad-review)
+      [ -f "$1/customize.toml" ] && grep -qE '^[[:space:]]*code[[:space:]]*=[[:space:]]*"adversarial"[[:space:]]*$' "$1/customize.toml" && return 0
+      echo "FAIL: the pipeline invokes '/$2' with lenses=adversarial, and $1/customize.toml declares no code = \"adversarial\" lens: this BMAD install has no adversarial lens. $FLOOR" >&2
+      return 1 ;;
+  esac
+  return 0
+}
+
+# SELF-PROBE, BEFORE THE REAL INPUT, IN BOTH DIRECTIONS. Each probe has an offender that must
+# fire and a near-miss that must stay quiet; the near-misses carry the property a widened match
+# would key on (a commented adversarial line, a longer lens code, a references/ directory holding
+# other gate files). A probe that cannot fire would let every install pass.
+cap_self_probe() {
+  local pd bad=0
+  pd="$(mktemp -d 2>/dev/null)" || return 1
+  [ -n "$pd" ] && [ -d "$pd" ] || return 1
+  mkdir -p "$pd/sp-ok/references" "$pd/sp-off/references" "$pd/rv-ok" "$pd/rv-commented" "$pd/rv-longer" "$pd/rv-notoml" || return 1
+  : > "$pd/sp-ok/references/readiness-gate.md"
+  : > "$pd/sp-off/references/generate-tracking.md"
+  printf '%s\n' '#   code = "accessibility"' '[[lens]]' 'code = "adversarial"' > "$pd/rv-ok/customize.toml"
+  printf '%s\n' '#   code = "adversarial"' 'code = "structure"' > "$pd/rv-commented/customize.toml"
+  printf '%s\n' 'code = "adversarial-x"' > "$pd/rv-longer/customize.toml"
+  cap_probe "$pd/sp-ok" bmad-sprint-planning 2>/dev/null || { echo "$PROG: SELF-PROBE FAIL: a sprint-planning skill carrying references/readiness-gate.md was refused." >&2; bad=1; }
+  cap_probe "$pd/sp-off" bmad-sprint-planning 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: a sprint-planning skill with no readiness-gate.md was accepted." >&2; bad=1; }
+  cap_probe "$pd/rv-ok" bmad-review 2>/dev/null || { echo "$PROG: SELF-PROBE FAIL: a bmad-review customize.toml carrying code = \"adversarial\" was refused." >&2; bad=1; }
+  cap_probe "$pd/rv-commented" bmad-review 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: a COMMENTED code = \"adversarial\" line was accepted as the lens." >&2; bad=1; }
+  cap_probe "$pd/rv-longer" bmad-review 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: code = \"adversarial-x\" was accepted as the adversarial lens." >&2; bad=1; }
+  cap_probe "$pd/rv-notoml" bmad-review 2>/dev/null && { echo "$PROG: SELF-PROBE FAIL: a bmad-review with no customize.toml was accepted." >&2; bad=1; }
+  cap_probe "$pd/rv-notoml" bmad-party-mode 2>/dev/null || { echo "$PROG: SELF-PROBE FAIL: a skill with no capability probe was refused." >&2; bad=1; }
+  rm -f "$pd/sp-ok/references/readiness-gate.md" "$pd/sp-off/references/generate-tracking.md" \
+    "$pd/rv-ok/customize.toml" "$pd/rv-commented/customize.toml" "$pd/rv-longer/customize.toml" 2>/dev/null
+  rmdir "$pd/sp-ok/references" "$pd/sp-off/references" "$pd/sp-ok" "$pd/sp-off" "$pd/rv-ok" \
+    "$pd/rv-commented" "$pd/rv-longer" "$pd/rv-notoml" "$pd" 2>/dev/null
+  return "$bad"
+}
+cap_self_probe || { echo "$PROG: DISARMED — the capability self-probe did not hold, so a verdict on the real skills tree would establish only that the scan ran." >&2; exit 2; }
+
 COUNT="$(printf '%s\n' "$NAMES" | grep -c . )"
 if [ "$COUNT" -eq 0 ]; then
   echo "$PROG: DISARMED — EXAMINED NOTHING — zero /bmad-* call sites enumerated under $RULES. Either the rulebook stopped invoking BMAD or this scan is looking in the wrong place; both print the same clean line, so this exits 2." >&2
@@ -170,7 +231,7 @@ for name in $NAMES; do
   d="$SKILLS/$name"
   s="$d/SKILL.md"
   if [ ! -d "$d" ] || [ ! -f "$s" ]; then
-    echo "FAIL: the pipeline invokes '/$name' and no such skill exists at $SKILLS/$name. The lead reports having run it and nothing runs. Correct the name in the rulebook, or install the module that provides it." >&2
+    echo "FAIL: the pipeline invokes '/$name' and no such skill exists at $SKILLS/$name. The lead reports having run it and nothing runs. Correct the name in the rulebook, or install the module that provides it. $FLOOR" >&2
     rc=1
     continue
   fi
@@ -190,11 +251,12 @@ for name in $NAMES; do
       elif [ -e "$d/$t" ]; then
         continue
       else
-        echo "FAIL: the pipeline invokes '/$name'; the skill exists but its SKILL.md is a loader for '$t', which is absent. A directory-existence check passes here and the skill loads nothing — the exact shape that keeps a dead name in a pipeline. Repoint the rulebook at the live skill, or install the module that provides '$t'." >&2
+        echo "FAIL: the pipeline invokes '/$name'; the skill exists but its SKILL.md is a loader for '$t', which is absent. A directory-existence check passes here and the skill loads nothing — the exact shape that keeps a dead name in a pipeline. Repoint the rulebook at the live skill, or install the module that provides '$t'. $FLOOR" >&2
         rc=1
       fi
     done <<< "$targets"
   fi
+  cap_probe "$d" "$name" || rc=1
   resolved=$((resolved+1))
 
   if head -5 "$s" | grep -q 'DEPRECATED'; then

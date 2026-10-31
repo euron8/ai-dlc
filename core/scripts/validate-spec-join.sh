@@ -1039,7 +1039,8 @@ fi
 # positive blocking every planning gate. Reading the real template settled it; a
 # paraphrase had already said `FR1: Epic 1` and the `(CAP-1)` was invented here.
 #
-# FR-to-epic coverage is already `bmad-check-implementation-readiness` step 03's job,
+# FR-to-epic coverage is BMAD's readiness gate's job (`bmad-sprint-planning` with the
+# `readiness` intent from BMAD 6.11, formerly `bmad-check-implementation-readiness` step 03),
 # so duplicating it would violate Rule 26(b). What ai-dlc owns is prd.md's own FR
 # entries — `research-requirements.md` mandates the capability citation there, e.g.
 # `- **FR-S300-1 (CAP-1)** ...` alongside the existing `(← LR-...)` form.

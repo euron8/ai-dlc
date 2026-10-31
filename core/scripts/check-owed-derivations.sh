@@ -219,9 +219,11 @@ sprint_split() {
 #     update session itself, one per run (core/skills/ai-dlc-update/SKILL.md:2497, "YOU write ... and
 #     `apply.sh` does NOT"; apply.sh:2780 confirms).
 #   - `_bmad-output/planning-artifacts/implementation-readiness-report-<YYYY-MM-DD>.md`: written fresh per run by
-#     BMAD's own skill `bmad-check-implementation-readiness` (outputFile
-#     `{planning_artifacts}/implementation-readiness-report-{{date}}.md`). That writer is BMAD's, so it is NOT in
-#     this tree and the outputFile shape is NOT checked here. ai-dlc invokes the skill from
+#     BMAD's pre-6.11 skill `bmad-check-implementation-readiness` (outputFile
+#     `{planning_artifacts}/implementation-readiness-report-{{date}}.md`). From BMAD 6.11 the readiness check is
+#     `bmad-sprint-planning` with the `readiness` intent (references/readiness-gate.md), which offers to save its
+#     findings to `{planning_artifacts}/implementation-readiness.md` instead. Either writer is BMAD's, so it is NOT in
+#     this tree and the output shape is NOT checked here. ai-dlc invokes the skill from
 #     core/skills/ai-dlc/steps/architecture.md:264 and core/skills/ai-dlc/steps/stories-test-strategy.md:18.
 is_history() { # <root-relative path> -> 0 when HISTORY
   local p="$1" rest seg after b n

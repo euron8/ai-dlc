@@ -32,6 +32,7 @@
 # B729-b decides S1 and S2 because its one fault, the exclusion list removed, is aimed at both short spellings.
 # B729-c decides all three spellings because the last-in-glob-order resolver is wrong under every spelling.
 # also trips: WR -> DS
+# also trips: AM -> N1,N2
 # MUTANT-MATRIX SV decides=V twins=P1
 # MUTANT-MATRIX MB decides=E twins=C
 # MUTANT-MATRIX MC decides=C,D twins=E
@@ -46,8 +47,16 @@
 # MUTANT-MATRIX B729-a decides=S3 twins=S1
 # MUTANT-MATRIX B729-b decides=S1,S2 twins=S3
 # MUTANT-MATRIX B729-c decides=S1,S2,S3 twins=- why=the last-in-glob-order resolver picks the wrong pass under all three spellings, so every cell is red
+#   f13   N0 (a current-name one-shot stamps skill+lens), N1 (an old-name one-shot stamps the current name and 0 bytes of
+#         the old one), N2 (an old-name one-shot stamps lens: adversarial). VB decides N1 and N2 because its one fault, the
+#         skill copied verbatim, both re-emits the old name and drops the lens the old name implied.
+# MUTANT-MATRIX VB decides=N1,N2 twins=N0
+# MUTANT-MATRIX LP decides=N0,N1,N2 twins=- why=the writer refuses a schema without lens_pins outright, as the reader does, so no cell stamps and every cell is red
+#         H (a pre-rename stamp, old name and no lens, passes the reader's --require-skill bmad-review under the project root's schema).
+#         AM decides H because its one fault, the alias row deleted from a copied schema, makes the reader refuse the old name.
+# MUTANT-MATRIX AM decides=H twins=N0
 # Every mutant reaches mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all fourteen mutants and every name keeps its own row
+# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all seventeen mutants and every name keeps its own row
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/story-provenance/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -127,11 +136,13 @@ mx_count() { local n; n="$(grep -c "^$1 " "$MXL")" || n=0; printf '%s' "$n"; }
 mx_fam() { # <mutant> -> its cell family
   case "$1" in
     SV) echo sv ;; MB|MC|MR) echo mixed ;; IA|IB|IC|IB2) echo inst ;; ID|ID2) echo guard ;; WR) echo b302 ;; B729-*) echo b729 ;;
+    VB|LP|AM) echo f13 ;;
   esac
 }
 mx_cells() { # <family> -> its cells
   case "$1" in
     sv) echo "V P1" ;; mixed) echo "E C D R" ;; inst) echo "CI CR NI NR" ;; guard) echo "Gw Gr" ;; b302) echo "DP DS DC" ;; b729) echo "S1 S2 S3" ;;
+    f13) echo "N0 N1 N2 H" ;;
   esac
 }
 mx_role() { case "$1" in IA|IB|ID) echo writer ;; *) echo reader ;; esac; }
@@ -141,6 +152,12 @@ mx_need() {
     MB:E|MC:C|MC:D) printf '%s' "OK (1 story file(s) current)" ;;
     MR:R) printf '%s' "which is not the story being stamped: ${S1B#s1/}" ;;
     SV:V) printf '%s' "stamped 1 of 1" ;;
+    # VB: the old name IS in the written bytes (not merely the new one missing). LP: the writer
+    # REFUSES a schema without lens_pins, exactly as the reader does (exit 2, same stem).
+    VB:N1) printf '%s' "skill: bmad-review-adversarial-general" ;;
+    VB:N2) printf '%s' "WRITER-RC=0" ;;
+    LP:N0|LP:N1|LP:N2) printf '%s' "needs the schema's lens_pins" ;;
+    AM:H) printf '%s' "was specified, but no block cites it" ;;
   esac
 }
 mx_register() { # <mutant> <mutant path or DID NOT APPLY...> -> 0 when it applied
@@ -220,6 +237,7 @@ mx_cell() {
   case "$f" in
     sv) cell_sv "$c" ;; mixed) cell_mixed "$c" "$mp" ;; inst) cell_inst "$c" "$m" "$mp" ;;
     guard) cell_guard "$c" "$m" "$mp" ;; b302) cell_b302 "$c" "$m" "$mp" ;; b729) cell_b729 "$c" "$mp" ;;
+    f13) cell_f13 "$c" "$m" "$mp" ;;
     *) false ;;
   esac
   rc=$?
@@ -351,7 +369,8 @@ expect "oneshot: --check post-stamp = OK" 0 "OK" \
   bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
     "$O/stories/story-bug-1.md"
 ASSERTIONS=$((ASSERTIONS + 1))
-if grep -q '^skill: bmad-review-adversarial-general$' "$O/stories/story-bug-1.md" \
+if grep -q '^skill: bmad-review$' "$O/stories/story-bug-1.md" \
+   && grep -q '^lens: adversarial$' "$O/stories/story-bug-1.md" \
    && ! grep -q '^verdict:' "$O/stories/story-bug-1.md"; then
   printf '  ok    %-46s\n' "oneshot: block cites the bmad skill, no verdict"
 else
@@ -658,6 +677,142 @@ open(sys.argv[2], "w").write(src[:m.start(1)] + new_body + src[m.end(1):])
 '
 MR="$(mk_mutx mr "$MR_PROG")"
 if mx_register MR "$MR"; then mx_score MR "${B_r:-0}"; fi
+
+# --- F13: THE ALIAS IS READ-ONLY. A one-shot citing the pre-rename name is stamped onto its story
+# under the CURRENT name with the lens the old name implied, and the old name is never written. These
+# cells read the BYTES the writer put in the story file, never --check's verdict: --check accepts a
+# verbatim pre-rename stamp by design (the historical-read arm below), so it cannot see a writer that
+# re-emits the old name. Each cell stamps a FRESH story from a fresh copy of a seeded one-shot whose
+# artifact: names that story, so the bind is satisfied and only the written block is under test.
+#   N0  a current-name one-shot -> the story carries `skill: bmad-review` and `lens: adversarial`
+#   N1  an old-name one-shot    -> the story carries `skill: bmad-review` and 0 bytes of the old name
+#   N2  an old-name one-shot    -> the story carries `lens: adversarial`
+# f13_stamp <cell dir> <one-shot template> <writer> <project root> -> MX_OUT = story bytes + WRITER-RC
+f13_stamp() {
+  local d="$1" rc
+  mkdir -p "$d" || return 2
+  cp "$O/stories/story-bug-old.md" "$d/story.md" || return 2
+  sed "s#^artifact:.*#artifact: $d/story.md#" "$2" > "$d/oneshot.md" || return 2
+  # An empty root would leave the writer walking up for a marker the sandbox does not carry. The cell
+  # dir holds no schemas/, so the writer falls to its script-relative copy: the shipped schema.
+  AI_DLC_PROJECT_ROOT="${4:-$d}" bash "$3" --terminal "$d/oneshot.md" --profile "$BUGP" "$d/story.md" > "$d/out" 2>&1; rc=$?
+  MX_OUT="$(cat "$d/story.md"; printf 'WRITER-RC=%s\n' "$rc"; [ "$rc" -eq 0 ] || sed 's/^/WRITER-OUT: /' "$d/out" | head -3)"
+  [ "$rc" -eq 0 ] || return 1
+  return 0
+}
+F13_NEW="$O/s1-bug-fix-oneshot.md"; F13_OLD="$O/s1-bug-fix-oneshot-oldname.md"
+# f13_pred <cell> -> 0 when the bytes in MX_OUT hold the cell's property
+f13_pred() {
+  local nold
+  nold="$(grep -c 'bmad-review-adversarial-general' <<<"$MX_OUT")" || nold=0
+  case "$1" in
+    N0) grep -qx 'skill: bmad-review' <<<"$MX_OUT" && grep -qx 'lens: adversarial' <<<"$MX_OUT" ;;
+    N1) grep -qx 'skill: bmad-review' <<<"$MX_OUT" && [ "$nold" -eq 0 ] ;;
+    N2) grep -qx 'lens: adversarial' <<<"$MX_OUT" ;;
+    *) return 2 ;;
+  esac
+}
+# cell_f13 <cell> <mutant> <mutant path> -- VB's path is a writer copy under MUTX; LP's is a project
+# root whose core/schemas/ copy has lost lens_pins, driven through the REAL writer. AM's is a project
+# root whose copied schema has lost the alias row. Cell H (the reader on the historical stamp) hands
+# that mutated root to AM and to LP (the H branch), so LP:H reads the schema without lens_pins too.
+cell_f13() {
+  local c="$1" w="$WRITER" r="" tpl="$F13_OLD" d hr=""
+  if [ "$c" = H ]; then # the reader on the historical stamp; only AM's root differs from the real schema
+    [ -f "${HD:-/nonexistent}/story.md" ] || return 2
+    case "$2" in AM|LP) hr="$3" ;; esac
+    MX_OUT="$(AI_DLC_PROJECT_ROOT="${hr:-$HD}" bash "$(dirname "$WRITER")/validate-provenance-block.sh" "$HD/story.md" --require-skill bmad-review 2>&1)"; d=$?
+    [ "$d" -eq 0 ] && return 1
+    return 0
+  fi
+  case "$2" in VB) w="$3"; r="$MUTX" ;; LP|AM) r="$3" ;; *) return 2 ;; esac
+  [ "$c" = N0 ] && tpl="$F13_NEW"
+  d="$(mktemp -d "$ROOT/f13cell.XXXXXX")" || return 2
+  f13_stamp "$d" "$tpl" "$w" "$r"
+  f13_pred "$c" && return 1
+  return 0
+}
+# The unmutated writer, once per cell: every cell must hold and the stamp must succeed.
+f13ok=1; f13why=""
+for c in N0 N1 N2; do
+  tpl="$F13_OLD"; [ "$c" = N0 ] && tpl="$F13_NEW"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if f13_stamp "$(mktemp -d "$ROOT/f13base.XXXXXX")" "$tpl" "$WRITER" "" && f13_pred "$c"; then
+    ok "F13-$c: stamped bytes hold (current name, lens, no old name)"
+  else
+    f13ok=0; f13why="$f13why $c"; bad "F13-$c: the written story block $(printf '%s' "$MX_OUT" | grep -E '^(skill|lens):|WRITER-RC|WRITER-OUT' | tr '\n' ' ' | cut -c1-400)"
+  fi
+done
+# Seed control: the old-name template really carries the old name, so N1's zero is about the WRITER.
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$f13ok" = 1 ] && grep -qx 'skill: bmad-review-adversarial-general' "$F13_OLD" && ! grep -q '^lens:' "$F13_OLD"; then
+  ok "F13: an old-name one-shot (no lens line) is stamped as skill: bmad-review + lens: adversarial"; B_f13=1
+else
+  bad "F13: base cells failed ($f13why) or the old-name seed does not carry the old name without a lens"
+fi
+# VB -- the writer copies the skill VERBATIM: the one normalisation call becomes a plain copy.
+VB_PROG='
+import sys
+src = open(sys.argv[1]).read()
+a = "invariant = normalise_skill(invariant)\n"
+if src.count(a) != 1: sys.exit("anchor: normalise_skill call %d" % src.count(a))
+open(sys.argv[2], "w").write(src.replace(a, "invariant = dict(invariant)\n"))
+'
+VB="$(mk_mutx vb "$VB_PROG")"
+# HISTORICAL READ. A story stamped BEFORE the rename carries the old name verbatim, and that stamp is
+# produced here by the producer that wrote it -- the verbatim-copy writer above, which is exactly the
+# pre-F13 writer -- never by hand. The shipped writer's --check and the reader's pin both accept it.
+ASSERTIONS=$((ASSERTIONS + 1))
+HD="$(mktemp -d "$ROOT/f13hist.XXXXXX")"
+if [ -f "${VB:-/nonexistent}" ] && f13_stamp "$HD" "$F13_OLD" "$VB" "$MUTX" \
+   && grep -qx 'skill: bmad-review-adversarial-general' "$HD/story.md" \
+   && bash "$WRITER" --terminal "$HD/oneshot.md" --profile "$BUGP" --check "$HD/story.md" > "$HD/chk" 2>&1 \
+   && grep -qF 'OK (1 story file(s) current)' "$HD/chk" \
+   && bash "$(dirname "$WRITER")/validate-provenance-block.sh" "$HD/story.md" --require-skill bmad-review > "$HD/rd" 2>&1; then
+  ok "F13 historical read: a pre-rename stamp (old name, no lens) passes --check and --require-skill bmad-review"
+else
+  bad "F13 historical read: a pre-rename stamp was refused on read ($(tail -1 "$HD/chk" 2>/dev/null) / $(tail -1 "$HD/rd" 2>/dev/null))"
+fi
+B_f13h=0
+if [ -f "$HD/story.md" ] && bash "$(dirname "$WRITER")/validate-provenance-block.sh" "$HD/story.md" --require-skill bmad-review >/dev/null 2>&1; then B_f13h="${B_f13:-0}"; fi
+# VB and LP are scored here, after the historical stamp exists: under --matrix their other cells include H, which reads it.
+if mx_register VB "$VB"; then mx_score VB "${B_f13:-0}"; fi
+# LP -- a copied schema loses lens_pins; the REAL writer is pinned to that copy's root. Precondition:
+# the writer reports that copy as its schema, and the copy really lost the key while keeping the alias.
+LPR="$ROOT/lp-root"; mkdir -p "$LPR/core/schemas"
+python3 - "$SCHEMA_SRC" "$LPR/core/schemas/provenance-block.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+if "lens_pins" not in s: sys.exit("anchor: no lens_pins")
+del s["lens_pins"]
+json.dump(s, open(sys.argv[2], "w"), indent=2)
+PY
+ASSERTIONS=$((ASSERTIONS + 1))
+lp_pre="$(AI_DLC_PROJECT_ROOT="$LPR" bash "$WRITER" --print-schema 2>/dev/null)"
+if [ -n "$lp_pre" ] && [ "$lp_pre" -ef "$LPR/core/schemas/provenance-block.json" ] \
+   && ! grep -q '"lens_pins"' "$LPR/core/schemas/provenance-block.json" \
+   && grep -q '"bmad-review-adversarial-general": "bmad-review"' "$LPR/core/schemas/provenance-block.json"; then
+  ok "F13 LP precondition: the pinned writer loads the copy without lens_pins (alias kept)"
+  mx_register LP "$LPR" && mx_score LP "${B_f13:-0}"
+else
+  bad "FIXTURE BROKEN: LP schema copy not loaded or not mutated (writer reports '${lp_pre:-<nothing>}')"
+fi
+# AM -- a copied schema loses the alias row; the READER, pinned to that copy's root, must refuse the old-name stamp.
+AMR="$ROOT/am-root"; mkdir -p "$AMR/core/schemas"
+python3 - "$SCHEMA_SRC" "$AMR/core/schemas/provenance-block.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+if s.get("superseded_skills", {}).pop("bmad-review-adversarial-general", None) != "bmad-review": sys.exit("anchor: no alias row")
+json.dump(s, open(sys.argv[2], "w"), indent=2)
+PY
+ASSERTIONS=$((ASSERTIONS + 1))
+if ! grep -q '"bmad-review-adversarial-general": "bmad-review"' "$AMR/core/schemas/provenance-block.json" \
+   && [ "$(AI_DLC_PROJECT_ROOT="$AMR" bash "$WRITER" --print-schema 2>/dev/null)" -ef "$AMR/core/schemas/provenance-block.json" ]; then
+  ok "F13 AM precondition: the copy lost the alias row and is the schema the pinned program loads"
+  mx_register AM "$AMR" && mx_score AM "$B_f13h"
+else
+  bad "FIXTURE BROKEN: AM schema copy not mutated or not loaded"
+fi
 
 # --- THE INSTALL'S SCHEMA. In a consumer the writer and reader sit at <root>/scripts/ai-dlc/ and
 # the schema at <root>/.claude/schemas/, so an AI_DLC_PROJECT_ROOT naming a root with no schema of

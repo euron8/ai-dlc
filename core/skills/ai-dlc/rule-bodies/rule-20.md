@@ -3,7 +3,7 @@
 This file is the full text of Rule 20 of `SKILL.md`; the stub in that file is the load pointer. It ships with the skill and is audited as rule prose under the same standard as the stub.
 
 Validation evaluations -- the four sub-skills (`/bmad-party-mode`,
-`/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
+`/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`,
 `/bmad-prd`) **and the native `ai-dlc-adversary-review` convergence
 review** -- MUST be evaluated by **real, independent subagents** -- never
 roleplayed solo in the lead's own context. Independence is the point: a single LLM
@@ -47,8 +47,10 @@ it returns the group menu and starts no party. If a party starts instead, the
 arguments did not arrive.
 
 **(ii) Single-voice (`/bmad-advanced-elicitation`,
-`/bmad-review-adversarial-general`, `/bmad-prd`).** These have no
-internal spawn, so the lead MUST dispatch the invocation to ONE spawned
+`/bmad-review lenses=adversarial`, `/bmad-prd`).** These have no
+internal spawn — `bmad-review` would spawn one subagent per lens where it can, so it is
+invoked with its one lens run inline in the invoking agent's context and no per-lens
+subagent — so the lead MUST dispatch the invocation to ONE spawned
 `adversary` teammate per Rule 28 part -- one in all, unless the subject is
 sharded under Rule 28 "Split dispatch", where it is one per part plus the
 cross-part agent (Rule 19 binding to `.claude/team-roles/adversary.md` --
@@ -76,7 +78,7 @@ axis), or sharded by section or subject part under that clause's sections and su
 the METHOD is `team-roles/adversary.md` itself.
 Procedure: `_gate-procedures.md`, "Adversarial review dispatch".
 **Why it is not a sub-skill:** the bmad review skill demands *at least ten
-findings*, *HALTs on zero*, and emits *no severity or ranking* -- so a loop whose
+findings*, *re-checks rather than stopping on zero*, and emits *no severity or ranking* -- so a loop whose
 exit criteria are a bounded severity residue has no fixed point under it, and the
 skill forbids the very severity fields Check 24 adjudicates. The counts the gate
 reads had no source of truth. bmad remains correct, and still runs, for the

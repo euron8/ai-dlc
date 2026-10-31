@@ -153,10 +153,15 @@ oneshot() {  # <file> [invoked_at artifact [tool_use_id]] -- the real block, fie
                                /^tool_use_id:/ && t != "" { print "tool_use_id: " t; next } { print }' "$BLOCK_SRC"
     else cat "$BLOCK_SRC"; fi; } > "$1"
 }
-residue() {  # <file> <tool_use_id> <artifact> -- the shape bug-investigation.md section 4 prescribes
+residue() {  # <file> <tool_use_id> <artifact> [old] -- the shape bug-investigation.md section 4 prescribes
+  # The current producer writes `skill: bmad-review` with `lens: adversarial`; a 4th argument `old`
+  # writes the pre-rename `skill: bmad-review-adversarial-general` with no lens, the historical shape
+  # the alias must keep accepting (the D3 and D5-cmd-skill arms seed it and sed it away).
+  local sk='skill: bmad-review' ln='lens: adversarial'
+  if [ "${4:-}" = old ]; then sk='skill: bmad-review-adversarial-general'; ln=''; fi
   printf '%s\n' '# Fold architecture disposition' '' \
     '- **No-AD:** CAP-7 — REASON: the fix narrows an existing burn guard; no new boundary.' '' \
-    '<!-- SKILL_INVOCATION_PROVENANCE v1' 'skill: bmad-review-adversarial-general' \
+    '<!-- SKILL_INVOCATION_PROVENANCE v1' "$sk" ${ln:+"$ln"} \
     'invoked_at: 2026-09-24T06:40:02Z' "tool_use_id: $2" 'mode: subagent' \
     'lead_role: bug-investigation.md' "artifact: $3" \
     'findings_critical: 0' 'findings_major: 0' 'findings_minor: 1' \
@@ -300,7 +305,7 @@ PDF="$WORK/probe-df-bad.md"; PDQ="$WORK/probe-df-good.md"
 printf '%s\n' '### 4. Validation' '' '**Direct fold: run the gate arms now.** Run Check 17'"'"'s' \
   '"Bug-fix story readiness gate (bug-investigation)" bullet and its "Fold architecture gate' \
   '(bug-investigation)" bullet: first `scripts/ai-dlc/validate-provenance-block.sh <residue>' \
-  '--require-skill bmad-review-adversarial-general`, then the fold command.' '' '### 5. Next' > "$PDF"
+  '--require-skill bmad-review`, then the fold command.' '' '### 5. Next' > "$PDF"
 printf '%s\n' '`scripts/ai-dlc/validate-spawn-ledger.sh --fold-architect <residue> <one-shot>` (decoy above)' '' \
   '### 4. Validation' '' '**Direct fold: run the gate arms now.** Run Check 17'"'"'s' \
   '"Bug-fix story readiness gate (bug-investigation)" bullet and its' \
@@ -330,9 +335,13 @@ mkworld 313; oneshot "$SLOT/$ONE"; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY"; 
 E2E=1 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF
 expect A-ii 0 "PASS: $ONE -> $RES" "architect dispatch $ARCH_AFTER in S313" 0 "(ii) architect row after the one-shot -> PASS"
 # The residue shape section 4 prescribes is the one the gate's OTHER half accepts.
+bash "$VPB" "$SLOT/$RES" --require-skill bmad-review >/dev/null 2>&1; pbrc=$?
+if [ "$pbrc" -eq 0 ]; then ok "[A-ii-pb] validate-provenance-block.sh --require-skill bmad-review accepts the prescribed residue"
+else bad "[A-ii-pb] validate-provenance-block.sh --require-skill bmad-review accepts the prescribed residue -- rc=$pbrc"; fi
+# The reverse alias direction: a consumer override still pinning the OLD name accepts the current block.
 bash "$VPB" "$SLOT/$RES" --require-skill bmad-review-adversarial-general >/dev/null 2>&1; pbrc=$?
-if [ "$pbrc" -eq 0 ]; then ok "[A-ii-pb] validate-provenance-block.sh --require-skill accepts the prescribed residue"
-else bad "[A-ii-pb] validate-provenance-block.sh --require-skill accepts the prescribed residue -- rc=$pbrc"; fi
+if [ "$pbrc" -eq 0 ]; then ok "[A-ii-pb-old] an old-name pin accepts the current bmad-review + lens: adversarial residue"
+else bad "[A-ii-pb-old] an old-name pin accepts the current bmad-review + lens: adversarial residue -- rc=$pbrc"; fi
 # Default ledger path resolves against the CWD the gate runs in, so drive it from the world root.
 ( cd "$W" && bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" $VARF ) > "$WORK/dl.out" 2>&1; RC=$?
 OUTF="$WORK/dl.out"; FIRST="$(sed -n 1p "$OUTF")"; NPASS=0
@@ -527,7 +536,7 @@ for flag in --ledger --sprint --settings --probe --variant --route --snapshot; d
 done
 
 # --- D3: the retired-pin remedy on a fold residue says the RESIDUE is wrong --------------------
-mkworld 313; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY"
+mkworld 313; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY" old
 sed 's/^skill: bmad-review-adversarial-general$/skill: ai-dlc-adversary-review/' "$SLOT/$RES" > "$WORK/d3.tmp" && mv "$WORK/d3.tmp" "$SLOT/$RES"
 cp "$SLOT/$RES" "$SLOT/story-review-$SLUG.md"
 grep -qx 'skill: ai-dlc-adversary-review' "$SLOT/$RES" || { echo "FIXTURE BROKEN: the D3 seed's skill rewrite did not apply" >&2; exit 1; }
@@ -575,7 +584,9 @@ fold_txt="$(c17_bullet '- **Fold architecture gate (bug-investigation):**' 2>"$W
 bug_txt="$(c17_bullet '- **Bug-fix story readiness gate (bug-investigation):**' 2>"$WORK/nb")"; nbug="$(cat "$WORK/nb")"
 b1=1
 [ "$nfold" = 1 ] && [ "$nbug" = 1 ] || b1=0
-case "$fold_txt" in *"--require-skill"*"bmad-review-adversarial-general"*) : ;; *) b1=0 ;; esac
+# The exact pin, closed by its backtick: the old pin `bmad-review-adversarial-general` carries
+# `bmad-review` as a prefix, so an unclosed match would pass a bullet reverted to the old name.
+case "$fold_txt" in *'--require-skill bmad-review`'*) : ;; *) b1=0 ;; esac
 case "$fold_txt" in *"--fold-architect"*) : ;; *) b1=0 ;; esac
 case "$bug_txt"  in *"--require-skill"*) : ;; *) b1=0 ;; esac
 case "$bug_txt"  in *"--fold-architect"*|*"fold-architecture-"*) b1=0 ;; esac
@@ -699,10 +710,19 @@ if [ "$nfold" != 1 ]; then
   sd "[D5-cmd-fail] stands down: B1 owns a missing or duplicated fold bullet"
   sd "[D5-cmd-skill] stands down: B1 owns a missing or duplicated fold bullet"
 else
+cp "$BWORLD/_bmad-output/planning-artifacts/s313/$RES" "$WORK/d5-res.before"
+cp "$BWORLD/_bmad-output/planning-artifacts/s313/$ONE" "$WORK/d5-one.before"
 run_cmds "$WORK/fold.cmds"
 if [ "$CRC" = 0 ] && cmds_first "PASS: $ONE -> $RES" && cmds_has "the residue's block passes validate-provenance-block.sh"; then
   ok "[D5-cmd-pass] the fold bullet's documented command, executed, PASSES on the correct world"
 else bad "[D5-cmd-pass] the fold bullet's documented command PASSES on the correct world -- commands=$nf worst rc=$CRC"; fi
+# The alias is READ-ONLY: the fold command reads the current-name residue and writes no block. Its
+# PASS above is the positive conjunct; byte-identity of both inputs after it is the reader claim.
+if [ "$CRC" = 0 ] && cmp -s "$WORK/d5-res.before" "$BWORLD/_bmad-output/planning-artifacts/s313/$RES" \
+   && cmp -s "$WORK/d5-one.before" "$BWORLD/_bmad-output/planning-artifacts/s313/$ONE" \
+   && grep -qx 'skill: bmad-review' "$WORK/d5-res.before" && grep -qx 'lens: adversarial' "$WORK/d5-res.before"; then
+  ok "[D5-read-only] the fold command PASSES a bmad-review + lens: adversarial residue and leaves it and the one-shot byte-identical"
+else bad "[D5-read-only] the fold command left its inputs byte-identical after a PASS on the current-name residue -- rc=$CRC"; fi
 rm -f "$BWORLD/_bmad-output/planning-artifacts/s313/$RES"
 run_cmds "$WORK/fold.cmds"
 if [ "$CRC" = 1 ] && cmds_first 'FAIL: no residue' && [ "$(cmds_npass)" = 0 ]; then
@@ -712,14 +732,14 @@ else bad "[D5-cmd-fail] the same command FAILS on the no-residue world -- comman
 # fold bullet documents ONE command, so the refusal can only come from the script's INTERNAL call
 # to validate-provenance-block.sh with its pin -- a dropped pin, or a pin on the wrong file, reads
 # PASS here.
-residue "$BWORLD/_bmad-output/planning-artifacts/s313/$RES" "$ARCH_AFTER" "$STORY"
+residue "$BWORLD/_bmad-output/planning-artifacts/s313/$RES" "$ARCH_AFTER" "$STORY" old
 sed 's/^skill: bmad-review-adversarial-general$/skill: ai-dlc-adversary-review/' "$BWORLD/_bmad-output/planning-artifacts/s313/$RES" > "$WORK/d5s.tmp" \
   && mv "$WORK/d5s.tmp" "$BWORLD/_bmad-output/planning-artifacts/s313/$RES"
 grep -qx 'skill: ai-dlc-adversary-review' "$BWORLD/_bmad-output/planning-artifacts/s313/$RES" \
   || { echo "FIXTURE BROKEN: the D5-cmd-skill seed's skill rewrite did not apply" >&2; exit 1; }
 run_cmds "$WORK/fold.cmds"
 if [ "$nf" = 1 ] && [ "$CRC" = 1 ] && cmds_first "FAIL: residue $RES fails its shape check" \
-   && cmds_has 'bmad-review-adversarial-general was specified, but no block cites it' && [ "$(cmds_npass)" = 0 ]; then
+   && cmds_has '--require-skill bmad-review was specified, but no block cites it' && [ "$(cmds_npass)" = 0 ]; then
   ok "[D5-cmd-skill] the ONE fold command FAILS a residue citing the wrong skill, through its internal shape check"
 else bad "[D5-cmd-skill] the ONE fold command FAILS a residue citing the wrong skill -- commands=$nf worst rc=$CRC"; fi
 fi
@@ -925,7 +945,7 @@ else
 fi
 
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=80
+EXPECTED_ARMS=82
 if [ $((asserted + stood)) -ne "$EXPECTED_ARMS" ]; then
   echo "FIXTURE BROKEN: $((asserted + stood)) arms reported, $EXPECTED_ARMS expected" >&2; exit 1
 fi

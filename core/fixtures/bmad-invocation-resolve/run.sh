@@ -19,6 +19,11 @@
 #       where no leading path character exists and only the trailing separator
 #       distinguishes it
 #   - MUTATION: neutering the load-target resolution turns the dead shim green
+#   - G611: the SHIPPED rulebook (less overrides/ and extensions/) against a BMAD 6.11 skills tree
+#       (deep-recon, review with the adversarial lens, sprint-planning with the readiness gate; the
+#       five removed names absent) PASSES (0); one old slash call restored FAILS (1) naming it; the
+#       old name kept without its `/` PASSES; a review with no adversarial lens and a sprint-planning
+#       with no readiness-gate.md each FAIL (1) with the 6.11.0 floor sentence
 #   - MUTATION: reverting the call-site grammar reds the clean run — and the
 #       dangling-name assertion stays GREEN under it, which is what proves the
 #       grammar narrowed the scan without neutering the check
@@ -169,6 +174,96 @@ mkdir -p "$ROOT/empty-rules"
 bash "$V" --skills-root "$S" --rules-root "$ROOT/empty-rules" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "FAIL-CLOSED: zero enumerated call sites exits 2, not 0" \
              || bad "a rulebook with no /bmad-* call sites did not exit 2 — an empty scan prints the same clean line as a full one"
+
+# --- THE SHIPPED RULEBOOK against a BMAD 6.11+ skills tree (the reference consumer's shape) ---
+# The rulebook is the installed one beside this fixture, copied WITHOUT overrides/ and extensions/:
+# those hold consumer-owned prose this fixture has no standing over (a consumer override can still
+# name a pre-6.11 slash form, which is that consumer's edit to make, not a red on its self-update).
+# The skill set is DERIVED: the shipping validator, pointed at an empty skills root, names every skill
+# the rulebook invokes. Each is stubbed self-contained EXCEPT the five 6.11 removed, which are never
+# stubbed -- a rulebook that still invoked one must go red here, so the arm can fire on its own subject.
+# bmad-review carries the adversarial lens and bmad-sprint-planning the readiness gate, as 6.11 ships them.
+RB=""
+for cand in "$DIR/../../skills/ai-dlc" "$DIR/../../../.claude/skills/ai-dlc"; do
+  [ -d "$cand/steps" ] && RB="$cand" && break
+done
+[ -n "$RB" ] || { echo "run.sh: could not locate the ai-dlc rulebook beside this fixture" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc/"
+OLD5="bmad-market-research bmad-domain-research bmad-technical-research bmad-review-adversarial-general bmad-check-implementation-readiness"
+G="$ROOT/g611"; GS="$G/.claude/skills"; GR="$G/rules"
+mkdir -p "$GS" "$G/empty/.claude/skills"
+cp -R "$RB" "$GR" || { echo "run.sh: could not copy the rulebook" >&2; exit 2; }
+rm -rf "$GR/overrides" "$GR/extensions"
+# The consumer-owned scaffolds beside the core flat files, DERIVED from the layer contract's
+# consumer_*_file keys as process-rule-pins' consumer_owned() derives them, are consumer text too.
+if [ -f "$GR/layer-contract.yaml" ]; then
+  for sc in $(awk '/^consumer_[a-z_]*_file:[ \t]/ { n = split($2, a, "/"); print a[n] }' "$GR/layer-contract.yaml"); do
+    rm -f "$GR/$sc"
+  done
+fi
+gnames="$(bash "$V" --skills-root "$G/empty/.claude/skills" --rules-root "$GR" 2>&1 | grep -o "invokes '/bmad-[a-z0-9-]*'" | sed "s#^invokes '/##; s#'\$##" | sort -u)"
+ng=0; nold=0
+for n in $gnames; do
+  ng=$((ng+1))
+  case " $OLD5 " in *" $n "*) nold=$((nold+1)); continue ;; esac
+  mkdir -p "$GS/$n"
+  printf -- '---\nname: %s\ndescription: self-contained\n---\n\n# %s\n' "$n" "$n" > "$GS/$n/SKILL.md"
+done
+mkdir -p "$GS/bmad-review" "$GS/bmad-sprint-planning/references"
+printf '%s\n' '#   code = "accessibility"' '[[lens]]' 'code = "adversarial"' > "$GS/bmad-review/customize.toml"
+: > "$GS/bmad-sprint-planning/references/readiness-gate.md"
+for n in bmad-deep-recon bmad-review bmad-sprint-planning; do
+  [ -f "$GS/$n/SKILL.md" ] || printf -- '---\nname: %s\n---\n' "$n" > "$GS/$n/SKILL.md"
+done
+# Seed controls: the derivation saw the rulebook (it names all three 6.11 skills), and the tree holds
+# none of the five removed names.
+gok=1
+for n in bmad-deep-recon bmad-review bmad-sprint-planning; do grep -qx "$n" <<<"$gnames" || gok=0; done
+for n in $OLD5; do [ -e "$GS/$n" ] && gok=0; done
+[ "$gok" = 1 ] && [ "$ng" -ge 3 ] && ok "G611 seed: the rulebook invokes $ng skill(s), deep-recon, review and sprint-planning among them; the five removed names are absent from the tree" \
+                                 || bad "G611 seed: derivation gave $ng name(s) [$(echo $gnames)] or a removed name is in the tree"
+rg() { bash "$V" --skills-root "$GS" --rules-root "$1" > "$G/out" 2>&1; echo $?; }
+g=$(rg "$GR")
+[ "$g" -eq 0 ] && [ "$nold" -eq 0 ] && grep -qF 'PASS (' "$G/out" \
+  && ok "G611-clean: the shipped rulebook resolves on a 6.11 tree (rc 0, PASS, 0 removed names invoked)" \
+  || bad "G611-clean: rc=$g, removed names invoked=$nold: $(grep -m1 FAIL "$G/out")"
+# One call site reverted to its pre-6.11 slash form: the readiness gate in architecture.md §3.
+GM="$G/rules-m1"; cp -R "$GR" "$GM"
+sed 's#`/bmad-sprint-planning intent=readiness`#`/bmad-check-implementation-readiness`#' "$GR/steps/architecture.md" > "$GM/steps/architecture.md"
+if cmp -s "$GR/steps/architecture.md" "$GM/steps/architecture.md"; then
+  bad "G611-m1: DID NOT APPLY -- the readiness call site was not found in architecture.md"
+else
+  g=$(rg "$GM")
+  [ "$g" -eq 1 ] && grep -qF "invokes '/bmad-check-implementation-readiness' and no such skill exists" "$G/out" \
+    && grep -qF 'This rulebook requires BMAD Method 6.11.0 or later' "$G/out" \
+    && ok "G611-m1: one old slash call restored -> rc 1 naming bmad-check-implementation-readiness, with the floor" \
+    || bad "G611-m1: an old slash call restored gave rc=$g: $(grep -m1 FAIL "$G/out")"
+fi
+# Near-miss: the same old name kept as HISTORY, without its leading `/`, is not a call site.
+GN="$G/rules-nm"; cp -R "$GR" "$GN"
+sed 's#`/bmad-sprint-planning intent=readiness`#`/bmad-sprint-planning intent=readiness` (formerly bmad-check-implementation-readiness)#' "$GR/steps/architecture.md" > "$GN/steps/architecture.md"
+if cmp -s "$GR/steps/architecture.md" "$GN/steps/architecture.md"; then
+  bad "G611-nm: DID NOT APPLY"
+else
+  g=$(rg "$GN")
+  [ "$g" -eq 0 ] && ok "G611-nm: the old name without its slash (history) stays rc 0" \
+                 || bad "G611-nm: a slash-less historical mention gave rc=$g"
+fi
+# Capability probes: the same tree, one capability removed at a time.
+mv "$GS/bmad-review/customize.toml" "$G/cz.toml"
+printf '%s\n' '#   code = "adversarial"' 'code = "structure"' > "$GS/bmad-review/customize.toml"
+g=$(rg "$GR")
+[ "$g" -eq 1 ] && grep -qF 'this BMAD install has no adversarial lens.' "$G/out" && grep -qF 'This rulebook requires BMAD Method 6.11.0 or later' "$G/out" \
+  && ok "G611-lens: a bmad-review with no adversarial lens (a commented one only) -> rc 1 with the floor" \
+  || bad "G611-lens: a lens-less bmad-review gave rc=$g: $(grep -m1 FAIL "$G/out")"
+mv "$G/cz.toml" "$GS/bmad-review/customize.toml"
+mv "$GS/bmad-sprint-planning/references/readiness-gate.md" "$G/rg.md"
+: > "$GS/bmad-sprint-planning/references/generate-tracking.md"
+g=$(rg "$GR")
+[ "$g" -eq 1 ] && grep -qF 'this BMAD install has no readiness gate.' "$G/out" && grep -qF 'This rulebook requires BMAD Method 6.11.0 or later' "$G/out" \
+  && ok "G611-gate: a sprint-planning with no readiness-gate.md -> rc 1 with the floor" \
+  || bad "G611-gate: a gate-less sprint-planning gave rc=$g: $(grep -m1 FAIL "$G/out")"
+mv "$G/rg.md" "$GS/bmad-sprint-planning/references/readiness-gate.md"
 
 echo
 if [ "$rc" -eq 0 ]; then echo "bmad-invocation-resolve: PASS"; else echo "bmad-invocation-resolve: FAILED" >&2; fi
