@@ -89,6 +89,7 @@
 # MUTANT-MATRIX scope-dropped decides=gp twins=cited
 # MUTANT-MATRIX nomissing decides=gap twins=full,group,zpad
 # MUTANT-MATRIX predfail decides=gap twins=full,group,zpad
+# MUTANT-MATRIX notrunc decides=sfxp,sfxs twins=sfxgap,plain
 # MUTANT-MATRIX nocover decides=r15r twins=- why=its drive has one cell (is 15r denied though the predicate ran), and deleting the ledger-coverage path flips it
 # MUTANT-MATRIX-DYNAMIC queue_run why=the cap and adjudicator mutants are registered by name and judged in one loop per family; every name it produces carries its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-DYNAMIC fam_mut why=the vector-family helpers pass the mutant name as a variable; every name they produce carries its own MUTANT-MATRIX row above
@@ -1167,6 +1168,48 @@ xv_mut nomissing '  return cv_out' '  return ""' "$XV_GAP_ALLOWED" \
 # (ii) the predicate failing (nonzero rc, no output) FAILS OPEN: the gap is allowed with its row.
 xv_mut predfail '  return cv_out' '  exit 3' "$XV_GAP_ALLOWED" \
   "a predicate that cannot run allows (fail open), never denies a full cover -- cell gap alone moves"
+
+# --- THE COVER DENY READS ONLY THE ORDINAL LIST: A PROSE SUFFIX IS IGNORED (BL-887) -------------
+# The list is the longest leading run of digits, commas, blanks and tabs after `g1/1 `. A complete
+# list followed by either suffix shape a consumer ledger recorded (` (...)`, `. Step ...`) is
+# ALLOWED: no deny AND exactly one appended row whose `.shard` is the canonical value, suffix
+# included. The gap twin (ordinal 8 dropped, same suffix) is DENIED naming 8, and plain is the
+# unsuffixed complete list, so a reader that refuses or accepts every suffixed line cannot pass.
+XS_P='shard: cross/8 g1/1 1,2,3,4,5,6,7,8 (you are the ONE cross QA for this pass)'
+XS_S='shard: cross/8 g1/1 1,2,3,4,5,6,7,8. Step test-strategy-p3. Brief: cross QA'
+XS_G='shard: cross/8 g1/1 1,2,3,4,5,6,7 (you are the ONE cross QA for this pass)'
+XS_N='shard: cross/8 g1/1 1,2,3,4,5,6,7,8'
+xs_cell() { # xs_cell <guard> <cell> -> that cell's "decision:rows:shard" value
+  case "$2" in
+    sfxp) dcell "$1" remediator "$XS_P" ;; sfxs) dcell "$1" remediator "$XS_S" ;;
+    sfxgap) dcell "$1" remediator "$XS_G" ;; plain) dcell "$1" remediator "$XS_N" ;;
+  esac
+}
+XS_WANT="sfxp=allow:1:${XS_P#shard: };sfxs=allow:1:${XS_S#shard: };sfxgap=deny:0:-;plain=allow:1:${XS_N#shard: }"
+# The gap cell runs ONCE, unwrapped, so its DOUT survives for the reason check.
+dcell "$HOOK" remediator "$XS_G" >/dev/null
+_xsgap="$DCELL"; _xsrs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$DOUT" 2>/dev/null)"
+XS_TIP="sfxp=$(xs_cell "$HOOK" sfxp);sfxs=$(xs_cell "$HOOK" sfxs);sfxgap=$_xsgap;plain=$(xs_cell "$HOOK" plain)"
+_old_ifs="$IFS"; IFS=';'
+for _c in $XS_WANT; do
+  case ";$XS_TIP;" in
+    *";$_c;"*) ok "COVER SUFFIX ${_c%%=*}: '${_c#*=}' (decision:rows added:shard)" ;;
+    *) bad "COVER SUFFIX ${_c%%=*}: expected '${_c#*=}', got vector '$XS_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+case "$_xsrs" in *"omits part(s) 8 of 1..8"*) ok "COVER SUFFIX deny reason names the missing ordinal: 'omits part(s) 8 of 1..8'" ;;
+  *) bad "COVER SUFFIX deny reason does not name ordinal 8 alone: '$(printf '%s' "$_xsrs" | cut -c1-200)'" ;; esac
+ALL_XS=sfxp,sfxs,sfxgap,plain; SEP_XS=";"; CELLFN_XS=xs_cell; BASE_XS="$(want_lines ';' "$XS_WANT")"
+B_XS=$([ "$XS_TIP" = "$XS_WANT" ] && echo 1 || echo 0)
+# MUTANT: the truncation line deleted, so the whole remainder is split on commas and the suffix is a
+# bad token. The complete+suffix cells are denied; the gap stays denied and plain stays allowed.
+if [ -n "$XV_CTL" ]; then
+  fam_control XS "$XV_CTL" sfxp "COVER SUFFIX MUTANT CONTROL: an unmutated hooks copy scores the suffix cell sfxp (positive; every cell under --matrix)"
+else bad "COVER SUFFIX MUTANT CONTROL is dead: no hooks copy"; fi
+fam_mut XS notrunc '  match(cv_l, /^[0-9, \t]*/); cv_l = substr(cv_l, 1, RLENGTH)' '' sfxp,sfxs sfxgap,plain "$B_XS" \
+  "sfxp=deny:0:-;sfxs=deny:0:-;sfxgap=deny:0:-;plain=allow:1:${XS_N#shard: }" \
+  "COVER MUTANT notrunc scores a kill: a guard that splits the whole remainder denies the complete one-cross brief carrying a suffix -- cells sfxp and sfxs catch it"
 
 # --- THE MARK LINE: A BRIEF WHOSE `--mark` THE ENGINE WILL REFUSE IS DENIED; A RENDERED ONE IS RECORDED ---
 # dg_mark_scan is the one predicate. Each cell is `<decision>:<rows written>:<mark field>`, the

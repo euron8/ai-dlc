@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.974.0] - 2026-10-31
+
+Batch b247. The Check 22 shard-ordinal parser ignores a prose suffix after the list (BL-887), and a Check 22 waiver is owned by the entry it names (BL-889).
+
+### The S4 / cover-deny ordinal list ignores a prose suffix (BL-887)
+
+`cover_missing`, defined byte-identically in `core/scripts/validate-spawn-ledger.sh` and `core/hooks/ai-dlc-dispatch-guard.sh` (invariant I56), split everything after `cross/<K> g1/1 ` on commas, so any prose after the ordinal list, as in `cross/8 g1/1 1,2,3,4,5,6,7,8 — all sections`, made it report every ordinal 1..K missing. The ordinal list is now the longest leading run of digits, commas, blanks and tabs, and anything after it is ignored. An empty list, a gap, an empty token, a trailing comma before the suffix and a digit-led suffix are still refused. A suffix glued to the last ordinal (`1,2,3rd`) is now accepted.
+
+BL-842's S320 census is corrected: its four S4 rows were false refusals, because each ledger row listed every section and the parser was wrong. Of graph's 25 `cross/N g1/1` rows, all are complete lists. graph's four 10-27 refusals came from the inline S4 parser in the 0.952.0 validator (graph's sprint-320 install read 0.952.0), so the defect is live from 0.952.0 on. The function name `cover_missing` dates from 0.967.0, and the 0.967.0 COVER DENY falsely denies a complete suffixed list at dispatch time for every consumer on 0.967.0 or later. The COVER DENY reached graph main at 0.969.0 in 72e1cd749 (2026-10-29 13:01 -0400), after the 10-27 refusals. Receipt: `core/fixtures/check-22-spawn-ledger/receipt-bl887.sh`.
+
+### A Check 22 waiver is owned by the entry it names, and an OVERRIDDEN entry stands down under a sibling's waiver (BL-889)
+
+C1. In `core/scripts/validate-suppression-lifetime.sh`, the expiry arm no longer fires on a latest `FAIL_WAIVED` row whose `waiver_id` differs from the entry's own key, so an expired S305 SUPPRESSED entry stops re-firing because of an unrelated S320 waiver. A plain `FAIL` and an own-entry `FAIL_WAIVED` still fire.
+
+C2. The operator ruling of 2026-10-31, "Reverse it for OVERRIDDEN", reverses BL-825's exact-match clause for OVERRIDDEN entries. An OVERRIDDEN entry naming check N now stands down when N's latest row is `FAIL_WAIVED` and the row's `waiver_id` resolves to an OVERRIDDEN entry, or to a SUPPRESSED entry whose target matches, archived entries included. A SUPPRESSED waiver that C2 resolves through must itself be within its lifetime, and one whose lifetime cannot be read acquits nothing. RESOLVED entries keep the exact-match rule unchanged. A pre-pass builds the key table so the answer does not depend on entry order.
+
+Finding about the consumer, phrased as no instruction: under C1, graph main's suppression-lifetime baseline line `EXPIRED:22` no longer reproduces, and the validator reports `baselined key no longer reproduces: EXPIRED:22`. Beside it, the baseline line `TERMINAL:##story-3.1[lead]-2026-08-26T02:50:00Z` was already stale at base and is not caused by this release.
+
+C2 rehearsal, read-only on graph history: OVERRIDDEN entries naming a still-failing terminal check go from 2 to 0 at graph 24c482244 and at 94d5ecb6c, and stay 3 at 1a3b62e61, whose `waiver_id` is a bare tag that names no entry. Receipt: `core/fixtures/suppression-lifetime/receipt-bl889.sh`.
+
 ## [0.973.0] - 2026-10-31
 
 Batch b247. The rule-file audit stops reporting pointer lines and the core files state their rules in the present tense (BL-888), closing the consumer's PC-S320-RULE-FILE-AUDIT-36-NARRATIVE-DRIFT-FINDINGS-ALL-IN-CORE-FILES.

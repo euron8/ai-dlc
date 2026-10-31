@@ -402,6 +402,55 @@ printf '## %s\n**Status:** DECIDED_AUTONOMOUSLY\n\nUnrelated.\n' "$W_DEC" > "$f"
 printf '# Escalation archive\n\n## %s\n**Status:** OVERRIDDEN\n**Operator authorization:** 2026-04-01T00:00:00Z | "Override, proceed, file backlog item"\n' "$W_ARCH" \
   > "$WORK/cases/waiver-archived/pending-archive.md"
 
+# ---- WHOSE WAIVER IS IT (C1, C2) --------------------------------------------
+# Every timeline below names ONE waiver id, W_C2W, whose header names no check, so the only entry
+# a terminal message can be about is the one the case names Check 32 in. The cases give that id a
+# different entry, status or home each time.
+W_C2W="[S400 gate — the operator waiver for the spawn rows] [lead] - ${A0}"
+GM_W_C2="$WORK/gm-waived-c2.jsonl"; gm_waived "$GM_W_C2" "$W_C2W" unspaced
+# The own-entry stand-down subject: a RESOLVED entry whose own header is the row id, written with
+# a TRAILING BLANK in the row, so only a stripped compare joins them. RESOLVED, so no OVERRIDDEN
+# resolution can stand it down instead.
+W_SD="[S400 gate — closed by its own waiver] [lead] - ${A0}"
+GM_W_SD="$WORK/gm-waived-sd.jsonl"; gm_waived "$GM_W_SD" "$W_SD " spaced
+c2_ovr()  { printf '## %s\n**Status:** OVERRIDDEN\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nThe spawn rows were waived; output verified.\n\n' "$W_C2W" "$A0"; }
+c2_res()  { printf '## %s\n**Status:** RESOLVED\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nClosed as answered.\n\n' "$W_C2W" "$A0"; }
+c2_sup()  { printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] %s — target\n**Expires after:** %s gates\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\n' "$W_C2W" "$1" "${2:-3}" "$A0"; }
+c2_name() { printf '## [S400 gate — a second override] [lead] - %s\n**Status:** OVERRIDDEN\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nCheck 32 failed again on another spawn row; output verified.\n\n' "$A0" "$A0"; }
+c1_exp()  { printf '## [S305 gate — an old suppression] [lead] - %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — bmad-invocation-resolves\n**Expires after:** 1 gates\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\n' "$A0" "$A0"; }
+# C1: an expired suppression of 32 while 32 is FAIL_WAIVED under ANOTHER entry (resolving, or not).
+f="$(mkcase c1-other-waiver)";  { c1_exp; c2_ovr; } > "$f"
+f="$(mkcase c1-unresolvable)";  c1_exp > "$f"
+printf 'EXPIRED:32\n' > "$WORK/baseline-expired32.txt"
+# C2: a second OVERRIDDEN entry naming 32, its waiver above and below it, archived, a SUPPRESSED
+# waiver of 32; then the waivers that must NOT stand it down.
+f="$(mkcase c2-waiver-above)";  { c2_ovr; c2_name; } > "$f"
+f="$(mkcase c2-waiver-below)";  { c2_name; c2_ovr; } > "$f"
+f="$(mkcase c2-archived)";      c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_ovr; } > "$WORK/cases/c2-archived/pending-archive.md"
+f="$(mkcase c2-suppressed-32)"; { c2_name; c2_sup 32; } > "$f"
+f="$(mkcase c2-unresolvable)";  c2_name > "$f"
+# N5: the row's waiver is an ARCHIVED SUPPRESSED entry targeting [core] 32 whose own one-gate lifetime
+# has run out (three gates recorded since its authorization). An expired suppression acquits nothing.
+f="$(mkcase c2-archived-expired)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 1; } > "$WORK/cases/c2-archived-expired/pending-archive.md"
+# The archived SUPPRESSED waiver of 32 STILL INSIDE its three-gate lifetime (three gates recorded,
+# not past three): the case the ruling says acquits. Separates the lifetime clause from a source
+# test (live file only), which every other C2 world agrees with.
+f="$(mkcase c2-archived-inforce)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 3; } > "$WORK/cases/c2-archived-inforce/pending-archive.md"
+# The archived SUPPRESSED waiver of 32 whose lifetime CANNOT BE READ: no **Expires after:** line in
+# one, no authorization timestamp in the other. Unreadable is expired, so both fire; without the
+# fail-closed guard the lifetime test errors and the waiver acquits.
+f="$(mkcase c2-archived-noexpiry)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 3 | grep -v '^\*\*Expires after:\*\*'; } > "$WORK/cases/c2-archived-noexpiry/pending-archive.md"
+f="$(mkcase c2-archived-nots)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 3 | sed 's/^\*\*Operator authorization:\*\* [^ ]* |/**Operator authorization:** at the gate |/'; } > "$WORK/cases/c2-archived-nots/pending-archive.md"
+f="$(mkcase c2-resolved)";      { c2_name; c2_res; } > "$f"
+f="$(mkcase c2-mistargeted)";   { c2_name; c2_sup 16; } > "$f"
+f="$(mkcase own-standdown)"
+printf '## %s\n**Status:** RESOLVED\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nThe gate failed Check 32 and this entry waived it.\n' "$W_SD" "$A0" > "$f"
+
 # ---- THE CWD WORLDS --------------------------------------------------------
 # The metrics file is the ONE input this script locates for itself, and it is located while
 # the process cwd is whatever the caller happened to be in. `ai-dlc-gate-remediation-guard.sh`
@@ -480,6 +529,9 @@ GM_W_NONE="$GM_W_NONE"
 GM_W_DEC="$GM_W_DEC"
 GM_W_ARCH="$GM_W_ARCH"
 GM_W_EMPTY="$GM_W_EMPTY"
+GM_W_C2="$GM_W_C2"
+GM_W_SD="$GM_W_SD"
+BASELINE_EXP32="$WORK/baseline-expired32.txt"
 G1="$G1"
 G2="$G2"
 G3="$G3"
