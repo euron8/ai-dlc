@@ -107,7 +107,11 @@
 #   - The terminal arm stands down when Check N's latest row is FAIL_WAIVED and:
 #       RESOLVED   -- the row's `waiver_id`, stripped, equals THIS entry's key. Nothing else.
 #       OVERRIDDEN -- that, OR the id resolves to an OVERRIDDEN entry, OR to a SUPPRESSED entry
-#                     whose target is (catalog, N) by section 6c's target test. An OVERRIDDEN
+#                     whose target is (catalog, N) by section 6c's target test AND which is
+#                     within its own lifetime by the expiry arm's predicate, sl_past_lifetime --
+#                     whether it sits in this file or in the archive. An expired suppression
+#                     acquits nothing, and section 6c only NOTEs an archived id, so without
+#                     this an archived expired suppression would acquit forever. An OVERRIDDEN
 #                     entry naming a check another operator waiver already owns is not closing
 #                     a red check behind the operator's back (operator ruling, reversing the
 #                     exact-match-only rule for OVERRIDDEN).
@@ -526,18 +530,20 @@ waived_latest() {
   ' "$GATE_METRICS" | sort
 }
 
-# sl_lookup <waiver-id> -> 0 and LK_STATUS LK_SUPPCAT LK_SUPP LK_SRC (P or A) set from the FIRST
-# pre-pass table row whose key equals the id; 1, all four empty, when none does. The id must
-# already be stripped. An empty id resolves to nothing, never to a blank table line. Through
-# ENVIRON, never `-v`, which strips a level of backslash escaping from a free-text header.
-LK_STATUS=""; LK_SUPPCAT=""; LK_SUPP=""; LK_SRC=""
+# sl_lookup <waiver-id> -> 0 and LK_STATUS LK_SUPPCAT LK_SUPP LK_SRC (P or A) LK_EXPIRES LK_AUTHTS
+# set from the FIRST pre-pass table row whose key equals the id; 1, all six empty, when none does.
+# The id must already be stripped. An empty id resolves to nothing, never to a blank table line.
+# Through ENVIRON, never `-v`, which strips a level of backslash escaping from a free-text header.
+# LK_EXPIRES and LK_AUTHTS carry the lifetime, so a SUPPRESSED waiver the terminal arm resolves
+# through is judged by sl_past_lifetime exactly as the expiry arm judges a live one.
+LK_STATUS=""; LK_SUPPCAT=""; LK_SUPP=""; LK_SRC=""; LK_EXPIRES=""; LK_AUTHTS=""
 sl_lookup() {
   local r
-  LK_STATUS=""; LK_SUPPCAT=""; LK_SUPP=""; LK_SRC=""
+  LK_STATUS=""; LK_SUPPCAT=""; LK_SUPP=""; LK_SRC=""; LK_EXPIRES=""; LK_AUTHTS=""
   [ -n "$1" ] || return 1
-  r="$(K="$1" awk -F "$US" '$9 != "" && $9 == ENVIRON["K"] { print $2 FS $7 FS $3 FS $10; exit }' <<<"$SL_TABLE")"
+  r="$(K="$1" awk -F "$US" '$9 != "" && $9 == ENVIRON["K"] { print $2 FS $7 FS $3 FS $10 FS $4 FS $5; exit }' <<<"$SL_TABLE")"
   [ -n "$r" ] || return 1
-  IFS="$US" read -r LK_STATUS LK_SUPPCAT LK_SUPP LK_SRC <<<"$r"
+  IFS="$US" read -r LK_STATUS LK_SUPPCAT LK_SUPP LK_SRC LK_EXPIRES LK_AUTHTS <<<"$r"
   return 0
 }
 
@@ -546,6 +552,17 @@ gates_since() {
   local since="$1"
   [ -n "$GATE_TS" ] || { printf '0\n'; return 0; }
   awk -v s="$since" '$0 > s {n++} END {print n+0}' <<<"$GATE_TS"
+}
+
+# sl_past_lifetime <authts> <expires> -> 0 when the suppression authorized at <authts> has had
+# more than <expires> gates recorded since, with SL_ELAPSED set to that count. THE ONE expiry
+# predicate: the expiry arm asks it of a live SUPPRESSED entry, and the terminal arm asks it of a
+# SUPPRESSED waiver it resolves through, live or archived. A waiver whose lifetime cannot be read
+# (no expiry or no authorization timestamp) is never asked: the caller treats it as expired.
+SL_ELAPSED=0
+sl_past_lifetime() {
+  SL_ELAPSED="$(gates_since "$1")"
+  [ "$SL_ELAPSED" -gt "$2" ]
 }
 
 # ---- 5. Baseline -----------------------------------------------------------
@@ -679,12 +696,12 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
         echo "      so elapsed gates cannot be counted. Shape was checked; lifetime was not." >&2
         continue
       fi
-      elapsed="$(gates_since "$authts")"
       vrow="$(latest_verdict "$supp" "$suppcat")"
       verdict="${vrow%%$'\t'*}"
       vts="${vrow#*$'\t'}"; vts="${vts%%$'\t'*}"
       vwid="${vrow##*$'\t'}"; vwid="${vwid%"${vwid##*[![:space:]]}"}"
-      if [ "$elapsed" -gt "$expires" ]; then
+      if sl_past_lifetime "$authts" "$expires"; then
+        elapsed="$SL_ELAPSED"
         # FAIL_WAIVED is still failing for THIS entry only when THIS entry is the waiver the row
         # names, so a SUPPRESSED waiver expires on this same lifetime. A row waived by another id
         # is that waiver's failure, judged in section 6c (header, "THE WAIVED VERDICT").
@@ -742,11 +759,14 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
           # Both statuses: this entry IS the waiver the row names.
           if [ -n "$tw" ] && [ "$tw" = "$wkey" ]; then continue; fi
           # OVERRIDDEN only: the id resolves, in the pre-pass table, to another OVERRIDDEN entry
-          # or to a SUPPRESSED entry whose target is (core, this check) by section 6c's test.
+          # or to a SUPPRESSED entry whose target is (core, this check) by section 6c's test AND
+          # which is within its own lifetime by the expiry arm's predicate. An expired suppression,
+          # live or archived, acquits nothing; one whose lifetime cannot be read is expired.
           if [ "$status" = OVERRIDDEN ] && sl_lookup "$tw"; then
             case "$LK_STATUS" in
               OVERRIDDEN) continue ;;
-              SUPPRESSED) if [ "$LK_SUPP" = "$id" ] && [ "${LK_SUPPCAT:-core}" = core ]; then continue; fi ;;
+              SUPPRESSED) if [ "$LK_SUPP" = "$id" ] && [ "${LK_SUPPCAT:-core}" = core ] \
+                             && [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ] && ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;
             esac
           fi
         fi

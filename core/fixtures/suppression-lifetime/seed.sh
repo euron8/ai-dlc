@@ -415,7 +415,7 @@ W_SD="[S400 gate — closed by its own waiver] [lead] - ${A0}"
 GM_W_SD="$WORK/gm-waived-sd.jsonl"; gm_waived "$GM_W_SD" "$W_SD " spaced
 c2_ovr()  { printf '## %s\n**Status:** OVERRIDDEN\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nThe spawn rows were waived; output verified.\n\n' "$W_C2W" "$A0"; }
 c2_res()  { printf '## %s\n**Status:** RESOLVED\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nClosed as answered.\n\n' "$W_C2W" "$A0"; }
-c2_sup()  { printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] %s — target\n**Expires after:** 3 gates\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\n' "$W_C2W" "$1" "$A0"; }
+c2_sup()  { printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] %s — target\n**Expires after:** %s gates\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\n' "$W_C2W" "$1" "${2:-3}" "$A0"; }
 c2_name() { printf '## [S400 gate — a second override] [lead] - %s\n**Status:** OVERRIDDEN\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nCheck 32 failed again on another spawn row; output verified.\n\n' "$A0" "$A0"; }
 c1_exp()  { printf '## [S305 gate — an old suppression] [lead] - %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — bmad-invocation-resolves\n**Expires after:** 1 gates\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\n' "$A0" "$A0"; }
 # C1: an expired suppression of 32 while 32 is FAIL_WAIVED under ANOTHER entry (resolving, or not).
@@ -430,6 +430,10 @@ f="$(mkcase c2-archived)";      c2_name > "$f"
 { printf '# Escalation archive\n\n'; c2_ovr; } > "$WORK/cases/c2-archived/pending-archive.md"
 f="$(mkcase c2-suppressed-32)"; { c2_name; c2_sup 32; } > "$f"
 f="$(mkcase c2-unresolvable)";  c2_name > "$f"
+# N5: the row's waiver is an ARCHIVED SUPPRESSED entry targeting [core] 32 whose own one-gate lifetime
+# has run out (three gates recorded since its authorization). An expired suppression acquits nothing.
+f="$(mkcase c2-archived-expired)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 1; } > "$WORK/cases/c2-archived-expired/pending-archive.md"
 f="$(mkcase c2-resolved)";      { c2_name; c2_res; } > "$f"
 f="$(mkcase c2-mistargeted)";   { c2_name; c2_sup 16; } > "$f"
 f="$(mkcase own-standdown)"

@@ -42,9 +42,10 @@
 # d_identity_lines_deleted and e_identity_nonce also trip cand in the measured matrix (the candidate-walk identity reads the same block).
 # f_attempt_demoted also trips att20 in the measured matrix (the RESOLVED branch world).
 # i_join_guard_removed also trips s16, s17 and t18b in the measured matrix (a dropped catalog join moves every join world; s14 is the one it targets).
-# w_resolve also trips w7, c1u and c2a in the measured matrix (each world reaches the skipped resolution).
+# w_resolve also trips w7, c1u, c2a and c2x in the measured matrix (each world reaches the skipped resolution).
 # w_overridden also trips c1, c2ab and c2ba in the measured matrix (each carries an OVERRIDDEN waiver 6c reads).
-# c2_noprepass also trips w7, c2a and c2s in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass).
+# c2_noprepass also trips w7, c2a, c2s and c2x in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass).
+# c2_any also trips c2x in the measured matrix (any FAIL_WAIVED stands down, so the expired archived suppression does too).
 # MUTANT-MATRIX k_ts_dropped decides=t18a twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
 # MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
@@ -75,6 +76,7 @@
 # MUTANT-MATRIX c2_any decides=c2u,c2r,c2m twins=c2ab
 # MUTANT-MATRIX c2_resolved decides=w2 twins=c2u
 # MUTANT-MATRIX c2_noprepass decides=c2ba twins=c2ab
+# MUTANT-MATRIX c2_nolife decides=c2x twins=c2s
 # MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
 set -uo pipefail
@@ -213,6 +215,7 @@ drive_run() { # <validator path> <drive> -> O E RC X
     c2ba)    c=c2-waiver-below; gm="$GM_W_C2" ;;
     c2a)     c=c2-archived; gm="$GM_W_C2" ;;
     c2s)     c=c2-suppressed-32; gm="$GM_W_C2" ;;
+    c2x)     c=c2-archived-expired; gm="$GM_W_C2" ;;
     c2u)     c=c2-unresolvable; gm="$GM_W_C2" ;;
     c2r)     c=c2-resolved; gm="$GM_W_C2" ;;
     c2m)     c=c2-mistargeted; gm="$GM_W_C2" ;;
@@ -436,12 +439,13 @@ ar_c2ab() { dv "$1" c2ab; ! hasF 'recorded FAILING' && hasF 'terminal_naming_che
 ar_c2ba() { dv "$1" c2ba; ! hasF 'recorded FAILING' && hasF 'terminal_naming_check=0 ' && w_quiet 1; }
 ar_c2a()  { dv "$1" c2a;  ! hasF 'recorded FAILING' && has 'names an entry archived' && w_quiet 1; }
 ar_c2s()  { dv "$1" c2s;  ! hasF 'recorded FAILING' && hasF 'suppressed=1 ' && w_quiet 1; }
+ar_c2x()  { dv "$1" c2x;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
 ar_c2u()  { dv "$1" c2u;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_c2r()  { dv "$1" c2r;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_c2m()  { dv "$1" c2m;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_wsd()  { dv "$1" wsd;  ! hasF 'recorded FAILING' && has 'neither OVERRIDDEN nor SUPPRESSED'; }
 
-ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2u c2r c2m wsd"
+ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2u c2r c2m wsd"
 
 reg() { printf -v "OK_$1" '%s' "$2"; printf -v "BAD_$1" '%s' "$3"; }
 reg s1 "a SUPPRESSED entry inside its lifetime does not fire (exit 0)" "in-force suppression FAILED — the arm has no green state and would wedge every gate"
@@ -520,6 +524,7 @@ reg c2ab "C2: a second OVERRIDDEN entry naming 32 is quiet when the row's OVERRI
 reg c2ba "C2: the same, with the waiver BELOW it -- resolution reads the pre-pass table, not the entries so far" "C2: the second OVERRIDDEN entry fired with its waiver below it -- resolved against the entries read so far"
 reg c2a "C2: the same, with the OVERRIDDEN waiver archived to pending-archive.md" "C2: an archived OVERRIDDEN waiver did not stand the naming entry down"
 reg c2s "C2: an OVERRIDDEN entry naming 32 is quiet when 32 is waived by a SUPPRESSED entry targeting [core] 32" "C2: a matching SUPPRESSED waiver did not stand the OVERRIDDEN entry down"
+reg c2x "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an ARCHIVED SUPPRESSED entry of 32 past its own lifetime" "C2: an expired archived suppression stood an OVERRIDDEN entry down -- its lifetime was never checked"
 reg c2u "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver resolves nowhere" "C2: an unresolvable waiver stood an OVERRIDDEN entry down"
 reg c2r "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a RESOLVED entry" "C2: a RESOLVED waiver stood an OVERRIDDEN entry down"
 reg c2m "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a SUPPRESSED entry of another check" "C2: a mis-targeted SUPPRESSED waiver stood an OVERRIDDEN entry down"
@@ -767,6 +772,9 @@ build_c2_noprepass() {
     '  short="$(printf '"'"'%s'"'"' "$header" | cut -c1-92)"; SL_TABLE="${SL_TABLE}${header}$US${status}$US${supp}$US$US$US$US${suppcat}$US$US${wkey}${US}P
 "'
 }
+# c2_nolife: C2 resolves through a SUPPRESSED waiver without asking its lifetime (tip adversary N5).
+SL_C2L='&& [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ] && ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;'
+build_c2_nolife() { mk_sub "$1" "$SL_C2L" '; then continue; fi ;;'; }
 build_w_overridden() { mk_sub "$1" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; }
 
 # ===== mutants =====================================================================================
@@ -822,6 +830,7 @@ defm c2_exact c2ab,c2ba,c2a,c2s c2u
 defm c2_any c2u,c2r,c2m c2ab
 defm c2_resolved w2 c2u
 defm c2_noprepass c2ba c2ab
+defm c2_nolife c2x c2s
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
 # The unmutated control: a lone copy. This validator resolves no sibling beside itself and its root by
