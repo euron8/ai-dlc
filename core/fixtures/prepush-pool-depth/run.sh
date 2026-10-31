@@ -50,7 +50,8 @@
 # MUTANT-MATRIX td-no-stop decides=td_term,td_queue twins=td_rc
 # MUTANT-MATRIX td-plain-amp decides=td_term,td_int,td_intp twins=td_queue
 # MUTANT-MATRIX td-no-pgid decides=td_decoy twins=td_term
-# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the twenty-four literal callers (mutant, pn_eval, td_eval and the I66 arm) has its own row above
+# MUTANT-MATRIX ps-rewait decides=ps_sig twins=ps_exit
+# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the twenty-five literal callers (mutant, pn_eval, td_eval, the I66 arm and the pool_stop arm) has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
 #
 # The matrix is re-measured whenever an arm or a mutant is added or changed, with the command above, run
@@ -81,6 +82,13 @@ asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-pool-depth: FIXTURE BROKEN" >&2; exit 2; }
+# SIGINT IGNORED ON ENTRY IS A REFUSAL, NOT A RED. A plain `&` from a non-interactive shell starts this
+# fixture with SIGINT ignored, every drive inherits that, and bash cannot re-enable a signal ignored at
+# entry: the hook's `trap 'pool_stop 130' INT` and the workers' `trap pool_abort INT` never fire, so the
+# INT cells (td_int, td_intp) and the mutants they score read red against a correct hook. Setting a trap
+# on an ignored-at-entry signal silently does nothing, so `trap -p INT` then reads empty.
+trap ':' INT; _ti="$(trap -p INT)"; trap - INT
+[ -n "$_ti" ] || { echo "prepush-pool-depth: FIXTURE BROKEN: launched with SIGINT ignored (a plain & from a non-interactive shell); its INT cells cannot fire. Run it in the foreground or under set -m." >&2; exit 2; }
 MUT_LIB="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $0" >&2; exit 2; }
 . "$MUT_LIB"
@@ -918,6 +926,59 @@ td_eval td-no-stop '/^    \[ -f "\$AI_DLC_FX_OUT\/.pr\/.stop" \] && { : > "\$pr.
 td_eval td-plain-amp '/^  set -m$/{N;s/^  set -m\n  { PREPUSH_POOL_DEPTH=/  { PREPUSH_POOL_DEPTH=/;}' 5
 # the pgid guard removed: pool_stop TERMs every recorded pid, the planted stale record included
 td_eval td-no-pgid "s/^      \[ \"\$(ps -o pgid= -p \"\$p\" 2>\/dev\/null | tr -d ' ')\" = \"\$pool_xp\" \] && kill -TERM/      kill -TERM/"
+
+# ------------------------------------------------- pool_stop waits for xargs ONCE (BL-881) ---------
+# pool_stop has set INT/TERM/HUP to '' before it waits, so a status above 128 can only mean xargs itself died
+# by a signal, and bash 3.2 answers a second wait on that reaped pid with the SAME status, never 127. A
+# re-wait loop keyed on "> 128" therefore spins forever with nothing able to stop it. The block's own
+# pool_stop text is driven in a subshell whose pool_xp is a child that dies by a signal or by an exit; the
+# subshell is KILLed by its recorded pid if it has not exited within PS_CEIL seconds.
+#   ps_sig  -- pool_xp died by SIGKILL (the defect needs only a death by signal; KILL because a fixture can be
+#              launched with SIGPIPE or TERM ignored, and a bash child sending itself an ignored signal
+#              lives on and exits 0, measured on bash 3.2): "exited:<rc>" or
+#              "spun" (want exited:130)
+#   ps_exit -- pool_xp exited 1, the twin: a re-wait loop ends here too (want exited:130)
+PS_CEIL=3
+ps_drive() { # ps_drive <block> <sig|exit> -> exited:<rc> | spun | nofn
+  local d p s
+  d="$(mktemp -d "$WORK/ps.XXXXXX")" && mkdir -p "$d/.pr" || { printf 'nodir'; return 0; }
+  sed -n '/^pool_stop() {/,/^}/p' "$1" > "$d/fn"
+  [ -s "$d/fn" ] || { printf 'nofn'; return 0; }
+  # pool_xp is launched under `set -m`, mirroring how the hook launches xargs (a re-wait on bash 3.2 reads
+  # the same status again with or without it)
+  ( . "$d/fn"; out="$d"; set -m
+    if [ "$2" = sig ]; then { exec bash -c 'kill -KILL $$'; } & else { exec bash -c 'exit 1'; } & fi
+    pool_xp=$!; set +m; pool_stop 130 ) > /dev/null 2>&1 &
+  p=$!
+  s=$SECONDS
+  while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$PS_CEIL" ]; do sleep 0.1; done
+  if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null; wait "$p" 2>/dev/null; printf 'spun'
+  else wait "$p"; printf 'exited:%s' "$?"; fi
+}
+PS_WANT=exited:130
+# the children are `bash`, never `sh`: tools.decl does not declare sh, so under the hermetic sandbox an
+# `exec sh` exits 127 and the signal world silently becomes a second exit world
+ps_fix_sig="$(ps_drive "$PB" sig)"; ps_fix_exit="$(ps_drive "$PB" exit)"
+B_ps=1
+for _c in sig exit; do
+  eval "v=\$ps_fix_$_c"
+  if [ "$v" = "$PS_WANT" ]; then ok "[$T] pool_stop ps_$_c=$v"
+  else bad "[$T] pool_stop ps_$_c read [$v], want [$PS_WANT]"; B_ps=0; fi
+done
+PS_M="$WORK/ps.mut.sh"
+sed 's/^    wait "\$pool_xp"$/    while :; do wait "$pool_xp"; [ "$?" -gt 128 ] || break; done/' "$PB" > "$PS_M"
+if cmp -s "$PB" "$PS_M"; then bad "MUTANT ps-rewait: the edit matched nothing, so it is not a mutant"
+else
+  ps_m_sig="$(ps_drive "$PS_M" sig)"; ps_m_exit="$(ps_drive "$PS_M" exit)"
+  ps_moved=""
+  [ "$ps_m_sig" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_sig "
+  [ "$ps_m_exit" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_exit "
+  [ "$MATRIX" = 1 ] && mx_row ps-rewait "ps_sig ps_exit" "$ps_moved"
+  ps_cond=0; same_set "$ps_moved" "$(mrow ps-rewait decides)" && ps_cond=1
+  finish_mutant "$B_ps" ps-rewait "$ps_cond" \
+    "MUTANT ps-rewait kill confirmed: decides [ps_sig] moved ($ps_m_sig), twin [ps_exit] stayed green" \
+    "MUTANT ps-rewait moved [${ps_moved% }], want [ps_sig] (sig read $ps_m_sig, exit read $ps_m_exit)"
+fi
 
 # a plain run executes no matrix-only cell: the counter moves only on the --matrix path
 if [ "$MATRIX" = 1 ]; then

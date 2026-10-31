@@ -2581,9 +2581,11 @@ apply_readset_skip() {
 # running (`pool_xp` empty) it only exits, as the traps did before it. With one running it ignores a second
 # signal, writes `.pr/.stop` and only then reads the `.k` records, TERMs each recorded worker pid -- never a
 # `.g` group and never by pattern, since a group id the watcher saw can be stale -- and waits for xargs, whose
-# workers each reap their own unit and watcher through pool_abort. `wait` returns above 128 when a signal
-# interrupts it OR when xargs itself died by one; the loop re-waits in both cases, and a second wait on a
-# reaped pid returns 127, so it ends. The exit runs the EXIT trap, which removes the root.
+# workers each reap their own unit and watcher through pool_abort. It waits ONCE: INT, TERM and HUP are
+# ignored by then, so no signal can interrupt the wait, and a status above 128 means xargs itself died by a
+# signal. Never re-wait on that status: bash 3.2 answers a second wait on a reaped pid with the SAME status,
+# not 127, so a re-wait loop spins forever with every signal that could stop it ignored. The exit runs the
+# EXIT trap, which removes the root.
 # A RECORDED PID IS TERMED ONLY WHILE IT IS IN XARGS' GROUP. A worker SIGKILLed mid-run never empties its
 # `.k`, and its pid can be reused by an unrelated process; a live worker is always in group `$pool_xp` (its
 # units and watchers lead their own), and that id cannot be reused while xargs is this shell's unreaped child.
@@ -2598,7 +2600,7 @@ pool_stop() { # pool_stop <exit status>
       case "$p" in ''|*[!0-9]*) continue ;; esac
       [ "$(ps -o pgid= -p "$p" 2>/dev/null | tr -d ' ')" = "$pool_xp" ] && kill -TERM "$p" 2>/dev/null
     done
-    while :; do wait "$pool_xp"; [ "$?" -gt 128 ] || break; done
+    wait "$pool_xp"
   fi
   exit "$1"
 }
