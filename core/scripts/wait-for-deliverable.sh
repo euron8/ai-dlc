@@ -858,10 +858,11 @@ $MK_OUT
         mk_vin_=0
         if [ -n "${VAD_LOADED:-}" ] && [ "$VAD_LOADED" -ef "$MK_VAL" ] && declare -F vad_invoke > /dev/null 2>&1; then
           mk_vin_=1
+          mk_vdf_="$(shopt -s extdebug; declare -F vad_invoke vad_load vad_run 2>/dev/null)" || mk_vdf_='x 0 '
           while IFS= read -r mk_vdl_; do
             mk_vdl_="${mk_vdl_#* }"; mk_vdl_="${mk_vdl_#* }"
             [ -n "$mk_vdl_" ] && [ "$mk_vdl_" != "(null)" ] && [ "$mk_vdl_" -ef "$MK_VAL" ] || mk_vin_=0
-          done <<< "$(shopt -s extdebug; declare -F vad_invoke vad_load vad_run 2>/dev/null || echo 'x 0 ')"
+          done <<< "$mk_vdf_"
         fi
         if [ "$mk_vin_" = 1 ]; then
           if [ -n "$MK_STATE" ]; then
