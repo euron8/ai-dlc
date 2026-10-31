@@ -800,7 +800,9 @@ td_rc=143:gone
 td_decoy=1
 td_int=0
 td_intp=130:gone:0"
-TD_CEIL=30
+# TD_CEIL is a HANG GUARD, never a verdict: on the unmutated block a ceiling that ends a wait (instead of the awaited
+# event) is FIXTURE BROKEN (td_hang); on a mutant the ceiling is the mutant's expected observable and stays a cell value.
+TD_CEIL=60
 TDT="$WORK/td.tpl"
 for _i in 1 2 3 4; do
   mkdir -p "$TDT/$PFXR/q$_i" || broken "could not build the teardown template"
@@ -824,6 +826,10 @@ td_alive() { # td_alive <pid...> -> how many are live and not exiting or zombie
   printf '%s' "$n"
 }
 td_stubs() { cat "$1"/s.* 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '; }
+td_hang() { # td_hang <block> <what>: the ceiling ended a wait; on the unmutated block that is not measurable
+  [ "$1" = "$PB" ] && broken "teardown drive: the ${TD_CEIL}s ceiling ended the wait for $2 on the unmutated block"
+  return 0
+}
 td_wait2() { # td_wait2 <stub dir>: until two stubs recorded, at most TD_CEIL seconds
   local s=$SECONDS
   while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
@@ -839,6 +845,7 @@ td_drive() {
   p=$!
   set +m
   if ! td_wait2 "$d/s"; then
+    td_hang "$blk" "two stubs to start"
     : > "$d/s/release"; wait "$p"
     case "$mode" in term) printf 'td_term=nostart\ntd_queue=nostart\ntd_rc=nostart\ntd_decoy=nostart\n' ;; int) printf 'td_int=nostart\ntd_intp=nostart\n' ;; esac >> "$WORK/td.$set.v"
     return 0
@@ -852,6 +859,7 @@ td_drive() {
     # until the parent is gone, or a third stub (a queued unit) has started
     s=$SECONDS
     while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    if kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ]; then td_hang "$blk" "the parent to exit after TERM"; fi
     n="$(td_alive $(td_stubs "$d/s"))"; dn="$(td_alive "$dp")"
     : > "$d/s/release"; wait "$p"; st=$?; wait "$dp"
     if [ -d "$root" ]; then root=present; else root=gone; fi
@@ -867,15 +875,19 @@ td_drive() {
       [ "$n" = 0 ] && break
       sleep 0.1
     done
+    n=0; for k in $ks; do [ -s "$k" ] && n=1; done
+    [ "$n" = 1 ] && td_hang "$blk" "the workers to clear their records after INT"
     if [ -z "$wp" ]; then n=norecord; else n="$(td_alive $t)"; fi
     # td_intp: once the workers have cleared, the two queued stubs start; then INT to the parent itself
     if [ "$n" = 0 ]; then
       s=$SECONDS
       while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 4 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+      [ "$(ls "$d/s" | grep -c '^s\.')" -lt 4 ] && td_hang "$blk" "the queued stubs to start"
     fi
     kill -INT "$p"
     s=$SECONDS
     while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    kill -0 "$p" 2>/dev/null && td_hang "$blk" "the parent to exit after INT"
     dn="$(td_alive $(td_stubs "$d/s"))"
     : > "$d/s/release"; wait "$p"; st=$?
     if [ -d "$root" ]; then root=present; else root=gone; fi

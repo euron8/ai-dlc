@@ -34,7 +34,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset PREPUSH_POOL_DEPTH
 HOOK="${1:-$ROOT/.githooks/pre-push}"
 [ -f "$HOOK" ] || { echo "REFUSED: no hook at $HOOK" >&2; exit 9; }
-BOUND=30
+BOUND=60   # a hang guard: a ceiling that ends a wait is "cannot measure" (exit 9), never a verdict
 T="$(mktemp -d "${TMPDIR:-/tmp}/bl881.XXXXXX")" || exit 9
 [ -d "$T" ] || exit 9
 trap ': > "$T/s/release" 2>/dev/null; rm -rf "$T"' EXIT
@@ -88,6 +88,12 @@ while kill -0 "$P" 2>/dev/null && [ $((SECONDS - s)) -lt "$BOUND" ]; do sleep 0.
 pgone=1; kill -0 "$P" 2>/dev/null && pgone=0
 while [ "$(alive)" != 0 ] && [ $((SECONDS - s)) -lt "$BOUND" ]; do sleep 0.1; done
 n_alive="$(alive)"; n_started="$(nstubs)"
+# The parent's exit is the event: once it is gone every stub is reaped or it never will be, so stubs alive
+# after it is A2's verdict. The ceiling ending the wait for the parent itself is a hang guard, not a verdict.
+if [ "$pgone" = 0 ]; then
+  : > "$T/s/release"; wait "$P"
+  echo "REFUSED: the ${BOUND}s ceiling ended the wait for the parent to exit; a ceiling is a hang guard, so this cannot be measured" >&2; exit 9
+fi
 : > "$T/s/release"
 wait "$P"; st=$?
 rc=0
