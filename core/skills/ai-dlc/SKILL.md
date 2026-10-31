@@ -605,9 +605,9 @@ are omitted from the plan. The bounded Read is the compliant Read.
 
 **Each step file carries a `STEP_LOADED_TOKEN` HTML comment** (format:
 `<!-- STEP_LOADED_TOKEN: <step-name> -->`). It is a marker, and no gate
-reads it. This paragraph used to say the gate log entry MUST cite the
-token and that the gate FAILS on a missing citation; nothing ever
-implemented either half, and the claim is withdrawn rather than built.
+reads it. The gate log entry does not cite the token and the gate does
+not fail on a missing citation; no mechanism implements either, so
+neither is claimed.
 A gate log entry is written by the same lead the rule constrains, so a
 token cited there is a SELF-REPORT: the lead this rule exists to catch
 — the one that pattern-matches on "I know what this step does" and
@@ -738,7 +738,7 @@ one of those files is blocked too. Archives and the planning corpus (`prd.md`,
 offload them freely.
 
 
-**Carrier:** `.claude/rules/ai-dlc-resident-discipline.md` (floor CC 2.0.64; detector: `.claude/hooks/ai-dlc-rules-floor.sh`, a SessionStart hook that resolves the running version and reports LOUDLY when these files are present but the loader is too old to read them -- gating the COPY was tried first and was wrong, because `apply.sh` is a second copy path that knows nothing about versions and a downgrade is a third) -- an UNCONDITIONAL `.claude/rules/` file, which is re-injected on every compaction (`load_reason:"compact"`, measured). It DUPLICATES this rule rather than replacing it, so below the floor the carrier is absent and this rule is exactly as carried as it was before. The floor is named because a bare `rule-file` here would be a claim nothing can falsify, which is worse than the `none` this line used to read -- measured the sharpest collapse in the band, 13x across a compaction boundary. A PATH-SCOPED rule could not have carried it: the per-session memo SURVIVES compaction, so a scoped rule is gone for the rest of the session once the first one lands. The detector cannot be receipt-only either: a subagent's read writes the same `InstructionsLoaded` receipt a parent's read does, while the parent never receives the rule. Do not mistake `context-mode-protection-log.md` for a carrier: that is an artifact-budget file under Rule 25, and matching its NAME is how a scanner wrongly scores this rule as carried.
+**Carrier:** `.claude/rules/ai-dlc-resident-discipline.md` (floor CC 2.0.64; detector: `.claude/hooks/ai-dlc-rules-floor.sh`, a SessionStart hook that resolves the running version and reports LOUDLY when these files are present but the loader is too old to read them -- the detector does not gate the COPY, because `apply.sh` is a second copy path that knows nothing about versions and a downgrade is a third) -- an UNCONDITIONAL `.claude/rules/` file, which is re-injected on every compaction (`load_reason:"compact"`, measured). It DUPLICATES this rule rather than replacing it, so below the floor the carrier is absent and this rule is exactly as carried as it is without the carrier. The floor is named because a bare `rule-file` here would be a claim nothing can falsify, which is worse than `none` -- measured the sharpest collapse in the band, 13x across a compaction boundary. A PATH-SCOPED rule could not have carried it: the per-session memo SURVIVES compaction, so a scoped rule is gone for the rest of the session once the first one lands. The detector cannot be receipt-only either: a subagent's read writes the same `InstructionsLoaded` receipt a parent's read does, while the parent never receives the rule. Do not mistake `context-mode-protection-log.md` for a carrier: that is an artifact-budget file under Rule 25, and matching its NAME is how a scanner wrongly scores this rule as carried.
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
      or declares `none` and is counted as a gap. A compacted lead does not hold this
      rule; whatever is named here is what survives instead of its memory. -->
