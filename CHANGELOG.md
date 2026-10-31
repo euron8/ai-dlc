@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.977.0] - 2026-10-31
+
+Batch b247. A TERM, INT or HUP to the pre-push hook now tears down its fixture pool (BL-881, which stays open for the sandboxed case), and BL-869 is closed as a dead premise.
+
+Rulebook and engine changes: `.githooks/pre-push` and `core/git-hooks/pre-push` (the FIXTURE_POOL block, held to one program by I66). Fixture changes: `core/fixtures/prepush-pool-depth` (`run.sh`, `invocations.decl`, and a new `receipt-bl881.sh`). Packaging: none. Backlog: `docs/backlog.md`, `docs/backlog.archive.md`.
+
+### A signal to the pre-push hook tears down its fixture pool (BL-881)
+
+A TERM to `.githooks/pre-push` left its fixture suite running. Each unit leads its own process group and the hook sat blocked in xargs, so on a stopped counting sweep 38 of 116 descendants and 14 of 18 groups were still live 120s after the TERM.
+
+Both hooks now start xargs in the background under `set -m`, so xargs and its workers lead a group of their own, and the hook waits on it once. INT, TERM and HUP go to `pool_stop`. It writes `.pr/.stop`, reads each worker's `.pr/<unit>.k` record, and TERMs each recorded pid only while that pid is in xargs' process group, because a stale record left by a SIGKILLed worker can name a reused pid. It then waits for xargs once and exits 130, 143 or 129; a re-wait loop would spin forever on bash 3.2, which returns the same status for a reaped pid. A worker writes its `.k` after setting its trap and checks `.stop` after that; when it finds `.stop` it exits 255, which stops xargs dispatching the queue. `set -m` is needed because bash starts a plain background job of a non-interactive shell with SIGINT ignored: the worker's INT trap fired in 0 of 2 workers under `&` and 2 of 2 under `set -m`, measured on /bin/bash 3.2.57 with BSD xargs. GNU xargs is unmeasured; the 255 stop affects speed only, since a queued worker exits at its `.stop` check before running a unit.
+
+`prepush-pool-depth` gains teardown cells and five mutants (the old traps, no `.stop` check, a plain `&`, no pgid guard, and a re-wait loop). Its cells decide by event, its pool_stop cells by counting `wait` calls, and a wall-clock ceiling on the unmutated drive reports FIXTURE BROKEN, never a verdict. Its start count is deterministic: with one queued unit, exactly one replacement can start after the signal, measured at 296 on eight counted runs, two of them on a loaded box. The fixture refuses to run when launched with SIGINT ignored. `core/fixtures/prepush-pool-depth/receipt-bl881.sh` drives the hook's own block over four barrier-held stubs at width 2, TERMs the parent, and requires exit 143, no recorded stub alive, no queued stub started and the pool root removed; it exits 0 on the fix and on an alternate `pool_stop` ordering and 1 on the old traps, and refuses with exit 9 where `/bin/ps` cannot run.
+
+BL-881 stays open. `pool_stop` reads a worker's process group through setuid `/bin/ps`, and `sandbox-exec` denies that binary even under an allow-default profile, so under any `sandbox-exec` process no worker is signalled and teardown waits for the units to end on their own. That covers an outer sandboxed harness push and a fixture traced by the read-set sandbox tracer that signals a nested pool. No push and no hermetic fixture run is affected: `hermetic-run.sh` uses `env -i` and a declared-tool PATH, where `ps` runs. A replacement check must still refuse to signal a pid outside the pool.
+
+### BL-869 is closed as a dead premise (BL-869)
+
+Operator ruling, 2026-10-31: "Close as dead premise". The entry asked for a pre-push arm refusing a release-commit push whose tree has no seeded verdict-store passes. The release push already runs every changed fixture through the hook, so an unseeded release push is not an unverified one. Measured on this batch: a sound guard needs three corrections ("OMITTED" is not a decision state; the five `+VERSION` fixtures would make it refuse every release push unless exempted; the in-block I66 line needs its own `return 1`), and even corrected it would have refused 0.973.0 naming 74 fixtures whose serial seeding costs 4144s loaded against one pool push that ran the same set. BL-868 gains item 9: the wall-clock ceilings in `core/fixtures/prepush-pool-depth/run.sh` that predate this release.
+
 ## [0.976.0] - 2026-10-31
 
 Batch b247. `apply.sh` hands back the files rendered from `templates/` and `--finish` re-checks them (BL-886, closing the consumer's PC-S320-APPLY-SH-NEVER-ACTS-ON-TEMPLATE-PROSE-MERGE); the smoke surface is declared in the layer contract, scaffolded on pull and read by `validate-handoff-evidence.sh` (BL-845, partial).

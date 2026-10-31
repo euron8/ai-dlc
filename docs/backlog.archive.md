@@ -39018,3 +39018,15 @@ COST: the ordinary run forks `preclassify.sh --templates` once per run that reac
 LIMITS: the ledger's own receipt greps the script's text, so a comment that carries the greppable string satisfies it; this entry's receipt runs the program. On a `SELF-UPDATE-DEFER` pull, step 7 runs the installed apply, so this change does nothing on that pull.
 
 verify: sh bash core/fixtures/apply-restamp-theirs/receipt-bl886.sh
+## BL-869 — the verdict-cache seeding is a script and one CLAUDE.md sentence, and nothing at pre-push refuses an unseeded release push
+
+**LANDED (v0.977.0, verified 85944bdaf).**
+
+**PARTIAL.** `scripts/seed-verdict-store.sh` and its CLAUDE.md sentence landed in v0.968.0. Owed: a pre-push arm refusing a release-commit push whose exact tree has no seeded passes. Operator, on prose-only carriers: "One clause in CLAUDE.md, that is it?" Provenance: batch b245 close filing.
+
+**Progress (batch b247): a sound guard needs three corrections, and its premise is with the operator.** (1) "OMITTED" is not a decision state. `readset-stage1-verdict` is declared and decided like any other fixture: the shared verdict store holds recorded entries for it (2 when the lead first looked, 15 `#fixture readset-stage1-verdict` entries on 2026-10-31, against 0 for an impossible name), and the 0.973.0 push log names it 0 times, against 2 for `prepush-pool-depth`. (2) Five fixtures declare `+VERSION` in their `inputs.decl`: backlog-ledger, enforcement-map-sites, enforcement-map-sites-b, enforcement-map-sites-c and schema-install-fallback. They run on every release push, so the guard must exempt fixtures keyed on `VERSION` or `CHANGELOG.md` (no `inputs.decl` declares `+CHANGELOG.md` today). (3) An I66 line inside the FIXTURE_POOL block needs its own `return 1`, because the hook runs without `set -e`. The premise conflicts with the batch ruling that a release push is its own gate. The guard would have refused the 0.973.0 push, which ran 74 fixtures (its log's `ok <fixture>` rows). Seeding those serially costs their summed loaded duration against one pool push. That was 4144s when the lead measured it, and it reads 4784s in `.git/ai-dlc-fixture-durations` on 2026-10-31, where all 74 have a row. Both figures are LOADED costs, measured under the pool. Whether the guard is wanted at all is the operator's decision.
+
+**Operator ruling 2026-10-31, via the lead's AskUserQuestion: "Close as dead premise", and that closes the entry.** The release push already runs every changed fixture through the hook, so an unseeded release push is not an unverified one, and the refusal this entry owes has nothing to protect. The measured basis is the progress paragraph above: a sound guard would need three corrections ("OMITTED" is not a decision state; the five `+VERSION` fixtures would make it refuse every release push unless exempted; the in-block I66 line needs its own `return 1`), and even corrected it would have refused 0.973.0 naming 74 fixtures whose serial seeding costs 4144s loaded (the lead's measurement; 4784s re-summed later from `.git/ai-dlc-fixture-durations`) against one pool push that ran the same set. Docs only.
+
+verify: manual
+

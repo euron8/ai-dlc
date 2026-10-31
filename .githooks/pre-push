@@ -2577,8 +2577,36 @@ apply_readset_skip() {
   return 0
 }
 
+# THE POOL'S INT/TERM/HUP HANDLER (BL-881). It runs inside run_fixtures, whose locals it reads. With no pool
+# running (`pool_xp` empty) it only exits, as the traps did before it. With one running it ignores a second
+# signal, writes `.pr/.stop` and only then reads the `.k` records, TERMs each recorded worker pid -- never a
+# `.g` group and never by pattern, since a group id the watcher saw can be stale -- and waits for xargs, whose
+# workers each reap their own unit and watcher through pool_abort. It waits ONCE: INT, TERM and HUP are
+# ignored by then, so no signal can interrupt the wait, and a status above 128 means xargs itself died by a
+# signal. Never re-wait on that status: bash 3.2 answers a second wait on a reaped pid with the SAME status,
+# not 127, so a re-wait loop spins forever with every signal that could stop it ignored. The exit runs the
+# EXIT trap, which removes the root.
+# A RECORDED PID IS TERMED ONLY WHILE IT IS IN XARGS' GROUP. A worker SIGKILLed mid-run never empties its
+# `.k`, and its pid can be reused by an unrelated process; a live worker is always in group `$pool_xp` (its
+# units and watchers lead their own), and that id cannot be reused while xargs is this shell's unreaped child.
+pool_stop() { # pool_stop <exit status>
+  local k p
+  trap '' INT TERM HUP
+  if [ -n "${pool_xp:-}" ]; then
+    : > "$out/.pr/.stop"
+    for k in "$out"/.pr/*.k; do
+      [ -s "$k" ] || continue
+      p=""; read -r p < "$k"
+      case "$p" in ''|*[!0-9]*) continue ;; esac
+      [ "$(ps -o pgid= -p "$p" 2>/dev/null | tr -d ' ')" = "$pool_xp" ] && kill -TERM "$p" 2>/dev/null
+    done
+    wait "$pool_xp"
+  fi
+  exit "$1"
+}
+
 run_fixtures() {
-  local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e
+  local rc=0 rf_hard=0 d b out out_q n_expected n_actual n_ordered verdict fx_root fx_s fx_err fx_m fx_p fx_t fx_e pool_xp=""
   if [ "$POOL_DEPTH_IN" -ge 2 ]; then
     printf '   FAIL  fixture pool refused: nested at depth %s (PREPUSH_POOL_DEPTH=%s), a hook started by a hook started by a pool opens no pool\n' "$POOL_DEPTH_IN" "$POOL_DEPTH_IN"
     return 1
@@ -2612,12 +2640,13 @@ run_fixtures() {
   # THE POOL ROOT IS REMOVED ON AN INTERRUPT OR AN ABORT TOO (BL-690). The EXIT trap's body carries the
   # path BAKED IN, %q-quoted, never `$out`: measured on bash 3.2, an EXIT trap fired by `exit` or by a
   # `set -u` abort inside this function runs after its locals are gone and reads `$out` unset, so a
-  # body naming the variable removes nothing. INT, TERM and HUP exit 130, 143 and 129, which runs the
-  # EXIT trap and keeps the hook non-zero. The parent shell sets no other trap (the trace's and the
+  # body naming the variable removes nothing. INT, TERM and HUP go through pool_stop, which tears the
+  # pool down when one is running and then exits 130, 143 and 129, which runs the EXIT trap and keeps
+  # the hook non-zero. The parent shell sets no other trap (the trace's and the
   # worker's are in their own subshells), so nothing is chained; each straight-line removal of the root
   # below clears all four right after it, so the trap never outlives this function.
   printf -v out_q '%q' "$out"
-  trap "rm -rf -- $out_q" EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
+  trap "rm -rf -- $out_q" EXIT; trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; trap 'pool_stop 129' HUP
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
   # below cannot match a directory whose name begins with a dot -- so no fixture
@@ -2764,14 +2793,23 @@ run_fixtures() {
   # THE WATCHER CHECKS ITS WORKER'S PID EVERY POLL. A worker that dies (SIGKILLed, or its xargs gone) never
   # reaps the watcher, so on that poll the watcher kills the unit's tree, whose verdict nobody will record,
   # and exits; without the check its only exit was a refusal and it outlived its worker indefinitely.
-  # A UNIT IN ITS OWN GROUP DOES NOT HEAR THE TERMINAL'S ^C, which reaches only the push's foreground group,
-  # so the worker (which is in that group) traps INT/TERM/HUP and kills its unit's tree and its watcher.
+  # A UNIT IN ITS OWN GROUP DOES NOT HEAR THE TERMINAL'S ^C, and neither does a worker: xargs is started in
+  # the background under `set -m`, so it and its workers lead a group of their own. The push's shell hears
+  # the ^C (or a TERM or HUP) and pool_stop TERMs every worker recorded in `.pr/<unit>.k`; the worker traps
+  # INT/TERM/HUP and kills its unit's tree and its watcher (BL-881). WHY `set -m` AND NOT A PLAIN `&`: bash
+  # starts a plain background job of a non-interactive shell with SIGINT ignored, an ignored signal cannot
+  # be trapped, and every unit would inherit it -- measured on /bin/bash 3.2.57, the worker's INT trap
+  # fired in 0 of 2 workers under `&` and 2 of 2 under `set -m`. `.k` is written AFTER the trap is set and
+  # BEFORE the `.stop` check: pool_stop writes `.stop` before it reads the `.k` files, so a worker is
+  # either read and TERMed or sees `.stop` and exits 255, which stops xargs dispatching the queue (an
+  # exit of 130 does not). Every exit empties `.k` first, with no fork, so a reused pid is never TERMed.
   # REFUSED IS WRITTEN BEFORE THE TRACE'S ROW DISCARD, so a refused unit keeps no trace rows; it writes no
   # `.dur` line, so it records no cost; readset_keys_write and readset_live_trace take only `ok`.
   readset_pool_trace_prep "$out"
-  PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" AI_DLC_FX_TRACE="$PT_ROOT" AI_DLC_FX_TRACE_LIST="$PT_LIST" AI_DLC_FX_DV="$PT_DV" \
+  set -m
+  { PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" AI_DLC_FX_TRACE="$PT_ROOT" AI_DLC_FX_TRACE_LIST="$PT_LIST" AI_DLC_FX_DV="$PT_DV" \
   POOL_STALL="$POOL_STALL" POOL_WALK="$POOL_WALK" AI_DLC_FX_TOTAL="$n_expected" \
-    xargs -P "$FIXTURE_JOBS" -I{} bash -c '
+    exec xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"; tp=""; wx=""; pr="$AI_DLC_FX_OUT/.pr/$b"
     pool_walk() { ps -A -o pid=,ppid=,pgid=,stat=,time= 2>/dev/null | awk -v root="$1" -v self="$2" -v groups="$3" -v known="$4" "$POOL_WALK"; }
     pool_kill() {
@@ -2793,9 +2831,12 @@ run_fixtures() {
     pool_abort() {
       [ -n "${wpid:-}" ] && kill -KILL -- "-$wpid"
       [ -n "${pid:-}" ] && pool_kill_saved
+      : > "$pr.k"
       exit 130
     } 2>/dev/null
     trap pool_abort INT TERM HUP
+    printf "%s\n" "$$" > "$pr.k"
+    [ -f "$AI_DLC_FX_OUT/.pr/.stop" ] && { : > "$pr.k"; exit 255; }
     pool_run() {
       local lg="$1" rc wr wp
       shift
@@ -2874,7 +2915,13 @@ run_fixtures() {
     [ -f "$pr.refused" ] || printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
     printf "%s\n" "$b" >> "$AI_DLC_FX_OUT/.done"
     printf "   done %s/%s  %s %s\n" "$(grep -c . "$AI_DLC_FX_OUT/.done" 2>/dev/null)" "$AI_DLC_FX_TOTAL" "$(cat "$AI_DLC_FX_OUT/$b" 2>/dev/null)" "$b"
+    : > "$pr.k"
   ' _ {} < "$out/.order"
+  } &
+  pool_xp=$!
+  set +m
+  wait "$pool_xp"
+  pool_xp=""
   readset_pool_trace_merge "$out"
 
   # Rendered in list order, so the output is deterministic and diffable across runs even
