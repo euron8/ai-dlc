@@ -458,9 +458,9 @@ else
   rc=1
 fi
 
-# b16 -- the same join against the REAL ledger -- is core/fixtures/backlog-real-ledger/ now. Its verdict
-# depends on docs/backlog.md, which sits under an excluded top of the content key, and that unit
-# declares it `+` so a backlog-only push re-runs it.
+# b16 -- the same join against the REAL ledger -- is core/fixtures/backlog-real-ledger/ now, over a
+# frozen ledger snapshot (BL-872); against the live docs/backlog.md it runs as R9 of
+# scripts/validate-backlog-receipts.sh, at the pre-push step "backlog receipts".
 
 # b17 WAS HERE AND IS DELETED ON PURPOSE. It asserted that the ceiling's label rule and the
 # ROTATOR's agreed on the real ledger. That drift is no longer CONSTRUCTIBLE: the rule moved

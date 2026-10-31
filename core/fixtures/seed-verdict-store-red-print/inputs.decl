@@ -1,0 +1,6 @@
+# seed-verdict-store-red-print drives scripts/seed-verdict-store.sh (and mutant copies of it) against a stub world.
+!scripts/seed-verdict-store.sh
+# The same-run kill helper, sourced by run.sh.
+core/fixtures/lib/mutant.sh
+# The git-env scrub, sourced by run.sh before its scratch git calls.
+core/fixtures/lib/preamble.sh

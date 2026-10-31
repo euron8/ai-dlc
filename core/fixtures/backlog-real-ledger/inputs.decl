@@ -1,13 +1,14 @@
-# backlog-real-ledger joins two validators against the classifier on THIS repository's real ledger.
-# The three scripts are copied into each probe tree and run; the two reconcile files are loaded
-# beside them. docs/backlog.md carries `+`: it sits under an excluded top, and `+` keys it anyway,
-# in the hook's per-fixture key and in scripts/suite-content-key.sh's outer key.
+# backlog-real-ledger joins two validators against the classifier on a FROZEN snapshot of this
+# repository's ledger (BL-872). The three scripts are copied into each probe tree and run; the two
+# reconcile files are loaded beside them. The snapshot is this fixture's own ledger.snapshot, so a
+# docs/backlog.md edit no longer keys or re-counts this unit; the live ledger's joins run as arm R9
+# of scripts/validate-backlog-receipts.sh at the pre-push step "backlog receipts".
 !scripts/validate-backlog-receipts.sh
 !scripts/validate-backlog-size.sh
 !scripts/backlog-reverify.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
-+docs/backlog.md
+core/fixtures/backlog-real-ledger/ledger.snapshot
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 +docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py
 scripts/backlog-receipt-lib.sh

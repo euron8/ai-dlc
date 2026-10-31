@@ -1026,8 +1026,8 @@ fi
 
 # ===== THE POPULATION JOIN MOVED. ==========================================================
 # Arm j1 -- the validator's `sh` population against backlog-reverify.sh on the REAL ledger -- is
-# core/fixtures/backlog-real-ledger/ now. Its verdict depends on docs/backlog.md, which sits under an
-# excluded top of the content key, and that unit declares it `+` so a backlog-only push re-runs it.
+# core/fixtures/backlog-real-ledger/ now, over a frozen ledger snapshot (BL-872); against the live
+# docs/backlog.md it runs as R9 of the validator itself, at the pre-push step "backlog receipts".
 
 # ===== M12 / M13. THE SEED AND THE TOKEN GRAMMAR MUST BE COMPLETE, NOT FIRST-ONLY. =========
 # Two wrong cuts that pass every single-subject probe in this file and SHRINK the real answer

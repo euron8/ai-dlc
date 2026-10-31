@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its SUBJECT is scripts/seed-verdict-store.sh, a repo-root script that install.sh never copies (its copy loop
+derives from core/fixtures/ and core/scripts/), and it drives the distribution .githooks/pre-push shape. On a
+consumer the subject is absent.

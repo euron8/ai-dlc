@@ -1,5 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-28 *
-2 scripts/install.sh
-3 scripts/uninstall.sh
+# Re-measured for arm I (BL-892): one more install and one more uninstall of the nested-subdirectory world, plus its mutant install.
+# Re-measured for BL-892's tracked-only copy: the non-git refusal install, the dotfile-only install, and mutant 2's two installs.
+56 *
+5 scripts/install.sh
+4 scripts/uninstall.sh
 5 core/hooks/ai-dlc-rules-floor.sh

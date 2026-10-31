@@ -15,8 +15,8 @@ and unpushed; this file itself lives on `exp/fixture-unit-tests` until action 8 
 `exp/*` branches until the release push in action 7. A consumer tree is never written: read it,
 never write it. A consumer pull is not preapproved (`.claude/rules/operator-rulings.md`).
 
-**The proven pattern** is BL-878's done-criteria (`docs/backlog.md:1846`) and the enforcer is
-BL-879 (`docs/backlog.md:1865`). The pilots' in-process cell files are
+**The proven pattern** is BL-878's done-criteria (`docs/backlog.md:1721`) and the enforcer is
+BL-879 (`docs/backlog.md:1751`). The pilots' in-process cell files are
 `core/fixtures/content-seal/unit-arms.sh` and `core/fixtures/remediator-shard-join/unit-parts.sh`.
 
 ### Ping the operator
@@ -116,7 +116,8 @@ content-seal hand's abandoned forks.
    - `--mark`'s own `--check-shard` and seal check;
    - LN3m, LPm1 and LPm4 still re-drive the hook inside their scoring.
 7. Push the merged branch as one release under the repo's release rules (CLAUDE.md "Releases",
-   `AI_DLC_PRESUITE_SKIP=1`, advisor before the push, confirm with `git ls-remote`). Merges are
+   AI_DLC_PRESUITE_SKIP unset, per the operator's BL-870 ruling, advisor before the push, confirm with
+   `git ls-remote`). Merges are
    preapproved. Then BL-878 batches proceed from BL-879's allowlist.
 
 8. Re-derive this file's `## RESUME HERE` block and `### Next actions` after the merge, so that

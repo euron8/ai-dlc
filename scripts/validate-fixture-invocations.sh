@@ -50,20 +50,14 @@
 #                          fixture whose start count is a function of a corpus. Allowed on a <path> row too. <glob> is
 #                          root-relative, has no `..` and no blank, and is expanded by bash 3.2 pathname expansion:
 #                          `*` never crosses a `/` (there is no globstar), so a nested corpus spells one glob per level.
-#   <n>±<k> <path> why=<the loop that retries or polls> provisional
-#                          THE TOLERANCE ROW, `*` allowed as the path: passes iff |measured - n| <= k. Its reason: count
-#                          drift from a timing-dependent loop (a retry or a poll whose iteration count follows load),
-#                          MEASURED as two counting sweeps disagreeing on the same tree, and PROVISIONAL until that loop
-#                          is made deterministic, when the row returns to exact. No `why=`, no trailing `provisional`,
-#                          k < 2, or a malformed n or k is a J4 FAIL. Every accepted measurement prints
-#                          `provisional: <fx> <path> n=<n> k=<k> measured=<m>`, so the population of tolerance rows shows
-#                          on every run; nothing here lists the fixtures that carry one. Every other row stays exact.
+#                          Every row is exact. There is no tolerance form: a count carrying `±`, with or without a `why=`
+#                          clause, is a malformed row and FAILs J4. A count that follows load is a fixture defect (BL-868).
 # THE ARMS.
 #   J1  the start log absent or empty -> BROKEN. run.sh is itself a start, so a counted run logs at least one row; an
 #       empty log means the counter never loaded and nothing below would be a measurement.
 #   J2  no invocations.decl -> FAIL, printing the measured rows as the declaration to write.
 #   J3  measured != declared on any row -> FAIL, naming fixture, row, measured, declared and the remedy.
-#   J4  grammar: a malformed row, a duplicate path, no `*` row or two, a path row naming no `!` line -> FAIL.
+#   J4  grammar: a malformed row (a `±` count included), a duplicate path, no `*` row or two, a path row naming no `!` line -> FAIL.
 #   J5  every mutant name core/fixtures/lib/mutant.sh's mutant_killed appended to <log>.mutants must carry a
 #       `# MUTANT-MATRIX <name> ...` or `# MUTANT-MATRIX-FULL <name> ...` row in the fixture's run.sh (a shard stub
 #       `exec bash "$IMPL" --group ...` is joined against its IMPL's run.sh). A name with no row, or with a
@@ -243,12 +237,6 @@ fxc_judge() {
     # J4: one normalised row per line: `<c>\t<k>\t<glob or ->\t<target>\t<raw>`, or `ERR\t<raw>`.
     awk '{ sub(/\r$/, "") } $0 ~ /^[[:blank:]]*$/ || $0 ~ /^[[:blank:]]*#/ { next }
       { raw = $0
-        if ($1 ~ /±/) {
-          # The tolerance row: `<n>±<k> <target> why=<the loop> provisional`. Every clause is required.
-          if (NF < 4 || $3 !~ /^why=./ || $NF != "provisional") { print "ERR\t" raw; next }
-          p = index($1, "±"); n = substr($1, 1, p - 1); kk = substr($1, p + length("±"))
-          if (n !~ /^(0|[1-9][0-9]*)$/ || kk !~ /^[1-9][0-9]*$/ || kk + 0 < 2) { print "ERR\t" raw; next }
-          print n "\t" kk "\t±\t" $2 "\t" raw; next }
         if (NF != 2) { print "ERR\t" raw; next }
         cnt = $1; t = $2
         # A count with a leading zero (`09`, `1+08x…`) is refused here: bash arithmetic reads it as octal and dies.
@@ -262,7 +250,7 @@ fxc_judge() {
         print "ERR\t" raw }' "$decl" > "$w/rows"
     while IFS="$(printf '\t')" read -r kind raw; do
       [ "$kind" = ERR ] || continue
-      printf '%s: FAIL (J4): malformed invocations.decl row: %s (want `<count> *`, `<count> <path>`, `<c>+<k>x<glob> <target>` or `<n>±<k> <target> why=<loop> provisional` with k >= 2)\n' "$fx" "$raw"; rc=1
+      printf '%s: FAIL (J4): malformed invocations.decl row: %s (want `<count> *`, `<count> <path>`, or `<c>+<k>x<glob> <target>`; every row is exact)\n' "$fx" "$raw"; rc=1
     done < "$w/rows"
     awk -F'\t' '$1 != "ERR" { print $4 }' "$w/rows" > "$w/tgts"
     n="$(grep -cxF '*' "$w/tgts")" || n=0
@@ -285,15 +273,6 @@ EOF
         m="$tot"
       fi
       dcl="$c"
-      if [ "$g" = "±" ]; then
-        if [ "$m" -ge $((c - k)) ] && [ "$m" -le $((c + k)) ]; then
-          printf 'provisional: %s %s n=%s k=%s measured=%s\n' "$fx" "$tgt" "$c" "$k" "$m"
-        else
-          printf '%s: FAIL (J3): row "%s": measured %s, outside the provisional bound %s±%s -- %s\n' "$fx" "$raw" "$m" "$c" "$k" "$FXC_REMEDY_TAIL"
-          rc=1
-        fi
-        continue
-      fi
       if [ "$g" != - ]; then
         n="$(fxc_glob_n "$root" "$g")" || { printf '%s: FIXTURE BROKEN (J4): cannot expand %s under %s\n' "$fx" "$g" "$root"; rm -rf "$w"; return 2; }
         dcl=$((c + k * n))
@@ -400,20 +379,22 @@ fxc_self_probe() {
   mkdir -p "$SPR/core/x+05" && printf ':\n' > "$SPR/core/x+05/a.sh"
   mkdir -p "$SPR/j4z"; cp "$fd/inputs.decl" "$SPR/j4z/"; printf '0+6xcore/x+05/*.sh *\n2 core/scripts/sub.sh\n' > "$SPR/j4z/invocations.decl"
   sp_cell "J4 a 0+k base, and a glob carrying +05, pass (a leading zero is refused only in a count)" 0 j4z "$SPR/log" "ok"
-  # The tolerance row, both directions. The log measures 6 starts and 2 of sub.sh.
-  for spec in "in:5±2 * why=poll provisional|2 core/scripts/sub.sh:0:provisional: p * n=5 k=2 measured=6" \
-              "edge:8±2 * why=poll provisional|2 core/scripts/sub.sh:0:provisional: p * n=8 k=2 measured=6" \
-              "out:9±2 * why=poll provisional|2 core/scripts/sub.sh:1:outside the provisional bound 9±2" \
-              "path:6 *|4±2 core/scripts/sub.sh why=retry provisional:0:provisional: p core/scripts/sub.sh n=4 k=2 measured=2" \
-              "nowhy:6±2 * because=poll provisional|2 core/scripts/sub.sh:1:(J4)" \
-              "noprov:6±2 * why=poll|2 core/scripts/sub.sh:1:(J4)" \
-              "k1:6±1 * why=poll provisional|2 core/scripts/sub.sh:1:(J4)" \
-              "badn:6x±2 * why=poll provisional|2 core/scripts/sub.sh:1:(J4)" \
+  # There is no tolerance row: every `±` spelling is a malformed row (J4), the retired full form included, and a
+  # row the old form would have passed (in: 5±2 against a measured 6) is refused. The log measures 6 starts and 2 of
+  # sub.sh. The `exact` seed is the near-miss: a plain count off by one is J3, never J4.
+  for spec in "in:5±2 * why=poll provisional|2 core/scripts/sub.sh:1:(J4): malformed invocations.decl row: 5±2 * why=poll provisional" \
+              "edge:8±2 * why=poll provisional|2 core/scripts/sub.sh:1:(J4): malformed invocations.decl row: 8±2 * why=poll provisional" \
+              "out:9±2 * why=poll provisional|2 core/scripts/sub.sh:1:(J4): malformed invocations.decl row: 9±2 * why=poll provisional" \
+              "path:6 *|4±2 core/scripts/sub.sh why=retry provisional:1:(J4): malformed invocations.decl row: 4±2 core/scripts/sub.sh why=retry provisional" \
+              "nowhy:6±2 * because=poll provisional|2 core/scripts/sub.sh:1:(J4): malformed invocations.decl row: 6±2 * because=poll provisional" \
+              "noprov:6±2 * why=poll|2 core/scripts/sub.sh:1:(J4): malformed invocations.decl row: 6±2 * why=poll" \
+              "k1:6±1 * why=poll provisional|2 core/scripts/sub.sh:1:(J4): malformed invocations.decl row: 6±1 * why=poll provisional" \
+              "badn:6x±2 * why=poll provisional|2 core/scripts/sub.sh:1:(J4): malformed invocations.decl row: 6x±2 * why=poll provisional" \
               "exact:5 *|2 core/scripts/sub.sh:1:measured 6, declared 5"; do
     SPN="tol${spec%%:*}"; r="${spec#*:}"; want="${r#*:}"; want="${want#*:}"; wrc="${r#*:}"; wrc="${wrc%%:*}"; r="${r%%:*}"
     mkdir -p "$SPR/$SPN"; cp "$fd/inputs.decl" "$SPR/$SPN/"
     printf '%s\n' "$r" | tr '|' '\n' > "$SPR/$SPN/invocations.decl"
-    sp_cell "J3/J4 tolerance ${spec%%:*}" "$wrc" "$SPN" "$SPR/log" "$want"
+    sp_cell "J4 ± seed ${spec%%:*}" "$wrc" "$SPN" "$SPR/log" "$want"
   done
   # J5 both directions, a header, a shard stub, a control
   mkdir -p "$SPR/j5" "$SPR/j5s" "$SPR/j5c"

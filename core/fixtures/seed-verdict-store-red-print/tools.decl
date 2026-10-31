@@ -1,0 +1,16 @@
+# Tools run.sh and the subject invoke.
+awk
+basename
+bash
+cat
+cmp
+cp
+dirname
+env
+git
+grep
+mkdir
+mktemp
+rm
+sed
+tr

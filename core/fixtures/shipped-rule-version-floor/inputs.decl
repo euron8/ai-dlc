@@ -1,14 +1,19 @@
 # shipped-rule-version-floor runs the real install.sh and uninstall.sh into scratch consumers and drives the rules-floor hook.
 # The marker run.sh walks up for is scripts/install.sh. install.sh copies from every shipped core subtree and templates/ and patterns/;
-# core/fixtures/lib/ is the preamble run.sh sources; the fixture's own directory is copied by the runner without being named.
+# core/fixtures/lib/ (the preamble run.sh sources) and this fixture's own directory fall under core/fixtures/ below.
+# reason: core/fixtures/ is declared whole, not lib/ alone (BL-871). install.sh (run at run.sh:274, :379) enumerates every
+# shipping fixture directory and copies its tracked files (scripts/install.sh:694-709, from git ls-files), so the set of
+# shipping fixture directories and their tracked files is that run's input. A new or changed fixture directory must re-key
+# this fixture, and only the whole core/fixtures/ row keys a directory added beside named ones: lib/ alone, or any list of
+# named fixtures, cannot see it.
 !scripts/install.sh
 !scripts/uninstall.sh
 !core/hooks/ai-dlc-rules-floor.sh
-core/fixtures/lib/
+core/fixtures/
 core/hooks/
 core/rules/
 core/schemas/
-# reason: core/scripts/ is enumerated -- install.sh (run at run.sh:140, :245) globs core_scripts=("$SCRIPT_DIR"/../core/scripts/*), scripts/install.sh:471.
+# reason: core/scripts/ is enumerated -- install.sh (run at run.sh:274, :379) globs core_scripts=("$SCRIPT_DIR"/../core/scripts/*), scripts/install.sh:507.
 core/scripts/
 core/session-driver/
 core/skills/

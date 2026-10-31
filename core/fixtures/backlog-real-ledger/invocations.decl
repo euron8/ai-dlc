@@ -1,5 +1,8 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-342 *
-124 scripts/validate-backlog-receipts.sh
-4 scripts/validate-backlog-size.sh
-6 scripts/backlog-reverify.sh
+# Over the frozen ledger.snapshot (BL-872), so a docs/backlog.md edit no longer moves these rows. The r9 arm runs the
+# receipts validator's own R9 in the j1 world: +2 classifier and +3 ceiling starts, each ceiling start asking the
+# classifier --marker-last once more. The m-r9call mutant runs the receipts validator once more in a copy of that world.
+462 *
+167 scripts/validate-backlog-receipts.sh
+7 scripts/validate-backlog-size.sh
+11 scripts/backlog-reverify.sh

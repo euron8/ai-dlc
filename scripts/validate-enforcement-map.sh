@@ -6913,8 +6913,11 @@ else
     # measured 3 false positives over core/fixtures/*/*.sh, among them backlog-ledger reading
     # `$MROOT/...` (a seeded tree, not the distribution), and 2 false zeros (names not ending in
     # ROOT). Keyed on the assignment SHAPE it measured 5 hits and 0 false positives: three
-    # `$ROOT/docs/` reads in backlog-real-ledger (acquitted by its `+docs/backlog.md`),
-    # schema-install-fallback's `$ROOT_DIR/VERSION` walk-up and enforcement-map-sites' climb
+    # `$ROOT/docs/` reads in backlog-real-ledger (acquitted then by its `+docs/backlog.md`; BL-872
+    # moved that fixture onto its own frozen ledger.snapshot and dropped the `$ROOT` climb, so those
+    # three reaches and their acquittal are gone, and the live ledger's joins run as R9 of
+    # scripts/validate-backlog-receipts.sh), schema-install-fallback's `$ROOT_DIR/VERSION` walk-up
+    # and enforcement-map-sites' climb
     # `$HERE/../../../VERSION`, the last two disposed of by `+VERSION` in their inputs.decl. A
     # mktemp root (`TMPROOT="$(mktemp -d)"`) is acquitted because nothing roots it.
     # WHAT THIS CANNOT SPELL: a climb from any base other than $HERE or `dirname $0`, a walk-up not

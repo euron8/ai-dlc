@@ -32,6 +32,14 @@
 #      consumer wrote: no ai-dlc hook, schema, driver, rule, stamp or generated agent, no
 #      ai-dlc registration in settings.json, and the consumer's own entries intact. A
 #      committed mutant drops the hook loop and must fail H1 alone.
+#   I  a shipping fixture carrying a SUBDIRECTORY installs whole (BL-892): install exits 0,
+#      the nested executable lands executable OVER a stale 0644 copy, the nested data file
+#      lands non-executable, and uninstall removes them. Driven in a copy of the distribution
+#      whose only fixture is lib/ plus a seeded sub/, so arm I's verdict rests on that seed
+#      alone and not on the shape of every other fixture the sandbox carries (BL-871 measured
+#      that shape deciding the main install). A committed mutant restores the flat
+#      `cp <fixture>/*` and must fail I.
+#      `run.sh --nested-only` runs arm I alone; it is BL-892's receipt.
 #
 # WHY E IS NOT PARANOIA. An unresolvable version is the same epistemic state as one below
 # the floor. A detector that treats "I could not tell" as "fine" is the defect it exists
@@ -69,6 +77,132 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
+
+# --- I: a shipping fixture's subdirectory installs whole (BL-892) ----------------------------
+# nested_dist <dir> -- a copy of the distribution shape install.sh and uninstall.sh read, whose
+# ONLY fixture is lib/ (shipping, and named in uninstall.sh's hand list) plus a seeded sub/ with
+# one executable and one data file. Every other core subtree is copied whole; core/fixtures/ is
+# not, so a shipping fixture whose shape aborts install.sh (BL-871) cannot fail arm I for a
+# reason that is not the seeded subdirectory.
+nested_dist() {
+  local d="$1" s
+  mkdir -p "$d/scripts" "$d/core/fixtures"
+  cp "$INSTALL" "$UNINSTALL" "$d/scripts/"
+  for s in "$ROOT/core/"*/; do
+    s="${s%/}"; [ "${s##*/}" = fixtures ] && continue
+    cp -R "$s" "$d/core/"
+  done
+  cp -R "$ROOT/templates" "$ROOT/patterns" "$d/"
+  cp -R "$ROOT/core/fixtures/lib" "$d/core/fixtures/"
+  mkdir -p "$d/core/fixtures/lib/sub"
+  printf '#!/bin/sh\necho nested\n' > "$d/core/fixtures/lib/sub/exec.sh"; chmod 755 "$d/core/fixtures/lib/sub/exec.sh"
+  printf 'data\n' > "$d/core/fixtures/lib/sub/data.txt"; chmod 644 "$d/core/fixtures/lib/sub/data.txt"
+}
+# ARM I ALSO HOLDS, beyond the header: only TRACKED files ship (an ignored and an untracked file
+# beside the nested pair must not land), a fixture holding only a top-level dotfile installs with
+# rc 0, and a distribution copy that is not its own git work tree makes install REFUSE before it
+# writes anything. A second committed mutant restores the directory copy `cp -pR <fixture>/*`
+# and must fail the not-landed and dotfile-only sub-arms and nothing else.
+# nested_index <dir> -- make the copy a git work tree with everything above in its INDEX (no commit:
+# ls-files reads the index, and a commit would need the operator's identity and signing config), then
+# seed one IGNORED file (by .git/info/exclude, not a .gitignore, which would itself be a stray dotfile)
+# and one UNTRACKED file beside the tracked nested pair. install.sh copies the index's list, so neither
+# may land. The seed state is proven before it is used: a zero from the not-landed sub-arms is a
+# finding only if the files were on disk and git classified them as seeded.
+nested_index() {
+  local d="$1" s="$1/core/fixtures/lib/sub"
+  git -C "$d" init -q --template= . && git -C "$d" add -A \
+    || { echo "run.sh: could not index the nested distribution copy" >&2; exit 2; }
+  mkdir -p "$d/.git/info" && printf '__pycache__/\n' > "$d/.git/info/exclude" || exit 2
+  mkdir -p "$s/__pycache__"; printf 'pyc\n' > "$s/__pycache__/x.pyc"; printf 'stray\n' > "$s/untracked.txt"
+  [ "$(git -C "$d" ls-files -- core/fixtures/lib/sub | tr '\n' ' ')" = "core/fixtures/lib/sub/data.txt core/fixtures/lib/sub/exec.sh " ] \
+    && [ "$(git -C "$d" ls-files --others --exclude-standard -- core/fixtures/lib/sub)" = "core/fixtures/lib/sub/untracked.txt" ] \
+    && git -C "$d" check-ignore -q core/fixtures/lib/sub/__pycache__/x.pyc \
+    && [ -f "$s/__pycache__/x.pyc" ] && [ -f "$s/untracked.txt" ] \
+    || { echo "run.sh: the nested copy's seed state is not tracked pair + one untracked + one ignored -- I-stray cannot discriminate" >&2; exit 2; }
+}
+# nested_target <dir> -- an empty consumer holding a STALE 0644 copy of the nested executable.
+# A fresh copy takes the source mode under any cp; only an overwrite separates a copy that
+# preserves modes from one that does not, and the top-level `*.sh` chmod cannot reach sub/.
+nested_target() {
+  local t="$1"
+  mkdir -p "$t/_bmad" "$t/tests/fixtures/lib/sub"; ( cd "$t" && git init -q . )
+  printf 'stale\n' > "$t/tests/fixtures/lib/sub/exec.sh"; chmod 644 "$t/tests/fixtures/lib/sub/exec.sh"
+  [ -x "$t/tests/fixtures/lib/sub/exec.sh" ] \
+    && { echo "run.sh: the stale nested copy is executable before install -- I-exec-mode cannot discriminate" >&2; exit 2; }
+  return 0
+}
+# nested_check <install script> <target> <log> -> prints the failed sub-arm ids, nothing when clean
+nested_check() {
+  local inst="$1" t="$2" log="$3" n="$2/tests/fixtures/lib/sub"
+  bash "$inst" "$t" > "$log" 2>&1 || echo I-rc
+  grep -q 'echo nested' "$n/exec.sh" 2>/dev/null || echo I-exec-content
+  [ -x "$n/exec.sh" ] || echo I-exec-mode
+  [ -f "$n/data.txt" ] || echo I-data
+  [ -f "$n/data.txt" ] && [ -x "$n/data.txt" ] && echo I-data-mode
+  [ -e "$n/__pycache__/x.pyc" ] && echo I-ignored-landed
+  [ -e "$n/untracked.txt" ] && echo I-untracked-landed
+  return 0
+}
+# dotonly_check <install script> <log> -> prints the failed sub-arm ids, nothing when clean. The world
+# is a git-indexed distribution copy holding a second shipping fixture zz-dotonly/ whose ONLY tracked
+# file is a top-level dotfile. A directory glob `<fixture>/*` matches nothing there and its cp exits 1,
+# aborting the install under `set -e`. Top-level dotfiles stay out, as the old glob left them, so the
+# fixture lands as its directory with the dotfile absent.
+dotonly_check() {
+  local inst="$1" log="$2" t; t="$(mktemp -d "$TMP/dotonly-tgt.XXXXXX")"; mkdir -p "$t/_bmad"; ( cd "$t" && git init -q . )
+  bash "$inst" "$t" > "$log" 2>&1 || echo I-dotonly-rc
+  [ -d "$t/tests/fixtures/zz-dotonly" ] || echo I-dotonly-dir
+  [ -e "$t/tests/fixtures/zz-dotonly/.keep" ] && echo I-dotonly-dotfile-landed
+  return 0
+}
+# nested_refusal <install script> <non-git dist> -> prints the failed sub-arm ids, nothing when clean.
+# A distribution that is not its own git work tree has no index to copy from, so install.sh must
+# REFUSE, before writing anything -- never fall back to a directory copy. rc alone would pass for any
+# unrelated failure (no _bmad, no jq), so the refusal's own text and an untouched target are asserted.
+nested_refusal() {
+  local inst="$1" t log="$TMP/install-i-nogit.log"
+  t="$(mktemp -d "$TMP/nested-nogit-tgt.XXXXXX")"; mkdir -p "$t/_bmad"; ( cd "$t" && git init -q . )
+  if bash "$inst" "$t" > "$log" 2>&1; then echo I-nogit-rc; fi
+  grep -q 'is not a git work tree of its own' "$log" || echo I-nogit-msg
+  [ -e "$t/.claude" ] && echo I-nogit-wrote
+  return 0
+}
+arm_i() {
+  local d t r
+  grep -Eq '^for fixture_dir in lib ' "$UNINSTALL" \
+    || { echo "run.sh: uninstall.sh's fixture list no longer opens with lib -- I cannot assert removal" >&2; exit 2; }
+  d="$TMP/nested-dist"; nested_dist "$d"
+  [ -f "$d/core/fixtures/lib/.dist-only" ] && { echo "run.sh: lib/ carries .dist-only -- I has no shipping subject" >&2; exit 2; }
+  nested_dist "$TMP/nested-nogit"
+  r="$(nested_refusal "$TMP/nested-nogit/scripts/install.sh")"
+  [ -n "$r" ] && { note "FAIL  I a distribution copy that is not a git work tree did not make install refuse: $(echo $r)"; rc=1; }
+  nested_dist "$TMP/nested-dot"; mkdir -p "$TMP/nested-dot/core/fixtures/zz-dotonly"
+  printf 'keep\n' > "$TMP/nested-dot/core/fixtures/zz-dotonly/.keep"
+  git -C "$TMP/nested-dot" init -q --template= . && git -C "$TMP/nested-dot" add -A \
+    && [ "$(git -C "$TMP/nested-dot" ls-files -- core/fixtures/zz-dotonly)" = "core/fixtures/zz-dotonly/.keep" ] \
+    || { echo "run.sh: the dotfile-only world does not track exactly zz-dotonly/.keep -- I-dotonly cannot discriminate" >&2; exit 2; }
+  r="$(dotonly_check "$TMP/nested-dot/scripts/install.sh" "$TMP/install-i-dot.log")"
+  [ -n "$r" ] && { note "FAIL  I a shipping fixture holding only a dotfile did not install as its directory: $(echo $r) ($(grep -m1 'No such file' "$TMP/install-i-dot.log"))"; rc=1; }
+  nested_index "$d"
+  t="$(mktemp -d "$TMP/nested-tgt.XXXXXX")"; nested_target "$t"
+  r="$(nested_check "$d/scripts/install.sh" "$t" "$TMP/install-i.log")"
+  if [ -n "$r" ]; then
+    note "FAIL  I a shipping fixture's subdirectory did not install whole: $(echo $r) ($(grep -m1 'is a directory' "$TMP/install-i.log"))"; rc=1
+  else
+    bash "$d/scripts/uninstall.sh" "$t" --force > "$TMP/uninstall-i.log" 2>&1
+    if [ -e "$t/tests/fixtures/lib/sub/exec.sh" ] || [ -e "$t/tests/fixtures/lib/sub/data.txt" ]; then
+      note "FAIL  I uninstall left a shipping fixture's nested files behind"; rc=1
+    else
+      note "ok    I a fixture subdirectory installs its tracked files only, modes kept over a stale copy, a non-git distribution is refused, and uninstall removes it"
+    fi
+  fi
+}
+if [ "${1:-}" = "--nested-only" ]; then
+  arm_i
+  [ "$rc" -eq 0 ] && note "PASS  shipped-rule-version-floor --nested-only"
+  exit "$rc"
+fi
 
 # Run the hook against a throwaway project dir at a pinned version.
 hook_out() { # hook_out <project-dir> <AI_AGENT value or empty>
@@ -339,6 +473,49 @@ else
     elif [ "$h_mut3" = "H9 " ]; then note "ok    H mutant removing same-named files by name alone fails H9 and only H9"
     else note "FAIL  H mutant removing same-named files by name alone scored '$h_mut3', expected exactly 'H9'"; rc=1; fi
   fi
+fi
+
+# --- I, then its mutant: the flat `cp <fixture>/*` restored ---------------------------------
+# Anchored on the two stable lines that BRACKET the copy (the per-fixture mkdir and the *.sh
+# chmod), never on the copy line itself, so a second correct spelling of the copy still mutates.
+arm_i
+MI="$TMP/nested-dist/scripts/install-mut.sh"
+awk '
+  /^    mkdir -p "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir"$/ {
+    print; print "    cp \"$SCRIPT_DIR/../core/fixtures/$fixture_dir/\"* \"$PROJECT_ROOT/tests/fixtures/$fixture_dir/\""; skip = 1; next }
+  /^    chmod \+x "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir\/"\*\.sh / { skip = 0 }
+  !skip { print }
+' "$INSTALL" > "$MI"
+if cmp -s "$INSTALL" "$MI" || ! grep -q '^    chmod +x "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"\*\.sh ' "$MI"; then
+  note "FAIL  I mutant DID NOT APPLY: the mkdir/chmod brackets around the fixture copy matched nothing"; rc=1
+else
+  tmi="$(mktemp -d "$TMP/nested-mut.XXXXXX")"; nested_target "$tmi"
+  r_mut="$(nested_check "$MI" "$tmi" "$TMP/install-imut.log")"
+  if [ -z "$r_mut" ]; then note "FAIL  I mutant restoring the flat cp <fixture>/* SURVIVED -- arm I cannot see a non-recursive copy"; rc=1
+  else note "ok    I mutant restoring the flat cp <fixture>/* fails I ($(echo $r_mut))"; fi
+fi
+# Mutant 2: the U8 directory copy `cp -pR <fixture>/*` restored between the same brackets. It
+# installs the nested pair whole, so it must fail the not-landed sub-arms and ONLY those.
+MI2="$TMP/nested-dist/scripts/install-mut2.sh"
+awk '
+  /^    mkdir -p "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir"$/ {
+    print; print "    cp -pR \"$SCRIPT_DIR/../core/fixtures/$fixture_dir/\"* \"$PROJECT_ROOT/tests/fixtures/$fixture_dir/\""; skip = 1; next }
+  /^    chmod \+x "\$PROJECT_ROOT\/tests\/fixtures\/\$fixture_dir\/"\*\.sh / { skip = 0 }
+  !skip { print }
+' "$INSTALL" > "$MI2"
+if cmp -s "$INSTALL" "$MI2" || ! grep -q '^    cp -pR "$SCRIPT_DIR' "$MI2"; then
+  note "FAIL  I mutant 2 DID NOT APPLY: the mkdir/chmod brackets around the fixture copy matched nothing"; rc=1
+else
+  tmi2="$(mktemp -d "$TMP/nested-mut2.XXXXXX")"; nested_target "$tmi2"
+  r_mut2="$(nested_check "$MI2" "$tmi2" "$TMP/install-imut2.log" | tr '\n' ' ')"
+  if [ "$r_mut2" = "I-ignored-landed I-untracked-landed " ]; then
+    note "ok    I mutant 2 restoring the directory copy cp -pR <fixture>/* fails the not-landed sub-arms and only those"
+  else note "FAIL  I mutant 2 restoring cp -pR <fixture>/* scored '$r_mut2', expected exactly 'I-ignored-landed I-untracked-landed'"; rc=1; fi
+  cp "$MI2" "$TMP/nested-dot/scripts/install-mut2.sh"
+  r_mut2d="$(dotonly_check "$TMP/nested-dot/scripts/install-mut2.sh" "$TMP/install-imut2-dot.log" | tr '\n' ' ')"
+  if [ "$r_mut2d" = "I-dotonly-rc " ]; then
+    note "ok    I mutant 2 restoring cp -pR <fixture>/* aborts the install on a dotfile-only fixture (I-dotonly-rc only)"
+  else note "FAIL  I mutant 2 on the dotfile-only world scored '$r_mut2d', expected exactly 'I-dotonly-rc'"; rc=1; fi
 fi
 
 [ "$rc" -eq 0 ] && note "PASS  shipped-rule-version-floor -- detector correct on both sides of the boundary, no copy-time gate, uninstall scoped by prefix"

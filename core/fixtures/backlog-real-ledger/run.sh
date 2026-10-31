@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
-# backlog-real-ledger -- the two arms whose verdict depends on the CONTENT of this repository's
-# own docs/backlog.md, in a unit keyed on that file.
+# backlog-real-ledger -- the two joins and the one label probe whose verdict depends on the CONTENT
+# of a real-sized ledger, run over a FROZEN SNAPSHOT of this repository's docs/backlog.md.
 #
 #   j1   the receipts validator's `sh` population covers the shipping classifier's resolved set
-#        on the real ledger (scripts/validate-backlog-receipts.sh vs scripts/backlog-reverify.sh)
-#   b16  the size ceiling's entry count equals the classifier's on the real ledger
+#        on the snapshot (scripts/validate-backlog-receipts.sh vs scripts/backlog-reverify.sh)
+#   b16  the size ceiling's entry count equals the classifier's on the snapshot
 #        (scripts/validate-backlog-size.sh vs scripts/backlog-reverify.sh)
+#   p1   a prose lead-in bullet in a host appended to the snapshot counts once, never twice
 #
-# WHY THESE TWO LIVE HERE AND NOT IN THEIR SUBJECTS' FIXTURES. They were j1 of
-# core/fixtures/backlog-receipt-binding/ and b16 of core/fixtures/backlog-size-ceiling/, and
-# `docs` is an EXCLUDED top of scripts/suite-content-key.sh, so neither the outer suite key nor
-# the hook's per-fixture key ever saw a backlog edit: a push carrying exactly the drift these arms
-# exist to catch skipped them. They are MOVED, not copied, into this small unit, whose inputs.decl
-# declares the ledger with a leading `+`. The hook's READSET_KEYROWS span keys a `+` file even
-# under an excluded top, and suite-content-key.sh hashes every `+` file into the outer key, so a
-# backlog-only push misses the outer key and the inner skip runs this unit alone -- seconds,
-# where keying the two source fixtures on the ledger would have paid backlog-receipt-binding's
-# whole run on every docs release.
+# THE LEDGER IS ledger.snapshot BESIDE THIS FILE, NOT docs/backlog.md (BL-872). Keyed on the live
+# ledger, this unit's invocations.decl counted validator STARTS over that content, so every backlog
+# edit re-keyed it or turned it red. The snapshot was copied byte-identical from docs/backlog.md at
+# the BL-872 base, and it is refreshed only when one of the three subjects changes shape enough to
+# need a newer real corpus; the count then moves with it, in that change. It is not named `.md` so
+# that no markdown scanner reads its frozen citations as live ones.
 #
-# THE LEDGER IS NAMED THROUGH "$ROOT/docs/backlog.md" -- A SPELLING I55 READS. I55 arm 3 flags a
-# fixture reaching a content-key-excluded path at the distribution root, and acquits one only
-# where the reach names a file this fixture declares with `+`. A `$DIR/../../../docs/...` chain
-# would be invisible to that grammar, so the acquittal could never be checked.
+# WHAT THE SNAPSHOT MAKES VACUOUS, AND WHERE THAT MOVED. Over a frozen file j1 and b16 can no longer
+# see LIVE drift -- a receipt or an entry shape filed after the snapshot. That half runs as arm R9
+# of scripts/validate-backlog-receipts.sh in the `.githooks/pre-push` step "backlog receipts" (a
+# keyed step whose key holds the ledger; AI_DLC_PRESUITE_SKIP=1 skips it), against the live ledger,
+# through the same two readers and the same comparison. What
+# stays here is the half a frozen corpus still answers: the three programs, as CHANGED, still agree
+# on a real-sized ledger, and p1's label rule (lib.sh's, the subject) still reads one host as one.
+# The anchor-collision guard on BL-899 below is now a constant against the snapshot (max id BL-883);
+# it can fire only when the snapshot is refreshed past it.
 #
 # Usage: run.sh
 # Exit:  0 = both arms hold, 1 = one regressed, 2 = fixture broken.
@@ -32,6 +34,7 @@
 # matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or a mutant is added
 # or changed. The recorded matrix plus the twin replaces the exact-vector assertion.
 # MUTANT-MATRIX m-loose decides=p1-count twins=b16-count
+# MUTANT-MATRIX m-r9call decides=r9-call twins=j1-pop
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-real-ledger/run.sh --matrix
 set -u
 
@@ -51,8 +54,6 @@ unset BR_RECEIPTS_RUNNING
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$DIR/../lib/mutant.sh" ] && [ -f "$DIR/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh or lib/matrix.sh not found" >&2; exit 2; }
-ROOT="$(cd "$DIR/../../.." 2>/dev/null && pwd || true)"
-
 find_one() { # find_one <relative path>... -> the first candidate that is a file, both layouts
   local c
   for c in "$@"; do [ -f "$c" ] && { printf '%s' "$c"; return 0; }; done
@@ -66,8 +67,9 @@ REVSRC="$(find_one "$DIR/../../skills/ai-dlc-update/reconcile/ledger-reverify.sh
 EXTRACT="$(find_one "$DIR/../../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py" "$DIR/../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py")" || EXTRACT=""
 # The could-not-measure rule both the classifier and the receipts validator source from beside them.
 RLIB="$(find_one "$DIR/../../scripts/backlog-receipt-lib.sh" "$DIR/../../../scripts/backlog-receipt-lib.sh")" || RLIB=""
+# The frozen ledger (BL-872); see the header. REAL_LEDGER keeps its name: it is a real ledger, frozen.
 REAL_LEDGER=""
-[ -n "$ROOT" ] && [ -f "$ROOT/docs/backlog.md" ] && REAL_LEDGER="$ROOT/docs/backlog.md"
+[ -f "$DIR/ledger.snapshot" ] && REAL_LEDGER="$DIR/ledger.snapshot"
 for _p in RECEIPTS SIZE REVERIFY LIBSRC REVSRC EXTRACT RLIB REAL_LEDGER; do
   eval "_v=\${$_p}"
   [ -n "$_v" ] || { echo "FIXTURE BROKEN: backlog-real-ledger could not resolve $_p" >&2; exit 2; }
@@ -93,6 +95,7 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$DIR/../lib/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 B_P1=0
+B_R9=0
 
 # --- j1's seed: a throwaway REPOSITORY, because the receipts validator checks each receipt out of
 # HEAD. It carries the validator, both reconcile files it loads, the classifier (R2's declared-empty
@@ -174,7 +177,8 @@ j1p_zero="$(j1_read "$(run_r "" "$TMP/j1p" $J1_ARGS)")"
 printf '## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1p/docs/backlog.md"
 ( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m anchor >/dev/null 2>&1 )
 # shellcheck disable=SC2086
-j1p_anch="$(j1_read "$(run_r "" "$TMP/j1p" $J1_ARGS)")"
+j1p_anch_out="$(run_r "" "$TMP/j1p" $J1_ARGS)"
+j1p_anch="$(j1_read "$j1p_anch_out")"
 if [ -z "$j1p_zero" ] && [ "${j1p_anch#* }" = 1 ]; then
   note "ok    j1 probe -- a zero-scored ledger yields no SUMMARY reading, and the same ledger plus the anchor yields scored=1"
 else
@@ -182,6 +186,10 @@ else
 fi
 seed_r "$TMP/j1"
 cp "$REAL_LEDGER" "$TMP/j1/docs/backlog.md"
+# THIS WORLD ALONE CARRIES THE CEILING, SO THE VALIDATOR'S OWN LIVE-LEDGER ARM R9 RUNS IN IT (BL-872).
+# j1p above has none, so its anchored run must say `R9: NOT RUN`; this one must say `R9: OK` with the
+# same counts this fixture derives independently below. Both are asserted after b16.
+cp "$SIZE" "$TMP/j1/scripts/validate-backlog-size.sh"
 # The anchor must be an id the real ledger does not carry, or it is a second entry under one id.
 # Real entries are titled (`## BL-NNN — ...`), so the id is closed by a non-digit or line end.
 # A real ledger DECLARED EMPTY carries no `## BL-` entry by construction, so that half of the
@@ -266,6 +274,57 @@ else
   note "ok    b16 -- on the real ledger the ceiling and the classifier agree at $b16_arm entries"
 fi
 
+# ===== r9: THE VALIDATOR'S OWN LIVE-LEDGER ARM, BOTH DIRECTIONS (BL-872). ===================
+# R9 of the receipts validator is where j1 and b16 run against the LIVE ledger now. Its OK line must
+# carry the counts this fixture derived on its own above for the same world (the snapshot plus the
+# anchor, so the ceiling reads b16 + 1), and the world with no size validator must say NOT RUN.
+# Presence-shaped both ways: a validator with the arm deleted prints neither line.
+if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ -n "$j1_arm" ]; then
+  r9_want="j1 the sh population $j1_arm covers the classifier's resolved set "
+  r9_want2="b16 the ceiling and the classifier agree at $(( b16_arm + 1 )) entries"
+  r9_line="$(printf '%s\n' "$j1_out" | grep '^R9: ')" || r9_line=""
+  if grep -qF "$r9_want" <<<"$r9_line" && grep -qF "$r9_want2" <<<"$r9_line" && grep -q '^R9: OK -- ' <<<"$r9_line"; then
+    ok "r9 -- the validator's live-ledger arm R9 ran in the world carrying the ceiling and agrees with this fixture ($j1_arm sh, $(( b16_arm + 1 )) entries)"; B_R9=1
+  else
+    bad "r9 -- the validator's R9 line in the world carrying the ceiling is '${r9_line}', want R9: OK carrying '${r9_want}' and '${r9_want2}'"
+  fi
+  if grep -q '^R9: NOT RUN -- scripts/validate-backlog-size.sh is absent' <<<"$j1p_anch_out"; then
+    ok "r9 -- the world with no size validator says R9: NOT RUN rather than a clean result"
+  else
+    bad "r9 -- the world with no size validator did not print R9: NOT RUN (got '$(printf '%s\n' "$j1p_anch_out" | grep '^R9' )')"
+  fi
+  # m-r9call: the CALL SITE of R9 neutered (`r9_run; _r9_rc=$?` -> `_r9_rc=0`), in a copy of the j1 world
+  # that carries the ceiling. The call line is the only place R9 runs, so the mutated validator prints no
+  # `R9:` line at all; the r9 OK arm above is presence-shaped and is what decides. Twin j1-pop: the same
+  # mutated tree still prints a SUMMARY whose sh population equals the unmutated world's.
+  cp -R "$TMP/j1" "$TMP/r9m"
+  r9m_v="$TMP/r9m/scripts/validate-backlog-receipts.sh"
+  sed 's/^r9_run; _r9_rc=\$?$/_r9_rc=0/' "$RECEIPTS" > "$r9m_v"
+  if cmp -s "$RECEIPTS" "$r9m_v"; then
+    note "FAIL  r9 m-r9call -- the call-site mutation DID NOT APPLY"; rc=1
+  else
+    r9m_out="$(run_r "" "$TMP/r9m" $J1_ARGS)"
+    r9m_sum="$(j1_read "$r9m_out")"
+    if ! grep -q '^R9: ' <<<"$r9m_out"; then
+      mutant_killed "$B_R9" m-r9call "m-r9call [r9-call]: with the R9 call site neutered the validator prints no R9 line at all"
+    else
+      bad "r9 m-r9call SURVIVED: the validator with its R9 call replaced still printed '$(printf '%s\n' "$r9m_out" | grep '^R9: ')'"
+    fi
+    if [ -n "$r9m_sum" ] && [ "${r9m_sum%% *}" = "$j1_arm" ]; then
+      ok "[j1-pop] twin of m-r9call stays green: the mutated validator still reads the sh population $j1_arm"
+    else
+      bad "[j1-pop] the twin TRIPPED: the mutated validator read '${r9m_sum}', want population $j1_arm"
+    fi
+    if [ "$MATRIX" = 1 ]; then
+      r9_t=GREEN; r9_k=no; grep -q '^R9: ' <<<"$r9m_out" || { r9_t=TRIPPED; r9_k=yes; }
+      j1p_t=GREEN; j1p_k=no; [ -n "$r9m_sum" ] && [ "${r9m_sum%% *}" = "$j1_arm" ] || { j1p_t=TRIPPED; j1p_k=yes; }
+      matrix_row m-r9call r9-call 0 "$r9_t" "$r9_k"
+      matrix_row m-r9call j1-pop 0 "$j1p_t" "$j1p_k"
+      MROWS=$(( MROWS + 2 ))
+    fi
+  fi
+fi
+
 # ===== p1: A PROSE LEAD-IN BULLET ON THE REAL LEDGER (BL-820). ==============================
 # The real ledger plus one host entry that carries `- **BL-632 is LANDED** prose` before its
 # receipt must count exactly ONE more than the real ledger alone -- the host, never the phantom.
@@ -310,7 +369,7 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ "$b16_arm" -gt 0 ]; then
       b16_t=GREEN; b16_k=no; [ "$p1mt_arm" != "$b16_arm" ] && { b16_t=TRIPPED; b16_k=yes; }
       matrix_row m-loose p1-count 0 "$p1_t" "$p1_k"
       matrix_row m-loose b16-count 0 "$b16_t" "$b16_k"
-      MROWS=2
+      MROWS=$(( MROWS + 2 ))
     fi
   fi
 elif [ "$b16_de" -eq 0 ]; then
@@ -321,10 +380,10 @@ fi
 
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
-elif [ "$MROWS" -eq 2 ]; then ok "[MX] the matrix run measured 2 cells for the 1 mutant"
-else bad "[MX] matrix rows=$MROWS, 2 expected"; fi
+elif [ "$MROWS" -eq 4 ]; then ok "[MX] the matrix run measured 4 cells for the 2 mutants"
+else bad "[MX] matrix rows=$MROWS, 4 expected"; fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  backlog-real-ledger -- j1 and b16 hold on the real ledger"
+  note "PASS  backlog-real-ledger -- j1 and b16 hold on the frozen ledger snapshot"
 fi
 exit "$rc"

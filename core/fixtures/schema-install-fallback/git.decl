@@ -1,0 +1,3 @@
+# `seed`: install.sh copies shipping fixtures from `git ls-files` and refuses a distribution that is not its own git
+# work tree (BL-892), and this fixture runs the real install.sh from the sandbox root, so that root must be a work tree.
+seed
