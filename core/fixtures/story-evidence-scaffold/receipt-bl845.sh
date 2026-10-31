@@ -68,6 +68,11 @@
 #   exclctl  the same diff and body, surface `web/src/**` alone (the near-miss)         -> 1:smoke-not-updated:
 #   grammar  `## Smoke Test Updates (dev)` with CRLF line ends, an absent token inside a
 #            fence and another under the next `## ` heading (neither read)             -> 0::O
+#   decl     a base layer contract declares `consumer_smoke_surface_file: docs/ui-surface.txt` (web/src/**)
+#            while docs/smoke-surface.txt reads `none`; UI diff; empty body: the declared path is read -> 1:smoke-not-updated:
+#   nokey    the clean world plus a base layer contract WITHOUT the key: the default path is read    -> 0::O
+#   emptykey the clean world plus `consumer_smoke_surface_file:` with no value: refused by the empty-key
+#            message (flag P, a `declares ... with no path` line), never by the matches-nothing guard -> 1:smoke-surface-unevaluable:P
 #   hand     handoff mode on the s320 world: the same smoke-not-updated line          -> smoke-not-updated present
 #   handmag  handoff mode on the magic world: exit 1 with smoke-surface-unevaluable (never the exit 2 a
 #            caller reads as "nothing checked")
@@ -102,6 +107,10 @@ seed() {
   printf 'old\n' > "$W/web/tests/old.spec.js"; printf 'h\n' > "$W/web/tests/e2e.d/helper.js"
   printf 'class TestA:\n    def test_x(self):\n        pass\n' > "$W/tests/test_x.py"; printf 't1\n' > "$W/web/src/a.test.js"
   [ "$sb" = - ] || printf '%s\n' "$sb" > "$W/docs/smoke-surface.txt"
+  # SEED_LC: a layer contract committed at base (the reader's declaration); SEED_ALT: the surface written
+  # at the non-default path docs/ui-surface.txt as well.
+  if [ -n "${SEED_LC:-}" ]; then mkdir -p "$W/.claude/skills/ai-dlc" && printf '%s\n' "$SEED_LC" > "$W/.claude/skills/ai-dlc/layer-contract.yaml" || return 1; fi
+  if [ -n "${SEED_ALT:-}" ]; then printf '%s\n' "$SEED_ALT" > "$W/docs/ui-surface.txt" || return 1; fi
   printf '# Story\n\n## Smoke Test Updates\n\n## Rename Verification\n\nnot a rename\n' > "$W/stories/s.md"
   g add -A && g commit -qm base || return 1
   g rev-parse HEAD > "$W/.B"
@@ -171,7 +180,14 @@ web/src/**' = ui '- `web/tests/e2e/x.spec.js` (added)' && fin || ok=0
 :!web/src/utils/configSchema.js" = gen '' && fin || ok=0
   seed exclctl "$SURF" = gen '' && fin || ok=0
   seed grammar "$SURF" = ui '' && spec || ok=0
-  [ "$ok" -eq 1 ] && printf '# Story\r\n\r\n## Smoke Test Updates (dev)\r\n\r\n- `web/tests/a.spec.js` (modified)\r\n```\r\n`web/tests/infence.spec.js`\r\n```\r\n\r\n## Rename Verification\r\n\r\n`web/tests/notread.spec.js`\r\n' > "$W/stories/s.md" && fin || ok=0
+  # The reader's PATH (header SURFACE PATH): decl declares docs/ui-surface.txt (web/src/**) while
+  # docs/smoke-surface.txt says none, so a reader ignoring the declaration reads NO-SURFACE instead of
+  # refusing; nokey carries a contract without the key (the clean world's answer); emptykey declares it empty.
+  SEED_LC="$(printf 'contract_version: 1\nconsumer_smoke_surface_file: docs/ui-surface.txt')" SEED_ALT="$SURF" \
+    seed decl none = ui '' && fin || ok=0
+  SEED_LC='contract_version: 1' seed nokey "$SURF" = ui "$CLEAN" && spec && fin || ok=0
+  SEED_LC="$(printf 'contract_version: 1\nconsumer_smoke_surface_file:')" seed emptykey "$SURF" = ui "$CLEAN" && spec && fin || ok=0
+  [ "$ok" -eq 1 ] && W="$R/grammar" && printf '# Story\r\n\r\n## Smoke Test Updates (dev)\r\n\r\n- `web/tests/a.spec.js` (modified)\r\n```\r\n`web/tests/infence.spec.js`\r\n```\r\n\r\n## Rename Verification\r\n\r\n`web/tests/notread.spec.js`\r\n' > "$W/stories/s.md" && fin || ok=0
   [ "$ok" -eq 1 ] || { echo "REFUSED: a cell world could not be seeded" >&2; exit 9; }
   : > "$R/.seeded"
 fi
@@ -220,6 +236,7 @@ run() { # <cell> [<subdirectory of the world to pass as -C>] -> "<rc>:<kinds>:<f
   grep -q '^SKIP SMOKE-SURFACE (empty' <<<"$o" && f="${f}E"
   grep -q '^UNEVALUABLE SMOKE-SURFACE (' <<<"$o" && f="${f}V"
   grep -q '^REFUSED smoke-surface-unevaluable .*: git rejected a pathspec' <<<"$o" && f="${f}R"
+  grep -q '^REFUSED smoke-surface-unevaluable .*declares consumer_smoke_surface_file: with no path' <<<"$o" && f="${f}P"
   printf '%s:%s:%s' "$rc" "$(awk '/^REFUSED /{print $2}' <<<"$o" | sort | tr '\n' ',' | sed 's/,$//')" "$f"
 }
 fails=0
@@ -264,6 +281,9 @@ cell excl     0::O
 cell exclbang 0::O
 cell exclctl  1:smoke-not-updated:
 cell grammar  0::O
+cell decl     1:smoke-not-updated:
+cell nokey    0::O
+cell emptykey 1:smoke-surface-unevaluable:P
 W="$R/s320"
 if want hand; then
 o="$(he_run "$HE" -C "$W" stories/s.md "$(cat "$W/.B")" "$(cat "$W/.T")" 2>/dev/null)"

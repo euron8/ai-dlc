@@ -30,3 +30,4 @@ sleep
 python3
 ps
 kill
+jq

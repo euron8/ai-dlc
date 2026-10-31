@@ -63,6 +63,12 @@
 #       never refused. A removal is not refused. Known
 #       acquittal: the removal word is read on the LINE, so "`x` was not removed" acquits an absent
 #       `x`; under (m2) a removal helps only if the path is in the range anyway.
+#   SURFACE PATH. The file the layer contract declares as `consumer_smoke_surface_file:`, the
+#       contract itself read at <BASE> through git (`.claude/skills/ai-dlc/layer-contract.yaml`, else
+#       the distribution's `core/skills/ai-dlc/layer-contract.yaml`). No contract at <base>, or a
+#       contract without the key: `docs/smoke-surface.txt`. The key present with an EMPTY value REFUSES
+#       `smoke-surface-unevaluable` (an empty path names the root tree). `docs/smoke-surface.txt` below
+#       stands for whichever path this resolves to.
 #   SURFACE. `docs/smoke-surface.txt`, read at <BASE> through git, never the working tree: one git pathspec per
 #       line, `#` comments and blank lines ignored. Each line reaches `git diff --name-only <base>
 #       <frozen> -- <lines>` as ONE argument, split on newlines only and never globbed by the shell
@@ -726,6 +732,11 @@ smoke_arms() { # <base> <frozen> <story> -> SMOKE/SKIP verdict lines and REFUSED
   fi
   chg="$(SD "$sb" "$sf" 2>/dev/null)" \
     || { printf 'UNEVALUABLE SMOKE-SURFACE (git diff %s..%s failed)\n' "${sb:0:12}" "${sf:0:12}"; return 2; }
+  # The surface's PATH is the contract's `consumer_smoke_surface_file:` at <base> (header: SURFACE).
+  smoke_surface_path "$sb" || return $?
+  if [ -z "$SMOKE_SURFACE" ]; then
+    refuse "smoke-surface-unevaluable $st: $SMOKE_SURFACE_LC at ${sb:0:12} declares consumer_smoke_surface_file: with no path; an empty path names the whole tree, so declare the surface file's path (or delete the key for $SMOKE_SURFACE_DEFAULT) outside the story's range"; return 0
+  fi
   # SMOKE-SURFACE-EDITED: the surface is the gate's input, read at <base>; the story may not move it.
   ed="$(SD "$sb" "$sf" -- "$SMOKE_SURFACE" 2>/dev/null)" \
     || { printf 'UNEVALUABLE SMOKE-SURFACE (git diff %s..%s -- %s failed)\n' "${sb:0:12}" "${sf:0:12}" "$SMOKE_SURFACE"; return 2; }
@@ -1045,7 +1056,29 @@ fi
 # ------------------------------------------------------------------------- smoke (BL-845)
 # The ONE smoke block: smoke_arms and the --smoke mode (header: SMOKE MODE). Handoff mode calls
 # smoke_arms in one line, after its own arms; --smoke runs smoke_arms alone and exits here.
-SMOKE_SURFACE=docs/smoke-surface.txt
+# The surface file's path is DERIVED from the layer contract's `consumer_smoke_surface_file:` at
+# <base>, never restated here: the literal below is only the fallback for a <base> carrying no
+# contract (either layout) or a contract with no such key, which is every tree that predates the
+# declaration. A key present with an EMPTY value refuses, because an empty path names the root tree
+# and an empty pathspec matches every path.
+SMOKE_SURFACE_DEFAULT=docs/smoke-surface.txt
+SMOKE_SURFACE=""
+SMOKE_SURFACE_LC=""
+smoke_surface_path() { # <rev> -> sets SMOKE_SURFACE (empty: key declared empty) and SMOKE_SURFACE_LC; 2 when unreadable
+  local rev="$1" lc decl
+  SMOKE_SURFACE="$SMOKE_SURFACE_DEFAULT"; SMOKE_SURFACE_LC=""
+  for lc in .claude/skills/ai-dlc/layer-contract.yaml core/skills/ai-dlc/layer-contract.yaml; do
+    G cat-file -e "$rev:$lc" 2>/dev/null || continue
+    decl="$(G show "$rev:$lc" 2>/dev/null)" \
+      || { printf 'UNEVALUABLE SMOKE-SURFACE (git show %s:%s failed)\n' "${rev:0:12}" "$lc"; return 2; }
+    SMOKE_SURFACE_LC="$lc"
+    if grep -q '^consumer_smoke_surface_file:' <<<"$decl"; then
+      SMOKE_SURFACE="$(sed -n 's/^consumer_smoke_surface_file:[[:space:]]*//p' <<<"$decl" | head -1 | sed 's/[[:space:]]*$//')"
+    fi
+    return 0
+  done
+  return 0
+}
 if [ "${1:-}" = "--smoke" ]; then
   [ $# -eq 4 ] || { echo "usage: $ME [-C <repo>] --smoke <story-file> <base> <frozen>" >&2; exit 2; }
   STORY="$(norm_story "$2")" || exit 2

@@ -73,6 +73,7 @@ core_manifest:
   - core/skills/ai-dlc/artifact-path-grammar.md
   - core/skills/ai-dlc/postcompact-digest.md
   - core/skills/ai-dlc/templates/*.md
+  - core/skills/ai-dlc/templates/smoke-surface.txt
   - core/team-roles/*.md
   - core/hooks/ai-dlc-*.sh
   - core/session-driver/*.sh
@@ -88,6 +89,7 @@ machinery:
   - core/skills/ai-dlc/layer-contract.yaml
   - core/git-hooks/pre-push
   - core/skills/ai-dlc/templates/*.md
+  - core/skills/ai-dlc/templates/smoke-surface.txt
   - core/skills/ai-dlc/postcompact-digest.md
   - core/hooks/ai-dlc-*.sh
   - core/session-driver/*.sh

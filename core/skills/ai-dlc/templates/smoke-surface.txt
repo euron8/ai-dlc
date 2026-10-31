@@ -1,0 +1,26 @@
+# Smoke surface: the paths whose change obliges a story to update its smoke test.
+#
+# This file is YOURS. ai-dlc scaffolded it once because the layer contract declares
+# `consumer_smoke_surface_file:` and nothing was here; no pull writes it again.
+#
+# validate-handoff-evidence.sh reads this file at the story's BASE, through git, at every
+# gate-1 handoff and at the gate-2 go-signal. Until you write a line below that is not a
+# comment, it prints `SKIP SMOKE-SURFACE (empty: write globs or none)`: a SKIP, never an OK.
+#
+# Grammar:
+#   - One git pathspec per line, for example  web/src/**  or  scripts/deploy/*.sh
+#   - Each line reaches `git diff --name-only <base> <frozen> -- <lines>` as ONE argument, so
+#     git's pathspec magic holds: a line may carry a space, and `:(exclude)<path>` or `:!<path>`
+#     removes a path from the surface.
+#   - Exclude your test files, for example  :(exclude)web/tests/**  — a story that edits only
+#     its tests otherwise reads as a surface change that owes a smoke update.
+#   - Or write a lone `none` to declare that this project has no smoke surface; the smoke
+#     coverage check then does not run.
+#   - Blank lines and lines starting with `#` are ignored.
+#   - A comment must sit on its OWN line. A `#` after a pathspec on the same line is part of the
+#     pathspec, which then matches nothing: when no line matches, the run refuses
+#     `smoke-surface-unevaluable`; beside a line that does match, that line's coverage is
+#     silently lost.
+#
+# Change this file between sprints: a story whose range edits it refuses
+# `smoke-surface-edited`, because the surface is read at the story's base.

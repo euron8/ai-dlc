@@ -880,6 +880,10 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   sm_mutant sm-hand-uneval-outranks 'smoke_arms "$BASE" "$FROZEN" "$STORY" || [ "$refused" -eq 1 ] || exit 2 # handoff mode' 'smoke_arms "$BASE" "$FROZEN" "$STORY" || exit 2 # handoff mode' handbrk "handoff: an unevaluable smoke arm after a refusal exits 2, so the refusal does not block dispatch"
   sm_mutant sm-diff-cwd 'SD() { git -C "$TOP" diff' 'SD() { git -C "$REPO" diff' sub "-C <subdirectory> re-roots the smoke pathspecs, so the range is acquitted"
   sm_mutant sm-no-empty "if [ -z \"\$globs\" ]; then printf 'SKIP SMOKE-SURFACE (empty" "if false; then printf 'SKIP SMOKE-SURFACE (empty" empty "an empty surface read as the whole diff"
+  # The surface PATH (BL-845's reader): a declared non-default path swapped back to the default while an
+  # empty declaration stays empty (so the emptykey cell is not what kills it), and the empty-key refusal off.
+  sm_mutant sm-decl-ignored "| head -1 | sed 's/[[:space:]]*\$//')\"" "| head -1 | sed 's/[[:space:]]*\$//')\"; [ -z \"\$SMOKE_SURFACE\" ] || SMOKE_SURFACE=\"\$SMOKE_SURFACE_DEFAULT\"" decl "the declared consumer_smoke_surface_file: ignored, so docs/smoke-surface.txt is read in its place"
+  sm_mutant sm-emptykey-unrefused 'if [ -z "$SMOKE_SURFACE" ]; then' 'if false; then' emptykey "an empty consumer_smoke_surface_file: is not refused by its own message"
   sm_mutant sm-handoff-unwired 'smoke_arms "$BASE" "$FROZEN" "$STORY" || [ "$refused" -eq 1 ] || exit 2 # handoff mode' ': # handoff mode' hand "handoff mode does not run the smoke arms"
   sm_mutant sm-exclglob-lost '"$sb" "$sf" -- $globs 2>/dev/null)"' '"$sb" "$sf" -- $(grep -v '"'"'^:(exclude,glob)'"'"' <<<"$globs") 2>/dev/null)"' exclglob "a glob-magic exclude line dropped from the (m2) diff, so a top-level test-only change refuses"
   if [ -d "$WORK/sm-worlds.snap/cnone/.git" ] && [ -d "$WORK/sm-worlds.snap/magic/.git" ] && [ -d "$WORK/sm-worlds.snap/edited/web" ] \

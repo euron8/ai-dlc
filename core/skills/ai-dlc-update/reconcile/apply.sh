@@ -935,9 +935,11 @@ ap_stage_or_refuse() {
 # a mid-pull tree, and `--finish` would have no record to check the merges against.
 ap_write_marker() {
   local _old="" _keep="" _rows="" _st _p _c _b _h _m _tab _n _ob _bt _tmp _rc=0 _sited _rest _l _unrec=0
+  local _tkeep="" _trows="" _tn=0 _tunrec=0 _thave=0 _tsent=0
   _tab="$(printf '\t')"
   if [ -d "$APPLYING" ]; then
     say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the in-flight marker's path is a DIRECTORY, so the marker cannot be written there: the fixture suite will not block on this mid-pull tree (\`core/git-hooks/pre-push\` tests for a file) and \`--finish\` has no record of which handed-back merges were still untouched. Remove that directory, then re-run apply with the same four arguments."
+    template_scan
     return 0
   fi
   if [ -f "$APPLYING" ]; then
@@ -949,6 +951,18 @@ ap_write_marker() {
       case "${NL_CH}${_old}" in
         *"${NL_CH}classify-hashes: "*) _keep="$(printf '%s\n' "$_old" | awk '/^classify: /')" ;;
         *) _unrec=1 ;;
+      esac
+      # The template record's own first-write-wins, on the same same-base test and the same
+      # reasoning (see TEMPLATE-DERIVED FILES below): kept when the earlier run wrote its sentinel,
+      # and a same-base marker without one stays template-unrecorded for the rest of this base.
+      # A kept `template-hashes: refused` is a scan that never completed, so it keeps NOTHING: this
+      # run's completed scan writes the numeric sentinel and its lines. Tested first, because the
+      # numeric arm's pattern matches it too, and on whole lines, because `$(cat)` strips the
+      # trailing newline that the sentinel, written last, would otherwise end on.
+      case "${NL_CH}${_old}${NL_CH}" in
+        *"${NL_CH}template-hashes: refused${NL_CH}"*) : ;;
+        *"${NL_CH}template-hashes: "*) _thave=1; _tkeep="$(printf '%s\n' "$_old" | awk '/^template: /')" ;;
+        *) _tunrec=1 ;;
       esac
     fi
   fi
@@ -968,6 +982,13 @@ ap_write_marker() {
     say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the setup-sited path set could not be loaded out of preclassify.sh's \`setup_sited_paths()\` (exit ${_rc}), so which handed-back merges are setup-filled is unknown and the in-flight marker was not written: the fixture suite will not block on this mid-pull tree and \`--finish\` has no record to check the merges against. ${_why}, then re-run apply with the same four arguments."
     return 0
   fi
+  # THE TEMPLATE SCAN RUNS HERE, AFTER THE SITED LOAD ABOVE AND BEFORE THE WRITE BELOW. Before the
+  # write, because the lines it collects go into this marker. After the load, because the forked
+  # `preclassify.sh --templates` loads the sited set itself at its top level, and
+  # apply-restamp-theirs proves the load above is status-checked by failing exactly the second
+  # sited-grammar `awk` of the run (the first is phase 0's preclassify): a fork placed before this
+  # load took that slot, so the stub failed the templates scan instead and the load went unprobed.
+  template_scan
   _rc=0
   # Walked by parameter expansion over the rows already in memory: no heredoc or here-string whose
   # staging could fail and read as "no CLASSIFY rows".
@@ -991,18 +1012,291 @@ ap_write_marker() {
   done
   _rows="$(printf '%s\n%s' "$_keep" "$_rows" | awk 'NF' | sort -t "$_tab" -k2,2 -u)"
   _n="$(printf '%s' "$_rows" | awk 'NF {n++} END {print n+0}')"
+  # The template lines template_scan collected, first write winning per path exactly as above.
+  # The numeric sentinel is written only when there is a record to vouch for: this run's scan
+  # completed, or the kept marker already carried one. A refused scan with no numeric sentinel kept
+  # writes `template-hashes: refused`, NEVER no sentinel: a marker without one is read as an older
+  # engine's, whose `--finish` is a NOTE that stamps, and whose same-base re-run records nothing --
+  # so an immediate `--finish` and a later working re-run both stamped over the unmerged file.
+  # `--finish` withholds on `refused` (finish-template-unscanned), and a same-base run whose scan
+  # completes replaces it.
+  if [ "$_tunrec" = 0 ] && [ "$TP_SCANNED" = 0 ] && [ "$_thave" = 0 ]; then
+    _tsent=refused
+  elif [ "$_tunrec" = 0 ] && { [ "$TP_SCANNED" = 1 ] || [ "$_thave" = 1 ]; }; then
+    _tsent=1
+    _rest="$TP_LINES"
+    while [ -n "$_rest" ]; do
+      _l="${_rest%%"$NL_CH"*}"
+      case "$_rest" in *"$NL_CH"*) _rest="${_rest#*"$NL_CH"}" ;; *) _rest="" ;; esac
+      [ -n "$_l" ] || continue
+      case "${NL_CH}${_tkeep}${NL_CH}" in *"${_tab}${_l#*"$_tab"}${NL_CH}"*) continue ;; esac
+      _trows="${_trows}${_l}${NL_CH}"
+    done
+    _trows="$(printf '%s\n%s' "$_tkeep" "$_trows" | awk 'NF' | sort -t "$_tab" -k2,2 -u)"
+    _tn="$(printf '%s' "$_trows" | awk 'NF {n++} END {print n+0}')"
+  fi
   _tmp="$APPLYING.incoming.$$"
   { printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS"
     if [ "$_unrec" = 0 ]; then
       printf 'classify-hashes: %s\n' "$_n"
       [ -z "$_rows" ] || printf '%s\n' "$_rows"
     fi
+    if [ "$_tsent" = 1 ]; then
+      printf 'template-hashes: %s\n' "$_tn"
+      [ -z "$_trows" ] || printf '%s\n' "$_trows"
+    fi
+    [ "$_tsent" != refused ] || printf 'template-hashes: refused\n'
   } | cat > "$_tmp" 2>/dev/null || _rc=$?
   [ "$_rc" -eq 0 ] && { mv -f "$_tmp" "$APPLYING" 2>/dev/null || _rc=$?; }
   if [ "$_rc" -ne 0 ]; then
     rm -f "$_tmp" 2>/dev/null
     say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the in-flight marker could not be written (exit ${_rc}), so the fixture suite will not block on this mid-pull tree and \`--finish\` has no record of which handed-back merges were still untouched. Check that .claude/ is writable and that no file-size limit is set, then re-run apply with the same four arguments."
   fi
+  return 0
+}
+
+# --- TEMPLATE-DERIVED FILES: HANDED BACK ON THE ORDINARY RUN, RECORDED, RE-CHECKED BY `--finish` --
+#
+# THE FOUR CONSUMER FILES RENDERED FROM `templates/` (CLAUDE.md, docs/coding-conventions.md,
+# QUICKSTART.md, .claude/settings.json) WERE NEVER LOOKED AT BY THIS DRIVER. `preclassify.sh
+# --templates` buckets them, but only emit-report called it, so a pull whose only template change
+# was boilerplate stamped theirs with the consumer copy still at base. Measured on a world changing
+# only QUICKSTART.md.template: `--templates` printed `TEMPLATE-PROSE-MERGE`, and apply printed one
+# row, `RESOLVED restamp`, stamped theirs, and left the file at base; `--finish` over that tree
+# stamped theirs whether or not the file had been merged -- the two trees were indistinguishable.
+#
+# THE ORDINARY RUN NAMES THE WORK AND RECORDS THE FILE; IT NEVER WRITES ONE OF THE FOUR. Each is
+# user-owned and its merge is operator-gated (see the hook row's header). `template_scan` runs
+# BEFORE the marker write and before every core write, so (a) its WORKLIST rows are counted by
+# the guard in write_stamp and withhold the stamp, and (b) the blob it records is the file as the
+# pull found it.
+#
+# `--finish` DOES NOT RE-RUN `--templates`. The bucket is a function of the two refs and the
+# file's presence alone, so it reads PROSE-MERGE on a merged tree exactly as on an untouched one and
+# would never clear. `--finish` instead judges the RECORD, the same way finish_classify_unmerged()
+# judges a semantic merge: a prose file still byte-identical (blob and mode) to the recorded copy
+# is a merge nobody did. A CONTENT PREDICATE WAS BUILT FIRST AND REFUTED, by measurement on the
+# reference consumer's own history: "every line the template deleted is absent and every line it
+# added is present" read NOT DONE on 27 of 28 historical QUICKSTART pairs, 23 CLAUDE.md pairs and
+# 6 of 7 coding-conventions pairs, every one of them a tree the operator had ALREADY merged --
+# kept table rows on purpose, re-wrapped paragraphs. A predicate that fires on a correct merge with
+# no in-band exit wedges the finisher; the record clears on any change and has a named exit.
+#
+# THEIR OWN LINE TYPE IN THE MARKER, `template: <blob> <755|644><TAB><path>`, under their own
+# sentinel `template-hashes: <n>`, and the classify record's rules exactly: first write wins per
+# base (a re-run after the operator merged must not make the merged copy the reference), sorted so
+# a re-run over the same state writes the same bytes (self-update-gate.sh digests this file), and a
+# same-base marker without the sentinel stays template-unrecorded -- an engine that predates this
+# record wrote it, and the tree may already carry the merges. A scan that refused writes the
+# sentinel `template-hashes: refused`, which records nothing and withholds under `--finish`.
+#
+# SETTINGS.JSON IS VERIFIED, NOT ATTESTED. Its merge is a program, `settings-merge.sh`, and that
+# program is idempotent: measured on the reference consumer's live settings.json against the
+# template at two refs, by its installed copy and this release's, all four merges were rc 0 and
+# byte-equal to the live file, and a second merge of each was byte-equal to the first; the same file
+# with its PreToolUse block stripped read DIFF after one merge, so the oracle can fire. So the test
+# is "merging theirs' template into a COPY changes nothing", the copy in this run's staging
+# directory: never the live file. Equal is no row and no record. A json file is judged by this
+# test under `--finish` too, never by its blob, and only while its `template:` line is present --
+# deleting that line is the decline exit an idempotency test otherwise would not have. This catches
+# only a template that moved base->theirs, since `--templates` buckets on that delta.
+#
+# ONE ROW HERE NAMES `reapply_remedy`, AND ONLY ONE: `finish-template-unscanned`, for a marker
+# whose scan refused. Nothing was recorded, so `--finish` cannot clear it; a fresh ordinary run whose
+# scan completes does, and the remedy's text routes the withheld row away from `--finish`. Deleting
+# the `template-hashes: refused` line is the last resort (SKILL.md check 5).
+# Every other row here is cleared by `--finish`, so it does not name it.
+TP_SCANNED=0
+TP_LINES=""
+TP_JSON_OWED=0
+TP_F_STATE=""
+TP_F_ROWS=""
+tp_remedy_json="Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"\${theirs}:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+# tp_rec_line <consumer-rel> -> the `template: ` line for the file as it stands now ("-" unreadable).
+tp_rec_line() {
+  local _h _m=644
+  _h="$(git hash-object "$CONSUMER/$1" 2>/dev/null)" || _h=""
+  [ -x "$CONSUMER/$1" ] && _m=755
+  printf 'template: %s %s\t%s' "${_h:--}" "$_m" "$1"
+}
+# tp_json_test <template-path at theirs> <consumer-rel> -> sets TP_JT to equal, differs, or
+# refused (TP_JW carries why). Merges theirs' template into a staged COPY of the consumer file with
+# this release's settings-merge.sh and compares the copy against the live file.
+tp_json_test() {
+  local _d _rc=0
+  TP_JT=refused; TP_JW=""
+  [ -f "$SELF/settings-merge.sh" ] || { TP_JW="reconcile/settings-merge.sh is not beside this apply.sh (version skew or a partial copy of reconcile/)"; return 0; }
+  [ -n "$AP_TMP" ] && _d="$AP_TMP/tpj" && mkdir -p "$_d" 2>/dev/null || { TP_JW="no staging directory"; return 0; }
+  git -C "$DIST" show "${THEIRS}:$1" > "$_d/template" 2>/dev/null || { TP_JW="\`${THEIRS}:$1\` could not be read"; return 0; }
+  rm -f "$_d/settings.json" 2>/dev/null
+  cp -p "$CONSUMER/$2" "$_d/settings.json" 2>/dev/null || { TP_JW="the consumer's $2 could not be copied"; return 0; }
+  # stdin closed: template_scan calls this inside a `read` loop over the staged rows.
+  bash "$SELF/settings-merge.sh" --consumer "$_d/settings.json" --template "$_d/template" < /dev/null > /dev/null 2> "$_d/err" || _rc=$?
+  if [ "$_rc" -ne 0 ]; then
+    TP_JW="settings-merge.sh exited ${_rc}: $(sed -n '1p' "$_d/err" 2>/dev/null | tr '\t' ' ')"
+    return 0
+  fi
+  if cmp -s "$_d/settings.json" "$CONSUMER/$2"; then TP_JT=equal; else TP_JT=differs; fi
+  return 0
+}
+# template_scan -- ordinary run only. Rows, TP_LINES for ap_write_marker, TP_SCANNED=1 on a scan
+# that completed. A refusal is a DECISION (the ordinary run withholds on it) and leaves TP_SCANNED
+# at 0, so the marker carries `template-hashes: refused` and `--finish` withholds on it
+# (finish-template-unscanned) until a same-base run's scan completes. A json row whose merge could
+# not be tested owns the settings-merge remedy exactly as an owed one does, so it sets TP_JSON_OWED
+# too and the hook row's `settings-merge` row stands down beside it (one row per remedy).
+template_scan() {
+  local _rc=0 _t _tm _c _b _tab
+  _tab="$(printf '\t')"
+  detector_run tpl preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER" --templates || _rc=$?
+  if [ "$_rc" -ne 0 ]; then
+    detector_refused template-prose "preclassify.sh --templates" "-" "$_rc" tpl
+    return 0
+  fi
+  [ -r "$DT_DIR/tpl.out" ] || { detector_refused template-prose "preclassify.sh --templates" "-" "unread" tpl; return 0; }
+  while IFS="$_tab" read -r _t _tm _c _b; do
+    [ "$_t" = T ] && [ -n "$_c" ] || continue
+    case "$_b" in
+      TEMPLATE-PROSE-MERGE)
+        say WORKLIST template-prose-merge "$_c" "upstream changed \`${_tm}\` between \`${BASE}\` and \`${THEIRS}\`, and this file is rendered from it with your values filled in, so the pull does not write it: merge the template's boilerplate change into it by the marker-anchored mask/reinject in reconcile/template-sites.md (keep every \`{token}\` fill region's live value; if a marker anchor no longer locates, STOP and merge that region by hand). Then run --finish, which withholds while this file is still byte-identical to the copy this run found. If no change is wanted, delete this file's own \`template:\` line from .claude/.ai-dlc-applying and run --finish."
+        TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}" ;;
+      TEMPLATE-JSON-MERGE)
+        tp_json_test "$_tm" "$_c"
+        case "$TP_JT" in
+          equal) : ;;
+          differs)
+            TP_JSON_OWED=1
+            say WORKLIST template-json-merge "$_c" "upstream changed \`${_tm}\` between \`${BASE}\` and \`${THEIRS}\`, and merging it into a copy of this file changes the copy, so the merge is owed. ${tp_remedy_json} Then run --finish, which re-runs this same test."
+            TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}" ;;
+          *)
+            TP_JSON_OWED=1
+            say DECISION template-json-refused "$_c" "upstream changed \`${_tm}\` between \`${BASE}\` and \`${THEIRS}\`, and whether this file still needs that merge could not be tested (${TP_JW}) -- this is NOT a finding that it is merged. Fix that, then ${tp_remedy_json}"
+            TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}" ;;
+        esac ;;
+    esac
+  done < "$DT_DIR/tpl.out"
+  TP_SCANNED=1
+  return 0
+}
+# tp_finish_read -- `--finish` only, and run BEFORE hook_registration_row so the settings-merge row
+# knows whether the json row owns its remedy (one row per remedy). Reads the marker and the
+# template manifest with builtins, so a marker with no `template:` line forks nothing. Sets
+# TP_F_STATE (absent | unreadable | unrecorded | unscanned | ok | nomanifest) and TP_F_ROWS, one
+# `<kind><TAB><blob><TAB><mode><TAB><path><TAB><template>` line per recorded file, the json
+# verdict already taken (kind `json-<equal|differs|refused>`).
+#
+# THE MANIFEST IS READ HERE AS WELL AS IN preclassify.sh, AND THAT IS A RESTATEMENT. The record
+# names the consumer path only; `--finish` needs the kind and the template path, and the one
+# program that already parses `template_manifest:` is the `--templates` run this mode must not
+# make. Read only when a `template:` line exists; unreadable, every recorded file is judged by its
+# blob and a NOTE says the json test did not run.
+tp_finish_read() {
+  local _l _sent=0 _ref=0 _lines="" _h _m _c _k _tm _mt="" _mc="" _f=0 _man="" _tab _rest
+  _tab="$(printf '\t')"
+  TP_F_STATE=absent; TP_F_ROWS=""
+  # ABSENT is silent: no apply recorded anything. PRESENT AND UNREADABLE is not absent: the record
+  # exists and cannot be judged, which is finish-template-unverified, never a stamp.
+  [ -f "$APPLYING" ] || return 0
+  [ -r "$APPLYING" ] || { TP_F_STATE=unreadable; return 0; }
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    case "$_l" in
+      "template-hashes: refused") _ref=1 ;;
+      "template-hashes: "*) _sent=1 ;;
+      "template: "*) _lines="${_lines}${_l#template: }${NL_CH}" ;;
+    esac
+  done < "$APPLYING"
+  [ "$_sent" = 1 ] || { if [ "$_ref" = 1 ]; then TP_F_STATE=unscanned; else TP_F_STATE=unrecorded; fi; return 0; }
+  TP_F_STATE=ok
+  [ -n "$_lines" ] || return 0
+  if [ -r "$SELF/template-sites.md" ]; then
+    while IFS= read -r _l || [ -n "$_l" ]; do
+      case "$_l" in
+        "template_manifest:"*) _f=1; continue ;;
+      esac
+      [ "$_f" = 1 ] || continue
+      case "$_l" in
+        "  - template: "*) _mt="${_l#  - template: }"; _mt="${_mt%% *}" ;;
+        "    consumer: "*) _mc="${_l#    consumer: }"; _mc="${_mc%% *}" ;;
+        "    kind: "*) _k="${_l#    kind: }"; _man="${_man}${_mc}${_tab}${_k%% *}${_tab}${_mt}${NL_CH}" ;;
+        [!\ ]*) break ;;
+      esac
+    done < "$SELF/template-sites.md"
+  fi
+  [ -n "$_man" ] || TP_F_STATE=nomanifest
+  _rest="$_lines"
+  while [ -n "$_rest" ]; do
+    _l="${_rest%%"$NL_CH"*}"
+    case "$_rest" in *"$NL_CH"*) _rest="${_rest#*"$NL_CH"}" ;; *) _rest="" ;; esac
+    _h="${_l%%"$_tab"*}"; _c="${_l#*"$_tab"}"
+    [ -n "$_c" ] && [ "$_c" != "$_l" ] || continue
+    _m=""; case "$_h" in *" "*) _m="${_h#* }"; _h="${_h%% *}" ;; esac
+    _k=prose; _tm=""
+    case "${NL_CH}${_man}" in
+      *"${NL_CH}${_c}${_tab}json-merge${_tab}"*)
+        _tm="${NL_CH}${_man}"
+        _tm="${_tm#*"${NL_CH}${_c}${_tab}json-merge${_tab}"}"
+        _tm="${_tm%%"$NL_CH"*}"
+        _k=json ;;
+    esac
+    if [ "$_k" = json ]; then
+      if [ -e "$CONSUMER/$_c" ]; then
+        tp_json_test "$_tm" "$_c"
+        _k="json-$TP_JT"
+        [ "$TP_JT" != equal ] && TP_JSON_OWED=1
+      else
+        _k=json-equal
+      fi
+    fi
+    TP_F_ROWS="${TP_F_ROWS}${_k}${_tab}${_h}${_tab}${_m}${_tab}${_c}${_tab}${_tm}${NL_CH}"
+  done
+  return 0
+}
+# finish_template_unmerged -- `--finish`, beside finish_classify_unmerged and gated with it on the
+# identity check. Emits from tp_finish_read's state; every withholding row is a WORKLIST. The rows
+# keyed on a recorded `template:` line (finish-template-unmerged, finish-template-json-unmerged) name
+# the delete-the-line exit; the marker-level rows (finish-template-unscanned, and
+# finish-template-unverified on an unreadable marker) and the per-file unverified row do not.
+finish_template_unmerged() {
+  local _rest _l _k _h _m _c _tm _now _nm _tab
+  _tab="$(printf '\t')"
+  case "$TP_F_STATE" in
+    absent) return 0 ;;
+    unreadable)
+      say WORKLIST finish-template-unverified "${APPLYING#"$CONSUMER"/}" "the in-flight marker exists and could not be read, so its template record cannot be judged: whether a template-derived file handed back as a merge is still undone is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
+      return 0 ;;
+    unscanned)
+      say WORKLIST finish-template-unscanned "${APPLYING#"$CONSUMER"/}" "the apply that wrote this marker could not run \`preclassify.sh --templates\` (\`template-hashes: refused\`), so which template-derived files (CLAUDE.md, docs/coding-conventions.md, QUICKSTART.md, .claude/settings.json) owe a merge was never decided and none was recorded, and the stamp is not advanced. Fix what made that scan refuse (its \`template-prose-refused\` row names the stderr; reconcile/template-sites.md missing or unreadable beside apply.sh is the usual cause), then ${reapply_remedy}"
+      return 0 ;;
+    unrecorded)
+      say NOTE finish-template-unrecorded "${APPLYING#"$CONSUMER"/}" "this marker records no \`template-hashes:\` line -- it was written by an apply that predates the record -- so whether a template-derived file (CLAUDE.md, docs/coding-conventions.md, QUICKSTART.md, .claude/settings.json) was merged cannot be checked here. Confirm each by hand against reconcile/template-sites.md."
+      return 0 ;;
+    nomanifest)
+      say NOTE finish-template-manifest-unreadable "${APPLYING#"$CONSUMER"/}" "reconcile/template-sites.md beside this apply.sh could not be read, so every recorded template-derived file is judged by its blob alone and .claude/settings.json's merge was not re-tested. Restore that file to the same release as apply.sh to re-test it." ;;
+  esac
+  _rest="$TP_F_ROWS"
+  while [ -n "$_rest" ]; do
+    _l="${_rest%%"$NL_CH"*}"
+    case "$_rest" in *"$NL_CH"*) _rest="${_rest#*"$NL_CH"}" ;; *) _rest="" ;; esac
+    _k="${_l%%"$_tab"*}"; _l="${_l#*"$_tab"}"
+    _h="${_l%%"$_tab"*}"; _l="${_l#*"$_tab"}"
+    _m="${_l%%"$_tab"*}"; _l="${_l#*"$_tab"}"
+    _c="${_l%%"$_tab"*}"; _tm="${_l#*"$_tab"}"
+    [ -n "$_c" ] || continue
+    case "$_k" in
+      json-equal) continue ;;
+      json-*)
+        say WORKLIST finish-template-json-unmerged "$_c" "$([ "$_k" = json-differs ] && printf 'merging theirs'"'"' \`%s\` into a copy of this file still changes the copy, so the settings merge this pull handed back was not done' "$_tm" || printf 'whether the settings merge this pull handed back was done could not be tested (%s)' "$TP_JW"), and the stamp would claim \`${THEIRS}\` over it. ${tp_remedy_json} Then re-run --finish. IF NOT MERGING IS THE DISPOSITION, delete this file's own line from .claude/.ai-dlc-applying (the \`template: … ${_c}\` line) and re-run --finish: every other check still runs, and the marker stays until the stamp clears it."
+        continue ;;
+    esac
+    [ -e "$CONSUMER/$_c" ] || continue
+    _now="$(git hash-object "$CONSUMER/$_c" 2>/dev/null)" || _now=""
+    _nm=644; [ -x "$CONSUMER/$_c" ] && _nm=755
+    if [ "$_h" = "-" ] || [ -z "$_now" ]; then
+      say WORKLIST finish-template-unverified "$_c" "handed back as a template merge, and its blob could not be read $([ "$_h" = "-" ] && printf 'when the apply recorded it' || printf 'now'), so whether the merge was done is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
+    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then
+      say WORKLIST finish-template-unmerged "$_c" "handed back as a template merge (\`template-prose-merge\`) and still byte-identical to the copy the apply found (${_h}${_m:+, mode ${_m}}), so the template's boilerplate change was never merged and the stamp would claim \`${THEIRS}\` over it. Merge it by the marker-anchored mask/reinject in reconcile/template-sites.md, then re-run --finish. IF KEEPING THIS COPY AS IT IS IS THE DISPOSITION, delete this file's own line from .claude/.ai-dlc-applying (the \`template: … ${_c}\` line) and re-run --finish: every other check still runs, and the marker stays until the stamp clears it."
+    fi
+  done
   return 0
 }
 
@@ -1199,7 +1493,11 @@ fi
 
 # The in-flight marker (see IN-FLIGHT MARKER above): ahead of every core write below. It also
 # records the consumer blob of every file this run hands back as a semantic merge, so `--finish`
-# can tell a merged file from one nobody touched (see ap_write_marker / finish_classify_unmerged).
+# can tell a merged file from one nobody touched (see ap_write_marker / finish_classify_unmerged),
+# and of every template-derived file template_scan handed back (its `template:` lines).
+# template_scan runs INSIDE ap_write_marker, after its sited-set load (see there). The one refusal
+# that returns before the scan is a failed sited load, itself a DECISION that withholds; its
+# template rows appear on the re-run that refusal prescribes.
 ap_write_marker
 # THE BUCKETS ARE HANDED DOWN, NOT RE-DERIVED. `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED
 # arm needs exactly the rows already in `$PC` -- same four arguments, same program -- and running
@@ -2465,6 +2763,31 @@ elif [ ! -f "$CONSUMER/$AP_REL" ]; then
   fi
 fi
 
+# The smoke surface validate-handoff-evidence.sh's smoke arms read, on the same terms and with the
+# same scoping as the five blocks above.
+SS_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
+  | sed -n 's/^consumer_smoke_surface_file:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
+if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
+  : # THEIRS predates the layer contract; nothing declared, nothing to scaffold.
+elif [ -z "$SS_REL" ]; then
+  : # THEIRS predates the smoke-surface declaration specifically. The smoke arms fall back to
+    # their default path in that state and SKIP when it is absent, so nothing is wedged.
+elif [ ! -f "$CONSUMER/$SS_REL" ]; then
+  ss_tpl="core/skills/ai-dlc/templates/$(basename "$SS_REL")"
+  ss_tmp="$CONSUMER/$SS_REL.incoming.$$"
+  mkdir -p "$(dirname "$CONSUMER/$SS_REL")" 2>/dev/null || true
+  if git -C "$DIST" show "${THEIRS}:${ss_tpl}" > "$ss_tmp" 2>/dev/null && [ -s "$ss_tmp" ]; then
+    mv "$ss_tmp" "$CONSUMER/$SS_REL"
+    say RESOLVED smoke-surface-scaffold "$SS_REL" \
+      "created from ${ss_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. It is comments only: until you write the git pathspecs of this project's smoke surface, or a lone 'none', 'validate-handoff-evidence.sh' prints 'SKIP SMOKE-SURFACE (empty ...)' and checks no smoke coverage. Commit it between sprints: a story whose range edits it refuses smoke-surface-edited."
+  else
+    rm -f "$ss_tmp"
+    say DECISION smoke-surface-template-missing "$ss_tpl" \
+      "THEIRS declares '$SS_REL' but ships no template to scaffold it from, so the declared path would stay absent while the smoke arms read it as the surface's home."
+    mech_fail=$((mech_fail+1))
+  fi
+fi
+
 # -----------------------------------------------------------------------------
 # EXEC-BIT AUDIT. Every file upstream ships as 100755 must be executable in the
 # consumer tree once this driver is done.
@@ -2720,6 +3043,12 @@ finish_verify_tree() {
 finish_classify_unmerged() {
   local _ml _l _h _m _c _now _nm _tab
   [ -f "$APPLYING" ] || return 0
+  # PRESENT AND UNREADABLE is not "no record": the grep below fails on it and read it as an older
+  # engine's marker, a NOTE that stamped. The record exists and cannot be judged.
+  [ -r "$APPLYING" ] || {
+    say WORKLIST finish-classify-unverified "${APPLYING#"$CONSUMER"/}" "the in-flight marker exists and could not be read, so its semantic-merge record cannot be judged: whether a handed-back merge is still undone is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
+    return 0
+  }
   _tab="$(printf '\t')"
   if ! grep -q '^classify-hashes: ' "$APPLYING" 2>/dev/null; then
     say NOTE finish-classify-unrecorded "${APPLYING#"$CONSUMER"/}" "this marker records no \`classify-hashes:\` line -- it was written by an apply that predates the record -- so whether a file handed back as a semantic merge was ever merged cannot be checked here. Confirm each \`semantic-merge\` row of that run by hand."
@@ -2861,6 +3190,7 @@ if [ "$FINISH" = 1 ]; then
   finish_identity
   [ -z "$finish_id_mismatch" ] && finish_verify_tree
   [ -z "$finish_id_mismatch" ] && finish_classify_unmerged
+  [ -z "$finish_id_mismatch" ] && finish_template_unmerged
   [ -z "$finish_id_mismatch" ] && finish_reapply_owed
 fi
 if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi
@@ -3039,10 +3369,14 @@ fi
 # user-owned file whose step-5 report the operator reads and gates before step 7 applies it,
 # and this driver has no channel to obtain that gate. That is also why `.claude/settings.json`
 # is absent from the mechanical set on purpose rather than by oversight: EVERY template-derived
-# consumer file is (`TEMPLATE-` appears zero times in this program, against three
-# `UPSTREAM-ONLY`), because each of the four is a user-owned file whose merge is
-# operator-gated. Calling the merge from here would discard that gate. Naming the work does
-# not, and the driver stating it is the difference between an instruction and a hope.
+# consumer file is, because each of the four is a user-owned file whose merge is operator-gated.
+# This program never WRITES any of the four. It does NAME their work: template_scan hands each
+# changed template back as a WORKLIST row before the stamp and records the file for `--finish`
+# (see TEMPLATE-DERIVED FILES above), and for settings.json it runs `settings-merge.sh` against a
+# COPY in its own staging directory, only to ask whether the merge would change anything -- the
+# live file is never the merge's target. Calling the merge on the live file would discard the
+# gate. Naming the work does not, and the driver stating it is the difference between an
+# instruction and a hope.
 #
 # WHY IT RUNS AFTER THE RE-STAMP RATHER THAN GATING IT. At this point in step 7 the tree is
 # SUPPOSED to be in this state: the pull writes hook files here and merges settings.json
@@ -3192,7 +3526,12 @@ for c in cmds:
     hr_what=""
     [ -n "$hr_names" ] && hr_what="hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. "
     [ -n "$hr_dangle" ] && hr_what="${hr_what}hook(s) REGISTERED in .claude/settings.json with no file under .claude/hooks/ (DANGLING): ${hr_dangle}— Claude Code cannot run them; the hook was retired upstream and the strip half of the reconcile did not run. If a name is still in theirs' template, its FILE is what is missing: restore it with \`git -C <dist> show \"\${theirs}:core/hooks/<name>\" > .claude/hooks/<name>\` instead. "
-    if [ -n "$hr_what" ]; then
+    # ONE ROW PER REMEDY ACROSS FUNCTIONS TOO: when the template rows already hand back this same
+    # settings-merge command for this file (`template-json-merge`, or `finish-template-json-unmerged`
+    # under `--finish`), this row stands down -- the validator re-run both rows name is the check
+    # either way. Only this row; the two rows above and below name different acts. Defaulted, so a
+    # caller that never ran the template scan (the fixture seam) keeps today's row.
+    if [ -n "$hr_what" ] && [ "${TP_JSON_OWED:-0}" != 1 ]; then
       say WORKLIST settings-merge ".claude/settings.json" \
         "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"\${theirs}:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
     fi
@@ -3438,7 +3777,13 @@ fi
 # ones too whenever the merge did not touch `aiDlcRoles`, and where the merge DID move a role,
 # `--finish` is the invocation that sees it. Gating the stamp on the earlier answer is what
 # would be wrong, and `say` never does that for a WORKLIST row on the ordinary path.
+#
+# THE TEMPLATE RECORD IS READ FIRST UNDER `--finish`, and it emits nothing there: its rows come
+# from write_stamp (finish_template_unmerged, behind the identity check). It is read ahead of the
+# hook row only so that row knows whether the settings merge is already handed back by the json
+# test. On the ordinary run template_scan ran in phase 0, before the marker write.
 if [ "$FINISH" = 1 ]; then
+  tp_finish_read
   hook_registration_row
   transient_ignore_row
   agent_definitions_row

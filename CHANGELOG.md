@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.976.0] - 2026-10-31
+
+Batch b247. `apply.sh` hands back the files rendered from `templates/` and `--finish` re-checks them (BL-886, closing the consumer's PC-S320-APPLY-SH-NEVER-ACTS-ON-TEMPLATE-PROSE-MERGE); the smoke surface is declared in the layer contract, scaffolded on pull and read by `validate-handoff-evidence.sh` (BL-845, partial).
+
+### apply.sh hands back template-derived files and --finish re-checks them (BL-886)
+
+Consumer filing PC-S320-APPLY-SH-NEVER-ACTS-ON-TEMPLATE-PROSE-MERGE. `apply.sh` never looked at the four consumer files rendered from `templates/` (`CLAUDE.md`, `docs/coding-conventions.md`, `QUICKSTART.md`, `.claude/settings.json`). `preclassify.sh --templates` buckets them, but only `emit-report.sh` called it, so a pull whose only template change was boilerplate stamped theirs with the consumer copy still at base, and the next pull read every one of those files as already at theirs. Measured on a world where only `templates/QUICKSTART.md.template` boilerplate changed: the shipped `apply.sh` exited 0 with one row, `RESOLVED restamp base -> theirs`, and `--finish` printed `RESOLVED restamp` and `RESOLVED consistent` whether the file was untouched or merged.
+
+Prose (`TEMPLATE-PROSE-MERGE`): the ordinary run hands each such file back as `WORKLIST template-prose-merge` before the stamp, which withholds it. It records the file's blob and mode in `.claude/.ai-dlc-applying` on a `template:` line under a `template-hashes:` sentinel; the first write wins per base and the lines are sorted, so a re-run after the merge keeps the pre-merge copy as the reference. `--finish` does not re-run `--templates`, whose bucket is a function of the refs alone and never clears. It withholds with `finish-template-unmerged` while the recorded file is byte-identical, and deleting that file's own `template:` line is the exit for a deliberate no-op. A refused `--templates` scan is `DECISION template-prose-refused` and writes `template-hashes: refused`, on which `--finish` withholds with `finish-template-unscanned` until a fresh run; deleting that line is the last resort. A marker that is present but unreadable withholds with `finish-template-unverified` and `finish-classify-unverified`. A marker written by an older engine, with no sentinel, gets the NOTE `finish-template-unrecorded`.
+
+settings.json (`TEMPLATE-JSON-MERGE`, the second claim, with no separate id): the ordinary run merges theirs' template into a copy of `.claude/settings.json` with this release's `settings-merge.sh` and compares. A copy equal to the live file is no row and no record. A copy that differs is `WORKLIST template-json-merge` plus a `template:` line. A merge that cannot be tested is `DECISION template-json-refused`, also recorded. `--finish` judges a recorded json file only by that same test, never by its blob (`finish-template-json-unmerged`), and only while its `template:` line is present. While a recorded json file is not equal, this row owns the `settings-merge` remedy and the hook row's `settings-merge` row stands down. Measured on a clone of the reference consumer: four merges of its live `settings.json` were equal and idempotent.
+
+Both claims catch only a template that moved base -> theirs, since `--templates` buckets on that delta. A content predicate ("every deleted line absent, every added line present") was measured and rejected: run over the reference consumer's historical template commits up to its stamp 78b38cc6, it read NOT DONE on QUICKSTART 27 of 28 pairs, on CLAUDE.md 23 pairs and on coding-conventions.md 6 of 7 pairs, all trees the operator had already merged.
+
+Delivery facts. Engine code is live from step 3 of the delivering pull, so that pull's own apply emits the new rows. On a `SELF-UPDATE-DEFER` pull, step 7 runs the installed apply and this change does nothing on that pull. The reference consumer's live pair (`templates/` unchanged 78b38cc6..6cf9f8376) gets no template row.
+
+Cost, as counts. The ordinary run forks `preclassify.sh --templates` once per run that reaches the marker write; `--finish` forks no `--templates` and runs `settings-merge.sh` once per recorded json line. The `*` row of each affected carrier's `invocations.decl` rises, for example apply-drift-after-write 220 -> 240, apply-restamp-worklist 953 -> 982, apply-drift-refile 822 -> 899 and apply-worklist-rows 67 -> 78. `core/fixtures/apply-restamp-theirs` gains `receipt-bl886.sh`, which runs the program rather than grepping its text, and 18 mutants (21 in all); its `*` row goes 65 -> 534 and its `apply.sh` row 4 -> 25. The receipt builds each world once and caches it, keyed on `settings-merge.sh`.
+
+### The smoke surface is declared, scaffolded and read (BL-845, apply side)
+
+`consumer_smoke_surface_file:` is declared in `core/skills/ai-dlc/layer-contract.yaml`. `apply.sh` and `install.sh` scaffold `templates/smoke-surface.txt` into the consumer as comments only, which reads as an empty surface. `validate-handoff-evidence.sh` reads the declared path at `<base>`, with the literal `docs/smoke-surface.txt` as the fallback, and refuses an empty key as `smoke-surface-unevaluable`. The template is in `core_manifest` and in `install.sh`'s template copy. A story range that contains the scaffold commit reads `smoke-surface-edited`. BL-845 stays PARTIAL: the `Outcome measured:` line, taken on a later graph sprint under the BL-817 close rule, is owed.
+
 ## [0.975.0] - 2026-10-31
 
 Batch b247. The rulebook invokes the BMAD skills that exist in BMAD 6.11 and later, and the provenance pin follows the rename (BL-884).
