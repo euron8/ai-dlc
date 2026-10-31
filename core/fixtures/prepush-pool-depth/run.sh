@@ -932,33 +932,44 @@ td_eval td-no-pgid "s/^      \[ \"\$(ps -o pgid= -p \"\$p\" 2>\/dev\/null | tr -
 # by a signal, and bash 3.2 answers a second wait on that reaped pid with the SAME status, never 127. A
 # re-wait loop keyed on "> 128" therefore spins forever with nothing able to stop it. The block's own
 # pool_stop text is driven in a subshell whose pool_xp is a child that dies by a signal or by an exit; the
-# subshell is KILLed by its recorded pid if it has not exited within PS_CEIL seconds.
+# subshell shadows `wait` with a counter: the FIRST call runs builtin wait, the SECOND exits the subshell with
+# PS_SENTINEL, so the verdict is the exit status and no clock decides it. A hang guard (PS_HANG seconds) only
+# stops a drive that neither exits nor re-waits; if it fires the fixture is BROKEN (exit 2), never a cell value.
 #   ps_sig  -- pool_xp died by SIGKILL (the defect needs only a death by signal; KILL because a fixture can be
 #              launched with SIGPIPE or TERM ignored, and a bash child sending itself an ignored signal
 #              lives on and exits 0, measured on bash 3.2): "exited:<rc>" or
-#              "spun" (want exited:130)
+#              "spun" (a second wait; want exited:130)
 #   ps_exit -- pool_xp exited 1, the twin: a re-wait loop ends here too (want exited:130)
-PS_CEIL=3
-ps_drive() { # ps_drive <block> <sig|exit> -> exited:<rc> | spun | nofn
+PS_SENTINEL=97
+PS_HANG=60
+[ "$PS_SENTINEL" != 130 ] || { echo "FIXTURE BROKEN: PS_SENTINEL equals pool_stop's exit status"; exit 2; }
+ps_drive() { # ps_drive <block> <sig|exit> -> exited:<rc> | spun | nofn | hung
   local d p s
   d="$(mktemp -d "$WORK/ps.XXXXXX")" && mkdir -p "$d/.pr" || { printf 'nodir'; return 0; }
   sed -n '/^pool_stop() {/,/^}/p' "$1" > "$d/fn"
   [ -s "$d/fn" ] || { printf 'nofn'; return 0; }
   # pool_xp is launched under `set -m`, mirroring how the hook launches xargs (a re-wait on bash 3.2 reads
   # the same status again with or without it)
-  ( . "$d/fn"; out="$d"; set -m
+  ( ps_n=0
+    wait() { ps_n=$((ps_n + 1)); [ "$ps_n" -lt 2 ] || exit "$PS_SENTINEL"; builtin wait "$@"; }
+    . "$d/fn"; out="$d"; set -m
     if [ "$2" = sig ]; then { exec bash -c 'kill -KILL $$'; } & else { exec bash -c 'exit 1'; } & fi
     pool_xp=$!; set +m; pool_stop 130 ) > /dev/null 2>&1 &
   p=$!
   s=$SECONDS
-  while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$PS_CEIL" ]; do sleep 0.1; done
-  if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null; wait "$p" 2>/dev/null; printf 'spun'
-  else wait "$p"; printf 'exited:%s' "$?"; fi
+  while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$PS_HANG" ]; do sleep 0.1; done
+  if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null; wait "$p" 2>/dev/null; printf 'hung'
+  else
+    wait "$p"; s=$?
+    if [ "$s" = "$PS_SENTINEL" ]; then printf 'spun'; else printf 'exited:%s' "$s"; fi
+  fi
 }
+ps_check_hung() { case " $* " in *" hung "*) echo "FIXTURE BROKEN: a pool_stop drive neither exited nor re-waited within ${PS_HANG}s"; exit 2;; esac; }
 PS_WANT=exited:130
 # the children are `bash`, never `sh`: tools.decl does not declare sh, so under the hermetic sandbox an
 # `exec sh` exits 127 and the signal world silently becomes a second exit world
 ps_fix_sig="$(ps_drive "$PB" sig)"; ps_fix_exit="$(ps_drive "$PB" exit)"
+ps_check_hung "$ps_fix_sig" "$ps_fix_exit"
 B_ps=1
 for _c in sig exit; do
   eval "v=\$ps_fix_$_c"
@@ -970,6 +981,7 @@ sed 's/^    wait "\$pool_xp"$/    while :; do wait "$pool_xp"; [ "$?" -gt 128 ] 
 if cmp -s "$PB" "$PS_M"; then bad "MUTANT ps-rewait: the edit matched nothing, so it is not a mutant"
 else
   ps_m_sig="$(ps_drive "$PS_M" sig)"; ps_m_exit="$(ps_drive "$PS_M" exit)"
+  ps_check_hung "$ps_m_sig" "$ps_m_exit"
   ps_moved=""
   [ "$ps_m_sig" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_sig "
   [ "$ps_m_exit" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_exit "
