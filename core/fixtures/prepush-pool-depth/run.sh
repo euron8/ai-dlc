@@ -46,7 +46,12 @@
 # MUTANT-MATRIX m-nomark decides=pn_grow twins=pn_ord
 # MUTANT-MATRIX m-noread decides=pn_grow twins=pn_ord
 # MUTANT-MATRIX m-novalidate decides=pn_hlink,pn_hout twins=pn_ord
-# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the twenty literal callers (mutant, pn_eval and the I66 arm) has its own row above
+# MUTANT-MATRIX td-old-traps decides=td_term,td_intp twins=td_queue
+# MUTANT-MATRIX td-no-stop decides=td_term,td_queue twins=td_rc
+# MUTANT-MATRIX td-plain-amp decides=td_term,td_int,td_intp twins=td_queue
+# MUTANT-MATRIX td-no-pgid decides=td_decoy twins=td_term
+# MUTANT-MATRIX ps-rewait decides=ps_sig twins=ps_exit
+# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the twenty-five literal callers (mutant, pn_eval, td_eval, the I66 arm and the pool_stop arm) has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
 #
 # The matrix is re-measured whenever an arm or a mutant is added or changed, with the command above, run
@@ -77,6 +82,13 @@ asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-pool-depth: FIXTURE BROKEN" >&2; exit 2; }
+# SIGINT IGNORED ON ENTRY IS A REFUSAL, NOT A RED. A plain `&` from a non-interactive shell starts this
+# fixture with SIGINT ignored, every drive inherits that, and bash cannot re-enable a signal ignored at
+# entry: the hook's `trap 'pool_stop 130' INT` and the workers' `trap pool_abort INT` never fire, so the
+# INT cells (td_int, td_intp) and the mutants they score read red against a correct hook. Setting a trap
+# on an ignored-at-entry signal silently does nothing, so `trap -p INT` then reads empty.
+trap ':' INT; _ti="$(trap -p INT)"; trap - INT
+[ -n "$_ti" ] || { echo "prepush-pool-depth: FIXTURE BROKEN: launched with SIGINT ignored (a plain & from a non-interactive shell); its INT cells cannot fire. Run it in the foreground or under set -m." >&2; exit 2; }
 MUT_LIB="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $0" >&2; exit 2; }
 . "$MUT_LIB"
@@ -762,6 +774,238 @@ else
   finish_mutant "$B_i66" i66-fork-seed "$i66_cond" \
     "MUTANT i66-fork-seed kill confirmed: decides [i66_seeded] moved (rc 1, FAIL: I66), twin [i66_clean] stayed green" \
     "MUTANT i66-fork-seed: a one-byte fork of hook 2's block read rc $I66_RC with no I66 FAIL line"
+fi
+
+# ------------------------------------------------- an interrupt tears the pool down (BL-881) ------
+# xargs runs in the background under `set -m` and the parent waits on it; INT/TERM/HUP reach the parent's
+# pool_stop, which writes `.pr/.stop`, TERMs every worker recorded in `.pr/<unit>.k` and waits for xargs.
+# FORCED, not waited for: three stubs at width 2, each recording "<pid> <pool root>" and then holding on a
+# barrier FILE the fixture writes, so the pool holds exactly two units when the signal lands and ONE queued.
+# ONE QUEUED UNIT, NEVER TWO, so the start count is the same on every run: when both workers die xargs
+# dispatches the queue once per reaped exit until it reaps a 255. With two queued, whether the second dying
+# worker or the first replacement's `.stop` refusal (255) is reaped first decided whether one or two refused
+# replacement workers started -- measured 305 and 306 starts on one tree. With one queued, exactly one starts.
+#   td_term  -- TERM to the parent: recorded stub pids still alive once the parent has exited (want 0)
+#   td_queue -- stubs that ever started, counted after release (want 2: the queued unit is never run)
+#   td_rc    -- the parent's exit status and whether its pool root survives (want 143:gone)
+#   td_decoy -- a live process NOT in xargs' group, its pid planted in `.pr/zz-decoy.k` before the TERM (the
+#               stale record a SIGKILLed worker leaves): alive once the parent has exited (want 1). The allow
+#               twin of td_term: a pool_stop that TERMs every record, group or not, reads 0 here.
+#   td_intp  -- after td_int, xargs dispatches the queued stub (an exit of 130 does not stop it); INT to
+#               the parent then: "<rc>:<root>:<stubs alive>" (want 130:gone:0), the ^C an operator sends
+#   td_int   -- INT to each worker recorded in `.k`: the two targeted stubs still alive once both workers
+#               cleared their `.k` (want 0). Under a plain `&` bash starts xargs with SIGINT ignored, every
+#               worker inherits that, and its `trap pool_abort INT` cannot fire (BL-881 D-f).
+# Signals go only to the drive's own pid and to the pids the workers recorded; release ends every stub.
+TD_ALL="td_term td_queue td_rc td_decoy td_int td_intp"
+WANT_TD="td_term=0
+td_queue=2
+td_rc=143:gone
+td_decoy=1
+td_int=0
+td_intp=130:gone:0"
+# TD_CEIL is a HANG GUARD, never a verdict: on the unmutated block a ceiling that ends a wait (instead of the awaited
+# event) is FIXTURE BROKEN (td_hang); on a mutant the ceiling is the mutant's expected observable and stays a cell value.
+TD_CEIL=60
+TDT="$WORK/td.tpl"
+for _i in 1 2 3; do
+  mkdir -p "$TDT/$PFXR/q$_i" || broken "could not build the teardown template"
+  cat > "$TDT/$PFXR/q$_i/run.sh" <<'FX'
+#!/usr/bin/env bash
+printf '%s %s\n' "$$" "${TMPDIR%/*}" > "$TD_DIR/s.$$"
+s=$SECONDS
+while [ ! -e "$TD_DIR/release" ] && [ -d "$TD_DIR" ] && [ $((SECONDS - s)) -lt 60 ]; do sleep 0.1; done
+exit 0
+FX
+done
+( cd "$TDT" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+[ -d "$TDT/.git" ] || broken "the teardown template world is not a repository"
+td_alive() { # td_alive <pid...> -> how many are live and not exiting or zombie
+  local p n=0 s
+  for p in "$@"; do
+    kill -0 "$p" 2>/dev/null || continue
+    s="$(ps -o stat= -p "$p" 2>/dev/null)"
+    case "$s" in Z*|E*|'') ;; *) n=$((n + 1)) ;; esac
+  done
+  printf '%s' "$n"
+}
+td_stubs() { cat "$1"/s.* 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '; }
+td_hang() { # td_hang <block> <what>: the ceiling ended a wait; on the unmutated block that is not measurable
+  [ "$1" = "$PB" ] && broken "teardown drive: the ${TD_CEIL}s ceiling ended the wait for $2 on the unmutated block"
+  return 0
+}
+td_wait2() { # td_wait2 <stub dir>: until two stubs recorded, at most TD_CEIL seconds
+  local s=$SECONDS
+  while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+  [ "$(ls "$1" | grep -c '^s\.')" -ge 2 ]
+}
+# td_drive <block> <set> <term|int> -> appends the mode's cells to $WORK/td.<set>.v
+td_drive() {
+  local blk="$1" set="$2" mode="$3" d="$WORK/td.$2.$3" p s n st root ks k wp t dp dn
+  mkdir -p "$d/s" && cp -R "$TDT" "$d/w" || { bad "teardown drive $set/$mode: could not copy the template"; return 1; }
+  set -m
+  ( cd "$d/w" && unset PREPUSH_POOL_DEPTH && export AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$d/s" \
+    && exec bash -c '. "$1" > /dev/null 2>&1; run_fixtures > "$2" 2>&1' _ "$blk" "$d/out" ) > /dev/null 2>&1 &
+  p=$!
+  set +m
+  if ! td_wait2 "$d/s"; then
+    td_hang "$blk" "two stubs to start"
+    : > "$d/s/release"; wait "$p"
+    case "$mode" in term) printf 'td_term=nostart\ntd_queue=nostart\ntd_rc=nostart\ntd_decoy=nostart\n' ;; int) printf 'td_int=nostart\ntd_intp=nostart\n' ;; esac >> "$WORK/td.$set.v"
+    return 0
+  fi
+  t="$(td_stubs "$d/s")"; root="$(sed -n '1s/^[0-9]* //p' "$d/s/$(ls "$d/s" | grep '^s\.' | sed -n 1p)")"
+  if [ "$mode" = term ]; then
+    # the decoy: blocks on the same barrier, so the release ends it and nothing here kills it
+    ( while [ ! -e "$d/s/release" ] && [ -d "$d/s" ]; do sleep 0.1; done ) > /dev/null 2>&1 &
+    dp=$!; printf '%s\n' "$dp" > "$root/.pr/zz-decoy.k"
+    kill -TERM "$p"
+    # until the parent is gone, or a third stub (a queued unit) has started
+    s=$SECONDS
+    while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    if kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ]; then td_hang "$blk" "the parent to exit after TERM"; fi
+    n="$(td_alive $(td_stubs "$d/s"))"; dn="$(td_alive "$dp")"
+    : > "$d/s/release"; wait "$p"; st=$?; wait "$dp"
+    if [ -d "$root" ]; then root=present; else root=gone; fi
+    printf 'td_term=%s\ntd_queue=%s\ntd_rc=%s:%s\ntd_decoy=%s\n' "$n" "$(ls "$d/s" | grep -c '^s\.')" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
+  else
+    ks=""; wp=""
+    for k in "$root"/.pr/*.k; do [ -s "$k" ] && { read -r n < "$k"; case "$n" in ''|*[!0-9]*) ;; *) wp="$wp $n"; ks="$ks $k" ;; esac; }; done
+    for n in $wp; do kill -INT "$n"; done
+    # until every targeted worker has cleared its record (pool_abort empties `.k` before it exits)
+    s=$SECONDS
+    while [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do
+      n=0; for k in $ks; do [ -s "$k" ] && n=1; done
+      [ "$n" = 0 ] && break
+      sleep 0.1
+    done
+    n=0; for k in $ks; do [ -s "$k" ] && n=1; done
+    [ "$n" = 1 ] && td_hang "$blk" "the workers to clear their records after INT"
+    if [ -z "$wp" ]; then n=norecord; else n="$(td_alive $t)"; fi
+    # td_intp: once the workers have cleared, the queued stub starts; then INT to the parent itself
+    if [ "$n" = 0 ]; then
+      s=$SECONDS
+      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+      [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && td_hang "$blk" "the queued stub to start"
+    fi
+    kill -INT "$p"
+    s=$SECONDS
+    while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    kill -0 "$p" 2>/dev/null && td_hang "$blk" "the parent to exit after INT"
+    dn="$(td_alive $(td_stubs "$d/s"))"
+    : > "$d/s/release"; wait "$p"; st=$?
+    if [ -d "$root" ]; then root=present; else root=gone; fi
+    printf 'td_int=%s\ntd_intp=%s:%s:%s\n' "$n" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
+  fi
+}
+td_run() { # td_run <block> <set> <cell...>: one drive per mode its cells need
+  local blk="$1" set="$2" c tm=0 im=0; shift 2
+  : > "$WORK/td.$set.v"
+  for c in "$@"; do case "$c" in td_int|td_intp) im=1 ;; *) tm=1 ;; esac; done
+  [ "$tm" = 1 ] && td_drive "$blk" "$set" term
+  [ "$im" = 1 ] && td_drive "$blk" "$set" int
+  return 0
+}
+td_val() { sed -n "s/^$2=//p" "$WORK/td.$1.v" 2>/dev/null; }
+wanttd() { printf '%s\n' "$WANT_TD" | sed -n "s/^$1=//p"; }
+td_run "$PB" fix $TD_ALL
+for _c in $TD_ALL; do
+  v="$(td_val fix "$_c")"
+  if [ "$v" = "$(wanttd "$_c")" ]; then ok "[$T] teardown $_c=$v"
+  else bad "[$T] teardown $_c read [${v:-none}], want [$(wanttd "$_c")]"; fi
+done
+# td_mut <name> <sed-expr>: a copy of the block, one edit, exactly one line changed
+td_eval() {
+  local name="$1" m="$WORK/td.mut.$1.sh" dec tw cells c got="" moved B_mut=1 cond=0 n_run
+  dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
+  [ -n "$dec" ] || { bad "MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
+  dec="${dec//,/ }"; tw="${tw//,/ }"
+  sed "$2" "$PB" > "$m" || { bad "MUTANT $name: sed did not apply"; return 0; }
+  if cmp -s "$PB" "$m"; then bad "MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
+  # the edit removed or changed exactly one line of the block (a multiset count, so a duplicate line elsewhere still counts)
+  [ "$(awk 'NR == FNR { c[$0]++; next } { c[$0]-- } END { for (k in c) if (c[k] > 0) n += c[k]; print n + 0 }' "$PB" "$m")" -eq 1 ] \
+    || { bad "MUTANT $name: the edit did not change exactly one line"; return 0; }
+  if [ "$MATRIX" = 1 ]; then cells="$TD_ALL"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + $(printf '%s\n' $TD_ALL | grep -c .) - n_run)); else cells="$dec $tw"; fi
+  ( TD_CEIL="${3:-$TD_CEIL}"; td_run "$m" "$name" $cells )
+  for c in $cells; do got="$got$c=$(td_val "$name" "$c")"$'\n'; done
+  for c in $dec $tw; do [ "$(td_val fix "$c")" = "$(wanttd "$c")" ] || B_mut=0; done
+  moved="$(moved_of "$got" "$WANT_TD")"
+  [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
+  same_set "$moved" "$dec" && cond=1
+  finish_mutant "$B_mut" "$name" "$cond" \
+    "MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
+    "MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}])"
+}
+td_eval td-old-traps "s/trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; trap 'pool_stop 129' HUP$/trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP/"
+td_eval td-no-stop '/^    \[ -f "\$AI_DLC_FX_OUT\/.pr\/.stop" \] && { : > "\$pr.k"; exit 255; }$/d'
+# the INT drive waits its ceiling under this mutant (the workers never clear `.k`): 5s, for this mutant only
+td_eval td-plain-amp '/^  set -m$/{N;s/^  set -m\n  { PREPUSH_POOL_DEPTH=/  { PREPUSH_POOL_DEPTH=/;}' 5
+# the pgid guard removed: pool_stop TERMs every recorded pid, the planted stale record included
+td_eval td-no-pgid "s/^      \[ \"\$(ps -o pgid= -p \"\$p\" 2>\/dev\/null | tr -d ' ')\" = \"\$pool_xp\" \] && kill -TERM/      kill -TERM/"
+
+# ------------------------------------------------- pool_stop waits for xargs ONCE (BL-881) ---------
+# pool_stop has set INT/TERM/HUP to '' before it waits, so a status above 128 can only mean xargs itself died
+# by a signal, and bash 3.2 answers a second wait on that reaped pid with the SAME status, never 127. A
+# re-wait loop keyed on "> 128" therefore spins forever with nothing able to stop it. The block's own
+# pool_stop text is driven in a subshell whose pool_xp is a child that dies by a signal or by an exit; the
+# subshell shadows `wait` with a counter: the FIRST call runs builtin wait, the SECOND exits the subshell with
+# PS_SENTINEL, so the verdict is the exit status and no clock decides it. A hang guard (PS_HANG seconds) only
+# stops a drive that neither exits nor re-waits; if it fires the fixture is BROKEN (exit 2), never a cell value.
+#   ps_sig  -- pool_xp died by SIGKILL (the defect needs only a death by signal; KILL because a fixture can be
+#              launched with SIGPIPE or TERM ignored, and a bash child sending itself an ignored signal
+#              lives on and exits 0, measured on bash 3.2): "exited:<rc>" or
+#              "spun" (a second wait; want exited:130)
+#   ps_exit -- pool_xp exited 1, the twin: a re-wait loop ends here too (want exited:130)
+PS_SENTINEL=97
+PS_HANG=60
+[ "$PS_SENTINEL" != 130 ] || { echo "FIXTURE BROKEN: PS_SENTINEL equals pool_stop's exit status"; exit 2; }
+ps_drive() { # ps_drive <block> <sig|exit> -> exited:<rc> | spun | nofn | hung
+  local d p s
+  d="$(mktemp -d "$WORK/ps.XXXXXX")" && mkdir -p "$d/.pr" || { printf 'nodir'; return 0; }
+  sed -n '/^pool_stop() {/,/^}/p' "$1" > "$d/fn"
+  [ -s "$d/fn" ] || { printf 'nofn'; return 0; }
+  # pool_xp is launched under `set -m`, mirroring how the hook launches xargs (a re-wait on bash 3.2 reads
+  # the same status again with or without it)
+  ( ps_n=0
+    wait() { ps_n=$((ps_n + 1)); [ "$ps_n" -lt 2 ] || exit "$PS_SENTINEL"; builtin wait "$@"; }
+    . "$d/fn"; out="$d"; set -m
+    if [ "$2" = sig ]; then { exec bash -c 'kill -KILL $$'; } & else { exec bash -c 'exit 1'; } & fi
+    pool_xp=$!; set +m; pool_stop 130 ) > /dev/null 2>&1 &
+  p=$!
+  s=$SECONDS
+  while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$PS_HANG" ]; do sleep 0.1; done
+  if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null; wait "$p" 2>/dev/null; printf 'hung'
+  else
+    wait "$p"; s=$?
+    if [ "$s" = "$PS_SENTINEL" ]; then printf 'spun'; else printf 'exited:%s' "$s"; fi
+  fi
+}
+ps_check_hung() { case " $* " in *" hung "*) echo "FIXTURE BROKEN: a pool_stop drive neither exited nor re-waited within ${PS_HANG}s"; exit 2;; esac; }
+PS_WANT=exited:130
+# the children are `bash`, never `sh`: tools.decl does not declare sh, so under the hermetic sandbox an
+# `exec sh` exits 127 and the signal world silently becomes a second exit world
+ps_fix_sig="$(ps_drive "$PB" sig)"; ps_fix_exit="$(ps_drive "$PB" exit)"
+ps_check_hung "$ps_fix_sig" "$ps_fix_exit"
+B_ps=1
+for _c in sig exit; do
+  eval "v=\$ps_fix_$_c"
+  if [ "$v" = "$PS_WANT" ]; then ok "[$T] pool_stop ps_$_c=$v"
+  else bad "[$T] pool_stop ps_$_c read [$v], want [$PS_WANT]"; B_ps=0; fi
+done
+PS_M="$WORK/ps.mut.sh"
+sed 's/^    wait "\$pool_xp"$/    while :; do wait "$pool_xp"; [ "$?" -gt 128 ] || break; done/' "$PB" > "$PS_M"
+if cmp -s "$PB" "$PS_M"; then bad "MUTANT ps-rewait: the edit matched nothing, so it is not a mutant"
+else
+  ps_m_sig="$(ps_drive "$PS_M" sig)"; ps_m_exit="$(ps_drive "$PS_M" exit)"
+  ps_check_hung "$ps_m_sig" "$ps_m_exit"
+  ps_moved=""
+  [ "$ps_m_sig" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_sig "
+  [ "$ps_m_exit" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_exit "
+  [ "$MATRIX" = 1 ] && mx_row ps-rewait "ps_sig ps_exit" "$ps_moved"
+  ps_cond=0; same_set "$ps_moved" "$(mrow ps-rewait decides)" && ps_cond=1
+  finish_mutant "$B_ps" ps-rewait "$ps_cond" \
+    "MUTANT ps-rewait kill confirmed: decides [ps_sig] moved ($ps_m_sig), twin [ps_exit] stayed green" \
+    "MUTANT ps-rewait moved [${ps_moved% }], want [ps_sig] (sig read $ps_m_sig, exit read $ps_m_exit)"
 fi
 
 # a plain run executes no matrix-only cell: the counter moves only on the --matrix path
