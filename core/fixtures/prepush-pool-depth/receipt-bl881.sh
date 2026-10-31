@@ -13,7 +13,7 @@
 #   A3  no queued stub ever started (2 recorded; the `.stop` record makes xargs stop dispatching)
 #   A4  the pool root the stubs recorded is removed
 # Exit 0 when all four hold; 1 when any fails (each failing assertion prints a FAIL line naming it);
-# 9 when the receipt cannot measure its subject (no hook, an empty block, no fixture root, or the
+# 9 when the receipt cannot measure its subject (ps cannot run, no hook, an empty block, no fixture root, or the
 # pool never started two stubs).
 #
 # Signals go ONLY to the pid this receipt started; the stubs end on the barrier release, never by a
@@ -34,6 +34,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset PREPUSH_POOL_DEPTH
 HOOK="${1:-$ROOT/.githooks/pre-push}"
 [ -f "$HOOK" ] || { echo "REFUSED: no hook at $HOOK" >&2; exit 9; }
+[ -n "$(ps -o pid= -p $$ 2>/dev/null | tr -d ' ')" ] || {
+  echo "REFUSED: /bin/ps cannot run here (e.g. under sandbox-exec, which denies the setuid binary), so liveness cannot be measured" >&2; exit 9; }
 BOUND=60   # a hang guard: a ceiling that ends a wait is "cannot measure" (exit 9), never a verdict
 T="$(mktemp -d "${TMPDIR:-/tmp}/bl881.XXXXXX")" || exit 9
 [ -d "$T" ] || exit 9
@@ -63,7 +65,7 @@ alive() { # how many of the recorded stub pids are live and neither exiting nor 
   for p in $(stubs); do
     kill -0 "$p" 2>/dev/null || continue
     st="$(ps -o stat= -p "$p" 2>/dev/null)"
-    case "$st" in Z*|E*|'') ;; *) n=$((n + 1)) ;; esac
+    case "$st" in Z*|E*) ;; *) n=$((n + 1)) ;; esac
   done
   printf '%s' "$n"
 }
