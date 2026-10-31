@@ -1919,4 +1919,13 @@ verify: sh ! grep -q 'tail -5' scripts/seed-verdict-store.sh
 
 verify: manual
 
+## BL-895 — the serial seat's `--story` is bound to no story
+
+**DEFECT.** Filed from the b247 delta adversary on BL-885. `merge-review-shards.sh --check-serial --gate qa --story <S> --range <B> <F>` binds `--story` to nothing. `record-only-diff.sh story-base <S> <B> <F>` exits 0 for any path absent at B and a blob at F, by design: a story created after the base is a gate-1 base. So naming any blob created in the range as the "story", for example a review file, passes the narrowed-base refusal for a real story already at `status: review` at B.
+
+Evidence (re-measured on branch b247-pc-s320-record-only with `adv3-fin.sh`, a mktemp repo with `stories/s.md` at `status: review` at L, then F adds `docs/reviews/s1/new.md`): `story-base stories/s.md L F` gives rc=1 "already status: review" (the control). `story-base docs/reviews/s1/new.md L F` gives rc=0. `paths docs/reviews/s1/new.md L F` gives rc=0 `RECORD-ONLY: 1 changed path(s)`.
+
+Not fixed in 0.978.0: the fix needs a story binding, which is a design decision (what names the story: the handoff, the sprint plan, or the verdict).
+
+verify: manual — no predicate over the tree can test it until the binding is designed.
 

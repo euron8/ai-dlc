@@ -1,5 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once.
-511 *
+514 *
 4 core/scripts/partition-review-diff.sh
 7 core/scripts/merge-review-shards.sh
 21 core/scripts/content-seal.sh

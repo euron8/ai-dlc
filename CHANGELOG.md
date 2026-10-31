@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.978.0] - 2026-10-31
+
+Batch b247. `record-only-diff.sh` resolves the story path against the physical repository top (BL-885), and `story-base` refuses a story that is no file at the base or at the frozen sha (BL-885).
+
+### The story path is resolved against the physical repository top (BL-885)
+
+`core/scripts/record-only-diff.sh` now normalises its story argument through one helper, `ro_story_rel`, used by both `story-base` and `paths`; before, both stripped only a leading `./`. An absolute path is resolved physically (`cd -P` on the repository top and on the story's directory) and printed relative to the top, so a symlinked spelling resolves like the physical one. A leading `./` followed by any run of `/` is stripped repeatedly. A path outside the repository, a path with no file name, a relative path with an empty, `.` or `..` component, and the empty string are exit 2 UNEVALUABLE. Every other relative path is unchanged.
+
+Why. An absolute `--story` made the serial seat of `merge-review-shards.sh` accept the record-only exemption over an empty range (the `cr-exempt-empty` world) for a story already at `status: review`: `story-base` named no blob and answered 0, and `paths` never recognised the story as the record path. `stories//s.md`, `stories/./s.md`, `stories/../stories/s.md`, the empty string and `/etc/hosts` failed open the same way. Every caller reads any non-zero as a refusal, so exit 2 fails closed.
+
+Held by. The arm `story_path` in `review-shard-merge` runs `core/fixtures/review-shard-merge/receipt-bl885.sh` (14 cells) against the shipped script, including a symlinked spelling of the repository top. The end-to-end cells `cr-exempt-abs` and `cr-exempt-abs-rec` run the serial seat over an absolute story. Mutants M49 (the helper reverted to the old `${1#./}` strip) and M50 (an absolute path outside the repository passed through as itself) are killed by that arm.
+
+### `story-base` refuses a story that is no file at the base or at the frozen sha (BL-885)
+
+`story-base` takes an optional third operand, `<frozen>`, and the exemption caller in `core/scripts/merge-review-shards.sh` now passes its frozen sha. With it, a story that is a tree or commit at `<base>` is exit 2, and a story absent at `<base>` is exit 0 only when it is a blob at `<frozen>` (a story created after the base); otherwise it is exit 2. The two-operand form keeps the old reading, where absent at `<base>` is exit 0.
+
+Why. `story-base` read any path that is no blob at `<base>` as a gate-1 base. Over the empty range, `--story stories/typo.md` (no such file) and `--story stories` (a directory) therefore reached SERIAL-OK. A story path inside `.git/` failed open the same way.
+
+Held by. `core/fixtures/review-shard-merge/receipt-bl885-frozen.sh` (8 cells), run by the arm `story_frozen`, covers a typo, `.git/HEAD` in absolute and relative spelling, a tree at the base, and a path absent at the base that is a tree at the frozen sha. The end-to-end cells `cr-exempt-typo`, `cr-exempt-dir` and `cr-exempt-created` run the serial seat over those worlds, the last being the accepted case of a story created after the base. Mutant M51 (the `<frozen>` operand ignored) is killed by `cr-exempt-typo`.
+
+Consumer reach. `install.sh` derives its copy list from `core/scripts/*`, so a consumer receives both fixes on its next pull. No rule or step changes.
+
 ## [0.977.0] - 2026-10-31
 
 Batch b247. A TERM, INT or HUP to the pre-push hook now tears down its fixture pool (BL-881, which stays open for the sandboxed case), and BL-869 is closed as a dead premise.
