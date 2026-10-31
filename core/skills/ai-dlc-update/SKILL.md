@@ -294,7 +294,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling path in its seed,
    so a run.sh-only derivation misses it).
 
-   **BOTH exclusions bind BOTH terms, and this one used to state only the first.** The
+   **BOTH exclusions bind BOTH terms, not only the first.** The
    enforcer applies them to every fixture directory the self-update commit writes, so a dir
    reaching this term through the grep — legitimately, because the grep reads `seed.sh` and a dir
    may carry a `seed.sh` and no `run.sh` — and written here is refused at the push.
@@ -403,8 +403,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `ALREADY-AT-THEIRS`. The slice is the sliced paths MINUS those.
 
    **Then subtract a SECOND set from the SAME call: every path whose bucket records a
-   consumer divergence.** That call already returns them; this step used to read one bucket
-   and drop the rest on the floor, which is the whole defect — a machinery path the consumer
+   consumer divergence.** That call already returns them; reading one bucket
+   and dropping the rest on the floor is the whole defect — a machinery path the consumer
    has edited comes back `BOTH-CHANGED->CLASSIFY` and was written from `theirs` anyway.
    **Key the subtraction on the CLASSIFY marker, not on that one bucket name.** Every bucket
    `preclassify.sh` sends `->CLASSIFY` is a path whose two sides diverged and which therefore
@@ -689,7 +689,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      four derived fixtures `ALREADY-AT-THEIRS` while a hand-rolled ref comparison performed under
      this step called all four CONSUMER-EDITED. The suppression was never missing —
      `at_self_update()` was present in the installed copy throughout; it was BYPASSED by the
-     second derivation this step used to invite. A ref comparison is wrong here in the direction
+     second derivation, which this step never invites. A ref comparison is wrong here in the direction
      that REFUSES a legitimate write, and it is wrong on every split stamp, which is the normal
      state after any self-update and which this cycle itself CREATES.
 
@@ -1345,7 +1345,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    - `INPUT-UNRESOLVED` → an ARGUMENT does not resolve, so **nothing was re-verified**. Run-
      scoped rather than entry-scoped: the entry column carries the offending path. Two causes,
      named in the DETAIL — the consumer root is not a directory, or an explicitly-supplied
-     arg-5 ledger path is not a readable file. This row exists because that state used to be
+     arg-5 ledger path is not a readable file. This row exists because that state would otherwise be
      spelled as **zero rows and exit 0**, which is exactly how a clean corpus is spelled, and
      the argument order is the trap: this tool takes consumer THIRD and theirs FOURTH while
      every sibling in `reconcile/` takes `<dist> <base> <theirs> <consumer>`. Fix the
@@ -1957,8 +1957,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    prevent it.
 
    **THE TWO SCRIPTS TAKE DIFFERENT BASES ON THIS RE-RUN, and one instruction for both
-   disarmed one of them.** This paragraph used to read *"pass `theirs` as the base on this
-   re-run, not the pull's base"* without qualification. That is right for one script and
+   disarmed one of them.** The unqualified instruction *"pass `theirs` as the base on this
+   re-run, not the pull's base"* is right for one script and
    wrong for the other, and the wrong half is silent.
 
    - **`unregistered-drift.sh` — pass `theirs`.** It measures the consumer against
@@ -1998,7 +1998,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `reconcile/hard-blockers.sh --post-apply <dist> <pull-base> <consumer> <theirs>` — it passes
    `theirs` to `unregistered-drift.sh` and keeps the pull's base for `layer-drift.sh`.
    `reconcile/post-write-gates.sh` runs exactly this call as its `hard-blockers` gate. It also
-   renders the `DRIFT-RANGE-DEGENERATE` row now, which its `HARD-`-only filter used to discard;
+   renders the `DRIFT-RANGE-DEGENERATE` row, which a `HARD-`-only filter would discard;
    a `0 HARD blockers.` line with that row beneath it is not a clean sheet.
 
    **Dispose of every `WORKLIST extension-reread` row — this is *the layer conformance
@@ -2534,9 +2534,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      their own bases, the validator outcomes, the ledger decisions, and what was deliberately not
      done.
 
-     *Why this is its own bullet.* It used to sit inside the re-stamp paragraph above, one
-     sentence after "**`apply.sh` does this; you do not edit the stamp**" — so a reader
-     reasonably attributed both to the tool, and the reference consumer filed exactly that
+     *Why this is its own bullet.* It stays out of the re-stamp paragraph above: one
+     sentence after "**`apply.sh` does this; you do not edit the stamp**", a reader
+     reasonably attributes both to the tool, and the reference consumer filed exactly that
      (`PC-S329-APPLY-SH-NEVER-WRITES-THE-RECONCILE-LOG`). Measured when they did: **zero
      occurrences of the token in `apply.sh` against nine files here that name the artifact** —
      the contract stated everywhere except in the program a reader took to be honouring it.
@@ -2740,11 +2740,11 @@ declared sites, not everywhere unconditionally.
      a swept entry can hide behind a duplicate. If a row appears, disappears, or changes status
      — including `NAMED-UPSTREAM <slug>` becoming `NAMED-UPSTREAM-AMBIGUOUS <prefix>` or the
      reverse — that is the signal; STOP, and read the entries that moved before anything else.
-     The one benign difference that used to exist here is gone: the sprint-prefix count inside
-     `NAMED-UPSTREAM-AMBIGUOUS` details once dipped while an entry sat annotated-but-unrotated
-     and rose back at the rotate, which on a two-member prefix flipped the surviving sibling's
-     row between the two statuses above and read exactly like a sweep. A bare prefix is now
-     never attributed to an entry and the count reads no history, so that flip cannot occur.
+     No difference is benign here: the sprint-prefix count inside
+     `NAMED-UPSTREAM-AMBIGUOUS` details never dips while an entry sits annotated-but-unrotated,
+     because a bare prefix is never attributed to an entry and the count reads no history.
+     A flip of the surviving sibling's row between the two statuses above on a two-member
+     prefix therefore cannot occur, and one that appears reads exactly like a sweep.
    - **Commit** all step-7 writes and the step-8 ledger writes above (the ledger and
      `push-candidate-ledger.archive.md`), each staged by explicit pathspec and never with
      `git add -A` or `git add .`, on the step-6 reconcile branch, with a subject
