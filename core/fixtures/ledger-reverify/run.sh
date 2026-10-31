@@ -173,6 +173,14 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # MUTANT-MATRIX-FULL mutation-ordinal-reset-gone worlds=id-class-control why=each mutant must move EXACTLY its declared cells of the 12-entry id-class cut and no other, so the whole cell vector is the verdict
 # MUTANT-MATRIX-FULL mutation-shas-every-kind worlds=id-class-control why=each mutant must move EXACTLY its declared cells of the 12-entry id-class cut and no other, so the whole cell vector is the verdict
 # MUTANT-MATRIX-FULL mutation-close-detail-no-shas worlds=id-class-control why=each mutant must move EXACTLY its declared cells of the 12-entry id-class cut and no other, so the whole cell vector is the verdict
+# MUTANT-MATRIX-FULL mutation-bl890-noparen worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (amb,s1,s2,s3,sib,sibY; twin c0)
+# MUTANT-MATRIX-FULL mutation-bl890-strip-all worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (r1-r6; twin s1)
+# MUTANT-MATRIX-FULL mutation-bl890-label-to-log worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (s1,s2,s3,sib,sibY; twin c0)
+# MUTANT-MATRIX-FULL mutation-bl890-greedy worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (r3; twin s1)
+# MUTANT-MATRIX-FULL mutation-bl890-no-anchor worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (r3,r5; twin s1)
+# MUTANT-MATRIX-FULL mutation-bl890-bare-prefix worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (r6; twin s1)
+# MUTANT-MATRIX-FULL mutation-bl890-amb-equality worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (amb; twin s1)
+# MUTANT-MATRIX-FULL mutation-bl890-sib-full-label worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (sib; twin sibY)
 # MUTANT-MATRIX-CONTROL CONTROL-acquit-before-if why=a correct fix placed just above the undecided if must read clean on all three suffix shapes
 # MUTANT-MATRIX-CONTROL CONTROL-acquit-cond-ord why=a reset guarded on the leftover ordinal fires unconditionally at EOF and must read clean on all three suffix shapes
 # MUTANT-MATRIX-DYNAMIC stdin-mut why=a loop over the two redirect sites produces stdin-mut-eval and stdin-mut-base, each rowed above
@@ -565,6 +573,15 @@ B2_ISDIST=0
 [ "$(cd "$(dirname "$CLOSER")" && pwd)" = "$(cd "$DIR/../../skills/ai-dlc-update/reconcile" 2>/dev/null && pwd)" ] && B2_ISDIST=1
 B2_RUN=1
 if ! grep -qF 'NAMED-UPSTREAM-DOCS-ONLY' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then B2_RUN=0; fi
+# THE NAMING GUARD LINE IN named_absorbed, as the RESOLVED engine spells it. Three mutants anchor on it
+# (receiptless-local-guard, narrow-named-absorbed, widen-class). The engine that strips one trailing
+# parenthetical (BL-890) assigns the bare id on that line; the one before it asked the equality. A
+# consumer runs this fixture a pull ahead of its engine, so the anchor is the line the engine CARRIES,
+# exactly, and the mutation that deletes it applies under either. In the distribution it is the new one.
+LR_EQ_GUARD_NEW='  _id="$(label_entry_id "$_id")" || return 0    # not the shared id rule: prose label, nothing to ask'
+LR_EQ_GUARD_OLD='  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask'
+LR_EQ_GUARD="$LR_EQ_GUARD_NEW"
+if [ "$B2_ISDIST" = 0 ] && ! grep -qxF -- "$LR_EQ_GUARD_NEW" "$CLOSER"; then LR_EQ_GUARD="$LR_EQ_GUARD_OLD"; fi
 
 # THE CONTROL ROW FOR ALL FIVE is the bare-bold near-miss reporting HAND-REVIEW. It is a
 # legitimate entry that every correct engine emits, so a mutant that lost it broke the tool.
@@ -5997,7 +6014,7 @@ rl_m2="$(rl_dir rl-local-guard)" \
   && rl_mutant "$rl_m2" ledger-reverify.sh 'ledger_entry_id(label) != "")' 'label ~ /^[A-Z0-9-]+$/ && label ~ /-/)' 1 \
   && rl_mutant "$rl_m2" ledger-reverify.sh '    PC-*|BL-*) : ;;' "    *[!A-Z0-9-]*|'') return 0 ;;" 1 \
   && rl_mutant "$rl_m2" ledger-reverify.sh '    *) return 0 ;;                            # not id-shaped: prose label, nothing to ask' '    *) : ;;' 1 \
-  && rl_mutant "$rl_m2" ledger-reverify.sh '  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask' '  :' 1 \
+  && rl_mutant "$rl_m2" ledger-reverify.sh "$LR_EQ_GUARD" '  :' 1 \
   || rl_m2=""
 dp_kill mutation-receiptless-local-guard "$rl_m2" \
   '$2 ~ /^FIXTURE-CAPS-HEADING-NOT-AN-ID$/ && $1=="NAMED-UPSTREAM" {f=1} END{exit !f}' \
@@ -6258,7 +6275,7 @@ lr_unit_id_class() {
 # the guard's helper name, and the full-stop carve-out of the boundary class. A consumer whose
 # installed engine predates either SKIPs those arms; in the distribution they always run.
 idc_guard=1; idc_bound=1
-grep -qF 'label_is_own_entry_id' "$CLOSER" || idc_guard=0
+grep -qF 'label_is_own_entry_id' "$CLOSER" || grep -qF 'label_entry_id' "$CLOSER" || idc_guard=0
 grep -qF '[.]([^0-9A-Za-z_-]' "$CLOSER" || idc_bound=0
 [ "$B2_ISDIST" = 1 ] && { idc_guard=1; idc_bound=1; }
 if [ "$idc_guard" = 0 ] && [ "$idc_bound" = 0 ]; then
@@ -6450,7 +6467,7 @@ idc_case() {
 }
 IDC_NA_CASE='    PC-*|BL-*) : ;;'
 IDC_NA_ELSE='    *) return 0 ;;                            # not id-shaped: prose label, nothing to ask'
-IDC_NA_EQ='  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask'
+IDC_NA_EQ="$LR_EQ_GUARD"
 if [ "$idc_guard" = 1 ]; then
   # named_absorbed's guard back to the shipped narrow form, every layer. S816 co-moves BY
   # CONSTRUCTION: its citation row comes from named_absorbed too. S802 holds, because its row is
@@ -6511,6 +6528,90 @@ fi
 
 } # end lr_unit_id_class
 
+lr_unit_bl890() {
+# --- A LABEL WITH ONE TRAILING PARENTHETICAL IS ASKED ABOUT BY ITS ID (BL-890) ------------------------
+# receipt-bl890.sh beside this file owns the world and the cells (its header lists them). The shipped
+# reconcile directory must answer every cell. Each mutant is a whole copy of that directory with ONE
+# change, scored over EVERY cell from the receipt's one engine run, and the set of cells that FAIL must
+# equal the list its bl_case call declares exactly, with its twin among the cells that hold. The
+# header's FULL rows for world bl890-receipt record the same vectors. Naming
+# cells costs nothing, since the receipt runs the engine once whatever it judges, so the exact vector is
+# checked on every run rather than only under --matrix.
+#
+# SHIPS AHEAD OF ITS SUBJECT: a consumer whose installed engine has no `label_entry_id` SKIPs this unit;
+# in the distribution it always runs.
+  local _rec _wc _o _rc _bad
+  _rec="$DIR/receipt-bl890.sh"
+  if [ ! -f "$_rec" ]; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s receipt-bl890.sh is not beside this fixture\n' "receipt-bl890"
+    return 0
+  fi
+  if [ "$B2_ISDIST" = 0 ] && ! grep -qF 'label_entry_id' "$CLOSER"; then
+    LR_SKIPPED=1
+    printf '  SKIP  BL-890 arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
+    return 0
+  fi
+  # BUILD ONCE: the shipped run fills the cache with the distribution and the consumer; every mutant
+  # drive copies them. The world reads no reconcile file, so one cache serves every engine copy.
+  _wc="$(dirname "$DIST")/bl890-worlds"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _o="$(bash "$_rec" "$(dirname "$CLOSER")" "" "$_wc" 2>&1)"; _rc=$?
+  if [ "$_rc" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl890" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"
+    return 0
+  fi
+  printf '  ok    %-22s a suffixed label is asked by its bare id (s1, s2, s3; sibling join sib/sibY), its never-named twin is silent (s0), a suffixed label whose prefix is cited bare is ambiguous on the prefix (amb), and every refused shape stays silent (r1-r6); c0 is the bare-id control\n' "receipt-bl890"
+  # bl_case <tag> <decides cells> <twin> <why> then (<old> <new> <count>)... -> scored on the exact vector
+  bl_case() {
+    local _tag="$1" _dec="$2" _tw="$3" _why="$4" _d _got _r
+    shift 4
+    ASSERTIONS=$((ASSERTIONS + 1))
+    _d="$(rl_dir "bl890-$_tag")" || _d=""
+    while [ -n "$_d" ] && [ "$#" -ge 3 ]; do
+      rl_mutant "$_d" ledger-reverify.sh "$1" "$2" "$3" || _d=""
+      shift 3
+    done
+    if [ -z "$_d" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY (an anchor matched the wrong count, or the mutant does not parse)\n' "mutation-bl890-$_tag"; return; fi
+    _o="$(bash "$_rec" "$_d" "" "$_wc" 2>&1)"; _r=$?
+    _got="$(printf '%s\n' "$_o" | sed -n 's/^FAIL \([a-zA-Z0-9]*\):.*/\1/p' | sort | tr '\n' ',' | sed 's/,$//')"
+    lr_mx "mutation-bl890-$_tag" "$_d"
+    if [ "$_r" -eq 9 ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the receipt could not run: %s\n' "mutation-bl890-$_tag" "$(printf '%s' "$_o" | head -2 | tr '\n' ' ')"
+    elif [ "$_r" -eq 1 ] && [ "$_got" = "$_dec" ] && grep -q "^ok $_tw:" <<< "$_o"; then printf '  ok    %-22s %s\n' "mutation-bl890-$_tag" "$_why"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s failing cells {%s} rc=%s, want exactly {%s} with %s holding\n' "mutation-bl890-$_tag" "$_got" "$_r" "$_dec" "$_tw"; fi
+  }
+  local _paren='  if (r ~ /^[ \t]+\([^()]*\)$/) return id'
+  bl_case noparen "amb,s1,s2,s3,sib,sibY" c0 \
+    "the equality back as the only rule: every suffixed label is silent again, and s1 is the cell that sees it (s2, s3 and the sibling pair co-move by construction)" \
+    "$_paren" '  if (0) return id' 1
+  bl_case strip-all "r1,r2,r3,r4,r5,r6" s1 \
+    "the id accepted whatever follows it: prose after the id (r1), a colon note (r2) and every other refused shape is asked and named" \
+    '  if (label == id) return id' '  return id' 1
+  bl_case label-to-log "s1,s2,s3,sib,sibY" c0 \
+    "the suffix tested but the FULL label handed to git log: no commit matches it, and s1 is the cell that sees it (the sibling pair co-moves: its naming comes from the same query)" \
+    "$LR_EQ_GUARD_NEW" '  label_entry_id "$_id" >/dev/null || return 0' 1 \
+    '  _id="$(label_entry_id "$_id")" || return 0' '  label_entry_id "$_id" >/dev/null || return 0' 1
+  bl_case greedy "r3" s1 \
+    "a greedy parenthetical rule reads (a) (b) as one balanced parenthetical, and r3 is the cell that sees it" \
+    "$_paren" '  if (r ~ /^[ \t]+\(.*\)$/) return id' 1
+  bl_case no-anchor "r3,r5" s1 \
+    "the parenthetical rule without its end anchor accepts text after the parenthetical, and r5 is the cell that sees it (r3 co-moves: its first parenthetical is a balanced prefix; greedy moves r3 alone)" \
+    "$_paren" '  if (r ~ /^[ \t]+\([^()]*\)/) return id' 1
+  bl_case bare-prefix "r6" s1 \
+    "a bare sprint prefix with a parenthetical is asked by the prefix and attributed the commits that cite it, and r6 is the cell that sees it" \
+    '  if (id ~ /^PC-S[0-9]+$/) return ""' '' 1
+  bl_case amb-equality "amb" s1 \
+    "named_ambiguous keeping the old equality rule: a suffixed label whose slug is unnamed but whose prefix is cited bare is never reported ambiguous, and amb is the cell that sees it" \
+    "$LR_EQ_GUARD_NEW" '@@GUARD701@@' 1 \
+    '  _id="$(label_entry_id "$_id")" || return 0' '  _eq="$(label_entry_id "$_id")" || return 0
+  [ "$_eq" = "$_id" ] || return 0' 1 \
+    '@@GUARD701@@' "$LR_EQ_GUARD_NEW" 1
+  bl_case sib-full-label "sib" sibY \
+    "xrcpt keyed on the full label again (staging, the lookup and the exclusion together): a sibling named by its slug is never found, and sib is the cell that sees it" \
+    '    k = label_entry_id($1); if (k == "") k = $1' '    k = $1' 1 \
+    '  _label="$(label_entry_id "$_label")" || _label="$1"' '  :' 1
+} # end lr_unit_bl890
 lr_unit_label_prefix() {
 # --- A LABEL READS ONLY ITS OWN ROW, and the old regex helper is the mutant that proves it -----------
 # The seeded OUT puts the LONGER entry FIRST with a DIFFERENT status, so a helper that matches the
