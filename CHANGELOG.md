@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.981.0] - 2026-10-31
+
+Batch b247. `ledger-reverify.sh` asks upstream's history about a ledger entry whose heading carries a trailing `(filed …)` parenthetical (BL-890).
+
+### The closer asks about a suffixed label by its id (BL-890)
+
+`named_absorbed` and `named_ambiguous` in `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` ran `git log -F --grep` only for a label equal to its own `ledger_entry_id()`. A heading such as `## <ID> (filed <date>, <context>)` keeps the parenthetical in its label, so the equality failed and the naming query never ran. `named_sibling` had the same blindness, because it matched other entries' full labels against the commit message. The new `label_entry_id` accepts the id alone, or the id followed by exactly one balanced trailing parenthetical with nothing after it. It refuses a bare sprint prefix in that form, and hands the bare id to every naming query and to the sibling join. The ENTRY column keeps the full label. `label_is_own_entry_id` is removed. Receipt: `core/fixtures/ledger-reverify/receipt-bl890.sh`, 14 cells and eight mutants.
+
+Measured on the reference consumer: with the shipped extraction over its committed live ledger, 9 of 9 id-keyed labels carry a `(filed …)` suffix and 0 equal their id, so its installed closer never asks upstream about any live entry. On a scratch clone of it (base its installed 6cf9f837, theirs this release's tree rebased onto 0.979.0), old closer against new, the live ledger goes from 16 to 24 rows, +8 NAMED-UPSTREAM, with no row lost and no common row changed. The rotation archive is not read by the verdict loop; passed as the ledger argument, it gives the same 2 rows on both engines.
+
+The naming query is an unanchored `git log -F --grep`, so a short `BL-NN` id also matches a commit naming a longer `BL-NNN`; this release extends that existing reach to `BL-NN (filed …)` labels, of which the reference consumer carries 0.
+
+Cost, as counts: `ledger-reverify` `invocations.decl` 684 -> 702, `emit-report-refusal` 2133 -> 2135.
+
 ## [0.980.0] - 2026-10-31
 
 Batch b247, tooling cluster. `seed-verdict-store.sh` prints a failing fixture's verdict lines (BL-882), the provisional `±` invocation row is refused at J4 (BL-868 item 6), `install.sh` ships only a fixture's tracked files and refuses a non-git source (BL-892), and `backlog-real-ledger` and `shipped-rule-version-floor` stop re-keying on unrelated edits (BL-871, BL-872).

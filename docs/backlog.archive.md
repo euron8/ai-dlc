@@ -39248,3 +39248,14 @@ Two committed mutants replace the copy between the lines that bracket it, which 
 
 verify: sh bash core/fixtures/shipped-rule-version-floor/run.sh --nested-only
 
+## BL-890 — ledger-reverify never asks upstream's history about a label carrying a trailing `(filed …)` parenthetical
+
+**LANDED (v0.981.0, verified fa4294f65).** **DEFECT.** Provenance: the reference consumer's push-candidate ledger. `named_absorbed` and `named_ambiguous` in `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` ran `git log -F --grep` only for a label EQUAL to its own `ledger_entry_id()`. That consumer files every live entry as `## <ID> (filed <date>, <context>)`, and the label keeps the parenthetical, so the equality failed and the naming query never ran. Measured with the shipped extraction over that consumer's committed ledgers: on the live ledger, 9 of 9 id-keyed labels carry the suffix and 0 equal their id. A distribution release naming such an entry by its full slug therefore produced no NAMED-UPSTREAM row. The same blindness reached `named_sibling`, which matches other entries' FULL labels against the commit message. The fix accepts the equality, or the id followed by exactly one balanced trailing parenthetical with nothing after it. It refuses a bare sprint prefix in that form, and hands the bare id to every query and to the sibling join. The ENTRY column keeps the full label.
+
+Measured on a scratch `file://` clone of the consumer (base = its installed commit 6cf9f837; theirs = the tip rebased onto 0.979.0), old engine against new: the live ledger goes from 16 to 24 rows, with +8 NAMED-UPSTREAM and no NAMED-UPSTREAM-AMBIGUOUS row. No row disappeared and no common row's detail changed. With the archive passed as the ledger argument, both engines give the same 2 rows. The consumer's open record-only-diff entry read NAMED-UPSTREAM-AMBIGUOUS when measured against f7ca63142: no commit named its full slug, so `named_ambiguous` reported three older commits that cite its sprint prefix bare, all of which concern a different, earlier filing from that sprint. On a tree carrying 0.978.0 the same entry reads NAMED-UPSTREAM in 9e7232874, which names its full slug, and the ambiguous row is gone.
+
+Limits: the rotation archive is never read by the verdict loop here, so its labels were measured but no archive row was at stake. The archive-only ` —` at end-of-line label form is out of scope.
+
+Known limit: the naming query is `git log -F --grep=<id>`, an unanchored substring match, so a short `BL-NN` id also matches a commit naming a longer `BL-NNN`. That already held for a bare `## BL-NN` heading and now extends to `BL-NN (filed …)`; graph's live ledger and archive carry 0 BL-labelled entry headings (measured against 9 PC-labelled ones in the live ledger).
+
+verify: sh bash core/fixtures/ledger-reverify/receipt-bl890.sh

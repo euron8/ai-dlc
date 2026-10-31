@@ -633,7 +633,8 @@ named_cited_filter() {
   printf '%s\n' "$_out" | grep . || true
 }
 
-# A LABEL IS ASKED ABOUT ONLY WHEN IT *IS* AN ENTRY ID: it must EQUAL its own `ledger_entry_id()`,
+# A LABEL IS ASKED ABOUT ONLY WHEN IT *IS* AN ENTRY ID: it must be form (a) or (b) of `label_entry_id`
+# below (the bare id itself, or the id followed by one trailing parenthetical), built on `ledger_entry_id()`,
 # the shared rule from lib.sh, asked through awk exactly as the `manual` dispatch below asks it. No
 # local restatement of the character class. Both naming guards used to carry one -- `[A-Z0-9-]`,
 # the narrow spelling lib.sh widened for `_` and `.` -- and it went blind on the widened forms.
@@ -648,10 +649,44 @@ named_cited_filter() {
 # an unguarded equality accepts the empty label. One line only, so a stray second line cannot vote.
 # Each caller runs a FORK-FREE `PC-*|BL-*` prefix refusal before this, so a prose label never pays
 # the awk fork; that is a prefix test, not a second copy of the class.
-label_is_own_entry_id() { # <label> -> rc 0 iff the label equals ledger_entry_id(label)
-  printf '%s\n' "$1" | LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
-    NR == 1 && $0 != "" && ledger_entry_id($0) == $0 { ok = 1 }
-    END { exit !(ok && NR == 1) }'
+#
+# EQUALITY ALONE WAS BLIND TO THE WHOLE LIVE LEDGER OF THE REFERENCE CONSUMER. Its entries are
+# filed as `## <ID> (filed <date>, <context>)`, and the label keeps that parenthetical, so the label
+# never equalled its id and neither naming function asked `git log` anything. Measured on that
+# consumer's live ledger with the shipped extraction: 9 of 9 id-keyed labels carry the suffix and 0
+# equal their id, so a release naming such an entry by its full slug produced no row at all. So
+# the rule takes ONE more form, and the id it PRINTS is what every later query uses:
+#   (a) the label IS `ledger_entry_id(label)` -- the equality, unchanged;
+#   (b) the id, then blanks, then ONE balanced parenthetical with no parenthesis inside it, and
+#       nothing after it.
+# Everything else is refused as before: prose after the id (`<ID> and BL-12 prose`, `<ID>: note`),
+# two parentheticals, an unclosed one, text after it. (b) is ALSO refused when the id is a bare
+# sprint prefix (`PC-S<n>`): `PC-S<n> (retro)` names no entry, and asking `git log` for the prefix
+# would hand it the attribution `named_ambiguous` exists to withhold. A bare `## PC-S<n>` heading is
+# form (a) and is asked exactly as before. The id is anchored at the label's start by
+# `ledger_entry_id`, so a label cannot borrow an id that appears later in it.
+#
+# THE LABEL ITSELF IS NOT CHANGED: the row's ENTRY column still prints the full label, which is the
+# join key of every reader of these rows. Only the id handed to the queries is bare.
+#
+# ONE AWK FUNCTION, TWO READERS: `label_entry_id` below, and the `xrcpt` staging pass, which keys
+# `named_sibling`'s entries on the same bare id so a sibling named by its slug is found.
+label_entry_id_awk() {
+  printf '%s\n' 'function label_entry_id(label,   id, r) {
+  if (label == "") return ""
+  id = ledger_entry_id(label)
+  if (id == "") return ""
+  if (label == id) return id
+  if (id ~ /^PC-S[0-9]+$/) return ""
+  r = substr(label, length(id) + 1)
+  if (r ~ /^[ \t]+\([^()]*\)$/) return id
+  return ""
+}'
+}
+label_entry_id() { # <label> -> the bare id on stdout, rc 0 iff the label is form (a) or (b) above
+  printf '%s\n' "$1" | LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)$(label_entry_id_awk)"'
+    NR == 1 { out = label_entry_id($0) }
+    END { if (NR == 1 && out != "") { print out; exit 0 } exit 1 }'
 }
 
 named_absorbed() { # <label> -> "<n> <sha>,<sha>,... <code|docs|cited>" if upstream's history names its full slug, else ""
@@ -664,7 +699,7 @@ named_absorbed() { # <label> -> "<n> <sha>,<sha>,... <code|docs|cited>" if upstr
     *-*) : ;;
     *)   return 0 ;;                          # a single word is not an id
   esac
-  label_is_own_entry_id "$_id" || return 0    # not the shared id rule: prose label, nothing to ask
+  _id="$(label_entry_id "$_id")" || return 0    # not the shared id rule: prose label, nothing to ask
   # THE WHOLE MATCH SET, NOT ONE COMMIT OF IT. This was `| tail -1` -- the OLDEST commit whose
   # MESSAGE names the id -- and the row then reported that commit's version as the absorbing
   # release. Naming is not absorbing: a commit naming an id to record a rejection, a split, a
@@ -1032,6 +1067,10 @@ named_sibling() {
   local _sb_blk=0 _sb_bad=0 _sibs=""
   NSB_STATE=touched; NSB_SIBS=""
   [ -n "$2" ] || return 0
+  # X's KEY IN `xrcpt` is its bare id (`label_entry_id`), or the label itself where the rule refuses
+  # it -- the key the staging pass wrote. It is the key for X's own lookup AND for X's exclusion from
+  # the sibling set, so both stay on one spelling.
+  _label="$(label_entry_id "$_label")" || _label="$1"
   # X's own receipts, from the SAME staged entries the verdict loop reads.
   LR_L="$_label" LC_ALL=C awk -F'\t' '$1 == ENVIRON["LR_L"] { print }' "$LR_STAGE/xrcpt" \
     > "$LR_STAGE/nsb-x" 2>/dev/null || return 0
@@ -1202,7 +1241,8 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
   # THE SHARED ID RULE, after the fork-free refusals and before the entry count, which forks.
   # Its own guard, not inherited from `named_absorbed`: this function receives the same label that
   # one just refused, and a prefix-shaped prose label would otherwise reach the prefix walk here.
-  label_is_own_entry_id "$_id" || return 0
+  # The BARE id from here on: the slug walk below must ask for the id, never the suffixed label.
+  _id="$(label_entry_id "$_id")" || return 0
   # THE ENTRY COUNT IS OVER THE OPEN LIVE ENTRIES THE VERDICT LOOP READS (`$LR_STAGE/entries`), one
   # per distinct label, and it gates NOTHING. It used to be a corpus count over the live ledger AND
   # the rotation archive, and a count of 1 handed the row to `named_absorbed` as an attribution;
@@ -2337,8 +2377,8 @@ lr_entries() { # <ledger-file> -> label TAB ord TAB directive, one row per recei
   # matches by common words. The loop below lets `0/0` emit NAMED-UPSTREAM(-AMBIGUOUS) and then
   # skips the verb dispatch, so no receipt verdict is ever invented for it.
   # DEFENCE IN DEPTH NOW, NOT THE GUARD: the naming path no longer depends on this filter.
-  # `named_absorbed` and `named_ambiguous` each refuse a label that does not equal its own
-  # ledger_entry_id(), so a RECEIPTED prose label -- which this filter never saw, since it gates
+  # `named_absorbed` and `named_ambiguous` each refuse a label that label_entry_id refuses,
+  # so a RECEIPTED prose label -- which this filter never saw, since it gates
   # only the receipt-less 0/0 row -- is refused there too. Kept so a 0/0 row is never emitted for
   # a label no naming query would ask about.
   function flush(){
@@ -2504,14 +2544,20 @@ printf '%s\n' "$ENTRIES" > "$LR_STAGE/entries" \
 # set. `close()` makes a failed write of either file fail the awk. A failure here leaves every
 # naming row at the kind it had before either datum existed: `named_sibling` is reached only from
 # a `touched` answer, and `named_subject` cannot give one without this stage.
+#
+# `xrcpt` IS KEYED ON THE BARE ID (`label_entry_id`), not the label: `named_sibling` tests every
+# other entry's key as a substring of the commit message, and a suffixed label such as
+# `<ID> (filed <date>, <context>)` is never in a message that names `<ID>`. A label the rule refuses
+# (prose) keeps its full text as the key, as before. `named_sibling` looks X up by the same key.
 LR_SUBJ_OK=0
-if LR_XR="$LR_STAGE/xrcpt" LC_ALL=C awk -F'\t' '
+if LR_XR="$LR_STAGE/xrcpt" LC_ALL=C awk -F'\t' "$(ledger_entry_awk)$(ledger_entry_id_awk)$(label_entry_id_awk)"'
   BEGIN { x = ENVIRON["LR_XR"]; printf "" > x }
   $2 == "0/0" { next }
   { d = $0; sub(/^[^\t]*\t[^\t]*\t/, "", d); v = d; sub(/ .*/, "", v); r = substr(d, length(v) + 1); sub(/^ /, "", r)
     gsub(/^[^A-Za-z_]+/, "", v); gsub(/[^A-Za-z_]+$/, "", v)
     if (v != "theirs_has" && v != "theirs_lacks") next
-    printf "%s\t%s\n", $1, r > x
+    k = label_entry_id($1); if (k == "") k = $1
+    printf "%s\t%s\n", k, r > x
     p = r; sub(/ .*/, "", p); printf "%s\t%s\n", $1, p }
   END { if (close(x) != 0) exit 2 }' "$LR_STAGE/entries" > "$LR_STAGE/subjects" 2>/dev/null; then
   LR_SUBJ_OK=1
@@ -3354,7 +3400,8 @@ fi
 # helper required `^[A-Z0-9-]+$`, which excludes `_` and `.`; two real entries on the reference
 # consumer failed it. It is now single-homed in `lib.sh` beside the shape rule, which is what
 # `ledger-entry-boundary-measurement.md` asks for, and `ledger-rotate.sh`s
-# refusal guard reads the same one.
+# refusal guard reads the same one. This greedy strip is the ENTRY-SWALLOWED pass's own; the rule
+# that decides which labels the NAMING queries ask about is `label_entry_id`.
 awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
   function idshape(s) {
     sub(/[[:space:]]*\(.*\)[[:space:]]*$/, "", s)
