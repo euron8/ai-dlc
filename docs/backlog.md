@@ -1907,7 +1907,7 @@ verify: manual
 
 ## BL-882 — `seed-verdict-store.sh` prints only `tail -5` of a failing fixture's output, hiding the verdict lines
 
-**DEFECT.** Found while recovering the 0.971.0 release (owner filing): at `scripts/seed-verdict-store.sh:45`, a fixture that exits non-zero prints only `tail -5 "$work/$fx.out"` — the fixture's own last five lines, and the J3 verdict rows and any other diagnostic above them are never shown. Measured cost: the two `J3` invocation-count mismatches (postcompact-rulebook-recovery and review-shard-merge) that seeded the 0.971.0 push's red run were invisible in the pre-push seed runs of the same fixtures — the runs printed `rc` lines and the five tail lines only, and read as clean. Owed: on a failing fixture the script prints the failing verdict lines (`FAIL` rows, or the whole output) instead of the tail; the pass-path output stays as it is.
+**DEFECT.** Found while recovering the 0.971.0 release (owner filing): at `scripts/seed-verdict-store.sh:45`, a fixture that exits non-zero prints only `tail -5 "$work/$fx.out"` — the fixture's own last five lines, and the J3 verdict rows and any other diagnostic above them are never shown. Measured cost: during the 0.971.0 recovery the seed runs of the two fixtures whose `J3` mismatches later made the push red (postcompact-rulebook-recovery and review-shard-merge) did report `rc` non-zero, but the five tail lines carried no `J3` row, so the cause of the failure was hidden and the fix was not derivable from the script's output. Owed: on a failing fixture the script prints the failing verdict lines (`FAIL` rows, or the whole output) instead of the tail; the pass-path output stays as it is.
 
 verify: sh ! grep -q 'tail -5' scripts/seed-verdict-store.sh
 
