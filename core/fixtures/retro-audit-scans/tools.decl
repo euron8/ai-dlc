@@ -5,10 +5,12 @@ cat
 cmp
 cp
 dirname
+diff
 find
 grep
 mkdir
 mktemp
+paste
 perl
 python3
 rm
