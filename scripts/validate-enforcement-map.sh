@@ -884,6 +884,10 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I75 +10 (one more root-consulting subject, core/scripts/serial-remediation-worklist.sh), I84 +2,
 #   I83 +1; no other arm moved. The new directory is serial-remediation-worklist, which ships.
 #   HIGH tip reading 3442 plus the same 4.
+#
+#   LOWERED, NOT RAISED, WHEN I83 AND I84 STOPPED GREPPING ONCE PER CORPUS FILE: each predicate is now
+#   one `grep -l` over the whole list, so a new shipped script no longer moves either arm; the
+#   measurement is in fork-budget.txt.
 # The assignment moved to fork-budget.txt at the repo root; this script never read it. New raises are recorded there.
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
@@ -9079,7 +9083,11 @@ fi
 # from a MENTION of one: the expression below writes the pattern escaped, an extractor writes it
 # bare and follows it with an action.
 I83_RESOLVER="core/scripts/artifact-path-config.sh"
-i83_extracts() { grep -qE '/\^areas:\$/[[:space:]]*\{|scan-roots\$/[[:space:]]*\{' "$1"; }
+i83_extracts() { # <file>... -> prints each file carrying an extractor, in argument order; 2 when one could not be read
+  [ "$#" -gt 0 ] || return 2
+  grep -lE '/\^areas:\$/[[:space:]]*\{|scan-roots\$/[[:space:]]*\{' -- "$@"
+  [ "$?" -le 1 ] || return 2
+}
 
 # THE LIVENESS PROBE. This reports an ABSENCE and its whole answer is one grep. An expression
 # that stopped matching would return the same empty set as a tree with one reader, so it is
@@ -9094,26 +9102,51 @@ i83_h='/^are'; i83_t='as:$/{f=1;next}'
 printf '#!/usr/bin/env bash\nareas="$(awk %s%s%s%s \"$1\")"\n' \
   "'" "$i83_h" "$i83_t" "'" > "$i83_probe_dir/copy.sh"
 printf '#!/usr/bin/env bash\necho no extraction here\n' > "$i83_probe_dir/clean.sh"
-if ! i83_extracts "$i83_probe_dir/copy.sh"; then
+# THE UNREAD GUARD'S PROBE. One grep over the whole corpus answers 2 when ANY file could not be
+# read, and still prints the matches it did read -- so the guard below is the only thing standing
+# between an unreadable file and a clean line. It is asked about a mode-000 file AFTER a readable
+# one (the reader must not stop at the first member), and about the readable one alone, which must
+# NOT be scored unread. A mode-000 file that still reads means root or a mode-blind filesystem:
+# the guard cannot be proven there, so that is a refusal, never a pass. Mode 000 comes from a
+# umask in a subshell, not `chmod`: builtins only, so no fixture driving this file owes a new tool.
+( umask 777; printf '#!/usr/bin/env bash\necho unreadable\n' > "$i83_probe_dir/unread.sh" )
+if [ -z "$(i83_extracts "$i83_probe_dir/copy.sh")" ]; then
   err "I83's own probe: a file carrying the areas extractor was NOT matched. The corpus result below is an empty set produced by an expression that matches nothing, which reads exactly like a tree with one reader."
-elif i83_extracts "$i83_probe_dir/clean.sh"; then
+elif [ -n "$(i83_extracts "$i83_probe_dir/clean.sh")" ]; then
   err "I83's own probe: a file carrying no extraction WAS matched, so every finding it prints is suspect."
+elif [ -r "$i83_probe_dir/unread.sh" ]; then
+  err "I83's own probe: a file set to mode 000 is still readable (root, or a filesystem that ignores modes), so the unread guard below cannot be shown to fire. Refusing rather than reporting a corpus scan whose read failures would be invisible."
+elif i83_extracts "$i83_probe_dir/clean.sh" "$i83_probe_dir/unread.sh" > /dev/null 2>&1; then
+  err "I83's own probe: a corpus holding one unreadable file was scored as fully read. A read failure would then report the same clean line as a scanned file."
+elif ! i83_extracts "$i83_probe_dir/clean.sh" > /dev/null 2>&1; then
+  err "I83's own probe: a corpus of one readable clean file was scored as UNREAD, so the unread guard fires on every tree and its error means nothing."
 else
   i83_extra=""
   i83_files=0
   i83_resolver_seen=0
+  i83_list=()
   while IFS= read -r i83_f; do
     [ -n "$i83_f" ] || continue
     i83_files=$((i83_files + 1))
-    i83_rel="${i83_f#"$REPO_ROOT/"}"
-    if [ "$i83_rel" = "$I83_RESOLVER" ]; then
-      i83_extracts "$i83_f" && i83_resolver_seen=1
-      continue
-    fi
-    i83_extracts "$i83_f" && i83_extra="${i83_extra} $i83_rel"
+    i83_list+=("$i83_f")
   done < <( { find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*"
               find "$REPO_ROOT/scripts" "$REPO_ROOT/.githooks" -type f 2>/dev/null; } | sort )
-  if [ "$i83_files" -lt 20 ]; then
+  i83_unread=0
+  if [ "$i83_files" -ge 1 ]; then
+    i83_extracts "${i83_list[@]}" > "$i83_probe_dir/hits" || i83_unread=1
+    while IFS= read -r i83_f; do
+      [ -n "$i83_f" ] || continue
+      i83_rel="${i83_f#"$REPO_ROOT/"}"
+      if [ "$i83_rel" = "$I83_RESOLVER" ]; then
+        i83_resolver_seen=1
+        continue
+      fi
+      i83_extra="${i83_extra} $i83_rel"
+    done < "$i83_probe_dir/hits"
+  fi
+  if [ "$i83_unread" -ne 0 ]; then
+    err "I83 could not read every file in its corpus (grep exited 2). An unreadable file is a file this invariant did not scan, and its silence about it reads exactly like a file with no extractor."
+  elif [ "$i83_files" -lt 20 ]; then
     err "I83 found only $i83_files file(s) to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same one-reader line as a bound one."
   elif [ "$i83_resolver_seen" -ne 1 ]; then
     err "I83 did not find the grammar extraction in $I83_RESOLVER, the one file that is supposed to carry it. Either the resolver stopped reading the grammar — in which case every caller is resolving against nothing — or this invariant is looking at the wrong path, and its zero below means nothing."
@@ -9153,19 +9186,28 @@ rm -rf "$i83_probe_dir"
 # FALSE-POSITIVE SET MEASURED BEFORE SHIPPING: zero files match, with the probe below proving the
 # expression still matches a restatement when one exists.
 I84_SCHEMA="$REPO_ROOT/core/schemas/sprint-status.json"
+# THIS FILE IS NOT A READER, for I83's resolver reason one level out: it names `stories_dir` in
+# code to READ the declaration it checks, so it scored itself as a reader and arm (b)'s "no reader
+# at all" could never fire on any tree that carries this validator. Matched by exact path.
+I84_SELF="scripts/validate-enforcement-map.sh"
 
 # Assembled from halves and never written whole, for I83's reason one level out: a literal here
 # would make THIS file the only positive, and the exemption that fixes that is an exemption for
 # exactly the kind of file the ban exists for.
 i84_a='planning-'; i84_b='artifacts[^ ]*stories'
-# ONE `grep` PER FILE, NOT TWO THROUGH A PIPE, AND THE FORK-FREE FORM WAS REFUTED BY
-# MEASUREMENT. The obvious cut here is an in-shell `read` loop with `[[ =~ ]]`, which removes
-# every fork. It is 3.7x SLOWER: over this arm's real corpus -- 127 files, 78011 lines --
-# interleaved reps read shipped 439-480ms against in-shell 1698-2028ms, all forms agreeing on
-# hits. The shipped shape pays its forks and scans in C; the fork-free shape runs 78011 bash
-# loop iterations. This validator runs well over a hundred times per full push, so that trade is
-# a wall-clock REGRESSION bought with a lower fork count -- and a fork budget cannot see it.
-# Folding the pipe into one `grep` removes 3 of the 4 forks per file AND is slightly faster.
+# ONE `grep -l` PER PREDICATE OVER THE WHOLE CORPUS, NOT ONE PER FILE, AND THE FORK-FREE FORM
+# WAS REFUTED BY MEASUREMENT. The obvious cut is an in-shell `read` loop with `[[ =~ ]]`, which
+# removes every fork. It is 3.7x SLOWER: over this arm's real corpus -- 127 files, 78011 lines --
+# interleaved reps read a per-file grep at 439-480ms against in-shell 1698-2028ms, all forms
+# agreeing on hits. A grep scans in C; the fork-free shape runs 78011 bash loop iterations, a
+# wall-clock REGRESSION bought with a lower fork count that a fork budget cannot see. The per-file
+# grep that replaced the old two-stage pipe then charged about three forks for every file added
+# under core/, scripts/ or .githooks/, and the budget was raised for that alone three times. Each
+# predicate now takes `<file>...` and is ONE `grep -lE` over the find|sort list I83 and I84 already
+# derive, so the corpus and its order are unchanged and an added file costs no fork: I84's corpus
+# read is two greps and I83's is one, whatever the corpus size. `-l` prints matches in argument
+# order, and its output, never its exit status, is the finding; an exit of 2 means some file was
+# not read and is its own error, refused before any finding is read.
 #
 # THE NARROWING IS THE SAME ONE, SPELLED AS A PREFIX. `^[[:blank:]]*([^#[:blank:]].*)?` is the
 # comment filter the pipe did with `grep -v`: optional leading blanks, then either the pattern
@@ -9181,14 +9223,18 @@ i84_a='planning-'; i84_b='artifacts[^ ]*stories'
 # It also closes the I54 shape latent in the old form: both predicates fed `grep -q` from a
 # pipe, which under `pipefail` answers with the writer's EPIPE on a MATCH. This file sets
 # `set -u` and not `pipefail`, so it did not bite; the pipe is gone now regardless.
-i84_restates() { # <file> -> 0 when a non-comment line carries an area-qualified story path
-  grep -qE "^[[:blank:]]*([^#[:blank:]].*)?${i84_a}${i84_b}" "$1" 2>/dev/null
+i84_restates() { # <file>... -> prints each file whose non-comment line carries an area-qualified story path; 2 on a read failure
+  [ "$#" -gt 0 ] || return 2
+  grep -lE "^[[:blank:]]*([^#[:blank:]].*)?${i84_a}${i84_b}" -- "$@"
+  [ "$?" -le 1 ] || return 2
 }
 # The SAME comment narrowing, and it is here because arm (b) fired on its first run without it:
 # migrate-artifact-paths.sh MENTIONS `stories_dir` in the comment explaining why it deferred the
 # corpus, and was scored as a reader that had forgotten to substitute. A mention is not a read.
-i84_reads() { # <file> -> 0 when a non-comment line reads the declaration
-  grep -qE "^[[:blank:]]*([^#[:blank:]].*)?stories_dir" "$1" 2>/dev/null
+i84_reads() { # <file>... -> prints each file whose non-comment line reads the declaration; 2 on a read failure
+  [ "$#" -gt 0 ] || return 2
+  grep -lE "^[[:blank:]]*([^#[:blank:]].*)?stories_dir" -- "$@"
+  [ "$?" -le 1 ] || return 2
 }
 # The SAME narrowing for the slot, and it is here because the whole-file `grep -qF` it replaces
 # was satisfied by a COMMENT: a reader that lost its placeholder-key line but kept a `# ... {sprint}`
@@ -9208,10 +9254,21 @@ i84_probe_dir="$(mktemp -d)"
 printf '#!/usr/bin/env bash\nD="_bmad-output/%s%s"\n' "$i84_a" 'artifacts/stories' > "$i84_probe_dir/restate.sh"
 printf '#!/usr/bin/env bash\n# _bmad-output/%s%s is what this used to say\nP="*/stories/*.md"\n' \
   "$i84_a" 'artifacts/stories' > "$i84_probe_dir/clean.sh"
-if ! i84_restates "$i84_probe_dir/restate.sh"; then
+# The unread guard's probe, I83's reason, asked of BOTH corpus predicates: each is its own grep
+# with its own exit status, and a guard dropped from either one loses read failures for that arm.
+( umask 777; printf '#!/usr/bin/env bash\necho unreadable\n' > "$i84_probe_dir/unread.sh" )
+if [ -z "$(i84_restates "$i84_probe_dir/restate.sh")" ]; then
   err "I84's own probe: a file that DOES restate the story corpus path was not matched. The zero below is produced by an expression that matches nothing, which reads exactly like a tree with one declaration."
-elif i84_restates "$i84_probe_dir/clean.sh"; then
+elif [ -n "$(i84_restates "$i84_probe_dir/clean.sh")" ]; then
   err "I84's own probe: a file carrying the path only in a COMMENT, and the component-keyed pattern the protect hook uses, WAS matched. The expression cannot tell a restatement from an explanation of one, so every finding it prints is suspect."
+elif [ -r "$i84_probe_dir/unread.sh" ]; then
+  err "I84's own probe: a file set to mode 000 is still readable (root, or a filesystem that ignores modes), so the unread guard below cannot be shown to fire. Refusing rather than reporting a corpus scan whose read failures would be invisible."
+elif i84_restates "$i84_probe_dir/clean.sh" "$i84_probe_dir/unread.sh" > /dev/null 2>&1; then
+  err "I84's own probe: i84_restates scored a corpus holding one unreadable file as fully read. A read failure would then report the same clean line as a scanned file."
+elif i84_reads "$i84_probe_dir/clean.sh" "$i84_probe_dir/unread.sh" > /dev/null 2>&1; then
+  err "I84's own probe: i84_reads scored a corpus holding one unreadable file as fully read. A read failure would then report the same clean line as a scanned file."
+elif ! i84_restates "$i84_probe_dir/clean.sh" > /dev/null 2>&1 || ! i84_reads "$i84_probe_dir/clean.sh" > /dev/null 2>&1; then
+  err "I84's own probe: a corpus of one readable clean file was scored as UNREAD, so the unread guard fires on every tree and its error means nothing."
 elif [ ! -r "$I84_SCHEMA" ]; then
   err "I84 cannot read core/schemas/sprint-status.json. It is the declared home of the story corpus template; absent it, every program composing a story path is unchecked and this invariant's silence is indistinguishable from conformance."
 else
@@ -9239,17 +9296,27 @@ else
     i84_readers=0
     i84_files=0
     i84_rarr=()
+    i84_list=()
+    i84_unread=0
     while IFS= read -r i84_f; do
       [ -n "$i84_f" ] || continue
       i84_files=$((i84_files + 1))
-      i84_rel="${i84_f#"$REPO_ROOT/"}"
-      i84_restates "$i84_f" && i84_bad="${i84_bad} $i84_rel"
-      if i84_reads "$i84_f"; then
-        i84_readers=$((i84_readers + 1))
-        i84_rarr+=("$i84_f")
-      fi
+      i84_list+=("$i84_f")
     done < <( { find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*"
                 find "$REPO_ROOT/scripts" "$REPO_ROOT/.githooks" -type f 2>/dev/null; } | sort )
+    if [ "$i84_files" -ge 1 ]; then
+      i84_restates "${i84_list[@]}" > "$i84_probe_dir/bad" || i84_unread=1
+      i84_reads "${i84_list[@]}" > "$i84_probe_dir/readers" || i84_unread=1
+      while IFS= read -r i84_f; do
+        [ -n "$i84_f" ] && i84_bad="${i84_bad} ${i84_f#"$REPO_ROOT/"}"
+      done < "$i84_probe_dir/bad"
+      while IFS= read -r i84_f; do
+        [ -n "$i84_f" ] || continue
+        [ "${i84_f#"$REPO_ROOT/"}" = "$I84_SELF" ] && continue
+        i84_readers=$((i84_readers + 1))
+        i84_rarr+=("$i84_f")
+      done < "$i84_probe_dir/readers"
+    fi
     # Expanded only behind the guard: an empty array under `set -u` is an error on bash 3.2, and
     # awk handed no file would read stdin. Its report lands in the probe dir, removed below.
     if [ "$i84_readers" -ge 1 ]; then
@@ -9258,7 +9325,9 @@ else
         [ -n "$i84_f" ] && i84_nosub="${i84_nosub} ${i84_f#"$REPO_ROOT/"}"
       done < "$i84_probe_dir/nosub"
     fi
-    if [ "$i84_files" -lt 20 ]; then
+    if [ "$i84_unread" -ne 0 ]; then
+      err "I84 could not read every file in its corpus (grep exited 2). An unreadable file is a file this invariant did not scan, and its silence about it reads exactly like a file that restates nothing."
+    elif [ "$i84_files" -lt 20 ]; then
       err "I84 found only $i84_files file(s) to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same one-declaration line as a bound one."
     elif [ "$i84_readers" -lt 1 ]; then
       err "I84 found NO shipped program reading \`stories_dir\` at all. The declaration has a home and no readers, so the ban below is enforcing a rule nothing obeys — and Check 6, the story-status join and the protected-path set have all stopped resolving the corpus."

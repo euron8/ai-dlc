@@ -39,4 +39,12 @@
 # 91374cf9e read 3470 across 261 fixture dirs, the b247-tooling tip 81abd3f47 read 3471 across 262. The +1
 # is the new fixture dir, which the validator walks; no validator code changed. The budget is the high
 # reading plus the same +4 margin.
-FORK_BUDGET=3475
+#
+# Lowered 3475 -> 2948 when I83 and I84 stopped grepping once per corpus file (BL-898). Measured with
+# `scripts/fork-profile.sh --section all`, each run from inside its own clean detached worktree: base
+# 808dccef1 read 3471, the tip (validator reshape plus the validator-fork-budget receipt arm) read 2946,
+# both EXIT 0 with TRACELINES = MARKERS. By line, base to tip: i83_extracts :9082 178 -> :9088 3,
+# i84_restates :9185 178 -> :9228 3, i84_reads :9191 176 -> :9236 1; the I83..I84 span 549 -> 24. Each
+# predicate is now one `grep -l` over the whole corpus, so a new shipped script no longer moves either
+# arm. The budget is the tip reading plus HEADROOM_MARGIN 2; A4's 70% line is 2063, so its window holds.
+FORK_BUDGET=2948

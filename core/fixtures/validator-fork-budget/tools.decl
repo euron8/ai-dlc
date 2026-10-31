@@ -4,6 +4,7 @@ basename
 bash
 bc
 cat
+chmod
 cksum
 cmp
 column

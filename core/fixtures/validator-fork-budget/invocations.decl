@@ -1,4 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-# Re-measured at slot sha 1a408b46e plus the m1-ii tip, armed through hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR), two runs, identical counts (p1's rows confirmed).
-86 *
-2 scripts/validate-enforcement-map.sh
+# Re-measured at slot sha 1a408b46e plus the m1-ii tip, armed through hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR), two runs, identical counts (p1's rows confirmed). Re-measured for the BL-898 receipt arm (A6: five worlds, one validator run each) and m16-m19 (deciding plus twin worlds only), one counted run through hermetic-run.sh, verified by a second.
+123 *
+18 scripts/validate-enforcement-map.sh

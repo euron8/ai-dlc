@@ -39273,4 +39273,14 @@ START COUNT, from a counted `hermetic-run.sh` run: `self-update-fixture-log` sta
 
 verify: sh bash core/fixtures/self-update-fixture-log/receipt-bl894.sh
 
+## BL-898 — I83 and I84 grep each corpus file separately, so every new file charges three forks
 
+**LANDED (v0.983.0, verified e7bb91580).** **DEFECT.** Tier: gate, cost and false clean in `scripts/validate-enforcement-map.sh`. Provenance: batch b247. Three subjects, all fixed.
+
+1. **Per-file greps.** I83 (`i83_extracts`) and I84 (`i84_restates`, `i84_reads`) ran one grep per corpus file, 176 files. That cost 549 forks of the 3471 total and hit `FORK_BUDGET` three times in batch b247. There is now one `grep -l` per predicate over the sorted corpus: TOTAL 3471 -> 2946, `FORK_BUDGET` 3475 -> 2948.
+2. **A reader-count guard that could not fire.** I84's reader-count guard scored the validator itself as a reader, so it could never read zero. The validator is now exempted by exact path, and a tree whose only reader is the validator now fails.
+3. **An unreadable corpus file read clean.** grep exit 2 is now a per-arm error, with a mode-000 self-probe.
+
+Held by: `core/fixtures/validator-fork-budget/receipt-bl898.sh` and mutants m16-m19.
+
+verify: sh bash core/fixtures/validator-fork-budget/receipt-bl898.sh

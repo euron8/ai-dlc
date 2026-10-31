@@ -8,7 +8,7 @@
 # The validator under test, REQUIRED: run.sh prints the sentinel once it has located it.
 !scripts/validate-enforcement-map.sh
 # The profiler walks up from itself for VERSION; the renderer it calls for the arm map does the same.
-# copy-only: core/fixtures/validator-fork-budget/run.sh:116 run.sh tests for the marker beside the profiler; nothing reads its content
+# copy-only: core/fixtures/validator-fork-budget/run.sh:123 run.sh tests for the marker beside the profiler; nothing reads its content
 VERSION
 scripts/
 .githooks/
