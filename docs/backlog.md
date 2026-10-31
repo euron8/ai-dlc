@@ -1929,3 +1929,15 @@ Not fixed in 0.978.0: the fix needs a story binding, which is a design decision 
 
 verify: manual — no predicate over the tree can test it until the binding is designed.
 
+
+## BL-896 — the gate-adjudication predicate site cannot observe a change to how waivers are read
+
+**DEFECT.** Tier: gate, false clean in `core/skills/ai-dlc-update/reconcile/predicate-differential.sh`. Verified at dc64ebe04.
+
+`core/scripts/validate-gate-adjudication.sh:776-780` reads `$GA_MAP_ROOT/docs/escalations/pending.md` in `--series` mode whenever a series carries a `"FAIL_WAIVED"` verdict. Under the predicate differential's pinned probe root neither side has that file, so both sides receive an identical empty input, which parses as agreement. A release that changes how waivers are read is therefore unobservable to the gate-adjudication site, and the site reads `PREDICATE-STABLE` where the consumer's stored verdicts would move. `core/skills/ai-dlc-update/reconcile/predicate-sites.md` states this in the corrected sentence beginning "Its escalations default (`$GA_MAP_ROOT/docs/escalations/pending.md`) IS read in `--series` mode".
+
+Measured reach, read-only with `git -C /Users/n8/git/graph` at HEAD: 4 of the 17 tracked `s320` gate-adjudication `verdict.json` files carry `FAIL_WAIVED`. Control: a token no file carries (`NO_SUCH_TOKEN_Q9Z`) matches 0 files in the same tree.
+
+Owed, not built: pass the consumer's escalations file by path to both sides, the way `AI_DLC_KNOWN_SKILLS_EXT` is passed.
+
+verify: manual

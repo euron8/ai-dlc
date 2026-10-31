@@ -19,6 +19,54 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.979.0] - 2026-10-31
+
+Batch b247. The predicate differential no longer reads a missing `gate_adjudication.py` as a mass reclassification (BL-893). Machinery-only; it ships alone.
+
+### The predicate differential reads gate_adjudication.py, treats a side silent on every series as UNDECIDABLE, and lists a read-set from the ref's tree alone (BL-893)
+
+Release 0.971.0 moved the python of `validate-gate-adjudication.sh` into `core/scripts/gate_adjudication.py`, and the gate-adjudication site's `reads:` line in `core/skills/ai-dlc-update/reconcile/predicate-sites.md` did not name it. The pinned incoming root therefore held no module, the incoming side printed a NOTE line and exited 2 on every series, the base side yielded verdict tokens, and `predicate-differential.sh` scored every series changed. The row read "AT LEAST 14 of 14" PREDICATE-RECLASSIFIES. Three fixes:
+
+1. `reads:` and prose. The gate-adjudication site's `reads:` line now lists `core/scripts/gate_adjudication.py`, and the prose names it among what the validator resolves under the pinned root.
+
+2. A one-sided-silence arm. After the `n_parsed==0` arm and before the changed-series count, the differential records per side per series whether the side SPOKE: it yielded a verdict token or, at a site whose `pass:` is a sed expression, printed its pass line. When one side spoke on zero series and the other on at least one, it emits PREDICATE-UNDECIDABLE naming "the incoming side" or "the base side", and the message names the ref at which that side printed no verdict token and no pass line, and says a verdict or pass grammar that no longer matches the side's output (for example a DEFERred pull running the old manifest) is one way to get there. The arm is keyed on tokens and pass lines, never on an exit code and never on empty output, because the real defect printed a NOTE line. It does not reuse `n_passed`, which counts series where both sides printed the pass line. The arm abstains on `pass: -` sites: a grammar that spells only failures cannot tell "passed every series" from "crashed on every series", so a real mixed to all-pass reclassification must stay RECLASSIFIES there. Every shipped site declares `pass:` (two sed expressions, three `in-verdict`), so the defect site is covered.
+
+3. The read-set listing ignores the dist's index. `ls-files --with-tree="$ref"` on a non-bare dist unions the index into the listing, so a member staged but absent from the ref was listed, `git show` of it failed, and the side read as unmaterializable with a spurious UNDECIDABLE naming the wrong side. The listing now runs with `GIT_INDEX_FILE` pointing at a path that does not exist, which excludes index entries, still globs, creates no file and works on a bare dist. Real pulls use a bare dist, so this affects fixtures and non-bare dists.
+
+The sentence in `predicate-sites.md` saying the escalations default is read only in the validator adjudicate mode was false. `validate-gate-adjudication.sh` reads `$GA_MAP_ROOT/docs/escalations/pending.md` in `--series` mode whenever a verdict carries `FAIL_WAIVED`, and 4 of the 17 tracked `s320` gate-adjudication `verdict.json` files in graph carry it (measured read-only for BL-896). It now says so, and says that under the pinned root neither side has an escalations file, so both get the same empty input and agree: a change to how waivers are read is not observed by this site. That hazard is stated, not fixed; it is filed as BL-896 below.
+
+`core/skills/ai-dlc-update/SKILL.md` documents the new cause. Its PREDICATE-UNDECIDABLE cause list now includes one-sided silence: on a site that declares `pass:`, one side yields no verdict token and no pass line on any series while the other side does; the row names the silent side, and a `pass: -` site abstains because a fail-only grammar cannot tell "every series now passes" from "the predicate crashed". This edit is in scope under the lead ruling that a bootstrapping release may correct its own skill documentation of the behaviour it changes.
+
+Measured on graph's 14 series at base 0.970.0 (`902d6f7e0^`), read-only on a bare clone:
+
+| Engine | Manifest | Gate-adjudication site |
+|--------|----------|------------------------|
+| old | old | PREDICATE-RECLASSIFIES, "AT LEAST 14 of 14" |
+| new | old | PREDICATE-UNDECIDABLE, "the incoming side" |
+| new | new | STABLE |
+| new | new, with a broken incoming `.py` | PREDICATE-RECLASSIFIES, 4 of 14 |
+
+The other four sites are unchanged across all four runs. The suppression-lifetime site reports RECLASSIFIES 1 of 1 at both 0.970.0 and 0.971.0 independent of this defect, so compare the gate-adjudication row and not the whole report. graph recorded the defect itself: commit 4e1c08d41, `_bmad-output/ai-dlc-update/reconcile-report.md:184`, disposed in `blocker-adjudication-20261031T123500Z.md` as "14 SAME".
+
+Machinery-only and bootstrapping. `predicate-sites.md` and `predicate-differential.sh` are both under the machinery glob, so the pull that delivers this release runs the installed engine and manifest at step 3g whenever step 2 DEFERs, and the old behaviour governs that pull. graph's 0.970.0 to 0.971.0 pull DEFERred. Every future graph base is at least 0.971.0, where the shipped manifest already reads STABLE, so the false RECLASSIFIES does not recur. The fix first governs a pull whose base is this release or later.
+
+The forward false clean. Before this fix, a release that changed only `gate_adjudication.py` read byte-identical STABLE by construction, because the file was outside the read-set and neither root held it (the v0.382.0 shape). That hole stays open for a consumer until it installs this release, and it is the same defect as the transition false positive.
+
+NOTE, not fixed. Other sites also resolve sibling scripts at run time that no `reads:` line lists, measured at 91374cf9e:
+
+- `validate-adversarial-convergence.sh` resolves `validate-steering-budget.sh`, `partition-document.sh`, `partition-subject.sh` and `merge-adversarial-shards.sh`, and reads K2 git history.
+- `validate-gate-adjudication.sh` resolves `validate-suppression-lifetime.sh` and `validate-steering-budget.sh`.
+- `gate_adjudication.py` resolves `content-seal.sh` (`--merge` only).
+- `validate-provenance-block.sh` sources `lib/meta-gate.sh`, which is untracked, so the line is a no-op.
+
+### BL-896, filed and not fixed (verify: manual): the gate-adjudication site cannot observe a change to how waivers are read
+
+`core/scripts/validate-gate-adjudication.sh` reads `$GA_MAP_ROOT/docs/escalations/pending.md` in `--series` mode whenever a series carries a `FAIL_WAIVED` verdict. Under the differential's pinned probe root neither side has that file, so both sides receive the same empty input and agree, and a release that changes how waivers are read reads `PREDICATE-STABLE` where the consumer's stored verdicts would move. Measured read-only in graph: 4 of the 17 tracked `s320` gate-adjudication `verdict.json` files carry `FAIL_WAIVED`, against a control token carried by 0 files. Owed, not built: pass the consumer's escalations file by path to both sides, the way `AI_DLC_KNOWN_SKILLS_EXT` is passed. This release only states the hazard in `predicate-sites.md`.
+
+Fixture and receipt. `core/fixtures/predicate-reclassification/run.sh` gains silence, pass-line, abstention, non-bare and shipped-manifest cells, plus cells BSILENT and NOTETOK, and nine mutants for the new arms (including `m-baseside`, which deletes the base direction, and `m-notesilent`, which lets a NOTE line force silence). `seed.sh` builds the toy worlds. `receipt-bl893.sh` drives the shipping differential over these worlds on a non-bare dist: UNDEC and SILENT0 (incoming side silent), BSILENT (base side silent, NOTE and exit 2 at base, mixed at theirs, UNDECIDABLE naming the base side), NOTETOK (mixed to a NOTE line plus a FAIL token on every series, RECLASSIFIES, because a warning is not silence), RECL, PASSONLY, PARTIAL, DASH (the arm abstains) and NONBARE (STABLE, compared); and over the shipped manifest, GA (only `gate_adjudication.py` moves, not STABLE) and GAU (the module no longer imports at the incoming ref, UNDECIDABLE naming the incoming side). The silence cells and the receipt's silence check require the message to name the ref (`no pass line at <ref>)`) as well as the side, and assert that no RECLASSIFIES row names the site. `invocations.decl` is 285.
+
+Receipt: `core/fixtures/predicate-reclassification/receipt-bl893.sh`.
+
 ## [0.978.0] - 2026-10-31
 
 Batch b247. `record-only-diff.sh` resolves the story path against the physical repository top (BL-885), and `story-base` refuses a story that is no file at the base or at the frozen sha (BL-885).

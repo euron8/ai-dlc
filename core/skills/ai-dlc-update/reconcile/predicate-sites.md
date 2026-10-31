@@ -113,12 +113,16 @@ there. Every such input is therefore passed explicitly:
   differential**: both sides are handed the file by path, so a release that moves where the
   validator looks for it compares identically. Only a change to how the file's CONTENT is read
   is still seen.
-- `validate-gate-adjudication.sh` resolves its schema, `enforcement-map.yaml` and its
-  `validate-adversarial-convergence.sh` sibling under the pinned root, which is why all three
-  are in `reads:`. Drop one and that side has no copy of it. `--series` is the form the
-  consumer's own gate runs; the per-pass form needs a gate type per file, which the `invoke:`
-  grammar cannot derive. Its escalations default (`$GA_MAP_ROOT/docs/escalations/pending.md`)
-  is read only in its adjudicate mode, which no site invokes.
+- `validate-gate-adjudication.sh` resolves its schema, `enforcement-map.yaml`, its
+  `validate-adversarial-convergence.sh` sibling and its `gate_adjudication.py` module under the
+  pinned root, which is why all four are in `reads:`. Drop one and that side has no copy of it:
+  without the module the side prints a NOTE, exits 2 and yields no verdict on any series.
+  `--series` is the form the consumer's own gate runs; the per-pass form needs a gate type per
+  file, which the `invoke:` grammar cannot derive. Its escalations default
+  (`$GA_MAP_ROOT/docs/escalations/pending.md`) IS read in `--series` mode, whenever a verdict in
+  scope carries `FAIL_WAIVED`. Under the pinned root neither side has an escalations file, so
+  both get the same empty input and agree; a change to how waivers are read is therefore not
+  observed by this site.
 - `validate-snapshot-conservation.sh` gets `--root .` and `validate-suppression-lifetime.sh`
   gets an explicit `--gate-metrics`. Without them, a predicate that cannot find its inputs reports
   NOT-APPLICABLE or an uncounted lifetime on both sides, and that parses as agreement.
@@ -156,7 +160,7 @@ invoke: {series}
 pass: s/^VALIDATE-PROVENANCE-BLOCK: PASS .*/PASS/p
 verdict: s/^FAIL: ([A-Za-z0-9_-]+).*/\1/p
 
-reads: core/scripts/validate-gate-adjudication.sh core/schemas/gate-adjudication-verdict.json core/skills/ai-dlc/enforcement-map.yaml core/scripts/validate-adversarial-convergence.sh
+reads: core/scripts/validate-gate-adjudication.sh core/scripts/gate_adjudication.py core/schemas/gate-adjudication-verdict.json core/skills/ai-dlc/enforcement-map.yaml core/scripts/validate-adversarial-convergence.sh
 entry: core/scripts/validate-gate-adjudication.sh
 corpus: *.verdict.json
 series: s|/[^/]*\.verdict\.json$||

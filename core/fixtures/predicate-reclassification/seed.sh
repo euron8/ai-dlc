@@ -212,4 +212,87 @@ printf '["ext-skill"]\n' > "$ROOT/consumer/.claude/skills/ai-dlc/extensions/know
 mkdir -p "$ROOT/consumer/docs/escalations"
 printf 'value: 2\n' > "$ROOT/consumer/docs/escalations/pending-pass1.md"
 
+# ---- THE SILENCE WORLD (part 16): one toy per cell, two refs, ONE drive scores every cell ----------
+# A side that renders NO verdict on any series is not a side that renders a different one. Each toy
+# below is a predicate at BASE and another at THEIRS, keyed on the series name; the modes:
+#   failall  FAIL token on every series      passall  PASS line on every series
+#   mixed    FAIL on alpha, PASS on beta/gamma
+#   note2    a NOTE line, exit 2, every series -- the measured defect: the module the predicate
+#            imports was not in the read-set, so it printed a NOTE and died before any verdict
+#   silent0  nothing at all, exit 0, every series (an exit-code key reads this as having spoken)
+#   partial  NOTE + exit 2 on alpha and beta, FAIL on gamma -- silent on SOME series, the FIRST ones
+#   notefail a NOTE line AND a FAIL token, exit 1, every series -- a side that warns and still renders
+#            a verdict has spoken; a NOTE line is not silence
+# toy-bsilent.sh is the BASE-silent world: note2 at BASE, mixed at THEIRS, the mirror of toy-undec.sh.
+# The dist is NON-BARE and its index sits at THEIRS, which stages core/scripts/helper.py: a member
+# absent from BASE's tree that `ls-files --with-tree` would union back into BASE's listing.
+D16="$ROOT/dist16"; C16="$ROOT/consumer16"
+mkdir -p "$D16/core/scripts" "$C16/_bmad-output/a"
+write_toy() { # $1 = file under core/scripts, $2 = mode
+  cat > "$D16/core/scripts/$1" <<PRED
+#!/usr/bin/env bash
+MODE=$2
+S=""
+while [ \$# -gt 0 ]; do case "\$1" in --series) S="\$2"; shift 2 ;; *) shift ;; esac; done
+case "\$MODE" in
+  failall) echo "FAIL (B -- CONSISTENCY): \$S"; exit 1 ;;
+  passall) echo "PASS: every value is within ceiling for \$S"; exit 0 ;;
+  note2)   echo "NOTE: the module this predicate imports is absent"; exit 2 ;;
+  silent0) exit 0 ;;
+  mixed)   case "\$S" in *alpha*) echo "FAIL (B -- CONSISTENCY): \$S"; exit 1 ;; esac
+           echo "PASS: every value is within ceiling for \$S"; exit 0 ;;
+  partial) case "\$S" in *gamma*) echo "FAIL (B -- CONSISTENCY): \$S"; exit 1 ;; esac
+           echo "NOTE: the module this predicate imports is absent"; exit 2 ;;
+  notefail) echo "NOTE: a module this predicate imports is deprecated"
+           echo "FAIL (B -- CONSISTENCY): \$S"; exit 1 ;;
+esac
+PRED
+}
+git -C "$D16" init -q 2>/dev/null
+git -C "$D16" config user.email fixture@example.invalid
+git -C "$D16" config user.name fixture
+write_toy toy-undec.sh mixed;    write_toy toy-recl.sh mixed;   write_toy toy-passonly.sh failall
+write_toy toy-silent0.sh mixed;  write_toy toy-dash.sh mixed;   write_toy toy-partial.sh mixed
+write_toy toy-nb.sh mixed;       write_toy toy-bsilent.sh note2; write_toy toy-notetok.sh mixed
+git -C "$D16" add -A >/dev/null
+git -C "$D16" commit -qm "base: every toy at its base mode" >/dev/null
+write_toy toy-undec.sh note2;    write_toy toy-recl.sh failall; write_toy toy-passonly.sh passall
+write_toy toy-silent0.sh silent0; write_toy toy-dash.sh passall; write_toy toy-partial.sh partial
+write_toy toy-bsilent.sh mixed;  write_toy toy-notetok.sh notefail
+printf 'x = 1\n' > "$D16/core/scripts/helper.py"
+git -C "$D16" add -A >/dev/null
+git -C "$D16" commit -qm "theirs: every toy at its incoming mode; helper.py added" >/dev/null
+for s in alpha beta gamma; do printf 'value: 1\n' > "$C16/_bmad-output/a/$s-pass1.md"; done
+
+# ---- THE GATE-ADJUDICATION WORLD (part 17): only gate_adjudication.py moves ----------------------
+# The SHIPPED manifest is driven over this dist, so the site that matters is the shipped site, read
+# from the shipped file. The entry is byte-identical at every ref; the module beside it carries the
+# verdict. HEAD~1 moves the module PASS -> FAIL (a real reclassification); HEAD breaks it so the
+# entry prints a NOTE and exits 2, the measured defect's output.
+DG="$ROOT/distga"; CG="$ROOT/consga"
+mkdir -p "$DG/core/scripts" "$CG/_bmad-output/gate-adjudication/s1"
+cat > "$DG/core/scripts/validate-gate-adjudication.sh" <<'PRED'
+#!/usr/bin/env bash
+# toy gate adjudicator -- its verdict lives in the module it imports from under its PROJECT ROOT.
+m="${AI_DLC_PROJECT_ROOT:-.}/core/scripts/gate_adjudication.py"
+[ -f "$m" ] || { echo "NOTE: gate_adjudication.py is absent under the project root"; exit 2; }
+v="$(sed -n 's/^VERDICT = \([A-Z]*\)$/\1/p' "$m")"
+[ -n "$v" ] || { echo "NOTE: gate_adjudication.py did not import"; exit 2; }
+echo "VALIDATE-GATE-ADJUDICATION: $v"
+[ "$v" = PASS ]
+PRED
+git -C "$DG" init -q 2>/dev/null
+git -C "$DG" config user.email fixture@example.invalid
+git -C "$DG" config user.name fixture
+printf 'VERDICT = PASS\n' > "$DG/core/scripts/gate_adjudication.py"
+git -C "$DG" add -A >/dev/null
+git -C "$DG" commit -qm "base: the module renders PASS" >/dev/null
+printf 'VERDICT = FAIL\n' > "$DG/core/scripts/gate_adjudication.py"
+git -C "$DG" add -A >/dev/null
+git -C "$DG" commit -qm "theirs: the module renders FAIL, the entry is byte-identical" >/dev/null
+printf 'syntax error\n' > "$DG/core/scripts/gate_adjudication.py"
+git -C "$DG" add -A >/dev/null
+git -C "$DG" commit -qm "broken: the module no longer imports" >/dev/null
+printf '{}\n' > "$CG/_bmad-output/gate-adjudication/s1/p1.verdict.json"
+
 printf '%s\n' "$ROOT"
