@@ -627,9 +627,24 @@ else:
 # measurement can be the calibration a rule runs on rather than a war story, and
 # only the lead can tell those apart.
 print("--- Class 1: Narrative Drift (tier 2) ---")
+# `the reason is` is NOT an alternative. How its false-positive set reached zero:
+# over the distribution's `--list` corpus (88 files) the token matched exactly 4
+# lines -- handoff.md:86, retro.md:403 and :1216, route.md:289 -- every one a
+# POINTER ("the reason is not restated here", "the reason is Rule 27", an
+# uppercase heading wrapping at "AND THE REASON IS"), against a control of 46
+# `measured:` lines the same run flagged (a raw grep counts 49; the other 3 are a
+# backticked `UNMEASURED:` span, which `used()` blanks). On a fresh consumer
+# install the same 4 lines were 4 of its 36 [core] findings. The commits that
+# added the live 4 (fea38ec7b, 74e8ea88c, 58952c5d7, 69618a558) added pointers;
+# the two that once added rationale prose under the token (ac7e98e74, c24d3c45c,
+# "The reason is the gate log") are gone from the corpus. The narrowed form
+# `the reason is (that|we|because)` matches 0 corpus lines, so it would be an
+# alternative with no subject; the token is dropped, not narrowed. BL-193's
+# attribution is the earlier measurement (`the reason is` taking 3 of 61
+# findings). `measured:` stays: the measurement behind a rule stays with it.
 NARRATIVE = re.compile(
     r"(because we\b|got burned|after the .{0,40}incident|when we found|learned that\b"
-    r"|measured:|the reason is\b|it turned out\b|historically\b"
+    r"|measured:|it turned out\b|historically\b"
     r"|before it was\b)", re.I)
 # `used to` is the habitual past ("the step used to say nothing here") only when
 # it is the clause's own verb. The same two words are a reduced passive of

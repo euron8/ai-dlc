@@ -18,6 +18,7 @@
 # MUTANT-MATRIX um6 decides=U twins=P1
 # MUTANT-MATRIX um7 decides=U twins=P1
 # MUTANT-MATRIX um8 decides=U twins=P1
+# MUTANT-MATRIX umr decides=U twins=P1
 # MUTANT-MATRIX umf decides=P1 twins=U
 # MUTANT-MATRIX umo decides=P1 twins=U
 # MUTANT-MATRIX m1 decides=D twins=P1
@@ -527,14 +528,26 @@ u_c() { cat > "$WORK/t/$TR/uc.md" <<'EOF'
 The nonce is not used to reconcile anything.
 EOF
 }
+# `the reason is` is a POINTER in every corpus line that carries it, never a story: the
+# three shapes the distribution holds (a lowercase "not restated here", a lowercase rule
+# citation, an uppercase heading wrapping at the token), then one habitual line that MUST
+# still flag. Line 4's predecessor ends in the wrapped token, so a restored alternative
+# moves lines 1-3 and leaves 4 where it was.
+u_r() { cat > "$WORK/t/$TR/uhr.md" <<'EOF'
+the reason is not restated here.
+the reason is Rule 27.
+**THE NUMBER IS THE SPRINT THAT CLOSED, AND THE REASON IS
+The step used to stop here.
+EOF
+}
 
 # --- Assertions 12u1-12u9d: ONE combined corpus, asserted per file ------------------------------
 # The predicate decides per LINE and each seed sits in a file of its own, so one run answers all of
 # them. 12u10 below asserts this corpus's EXACT hit list, so a purpose line missing from it and a
 # habitual line present in it are each held to a single line.
-wu_world() { fresh; u_p1; u_p2; u_p3; u_h1; u_h2; u_h3; u_h4; u_h5; u_a; u_b; u_b2; u_c; }
+wu_world() { fresh; u_p1; u_p2; u_p3; u_h1; u_h2; u_h3; u_h4; u_h5; u_a; u_b; u_b2; u_c; u_r; }
 wu_world
-HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2"
+HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2,$TR/uhr.md:4"
 ALLHITS="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$HAB"
 WITHUC="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uc.md:1,$HAB"
 cout="$(audit)"
@@ -569,6 +582,14 @@ has "$TR/uh4.md:2[],]" "$nl" \
 has "$TR/uh5.md:2[],]" "$nl" \
   && ok "'that used to collide with it now sit …' -> FLAGGED at uh5.md:2" \
   || bad "a habitual line that DOES carry 'now' was acquitted"
+# Assertion 12u9e: `the reason is` is no NARRATIVE alternative. Three pointer shapes stay CLEAN and
+# the habitual line beside them still flags; mutant umr (12u21) restores the token and is killed here.
+{ ! has "$TR/uhr.md:[123][],]" "$nl"; } \
+  && ok "'the reason is not restated here.' / 'the reason is Rule 27.' / '… AND THE REASON IS' -> CLEAN" \
+  || bad "a 'the reason is' pointer line scored as narrative drift"
+has "$TR/uhr.md:4[],]" "$nl" \
+  && ok "'The step used to stop here.' after the pointer lines -> FLAGGED at uhr.md:4" \
+  || bad "the habitual line beside the pointer lines was acquitted"
 
 # --- Assertion 12u9: one purpose line and one habitual line, SAME FILE -------
 # The arm that proves the predicate decides per LINE and not per FILE. Both
@@ -615,7 +636,7 @@ else
 fi
 
 wu_world
-HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2"
+HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2,$TR/uhr.md:4"
 ALLHITS="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$HAB"
 WITHUC="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uc.md:1,$HAB"
 
@@ -739,6 +760,18 @@ if mkmut um8 $'/directly|solely/d\ns#.*explicitly|first.*#    r"\\\\s*$"#'; then
   fi
 else
   bad "MUTANT m8 DID NOT APPLY — its anchor moved; 12u9d is unproven"
+fi
+
+# --- Assertion 12u21: mr, `the reason is` restored to NARRATIVE --------------
+# Moves exactly the three pointer lines of uhr.md; line 4 is flagged either way.
+if mkmut umr 's/|measured:|it turned out/|measured:|the reason is\\b|it turned out/'; then
+  if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2,$TR/uhr.md:1,$TR/uhr.md:2,$TR/uhr.md:3,$TR/uhr.md:4\]" "$(audit_at "$WORK/umr.sh")"; then
+    mutant_killed "${B_u10:-0}" umr "MUTANT mr ('the reason is' restored) -> the three pointer lines flip to FLAGGED; killed"
+  else
+    bad "umr SURVIVED: MUTANT mr restored 'the reason is' and no pointer line moved — 12u9e proves nothing"
+  fi
+else
+  bad "MUTANT mr DID NOT APPLY — its anchor moved; 12u9e is unproven"
 fi
 
 # --- Assertion 12u19 and 12u20: mf and mo, scored on World P1 (the tier-2 corpus) ----------------
@@ -1427,7 +1460,7 @@ twin() { # <twin arm> <mutant id> <world fn> <script> <env>
   fi
 }
 if [ -f "$WORK/um1.sh" ] && [ -f "$WORK/umo.sh" ] && [ -f "$DM/m2.sh" ]; then
-  for _m in um1 um2 um3 um4 um5 um6 um7 um8; do twin P1 "$_m" p1_world "$WORK/$_m.sh" 0; done
+  for _m in um1 um2 um3 um4 um5 um6 um7 um8 umr; do twin P1 "$_m" p1_world "$WORK/$_m.sh" 0; done
   twin U umf wu_world "$WORK/umf.sh" 0
   twin U umo wu_world "$WORK/umo.sh" 0
   twin P1 m1 p1_world "$DM/m1.sh" 0
@@ -1443,7 +1476,7 @@ if [ "$MATRIX" = 1 ]; then
   echo "MATRIX: one row per mutant; dead= the worlds (arms) where it changes a row, green= where it changes none"
   for _e in "um1|$WORK/um1.sh|0" "um2|$WORK/um2.sh|0" "um3|$WORK/um3.sh|0" "um4|$WORK/um4.sh|0" \
             "um5|$WORK/um5.sh|0" "um6|$WORK/um6.sh|0" "um7|$WORK/um7.sh|0" "um8|$WORK/um8.sh|0" \
-            "umf|$WORK/umf.sh|0" "umo|$WORK/umo.sh|0" "m1|$DM/m1.sh|0" "m2|$DM/m2.sh|0" \
+            "umr|$WORK/umr.sh|0" "umf|$WORK/umf.sh|0" "umo|$WORK/umo.sh|0" "m1|$DM/m1.sh|0" "m2|$DM/m2.sh|0" \
             "tier1-strip|$AUDIT|1" "grant-strip|$AUDIT|1"; do
     _id="${_e%%|*}"; _r="${_e#*|}"; _sc="${_r%%|*}"; _ev="${_r##*|}"
     _dead=""; _green=""
@@ -1453,9 +1486,9 @@ if [ "$MATRIX" = 1 ]; then
     done
     echo "MATRIX-ROW $_id dead:${_dead:- -} green:${_green:- -}"
   done
-  [ "$mcells" = 70 ] \
-    && ok "matrix mode: 70 mutant x world cells measured (14 mutants x 5 worlds)" \
-    || bad "matrix mode measured $mcells cells, not 70"
+  [ "$mcells" = 75 ] \
+    && ok "matrix mode: 75 mutant x world cells measured (15 mutants x 5 worlds)" \
+    || bad "matrix mode measured $mcells cells, not 75"
 else
   [ "$mcells" = 0 ] \
     && ok "plain run: no matrix-only cell was driven" \

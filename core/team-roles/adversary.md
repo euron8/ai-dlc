@@ -445,7 +445,7 @@ CRITICAL and MAJOR counts.
   `findings_major_underived` → `EXIT_CONDITION_NOT_MET`. The exit is closed.
 
 **PREFER MET AT OR BELOW THE CEILING UNLESS YOU CAN NAME WHAT THE NEXT PASS CLOSES.**
-What the ceiling exists to end is the plateau this loop used to sit in: 0 CRITICAL against
+What the ceiling exists to end is the plateau this loop can sit in: 0 CRITICAL against
 one standing MAJOR that each repair rewrites and the next pass falsifies with one more
 counterexample. Passes there buy counterexamples, not convergence. If you stamp NOT_MET at
 one, two or three blocking MAJORs, say in your first line what the repair is expected to
