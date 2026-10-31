@@ -765,6 +765,12 @@ fi
 # `dist_only()` uses for its DIST-ONLY-SKIP bucket: 0 present, 128 CONFIRMED absent, anything else
 # a refusal naming the directory. `run.sh` is read in the COMMITTED tree, so a driver that was
 # written and not staged reads as missing — which is what the push would carry.
+#
+# A directory with no `run.sh` in HEAD is then asked at THEIRS through the same oracle. A `run.sh`
+# there (0) means a fixture written without its driver: NO-DRIVER. No `run.sh` there (128) and the
+# directory itself present (0) means a SUPPORT directory upstream ships with no driver (the shared
+# `lib/`, seed-only directories): accepted. The directory absent at THEIRS (128) is NO-DRIVER, since
+# step 2 writes nothing upstream does not ship. Any other exit on either read is UNCONFIRMED.
 su_fx_dirs=""
 # BOTH SIDES PHYSICAL (`pwd -P`). `--show-toplevel` answers with symlinks resolved, `cd && pwd`
 # without, and under a `/var` -> `/private/var` link the two never compare equal, which would skip
@@ -797,8 +803,25 @@ while IFS= read -r d; do
     su_slice_bad="$su_slice_bad
   $d — UNCONFIRMED: its .dist-only marker at ${THEIRS} could not be confirmed present or absent (exit $_do_rc)"
   elif ! git -C "$CONSUMER" cat-file -e "HEAD:${FX_ROOT}/${d}/run.sh" 2>/dev/null; then
-    su_slice_bad="$su_slice_bad
+    _rs_rc=0
+    memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/run.sh" || _rs_rc=$?
+    if [ "$_rs_rc" -eq 0 ]; then
+      su_slice_bad="$su_slice_bad
   $d — NO-DRIVER: the self-update commit holds $FX_ROOT/$d/ with no run.sh, so the directory was written without its driver"
+    elif [ "$_rs_rc" -ne 128 ]; then
+      su_slice_bad="$su_slice_bad
+  $d — UNCONFIRMED: its run.sh at ${THEIRS} could not be confirmed present or absent (exit $_rs_rc)"
+    else
+      _dir_rc=0
+      memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}" || _dir_rc=$?
+      if [ "$_dir_rc" -eq 128 ]; then
+        su_slice_bad="$su_slice_bad
+  $d — NO-DRIVER: the self-update commit holds $FX_ROOT/$d/ with no run.sh, and it is not a directory at ${THEIRS}, so the directory was written without its driver"
+      elif [ "$_dir_rc" -ne 0 ]; then
+        su_slice_bad="$su_slice_bad
+  $d — UNCONFIRMED: its directory at ${THEIRS} could not be confirmed present or absent (exit $_dir_rc)"
+      fi
+    fi
   fi
 done < "$SU_T/fx-dirs"
 if [ -n "$su_slice_bad" ]; then

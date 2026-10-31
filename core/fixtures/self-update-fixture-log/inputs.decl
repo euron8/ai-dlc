@@ -2,7 +2,7 @@
 # consumer trees it builds under mktemp. The checker sources lib.sh and reads map_consumer() out of
 # preclassify.sh beside it; G4 drives self-update-gate.sh, which reads setup-sites.md. The J and W
 # arms read SKILL.md. The preamble is sourced first by run.sh. lib.sh and seed.sh sit in the
-# fixture's own directory.
+# fixture's own directory. D12p drives self-update-push.sh.
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/skills/ai-dlc-update/reconcile/self-update-gate.sh
@@ -11,3 +11,4 @@ core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/fixtures/lib/
 core/skills/ai-dlc-update/SKILL.md
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/self-update-push.sh

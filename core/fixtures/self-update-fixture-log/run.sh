@@ -15,6 +15,11 @@
 #            mutant that restores the deleted fixture run and runs 1
 #   D9, D12  the self-update commit's fixture directories: a `.dist-only` one and one with no run.sh
 #            are refused, a complete shippable one is not
+#   D12x, D12s-lib, D12s-seed, D12u, D12d
+#            a driverless directory upstream does not ship is refused, a support directory upstream
+#            ships with no run.sh (lib/, a seed-only one) is accepted, an unconfirmable run.sh read
+#            or directory read refused
+#   D12p     through the real self-update-push.sh, the push is judged by the checker the commit wrote
 #
 # The G arms drive the checker through `ck` (lib.sh), which passes exactly the four arguments the
 # checker takes and keeps its stdout as the log the arm reads. Arms written against the old runner
@@ -23,7 +28,8 @@
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
 #
 # Mutant-matrix battery. Measured with `--matrix` (every mutant driven against EVERY cell, every cell printed as
-# a MATRIX-ROW); a plain run drives each mutant's deciding cells plus the named twin only. Each mutant co-trips no
+# a MATRIX-ROW); a plain run drives each mutant's deciding cells plus the named twin only, and for a d12- mutant
+# only the FIRST cell of its decides list plus its twin, each first cell killing it alone. Each mutant co-trips no
 # other arm, measured at authoring. The matrix is re-measured whenever an arm or a mutant is added or changed.
 # Cells: J mutants score the verdict cells DEFER/OK/UNDECIDED/STRANDED (1 = the reader reports that verdict
 # unclaimed), WM mutants score W1-W7 (1 = that cell moved off 1), BH-mut scores BH (1 = the 5-argument drive
@@ -43,10 +49,19 @@
 # MUTANT-MATRIX WM6 decides=W6 twins=W5
 # MUTANT-MATRIX WM7 decides=W1,W7 twins=W2
 # MUTANT-MATRIX BH-mut decides=BH twins=BH-ctl
+# MUTANT-MATRIX d12-unfixed decides=D12s-lib,D12s-seed,D12u,D12d twins=D12x
+# MUTANT-MATRIX d12-literal-lib decides=D12s-seed,D12u,D12d twins=D12s-lib
+# MUTANT-MATRIX d12-exempt-all decides=D12x,D12,D12s-lib,D12s-seed,D12u,D12d twins=- why=with no driverless directory refused every one of the six slice cells moves
+# MUTANT-MATRIX d12-bare-128 decides=D12x,D12s-lib,D12s-seed,D12d twins=D12
+# MUTANT-MATRIX d12-dir-only decides=D12,D12u twins=D12x
+# MUTANT-MATRIX d12-unconfirmed-accepts decides=D12u twins=D12x
+# MUTANT-MATRIX d12-dir-unconfirmed-accepts decides=D12d twins=D12x
+# MUTANT-MATRIX push-checker-from-dist decides=D12p-mark twins=D12p-landed
 # MUTANT-MATRIX-CONTROL J12 why=an alternate phrasing of the correct fix must be ACCEPTED, so the correct outcome is that the mutation survives
 # MUTANT-MATRIX-CONTROL J13 why=a second alternate phrasing of the correct fix must be ACCEPTED, so the correct outcome is that the mutation survives
 # MUTANT-MATRIX-DYNAMIC j_mut why=one helper scores J5 J7 J8 J9 J10 J11 and each name has its own row above
 # MUTANT-MATRIX-DYNAMIC w_mut why=one helper scores WM1-WM7 and each name has its own row above
+# MUTANT-MATRIX-DYNAMIC d12_kill why=one helper scores the seven d12- checker mutants and each name has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-fixture-log/run.sh --matrix
 set -uo pipefail
 
@@ -1310,6 +1325,7 @@ if sc_consumer "$SC9/c" tests/fixtures/named-distonly/run.sh \
   fi
   sc_got="$(sc_run "$SC12/c")"
   if [ "$sc_got" = rc=2 ] && grep -q '^GATE-RECORD: SLICE green-one — NO-DRIVER' "$SC12/c.out"; then
+    B_d12=1
     ok "Part D12: a self-update commit that wrote a fixture directory with no run.sh is refused before the push"
   else
     bad "Part D12: a commit writing a driverless fixture directory read '$sc_got' without a SLICE NO-DRIVER line"
@@ -1322,6 +1338,229 @@ if sc_consumer "$SC9/c" tests/fixtures/named-distonly/run.sh \
   fi
 else
   bad "FIXTURE ERROR: the D9/D12 consumers did not build, so neither slice duty was asserted"
+fi
+
+# --- Parts D12x, D12s-lib, D12s-seed, D12u: WHICH driverless directory the slice may write ------------
+# A directory the self-update commit holds with no run.sh is asked at THEIRS. Upstream ships it with
+# no run.sh (the shared `lib/`, a seed-only directory): a SUPPORT directory, accepted. Upstream ships
+# a run.sh for it: NO-DRIVER (D12 above). Upstream does not ship it at all: NO-DRIVER. A read that
+# answers neither present nor confirmed absent: UNCONFIRMED.
+#   D12x       the commit writes `absent-at-theirs/README.md` alone              -> rc 2, ONE SLICE line, NO-DRIVER
+#   D12s-lib   the commit writes `lib/inproc.sh` AND `absent-at-theirs/README.md` -> rc 2, ONE SLICE line naming
+#              the absent directory and none naming lib
+#   D12s-seed  the same with the seed-only `theirs-only-nodriver/seed.sh` in place of lib
+#   D12u       the commit writes `unreadable-driver/README.md`, judged against a COPY of the distribution
+#              whose `unreadable-driver/run.sh` BLOB is removed, so the run.sh read at theirs answers
+#              neither 0 nor a confirmed 128                                     -> rc 2, ONE SLICE line, UNCONFIRMED
+#   D12d       the commit writes `flat-entry/README.md`, judged against the same COPY, where `flat-entry` is
+#              a BLOB whose object is removed: the `.dist-only` and run.sh reads confirm an absence and the
+#              directory read answers neither 0 nor 128            -> rc 2, ONE SLICE line, UNCONFIRMED: its directory
+# THE ACCEPT CELLS ARE COMBINED WORLDS ON PURPOSE. A world writing only a support directory exits 0
+# with no SLICE line, which is also what a checker that never reached the loop prints; beside a
+# directory the loop MUST refuse, exactly one SLICE line proves the loop ran and passed over lib.
+# Every cell also requires the NOT-REQUIRED line, so a copy that died before the gate-record arm
+# reads as broken, never as a kill.
+SCX="$(mktemp -d)"; sufl_tmp "$SCX"
+D12_ABS=absent-at-theirs
+DIST_U="$(mktemp -d)"; sufl_tmp "$DIST_U"
+d12_built=0
+if sc_consumer "$SCX/x" "tests/fixtures/$D12_ABS/README.md" \
+   && sc_consumer "$SCX/slib" tests/fixtures/lib/inproc.sh "tests/fixtures/$D12_ABS/README.md" \
+   && sc_consumer "$SCX/sseed" tests/fixtures/theirs-only-nodriver/seed.sh "tests/fixtures/$D12_ABS/README.md" \
+   && sc_consumer "$SCX/u" tests/fixtures/unreadable-driver/README.md \
+   && sc_consumer "$SCX/d" tests/fixtures/flat-entry/README.md \
+   && cp -R "$DIST/." "$DIST_U/"; then
+  d12_built=1
+  for d12_p in core/fixtures/unreadable-driver/run.sh core/fixtures/flat-entry; do
+    d12_t="$(git -C "$DIST_U" rev-parse -q --verify "${D_THEIRS}:${d12_p}" 2>/dev/null)" || d12_t=""
+    d12_o="$DIST_U/.git/objects/${d12_t:0:2}/${d12_t:2}"
+    if [ -n "$d12_t" ] && [ -f "$d12_o" ] && rm -f "$d12_o" \
+       && ! git -C "$DIST_U" cat-file -e "$d12_t" 2>/dev/null && git -C "$DIST" cat-file -e "$d12_t" 2>/dev/null; then :
+    else d12_built=0; fi
+  done
+fi
+[ "$d12_built" = 1 ] || bad "FIXTURE ERROR: the D12x/D12s/D12u/D12d worlds did not build (or the unreadable-driver or flat-entry blob was not a removable loose object), so no support-directory cell was asserted"
+d12_cell() { # d12_cell <checker> <cell> -> 1 when the cell's assertion holds, 0 when not, X when the checker did not reach its gate-record arm
+  local r="$1" c="$2" dist="$DIST" cons rc=0 o n
+  case "$c" in
+    D12) cons="$SC12/c" ;;
+    D12x) cons="$SCX/x" ;;
+    D12s-lib) cons="$SCX/slib" ;;
+    D12s-seed) cons="$SCX/sseed" ;;
+    D12u) cons="$SCX/u"; dist="$DIST_U" ;;
+    D12d) cons="$SCX/d"; dist="$DIST_U" ;;
+    *) printf X; return ;;
+  esac
+  o="$SCX/$c.$(basename "$(dirname "$(dirname "$r")")").out"
+  bash "$r" "$dist" "$D_BASE" "$D_THEIRS" "$cons" > "$o" 2>&1 || rc=$?
+  grep -q '^GATE-RECORD: NOT-REQUIRED' "$o" || { printf X; return; }
+  n="$(grep -c '^GATE-RECORD: SLICE' "$o")" || n=0
+  case "$c" in
+    D12) [ "$rc" = 2 ] && grep -q '^GATE-RECORD: SLICE green-one — NO-DRIVER' "$o" ;;
+    D12x) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -q "^GATE-RECORD: SLICE $D12_ABS — NO-DRIVER" "$o" ;;
+    D12s-lib) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -q "^GATE-RECORD: SLICE $D12_ABS — NO-DRIVER" "$o" \
+                && ! grep -q '^GATE-RECORD: SLICE lib ' "$o" ;;
+    D12s-seed) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -q "^GATE-RECORD: SLICE $D12_ABS — NO-DRIVER" "$o" \
+                 && ! grep -q '^GATE-RECORD: SLICE theirs-only-nodriver ' "$o" ;;
+    D12u) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -q '^GATE-RECORD: SLICE unreadable-driver — UNCONFIRMED: its run.sh' "$o" ;;
+    D12d) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -q '^GATE-RECORD: SLICE flat-entry — UNCONFIRMED: its directory' "$o" ;;
+  esac && printf 1 || printf 0
+}
+D12_CELLS="D12 D12x D12s-lib D12s-seed D12u D12d"
+if [ "$d12_built" = 1 ]; then
+  if [ "$(d12_cell "$RUNNER" D12x)" = 1 ]; then B_d12x=1; ok "Part D12x: a self-update commit that wrote a driverless directory upstream does not ship is refused NO-DRIVER, one SLICE line"
+  else bad "Part D12x: a driverless directory absent at theirs was not refused with exactly one SLICE NO-DRIVER line ($SCX/D12x.*.out)"; fi
+  if [ "$(d12_cell "$RUNNER" D12s-lib)" = 1 ]; then B_d12slib=1; ok "Part D12s-lib: the shared lib/ upstream ships with no run.sh is written whole and not refused; the absent directory beside it is the one SLICE line"
+  else bad "Part D12s-lib: a commit writing lib/inproc.sh beside an absent directory did not give rc 2 with one SLICE line naming only the absent directory. The shared lib/ is treated as a fixture"; fi
+  if [ "$(d12_cell "$RUNNER" D12s-seed)" = 1 ]; then B_d12sseed=1; ok "Part D12s-seed: a seed-only directory upstream ships with no run.sh is not refused; the absent directory beside it is the one SLICE line"
+  else bad "Part D12s-seed: a commit writing a seed-only directory beside an absent directory did not give rc 2 with one SLICE line naming only the absent directory"; fi
+  if [ "$(d12_cell "$RUNNER" D12u)" = 1 ]; then B_d12u=1; ok "Part D12u: a theirs read that can confirm neither presence nor absence is UNCONFIRMED, one SLICE line, never accepted"
+  else bad "Part D12u: with the unreadable-driver run.sh blob unreadable at theirs the checker did not refuse it UNCONFIRMED with one SLICE line"; fi
+  if [ "$(d12_cell "$RUNNER" D12d)" = 1 ]; then B_d12d=1; ok "Part D12d: a directory read at theirs that can confirm neither presence nor absence is UNCONFIRMED, one SLICE line, never accepted"
+  else bad "Part D12d: with the flat-entry blob unreadable at theirs the checker did not refuse it UNCONFIRMED (its directory) with one SLICE line ($SCX/D12d.*.out)"; fi
+fi
+
+# MUTANTS of the checker, each a COPY of the whole reconcile directory with one change, `cmp -s` guarded.
+# A plain run drives each mutant's ONE deciding cell plus its twin; --matrix drives every cell and
+# prints the whole vector, which the header records.
+D12M="$(mktemp -d)"; sufl_tmp "$D12M"
+D12L_HEAD='  elif ! git -C "$CONSUMER" cat-file -e "HEAD:${FX_ROOT}/${d}/run.sh" 2>/dev/null; then'
+D12L_RS='    memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/run.sh" || _rs_rc=$?'
+D12L_RSU='    elif [ "$_rs_rc" -ne 128 ]; then'
+D12L_DIR='      memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}" || _dir_rc=$?'
+D12L_DIRU='      elif [ "$_dir_rc" -ne 0 ]; then'
+d12_mut() { # d12_mut <name> <old> <new> [<old2> <new2>] -> the mutated checker's path; exit 1 when the mutation did not apply
+  local m="$D12M/$1/reconcile"
+  mkdir -p "$m" && cp -R "$RECONCILE/." "$m/" || return 1
+  aw_replace_once "$RUNNER" "$D12M/$1/s1" "$2" "$3" || return 1
+  if [ "$#" -ge 5 ]; then
+    aw_replace_once "$D12M/$1/s1" "$D12M/$1/s2" "$4" "$5" && mv -f "$D12M/$1/s2" "$D12M/$1/s1" || return 1
+  fi
+  cmp -s "$RUNNER" "$D12M/$1/s1" && return 1
+  mv -f "$D12M/$1/s1" "$m/self-update-fixtures.sh" || return 1
+  [ -f "$m/lib.sh" ] && [ -f "$m/preclassify.sh" ] || return 1
+  printf '%s' "$m/self-update-fixtures.sh"
+}
+# <flag> is the conjunction of the B_ flags of every cell the mutant decides plus its twin, passed by
+# the caller so each call site binds its own flag.
+d12_kill() { # d12_kill <flag> <mutant> <decides> <twin> <why> <old> <new> [<old2> <new2>]
+  local flag="$1" name="$2" dec="$3" twin="$4" why="$5" m c v row="" ok_all=1
+  shift 5
+  m="$(d12_mut "$name" "$@")" || { bad "FIXTURE ERROR: mutant $name DID NOT APPLY (its anchor is not exactly once in the checker, or the copy is incomplete)"; return; }
+  if [ "$MATRIX" = 1 ]; then
+    for c in $D12_CELLS; do
+      v="$(d12_cell "$m" "$c")"
+      [ "$v" = X ] && { bad "FIXTURE ERROR: mutant $name never reached its gate-record arm in cell $c"; return; }
+      row="$row${row:+ }$c:$([ "$v" = 1 ] && echo 0 || echo 1)"
+    done
+    mrow "$name" "$row"
+  fi
+  for c in $dec; do
+    v="$(d12_cell "$m" "$c")"
+    [ "$v" = X ] && { bad "FIXTURE ERROR: mutant $name never reached its gate-record arm in cell $c"; return; }
+    [ "$v" = 0 ] || ok_all=0
+  done
+  if [ "$twin" != - ]; then
+    v="$(d12_cell "$m" "$twin")"
+    [ "$v" = X ] && { bad "FIXTURE ERROR: mutant $name never reached its gate-record arm in cell $twin"; return; }
+    [ "$v" = 1 ] || ok_all=0
+  fi
+  if [ "$ok_all" = 1 ]; then
+    mutant_killed "$flag" "$name" "Part D12 mutant $name killed by $dec ($twin unmoved): $why"
+  else
+    bad "Part D12 mutant $name SURVIVED: want $dec moved and $twin unmoved. $why"
+  fi
+}
+if [ "$d12_built" = 1 ]; then
+  d12_kill "$(( ${B_d12slib:-0} && ${B_d12x:-0} ))" d12-unfixed D12s-lib D12x \
+    "every driverless directory refused NO-DRIVER, the shared lib/ included" "$D12L_RS" '    _rs_rc=0'
+  d12_kill "$(( ${B_d12sseed:-0} && ${B_d12slib:-0} ))" d12-literal-lib D12s-seed D12s-lib \
+    "a literal lib exemption refuses every other support directory and accepts lib unread" \
+    "$D12L_RS" '    [ "$d" != lib ] || _rs_rc=128' "$D12L_DIR" '      :'
+  d12_kill "${B_d12x:-0}" d12-exempt-all D12x - \
+    "no driverless directory refused at all" "$D12L_HEAD" '  elif false; then'
+  d12_kill "$(( ${B_d12x:-0} && ${B_d12:-0} ))" d12-bare-128 D12x D12 \
+    "run.sh absent at theirs accepted without asking whether upstream ships the directory" "$D12L_DIR" '      :'
+  d12_kill "$(( ${B_d12:-0} && ${B_d12x:-0} ))" d12-dir-only D12 D12x \
+    "the directory read alone accepts a fixture upstream ships with a run.sh" "$D12L_RS" '    _rs_rc=128'
+  d12_kill "$(( ${B_d12u:-0} && ${B_d12x:-0} ))" d12-unconfirmed-accepts D12u D12x \
+    "an unreadable run.sh answer at theirs accepted as a support directory" "$D12L_RSU" '    elif false; then'
+  d12_kill "$(( ${B_d12d:-0} && ${B_d12x:-0} ))" d12-dir-unconfirmed-accepts D12d D12x \
+    "an unreadable directory answer at theirs accepted as a support directory" "$D12L_DIRU" '      elif false; then'
+fi
+
+# --- Part D12p: STEP 2'S PUSH IS JUDGED BY THE CHECKER THE SLICE JUST WROTE ------------------------------
+# Driven through the REAL reconcile/self-update-push.sh in a consumer that is its own repository with a
+# bare origin and no pre-push hook. The consumer's installed reconcile directory is the shipped one; the
+# self-update commit writes lib/inproc.sh and overwrites the checker with a copy carrying one stderr
+# MARK line. The wrapper resolves its checker beside itself, so the push lands (rc 0) and the mark
+# appears once.
+#   D12p-mark    the written checker's mark is on the wrapper's stderr, exactly once
+#   D12p-landed  rc 0 and origin's su is the local sha
+# Mutant push-checker-from-dist: the wrapper resolves CHECKER from the distribution checkout, which
+# holds an unmarked checker; the push still lands and the mark is absent.
+PP="$(mktemp -d)"; sufl_tmp "$PP"
+pp_build() { # pp_build <name> <push-wrapper-source> -> 0 when built
+  local c="$PP/$1/c" r
+  (
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+    pg() { git -c init.templateDir= -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@"; }
+    pg init -q --bare "$PP/$1/o.git" && pg init -q "$c" || exit 1
+    r="$c/.claude/skills/ai-dlc-update/reconcile"
+    mkdir -p "$r" && cp -R "$RECONCILE/." "$r/" && printf 'base\n' > "$c/README" || exit 1
+    pg -C "$c" add -A && pg -C "$c" commit -q --no-verify -m installed || exit 1
+    pg -C "$c" remote add origin "$PP/$1/o.git" && pg -C "$c" checkout -q -b su || exit 1
+    mkdir -p "$c/tests/fixtures/lib" && printf 'exit 0\n' > "$c/tests/fixtures/lib/inproc.sh" || exit 1
+    { sed -n 1p "$RUNNER"; echo 'echo "CHECKER-MARK written-by-the-slice" >&2'; sed -n '2,$p' "$RUNNER"; } > "$r/self-update-fixtures.sh" || exit 1
+    cp "$2" "$r/self-update-push.sh" || exit 1
+    pg -C "$c" add -A && pg -C "$c" commit -q --no-verify -m self-update || exit 1
+  ) >/dev/null 2>&1
+}
+pp_drive() { # pp_drive <name> -> "mark=<n> landed=<0|1> rc=<n>"
+  local c="$PP/$1/c" rc=0 n l=0
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+    cd / && bash "$c/.claude/skills/ai-dlc-update/reconcile/self-update-push.sh" "$c" origin su \
+      _bmad-output/ai-dlc-update/self-update-push-pp.md "$DIST" "$D_BASE" "$D_THEIRS" ) > "$PP/$1.out" 2> "$PP/$1.err" || rc=$?
+  n="$(grep -c '^CHECKER-MARK written-by-the-slice$' "$PP/$1.err")" || n=0
+  [ "$(git --git-dir="$PP/$1/o.git" rev-parse -q --verify refs/heads/su 2>/dev/null)" = "$(git -C "$c" rev-parse -q --verify refs/heads/su 2>/dev/null)" ] \
+    && [ -n "$(git -C "$c" rev-parse -q --verify refs/heads/su 2>/dev/null)" ] && l=1
+  printf 'mark=%s landed=%s rc=%s' "$n" "$l" "$rc"
+}
+PP_PUSH="$RECONCILE/self-update-push.sh"
+if [ -f "$PP_PUSH" ] && pp_build shipped "$PP_PUSH"; then
+  pp_got="$(pp_drive shipped)"
+  if [ "$pp_got" = "mark=1 landed=1 rc=0" ]; then
+    B_d12p=1
+    ok "Part D12p: through the real self-update-push.sh, step 2's push is judged by the checker the self-update commit wrote (its mark appears once) and lands"
+  else
+    bad "Part D12p: the real push wrapper read '$pp_got', want 'mark=1 landed=1 rc=0' ($PP/shipped.err)"
+  fi
+  # The mutant: CHECKER resolved from the distribution checkout, where an unmarked checker sits beside its siblings.
+  for _pf in self-update-fixtures.sh lib.sh preclassify.sh; do
+    mkdir -p "$DIST/core/skills/ai-dlc-update/reconcile" && cp "$RECONCILE/$_pf" "$DIST/core/skills/ai-dlc-update/reconcile/$_pf"
+  done
+  if aw_replace_once "$PP_PUSH" "$PP/push-m.sh" 'CHECKER="$SU_SELF/self-update-fixtures.sh"' \
+       'CHECKER="$DIST/core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh"' 2>/dev/null \
+     && ! cmp -s "$PP_PUSH" "$PP/push-m.sh" && pp_build distck "$PP/push-m.sh"; then
+    pp_gotm="$(pp_drive distck)"
+    if [ "$MATRIX" = 1 ]; then
+      pp_mk=1; pp_ld=1
+      [ "${pp_gotm%% *}" = mark=1 ] && pp_mk=0
+      [ "${pp_gotm#* }" = "landed=1 rc=0" ] && pp_ld=0
+      mrow push-checker-from-dist "D12p-mark:$pp_mk D12p-landed:$pp_ld"
+    fi
+    if [ "$pp_gotm" = "mark=0 landed=1 rc=0" ]; then
+      mutant_killed "${B_d12p:-0}" push-checker-from-dist "Part D12p mutant push-checker-from-dist killed: a wrapper resolving its checker from the distribution checkout lands the push with no mark, so the mark above is the written checker's"
+    else
+      bad "Part D12p mutant push-checker-from-dist read '$pp_gotm', want 'mark=0 landed=1 rc=0'"
+    fi
+  else
+    bad "FIXTURE ERROR: Part D12p's mutant DID NOT APPLY or its consumer did not build"
+  fi
+else
+  bad "FIXTURE ERROR: Part D12p's consumer did not build, or self-update-push.sh is not beside the checker ($PP_PUSH)"
 fi
 
 if [ "$MATRIX" = 0 ]; then

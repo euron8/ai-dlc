@@ -194,6 +194,18 @@ dput "core/fixtures/named-distonly/.dist-only" 'a mutation battery over core sou
 dput "core/fixtures/theirs-only-distonly/run.sh" 'at base'
 dput "core/fixtures/theirs-only-distonly/.dist-only" 'a mutation battery over core sources; never shipped'
 dput "core/fixtures/theirs-only-nodriver/.keep" 'a directory upstream carries with no driver in it'
+# THE SHARED SUPPORT DIRECTORY, upstream's `lib/`: shipped with no run.sh and untouched by
+# base..theirs, so Part 0's census is unmoved. Part D12s-lib writes it; `theirs-only-nodriver`
+# above is Part D12s-seed's seed-only directory.
+dput "core/fixtures/lib/inproc.sh" 'shared helpers every fixture sources; no driver of its own'
+# A fixture whose run.sh BLOB Part D12u removes from a copy of this repo, so `cat-file -e` on it
+# answers 1 with its tree still readable: the `.dist-only` read confirms an absence and the run.sh
+# read can confirm neither. The content is unique so no other path shares the blob.
+dput "core/fixtures/unreadable-driver/run.sh" 'a driver whose blob one copy of the distribution loses'
+# A BLOB where a fixture directory would be, whose object the same copy loses, so the `.dist-only`
+# and run.sh reads at theirs confirm an absence (no tree to descend) and the directory read can
+# confirm neither: Part D12d's subject. Unique content, so no other path shares the blob.
+dput "core/fixtures/flat-entry" 'a blob, not a directory, whose object one copy of the distribution loses'
 
 dput "core/scripts/machinery.sh" 'at base'
 # THE DISTRIBUTION FALLBACK HOOK, and it is what Part G4 stands on. The seeded consumer has no
