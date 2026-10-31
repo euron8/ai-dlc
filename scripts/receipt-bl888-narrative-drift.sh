@@ -2,7 +2,7 @@
 # Receipt: on a fresh consumer install, audit-rule-files.sh's NARRATIVE_DRIFT class reports only the
 # rule text that is meant to carry its measurement or a present-tense `used to`, and the twenty-one
 # rule sentences that told their own history state their rule in the present tense.
-# Usage: receipt-bl888.sh [<root>]      (<root> = a distribution tree; default .)
+# Usage: receipt-bl888-narrative-drift.sh [<root>]      (<root> = a distribution tree; default .)
 # Builds a consumer install of <root> (git init a mktemp dir, one empty commit, `_bmad/`, then
 # `scripts/install.sh <dir>`) and asserts four arms:
 #   (a) `audit-rule-files.sh --fail-on=local` in the install gives exactly 11 NARRATIVE_DRIFT finding
@@ -19,6 +19,17 @@
 # 9 = no verdict: no install.sh (a consumer tree), the install or the audit could not run, or an
 #     anchor matched other than exactly one line.
 set -uo pipefail
+r888_seam() { # walk up from $1 for the git-env seam; never count hops
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -f "$d/core/fixtures/lib/preamble.sh" ]; then printf '%s\n' "$d/core/fixtures/lib/preamble.sh"; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+_PRE="$(r888_seam "$(cd "$(dirname "$0")" && pwd)")" || _PRE=""
+[ -n "$_PRE" ] && [ -f "$_PRE" ] || { echo "REFUSED: no git-env seam core/fixtures/lib/preamble.sh above $0" >&2; exit 9; }
+. "$_PRE"
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 ROOT="${1:-.}"
 ROOT="$(cd "$ROOT" 2>/dev/null && pwd -P)" || { echo "REFUSED: no root" >&2; exit 9; }
