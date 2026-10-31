@@ -779,15 +779,19 @@ fi
 # ------------------------------------------------- an interrupt tears the pool down (BL-881) ------
 # xargs runs in the background under `set -m` and the parent waits on it; INT/TERM/HUP reach the parent's
 # pool_stop, which writes `.pr/.stop`, TERMs every worker recorded in `.pr/<unit>.k` and waits for xargs.
-# FORCED, not waited for: four stubs at width 2, each recording "<pid> <pool root>" and then holding on a
-# barrier FILE the fixture writes, so the pool holds exactly two units when the signal lands and two queued.
+# FORCED, not waited for: three stubs at width 2, each recording "<pid> <pool root>" and then holding on a
+# barrier FILE the fixture writes, so the pool holds exactly two units when the signal lands and ONE queued.
+# ONE QUEUED UNIT, NEVER TWO, so the start count is the same on every run: when both workers die xargs
+# dispatches the queue once per reaped exit until it reaps a 255. With two queued, whether the second dying
+# worker or the first replacement's `.stop` refusal (255) is reaped first decided whether one or two refused
+# replacement workers started -- measured 305 and 306 starts on one tree. With one queued, exactly one starts.
 #   td_term  -- TERM to the parent: recorded stub pids still alive once the parent has exited (want 0)
-#   td_queue -- stubs that ever started, counted after release (want 2: no queued unit is dispatched)
+#   td_queue -- stubs that ever started, counted after release (want 2: the queued unit is never run)
 #   td_rc    -- the parent's exit status and whether its pool root survives (want 143:gone)
 #   td_decoy -- a live process NOT in xargs' group, its pid planted in `.pr/zz-decoy.k` before the TERM (the
 #               stale record a SIGKILLed worker leaves): alive once the parent has exited (want 1). The allow
 #               twin of td_term: a pool_stop that TERMs every record, group or not, reads 0 here.
-#   td_intp  -- after td_int, xargs dispatches the two queued stubs (an exit of 130 does not stop it); INT to
+#   td_intp  -- after td_int, xargs dispatches the queued stub (an exit of 130 does not stop it); INT to
 #               the parent then: "<rc>:<root>:<stubs alive>" (want 130:gone:0), the ^C an operator sends
 #   td_int   -- INT to each worker recorded in `.k`: the two targeted stubs still alive once both workers
 #               cleared their `.k` (want 0). Under a plain `&` bash starts xargs with SIGINT ignored, every
@@ -804,7 +808,7 @@ td_intp=130:gone:0"
 # event) is FIXTURE BROKEN (td_hang); on a mutant the ceiling is the mutant's expected observable and stays a cell value.
 TD_CEIL=60
 TDT="$WORK/td.tpl"
-for _i in 1 2 3 4; do
+for _i in 1 2 3; do
   mkdir -p "$TDT/$PFXR/q$_i" || broken "could not build the teardown template"
   cat > "$TDT/$PFXR/q$_i/run.sh" <<'FX'
 #!/usr/bin/env bash
@@ -878,11 +882,11 @@ td_drive() {
     n=0; for k in $ks; do [ -s "$k" ] && n=1; done
     [ "$n" = 1 ] && td_hang "$blk" "the workers to clear their records after INT"
     if [ -z "$wp" ]; then n=norecord; else n="$(td_alive $t)"; fi
-    # td_intp: once the workers have cleared, the two queued stubs start; then INT to the parent itself
+    # td_intp: once the workers have cleared, the queued stub starts; then INT to the parent itself
     if [ "$n" = 0 ]; then
       s=$SECONDS
-      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 4 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
-      [ "$(ls "$d/s" | grep -c '^s\.')" -lt 4 ] && td_hang "$blk" "the queued stubs to start"
+      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+      [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && td_hang "$blk" "the queued stub to start"
     fi
     kill -INT "$p"
     s=$SECONDS
