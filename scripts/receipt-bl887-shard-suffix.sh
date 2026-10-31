@@ -20,6 +20,11 @@
 #   S2  complete list + ` -- all sections`, an em dash         ALLOW / PASS
 #   S3  complete list + `. Step test-strategy-p3. Brief: x`    ALLOW / PASS  (a period suffix)
 #   S4  SPACED list `1, 2, ..., 8` + ` (note)`, the second correct spelling   ALLOW / PASS
+#   S5  complete list + a bare-word suffix ` all sections` (no punctuation)    ALLOW / PASS
+#   S6  a list whose last separator is a TAB, `1,...,7,<TAB>8` + ` (note)`   ALLOW / PASS
+#       (the hook collapses a tab to a blank before cover_missing and records the blank form, so the
+#       row is compared with tabs turned to blanks and the validator is driven with the RECORDED value;
+#       a tab cannot reach cover_missing by either path, so this world does not score a tab-free class)
 #   G   gap `1,...,7` + ` (note)`   hook DENY naming `omits part(s) 8 of 1..8`; validator FAIL
 #   N   no list, `all sections`     hook DENY `omits part(s) 1..8 of 1..8`... every part; validator FAIL
 #   E   an empty token `1,2,,4,5,6,7,8` + ` (note)`            DENY / FAIL
@@ -124,12 +129,12 @@ world() {
   local canon="cross/$k g1/1 $tail" okh=1 okv=1
   hdrive "$canon"
   if [ "$want" = allow ]; then
-    { [ "$HDEC" != deny ] && [ "$HROWS" = 1 ] && [ "$HSHARD" = "$canon" ]; } || okh=0
+    { [ "$HDEC" != deny ] && [ "$HROWS" = 1 ] && [ "$(printf '%s' "$HSHARD" | tr '\t' ' ')" = "$(printf '%s' "$canon" | tr '\t' ' ')" ]; } || okh=0
   else
     { [ "$HDEC" = deny ] && [ "$HROWS" = 0 ]; } || okh=0
     case "$HREASON" in *"$reason"*) ;; *) okh=0 ;; esac
   fi
-  vdrive "$canon"
+  if [ "$want" = allow ] && [ -n "$HSHARD" ]; then vdrive "$HSHARD"; else vdrive "$canon"; fi
   if [ "$want" = allow ]; then
     { [ "$VRC" = 0 ] && grep -qF 'cover (S4)' <<<"$VOUT" && ! grep -qF 'does not name every section' <<<"$VOUT"; } || okv=0
   else
@@ -159,6 +164,8 @@ world S1 "$L8 (you are the ONE cross QA for this sprint)" 8 allow
 world S2 "$L8 — all sections" 8 allow
 world S3 "$L8. Step test-strategy-p3. Brief: x" 8 allow
 world S4 "1, 2, 3, 4, 5, 6, 7, 8 (note)" 8 allow
+world S5 "$L8 all sections" 8 allow
+world S6 "1,2,3,4,5,6,7,"$'\t'"8 (note)" 8 allow
 world G "1,2,3,4,5,6,7 (you are the ONE cross QA)" 8 deny "omits part(s) 8 of 1..8"
 world N "all sections" 8 deny "omits part(s) 1,2,3,4,5,6,7,8 of 1..8"
 world E "1,2,,4,5,6,7,8 (note)" 8 deny "omits part(s) 1,2,3,4,5,6,7,8 of 1..8"
