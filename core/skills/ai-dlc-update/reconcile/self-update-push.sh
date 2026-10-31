@@ -32,7 +32,8 @@
 # THE GATE RECORD IS CHECKED HERE, BEFORE THE HOOK AND BEFORE ANY PUSH. `self-update-fixtures.sh`
 # (beside this file; the name is historical) refuses unless the gate recorded `# verdict: OK` for
 # this range on the tree this cycle wrote over, and unless the committed slice wrote no `.dist-only`
-# fixture directory and none without its `run.sh`. Its exit 2 is a refusal here: no hook runs,
+# fixture directory, none upstream does not ship, none without a `run.sh` upstream ships, and none
+# whose state at theirs cannot be read (UNCONFIRMED). Its exit 2 is a refusal here: no hook runs,
 # nothing is pushed, one stdout line `GATE-RECORD-REFUSED <first finding>`, and <out> carries the
 # checker's `GATE-RECORD:` lines as `# probe:` lines. The check is never skipped: there is no
 # argument count that omits it, and a checker that is absent or not executable by bash is the

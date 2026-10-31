@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.982.0] - 2026-10-31
+
+Batch b247. The self-update slice check accepts a support directory upstream ships with no `run.sh`, so a self-update can deliver a change to the shared fixtures `lib/` (BL-894).
+
+Machinery-only, and it ships alone. Files: `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh` (the slice check), `core/skills/ai-dlc-update/SKILL.md` (step 2's fixture-term exclusions and the red-push paragraph), `core/skills/ai-dlc-update/reconcile/self-update-push.sh` (header comment only). Fixtures: `core/fixtures/self-update-fixture-log/` gains Parts D12x, D12s-lib, D12s-seed, D12u, D12d and D12p and their mutants. Backlog: `docs/backlog.md`. Receipt: `core/fixtures/self-update-fixture-log/receipt-bl894.sh`. Nothing under `core/fixtures/lib/` changes.
+
+### A self-update can deliver a change to the shared fixtures `lib/` (BL-894)
+
+- The slice check refused `NO-DRIVER` for every fixture directory the self-update commit wrote without a `run.sh`. The shared `core/fixtures/lib/` and the seed-only `check-h1-recursion` and `check-manifest-bypass` ship with no `run.sh`, so a step-2 cycle whose slice carried a change to one of them could not push.
+- When `run.sh` is absent from the commit, the check now asks `theirs` through the same oracle as the `.dist-only` read. A `run.sh` at `theirs` is NO-DRIVER. A directory upstream ships at `theirs` with no `run.sh` is a support directory and is accepted. A directory upstream does not ship at `theirs` is NO-DRIVER. A `theirs` state that cannot be read is UNCONFIRMED. A directory whose `run.sh` is in the commit is decided as before.
+- Step 2's push is judged by the checker its slice just wrote, because `self-update-push.sh` resolves the checker from its own directory. This was measured in a scratch consumer, and Part D12p holds it. A pull whose slice rewrites the checker to this release's version therefore has its `lib/` changes accepted by the fixed check. Where the slice does not rewrite the checker (a CARRY row or DEFER), the installed check still decides.
+- `preclassify.sh` keeps a comment saying step 2 never writes `core/fixtures/lib/`. That comment now overstates the rule and is left as written; BL-894 records the drift.
+
 ## [0.981.0] - 2026-10-31
 
 Batch b247. `ledger-reverify.sh` asks upstream's history about a ledger entry whose heading carries a trailing `(filed …)` parenthetical (BL-890).

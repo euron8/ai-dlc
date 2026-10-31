@@ -289,15 +289,18 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `ai-dlc-update` subtrees) — **plus the fixtures that cover THE CHANGED PATHS**: every
    `core/fixtures/<dir>/` whose `*.sh` names one of the machinery paths **this diff actually
    touched**, EXCLUDING — read AT `theirs` — any dir carrying a `.dist-only` marker (never
-   shipped, so it cannot run on a consumer) and any dir with **no `run.sh` at `theirs`**
-   (nothing to write). Derive both sets rather than enumerating either here, and grep
+   shipped, so it cannot run on a consumer) and any dir **upstream does not ship at `theirs`**
+   (nothing to write; a dir upstream ships with no `run.sh`, such as the shared `lib/` or a
+   seed-only dir, is written whole). Derive both sets rather than enumerating either here, and grep
    `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling path in its seed,
    so a run.sh-only derivation misses it).
 
    **BOTH exclusions bind BOTH terms, not only the first.** The
    enforcer applies them to every fixture directory the self-update commit writes, so a dir
    reaching this term through the grep — legitimately, because the grep reads `seed.sh` and a dir
-   may carry a `seed.sh` and no `run.sh` — and written here is refused at the push.
+   may carry a `seed.sh` and no `run.sh` — and written here is refused at the push when it
+   carries `.dist-only` or does not exist at `theirs`, when it has a `run.sh` at `theirs`
+   that the write omits, or when its state at `theirs` cannot be read (UNCONFIRMED).
 
    **The fixture term has a SECOND half, and the first cannot see it: every
    `core/fixtures/<dir>/` THE DIFF ITSELF TOUCHES.** The grep above runs over the fixtures
@@ -308,14 +311,17 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    release-to-release ranges of the distribution: **16 carry at least one SHIPPING fixture in
    exactly that state**. Two exclusions, both read AT `theirs`, and both stated as the
    ENFORCER spells them rather than as a paraphrase: a dir carrying `.dist-only` never ships,
-   and a dir with **no `run.sh` at `theirs`** has nothing to write. That second one is not
-   "a dir the diff deletes" — a dir that keeps a README and loses only its driver satisfies
-   it — and deriving this term by hand from the looser wording yields a slice the push then
-   refuses. **Subtract every path `preclassify.sh` buckets `DIST-ONLY-SKIP` from the write set,
+   and a dir **upstream does not ship at `theirs`** has nothing to write. A dir upstream ships
+   with no `run.sh` (a support dir: the shared `lib/`, seed-only dirs) is written whole like any
+   other covered path and is not refused; a dir with a `run.sh` at `theirs` is written with it.
+   That second exclusion is not "a dir the diff deletes" — deriving this term by hand from the
+   looser wording yields a slice the push then refuses. **Subtract every path `preclassify.sh` buckets `DIST-ONLY-SKIP` from the write set,
    and write each fixture directory WHOLE, its `run.sh` included.** The gate-record checker the
    push runs (`reconcile/self-update-fixtures.sh`, called by `reconcile/self-update-push.sh`)
    refuses a self-update commit that wrote a fixture directory carrying `.dist-only` at `theirs`,
-   or one with no `run.sh`, before any hook runs and before anything is pushed. That refusal exists
+   a dir upstream does not ship at `theirs`, a dir whose `run.sh` at `theirs` the commit omits,
+   or a dir whose state at `theirs` cannot be read (UNCONFIRMED), before any hook runs and before
+   anything is pushed. That refusal exists
    because a hand derivation on the reference consumer named `backlog-size-ceiling`, which carries
    `.dist-only`, and wrote it into that consumer's `tests/fixtures/` as a RETIRED-FIXTURE-ORPHAN.
 
@@ -703,7 +709,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      nothing. So a red push leaves exactly one thing behind, the self-update commit on its own
      branch, and the branch discard above removes it. A `GATE-RECORD-REFUSED` exit 2 — no
      matching OK record, a record whose inputs moved or that was taken on the written tree, or a
-     commit that wrote a `.dist-only` fixture directory or one without its `run.sh` (each a
+     commit that wrote a `.dist-only` fixture directory or one without a `run.sh` it ships (each a
      `GATE-RECORD:` line on the wrapper's stderr and a `# probe:` line in its record) — takes the
      HOOK-REFUSED paragraph's sequence and disposition exactly, `SELF-UPDATE-DEFER`, with the
      wrapper's record carrying the checker's lines where the hook's would be. Report the
