@@ -46,7 +46,11 @@
 # MUTANT-MATRIX m-nomark decides=pn_grow twins=pn_ord
 # MUTANT-MATRIX m-noread decides=pn_grow twins=pn_ord
 # MUTANT-MATRIX m-novalidate decides=pn_hlink,pn_hout twins=pn_ord
-# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the twenty literal callers (mutant, pn_eval and the I66 arm) has its own row above
+# MUTANT-MATRIX td-old-traps decides=td_term,td_intp twins=td_queue
+# MUTANT-MATRIX td-no-stop decides=td_term,td_queue twins=td_rc
+# MUTANT-MATRIX td-plain-amp decides=td_term,td_int,td_intp twins=td_queue
+# MUTANT-MATRIX td-no-pgid decides=td_decoy twins=td_term
+# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the twenty-four literal callers (mutant, pn_eval, td_eval and the I66 arm) has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
 #
 # The matrix is re-measured whenever an arm or a mutant is added or changed, with the command above, run
@@ -763,6 +767,157 @@ else
     "MUTANT i66-fork-seed kill confirmed: decides [i66_seeded] moved (rc 1, FAIL: I66), twin [i66_clean] stayed green" \
     "MUTANT i66-fork-seed: a one-byte fork of hook 2's block read rc $I66_RC with no I66 FAIL line"
 fi
+
+# ------------------------------------------------- an interrupt tears the pool down (BL-881) ------
+# xargs runs in the background under `set -m` and the parent waits on it; INT/TERM/HUP reach the parent's
+# pool_stop, which writes `.pr/.stop`, TERMs every worker recorded in `.pr/<unit>.k` and waits for xargs.
+# FORCED, not waited for: four stubs at width 2, each recording "<pid> <pool root>" and then holding on a
+# barrier FILE the fixture writes, so the pool holds exactly two units when the signal lands and two queued.
+#   td_term  -- TERM to the parent: recorded stub pids still alive once the parent has exited (want 0)
+#   td_queue -- stubs that ever started, counted after release (want 2: no queued unit is dispatched)
+#   td_rc    -- the parent's exit status and whether its pool root survives (want 143:gone)
+#   td_decoy -- a live process NOT in xargs' group, its pid planted in `.pr/zz-decoy.k` before the TERM (the
+#               stale record a SIGKILLed worker leaves): alive once the parent has exited (want 1). The allow
+#               twin of td_term: a pool_stop that TERMs every record, group or not, reads 0 here.
+#   td_intp  -- after td_int, xargs dispatches the two queued stubs (an exit of 130 does not stop it); INT to
+#               the parent then: "<rc>:<root>:<stubs alive>" (want 130:gone:0), the ^C an operator sends
+#   td_int   -- INT to each worker recorded in `.k`: the two targeted stubs still alive once both workers
+#               cleared their `.k` (want 0). Under a plain `&` bash starts xargs with SIGINT ignored, every
+#               worker inherits that, and its `trap pool_abort INT` cannot fire (BL-881 D-f).
+# Signals go only to the drive's own pid and to the pids the workers recorded; release ends every stub.
+TD_ALL="td_term td_queue td_rc td_decoy td_int td_intp"
+WANT_TD="td_term=0
+td_queue=2
+td_rc=143:gone
+td_decoy=1
+td_int=0
+td_intp=130:gone:0"
+TD_CEIL=30
+TDT="$WORK/td.tpl"
+for _i in 1 2 3 4; do
+  mkdir -p "$TDT/$PFXR/q$_i" || broken "could not build the teardown template"
+  cat > "$TDT/$PFXR/q$_i/run.sh" <<'FX'
+#!/usr/bin/env bash
+printf '%s %s\n' "$$" "${TMPDIR%/*}" > "$TD_DIR/s.$$"
+s=$SECONDS
+while [ ! -e "$TD_DIR/release" ] && [ -d "$TD_DIR" ] && [ $((SECONDS - s)) -lt 60 ]; do sleep 0.1; done
+exit 0
+FX
+done
+( cd "$TDT" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+[ -d "$TDT/.git" ] || broken "the teardown template world is not a repository"
+td_alive() { # td_alive <pid...> -> how many are live and not exiting or zombie
+  local p n=0 s
+  for p in "$@"; do
+    kill -0 "$p" 2>/dev/null || continue
+    s="$(ps -o stat= -p "$p" 2>/dev/null)"
+    case "$s" in Z*|E*|'') ;; *) n=$((n + 1)) ;; esac
+  done
+  printf '%s' "$n"
+}
+td_stubs() { cat "$1"/s.* 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '; }
+td_wait2() { # td_wait2 <stub dir>: until two stubs recorded, at most TD_CEIL seconds
+  local s=$SECONDS
+  while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+  [ "$(ls "$1" | grep -c '^s\.')" -ge 2 ]
+}
+# td_drive <block> <set> <term|int> -> appends the mode's cells to $WORK/td.<set>.v
+td_drive() {
+  local blk="$1" set="$2" mode="$3" d="$WORK/td.$2.$3" p s n st root ks k wp t dp dn
+  mkdir -p "$d/s" && cp -R "$TDT" "$d/w" || { bad "teardown drive $set/$mode: could not copy the template"; return 1; }
+  set -m
+  ( cd "$d/w" && unset PREPUSH_POOL_DEPTH && export AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$d/s" \
+    && exec bash -c '. "$1" > /dev/null 2>&1; run_fixtures > "$2" 2>&1' _ "$blk" "$d/out" ) > /dev/null 2>&1 &
+  p=$!
+  set +m
+  if ! td_wait2 "$d/s"; then
+    : > "$d/s/release"; wait "$p"
+    case "$mode" in term) printf 'td_term=nostart\ntd_queue=nostart\ntd_rc=nostart\ntd_decoy=nostart\n' ;; int) printf 'td_int=nostart\ntd_intp=nostart\n' ;; esac >> "$WORK/td.$set.v"
+    return 0
+  fi
+  t="$(td_stubs "$d/s")"; root="$(sed -n '1s/^[0-9]* //p' "$d/s/$(ls "$d/s" | grep '^s\.' | sed -n 1p)")"
+  if [ "$mode" = term ]; then
+    # the decoy: blocks on the same barrier, so the release ends it and nothing here kills it
+    ( while [ ! -e "$d/s/release" ] && [ -d "$d/s" ]; do sleep 0.1; done ) > /dev/null 2>&1 &
+    dp=$!; printf '%s\n' "$dp" > "$root/.pr/zz-decoy.k"
+    kill -TERM "$p"
+    # until the parent is gone, or a third stub (a queued unit) has started
+    s=$SECONDS
+    while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    n="$(td_alive $(td_stubs "$d/s"))"; dn="$(td_alive "$dp")"
+    : > "$d/s/release"; wait "$p"; st=$?; wait "$dp"
+    if [ -d "$root" ]; then root=present; else root=gone; fi
+    printf 'td_term=%s\ntd_queue=%s\ntd_rc=%s:%s\ntd_decoy=%s\n' "$n" "$(ls "$d/s" | grep -c '^s\.')" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
+  else
+    ks=""; wp=""
+    for k in "$root"/.pr/*.k; do [ -s "$k" ] && { read -r n < "$k"; case "$n" in ''|*[!0-9]*) ;; *) wp="$wp $n"; ks="$ks $k" ;; esac; }; done
+    for n in $wp; do kill -INT "$n"; done
+    # until every targeted worker has cleared its record (pool_abort empties `.k` before it exits)
+    s=$SECONDS
+    while [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do
+      n=0; for k in $ks; do [ -s "$k" ] && n=1; done
+      [ "$n" = 0 ] && break
+      sleep 0.1
+    done
+    if [ -z "$wp" ]; then n=norecord; else n="$(td_alive $t)"; fi
+    # td_intp: once the workers have cleared, the two queued stubs start; then INT to the parent itself
+    if [ "$n" = 0 ]; then
+      s=$SECONDS
+      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 4 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    fi
+    kill -INT "$p"
+    s=$SECONDS
+    while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    dn="$(td_alive $(td_stubs "$d/s"))"
+    : > "$d/s/release"; wait "$p"; st=$?
+    if [ -d "$root" ]; then root=present; else root=gone; fi
+    printf 'td_int=%s\ntd_intp=%s:%s:%s\n' "$n" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
+  fi
+}
+td_run() { # td_run <block> <set> <cell...>: one drive per mode its cells need
+  local blk="$1" set="$2" c tm=0 im=0; shift 2
+  : > "$WORK/td.$set.v"
+  for c in "$@"; do case "$c" in td_int|td_intp) im=1 ;; *) tm=1 ;; esac; done
+  [ "$tm" = 1 ] && td_drive "$blk" "$set" term
+  [ "$im" = 1 ] && td_drive "$blk" "$set" int
+  return 0
+}
+td_val() { sed -n "s/^$2=//p" "$WORK/td.$1.v" 2>/dev/null; }
+wanttd() { printf '%s\n' "$WANT_TD" | sed -n "s/^$1=//p"; }
+td_run "$PB" fix $TD_ALL
+for _c in $TD_ALL; do
+  v="$(td_val fix "$_c")"
+  if [ "$v" = "$(wanttd "$_c")" ]; then ok "[$T] teardown $_c=$v"
+  else bad "[$T] teardown $_c read [${v:-none}], want [$(wanttd "$_c")]"; fi
+done
+# td_mut <name> <sed-expr>: a copy of the block, one edit, exactly one line changed
+td_eval() {
+  local name="$1" m="$WORK/td.mut.$1.sh" dec tw cells c got="" moved B_mut=1 cond=0 n_run
+  dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
+  [ -n "$dec" ] || { bad "MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
+  dec="${dec//,/ }"; tw="${tw//,/ }"
+  sed "$2" "$PB" > "$m" || { bad "MUTANT $name: sed did not apply"; return 0; }
+  if cmp -s "$PB" "$m"; then bad "MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
+  # the edit removed or changed exactly one line of the block (a multiset count, so a duplicate line elsewhere still counts)
+  [ "$(awk 'NR == FNR { c[$0]++; next } { c[$0]-- } END { for (k in c) if (c[k] > 0) n += c[k]; print n + 0 }' "$PB" "$m")" -eq 1 ] \
+    || { bad "MUTANT $name: the edit did not change exactly one line"; return 0; }
+  if [ "$MATRIX" = 1 ]; then cells="$TD_ALL"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + $(printf '%s\n' $TD_ALL | grep -c .) - n_run)); else cells="$dec $tw"; fi
+  ( TD_CEIL="${3:-$TD_CEIL}"; td_run "$m" "$name" $cells )
+  for c in $cells; do got="$got$c=$(td_val "$name" "$c")"$'\n'; done
+  for c in $dec $tw; do [ "$(td_val fix "$c")" = "$(wanttd "$c")" ] || B_mut=0; done
+  moved="$(moved_of "$got" "$WANT_TD")"
+  [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
+  same_set "$moved" "$dec" && cond=1
+  finish_mutant "$B_mut" "$name" "$cond" \
+    "MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
+    "MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}])"
+}
+td_eval td-old-traps "s/trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; trap 'pool_stop 129' HUP$/trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP/"
+td_eval td-no-stop '/^    \[ -f "\$AI_DLC_FX_OUT\/.pr\/.stop" \] && { : > "\$pr.k"; exit 255; }$/d'
+# the INT drive waits its ceiling under this mutant (the workers never clear `.k`): 5s, for this mutant only
+td_eval td-plain-amp '/^  set -m$/{N;s/^  set -m\n  { PREPUSH_POOL_DEPTH=/  { PREPUSH_POOL_DEPTH=/;}' 5
+# the pgid guard removed: pool_stop TERMs every recorded pid, the planted stale record included
+td_eval td-no-pgid "s/^      \[ \"\$(ps -o pgid= -p \"\$p\" 2>\/dev\/null | tr -d ' ')\" = \"\$pool_xp\" \] && kill -TERM/      kill -TERM/"
 
 # a plain run executes no matrix-only cell: the counter moves only on the --matrix path
 if [ "$MATRIX" = 1 ]; then
