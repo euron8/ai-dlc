@@ -1,4 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once.
 # Exact (BL-868): the fx_drive and fw_drive stop-at-first-leak drives now run a fixed number of launches.
-484 *
+477 *
 82 core/scripts/derive-fixture-readsets.sh

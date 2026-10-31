@@ -364,7 +364,7 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     # it. Anchored on the heir branch's own line; the `else rm` line beneath it stays.
     lease-no-heir)            MUT_EXPR='s/^    if \[ -n "\$lr_heir_" \]; then lease_put .*$/    if false; then :/' ;;
     # Every beat takes the marker on every beat_alive, live holder or not.
-    lease-always-put)         MUT_EXPR='s/^  if \[ "\$ba_pid_" = "\$\$" \] || lease_holder_dead "\$ba_pid_"; then lease_put "\$ba_e_" "\$\$"; fi$/  lease_put "$ba_e_" "$$"/' ;;
+    lease-always-put)         MUT_EXPR='s/^  if \[ "\$ba_pid_" = "\$WD_SELF_PID" \] || lease_holder_dead "\$ba_pid_"; then lease_put "\$ba_e_" "\$WD_SELF_PID"; fi$/  lease_put "$ba_e_" "$WD_SELF_PID"/' ;;
     # The early lease, deleted: the bare `beat_alive` directly beneath the trap line. The
     # in-loop call before the sleep is ALSO a bare column-0 `beat_alive`, so the delete is
     # keyed on the line after the trap rather than on the text, which matches both.

@@ -1,4 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once.
 # Exact (BL-868): every stub-world liveness, settle and flush poll ends on its first iteration.
-805 *
-81 core/scripts/derive-fixture-readsets.sh
+756 *
+2 core/scripts/derive-fixture-readsets.sh
