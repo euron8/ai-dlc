@@ -93,16 +93,27 @@
 #     beside this file is acquitted with a NOTE: escalations.md moves terminal entries there at
 #     retro close, the latest row is always the PREVIOUS gate's, and without the acquittal the
 #     first gate of every sprint after a waived one would fail on an entry correctly archived.
-#   - A SUPPRESSED waiver keeps the existing lifetime: the expiry arm treats FAIL_WAIVED as
-#     still failing, so a waiver outlives its `**Expires after:**` exactly as a suppression does.
+#   - A SUPPRESSED waiver keeps the existing lifetime: the expiry arm treats a FAIL_WAIVED row as
+#     still failing for THIS entry only when the row's waiver_id, stripped, equals this entry's
+#     key, so a waiver outlives its `**Expires after:**` exactly as a suppression does. A row
+#     waived by ANY other id -- whether it resolves here, in the archive, or nowhere -- is a
+#     failure owned by that other waiver, and does not re-fire an expired suppression of the
+#     same check; section 6c still judges that id. A plain FAIL always fires.
 #     A SUPPRESSED waiver naming a check other than its own `**Suppresses:**` target fails.
 #   - An OVERRIDDEN waiver does NOT expire by gate count, and no OVERRIDDEN entry may carry
 #     `**Expires after:**` (that is the malformed-attempt arm below). Its bound is elsewhere:
 #     gate-validation.md Check 22 names every violation per spawn, so a NEW unnamed violation is
 #     a fresh FAIL that no existing OVERRIDDEN entry waives.
-#   - The terminal arm stands down for exactly one row: a RESOLVED/OVERRIDDEN entry naming
-#     Check N is not failed when N's latest row is FAIL_WAIVED with `waiver_id` equal to THIS
-#     entry's key. Every other FAIL_WAIVED row is FAIL to that arm.
+#   - The terminal arm stands down when Check N's latest row is FAIL_WAIVED and:
+#       RESOLVED   -- the row's `waiver_id`, stripped, equals THIS entry's key. Nothing else.
+#       OVERRIDDEN -- that, OR the id resolves to an OVERRIDDEN entry, OR to a SUPPRESSED entry
+#                     whose target is (catalog, N) by section 6c's target test. An OVERRIDDEN
+#                     entry naming a check another operator waiver already owns is not closing
+#                     a red check behind the operator's back (operator ruling, reversing the
+#                     exact-match-only rule for OVERRIDDEN).
+#     Resolution reads a table of every entry in this file AND in `pending-archive.md` beside
+#     it, built BEFORE the entry loop, so an entry's waiver may sit above or below it, or be
+#     archived. Every other FAIL_WAIVED row is FAIL to that arm.
 # TWO KEYS, AND WHICH ONE JOINS. `short` (the header cut to 92 characters) remains the key of
 # every MESSAGE and every `--baseline` line, unchanged, so no baseline on disk moves. The waiver
 # join uses `wkey`, the FULL header stripped as above, because a 92-character prefix is not the
@@ -318,10 +329,19 @@ fi
 #
 # Fields are emitted in an order no field name prefixes another's value, and each is
 # delimited, so a `Suppresses:` cannot cross-match `Suppresses-something:`.
-RECORDS="$(awk '
-  function flush() {
-    if (header != "")
-      printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n", header, status, supp, expires, authts, named, suppcat, authline
+#
+# The ninth field is the WAIVER KEY (rules.waiver_id): the header without its `## `/`### `
+# marker, trailing whitespace stripped. The tenth is the SOURCE, `P` for this file and `A` for
+# the archive beside it. One program parses both files, so a key and a status mean the same
+# thing wherever the entry lives.
+US="$(printf '\037')"
+SL_REC_AWK='
+  function flush(   k) {
+    if (header == "") return
+    k = header
+    if (!sub(/^### /, "", k)) sub(/^## /, "", k)
+    sub(/[[:space:]]+$/, "", k)
+    printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n", header, status, supp, expires, authts, named, suppcat, authline, k, src
   }
   /^#{2,3} / { flush(); header=$0; status=""; supp=""; expires=""; authts=""; named=""; suppcat=""; authline=""; canon=0; next }
   /\*\*[Ss]tatus:\*\*/ {
@@ -378,10 +398,23 @@ RECORDS="$(awk '
     }
   }
   END { flush() }
-' "$ESCALATIONS")"
+'
+RECORDS="$(awk -v src=P "$SL_REC_AWK" "$ESCALATIONS")"
 
 ENTRIES_N="$(grep -c . <<<"$RECORDS")"
 [ -n "$RECORDS" ] || ENTRIES_N=0
+
+# THE PRE-PASS TABLE: every entry of this file, then every entry of the archive beside it, in
+# the record layout above. Built BEFORE the entry loop, so a waiver is resolved against the whole
+# corpus and never against the entries read so far. Section 6c and the terminal arm read it; a
+# lookup takes the FIRST row whose key matches, so this file wins over the archive. Its rows
+# feed no counter and no stdout row; they are only ever looked up.
+ARCHIVE="$(dirname "$ESCALATIONS")/pending-archive.md"
+SL_TABLE="$RECORDS"
+if [ -f "$ARCHIVE" ]; then
+  SL_TABLE="${SL_TABLE}
+$(awk -v src=A "$SL_REC_AWK" "$ARCHIVE")"
+fi
 
 # ---- 4. Gate timeline from the metrics -------------------------------------
 # BOTH JSON SPACINGS, BECAUSE THE REAL FILE CARRIES BOTH. Measured on the reference
@@ -493,13 +526,19 @@ waived_latest() {
   ' "$GATE_METRICS" | sort
 }
 
-# entry_key <header> -> the waiver key: the header without its `## `/`### ` marker, trailing
-# whitespace stripped. rules.waiver_id in gate-adjudication-verdict.json. No fork: one per entry.
-entry_key() {
-  local k="${1#\#\#\# }"
-  [ "$k" != "$1" ] || k="${1#\#\# }"
-  k="${k%"${k##*[![:space:]]}"}"
-  printf '%s' "$k"
+# sl_lookup <waiver-id> -> 0 and LK_STATUS LK_SUPPCAT LK_SUPP LK_SRC (P or A) set from the FIRST
+# pre-pass table row whose key equals the id; 1, all four empty, when none does. The id must
+# already be stripped. An empty id resolves to nothing, never to a blank table line. Through
+# ENVIRON, never `-v`, which strips a level of backslash escaping from a free-text header.
+LK_STATUS=""; LK_SUPPCAT=""; LK_SUPP=""; LK_SRC=""
+sl_lookup() {
+  local r
+  LK_STATUS=""; LK_SUPPCAT=""; LK_SUPP=""; LK_SRC=""
+  [ -n "$1" ] || return 1
+  r="$(K="$1" awk -F "$US" '$9 != "" && $9 == ENVIRON["K"] { print $2 FS $7 FS $3 FS $10; exit }' <<<"$SL_TABLE")"
+  [ -n "$r" ] || return 1
+  IFS="$US" read -r LK_STATUS LK_SUPPCAT LK_SUPP LK_SRC <<<"$r"
+  return 0
 }
 
 # gates_since <iso-ts> -> count of distinct gate events recorded strictly after it
@@ -541,17 +580,11 @@ matched_baseline=""
 in_force_n=0
 unresolved_n=0
 waivers_n=0
-# Every entry's waiver key, status and suppression target, for section 6c's join:
-#   <wkey>\037<status>\037<suppcat>\037<supp>
-ENTRY_KEYS=""
-while IFS="$(printf '\037')" read -r header status supp expires authts named suppcat authline; do
+while IFS="$US" read -r header status supp expires authts named suppcat authline wkey _src; do
   [ -n "${header:-}" ] || continue
-  # `short` is the message and --baseline key and is unchanged; `wkey` is the waiver join key.
-  # The header comment's "TWO KEYS" paragraph says why they differ.
+  # `short` is the message and --baseline key and is unchanged; `wkey` is the waiver join key,
+  # computed by the record extractor. The header comment's "TWO KEYS" paragraph says why they differ.
   short="$(printf '%s' "$header" | cut -c1-92)"
-  wkey="$(entry_key "$header")"
-  ENTRY_KEYS="${ENTRY_KEYS}${wkey}$(printf '\037')${status:-}$(printf '\037')${suppcat:-}$(printf '\037')${supp:-}
-"
 
   # --- a suppression declared by its fields but classified as something else ---
   # Sited ABOVE the case, not inside it as an else, because the case branches on the
@@ -650,9 +683,12 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
       vrow="$(latest_verdict "$supp" "$suppcat")"
       verdict="${vrow%%$'\t'*}"
       vts="${vrow#*$'\t'}"; vts="${vts%%$'\t'*}"
+      vwid="${vrow##*$'\t'}"; vwid="${vwid%"${vwid##*[![:space:]]}"}"
       if [ "$elapsed" -gt "$expires" ]; then
-        # FAIL_WAIVED is still failing, so a SUPPRESSED waiver expires on this same lifetime.
-        if [ "$verdict" = "FAIL" ] || [ "$verdict" = "FAIL_WAIVED" ]; then
+        # FAIL_WAIVED is still failing for THIS entry only when THIS entry is the waiver the row
+        # names, so a SUPPRESSED waiver expires on this same lifetime. A row waived by another id
+        # is that waiver's failure, judged in section 6c (header, "THE WAIVED VERDICT").
+        if [ "$verdict" = "FAIL" ] || { [ "$verdict" = "FAIL_WAIVED" ] && [ "$vwid" = "$wkey" ]; }; then
           key="EXPIRED:$supp"
           if baselined "$key"; then
             matched_baseline="$matched_baseline$key
@@ -699,10 +735,20 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         # never resolved, and every such entry would silently stop being checked.
         vrow="$(latest_verdict "$id" core)"
         tverdict="${vrow%%$'\t'*}"
-        # THE ONE STAND-DOWN (header, "THE WAIVED VERDICT"): this entry IS the waiver the row
-        # names, by rules.waiver_id's exact join. Any other FAIL_WAIVED is FAIL here.
-        if [ "$tverdict" = "FAIL_WAIVED" ] && [ "${vrow##*$'\t'}" = "$wkey" ]; then
-          continue
+        # THE STAND-DOWNS (header, "THE WAIVED VERDICT"). The row id is stripped exactly as
+        # section 6c strips it, so the two compares agree.
+        if [ "$tverdict" = "FAIL_WAIVED" ]; then
+          tw="${vrow##*$'\t'}"; tw="${tw%"${tw##*[![:space:]]}"}"
+          # Both statuses: this entry IS the waiver the row names.
+          if [ -n "$tw" ] && [ "$tw" = "$wkey" ]; then continue; fi
+          # OVERRIDDEN only: the id resolves, in the pre-pass table, to another OVERRIDDEN entry
+          # or to a SUPPRESSED entry whose target is (core, this check) by section 6c's test.
+          if [ "$status" = OVERRIDDEN ] && sl_lookup "$tw"; then
+            case "$LK_STATUS" in
+              OVERRIDDEN) continue ;;
+              SUPPRESSED) if [ "$LK_SUPP" = "$id" ] && [ "${LK_SUPPCAT:-core}" = core ]; then continue; fi ;;
+            esac
+          fi
         fi
         [ "$tverdict" = "FAIL" ] || [ "$tverdict" = "FAIL_WAIVED" ] || continue
         hit="$hit $id"
@@ -744,14 +790,10 @@ fi
 
 # ---- 6c. Every FAIL_WAIVED latest row names a waiver that resolves ----------
 # Header, "THE WAIVED VERDICT". The population is the latest row per (catalog, check); the
-# join is rules.waiver_id's exact equality against every entry's `wkey`. An id resolving only
-# in the sibling `pending-archive.md` is acquitted with a NOTE, never silently.
+# join is rules.waiver_id's exact equality against every entry's `wkey`, read from the pre-pass
+# table. An id resolving only in the sibling `pending-archive.md` is acquitted with a NOTE,
+# never silently.
 waived_n=0
-ARCHIVE="$(dirname "$ESCALATIONS")/pending-archive.md"
-ARCHIVE_KEYS=""
-if [ -f "$ARCHIVE" ]; then
-  ARCHIVE_KEYS="$(sed -n 's/^#\{2,3\} //p' "$ARCHIVE" | sed 's/[[:space:]]*$//')"
-fi
 WAIVED_ROWS="$(waived_latest)"
 while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
   [ -n "${wcheck:-}" ] || continue
@@ -764,10 +806,11 @@ while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
     echo "      no entry cannot be joined to the operator authority behind it. Source: $GATE_METRICS" >&2
     continue
   fi
-  # Through ENVIRON, never `-v`, which strips a level of backslash escaping from a free-text header.
-  wrec="$(K="$wid" awk -F "$(printf '\037')" '$1 == ENVIRON["K"] { print; exit }' <<<"$ENTRY_KEYS")"
+  # The pre-pass table, this file first: `wrec` is empty unless the id names an entry HERE.
+  wrec=""; wsrc=""
+  if sl_lookup "$wid"; then wsrc="$LK_SRC"; [ "$wsrc" = P ] && wrec="$LK_STATUS$US$LK_SUPPCAT$US$LK_SUPP"; fi
   if [ -z "$wrec" ]; then
-    if [ -n "$ARCHIVE_KEYS" ] && grep -qxF -- "$wid" <<<"$ARCHIVE_KEYS"; then
+    if [ "$wsrc" = A ]; then
       echo "NOTE: check '$wcheck' [$wcat] FAIL_WAIVED at ts $wts names an entry archived to $ARCHIVE;" >&2
       echo "      the row is the previous gate's, recorded before the entry was moved. Not adjudicated." >&2
       continue
@@ -779,12 +822,12 @@ while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
     echo "      waives nothing, and the check is a FAIL." >&2
     continue
   fi
-  wstatus="$(awk -F "$(printf '\037')" '{ print $2 }' <<<"$wrec")"
+  wstatus="$LK_STATUS"
   case "$wstatus" in
     OVERRIDDEN) : ;;  # no gate-count bound: Check 22's per-spawn naming bounds it (header)
     SUPPRESSED)
-      wscat="$(awk -F "$(printf '\037')" '{ print $3 }' <<<"$wrec")"
-      wsupp="$(awk -F "$(printf '\037')" '{ print $4 }' <<<"$wrec")"
+      wscat="$LK_SUPPCAT"
+      wsupp="$LK_SUPP"
       if [ "$wsupp" != "$wcheck" ] || [ "${wscat:-core}" != "$wcat" ]; then
         bad=$((bad + 1))
         echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED under the SUPPRESSED entry" >&2

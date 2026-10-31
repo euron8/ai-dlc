@@ -36,13 +36,15 @@
 # re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
 # decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments above, not driven per push.
 # a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
-# c_ifs_delimiter also trips 21 further arms in the measured matrix (wholesale delimiter break).
+# c_ifs_delimiter also trips 35 further arms in the measured matrix (wholesale delimiter break).
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
 # k_ts_dropped also trips t18b and t18d in the measured matrix (the dropped ts is seen through three timelines; t18a is the one it targets).
 # d_identity_lines_deleted and e_identity_nonce also trip cand in the measured matrix (the candidate-walk identity reads the same block).
 # f_attempt_demoted also trips att20 in the measured matrix (the RESOLVED branch world).
 # i_join_guard_removed also trips s16, s17 and t18b in the measured matrix (a dropped catalog join moves every join world; s14 is the one it targets).
-# w_resolve also trips w7 in the measured matrix (the archived-waiver world shares the skipped resolution).
+# w_resolve also trips w7, c1u and c2a in the measured matrix (each world reaches the skipped resolution).
+# w_overridden also trips c1, c2ab and c2ba in the measured matrix (each carries an OVERRIDDEN waiver 6c reads).
+# c2_noprepass also trips w7, c2a and c2s in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass).
 # MUTANT-MATRIX k_ts_dropped decides=t18a twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
 # MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
@@ -64,10 +66,15 @@
 # MUTANT-MATRIX r_rc decides=sr_Ag,sr_Ai,sr_Dg,sr_Di twins=sr_Eg
 # MUTANT-MATRIX r_readable_never decides=sr_Ag,sr_Ai twins=sr_Dg
 # MUTANT-MATRIX r_readable_always decides=sr_Dg,sr_Di twins=sr_Ag
-# MUTANT-MATRIX w_standdown decides=w1,w3 twins=w2
+# MUTANT-MATRIX w_standdown decides=wsd twins=w1
 # MUTANT-MATRIX w_resolve decides=w5 twins=w1
 # MUTANT-MATRIX w_lifetime decides=w4 twins=s2
 # MUTANT-MATRIX w_overridden decides=w3,w1 twins=w4
+# MUTANT-MATRIX c1_revert decides=c1,c1b,c1u twins=w4
+# MUTANT-MATRIX c2_exact decides=c2ab,c2ba,c2a,c2s twins=c2u
+# MUTANT-MATRIX c2_any decides=c2u,c2r,c2m twins=c2ab
+# MUTANT-MATRIX c2_resolved decides=w2 twins=c2u
+# MUTANT-MATRIX c2_noprepass decides=c2ba twins=c2ab
 # MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
 set -uo pipefail
@@ -199,6 +206,17 @@ drive_run() { # <validator path> <drive> -> O E RC X
     wdec)    c=waiver-wrong-status; gm="$GM_W_DEC" ;;
     warch)   c=waiver-archived; gm="$GM_W_ARCH" ;;
     wempty)  c=waiver-match; gm="$GM_W_EMPTY" ;;
+    c1)      c=c1-other-waiver; gm="$GM_W_C2" ;;
+    c1b)     c=c1-other-waiver; gm="$GM_W_C2"; ex="--baseline $BASELINE_EXP32" ;;
+    c1u)     c=c1-unresolvable; gm="$GM_W_C2" ;;
+    c2ab)    c=c2-waiver-above; gm="$GM_W_C2" ;;
+    c2ba)    c=c2-waiver-below; gm="$GM_W_C2" ;;
+    c2a)     c=c2-archived; gm="$GM_W_C2" ;;
+    c2s)     c=c2-suppressed-32; gm="$GM_W_C2" ;;
+    c2u)     c=c2-unresolvable; gm="$GM_W_C2" ;;
+    c2r)     c=c2-resolved; gm="$GM_W_C2" ;;
+    c2m)     c=c2-mistargeted; gm="$GM_W_C2" ;;
+    wsd)     c=own-standdown; gm="$GM_W_SD" ;;
   esac
   case "$d" in
     nocat)
@@ -404,8 +422,26 @@ ar_w5()  { dv "$1" wnone; [ "$DV_RC" = "1" ] && has "which names NO entry"; }
 ar_w6()  { dv "$1" wdec; [ "$DV_RC" = "1" ] && has "neither OVERRIDDEN nor SUPPRESSED"; }
 ar_w7()  { dv "$1" warch; w_quiet 1 && has "names an entry archived"; }
 ar_w8()  { dv "$1" wempty; [ "$DV_RC" = "1" ] && has "with NO waiver_id"; }
+# ---- whose waiver is it (C1: the expiry arm; C2: the terminal arm for OVERRIDDEN) ----------------
+# Each arm keys on ITS OWN message: C1 on "past its lifetime", C2 on the terminal arm's line for the
+# one entry naming Check 32. The quiet arms carry a positive conjunct a silent copy cannot print.
+C2_HIT='a OVERRIDDEN entry names check(s) 32,'
+# The expiry FAIL's own text: the clean OK line also says "past its lifetime", so the bare phrase
+# is present on every quiet run and cannot be the absence token.
+C1_MSG='is past its lifetime and the check is'
+ar_c1()   { dv "$1" c1;   ! hasF "$C1_MSG" && hasF 'suppressed=1 ' && w_quiet 1; }
+ar_c1b()  { dv "$1" c1b;  [ "$DV_RC" = "1" ] && hasF 'no longer reproduces: EXPIRED:32' && ! hasF "$C1_MSG"; }
+ar_c1u()  { dv "$1" c1u;  ! hasF "$C1_MSG" && has 'which names NO entry' && hasF 'suppressed=1 '; }
+ar_c2ab() { dv "$1" c2ab; ! hasF 'recorded FAILING' && hasF 'terminal_naming_check=0 ' && w_quiet 1; }
+ar_c2ba() { dv "$1" c2ba; ! hasF 'recorded FAILING' && hasF 'terminal_naming_check=0 ' && w_quiet 1; }
+ar_c2a()  { dv "$1" c2a;  ! hasF 'recorded FAILING' && has 'names an entry archived' && w_quiet 1; }
+ar_c2s()  { dv "$1" c2s;  ! hasF 'recorded FAILING' && hasF 'suppressed=1 ' && w_quiet 1; }
+ar_c2u()  { dv "$1" c2u;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
+ar_c2r()  { dv "$1" c2r;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
+ar_c2m()  { dv "$1" c2m;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
+ar_wsd()  { dv "$1" wsd;  ! hasF 'recorded FAILING' && has 'neither OVERRIDDEN nor SUPPRESSED'; }
 
-ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8"
+ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2u c2r c2m wsd"
 
 reg() { printf -v "OK_$1" '%s' "$2"; printf -v "BAD_$1" '%s' "$3"; }
 reg s1 "a SUPPRESSED entry inside its lifetime does not fire (exit 0)" "in-force suppression FAILED — the arm has no green state and would wedge every gate"
@@ -477,6 +513,17 @@ reg w5 "W5: a FAIL_WAIVED whose waiver_id names no pending.md entry FIRES with i
 reg w6 "W6: a waiver_id resolving to a DECIDED_AUTONOMOUSLY entry FIRES" "W6: a waiver resolving to a non-waiving status did not fire"
 reg w7 "W7: a waiver_id resolving only in pending-archive.md is acquitted with a NOTE, not silently" "W7: the archived waiver was not acquitted with its NOTE"
 reg w8 "W8: a FAIL_WAIVED row with an empty waiver_id FIRES" "W8: an empty waiver_id did not fire"
+reg c1 "C1: an expired SUPPRESSED entry of 32 does not re-fire when 32 is FAIL_WAIVED under ANOTHER entry's waiver" "C1: an unrelated waiver re-fired an expired suppression of the same check"
+reg c1b "C1: with that acquittal, a baselined EXPIRED:32 is reported as no longer reproducing" "C1: the stale EXPIRED baseline line was not reported, or the expiry still fired"
+reg c1u "C1: the acquittal holds for an id that resolves nowhere; section 6c still fails that id" "C1: an unresolvable other id re-fired the expiry, or 6c went quiet on it"
+reg c2ab "C2: a second OVERRIDDEN entry naming 32 is quiet when the row's OVERRIDDEN waiver sits ABOVE it" "C2: the second OVERRIDDEN entry fired with its waiver above it"
+reg c2ba "C2: the same, with the waiver BELOW it -- resolution reads the pre-pass table, not the entries so far" "C2: the second OVERRIDDEN entry fired with its waiver below it -- resolved against the entries read so far"
+reg c2a "C2: the same, with the OVERRIDDEN waiver archived to pending-archive.md" "C2: an archived OVERRIDDEN waiver did not stand the naming entry down"
+reg c2s "C2: an OVERRIDDEN entry naming 32 is quiet when 32 is waived by a SUPPRESSED entry targeting [core] 32" "C2: a matching SUPPRESSED waiver did not stand the OVERRIDDEN entry down"
+reg c2u "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver resolves nowhere" "C2: an unresolvable waiver stood an OVERRIDDEN entry down"
+reg c2r "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a RESOLVED entry" "C2: a RESOLVED waiver stood an OVERRIDDEN entry down"
+reg c2m "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a SUPPRESSED entry of another check" "C2: a mis-targeted SUPPRESSED waiver stood an OVERRIDDEN entry down"
+reg wsd "own-entry stand-down: a RESOLVED entry naming 32 is quiet when the row's waiver_id is its own header plus a trailing blank" "own-entry stand-down: the entry that IS the waiver fired -- the own-entry compare does not strip the row id"
 
 in_set() { case "$2" in *" $1 "*) return 0 ;; esac; return 1; }
 arm_eval() { # <key> <arm> -> 0 holds, 1 does not
@@ -701,9 +748,25 @@ build_r_rc() { mk_sub "$1" "$SR_G2" 'if false; then'; }
 build_r_readable_never() { mk_sub "$1" "$SR_G3" 'if false; then'; }
 build_r_readable_always() { mk_sub "$1" "$SR_G3" 'if true; then'; }
 # MW-*: the waived verdict. Each is scored only after the arm it targets PASSED unmutated in this same run.
-build_w_standdown() { mk_sub "$1" 'if [ "$tverdict" = "FAIL_WAIVED" ] && [ "${vrow##*$'"'"'\t'"'"'}" = "$wkey" ]; then' 'if false; then'; }
+SL_SD='if [ -n "$tw" ] && [ "$tw" = "$wkey" ]; then continue; fi'
+SL_C1='if [ "$verdict" = "FAIL" ] || { [ "$verdict" = "FAIL_WAIVED" ] && [ "$vwid" = "$wkey" ]; }; then'
+SL_C2='if [ "$status" = OVERRIDDEN ] && sl_lookup "$tw"; then'
+build_w_standdown() { mk_sub "$1" "$SL_SD" 'if false; then continue; fi'; }
 build_w_resolve() { mk_sub "$1" '  if [ -z "$wrec" ]; then' '  if [ -z "$wrec" ]; then continue; fi; if false; then'; }
-build_w_lifetime() { mk_sub "$1" 'if [ "$verdict" = "FAIL" ] || [ "$verdict" = "FAIL_WAIVED" ]; then' 'if [ "$verdict" = "FAIL" ]; then'; }
+build_w_lifetime() { mk_sub "$1" "$SL_C1" 'if [ "$verdict" = "FAIL" ]; then'; }
+# C1/C2. c1_revert: any FAIL_WAIVED re-fires the expiry. c2_exact: the ruling's mutant, exact match
+# only for OVERRIDDEN. c2_any: any FAIL_WAIVED stands an OVERRIDDEN entry down. c2_resolved: C2 for
+# RESOLVED too. c2_noprepass: the table holds only the entries read so far, as ENTRY_KEYS once did.
+build_c1_revert() { mk_sub "$1" "$SL_C1" 'if [ "$verdict" = "FAIL" ] || [ "$verdict" = "FAIL_WAIVED" ]; then'; }
+build_c2_exact() { mk_sub "$1" "$SL_C2" 'if false && sl_lookup "$tw"; then'; }
+build_c2_any() { mk_sub "$1" "$SL_C2" 'if [ "$status" = OVERRIDDEN ]; then continue; fi; if false; then'; }
+build_c2_resolved() { mk_sub "$1" "$SL_C2" 'if sl_lookup "$tw"; then'; }
+build_c2_noprepass() {
+  mk_sub "$1" 'SL_TABLE="$RECORDS"' 'SL_TABLE=""' \
+    '  short="$(printf '"'"'%s'"'"' "$header" | cut -c1-92)"' \
+    '  short="$(printf '"'"'%s'"'"' "$header" | cut -c1-92)"; SL_TABLE="${SL_TABLE}${header}$US${status}$US${supp}$US$US$US$US${suppcat}$US$US${wkey}${US}P
+"'
+}
 build_w_overridden() { mk_sub "$1" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; }
 
 # ===== mutants =====================================================================================
@@ -749,10 +812,16 @@ defm r_rc sr_Ag,sr_Ai,sr_Dg,sr_Di sr_Eg
 defm r_readable_never sr_Ag,sr_Ai sr_Dg
 defm r_readable_always sr_Dg,sr_Di sr_Ag
 # MW: the waived verdict.
-defm w_standdown w1,w3 w2
+defm w_standdown wsd w1
 defm w_resolve w5 w1
 defm w_lifetime w4 s2
 defm w_overridden w3,w1 w4
+# C1/C2: whose waiver is it.
+defm c1_revert c1,c1b,c1u w4
+defm c2_exact c2ab,c2ba,c2a,c2s c2u
+defm c2_any c2u,c2r,c2m c2ab
+defm c2_resolved w2 c2u
+defm c2_noprepass c2ba c2ab
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
 # The unmutated control: a lone copy. This validator resolves no sibling beside itself and its root by
@@ -797,7 +866,10 @@ fi
 mut_witness() { # <mutant> <vk> -> 0 when the mutant's extra observable holds (checked on cached drives)
   case "$1" in
     k_ts_dropped)    dv "$2" exp; [ "$DV_RC" = 1 ] && hasF "STILL FAILING" ;;                 # the FAIL still fires; only the ts channel moved
-    w_standdown)     dv "$2" wm_ovr; [ "$DV_RC" = 1 ] && has "recorded FAILING" ;;            # W1 dies by the terminal arm's own line
+    w_standdown)     dv "$2" wsd; [ "$DV_RC" = 1 ] && has "recorded FAILING" ;;               # the own-entry world dies by the terminal arm's own line
+    c1_revert)       dv "$2" c1; [ "$DV_RC" = 1 ] && hasF "$C1_MSG" && has 'latest recorded verdict is FAIL_WAIVED' ;;
+    c2_exact|c2_noprepass) dv "$2" c2ba; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" ;;
+    c2_resolved)     dv "$2" wo; [ "$DV_RC" = 0 ] && ! has 'recorded FAILING' ;;
     w_resolve)       dv "$2" wnone; [ "$DV_RC" = 0 ] && ! has "which names NO entry" && w_quiet 1 ;;   # the acquittal is the skipped resolution's
     w_lifetime)      dv "$2" wsup1; [ "$DV_RC" = 0 ] ;;
     w_overridden)    dv "$2" wm_ovr; has "^FAIL: 1 suppression-lifetime violation(s)" && [ "$(grep -c '^FAIL: ' <<<"$DV_O")" = "1" ] ;;
