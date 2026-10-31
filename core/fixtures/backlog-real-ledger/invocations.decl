@@ -1,5 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-341 *
-123 scripts/validate-backlog-receipts.sh
+342 *
+124 scripts/validate-backlog-receipts.sh
 4 scripts/validate-backlog-size.sh
 6 scripts/backlog-reverify.sh

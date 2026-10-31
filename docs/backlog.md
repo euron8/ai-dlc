@@ -1905,3 +1905,15 @@ verify: manual
 
 verify: manual
 
+## BL-882 — `seed-verdict-store.sh` prints only `tail -5` of a failing fixture's output, hiding the verdict lines
+
+**DEFECT.** Found while recovering the 0.971.0 release (owner filing): at `scripts/seed-verdict-store.sh:45`, a fixture that exits non-zero prints only `tail -5 "$work/$fx.out"` — the fixture's own last five lines, and the J3 verdict rows and any other diagnostic above them are never shown. Measured cost: the two `J3` invocation-count mismatches (postcompact-rulebook-recovery and review-shard-merge) that seeded the 0.971.0 push's red run were invisible in the pre-push seed runs of the same fixtures — the runs printed `rc` lines and the five tail lines only, and read as clean. Owed: on a failing fixture the script prints the failing verdict lines (`FAIL` rows, or the whole output) instead of the tail; the pass-path output stays as it is.
+
+verify: sh ! grep -q 'tail -5' scripts/seed-verdict-store.sh
+
+## BL-883 — readset-stage1-verdict cannot be traced and is permanently OMITTED, so it runs on every push
+
+**NOTE.** Found during the 0.971.0 read-set re-derivation (action 5 of the fixtures-to-unit-tests plan): the fixture's `--tracer sandbox` run exits 1 with stream drops, so `derive-fixture-readsets.sh --reconcile` records it in the committed map as `# OMITTED by the last run (always run): readset-stage1-verdict`. The consequence is a cost, not a coverage gap: the fixture runs on every push whatever changed. Owed: the trace runs clean and the fixture is keyed like its siblings. Not yet measured: cause of the exit-1-under-tracer. Provenance: 0.971.0 release work, `exp/fut-readset` line.
+
+verify: manual
+
