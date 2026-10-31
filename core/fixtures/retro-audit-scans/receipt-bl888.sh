@@ -24,6 +24,7 @@ ROOT="${1:-.}"
 ROOT="$(cd "$ROOT" 2>/dev/null && pwd -P)" || { echo "REFUSED: no root" >&2; exit 9; }
 [ -f "$ROOT/scripts/install.sh" ] || { echo "REFUSED: no scripts/install.sh under $ROOT" >&2; exit 9; }
 T="$(mktemp -d "${TMPDIR:-/tmp}/bl888.XXXXXX")" || exit 9
+[ -d "$T" ] || exit 9
 trap 'rm -rf "$T"' EXIT
 C="$T/c"
 mkdir -p "$C/_bmad" || exit 9
