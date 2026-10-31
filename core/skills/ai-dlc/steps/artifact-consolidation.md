@@ -80,8 +80,8 @@ returns `{artifact_path, summary, gaps}`, and its `gaps` are also in the `## Gap
 
 Dispatch an `analyst` (Rule 24; one source document, and no section join exists for an
 authoring draft, so one agent: Rule 28 "Split dispatch" serial exception 3) to produce two drafts, written to disk
-(NOT returned inline) **at these paths** — the step used to name none, and an
-unprescribed path is how eleven drafts landed in the durable area root:
+(NOT returned inline) **at these paths** — a draft with no prescribed path is a
+draft with no home, and an unprescribed path is how eleven drafts landed in the durable area root:
 - **Consolidated live draft** —
   `_bmad-output/planning-artifacts/s<N>/consolidation-draft-<artifact>-live.md`.
   Current-state only: deduplicated
@@ -140,12 +140,12 @@ Only after Steps 3–4 pass:
 
 ### 6. Retire the drafts, keep the record
 
-**DELETE both drafts. KEEP the manifest and the coverage report.** The step used to say
-nothing here, and the silence is how eleven drafts accumulated in the reference consumer
+**DELETE both drafts. KEEP the manifest and the coverage report.** Silence here
+is how eleven drafts accumulated in the reference consumer
 — one of them a 1383-line near-duplicate of the 1530-line live PRD, differing on 155
 lines, with nothing declaring which was authoritative. **Two files claiming to be the
-same artifact is the failure mode this whole step exists to end, and the step was
-manufacturing it.**
+same artifact is the failure mode this whole step exists to end, and a step that
+leaves the drafts in place manufactures it.**
 
 ```sh
 rm -f _bmad-output/planning-artifacts/s<N>/consolidation-draft-<artifact>-live.md \

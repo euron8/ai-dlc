@@ -563,7 +563,7 @@ artifact or anchor that is not there.
 `PASS — EXAMINED NOTHING` means the story carried no resolvable
 citation of either form: a legal state for a block that claims nothing,
 and the absence of evidence rather than evidence of correctness. It is
-reported separately because the two roads to exit 0 used to be spelled
+reported separately because the two roads to exit 0 are otherwise spelled
 identically — measured on a reference consumer, 196 of 998 stories took
 that road, 0 had ever taken the other, and every gate had read green.
 
@@ -885,10 +885,10 @@ Check 5 skips as source-free — the isolated section MUST carry `USER-CONFIRMED
 trace evidence in its Deploy Status Report, or Check 5 FAILs with `Check5_VISUAL_UI`. Write
 that evidence into this entry at the same time as the header.
 
-**This used to cite "CLAUDE.md Autonomous Gate Protocol" and that section does not exist.** It
-was a pre-R22 CLAUDE.md section, and `ai-dlc-setup/SKILL.md`'s own absorption table records it
-as having MOVED to this file — so the citation pointed at a section whose content was supposed
-to be here, and a consumer following it literally found nothing to follow and invented a format.
+**Never cite "CLAUDE.md Autonomous Gate Protocol": that section does not exist.** It
+belongs to the pre-R22 CLAUDE.md, and `ai-dlc-setup/SKILL.md`'s own absorption table records it
+as having MOVED to this file — so a citation points at a section whose content is supposed
+to be here, and a consumer following it literally finds nothing to follow and invents a format.
 The format is stated inline for that reason: an indirection to a file this distribution does not
 own cannot be kept true.
 
@@ -3028,7 +3028,7 @@ write no such file, and a gate that did not evaluate reads exactly like one that
 passed.
 
 **The story `capabilities:` field has THREE states, and they are three verdicts.** An
-empty field used to print *"carries no `capabilities:` frontmatter field"* — a sentence
+empty field must never print *"carries no `capabilities:` frontmatter field"* — a sentence
 that is false whenever the field is sitting right there in the frontmatter. A wrong
 diagnosis on a hard block is how checks get turned off: the author reads it, looks at the
 field, and concludes the check is broken. Measured on the reference consumer, 3 of the 4

@@ -1029,7 +1029,7 @@ audit (`gate-validation.md` Check 18).
 
 **A sprint that ends WITHOUT a retro-PR merge still owes an anchor.** A sprint
 reset or abandoned after its number was consumed reaches neither this step nor a
-merge SHA, so it used to leave a hole — and a hole and a missing anchor are the
+merge SHA, so it leaves a hole — and a hole and a missing anchor are the
 same observation, which is why Check 18 fails closed on both and why clearing one
 took an operator override. Write the close record instead:
 

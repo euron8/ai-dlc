@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.973.0] - 2026-10-31
+
+Batch b247. The rule-file audit stops reporting pointer lines and the core files state their rules in the present tense (BL-888), closing the consumer's PC-S320-RULE-FILE-AUDIT-36-NARRATIVE-DRIFT-FINDINGS-ALL-IN-CORE-FILES.
+
+Rulebook and engine changes: `core/scripts/audit-rule-files.sh`; present-tense rewrites in `core/skills/ai-dlc/SKILL.md`, its rendered `postcompact-digest.md`, `core/skills/ai-dlc/artifact-path-grammar.md`, `core/skills/ai-dlc/steps/artifact-consolidation.md`, `discovery.md`, `gate-validation.md` and `retro.md`, `core/skills/ai-dlc-update/SKILL.md`, and `core/team-roles/adversary.md`. Fixture changes: `core/fixtures/retro-audit-scans` (`run.sh`, `invocations.decl`, `tools.decl`). New receipt: `scripts/receipt-bl888-narrative-drift.sh`. Packaging: none. Backlog: `docs/backlog.md`, `docs/backlog.archive.md`.
+
+### The rule-file audit no longer reports pointer lines, and the core files state their rules in the present tense (BL-888)
+
+Consumer filing PC-S320-RULE-FILE-AUDIT-36-NARRATIVE-DRIFT-FINDINGS-ALL-IN-CORE-FILES. On a fresh consumer install, `scripts/ai-dlc/audit-rule-files.sh --fail-on=local` reported 36 NARRATIVE_DRIFT findings, every one in a core file the consumer cannot edit, so the retro's Step 4 scan handed it a worklist it could not act on.
+
+`core/scripts/audit-rule-files.sh` no longer matches `the reason is`: the 4 lines it flagged were pointers ("the reason is not restated here", "the reason is Rule 27"), not self-history, and the measurement is recorded beside the regex. The `measured:` pattern and the habitual `used to` detector are unchanged. 20 self-history sentences across the core step, skill and role files, plus the one copy rendered into `postcompact-digest.md`, now state their rule in the present tense with every rule, token and path kept. A consumer install now reports 11 NARRATIVE_DRIFT findings, all deliberate keeps (7 `Measured:` calibrations and 4 present-tense `used to` lines), down from 36. `scripts/receipt-bl888-narrative-drift.sh` builds a fresh install and asserts that count one-to-one against the keep list; it scrubs the inherited git environment through `core/fixtures/lib/preamble.sh` before any git call, so a run inside the pre-push hook cannot commit to the pushing repository.
+
+The `retro-audit-scans` fixture also gains an arm asserting a seeded pointer line is not flagged and a seeded `used to` line is, with a mutant restoring the token. Separately, that fixture's twin arms were dead under `hermetic-run.sh` before this release, because its `tools.decl` lacked `diff` and `paste`, which `run.sh` calls. This was a pre-existing dead arm; with both declared it can fire, and a seeded mismatch now fires.
+
 ## [0.972.0] - 2026-10-31
 
 Batch b247. `readset-stage1-verdict` sets its wrapper-mutant flags where `validate-mutant-kills.sh` can read them (BL-891).
