@@ -152,6 +152,29 @@
 #      `--base` resolving to nothing is reported NOT DERIVED, never as empty.
 #   No path-token filter is used by either arm, so neither carries a path-extraction floor.
 #
+# R9 -- THE LIVE-LEDGER JOINS (BL-872). Two joins that used to be arms j1 and b16 of
+# core/fixtures/backlog-real-ledger/, which now reads a frozen ledger snapshot so its invocation
+# count stops following docs/backlog.md. Against the LIVE ledger they run here, wherever the pre-push
+# step "backlog receipts" runs. That step is keyed on what it reads, the ledger among them, so a
+# ledger edit re-runs it; AI_DLC_PRESUITE_SKIP=1 skips it and R9 with it (BL-870):
+#   j1  this arm's own `sh` population (the scorer's count, R5's number) is AT LEAST the shipping
+#       classifier's resolved set -- the distinct ids scripts/backlog-reverify.sh reports from an sh
+#       receipt that ran (`sh receipt exited`). Smaller means receipts exist that this arm never scores.
+#   b16 scripts/validate-backlog-size.sh's B1 count equals the classifier's distinct entry ids; a
+#       declared-empty ledger is asked the declared state instead (ceiling 0 declared empty, one
+#       DECLARED-EMPTY row).
+#   The classifier evaluates every live receipt, so it runs inside a detached checkout of the subject
+#   repository's HEAD, never in the caller's tree, with BR_RECEIPTS_RUNNING set to this run's key so a
+#   receipt that re-enters this validator skips. A SELF-PROBE runs first, through the same readers and
+#   the same judge over the REAL classifier and ceiling on two seeded ledgers: the readers must parse
+#   both programs' real output (a format drift that empties a reading is caught there, not acquitted),
+#   the join must hold on the seeded truth, and it must FAIL with the arm's count one short (j1) and
+#   with a ceiling reading one more entry (b16). Where this tree carries no validate-backlog-size.sh
+#   (the receipt-binding fixture's seeds) or its HEAD no scripts/backlog-reverify.sh, R9 prints
+#   `R9: NOT RUN` and observes nothing, said as such in every verbosity. A zero on both sides is not
+#   refused: an all-manual ledger has no `sh` receipt, and the probe, not the corpus, proves the join
+#   can fire.
+#
 # EMPTY IS NOT CLEAN. Both populations print a line in every verbosity -- `OPEN-POPULATION: EMPTY`
 # when the ledger has no live `sh` receipt (the state on every push when this shipped: 43 live
 # entries, 0 `sh` receipts; control, the same ledger's `^verify:` lines, 47, of which the one
@@ -1961,6 +1984,94 @@ case "$(closed_line 0)" in "CLOSED-POPULATION: SKIPPED "*) ;; *) r7_fail "a re-e
 R7_PROBED="R7 fired both directions over 8 seeded open receipts and R8 over 9 seeded closed-population entries and the re-entry skip"
 }
 
+# ---------------------------------------------------------------------------
+# R9 -- THE LIVE-LEDGER JOINS (BL-872); see the header. ONE reader per producer and ONE judge, called
+# by the self-probe on seeded ledgers and by the corpus on the live one.
+# ---------------------------------------------------------------------------
+# r9_read_rows <classifier rows> -> "<resolved sh ids> <distinct ids> <rows> <first status>"
+r9_read_rows() {
+  printf '%s\n' "$1" | awk -F'\t' '
+    $0 == "" { next }
+    { n++; if (n == 1) first = $1; ids[$2] = 1 }
+    $3 ~ /^sh receipt exited/ { sh[$2] = 1 }
+    END { for (i in ids) ni++; for (s in sh) ns++; printf "%d %d %d %s\n", ns + 0, ni + 0, n + 0, (first == "" ? "-" : first) }'
+}
+# r9_read_size <validate-backlog-size.sh output> -> its B1 count, or nothing when B1 did not speak
+r9_read_size() {
+  printf '%s\n' "$1" | sed -n 's|^OK: validate-backlog-size -- B1 \([0-9][0-9]*\)/[0-9]* entries in .*|\1|p'
+}
+# r9_judge <arm sh count> <ceiling output> <classifier rows> -> one line; 0 both joins hold, 1 not
+r9_judge() {
+  _r9_rd="$(r9_read_rows "$3")"
+  read -r _r9_ns _r9_ni _r9_nr _r9_first <<<"$_r9_rd"
+  _r9_sz="$(r9_read_size "$2")"
+  if [ "$_r9_first" = DECLARED-EMPTY ]; then
+    if [ "$_r9_nr" -eq 1 ] && [ "$_r9_sz" = 0 ] && grep -qF ', declared empty (' <<<"$2"; then
+      echo "the ledger is declared empty, and the ceiling (0, declared empty) and the classifier (one DECLARED-EMPTY row) both say so"; return 0
+    fi
+    echo "the classifier says the ledger is declared empty and the ceiling disagrees (ceiling '${_r9_sz}', classifier rows ${_r9_nr})"; return 1
+  fi
+  if [ "$_r9_first" = INPUT-UNRESOLVED ] || [ "$_r9_nr" -eq 0 ]; then
+    echo "the classifier resolved no entry (rows ${_r9_nr}, first '${_r9_first}'), so neither join observed anything"; return 1
+  fi
+  if [ -z "$_r9_sz" ]; then
+    echo "validate-backlog-size.sh printed no B1 reading, so the ceiling join has no left side"; return 1
+  fi
+  if [ "$1" -lt "$_r9_ns" ]; then
+    echo "j1: this arm's sh population is $1 and backlog-reverify.sh resolves ${_r9_ns} sh receipts; the arm's population is SMALLER than the classifier's, so receipts exist that it never scores"; return 1
+  fi
+  if [ "$_r9_sz" -ne "$_r9_ni" ]; then
+    echo "b16: the ceiling counts ${_r9_sz} entries and backlog-reverify.sh classifies ${_r9_ni}"; return 1
+  fi
+  echo "j1 the sh population $1 covers the classifier's resolved set ${_r9_ns}; b16 the ceiling and the classifier agree at ${_r9_sz} entries"
+  return 0
+}
+# r9_run -> prints the R9 line on stdout; returns 0 held or not run, 1 a join failed, 2 a refusal
+r9_run() {
+  R9_SIZE="$SELF_ROOT/scripts/validate-backlog-size.sh"
+  if [ ! -f "$R9_SIZE" ]; then
+    echo "R9: NOT RUN -- scripts/validate-backlog-size.sh is absent beside this validator, so the live-ledger joins (j1 population, b16 ceiling) observed NOTHING in this tree; that is not a clean result."
+    return 0
+  fi
+  if ! git -C "$SUBJECT_ROOT" cat-file -e "HEAD:scripts/backlog-reverify.sh" 2>/dev/null; then
+    echo "R9: NOT RUN -- the subject repository's HEAD carries no scripts/backlog-reverify.sh, so the live-ledger joins (j1 population, b16 ceiling) observed NOTHING in this tree; that is not a clean result."
+    return 0
+  fi
+  R9_T="$WORK/t/r9"
+  mkdir -p "$WORK/t"
+  git -C "$SUBJECT_ROOT" worktree add --detach -q "$R9_T" HEAD >/dev/null 2>&1 \
+    || { echo "$(me): FAIL -- R9 could not check out HEAD of $SUBJECT_ROOT for the classifier; this is a refusal, not a reading." >&2; return 2; }
+  R9_REV="$R9_T/scripts/backlog-reverify.sh"
+  # THE SELF-PROBE, BOTH DIRECTIONS, BEFORE THE CORPUS, ON THE REAL PROGRAMS.
+  printf '# R9 probe\n\n## BL-001 — probe\n\nverify: sh true\n\n## BL-002 — probe\n\nverify: manual\n' > "$WORK/r9p2.md"
+  { cat "$WORK/r9p2.md"; printf '\n## BL-003 — probe\n\nverify: manual\n'; } > "$WORK/r9p3.md"
+  r9_prow="$(bash "$R9_REV" "$WORK/r9p2.md" 2>/dev/null)"
+  r9_ps2="$(AI_DLC_BACKLOG_MAX_ENTRIES=100000 bash "$R9_SIZE" "$WORK/r9p2.md" 2>&1)"
+  r9_ps3="$(AI_DLC_BACKLOG_MAX_ENTRIES=100000 bash "$R9_SIZE" "$WORK/r9p3.md" 2>&1)"
+  r9_pread="$(r9_read_rows "$r9_prow") $(r9_read_size "$r9_ps2") $(r9_read_size "$r9_ps3")"
+  r9_pfail=""
+  [ "$r9_pread" = "1 2 2 CLOSE-CANDIDATE 2 3" ] || r9_pfail="the readers parsed '$r9_pread' from the real classifier and ceiling on two seeded ledgers, want '1 2 2 CLOSE-CANDIDATE 2 3'"
+  [ -n "$r9_pfail" ] || r9_judge 1 "$r9_ps2" "$r9_prow" >/dev/null || r9_pfail="the join REFUSED the seeded truth (arm 1, classifier 1 resolved of 2, ceiling 2)"
+  [ -n "$r9_pfail" ] || ! r9_judge 0 "$r9_ps2" "$r9_prow" >/dev/null || r9_pfail="j1 ACCEPTED an arm population one short of the classifier's"
+  [ -n "$r9_pfail" ] || ! r9_judge 1 "$r9_ps3" "$r9_prow" >/dev/null || r9_pfail="b16 ACCEPTED a ceiling reading one entry more than the classifier"
+  if [ -n "$r9_pfail" ]; then
+    git -C "$SUBJECT_ROOT" worktree remove --force "$R9_T" >/dev/null 2>&1 || rm -rf "$R9_T"
+    echo "$(me): SELF-PROBE FAILED -- R9: $r9_pfail; the live-ledger joins below would prove nothing." >&2
+    return 2
+  fi
+  # THE CORPUS. The classifier's receipts run in the checkout; a re-entry into this validator skips.
+  r9_rows="$(BR_RECEIPTS_RUNNING="$LEDGER_KEY" bash "$R9_REV" "$LEDGER" 2>/dev/null)"
+  r9_size="$(AI_DLC_BACKLOG_MAX_ENTRIES=100000 bash "$R9_SIZE" "$LEDGER" 2>&1)"
+  git -C "$SUBJECT_ROOT" worktree remove --force "$R9_T" >/dev/null 2>&1 || rm -rf "$R9_T"
+  if r9_why="$(r9_judge "$SH_RECEIPTS" "$r9_size" "$r9_rows")"; then
+    echo "R9: OK -- live-ledger joins on ${LEDGER}: ${r9_why} (probe fired both directions)."
+    return 0
+  fi
+  echo "FAIL: R9: live-ledger join on ${LEDGER}: ${r9_why}." >&2
+  echo "R9: FAIL -- see stderr."
+  return 1
+}
+
 vbr_sec_corpus() {
 # ---------------------------------------------------------------------------
 # THE CORPUS.
@@ -2121,6 +2232,10 @@ if [ "$SH_RECEIPTS" -lt "$MIN_SH" ]; then
     RC=1
   fi
 fi
+# R9, after every read of $WORK/counts and $WORK/unrec above; its line prints in both verbosities.
+r9_run; _r9_rc=$?
+[ "$_r9_rc" -eq 2 ] && exit 2
+[ "$_r9_rc" -eq 0 ] || RC=1
 eff_report || RC=1
 [ "$RC" -ne 0 ] && exit 1
 

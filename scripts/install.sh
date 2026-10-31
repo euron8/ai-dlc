@@ -55,6 +55,40 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+# The source must be a git work tree whose top level IS this distribution (BL-892).
+#
+# SHIPPING FIXTURES ARE COPIED FROM THE INDEX, NOT FROM THE DIRECTORY. A directory copy carries
+# whatever happens to sit beside a fixture's tracked files -- a `__pycache__/` next to a fixture's
+# .py file, an editor swap file, a scratch log -- into a real consumer's suite, silently. So the
+# fixture loop below reads `git ls-files`, and this check runs before anything is written, so a
+# refusal leaves the target untouched. The documented install runs from a clone of the
+# distribution. A tarball or `git archive` extraction has no index to read, and it is REFUSED here
+# rather than falling back to a directory copy: a fallback would ship stray files again on the one
+# path nobody tests. THE TOP-LEVEL COMPARISON IS LOAD-BEARING. A copy extracted inside some other
+# repository answers `rev-parse` with rc 0 and an `ls-files` with nothing in it, which would ship
+# no fixture at all and print no error. Both sides are physical paths, because `/tmp` and
+# `/var/folders` are symlinks on macOS and `rev-parse --show-toplevel` resolves them.
+#
+# GIT_DIR AND ITS SIBLINGS ARE SCRUBBED for every git call made for the copy, as
+# core/fixtures/lib/preamble.sh does: run from inside a hook, an inherited GIT_DIR would point
+# `git -C` at the CALLING repository.
+ai_dlc_src_git() {
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    git -C "$AI_DLC_ROOT" "$@" )
+}
+AI_DLC_ROOT_PHYS="$(cd "$AI_DLC_ROOT" && pwd -P)"
+ai_dlc_src_top="$(ai_dlc_src_git rev-parse --show-toplevel 2>/dev/null)" || ai_dlc_src_top=""
+[ -n "$ai_dlc_src_top" ] && ai_dlc_src_top="$(cd "$ai_dlc_src_top" 2>/dev/null && pwd -P)"
+if [ -z "$ai_dlc_src_top" ] || [ "$ai_dlc_src_top" != "$AI_DLC_ROOT_PHYS" ]; then
+  echo "Error: $AI_DLC_ROOT is not a git work tree of its own, so install.sh cannot tell which"
+  echo "fixture files the distribution ships. Install from a clone of the distribution"
+  echo "(git clone ...), not from a tarball, an archive or a copied directory."
+  echo "Nothing was written to $PROJECT_ROOT."
+  exit 1
+fi
+AI_DLC_FX_LS="$(mktemp "${TMPDIR:-/tmp}/ai-dlc-install-fixtures.XXXXXX")"
+trap 'rm -f "$AI_DLC_FX_LS"' EXIT
+
 # Create directories
 echo "Creating directories..."
 mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/steps"
@@ -681,9 +715,25 @@ for fixture_dir in $(
     _fn="${_fd%/}"; printf '%s\n' "${_fn##*/}"
   done | sort
 ); do
+  # TRACKED FILES ONLY, NESTED ONES INCLUDED, MODES KEPT (BL-892). The list is the index's,
+  # read through the scrubbed call above, so an untracked or ignored file beside a fixture's
+  # tracked ones (a `__pycache__/`, a scratch log) never reaches a consumer. A plain
+  # `cp dir/*` refused a subdirectory and aborted the install under `set -e`; `cp -pR dir/*`
+  # fixed that and copied every stray file on disk instead. A fixture directory with no
+  # tracked file at all (a deleted fixture's leftovers) is skipped before the `mkdir`, so
+  # the consumer gets no empty directory that uninstall's hand list would never remove.
+  # Top-level dotfiles stay out, exactly as under the old `*` glob.
+  ai_dlc_src_git ls-files -z -- ":(literal)core/fixtures/$fixture_dir" > "$AI_DLC_FX_LS" \
+    || { echo "Error: git ls-files failed for core/fixtures/$fixture_dir/"; exit 1; }
+  [ -s "$AI_DLC_FX_LS" ] || continue
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
-    cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"
+    while IFS= read -r -d '' _fx_path; do
+      _fx_rel="${_fx_path#"core/fixtures/$fixture_dir/"}"
+      case "$_fx_rel" in .*) continue ;; esac
+      case "$_fx_rel" in */*) mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir/${_fx_rel%/*}" ;; esac
+      cp -p "$AI_DLC_ROOT/$_fx_path" "$PROJECT_ROOT/tests/fixtures/$fixture_dir/$_fx_rel"
+    done < "$AI_DLC_FX_LS"
     # chmod the whole glob, not two named scripts -- the same reasoning the reconcile
     # loop above states. `cp` preserves the source mode on a NEW file, so a fixture
     # shipping a third executable works by luck; on an OVERWRITE it keeps the

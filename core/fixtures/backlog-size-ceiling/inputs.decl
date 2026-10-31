@@ -1,5 +1,6 @@
 # Reads the entry-boundary library, and copies the ceiling validator and the classifier into each
-# seeded tree. The real ledger is not read here: its join (b16) is core/fixtures/backlog-real-ledger/.
+# seeded tree. The real ledger is not read here: its join (b16) is core/fixtures/backlog-real-ledger/
+# over a frozen snapshot, and R9 of scripts/validate-backlog-receipts.sh over the live ledger.
 # VERSION is not declared: every seed writes its own.
 !scripts/validate-backlog-size.sh
 !scripts/backlog-reverify.sh

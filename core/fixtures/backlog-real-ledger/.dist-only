@@ -2,13 +2,14 @@ This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
 
 Both of the rule's corpus and subject shapes apply, either alone being sufficient.
 
-Its CORPUS is docs/backlog.md, this repository's own carry-over backlog, and a consumer tree gets
-no docs/backlog.md at all. Its SUBJECTS are scripts/validate-backlog-receipts.sh,
+Its CORPUS is ledger.snapshot, a frozen copy of docs/backlog.md, this repository's own carry-over
+backlog; a consumer tree gets no docs/backlog.md at all. Its SUBJECTS are scripts/validate-backlog-receipts.sh,
 scripts/validate-backlog-size.sh and scripts/backlog-reverify.sh, none of which install.sh
 copies: its copy loop derives from core/fixtures/ and core/scripts/ and never touches the
 repo-root scripts/. On a consumer this fixture would resolve no validator and no ledger.
 
 It holds the two real-ledger joins that used to be arm j1 of core/fixtures/backlog-receipt-binding/
-and arm b16 of core/fixtures/backlog-size-ceiling/, moved here so the unit keyed on the ledger
-(`+docs/backlog.md` in inputs.decl) is cheap. Those two fixtures carry the same declaration for
+and arm b16 of core/fixtures/backlog-size-ceiling/. BL-872 froze the ledger they read into
+ledger.snapshot; against the live docs/backlog.md they run as arm R9 of
+scripts/validate-backlog-receipts.sh at pre-push. Those two fixtures carry the same declaration for
 the same reason.

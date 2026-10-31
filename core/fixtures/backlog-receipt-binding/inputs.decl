@@ -1,7 +1,8 @@
 # backlog-receipt-binding reads these paths outside its own directory. The validator under test is
 # copied into every probe repository (seed) and then run; the other files are copied beside it, or
 # read to derive the receipt-join arm (rj). The real ledger's population join (j1) is
-# core/fixtures/backlog-real-ledger/ now; the archive stays, because rj reads it.
+# core/fixtures/backlog-real-ledger/ now (over a frozen snapshot; the live ledger's is the
+# validator's own R9); the archive stays, because rj reads it.
 !scripts/validate-backlog-receipts.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh

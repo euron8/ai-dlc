@@ -42,6 +42,13 @@ fail=0
 for fx in "$@"; do
   bash core/scripts/hermetic-run.sh "$fx" > "$work/$fx.out" 2>&1; rc=$?
   printf '%s rc=%s\n' "$fx" "$rc"
-  [ "$rc" = 0 ] || { fail=1; tail -5 "$work/$fx.out"; }
+  if [ "$rc" != 0 ]; then
+    fail=1
+    # A red prints the verdict lines (never a bare tail, which hid the J3 rows above it), plus the hermetic-run trailer;
+    # with no verdict line at all it prints the whole output.
+    if grep -Eq 'FAIL|J[1-5]|BROKEN|ERROR|REQUIRED input' "$work/$fx.out"; then
+      grep -E "FAIL|J[1-5]|BROKEN|ERROR|REQUIRED input|^hermetic-run: $fx: rc=" "$work/$fx.out"
+    else cat "$work/$fx.out"; fi
+  fi
 done
 exit "$fail"

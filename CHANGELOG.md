@@ -19,6 +19,44 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.980.0] - 2026-10-31
+
+Batch b247, tooling cluster. `seed-verdict-store.sh` prints a failing fixture's verdict lines (BL-882), the provisional `±` invocation row is refused at J4 (BL-868 item 6), `install.sh` ships only a fixture's tracked files and refuses a non-git source (BL-892), and `backlog-real-ledger` and `shipped-rule-version-floor` stop re-keying on unrelated edits (BL-871, BL-872).
+
+Rulebook and engine changes: `CLAUDE.md` (no mandatory `AI_DLC_PRESUITE_SKIP=1`); `scripts/seed-verdict-store.sh`; `scripts/validate-fixture-invocations.sh`; `scripts/install.sh`; `scripts/validate-backlog-receipts.sh` (arm R9). Fixture changes: new `seed-verdict-store-red-print`; `shipped-rule-version-floor`, `backlog-real-ledger`, `schema-install-fallback` and the fixtures whose `invocations.decl` moved. Backlog: `docs/backlog.md`, `docs/backlog.archive.md`.
+
+### seed-verdict-store.sh prints a failing fixture's verdict lines (BL-882)
+
+On a red fixture the script printed only `tail -5` of its output, which hid the J3 rows that explained the failure. It now prints the lines matching `FAIL|J[1-5]|BROKEN|ERROR|REQUIRED input` plus the `hermetic-run: <fx>: rc=` trailer, and the whole output when nothing matches. The pass path is unchanged. The new `.dist-only` fixture `seed-verdict-store-red-print` drives the script against a stub runner and scores two mutants.
+
+### The `±` judge form is removed, and a `±` row is refused at J4 (BL-868 item 6)
+
+`scripts/validate-fixture-invocations.sh` no longer carries the `<n>±<k> <target> why=<loop> provisional` form. Any `±` count now parses as a malformed row and FAILs J4, and the self-probe's eight tolerance seeds are must-refuse seeds. No tracked `invocations.decl` carries `±`. BL-868 stays PARTIAL: items 7, 8 and 9 are still owed.
+
+### BL-850 is closed, its owed items carried into BL-878
+
+Every owed item of the fixture-optimisation umbrella is now in BL-878's text, in its "Owed items carried from BL-850" block, or is done elsewhere. The entry is rotated to the archive.
+
+### The mandatory pre-suite skip flag is removed from CLAUDE.md (BL-870)
+
+CLAUDE.md no longer tells unit pushes to set `AI_DLC_PRESUITE_SKIP=1`, so a unit push runs the keyed pre-suite. BL-870 stays PARTIAL and closes on a release push's `pre-suite keys:` line.
+
+### Six invocation-count changes state their cause (BL-873)
+
+The six fixtures whose `invocations.decl` rose in 0.968.0 (carried-findings, check-31-ac-falsifiability, review-reroute, review-shard-merge, sprint-status-lifecycle, story-evidence-scaffold) each have their cause stated in the entry.
+
+### shipped-rule-version-floor declares core/fixtures/ as a read-set fact (BL-871)
+
+The fixture runs `install.sh`, which copies the shipping fixture set, so a new fixture directory must re-key it. Its `inputs.decl` now declares `core/fixtures/` whole, and the receipt is `core/fixtures/shipped-rule-version-floor/receipt-bl871.sh`.
+
+### backlog-real-ledger reads a frozen ledger snapshot (BL-872)
+
+The fixture reads `ledger.snapshot` instead of the live `docs/backlog.md`, so a backlog edit no longer re-keys it or moves its invocation count. The live-ledger j1 and b16 joins move to arm R9 of `scripts/validate-backlog-receipts.sh`, and the new mutant `m-r9call` covers its call site. Receipt: `core/fixtures/backlog-real-ledger/receipt-bl872.sh`.
+
+### install.sh copies only a fixture's git-tracked files and refuses a non-git source (BL-892)
+
+The fixture loop copied each shipping fixture with a flat `cp <fixture>/*`, which aborted the consumer install on a subdirectory. It now lists each fixture with `git ls-files -z` and copies each tracked file with its mode, nested directories included, so untracked and ignored files do not ship. A source that is not a git work tree whose top level is the distribution makes `install.sh` refuse with exit 1 before writing anything. Proof: arm I of `shipped-rule-version-floor`. This is a consumer-facing behaviour change, ruled by the operator on 2026-10-31: `install.sh` now installs only from a git clone of the distribution, as documented at `README.md:88`, so a `git archive` extraction, a tarball, or a copy nested inside another repository now fails closed.
+
 ## [0.979.0] - 2026-10-31
 
 Batch b247. The predicate differential no longer reads a missing `gate_adjudication.py` as a mass reclassification (BL-893). Machinery-only; it ships alone.

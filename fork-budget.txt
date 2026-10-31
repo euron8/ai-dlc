@@ -33,4 +33,10 @@
 # :6414 +2), I84 +2 (:9182, :9188), I83 +1 (:9079). The new script resolves its root through the
 # AI_DLC_PROJECT_ROOT chain, so it is one more I75 subject and one more file the I83/I84 per-file greps
 # read; no loop and no validator code changed. The budget is the high reading plus the same +4 margin.
-FORK_BUDGET=3472
+#
+# Raised 3472 -> 3475 for `core/fixtures/seed-verdict-store-red-print/` (BL-882). Measured with
+# `core/fixtures/validator-fork-budget/run.sh`, each run from inside its own clean detached worktree: base
+# 91374cf9e read 3470 across 261 fixture dirs, the b247-tooling tip 81abd3f47 read 3471 across 262. The +1
+# is the new fixture dir, which the validator walks; no validator code changed. The budget is the high
+# reading plus the same +4 margin.
+FORK_BUDGET=3475

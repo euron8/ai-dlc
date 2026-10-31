@@ -11,7 +11,8 @@ the consumer's own suite verdict.
 
 It also copies scripts/backlog-reverify.sh into every seed and reads docs/backlog.archive.md for
 its receipt join (rj). Neither exists on a consumer. Its real-ledger population join (j1) moved
-to core/fixtures/backlog-real-ledger/, which is keyed on docs/backlog.md.
+to core/fixtures/backlog-real-ledger/, which runs it over a frozen ledger snapshot; against the
+live docs/backlog.md it runs as arm R9 of scripts/validate-backlog-receipts.sh at pre-push.
 
 The consumer's equivalent ledger is the push-candidate ledger under
 _bmad-output/ai-dlc-update/, whose own fixtures (ledger-reverify, ledger-rotate,
