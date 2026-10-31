@@ -2634,6 +2634,15 @@ CR_P2="$(G -C "$CR_REPO" rev-parse HEAD)"
 G -C "$CR_REPO" checkout -q -b evil "$CR_REC" && printf 'def test_evil():\n    assert False\n' > "$CR_REPO/test-results/test_evil.py" \
   && G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m evil && CR_EVIL="$(G -C "$CR_REPO" rev-parse HEAD)" \
   && G -C "$CR_REPO" checkout -q - || { echo "FIXTURE ERROR: the evil branch was not seeded" >&2; exit 2; }
+# CR_NEWS: over CR_BASE, one commit adding a second story, stories/story-2.md (status: review), so the story
+# is absent at the base and a blob at the frozen sha: the created-after-base story story-base accepts.
+CR_STORY2=stories/story-2.md
+G -C "$CR_REPO" checkout -q -b created "$CR_BASE" && printf -- '---\nstatus: review\n---\n# Story 2\nFull-collection run: none, record-only\n' > "$CR_REPO/$CR_STORY2" \
+  && G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m created && CR_NEWS="$(G -C "$CR_REPO" rev-parse HEAD)" \
+  && G -C "$CR_REPO" checkout -q - || { echo "FIXTURE ERROR: the created-story branch was not seeded" >&2; exit 2; }
+! G -C "$CR_REPO" cat-file -e "${CR_BASE}:$CR_STORY2" 2> /dev/null && [ "$(G -C "$CR_REPO" cat-file -t "${CR_NEWS}:$CR_STORY2")" = blob ] \
+  && [ "$(G -C "$CR_REPO" cat-file -t "${CR_CODE}:stories")" = tree ] && ! G -C "$CR_REPO" cat-file -e "${CR_CODE}:stories/typo.md" 2> /dev/null \
+  || { echo "FIXTURE STALE: story-2 is not absent at CR_BASE and a blob at CR_NEWS, or stories/ is no tree (or typo.md exists) at CR_CODE" >&2; exit 2; }
 # PROJ_CRS: a serial root whose qa.md predates the label (the LEGACY branch of --check-serial).
 PROJ_CRS="$WORK/proj-crs"
 mkdir -p "$PROJ_CRS/core/skills/ai-dlc/steps" "$PROJ_CRS/core/team-roles" \
@@ -2935,6 +2944,18 @@ p_canon() {
   # `review`), and an empty CR_CODE..CR_CODE too; over the whole story the partition refuses it.
   if cell cr-exempt-narrow; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-narrow "$CR_GATE1" --story "$CR_STORY" --range "$CR_CODE" "$CR_P2"; fi
   if cell cr-exempt-empty; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-empty "$CR_GATE1" --story "$CR_STORY" --range "$CR_CODE" "$CR_CODE"; fi
+  # BL-885: the same empty range with --story ABSOLUTE. A story path record-only-diff.sh cannot resolve at the base
+  # read as "no story there yet", a gate-1 base, and the empty diff as record-only, so the exemption was ACCEPTED.
+  if cell cr-exempt-abs; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-abs "$CR_GATE1" --story "$CR_REPO/$CR_STORY" --range "$CR_CODE" "$CR_CODE"; fi
+  # BL-885: --story ABSOLUTE over the genuinely record-only CR_BASE..CR_REC (story-1 ready-for-dev at the base) is
+  # accepted only when the path is normalised to the repo-relative story: unnormalised it is no file at the base or
+  # at the frozen sha, and the diff's stories/story-1.md is no story path.
+  if cell cr-exempt-abs-rec; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-exempt-abs-rec --story "$CR_REPO/$CR_STORY" --range "$CR_BASE" "$CR_REC"; fi
+  # A story that is no file at the base or at the frozen sha (a typo, a directory) is not a gate-1 base, even over the
+  # empty range; its ALLOW twin is a story created after the base (absent there, a blob at the frozen sha).
+  if cell cr-exempt-typo; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-typo "$CR_GATE1" --story stories/typo.md --range "$CR_CODE" "$CR_CODE"; fi
+  if cell cr-exempt-dir; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-dir "$CR_GATE1" --story stories --range "$CR_CODE" "$CR_CODE"; fi
+  if cell cr-exempt-created; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-exempt-created --story "$CR_STORY2" --range "$CR_BASE" "$CR_NEWS"; fi
   if cell cr-exempt-whole; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-whole "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_P2"; fi
   if cell cr-exempt-nonanc; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-nonanc "$CR_NOANC" --story "$CR_STORY" --range "$CR_CODE" "$CR_REC"; fi
   if cell cr-bare; then SR_CANON='Canonical run: none' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-bare "gives no reason" --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"; fi
@@ -2961,6 +2982,35 @@ p_canon() {
     [ "$SRC" -eq 0 ] && has "$CO" "LEGACY: canonical-run lines not checked:" && has "$CO" "SERIAL-OK:" || WHY="$WHY cr-serial-legacy{rc=$SRC $(head -1 "$CO")}"
   fi
   rm -f "$f"
+  [ -z "$WHY" ]
+}
+# SP1 (BL-885): the story path record-only-diff.sh resolves, asked of its story-base and paths modes by
+# receipt-bl885.sh (beside this file in both layouts) over <script-dir>'s copy. Presence-shaped: every one of the
+# receipt's 14 cells must print its `ok` row; a failing cell's FAIL row is the reason a mutant's kill must carry.
+SP_CELLS=14
+p_story_path() { # <script-dir>
+  local sd="$1" o rc n
+  WHY=""
+  if cell story-path; then
+    o="$(bash "$LIB_DIR/receipt-bl885.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
+    n="$(grep -c '^ok ' <<<"$o")" || n=0
+    [ "$rc" = 0 ] && [ "$n" = "$SP_CELLS" ] \
+      || WHY="$WHY story-path{rc=$rc ok=$n/$SP_CELLS $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
+  fi
+  [ -z "$WHY" ]
+}
+# SP2 (BL-885): story-base's third operand <frozen>, asked by receipt-bl885-frozen.sh over <script-dir>'s copy. The
+# same presence shape: every one of the receipt's 8 cells must print its `ok` row.
+SF_CELLS=8
+p_story_frozen() { # <script-dir>
+  local sd="$1" o rc n
+  WHY=""
+  if cell story-frozen; then
+    o="$(bash "$LIB_DIR/receipt-bl885-frozen.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
+    n="$(grep -c '^ok ' <<<"$o")" || n=0
+    [ "$rc" = 0 ] && [ "$n" = "$SF_CELLS" ] \
+      || WHY="$WHY story-frozen{rc=$rc ok=$n/$SF_CELLS $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
+  fi
   [ -z "$WHY" ]
 }
 # CR2: the merge holds the execution owner's file (cross-1) to the rule, and a frozen tree whose

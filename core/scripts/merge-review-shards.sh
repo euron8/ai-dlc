@@ -193,7 +193,9 @@
 #   range is the whole story, and the merge refuses `--range`. In --check-serial the seat passes
 #   `--range <b> <f>` (no manifest exists), read in the serial file's own repository, and <b> is held
 #   to a gate-1 base's shape: an ancestor of <f>, at which the story is absent or carries no
-#   `Full-collection run:` line and is not `review` or `done` (record-only-diff.sh STORY-BASE). A
+#   `Full-collection run:` line and is not `review` or `done` (record-only-diff.sh STORY-BASE); the
+#   seat passes <f> as story-base's third operand, so a story that is no file at <b> or at <f> (a typo,
+#   a directory, a path inside .git/) is UNEVALUABLE and REFUSED rather than read as absent. A
 #   claimed exemption with no --story or no range is REFUSED; a bare `none` is REFUSED.
 #   LEGACY. The merge holds a set to this rule only when qa.md AS INSTALLED at the manifest's frozen
 #   sha (`.claude/team-roles/qa.md`, then `core/team-roles/qa.md`, read in the manifest's worktree),
@@ -567,7 +569,7 @@ canon_gate() {
       # The seat supplies its own range, so its base is held to a gate-1 base's shape (header).
       git -C "$cg_r_" merge-base --is-ancestor "$cg_b_" "$cg_z_" 2> /dev/null < /dev/null \
         || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not an ancestor of $cg_z_; pass the base gate 1 used"
-      cg_sb_="$(mrs_sib "$RO" ro_main story-base -C "$cg_r_" "$STORY_F" "$cg_b_" 2>&1)" \
+      cg_sb_="$(mrs_sib "$RO" ro_main story-base -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \
         || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not the story's gate-1 base ($cg_sb_); the exemption is decided over the WHOLE story, from the base gate 1 used, on every pass"
     fi
     cg_ro_="$(mrs_sib "$RO" ro_main paths -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \

@@ -9,7 +9,7 @@
 #   record-only-diff.sh run-shape <value> [<conventions file>]
 #   record-only-diff.sh setup-shape <value>
 #   record-only-diff.sh run-filter <value> [<conventions file>]
-#   record-only-diff.sh story-base [-C <repo>] <story-file> <base>
+#   record-only-diff.sh story-base [-C <repo>] <story-file> <base> [<frozen>]
 #
 # RUN-FILTER. Exit 0 when the invocation in <value> is the unfiltered canonical collection, 1 with
 # the reason on stdout when it narrows it. The invocation is the first backticked span naming
@@ -33,9 +33,14 @@
 # `pytest rebalancer/tests` and `<venv>/bin/python -m pytest -m unit`, and its QA records run both.
 #
 # STORY-BASE. The serial seat supplies its own --range, so the exemption's base is held to the
-# shape a gate-1 base has: exit 0 when <story-file> at <base> is absent, or carries no column-0
+# shape a gate-1 base has. With the optional third operand <frozen> (the exemption caller passes it),
+# a <story-file> that is not a blob at <base> is decided first: a tree or commit there is exit 2, and
+# a path absent at <base> is exit 0 only when it is a blob at <frozen> (a story created after the
+# base), else exit 2 (a typo, a directory, a path inside .git/). The two-operand form keeps the old
+# reading below, where absent at <base> is exit 0. Exit 0 when <story-file> at <base> is absent, or carries no column-0
 # `Full-collection run:` label and a frontmatter `status:` other than `review` and `done` (the dev
-# has not handed off yet). Exit 1 with the reason on stdout otherwise: <base> is a later sha (a
+# has not handed off yet). <story-file> is read as PATHS reads it: repo-relative or absolute inside
+# the repository; any other spelling is exit 2. Exit 1 with the reason on stdout otherwise: <base> is a later sha (a
 # rework pass's previous frozen sha, or the frozen sha itself), which narrows the range the
 # exemption is decided over. Exit 2 UNEVALUABLE. Measured on the reference consumer's 73 shard
 # manifests: all 35 gate-1 bases answer 0 (status `ready`/`ready-for-dev`, no label); 24 of the 38
@@ -78,10 +83,13 @@
 # RECORD path; stdout then carries `RECORD-ONLY: <n> changed path(s)`. Exit 1 when one is not;
 # stdout carries `NOT-RECORD-ONLY: <n> changed path(s), first non-record path <p>`. Exit 2
 # UNEVALUABLE (not a repository, a ref that does not resolve), with the reason on stderr.
+# <story-file> is repo-relative (a leading `./` is dropped) or absolute inside the repository; an
+# absolute path is resolved physically, and a spelling that cannot be normalised (empty, or an empty,
+# `.` or `..` component) or a path outside the repository is exit 2 UNEVALUABLE.
 # An empty diff (base == frozen) is record-only: nothing the canonical collection reads moved.
 #
 # THE PARTITION. A path is a record path when it is exactly one of:
-#   - the <story-file> argument itself (identity, after a leading `./` is dropped);
+#   - the <story-file> argument itself (identity, after the story is made repo-relative: see PATHS);
 #   - `_bmad-output/implementation-artifacts/sprint-status.yaml` or
 #     `_bmad-output/planning-artifacts/sprint-status.yaml` (sprint-status.sh's two VIEWS);
 #   - anything under `docs/reviews/`, `test-results/` or `docs/escalations/`, EXCEPT a file a
@@ -227,6 +235,35 @@ ro_run_filter() {
     done <<<"$RF_RUN"
     exit 0
 }
+# ro_story_rel <repo> <story> prints the story as a path relative to the repository top. A relative
+# spelling is only normalised (a leading `./` plus any run of `/`, repeatedly) and refused when it
+# is empty or has an empty, `.` or `..` component; an absolute spelling is resolved physically
+# (`cd -P`) against the physical top and refused when it lies outside the repository.
+ro_story_rel() {
+    local rs_repo="$1" rs_p="$2" rs_top rs_dir rs_base
+    while :; do
+      case "$rs_p" in ./*) rs_p="${rs_p#./}"; rs_p="${rs_p#"${rs_p%%[!/]*}"}" ;; *) break ;; esac
+    done
+    case "$rs_p" in
+      /*)
+        rs_base="${rs_p##*/}"
+        case "$rs_base" in ''|.|..) echo "$ME: UNEVALUABLE — story path has no file name: $2" >&2; return 2 ;; esac
+        rs_top="$(cd -P "$(git -C "$rs_repo" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)" \
+          || { echo "$ME: UNEVALUABLE — repository top does not resolve: $rs_repo" >&2; return 2; }
+        rs_dir="$(cd -P "$(dirname "$rs_p")" 2>/dev/null && pwd -P)" \
+          || { echo "$ME: UNEVALUABLE — story directory does not resolve: $2" >&2; return 2; }
+        case "$rs_dir" in
+          "$rs_top") printf '%s\n' "$rs_base" ;;
+          "$rs_top"/*) printf '%s\n' "${rs_dir#"$rs_top"/}/$rs_base" ;;
+          *) echo "$ME: UNEVALUABLE — story path is outside the repository: $2" >&2; return 2 ;;
+        esac ;;
+      *)
+        case "/$rs_p/" in
+          //|*//*|*/./*|*/../*) echo "$ME: UNEVALUABLE — story path is not a plain relative path: $2" >&2; return 2 ;;
+        esac
+        printf '%s\n' "$rs_p" ;;
+    esac
+}
 ro_story_base() {
     shift
     REPO=.
@@ -234,11 +271,23 @@ ro_story_base() {
       [ $# -ge 2 ] || { echo "$ME: UNEVALUABLE — -C needs a directory" >&2; exit 2; }
       REPO="$2"; shift 2
     fi
-    [ $# -eq 2 ] || { echo "usage: $ME story-base [-C <repo>] <story-file> <base>" >&2; exit 2; }
+    { [ $# -eq 2 ] || [ $# -eq 3 ]; } || { echo "usage: $ME story-base [-C <repo>] <story-file> <base> [<frozen>]" >&2; exit 2; }
     git -C "$REPO" rev-parse --verify --quiet "$2^{commit}" >/dev/null 2>&1 \
       || { echo "$ME: UNEVALUABLE — base does not resolve: $2" >&2; exit 2; }
-    git -C "$REPO" cat-file -e "$2:${1#./}" 2>/dev/null || exit 0
-    sb_t="$(git -C "$REPO" show "$2:${1#./}" 2>/dev/null)"
+    sb_rel="$(ro_story_rel "$REPO" "$1")" || exit 2
+    if [ $# -eq 3 ]; then
+      sb_ty="$(git -C "$REPO" cat-file -t "$2:$sb_rel" 2>/dev/null)" || sb_ty=""
+      case "$sb_ty" in
+        blob) ;;
+        "") # absent at <base>: a story created after it is a blob at <frozen>; anything else is no story
+            [ "$(git -C "$REPO" cat-file -t "$3:$sb_rel" 2>/dev/null)" = blob ] && exit 0
+            echo "$ME: UNEVALUABLE — story is not a file at $2 or $3: $1" >&2; exit 2 ;;
+        *) echo "$ME: UNEVALUABLE — story is not a file at $2: $1" >&2; exit 2 ;;
+      esac
+    else
+      git -C "$REPO" cat-file -e "$2:$sb_rel" 2>/dev/null || exit 0
+    fi
+    sb_t="$(git -C "$REPO" show "$2:$sb_rel" 2>/dev/null)"
     if (ro_label label 'Full-collection run:') <<<"$sb_t" >/dev/null; then
       printf 'the story at %s already carries a Full-collection run: line\n' "$2"; exit 1
     fi
@@ -303,7 +352,7 @@ ro_paths() {
       REPO="$2"; shift 2
     fi
     [ $# -eq 3 ] || { echo "usage: $ME paths [-C <repo>] <story-file> <base> <frozen>" >&2; exit 2; }
-    story="${1#./}"
+    story="$(ro_story_rel "$REPO" "$1")" || exit 2
     git -C "$REPO" rev-parse --verify --quiet "$2^{commit}" >/dev/null 2>&1 \
       || { echo "$ME: UNEVALUABLE — base does not resolve: $2" >&2; exit 2; }
     git -C "$REPO" rev-parse --verify --quiet "$3^{commit}" >/dev/null 2>&1 \

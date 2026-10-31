@@ -69,9 +69,10 @@
 # also trips: M24 canon.cr-exempt-evil,canon.cr-exempt-whole,canon.cr-norun-na,canon.cr-norun-nonebt,canon.cr-norun-other
 # also trips: M25 canon_merge.crm-disk-legacy
 # also trips: M27 canon_merge.crm-disk-held,canon_merge.crm-neither
-# also trips: M28 canon.cr-exempt-empty
+# also trips: M28 canon.cr-exempt-empty,canon.cr-exempt-abs,canon.cr-exempt-typo,canon.cr-exempt-dir
 # also trips: M29 canon.cr-m-other,canon.cr-filter-ff,canon.cr-path-super,canon.cr-conv-runner
 # also trips: M30 canon.cr-conv-runner-none,canon.cr-norun-other,canon.cr-norun-rec
+# also trips: M51 canon.cr-exempt-dir
 # also trips: M41 adv_qa.ad-q-unreadable-absent,adv_qa.ad-q-world-b,adv_qa.ad-q-untracked-new
 # also trips: M42 adv_qa.ad-q-legacy-prose,adv_qa.ad-q-world-a,adv_qa.ad-q-untracked-old
 # also trips: M43 xc_count.xc-count,xc_one.xc-one
@@ -103,7 +104,7 @@
 # MUTANT-MATRIX M25 decides=canon_merge.crm-legacy twins=canon_merge.crm-disk-held
 # MUTANT-MATRIX M26 decides=canon.cr-nr-norun twins=canon.cr-exempt-rec
 # MUTANT-MATRIX M27 decides=canon_merge.crm-norun twins=canon_merge.crm-nr-norun
-# MUTANT-MATRIX M28 decides=canon.cr-exempt-narrow twins=canon.cr-exempt-whole
+# MUTANT-MATRIX M28 decides=canon.cr-exempt-narrow twins=canon.cr-exempt-abs-rec
 # MUTANT-MATRIX M29 decides=canon.cr-path-conv twins=canon.cr-path-other
 # MUTANT-MATRIX M30 decides=canon.cr-norun-na twins=canon.cr-norun-nonebt
 # MUTANT-MATRIX M31 decides=canon.cr-exempt-evil twins=canon.cr-exempt-narrow
@@ -124,6 +125,9 @@
 # MUTANT-MATRIX M46 decides=xc_one.xc-one twins=xc_flip.xc-flip
 # MUTANT-MATRIX M47 decides=qclass.qc-foo twins=qclass.qc-evidence
 # MUTANT-MATRIX M48 decides=qclass.qc-none twins=qclass.qc-foo
+# MUTANT-MATRIX M49 decides=canon.cr-exempt-abs-rec,story_path.story-path twins=canon.cr-exempt-typo
+# MUTANT-MATRIX M50 decides=story_path.story-path twins=canon.cr-exempt-evil
+# MUTANT-MATRIX M51 decides=canon.cr-exempt-typo,story_frozen.story-frozen twins=canon.cr-exempt-created
 # MUTANT-MATRIX m-k2only decides=x_lone.x-lone-k8 twins=x_lone.x-partial
 # MUTANT-MATRIX m-nomix decides=x_mix.x-mix twins=cs.partcite
 # MUTANT-MATRIX-CONTROL VBCTL why=no mutation: each mutant's deciding cell reuses the passing top-level arm of the same predicate from this run as its base-pass flag, and runs over the unmutated sibling copy only when no such arm passed or under --matrix
@@ -440,10 +444,14 @@ arm2 fr_remedy "FR3: the orphan remedy is satisfiable -- cross-1 filing the AC4 
                "FR3: the orphan FAIL row's remedy cannot be satisfied under the owner rule"
 arm2 serial "SR1: --check-serial, gate 3's Check 1 rule and no stricter -- '## Verdict / PASS', 'Verdict: NEEDS_REWORK', 'Verdict: PASS (all ACs)', '## Verdict / PASS.' and two matches both reading PASS answer SERIAL-OK; the heading-then-'Verdict: PASS' union and two different values, 'PASS-pending', APPROVED under --gate qa, a renamed '## Result' code review (0 matches), a PASS over a FAIL or FAILED row (the latter under '### Acceptance criteria'), and FAIL rows named only by 'AC-4.1' or a 'handover:' line each REFUSED [owner: serial]; code-review APPROVED and a backed NEEDS_REWORK FAIL row answer SERIAL-OK" \
              "SR1: --check-serial accepted a malformed serial verdict, or refused a correct one"
-arm2 canon "CR1: --check-serial --gate qa, a PASS waits for its canonical run -- the run line plus a counted result, a bulleted pair and a '-p no:cacheprovider' near-miss answer SERIAL-OK; no run line, counts only on a RED replay line, -k in four spellings, --deselect, a file and a node id, a path root and a marker the conventions do not declare, no result line, a NOT FINISHED result and a result with no count each REFUSED [owner: serial]; NEEDS_REWORK with no run SERIAL-OK; 'none, <reason>' over a record-only --range SERIAL-OK, over a range touching a test, a test module under test-results/, a seat-narrowed rework range, an empty range and a non-ancestor base, and with no range REFUSED; N/A, TBD and skipped held to the same partition; a bare none REFUSED; -m unit accepted with no conventions and declared, a declared path root accepted; a root whose qa.md lacks the sentinel prints LEGACY and accepts" \
+arm2 canon "CR1: --check-serial --gate qa, a PASS waits for its canonical run -- the run line plus a counted result, a bulleted pair and a '-p no:cacheprovider' near-miss answer SERIAL-OK; no run line, counts only on a RED replay line, -k in four spellings, --deselect, a file and a node id, a path root and a marker the conventions do not declare, no result line, a NOT FINISHED result and a result with no count each REFUSED [owner: serial]; NEEDS_REWORK with no run SERIAL-OK; 'none, <reason>' over a record-only --range SERIAL-OK, over a range touching a test, a test module under test-results/, a seat-narrowed rework range, an empty range (also with --story absolute, a typo or a directory) and a non-ancestor base, and with no range REFUSED; --story absolute over a record-only range, and a story created after the base, SERIAL-OK; N/A, TBD and skipped held to the same partition; a bare none REFUSED; -m unit accepted with no conventions and declared, a declared path root accepted; a root whose qa.md lacks the sentinel prints LEGACY and accepts" \
            "CR1: --check-serial accepted a PASS with no canonical run, or refused a correct one"
 arm2 canon_merge "CR2: the qa merge -- four PASS shards carrying the run merge with no LEGACY line; the execution owner's run lines removed REFUSED [owner: cross-1]; the same with a NEEDS_REWORK part merges NEEDS_REWORK; frozen over an installed qa.md with no label, LEGACY and merges; qa.md untracked at the frozen sha and on disk without the label LEGACY, with it held; neither, held naming both paths; --range on the merge REFUSED" \
                  "CR2: the merge did not hold the execution owner's PASS to its canonical run, or held a legacy set"
+arm2 story_path "BL-885 STORY PATH: record-only-diff.sh's story-base and paths resolve an absolute story spelled through a symlink, its physical spelling under a link-spelled -C, './' and './/' to the repo-relative story (status: review at the base -> 1; a story-only diff RECORD-ONLY, a diff adding app.py NOT-RECORD-ONLY naming it); /etc/hosts, 'stories/./s.md', 'stories//s.md', 'stories/../stories/s.md' and '' are exit 2 UNEVALUABLE (receipt-bl885.sh, all $SP_CELLS cells)" \
+                "BL-885 STORY PATH: record-only-diff.sh resolved a story path wrongly"
+arm2 story_frozen "BL-885 STORY FROZEN: record-only-diff.sh's story-base with the third operand <frozen> -- a typo, '<top>/.git/HEAD' and '.git/HEAD' (no file at the base or at the frozen sha), 'stories' (a tree at the base) and 'stories/later' (absent at the base, a tree at the frozen sha) exit 2 UNEVALUABLE; a story created after the base exits 0, one at status: review at the base 1; the two-operand typo keeps the old 0 (receipt-bl885-frozen.sh, all $SF_CELLS cells)" \
+                  "BL-885 STORY FROZEN: record-only-diff.sh's story-base read a story that is no file as a gate-1 base, or refused a real one"
 # BL-790: THE ADVISOR LINE, per shard under both gates and through --check-serial, its absence keyed on
 # the gate's role file AT THE FROZEN SHA (lead worlds a and b; the untracked fallback refuses).
 AD_ARM="the sentinel world: absent REFUSED [owner: 1] naming the role file that prescribes it, called, unavailable and 'unavailable' with trailing blanks and CR merge with no LEGACY line, maybe, two lines, '- advisor: called' (naming the remediator near-miss) and '**advisor:** called' REFUSED; a fenced 'advisor: maybe' above the bare line, and graph's prose 'Advisor: ...' line beside it, merge; a role file at the frozen sha without the sentinel accepts the absence, and that prose line alone, with the LEGACY line by value and still refuses maybe; a role file unreadable at the sha REFUSED; world (a), frozen over the old role file with the new one on disk, LEGACY and merges; world (b), frozen over the new one with the old on disk, REFUSED; untracked at the sha with the new copy on disk REFUSED naming the on-disk fallback and the commit remedy, with the old copy on disk LEGACY naming it"
@@ -765,6 +773,19 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # M40 the conventions' declared canonical command no longer read as a runner, so `tox -e all` is a no-run claim.
   CS_ONLY=cr-conv-runner mut_run M40 record-only-diff.sh '        rs_rn="$rs_rn|$(printf' '        : "$(printf' \
     canon "cr-conv-runner{" "a runner the conventions declare canonical read as a no-run claim"
+  # BL-885, both in record-only-diff.sh's ro_story_rel. M49 the helper reverted to the old `${1#./}` strip, so an
+  # absolute --story names no blob at the base or at the frozen sha and a genuinely record-only range is REFUSED end
+  # to end (the receipt's absolute and `.//` cells fail too; cr-exempt-abs, the empty range, refuses either way).
+  # M50 an absolute path outside the repository passed through as itself.
+  CS_ONLY=cr-exempt-abs-rec mut_run M49 record-only-diff.sh '    local rs_repo="$1" rs_p="$2" rs_top rs_dir rs_base' \
+    '    printf '"'"'%s\n'"'"' "${2#./}"; return 0; local rs_repo="$1" rs_p="$2" rs_top rs_dir rs_base' \
+    canon "cr-exempt-abs-rec{rc=2" "the story path stripped of a leading ./ only, so an absolute --story over a record-only range is refused"
+  CS_ONLY=story-path mut_run M50 record-only-diff.sh '*) echo "$ME: UNEVALUABLE — story path is outside the repository: $2" >&2; return 2 ;;' \
+    '*) printf '"'"'%s\n'"'"' "$rs_p" ;;' story_path "FAIL sb-hosts:" "an absolute story path outside the repository passed through"
+  # BL-885, record-only-diff.sh's ro_story_base. M51 the <frozen> operand ignored, so a story absent at the base exits
+  # 0 unconditionally (the frozen-blob and non-blob checks both gone) and a typo --story acquits the empty range.
+  CS_ONLY=cr-exempt-typo mut_run M51 record-only-diff.sh '    if [ $# -eq 3 ]; then' '    if false; then' \
+    canon "cr-exempt-typo{rc=0 SERIAL-OK:" "a story that is no file at the base or at the frozen sha read as a gate-1 base"
   # BL-790. M41 the advisor absence refusal deleted, so a sentinel-era shard with no line merges. M42 the
   # era check deleted, so the absence is refused in the legacy world too.
   CS_ONLY=ad-q-present-absent mut_run M41 merge-review-shards.sh "  else refuse \"\$1 carries no column-0 'advisor:' line" "  else : \"\$1 carries no column-0 'advisor:' line" \
@@ -805,17 +826,17 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     : > "$WORK/mx-log"; matrix_score
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "MX1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the matrix"
     reuse_proof
-    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 50 ]; then
+    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 53 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
   else
-    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 50 ]; then
+    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 53 ]; then
       ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant, each passing over its mutant copy"
-    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 50"; fi
+    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 53"; fi
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 50 ]; then ok "VBCTL: CONTROL -- each of M1-M48, m-k2only and m-nomix's selected cells passed unmutated ($VB_CTL_N of 50): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 50 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 53 ]; then ok "VBCTL: CONTROL -- each of M1-M51, m-k2only and m-nomix's selected cells passed unmutated ($VB_CTL_N of 53): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 53 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
