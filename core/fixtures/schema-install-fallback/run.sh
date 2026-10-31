@@ -243,10 +243,14 @@ PY
 # The pre-relocation layout, beside the current one. Every shipped script is copied, not just the
 # five: gate-adjudication shells to siblings beside itself.
 n_legacy=0
-for f in "$BASE/t/scripts/ai-dlc/"*.sh; do
+# The legacy tree is a pre-0.126.0 consumer: install.sh never writes scripts/<x>.sh, it only reports a
+# stale one, which is an OLD script carrying its own embedded helpers. Modelling "the same program"
+# there means the .sh files AND the non-.sh modules they run beside themselves (gate_adjudication.py);
+# a bare new .sh without its module is a layout no install produces.
+for f in "$BASE/t/scripts/ai-dlc/"*.sh "$BASE/t/scripts/ai-dlc/"*.py; do
   [ -f "$f" ] || continue
   cp "$f" "$BASE/t/scripts/" || exit 2
-  n_legacy=$((n_legacy + 1))
+  case "$f" in *.sh) n_legacy=$((n_legacy + 1));; esac
 done
 [ "$n_legacy" -ge 10 ] || { echo "FIXTURE ERROR: only $n_legacy script(s) under scripts/ai-dlc/" >&2; exit 2; }
 
