@@ -605,8 +605,8 @@ are omitted from the plan. The bounded Read is the compliant Read.
 
 **Each step file carries a `STEP_LOADED_TOKEN` HTML comment** (format:
 `<!-- STEP_LOADED_TOKEN: <step-name> -->`). It is a marker, and no gate
-reads it. The gate log entry does not cite the token and the gate does
-not fail on a missing citation; no mechanism implements either, so
+reads it. No rule requires the gate log entry to cite the token and no gate
+fails on a missing citation; neither is implemented, so
 neither is claimed.
 A gate log entry is written by the same lead the rule constrains, so a
 token cited there is a SELF-REPORT: the lead this rule exists to catch

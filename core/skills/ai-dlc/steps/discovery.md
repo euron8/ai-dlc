@@ -163,8 +163,8 @@ the union across slots; no block is copied here.
 
 **Every block MUST be closed.** `validate-locked-anchor.sh` (Check 3b) parses
 blocks by their sentinels, and an opener it cannot pair extracts as nothing —
-which reaches the PASS line reporting `0 block(s), 0 claim(s) verified`,
-so a fabricated requirement passed a `hard_block` check on one word's difference
+which, without the unpaired-opener guard, would reach the PASS line reporting `0 block(s), 0 claim(s) verified`,
+so a fabricated requirement would pass a `hard_block` check on one word's difference
 in a comment. Measured across one consumer: SEVEN sentinel spellings, three
 story files with an opener and no closer at all. The parser now accepts every
 spelling found in the field and FAILS on an unpaired opener; keep to one of the

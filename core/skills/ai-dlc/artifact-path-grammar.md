@@ -176,7 +176,7 @@ and for every already-written file. Stated at this width so a later session does
 residue for the whole class and re-defer the half that is now checkable.
 
 **And that validator closes MOST of the gap, not all of it — measured, because the sentence above
-claims only the half the validator can see.** `<story-id>-review.md` expands to `S292-ff-s3-…-review.md` and is
+reads as though it closes all of it.** `<story-id>-review.md` expands to `S292-ff-s3-…-review.md` and is
 caught. `story-<id>-<slug>.md` expands two ways, and only one of them carries a token anything can
 see: on the reference consumer **761 of 1024 story files spell the sprint as a bare leading
 number** (`story-297-1-slug.md`), which is character-for-character the `story-<M>-<slug>.md` this

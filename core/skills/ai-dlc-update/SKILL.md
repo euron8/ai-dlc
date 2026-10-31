@@ -689,7 +689,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      four derived fixtures `ALREADY-AT-THEIRS` while a hand-rolled ref comparison performed under
      this step called all four CONSUMER-EDITED. The suppression was never missing —
      `at_self_update()` was present in the installed copy throughout; it was BYPASSED by the
-     second derivation, which this step never invites. A ref comparison is wrong here in the direction
+     second derivation that this step does not call for. A ref comparison is wrong here in the direction
      that REFUSES a legitimate write, and it is wrong on every split stamp, which is the normal
      state after any self-update and which this cycle itself CREATES.
 
