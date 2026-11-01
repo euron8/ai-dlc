@@ -1628,11 +1628,11 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
     [ "$MATRIX" = 1 ] && continue
     eq "$mname fails exactly its own arms [$want]" "$got" "$want"
   done
-  B_XR=0; case " $(failed_set "$MAIN_FAILED") " in *" XR "*) ;; *) B_XR=1 ;; esac
+  xr_set=" $(failed_set "$MAIN_FAILED") "; xr_hit="$(grep -c ' XR ' <<<"$xr_set")" || true
   got="$(cat "$WORK/mut-M27.res" 2>/dev/null)"
   [ "$got" != BROKEN ] || { echo "FIXTURE ERROR: mutant M27 did not apply to $HOOK_SRC (the G-row line of readset_decl_keys moved)" >&2; exit 2; }
   if [ "$MATRIX" = 1 ]; then :
-  elif [ "$got" = "$(failed_set XR)" ]; then mutant_killed "$B_XR" M27 "M: M27 fails exactly its own arms [XR] (the range fold dropped from the composer)"
+  elif [ "$got" = "$(failed_set XR)" ]; then mutant_killed "$([ "$xr_hit" = 0 ] && echo 1 || echo 0)" M27 "M: M27 fails exactly its own arms [XR] (the range fold dropped from the composer)"
   else bad "M: M27 should fail exactly arm XR (got '$got')"; fi
   if [ "$MATRIX" = 1 ]; then
     for mname in M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 M15 M16 M17 M18 M19 M20 M21 M22 M23 M24 M25 M26 M27; do

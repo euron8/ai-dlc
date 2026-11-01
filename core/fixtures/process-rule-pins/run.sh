@@ -1046,6 +1046,7 @@ pmutate() {
   END { for (i = 1; i <= n; i++) { print ""; print held[i] } }' "$2" > "$3"
 }
 
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
 M="$WORK/mut"; mkdir -p "$M" || exit 2
 while IFS='|' read -r id base rel s e lead mode tok; do
   f="$(pin_path "$base" "$rel")"
@@ -1054,8 +1055,10 @@ while IFS='|' read -r id base rel s e lead mode tok; do
     # MUTANT: the token copied into the file (inside a fence, to prove fences are not an exemption) must fire.
     dst="$M/$id.copy.md"; { cat "$f"; printf '\n```\n%s\n```\n' "$lead"; } > "$dst"
     o0="$(pin_scan "$f" "" "" "$lead" absent)"; o1="$(pin_scan "$dst" "" "" "$lead" absent)"
+    B_copy=0
+    if [ "${o0%% *}" = "0" ]; then ok "$id/copy: control: the unmutated file carries no copy of the token (reads 0)"; B_copy=1; fi
     if [ "${o0%% *}" = "0" ] && [ "${o1%% *}" -ge 1 ]; then
-      ok "$id/copy: the token copied into the file fires (original 0, mutant ${o1%% *}) — killed"
+      mutant_killed "${B_copy:-0}" "$id/copy" "$id/copy: the token copied into the file fires (original 0, mutant ${o1%% *})"
     else bad "$id/copy: original='${o0%% *}' mutant='${o1%% *}' (wanted 0 and >=1)"; fi
     continue
   fi
@@ -1065,8 +1068,10 @@ while IFS='|' read -r id base rel s e lead mode tok; do
     dst="$M/$id.delete.md"; mutate delete "$f" "$dst" "$lead" contains
     if cmp -s "$f" "$dst"; then bad "$id/delete: mutation did not apply"; continue; fi
     o1="$(pin_scan "$dst" "$s" "$e" "$lead" fenced)"; read -r ins whole sl el fl <<<"$o1"
+    B_fdel=0
+    if [ "${o0%% *}" -ge 1 ]; then ok "$id/delete: control: the unmutated file pins the fenced lead in span (${o0%% *})"; B_fdel=1; fi
     if [ "${o0%% *}" -ge 1 ] && [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then
-      ok "$id/delete: every fenced line deleted fires (original in-span ${o0%% *}, mutant $ins) — killed"
+      mutant_killed "${B_fdel:-0}" "$id/delete" "$id/delete: every fenced line deleted fires (original in-span ${o0%% *}, mutant $ins)"
     else bad "$id/delete: original in-span='${o0%% *}' mutant in-span=$ins whole=$whole"; fi
     continue
   fi
@@ -1075,7 +1080,10 @@ while IFS='|' read -r id base rel s e lead mode tok; do
   if [ "$mode" = "para" ]; then
     flat="$M/$id.flat.md"; flatten "$f" "$flat"
     o1="$(pin_scan "$f" "$s" "$e" "$lead" para "$tok")"; o2="$(pin_scan "$flat" "$s" "$e" "$lead" para "$tok")"
-    if [ "${o1%% *}" != "1" ] || [ "${o2%% *}" != "1" ]; then
+    B_para=0
+    if [ "${o1%% *}" = "1" ] && [ "${o2%% *}" = "1" ]; then
+      ok "$id: control: original and flattened copy both pin the paragraph in span (1)"; B_para=1
+    else
       bad "$id: CONTROL — original in-span=${o1%% *}, flattened in-span=${o2%% *}; both must be 1 before a mutant is read"; continue
     fi
     for mm in negate relocate fence comment; do
@@ -1086,8 +1094,8 @@ while IFS='|' read -r id base rel s e lead mode tok; do
       [ "$rc" -eq 0 ] || { bad "$id/$mm: mutated copy unbalanced (rc=$rc)"; continue; }
       read -r ins whole sl el fl <<<"$out"
       case "$mm" in
-        negate)   [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ] && ok "$id/negate: binding clause rewritten under an intact lead — killed" \
-                    || bad "$id/negate: SURVIVED (in-span=$ins whole=$whole)" ;;
+        negate)   if [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then mutant_killed "${B_para:-0}" "$id/negate" "$id/negate: binding clause rewritten under an intact lead"
+                    else bad "$id/negate: SURVIVED (in-span=$ins whole=$whole)"; fi ;;
         relocate) [ "$ins" -eq 0 ] && [ "$whole" -ge 1 ] && ok "$id/relocate: paragraph outside the span fails though it is still in the file" \
                     || bad "$id/relocate: in-span=$ins whole=$whole — span does not discriminate" ;;
         fence|comment)
@@ -1097,6 +1105,10 @@ while IFS='|' read -r id base rel s e lead mode tok; do
     done
     continue
   fi
+  o0="$(pin_scan "$f" "$s" "$e" "$lead" "$mode")"
+  B_gen=0
+  if [ "${o0%% *}" -ge 1 ]; then ok "$id: control: the unmutated file pins the lead in span (${o0%% *})"; B_gen=1
+  else bad "$id: CONTROL — the unmutated file reads in-span=${o0%% *}, so the delete mutant has no subject"; continue; fi
   modes="delete relocate fence comment"
   [ "$mode" = "prefix" ] && modes="$modes indent"
   for mm in $modes; do
@@ -1107,8 +1119,8 @@ while IFS='|' read -r id base rel s e lead mode tok; do
     [ "$rc" -eq 0 ] || { bad "$id/$mm: mutated copy unbalanced (rc=$rc)"; continue; }
     read -r ins whole sl el fl <<<"$out"
     case "$mm" in
-      delete)   [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ] && ok "$id/delete: mutant killed" \
-                  || bad "$id/delete: SURVIVED (in-span=$ins whole=$whole)" ;;
+      delete)   if [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then mutant_killed "${B_gen:-0}" "$id/delete" "$id/delete: the mutant is caught"
+                  else bad "$id/delete: SURVIVED (in-span=$ins whole=$whole)"; fi ;;
       relocate) [ "$ins" -eq 0 ] && [ "$whole" -ge 1 ] && ok "$id/relocate: outside the span fails though the line is still in the file" \
                   || bad "$id/relocate: in-span=$ins whole=$whole — span does not discriminate" ;;
       fence|comment)
@@ -1157,12 +1169,14 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   src="$f"
   if [ "$mode" = "para" ]; then src="$M/$id.named.flat.md"; flatten "$f" "$src"; fi
   c="$(pin_scan "$src" "$s" "$e" "$lead" "$mode" "$tok")"
-  [ "${c%% *}" = "1" ] || { bad "$id/named: CONTROL — unmutated in-span=${c%% *}, wanted 1"; continue; }
+  B_named=0
+  if [ "${c%% *}" = "1" ]; then ok "$id/named: control: the unmutated text pins in span (1)"; B_named=1
+  else bad "$id/named: CONTROL — unmutated in-span=${c%% *}, wanted 1"; continue; fi
   dst="$M/$id.named.md"; lreplace "$src" "$dst" "$old" "$new"
   if cmp -s "$src" "$dst"; then bad "$id/named: rewording '$new' did not apply"; continue; fi
   out="$(pin_scan "$dst" "$s" "$e" "$lead" "$mode" "$tok")"
-  [ "${out%% *}" = "0" ] && ok "$id/named: rewritten to '$new' — killed" \
-                         || bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"
+  if [ "${out%% *}" = "0" ]; then mutant_killed "${B_named:-0}" "$id/named" "$id/named: rewritten to '$new'"
+  else bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"; fi
 done <<<"$(named_mutants)"
 [ "$n_named" -eq 10 ] || bad "named: $n_named named mutant(s) read, wanted 10"
 # m3's TWINS. The two readiness rows share architecture.md §3's one line, so each named rewrite must
@@ -1195,9 +1209,11 @@ cs_real="$(pin_scan "$CSF" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" cont
 cs_shad="$(pin_scan "$CSS" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
 cs_move="$(pin_scan "$CSM" '## Class Sweep (HARD GATE)' '## Verdict' "$CSL" contains)"
 read -r cs_mi cs_mw _ <<<"$cs_move"
+B_qa=0
 if cmp -s "$CSF" "$CSM"; then bad "MUTANT qa-sweep/move-into-checklist: DID NOT APPLY"
 elif [ "${cs_real%% *}" = 1 ] && [ "${cs_shad%% *}" = 1 ] && [ "$cs_mi" = 0 ] && [ "$cs_mw" -ge 1 ]; then
-  ok "qa-sweep: pinned in its own section past the Validation Checklist shadow (real=1, shadowed=1); the sentence moved into the checklist reads 0 in span though still in the file — killed"
+  ok "qa-sweep: control: pinned in its own section past the Validation Checklist shadow (real=1, shadowed=1)"; B_qa=1
+  mutant_killed "${B_qa:-0}" qa-sweep/move-into-checklist "qa-sweep: the sentence moved into the checklist reads 0 in span though still in the file"
 else bad "qa-sweep/move-into-checklist: real='$cs_real' shadowed='$cs_shad' moved='$cs_move' (wanted 1 / 1 / 0 with whole>=1)"; fi
 
 # --- 4a2. the serial remediator is never told --mark-repair replays for it ----------
@@ -1335,9 +1351,9 @@ fi
 # count is asserted, so a site the scan cannot place in a paragraph reads as a survivor rather
 # than as a smaller battery.
 jm="$WORK/join-mut"; mkdir -p "$jm" || exit 2
-# join_battery <files...> -> sets jb_sites, jb_paras, jb_killed, jb_surv
+# join_battery <files...> -> sets jb_sites, jb_paras, jb_hit, jb_surv
 join_battery() {
-  jb_sites=0; jb_paras=0; jb_killed=0; jb_surv=""
+  jb_sites=0; jb_paras=0; jb_hit=0; jb_surv=""
   local f rows l para done_p clines
   for f in "$@"; do
     rows="$(join_scan "$f")"
@@ -1357,7 +1373,7 @@ join_battery() {
         $0 = o s } { print }' "$f" > "$jm/m.md"
       if cmp -s "$f" "$jm/m.md"; then jb_surv="$jb_surv ${f#"$ROOT/"}:$para(no-apply)"; continue; fi
       jb_found="$(join_findings "$jm/m.md")"
-      if grep -qF -- "$jm/m.md:$para:" <<<"$jb_found"; then jb_killed=$((jb_killed + 1))
+      if grep -qF -- "$jm/m.md:$para:" <<<"$jb_found"; then jb_hit=$((jb_hit + 1))
       else jb_surv="$jb_surv ${f#"$ROOT/"}:$para"; fi
     done
   done
@@ -1375,12 +1391,12 @@ c_two0="$(join_findings "$JS/two.md" | grep -c .)" || c_two0=0
 c_line="$(join_findings "$JS/two.line.md" | grep -c .)" || c_line=0
 c_mx0="$(join_findings "$JS/mixed2.md" | grep -c .)" || c_mx0=0
 c_mxc="$(join_scan "$JS/mixed2.md" | awk -F'\t' '$2 == "P=1"' | grep -c .)" || c_mxc=0
-join_battery "$JS/two.md"; c_two="$jb_sites $jb_paras $jb_killed"
-join_battery "$JS/mixed2.md"; c_mx="$jb_sites $jb_paras $jb_killed"
+join_battery "$JS/two.md"; c_two="$jb_sites $jb_paras $jb_hit"
+join_battery "$JS/mixed2.md"; c_mx="$jb_sites $jb_paras $jb_hit"
 #   nonseat.md -- a --complete join naming no seat or cross path: its paragraph mutant is exempt,
 #              so the battery must report it as a SURVIVOR naming line 1 -- the survivor branch fires.
 printf 'Join the analyst artifact with `scripts/ai-dlc/wait-for-deliverable.sh --complete <artifact_path>`.\n' > "$JS/nonseat.md"
-join_battery "$JS/nonseat.md"; c_ns="$jb_sites $jb_paras $jb_killed"; c_nss="${jb_surv# }"
+join_battery "$JS/nonseat.md"; c_ns="$jb_sites $jb_paras $jb_hit"; c_nss="${jb_surv# }"
 case "$c_nss" in *nonseat.md:1) c_nsok=1 ;; *) c_nsok=0 ;; esac
 if [ "$c_two0" = 0 ] && [ "$c_line" = 0 ] && [ "$c_two" = "2 1 1" ] && [ "$c_mx0" = 0 ] && [ "$c_mxc" = 2 ] && [ "$c_mx" = "1 1 1" ] \
    && [ "$c_ns" = "1 1 0" ] && [ "$c_nsok" = 1 ] && ! cmp -s "$JS/two.md" "$JS/two.line.md"; then
@@ -1397,7 +1413,7 @@ fi
 printf 'Each seat file joins with `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <path>`.\n' > "$JS/prefix.md"
 printf 'Arm `scripts/ai-dlc/wait-for-deliverable.sh --complete-repair <record>` on the record.\n' > "$JS/prefixns.md"
 c_pf="$(join_findings "$JS/prefix.md" | grep -c .)" || c_pf=0
-join_battery "$JS/prefixns.md"; c_pfb="$jb_sites $jb_paras $jb_killed"
+join_battery "$JS/prefixns.md"; c_pfb="$jb_sites $jb_paras $jb_hit"
 if [ "$c_pf" = 1 ] && [ "$c_pfb" = "0 0 0" ]; then
   ok "join/flag-whole: a seat paragraph whose only call is --complete-repair is a bare seat join (1); --complete-repair alone offers the battery no site ($c_pfb)"
 else
@@ -1408,9 +1424,9 @@ join_battery $JSCOPE
 if [ "$jb_paras" -lt 3 ]; then
   bad "join/mutant: only $jb_paras paragraph(s) holding a --complete site found ($jb_sites site(s)) -- the battery has nothing to strip"
 elif [ -n "$jb_surv" ]; then
-  bad "join/mutant: SURVIVED -- every --complete stripped from the paragraph at [${jb_surv# }] was not flagged ($jb_killed/$jb_paras paragraphs killed, $jb_sites sites)"
+  bad "join/mutant: SURVIVED -- every --complete stripped from the paragraph at [${jb_surv# }] was not flagged ($jb_hit/$jb_paras paragraphs flagged, $jb_sites sites)"
 else
-  ok "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_killed/$jb_paras)"
+  ok "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_hit/$jb_paras)"
 fi
 
 # --- 4c. the lead-address arm: probes both directions, then mutants ---------------
@@ -1463,7 +1479,8 @@ fi
 LM="$WORK/lead-mut"; mkdir -p "$LM" || exit 2
 cp "$SELF" "$LM/real.sh" || exit 2
 ctl="$(bash "$LM/real.sh" --lead-verdict 1 "$LA" "$LP/h1.md")"
-case "$ctl" in PASS*) ok "lead-mutant CONTROL: an unmutated copy runs --lead-verdict and passes an addressed corpus" ;;
+B_lead=0
+case "$ctl" in PASS*) ok "lead-mutant CONTROL: an unmutated copy runs --lead-verdict and passes an addressed corpus"; B_lead=1 ;;
   *) bad "lead-mutant CONTROL: unmutated copy did not pass ('$ctl') -- no mutant verdict below is evidence" ;; esac
 # lead_mut <name> <sed-expr> <floor> <addr> <files...>: real must FAIL, mutant must PASS
 lead_mut() {
@@ -1471,7 +1488,7 @@ lead_mut() {
   sed -e "$ex" "$SELF" > "$LM/$nm.sh"
   if cmp -s "$SELF" "$LM/$nm.sh"; then bad "MUTANT lead/$nm: DID NOT APPLY"; return; fi
   r="$(bash "$LM/real.sh" --lead-verdict "$fl" "$a" "$@")"; m="$(bash "$LM/$nm.sh" --lead-verdict "$fl" "$a" "$@")"
-  case "$r|$m" in FAIL*"|"PASS*) ok "MUTANT lead/$nm: killed (real: ${r%%:*}, mutant: ${m%%:*})" ;;
+  case "$r|$m" in FAIL*"|"PASS*) mutant_killed "${B_lead:-0}" "lead/$nm" "MUTANT lead/$nm: caught (real: ${r%%:*}, mutant: ${m%%:*})" ;;
     *) bad "MUTANT lead/$nm: SURVIVED or broken (real='$r' mutant='$m')" ;; esac
 }
 lead_mut floor-dropped 's/^  if \[ "\$n" -lt "\$fl" \]; then$/  if false; then/' 1 "$LA" "$LP/n1.md" "$LP/n2.md"

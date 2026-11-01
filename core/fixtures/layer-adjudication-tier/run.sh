@@ -1609,7 +1609,7 @@ if [ "$p11_ready" = yes ]; then
 fi
 if [ "$p11_ready" = yes ]; then
   p11_score "$DRIFT"
-  [ "$p11_v" = "$P11ALLOK" ] && B_p11=1
+  p11_base_v="$(printf %s "$p11_v")"
   for p11_a in $p11_v; do
     case "$p11_a" in
       A=ok)  ok "Part 11 A: --adjudicated-codes with an unresolvable THEIRS exits 1 with a REFUSED line naming the ref, and prints no code" ;;
@@ -1766,7 +1766,7 @@ if [ "$p11_ready" = yes ]; then
         else
           p11_v=""; p11_d=""; p11_one "$p11_f" "$p11_dec"; p11_one "$p11_f" "$p11_twin"
         fi
-        mx_score "p11-$p11_id" "${B_p11:-0}" "$p11_dec" "$(p11_cell "$p11_dec")" "$p11_twin" "$(p11_cell "$p11_twin")" "$p11_what: decided by arm $p11_dec while arm $p11_twin holds"
+        mx_score "p11-$p11_id" "$([ "$p11_base_v" = "$P11ALLOK" ] && echo 1 || echo 0)" "$p11_dec" "$(p11_cell "$p11_dec")" "$p11_twin" "$(p11_cell "$p11_twin")" "$p11_what: decided by arm $p11_dec while arm $p11_twin holds"
         mx_quiet=0
       fi
     done

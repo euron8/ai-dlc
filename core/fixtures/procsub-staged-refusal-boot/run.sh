@@ -170,6 +170,7 @@ trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"; [ "$PSB_DONE" = 1 ] || { ech
 fails=0; asserts=0
 ok()  { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
 # BOUNDARY. Every assertion-bearing section below is a UNIT guarded by `if sg <unit>; then ... fi`, or, for
@@ -1415,17 +1416,34 @@ forced() {
 }
 
 # --- CONTROLS AND FORCED ARMS ON THE SHIPPED SCRIPTS ----------------------------------------------
+# baseok_set <arm> / baseok_key <key> -> 1 when EVERY arm of <key> passed its control and its forced
+# run in this run, so a mutant kill is only read against arms whose unmutated shape was proven.
+BASEOK="$WORK/baseok"; mkdir -p "$BASEOK" || { echo "FIXTURE ERROR: mkdir $BASEOK" >&2; exit 2; }
+baseok_set() { : > "$BASEOK/$1"; }
+# psb_kill <key> <mutant> <message> -- the one kill emission for the EXPECT-keyed cells: the flag is 1 only when
+# every arm of <key> proved its unmutated shape in this run.
+psb_kill() {
+  local ak bo
+  ak="$(arms_of "$1")"; bo="$(baseok_key $ak)"
+  mutant_killed "$([ "$bo" = 1 ] && echo 1 || echo 0)" "$2" "$3"
+}
+baseok_key() { # <arm...> -> 1 when every arm named has a marker and there is at least one
+  local a n=0
+  for a in "$@"; do [ -f "$BASEOK/$a" ] || { echo 0; return 0; }; n=$((n+1)); done
+  [ "$n" -gt 0 ] && echo 1 || echo 0
+}
 for A in $(awk '{print $1}' <<<"$EXPECT"); do
   sg "$(unit_of_key "$(col "$A" 2)")" || continue
-  c="$(arm_shape "$A" "$RECON" -)"
+  c="$(arm_shape "$A" "$RECON" -)"; _ctl_ok=0
   if [ "$c" = "$(col "$A" 3)" ]; then
-    ok "$A control (no stub): $c -- the world expresses the healthy verdict"
+    ok "$A control (no stub): $c -- the world expresses the healthy verdict"; _ctl_ok=1
   else
     bad "$A control (no stub): $c, expected $(col "$A" 3) -- the world does not express the case, so the forced arm below is unattributable"
   fi
   set -- $(forced "$A" "$RECON" tip)
   if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 4)" ]; then
     ok "$A forced (stub fired ${2}x): $1 -- the tip shape (base spelling reads $(col "$A" 5))"
+    [ "$_ctl_ok" = 1 ] && baseok_set "$A"
   elif [ "${2:-0}" -eq 0 ]; then
     bad "$A FIXTURE BROKEN: the stub never fired, so its shape ($1) says nothing about the site"
   else
@@ -1518,7 +1536,7 @@ score_as() {
     fi
   done
   if [ -n "$sfails" ]; then bad "MUTANT SURVIVED [$m]:$sfails -- the arm cannot see its own site revert"
-  elif [ "$others_ok" -eq 1 ]; then ok "MUTANT KILLED [$m]:$named, every other $k arm stays at its tip shape"
+  elif [ "$others_ok" -eq 1 ]; then psb_kill "$k" "$m" "MUTANT [$m] scored as a kill:$named, every other $k arm stays at its tip shape"
   else bad "MUTANT ENTANGLED [$m]:$named but undeclared arm(s) moved too:$detail"; fi
   return 0
 }
@@ -1527,7 +1545,7 @@ report_score() { # <m> <own> <k> <got_own> <others_ok> <detail> <base-shape>
   case "$got_own" in
     '!'*) bad "MUTANT SURVIVED [$m]: arm $own read ${got_own#!}, expected the base shape $7 -- the arm cannot see its own site revert" ;;
     *) if [ "$others_ok" -eq 1 ]; then
-         ok "MUTANT KILLED [$m]: $own reads $got_own (the base shape), every other $k arm stays at its tip shape"
+         psb_kill "$k" "$m" "MUTANT [$m] scored as a kill: $own reads $got_own (the base shape), every other $k arm stays at its tip shape"
        else
          bad "MUTANT ENTANGLED [$m]: $own reads $got_own but other arm(s) moved too:$detail"
        fi ;;
@@ -1580,8 +1598,10 @@ if sg lrpe; then
     && score M-P2 P2 "$d" \
     || mutreport M-P2
   PM_M_T='is_machinery() { pc_has_line "$MACHINERY_PATHS" "$1"; }'
-  PM_M_B='is_machinery() { grep -qxF "$1" <<EOF'
-  d="$(DROP1=ZZ-PSB-NONE DROP2=ZZ-PSB-NONE OLD="$PM_M_T" NEW="$PM_M_B"$'\n$MACHINERY_PATHS\nEOF\n}' \
+  PM_HD='<''<'
+  PM_M_B='is_machinery() { grep -qxF "$1" '"${PM_HD}"'EOF'
+  PM_M_N="$(printf '%s\n%s\n%s\n%s' "$PM_M_B" '$MACHINERY_PATHS' EOF '}')"
+  d="$(DROP1=ZZ-PSB-NONE DROP2=ZZ-PSB-NONE OLD="$PM_M_T" NEW="$PM_M_N" \
        mut M-P3 preclassify.sh "$SWAP" "$PM_M_B" 'pc_has_line "$MACHINERY_PATHS"' "$PM_M_T")" \
     && score M-P3 P3 "$d" \
     || mutreport M-P3
@@ -1864,7 +1884,8 @@ cp "$RECON/preclassify.sh" "$_sp/pc-offender.sh" && cp "$RECON/preclassify.sh" "
   && git -C "$TREE_TOP" show "1749b545:core/skills/ai-dlc-update/reconcile/preclassify.sh" > "$_sp/pc-base.sh" 2>/dev/null \
   || { echo "FIXTURE ERROR: preclassify spell probe copies" >&2; exit 2; }
 printf 'done < <(printf %s "$x")\n' "'%s\n'" >> "$_sp/pc-offender.sh"
-printf '  # a comment naming done <<EOF and < <(x) is not a site; echo "<<<<<<< x" neither\n' >> "$_sp/pc-nearmiss.sh"
+_spd='<''<'
+printf '  # a comment naming done %sEOF and < <(x) is not a site; echo "<<<<<<< x" neither\n' "$_spd" >> "$_sp/pc-nearmiss.sh"
 printf 'echo "<<<<<<< x"\n' >> "$_sp/pc-nearmiss.sh"
 _po="$(pc_spell "$_sp/pc-offender.sh")"; _pn="$(pc_spell "$_sp/pc-nearmiss.sh")"
 _pt="$(pc_spell "$RECON/preclassify.sh")"; _pb="$(pc_spell "$_sp/pc-base.sh")"
@@ -2355,10 +2376,12 @@ ok "BL-360 calibration (c): each forced tip render differs from its control only
 for _A in O1 O2 O3 V1; do
   _k="$(b360_col "$_A" 2)"
   _c="$(b360_shape "$_A" "tip-$_k-ctl")"; _f="$(b360_shape "$_A" "tip-$_k-forced")"; _b="$(b360_shape "$_A" "base-$_k-forced")"
-  [ "$_c" = "$(b360_col "$_A" 3)" ] && ok "BL-360 $_A control (no limit): $_c" \
-    || bad "BL-360 $_A control (no limit): $_c, expected $(b360_col "$_A" 3) -- the world does not express the case"
-  [ "$_f" = "$(b360_col "$_A" 4)" ] && ok "BL-360 $_A forced (${_k}): $_f -- the tip shape" \
-    || bad "BL-360 $_A forced (${_k}): $_f, expected $(b360_col "$_A" 4) -- a staging failure read as $_f"
+  _c_ok=0; _f_ok=0
+  if [ "$_c" = "$(b360_col "$_A" 3)" ]; then ok "BL-360 $_A control (no limit): $_c"; _c_ok=1
+  else bad "BL-360 $_A control (no limit): $_c, expected $(b360_col "$_A" 3) -- the world does not express the case"; fi
+  if [ "$_f" = "$(b360_col "$_A" 4)" ]; then ok "BL-360 $_A forced (${_k}): $_f -- the tip shape"; _f_ok=1
+  else bad "BL-360 $_A forced (${_k}): $_f, expected $(b360_col "$_A" 4) -- a staging failure read as $_f"; fi
+  [ "$_c_ok$_f_ok" = 11 ] && baseok_set "b360-$_A"
   [ "$_b" = "$(b360_col "$_A" 5)" ] && ok "BL-360 $_A on the ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} engine: $_b -- the cell fails the pre-fix engine" \
     || bad "BL-360 $_A on the ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} engine: $_b, expected $(b360_col "$_A" 5) -- the cell cannot tell the pre-fix engine from the fix"
 done
@@ -2383,7 +2406,10 @@ for _mm in M-B360-O1:O1 M-B360-O2:O2 M-B360-O3:O3 M-B360-V1:V1; do
   done
   if [ "$_got" != "$(b360_col "$_own" 5)" ]; then bad "MUTANT SURVIVED [$_m]: $_own reads $_got, expected the base shape $(b360_col "$_own" 5)"
   elif [ -n "$_oth" ]; then bad "MUTANT ENTANGLED [$_m]: $_own reads $_got but other $_k cell(s) moved:$_oth"
-  else ok "MUTANT KILLED [$_m]: $_own reads $_got (the base shape), every other $_k cell stays at its tip shape"; fi
+  else
+    _bo="$(baseok_key "b360-$_own")"
+    mutant_killed "$([ "$_bo" = 1 ] && echo 1 || echo 0)" "$_m" "MUTANT KILLED [$_m]: $_own reads $_got (the base shape), every other $_k cell stays at its tip shape"
+  fi
 done
 
 # --- SPELL: emit-report.sh carries no non-comment here-string (secondary to the cells above) ---
