@@ -5191,8 +5191,8 @@ STUB
 
     # THE MAP IS WRITTEN AFTER EACH ACCEPTED FIXTURE, SO AN INTERRUPTED RUN KEEPS WHAT IT TRACED.
     # Three fixtures with OLD committed rows; a `--list "fxw1 fxw2 fxw3"` run is SIGKILLed while
-    # fxw3 runs (fxw3 touches <flag>.at and waits; the fixture then kills the deriver and its direct
-    # children, and removes the flag so fxw3 exits instead of leaking). The map must hold fxw1's and
+    # fxw3 runs (fxw3 touches <flag>.at and waits; the fixture then kills the deriver's whole process
+    # group, and removes the flag). The map must hold fxw1's and
     # fxw2's NEW rows, none of their OLD ones, fxw3's OLD row and no fxw3 NEW row. The mutant
     # deletes the per-fixture call, restoring end-only writing: the kill then leaves the map as seeded.
     # The identity arm runs the same three UNINTERRUPTED, with fxw2 omitted by the canary (its read
@@ -5208,22 +5208,84 @@ STUB
     printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w2.sh src/w3.sh > "$SX/fxw.list"
     printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w3.sh > "$SX/fxw.omit.list"
     sed '/^    if \[ -z "\$LOCAL_MAP" \] && \[ "\$TRACER" != both \]; then$/,/^    fi$/d' "$SB/deriver.sh" > "$SX/deriver.endonly.sh"
+    # THE KILL REAPS THE RUN'S WHOLE PROCESS GROUP (BL-900). The run starts under `set -m`, so it leads a group
+    # whose id is its recorded pid, and the kill is `kill -9 -- -<pid>` until no member answers. A one-level
+    # `pkill -P <pid>; kill <pid>` left any process the deriver forked BETWEEN the two signals alive: killing its
+    # children woke it into the flush, whose `sandboxed cat` of the end marker is a stub that waits, unbounded, for
+    # a live stream of `w/fxw3.raw`. That orphan outlived the run, and the next run on this SAME trace root and
+    # feed registered exactly that stream at its own fxw3: the orphan's end-marker read landed in IU's capture
+    # ahead of fxw3's own reads, and fxw3 was OMITTED (LOSS CANARY, with or without "no end sentinel"). Each run's
+    # output goes to its own `<map out>.out`, so a later run cannot overwrite the reason an earlier one printed.
+    # The group's state is written to `<map out>.grp` as "<alive before the kill>|<alive after the reap>".
+    #
+    # THE BOUND (IW_REAP_ROUNDS = 5 missed rounds) STANDS FOR: the generations of this run's process chain that a
+    # group SIGKILL can miss. A `kill -9 -- -<pgid>` reaches every member present when it is sent; the only member it
+    # can miss is one forked in flight, and that one is a generation deeper. The chain is subshell -> deriver ->
+    # stub sandbox-exec -> fixture run.sh -> its `sleep`, five deep, so no killable group needs a sixth. A ROUND IS
+    # A GENERATION, NOT AN INTERVAL: it is counted only when every live member reads aw_blocked (state S, I or T with
+    # nothing pending) right after a kill -- a member the kill provably did not take. A member that took SIGKILL and
+    # is still exiting on a loaded box is never blocked with nothing pending (aw_group_settled's contract), so it is
+    # polled without spending a round, and a correct reap cannot reach the bound at any load. OUTCOME ON HIT: the
+    # reaper stops and writes "BROKEN" and each surviving pid with its `ps` state into AW_STALL_LOG; the caller's
+    # shell refuses on it with aw_gate before any verdict is read, because iw_run runs inside `$( )` and a `broken`
+    # there would end only the subshell -- and the fixture's final aw_gate refuses on it again, so a dropped call-site
+    # gate is still FIXTURE BROKEN and never a verdict. LIMIT: a member stuck in the kernel with SIGKILL pending
+    # reads as dying forever and is polled, unbounded; that is a hang for the gate's watchdog, never a verdict.
+    # A zombie never answers `kill -0 -- -<pgid>` here (measured on Darwin: a zombie-only group reads rc 1, a live
+    # one rc 0), so a killed leader not yet waited cannot hold the loop, and the reaper never `wait`s inside it:
+    # a wait on a leader that never dies would block before any round is counted.
+    IW_REAP_ROUNDS=5
+    # iw_group_state <pgid>: "gone", "dying" (a live member is not blocked), or "missed <pid>..." (every live member
+    # blocked with nothing pending). THE SEAM: the reaper reads the group only through ${IW_GROUP_STATE:-iw_group_state},
+    # so the unkillable-member cell drives the SAME iw_reap with a state that never leaves "missed".
+    iw_group_state() {
+      kill -0 -- -"$1" 2>/dev/null || { echo gone; return 0; }
+      if aw_group_settled "$1"; then printf 'missed %s\n' "$(pgrep -g "$1" 2>/dev/null | tr '\n' ' ')"; else echo dying; fi
+    }
+    iw_reap() { # <pgid> <refusal record>; 0 the group is gone, 1 the bound was reached
+      local g="$1" rec="$2" n=0 st p s l=""
+      # The first kill precedes the first read, so a group whose members all sleep before it is never a missed round.
+      kill -9 -- -"$g" 2>/dev/null
+      while :; do
+        st="$(${IW_GROUP_STATE:-iw_group_state} "$g")"
+        case "$st" in
+          gone) return 0 ;;
+          missed*)
+            if [ "$n" -ge "$IW_REAP_ROUNDS" ]; then
+              for p in ${st#missed}; do
+                s="$(ps -o stat= -p "$p" 2>/dev/null | tr -d ' ')"; l="$l $p (${s:-state unreadable})"
+              done
+              printf 'BROKEN: iw_reap read group %s missed after %s SIGKILL round(s), and it still holds%s\n' "$g" "$n" "$l" >> "$rec"
+              return 1
+            fi
+            n=$((n + 1)) ;;
+        esac
+        kill -9 -- -"$g" 2>/dev/null
+        [ "$st" = dying ] && sleep 0.1
+      done
+    }
     iw_run() { # <deriver copy> <stream list> <kill: yes|no> <map copy out>; prints "<rc or sigkill>|<reached fxw3>"
-      local dv="$1" sl="$2" k="$3" out="$4" pid r at=no i=0 kf=""
+      local dv="$1" sl="$2" k="$3" out="$4" pid r at=no i=0 kf="" ga=0 gb=0
       cp "$dv" "$STUB_DERIVER"
-      rm -f "$SX/kill" "$SX/kill.at"
+      rm -f "$SX/kill" "$SX/kill.at" "${out%.tsv}.grp"
       [ "$k" = yes ] && { kf="$SX/kill"; : > "$kf"; }
+      set -m
       ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$sl" STUB_KILLFLAG="$kf" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list "fxw1 fxw2 fxw3" --tracer sandbox ) > "$WORK/iw.out" 2>&1 </dev/null &
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list "fxw1 fxw2 fxw3" --tracer sandbox ) > "${out%.tsv}.out" 2>&1 </dev/null &
       pid=$!
+      set +m
       if [ "$k" = yes ]; then
         # fxw3 REACHED, OR THE DERIVER GONE. A 60s tick count used to end this wait and score `at=no`, so
         # a deriver slowed past it by load read as a run that never reached fxw3. The net is no progress:
         # its output, the map and the trace root all unchanged for AW_STALL polls is a refusal.
         aw_wait '[ -e "$SX/kill.at" ]' 'printf %s "$pid"' ''
         [ -e "$SX/kill.at" ] && at=yes
-        pkill -9 -P "$pid" 2>/dev/null; kill -9 "$pid" 2>/dev/null
-        wait "$pid" 2>/dev/null; r=sigkill
+        # PRESENCE FIRST: the recorded group answers before the kill, so a group never created cannot read as reaped.
+        kill -0 -- -"$pid" 2>/dev/null && gb=1
+        # GONE, ON A CONDITION, WITHIN THE BOUND: every member has taken SIGKILL once none answers, at any load.
+        iw_reap "$pid" "$AW_STALL_LOG" && wait "$pid" 2>/dev/null; r=sigkill
+        kill -0 -- -"$pid" 2>/dev/null && ga=1
+        printf '%s|%s\n' "$gb" "$ga" > "${out%.tsv}.grp"
         rm -f "$SX/kill"
       else
         wait "$pid"; r=$?
@@ -5244,27 +5306,64 @@ STUB
     }
     TRACE_ARMS=$((TRACE_ARMS+1))
     IW="$(iw_run "$SB/deriver.sh" "$SX/fxw.list" yes "$WORK/iw.sigk.tsv")"
+    aw_gate
     IWS="$(iw_sig "$WORK/iw.sigk.tsv")"
     if [ "$IW|$IWS" = "sigkill|yes|101001|2|0" ]; then
       ok "INTERRUPTED: a 3-fixture --list run SIGKILLed during fxw3 leaves a map holding fxw1's and fxw2's new rows, fxw3's old row, the untraced fixture's rows, and no temp file"
       B_iw=1
     else
-      bad "INTERRUPTED: expected 'sigkill|yes|101001|2|0' (rc|reached fxw3|new/old rows fxw1..3|other rows|tmp files), got '$IW|$IWS' — $(tail -3 "$WORK/iw.out" | tr '\n' ' ')"
+      bad "INTERRUPTED: expected 'sigkill|yes|101001|2|0' (rc|reached fxw3|new/old rows fxw1..3|other rows|tmp files), got '$IW|$IWS' — $(tail -3 "$WORK/iw.sigk.out" | tr '\n' ' ')"
     fi
     TRACE_ARMS=$((TRACE_ARMS+1))
     if cmp -s "$SB/deriver.sh" "$SX/deriver.endonly.sh"; then
       bad "INTERRUPTED MUTANT endonly did not apply: deleting the per-fixture write changed nothing in the deriver copy"
     else
       IWM="$(iw_run "$SX/deriver.endonly.sh" "$SX/fxw.list" yes "$WORK/iw.sigk.endonly.tsv")"
+      aw_gate
       IWMS="$(iw_sig "$WORK/iw.sigk.endonly.tsv")"
       [ "$F2C_MATRIX" = 1 ] && f2c_mx endonly "$IWM|$IWMS"
       # TWIN: the untraced fixture's 2 rows and no temp file -- the tail of the vector, at want.
       _tw=0; case "$IWMS" in *"|2|0") _tw=1 ;; esac
       case "$IWM|$IWMS" in
         "sigkill|yes|010101|"*) if f2c_twin endonly "other rows 2, no temp file" "$_tw"; then mutant_killed "${B_iw:-0}" endonly "INTERRUPTED MUTANT endonly is KILLED: with end-only writing the same SIGKILL leaves every fixture's OLD row and none of the new ones"; fi ;;
-        *) bad "INTERRUPTED MUTANT endonly: expected 'sigkill|yes|010101|2|0', got '$IWM|$IWMS' — $(tail -3 "$WORK/iw.out" | tr '\n' ' ')" ;;
+        *) bad "INTERRUPTED MUTANT endonly: expected 'sigkill|yes|010101|2|0', got '$IWM|$IWMS' — $(tail -3 "$WORK/iw.sigk.endonly.out" | tr '\n' ' ')" ;;
       esac
     fi
+    # THE KILLED RUNS' GROUPS ARE EMPTY BEFORE IU STARTS (BL-900). Both SIGKILLed runs share IU's trace root and feed,
+    # so an orphan of either could read a marker in IU's fxw3 window. Presence-shaped on both sides: each recorded
+    # group answered `kill -0` BEFORE its kill (1), so a group never created cannot pass as reaped, and none of it
+    # answers AFTER the reap (0), read while fxw3's kill flag still holds its poller in the loop.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    IWG="$(cat "$WORK/iw.sigk.grp" 2>/dev/null) $(cat "$WORK/iw.sigk.endonly.grp" 2>/dev/null)"
+    if [ "$IWG" = "1|0 1|0" ]; then
+      ok "INTERRUPTED GROUP: each interrupted run's recorded process group was alive before the kill and empty after the reap ('1|0 1|0', before|after for the run and the endonly run), so no orphan reaches IU's trace root"
+    else
+      bad "INTERRUPTED GROUP: expected '1|0 1|0' (recorded group alive before the kill | alive after the reap, for the run and the endonly run), got '$IWG'"
+    fi
+    # THE REAP IS BOUNDED, AND ITS REFUSAL REACHES THE FIXTURE'S OWN SHELL (BL-900). A real group the kill cannot empty
+    # is not constructible here: a zombie never answers `kill -0 -- -<pgid>` on Darwin. So the cell starts one `sleep`
+    # WITHOUT `set -m` (pid recorded, killed by that pid after) and drives the SHIPPED iw_reap on the group id equal to
+    # that pid -- a group that cannot exist while its would-be leader lives outside it, so every round's group kill
+    # lands on nothing and the member stays alive for `ps` to read -- through the IW_GROUP_STATE seam, with a state
+    # reporting that pid as a missed member forever. The reap runs inside `$( )`, as it does inside iw_run, and
+    # records into the cell's own file (never the real AW_STALL_LOG, which the fixture's final aw_gate reads). The
+    # shipped aw_gate then runs in a separate `( )` reading that file, as the call site's does, and must exit 2 with
+    # FIXTURE BROKEN naming the pid and its `ps` state: the refusal crossed the `$( )` boundary as a file.
+    # Its twin is INTERRUPTED GROUP above: the unseamed reap emptied both real groups without reaching the bound.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    sleep 30 </dev/null >/dev/null 2>&1 & IWB_P=$!
+    iwb_stuck() { printf 'missed %s\n' "$IWB_P"; }
+    IWB_R="$(IW_GROUP_STATE=iwb_stuck; iw_reap "$IWB_P" "$WORK/iwb.reap"; echo "$?")"
+    IWB_OUT="$( ( AW_STALL_LOG="$WORK/iwb.reap"; aw_gate; echo "NOT REFUSED" ) 2>&1 )"; IWB_RC=$?
+    kill -9 "$IWB_P" 2>/dev/null; wait "$IWB_P" 2>/dev/null
+    IWB_LEFT=0; kill -0 "$IWB_P" 2>/dev/null && IWB_LEFT=1
+    case "$IWB_R|$IWB_RC|$IWB_LEFT|$IWB_OUT" in
+      "1|2|0|"*"FIXTURE BROKEN"*)
+        if grep -Eq "group $IWB_P missed after $IW_REAP_ROUNDS SIGKILL round\(s\), and it still holds $IWB_P \([A-Z]" <<< "$IWB_OUT" && ! grep -q 'NOT REFUSED' <<< "$IWB_OUT"; then
+          ok "INTERRUPTED REAP BOUND: a group member no kill takes stops iw_reap after $IW_REAP_ROUNDS missed rounds inside \$( ), and aw_gate in the caller's shell refuses FIXTURE BROKEN naming pid $IWB_P and its ps state, never a spin and never a pass"
+        else bad "INTERRUPTED REAP BOUND: refused, but the refusal does not name the member and its state: $(tr '\n' ' ' <<< "$IWB_OUT")"; fi ;;
+      *) bad "INTERRUPTED REAP BOUND: expected reap rc 1, gate rc 2, the member reaped, FIXTURE BROKEN; got reap $IWB_R gate $IWB_RC left $IWB_LEFT: $(tr '\n' ' ' <<< "$IWB_OUT")" ;;
+    esac
     # The identity arm. The fix's run must have written per fixture and reached a map that MOVED (new
     # rows, fxw2's OLD row dropped, the OMITTED line), so the cmp is not two untouched seeds agreeing;
     # the mutant must have written none. The per-fixture call's output lands in $WORK/fxw1.write; it
@@ -5280,7 +5379,7 @@ STUB
     if [ "$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH" = "0|no|0|no|1|0|100010|2|0|1" ] && cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv"; then
       ok "IDENTITY: an uninterrupted run that wrote after each fixture ends on a map byte-identical (cmp -s) to the end-only write's, including the OMITTED line for the mid-list fxw2"
     else
-      bad "IDENTITY: expected '0|no|0|no|1|0|100010|2|0|1' and identical maps, got '$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH' cmp=$(cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" && echo same || echo DIFFER) — $(diff "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" | head -4 | tr '\n' ' ')"
+      bad "IDENTITY: expected '0|no|0|no|1|0|100010|2|0|1' and identical maps, got '$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH' cmp=$(cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" && echo same || echo DIFFER) — $(diff "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" | head -4 | tr '\n' ' ') — the fix run's omissions: $(grep -E '^  [a-z0-9_.-]+ +OMITTED \(' "$WORK/iw.full.out" | tr -s ' ' | tr '\n' ' ')"
     fi
 
     # THE DIGEST WRITER (BL-471), DRIVEN WHOLE. The BR runner carries only an FXROOT line, so it has no

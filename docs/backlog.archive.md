@@ -39316,3 +39316,19 @@ Owed: decide whether every pull runs the differential (two validator passes per 
 
 verify: sh bash core/fixtures/owed-derivations/receipt-bl706.sh
 
+## BL-900 — readset-skip's IDENTITY arm reads a different verdict from run to run, because iw_run's one-level kill leaves a flush-stub orphan
+
+**LANDED (v0.990.0).** **DEFECT.** BL-868 class, a verdict that varies from run to run. Tier: gate, a false red in `core/fixtures/readset-skip/run.sh` `sg tracer` (shard readset-skip-c). Provenance: batch b247.
+
+Symptom. On the 0.984.0 push the IDENTITY arm read `got '0|no|0|no|1|0|100000|2|0|0'` against want `0|no|0|no|1|0|100010|2|0|1`, cmp DIFFER, with the OMITTED line reading `fxw2 fxw3` instead of `fxw2` (retained log `.git/ai-dlc-fixture-failures.20261101T023158Z.11828:112`). The re-push of the same sha passed. That run's own omission reason was lost, because the endonly run overwrote `$WORK/iw.out`.
+
+Cause, in the test. `iw_run` killed a SIGKILLed deriver one level deep (`pkill -9 -P "$pid"; kill -9 "$pid"`). Killing its children woke the deriver into its end flush, which forked a stub `sandbox-exec` reading the end marker `end-fxw3` before the second signal. That stub waits, with no bound, for a live stream of `w/fxw3.raw`, and no stub records its pid, so `stub_reap` could not reach it. IW and IWM share IU's trace root (`$SX_TR`) and feed. When IU registered that stream at its own fxw3, the orphan emitted its end-marker read into IU's capture ahead of fxw3's reads, and fxw3 was OMITTED (LOSS CANARY: 2 path(s), sometimes with "no end sentinel").
+
+Fix. `iw_run` starts each run under `set -m` and kills the recorded process group with `kill -9 -- -<pid>` until no member answers, never by pattern. The reap is bounded at IW_REAP_ROUNDS=5 missed rounds, the depth of the run's process chain; a round counts only when every live member reads blocked with nothing pending right after a SIGKILL, so a dying member under load never spends one. At the bound it writes each surviving pid and its ps state to AW_STALL_LOG, and aw_gate refuses FIXTURE BROKEN in the fixture's own shell before any verdict is read; the INTERRUPTED REAP BOUND cell proves this through the IW_GROUP_STATE seam. Each run writes its own `<map>.out`, so a later run cannot overwrite an earlier run's reason. The new arm INTERRUPTED GROUP asserts `1|0 1|0`: each killed run's recorded group was alive before the kill and empty after the reap. IDENTITY's FAIL now prints the fix run's own OMITTED lines.
+
+Measured. A forced interleaving held the killed run's flush-stub orphan on a flag and released it at IU's fxw3. The base copy 8f25c6904 was red 5/5 with the exact retained vector and reason `fxw3 OMITTED (LOSS CANARY: 2 path(s) ...)`; the fix was green 5/5. Reverting only the reap to one level, unforced, reds the INTERRUPTED GROUP arm alone (`1|1 1|1`). The readset-skip-c invocation budget is 756, unchanged (`invocations.decl` `756 *`). No `.githooks` or deriver change.
+
+Related. BL-881 carries a progress paragraph for this second instance of the "no stub records its pid" teardown gap; BL-881 stays OPEN.
+
+verify: sh bash core/fixtures/readset-skip/run.sh
+
