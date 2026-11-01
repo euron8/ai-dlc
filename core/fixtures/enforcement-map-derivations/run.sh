@@ -133,7 +133,7 @@ mutant_apply() {
 # the deciding arm.
 mutant_case() {
   local name="$1" label="$2" want="$3" want_n="$4" clabel="${5:-}"
-  local id hdr twin dec out rc n base=0
+  local id hdr twin dec out rc n bv bn
   id="$(arm_of)"
   hdr="$(grep "^# MUTANT-MATRIX $name " "$0")"
   dec="${hdr#*decides=}"; dec="${dec%% *}"
@@ -146,10 +146,9 @@ mutant_case() {
   rc=$?
   sel_guard "$rc" "$id,$twin" "$out"
   n="$(grep -c '^FAIL:' <<<"$out")" || n=0
-  case "$out" in
-    *"OK: enforcement-map.yaml in sync with"*) [ "$n" -eq 0 ] && base=1 ;;
-  esac
-  need_base "$base" "$name" || return 0
+  grep -qF "OK: enforcement-map.yaml in sync with" <<<"$out"; bv=$?
+  [ "$n" -eq 0 ]; bn=$?
+  need_base "$([ "$bv" -eq 0 ] && [ "$bn" -eq 0 ] && echo 1 || echo 0)" "$name" || return 0
   ok "${clabel:-$id mutant control: the unmutated copy passes $id and its twin $twin}"
   mutant_apply "$name" "$t" || return 0
   out="$(run_map "$id,$twin")"
@@ -170,7 +169,7 @@ mutant_case() {
     bad "$label — $n finding(s), $(fail_count "$out" "$id") naming $id, where $want_n naming $id were expected"
     return 0
   fi
-  mutant_killed "$base" "$name" "$label"
+  mutant_killed "$([ "$bv" -eq 0 ] && [ "$bn" -eq 0 ] && echo 1 || echo 0)" "$name" "$label"
 }
 
 SKILL_REL="core/skills/ai-dlc/SKILL.md"

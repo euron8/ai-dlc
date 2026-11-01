@@ -346,6 +346,29 @@ PARTMODE=0; CHKPART=""
 # backslash may enter this value: `awk -v` strips one level of escaping.
 DISP_KEY_ERE='^([[:space:]-]*[*_`]*disposition|[[:space:]]*-[[:space:]]*[*_`]*[Dd][Ii][Ss][Pp][Oo][Ss][Ii][Tt][Ii][Oo][Nn])[*_`]*:'
 
+# THE BATCH FORM (BL-877). A self-probe asks one shared grammar function many questions, and each question used to
+# be one awk start (about 33 starts per join invocation). Each of contract_check, checks_field, gap_section, src_check
+# and spec_render_scan takes `-b` and then several questions: it runs its OWN awk program once, each question a GROUP
+# of operands opened by `G_=<n>`, and prints each group's answer exactly as the one-question call prints it. The
+# answers are separated by a line holding only BT_SEP (\034, the ASCII field separator, a byte no record or probe
+# file carries). Each awk resets its state at a group boundary and runs its END logic for the group that closed, so
+# no state crosses groups. A group the awk never opened (an empty file) leaves the boundary count short, and the
+# batch then prints a final BATCHLOST line, so the probe's comparison fails closed. The join's own calls ask one
+# question and print no separator. The probes call the same function the join calls, never a copy of its grammar.
+BT_SEP=$'\034'
+# bt_pop -- BT holds a batch's output; BT_O becomes its next answer, as `$( )` would have captured it alone.
+bt_pop() {
+  BT_O="${BT%%"$BT_SEP"*}"
+  case "$BT" in *"$BT_SEP"*) BT="${BT#*"$BT_SEP"}"; BT="${BT#$'\n'}" ;; *) BT="" ;; esac
+  while [ "${BT_O%$'\n'}" != "$BT_O" ]; do BT_O="${BT_O%$'\n'}"; done
+}
+# bt_cat <n> -- BT_O becomes the next <n> answers concatenated, as `$(f a; f b; ...)` would have captured them.
+bt_cat() {
+  local i_=0 c_=""
+  while [ "$i_" -lt "$1" ]; do bt_pop; [ -z "$BT_O" ] || c_="${c_:+${c_}$'\n'}${BT_O}"; i_=$((i_ + 1)); done
+  BT_O="$c_"
+}
+
 # --- PARTY SOURCES (BL-462). Every applied entry names `source: <seat-file>#<finding-id>`, and the
 # pair resolves against the sprint's seat files -- never the id alone, which collides across seats.
 # src_ids <seat file>... -> "<basename>\t<finding id>" per finding heading (grammar: the header).
@@ -369,11 +392,18 @@ src_ids() {
 # it carries a `disposition:` line (the label arm H reads), so a preamble or a "for the lead"
 # section is not an entry. No `{n,m}` interval in these regexes: the macOS awk is not assumed to
 # carry them.
+# src_check -b <seat dir> <record>... -> the same lines per record, each record its own question, ONE token awk
+# and ONE resolver over the seat dir (BT_SEP).
 src_check() {
-  local sd="$1" sdp ids toks; shift
+  local sd="$1" sdp ids toks g_=0 n_; shift
+  if [ "$sd" = -b ]; then sd="$1"; shift; n_=$#
+    while [ "$n_" -gt 0 ]; do g_=$((g_ + 1)); set -- "$@" "G_=$g_" "$1"; shift; n_=$((n_ - 1)); done
+  fi
   sdp="$(cd "$sd" 2>/dev/null && pwd -P)" || sdp="$sd"
-  toks="$(awk -v DK="$DISP_KEY_ERE" '
+  toks="$(awk -v DK="$DISP_KEY_ERE" -v NG_="$g_" '
     function flush() { if (disp && !nsrc && !ruled) print "NOSOURCE\t" cf "\t" cur; if (disp) ne++; disp = 0; nsrc = 0; ruled = 0 }
+    # THE BATCH BOUNDARY: the last group tail, then its counts reset.
+    FNR == 1 && G_ != pg { if (ng_++) { flush(); print "N\t" ne + 0 "\t" ns + 0; print "\034"; ne = 0; ns = 0 }; pg = G_ }
     FNR == 1 { flush(); cur = "(before any heading)"; cf = FILENAME; sub(/.*\//, "", cf); fence = 0 }
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
@@ -389,7 +419,7 @@ src_check() {
       }
       if (!n) { l = $0; sub(/^[ \t]+/, "", l); print "BADFORM\t" cf "\t" l }
       next }
-    END { flush(); print "N\t" ne + 0 "\t" ns + 0 }' "$@")"
+    END { flush(); if (NG_ > 0 && ng_ != NG_) print "BATCHLOST"; print "N\t" ne + 0 "\t" ns + 0 }' "$@")"
   # One awk over every seat file of the sprint; a glob that matched nothing leaves no file, and
   # every source then reads NOFILE -- a refusal, never a pass.
   set -- "$sd"/*.md
@@ -502,9 +532,10 @@ src_probe() {
   printf '# seat b\n\n## Finding A1-2 (MAJOR) sections: 1\n' > "$d/seats/b-1.md"
   printf '### F-1\n- disposition: repaired\n- source: a-1.md#F-1\n' > "$d/good.md"
   printf '### F-1\n- disposition: repaired\n- source: b-1.md#F-1\n' > "$d/bad.md"
-  o="$(src_check "$d/seats" "$d/good.md")"
+  BT="$(src_check -b "$d/seats" "$d/good.md" "$d/bad.md")"
+  bt_pop; o="$BT_O"
   [ "$o" = "N	1	1" ] || { rm -rf "$d"; die "the source resolver's self-probe failed: a resolving source read '${o}'; no verdict"; }
-  o="$(src_check "$d/seats" "$d/bad.md")"
+  bt_pop; o="$BT_O"
   case "$o" in UNRESOLVED*"b-1.md#F-1"*) ;; *) rm -rf "$d"; die "the source resolver's self-probe failed: an id only another seat carries read '${o}'; no verdict" ;; esac
   rm -rf "$d"
 }
@@ -771,9 +802,13 @@ src_probe() {
 #   BADSIB\t<rec>\t<entry>     the same entry carrying the field in none of its four forms
 #   CTL\t<rec>\t<entry>\t<file>\t<text>   a siblings fence's control, counted by the caller (parts mode)
 #   SETASIDE\t<rec>\t<entry>\t<line>
+# contract_check -b <0|1> <file> [<0|1> <file>]... -> the same lines per pair, ONE awk (BT_SEP).
 contract_check() {
-  local srcm="$1"; shift
-  awk -v src="$srcm" -v DK="$DISP_KEY_ERE" '
+  local srcm="$1" g_=0 n_; shift
+  if [ "$srcm" = -b ]; then srcm=0; n_=$(($# / 2))
+    while [ "$n_" -gt 0 ]; do g_=$((g_ + 1)); set -- "$@" "G_=$g_" "src=$1" "$2"; shift 2; n_=$((n_ - 1)); done
+  fi
+  awk -v src="$srcm" -v DK="$DISP_KEY_ERE" -v NG_="$g_" '
     BEGIN { SIBNA["n/a (insertion)"] = 1; SIBNA["n/a (deletion)"] = 1
             SIBNA["n/a (section shard; re-checked by the serial remediator after assembly)"] = 1
             VOC["repaired"] = 1; VOC["escalated"] = 1; VOC["skipped"] = 1; VOC["not-reproduced"] = 1
@@ -844,6 +879,12 @@ contract_check() {
       ctext = substr(r, 1, i - 1); gsub(/\t/, " ", ctext); r = substr(r, i + 1); sub(/^[ \t]+/, "", r); sub(/[ \t]+$/, "", r)
       if (r != "" && r !~ /[ \t]/) cfile = r; else ctext = ""
     }
+    # THE BATCH BOUNDARY: a new group closes the last one with this program END logic, under that group src.
+    FNR == 1 && G_ != pg { if (ng_++) { s_ = src; src = ps_; ct_fin(); src = s_; print "\034"
+                             ne = 0; nedt = 0; nrep = 0; nsib = 0; era = 0; nesc = 0; npend = 0; nlk = 0; sibin = 0
+                             split("", ef); split("", en); split("", ex); split("", la); split("", lb); split("", par)
+                             split("", csz); split("", mcl); split("", lop); split("", mop); split("", mem) }
+                           pg = G_; ps_ = src }
     FNR == 1 { flush(); cur = "(before any heading)"; sev = 0; hl = 0; cf = FILENAME; sub(/.*\//, "", cf); part = cf; fence = 0 }
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) {
       if (sibin) sibclose()
@@ -880,12 +921,13 @@ contract_check() {
     /^[[:space:]-]*[*_`]*claim now asserted[*_`]*:/ { claim = tolower($0); inclaim = 1; next }
     /^[[:space:]-]*[*_`]*[a-z][a-z _]*[*_`]*:/ { inclaim = 0 }
     inclaim { claim = claim " " tolower($0) }
-    END {
+    function ct_fin(   i) {
       flush()
       if (nlk) chains()
       for (i = 1; i <= nesc; i++) print (ex[i] ? "X" : "E") "\t" ef[i] "\t" en[i]
       print "N\t" ne + 0 "\t" nedt + 0 "\t" nsib + 0 "\t" npend + 0 "\t" nrep + 0
-    }' "$@"
+    }
+    END { if (NG_ > 0 && ng_ != NG_) print "BATCHLOST"; ct_fin() }' "$@"
 }
 # sib_control <part> <entry> <file> <text> -- the siblings fence's control, counted ONCE, here, at the
 # join: the text the fence says the edit wrote must be in the file it names now, which is the
@@ -938,17 +980,16 @@ ruling_cite() {
 # heading at or above it (not before <lo>), to the next heading of the same or higher level (not past <hi>);
 # <token> is the first D-<n>, LR-<x> or LRC-<x> in it, word-bounded, outside fences, or empty. Nothing when
 # <line> is outside [lo, hi] or the file has fewer lines.
+# gap_section -b <file> <line> <lo> <hi> [<file> <line> <lo> <hi>]... -> the same per quadruple, ONE awk (BT_SEP).
 gap_section() {
-  awk -v L="$2" -v lo="$3" -v hi="$4" '
+  local g_=0 n_ l_=0 o_=0 h_=0
+  if [ "$1" = -b ]; then shift; n_=$(($# / 4))
+    while [ "$n_" -gt 0 ]; do g_=$((g_ + 1)); set -- "$@" "G_=$g_" "L=$2" "lo=$3" "hi=$4" "$1"; shift 4; n_=$((n_ - 1)); done
+  else l_="$2"; o_="$3"; h_="$4"; set -- "$1"; fi
+  awk -v L="$l_" -v lo="$o_" -v hi="$h_" -v NG_="$g_" '
     function lvl(s) { match(s, /^#+/); return RLENGTH }
-    NR < lo { next }
-    NR > hi { exit }
-    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; t[NR] = ""; next } }
-    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; t[NR] = ""; next }
-    { t[NR] = fence ? "" : $0 }
-    !fence && /^#+[ \t]/ { if (NR <= L) { hs = NR; hv = lvl($0); hd = $0 } else if (hs && !he && lvl($0) <= hv) he = NR - 1 }
-    END {
-      if (L < lo || L > NR || L > hi) exit
+    function gs_fin(   s, e, tok, i, x) {
+      if (L < lo || L > NR || L > hi) return
       s = (hs ? hs : lo); e = (he ? he : (NR < hi ? NR : hi)); tok = ""
       for (i = s; i <= e && tok == ""; i++) {
         x = " " t[i] " "
@@ -956,7 +997,25 @@ gap_section() {
       }
       sub(/^#+[ \t]+/, "", hd); gsub(/[\t\r]/, " ", hd); sub(/[ ]+$/, "", hd)
       print (hs ? hd : "(before any heading)") "\t" tok
-    }' "$1"
+    }
+    # THE BATCH BOUNDARY: the last group judged under its own line, bounds and line count, then every reader reset.
+    FNR == 1 && G_ != pg { if (ng_++) { sL = L; slo = lo; shi = hi; sNR = NR; L = pL; lo = plo; hi = phi; NR = ln_
+                             gs_fin(); print "\034"; L = sL; lo = slo; hi = shi; NR = sNR
+                             split("", t); hs = 0; he = 0; hv = 0; hd = ""; fence = 0; dn_ = 0 }
+                           pg = G_; pL = L; plo = lo; phi = hi }
+    # A batch keeps reading after a group reaches its <hi>: the group skips its remaining lines (dn_), and
+    # its line count stays the one the one-question exit left (ln_). One question keeps the exit and NR.
+    NG_ > 0 { if (dn_) next; NR = FNR; ln_ = FNR }
+    NR < lo { next }
+    NR > hi { if (NG_ > 0) { dn_ = 1; next }; exit }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; t[NR] = ""; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; t[NR] = ""; next }
+    { t[NR] = fence ? "" : $0 }
+    !fence && /^#+[ \t]/ { if (NR <= L) { hs = NR; hv = lvl($0); hd = $0 } else if (hs && !he && lvl($0) <= hv) he = NR - 1 }
+    END {
+      if (NG_ > 0) { if (ng_ != NG_) print "BATCHLOST"; NR = ln_ }
+      gs_fin()
+    }' "$@"
 }
 # gap_where <cite> -> the GAPFILL line's location suffix (BL-556), NOTE tier: it never refuses and changes no
 # exit code. A LIVE file resolves under the project root, then the state dir's parent, then absolutely (the
@@ -1075,58 +1134,63 @@ contract_probe() {
   printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: n/a (insertion)\n- claim now asserted: X. Y is outside this shard and is not required.\n' > "$d/bad.md"
   printf '### F-1 — MAJOR\n- source: x/s-1.md#F-1\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: n/a (insertion)\n- claim now asserted: X. Y is outside this shard; escalated below.\n\n### F-1 (remainder) — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n' > "$d/good.md"
   printf '### F-7 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: checked\n\n### F-8 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:4\n- **siblings:**\n\n```text\n$ grep -rn -F \047old\047 s1/stories/a.md\n$ grep -c -F \047new words\047 s1/stories/a.md\n1\n```\n\n### F-9 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:5\n- siblings:\n\n```derived\n$ grep -rn -F \047old\047 s1/stories/a.md\n$ grep -c -F \047new\047 s1/stories/a.md\n1\n```\n' > "$d/forms.md"
-  o="$(contract_check 0 "$d/forms.md")"
-  [ "$o" = "BADSIB	forms.md	F-7 — MINOR
-CTL	forms.md	F-8 — MINOR	s1/stories/a.md	new words
-BADSIB	forms.md	F-9 — MINOR
-N	3	3	3	0	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings forms read '${o}'; no verdict"; }
+  # Every record the probe asks contract_check about is written first, then ONE batched call answers all twelve
+  # questions (BT_SEP); each answer is compared below in the order the questions were asked.
   printf '### F-2 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n\n### F-3 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n' > "$d/sib.md"
   printf '### F-2 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n\n### F-4 — MAJOR\n- disposition: repaired\n- edit: s1/stories/a.md:9\n- siblings: n/a (insertion)\n\n### F-5 — MAJOR\n- disposition: repaired\n- edit: s1/stories/a.md:12\n' > "$d/era.md"
   printf '<!-- shard: 01.md -->\n### F-6 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-6 — MAJOR\n\n### F-1 — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n\n### F-6 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n<!-- shard: 02.md -->\n### F-1 — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n\n### serial F-1 by token — MAJOR\n- source: s-1.md#F-1\n- disposition: repaired\n- edit: n/a (no edit)\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- **closes:** `01.md F-1 — MAJOR`\n' > "$d/close.md"
-  o="$(contract_check 0 "$d/bad.md")"
-  case "$o" in SETASIDE*"F-1 — MAJOR"*) ;; *) rm -rf "$d"; die "the entry contract's self-probe failed: a set-aside read '${o}'; no verdict" ;; esac
-  o="$(contract_check 1 "$d/good.md")"
-  [ "$o" = "E	good.md	F-1 (remainder) — MAJOR
-N	2	1	1	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a handed-off split pair read '${o}'; no verdict"; }
-  o="$(contract_check 0 "$d/sib.md")"
-  [ "$o" = "NOSIB	sib.md	F-2 — MINOR
-N	2	1	0	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings reader read '${o}' in parts mode; no verdict"; }
-  o="$(contract_check 1 "$d/sib.md")"
-  [ "$o" = "N	2	1	0	1	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a pre-rule --sources record read '${o}'; no verdict"; }
-  o="$(contract_check 1 "$d/era.md")"
-  [ "$o" = "NOSIB	era.md	F-5 — MAJOR
-N	3	3	1	1	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the --sources positional era read '${o}'; no verdict"; }
-  o="$(contract_check 1 "$d/close.md")"
-  [ "$o" = "X	01.md	F-1 — MAJOR
-E	01.md	F-6 — MAJOR
-E	02.md	F-1 — MAJOR
-N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: escalated-entry closure read '${o}'; no verdict"; }
-  o="$(contract_check 0 "$d/close.md")"
-  [ "$o" = "E	01.md	F-1 — MAJOR
-E	01.md	F-6 — MAJOR
-E	02.md	F-1 — MAJOR
-N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: parts mode closed an escalated entry ('${o}'); no verdict"; }
   # The disposition key and its vocabulary (BL-542). Offenders: a renamed key over an edit, a value
   # outside the vocabulary, an operator-ruling with its cite. Near-misses on the same run: a
   # preamble heading with no edit:, and `not-reproduced`, whose hyphen a first-token read loses.
   printf '# preamble\n\n### F-1\n- outcome: done\n- edit: n/a\n\n### F-2\n- disposition: done\n- edit: n/a\n\n### F-3\n- disposition: not-reproduced\n- edit: n/a\n\n### F-4\n- disposition: operator-ruling\n- edit: n/a\n- ruling: 2026-01-01T00:00:00Z\n' > "$d/vocab.md"
-  o="$(contract_check 0 "$d/vocab.md")"
-  [ "$o" = "NODISP	vocab.md	F-1
-BADDISP	vocab.md	F-2	done
-RULING	vocab.md	F-4	2026-01-01T00:00:00Z
-N	3	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the disposition key and vocabulary read '${o}'; no verdict"; }
   # The gap-fill tripwire (BL-556): a repaired claim saying so fires; an escalated one does not.
   printf '### F-4\n- disposition: repaired\n- edit: n/a\n- claim now asserted: one pool down makes the total unavailable. This is a gap fill; the lead may veto it.\n\n### F-5\n- disposition: escalated\n- edit: n/a\n- claim now asserted: a gap fill the operator decides.\n' > "$d/gap.md"
-  o="$(contract_check 0 "$d/gap.md")"
-  [ "$o" = "GAPFILL	gap.md	F-4
-E	gap.md	F-5
-N	2	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the gap-fill tripwire read '${o}'; no verdict"; }
   # The supersedes chain (BL-565), record mode: a serial escalation superseding a part escalation makes ONE
   # chain, the part member SUP and the latest the counted one; a closes: on the latest alone leaves the part
   # member open and flagged; a supersedes naming a LATER escalation is DANGLING. Near-miss: the same record
   # with no supersedes line reads two plain escalations, no chain.
   printf '<!-- shard: 01.md -->\n### F-1\n- disposition: escalated\n- edit: n/a\n\n### S-1\n- disposition: escalated\n- supersedes: 01.md F-1\n- edit: n/a\n\n### A-1\n- disposition: repaired\n- closes: 01.md S-1\n- edit: n/a\n\n### S-2\n- disposition: escalated\n- supersedes: 01.md S-3\n- edit: n/a\n\n### S-3\n- disposition: escalated\n- edit: n/a\n' > "$d/sup.md"
-  o="$(contract_check 1 "$d/sup.md")"
+  grep -v -e '^- supersedes:' "$d/sup.md" > "$d/nosup.md"
+  BT="$(contract_check -b 0 "$d/forms.md" 0 "$d/bad.md" 1 "$d/good.md" 0 "$d/sib.md" 1 "$d/sib.md" 1 "$d/era.md" \
+    1 "$d/close.md" 0 "$d/close.md" 0 "$d/vocab.md" 0 "$d/gap.md" 1 "$d/sup.md" 1 "$d/nosup.md")"
+  bt_pop; o="$BT_O"
+  [ "$o" = "BADSIB	forms.md	F-7 — MINOR
+CTL	forms.md	F-8 — MINOR	s1/stories/a.md	new words
+BADSIB	forms.md	F-9 — MINOR
+N	3	3	3	0	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings forms read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"
+  case "$o" in SETASIDE*"F-1 — MAJOR"*) ;; *) rm -rf "$d"; die "the entry contract's self-probe failed: a set-aside read '${o}'; no verdict" ;; esac
+  bt_pop; o="$BT_O"
+  [ "$o" = "E	good.md	F-1 (remainder) — MAJOR
+N	2	1	1	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a handed-off split pair read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"
+  [ "$o" = "NOSIB	sib.md	F-2 — MINOR
+N	2	1	0	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings reader read '${o}' in parts mode; no verdict"; }
+  bt_pop; o="$BT_O"
+  [ "$o" = "N	2	1	0	1	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a pre-rule --sources record read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"
+  [ "$o" = "NOSIB	era.md	F-5 — MAJOR
+N	3	3	1	1	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the --sources positional era read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"
+  [ "$o" = "X	01.md	F-1 — MAJOR
+E	01.md	F-6 — MAJOR
+E	02.md	F-1 — MAJOR
+N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: escalated-entry closure read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"
+  [ "$o" = "E	01.md	F-1 — MAJOR
+E	01.md	F-6 — MAJOR
+E	02.md	F-1 — MAJOR
+N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: parts mode closed an escalated entry ('${o}'); no verdict"; }
+  bt_pop; o="$BT_O"
+  [ "$o" = "NODISP	vocab.md	F-1
+BADDISP	vocab.md	F-2	done
+RULING	vocab.md	F-4	2026-01-01T00:00:00Z
+N	3	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the disposition key and vocabulary read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"
+  [ "$o" = "GAPFILL	gap.md	F-4
+E	gap.md	F-5
+N	2	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the gap-fill tripwire read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"
   [ "$o" = "DANGLING	sup.md	S-2	01.md S-3
 CHAIN	01.md S-1	01.md F-1
 CHOPEN	01.md S-1	01.md F-1
@@ -1135,8 +1199,7 @@ X	01.md	S-1
 E	01.md	S-2
 E	01.md	S-3
 N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the supersedes chain read '${o}'; no verdict"; }
-  grep -v -e '^- supersedes:' "$d/sup.md" > "$d/nosup.md"
-  o="$(contract_check 1 "$d/nosup.md")"
+  bt_pop; o="$BT_O"
   [ "$o" = "E	01.md	F-1
 X	01.md	S-1
 E	01.md	S-2
@@ -1146,7 +1209,7 @@ N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a 
   # two lines on, in the ADJACENT section citing D-7 only in a fence and D-50x in prose, names none -- a
   # whole-file scan, an unfenced scan or an unbounded token would each read a decision there.
   printf '# Doc\n\n## A\nThe rule per D-5.\nedited here\n\n## B\nedited there\n```text\nD-7\n```\nnot D-50x\n\n### B.1\nD-9 is a child of B\n' > "$d/sec.md"
-  o="$(gap_section "$d/sec.md" 5 1 999; gap_section "$d/sec.md" 8 1 13; gap_section "$d/sec.md" 8 1 999)"
+  BT="$(gap_section -b "$d/sec.md" 5 1 999 "$d/sec.md" 8 1 13 "$d/sec.md" 8 1 999)"; bt_cat 3; o="$BT_O"
   [ "$o" = "A	D-5
 B	
 B	D-9" ] || { rm -rf "$d"; die "the gap-fill location self-probe failed: read '${o}'; no verdict"; }
@@ -1156,19 +1219,12 @@ B	D-9" ] || { rm -rf "$d"; die "the gap-fill location self-probe failed: read '$
   printf '### F-1\n- disposition: repaired\n- edit: n/a\n' > "$d/nochk.md"
   printf '### F-1\n- disposition: escalated\n- edit: n/a\n' > "$d/esconly.md"
   printf -- '- advisor: called\n- derivations: not replayed\n\n### F-1\n- disposition: repaired\n- edit: n/a\n' > "$d/notrep.md"
-  o="$(checks_field 0 "$d/nochk.md"; checks_field 0 "$d/esconly.md"; checks_field 1 "$d/nochk.md"; checks_field 1 "$d/notrep.md")"
-  [ "$o" = "CHK	nochk.md	no advisor: line
-CHK	nochk.md	no derivations: line
-CHK	notrep.md	derivations: not replayed" ] || { rm -rf "$d"; die "the check-fields self-probe failed: read '${o}'; no verdict"; }
   # Prose and trailers (the s317 shape): a record whose only labelled lines are prose never opens
   # the era and passes; a keyword-led value with a trailer, in CRLF, reads; a prose line beside a
   # grammar line in a bound file is the value outside the grammar.
   printf -- '- derivations: the validator reports OK on the PRD\n- advisor: one attempt was made\n\n### F-1\n- disposition: repaired\n- edit: n/a\n' > "$d/prose.md"
   printf -- '- advisor: called (no concerns)\r\n- derivations: replayed 3 -- validator OK\r\n\r\n### F-1\r\n- disposition: repaired\r\n- edit: n/a\r\n' > "$d/trail.md"
   printf -- '- advisor: called\n- derivations: the validator reports OK\n\n### F-1\n- disposition: repaired\n- edit: n/a\n' > "$d/mixed.md"
-  o="$(checks_field 1 "$d/prose.md"; checks_field 1 "$d/trail.md"; checks_field 1 "$d/mixed.md")"
-  [ "$o" = "CHK	mixed.md	no derivations: line
-CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok" ] || { rm -rf "$d"; die "the check-fields self-probe failed on prose and trailers: read '${o}'; no verdict"; }
   # The serial blocks (BL-557): a joined record whose part carries both lines and whose SECOND serial
   # block, closed by its own terminator, omits both fires for that block alone; the same record with
   # the second block carrying both is quiet (the near-miss a last-part or last-triple read cannot
@@ -1194,7 +1250,19 @@ CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok"
   printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/nont.md"
   printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: p\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/lowp.md"
   printf -- '- artifact: j\n\n<!-- shard: 01.md -->\n### Repair record -- shard 01\n- artifact: p\n- advisor: called\n- derivations: replayed 1\n\n### F-1\n- disposition: repaired\n- edit: n/a\n\n- artifact: s\n\n### S-1\n- disposition: repaired\n- edit: n/a\n\nrepair-complete: serial 1\n' > "$d/ktitle.md"
-  o="$(checks_field 1 "$d/ser.md"; checks_field 1 "$d/serok.md"; checks_field 1 "$d/sernt.md"; checks_field 1 "$d/seropen.md"; checks_field 1 "$d/nonp.md"; checks_field 1 "$d/nont.md"; checks_field 1 "$d/lowp.md"; checks_field 1 "$d/ktitle.md")"
+  # ONE batched checks_field call answers all fifteen questions; the three comparisons below each read
+  # the concatenation of their own questions' answers, as the three `$( f; f; ... )` captures did.
+  BT="$(checks_field -b 0 "$d/nochk.md" 0 "$d/esconly.md" 1 "$d/nochk.md" 1 "$d/notrep.md" \
+    1 "$d/prose.md" 1 "$d/trail.md" 1 "$d/mixed.md" \
+    1 "$d/ser.md" 1 "$d/serok.md" 1 "$d/sernt.md" 1 "$d/seropen.md" 1 "$d/nonp.md" 1 "$d/nont.md" 1 "$d/lowp.md" 1 "$d/ktitle.md")"
+  bt_cat 4; o="$BT_O"
+  [ "$o" = "CHK	nochk.md	no advisor: line
+CHK	nochk.md	no derivations: line
+CHK	notrep.md	derivations: not replayed" ] || { rm -rf "$d"; die "the check-fields self-probe failed: read '${o}'; no verdict"; }
+  bt_cat 3; o="$BT_O"
+  [ "$o" = "CHK	mixed.md	no derivations: line
+CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok" ] || { rm -rf "$d"; die "the check-fields self-probe failed on prose and trailers: read '${o}'; no verdict"; }
+  bt_cat 8; o="$BT_O"
   [ "$o" = "CHK	ser.md	no advisor: line (the block closed at line 27 by 'repair-complete: serial 2')
 CHK	ser.md	no derivations: line (the block closed at line 27 by 'repair-complete: serial 2')
 CHK	sernt.md	the serial block closed at line 16 by 'repair-complete: serial 1' opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard 01.md
@@ -1240,8 +1308,14 @@ CHK	ktitle.md	no derivations: line (the block closed at line 19 by 'repair-compl
 # defines them as an edit that inserted or deleted text, so on an `edit:` line they name a write. Fail closed.
 # An entry dispositioned repaired or operator-ruling that carries NO `edit:` line prints
 # "EDT\t(no edit: line)": an absent value is not a no-edit value, so it cannot acquit key 2 either.
+# checks_field -b <0|1> <file> [<0|1> <file>]... -> the same lines per pair, ONE awk (BT_SEP); the batch form never
+# reads CF_LINES or CF_EDITS, so it asks only what the join and its self-probe ask.
 checks_field() {
-  awk -v rec="$1" -v dok="${CF_DEFER:-1}" -v nrl="${CF_LINES:-0}" -v ed="${CF_EDITS:-0}" -v DK="$DISP_KEY_ERE" '
+  local r_="$1" l_="${CF_LINES:-0}" e_="${CF_EDITS:-0}" g_=0 n_
+  if [ "$r_" = -b ]; then shift; r_=0; l_=0; e_=0; n_=$(($# / 2))
+    while [ "$n_" -gt 0 ]; do g_=$((g_ + 1)); set -- "$@" "G_=$g_" "rec=$1" "$2"; shift 2; n_=$((n_ - 1)); done
+  else set -- "$2"; fi
+  awk -v rec="$r_" -v dok="${CF_DEFER:-1}" -v nrl="$l_" -v ed="$e_" -v DK="$DISP_KEY_ERE" -v NG_="$g_" '
     function val(  v) { v = $0; sub(/^[^:]*:/, "", v); gsub(/[*_`\r]/, "", v); v = tolower(v)
                         gsub(/^[ \t]+|[ \t]+$/, "", v); return v }
     function kw(v, re) { return v ~ ("^(" re ")[ \t]*($|[(;,]|--)") }
@@ -1271,6 +1345,12 @@ checks_field() {
     }
     function blk(j) { return " (the block closed at line " tl[j] " by \047" tx[j] "\047)" }
     BEGIN { nk = 1; ck[1] = "H"; cl[1] = 1 }
+    # THE BATCH BOUNDARY: a new group closes the last one with this program END logic, under that group rec.
+    FNR == 1 && G_ != pg { if (ng_++) { s_ = rec; rec = pr_; cf_fin(); rec = s_; print "\034"
+                             split("", ck); split("", cl); split("", ca); split("", cd); split("", cr); split("", cn); split("", cy)
+                             split("", cb); split("", cnl); split("", cm); split("", tl); split("", tx); split("", ts); split("", ce)
+                             nk = 1; ck[1] = "H"; cl[1] = 1; nrep = 0; sawe = 0; fence = 0; own = 0 }
+                           pg = G_; pr_ = rec; fn_ = FILENAME }
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
@@ -1295,9 +1375,15 @@ checks_field() {
     $0 ~ DK { if (rec == 1) sawe = 1; v = tolower(val()); sub(/[^a-z-].*$/, "", v); if (v == "repaired") { nrep++; cr[nk]++ } }
     END {
       if (ed == 1) { eflush(); exit }
-      b = FILENAME; sub(/.*\//, "", b)
+      if (NG_ > 0 && ng_ != NG_) print "BATCHLOST"
+      cf_fin()
+    }
+    # One file judged: the END logic of a one-question call, and of each group of a batch. Every early
+    # stop is a return, so a batch group that stops early still lets the next group run.
+    function cf_fin(   j) {
+      b = (fn_ != "" ? fn_ : FILENAME); sub(/.*\//, "", b)
       # A PART is one segment, bound unconditionally once it holds a repaired entry.
-      if (rec == 0) { if (nrep == 0) exit; own = 1; judge(1, nk, "", "S", 0); exit }
+      if (rec == 0) { if (nrep == 0) return; own = 1; judge(1, nk, "", "S", 0); return }
       lm = 0; nt = 0; lt = 0
       for (j = 1; j <= nk; j++) { if (ck[j] == "M") lm = j; if (tl[j]) { nt++; lt = j } }
       lo = 1
@@ -1305,7 +1391,7 @@ checks_field() {
         # AN UNMARKED RECORD (the one unsharded remediator, or a record no join wrote) owes the lines
         # unconditionally only in a block its serial terminator closes; with no terminator it is one
         # era-gated segment, as before.
-        if (!nt) { judge(1, nk, "", "E", 0); exit }
+        if (!nt) { judge(1, nk, "", "E", 0); return }
       } else {
         # The head and every shard segment, era-gated per segment. THE SERIAL BLOCK OPENS BY POSITION:
         # at the first `- artifact:` triple after the last marker that follows one of the entries of
@@ -1333,7 +1419,7 @@ checks_field() {
         # cannot be told from the last part, so it is refused by name, never judged.
         for (j = lm; j <= hi; j++) if (tl[j] && ts[j]) emit("the serial block closed at line " tl[j] " by \047" tx[j] "\047 opens with no sha triple of its own after the entries of the last shard, so its advisor: and derivations: lines cannot be told from those of shard " cm[lm], "")
         judge(lm, hi, " (shard " cm[lm] ")", "E", 1)
-        if (!t2) exit
+        if (!t2) return
         lo = t2
       }
       # THE BLOCKS: each runs to the terminator that closes it; the next opens after it. A block
@@ -1341,7 +1427,7 @@ checks_field() {
       # on its values alone; an unterminated tail is era-gated like a part. Parts never reach a block.
       for (j = lo; j <= nk; j++) if (tl[j]) { own = (j == lt); judge(lo, j, blk(j), (ts[j] ? "S" : "V"), (lm && !ts[j])); own = 0; lo = j + 1 }
       if (lo <= nk) judge(lo, nk, (lm ? " (the unterminated block from line " cl[lo] ")" : ""), "E", (lm > 0))
-    }' "$2"
+    }' "$@"
 }
 checks_refusals() {  # <checks_field output>
   local k b w
@@ -1358,11 +1444,19 @@ ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]
 # the entry contract's functions and constants; nothing below runs.
 SPEC_RENDER_PHRASE="re-derived from memlog through"
 # spec_render_scan <memlog> -> "<last render line> <decisions after it> <first such line>", 0 0 0 with no render.
+# spec_render_scan -b <memlog>... -> the same line per memlog, ONE awk, the answers split by bt_pop (the batch form;
+# see BT_SEP). The self-probe asks its four memlogs this way; the join's own call passes one memlog.
 spec_render_scan() {
-  awk -v ph="$SPEC_RENDER_PHRASE" '
+  local g_=0 n_
+  if [ "$1" = -b ]; then shift; n_=$#
+    while [ "$n_" -gt 0 ]; do g_=$((g_ + 1)); set -- "$@" "G_=$g_" "$1"; shift; n_=$((n_ - 1)); done
+  else set -- "$1"; fi
+  awk -v ph="$SPEC_RENDER_PHRASE" -v NG_="$g_" '
+    FNR == 1 && G_ != pg { if (ng_++) { print r + 0, n + 0, f + 0; print "\034"; r = 0; n = 0; f = 0 }; pg = G_ }
+    NG_ > 0 { NR = FNR }
     /^[[:space:]]*[-*][[:space:]]*\(event([[:space:]][^)]*)?\)[[:space:]]+Render/ && index($0, ph) { r = NR; n = 0; f = 0; next }
     /^[[:space:]]*[-*][[:space:]]*\(decision([[:space:]][^)]*)?\)/ { if (r) { n++; if (!f) f = NR } }
-    END { print r + 0, n + 0, f + 0 }' "$1"
+    END { if (NG_ > 0 && ng_ != NG_) print "BATCHLOST"; print r + 0, n + 0, f + 0 }' "$@"
 }
 # spec_render_check <memlog or empty> <why empty> -> SPEC_LINE (one SPEC-RENDER: line), or a refusal.
 # NEVER CALLED INSIDE $( ): refuse() counts in this shell, and a subshell would drop the count.
@@ -1404,10 +1498,11 @@ spec_render_probe() {
   printf -- '- (decision) a\n- (event) Render p1: %s a\n' "$SPEC_RENDER_PHRASE" > "$d/fresh.md"
   printf -- '- (decision) a\n- (decision) b\n' > "$d/none.md"
   printf -- '- (event) Render (fold): ran no renderer; applied to SPEC.md by hand\n- (decision) a\n' > "$d/hand.md"
-  o="$(spec_render_scan "$d/stale.md")"; [ "$o" = "2 1 3" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a decision after a render read '${o}'; no verdict"; }
-  o="$(spec_render_scan "$d/fresh.md")"; [ "$o" = "2 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a render after its decision read '${o}'; no verdict"; }
-  o="$(spec_render_scan "$d/none.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a memlog with no render read '${o}'; no verdict"; }
-  o="$(spec_render_scan "$d/hand.md")"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: an unphrased Render line read '${o}', acquitting a hand edit; no verdict"; }
+  BT="$(spec_render_scan -b "$d/stale.md" "$d/fresh.md" "$d/none.md" "$d/hand.md")"
+  bt_pop; o="$BT_O"; [ "$o" = "2 1 3" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a decision after a render read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"; [ "$o" = "2 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a render after its decision read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a memlog with no render read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: an unphrased Render line read '${o}', acquitting a hand edit; no verdict"; }
   rm -rf "$d"
 }
 # record_tail <record> -- the entry contract over one record no join wrote, then its escalations:

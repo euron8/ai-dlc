@@ -66,6 +66,8 @@ PY
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 echo "ci-gates-resolution:"
 
 # ==================== A. EXAMINED NOTHING = exit 78 ==========================
@@ -425,7 +427,7 @@ if [ "$IDENT_CTL_OK" = "1" ]; then
     if ident_holds "$MZ" "$IDENT_BODY_ZERO" '0 gates declared'; then
       bad "H MUTANT Z SURVIVED — the zero-gate exit still satisfies H1 with its identity block deleted, so H1 is not testing that emitter"
     else
-      ok "H MUTANT Z killed — deleting the zero-gate identity block alone makes two different trees indistinguishable ($IDENT_WHY)"
+      mutant_killed "${IDENT_CTL_OK:-0}" H-Z "H MUTANT Z killed — deleting the zero-gate identity block alone makes two different trees indistinguishable ($IDENT_WHY)"
     fi
     if ident_holds "$MZ" "$IDENT_BODY_GATES" '2 gates declared'; then
       ok "H MUTANT Z leaves the MAIN verdict intact — the mutation is site-specific, not a sed that edited both byte-identical blocks"
@@ -440,7 +442,7 @@ if [ "$IDENT_CTL_OK" = "1" ]; then
     if ident_holds "$MM" "$IDENT_BODY_GATES" '2 gates declared'; then
       bad "H MUTANT M SURVIVED — the main verdict still satisfies H2 with its identity block deleted, so H2 is not testing that emitter"
     else
-      ok "H MUTANT M killed — deleting the main identity block alone makes two different trees indistinguishable ($IDENT_WHY)"
+      mutant_killed "${IDENT_CTL_OK:-0}" H-M "H MUTANT M killed — deleting the main identity block alone makes two different trees indistinguishable ($IDENT_WHY)"
     fi
     if ident_holds "$MM" "$IDENT_BODY_ZERO" '0 gates declared'; then
       ok "H MUTANT M leaves the ZERO-GATE exit intact — the mutation is site-specific"
@@ -459,7 +461,7 @@ if [ "$IDENT_CTL_OK" = "1" ]; then
     if ident_holds "$MA" "$IDENT_BODY_ZERO" '0 dormant (no ' 'no-such-retro'; then
       bad "H MUTANT A SURVIVED — the absent-retro exit still satisfies H3 with its surface line deleted, so H3 is not testing that emitter"
     else
-      ok "H MUTANT A killed — deleting the absent-retro exit's surface line alone makes two different surfaces indistinguishable ($IDENT_WHY)"
+      mutant_killed "${IDENT_CTL_OK:-0}" H-A "H MUTANT A killed — deleting the absent-retro exit's surface line alone makes two different surfaces indistinguishable ($IDENT_WHY)"
     fi
     if ident_holds "$MA" "$IDENT_BODY_ZERO" '0 gates declared' \
        && ident_holds "$MA" "$IDENT_BODY_GATES" '2 gates declared'; then
@@ -489,7 +491,7 @@ if [ "$IDENT_CTL_OK" = "1" ]; then
       if [ "$MT_RC" = "0" ] && grep -qF "$MT_A/aliases.txt" "$WORK/ident-mt.txt"; then
         bad "H MUTANT T SURVIVED — the alias table is still named with its line deleted, so H4b is keyed on a path emitted somewhere else"
       else
-        ok "H MUTANT T killed — deleting the alias-table line alone leaves the suppression channel unidentified (rc=$MT_RC)"
+        mutant_killed "${IDENT_CTL_OK:-0}" H-T "H MUTANT T killed — deleting the alias-table line alone leaves the suppression channel unidentified (rc=$MT_RC)"
       fi
       if ident_holds "$MT" "$IDENT_BODY_GATES" '2 gates declared'; then
         ok "H MUTANT T leaves the two scanned roots named — H4b owns the alias table and H2 owns the roots"
@@ -522,7 +524,7 @@ if [ "$IDENT_CTL_OK" = "1" ]; then
     IDENT_ALIAS=""
     if grep -qF "$ME_A/aliases.txt" "$WORK/ident-me-zero.txt" \
        && grep -qF "$ME_A/aliases.txt" "$WORK/ident-me-absent.txt"; then
-      ok "H MUTANT E killed — with the alias table echoed at both early exits (rc=$ME_RC1/$ME_RC2) H6 fires, so H6 is a real constraint and not a vacuous absence"
+      mutant_killed "${IDENT_CTL_OK:-0}" H-E "H MUTANT E killed — with the alias table echoed at both early exits (rc=$ME_RC1/$ME_RC2) H6 fires, so H6 is a real constraint and not a vacuous absence"
     else
       bad "H MUTANT E SURVIVED — the early exits still do not name the alias table after it was injected there, so H6 could never fire"
     fi
@@ -549,7 +551,7 @@ if [ "$IDENT_CTL_OK" = "1" ]; then
     if ident_holds "$MN" "$IDENT_BODY_ZERO" '0 gates declared'; then
       bad "H MUTANT N SURVIVED — a per-site constant that names no corpus satisfies H1, so H1 is a differ-check rather than a naming check"
     else
-      ok "H MUTANT N killed — a per-run nonce varies the output exactly as the real roots do and still fails the arm, so H1 demands the corpus be NAMED and not merely varied ($IDENT_WHY)"
+      mutant_killed "${IDENT_CTL_OK:-0}" H-N "H MUTANT N killed — a per-run nonce varies the output exactly as the real roots do and still fails the arm, so H1 demands the corpus be NAMED and not merely varied ($IDENT_WHY)"
     fi
   fi
 fi

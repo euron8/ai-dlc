@@ -243,10 +243,10 @@ if [ "$MATRIX" = 1 ]; then
   ok "MATRIX no-enum-check measured against $MROWS arms"
 else
   # Per push: deciding arm E must stop holding (and diverge from the shipped answer), twin V must hold.
-  _base=0; arm_holds E "$(arm_raw E "$VALIDATOR")" && _base=1
+  arm_holds E "$(arm_raw E "$VALIDATOR")"; _base_rc=$?
   r="$(arm_raw E "$MUT_ENUM")"
   if ! arm_holds E "$r"; then
-    mutant_killed "$_base" no-enum-check "MUTANT no-enum-check (E): removing the entry-loop enum read lets a hand-written 'paused' validate"
+    mutant_killed "$([ "$_base_rc" -eq 0 ] && echo 1 || echo 0)" no-enum-check "MUTANT no-enum-check (E): removing the entry-loop enum read lets a hand-written 'paused' validate"
   else bad "MUTANT no-enum-check SURVIVED on E ($r)"; fi
   r="$(arm_raw V "$MUT_ENUM")"
   if arm_holds V "$r"; then ok "T-no-enum-check twin V stays GREEN under mutant no-enum-check (a member of the enum still passes)"

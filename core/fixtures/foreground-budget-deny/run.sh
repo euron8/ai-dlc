@@ -582,8 +582,8 @@ if [ -z "$GOT" ]; then
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
-# B_<arm>=1 only for an arm the shipped hook passed in THIS run: the base-pass flag every kill is gated on.
-for _a in $ALL_ARMS; do in_set "$_a" "$GOT" || printf -v "B_$_a" '%s' 1; done
+# The base-pass flag every kill is gated on is computed inside mut() from GOT, the set of arms the shipped hook
+# failed in THIS run: the deciding arm held on the unmutated hook exactly when it is absent from GOT.
 
 # The SHIFT world is the only thing that separates "reads the detector's default" from "carries
 # its own 120". Prove the two projects really do disagree on the default line.
@@ -599,7 +599,9 @@ n_mut=0; n_kill=0
 # the recorded one (the old exact-vector assertion).
 mut() {
   local name="$1" dec="$2" twin="$3" want="$4"; shift 4
-  local m="$MUT/hook-$name.sh" bv="B_$dec" ud ut
+  local m="$MUT/hook-$name.sh" ud ut held mx0
+  held="$(in_set "$dec" "$GOT" && echo 0 || echo 1)"
+  mx0="$([ "${B_MX0:-0}" = 1 ] && echo 1 || echo 0)"
   if ! sed "$@" "$HOOK" > "$m"; then bad "mutant $name: sed failed -- DID NOT APPLY"; return; fi
   if cmp -s "$HOOK" "$m"; then bad "mutant $name: sed matched nothing -- DID NOT APPLY (the anchor moved)"; return; fi
   n_mut=$((n_mut+1))
@@ -610,7 +612,7 @@ mut() {
     elif ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec]"
     elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] is not green in the matrix"
     else
-      n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by exactly [$want] (matrix); deciding [$dec], twin [$twin] green"
+      n_kill=$((n_kill+1)); mutant_killed "$([ "$held" = 1 ] && [ "$mx0" = 1 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by exactly [$want] (matrix); deciding [$dec], twin [$twin] green"
     fi
     return
   fi
@@ -619,7 +621,7 @@ mut() {
   if ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec] -- the kill moved; re-measure with --matrix"
   elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] FAILS too -- the kill spread past the recorded matrix; re-measure with --matrix"
   else
-    n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
+    n_kill=$((n_kill+1)); mutant_killed "$([ "$held" = 1 ] && [ "$mx0" = 1 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
   fi
 }
 

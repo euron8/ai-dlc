@@ -911,14 +911,13 @@ else
   fi
 
   HGOT="$(hook_battery "$HOOK")"
+  B_hook=0
   if [ "$HGOT" = "$HOOK_EXPECTED" ]; then
-    ok "consumer pre-push: an ABSENT .claude/agents/ is rendered and the push passes; a DRIFTED definition blocks the push and is left byte-identical; a CURRENT tree is checked and not written; UNPARSEABLE settings block with no directory created"
+    ok "consumer pre-push: an ABSENT .claude/agents/ is rendered and the push passes; a DRIFTED definition blocks the push and is left byte-identical; a CURRENT tree is checked and not written; UNPARSEABLE settings block with no directory created"; B_hook=1
   else
     bad "consumer pre-push battery: expected [$HOOK_EXPECTED], got [$HGOT]"
   fi
 
-  B_hook=0
-  [ "$HGOT" = "$HOOK_EXPECTED" ] && B_hook=1
 
   # hmut <label> <sed-expr> <deciding world> <twin world> <deciding world's mutated token> <claim>
   # Per push the mutant runs its DECIDING world and one TWIN world, asserting the deciding world

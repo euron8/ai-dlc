@@ -206,11 +206,10 @@ MUT2="$WORK/m2-pregate-self-check.sh"
 sed 's/^AI_DLC_VERDICT_STORE="\$W\/vs" bash "\$W\/prefix\.sh" < \/dev\/null > "\$W\/a\.out" 2>&1$/: "$ai_dlc_m2_unbound"; &/' "$SUBJECT" > "$MUT2" 2>/dev/null
 if [ "$n_anchor" -eq 1 ] && [ -s "$MUT2" ] && ! cmp -s "$SUBJECT" "$MUT2"; then
   bash "$RECEIPT" "$MUT2" > "$WORK/m2.out" 2>&1; echo $? > "$WORK/m2.rc"; m2="$(cat "$WORK/m2.rc")"
-  M2_FLAG="$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))"
-  if cell_red exit1 m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: receipt exit 1 (killed)"; else bad "m2 mutant SURVIVED: receipt exit $m2, expected 1"; fi
-  if cell_red m2-refused m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: every world refused with exit 2"; else bad "m2 mutant SURVIVED: expected the line '$M2_WANT' (got: $(tail -1 "$WORK/m2.out"))"; fi
-  if cell_red m2-names m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: world A names the early-death refusal and the unbound variable"; else bad "m2 mutant SURVIVED: world A's output lacks the early-death refusal or the unbound variable"; fi
-  if cell_red differs m2; then mutant_killed "$M2_FLAG" m2 "m2 mutant: output differs from the control"; else bad "m2 mutant SURVIVED: output equals the control"; fi
+  if cell_red exit1 m2; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))" m2 "m2 mutant: receipt exit 1 (killed)"; else bad "m2 mutant SURVIVED: receipt exit $m2, expected 1"; fi
+  if cell_red m2-refused m2; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))" m2 "m2 mutant: every world refused with exit 2"; else bad "m2 mutant SURVIVED: expected the line '$M2_WANT' (got: $(tail -1 "$WORK/m2.out"))"; fi
+  if cell_red m2-names m2; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))" m2 "m2 mutant: world A names the early-death refusal and the unbound variable"; else bad "m2 mutant SURVIVED: world A's output lacks the early-death refusal or the unbound variable"; fi
+  if cell_red differs m2; then mutant_killed "$(( ${B_a1_exit:-0} && ${B_a1_line:-0} && ${B_m2_anchor:-0} ))" m2 "m2 mutant: output differs from the control"; else bad "m2 mutant SURVIVED: output equals the control"; fi
   mx_twins m2
   mx_matrix_only m2
 else

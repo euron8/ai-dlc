@@ -4,3 +4,4 @@
 VERSION
 !scripts/plan-rotate.sh
 !scripts/validate-plan-shape.sh
+core/fixtures/lib/

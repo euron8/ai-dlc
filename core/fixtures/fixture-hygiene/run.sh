@@ -198,14 +198,15 @@ score() { # <mutant> <arm> <arm label in the self-probe>; 0 when the arm fails f
   rcis "$1" 2 && has "$1" "$(REFUSAL "$3")" || { bad "$1: arm $2 fails under it, but not by the self-probe naming $3 (rc $(cat "$WORK/c.$1.rc"))"; return 1; }
 }
 flag() { [ -e "$WORK/base.$1" ] && echo 1 || echo 0; }
-score MH1 D1 H1 && mutant_killed "$(flag D1)" MH1 "MH1: arm D1 fails by the self-probe refusal naming H1"
-score MH2 D2 H2 && mutant_killed "$(flag D2)" MH2 "MH2: arm D2 fails by the self-probe refusal naming H2"
-score MH3 D3 H3 && mutant_killed "$(flag D3)" MH3 "MH3: arm D3 fails by the self-probe refusal naming H3"
-score MH5 D5 H5 && mutant_killed "$(flag D5)" MH5 "MH5: arm D5 fails by the self-probe refusal naming H5"
+BASE_D1="$(flag D1)"; BASE_D2="$(flag D2)"; BASE_D3="$(flag D3)"; BASE_D5="$(flag D5)"
+score MH1 D1 H1 && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MH1 "MH1: arm D1 fails by the self-probe refusal naming H1"
+score MH2 D2 H2 && mutant_killed "$([ "$BASE_D2" = 1 ] && echo 1 || echo 0)" MH2 "MH2: arm D2 fails by the self-probe refusal naming H2"
+score MH3 D3 H3 && mutant_killed "$([ "$BASE_D3" = 1 ] && echo 1 || echo 0)" MH3 "MH3: arm D3 fails by the self-probe refusal naming H3"
+score MH5 D5 H5 && mutant_killed "$([ "$BASE_D5" = 1 ] && echo 1 || echo 0)" MH5 "MH5: arm D5 fails by the self-probe refusal naming H5"
 # MH5N must die on the world-letter cell itself: the refusal alone is MH5's signal too.
 WL_ROW="$(printf 'got-only  JOIN\tcore/fixtures/m5m/run.sh:5')"
 if score MH5N D5 H5; then
-  if has MH5N "$WL_ROW"; then mutant_killed "$(flag D5)" MH5N "MH5N: arm D5 fails by the self-probe refusal naming H5, on the world-letter JOIN row m5m:5"
+  if has MH5N "$WL_ROW"; then mutant_killed "$([ "$BASE_D5" = 1 ] && echo 1 || echo 0)" MH5N "MH5N: arm D5 fails by the self-probe refusal naming H5, on the world-letter JOIN row m5m:5"
   else bad "MH5N: the self-probe refused, but not on the world-letter JOIN row m5m:5"; fi
 fi
 

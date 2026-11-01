@@ -1164,18 +1164,18 @@ lw_base_passed() { local a; for a in $1; do case "$LW_PASS" in *" $a "*) ;; *) r
 # real pass of THIS run. MATRIX mode prints a row per recorded arm first, and scores the deciding arm alone
 # (the twins are chosen FROM the matrix).
 mut_score() {
-  local a tbad="" dfail=0 tw="$3" mut_flag=0
+  local a tbad="" dfail=0 tw="$3" base_rc
   if [ "$OWED_MATRIX" = 1 ]; then
     for a in $LW_ALLARMS; do
       case " $LW_FAILED " in *" $a "*) printf 'MATRIX\t%s\t%s\tFAIL\n' "$1" "$a" ;; *) printf 'MATRIX\t%s\t%s\tok\n' "$1" "$a" ;; esac
     done
     tw=""
   fi
-  if lw_base_passed "$2 $tw"; then mut_flag=1; fi
+  lw_base_passed "$2 $tw"; base_rc=$?
   for a in $tw; do case " $LW_FAILED " in *" $a "*) tbad="$tbad $a" ;; esac; done
   case " $LW_FAILED " in *" $2 "*) dfail=1 ;; esac
   if [ "$dfail" = 1 ] && [ -z "$tbad" ]; then
-    mutant_killed "$mut_flag" "$1" "$1 killed: deciding arm $2 failed, twin(s) ${tw:-none} held (failed:$LW_FAILED)"
+    mutant_killed "$([ "$base_rc" -eq 0 ] && echo 1 || echo 0)" "$1" "$1 killed: deciding arm $2 failed, twin(s) ${tw:-none} held (failed:$LW_FAILED)"
   elif [ "$dfail" = 0 ]; then
     bad "$1 SURVIVED: deciding arm $2 did not fail (failed:${LW_FAILED:- none})"
   else

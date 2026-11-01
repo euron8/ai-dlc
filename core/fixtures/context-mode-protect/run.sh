@@ -36,6 +36,11 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_<arm>=1 only beside the unmutated arm's own ok: a mutant is scored only if its base arm passed.
+B_CTX=0; B_H2=0; B_LBL=0; B_COST=0
 
 # raw <project_dir> <json> -> hook stdout (JSON on deny, empty on allow)
 raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
@@ -157,9 +162,8 @@ ctxarm() {
   ! grep -qF 'NOT protected' <<<"$o" || return 1
   grep -qF 'Use the native Read tool' <<<"$o" || return 1
 }
-ctxarm "$HOOK" \
-  && ok "layered deny CONTEXT: deny, no 'NOT protected', names the native Read tool" \
-  || bad "layered deny CONTEXT: deny + no 'NOT protected' + 'Use the native Read tool' did not all hold"
+if ctxarm "$HOOK"; then ok "layered deny CONTEXT: deny, no 'NOT protected', names the native Read tool"; B_CTX=1
+else bad "layered deny CONTEXT: deny + no 'NOT protected' + 'Use the native Read tool' did not all hold"; fi
 
 # Mutant CONTEXT-RESTORED: the whole hooks directory is copied (the hook sources a sibling),
 # with the 0.927.0 sentence restored. It must differ from the fix, pass the unmutated control,
@@ -173,7 +177,7 @@ printf '%s' "${_SRC/"$_OLD"/$_NEW}" > "$_MUT/ai-dlc-protect.sh"
 if cmp -s "$HOOK" "$_MUT/ai-dlc-protect.sh"; then
   bad "mutant CONTEXT-RESTORED did not differ from the fix (DID NOT APPLY)"
 elif ! bash -n "$_MUT/ai-dlc-protect.sh" 2>/dev/null; then
-  bad "mutant CONTEXT-RESTORED does not parse (a crashing hook is killed at the deny conjunct, not the NOT protected one)"
+  bad "mutant CONTEXT-RESTORED does not parse (a crashing hook fails at the deny conjunct, not the NOT protected one)"
 elif _MO="$(printf '%s' "$(jb 'cat docs/architecture.md')" | CLAUDE_PROJECT_DIR="$LAYERED" bash "$_MUT/ai-dlc-protect.sh" 2>/dev/null)"; \
      ! { grep -q '"permissionDecision": *"deny"' <<<"$_MO" && grep -qF 'NOT protected' <<<"$_MO"; }; then
   bad "mutant CONTEXT-RESTORED output lacks deny + 'NOT protected': its kill would not come from the NOT protected conjunct"
@@ -181,7 +185,7 @@ elif ! { cp "$HOOK" "$_MUT/ctl.sh" && ctxarm "$_MUT/ctl.sh"; }; then
   bad "mutant CONTEXT-RESTORED harness broken: an unmutated copy in the same directory fails the 9c arm"
 elif ! ctxarm "$_MUT/ai-dlc-protect.sh" \
      && [ "$(CLAUDE_PROJECT_DIR="$PLAIN" bash "$_MUT/ai-dlc-protect.sh" <<<"$(jf docs/architecture.md)" 2>/dev/null | grep -c permissionDecision)" = 0 ]; then
-  ok "mutant CONTEXT-RESTORED killed by the 9c arm, and its PLAIN allow of docs/architecture.md still holds"
+  mutant_killed "$B_CTX" "CONTEXT-RESTORED" "mutant CONTEXT-RESTORED killed by the 9c arm, and its PLAIN allow of docs/architecture.md still holds"
 else
   bad "mutant CONTEXT-RESTORED SURVIVED the 9c arm (or disturbed the PLAIN allow)"
 fi
@@ -215,15 +219,15 @@ hit2arm() {
 labelarm() { grep -q '"permissionDecision": *"deny"' <<<"$(printf '%s' "$J_LABEL" | CLAUDE_PROJECT_DIR="$PLAIN" bash "$1" 2>/dev/null)"; }
 
 expect deny "$PLAIN" "$J_HIT2" "3-command batch, protected path in command 2 → deny"
-hit2arm "$HOOK" \
-  && ok "batch deny REASON names exactly 'command 2 of 3 (label \"rd\")', the 2 clean commands, and native Read" \
-  || bad "batch deny REASON does not name exactly command 2 of 3 — got '$(offending "$HOOK" "$J_HIT2")'"
+if hit2arm "$HOOK"; then ok "batch deny REASON names exactly 'command 2 of 3 (label \"rd\")', the 2 clean commands, and native Read"; B_H2=1
+else bad "batch deny REASON does not name exactly command 2 of 3 — got '$(offending "$HOOK" "$J_HIT2")'"; fi
 [ "$(offending "$HOOK" "$J_HIT3")" = 'Offending: command 3 of 3 (label "rd")' ] \
   && ok "batch deny with the hit in command 3 names 'command 3 of 3'" \
   || bad "batch deny with the hit in command 3 — got '$(offending "$HOOK" "$J_HIT3")'"
 expect allow "$PLAIN" "$J_NONE" "3-command batch with no protected path → allow"
 expect deny "$PLAIN" "$J_LABEL" "protected path carried ONLY by a label → deny (decision reads the whole element)"
-labelarm "$HOOK" || bad "labelarm helper disagrees with expect on the label-only batch"
+if labelarm "$HOOK"; then ok "label-only batch: the label arm denies the unmutated hook"; B_LBL=1
+else bad "labelarm helper disagrees with expect on the label-only batch"; fi
 expect deny "$PLAIN" "$J_STR" "string-element batch naming a protected path → deny"
 [ "$(offending "$HOOK" "$J_STR")" = 'Offending: command 1 of 1' ] \
   && ok "string-element deny names 'command 1 of 1' with no label" \
@@ -265,7 +269,7 @@ elif ! bash -n "$_M1/ai-dlc-protect.sh" 2>/dev/null; then
 elif hit2arm "$_M1/ai-dlc-protect.sh"; then
   bad "mutant REASON-BASE SURVIVED the command-2 arm"
 elif [ "$(decision_with "$_M1" "$J_HIT2")$(decision_with "$_M1" "$J_LABEL")$(decision_with "$_M1" "$J_NONE")" = denydenyallow ]; then
-  ok "mutant REASON-BASE killed by the command-2 arm, its decisions unchanged (deny, deny, allow)"
+  mutant_killed "$B_H2" "REASON-BASE" "mutant REASON-BASE killed by the command-2 arm, its decisions unchanged (deny, deny, allow)"
 else
   bad "mutant REASON-BASE moved a decision — its kill is not the REASON's"
 fi
@@ -282,7 +286,7 @@ elif ! bash -n "$_M2/ai-dlc-protect.sh" 2>/dev/null; then
 elif labelarm "$_M2/ai-dlc-protect.sh"; then
   bad "mutant PER-ELEMENT-DECIDES SURVIVED the label-only arm"
 elif hit2arm "$_M2/ai-dlc-protect.sh"; then
-  ok "mutant PER-ELEMENT-DECIDES killed by the label-only arm, and the command-2 arm still passes on it"
+  mutant_killed "$(( ${B_LBL:-0} && ${B_H2:-0} ))" "PER-ELEMENT-DECIDES" "mutant PER-ELEMENT-DECIDES killed by the label-only arm, and the command-2 arm still passes on it"
 else
   bad "mutant PER-ELEMENT-DECIDES also fails the command-2 arm — its kill is not the label's"
 fi
@@ -333,7 +337,7 @@ J_ALLOWF="$(jf _bmad-output/planning-artifacts/prd.md)"
 costarm() { [ "$(jqcount "$1" "$J_NONE")" = "$(jqcount "$1" "$J_ALLOWF")" ]; }
 _cn="$(jqcount "$HOOK" "$J_NONE")"; _cd="$(jqcount "$HOOK" "$J_HIT2")"
 if [ "${_cn:-0}" -gt 0 ] && [ "${_cd:-0}" -gt "${_cn:-0}" ] && costarm "$HOOK"; then
-  ok "allowed batch does not run the naming step (jq forks: allowed batch $_cn = allowed file call, deny $_cd)"
+  ok "allowed batch does not run the naming step (jq forks: allowed batch $_cn = allowed file call, deny $_cd)"; B_COST=1
 else
   bad "allowed batch ran the naming step, or the jq counter is blind (allowed batch ${_cn:-?}, deny ${_cd:-?}, file call $(jqcount "$HOOK" "$J_ALLOWF"))"
 fi
@@ -345,7 +349,7 @@ elif ! bash -n "$_M4/ai-dlc-protect.sh" 2>/dev/null; then
 elif costarm "$_M4/ai-dlc-protect.sh"; then
   bad "mutant NAMING-UNGUARDED SURVIVED the cost arm"
 elif hit2arm "$_M4/ai-dlc-protect.sh" && [ "$(decision_with "$_M4" "$J_NONE")" = allow ]; then
-  ok "mutant NAMING-UNGUARDED killed by the cost arm, its command-2 REASON and clean allow unchanged"
+  mutant_killed "$(( ${B_COST:-0} && ${B_H2:-0} ))" "NAMING-UNGUARDED" "mutant NAMING-UNGUARDED killed by the cost arm, its command-2 REASON and clean allow unchanged"
 else
   bad "mutant NAMING-UNGUARDED moved a decision or the REASON — its kill is not the cost arm's"
 fi

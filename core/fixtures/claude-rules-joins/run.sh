@@ -67,6 +67,12 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
+ok()  { note "ok    $1"; }
+bad() { note "FAIL  $1"; rc=1; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# B_CTRL=1 only beside the unmutated control's own ok: every mutant below is scored only if it passed.
+B_CTRL=0
 
 seed() {
   local d="$1"
@@ -103,7 +109,7 @@ run_v_env() { ( cd "$2" && env "$1" bash scripts/validate-claude-rules.sh 2>&1 )
 # --- unmutated control ------------------------------------------------------
 seed "$TMP/control"
 if out="$(run_v "$TMP/control")" && [ -n "$out" ]; then
-  note "ok    control -- clean tree passes, harness is live"
+  ok "control -- clean tree passes, harness is live"; B_CTRL=1
 else
   note "FIXTURE BROKEN: the unmutated control did NOT pass. Every mutant verdict below is meaningless."
   printf '%s\n' "$out" | sed 's/^/      /'
@@ -126,7 +132,7 @@ kill_check() { # kill_check <name> <dir> <expected-substring>
     note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own assertion, so the arms are entangled"
     rc=1; return
   fi
-  note "ok    $n -- killed by its own arm, and only its own"
+  mutant_killed "${B_CTRL:-0}" "$n" "$n -- killed by its own arm, and only its own"
 }
 
 mutate() { # mutate <file> <sed-expr> ; guarded so a no-op sed cannot pass as a mutation
@@ -217,7 +223,7 @@ if [ -z "$out" ] || ! grep -qF "against a ceiling of 10" <<<"$out"; then
 elif [ "$(printf '%s\n' "$out" | grep -c '^FAIL:')" -ne 1 ]; then
   note "FAIL  m11 A6 over ceiling -- more than one FAIL line; the arms are entangled"; rc=1
 else
-  note "ok    m11 A6 over ceiling -- killed by its own arm, and only its own"
+  mutant_killed "${B_CTRL:-0}" "m11 A6 over ceiling" "m11 A6 over ceiling -- killed by its own arm, and only its own"
 fi
 
 # m12 -- THE PROBE MUST BUILD ITS OWN REPOSITORY, NOT WRITE THE CALLER'S.
@@ -390,5 +396,5 @@ else
   fi
 fi
 
-if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 13/13 mutants killed by their own arm"; fi
+if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 13/13 mutants refused by their own arm"; fi
 exit "$rc"

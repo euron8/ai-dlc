@@ -328,7 +328,7 @@ if [ -n "$b_bad" ]; then
   exit 1
 fi
 if outB="$(check_in "$TMP/controlB")" && grep -qF "$OK_TAIL" <<<"$outB"; then
-  note "ok    controlB   hand-written section repaired by --write and round-trips through --check"; B_ctlB=1
+  ok "controlB   hand-written section repaired by --write and round-trips through --check"; B_ctlB=1
 else
   note "FIXTURE BROKEN: a freshly written region did not survive its own --check."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6

@@ -161,11 +161,46 @@ STUB_PATH=""; STUB_LOG=""
 # sleeps 0.05s whatever the argument, for a case that only needs the beat to ENTER a poll sleep
 # and then see a write. `gate` records and then blocks until `<dir>/release` exists, so the case
 # decides the moment the beat wakes and no clock does.
-sleep_stub() { # <dir> [real|fast|gate]
-  local real_sleep real_bash mode="${2:-real}" body
-  real_sleep="$(command -v sleep)"; real_bash="$(command -v bash)"
-  [ -n "$real_sleep" ] && [ -n "$real_bash" ] || { echo "FIXTURE ERROR: cannot resolve sleep/bash for the sleep stub" >&2; exit 2; }
-  mkdir -p "$1/bin" || { echo "FIXTURE ERROR: cannot create the sleep stub dir" >&2; exit 2; }
+# THE VIRTUAL CLOCK (the wait-beat-liveness lever). `<clock dir>/clock.base` is the real `date +%s`, written ONCE;
+# `<clock dir>/clock` is an offset that starts at 0. The stub's `date` shim answers `date +%s` with base + offset and
+# execs the real date for any other argv; its `sleep` shim adds its integer argument to the offset BEFORE its mode
+# body. A beat's deadline is therefore reached after BUDGET/POLL of its OWN poll sleeps and never by wall time, so no
+# stall of the box moves a beat across its deadline. The clock dir defaults to the stub dir; two stubs given the same
+# third argument share one world clock. The subject resolves bare `date` and `sleep` on PATH, so both shims reach it.
+# EVERY CLOCK WRITE IS ATOMIC AND EVERY ADVANCE IS SERIALIZED, so no reader ever sees a torn file and no update is lost:
+# `clk-advance.sh` (sourced by the sleep shim) takes a `clock.lock` symlink mutex (its target is the holder's pid, recorded in the same atomic step that takes it), reads, adds, writes `clock.tmp.$$` and
+# renames it onto `clock` with the REAL mv, baked in by absolute path so the W5 mv shim never logs a clock write. A lock
+# whose holder pid is dead is renamed away, so a beat reaped with SIGKILL mid-advance cannot wedge the clock.
+CLK_DIR=""
+clock_now() { # [clock dir] -> the virtual now of the last stub (or of the named clock dir)
+  local b o; read -r b < "${1:-$CLK_DIR}/clock.base"; read -r o < "${1:-$CLK_DIR}/clock"
+  echo $(( b + o ))
+}
+# clk_advance_lib <clock dir> <real mv> <out>: writes the sourced advance routine (argument $1 = seconds to add).
+clk_advance_lib() {
+  local body
+  body='d_="@D@"
+until ln -s "$$" "$d_/clock.lock" 2>/dev/null; do
+  h_="$(readlink "$d_/clock.lock" 2>/dev/null)"
+  if [ -n "$h_" ] && ! kill -0 "$h_" 2>/dev/null; then
+    "@M@" -f "$d_/clock.lock" "$d_/clock.dead.$$" 2>/dev/null && { g_="$(readlink "$d_/clock.dead.$$")"; [ "$g_" = "$h_" ] || ln -s "$g_" "$d_/clock.lock" 2>/dev/null; rm -f "$d_/clock.dead.$$"; }
+  fi
+done
+read -r o_ < "$d_/clock"
+printf "%s" "$(( o_ + $1 ))" > "$d_/clock.tmp.$$" && "@M@" -f "$d_/clock.tmp.$$" "$d_/clock"
+rm -f "$d_/clock.lock"'
+  body="${body//@D@/$1}"; body="${body//@M@/$2}"
+  printf '%s\n' "$body" > "$3"
+}
+sleep_stub() { # <dir> [real|fast|gate] [clock dir]
+  local real_sleep real_bash real_date real_mv mode="${2:-real}" body cdir="${3:-$1}" adv
+  real_sleep="$(command -v sleep)"; real_bash="$(command -v bash)"; real_date="$(command -v date)"; real_mv="$(command -v mv)"
+  [ -n "$real_sleep" ] && [ -n "$real_bash" ] && [ -n "$real_date" ] && [ -n "$real_mv" ] || { echo "FIXTURE ERROR: cannot resolve sleep/bash/date for the sleep stub" >&2; exit 2; }
+  mkdir -p "$1/bin" "$cdir" || { echo "FIXTURE ERROR: cannot create the sleep stub dir" >&2; exit 2; }
+  if [ ! -f "$cdir/clock.base" ]; then
+    "$real_date" +%s > "$cdir/clock.base" && printf '0' > "$cdir/clock" || { echo "FIXTURE ERROR: cannot start the virtual clock" >&2; exit 2; }
+  fi
+  CLK_DIR="$cdir"
   STUB_LOG="$1/sleep.log"; : > "$STUB_LOG"
   case "$mode" in
     real) body="$(printf 'exec "%s" "$@"' "$real_sleep")" ;;
@@ -173,9 +208,35 @@ sleep_stub() { # <dir> [real|fast|gate]
     gate) body="$(printf 'while [ ! -e "%s/release" ]; do "%s" 0.02; done' "$1" "$real_sleep")" ;;
     *) echo "FIXTURE ERROR: unknown sleep stub mode '$mode'" >&2; exit 2 ;;
   esac
-  printf '#!%s\nprintf "%%s\\n" "$*" >> "%s"\n%s\n' "$real_bash" "$STUB_LOG" "$body" > "$1/bin/sleep"
+  clk_advance_lib "$cdir" "$real_mv" "$cdir/clk-advance.sh"
+  adv="$(printf 'if [ "$#" -eq 1 ]; then case "$1" in ""|*[!0-9]*) ;; *) [ -e "%s/noadvance" ] || . "%s/clk-advance.sh" "$1" ;; esac; fi' "$cdir" "$cdir")"
+  printf '#!%s\n%s\nprintf "%%s\\n" "$*" >> "%s"\n%s\n' "$real_bash" "$adv" "$STUB_LOG" "$body" > "$1/bin/sleep"
+  [ -e "$cdir/noadvance" ] || printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then read -r b_ < "%s/clock.base"; read -r o_ < "%s/clock"; printf "%%s\\n" "$(( b_ + o_ ))"; exit 0; fi\nexec "%s" "$@"\n' "$real_bash" "$cdir" "$cdir" "$real_date" > "$1/bin/date"
   chmod +x "$1/bin/sleep" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
+  [ -e "$cdir/noadvance" ] || chmod +x "$1/bin/date" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
   STUB_PATH="$1/bin:$PATH"
+}
+# A LOSSLESS RECORD OF THE LEASE WRITES. `mv_shim <bin dir> <log>` writes `<bin dir>/mv`: when its last argument
+# ends in `/.beat-inflight` (lease_put is the ONLY writer of the marker) it appends the content of the file being
+# moved in to <log>, then execs the real mv, resolved here and baked in. A correct second beat takes no lease from a
+# live holder, so it writes ZERO records; any record is a write, however briefly it held the marker, and no sampler
+# can miss one.
+mv_shim() { # <bin dir> <log>
+  local real_mv real_bash
+  real_mv="$(command -v mv)"; real_bash="$(command -v bash)"
+  [ -n "$real_mv" ] && [ -n "$real_bash" ] || { echo "FIXTURE ERROR: cannot resolve mv/bash for the mv shim" >&2; exit 2; }
+  : > "$2"
+  printf '#!%s\np=""; l=""; for a in "$@"; do p="$l"; l="$a"; done\ncase "$l" in */.beat-inflight) c=""; read -r c < "$p" 2>/dev/null || true; printf "%%s\\n" "$c" >> "%s" ;; esac\nexec "%s" "$@"\n' "$real_bash" "$2" "$real_mv" > "$1/mv"
+  chmod +x "$1/mv" || { echo "FIXTURE ERROR: cannot make the mv shim executable" >&2; exit 2; }
+}
+mv_works() { # <PATH> <log> <scratch dir> -> 0 when one marker-named mv through <PATH> adds exactly one record
+  local n0 n1
+  n0="$(awk 'END { print NR }' "$2")"
+  mkdir -p "$3/ctl"; printf 'ctl' > "$3/ctl.src"
+  env PATH="$1" mv -f "$3/ctl.src" "$3/ctl/.beat-inflight" || return 1
+  n1="$(awk 'END { print NR }' "$2")"
+  : > "$2"
+  [ "$n1" = "$(( n0 + 1 ))" ]
 }
 stub_lines() { [ -f "$STUB_LOG" ] || { echo 0; return; }; awk 'END { print NR }' "$STUB_LOG"; }
 stub_works() { # -> 0 when one `sleep 0` through STUB_PATH adds exactly one record
@@ -194,7 +255,7 @@ stub_works() { # -> 0 when one `sleep 0` through STUB_PATH adds exactly one reco
 DW=""
 deliver_on_sleep() { # <file> <stop>
   ( while [ ! -s "$STUB_LOG" ] && [ ! -e "$2" ]; do sleep 0.02; done
-    [ -s "$STUB_LOG" ] && printf 'the actual answer for this sprint\n' > "$1" ) &
+    [ -s "$STUB_LOG" ] && { printf 'the actual answer for this sprint\n' > "$1"; : > "$(dirname "$STUB_LOG")/release"; } ) &
   DW=$!
 }
 end_writer() { # <stop>
@@ -461,11 +522,10 @@ sleep_stub "$W/.stub" gate
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
     AI_DLC_PROJECT_ROOT="$PWD" bash "$SUBJ" deliv.md >/dev/null 2>&1 ) & PID=$!
 seen=0
-for _ in $(seq 1 3000); do
-  [ -f "$W/_bmad-output/.beat-inflight" ] && { seen=1; break; }
-  kill -0 "$PID" 2>/dev/null || break
-  sleep 0.02
-done
+# The beat is parked when the stub has RECORDED its first poll sleep, which is after every pre-loop lease write, so the
+# marker is read at a fixed point of the beat (and the beat's clock reads before the release do not move with load).
+until [ -s "$STUB_LOG" ] || ! kill -0 "$PID" 2>/dev/null; do sleep 0.02; done
+[ -f "$W/_bmad-output/.beat-inflight" ] && seen=1
 printf 'the actual answer for this sprint\n' > "$W/deliv.md"
 : > "$W/.stub/release"
 wait "$PID" 2>/dev/null || true
@@ -484,7 +544,7 @@ rm -rf "$W"
 # write past the beat's deadline -- which at quantum 4 it could, and read as a missed delivery.
 C03_arrives_mid_beat() {
 W="$( bash "$SEED" arrives-mid-beat )"
-sleep_stub "$W/.stub" fast
+sleep_stub "$W/.stub" gate
 deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
 BW_Q=60; BW_PATH="$STUB_PATH"
 beat "$W"
@@ -511,7 +571,7 @@ W="$( bash "$SEED" since-clamp )"
 FUT=$(( $(date +%s) + 600 ))
 # The write is gated on the beat's first poll sleep (deliver_on_sleep), not on `sleep 2`: it lands
 # strictly inside the poll loop whatever the load, and no second of clock is spent waiting for it.
-sleep_stub "$W/.stub" fast
+sleep_stub "$W/.stub" gate
 deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
 BW_Q=20; BW_PATH="$STUB_PATH"
 beat "$W" --since "$FUT"
@@ -639,7 +699,7 @@ rm -rf "$W"
 # passes the forward case whenever the budget happens to be the smaller number.
 C09_knob_split_reverse() {
 W="$( bash "$SEED" knob-split-reverse )"
-sleep_stub "$W/.stub" fast
+sleep_stub "$W/.stub" gate
 deliver_on_sleep "$W/deliv.md" "$W/.stub/stop"
 knob_beat "$W" 60 3
 end_writer "$W/.stub/stop"
@@ -682,19 +742,19 @@ rm -rf "$W"
 # it, so no EXIT trap runs and nothing writes after KILL_T.
 MS_Q=60; MS_POLL=1; MS_MARGIN=1
 run_stale() { # <subject> -> MS_LEASE MS_KILL_T MS_DISCRIM ; leaves W
-  local pid i reserve
+  local pid reserve
   W="$( bash "$SEED" marker-goes-stale )"
-  MS_T0="$(date +%s)"
-  ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" \
+  # The beat runs under the virtual clock with a gate stub that is never released: it parks in its first poll
+  # sleep, the clock has moved by one POLL and no more, and the defect's END lease (T0 + Q - R = base + 59) is
+  # above KILL_T + 3 x POLL (base + 4) by construction, whatever the box does between start and kill.
+  sleep_stub "$W/.stub" gate
+  MS_T0="$(clock_now)"
+  ( cd "$W" && env PATH="$STUB_PATH" AI_DLC_WAIT_BEAT_SECS="$MS_Q" AI_DLC_WAIT_POLL_SECS="$MS_POLL" \
                    AI_DLC_WAIT_MARGIN_SECS="$MS_MARGIN" AI_DLC_MAX_WAIT_BEATS=6 \
       AI_DLC_PROJECT_ROOT="$PWD" bash "$1" deliv.md >/dev/null 2>&1 ) & pid=$!
-  for i in $(seq 1 3000); do
-    [ -s "$W/_bmad-output/.beat-inflight" ] && break
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.02
-  done
+  until [ -s "$STUB_LOG" ] || ! kill -0 "$pid" 2>/dev/null; do sleep 0.02; done
   reap_tree "$pid"
-  MS_KILL_T="$(date +%s)"
+  MS_KILL_T="$(clock_now)"
   MS_LEASE="$(marker_of "$W")"
   MS_LEASE="${MS_LEASE%% *}"   # the marker is `<epoch> <pid>`; the lease is the first field
   reserve="$MS_MARGIN"; [ "$MS_POLL" -gt "$reserve" ] && reserve="$MS_POLL"
@@ -1158,18 +1218,26 @@ run_handoff() { # <subject> -> HO_* ; leaves W for the caller
   # A's record, HO_SLEEPS, still counts only A's sleeps), a lease of 3 x POLL that no load can reach, and
   # A is not started until B's stub has RECORDED B's first poll sleep, which is after both of B's
   # pre-loop lease writes. The order is a file, not a delay. B is woken on purpose below, as A is.
-  sleep_stub "$W/.stubB"; bs_path="$STUB_PATH"; bs_log="$STUB_LOG"
-  sleep_stub "$W/.stub"
+  # ONE WORLD CLOCK: both stubs share "$W/clk", so A and B read and advance the same virtual now, and the lease
+  # epoch bound at the read (HO_NOW) is taken from that clock and not from the real one.
+  # The handoff beats' POLL is 600 and a file's mtime is a REAL time, so a clock advanced by those sleeps would
+  # put the join epoch above a.md's mtime: `noadvance` freezes the offset at 0 and writes NO date shim (each shim call is a
+  # bash start, and the subject then reads the real clock, whose epoch the frozen base only understates).
+  mkdir -p "$W/clk" && : > "$W/clk/noadvance"
+  sleep_stub "$W/.stubB" real "$W/clk"; bs_path="$STUB_PATH"; bs_log="$STUB_LOG"
+  sleep_stub "$W/.stub" real "$W/clk"
   BG_PATH="$bs_path"; bg_beat "$1" "$W" "$W/b.out" "$(( 2 * HO_POLL ))" "$HO_POLL" b.md; pb=$BG; BG_PATH=""
-  HO_B_ASLEEP=0; until_true 600 test -s "$bs_log" && HO_B_ASLEEP=1
+  until_event eval 'test -s "$bs_log" || ! kill -0 "$pb" 2>/dev/null'
+  HO_B_ASLEEP=0; test -s "$bs_log" && HO_B_ASLEEP=1
   HO_B="$(marker_pid "$W")"
   BG_PATH="$STUB_PATH"; bg_beat "$1" "$W" "$W/a.out" "$(( 2 * HO_POLL ))" "$HO_POLL" a.md; pa=$BG; BG_PATH=""
-  until_true 100 leases_are "$W" 2 || true
+  until_event eval 'leases_are "$W" 2 || ! kill -0 "$pa" 2>/dev/null'
   # A writes the lease twice before it sleeps: early, and again just before the poll loop. If B
   # exits between the two, A's second write takes the free marker and EVERY subject -- the trap
   # mutant included -- leaves a marker naming A. Measured: 4 of 4 trap-mutant survivors at load
   # ~60 passed every other control. So B's target lands only once A is in its `sleep`.
-  HO_A_ASLEEP=0; until_true 150 tree_has_sleep "$pa" && HO_A_ASLEEP=1
+  until_event eval 'tree_has_sleep "$pa" || ! kill -0 "$pa" 2>/dev/null'
+  HO_A_ASLEEP=0; tree_has_sleep "$pa" && HO_A_ASLEEP=1
   HO_A="$(other_lease_pid "$W" "$HO_B")"
   HO_HOLDER0="$(marker_pid "$W")"
   # A IS FROZEN from before B's target lands until after the read, so no write of A's can fall
@@ -1186,21 +1254,24 @@ run_handoff() { # <subject> -> HO_* ; leaves W for the caller
   # WAKE B ON PURPOSE: end its stub sleep. B's loop re-stamps, finds b.md and delivers, so its exit (the
   # event under test) happens now and the passing path never waits out B's long POLL. A is still frozen.
   tree_kill_sleep "$pb"
-  until_true 1200 eval '! kill -0 "$pb" 2>/dev/null' || reap_tree "$pb"
+  # B resolves by an EVENT: it exits, or it enters a SECOND poll sleep (it did not deliver on its wake, so b.out
+  # lacks DELIVERED and the case reds). Neither carries a count or a clock.
+  until_event eval '! kill -0 "$pb" 2>/dev/null || [ "$(awk "END{print NR}" "$bs_log")" -ge 2 ]'
+  reap_tree "$pb"
   wait "$pb" 2>/dev/null || true
   HO_AFTER="$(marker_of "$W")"
-  HO_NOW="$(date +%s)"
+  HO_NOW="$(clock_now "$W/clk")"
   HO_A_ALIVE=0; [ -n "$HO_A" ] && kill -0 "$HO_A" 2>/dev/null && HO_A_ALIVE=1
   printf 'the answer A was waiting for\n' > "$W/a.md"
   # WAKE A ON PURPOSE: resume it, then end its stub sleep. A's loop re-stamps, finds a.md and
   # delivers, so the passing path never waits out POLL 600.
   tree_signal "$pa" CONT
   tree_kill_sleep "$pa"
-  # A WAKE THAT DID NOT HAPPEN IS A RED, NOT A 600s STALL. A woken beat delivers in well under a
-  # second; if it is still running after this bound its tree is reaped, a.out carries no
-  # DELIVERED line, and the C33 control below fails loudly. The bound decides no verdict -- it
-  # only stops a broken wake from holding the pool for ten minutes.
-  until_true 300 eval '! kill -0 "$pa" 2>/dev/null' || reap_tree "$pa"
+  # A WAKE THAT DID NOT HAPPEN IS A RED, NOT A 600s STALL. A woken beat delivers; one that enters a
+  # SECOND poll sleep did not, and the wait below ends on that event, reaps its tree, and a.out carries
+  # no DELIVERED line, so the C33 control fails loudly. No count or clock decides it.
+  until_event eval '! kill -0 "$pa" 2>/dev/null || [ "$(awk "END{print NR}" "$W/.stub/sleep.log")" -ge 2 ]'
+  reap_tree "$pa"
   wait "$pa" 2>/dev/null || true
   HO_GONE=1; [ -e "$W/_bmad-output/.beat-inflight" ] && HO_GONE=0
   separate_shells "$W" 2 "$W/a.out" "$W/b.out"
@@ -1265,6 +1336,9 @@ run_noclobber() { # <subject> -> NC_* ; leaves W
   args=""
   for i in $(seq 1 30); do printf 'delivered\n' > "$W/d$i.md"; args="$args d$i.md"; done
   bg_beat "$1" "$W" "$W/a.out" "$(( 2 * NC_POLL ))" "$NC_POLL" a.md; pa=$BG
+  # The SECOND beat runs under the virtual clock and the mv record (its own stub dir, so A's real clock is untouched).
+  sleep_stub "$W/.stubI" fast "$W/clk"; mv_shim "$W/.stubI/bin" "$W/.mvlog"; NC_PATH="$STUB_PATH"
+  NC_MVOK=0; mv_works "$NC_PATH" "$W/.mvlog" "$W/.mvctl" && NC_MVOK=1
   # A ASLEEP, not merely started: A re-stamps once more after charging its beat and before the
   # sleep, and a baseline read before that re-stamp would score A's own write as a clobber. The
   # sleep child is the proof A is past every pre-loop write; then A is frozen where it stands.
@@ -1275,20 +1349,15 @@ run_noclobber() { # <subject> -> NC_* ; leaves W
   ( cd "$W" && AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status other.md ) > "$W/st.out" 2>&1
   NC_STATUS="$(marker_of "$W")"
   # $args is a word list built above with no spaces inside a word, so it is left unquoted.
-  bg_beat "$1" "$W" "$W/i.out" 4 1 --since "$(( $(date +%s) - 60 ))" $args; pi=$BG
-  # NC_SEEN: the first sample differing from A's baseline. NC_FOREIGN: the first naming a pid
-  # other than A's -- the clobber itself. The LAST differing sample would be the wrong one to
-  # keep: a clobbering beat hands the marker back to A at exit, with A's latest registration.
-  NC_SEEN=""; NC_FOREIGN=""
-  while kill -0 "$pi" 2>/dev/null; do
-    cur="$(marker_of "$W")"
-    if [ "$cur" != "$NC_M0" ]; then
-      [ -n "$NC_SEEN" ] || NC_SEEN="${cur:-<absent>}"
-      case "$cur" in *" $NC_A") : ;; *) [ -n "$NC_FOREIGN" ] || NC_FOREIGN="${cur:-<absent>}" ;; esac
-    fi
-    sleep 0.05
-  done
+  BG_PATH="$NC_PATH"; bg_beat "$1" "$W" "$W/i.out" 4 1 --since "$(( $(date +%s) - 60 ))" $args; pi=$BG; BG_PATH=""
   wait "$pi" 2>/dev/null || true
+  # NC_SEEN: the first marker write the second beat made. NC_FOREIGN: the first naming a pid other than A's -- the
+  # clobber itself. Read from the mv record, which loses nothing between two samples.
+  NC_SEEN=""; NC_FOREIGN=""
+  while IFS= read -r cur; do
+    [ -n "$NC_SEEN" ] || NC_SEEN="${cur:-<absent>}"
+    case "$cur" in *" $NC_A") : ;; *) [ -n "$NC_FOREIGN" ] || NC_FOREIGN="${cur:-<absent>}" ;; esac
+  done < "$W/.mvlog"
   NC_AFTER="$(marker_of "$W")"
   NC_DELIV="$(grep -c '^DELIVERED d' "$W/i.out" || true)"
   NC_A_ALIVE=0; [ -n "$NC_A" ] && kill -0 "$NC_A" 2>/dev/null && NC_A_ALIVE=1
@@ -1296,7 +1365,7 @@ run_noclobber() { # <subject> -> NC_* ; leaves W
   case "$NC_A" in ''|*[!0-9]*) : ;; *) case "$(ps -o stat= -p "$NC_A" 2>/dev/null)" in *T*) NC_A_STOPPED=1 ;; esac ;; esac
   NC_A_LEASED=0; le=""
   [ -n "$NC_A" ] && le="$(cat "$W/_bmad-output/.wait-beats/.lease-$NC_A" 2>/dev/null || echo '')"
-  case "$le" in ''|*[!0-9]*) : ;; *) [ "$le" -gt "$(date +%s)" ] && NC_A_LEASED=1 ;; esac
+  case "$le" in ''|*[!0-9]*) : ;; *) [ "$le" -gt "$(clock_now "$W/clk")" ] && NC_A_LEASED=1 ;; esac
   reap_tree "$pa"
   separate_shells "$W" 2 "$W/a.out" "$W/i.out"
 }
@@ -1308,6 +1377,9 @@ noclobber_preconditions() { # <label>
   if [ "$NC_A_ASLEEP" -eq 1 ] && [ "$NC_A_STOPPED" -eq 1 ]; then
     pre_ok "$1: CONTROL — A was in its poll sleep when frozen and still frozen at the window's end, so no marker write in the window is A's"
   else pre_bad "$1: A asleep=$NC_A_ASLEEP stopped=$NC_A_STOPPED — A could write the marker inside the window, so a change there is not attributable to the second beat"; fi
+  if [ "$NC_MVOK" -eq 1 ]; then
+    pre_ok "$1: CONTROL — the mv record logs a marker-named mv run through the second beat's PATH"
+  else pre_bad "$1: the mv record logged nothing for a marker-named mv — 'the second beat wrote no marker' would be unmeasured"; fi
   if [ "$NC_A_LEASED" -eq 1 ]; then
     pre_ok "$1: CONTROL — A's registration was still in the future at the window's end; no beat could take the marker legitimately"
   else pre_bad "$1: A's .lease-$NC_A was expired or absent at the window's end — a correct beat may take a dead holder's marker, so a change there is not a clobber"; fi
@@ -1346,25 +1418,32 @@ rm -rf "$W"
 # would then score alike. The beat is reaped once observed: run out, a large wave costs a
 # multi-second sweep plus a report that re-forks per target (measured at load ~60: 200 targets
 # swept in 9.3s, the marker at 0.08s, the first sidecar at 0.12s).
-EARLY_N=150
+EARLY_N=3
 run_early() { # <subject> -> EA_* ; leaves W
   W="$( bash "$SEED" lease-early )"
   local p i args d
   args=""
   for i in $(seq 1 "$EARLY_N"); do args="$args t$i.md"; done
-  bg_beat "$1" "$W" "$W/e.out" 30 1 $args; p=$BG
+  # THE OBSERVATION IS HELD, NOT SAMPLED. A `cksum` shim on the beat's PATH (key_of forks cksum once per target):
+  # once a `.since` sidecar exists it writes $W/.held and blocks until $W/.go, then execs the real cksum. The beat
+  # is therefore parked mid-sweep with at least one sidecar and fewer than EARLY_N, however the box is loaded.
+  local real_ck real_sl real_bash
+  real_ck="$(command -v cksum)"; real_sl="$(command -v sleep)"; real_bash="$(command -v bash)"
+  [ -n "$real_ck" ] && [ -n "$real_sl" ] && [ -n "$real_bash" ] || { echo "FIXTURE ERROR: cannot resolve cksum/sleep/bash for the cksum hold" >&2; exit 2; }
+  mkdir -p "$W/.ckbin" || { echo "FIXTURE ERROR: cannot create the cksum hold dir" >&2; exit 2; }
   d="$W/_bmad-output/.wait-beats"
+  printf '#!%s\nfor f_ in "%s"/*.since; do\n  [ -e "$f_" ] || break\n  [ -e "%s/.held" ] || : > "%s/.held"\n  while [ ! -e "%s/.go" ]; do "%s" 0.02; done\n  break\ndone\nexec "%s" "$@"\n' \
+    "$real_bash" "$d" "$W" "$W" "$W" "$real_sl" "$real_ck" > "$W/.ckbin/cksum"
+  chmod +x "$W/.ckbin/cksum" || { echo "FIXTURE ERROR: cannot make the cksum hold executable" >&2; exit 2; }
+  BG_PATH="$W/.ckbin:$PATH"; bg_beat "$1" "$W" "$W/e.out" 30 1 $args; p=$BG; BG_PATH=""
   EA_SEEN=0; EA_MARK=0; EA_CNT=0
-  for i in $(seq 1 600); do
-    EA_CNT="$(count_glob "$d"/*.since)"
-    if [ "$EA_CNT" -gt 0 ]; then
-      EA_SEEN=1; [ -e "$W/_bmad-output/.beat-inflight" ] && EA_MARK=1
-      break
-    fi
-    kill -0 "$p" 2>/dev/null || break
-    sleep 0.02
-  done
+  until_event eval '[ -e "$W/.held" ] || ! kill -0 "$p" 2>/dev/null'
+  EA_CNT="$(count_glob "$d"/*.since)"
+  if [ -e "$W/.held" ] && [ "$EA_CNT" -gt 0 ]; then
+    EA_SEEN=1; [ -e "$W/_bmad-output/.beat-inflight" ] && EA_MARK=1
+  fi
   reap_tree "$p"
+  : > "$W/.go"
 }
 early_preconditions() { # <label>
   if [ "$EA_SEEN" -eq 1 ] && [ "$EA_CNT" -lt "$EARLY_N" ]; then
@@ -1499,15 +1578,17 @@ rm -rf "$W"
 run_bare_epoch() { # <subject> -> BE_* ; leaves W
   W="$( bash "$SEED" bare-epoch )"
   local p cur
+  # The beat runs under the virtual clock and the mv record. The seed's bare epoch is the REAL now + 120, which a
+  # 120s stall would let a correct beat legitimately take; it is rewritten here as the virtual base + 120, so the
+  # beat's clock (base + at most 4) never reaches it.
+  sleep_stub "$W/.stubI" fast "$W/clk"; mv_shim "$W/.stubI/bin" "$W/.mvlog"
+  printf '%s' "$(( $(clock_now "$W/clk") + 120 ))" > "$W/_bmad-output/.beat-inflight"
+  BE_MVOK=0; mv_works "$STUB_PATH" "$W/.mvlog" "$W/.mvctl" && BE_MVOK=1
   BE_M0="$(marker_of "$W")"
-  bg_beat "$1" "$W" "$W/o.out" 4 1 x.md; p=$BG
-  BE_SEEN=""
-  while kill -0 "$p" 2>/dev/null; do
-    cur="$(marker_of "$W")"
-    [ "$cur" = "$BE_M0" ] || BE_SEEN="${cur:-<absent>}"
-    sleep 0.02
-  done
+  BG_PATH="$STUB_PATH"; bg_beat "$1" "$W" "$W/o.out" 4 1 x.md; p=$BG; BG_PATH=""
   wait "$p"; BE_RC=$?
+  BE_SEEN=""
+  while IFS= read -r cur; do [ -n "$BE_SEEN" ] || BE_SEEN="${cur:-<absent>}"; done < "$W/.mvlog"
   BE_AFTER="$(marker_of "$W")"
   separate_shells "$W" 1 "$W/o.out"
 }
@@ -1518,6 +1599,8 @@ case "$BE_M0" in
   ''|*' '*|*[!0-9]*) bad "bare-epoch: seeded marker '$BE_M0' is not a bare epoch — the case cannot test a pre-upgrade lease" ;;
   *) ok "bare-epoch: CONTROL — the seeded marker is a bare future epoch" ;;
 esac
+if [ "$BE_MVOK" -eq 1 ]; then ok "bare-epoch: CONTROL — the mv record logs a marker-named mv run through the beat's PATH"
+else bad "bare-epoch: the mv record logged nothing for a marker-named mv — 'the beat wrote no marker' would be unmeasured"; fi
 if [ -z "$BE_SEEN" ] && [ "$BE_AFTER" = "$BE_M0" ]; then
   ok "bare-epoch: a live pid-less lease is never taken, during the beat or at its exit"
 else bad "bare-epoch: marker went to '${BE_SEEN:-$BE_AFTER}' — a new beat took a live pre-upgrade lease that beat will delete on its own exit"; fi
@@ -1780,7 +1863,9 @@ else bad "CONTROL MX0: the unmutated copy (identical=$MX0_SAME, rc ${CELL_RC:-no
 n_dead=0
 count_lines() { if [ -f "$1" ]; then grep -c . "$1" || true; else echo 0; fi; }
 while read -r m d t; do
-  bv="B_$d"; bt="B_$t"
+  # The base-pass flags are read back from the verdicts of THIS run: the rc each unmutated arm exited with in its
+  # worker, and the MX0 control's own flag.
+  bd="$(cat "$OUT/b.$d.rc" 2>/dev/null)"; bt="$(cat "$OUT/b.$t.rc" 2>/dev/null)"; mx0="$(printf '%s' "$B_MX0")"
   cell_state "$m" "$d"
   # A PRECONDITION FAILURE INSIDE A MUTANT CELL IS A FIXTURE ERROR, NEVER A KILL: the worker exits 2.
   if [ "$CELL_OK" -eq 1 ] && [ "$CELL_RC" = "2" ]; then
@@ -1808,7 +1893,7 @@ while read -r m d t; do
     if [ -f "$OUT/x.$m.$d.pre" ]; then
       while IFS= read -r pl; do ok "MUTANT $m: ${pl#*: }"; done < "$OUT/x.$m.$d.pre"
     fi
-    mutant_killed "$(( ${!bv:-0} && ${!bt:-0} && B_MX0 ))" "$m" "MUTANT $m: arm $d trips under the mutant while twin $t stays green"
+    mutant_killed "$([ "$bd" = 0 ] && [ "$bt" = 0 ] && [ "$mx0" = 1 ] && echo 1 || echo 0)" "$m" "MUTANT $m: arm $d trips under the mutant while twin $t stays green"
   fi
 done < "$OUT/table"
 

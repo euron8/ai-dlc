@@ -78,7 +78,7 @@ new_world() { # -> a fresh project root (own mktemp: a counter bumped inside $( 
 # a re-run start, so drive() can put a `date` shim first on PATH that prints a pinned ts. The ROW is
 # still the real hook's -- only the clock is fixed. Without a ts the shim is not on PATH at all.
 DSHIM="$WORK/dshim"; mkdir -p "$DSHIM" || exit 2
-printf '#!/bin/sh\nprintf "%%s\\n" "$FIX_DRIVE_TS"\n' > "$DSHIM/date" && chmod +x "$DSHIM/date" || exit 2
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$FIX_DRIVE_TS"\n' > "$DSHIM/date" && chmod +x "$DSHIM/date" || exit 2
 # THE JOIN'S --until (BL-807), taken from the REAL clock at each join invocation. The join refuses an
 # --until later than its own clock, so no window may be closed by a far-future constant. The real clock is
 # right at every site: no join runs while DTS is set, and every pinned row (2026-05, 06 and 10-15 seeds)

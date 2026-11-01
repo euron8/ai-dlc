@@ -226,8 +226,11 @@ fails=0
 broken=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-# Every kill below is emitted through mutant_killed, behind B_base (A00 passed in this shard
-# run, handed to each cell as an argument) or a same-cell control flag.
+# Every kill below is emitted through mutant_killed, behind a same-run test over CTL_RC (the exit
+# status the shard driver captured from this shard's A00 control run, read from the file named
+# in --run-one's slot 6), or behind a same-cell flag: B_a25m3/B_a35m1/B_a39m1 are set only after
+# their own kill passed that gate, and B_cw beside the cwd battery's unmutated control's ok
+# (cwd_control), which the driver reaches only after A00 passed.
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
@@ -569,7 +572,7 @@ mkdir -p "$ROOT/core/brand-new-subtree"
 echo 'x' > "$ROOT/core/brand-new-subtree/thing.sh"
 out="$(vrun)"
 if mx_red A01-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A01-m1 "A01-m1: a new core/ subtree with no site row FAILS (the catch-all can no longer swallow one silently)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A01-m1 "A01-m1: a new core/ subtree with no site row FAILS (the catch-all can no longer swallow one silently)"
 else
   bad "A01-m1 SURVIVED: a new core/ subtree with no site row did NOT fail — I8 is hand-listed again, and the next core/<dir>/ ships to a path nothing reads"
 fi
@@ -584,7 +587,7 @@ grep -q 'core/git-hooks/\*)' "$PRECLASS" || bad "FIXTURE STALE: preclassify.sh h
 sed -i.bak '/core\/git-hooks\/\*)/d' "$PRECLASS"
 out="$(vrun)"
 if mx_red A02-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A02-m1 "A02-m1: map_consumer() losing its git-hooks case FAILS (the v0.53.0 regression cannot return)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A02-m1 "A02-m1: map_consumer() losing its git-hooks case FAILS (the v0.53.0 regression cannot return)"
 else
   bad "A02-m1 SURVIVED: map_consumer() with no git-hooks case did NOT fail — the pre-push gate would ship to .claude/git-hooks/ again"
 fi
@@ -600,7 +603,7 @@ grep -q 'PROJECT_ROOT/.githooks' "$INSTALL" || bad "FIXTURE STALE: install.sh ha
 sed -i.bak 's|"\$PROJECT_ROOT/\.githooks|"$PROJECT_ROOT/.githooks-REMOVED|g' "$INSTALL"
 out="$(vrun)"
 if mx_red A03-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A03-m1 "A03-m1: a site row whose destination install.sh abandoned FAILS (the table is bound to the installer, not to itself)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A03-m1 "A03-m1: a site row whose destination install.sh abandoned FAILS (the table is bound to the installer, not to itself)"
 else
   bad "A03-m1 SURVIVED: install.sh dropping .githooks did NOT fail — I8's table can assert a destination nothing writes"
 fi
@@ -617,7 +620,7 @@ if grep -q 'core/hooks core/schemas' "$UD"; then
   sed -i.bak 's| core/hooks core/schemas | core/hooks |' "$UD"
   out="$(vrun)"
   if mx_red A04-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A04-m1 "A04-m1: unregistered-drift.sh dropping core/schemas from its scan FAILS I12 (the scan set is bound, not hand-listed)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A04-m1 "A04-m1: unregistered-drift.sh dropping core/schemas from its scan FAILS I12 (the scan set is bound, not hand-listed)"
   else
     bad "A04-m1 SURVIVED: dropping core/schemas from the scan did NOT fail I12 — the scan set can rot silently again"
   fi
@@ -634,7 +637,7 @@ mkdir -p "$ROOT/core/brand-new-subtree"
 echo 'x' > "$ROOT/core/brand-new-subtree/thing.md"
 out="$(vrun)"
 if mx_red A05-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A05-m1 "A05-m1: a new core/ subtree with no I12 policy row FAILS (a new dir must be classified scan/exempt before it can ship)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A05-m1 "A05-m1: a new core/ subtree with no I12 policy row FAILS (a new dir must be classified scan/exempt before it can ship)"
 else
   bad "A05-m1 SURVIVED: a new core/ subtree with no I12 policy row did NOT fail — the scan set is hand-listed again"
 fi
@@ -652,7 +655,7 @@ if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   sed -i.bak "s|^ANCHOR_RE=.*|ANCHOR_RE='^#{2,4} [0-9]+[a-z]*\\\\.'|" "$RELABEL"
   out="$(vrun)"
   if mx_red A06-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A06-m1 "A06-m1: narrowing relabel's ANCHOR_RE FAILS I15 (the reporter and the fixer cannot drift apart)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A06-m1 "A06-m1: narrowing relabel's ANCHOR_RE FAILS I15 (the reporter and the fixer cannot drift apart)"
   else
     bad "A06-m1 SURVIVED: narrowing relabel's ANCHOR_RE did NOT fail I15 — the two grammars can fork again and H1-style collisions go unrelabellable"
   fi
@@ -676,7 +679,7 @@ if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   sed -i.bak '/^ANCHOR_RE=/d' "$RELABEL"
   out="$(vrun)"
   if mx_red A07-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A07-m1 "A07-m1: deleting an ANCHOR_RE definition FAILS I15 loudly (it cannot pass by comparing nothing)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A07-m1 "A07-m1: deleting an ANCHOR_RE definition FAILS I15 loudly (it cannot pass by comparing nothing)"
   else
     bad "A07-m1 SURVIVED: deleting an ANCHOR_RE definition did NOT fail I15 — the check goes vacuous exactly when the grammar is missing"
   fi
@@ -708,7 +711,7 @@ open(p, 'w').write(s)
 PY
   out="$(vrun)"
   if mx_red A08-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A08-m1 "A08-m1: apply.sh regrowing a private path table FAILS I17 (the pull's WRITER is bound to the installer, not just the classifier)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A08-m1 "A08-m1: apply.sh regrowing a private path table FAILS I17 (the pull's WRITER is bound to the installer, not just the classifier)"
   else
     bad "A08-m1 SURVIVED: apply.sh with a hand-listed table missing session-driver did NOT fail I17 — a subtree can silently not apply while the run re-stamps, and the consumer's stamp claims a version its tree lacks"
   fi
@@ -726,7 +729,7 @@ A09_i16_dead_prose_path() {
 printf '\nSee `core/team-roles/dev.md` for the map.\n' >> "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 out="$(vrun)"
 if mx_red A09-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A09-m1 "A09-m1: a core/-prefixed prose path in a runtime step file FAILS I16 (installed core cannot ship a dead citation)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A09-m1 "A09-m1: a core/-prefixed prose path in a runtime step file FAILS I16 (installed core cannot ship a dead citation)"
 else
   bad "A09-m1 SURVIVED: a core/-prefixed prose path did NOT fail I16 — installed core can cite the distribution's layout again, and one dead link already cost a live gate rule"
 fi
@@ -763,7 +766,7 @@ APPLY_F="$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
 printf '\nsection_of() { echo private; }\n' >> "$APPLY_F"
 out="$(vrun)"
 if mx_red A11-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A11-m1 "A11-m1: a fourth inline section_of() FAILS I21 (the resolver cannot fork a third time)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A11-m1 "A11-m1: a fourth inline section_of() FAILS I21 (the resolver cannot fork a third time)"
 else
   bad "A11-m1 SURVIVED: a fourth inline section_of() did NOT fail I21 — the divergence that shipped in v0.52.0 and v0.54.2 can return, and nothing compares the copies"
 fi
@@ -781,7 +784,7 @@ if grep -q '^\. "\$SELF/lib\.sh"' "$REG_F"; then
   sed -i.bak '/^\. "\$SELF\/lib\.sh"/d' "$REG_F"
   out="$(vrun)"
   if mx_red A12-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A12-m1 "A12-m1: a classifier that drops its lib.sh source FAILS I21 (a call that resolves to nothing cannot ship)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A12-m1 "A12-m1: a classifier that drops its lib.sh source FAILS I21 (a call that resolves to nothing cannot ship)"
   else
     bad "A12-m1 SURVIVED: register-drift.sh dropping its lib.sh source did NOT fail I21 — section_of() resolves to nothing on a real pull and the empty section reads as 'no drift'"
   fi
@@ -806,7 +809,7 @@ if grep -qE '^[a-z_]+\(\) \{' "$RLIB_F"; then
   grep -vE '^[a-z_]+\(\) \{' "$RLIB_F" > "$RLIB_F.tmp" && mv "$RLIB_F.tmp" "$RLIB_F"
   out="$(vrun)"
   if mx_red A13-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A13-m1 "A13-m1: lib.sh losing its definitions FAILS I21 loudly (it cannot pass by binding an empty helper set)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A13-m1 "A13-m1: lib.sh losing its definitions FAILS I21 loudly (it cannot pass by binding an empty helper set)"
   else
     bad "A13-m1 SURVIVED: emptying lib.sh did NOT fail I21 — the check goes vacuous exactly when the single home stops being one"
   fi
@@ -828,7 +831,7 @@ if grep -q '^  schemas/\*|skills/ai-dlc-setup/\*)' "$RD_F"; then
   sed -i.bak 's@^  schemas/\*|skills/ai-dlc-setup/\*)@  never-matches-a-real-path/*)@' "$RD_F"
   out="$(vrun)"
   if mx_red A14-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A14-m1 "A14-m1: removing register-drift's no-grain refusal FAILS I31 (a scan-marked subtree cannot reach an unnamed refusal)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A14-m1 "A14-m1: removing register-drift's no-grain refusal FAILS I31 (a scan-marked subtree cannot reach an unnamed refusal)"
   else
     bad "A14-m1 SURVIVED: removing the no-grain refusal did NOT fail I31 — a scan-marked subtree can be reported with no sanctioned disposition again"
   fi
@@ -855,7 +858,7 @@ if grep -q '^case "\$REL" in' "$RD_F"; then
   grep -v '^case "\$REL" in' "$RD_F" > "$RD_F.tmp" && mv "$RD_F.tmp" "$RD_F"
   out="$(vrun)"
   if mx_red A15-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A15-m1 "A15-m1: an unparseable case block FAILS I31 loudly (it cannot pass by comparing against nothing)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A15-m1 "A15-m1: an unparseable case block FAILS I31 loudly (it cannot pass by comparing against nothing)"
   else
     bad "A15-m1 SURVIVED: an unparseable case block did NOT fail I31 — the check goes vacuous exactly when register-drift's dispositions become unreadable"
   fi
@@ -877,7 +880,7 @@ if grep -qE '^  bmad-prd`\.$' "$GV_F"; then
   sed -i.bak 's/^  bmad-prd`\.$/  bmad-party-mode`./' "$GV_F"
   out="$(vrun)"
   if mx_red A16-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A16-m1 "A16-m1: an arm pinning a skill its step file never invokes FAILS I32 (a pin and an invocation are one fact in two files)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A16-m1 "A16-m1: an arm pinning a skill its step file never invokes FAILS I32 (a pin and an invocation are one fact in two files)"
   else
     bad "A16-m1 SURVIVED: repointing the PRD arm at an uninvoked skill did NOT fail I32 — the pin can fork from the step again"
   fi
@@ -902,7 +905,7 @@ if grep -q -- '--require-skill' "$GV_F"; then
   sed -i.bak 's/--require-skill/--require-SKILL/g' "$GV_F"
   out="$(vrun)"
   if mx_red A17-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A17-m1 "A17-m1: an unparseable arm grammar FAILS I32 loudly ('nothing to compare' never reads as 'the pins agree')"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A17-m1 "A17-m1: an unparseable arm grammar FAILS I32 loudly ('nothing to compare' never reads as 'the pins agree')"
   else
     bad "A17-m1 SURVIVED: breaking the arm grammar did NOT fail I32 — the check goes vacuous exactly when the arms become unreadable"
   fi
@@ -930,7 +933,7 @@ if grep -q -- '--print-schema' "$SP_F"; then
   sed -i.bak "s@^SCHEMA_SRC=.*\$@SCHEMA_SRC=\"$walk\"@" "$SP_F"
   out="$(vrun)"
   if mx_red A18-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A18-m1 "A18-m1: a fixture walking up from a resolved script into another core subtree FAILS I33"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A18-m1 "A18-m1: a fixture walking up from a resolved script into another core subtree FAILS I33"
   else
     bad "A18-m1 SURVIVED: the walk-up path was not caught by I33 — a fixture can go green here and red on every consumer again"
   fi
@@ -949,7 +952,7 @@ if [ -d "$ROOT/core/fixtures" ]; then
   find "$ROOT/core/fixtures" -name '*.sh' -type f -delete 2>/dev/null
   out="$(vrun)"
   if mx_red A19-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A19-m1 "A19-m1: an empty fixture tree FAILS I33 loudly (a scan over nothing never reads as clean)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A19-m1 "A19-m1: an empty fixture tree FAILS I33 loudly (a scan over nothing never reads as clean)"
   else
     bad "A19-m1 SURVIVED: I33 reported clean over an empty fixture tree — 'no hits' is indistinguishable from 'no defect'"
   fi
@@ -984,7 +987,7 @@ else
   else
     out="$(vrun)"
     if mx_red A20-m1 "$out"; then
-      mutant_killed "${B_base:-0}" A20-m1 "A20-m1: a line naming three manifest entries FAILS I26 (the derived set cannot be quietly replaced by a list)"
+      mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A20-m1 "A20-m1: a line naming three manifest entries FAILS I26 (the derived set cannot be quietly replaced by a list)"
     else
       bad "A20-m1 SURVIVED: a restated core path list did NOT fail I26 — the check that stopped six core subtrees being silently skipped is not firing"
     fi
@@ -1018,7 +1021,7 @@ else
   else
     out="$(vrun)"
     if mx_red A21-m1 "$out"; then
-      mutant_killed "${B_base:-0}" A21-m1 "A21-m1: a one-copy change to the anchor arm FAILS I40 (the linter and the pull classifier cannot disagree)"
+      mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A21-m1 "A21-m1: a one-copy change to the anchor arm FAILS I40 (the linter and the pull classifier cannot disagree)"
     else
       bad "A21-m1 SURVIVED: a forked anchor_arm() did NOT fail I40 — the two tools can now answer the same question differently and the operator believes whichever they ran"
     fi
@@ -1032,7 +1035,7 @@ else
   else
     out="$(vrun)"
     if mx_red A21-m2 "$out"; then
-      mutant_killed "${B_base:-0}" A21-m2 "A21-m2: a MISSING bound function FAILS I40 loudly (finding nothing never reads as agreement)"
+      mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A21-m2 "A21-m2: a MISSING bound function FAILS I40 loudly (finding nothing never reads as agreement)"
     else
       bad "A21-m2 SURVIVED: I40 reported clean with shadow_parts() deleted from one side — a rename silently retires the binding"
     fi
@@ -1078,7 +1081,7 @@ if cmp -s "$SKB.orig" "$SKB"; then
 else
   out="$(vrun)"
   if mx_red A22-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A22-m1 "A22-m1: a core rule numbered 900 FAILS I45 (core cannot allocate from the range E15 tells consumers to move into)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A22-m1 "A22-m1: a core rule numbered 900 FAILS I45 (core cannot allocate from the range E15 tells consumers to move into)"
   else
     bad "A22-m1 SURVIVED: core allocated Rule 900 and I45 stayed silent — the band is a promise to consumers with nothing holding core to it"
   fi
@@ -1102,7 +1105,7 @@ if cmp -s "$GVB.orig" "$GVB"; then
 else
   out="$(vrun)"
   if mx_red A22-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A22-m2 "A22-m2: a core check id 'XAP' FAILS I45 (the alphabetic half of the partition has a mechanism, not just a paragraph)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A22-m2 "A22-m2: a core check id 'XAP' FAILS I45 (the alphabetic half of the partition has a mechanism, not just a paragraph)"
   else
     bad "A22-m2 SURVIVED: core allocated check 'XAP' and I45 stayed silent — a consumer that renamed 'AP' into the reserved prefix has bought nothing, and the collision it migrated to escape reappears upstream for every consumer at once"
   fi
@@ -1121,7 +1124,7 @@ if cmp -s "$VLE_BAK" "$VLE"; then
 else
   out="$(vrun)"
   if mx_red A22-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A22-m3 "A22-m3: an unreadable BAND_ALPHA_PREFIX FAILS I45 loudly (a prefix it cannot read would make every core alphabetic id conforming)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A22-m3 "A22-m3: an unreadable BAND_ALPHA_PREFIX FAILS I45 loudly (a prefix it cannot read would make every core alphabetic id conforming)"
   else
     bad "A22-m3 SURVIVED: I45 reported clean with BAND_ALPHA_PREFIX renamed — the alphabetic half retires itself silently the moment the constant moves"
   fi
@@ -1140,7 +1143,7 @@ if cmp -s "$VLE_BAK" "$VLE"; then
 else
   out="$(vrun)"
   if mx_red A22-m4 "$out"; then
-    mutant_killed "${B_base:-0}" A22-m4 "A22-m4: an unreadable BAND_FLOOR FAILS I45 loudly (a floor it cannot read would make every core number conforming)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A22-m4 "A22-m4: an unreadable BAND_FLOOR FAILS I45 loudly (a floor it cannot read would make every core number conforming)"
   else
     bad "A22-m4 SURVIVED: I45 reported clean with BAND_FLOOR renamed — the invariant retires itself silently the moment the constant moves"
   fi
@@ -1161,7 +1164,7 @@ if cmp -s "$VLE_BAK" "$VLE"; then
 else
   out="$(vrun)"
   if mx_red A22-m5 "$out"; then
-    mutant_killed "${B_base:-0}" A22-m5 "A22-m5: a renamed catalog extractor FAILS I45 loudly (an empty catalog never reads as a conforming one)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A22-m5 "A22-m5: a renamed catalog extractor FAILS I45 loudly (an empty catalog never reads as a conforming one)"
   else
     bad "A22-m5 SURVIVED: I45 reported clean with defined_anchors() renamed — it was scanning nothing and calling it agreement"
   fi
@@ -1197,7 +1200,7 @@ if cmp -s "$VGM_BAK" "$VGM"; then
 else
   out="$(vrun)"
   if mx_red A23-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A23-m1 "A23-m1: a narrowed CHECK_HEAD_RE in the resolver FAILS I47 (a definition one tool sees and the other cannot)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A23-m1 "A23-m1: a narrowed CHECK_HEAD_RE in the resolver FAILS I47 (a definition one tool sees and the other cannot)"
   else
     bad "A23-m1 SURVIVED: the two copies of the check-heading grammar diverged and I47 stayed silent — GM1's subject set can shrink with the build green"
   fi
@@ -1216,7 +1219,7 @@ if cmp -s "$VLE_BAK" "$VLE"; then
 else
   out="$(vrun)"
   if mx_red A23-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A23-m2 "A23-m2: a renamed CHECK_HEAD_RE FAILS I47 loudly (a join that cannot locate a side never passes by comparing nothing)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A23-m2 "A23-m2: a renamed CHECK_HEAD_RE FAILS I47 loudly (a join that cannot locate a side never passes by comparing nothing)"
   else
     bad "A23-m2 SURVIVED: I47 reported clean with the assignment renamed — it was comparing nothing and calling it agreement"
   fi
@@ -1251,7 +1254,7 @@ else
   if grep -q "the check-heading grammar has forked between" <<<"$out"; then
     bad "A23-m3: the pair-of-pairs mutant tripped arm 1 as well — the two mutations are entangled and this arm proves nothing"
   elif grep -q "the DETECTORS' check-heading grammar and the REWRITER's have forked" <<<"$out"; then
-    mutant_killed "${B_base:-0}" A23-m3 "A23-m3: narrowing BOTH detectors in step FAILS I47 (a heading the rewriter relabels that no detector reports — green under every pair-check)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A23-m3 "A23-m3: narrowing BOTH detectors in step FAILS I47 (a heading the rewriter relabels that no detector reports — green under every pair-check)"
   else
     bad "A23-m3: both detectors reverted to the numeric grammar and I47 stayed silent — the fork that hid two live unloadable checks can reopen"
   fi
@@ -1289,7 +1292,7 @@ if cmp -s "$GV.orig" "$GV"; then
 else
   out="$(vrun)"
   if mx_red A24-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A24-m1 "A24-m1: a rule file naming a core-paths.sh mode the dispatch rejects FAILS I49 (the call would exit 2, which the caller reads as 'cannot determine')"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A24-m1 "A24-m1: a rule file naming a core-paths.sh mode the dispatch rejects FAILS I49 (the call would exit 2, which the caller reads as 'cannot determine')"
   else
     bad "A24-m1 SURVIVED: the gate check body named a nonexistent resolver mode and I49 stayed silent — a typo in a paragraph now reports as an unreadable manifest"
   fi
@@ -1308,7 +1311,7 @@ if cmp -s "$CP_BAK" "$CP"; then
 else
   out="$(vrun)"
   if mx_red A24-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A24-m2 "A24-m2: a dispatched mode missing from usage() FAILS I49 (a mode no operator can discover)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A24-m2 "A24-m2: a dispatched mode missing from usage() FAILS I49 (a mode no operator can discover)"
   else
     bad "A24-m2 SURVIVED: a mode vanished from usage() and I49 reported clean — the discoverable set and the dispatched set can now diverge"
   fi
@@ -1329,7 +1332,7 @@ if cmp -s "$CP_BAK" "$CP"; then
 else
   out="$(vrun)"
   if mx_red A24-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A24-m3 "A24-m3: a renamed dispatch sentinel FAILS I49 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A24-m3 "A24-m3: a renamed dispatch sentinel FAILS I49 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
   else
     bad "A24-m3 SURVIVED: the dispatch extraction found nothing and I49 did not say so — it was comparing against an empty set and calling it agreement"
   fi
@@ -1365,7 +1368,7 @@ if cmp -s "$DEV.orig" "$DEV"; then
 else
   out="$(vrun)"
   if mx_red A25-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A25-m1 "A25-m1: a role file naming a validator core does not ship FAILS I50 (the command does not exist in any consumer tree)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A25-m1 "A25-m1: a role file naming a validator core does not ship FAILS I50 (the command does not exist in any consumer tree)"
   else
     bad "A25-m1 SURVIVED: a role file told an agent to run a validator core does not ship and I50 stayed silent — the command that never ran reports what a clean run reports"
   fi
@@ -1388,7 +1391,7 @@ if cmp -s "$TPL.orig" "$TPL"; then
 else
   out="$(vrun)"
   if mx_red A25-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A25-m2 "A25-m2: a consumer-installed template naming a validator core does not ship FAILS I50 (templates/ is inside the corpus)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A25-m2 "A25-m2: a consumer-installed template naming a validator core does not ship FAILS I50 (templates/ is inside the corpus)"
   else
     bad "A25-m2 SURVIVED: a template cited a validator core does not ship and I50 reported clean — half its corpus is outside what it reads"
   fi
@@ -1409,7 +1412,7 @@ if cmp -s "$DEV.orig" "$DEV"; then
 else
   out="$(vrun)"
   if mx_red A25-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A25-m3 "A25-m3: a role file naming a NON-ASCII validator core does not ship FAILS I50 (the class spells it)" && B_a25m3=1
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A25-m3 "A25-m3: a role file naming a NON-ASCII validator core does not ship FAILS I50 (the class spells it)" && B_a25m3=1
   else
     bad "A25-m3 SURVIVED: a role file named a non-ASCII validator core does not ship and I50 stayed silent — its class cannot spell the name"
   fi
@@ -1434,7 +1437,7 @@ open(sys.argv[1], "w").write("\n".join(L))' "$V" 2>/dev/null; m_rc=$?
     elif grep -q "I50 derived an EMPTY set" <<<"$out"; then
       bad "A25-m4: mutant (I50 ASCII class) went EMPTY instead of narrow -- the mutation broke the grep, not the class"
     else
-      mutant_killed "$(( ${B_base:-0} && ${B_a25m3:-0} ))" A25-m4 "A25-m4: mutant (I50 ASCII class) killed: the restored class cannot spell the non-ASCII ghost and I50 goes silent"
+      mutant_killed "${B_a25m3:-0}" A25-m4 "A25-m4: mutant (I50 ASCII class) killed: the restored class cannot spell the non-ASCII ghost and I50 goes silent"
     fi
     mx_twins A25-m4 "$out"
   fi
@@ -1451,7 +1454,7 @@ mv "$ROOT/core/scripts" "$ROOT/core/scripts.hidden"
 out="$(vrun)"
 mv "$ROOT/core/scripts.hidden" "$ROOT/core/scripts"
 if mx_red A25-m5 "$out"; then
-  mutant_killed "${B_base:-0}" A25-m5 "A25-m5: an empty shipped-validator set FAILS I50 loudly (an empty set contains nothing, so every citation would be a ghost and the join must refuse)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A25-m5 "A25-m5: an empty shipped-validator set FAILS I50 loudly (an empty set contains nothing, so every citation would be a ghost and the join must refuse)"
 else
   bad "A25-m5 SURVIVED: the shipped-validator set was empty and I50 did not say so — it was comparing citations against nothing"
 fi
@@ -1484,7 +1487,7 @@ if cmp -s "$RTR.orig" "$RTR"; then
 else
   out="$(vrun)"
   if mx_red A26-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A26-m1 "A26-m1: a Step 5b template the schema regex rejects FAILS I51 (a lead following the step file would write an unlandable commit)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A26-m1 "A26-m1: a Step 5b template the schema regex rejects FAILS I51 (a lead following the step file would write an unlandable commit)"
   else
     bad "A26-m1 SURVIVED: the step file and the push-time matcher disagreed on the licensed subject and I51 reported clean"
   fi
@@ -1502,7 +1505,7 @@ if cmp -s "$AAJ.orig" "$AAJ"; then
 else
   out="$(vrun)"
   if mx_red A26-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A26-m2 "A26-m2: an example its own pattern rejects FAILS I51 (the rejection message would hand the consumer a subject the same run refuses)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A26-m2 "A26-m2: an example its own pattern rejects FAILS I51 (the rejection message would hand the consumer a subject the same run refuses)"
   else
     bad "A26-m2 SURVIVED: backfill_commit carried an example its own pattern rejects and I51 reported clean"
   fi
@@ -1521,7 +1524,7 @@ if cmp -s "$RTR.orig" "$RTR"; then
 else
   out="$(vrun)"
   if mx_red A26-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A26-m3 "A26-m3: a retro.md with no subject template FAILS I51 loudly (nothing to compare must not read as the two agreeing)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A26-m3 "A26-m3: a retro.md with no subject template FAILS I51 loudly (nothing to compare must not read as the two agreeing)"
   else
     bad "A26-m3 SURVIVED: the prose side of I51 vanished and the invariant reported agreement it never computed"
   fi
@@ -1550,7 +1553,7 @@ if cmp -s "$FDS_BAK" "$FDS"; then
 else
   out="$(vrun)"
   if mx_red A27-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A27-m1 "A27-m1: a reworded marker in the shipped validator FAILS I52 (core's two driverless fixtures would fail every consumer's push)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A27-m1 "A27-m1: a reworded marker in the shipped validator FAILS I52 (core's two driverless fixtures would fail every consumer's push)"
   else
     bad "A27-m1 SURVIVED: the shipped validator's exemption marker diverged from I20's and I52 stayed silent — core's own fixtures would start failing consumers who changed nothing"
   fi
@@ -1569,7 +1572,7 @@ if cmp -s "$FDS_BAK" "$FDS"; then
 else
   out="$(vrun)"
   if mx_red A27-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A27-m2 "A27-m2: an unreadable marker in the shipped validator FAILS I52 loudly (two empty strings compare equal, and that is not agreement)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A27-m2 "A27-m2: an unreadable marker in the shipped validator FAILS I52 loudly (two empty strings compare equal, and that is not agreement)"
   else
     bad "A27-m2 SURVIVED: I52 could not extract the shipped validator's marker and passed anyway — it compared nothing against nothing"
   fi
@@ -1601,7 +1604,7 @@ if cmp -s "$CPS_BAK" "$CPS"; then
 else
   out="$(vrun)"
   if mx_red A28-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A28-m1 "A28-m1: one core script invoking a mode the other does not dispatch FAILS I53 (the call exits 2, and the citation arm reads that as 'no operator citation')"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A28-m1 "A28-m1: one core script invoking a mode the other does not dispatch FAILS I53 (the call exits 2, and the citation arm reads that as 'no operator citation')"
   else
     bad "A28-m1 SURVIVED: core-paths.sh called an escalation mode that does not exist and I53 stayed silent — the core-layer-immutability backstop would FAIL trees that are clean"
   fi
@@ -1618,7 +1621,7 @@ if cmp -s "$ESR_BAK" "$ESR"; then
 else
   out="$(vrun)"
   if mx_red A28-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A28-m2 "A28-m2: a dispatched escalation mode missing from the USAGE block FAILS I53 (a mode no operator can discover)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A28-m2 "A28-m2: a dispatched escalation mode missing from the USAGE block FAILS I53 (a mode no operator can discover)"
   else
     bad "A28-m2 SURVIVED: a mode vanished from the USAGE block and I53 reported clean — the discoverable set and the dispatched set can now diverge"
   fi
@@ -1635,7 +1638,7 @@ if cmp -s "$ESR_BAK" "$ESR"; then
 else
   out="$(vrun)"
   if mx_red A28-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A28-m3 "A28-m3: a renamed dispatch sentinel FAILS I53 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A28-m3 "A28-m3: a renamed dispatch sentinel FAILS I53 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
   else
     bad "A28-m3 SURVIVED: the escalation dispatch extraction found nothing and I53 did not say so — it was comparing against an empty set and calling it agreement"
   fi
@@ -1663,7 +1666,7 @@ I54_TGT="core/fixtures/ledger-rotate/run.sh"
 printf '\nif false; then\n  printf %s "$_i54" | %s I54_SENTINEL_ALPHA\nfi\n' "'%s'" "$_g" >> "$ROOT/$I54_TGT"
 out="$(vrun)"
 if grep -qF "$I54_TGT" <<<"$out" && grep -q 'I54 found' <<<"$out"; then
-  mutant_killed "${B_base:-0}" A29-m1 "A29-m1: a variable written into a first-match reader FAILS I54, naming the file (under pipefail that test answers 'not found' on input that contains the pattern)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A29-m1 "A29-m1: a variable written into a first-match reader FAILS I54, naming the file (under pipefail that test answers 'not found' on input that contains the pattern)"
 else
   bad "A29-m1 SURVIVED: the banned reader idiom was reintroduced and I54 stayed silent — the check that keeps a negative assertion able to fire is itself unable to fire"
 fi
@@ -1693,7 +1696,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A29-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A29-m2 "A29-m2: a grammar that stops matching its own probe FAILS I54 loudly (a scan that matches nothing reads exactly like a clean tree)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A29-m2 "A29-m2: a grammar that stops matching its own probe FAILS I54 loudly (a scan that matches nothing reads exactly like a clean tree)"
   else
     bad "A29-m2 SURVIVED: I54's grammar was broken and it reported a clean tree — it was scanning for a shape it could no longer match"
   fi
@@ -1715,7 +1718,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A29-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A29-m3 "A29-m3: a grammar that starts matching the permitted shape FAILS I54 loudly (a check nobody can leave on enforces nothing)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A29-m3 "A29-m3: a grammar that starts matching the permitted shape FAILS I54 loudly (a check nobody can leave on enforces nothing)"
   else
     bad "A29-m3 SURVIVED: I54's grammar was widened to match ordinary pipelines and it did not object — its false-positive set is unguarded"
   fi
@@ -1745,7 +1748,7 @@ if cmp -s "$KEY_BAK" "$KEY"; then
 else
   out="$(vrun)"
   if mx_red A30-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A30-m1 "A30-m1: an exclusion carrying a slash is REPORTED (it matches no top-level entry and silently excludes nothing)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A30-m1 "A30-m1: an exclusion carrying a slash is REPORTED (it matches no top-level entry and silently excludes nothing)"
   else
     bad "A30-m1 SURVIVED: suite-content-key.sh declared an exclusion that its own exact-match filter can never apply, and the build stayed green"
   fi
@@ -1761,7 +1764,7 @@ if cmp -s "$KEY_BAK" "$KEY"; then
 else
   out="$(vrun)"
   if mx_red A30-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A30-m2 "A30-m2: including .git in the key is REPORTED (it moves every commit, so the skip could never fire again)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A30-m2 "A30-m2: including .git in the key is REPORTED (it moves every commit, so the skip could never fire again)"
   else
     bad "A30-m2 SURVIVED: the content key was widened to cover the object store and nothing objected — the suite skip became unreachable silently"
   fi
@@ -1788,7 +1791,7 @@ else
   else
     out="$(vrun)"
     if mx_red A30-m3 "$out"; then
-      mutant_killed "${B_base:-0}" A30-m3 "A30-m3: a fixture reading an excluded path at the distribution root is REPORTED (its input could change with the suite never re-running)"
+      mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A30-m3 "A30-m3: a fixture reading an excluded path at the distribution root is REPORTED (its input could change with the suite never re-running)"
     else
       bad "A30-m3 SURVIVED: a fixture took an unhashed path as input and I55 stayed silent — the skip would hold across a change to that fixture's own subject"
     fi
@@ -1832,7 +1835,7 @@ else
   i55_named="$(grep -oE '[A-Z][A-Z0-9_]*_RECORD=' <<<"$out" | sort -u | grep -c . 2>/dev/null)"
   case "$i55_named" in ''|*[!0-9]*) i55_named=0 ;; esac
   if grep -q "inside the working tree" <<<"$out" && [ "$i55_named" -eq "$i55_declared" ]; then
-    mutant_killed "${B_base:-0}" A30-m4 "A30-m4: moving ALL $i55_declared cross-run records inside the tree they are hashed by is REPORTED, and the report names every one — the subject set is derived from the hook, not from a name this fixture knows"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A30-m4 "A30-m4: moving ALL $i55_declared cross-run records inside the tree they are hashed by is REPORTED, and the report names every one — the subject set is derived from the hook, not from a name this fixture knows"
   else
     bad "A30-m4 SURVIVED: the cross-run records were moved into the hashed tree and I55 named $i55_named of $i55_declared — a record outside the derived subject set sits in the tree while the skip becomes machinery that runs on every push and never pays"
   fi
@@ -1873,7 +1876,7 @@ if cmp -s "$LEDGERV_BAK" "$LEDGERV"; then
 else
   out="$(vrun)"
   if mx_red A31-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A31-m1 "A31-m1: a one-copy change to the match tolerance FAILS I56 (the gate cannot classify a binding differently from the hook that made it)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A31-m1 "A31-m1: a one-copy change to the match tolerance FAILS I56 (the gate cannot classify a binding differently from the hook that made it)"
   else
     bad "A31-m1 SURVIVED: matches_pin() forked between the dispatch guard and the gate validator and I56 stayed silent — Check 22 would fail spawns the guard bound correctly"
   fi
@@ -1891,7 +1894,7 @@ if cmp -s "$LEDGERV_BAK" "$LEDGERV"; then
 else
   out="$(vrun)"
   if mx_red A31-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A31-m2 "A31-m2: a MISSING bound function FAILS I56 loudly, naming the count it found (a rename never retires the binding in silence)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A31-m2 "A31-m2: a MISSING bound function FAILS I56 loudly, naming the count it found (a rename never retires the binding in silence)"
   else
     bad "A31-m2 SURVIVED: pin_key() was deleted from the gate validator and I56 did not report a zero count — the binding can be retired by a rename"
   fi
@@ -1912,7 +1915,7 @@ if cmp -s "$GUARD.orig" "$GUARD"; then
 else
   out="$(vrun)"
   if mx_red A31-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A31-m3 "A31-m3: a SECOND definition of a bound function FAILS I56, naming the count (the later one shadows the earlier and the fork arm would compare two spans against one)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A31-m3 "A31-m3: a SECOND definition of a bound function FAILS I56, naming the count (the later one shadows the earlier and the fork arm would compare two spans against one)"
   else
     bad "A31-m3 SURVIVED: the dispatch guard defined matches_pin() twice and I56 reported clean — this is the exact state it shipped in, and a genuine fork could hide behind it"
   fi
@@ -1940,7 +1943,7 @@ if cmp -s "$MAPF.orig" "$MAPF"; then
 else
   out="$(vrun)"
   if mx_red A32-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A32-m1 "A32-m1: an unbound validator whose exit code the check's own body requires FAILS I57, named with its check (the v0.211.0 state of Check 17, replayed)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A32-m1 "A32-m1: an unbound validator whose exit code the check's own body requires FAILS I57, named with its check (the v0.211.0 state of Check 17, replayed)"
   else
     bad "A32-m1 SURVIVED: Check 17 states 'exit 0 required' over stamp-story-provenance.sh with nothing in the map binding it, and I57 reported clean — the class this invariant exists to end is still open"
   fi
@@ -1963,7 +1966,7 @@ if cmp -s "$MAPF.orig" "$MAPF"; then
 else
   out="$(vrun)"
   if mx_red A32-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A32-m2 "A32-m2: a validator cited through the verdict.sh DISPATCHER and bound on a non_catalog_units call site is resolved both ways by I57 (repointing the site alone reports it)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A32-m2 "A32-m2: a validator cited through the verdict.sh DISPATCHER and bound on a non_catalog_units call site is resolved both ways by I57 (repointing the site alone reports it)"
   else
     bad "A32-m2 SURVIVED: the artifact-budget unit stopped naming Check 14 as a call site and I57 did not report it — either the dispatcher's argument or the call-site route is not being resolved, and the join is reading wrapper basenames"
   fi
@@ -1985,7 +1988,7 @@ if cmp -s "$GVF.orig" "$GVF"; then
 else
   out="$(vrun)"
   if mx_red A32-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A32-m3 "A32-m3: adding an exit-code posture to an On-FAIL REMEDY — same citation, same map — moves it into I57's subject set (the discriminator reads the sentence, not the mention)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A32-m3 "A32-m3: adding an exit-code posture to an On-FAIL REMEDY — same citation, same map — moves it into I57's subject set (the discriminator reads the sentence, not the mention)"
   else
     bad "A32-m3 SURVIVED: Check 25's remedy citation gained 'exit 0 required' and I57 stayed silent — the selection is not keying on the posture, so it cannot be separating predicates from producers and remedies either"
   fi
@@ -2013,7 +2016,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A32-m4 "$out"; then
-    mutant_killed "${B_base:-0}" A32-m4 "A32-m4: a posture grammar that can no longer match FAILS I57 against its own probe (an empty subject set never again reads as a clean tree)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A32-m4 "A32-m4: a posture grammar that can no longer match FAILS I57 against its own probe (an empty subject set never again reads as a clean tree)"
   else
     bad "A32-m4 SURVIVED: I57's posture grammar was broken so that it matches nothing, and the invariant still printed clean — the liveness probe is not wired, and this check would silently stop firing on its first grammar edit"
   fi
@@ -2037,7 +2040,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A32-m5 "$out"; then
-    mutant_killed "${B_base:-0}" A32-m5 "A32-m5: widening the posture to accept an exit-code LEGEND FAILS I57's negative probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A32-m5 "A32-m5: widening the posture to accept an exit-code LEGEND FAILS I57's negative probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
   else
     bad "A32-m5 SURVIVED: I57's posture grammar was widened to match 'exit 0 = ...' and the negative probe stayed silent — nothing stops this check from growing back onto delegations that are correctly carried under reads:"
   fi
@@ -2080,7 +2083,7 @@ elif [ "$(a33_doc_lines "$RO")" -ne 0 ] || [ "$(a33_doc_lines "$RO.orig")" -eq 0
 else
   out="$(vrun)"
   if mx_red A33-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A33-m1 "A33-m1: a dispatched mode named in neither the usage header nor the usage string FAILS I59, named with its file (the v0.213.1 defect, replayed)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A33-m1 "A33-m1: a dispatched mode named in neither the usage header nor the usage string FAILS I59, named with its file (the v0.213.1 defect, replayed)"
   else
     bad "A33-m1 SURVIVED: readopt-override.sh dispatched --merge with nothing naming it and I59 stayed silent — the mode is invisible again, and the next operator to read that block files the instruction that uses it as a defect"
   fi
@@ -2116,7 +2119,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A33-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A33-m2 "A33-m2: a case-arm grammar that can no longer match FAILS I59 against its own probe (an extraction that finds nothing never again reads as a documented tree)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A33-m2 "A33-m2: a case-arm grammar that can no longer match FAILS I59 against its own probe (an extraction that finds nothing never again reads as a documented tree)"
   else
     bad "A33-m2 SURVIVED: I59's mode extraction was broken so that it matches nothing and the invariant still printed clean — it would stop firing on its first grammar edit and no one would learn of it"
   fi
@@ -2134,7 +2137,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A33-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A33-m3 "A33-m3: losing the --help carve-out FAILS I59 on its own probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A33-m3 "A33-m3: losing the --help carve-out FAILS I59 on its own probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
   else
     bad "A33-m3 SURVIVED: I59's --help exemption was deleted and the probe stayed silent — six scripts that dispatch -h|--help to print their own header become findings, and the carve-out is unheld"
   fi
@@ -2169,7 +2172,7 @@ elif [ "$a33_nchg" -ne 1 ]; then
 else
   out="$(vrun)"
   if mx_red A33-m4 "$out"; then
-    mutant_killed "${B_base:-0}" A33-m4 "A33-m4: a corpus derivation that returns nothing FAILS I59 loudly (scanning zero files is not the same answer as finding zero findings)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A33-m4 "A33-m4: a corpus derivation that returns nothing FAILS I59 loudly (scanning zero files is not the same answer as finding zero findings)"
   else
     bad "A33-m4 SURVIVED: I59's corpus derivation matched no files and the invariant reported clean — every mode in core/ was unchecked and the run said so nowhere"
   fi
@@ -2219,7 +2222,7 @@ else
   else
     out="$(vrun)"
     if mx_red A34-m1 "$out"; then
-      mutant_killed "${B_base:-0}" A34-m1 "A34-m1: a shipped file naming a core-paths.sh mode the dispatch rejects FAILS I60, named with its mode (the call would exit 2, and both hand-listed call sites misread that 2)"
+      mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A34-m1 "A34-m1: a shipped file naming a core-paths.sh mode the dispatch rejects FAILS I60, named with its mode (the call would exit 2, and both hand-listed call sites misread that 2)"
     else
       bad "A34-m1 SURVIVED: a shipped file named a resolver mode that does not exist and I60 stayed silent — the generalisation covers 25 targets on paper and reached none of them"
     fi
@@ -2250,7 +2253,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A34-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A34-m2 "A34-m2: a dispatch side that no longer reads \`[ \"\$1\" = \"--x\" ]\` FAILS I60 on its own probe (the empty false-positive set is held by a mechanism, not by a paragraph)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A34-m2 "A34-m2: a dispatch side that no longer reads \`[ \"\$1\" = \"--x\" ]\` FAILS I60 on its own probe (the empty false-positive set is held by a mechanism, not by a paragraph)"
   else
     bad "A34-m2 SURVIVED: I60's non-case dispatch form was removed and the probe stayed silent — six shipped scripts become false findings, which is the shape that gets a lint turned off"
   fi
@@ -2267,7 +2270,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A34-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A34-m3 "A34-m3: a citation grammar that can no longer match FAILS I60 against its own probe (an extraction that finds nothing never again reads as a tree with no ghost citation)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A34-m3 "A34-m3: a citation grammar that can no longer match FAILS I60 against its own probe (an extraction that finds nothing never again reads as a tree with no ghost citation)"
   else
     bad "A34-m3 SURVIVED: I60's citation extraction was broken so that it matches nothing and the invariant still printed clean — it would stop firing on its first grammar edit and no one would learn of it"
   fi
@@ -2292,7 +2295,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A34-m4 "$out"; then
-    mutant_killed "${B_base:-0}" A34-m4 "A34-m4: a citation corpus that collapses to nothing FAILS I60 loudly (scanning zero files is not the same answer as finding zero ghosts)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A34-m4 "A34-m4: a citation corpus that collapses to nothing FAILS I60 loudly (scanning zero files is not the same answer as finding zero ghosts)"
   else
     bad "A34-m4 SURVIVED: I60's citation corpus matched no files and the invariant reported clean — every cited mode in the tree was unchecked and the run said so nowhere"
   fi
@@ -2347,7 +2350,7 @@ esv_core_new="$ROOT/core/scripts/esv-newcomer.sh"
 printf '%s\n' '#!/usr/bin/env bash' "echo \"$esv_tok: this run opened no file\"" > "$esv_core_new"
 out="$(vrun)"
 if mx_red A35-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A35-m1 "A35-m1: a core/scripts/ file emitting the declared token while the map declares it nowhere FAILS I93 (a validator cannot join this vocabulary without registering)" && B_a35m1=1
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A35-m1 "A35-m1: a core/scripts/ file emitting the declared token while the map declares it nowhere FAILS I93 (a validator cannot join this vocabulary without registering)" && B_a35m1=1
 else
   bad "A35-m1 SURVIVED: an undeclared core/scripts/ emitter of the empty-subject verdict did not fail I93 — the reverse join is one-way again and docs/vocabulary-index.md under-reports the set by one file"
 fi
@@ -2373,7 +2376,7 @@ esv_dist_new="$ROOT/scripts/esv-dist-newcomer.sh"
 printf '%s\n' '#!/usr/bin/env bash' "echo \"$esv_tok: this run opened no file\"" > "$esv_dist_new"
 out="$(vrun)"
 if mx_red A35-m2 "$out"; then
-  mutant_killed "${B_base:-0}" A35-m2 "A35-m2: an undeclared emitter under scripts/ FAILS I93 too (the distribution-only half of arm D's population is swept, not just core/scripts/)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A35-m2 "A35-m2: an undeclared emitter under scripts/ FAILS I93 too (the distribution-only half of arm D's population is swept, not just core/scripts/)"
 else
   bad "A35-m2 SURVIVED: an undeclared scripts/ emitter did not fail I93 — arm D's sweep has narrowed to core/scripts/, and the only file that ever demonstrated this gap lives in the half it stopped reading"
 fi
@@ -2390,7 +2393,7 @@ esv_js_new="$ROOT/core/scripts/esv-newcomer.js"
 printf '%s\n' "console.log(\"$esv_tok: this run opened no file\");" > "$esv_js_new"
 out="$(vrun)"
 if mx_red A35-m3 "$out"; then
-  mutant_killed "${B_base:-0}" A35-m3 "A35-m3: an undeclared emitter that is NOT a .sh FAILS I93 (arm D's population is the directory, not an extension, and a JS validator can join this vocabulary too)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A35-m3 "A35-m3: an undeclared emitter that is NOT a .sh FAILS I93 (arm D's population is the directory, not an extension, and a JS validator can join this vocabulary too)"
 else
   bad "A35-m3 SURVIVED: an undeclared .js emitter did not fail I93 — arm D has narrowed to *.sh, which is the blind spot it exists to close, moved one file type over"
 fi
@@ -2419,7 +2422,7 @@ else
   if grep -q 'esv-newcomer.sh' <<<"$out"; then
     bad "A35-m4: arm D's reporter was neutered and the seeded undeclared emitter was STILL named — the finding arm 1 scores as arm D's kill is coming from somewhere else, and deleting arm D would leave this battery green"
   elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
-    mutant_killed "$(( ${B_base:-0} && ${B_a35m1:-0} ))" A35-m4 "A35-m4: neutering arm D's reporter makes the SAME seeded emitter go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm D, and the seed trips no other arm)"
+    mutant_killed "${B_a35m1:-0}" A35-m4 "A35-m4: neutering arm D's reporter makes the SAME seeded emitter go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm D, and the seed trips no other arm)"
   else
     bad "A35-m4: with arm D's reporter neutered the run neither named the seeded emitter nor reached I93's OK verdict — the mutant broke something other than the arm it aimed at, so it proves nothing about arm D"
   fi
@@ -2456,7 +2459,7 @@ mv "$ROOT/$esv_xp" "$ROOT/$esv_xp.hidden"
 out="$(vrun)"
 mv "$ROOT/$esv_xp.hidden" "$ROOT/$esv_xp"
 if mx_red A36-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A36-m1 "A36-m1: an arm D exemption for a file that no longer exists FAILS I93 (a hole aimed at nothing is a hole nobody can audit)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A36-m1 "A36-m1: an arm D exemption for a file that no longer exists FAILS I93 (a hole aimed at nothing is a hole nobody can audit)"
 else
   bad "A36-m1 SURVIVED: arm D exempted a path that is not in the tree and I93 reported clean — the exemption list can be left pointing at moved files indefinitely"
 fi
@@ -2472,7 +2475,7 @@ if cmp -s "$esv_xp_bak" "$ROOT/$esv_xp"; then
 else
   out="$(vrun)"
   if mx_red A36-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A36-m2 "A36-m2: an exempt file that stopped emitting FAILS I93 (arm D's positive control fires in the same invocation as the zero it licenses)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A36-m2 "A36-m2: an exempt file that stopped emitting FAILS I93 (arm D's positive control fires in the same invocation as the zero it licenses)"
   else
     bad "A36-m2 SURVIVED: the one file arm D's sweep is REQUIRED to find emitting stopped emitting and I93 said nothing — every 'no undeclared emitter' verdict from this arm is now a zero taken over a corpus nobody proved was read"
   fi
@@ -2496,7 +2499,7 @@ if cmp -s "$MAPY.orig" "$MAPY"; then
 else
   out="$(vrun)"
   if mx_red A36-m3 "$out"; then
-    mutant_killed "${B_base:-0}" A36-m3 "A36-m3: a path that is both declared in the map and exempted from arm D FAILS I93 (the two are opposite claims and nothing downstream can resolve them)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A36-m3 "A36-m3: a path that is both declared in the map and exempted from arm D FAILS I93 (the two are opposite claims and nothing downstream can resolve them)"
   else
     bad "A36-m3 SURVIVED: one path was simultaneously declared an emitter and exempted from the reverse join and I93 accepted both — the map and the exemption list can disagree about the same file silently"
   fi
@@ -2528,7 +2531,7 @@ if cmp -s "$esv_bak" "$V"; then
 else
   out="$(vrun)"
   if mx_red A36-m4 "$out"; then
-    mutant_killed "${B_base:-0}" A36-m4 "A36-m4: an arm D exemption with no reason after the path FAILS I93 (a bare path reads exactly like a declaration somebody forgot)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A36-m4 "A36-m4: an arm D exemption with no reason after the path FAILS I93 (a bare path reads exactly like a declaration somebody forgot)"
   else
     bad "A36-m4 SURVIVED: arm D accepted an exemption with no reason — a hole in the guard can be opened with no record of why, and the next author reading it cannot tell it from an omission"
   fi
@@ -2565,7 +2568,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A37-m1 "$out"; then
-    mutant_killed "${B_base:-0}" A37-m1 "A37-m1: a reverse join that reports nothing is caught by I93's own probe BEFORE the corpus is read (arm D's +1000000 and +1000000000 bits are reachable)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A37-m1 "A37-m1: a reverse join that reports nothing is caught by I93's own probe BEFORE the corpus is read (arm D's +1000000 and +1000000000 bits are reachable)"
   else
     bad "A37-m1 SURVIVED: esv_undeclared was neutered to return nothing and I93's probe still scored 0 — the four bits guarding arm D cannot fire, so arm D's silence over the real tree establishes only that it ran"
   fi
@@ -2589,7 +2592,7 @@ if cmp -s "$V_BAK" "$V"; then
 else
   out="$(vrun)"
   if mx_red A37-m2 "$out"; then
-    mutant_killed "${B_base:-0}" A37-m2 "A37-m2: a reverse join that reports DECLARED and EXEMPT files too is caught by the same probe (the suppression bits score separately from the fires-at-all bit)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A37-m2 "A37-m2: a reverse join that reports DECLARED and EXEMPT files too is caught by the same probe (the suppression bits score separately from the fires-at-all bit)"
   else
     bad "A37-m2 SURVIVED: esv_undeclared was widened to report every file it was handed and I93's probe did not score it — arm D could fail the tree as it stands, on files the map declares, with nothing upstream to catch it"
   fi
@@ -2638,7 +2641,7 @@ elif grep -q "arm D exempts .* and arm D's own sweep found no line of it" <<<"$o
 elif [ "$esv_n" -ne 1 ]; then
   bad "A38-m1: an aborted sweep produced $esv_n I93 finding(s) where exactly 1 is correct -- one cause must yield one finding, or the reader cannot tell which arm owns the case"
 else
-  mutant_killed "${B_base:-0}" A38-m1 "A38-m1: a path arm D cannot open is reported BY THE SCAN-STATUS ARM and by that arm alone (the exemption control stands down, so one cause yields one finding and it names the right question)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A38-m1 "A38-m1: a path arm D cannot open is reported BY THE SCAN-STATUS ARM and by that arm alone (the exemption control stands down, so one cause yields one finding and it names the right question)"
 fi
 mx_twins A38-m1 "$out"
 
@@ -2677,7 +2680,7 @@ else
     # was never aimed at, and a reader cannot tell which arm owns the case.
     bad "A38-m2: a mutated exempt file produced $esv_n2 I93 finding(s) where exactly 1 is correct -- the seed is tripping arms beyond the exemption control, so this arm's kill is not attributable to it"
   else
-    mutant_killed "${B_base:-0}" A38-m2 "A38-m2: the exemption control still fires on its OWN case when the sweep COMPLETED, and on that case ALONE (the stand-down narrowed it to the aborted-scan case rather than switching it off, and the seed trips nothing else)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A38-m2 "A38-m2: the exemption control still fires on its OWN case when the sweep COMPLETED, and on that case ALONE (the stand-down narrowed it to the aborted-scan case rather than switching it off, and the seed trips nothing else)"
   fi
   mx_twins A38-m2 "$out"
 fi
@@ -2719,7 +2722,7 @@ esv_core_new="$ROOT/core/scripts/esv-fourth.sh"
 printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_core_new"
 out="$(vrun)"
 if mx_red A39-m1 "$out"; then
-  mutant_killed "${B_base:-0}" A39-m1 "A39-m1: a core/scripts/ validator stating the empty-subject verdict in a FOURTH spelling FAILS I93, reported by LINE (arm C's enumeration cannot reach a spelling nobody has written yet)" && B_a39m1=1
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A39-m1 "A39-m1: a core/scripts/ validator stating the empty-subject verdict in a FOURTH spelling FAILS I93, reported by LINE (arm C's enumeration cannot reach a spelling nobody has written yet)" && B_a39m1=1
 else
   bad "A39-m1 SURVIVED: a novel empty-subject spelling under core/scripts/ did not fail I93 — the fourth spelling seeds clean exactly as it did before arm E, and the vocabulary index reads as complete while a new emitter spells the verdict however it likes"
 fi
@@ -2732,7 +2735,7 @@ esv_dist_new="$ROOT/scripts/esv-fourth-dist.sh"
 printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_dist_new"
 out="$(vrun)"
 if mx_red A39-m2 "$out"; then
-  mutant_killed "${B_base:-0}" A39-m2 "A39-m2: the same novel spelling under scripts/ FAILS I93 too (arm E sweeps the distribution-only half, not just core/scripts/)"
+  mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A39-m2 "A39-m2: the same novel spelling under scripts/ FAILS I93 too (arm E sweeps the distribution-only half, not just core/scripts/)"
 else
   bad "A39-m2 SURVIVED: a novel spelling under scripts/ did not fail I93 — arm E has narrowed to core/scripts/, and two of its three exemptions live in the half it stopped reading"
 fi
@@ -2792,7 +2795,7 @@ else
   if grep -q "$esv_xp2:.* states an empty-subject verdict" <<<"$out"; then
     bad "A39-m3: arm E reported an EXEMPT path, so the skip is not in force and the arm prints a remedy (declare it) that contradicts the exemption"
   elif grep -q "arm D exempts '$esv_xp2' and arm D's own sweep found no line of it" <<<"$out"; then
-    mutant_killed "${B_base:-0}" A39-m3 "A39-m3: an exempt file that swaps the declared token for a NOVEL spelling is reported by arm D's exemption control, not by arm E (the skip hands the case to the arm whose remedy is legal, and does not swallow it)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A39-m3 "A39-m3: an exempt file that swaps the declared token for a NOVEL spelling is reported by arm D's exemption control, not by arm E (the skip hands the case to the arm whose remedy is legal, and does not swallow it)"
   else
     bad "A39-m3: an exempt file that stopped emitting the declared token was reported by NEITHER arm -- arm E's skip has acquitted arm E's own subject and arm D's control did not pick it up, so this state is now unguarded in both directions"
   fi
@@ -2826,7 +2829,7 @@ else
   if grep -q 'esv-fourth.sh' <<<"$out"; then
     bad "A39-m4: arm E's reporter was neutered and the seeded novel spelling was STILL named — the finding arm 1 scores as arm E's kill comes from somewhere else, and deleting arm E would leave this battery green"
   elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
-    mutant_killed "$(( ${B_base:-0} && ${B_a39m1:-0} ))" A39-m4 "A39-m4: neutering arm E's reporter makes the SAME seeded novel spelling go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm E, and the seed trips no other arm)"
+    mutant_killed "${B_a39m1:-0}" A39-m4 "A39-m4: neutering arm E's reporter makes the SAME seeded novel spelling go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm E, and the seed trips no other arm)"
   else
     bad "A39-m4: with arm E's reporter neutered the run neither named the seed nor reached I93's OK verdict — the mutant broke something other than the arm it aimed at"
   fi
@@ -2847,7 +2850,7 @@ if cmp -s "$esv_bak" "$V"; then
 else
   out="$(vrun)"
   if mx_red A39-m5 "$out"; then
-    mutant_killed "${B_base:-0}" A39-m5 "A39-m5: an arm E whose verdict-phrase test is removed REDS the clean tree (the phrase grammar is load-bearing, not decoration on a scan that flags every emission)"
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A39-m5 "A39-m5: an arm E whose verdict-phrase test is removed REDS the clean tree (the phrase grammar is load-bearing, not decoration on a scan that flags every emission)"
   else
     bad "A39-m5 SURVIVED: arm E with its verdict-phrase test removed still passed the clean tree — the grammar is doing no work, which means arm 1's kill would be scored by a scan that reports every echo and the arm has no false-positive story at all"
   fi
@@ -3012,7 +3015,7 @@ cwd_mutant() {
     if [ -n "$a1_fail" ]; then
       bad "$a1_fail"
     elif [ "$CW_BITS" = "$exp" ]; then
-      mutant_killed "$(( ${B_base:-0} && ${B_cw:-0} ))" "$CW_ID-$tag" "$CW_ID-$tag: $CW_ID $tag scores $CW_BITS on C1 scratch / C2 live root / C3 relative / C4 inherited VEM_SELF, exactly the cells it must kill ($CW_RCS)"
+      mutant_killed "${B_cw:-0}" "$CW_ID-$tag" "$CW_ID-$tag: $CW_ID $tag scores $CW_BITS on C1 scratch / C2 live root / C3 relative / C4 inherited VEM_SELF, exactly the cells it must kill ($CW_RCS)"
     else
       bad "$CW_ID-$tag SURVIVED: $CW_ID $tag scored $CW_BITS where $exp was expected ($CW_RCS) -- the cells do not discriminate this layer of the fix the way they claim to"
     fi
@@ -3341,10 +3344,10 @@ $FN
     echo "  The shard driver builds one; by hand, see the template message's recipe. There is no fallback to the live root on purpose." >&2
     exit 2
   fi
-  # SLOTS 6-8: whether this shard's A00 passed (the base-pass flag every kill is gated on), the
-  # mode (plain or matrix), and the matrix ledger. All arguments, for the scrub's reason.
-  B_base=0
-  if [ "${6:-}" = base-passed ]; then B_base=1; fi
+  # SLOTS 6-8: the file holding this shard's A00 exit status (every kill is gated on it reading 0;
+  # empty, missing or nonzero and every kill prints FIXTURE BROKEN), the mode (plain or matrix),
+  # and the matrix ledger. All arguments, for the scrub's reason.
+  CTL_RC="$( [ -n "${6:-}" ] && [ -f "$6" ] && printf '%s' "$(< "$6")" )"
   case "${7:-plain}" in
     plain) MX_MODE="" ;;
     matrix) MX_MODE=matrix ;;
@@ -3583,6 +3586,7 @@ CTL="$(printf '%s\n' "$NAMES" | head -1)"
 MXL="$OUT/mx.ledger"; : > "$MXL"
 bash "$SELF" --run-one "$CTL" "$OUT/$CTL.vrun" "$CELL_TPL" "$CELL_DCY" "" "$RUN_MODE" "$MXL" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
 ctl_rc=$?
+printf '%s\n' "$ctl_rc" > "$OUT/ctl.rc" || { echo "$NAME: FIXTURE ERROR — could not record the control's exit status" >&2; exit 2; }
 cat "$OUT/$CTL"
 if [ "$ctl_rc" -ne 0 ]; then
   [ -s "$OUT/$CTL.err" ] && cat "$OUT/$CTL.err" >&2
@@ -3609,15 +3613,15 @@ if [ "$N_MINE" -eq 0 ]; then
   exit 2
 fi
 # The template, decoy, base-pass verdict, mode and ledger reach each worker as positional
-# arguments ($2-$6), never environment names. The control passed (the run stopped above
-# otherwise), so every cell receives `base-passed`: that is the B_base every kill is gated on.
+# arguments ($2-$6), never environment names. Every cell receives the path of the control's
+# recorded exit status, and every kill is gated on that status reading 0 in its own process.
 AI_DLC_EMS_SELF="$SELF" AI_DLC_EMS_OUT="$OUT" \
   xargs -P "$JOBS" -I{} bash -c '
     n="$1"
     bash "$AI_DLC_EMS_SELF" --run-one "$n" "$AI_DLC_EMS_OUT/$n.vrun" "$2" "$3" "$4" "$5" "$6" \
       > "$AI_DLC_EMS_OUT/$n" 2> "$AI_DLC_EMS_OUT/$n.err"
     printf %s $? > "$AI_DLC_EMS_OUT/$n.rc"
-  ' _ {} "$CELL_TPL" "$CELL_DCY" base-passed "$RUN_MODE" "$MXL" < "$OUT/list"
+  ' _ {} "$CELL_TPL" "$CELL_DCY" "$OUT/ctl.rc" "$RUN_MODE" "$MXL" < "$OUT/list"
 
 TPL_S1="$(tree_state "$CELL_TPL")"
 DCY_S1="$(tree_state "$CELL_DCY")"

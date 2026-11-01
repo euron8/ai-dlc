@@ -91,6 +91,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # --- a FAITHFUL installed consumer ---------------------------------------------
 # .git is the walk-up marker. The core validators go to scripts/ai-dlc/ and NOWHERE
@@ -887,7 +889,7 @@ b351-star|1|inside other text"
     for q in "$@"; do
       "$q" "$m" || { bad "MUTATION ($label) broke sanity predicate $q — it is not the fix it models"; return; }
     done
-    ok "MUTATION ($label): $what — KILLED by $owner"
+    mutant_killed "${B_CTL:-0}" "$label" "MUTATION ($label): $what — KILLED by $owner"
   }
 
   # Named predicates, one per arm a mutant is scored against, each taking only the script.
@@ -940,7 +942,9 @@ b351-star|1|inside other text"
     "$p" "$MCTL" || { ctl_ok=0; bad "MUTATION CONTROL: the unmutated copy fails $p (rc=$X_RC) —"
       echo "        the harness cannot drive a copy from \$WORK, so no mutant verdict is evidence." >&2; }
   done
-  [ "$ctl_ok" -eq 1 ] && ok "MUTATION CONTROL: an unmutated copy in \$WORK passes every scored arm"
+  if [ "$ctl_ok" -eq 1 ]; then
+    ok "MUTATION CONTROL: an unmutated copy in \$WORK passes every scored arm"; B_CTL=1
+  fi
 
   if [ "$ctl_ok" -eq 1 ]; then
     # (a) the token boundary dropped outright, BOTH layers: the closed lead and the locating

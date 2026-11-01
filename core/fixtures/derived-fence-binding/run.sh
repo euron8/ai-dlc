@@ -217,12 +217,11 @@ guard_sel() {
 # says <arm> <label> <tree> <expected substring> — the arm must REPORT it.
 says() {
   local arm="$1" label="$2" t="$3" want="$4" out rc
-  SAYS_OK=0
   out="$(run_arm "$t" "$arm")"; rc=$?
-  guard_sel "$rc" "$out" || return 0
+  guard_sel "$rc" "$out" || return 1
   case "$out" in
-    *"$want"*) ok "$label"; SAYS_OK=1 ;;
-    *)         bad "$label — the arm did NOT report it (rc=$rc). The predicate no longer reaches this subject, and a corpus it cannot see reads exactly like a corpus with nothing wrong in it." ;;
+    *"$want"*) ok "$label"; return 0 ;;
+    *)         bad "$label — the arm did NOT report it (rc=$rc). The predicate no longer reaches this subject, and a corpus it cannot see reads exactly like a corpus with nothing wrong in it."; return 1 ;;
   esac
 }
 
@@ -476,7 +475,7 @@ t="$(fresh)"
 if edit "$t" "core/team-roles/sm.md" "$MUT_DRIFT"; then
   says I108 "A08a W1's tree is an offender: the shipped arm reports the body drift" \
        "$t" "the taught derivation-fence passage has forked"
-  if [ "$SAYS_OK" = 1 ]; then B_W1=1; fi
+  W1_RC=$?
   if edit "$t" "$ARM" "$MUT_W1"; then
     twin W1 "$t" I121
     out="$(run_arm "$t" I108)"; rc=$?
@@ -485,7 +484,7 @@ if edit "$t" "core/team-roles/sm.md" "$MUT_DRIFT"; then
         *"the taught derivation-fence passage has forked"*)
           bad "A08b W1 (an arm comparing only the OPENER line) still reported the body drift, so shortening the extraction changed no cell and this tree does not separate the two implementations" ;;
         *"probe scored 10000100 "*)
-          mutant_killed "${B_W1:-0}" W1 "A08b W1 (an arm extracting only the OPENER line) is KILLED by the probe on BOTH body bits — 100, two passages differing by one word, and 10000000, two differing only in the leading blanks of their fence" ;;
+          mutant_killed "$([ "$W1_RC" -eq 0 ] && echo 1 || echo 0)" W1 "A08b W1 (an arm extracting only the OPENER line) is KILLED by the probe on BOTH body bits — 100, two passages differing by one word, and 10000000, two differing only in the leading blanks of their fence" ;;
         *)
           bad "A08b W1 reported neither the fork nor a probe refusal (rc=$rc). An arm that compares openers would ship, green, over five copies teaching five different bodies." ;;
       esac
@@ -501,7 +500,7 @@ t="$(fresh)"
 if edit "$t" "core/team-roles/tea.md" "$MUT_DRIFT"; then
   says I108 "A09a W2's tree is an offender: the shipped arm reports the drift in tea.md" \
        "$t" "the taught derivation-fence passage has forked"
-  if [ "$SAYS_OK" = 1 ]; then B_W2=1; fi
+  W2_RC=$?
   if edit "$t" "$ARM" "$MUT_W2"; then
     twin W2 "$t" I121
     out="$(run_arm "$t" I108)"; rc=$?
@@ -510,7 +509,7 @@ if edit "$t" "core/team-roles/tea.md" "$MUT_DRIFT"; then
         *"the taught derivation-fence passage has forked"*)
           bad "A09b W2 (an arm binding FOUR of the five) still reported the fork, so dropping a copy from i108_declared changed no cell and this tree does not separate the two implementations" ;;
         *"outside the five bound role files carry the taught derivation-fence passage"*)
-          mutant_killed "${B_W2:-0}" W2 "A09b W2 (an arm binding FOUR of the five) goes blind to the drift and is KILLED by half B, which reports the unbound copy" ;;
+          mutant_killed "$([ "$W2_RC" -eq 0 ] && echo 1 || echo 0)" W2 "A09b W2 (an arm binding FOUR of the five) goes blind to the drift and is KILLED by half B, which reports the unbound copy" ;;
         *)
           bad "A09b W2 reported NEITHER the fork nor an unbound copy (rc=$rc), so a copy dropped from the declared set is invisible to every half. The four-of-five wrong fix would ship." ;;
       esac
@@ -526,7 +525,7 @@ t="$(fresh)"
 if edit "$t" "core/team-roles/remediator.md" "$MUT_TEMPLATE"; then
   says I108 "A10a W3's tree is an offender: the shipped arm names remediator.md" \
        "$t" "core/team-roles/remediator.md"
-  if [ "$SAYS_OK" = 1 ]; then B_W3=1; fi
+  W3_RC=$?
   if edit "$t" "$ARM" "$MUT_W3"; then
     twin W3 "$t" I121
     out="$(run_arm "$t" I108)"; rc=$?
@@ -535,7 +534,7 @@ if edit "$t" "core/team-roles/remediator.md" "$MUT_TEMPLATE"; then
         *"core/team-roles/remediator.md"*)
           bad "A10b W3 (half C keyed on the fence opener) still named remediator.md, so the population key is not what this assertion claims it is and the tree does not separate the two implementations" ;;
         *"probe scored 1000000 "*)
-          mutant_killed "${B_W3:-0}" W3 "A10b W3 (half C keyed on the FENCE OPENER, the token that drifts) is KILLED by the probe, which requires the population to take a file anchored on the record field alone" ;;
+          mutant_killed "$([ "$W3_RC" -eq 0 ] && echo 1 || echo 0)" W3 "A10b W3 (half C keyed on the FENCE OPENER, the token that drifts) is KILLED by the probe, which requires the population to take a file anchored on the record field alone" ;;
         *)
           bad "A10b W3 reported neither remediator.md nor a probe refusal (rc=$rc). A population keyed on the drifting token would ship, silently, over the one file it exists to catch." ;;
       esac
@@ -560,7 +559,7 @@ t="$(fresh)"
 if edit "$t" "core/team-roles/analyst.md" "$MUT_INDENT"; then
   says I108 "A12a W4's tree is an offender: the shipped arm reports the leading-blank fork" \
        "$t" "the taught derivation-fence passage has forked"
-  if [ "$SAYS_OK" = 1 ]; then B_W4=1; fi
+  W4_RC=$?
   if edit "$t" "$ARM" "$MUT_W4"; then
     twin W4 "$t" I121
     out="$(run_arm "$t" I108)"; rc=$?
@@ -569,7 +568,7 @@ if edit "$t" "core/team-roles/analyst.md" "$MUT_INDENT"; then
         *"the taught derivation-fence passage has forked"*)
           bad "A12b W4 (a comparison that strips leading blanks) still reported the fork, so the normalisation changed no cell and this tree does not separate the two implementations" ;;
         *"$OKLINE"*)
-          mutant_killed "${B_W4:-0}" W4 "A12b W4 (a comparison that STRIPS LEADING BLANKS) is KILLED — it goes green on a copy whose fence is indented where the others are not" ;;
+          mutant_killed "$([ "$W4_RC" -eq 0 ] && echo 1 || echo 0)" W4 "A12b W4 (a comparison that STRIPS LEADING BLANKS) is KILLED — it goes green on a copy whose fence is indented where the others are not" ;;
         *)
           bad "A12b W4 stayed silent about the fork but did NOT reach a green verdict (rc=$rc), so the silence is a run that died rather than a comparison that went blind." ;;
       esac
@@ -603,7 +602,7 @@ done
 if [ "$brk" -eq 0 ]; then
   says I108 "A14a W5's tree is an offender: the shipped arm reports the unclosed block" \
        "$t" "open a derivation fence the reader never sees CLOSED"
-  if [ "$SAYS_OK" = 1 ]; then B_W5=1; fi
+  W5_RC=$?
   if edit "$t" "$ARM" "$MUT_W5"; then
     twin W5 "$t" I121
     out="$(run_arm "$t" I108)"; rc=$?
@@ -612,7 +611,7 @@ if [ "$brk" -eq 0 ]; then
         *"open a derivation fence the reader never sees CLOSED"*)
           bad "A14b W5 (the reader's streams merged with 2>&1) still reported the unclosed block, so the merge changed no cell and this tree does not separate the two implementations" ;;
         *"probe scored 100000000000 "*)
-          mutant_killed "${B_W5:-0}" W5 "A14b W5 (the reader's two streams MERGED with 2>&1) is KILLED by the probe, whose stderr channel reads empty when the merge takes it" ;;
+          mutant_killed "$([ "$W5_RC" -eq 0 ] && echo 1 || echo 0)" W5 "A14b W5 (the reader's two streams MERGED with 2>&1) is KILLED by the probe, whose stderr channel reads empty when the merge takes it" ;;
         *"$OKLINE"*)
           bad "A14b W5 went fully GREEN. The merge is not caught by the probe either, so an arm reading a merged stream would ship and acquit every unclosable taught block." ;;
         *)
@@ -839,14 +838,14 @@ fi
 t="$(fresh)"
 if edit "$t" "core/team-roles/dev.md" "$MUT_I121_PTR"; then
   says I121 "A31a W6's tree is an offender: the shipped arm reports the deleted pointer" "$t" "$I121_FORK"
-  if [ "$SAYS_OK" = 1 ]; then B_W6=1; fi
+  W6_RC=$?
   if edit "$t" "$ARM" "$MUT_W6"; then
     twin W6 "$t" I122
     out="$(run_i121_out "$t")"; rc=$?
     if guard_sel "$rc" "$out"; then
       case "$out" in
         *"$I121_FORK"*) bad "A31b W6 (opener-only compare) still reported the fork, so this tree does not separate the two implementations" ;;
-        *"I121's probe scored 1000000001010 "*) mutant_killed "${B_W6:-0}" W6 "A31b W6 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK, and 1000000000000, no validator path left to resolve" ;;
+        *"I121's probe scored 1000000001010 "*) mutant_killed "$([ "$W6_RC" -eq 0 ] && echo 1 || echo 0)" W6 "A31b W6 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK, and 1000000000000, no validator path left to resolve" ;;
         *) bad "A31b W6 reported neither the fork nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I121 | cut -c1-200)" ;;
       esac
     fi
@@ -858,14 +857,14 @@ fi
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I121_DROP"; then
   says I121 "A32a W7's tree is an offender: the shipped arm names qa.md" "$t" "$I121_MISSING: core/team-roles/qa.md"
-  if [ "$SAYS_OK" = 1 ]; then B_W7=1; fi
+  W7_RC=$?
   if edit "$t" "$ARM" "$MUT_W7"; then
     twin W7 "$t" I122
     out="$(run_i121_out "$t")"; rc=$?
     if guard_sel "$rc" "$out"; then
       case "$out" in
         *"core/team-roles/qa.md"*) bad "A32b W7 (hand-listed population) still named qa.md, so this tree does not separate the two implementations" ;;
-        *"I121's probe scored 1 "*) mutant_killed "${B_W7:-0}" W7 "A32b W7 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
+        *"I121's probe scored 1 "*) mutant_killed "$([ "$W7_RC" -eq 0 ] && echo 1 || echo 0)" W7 "A32b W7 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
         *) bad "A32b W7 reported neither qa.md nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I121 | cut -c1-200)" ;;
       esac
     fi
@@ -876,14 +875,14 @@ fi
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I121_INLINE"; then
   says I121 "A33a W8's tree is an offender: the shipped arm reports the inline opener" "$t" "$I121_INLINE: core/team-roles/qa.md"
-  if [ "$SAYS_OK" = 1 ]; then B_W8=1; fi
+  W8_RC=$?
   if edit "$t" "$ARM" "$MUT_W8"; then
     twin W8 "$t" I122
     out="$(run_i121_out "$t")"; rc=$?
     if guard_sel "$rc" "$out"; then
       case "$out" in
         *"$I121_INLINE"*) bad "A33b W8 (substring key) still reported the inline opener, so this tree does not separate the two implementations" ;;
-        *"I121's probe scored 1101010 "*) mutant_killed "${B_W8:-0}" W8 "A33b W8 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10, the no-blank-line seed counted an OK copy, and 1000, the glued seed counted a fork" ;;
+        *"I121's probe scored 1101010 "*) mutant_killed "$([ "$W8_RC" -eq 0 ] && echo 1 || echo 0)" W8 "A33b W8 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10, the no-blank-line seed counted an OK copy, and 1000, the glued seed counted a fork" ;;
         *) bad "A33b W8 reported neither the inline opener nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I121 | cut -c1-200)" ;;
       esac
     fi
@@ -1036,14 +1035,14 @@ fi
 t="$(fresh)"
 if edit "$t" "core/team-roles/dev.md" "$MUT_I122_WORD"; then
   says I122 "A43a W9's tree is an offender: the shipped arm reports the dropped touchpoint" "$t" "$I122_FORK"
-  if [ "$SAYS_OK" = 1 ]; then B_W9=1; fi
+  W9_RC=$?
   if edit "$t" "$ARM" "$MUT_W9"; then
     twin W9 "$t" I121
     out="$(run_i122_out "$t")"; rc=$?
     if guard_sel "$rc" "$out"; then
       case "$out" in
         *"$I122_FORK"*) bad "A43b W9 (opener-only compare) still reported the fork, so this tree does not separate the two implementations" ;;
-        *"I122's probe scored 1010 "*) mutant_killed "${B_W9:-0}" W9 "A43b W9 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK" ;;
+        *"I122's probe scored 1010 "*) mutant_killed "$([ "$W9_RC" -eq 0 ] && echo 1 || echo 0)" W9 "A43b W9 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK" ;;
         *) bad "A43b W9 reported neither the fork nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
       esac
     fi
@@ -1054,14 +1053,14 @@ fi
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I122_DROP"; then
   says I122 "A44a W10's tree is an offender: the shipped arm names qa.md" "$t" "$I122_MISSING: core/team-roles/qa.md"
-  if [ "$SAYS_OK" = 1 ]; then B_W10=1; fi
+  W10_RC=$?
   if edit "$t" "$ARM" "$MUT_W10"; then
     twin W10 "$t" I121
     out="$(run_i122_out "$t")"; rc=$?
     if guard_sel "$rc" "$out"; then
       case "$out" in
         *"core/team-roles/qa.md"*) bad "A44b W10 (hand-listed population) still named qa.md, so this tree does not separate the two implementations" ;;
-        *"I122's probe scored 1 "*) mutant_killed "${B_W10:-0}" W10 "A44b W10 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
+        *"I122's probe scored 1 "*) mutant_killed "$([ "$W10_RC" -eq 0 ] && echo 1 || echo 0)" W10 "A44b W10 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
         *) bad "A44b W10 reported neither qa.md nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
       esac
     fi
@@ -1072,14 +1071,14 @@ fi
 t="$(fresh)"
 if edit "$t" "core/team-roles/qa.md" "$MUT_I122_INLINE"; then
   says I122 "A45a W11's tree is an offender: the shipped arm reports the inline opener" "$t" "$I122_INLINE: core/team-roles/qa.md"
-  if [ "$SAYS_OK" = 1 ]; then B_W11=1; fi
+  W11_RC=$?
   if edit "$t" "$ARM" "$MUT_W11"; then
     twin W11 "$t" I121
     out="$(run_i122_out "$t")"; rc=$?
     if guard_sel "$rc" "$out"; then
       case "$out" in
         *"$I122_INLINE"*) bad "A45b W11 (substring key) still reported the inline opener, so this tree does not separate the two implementations" ;;
-        *"I122's probe scored 1101010 "*) mutant_killed "${B_W11:-0}" W11 "A45b W11 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10 and 1000" ;;
+        *"I122's probe scored 1101010 "*) mutant_killed "$([ "$W11_RC" -eq 0 ] && echo 1 || echo 0)" W11 "A45b W11 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10 and 1000" ;;
         *) bad "A45b W11 reported neither the inline opener nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
       esac
     fi

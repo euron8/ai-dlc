@@ -807,12 +807,12 @@ mx_cells() { # <id> -> one MATRIX row per arm of ARMS_ALL, from SC_DEAD
 }
 mut() { # <name> <deciding arm> <twin arm> <merge file>
   local name="$1" dec="$2" twin="$3" mf="$4" fl
-  fl="$(( $(bflag "$dec") && $(bflag "$twin") && ${B_MX0:-0} ))"
+  fl="$(bflag "$dec")$(bflag "$twin")${B_MX0:-0}"
   n_mut=$((n_mut + 1))
   if [ "$MATRIX" -eq 1 ]; then sc_run "$mf" $ARMS_ALL; mx_cells "$name"; else sc_run "$mf" "$dec" "$twin"; fi
   if ! in_set "$dec" "$SC_DEAD"; then bad "mutant $name SURVIVED its deciding arm [$dec] (tripped: [$SC_DEAD]) -- the kill moved; re-measure with --matrix"
   elif in_set "$twin" "$SC_DEAD"; then bad "mutant $name: twin [$twin] FAILS too (tripped: [$SC_DEAD]) -- the kill spread past the recorded matrix; re-measure with --matrix"
-  else n_kill=$((n_kill + 1)); mutant_killed "$fl" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
+  else n_kill=$((n_kill + 1)); mutant_killed "$([ "$fl" = 111 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
   fi
 }
 mutm() { # <name> <deciding arm> <twin arm> <old> <new>

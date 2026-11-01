@@ -214,9 +214,9 @@ mutant_score() {
     ok "MATRIX $n measured against $ARMS"
     return 0
   fi
-  ship_get "$d"; if arm_holds "$d" "$SHIPV"; then base=1; else base=0; fi
+  ship_get "$d"; base="$(arm_holds "$d" "$SHIPV" && echo 1 || echo 0)"
   o="$(arm_out "$d" "$m")"
-  if [ "$o" != "$SHIPV" ] && ! arm_holds "$d" "$o"; then mutant_killed "$base" "$n" "mutant $n: $4 ($d)"
+  if [ "$o" != "$SHIPV" ] && ! arm_holds "$d" "$o"; then mutant_killed "$([ "$base" = 1 ] && echo 1 || echo 0)" "$n" "mutant $n: $4 ($d)"
   else bad "MUTANT $n SURVIVED on $d ($o) -- $4"; fi
   ship_get "$tw"; o="$(arm_out "$tw" "$m")"
   if [ "$o" = "$SHIPV" ]; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"

@@ -313,20 +313,20 @@ echo "HERMETIC-CONSUMED core/fixtures/fixture-git-env-seam/matrix-lib.sh"
 if [ ! -f "$ROOT/core/fixtures/$SUBJECT_C/run.sh" ]; then
   broken "driven fixture $SUBJECT_C is absent -- the 'git -C' form has no subject in this battery"
 fi
-cell A; SV_A="$VERD"; mx_pp=$((mx_pp + 1)); DET_A="$DET"
+cell A; SV_A="$(printf '%s' "$VERD")"; mx_pp=$((mx_pp + 1)); DET_A="$DET"
 if [ "$SV_A" = INTACT ]; then
   ok "A  shipping tree: index 40, victim still a repository, core.bare not true, user.name still the sentinel"
 else
   fail "A  shipping tree: ($DET_A) — expected 40/yes/not-true/$VICTIM_SENTINEL. The seam is not protecting a directly-run fixture."
 fi
 # B1. SEAM INTACT on the `git -C` form (its init is in a seed.sh the run.sh never makes; the seam reaches it by inheritance).
-cell B; SV_B="$VERD"; mx_pp=$((mx_pp + 1)); DET_B="$DET"
+cell B; SV_B="$(printf '%s' "$VERD")"; mx_pp=$((mx_pp + 1)); DET_B="$DET"
 if [ "$SV_B" = INTACT ]; then
   ok "B1 $SUBJECT_C (git -C form, init in its seed.sh) with the seam: index 40, repo yes, bare not true, sentinel intact"
 else
   fail "B1 $SUBJECT_C with the seam intact still moved the victim ($DET_B). The seam does not reach an init the run.sh never makes."
 fi
-cell U; SV_U="$VERD"; mx_pp=$((mx_pp + 1)); DET_U="$DET"
+cell U; SV_U="$(printf '%s' "$VERD")"; mx_pp=$((mx_pp + 1)); DET_U="$DET"
 if [ "$SV_U" = INTACT ]; then
   ok "U  shipping tree, GIT_DIR unset: victim untouched on all four channels — the twin cell every mutant below is compared against"
 else
@@ -383,7 +383,7 @@ esac; }
 for _m in m1 m2 m3 m4 b2; do
   mut_apply "$_m"
   _dc=A; [ "$_m" = b2 ] && _dc=B
-  eval "_sd=\$SV_$_dc"
+  case "$_dc" in A) _sd="$(printf '%s' "$SV_A")" ;; *) _sd="$(printf '%s' "$SV_B")" ;; esac
   if [ "$MX" = 1 ]; then
     _trip=""
     for _c in A B U; do
@@ -396,7 +396,7 @@ for _m in m1 m2 m3 m4 b2; do
     cell "$_dc"; mx_pp=$((mx_pp + 1)); _dv="$VERD"; _dd="$DET"
     cell U; mx_pp=$((mx_pp + 1)); _uv="$VERD"
     if [ "$(mx_diverge "$_sd" "$_dv")" = yes ] && [ "$_uv" = INTACT ]; then
-      mutant_killed "$([ "$_sd" = INTACT ] && [ "$SV_U" = INTACT ] && echo 1)" "$_m" "$(mut_msg "$_m" "$_dd")"
+      mutant_killed "$([ "$_sd" = INTACT ] && [ "$SV_U" = INTACT ] && echo 1 || echo 0)" "$_m" "$(mut_msg "$_m" "$_dd")"
     else
       fail "$_m did not decide on $_dc with U green: $_dc $_dv ($_dd), U $_uv. This fixture cannot distinguish a working seam from this mutation."
     fi

@@ -54,6 +54,8 @@ EXPECTED_ASSERTIONS=76
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 show() { sed 's/^/        /' <<<"$1"; }
 
 run() { bash "$AUDIT" --register "$1" 2>&1; }
@@ -581,6 +583,19 @@ fi
 # VANISHING — because a widened guard often reproduces the original output and would otherwise
 # score a kill it did not earn.
 # =============================================================================================
+# UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
+# subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and
+# invoked the same way as every mutant must still NAME the baseline rows.
+CTL="$WORK/control.sh"
+cp "$AUDIT" "$CTL"
+ctl_out="$(bash "$CTL" --register "$DREG" 2>&1)"; ctl_rc=$?
+if [ "$ctl_rc" -eq 0 ] && grep -q 'nom\.md' <<<"$ctl_out" && grep -q 'OWED-B1' <<<"$ctl_out"; then
+  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as the mutants are, still names the baseline rows — so a kill below is the mutation and not the harness"; B_CTL=1
+else
+  bad "CONTROL: an unmutated copy did not reproduce the baseline (rc=$ctl_rc) — every kill below may be the harness failing to run the subject"
+  show "$ctl_out"
+fi
+
 score() { # score <label> <path-or-empty> <register> <describe> <present|absent> <token>
   local label="$1" m="$2" reg="$3" desc="$4" mode="$5" tok="$6" out hit
   if [ -z "$m" ]; then
@@ -590,7 +605,7 @@ score() { # score <label> <path-or-empty> <register> <describe> <present|absent>
   out="$(bash "$m" --register "$reg" 2>&1)"
   hit=no; grep -q "$tok" <<<"$out" && hit=yes
   if { [ "$mode" = present ] && [ "$hit" = yes ]; } || { [ "$mode" = absent ] && [ "$hit" = no ]; }; then
-    ok "MUTANT $label KILLED — $desc"
+    mutant_killed "${B_CTL:-0}" "$label" "MUTANT $label KILLED — $desc"
   else
     bad "MUTANT $label SURVIVED — $desc did not happen, so the arm it backs passes whatever the reader does"
     show "$out"
@@ -990,19 +1005,6 @@ grep -F 'kdang.md' "$KREG" >"$KDREG"
 score MK_substr "$(mkmut mk_substr "$ANCHOR_KIND" '                if d["id"] in d["closes_when"]')" "$KDREG" \
   "a bare substring test reads \`OWED-K-DANG-V2\` as the join for \`OWED-K-DANG\`" \
   present 'the register join'
-
-# UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
-# subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and
-# invoked the same way as every mutant must still NAME the baseline rows.
-CTL="$WORK/control.sh"
-cp "$AUDIT" "$CTL"
-ctl_out="$(bash "$CTL" --register "$DREG" 2>&1)"; ctl_rc=$?
-if [ "$ctl_rc" -eq 0 ] && grep -q 'nom\.md' <<<"$ctl_out" && grep -q 'OWED-B1' <<<"$ctl_out"; then
-  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as the mutants are, still names the baseline rows — so a kill above is the mutation and not the harness"
-else
-  bad "CONTROL: an unmutated copy did not reproduce the baseline (rc=$ctl_rc) — every kill above may be the harness failing to run the subject"
-  show "$ctl_out"
-fi
 
 echo ""
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

@@ -43,6 +43,11 @@ DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_P2=1 only beside the part 2 control's own ok: a part 2 mutant is scored only if the unmutated copy scored all-ok.
+B_P2=0
 
 echo "layer-absorption-retire:"
 
@@ -234,7 +239,7 @@ else
   if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(m2_st 'ABSORBED\.md$')"; then
     ok "  and the same-number row survives it — the two emit sites are asserted separately"
   else
-    bad "  MUTANT 2 also killed the same-number row: assertions 1 and 3 are entangled"
+    bad "  MUTANT 2 also removed the same-number row: assertions 1 and 3 are entangled"
   fi
 fi
 
@@ -457,7 +462,7 @@ B376PY
     if [ "$b376_v" != "$B376_ALLOK" ]; then
       bad "FIXTURE ERROR: the UNMUTATED copy in $BM scores '$b376_v', not all-ok, so no mutant verdict below is attributable"
     else
-      ok "part 2 CONTROL: an unmutated copy in the mutant directory scores every arm ok, NM's rows present"
+      ok "part 2 CONTROL: an unmutated copy in the mutant directory scores every arm ok, NM's rows present"; B_P2=1
       for b376_m in \
         "gn:N=no T=ok X=ok O=ok S=ok NN=ok NT=ok NX=ok NO=ok NSS=ok:the numbered-catalog base gate removed" \
         "gt:N=ok T=no X=ok O=ok S=ok NN=ok NT=ok NX=ok NO=ok NSS=ok:the title-arm base gate removed" \
@@ -481,7 +486,7 @@ B376PY
         else
           b376_score "$b376_f"
           if [ "$b376_v" = "$b376_want" ]; then
-            ok "part 2 MUTANT $b376_id -- $b376_what: KILLED by exactly $(printf '%s' "$b376_v" | tr ' ' '\n' | grep '=no' | cut -d= -f1 | tr '\n' ' ' | sed 's/ $//')"
+            mutant_killed "$B_P2" "part2-$b376_id" "part 2 MUTANT $b376_id -- $b376_what: KILLED by exactly $(printf '%s' "$b376_v" | tr ' ' '\n' | grep '=no' | cut -d= -f1 | tr '\n' ' ' | sed 's/ $//')"
           else
             bad "part 2 MUTANT $b376_id -- $b376_what: scored '$b376_v', want '$b376_want'"
           fi

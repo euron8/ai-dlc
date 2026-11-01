@@ -412,7 +412,8 @@ for _a in a1warn a3noflag a4clean a5cov a6schema a10struck a11marker; do
     a10struck) _t="a struck In-Flight row under retro's flags exits 0, names the row in the summary, and prints no PASS line" ;;
     a11marker) _t="a superseded marker under --warn-only exits 0, names the marker in the summary, and prints no PASS line" ;;
   esac
-  if "arm_$_a" "$VD" "$VW"; then ok "[$_a] $_t"; eval "B_$_a=1"
+  if "arm_$_a" "$VD" "$VW"; then ok "[$_a] $_t"
+    case "$_a" in a1warn) B_a1warn=1 ;; a5cov) B_a5cov=1 ;; a10struck) B_a10struck=1 ;; a11marker) B_a11marker=1 ;; esac
   else bad "[$_a] the unmutated validator tripped this arm: exit $(status_of "$AXL")"; sed 's/^/      /' "$OUT" >&2; fi
 done
 # --- 0. THE SEED IS ACTUALLY MEASURED, read from the a1warn and a4warn drives above ----------------
@@ -553,7 +554,7 @@ while IFS='|' read -r nlabel nline; do
   if [ "$(status_of "nm-$nlabel")" != "0" ] || grep -q '^FUTURE ' "$OUT"; then
     nm_ok=0; bad "near-miss '$nlabel' was refused: $(grep '^FUTURE ' "$OUT" | head -1)"
   else
-    eval "B_f_$nlabel=1"
+    case "$nlabel" in range) B_f_range=1 ;; five) B_f_five=1 ;; spaced) B_f_spaced=1 ;; esac
   fi
 done <<'NEAR'
 range|- 2026-10-14T09:55-10:45Z window, and 2026-10-14T12:00Z-12:45Z planned

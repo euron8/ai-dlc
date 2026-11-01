@@ -264,8 +264,9 @@ pd() { env -u CLAUDE_PROJECT_DIR -u AI_DLC_PROJECT_ROOT -u AI_DLC_KNOWN_SKILLS_E
 row_of() { grep -F "$1" <<<"$2" | grep -v '^PREDICATE-[A-Z]*	toy' | head -1; }
 R11="$(mkrecon "$ROOT_SITE")"
 out11="$(pd "$R11/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
-if grep -qF "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" <<<"$out11"; then
-  printf 'ok   %s\n' "11a a schema-only change to a ROOT-resolving predicate is a reclassification"; B_11a=1
+grep -qF "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" <<<"$out11"; RC_11a=$?
+if [ "$RC_11a" -eq 0 ]; then
+  printf 'ok   %s\n' "11a a schema-only change to a ROOT-resolving predicate is a reclassification"
 else
   printf 'FAIL %s\n  expected to find: %s\n  in: %s\n' "11a a schema-only change to a ROOT-resolving predicate is a reclassification" "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" "$out11"; fails=$((fails + 1))
 fi
@@ -274,8 +275,9 @@ ck "11b and the crossing series moves [] -> [B]" "verdict tokens [] -> [B,] unde
 # whose root is pinned to its probe root and is not handed that file searches the probe root, finds
 # nothing, and fails it as unknown on BOTH sides -- [U] -> [B,U]. Only an explicit per-side value
 # keeps it [] -> [B]. A walk-up marker alone cannot pass this cell.
-if grep -qF "verdict tokens [] -> [B,] under toy-root-predicate.sh" <<<"$(row_of ext-adversarial-pass "$out11")"; then
-  printf 'ok   %s\n' "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)"; B_11c=1
+grep -qF "verdict tokens [] -> [B,] under toy-root-predicate.sh" <<<"$(row_of ext-adversarial-pass "$out11")"; RC_11c=$?
+if [ "$RC_11c" -eq 0 ]; then
+  printf 'ok   %s\n' "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)"
 else
   printf 'FAIL %s\n  expected to find: %s\n  in: %s\n' "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of ext-adversarial-pass "$out11")"; fails=$((fails + 1))
 fi
@@ -418,14 +420,14 @@ else
   if cell_red ran "$mo"; then
     printf 'FAIL 11f mutant [m-noroot] never ran: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
   elif cell_red 11a "$mo"; then
-    mutant_killed "${B_11a:-0}" m-noroot "11f mutant [m-noroot] killed: without the per-side root pin the schema-only change reads $(cut -f1 <<<"$mo" | head -1)"
+    mutant_killed "$([ "$RC_11a" -eq 0 ] && echo 1 || echo 0)" m-noroot "11f mutant [m-noroot] killed: without the per-side root pin the schema-only change reads $(cut -f1 <<<"$mo" | head -1)"
   else
     printf 'FAIL 11f mutant [m-noroot] SURVIVED: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
   fi
   mx_twins m-noroot "$mo"
   if [ "$MODE" = matrix ]; then mx_score m-noroot "$mo"; fi
   if ! cell_red 11a "$mm" && cell_red 11c "$mm"; then
-    mutant_killed "${B_11c:-0}" m-marker "11g mutant [m-marker] killed: a walk-up marker finds the schema but loses the extension ($(row_of ext-adversarial-pass "$mm" | cut -f3 | cut -c1-40))"
+    mutant_killed "$([ "$RC_11c" -eq 0 ] && echo 1 || echo 0)" m-marker "11g mutant [m-marker] killed: a walk-up marker finds the schema but loses the extension ($(row_of ext-adversarial-pass "$mm" | cut -f3 | cut -c1-40))"
   else
     printf 'FAIL 11g mutant [m-marker] SURVIVED or never ran: %s\n' "$(head -c 200 <<<"$mm")"; fails=$((fails + 1))
   fi

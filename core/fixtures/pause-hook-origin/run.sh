@@ -45,6 +45,11 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_LEG=1 only beside the battery control's own ok: a legend mutant is scored only if the unmutated copies read SAME.
+B_LEG=0
 
 # Drive the hook exactly as the harness does: JSON on stdin, CLAUDE_PROJECT_DIR set.
 fire() { # <prompt-json-string>
@@ -417,7 +422,7 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
   # 9a. CONTROL — unmutated copies in the mutant directory still read SAME.
   VC="$(legend_verdict "$MUT" "$MUT/continue.sh" "$MUT/acknowledge.sh" "$MUT/pause.sh" "$MUT/escalation.sh" "$MUT/answer.sh")"
   if [ "$VC" = "SAME" ]; then
-    ok "mutant control: unmutated copies under $MUT read SAME — the battery's harness is alive"
+    ok "mutant control: unmutated copies under $MUT read SAME — the battery's harness is alive"; B_LEG=1
   else
     bad "MUTANT HARNESS BROKEN — unmutated copies read $VC, so every kill below is unreadable"
   fi
@@ -446,7 +451,7 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
     printf '        mutant 9b/%s edits: %s\n' "$src" "$MUT/$src.1byte.sh"
     V9B="$(legend_verdict "$MUT" "$c" "$a" "$p" "$e" "$n")"
     if [ "$V9B" = "DIFFER" ]; then
-      kills=$((kills+1)); ok "mutant 9b/$src: one byte changed in $src's legend -> DIFFER (assertion 8 can fire on this hook)"
+      mutant_killed "$B_LEG" "9b/$src" "mutant 9b/$src: one byte changed in $src's legend -> DIFFER (assertion 8 can fire on this hook)" && kills=$((kills+1))
     else
       bad "MUTANT 9b/$src DID NOT FAIL — a one-byte divergence in $src read as $V9B, so assertion 8 is blind to that hook"
     fi
@@ -466,7 +471,7 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
     V9C="$(legend_verdict "$MUT" "$MUT/continue.noanchor.sh" "$MUT/acknowledge.noanchor.sh" "$MUT/pause.noanchor.sh")"
     case "$V9C" in
       NO-SINGLE-OPENER:*)
-        kills=$((kills+1)); ok "mutant 9c: extractor anchor gone in all three -> $V9C (the guard fires, not the comparison)" ;;
+        mutant_killed "$B_LEG" "9c" "mutant 9c: extractor anchor gone in all three -> $V9C (the guard fires, not the comparison)" && kills=$((kills+1)) ;;
       SAME)
         bad "MUTANT 9c DID NOT FAIL — three unextractable legends compared EQUAL and assertion 8 would have printed ok" ;;
       *)
@@ -492,7 +497,7 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
     V9D="$(legend_verdict "$MUT" "$MUT/continue.emptybody.sh" "$MUT/acknowledge.emptybody.sh" "$MUT/pause.emptybody.sh")"
     case "$V9D" in
       EMPTY-LEGEND:*)
-        kills=$((kills+1)); ok "mutant 9d: three EMPTY legend bodies -> $V9D (the anti-vacuity guard fires)" ;;
+        mutant_killed "$B_LEG" "9d" "mutant 9d: three EMPTY legend bodies -> $V9D (the anti-vacuity guard fires)" && kills=$((kills+1)) ;;
       SAME)
         bad "MUTANT 9d DID NOT FAIL — three empty legends compared EQUAL, which is assertion 8 closing on a dead instrument" ;;
       *)
@@ -512,9 +517,9 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
   LEGEND_HOOKS=5
   EXPECT_KILLS=$(( LEGEND_HOOKS + 2 ))
   if [ "$kills" -eq "$EXPECT_KILLS" ]; then
-    ok "legend battery: $kills of $EXPECT_KILLS mutants killed ($LEGEND_HOOKS one-byte, 1 anchor-loss, 1 empty-body)"
+    ok "legend battery: $kills of $EXPECT_KILLS mutants scored ($LEGEND_HOOKS one-byte, 1 anchor-loss, 1 empty-body)"
   else
-    bad "LEGEND BATTERY KILLED $kills OF $EXPECT_KILLS — a mutant that killed nothing is indistinguishable from an arm that cannot fire"
+    bad "LEGEND BATTERY SCORED $kills OF $EXPECT_KILLS — a mutant that scored nothing is indistinguishable from an arm that cannot fire"
   fi
 fi
 

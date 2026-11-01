@@ -424,6 +424,7 @@ blind_check() { # blind_check <name> <dir> <sed-expr> <arm> <which-cell>
   pre="$(pre_out "$d")"
   nfail="$(grep -c '^FAIL:' <<<"$pre")"
   nhits="$(grep -c '^    ' <<<"$pre")"
+  pre_hit="$(grep -c "^FAIL: ${arm}:" <<<"$pre")"
   if ! grep -q "^FAIL: ${arm}:" <<<"$pre" || [ "${nfail:-0}" -ne 1 ] || [ "${nhits:-0}" -lt 1 ]; then
     note "FAIL  $n -- the UNMUTATED validator gave $nfail FAIL line(s) and $nhits hit line(s), not exactly one ${arm} with a hit. The mutant below could not have discriminated anything."
     printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
@@ -432,7 +433,7 @@ blind_check() { # blind_check <name> <dir> <sed-expr> <arm> <which-cell>
   post="$(run_v "$d")"
   if grep -q "^validate-shell-portability: PASS" <<<"$post"; then
     mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "${nfail:-0}" -eq 1 ] && [ "${nhits:-0}" -ge 1 ] && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped $arm reports $nhits line(s), mutated reports 0"
+    mutant_killed "$([ "$pre_hit" -ne 0 ] && [ "$nfail" -eq 1 ] && [ "$nhits" -ne 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped $arm reports $nhits line(s), mutated reports 0"
   else
     note "FAIL  $n -- $cell: the mutated validator did NOT go quiet, so it is not what found this seed"
     printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
@@ -503,7 +504,8 @@ count_check() { # count_check <name> <dir> <arm-id> <expected-hit-lines>
 count_shrink_check() { # count_shrink_check <name> <dir> <sed-expr> <arm> <pre-n> <post-n> <cell>
   local n="$1" d="$2" expr="$3" arm="$4" want_pre="$5" want_post="$6" cell="$7" pre post npre npost
   pre="$(pre_out "$d")"
-  npre="$(grep -c '^    ' <<<"$pre")" || npre=0
+  npre="$(grep -c '^    ' <<<"$pre")"
+  pre_hit="$(grep -c "^FAIL: ${arm}:" <<<"$pre")"
   if ! grep -q "^FAIL: ${arm}:" <<<"$pre" || [ "$npre" -ne "$want_pre" ]; then
     note "FAIL  $n -- the UNMUTATED validator reported $npre line(s), not the $want_pre seeded. Nothing below discriminates."
     printf '%s\n' "$pre" | sed 's/^/      /' | head -6; rc=1; return
@@ -522,7 +524,7 @@ count_shrink_check() { # count_shrink_check <name> <dir> <sed-expr> <arm> <pre-n
     printf '%s\n' "$post" | sed 's/^/      /' | head -10; rc=1; return
   fi
   mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$(grep -q "^FAIL: ${arm}:" <<<"$pre" && [ "$npre" -eq "$want_pre" ] && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped reports $npre line(s), narrowed reports $npost"
+  mutant_killed "$([ "$pre_hit" -ne 0 ] && [ "$npre" -eq "$want_pre" ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped reports $npre line(s), narrowed reports $npost"
 }
 
 # The inverse of `blind_check`: the seed is a measured FALSE POSITIVE the shipped arm is
@@ -532,6 +534,7 @@ count_shrink_check() { # count_shrink_check <name> <dir> <sed-expr> <arm> <pre-n
 appear_check() { # appear_check <name> <dir> <sed-expr> <arm> <cell>
   local n="$1" d="$2" expr="$3" arm="$4" cell="$5" pre post nfail nhits
   pre="$(pre_out "$d")"
+  pre_pass="$(grep -c "^validate-shell-portability: PASS" <<<"$pre")"
   if ! grep -q "^validate-shell-portability: PASS" <<<"$pre"; then
     note "FAIL  $n -- the UNMUTATED validator already reported this seed, so $cell cannot be what acquits it"
     printf '%s\n' "$pre" | sed 's/^/      /' | head -6; rc=1; return
@@ -549,7 +552,7 @@ appear_check() { # appear_check <name> <dir> <sed-expr> <arm> <cell>
     printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1; return
   fi
   mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-  mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent on the near-miss, mutated reports $nhits line(s)"
+  mutant_killed "$([ "$pre_pass" -ne 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent on the near-miss, mutated reports $nhits line(s)"
 }
 
 seed "$TMP/m1" "sed -i 's/x/y/' f"                            ; kill_check "m1 S1 sed -i bare"        "$TMP/m1" S1
@@ -709,7 +712,8 @@ blind_check "x3 S8_PAT" "$TMP/x3" 's/^S8_PAT="/S8_PAT="git.*/' S8 \
 corpus_cell_check() { # corpus_cell_check <name> <dir> <sed-expr> <corpus-name> <cell>
   local n="$1" d="$2" expr="$3" which="$4" cell="$5" pre post
   pre="$(pre_out "$d")"
-  if ! refused_for "$pre" "$which"; then
+  refused_for "$pre" "$which"; pre_ref=$?
+  if [ "$pre_ref" -ne 0 ]; then
     note "FAIL  $n -- the UNMUTATED validator did not name the $which corpus; nothing below discriminates"
     printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
   fi
@@ -720,7 +724,7 @@ corpus_cell_check() { # corpus_cell_check <name> <dir> <sed-expr> <corpus-name> 
     printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
   else
     mx_score "${n%% *}" "$(corpus_arm "$which")" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$(refused_for "$pre" "$which" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped names the $which corpus, mutated does not"
+    mutant_killed "$([ "$pre_ref" -eq 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped names the $which corpus, mutated does not"
   fi
 }
 
@@ -780,6 +784,7 @@ awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
 X7EOF
   pre="$(run_v_locale "$TMP/x7" "$UTF8_LOCALE")"; pre_rc="$(cat "$RCF")"
+  pre_s10="$(grep -c "^FAIL: S10:" <<<"$pre")"
   if ! grep -q "^FAIL: S10:" <<<"$pre" || grep -q "own probe did not fire" <<<"$pre"; then
     note "FAIL  x7 LC_ALL=C -- the UNMUTATED validator under $UTF8_LOCALE did not report its seed as an"
     note "               S10 CORPUS finding (rc=$pre_rc). The pinned locale is what makes that work, and"
@@ -803,7 +808,7 @@ X7EOF
       printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
     else
       if mx_score x7 S10 "$pre" "$post" "$post_rc"; then
-        mutant_killed "$(grep -q "^FAIL: S10:" <<<"$pre" && echo 1)" "x7" "x7 LC_ALL=C -- the pinned locale is load-bearing: shipped reports the seed under $UTF8_LOCALE,"
+        mutant_killed "$([ "$pre_s10" -ne 0 ] && echo 1 || echo 0)" "x7" "x7 LC_ALL=C -- the pinned locale is load-bearing: shipped reports the seed under $UTF8_LOCALE,"
         note "               stripped of the export it REFUSES (rc=$post_rc, S10's probe cannot fire) rather than passing"
       else
         note "FAIL  x7 LC_ALL=C -- $MX_ERR"; rc=1
@@ -1162,6 +1167,7 @@ fi
 probe_owned_appear() { # probe_owned_appear <name> <dir> <sed-expr> <arm> <file:line: tag> <cell>
   local n="$1" d="$2" expr="$3" arm="$4" tag="$5" cell="$6" pre post other
   pre="$(pre_out "$d")"
+  pre_pass="$(grep -c "^validate-shell-portability: PASS" <<<"$pre")"
   if ! grep -q "^validate-shell-portability: PASS" <<<"$pre"; then
     note "FAIL  $n -- the UNMUTATED validator already reported this seed, so $cell cannot be what acquits it"
     printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
@@ -1172,7 +1178,7 @@ probe_owned_appear() { # probe_owned_appear <name> <dir> <sed-expr> <arm> <file:
   if grep -q "${arm}'s own probe misfired" <<<"$post" && grep -q "^FAIL: ${arm}:" <<<"$post" \
      && grep -qF "$tag" <<<"$post" && [ "$other" -eq 0 ]; then
     mx_score "${n%% *}" "$arm" "$pre" "$post" "$(rcv)" || { note "FAIL  $n -- $MX_ERR"; rc=1; return; }
-    mutant_killed "$(grep -q "^validate-shell-portability: PASS" <<<"$pre" && echo 1)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent, mutated reports the seed ($tag) AND ${arm}'s probe misfires"
+    mutant_killed "$([ "$pre_pass" -ne 0 ] && echo 1 || echo 0)" "${n%% *}" "$n -- $cell is load-bearing: shipped is silent, mutated reports the seed ($tag) AND ${arm}'s probe misfires"
   else
     note "FAIL  $n -- $cell: the mutant did not report both the seeded line ($tag) and ${arm}'s probe, and nothing else"
     printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
@@ -1536,13 +1542,14 @@ grep -q '^validate-shell-portability: REFUSED' <<<"$x26_out" || x26_ok=0
 for x26_a in S12 S13 S14; do
   grep -q "^REFUSED: ${x26_a}: .*unopenable: scripts/a0.sh" <<<"$x26_out" || x26_ok=0
 done
+x26_v="$(printf '%s' "$x26_ok")"
 if [ "$x26_ok" -ne 1 ]; then
   note "FAIL  x26 unopenable listed file -- control PASS rc 0 and refusal rc 2 naming S12, S13 and S14 and scripts/a0.sh were not both seen"
   printf '%s\n' "$x26_ctl" "$x26_out" | sed 's/^/      /' | head -8; rc=1
 elif mutate "$TMP/x26" 's/^  AWKN_OUT="\$probe\/awkn" awk \(.*\) 2>"\$probe\/awke"$/  AWKN_OUT="$probe\/awkn" awk \1 2>\/dev\/null/; s/^  if \[ "\$rc" -ne 0 \] || \[ "\${got:-none}" != "\$want" \]; then$/  if false; then/' "x26"; then
   x26_mut="$(x26_run "$TMP/x26")"
   if grep -qx 'rc=0' <<<"$x26_mut" && grep -q '^validate-shell-portability: PASS' <<<"$x26_mut"; then
-    mutant_killed "$x26_ok" "x26" "x26 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0); the uncounted mutant PASSES the same tree"
+    mutant_killed "$([ "$x26_v" -eq 1 ] && echo 1 || echo 0)" "x26" "x26 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0); the uncounted mutant PASSES the same tree"
   else
     note "FAIL  x26 unopenable listed file -- the uncounted mutant did not PASS the deleted tree, so the count is not what refused it"
     printf '%s\n' "$x26_mut" | sed 's/^/      /' | head -4; rc=1

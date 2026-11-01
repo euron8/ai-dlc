@@ -47,6 +47,8 @@ fails=0
 made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant to a
 # missing space in a helper call: `set -u` killed the `$( )` subshell, `if m="$( … )"`
@@ -135,7 +137,7 @@ if git clone -q --depth 1 "file://$CONS" "$SH" 2>/dev/null && \
    [ "$(git -C "$SH" rev-parse --is-shallow-repository)" = true ]; then
   SHOUT="$(bash "$LINTER" "$SH" 2>&1)"
   if grep -q 'RETIRED-ID HISTORY UNREADABLE' <<<"$SHOUT"; then
-    ok "on a SHALLOW clone the arm REFUSES rather than reporting the tree clean"
+    ok "on a SHALLOW clone the arm REFUSES rather than reporting the tree clean"; B_SH=1
   else
     bad "the arm was silent on a shallow clone. A truncated id history and a clean one now produce identical output — the defect this guard exists to end."
   fi
@@ -158,13 +160,13 @@ MDIR="$ROOT/mutants"; mkdir -p "$MDIR"
 cp "$LINTER" "$MDIR/control.sh"
 CTRL="$(vector "$MDIR/control.sh" "$CONS")"
 if [ "$CTRL" = "$WANT" ]; then
-  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"
+  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"; B_CTRL=1
 else
   bad "CONTROL FAILED — an unmutated COPY reports '$CTRL', not '$WANT'. Every mutant below would be scored against a linter that is not working."
 fi
 
-mutant() { # mutant <label> <sed> <want-vector> <root> <why>
-  local label="$1" prog="$2" want="$3" root="$4" why="$5" f="$MDIR/m.sh" got
+mutant() { # mutant <base-flag> <id> <label> <sed> <want-vector> <root> <why>
+  local flag="$1" id="$2" label="$3" prog="$4" want="$5" root="$6" why="$7" f="$MDIR/m.sh" got
   sed "$prog" "$LINTER" > "$f"
   if cmp -s "$LINTER" "$f"; then
     bad "MUTATION VACUOUS ($label) — the sed matched nothing, so the assertion below would score an unchanged run as a kill"
@@ -172,7 +174,7 @@ mutant() { # mutant <label> <sed> <want-vector> <root> <why>
   fi
   got="$(vector "$f" "$root")"
   if [ "$got" = "$want" ]; then
-    ok "MUTANT killed: $label"
+    mutant_killed "$flag" "$id" "MUTANT killed: $label"
   else
     bad "MUTANT '$label' did not produce its expected vector, so what it proves is unproven.
           got  '$got'
@@ -183,14 +185,14 @@ mutant() { # mutant <label> <sed> <want-vector> <root> <why>
 
 # M1 — the row lookup is what decides, not the retirement alone. Making every id look
 # already-rowed must silence the one real finding and nothing else.
-mutant "making the crosswalk lookup always match silences the retired id" \
+mutant "${B_CTRL:-0}" m1 "making the crosswalk lookup always match silences the retired id" \
   's|^          grep -Fxq -- "\$_rid" <<<"\$CROSSWALK_IDS" && continue|          true \&\& continue|' \
   '33=- 34=- 5=- 933=- guard=0' "$CONS" \
   "If 33 still reports, the arm is not consulting the table at all and adding a row could never clear it."
 
 # M2 — the resolvability set is load-bearing. Narrowing it back to the entry's own ids
 # must make BOTH resolvable cells report, and must not touch 933.
-mutant "narrowing the resolvability set back to the entry's own ids reports both resolvable cells" \
+mutant "${B_CTRL:-0}" m2 "narrowing the resolvability set back to the entry's own ids reports both resolvable cells" \
   's|_now="\$LIVE_ANCHORS";|_now="$_mine";|' \
   '33=R 34=R 5=R 933=- guard=0' "$CONS" \
   "34 moved to a sibling and 5 is core's. This is the exact 25-of-32 false-positive set the arm was corrected for, and if this mutant does not reproduce it the correction is not what is keeping them quiet."
@@ -207,7 +209,7 @@ mutant "narrowing the resolvability set back to the entry's own ids reports both
 # refusal and only one of them is reachable here. A mutant that fails to move its cell is
 # telling you the arm it named is not the arm under test.
 if [ -d "$SH" ]; then
-  mutant "forcing the shallow probe to 'ok' makes a truncated history report CLEAN" \
+  mutant "${B_SH:-0}" m3 "forcing the shallow probe to 'ok' makes a truncated history report CLEAN" \
     's|^    CROSSWALK_STATE=shallow$|    CROSSWALK_STATE=ok|' \
     '33=- 34=- 5=- 933=- guard=0' "$SH" \
     "If the guard count stays above 0, the refusal on a shallow clone is coming from somewhere other than the shallow probe, and the probe is decoration. If a cell reports R, the truncated run is inventing a retirement."
@@ -219,7 +221,7 @@ fi
 # the finding and trip the guard, because an entry that defines ids whose history yields
 # none of them is exactly the unreadable case. Two cells move together and that pairing
 # is the point: a mutation that only silenced the finding would be M1.
-mutant "emptying the historical read silences the finding AND trips the guard" \
+mutant "${B_CTRL:-0}" m4 "emptying the historical read silences the finding AND trips the guard" \
   's|^  git -C "\$PROJECT_ROOT" log -p --format=.. -- "\$1" 2>/dev/null . sed -n .s/\^+//p. > "\$tmp"|  : > "$tmp"|' \
   '33=- 34=- 5=- 933=- guard=2' "$CONS" \
   "If the guard does NOT trip, an entry whose id history is unreadable reports clean — the defect the whole arm is built around, reproduced inside it."

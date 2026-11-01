@@ -577,9 +577,9 @@ for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
   classify "$copy" "$probe" $tw_paths
   got="$(verdict "$OUT" "$probe")"
   # SAME-RUN BASE PASS: the unmutated copy answered the probe as the arm asserts, in THIS run.
-  bflag=0; [ "$(verdict "$CTL_OUT" "$probe")" = "$(want_of "$probe")" ] && bflag=1
+  ctl_got="$(verdict "$CTL_OUT" "$probe")"; ctl_want="$(want_of "$probe")"
   if [ "$got" = "${MUT_WANT[$i]}" ]; then
-    mutant_killed "$bflag" "$label" "MUTANT $label ${MUT_WHY[$i]}"
+    mutant_killed "$([ "$ctl_got" = "$ctl_want" ] && echo 1 || echo 0)" "$label" "MUTANT $label ${MUT_WHY[$i]}"
   else
     note "BAD" "MUTANT $label" "SURVIVED — $probe answered '$got', wanted '${MUT_WANT[$i]}'"
     fails=$((fails + 1))

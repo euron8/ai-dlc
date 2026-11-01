@@ -425,12 +425,14 @@ kills=0
 # live run set for the deciding arm (B_<arm>, set beside that arm's ok above).
 . "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh"
 
-mutate() { # <label> <sed-expr> <arm-that-must-fail> <twin-arm> <base-pass-flag>
-  local label="$1" expr="$2" want="$3" twin="$4" flag="$5"
+mutate() { # <label> <sed-expr> <arm-that-must-fail> <twin-arm>; the base pass is read from the LIVE run of the same invocation
+  local label="$1" expr="$2" want="$3" twin="$4"
   # `copy` is declared on its own line, NOT in the `local` above: bash 3.2 under `set -u`
   # rejects a reference to a variable being declared in the same `local` statement.
   local copy="$MUTDIR/$label.sh"
   local out rc others
+  local live_rc
+  live_rc="$(printf '%s\n' "$LIVE" | sed -n "s/^${want}://p")"
   cp "$SUBJECT" "$copy"
   sed -e "$expr" "$SUBJECT" > "$copy.new" && mv "$copy.new" "$copy"
   if cmp -s "$SUBJECT" "$copy"; then
@@ -453,7 +455,7 @@ mutate() { # <label> <sed-expr> <arm-that-must-fail> <twin-arm> <base-pass-flag>
     if [ -n "${others// /}" ]; then
       bad "MUTANT $label scored by $want AND by: $others — those arms are entangled and at least one is not independently load-bearing"
     else
-      mutant_killed "$flag" "$label" "MUTANT $label killed by $want, and by that arm alone" && kills=$((kills+1))
+      mutant_killed "$([ "$live_rc" = 0 ] && echo 1 || echo 0)" "$label" "MUTANT $label killed by $want, and by that arm alone" && kills=$((kills+1))
     fi
   else
     bad "MUTANT $label SURVIVED: $want still passes against a subject that no longer does the thing that arm asserts"
@@ -463,7 +465,7 @@ mutate() { # <label> <sed-expr> <arm-that-must-fail> <twin-arm> <base-pass-flag>
 # M1: the cut never resets, so it runs from the begin marker to EOF and eats everything after
 # the block. Anchored on the END-marker clause, which is the line that SEPARATES this arm of
 # the awk from the one above it -- keying on the shared `skip` text would edit both.
-mutate cut-runs-to-eof 's/skip == 1 && \$0 == e { skip = 0; next }//' cut_is_bounded idempotent "${B_cut_is_bounded:-0}"
+mutate cut-runs-to-eof 's/skip == 1 && \$0 == e { skip = 0; next }//' cut_is_bounded idempotent
 
 # M2: render the whole declaration rather than its transient half, so the block carries ignore
 # rules for artifacts the consumer commits.
@@ -475,10 +477,10 @@ mutate cut-runs-to-eof 's/skip == 1 && \$0 == e { skip = 0; next }//' cut_is_bou
 # SYNTHESISE a pattern for the durable half, which it does under the declared root rather than
 # a literal one -- a hard-coded root here would stop matching the arm the day the declaration
 # moved, and the mutant would survive for a reason that has nothing to do with the subject.
-mutate renders-durable-too 's#\.paths\[\] | select(\.transient) | \.ignore // empty#. as $d | $d.paths[] | (.ignore // ($d.root + "/" + .name))#' excludes_durable renders_declared_set "${B_excludes_durable:-0}"
+mutate renders-durable-too 's#\.paths\[\] | select(\.transient) | \.ignore // empty#. as $d | $d.paths[] | (.ignore // ($d.root + "/" + .name))#' excludes_durable renders_declared_set
 
 # M3: drop the empty-marker guard, so an unusable declaration is used anyway.
-mutate no-empty-marker-guard 's/if \[ -z "\$IG_BEGIN" \] || \[ -z "\$IG_END" \]; then/if false; then/' fails_closed_on_empty_marker cut_is_bounded "${B_fails_closed_on_empty_marker:-0}"
+mutate no-empty-marker-guard 's/if \[ -z "\$IG_BEGIN" \] || \[ -z "\$IG_END" \]; then/if false; then/' fails_closed_on_empty_marker cut_is_bounded
 
 # M4: make `--check` REPORT a tracked transient path while still exiting 0 and still writing
 # nothing. That is the widening arm 8's contract forbids, and it is the shape a later hand
@@ -493,13 +495,13 @@ mutate no-empty-marker-guard 's/if \[ -z "\$IG_BEGIN" \] || \[ -z "\$IG_END" \];
 # 8 owns: what --check PRINTS about the index.
 mutate check-reports-tracked \
   's#^  echo "OK: transient-state block current#  git -C "$PROJECT_ROOT" ls-files -- $PATTERNS 2>/dev/null | sed "s/^/  NOTE: still TRACKED: /"\n  echo "OK: transient-state block current#' \
-  check_is_blind_to_tracked check_discriminates "${B_check_is_blind_to_tracked:-0}"
+  check_is_blind_to_tracked check_discriminates
 
 # M5 (BL-329): the install-root candidate empties, so the consumer layout has no fallback again.
-mutate no-install-fallback 's/^_install_root="\$(sti_walk_root "\$_self" || true)"$/_install_root=""/' install_fallback renders_declared_set "${B_install_fallback:-0}"
+mutate no-install-fallback 's/^_install_root="\$(sti_walk_root "\$_self" || true)"$/_install_root=""/' install_fallback renders_declared_set
 
 # M6 (BL-685): the out_of_root half is never read, so the block carries the in-root set only.
-mutate no-out-of-root 's/^OOR_PATTERNS="\$(jq .*$/OOR_PATTERNS=""/' renders_out_of_root renders_declared_set "${B_renders_out_of_root:-0}"
+mutate no-out-of-root 's/^OOR_PATTERNS="\$(jq .*$/OOR_PATTERNS=""/' renders_out_of_root renders_declared_set
 
 # NO SEPARATE UNMUTATED CONTROL. It re-ran every arm on a lone copy of the subject, which the live
 # run above already establishes: renders_declared_set is an ok line there, and every mutant's

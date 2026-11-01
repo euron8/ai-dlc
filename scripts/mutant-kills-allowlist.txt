@@ -5,33 +5,11 @@
 # none is ever added. The rows are the output of `bash scripts/validate-mutant-kills.sh --derive`,
 # never typed: 127 at origin/main 7c8a88fd7, less check-22-spawn-ledger, migrated in the change
 # that shipped the arm.
-apply-drift-after-write
-ci-gates-resolution
-claude-rules-joins
-context-mode-protect
-core-paths-audit-diff
-decl-reasons
-deploy-validate-smoke-classification
 derivation-capture
-derivation-capture-worktree-root
 divergence-hard-block
-enforcement-map-yaml-plain
 escalation-status-vocabulary
 fanout-payload-channel
-gate-adjudication
-h2-attest-scripts-dir
-inflight-row-shape
-layer-absorption-retire
-layer-catalog-collision
-layer-debt-due-and-discharge
-layer-entry-unreadable
-layer-extends-grain
-layer-retired-id-crosswalk
-pause-hook-origin
-plan-rotate
-post-write-gates
 postcompact-rulebook-recovery
-preclassify-mode-bucket
 process-rule-pins
 procsub-staged-refusal-boot
 scope-confirmation

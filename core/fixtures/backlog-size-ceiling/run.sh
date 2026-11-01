@@ -124,7 +124,7 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$DIR/../lib/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 # Flags are set ONLY in the passing branch of the unmutated arm a mutant guards.
-B_CTRL=0; B_D02=0; B_D03N=0; B_D04=0; B_D07=0; B_P01=0
+B_CTRL=0
 KC_OK=0; CC_OK=0
 # A mutant's DECIDING ARM, stored as files so every arm can be scored against every captured output:
 # <id>.want is "eq:N" or "ne:N" for the exit status, <id>.pats one text condition per line (a leading
@@ -217,16 +217,16 @@ count_check() { # count_check <name> <dir> <env> <want> [<extra-args>...]
   out="$(run_v "$e" "$d" "$@")"; rc_v=$?
   if [ "$rc_v" -ne 0 ]; then
     note "FAIL  $n -- validator exited $rc_v on a tree that must pass"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return 1
   fi
   got="$(bl_reported "$out")"
   if [ -z "$got" ]; then
     note "FAIL  $n -- the arm printed no ok line, so it observed nothing and the quiet is not a reading"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1; return 1
   fi
   if [ "$got" -ne "$want" ]; then
     note "FAIL  $n -- the arm reports $got live entries; the seed wrote $want. Quiet at a slack ceiling is not evidence the predicate read the right file."
-    rc=1; return
+    rc=1; return 1
   fi
   note "ok    $n -- quiet, and the arm counted exactly the $want entries the seed wrote"; CC_OK=1
 }
@@ -236,18 +236,18 @@ kill_check() { # kill_check <name> <dir> <env> <nfail> <substr>
   KC_OK=0
   out="$(run_v "$e" "$d")"; rc_v=$?
   nfail="$(printf '%s\n' "$out" | grep -c '^FAIL:')"
-  if [ "$rc_v" -eq 0 ]; then note "FAIL  $n -- probe SURVIVED (validator exited 0)"; rc=1; return; fi
+  if [ "$rc_v" -eq 0 ]; then note "FAIL  $n -- probe SURVIVED (validator exited 0)"; rc=1; return 1; fi
   if [ "$rc_v" -eq 2 ]; then
     note "FAIL  $n -- validator exited 2 (environment/self-probe), which is not this probe's assertion"
-    printf '%s\n' "$out" | sed 's/^/      /' | head -3; rc=1; return
+    printf '%s\n' "$out" | sed 's/^/      /' | head -3; rc=1; return 1
   fi
   if ! grep -qF "$pat" <<<"$out"; then
     note "FAIL  $n -- validator failed, but not on this probe's assertion (wanted: $pat)"
-    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -3; rc=1; return
+    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -3; rc=1; return 1
   fi
   if [ "$nfail" -ne "$want" ]; then
     note "FAIL  $n -- $nfail FAIL lines, expected $want"
-    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -4; rc=1; return
+    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -4; rc=1; return 1
   fi
   note "ok    $n -- fails on its own assertion, and by exactly that many"; KC_OK=1
 }
@@ -257,7 +257,7 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$REVERIFY")" && pwd)/${REVERIFY##*/}"
 # --- unmutated control ------------------------------------------------------
 seed "$TMP/control"
 if out="$(run_v "" "$TMP/control")" && [ -n "$out" ]; then
-  note "ok    control -- clean seed passes, harness is live"; B_CTRL=1
+  ok "control -- clean seed passes, harness is live"; B_CTRL=1
 else
   note "FIXTURE BROKEN: the unmutated control did NOT pass. Every probe verdict below is meaningless."
   printf '%s\n' "$out" | sed 's/^/      /'
@@ -511,20 +511,20 @@ fi
 
 # d02 / d03 -- B1b: the marker last while a real entry is present, in each entry shape.
 seed "$TMP/d02"; de_ledger "$TMP/d02/docs/backlog.md" "## BL-001 — a live entry\n\nverify: manual\n\n"
-kill_check "d02 the empty marker beside a live '## BL-' entry fails B1b" "$TMP/d02" "" 1 "FAIL: B1b:"; B_D02=$KC_OK
+kill_check "d02 the empty marker beside a live '## BL-' entry fails B1b" "$TMP/d02" "" 1 "FAIL: B1b:"; R_D02=$?
 seed "$TMP/d03"; de_ledger "$TMP/d03/docs/backlog.md" "- **BL-001** — a live list entry\n\nverify: manual\n\n"
 kill_check "d03 the empty marker beside a live '- **BL-' entry fails B1b" "$TMP/d03" "" 1 "FAIL: B1b:"
 # d03n -- B1b's near-miss: a live entry with the marker QUOTED above it, not last, passes B1.
 seed "$TMP/d03n"; de_ledger "$TMP/d03n/docs/backlog.md" "" "\n## BL-001 — a live entry filed below a stale marker\n\nverify: manual\n\n"
-count_check "d03n a live entry below the marker is not B1b" "$TMP/d03n" "" 1; B_D03N=$CC_OK
+count_check "d03n a live entry below the marker is not B1b" "$TMP/d03n" "" 1; R_D03N=$?
 
 # d04 -- zero entries with the marker quoted in the preamble but NOT last: undeclared, B1 fails.
 seed "$TMP/d04"; de_ledger "$TMP/d04/docs/backlog.md" "" "\nTrailing prose after the quotation.\n"
-kill_check "d04 a marker that is not the last non-blank line declares nothing" "$TMP/d04" "" 1 "parsed to ZERO entries"; B_D04=$KC_OK
+kill_check "d04 a marker that is not the last non-blank line declares nothing" "$TMP/d04" "" 1 "parsed to ZERO entries"; R_D04=$?
 
 # d07 -- clause (c): zero entries, the marker last, but a BL- id in the prose. Undeclared.
 seed "$TMP/d07"; de_ledger "$TMP/d07/docs/backlog.md" "BL-497 moved to the archive.\n\n"
-kill_check "d07 a BL- id anywhere keeps a zero parse undeclared" "$TMP/d07" "" 1 "parsed to ZERO entries"; B_D07=$KC_OK
+kill_check "d07 a BL- id anywhere keeps a zero parse undeclared" "$TMP/d07" "" 1 "parsed to ZERO entries"; R_D07=$?
 
 # d05 / d06 -- the boundary rule broken in the seed's lib.sh, one shape each, with a real entry of
 # that shape plus the marker: a parser that stopped seeing the entry must refuse on the self-probe,
@@ -547,7 +547,7 @@ seed "$TMP/mc"; de_ledger "$TMP/mc/docs/backlog.md" "BL-497 moved to the archive
 case "$(mutate "$TMP/mc/scripts/backlog-reverify.sh" 's@^  \[ "\$(raw_ids "\$LEDGER")" = 0 \] || return 1$@  :@'; echo $?)" in
   0) mc_out="$(run_v "" "$TMP/mc")"; mc_rc=$?
      record_arm mc eq:0 "$mc_rc" "$mc_out" ', declared empty ('
-     score mc "$B_D07" "mc -- without clause (c) a zero parse carrying a BL- id passes as declared empty" ;;
+     score mc "$([ "$R_D07" -eq 0 ] && echo 1 || echo 0)" "mc -- without clause (c) a zero parse carrying a BL- id passes as declared empty" ;;
   *) note "FAIL  mc -- the clause-(c) mutation DID NOT APPLY"; rc=1 ;;
 esac
 # mb -- B1b dropped: d02's ledger now passes.
@@ -555,7 +555,7 @@ seed "$TMP/mb"; de_ledger "$TMP/mb/docs/backlog.md" "## BL-001 — a live entry\
 case "$(mutate "$TMP/mb/scripts/validate-backlog-size.sh" 's@^bash "\$REVERIFY" --marker-last "\$LEDGER" >/dev/null 2>&1; ML=\$?$@ML=1@'; echo $?)" in
   0) mb_out="$(run_v "" "$TMP/mb")"; mb_rc=$?
      record_arm mb eq:0 "$mb_rc" "$mb_out" 'OK: validate-backlog-size -- B1 1/'
-     score mb "$B_D02" "mb -- without B1b a live entry above the empty marker passes" ;;
+     score mb "$([ "$R_D02" -eq 0 ] && echo 1 || echo 0)" "mb -- without B1b a live entry above the empty marker passes" ;;
   *) note "FAIL  mb -- the B1b mutation DID NOT APPLY"; rc=1 ;;
 esac
 # ms -- the self-probe's bullet seed dropped: d06's bullet-blind parser is no longer refused on
@@ -587,14 +587,14 @@ else
   case "$(mutate "$TMP/mp4/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
     0) mp4_out="$(run_v "" "$TMP/mp4")"; mp4_rc=$?
        record_arm mp-d04 eq:0 "$mp4_rc" "$mp4_out" ', declared empty ('
-       score mp-d04 "$B_D04" "mp/d04 -- with the position rule replaced by presence, a marker quoted above trailing prose declares the ledger empty" ;;
+       score mp-d04 "$([ "$R_D04" -eq 0 ] && echo 1 || echo 0)" "mp/d04 -- with the position rule replaced by presence, a marker quoted above trailing prose declares the ledger empty" ;;
     *) note "FAIL  mp/d04 -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
   esac
   seed "$TMP/mp3"; de_ledger "$TMP/mp3/docs/backlog.md" "" "\n## BL-001 — a live entry filed below a stale marker\n\nverify: manual\n\n"
   case "$(mutate "$TMP/mp3/scripts/backlog-reverify.sh" "$MP_SED"; echo $?)" in
     0) mp3_out="$(run_v "" "$TMP/mp3")"; mp3_rc=$?
        record_arm mp-d03n eq:1 "$mp3_rc" "$mp3_out" "FAIL: B1b:"
-       score mp-d03n "$B_D03N" "mp/d03n -- with the position rule replaced by presence, a live entry below a quoted marker trips B1b" ;;
+       score mp-d03n "$([ "$R_D03N" -eq 0 ] && echo 1 || echo 0)" "mp/d03n -- with the position rule replaced by presence, a live entry below a quoted marker trips B1b" ;;
     *) note "FAIL  mp/d03n -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
   esac
 fi
@@ -611,7 +611,7 @@ ph_seed() { # ph_seed <dir> -- BL_K entries; the phantom bullet sits inside BL-0
     && cp "$1/docs/backlog.md.new" "$1/docs/backlog.md"; rm -f "$1/docs/backlog.md.new"
   grep -qxF -- "$PH_BODY" "$1/docs/backlog.md" || { note "FAIL  p01 -- the phantom bullet was not seeded into $1"; rc=1; return 1; }
 }
-ph_seed "$TMP/p01" && { count_check "p01 a '- **BL-632 is LANDED**' lead-in inside an entry is not counted" "$TMP/p01" "" "$BL_K"; B_P01=$CC_OK; }
+ph_seed "$TMP/p01" && count_check "p01 a '- **BL-632 is LANDED**' lead-in inside an entry is not counted" "$TMP/p01" "" "$BL_K"; R_P01=$?
 PH_ANCHOR='if (line !~ /^BL-'
 ph_n="$(grep -cF "$PH_ANCHOR" "$LIBSRC")" || ph_n=0
 ph_z="$(grep -cF 'ZQ-NEVER-IN-LIB-QZ' "$LIBSRC")" || ph_z=0
@@ -624,7 +624,7 @@ ph_seed "$TMP/mloose"
 case "$(mutate "$TMP/mloose/core/skills/ai-dlc-update/reconcile/lib.sh" '/if (line !~ \/^BL-/d'; echo $?)" in
   0) ml_out="$(run_v "" "$TMP/mloose")"; ml_rc=$?
      record_arm m-loose eq:0 "$ml_rc" "$ml_out" "OK: validate-backlog-size -- B1 $(( BL_K + 1 ))/"
-     score m-loose "$B_P01" "m-loose -- with the loose label rule the lead-in bullet counts as an entry ($(( BL_K + 1 )) against $BL_K)" ;;
+     score m-loose "$([ "$R_P01" -eq 0 ] && echo 1 || echo 0)" "m-loose -- with the loose label rule the lead-in bullet counts as an entry ($(( BL_K + 1 )) against $BL_K)" ;;
   *) note "FAIL  m-loose -- the label mutation DID NOT APPLY"; rc=1 ;;
 esac
 # m-heading-only -- bullets never labelled. The arm's own self-probe seeds a list entry, so it

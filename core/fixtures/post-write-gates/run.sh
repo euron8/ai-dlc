@@ -57,6 +57,8 @@ HRV="$(pick "$HERE/../../scripts/validate-hook-registration.sh" \
 fails=0; asserts=0
 ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
 bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/pwg-fx-XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 trap 'chmod -R u+rwx "$W" 2>/dev/null; rm -rf "$W"' EXIT
@@ -291,14 +293,22 @@ expect_kill() {
   case "$m" in "DID NOT APPLY"*|"") bad "mutant $t DID NOT APPLY"; return ;; esac
   local g missing="" a; g=" $(echo $(arms "$m" "m$t-" "$@")) "
   for a in "$@"; do case "$g" in *" $a "*) missing="$missing $a" ;; esac; done
-  [ -z "$missing" ] && ok "mutant $t killed by:$(printf ' %s' "$@")" || bad "mutant $t SURVIVED arm(s):$missing"
+  if [ -z "$missing" ]; then
+    mutant_killed "${B_CTL:-0}" "$t" "mutant $t killed by:$(printf ' %s' "$@")"
+  else
+    bad "mutant $t SURVIVED arm(s):$missing"
+  fi
 }
 
 # control: an unmutated copy built the same way, in the same symlink farm, passes every arm.
 c="$(mkmut control 'set -uo pipefail' 'set -uo pipefail')"
 cg=" $(echo $(arms "$c" mc-)) "
 cmiss=""; for a in $ALL_ARMS; do case "$cg" in *" $a "*) : ;; *) cmiss="$cmiss $a" ;; esac; done
-[ -z "$cmiss" ] && ok "unmutated copy passes every arm" || bad "unmutated copy FAILED arm(s):$cmiss (the harness, not the runner)"
+if [ -z "$cmiss" ]; then
+  ok "unmutated copy passes every arm"; B_CTL=1
+else
+  bad "unmutated copy FAILED arm(s):$cmiss (the harness, not the runner)"
+fi
 
 # M1 the filed shape: read the tail of the output instead of the exit code.
 expect_kill tail "$(mkmut tail '    rc=$?' '    tail -3 "$out" > "$out.tail"; if grep -qE "FAIL|DRIFT|REFUSED" "$out.tail"; then rc=1; else rc=0; fi')" A1 A3

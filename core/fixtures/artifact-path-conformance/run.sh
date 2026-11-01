@@ -448,10 +448,10 @@ mutant_score() {
     ok "MATRIX $n measured against $(printf '%s\n' $ARMS | grep -c .) arms"
     return 0
   fi
-  if arm_holds "$dec" "$(arm_raw "$dec" "$SHIPD")"; then base=1; else base=0; fi
+  base="$(arm_holds "$dec" "$(arm_raw "$dec" "$SHIPD")" && echo held)"
   r="$(arm_raw "$dec" "$d")"
   if arm_holds "$dec" "$r"; then bad "MUTANT $n SURVIVED on $dec ($r) -- $claim"
-  else mutant_killed "$base" "$n" "MUTANT $n ($dec): $claim"; fi
+  else mutant_killed "$([ "$base" = held ] && echo 1 || echo 0)" "$n" "MUTANT $n ($dec): $claim"; fi
   r="$(arm_raw "$tw" "$d")"
   if arm_holds "$tw" "$r"; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
   else bad "T-$n twin $tw TRIPPED ($r) under mutant $n -- the matrix row for this mutant moved"; fi
