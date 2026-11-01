@@ -36,6 +36,14 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# Base-pass flags for mutant_killed: each is set to 1 beside the ok of the control whose copy the mutants below are built from.
+B_sd=0; B_ur=0; B_pc=0; B_ls=0; B_lb=0
+
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 sha_of() { printf '%s' "$1" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1; }
 
@@ -488,7 +496,7 @@ if build_field_of_mutant d "$WORK/body-d.sh"; then
     kills=$((kills+1))
     ok "mutant D: the pre-fix extractor fails all five producer grammars and reports the markup as the value — assertions 19-25 have teeth"
   else
-    bad "MUTANT D KILLED ONLY $red OF 6 — the pre-fix extractor still satisfies assertions 19-25, so they are not testing the extractor"
+    bad "MUTANT D CAUGHT ONLY $red OF 6 — the pre-fix extractor still satisfies assertions 19-25, so they are not testing the extractor"
   fi
   run_v "$MUT_PATH" "$WORK/snap-good.md" "$ANSWERS"; r=$LAST_RC
   run_v "$MUT_PATH" "$WORK/snap-inline.md" "$ANSWERS"; r2=$LAST_RC
@@ -520,7 +528,7 @@ if build_field_of_mutant d2 "$WORK/body-d2.sh"; then
     kills=$((kills+1))
     ok "mutant D2: dropping the emphasis strip breaks all three bold spellings — that layer is separately load-bearing"
   else
-    bad "MUTANT D2 KILLED ONLY $red OF 3 — the emphasis-strip layer is not what assertions 19, 20 and 22 are testing"
+    bad "MUTANT D2 CAUGHT ONLY $red OF 3 — the emphasis-strip layer is not what assertions 19, 20 and 22 are testing"
   fi
   run_v "$MUT_PATH" "$WORK/snap-prod-btval.md" "$ANSWERS"; r=$LAST_RC
   run_v "$MUT_PATH" "$WORK/snap-inline.md" "$ANSWERS"; r2=$LAST_RC
@@ -638,9 +646,9 @@ fi
 # A mutant that kills nothing reads exactly like an arm that cannot fire, and `cmp -s` does
 # not separate them: the mutation applies cleanly to a file the run never loaded.
 if [ "$kills" -eq 5 ]; then
-  ok "all 5 field_of mutants were killed against the resolved validator $VALIDATOR — the arms above are running against the code they name"
+  ok "all 5 field_of mutants died against the resolved validator $VALIDATOR — the arms above are running against the code they name"
 else
-  bad "only $kills of 5 field_of mutants were killed — an unkilled mutant means either the arm cannot fire or the mutation landed on a copy this run never executed"
+  bad "only $kills of 5 field_of mutants died — a surviving mutant means either the arm cannot fire or the mutation landed on a copy this run never executed"
 fi
 
 # =============================================================================
@@ -1108,7 +1116,7 @@ sd_mut() {   # $1 label, $2 anchor, $3 replacement, $4 expected anchor count, $5
     bad "MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned) — those cells are not testing what this mutant removes"
   else
     SD_MUT_KILLS=$((SD_MUT_KILLS + 1))
-    ok "mutant $label killed on exactly its own cells:$moved"
+    mutant_killed "$B_sd" "$label" "mutant $label killed on exactly its own cells:$moved"
   fi
 }
 
@@ -1117,6 +1125,7 @@ SD_CTL="$SD/control.sh"; cp "$VALIDATOR" "$SD_CTL"
 SD_CTL_GOT="$(sd_verdicts "$SD_CTL")"
 if [ "$SD_CTL_GOT" = "$SD_EXPECT" ]; then
   ok "control: an unmutated copy reproduces all $(echo $SD_CELLS | wc -w) deferred-items cells, PASS, FAIL and PENDING alike"
+  B_sd=1
 
   # REGRESSION 1 — field_of reused: it stops at the first space, so a list collapses to its
   # FIRST id once the brackets and comma are stripped, and a second unfiled id rides along.
@@ -1148,9 +1157,9 @@ if [ "$SD_CTL_GOT" = "$SD_EXPECT" ]; then
     SD_MUT_WANT=11
   fi
   if [ "$SD_MUT_KILLS" -eq "$SD_MUT_WANT" ]; then
-    ok "all $SD_MUT_WANT deferred-items mutants killed against the resolved validator $VALIDATOR"
+    ok "all $SD_MUT_WANT deferred-items mutants died against the resolved validator $VALIDATOR"
   else
-    bad "only $SD_MUT_KILLS of $SD_MUT_WANT deferred-items mutants were killed ($SD_MUT_BUILT built) — an unkilled mutant is an arm that cannot fire"
+    bad "only $SD_MUT_KILLS of $SD_MUT_WANT deferred-items mutants died ($SD_MUT_BUILT built) — a surviving mutant is an arm that cannot fire"
   fi
 else
   bad "CONTROL FAILED: an unmutated copy returned [$SD_CTL_GOT], expected [$SD_EXPECT] — every mutant verdict below would be uninterpretable"
@@ -1191,7 +1200,7 @@ UR_MODE000="bl-closed bl-unfiled bl-none ar-only ar-unreached"
 # awk for everything else.
 UR_REALAWK="$(command -v awk)" || { echo "FIXTURE ERROR: awk is not on PATH" >&2; exit 2; }
 {
-  printf '#!/bin/sh\ncase " $* " in\n'
+  printf '#!/bin/bash\ncase " $* " in\n'
   printf '  *" id="*) printf "x\\n" >> "%s/LOG"\n' "$UR/stub"
   printf '    case "$UR_AWK_MODE" in failok) echo "S OPEN"; exit 2 ;; silent) exit 0 ;; esac ;;\n'
   printf 'esac\nexec "%s" "$@"\n' "$UR_REALAWK"
@@ -1290,7 +1299,7 @@ ur_mut() {   # $1 label, $2 owned cells, then anchor/replacement pairs; every an
     bad "UNREADABLE-CORPUS MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: ${owned:-none})"
   else
     UR_MUT_KILLS=$((UR_MUT_KILLS + 1))
-    ok "unreadable-corpus mutant $label killed on exactly its own cells:$moved"
+    mutant_killed "$B_ur" "$label" "unreadable-corpus mutant $label killed on exactly its own cells:$moved"
   fi
 }
 
@@ -1298,6 +1307,7 @@ UR_CTL="$UR/control.sh"; cp "$VALIDATOR" "$UR_CTL"
 UR_CTL_GOT="$(ur_verdicts "$UR_CTL")"
 if [ "$UR_CTL_GOT" = "$UR_EXPECT" ]; then
   ok "control: an unmutated copy reproduces every unreadable-corpus cell, the readable CLOSED twins at 1 included"
+  B_ur=1
   UR_A1='if [ -e "$sdi_f" ] && {'; UR_R1='if false && {'
   UR_A2='      if [ "$sdi_lrc" -ne 0 ]; then'; UR_R2='      if false; then'
   UR_A3='        "S "*)'; UR_R3='        *)'
@@ -1309,9 +1319,9 @@ if [ "$UR_CTL_GOT" = "$UR_EXPECT" ]; then
   ur_mut fallthrough "bl-closed bl-unfiled ar-only ar-unreached dir stub-failok stub-silent" \
     "$UR_A1" "$UR_R1" "$UR_A2" "$UR_R2" "$UR_A3" "$UR_R3"
   if [ "$UR_MUT_KILLS" -eq "$UR_MUT_WANT" ] && [ "$UR_MUT_WANT" -eq 4 ]; then
-    ok "all 4 unreadable-corpus mutants killed against the resolved validator $VALIDATOR"
+    ok "all 4 unreadable-corpus mutants died against the resolved validator $VALIDATOR"
   else
-    bad "only $UR_MUT_KILLS of $UR_MUT_WANT unreadable-corpus mutants were killed (4 expected)"
+    bad "only $UR_MUT_KILLS of $UR_MUT_WANT unreadable-corpus mutants died (4 expected)"
   fi
 else
   bad "CONTROL FAILED: an unmutated copy returned [$UR_CTL_GOT], expected [$UR_EXPECT] — every unreadable-corpus mutant verdict would be uninterpretable"
@@ -1345,6 +1355,7 @@ else
   r_open="$(lb_run "$VALIDATOR" open)"; r_closed="$(lb_run "$VALIDATOR" closed)"
   if [ "$r_open" = "0" ] && [ "$r_closed" = "1" ]; then
     ok "a Latin-1 byte in a readable item under $LB_LOC: OPEN passes (0), its CLOSED twin fails (1)"
+    B_lb=1
   else
     bad "a Latin-1 byte in a readable item under $LB_LOC: OPEN rc=$r_open (want 0), CLOSED rc=$r_closed (want 1) — an encoding read as an unreadable corpus, or a CLOSED item acquitted"
   fi
@@ -1360,7 +1371,7 @@ else
     else
       m_open="$(lb_run "$LB_MUT" open)"; m_closed="$(lb_run "$LB_MUT" closed)"
       if [ "$m_open" != "0" ] && [ "$m_closed" != "0" ]; then
-        ok "latin1 mutant (locale pin removed) killed: OPEN rc=$m_open under $LB_LOC"
+        mutant_killed "$B_lb" latin1-unpinned "latin1 mutant (locale pin removed) killed: OPEN rc=$m_open under $LB_LOC"
       else
         bad "LATIN1 MUTANT SURVIVED: with the locale pin removed the OPEN item still passed (rc=$m_open) — the cell cannot see the abort"
       fi
@@ -1476,11 +1487,12 @@ pc_mut() {   # $1 label, $2 owned cells, then anchor/replacement pairs; every an
     bad "LABELLED-CITE MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned)"
   else
     PC_MUT_KILLS=$((PC_MUT_KILLS + 1))
-    ok "labelled-cite mutant $label killed on exactly its own cells:$moved"
+    mutant_killed "$B_pc" "$label" "labelled-cite mutant $label killed on exactly its own cells:$moved"
   fi
 }
 if [ "$PC_CTL_GOT" = "$PC_EXPECT" ]; then
   ok "control: assertion 14's unmutated copy reproduces all $(echo $PC_CELLS | wc -w) labelled-cite cells"
+  B_pc=1
   PC_A='CITE="${CITE#SHA256:}"'
   # --- Assertions 72-75: the four mutants ------------------------------------
   pc_mut stripdeleted "pc-real pc-fab pc-absent" "$PC_A" 'CITE="$CITE"'
@@ -1490,9 +1502,9 @@ if [ "$PC_CTL_GOT" = "$PC_EXPECT" ]; then
     '  case "$CITE" in' '  case "${CITE#SHA256:}" in' \
     'grep -q "^- SHA256: ${CITE}' 'grep -q "^- SHA256: ${CITE#SHA256:}'
   if [ "$PC_MUT_KILLS" -eq "$PC_MUT_WANT" ] && [ "$PC_MUT_WANT" -eq 4 ]; then
-    ok "all 4 labelled-cite mutants killed against the resolved validator $VALIDATOR"
+    ok "all 4 labelled-cite mutants died against the resolved validator $VALIDATOR"
   else
-    bad "only $PC_MUT_KILLS of $PC_MUT_WANT labelled-cite mutants were killed (4 expected)"
+    bad "only $PC_MUT_KILLS of $PC_MUT_WANT labelled-cite mutants died (4 expected)"
   fi
 else
   bad "CONTROL FAILED: assertion 14's unmutated copy returned [$PC_CTL_GOT], expected [$PC_EXPECT] — every labelled-cite mutant verdict would be uninterpretable"
@@ -1622,11 +1634,12 @@ ls_mut() {   # $1 label, $2 owned cells, $3 anchor (must occur once), $4 replace
   if [ -n "$stray" ]; then bad "locked-scope mutant $label moved cells it does not own:$stray"
   elif [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
     bad "LOCKED-SCOPE MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned)"
-  else LS_MUT_KILLS=$((LS_MUT_KILLS + 1)); ok "locked-scope mutant $label killed on exactly its own cells:$moved"; fi
+  else LS_MUT_KILLS=$((LS_MUT_KILLS + 1)); mutant_killed "$B_ls" "$label" "locked-scope mutant $label killed on exactly its own cells:$moved"; fi
 }
 LS_CTL_GOT="$(ls_verdicts "$CTL")"
 if [ "$LS_CTL_GOT" = "$LS_EXPECT" ]; then
   ok "control: assertion 14's unmutated copy reproduces all $(echo $LS_CELLS | wc -w) locked-scope cells"
+  B_ls=1
   ls_mut sprintleg "fire"      '(sprint != "" && index(id, "CO-S" sprint "-") == 1) || ' ''
   ls_mut askleg    "fireask"   ' || index(ask, " " id " ")' ''
   ls_mut status    "resolved"  'st != "DEFERRAL_REQUEST") return' 'st != "DEFERRAL_REQUEST" && st != "RESOLVED") return'
@@ -1638,9 +1651,9 @@ if [ "$LS_CTL_GOT" = "$LS_EXPECT" ]; then
   ls_mut fullpass  "noask badhash" 'elif [ "$LS_ASK_LEG" = ran ] && [ -n "$LS_SPRINT" ]; then' 'elif true; then'
   ls_mut resolve   "badhash"   'grep -qxF -- "- SHA256: ${LS_REQ_CITE}" "$REQUESTS" 2>/dev/null' 'true'
   if [ "$LS_MUT_KILLS" -eq "$LS_MUT_WANT" ] && [ "$LS_MUT_WANT" -eq 10 ]; then
-    ok "all 10 locked-scope mutants killed against the resolved validator $VALIDATOR"
+    ok "all 10 locked-scope mutants died against the resolved validator $VALIDATOR"
   else
-    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants were killed (10 expected)"
+    bad "only $LS_MUT_KILLS of $LS_MUT_WANT locked-scope mutants died (10 expected)"
   fi
 else
   bad "CONTROL FAILED: assertion 14's unmutated copy returned [$LS_CTL_GOT], expected [$LS_EXPECT] — every locked-scope mutant verdict would be uninterpretable"

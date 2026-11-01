@@ -46,7 +46,7 @@ cp "$MANDATORY"      "$ROOT/scripts/ai-dlc/validate-mandatory-rules.sh"
 # The three siblings Check 1/2/4 delegate to. Stubs: this fixture's subject is Check 6 and the
 # story join, and a missing sibling makes the whole run exit before either is reached.
 for s in validate-retro-evidence.sh validate-cycle-commits.sh validate-retro-prereq.sh; do
-  printf '#!/bin/sh\nexit 0\n' > "$ROOT/scripts/ai-dlc/$s"
+  printf '#!/bin/bash\nexit 0\n' > "$ROOT/scripts/ai-dlc/$s"
 done
 chmod +x "$ROOT/scripts/ai-dlc"/*.sh
 

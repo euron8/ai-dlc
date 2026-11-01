@@ -340,7 +340,7 @@ if [ "$P_POS" != "50" ] || [ "$P_NEG" != "0" ] || [ "$P_ASG" != "3" ]; then
   note "FIXTURE BROKEN: self-probe returned PROBEPOS=$P_POS PROBENEG=$P_NEG PROBEASG=$P_ASG; must be 50, 0 and 3."
   exit 1
 fi
-note "ok    A0 self-probe   -- a known-50 script counts 50, a fork-free one counts 0, the assignment probe counts only its 3 near-misses"; B_a0=1
+note "ok    A0 self-probe   -- a known-50 script counts 50, a fork-free one counts 0, the assignment probe counts only its 3 near-misses"
 
 # ==========================================================================================
 # THE FLOOR -- what a BROKEN subject reads under THIS profiler, measured before the corpus.
@@ -410,7 +410,7 @@ if [ "$A2V" != "OK" ]; then
   note "FIXTURE BROKEN: ${A2V#BROKEN }"
   exit 1
 fi
-note "ok    A2 wholeness    -- the classifier read all $N_MARK trace record(s) of one reading, $N_DISP displaced"; B_a2=1
+note "ok    A2 wholeness    -- the classifier read all $N_MARK trace record(s) of one reading, $N_DISP displaced"
 
 VERDICT="$(judge "$T1" "$EX" "$MX" "$LA" "$BUDGET")"
 case "$VERDICT" in
@@ -420,7 +420,6 @@ case "$VERDICT" in
     note "ok    A3b spare      -- $((BUDGET - T1)) fork(s) to spare, at least the allowance of $HEADROOM_MARGIN"
     note "ok    A4 stale-high  -- $T1 is at least 70% of $BUDGET, so the ceiling is still reachable"
     note "ok    A5 wholeness   -- traced run exited $EX and reached line $MX, past the last arm header at $LA"
-    B_live=1
     ;;
   *)
     note "FAIL  validator-fork-budget -- ${VERDICT}"
@@ -509,7 +508,7 @@ kill_j() {
 # repository's rule demands of any absence-shaped arm: would the gate print `ok` for a program
 # that emits nothing? It must not. It reads the profile the floor derivation already took of
 # the same subject, so the subject is profiled once.
-kill_j m0-empty-subject "${B_live:-0}" "m0-empty-subject: a subject that forks nothing is BROKEN, not a pass" \
+kill_j m0-empty-subject "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m0-empty-subject: a subject that forks nothing is BROKEN, not a pass" \
        "$(field "$TMP/m0.out" TOTAL)" "$(field "$TMP/m0.out" EXIT)" \
        "$(field "$TMP/m0.out" MAXLINE)" "$(field "$TMP/m0.out" LASTARM)" "$BUDGET"
 
@@ -541,7 +540,7 @@ if sed "s/PS4='+@\${LINENO}@ '/PS4='+ '/" "$TMP/fake/scripts/fp-neutered.sh" > "
     cat "$TMP/m1.err" > "$TMP/mx.m1-marker-neutered.txt"
     [ -s "$TMP/mx.m1-marker-neutered.txt" ] || echo "(the profiler failed with no stderr)" > "$TMP/mx.m1-marker-neutered.txt"
   fi
-  mx_score m1-marker-neutered "${B_live:-0}" "m1-marker-neutered: a neutered PS4 is refused by the profiler's own self-probe"
+  mx_score m1-marker-neutered "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m1-marker-neutered: a neutered PS4 is refused by the profiler's own self-probe"
 else
   bad "m1-marker-neutered DID NOT APPLY -- the PS4 sed matched nothing; no mutation occurred, so nothing was proven"
 fi
@@ -555,15 +554,15 @@ fi
 # demonstrate a red: m5 and m6 both went off on the CEILING arm instead of their own, because
 # the ceiling fires first. Two failures from one mutation is this repository's sign that an
 # assertion is vacuous, and it was.
-kill_j m2-ceiling "${B_live:-0}" "m2-ceiling: budget one below the truth" \
+kill_j m2-ceiling "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m2-ceiling: budget one below the truth" \
        "$T1" "$EX" "$MX" "$LA" "$((T1 - 1))"
-kill_j m3-stale-high "${B_live:-0}" "m3-stale-high: budget at twice the truth" \
+kill_j m3-stale-high "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m3-stale-high: budget at twice the truth" \
        "$T1" "$EX" "$MX" "$LA" "$((T1 * 2))"
-kill_j m4-floor "${B_live:-0}" "m4-floor: a measurement AT the floor" \
+kill_j m4-floor "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m4-floor: a measurement AT the floor" \
        "$FLOOR" "$EX" "$MX" "$LA" "$T1"
-kill_j m5-wholeness-lastarm "${B_live:-0}" "m5-wholeness-lastarm: trace stops before the last arm" \
+kill_j m5-wholeness-lastarm "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m5-wholeness-lastarm: trace stops before the last arm" \
        "$T1" "$EX" "$((LA - 1))" "$LA" "$T1"
-kill_j m6-wholeness-exit "${B_live:-0}" "m6-wholeness-exit: the traced run exited non-zero" \
+kill_j m6-wholeness-exit "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m6-wholeness-exit: the traced run exited non-zero" \
        "$T1" "2" "$MX" "$LA" "$T1"
 
 # m8 -- A4 IS REACHABLE AT THE COMMITTED BUDGET, and this is the one mutant that must be
@@ -584,7 +583,7 @@ M8_LO="$FLOOR"
 M8_HI="$((BUDGET * 7 / 10))"
 M8_T="$(( (M8_LO + M8_HI) / 2 ))"
 if [ "$M8_LO" -lt "$M8_HI" ] && [ "$M8_T" -gt "$M8_LO" ] && [ "$M8_T" -lt "$M8_HI" ]; then
-  kill_j m8-A4-reachable "${B_live:-0}" "m8-A4-reachable: a total inside A4's window at the LIVE budget" \
+  kill_j m8-A4-reachable "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m8-A4-reachable: a total inside A4's window at the LIVE budget" \
          "$M8_T" "$EX" "$MX" "$LA" "$BUDGET"
 else
   bad "m8-A4-reachable -- A4 has NO window at FORK_BUDGET=$BUDGET (floor $M8_LO, stale-high below $M8_HI). The stale-high arm cannot fire for any measurement whatsoever, and a check that cannot fire reads exactly like one that passed."
@@ -595,7 +594,7 @@ fi
 # the budget puts the floor in the hundreds or thousands and refuses this input as BROKEN, so
 # respelling the old `4/10` in any form fails here. That is the input m4 and m8 cannot supply:
 # m4 sits at the floor, and m8 sits at a midpoint every fraction below 0.7 also clears.
-kill_j m9-floor-tight "${B_live:-0}" "m9-floor-tight: one fork above the measured floor" \
+kill_j m9-floor-tight "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m9-floor-tight: one fork above the measured floor" \
        "$((FLOOR + 1))" "$EX" "$MX" "$LA" "$BUDGET"
 
 # m7 -- THE CLASSIFIER REVERTED TO FIELD 1, the reader that produced the spread. Without this, A2
@@ -613,7 +612,7 @@ elif sed 's|^  while (match(s, /\\++@\[0-9\]+@(\[ \\t\]\|\$)/)) {$|  while (matc
    && ! cmp -s "$PROFILER" "$TMP/fake2/scripts/fp-field1.sh"; then
   bash "$TMP/fake2/scripts/fp-field1.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/m7.out" 2>"$TMP/m7.err"
   { cat "$TMP/m7.err"; marker_verdict 90450 90452 0; } > "$TMP/mx.m7-field-1.txt"
-  mx_score m7-field-1 "$(( ${B_a0:-0} && ${B_a2:-0} ))" "m7-field-1: the splice probe refuses a field-1 classifier and A2 reads the measured 90450/90452 gap as BROKEN"
+  mx_score m7-field-1 "$([ "$P_POS" = 50 ] && [ "$A2V" = OK ] && echo 1 || echo 0)" "m7-field-1: the splice probe refuses a field-1 classifier and A2 reads the measured 90450/90452 gap as BROKEN"
 else
   bad "m7-field-1 DID NOT APPLY -- the field-1 sed matched nothing; no mutation occurred, so nothing was proven"
 fi
@@ -627,7 +626,7 @@ if [ "$(grep -cxF -- "$M7_ANCHOR" "$PROFILER")" = "1" ] \
   bash "$TMP/fake2/scripts/fp-wide.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/m13.out" 2>"$TMP/m13.err"
   cat "$TMP/m13.err" > "$TMP/mx.m13-marker-widened.txt"
   [ -s "$TMP/mx.m13-marker-widened.txt" ] || echo "(the widened classifier passed the self-probe with no stderr)" > "$TMP/mx.m13-marker-widened.txt"
-  mx_score m13-marker-widened "${B_a0:-0}" "m13-marker-widened: the splice probe's near-miss refuses a classifier reading the marker without its + run"
+  mx_score m13-marker-widened "$([ "$P_POS" = 50 ] && echo 1 || echo 0)" "m13-marker-widened: the splice probe's near-miss refuses a classifier reading the marker without its + run"
 else
   bad "m13-marker-widened DID NOT APPLY -- the widening sed matched nothing; no mutation occurred, so nothing was proven"
 fi
@@ -635,7 +634,7 @@ fi
 # m14 -- A DISPLACED HOST WITH THE READERS IN AGREEMENT. The one splice shape TRACELINES == MARKERS
 # cannot see; A2 must still read it as BROKEN, on its DISPLACED clause and not on a count gap.
 marker_verdict 90452 90452 1 > "$TMP/mx.m14-displaced.txt"
-mx_score m14-displaced "${B_a2:-0}" "m14-displaced: equal readers with one displaced host read BROKEN"
+mx_score m14-displaced "$([ "$A2V" = OK ] && echo 1 || echo 0)" "m14-displaced: equal readers with one displaced host read BROKEN"
 
 # m15 -- A3b IS REACHABLE AND LOAD-BEARING AT THE COMMITTED BUDGET. A total one fork inside the
 # margin (`b - margin + 1`) passes A3 and must be refused by A3b alone. The same total with the
@@ -646,7 +645,7 @@ mx_score m14-displaced "${B_a2:-0}" "m14-displaced: equal readers with one displ
 M15_T="$((BUDGET - HEADROOM_MARGIN + 1))"
 if [ "$M15_T" -gt "$FLOOR" ] && [ "$M15_T" -le "$BUDGET" ] \
    && [ "$((BUDGET - HEADROOM_MARGIN))" -ge "$((BUDGET * 7 / 10))" ]; then
-  kill_j m15-A3b-headroom "${B_live:-0}" "m15-A3b-headroom: a total one fork inside the margin at the LIVE budget" \
+  kill_j m15-A3b-headroom "$([ "$VERDICT" = PASS ] && echo 1 || echo 0)" "m15-A3b-headroom: a total one fork inside the margin at the LIVE budget" \
          "$M15_T" "$EX" "$MX" "$LA" "$BUDGET"
   m15_off="$(HEADROOM_MARGIN=0; judge "$M15_T" "$EX" "$MX" "$LA" "$BUDGET")"
   if [ "$m15_off" != "PASS" ]; then

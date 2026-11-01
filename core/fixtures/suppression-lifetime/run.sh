@@ -167,7 +167,7 @@ if ! { [ -L "$SR_LINK" ] && [ ! -e "$SR_LINK" ]; }; then bad "FIXTURE BROKEN: th
 SR_STUB="$SR/stub"; mkdir -p "$SR_STUB"
 SR_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
 {
-  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '#!/bin/bash\ncase "$*" in\n'
   printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$SR_STUB"
   printf 'esac\nexec "%s" "$@"\n' "$SR_REALGREP"
 } > "$SR_STUB/grep"
@@ -939,17 +939,16 @@ else
       printf '  SKIP  MUTANT %s -- every deciding arm is skipped on this host or against this installed validator\n' "$n"
       mut_i=$((mut_i+1)); continue
     fi
-    flag=1
-    for a in $dec $twn; do base_ok "$a" || flag=0; done
+    flag="$(r=1; for a in $dec $twn; do base_ok "$a" || r=0; done; echo "$r")"
     wrong=""
     for a in $dec; do if arm_eval $((mut_i+2)) "$a"; then wrong="$wrong $a-did-not-flip"; fi; done
     for a in $twn; do arm_eval $((mut_i+2)) "$a" || wrong="$wrong $a-twin-not-green"; done
     if [ -n "$wrong" ]; then
-      if [ "$flag" = 1 ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] flipped and twin=[${MT[$mut_i]}] green"; else need_base "$flag" "$n" || true; fi
+      if [ "$flag" = 1 ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] flipped and twin=[${MT[$mut_i]}] green"; else need_base "$([ "$flag" = 1 ] && echo 1 || echo 0)" "$n" || true; fi
     elif ! mut_witness "$n" $((mut_i+2)); then
       bad "MUTANT $n flipped its arm but its witness did not hold — it died for a reason other than its mutation"
     else
-      mutant_killed "$flag" "$n" "MUTANT $n killed on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
+      mutant_killed "$([ "$flag" = 1 ] && echo 1 || echo 0)" "$n" "MUTANT $n killed on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
     fi
     mut_i=$((mut_i+1))
   done

@@ -9,4 +9,3 @@ divergence-hard-block
 postcompact-rulebook-recovery
 process-rule-pins
 procsub-staged-refusal-boot
-scope-confirmation

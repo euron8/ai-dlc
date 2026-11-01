@@ -6,3 +6,4 @@
 !core/hooks/ai-dlc-answer-capture.sh
 !core/hooks/ai-dlc-context-provenance.sh
 !core/schemas/pause-routing.json
+core/fixtures/lib/mutant.sh

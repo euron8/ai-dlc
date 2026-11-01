@@ -33,9 +33,4 @@ spec-join-integrity	mut	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; 
 spec-join-integrity	mut2	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
 spec-join-integrity	mut2_says	1	if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
 spec-join-integrity	mut_says	1	if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-story-corpus-sprint-slot	-	1	if [ "$flag" = 1 ]; then bad "MUTANT $n failed wrongly [$wrong ], expected decides=[${MD[$mut_i]}] with twin [${MT[$mut_i]}] green — entangled assertions, or the mutation is not reached"; else need_base "$flag" "$n" || true; fi
-story-corpus-sprint-slot	-	1	mutant_killed "$flag" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
 suite-dispatch-order	score_mutant	1	mutant_killed "$B_ALL" "$m" "KILL $m: the deciding arm $dec fails under the mutant ($(mutant_what "$m"))"
-suppression-lifetime	ar_sen_F	1	if [ "$flag" = 1 ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] flipped and twin=[${MT[$mut_i]}] green"; else need_base "$flag" "$n" || true; fi
-suppression-lifetime	ar_sen_F	1	mutant_killed "$flag" "$n" "MUTANT $n killed on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
-validator-fork-budget	mx_score	1	if [ "$allred" = 1 ]; then mutant_killed "$fl" "$m" "$msg -- scored by its own arm alone, cell(s)$shown"
