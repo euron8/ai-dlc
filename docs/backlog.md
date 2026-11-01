@@ -1782,6 +1782,8 @@ verify: manual
 
 Measured at batch b247, as owed-item facts. (a) The lead's push shell runs `ps`: `ps -o pgid= -p $$` rc 0, and the control `ps -o pid= -p 1` rc 0, so the DEFECT does not reach the lead's pushes. The "sandbox-exec refused the profile (a push from inside a sandbox?)" line in a lead push log is `pk_step` being unable to NEST `sandbox-exec` (.githooks/pre-push:239-240), a second instance of the same root (no nested sandbox-exec); priority unchanged. (b) `prepush-pool-depth` run once under `sandbox-exec` with an allow-default profile, outside the deriver: rc 2, `FAIL  teardown drive: the 60s ceiling ended the wait for the parent to exit after INT on the unmutated block`, then `prepush-pool-depth: FIXTURE BROKEN`; the read-set map's md5 was unchanged. The SIGINT-ignored guard did not fire (earlier cells, including nested-root and I66, ran ok), so the cause is `ps` and the DEFECT's scope does not narrow. (c) A `--tracer sandbox` trace of `prepush-pool-depth` at fb4cb5f40 OMITTED it ("fixture exited 2") and wrote no row for it.
 
+**Progress (BL-900, a second instance of the "no stub records its pid" teardown gap; the entry stays OPEN, `verify: manual` unchanged).** readset-skip's flush-stub `sandbox-exec` orphan outlived a one-level kill of its deriver because no stub records its pid, so `stub_reap` could not reach it. The fixture side is fixed in 0.990.0 by a recorded process-group kill (BL-900). The pre-push pool side is unchanged. BL-875's subject, slot-world `stub/logstream stream` processes outliving their run, may be the same gap; that is not measured here.
+
 verify: manual
 
 ## BL-875 — readset-skip's slot-world `stub/logstream stream` processes outlive their run
