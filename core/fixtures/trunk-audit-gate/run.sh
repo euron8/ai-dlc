@@ -116,8 +116,8 @@ mkworld() {
     printf 'x\n```\nclass: code\npaths: ^src/\nvalidator: validators/ok.sh\n\nclass: bad\npaths: ^broken/\nvalidator: validators/bad.sh\n```\n' \
       > "$d/.claude/skills/ai-dlc/pr-classes.md"
   fi
-  printf '#!/bin/sh\nexit 0\n' > "$d/validators/ok.sh";  chmod +x "$d/validators/ok.sh"
-  printf '#!/bin/sh\nexit 1\n' > "$d/validators/bad.sh"; chmod +x "$d/validators/bad.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$d/validators/ok.sh";  chmod +x "$d/validators/ok.sh"
+  printf '#!/bin/bash\nexit 1\n' > "$d/validators/bad.sh"; chmod +x "$d/validators/bad.sh"
   git init -q "$d" >/dev/null 2>&1
   git -C "$d" symbolic-ref HEAD refs/heads/main
   G "$d" add .claude validators >/dev/null 2>&1

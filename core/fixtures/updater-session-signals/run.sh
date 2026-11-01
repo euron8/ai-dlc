@@ -79,7 +79,7 @@ seed() {
   mkdir -p "$w/_bmad-output/planning-artifacts/s7" "$w/scripts/ai-dlc"
   : > "$w/_bmad-output/pipeline-snapshot.md"
   : > "$w/_bmad-output/pipeline-paused.flag"
-  printf '#!/bin/sh\necho 7\n' > "$w/scripts/ai-dlc/sprint-status.sh"
+  printf '#!/bin/bash\necho 7\n' > "$w/scripts/ai-dlc/sprint-status.sh"
   chmod +x "$w/scripts/ai-dlc/sprint-status.sh"
   printf '%s' "$w"
 }

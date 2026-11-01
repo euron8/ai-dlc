@@ -270,7 +270,7 @@ grep -q 'UNRESOLVED' <<<"$(hook_out "$d" "")" \
 # --- F: install.sh ships the file, with no version gate ---------------------
 t="$(mktemp -d "$TMP/tgt.XXXXXX")"; mkdir -p "$t/_bmad"; ( cd "$t" && git init -q . )
 oldbin="$(mktemp -d "$TMP/old.XXXXXX")"
-printf '#!/bin/sh\necho "1.9.0 (Claude Code)"\n' > "$oldbin/claude"; chmod +x "$oldbin/claude"
+printf '#!/bin/bash\necho "1.9.0 (Claude Code)"\n' > "$oldbin/claude"; chmod +x "$oldbin/claude"
 PATH="$oldbin:$PATH" bash "$INSTALL" "$t" > "$TMP/install.log" 2>&1
 if [ -f "$t/.claude/rules/$RULE" ]; then
   note "ok    F install ships the rule with no copy-time version gate"

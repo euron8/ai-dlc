@@ -53,7 +53,7 @@ W="$(mktemp -d)" || exit 9
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/shim" "$W/t" || exit 9
 REAL_GREP="$(command -v grep)"
-printf '#!/bin/sh\nprintf x >> "$GREP_LOG"\nexec %s "$@"\n' "$REAL_GREP" > "$W/shim/grep"
+printf '#!/bin/bash\nprintf x >> "$GREP_LOG"\nexec %s "$@"\n' "$REAL_GREP" > "$W/shim/grep"
 chmod +x "$W/shim/grep" || exit 9
 
 # THE ONE COPY. Every top-level entry but .git, and core/ without core/fixtures/ (which neither arm

@@ -638,8 +638,8 @@ arm_ulim() {
 REAL_CAT="$(command -v cat)"
 SHIM="$WORK/shim"
 mkdir -p "$SHIM/late" "$SHIM/short" || { echo "FIXTURE ERROR: cannot build the cat shims" >&2; exit 2; }
-printf '#!/bin/sh\n"%s" "$@"\nexit 1\n' "$REAL_CAT" > "$SHIM/late/cat"
-printf '#!/bin/sh\nn=$(wc -c < "$1")\nhead -c $((n - 1)) "$1"\nexit 0\n' > "$SHIM/short/cat"
+printf '#!/bin/bash\n"%s" "$@"\nexit 1\n' "$REAL_CAT" > "$SHIM/late/cat"
+printf '#!/bin/bash\nn=$(wc -c < "$1")\nhead -c $((n - 1)) "$1"\nexit 0\n' > "$SHIM/short/cat"
 chmod +x "$SHIM/late/cat" "$SHIM/short/cat" || { echo "FIXTURE ERROR: cannot chmod the cat shims" >&2; exit 2; }
 arm_wshim() {  # <late|short>
   local w pre rc a0 a1 sid want; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
@@ -728,7 +728,7 @@ RSHIM="$SHIM/rw"
 GSHIM="$SHIM/git"
 mkdir -p "$RSHIM" "$GSHIM" || { echo "FIXTURE ERROR: cannot build the rewrite shims" >&2; exit 2; }
 cat > "$RSHIM/cat" <<'SHIMEOF'
-#!/bin/sh
+#!/bin/bash
 R="$SNAPROT_REAL_CAT"; m="${SNAPROT_SHIM_MODE:-}"; hit=""
 case "$m:$#:${1:-}" in
   tlate:2:*/preamble|tshort:2:*/preamble) hit=1 ;;
@@ -742,14 +742,14 @@ case "$m" in
 esac
 SHIMEOF
 cat > "$RSHIM/mv" <<'SHIMEOF'
-#!/bin/sh
+#!/bin/bash
 case "${SNAPROT_SHIM_MODE:-}" in
   mvfail) printf 'mvfail\n' >> "$SNAPROT_SHIM_SENT"; exit 1 ;;
 esac
 exec "$SNAPROT_REAL_MV" "$@"
 SHIMEOF
 cat > "$GSHIM/git" <<'SHIMEOF'
-#!/bin/sh
+#!/bin/bash
 if [ "${SNAPROT_SHIM_MODE:-}" = gitkill ] && [ "${3:-}" = add ]; then
   printf 'gitkill\n' >> "$SNAPROT_SHIM_SENT"; kill -KILL "$PPID"; exit 1
 fi
