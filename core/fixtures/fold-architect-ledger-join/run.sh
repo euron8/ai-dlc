@@ -100,6 +100,8 @@ MUT_LIB="$HERE/../lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$HERE/../lib/matrix.sh" || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+. "$HERE/../lib/settled-net.sh" || { echo "FIXTURE ERROR: lib/settled-net.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/settled-net.sh"
 
 # --- the real inputs, and the controls that they can express the defect --------------------
 STORY="$(awk '/^artifact:/ { sub(/^artifact:[ \t]*/, ""); print; exit }' "$BLOCK_SRC")"
@@ -507,37 +509,6 @@ expect D5-dot 0 "PASS: $ONE -> $RES" "" 0 "residue artifact: with a leading ./ -
 # loaded box as a wedge. A spinning subject is runnable, so it is never settled and always reaches
 # its cap. A refusal is a harness that wedged, not a verdict about the parse: exit 2, never a FAIL row.
 D6_CPU=10
-# ST_NET_BEGIN -- the settled-tree net. A restated copy, byte-identical, in spec-join-integrity/run.sh;
-# the shape is readset-skip's aw_group_settled, with one difference: a member whose state `ps` will
-# not give is NOT settled (the net keeps waiting), so a refused `ps` can never make the net fire.
-st_alive() { kill -0 "$1" 2>/dev/null; }
-st_members() { # <pid>: "<pid> <stat> <pending> <cpu time>" for <pid> and every descendant
-  local p
-  st_alive "$1" || return 0
-  printf '%s %s\n' "$1" "$(ps -o stat=,pending=,time= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //')"
-  for p in $(pgrep -P "$1" 2>/dev/null); do st_members "$p"; done
-}
-st_settled() { # <members text>: 0 when there is a member and EVERY member is blocked with nothing pending
-  awk 'NF < 4 { bad = 1; next } { n++; if ($2 !~ /^[SIT]/ || $3 != "0") bad = 1 } END { exit (n > 0 && !bad) ? 0 : 1 }' <<<"$1"
-}
-st_net() { # <root pid> <progress file>: 0 when the root exits; 2 when the tree is settled on two consecutive identical polls
-  local cur prev="" sz
-  while st_alive "$1"; do
-    cur="$(st_members "$1")"; sz="$(wc -c < "$2" 2>/dev/null | tr -d ' ')"
-    if st_settled "$cur"; then
-      [ "$prev" = "$sz|$cur" ] && return 2
-      prev="$sz|$cur"
-    else prev=""; fi
-    sleep 0.1
-  done
-  return 0
-}
-st_reap() { # <pid>: SIGKILL the tree, leaves first (a stopped process takes SIGKILL)
-  local p
-  for p in $(pgrep -P "$1" 2>/dev/null); do st_reap "$p"; done
-  kill -9 "$1" 2>/dev/null
-}
-# ST_NET_END
 # d6_metered <out> <rcfile> <cmd...>: runs <cmd> under the CPU cap in a wrapper that records its rc;
 # returns st_net's answer, with the tree reaped on a refusal.
 d6_metered() {
@@ -573,8 +544,8 @@ else
 fi
 B_NET=0
 
-# THE NET'S TWO GUARDS, EACH WITH A SUBJECT THE OTHER CANNOT SEE. The block above is cut from this file
-# and driven over SCRIPTED trees (st_alive/st_members replaced, pacing a no-op), so each cell is a
+# THE NET'S TWO GUARDS, EACH WITH A SUBJECT THE OTHER CANNOT SEE. A copy of lib/settled-net.sh
+# is driven over SCRIPTED trees (st_alive/st_members replaced, pacing a no-op), so each cell is a
 # fact about the predicate and costs no process. frozen: a RUNNING member, nothing changing, then
 # gone -> 0 (only the state test separates it; the confirm step sees identical polls). changing:
 # every poll settled but with a different pid set, then gone -> 0 (only the confirm step separates
@@ -594,8 +565,8 @@ st_cells() { # <block file> -> "<frozen rc><changing rc><stuck rc>"
   for c in frozen changing stuck; do v="$v$(st_cell "$1" "$c")"; done
   printf '%s' "$v"
 }
-awk '/^# ST_NET_BEGIN/ { f = 1; next } /^# ST_NET_END/ { f = 0 } f' "$0" > "$WORK/st-block.sh"
-grep -q '^st_net()' "$WORK/st-block.sh" || { echo "FIXTURE BROKEN: the ST_NET block could not be cut from $0" >&2; exit 2; }
+cp "$HERE/../lib/settled-net.sh" "$WORK/st-block.sh"
+grep -q '^st_net()' "$WORK/st-block.sh" || { echo "FIXTURE BROKEN: lib/settled-net.sh holds no st_net" >&2; exit 2; }
 ST_BASE="$(st_cells "$WORK/st-block.sh")"
 if [ "$ST_BASE" = 002 ]; then ok "[NET-cells] the cut net reads frozen-running 0, changing-settled 0, stuck 2"; B_NET=1
 else bad "[NET-cells] the cut net read '$ST_BASE', want 002"; fi

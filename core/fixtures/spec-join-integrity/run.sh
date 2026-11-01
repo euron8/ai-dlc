@@ -135,6 +135,9 @@ LIBDIR="$(cd "$DIR/../lib" 2>/dev/null && pwd)"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$LIBDIR/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+[ -f "$LIBDIR/settled-net.sh" ] || { echo "FIXTURE ERROR: lib/settled-net.sh not found beside $DIR" >&2; exit 2; }
+. "$LIBDIR/settled-net.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/settled-net.sh"
 B_BASE=0
 
 # --- capture: the subject is run ONCE per distinct (program, argument list) --------------------
@@ -639,7 +642,7 @@ _mut3_build() { # <name> <f1> <t1> <f2> <t2> <f3> <t3>  -- each layer guarded on
 # level of `pkill -P` was not enough either, because the chain is wrapper -> subshell ->
 # awk; two survived. Recursion is what makes it complete, and children must die before
 # their parent, since once the parent is gone `pgrep -P` can no longer find them. That is
-# st_reap, inside the ST_NET block below.
+# st_reap, in lib/settled-net.sh.
 
 discriminates() { # <label> <quiet-spec-dir> <offender-spec-dir> <prd>
   local lab="$1" q="$2" o="$3" pr="$4" a b
@@ -684,37 +687,6 @@ printf '#!/bin/bash\nprintf "start %%s\\n" "$$" >> "$SJ_SHIM_LOG"\n"%s" "$@"; r=
   "$SJ_REAL_AWK" > "$SJ_SHIM/awk" && chmod +x "$SJ_SHIM/awk" \
   || { echo "spec-join-integrity: FIXTURE BROKEN: could not write the awk shim" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "spec-join-integrity: FIXTURE BROKEN: $1" >&2; exit 2; }
-# ST_NET_BEGIN -- the settled-tree net. A restated copy, byte-identical, in fold-architect-ledger-join/run.sh;
-# the shape is readset-skip's aw_group_settled, with one difference: a member whose state `ps` will
-# not give is NOT settled (the net keeps waiting), so a refused `ps` can never make the net fire.
-st_alive() { kill -0 "$1" 2>/dev/null; }
-st_members() { # <pid>: "<pid> <stat> <pending> <cpu time>" for <pid> and every descendant
-  local p
-  st_alive "$1" || return 0
-  printf '%s %s\n' "$1" "$(ps -o stat=,pending=,time= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //')"
-  for p in $(pgrep -P "$1" 2>/dev/null); do st_members "$p"; done
-}
-st_settled() { # <members text>: 0 when there is a member and EVERY member is blocked with nothing pending
-  awk 'NF < 4 { bad = 1; next } { n++; if ($2 !~ /^[SIT]/ || $3 != "0") bad = 1 } END { exit (n > 0 && !bad) ? 0 : 1 }' <<<"$1"
-}
-st_net() { # <root pid> <progress file>: 0 when the root exits; 2 when the tree is settled on two consecutive identical polls
-  local cur prev="" sz
-  while st_alive "$1"; do
-    cur="$(st_members "$1")"; sz="$(wc -c < "$2" 2>/dev/null | tr -d ' ')"
-    if st_settled "$cur"; then
-      [ "$prev" = "$sz|$cur" ] && return 2
-      prev="$sz|$cur"
-    else prev=""; fi
-    sleep 0.1
-  done
-  return 0
-}
-st_reap() { # <pid>: SIGKILL the tree, leaves first (a stopped process takes SIGKILL)
-  local p
-  for p in $(pgrep -P "$1" 2>/dev/null); do st_reap "$p"; done
-  kill -9 "$1" 2>/dev/null
-}
-# ST_NET_END
 run_metered() { # <log> <script> <args...> -- 0 the subject exited; 2 its tree settled without exiting
   # stdout+stderr land in <log>.out; the shim's records in <log>.
   local log="$1" prog="$2" pid r; shift 2
@@ -727,10 +699,8 @@ run_metered() { # <log> <script> <args...> -- 0 the subject exited; 2 its tree s
   return "$r"
 }
 # The net's subject, end to end: a script that STOPS itself is refused (rc 2) and its tree reaped, and
-# one that exits is not. Asserted once below, beside the termination arm. The net's two guards are
-# each held by a mutant in fold-architect-ledger-join, whose copy of the block is byte-identical
-# (by hand: no gate binds the two copies, since neither fixture may read the other's directory);
-# here the end-to-end pair proves this copy is wired.
+# one that exits is not. Asserted once below, beside the termination arm. The net lives in
+# lib/settled-net.sh; the end-to-end pair proves this fixture's use of it is wired.
 SJ_STOP="$R/st-stop.sh"; SJ_EXIT="$R/st-exit.sh"
 printf '%s\n' '#!/bin/bash' "echo \"\$\$\" > \"$R/st-stop.pid\"" 'kill -STOP $$' > "$SJ_STOP"
 printf '%s\n' '#!/bin/bash' 'exit 3' > "$SJ_EXIT"
@@ -1675,8 +1645,7 @@ else
   else bad "NET-e2e: the settled-tree net read stopped rc=$sj_e2e left=$sj_left, exiting rc=$sj_e2t"; fi
 fi
 # THIS COPY'S TWO GUARDS, each with a subject the other cannot see (the same cells fold-architect-ledger-join
-# scores over its copy; nothing binds the two copies, so each is mutated where it lives). The ST_NET block is
-# cut from this file and driven over SCRIPTED trees: frozen (a RUNNING member, nothing changing) -> 0,
+# scores over the same lib/settled-net.sh, mutated in a per-run copy). The net is copied from the lib and driven over SCRIPTED trees: frozen (a RUNNING member, nothing changing) -> 0,
 # changing (settled but a different pid set each poll) -> 0, stuck -> 2. Vector "<frozen><changing><stuck>".
 sj_cell() { # <block file> <frozen|changing|stuck> -> st_net's rc (run in a subshell)
   . "$1"
@@ -1689,8 +1658,8 @@ sj_cell() { # <block file> <frozen|changing|stuck> -> st_net's rc (run in a subs
   st_net 100 /dev/null; echo $?
 }
 sj_cells() { local c v=""; for c in frozen changing stuck; do v="$v$(sj_cell "$1" "$c")"; done; printf '%s' "$v"; }
-awk '/^# ST_NET_BEGIN/ { f = 1; next } /^# ST_NET_END/ { f = 0 } f' "$DIR/run.sh" > "$R/st-block.sh"
-grep -q '^st_net()' "$R/st-block.sh" || broken "the ST_NET block could not be cut from $DIR/run.sh"
+cp "$LIBDIR/settled-net.sh" "$R/st-block.sh"
+grep -q '^st_net()' "$R/st-block.sh" || broken "lib/settled-net.sh holds no st_net"
 B_NETC=0
 SJ_NB="$(sj_cells "$R/st-block.sh")"
 if [ "$SJ_NB" = 002 ]; then ok "NET-cells: the cut net reads frozen-running 0, changing-settled 0, stuck 2"; B_NETC=1
