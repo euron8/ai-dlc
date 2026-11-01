@@ -2135,9 +2135,12 @@ FX
   CT_LIVE='alive,alive,alive,tr,tmp'
   CT_T1="$CT_LIVE|released,gone,gone,gone,notr,notmp,same|timeout|timed"
   RT1="$(ct_drive "$POOL" t1 3 hang)"; lt_arm
-  [ "$RT1" = "$CT_T1" ] && B_LOC_t1=1
-  [ "$RT1" = "$CT_T1" ] && ok "(t1) at a 3s ceiling a hung deriver's GRANDCHILD, its group and the subshell's group are gone (each alive in the same drive before it), status reads exit timeout, the lock is released, the trace root and map temp are removed, the map is unchanged, and the report says TIMED OUT" \
-    || bad "(t1) the ceiling did not end a hung trace cleanly: want '$CT_T1', got '$RT1'"
+  if [ "$RT1" = "$CT_T1" ]; then
+    ok "(t1) at a 3s ceiling a hung deriver's GRANDCHILD, its group and the subshell's group are gone (each alive in the same drive before it), status reads exit timeout, the lock is released, the trace root and map temp are removed, the map is unchanged, and the report says TIMED OUT"
+    B_LOC_t1=1
+  else
+    bad "(t1) the ceiling did not end a hung trace cleanly: want '$CT_T1', got '$RT1'"
+  fi
   RT2="$(ct_drive "$POOL" t2 900 finish)"; lt_arm
   case "$RT2" in
     "$CT_LIVE|released,gone,gone,gone,notr,notmp,same|0|finished-0") ok "(t2) at a 900s ceiling the normal finish is unchanged: exit 0, lock released, and group \$tp is empty -- the watchdog's sleep was reaped, not left for 900s" ;;
@@ -2179,11 +2182,11 @@ pm_copy() { # <name> then triples <count> <from> <to>; sets PM, or reports DID N
 }
 pm_lw() { # <name> <predicate> <mutation> [sub] -- scored on a local world; the copy must reach the announce
   local r bf; lt_arm
-  eval "bf=\${B_LOC_$2:-0}"
+  bf="$(eval "printf %s \"\${B_LOC_$2:-0}\"")"
   r="$(lw_run "$PM" "pm.$1" "$3" "${4:-}")"
   if ! msg_of "$r" | grep -qE 'read-set map|no read-set map'; then bad "BL-452 MUTANT $1: the copy never reached apply_readset_skip — no verdict"
   elif "$2" "$r"; then bad "BL-452 MUTANT $1 SURVIVED $2: sel '$(sel_of "$r")' trace '$(trace_of "$r")'"
-  else mutant_killed "$bf" "$1" "BL-452 MUTANT $1 is KILLED by $2: sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")'"; fi
+  else mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-452 MUTANT $1 is KILLED by $2: sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")'"; fi
 }
 pm_copy hash 1 'else if (!(($2 in now) && now[$2] == $3)) bad[f] = 1' 'else if (0) bad[f] = 1' && pm_lw hash lc1 "$LM_C1"
 pm_copy dsha 1 '$2 == "#deriver" { dok[$1] = ($3 == dsha); next }' '$2 == "#deriver" { dok[$1] = 1; next }' && pm_lw dsha lc2 "$LM_C2"
@@ -2435,14 +2438,14 @@ pj_arm split "  written under de_DE/Asia/Tokyo and judged under fr_FR/America/Lo
 # Each mutant is a pm_copy of the pool block -- the one mutation path every mutant here uses -- with
 # the two functions re-extracted from it, scored against ALL six worlds, and must move exactly its own.
 pj_mut() { # <name> <from> <to> <the one world it must move>
-  local m="$PJW/m.$1.sh" bf=1 w
-  for w in $4; do eval "[ \"\${B_PJ_$w:-0}\" = 1 ]" || bf=0; done
+  local m="$PJW/m.$1.sh" bf w
+  bf="$(b=1; for w in $4; do eval "[ \"\${B_PJ_$w:-0}\" = 1 ]" || b=0; done; printf %s "$b")"
   pm_copy "pj.$1" 1 "$2" "$3" || return 0
   lt_arm
   pj_lib "$PM" "$m"
   if cmp -s "$PJ_LIB" "$m"; then bad "BL-463 MUTANT $1: applied to the block but not inside the two extracted functions"; return 0; fi
   pj_eval "$m"
-  if [ "$PJ_FLIP" = "$4" ]; then mutant_killed "$bf" "$1" "BL-463 MUTANT $1 is KILLED by '$4' alone: '$(eval "printf '%s' \"\$PJ_R_$4\"")'"
+  if [ "$PJ_FLIP" = "$4" ]; then mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-463 MUTANT $1 is KILLED by '$4' alone: '$(eval "printf '%s' \"\$PJ_R_$4\"")'"
   else bad "BL-463 MUTANT $1 moved '${PJ_FLIP:-nothing}', want exactly '$4'"; fi
 }
 pj_mut nostart '    [ "$c" != "$s" ] && return 0' '    :' wrong
@@ -2471,11 +2474,11 @@ fi # end of the ps-dependent start-time worlds
 if [ "$LT_CAN" = 1 ]; then
   pm_l() { # <name> <arm label> <setup> <correct result glob> [world]
     local r bf; lt_arm
-    eval "bf=\${B_LOC_$2:-0}"
+    bf="$(eval "printf %s \"\${B_LOC_$2:-0}\"")"
     r="$(lt_drive "$PM" "${5:-$(lt_fresh "pm.$1")}" "$3")"
     case "$r" in
       $4) bad "BL-452 MUTANT $1 SURVIVED $2: '$r'" ;;
-      *) mutant_killed "$bf" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
+      *) mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
     esac
   }
   PM_FN=readset_live_trace pm_copy knob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pm_l knob k0 'export AI_DLC_READSET_LIVE_TRACE=0' '*"|not"'
@@ -2487,8 +2490,8 @@ if [ "$LT_CAN" = 1 ]; then
   # prep, and it is scored by pt0 alone. The prep has no linked-worktree check since BL-701; ptlinked2
   # puts the old one back and ptw alone must kill it.
   pt_kill() { # <name> <arm that must fail> <setup> <world> -- every arm is scored, only <arm> may move
-    local m="$1" want="$2" r0 r1 rw flips="" w bf=0
-    eval "[ \"\${B_LOC_$want}\" = 1 ]" && [ "$B_LOC_pt1" = 1 ] && bf=1
+    local m="$1" want="$2" r0 r1 rw flips="" w bf
+    bf="$( { eval "[ \"\${B_LOC_$want:-0}\" = 1 ]" && [ "${B_LOC_pt1:-0}" = 1 ]; } && echo 1 || echo 0)"
     r0="$(pt_drive "$PM" "$(lt_fresh pm.$m.0)" 'export AI_DLC_READSET_LIVE_TRACE=0')"
     r1="$(pt_drive "$PM" "$(lt_fresh pm.$m.1)" ':')"
     rw="$(pt_drive "$PM" "$LW_T.wt" ':')"; lt_arm
@@ -2497,7 +2500,7 @@ if [ "$LT_CAN" = 1 ]; then
     case "$rw" in *"skipped ("*) flips="$flips ptw" ;; *"traced in the pool: gamma"*"|gamma") ;; *) flips="$flips ptw" ;; esac
     PT_MATRIX="${PT_MATRIX}${m} -> ${flips:- none}\n"
     case "$want" in pt0) w=" pt0" ;; ptw) w=" ptw" ;; esac
-    if [ "$flips" = "$w" ]; then mutant_killed "$bf" "$m" "BL-452 MUTANT $m (in-pool prep) is KILLED by $want alone: knob0 '$r0' main '$r1' linked '$rw'"
+    if [ "$flips" = "$w" ]; then mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$m" "BL-452 MUTANT $m (in-pool prep) is KILLED by $want alone: knob0 '$r0' main '$r1' linked '$rw'"
     else bad "BL-452 MUTANT $m (in-pool prep) moved '${flips:-nothing}', want exactly '$want': knob0 '$r0' main '$r1' linked '$rw'"; fi
   }
   PT_MATRIX=""
@@ -2507,11 +2510,11 @@ if [ "$LT_CAN" = 1 ]; then
   printf 'in-pool prep kill matrix (mutant -> arms that failed):\n%b' "$PT_MATRIX"
   pm_rf() { # <name> <arm> <setup> <correct result glob> [base-flag suffix, default <arm>]
     local r bf; lt_arm
-    eval "bf=\${B_LOC_${5:-$2}:-0}"
+    bf="$(eval "printf %s \"\${B_LOC_${5:-$2}:-0}\"")"
     r="$(rf_drive "$PM" "pm.$1" "$3")"
     case "$r" in
       $4) bad "BL-452 MUTANT $1 SURVIVED $2: '$r'" ;;
-      *) mutant_killed "$bf" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
+      *) mutant_killed "$([ "$bf" = 1 ] && echo 1 || echo 0)" "$1" "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
     esac
   }
   pm_copy nocall 1 '  readset_live_trace "$out"' '  :' \
@@ -2637,9 +2640,12 @@ rp_score() { # <report>: the names of the (r1) lines MISSING from it, space sepa
 }
 RP_R1="$(rp_world "$POOL" r1 "$RP_FULL")"; lt_arm
 RP_R1_MISS="$(rp_score "$RP_R1")"
-[ -z "$RP_R1_MISS" ] && B_LOC_r1=1
-[ -z "$RP_R1_MISS" ] && ok "(r1) the report names every count and fixture: the outcome of the last trace with the two-line hash failure counted as NOT recorded, the discard buckets and causes, alpha at 2 of 3, beta HELD on its current key (gamma's moved key is not held), eps not recorded, and this push's uncleared stale and unmapped" \
-  || bad "(r1) the report is missing line(s) [$RP_R1_MISS]: $(tr '\n' '|' <<< "$RP_R1")"
+if [ -z "$RP_R1_MISS" ]; then
+  ok "(r1) the report names every count and fixture: the outcome of the last trace with the two-line hash failure counted as NOT recorded, the discard buckets and causes, alpha at 2 of 3, beta HELD on its current key (gamma's moved key is not held), eps not recorded, and this push's uncleared stale and unmapped"
+  B_LOC_r1=1
+else
+  bad "(r1) the report is missing line(s) [$RP_R1_MISS]: $(tr '\n' '|' <<< "$RP_R1")"
+fi
 RP_R2="$(rp_world "$POOL" r2 ':')"; lt_arm
 case "$RP_R2" in
   *"trace-report last trace: none recorded (no status file at "*"trace-report local map: none at "*"trace-report last trace outcome: no trace log at "*"trace-report discards: none recorded"*"trace-report at 2 of 3: none"*"trace-report held: none"*"trace-report not recorded: none"*"trace-report uncleared this push: unknown -- no fixture keys were built this push"*)
@@ -2730,9 +2736,12 @@ rp_run() { # <pool> <name>; prints the run's output, also kept with its POOL_STA
 }
 rp_called() { awk '/trace-report last trace:/ { r = NR } /^  *ok  *(alpha|beta|gamma)/ && !f { f = NR } END { exit !(r && f && r < f) }' <<< "$1"; }
 RP_RUN="$(rp_run "$POOL" call)"; lt_arm
-rp_called "$RP_RUN" && B_LOC_r7=1
-rp_called "$RP_RUN" && ok "(r7) run_fixtures prints the trace report on every push that builds its list, BEFORE the first fixture verdict" \
-  || bad "(r7) run_fixtures printed no trace report before the suite: $(tr '\n' '|' <<< "$RP_RUN" | cut -c1-600)"
+if rp_called "$RP_RUN"; then
+  ok "(r7) run_fixtures prints the trace report on every push that builds its list, BEFORE the first fixture verdict"
+  B_LOC_r7=1
+else
+  bad "(r7) run_fixtures printed no trace report before the suite: $(tr '\n' '|' <<< "$RP_RUN" | cut -c1-600)"
+fi
 # MUTANTS of the report, each scored on (r1)'s named lines (and the call site on r7): each must move
 # exactly its own line.
 rp_mut() { # <name> <want missing>
@@ -4339,18 +4348,18 @@ d/-p'
         continue
       fi
       case "$_pm" in
-        nofilter|sbonly) stub_run "$SB/deriver.p.$_pm.sh" "$SB/sb.list" >/dev/null; _ps="$(pseudo_sig)"; _pf="${B_pseudo:-0}" ;;
+        nofilter|sbonly) stub_run "$SB/deriver.p.$_pm.sh" "$SB/sb.list" >/dev/null; _ps="$(pseudo_sig)"; _pfv="$(printf %s "${B_pseudo:-0}")" ;;
         *) sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$SB/deriver.p.$_pm.sh" > "$PSPAN.$_pm"
            if cmp -s "$PSPAN" "$PSPAN.$_pm" || ! bash -n "$PSPAN.$_pm" 2>/dev/null; then
              bad "PSEUDO MUTANT $_pm did not apply inside the READSET_PSEUDO span, or the span copy does not parse"; continue
            fi
-           _ps="$(pseudo_seam "$PSPAN.$_pm")"; _pf="$(( ${B_pseudo:-0} && ${B_pseam:-0} ))" ;;
+           _ps="$(pseudo_seam "$PSPAN.$_pm")"; _pfv="$(( ${B_pseudo:-0} && ${B_pseam:-0} ))" ;;
       esac
       [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_pm" "$_ps"
       _tw=0; case "$_ps" in ????1??????) _tw=1 ;; esac
       case "$_ps" in
         00111110001) bad "PSEUDO MUTANT $_pm: the set still reads 00111110001, so the pseudo arm does not depend on what this mutant removed" ;;
-        *1*) if f2c_twin "$_pm" "d/<real> (bit 5)" "$_tw"; then mutant_killed "$_pf" "$_pm" "PSEUDO MUTANT $_pm: the set reads '$_ps', not 00111110001 — the pseudo arm refuses it"; fi ;;
+        *1*) if f2c_twin "$_pm" "d/<real> (bit 5)" "$_tw"; then mutant_killed "$([ "$_pfv" = 1 ] && echo 1 || echo 0)" "$_pm" "PSEUDO MUTANT $_pm: the set reads '$_ps', not 00111110001 — the pseudo arm refuses it"; fi ;;
         *) bad "PSEUDO MUTANT $_pm: the set carries none of the seeds ('$_ps'), so the run wrote no set and scored nothing — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
       esac
       # With no filter at all the absent option-shaped seed must reach the set: otherwise its drop
@@ -4930,11 +4939,12 @@ STUB
     lm_seed; L1="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
     L1_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || L1_COPY=0
     TRACE_ARMS=$((TRACE_ARMS+1))
+    B_lclean_v="$(printf %s no)"
     if [ "$(grep -c '^gh	' "$LMF" 2>/dev/null)" = 0 ] && [ "$(grep -c '^zz	' "$LMF" 2>/dev/null)" = 2 ]; then
       ok "  and a fixture with NO directory loses every local row, while the untraced zz, whose directory is present, keeps both of its rows"
       B_lghost=1
       # The clean trace also removed its trace root (field 7), which the notrap mutant must break.
-      if [ "$(printf '%s' "$L1" | cut -d'|' -f7)" = yes ]; then B_lclean=1; fi
+      B_lclean_v="$(printf '%s' "$L1" | cut -d'|' -f7)"
     else
       bad "  the ghost fixture gh kept local rows, or zz lost its own: $(cut -f1,2 "$LMF" | tr '\t\n' ': ')"
     fi
@@ -4947,7 +4957,7 @@ STUB
     fi
     lm_seed; L2="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
     L2B="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
-    if lm_arm "LOCAL TRIP x2" "$L2B" "0|0|no|2|*" "  and a second discard on the same key counts 2 — the hook holds the fixture back at 3"; then B_ltrip=1; fi
+    lm_arm "LOCAL TRIP x2" "$L2B" "0|0|no|2|*" "  and a second discard on the same key counts 2 — the hook holds the fixture back at 3"; B_ltrip_rc=$?
     L2C="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
     lm_arm "LOCAL recover" "$L2C" "0|2|yes|-|*" "  and a clean trace after it records the rows and clears the discard count"
     lm_seed; L3="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DROP=1)"
@@ -5000,7 +5010,7 @@ STUB
     sed 's|grep -qF "$ENDMARK" "$raw"|grep -q readset-end "$raw"|' "$SL/deriver.sh" > "$SG/deriver.bare-flush.sh"
     fg_run() { rm -f "$SG/endn"; lm_seed; lm_run "$1" "$SL/whole.list" same PATH="$SG:$SL:$PATH" FG_COUNT="$SG/endn"; }
     FG0="$(fg_run "$SL/deriver.sh")"
-    if lm_arm "FOREIGN markers" "$FG0" "0|2|yes|-|*" "LOCAL: a foreign deriver's sentinel and end lines (same FXTAG, another MARKDIR), the end ahead of this run's own, leave the window cut at THIS run's markers — fxl maps both reads"; then B_foreign=1; fi
+    lm_arm "FOREIGN markers" "$FG0" "0|2|yes|-|*" "LOCAL: a foreign deriver's sentinel and end lines (same FXTAG, another MARKDIR), the end ahead of this run's own, leave the window cut at THIS run's markers — fxl maps both reads"; B_foreign_rc=$?
     for _fm in bare-start bare-end bare-flush; do
       TRACE_ARMS=$((TRACE_ARMS+1))
       if cmp -s "$SL/deriver.sh" "$SG/deriver.$_fm.sh"; then
@@ -5010,17 +5020,17 @@ STUB
       FGM="$(fg_run "$SG/deriver.$_fm.sh")"
       [ "$F2C_MATRIX" = 1 ] && f2c_mx "$_fm" "$FGM"
       case "$FGM" in
-        "0|0|no|1|"*) if lm_twin "$_fm" "$FGM"; then mutant_killed "${B_foreign:-0}" "$_fm" "FOREIGN MUTANT $_fm: keyed on the bare marker name the run is cut or flushed at the foreign marker and fxl is discarded — the arm above depends on the full path"; fi ;;
+        "0|0|no|1|"*) if lm_twin "$_fm" "$FGM"; then mutant_killed "$([ "$B_foreign_rc" = 0 ] && echo 1 || echo 0)" "$_fm" "FOREIGN MUTANT $_fm: keyed on the bare marker name the run is cut or flushed at the foreign marker and fxl is discarded — the arm above depends on the full path"; fi ;;
         *) bad "FOREIGN MUTANT $_fm: expected fxl discarded ('0|0|no|1|*'), got '$FGM' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;;
       esac
     done
     lm_seed; L5="$(lm_run "$SL/deriver.sh" "$SL/whole.list" diff)"
-    if lm_arm "LOCAL verdict" "$L5" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: the sandboxed run's verdict lines differ*" "LOCAL: a sandboxed run whose verdict lines differ from the normal run's is discarded"; then B_lverdict=1; fi
+    lm_arm "LOCAL verdict" "$L5" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: the sandboxed run's verdict lines differ*" "LOCAL: a sandboxed run whose verdict lines differ from the normal run's is discarded"; B_lverdict_rc=$?
     lm_seed; L6="$(lm_run "$SL/deriver.sh" "$SL/whole.list" none)"
     lm_arm "LOCAL nolog" "$L6" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: no normal-run log*" "  and so is one with no stashed normal-run log to compare against"
     lm_seed; L7="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DEADLIVE=1)"
     L7_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || L7_COPY=0
-    if lm_arm "LOCAL liveness" "$L7" "1|0|no|-|yes|yes|yes|ERROR: LIVENESS*" "LOCAL: a stream that never sees the 1s liveness probe REFUSES before tracing — the local map is untouched and the trace root is removed"; then B_llive=1; fi
+    lm_arm "LOCAL liveness" "$L7" "1|0|no|-|yes|yes|yes|ERROR: LIVENESS*" "LOCAL: a stream that never sees the 1s liveness probe REFUSES before tracing — the local map is untouched and the trace root is removed"; B_llive_rc=$?
     # THE REFUSAL PAYS NO TREE COPY. A consumer whose stream never delivers refuses on every green
     # push, so the copy must come after the probe. The clean run above is the control: it copies.
     TRACE_ARMS=$((TRACE_ARMS+1))
@@ -5071,10 +5081,10 @@ STUB
         *) bad "LOCAL MUTANT $n SURVIVED $arm: '$r'" ;;
       esac
     }
-    lm_mut notrip "$SL/d.notrip.sh" "$SL/whole.list" same "LOCAL TRIP" "0|2|yes|*" "${B_ltrip:-0}" STUB_TRIP=1
-    lm_mut noverdict "$SL/d.noverdict.sh" "$SL/whole.list" diff "LOCAL verdict" "0|2|yes|*" "${B_lverdict:-0}"
-    lm_mut nolive "$SL/d.nolive.sh" "$SL/whole.list" same "LOCAL liveness" "0|2|yes|*" "${B_llive:-0}" STUB_DEADLIVE=1
-    lm_mut notrap "$SL/d.notrap.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|*|*|no|*" "${B_lclean:-0}"
+    lm_mut notrip "$SL/d.notrip.sh" "$SL/whole.list" same "LOCAL TRIP" "0|2|yes|*" "$([ "$B_ltrip_rc" = 0 ] && echo 1 || echo 0)" STUB_TRIP=1
+    lm_mut noverdict "$SL/d.noverdict.sh" "$SL/whole.list" diff "LOCAL verdict" "0|2|yes|*" "$([ "$B_lverdict_rc" = 0 ] && echo 1 || echo 0)"
+    lm_mut nolive "$SL/d.nolive.sh" "$SL/whole.list" same "LOCAL liveness" "0|2|yes|*" "$([ "$B_llive_rc" = 0 ] && echo 1 || echo 0)" STUB_DEADLIVE=1
+    lm_mut notrap "$SL/d.notrap.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|*|*|no|*" "$([ "$B_lclean_v" = yes ] && echo 1 || echo 0)"
     # copyfirst: the WHOLE copy block -- from its announce through the sentinel exclude -- moved back
     # ahead of the liveness probe's comment block, the order this replaced. The refusal then pays it.
     awk '/^say "copying the tree to \$TREE"$/ { inb = 1 }
@@ -5172,11 +5182,11 @@ STUB
       IPW_ENMSG=no; grep -q 'no in-pool trace to merge' "$WORK/mp.out" && IPW_ENMSG=yes
     }
     ip_world "$SL/deriver.sh"
-    if ip_arm "IN-POOL clean" "$IPW_A" "0|2|yes|0|yes|no|no|-" "IN-POOL: a clean trace of fxl writes rows naming its paths with sha256 values, rc 0 and a log, and no discard or trip"; then B_ipclean=1; fi
+    ip_arm "IN-POOL clean" "$IPW_A" "0|2|yes|0|yes|no|no|-" "IN-POOL: a clean trace of fxl writes rows naming its paths with sha256 values, rc 0 and a log, and no discard or trip"; B_ipclean_rc=$?
     ip_arm "MERGE-POOL clean" "$IPW_AM" "0|2|yes|-|2|1" "MERGE-POOL: the rows land in the local map with a #deriver row, while the untraced zz and other keep theirs"
     ip_arm "IN-POOL drop" "$IPW_B" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: a drop notice in the window writes a discard and no rows"
     ip_arm "MERGE-POOL drop" "$IPW_BM" "0|0|no|1|2|1" "MERGE-POOL: the discard lands as a #discards row and no fxl path rows"
-    if ip_arm "IN-POOL canary" "$IPW_C" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: the LOSS CANARY (a read the stream never reported) discards the trace"; then B_ipcanary=1; fi
+    ip_arm "IN-POOL canary" "$IPW_C" "0|0|no|0|yes|yes|no|fxl" "IN-POOL: the LOSS CANARY (a read the stream never reported) discards the trace"; B_ipcanary_rc=$?
     ip_arm "MERGE-POOL canary" "$IPW_CM" "0|0|no|1|2|1" "  and the merge records that discard"
     ip_arm "IN-POOL trip" "$IPW_D" "0|*|*|0|yes|*|yes|*" "IN-POOL: a refused exec leaves <dir>/trip and still writes rc"
     ip_arm "MERGE-POOL empty dirs" "$IPW_EM" "0|2|yes|-|2|1" "MERGE-POOL: a subdirectory with neither rows nor discard changes nothing, so zz and other keep their rows"
@@ -5203,7 +5213,7 @@ STUB
       fi
       if [ "$C_C" != "$IPW_C|$IPW_CM" ] && [ "$(printf '%s' "$IPW_C" | cut -d'|' -f6)" = no ] \
          && f2c_twin ipnocanary "scenario A byte-identical" "$([ "$C_A" = "$M_A" ] && echo 1 || echo 0)"; then
-        mutant_killed "$(( ${B_ipclean:-0} && ${B_ipcanary:-0} ))" ipnocanary "IN-POOL MUTANT nocanary is KILLED by the canary arm alone: the lossy fixture is no longer discarded ('$IPW_C'), and every other arm's result is byte-identical"
+        mutant_killed "$([ "$B_ipclean_rc" = 0 ] && [ "$B_ipcanary_rc" = 0 ] && echo 1 || echo 0)" ipnocanary "IN-POOL MUTANT nocanary is KILLED by the canary arm alone: the lossy fixture is no longer discarded ('$IPW_C'), and every other arm's result is byte-identical"
       elif [ "$C_C" != "$IPW_C|$IPW_CM" ] && [ "$(printf '%s' "$IPW_C" | cut -d'|' -f6)" = no ]; then :
       else
         bad "IN-POOL MUTANT nocanary: moved the wrong arms or none. rest clean '$C_A' mutant '$M_A'; canary clean '$C_C' mutant '$IPW_C|$IPW_CM'"
@@ -6077,7 +6087,7 @@ ck_base() { # <world>: the UNMUTATED block's world, once per process; sets CKB_<
 }
 ck_mut() { # <world> <twin> <name> <moved vector> then triples <count> <from> <to>
   local w="$1" tw="$2" name="$3" mv="$4" dst="$CK_W/mut.$3.sh" n o moved="" cb; shift 4
-  CK_ARMS=$((CK_ARMS+1)); ck_base "$w"; eval "cb=\"\${CKB_$w:-0}\""; cp "$CK_P1" "$dst" || { bad "CK MUTANT $name: copy failed"; return; }
+  CK_ARMS=$((CK_ARMS+1)); ck_base "$w"; cb="$(eval "printf %s \"\${CKB_$w:-0}\"")"; cp "$CK_P1" "$dst" || { bad "CK MUTANT $name: copy failed"; return; }
   while [ $# -ge 3 ]; do
     MF="$2" MT="$3" MC="$CK_W/mut.$name.n" awk '
       BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
@@ -6102,7 +6112,7 @@ ck_mut() { # <world> <twin> <name> <moved vector> then triples <count> <from> <t
   fi
   [ "$(cat "$CK_W/m.$name.$w.got")" = "$mv" ] || moved="$moved $w"
   [ "$(cat "$CK_W/m.$name.$tw.got")" = "$(ck_want "$tw")" ] || moved="$moved $tw"
-  if [ -z "$moved" ] && [ "$mv" != "$(ck_want "$w")" ]; then mutant_killed "$cb" "$name" "CK MUTANT $name is KILLED by ($w), twin ($tw) at want: $mv"
+  if [ -z "$moved" ] && [ "$mv" != "$(ck_want "$w")" ]; then mutant_killed "$([ "$cb" = 1 ] && echo 1 || echo 0)" "$name" "CK MUTANT $name is KILLED by ($w), twin ($tw) at want: $mv"
   else
     bad "CK MUTANT $name: ($w) must read its stated vector and twin ($tw) its want; off: '${moved# }'"
     # EVERY MOVED WORLD'S VECTOR PAIR IS PRINTED (BL-616): a red read only as a set of world letters left
@@ -6559,7 +6569,7 @@ else
       n="$(cat "$m.n")"
       if [ "$n" != 1 ] || cmp -s "$HR_SPAN" "$m"; then bad "MUTANT $1: anchor matched ${n:-nothing} time(s), not 1 -- DID NOT APPLY"; return; fi
       r="$(hr_arms "$m")"
-      if [ "$r" = "$4" ]; then mutant_killed "$([ "$B_HR_h1" = 1 ] && [ "$B_HR_h2" = 1 ] && echo 1 || echo 0)" "$1" "MUTANT $1 is KILLED, on exactly its own cell: $r"
+      if [ "$r" = "$4" ]; then mutant_killed "$(( ${B_HR_h1:-0} && ${B_HR_h2:-0} ))" "$1" "MUTANT $1 is KILLED, on exactly its own cell: $r"
       else bad "MUTANT $1 moved '$r', want '$4'"; fi
     }
     hr_mut lastpath "if [ -f \"\$p\" ]; then printf '%s\\0' \"\$p\"; n=\$((n + 1)); fi" "[ -f \"\$p\" ] && printf '%s\\0' \"\$p\" && n=\$((n + 1))" 'h1=1|0 ok ok'
