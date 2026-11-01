@@ -73,6 +73,7 @@
 # also trips: M29 canon.cr-m-other,canon.cr-filter-ff,canon.cr-path-super,canon.cr-conv-runner
 # also trips: M30 canon.cr-conv-runner-none,canon.cr-norun-other,canon.cr-norun-rec
 # also trips: M51 canon.cr-exempt-dir
+# also trips: M53 files.fl-base,files.fl-del
 # also trips: M41 adv_qa.ad-q-unreadable-absent,adv_qa.ad-q-world-b,adv_qa.ad-q-untracked-new
 # also trips: M42 adv_qa.ad-q-legacy-prose,adv_qa.ad-q-world-a,adv_qa.ad-q-untracked-old
 # also trips: M43 xc_count.xc-count,xc_one.xc-one
@@ -125,6 +126,12 @@
 # MUTANT-MATRIX M46 decides=xc_one.xc-one twins=xc_flip.xc-flip
 # MUTANT-MATRIX M47 decides=qclass.qc-foo twins=qclass.qc-evidence
 # MUTANT-MATRIX M48 decides=qclass.qc-none twins=qclass.qc-foo
+# MUTANT-MATRIX M52 decides=files.fl-nc twins=files.fl-dup
+# MUTANT-MATRIX M53 decides=files.fl-gone twins=files.fl-ok
+# MUTANT-MATRIX M54 decides=files.fl-tick twins=files.fl-line
+# MUTANT-MATRIX M55 decides=files.fl-dup twins=files.fl-empty
+# MUTANT-MATRIX M56 decides=files.fl-empty twins=files.fl-tick
+# MUTANT-MATRIX M57 decides=files.fl-del twins=files.fl-ok
 # MUTANT-MATRIX M49 decides=canon.cr-exempt-abs-rec,story_path.story-path twins=canon.cr-exempt-typo
 # MUTANT-MATRIX M50 decides=story_path.story-path twins=canon.cr-exempt-evil
 # MUTANT-MATRIX M51 decides=canon.cr-exempt-typo,story_frozen.story-frozen twins=canon.cr-exempt-created
@@ -474,6 +481,8 @@ else
 fi
 arm2 qclass "QC1: --gate qa, the Class line lifted from qa.md -- a part shard's 'Class: FOO' REFUSED byte-equal under --check-shard naming qa.md's set, 'Class: EVIDENCE' merges and is SHARD-OK, and over a qa.md declaring no Class template the FOO shard merges and is SHARD-OK (nothing checked)" \
              "QC1: the qa merge did not hold the Class line to qa.md's template, or checked one with no template"
+arm2 files "FL1: the Files: line -- a CODE finding naming two paths tracked at the frozen sha is SHARD-OK; Files: on an EVIDENCE finding, two Files: lines, an empty list, a backticked entry, a ':line' entry, a bare basename and a path tracked nowhere are each REFUSED by --check-shard naming the line; a path the range deleted is SHARD-OK (fl-del)" \
+           "FL1: --check-shard did not hold the Files: line to its grammar"
 arm2 vb_r3 "VB3: graph s319 3.1's cross-1 shape (qa NEEDS_REWORK, its ## Findings saying the gap is another group's) REFUSED byte-equal under --check-shard, naming the set 'shard-verdict: PASS' exit first, then the file-here exit, and [owner: cross-1]" \
            "VB3: the cross-1 refusal does not name both exits and its owner"
 arm2 vb_mark "VB4: --mark findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the file byte-unchanged; the same file with one Important finding re-written marks findings=1 key=2" \
@@ -819,6 +828,22 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     qclass "qc-foo{" "the Class lift restored to --gate code-review only"
   CS_ONLY=qc-none mut_run M48 merge-review-shards.sh '  [ -n "$CLASS_SET" ] || return 0' '  :' \
     qclass "qc-none{" "the empty-set guard dropped, so a role file with no template checks every Class value"
+  # BL-809 item 2, THE FILES LINE. M52 a Files: line on an EVIDENCE finding accepted. M53 the frozen-sha
+  # path check removed. M54 a backtick allowed in an entry. M55 a second Files: line accepted. M56 an
+  # empty list accepted.
+  CS_ONLY=fl-nc mut_run M52 merge-review-shards.sh '      FNC) refuse "' '      FNC) : "' \
+    files "fl-nc{" "a Files: line on a non-CODE/TEST finding accepted"
+  CS_ONLY=fl-gone mut_run M53 merge-review-shards.sh '    grep -qxF -- "$cg_v_" "$T/files-known" \' '    true \' \
+    files "fl-gone{" "the frozen-sha path check removed"
+  CS_ONLY=fl-tick mut_run M54 merge-review-shards.sh 'e ~ /[`:,[:blank:]]/' 'e ~ /[:,[:blank:]]/' \
+    files "fl-tick{" "a backtick allowed inside a Files: entry"
+  CS_ONLY=fl-dup mut_run M55 merge-review-shards.sh 'if (inf && nfl > 1) print "FDUP\t" fln2' 'if (0) print "FDUP\t" fln2' \
+    files "fl-dup{" "a second Files: line in one finding accepted"
+  CS_ONLY=fl-empty mut_run M56 merge-review-shards.sh 'else if (fv == "") print "FEMPTY\t" fln1' 'else if (0) print "FEMPTY\t" fln1' \
+    files "fl-empty{" "an empty Files: list accepted"
+  # M57 the range's diff-name-only allowance dropped, so a Files: entry naming a file the rework DELETED is refused.
+  CS_ONLY=fl-del mut_run M57 merge-review-shards.sh ' && git -C "$M_WT" -c core.quotePath=false diff --name-only --no-renames "${M_BASE}..${M_SHA}"; }' '; }' \
+    files "fl-del{" "a Files: entry naming a file the range deleted refused"
   # The matrix, or the twins. A plain run scores no matrix cell and runs at least one twin per mutant; a
   # --matrix run scores the matrix and runs no twin. Either way the count below is the mode's own.
   _mx_n="$(grep -c . "$MX_ROWS")" || _mx_n=0
@@ -826,17 +851,17 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     : > "$WORK/mx-log"; matrix_score
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "MX1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the matrix"
     reuse_proof
-    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 53 ]; then
+    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 59 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
   else
-    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 53 ]; then
+    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 59 ]; then
       ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant, each passing over its mutant copy"
-    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 53"; fi
+    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 59"; fi
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 53 ]; then ok "VBCTL: CONTROL -- each of M1-M51, m-k2only and m-nomix's selected cells passed unmutated ($VB_CTL_N of 53): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 53 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 59 ]; then ok "VBCTL: CONTROL -- each of M1-M57, m-k2only and m-nomix's selected cells passed unmutated ($VB_CTL_N of 59): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 59 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
@@ -1372,8 +1397,8 @@ _s12=""
 p_hc_role "$QA_MD" || _s12="$_s12 qa.md-As-a-Shard"
 p_hc_step "$STEP_MD" || _s12="$_s12 implementation.md-Gate-2-dispatch"
 # XC-STEP (BL-808): every literal partition invocation in implementation.md -- gate 1, the pass-M>=2
-# re-review and gate 2 -- passes --exclude-captures ON THE SAME LINE as its `--map <worktree>`. The
-# invocation count is held to exactly 3 (the control: a count below 3 means an invocation lost its
+# re-review, the narrowed re-review (BL-809 item 2) and gate 2 -- passes --exclude-captures ON THE SAME
+# LINE as its `--map <worktree>`. The invocation count is held to exactly 4 (the control: a count below 4 means an invocation lost its
 # literal and the per-line join would pass on fewer), and the flagged count must equal it. The
 # offender drops the flag from the FIRST invocation only, on a copy.
 xc_step_counts() { # <file> -> "<invocations> <flagged>"
@@ -1382,7 +1407,7 @@ xc_step_counts() { # <file> -> "<invocations> <flagged>"
   b="$(grep -F -- 'partition-review-diff.sh --map <worktree>' "$1" | grep -cF -- '--exclude-captures')" || b=0
   printf '%s %s' "$a" "$b"
 }
-p_xc_step() { [ "$(xc_step_counts "$1")" = "3 3" ]; }
+p_xc_step() { [ "$(xc_step_counts "$1")" = "4 4" ]; }
 awk '!done && index($0, "partition-review-diff.sh --map <worktree>") && sub(/ --exclude-captures/, "") { done = 1 } { print }' \
   "$STEP_MD" > "$WORK/xc-step-drop.md"
 if cmp -s "$STEP_MD" "$WORK/xc-step-drop.md"; then
@@ -1393,9 +1418,9 @@ else
   ok "XC-STEP-pre: the step pin refuses a copy with --exclude-captures dropped from one invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
 fi
 if p_xc_step "$STEP_MD"; then
-  ok "XC-STEP: implementation.md carries exactly 3 'partition-review-diff.sh --map <worktree>' invocations (gate 1, the re-review, gate 2), each passing --exclude-captures on the same line"
+  ok "XC-STEP: implementation.md carries exactly 4 'partition-review-diff.sh --map <worktree>' invocations (gate 1, the re-review, the narrowed re-review, gate 2), each passing --exclude-captures on the same line"
 else
-  bad "XC-STEP: implementation.md's partition invocations and flagged ones read [$(xc_step_counts "$STEP_MD")], want [3 3]"
+  bad "XC-STEP: implementation.md's partition invocations and flagged ones read [$(xc_step_counts "$STEP_MD")], want [4 4]"
 fi
 if [ -z "$_s12" ]; then
   ok "S12: qa.md's As a Shard and implementation.md's Gate-2 paragraph tell every part shard to write 'handovers: <n>', 0 when it handed nothing over"

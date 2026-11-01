@@ -14,14 +14,17 @@
 #       lines go to stderr; exit 1 when a finding cannot be carried (a post-rule bullet), 2 on a
 #       refusal, else 0.
 #   validate-carried-findings.sh --classes <pass M-1 review file>
-#       Prints one line per Critical/Important finding of that pass, `<class>\t<carry string>`,
+#       Prints one line per Critical/Important finding of that pass, `<class>\t<carry string>\t<files>`,
 #       in --list's order and nothing else on stdout. <class> is the value of the finding's
 #       column-0 `Class:` line (code-reviewer.md's template; merge-review-shards.sh SHARD GRAMMAR
-#       checks the value), `-` when it carries none, `?` when it carries two. A label prior and a
-#       pre-rule line that is a NOTE under --list print `-`: neither is classed. Exit codes are
+#       checks the value), `-` when it carries none, `?` when it carries two. <files> is the value
+#       of its column-0 `Files:` line (comma-and-blank separated repo-relative paths, as written),
+#       `-` when it carries none, `?` when it carries two. A label prior and a
+#       pre-rule line that is a NOTE under --list print `-` in both: neither is classed. Exit codes are
 #       --list's. The carry string is never extended with the class: --list's lines are pasted
 #       verbatim into `carried:` lines and matched by Check 1. Its reader is
-#       partition-review-diff.sh --route, which routes on these classes and fails closed on `-`/`?`.
+#       partition-review-diff.sh --route and --narrow, which route on these classes and files and
+#       fail closed on `-`/`?`.
 #       A `#### ` finding carrying a column-0 `handover: <AC-id>` line outside fences (a part
 #       shard handing a replay to the cross shard, at either gate: merge-review-shards.sh
 #       HAND-OVERS) is NOT printed: it is shard-internal routing, resolved inside the same pass by
@@ -279,7 +282,7 @@ POST=0
 priors="$(CF_POST="$POST" awk '
   function norm(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
   function key(s) { s = norm(s); sub(/[.:;, \t]+$/, "", s); return s }
-  function flush() { if (inf) print "CLS\t" (ho ? "HANDOVER SKIP" : (nc == 1 ? cv : (nc == 0 ? "-" : "?"))); inf = 0; nc = 0; cv = ""; ho = 0 }
+  function flush() { if (inf) print "CLS\t" (ho ? "HANDOVER SKIP" : (nc == 1 ? cv : (nc == 0 ? "-" : "?"))) "\t" (nfl == 1 ? fv : (nfl == 0 ? "-" : "?")); inf = 0; nc = 0; cv = ""; ho = 0; nfl = 0; fv = "" }
   BEGIN { post = (ENVIRON["CF_POST"] == "1") }
   { t = $0; sub(/^[ \t]+/, "", t) }
   fence != "" { if (substr(t, 1, 3) == fence) fence = ""; next }
@@ -290,6 +293,7 @@ priors="$(CF_POST="$POST" awk '
   /^#### / { flush(); if ((fs && sev != "") || top) { d = norm(substr($0, 6)); print (sev != "" ? sev : "Critical/Important") "\t" d "\t" key(d) "\t"; seen = 1; inf = 1 }; next }
   inf && /^Class:/ { nc++; v = $0; sub(/^Class:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); if (v == "" || v ~ /[ \t]/) v = "?"; cv = v }
   inf && /^handover:/ { ho = 1 }
+  inf && /^Files:/ { nfl++; v = $0; sub(/^Files:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); if (v == "" || index(v, "\t")) v = "?"; fv = v }
   END { flush() }
   # A line in a container before its first #### heading. Only a "None" line is silent.
   fs && sev != "" && !seen && t != "" {
@@ -333,7 +337,7 @@ if [ "$LIST" -eq 1 ]; then
   while IFS="$TAB" read -r sev disp k id; do
     [ -n "$disp" ] || continue
     if [ "$sev" = "CLS" ]; then
-      [ "$CLASSES" -eq 1 ] && [ -n "$hold" ] && [ "$disp" != "HANDOVER SKIP" ] && printf '%s\t%s\n' "$disp" "$hold"
+      [ "$CLASSES" -eq 1 ] && [ -n "$hold" ] && [ "$disp" != "HANDOVER SKIP" ] && printf '%s\t%s\t%s\n' "$disp" "$hold" "${k:--}"
       hold=""; continue
     fi
     case "$sev" in
@@ -341,7 +345,7 @@ if [ "$LIST" -eq 1 ]; then
       LEADIN)   say "NOTE: $PRIOR:$k is lead-in prose in a $disp container before its first \"#### \" heading; not a finding" ;;
       UNPARSED) say "FAIL: $PRIOR:$k carries a $disp finding that is not a \"#### \" heading, so it cannot be carried"; fails=$((fails + 1)) ;;
       *)        if [ "$CLASSES" -eq 0 ]; then printf '%s\n' "$disp"
-                elif [ -n "$id" ]; then printf '%s\t%s\n' "-" "$disp"
+                elif [ -n "$id" ]; then printf '%s\t%s\t%s\n' "-" "$disp" "-"
                 else hold="$disp"; fi ;;
     esac
   done <<EOF

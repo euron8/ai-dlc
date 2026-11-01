@@ -354,6 +354,22 @@
 #   installed role file declaring no `Class:` template line (a consumer between the engine pull
 #   and the reconcile merge, at either gate) declares no set, and no `Class:` line is checked.
 #   Checked per shard by the merge and --check-shard, and on the one file by --check-serial.
+#   THE FILES LINE, BOTH GATES, read by the same pass as THE CLASS LINE (so a role file declaring no
+#   Class set checks neither). A CODE or TEST finding carries at most one column-0 line outside fences
+#       Files: <repo-relative path>[, <repo-relative path>...]
+#   REFUSED: a `Files:` line on a finding whose Class is not CODE or TEST (none included); two in one
+#   finding; an empty list; an entry carrying a backtick, `:`, `,` or a blank, a leading `/` or `./`,
+#   or a `..` component; and, under the merge and --check-shard, an entry that is neither tracked at
+#   the manifest's frozen sha nor a path <base>..<sha> changes (a deleted file is allowed). Matched
+#   whole, never by basename, and never read off HEAD. --check-serial has no frozen sha and runs the
+#   syntactic refusals only; a path naming no file there moves that file between the narrowed set and
+#   its residue, both of which are reviewed. A CODE or TEST finding with NO `Files:` line is ACCEPTED:
+#   partition-review-diff.sh --narrow answers FULL on it, so an omission costs a narrowing, never a miss.
+#   THE NARROWED MANIFEST. A manifest carrying `narrow-from\t<repo-relative path>` is re-derived with
+#   `--narrow-from <that path>`, resolved under the shard directory's work tree. A narrowed manifest
+#   whose narrow-from line is dropped is re-derived flagless, and is REFUSED by the map cmp whenever that
+#   map differs from its own part lines; when the residue is empty the two partitions are identical
+#   and the merge accepts it.
 #
 # CHECK 1'S PATTERN IS DERIVED, NEVER RETYPED. It is lifted from gate-validation.md's own
 #   `grep -inE '<pattern>' <review-file>` directive the way core/fixtures/gate-verdict-grep-shape
@@ -620,7 +636,18 @@ adv_gate() {
 class_gate() {
   [ -n "$CLASS_SET" ] || return 0
   cg_o_="$(CG_SET=" $CLASS_SET" awk '
-    function close_f() { if (inf && ncls == 0) print "ABSENT\t" fl; inf = 0; ncls = 0 }
+    function close_f(   i, n, a, e) {
+      if (inf && ncls == 0) print "ABSENT\t" fl
+      if (inf && nfl > 1) print "FDUP\t" fln2
+      else if (inf && nfl == 1) {
+        if (cv != "CODE" && cv != "TEST") print "FNC\t" fln1 "\t" cv
+        else if (fv == "") print "FEMPTY\t" fln1
+        else { n = split(fv, a, /, /)
+               for (i = 1; i <= n; i++) { e = a[i]
+                 if (e == "" || e ~ /[`:,[:blank:]]/ || e ~ /^\// || e ~ /^\.\// || e ~ /(^|\/)\.\.(\/|$)/) { print "FBAD\t" fln1 "\t" e; break }
+                 print "FPATH\t" fln1 "\t" e } } }
+      inf = 0; ncls = 0; nfl = 0; cv = ""; fv = ""
+    }
     f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { f = 0; next } }
     !f && /^[ \t]*(```+[^`]*|~~~+.*)$/ { f = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     f { next }
@@ -628,17 +655,39 @@ class_gate() {
     /^### / { close_f(); h = tolower(substr($0, 5)); sub(/^[ \t*]+/, "", h); sev = fs && (h ~ /^(critical|important)/); next }
     /^#### / { close_f(); if (sev) { inf = 1; fl = NR }; next }
     inf && /^Class:/ { ncls++; v = $0; sub(/^Class:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v)
+                       if (ncls == 1) cv = v
                        if (ncls > 1) print "DUP\t" NR
                        else if (v == "" || v ~ /[ \t]/ || index(ENVIRON["CG_SET"] " ", " " v " ") == 0) print "BAD\t" NR "\t" v }
+    inf && /^Files:/ { nfl++; if (nfl == 1) { fln1 = NR; v = $0; sub(/^Files:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); fv = v } else fln2 = NR }
     END { close_f() }' "$1")" \
     || refuse_to lead "reading the Class lines of $1 did not run (awk failed); repair the environment in the lead checkout and check again"
+  cg_fp_=""
   while IFS="$TAB" read -r cg_k_ cg_l_ cg_v_; do
     case "$cg_k_" in
       ABSENT) continue ;; # an unclassed finding is accepted; partition-review-diff.sh --route sends the next pass full
+      FDUP) refuse "$1:$cg_l_ is a second 'Files:' line in one finding; a CODE or TEST finding carries one, its paths separated by ', '" ;;
+      FNC) refuse "$1:$cg_l_ is a 'Files:' line on a Class ${cg_v_:-<none>} finding; only a CODE or TEST finding names its files" ;;
+      FEMPTY) refuse "$1:$cg_l_ 'Files:' names no path; write 'Files: <repo-relative path>[, <repo-relative path>...]', or no Files: line at all" ;;
+      FBAD) refuse "$1:$cg_l_ 'Files:' entry '$cg_v_' is not a bare repo-relative path (no backtick, ':', ',' or blank inside an entry, no leading '/' or './', no '..'); entries are separated by ', '" ;;
+      FPATH) cg_fp_="$cg_fp_$cg_l_$TAB$cg_v_$NL_" ;;
       DUP) refuse "$1:$cg_l_ is a second 'Class:' line in one finding; a Critical or Important finding carries one, a member of ${CLASS_SET% } ($ROLE_NAME's template)" ;;
       BAD) refuse "$1:$cg_l_ 'Class: $cg_v_' is not one of ${CLASS_SET% } ($ROLE_NAME's template); TEST is code-class, and a finding admitting any code fix is CODE" ;;
     esac
   done <<<"$cg_o_"
+  # THE FILES LINE's path rule needs the frozen sha, so it runs only where a manifest names one (the
+  # merge and --check-shard, never --check-serial). Read lazily: a shard naming no file pays nothing.
+  [ -n "$cg_fp_" ] && [ -n "${M_SHA:-}" ] || return 0
+  if [ -z "${FILES_KNOWN:-}" ]; then
+    { git -C "$M_WT" -c core.quotePath=false ls-tree -r --name-only "$M_SHA" && git -C "$M_WT" -c core.quotePath=false diff --name-only --no-renames "${M_BASE}..${M_SHA}"; } \
+      > "$T/files-known" 2>/dev/null < /dev/null \
+      || refuse_to lead "cannot list the files tracked at $M_SHA or changed in ${M_BASE}..${M_SHA} in $M_WT, so no Files: path can be checked"
+    FILES_KNOWN=1
+  fi
+  while IFS="$TAB" read -r cg_l_ cg_v_; do
+    [ -n "$cg_v_" ] || continue
+    grep -qxF -- "$cg_v_" "$T/files-known" \
+      || refuse "$1:$cg_l_ 'Files:' entry '$cg_v_' is neither tracked at the frozen sha $M_SHA nor a path the range ${M_BASE:0:12}..${M_SHA:0:12} changes; write the full repo-relative path"
+  done <<<"$cg_fp_"
 }
 
 mf() { awk -F'\t' -v k="$1" '$1 == k { sub(/^[^\t]*\t/, ""); print; exit }' "$MF"; }
@@ -1177,6 +1226,8 @@ fi # end the shard-directory resolution (skipped by --check-serial)
 T="$(mktemp -d "${TMPDIR:-/tmp}/merge-review-shards.XXXXXX")" || refuse "mktemp failed"
 trap 'rm -rf "$T"' EXIT
 TAB="$(printf '\t')"
+NL_='
+'
 
 AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
@@ -1317,7 +1368,21 @@ fi
 
 PART="$SELF_DIR/partition-review-diff.sh"
 [ -f "$PART" ] || refuse "cannot re-derive the part map: $PART is absent"
-mrs_sib "$PART" prd_main --map "$M_WT" "$M_BASE" "$M_SHA" --min-files "$M_MIN" --max-parts "$M_MAX" > "$T/map" 2> "$T/map.err"; prc=$?
+# A NARROWED manifest (`narrow-from\t<path>`, partition-review-diff.sh THE NARROWED RE-REVIEW) is
+# re-derived with that prior handed back, resolved against the shard directory's work tree, where the
+# review files live. Without it the map is re-derived flagless, and the cmp below refuses whenever that
+# map differs; an empty residue makes the two partitions identical, and the cmp accepts it.
+n_nf="$(awk -F'\t' '$1 == "narrow-from" { n++ } END { print n + 0 }' "$MF")"
+[ "$n_nf" -le 1 ] || refuse "$MF carries $n_nf 'narrow-from' line(s); want at most 1"
+NF_ARGS=()
+if [ "$n_nf" = 1 ]; then
+  M_NF="$(mf narrow-from)"
+  NF_TOP="$(git -C "$SDIR" rev-parse --show-toplevel 2>/dev/null < /dev/null)" \
+    || refuse "$MF is narrowed from $M_NF, but $SDIR is not inside a git work tree to resolve it in"
+  [ -f "$NF_TOP/$M_NF" ] || refuse "$MF is narrowed from $M_NF, which is not a file under $NF_TOP"
+  NF_ARGS=(--narrow-from "$NF_TOP/$M_NF")
+fi
+mrs_sib "$PART" prd_main --map "$M_WT" "$M_BASE" "$M_SHA" --min-files "$M_MIN" --max-parts "$M_MAX" ${NF_ARGS[@]+"${NF_ARGS[@]}"} > "$T/map" 2> "$T/map.err"; prc=$?
 [ "$prc" -eq 0 ] || refuse "partition-review-diff.sh --map re-run exited $prc: $(head -1 "$T/map") $(head -1 "$T/map.err")"
 cmp -s "$T/map" "$T/mfmap" || refuse "the part map re-derived from $MF's inputs differs from the map it records; the shards were briefed on another partition"
 K="$(grep -c . "$T/map")" || K=0

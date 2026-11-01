@@ -90,6 +90,16 @@ JS
   # graph s318 2-3: the story cites test-results/red_splat_copy.py, a .py in the capture directory.
   rr_e_pycap()  { printf 'print("splat")\n' > "$R/test-results/red_copy.py" && printf 'story cites test-results/red_copy.py\n' > "$R/_bmad-output/story.md"; }
   rr_seed PYCAP rr_e_pycap || return 1
+  # BL-809 item 2: a mixed rework editing the code file a CODE finding names AND a test it does not.
+  rr_e_mixed()  { printf 'LIMIT = 3\n' >> "$R/rebalancer/engine.py" && sed -e 's/assert plan(2) == 3/assert plan(2) == 3, "two"/' "$R/rebalancer/tests/test_engine.py" > "$R/t" && mv "$R/t" "$R/rebalancer/tests/test_engine.py"; }
+  rr_seed MIXED rr_e_mixed || return 1
+  # The narrowed map's part bound: MIXED_APP is MIXED plus a web/app.js edit (flagless 2 parts, narrowed
+  # to web/app.js 2 parts: the NM world); THREE edits engine.py, web/app.js and server/test_live_smoke.py
+  # (flagless 2 parts at --max-parts 2, narrowed to engine.py and app.js 3).
+  rr_e_mixapp() { rr_e_mixed && printf 'export const b = 2;\n' >> "$R/web/app.js"; }
+  rr_seed MIXED_APP rr_e_mixapp || return 1
+  rr_e_three()  { printf 'LIMIT = 3\n' >> "$R/rebalancer/engine.py" && printf 'export const b = 2;\n' >> "$R/web/app.js" && printf '\ndef test_more():\n    assert 1\n' >> "$R/server/test_live_smoke.py"; }
+  rr_seed THREE rr_e_three || return 1
   { printf 'test-results/cap1.txt\n'; printf 'test-results/red_copy.py\n'; } > "$W/captures-cited-py"
   printf 'test-results/cap1.txt\n' > "$W/captures"
   # The prior reviews. A merged review's shard body and a serial review both read as one file.
@@ -115,6 +125,19 @@ JS
     "$(printf '#### AC3 replay result\nparts: 2\nhandover-run: 2 AC3 RED\nThe handed-over replay went RED.\n')"
   # A CLASSED cross finding carrying the replay result: RED routes; GREEN-SURVIVED or NO-BASELINE is a
   # failed hard gate and goes full whatever the class.
+  # The mixed priors (BL-809 item 2), written as code-reviewer.md's template asks: a CODE finding
+  # carries `Files:` under its `Class:`. (a) names the delta's code file; (b) names a file outside the
+  # delta while an EVIDENCE finding's Files: names the delta's (the merge refuses that shape; the
+  # route must not read it); (c) names only a file outside the delta; (d) a second CODE finding has no
+  # Files:. (a) also lives inside the repository, where --narrow-from records it repo-relative.
+  rr_nprior "$W/nprior-a.md" 'Class: CODE' 'Files: rebalancer/engine.py' 'Class: EVIDENCE' ''
+  rr_nprior "$W/nprior-b.md" 'Class: CODE' 'Files: web/app.js' 'Class: EVIDENCE' 'Files: rebalancer/engine.py'
+  rr_nprior "$W/nprior-c.md" 'Class: CODE' 'Files: web/app.js' 'Class: EVIDENCE' ''
+  rr_nprior "$W/nprior-d.md" 'Class: CODE' 'Files: rebalancer/engine.py' 'Class: CODE' ''
+  mkdir -p "$R/docs/reviews/s1" && cp "$W/nprior-a.md" "$R/docs/reviews/s1/1-code-review.md" || return 1
+  # The part-bound priors, inside the repository: (app) names web/app.js, (two) engine.py and web/app.js.
+  rr_nprior "$R/docs/reviews/s1/nprior-app.md" 'Class: CODE' 'Files: web/app.js' 'Class: EVIDENCE' ''
+  rr_nprior "$R/docs/reviews/s1/nprior-two.md" 'Class: CODE' 'Files: rebalancer/engine.py, web/app.js' 'Class: EVIDENCE' ''
   local hr
   for hr in RED GREEN-SURVIVED NO-BASELINE; do
     rr_qprior "$W/qprior-hr-$hr.md" 'Class: EVIDENCE' 'Class: BOOKKEEPING' \
@@ -164,5 +187,21 @@ rr_prior() { # <file> <reviewed-sha> <class line of finding 1 or empty> <class l
     [ -z "$4" ] || printf '%s\n' "$4"
     printf 'Story line 12 cites engine.py:40.\n\n### Suggestions (optional improvements)\n\nNone.\n'
   } > "$1"
+}
+rr_nprior() { # <file> <class 1> <files 1 or empty> <class 2> <files 2 or empty>: reviewed-sha B0
+  { printf '# Code Review: 1\n\nreviewed-sha: %s\n\nadvisor: called\n\n## Summary\nRework owed.\n\n## Verdict\nNEEDS_REWORK\n\n## Findings\n\n' "$(sed -n 's/^B0=//p' "$W/refs")"
+    printf '### Critical (must fix before merge)\n\n#### plan() returns one past the limit\n%s\n' "$2"
+    [ -z "$3" ] || printf '%s\n' "$3"
+    printf 'plan(3) returns 4.\n\n### Important (should fix, can be follow-up)\n\n#### The capture records no head sha\n%s\n' "$4"
+    [ -z "$5" ] || printf '%s\n' "$5"
+    printf 'The capture test-results/cap1.txt names no commit.\n\n### Suggestions (optional improvements)\n\nNone.\n'
+  } > "$1"
+}
+# rr_nshard <shard dir> <key> <frozen sha>: an APPROVED code-review shard with no finding, as the role writes one.
+rr_nshard() {
+  { printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: APPROVED\nadvisor: called\n' "$2" "$3"
+    case "$2" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
+    printf '\n## Summary\nRead.\n\n## Findings\n\n### Critical (must fix before merge)\n\nNone.\n\n### Important (should fix, can be follow-up)\n\nNone.\n\n### Suggestions (optional improvements)\n\nNone.\n'
+  } > "$1/$2.md"
 }
 rr_ref() { sed -n "s/^$2=//p" "$1/refs"; } # <world dir> <name>

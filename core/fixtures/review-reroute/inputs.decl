@@ -11,3 +11,5 @@ core/skills/ai-dlc/steps/gate-validation.md
 core/team-roles/code-reviewer.md
 core/team-roles/qa.md
 core/fixtures/lib/mutant.sh
+core/scripts/partition-document.sh
+core/scripts/content-seal.sh
