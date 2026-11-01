@@ -1249,36 +1249,59 @@ rc_bad="$(rc_of "$AUDIT" --fail-on=nonsense)"
 # local, and exited 1 with nothing naming the timeout -- a stall read as a sheet of
 # ownership findings. The audit must name the timeout and exit 2.
 #
-# Forced in a scratch sibling dir, as assertion 28 does: a resolver shim that
-# `exec`s a sleep (so the timeout's kill reaps it, with no orphaned grandchild),
-# and the shipped 30s timeout lowered to 1s in the COPY so the unit does not pay
-# 30s. The `cmp -s` guard makes a sed that matched nothing a broken fixture.
+# Forced in a scratch sibling dir, as assertion 28 does, with the unmodified script
+# copied in and its resolver replaced by a shim. No elapsed time decides either arm
+# (BL-868). The stall arm's shim stops itself and never answers, so any timeout
+# fires; it runs at a small AI_DLC_AUDIT_RESOLVER_TIMEOUT so the unit does not pay
+# the shipped 30s, and asserts that exact value is the one named. The control's
+# shim blocks on a fifo this fixture holds and runs the REAL resolver only once the
+# fixture writes to it, with the seam at `none`, so the control's wait ends on that
+# write and never on how long `--list` takes under the pool.
 fresh
 SS="$WORK/stall"
 rm -rf "$SS"; mkdir -p "$SS"
-sed 's/timeout=30)/timeout=1)/' "$AUDIT" > "$SS/audit-rule-files.sh"
-if cmp -s "$AUDIT" "$SS/audit-rule-files.sh"; then
-  bad "FIXTURE BROKEN — the timeout sed matched nothing, so the stall cannot be forced inside the unit's budget"
+cp "$AUDIT" "$SS/audit-rule-files.sh"
+cp "$RESOLVER" "$SS/core-paths.real.sh"
+cmp -s "$RESOLVER" "$SS/core-paths.real.sh" || bad "FIXTURE BROKEN — the real resolver was not copied beside the scratch audit"
+FIFO="$SS/release"
+if ! mkfifo "$FIFO"; then
+  bad "FIXTURE BROKEN — mkfifo failed, so the control cannot gate its resolver on an event"
 else
-  # The stall NEVER ENDS (BL-868): the shim stops itself, so the timeout always fires first and no
-  # elapsed time decides the arm -- the `exec sleep 5` this replaced lost to a 1s timeout only while
-  # the box ran it within 4s. The timeout's SIGKILL ends a stopped process, so nothing is orphaned.
+  # The stall NEVER ENDS: the shim stops itself, so the timeout always fires first.
+  # The timeout's SIGKILL ends a stopped process, so nothing is orphaned.
   printf '#!/usr/bin/env bash\nkill -STOP $$\n' > "$SS/core-paths.sh"
   printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"
-  rc_st="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
-  if [ "$rc_st" = "2" ] && grep -q 'timed out after' "$SS/err" && ! grep -q '\[unknown\]' "$SS/out"; then
+  rc_st="$( cd "$WORK/t" && AI_DLC_AUDIT_RESOLVER_TIMEOUT=0.5 bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  if [ "$rc_st" = "2" ] && grep -q 'timed out after 0.5s' "$SS/err" && ! grep -q '\[unknown\]' "$SS/out"; then
     ok "a STALLED resolver names the timeout and exits 2 — it is not scored as unresolved ownership"
   else
-    bad "a stalled resolver returned rc=$rc_st without naming the timeout — the stall read as ownership findings"
+    bad "a stalled resolver returned rc=$rc_st without naming the 0.5s timeout — the stall read as ownership findings, or the seam was ignored"
   fi
-  # Control: the same scratch dir with the real resolver beside it scores the
-  # seeded local finding (rc=1) and names no timeout. Without this, rc=2 above is
-  # equally consistent with a sibling-dir copy that refuses for any reason at all.
-  # The control runs at the SHIPPED 30s timeout: a real `--list` takes most of a
-  # second on this repo, so a 1s control would itself time out under the pool.
-  cp "$RESOLVER" "$SS/core-paths.sh"
-  cp "$AUDIT" "$SS/audit-rule-files.sh"
-  rc_sc="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  # A seam value that is neither a positive number nor `none` is refused BY NAME before
+  # any wait. rc=2 alone cannot tell: with the check deleted, `abc` and `0` become
+  # non-positive timeouts that expire at once and refuse as `timed out after`.
+  inv_ok=1
+  for v in abc 0; do
+    rc_iv="$( cd "$WORK/t" && AI_DLC_AUDIT_RESOLVER_TIMEOUT="$v" bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+    { [ "$rc_iv" = "2" ] && grep -q 'is neither a positive number nor' "$SS/err" && ! grep -q 'timed out after' "$SS/err"; } || { inv_ok=0; inv_bad="$v rc=$rc_iv"; }
+  done
+  [ "$inv_ok" = 1 ] \
+    && ok "an AI_DLC_AUDIT_RESOLVER_TIMEOUT that is neither a positive number nor \`none\` is refused by name, before any wait" \
+    || bad "an invalid resolver-timeout seam value was not refused by name (${inv_bad:-?}) — it became a timeout"
+  # Control: the same scratch dir, its resolver answering once released, scores
+  # the seeded local finding (rc=1) and names no timeout. Without this, rc=2 above
+  # is equally consistent with a sibling-dir copy that refuses for any reason.
+  # fd 9 holds the fifo open read-write for the whole run: the write below cannot
+  # block whether or not the shim has opened it yet, and its bytes stay buffered
+  # until the shim reads them. It is closed only after the audit has exited.
+  printf '#!/usr/bin/env bash\nread -r _ < "%s"\nexec bash "%s" "$@"\n' "$FIFO" "$SS/core-paths.real.sh" > "$SS/core-paths.sh"
+  exec 9<>"$FIFO"
+  ( cd "$WORK/t" && AI_DLC_AUDIT_RESOLVER_TIMEOUT=none bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? > "$SS/rc" ) &
+  sc_pid=$!
+  printf 'go\n' >&9
+  wait "$sc_pid"
+  exec 9>&-
+  rc_sc="$(cat "$SS/rc" 2>/dev/null)"
   if [ "$rc_sc" = "1" ] && grep -q '\[local\] docs/coding-conventions.md' "$SS/out" && ! grep -q 'timed out after' "$SS/err"; then
     ok "  control: the same scratch dir with the real resolver scores the local finding (rc=1) — the refusal above was the STALL"
   else
