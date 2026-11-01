@@ -29,6 +29,9 @@
 
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
+# The gate always fires every self-probe: a caller's exported BR_PROBE_RECORD would make the
+# "backlog receipts" step replay R1 and R7/R8 from a record, so it is dropped before any step runs.
+unset BR_PROBE_RECORD
 
 # 0. A GREEN GATE IS NOT A LANDED PUSH, and the cause is a dotfile, not this tree. `git push`
 #    opens the SSH connection BEFORE this hook runs; the suite below then idles it for minutes,

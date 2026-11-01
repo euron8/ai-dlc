@@ -97,6 +97,105 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 B_P1=0
 B_R9=0
 
+# ===== p3: THE GATE NEVER NAMES A PROBE RECORD (BL-880). ===================================
+# scripts/validate-backlog-receipts.sh replays R1 and R7/R8 from a record only when its caller sets
+# BR_PROBE_RECORD, so the gate's every run fires them only as long as nothing the gate runs sets it.
+# The set is DERIVED here, never listed: both pre-push hooks, plus every script path either one
+# names on a non-comment line (the consumer hook's scripts/ai-dlc/<x> is this tree's core/scripts/<x>).
+# A derived file absent from this sandbox is FIXTURE BROKEN, so inputs.decl cannot fall behind the
+# hooks. The count is of non-comment lines that SET the token (`T=`, `${T:=`, `export`/`declare`/
+# `local` naming it); a read is not counted, because the validator in the set reads it. It must be 0.
+# Controls, in the same arm: five seeded setting forms count 5, a seeded comment and a seeded read
+# count 0; TMPDIR, which EACH hook sets, counts above 0 in each and over the set, and each hook names
+# at least one script (so a derivation that skipped one hook cannot pass); the token's
+# READ sites over the same set count above 0; and a hook copy with `BR_PROBE_RECORD=x` counts 1.
+p3_count() { # p3_count <token> <file>... -> non-comment lines that SET the token
+  # A setting site: `T=` or `${T:=` / `${T=` (the token closed on its left by a non-identifier char),
+  # or `export|declare|local|readonly|typeset ... T`. A READ (`${T:-}`, `"$T/x"`) is not one: the
+  # validator itself reads the variable and is a member of the set.
+  awk -v t="$1" '
+    /^[[:space:]]*#/ { next }
+    { s = " " $0 " " }
+    s ~ ("[^A-Za-z0-9_]" t ":?=") || s ~ ("(export|declare|local|readonly|typeset)[[:space:]]+([^;&|]*[[:space:]])?" t "([^A-Za-z0-9_]|$)") { n++ }
+    END { print n + 0 }' "${@:2}"
+}
+p3_reads() { # p3_reads <token> <file>... -> non-comment lines carrying the token at all
+  awk -v t="$1" '/^[[:space:]]*#/ { next } index($0, t) > 0 { n++ } END { print n + 0 }' "${@:2}"
+}
+# The tree root, from this file's own location (a .dist-only unit: the distribution layout only).
+P3R="$(cd "$DIR/../../.." && pwd)"
+p3_derive() { # p3_derive -> the hook files and every script they name, one per line
+  local h p
+  for h in .githooks/pre-push core/git-hooks/pre-push; do
+    printf '%s\n' "$h"
+    grep -v '^[[:space:]]*#' "$P3R/$h" | grep -oE '(core/)?scripts/(ai-dlc/)?[A-Za-z0-9_./-]+\.(sh|py)' | while read -r p; do
+      case "$p" in scripts/ai-dlc/*) p="core/scripts/${p#scripts/ai-dlc/}" ;; esac
+      printf '%s\n' "$p"
+    done
+  done | sort -u
+}
+p3_ok=1
+for _h in .githooks/pre-push core/git-hooks/pre-push; do
+  [ -f "$P3R/$_h" ] || { echo "FIXTURE BROKEN: p3 -- $_h is absent from this tree (declare it in inputs.decl)" >&2; exit 2; }
+done
+p3_set="$(p3_derive)"
+p3_n="$(printf '%s\n' "$p3_set" | grep -c .)" || p3_n=0
+[ "$p3_n" -gt 2 ] || { echo "FIXTURE BROKEN: p3 -- the derived set holds $p3_n file(s); the hooks named no script" >&2; exit 2; }
+for _p in $p3_set; do
+  [ -f "$P3R/$_p" ] || { echo "FIXTURE BROKEN: p3 -- $_p, which a pre-push hook runs, is absent from this sandbox; add it to inputs.decl" >&2; exit 2; }
+done
+echo "HERMETIC-CONSUMED .githooks/pre-push"
+echo "HERMETIC-CONSUMED core/git-hooks/pre-push"
+mkdir -p "$TMP/p3"
+printf '#!/usr/bin/env bash\nexport BR_PROBE_RECORD=/x\n# BR_PROBE_RECORD=/y in a comment\n[ -n "${BR_PROBE_RECORD:-}" ] && cat "$BR_PROBE_RECORD/k"\n' > "$TMP/p3/probe.sh"
+p3_probe="$(p3_count BR_PROBE_RECORD "$TMP/p3/probe.sh")"
+p3_probe_r="$(p3_reads BR_PROBE_RECORD "$TMP/p3/probe.sh")"
+for _f in 'BR_PROBE_RECORD=/a cmd' 'env X=1 BR_PROBE_RECORD="$d" bash v.sh' ': "${BR_PROBE_RECORD:=/d}"' 'export X BR_PROBE_RECORD' 'local BR_PROBE_RECORD'; do printf '%s\n' "$_f"; done > "$TMP/p3/forms.sh"
+p3_forms="$(p3_count BR_PROBE_RECORD "$TMP/p3/forms.sh")"
+cp "$P3R/.githooks/pre-push" "$TMP/p3/pre-push"; printf 'BR_PROBE_RECORD=x\n' >> "$TMP/p3/pre-push"
+p3_seeded="$(p3_count BR_PROBE_RECORD "$TMP/p3/pre-push")"
+# The hook must also DROP an inherited BR_PROBE_RECORD: a non-comment, top-level (column 0) `unset ... BR_PROBE_RECORD`
+# line that sits BEFORE the first top-level `step "` or `pk_step ` call. p3_unset prints "<unset line> <first step line>"
+# (0 when absent). Controls that must fail: the line removed, moved after the first step, and only inside a function body.
+p3_unset() { awk '/^#/ { next } !u && /^unset[[:space:]]([^;&|]*[[:space:]])?BR_PROBE_RECORD([[:space:]]|$)/ { u = NR } !s && /^(step "|pk_step )/ { s = NR } END { print u + 0, s + 0 }' "$1"; }
+p3_unset_ok() { set -- $1; [ "$1" -ge 1 ] && [ "$2" -ge 1 ] && [ "$1" -lt "$2" ]; }
+grep -v '^unset BR_PROBE_RECORD$' "$P3R/.githooks/pre-push" > "$TMP/p3/pre-push.nounset"
+{ grep -v '^unset BR_PROBE_RECORD$' "$P3R/.githooks/pre-push"; printf 'unset BR_PROBE_RECORD\n'; } > "$TMP/p3/pre-push.late"
+awk '/^unset BR_PROBE_RECORD$/ { print "p3_fn() {"; print "  unset BR_PROBE_RECORD"; print "}"; next } { print }' "$P3R/.githooks/pre-push" > "$TMP/p3/pre-push.infn"
+p3_un_real="$(p3_unset "$P3R/.githooks/pre-push")"
+p3_un_seed="$(p3_unset "$TMP/p3/pre-push.nounset")"
+p3_un_late="$(p3_unset "$TMP/p3/pre-push.late")"
+p3_un_fn="$(p3_unset "$TMP/p3/pre-push.infn")"
+# shellcheck disable=SC2086
+p3_ctl="$(cd "$P3R" && p3_count TMPDIR $p3_set)"
+# PER HOOK: each hook must SET the control token and name at least one script, or a derivation that
+# never read one hook would pass. AI_DLC_PRESUITE_SKIP is set in the distribution hook only; TMPDIR in both.
+p3_ph=""
+for _h in .githooks/pre-push core/git-hooks/pre-push; do
+  _c="$(p3_count TMPDIR "$P3R/$_h")"
+  _m="$(grep -v '^[[:space:]]*#' "$P3R/$_h" | grep -oE '(core/)?scripts/(ai-dlc/)?[A-Za-z0-9_./-]+\.(sh|py)' | sort -u | grep -c .)" || _m=0
+  { [ "${_c:-0}" -gt 0 ] && [ "${_m:-0}" -gt 0 ]; } || p3_ph="$p3_ph $_h(control=$_c scripts=$_m)"
+done
+# shellcheck disable=SC2086
+p3_got="$(cd "$P3R" && p3_count BR_PROBE_RECORD $p3_set)"
+# shellcheck disable=SC2086
+p3_rd="$(cd "$P3R" && p3_reads BR_PROBE_RECORD $p3_set)"
+if [ "$p3_probe" != 1 ] || [ "$p3_probe_r" != 2 ] || [ "$p3_forms" != 5 ] || [ "$p3_seeded" != 1 ] || [ "${p3_ctl:-0}" -le 0 ] || [ "${p3_rd:-0}" -le 0 ] || [ -n "$p3_ph" ]; then
+  bad "p3 -- the counter cannot discriminate: seeded set+comment+read counted $p3_probe set (want 1) of $p3_probe_r carrying lines (want 2), five setting forms $p3_forms (want 5), seeded hook copy $p3_seeded (want 1), control TMPDIR set $p3_ctl (want > 0), token read sites in the set $p3_rd (want > 0), hooks short of a control or a script:${p3_ph:- none}"; p3_ok=0
+elif ! p3_unset_ok "$p3_un_real" || p3_unset_ok "$p3_un_seed" || p3_unset_ok "$p3_un_late" || p3_unset_ok "$p3_un_fn"; then
+  bad "p3 -- .githooks/pre-push has its column-0 BR_PROBE_RECORD unset at line/first-step-line [$p3_un_real] (want both >= 1 and unset < first step); seeded copies must fail: removed [$p3_un_seed], moved after the first step [$p3_un_late], only inside a function body [$p3_un_fn]; a caller's exported record would make the gate replay R1 and R7/R8"; p3_ok=0
+elif [ "$p3_got" != 0 ]; then
+  bad "p3 -- BR_PROBE_RECORD is carried on $p3_got non-comment line(s) of the pre-push hooks or a script they run; the gate would replay R1 and R7/R8 from a record"
+else
+  ok "p3 -- BR_PROBE_RECORD is set 0 times over the $p3_n files the two pre-push hooks run, which read it on $p3_rd line(s) (control TMPDIR set $p3_ctl, in each hook; a seeded hook copy counts 1; the hook unsets it at line/first-step-line [$p3_un_real]; copies without it [$p3_un_seed], moved late [$p3_un_late], in a function [$p3_un_fn] all fail)"
+fi
+
+# THE PROBE RECORD (BL-880): every receipts-validator run below shares this unit's own store, so its
+# first green firing of R1 and R7/R8 is replayed by the later runs on the same bytes; a mutated copy
+# has its own key and fires. The store lives and dies with $TMP.
+export BR_PROBE_RECORD="$TMP/prstore"
+mkdir -p "$BR_PROBE_RECORD"
+
 # --- j1's seed: a throwaway REPOSITORY, because the receipts validator checks each receipt out of
 # HEAD. It carries the validator, both reconcile files it loads, the classifier (R2's declared-empty
 # exemption asks it), and the two probe files the self-probe and the anchor name.
@@ -173,7 +272,9 @@ printf '# Probe backlog\n\n## BL-803\n\nverify: sh grep -q %s probe/guarded.txt 
   > "$TMP/j1p/docs/backlog.md"
 ( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m zero >/dev/null 2>&1 )
 # shellcheck disable=SC2086
-j1p_zero="$(j1_read "$(run_r "" "$TMP/j1p" $J1_ARGS)")"
+j1p_zero_out="$(run_r "" "$TMP/j1p" $J1_ARGS)"
+run_r_first_out() { printf '%s\n' "$j1p_zero_out"; }
+j1p_zero="$(j1_read "$j1p_zero_out")"
 printf '## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1p/docs/backlog.md"
 ( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m anchor >/dev/null 2>&1 )
 # shellcheck disable=SC2086
@@ -208,6 +309,12 @@ printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'M
 # shellcheck disable=SC2086
 j1_out="$(run_r "" "$TMP/j1" $J1_ARGS)"
 j1_rd="$(j1_read "$j1_out")"
+# The store is wired: j1p's first run wrote the record, and j1, on the same validator bytes, replayed it.
+if grep -q '^PROBE-RECORD: WRITTEN (K=' <<<"$(run_r_first_out)" && grep -q '^PROBE-RECORD: REPLAYED (K=' <<<"$j1_out"; then
+  ok "pr -- the probe record is wired: j1p's first run fired and wrote it, and j1 replayed it"
+else
+  bad "pr -- the probe record did not replay: j1p first '$(run_r_first_out | grep '^PROBE-RECORD' | cut -c1-80)', j1 '$(grep '^PROBE-RECORD' <<<"$j1_out" | cut -c1-80)'"
+fi
 j1_arm="${j1_rd%% *}"; j1_sc="${j1_rd#* }"
 if [ -z "$j1_rd" ] || [ "$j1_sc" -eq 0 ]; then
   note "FAIL  j1 -- the validator printed no SUMMARY or scored nothing on the real ledger plus a receipt it always scores (reading '$j1_rd'); nothing was observed"; rc=1

@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-6937 *
-2532 scripts/validate-backlog-receipts.sh
+# BL-880: after VEQ and the storeless control (cell 8), every in-process run shares the unit's BR_PROBE_RECORD store, so
+# an unmutated copy replays R1 and R7/R8; each mutant copy has its own key and fires. The probe-record cells and the
+# nine pr-m-* mutants (two runs each in a store of their own) are counted here. Was 6937 * / 2532 validator at 99fe3afda.
+5416 *
+2067 scripts/validate-backlog-receipts.sh

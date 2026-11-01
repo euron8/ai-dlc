@@ -191,6 +191,47 @@
 # close, which is a TRUE positive for a close made today, not a false one. The archive's receipts
 # were NOT swept: over a hundred drive fixtures and dozens recurse into pre-push.
 #
+# THE PROBE RECORD (BL-880) -- A KEYED REPLAY OF R1 AND R7/R8, AND ONLY OF THOSE.
+#   WHY. R1 and R7/R8 start most of this program's processes: two seeded ledgers scored twice,
+#   a closed-population repository scored three times, a checkout per receipt. A fixture that
+#   drives this validator over dozens of seeded worlds paid for them on every run, on the same
+#   bytes, to learn the same green answer each time.
+#   THE MECHANISM. A caller that wants the replay exports BR_PROBE_RECORD naming an ABSOLUTE,
+#   writable directory it owns. There is no default and the pre-push hooks never set it, and
+#   .githooks/pre-push runs `unset BR_PROBE_RECORD` before any step, so a caller's exported value
+#   cannot reach the gate: that unset is why the gate fires every probe (this validator does not
+#   unset it itself). core/fixtures/backlog-real-ledger arm p3 counts the setting sites over both
+#   hooks and every script they run and requires zero, and requires the unset in the hook. With the store set,
+#   after R0 and E0 and before R1, the run computes the key K and looks for <store>/<K>.green.
+#   A record whose CONTENT equals this run's manifest is a replay: R1 and R7/R8 do not run, the
+#   run prints `PROBE-RECORD: REPLAYED (K=<K>)` in both verbosities, and the OK line says
+#   `R1 replayed (K=<K>)` and `R7 and R8 replayed (K=<K>)` where a firing run says "fired".
+#   Otherwise both probes run, and only after R7/R8 RETURNS -- every probe green, in the parent,
+#   never in a worker -- is the record written, by a temp file and a move, with
+#   `PROBE-RECORD: WRITTEN (K=<K>)`. A red probe exits 2 before that line, so no record can say
+#   green about a key that went red. A store that is set but unusable (not absolute, not a
+#   writable directory, or the key could not be computed) prints `PROBE-RECORD: UNUSABLE` and
+#   the probes run. R0, E0 and R9 always run, and --archive / --efficiency-only never reach this.
+#   THE KEY. K is the `git hash-object` of the manifest, and the record IS the manifest: the
+#   blob ids of this file, reconcile/lib.sh and scripts/backlog-receipt-lib.sh (the three files
+#   the probes and their workers execute); $BASH_VERSION, and the PATH bash's path and version
+#   when it is not the same file as $BASH (whose own path is not keyed: two spellings of one binary); `git --version`; the `command -v` paths of awk, sed, grep, find, xargs,
+#   sort, cut, tr, cmp, cp and mktemp; `git config --global --list` and `--system --list`; and
+#   $EUID, `umask` and JOBS. Paths are NOT in it, so two copies of the same bytes share a key.
+#   One changed byte anywhere in the three files -- a comment line included -- is a new key.
+#   WHAT IT CANNOT SEE. Anything the probes depend on outside that manifest: the CONTENT of a
+#   tool binary at an unchanged path, tools not listed (chmod, env, git's own exec-path
+#   helpers), scripts/backlog-reverify.sh (whose has|lacks drift guard the corpus pass re-checks
+#   on every run anyway), the environment beyond the variables named (this file unsets
+#   BR_GENERIC_SEED on entry, because R1 used to be what reset it), the filesystem and TMPDIR
+#   the probes build under, and machine load. A record replayed under such a change replays a
+#   green that was true of a different environment. That is why the store belongs to one caller
+#   (a fixture's own mktemp dir, deleted with it) and why the gate never names one.
+#   THE RULING. BL-880 said "a skip switch is an opt-out". The operator ruled "Allow the keyed
+#   replay" (2026-10-31): for this form, a replay keyed on the bytes and the environment above
+#   and written only after a green probe on the same key, that sentence is reversed. A probe
+#   that is skipped has run, green, on the same KEY.
+#
 # Usage: validate-backlog-receipts.sh [<ledger>] [--root <dir>] [--base <ref>] [--quiet]
 #          [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N]
 #          [--max-unstable N] [--max-cannot-measure N]
@@ -231,6 +272,13 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 # as `git -c core.hooksPath=X push` set X in the probe repository below, its post-checkout never ran,
 # and the BL-906 arm read PROSE-CLOSABLE: a false red on a clean tree.
 unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+# BR_GENERIC_SEED IS THE PARENT'S TO SET, NEVER A CALLER'S. R1 assigns it before each of its passes,
+# which used to be what reset an inherited value; a replayed run (see THE PROBE RECORD) runs no R1,
+# so an inherited 1 would reach the corpus pass and seed it token-free. A worker keeps it: the parent
+# exports it to each pass, and the worker's argv is how this tells the two apart.
+# BR_PROBE_COUNTER is the same: R1 sets it to its own file, but a replay runs no R1, so an inherited one
+# would reach the corpus pass, where score_ledger overwrites the caller's file with 0.
+case "${1:-}" in --score-one|--closed-one) ;; *) unset BR_GENERIC_SEED BR_PROBE_COUNTER ;; esac
 }
 
 # ---------------------------------------------------------------------------
@@ -1621,6 +1669,18 @@ read_counts() {
 #   BL-912 the same script `&&` one PRESENT in the checkout but UNTRACKED, at base 1: NOT a
 #          driver, so UNSCORABLE -- and BL-911 plus BL-904 must still FAIL R2's all-driver test
 # ---------------------------------------------------------------------------
+# r2_alldriver <rows> <sh-count> -- exit 0 iff a ZERO-scored ledger is accounted for by drivers:
+# nothing scored, at least one DRIVER, and every `sh` receipt is DRIVER, ALREADY-PASSING or
+# OUT-OF-POPULATION. ONE implementation, called by R1 on seeded rows and by R2 on the corpus. It is
+# defined at top level, not inside vbr_probe_r1, because a replayed run (THE PROBE RECORD) never
+# enters vbr_probe_r1 and R2 still calls it.
+r2_alldriver() {
+  printf '%s\n' "$1" | awk -F'\t' -v sh="$2" '
+    $1 == "PROSE-CLOSABLE" || $1 == "BOUND" || $1 == "FORMAT-SENSITIVE" { sc++ }
+    $1 == "DRIVER" { dr++ }
+    $1 == "DRIVER" || $1 == "ALREADY-PASSING" || $1 == "OUT-OF-POPULATION" { ok++ }
+    END { exit ((sc + 0) == 0 && (dr + 0) > 0 && (ok + 0) == sh + 0 ? 0 : 1) }'
+}
 vbr_probe_r1() {
 P="$WORK/probe"
 mkdir -p "$P/probe" "$P/docs"
@@ -1721,16 +1781,6 @@ _probe_hp="$(git config --file "$P/.git/config" --get core.hooksPath 2>/dev/null
 [ "$_probe_hp" = "$P/.probehooks" ] || {
   echo "$(me): SELF-PROBE FAILED -- the probe repository's own .git/config does not carry core.hooksPath (read by path: '${_probe_hp:-<unset>}', expected '$P/.probehooks'). The write went somewhere else -- under an inherited GIT_DIR that somewhere is the CALLER'S repository, whose pre-push hook would then point at a directory this run deletes." >&2; exit 2; }
 
-# r2_alldriver <rows> <sh-count> -- exit 0 iff a ZERO-scored ledger is accounted for by drivers:
-# nothing scored, at least one DRIVER, and every `sh` receipt is DRIVER, ALREADY-PASSING or
-# OUT-OF-POPULATION. ONE implementation, called by R1 on seeded rows and by R2 on the corpus.
-r2_alldriver() {
-  printf '%s\n' "$1" | awk -F'\t' -v sh="$2" '
-    $1 == "PROSE-CLOSABLE" || $1 == "BOUND" || $1 == "FORMAT-SENSITIVE" { sc++ }
-    $1 == "DRIVER" { dr++ }
-    $1 == "DRIVER" || $1 == "ALREADY-PASSING" || $1 == "OUT-OF-POPULATION" { ok++ }
-    END { exit ((sc + 0) == 0 && (dr + 0) > 0 && (ok + 0) == sh + 0 ? 0 : 1) }'
-}
 probe_status() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $1 }'; }
 probe_detail() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $3 }'; }
 probe_count()  { printf '%s\n' "$1" | awk -F'\t' '$1 == "PROSE-CLOSABLE"' | grep -c . ; }
@@ -1982,6 +2032,73 @@ R8_SKIP=0
 [ -z "$R8_SKIPPED_OUT" ] || r7_fail "a re-entered run executed closed receipts: $R8_SKIPPED_OUT"
 case "$(closed_line 0)" in "CLOSED-POPULATION: SKIPPED "*) ;; *) r7_fail "a re-entered run was reported as '$(closed_line 0)', not SKIPPED." ;; esac
 R7_PROBED="R7 fired both directions over 8 seeded open receipts and R8 over 9 seeded closed-population entries and the re-entry skip"
+}
+
+# ---------------------------------------------------------------------------
+# THE PROBE RECORD (BL-880); see the header. probe_key prints the manifest; K is its blob id.
+# Nothing here runs unless the caller set BR_PROBE_RECORD, so the gate pays no start for it.
+# ---------------------------------------------------------------------------
+R1_PROBED="R1 fired both directions over 12 seeded receipts"
+PR_STATE=off
+probe_key() { # -> the manifest on stdout; non-zero when any part could not be read
+  local _pk_ids _pk_pb _t
+  _pk_ids="$(git hash-object --no-filters -- "$SELF" "$LIB" "$BR_RECEIPT_LIB" 2>/dev/null)" || return 1
+  [ "$(printf '%s\n' "$_pk_ids" | grep -c .)" -eq 3 ] || return 1
+  printf 'files %s\n' $_pk_ids
+  # $BASH's PATH is not keyed, only its version: an in-process drive and a CLI run of one tree name
+  # the same binary by two spellings. A PATH bash that is a DIFFERENT file is keyed, path and version.
+  printf 'bash %s\n' "$BASH_VERSION"
+  _pk_pb="$(command -v bash)" || _pk_pb=""
+  if [ -n "$_pk_pb" ] && ! [ "$_pk_pb" -ef "$BASH" ]; then
+    printf 'pathbash %s %s\n' "$_pk_pb" "$("$_pk_pb" -c 'printf %s "$BASH_VERSION"' 2>/dev/null)"
+  fi
+  printf 'git %s\n' "$(git --version 2>/dev/null)"
+  for _t in awk sed grep find xargs sort cut tr cmp cp mktemp; do printf 'tool %s %s\n' "$_t" "$(command -v "$_t")"; done
+  printf 'gitglobal\n'; git config --global --list 2>/dev/null
+  printf 'gitsystem\n'; git config --system --list 2>/dev/null
+  printf 'euid %s umask %s jobs %s\n' "${EUID:-}" "$(umask)" "$JOBS"
+  return 0
+}
+vbr_probe_record_check() { # sets PR_STATE off|unusable|replay|fire, PR_K, PR_MAN
+  PR_STATE=off; PR_K=""; PR_MAN=""
+  [ -n "${BR_PROBE_RECORD:-}" ] || return 0
+  PR_STATE=unusable
+  case "$BR_PROBE_RECORD" in /*) ;; *) echo "PROBE-RECORD: UNUSABLE -- BR_PROBE_RECORD '$BR_PROBE_RECORD' is not an absolute path; R1 and R7/R8 fire."; return 0 ;; esac
+  if ! [ -d "$BR_PROBE_RECORD" ] || ! [ -w "$BR_PROBE_RECORD" ]; then
+    echo "PROBE-RECORD: UNUSABLE -- BR_PROBE_RECORD '$BR_PROBE_RECORD' is not a writable directory; R1 and R7/R8 fire."; return 0
+  fi
+  PR_MAN="$(probe_key)" || { echo "PROBE-RECORD: UNUSABLE -- the probe key could not be computed; R1 and R7/R8 fire."; return 0; }
+  PR_K="$(printf '%s\n' "$PR_MAN" | git hash-object --stdin 2>/dev/null)" || PR_K=""
+  [ -n "$PR_K" ] || { echo "PROBE-RECORD: UNUSABLE -- the probe key could not be hashed; R1 and R7/R8 fire."; return 0; }
+  PR_STATE=fire
+  # A RECORD IS READ BY CONTENT, NOT BY NAME: it must hold this run's manifest, byte for byte.
+  if [ -f "$BR_PROBE_RECORD/$PR_K.green" ] && [ "$(cat "$BR_PROBE_RECORD/$PR_K.green")" = "$PR_MAN" ]; then
+    PR_STATE=replay
+  fi
+  return 0
+}
+vbr_probe_record_write() { # only after vbr_probe_r7r8 RETURNED, every probe green
+  [ "$PR_STATE" = fire ] || return 0
+  # mktemp, never `$$`: a sourced copy run in two concurrent subshells shares its parent's `$$`.
+  local _t
+  _t="$(mktemp "$BR_PROBE_RECORD/.$PR_K.XXXXXX")" || _t=""
+  if [ -n "$_t" ] && printf '%s\n' "$PR_MAN" > "$_t" && mv -f "$_t" "$BR_PROBE_RECORD/$PR_K.green"; then
+    echo "PROBE-RECORD: WRITTEN (K=$PR_K) -- R1 and R7/R8 fired green on this key."
+  else
+    rm -f "$_t"; echo "PROBE-RECORD: UNUSABLE -- the record for K=$PR_K could not be written."
+  fi
+}
+vbr_probes() {
+  vbr_probe_record_check
+  if [ "$PR_STATE" = replay ]; then
+    R1_PROBED="R1 replayed (K=$PR_K)"
+    R7_PROBED="R7 and R8 replayed (K=$PR_K)"
+    echo "PROBE-RECORD: REPLAYED (K=$PR_K) -- R1 and R7/R8 fired green on this key earlier; they were not run again."
+    return 0
+  fi
+  vbr_probe_r1
+  vbr_probe_r7r8
+  vbr_probe_record_write
 }
 
 # ---------------------------------------------------------------------------
@@ -2251,7 +2368,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 12 seeded receipts; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -2268,7 +2385,7 @@ exit 0
 # is the whole CLI, in the order the file always ran: scrub, worker dispatch, arguments, parent.
 # core/fixtures/backlog-receipt-binding/run.sh (its vin helper) sources it and calls vbr_main in a subshell.
 vbr_main() {
-vbr_sec_env
+vbr_sec_env "$@"
 vbr_worker "$@"
 vbr_sec_args "$@"
 vbr_sec_setup
@@ -2276,8 +2393,7 @@ vbr_probe_r0
 vbr_sec_r0
 vbr_probe_e0
 vbr_sec_eff
-vbr_probe_r1
-vbr_probe_r7r8
+vbr_probes
 vbr_sec_corpus
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
