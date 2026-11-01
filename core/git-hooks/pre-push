@@ -1410,9 +1410,22 @@ readset_vs_ident() { # <hook> <runner>: prints "<runner span sha> <hook spans sh
   printf '%s %s' "$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$rn" | shasum -a 256 | cut -d' ' -f1)" \
     "$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hk"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$hk"; sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$hk"; sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$hk"; } | shasum -a 256 | cut -d' ' -f1)"
 }
-readset_vs_input() { # <fx> <ident> <rows file>: the digest input
+readset_vs_input() { # <fx> <ident> <rows file> [<project root>, default .]: the digest input
   printf '#fixture %s\n#runner %s\n#universe %s\n' "$1" "${2%% *}" "${2#* }"
+  readset_vs_inproc "$1" "${4:-.}"
   cat "$3"
+}
+# THIS FIXTURE'S OWN in-process-cells STATE, one row, read under <project root>: `listed` or `unlisted` on
+# scripts/fixture-inprocess-allowlist.txt and the sha256 of its cells.decl or `none`. A consumer carries neither
+# file, so its row is `#inproc unlisted none`; the line exists so both hooks run one program (I66).
+readset_vs_inproc() { # <fx> <project root>
+  local d c=none l=unlisted
+  for d in core/fixtures tests/fixtures; do [ -d "$2/$d/$1" ] && break; done
+  [ -f "$2/$d/$1/cells.decl" ] && c="$(shasum -a 256 < "$2/$d/$1/cells.decl" | cut -d' ' -f1)"
+  [ -f "$2/scripts/fixture-inprocess-allowlist.txt" ] \
+    && F="$1" awk -F'\t' '$0 !~ /^[[:space:]]*(#|$)/ && $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$2/scripts/fixture-inprocess-allowlist.txt" \
+    && l=listed
+  printf '#inproc %s %s\n' "$l" "$c"
 }
 # READSET_VS_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at

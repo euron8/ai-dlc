@@ -1,0 +1,10 @@
+# fixture-inprocess drives the REAL validator against probe projects under mktemp.
+# The subject and its two siblings, all REQUIRED: run.sh prints HERMETIC-CONSUMED for each once arms DR and C held.
+!scripts/validate-fixture-inprocess.sh
+!scripts/validate-fixture-invocations.sh
+!scripts/validate-fixture-hygiene.sh
+# preamble.sh and mutant.sh, sourced here.
+core/fixtures/lib/
+# Both pre-push hooks, READ for arm DG: the READSET_VS span is extracted and sourced, never run as a program.
+!.githooks/pre-push
+!core/git-hooks/pre-push

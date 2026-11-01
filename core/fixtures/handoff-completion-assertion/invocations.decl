@@ -3,4 +3,5 @@
 # mutant battery and the live pass drive are counted by path (a mutant copy ending in the same suffix counts too).
 519 *
 196 core/hooks/ai-dlc-continue.sh
+0 core/hooks/ai-dlc-handoff-pending.sh
 46 core/hooks/ai-dlc-recover.sh

@@ -1,5 +1,7 @@
 # Measured by three armed hermetic runs of the deterministic sweep (rounds of KPAR, the stop file read only between rounds): identical counts.
 1319 *
-386 core/scripts/rotate-snapshot-archive.sh
+0 core/hooks/ai-dlc-context-provenance.sh
 3 core/hooks/ai-dlc-continue.sh
+0 core/hooks/ai-dlc-handoff-pending.sh
 3 core/hooks/ai-dlc-pause.sh
+386 core/scripts/rotate-snapshot-archive.sh

@@ -1,2 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 61 *
+58 core/hooks/ai-dlc-acknowledge.sh
+0 core/hooks/ai-dlc-dispatch-guard.sh

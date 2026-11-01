@@ -1,3 +1,7 @@
 # Measured by two counted runs through core/scripts/hermetic-run.sh (armed-run.sh) at one tip, under load: both gave 6533 and 26.
 602 *
-26 core/scripts/merge-adversarial-shards.sh
+0 core/fixtures/lib/mutant.sh
+33 core/scripts/merge-adversarial-shards.sh
+0 core/scripts/validate-adversarial-convergence.sh
+5 core/scripts/wait-for-deliverable.sh
+0 core/scripts/wfd-start-of.sh

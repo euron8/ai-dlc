@@ -27,22 +27,32 @@
 #       verdicts at every depth) and returns 0 with the nested-pool line, and nothing is exported: no FXCOUNT variable
 #       in a child env and the store not rewritten to counted-*. Also: exactly
 #       one non-comment line before `step "fixture suite` calls fxcount_arm as a command word.
+#   A9  untag, armed: the same two sub.sh starts with no FXCELL tag and no cells.decl -> rc 1, the C1 row naming the
+#       missing cells.decl, NO store entry. Its ALLOW twin is A1, whose world tags both starts as declared e2e cells
+#       (`ok C: probe: 2 subject start(s), 2 tagged`), one property apart.
+#   A10 rel, armed: the ok world with its second sub.sh start spelled relative to a cd'd directory, `( cd core &&
+#       FXCELL=b bash scripts/sub.sh )` -> rc 0, the J3 path row reads 2 and both starts are tagged (twin A1)
 #   SP  the judge's --self-probe standalone -> rc 0, all cells green
 #   NM  a plain run executes no matrix-only cell (control: the per-push mutant drives ran)
 # THE MUTANTS are copies of the whole subject tree (judge, runner, its core-paths.sh, mutant.sh), one line changed,
 # guarded by cmp -s and an exactly-one-match rewrite. Per push each runs its deciding arm and one twin; the full
 # mutant x arm matrix is `--matrix`, measured from a real run and recorded here:
 # MUTANT-MATRIX MJ3 decides=A2,A8,SP twins=A3
-# MUTANT-MATRIX MGATE decides=A1,A2,A4,A5,A7 twins=A3
-# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5,A7 twins=A3
+# MUTANT-MATRIX MGATE decides=A1,A2,A4,A5,A7,A9,A10 twins=A3
+# MUTANT-MATRIX MPASS decides=A1,A2,A4,A5,A7,A9,A10 twins=A3
 # MUTANT-MATRIX MEXEMPT decides=A7,A8,SP twins=A4
 # MUTANT-MATRIX MARM decides=A8 twins=A1
-# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the five literals above
+# MUTANT-MATRIX MNRM decides=A8,SP twins=A3
+# MUTANT-MATRIX MJ6 decides=A8,SP twins=A3
+# MUTANT-MATRIX MC1 decides=A8,A9,SP twins=A3
+# MUTANT-MATRIX MTAG decides=A1,A7,A8,A10,SP twins=A3
+# MUTANT-MATRIX MREL decides=A8,A10,SP twins=A1
+# MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; the names are the seven literals above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-invocation-budget/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed. The matrix also shows A1, A4, A5, A6 and A7 green
 # under MJ3, A3, A6, A8 and SP green under MGATE and MPASS, A1-A6 green under MEXEMPT, and every arm but A8 green under
-# MARM; only the twin each mutant runs per push is named. A8 decides MJ3 and MEXEMPT because arming runs the subject
-# judge's self-probe, which is red under both. Per push: MJ3 runs SP with twin A3 (the per-fixture judge no longer
+# MARM, and A1-A7 green under MNRM and MJ6; only the twin each mutant runs per push is named. A8 decides MJ3, MEXEMPT, MNRM
+# and MJ6 because arming runs the subject judge's self-probe, which is red under all four. MNRM and MJ6 run SP with twin A3. Per push: MJ3 runs SP with twin A3 (the per-fixture judge no longer
 # repeats the self-probe, so only the J3 cells and the A2 mismatch see it); MGATE runs A2 with twin A3; MPASS runs A1
 # with twin A3; MEXEMPT runs A7 with twin A4 (the same unrowed Mx, judged rather than exempt); MARM runs A8 with twin A1.
 #   MJ3      the judge's J3 compare removed            -> SP names the J3 off-by-one cell
@@ -50,6 +60,14 @@
 #   MPASS    the runner's BASH_ENV passthrough dropped  -> A1 is J1 BROKEN: the counter never loaded
 #   MEXEMPT  the judge's J5 allowlist exemption removed -> A7 FAILs J5 on an allowlisted fixture
 #   MARM     the hook's arming export drops FXCOUNT_DIR -> A8 names FXCOUNT_DIR absent from a child env (twin A1)
+#   MNRM     fxc_count's `.`/`..` normalisation removed (the old raw match) -> SP names the `..`-spelled cell (twin A3)
+#   MJ6      fxc_b2's gap row reclassified as rowed (J6 dropped) -> SP names the unrowed-subject cell (twin A3); A8 decides
+#            it too because arming runs the self-probe
+#   MC1      fxc_cells_judge's C1 row dropped -> A9 passes the untagged world (twin A3); SP and A8 decide it too
+#   MTAG     the rc's FXCELL field logged empty -> A1's tagged starts read untagged and FAIL C1 (twin A3); A7's world
+#            tags the same way, and SP's real-rc leg and A8 decide it too
+#   MREL     the rc logs a relative BASH_SOURCE as spelled (no `$PWD/` prefix) -> A10's cd-relative start matches no
+#            row, so J3 reads 1 for 2 (twin A1); SP's relative-start cells and A8 decide it too
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "fixture-invocation-budget: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
@@ -107,6 +125,16 @@ mk_mutant MPASS "$RREL" ' "BASH_ENV=$FXCOUNT_RC"' '' \
   || { echo "FIXTURE BROKEN: mutant MPASS DID NOT APPLY (the BASH_ENV passthrough moved in $RREL)" >&2; exit 2; }
 mk_mutant MEXEMPT "$JREL" 'if [ -s "$log.mutants" ] && fxc_allowlisted "$key"; then' 'if false; then' \
   || { echo "FIXTURE BROKEN: mutant MEXEMPT DID NOT APPLY (the J5 allowlist exemption moved in $JREL)" >&2; exit 2; }
+mk_mutant MNRM "$JREL" '? nrm($1) : $1 }' '? $1 : $1 }' \
+  || { echo "FIXTURE BROKEN: mutant MNRM DID NOT APPLY (the fxc_count normalisation moved in $JREL)" >&2; exit 2; }
+mk_mutant MJ6 "$JREL" "*) printf 'G" "*) printf 'B" \
+  || { echo "FIXTURE BROKEN: mutant MJ6 DID NOT APPLY (fxc_b2's gap row moved in $JREL)" >&2; exit 2; }
+mk_mutant MC1 "$JREL" 'print "C1\t" s "\t" $1 "\t" (par == "" ? "-" : par) }' 'next }' \
+  || { echo "FIXTURE BROKEN: mutant MC1 DID NOT APPLY (fxc_cells_judge's C1 row moved in $JREL)" >&2; exit 2; }
+mk_mutant MTAG "$JREL" '"${FXCELL:-}" "${FXCOUNT_PARENT:-}" >> "$FXCOUNT_LOG"' '"" "${FXCOUNT_PARENT:-}" >> "$FXCOUNT_LOG"' \
+  || { echo "FIXTURE BROKEN: mutant MTAG DID NOT APPLY (the rc's FXCELL field moved in $JREL)" >&2; exit 2; }
+mk_mutant MREL "$JREL" '*) __fxcp="$PWD/$__fxcp" ;;' '*) ;;' \
+  || { echo "FIXTURE BROKEN: mutant MREL DID NOT APPLY (the rc's relative-path prefix moved in $JREL)" >&2; exit 2; }
 mk_mutant MARM .githooks/pre-push 'export FXCOUNT_RC FXCOUNT_DIR FXCOUNT_JUDGE' 'export FXCOUNT_RC FXCOUNT_JUDGE' \
   || { echo "FIXTURE BROKEN: mutant MARM DID NOT APPLY (the arming export moved in .githooks/pre-push)" >&2; exit 2; }
 
@@ -177,16 +205,22 @@ exit "$bad"
 A8
 
 # --- the probe worlds, each built once --------------------------------------------------------------------------
-mk_world() { # <dir> <invocations.decl rows joined by |, or -> <Mx header row 1|0> [fixture name, default probe]
-  local w="$1" f="$1/core/fixtures/${4:-probe}"
+mk_world() { # <dir> <invocations.decl rows joined by |, or -> <Mx header row 1|0> [fixture name, default probe] [tag 1|0] [rel 1|0]
+  # Tagged (the default) the two sub.sh starts carry FXCELL=a and FXCELL=b and the fixture declares both as e2e cells;
+  # untagged (the `untag` world) the same starts carry no tag and there is no cells.decl, which C1 refuses.
+  # rel (the `rel` world): the second start is spelled relative to a cd'd directory, `( cd core && bash scripts/sub.sh )`.
+  local w="$1" f="$1/core/fixtures/${4:-probe}" tg="${5:-1}" pa="" pb="" s2='bash core/scripts/sub.sh'
+  [ "$tg" = 1 ] && { pa='FXCELL=a '; pb='FXCELL=b '; }
+  [ "${6:-0}" = 1 ] && { s2='bash scripts/sub.sh )'; pb="( cd core && $pb"; }
   mkdir -p "$f" "$w/core/scripts" "$w/core/fixtures/lib" "$w/.githooks" "$w/scripts" || return 1
   cp -p "$ROOT/.githooks/pre-push" "$w/.githooks/pre-push" && cp -p "$ROOT/scripts/suite-content-key.sh" "$w/scripts/" \
     && cp -p "$ROOT/core/fixtures/lib/mutant.sh" "$w/core/fixtures/lib/" || return 1
   printf 'printf "HERMETIC-CONSUMED core/scripts/sub.sh\\n"\n' > "$w/core/scripts/sub.sh"
   { printf '#!/usr/bin/env bash\n'
     [ "$3" = 1 ] && printf '%s MUTANT-MATRIX Mx decides=A twins=B\n' '#'
-    printf 'set -u\nok() { :; }\nbad() { :; }\n. core/fixtures/lib/mutant.sh\nbash core/scripts/sub.sh\nbash core/scripts/sub.sh\n'
+    printf 'set -u\nok() { :; }\nbad() { :; }\n. core/fixtures/lib/mutant.sh\n%sbash core/scripts/sub.sh\n%s%s\n' "$pa" "$pb" "$s2"
     printf '%s\n' ' mutant_killed 1 Mx probe'; } > "$f/run.sh"
+  [ "$tg" = 1 ] && printf 'e2e core/scripts/sub.sh a why=the probe wiring\ne2e core/scripts/sub.sh b why=the probe wiring, second start\n' > "$f/cells.decl"
   printf '!core/scripts/sub.sh\ncore/fixtures/lib/\n' > "$f/inputs.decl"
   printf 'bash\n' > "$f/tools.decl"
   [ "$2" = - ] || printf '%s\n' "$2" | tr '|' '\n' > "$f/invocations.decl"
@@ -197,6 +231,8 @@ mk_world "$WORK/w-ok" '3 *|2 core/scripts/sub.sh' 1 \
   && mk_world "$WORK/w-nohdr" '3 *|2 core/scripts/sub.sh' 0 \
   && mk_world "$WORK/w-nodecl" - 1 \
   && mk_world "$WORK/w-held" '3 *|2 core/scripts/sub.sh' 0 held \
+  && mk_world "$WORK/w-untag" '3 *|2 core/scripts/sub.sh' 1 probe 0 \
+  && mk_world "$WORK/w-rel" '3 *|2 core/scripts/sub.sh' 1 probe 1 1 \
   || { echo "FIXTURE BROKEN: could not build the probe worlds" >&2; exit 2; }
 
 # --- one drive per cell -----------------------------------------------------------------------------------------
@@ -211,7 +247,7 @@ drive() {
     bash "$WORK/a8.sh" "$s" "$WORK/a8.$t" > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
   fi
   local fx=probe
-  case "$2" in A1) w=ok ;; A2|A3|A6) w=mis ;; A4) w=nohdr ;; A5) w=nodecl ;; A7) w=held; fx=held ;; esac
+  case "$2" in A1) w=ok ;; A2|A3|A6) w=mis ;; A4) w=nohdr ;; A5) w=nodecl ;; A7) w=held; fx=held ;; A9) w=untag ;; A10) w=rel ;; esac
   rcf="$(bash "$s/$JREL" --gen-rc "$WORK/rc.$t")" || return 1
   case "$2" in
     A3) env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$st" \
@@ -230,7 +266,12 @@ nstore() { /usr/bin/find "$WORK/store.$1" -type f | wc -l | tr -d ' '; }
 verdict() {
   local t="$2"
   case "$1" in
-    A1) rcis "$t" 0 && has "$t" 'probe: invocation budget ok: 3 start(s)' && has "$t" 'probe: verdict recorded in' ;;
+    A1) rcis "$t" 0 && has "$t" 'probe: invocation budget ok: 3 start(s)' && has "$t" 'probe: verdict recorded in' \
+          && has "$t" 'ok C: probe: 2 subject start(s), 2 tagged, 0 covered by a nested row' ;;
+    A9) rcis "$t" 1 && has "$t" 'probe: FAIL (C1): core/scripts/sub.sh started as a separate program with no FXCELL tag' \
+          && has "$t" 'the fixture carries no cells.decl' && has "$t" 'hermetic-run: probe: rc=1' && [ "$(nstore "$t")" = 0 ] ;;
+    A10) rcis "$t" 0 && has "$t" 'probe: invocation budget ok: 3 start(s)' && has "$t" 'probe: verdict recorded in' \
+          && has "$t" 'ok C: probe: 2 subject start(s), 2 tagged, 0 covered by a nested row' ;;
     A2) rcis "$t" 1 && has "$t" 'probe: FAIL (J3): row "2 *": measured 3, declared 2 -- if this change was meant to alter how often the fixture runs its subject, set the row to 3; otherwise this is the regrowth fixture-mutants.md '"'"'One run per distinct state'"'"' forbids' \
           && has "$t" 'hermetic-run: probe: rc=1' && [ "$(nstore "$t")" = 0 ] ;;
     A3|A6) rcis "$t" 0 && has "$t" 'probe: verdict recorded in' && ! has "$t" 'invocation budget' && [ ! -e "$WORK/fxd.$t/probe" ] ;;
@@ -238,14 +279,14 @@ verdict() {
     A5) rcis "$t" 1 && has "$t" 'probe: FAIL (J2)' && has "$t" '  3 *' && has "$t" '  2 core/scripts/sub.sh' ;;
     A7) rcis "$t" 0 && has "$t" 'held: J5 EXEMPT, not judged: held is a row of scripts/fixture-matrix-allowlist.txt' \
           && has "$t" 'held: verdict recorded in' && ! has "$t" '(J5): mutant_killed reported' ;;
-    SP) rcis "$t" 0 && has "$t" 'self-probe: 54 cells, all green' ;;
+    SP) rcis "$t" 0 && has "$t" 'self-probe: 102 cells, all green' ;;
     A8) rcis "$t" 0 && has "$t" 'A8 CHECK-OK call:' && has "$t" 'A8 CHECK-OK a-armed:' && has "$t" 'A8 CHECK-OK b-judge-absent:' \
           && has "$t" 'A8 CHECK-OK c-nested:' && ! has "$t" 'A8 CHECK-BAD' ;;
     *) return 1 ;;
   esac
 }
-ARMS="A1 A2 A3 A4 A5 A6 A7 A8 SP"
-MUTANTS="MJ3 MGATE MPASS MEXEMPT MARM"
+ARMS="A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 SP"
+MUTANTS="MJ3 MGATE MPASS MEXEMPT MARM MNRM MJ6 MC1 MTAG MREL"
 
 if [ "$MODE" = matrix ]; then
   # THE MATRIX: every mutant against every arm, never on a plain run (arm NM asserts that).
@@ -286,12 +327,22 @@ drive MGATE.A2 A2 "$WORK/mut-MGATE" & drive MGATE.A3 A3 "$WORK/mut-MGATE" &
 drive MPASS.A1 A1 "$WORK/mut-MPASS" & drive MPASS.A3 A3 "$WORK/mut-MPASS" &
 drive MEXEMPT.A7 A7 "$WORK/mut-MEXEMPT" & drive MEXEMPT.A4 A4 "$WORK/mut-MEXEMPT" &
 drive MARM.A8 A8 "$WORK/mut-MARM" & drive MARM.A1 A1 "$WORK/mut-MARM" &
+drive MNRM.SP SP "$WORK/mut-MNRM" & drive MNRM.A3 A3 "$WORK/mut-MNRM" &
+drive MJ6.SP SP "$WORK/mut-MJ6" & drive MJ6.A3 A3 "$WORK/mut-MJ6" &
+drive MC1.A9 A9 "$WORK/mut-MC1" & drive MC1.A3 A3 "$WORK/mut-MC1" &
+drive MTAG.A1 A1 "$WORK/mut-MTAG" & drive MTAG.A3 A3 "$WORK/mut-MTAG" &
+drive MREL.A10 A10 "$WORK/mut-MREL" & drive MREL.A1 A1 "$WORK/mut-MREL" &
 wait
 score MJ3 SP A3 'FAIL  self-probe J3 a * row off by one'
 score MGATE A2 A3 'probe: verdict recorded in'
 score MPASS A1 A3 'probe: FIXTURE BROKEN (J1)'
 score MEXEMPT A7 A4 'held: FAIL (J5): mutant_killed reported Mx, which has no'
 score MARM A8 A1 'A8 CHECK-BAD a-exported: FXCOUNT_DIR is not in a child env'
+score MNRM SP A3 'FAIL  self-probe NRM dotdot counts 1'
+score MJ6 SP A3 'FAIL  self-probe J6 an unrowed .sh bash subject FIRES'
+score MC1 A9 A3 'probe: invocation budget ok: 3 start(s)'
+score MTAG A1 A3 'probe: FAIL (C1): core/scripts/sub.sh started as a separate program with no FXCELL tag'
+score MREL A10 A1 'probe: FAIL (J3): row "2 core/scripts/sub.sh": measured 1, declared 2'
 
 # NM: a plain run reached no matrix-only cell, and its per-push mutant drives did run.
 if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MPASS.A1.out" ] && [ -e "$WORK/c.MJ3.SP.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"

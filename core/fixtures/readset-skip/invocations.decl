@@ -2,4 +2,5 @@
 # Exact (BL-868): every stub-world liveness, settle and flush poll, and slot-world's beat and rebreak waits,
 # take a fixed number of iterations.
 959 *
+0 core/git-hooks/pre-push
 87 core/scripts/derive-fixture-readsets.sh

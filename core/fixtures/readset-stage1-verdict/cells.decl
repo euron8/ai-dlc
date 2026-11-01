@@ -1,0 +1,12 @@
+cli scripts/readset-stage1-verdict.sh score-selfprobe
+cli scripts/readset-stage1-verdict.sh score-cli-met
+cli scripts/readset-stage1-verdict.sh score-cli-a1
+cli scripts/readset-stage1-verdict.sh score-cli-r1
+cli scripts/readset-stage1-run.sh wrap-fail
+cli scripts/readset-stage1-run.sh wrap-ok
+cli scripts/readset-stage1-run.sh wrap-term
+cli scripts/readset-stage1-run.sh wrap-late
+cli scripts/readset-stage1-run.sh wrap-run2
+cli scripts/readset-stage1-run.sh wrap-run3
+cli scripts/readset-stage1-run.sh wrap-run4
+cli scripts/readset-stage1-run.sh wrap-refuse-dirty-tree

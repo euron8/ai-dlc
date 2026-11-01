@@ -1983,9 +1983,24 @@ readset_vs_ident() { # <hook> <runner>: prints "<runner span sha> <hook spans sh
   printf '%s %s' "$(sed -n '/^# HR_SANDBOX_BEGIN$/,/^# HR_SANDBOX_END$/p' "$rn" | shasum -a 256 | cut -d' ' -f1)" \
     "$( { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hk"; sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$hk"; sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$hk"; sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' "$hk"; } | shasum -a 256 | cut -d' ' -f1)"
 }
-readset_vs_input() { # <fx> <ident> <rows file>: the digest input
+readset_vs_input() { # <fx> <ident> <rows file> [<project root>, default .]: the digest input
   printf '#fixture %s\n#runner %s\n#universe %s\n' "$1" "${2%% *}" "${2#* }"
+  readset_vs_inproc "$1" "${4:-.}"
   cat "$3"
+}
+# THIS FIXTURE'S OWN BL-879 STATE, one row, read under <project root>: `listed` or `unlisted` on
+# scripts/fixture-inprocess-allowlist.txt (field 1, never the reason, so a reworded reason voids nothing), and the
+# sha256 of its cells.decl or `none`. The judge's C arms read both, so a pass is reused only under the same two; an
+# allowlist edit voids only the fixtures whose row changed, never the whole counted store (the allowlist is NOT in
+# fxcount_arm's vk). hermetic-run.sh passes its HR_ROOT; this hook's reader runs at the root and passes nothing.
+readset_vs_inproc() { # <fx> <project root>
+  local d c=none l=unlisted
+  for d in core/fixtures tests/fixtures; do [ -d "$2/$d/$1" ] && break; done
+  [ -f "$2/$d/$1/cells.decl" ] && c="$(shasum -a 256 < "$2/$d/$1/cells.decl" | cut -d' ' -f1)"
+  [ -f "$2/scripts/fixture-inprocess-allowlist.txt" ] \
+    && F="$1" awk -F'\t' '$0 !~ /^[[:space:]]*(#|$)/ && $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$2/scripts/fixture-inprocess-allowlist.txt" \
+    && l=listed
+  printf '#inproc %s %s\n' "$l" "$c"
 }
 # READSET_VS_END
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
@@ -3332,10 +3347,71 @@ fxcount_arm() {
 }
 step "invocation counter armed (scripts/validate-fixture-invocations.sh)" fxcount_arm
 
+# 2g. BL-879'S STATIC HALF: the cells.decl grammar (C2, C4), the source guard on a `cli` subject (C5), every fixture
+#     the static join refuses being an allowlist row, and scripts/fixture-inprocess-allowlist.txt down-only (M4).
+#     After PRESUITE_DONE, so an AI_DLC_PRESUITE_SKIP=1 push still runs it, and before the suite, so a red here stops
+#     the pool early. It judges GRAMMAR ONLY: C1-C3 and the stale allowlist row are the invocation judge's, per counted
+#     run, and step 3b below names every fixture that had none. Distribution hook only, outside FIXTURE_POOL.
+step "fixture in-process cells, static half (scripts/validate-fixture-inprocess.sh; grammar only)" \
+  bash scripts/validate-fixture-inprocess.sh
+
 SUITE_SKIPPED=0
 SUITE_STOPPED_EARLY=0
 FAIL_BEFORE_SUITE="$fail"
 step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
+
+# 3b. PENDING, NEVER GREEN. The dynamic in-process arms (C1-C3, the stale allowlist row) run only inside a COUNTED
+#     run: validate-fixture-invocations.sh's fxc_judge, called by hermetic-run.sh. A fixture this push did not run
+#     counted carries a verdict from that judge only if it was skipped on a counted-store entry written under its
+#     CURRENT per-fixture key, the store being counted-<vk> (vk hashes the judge and the rc) and the key carrying the
+#     fixture's own `#inproc` row. Both other skip paths can skip WITHOUT one: the read-set key-record skip (a
+#     `.git/ai-dlc-fixture-keys/<fx>.key` whose keys still hold -- the judge is no declared input of most fixtures, so
+#     a pass recorded under an older judge or none skips) and the whole-suite content-key SKIP. So this step, per
+#     declared fixture (inputs.decl, no .undeclarable) that is not an allowlist row:
+#       counted this push      $FXCOUNT_DIR/<fx> exists (hermetic-run.sh creates it, armed, before the fixture runs)
+#       counted elsewhere      the digest of readset_vs_input over <fx>.key's rows names an entry of the counted store
+#                              whose body is that digest input -- readset_verdicts' own test, over the record the skip used
+#       otherwise              PENDING (no counted run under this judge), named, and counted on the final banner.
+#     No counter armed (a nested copy, or arming failed): every such fixture is PENDING. The undeclared and
+#     `.undeclarable` fixtures never run counted and are out of BL-879's population (B2). It reads only records this
+#     hook wrote, never the pool's temp dir, so it sits outside FIXTURE_POOL in this hook alone. Information, not a
+#     verdict: it returns 0, and the final banner names the count it could not vouch for.
+PENDING_N=0
+inproc_pending_step() {
+  local d fx ident="" store="" rec dig e n_dec=0 n_cnt=0 n_vs=0 n_al=0 pl="" w
+  if [ "${SUITE_STOPPED_EARLY:-0}" = 1 ]; then printf '   (the suite was stopped early; nothing to account for)\n'; return 0; fi
+  w="$(mktemp -d "${TMPDIR:-/tmp}/inproc-pending.XXXXXX")" || { printf '   could not make a scratch dir\n'; return 1; }
+  # Armed, AI_DLC_VERDICT_STORE is <base>/counted-<vk>, so readset_vs_store resolves the counted store's project dir.
+  if [ -n "${FXCOUNT_DIR:-}" ] && [ -d "$FXCOUNT_DIR" ]; then
+    case "${AI_DLC_VERDICT_STORE:-}" in */counted-*) store="$(readset_vs_store "$PWD")" ;; esac
+    ident="$(readset_vs_ident_here)" || ident=""
+  fi
+  for d in "$FXROOT"*/; do
+    d="${d%/}"; fx="${d##*/}"
+    [ -f "$d/run.sh" ] && [ -f "$d/inputs.decl" ] && [ ! -e "$d/.undeclarable" ] || continue
+    n_dec=$((n_dec + 1))
+    if [ -f scripts/fixture-inprocess-allowlist.txt ] \
+      && F="$fx" awk -F'\t' '$0 !~ /^[[:space:]]*(#|$)/ && $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' scripts/fixture-inprocess-allowlist.txt; then
+      n_al=$((n_al + 1)); continue
+    fi
+    if [ -n "${FXCOUNT_DIR:-}" ] && [ -e "$FXCOUNT_DIR/$fx" ]; then n_cnt=$((n_cnt + 1)); continue; fi
+    rec="$KEYS_DIR/$fx.key"
+    if [ -n "$store" ] && [ -n "$ident" ] && [ -f "$rec" ] && tail -n +4 "$rec" > "$w/rows" 2>/dev/null && [ -s "$w/rows" ] \
+      && readset_vs_input "$fx" "$ident" "$w/rows" > "$w/d" 2>/dev/null; then
+      dig="$(shasum -a 256 < "$w/d" | cut -d' ' -f1)"; e="$store/$dig"
+      if [ "${#dig}" -eq 64 ] && [ -f "$e" ] && [ "$(sed -n '1,2p' "$e" 2>/dev/null)" = "$(printf '#format k1\n#state ok')" ] \
+        && tail -n +3 "$e" > "$w/e" 2>/dev/null && cmp -s "$w/e" "$w/d"; then n_vs=$((n_vs + 1)); continue; fi
+    fi
+    pl="$pl $fx"; PENDING_N=$((PENDING_N + 1))
+  done
+  rm -rf "$w"
+  [ -n "${FXCOUNT_DIR:-}" ] || printf '   no invocation counter armed on this push: no declared fixture has a counted verdict here\n'
+  printf '   %s declared fixture(s): %s counted this push, %s skipped on a counted pass under this judge, %s on scripts/fixture-inprocess-allowlist.txt, %s PENDING\n' \
+    "$n_dec" "$n_cnt" "$n_vs" "$n_al" "$PENDING_N"
+  [ -z "$pl" ] || printf '   PENDING (no counted run under this judge):%s\n' "$pl"
+  return 0
+}
+step "in-process cells, dynamic half: every declared fixture judged under this judge, or PENDING (information, not a verdict)" inproc_pending_step
 
 # 3a. THE SUITE'S WALL CLOCK IS ONE NUMBER, AND IT IS PRINTED, NEVER JUDGED. This suite is
 #     POLE-BOUND: the time you wait tracks the single longest fixture DIRECTORY, not the sum over
@@ -3376,8 +3452,10 @@ if [ "$fail" -ne 0 ]; then
   printf '\npre-push: BLOCKED. Fix the above, or `git push --no-verify` on the record.\n\n'
   exit 1
 fi
+pending_note=""
+[ "${PENDING_N:-0}" -gt 0 ] && pending_note=" -- $PENDING_N declared fixture(s) PENDING (no counted run under this judge; see step 3b)"
 if [ "$SUITE_SKIPPED" -ne 0 ]; then
-  printf '\npre-push: all gates green -- FIXTURE SUITE SKIPPED on an unchanged content key.\n\n'
+  printf '\npre-push: all gates green -- FIXTURE SUITE SKIPPED on an unchanged content key%s.\n\n' "$pending_note"
   exit 0
 fi
-printf '\npre-push: all gates green.\n\n'
+printf '\npre-push: all gates green%s.\n\n' "$pending_note"

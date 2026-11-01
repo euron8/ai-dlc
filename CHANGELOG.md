@@ -19,6 +19,89 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.986.0] - 2026-11-01
+
+Batch b247. A fixture that runs its subject as a separate program now fails the push unless that start is declared as a cell (BL-879). BL-879 closes. BL-878's progress line is corrected to the measured four of fifteen.
+
+### A start of a fixture's subject must be a declared cell (BL-879)
+
+Each fixture can carry `core/fixtures/<f>/cells.decl`, which has three row kinds:
+
+- `cli <subject> <cell-id>`, for a command-line equivalence cell;
+- `e2e <subject> <cell-id> why=<reason>`, for a cell that stays end to end;
+- `nested <parent> <child> why=<reason>`, for starts that the subject makes itself.
+
+A fixture tags a start where it makes it, as `FXCELL=<id> bash <subject>`. The counter rc logs the tag and the parent start as two more tab fields. A missing `cells.decl` reads as an empty one.
+
+The dynamic arms live in `fxc_judge` in `scripts/validate-fixture-invocations.sh`, which runs once per counted run:
+
+- C1: every start of a subject carries a tag or is covered by a `nested` row.
+- C2's tag half: every tag names a declared cell.
+- C3: each cell tags exactly one start.
+- A stale allowlist row fails.
+
+The static arms live in the new `scripts/validate-fixture-inprocess.sh`, which runs at pre-push after the pre-suite:
+
+- C2's grammar and id uniqueness, and C4, which requires a non-empty `why=`.
+- C5: a subject with a `cli` row must carry one of the two column-0 source-guard statements.
+- NP: a `nested` parent must be shipped code, never a fixture-local driver.
+- The m4 down-only check on `scripts/fixture-inprocess-allowlist.txt`. It is generalised in place in `validate-fixture-hygiene.sh` and shared by extraction, and hygiene's output is byte-identical.
+- The number of fixtures scanned must equal the number of `run.sh` files listed.
+
+The validator also has three modes:
+
+- `--complete` is non-zero while any allowlist row remains.
+- `--derive` writes the allowlist.
+- The header states the residual loophole and the blind routes.
+
+Each fixture's allowlist state and `cells.decl` hash is one `#inproc` row of that fixture's own store digest, so an allowlist edit voids only that fixture's counted entry. The allowlist is not in the whole-suite counter key. A post-suite step reports every fixture that has no counted pass under the current judge as `PENDING (no counted run under this judge)`, and never folds one into a pass line.
+
+The allowlist figures differ on purpose. M1 measured 206 fixtures refused before the start-count rows existed, and 55 of those failed only on a missing `invocations.decl` row. Every missing row is now present, many of them `0`, and a fixture whose rows are all zero starts no subject and passes with no `cells.decl`. `--derive` seeded 181 rows. Four fixtures already met the predicate and are off the allowlist in this release:
+
+- push-drain-refusals;
+- ledger-reverify-unfalsifiable;
+- readset-stage1-verdict;
+- story-evidence-scaffold.
+
+That leaves 177 rows. Of the 260 `run.sh` files, 258 were judged: 181 refused and 77 predicted to pass, where the 77 are 76 fixtures with all-zero rows plus fixture-inprocess. The other 2 are undeclarable and exempt.
+
+### Start counts the judge could not see before (a finding)
+
+- `fxc_count` now normalises `.` and `..` segments in a logged path.
+- A start spelled relative to a `cd`'d directory is logged under its own `$PWD`.
+- J6 requires a start-count row for every bash subject a fixture declares as an input. 343 subjects are rowed and 2 are exempt.
+
+Rows these fixes moved, each measured by two counted runs that agreed:
+
+| Fixture | Subject | Before | After |
+|---------|---------|--------|-------|
+| escalation-citation | validate-escalation-resolution.sh | 10 | 56 |
+| layer-title-join | layer-drift.sh | 3 | 19 |
+| story-provenance | stamp-story-provenance.sh | 6 | 68 |
+| story-provenance | validate-provenance-block.sh | 2 | 5 |
+| wait-beat-liveness | merge-adversarial-shards.sh | 26 | 33 |
+| artifact-path-conformance | validate-artifact-paths.sh | 5 | 6 |
+
+The scan for cd-relative starts found 15 candidate fixtures, and each was run counted twice. It cannot see a `cd` inside a `core/fixtures/lib` helper or inside a subject.
+
+### Fork count
+
+The `.dist-only` arm of `scripts/validate-enforcement-map.sh` ran one `grep` per marked fixture, so it cost one more fork with every distribution-only fixture added. It is now one `comm` join, with a self-probe that runs in both directions. The total went 2947 → 2899 (−48), measured with `scripts/fork-profile.sh` before and after, each in a clean worktree. It reads 2899 at the release tip. FORK_BUDGET is ratcheted to 2901.
+
+### Cost
+
+Changing the counter rc and the judge re-keys the counted store, so this push re-runs every counted fixture once.
+
+### Fixtures
+
+- New `.dist-only` fixture `fixture-inprocess`, with arms for the validator, the digest row (DG and DS) and NP, and their mutants.
+- fixture-invocation-budget gains arms A9 and A10 and the mutants MC1, MTAG and MREL.
+- BL-879's receipt is `scripts/receipt-bl879-inprocess-enforcer.sh`. It drives the shipping judge, gate and hygiene programs, and checks that the pre-push step and the `#inproc` row are present.
+
+The first 0.986.0 push went red on backlog-real-ledger's p3 arm, because the new hook step's script was not in that fixture's `inputs.decl`. A new pre-push step needs its script declared in the `inputs.decl` of every fixture that reads the hook's run list.
+
+BL-878 stays open. Its receipt `--complete` exits 1 with 177 allowlist rows remaining.
+
 ## [0.985.0] - 2026-10-31
 
 Batch b247. The backlog receipts validator can replay its R1 and R7/R8 self-probes from a keyed record that a caller names, so a fixture that runs the validator many times stops re-firing every probe (BL-880). BL-880 stays open: the enforcement-map-sites instance is not addressed here.

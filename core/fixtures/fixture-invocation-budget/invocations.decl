@@ -1,4 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), twice, identical.
-48 *
-30 scripts/validate-fixture-invocations.sh
-15 core/scripts/hermetic-run.sh
+# 54 -> 67 with arm A9 and mutants MC1 and MTAG: A9's base drive and the four per-push mutant drives (MC1 on A9 and A3,
+# MTAG on A1 and A3), each one runner start, its rc generation and its judge start.
+# 67 -> 76 with arm A10 and mutant MREL: A10's base drive and MREL's two per-push drives (A10, A1), three starts each.
+76 *
+48 scripts/validate-fixture-invocations.sh
+25 core/scripts/hermetic-run.sh

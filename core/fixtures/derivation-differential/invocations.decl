@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 171 *
+0 core/scripts/check-owed-derivations.sh
+0 core/scripts/sprint-status.sh
+0 core/scripts/validate-artifact-derivations.sh
 31 core/skills/ai-dlc-update/reconcile/derivation-differential.sh

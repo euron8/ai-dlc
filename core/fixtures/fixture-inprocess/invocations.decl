@@ -1,0 +1,10 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), twice, identical.
+# 11 validator runs (dirty, clean, k, derive twice, MR, MC5, MN, MK, MKC, MNP); each calls the judge for --static-join
+# and --b2-census on the probe tree, and again on the corpus when it passes its self-probe; plus two dg.sh starts (arm
+# DG, and mutant MDG). The hygiene validator and both hooks are only READ (spans extracted), never started.
+50 *
+11 scripts/validate-fixture-inprocess.sh
+36 scripts/validate-fixture-invocations.sh
+0 scripts/validate-fixture-hygiene.sh
+0 .githooks/pre-push
+0 core/git-hooks/pre-push

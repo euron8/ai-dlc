@@ -4,5 +4,5 @@
 # LP became a whole-vector mutant (the writer refuses a schema without lens_pins), so it scores N0,N1,N2 with no twin (* 134->135).
 # AM (alias row deleted, cell H) adds 4 starts (* 135->139): the precondition's writer --print-schema, the unmutated reader on the historical stamp (B_f13h), AM's deciding cell H, and its twin cell N0.
 139 *
-6 core/scripts/stamp-story-provenance.sh
-2 core/scripts/validate-provenance-block.sh
+68 core/scripts/stamp-story-provenance.sh
+5 core/scripts/validate-provenance-block.sh

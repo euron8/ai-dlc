@@ -64,10 +64,10 @@ OUT0="$CUR"
 # TMPDIR: the staging directory cannot be made, rc 2), and the two must differ -- or one input proves
 # nothing about the other.
 eq_ok=1
-cli_o="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>"$WORK/cli.err")"; cli_rc=$?
+cli_o="$(FXCELL=cli-pass bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>"$WORK/cli.err")"; cli_rc=$?
 in_o="$(AI_DLC_RECONCILE_MEMO="$WORK/memo" inproc_run "$RV" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>"$WORK/in.err")"; in_rc=$?
 [ "$cli_o" = "$in_o" ] && [ "$cli_rc" = "$in_rc" ] && cmp -s "$WORK/cli.err" "$WORK/in.err" && [ "$in_o" = "$OUT0" ] || eq_ok=0
-rcli_o="$(TMPDIR="$WORK/no-such-dir" bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"; rcli_rc=$?
+rcli_o="$(TMPDIR="$WORK/no-such-dir" FXCELL=cli-refuse bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"; rcli_rc=$?
 rin_o="$(TMPDIR="$WORK/no-such-dir" AI_DLC_RECONCILE_MEMO="$WORK/memo" inproc_run "$RV" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"; rin_rc=$?
 [ "$rcli_o" = "$rin_o" ] && [ "$rcli_rc" = "$rin_rc" ] || eq_ok=0
 if [ "$eq_ok" = 1 ] && [ "$cli_rc" = 0 ] && [ "$rcli_rc" = 2 ] && [ -n "$cli_o" ] && [ "$cli_o" != "$rcli_o" ]; then

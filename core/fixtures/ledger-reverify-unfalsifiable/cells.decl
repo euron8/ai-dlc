@@ -1,0 +1,2 @@
+cli core/skills/ai-dlc-update/reconcile/ledger-reverify.sh cli-pass
+cli core/skills/ai-dlc-update/reconcile/ledger-reverify.sh cli-refuse

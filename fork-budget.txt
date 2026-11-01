@@ -47,4 +47,9 @@
 # i84_restates :9185 178 -> :9228 3, i84_reads :9191 176 -> :9236 1; the I83..I84 span 549 -> 24. Each
 # predicate is now one `grep -l` over the whole corpus, so a new shipped script no longer moves either
 # arm. The budget is the tip reading plus HEADROOM_MARGIN 2; A4's 70% line is 2063, so its window holds.
-FORK_BUDGET=2948
+#
+# Lowered 2948 -> 2901 when the .dist-only uninstall check became one comm join instead of a grep per
+# marked fixture. Measured with `scripts/fork-profile.sh --section total`, each run from inside its own
+# clean detached worktree: base 963de2dd6 read 2947 (line 1415 alone 55 forks), the tip read 2899, both
+# EXIT 0. The budget is the tip reading plus HEADROOM_MARGIN 2.
+FORK_BUDGET=2901

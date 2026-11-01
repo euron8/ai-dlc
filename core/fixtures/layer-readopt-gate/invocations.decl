@@ -1,2 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 143 *
+2 core/skills/ai-dlc-update/reconcile/layer-drift.sh
+38 core/skills/ai-dlc-update/reconcile/readopt-override.sh
+19 core/skills/ai-dlc-update/reconcile/register-drift.sh
+5 core/skills/ai-dlc-update/reconcile/unregistered-drift.sh

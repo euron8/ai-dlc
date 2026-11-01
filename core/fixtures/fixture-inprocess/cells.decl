@@ -1,0 +1,16 @@
+# fixture-inprocess's in-process cells (BL-879). Every start of the validator is one end-to-end cell, tagged at its
+# start by drive() (FXCELL=<tag>). The validator IS the subject end to end: its gate, --derive and --complete modes
+# are its exit codes and its written allowlist, which no sourced function call reproduces.
+e2e scripts/validate-fixture-inprocess.sh dirty why=the dirty world's gate run: R, C4, C5 and the near-misses
+e2e scripts/validate-fixture-inprocess.sh clean why=the clean world's gate run: the OK line and the probe's own count
+e2e scripts/validate-fixture-inprocess.sh k why=--complete on a non-empty allowlist
+e2e scripts/validate-fixture-inprocess.sh derive.first why=--derive, first of the two runs the byte comparison needs
+e2e scripts/validate-fixture-inprocess.sh derive why=--derive, second run, compared byte for byte with the first
+e2e scripts/validate-fixture-inprocess.sh MR why=mutant MR, refused by the validator's own self-probe
+e2e scripts/validate-fixture-inprocess.sh MC5 why=mutant MC5, refused by the validator's own self-probe
+e2e scripts/validate-fixture-inprocess.sh MN why=mutant MN, refused by the validator's own self-probe
+e2e scripts/validate-fixture-inprocess.sh MK why=mutant MK, --complete passing a non-empty allowlist
+e2e scripts/validate-fixture-inprocess.sh MKC why=mutant MK's twin, the clean world, whose empty allowlist completes
+# The validator starts the judge for --static-join and --b2-census, twice per run that passes its self-probe.
+nested scripts/validate-fixture-inprocess.sh scripts/validate-fixture-invocations.sh why=the validator reads every fixture through the judge's own parses
+e2e scripts/validate-fixture-inprocess.sh MNP why=mutant MNP, refused by the validator's own self-probe

@@ -657,7 +657,7 @@ hr_store_put() {
   hr_rows > "$HR_WORK/vs.rows" || return 0
   [ -s "$HR_WORK/vs.rows" ] || return 0
   ident="$(readset_vs_ident "$HR_HOOK" "${BASH_SOURCE[0]}")" || return 0
-  readset_vs_input "$HR_FX" "$ident" "$HR_WORK/vs.rows" > "$HR_WORK/vs.d" || return 0
+  readset_vs_input "$HR_FX" "$ident" "$HR_WORK/vs.rows" "$HR_ROOT" > "$HR_WORK/vs.d" || return 0
   dig="$(shasum -a 256 < "$HR_WORK/vs.d" | cut -d' ' -f1)"
   [ "${#dig}" -eq 64 ] || return 0
   { printf '#format k1\n#state ok\n'; cat "$HR_WORK/vs.d"; } > "$store/.tmp.$$.$HR_FX" 2>/dev/null \

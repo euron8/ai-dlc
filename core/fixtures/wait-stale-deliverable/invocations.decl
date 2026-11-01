@@ -2,3 +2,6 @@
 # History: p1 declared `282 *` before the per-push mutant cells replaced the mutant case functions and the flagless loop;
 # that rewrite measured 347; giving the lease-handoff arm's B beat its own sleep stub (so B is parked, not racing a 3s lease) added 3.
 350 *
+0 core/fixtures/lib/matrix.sh
+0 core/fixtures/lib/mutant.sh
+37 core/scripts/wait-for-deliverable.sh

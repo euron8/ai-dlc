@@ -1,2 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 74 *
+34 core/hooks/ai-dlc-continue.sh
+0 core/hooks/ai-dlc-handoff-pending.sh

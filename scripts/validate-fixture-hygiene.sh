@@ -518,24 +518,33 @@ run_all() {
   return 0
 }
 
-# m4 <repo> <current list> <scratch>: the down-only arm, keyed on field 1.
+# m4 <repo> <current list> <scratch> [<rel> <arm> <remedy>]: the down-only arm, keyed on field 1. With no 4th-6th
+# argument it judges this file's H5 list ($ALLOW_REL, arm M4, its remedy). THE ONE SHARED COPY:
+# scripts/validate-fixture-inprocess.sh extracts this function by its own boundaries (awk, every line strictly between
+# the `# M4_BEGIN` and `# M4_END` marker lines below, refusing unless exactly one `m4() {` sits between them) and passes
+# all three, so the two down-only fixture lists run one function.
+# validate-mutant-kills.sh's m4 is NOT this copy and is not bound to it: it keys on the WHOLE trimmed row, so a
+# reworded reason is an added row there and would flip this file's `reworded` probe case here.
+# M4_BEGIN
 m4() {
-  local repo="$1" cur="$2" base="$3" sha added
+  local repo="$1" cur="$2" base="$3" rel="${4:-$ALLOW_REL}" arm="${5:-M4}" sha added
+  local remedy="${6:-do not list the fixture; give it its MUTANT-MATRIX block (fixture-mutants.md) and delete the row.}"
   sha="$(git -C "$repo" rev-parse -q --verify 'origin/main^{commit}' 2>/dev/null)" || sha=""
-  if [ -z "$sha" ]; then echo "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against"; return 0; fi
-  if ! git -C "$repo" cat-file -e "${sha}:${ALLOW_REL}" 2>/dev/null; then
-    echo "SKIP M4: origin/main carries no $ALLOW_REL -- this is the release that first ships it"; return 0; fi
-  git -C "$repo" show "${sha}:${ALLOW_REL}" > "$base" 2>/dev/null || { echo "FAIL M4: origin/main carries $ALLOW_REL but it could not be read"; return 1; }
+  if [ -z "$sha" ]; then echo "SKIP $arm: origin/main does not resolve here, so there is no base allowlist to compare against"; return 0; fi
+  if ! git -C "$repo" cat-file -e "${sha}:${rel}" 2>/dev/null; then
+    echo "SKIP $arm: origin/main carries no $rel -- this is the release that first ships it"; return 0; fi
+  git -C "$repo" show "${sha}:${rel}" > "$base" 2>/dev/null || { echo "FAIL $arm: origin/main carries $rel but it could not be read"; return 1; }
   added="$(awk -F'\t' '/^[[:space:]]*(#|$)/ { next } { x = $1; gsub(/[[:space:]]/, "", x) }
     FNR == NR { b[x] = 1; next } !(x in b) && !(x in seen) { seen[x] = 1; print x }' "$base" "$cur" | LC_ALL=C sort)"
   if [ -n "$added" ]; then
-    echo "FAIL M4: allowlist row(s) whose fixture is not on $ALLOW_REL at origin/main -- the list is DOWN-ONLY:"
+    echo "FAIL $arm: allowlist row(s) whose fixture is not on $rel at origin/main -- the list is DOWN-ONLY:"
     printf '%s\n' "$added" | sed 's/^/    /'
-    echo "  Remedy: do not list the fixture; give it its MUTANT-MATRIX block (fixture-mutants.md) and delete the row."
+    echo "  Remedy: $remedy"
     return 1
   fi
-  echo "OK M4: no allowlist row added against origin/main"; return 0
+  echo "OK $arm: no allowlist row added against origin/main"; return 0
 }
+# M4_END
 
 # --- self-probe, before the corpus ---------------------------------------------------------------------------------
 pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
