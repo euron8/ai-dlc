@@ -4167,7 +4167,7 @@ if sg stg; then
 # `self-update-gate-XXXXXX` call and logs each claim; the cell asserts it fired.
 SG="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-stage.XXXXXX")"
 SG_REAL_MKTEMP="$(command -v mktemp)"
-printf '#!/bin/sh\ncase "$*" in\n  *self-update-gate-XXXXXX*) d="$(%s "$@")" || exit $?; mkdir "$d/gating"; echo fired >> %s/fired; printf "%%s\\n" "$d" ;;\n  *) exec %s "$@" ;;\nesac\n' \
+printf '#!/bin/bash\ncase "$*" in\n  *self-update-gate-XXXXXX*) d="$(%s "$@")" || exit $?; mkdir "$d/gating"; echo fired >> %s/fired; printf "%%s\\n" "$d" ;;\n  *) exec %s "$@" ;;\nesac\n' \
   "$SG_REAL_MKTEMP" "$SG" "$SG_REAL_MKTEMP" > "$SG/mktemp"
 chmod +x "$SG/mktemp"
 # sg_scan <gate> <stubbed:yes|no> -> "und=<n> defer=<n> fired=<n>" on the base seed
@@ -4463,7 +4463,7 @@ qw_mut_pairs "${B_qr_utf8:-0}" "quote-mut-r2split" qr_scan "r2=1 ok=0" "r2=0 ok=
 # The shim fails ONLY the R2 listing (the one `diff --name-only` naming rule-authoring.md) and drops
 # a marker, so the cell cannot pass on a shim that never ran.
 QR_SH="$QW/r2shim"; mkdir -p "$QR_SH"
-printf '#!/bin/sh\ncase "$*" in *" diff --name-only "*"rule-authoring.md"*) : > "%s/fired"; exit 128 ;; esac\nexec "%s" "$@"\n' \
+printf '#!/bin/bash\ncase "$*" in *" diff --name-only "*"rule-authoring.md"*) : > "%s/fired"; exit 128 ;; esac\nexec "%s" "$@"\n' \
   "$QR_SH" "$(command -v git)" > "$QR_SH/git"
 chmod +x "$QR_SH/git"
 qr_fail() { # qr_fail <gate> [locale] -> "und=<n> defer=<n> ok=<n> fired=<0|1>"
@@ -4587,7 +4587,7 @@ MP="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-mp.XXXXXX")"
 mp_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
 mp_shim() { # mp_shim <dir> <ref> -- a git that fails only `ls-files --with-tree=<ref>`
   mkdir -p "$1"
-  printf '#!/bin/sh\ncase "$*" in *"ls-files --with-tree=%s "*) : > "%s/fired"; exit 128 ;; esac\nexec "%s" "$@"\n' \
+  printf '#!/bin/bash\ncase "$*" in *"ls-files --with-tree=%s "*) : > "%s/fired"; exit 128 ;; esac\nexec "%s" "$@"\n' \
     "$2" "$1" "$(command -v git)" > "$1/git"
   chmod +x "$1/git"
 }
@@ -4748,7 +4748,7 @@ for h in omega kappa sigma; do
   git -C "$UDD" show "$MP_UB:core/hooks/ai-dlc-$h.sh" > "$UDC/.claude/hooks/ai-dlc-$h.sh"
   printf '# CONSUMER HARDENING on %s: a line the distribution never carried here.\n' "$h" >> "$UDC/.claude/hooks/ai-dlc-$h.sh"
 done
-printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/log"\nexec "%s" "$@"\n' "$UD/mk" "$(command -v mktemp)" > "$UD/mk/mktemp"
+printf '#!/bin/bash\nprintf "%%s\\n" "$*" >> "%s/log"\nexec "%s" "$@"\n' "$UD/mk" "$(command -v mktemp)" > "$UD/mk/mktemp"
 chmod +x "$UD/mk/mktemp"
 mp_shim "$MP/us" "$MP_UB"
 mp_ud() { # mp_ud <unregistered-drift> <shim-dir|-> -> "rc=<n> rows=<status:path,...> refused=<0|1> fired=<0|1>"
