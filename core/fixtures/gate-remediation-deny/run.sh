@@ -1254,7 +1254,7 @@ esac
 _fl0="$fails"
 fl_report "FLOOR (7b padded/blank/whole, arm 9 padded/blank/whole)" DDSDDL "$HOOK" 0
 fl_report "FLOOR-CONTROL: an unmutated copy of the hook" DDSDDL "$FL_MW/control.sh" 0
-[ "$fails" = "$_fl0" ] && B_floor=1
+if [ "$fails" = "$_fl0" ]; then ok "FLOOR: the hook and its unmutated copy both hold every floor cell"; B_floor=1; fi
 # THE CALLER MEASURES RAW BYTES AGAIN, at both sites. The predicate still refuses the short needle
 # (NOMATCH-SHORT), so no verdict moves -- the defence in depth, asserted rather than assumed.
 FL_C7='  [ "$(cite_nlen "$nq")" -ge 12 ] || return 1'
@@ -1392,7 +1392,7 @@ mut m5-any-suppression-lifts 's@if \[ -z "\$FAILED_CHECKS" \]; then@if [ -n "$SU
 mut m6b-key-drops-verifier 's@|\$(ckey "\$STEER_SCRIPT")@@' || :
 mut m6-key-drops-escalations 's@|\$(ckey "\$ESC_FILE")@@' || :
 seed suppressed
-if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces S1's allow"; then B_ctlS1=1; fi
+if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces S1's allow"; then ok "CONTROL bound: the S1 mutants below are scored against a copy that reproduced the shipped allow"; B_ctlS1=1; fi
 if mok m1-no-subtract; then
   kill_arm "$(( ${B_S1:-0} && ${B_ctlS1:-0} ))" m1-no-subtract deny "$W" "M1: computing the subtraction and never applying it DENIES S1 — the arm can fire"
 fi
@@ -1671,7 +1671,7 @@ rm -rf "$W"
 # only ever denies would pass every assertion above. M14 makes B1 unable to bind and this
 # world must go red — that is what proves the allow is a measurement and not a default.
 seed forged-clean-bound
-if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces 7a's allow on a BOUND clean pass"; then B_ctl7a=1; fi
+if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces 7a's allow on a BOUND clean pass"; then ok "CONTROL bound: B_ctl7a -- the mutants it gates are scored against a copy that reproduced the shipped verdict"; B_ctl7a=1; fi
 if mok m14-write-never-binds; then
   kill_arm "$(( ${B_7abound:-0} && ${B_ctl7a:-0} ))" m14-write-never-binds deny "$W" "M14: a B1 arm that never returns bound-write DENIES a legitimately bound pass — the acquitting arm can fire"
 fi
@@ -1788,7 +1788,7 @@ aq_allow() { # <case> <flow event that must be logged> <label> -- AQ_OK=1 when b
 }
 
 aq_deny suppressed-forged-unbound 3a "AQ-A (L2): a bound pass FAILing 3a+7, then an UNBOUND pass FAILing only the suppressed 7"
-if [ "$AQ_OK" = 1 ]; then B_AQ_A=1; fi
+if [ "$AQ_OK" = 1 ]; then ok "base-pass flag B_AQ_A: the unmutated arm it gates passed in this run"; B_AQ_A=1; fi
 aq_allow suppressed-forged-bound GATE_REMEDIATION_SUPPRESSED "AQ-A twin: the same newer pass BOUND by its write row"
 aq_allow suppressed-unbound-substitute-covered GATE_REMEDIATION_SUPPRESSED "AQ-A twin: every FAIL in the convict set is covered"
 aq_drive suppressed-unbound-substitute-covered
@@ -1796,7 +1796,7 @@ if aq_unbound; then ok "AQ-A twin: ...GATE_VERDICT_UNBOUND is still logged on th
 else bad "AQ-A twin: the covered allow logged no GATE_VERDICT_UNBOUND — the binding was never asked on this exit"; fi
 rm -rf "$W"
 aq_deny subst-newer-unbound-fail 3a "AQ-B: a bound CLEAN pass, a NEWER unbound pass FAILing 3a, a forged clean live pass"
-if [ "$AQ_OK" = 1 ]; then B_AQ_B=1; fi
+if [ "$AQ_OK" = 1 ]; then ok "base-pass flag B_AQ_B: the unmutated arm it gates passed in this run"; B_AQ_B=1; fi
 aq_deny subst-nobound-older-fail 3a "AQ-L1: nothing bound, an OLDER unbound pass FAILing 3a, a live pass FAILing only the suppressed 7"
 aq_deny subst-two-forged 3a "AQ-2F: nothing bound, a real FAIL on 3a under TWO forged passes FAILing only the suppressed 7"
 # With nothing bound, the flow log must say the set it convicted on is itself unbound.
@@ -1807,9 +1807,9 @@ for _aq in subst-nobound-older-fail subst-two-forged; do
   rm -rf "$W"
 done
 aq_deny subst-crossgate 3a "AQ-L3: planning s301 bound CLEAN, story s302 unbound FAIL 3a, forged implementation s303 FAIL 7 covered"
-if [ "$AQ_OK" = 1 ]; then B_AQ_L3=1; fi
+if [ "$AQ_OK" = 1 ]; then ok "base-pass flag B_AQ_L3: the unmutated arm it gates passed in this run"; B_AQ_L3=1; fi
 aq_allow subst-percatalog GATE_REMEDIATION_SUPPRESSED "AQ-CAT: ext-catalog passes FAILing 7 over a bound core CLEAN pass, \`[ext-catalog] 7\` in force"
-if [ "$AQ_OK" = 1 ]; then B_AQ_CAT=1; fi
+if [ "$AQ_OK" = 1 ]; then ok "base-pass flag B_AQ_CAT: the unmutated arm it gates passed in this run"; B_AQ_CAT=1; fi
 aq_drive subst-percatalog
 if aq_unbound; then ok "AQ-CAT: ...GATE_VERDICT_UNBOUND is logged before the suppressed allow"
 else bad "AQ-CAT: no GATE_VERDICT_UNBOUND on the per-catalog allow"; fi
@@ -1958,6 +1958,7 @@ while IFS='|' read -r _al _ac _am _an; do
       *) ok "AD-W4-SPACE: ...and no waiver of the unbound pass was taken (no 'under a verified waiver' in the flow log)" ;; esac
   fi
   if [ "$fails" = "$_adf0" ]; then
+    ok "$_al: every cell of this world held (its base-pass flag is set)"
     case "$_al" in
       AD-UNPARSEABLE) B_ad_unparseable=1 ;;
       AD-DASH) B_ad_dash=1 ;;
@@ -2241,7 +2242,7 @@ E1EOF
 }
 _e10="$fails"
 e1_drive_all "$HOOK"
-[ "$fails" = "$_e10" ] && B_e1=1
+if [ "$fails" = "$_e10" ]; then ok "base-pass flag B_e1: the unmutated arm it gates passed in this run"; B_e1=1; fi
 # The deny's TEXT, guarded on the deny existing.
 OUT="$(drive "$W" Edit "$E1_PEND" z9rem "$E1_TR")"
 if denied "$OUT"; then
@@ -2725,7 +2726,7 @@ B_3b=0
 _3b0="$fails"
 lpe deny "3b base: P1 (a lead product Edit with an /ai-dlc transcript) is DENIED" "$W/src/app.py" "$TA"
 lpe allow "3b base: the sibling worktree's _bmad-output/ path is ALLOWED" "$SIB/_bmad-output/planning-artifacts/x.md" "$TA"
-[ "$fails" = "$_3b0" ] && B_3b=1
+if [ "$fails" = "$_3b0" ]; then ok "base-pass flag B_3b: the unmutated arm it gates passed in this run"; B_3b=1; fi
 if mut m3b-no-iv 's@^    if \[ "\$AIDLC_SESSION" -eq 1 \]; then$@    if true; then@'; then
   lpe_mut m3b-no-iv "${B_3b:-0}" deny "$W/src/app.py" "$TP" allow "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "M3b-iv: dropping (iv) DENIES the non-pipeline session's product edit — (iv) is load-bearing"
 fi

@@ -10,3 +10,4 @@
 !core/scripts/verdict.sh
 core/skills/ai-dlc/SKILL.md
 !core/schemas/pause-routing.json
+core/fixtures/lib/mutant.sh

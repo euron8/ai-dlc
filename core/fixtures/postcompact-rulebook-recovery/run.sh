@@ -75,9 +75,9 @@
 # MUTANT-MATRIX M8-step-only decides=d_first twins=d_step
 # MUTANT-MATRIX M-base decides=d_base twins=d_step
 # MUTANT-MATRIX M-nofull decides=d_bounded twins=d_step
-# MUTANT-MATRIX M9-inplace decides=s_inode,s_killed,s_struct twins=s_garbage
-# MUTANT-MATRIX M10-no-rename decides=s_inode,s_struct twins=s_killed
-# MUTANT-MATRIX M-unlink decides=s_killed,s_struct twins=s_inode
+# MUTANT-MATRIX M9-inplace decides=s_inode,s_ulimit,s_struct twins=s_garbage
+# MUTANT-MATRIX M10-no-rename decides=s_inode,s_struct twins=s_ulimit
+# MUTANT-MATRIX M-unlink decides=s_ulimit,s_struct twins=s_inode
 # MUTANT-MATRIX M-fixedname decides=s_struct twins=s_inode
 # MUTANT-MATRIX M-684 decides=r_clear twins=r_owed
 # MUTANT-MATRIX M-730 decides=r_owed twins=r_clear
@@ -102,6 +102,10 @@
 # MUTANT-MATRIX M8-agreement-dup decides=S5 twins=S2
 # MUTANT-MATRIX PC-f decides=upd_nomark,upd_foreign twins=foreign
 # MUTANT-MATRIX PC-g decides=foreign twins=legacy
+# MUTANT-MATRIX M-reclear decides=reclear twins=- why=a one-world arm whose only cell is the re-clear predicate
+# MUTANT-MATRIX M-net-ceiling decides=net twins=- why=a one-world arm whose only cell is the net-expiry predicate
+# MUTANT-MATRIX M-pc-deletes decides=sequence twins=- why=a one-world arm whose only cell is the three-hook sequence
+# MUTANT-MATRIX-DYNAMIC scorer why=each battery's scorer passes its own name argument to mutant_killed, every name carrying its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix
 set -uo pipefail
 
@@ -133,6 +137,10 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# Every mutant kill is emitted through mutant_killed, gated on its block's unmutated control having passed
+# in this run (BL-828): a kill read off a control that failed would be the harness failing, not the mutation.
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 skip() { # skip <what> <why> — tolerated only where the subject legitimately has not arrived
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -1167,7 +1175,7 @@ CTRL_G="$WORK/gate-control.sh"
 cp "$GATE" "$CTRL_G"
 cf="$(flips "$CTRL_G")"
 if [ -z "${cf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces all ${NPREDS} verdicts — the flips below are the mutations"
+  ok "control: an unmutated copy of the gate reproduces all ${NPREDS} verdicts — the flips below are the mutations"; B_ctl_g=1
 else
   bad "CONTROL FAILED — an unmutated copy already flips {${cf}}, so every mutant verdict below is uninterpretable"
 fi
@@ -1182,9 +1190,9 @@ mutant_arm() { # mutant_arm <label> <mutant> <expected flip set, in PREDS order>
   fi
   got="$(flips "$2" "$(mx_sel "$PREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
   if [ "$got" = "$3 " ]; then
-    ok "mutant: $1 — flips exactly {$3}"
+    mutant_killed "${B_ctl_g:-0}" "$5" "mutant: $1 — flips exactly {$3}"
   elif [ -z "${got// /}" ]; then
-    bad "MUTANT KILLED NOTHING: $1 — every gate arm stays green with the mutation applied, so {$3} cannot fire"
+    bad "MUTANT SURVIVED: $1 — every gate arm stays green with the mutation applied, so {$3} cannot fire"
   else
     bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}; the arms are entangled or one of them is vacuous"
   fi
@@ -1492,7 +1500,7 @@ RCTRL="$WORK/recover-control-producer.sh"
 cp "$HOOK" "$RCTRL"
 rcf="$(rflips "$RCTRL")"
 if [ -z "${rcf// /}" ]; then
-  ok "control: an unmutated copy of the producer reproduces both verdicts — the flips below are the mutations"
+  ok "control: an unmutated copy of the producer reproduces both verdicts — the flips below are the mutations"; B_ctl_r=1
 else
   bad "CONTROL FAILED — an unmutated copy of the producer already flips {${rcf}}, so every producer-mutant verdict below is uninterpretable"
 fi
@@ -1506,9 +1514,9 @@ rmutant_arm() { # rmutant_arm <label> <mutant> <expected flip set, in RPREDS ord
   fi
   got="$(rflips "$2" "$(mx_sel "$RPREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
   if [ "$got" = "$3 " ]; then
-    ok "mutant: $1 — flips exactly {$3}"
+    mutant_killed "${B_ctl_r:-0}" "$5" "mutant: $1 — flips exactly {$3}"
   elif [ -z "${got// /}" ]; then
-    bad "MUTANT KILLED NOTHING: $1 — both producer arms stay green with the mutation applied, so {$3} cannot fire"
+    bad "MUTANT SURVIVED: $1 — both producer arms stay green with the mutation applied, so {$3} cannot fire"
   else
     bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}; the arms are entangled or one of them is vacuous"
   fi
@@ -1782,16 +1790,16 @@ a_reclear() {
   printf 'PASS\n'
 }
 r_re="$(a_reclear "$HOOK")"
-if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"
+if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"; B_reclear=1
 else bad "R: a new recovery clears the advisor window the previous one left — ${r_re#FAIL:}"; fi
 MR_RECLEAR="$WORK/recover-no-reclear.sh"
 awk '!index($0,"rm -f \"${STATE_DIR}/.recover-advisor-owed\"")' "$HOOK" > "$MR_RECLEAR"
 if cmp -s "$HOOK" "$MR_RECLEAR" || ! bash -n "$MR_RECLEAR" 2>/dev/null; then
   bad "FIXTURE STALE: the window-clear mutant did not apply"
 elif [ "$(a_reclear "$MR_RECLEAR")" = PASS ]; then
-  bad "MUTANT KILLED NOTHING: a producer that does not clear the advisor window still passes"
+  bad "MUTANT SURVIVED: a producer that does not clear the advisor window still passes"
 else
-  ok "mutant: a producer that does not clear the advisor window fails the re-clear arm"
+  mutant_killed "${B_reclear:-0}" M-reclear "mutant: a producer that does not clear the advisor window fails the re-clear arm"
 fi
 
 APREDS="deny after before unavail nogrant mate nodigest bound session"
@@ -1819,7 +1827,7 @@ CTRL_A="$WORK/gate-control-adv.sh"
 cp "$GATE" "$CTRL_A"
 acf="$(aflips "$CTRL_A")"
 if [ -z "${acf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces every advisor-stage verdict"
+  ok "control: an unmutated copy of the gate reproduces every advisor-stage verdict"; B_ctl_a=1
 else
   bad "CONTROL FAILED — an unmutated copy already flips {${acf}}, so every advisor-stage mutant below is uninterpretable"
 fi
@@ -1828,8 +1836,8 @@ amutant_arm() { # amutant_arm <label> <mutant> <expected flip set, in APREDS ord
   if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
   if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
   got="$(aflips "$2" "$(mx_sel "$APREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
-  if [ "$got" = "$3 " ]; then ok "mutant: $1 — flips exactly {$3}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$3} cannot fire"
+  if [ "$got" = "$3 " ]; then mutant_killed "${B_ctl_a:-0}" "$5" "mutant: $1 — flips exactly {$3}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$3} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}"; fi
 }
 amut() { # amut <name> <awk program> -> mutant path
@@ -2032,7 +2040,7 @@ SCTRL_H="$WORK/recover-control-whose.sh"; SCTRL_G="$WORK/gate-control-whose.sh"
 cp "$HOOK" "$SCTRL_H"; cp "$GATE" "$SCTRL_G"
 scf="$(sflips "$SCTRL_H" "$SCTRL_G")"
 if [ -z "${scf// /}" ]; then
-  ok "control: unmutated copies of the producer and the gate reproduce all 9 whose-recovery verdicts, deny cells included"
+  ok "control: unmutated copies of the producer and the gate reproduce all 9 whose-recovery verdicts, deny cells included"; B_ctl_s=1
 else
   bad "CONTROL FAILED — unmutated copies already flip {${scf}}, so every whose-recovery mutant verdict below is uninterpretable"
 fi
@@ -2050,8 +2058,8 @@ smutant_arm() { # smutant_arm <label> <hook> <gate> <expected flips in SPREDS or
   if [ "$3" != "$GATE" ] && cmp -s "$GATE" "$3"; then bad "FIXTURE STALE: $1 — the gate mutant is byte-identical"; return; fi
   if ! bash -n "$2" 2>/dev/null || ! bash -n "$3" 2>/dev/null; then bad "FIXTURE STALE: $1 — a mutant is not valid shell, and its silence would score as a kill"; return; fi
   got="$(sflips "$2" "$3" "$(mx_sel "$SPREDS" "$4" "$5")")"; mx_note "$6" "$4" "$got"
-  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — every whose-recovery arm stays green, so {$4} cannot fire"
+  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_s:-0}" "$6" "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — every whose-recovery arm stays green, so {$4} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}; the arms are entangled or one of them is vacuous"; fi
 }
 UPD_CASE='    *'"'"'/ai-dlc-update</command-name>'"'"'|*'"'"'"skill":"ai-dlc-update"'"'"') exit 0 ;;'
@@ -2136,16 +2144,16 @@ a_net() {
   printf 'PASS\n'
 }
 r_net="$(a_net "$GATE")"
-if [ "$r_net" = PASS ]; then ok "R: the safety net's expiry with the incoming call's line unseen allows, uncounted, with a stderr reason"
+if [ "$r_net" = PASS ]; then ok "R: the safety net's expiry with the incoming call's line unseen allows, uncounted, with a stderr reason"; B_net=1
 else bad "R: the safety net's expiry with the incoming call's line unseen — ${r_net#FAIL:}"; fi
 MR_NET="$WORK/gate-adv-net.sh"
 awk 'index($0,"if [ \"${R_SEEN:-0}\" != 1 ]; then"){print "  if false; then"; next} 1' "$GATE" > "$MR_NET"
 if cmp -s "$GATE" "$MR_NET" || ! bash -n "$MR_NET" 2>/dev/null; then
   bad "FIXTURE STALE: the time-only-ceiling mutant did not apply"
 elif [ "$(a_net "$MR_NET")" = PASS ]; then
-  bad "MUTANT KILLED NOTHING: a gate whose clock denies an unseen call still passes the net arm"
+  bad "MUTANT SURVIVED: a gate whose clock denies an unseen call still passes the net arm"
 else
-  ok "mutant: a gate whose net ceiling denies an unseen call fails the net arm"
+  mutant_killed "${B_net:-0}" M-net-ceiling "mutant: a gate whose net ceiling denies an unseen call fails the net arm"
 fi
 
 # =============================================================================
@@ -2314,7 +2322,7 @@ for _n in $R7PREDS; do
 done
 r7cf="$(r7_flips "$WORK/r7-ctrl")"
 if [ -z "${r7cf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces every BL-730 verdict"
+  ok "control: an unmutated copy of the gate reproduces every BL-730 verdict"; B_ctl_r7=1
 else
   bad "CONTROL FAILED — an unmutated copy already flips {${r7cf}}, so every BL-730 mutant below is uninterpretable"
 fi
@@ -2322,8 +2330,8 @@ r7mutant_arm() { # r7mutant_arm <label> <mutant> <outdir> <expected flip set, in
   if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
   if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
   got="$(r7_flips "$3")"; mx_note "$5" "$4" "$got"
-  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$4} cannot fire"
+  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_r7:-0}" "$5" "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$4} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
 }
 if grep -qxF '  R_NET=10' "$R7_NET10" && ! grep -qF '10#$RECOVER_GATE_NET' "$R7_NET10"; then
@@ -2644,12 +2652,12 @@ fi
   # A write killed by the file-size limit must leave the old stage whole. This arm alone cannot
   # tell a gate that never reached the write from one that wrote safely; rp_s_inode is the
   # presence-shaped half, and the unmutated control requires both.
-  rp_s_killed() {
+  rp_s_ulimit() {
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
     printf 'snapshot\n' > "$_rq/$pg"
     _rj="$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")"
     ( ulimit -f 0; gate_call "$1/$RG" "$_rq" "$_rj" >/dev/null ) 2>/dev/null
-    [ "$(cat "$_rq/$pg" 2>/dev/null)" = snapshot ] || { echo "FAIL:a killed stage write left the stage reading '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
+    [ "$(cat "$_rq/$pg" 2>/dev/null)" = snapshot ] || { echo "FAIL:a stage write cut off by ulimit left the stage reading '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
     echo PASS
   }
   rp_s_garbage() { # control: a garbage stage is allowed through and the file removed
@@ -2683,7 +2691,7 @@ fi
     [ "$_rv" = first ] || { echo "FAIL:a decoy Read after a new recovery answered '${_rv}', not the FIRST deny"; return; }
     echo PASS
   }
-  rp_r_owed() { # a new recovery clears an owed-file temp left by a killed owed_put
+  rp_r_owed() { # a new recovery clears an owed-file temp left by an interrupted owed_put
     _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
     : > "$_rq/${pg%/*}/.recover-advisor-owed.4242"
     [ -e "$_rq/${pg%/*}/.recover-advisor-owed.4242" ] || { echo 'FAIL:SEED — the owed temp was not seeded'; return; }
@@ -2706,11 +2714,11 @@ fi
       d_base)    echo "BL-658 control: a same-basename decoy x/postcompact-digest.md is denied at both stages" ;;
       d_bounded) echo "BL-658 control: a bounded digest Read (limit=1) is denied at both stages" ;;
       s_inode)   echo "BL-666: a full snapshot Read replaces the stage inode — the hard link still reads snapshot, the stage reads step" ;;
-      s_killed)  echo "BL-666: a stage write killed by ulimit -f 0 leaves the stage reading snapshot" ;;
+      s_ulimit)  echo "BL-666: a stage write cut off by ulimit -f 0 leaves the stage reading snapshot" ;;
       s_garbage) echo "BL-666 control: a garbage stage is allowed through and the file removed" ;;
       s_struct)  echo "BL-666 structural: the stage write's temp is spelled from \${PROGRESS}, carries \$\$, and is renamed onto \$PROGRESS" ;;
       r_clear)   echo "BL-684: a new recovery clears the previous stage and its temp, and a first-call decoy Read gets the FIRST deny" ;;
-      r_owed)    echo "BL-730: a new recovery clears an owed-file temp (.recover-advisor-owed.<pid>) left by a killed write" ;;
+      r_owed)    echo "BL-730: a new recovery clears an owed-file temp (.recover-advisor-owed.<pid>) left by an interrupted write" ;;
       r_ctl)     echo "BL-684 control: on a fresh recovery the same decoy Read gets the FIRST deny" ;;
     esac
   }
@@ -2720,8 +2728,8 @@ fi
     _rd="$(race_dir)"
     if [ -z "$_rd" ]; then bad "FIXTURE BROKEN: $2 — a whole-directory copy of the hooks did not carry every sibling"; return; fi
     _rg="$(rc_flips "$_rd" "$1")"
-    if [ -z "${_rg// /}" ]; then ok "control: $2 — an unmutated whole-directory copy passes every arm, so a flip below is its mutation"
-    else bad "CONTROL FAILED: $2 — an unmutated copy already flips {${_rg}}, so no mutant verdict below is evidence"; fi
+    if [ -z "${_rg// /}" ]; then ok "control: $2 — an unmutated whole-directory copy passes every arm, so a flip below is its mutation"; RC_CTL=1
+    else bad "CONTROL FAILED: $2 — an unmutated copy already flips {${_rg}}, so no mutant verdict below is evidence"; RC_CTL=0; fi
   }
   rc_score() { # rc_score <label> <dir> <file> <preds> <expected flips>
     if [ -z "$2" ]; then bad "FIXTURE STALE: $1 — the mutation did not apply to its anchor"; return; fi
@@ -2731,7 +2739,7 @@ fi
     _rtw="-"; for _rx in $4; do case " $5 " in *" $_rx "*) ;; *) _rtw="$_rx"; break ;; esac; done
     _rnm="${1%%:*}"; _rnm="$(printf '%s' "$_rnm" | tr -c 'A-Za-z0-9_+-' '_')"
     _rg="$(rc_flips "$2" "$(mx_sel "$4" "$5" "$_rtw")")"; mx_note "$_rnm" "$5" "$_rg"
-    if [ "$_rg" = "$5 " ]; then ok "mutant: $1 — applied (cmp differs), killed by exactly {$5}"
+    if [ "$_rg" = "$5 " ]; then mutant_killed "${RC_CTL:-0}" "$_rnm" "mutant: $1 — applied (cmp differs), flips exactly {$5}"
     elif [ -z "${_rg// /}" ]; then bad "MUTANT SURVIVED: $1 — every arm stays green, so {$5} cannot fire"
     else bad "MUTANT FLIP SET WRONG: $1 — expected {$5}, measured {${_rg}}"; fi
   }
@@ -2801,7 +2809,7 @@ END { if (inb) flush() }
   if [ "$_rk" -lt 1 ]; then
     skip "BL-666 renamed-stage-write arms" "the gate does not rename a temp onto the stage (key '${RC_RENKEY}', found 0); this fixture ships one pull ahead of its subject"
   else
-    RC_P666="s_inode s_killed s_garbage s_struct"
+    RC_P666="s_inode s_ulimit s_garbage s_struct"
     rc_arms "$RC_P666"
     rc_control "$RC_P666" "BL-666 stage write"
     _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
@@ -2812,11 +2820,11 @@ END { if (inb) flush() }
       printf '%s\n' "$_rd"
     }
     rc_score "M9-inplace: the stage written in place" \
-      "$(rc_sw $'        printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_killed s_struct"
+      "$(rc_sw $'        printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_ulimit s_struct"
     rc_score "M10-no-rename: the temp written and never moved" \
       "$(rc_sw $'        printf \'step\\n\' >"${PROGRESS}.$$" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_struct"
     rc_score "M-unlink: the stage removed, then written in place" \
-      "$(rc_sw $'        rm -f "$PROGRESS" 2>/dev/null; printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_killed s_struct"
+      "$(rc_sw $'        rm -f "$PROGRESS" 2>/dev/null; printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_ulimit s_struct"
     rc_score "M-fixedname: a fixed temp name with no \$\$" \
       "$(rc_sw "${_rsw//"$_rfa"/$_rfb}")" "$RG" "$RC_P666" "s_struct"
   fi
@@ -3362,7 +3370,7 @@ posmutant() { # posmutant <label> <mutant-path> <expected flip set> <what it pro
   _pg="$(posbattery "$2" "$(mx_sel "$POS_SEEDS" "$3" "$5")")"
   _pfl="$(posflips "$_pg")"; mx_note "$6" "$3" "$_pfl"
   if [ "$_pfl" = "$3" ]; then
-    ok "MUTANT $1: flips exactly {$3} — $4"
+    mutant_killed "${B_ctl_pos:-0}" "$6" "MUTANT $1: flips exactly {$3} — $4"
   elif [ -z "$_pfl" ]; then
     bad "MUTANT SURVIVED: $1 — every seed answers as the fixed hook does, so {$3} cannot fire and $4 is unproven"
   else
@@ -3379,7 +3387,7 @@ POS_CTRL="$WORK/recover-pos-control.sh"
 cp "$HOOK" "$POS_CTRL"
 POS_C="$(posbattery "$POS_CTRL")"
 if [ "$POS_C" = "$POS_EXPECTED" ]; then
-  ok "control: an unmutated copy of the hook, driven from a scratch project, reproduces all ten seed tokens — a mutant's flip below is its mutation and not the copy"
+  ok "control: an unmutated copy of the hook, driven from a scratch project, reproduces all ten seed tokens — a mutant's flip below is its mutation and not the copy"; B_ctl_pos=1
 else
   bad "CONTROL FAILED — an unmutated copy answers [$POS_C], not the battery the real hook answers, so every position-mutant verdict below is uninterpretable"
 fi
@@ -3521,7 +3529,7 @@ p_sequence() { # p_sequence <postcompact-hook> -> PASS | FAIL:<what it saw>
 
 r="$(p_sequence "$POSTCOMPACT")"
 if [ "$r" = PASS ]; then
-  ok "three-hook sequence: recover.sh -> postcompact.sh -> gate, the marker survives postcompact and the first non-mandated call is DENIED"
+  ok "three-hook sequence: recover.sh -> postcompact.sh -> gate, the marker survives postcompact and the first non-mandated call is DENIED"; B_seq=1
 else
   bad "three-hook sequence: ${r#FAIL:}"
 fi
@@ -3538,8 +3546,8 @@ elif ! bash -n "$MP_DEL" 2>/dev/null; then
 else
   rm_="$(p_sequence "$MP_DEL")"
   case "$rm_" in
-    FAIL:postcompact\ DELETED*) ok "mutant: postcompact.sh restored to deleting the marker — the sequence arm goes red on exactly that line" ;;
-    PASS) bad "MUTANT KILLED NOTHING: a postcompact.sh that deletes the marker still passes the sequence arm, so the arm cannot see the shipped defect" ;;
+    FAIL:postcompact\ DELETED*) mutant_killed "${B_seq:-0}" M-pc-deletes "mutant: postcompact.sh restored to deleting the marker — the sequence arm goes red on exactly that line" ;;
+    PASS) bad "MUTANT SURVIVED: a postcompact.sh that deletes the marker still passes the sequence arm, so the arm cannot see the shipped defect" ;;
     *) bad "MUTANT FLIP WRONG: expected the deletion finding, measured '${rm_#FAIL:}'" ;;
   esac
 fi
@@ -3608,7 +3616,8 @@ for _n in $PCPREDS; do
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
 pcf="$(pcflips "$POSTCOMPACT")"
-[ -z "${pcf// /}" ] && ok "control: the unmutated postcompact hook reproduces all 4 verdicts" || bad "CONTROL FAILED — postcompact already flips {${pcf}}"
+if [ -z "${pcf// /}" ]; then ok "control: the unmutated postcompact hook reproduces all 4 verdicts"; B_ctl_pc=1
+else bad "CONTROL FAILED — postcompact already flips {${pcf}}"; fi
 
 pcmutant() { # pcmutant <label> <src-anchor-line> <replacement> <expected flips> <twins> <name>
   _m="$WORK/postcompact-whose-$$-$RANDOM.sh"
@@ -3616,8 +3625,8 @@ pcmutant() { # pcmutant <label> <src-anchor-line> <replacement> <expected flips>
   cmp -s "$POSTCOMPACT" "$_m" && { bad "FIXTURE STALE: $1 — byte-identical"; return; }
   bash -n "$_m" 2>/dev/null || { bad "FIXTURE STALE: $1 — not valid shell"; return; }
   got="$(pcflips "$_m" "$(mx_sel "$PCPREDS" "$4" "$5")")"; mx_note "$6" "$4" "$got"
-  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$4} cannot fire"
+  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_pc:-0}" "$6" "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$4} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
 }
 # (f) updater stand-down removed. Killed by upd_nomark (no marker -> logs `no` and prints the

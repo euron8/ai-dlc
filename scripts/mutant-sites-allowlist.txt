@@ -1,4 +1,1 @@
-backlog-receipt-binding	score	1	if "arm_$a" "$m"; then mutant_killed "$f" "$m" "$3"
-gate-remediation-deny	mx_kill	1	if [ "$4" = 1 ]; then mutant_killed "$1" "$2" "$5"; else bad "$2 SURVIVED: $5"; fi
 prepush-pool-depth	finish_mutant	1	if [ "$3" = 1 ]; then mutant_killed "$1" "$2" "$4"; else bad "$5"; fi
-readset-stage1-verdict	smut	1	if [ "$(world_hit "$dst" "$w")" = 1 ]; then mutant_killed "$flag" "$name" "mutant $name KILLED on $w (applied; twin $twin green)"; else bad "mutant $name SURVIVED on $w"; fi

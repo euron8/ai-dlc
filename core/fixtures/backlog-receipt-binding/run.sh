@@ -602,8 +602,9 @@ m7_sum_after="$(cksum "$TMP/control/probe/subject.txt" | awk '{print $1}')"
 if [ "$rc" -ne 0 ]; then
   note "FIXTURE BROKEN: the unmutated control did NOT pass. Every probe verdict below is meaningless."
   exit 1
+else
+  ok "control -- the unmutated subject passed, so a mutant verdict below is its mutation"; B_CTRL=1
 fi
-B_CTRL=1
 record control "$CTL_RC" "ARGS $DEF
 $CTL_OUT"
 
@@ -770,7 +771,7 @@ if [ "$m5_801" != "UNSEEDED" ]; then
   note "FAIL  m5 -- with its subject unwritable the literal-grep receipt was classified '${m5_801:-NONE}', not UNSEEDED. An unapplied seed must be reported as unseeded; reported as 'no flip' it is a silent acquittal."
   rc=1
 else
-  note "ok    m5 -- a seed that could not be applied is reported UNSEEDED, not read as a bound receipt"; B_M5=1
+  ok "m5 -- a seed that could not be applied is reported UNSEEDED, not read as a bound receipt"; B_M5=1
 fi
 # ...and the mutant: with the applied-check gone, that same receipt must stop being UNSEEDED.
 if mut "$TMP/m5" 's|^      if cmp -s "$_st_d/$_p" "$_st_d/$_p.brpre"; then|      if false; then|'; then
@@ -885,7 +886,7 @@ M8B_ARGS="--max-prose-closable 0 --max-unscorable 0 --max-out-of-population 0 --
 m8b_out="$(run_v "" "$TMP/m8b" $M8B_ARGS)"; m8b_rc=$?
 if [ "$m8b_rc" -eq 0 ] && grep -q '^OK: validate-backlog-receipts.* R2 all-already-passing$' <<<"$m8b_out" \
    && [ "$(cls "$m8b_out" BL-805)" = ALREADY-PASSING ]; then
-  note "ok    m8b -- a ledger whose only receipt already passes is OK and says R2 all-already-passing"; B_M8B=1
+  ok "m8b -- a ledger whose only receipt already passes is OK and says R2 all-already-passing"; B_M8B=1
 else
   note "FAIL  m8b -- a ledger whose only receipt already passes must pass and say so (rc=$m8b_rc)"
   printf '%s\n' "$m8b_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
@@ -921,7 +922,7 @@ printf '# Probe backlog\n\n## BL-806\n\nBody.\n\nverify: manual -- close when ob
 # shellcheck disable=SC2086
 m8cn_out="$(run_v "" "$TMP/m8cn" $M8C_ARGS)"; m8cn_rc=$?
 if [ "$m8cn_rc" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$m8cn_out"; then
-  note "ok    m8c-near -- one live entry with no receipt line beside a manual one still refuses as a zero"; B_M8CN=1
+  ok "m8c-near -- one live entry with no receipt line beside a manual one still refuses as a zero"; B_M8CN=1
 else
   note "FAIL  m8c-near -- a ledger not accounted for entry by entry exited $m8cn_rc instead of refusing as a zero"; rc=1
 fi
@@ -947,7 +948,7 @@ M8E_ARGS="--max-prose-closable 0 --max-unscorable 0 --max-out-of-population 0 --
 m8e_out="$(run_v "" "$TMP/m8e" $M8E_ARGS)"; m8e_rc=$?
 if [ "$m8e_rc" -eq 1 ] && grep -qE '^FAIL: UNRECOGNISED.BL-851' <<<"$m8e_out" \
    && ! grep -qE 'UNRECOGNISED.BL-85[234]' <<<"$m8e_out"; then
-  note "ok    m8e -- 'verify: manual.' is named by entry id; bare 'manual' and 'manual reason' are not"; B_M8E=1
+  ok "m8e -- 'verify: manual.' is named by entry id; bare 'manual' and 'manual reason' are not"; B_M8E=1
 else
   note "FAIL  m8e -- the unrecognised value must be named by id and the near-misses left alone (rc=$m8e_rc)"
   printf '%s\n' "$m8e_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -4; rc=1
@@ -1012,7 +1013,7 @@ else
   # shellcheck disable=SC2086
   m8d_out="$(run_v "" "$TMP/m8d" $M8D_ARGS)"; m8d_rc=$?
   if [ "$m8d_rc" -eq 0 ] && grep -q '^OK: validate-backlog-receipts.* R2 declared-empty$' <<<"$m8d_out"; then
-    note "ok    m8d -- a ledger declared empty is OK and says R2 declared-empty"; B_M8D=1
+    ok "m8d -- a ledger declared empty is OK and says R2 declared-empty"; B_M8D=1
   else
     note "FAIL  m8d -- a declared-empty ledger must pass and say so (rc=$m8d_rc)"
     printf '%s\n' "$m8d_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
@@ -1127,7 +1128,7 @@ fi
 seed "$TMP/m14"
 kill_check "m14 R4 fires when out-of-population exceeds its ceiling" "$TMP/m14" "" 1 \
   "have a base exit that is neither 0 nor 1" --max-out-of-population 0
-B_M14=$KC_OK
+if [ "${KC_OK:-0}" = 1 ]; then ok "base-pass flag B_M14: the unmutated arm it gates passed in this run"; B_M14=1; fi
 # ...and the arm's mutant: with the comparison dead, the same corpus must pass.
 seed "$TMP/m14b"
 if mut "$TMP/m14b" 's|^if \[ "$N_OOP" -gt "$MAX_OOP" \]; then|if false; then|'; then
@@ -1155,7 +1156,7 @@ if mut "$TMP/m15b" 's|^  wr() { printf|  wr() { [ "$n" = "0001" ] \&\& return 0;
     note "FAIL  m15b the subject refused, but not on the dispatched-verdict assertion"
     printf '%s\n' "$m15b_out" | sed 's/^/      /' | head -3; rc=1
   else
-    note "ok    m15b -- a dispatched receipt that files no verdict is a refusal, not a smaller population"; B_M15B=1
+    ok "m15b -- a dispatched receipt that files no verdict is a refusal, not a smaller population"; B_M15B=1
   fi
 fi
 [ -f "$REC/m15.rc" ] && score m15 "${B_M15B:-0}" "m15 -- without the verdict-count assert a missing verdict changes the answer, so the assert is what catches a dead worker"
@@ -1351,7 +1352,7 @@ else
   gd_out="$(run_v "GIT_DIR=$gd_caller/.git BR_PROBE_RECORD=" "$TMP/gd1" $DEF --quiet 2>&1)"; gd_rc=$?
   gd_after="$(git config --file "$gd_caller/.git/config" --get core.hooksPath 2>/dev/null)" || gd_after=""
   if [ "$gd_after" = "$gd_before" ]; then
-    note "ok    gitdir -- the subject run under an inherited GIT_DIR leaves the caller's core.hooksPath byte-unchanged ($gd_after)"; B_GDa=1
+    ok "gitdir -- the subject run under an inherited GIT_DIR leaves the caller's core.hooksPath byte-unchanged ($gd_after)"; B_GDa=1
   else
     note "FAIL  gitdir -- the subject REWROTE the caller's core.hooksPath from '$gd_before' to '$gd_after'. The caller's own pre-push hook now points at a directory this run deletes, so its next push runs no gate and reports success."
     rc=1
@@ -1366,7 +1367,7 @@ else
   gd_wt="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
               git -C "$gd_caller" worktree list 2>/dev/null ) | grep -c . )" || gd_wt=0
   if [ "${gd_rc:-1}" -eq 0 ] && [ "$gd_wt" -le 1 ]; then
-    note "ok    gitdir-scored -- under an inherited GIT_DIR the subject scored its OWN tree (exit 0) and registered no checkout in the caller (worktree rows: $gd_wt)"; B_GDb=1
+    ok "gitdir-scored -- under an inherited GIT_DIR the subject scored its OWN tree (exit 0) and registered no checkout in the caller (worktree rows: $gd_wt)"; B_GDb=1
   else
     note "FAIL  gitdir-scored -- the subject exited ${gd_rc:-?} and left $gd_wt worktree row(s) in the caller. Its receipt checkouts came from the CALLER'S HEAD, so every receipt was scored against a tree carrying none of its subjects."
     printf '%s\n' "$gd_out" | tail -4 | sed 's/^/      /'
@@ -1391,7 +1392,7 @@ else
     drive gitdir-mutant "$TMP/gd2" "GIT_DIR=$gd_caller/.git BR_PROBE_RECORD=" $DEF --quiet
     gd_mut="$(git config --file "$gd_caller/.git/config" --get core.hooksPath 2>/dev/null)" || gd_mut=""
     if [ "$gd_mut" != "$gd_before" ]; then side gitdir-mutant "hookspath=changed"; else side gitdir-mutant "hookspath=same"; fi
-    score gitdir-mutant "$(( ${B_GDa:-0} * ${B_GDb:-0} ))" "gitdir-mutant -- with the scrub removed the subject is redirected at the CALLER (it refuses on its own seeded probes, or rewrites the caller's hooks path), so the arm above reads the scrub and not merely the absence of a crash"
+    score gitdir-mutant "$(( ${B_GDa:-0} && ${B_GDb:-0} ))" "gitdir-mutant -- with the scrub removed the subject is redirected at the CALLER (it refuses on its own seeded probes, or rewrites the caller's hooks path), so the arm above reads the scrub and not merely the absence of a crash"
     ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
       git -C "$gd_caller" config core.hooksPath .githooks >/dev/null 2>&1 )
   fi
@@ -1433,7 +1434,7 @@ ph_world "$TMP/ph01"
 ph_out="$(run_v "" "$TMP/ph01" $PH_ARGS)"; ph_rc=$?
 if [ "$ph_rc" -eq 0 ] && [ "$(cls "$ph_out" BL-850)" = PROSE-CLOSABLE ] && [ "$(cls "$ph_out" BL-851)" = PROSE-CLOSABLE ] \
    && [ -z "$(cls "$ph_out" BL-632)" ] && grep -qE '^SUMMARY entries=2 sh-receipts=2 ' <<<"$ph_out"; then
-  note "ok    ph01 -- the lead-in bullet inside BL-850 opens no entry: BL-850 keeps its receipt, the list entry BL-851 is scored, 2 entries"; B_PH=1
+  ok "ph01 -- the lead-in bullet inside BL-850 opens no entry: BL-850 keeps its receipt, the list entry BL-851 is scored, 2 entries"; B_PH=1
 else
   note "FAIL  ph01 -- exit $ph_rc, BL-850=$(cls "$ph_out" BL-850) BL-851=$(cls "$ph_out" BL-851) BL-632=$(cls "$ph_out" BL-632)"
   printf '%s\n' "$ph_out" | grep -E '^SUMMARY|SELF-PROBE' | sed 's/^/      /'; rc=1
@@ -1547,7 +1548,7 @@ for mdrv in none caller; do
   fi
 done
 [ -d "$MEMO_IN" ] || { note "FAIL  memo-caller-owned -- the subject removed a memo directory its caller owns"; rc=1; }
-B_MEMO=0; [ "$rc" = "$memo_rc0" ] && B_MEMO=1
+B_MEMO=0; if [ "$rc" = "$memo_rc0" ]; then ok "memo base: every memo-leak cell above held, so the memo mutants below are scored against a passing base"; B_MEMO=1; fi
 
 # THREE MUTANTS, one per half of the fix, each scored on BOTH drives against its own expected cells.
 # memo_mut <name> <sed> <deciding drive: none|caller>. The deciding drive runs per push; --matrix runs both.
@@ -1638,7 +1639,7 @@ ef_world() { # ef_world <name> <dir> <ledger> <want-rows> <want-rc>
   out="$(vin "$2" "$2/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   got="$(ef_rows "$out")"
   if [ "$rc_v" -eq "$5" ] && [ "$got" = "$4" ] && { [ "$5" -ne 0 ] || grep -qF 'OK: validate-backlog-receipts --efficiency-only' <<<"$out"; }; then
-    note "ok    $1 -- rc $rc_v, rows [${got}]"; eval "B_${1//-/_}=1"
+    ok "$1 -- rc $rc_v, rows [${got}]"; case "$1" in ef-good) B_ef_good=1 ;; ef-noclose) B_ef_noclose=1 ;; ef-sprintless) B_ef_sprintless=1 ;; ef-untagged) B_ef_untagged=1 ;; ef-second) B_ef_second=1 ;; ef-noseat) B_ef_noseat=1 ;; ef-pathsprint) B_ef_pathsprint=1 ;; ef-noscript) B_ef_noscript=1 ;; ef-dirbase) B_ef_dirbase=1 ;; ef-nofigs) B_ef_nofigs=1 ;; ef-topair) B_ef_topair=1 ;; ef-filing) B_ef_filing=1 ;; ef-filing-noref) B_ef_filing_noref=1 ;; esac
   else
     note "FAIL  $1 -- rc $rc_v (want $5), rows [${got}] (want [$4])"
     printf '%s\n' "$out" | grep -v '^FAIL: E' | sed 's/^/      /' | head -4; rc=1
@@ -1721,14 +1722,29 @@ ef_world ef-pathsprint "$TMP/efps" "$EF_PATHSPRINT" "" 0
 # ef_mut <name> <sed> <world-dir-name> <ledger> -- the mutant must turn its world from red to green
 # (the arm stopped firing) OR be refused by the subject's own E0 self-probe (exit 2 naming E0).
 ef_mut() { # ef_mut <name> <sed> <world-dir-name> <ledger>
-  local d="$TMP/$1" out rc_v bf
+  local d="$TMP/$1" out rc_v
   ef_seed "$d" "$4"
   mut "$d" "$2" || return
   out="$(vin "$d" "$d/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   record "$1" "$rc_v" "$out"
   side "$1" "world=$3"
-  eval "bf=\${B_${3//-/_}:-0}"
-  score "$1" "$bf" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated"
+  # The base-pass flag is read LITERALLY per world, so it is a value this run set beside that world's ok.
+  case "$3" in
+    ef-good) score "$1" "${B_ef_good:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-noclose) score "$1" "${B_ef_noclose:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-sprintless) score "$1" "${B_ef_sprintless:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-untagged) score "$1" "${B_ef_untagged:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-second) score "$1" "${B_ef_second:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-noseat) score "$1" "${B_ef_noseat:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-pathsprint) score "$1" "${B_ef_pathsprint:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-noscript) score "$1" "${B_ef_noscript:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-dirbase) score "$1" "${B_ef_dirbase:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-nofigs) score "$1" "${B_ef_nofigs:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-topair) score "$1" "${B_ef_topair:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-filing) score "$1" "${B_ef_filing:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-filing-noref) score "$1" "${B_ef_filing_noref:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    *) bad "$1 -- ef_mut names world $3, which has no base-pass flag" ;;
+  esac
 }
 ef_mut m-noclose 's/^    if \[ "\$_ld" = "1" \] .. { \[ "\$_t" = "1" \] || \[ "\$_on" = "1" \]; }; then$/    if false; then/' ef-noclose "# probe
 
@@ -1827,7 +1843,7 @@ ef_filing() { # ef_filing <name> <dir> <with-origin 0|1> <want-rows> <want-rc> <
   out="$(vin "$2" "$2/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   got="$(ef_rows "$out")"
   if [ "$rc_v" -eq "$5" ] && [ "$got" = "$4" ] && grep -qF -- "$6" <<<"$out"; then
-    note "ok    $1 -- rc $rc_v, rows [${got}], scope [$6]"; eval "B_${1//-/_}=1"
+    ok "$1 -- rc $rc_v, rows [${got}], scope [$6]"; case "$1" in ef-good) B_ef_good=1 ;; ef-noclose) B_ef_noclose=1 ;; ef-sprintless) B_ef_sprintless=1 ;; ef-untagged) B_ef_untagged=1 ;; ef-second) B_ef_second=1 ;; ef-noseat) B_ef_noseat=1 ;; ef-pathsprint) B_ef_pathsprint=1 ;; ef-noscript) B_ef_noscript=1 ;; ef-dirbase) B_ef_dirbase=1 ;; ef-nofigs) B_ef_nofigs=1 ;; ef-topair) B_ef_topair=1 ;; ef-filing) B_ef_filing=1 ;; ef-filing-noref) B_ef_filing_noref=1 ;; esac
   else
     note "FAIL  $1 -- rc $rc_v (want $5), rows [${got}] (want [$4]), scope text [$6] $(grep -qF -- "$6" <<<"$out" && echo present || echo ABSENT)"
     printf '%s\n' "$out" | grep -v '^FAIL: E' | sed 's/^/      /' | head -4; rc=1
@@ -1841,14 +1857,17 @@ ef_filing ef-filing-noref "$TMP/efflnr" 0 "" 0 "filing shape: 0 added entr(y/ies
 # score a survivor of a filing mutant as a kill. The unmutated controls are ef-noscript, ef-nofigs
 # and ef-filing above, which pass E0 on the same seed builder.
 ef_mut0() { # ef_mut0 <name> <sed> <ledger>
-  local d="$TMP/$1" out rc_v f wf
+  local d="$TMP/$1" out rc_v
   ef_seed "$d" "$3"
   mut "$d" "$2" || return
   out="$(vin "$d" "$d/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   record "$1" "$rc_v" "$out"
-  case "$1" in m-noscript) f=ef_noscript ;; m-nofigs) f=ef_nofigs ;; *) f=ef_filing ;; esac
-  eval "wf=\${B_$f:-0}"
-  score "$1" "$wf" "$1 -- refused by the subject's own E0 self-probe before the corpus"
+  # Each mutant's base-pass flag is read literally (its unmutated control world's flag).
+  case "$1" in
+    m-noscript) score "$1" "${B_ef_noscript:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" ;;
+    m-nofigs) score "$1" "${B_ef_nofigs:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" ;;
+    *) score "$1" "${B_ef_filing:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" ;;
+  esac
 }
 ef_mut0 m-noscript 's/^eff_script_ok() {$/eff_script_ok() { return 0;/' "$EF_SL_HEAD measured by docs/analysis/gone.py, before 2.0 h and after 1.0 h; fell.
 "
@@ -2047,7 +2066,7 @@ elif ! grep -q '^CLOSED-POPULATION: 1 sh receipt(s) run over merge-base ' <<<"$c
 elif [ "$(c5_r10 "$c5_out")" != "BL-801," ] || ! grep -q '^R10-POPULATION: 3 open sh receipt(s) read as text, 1 unanchored, ' <<<"$c5_out"; then
   note "FAIL  c5-control -- R10 named '$(c5_r10 "$c5_out")', want 'BL-801,' (an unanchored grep over a tracked file) with an R10-POPULATION line of 3 read, 1 unanchored"; rc=1
 else
-  note "ok    c5-control -- R8 names BL-861 (closed on the branch, renamed symbol, exit 1), R7 names BL-862 (open, exit 9), BL-863 (open, exit 2) is in neither, R10 names BL-801 (unanchored) of 3 open receipts read"
+  ok "c5-control -- R8 names BL-861 (closed on the branch, renamed symbol, exit 1), R7 names BL-862 (open, exit 9), BL-863 (open, exit 2) is in neither, R10 names BL-801 (unanchored) of 3 open receipts read"
   C5_BASE_OK=1
 fi
 c5_mut() { # c5_mut <name> <sed> <want-rows> <what> [<target seed id a self-probe refusal must name>]
@@ -2142,7 +2161,7 @@ if c5r_case c5r-ctl closed ""; then
   elif ! grep -q '^CLOSED-POPULATION: 1 sh receipt(s) run over merge-base .*, 0 not exiting 0\.$' <<<"$C5R_OUT"; then
     note "FAIL  c5r-control -- no CLOSED-POPULATION line naming 1 receipt run and 0 failing"; rc=1
   else
-    note "ok    c5r-control -- BL-864 re-entered the validator through pre-push, the inner run printed SKIPPED, R8 ran it once and it exited 0"
+    ok "c5r-control -- BL-864 re-entered the validator through pre-push, the inner run printed SKIPPED, R8 ran it once and it exited 0"
     C5R_BASE_OK=1
   fi
 fi
@@ -2161,7 +2180,7 @@ if c5r_case c5r-open-ctl open ""; then
   else
     # The corpus row prints STATUS and paths only; ALREADY-PASSING is the status of a base exit 0.
     case "$c5r_r" in
-      "ALREADY-PASSING|"*) note "ok    c5r-open-control -- BL-865 (OPEN) re-entered the validator through pre-push, the inner run printed OPEN-POPULATION: SKIPPED, row ALREADY-PASSING (base exit 0), $C5R_RUNS receipt run(s)"; C5R_OPEN_RUNS="$C5R_RUNS" ;;
+      "ALREADY-PASSING|"*) ok "c5r-open-control -- BL-865 (OPEN) re-entered the validator through pre-push, the inner run printed OPEN-POPULATION: SKIPPED, row ALREADY-PASSING (base exit 0), $C5R_RUNS receipt run(s)"; C5R_OPEN_RUNS="$C5R_RUNS"; B_c5r_open=1 ;;
       *) note "FAIL  c5r-open-control -- BL-865's row read '$c5r_r', want ALREADY-PASSING (base exit 0: the inner run must say OPEN-POPULATION: SKIPPED)"; rc=1 ;;
     esac
   fi
@@ -2175,7 +2194,7 @@ if c5r_case c5-m4-open open "$C5R_M4"; then
   side c5-m4-open "runs=$C5R_RUNS"
   side c5-m4-open "ctlruns=$C5R_OPEN_RUNS"
   side c5-m4-open "row=$c5r_r"
-  score c5-m4-open "${C5R_OPEN_RUNS:+1}" "c5-m4-open -- with the sentinel ignored the open scorer re-ran inside itself and BL-865 is no longer ALREADY-PASSING" c5_open
+  score c5-m4-open "${B_c5r_open:-0}" "c5-m4-open -- with the sentinel ignored the open scorer re-ran inside itself and BL-865 is no longer ALREADY-PASSING" c5_open
 fi
 # The two exports, each dropped: the self-probe's BL-976 (open) and BL-987 (closed) refuse first.
 c5_mut c5-m5 's|BR_RECEIPTS_RUNNING="\$_sl_key" xargs|xargs|' \

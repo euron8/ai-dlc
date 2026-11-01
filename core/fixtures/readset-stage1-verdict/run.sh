@@ -428,7 +428,21 @@ case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") B_sp=1; ok "-
 while IFS="$(printf '\t')" read -r name wrc wspec; do
   got="$(verdict "$SCORER" "$(w_of "$name")")"
   eval "GOT_${name//-/_}=\$got"
-  if matches "$got" "$wrc" "$wspec"; then ok "$name -> $got"; eval "B_w_${name//-/_}=1"; else bad "$name -> $got (want $wrc|$wspec)"; fi
+  if matches "$got" "$wrc" "$wspec"; then
+    ok "$name -> $got"
+    # Each base-pass flag a mutant gates on is assigned LITERALLY, here in the passing branch, so the
+    # flag is a value this run set beside its world's ok (validate-mutant-kills.sh M5 reads it).
+    case "$name" in
+      met) B_w_met=1 ;; a1) B_w_a1=1 ;; a2) B_w_a2=1 ;; a3) B_w_a3=1 ;; a3u) B_w_a3u=1 ;;
+      a4) B_w_a4=1 ;; a4-after) B_w_a4_after=1 ;; a5) B_w_a5=1 ;; a5n) B_w_a5n=1 ;;
+      a6) B_w_a6=1 ;; a6-gitignore) B_w_a6_gitignore=1 ;; a6-owntree) B_w_a6_owntree=1 ;;
+      a6-p2) B_w_a6_p2=1 ;; a6-dir) B_w_a6_dir=1 ;;
+      r0-log) B_w_r0_log=1 ;; r0-sb) B_w_r0_sb=1 ;; r0-profile) B_w_r0_profile=1 ;;
+      r2-link) B_w_r2_link=1 ;; r2-one) B_w_r2_one=1 ;; r6-omitted) B_w_r6_omitted=1 ;;
+      rl-rc) B_w_rl_rc=1 ;; rl-skip) B_w_rl_skip=1 ;; rl-started) B_w_rl_started=1 ;;
+      rl-foreign) B_w_rl_foreign=1 ;; rl-epoch) B_w_rl_epoch=1 ;; rl-head) B_w_rl_head=1 ;;
+    esac
+  else bad "$name -> $got (want $wrc|$wspec)"; fi
 done < "$TABLE"
 
 # THE EQUIVALENCE CELL, and the one end-to-end run per distinct CLI outcome (exit 0 MET, exit 1 NOT-MET, exit 2
