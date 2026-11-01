@@ -98,6 +98,20 @@
 # MUTANT-MATRIX pr-m-nostate decides=pr_m_nostate twins=pr_m_ignore
 # MUTANT-MATRIX pr-m-generic decides=pr_m_generic twins=pr_m_ignore
 # MUTANT-MATRIX pr-m-counter decides=pr_m_counter twins=pr_m_ignore
+# MUTANT-MATRIX r10-m1 decides=r10_m1 twins=c5_m1
+# MUTANT-MATRIX r10-m2 decides=r10_m2 twins=c5_m5
+# MUTANT-MATRIX r10-m3 decides=r10_m3 twins=c5_m5
+# MUTANT-MATRIX r10-m4 decides=r10_m4 twins=c5_m5
+# MUTANT-MATRIX r10-m5 decides=r10_m5 twins=c5_m5
+# MUTANT-MATRIX r10-m6 decides=r10_m6 twins=c5_m5
+# MUTANT-MATRIX r10-m7 decides=r10_m7 twins=c5_m5
+# MUTANT-MATRIX r10-m8 decides=r10_m8 twins=c5_m5
+# MUTANT-MATRIX r10-m9 decides=r10_m9 twins=c5_m5
+# MUTANT-MATRIX r10-m10 decides=r10_m10 twins=c5_m5
+# MUTANT-MATRIX r10-m11 decides=r10_m11 twins=c5_m5
+# MUTANT-MATRIX r10-m12 decides=r10_m12 twins=c5_m5
+# MUTANT-MATRIX r10-m13 decides=r10_m13 twins=c5_m5
+# MUTANT-MATRIX r10-m14 decides=r10_m14 twins=c5_m5
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
 # IN PROCESS. Validator runs go through vin: the world's own copy of the validator (mutated or not)
@@ -302,9 +316,12 @@ c5_arm() { # c5_arm <capture> <mutant key>
   fi
   r_line "$c" "SIDE rows=$w"
 }
-for _k in c5_m1 c5_m2 c5_m3 c5_m5 c5_m6 c5_m7 c5_m8 c5_m9 c5_m10 c5_m11 c5_m12; do
+for _k in c5_m1 c5_m2 c5_m3 c5_m5 c5_m6 c5_m7 c5_m8 c5_m9 c5_m10 c5_m11 c5_m12 r10_m2 r10_m3 r10_m4 r10_m5 r10_m6 r10_m7 r10_m8 r10_m9 r10_m10 r10_m11 r10_m12 r10_m13 r10_m14; do
   eval "arm_$_k() { c5_arm \"\$1\" $_k; }"
 done
+# r10-m1: every self-probe passed, and the corpus pass, handed no records, REFUSED with exit 2
+# because it read fewer receipts than the scorer wrote.
+arm_r10_m1() { ! r_has "$1" "SELF-PROBE FAILED" && [ "$(r_rc "$1")" = 2 ] && r_has "$1" "R10 scanned 0 of the scorer's 3 open sh receipts"; }
 # c5-m4: the sentinel ignored on entry. The bounded seed (depth cap 1) runs the receipt once under
 # the control and twice when the inner run re-executes it instead of skipping.
 arm_c5_m4() { r_line "$1" "SIDE rows=R8:BL-864, R7:" && r_line "$1" "SIDE runs=2"; }
@@ -429,7 +446,7 @@ bl_seed_ledger() { # bl_seed_ledger <file>
 # arms above R7's own (c5-*, which drive the subject without run_v) are about other ceilings.
 run_v() { # run_v <env-string-or-empty> <dir> [<extra-args>...]
   local e="$1" d="$2"; shift 2
-  vin "$d" "$d/scripts/validate-backlog-receipts.sh" "$e" --max-cannot-measure 99 "$@"
+  vin "$d" "$d/scripts/validate-backlog-receipts.sh" "$e" --max-cannot-measure 99 --max-unanchored 99 "$@"
 }
 # vin <cwd> <validator copy> <env-words> [<args>...] -- THE IN-PROCESS DRIVE. The world's own copy
 # of the validator (mutated or not) is SOURCED in a subshell -- its BASH_SOURCE guard stops it after
@@ -613,12 +630,12 @@ fi
 veq_ok=1; veq_why=""
 printf 0 > "$BL_UNSTABLE_COUNTER"
 # shellcheck disable=SC2086
-veq_cli="$(cli_v "$TMP/control" "$TMP/control/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 $DEF)"; veq_crc=$?
+veq_cli="$(cli_v "$TMP/control" "$TMP/control/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 --max-unanchored 99 $DEF)"; veq_crc=$?
 [ "$veq_crc" = "$CTL_RC" ] && [ "$veq_cli" = "$CTL_OUT" ] || { veq_ok=0; veq_why="$veq_why control(cli=$veq_crc unit=$CTL_RC)"; }
 PR8_CLI="$veq_cli"
 if [ -f "$REC/m1.out" ]; then
   # shellcheck disable=SC2086
-  veq_cli="$(cli_v "$TMP/m1" "$TMP/m1/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 $DEF)"; veq_crc=$?
+  veq_cli="$(cli_v "$TMP/m1" "$TMP/m1/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 --max-unanchored 99 $DEF)"; veq_crc=$?
   [ "$veq_crc" = "$(r_rc m1)" ] && [ "$veq_cli" = "$(cat "$REC/m1.out")" ] || { veq_ok=0; veq_why="$veq_why m1(cli=$veq_crc unit=$(r_rc m1))"; }
   [ "$(r_rc m1)" = 2 ] && [ "$CTL_RC" = 0 ] || { veq_ok=0; veq_why="$veq_why outcomes-do-not-differ"; }
 else veq_ok=0; veq_why="$veq_why m1-uncaptured"; fi
@@ -661,7 +678,7 @@ if [ "$pr1a_rc" = 0 ] && [ -n "$PR_K0" ] && grep -qxF "PROBE-RECORD: WRITTEN (K=
    && grep -qF "$PR_FIRED" <<<"$(pr_okline "$pr1a")" && [ "$pr1_n" = 1 ] && [ -f "$PRS/$PR_K0.green" ] \
    && [ "$pr1b_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr1b" \
    && grep -qF "R1 replayed (K=$PR_K0)" <<<"$pr1b_ok" && grep -qF "R7 and R8 replayed (K=$PR_K0)" <<<"$pr1b_ok" \
-   && ! grep -q 'fired' <<<"$pr1b_ok" && [ "$(cls "$pr1b" BL-801)" = PROSE-CLOSABLE ]; then
+   && ! grep -qE 'R[17] fired' <<<"$pr1b_ok" && [ "$(cls "$pr1b" BL-801)" = PROSE-CLOSABLE ]; then
   ok "pr1 -- a fresh store: the first run fired and wrote one record ($PR_K0.green), the second replayed naming that K and its OK line says replayed, never fired"; B_PR1=1
 else
   bad "pr1 -- first run rc=$pr1a_rc K='$PR_K0' records=$pr1_n; second run rc=$pr1b_rc: $(grep '^PROBE-RECORD' <<<"$pr1b")"
@@ -1499,7 +1516,7 @@ memo_drive() {
   [ "$2" = caller ] && e="AI_DLC_RECONCILE_MEMO=$MEMO_IN"
   [ -n "$m" ] || { m=vin; [ "$2" = none ] && m=cli; }
   # shellcheck disable=SC2086
-  if [ "$m" = cli ]; then o="$(cli_v "$d" "$d/scripts/validate-backlog-receipts.sh" "$e" --max-cannot-measure 99 $MEMO_ARGS)"; r=$?
+  if [ "$m" = cli ]; then o="$(cli_v "$d" "$d/scripts/validate-backlog-receipts.sh" "$e" --max-cannot-measure 99 --max-unanchored 99 $MEMO_ARGS)"; r=$?
   else o="$(run_v "$e" "$d" $MEMO_ARGS)"; r=$?; fi
   s=""
   for id in BL-821 BL-822 BL-823 BL-824; do s="$s$id=$(cls "$o" "$id") "; done
@@ -2003,7 +2020,9 @@ c5_seed() { # c5_seed <dir>
   ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m c5branch >/dev/null 2>&1 )
   [ -s "$d/.c5base" ] || { echo "FIXTURE BROKEN: c5 probe has no base sha" >&2; exit 2; }
 }
-C5_ARGS="--max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 --max-unstable 0 --min-sh-receipts 0 --min-entries 0"
+# `--max-unanchored 9`: BL-801 reads a tracked file with no anchor, so R10 names it on every c5 world;
+# the slack keeps R10 out of the exits the c5r controls assert, and r10-m1 reads its row instead.
+C5_ARGS="--max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 --max-unstable 0 --max-unanchored 9 --min-sh-receipts 0 --min-entries 0"
 c5_run() { # c5_run <dir> -> output with rc on the last line
   local d="$1"
   # shellcheck disable=SC2086
@@ -2014,6 +2033,7 @@ c5_rows() { # c5_rows <output> -> "R8:<ids> R7:<ids>"
     "$(printf '%s\n' "$1" | awk -F'\t' '$1 == "FAIL: R8" { printf "%s,", $2 }')" \
     "$(printf '%s\n' "$1" | awk -F'\t' '$1 == "FAIL: R7" { printf "%s,", $2 }')"
 }
+c5_r10() { printf '%s\n' "$1" | awk -F'\t' '$1 == "UNANCHORED" { printf "%s,", $2 }'; }
 c5_seed "$TMP/c5ctl"
 c5_out="$(c5_run "$TMP/c5ctl")"
 c5_got="$(c5_rows "$c5_out")"
@@ -2024,8 +2044,10 @@ elif [ "$c5_got" != "R8:BL-861, R7:BL-862," ]; then
   note "FAIL  c5-control -- rows read '$c5_got', want 'R8:BL-861, R7:BL-862,' (BL-863 exits 2, a reproduction, and must be in neither)"; rc=1
 elif ! grep -q '^CLOSED-POPULATION: 1 sh receipt(s) run over merge-base ' <<<"$c5_out"; then
   note "FAIL  c5-control -- no CLOSED-POPULATION line naming 1 receipt run"; rc=1
+elif [ "$(c5_r10 "$c5_out")" != "BL-801," ] || ! grep -q '^R10-POPULATION: 3 open sh receipt(s) read as text, 1 unanchored, ' <<<"$c5_out"; then
+  note "FAIL  c5-control -- R10 named '$(c5_r10 "$c5_out")', want 'BL-801,' (an unanchored grep over a tracked file) with an R10-POPULATION line of 3 read, 1 unanchored"; rc=1
 else
-  note "ok    c5-control -- R8 names BL-861 (closed on the branch, renamed symbol, exit 1), R7 names BL-862 (open, exit 9), BL-863 (open, exit 2) is in neither"
+  note "ok    c5-control -- R8 names BL-861 (closed on the branch, renamed symbol, exit 1), R7 names BL-862 (open, exit 9), BL-863 (open, exit 2) is in neither, R10 names BL-801 (unanchored) of 3 open receipts read"
   C5_BASE_OK=1
 fi
 c5_mut() { # c5_mut <name> <sed> <want-rows> <what> [<target seed id a self-probe refusal must name>]
@@ -2037,6 +2059,7 @@ c5_mut() { # c5_mut <name> <sed> <want-rows> <what> [<target seed id a self-prob
   eval "C5WANT_${n//-/_}=\$3; C5TARGET_${n//-/_}=\${5:-}"
   record "$n" "$r" "$o"
   side "$n" "rows=$(c5_rows "$o")"
+  side "$n" "r10=$(c5_r10 "$o")"
   score "$n" "${C5_BASE_OK:-0}" "$n -- $4"
 }
 # Both mutants sit where the self-probe cannot see them -- the corpus call and the shipped ceiling --
@@ -2178,6 +2201,75 @@ c5_mut c5-m11 "s|^  \\[ -n \"\\\$1\" \\] \\&\\& \\[ \"\\\$1\" = \"\\\$2\" \\] \\
 # The key without its repository half: two repositories with a ledger at one relative path share it.
 c5_mut c5-m12 "s/^  printf '%s|%s' \"\\\$_lk_cd\" \"\\\$_lk_led\"\$/  printf '%s' \"\$_lk_led\"/" \
   "unreachable" "with the common dir dropped from the key, two repositories' docs/backlog.md share one key" BL-979
+# ===== BL-836, R10 (the anchor convention). r10-m1 sits where the self-probe cannot see it -- the
+# corpus call -- so ONE full validator run scores it on the corpus row. r10-m2..m6 break the grammar,
+# and each is killed by the FIRST seed of vbr_probe_r10 it breaks, named `seed <id>:`. Those five are
+# driven through R10's probe ALONE (r10_probe_only): the world's mutated copy is sourced and
+# vbr_probe_r10 -- R10's own repository, its 47 seeds, one r10_judge -- is called directly, the SAME
+# function a full run calls, so a grammar mutant pays four starts and not a whole validator run.
+# The unmutated control, judged the same way, must pass all 47 seeds and give each target seed the
+# verdict its mutant breaks; the mutants are scored against it.
+c5_mut r10-m1 's|^set -- "\$WORK"/rec/\*$|set --|' \
+  "unreachable" "with the corpus pass handed no records, R10 scans 0 of 3 open receipts and the run refuses"
+r10_probe_only() { # r10_probe_only <world> -> vbr_probe_r10's output, its rows, and its status
+  local d="$1"
+  ( cd "$d" || exit 2
+    # shellcheck source=/dev/null
+    . "$d/scripts/validate-backlog-receipts.sh" || exit 2
+    declare -F vbr_probe_r10 >/dev/null || { echo "FIXTURE BROKEN: $d defined no vbr_probe_r10 when sourced" >&2; exit 3; }
+    WORK="$d/.r10work"; mkdir -p "$WORK" || exit 2
+    vbr_probe_r10
+    echo "R10D: $R10_PROBED"
+    printf '%s\n' "$R10_ROWS" | awk -F'\t' 'NF { print "R10ROW " $1 " " $2 "/" $4 }' ) 2>&1
+}
+R10D_BASE_OK=0
+seed "$TMP/r10d-ctl"
+r10d_ctl="$(r10_probe_only "$TMP/r10d-ctl")"; r10d_crc=$?
+r10d_want_ok=1
+for _s in BL-1005 BL-1003 BL-1006 BL-1021 BL-1004 BL-1030 BL-1035 BL-1036 BL-1038 BL-1040 BL-1045 BL-1043 BL-1044; do
+  grep -qxF "R10ROW $_s UNANCHORED/full" <<<"$r10d_ctl" || r10d_want_ok=0
+done
+if [ "$r10d_crc" = 0 ] && grep -qxF "R10D: R10 fired both directions over 47 text seeds" <<<"$r10d_ctl" && [ "$r10d_want_ok" = 1 ]; then
+  ok "r10d-control -- R10's probe alone, over the unmutated copy, passed 47 seeds and read each mutant target seed UNANCHORED/full"; R10D_BASE_OK=1
+else
+  bad "r10d-control -- rc=$r10d_crc targets-ok=$r10d_want_ok: $(grep -E 'R10D|SELF-PROBE|FIXTURE' <<<"$r10d_ctl" | head -2)"
+fi
+r10_direct() { # r10_direct <name> <sed> <unused, c5_mut's rows> <what> <target seed id the refusal must name>
+  local n="$1" d="$TMP/$1" o r
+  seed "$d"
+  mut "$d" "$2" || return
+  o="$(r10_probe_only "$d")"; r=$?
+  eval "C5WANT_${n//-/_}=unreachable; C5TARGET_${n//-/_}=\$5"
+  record "$n" "$r" "$o"
+  score "$n" "$R10D_BASE_OK" "$n -- $4"
+}
+r10_direct r10-m2 's|^      if (CW\[d, c, j + 1\] == "-n") settle(d, c, j + 2, insub, neg)$|      if (CW[d, c, j + 1] == "-f") { a = rpath(CW[d, c, j + 2]); if (a != "") ANC[a] = 1 }; if (CW[d, c, j + 1] == "-n") settle(d, c, j + 2, insub, neg)|' \
+  "unreachable" "with a bare [ -f ] accepted as an anchor, seed BL-1005 reads ANCHORED" BL-1005
+r10_direct r10-m3 's|^      if (p in ANC) continue$|      if (NANC > 0) continue|' \
+  "unreachable" "with an anchor on any path accepted for every path, seed BL-1003 reads ANCHORED" BL-1003
+r10_direct r10-m4 's|CW\[d, m, 2\] == "9") }$|(CW[d, m, 2] == "9" \|\| CW[d, m, 2] == "1")) }|' \
+  "unreachable" "with exit 1 accepted as the anchor's exit, seed BL-1006 reads ANCHORED" BL-1006
+r10_direct r10-m5 's|^    if (rv != "HEAD" \&\& rv != "") { EXEMPT = 1; continue }$|    { EXEMPT = 1; continue }|' \
+  "unreachable" "with the history exemption widened to HEAD, seed BL-1021 reads exempt" BL-1021
+r10_direct r10-m6 's|^    if (EXEMPT) continue$|    if (EXEMPT \|\| neg) continue|' \
+  "unreachable" "with every \`! grep\` exempt, seed BL-1004 reads no tracked read" BL-1004
+# The anchor shapes the FP census accepted, each killed by the vacuous twin its acceptance must refuse.
+r10_direct r10-m7 's|^  if (op == "-ge" \|\| op == "-eq" \|\| op == "=" \|\| op == "==") return (k + 0 >= 1)$|  if (op == "-ge" \|\| op == "-eq" \|\| op == "=" \|\| op == "==") return (k + 0 >= 0)|' \
+  "unreachable" "with a count compare accepting -ge 0, seed BL-1030 reads ANCHORED" BL-1030
+r10_direct r10-m8 '/^  if (m > 1 \&\& CSEP\[d, m - 1\] == "||") return 0$/d' \
+  "unreachable" "with an anchor on the right side of an || accepted, seed BL-1035 reads ANCHORED" BL-1035
+r10_direct r10-m9 's|^    if (isg \&\& QUIET \&\& !INV \&\& NF2 == 1 |    if (isg \&\& QUIET \&\& NF2 == 1 |' \
+  "unreachable" "with an inverted grep -qv accepted as an anchor, seed BL-1036 reads ANCHORED" BL-1036
+r10_direct r10-m10 's| \&\& CW\[d, m, 2\] !~ /v/ \&\& CW\[d, m, 3\] == "\.") }$| \&\& CW[d, m, 3] == ".") }|' \
+  "unreachable" "with a pipe into grep -qv . accepted, seed BL-1038 reads ANCHORED" BL-1038
+r10_direct r10-m11 's|^    if ((y in PEND) \&\& index(PEND\[y\] S4, S4 px S4)) |    for (y in PEND) if (index(PEND[y] S4, S4 px S4)) |' \
+  "unreachable" "with cmp -s accepted against any copy, seed BL-1040 reads ANCHORED" BL-1040
+r10_direct r10-m12 's|^  for (i = 1; i <= n; i++) if (patok(PAT, ps\[i\])) { ANC\[ps\[i\]\] = 1; NANC++ } else keep = keep S4 ps\[i\]$|  for (i = 1; i <= n; i++) { ANC[ps[i]] = 1; NANC++ }|' \
+  "unreachable" "with a here-string anchor accepted whatever its pattern, seed BL-1045 reads ANCHORED" BL-1045
+r10_direct r10-m13 's|^  s = v; gsub(/\\\[\\\[:\[a-z\]+:\\\]\\\]/, "", s)$|  s = v|' \
+  "unreachable" "with a POSIX class name counted as an identifier, seed BL-1043 reads ANCHORED" BL-1043
+r10_direct r10-m14 's|^      if (cap != "" \&\& !INV \&\& patok(PAT, p)) |      if (cap != "" \&\& patok(PAT, p)) |' \
+  "unreachable" "with a grep -v capture settled by [ -n ], seed BL-1044 reads ANCHORED" BL-1044
 
 # ===== PR. THE PROBE RECORD (BL-880), PART TWO: CELLS 2-7, P2, AND ITS EIGHT MUTANTS. ===========
 # Every mutant below edits the validator, so its key is its OWN and never the control's K0: each is
@@ -2192,10 +2284,10 @@ pr_two() { # pr_two <name> <dirA> <envA> <argsA> <dirB> <envB> <argsB>
   mkdir -p "$s"
   printf 0 > "$BL_UNSTABLE_COUNTER"
   # shellcheck disable=SC2086
-  o1="$(vin "$2" "$2/scripts/validate-backlog-receipts.sh" "BR_PROBE_RECORD=$s $3" --max-cannot-measure 99 $4)"; r1=$?
+  o1="$(vin "$2" "$2/scripts/validate-backlog-receipts.sh" "BR_PROBE_RECORD=$s $3" --max-cannot-measure 99 --max-unanchored 99 $4)"; r1=$?
   printf 0 > "$BL_UNSTABLE_COUNTER"
   # shellcheck disable=SC2086
-  o2="$(vin "$5" "$5/scripts/validate-backlog-receipts.sh" "BR_PROBE_RECORD=$s $6" --max-cannot-measure 99 $7)"; r2=$?
+  o2="$(vin "$5" "$5/scripts/validate-backlog-receipts.sh" "BR_PROBE_RECORD=$s $6" --max-cannot-measure 99 --max-unanchored 99 $7)"; r2=$?
   record "$n" "$r2" "$o2"
   side "$n" "rc1=$r1"
   side "$n" "pre=$(pr_verb "$o1")"
@@ -2215,7 +2307,7 @@ arm_pr_m_nostate() {
   local k l
   r_has "$1" "PROBE-RECORD: REPLAYED" || return 1
   k="$(sed -n 's/^PROBE-RECORD: REPLAYED (K=\([0-9a-f]*\)).*/\1/p' "$REC/$1.out" | sed -n '1p')"; l="$(pr_ok_of "$1")"
-  ! { [ "$(r_rc "$1")" = 0 ] && grep -q ' R2 all-driver$' <<<"$l" && grep -qF "R1 replayed (K=$k)" <<<"$l" && ! grep -q fired <<<"$l"; }
+  ! { [ "$(r_rc "$1")" = 0 ] && grep -q ' R2 all-driver$' <<<"$l" && grep -qF "R1 replayed (K=$k)" <<<"$l" && ! grep -qE 'R[17] fired' <<<"$l"; }
 }
 arm_pr_m_counter() { r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_line "$1" "SIDE keep=keepme"; }
 arm_pr_m_generic() { r_has "$1" "PROBE-RECORD: REPLAYED" && [ "$(r_cls "$1" BL-801)" != PROSE-CLOSABLE ]; }
@@ -2304,7 +2396,7 @@ pr_driver_world "$TMP/pr6"
 pr6="$(run_v "" "$TMP/pr6" $PR_DRV_ARGS)"; pr6_rc=$?
 pr6_ok="$(pr_okline "$pr6")"
 if [ "$pr6_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr6" && grep -q ' R2 all-driver$' <<<"$pr6_ok" \
-   && grep -qF "R1 replayed (K=$PR_K0)" <<<"$pr6_ok" && ! grep -q 'fired' <<<"$pr6_ok"; then
+   && grep -qF "R1 replayed (K=$PR_K0)" <<<"$pr6_ok" && ! grep -qE 'R[17] fired' <<<"$pr6_ok"; then
   ok "pr6 -- a replay over an all-driver ledger says R2 all-driver, and its OK line names K0 and never says fired"; B_PR6=1
 else
   bad "pr6 -- rc=$pr6_rc verb=$(pr_verb "$pr6") OK: $(printf '%s' "$pr6_ok" | cut -c1-120)...$(printf '%s' "$pr6_ok" | tail -c 60)"
@@ -2313,8 +2405,11 @@ fi
 B_PR7=0
 seed "$TMP/pr7"
 pr7="$(run_v "BR_GENERIC_SEED=1" "$TMP/pr7" $DEF)"; pr7_rc=$?
-if [ "$pr7_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr7" && [ "$(cls "$pr7" BL-801)" = PROSE-CLOSABLE ]; then
-  ok "pr7 -- a replay that inherited BR_GENERIC_SEED=1 still classifies BL-801 PROSE-CLOSABLE"; B_PR7=1
+# A replay still runs R10 (BL-836): its self-probe over its own repository and its corpus pass are
+# outside the record, so the replayed OK line names R10's 47 seeds and the run prints R10-POPULATION.
+if [ "$pr7_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr7" && [ "$(cls "$pr7" BL-801)" = PROSE-CLOSABLE ] \
+   && grep -qF "R10 fired both directions over 47 text seeds" <<<"$(pr_okline "$pr7")" && grep -q '^R10-POPULATION: ' <<<"$pr7"; then
+  ok "pr7 -- a replay that inherited BR_GENERIC_SEED=1 still classifies BL-801 PROSE-CLOSABLE, and still fired R10's 47 seeds and its corpus pass"; B_PR7=1
 else
   bad "pr7 -- rc=$pr7_rc verb=$(pr_verb "$pr7") BL-801=$(cls "$pr7" BL-801)"
 fi
@@ -2466,6 +2561,20 @@ twin_of() {
     pr-m-nostate) echo pr_m_ignore ;;
     pr-m-generic) echo pr_m_ignore ;;
     pr-m-counter) echo pr_m_ignore ;;
+    r10-m1) echo c5_m1 ;;
+    r10-m2) echo c5_m5 ;;
+    r10-m3) echo c5_m5 ;;
+    r10-m4) echo c5_m5 ;;
+    r10-m5) echo c5_m5 ;;
+    r10-m6) echo c5_m5 ;;
+    r10-m7) echo c5_m5 ;;
+    r10-m8) echo c5_m5 ;;
+    r10-m9) echo c5_m5 ;;
+    r10-m10) echo c5_m5 ;;
+    r10-m11) echo c5_m5 ;;
+    r10-m12) echo c5_m5 ;;
+    r10-m13) echo c5_m5 ;;
+    r10-m14) echo c5_m5 ;;
     *) echo "" ;;
 # TWINS-END
   esac

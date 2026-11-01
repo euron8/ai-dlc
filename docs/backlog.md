@@ -32,6 +32,18 @@ assume of the ref it greps. A receipt runs from the repo root with stdin closed,
 any input it reads as a file. A behavioural predicate asserts the defect itself and cannot be
 anchored on prose the author invented to describe a wanted fix.
 
+**An `sh` receipt that reads a tracked file asserts its anchor first.** Before it tests the defect,
+it asserts on that same path something that exits 9 if absent: `grep -q '<identifier>' <path> ||
+exit 9`, or the brace-group, `if !` or non-empty-extract forms of the same guard. This covers
+`grep`, `awk`, `sed`, `cat`, `! grep`, a working-tree `git grep` and `git show HEAD:<path>`. A rename
+inside the file then reads as exit 9 (NEEDS-REVIEW) instead of as a quiet exit 1. `[ -f <path> ]`
+alone is not an anchor. The anchor pattern carries a real identifier of 4 or more characters, does
+not match line 1 or a shebang, and the guard exits exactly 9. The anchor must survive the fix,
+because R8 wants a closed receipt to exit exactly 0, and an anchor the fix removes fails the close
+permanently. An irrelevant but real identifier is left to review. This is enforced by R10 of
+`scripts/validate-backlog-receipts.sh` (ceiling 0, `--max-unanchored`). Only history reads at a
+non-HEAD revision are exempt.
+
 **THIS FILE'S `sh` POLARITY IS THE OPPOSITE OF THE CONSUMER LEDGER'S, AND THE TWO ARE WRITTEN
 IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:334-335` reads **exit 0 as "the fix
 is present"** and non-zero as "still reproduces". In a consumer's push-candidate ledger,
@@ -834,6 +846,12 @@ Neither executor can recurse. A receipt that invokes `.githooks/pre-push` re-ent
 
 Cost: R8 re-runs receipts that `scripts/backlog-rotate.sh` already ran at the release commit, so a fixture-keyed receipt runs twice in a release. R8 still earns that run because the pre-push tree is the MERGED tree, not the tree the rotate step saw.
 
+**Progress (0.987.0, batch b247).** The convention is built as R10 of `scripts/validate-backlog-receipts.sh`. R10 judges each OPEN `verify: sh` receipt as text inside the corpus section and executes nothing. It resolves the operand through `NAME=<literal>` and into `$( )`, decides "tracked" by exact `git ls-files`, and refuses a short read: exit 2 if it read fewer receipts than the scorer. The self-probe runs before the corpus: 47 text seeds in both directions, plus BL-990 (anchored; R7 reads exit 9 after a committed in-file rename) and BL-991 (unanchored; R7 reads it PROSE-CLOSABLE with base exit 1, so R7 cannot see the rename, and R10 refuses it). Mutants are r10-m1 through r10-m14: m1 skips the arm (one full validator run); m2 through m14 drive `vbr_probe_r10` in-process against an unmutated control that must pass all 47 seeds. m1 through m6 are: arm skipped, `[ -f ]` accepted, anchor on another path, `exit 1` accepted, exemption widened to HEAD, and every `! grep` exempt. Each is killed by its own seed in `backlog-receipt-binding`. R10's self-probe builds its own small repository every run and judges the BL-990/BL-991 receipt bytes as top-level constants, so a BL-880 keyed replay of R1/R7/R8 still runs it (replay cell pr7 requires the seed line and `R10-POPULATION:`), and a one-byte change to the BL-990 receipt changes the replay key (measured: an unchanged copy REPLAYED, a mutant copy WRITTEN with a new key). Unparsed shapes among the 326, by tagged copy (a receipt can hit several): an operand still holding `$`, `$( )` or `${…}` after resolution 184; `case` 130; `git -C` 116; an unresolved command word 10; a directory operand 3. Cost: `backlog-receipt-binding` invocations 5416 at bc1321bf1 to 5772 (of which +246 is BL-990/991 scored on every fired run), `backlog-real-ledger` 248 to 260; the fork profile is 2899 to 2899 (budget 2901). Today's OPEN population is 2 driver receipts that read no tracked file, so the corpus 0 is VACUOUS and only the self-probe shows that R10 fires. `scripts/check-no-provisional-invocations.sh` now exits 9 on its four could-not-measure paths (they were 2), and `set -uo pipefail` catches a failing `git ls-files`.
+
+False-positive measurement: the shipping `r10_judge`, text only, over 704 receipts at ba72d81e7 (702 archived, 2 live) refused 149 (167 before this release's grammar widening: 19 left the set and 1 joined). That is a FLOOR, because 326 receipts were only partly parsed (66 refused, 32 anchored, 228 reading no tracked path), which is a floor of unknown depth, not a clean result. The 2 live receipts refuse 0. Archived receipts are inert and are not edited. The refused ids are BL-009, BL-012, BL-014, BL-015, BL-019, BL-024, BL-025, BL-026, BL-027, BL-028, BL-029, BL-031, BL-035, BL-038, BL-039, BL-040, BL-042, BL-043, BL-048, BL-049, BL-058, BL-078, BL-081, BL-091, BL-104, BL-108, BL-114, BL-115, BL-118, BL-123, BL-127, BL-157, BL-182, BL-185, BL-188, BL-190, BL-193, BL-197, BL-198, BL-200, BL-203, BL-204, BL-205, BL-206, BL-207, BL-208, BL-224, BL-229, BL-232, BL-233, BL-237, BL-242, BL-246, BL-247, BL-248, BL-251, BL-255, BL-260, BL-262, BL-275, BL-278, BL-282, BL-283, BL-288, BL-291, BL-312, BL-323, BL-324, BL-325, BL-338, BL-360, BL-362, BL-379, BL-395, BL-399, BL-406, BL-407, BL-409, BL-432, BL-433, BL-439, BL-441, BL-443, BL-445, BL-454, BL-456, BL-461, BL-462, BL-466, BL-467, BL-468, BL-469, BL-471, BL-472, BL-475, BL-476, BL-477, BL-488, BL-489, BL-490, BL-493, BL-498, BL-499, BL-506, BL-524, BL-527, BL-551, BL-604, BL-605, BL-632, BL-635, BL-644, BL-653, BL-654, BL-659, BL-667, BL-679, BL-685, BL-699, BL-701, BL-707, BL-713, BL-722, BL-723, BL-734, BL-738, BL-741, BL-743, BL-757, BL-759, BL-762, BL-764, BL-765, BL-766, BL-771, BL-772, BL-773, BL-774, BL-779, BL-780, BL-782, BL-786, BL-791, BL-795, BL-798, BL-799, BL-818, BL-830, BL-850. About 26 of them (approximate, by regex) carry an `|| exit 9` guard in a shape the grammar does not accept, such as a count compare: every refused receipt whose content gates an `exit 9`, by id. Accepted this release, each with an accepted seed, a vacuous twin and a mutant (these ids left the refused set, measured from knock-out copies): a count meaning one or more matches (r10-m7) BL-073, BL-140, BL-151, BL-271, BL-286; a `&&` chain ending `|| exit 9` (r10-m8) BL-153, BL-365, BL-366, BL-396, BL-408, BL-415, BL-502, BL-504, BL-656; a pipe into `grep -q . || exit 9` (r10-m10) BL-263; a rewrite to a copy then `cmp -s P copy && exit 9` (r10-m11) BL-304, BL-675; `grep -q <pat> <<<"$C" || exit 9` over a capture of the file (r10-m12) BL-050, BL-400. Newly refused vacuous forms: `grep -qv` (r10-m9), a pattern whose only word is a POSIX class name (r10-m13) and `[ -n ]` over a `grep -v` capture (r10-m14); together they newly refuse BL-406. Genuine anchors in a shape no R10 reader accepts, left open: BL-014 (`case` over an awk capture, `*) exit 9`; it would need a `case` reader over a capture of the path, where a `*)` arm exits 9), BL-248 (`exit 9` inside an awk `END` block; it would need an awk-program reader that sees `exit 9` inside END, gated on a match of an identifier), BL-291 (`jq -e … || exit 9`; it would need a `jq -e … P || exit 9` reader), BL-707 (a count of a seeded marker in a rewritten copy; it would need a reader for a seeded-marker count in a rewritten copy, and its receipt is also only partly parsed). These four are archived and inert, so no reader ships in this release, and each reader would carry its own false-positive risk. Refused by the identifier rule, by design (content gates `exit 9` but the pattern has no 4+ character identifier): BL-091, BL-127, BL-653, BL-654, BL-723. True refusals: BL-123, BL-456, BL-498 (only `[ -f ]` and `cp … || exit 9` touch the path); BL-193 (reads guarded by `|| exit 1`); BL-197, BL-743 (first read guarded by `exit 1`); BL-224 (anchor on a different file); BL-278 (`grep -q x P && exit 9` exits 9 on a match, so a rename never reaches exit 9); BL-288 (path only `[ -r ]`-tested); BL-466 (a pipeline capture whose own `|| exit 1` fires first); BL-477 (sed rewrite `|| exit 9`, and sed exits 0 whatever it matched); BL-701, BL-713 (a `grep -v` capture, non-empty for any file with an uncommented line). Narrowing: the census's earlier text-bucket lint refused 33, and under the shipping grammar 31 of those are still refused; BL-116 is anchored through a `[ -n "$s" ] || exit 9` capture and BL-064 reads no tracked path.
+
+The driver-absent-at-base exclusion (lead ruling L3) is dropped: it changes no outcome while no arm reads driver files, and it moves to BL-899's scope. BL-836 stays PARTIAL. Uncovered and homed in BL-899 are shape 2 (a child's bare 127), shape 3 (a child script sourcing a missing file) and the driver form (a `bash x.sh` receipt whose driver greps inside itself, invisible to a one-liner lint).
+
 Seeded evidence, per shape:
 
 | Shape | exit | OPEN R7 | LANDED R8 |
@@ -843,16 +861,16 @@ Seeded evidence, per shape:
 | 130 | 130 | fires | fires |
 | own-shell command not found | 127 | fires | fires |
 | exit 2 | 2 | does not fire | — |
-| BL-830 rename under `grep -q old_name` | 1 | CANNOT fire | fires |
+| BL-830 rename under `grep -q old_name` | 1 | refused by R10 unless anchored; anchored, fires (exit 9) | fires |
 | BL-830 calling the renamed function | 127 | fires | fires |
 | BL-830 as it broke (`. f; old_name x \|\| exit 1`) | 1 | fires (own-shell) | fires |
 | BL-834 as it was, `\|\| exit 9` guard | 9 | fires | fires |
 | BL-834 guardless, source then call | 127 | fires | fires |
 | BL-834 guardless, source only | 1 | fires | fires |
-| BL-834 via a child script sourcing the missing file | 127 | does not fire | fires |
-| bare 127 from a child's missing helper | 127 | does not fire | fires |
+| BL-834 via a child script sourcing the missing file | 127 | does not fire (BL-899) | fires |
+| bare 127 from a child's missing helper | 127 | does not fire (BL-899) | fires |
 
-Three open-entry shapes cannot fire: the rename under `grep -q`, a child's bare 127, and a child sourcing the missing helper. This entry's title names an OPEN entry's receipt as its subject (lead ruling), so it stays PARTIAL. Reported, not built: a convention that asserts the anchor before testing the defect (`grep -q anchor f || exit 9; …`) would turn a rename into exit 9, which R7 sees. That is a design question for the next batch. The scored receipt draft is evidence only. Scored under `set -uo pipefail`, it exits 0 on the fix in this release, 1 on the base c0d4f97cc, 1 with the population not widened, 1 with exits 2 through 8 in the FAIL set, and 0 on a second spelling (the LANDED set from the ledger diff's added-line ranges, the rotated set from `git log -p`).
+Two open-entry shapes still cannot fire: a child's bare 127 and a child sourcing the missing helper, both homed in BL-899. The third, the rename under `grep -q`, is now refused by R10 unless the receipt anchors first. This entry's title names an OPEN entry's receipt as its subject (lead ruling), so it stays PARTIAL. The convention that asserts the anchor before testing the defect (`grep -q anchor f || exit 9; …`) turns a rename into exit 9, which R7 sees, and it is now built as R10. The scored receipt draft is evidence only. Scored under `set -uo pipefail`, it exits 0 on the fix in this release, 1 on the base c0d4f97cc, 1 with the population not widened, 1 with exits 2 through 8 in the FAIL set, and 0 on a second spelling (the LANDED set from the ledger diff's added-line ranges, the rotated set from `git log -p`).
 
 verify: manual
 
@@ -1819,5 +1837,11 @@ Found at batch b247 (lead filing). Measured on the main checkout at fb4cb5f40: `
 The digests' only readers are the hook's committed-row join for a matching fixture (.githooks/pre-push:1426-1433, and these fixtures have no rows) and the stale-reason message (.githooks/pre-push:2556), so the 19 lines were inert. They were committed by 902d6f7e0 (0.971.0). The write was restored with `git checkout`; nothing was committed.
 
 Owed: nothing. The next trace that rewrites the map removes them; a release may also drop them by hand.
+
+verify: manual
+
+## BL-899 — a command-level sandbox tracer for an arbitrary receipt run, so a traced-removal arm can cover child-process deletions
+
+**NOTE.** Split from BL-836 at 0.987.0. R10 lints receipt TEXT, so it cannot see a child process's missing file (BL-836 shapes 2 and 3: a child's bare 127, and a child script sourcing a missing file) or a driver's internal grep (a `bash x.sh` receipt whose driver greps inside itself). A traced-removal arm would run the receipt in a scratch tree with each file it read removed and require exit 9. That needs a tracer for an arbitrary command. `core/scripts/derive-fixture-readsets.sh --tracer sandbox` traces fixtures only (its runner is at `:1878`), refuses linked worktrees (LW_GATE, `:205`) and copies the whole tree (`:1402`). The driver-absent-at-base exclusion (lead ruling L3) moved here from BL-836: it changes no outcome until an arm reads driver files.
 
 verify: manual

@@ -4,7 +4,9 @@
 # classifier --marker-last once more. The m-r9call mutant runs the receipts validator once more in a copy of that world.
 # BL-880: every receipts-validator run shares the unit's BR_PROBE_RECORD store, so j1 replays the R1 and R7/R8 record
 # j1p's first run wrote (the m-r9call copy has its own key and fires). Was 462 * / 167 validator at 99fe3afda.
-248 *
-91 scripts/validate-backlog-receipts.sh
+# BL-836: 248 * / 91 validator at bc1321bf1. The whole +12 / +4 is BL-990/991 in R7's probe ledger, scored on each
+# FIRED run: a counted run with both removed read 248 / 91.
+260 *
+95 scripts/validate-backlog-receipts.sh
 7 scripts/validate-backlog-size.sh
 11 scripts/backlog-reverify.sh
