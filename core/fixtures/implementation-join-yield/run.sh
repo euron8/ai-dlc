@@ -165,7 +165,7 @@ rm -rf "$W"
 # CONSUMED TIME — and in nothing else. Same event shape, same marker handling,
 # same number of blocks. Without that pairing an arm that flags every sequence
 # reads exactly like one that discriminates.
-beat_on()  { printf '%s' "$(( $(date +%s) + 100 ))" > "$1/_bmad-output/.beat-inflight"; }
+beat_on()  { printf '%s' 9999999999 > "$1/_bmad-output/.beat-inflight"; }
 beat_off() { rm -f "$1/_bmad-output/.beat-inflight"; }
 # Push the recorded block timestamp back, so the NEXT block reads a real elapsed
 # gap. This is how a beat that genuinely slept is expressed without sleeping:
@@ -189,7 +189,7 @@ age_state() {
 pin_state() {
   _sf="$1/_bmad-output/pipeline-block-state.txt"; [ -f "$_sf" ] || return 0
   _c="$(sed -n '2p' "$_sf")"
-  printf '%s\n%s\n' "$(date +%s)" "$_c" > "$_sf"
+  printf '%s\n%s\n' 9999999999 "$_c" > "$_sf"
 }
 # Drive one event sequence: B = block turn (no beat), L = live-beat turn,
 # G = the previous beat consumed real time, R = the previous beat consumed
@@ -295,7 +295,7 @@ T0=1790000000
 tx_world() { # tx_world <seed-case> -> world dir with a date shim at $T0
   _tw="$(bash "$HERE/seed.sh" "$1")" || return 1
   mkdir -p "$_tw/.bin"
-  printf '#!/bin/sh\nif [ "${1:-}" = "+%%s" ]; then cat "%s/.now"; else exec "%s" "$@"; fi\n' "$_tw" "$REAL_DATE" > "$_tw/.bin/date"
+  printf '#!/bin/bash\nif [ "${1:-}" = "+%%s" ]; then cat "%s/.now"; else exec "%s" "$@"; fi\n' "$_tw" "$REAL_DATE" > "$_tw/.bin/date"
   chmod +x "$_tw/.bin/date"; echo "$T0" > "$_tw/.now"; echo jy > "$_tw/.sid"
   printf '%s' "$_tw"
 }

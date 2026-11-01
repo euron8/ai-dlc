@@ -257,7 +257,7 @@ stub() {
   local d="$1" t="$2" real="$3" pat="$4" act="$5"
   mkdir -p "$d"; : > "$d/FIRED"
   {
-    printf '#!/bin/sh\nF="%s/FIRED"\n' "$d"
+    printf '#!/bin/bash\nF="%s/FIRED"\n' "$d"
     printf 'case "$*" in\n  %s)\n    %s ;;\nesac\n' "$pat" "$act"
     printf 'exec "%s" "$@"\n' "$real"
   } > "$d/$t"

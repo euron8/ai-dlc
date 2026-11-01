@@ -478,7 +478,7 @@ r="$(drive_world "$(cat "$ROOT/.w_namedteam")" 2>/dev/null)"
 #     the ONE constant fail-closed block instead of a silent allow, so the assertion is that any
 #     block text is that constant and names no arm.
 JQSTUB="$ROOT/nojq"; mkdir -p "$JQSTUB"
-printf '#!/bin/sh\nexit 127\n' > "$JQSTUB/jq"; chmod +x "$JQSTUB/jq"
+printf '#!/bin/bash\nexit 127\n' > "$JQSTUB/jq"; chmod +x "$JQSTUB/jq"
 f_out="$(jq -nc --arg t "$W_OFF/lead.jsonl" --arg s "fx" '{transcript_path:$t,session_id:$s}')"
 f_proj="$(mktemp -d)"; mkdir -p "$f_proj/_bmad-output/.driver"
 snap_from_body "$W_OFF/snapshot-body.md" > "$f_proj/_bmad-output/pipeline-snapshot.md"
@@ -649,8 +649,8 @@ LEASE_LOG='_bmad-output/pipeline-continuation-log.md'
 lease_ev()  { grep -c -- "^## .* -- $2\$" "$1/$LEASE_LOG" 2>/dev/null || true; }
 is_guard()  { case "$1" in *'HANDOFF GUARD'*) return 0 ;; esac; return 1; }
 is_block()  { printf '%s' "$1" | jq -e '.decision=="block"' >/dev/null 2>&1; }
-live_lease()    { printf '%s' "$(( $(date +%s) + 60 ))"; }
-expired_lease() { printf '%s' "$(( $(date +%s) - 1 ))"; }
+live_lease()    { printf '%s' 9999999999; }
+expired_lease() { printf '%s' 1; }
 
 # Each scorer drives one world through the given hook and returns 0 when the arm's property
 # holds, so the mutant battery below scores the SAME predicate the arm does. LA_MSG is evidence.

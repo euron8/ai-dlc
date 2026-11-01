@@ -2436,7 +2436,7 @@ fi
 # happened. Under the shim S955 must read the PRE-FILTER kind, NAMED-UPSTREAM.
 CO_SHIM="$COD/shim"; rm -rf "$CO_SHIM"; mkdir -p "$CO_SHIM"
 CO_REALGIT="$(command -v git)"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in --no-walk=unsorted) : > "%s/fired"; exit 128 ;; esac; done\nexec "%s" "$@"\n' \
+printf '#!/bin/bash\nfor a in "$@"; do case "$a" in --no-walk=unsorted) : > "%s/fired"; exit 128 ;; esac; done\nexec "%s" "$@"\n' \
   "$CO_SHIM" "$CO_REALGIT" > "$CO_SHIM/git"
 chmod +x "$CO_SHIM/git"
 co_failopen() { # <engine> -> S955's kind with the filter's git call failing, or BROKEN
@@ -2677,7 +2677,7 @@ esac
 # with `-m` and without `--stdin`; `named_reach` passes `--stdin`, so reach stays `code`) and leaves
 # a sentinel. No sentinel is BROKEN, never a verdict.
 OS_SHIM="$OSW/shim"; mkdir -p "$OS_SHIM"
-printf '#!/bin/sh\nnw=0; m=0; st=0\nfor a in "$@"; do case "$a" in --no-walk) nw=1 ;; -m) m=1 ;; --stdin) st=1 ;; esac; done\nif [ "$nw" = 1 ] && [ "$m" = 1 ] && [ "$st" = 0 ]; then : > "%s/fired"; exit 128; fi\nexec "%s" "$@"\n' \
+printf '#!/bin/bash\nnw=0; m=0; st=0\nfor a in "$@"; do case "$a" in --no-walk) nw=1 ;; -m) m=1 ;; --stdin) st=1 ;; esac; done\nif [ "$nw" = 1 ] && [ "$m" = 1 ] && [ "$st" = 0 ]; then : > "%s/fired"; exit 128; fi\nexec "%s" "$@"\n' \
   "$OS_SHIM" "$(command -v git)" > "$OS_SHIM/git"
 chmod +x "$OS_SHIM/git"
 os_lf() { # <engine> -> S969's kind with the subject listing failing, or BROKEN

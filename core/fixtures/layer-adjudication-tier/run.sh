@@ -1520,7 +1520,7 @@ fi
 # drive's own directory and logs it; every other call passes through untouched. The stub's positive
 # control is the healthy list run below, which must log exactly the listing's call.
 mkdir -p "$P11W/bin"
-printf '%s\n' '#!/bin/sh' \
+printf '%s\n' '#!/bin/bash' \
   'echo "$#" >> "$P11_TD.calls"' \
   '[ "$#" -eq 0 ] && exec /usr/bin/mktemp "$P11_TD/tmp.XXXXXX"' \
   'exec /usr/bin/mktemp "$@"' > "$P11W/bin/mktemp"

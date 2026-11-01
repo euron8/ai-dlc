@@ -22,7 +22,6 @@
 set -eu
 
 CASE="${1:?case}"
-NOW="$(date +%s)"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/join-yield-XXXXXX")"
 OUT="$WORK/_bmad-output"
@@ -58,23 +57,23 @@ case "$CASE" in
   # first field: live-marker-pid is that PRODUCER form. live-marker, and every other bare-epoch
   # seed in this file and in run.sh, is the BACKWARD-COMPATIBILITY form a pre-upgrade beat
   # writes, which a consumer mid-pull runs the new hook against.
-  live-marker)     write_snapshot; printf '%s' "$(( NOW + 100 ))" > "$MARK" ;;
-  live-marker-pid) write_snapshot; printf '%s %s' "$(( NOW + 100 ))" 12345 > "$MARK" ;;
+  live-marker)     write_snapshot; printf '%s' 9999999999 > "$MARK" ;;
+  live-marker-pid) write_snapshot; printf '%s %s' 9999999999 12345 > "$MARK" ;;
 
   # Fail-safe: every non-live marker state MUST fall through to block.
-  expired-marker) write_snapshot; printf '%s' "$(( NOW - 5 ))"   > "$MARK" ;;   # SIGKILLed beat's stale marker
-  expired-marker-pid) write_snapshot; printf '%s %s' "$(( NOW - 5 ))" 12345 > "$MARK" ;;   # the same, producer form
+  expired-marker) write_snapshot; printf '%s' 1 > "$MARK" ;;   # SIGKILLed beat's stale marker
+  expired-marker-pid) write_snapshot; printf '%s %s' 1 12345 > "$MARK" ;;   # the same, producer form
   garbage-marker) write_snapshot; printf 'not-a-number'          > "$MARK" ;;   # non-numeric epoch
   empty-marker)   write_snapshot; : > "$MARK" ;;                                # zero-byte marker
   marker-is-dir)  write_snapshot; mkdir -p "$MARK" ;;                           # unreadable -> -f is false
 
   # Precedence: the operator pause (Check 1) precedes Check 2b. A live marker is
   # also present to prove the allow is credited to PAUSE, not to the live beat.
-  paused)         write_snapshot; printf '%s' "$(( NOW + 100 ))" > "$MARK"; touch "$OUT/pipeline-paused.flag" ;;
+  paused)         write_snapshot; printf '%s' 9999999999 > "$MARK"; touch "$OUT/pipeline-paused.flag" ;;
 
   # Gating: Check 2b must sit behind Check 2. A live marker with NO snapshot must
   # not manufacture an allow of its own.
-  no-snapshot)    printf '%s' "$(( NOW + 100 ))" > "$MARK" ;;
+  no-snapshot)    printf '%s' 9999999999 > "$MARK" ;;
 
   # A bare active pipeline with no marker and no block state, for the SEQUENCE
   # arms. Those drive the hook repeatedly and toggle the marker themselves,

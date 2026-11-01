@@ -108,8 +108,8 @@ printf 'Host keepalive-probe-alias\n  ServerAliveInterval 60\n  ServerAliveCount
 # A PATH `ssh` that is a wrapper pinned to the bad config — how the DEFAULT branch
 # (no GIT_SSH_COMMAND, no core.sshCommand, no GIT_SSH) is driven without reading ~/.ssh.
 WRAPBIN="$WORK/wrapbin"; mkdir -p "$WRAPBIN"
-printf '#!/bin/sh\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/ssh"
-printf '#!/bin/sh\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/myssh-wrapper"
+printf '#!/bin/bash\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/ssh"
+printf '#!/bin/bash\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/myssh-wrapper"
 chmod +x "$WRAPBIN/ssh" "$WRAPBIN/myssh-wrapper"
 
 # A PATH with bash and sh and NO ssh, plus its twin that differs by one ssh symlink.

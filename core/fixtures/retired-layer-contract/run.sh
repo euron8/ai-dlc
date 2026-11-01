@@ -385,7 +385,7 @@ FX_STUB=""
 fx_stub() {  # <name> <case-pattern> -> FX_STUB, a directory holding a `git` failing every claimed call with 128
   FX_STUB="$FX/stub-$1"; mkdir -p "$FX_STUB"; : > "$FX_STUB/LOG"
   {
-    printf '#!/bin/sh\ncase "$*" in\n  %s)\n' "$2"
+    printf '#!/bin/bash\ncase "$*" in\n  %s)\n' "$2"
     printf '    printf "x\\n" >> "%s/LOG"; echo "git: forced failure" >&2; exit 128 ;;\n' "$FX_STUB"
     printf 'esac\nexec "%s" "$@"\n' "$FX_REALGIT"
   } > "$FX_STUB/git"
