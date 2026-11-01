@@ -2,8 +2,10 @@
 # 1869 and 141 include the 10 gate starts under `ulimit -f 0` (s_killed at run.sh:2506, the race at :2799), which the counter
 # recorded only once it learned to count a start whose log append the file-size limit refuses: 2 of them are the real gate.
 83 *
-3 core/hooks/ai-dlc-recover.sh
-2 core/hooks/ai-dlc-recover-gate.sh
+0 core/hooks/ai-dlc-context-provenance.sh
+0 core/hooks/ai-dlc-handoff-pending.sh
 3 core/hooks/ai-dlc-postcompact.sh
+2 core/hooks/ai-dlc-recover-gate.sh
+3 core/hooks/ai-dlc-recover.sh
 3 core/scripts/validate-reattach-budget.sh
 1 core/scripts/verdict.sh

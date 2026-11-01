@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output) at the rebased tip of the f3 rework, then verified by a second armed run.
 462 *
+0 core/scripts/check-owed-derivations.sh
+0 core/scripts/sprint-status.sh
+0 core/scripts/sync-transient-ignore.sh
 25 core/skills/ai-dlc-update/reconcile/apply.sh

@@ -342,7 +342,7 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     local l="$1" fn="$2" urc crc
     shift 2
     "$fn" "$@" > "$WORK/eq.$l.u" 2>&1; urc=$?
-    bash "$@" > "$WORK/eq.$l.c" 2>&1; crc=$?
+    FXCELL="cli-$l" bash "$@" > "$WORK/eq.$l.c" 2>&1; crc=$?
     if cmp -s "$WORK/eq.$l.u" "$WORK/eq.$l.c" && [ "$urc" = "$crc" ]; then echo "$l $urc" >> "$WORK/eq.rows"
     else echo "$l DIFF($urc/$crc)" >> "$WORK/eq.rows"; fi
   }

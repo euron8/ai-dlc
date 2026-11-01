@@ -382,7 +382,7 @@ pe_D="$WORK/real/dist"; pe_C="$WORK/real/c"; pe_good="$(cat "$WORK/real/.ref.goo
 pe_cmp() { # pe_cmp <tag> <args...>
   local t="$1" ur=0 cr=0; shift
   pdx "$RD" "$@" > "$WORK/pe.$t.uo" 2> "$WORK/pe.$t.ue" || ur=$?
-  bash "$RD" "$@" > "$WORK/pe.$t.co" 2> "$WORK/pe.$t.ce" || cr=$?
+  FXCELL="cli-$t" bash "$RD" "$@" > "$WORK/pe.$t.co" 2> "$WORK/pe.$t.ce" || cr=$?
   # The staging dir's name is in no output; a REFUSED line names only inputs, so stderr compares exactly.
   cmp -s "$WORK/pe.$t.uo" "$WORK/pe.$t.co" && cmp -s "$WORK/pe.$t.ue" "$WORK/pe.$t.ce" && [ "$ur" = "$cr" ] \
     || { pe_ok=0; pe_why="$pe_why $t(unit=$ur cli=$cr)"; }

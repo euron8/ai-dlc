@@ -1411,10 +1411,30 @@ fi
 DIST_ONLY="$(cd "$REPO_ROOT/core/fixtures" 2>/dev/null && for d in */; do
   [ -f "${d}.dist-only" ] && printf '%s\n' "${d%/}"
 done | sort -u)"
-for f in $DIST_ONLY; do
-  grep -qx "$f" <<<"$in_uninstall" && err "fixture '$f' carries a .dist-only marker but uninstall.sh names it. install.sh never copies a marked fixture, so this is a removal loop reaching for a path no consumer was ever given."
-  [ -d "$REPO_ROOT/core/fixtures/$f" ] || err "fixture '$f' carries a .dist-only marker but does not exist in core/fixtures/ — stale marker."
-done
+# ONE comm join for "uninstall.sh names a marked fixture": a grep per fixture cost one fork per
+# .dist-only fixture, so the fork total grew with every marker added. The stale-marker test stays a
+# builtin `[ -d ]` in a loop with no fork inside it. dist_only_findings is a function so the
+# self-probe drives the SAME code the corpus run does.
+dist_only_findings() { # dist_only_findings <marked list> <uninstall list> <fixtures root> -> "named <f>" / "stale <f>" lines
+  local _n _f
+  _n="$(LC_ALL=C comm -12 <(LC_ALL=C sort -u <<<"$1") <(LC_ALL=C sort -u <<<"$2"))"
+  while IFS= read -r _f; do [ -n "$_f" ] && echo "named $_f"; done <<<"$_n"
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    [ -d "$3/$_f" ] || echo "stale $_f"
+  done <<<"$1"
+}
+# SELF-PROBE, three seeds read in one invocation, against / so no directory is created: `bin` is
+# marked AND named by uninstall (must err), `etc` is marked and NOT named (must stay quiet), and
+# `ghost-nodir` is marked with no directory (must err as stale).
+do_pf="$(dist_only_findings "$(printf 'bin\netc\nghost-nodir\n')" "$(printf 'bin\nother\n')" / | tr '\n' ',')"
+[ "$do_pf" = "named bin,stale ghost-nodir," ] || err "I8's .dist-only join SELF-PROBE FAILED: findings read '${do_pf}', expected exactly 'named bin,stale ghost-nodir,'. Either a marked fixture uninstall.sh names was not reported, a marked fixture it does not name was, or a stale marker was missed, so a clean corpus result below means nothing."
+while IFS=' ' read -r do_kind f; do
+  case "$do_kind" in
+    named) err "fixture '$f' carries a .dist-only marker but uninstall.sh names it. install.sh never copies a marked fixture, so this is a removal loop reaching for a path no consumer was ever given." ;;
+    stale) err "fixture '$f' carries a .dist-only marker but does not exist in core/fixtures/ — stale marker." ;;
+  esac
+done <<<"$(dist_only_findings "$DIST_ONLY" "$in_uninstall" "$REPO_ROOT/core/fixtures")"
 
 shippable="$(comm -23 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$DIST_ONLY"))"
 miss_uninstall="$(comm -23 <(printf '%s\n' "$shippable") <(printf '%s\n' "$in_uninstall"))"

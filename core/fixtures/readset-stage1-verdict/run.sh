@@ -423,7 +423,7 @@ NWORLDS="$(grep -c . "$TABLE")" || NWORLDS=0
 
 # ------------------------------------------------------------------ the shipping scorer ----
 echo " the shipping scorer, every world:"
-sp="$(TMPDIR="$WORK/w" bash "$SCORER" --self-probe 2>&1)"; rc=$?
+sp="$(TMPDIR="$WORK/w" FXCELL=score-selfprobe bash "$SCORER" --self-probe 2>&1)"; rc=$?
 case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") B_sp=1; ok "--self-probe exits 0 ($sp)" ;; *) bad "--self-probe: rc=$rc $sp" ;; esac
 while IFS="$(printf '\t')" read -r name wrc wspec; do
   got="$(verdict "$SCORER" "$(w_of "$name")")"
@@ -439,7 +439,7 @@ eqv=""; eqo=""
 for name in met a1 r1; do
   W="$(w_of "$name")"
   ip="$(score_in "$SCORER" "$W" "$WORK")"; iprc=$?
-  cl="$(score_cli "$SCORER" "$W" "$WORK")"; clrc=$?
+  cl="$(FXCELL="score-cli-$name" score_cli "$SCORER" "$W" "$WORK")"; clrc=$?
   [ "$iprc|$ip" = "$clrc|$cl" ] || eqv="$eqv $name[in-process rc=$iprc, cli rc=$clrc]"
   eqo="$eqo$clrc:$(printf '%s' "$cl" | cksum | cut -d' ' -f1) "
 done
@@ -700,7 +700,7 @@ wrap_ok() {
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
   ( cd "$DECOY" && PATH="$SBIN:$PATH" AI_DLC_READSET_SANDBOX_PROFILE="$WORK/narrow.sb" AI_DLC_READSET_STAGE1_LEDGER="$L" \
-      bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" ) > "$R/out" 2>&1; rc=$?
+      FXCELL=wrap-ok bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" ) > "$R/out" 2>&1; rc=$?
   # THE ENVIRONMENT ARM, with its control: the stub's env dump must exist and carry the ledger
   # variable the wrapper DID pass, so an absent profile variable is not an absent dump.
   grep -q '^AI_DLC_READSET_TRACE_ROOT=' "$rd/root/w/stub.env" 2>/dev/null || { echo "    [$t] the stub recorded no environment (control)"; f=1; }
@@ -798,7 +798,7 @@ wrap_term() {
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
   : > "$R/pids"
-  AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
+  FXCELL=wrap-term AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
   await "$R" "$wp" "the stub's ready file" is_file "$R/ready" \
@@ -841,7 +841,7 @@ echo " the wrapper, against a stub deriver:"
 if wrap_ok "$WRAPPER" ok; then B_wr_ok=1; ok "exit 0 run (driven from a dirty decoy repo, stub sysctl first on PATH, a replacement profile in the env): map restored, started + terminal ledger lines, load.tsv is the 1-min figure, profile not passed on, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
 
 R="$WORK/wr/fail"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo fail"
-AI_DLC_READSET_STAGE1_LEDGER="$R/ledger" STUB_MODE=fail bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
+FXCELL=wrap-fail AI_DLC_READSET_STAGE1_LEDGER="$R/ledger" STUB_MODE=fail bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
 if [ "$rc" = 1 ] && cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && grep -qx 'stub-wrote' "$R/run/root/w/map.written" \
    && awk -F'\t' '(NR == 1 && NF == 4 && $2 == "started") || (NR == 2 && NF == 5 && $2 == "1") { n++ } END { exit !(n == 2 && NR == 2) }' "$R/ledger" \
    && [ "$(cat "$R/run/rc")" = 1 ]; then
@@ -868,7 +868,7 @@ wrap_kill9() {
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
   : > "$R/pids"
-  AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang-late STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
+  FXCELL=wrap-late AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang-late STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
   await "$R" "$wp" "the stub's ready file and the wrapper's pgid file" ready_and_pgid "$R/ready" "$rd/pgid" \
@@ -886,7 +886,7 @@ wrap_kill9() {
   # (a) the map is CLEAN here -- the dirty-tree check is checked first and cannot be what refuses.
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map is dirty straight after SIGKILL, so (a) cannot show the orphan refusal"; f=1; }
   kill -0 -- "-$pg" 2>/dev/null || { echo "    [$t] the orphaned process group $pg is not alive after SIGKILL"; f=1; }
-  out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run2" 2>&1)"; rc2=$?
+  out="$(FXCELL=wrap-run2 AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run2" 2>&1)"; rc2=$?
   case "$rc2|$out" in 2*"(process group $pg) is still alive"*) ;; *) echo "    [$t] (a) the run beside the live orphan did not refuse on it: rc=$rc2 $out"; f=1 ;; esac
   [ "$(grep -c . "$L")" = 1 ] || { echo "    [$t] (a) the refused run beside the orphan wrote to the ledger"; f=1; }
   [ ! -e "$R/run2" ] || { echo "    [$t] (a) the refused run beside the orphan created its RUN_DIR"; f=1; }
@@ -897,13 +897,13 @@ wrap_kill9() {
     || broken "[$t] the orphaned process group $pg did not exit after its children were ended: $AWAIT_WHY"
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] (b) the orphan never reached its final map write"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] (b) the map is clean after the orphan exited, so the dirty-tree refusal proves nothing"; f=1; }
-  out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run3" 2>&1)"; rc2=$?
+  out="$(FXCELL=wrap-run3 AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run3" 2>&1)"; rc2=$?
   case "$rc2|$out" in 2*"has uncommitted changes"*) ;; *) echo "    [$t] (b) the run after the orphan wrote the map did not refuse on the dirty map: rc=$rc2 $out"; f=1 ;; esac
   [ "$(grep -c . "$L")" = 1 ] || { echo "    [$t] (b) the refused run on the dirty map wrote to the ledger"; f=1; }
   [ ! -e "$R/run3" ] || { echo "    [$t] (b) the refused run on the dirty map created its RUN_DIR"; f=1; }
   # (c) the ALLOW twin.
   git -C "$R/repo" checkout -q -- .ai-dlc-fixture-readsets.tsv || broken "[$t] cannot check the map out clean"
-  out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run4" 2>&1)"; rc2=$?
+  out="$(FXCELL=wrap-run4 AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run4" 2>&1)"; rc2=$?
   [ "$rc2" = 0 ] || { echo "    [$t] (c) with the orphan gone and the map clean the next run did not proceed: rc=$rc2 $out"; f=1; }
   return "$f"
 }
@@ -917,7 +917,7 @@ if wrap_kill9 "$WRAPPER" kill9; then B_wr_kill9=1; ok "SIGKILL: exit 137, the st
 pre_in() { ( AI_DLC_READSET_STAGE1_LEDGER="$2"; export AI_DLC_READSET_STAGE1_LEDGER; . "$1" || exit 9; stage1_preflight "$3" ) 2>&1; }
 refusal() { # refusal <tag> <reason> <rundir> <wrapper> [cli] -- run with the ledger override
   local L="$WORK/wr/$1.ledger" out rc
-  if [ "${5:-}" = cli ]; then out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$4" "$3" 2>&1)"; rc=$?
+  if [ "${5:-}" = cli ]; then out="$(FXCELL=wrap-refuse-dirty-tree AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$4" "$3" 2>&1)"; rc=$?
   else out="$(pre_in "$4" "$L" "$3")"; rc=$?; fi
   if [ "$rc" = 2 ] && case "$out" in *"$2"*) true ;; *) false ;; esac && [ ! -e "$L" ]; then
     ok "refuses $1: exit 2, '$2', no ledger line${5:+ (end to end)}"

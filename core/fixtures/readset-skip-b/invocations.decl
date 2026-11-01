@@ -2,4 +2,5 @@
 # Exact (BL-868): the fx_drive and fw_drive stop-at-first-leak drives now run a fixed number of launches.
 # +18 for the forced-day psfailpad world (BL-868): 8 pj_evals x (judge + ps stub), and 2 ps-stub writer runs.
 495 *
+0 core/git-hooks/pre-push
 82 core/scripts/derive-fixture-readsets.sh

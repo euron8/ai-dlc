@@ -1,0 +1,3 @@
+cli core/skills/ai-dlc-update/reconcile/push-drain.sh cli-pass
+cli core/skills/ai-dlc-update/reconcile/push-drain.sh cli-refuse
+cli core/skills/ai-dlc-update/reconcile/push-drain.sh cli-digest

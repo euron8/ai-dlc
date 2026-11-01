@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 837 *
+0 core/scripts/validate-adversarial-convergence.sh
+72 core/scripts/validate-artifact-budget.sh
+8 core/scripts/verdict.sh
 326 core/scripts/wait-for-deliverable.sh

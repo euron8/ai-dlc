@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-fixture-inprocess.sh, BL-879's static validator, together with the two siblings it
+calls (scripts/validate-fixture-invocations.sh and scripts/validate-fixture-hygiene.sh). All three live in the
+repo-root scripts/, which install.sh never copies, so on a consumer this fixture could resolve no subject.

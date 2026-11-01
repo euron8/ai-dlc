@@ -33,6 +33,7 @@ scripts/validate-claude-rules.sh
 scripts/validate-enforcement-map.sh
 scripts/validate-fixture-git-env.sh
 scripts/validate-fixture-hygiene.sh
+scripts/validate-fixture-inprocess.sh
 scripts/validate-fixture-invocations.sh
 scripts/validate-mutant-kills.sh
 scripts/validate-no-dead-doc-refs.sh
