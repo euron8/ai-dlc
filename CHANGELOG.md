@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.987.0] - 2026-11-01
+
+### An open `sh` receipt must assert its anchor before it tests its defect, and R10 refuses one that does not (BL-836)
+
+- **Fix.** `scripts/validate-backlog-receipts.sh` gains R10, a text-only pass over every OPEN `verify: sh` receipt inside the corpus section. A grep, awk, sed or cat read (including `! grep`, a working-tree `git grep` and `git show HEAD:`) of a tracked path must come after an anchor on that same path that exits 9. Operands resolve through `NAME=<literal>` and into `$( )`, and "tracked" means an exact `git ls-files` match. `[ -f ]`, `exit 1`, `exit 99`, a pattern with no identifier of four or more characters, a shebang or line-1 pattern, and an anchor inside a subshell are refused. Only history reads at a non-HEAD revision are exempt. The ceiling is 0, set with `--max-unanchored`, and R10 refuses a short corpus read. `scripts/check-no-provisional-invocations.sh` exits 9, not 2, on each of its four could-not-measure paths, and `set -uo pipefail` catches a failing `git ls-files`. The `## Receipts` legend states the convention, including that the anchor must survive the fix. BL-899 is filed for the child-process and driver shapes R10's text cannot see.
+- **Why.** A receipt that greps for a renamed anchor exits 1, STILL-LIVE's code, so R7 could not see the rename and the receipt stopped measuring its subject silently.
+- **Held by.** R10's self-probe runs 47 text seeds in both directions before the corpus. Seeds BL-990 and BL-991 are run by R7 against a committed in-file rename: the anchored one exits 9, and the unanchored one exits 1 and is refused by R10. The probe builds its own repository, so a BL-880 keyed replay still runs it (replay cell pr7). A one-byte change to BL-990 changes the replay key. Mutants r10-m1 to r10-m14 sit in `core/fixtures/backlog-receipt-binding`.
+- **Measured.** Today's OPEN population is 2 driver receipts that read no tracked file, so R10's corpus 0 is vacuous. Over the 704 `sh` receipts at ba72d81e7, the shipping judge refuses 149 archived receipts and 0 live ones, and every refused receipt with a content-gated `exit 9` is enumerated in BL-836. 326 receipts are only partly parsed, so 149 is a floor of unknown depth.
+- **Cost.** `backlog-receipt-binding` invocations go from 5416 to 5772 and `backlog-real-ledger` from 248 to 260. An ablation with BL-990 and BL-991 removed reads 5526 and 248, so +246 and +12 are those two seeds, scored on every fired run. Fork profile 2899 to 2899, against a budget of 2901.
+- **Consumer reach.** None. The validator, the check script and both fixtures are distribution-only.
+
 ## [0.986.0] - 2026-11-01
 
 Batch b247. A fixture that runs its subject as a separate program now fails the push unless that start is declared as a cell (BL-879). BL-879 closes. BL-878's progress line is corrected to the measured four of fifteen.

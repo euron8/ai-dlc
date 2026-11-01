@@ -2,5 +2,8 @@
 # BL-880: after VEQ and the storeless control (cell 8), every in-process run shares the unit's BR_PROBE_RECORD store, so
 # an unmutated copy replays R1 and R7/R8; each mutant copy has its own key and fires. The probe-record cells and the
 # nine pr-m-* mutants (two runs each in a store of their own) are counted here. Was 6937 * / 2532 validator at 99fe3afda.
-5416 *
-2067 scripts/validate-backlog-receipts.sh
+# BL-836: 5416 * / 2067 validator at bc1321bf1. Of the +356 / +123, +246 / +82 are BL-990/991 in R7's probe ledger (two
+# more receipts scored per FIRED run; a counted run with both removed read 5526 / 2108), and +110 / +41 are R10's own
+# cells: r10-m1's full run and the c5 worlds' R10 rows. r10-m2..m14 drive vbr_probe_r10 alone, in-process.
+5772 *
+2190 scripts/validate-backlog-receipts.sh

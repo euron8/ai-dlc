@@ -261,7 +261,7 @@ bl_reported() { printf '%s\n' "$1" | sed -n 's|^OK: validate-backlog-size -- B1 
 # is then always printed, the population is read from it alone, and `scored=` must be non-zero.
 # The anchor is one more sh receipt on BOTH sides of the join, so the comparison is unmoved.
 J1_ANCHOR='BL-899'
-J1_ARGS="--max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0"
+J1_ARGS="--max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --max-unanchored 9999 --min-sh-receipts 0 --min-entries 0"
 j1_read() { # j1_read <validator output> -> "<sh-receipts> <scored>", or nothing without a SUMMARY
   printf '%s\n' "$1" | sed -n 's/^SUMMARY .*sh-receipts=\([0-9][0-9]*\) scored=\([0-9][0-9]*\) .*/\1 \2/p'
 }

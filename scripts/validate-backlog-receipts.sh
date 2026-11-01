@@ -175,6 +175,44 @@
 #   refused: an all-manual ledger has no `sh` receipt, and the probe, not the corpus, proves the join
 #   can fire.
 #
+# R10 -- AN OPEN RECEIPT ASSERTS ITS ANCHOR BEFORE IT TESTS ITS DEFECT (BL-836, the operator's
+# "adopt the convention" ruling). R7 cannot see a grep-shaped receipt whose subject was renamed: it
+# exits 1, STILL-LIVE's own code (and `! grep` exits 0, which R8 then reads as a good close). The
+# convention makes that rename visible to R7 with no change to R7: before the defect test the receipt
+# proves the thing it tests EXISTS, and exits 9 -- already in R7's FAIL set -- if it does not.
+#   Population: every OPEN `verify: sh` receipt, the `$WORK/rec` line-2 bytes R2's worker evals, read
+#      as TEXT in the corpus step only (never on the R1/R7 probe passes, and `--archive` exits before
+#      it). It EXECUTES NOTHING: one `git ls-files` and one awk program per run.
+#   Rule: a grep, egrep, fgrep, awk, sed or cat -- `! grep` included, since after a rename it exits 0
+#      -- or a working-tree `git grep` / `git show HEAD:p` / `git show :p`, whose FILE operand resolves
+#      to a path TRACKED in the subject root (`git ls-files`, exact path, never a prefix list), must be
+#      preceded in the same receipt by an ANCHOR on THAT path. Operands are resolved through earlier
+#      `NAME=<literal>` assignments and `$( )` is descended into, quoted or not. A read inside a
+#      `NAME=$( )` capture is held pending and is settled by a later anchor on its capture.
+#   Anchor forms, each at top level (not inside `( )` or `$( )`, where exit leaves only the subshell):
+#      `grep -q|--quiet <pat> P || exit 9`, `grep -q <pat> P || { ...; exit 9; }`,
+#      `if ! grep -q <pat> P; then exit 9; fi`, and the non-empty extract
+#      `s=$(awk|sed|grep ... P); [ -n "$s" ] || exit 9`, a count meaning one match or more
+#      (`n=$(grep -c t P); [ "$n" -ge 1 ] || exit 9`, or the `$( )` inline), an anchor in an `&&`
+#      chain ending `|| exit 9`, `awk|sed ... P | grep -q . || exit 9`, and an awk/sed rewrite of P to a
+#      copy followed by `cmp -s P copy && exit 9`. The exit is `exit 9` followed by a word
+#      boundary (`exit 99` is refused). A bare `[ -f P ]` is NOT an anchor, nor is `grep -qv`.
+#   Vacuous anchors are refused: the pattern must carry an identifier run of four or more characters,
+#      must not be a shebang, and must not be found on line 1 of P. An irrelevant-but-real identifier
+#      is left to review.
+#   Exempt: a history read against a NON-HEAD revision -- `git show <rev>:p`, `git grep ... <rev>`,
+#      `git log` -- because the working tree's rename does not move it. NOT exempt: `git show HEAD:p`,
+#      `git grep ... -- p`, `cat p | grep`, and a here-string fed from `$(cat p)`.
+#   Ceiling 0 (`DEFAULT_MAX_R10`, `--max-unanchored`); `R10-POPULATION:` prints in every verbosity.
+#   TODAY'S OPEN POPULATION IS 2 RECEIPTS, BOTH DRIVERS (`bash scripts/<x>.sh`) WITH NO GREP, so the
+#      corpus 0 is VACUOUS: nothing was judged. The self-probe, not the corpus, proves the arm fires.
+#   WHAT IT CANNOT SEE, so its refusal count is a FLOOR: a driver script's own greps (the arm never
+#      opens a file a receipt runs), backticks, `cd`-relative paths, loop variables, heredocs,
+#      `xargs`/`eval`/`bash -c` bodies, `git -C`, a directory operand (`grep -r x core/`), and any
+#      operand left holding a `$` after resolution. Receipts carrying one are counted on the
+#      population line as not fully parsed.
+#   HOW THE FALSE-POSITIVE SET REACHED ITS VALUE: see the R10 FP block beside DEFAULT_MAX_R10.
+#
 # EMPTY IS NOT CLEAN. Both populations print a line in every verbosity -- `OPEN-POPULATION: EMPTY`
 # when the ledger has no live `sh` receipt (the state on every push when this shipped: 43 live
 # entries, 0 `sh` receipts; control, the same ledger's `^verify:` lines, 47, of which the one
@@ -211,7 +249,8 @@
 #   `PROBE-RECORD: WRITTEN (K=<K>)`. A red probe exits 2 before that line, so no record can say
 #   green about a key that went red. A store that is set but unusable (not absolute, not a
 #   writable directory, or the key could not be computed) prints `PROBE-RECORD: UNUSABLE` and
-#   the probes run. R0, E0 and R9 always run, and --archive / --efficiency-only never reach this.
+#   the probes run. R0, E0 and R9 always run, and so do R10's self-probe (over its own repository,
+#   never R1's) and R10's corpus pass; --archive / --efficiency-only never reach this.
 #   THE KEY. K is the `git hash-object` of the manifest, and the record IS the manifest: the
 #   blob ids of this file, reconcile/lib.sh and scripts/backlog-receipt-lib.sh (the three files
 #   the probes and their workers execute); $BASH_VERSION, and the PATH bash's path and version
@@ -234,7 +273,7 @@
 #
 # Usage: validate-backlog-receipts.sh [<ledger>] [--root <dir>] [--base <ref>] [--quiet]
 #          [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N]
-#          [--max-unstable N] [--max-cannot-measure N]
+#          [--max-unstable N] [--max-cannot-measure N] [--max-unanchored N]
 #          [--min-sh-receipts N] [--min-entries N]
 # Output: one TAB-delimited row per finding, then a summary and one OK line.
 #          STATUS <TAB> ENTRY <TAB> paths=... <TAB> tokens=...
@@ -309,6 +348,65 @@ DEFAULT_MAX_UNSTABLE=0
 # false-positive set is EMPTY -- VACUOUSLY (see the header's BL-836 section). The gate passes no
 # --max-cannot-measure, so this line is the one source.
 DEFAULT_MAX_CM=0
+# R10, UNANCHORED READS, SHIPS AT ZERO. The open `sh` population is 2 driver receipts with no grep, so
+# its false-positive set is EMPTY -- VACUOUSLY.
+# R10 FP BLOCK -- HOW THE REFUSAL SET REACHED ITS VALUE. Measured once, text only, with THIS file's
+# r10_judge over every `verify: sh` receipt the ledger grammar parses at ba72d81e7 (702 archived, 2
+# live; tracked set from that tree): 167 refused, 60 anchored, 477 reading no tracked path. 702 is
+# the archive's 700 column-0 plus 2 indented `verify: sh` lines; a raw `grep -c 'verify: sh'` reads
+# 730 because 28 more sit mid-line in prose, and only 1 entry carries a second `verify:` line (not
+# an `sh` one). 167 IS A FLOOR: 253 receipts outside the refused set were only partly parsed (228
+# reading no tracked path, 25 anchored), and any of them can hide an unanchored read this grammar
+# could not follow. The census lint before it refused 33; 31 of those are still refused, and the 2
+# that left were read correctly here (BL-116 anchors through a `[ -n "$s" ] || exit 9` capture,
+# BL-064 reads no tracked path). The narrowing from the contract's draft: `! grep` was un-exempted
+# (G1), the history exemption narrowed to a non-HEAD revision (G3), tracked decided by `git ls-files`
+# rather than a prefix list (G2). THE FALSE-POSITIVE CENSUS, by this grammar over the same 704: 36 of
+# the 167 carried an `exit 9` guard, other than a bare existence test, whose statement names the
+# refused path or a variable bound to or captured from it. Five guard shapes ARE anchors and were
+# accepted, each with an accepted seed, a vacuous twin and a mutant; which ids each freed was derived
+# by judging the 704 once per scratch copy with that one acceptance disabled:
+#   a count meaning one match or more (`-gt 0`, `-ge|-eq|= N>=1`, `-ne 0`), captured or inline
+#     (BL-1029..1033, r10-m7): freed BL-073 140 151 271 286
+#   an anchor in an `&&` chain ending `|| exit 9`, not the right side of an `||` (BL-1034/1035,
+#     r10-m8): freed BL-153 365 366 396 408 415 502 504 656
+#   a read piped into `grep -q . || exit 9` (BL-1037/1038, r10-m10): freed BL-263
+#   an awk/sed rewrite of P to a copy, then `cmp -s P copy && exit 9` (BL-1039/1040, r10-m11):
+#     freed BL-304 675
+#   `grep -q <id pat> <<<"$C" || exit 9` over a capture C of P (BL-1041/1042/1045, r10-m12): freed
+#     BL-050 400, and holds BL-403
+# and two vacuous forms are refused: a pattern whose only word is a POSIX class name (`[[:blank:]]`;
+# BL-1043, r10-m13), and `[ -n ]` over a `grep -v` capture, non-empty whenever another line exists
+# (BL-1044, r10-m14), which is why BL-406 is newly refused -- it had read ANCHORED only through both.
+# Result: 149 refused (was 167), 78 anchored (was 60); 19 left the set and 1 joined it.
+# THE RESIDUAL FALSE POSITIVES -- the path's content gates `exit 9` with an identifier pattern, in a
+# shape this grammar has no reader for -- are 4, left open, not accepted:
+#   BL-014 `case "$P" in *'fm_block "$OVR" reason'*) ;; *) exit 9 ;; esac` over an awk capture of P
+#   BL-248 `END{if(n!=8||g!=1)exit 9}` inside an awk program over P
+#   BL-291 `jq -e '... any(test("/\\.claude/hooks/ai-dlc-..."))' P || exit 9`
+#   BL-707 a count of a seeded marker in a rewritten copy of P, in a receipt only partly parsed
+# REFUSED BY G5, the convention working as designed -- content gates `exit 9` but the pattern carries
+# no identifier of four or more characters:
+#   BL-091 `^## BL-[0-9]+` counted `-gt 0` (one identifier word in it reads ANCHORED, measured)
+#   BL-127 `^# --- I[0-9]+` counted `${h:-0} -ge 10`
+#   BL-653 BL-654 `[ -n "$t" ]` over `awk '/^### 2\./' P | tr`
+#   BL-723 `awk '/^### 24\./' P` counted through `${c% *} -gt 0`
+# THE TRUE REFUSALS among the 36, each guarding the refused read with no content test that exits 9:
+#   BL-123 BL-456 BL-498 only `[ -f ]` and `cp ... || exit 9` touch the path
+#   BL-193 `[ -f ]`, `cp ... || exit 9`, and `grep -q ... || exit 1` reads: a rename exits 1
+#   BL-197 BL-743 the first read of the path is guarded by `exit 1`
+#   BL-224 the anchor is on layer-drift.sh; the refused read is SKILL.md
+#   BL-278 `grep -q x P && exit 9` exits 9 on a MATCH, so a rename does not reach exit 9
+#   BL-288 the refused path is only `[ -r ]`-tested
+#   BL-466 the capture is a pipeline whose own `|| exit 1` fires first on a rename
+#   BL-477 a sed rewrite `|| exit 9` with no no-op check: sed exits 0 whatever it matched
+#   BL-701 BL-713 a `grep -v` capture, non-empty for any file with an uncommented line
+# THE FLOOR. 326 of the 704 are partly parsed (66 refused, 32 anchored, 228 no tracked path), so 149
+# is a floor of unknown depth. By the PARTIAL site each set (a receipt can set several), from a
+# tagged scratch copy over the same 704: an operand still holding `$`, `$( )` or `${..}` after
+# resolution 184, `case` 130, a `git -<option>` (git -C) 116, an unresolved command word 10, a
+# directory operand 3; backticks, heredocs and unbalanced quotes 0. The live 2 refuse 0.
+DEFAULT_MAX_R10=0
 # THE ONE SOURCE of the sh-receipt floor: `.githooks/pre-push` passes no --min-sh-receipts, so the
 # gate and a bare run read this line. Lower it only with DEFAULT_MIN_ENTRIES, when entries rotate.
 DEFAULT_MIN_SH=0
@@ -679,8 +777,8 @@ fi
 # ===========================================================================
 vbr_sec_args() {
 QUIET=0; LEDGER=""; ROOT_ARG=""; EFF_MODE=""; BASE_REF="origin/main"
-MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MAX_UNSTABLE=""; MIN_SH=""; MIN_ENTRIES=""; MAX_CM=""
-usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--archive | --efficiency-only] [--root <dir>] [--base <ref>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--max-cannot-measure N] [--min-sh-receipts N] [--min-entries N]" >&2; }
+MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MAX_UNSTABLE=""; MIN_SH=""; MIN_ENTRIES=""; MAX_CM=""; MAX_R10=""
+usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--archive | --efficiency-only] [--root <dir>] [--base <ref>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--max-cannot-measure N] [--max-unanchored N] [--min-sh-receipts N] [--min-entries N]" >&2; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --quiet) QUIET=1; shift ;;
@@ -692,6 +790,7 @@ while [ "$#" -gt 0 ]; do
     --max-out-of-population) MAX_OOP="${2:-}"; shift 2 ;;
     --max-unstable) MAX_UNSTABLE="${2:-}"; shift 2 ;;
     --max-cannot-measure) MAX_CM="${2:-}"; shift 2 ;;
+    --max-unanchored) MAX_R10="${2:-}"; shift 2 ;;
     --base) BASE_REF="${2:-}"; shift 2 ;;
     --min-sh-receipts) MIN_SH="${2:-}"; shift 2 ;;
     --min-entries) MIN_ENTRIES="${2:-}"; shift 2 ;;
@@ -768,6 +867,8 @@ num_or_die() { # num_or_die <value> <name>
 [ -n "$MIN_ENTRIES" ] || MIN_ENTRIES="${AI_DLC_BACKLOG_MIN_ENTRIES:-$DEFAULT_MIN_ENTRIES}"
 [ -n "$MAX_CM" ]      || MAX_CM="${AI_DLC_BACKLOG_MAX_CANNOT_MEASURE:-$DEFAULT_MAX_CM}"
 num_or_die "$MAX_CM" --max-cannot-measure
+[ -n "$MAX_R10" ]     || MAX_R10="${AI_DLC_BACKLOG_MAX_UNANCHORED:-$DEFAULT_MAX_R10}"
+num_or_die "$MAX_R10" --max-unanchored
 [ -n "$BASE_REF" ] || { echo "$(me): FAIL -- --base needs a ref" >&2; exit 2; }
 # RE-ENTRY. A receipt that invokes `.githooks/pre-push` (dozens of archive receipts do, directly
 # or as `git push`) re-enters this validator from inside the run executing it, whose population at
@@ -1904,12 +2005,16 @@ vbr_probe_r7r8() {
 #   BL-989 absent at base, filed AND rotated on the branch, exits 0   -> OK (a release's own close)
 #   BL-986 OPEN on the branch, the same renamed-symbol receipt as BL-981 -> STILL-LIVE shape, exits
 #          1, and is NOT a finding: an open entry's renamed anchor CANNOT be seen by exit alone.
+#   BL-990 R10's anchored receipt over probe/r10-subject.sh, committed AFTER the rename of its anchor
+#          r10_anchor_old -> r10_anchor_new: exit 9, marker exit-9 -- the rename is visible to R7
+#   BL-991 the same subject, unanchored: exit 1, NO marker -- R7 is blind, and R10 refuses it
 # ---------------------------------------------------------------------------
 r7_fail() { echo "$(me): SELF-PROBE FAILED -- $1" >&2; exit 2; }
 mkdir -p "$WORK/r7probe"
 printf '#!/usr/bin/env bash\nsubject_helper_never_shipped_zz\n' > "$P/probe/calls-missing.sh"
+printf '%s' "$R10_SUBJECT_BODY" > "$P/probe/r10-subject.sh"
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-  cd "$P" && git add probe/calls-missing.sh >/dev/null 2>&1 \
+  cd "$P" && git add probe/calls-missing.sh probe/r10-subject.sh >/dev/null 2>&1 \
     && git -c user.email=probe@local -c user.name=probe commit -q -m probe2 >/dev/null 2>&1 ) \
   || r7_fail "the probe repository would not take the R7 subject commit."
 {
@@ -1922,6 +2027,8 @@ printf '#!/usr/bin/env bash\nsubject_helper_never_shipped_zz\n' > "$P/probe/call
   printf '%s\n\n' '## BL-979' 'verify: sh printf "%s" "${BR_RECEIPTS_RUNNING:-}" > "$BR_WORK/r7probe/seen"'
   printf '## BL-977\n\nverify: sh exit 126\n\n'
   printf '## BL-978\n\nverify: sh exit 130\n\n'
+  printf '%s\n\n' '## BL-990' "verify: sh $R10_ANCH_RCPT"
+  printf '%s\n\n' '## BL-991' "verify: sh $R10_BARE_RCPT"
 } > "$WORK/r7probe/backlog.md"
 R7_OUT="$(score_ledger "$WORK/r7probe/backlog.md" "$P")" || exit 2
 cm_of() { printf '%s\n' "$R7_OUT" | awk -F'\t' -v id="$1" '$2 == id { print $1 "|" $3 }'; }
@@ -1962,6 +2069,8 @@ _r7_k3="$(ledger_key "$WORK/r7other/x.md" "$WORK/r7other")"
 [ "$_r7_k3" != "$_r7_k1" ] || r7_fail "seed BL-979: two repositories with a ledger at the same relative path resolved to ONE key ('$_r7_k1'), so a receipt seeding its own docs/backlog.md would read as a re-entry and score nothing."
 case "$(cm_of BL-977)" in "OUT-OF-POPULATION|base-exit=126-cannot-measure=exit-126") ;; *) r7_fail "seed BL-977: an OPEN receipt exiting 126 read '$(cm_of BL-977)', not cannot-measure=exit-126." ;; esac
 case "$(cm_of BL-978)" in "OUT-OF-POPULATION|base-exit=130-cannot-measure=exit-130") ;; *) r7_fail "seed BL-978: an OPEN receipt exiting 130 (a signal) read '$(cm_of BL-978)', not cannot-measure=exit-130." ;; esac
+case "$(cm_of BL-990)" in "OUT-OF-POPULATION|base-exit=9-cannot-measure=exit-9") ;; *) r7_fail "seed BL-990: R10's ANCHORED receipt over a subject whose anchor was renamed read '$(cm_of BL-990)', not cannot-measure=exit-9, so the convention does not make a rename visible to R7." ;; esac
+case "$(cm_of BL-991)" in "PROSE-CLOSABLE|"*) ;; *) r7_fail "seed BL-991: the UNANCHORED twin of BL-990 read '$(cm_of BL-991)', want a base exit of 1 with no cannot-measure marker (R7 blind, which is what R10 exists for)." ;; esac
 case "$(open_skip_line)" in "OPEN-POPULATION: SKIPPED -- "*) ;; *) r7_fail "the open-population skip line does not say SKIPPED." ;; esac
 read_counts
 [ "$(open_empty_line "$SH_RECEIPTS")" = "" ] || r7_fail "the open-population line said EMPTY over a ledger of $SH_RECEIPTS sh receipts."
@@ -2031,7 +2140,7 @@ R8_SKIPPED_OUT="$(score_closed "$Q/docs/backlog.md" "$Q" "$R8_MB")" || exit 2
 R8_SKIP=0
 [ -z "$R8_SKIPPED_OUT" ] || r7_fail "a re-entered run executed closed receipts: $R8_SKIPPED_OUT"
 case "$(closed_line 0)" in "CLOSED-POPULATION: SKIPPED "*) ;; *) r7_fail "a re-entered run was reported as '$(closed_line 0)', not SKIPPED." ;; esac
-R7_PROBED="R7 fired both directions over 8 seeded open receipts and R8 over 9 seeded closed-population entries and the re-entry skip"
+R7_PROBED="R7 fired both directions over 10 seeded open receipts and R8 over 9 seeded closed-population entries and the re-entry skip"
 }
 
 # ---------------------------------------------------------------------------
@@ -2189,6 +2298,565 @@ r9_run() {
   return 1
 }
 
+# ---------------------------------------------------------------------------
+# R10 -- THE ANCHOR CONVENTION (BL-836); see the header. ONE grammar, r10_awk_prog, and ONE judge,
+# r10_judge, called by the self-probe on seeded record files and by the corpus on `$WORK/rec`.
+# TEXT ONLY: nothing a receipt names is executed, and the only file contents read are line 1 of each
+# tracked path an anchor names (the vacuity test). Record files are the scorer's own format: line 1
+# the entry label, line 2 the ledger's receipt value (`sh <one-liner>`).
+# Row: <label> TAB <ANCHORED|UNANCHORED|NO-TRACKED-READ> TAB <first unanchored path, or -> TAB
+# <full|partial>; then one `R10-COUNTS <scanned> <unanchored> <anchored> <partial>` line.
+# ---------------------------------------------------------------------------
+r10_awk_prog() {
+cat <<'AWK'
+function isid(s) { return (s ~ /[A-Za-z_][A-Za-z0-9_][A-Za-z0-9_][A-Za-z0-9_]/) }
+function addtok(d, t, v) { NT[d]++; TT[d, NT[d]] = t; TV[d, NT[d]] = v }
+# matchp <text> <i> -> the index of the ")" closing the "(" at i, quote-aware; 0 when unbalanced
+function matchp(t, i,   n, dep, q, c) {
+  n = length(t); dep = 0; q = ""
+  for (; i <= n; i++) {
+    c = substr(t, i, 1)
+    if (q == "'") { if (c == "'") q = ""; continue }
+    if (c == "\\") { i++; continue }
+    if (q == "\"") {
+      if (c == "\"") q = ""
+      else if (c == "$" && substr(t, i + 1, 1) == "(") { i = matchp(t, i + 1); if (!i) return 0 }
+      continue
+    }
+    if (c == "'" || c == "\"") { q = c; continue }
+    if (c == "(") dep++
+    else if (c == ")") { dep--; if (dep == 0) return i }
+  }
+  return 0
+}
+# dollar <text> <i> <depth> -> the index after the expansion at i; DOL is its template: S1 k S1 for
+# command substitution k (its text in SUBT), S2 name S2 for a variable, S3 for anything unresolvable.
+function dollar(t, i, d,   c, j, nm, k) {
+  c = substr(t, i + 1, 1)
+  if (c == "(") {
+    j = matchp(t, i + 1)
+    if (!j) { PARTIAL = 1; DOL = S3; return length(t) + 1 }
+    if (substr(t, i + 2, 1) == "(") { DOL = S3; return j + 1 }
+    k = ++NSUB[d]; SUBT[d, k] = substr(t, i + 2, j - i - 2); DOL = S1 k S1; return j + 1
+  }
+  if (c == "{") {
+    j = index(substr(t, i + 2), "}")
+    if (!j) { PARTIAL = 1; DOL = S3; return length(t) + 1 }
+    nm = substr(t, i + 2, j - 1)
+    DOL = (nm ~ /^[A-Za-z_][A-Za-z0-9_]*$/) ? S2 nm S2 : S3
+    return i + 2 + j
+  }
+  if (c ~ /[A-Za-z_]/) {
+    nm = substr(t, i + 1); match(nm, /^[A-Za-z_][A-Za-z0-9_]*/)
+    DOL = S2 substr(nm, 1, RLENGTH) S2; return i + 1 + RLENGTH
+  }
+  if (c ~ /[0-9?#@*$!-]/) { DOL = S3; return i + 2 }
+  DOL = "$"; return i + 1
+}
+# lex <text> <depth> -> tokens TT/TV at that depth: w (a word template), r (a redirection), o (an operator)
+function lex(t, d,   n, i, c, c2, w, inw, q, two, three, j) {
+  NT[d] = 0; NSUB[d] = 0; n = length(t); w = ""; inw = 0; q = ""; i = 1
+  while (i <= n) {
+    c = substr(t, i, 1)
+    if (q == "'") { if (c == "'") q = ""; else w = w c; i++; continue }
+    if (c == "\\") {
+      c2 = substr(t, i + 1, 1)
+      if (q == "\"" && c2 !~ /[$`"\\]/) { w = w c; i++; continue }
+      w = w c2; inw = 1; i += 2; continue
+    }
+    if (c == "$") { i = dollar(t, i, d); w = w DOL; inw = 1; continue }
+    if (c == "`") { PARTIAL = 1; j = index(substr(t, i + 1), "`"); w = w S3; inw = 1; i = j ? i + j + 1 : n + 1; continue }
+    if (q == "\"") { if (c == "\"") q = ""; else w = w c; i++; continue }
+    if (c == "'" || c == "\"") { q = c; inw = 1; i++; continue }
+    if (c == " " || c == "\t") { if (inw) addtok(d, "w", w); w = ""; inw = 0; i++; continue }
+    two = substr(t, i, 2); three = substr(t, i, 3)
+    if (c == "<" || c == ">" || two == "&>") {
+      if (inw && c != "&" && w ~ /^[0-9]+$/) { w = ""; inw = 0 }
+      if (inw) addtok(d, "w", w)
+      w = ""; inw = 0
+      if (three == "<<<") { addtok(d, "r", "<<<"); i += 3; continue }
+      if (two == "<<") { PARTIAL = 1; addtok(d, "r", "<<"); i += 2; continue }
+      if (two == ">>" || two == ">&" || two == "<&" || two == "&>" || two == "<>" || two == ">|") { addtok(d, "r", two); i += 2; continue }
+      addtok(d, "r", c); i++; continue
+    }
+    if (two == "&&" || two == "||" || two == ";;") { if (inw) addtok(d, "w", w); w = ""; inw = 0; addtok(d, "o", two); i += 2; continue }
+    if (c == ";" || c == "|" || c == "&" || c == "\n" || c == "(" || c == ")") { if (inw) addtok(d, "w", w); w = ""; inw = 0; addtok(d, "o", c); i++; continue }
+    w = w c; inw = 1; i++
+  }
+  if (q != "") PARTIAL = 1
+  if (inw) addtok(d, "w", w)
+}
+function newcmd(d, lvl) { C = ++NC[d]; CN[d, C] = 0; CSEP[d, C] = ""; CIN[d, C] = ""; COUT[d, C] = ""; CHS[d, C] = ""; CLVL[d, C] = lvl; CG[d, C] = 0; CGC[d, C] = 0; CSUBS[d, C] = "" }
+function addsubs(d, c, w,   a, b) {
+  while ((a = index(w, S1)) > 0) { w = substr(w, a + 1); b = index(w, S1); CSUBS[d, c] = CSUBS[d, c] " " substr(w, 1, b - 1); w = substr(w, b + 1) }
+}
+# build <depth> -> simple commands CW/CN, each with its terminating operator CSEP, its `<` input CIN,
+# its subshell level CLVL, and whether it opens (CG) or closes (CGC) a `{ }` group.
+function build(d,   i, t, v, open, lvl, tgt) {
+  NC[d] = 0; open = 0; lvl = 0; tgt = ""
+  for (i = 1; i <= NT[d]; i++) {
+    t = TT[d, i]; v = TV[d, i]
+    if (t == "w") {
+      if (tgt != "") { if (tgt == "<") CIN[d, C] = v; if (tgt == ">") COUT[d, C] = v; if (tgt == "<<<") CHS[d, C] = v; addsubs(d, C, v); tgt = ""; continue }
+      if (!open) { newcmd(d, lvl); open = 1 }
+      if (CN[d, C] == 0 && v == "{") { CG[d, C]++; continue }
+      if (CN[d, C] == 0 && v == "}") { CGC[d, C] = 1; continue }
+      CN[d, C]++; CW[d, C, CN[d, C]] = v; addsubs(d, C, v); continue
+    }
+    if (t == "r") { if (!open) { newcmd(d, lvl); open = 1 }; tgt = v; continue }
+    if (v == "(") { if (open) CSEP[d, C] = v; open = 0; lvl++; continue }
+    if (v == ")") { if (open) CSEP[d, C] = v; open = 0; if (lvl > 0) lvl--; continue }
+    if (open) { CSEP[d, C] = v; open = 0 } else if (NC[d] > 0 && (CSEP[d, C] == ")" || CSEP[d, C] == "")) CSEP[d, C] = v
+  }
+}
+# expand <template> -> the word with every known variable substituted; UNRES = 1 when anything is left
+function expand(w,   out, a, b, nm) {
+  UNRES = 0; out = ""
+  while ((a = index(w, S2)) > 0) {
+    out = out substr(w, 1, a - 1); w = substr(w, a + 1); b = index(w, S2); nm = substr(w, 1, b - 1); w = substr(w, b + 1)
+    if (nm in VAR) out = out VAR[nm]; else { UNRES = 1; out = out "$" nm }
+  }
+  out = out w
+  if (index(out, S1) || index(out, S3)) UNRES = 1
+  return out
+}
+# rpath <template> -> the TRACKED path it names, or nothing; an unresolved or directory operand is PARTIAL
+function rpath(w,   v) {
+  v = expand(w)
+  if (UNRES) { PARTIAL = 1; return "" }
+  sub(/^\.\//, "", v); sub(/\/$/, "", v)
+  if (v in TR) return v
+  if (v in TD) PARTIAL = 1
+  return ""
+}
+function line1(p,   l) {
+  if (!(p in L1)) { L1[p] = ""; if ((getline l < (ROOT "/" p)) > 0) L1[p] = l; close(ROOT "/" p) }
+  return L1[p]
+}
+# patok <pattern template> <path> -> 1 when the pattern is a non-vacuous anchor for that path
+function patok(pt, p,   v, s) {
+  v = expand(pt)
+  if (UNRES) return 0
+  # A POSIX class name is not an identifier: `^[[:blank:]]*#` names no line of the subject.
+  s = v; gsub(/\[\[:[a-z]+:\]\]/, "", s)
+  if (!isid(s)) return 0
+  if (v ~ /^\^?#!/) return 0
+  s = v; sub(/^\^/, "", s); sub(/\$$/, "", s)
+  if (index(line1(p), s) > 0) return 0
+  return 1
+}
+# chain9 <depth> <c> -> 1 when command c gates an `exit 9`: c heads or sits in an `&&` chain, at one
+# subshell level, whose last member is joined by `||` to `exit 9` (or a `{ }` group holding one), and
+# the chain is not itself the right side of an `||` (`X || grep -q t P || exit 9` skips the grep when X
+# succeeds). A lone `grep -q t P || exit 9` is the one-member chain.
+function chain9(d, c,   m) {
+  m = c
+  while (m > 1 && CSEP[d, m - 1] == "&&") m--
+  if (m > 1 && CSEP[d, m - 1] == "||") return 0
+  m = c
+  while (m <= NC[d] && CSEP[d, m] == "&&") { m++; if (m > NC[d] || CLVL[d, m] != CLVL[d, c]) return 0 }
+  return (m <= NC[d] && CSEP[d, m] == "||" && exit9_after(d, m))
+}
+# cmpok <op> <k> -> 1 when `[ "$n" <op> <k> ]` holding means n >= 1: a count of at least one match.
+# `-ge 0`, `-lt`, `-le` and `-eq 0` hold on a count of zero, so they are vacuous and refused.
+function cmpok(op, k) {
+  if (k !~ /^[0-9]+$/) return 0
+  if (op == "-gt") return 1
+  if (op == "-ge" || op == "-eq" || op == "=" || op == "==") return (k + 0 >= 1)
+  if (op == "-ne") return (k + 0 == 0)
+  return 0
+}
+function is9(d, m) { return (m <= NC[d] && CN[d, m] == 2 && CW[d, m, 1] == "exit" && CW[d, m, 2] == "9") }
+# grepdot <depth> <m> -> 1 when command m is `grep -q .` (no file, not inverted): a pipe into it fails
+# exactly when the stage before printed nothing.
+function grepdot(d, m) { return (m <= NC[d] && CN[d, m] == 3 && CW[d, m, 1] == "grep" && CW[d, m, 2] ~ /^-[A-Za-z]*q[A-Za-z]*$/ && CW[d, m, 2] !~ /v/ && CW[d, m, 3] == ".") }
+# cmpanchor <depth> <c> -- `cmp -s A B && exit 9`, at top level and not the right side of an `||`,
+# where B is the `>` target of an earlier awk or sed over the tracked path A (or the operands swapped):
+# a transform that changed nothing exits 9, so its pattern is an anchor on A.
+function cmpanchor(d, c,   j, a, ops, no, k, x, y, px) {
+  if (CLVL[d, c] || CSEP[d, c] != "&&" || !is9(d, c + 1) || (c > 1 && CSEP[d, c - 1] == "||")) return
+  no = 0
+  for (j = 2; j <= CN[d, c]; j++) { a = CW[d, c, j]; if (substr(a, 1, 1) == "-") continue; ops[++no] = a }
+  if (no != 2) return
+  for (k = 1; k <= 2; k++) {
+    x = ops[k]; y = ops[3 - k]
+    px = rpath(x); if (px == "") continue
+    y = S6 expand(y)
+    if ((y in PEND) && index(PEND[y] S4, S4 px S4)) { ANC[px] = 1; NANC++; PEND[y] = ""; return }
+  }
+}
+function then9(d, m) { return (m <= NC[d] && CN[d, m] == 3 && CW[d, m, 1] == "then" && CW[d, m, 2] == "exit" && CW[d, m, 3] == "9") }
+# exit9_after <depth> <c> -> 1 when the command after c is `exit 9`, or a `{ }` group holding one
+function exit9_after(d, c,   m, g) {
+  m = c + 1
+  if (m > NC[d]) return 0
+  if (!CG[d, m]) return is9(d, m)
+  g = 0
+  for (; m <= NC[d]; m++) { g += CG[d, m]; if (is9(d, m)) return 1; if (CGC[d, m]) g--; if (g <= 0) return 0 }
+  return 0
+}
+function pgrep(d, c, s, git,   j, a, k, ch, rest, endo, havep, v) {
+  endo = 0; havep = 0
+  for (j = s; j <= CN[d, c]; j++) {
+    a = CW[d, c, j]
+    if (!endo && a == "--") { endo = 1; if (git) GITDD = 1; continue }
+    if (!endo && substr(a, 1, 1) == "-" && a != "-") {
+      if (a ~ /^--/) {
+        if (a == "--quiet" || a == "--silent") QUIET = 1
+        else if (a == "--invert-match") INV = 1
+        else if (a ~ /^--regexp=/) { if (!havep) PAT = substr(a, 10); havep = 1 }
+        else if (a == "--regexp") { j++; if (!havep) PAT = CW[d, c, j]; havep = 1 }
+        else if (a == "--file") { j++; PAT = S3; havep = 1 }
+        else if (a ~ /^--file=/) { PAT = S3; havep = 1 }
+        continue
+      }
+      for (k = 2; k <= length(a); k++) {
+        ch = substr(a, k, 1)
+        if (ch == "q") QUIET = 1
+        if (ch == "v") INV = 1
+        if (index("efmABCdD", ch)) {
+          rest = substr(a, k + 1); if (rest == "") { j++; rest = CW[d, c, j] }
+          if (ch == "e") { if (!havep) PAT = rest; havep = 1 } else if (ch == "f") { PAT = S3; havep = 1 }
+          break
+        }
+      }
+      continue
+    }
+    if (!havep) { PAT = a; havep = 1; continue }
+    if (git && !GITDD) {
+      v = expand(a)
+      if (UNRES) { PARTIAL = 1; continue }
+      if ((v in TR) || (v in TD)) { F[++NF2] = a; continue }
+      if (v != "HEAD") EXEMPT = 1
+      continue
+    }
+    F[++NF2] = a
+  }
+}
+function pawk(d, c, s,   j, a, havep) {
+  havep = 0
+  for (j = s; j <= CN[d, c]; j++) {
+    a = CW[d, c, j]
+    if (!havep && substr(a, 1, 1) == "-" && a != "-") {
+      if (a == "-f") { j++; PAT = S3; havep = 1 } else if (a == "-F" || a == "-v") j++
+      continue
+    }
+    if (!havep) { PAT = a; havep = 1; continue }
+    if (a ~ /^[A-Za-z_][A-Za-z0-9_]*=/) continue
+    F[++NF2] = a
+  }
+}
+function psed(d, c, s,   j, a, havep, endo) {
+  havep = 0; endo = 0
+  for (j = s; j <= CN[d, c]; j++) {
+    a = CW[d, c, j]
+    if (!endo && a == "--") { endo = 1; continue }
+    if (!endo && substr(a, 1, 1) == "-" && a != "-") {
+      if (a == "-e" || a == "--expression" || a ~ /^-[A-Za-z]*e$/) { j++; if (!havep) PAT = CW[d, c, j]; havep = 1 }
+      else if (a == "-f") { j++; PAT = S3; havep = 1 }
+      continue
+    }
+    if (!havep) { PAT = a; havep = 1; continue }
+    F[++NF2] = a
+  }
+}
+function pcat(d, c, s,   j, a) {
+  for (j = s; j <= CN[d, c]; j++) { a = CW[d, c, j]; if (substr(a, 1, 1) == "-" && a != "-") continue; F[++NF2] = a }
+}
+# git show <rev>:<path> reads the WORKING TREE only when <rev> is HEAD or the index (empty); any
+# other revision is a history read the rename does not move, and the command is exempt.
+function pshow(d, c, s,   j, a, v, rv, k) {
+  for (j = s; j <= CN[d, c]; j++) {
+    a = CW[d, c, j]
+    if (substr(a, 1, 1) == "-") continue
+    v = expand(a)
+    if (UNRES) { PARTIAL = 1; continue }
+    k = index(v, ":")
+    if (!k) continue
+    rv = substr(v, 1, k - 1)
+    if (rv != "HEAD" && rv != "") { EXEMPT = 1; continue }
+    F[++NF2] = substr(v, k + 1)
+  }
+}
+# settle <depth> <c> <j> <insub> <neg> -- `[ -n "$NAME" ] || exit 9`, or a count compare
+# `[ "$NAME" -ge 1 ] || exit 9` (cmpok), anchors every path NAME's capture read with a non-vacuous
+# pattern. The word may also be an inline `"$(grep -c t P)"`, whose reads walk() held under S5 d S5 k.
+function settle(d, c, j, insub, neg,   w, nm, n, ps, i) {
+  w = CW[d, c, j]
+  if (substr(w, 1, 1) == S1 && substr(w, length(w), 1) == S1) nm = S5 d S5 substr(w, 2, length(w) - 2)
+  else if (substr(w, 1, 1) != S2 || substr(w, length(w), 1) != S2) return
+  else nm = substr(w, 2, length(w) - 2)
+  if (insub || CLVL[d, c] || neg || !chain9(d, c)) return
+  if (!(nm in PEND) || PEND[nm] == "") return
+  n = split(substr(PEND[nm], 2), ps, S4)
+  for (i = 1; i <= n; i++) { ANC[ps[i]] = 1; NANC++ }
+  PEND[nm] = ""
+}
+# hsettle <name> -- the here-string anchor: every path NAME's capture read (PEND and PENDX) for which
+# PAT is a non-vacuous anchor is anchored; the rest stay pending.
+function hsettle(nm,   n, ps, i, keep) {
+  keep = ""; n = split(substr(PEND[nm], 2), ps, S4)
+  for (i = 1; i <= n; i++) if (patok(PAT, ps[i])) { ANC[ps[i]] = 1; NANC++ } else keep = keep S4 ps[i]
+  PEND[nm] = keep
+  keep = ""; n = split(substr(PENDX[nm], 2), ps, S4)
+  for (i = 1; i <= n; i++) if (patok(PAT, ps[i])) { ANC[ps[i]] = 1; NANC++ } else keep = keep S4 ps[i]
+  PENDX[nm] = keep
+}
+function capname(caps, k,   a, s) {
+  a = index(caps, " " k "=")
+  if (!a) return ""
+  s = substr(caps, a + length(k) + 2); sub(/ .*$/, "", s)
+  return s
+}
+# walk <depth> <insub> <cap> -- judge every command at this depth, substitutions before the command
+# that carries them. <insub> is 1 inside `$( )`, where no exit leaves the receipt; <cap> names the
+# variable a `NAME=$( )` capture assigns, whose reads wait for a `[ -n "$NAME" ] || exit 9`.
+function walk(d, insub, cap,   c, j, n, ks, k, w1, neg, isif, a, nm, val, caps, cmd, isg, anc, i, p, cpk) {
+  build(d)
+  for (c = 1; c <= NC[d]; c++) {
+    caps = ""
+    for (j = 1; j <= CN[d, c] && CW[d, c, j] ~ /^[A-Za-z_][A-Za-z0-9_]*=/; j++) {
+      a = index(CW[d, c, j], "="); nm = substr(CW[d, c, j], 1, a - 1); val = substr(CW[d, c, j], a + 1)
+      while ((a = index(val, S1)) > 0) { val = substr(val, a + 1); i = index(val, S1); caps = caps " " substr(val, 1, i - 1) "=" nm; val = substr(val, i + 1) }
+    }
+    n = split(CSUBS[d, c], ks, " ")
+    for (j = 1; j <= n; j++) {
+      k = ks[j]; nm = capname(caps, k)
+      # An inline count compare `[ "$(grep -c t P)" -gt 0 ]` holds its reads as a capture of its own.
+      if (nm == "" && CW[d, c, 1] == "[" && CW[d, c, 2] == S1 k S1) nm = S5 d S5 k
+      lex(SUBT[d, k], d + 1); walk(d + 1, 1, nm != "" ? nm : cap)
+    }
+    j = 1; neg = 0; isif = 0
+    while (j <= CN[d, c]) {
+      w1 = CW[d, c, j]
+      if (w1 == "!") neg = 1
+      else if (w1 == "if") isif = 1
+      else if (w1 == "case") { PARTIAL = 1; j = CN[d, c] + 1; break }
+      else if (w1 !~ /^(then|do|else|elif|while|until|time|fi|done|esac)$/) break
+      j++
+    }
+    while (j <= CN[d, c] && CW[d, c, j] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+      a = index(CW[d, c, j], "="); nm = substr(CW[d, c, j], 1, a - 1); val = expand(substr(CW[d, c, j], a + 1))
+      VAR[nm] = UNRES ? S3 : val; j++
+    }
+    if (j > CN[d, c]) continue
+    cmd = expand(CW[d, c, j])
+    if (UNRES) { PARTIAL = 1; continue }
+    if (cmd == "env" || cmd == "command") { j++; while (j <= CN[d, c] && CW[d, c, j] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) j++; cmd = expand(CW[d, c, j]) }
+    sub(/^.*\//, "", cmd)
+    if (cmd == "[" || cmd == "test") {
+      if (CW[d, c, j + 1] == "-n") settle(d, c, j + 2, insub, neg)
+      else if (cmpok(CW[d, c, j + 2], CW[d, c, j + 3]) && (cmd == "[" ? (CN[d, c] == j + 4 && CW[d, c, j + 4] == "]") : CN[d, c] == j + 3)) settle(d, c, j + 1, insub, neg)
+      continue
+    }
+    if (cmd == "cmp") { if (!insub && !neg && j == 1) cmpanchor(d, c); continue }
+    NF2 = 0; PAT = ""; QUIET = 0; INV = 0; EXEMPT = 0; GITDD = 0; isg = 0
+    if (cmd == "grep" || cmd == "egrep" || cmd == "fgrep") { isg = 1; pgrep(d, c, j + 1, 0) }
+    else if (cmd == "awk" || cmd == "gawk" || cmd == "nawk") pawk(d, c, j + 1)
+    else if (cmd == "sed") psed(d, c, j + 1)
+    else if (cmd == "cat") pcat(d, c, j + 1)
+    else if (cmd == "git") {
+      a = CW[d, c, j + 1]
+      if (a == "grep") { isg = 1; pgrep(d, c, j + 2, 1) }
+      else if (a == "show") pshow(d, c, j + 2)
+      else { if (substr(a, 1, 1) == "-") PARTIAL = 1; continue }
+    }
+    else continue
+    if (EXEMPT) continue
+    if (CIN[d, c] != "") F[++NF2] = CIN[d, c]
+    anc = ""
+    # An INVERTED grep (-v) matches any line lacking the pattern, so it is never an anchor.
+    if (isg && QUIET && !INV && NF2 == 1 && !insub && !CLVL[d, c]) {
+      p = rpath(F[1])
+      if (p != "" && patok(PAT, p)) {
+        if (!neg && chain9(d, c)) anc = p
+        else if (neg && isif && (CSEP[d, c] == ";" || CSEP[d, c] == "\n") && then9(d, c + 1)) anc = p
+      }
+    }
+    # A read piped into `grep -q . || exit 9`: the stage's output is empty exactly when its pattern
+    # matched nothing, so a non-vacuous pattern anchors its one path.
+    if (anc == "" && !INV && NF2 == 1 && !insub && !CLVL[d, c] && !neg && CSEP[d, c] == "|" && grepdot(d, c + 1) && chain9(d, c + 1)) {
+      p = rpath(F[1])
+      if (p != "" && patok(PAT, p)) anc = p
+    }
+    # `grep -q <pat> <<<"$NAME" || exit 9` over a capture NAME of P anchors P with that pattern,
+    # whatever read took the capture (a `grep -v` comment strip included): its CONTENT is P's lines.
+    if (isg && QUIET && !INV && NF2 == 0 && !insub && !CLVL[d, c] && !neg && chain9(d, c)) {
+      a = CHS[d, c]
+      if (length(a) > 2 && substr(a, 1, 1) == S2 && substr(a, length(a), 1) == S2) hsettle(substr(a, 2, length(a) - 2))
+    }
+    # An awk or sed over one path written by `>` to a copy: the read waits for `cmp -s P copy && exit 9`.
+    cpk = ""
+    if (!isg && !INV && NF2 == 1 && COUT[d, c] != "" && !insub && !CLVL[d, c]) cpk = S6 expand(COUT[d, c])
+    for (i = 1; i <= NF2; i++) {
+      p = rpath(F[i])
+      if (p == "") continue
+      TRK = 1
+      if (p in ANC) continue
+      if (p == anc) { ANC[p] = 1; NANC++; continue }
+      # A capture's read waits: PEND for one a `[ -n ]` or a count compare may settle (a non-inverted
+      # read with a non-vacuous pattern), PENDX for one only a here-string anchor settles.
+      if (cap != "" && !INV && patok(PAT, p)) { PEND[cap] = PEND[cap] S4 p; continue }
+      if (cap != "") { PENDX[cap] = PENDX[cap] S4 p; continue }
+      if (cpk != "" && patok(PAT, p)) { PEND[cpk] = PEND[cpk] S4 p; continue }
+      if (REF == "") REF = p
+    }
+  }
+}
+BEGIN {
+  S1 = sprintf("%c", 1); S2 = sprintf("%c", 2); S3 = sprintf("%c", 3); S4 = sprintf("%c", 4); S5 = sprintf("%c", 5); S6 = sprintf("%c", 6)
+  while ((rc = (getline l < TRL)) > 0) { TR[l] = 1; p = l; while (sub(/\/[^\/]*$/, "", p)) { if (p in TD) break; TD[p] = 1 } }
+  if (rc < 0) { print "R10-ERROR the tracked list " TRL " could not be read"; ERR = 1; exit 2 }
+  close(TRL)
+}
+FNR == 1 { LBL = $0; next }
+FNR == 2 {
+  r = $0
+  if (r == "sh") r = ""; else sub(/^sh /, "", r)
+  delete VAR; delete ANC; delete PEND; delete PENDX
+  NANC = 0; PARTIAL = 0; REF = ""; TRK = 0
+  lex(r, 1); walk(1, 0, "")
+  for (nm in PEND) if (PEND[nm] != "" && REF == "") { REF = substr(PEND[nm], 2); sub(S4 ".*$", "", REF) }
+  for (nm in PENDX) if (PENDX[nm] != "" && REF == "") { REF = substr(PENDX[nm], 2); sub(S4 ".*$", "", REF) }
+  st = (REF != "") ? "UNANCHORED" : (TRK ? "ANCHORED" : "NO-TRACKED-READ")
+  if (REF != "") NU++; else if (TRK) NA++
+  if (PARTIAL) NP++
+  printf "%s\t%s\t%s\t%s\n", LBL, st, (REF != "" ? REF : "-"), (PARTIAL ? "partial" : "full")
+  NSCAN++
+}
+END { if (ERR) exit 2; printf "R10-COUNTS %d %d %d %d\n", NSCAN, NU, NA, NP }
+AWK
+}
+# r10_judge <subject-root> <record-file>... -> the rows and the R10-COUNTS line; 2 when the tracked
+# list could not be read, which is a refusal and never an empty population.
+r10_judge() {
+  _r10_root="$1"; shift
+  git -C "$_r10_root" -c core.quotePath=false ls-files > "$WORK/r10.tracked" 2>/dev/null || return 2
+  [ -s "$WORK/r10.tracked" ] || return 2
+  [ -s "$WORK/r10.awk" ] || r10_awk_prog > "$WORK/r10.awk"
+  awk -v ROOT="$_r10_root" -v TRL="$WORK/r10.tracked" -f "$WORK/r10.awk" "$@"
+}
+# r10_counts <judge output> -- lifts R10-COUNTS into R10_SCAN R10_N R10_ANC R10_PART and the rows
+# into R10_ROWS, with no fork; 1 when the line is missing or does not parse.
+r10_counts() {
+  R10_ROWS=""; R10_SCAN=""; R10_N=""; R10_ANC=""; R10_PART=""
+  case "$1" in *"R10-COUNTS "*) ;; *) return 1 ;; esac
+  read -r R10_SCAN R10_N R10_ANC R10_PART <<<"${1##*R10-COUNTS }"
+  R10_ROWS="${1%R10-COUNTS *}"
+  case "${R10_SCAN}${R10_N}${R10_ANC}${R10_PART}" in ''|*[!0-9]*) return 1 ;; esac
+  return 0
+}
+
+# THE R10 BEHAVIOURAL PAIR AND ITS SUBJECT, AT TOP LEVEL. R7's probe commits R10_SUBJECT_BODY into
+# $P and runs both receipts (BL-990 / BL-991); R10's probe judges the same two strings as text over
+# its own repository holding the same body. They are top-level constants, not R7 locals, because a
+# replayed run (THE PROBE RECORD) never enters vbr_probe_r7r8 and R10's probe still runs; and because
+# they are in this file, a byte changed in either is a new probe key, so a replay never vouches for it.
+R10_SUBJECT_BODY='#!/usr/bin/env bash
+r10_anchor_new() { :; }
+'
+R10_ANCH_RCPT="grep -q 'r10_anchor_old' probe/r10-subject.sh || exit 9; ! grep -q 'r10_defect_zz' probe/r10-subject.sh"
+R10_BARE_RCPT="grep -q 'r10_anchor_old' probe/r10-subject.sh"
+
+vbr_probe_r10() {
+# ---------------------------------------------------------------------------
+# R10 SELF-PROBE, BOTH DIRECTIONS, BEFORE THE CORPUS, THROUGH r10_judge. Text seeds judged against
+# R10's OWN probe repository $R10Q, built on every run -- never $P, which R1 builds and a replayed
+# run therefore never has. Its tracked probe/r10-subject.sh (line 1 a shebang, line 2
+# `r10_anchor_new`) is R10_SUBJECT_BODY, the post-rename subject R7's probe commits; probe/subject.txt
+# is tracked too, and probe/r10-untracked.txt is on disk and untracked. The behavioural pair BL-990 /
+# BL-991 are R10_ANCH_RCPT / R10_BARE_RCPT, the same bytes R7's probe ran: the anchored form exited 9
+# after the rename (R7 fired) and the bare form exited 1 (R7 silent). ORDER IS LOAD-BEARING: each
+# mutant of this arm is killed by the FIRST seed it breaks, named `seed <id>:`.
+# THIS PROBE IS NEVER REPLAYED: vbr_main calls it after vbr_probes, outside the probe record.
+# ---------------------------------------------------------------------------
+r10_fail() { echo "$(me): SELF-PROBE FAILED -- R10: $1" >&2; exit 2; }
+R10Q="$WORK/r10repo"; mkdir -p "$R10Q/probe"
+printf '%s' "$R10_SUBJECT_BODY" > "$R10Q/probe/r10-subject.sh"
+printf 'alpha\nbeta\n' > "$R10Q/probe/subject.txt"
+# `git add` alone: r10_judge reads `git ls-files`, which is the index, so no commit is needed.
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  cd "$R10Q" && git init -q >/dev/null 2>&1 && git add probe/r10-subject.sh probe/subject.txt >/dev/null 2>&1 ) \
+  || r10_fail "R10's probe repository would not take its two tracked files."
+R10P="$WORK/r10probe"; mkdir -p "$R10P"
+R10P_N=0; R10P_IDS=""; R10P_F=()
+r10_seed() { # r10_seed <id> <want STATUS/parse> <what it is> <receipt>
+  R10P_N=$(( R10P_N + 1 ))
+  printf '%s\nsh %s\n' "$1" "$4" > "$R10P/s$R10P_N"
+  R10P_F[${#R10P_F[@]}]="$R10P/s$R10P_N"
+  eval "R10W_${1//-/_}=\$2; R10Y_${1//-/_}=\$3"
+  R10P_IDS="$R10P_IDS $1"
+}
+_rs=probe/r10-subject.sh
+r10_seed BL-990 ANCHORED/full "the anchored receipt R7 saw exit 9 after the rename (G9 ii; its defect test is a \`! grep\`, G1)" "$R10_ANCH_RCPT"
+r10_seed BL-991 UNANCHORED/full "the bare receipt R7 saw exit 1 after the rename (contract a i)" "$R10_BARE_RCPT"
+r10_seed BL-1001 UNANCHORED/full "an unanchored grep over a tracked file" "grep -q 'r10_anchor_new' $_rs"
+r10_seed BL-1002 ANCHORED/full "an anchor on line 2, then the defect test (contract a ii)" "grep -q 'r10_anchor_new' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1003 UNANCHORED/full "an anchor on a DIFFERENT path than the read (contract a iv)" "grep -q 'alpha_zz' probe/subject.txt || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1004 UNANCHORED/full "an unanchored \`! grep\` (G1)" "! grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1005 UNANCHORED/full "a bare \`[ -f ]\` guard, which is not an anchor (G9)" "[ -f $_rs ] || exit 9; grep -q 'r10_anchor_new' $_rs"
+r10_seed BL-1006 UNANCHORED/full "an anchor ending \`|| exit 1\` (G9)" "grep -q 'r10_anchor_new' $_rs || exit 1; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1007 UNANCHORED/full "an anchor ending \`|| exit 99\`, no word boundary after 9 (G5)" "grep -q 'r10_anchor_new' $_rs || exit 99; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1008 UNANCHORED/full "an anchor whose pattern is only metacharacters (G5)" "grep -q '^.*\$' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1009 UNANCHORED/full "an anchor whose pattern is a shebang not on line 1 (G5)" "grep -q '^#!/bin/zsh_probe' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1010 UNANCHORED/full "an anchor whose pattern matches line 1 (G5; BL-1002 is its line-2 twin)" "grep -q 'env bash' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1011 ANCHORED/full "the brace-group anchor (G4)" "grep -q 'r10_anchor_new' $_rs || { echo missing >&2; exit 9; }; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1012 ANCHORED/full "the if-not-grep-then-exit-9 anchor (G4)" "if ! grep -q 'r10_anchor_new' $_rs; then exit 9; fi; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1013 ANCHORED/full "the --quiet anchor (G4)" "grep --quiet 'r10_anchor_new' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1014 ANCHORED/full "the non-empty-extract anchor (G4)" "s=\$(awk '/r10_anchor_new/' $_rs); [ -n \"\$s\" ] || exit 9; grep -q 'r10_defect_zz' <<<\"\$s\""
+r10_seed BL-1015 UNANCHORED/full "the same extract with no exit-9 guard (BL-1014's twin)" "s=\$(awk '/r10_anchor_new/' $_rs); grep -q 'r10_defect_zz' <<<\"\$s\""
+r10_seed BL-1016 UNANCHORED/full "a path held in a NAME=<literal> assignment (G2)" "f=$_rs; grep -q 'r10_defect_zz' \"\$f\""
+r10_seed BL-1017 ANCHORED/full "the same assignment, anchored through the variable (G2)" "f=$_rs; grep -q 'r10_anchor_new' \"\$f\" || exit 9; grep -q 'r10_defect_zz' \"\$f\""
+r10_seed BL-1018 UNANCHORED/full "a read inside \$( ) inside double quotes (G2)" "x=\"\$(grep -c 'r10_defect_zz' $_rs)\"; [ \"\$x\" = 0 ]"
+r10_seed BL-1019 NO-TRACKED-READ/full "an UNTRACKED path under a tracked prefix, decided by git ls-files (G2)" "grep -q 'r10_defect_zz' probe/r10-untracked.txt"
+r10_seed BL-1020 NO-TRACKED-READ/full "git show at a non-HEAD revision, exempt (G3)" "git show abc1234:$_rs | grep -q 'r10_defect_zz'"
+r10_seed BL-1021 UNANCHORED/full "git show HEAD:, BL-1020's de-exempted twin (G3)" "git show HEAD:$_rs | grep -q 'r10_defect_zz'"
+r10_seed BL-1022 NO-TRACKED-READ/full "git grep at a non-HEAD revision, exempt (G3)" "git grep -q 'r10_defect_zz' origin/main -- $_rs"
+r10_seed BL-1023 UNANCHORED/full "git grep over the working tree, BL-1022's de-exempted twin (G3)" "git grep -q 'r10_defect_zz' -- $_rs"
+r10_seed BL-1024 NO-TRACKED-READ/full "git log, exempt (G3; BL-1001 is its working-tree twin)" "git log -S r10_defect_zz --oneline -- $_rs | grep -q ."
+r10_seed BL-1025 UNANCHORED/full "cat p | grep, not exempt (G3)" "cat $_rs | grep -q 'r10_defect_zz'"
+r10_seed BL-1026 UNANCHORED/full "a here-string from \$(cat p), not exempt (G3)" "grep -q 'r10_defect_zz' <<<\"\$(cat $_rs)\""
+r10_seed BL-1027 UNANCHORED/full "an anchor inside a ( ) subshell, whose exit 9 leaves only the subshell" "( grep -q 'r10_anchor_new' $_rs || exit 9 ); grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1028 NO-TRACKED-READ/partial "an operand behind a backtick, which the grammar does not follow" "grep -q 'r10_defect_zz' \`echo $_rs\`"
+# The count-compare and `&&`-chain anchors (the FP census), each beside the twin one property short.
+r10_seed BL-1029 ANCHORED/full "a captured count compared -ge 1, then exit 9" "n=\$(grep -c 'r10_anchor_new' $_rs); [ \"\$n\" -ge 1 ] || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1030 UNANCHORED/full "the same count compared -ge 0, which holds on zero (BL-1029's twin)" "n=\$(grep -c 'r10_anchor_new' $_rs); [ \"\$n\" -ge 0 ] || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1031 ANCHORED/full "an inline count compared -gt 0, then exit 9" "[ \"\$(grep -c 'r10_anchor_new' $_rs)\" -gt 0 ] || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1032 UNANCHORED/full "the inline count compared -gt 0, then exit 1 (BL-1031's twin)" "[ \"\$(grep -c 'r10_anchor_new' $_rs)\" -gt 0 ] || exit 1; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1033 UNANCHORED/full "a captured count whose pattern carries no identifier (G5; BL-1029's twin)" "n=\$(grep -c '^r1' $_rs); [ \"\$n\" -ge 1 ] || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1034 ANCHORED/full "an anchor HEADING an && chain whose last member is joined by || to exit 9" "grep -q 'r10_anchor_new' $_rs && [ -f $_rs ] || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1035 UNANCHORED/full "an anchor on the right side of an ||, skipped when the left holds (BL-1034's twin)" "[ -f $_rs ] || grep -q 'r10_anchor_new' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1036 UNANCHORED/full "an inverted grep -qv, true of any line lacking the pattern (BL-1002's twin)" "grep -qv 'r10_anchor_new' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+# The pipe is spelled through $_rp so this source line carries no pipeline for I54b to read as one.
+_rp='|'
+r10_seed BL-1037 ANCHORED/full "an awk extract piped into grep -q . || exit 9" "awk '/r10_anchor_new/' $_rs $_rp grep -q . || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1038 UNANCHORED/full "the same pipe into grep -qv ., which holds on any output (BL-1037's twin)" "awk '/r10_anchor_new/' $_rs $_rp grep -qv . || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1039 ANCHORED/full "a sed rewrite to a copy, then cmp -s P copy && exit 9 (a no-op edit exits 9)" "sed 's/r10_anchor_new/x/' $_rs > /tmp/r10c; cmp -s $_rs /tmp/r10c && exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1040 UNANCHORED/full "the same rewrite with cmp -s on an unrelated copy (BL-1039's twin)" "sed 's/r10_anchor_new/x/' $_rs > /tmp/r10c; cmp -s $_rs /tmp/r10d && exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1041 ANCHORED/full "a here-string anchor over a comment-stripped capture of the path" "C=\$(grep -v '^[[:blank:]]*#' $_rs); grep -qF 'r10_anchor_new' <<<\"\$C\" || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1042 UNANCHORED/full "the same here-string guard ending exit 1 (BL-1041's twin)" "C=\$(grep -v '^[[:blank:]]*#' $_rs); grep -qF 'r10_anchor_new' <<<\"\$C\" || exit 1; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1043 UNANCHORED/full "a pattern whose only word is a POSIX class name (G5)" "grep -q '^[[:space:]]*\$' $_rs || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1044 UNANCHORED/full "[ -n ] over a grep -v capture, non-empty whenever another line exists" "C=\$(grep -v 'r10_anchor_new' $_rs); [ -n \"\$C\" ] || exit 9; grep -q 'r10_defect_zz' $_rs"
+r10_seed BL-1045 UNANCHORED/full "a here-string guard whose pattern carries no identifier (BL-1041's twin)" "C=\$(grep -v '^#' $_rs); grep -q '^r1' <<<\"\$C\" || exit 9; grep -q 'r10_defect_zz' $_rs"
+# BL-1019's file is PRESENT ON DISK AND UNTRACKED, so only the `git ls-files` decision refuses it; an
+# absent file would be refused by an on-disk test too. Nothing checks $P out after this point.
+printf 'r10_defect_zz\n' > "$R10Q/probe/r10-untracked.txt"
+R10P_OUT="$(r10_judge "$R10Q" "${R10P_F[@]}")" || r10_fail "r10_judge refused the probe repository (exit $?)."
+r10_counts "$R10P_OUT" || r10_fail "the judge printed no R10-COUNTS line."
+[ "$R10_SCAN" -eq "$R10P_N" ] || r10_fail "the judge scanned $R10_SCAN of $R10P_N seeded records, so a record it never read would read as clean."
+while IFS="$(printf '\t')" read -r _id _st _pa _pr; do
+  [ -n "$_id" ] || continue
+  eval "R10G_${_id//-/_}=\$_st/\$_pr"
+done <<EOF
+$R10_ROWS
+EOF
+for _id in $R10P_IDS; do
+  eval "_w=\$R10W_${_id//-/_}; _y=\$R10Y_${_id//-/_}; _g=\${R10G_${_id//-/_}:-none}"
+  [ "$_g" = "$_w" ] || r10_fail "seed $_id: $_y read '$_g', want '$_w'."
+done
+R10_PROBED="R10 fired both directions over ${R10P_N} text seeds"
+}
+
 vbr_sec_corpus() {
 # ---------------------------------------------------------------------------
 # THE CORPUS.
@@ -2200,6 +2868,7 @@ if [ -n "$RE_ENTRY" ]; then
   score_closed "$LEDGER" "$SUBJECT_ROOT" "$BASE_REF" >/dev/null || exit 2
   open_skip_line
   closed_line 0
+  echo "R10-POPULATION: SKIPPED -- re-entered from inside a receipt, so the anchor convention judged no open receipt here; the outer run judges them once."
   eff_report || exit 1
   parent_cleanup_trees
   echo "OK: validate-backlog-receipts -- EXAMINED NOTHING for R2-R8: re-entered from inside a receipt (BR_RECEIPTS_RUNNING set on entry), so no corpus receipt was executed here; ${R7_PROBED}; the efficiency arms ran over ${LEDGER}."
@@ -2207,6 +2876,13 @@ if [ -n "$RE_ENTRY" ]; then
 fi
 OUT="$(score_ledger "$LEDGER" "$SUBJECT_ROOT")" || exit 2
 read_counts
+# R10 over the records score_ledger just wrote: the exact bytes its workers evaluated, as TEXT.
+set -- "$WORK"/rec/*
+[ -e "${1:-}" ] || set --
+R10_JOUT="R10-COUNTS 0 0 0 0"
+[ "$#" -gt 0 ] && { R10_JOUT="$(r10_judge "$SUBJECT_ROOT" "$@")" || { echo "$(me): FAIL -- R10 could not read the tracked set of $SUBJECT_ROOT; this is a refusal, not a reading." >&2; exit 2; }; }
+r10_counts "$R10_JOUT" || { echo "$(me): FAIL -- R10's judge printed no R10-COUNTS line; this is a refusal, not a reading." >&2; exit 2; }
+[ "$R10_SCAN" -eq "$SH_RECEIPTS" ] || { echo "$(me): FAIL -- R10 scanned $R10_SCAN of the scorer's $SH_RECEIPTS open sh receipts; a receipt it never read would read as anchored. This is a refusal, not a reading." >&2; exit 2; }
 CLOSED_OUT="$(score_closed "$LEDGER" "$SUBJECT_ROOT" "$BASE_REF")" || exit 2
 
 n_of() { printf '%s\n' "$OUT" | awk -F'\t' -v s="$1" '$1 == s' | grep -c . ; }
@@ -2307,6 +2983,14 @@ fi
 # nothing", and the second reads exactly like the first in every other line this arm prints.
 open_empty_line "$SH_RECEIPTS"
 closed_line "$N_CFAIL"
+if [ "$QUIET" != "1" ] && [ "$R10_N" -gt 0 ]; then
+  printf '%s\n' "$R10_ROWS" | awk -F'\t' '$2 == "UNANCHORED" { printf "UNANCHORED\t%s\t%s\t%s\n", $1, $3, $4 }'
+fi
+if [ "$R10_SCAN" -eq 0 ]; then
+  echo "R10-POPULATION: EMPTY -- 0 open sh receipt(s), so the anchor convention (R10) observed NOTHING this run; that is not a clean result."
+else
+  echo "R10-POPULATION: $R10_SCAN open sh receipt(s) read as text, $R10_N unanchored, $R10_ANC anchored, $(( R10_SCAN - R10_N - R10_ANC )) reading no tracked path ($R10_PART not fully parsed, so the unanchored count is a floor)."
+fi
 
 RC=0
 if [ "$N_PC" -gt "$MAX_PC" ]; then
@@ -2329,6 +3013,11 @@ fi
 if [ "$N_CM" -gt "$MAX_CM" ]; then
   printf '%s\n' "$OUT" | awk -F'\t' '$1 == "OUT-OF-POPULATION" && $3 ~ /-cannot-measure=/ { sub(/^base-exit=/, "", $3); printf "FAIL: R7\t%s\texit=%s\n", $2, $3 }' >&2
   echo "FAIL: R7: $N_CM OPEN receipt(s) in $LEDGER CANNOT MEASURE their subject (named above), against a ceiling of $MAX_CM. The set is exit 9, 126, 128 and above, and the receipt's OWN shell reporting a missing command, a missing sourced file or a syntax error (scripts/backlog-receipt-lib.sh cant_measure). Such a receipt answers whatever the fix does, so the entry it guards has no instrument -- usually a subject renamed or moved inside a release. NOT in the set: bare 127 and 2-8, which are reproductions. REMEDY: repair the receipt so it reaches its question." >&2
+  RC=1
+fi
+if [ "$R10_N" -gt "$MAX_R10" ]; then
+  printf '%s\n' "$R10_ROWS" | awk -F'\t' '$2 == "UNANCHORED" { printf "FAIL: R10\t%s\tpath=%s\n", $1, $3 }' >&2
+  echo "FAIL: R10: $R10_N OPEN receipt(s) in $LEDGER read a tracked file with no anchor on it (named above with the first such path), against a ceiling of $MAX_R10. A grep-shaped receipt whose subject is renamed exits 1, which is a live defect's own code, and a \`! grep\` exits 0, which reads as a fix -- so R7 cannot see the rename and the entry has no instrument. REMEDY: before the defect test, assert the file still carries a token the subject cannot lack while it exists, and exit 9 if not: \`grep -q '<anchor>' <path> || exit 9; <defect test>\`. A bare [ -f ] is not an anchor, the exit must be exactly 9, and the anchor must survive the fix (R8 wants a closed receipt to exit 0)." >&2
   RC=1
 fi
 if [ "$N_CFAIL" -gt 0 ]; then
@@ -2368,7 +3057,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; R10 ${R10_N}/${MAX_R10} open receipts unanchored over ${R10_SCAN} read, ${R10_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -2394,6 +3083,7 @@ vbr_sec_r0
 vbr_probe_e0
 vbr_sec_eff
 vbr_probes
+vbr_probe_r10
 vbr_sec_corpus
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
