@@ -89,6 +89,15 @@
 # MUTANT-MATRIX c5-m12 decides=c5_m12 twins=c5_m10
 # MUTANT-MATRIX c5-m10 decides=c5_m10 twins=c5_m9
 # MUTANT-MATRIX c5-m4-open decides=c5_open twins=c5_m4
+# MUTANT-MATRIX pr-m-ignore decides=pr_m_ignore twins=pr_m_keylib
+# MUTANT-MATRIX pr-m-default decides=pr_m_default twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-keylib decides=pr_m_keylib twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-keyrlib decides=pr_m_keyrlib twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-early decides=pr_m_early twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-between decides=pr_m_between twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-nostate decides=pr_m_nostate twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-generic decides=pr_m_generic twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-counter decides=pr_m_counter twins=pr_m_ignore
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
 # IN PROCESS. Validator runs go through vin: the world's own copy of the validator (mutated or not)
@@ -606,6 +615,7 @@ printf 0 > "$BL_UNSTABLE_COUNTER"
 # shellcheck disable=SC2086
 veq_cli="$(cli_v "$TMP/control" "$TMP/control/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 $DEF)"; veq_crc=$?
 [ "$veq_crc" = "$CTL_RC" ] && [ "$veq_cli" = "$CTL_OUT" ] || { veq_ok=0; veq_why="$veq_why control(cli=$veq_crc unit=$CTL_RC)"; }
+PR8_CLI="$veq_cli"
 if [ -f "$REC/m1.out" ]; then
   # shellcheck disable=SC2086
   veq_cli="$(cli_v "$TMP/m1" "$TMP/m1/scripts/validate-backlog-receipts.sh" "" --max-cannot-measure 99 $DEF)"; veq_crc=$?
@@ -616,6 +626,45 @@ if [ "$veq_ok" = 1 ]; then
   note "ok    VEQ -- the in-process vbr_main answers byte-for-byte what bash <copy> prints and exits with, on the control (rc 0) and on m1's self-probe refusal (rc 2)"
 else
   note "FAIL  VEQ -- the in-process drive differs from the CLI:$veq_why"; rc=1
+fi
+
+# ===== PR. THE PROBE RECORD (BL-880), PART ONE: THE STORE AND CELLS 1 AND 8. ====================
+# Everything above ran with BR_PROBE_RECORD unset, so the control, m1 and VEQ's CLI side fired every
+# probe. From here on the fixture exports ONE store of its own, under $TMP, and every later run of an
+# unmutated copy replays R1 and R7/R8 from the record cell 1 leaves; a mutated copy has its own key and
+# fires. The unmutated GIT_DIR world blanks it per drive. The rest of the cells are in part two.
+# Cell 8 -- store unset, two runs both fire: the control and VEQ's CLI run of the same world.
+pr_k() { printf '%s\n' "$1" | sed -n -e 's/^PROBE-RECORD: WRITTEN (K=\([0-9a-f]*\)).*/\1/p' -e 's/^PROBE-RECORD: REPLAYED (K=\([0-9a-f]*\)).*/\1/p' | sed -n '1p'; }
+pr_okline() { printf '%s\n' "$1" | grep '^OK: validate-backlog-receipts' | sed -n '1p'; }
+pr_n() { local n; n="$(find "$1" -type f -name '*.green' | grep -c .)"; printf '%s' "${n:-0}"; }
+PR_FIRED="R1 fired both directions over 12 seeded receipts"
+B_PR8=0
+if ! grep -q '^PROBE-RECORD' <<<"$CTL_OUT" && ! grep -q '^PROBE-RECORD' <<<"$PR8_CLI" \
+   && grep -qF "$PR_FIRED" <<<"$(pr_okline "$CTL_OUT")" && grep -qF "$PR_FIRED" <<<"$(pr_okline "$PR8_CLI")" \
+   && grep -qF "R7 fired both directions" <<<"$(pr_okline "$PR8_CLI")"; then
+  ok "pr8 -- with BR_PROBE_RECORD unset two runs of one world both fire R1 and R7/R8 and print no PROBE-RECORD line"; B_PR8=1
+else
+  bad "pr8 -- a storeless run printed a PROBE-RECORD line or did not say R1 and R7 fired"
+fi
+PRS="$TMP/prstore"; mkdir -p "$PRS"
+export BR_PROBE_RECORD="$PRS"
+# Cell 1 -- a fresh store: the first run fires and leaves exactly one record, named by K; the second
+# run on identical bytes prints REPLAYED naming the same K, and its OK line says replayed, not fired.
+seed "$TMP/pr1"
+pr1a="$(run_v "" "$TMP/pr1" $DEF)"; pr1a_rc=$?
+PR_K0="$(pr_k "$pr1a")"; pr1_n="$(pr_n "$PRS")"
+printf 0 > "$BL_UNSTABLE_COUNTER"
+pr1b="$(run_v "" "$TMP/pr1" $DEF)"; pr1b_rc=$?
+pr1b_ok="$(pr_okline "$pr1b")"
+B_PR1=0
+if [ "$pr1a_rc" = 0 ] && [ -n "$PR_K0" ] && grep -qxF "PROBE-RECORD: WRITTEN (K=$PR_K0) -- R1 and R7/R8 fired green on this key." <<<"$pr1a" \
+   && grep -qF "$PR_FIRED" <<<"$(pr_okline "$pr1a")" && [ "$pr1_n" = 1 ] && [ -f "$PRS/$PR_K0.green" ] \
+   && [ "$pr1b_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr1b" \
+   && grep -qF "R1 replayed (K=$PR_K0)" <<<"$pr1b_ok" && grep -qF "R7 and R8 replayed (K=$PR_K0)" <<<"$pr1b_ok" \
+   && ! grep -q 'fired' <<<"$pr1b_ok" && [ "$(cls "$pr1b" BL-801)" = PROSE-CLOSABLE ]; then
+  ok "pr1 -- a fresh store: the first run fired and wrote one record ($PR_K0.green), the second replayed naming that K and its OK line says replayed, never fired"; B_PR1=1
+else
+  bad "pr1 -- first run rc=$pr1a_rc K='$PR_K0' records=$pr1_n; second run rc=$pr1b_rc: $(grep '^PROBE-RECORD' <<<"$pr1b")"
 fi
 
 # ===== M2. THE CEILING COMPARISON IS `-ge`. ================================================
@@ -1280,7 +1329,9 @@ else
   # The subject is driven with GIT_DIR pointed at the throwaway caller, which is exactly the
   # environment git hands a hook running from a linked worktree.
   seed "$TMP/gd1"
-  gd_out="$(run_v "GIT_DIR=$gd_caller/.git" "$TMP/gd1" $DEF --quiet 2>&1)"; gd_rc=$?
+  # THE STORE IS BLANKED HERE (BL-880): a replay would skip R1, whose hooks-path write is this arm's
+  # whole subject, and the arm would pass because nothing ran.
+  gd_out="$(run_v "GIT_DIR=$gd_caller/.git BR_PROBE_RECORD=" "$TMP/gd1" $DEF --quiet 2>&1)"; gd_rc=$?
   gd_after="$(git config --file "$gd_caller/.git/config" --get core.hooksPath 2>/dev/null)" || gd_after=""
   if [ "$gd_after" = "$gd_before" ]; then
     note "ok    gitdir -- the subject run under an inherited GIT_DIR leaves the caller's core.hooksPath byte-unchanged ($gd_after)"; B_GDa=1
@@ -1320,7 +1371,7 @@ else
     note "FAIL  gitdir-mutant -- the scrub anchor matches $gd_anchor_n line(s), not 1, so the mutation below would edit the wrong site or none"
     rc=1
   elif mut "$TMP/gd2" 's|^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY$|: # scrub removed by the fixture mutant|'; then
-    drive gitdir-mutant "$TMP/gd2" "GIT_DIR=$gd_caller/.git" $DEF --quiet
+    drive gitdir-mutant "$TMP/gd2" "GIT_DIR=$gd_caller/.git BR_PROBE_RECORD=" $DEF --quiet
     gd_mut="$(git config --file "$gd_caller/.git/config" --get core.hooksPath 2>/dev/null)" || gd_mut=""
     if [ "$gd_mut" != "$gd_before" ]; then side gitdir-mutant "hookspath=changed"; else side gitdir-mutant "hookspath=same"; fi
     score gitdir-mutant "$(( ${B_GDa:-0} * ${B_GDb:-0} ))" "gitdir-mutant -- with the scrub removed the subject is redirected at the CALLER (it refuses on its own seeded probes, or rewrites the caller's hooks path), so the arm above reads the scrub and not merely the absence of a crash"
@@ -2128,6 +2179,228 @@ c5_mut c5-m11 "s|^  \\[ -n \"\\\$1\" \\] \\&\\& \\[ \"\\\$1\" = \"\\\$2\" \\] \\
 c5_mut c5-m12 "s/^  printf '%s|%s' \"\\\$_lk_cd\" \"\\\$_lk_led\"\$/  printf '%s' \"\$_lk_led\"/" \
   "unreachable" "with the common dir dropped from the key, two repositories' docs/backlog.md share one key" BL-979
 
+# ===== PR. THE PROBE RECORD (BL-880), PART TWO: CELLS 2-7, P2, AND ITS EIGHT MUTANTS. ===========
+# Every mutant below edits the validator, so its key is its OWN and never the control's K0: each is
+# therefore driven TWICE in a fresh store of its own (pr_two), the first run writing the mutant's
+# record and the second being the deciding one. The first run's PROBE-RECORD verb is kept as
+# `SIDE pre=<verb>`, the store's record count after both runs as `SIDE store=<n>`, and the capture is
+# the second run. A mutant whose deciding run REPLAYS where the shipped key must have moved, or whose
+# record survives a red probe, is killed. The unmutated cell each mutant mirrors is its base flag.
+pr_verb() { local v; v="$(printf '%s\n' "$1" | sed -n 's/^PROBE-RECORD: \([A-Z]*\) .*/\1/p' | sed -n '1p')"; printf '%s' "${v:-none}"; }
+pr_two() { # pr_two <name> <dirA> <envA> <argsA> <dirB> <envB> <argsB>
+  local n="$1" s="$TMP/$1.store" o1 r1 o2 r2
+  mkdir -p "$s"
+  printf 0 > "$BL_UNSTABLE_COUNTER"
+  # shellcheck disable=SC2086
+  o1="$(vin "$2" "$2/scripts/validate-backlog-receipts.sh" "BR_PROBE_RECORD=$s $3" --max-cannot-measure 99 $4)"; r1=$?
+  printf 0 > "$BL_UNSTABLE_COUNTER"
+  # shellcheck disable=SC2086
+  o2="$(vin "$5" "$5/scripts/validate-backlog-receipts.sh" "BR_PROBE_RECORD=$s $6" --max-cannot-measure 99 $7)"; r2=$?
+  record "$n" "$r2" "$o2"
+  side "$n" "rc1=$r1"
+  side "$n" "pre=$(pr_verb "$o1")"
+  side "$n" "store=$(pr_n "$s")"
+}
+pr_ok_of() { grep '^OK: validate-backlog-receipts' "$REC/$1.out" | sed -n '1p'; }
+# The arms. Each TRIPS on the mutant's wrong behaviour, read off the deciding capture.
+arm_pr_m_ignore() { r_line "$1" "SIDE pre=REPLAYED"; }
+arm_pr_m_default() { r_has "$1" "PROBE-RECORD: REPLAYED"; }
+arm_pr_m_keylib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
+arm_pr_m_keyrlib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
+arm_pr_m_early() { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }
+arm_pr_m_between() { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }
+# Cell 6 negated on the capture: a replay whose run did not end in an all-driver OK line naming K
+# without "fired" (the deleted R7_PROBED is also unbound under set -u, which ends the run unreported).
+arm_pr_m_nostate() {
+  local k l
+  r_has "$1" "PROBE-RECORD: REPLAYED" || return 1
+  k="$(sed -n 's/^PROBE-RECORD: REPLAYED (K=\([0-9a-f]*\)).*/\1/p' "$REC/$1.out" | sed -n '1p')"; l="$(pr_ok_of "$1")"
+  ! { [ "$(r_rc "$1")" = 0 ] && grep -q ' R2 all-driver$' <<<"$l" && grep -qF "R1 replayed (K=$k)" <<<"$l" && ! grep -q fired <<<"$l"; }
+}
+arm_pr_m_counter() { r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_line "$1" "SIDE keep=keepme"; }
+arm_pr_m_generic() { r_has "$1" "PROBE-RECORD: REPLAYED" && [ "$(r_cls "$1" BL-801)" != PROSE-CLOSABLE ]; }
+
+# The mutations. The key line, the replay decision, the write's place and the two replay-state lines.
+PR_KEYLINE='^  _pk_ids="\$(git hash-object --no-filters -- "\$SELF" "\$LIB" "\$BR_RECEIPT_LIB" 2>/dev/null)" [|][|] return 1$'
+PR_RLIB_SED='s#^  case "\$rc" in 1|2|127) ;; \*) return 0 ;; esac$#  return 0#'
+pr_rlib_mut() { # pr_rlib_mut <dir> -- cant_measure in the world's backlog-receipt-lib.sh never marks
+  local f="$1/scripts/backlog-receipt-lib.sh"
+  sed "$PR_RLIB_SED" "$RLIB" > "$f" || return 1
+  cmp -s "$f" "$RLIB" && return 1
+  return 0
+}
+
+# Cell 2 -- a ONE-BYTE validator change, sharing the store that holds K0, re-probes.
+B_PR2=0
+seed "$TMP/pr2"
+if mut "$TMP/pr2" 's|^DEFAULT_MAX_PC=9$|DEFAULT_MAX_PC=8|'; then
+  pr2_bytes="$(cmp -l "$VALIDATOR" "$TMP/pr2/scripts/validate-backlog-receipts.sh" | grep -c .)" || pr2_bytes=0
+  pr2_had=0; [ -f "$PRS/$PR_K0.green" ] && pr2_had=1
+  pr2="$(run_v "" "$TMP/pr2" $DEF)"; pr2_rc=$?
+  pr2_k="$(pr_k "$pr2")"
+  if [ "$pr2_bytes" = 1 ] && [ "$pr2_had" = 1 ] && [ "$pr2_rc" = 0 ] && [ "$(pr_verb "$pr2")" = WRITTEN ] \
+     && [ -n "$pr2_k" ] && [ "$pr2_k" != "$PR_K0" ] && grep -qF "$PR_FIRED" <<<"$(pr_okline "$pr2")"; then
+    ok "pr2 -- a one-byte change to the validator, sharing a store holding K0, fired R1 and R7/R8 under a new key ($pr2_k)"; B_PR2=1
+  else
+    bad "pr2 -- bytes=$pr2_bytes store-held-K0=$pr2_had rc=$pr2_rc verb=$(pr_verb "$pr2") K='$pr2_k' (K0 $PR_K0)"
+  fi
+fi
+# P2 -- the validator changed by ONE COMMENT LINE only, sharing the store: no REPLAYED, and fired.
+seed "$TMP/prp2"
+printf '# probe-record P2: one comment line, nothing else\n' >> "$TMP/prp2/scripts/validate-backlog-receipts.sh"
+prp2_add="$(diff "$VALIDATOR" "$TMP/prp2/scripts/validate-backlog-receipts.sh" | grep -c '^> #')" || prp2_add=0
+prp2_all="$(diff "$VALIDATOR" "$TMP/prp2/scripts/validate-backlog-receipts.sh" | grep -c '^[<>]')" || prp2_all=0
+prp2="$(run_v "" "$TMP/prp2" $DEF)"; prp2_rc=$?
+if [ "$prp2_add" = 1 ] && [ "$prp2_all" = 1 ] && [ -f "$PRS/$PR_K0.green" ] && [ "$prp2_rc" = 0 ] \
+   && ! grep -q '^PROBE-RECORD: REPLAYED' <<<"$prp2" && [ "$(pr_k "$prp2")" != "$PR_K0" ] \
+   && grep -qF "$PR_FIRED" <<<"$(pr_okline "$prp2")" && grep -qF "R7 fired both directions" <<<"$(pr_okline "$prp2")"; then
+  ok "p2 -- a validator differing by one comment line, sharing a store holding K0, did not replay: R1 and R7/R8 fired"
+else
+  bad "p2 -- diff lines=$prp2_all (comment $prp2_add) rc=$prp2_rc verb=$(pr_verb "$prp2")"
+fi
+# Cell 3 -- the m-loose lib.sh world (above) ran with this store exported, which held K0: it still
+# exited 2 naming BL-632, and replayed nothing.
+B_PR3=0
+if [ -f "$PRS/$PR_K0.green" ] && [ -f "$REC/m-loose.rc" ] && arm_m_loose m-loose && ! r_has m-loose "PROBE-RECORD: REPLAYED"; then
+  ok "pr3 -- the loose-label lib.sh world sharing the store with the control still fired R1, which refused naming BL-632"; B_PR3=1
+else
+  bad "pr3 -- the m-loose world with the shared store did not refuse by firing R1 (rc=$(r_rc m-loose 2>/dev/null))"
+fi
+# Cell 4 -- cant_measure in backlog-receipt-lib.sh never marks; with the shared store, R7's probe fires and refuses.
+B_PR4=0
+seed "$TMP/pr4"
+if pr_rlib_mut "$TMP/pr4"; then
+  pr4="$(run_v "" "$TMP/pr4" $DEF)"; pr4_rc=$?
+  if [ -f "$PRS/$PR_K0.green" ] && [ "$pr4_rc" = 2 ] && grep -q 'SELF-PROBE FAILED -- (c)' <<<"$pr4" && ! grep -q '^PROBE-RECORD: REPLAYED' <<<"$pr4"; then
+    ok "pr4 -- a cant_measure that never marks, sharing the store with the control, fails R7's own-shell seed (exit 2)"; B_PR4=1
+  else
+    bad "pr4 -- rc=$pr4_rc verb=$(pr_verb "$pr4"): $(grep 'SELF-PROBE' <<<"$pr4" | cut -c1-160)"
+  fi
+else bad "pr4 -- the cant_measure mutation DID NOT APPLY"; fi
+# Cell 5 -- a red probe leaves no record. m1 (R1 red) twice in one store, and c5-m3 (R1 green, R7 red) twice.
+B_PR5=0
+pr_two pr5a "$TMP/m1" "" "$DEF" "$TMP/m1" "" "$DEF"
+seed "$TMP/pr5b"
+if mut "$TMP/pr5b" 's|^      9) printf .exit-9. ;;$|      9) : ;;|'; then
+  pr_two pr5b "$TMP/pr5b" "" "$DEF" "$TMP/pr5b" "" "$DEF"
+  if r_line pr5a "SIDE rc1=2" && [ "$(r_rc pr5a)" = 2 ] && r_has pr5a "SELF-PROBE FAILED" && r_line pr5a "SIDE store=0" && ! arm_pr_m_early pr5a \
+     && r_line pr5b "SIDE rc1=2" && [ "$(r_rc pr5b)" = 2 ] && r_has pr5b "SELF-PROBE FAILED -- seed BL-972" && r_line pr5b "SIDE store=0" && ! arm_pr_m_between pr5b; then
+    ok "pr5 -- R1 red (m1) and R7 red (c5-m3) each exit 2 on both runs in one store and leave no record"; B_PR5=1
+  else
+    bad "pr5 -- m1: rc $(sed -n 's/^SIDE rc1=//p' "$REC/pr5a.out")/$(r_rc pr5a) $(grep '^SIDE store' "$REC/pr5a.out"); c5-m3: rc $(sed -n 's/^SIDE rc1=//p' "$REC/pr5b.out")/$(r_rc pr5b) $(grep '^SIDE store' "$REC/pr5b.out")"
+  fi
+else bad "pr5 -- the c5-m3 mutation DID NOT APPLY"; fi
+# Cell 6 -- a replay over an ALL-DRIVER ledger prints ` R2 all-driver`, through the lifted r2_alldriver,
+# and its OK line names K and never says fired.
+pr_driver_world() { # pr_driver_world <dir>
+  seed "$1"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$1/probe/drive.sh"
+  printf '# Probe backlog\n\n## BL-811\n\nBody.\n\nverify: sh bash probe/drive.sh\n\n' > "$1/docs/backlog.md"
+  ( cd "$1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m driver >/dev/null 2>&1 )
+}
+PR_DRV_ARGS="--max-prose-closable 9 --min-sh-receipts 0 --min-entries 0"
+B_PR6=0
+pr_driver_world "$TMP/pr6"
+pr6="$(run_v "" "$TMP/pr6" $PR_DRV_ARGS)"; pr6_rc=$?
+pr6_ok="$(pr_okline "$pr6")"
+if [ "$pr6_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr6" && grep -q ' R2 all-driver$' <<<"$pr6_ok" \
+   && grep -qF "R1 replayed (K=$PR_K0)" <<<"$pr6_ok" && ! grep -q 'fired' <<<"$pr6_ok"; then
+  ok "pr6 -- a replay over an all-driver ledger says R2 all-driver, and its OK line names K0 and never says fired"; B_PR6=1
+else
+  bad "pr6 -- rc=$pr6_rc verb=$(pr_verb "$pr6") OK: $(printf '%s' "$pr6_ok" | cut -c1-120)...$(printf '%s' "$pr6_ok" | tail -c 60)"
+fi
+# Cell 7 -- a replay with BR_GENERIC_SEED=1 inherited still seeds tokens: BL-801 is PROSE-CLOSABLE.
+B_PR7=0
+seed "$TMP/pr7"
+pr7="$(run_v "BR_GENERIC_SEED=1" "$TMP/pr7" $DEF)"; pr7_rc=$?
+if [ "$pr7_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr7" && [ "$(cls "$pr7" BL-801)" = PROSE-CLOSABLE ]; then
+  ok "pr7 -- a replay that inherited BR_GENERIC_SEED=1 still classifies BL-801 PROSE-CLOSABLE"; B_PR7=1
+else
+  bad "pr7 -- rc=$pr7_rc verb=$(pr_verb "$pr7") BL-801=$(cls "$pr7" BL-801)"
+fi
+
+# THE MUTANTS.
+# Cell 9 (D2) -- a replay that inherited BR_PROBE_COUNTER leaves the caller's file alone; the storeless
+# control (BR_PROBE_RECORD empty, so both R1 and the corpus run) keeps it too. Only a replay shows the bad direction.
+B_PR9=0
+seed "$TMP/pr9"
+printf keepme > "$TMP/pr9.keep"
+pr9="$(run_v "BR_PROBE_COUNTER=$TMP/pr9.keep" "$TMP/pr9" $DEF)"; pr9_rc=$?
+pr9_keep="$(cat "$TMP/pr9.keep")"
+printf keepme > "$TMP/pr9.keep"
+pr9c="$(run_v "BR_PROBE_RECORD= BR_PROBE_COUNTER=$TMP/pr9.keep" "$TMP/pr9" $DEF)"; pr9c_rc=$?
+pr9c_keep="$(cat "$TMP/pr9.keep")"
+if [ "$pr9_rc" = 0 ] && grep -q "^PROBE-RECORD: REPLAYED (K=$PR_K0) " <<<"$pr9" && [ "$pr9_keep" = keepme ] \
+   && [ "$pr9c_rc" = 0 ] && ! grep -q '^PROBE-RECORD' <<<"$pr9c" && [ "$pr9c_keep" = keepme ]; then
+  ok "pr9 -- a replay that inherited BR_PROBE_COUNTER left the caller's file at keepme, as the storeless control did"; B_PR9=1
+else
+  bad "pr9 -- replay rc=$pr9_rc verb=$(pr_verb "$pr9") file=$pr9_keep; storeless rc=$pr9c_rc file=$pr9c_keep"
+fi
+# pr-m-ignore (cell 1): the replay decision ignores the record, so a fresh store replays.
+seed "$TMP/pr-m-ignore"
+if mut "$TMP/pr-m-ignore" 's#^  if \[ -f "\$BR_PROBE_RECORD/\$PR_K.green" \] && \[ "\$(cat "\$BR_PROBE_RECORD/\$PR_K.green")" = "\$PR_MAN" \]; then$#  if true; then#'; then
+  pr_two pr-m-ignore "$TMP/pr-m-ignore" "" "$DEF" "$TMP/pr-m-ignore" "" "$DEF"
+  score pr-m-ignore "$B_PR1" "pr-m-ignore -- a replay that ignores the record replays on an empty store"
+fi
+# pr-m-default (cell 8): a default store beside the world, so a caller that set none still replays.
+seed "$TMP/pr-m-default"
+if mut "$TMP/pr-m-default" 's#^  \[ -n "\${BR_PROBE_RECORD:-}" \] [|][|] return 0$#  : "${BR_PROBE_RECORD:=$SELF_ROOT.prdefault}"; mkdir -p "$BR_PROBE_RECORD"#'; then
+  pr_two pr-m-default "$TMP/pr-m-default" "BR_PROBE_RECORD=" "$DEF" "$TMP/pr-m-default" "BR_PROBE_RECORD=" "$DEF"
+  score pr-m-default "$B_PR8" "pr-m-default -- with a default store a run that set no store replays on its second run"
+fi
+# pr-m-keylib (cell 3): the key omits reconcile/lib.sh, so the loose-label world replays the clean world's record.
+seed "$TMP/pr-m-keylib.a"
+if mut "$TMP/pr-m-keylib.a" "s#$PR_KEYLINE#  _pk_ids=\"\$(git hash-object --no-filters -- \"\$SELF\" \"\$SELF\" \"\$BR_RECEIPT_LIB\" 2>/dev/null)\" || return 1#" \
+   && ph_world "$TMP/pr-m-keylib.b" '/if (line !~ \/^BL-/d'; then
+  cp "$TMP/pr-m-keylib.a/scripts/validate-backlog-receipts.sh" "$TMP/pr-m-keylib.b/scripts/validate-backlog-receipts.sh"
+  pr_two pr-m-keylib "$TMP/pr-m-keylib.a" "" "$DEF" "$TMP/pr-m-keylib.b" "" "$PH_ARGS"
+  score pr-m-keylib "$B_PR3" "pr-m-keylib -- with lib.sh out of the key the loose-label world replays a record its lib.sh never earned"
+else bad "pr-m-keylib -- a mutation DID NOT APPLY"; fi
+# pr-m-keyrlib (cell 4): the key omits backlog-receipt-lib.sh, so the never-marking cant_measure replays.
+seed "$TMP/pr-m-keyrlib.a"; seed "$TMP/pr-m-keyrlib.b"
+if mut "$TMP/pr-m-keyrlib.a" "s#$PR_KEYLINE#  _pk_ids=\"\$(git hash-object --no-filters -- \"\$SELF\" \"\$LIB\" \"\$LIB\" 2>/dev/null)\" || return 1#" \
+   && pr_rlib_mut "$TMP/pr-m-keyrlib.b"; then
+  cp "$TMP/pr-m-keyrlib.a/scripts/validate-backlog-receipts.sh" "$TMP/pr-m-keyrlib.b/scripts/validate-backlog-receipts.sh"
+  pr_two pr-m-keyrlib "$TMP/pr-m-keyrlib.a" "" "$DEF" "$TMP/pr-m-keyrlib.b" "" "$DEF"
+  score pr-m-keyrlib "$B_PR4" "pr-m-keyrlib -- with backlog-receipt-lib.sh out of the key a cant_measure that never marks replays"
+else bad "pr-m-keyrlib -- a mutation DID NOT APPLY"; fi
+# pr-m-early (cell 5): the record written BEFORE the probes; over m1 the red R1 still leaves a record.
+seed "$TMP/pr-m-early"
+if mut "$TMP/pr-m-early" 's|^  GENERIC_LINE="# probe"|  GENERIC_LINE="# probe"; SEED_LINE="# probe"|' \
+   && mut "$TMP/pr-m-early" 's|^  vbr_probe_r1$|  vbr_probe_record_write; vbr_probe_r1|'; then
+  pr_two pr-m-early "$TMP/pr-m-early" "" "$DEF" "$TMP/pr-m-early" "" "$DEF"
+  score pr-m-early "$B_PR5" "pr-m-early -- a record written before the probes survives m1's red R1 and the second run replays it"
+fi
+# pr-m-between (P1): the record written after R1 and BEFORE R7/R8 returns; over c5-m3 the red R7 leaves one.
+seed "$TMP/pr-m-between"
+if mut "$TMP/pr-m-between" 's|^      9) printf .exit-9. ;;$|      9) : ;;|' \
+   && mut "$TMP/pr-m-between" 's|^  vbr_probe_r7r8$|  vbr_probe_record_write; vbr_probe_r7r8|'; then
+  pr_two pr-m-between "$TMP/pr-m-between" "" "$DEF" "$TMP/pr-m-between" "" "$DEF"
+  score pr-m-between "$B_PR5" "pr-m-between -- a record written before R7/R8 returns survives c5-m3's red R7 and the second run replays it"
+fi
+# pr-m-nostate (cell 6): a replay that restores no state; the OK line then says fired.
+pr_driver_world "$TMP/pr-m-nostate"
+if mut "$TMP/pr-m-nostate" '/^    R1_PROBED="R1 replayed (K=\$PR_K)"$/d' \
+   && mut "$TMP/pr-m-nostate" '/^    R7_PROBED="R7 and R8 replayed (K=\$PR_K)"$/d'; then
+  pr_two pr-m-nostate "$TMP/pr-m-nostate" "" "$PR_DRV_ARGS" "$TMP/pr-m-nostate" "" "$PR_DRV_ARGS"
+  score pr-m-nostate "$B_PR6" "pr-m-nostate -- a replay that restores no state reports R1 and R7 fired though neither ran"
+fi
+# pr-m-generic (cell 7): BR_GENERIC_SEED no longer unset on entry; a replay inheriting 1 seeds token-free.
+seed "$TMP/pr-m-generic"
+if mut "$TMP/pr-m-generic" 's#unset BR_GENERIC_SEED BR_PROBE_COUNTER ;; esac$#unset BR_PROBE_COUNTER ;; esac#'; then
+  pr_two pr-m-generic "$TMP/pr-m-generic" "" "$DEF" "$TMP/pr-m-generic" "BR_GENERIC_SEED=1" "$DEF"
+  score pr-m-generic "$B_PR7" "pr-m-generic -- without the unset an inherited BR_GENERIC_SEED=1 reaches a replayed corpus and BL-801 stops flipping"
+# pr-m-counter (cell 9): BR_PROBE_COUNTER no longer unset on entry; a replay overwrites the caller's file.
+seed "$TMP/pr-m-counter"
+printf keepme > "$TMP/pr-m-counter.keep"
+if mut "$TMP/pr-m-counter" 's#unset BR_GENERIC_SEED BR_PROBE_COUNTER ;; esac$#unset BR_GENERIC_SEED ;; esac#'; then
+  pr_two pr-m-counter "$TMP/pr-m-counter" "" "$DEF" "$TMP/pr-m-counter" "BR_PROBE_COUNTER=$TMP/pr-m-counter.keep" "$DEF"
+  side pr-m-counter "keep=$(cat "$TMP/pr-m-counter.keep")"
+  score pr-m-counter "$B_PR9" "pr-m-counter -- without the unset a replay with an inherited BR_PROBE_COUNTER overwrites the caller's file"
+else bad "pr-m-counter -- a mutation DID NOT APPLY"; fi
+fi
+unset BR_PROBE_RECORD
+
 # --- per-push twins ----------------------------------------------------------------------------
 # A TWIN is a different arm that the MEASURED matrix shows GREEN for the mutant. Every push reads it
 # off the mutant's own capture, so a kill that spreads past its deciding arm is seen at no cost.
@@ -2184,6 +2457,15 @@ twin_of() {
     c5-m12) echo c5_m10 ;;
     c5-m10) echo c5_m9 ;;
     c5-m4-open) echo c5_m4 ;;
+    pr-m-ignore) echo pr_m_keylib ;;
+    pr-m-default) echo pr_m_ignore ;;
+    pr-m-keylib) echo pr_m_ignore ;;
+    pr-m-keyrlib) echo pr_m_ignore ;;
+    pr-m-early) echo pr_m_ignore ;;
+    pr-m-between) echo pr_m_ignore ;;
+    pr-m-nostate) echo pr_m_ignore ;;
+    pr-m-generic) echo pr_m_ignore ;;
+    pr-m-counter) echo pr_m_ignore ;;
     *) echo "" ;;
 # TWINS-END
   esac

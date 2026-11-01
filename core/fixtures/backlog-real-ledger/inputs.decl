@@ -14,3 +14,28 @@ core/skills/ai-dlc-update/reconcile/consumer-read.sh
 scripts/backlog-receipt-lib.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/matrix.sh
+# p3 (BL-880): both pre-push hooks and every script either one names on a non-comment line. The fixture
+# DERIVES that set from the hooks at run time and refuses (FIXTURE BROKEN) when a member is absent from
+# the sandbox, so a script a hook starts running is a red run until it is added here. The two validators
+# above are members too and are declared once, above. core/scripts/ is declared as its DIRECTORY, never
+# file by file: invariant I65 of scripts/validate-enforcement-map.sh reads a fixture directory naming an
+# enforcer basename anywhere (this file included) as a driver of that enforcer's clauses, and this unit's
+# ledger.snapshot carries clause codes, so a named core/scripts validator here is a false proof of a clause.
+.githooks/pre-push
+core/git-hooks/pre-push
+core/scripts/
+scripts/render-invariant-index.sh
+scripts/render-path-mapping.sh
+scripts/render-postcompact-digest.sh
+scripts/render-vocabulary-index.sh
+scripts/suite-content-key.sh
+scripts/validate-claude-rules.sh
+scripts/validate-enforcement-map.sh
+scripts/validate-fixture-git-env.sh
+scripts/validate-fixture-hygiene.sh
+scripts/validate-fixture-invocations.sh
+scripts/validate-mutant-kills.sh
+scripts/validate-no-dead-doc-refs.sh
+scripts/validate-plan-shape.sh
+scripts/validate-release-version.sh
+scripts/validate-shell-portability.sh

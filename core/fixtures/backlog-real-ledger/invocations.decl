@@ -2,7 +2,9 @@
 # Over the frozen ledger.snapshot (BL-872), so a docs/backlog.md edit no longer moves these rows. The r9 arm runs the
 # receipts validator's own R9 in the j1 world: +2 classifier and +3 ceiling starts, each ceiling start asking the
 # classifier --marker-last once more. The m-r9call mutant runs the receipts validator once more in a copy of that world.
-462 *
-167 scripts/validate-backlog-receipts.sh
+# BL-880: every receipts-validator run shares the unit's BR_PROBE_RECORD store, so j1 replays the R1 and R7/R8 record
+# j1p's first run wrote (the m-r9call copy has its own key and fires). Was 462 * / 167 validator at 99fe3afda.
+248 *
+91 scripts/validate-backlog-receipts.sh
 7 scripts/validate-backlog-size.sh
 11 scripts/backlog-reverify.sh

@@ -19,6 +19,48 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.985.0] - 2026-10-31
+
+Batch b247. The backlog receipts validator can replay its R1 and R7/R8 self-probes from a keyed record that a caller names, so a fixture that runs the validator many times stops re-firing every probe (BL-880). BL-880 stays open: the enforcement-map-sites instance is not addressed here.
+
+### The backlog receipts validator replays R1 and R7/R8 from a keyed probe record a caller names (BL-880)
+
+Operator ruling, 2026-10-31: "Allow the keyed replay". For this keyed form the ruling reverses the BL-880 entry's own sentence "a skip switch is an opt-out".
+
+`scripts/validate-backlog-receipts.sh` replays R1 and R7/R8, and only those, when its caller exports `BR_PROBE_RECORD`, and only from a record whose content equals the run's manifest key K. The key covers the validator's bytes, `reconcile/lib.sh` and `scripts/backlog-receipt-lib.sh`, the bash and git versions, the tool paths, git's global and system config, the euid, the umask and JOBS. It is hashed with `git hash-object --no-filters`, so a smudge or clean filter cannot change it. A replayed probe reports as "replayed (K=...)" in place of firing. The parent writes the record after R7/R8 return green. R0, E0 and R9 always run.
+
+The store rules:
+
+- The store is caller-only. There is no default store, and each caller's own `$TMP` is its store.
+- `.githooks/pre-push` runs `unset BR_PROBE_RECORD` at top level before its first step, so an exported store never reaches the "backlog receipts" step. The validator itself does not unset it. The pre-push step's own run is unchanged, because it fires every probe.
+- `backlog-real-ledger` arm p3 requires that unset at top level above the first `step`/`pk_step` call. It also counts the setting sites over both hooks and the 32 scripts they name, and requires 0.
+
+The tip adversary found three defects, and all three are fixed:
+
+1. The hook did not unset `BR_PROBE_RECORD`, so an exported store reached the gate's own run. It does now, and arm p3 binds it.
+2. A replay inherited the caller's `BR_PROBE_COUNTER` and overwrote that file. `vbr_sec_env` now unsets it outside worker mode. Cell pr9 and mutant `pr-m-counter` hold it.
+3. The key was hashed through git's content filters. It now uses `git hash-object --no-filters`.
+
+Counted starts, measured by the owner with the hook's counter, all rc=0, before at 0e190a93c (0.983.0) and after on the release tip:
+
+| Fixture | Before | After | Validator before | Validator after |
+|---------|--------|-------|------------------|-----------------|
+| backlog-real-ledger | 462 | 248 | 167 | 91 |
+| backlog-receipt-binding | 6937 | 5416 | 2532 | 2067 |
+| backlog-size-ceiling | 61 | 61 | - | - |
+
+The backlog-receipt-binding figures count the nine pr-m-* mutants and the probe-record cells. backlog-size-ceiling is not a caller, so it is unchanged.
+
+Fixtures. `core/fixtures/backlog-receipt-binding/run.sh` gains cells pr1 to pr9 and P2, and nine mutants: `pr-m-ignore`, `pr-m-default`, `pr-m-keylib`, `pr-m-keyrlib`, `pr-m-early`, `pr-m-between`, `pr-m-nostate`, `pr-m-generic` and `pr-m-counter`. `core/fixtures/backlog-real-ledger/run.sh` gains arm p3.
+
+BL-880 stays open. The enforcement-map-sites instance is still to do.
+
+NOTE, not fixed. The delta adversary found three items:
+
+- Item D3: the `--no-filters` key line has no mutant of its own. Mutants `pr-m-keylib` and `pr-m-keyrlib` rewrite that line, but neither drops the flag.
+- The `pr-m-counter` mutant is nested inside `pr-m-generic`'s block in `core/fixtures/backlog-receipt-binding/run.sh`, so it is scored only where that block runs.
+- Arm p3 is lexical. A column-0 `unset BR_PROBE_RECORD` inside an unindented function body, or inside an `if false` block, would pass. Only double-quoted `step "` and `pk_step ` calls count as steps, so a step spelled another way is not seen.
+
 ## [0.984.0] - 2026-10-31
 
 ### readset-skip-b's lock start-time worlds force the perl fallback's day, so its verdict no longer depends on the calendar date (BL-868)
