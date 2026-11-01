@@ -203,7 +203,7 @@ mkfx_observe() {
 #!/usr/bin/env bash
 : > "$CSP_OBSERVE/$$"
 n=0
-while :; do
+while :; do  # bl868-allow: csp-barrier-cap
   c="$(ls "$CSP_OBSERVE" | wc -l | tr -d ' ')"
   [ "$c" -ge 2 ] && break
   grep -q '^[2-9]' "$CSP_OBSERVE/../seen" 2>/dev/null && break
