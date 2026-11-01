@@ -1,4 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once.
 # Exact (BL-868): the fx_drive and fw_drive stop-at-first-leak drives now run a fixed number of launches.
-477 *
+# +18 for the forced-day psfailpad world (BL-868): 8 pj_evals x (judge + ps stub), and 2 ps-stub writer runs.
+495 *
 82 core/scripts/derive-fixture-readsets.sh
