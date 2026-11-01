@@ -183,7 +183,8 @@ cat > "$R/core/fixtures/fa/run.sh" <<'FX'
 O="$SW_ORDER"; echo a-in >> "$O"
 if [ -n "${SW_HOLD:-}" ]; then
   echo a-hold >> "$O"
-  i=0; while [ "$i" -lt 600 ]; do /bin/sleep 1; i=$((i + 1)); done
+  # A HANG TARGET WITH NO CLOCK (BL-868): it never exits on its own; the world's group kill ends it.
+  tail -f /dev/null </dev/null
 fi
 if [ -n "${SW_B_MODE:-}" ]; then
   case "$SW_B_MODE" in
@@ -207,7 +208,8 @@ FX
 printf '#!/bin/bash\necho b-in >> "$SW_ORDER"\necho b-out >> "$SW_ORDER"\n' > "$R/core/fixtures/fb/run.sh"
 ( cd "$R" && git init -q . && git add -A && git -c user.email=s@w -c user.name=s commit -qm slot-world ) >/dev/null 2>&1 || exit 9
 
-/bin/sleep 600 </dev/null >/dev/null 2>&1 &
+# The live-pid control never exits on its own (BL-868): a `sleep 600` would read dead in a world slower than its timer.
+tail -f /dev/null </dev/null >/dev/null 2>&1 &
 LIVE=$!
 ( : ) & DEAD=$!; wait "$DEAD"
 kill -0 "$DEAD" 2>/dev/null && { echo "slot-world: the dead-pid control $DEAD is alive" >&2; exit 9; }

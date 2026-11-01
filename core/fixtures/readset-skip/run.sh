@@ -1906,7 +1906,7 @@ RT
   #   (t3) hang, ceiling 900s, and a hand's `kill -TERM -- -<lock pid>`: the subshell forwards it to the
   #        deriver's group, so the grandchild is gone too and the exit is written
   LT_HANG='#!/bin/bash
-sleep 600 </dev/null >/dev/null 2>&1 &
+tail -f /dev/null </dev/null >/dev/null 2>&1 &
 printf "%s\n" "$!" > "$STUB_GC"
 printf "%s\n" "$$" > "$STUB_SELF"
 mkdir -p "$AI_DLC_READSET_TRACE_ROOT"
@@ -1923,7 +1923,24 @@ cd "$t" || exit 1
 mkdir -p "$o/tmp" "$o/.log"
 export STUB_GC="$o/gc" STUB_SELF="$o/self" STUB_GO="$o/go" STUB_GO_OWNER="$(exec bash -c 'printf %s "$PPID"')" STUB_MODE="$mode" AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING="$ceil" TMPDIR="$o/tmp/"
 . "$AW_LIB"
+AW_SLEEP=/bin/sleep
 . "$pool" 2>/dev/null
+# THE CEILING'S CLOCK STARTS AFTER THE LIVE READ (BL-868). The watchdog's `sleep "$cl"` resolves on PATH, so a perl
+# stand-in (perl, so it is no counted bash start) holds a sleep of exactly the ceiling until the driver has read its
+# live controls, then runs the real sleep: the ceiling is still the subject's, but a box slow enough to take 3s
+# between the stub's records and the live read can no longer read the groups `gone` before the kill. The real
+# sleep is a FORKED child, never an exec: `ps etime` counts from fork, so an exec'd sleep would carry the hold in
+# its elapsed time and aw_overslept would read a correct ceiling as overslept. Every other sleep (the grace loop,
+# the stub's own, noceil's 600) is exec'd straight through.
+mkdir -p "$o/sbin"
+printf '%s\n' '#!/usr/bin/perl' \
+  'if (@ARGV == 1 && $ARGV[0] eq $ENV{STUB_CEIL_ARG}) {' \
+  '  select(undef, undef, undef, 0.05) until -e $ENV{STUB_REL};' \
+  '  my $c = fork(); die "fork" unless defined $c; if ($c == 0) { exec "/bin/sleep", @ARGV; exit 127 }' \
+  '  waitpid($c, 0); exit($? >> 8);' \
+  '}' \
+  'exec "/bin/sleep", @ARGV;' > "$o/sbin/sleep" && chmod +x "$o/sbin/sleep" || exit 1
+export PATH="$o/sbin:$PATH" STUB_CEIL_ARG="$ceil" STUB_REL="$o/rel"
 printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
 printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
 printf 'alpha\t#deriver\tseeded\n' > "$READSET_LOCAL"; cp "$READSET_LOCAL" "$o/map.before"
@@ -1942,6 +1959,7 @@ tr="$(ls -d "$o/tmp/"ai-dlc-readset-live.* 2>/dev/null)"
 case "$tp" in ''|*[!0-9]*) tp=0 ;; esac; case "$dp" in ''|*[!0-9]*) dp=0 ;; esac; case "$gc" in ''|*[!0-9]*) gc=0 ;; esac
 printf '%s,%s,%s,%s,%s' "$(al "-$tp")" "$(al "-$dp")" "$(al "$gc")" "$([ -n "$tr" ] && [ -d "$tr" ] && echo tr || echo notr)" \
   "$(ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1 && echo tmp || echo notmp)" > "$o/live"
+: > "$o/rel"
 [ "$hk" = hk ] && kill -TERM -- "-$tp" 2>/dev/null
 [ "$mode" = finish ] && : > "$STUB_GO"
 # THE LOCK GONE, OR ITS OWNER GONE, OR A FINAL STALL. It used to wait `ceiling + 8` seconds (4 at the
@@ -2005,7 +2023,7 @@ export AI_DLC_READSET_LIVE_TRACE=1 AI_DLC_READSET_TRACE_CEILING=777 TMPDIR="$o/t
 AW_SLEEP=/bin/sleep
 . "$pool" 2>/dev/null
 lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
-set -m; sleep 30 </dev/null >/dev/null 2>&1 & cg=$!; set +m
+set -m; tail -f /dev/null </dev/null >/dev/null 2>&1 & cg=$!; set +m
 if kill -0 -- "-$cg" 2>/dev/null; then ctl=alive; else ctl=dead; fi
 kill -- "-$cg" 2>/dev/null; wait "$cg" 2>/dev/null
 ran=0; leaks=0; fin=0; i=0
@@ -2094,12 +2112,14 @@ FX
   FW_PATH="$FW_SHIM:$(awk -v n="$FW_NDIRS" 'BEGIN { for (i = 0; i < n; i++) printf "fw-absent-%d:", i }')$PATH"
   FW_DRIVER="$WORK/fw-driver.sh"
   # The driver's waits are aw_wait's polls, which sleep through AW_SLEEP; FX_DRIVER pins it to /bin/sleep,
-  # and the wait library must carry no other sleep, or a poll would walk the absent PATH entries too.
-  sed -e 's|sleep 30 |/bin/sleep 30 |' "$FX_DRIVER" > "$FW_DRIVER"
+  # and the wait library must carry no other sleep, or a poll would walk the absent PATH entries too. Its live
+  # control is a `tail -f /dev/null` (BL-868: a timer could run out before it was read), which the shim resolves at once.
+  cp "$FX_DRIVER" "$FW_DRIVER"
   _aws="$(grep -cE '(^|[^-_A-Za-z"/])sleep[[:space:]]+[0-9$]' "$AW_LIB")" || _aws=0
-  grep -q '^set -m; /bin/sleep 30 ' "$FW_DRIVER" && grep -qx 'AW_SLEEP=/bin/sleep' "$FW_DRIVER" \
+  grep -q '^set -m; tail -f /dev/null ' "$FW_DRIVER" && grep -qx 'AW_SLEEP=/bin/sleep' "$FW_DRIVER" \
+    && [ -e "$FW_SHIM/tail" ] \
     && [ "$_aws" -eq 0 ] && [ "$(grep -cF '${AW_SLEEP:-sleep} 0.1' "$AW_LIB")" -eq 1 ] \
-    || broken "(t4w) the forced-window driver did not take /bin/sleep at its control and its waits (wait-library sleep sites: $_aws, want 1)"
+    || broken "(t4w) the forced-window driver did not take a tail -f control the shim resolves and /bin/sleep at its waits (wait-library sleep sites: $_aws, want 1)"
   fw_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
     local t="$WORK/fw.$2" o="$WORK/fwo.$2"
     f2b_world seed_fx "$t" || { printf 'SEED FAILED'; return 1; }
@@ -5202,7 +5222,7 @@ STUB
     mkdir -p "$BR/core/fixtures/fxw1" "$BR/core/fixtures/fxw2" "$BR/core/fixtures/fxw3" || broken "mkdir failed"
     printf '#!/bin/bash\ncat src/w1.sh >/dev/null\n' > "$BR/core/fixtures/fxw1/run.sh"
     printf '#!/bin/bash\ncat src/w2.sh >/dev/null\n' > "$BR/core/fixtures/fxw2/run.sh"
-    printf '#!/bin/bash\ncat src/w3.sh >/dev/null\nif [ -n "${STUB_KILLFLAG:-}" ]; then : > "$STUB_KILLFLAG.at"; i=0; while [ -e "$STUB_KILLFLAG" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done; fi\n' > "$BR/core/fixtures/fxw3/run.sh"
+    printf '#!/bin/bash\ncat src/w3.sh >/dev/null\nif [ -n "${STUB_KILLFLAG:-}" ]; then : > "$STUB_KILLFLAG.at"; while [ -e "$STUB_KILLFLAG" ]; do sleep 0.1; done; fi\n' > "$BR/core/fixtures/fxw3/run.sh"
     printf 'w1\n' > "$BR/src/w1.sh"; printf 'w2\n' > "$BR/src/w2.sh"; printf 'w3\n' > "$BR/src/w3.sh"
     printf 'fxw1\tsrc/OLD-1\nfxw2\tsrc/OLD-2\nfxw3\tsrc/OLD-3\n' >> "$BR/.ai-dlc-fixture-readsets.tsv"
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxw ) >/dev/null 2>&1 || broken "could not seed fxw1-3"
@@ -5352,7 +5372,8 @@ STUB
     # FIXTURE BROKEN naming the pid and its `ps` state: the refusal crossed the `$( )` boundary as a file.
     # Its twin is INTERRUPTED GROUP above: the unseamed reap emptied both real groups without reaching the bound.
     TRACE_ARMS=$((TRACE_ARMS+1))
-    sleep 30 </dev/null >/dev/null 2>&1 & IWB_P=$!
+    # A member that never exits on its own (BL-868): a `sleep 30` that ran out before `ps` read it left no state to name.
+    tail -f /dev/null </dev/null >/dev/null 2>&1 & IWB_P=$!
     iwb_stuck() { printf 'missed %s\n' "$IWB_P"; }
     IWB_R="$(IW_GROUP_STATE=iwb_stuck; iw_reap "$IWB_P" "$WORK/iwb.reap"; echo "$?")"
     IWB_OUT="$( ( AW_STALL_LOG="$WORK/iwb.reap"; aw_gate; echo "NOT REFUSED" ) 2>&1 )"; IWB_RC=$?
@@ -5617,10 +5638,12 @@ STUB
     cp "${SB:-/nonexistent}/logstream" "$RM/logstream" 2>/dev/null || cp "${SL:-/nonexistent}/logstream" "$RM/logstream" || broken "no logstream stub to probe the reap with"
     : > "$RM/feed"
     reap_drive() { # <mutant 0|1>; prints "<recorded>|<live>" for one stub its starter left running
-      local i=0 rec live
+      local i rec live
       : > "$RM/pids"
       ( STUB_FEED="$RM/feed" "$RM/logstream" </dev/null >/dev/null 2>&1 & )
-      while [ ! -s "$RM/pids" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+      # THE STUB'S OWN RECORD, ON A CONDITION WITH NO BOUND (BL-868): a 50-poll cap read a stub slow to start as
+      # one never recorded ('0|0'). A stub that never records hangs until the gate's watchdog, never a verdict.
+      until [ -s "$RM/pids" ]; do sleep 0.1; done
       REAP_MUT="$1" stub_reap "$RM"
       rec="$(grep -c . "$RM/pids.last")" || rec=0
       live="$(stub_live "$RM/pids.last")"
@@ -6354,7 +6377,7 @@ if sg tk; then
 TK_ARMS=0
 TK_FX="$WORK/tk.xp"; mkdir -p "$TK_FX" || broken "could not create the fake exec-path dir"
 TK_GIT="$(command -v git)" || broken "no git on PATH"
-printf '#!/bin/sh\n# readset-skip: a stand-in for the copy of git in an exec-path dir\nexec "%s" "$@"\n' "$TK_GIT" > "$TK_FX/git" && chmod +x "$TK_FX/git" \
+printf '#!/bin/bash\n# readset-skip: a stand-in for the copy of git in an exec-path dir\nexec "%s" "$@"\n' "$TK_GIT" > "$TK_FX/git" && chmod +x "$TK_FX/git" \
   || broken "could not write the fake exec-path git"
 cmp -s "$TK_FX/git" "$TK_GIT" && broken "the fake exec-path git is byte-identical to the real one, so no world could tell them apart"
 TK_PLAIN="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"
