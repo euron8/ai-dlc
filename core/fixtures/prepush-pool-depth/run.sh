@@ -25,6 +25,7 @@
 #
 # THE MUTANTS are cmp -s guarded COPIES of the resolved block. Each mutant is a row of the matrix below:
 # the arm cells it moves (decides) and a cell of another arm that stays green (twins).
+# The one exception is td-life-fd, which re-defines the fixture's own ts_launch with its single ' 9>&- &' removed instead of copying the block.
 #
 # MUTANT-MATRIX not-exported decides=raw_d0,raw_d1,nest_started,nest_depths,nest_b_present,nest_refusal_line twins=scrub_same
 # MUTANT-MATRIX not-incremented decides=raw_d0,raw_d1,nest_started,nest_depths,nest_refusal_line twins=scrub_same
@@ -50,8 +51,14 @@
 # MUTANT-MATRIX td-no-stop decides=td_term,td_queue twins=td_rc
 # MUTANT-MATRIX td-plain-amp decides=td_term,td_int,td_intp twins=td_queue
 # MUTANT-MATRIX td-no-pgid decides=td_decoy twins=td_term
+# MUTANT-MATRIX td-ps-pgid decides=td_sbx_stub,td_sbx_gc,td_sbx_orph,td_sbx_lead,td_sbx_sent twins=td_sbx_rc
+# MUTANT-MATRIX td-no-tree decides=td_sbx_gc,td_sbx_lead twins=td_sbx_stub
+# MUTANT-MATRIX td-no-pidgrp decides=td_sbx_orph twins=td_sbx_lead
+# MUTANT-MATRIX td-no-memgrp decides=td_sbx_lead twins=td_sbx_orph
+# MUTANT-MATRIX td-no-mem decides=td_sbx_lead twins=td_sbx_orph
+# MUTANT-MATRIX td-life-fd decides=td_life twins=td_life_alive
 # MUTANT-MATRIX ps-rewait decides=ps_sig twins=ps_exit
-# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the twenty-five literal callers (mutant, pn_eval, td_eval, the I66 arm and the pool_stop arm) has its own row above
+# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the thirty-one literal callers (mutant, pn_eval, td_eval, the I66 arm, the pool_stop arm and the td-life-fd lifeline arm) has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
 #
 # The matrix is re-measured whenever an arm or a mutant is added or changed, with the command above, run
@@ -798,46 +805,171 @@ fi
 #               worker inherits that, and its `trap pool_abort INT` cannot fire (BL-881 D-f).
 # Signals go only to the drive's own pid and to the pids the workers recorded; release ends every stub.
 TD_ALL="td_term td_queue td_rc td_decoy td_int td_intp"
+# THE SANDBOXED TERM DRIVE (BL-881): the same TERM drive, with ONLY the run_fixtures launch under
+# `sandbox-exec -p '(version 1)(allow default)' /bin/bash -c ...`, where the setuid /bin/ps cannot run, so
+# pool_stop's group listing and pool_kill's descendant walk must both work without ps. sandbox-exec execs in
+# place, so the launch pid is the bash running run_fixtures. Each stub starts a `set -m` grandchild (its own
+# group, so a kill of the stub's group misses it) and records the grandchild's pid BEFORE its own record, so
+# two stub records imply two grandchild records. The observer stays OUTSIDE the sandbox. LIVENESS: a pid is
+# alive iff it is a whole line of `pgrep -g <pid>` -- each stub and grandchild leads its own group (asserted
+# before the TERM), a zombie leader lists nothing, and no clock or heartbeat decides it.
+#   td_sbx_stub -- recorded stubs alive once the parent has exited (want 0)
+#   td_sbx_gc   -- recorded grandchildren alive then (want 0): pool_kill's ps-free walk reaches them
+#   td_sbx_rc   -- "<parent rc>:<pool root>:<stubs that ever started>" after release (want 143:gone:2)
+#   td_sbx_orph -- recorded unit-group orphans alive then (want 0): each stub forks a child in its OWN group whose
+#                  parent subshell exits at once (ppid 1), so no `pgrep -P` walk reaches it and only the per-pid
+#                  group KILL of the stub's own group does
+#   td_sbx_lead -- recorded orphaned group LEADERS alive then (want 0): each stub starts a `set -m` child under a
+#                  subshell, waits for ONE WHOLE WATCHER POLL that began after the child existed, then lets the
+#                  subshell exit, so the child is reparented and only the watcher's ps-free group memory reaches it.
+#                  The event, with no clock: a `sleep` PATH shim (modelled on receipt-bl881.sh's A6 seam) GATES every watcher
+#                  poll, so each watcher polls exactly once. Its FIRST sleep makes the fifo `ev.<watcher>`, holds it
+#                  open read-write and blocks reading it; the stub reads the watcher from `.pr/<unit>.w` and, once
+#                  its child exists, writes `go` there, so the one poll body that follows began after the child
+#                  existed. The SECOND sleep writes `frozen.<watcher>` and blocks on the drive's LIFELINE lock
+#                  (TL_ALL below says how) until it is released. The stub then reads `.g` with no write in flight and records `remembered` or
+#                  `unremembered` (r.<stub>), and proceeds either way, so a hook without the memory reads
+#                  td_sbx_lead=2 and never waits on `.g`; a `note` line names how many read remembered when not
+#                  both did. THE FROZEN SLEEP NEVER RETURNS INTO THE WATCHER: the release does not end it, so no
+#                  watcher polls again after the teardown begins, and every start in this drive happens a fixed
+#                  number of times (a frozen sleep that returned on the release raced the worker's group KILL to
+#                  one more poll, measured 11 and 12 ps starts under td-ps-pgid). It ends when its watcher's group
+#                  is KILLed -- by pool_abort under the fix, by the worker once its unit exits under every mutant
+#                  -- and otherwise at the lifeline lock's release: the drive closes fd 9 after the parent's exit, or
+#                  dies, and the shim KILLs its own watcher and exits; a seam that cannot be set up execs the real
+#                  sleep, so it degrades to the hook's own cadence and never spins, and first notes the fallback
+#                  on the drive-death drive's evlog, so that drive reads nofreeze rather than waiting for a freeze.
+#                  `fallback-poll` is COUPLED TO THE HOOK'S INTERNALS: it tells a watcher's poll from a unit's sleep
+#                  by the rule that the block gives a unit a `$AI_DLC_FX_OUT/.t.*` TMPDIR while the watcher inherits
+#                  the worker's own TMPDIR, so a hook that changes either TMPDIR breaks the note's test.
+# NO CLOCK DECIDES A CELL (BL-868). Every wait ends on an event: a stub record, the parent's exit, a third stub, a
+# cleared `.k`, or the END RECORD -- a pid planted in `.pr/zz-end.k`, after every worker record in glob order, and
+# a `ps` PATH shim that runs the real ps and, AFTER it answers, writes `end.seen` when asked about that pid. A
+# pool_stop that tests each record with ps (td-ps-pgid) therefore marks the end of its kill loop, and the drive
+# reads its cells there instead of waiting for a parent that will not exit until the release. The fix never asks
+# ps about a record (pgrep is declared), so for it the event is the parent's exit.
+# LIVENESS, ps-free (sandbox-exec denies the setuid /bin/ps to the observer too, when the whole run is sandboxed):
+# a group leader is alive iff it is a whole line of `pgrep -g <pid>`; a unit-group orphan iff it is a whole line of
+# `pgrep -g <its stub>`; a non-leader (the decoy) iff it is a whole line of `pgrep -U <uid>`. Each lists a live pid
+# and omits a zombie, measured plain and under allow-default sandbox-exec.
+#   td_sbx_sent -- "<sentinel>:<end mark>" (want signalled:nomark): the SENTINEL is a recorded pid in xargs' group
+#                  that blocks TERM, so the fix TERMs it and the TERM stays pending; the fix never asks ps about a
+#                  record, so the END RECORD's ps shim never marks. A pool_stop testing records with ps reads
+#                  unsignalled:mark, and the mark is the event its cells are read on.
+TS_ALL="td_sbx_stub td_sbx_gc td_sbx_orph td_sbx_lead td_sbx_sent td_sbx_rc"
+# THE LIFELINE (BL-868): a frozen sleep shim must end when the DRIVE dies before its cells are read (an interrupted
+# push, an outer pool killing this tree, a traced run), and no clock may end it. The drive opens the file `life` on
+# fd 9 and takes LOCK_EX on that open file description (ts_hold); a flock belongs to the DESCRIPTION, so it is held
+# while any process holds fd 9 and released when the last one closes it: the drive's exit, by any death, or its own
+# close once its cells are read. Every launch it makes closes fd 9 (`9>&-`: the subject's run_fixtures launch in
+# ts_launch, the perl sentinel, the end record), and the frozen shim execs a perl that opens `life` afresh and
+# blocks in flock(LOCK_SH), then KILLs its own watcher (still its parent) so it polls no more, and exits. The
+# first-poll `go` wake stays on `ev.<watcher>`: each of the two sleeps waits for exactly one event.
+# WHY A LOCK AND NOT A FIFO'S EOF: two readers blocked on one fifo whose last writer was KILLed, nothing else touching
+# it, woke 1 of 2 on this kernel; the other stayed in read() for good. Two flock waiters woke 2 of 2 in 10 of 10 runs,
+# plain and under allow-default sandbox-exec, and with a descendant keeping fd 9 the lock stayed held and 0 woke.
+#   td_life_alive -- the CONTROL, the sub-drive alive: "<its answer to a probe>:<frozen shims listed in their
+#                    watchers' groups after it>:<lifeline lock>" (want marker:2:held), or "nofreeze:<event>:<freezes>"
+#                    when a fallback note or the subject's exit (`subject-exit`) ended the wait before both froze
+#   td_life       -- the sub-drive KILLed by its recorded pid: "exited:<shims that took the lock and exited>", read
+#                    once a fifo every shim holds open reads EOF (one reader, this drive), or "leaked:held" when a
+#                    descendant still holds fd 9, read by one non-blocking lock attempt, so that read cannot hang (want exited:2)
+# tl_drive HAS ONE REMAINING COUPLING: if the hook's pool starts but its watcher never polls through the PATH `sleep` and never takes a shim fallback, no event arrives and tl_drive blocks instead of reporting `nofreeze`. Every other failure ends on an event: a fallback-* note, a `subject-exit` line, or the lifeline's release.
+TL_ALL="td_life_alive td_life"
 WANT_TD="td_term=0
 td_queue=2
 td_rc=143:gone
 td_decoy=1
 td_int=0
-td_intp=130:gone:0"
-# TD_CEIL is a HANG GUARD, never a verdict: on the unmutated block a ceiling that ends a wait (instead of the awaited
-# event) is FIXTURE BROKEN (td_hang); on a mutant the ceiling is the mutant's expected observable and stays a cell value.
-TD_CEIL=60
+td_intp=130:gone:0
+td_sbx_stub=0
+td_sbx_gc=0
+td_sbx_orph=0
+td_sbx_lead=0
+td_sbx_sent=signalled:nomark
+td_sbx_rc=143:gone:2
+td_life_alive=marker:2:held
+td_life=exited:2"
+# TD_CEIL is EMPTY, so no wait is bounded. ONE mutant passes a ceiling: td-plain-amp, whose INT never reaches a
+# worker (an ignored signal is discarded when sent), so no event can follow it; that ceiling is an open BL-868 item.
+TD_CEIL=""
+# THE SANDBOX DRIVE'S TOOLS ARE DECLARED, so their absence is FIXTURE BROKEN, never a SKIP: this fixture is
+# .dist-only and every box that runs it has them. A refused allow-default profile (a nested sandbox) is the same.
+command -v pgrep > /dev/null 2>&1 || broken "pgrep is declared in tools.decl and not found"
+command -v sandbox-exec > /dev/null 2>&1 || broken "sandbox-exec is declared in tools.decl and not found"
+sandbox-exec -p '(version 1)(allow default)' /usr/bin/true > /dev/null 2>&1 || broken "sandbox-exec refused an allow-default profile running /usr/bin/true (a nested sandbox?)"
 TDT="$WORK/td.tpl"
 for _i in 1 2 3; do
   mkdir -p "$TDT/$PFXR/q$_i" || broken "could not build the teardown template"
   cat > "$TDT/$PFXR/q$_i/run.sh" <<'FX'
 #!/usr/bin/env bash
 printf '%s %s\n' "$$" "${TMPDIR%/*}" > "$TD_DIR/s.$$"
-s=$SECONDS
-while [ ! -e "$TD_DIR/release" ] && [ -d "$TD_DIR" ] && [ $((SECONDS - s)) -lt 60 ]; do sleep 0.1; done
+while [ ! -e "$TD_DIR/release" ] && [ -d "$TD_DIR" ]; do sleep 0.1; done
 exit 0
 FX
 done
 ( cd "$TDT" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
 [ -d "$TDT/.git" ] || broken "the teardown template world is not a repository"
-td_alive() { # td_alive <pid...> -> how many are live and not exiting or zombie
-  local p n=0 s
+TST="$WORK/ts.tpl"
+for _i in 1 2 3; do
+  mkdir -p "$TST/$PFXR/q$_i" || broken "could not build the sandboxed teardown template"
+  cat > "$TST/$PFXR/q$_i/run.sh" <<'FX'
+#!/usr/bin/env bash
+up() { [ ! -e "$TD_DIR/release" ] && [ -d "$TD_DIR" ]; }
+hold() { while up; do "$TD_SLP" 0.1; done; }
+set -m
+( hold ) &
+printf '%s\n' "$!" > "$TD_DIR/g.$$"
+set +m
+( hold & printf '%s\n' "$!" > "$TD_DIR/m.$$" )
+( set -m; hold & printf '%s\n' "$!" > "$TD_DIR/o.$$"
+  while [ ! -e "$TD_DIR/o.$$.go" ] && up; do "$TD_SLP" 0.1; done ) &
+c=$!
+read -r o < "$TD_DIR/o.$$" 2> /dev/null || o=""
+while [ -z "$o" ] && [ -d "$TD_DIR" ]; do "$TD_SLP" 0.1; read -r o < "$TD_DIR/o.$$" 2> /dev/null || o=""; done
+pr="$AI_DLC_FX_OUT/.pr/$(basename "$(dirname "$0")")"
+read -r w < "$pr.w" 2> /dev/null || w=""
+while [ -z "$w" ] && up; do "$TD_SLP" 0.1; read -r w < "$pr.w" 2> /dev/null || w=""; done
+while [ ! -p "$TD_DIR/ev.$w" ] && up; do "$TD_SLP" 0.1; done
+up && printf 'go\n' > "$TD_DIR/ev.$w"
+while [ ! -e "$TD_DIR/frozen.$w" ] && up; do "$TD_SLP" 0.1; done
+{ read -r _k; read -r _g; } < "$pr.g" 2> /dev/null || _g=""
+case " $_g " in *" $o "*) echo remembered ;; *) echo unremembered ;; esac > "$TD_DIR/r.$$"
+: > "$TD_DIR/o.$$.go"; wait "$c"
+printf '%s %s\n' "$$" "${TMPDIR%/*}" > "$TD_DIR/s.$$"
+hold
+exit 0
+FX
+done
+( cd "$TST" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+[ -d "$TST/.git" ] || broken "the sandboxed teardown template world is not a repository"
+ts_alive() { # ts_alive <pid...> -> how many are a whole line of `pgrep -g <pid>` (alive leaders of their own group)
+  local p n=0
   for p in "$@"; do
-    kill -0 "$p" 2>/dev/null || continue
-    s="$(ps -o stat= -p "$p" 2>/dev/null)"
-    case "$s" in Z*|E*|'') ;; *) n=$((n + 1)) ;; esac
+    case $'\n'"$(pgrep -g "$p" 2>/dev/null)"$'\n' in *$'\n'"$p"$'\n'*) n=$((n + 1)) ;; esac
   done
   printf '%s' "$n"
 }
+td_alive() { ts_alive "$@"; } # every plain-drive stub leads its own group (the pool starts each unit under set -m)
+td_inl() { # td_inl <listing> <pid...> -> how many of the pids are a whole line of the listing
+  local l="$1" p n=0; shift
+  for p in "$@"; do case $'\n'"$l"$'\n' in *$'\n'"$p"$'\n'*) n=$((n + 1)) ;; esac; done
+  printf '%s' "$n"
+}
+td_user() { td_inl "$(pgrep -U "$UID" 2>/dev/null)" "$@"; } # a NON-leader (the decoy): a live pid is listed, a zombie is not
+td_orph() { # td_orph <stub pids> <orphan pids>: orphans listed in their stubs' groups (the stub pid names the group)
+  local p l=""
+  for p in $1; do l="$l"$'\n'"$(pgrep -g "$p" 2>/dev/null)"; done
+  td_inl "$l" $2
+}
 td_stubs() { cat "$1"/s.* 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '; }
-td_hang() { # td_hang <block> <what>: the ceiling ended a wait; on the unmutated block that is not measurable
-  [ "$1" = "$PB" ] && broken "teardown drive: the ${TD_CEIL}s ceiling ended the wait for $2 on the unmutated block"
+td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; } # unbounded unless a mutant passed a ceiling
+td_hang() { # td_hang <block> <what>: a ceiling ended a wait; only a mutant passes one, so never on the unmutated block
+  [ "$1" = "$PB" ] && broken "teardown drive: a ceiling ended the wait for $2 on the unmutated block"
   return 0
 }
-td_wait2() { # td_wait2 <stub dir>: until two stubs recorded, at most TD_CEIL seconds
-  local s=$SECONDS
-  while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
-  [ "$(ls "$1" | grep -c '^s\.')" -ge 2 ]
+td_wait2() { # td_wait2 <stub dir>: until two stubs have recorded; every stub starts (no mutant touches dispatch)
+  while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ]; do sleep 0.1; done
 }
 # td_drive <block> <set> <term|int> -> appends the mode's cells to $WORK/td.<set>.v
 td_drive() {
@@ -848,23 +980,23 @@ td_drive() {
     && exec bash -c '. "$1" > /dev/null 2>&1; run_fixtures > "$2" 2>&1' _ "$blk" "$d/out" ) > /dev/null 2>&1 &
   p=$!
   set +m
-  if ! td_wait2 "$d/s"; then
-    td_hang "$blk" "two stubs to start"
-    : > "$d/s/release"; wait "$p"
-    case "$mode" in term) printf 'td_term=nostart\ntd_queue=nostart\ntd_rc=nostart\ntd_decoy=nostart\n' ;; int) printf 'td_int=nostart\ntd_intp=nostart\n' ;; esac >> "$WORK/td.$set.v"
-    return 0
-  fi
+  td_wait2 "$d/s"
   t="$(td_stubs "$d/s")"; root="$(sed -n '1s/^[0-9]* //p' "$d/s/$(ls "$d/s" | grep '^s\.' | sed -n 1p)")"
+  # the readers' precondition, before any signal: both stubs read alive (a reader that reads everything dead fails here)
+  q="$(td_alive $t)"
+  [ "$q" = 2 ] || { [ "$blk" = "$PB" ] && broken "teardown drive: $q of 2 recorded stubs read alive by pgrep -g before the signal"; }
   if [ "$mode" = term ]; then
-    # the decoy: blocks on the same barrier, so the release ends it and nothing here kills it
+    # the decoy: blocks on the same barrier, so the release ends it and nothing here kills it; a NON-leader
     ( while [ ! -e "$d/s/release" ] && [ -d "$d/s" ]; do sleep 0.1; done ) > /dev/null 2>&1 &
     dp=$!; printf '%s\n' "$dp" > "$root/.pr/zz-decoy.k"
+    q="$(td_user "$dp")"
+    [ "$q" = 1 ] || { [ "$blk" = "$PB" ] && broken "teardown drive: the live decoy $dp read $q by pgrep -U before the TERM"; }
     kill -TERM "$p"
     # until the parent is gone, or a third stub (a queued unit) has started
     s=$SECONDS
-    while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ] && td_more "$s"; do sleep 0.1; done
     if kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ]; then td_hang "$blk" "the parent to exit after TERM"; fi
-    n="$(td_alive $(td_stubs "$d/s"))"; dn="$(td_alive "$dp")"
+    n="$(td_alive $(td_stubs "$d/s"))"; dn="$(td_user "$dp")"
     : > "$d/s/release"; wait "$p"; st=$?; wait "$dp"
     if [ -d "$root" ]; then root=present; else root=gone; fi
     printf 'td_term=%s\ntd_queue=%s\ntd_rc=%s:%s\ntd_decoy=%s\n' "$n" "$(ls "$d/s" | grep -c '^s\.')" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
@@ -874,7 +1006,7 @@ td_drive() {
     for n in $wp; do kill -INT "$n"; done
     # until every targeted worker has cleared its record (pool_abort empties `.k` before it exits)
     s=$SECONDS
-    while [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do
+    while td_more "$s"; do
       n=0; for k in $ks; do [ -s "$k" ] && n=1; done
       [ "$n" = 0 ] && break
       sleep 0.1
@@ -885,12 +1017,12 @@ td_drive() {
     # td_intp: once the workers have cleared, the queued stub starts; then INT to the parent itself
     if [ "$n" = 0 ]; then
       s=$SECONDS
-      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && td_more "$s"; do sleep 0.1; done
       [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && td_hang "$blk" "the queued stub to start"
     fi
     kill -INT "$p"
     s=$SECONDS
-    while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$TD_CEIL" ]; do sleep 0.1; done
+    while kill -0 "$p" 2>/dev/null && td_more "$s"; do sleep 0.1; done
     kill -0 "$p" 2>/dev/null && td_hang "$blk" "the parent to exit after INT"
     dn="$(td_alive $(td_stubs "$d/s"))"
     : > "$d/s/release"; wait "$p"; st=$?
@@ -898,25 +1030,227 @@ td_drive() {
     printf 'td_int=%s\ntd_intp=%s:%s:%s\n' "$n" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
   fi
 }
+# ts_shims <drive dir> -> writes the ps and sleep shims into <dir>/shim and sets slp to the real sleep
+ts_shims() {
+  # the ps shim answers as the sandboxed /bin/ps does (no output, exit 71); asked about the END RECORD pid it then
+  # marks `end.seen`. It is first on the SUBJECT's PATH only, so ps fails for the block even when nothing is sandboxed.
+  printf '#!/usr/bin/env bash\nread -r e < "$TD_DIR/end.pid" 2> /dev/null || e=x\nfor a in "$@"; do [ "$a" = "$e" ] && : > "$TD_DIR/end.seen"; done\nexit 71\n' > "$1/shim/ps" \
+    && chmod +x "$1/shim/ps" || { bad "teardown drive: could not write the ps shim"; return 1; }
+  # the sleep shim gates the watcher's polls (the td_sbx_lead header says how): a watcher's `sleep 1` (a pool
+  # worker's env carries AI_DLC_FX_OUT) blocks on the fifo `ev.<parent>` until the stub's `go`; the second blocks
+  # on the LIFELINE `life` until its group's KILL or the lifeline lock's release; any other sleep execs the real one.
+  # EVERY FALLBACK A WATCHER CAN TAKE IS AN EVENT: where a watcher's poll execs the real sleep (it polls with other
+  # than `sleep 1`, its fifo cannot be made, or `life` is absent), the shim first notes `fallback-poll`,
+  # `fallback-fifo` or `fallback-life` on the drive-death drive's evlog, so that drive reports nofreeze instead of
+  # waiting for a freeze that cannot come. Which processes reach the poll test: every `sleep` under the subject. One
+  # with AI_DLC_FX_OUT unset is not in a pool worker (run_fixtures itself) and is never noted. In a worker's env the
+  # block starts the unit with TMPDIR set to its watched root `$AI_DLC_FX_OUT/.t.XXXXX`, and the watcher inherits
+  # the worker's own TMPDIR; the worker's shell sleeps nowhere, so a sleep with AI_DLC_FX_OUT set and TMPDIR outside
+  # `$AI_DLC_FX_OUT/.t.*` is the watcher's poll, and a unit's sleep (a stub's, at any depth) is never noted.
+  slp="$(command -v sleep)"; case "$slp" in /*) ;; *) bad "teardown drive: no sleep binary on PATH for the poll shim"; return 1 ;; esac
+  { printf '#!/usr/bin/env bash\nS=%s\n' "$slp"
+    cat <<'SH'
+note() { [ -p "$TD_DIR/evlog" ] && printf '%s %s %s\n' "$1" "$PPID" "$$" 1<> "$TD_DIR/evlog"; return 0; }
+case "${AI_DLC_FX_OUT:-}:$*" in
+  ?*:1) ;;
+  ?*:*) case "${TMPDIR:-}" in "$AI_DLC_FX_OUT"/.t.*) ;; *) note fallback-poll ;; esac; exec "$S" "$@" ;;
+  *) exec "$S" "$@" ;;
+esac
+f="$TD_DIR/ev.$PPID"; L="$TD_DIR/life"
+if [ ! -p "$f" ]; then
+  mkfifo "$f" && exec 3<> "$f" || { note fallback-fifo; exec "$S" "$@"; }
+  while read -r l <&3; do [ "$l" = go ] && exit 0; [ -p "$f" ] && [ -d "$TD_DIR" ] || exit 0; done
+  exit 0
+fi
+[ -f "$L" ] || { note fallback-life; exec "$S" "$@"; }
+[ -p "$TD_DIR/gone" ] && exec 8<> "$TD_DIR/gone"
+: > "$TD_DIR/frozen.$PPID"
+note frozen
+exec perl -e 'use Fcntl ":flock"; my ($l, $w, $t) = @ARGV;
+  open(my $f, "<", $l) or exit 3; flock($f, LOCK_SH) or exit 4;
+  if (open(my $o, ">", $t)) { close $o }
+  my $q = getppid(); kill("KILL", $q) if $q > 1 && $q == $w; exit 0' "$L" "$PPID" "$TD_DIR/thawed.$$"
+SH
+  } > "$1/shim/sleep" && chmod +x "$1/shim/sleep" || { bad "teardown drive: could not write the sleep shim"; return 1; }
+}
+# ts_hold <drive dir> -> THE LIFELINE: opens <dir>/s/life on fd 9 and takes LOCK_EX on that open file description
+# through one perl child, the only launch that keeps fd 9; the lock lasts while any process holds the description
+ts_hold() {
+  : > "$1/s/life" && exec 9< "$1/s/life" || return 1
+  perl -e 'use Fcntl ":flock"; open(my $f, "<&=", 9) or exit 3; flock($f, LOCK_EX | LOCK_NB) or exit 4; exit 0'
+}
+# ts_launch <drive dir> <block> -> the sandboxed run_fixtures launch, its pid in p. It CLOSES fd 9, the lifeline,
+# so nothing under the subject can hold the lifeline lock after the drive has gone (td-life-fd).
+ts_launch() {
+  set -m
+  ( cd "$1/w" && unset PREPUSH_POOL_DEPTH && export PATH="$1/shim:$PATH" TD_SLP="$slp" AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$1/s" \
+    && exec sandbox-exec -p '(version 1)(allow default)' /bin/bash -c '. "$1" > /dev/null 2>&1; run_fixtures > "$2" 2>&1; r=$?; [ -p "$TD_DIR/evlog" ] && printf "subject-exit %s\n" "$r" 1<> "$TD_DIR/evlog"; exit "$r"' _ "$2" "$1/out" ) > /dev/null 2>&1 9>&- &
+  p=$!
+  set +m
+}
+# ts_drive <block> <set> -> appends the sandboxed TERM drive's cells to $WORK/td.<set>.v
+ts_drive() {
+  local blk="$1" set="$2" d="$WORK/td.$2.sbx" p n gn on ln st root sp gp mp op q w k xg ep hit mk f
+  mkdir -p "$d/s" "$d/shim" && cp -R "$TST" "$d/w" || { bad "teardown drive $set/sbx: could not copy the template"; return 1; }
+  ts_shims "$d" || return 1
+  # THE LIFELINE: this drive holds the lock on fd 9 until its cells are read, and every launch below closes it
+  ts_hold "$d" || { bad "teardown drive $set/sbx: could not take the lifeline lock"; return 1; }
+  ts_launch "$d" "$blk"
+  td_wait2 "$d/s"
+  sp="$(td_stubs "$d/s")"; gp="$(cat "$d/s"/g.* 2>/dev/null | tr '\n' ' ')"; mp="$(cat "$d/s"/m.* 2>/dev/null | tr '\n' ' ')"
+  op=""; for f in "$d/s"/o.*; do case "$f" in *.go) ;; *) [ -s "$f" ] && op="$op $(cat "$f")" ;; esac; done
+  root="$(sed -n '1s/^[0-9]* //p' "$d/s/$(ls "$d/s" | grep '^s\.' | sed -n 1p)")"
+  # what each stub read in `.g` after its frozen poll: printed beside td_sbx_lead when the block under test did not
+  # remember both orphans, so a red td_sbx_lead names its cause (the cell itself is the verdict)
+  q="$(cat "$d/s"/r.* 2>/dev/null | grep -c '^remembered$')" || q=0
+  [ "$q" = 2 ] || [ "$blk" != "$PB" ] || printf '  note  sandboxed teardown drive: %s of 2 stubs read their orphan'"'"'s group in .g after a frozen poll\n' "$q"
+  # the readers' precondition: every recorded stub, grandchild and orphaned leader leads its own group and is listed
+  # now, each unit-group orphan is listed in its stub's group, and every orphan has been reparented to pid 1
+  q="$(ts_alive $sp $gp $op):$(td_orph "$sp" "$mp"):$(td_inl "$(pgrep -P 1 2>/dev/null)" $mp $op)"
+  [ "$q" = 6:2:4 ] || { [ "$blk" = "$PB" ] && broken "sandboxed teardown drive: read [$q] before the TERM, want [6:2:4] (leaders alive : unit-group orphans in their stubs' groups : orphans under pid 1)"; }
+  # the SENTINEL: a RECORDED process in xargs' group (joined through a recorded worker's group) that blocks TERM, so a
+  # TERM sent to it stays pending; told to report, it answers whether one is. The END RECORD: a drive-owned process
+  # outside xargs' group, recorded last in glob order, so neither the fix nor a group-checking pool_stop TERMs it.
+  w=""; for k in "$root"/.pr/q*.k; do [ -s "$k" ] && { read -r w < "$k"; break; }; done
+  xg=""; case "$w" in ''|*[!0-9]*) ;; *) xg="$(perl -e 'print getpgrp($ARGV[0])' "$w")" ;; esac
+  perl -MPOSIX -e '
+    my ($pg, $dir, $rec) = @ARGV; pipe(my $r, my $w) or exit 3; my $c = fork(); defined $c or exit 3;
+    if ($c == 0) {
+      close $r; my $g = fork(); defined $g or POSIX::_exit(3); POSIX::_exit(0) if $g;
+      sigprocmask(SIG_BLOCK, POSIX::SigSet->new(SIGTERM, SIGINT, SIGHUP)) or POSIX::_exit(4);
+      setpgid(0, $pg) or POSIX::_exit(5);
+      open(my $f, ">", "$rec.t") or POSIX::_exit(6); print $f "$$ ", getpgrp(0), "\n"; close $f; rename("$rec.t", $rec) or POSIX::_exit(6);
+      syswrite($w, "r"); close $w; my $hit = "";
+      until ($hit ne "" || ! -d $dir) {
+        my $p = POSIX::SigSet->new; sigpending($p);
+        if ($p->ismember(SIGTERM)) { $hit = "signalled" }
+        elsif (-e "$dir/report") { sigpending($p); $hit = $p->ismember(SIGTERM) ? "signalled" : "unsignalled" }
+        else { select(undef, undef, undef, 0.1) }
+      }
+      if (open($f, ">", "$rec.r.t")) { print $f "$hit\n"; close $f; rename("$rec.r.t", "$rec.r") }
+      until (-e "$dir/release" || ! -d $dir) { select(undef, undef, undef, 0.1) }
+      POSIX::_exit(0);
+    }
+    close $w; waitpid($c, 0); my $b = ""; sysread($r, $b, 1); exit($b eq "r" ? 0 : 7);' "${xg:-0}" "$d/s" "$d/s/sent" > /dev/null 2>&1 9>&-
+  q="$?:$(sed -n '1s/^[0-9]* //p' "$d/s/sent" 2>/dev/null)"
+  [ "$q" = "0:$xg" ] || { [ "$blk" = "$PB" ] && broken "sandboxed teardown drive: the sentinel did not join xargs' group [$xg] (read [$q])"; }
+  [ -s "$d/s/sent" ] && read -r k _ < "$d/s/sent" && printf '%s\n' "$k" > "$root/.pr/zy-sent.k"
+  ( while [ ! -e "$d/s/release" ] && [ -d "$d/s" ]; do sleep 0.1; done ) > /dev/null 2>&1 9>&- &
+  ep=$!; printf '%s\n' "$ep" > "$d/s/end.pid"; printf '%s\n' "$ep" > "$root/.pr/zz-end.k"
+  kill -TERM "$p"
+  # until the parent is gone, a third stub (a queued unit) has started, or the END RECORD was tested with ps, which a
+  # pool_stop does only after it has decided every earlier record, the sentinel's included; no clock decides it
+  while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ] && [ ! -e "$d/s/end.seen" ]; do sleep 0.1; done
+  n="$(ts_alive $sp)"; gn="$(ts_alive $gp)"; on="$(td_orph "$sp" "$mp")"; ln="$(ts_alive $op)"
+  : > "$d/s/report"
+  while [ ! -s "$d/s/sent.r" ]; do sleep 0.1; done
+  read -r hit < "$d/s/sent.r"
+  if [ -e "$d/s/end.seen" ]; then mk=mark; else mk=nomark; fi
+  : > "$d/s/release"; wait "$p"; st=$?; wait "$ep"
+  # the fallback: closing the lifeline releases its lock, so a frozen shim its watcher's group KILL missed takes its
+  # shared lock and exits; a first-poll shim still waiting for `go` is woken by a line and reads its fifo gone
+  exec 9>&-
+  for f in "$d/s"/ev.*; do [ -p "$f" ] || continue; exec 8<> "$f"; rm -f "$f"; printf 'end\n' >&8; exec 8>&-; done
+  if [ -d "$root" ]; then root=present; else root=gone; fi
+  printf 'td_sbx_stub=%s\ntd_sbx_gc=%s\ntd_sbx_orph=%s\ntd_sbx_lead=%s\ntd_sbx_sent=%s:%s\ntd_sbx_rc=%s:%s:%s\n' "$n" "$gn" "$on" "$ln" "$hit" "$mk" "$st" "$root" "$(ls "$d/s" | grep -c '^s\.')" >> "$WORK/td.$set.v"
+}
+tl_held() { # tl_held <file> -> held | free | noopen: one non-blocking shared-lock attempt; no clock decides it
+  perl -e 'use Fcntl ":flock"; open(my $f, "<", $ARGV[0]) or do { print "noopen"; exit 0 }; print(flock($f, LOCK_SH | LOCK_NB) ? "free" : "held")' "$1"
+}
+# tl_drive <block> <set> -> appends the drive-death cells to $WORK/td.<set>.v
+tl_drive() {
+  local blk="$1" set="$2" d="$WORK/td.$2.life" sd p="" a b c n=0 fz="" sh="" fb="" l al wr res
+  mkdir -p "$d/s" "$d/shim" && cp -R "$TST" "$d/w" || { bad "drive-death drive $set: could not copy the template"; return 1; }
+  ts_shims "$d" || return 1
+  mkfifo "$d/s/evlog" "$d/s/hold" "$d/s/done" "$d/s/gone" || { bad "drive-death drive $set: could not make its fifos"; return 1; }
+  # evlog carries the events (held read-write here, so a line outlives its writer); done reads EOF once the
+  # SUB-DRIVE and every process of the subject have exited: they hold its write end, and this drive only a read end.
+  # hold: THIS DRIVE IS ITS ONLY WRITER (fd 3, opened read-write so the open cannot block on a missing reader).
+  exec 7<> "$d/s/evlog" 5<> "$d/s/done" 6< "$d/s/done" 3<> "$d/s/hold"
+  # THE SUB-DRIVE: ts_drive's lifeline and launch, and nothing else. Told `probe` on hold, it answers `marker`. It
+  # opens hold READ-ONLY while its inherited fd 3 still makes a writer exist (so the open cannot block, whenever this
+  # drive dies), then closes fd 3 before anything is launched: no process but this drive holds a write end, so when
+  # this drive dies by any means (a ^C, a KILL of the fixture pid alone) the sub-drive's read sees EOF, it exits, and
+  # the lifeline lock is released. The read end its launches inherit is never read and cannot delay that EOF.
+  set -m
+  ( exec 4< "$d/s/hold" 3>&- 6<&- 7<&-
+    ts_hold "$d" || { printf 'failed\n' 1<> "$d/s/evlog"; exit 3; }
+    ts_launch "$d" "$blk"
+    printf 'launched %s\n' "$p" 1<> "$d/s/evlog"
+    while read -r l <&4; do printf 'marker %s\n' "$l" 1<> "$d/s/evlog"; done ) > /dev/null 2>&1 &
+  sd=$!
+  set +m
+  exec 5>&-
+  # until the launch is recorded and both watchers' SECOND sleeps are frozen on the lifeline. A sub-drive that could
+  # not open the lifeline (`failed`) ends the wait at once; a watcher's poll that fell back to the real sleep
+  # (`fallback-poll`, `fallback-fifo`, `fallback-life`: the shim notes each before it execs) ends it once the launch
+  # is recorded, so the subject's parent is known to the teardown. THE SUBJECT'S EXIT IS AN EVENT TOO: ts_launch's
+  # sandboxed bash writes `subject-exit <rc>` once run_fixtures returns, so a block that fails before its pool starts
+  # ends the wait (the `*)` arm) and reads nofreeze:subject-exit:<n>. evlog is held read-write by this shell, so its
+  # read never fails, and without that line the loop blocked for good. The fix block's subject cannot return before
+  # both freezes: its units hold until the release, which comes after the teardown's TERM below.
+  while [ -z "$p" ] || { [ "$n" -lt 2 ] && [ -z "$fb" ]; }; do
+    read -r a b c <&7 || break
+    case "$a" in
+      launched) p="$b" ;;
+      frozen) n=$((n + 1)); fz="$fz $b"; sh="$sh $c" ;;
+      fallback-*) fb="${fb:-$a}" ;;
+      *) break ;;
+    esac
+  done
+  if [ -n "$p" ] && [ "$n" = 2 ] && [ -z "$fb" ]; then
+    # THE CONTROL, the drive alive: it answers a probe, and then both shims are still in their watchers' groups
+    printf 'probe\n' >&3
+    # the reply is MATCHED: the loop reads past any line other than the sub-drive's `marker` reply, and it cannot spin, because a read on fd 7 blocks rather than fails
+    while read -r a b <&7 && [ "$a" != marker ]; do :; done
+    l=""; for c in $fz; do l="$l"$'\n'"$(pgrep -g "$c" 2>/dev/null)"; done
+    al="$a:$(td_inl "$l" $sh):$(tl_held "$d/s/life")"
+  else
+    al="nofreeze:${fb:-$a}:$n"; n=0
+  fi
+  # THE SUB-DRIVE DIES, by its recorded pid; once reaped none of its descriptors is open
+  kill -KILL "$sd"; wait "$sd" 2>/dev/null
+  wr="$(tl_held "$d/s/life")"
+  if [ "$n" != 2 ]; then res=nofreeze
+  elif [ "$wr" = free ]; then
+    # the lock is released, so each frozen shim takes its shared lock and exits; gone reads EOF once both have exited
+    exec 4<> "$d/s/gone" 8< "$d/s/gone" 4>&-
+    read -r _ <&8; exec 8<&-
+    res="exited:$(ls "$d/s" | grep -c '^thawed\.')"
+  else
+    res="leaked:$wr"
+  fi
+  # teardown: TERM the subject's parent (alive: its units hold until the release) and wait until it is gone, as
+  # ts_drive does, so no unit can end normally and let xargs start the queued one before pool_stop writes `.stop`;
+  # pool_stop's TERM and KILLs end the units without the release. Then release; done reads EOF once all of the
+  # subject is gone. p is not this shell's child, so the wait is a kill -0 loop, ended by the parent's exit alone.
+  case "$p" in ''|*[!0-9]*) ;; *) kill -TERM "$p"; while kill -0 "$p" 2>/dev/null; do sleep 0.1; done ;; esac
+  : > "$d/s/release"
+  read -r _ <&6
+  exec 3>&- 6<&- 7<&-
+  printf 'td_life_alive=%s\ntd_life=%s\n' "$al" "$res" >> "$WORK/td.$set.v"
+}
 td_run() { # td_run <block> <set> <cell...>: one drive per mode its cells need
-  local blk="$1" set="$2" c tm=0 im=0; shift 2
+  local blk="$1" set="$2" c tm=0 im=0 sm=0 lm=0; shift 2
   : > "$WORK/td.$set.v"
-  for c in "$@"; do case "$c" in td_int|td_intp) im=1 ;; *) tm=1 ;; esac; done
+  for c in "$@"; do case "$c" in td_int|td_intp) im=1 ;; td_sbx_*) sm=1 ;; td_life*) lm=1 ;; *) tm=1 ;; esac; done
   [ "$tm" = 1 ] && td_drive "$blk" "$set" term
   [ "$im" = 1 ] && td_drive "$blk" "$set" int
+  [ "$sm" = 1 ] && ts_drive "$blk" "$set"
+  [ "$lm" = 1 ] && tl_drive "$blk" "$set"
   return 0
 }
 td_val() { sed -n "s/^$2=//p" "$WORK/td.$1.v" 2>/dev/null; }
 wanttd() { printf '%s\n' "$WANT_TD" | sed -n "s/^$1=//p"; }
-td_run "$PB" fix $TD_ALL
-for _c in $TD_ALL; do
+td_run "$PB" fix $TD_ALL $TS_ALL $TL_ALL
+for _c in $TD_ALL $TS_ALL $TL_ALL; do
   v="$(td_val fix "$_c")"
   if [ "$v" = "$(wanttd "$_c")" ]; then ok "[$T] teardown $_c=$v"
   else bad "[$T] teardown $_c read [${v:-none}], want [$(wanttd "$_c")]"; fi
 done
 # td_mut <name> <sed-expr>: a copy of the block, one edit, exactly one line changed
 td_eval() {
-  local name="$1" m="$WORK/td.mut.$1.sh" dec tw cells c got="" moved B_mut=1 cond=0 n_run
+  local name="$1" m="$WORK/td.mut.$1.sh" dec tw cells c got="" moved bm cond=0 n_run fam="$TD_ALL"
   dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
   [ -n "$dec" ] || { bad "MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
   dec="${dec//,/ }"; tw="${tw//,/ }"
@@ -925,14 +1259,17 @@ td_eval() {
   # the edit removed or changed exactly one line of the block (a multiset count, so a duplicate line elsewhere still counts)
   [ "$(awk 'NR == FNR { c[$0]++; next } { c[$0]-- } END { for (k in c) if (c[k] > 0) n += c[k]; print n + 0 }' "$PB" "$m")" -eq 1 ] \
     || { bad "MUTANT $name: the edit did not change exactly one line"; return 0; }
-  if [ "$MATRIX" = 1 ]; then cells="$TD_ALL"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + $(printf '%s\n' $TD_ALL | grep -c .) - n_run)); else cells="$dec $tw"; fi
+  # a mutant whose decides are sandboxed cells has the sandboxed drive as its family; every other td mutant has the plain drives
+  case " $dec " in *" td_sbx_"*) fam="$TS_ALL" ;; esac
+  if [ "$MATRIX" = 1 ]; then cells="$fam"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + $(printf '%s\n' $fam | grep -c .) - n_run)); else cells="$dec $tw"; fi
   ( TD_CEIL="${3:-$TD_CEIL}"; td_run "$m" "$name" $cells )
   for c in $cells; do got="$got$c=$(td_val "$name" "$c")"$'\n'; done
-  for c in $dec $tw; do [ "$(td_val fix "$c")" = "$(wanttd "$c")" ] || B_mut=0; done
+  # the base-pass flag is COMPUTED in this run: 1 only when every decides and twin cell read its want on the unmutated block
+  bm="$(for c in $dec $tw; do [ "$(td_val fix "$c")" = "$(wanttd "$c")" ] || { echo 0; exit 0; }; done; echo 1)"
   moved="$(moved_of "$got" "$WANT_TD")"
   [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
   same_set "$moved" "$dec" && cond=1
-  finish_mutant "$B_mut" "$name" "$cond" \
+  finish_mutant "$([ "$bm" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
     "MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
     "MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}])"
 }
@@ -940,8 +1277,37 @@ td_eval td-old-traps "s/trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; tra
 td_eval td-no-stop '/^    \[ -f "\$AI_DLC_FX_OUT\/.pr\/.stop" \] && { : > "\$pr.k"; exit 255; }$/d'
 # the INT drive waits its ceiling under this mutant (the workers never clear `.k`): 5s, for this mutant only
 td_eval td-plain-amp '/^  set -m$/{N;s/^  set -m\n  { PREPUSH_POOL_DEPTH=/  { PREPUSH_POOL_DEPTH=/;}' 5
-# the pgid guard removed: pool_stop TERMs every recorded pid, the planted stale record included
-td_eval td-no-pgid "s/^      \[ \"\$(ps -o pgid= -p \"\$p\" 2>\/dev\/null | tr -d ' ')\" = \"\$pool_xp\" \] && kill -TERM/      kill -TERM/"
+# the group guard removed: pool_stop TERMs every recorded pid, the planted stale record included
+TS_CASE='^      case .*"\$pg".*) \(kill -TERM "\$p" 2>\/dev\/null\) ;; esac$'
+td_eval td-no-pgid "s/$TS_CASE/      \\1/"
+# the ps group test restored (BL-881): with ps failing it is always false and no worker is TERMed; the drive
+# reads its cells on the END RECORD's ps mark, which this pool_stop makes after deciding every earlier record
+td_eval td-ps-pgid "s/$TS_CASE/      [ \"\$(ps -o pgid= -p \"\$p\" 2>\\/dev\\/null | tr -d ' ')\" = \"\$pool_xp\" ] \\&\\& \\1/"
+# pool_kill's ps-free walk removed: with ps failing it kills only the unit pid and the unit's own group
+td_eval td-no-tree 's/^      \[ -n "\$2" \] || { pool_kill_tree "\$1" "\$3" "\$4"; return 0; }$/      [ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }/'
+# pool_kill_tree's per-pid group KILL removed: a unit-group orphan (ppid 1) is reached by nothing else
+td_eval td-no-pidgrp '/^      for p in \$l; do kill -KILL -- "-\$p"; done$/d'
+# the remembered-group KILL removed: an orphaned group leader the watcher remembered is reached by nothing else
+td_eval td-no-memgrp '/^      for g in \$3; do case " \$l " in/d'
+# the ps-free memory removed (the 8713fbf6f shape): the watcher never writes the orphaned leader's group to `.g`, so
+# the stub reads `unremembered` after its frozen poll and the leader survives; it must be KILLED, never hang
+td_eval td-no-mem '/^          \[ -n "\$self" \] || { pool_mem "\$pid"/d'
+# the lifeline's closure on the subject launch dropped: the mutant is ts_launch's own text, re-defined in a subshell
+# with its one `9>&-` removed, so every process of the subject inherits fd 9's open file description and the EX
+# lock stays held after the drive dies; td_life reads leaked:held by one non-blocking lock attempt, so no wait can hang
+tl_m="$(declare -f ts_launch)"
+if [ "$(printf '%s\n' "$tl_m" | grep -c ' 9>&- &')" != 1 ]; then bad "MUTANT td-life-fd: ts_launch carries no single ' 9>&- &', so it is not a mutant"
+else
+  ( eval "$(printf '%s\n' "$tl_m" | sed 's/ 9>&- &/ \&/')"; td_run "$PB" td-life-fd $TL_ALL )
+  tl_got=""; for _c in $TL_ALL; do tl_got="$tl_got$_c=$(td_val td-life-fd "$_c")"$'\n'; done
+  tl_bm=1; for _c in $TL_ALL; do [ "$(td_val fix "$_c")" = "$(wanttd "$_c")" ] || tl_bm=0; done
+  tl_moved="$(moved_of "$tl_got" "$WANT_TD")"
+  [ "$MATRIX" = 1 ] && mx_row td-life-fd "$TL_ALL" "$tl_moved"
+  tl_cond=0; same_set "$tl_moved" "$(mrow td-life-fd decides)" && tl_cond=1
+  finish_mutant "$tl_bm" td-life-fd "$tl_cond" \
+    "MUTANT td-life-fd kill confirmed: decides [td_life] moved ($(td_val td-life-fd td_life)), twin [td_life_alive] stayed green" \
+    "MUTANT td-life-fd moved [${tl_moved% }], want [td_life] (read ${tl_got//$'\n'/ })"
+fi
 
 # ------------------------------------------------- pool_stop waits for xargs ONCE (BL-881) ---------
 # pool_stop has set INT/TERM/HUP to '' before it waits, so a status above 128 can only mean xargs itself died
@@ -949,17 +1315,16 @@ td_eval td-no-pgid "s/^      \[ \"\$(ps -o pgid= -p \"\$p\" 2>\/dev\/null | tr -
 # re-wait loop keyed on "> 128" therefore spins forever with nothing able to stop it. The block's own
 # pool_stop text is driven in a subshell whose pool_xp is a child that dies by a signal or by an exit; the
 # subshell shadows `wait` with a counter: the FIRST call runs builtin wait, the SECOND exits the subshell with
-# PS_SENTINEL, so the verdict is the exit status and no clock decides it. A hang guard (PS_HANG seconds) only
-# stops a drive that neither exits nor re-waits; if it fires the fixture is BROKEN (exit 2), never a cell value.
+# PS_SENTINEL, so the verdict is the exit status and no clock decides it. The drive ends on its own exit and
+# nothing bounds the wait (BL-868): the fix exits 130 after one wait, a re-wait exits PS_SENTINEL on the second.
 #   ps_sig  -- pool_xp died by SIGKILL (the defect needs only a death by signal; KILL because a fixture can be
 #              launched with SIGPIPE or TERM ignored, and a bash child sending itself an ignored signal
 #              lives on and exits 0, measured on bash 3.2): "exited:<rc>" or
 #              "spun" (a second wait; want exited:130)
 #   ps_exit -- pool_xp exited 1, the twin: a re-wait loop ends here too (want exited:130)
 PS_SENTINEL=97
-PS_HANG=60
 [ "$PS_SENTINEL" != 130 ] || { echo "FIXTURE BROKEN: PS_SENTINEL equals pool_stop's exit status"; exit 2; }
-ps_drive() { # ps_drive <block> <sig|exit> -> exited:<rc> | spun | nofn | hung
+ps_drive() { # ps_drive <block> <sig|exit> -> exited:<rc> | spun | nofn
   local d p s
   d="$(mktemp -d "$WORK/ps.XXXXXX")" && mkdir -p "$d/.pr" || { printf 'nodir'; return 0; }
   sed -n '/^pool_stop() {/,/^}/p' "$1" > "$d/fn"
@@ -972,20 +1337,13 @@ ps_drive() { # ps_drive <block> <sig|exit> -> exited:<rc> | spun | nofn | hung
     if [ "$2" = sig ]; then { exec bash -c 'kill -KILL $$'; } & else { exec bash -c 'exit 1'; } & fi
     pool_xp=$!; set +m; pool_stop 130 ) > /dev/null 2>&1 &
   p=$!
-  s=$SECONDS
-  while kill -0 "$p" 2>/dev/null && [ $((SECONDS - s)) -lt "$PS_HANG" ]; do sleep 0.1; done
-  if kill -0 "$p" 2>/dev/null; then kill -KILL "$p" 2>/dev/null; wait "$p" 2>/dev/null; printf 'hung'
-  else
-    wait "$p"; s=$?
-    if [ "$s" = "$PS_SENTINEL" ]; then printf 'spun'; else printf 'exited:%s' "$s"; fi
-  fi
+  wait "$p"; s=$?
+  if [ "$s" = "$PS_SENTINEL" ]; then printf 'spun'; else printf 'exited:%s' "$s"; fi
 }
-ps_check_hung() { case " $* " in *" hung "*) echo "FIXTURE BROKEN: a pool_stop drive neither exited nor re-waited within ${PS_HANG}s"; exit 2;; esac; }
 PS_WANT=exited:130
 # the children are `bash`, never `sh`: tools.decl does not declare sh, so under the hermetic sandbox an
 # `exec sh` exits 127 and the signal world silently becomes a second exit world
 ps_fix_sig="$(ps_drive "$PB" sig)"; ps_fix_exit="$(ps_drive "$PB" exit)"
-ps_check_hung "$ps_fix_sig" "$ps_fix_exit"
 B_ps=1
 for _c in sig exit; do
   eval "v=\$ps_fix_$_c"
@@ -997,7 +1355,6 @@ sed 's/^    wait "\$pool_xp"$/    while :; do wait "$pool_xp"; [ "$?" -gt 128 ] 
 if cmp -s "$PB" "$PS_M"; then bad "MUTANT ps-rewait: the edit matched nothing, so it is not a mutant"
 else
   ps_m_sig="$(ps_drive "$PS_M" sig)"; ps_m_exit="$(ps_drive "$PS_M" exit)"
-  ps_check_hung "$ps_m_sig" "$ps_m_exit"
   ps_moved=""
   [ "$ps_m_sig" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_sig "
   [ "$ps_m_exit" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_exit "

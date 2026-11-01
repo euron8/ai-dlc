@@ -1088,9 +1088,10 @@ if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "
 fi
 # THE EMPTY-SELF PATH KILLS THE UNIT'S GROUP TOO (BL-677). A stub `ps` that FAILS on `-p` (and records that
 # it did) leaves the worker's `self` empty, so the watcher's worker-death `pool_kill` takes its guard path,
-# which kills the recorded pid and its group and walks nothing. The unit leads its own group and its
-# `sleep` child is in it, so the child dies only if the guard signals the group. Every other `ps` call
-# (the walk's `-A`) passes through to the real binary, resolved here before the stub dir is on PATH.
+# pool_kill_tree, which walks the unit's tree ps-free (`pgrep -P`) and KILLs each listed pid's group and each
+# pid. The unit leads its own group and its `/bin/cat` child is in it, so the child dies only if the guard
+# reaches past the recorded pid. Every other `ps` call (the walk's `-A`) passes through to the real binary,
+# resolved here before the stub dir is on PATH.
 SP="$WORK/ps-stub"; mkdir -p "$SP"
 PS_REAL="$(command -v ps)" || broken "no ps on PATH to wrap"
 printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = -p ] && { printf "%%s\\n" "$*" >> "%s/refused"; exit 1; }; done\nexec "%s" "$@"\n' "$SP" "$PS_REAL" > "$SP/ps"
@@ -1099,18 +1100,19 @@ _f0=$fails
 o="$(st_orphan "$HOOK" eself "$SP")"
 case "$o" in
   BROKEN) bad "empty-self arm: the stubbed worker recorded no watcher, or the stub never refused a -p lookup -- self was not shown empty" ;;
-  "0 0") ok "with self empty (ps fails on -p) a SIGKILLed worker's watcher still kills the unit's whole group, its child included" ;;
+  "0 0") ok "with self empty (ps fails on -p) a SIGKILLed worker's watcher still kills the unit's whole tree, its child included" ;;
   *) bad "with self empty a SIGKILLed worker left its watcher or a unit group member alive (watcher-left unit-left: $o)" ;;
 esac
 B_eself=$([ "$fails" = "$_f0" ] && echo 1 || echo 0)
 BASE_eself="wl=${o%% *}
 ul=${o##* }"
-# st-g: the empty-self guard kills the recorded pid alone, so the unit's child survives the worker's death.
-if mutx st-g '[ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }' '[ -n "$2" ] || { kill -KILL "$1"; return 0; }'; then
+# st-g: the empty-self guard kills the recorded pid alone instead of walking its tree (pool_kill_tree), so the
+# unit's child survives the worker's death.
+if mutx st-g '[ -n "$2" ] || { pool_kill_tree "$1" "$3" "$4"; return 0; }' '[ -n "$2" ] || { kill -KILL "$1"; return 0; }'; then
   : > "$SP/refused"
   if orph_m st-g "$MUT" "$SP" alive; then
     csp_score st-g "$([ "$B_eself" = 1 ] && echo 1 || echo 0)" "ul" "wl" "" "wl,ul" "$BASE_eself" \
-      "st-g without the group kill on the empty-self path the unit's child outlives the worker -- the group kill is what reaps it"
+      "st-g without the tree kill on the empty-self path the unit's child outlives the worker -- the tree kill is what reaps it"
   fi
 fi
 

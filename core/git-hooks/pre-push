@@ -2027,16 +2027,29 @@ apply_readset_skip() {
 # A RECORDED PID IS TERMED ONLY WHILE IT IS IN XARGS' GROUP. A worker SIGKILLed mid-run never empties its
 # `.k`, and its pid can be reused by an unrelated process; a live worker is always in group `$pool_xp` (its
 # units and watchers lead their own), and that id cannot be reused while xargs is this shell's unreaped child.
+# THE GROUP IS READ ONCE, BY `pgrep -g "$pool_xp"`, and a record is TERMed only on a whole-line match in that
+# listing. Not `ps`: under sandbox-exec, even an allow-default profile, the setuid /bin/ps cannot run (rc 126
+# through the deriver, rc 71 bare, measured), so a ps test is always false and no worker is TERMed. pgrep's
+# default exclusion of itself and its ancestors cannot hide a worker: pgrep's ancestors are this shell and
+# its own ancestors, none of them in xargs' group. The listing is taken AFTER `.stop` is written: a worker
+# that starts after the listing then sees `.stop` and exits 255, whereas with the listing taken first, a
+# worker started between it and `.stop` would be in no listing, pass its `.stop` check and run its unit.
+# The match is a `case` on the newline-framed listing, so it forks nothing per record.
+# A BOX WITHOUT pgrep KEEPS THE PER-RECORD `ps -o pgid=` TEST, which is what ran before the listing: pgrep is
+# primary, and only when `command -v pgrep` fails does each record get its own ps test (still false under
+# sandbox-exec, as before; a box with neither has no way to read the group at all).
 pool_stop() { # pool_stop <exit status>
-  local k p
+  local k p pg="" pl=0
   trap '' INT TERM HUP
   if [ -n "${pool_xp:-}" ]; then
     : > "$out/.pr/.stop"
+    command -v pgrep > /dev/null 2>&1 && pl=1 && pg="$(pgrep -g "$pool_xp" 2>/dev/null)"
     for k in "$out"/.pr/*.k; do
       [ -s "$k" ] || continue
       p=""; read -r p < "$k"
       case "$p" in ''|*[!0-9]*) continue ;; esac
-      [ "$(ps -o pgid= -p "$p" 2>/dev/null | tr -d ' ')" = "$pool_xp" ] && kill -TERM "$p" 2>/dev/null
+      [ "$pl" = 1 ] || { [ "$(ps -o pgid= -p "$p" 2>/dev/null | tr -d ' ')" = "$pool_xp" ] && kill -TERM "$p" 2>/dev/null; continue; }
+      case $'\n'"$pg"$'\n' in *$'\n'"$p"$'\n'*) kill -TERM "$p" 2>/dev/null ;; esac
     done
     wait "$pool_xp"
   fi
@@ -2219,6 +2232,24 @@ run_fixtures() {
   # The watcher also kills the unit's OWN group by its recorded pid: the unit is still the worker's
   # unreaped child at that point, so the id cannot have been reused, and a `ps` that cannot see the tree
   # (a sandbox granting no process-info) still leaves a refused unit killed rather than waited on forever.
+  # WHEN `ps` FAILS (sandbox-exec denies the setuid /bin/ps), `self` is empty and pool_kill walks the unit's
+  # descendants without ps: pool_tree lists the unit pid and then, breadth-first, each listed pid's children
+  # by `pgrep -P`, which runs under the same sandbox. The discipline is the ps path's: STOP every listed pid,
+  # re-walk, then KILL each listed pid's group and each pid. A listed pid is live, so its id cannot name a
+  # reused group, and a pid is listed before its children are asked for, so a failing pgrep leaves the unit
+  # pid and its own group killed, as before the walk. Measured: a unit's grandchild in its own group survived
+  # the TERM teardown with `ps` failing (a PATH shim exiting 71, and an allow-default sandbox-exec) before the
+  # walk, and dies under it.
+  # THE WALK CANNOT REACH A REPARENTED PROCESS, so with `ps` failing the watcher keeps the ps path's known-group
+  # memory without ps (pool_mem): each poll it walks the tree, takes every walked pid whose `pgrep -g` listing
+  # holds a walked or previously known pid as a group (a live pid leads group <pid> or no group at all), keeps
+  # each remembered group that still holds a known pid, and writes the known pids and groups to `.g` as the ps
+  # path does. pool_kill_tree then KILLs each remembered group that is not a walked pid (the per-pid group KILL
+  # before it already covers those), and only while its listing NOW holds a known pid: a group id is reused only
+  # after every member is gone, so a reused id can name a known pid only if that pid was itself reused into the
+  # new group -- the ps path residual, stated beside POOL_WALK. Measured: a unit's own-group descendant whose
+  # parent had exited (ppid 1) survived the TERM teardown with `ps` failing before the memory, and dies under it;
+  # a remembered group whose listing held no known pid was left alive, the same group with its pid known was killed.
   # THE WATCHER CHECKS ITS WORKER'S PID EVERY POLL. A worker that dies (SIGKILLed, or its xargs gone) never
   # reaps the watcher, so on that poll the watcher kills the unit's tree, whose verdict nobody will record,
   # and exits; without the check its only exit was a refusal and it outlived its worker indefinitely.
@@ -2241,9 +2272,36 @@ run_fixtures() {
     exec xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"; tp=""; wx=""; pr="$AI_DLC_FX_OUT/.pr/$b"
     pool_walk() { ps -A -o pid=,ppid=,pgid=,stat=,time= 2>/dev/null | awk -v root="$1" -v self="$2" -v groups="$3" -v known="$4" "$POOL_WALK"; }
+    pool_tree() {
+      local l="$1" q="$1" c p
+      while [ -n "$q" ]; do
+        c=""; for p in $q; do c="$c $(pgrep -P "$p")"; done
+        q="$(printf "%s\n" $c)"; l="$l $q"
+      done
+      printf "%s" "$l"
+    }
+    pool_mem() {
+      local t="" g m p ng="" nk=""
+      for p in $(pool_tree "$1"); do t="$t $p"; done
+      for g in $t $3; do
+        case " $ng " in *" $g "*) continue ;; esac
+        m="$(pgrep -g "$g")"
+        for p in $m; do case " $t $2 " in *" $p "*) ng="$ng $g"; for p in $m; do nk="$nk $p"; done; break ;; esac; done
+      done
+      kp="$t$nk"; kg="$ng"
+    }
+    pool_kill_tree() {
+      local l p g m
+      l="$(pool_tree "$1")"
+      for p in $l; do kill -STOP "$p"; done
+      l="$l $(pool_tree "$1")"
+      for p in $l; do kill -KILL -- "-$p"; done
+      for g in $3; do case " $l " in *" $g "*) continue ;; esac; m="$(pgrep -g "$g")"; for p in $m; do case " $2 " in *" $p "*) kill -KILL -- "-$g"; break ;; esac; done; done
+      for p in $l; do kill -KILL "$p"; done
+    }
     pool_kill() {
       local w ws wsig wlp wlg p
-      [ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }
+      [ -n "$2" ] || { pool_kill_tree "$1" "$3" "$4"; return 0; }
       w="$(pool_walk "$1" "$2" "$4" "$3")"
       IFS="|" read -r ws wsig wlp wlg <<< "$w"
       for p in $wlp; do kill -STOP "$p"; done
@@ -2284,6 +2342,7 @@ run_fixtures() {
           w="$(pool_walk "$pid" "$self" "$kg" "$kp")"
           IFS="|" read -r ws wsig wlp wlg <<< "$w"
           [ -n "$wlp" ] && { kp="$wlp"; kg="$wlg"; printf "%s\n%s\n" "$kp" "$kg" > "$pr.g"; }
+          [ -n "$self" ] || { pool_mem "$pid" "$kp" "$kg"; printf "%s\n%s\n" "$kp" "$kg" > "$pr.g"; }
           set --; nn=0
           [ -f "$wr/.pool-nested" ] && [ ! -L "$wr/.pool-nested" ] && while [ "$nn" -lt 16 ] && IFS= read -r e; do
             nn=$((nn + 1)); x=""
@@ -2434,12 +2493,12 @@ run_fixtures() {
   # PER-FIXTURE KEY RECORDS ARE PUBLISHED ON A RED RUN TOO: each one is gated on its own verdict.
   readset_keys_write "$out"
 
-  # PUBLISH THIS RUN'S UNMERGED COSTS UNDER THE SAME GREEN-ONLY GATE. The file copied is the
-  # PRE-MERGE one -- "$out/.durations" holds exactly the units this pool timed, whereas
-  # "$out/.merged" above has already absorbed rows from earlier runs. Written only when every
-  # unit came back green, because timings from a suite that stopped early describe a shorter
-  # suite, not a faster one.
-  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD" 2>/dev/null; fi
+  # PUBLISH THIS RUN'S UNMERGED COSTS WHATEVER `rc` IS, and copy the PRE-MERGE file:
+  # "$out/.durations" is exactly the units this pool timed, whereas "$out/.merged" above has
+  # already absorbed rows from earlier runs. `.last` is this run's own measurement and is read
+  # only by the pole line, so it is true on a red run too; gating it on `rc` made a red run
+  # print "no suite run, no pole". The merged record above steers dispatch and stays green-only.
+  if [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD" 2>/dev/null; fi
 
   # THE DETACHED TRACE STARTS ONLY HERE, after every record above is written, and whatever the push's
   # rc: readset_live_trace selects each unmapped fixture by its OWN verdict (ok), so a fixture whose

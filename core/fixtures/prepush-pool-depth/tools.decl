@@ -3,6 +3,7 @@ awk
 basename
 bash
 cat
+chmod
 cmp
 cp
 cut
@@ -19,8 +20,11 @@ mkdir
 mkfifo
 mktemp
 mv
+perl
+pgrep
 ps
 rm
+sandbox-exec
 sed
 seq
 shasum
