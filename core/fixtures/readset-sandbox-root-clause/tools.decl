@@ -8,15 +8,12 @@ dirname
 env
 grep
 head
-id
-kill
 ls
 mkdir
 mktemp
 rm
 sandbox-exec
 sed
-sleep
 sort
 tr
 wc
