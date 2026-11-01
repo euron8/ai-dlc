@@ -1472,7 +1472,7 @@ sl_mut index-bound \
 # shim absent: denied. The shim token is checked to be in the hook before the cell is trusted.
 ML_SHIM="$WORK/ml-awk-shim"; mkdir -p "$ML_SHIM"
 ML_AWK="$(command -v awk)"
-printf '#!/bin/sh\ncase "$*" in *wait-for-deliverable.sh*) exit 2 ;; esac\nexec %s "$@"\n' "$ML_AWK" > "$ML_SHIM/awk"
+printf '#!/bin/bash\ncase "$*" in *wait-for-deliverable.sh*) exit 2 ;; esac\nexec %s "$@"\n' "$ML_AWK" > "$ML_SHIM/awk"
 chmod +x "$ML_SHIM/awk"
 # The shim must be the awk a PATH lookup finds, or the fail-open cell reads a working scan's deny.
 [ "$(PATH="$ML_SHIM:$PATH" bash -c 'command -v awk')" = "$ML_SHIM/awk" ] \

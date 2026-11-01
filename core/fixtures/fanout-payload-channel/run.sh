@@ -229,7 +229,7 @@ run() {
 capture() {
   local subj="$1" tree="$2" base="$3" dest="$4" shimdir
   shimdir="$(mktemp -d "$WORK/shim.XXXXXX")" || return 2
-  printf '#!/bin/sh\ncat >/dev/null\nenv > "%s"\n' "$dest" > "$shimdir/python3" || return 2
+  printf '#!/bin/bash\ncat >/dev/null\nenv > "%s"\n' "$dest" > "$shimdir/python3" || return 2
   chmod +x "$shimdir/python3" || return 2
   ( cd "$tree" && PATH="$shimdir:$PATH" AI_DLC_PROJECT_ROOT="$tree" \
       bash "$subj" "$base" ) >/dev/null 2>&1
@@ -317,7 +317,7 @@ fi
 mkshim() { # mkshim <dir> <env-assignment-or-empty>
   local d="$1" assign="$2"
   mkdir -p "$d" || return 2
-  { printf '#!/bin/sh\n'
+  { printf '#!/bin/bash\n'
     [ -n "$assign" ] && printf 'export %s\n' "$assign"
     printf 'exec "%s" "$@"\n' "$REAL_PY"
   } > "$d/python3" || return 2

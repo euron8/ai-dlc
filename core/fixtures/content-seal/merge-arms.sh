@@ -385,7 +385,7 @@ grep -q '^seat-complete: stories adversary 1 sha=' "$dE/1.md" && s_6c_sha=1 || s
 a5bin="$WORK/a5bin"; mkdir -p "$a5bin"
 a5real="$(command -v awk)"
 # It fails only a `k=` lookup whose input file sits beside an admit-keys file, i.e. the admission's own lookup.
-printf '#!/bin/sh\nfor a in "$@"; do last="$a"; case "$a" in k=*) kk=1 ;; esac; done\nif [ -n "$kk" ] && [ -f "$(dirname "$last")/admit-keys" ]; then exit 3; fi\nexec "%s" "$@"\n' "$a5real" > "$a5bin/awk"; chmod +x "$a5bin/awk"
+printf '#!/bin/bash\nfor a in "$@"; do last="$a"; case "$a" in k=*) kk=1 ;; esac; done\nif [ -n "$kk" ] && [ -f "$(dirname "$last")/admit-keys" ]; then exit 3; fi\nexec "%s" "$@"\n' "$a5real" > "$a5bin/awk"; chmod +x "$a5bin/awk"
 a5_probe="$WORK/a5probe"; mkdir -p "$a5_probe"; : > "$a5_probe/admit-keys"; : > "$a5_probe/shards"
 a5_stub_rc=0; PATH="$a5bin:$PATH" awk -v k=x 'BEGIN { exit 0 }' "$a5_probe/shards" || a5_stub_rc=$?
 a5_pass_rc=0; PATH="$a5bin:$PATH" awk 'BEGIN { exit 0 }' || a5_pass_rc=$?

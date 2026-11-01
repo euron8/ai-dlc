@@ -526,7 +526,7 @@ if ! { [ -L "$VR_LINK" ] && [ ! -e "$VR_LINK" ]; }; then bad "FIXTURE BROKEN: th
 VR_STUB="$VR/stub"; mkdir -p "$VR_STUB"
 VR_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
 {
-  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '#!/bin/bash\ncase "$*" in\n'
   printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$VR_STUB"
   printf 'esac\nexec "%s" "$@"\n' "$VR_REALGREP"
 } > "$VR_STUB/grep"

@@ -976,7 +976,7 @@ bmut l-m4 l-reader l-pipe "l-cat l-reader l-reader-rest" 's|eval "\$c" <&3 3<&-;
 mkdir -p "$WORK/m/bin"
 printf 'm-data\n' > "$WORK/src/m-data.txt"
 mshim() { # $1 body of the shasum shim
-  printf '#!/bin/sh\n%s\n' "$1" > "$WORK/m/bin/shasum"; chmod +x "$WORK/m/bin/shasum"
+  printf '#!/bin/bash\n%s\n' "$1" > "$WORK/m/bin/shasum"; chmod +x "$WORK/m/bin/shasum"
 }
 mrun() { # $1 validator  $2 story -> sets out, rc
   out="$(cd "$WORK" && vad_call "$1" PATH="$WORK/m/bin:$PATH" AI_DLC_PROJECT_ROOT="$WORK" -- "$2" 2>&1)"; rc=$?
@@ -1147,7 +1147,7 @@ nstub() {
   if [ "$failing" = 1 ]; then act='echo "'"$tool"': forced failure" >&2; exit 2'; else act=':'; fi
   [ "$tool" = find ] && [ "$failing" = 1 ] && act='echo "find: forced failure" >&2; exit 1'
   {
-    printf '#!/bin/sh\n'
+    printf '#!/bin/bash\n'
     if [ -n "$match" ]; then
       printf 'case "$*" in\n  %s) echo "$*" >> "%s/SENT"; %s ;;\nesac\n' "$match" "$d" "$act"
     else
@@ -1182,7 +1182,7 @@ nstub_side() { # <dir> <fail: 1|0> -- claims only norm calls whose stdin is non-
   mkdir -p "$d"; : > "$d/SENT"
   [ "$2" = 1 ] && act='echo "sed: forced failure" >&2; rm -f "$t"; exit 2'
   {
-    printf '#!/bin/sh\n'
+    printf '#!/bin/bash\n'
     printf 'case "$*" in\n'
     printf "  's/[[:space:]]*\$//'|'/^\$/d')\n"
     printf '    t="$(mktemp)" || exit 3; cat > "$t"\n'
@@ -1691,9 +1691,9 @@ mkdir -p "$RP/.claude" "$RP/sub" "$R/o" "$R/x" "$R/src"
   && printf 'two\n' > "$R/f/t" && git -C "$R/f" config diff.external "$R/ext-sym.sh" \
   && ln -s "$R/f/sub" "$RP/lnk" ) >/dev/null 2>&1 \
   || bad "r-world could not be built -- no R verdict below is readable"
-printf '#!/bin/sh\ntouch %s/canary-nested\n' "$R" > "$R/ext-nested.sh"
-printf '#!/bin/sh\ntouch %s/canary-bare\n' "$R" > "$R/ext-bare.sh"
-printf '#!/bin/sh\ntouch %s/canary-sym\n' "$R" > "$R/ext-sym.sh"
+printf '#!/bin/bash\ntouch %s/canary-nested\n' "$R" > "$R/ext-nested.sh"
+printf '#!/bin/bash\ntouch %s/canary-bare\n' "$R" > "$R/ext-bare.sh"
+printf '#!/bin/bash\ntouch %s/canary-sym\n' "$R" > "$R/ext-sym.sh"
 chmod +x "$R/ext-nested.sh" "$R/ext-bare.sh" "$R/ext-sym.sh"
 printf 'a`b\n' > "$RP/d.txt"
 
@@ -2418,7 +2418,7 @@ bmut t-m15 t-cd-dash t-cd-core "t-cd-dash" \
 # shim on PATH then shows the CLI side executed `bash` and the in-process side executed none.
 U="$WORK/u"; mkdir -p "$U/bin"
 UREAL_BASH="$(command -v bash)"
-printf '#!/bin/sh\necho call >> "%s/bash.log"\nexec "%s" "$@"\n' "$U" "$UREAL_BASH" > "$U/bin/bash"; chmod +x "$U/bin/bash"
+printf '#!/bin/bash\necho call >> "%s/bash.log"\nexec "%s" "$@"\n' "$U" "$UREAL_BASH" > "$U/bin/bash"; chmod +x "$U/bin/bash"
 u_norm() { sed -e "s#$U_VALP#VAL#g" -e "s#$0#VAL#g"; }
 u_pair() { # $1 validator  $2 cwd  $3 root  $4 PATH prefix ("" = none)  $5.. args -> UP_IN UP_CLI UP_RIN UP_RCLI
   local val="$1" cwd="$2" root="$3" pp="$4"; shift 4

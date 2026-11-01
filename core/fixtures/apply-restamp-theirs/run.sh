@@ -386,7 +386,7 @@ printf 'version: 1.0.0\ncommit: %s\n' "$SS_B" > "$SSC/.claude/.ai-dlc-version"
 # `?` anything else. A count alone cannot tell the templates fork from an unrelated new preclassify
 # call; the sequence can, so the cells below compare it.
 cat > "$SS/sh/awk" <<SH
-#!/bin/sh
+#!/bin/bash
 case "\$*" in *'file:[ \\t]*core'*)
   n=\$(( \$(wc -l < "$SS/sh/LOG") + 1 ))
   pa="\$(ps -o args= -p "\$PPID" 2>/dev/null)"
