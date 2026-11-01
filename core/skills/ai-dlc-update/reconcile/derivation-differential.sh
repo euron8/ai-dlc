@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# reconcile-region: exempt — operator-run differential; executes consumer commands, never on the pull path
+# reconcile-region: exempt — a measurement run by apply.sh and by the operator, not a finding the report renders; it executes consumer commands and its rows ride apply.sh's own WORKLIST and DECISION output
 # derivation-differential.sh — did THIS PULL break a recorded derivation, as opposed to the
 # consumer's artifact corpus carrying stale ones already?
 #
@@ -8,14 +8,37 @@
 #
 # `--record-owed <file>` APPENDS every NEWLY-FAILING row this run prints to <file>, so a derivation the
 # operator chooses to LEAVE (disposing of the artifact-derivations WORKLIST row without re-pointing it)
-# stays owed instead of living only in the model's recollection. Each record row is rendered by the
+# stays owed instead of living only in the model's recollection. apply.sh RUNS THIS MODE ON EVERY ORDINARY
+# PULL (after its writes, before the stamp), so an owed derivation is recorded the moment it is found and
+# the operator's choice is to re-point it or leave it owed, never to remember to record it.
+#
+# RECORD MODE MEASURES EVERY PULL, NOT ONLY A PULL A FENCE NAMES. A derivation can read files its command line
+# never names, so the join-only set (fences naming a path the range changed) would miss it, and a record
+# written from "no fence names a changed path" would be written from intent. Under `--record-owed` the file
+# set is every CURRENT or LIVING `_bmad-output/**/*.md` carrying a `derived` fence, taken from the SAME vd_join
+# through its widened mode (VD_ALL=1, set by this script in its own shell for that one call and never exported),
+# and the run is a measurement. Three outcomes create the record with no row and exit 0: no in-scope file
+# carries a fence (the empty join); the consumer's tracked tree equals the base commit on every path and holds
+# no untracked and no ignored file (the tree did not move, so zero NEWLY-FAILING holds by construction and no
+# validator runs; an ignored file counts as movement because a directory-walking derivation can fail on one the
+# base worktree lacks, and the short-circuit must never be weaker than the full run);
+# and a full differential that finds nothing. A REFUSAL (broken base root, validator, scope, a join whose files
+# could not all be read) leaves the record ABSENT: a refusal is no measurement, and a record written for one
+# would be a record of intent. Outside record mode every refusal below stands unchanged and the join is the
+# row's own. A row whose (key, range) already sits as an OWED row in the record is NOT appended again, so
+# re-running an apply does not duplicate it.
+#
+# Each record row is rendered by the
 # classifier from the SAME variables as the printed row, never retyped, one tab-separated line:
 #   OWED <key = file:line, relative to the consumer> <recorded command> <recorded output>
 #        <actual output> <base>..<theirs> <reconcile log name>
 # There is NO status cell: the record is append-only and a row closes only when
 # `scripts/ai-dlc/check-owed-derivations.sh` re-runs the validator on that key and finds it reproducing.
-# Without the flag nothing is written. `--log-name` names the reconcile log the row belongs to; its
-# default is `reconcile-log-unnamed`, because the log is written after this runs.
+# Without the flag nothing is written. `--log-name` names the reconcile log the row belongs to (field 7). apply.sh
+# mints that name once per pull and passes it, prints it on a `NOTE reconcile-log-name` row, and the update session
+# writes its log under that name, so field 7 names a log that will exist. The default `reconcile-log-unnamed` is
+# only for a hand run that passes no name; no log by that name exists, and dedup ignores field 7, so a later run
+# cannot repair it.
 #
 # THE ROW THIS CHECKS. apply.sh emits `WORKLIST artifact-derivations` when a fenced ```derived
 # command in `_bmad-output/**/*.md` names a core path the range CHANGED. Its clear used to be the
@@ -137,15 +160,15 @@
 # NOTE); a checkout-dependent derivation (branch name, mtimes, `.git/*`) can differ as noise; a
 # relative `_bmad-output/...` operand reads each root's own copy of that artifact; ref-dependent
 # `git` derivations read the shared refs from both roots. Runtime is roughly the validator's cost
-# twice, run in parallel -- tens of seconds per side on the reference consumer -- which is why
-# this is operator-run and never invoked from the driver.
+# twice, run in parallel -- tens of seconds per side on the reference consumer. apply.sh pays that once per
+# ordinary pull; `emit-report.sh` never invokes this script, which is why it is exempt from I105.
 set -uo pipefail
 
 PROG=derivation-differential
 say_row() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 refuse()  { say_row REFUSED "$1" "$2"; exit 2; }
 
-BASE_ROOT_ARG=""; BASE_ROOT_SET=0
+BASE_ROOT_ARG=""; BASE_ROOT_SET=0; TREE_DIFF_KNOWN=0
 OWED_FILE=""; OWED_SET=0; LOG_NAME="reconcile-log-unnamed"
 _n=0; DIST=""; BASE=""; CONSUMER=""; THEIRS=""
 while [ "$#" -gt 0 ]; do
@@ -211,25 +234,64 @@ cleanup() {
   [ -n "$WT_PARENT" ] && { rm -f "$WT_PARENT/pid" 2>/dev/null; rmdir "$WT_PARENT" 2>/dev/null; }
   rm -f "$TMP/files" "$TMP/chain" "$TMP/blobs" "$TMP/pairs" "$TMP/list.out" "$TMP/list.err" \
         "$TMP/b.out" "$TMP/b.err" "$TMP/t.out" "$TMP/t.err" "$TMP/rows" "$TMP/counts" \
-        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/scope.err" "$TMP/dropped" 2>/dev/null
+        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/owed.new" "$TMP/scope.err" "$TMP/dropped" 2>/dev/null
   rmdir "$TMP" 2>/dev/null
 }
 trap cleanup EXIT
 
 # ---- the row's file set, by the row's own join --------------------------------------------
+# VD_ALL IS THIS SHELL'S OWN, NEVER THE CALLER'S: cleared first so an exported VD_ALL cannot widen a
+# non-record run, set (unexported) only around the record-mode join, cleared again straight after.
+unset VD_ALL
+[ "$OWED_SET" -eq 1 ] && VD_ALL=1
 vd_join "$DIST" "$BASE" "$THEIRS" "$ART"
+unset VD_ALL
 # The join keeps only the current sprint's artifacts and the living documents, so a past sprint's
 # derivation can neither make this exit 1 nor be recorded. A classifier that could not run leaves
 # the set unknown, and a clear over an unknown set is the guess the scope ruling forbids.
 [ -z "${VD_SCOPE_ERR:-}" ] \
   || refuse scope "which artifacts belong to the current sprint is unknown: ${VD_SCOPE_ERR}. Restore the current sprint's canonical sprint-status.yaml (its \`sprint: <N>\` and \`status:\` lines) so \`sprint-status.sh sprint-id\` answers, then re-run."
-[ -n "${VD_MOVED:-}" ] \
-  || refuse join "the range ${BASE}..${THEIRS} changes no core path (or the diff could not be read), so the artifact-derivations row cannot have been emitted for it. Check the refs against the row."
-[ "$VD_LISTED" -gt 0 ] || refuse join "$ART lists no markdown file."
-[ "$VD_SCANNED" -ge "$VD_LISTED" ] \
-  || refuse join "the join opened ${VD_SCANNED} of ${VD_LISTED} artifact file(s), so the row's file set is not known."
-[ -n "$VD_FILES" ] \
-  || refuse join "no fenced derivation names a path this range changed (${VD_HITS} hit(s)), so there is no artifact-derivations row for this range to clear."
+# THE OWED RECORD IS CREATED BY ONE FUNCTION, called from every path that passed its refusals.
+make_record() {
+  mkdir -p "$(dirname "$OWED_FILE")" 2>/dev/null && : >> "$OWED_FILE" 2>/dev/null \
+    || refuse record "could not create the owed-derivations record $OWED_FILE, so a measured-clean run would read as never measured."
+}
+# One row per hit-bearing PAST or HISTORY file the scope dropped. Out of scope is not the same as absent.
+print_dropped() {
+  local _dt _dp _dw _dn
+  printf '%s\n' "$VD_DROPPED" > "$TMP/dropped" \
+    || refuse tmp "could not stage the out-of-scope file list, so a dropped file would go unnamed."
+  while IFS="$(printf '\t')" read -r _dt _dp; do
+    [ -n "$_dp" ] || continue
+    case "$_dt" in
+      PAST) _dw="a sprint that has since finished" ;;
+      *)    _dw="a history file (an archive, or an ai-dlc rotation output)" ;;
+    esac
+    if [ "$OWED_SET" -eq 1 ]; then _dn="carries a recorded derivation"
+    else _dn="carries a recorded derivation naming a path this range changed"; fi
+    say_row INFO out-of-scope "${_dt}	${_dp} ${_dn}, and is ${_dw}: it is not this pull's to repair, so it is NOT run, NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
+  done < "$TMP/dropped"
+}
+if [ "$OWED_SET" -eq 1 ]; then
+  # Record mode: VD_MOVED empty is not a refusal (the tree-moved test below owns that question), and a corpus
+  # with no markdown file is an empty join. A join that could not open every file is still unknown.
+  [ "$VD_SCANNED" -ge "$VD_LISTED" ] \
+    || refuse join "the join opened ${VD_SCANNED} of ${VD_LISTED} artifact file(s), so the file set is not known."
+  if [ -z "$VD_FILES" ]; then
+    make_record
+    print_dropped
+    say_row INFO join "no CURRENT-sprint or living artifact under $ART carries a \`derived\` fence, so there is nothing to re-run and nothing owed. The owed-derivations record exists with 0 OWED rows: measured, not assumed."
+    exit 0
+  fi
+else
+  [ -n "${VD_MOVED:-}" ] \
+    || refuse join "the range ${BASE}..${THEIRS} changes no core path (or the diff could not be read), so the artifact-derivations row cannot have been emitted for it. Check the refs against the row."
+  [ "$VD_LISTED" -gt 0 ] || refuse join "$ART lists no markdown file."
+  [ "$VD_SCANNED" -ge "$VD_LISTED" ] \
+    || refuse join "the join opened ${VD_SCANNED} of ${VD_LISTED} artifact file(s), so the row's file set is not known."
+  [ -n "$VD_FILES" ] \
+    || refuse join "no fenced derivation names a path this range changed (${VD_HITS} hit(s)), so there is no artifact-derivations row for this range to clear."
+fi
 printf '%s\n' "$VD_FILES" > "$TMP/files"
 printf '%s\n' "$VD_MOVED" | tr '|' '\n' | grep -v '^$' > "$TMP/moved"
 
@@ -297,6 +359,33 @@ else
   done < "$TMP/pairs"
   [ -n "$BASE_COMMIT" ] \
     || refuse base-root "no commit on the consumer's first-parent chain carries a .claude/.ai-dlc-version whose commit: resolves to <base> ${BASE} in $DIST with a skill_commit: that is absent, <base>, or an ancestor of <base> (a self-update commit, or one whose skill_commit: is empty or unresolvable, is not shown to be the pre-pull tree), so the tree this pull started from cannot be found. Pass --base-root <dir> naming a checkout of the commit the pull started from -- the one BELOW any self-update commit; --base-root holds its stamp to the same test and refuses a root whose skill_commit: is past <base>."
+  # THE TREE DID NOT MOVE (record mode only, and only when the base commit was found by the stamp walk). The
+  # consumer's tracked tree equals BASE_COMMIT on every path -- a whole-tree comparison, not the moved set, because
+  # the apply also writes non-core paths -- and it holds no untracked file AND no ignored file, so the two sides would
+  # read one tree and zero NEWLY-FAILING holds by construction. Write-free (`diff` and `ls-files` only); the in-flight
+  # marker and the record are the run's own files and are not a movement; any git error reads as MOVED, the safe direction.
+  # IGNORED FILES COUNT AS MOVEMENT, AND THAT IS MEASURED, NOT TIDY: the base worktree is `git worktree add` of a commit, so
+  # it holds no ignored file. A derivation that walks a directory (`grep -rl <token> <dir>`) PASSES there and FAILS at the
+  # consumer once the apply has written an ignored file into that directory, which the full run scores NEWLY-FAILING. A test
+  # that skipped ignored paths (`--exclude-standard`) read that tree as unmoved and recorded 0, weaker than the full run.
+  # With ignored entries counted the short-circuit fires only on a tree with no untracked or ignored entry outside the two
+  # run-owned files, and on every other tree it runs the full differential. The other ignored-file shape, a derivation naming
+  # an ignored OPERAND, fails at the base and passes at the consumer, so it reads NEWLY-PASSING in the full run and is never
+  # NEWLY-FAILING (the NOTE operands row below says so); the short-circuit and the full run agree on it.
+  if [ "$OWED_SET" -eq 1 ]; then
+    _rec_rel="${OWED_FILE#"$CONSUMER"/}"
+    _tm_d="$(git -C "$CONSUMER" -c core.quotePath=false diff --name-only "$BASE_COMMIT" -- 2>/dev/null)" || _tm_d="?git-diff-failed"
+    _tm_u="$(git -C "$CONSUMER" -c core.quotePath=false ls-files --others 2>/dev/null)" || _tm_u="?git-ls-files-failed"
+    _tm_n="$(printf '%s\n%s\n' "$_tm_d" "$_tm_u" | awk -v a=".claude/.ai-dlc-applying" -v b="$_rec_rel" '$0 != "" && $0 != a && $0 != b { n++ } END { print n + 0 }')"
+    if [ "$_tm_n" = 0 ]; then
+      make_record
+      print_dropped
+      _tm_t="$(git -C "$DIST" rev-parse --verify -q "${THEIRS}^{commit}" 2>/dev/null)"
+      say_row INFO unmoved "the tree did not move; no derivation re-run. The consumer's tracked tree equals ${BASE_COMMIT} (the base root) on every path and holds no untracked or ignored file, so zero NEWLY-FAILING holds by construction (the full run reads the same tree on both sides). Measured on core base ${BASE_OBJ} and theirs ${_tm_t}. The owed-derivations record exists with 0 OWED rows."
+      exit 0
+    fi
+    TREE_DIFF_KNOWN=1
+  fi
   WT_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/$PROG-root-XXXXXX")" || refuse base-root "could not create a scratch directory for the base worktree."
   printf '%s\n' "$$" > "$WT_PARENT/pid" || refuse base-root "could not record this run's PID in $WT_PARENT, so a later run could not tell this worktree from an abandoned one."
   git -C "$CONSUMER" -c core.hooksPath=/dev/null worktree add --detach "$WT_PARENT/base" "$BASE_COMMIT" >/dev/null 2>&1 \
@@ -320,9 +409,15 @@ while IFS= read -r _p; do
     _ndiff=$((_ndiff + 1))
   fi
 done < "$TMP/moved"
+if [ "$TREE_DIFF_KNOWN" -eq 1 ]; then
+  # Record mode found the whole tree differing from the base commit above, which is the stronger control: a
+  # derivation may read a path outside the moved set, so the sides differing on the moved set alone is not required.
+  say_row INFO control "the consumer's tree differs from the base root on ${_tm_n} path(s) (whole-tree comparison); ${_ndiff} of ${_nmoved} core-changed path(s) differ."
+else
 [ "$_ndiff" -gt 0 ] \
   || refuse control "none of the ${_nmoved} path(s) this range changed differs between the base root and the consumer, so both runs would read the same tree and a null would read as agreement. Either the apply has not been run, or the base root is not the pre-apply tree."
 say_row INFO control "${_ndiff} of ${_nmoved} changed path(s) differ between the base root and the consumer."
+fi
 
 # ---- the universe: every derivation in the row's files, root-independent -----------------
 # shellcheck disable=SC2046 -- the file list is newline-split on purpose; IFS is set to newline.
@@ -458,10 +553,7 @@ say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a la
 # THE RECORD EXISTS AFTER ANY --record-owed RUN THAT PASSED THE REFUSALS ABOVE, rows or not: an absent record
 # means no reconcile ever measured this tree, a present one with 0 OWED rows means measured and nothing owed
 # (check-owed-derivations.sh prints a different UNMEASURED line for each). Creating it appends no row.
-if [ "$OWED_SET" -eq 1 ]; then
-  mkdir -p "$(dirname "$OWED_FILE")" 2>/dev/null && : >> "$OWED_FILE" 2>/dev/null \
-    || refuse record "could not create the owed-derivations record $OWED_FILE, so a measured-clean run would read as never measured."
-fi
+if [ "$OWED_SET" -eq 1 ]; then make_record; fi
 if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
   _scope_tool="$CONSUMER/scripts/ai-dlc/check-owed-derivations.sh"
   [ -f "$_scope_tool" ] \
@@ -476,8 +568,15 @@ if [ "$OWED_SET" -eq 1 ] && [ -s "$TMP/owed" ]; then
       *) refuse record "the scope classifier printed '${_sc}' for ${_okey%:*}, which the join had kept as the current sprint's or a living document's. The scope moved between the two reads (did the sprint roll?), so nothing was recorded; re-run." ;;
     esac
   done < "$TMP/owed"
-  if [ -s "$TMP/owed.keep" ]; then
-    cat "$TMP/owed.keep" >> "$OWED_FILE" 2>/dev/null \
+  # DEDUP AT THE PRODUCER: the reader does not collapse OWED rows by key, so a row whose (key, range) -- fields 2 and
+  # 6, never the log name in field 7 -- already sits as an OWED row in the record is not appended again.
+  awk -F'\t' -v rec="$OWED_FILE" 'FILENAME == rec { if ($1 == "OWED") S[$2 SUBSEP $6] = 1; next } !(($2 SUBSEP $6) in S)' \
+    "$OWED_FILE" "$TMP/owed.keep" > "$TMP/owed.new" 2>/dev/null \
+    || refuse record "could not compare the NEWLY-FAILING rows against $OWED_FILE, so nothing was recorded."
+  _ndup=$(( $(awk 'END { print NR + 0 }' "$TMP/owed.keep") - $(awk 'END { print NR + 0 }' "$TMP/owed.new") ))
+  [ "$_ndup" -le 0 ] || say_row INFO recorded "${_ndup} NEWLY-FAILING row(s) already sit as OWED rows for ${BASE}..${THEIRS} in $OWED_FILE and were not appended again."
+  if [ -s "$TMP/owed.new" ]; then
+    cat "$TMP/owed.new" >> "$OWED_FILE" 2>/dev/null \
       || refuse record "could not append the NEWLY-FAILING rows to $OWED_FILE, so the debt this run found would be recorded nowhere. Nothing was cleared."
   fi
 fi
@@ -485,16 +584,7 @@ fi
 cat "$TMP/rows"
 # A file the scope dropped is named, never silently absent: one row per hit-bearing PAST or HISTORY file.
 # It is not run, not recorded, not refused and not closed.
-printf '%s\n' "$VD_DROPPED" > "$TMP/dropped" \
-  || refuse tmp "could not stage the out-of-scope file list, so a dropped file would go unnamed."
-while IFS="$(printf '\t')" read -r _dt _dp; do
-  [ -n "$_dp" ] || continue
-  case "$_dt" in
-    PAST) _dw="a sprint that has since finished" ;;
-    *)    _dw="a history file (an archive, or an ai-dlc rotation output)" ;;
-  esac
-  say_row INFO out-of-scope "${_dt}	${_dp} carries a recorded derivation naming a path this range changed, and is ${_dw}: it is not this pull's to repair, so it is NOT run, NOT recorded, NOT refused at the gate and NOT carried forward, and it is not closed."
-done < "$TMP/dropped"
+print_dropped
 
 # ---- NOTEs: what the differential cannot attribute -----------------------------------------
 # Operands are read as whitespace-split words of the recorded command with globbing OFF, so a

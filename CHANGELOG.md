@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.988.0] - 2026-11-01
+
+### Every pull runs the derivation differential, so a pull always leaves the owed-derivations record (BL-706)
+
+- **Fix.** Every ordinary `apply.sh` run (not `--finish`) executes `derivation-differential.sh --record-owed` at the end of its resolution span, after the relocation, relabel and exec-bit writes and before the stamp, so a pull leaves the owed-derivations record. In record mode the differential runs every CURRENT or LIVING `derived` fence (`VD_ALL`, set in the helper's own shell and never exported). An empty join, or a tree that did not move (no untracked or ignored entry), writes the record with 0 OWED rows. Rows dedup on (key, range). `apply.sh` mints the reconcile-log name and passes it to the helper. A refused run leaves the record absent and draws a DECISION row, and a finding draws one row per cause. The `ai-dlc-update` `SKILL.md` is rewritten to match.
+- **Why.** Operator ruling 2026-10-31, "why not make it run every pull?". Before this, a consumer whose pulls never named a changed path never got a record, and `check-owed-derivations.sh` printed "UNMEASURED: no owed-derivations record".
+- **Held by.** `core/fixtures/owed-derivations/receipt-bl706.sh` cells and the 13 mutants BL706-M1 to BL706-M13 in `core/fixtures/owed-derivations`.
+- **Measured.** Through the real counter on the rebased tree, two agreeing runs each: `owed-derivations` reads 1879 starts in total (main 1176), 100 of `validate-artifact-derivations.sh` (main 0) and 20 of `derivation-differential.sh` (main 3); `apply-restamp-worklist-c` reads 481 (main 462).
+- **Cost.** Per pull, the full path is 1 helper start, 3 validator starts (`--list`, base, consumer) and 1 `git worktree` add and remove. The short paths (empty join, unmoved tree, refusal, unscoped) are 1 helper start and 0 validator starts. Fixture J3 deltas: `owed-derivations` 1176 to 1879, `apply-restamp-worklist-c` 462 to 481, both re-declared in their `invocations.decl`.
+- **Consumer reach.** `apply.sh`, `derivation-differential.sh` and `SKILL.md` ride the machinery slice, so the pull that delivers them records: step 2 self-updates the engine and re-invokes, and the new `apply.sh` runs this pull's apply. A self-update the gate DEFERs records from the next pull.
+
 ## [0.987.0] - 2026-11-01
 
 ### An open `sh` receipt must assert its anchor before it tests its defect, and R10 refuses one that does not (BL-836)

@@ -1788,6 +1788,12 @@ fi
 # of which files the row names, and the operator would be clearing a set the row never named.
 # It must stay at column 0 and close on a column-0 `}` -- that is the lift's grammar.
 #
+# THE WIDENED MODE, `VD_ALL=1`, IS READ FROM THE SHELL VARIABLE AND NEVER SET HERE. The helper's `--record-owed`
+# run measures every pull, so it needs every `$ ` fence line of every CURRENT or LIVING file as a hit and no
+# VD_MOVED gate on the scan (a derivation can read a changed file its command line never names). Only
+# derivation-differential.sh sets it, unexported, around its own record-mode call; THIS driver clears it
+# before its own call below, so an exported VD_ALL cannot widen the row it names. The column-0 lift grammar holds.
+#
 # vd_join <dist> <base> <theirs> <artifact-dir>  ->  sets VD_MOVED VD_LISTED VD_SCANNED VD_HITS
 # VD_NF VD_FILES VD_SCOPE_ERR VD_DROPPED. VD_FILES is the newline-joined, sorted set of artifact files carrying
 # at least one hit -- the row's file set, and the helper's corpus. The scan runs only when the
@@ -1820,7 +1826,7 @@ vd_join() {
     | while IFS= read -r _vp; do [ -n "$_vp" ] && map_consumer "$_vp"; done | sort -u | paste -sd'|' -)"
   VD_LISTED="$(find "$4" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
   case "${VD_LISTED:-0}" in ''|*[!0-9]*) VD_LISTED=0 ;; esac
-  if [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]; then
+  if { [ -n "${VD_MOVED:-}" ] || [ "${VD_ALL:-0}" = 1 ]; } && [ "$VD_LISTED" -gt 0 ]; then
     # THE NEEDLES RIDE IN `-v`, NOT IN A FILE awk OPENS. `getline < file` returns -1 for an
     # unopenable file and 0 for an empty one and raises nothing, so a needle set that failed to
     # load scores every artifact as a non-instance and the run reads clean. A `-v` that did not
@@ -1843,14 +1849,15 @@ vd_join() {
     # consumer, 4556 of 4557 on the 0.614.0 -> 0.618.0 reconcile. `getline` answers -1 only for a
     # file it cannot open and 0 for an empty one, which is exactly the distinction wanted here.
     VD_SCAN="$(find "$4" -type f -name '*.md' -print0 2>/dev/null \
-      | xargs -0 awk -v paths="$VD_MOVED" '
+      | xargs -0 awk -v paths="$VD_MOVED" -v all="${VD_ALL:-0}" '
           BEGIN { n = split(paths, A, "|"); for (i = 1; i <= n; i++) if (A[i] != "") P[A[i]] = 1
                   for (i = 1; i < ARGC; i++) if ((getline _vl < ARGV[i]) >= 0) { files++; printf "O\t%s\n", ARGV[i]; close(ARGV[i]) } }
           FNR == 1 { infence = 0 }
           /^[[:blank:]]*```derived[[:blank:]]*$/ { infence = 1; next }
           infence && /^[[:blank:]]*```[[:blank:]]*$/ { infence = 0; next }
           infence && /^[[:blank:]]*\$ / {
-            for (p in P) if (index($0, p) > 0) { hits++; H[FILENAME]++; break }
+            if (all == 1) { hits++; H[FILENAME]++ }
+            else for (p in P) if (index($0, p) > 0) { hits++; H[FILENAME]++; break }
           }
           END { m = 0; for (f in H) { m++; printf "F\t%d\t%s\n", H[f], f }; printf "%d\t%d\t%d\n", files + 0, hits + 0, m }
         ' 2>/dev/null)"
@@ -1920,18 +1927,24 @@ vd_join() {
 }
 VD_ART="$CONSUMER/_bmad-output"
 VD_VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
+# THE MOVED-PATH WORKLIST ROW IS HELD HERE AND EMITTED BY THE DIFFERENTIAL'S SITE BELOW, ONE ROW PER CAUSE. A fence
+# naming a moved path whose derivation the differential then finds NEWLY-FAILING is ONE cause, and used to draw this row
+# AND `artifact-derivations-owed`. The differential site folds the two into one `artifact-derivations` row when the
+# helper exits 1, and emits this row unchanged on every other outcome (helper exit 0 or 2, helper absent).
+DD_OLD_ROW=""; DD_UNSCOPED=0
 if [ -d "$VD_ART" ]; then
+  unset VD_ALL
   vd_join "$DIST" "$BASE" "$THEIRS" "$VD_ART"
   if [ -n "${VD_SCOPE_ERR:-}" ]; then
+    DD_UNSCOPED=1
     say DECISION artifact-derivations-unscoped "_bmad-output/" \
-      "${VD_HITS} recorded \`derived\` command(s) name a core path this range changed (${VD_SCANNED} of ${VD_LISTED} markdown file(s) opened), but whether any of them belongs to the CURRENT sprint or a living document is UNKNOWN: ${VD_SCOPE_ERR}. Only those are this pull's to repair; a past sprint's artifact is owed by nobody, so nothing is listed here rather than listing every sprint's. Restore the current sprint's canonical \`sprint-status.yaml\` (its \`sprint: <N>\` and \`status:\` lines) so \`bash scripts/ai-dlc/sprint-status.sh sprint-id\` answers, then re-run this apply."
+      "${VD_HITS} recorded \`derived\` command(s) name a core path this range changed (${VD_SCANNED} of ${VD_LISTED} markdown file(s) opened), but whether any of them belongs to the CURRENT sprint or a living document is UNKNOWN: ${VD_SCOPE_ERR}. Only those are this pull's to repair; a past sprint's artifact is owed by nobody, so nothing is listed here rather than listing every sprint's. Restore the current sprint's canonical \`sprint-status.yaml\` (its \`sprint: <N>\` and \`status:\` lines) so \`bash scripts/ai-dlc/sprint-status.sh sprint-id\` answers, then re-run this apply. While the scope is unknown the differential's scope refusal is this same cause, so it draws no second row and no owed-derivations record is written."
   elif [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]; then
     if [ "$VD_SCANNED" -lt "$VD_LISTED" ]; then
       say DECISION artifact-derivations-unreadable "_bmad-output/" \
         "the current sprint's and the living artifacts could not be fully read — ${VD_SCANNED} of ${VD_LISTED} markdown file(s) were opened — so whether this range stranded a recorded derivation is UNKNOWN, and unknown reads exactly like clean. Make every markdown file under _bmad-output/ readable and re-run this apply before treating this pull as done. A past sprint's file is not this row's to read."
     elif [ "$VD_HITS" -gt 0 ] && [ -f "$VD_VALIDATOR" ]; then
-      say WORKLIST artifact-derivations "_bmad-output/" \
-        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each one this range broke at the path core carries at ${THEIRS}. The check is \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`, run before the apply is committed: it re-derives this row's file set with the same join, runs the installed validator over those files once against the pre-apply tree and once against this one, and keys each derivation on its pass/fail STATUS. The clear is ZERO NEWLY-FAILING — a derivation that passed before this apply and fails after it; exit 0 is that clear, exit 1 names each newly-failing one, exit 2 is a refusal and is never a clear. A derivation that was already stale before the apply is OUT OF THIS ROW'S SCOPE: this range did not break it, and the whole-corpus validator's exit 0 is a clear no edit made for this pull can reach. UNASSESSABLE derivations (refused by the validator on either side: ALLOWLIST, GRAMMAR, READS-STDIN) are LISTED, never counted as cleared — adjudicate each by hand. To LEAVE a NEWLY-FAILING derivation without re-pointing it (the operator chose that by AskUserQuestion), re-run the same command with \`--record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv --log-name <this pull's reconcile-log-<ts>.md>\`: the flag appends each CURRENT-sprint or living-document NEWLY-FAILING row to the owed record (a past sprint's break prints INFO and is not recorded), and \`scripts/ai-dlc/check-owed-derivations.sh\` keeps it open until the derivation reproduces. To CLOSE an owed row by re-pointing it, append \`REPOINTED<TAB><old file:line><TAB><new file:line><TAB>\$ <new command>\` to that record; the reader re-derives the NEW derivation on every read, so the append closes nothing unless it reproduces. NOT run from here: it executes the commands it finds, twice, and that is a cost this driver must not charge on a pull."
+      DD_OLD_ROW="${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each one this range broke at the path core carries at ${THEIRS}. This driver RUNS the check on every ordinary pull, after its writes and before the stamp (the rows it draws are \`artifact-derivations-owed\` and \`artifact-derivations-differential\`, below); to re-run it by hand: \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`. It re-derives the file set with the same join, runs the installed validator over those files once against the pre-apply tree and once against this one, and keys each derivation on its pass/fail STATUS. The clear is ZERO NEWLY-FAILING — a derivation that passed before this apply and fails after it; exit 0 is that clear, exit 1 names each newly-failing one, exit 2 is a refusal and is never a clear. A derivation that was already stale before the apply is OUT OF THIS ROW'S SCOPE: this range did not break it, and the whole-corpus validator's exit 0 is a clear no edit made for this pull can reach. UNASSESSABLE derivations (refused by the validator on either side: ALLOWLIST, GRAMMAR, READS-STDIN) are LISTED, never counted as cleared — adjudicate each by hand. A NEWLY-FAILING derivation is already RECORDED OWED in \`_bmad-output/ai-dlc-update/owed-derivations.tsv\` by this driver's run, so LEAVING one needs no further step: \`scripts/ai-dlc/check-owed-derivations.sh\` keeps it open until the derivation reproduces (a past sprint's break prints INFO and is not recorded). To CLOSE an owed row by re-pointing it, append \`REPOINTED<TAB><old file:line><TAB><new file:line><TAB>\$ <new command>\` to that record; the reader re-derives the NEW derivation on every read, so the append closes nothing unless it reproduces."
     elif [ "$VD_HITS" -gt 0 ]; then
       say DECISION artifact-derivations-unchecked "_bmad-output/" \
         "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range changed, and scripts/ai-dlc/validate-artifact-derivations.sh is not on this consumer, so nothing can re-run them. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then re-run this apply, which then draws the WORKLIST row and names the check that scopes to the current sprint."
@@ -2831,6 +2844,113 @@ fi
 # reads a failed staging as an empty listing.
 exec_audit
 
+# --- THE DERIVATION DIFFERENTIAL, RUN ON EVERY ORDINARY PULL -----------------------------------
+#
+# An absent owed-derivations record must mean "no reconcile ever measured this tree", so the
+# differential runs HERE on every pull and creates the record (0 OWED rows when nothing is owed),
+# not only on a pull a fence names. Its file set is every CURRENT or LIVING fenced artifact, because a
+# derivation can read a file its command line never names; see the helper's header.
+#
+# THE SITE IS THE LAST LINE OF THE RESOLUTION SPAN, and the reason is a measurement of what each
+# earlier phase writes, not a preference. The consumer side must be the post-apply tree: phases 2 to
+# 4 (drift refile, override readopt, catalog relabel) and the legacy `relocate-move`, which deletes the
+# old `scripts/<x>` copy a derivation may still read, all write ABOVE this line, and a call made at
+# the join row's old site read the tree before them and recorded a pass the finished apply then broke.
+# WHAT RUNS BELOW IT CANNOT MOVE A VERDICT: write_stamp touches only `.claude/.ai-dlc-version` and
+# the in-flight marker (neither is a derivation operand the validator's allowlist can read as a
+# core path, and the helper's tree-moved test excludes the marker), and the hook, transient-ignore
+# and agent-definition rows run read-only `--check` validators and write nothing. It is BEFORE
+# write_stamp so its WORKLIST and DECISION rows count into `handback` and withhold the stamp.
+# SKILL.md step 7's later steps (settings merge, hook wiring) run after this program and are outside it.
+#
+# `--finish` does not run it: its tree is one this invocation did not write, and the rows below would
+# count into the finisher's `worklist_n` and could not be cleared by the work they ask for.
+# The helper is resolved beside THIS apply.sh, never from a dist path.
+#
+# THE RECONCILE LOG NAME IS MINTED HERE, ONCE, AND PRINTED. The log itself is written by the update session
+# after this runs (this program sees none of what it records), but the record's field 7 must name a log that WILL
+# exist, or a reader's OPEN line points at nothing and dedup (which ignores field 7) can never repair it. So this
+# program mints `reconcile-log-<UTC stamp>.md`, passes it as `--log-name`, and prints it on a `NOTE reconcile-log-name`
+# row whose path field is the file the session writes. A RE-RUN REUSES the name: when the record already holds an
+# OWED row for this exact range whose field 7 has the shape the reader classes as HISTORY, that name is the one
+# printed, because dedup drops the re-run's rows and the first run's name is the one on disk in the record.
+# An unmintable name (no `date`, or an answer without the stamp shape) is loud: the helper is not run.
+DD_HELPER="$SELF/derivation-differential.sh"
+DD_RECORD="$CONSUMER/_bmad-output/ai-dlc-update/owed-derivations.tsv"
+DD_CMD_HAND="bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS} --record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv"
+dd_log_shape() { # <name> -> 0 when it is reconcile-log-<ts>.md with the ts shape check-owed-derivations.sh classes as HISTORY
+  case "$1" in
+    reconcile-log-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9]Z.md) return 0 ;;
+    reconcile-log-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9]Z.md) return 0 ;;
+    reconcile-log-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.md) return 0 ;;
+  esac
+  return 1
+}
+DD_FOLDED=0
+if [ -d "$VD_ART" ] && [ -f "$VD_VALIDATOR" ]; then
+  if [ ! -f "$DD_HELPER" ]; then
+    say DECISION artifact-derivations-differential "_bmad-output/" \
+      "reconcile/derivation-differential.sh is not beside this apply.sh (version skew or a partial copy of reconcile/), so this pull's derivations were NOT measured and no owed-derivations record was written. Restore the helper beside apply.sh and re-run the differential by hand: \`${DD_CMD_HAND}\`."
+  else
+    DD_LOG=""; _dts=""
+    if [ -f "$DD_RECORD" ]; then
+      set -f
+      for _dl in $(awk -F'\t' -v r="${BASE}..${THEIRS}" '$1 == "OWED" && $6 == r { print $7 }' "$DD_RECORD" 2>/dev/null); do
+        if dd_log_shape "$_dl"; then DD_LOG="$_dl"; break; fi
+      done
+      set +f
+    fi
+    if [ -z "$DD_LOG" ]; then
+      _dts="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null)" || _dts=""
+      DD_LOG="reconcile-log-${_dts}.md"
+    fi
+    if ! dd_log_shape "$DD_LOG"; then
+      say DECISION artifact-derivations-differential "_bmad-output/" \
+        "this apply could not mint the reconcile log name the owed-derivations record must carry (\`date -u\` answered '${_dts:-<nothing>}', not a UTC stamp), so the derivation differential was NOT run and no owed-derivations record was written. Make \`date\` available, then re-run this apply, or run the differential by hand with a name you will use for your log: \`${DD_CMD_HAND} --log-name reconcile-log-<UTC stamp, e.g. 20261031T210000Z>.md\`."
+    else
+      say NOTE reconcile-log-name "_bmad-output/ai-dlc-update/${DD_LOG}" "write this pull's reconcile log at exactly this path: the owed-derivations record, when this run appends a row, carries this name in its last field so the reader's OPEN line points at the log you write."
+      dd_out="$(unset VD_ALL; bash "$DD_HELPER" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" --record-owed "$DD_RECORD" --log-name "$DD_LOG" 2>&1)"
+      dd_rc=$?
+      case "$dd_rc" in
+        0) ;;
+        1)
+          dd_nf="$(printf '%s\n' "$dd_out" | awk -F'\t' '$1 == "NEWLY-FAILING" { printf "%s%s", (n++ ? ", " : ""), $2 }')"
+          if [ -n "$DD_OLD_ROW" ]; then
+            # ONE ROW PER CAUSE: a fence named a moved path AND the differential found a derivation newly failing, so the
+            # moved-path row (held above, with its re-point guidance) carries the finding and no second row is drawn.
+            DD_FOLDED=1
+            say WORKLIST artifact-derivations "_bmad-output/" \
+              "${DD_OLD_ROW} THIS RUN FOUND the derivation(s) this pull broke: ${dd_nf}. They were RECORDED OWED at the end of this apply under reconcile log ${DD_LOG}; re-point each and append REPOINTED as above, or LEAVE it owed (nothing more to do). Full rows: \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`."
+          else
+            say WORKLIST artifact-derivations-owed "_bmad-output/" \
+              "this pull broke recorded derivation(s): ${dd_nf}. The differential ran at the end of this apply (the pre-apply tree against this one, the installed validator, each derivation keyed on its pass/fail status) and RECORDED each one OWED in _bmad-output/ai-dlc-update/owed-derivations.tsv under reconcile log ${DD_LOG}, so \`scripts/ai-dlc/check-owed-derivations.sh\` keeps it open until it reproduces. Either RE-POINT each at the path core carries at ${THEIRS} and append \`REPOINTED<TAB><old file:line><TAB><new file:line><TAB>\$ <new command>\` to that record, or LEAVE it owed (nothing more to do). Full rows: \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`."
+          fi
+          ;;
+        *)
+          dd_ref="$(printf '%s\n' "$dd_out" | awk -F'\t' '$1 == "REFUSED" { print $2 ": " $3; exit }')"
+          [ -n "$dd_ref" ] || dd_ref="the helper exited ${dd_rc} and printed no REFUSED line: $(printf '%s' "$dd_out" | head -3 | tr '\n\t' '  ')"
+          # The hand remedy for a base-root refusal names the base root, which is what clears it.
+          dd_hand="${DD_CMD_HAND} --log-name ${DD_LOG}"
+          case "$dd_ref" in
+            base-root:*) dd_hand="${dd_hand} --base-root <a checkout of the commit this pull started from, the one BELOW any self-update commit>" ;;
+          esac
+          # ONE ROW PER CAUSE: a scope refusal while this apply already drew artifact-derivations-unscoped is that same cause.
+          dd_dup=0
+          if [ "$DD_UNSCOPED" = 1 ]; then case "$dd_ref" in scope:*) dd_dup=1 ;; esac; fi
+          if [ "$dd_dup" = 0 ]; then
+            say DECISION artifact-derivations-differential "_bmad-output/" \
+              "the derivation differential REFUSED (exit ${dd_rc}), so this pull's derivations were NOT measured: ${dd_ref}. A refusal is no measurement, so the owed-derivations record is deliberately left ABSENT or unchanged by this run: a record written for a refused run would claim a measurement that never happened. Fix what the refusal names and re-run the differential by hand: \`${dd_hand}\`. The stamp is withheld while this row is undisposed; \`--finish\` does not wait on it."
+          fi
+          ;;
+      esac
+    fi
+  fi
+fi
+# The held moved-path row, on every outcome that did not fold it into the helper's finding.
+if [ -n "$DD_OLD_ROW" ] && [ "$DD_FOLDED" != 1 ]; then
+  say WORKLIST artifact-derivations "_bmad-output/" "$DD_OLD_ROW"
+fi
+
 fi  # ---- end of the resolution phases; see the `--finish` guard that opens them --------------
 
 # --- `--finish`: IS <theirs> THE REF THIS TREE WAS WRITTEN FROM? -------------------------------
@@ -3336,7 +3456,7 @@ elif [ -f "$STAMP" ]; then
   #
   # So the boundary is stated HERE, on the successful run, where the omission actually happens.
   # Prose alone was what failed the first time.
-  echo "apply: NOT WRITTEN BY THIS TOOL -- _bmad-output/ai-dlc-update/reconcile-log-<ts>.md" >&2
+  echo "apply: NOT WRITTEN BY THIS TOOL -- _bmad-output/ai-dlc-update/reconcile-log-<ts>.md (the path on the NOTE reconcile-log-name row when this run drew one)" >&2
   echo "  It records the gates, the post-apply re-runs, the validators and the ledger decisions." >&2
   echo "  This program can see none of those, so it does not write them. Step 7 is where you do." >&2
   fi  # ---- end of the resolvable-<theirs> arm; the else below is the no-stamp case ----

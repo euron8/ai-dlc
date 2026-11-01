@@ -888,8 +888,10 @@ checks:
           derivation-validator step" recorded it only in prose, and no sprint step read
           that log: measured on the reference consumer, 8 owed rows from its 0.793.0 pull
           sat in a reconcile log the resumed sprint lead never saw. The record is written
-          by the differential's --record-owed and its openness is re-derived on every
-          read, so a row closes only by re-pointing the derivation. Scoped to the current
+          by the differential's --record-owed, which apply.sh runs on every ordinary
+          pull (its last field names the reconcile log apply.sh mints and prints), and
+          its openness is re-derived on every read, so a row closes only by
+          re-pointing the derivation. Scoped to the current
           sprint and living documents by operator ruling.
     ci_workflow: ~
     fixtures: [tests/fixtures/owed-derivations]

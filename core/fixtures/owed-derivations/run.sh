@@ -96,6 +96,21 @@
 # variables the drivers and world bodies assign, derived from this file's own text; RSETf and RSETp seed a copy both
 # ways, and RSETr drives a world pair through the real lw_world. CPY holds the copy lw_all runs byte-identical to the reader.
 # MUTANT-MATRIX-DYNAMIC mut_score why=mut_case and MV1 pass their mutant id to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
+# MUTANT-MATRIX BL706-M1 decides=B7b twins=B7a,B7c
+# MUTANT-MATRIX BL706-M2 decides=B7e twins=B7a,B7b
+# MUTANT-MATRIX BL706-M3 decides=B7g twins=B7b
+# MUTANT-MATRIX BL706-M4 decides=B7d twins=B7b
+# MUTANT-MATRIX BL706-M5 decides=B7c twins=B7a
+# MUTANT-MATRIX BL706-M6 decides=B7h twins=B7a
+# MUTANT-MATRIX BL706-M7 decides=B7h twins=B7a
+# MUTANT-MATRIX BL706-M8 decides=B7a twins=B7h
+# MUTANT-MATRIX BL706-M9 decides=B7j twins=B7b
+# MUTANT-MATRIX BL706-M10 decides=B7k twins=B7e
+# MUTANT-MATRIX BL706-M11 decides=B7i twins=B7f
+# MUTANT-MATRIX BL706-M12 decides=B7l twins=B7b,B7d
+# MUTANT-MATRIX BL706-M13 decides=B7e2 twins=B7e
+# MUTANT-MATRIX-DYNAMIC b7_mut why=b7_mut passes its mutant id (BL706-M1, M2, M4 to M13) to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
+# BL706 (B7 cells) measured by: bash core/fixtures/owed-derivations/receipt-bl706.sh, whose CELL lines the B7 arms read; mutants M1 to M8 each copy the whole reconcile/ directory.
 # receipt-bl587.sh drives the real reader over S1's seed; receipt-bl801.sh drives the world filter.
 set -uo pipefail
 
@@ -1359,12 +1374,117 @@ else
 fi
 ck "We the recorded and actual outputs are both present in the record" "${TAB}1${TAB}0${TAB}$BASE..$THEIRS${TAB}reconcile-log-t1.md" "$(cat "$OWED" 2>/dev/null)"
 dd --record-owed "$OWED" --log-name reconcile-log-t2.md
-rc_is "Wf a second run APPENDS: the record has two rows" 2 "$(awk 'END { print NR + 0 }' "$OWED")"
+rc_is "Wf a second run of the SAME range does not append: the record still has one row (producer-side dedup on key and range)" 1 "$(awk 'END { print NR + 0 }' "$OWED")"
 rd "$C" "$OWED"
-rc_is "Wg the reader over the WRITER'S record: exit 1 and the key is OPEN (duplicate rows report each)" 0 "$([ "$RC" = 1 ] && [ "$(open_keys)" = "$K_W,$K_W" ] && echo 0 || echo 1)"
+rc_is "Wg the reader over the WRITER'S record: exit 1 and the key is OPEN once" 0 "$([ "$RC" = 1 ] && [ "$(open_keys)" = "$K_W" ] && echo 0 || echo 1)"
 printf 'qqalpha\nqqgamma\n' > "$C/scripts/ai-dlc/toy.sh"
 rd "$C" "$OWED"
 rc_is "Wh once the tree reproduces the derivation again the writer's rows read closed -> exit 0" 0 "$RC"
+
+# ---- B7: BL-706 -- the shipping apply.sh runs the differential on EVERY ordinary pull ------------------------
+# receipt-bl706.sh drives the shipping apply.sh and the helper beside it over seeded worlds (cells a a2 a3 b d l c e e2 f g h i i2 j k,
+# its header names each) and prints one `CELL <id> ok|FAIL` line per cell. It runs once unmutated here. Each mutant is a
+# COPY of the whole reconcile/ directory (the helper lifts vd_join out of the apply.sh beside it and apply.sh shells to
+# its siblings, so a lone mutated file would find none), mutated by ONE exact-once replacement, and is scored on its
+# deciding cell and its twins only. The twins' `ok` is also the control that the copy RAN: a copy that never ran prints
+# no CELL line, which reads MISSING, never ok.
+printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh\n'
+B7_RECON="$(dirname "$DIFFER")"
+B7_RCPT="$HERE/receipt-bl706.sh"
+[ -f "$B7_RCPT" ] && [ -f "$B7_RECON/apply.sh" ] || { echo "FIXTURE ERROR: receipt-bl706.sh or the reconcile/ directory is missing" >&2; exit 2; }
+b7_state() { awk -v c="$2" '$1 == "CELL" && $2 == c { print $3; f = 1; exit } END { if (!f) print "MISSING" }' <<<"$1"; }
+b7_text() { awk -v c="$2" '$1 == "CELL" && $2 == c { sub(/^CELL [^ ]+ [^ ]+ /, ""); print; exit }' <<<"$1"; }
+B7_REAL="$(TMPDIR="$WORK" bash "$B7_RCPT" "$B7_RECON" "$READER" 2>&1)"; B7_RC=$?
+for _c in a a2 a3 b d l c e e2 f g h i i2 j k; do
+  if [ "$(b7_state "$B7_REAL" "$_c")" = ok ]; then
+    case "$_c" in a) B_B7a=1 ;; b) B_B7b=1 ;; c) B_B7c=1 ;; d) B_B7d=1 ;; e) B_B7e=1 ;; e2) B_B7e2=1 ;; f) B_B7f=1 ;; g) B_B7g=1 ;; h) B_B7h=1 ;; i) B_B7i=1 ;; j) B_B7j=1 ;; k) B_B7k=1 ;; l) B_B7l=1 ;; esac
+    ok "B7$_c $(b7_text "$B7_REAL" "$_c" | cut -c1-200)"
+  else bad "B7$_c the shipping apply.sh/helper did not hold cell $_c: $(b7_text "$B7_REAL" "$_c" | cut -c1-300) (state $(b7_state "$B7_REAL" "$_c"))"; fi
+done
+rc_is "B7rc the receipt exits 0 over the unmutated reconcile/ directory" 0 "$B7_RC"
+
+# b7_sub <file>: replace the text in B7_OLD with B7_NEW exactly once, or fail (a mutation that matches nothing is a lost subject).
+b7_sub() {
+  B7_F="$1" B7_OLD="$B7_OLD" B7_NEW="$B7_NEW" python3 -I -c 'import os, sys
+f = os.environ["B7_F"]; s = open(f).read(); o = os.environ["B7_OLD"]; n = os.environ["B7_NEW"]
+if s.count(o) != 1: sys.exit(1)
+open(f, "w").write(s.replace(o, n))'
+}
+# b7_mut <id> <file in reconcile/> <deciding cells> <twin cells> <receipt groups> <base flag>   (B7_OLD / B7_NEW carry the replacement)
+# <base flag> is the $(( )) conjunction of the B_B7<cell> flags the unmutated pass set for the deciding cell and its twins.
+b7_mut() {
+  local id="$1" f="$2" dec="$3" tw="$4" grp="$5" d="$WORK/b7/$1" c out ndead=0 note=""
+  mkdir -p "$WORK/b7" && cp -R "$B7_RECON" "$d" || { bad "$id FIXTURE BROKEN: could not copy reconcile/"; return; }
+  [ -f "$d/preclassify.sh" ] && [ -f "$d/derivation-differential.sh" ] || { bad "$id FIXTURE BROKEN: the copied reconcile/ lacks a sibling the subject resolves beside itself"; return; }
+  if ! b7_sub "$d/$f" || cmp -s "$B7_RECON/$f" "$d/$f"; then bad "$id FIXTURE BROKEN: the mutation did not apply exactly once to $f, so it is not scored"; return; fi
+  bash -n "$d/$f" || { bad "$id FIXTURE BROKEN: the mutated $f does not parse"; return; }
+  out="$(TMPDIR="$WORK" bash "$B7_RCPT" "$d" "$READER" "$grp" 2>&1)"
+  for c in $dec; do [ "$(b7_state "$out" "$c")" = FAIL ] || { ndead=1; note="$note deciding cell $c read $(b7_state "$out" "$c");"; }; done
+  for c in $tw; do [ "$(b7_state "$out" "$c")" = ok ] || { ndead=1; note="$note twin cell $c read $(b7_state "$out" "$c");"; }; done
+  if [ "$ndead" = 0 ]; then mutant_killed "$6" "$id" "$id killed: deciding cell(s) $dec failed, twin(s) $tw held"
+  else bad "$id SURVIVED or ENTANGLED:$note"; fi
+}
+# M1 join-only: record mode stops widening the set, so a derivation reading a changed file it does not name is never run.
+B7_OLD='[ "$OWED_SET" -eq 1 ] && VD_ALL=1' B7_NEW='[ "$OWED_SET" -eq 1 ] && VD_ALL=0'
+b7_mut BL706-M1 derivation-differential.sh b "a c" "bd a c" "$(( ${B_B7b:-0} && ${B_B7a:-0} && ${B_B7c:-0} ))"
+# M2 exit 2 swallowed: apply.sh reads a refusal as exit 0, so no DECISION row is drawn.
+B7_OLD='case "$dd_rc" in' B7_NEW='case "$((dd_rc == 2 ? 0 : dd_rc))" in'
+b7_mut BL706-M2 apply.sh e "a b" "a bd e" "$(( ${B_B7e:-0} && ${B_B7a:-0} && ${B_B7b:-0} ))"
+# M3 call before the writes: the whole call block moves above the phases that write the tree.
+B7_OLD='DD_HELPER="$SELF/derivation-differential.sh"' B7_NEW='DD_HELPER="$SELF/derivation-differential.sh"'
+B7_F="$WORK/b7-m3.py"
+printf '%s\n' 'import os, sys' 'f = os.environ["B7_F2"]; s = open(f).read()' \
+  'a = s.index("DD_HELPER=\"$SELF/derivation-differential.sh\""); b = s.index("fi  # ---- end of the resolution phases")' \
+  'blk = s[a:b]; s = s[:a] + s[b:]; m = "# THE DRIVER REPLACED ITSELF, AND THE OPERATOR IS TOLD SO"' \
+  'if s.count(m) != 1: sys.exit(1)' 'i = s.index(m); s = s[:i] + blk + s[i:]; open(f, "w").write(s)' > "$B7_F"
+mkdir -p "$WORK/b7" && cp -R "$B7_RECON" "$WORK/b7/BL706-M3" \
+  && B7_F2="$WORK/b7/BL706-M3/apply.sh" python3 -I "$B7_F" && ! cmp -s "$B7_RECON/apply.sh" "$WORK/b7/BL706-M3/apply.sh" && bash -n "$WORK/b7/BL706-M3/apply.sh"; B7_M3=$?
+if [ "$B7_M3" != 0 ]; then bad "BL706-M3 FIXTURE BROKEN: the call block did not move, so it is not scored"
+else
+  B7_M3OUT="$(TMPDIR="$WORK" bash "$B7_RCPT" "$WORK/b7/BL706-M3" "$READER" "g bd" 2>&1)"
+  if [ "$(b7_state "$B7_M3OUT" g)" = FAIL ] && [ "$(b7_state "$B7_M3OUT" b)" = ok ]; then
+    mutant_killed "$(( ${B_B7g:-0} && ${B_B7b:-0} ))" BL706-M3 "BL706-M3 killed: with the call above the writes the relocation's break is missed (cell g failed), while a derivation the earlier phases break is still found (cell b held)"
+  else bad "BL706-M3 SURVIVED or ENTANGLED: cell g read $(b7_state "$B7_M3OUT" g), cell b read $(b7_state "$B7_M3OUT" b)"; fi
+fi
+# M4 dedup removed: a second run of the same range appends a duplicate OWED row.
+B7_OLD="!((\$2 SUBSEP \$6) in S)'" B7_NEW="1'"
+b7_mut BL706-M4 derivation-differential.sh d b "bd" "$(( ${B_B7d:-0} && ${B_B7b:-0} ))"
+# M5 empty-join record skipped: a pull with no fence in scope leaves no record.
+B7_OLD='    make_record
+    print_dropped
+    say_row INFO join' B7_NEW='    print_dropped
+    say_row INFO join'
+b7_mut BL706-M5 derivation-differential.sh c a "a c" "$(( ${B_B7c:-0} && ${B_B7a:-0} ))"
+# M6 apply.sh no longer clears an inherited VD_ALL before its own WORKLIST join.
+B7_OLD='  unset VD_ALL
+  vd_join "$DIST" "$BASE" "$THEIRS" "$VD_ART"' B7_NEW='  vd_join "$DIST" "$BASE" "$THEIRS" "$VD_ART"'
+b7_mut BL706-M6 apply.sh h a "a h" "$(( ${B_B7h:-0} && ${B_B7a:-0} ))"
+# M7 the helper no longer clears an inherited VD_ALL before its non-record join.
+B7_OLD='unset VD_ALL
+[ "$OWED_SET" -eq 1 ] && VD_ALL=1' B7_NEW='[ "$OWED_SET" -eq 1 ] && VD_ALL=1'
+b7_mut BL706-M7 derivation-differential.sh h a "a h" "$(( ${B_B7h:-0} && ${B_B7a:-0} ))"
+# M8 the NEGATIVE: the call is deleted, which is what the apply was before this change. No record is left.
+B7_OLD='if [ -d "$VD_ART" ] && [ -f "$VD_VALIDATOR" ]; then
+  if [ ! -f "$DD_HELPER" ]; then' B7_NEW='if false; then
+  if [ ! -f "$DD_HELPER" ]; then'
+b7_mut BL706-M8 apply.sh a h "a h" "$(( ${B_B7a:-0} && ${B_B7h:-0} ))"
+# M9 no fold: a moved-path hit that the differential finds newly failing draws BOTH the held WORKLIST artifact-derivations row and the -owed row.
+B7_OLD='          if [ -n "$DD_OLD_ROW" ]; then
+            # ONE ROW PER CAUSE: a fence named' B7_NEW='          if false; then
+            # ONE ROW PER CAUSE: a fence named'
+b7_mut BL706-M9 apply.sh j b "bd j" "$(( ${B_B7j:-0} && ${B_B7b:-0} ))"
+# M10 duplicate scope refusal not suppressed: a scope-classifier failure draws -unscoped AND the -differential refusal.
+B7_OLD='          if [ "$dd_dup" = 0 ]; then' B7_NEW='          if true; then'
+b7_mut BL706-M10 apply.sh k e "k e" "$(( ${B_B7k:-0} && ${B_B7e:-0} ))"
+# M11 the tree-moved test skips ignored files again: the short-circuit records 0 where the full differential finds a break.
+B7_OLD='ls-files --others 2>/dev/null)" || _tm_u' B7_NEW='ls-files --others --exclude-standard 2>/dev/null)" || _tm_u'
+b7_mut BL706-M11 derivation-differential.sh i f "i f" "$(( ${B_B7i:-0} && ${B_B7f:-0} ))"
+# M12 the minted log name is not passed: the record carries the helper default, a name no log has.
+B7_OLD=' --record-owed "$DD_RECORD" --log-name "$DD_LOG" 2>&1)"' B7_NEW=' --record-owed "$DD_RECORD" 2>&1)"'
+b7_mut BL706-M12 apply.sh l "b d" "bd" "$(( ${B_B7l:-0} && ${B_B7b:-0} && ${B_B7d:-0} ))"
+# M13 the base-root hand remedy drops --base-root.
+B7_OLD='            base-root:*) dd_hand=' B7_NEW='            base-rootX:*) dd_hand='
+b7_mut BL706-M13 apply.sh e2 e "e" "$(( ${B_B7e2:-0} && ${B_B7e:-0} ))"
 
 # ---- G: the callers (rulebook prose) --------------------------------------------------------------
 # The prose-presence arms for the three callers lived in a retired dist-only mutation battery: on a
