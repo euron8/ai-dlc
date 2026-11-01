@@ -5,5 +5,4 @@
 # none is ever added. The rows are the output of `bash scripts/validate-mutant-kills.sh --derive`,
 # never typed: 127 at origin/main 7c8a88fd7, less check-22-spawn-ledger, migrated in the change
 # that shipped the arm.
-divergence-hard-block
 postcompact-rulebook-recovery

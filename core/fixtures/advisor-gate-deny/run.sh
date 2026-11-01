@@ -43,7 +43,7 @@ printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 # NET_CELLS=1 for the shipped hook only: rr-never pays its ADVISOR_GATE_NET-shortened safety net once, here (lib.sh REREAD).
 GOT="$(NET_CELLS=1 score "$HOOK" "$W/failed.shipped")"
-# B_SHIP, the base flag the BL-868 noid-wait kill is gated on, is raised only in this arm's passing branch.
+# B_SHIP, the base flag both mutant kills are gated on, is raised only in this arm's passing branch (BL-828).
 B_SHIP=0
 if [ -z "$GOT" ]; then
   B_SHIP=1
@@ -87,11 +87,10 @@ else
   else
     # Per push: the deciding arm REREAD (via the netdef read; SCORE_ARMS names no cell arm, so no cell
     # is driven) must fail and the twin UNAV must stay green. The base flag is the shipped pass.
-    _base=0; [ -z "$GOT" ] && _base=1
     MUTD="$(SCORE_ARMS="NONE" score "$MUT/hook-netcap10.sh" "$W/failed.netcap10")"
     TWIN="$(SCORE_ARMS="UNAV" score "$MUT/hook-netcap10.sh" "$W/failed.netcap10t")"
     if [ "$MUTD" = REREAD ] && grep -qx netdef "$W/failed.netcap10"; then
-      mutant_killed "$_base" netcap10 "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap"
+      mutant_killed "${B_SHIP:-0}" netcap10 "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap"
     else bad "mutant netcap10: expected REREAD via netdef, got [$MUTD] cells [$(cells_of "$W/failed.netcap10")]"; fi
     # score() always runs the netdef read, so the twin's log holds exactly `netdef` when no UNAV cell tripped.
     [ "$(cells_of "$W/failed.netcap10t")" = netdef ] && ok "T-netcap10 twin UNAV stays GREEN under mutant netcap10 (only the netdef read, REREAD, trips)" \

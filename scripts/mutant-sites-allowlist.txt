@@ -1,16 +1,4 @@
-advisor-gate-deny	-	1	mutant_killed "$_base" netcap10 "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap"
 backlog-receipt-binding	score	1	if "arm_$a" "$m"; then mutant_killed "$f" "$m" "$3"
-emit-report-refusal	-	1	mutant_killed "$(( B_MX0 && $([ "$(armv ctl "$dec")" = 0 ] && echo 1 || echo 0) && $([ "$(armv ctl "$twin")" = 0 ] && echo 1 || echo 0) ))" "$name" "mutant [$name] KILLED by [$dec]; twin [$twin] holds"
-fold-architect-ledger-join	-	1	mutant_killed "$B_SEAM" PROBE-STUB "[PROBE-refuses] a gate whose self-probe fails refuses with exit 2 and says so end to end; a gate that skipped or deleted the probe call would answer rc 0"
-fold-architect-ledger-join	-	1	mutant_killed "$B_SEAM" SEAM-INVERTED "[SEAM-mutant] a gate that skips its self-probe WITHOUT the flag is caught: its end-to-end run carries the banner, the real one does not"
 gate-remediation-deny	mx_kill	1	if [ "$4" = 1 ]; then mutant_killed "$1" "$2" "$5"; else bad "$2 SURVIVED: $5"; fi
-gate-resume	-	1	mutant_killed "$([ "$B_F2B$B_F2C$B_F2E" = 111 ] && echo 1 || echo 0)" m9 "mutant m9: a loose <word>- regex opens deploy-validate-s304-... (rc 0) and its text no longer equals the schema's pattern -- (b) and (e) kill it"
-gate-resume	-	1	mutant_killed "$([ -z "$_m5real" ] && echo 1 || echo 0)" m5 "mutant m5: reverting 'current' to a directory mtime scan makes an unopened, never-armed ledger (m5-new) read as the live gate, where the real script correctly reports no gate in flight"
-gate-resume	b457_score	1	mutant_killed "$B457_FLAG" "b457-$tag" "BL-457 mutant b457-$tag ($tag) $what -- killed by ${dec}, twin(s) [${twins}] hold"
 prepush-pool-depth	finish_mutant	1	if [ "$3" = 1 ]; then mutant_killed "$1" "$2" "$4"; else bad "$5"; fi
 readset-stage1-verdict	smut	1	if [ "$(world_hit "$dst" "$w")" = 1 ]; then mutant_killed "$flag" "$name" "mutant $name KILLED on $w (applied; twin $twin green)"; else bad "mutant $name SURVIVED on $w"; fi
-spec-join-integrity	mut	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-spec-join-integrity	mut2	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-spec-join-integrity	mut2_says	1	if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-spec-join-integrity	mut_says	1	if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
-suite-dispatch-order	score_mutant	1	mutant_killed "$B_ALL" "$m" "KILL $m: the deciding arm $dec fails under the mutant ($(mutant_what "$m"))"

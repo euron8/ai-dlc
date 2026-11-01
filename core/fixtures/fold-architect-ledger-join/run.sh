@@ -971,9 +971,12 @@ expect Dc-reader-lives 2 "FAIL: variant disagreement: snapshot says carry-over, 
 mkworld 313; oneshot "$SLOT/$ONE"
 ( cd "$W" && bash "$VSL" --probe-from-caller --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.seam" 2>&1
 ( cd "$W" && bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.e2e" 2>&1
+# B_SEAM, the base flag both seam mutants are gated on, is raised only by this arm's pass (BL-828): the
+# unmutated gate carries the banner on the seam run and none end to end.
+B_SEAM=0
 if [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && [ "$(sed -n 2p "$WORK/s1.seam")" = "$(sed -n 1p "$WORK/s1.e2e")" ] \
    && ! grep -qF 'PROBE-SKIPPED-BY-CALLER' "$WORK/s1.e2e"; then
-  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"
+  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"; B_SEAM=1
 else bad "[SEAM-banner] --probe-from-caller banner on the seam run and none end to end -- seam1='$(sed -n 1p "$WORK/s1.seam")' e2e1='$(sed -n 1p "$WORK/s1.e2e")'"; fi
 
 # S2 (no shipped caller passes --probe-from-caller) lives in derived-fence-binding, which is
@@ -987,8 +990,6 @@ sed 's/"\${FA_SKIP_PROBE:-0}" = 1/"${FA_SKIP_PROBE:-0}" != 1/' "$VSL" > "$MUTD/v
 if cmp -s "$VSL" "$MUTD/validate-spawn-ledger.sh"; then echo "FIXTURE BROKEN: the SEAM mutant's sed did not apply" >&2; exit 1; fi
 [ -f "$MUTD/validate-provenance-block.sh" ] || { echo "FIXTURE BROKEN: the mutant copy lacks its sibling" >&2; exit 1; }
 ( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s3.mut" 2>&1
-# The base flag: the real end-to-end run carried NO banner (the unmutated gate behaves as base).
-B_SEAM=0; [ "$(sed -n 1p "$WORK/s1.e2e")" != "$SEAM_BANNER" ] && [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && B_SEAM=1
 # Cells. SEAM-mutant: the end-to-end run of the mutant carries the banner. SEAM-verdict (the twin): with
 # the banner line dropped, the mutant's output equals the real end-to-end output, so the verdict itself is intact.
 c_mutant=0; [ "$(sed -n 1p "$WORK/s3.mut")" = "$SEAM_BANNER" ] && c_mutant=1

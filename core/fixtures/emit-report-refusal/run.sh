@@ -815,8 +815,10 @@ while IFS='|' read -r name p dec twin; do
   elif [ "$dv" = 0 ]; then bad "mutant [$name] SURVIVED its deciding arm [$dec] -- the kill moved; re-measure with --matrix"
   elif [ "$tv" = 1 ]; then bad "mutant [$name]: twin [$twin] FAILS too -- the kill spread past the recorded matrix; re-measure with --matrix"
   elif ! kobs_ok "$name" "$p"; then bad "mutant [$name] tripped [$dec] without its defect's observable -- the kill is the harness's, not the mutation's"
+  elif [ "$(armv ctl "$dec")" != 0 ] || [ "$(armv ctl "$twin")" != 0 ]; then
+    bad "FIXTURE BROKEN: MUTANT $name not scored -- the unmutated copy does not hold its deciding [$dec] or twin [$twin] arm, so its kill would read the seed failing"
   else
-    mutant_killed "$(( B_MX0 && $([ "$(armv ctl "$dec")" = 0 ] && echo 1 || echo 0) && $([ "$(armv ctl "$twin")" = 0 ] && echo 1 || echo 0) ))" "$name" "mutant [$name] KILLED by [$dec]; twin [$twin] holds"
+    mutant_killed "${B_MX0:-0}" "$name" "mutant [$name] KILLED by [$dec]; twin [$twin] holds"
   fi
 done <<EOF
 $MT

@@ -338,7 +338,9 @@ run_world() { "w_$1" "$2" "$3"; }         # run_world <world> <tag> <hook>
 
 # ---------------------------------- THE SHIPPED HOOK, EVERY ARM ----------------------------------
 for _w in lpt bad merge prune red; do run_world "$_w" base "$HOOK"; done
-B_ALL=1; [ "$fails" -eq 0 ] || B_ALL=0
+# B_ALL, the base flag every mutant kill is gated on, is raised only beside its own ok (BL-828).
+B_ALL=0
+if [ "$fails" -eq 0 ]; then ok "BASE: the shipped hook passed every arm of every world, so each mutant kill below reads the mutation"; B_ALL=1; fi
 
 # CONTROL, and it runs BEFORE any mutant verdict. An UNMUTATED COPY of the hook, driven through the same
 # harness the mutants use, must be green on a one-fixture tree: if the harness itself were what fails,
@@ -450,8 +452,8 @@ fi
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are emitted from inside a
 # conditional: an assertion that never executed prints nothing, and a short green report reads exactly
-# like a complete one. 11 shipped-hook arms + 1 control + 8 kills + 8 twins + 1 plain-run arm.
-EXPECTED_ASSERTIONS=29
+# like a complete one. 11 shipped-hook arms + 1 control + 1 base + 8 kills + 8 twins + 1 plain-run arm.
+EXPECTED_ASSERTIONS=30
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

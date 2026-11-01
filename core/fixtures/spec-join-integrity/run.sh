@@ -199,7 +199,8 @@ want 0 "OVER-FIRE CONTROL: a healthy spec set passes every join" \
 # THE BASE PASS every mutant verdict below is gated on: the healthy set exited 0 AND printed its
 # PASS line (rc 0 alone is also what a subject replaced by `exit 0` produces). Read from the capture.
 cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
-if [ "$CAPRC" -eq 0 ] && grep -qF ": PASS (" <<<"$CAPOUT"; then B_BASE=1; fi
+if [ "$CAPRC" -eq 0 ] && grep -qF ": PASS (" <<<"$CAPOUT"; then ok "BASE: the healthy set exits 0 and prints its PASS line, so every mutant kill below reads the mutation"; B_BASE=1
+else bad "BASE: the healthy set did not exit 0 with its PASS line (rc=$CAPRC), so no mutant kill below can be scored"; fi
 # Mutant registry: each mutant's script is kept under $R/mx so the matrix and the twin run can
 # drive it after a later mutant has reused its working name. The anchor sibling sits beside them.
 mkdir -p "$R/mx"
