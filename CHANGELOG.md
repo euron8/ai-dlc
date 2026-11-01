@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.984.0] - 2026-10-31
+
+### readset-skip-b's lock start-time worlds force the perl fallback's day, so its verdict no longer depends on the calendar date (BL-868)
+
+- **Fix.** `core/fixtures/readset-skip/run.sh` (shard b, unit `loc`) forces the day the perl sysctl fallback prints in the ps-stubbed worlds, through a `PJDay.pm` loaded with `PERL5OPT`. The `psfail` world is forced to day 19 (unpadded) and a new `psfailpad` world to day 5 (padded, `Nov  5`). Each world's lock is written by the real writer and judged under the same forced day. Guards refuse the run unless the padded string differs from its re-joined form, the unpadded one equals it, and each writer recorded the forced day with the live start's time and year. The kill sets are fixed: `nonorm` moves `right psfailpad`, `nofallback` moves `psfail psfailpad`, and `readerself` moves `right psfail psfailpad`. `core/fixtures/readset-skip-b/invocations.decl` goes from 477 to 495.
+- **Why.** `readset_pid_start` in `.githooks/pre-push` re-joins its words with an unquoted `set -- $x`, and the hook is correct. `ps -o lstart=` always pads, but perl's scalar `gmtime` pads the day only on days 1-9. So mutant `nonorm` also moved `psfail` from the 1st to the 9th of each month, and every push from 2026-11-01T00:00Z was red with `nonorm moved 'right psfail', want exactly 'right'`.
+- **Held by.** The fixture itself, on every push: the `psfailpad` world, the two discrimination guards and the fixed kill sets. Proof of the fix, a forced-date differential (not shipped). With the day forced to 5, the base copy reads rc 1 with that line and the fix reads rc 0. With the day forced to 19, both read rc 0, and the fix's output is identical on both days.
+- **Consumer reach.** The fixture ships, and only its verdict changes. `.githooks/pre-push` is unchanged.
+
 ## [0.983.0] - 2026-10-31
 
 ### I83 and I84 read their corpus with one grep per predicate, and refuse an unreadable file and a self-reader (BL-898)

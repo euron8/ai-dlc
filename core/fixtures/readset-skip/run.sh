@@ -84,10 +84,10 @@
 # MUTANT-MATRIX nostart decides=loc-pj-wrong twins=loc-pj-right
 # MUTANT-MATRIX nopin decides=loc-pj-split twins=loc-pj-right
 # MUTANT-MATRIX psstale decides=loc-pj-bothfail twins=loc-pj-right
-# MUTANT-MATRIX nofallback decides=loc-pj-psfail twins=loc-pj-right
+# MUTANT-MATRIX nofallback decides=loc-pj-psfail,loc-pj-psfailpad twins=loc-pj-right
 # MUTANT-MATRIX silentempty decides=loc-pw twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
-# MUTANT-MATRIX nonorm decides=loc-pj-right twins=loc-pj-wrong
-# MUTANT-MATRIX readerself decides=loc-pj-right,loc-pj-psfail twins=loc-pj-wrong
+# MUTANT-MATRIX nonorm decides=loc-pj-right,loc-pj-psfailpad twins=loc-pj-wrong
+# MUTANT-MATRIX readerself decides=loc-pj-right,loc-pj-psfail,loc-pj-psfailpad twins=loc-pj-wrong
 # MUTANT-MATRIX helperself decides=loc-pj-right twins=loc-pj-wrong
 # MUTANT-MATRIX knob decides=loc-k0 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
 # MUTANT-MATRIX lockall decides=loc-lk1 twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
@@ -1460,7 +1460,7 @@ if sg loc; then
 # Same-run base-pass flags (RULE 8): each is set to 1 ONLY in the passing branch of the unmutated arm its mutants guard.
 B_LOC_lc1=0; B_LOC_lc2=0; B_LOC_h3=0; B_LOC_pw=0; B_LOC_k0=0; B_LOC_lk1=0; B_LOC_lk2=0; B_LOC_e=0; B_LOC_pt0=0; B_LOC_pt1=0; B_LOC_ptw=0
 B_LOC_a=0; B_LOC_f=0; B_LOC_rr=0; B_LOC_k=0; B_LOC_r9=0; B_LOC_r1=0; B_LOC_r7=0; B_LOC_t1=0; B_LOC_t4=0; B_LOC_t4w=0
-B_PJ_wrong=0; B_PJ_right=0; B_PJ_legacylive=0; B_PJ_legacydead=0; B_PJ_psfail=0; B_PJ_bothfail=0; B_PJ_split=0
+B_PJ_wrong=0; B_PJ_right=0; B_PJ_legacylive=0; B_PJ_legacydead=0; B_PJ_psfail=0; B_PJ_psfailpad=0; B_PJ_bothfail=0; B_PJ_split=0
 LT_CAN=1
 { command -v sandbox-exec >/dev/null 2>&1 && [ -x /usr/bin/log ] && command -v python3 >/dev/null 2>&1; } || LT_CAN=0
 sha_of() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
@@ -2200,9 +2200,17 @@ fi
 #   right       the real writer's lock for that pid, judged under LC_ALL=C TZ=UTC0     -> held, silent
 #   legacylive  `pid epoch` only, as an older hook wrote it, live pid                  -> held, silent
 #   legacydead  the same with a dead pid                                               -> stale, silent
-#   psfail      the real writer's lock, judged with a PATH `ps` that exits 1           -> held, silent
+#   psfail      the real writer's lock, written AND judged with a PATH `ps` that exits 1 -> held, silent
 #               (BL-686: the helper's perl sysctl fallback reads the same start, as it must under
-#               sandbox-exec, which refuses the setuid /bin/ps)
+#               sandbox-exec, which refuses the setuid /bin/ps), the fallback's day FORCED to 19
+#   psfailpad   the same with the fallback's day FORCED to 5                          -> held, silent
+# THE FALLBACK'S DAY IS FORCED, NEVER THE CLOCK'S (BL-868). `perl`'s scalar gmtime pads a day of 1-9
+# ("Nov  5") and not 10-31 ("Nov 19"), so whether the helper's word re-join matters on the fallback
+# path is a property of the lock pid's start date. Left to the clock, mutant nonorm moved `psfail` on
+# days 1-9 only. PJDay.pm (built below, loaded through PERL5OPT in these two worlds alone) shifts the
+# fallback's gmtime to a chosen day of the same month, so every run holds one padded and one unpadded
+# fallback string, and a guard refuses unless the padded raw string differs from its re-joined form
+# and the unpadded one does not.
 #   bothfail    the same, with a PATH `perl` that exits 1 as well                    -> held, announced
 #   split       written under de_DE/Asia/Tokyo, judged under fr_FR/America/Los_Angeles -> whatever `right` reads
 # `split` is scored RELATIVE to `right` under the same lib, so a mutant that breaks every held-with-
@@ -2243,14 +2251,13 @@ grep -q '^readset_lock_write() {' "$PJ_SEEDLIB" || broken "could not extract rea
 kill -0 "$LOCKPID" 2>/dev/null || broken "the lock-pid sleep $LOCKPID is not alive"
 PJ_LIVE="$( . "$PJ_SEEDLIB"; readset_pid_start "$LOCKPID" )" || PJ_LIVE=""
 [ -n "$PJ_LIVE" ] || broken "readset_pid_start printed nothing for the live lock pid $LOCKPID -- no world below can reach the start comparison"
-for _w in wrong right legacylive legacydead psfail bothfail split; do mkdir -p "$PJW/j.$_w.lock" || broken "could not create the $_w lock world"; done
+for _w in wrong right legacylive legacydead psfail psfailpad bothfail split; do mkdir -p "$PJW/j.$_w.lock" || broken "could not create the $_w lock world"; done
 printf '%s %s\n%s\n' "$LOCKPID" "$(date +%s)" 'Thu Jan  1 00:00:00 1970' > "$PJW/j.wrong.lock/pid"
 _s="$(sed -n 2p "$PJW/j.wrong.lock/pid")"; _s="$(set -f; set -- $_s; printf '%s' "$*")"
 [ "$_s" != "$PJ_LIVE" ] || broken "the wrong-start seed '$_s' equals the live start '$PJ_LIVE' -- the world cannot discriminate"
 ( . "$PJ_SEEDLIB"; pj_write_lock "$LOCKPID" "$PJW/j.right.lock" )
 [ "$(sed -n 1p "$PJW/j.right.lock/pid" | cut -d' ' -f1)" = "$LOCKPID" ] && [ "$(sed -n 2p "$PJW/j.right.lock/pid")" = "$PJ_LIVE" ] \
   || broken "the real writer did not record pid $LOCKPID and its start '$PJ_LIVE': $(tr '\n' '/' < "$PJW/j.right.lock/pid")"
-cp "$PJW/j.right.lock/pid" "$PJW/j.psfail.lock/pid"
 cp "$PJW/j.right.lock/pid" "$PJW/j.bothfail.lock/pid"
 printf '%s %s\n' "$LOCKPID" "$(date +%s)" > "$PJW/j.legacylive.lock/pid"
 bash -c 'exit 0' & _dp=$!; wait "$_dp"
@@ -2270,7 +2277,43 @@ _pf="$( . "$PJ_SEEDLIB"; PATH="$PJW/psbin:$PATH"; readset_pid_start "$LOCKPID" )
 PJ_PERL=1
 if [ "$_pf" != "$PJ_LIVE" ]; then
   PJ_PERL=0
-  printf '  SKIP  psfail world, BL-686 MUTANT nofallback, and BL-463 MUTANT readerself'"'"'s psfail cell: with ps stubbed the perl fallback read '"'"'%s'"'"' for the lock pid, not its start -- no usable perl here (it is optional)\n' "$_pf"
+  printf '  SKIP  psfail and psfailpad worlds, BL-686 MUTANT nofallback, and the psfail cells of BL-463 MUTANTs readerself and nonorm: with ps stubbed the perl fallback read '"'"'%s'"'"' for the lock pid, not its start -- no usable perl here (it is optional)\n' "$_pf"
+fi
+# THE FORCED FALLBACK DAY (BL-868). PJDay.pm shifts perl's gmtime to day N of the same month, so the
+# psfail world (N=19) and the psfailpad world (N=5) hold an unpadded and a padded fallback string on
+# every calendar day. Each world is written by the real writer and judged under the same N.
+mkdir -p "$PJW/psbin/p5" || broken "could not create the PJDay module dir"
+cat > "$PJW/psbin/p5/PJDay.pm" <<'PM'
+package PJDay;
+sub import {
+  my $d = $_[1];
+  no warnings;
+  *CORE::GLOBAL::gmtime = sub (;$) {
+    my $t = @_ ? $_[0] : time;
+    if (wantarray) { return CORE::gmtime($t); }
+    my $s = scalar CORE::gmtime($t);
+    substr($s, 8, 2) = sprintf("%2d", $d);
+    return $s;
+  };
+}
+1;
+PM
+if [ "$PJ_PERL" = 1 ]; then
+  # DISCRIMINATION GUARD: the padded day's raw fallback text must differ from its re-joined form, and the
+  # unpadded day's must not -- else the two worlds no longer separate a re-join mutant from a right helper.
+  _r5="$(PERL5LIB="$PJW/psbin/p5" PERL5OPT=-MPJDay=5 perl -e 'print scalar gmtime')"
+  _r19="$(PERL5LIB="$PJW/psbin/p5" PERL5OPT=-MPJDay=19 perl -e 'print scalar gmtime')"
+  _n5="$(set -f; set -- $_r5; printf '%s' "$*")"; _n19="$(set -f; set -- $_r19; printf '%s' "$*")"
+  [ -n "$_r5" ] && [ "$_r5" != "$_n5" ] && [ -n "$_r19" ] && [ "$_r19" = "$_n19" ] \
+    || broken "the forced fallback days do not discriminate: day 5 raw '$_r5' vs joined '$_n5', day 19 raw '$_r19' vs joined '$_n19'"
+  for _w in psfail:19 psfailpad:5; do
+    ( . "$PJ_SEEDLIB"; PATH="$PJW/psbin:$PATH"; PERL5LIB="$PJW/psbin/p5"; PERL5OPT="-MPJDay=${_w#*:}"; export PERL5LIB PERL5OPT
+      pj_write_lock "$LOCKPID" "$PJW/j.${_w%%:*}.lock" )
+    _s="$(sed -n 2p "$PJW/j.${_w%%:*}.lock/pid")"
+    # the writer recorded the forced day and the lock pid's own time of day and year
+    [ "$(set -f; set -- $_s; printf '%s|%s|%s' "$3" "$4" "$5")" = "${_w#*:}|$(set -f; set -- $PJ_LIVE; printf '%s|%s' "$4" "$5")" ] \
+      || broken "the ${_w%%:*} world's writer did not record day ${_w#*:} of the live start '$PJ_LIVE': '$_s'"
+  done
 fi
 # ANTI-SKIP: the SKIP above must be UNREACHABLE where the fallback has what it needs, or a broken
 # detector would skip these cells everywhere. The precondition is computed apart from the detector
@@ -2278,8 +2321,8 @@ fi
 lt_arm
 _uname_s="$(uname -s 2>/dev/null)" || broken "anti-SKIP: uname -s failed, so the Darwin gate would read 'not Darwin' and print ok vacuously"
 if command -v perl >/dev/null 2>&1 && [ "$_uname_s" = Darwin ]; then
-  [ "$PJ_PERL" = 1 ] && ok "anti-SKIP: perl is on PATH on Darwin, and the psfail world, nofallback and readerself's psfail cell run (BL-686)" \
-    || bad "anti-SKIP: perl is on PATH on Darwin, yet the psfail world, BL-686 MUTANT nofallback and BL-463 MUTANT readerself's psfail cell were SKIPPED -- the fallback detector is broken"
+  [ "$PJ_PERL" = 1 ] && ok "anti-SKIP: perl is on PATH on Darwin, and the psfail and psfailpad worlds, BL-686 MUTANT nofallback, and the psfail cells of BL-463 MUTANTs readerself and nonorm run" \
+    || bad "anti-SKIP: perl is on PATH on Darwin, yet the psfail and psfailpad worlds, BL-686 MUTANT nofallback, and the psfail cells of BL-463 MUTANTs readerself and nonorm were SKIPPED -- the fallback detector is broken"
 else
   ok "anti-SKIP: no perl on PATH, or not Darwin -- the BL-686 SKIP is allowed here"
 fi
@@ -2315,7 +2358,8 @@ if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "n
 case "$w" in
   right) export LC_ALL=C TZ=UTC0 ;;
   split) export LANG=fr_FR.UTF-8 LC_ALL=fr_FR.UTF-8 TZ=America/Los_Angeles ;;
-  psfail) PATH="$psbin:$PATH"; [ "$(command -v ps)" = "$psbin/ps" ] || exit 7 ;;
+  psfail|psfailpad) PATH="$psbin:$PATH"; [ "$(command -v ps)" = "$psbin/ps" ] || exit 7
+    PERL5LIB="$psbin/p5"; PERL5OPT=-MPJDay=19; [ "$w" = psfail ] || PERL5OPT=-MPJDay=5; export PERL5LIB PERL5OPT ;;
   bothfail) PATH="$psbin/both:$PATH"; [ "$(command -v ps)" = "$psbin/both/ps" ] && [ "$(command -v perl)" = "$psbin/both/perl" ] || exit 7 ;;
 esac
 readset_lock_stale "$lk" > "$o/out" 2>&1; echo "$?" > "$o/rc"
@@ -2334,12 +2378,12 @@ pj_judge() { # <lib> <world> -> "<stale|held|err<rc>>|<ann|noann>"; refuses on a
   case "$rc" in 0) rc=stale ;; 1) rc=held ;; *) rc="err${rc:-none}" ;; esac
   printf '%s|%s' "$rc" "$(grep -q 'could not read the start time of lock pid' "$o/out" && echo ann || echo noann)"
 }
-PJ_WORLDS="wrong right legacylive legacydead psfail bothfail split"
+PJ_WORLDS="wrong right legacylive legacydead psfail psfailpad bothfail split"
 [ "$PJ_PERL" = 1 ] || PJ_WORLDS="wrong right legacylive legacydead bothfail split"
 pj_want() { # <world> <right's result under the same lib>
   case "$1" in
     wrong|legacydead) printf 'stale|noann' ;;
-    right|legacylive|psfail) printf 'held|noann' ;;
+    right|legacylive|psfail|psfailpad) printf 'held|noann' ;;
     bothfail) printf 'held|ann' ;;
     split) printf '%s' "$2" ;;
   esac
@@ -2363,7 +2407,8 @@ pj_arm wrong "lock start: a LIVE pid whose recorded start time is not its own (a
 pj_arm right "  the real writer's lock for a live pid is HELD, with no ps-fallback announcement"
 pj_arm legacylive "  a two-field lock from an older hook with a live pid is HELD, judged as before, with no announcement"
 pj_arm legacydead "  a two-field lock from an older hook with a dead pid is STALE"
-[ "$PJ_PERL" = 1 ] && pj_arm psfail "  a ps that fails (PATH stub exiting 1, as sandbox-exec refuses the setuid /bin/ps) still reads the start through the perl fallback: HELD, silent (BL-686)"
+[ "$PJ_PERL" = 1 ] && pj_arm psfail "  a ps that fails (PATH stub exiting 1, as sandbox-exec refuses the setuid /bin/ps) still reads the start through the perl fallback: HELD, silent (BL-686), fallback day forced to 19 (unpadded)"
+[ "$PJ_PERL" = 1 ] && pj_arm psfailpad "  the same with the fallback's day forced to 5, which perl pads ('Nov  5'): HELD, silent -- the helper re-joins the fallback's words too (BL-868)"
 pj_arm bothfail "  a ps AND a perl that fail leave a live lock HELD and say so in one line"
 pj_arm split "  written under de_DE/Asia/Tokyo and judged under fr_FR/America/Los_Angeles, the lock reads as it does under C/UTC0"
 # Each mutant is a pm_copy of the pool block -- the one mutation path every mutant here uses -- with
@@ -2383,7 +2428,7 @@ pj_mut nostart '    [ "$c" != "$s" ] && return 0' '    :' wrong
 pj_mut nopin 'LC_ALL=C TZ=UTC0 ps -o lstart=' 'ps -o lstart=' split
 pj_mut psstale "alone\\n' \"\$p\"" "alone\\n' \"\$p\"; return 0" bothfail
 # BL-686: the perl sysctl fallback removed -- a failing ps is then announced, as under sandbox-exec before.
-[ "$PJ_PERL" = 1 ] && pj_mut nofallback '  [ -n "$x" ] || x="$(perl -e' '  [ -n "$x" ] || x="$(false -e' psfail
+[ "$PJ_PERL" = 1 ] && pj_mut nofallback '  [ -n "$x" ] || x="$(perl -e' '  [ -n "$x" ] || x="$(false -e' 'psfail psfailpad'
 # BL-686: the writer's guard removed -- it writes `pid epoch` and an EMPTY start line, silently, as
 # both writers did under a sandbox before. Killed by the no-perl writer arm.
 if PM_FN=readset_lock_write pm_copy silentempty 1 '  if s="$(readset_pid_start "$2")"; then' '  s="$(readset_pid_start "$2")"; if :; then'; then
@@ -2391,13 +2436,15 @@ if PM_FN=readset_lock_write pm_copy silentempty 1 '  if s="$(readset_pid_start "
   [ "$_pw" != "$PW_OK" ] && mutant_killed "$B_LOC_pw" silentempty "BL-686 MUTANT silentempty is KILLED by the no-perl writer arm: '$_pw'" \
     || bad "BL-686 MUTANT silentempty SURVIVED the no-perl writer arm: '$_pw'"
 fi
-pj_mut nonorm '  set -- $x' '  set -- "$x"' right
+# nonorm keeps `ps`'s column padding (always, so `right` dies) and perl's day padding, which exists only
+# on days 1-9: psfailpad (forced day 5) dies and psfail (forced day 19) does not, on every calendar day.
+pj_mut nonorm '  set -- $x' '  set -- "$x"' "$([ "$PJ_PERL" = 1 ] && echo 'right psfailpad' || echo right)"
 # readerself and helperself read the start of `$$` -- the judge -- in place of the lock pid. They
 # die on `right` only because the lock pid is the sleep and the judge's start is asserted different.
-# readerself dies on `psfail` too (BL-686): with ps stubbed the fallback still reads the judge's start
-# there, so the comparison is reached in both worlds. helperself does not, because the fallback reads
+# readerself dies on `psfail` and `psfailpad` too (BL-686): with ps stubbed the fallback still reads the
+# judge's start there, so the comparison is reached in all three worlds. helperself does not, because the fallback reads
 # its own `$1` and so the stubbed-ps world never runs the mutated `ps` line.
-pj_mut readerself 'if ! c="$(readset_pid_start "$p")"; then' 'if ! c="$(readset_pid_start "$$")"; then' "$([ "$PJ_PERL" = 1 ] && echo 'right psfail' || echo right)"
+pj_mut readerself 'if ! c="$(readset_pid_start "$p")"; then' 'if ! c="$(readset_pid_start "$$")"; then' "$([ "$PJ_PERL" = 1 ] && echo 'right psfail psfailpad' || echo right)"
 pj_mut helperself 'ps -o lstart= -p "$1"' 'ps -o lstart= -p "$$"' right
 fi # end of the ps-dependent start-time worlds
 if [ "$LT_CAN" = 1 ]; then
