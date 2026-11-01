@@ -5,3 +5,5 @@ core/scripts/validate-artifact-derivations.sh
 !core/scripts/wait-for-deliverable.sh
 !core/scripts/validate-adversarial-convergence.sh
 !core/scripts/wfd-start-of.sh
+# The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
+core/fixtures/lib/

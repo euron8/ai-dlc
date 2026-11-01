@@ -1,6 +1,4 @@
 advisor-gate-deny	-	1	mutant_killed "$_base" netcap10 "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap"
-artifact-derivations	bmut	1	n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
-artifact-derivations	bmut	1	n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by exactly [$want_set] (matrix); deciding [$dec], twin [$twin] green"
 backlog-receipt-binding	score	1	if "arm_$a" "$m"; then mutant_killed "$f" "$m" "$3"
 emit-report-refusal	-	1	mutant_killed "$(( B_MX0 && $([ "$(armv ctl "$dec")" = 0 ] && echo 1 || echo 0) && $([ "$(armv ctl "$twin")" = 0 ] && echo 1 || echo 0) ))" "$name" "mutant [$name] KILLED by [$dec]; twin [$twin] holds"
 fold-architect-ledger-join	-	1	mutant_killed "$B_SEAM" PROBE-STUB "[PROBE-refuses] a gate whose self-probe fails refuses with exit 2 and says so end to end; a gate that skipped or deleted the probe call would answer rc 0"

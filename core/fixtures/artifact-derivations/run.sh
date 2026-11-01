@@ -791,8 +791,10 @@ bat_base() {
 # for the mutant; it is consumed by this call.
 bmut() {
   local name="$1" dec="$2" twin="$3" want_set="$4"; shift 4
-  local M="$BAT_DIR/$name-$VBASE" bv="B_${dec//-/_}" got ran vfy="$BM_VERIFY" vok=1
+  local M="$BAT_DIR/$name-$VBASE" bv="B_${dec//-/_}" got ran vfy="$BM_VERIFY" vok=1 bf mx
   BM_VERIFY=""; [ "$want_set" = ALL ] && want_set="$BAT_RAN"
+  # The base-pass flags as command-substitution values, so the kill below is gated on a computed pair.
+  bf="$(printf '%s' "${!bv:-0}")"; mx="$(printf '%s' "${B_MX0:-0}")"
   if ! mut_copy "$M" "$@"; then bad "mutant $name DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return; fi
   if ! bash -n "$M" 2>/dev/null; then bad "mutant $name does not parse -- no verdict was scored"; return; fi
   n_mut=$((n_mut+1))
@@ -806,7 +808,7 @@ bmut() {
     elif [ "$twin" != "-" ] && in_set "$twin" "$got"; then bad "mutant $name: twin [$twin] is not green in the matrix"
     elif [ "$vok" -eq 0 ]; then bad "mutant $name: its presence check failed on the copy"
     else
-      n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by exactly [$want_set] (matrix); deciding [$dec], twin [$twin] green"
+      n_kill=$((n_kill+1)); mutant_killed "$([ "$bf" = 1 ] && [ "$mx" = 1 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by exactly [$want_set] (matrix); deciding [$dec], twin [$twin] green"
     fi
     return
   fi
@@ -819,7 +821,7 @@ bmut() {
   elif [ "$twin" != "-" ] && in_set "$twin" "$got"; then bad "mutant $name: twin [$twin] FAILS too -- the kill spread past the recorded matrix; re-measure with --matrix"
   elif [ "$vok" -eq 0 ]; then bad "mutant $name: its presence check failed on the copy"
   else
-    n_kill=$((n_kill+1)); mutant_killed "$(( ${!bv:-0} && ${B_MX0:-0} ))" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
+    n_kill=$((n_kill+1)); mutant_killed "$([ "$bf" = 1 ] && [ "$mx" = 1 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
   fi
 }
 
