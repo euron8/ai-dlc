@@ -16,8 +16,11 @@ head
 mkdir
 mktemp
 mv
+pgrep
+ps
 rm
 sed
+sleep
 sort
 tail
 tr
