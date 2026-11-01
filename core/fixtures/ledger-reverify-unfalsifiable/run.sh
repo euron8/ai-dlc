@@ -282,7 +282,11 @@ fi
 # run passes half the time by luck, which is worse than no assertion at all.
 # Each of these seven is its OWN run with NO memo: stability is the property, so every run must read the
 # blob itself (a cached answer would be one read seven times). In process, on the world as it stands.
-big_v() { inproc_run "$RV" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$2 ~ /PC-BIG/ {print $1; exit}'; }
+# CAPTURED, then read from a here-string (BL-867's shape): the PC-SH-* entries after PC-BIG each start
+# `bash -c` (ledger-reverify.sh's `cr_run ... bash -c "$sh_prog"`), so a reader that exits at the PC-BIG row
+# SIGPIPEs the writer partway through them and the counted start set moves with scheduling.
+big_v() { local o; o="$(inproc_run "$RV" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+          awk -F'\t' '$2 ~ /PC-BIG/ {print $1; exit}' <<<"$o"; }
 big="$(big_v)"
 if [ "$big" = "STILL-LIVE" ]; then
   ok "PC-BIG (needle in a >64KB file) → STILL-LIVE"
@@ -386,8 +390,9 @@ m_guard="$(grep -c 'if \[ -n "\$LEDGER_TOP" \]; then' "$MUT")"
 if [ "$m_strip" -ne 1 ] || [ "$m_fall" -ne 0 ] || [ "$m_guard" -ne 0 ]; then
   bad "FIXTURE BROKEN — partial mutation (strip=$m_strip want 1, fallback=$m_fall want 0, guard=$m_guard want 0); a half-reverted fix repairs itself and scores green"
 fi
-pcgood() { AI_DLC_RECONCILE_MEMO="$W2/memo" inproc_run "$1" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ${2:+"$2"} 2>/dev/null \
-             | awk -F'\t' '$2 ~ /PC-GOOD/ {print $1; exit}'; }
+# Captured before the reader, for big_v's reason: every PC-SH-* entry after PC-GOOD starts a counted `bash -c`.
+pcgood() { local o; o="$(AI_DLC_RECONCILE_MEMO="$W2/memo" inproc_run "$1" lr_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ${2:+"$2"} 2>/dev/null)"
+           awk -F'\t' '$2 ~ /PC-GOOD/ {print $1; exit}' <<<"$o"; }
 
 if [ "$(pcgood "$CTL")" != "STILL-LIVE" ] || [ "$(pcgood "$CTL" "$OUT_COPY")" != "STILL-LIVE" ]; then
   bad "FIXTURE BROKEN — the UNMUTATED copy in the mutant directory does not reproduce the fixed behaviour (got '$(pcgood "$CTL")' / '$(pcgood "$CTL" "$OUT_COPY")'), so the mutation below would score a false kill"
