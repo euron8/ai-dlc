@@ -105,7 +105,7 @@ ledger-rotate	core/skills/ai-dlc-update/reconcile/ledger-rotate.sh declares 51 s
 ledger-status-vocabulary	scripts/validate-enforcement-map.sh declares 11 start(s) against 0 cell(s)
 mutation-red-replay	core/scripts/validate-mutation-red.sh declares 52 start(s) against 0 cell(s)
 operator-request-capture	core/hooks/ai-dlc-pause.sh declares 9 start(s) against 0 cell(s)
-owed-derivations	core/skills/ai-dlc-update/reconcile/derivation-differential.sh declares 3 start(s) against 0 cell(s)
+owed-derivations	core/skills/ai-dlc-update/reconcile/derivation-differential.sh declares 20 start(s) against 0 cell(s); core/scripts/validate-artifact-derivations.sh declares 100 start(s) against 0 cell(s)
 party-wave-barrier	scripts/audit-party-wave-barrier.sh declares 23 start(s) against 0 cell(s)
 path-mapping-render	scripts/render-path-mapping.sh declares 23 start(s) against 0 cell(s)
 pause-hook-origin	core/hooks/ai-dlc-pause.sh declares 14 start(s) against 0 cell(s)

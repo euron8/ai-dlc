@@ -15,7 +15,6 @@
 # it recomputes the same value over the tree it is pushing.
 #
 # fixtures mapped: 2    entries: 54
-# OMITTED by the last run (always run): readset-stage1-verdict
 hook-registration-join	core
 hook-registration-join	core/.claude
 hook-registration-join	core/.git
@@ -70,24 +69,7 @@ retro-compliance-workflow	core/fixtures/retro-compliance-workflow/run.sh
 retro-compliance-workflow	core/fixtures/retro-compliance-workflow/seed.sh
 retro-compliance-workflow	core/schemas/provenance-block.json
 retro-compliance-workflow	core/scripts/validate-provenance-block.sh
-# digest adversarial-shard-merge 1f22dcec858d1b85c5bd786381f50dd4185a3cb4bc85d7d2cf30dbb580da7870
-# digest artifact-derivations 79fff633949d126f3fa65025bda6d9ce1b44007c65c338fa8ede555256f1edf4
-# digest backlog-real-ledger da79b5c78ea18e06c5089b43981963885e223f3889fa4f81f3987d42c7a50ce7
-# digest backlog-receipt-binding 47c957e46035b52995b44d4bee3846ccc76c5d8222480c67c03634dbe59c970d
-# digest content-seal bf7a5262075b47bdbe06874a83a61ed27eb35e7c58a9265f4952c1c2d8fbec8e
-# digest dispatch-model-guard 8cd53ebcc50060ff82fcaa7bb5bfd9f5914ca884587c7544ce47dc106550e4e0
-# digest gate-adjudication 7c41ed99d6dd4afb73a2e9566f409491319b586e3a2d545e00c315ccbeb820f6
-# digest gate-repair-record c6a81f006f08282be4cce0d7664735044ea821db00a054f397f264c1b56eeb8f
-# digest gate-series-rung a7d6a739e3ee1a3584dafad14a1f49a1d107600c236a649cb522d8d8cb488bc2
-# digest hook-registration-join c45c40848589cebd3e926e78188d9e8f48905ecc3fc0a7e6650dcc1d03ad11ea
-# digest ledger-reverify 9c63e67428ecd3dabf1febad2a8996cb6cb6db5f35ec8f385ff428fe544223f7
-# digest ledger-reverify-unfalsifiable 1f3960a13d6cd17740cca9a0ccb6bee5581e96c836fa4a666328ea51d920359e
-# digest postcompact-rulebook-recovery 42b5074ae5abe3353d99ec5d1c80bc2040d5ba2336ae40862d2b4234ef878537
-# digest push-drain-refusals 6fd879efe5892e21ea89ec4cc4de1d208d75aba38f659937dfb685a1738d248a
-# digest readset-skip 8437d253f055528bd3496e582a3ba21f61474b46924f99b3b7bfaf9547eacf09
-# digest remediator-shard-join 5b8a78320cd1e838b367a03c2f24c052c53c8b4a5f4a47809168cfbd8f63a851
-# digest retro-compliance-workflow 01d1f386a7ce52950c2d61f9e70071e4cb48d62931f3fe9732fa612b871c312e
-# digest review-shard-merge 888cfaf0aa5f3bfaf0e323ddb27756277de6a49c1f17a955a014483748c069d3
-# digest story-evidence-scaffold c00f3bd797f8a0d4400cb448ae899fcb48288fd21396b9c5e98b75a2ef3f0bb3
-# digest validator-path-resolution 3eb1f513f68a9e557217b637592f995e0c5395166dcbe7b1d9575da3e9ccccd0
-# digest wait-beat-liveness 0f48a026e450d4e5b0c7be14bc2a4686f47fdb8f4eba78c4638dd025f65109d5
+# digest backlog-real-ledger 3438aa99e713cb12f4c192712f9f1a053484d9ce33bc491dc6fe1a89114a6f6f
+# digest hook-registration-join 18a69bb66d34e17e72e4c82303315a5893ff4ce8c3314031b9cb446b3fb023dc
+# digest retro-compliance-workflow 96bb6a7c7b56928fd395cadf7436b84cb8706cf9af77f8057c2ed7e8484ee674
+# digest shipped-rule-version-floor cbb7f7a0668d289e37212c210187429a075eabad154f54f43e12ca86631bd2ef

@@ -105,7 +105,9 @@ content-seal hand's abandoned forks.
    - run `validate-fixture-hygiene.sh`, `validate-shell-portability.sh`,
      `validate-enforcement-map.sh` and the backlog validators.
 4. Re-measure every converted fixture's `invocations.decl` with counted hermetic runs. Also
-   re-measure `backlog-real-ledger`'s (BL-872: the backlog edits re-key it).
+   re-measure `backlog-receipt-binding`'s when the conversion edits `docs/backlog.archive.md`: it
+   is the one fixture that keys a backlog file (`+docs/backlog.archive.md`), and since 0.980.0
+   (BL-872) `backlog-real-ledger` reads `ledger.snapshot`, so a backlog edit no longer moves it.
 5. Re-trace the converted fixtures' read sets with
    `bash core/scripts/derive-fixture-readsets.sh --list "<names>" --tracer sandbox` and commit
    the map.

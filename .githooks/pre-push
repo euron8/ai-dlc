@@ -695,9 +695,11 @@ step "backlog depth (docs/backlog.md stays a queue, not a log)" \
 #
 #     STANDALONE, AND NOT AN ARM INSIDE validate-enforcement-map.sh, for a stronger reason than
 #     its siblings carry. That validator is driven through ~20 and ~17 mutants by the two sharded
-#     batteries, and this arm runs a detached checkout of HEAD -- twice -- for every receipt in
-#     the ledger. It is ~22s at 8-way here, which is the most expensive validator in this hook;
-#     multiplied by thirty it would be the suite's pole on its own.
+#     batteries, and this arm builds detached checkouts of HEAD: a base tree for every open `sh`
+#     receipt (plus a re-read tree on a non-0/1 exit and up to two seeded trees), and the seeded
+#     trees its self-probes (R1, R7/R8 and R10) build before the corpus. It was ~22s at 8-way,
+#     the most expensive validator in this hook, when measured at 0.562.0 (BL-227); multiplied
+#     by thirty it would be the suite's pole on its own.
 #
 #     THE CEILINGS ARE RATCHETS AND ONLY EVER MOVE DOWN. Each is the count the arm READ on the
 #     tree that registered it, not a policy number -- every receipt under one is a filed defect
@@ -717,9 +719,9 @@ step "backlog depth (docs/backlog.md stays a queue, not a log)" \
 #
 #     The sh floor is `DEFAULT_MIN_SH` in `scripts/validate-backlog-receipts.sh`, its ONE source: the
 #     gate passes no `--min-sh-receipts`, so a bare run of the script and this step answer alike.
-#     That floor is 0, the level the work reached: the last `sh`-receipted live entry
-#     was closed and rotated, every live entry declares `verify: manual`, and the arm reports
-#     that state as `R2 all-manual` (entries == manual receipts) rather than as a zero. It
+#     That floor is 0. While every live entry declares `verify: manual` the arm reports that
+#     state as `R2 all-manual` (entries == manual receipts) rather than as a zero, and while
+#     every `sh` receipt is a DRIVER (`bash scripts/<x>.sh`) it reports `R2 all-driver`. It
 #     rises again the moment an `sh` receipt is filed, by lowering nothing: the floor binds
 #     the DROP from the registered count, so a ledger that grows past it is not bound by it.
 step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
