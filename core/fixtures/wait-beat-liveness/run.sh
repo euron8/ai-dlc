@@ -296,14 +296,14 @@ CLOCK_REC="$TMPROOT/clock-probe.sleeps"; CLOCK_REC_BIN="$TMPROOT/clock-probe-sle
   && chmod +x "$CLOCK_REC_BIN" || broken "cannot write the clock probe's sleep recorder"
 clock_probe() {
   cp_w_="$TMPROOT/clock-probe"; mkdir -p "$cp_w_"; fx_clock_on "$cp_w_"; : > "$CLOCK_REC"
-  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" WBL_REAL_SLEEP="$CLOCK_REC_BIN" bash -c 'a=$(date +%s); sleep 60; b=$(date +%s); printf "%s %s %s" "$(command -v sleep)" "$a" "$b"')"
+  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" WBL_REAL_SLEEP="$CLOCK_REC_BIN" bash -c 'a=$(date +%s); sleep 60; b=$(date +%s); printf "%s %s %s" "$(command -v sleep)" "$a" "$b"')"  # bl868-allow: wbl-clock-shim-probe
   set -- $cp_out_
   if [ "${1:-}" = "$WBL_CLOCK_BIN/sleep" ] && [ $(( ${3:-0} - ${2:-0} )) -eq 60 ] && [ ! -s "$CLOCK_REC" ]; then
     ok "clock: in a clocked world the subject's PATH finds the shim, a sleep 60 reaches no real sleep, and date +%s moved exactly 60"
   else broken "clock: the shim did not engage (sleep=${1:-?}, date moved $(( ${3:-0} - ${2:-0} ))s, real sleeps: $(tr '\n' ' ' < "$CLOCK_REC"))"; fi
   fx_clock_off "$cp_w_"; fx_shims_on
   cp_r0_="$("$WBL_REAL_DATE" +%s)"
-  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" WBL_REAL_SLEEP="$CLOCK_REC_BIN" bash -c 'sleep 1; date +%s')"
+  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" WBL_REAL_SLEEP="$CLOCK_REC_BIN" bash -c 'sleep 1; date +%s')"  # bl868-allow: wbl-clock-shim-control
   cp_r1_="$("$WBL_REAL_DATE" +%s)"
   if [ "$(cat "$CLOCK_REC")" = 1 ] && [ "${cp_out_:-0}" -ge "$cp_r0_" ] && [ "${cp_out_:-0}" -le "$cp_r1_" ]; then
     ok "clock: CONTROL — the same world with its clock off falls through: the sleep reached the real binary and date read the real clock"
@@ -468,14 +468,14 @@ wbl_clock_fns() {  # defines date and sleep as the in-process clock, in the call
 clock_probe_ip() {
   cpi_w_="$TMPROOT/clock-probe-ip"; mkdir -p "$cpi_w_"; fx_clock_on "$cpi_w_"; : > "$CLOCK_REC"
   fx_onsleep "$cpi_w_" ": > '$cpi_w_/hooked'"
-  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; WBL_REAL_SLEEP="$CLOCK_REC_BIN"; wbl_clock_fns; a=$(date +%s); sleep 60; b=$(date +%s); printf '%s %s %s' "$(type -t sleep)" "$a" "$b" )"
+  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; WBL_REAL_SLEEP="$CLOCK_REC_BIN"; wbl_clock_fns; a=$(date +%s); sleep 60; b=$(date +%s); printf '%s %s %s' "$(type -t sleep)" "$a" "$b" )"  # bl868-allow: wbl-clock-ip-probe
   set -- $cpi_out_
   if [ "${1:-}" = function ] && [ $(( ${3:-0} - ${2:-0} )) -eq 60 ] && [ ! -s "$CLOCK_REC" ] && [ -e "$cpi_w_/hooked" ]; then
     ok "clock: in process, a clocked world's sleep 60 reaches no real sleep, date +%s moves exactly 60, and the poll hook ran"
   else broken "clock: the in-process clock did not engage (sleep=${1:-?}, date moved $(( ${3:-0} - ${2:-0} ))s, real sleeps: $(tr '\n' ' ' < "$CLOCK_REC"), hook=$([ -e "$cpi_w_/hooked" ] && echo ran || echo no))"; fi
   fx_clock_off "$cpi_w_"; fx_shims_on
   cpi_r0_="$("$WBL_REAL_DATE" +%s)"
-  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; export WBL_REAL_SLEEP="$CLOCK_REC_BIN"; wbl_clock_fns; sleep 1; date +%s )"
+  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; export WBL_REAL_SLEEP="$CLOCK_REC_BIN"; wbl_clock_fns; sleep 1; date +%s )"  # bl868-allow: wbl-clock-ip-control
   cpi_r1_="$("$WBL_REAL_DATE" +%s)"
   if [ "$(cat "$CLOCK_REC")" = 1 ] && [ "${cpi_out_:-0}" -ge "$cpi_r0_" ] && [ "${cpi_out_:-0}" -le "$cpi_r1_" ]; then
     ok "clock: in process, CONTROL — the same world with its clock off falls through: the sleep reached the real binary and date read the real clock"

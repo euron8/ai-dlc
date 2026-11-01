@@ -1,6 +1,7 @@
 # Measured by two counted runs through core/scripts/hermetic-run.sh (armed-run.sh) at one tip, under load: both gave 6533 and 26.
-# BL-868: 602 -> 363. The seed clock reads the real date binary (not the clockbin/date shim, 541 -> 286 starts), and the
-# ps/perl stubs are #!/bin/bash, so the counter now sees them (+15).
+# BL-868: 602 -> 363, the armed judge's count ("invocation budget ok: 363 start(s)"). The seed clock reads the real date
+# binary (not the clockbin/date shim, 541 -> 286 starts, -255), and the ps/perl stubs are #!/bin/bash, so the counter now
+# sees them (+15); those two sum to 362, and the remaining 1 start is measured but not attributed to either.
 363 *
 0 core/fixtures/lib/mutant.sh
 33 core/scripts/merge-adversarial-shards.sh
