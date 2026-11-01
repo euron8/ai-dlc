@@ -53,6 +53,35 @@ image_unavailable() {
   [ "$LAYOUT" = dist ] && broken "$1: $2 (hdiutil: ${why:-no stderr})"
   ok "$1 SKIP: $2 on this consumer host (hdiutil: ${why:-no stderr})"
 }
+# IMG-BUILD-BEGIN
+# img_build <image> <mountpoint> <cs-apfs|hfs> -- the named kind of volume, writable and mounted at
+# the mountpoint, built WITHOUT formatting anything on this run (BL-868 item 11).
+#
+# Formatting is the step that races. Two `hdiutil create -fs` released together from one fifo
+# barrier fail `create failed - Directory not empty` or `- Operation not permitted` at a few
+# percent, with unique volnames, unique TMPDIRs and SPARSE images alike; a hand-rolled mkfile +
+# `attach -nomount` + newfs_apfs/newfs_hfs path failed the same way (`newfs_*: /dev/rdiskN:
+# Operation not permitted`, 5/240 HFS+ builds, and 1/240 cs while creates ran beside it). Either
+# way the arms read BROKEN in dist or green by what else the pool was running.
+#
+# So the volume is formatted ONCE, off-line, and committed: `<kind>.dmg.b64` is a read-only
+# compressed (UDZO) image, base64 so it diffs and greps as text. This run decodes a private copy
+# and attaches it with a private -shadow file, so every write lands in the shadow and two runs
+# share no file at all. Measured on THIS function, extracted between the IMG-BUILD markers and
+# raced in pairs under the barrier: 0/240 cs and 0/240 HFS+ failures, interleaved round by round
+# with create pairs that failed 8/240 (cs) and 4/240 (HFS+) in the same run. Rebuild an asset with
+#   hdiutil create -fs 'Case-sensitive APFS' -size 8m -volname bl082cs rw.dmg   (HFS+: -fs 'HFS+' -size 4m -volname bl082hfs)
+#   hdiutil convert rw.dmg -format UDZO -imagekey zlib-level=9 -o cs.dmg && base64 -b 76 -i cs.dmg -o cs-apfs.dmg.b64
+# and the S10-C / S10-H premise checks below say whether the volume is the kind it claims to be.
+# Every step writes $WORK/hdiutil.err, so image_unavailable names the step that failed.
+img_build() {
+  local img="$1" mnt="$2" kind="$3"
+  [ -f "$HERE/$kind.dmg.b64" ] || broken "img_build: the committed image $HERE/$kind.dmg.b64 is absent"
+  base64 -D -i "$HERE/$kind.dmg.b64" -o "$img" 2>"$WORK/hdiutil.err" || return 1
+  mkdir -p "$mnt" || return 1
+  hdiutil attach -nobrowse -shadow "$img.shadow" -mountpoint "$mnt" "$img" >/dev/null 2>"$WORK/hdiutil.err"
+}
+# IMG-BUILD-END
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -408,9 +437,7 @@ mkdir -p "$WORK/cs-native/probe" || broken "S10-C: mkdir cs-native"
 if [ ! -e "$WORK/cs-native/PROBE" ]; then
   CS_BASE="$WORK/cs-native"; CS_WHY="native case-sensitive filesystem"
 elif command -v hdiutil >/dev/null 2>&1; then
-  if hdiutil create -fs 'Case-sensitive APFS' -size 20m -volname bl082cs "$WORK/cs.dmg" >/dev/null 2>"$WORK/hdiutil.err" \
-     && mkdir -p "$WORK/cs-mnt" \
-     && hdiutil attach -nobrowse -mountpoint "$WORK/cs-mnt" "$WORK/cs.dmg" >/dev/null 2>"$WORK/hdiutil.err"; then
+  if img_build "$WORK/cs.dmg" "$WORK/cs-mnt" cs-apfs; then
     CS_MNT="$WORK/cs-mnt"; CS_BASE="$CS_MNT"; CS_WHY="case-sensitive APFS disk image"
   else
     CS_WHY="-"
@@ -464,9 +491,7 @@ fi
 LS="$(printf 'doc\305\277')"
 if ! command -v hdiutil >/dev/null 2>&1; then
   ok "S10-H SKIP: hdiutil is not available to build an HFS+ volume -- MUT-H (casefold without samestat) is UNGUARDED on this run"
-elif ! { hdiutil create -fs 'HFS+' -size 20m -volname bl082hfs "$WORK/hfs.dmg" >/dev/null 2>"$WORK/hdiutil.err" \
-         && mkdir -p "$WORK/hfs-mnt" \
-         && hdiutil attach -nobrowse -mountpoint "$WORK/hfs-mnt" "$WORK/hfs.dmg" >/dev/null 2>"$WORK/hdiutil.err"; }; then
+elif ! img_build "$WORK/hfs.dmg" "$WORK/hfs-mnt" hfs; then
   image_unavailable "S10-H" "hdiutil could not create or attach an HFS+ image -- MUT-H (casefold without samestat) is UNGUARDED"
 else
   HFS_MNT="$WORK/hfs-mnt"

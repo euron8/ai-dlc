@@ -1,4 +1,5 @@
-# Tools run.sh, seed.sh and the validator invoke. hdiutil is declared so the case-sensitive and HFS+ arms run rather than SKIP.
+# Tools run.sh, seed.sh and the validator invoke. base64 decodes the committed case-sensitive and HFS+ images and hdiutil attaches them, so those arms run rather than SKIP.
+base64
 bash
 cat
 cmp
