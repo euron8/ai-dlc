@@ -104,6 +104,8 @@
 # MUTANT-MATRIX PC-g decides=foreign twins=legacy
 # MUTANT-MATRIX M-reclear decides=reclear twins=- why=a one-world arm whose only cell is the re-clear predicate
 # MUTANT-MATRIX M-net-ceiling decides=net twins=- why=a one-world arm whose only cell is the net-expiry predicate
+# MUTANT-MATRIX M-nowall-ignored decides=nowall twins=- why=a one-arm pair whose set and unset cells are each the other's twin, and this mutant fails only the set cell
+# MUTANT-MATRIX M-nowall-always decides=nowall twins=- why=a one-arm pair whose set and unset cells are each the other's twin, and this mutant fails only the unset cell
 # MUTANT-MATRIX M-pc-deletes decides=sequence twins=- why=a one-world arm whose only cell is the three-hook sequence
 # MUTANT-MATRIX-DYNAMIC scorer why=each battery's scorer passes its own name argument to mutant_killed, every name carrying its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix
@@ -1706,7 +1708,7 @@ a_unavail() {
 # The pre-wait grant line of the hook is a COST fast-path, not the verdict guard: with it deleted
 # the post-wait grant check stands the same call down after the wait. So this arm asserts that the
 # wait loop is never ENTERED, as a COUNT load cannot move. The hook's loop calls a bare `sleep`
-# (recover-gate line 269, no path), so a shim `sleep` first on PATH appends a line per call and
+# (recover-gate line 274, no path), so a shim `sleep` first on PATH appends a line per call and
 # returns at once. No grant line, R owed, the call's own line NEVER lands, RECOVER_GATE_NET=8:
 # the real gate writes 0 lines; the mutant enters the loop and writes more. The CONTROL, same shim
 # and seed WITH a grant that stays on, must write >0 lines, which proves the shim is reached.
@@ -2135,7 +2137,7 @@ a_net() {
   _d0="$(sed -n 's/^denies=//p' "$_p/$OW")"
   _e="$_p/net.err"
   d="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"tin-never","tool_input":{}}' "$_p/t.jsonl" \
-    | RECOVER_GATE_NET=2 hook_run "$1" "$_p" 2>"$_e")"
+    | AI_DLC_TEST_RECOVER_GATE_NO_WALL=1 RECOVER_GATE_NET=2 hook_run "$1" "$_p" 2>"$_e")"
   d="$(dec_of "$d")"; d="${d%%|*}"
   [ "$d" = deny ] && { printf 'FAIL:an unseen call was denied when the safety net expired\n'; return; }
   grep -q 'did not land within the' "$_e" || { printf 'FAIL:the stand-down gave no stderr reason\n'; return; }
@@ -2174,7 +2176,7 @@ fi
 # rcall <gate> <project> <tool_use_id> <net> [stderr file] -> deny | empty, for an Agent call
 rcall() {
   _rco="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"%s","tool_input":{}}' "$2/t.jsonl" "$3" \
-    | RECOVER_GATE_NET="$4" hook_run "$1" "$2" 2>"${5:-/dev/null}")"
+    | AI_DLC_TEST_RECOVER_GATE_NO_WALL=1 RECOVER_GATE_NET="$4" hook_run "$1" "$2" 2>"${5:-/dev/null}")"
   _rco="$(dec_of "$_rco")"; printf '%s\n' "${_rco%%|*}"
 }
 # mline <message id> <tool_use id...> -> ONE assistant line carrying those Agent tool_use blocks,
@@ -2356,6 +2358,51 @@ if ! grep -qF 'while [ "$R_V" = owed ]' "$R7_NORR"; then
 else bad "FIXTURE STALE: M-730-noreread did not remove the wait loop"; fi
 r7mutant_arm "M-730-count: the denied_msg comparison removed, every call counts" "$R7_COUNT" "$WORK/r7-count" "rmsg" M-730-count
 r7mutant_arm "M-730-grant: the post-wait grant check removed" "$R7_GRANT" "$WORK/r7-grant" "rwithdraw" M-730-grant
+
+# R4. THE NO-WALL SEAM (BL-868). rcall and a_net set AI_DLC_TEST_RECOVER_GATE_NO_WALL=1, which drops
+# the wait loop's SECONDS clause, so a loaded box cannot end the wait before the tick the r7_shim
+# writer lands on. Unset (every consumer), the clause stays. Both cells drive an INJECTED CLOCK: a
+# shell function `sleep` (functions win over PATH, and the sourced gate inherits it) counts the tick
+# and advances SECONDS by 100, so no wall time passes and none decides (a stall before the first
+# loop test would need 10 real seconds to move a cell). RECOVER_GATE_NET=10, the line never lands:
+# unset, the SECONDS clause ends the wait after exactly 1 tick; set, only the slept bound ends it,
+# after exactly 16 (8 quarter ticks, then 8 one-second ticks). Both cells are judged before the
+# verdict, so a mutant's flip set is read whole.
+a_nowall_run() { # a_nowall_run <gate> <project> <seam value|''> -> tick count
+  _nwt="$2/nwticks"; : > "$_nwt"
+  ( sleep() { echo x >> "$_nwt"; SECONDS=$((SECONDS + 100)); }
+    printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"toolu_nowall_never","tool_input":{}}' "$2/t.jsonl" \
+      | if [ -n "$3" ]; then AI_DLC_TEST_RECOVER_GATE_NO_WALL="$3" RECOVER_GATE_NET=10 hook_run "$1" "$2"; else RECOVER_GATE_NET=10 hook_run "$1" "$2"; fi ) >/dev/null 2>&1
+  r7_ticks_f "$2/nwticks"
+}
+r7_ticks_f() { _tn=0; while read -r _; do _tn=$((_tn + 1)); done < "$1"; printf '%s\n' "$_tn"; }
+a_nowall() { # a_nowall <gate> -> PASS | FAIL:<flipped cells>:<why>
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  _u="$(a_nowall_run "$1" "$_p" '')"
+  _q="$(a_world "$1" grant boundary digest)"
+  _s="$(a_nowall_run "$1" "$_q" 1)"
+  _nf=""; _nwhy=""
+  [ "$_u" = 1 ] || { _nf="unset"; _nwhy="with the seam unset the wall clause did not end the wait after 1 tick ($_u ticks), so a consumer gate is no longer bounded by SECONDS"; }
+  [ "$_s" = 16 ] || { _nf="${_nf:+$_nf+}set"; _nwhy="${_nwhy:+$_nwhy; }with the seam set the wait ran $_s tick(s), not the 16 the slept bound allows, so the SECONDS clause still decides"; }
+  if [ -n "$_nf" ]; then printf 'FAIL:%s:%s\n' "$_nf" "$_nwhy"; else printf 'PASS\n'; fi
+}
+r_nw="$(a_nowall "$GATE")"
+if [ "$r_nw" = PASS ]; then ok "R (BL-868): the no-wall seam drops only the SECONDS clause; unset it still bounds the wait (a_nowall)"; B_nw=1
+else bad "R (BL-868): the no-wall seam — ${r_nw#FAIL:}"; fi
+MR_NWIGN="$WORK/gate-nowall-ignored.sh"; MR_NWON="$WORK/gate-nowall-always.sh"
+awk 'index($0,"in 1) _rw=0 ;; esac"){sub(/1\) _rw=0 ;;/, "1) : ;;")} 1' "$GATE" > "$MR_NWIGN"
+awk 'index($0,"_rt0=$SECONDS; _rq=0; _rw=1")==3{sub(/_rw=1/, "_rw=0")} 1' "$GATE" > "$MR_NWON"
+for _nm in "M-nowall-ignored:$MR_NWIGN:set" "M-nowall-always:$MR_NWON:unset"; do
+  _nn="${_nm%%:*}"; _nr="${_nm#*:}"; _nf="${_nr%:*}"; _nc="${_nr##*:}"
+  if cmp -s "$GATE" "$_nf" || ! bash -n "$_nf" 2>/dev/null; then bad "FIXTURE STALE: $_nn did not apply"; continue; fi
+  _nv="$(a_nowall "$_nf")"
+  case "$_nv" in
+    "FAIL:$_nc:"*) mutant_killed "${B_nw:-0}" "$_nn" "mutant: $_nn fails exactly the $_nc cell of the no-wall arm" ;;
+    PASS) bad "MUTANT SURVIVED: $_nn passes the no-wall arm" ;;
+    *) bad "MUTANT FLIP SET WRONG: $_nn — expected the $_nc cell, measured ${_nv#FAIL:}" ;;
+  esac
+done
 
 # =============================================================================
 # THE SAME-MESSAGE RACE AT THE READ STAGES (BL-658)
