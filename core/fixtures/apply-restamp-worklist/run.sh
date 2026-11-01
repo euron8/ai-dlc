@@ -2569,6 +2569,20 @@ if [ "$BL_BOTH_OK" = 1 ]; then
   else
     bad "BL-1 the firing consumer drew row1|wl2|unreadable|unchecked = $BL_BOTH, not 1|1|0|0 — the classes BL-276 routes to the worklist are not reaching it"
   fi
+  # BL-706: the firing consumer is a NON-GIT tree with an installed validator, so the derivation differential REFUSES (no base
+  # commit can be found) and apply.sh must say so loudly. The row is asserted by NAME and by its refusal arm, so a regression
+  # that drops it (the call, the case arm, the DECISION) fails here. A real consumer is a git repo; a non-git one refusing is correct.
+  BL_DD_ROWS="$(bl_n "$BL_BOTH_OUT" DECISION artifact-derivations-differential)"
+  BL_DD_ARM="$(awk -F'\t' '$1 == "DECISION" && $2 == "artifact-derivations-differential" { print $4; exit }' <<<"$BL_BOTH_OUT")"
+  case "$BL_DD_ARM" in
+    *"REFUSED (exit 2)"*"consumer: "*"is not a git work tree with a HEAD"*) BL_DD_OK=1 ;;
+    *) BL_DD_OK=0 ;;
+  esac
+  if [ "$BL_DD_ROWS" = 1 ] && [ "$BL_DD_OK" = 1 ]; then
+    ok "BL-1 and the non-git consumer draws exactly one DECISION artifact-derivations-differential row quoting the consumer refusal (BL-706: a refused measurement is loud)"
+  else
+    bad "BL-1 the firing non-git consumer drew $BL_DD_ROWS DECISION artifact-derivations-differential row(s) (want 1) with refusal arm ok=$BL_DD_OK (want a 'REFUSED (exit 2)' quoting the consumer not-a-git-work-tree refusal; row text: $(printf '%s' "$BL_DD_ARM" | cut -c1-260)) — apply.sh's differential site no longer reports a refused measurement"
+  fi
   if [ "$BL_CTL" -ge 1 ]; then
     ok "BL-1 and the same invocation emits DECISION restamp-withheld, so the run reached its re-stamp verdict rather than dying early"
   else

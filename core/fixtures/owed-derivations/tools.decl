@@ -27,3 +27,8 @@ cmp
 diff
 xargs
 python3
+comm
+uniq
+date
+tail
+jq
