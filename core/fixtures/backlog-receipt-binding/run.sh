@@ -263,10 +263,14 @@ score() {
 }
 
 # ARMS. Each is the kill condition of the base fixture's chain for that mutant.
-arm_m1() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && ! r_has "$1" "OK: validate-backlog-receipts"; }
+# m1, m4, m12, m13 and m15 each read only a refusal or a row about THEIR OWN seed: R1's token-free
+# answer (got: BOUND), BL-805's base-0 receipt, BL-807's two-file receipt, a lost verdict (got: ).
+# Without the key, m1 read any self-probe refusal as its kill, and m4, m12 and m13 read a MISSING row
+# as a wrong one, so every refusing capture in the matrix tripped all four.
+arm_m1() { r_has "$1" "did NOT flip under a seed carrying its own grep literal (got: BOUND)" && [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m2c() { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "are satisfied by a COMMENT"; }
 arm_m3() { [ "$(r_rc "$1")" != 0 ] && ! r_has "$1" "OK: validate-backlog-receipts" && grep -qE 'base-exit-9 receipt|exits 9 on' "$REC/$1.out"; }
-arm_m4() { [ "$(r_cls "$1" BL-805)" != "ALREADY-PASSING" ] && [ "$(r_rc "$1")" != 0 ]; }
+arm_m4() { r_has "$1" "the base-0 receipt was reported" &&[ "$(r_cls "$1" BL-805)" != "ALREADY-PASSING" ] && [ "$(r_rc "$1")" != 0 ]; }
 # m5b, m15 and gitdir_mutant each read only a capture of their OWN world, keyed on the SIDE line its
 # block writes after its drive. Without that key each arm was absence-shaped -- true on any refusing
 # capture -- and c1-whole's AFTER leak refusal (rc 2, no verdict on BL-801) tripped all three.
@@ -274,13 +278,18 @@ arm_m5b() { r_line "$1" "SIDE world=unwritable" && [ "$(r_cls "$1" BL-801)" != "
 arm_m6() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "DRIFTED" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m7b() { r_has "$1" "SIDE escaped=1" && [ "$(r_rc "$1")" != 0 ]; }
 arm_m8b_mut() { [ "$(r_rc "$1")" = 1 ] && r_has "$1" "produced ZERO scored receipts"; }
-arm_m8c_mut() { [ "$(r_rc "$1")" = 0 ]; }
+arm_m8c_mut() { [ "$(r_rc "$1")" = 0 ] && grep -qE '^OK: validate-backlog-receipts -- .* R2 all-manual$' "$REC/$1.out"; }
 arm_m8e_mut() { [ "$(r_rc "$1")" != 0 ] && ! grep -qE '^FAIL: UNRECOGNISED.BL-851' "$REC/$1.out" && r_has "$1" "unrecognised-value arm did not name"; }
 arm_m8d_mut() { [ "$(r_rc "$1")" = 0 ] && grep -q ' R2 declared-empty$' "$REC/$1.out"; }
-arm_m12() { [ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
-arm_m13() { [ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
-arm_m14b() { [ "$(r_rc "$1")" = 0 ]; }
-arm_m15() { r_line "$1" "SIDE world=lost-verdict" && [ "$(r_rc "$1")" != 0 ]; }
+arm_m12() { r_has "$1" "the TWO-file TWO-literal receipt was reported" &&[ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
+arm_m13() { r_has "$1" "the TWO-file TWO-literal receipt was reported" &&[ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
+# m14b and m8c-mut read only a PASS that names their own breach: R4 over a ceiling of 0, and the
+# near-miss ledger accepted as all-manual. A bare rc 0 was true on every passing capture.
+arm_m14b() { [ "$(r_rc "$1")" = 0 ] && grep -qE '^OK: validate-backlog-receipts -- .* R4 [1-9][0-9]*/0 out of population' "$REC/$1.out"; }
+# m15b runs this same lost-verdict tree with the assert intact and it ALSO exits non-zero, so rc alone
+# cannot tell the mutant from its base. The mutant's mark is the empty verdict reaching R1 (got: )
+# where the intact assert refuses first, naming the dispatched receipts that produced a verdict.
+arm_m15() { r_line "$1" "SIDE world=lost-verdict" && [ "$(r_rc "$1")" != 0 ] && r_has "$1" "carrying its own grep literal (got: )" && ! r_has "$1" "produced a verdict"; }
 arm_m15b() { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "produced a verdict"; }
 arm_c1_whole() { r_line "$1" "SIDE added=1" && [ "$(r_rc "$1")" = 2 ] && r_has "$1" "are still registered in" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m16() { ! r_has "$1" "SIDE porc=0" && r_has "$1" "SIDE porc=" && ! { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "working tree changed"; }; }
@@ -297,12 +306,15 @@ arm_m_memo_name() { r_line "$1" "CALLER $LEAK_MEMO"; }
 arm_memo_caller_both() { r_line "$1" "CALLER $LEAK_BOTH"; }
 # The efficiency arms: a mutant is caught when the subject's own E0 self-probe refuses (exit 2) or,
 # for the world-turned-green form, when the world red on the shipped subject exits 0.
+# The green form reads the efficiency-only pass's own OK line, not a bare rc 0, which every passing
+# capture in the file carries.
 ef_e0() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" 'SELF-PROBE FAILED -- E0'; }
-arm_m_noclose() { ef_e0 "$1" || [ "$(r_rc "$1")" = 0 ]; }
-arm_m_widenostep() { ef_e0 "$1" || [ "$(r_rc "$1")" = 0 ]; }
-arm_m_noseat() { ef_e0 "$1" || [ "$(r_rc "$1")" = 0 ]; }
-arm_m_seatword() { ef_e0 "$1" || [ "$(r_rc "$1")" = 0 ]; }
-arm_m_nofiling() { ef_e0 "$1" || [ "$(r_rc "$1")" = 0 ]; }
+ef_green() { [ "$(r_rc "$1")" = 0 ] && r_has "$1" "OK: validate-backlog-receipts --efficiency-only -- "; }
+arm_m_noclose() { ef_e0 "$1" || ef_green "$1"; }
+arm_m_widenostep() { ef_e0 "$1" || ef_green "$1"; }
+arm_m_noseat() { ef_e0 "$1" || ef_green "$1"; }
+arm_m_seatword() { ef_e0 "$1" || ef_green "$1"; }
+arm_m_nofiling() { ef_e0 "$1" || ef_green "$1"; }
 arm_m_nopathnarrow() { ef_e0 "$1" || { [ "$(r_rc "$1")" = 1 ] && r_has "$1" "SIDE rows=SHAPE BL-979|"; }; }
 arm_m_noscript() { ef_e0 "$1"; }
 arm_m_nofigs() { ef_e0 "$1"; }
@@ -315,8 +327,10 @@ arm_m_noscope() { ef_e0 "$1"; }
 c5_arm() { # c5_arm <capture> <mutant key>
   local c="$1" k="$2" w t
   eval "w=\${C5WANT_$k:-unset}; t=\${C5TARGET_$k:-}"
+  # A mutant naming NO target (c5-m1, c5-m2) sits where the self-probe cannot see it, so only its
+  # corpus row kills it: any self-probe refusal is some OTHER world's, never its own kill.
   if r_has "$c" "SELF-PROBE FAILED"; then
-    [ -z "$t" ] && return 0
+    [ -z "$t" ] && return 1
     grep -F 'SELF-PROBE FAILED' "$REC/$c.out" | grep -qF "seed $t:"; return
   fi
   r_line "$c" "SIDE rows=$w"
@@ -857,10 +871,14 @@ fi
 # THE MUTATION IS ON THE SEED HELPER'S TARGET, NOT ON ITS CALL. Replacing the call's result
 # with `$SR` leaves `seed_tree` still creating and writing a checkout, so the escape would be
 # partial and the arm would be scoring a shape nobody ships. Redirecting the helper's own
-# target directory is the whole of the property: every append it makes then lands in the
-# caller's tree.
+# target directory is the whole of the property: every append the CORPUS pass makes then lands
+# in the caller's tree.
+# ONLY THE CORPUS SEED ESCAPES. The self-probes' trees live under $BR_WORK and keep their own
+# checkouts, so no self-probe refuses first and the run reaches the porcelain comparison: m7b's
+# capture is then the porcelain arm REFUSING, which is the base m16's mutant is read against.
+M7B_SED='s#^    _st_d="$(mktree "$1")"#    case "$SR" in "$BR_WORK"/*) _st_d="$(mktree "$1")" ;; *) _st_d="$SR" ;; esac#'
 seed "$TMP/m7b"
-if mut "$TMP/m7b" 's|^    _st_d="$(mktree "$1")"|    _st_d="$SR"|'; then
+if mut "$TMP/m7b" "$M7B_SED"; then
   m7b_sum_before="$(cksum "$TMP/m7b/probe/subject.txt" | awk '{print $1}')"
   drive m7b "$TMP/m7b" "" $DEF
   m7b_sum_after="$(cksum "$TMP/m7b/probe/subject.txt" | awk '{print $1}')"
@@ -1171,12 +1189,21 @@ fi
 # would notice if it were not. m7b makes the seed escape, so this asks whether the porcelain
 # comparison is what reports it.
 seed "$TMP/m16"
-if mut "$TMP/m16" 's|^    _st_d="$(mktree "$1")"|    _st_d="$SR"|'; then
+# Its base is m7b's capture: the same corpus-only escape with the comparison intact, which must refuse
+# naming the changed working tree. Before the escape was corpus-only, both captures were the R1
+# self-probe's UNSEEDED refusal, byte-identical, so this arm read an absence true of its own base.
+B_M16=0
+if [ -f "$REC/m7b.rc" ] && [ "$(r_rc m7b)" = 2 ] && r_has m7b "the caller's working tree changed during this run" && ! r_has m7b "SELF-PROBE FAILED"; then
+  ok "m16-base -- the corpus-only escape with the comparison intact refuses naming the changed working tree, before any self-probe"; B_M16=1
+else
+  bad "m16-base -- m7b's corpus-only escape did not refuse on the porcelain comparison (rc=$(r_rc m7b 2>/dev/null)): $(grep -E 'FAIL|SELF-PROBE' "$REC/m7b.out" 2>/dev/null | head -1 | cut -c1-160)"
+fi
+if mut "$TMP/m16" "$M7B_SED"; then
   if mut "$TMP/m16" 's|^if \[ "$PORC_AFTER" != "$PORC_BEFORE" \]; then|if false; then|'; then
     drive m16 "$TMP/m16" "" $DEF
     m16_porc="$(git -C "$TMP/m16" status --porcelain | grep -c . )"
     side m16 "porc=$m16_porc"
-    score m16 "$B_CTRL" "m16 -- with the porcelain comparison dead an escaped seed is no longer reported as one, so that comparison is the reporter"
+    score m16 "$B_M16" "m16 -- with the porcelain comparison dead an escaped seed is no longer reported as one, so that comparison is the reporter"
   fi
 fi
 
@@ -2351,20 +2378,25 @@ arm_pr_m_ignore() { r_line "$1" "SIDE pre=REPLAYED"; }
 arm_pr_m_default() { r_has "$1" "PROBE-RECORD: REPLAYED"; }
 arm_pr_m_keylib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
 arm_pr_m_keyrlib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
-# Both read a pr_two capture only: `SIDE store=` is written by pr_two alone, so a capture from a world
-# that never measured a store (c1-whole's, the control's) cannot read as a surviving record.
-arm_pr_m_early() { r_has "$1" "SIDE store=" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
-arm_pr_m_between() { r_has "$1" "SIDE store=" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
+# Both read only a pr_two capture whose FIRST run was red (`SIDE rc1=2`): their worlds are m1's and
+# c5-m3's, where a record must not survive. A pr_two world whose first run was green writes a record
+# by design, so `store` non-zero there is the shipped behaviour, not this mutant's.
+arm_pr_m_early() { r_line "$1" "SIDE rc1=2" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
+arm_pr_m_between() { r_line "$1" "SIDE rc1=2" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
 # Cell 6 negated on the capture: a replay whose run did not end in an all-driver OK line naming K
 # without "fired" (the deleted R7_PROBED is also unbound under set -u, which ends the run unreported).
-arm_pr_m_nostate() {
+pr_nostate_body() {
   local k l
   r_has "$1" "PROBE-RECORD: REPLAYED" || return 1
   k="$(sed -n 's/^PROBE-RECORD: REPLAYED (K=\([0-9a-f]*\)).*/\1/p' "$REC/$1.out" | sed -n '1p')"; l="$(pr_ok_of "$1")"
   ! { [ "$(r_rc "$1")" = 0 ] && grep -q ' R2 all-driver$' <<<"$l" && grep -qF "R1 replayed (K=$k)" <<<"$l" && ! grep -qE 'R[17] fired' <<<"$l"; }
 }
-arm_pr_m_counter() { r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_line "$1" "SIDE keep=keepme"; }
-arm_pr_m_generic() { r_has "$1" "PROBE-RECORD: REPLAYED" && [ "$(r_cls "$1" BL-801)" != PROSE-CLOSABLE ]; }
+# nostate, counter and generic each read only their own world: an all-driver ledger (the subject's own
+# SUMMARY), a capture that measured the caller's counter file, and the generic-seed world's tag. Without
+# the key each was absence-shaped -- a non-driver ledger, a missing keep line, a missing BL-801 row.
+arm_pr_m_nostate() { grep -qE '^SUMMARY entries=1 sh-receipts=1 .* driver=1 ' "$REC/$1.out" && pr_nostate_body "$1"; }
+arm_pr_m_counter() { r_has "$1" "SIDE keep=" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_line "$1" "SIDE keep=keepme"; }
+arm_pr_m_generic() { r_line "$1" "SIDE world=generic-seed" && r_has "$1" "PROBE-RECORD: REPLAYED" && [ "$(r_cls "$1" BL-801)" != PROSE-CLOSABLE ]; }
 
 # The mutations. The key line, the replay decision, the write's place and the two replay-state lines.
 PR_KEYLINE='^  _pk_ids="\$(git hash-object --no-filters -- "\$SELF" "\$LIB" "\$BR_RECEIPT_LIB" 2>/dev/null)" [|][|] return 1$'
@@ -2538,6 +2570,7 @@ fi
 seed "$TMP/pr-m-generic"
 if mut "$TMP/pr-m-generic" 's#unset BR_GENERIC_SEED BR_PROBE_COUNTER ;; esac$#unset BR_PROBE_COUNTER ;; esac#'; then
   pr_two pr-m-generic "$TMP/pr-m-generic" "" "$DEF" "$TMP/pr-m-generic" "BR_GENERIC_SEED=1" "$DEF"
+  side pr-m-generic "world=generic-seed"
   score pr-m-generic "$B_PR7" "pr-m-generic -- without the unset an inherited BR_GENERIC_SEED=1 reaches a replayed corpus and BL-801 stops flipping"
 # pr-m-counter (cell 9): BR_PROBE_COUNTER no longer unset on entry; a replay overwrites the caller's file.
 seed "$TMP/pr-m-counter"
