@@ -1257,6 +1257,8 @@ rc_bad="$(rc_of "$AUDIT" --fail-on=nonsense)"
 # shim blocks on a fifo this fixture holds and runs the REAL resolver only once the
 # fixture writes to it, with the seam at `none`, so the control's wait ends on that
 # write and never on how long `--list` takes under the pool.
+# STATED LIMIT: "none never times out" is not separable from "30s" by a load-free arm; the
+# fifo-release probe recorded in commit 0ed48124a's message is the evidence for it.
 fresh
 SS="$WORK/stall"
 rm -rf "$SS"; mkdir -p "$SS"

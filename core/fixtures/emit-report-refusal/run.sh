@@ -908,7 +908,7 @@ RACE
   elif [ "$_rp" = "0 5" ]; then
     printf '  INCONCLUSIVE  A7 forced: this bash (%s) keeps a process substitution'"'"'s fd open across the call, so the forced interleaving cannot reproduce the bash 3.2 race here and the engine'"'"'s result would discriminate nothing\n' "$BASH_VERSION"
   elif [ "$_rp" != "5 5" ]; then
-    bad "A7 HARNESS BROKEN: the process-substitution reference refused ${_rp% *} of 5 under the forced delay, neither every call (bash 3.2) nor none (a bash that holds the fd), so the forcing is not deterministic here"
+    bad "A7 HARNESS BROKEN: the process-substitution reference refused ${_rp% *} of 5 under the forcing (a fork, cat </dev/null), neither every call (bash 3.2) nor none (a bash that holds the fd), so the fork forcing is not deterministic here"
   else
     _rs="$(bash "$R/race.sh" "$RB" "$R/race-ours" 5 "$R/calls.s" "$RF")"
     if [ "${_rs#* }" != 5 ]; then

@@ -3,7 +3,6 @@ basename
 bash
 cat
 cmp
-cp
 dirname
 env
 grep
@@ -16,4 +15,3 @@ sandbox-exec
 sed
 sort
 tr
-wc
