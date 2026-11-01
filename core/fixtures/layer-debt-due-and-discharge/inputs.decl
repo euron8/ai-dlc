@@ -1,3 +1,5 @@
 # layer-debt-due-and-discharge reads ONE file outside its own directory: the audit script under test.
 # run.sh locates it as HERE/../../scripts/audit-layer-debt.sh, runs it, and cp-s it for every mutant.
 !core/scripts/audit-layer-debt.sh
+# run.sh sources the shared mutant-kill helper, so the sandbox must carry it.
+core/fixtures/lib/mutant.sh

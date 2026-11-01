@@ -243,23 +243,29 @@ mut() {
   cmp -s "$SUBJ" "$d/dist-clone.sh" && { bad "$1 DID NOT APPLY"; return 1; }
   return 0
 }
-score() { # score <name> <expected kill set, space separated>
+# base_ok_count <ids> -- how many of the named arms the UNMUTATED subject passed in this run (its verdicts file).
+base_ok_count() { awk -v ids="$1" 'BEGIN { n = split(ids, a, " "); for (i = 1; i <= n; i++) w[a[i]] = 1 } $1 == "ok" && ($2 in w) { c++ } END { print c + 0 }' "$W/real/verdicts"; }
+BV_shared="$(base_ok_count "DC9")"
+BV_allbranches="$(base_ok_count "DC3")"
+BV_nopin="$(base_ok_count "DC14")"
+BV_fallback="$(base_ok_count "DC4 DC5 DC7 DC12 DC16 DC18 DC20")"
+score() { # score <name> <expected kill set, space separated> <flag: 1 when the unmutated subject passed every arm in the set>
   local d="$W/mut/$1" got want
   suite "$d/dist-clone.sh" "$d/run"
   grep -q '^ok DC1 ' "$d/run/verdicts" || { bad "$1 BROKEN: the mutant copy failed DC1, so it did not run as a dist clone"; return; }
   got="$(awk '$1=="FAIL"{print $2}' "$d/run/verdicts" | sort | tr '\n' ' ')"
   want="$(printf '%s\n' $2 | sort | tr '\n' ' ')"
-  if [ "$got" = "$want" ]; then mutant_killed 1 "$1" "$1 KILLED by exactly [$got]"; else bad "$1 moved [$got], expected exactly [$want]"; fi
+  if [ "$got" = "$want" ]; then mutant_killed "$3" "$1" "$1 KILLED by exactly [$got]"; else bad "$1 moved [$got], expected exactly [$want]"; fi
 }
 CLONE_ANCHOR='git clone --bare --single-branch --branch main --no-tags "$UP_ARG" "$TMP/c"'
 mut M-shared "$CLONE_ANCHOR" '  git clone --shared --bare --single-branch --branch main --no-tags "$UP_ARG" "$TMP/c" 2>"$ERR" >/dev/null \' \
-  && score M-shared "DC9"
+  && score M-shared "DC9" "$([ "$BV_shared" -eq 1 ] && echo 1 || echo 0)"
 mut M-allbranches "$CLONE_ANCHOR" '  git clone --bare --branch main --no-tags "$UP_ARG" "$TMP/c" 2>"$ERR" >/dev/null \' \
-  && score M-allbranches "DC3"
+  && score M-allbranches "DC3" "$([ "$BV_allbranches" -eq 1 ] && echo 1 || echo 0)"
 mut M-nopin 'G update-ref "refs/ai-dlc-pin/$1" "$1"' '  true' \
-  && score M-nopin "DC14"
+  && score M-nopin "DC14" "$([ "$BV_nopin" -eq 1 ] && echo 1 || echo 0)"
 mut M-fallback 'stop() { echo "dist-clone: STOP -- $*" >&2; exit 1; }' 'stop() { printf '"'"'%s\n'"'"' "$UPSTREAM"; exit 0; }' \
-  && score M-fallback "DC4 DC5 DC7 DC12 DC16 DC18 DC20"
+  && score M-fallback "DC4 DC5 DC7 DC12 DC16 DC18 DC20" "$([ "$BV_fallback" -eq 7 ] && echo 1 || echo 0)"
 
 if [ "$FAILS" -eq 0 ]; then echo "PASS dist-clone"; exit 0; fi
 echo "FAILED dist-clone: $FAILS"; exit 1

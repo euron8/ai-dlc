@@ -315,12 +315,12 @@ fi
 # --- the mutants, each on its deciding arm and one twin ---------------------------------------------------------
 # score <mutant> <deciding arm> <twin arm> <the text the deciding arm's failure must carry>
 score() {
-  local m="$1" flag=0
-  [ -e "$WORK/base.$2" ] && [ -e "$WORK/base.$3" ] && flag=1
+  local m="$1" bp
+  bp="$([ -e "$WORK/base.$2" ] && [ -e "$WORK/base.$3" ] && echo 1 || echo 0)"
   if verdict "$2" "$m.$2"; then bad "$m SURVIVED: arm $2 still holds under it"; return; fi
   has "$m.$2" "$4" || { bad "$m: arm $2 fails under it, but not for its reason (absent: $4)"; return; }
   verdict "$3" "$m.$3" || { bad "$m: its twin arm $3 fails too, so the failure is not attributable to $2"; return; }
-  mutant_killed "$flag" "$m" "$m: arm $2 fails for its reason, twin $3 holds"
+  mutant_killed "$([ "$bp" = 1 ] && echo 1 || echo 0)" "$m" "$m: arm $2 fails for its reason, twin $3 holds"
 }
 drive MJ3.SP SP "$WORK/mut-MJ3" & drive MJ3.A3 A3 "$WORK/mut-MJ3" &
 drive MGATE.A2 A2 "$WORK/mut-MGATE" & drive MGATE.A3 A3 "$WORK/mut-MGATE" &

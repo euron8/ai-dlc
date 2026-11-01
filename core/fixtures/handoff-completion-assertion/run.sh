@@ -240,7 +240,7 @@ drive() { # drive <projdir> <session> <transcript> [hooksdir] -> raw stdout
   mkdir -p "$proj/_bmad-output"
   rm -f "$proj/_bmad-output/handoff-guard-state.txt"
   jq -nc --arg t "$t" --arg s "$sess" '{transcript_path:$t,session_id:$s}' \
-  | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$hd/ai-dlc-continue.sh" 2>/dev/null
+  | PATH="${HCA_PATH:-$PATH}" CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$hd/ai-dlc-continue.sh" 2>/dev/null
 }
 # ai-dlc-handoff-entry.sh: a PostToolUse payload in, a marker file on disk out. It is the
 # PRODUCER of key 1, so every key-1 seed in this fixture is made by driving it -- never by
@@ -763,9 +763,18 @@ pb_tx() { # pb_tx <out> <bg: run|enq> <iso-ts> [bash-command] [agent: yes -> an 
 }
 T_PB_RUN="$ROOT/pb-run.jsonl"; T_PB_ENQ="$ROOT/pb-enq.jsonl"; T_PB_OLD="$ROOT/pb-old.jsonl"
 T_PB_MID="$ROOT/pb-mid.jsonl"; T_PB_WATCH="$ROOT/pb-watch.jsonl"; T_PB_AGENT="$ROOT/pb-agent.jsonl"
-_pb_now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+# THE PUSH'S AGE IS DECIDED BY AN INJECTED CLOCK, NOT BY HOW LONG THE FIXTURE TOOK. The stamps are cut from one
+# epoch captured once, and every drive that reads them puts a `date` shim first on the hook's PATH (HCA_PATH)
+# that answers `date +%s` with that epoch, so the age the hook computes is exactly 0 and 1800 whatever the load.
+# Every other `date` call passes through to the real one. reset_state/drive clear the stall state before each
+# drive, so no stamp written under the real clock is read under the pinned one.
+HCA_EPOCH="$(date +%s)"; HCA_REAL_DATE="$(command -v date)"; mkdir -p "$ROOT/clk"
+printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then echo %s; exit 0; fi\nexec %s "$@"\n' "$(command -v bash)" "$HCA_EPOCH" "$HCA_REAL_DATE" > "$ROOT/clk/date"
+chmod +x "$ROOT/clk/date"
+[ "$(PATH="$ROOT/clk:$PATH" date +%s)" = "$HCA_EPOCH" ] || broken "(pb) the injected clock shim does not answer date +%s"
+_pb_now="$(jq -nr --argjson e "$HCA_EPOCH" '$e | strftime("%Y-%m-%dT%H:%M:%S.000Z")')"
 # 1800 s back: past the old one-sample 729 s ceiling, inside the derived 3004 s one.
-_pb_mid="$(jq -nr 'now - 1800 | strftime("%Y-%m-%dT%H:%M:%S.000Z")')"
+_pb_mid="$(jq -nr --argjson e "$HCA_EPOCH" '$e - 1800 | strftime("%Y-%m-%dT%H:%M:%S.000Z")')"
 pb_tx "$T_PB_RUN" run "$_pb_now"; pb_tx "$T_PB_ENQ" enq "$_pb_now"; pb_tx "$T_PB_OLD" run "2020-01-01T00:00:00.000Z"
 pb_tx "$T_PB_MID" run "$_pb_mid"
 # A backgrounded WATCHER that carries `git push` as TEXT, never as its program.
@@ -776,7 +785,7 @@ _pb_user="$(jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type
   broken "(pb) premise: the background-push transcript's last user text ('$_pb_user') is not a handoff request — the tool-result record displaced it, and no (pb) verdict would mean anything"
 pb_drive() { # pb_drive <transcript> [hooksdir] -> raw stdout; the pause flag is up
   reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
-  drive "$P_UNPUSHED" "$SESS_A" "$1" "${2:-$HOOKS_DIR}"
+  HCA_PATH="$ROOT/clk:$PATH" drive "$P_UNPUSHED" "$SESS_A" "$1" "${2:-$HOOKS_DIR}"
 }
 pb_log() { printf '%s' "$P_UNPUSHED/_bmad-output/pipeline-continuation-log.md"; }
 
@@ -880,7 +889,7 @@ fi
 #       tree whose only other unsatisfied step is the push.
 pbx_drive() { # pbx_drive <projdir> <transcript> [hooksdir] -> raw stdout; the pause flag is up
   reset_state "$1"; touch "$1/_bmad-output/pipeline-paused.flag"
-  drive "$1" "$SESS_A" "$2" "${3:-$HOOKS_DIR}"
+  HCA_PATH="$ROOT/clk:$PATH" drive "$1" "$SESS_A" "$2" "${3:-$HOOKS_DIR}"
 }
 pbx_log() { printf '%s' "$1/_bmad-output/pipeline-continuation-log.md"; }
 INFL_MARK="table has NO data rows while"
@@ -893,7 +902,7 @@ pb7_world() { # pb7_world <projdir>: the ledger row is written after reset_state
   jq -nc '{v:1,ts:"2026-10-18T17:00:00Z",name:"dev",role:"dev",tool_use_id:"toolu_PBAGENT1"}' > "$1/_bmad-output/spawn-ledger.jsonl"
 }
 reset_state "$P_UNPUSHED"; pb7_world "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
-o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT")"
+o="$(HCA_PATH="$ROOT/clk:$PATH" drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT")"
 rr="$(reason "$o")"
 if has "$rr" "$INFL_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; then
   ok "(pb7) push in flight AND an empty In-Flight table with a dispatch outstanding -> the INFLIGHT text, no deferral"
@@ -906,7 +915,7 @@ rm -f "$P_UNPUSHED/_bmad-output/spawn-ledger.jsonl"
 reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
 printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## In-Flight Teammates\n\nagent | role | deliverable | dispatched-at | status\ndev | dev | docs/x.md | 2026-10-18T17:00:00Z | in-flight\n\n## Context Reminders\ncontext_reminders_sent: none\n' \
   > "$P_UNPUSHED/_bmad-output/pipeline-snapshot.md"
-o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_RUN")"
+o="$(HCA_PATH="$ROOT/clk:$PATH" drive "$P_UNPUSHED" "$SESS_A" "$T_PB_RUN")"
 rr="$(reason "$o")"
 if has "$rr" "$TEAM_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; then
   ok "(pb8) push in flight AND an in-flight teammate row -> the TEAMMATES text, no deferral"
@@ -2335,7 +2344,7 @@ a_pb5() { local o; o="$(pb_drive "$T_PB_MID" "$1")"
 a_pb6() { local o; o="$(pb_drive "$T_PB_WATCH" "$1")"
          if has "$(reason "$o")" "$PUSH_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pb_log)"; then echo 1; else echo 0; fi; }
 a_pb7() { local o rr; reset_state "$P_UNPUSHED"; pb7_world "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
-         o="$(drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT" "$1")"; rr="$(reason "$o")"
+         o="$(HCA_PATH="$ROOT/clk:$PATH" drive "$P_UNPUSHED" "$SESS_A" "$T_PB_AGENT" "$1")"; rr="$(reason "$o")"
          rm -f "$P_UNPUSHED/_bmad-output/spawn-ledger.jsonl"
          if has "$rr" "$INFL_MARK" && ! grep -qF -- "-- $PB_DEF" "$(pbx_log "$P_UNPUSHED")"; then echo 1; else echo 0; fi; }
 a_pb10(){ local o; o="$(pb_drive "$T_PB_NOID" "$1")"
@@ -2454,8 +2463,8 @@ armbase() {
 # at MUT_DIR and every twin must HOLD. In --matrix mode every arm is run and one MATRIX line is
 # printed per cell; the plain run executes no matrix-only cell.
 mscore() {
-  local flag="$1" m="$2" dec="$3" t a v dv tv held=1 tl="" bv; shift 3
-  for t in "$dec" "$@"; do bv="$(armbase "$t")"; [ "$bv" = 1 ] || flag=0; done
+  local flag="$1" m="$2" dec="$3" t a v dv tv held=1 tl="" bv nobase=""; shift 3
+  for t in "$dec" "$@"; do bv="$(armbase "$t")"; [ "$bv" = 1 ] || nobase=1; done
   if [ "$MATRIX" = 1 ]; then
     for a in $ARMS_ALL; do
       v="$(armv "$a" "$MUT_DIR")"; eval "CELL_$a=\$v"
@@ -2469,7 +2478,8 @@ mscore() {
     for t in "$@"; do tv="$(armv "$t" "$MUT_DIR")"; [ "$tv" = 1 ] || held=0; tl="$tl $t"; done
   fi
   if [ "$dv" = 0 ] && [ "$held" = 1 ]; then
-    mutant_killed "$flag" "$m" "$m: killed by arm $dec (FAIL under it), twin(s)${tl} hold"
+    if [ -n "$nobase" ]; then bad "FIXTURE BROKEN: MUTANT $m not scored -- an arm it is scored on does not hold on the shipped hooks, so its kill would read the seed failing"
+    else mutant_killed "$flag" "$m" "$m: killed by arm $dec (FAIL under it), twin(s)${tl} hold"; fi
   else
     bad "$m SURVIVED: arm $dec read $dv under the mutant (want 0) and the twin(s)${tl} held=$held (want 1) -- $dec does not depend on the mutated code, or the mutation moved a twin too"
   fi

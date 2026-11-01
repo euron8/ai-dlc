@@ -823,13 +823,14 @@ if sg cf; then
 # the stamp and a stray `rm -f` outside the read-back still clears the marker.
 W_VER="$(stamp_ver "$C_WORK")"; W_SHA="$(stamp_sha "$C_WORK")"; W_MK="$(marker "$C_WORK")"
 if [ "$W_VER" = "1.0.0" ] && [ "$W_SHA" = "$BASE" ]; then
-  ok "C1 a run carrying a WORKLIST row leaves .ai-dlc-version at base (version: 1.0.0)"; C1_STAMP_OK=1
+  ok "C1 a run carrying a WORKLIST row leaves .ai-dlc-version at base (version: 1.0.0)"; B_C1s=1
 else
   bad "C1 the stamp advanced to 'version: ${W_VER:-<absent>} / commit: ${W_SHA:-<absent>}' over a tree with an outstanding semantic merge. It should read 1.0.0 @ $BASE. The next pull computes its base from this file, so it will merge from a ref this tree never reached"
 fi
 if [ "$W_MK" = PRESENT ]; then
   ok "C1 and .ai-dlc-applying survives — the fixture suite stays blocked on a tree whose merges are outstanding"
-  if [ "${C1_STAMP_OK:-0}" = 1 ]; then B_C1=1; fi
+  B_C1m=1
+  [ "${B_C1s:-0}${B_C1m:-0}" = 11 ] && B_C1=1
 else
   bad "C1 .ai-dlc-applying was removed on a run that handed back a semantic merge. pre-push re-enables the fixture suite over a partially reconciled tree, which is the one state the marker exists to keep unjudged"
 fi
@@ -1220,20 +1221,19 @@ U5="$(printf '%s|%s|%s|%s|%s|%s\n' "$RC_U5" "$(stamp_ver "$C_U5")" "$(marker "$C
 RA1="$(printf '%s|%s|%s|%s\n' "$RC_U5" "$(stamp_ver "$C_U5")" \
     "$(grep -q 'UPSTREAM' "$C_U5/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
     "$(has_row "$OUT_U5" NOTE blockers-resolved && echo NOTE || echo -)")"
-U5_N=0
 case "$U5" in
-  "1|1.0.0|GONE|"*) ok "U5 a report approved before its blocker was resolved REFUSES the apply (rc 1), leaving the stamp at base and writing no in-flight marker"; U5_N=$((U5_N+1)) ;;
+  "1|1.0.0|GONE|"*) ok "U5 a report approved before its blocker was resolved REFUSES the apply (rc 1), leaving the stamp at base and writing no in-flight marker"; B_u5a=1 ;;
   *)                bad "U5 the apply did not refuse cleanly ($U5, want 1|1.0.0|GONE|...) — either step 7's own prescribed resolution now writes over a region nobody re-approved, or the refusal left a marker the operator has to clear by hand" ;;
 esac
 case "$U5" in
-  *"|CAUSE|REMEDY|"*) ok "U5 and the refusal NAMES the cause (BLOCKERS-RESOLVED) and the one-step remedy with this run's four arguments — not the two false causes it used to offer"; U5_N=$((U5_N+1)) ;;
+  *"|CAUSE|REMEDY|"*) ok "U5 and the refusal NAMES the cause (BLOCKERS-RESOLVED) and the one-step remedy with this run's four arguments — not the two false causes it used to offer"; B_u5b=1 ;;
   *)                  bad "U5 the refusal did not name the cause and the remedy ($U5) — the operator is told upstream moved or the region was hand-edited, both false, and the pull is unpassable by any sequence step 7 permits" ;;
 esac
 case "$U5" in
-  *"|FWD") ok "U5 and --verify's own stderr is FORWARDED: the cause line and the want-vs-report diff reach the operator, so 'read the diff' points at a diff they have rather than at a tool they must re-run"; U5_N=$((U5_N+1)) ;;
+  *"|FWD") ok "U5 and --verify's own stderr is FORWARDED: the cause line and the want-vs-report diff reach the operator, so 'read the diff' points at a diff they have rather than at a tool they must re-run"; B_u5c=1 ;;
   *)       bad "U5 the refusal did not forward --verify's stderr ($U5) — the message quotes the cause text and then tells the operator to read a diff apply.sh discarded, which is a pointer to nothing" ;;
 esac
-if [ "$U5_N" -eq 3 ]; then B_U5=1; fi
+[ "${B_u5a:-0}${B_u5b:-0}${B_u5c:-0}" = 111 ] && B_U5=1
 
 # --- RA0-RA5: the recorded re-approval, and the exit-0 control --------------------------------
 # EVERY RA WORLD IS A COPY of one of two builds: the unseen world above (U5_SRC) or one plain world
@@ -3523,27 +3523,25 @@ hr_mut() { # hr_mut <dir> <anchor-literal> ; transform on stdin
   [ "$n" = 1 ] || { cat >/dev/null; return 1; }
   mut_apply "$1"
 }
-# hr_mscore <label> <dir> <what> <worlds> <cells> <want> <reason-fn>
+# hr_mscore <flag> <label> <dir> <what> <worlds> <cells> <want> <reason-fn>
 # Scored on the mutant's DECIDING worlds and one twin it must leave holding; <reason-fn> <label>
 # must find the row the removed line's absence produces, so a mutant that killed its cells by
 # breaking the seam cannot score.
 hr_mscore() {
-  local lab="$1" d="$2" what="$3" ws="$4" cs="$5" want="$6" why="$7" c v="" ones="" bf
+  local flag="$1" lab="$2" d="$3" what="$4" ws="$5" cs="$6" want="$7" why="$8" c v="" ones=""
   if ! hr_seam_set "$d/apply.sh" "$lab" $ws; then
     bad "$lab ($what): the seam did not run over {$ws} on the mutant — BROKEN, not a verdict"; return
   fi
   for c in $cs; do v="$v $(hr_cell "$c" "$lab")"; ones="$ones 1"; done
   v="${v# }"; ones="${ones# }"
-  bf="${B_hrctl:-0}"
-  for c in $cs; do eval "[ \"\${B_hr$c:-0}\" = 1 ]" || bf=0; done
   if [ "$v" = "$want" ] && "$why" "$lab"; then
-    mutant_killed "$bf" "$lab" "$1 ($what): cells {$cs} over worlds {$ws} = $v — killed exactly the arms it owns, for the reason it removes"
+    mutant_killed "$flag" "$lab" "$lab ($what): cells {$cs} over worlds {$ws} = $v — killed exactly the arms it owns, for the reason it removes"
   elif [ "$v" = "$ones" ]; then
-    bad "$1 SURVIVED ($what): cells {$cs} all still hold ($v), so the arms it should kill are not testing that line"
+    bad "$lab SURVIVED ($what): cells {$cs} all still hold ($v), so the arms it should kill are not testing that line"
   elif [ "$v" = "$want" ]; then
-    bad "$1 ($what) scored $v as wanted but the row its removal produces is absent — it broke the cells some other way"
+    bad "$lab ($what) scored $v as wanted but the row its removal produces is absent — it broke the cells some other way"
   else
-    bad "$1 ($what) scored $v over {$cs}, want $want — it broke an arm it should not, or missed one it should, so the arms are entangled or one is vacuous"
+    bad "$lab ($what) scored $v over {$cs}, want $want — it broke an arm it should not, or missed one it should, so the arms are entangled or one is vacuous"
   fi
 }
 hr_why_ma() { [ "$(hk_n "$HR_R/$1.D" DECISION hook-registration-unparsed)" = 1 ]; }
@@ -3563,7 +3561,7 @@ hr_why_mg() { [ "$(hk_n "$HR_R/$1.G" WORKLIST settings-local-dangling)" = 0 ] &&
 # green as the twin, and (g) dies with the rest: its name reaches the function only through the D list.
 HR_MA='    index($0, "  DANGLING ") == 1 { m = "D"; next }'
 if awk -v a="$HR_MA" '$0 == a { next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-ma" "$HR_MA"; then
-  hr_mscore "HR-M-a" "$WORK/hr-ma" "the DANGLING block parse deleted" "D B L E G" "a b c d e g" "0 0 0 1 0 0" hr_why_ma
+  hr_mscore "$(( ${B_hrctl:-0} && ${B_hra:-0} && ${B_hrb:-0} && ${B_hrc:-0} && ${B_hrd:-0} && ${B_hre:-0} && ${B_hrg:-0} ))" "HR-M-a" "$WORK/hr-ma" "the DANGLING block parse deleted" "D B L E G" "a b c d e g" "0 0 0 1 0 0" hr_why_ma
 else
   bad "HR-M-a DID NOT APPLY — the DANGLING parse line is no longer spelled \`$HR_MA\` exactly once in apply.sh; HR-a/b/e are unproven. Re-anchor it."
 fi
@@ -3574,7 +3572,7 @@ fi
 # Twin (g): its local row comes from the direct read, which M-c leaves alone.
 HR_MC='    case "$hr_local" in'
 if awk -v a="$HR_MC" '$0 == a { print "    case \"\" in"; next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-mc" "$HR_MC"; then
-  hr_mscore "HR-M-c" "$WORK/hr-mc" "the settings.local.json split deleted; local names go to settings-merge" "L G" "c g" "0 1" hr_why_mc
+  hr_mscore "$(( ${B_hrctl:-0} && ${B_hrc:-0} && ${B_hrg:-0} ))" "HR-M-c" "$WORK/hr-mc" "the settings.local.json split deleted; local names go to settings-merge" "L G" "c g" "0 1" hr_why_mc
 else
   bad "HR-M-c DID NOT APPLY — \`$HR_MC\` is not in apply.sh exactly once; HR-c is unproven. Re-anchor it."
 fi
@@ -3583,7 +3581,7 @@ fi
 # silent exactly as before the fix. Twin (a): rc 1 WITH names never reaches that branch.
 HR_MD='  elif [ "$hr_rc" != "0" ]; then'
 if awk -v a="$HR_MD" '$0 == a { print "  elif false; then"; next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-md" "$HR_MD"; then
-  hr_mscore "HR-M-d" "$WORK/hr-md" "the hook-registration-unparsed branch made unreachable" "D E" "a d" "1 0" hr_why_md
+  hr_mscore "$(( ${B_hrctl:-0} && ${B_hra:-0} && ${B_hrd:-0} ))" "HR-M-d" "$WORK/hr-md" "the hook-registration-unparsed branch made unreachable" "D E" "a d" "1 0" hr_why_md
 else
   bad "HR-M-d DID NOT APPLY — \`$HR_MD\` is not in apply.sh exactly once; HR-d is unproven. Re-anchor it."
 fi
@@ -3593,7 +3591,7 @@ fi
 # unregistered text to lose.
 HR_MB='    [ -n "$hr_dangle" ] && hr_what="${hr_what}hook(s) REGISTERED'
 if awk -v a="$HR_MB" 'index($0, a) == 1 { sub(/hr_what="\$\{hr_what\}hook/, "hr_what=\"hook") } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-mb" "$HR_MB"; then
-  hr_mscore "HR-M-b" "$WORK/hr-mb" "the dangling clause overwrites the unregistered text" "D B" "a b" "1 0" hr_why_mb
+  hr_mscore "$(( ${B_hrctl:-0} && ${B_hra:-0} && ${B_hrb:-0} ))" "HR-M-b" "$WORK/hr-mb" "the dangling clause overwrites the unregistered text" "D B" "a b" "1 0" hr_why_mb
 else
   bad "HR-M-b DID NOT APPLY — \`$HR_MB\` is not in apply.sh exactly once; HR-b's mixed row is unproven. Re-anchor it."
 fi
@@ -3602,7 +3600,7 @@ fi
 # Twin (c): a local-only name is routed by the NOTE split, which M-g leaves alone.
 HR_MG='                    case "$hr_inlocal" in'
 if awk -v a="$HR_MG" 'index($0, a) == 1 { sub(/case "\$hr_inlocal" in/, "case \"\" in") } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-mg" "$HR_MG"; then
-  hr_mscore "HR-M-g" "$WORK/hr-mg" "the direct settings.local.json read ignored" "L G" "c g" "1 0" hr_why_mg
+  hr_mscore "$(( ${B_hrctl:-0} && ${B_hrc:-0} && ${B_hrg:-0} ))" "HR-M-g" "$WORK/hr-mg" "the direct settings.local.json read ignored" "L G" "c g" "1 0" hr_why_mg
 else
   bad "HR-M-g DID NOT APPLY — \`$HR_MG\` is not in apply.sh exactly once; HR-g is unproven. Re-anchor it."
 fi
@@ -4095,7 +4093,12 @@ fi
 
 if [ "$VF_PRESENT" = 1 ] || [ "$IS_DIST" = 1 ]; then
 vf_report() { # vf_report <arm-fn> <label> <ok-text> <bad-text>
-  if "$1" "$REC"; then ok "$2 $3"; eval "B_${1}=1"; else
+  if "$1" "$REC"; then ok "$2 $3"
+    case "$1" in
+      vf_r1) B_vf_r1=1 ;; vf_r2) B_vf_r2=1 ;; vf_ro) B_vf_ro=1 ;; vf_r3) B_vf_r3=1 ;; vf_r4) B_vf_r4=1 ;;
+      vf_r5) B_vf_r5=1 ;; vf_r5b) B_vf_r5b=1 ;; vf_r6) B_vf_r6=1 ;; vf_do1) B_vf_do1=1 ;; vf_do2) B_vf_do2=1 ;; vf_do3) B_vf_do3=1 ;;
+    esac
+  else
     bad "$2 $4 (stamp '$(stamp_ver "$VF_C") @ $(stamp_sha "$VF_C")', marker $(marker "$VF_C"), finish-unapplied: '$(vf_subj "$VF_C" WORKLIST finish-unapplied)', base-unverified=$(vf_n "$VF_C" WORKLIST finish-base-unverified), identity-mismatch=$(vf_n "$VF_C" DECISION restamp-identity-mismatch))"
   fi
 }
@@ -4141,13 +4144,11 @@ vf_mut() { # vf_mut <dir> <apply.sh|preclassify.sh> <anchor-line> <replacement>
   [ -f "$1/preclassify.sh" ] && [ -f "$1/lib.sh" ] || return 1
   ! cmp -s "$REC/$2" "$1/$2"
 }
-# vf_score <label> <dir> <decides> <twins> <what it did> -- PER PUSH: the mutant runs on the arm(s) it must kill and the
+# vf_score <flag> <label> <dir> <decides> <twins> <what it did> -- PER PUSH: the mutant runs on the arm(s) it must kill and the
 # green twin(s) it must leave holding (the measured `--matrix` rows record the rest). The kill needs every arm it names
 # to have held on the shipped program in this run (B_vf_<arm>) AND the copy-under-test control (B_vfctl).
 vf_score() {
-  local lab="$1" d="$2" dec="$3" tw="$4" what="$5" a bf=1 ok=1 got=""
-  eval "bf=\${B_vfctl:-0}"
-  for a in $dec $tw; do eval "[ \"\${B_vf_$a:-0}\" = 1 ]" || bf=0; done
+  local bf="$1" lab="$2" d="$3" dec="$4" tw="$5" what="$6" a ok=1 got=""
   for a in $dec; do if "vf_$a" "$d"; then ok=0; got="$got $a=1"; else got="$got $a=0"; fi; done
   for a in $tw; do if "vf_$a" "$d"; then got="$got $a=1"; else ok=0; got="$got $a=0"; fi; done
   if [ "$ok" = 1 ]; then
@@ -4178,7 +4179,7 @@ VF_CASE='      UPSTREAM-ONLY|UPSTREAM-ONLY-ADD|*SETUP-TOKENS*)'
 # preclassify's bucket. The design the fix's own header records as built and refuted.
 if vf_mut "$WORK/vf-mcmp" apply.sh "$VF_CASE" \
   '      *) if [ "$_fv_bucket" = DIST-ONLY-SKIP ] || [ "$(git -C "$DIST" show "${THEIRS}:${_fv_path}" 2>/dev/null | git hash-object --stdin)" = "$(git hash-object "$CONSUMER/$_fv_cons" 2>/dev/null)" ]; then continue; fi'; then
-  vf_score VF-m-cmp "$WORK/vf-mcmp" "r4" "r1" "compare each copy to theirs' blob instead of preclassify's pure-apply buckets"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r4:-0} && ${B_vf_r1:-0} ))" VF-m-cmp "$WORK/vf-mcmp" "r4" "r1" "compare each copy to theirs' blob instead of preclassify's pure-apply buckets"
 else
   bad "VF-m-cmp DID NOT APPLY — \`$VF_CASE\` is not in apply.sh exactly once; VF-R4 is unproven"
 fi
@@ -4188,13 +4189,13 @@ fi
 # exemption no finished tree over that range can ever stamp. R4's own subject is the merge (m-cmp),
 # DO2's is the skewed checkout (m-wt); each of them has its own mutant that R3 does not see.
 if vf_mut "$WORK/vf-mdo" apply.sh "$VF_CASE" '      UPSTREAM-ONLY|UPSTREAM-ONLY-ADD|*SETUP-TOKENS*|DIST-ONLY-SKIP)'; then
-  vf_score VF-m-distonly "$WORK/vf-mdo" "r3 r4 do2" "r1" "a DIST-ONLY-SKIP row counted as unapplied"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r3:-0} && ${B_vf_r4:-0} && ${B_vf_do2:-0} && ${B_vf_r1:-0} ))" VF-m-distonly "$WORK/vf-mdo" "r3 r4 do2" "r1" "a DIST-ONLY-SKIP row counted as unapplied"
 else
   bad "VF-m-distonly DID NOT APPLY — \`$VF_CASE\` is not in apply.sh exactly once; VF-R3 is unproven"
 fi
 # m-noadd: the added-file half dropped -- UPSTREAM-ONLY-ADD not counted.
 if vf_mut "$WORK/vf-mna" apply.sh "$VF_CASE" '      UPSTREAM-ONLY|*SETUP-TOKENS*)'; then
-  vf_score VF-m-noadd "$WORK/vf-mna" "r2" "r1" "an UPSTREAM-ONLY-ADD row not counted"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r2:-0} && ${B_vf_r1:-0} ))" VF-m-noadd "$WORK/vf-mna" "r2" "r1" "an UPSTREAM-ONLY-ADD row not counted"
 else
   bad "VF-m-noadd DID NOT APPLY — \`$VF_CASE\` is not in apply.sh exactly once; VF-R2 is unproven"
 fi
@@ -4204,14 +4205,14 @@ if vf_mut "$WORK/vf-mfp" apply.sh "$VF_LOOP" "$VF_LOOP
     [ -n \"\${_fv_one:-}\" ] && break
     case \"\$_fv_bucket\" in DIST-ONLY-SKIP) continue ;; esac
     _fv_one=1"; then
-  vf_score VF-m-first "$WORK/vf-mfp" "r1 r2 ro" "r3" "only the first changed path is checked"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r1:-0} && ${B_vf_r2:-0} && ${B_vf_ro:-0} && ${B_vf_r3:-0} ))" VF-m-first "$WORK/vf-mfp" "r1 r2 ro" "r3" "only the first changed path is checked"
 else
   bad "VF-m-first DID NOT APPLY — \`$VF_LOOP\` is not in apply.sh exactly once; VF-RO is unproven"
 fi
 # m-order: the tree check no longer gated on the identity verdict, so it runs against a fumbled ref.
 VF_GATE='  [ -z "$finish_id_mismatch" ] && finish_verify_tree'
 if vf_mut "$WORK/vf-mor" apply.sh "$VF_GATE" '  finish_verify_tree'; then
-  vf_score VF-m-order "$WORK/vf-mor" "r6" "r1" "the tree check runs whatever the identity check decided"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r6:-0} && ${B_vf_r1:-0} ))" VF-m-order "$WORK/vf-mor" "r6" "r1" "the tree check runs whatever the identity check decided"
 else
   bad "VF-m-order DID NOT APPLY — \`$VF_GATE\` is not in apply.sh exactly once; VF-R6 is unproven"
 fi
@@ -4220,7 +4221,7 @@ fi
 VF_WHY='  if [ -n "$_fv_why" ]; then'
 if vf_mut "$WORK/vf-mbs" apply.sh "$VF_WHY" "  _fv_why=\"\"
 $VF_WHY"; then
-  vf_score VF-m-base "$WORK/vf-mbs" "r5 r5b" "r1" "BASE trusted from argv, never checked against the stamp"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r5:-0} && ${B_vf_r5b:-0} && ${B_vf_r1:-0} ))" VF-m-base "$WORK/vf-mbs" "r5 r5b" "r1" "BASE trusted from argv, never checked against the stamp"
 else
   bad "VF-m-base DID NOT APPLY — \`$VF_WHY\` is not in apply.sh exactly once; VF-R5/R5b are unproven"
 fi
@@ -4235,7 +4236,7 @@ if ! grep -qxF -- "$VF_DO" "$REC/preclassify.sh"; then
   VF_DO_R='      [ -f "$DIST/core/fixtures/$_f/.dist-only" ]'
 fi
 if vf_mut "$WORK/vf-mwt" preclassify.sh "$VF_DO" "$VF_DO_R"; then
-  vf_score VF-m-wt "$WORK/vf-mwt" "do1 do2 do3" "r1" "dist_only() reads the dist working tree instead of THEIRS"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_do1:-0} && ${B_vf_do2:-0} && ${B_vf_do3:-0} && ${B_vf_r1:-0} ))" VF-m-wt "$WORK/vf-mwt" "do1 do2 do3" "r1" "dist_only() reads the dist working tree instead of THEIRS"
 else
   bad "VF-m-wt DID NOT APPLY — \`$VF_DO\` is not in preclassify.sh exactly once; VF-DO1..3 are unproven"
 fi
@@ -4937,10 +4938,9 @@ ar_mut() { # ar_mut <dir> <file> <old> <new>
   py_replace_once "$1/$2" "$3" "$4" 2>/dev/null || return 1
   ! cmp -s "$REC/$2" "$1/$2"
 }
-# ar_score <id> <tokens> <must-flip> <must-hold> <what>
+# ar_score <flag> <id> <tokens> <must-flip> <must-hold> <what>
 ar_score() {
-  local bf
-  eval "bf=\${B_ars_$1:-0}"
+  local bf="$1"; shift
   if tk "$2" "$3!" && tk "$2" "$4"; then
     mutant_killed "$bf" "$1" "$1 ($5): $3 goes red while $4 holds [$2]"
   else
@@ -4961,46 +4961,40 @@ else
     bad "CONTROL-AR could not copy the reconcile directory"
   fi
   # Each mutant's kill needs the shipped arm it must flip AND the copy-under-test control to have passed in this run.
-  B_ars_M1="$(( ${B_ar_r1:-0} && ${B_arctl:-0} ))"; B_ars_M2="$(( ${B_ar_r2:-0} && ${B_arctl:-0} ))"
-  B_ars_M3="$(( ${B_ar_a:-0} && ${B_arctl:-0} ))"; B_ars_M4="$(( ${B_ar_mb:-0} && ${B_ar_ma:-0} && ${B_arctl:-0} ))"
-  B_ars_M5="$(( ${B_ar_f1:-0} && ${B_arctl:-0} ))"; B_ars_M6="$(( ${B_ar_g:-0} && ${B_arctl:-0} ))"
-  B_ars_M7a="$(( ${B_ar_i2:-0} && ${B_arctl:-0} ))"; B_ars_M7b="$(( ${B_ar_i3:-0} && ${B_arctl:-0} ))"
-  B_ars_M8="$(( ${B_ar_j:-0} && ${B_arctl:-0} ))"; B_ars_M9="$(( ${B_ar_kf:-0} && ${B_arctl:-0} ))"
-  B_ars_M10="$(( ${B_ar_n:-0} && ${B_arctl:-0} ))"
   if ar_mut "$WORK/arm1" emit-report.sh 'ar_record() {' 'ar_record() { return 0'; then
-    ar_flowA "$WORK/arm1" r1; ar_score M1 "$AR_V" R1 V0 "the record write disabled"
+    ar_flowA "$WORK/arm1" r1; ar_score "$(( ${B_ar_r1:-0} && ${B_arctl:-0} ))" M1 "$AR_V" R1 V0 "the record write disabled"
   else bad "M1 DID NOT APPLY — \`ar_record() {\` is not in emit-report.sh exactly once"; fi
   if ar_mut "$WORK/arm2" emit-report.sh '  ar_read && return 0' '  :'; then
-    ar_flowA "$WORK/arm2" r2; ar_score M2 "$AR_V" R2 R1 "first-wins made last-wins"
+    ar_flowA "$WORK/arm2" r2; ar_score "$(( ${B_ar_r2:-0} && ${B_arctl:-0} ))" M2 "$AR_V" R2 R1 "first-wins made last-wins"
   else bad "M2 DID NOT APPLY — \`  ar_read && return 0\` is not in emit-report.sh exactly once"; fi
   # M3 and M7a anchor on the substitution as f4a56f21f spells it (it also sets _ar_sub). M3 reverts
   # BOTH layers: `got` stays the report's region and _ar_sub stays 0.
   if ar_mut "$WORK/arm3" emit-report.sh '    [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; }' '    :'; then
-    ar_flowA "$WORK/arm3" a; ar_score M3 "$AR_V" A R2 "apply mode ignores the record"
+    ar_flowA "$WORK/arm3" a; ar_score "$(( ${B_ar_a:-0} && ${B_arctl:-0} ))" M3 "$AR_V" A R2 "apply mode ignores the record"
   else bad "M3 DID NOT APPLY — the record substitution is not in emit-report.sh exactly once"; fi
   if ar_mut "$WORK/arm4" apply.sh "      *[!0-9a-f]*|'') _ar_ok=0 ;;" "      *[!0-9a-f]*|'') _ar_ok=1; _ar_first=NONE ;;"; then
     ar_flowM "$WORK/arm4" bad; M4B="$AR_V"; ar_flowM "$WORK/arm4" absent; M4A="$AR_V"
-    ar_score M4 "$M4B $M4A" M-bad M-absent "a malformed approved-region line read as NONE"
+    ar_score "$(( ${B_ar_mb:-0} && ${B_ar_ma:-0} && ${B_arctl:-0} ))" M4 "$M4B $M4A" M-bad M-absent "a malformed approved-region line read as NONE"
   else bad "M4 DID NOT APPLY — the malformed-line case is not in apply.sh exactly once"; fi
   if ar_mut "$WORK/arm5" apply.sh '            echo "  option label: ${_ra_lb}"' '            echo "  option label: ${_ra_lb/R/r}"'; then
-    ar_flowA "$WORK/arm5" f; ar_score M5 "$AR_V" F1 A "one character of the PRINTED label changed"
+    ar_flowA "$WORK/arm5" f; ar_score "$(( ${B_ar_f1:-0} && ${B_arctl:-0} ))" M5 "$AR_V" F1 A "one character of the PRINTED label changed"
   else bad "M5 DID NOT APPLY — the printed option label is not in apply.sh exactly once"; fi
   if ar_mut "$WORK/arm6" emit-report.sh '[ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 3' '[ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 1'; then
-    ar_flowG "$WORK/arm6" g1; ar_score M6 "$AR_V" G1 G0 "F3 classifies a re-render as exit 1"
+    ar_flowG "$WORK/arm6" g1; ar_score "$(( ${B_ar_g:-0} && ${B_arctl:-0} ))" M6 "$AR_V" G1 G0 "F3 classifies a re-render as exit 1"
   else bad "M6 DID NOT APPLY — the RE-RENDERED-SINCE-APPROVAL exit is not in emit-report.sh exactly once"; fi
   # M7a/M7b re-drive cell (i), whose I1 conjunct compares against the twin; build it here too.
   ar_twin || bad "M7 could not build cell (i)'s twin world, so I1 cannot hold under either M7 mutant"
   if ar_mut "$WORK/arm7a" emit-report.sh '    [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; }' '    [ -n "$got" ] && { got="$_ar_first"; _ar_sub=1; printf '"'"'%s\n'"'"' "$_ar_first" > "$REPORT"; }'; then
-    ar_flowI "$WORK/arm7a"; ar_score M7a "$AR_V" I2 I1 "apply mode writes the first region back to the report"
+    ar_flowI "$WORK/arm7a"; ar_score "$(( ${B_ar_i2:-0} && ${B_arctl:-0} ))" M7a "$AR_V" I2 I1 "apply mode writes the first region back to the report"
   else bad "M7a DID NOT APPLY — the record substitution is not in emit-report.sh exactly once"; fi
   if ar_mut "$WORK/arm7b" apply.sh "quoting digest \${_ra_dg} answered '\${_ra_lb}'.\${_ar_note}\"" "quoting digest \${_ar_first} answered '\${_ra_lb}'.\${_ar_note}\""; then
-    ar_flowI "$WORK/arm7b"; ar_score M7b "$AR_V" I3 I2 "the NOTE names the first region's digest as the re-approved one"
+    ar_flowI "$WORK/arm7b"; ar_score "$(( ${B_ar_i3:-0} && ${B_arctl:-0} ))" M7b "$AR_V" I3 I2 "the NOTE names the first region's digest as the re-approved one"
   else bad "M7b DID NOT APPLY — the re-approved NOTE is not in apply.sh exactly once"; fi
   if ar_mut "$WORK/arm8" emit-report.sh '  [ "$(sed -n 2p "$_ar_rec" 2>/dev/null)" = "key $_ar_key" ] || return 1' '  :'; then
-    ar_flowJ "$WORK/arm8"; ar_score M8 "$AR_V" J1 J0 "the record's key ignored"
+    ar_flowJ "$WORK/arm8"; ar_score "$(( ${B_ar_j:-0} && ${B_arctl:-0} ))" M8 "$AR_V" J1 J0 "the record's key ignored"
   else bad "M8 DID NOT APPLY — the key comparison is not in emit-report.sh exactly once"; fi
   if ar_mut "$WORK/arm9" emit-report.sh "  if [ \"\$rc\" -eq 0 ]; then printf '%s\\n' \"\$d\"; else printf 'FAILED-%s\\n' \"\$t\"; fi" "  if [ \"\$rc\" -eq 0 ]; then printf '%s\\n' \"\$d\"; else printf 'UNAVAILABLE\\n'; fi"; then
-    ar_flowK "$WORK/arm9"; ar_score M9 "$AR_V" KF2 KA3 "a failed tool conflated with no tool"
+    ar_flowK "$WORK/arm9"; ar_score "$(( ${B_ar_kf:-0} && ${B_arctl:-0} ))" M9 "$AR_V" KF2 KA3 "a failed tool conflated with no tool"
     tk "$AR_V" KV! && tk "$AR_V" KF1! || bad "M9 the record write or the apply-mode state did not move with the conflation [$AR_V]"
   else bad "M9 DID NOT APPLY — the FAILED-<tool> branch is not in emit-report.sh exactly once"; fi
   # M10: the edited-report comparison deleted. ONE CASE IN TWO SHAPES: (n) and n2 both go red, and
@@ -5012,7 +5006,7 @@ else
     ar_flowN2 "$WORK/arm10" n2; M10N2="$AR_V"
     ar_flowN2 "$WORK/arm10" n3; M10N3="$AR_V"
     ar_flowN "$WORK/arm10" plain; M10N4="$AR_V"
-    ar_score M10 "$M10N" N1 N0 "the edited-report comparison deleted: (n)"
+    ar_score "$(( ${B_ar_n:-0} && ${B_arctl:-0} ))" M10 "$M10N" N1 N0 "the edited-report comparison deleted: (n)"
     tk "$M10N2" N2E! && tk "$M10N2" N2P && ok "M10 and n2 goes red the same way: its unseen=0 world PROCEEDS (exit 0, written, blockers-resolved NOTE) [$M10N2]" \
                                        || bad "M10 n2 did not proceed under the deleted comparison [$M10N2] — n2 is not a cell only that comparison refuses"
     tk "$M10N3" N3 && tk "$M10N4" NT && tk "$M10N4" N4S && ok "M10 and n3 and n4 HOLD — the splice keeps its re-render verdict and the unedited world writes" \

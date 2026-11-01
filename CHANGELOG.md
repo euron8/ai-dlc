@@ -19,6 +19,37 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.992.0] - 2026-11-01
+
+Batch b248, cluster b248-mutants. Closes BL-903 and BL-877, advances BL-828 and BL-868. No PC- id is closed.
+
+### BL-903 closed: M1 reads kill-shaped emissions only (`scripts/validate-mutant-kills.sh`)
+
+- **Fix.** M1's deny mask covers only `run(s)`, `(process) group(s)`, `pid(s)` and `by|with|on SIG<NAME>`, the non-kill senses of "killed". The mask stops at the first deny match whose preceding text names a mutant (a `mut`/`Mut`/`MUT` word start, or an `[mM]<digit>` id), so a kill line that names a mutant is never masked.
+- **Measured.** U-rows (the lines M1 refuses): 149 in 30 fixtures at 47102ad20, identical after the narrowing; 69 in 8 fixtures at 370d9df80, identical after the mutant-name stop. `--derive` membership is unchanged.
+- **Held by.** `core/fixtures/backlog-real-ledger/receipt-bl903.sh`, including a case for the mask applied with a mutant named first.
+
+### BL-877 closed: the join's probe call sites are guarded and the probe starts are batched (`core/scripts/join-remediator-shards.sh`)
+
+- **Fix.** The probes keep calling the same function the join calls, extended to take several mode/file pairs per awk with one tail per file. External starts per join: escalations 46 to 15, check-part 37 to 9, sources 69 to 34, files 114 to 86, party 135 to 103, subject 239 to 208.
+- **Cost.** `invocations.decl` `*` goes 924 to 972 and the guard hook 64 to 75, from the new cells.
+
+### BL-828 advanced (stays OPEN, `verify: manual`)
+
+- **M1.** 22 fixtures route their kills through `mutant_killed`, including inflight-row-shape (9 kills routed, plus a control arm for mutant 5). `scripts/mutant-kills-allowlist.txt` goes 30 to 8 rows.
+- **M5.** 45 fixtures are bound and `scripts/mutant-sites-allowlist.txt` goes 254 to 60 rows. M5 also refuses a same-run test variable only ever assigned a constant command substitution (`--derive-m5` unchanged at 60).
+- **Stated limit.** A constant default followed by a `$?` capture that runs only under a condition reaches the test as the constant on the false path. story-provenance RC_c/d/e/r at :532 are safe today only because the default 1 fails `-eq 0`.
+- **Owed.** The 8 M1 rows, the 19 M5 fixtures and 60 rows owned by b248-loadfree, and the keyword-free mutant-verdict residue M1 cannot see, named per fixture and line in the entry.
+
+### BL-868 advanced (stays OPEN)
+
+- **Item 7** in remediator-shard-join: `invocations.decl` `*` 678 to 924, from previously uncounted shim starts.
+- **Items 5 and 8, partly.** consumer-suite-pool F1-F10 (`invocations.decl` 362 to 356) plus the leak sweep's `csp_state` settle predicate (kernel state only, no clock); handoff-completion-assertion H1; wait-stale-deliverable W1-W6 (virtual clock, atomic-rename writes, symlink-lock-serialized advance; `invocations.decl` 350 to 627). W7 (C40 run_two_beats, C42 run_memo_single) is OPEN and needs a design.
+- **Unreachable probe.** The F8/F9 unsignalled-self-exit probe is UNREACHABLE at the sweep by construction, and `csp_state` classifies that state as LEAK. At 47102ad20: stall-world unit shells are awaited at `.githooks/pre-push:2869-2870` and `:2896`; every recorded descendant is SIGKILLed by `st_alive` (consumer-suite-pool `run.sh` :868, :909, :941); orphan worlds are killed at :1036, with the single no-kill path :1018 a BROKEN path holding a real leak; trace worlds are killed unconditionally at :1132.
+
+- **NET.** 2 (closed 2 minus filed 0).
+- **Consumer reach.** None. Validators, fixtures and one core script's internal probes.
+
 ## [0.991.0] - 2026-11-01
 
 Batch b248, lead ai-dlc-f8, cluster b248-docs. Docs-only: the diff from 47102ad20 touches `docs/backlog.md`, `docs/backlog.archive.md` and two tracked receipt drivers, and no shipped engine, hook, rule or fixture arm.

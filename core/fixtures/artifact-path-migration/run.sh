@@ -622,7 +622,7 @@ arm_hold() {
 SHIPD="$MUT/ship"; lay_dir "$SHIPD"
 # mutant_score <name> <m|c|v: which file the sed edits> <sed flag> <sed program> <deciding arm> <twin arm> <claim>
 mutant_score() {
-  local n="$1" which="$2" flag="$3" prog="$4" dec="$5" tw="$6" claim="$7" d="$MUT/$1" src dst a base
+  local n="$1" which="$2" flag="$3" prog="$4" dec="$5" tw="$6" claim="$7" d="$MUT/$1" src dst a base_rc
   lay_dir "$d"
   case "$which" in m) src="$MIG"; dst="$d/m.sh" ;; c) src="$CONFIG"; dst="$d/artifact-path-config.sh" ;; v) src="$VAL"; dst="$d/v.sh" ;; esac
   sed $flag "$prog" "$src" > "$dst.new" && mv "$dst.new" "$dst"
@@ -637,9 +637,9 @@ mutant_score() {
     ok "MATRIX $n measured against $(printf '%s\n' $ARMS | grep -c .) arms"
     return 0
   fi
-  if arm_hold "$dec" "$SHIPD"; then base=1; else base=0; fi
+  arm_hold "$dec" "$SHIPD"; base_rc=$?
   if arm_hold "$dec" "$d"; then bad "MUTANT $n SURVIVED on $dec -- $claim"
-  else mutant_killed "$base" "$n" "MUTANT $n ($dec): $claim"; fi
+  else mutant_killed "$([ "$base_rc" -eq 0 ] && echo 1 || echo 0)" "$n" "MUTANT $n ($dec): $claim"; fi
   if arm_hold "$tw" "$d"; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
   else bad "T-$n twin $tw TRIPPED under mutant $n -- the matrix row for this mutant moved"; fi
 }

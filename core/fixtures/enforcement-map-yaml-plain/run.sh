@@ -89,6 +89,11 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_FOLD=1 only beside the unmutated grammar's own ok on the folded near-miss: the mutant is scored only if that base arm passed.
+B_FOLD=0
 
 # =============================================================================
 # THE GRAMMAR — one program, used by the self-probe, the mutant and the real map.
@@ -204,12 +209,15 @@ else
   if cmp -s "$WORK/scan.awk" "$WORK/scan-mut.awk"; then
     bad "MUTANT DID NOT APPLY: disabling block-scalar tracking changed no bytes"
   else
+    h_base="$(hits "$WORK/scan.awk" "$P/nm-folded.yaml")"
+    if [ -z "$h_base" ]; then ok "BASE: the unmutated grammar keeps the folded near-miss quiet"; B_FOLD=1
+    else bad "BASE: the unmutated grammar reported the folded near-miss '$(tr '\n' ' ' <<<"$h_base")' -- the mutant below would be scored against a grammar that already fails"; fi
     h_mut="$(hits "$WORK/scan-mut.awk" "$P/nm-folded.yaml")"
     h_off="$(hits "$WORK/scan-mut.awk" "$P/off-cont.yaml")"
     # Positive control on the SAME mutant: it still runs and still reports the offender, so a
     # kill below is the folded body being misread, not a program that died.
     if [ "$h_off" = "5" ] && [ "$h_mut" = "5" ]; then
-      ok "MUTANT killed: without block-scalar tracking the folded near-miss is REPORTED at line 5 (and the mutant still reports the real offender)"
+      mutant_killed "$B_FOLD" "block-scalar-tracking" "MUTANT killed: without block-scalar tracking the folded near-miss is REPORTED at line 5 (and the mutant still reports the real offender)"
     else
       bad "MUTANT survived or broke: folded near-miss read '$(tr '\n' ' ' <<<"$h_mut")', offender read '$(tr '\n' ' ' <<<"$h_off")' -- wanted 5 and 5"
     fi

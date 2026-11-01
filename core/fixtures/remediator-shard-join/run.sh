@@ -73,6 +73,14 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX NLmh decides=NL8c twins=NL1
 # MUTANT-MATRIX DKm decides=DK1 twins=DK2
 # MUTANT-MATRIX UFm decides=UF1 twins=UF1.now
+# MUTANT-MATRIX PCm1417 decides=PC1417 twins=- why=PC1756 and PC2768 share its broken copy in other modes and still fire under it, measured once in --matrix
+# MUTANT-MATRIX PCm1423 decides=PC1423 twins=- why=PC2779 shares its broken copy in subject mode and still fires under it, measured once in --matrix
+# MUTANT-MATRIX PCm1756 decides=PC1756 twins=- why=PC1417 and PC2768 share its broken copy in other modes and still fire under it, measured once in --matrix
+# MUTANT-MATRIX PCm1773 decides=PC1773 twins=- why=PC2755 shares its broken copy in party mode and still fires under it, measured once in --matrix
+# MUTANT-MATRIX PCm2755 decides=PC2755 twins=- why=PC1773 shares its broken copy in --sources mode and still fires under it, measured once in --matrix
+# MUTANT-MATRIX PCm2768 decides=PC2768 twins=- why=PC1417 and PC1756 share its broken copy in record modes and still fire under it, measured once in --matrix
+# MUTANT-MATRIX PCm2779 decides=PC2779 twins=- why=PC1423 shares its broken copy in --escalations mode and still fires under it, measured once in --matrix
+# MUTANT-MATRIX-DYNAMIC pc-score why=pc_score passes PCm<site> to mutant_killed
 # MUTANT-MATRIX-DYNAMIC hx-loop why=the HX loop passes its list id _id to mutant_killed
 # MUTANT-MATRIX-DYNAMIC u34-loop why=the U3/U4 loop passes its list id _id to mutant_killed
 # MUTANT-MATRIX-DYNAMIC u12-loop why=the U1/U2 loop passes its list id _id to mutant_killed
@@ -406,6 +414,112 @@ else
   if [ "$_c" -ne 0 ] || ! has "$JO" "ESCALATED-COUNT: 0"; then mrow DKm DK2=1; bad "DKm: the near-miss control DK2 did not pass under the mutant copy (rc=$_c) -- the copy did not run or the arms are entangled"
   elif p_dispcap "$_dkm"; then mrow DKm DK1=0 DK2=0; bad "DKm: SURVIVED -- contract_check's case-sensitive key still refused the capitalised list item BADDISP"
   else mrow DKm DK1=1 DK2=0; mutant_killed "$(( ${B_DK1:-0} && ${B_DK2:-0} ))" DKm "DKm contract_check's key reverted to case-sensitive: KILLED by [DK1] (rc=$RC, no BADDISP for F-2), DK2 still clean"; fi
+fi
+
+# ---- BL-877: one OWNING cell per self-probe call site of the join. A probe is the join's guard against its own grammar
+# breaking, so each cell drives the join, in the one mode that reaches its site, from a WHOLE-DIRECTORY copy of the scripts
+# dir whose SHARED grammar function the probe exercises is broken by one line, and asserts the probe's own die text and no
+# verdict (rc 2). Three broken copies, each built ONCE: ct (contract_check's vocabulary key `not-reproduced` renamed, so
+# contract_probe's vocabulary case dies), src (src_check stops counting sources, so src_probe's resolving case dies), sr
+# (spec_render_scan stops counting decisions after a render, so spec_render_probe's stale case dies). One copy per grammar,
+# because in one tree :1417 dies before :1423 is reached. Each mutant PCm<site> is its cell's broken copy plus that ONE
+# call line replaced with `:`, anchored on the call line AND the line above it (`  contract_probe` and
+# `  spec_render_probe` each occur twice), the anchor asserted unique and the diff asserted to be exactly one line; the
+# owning cell must then reach its mode's verdict (rc 0) with no self-probe text. Sites sharing a broken copy and reached by
+# different modes keep firing under each other's mutants; --matrix drives them as the twin column, the plain run does not.
+PCB="$WORK/pcb"; mkdir -p "$PCB" || exit 2
+pc_break() { # <name> <grammar text> <replacement> -> 0 when $PCB/<name> is a whole-dir copy with that ONE line changed
+  local d="$PCB/$1"
+  mkdir -p "$d" && cp -R "$SRCDIR"/. "$d/" || return 1
+  K="$2" N="$3" awk 'BEGIN { k = ENVIRON["K"]; r = ENVIRON["N"] } { i = index($0, k); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(k)); c++ } print } END { exit (c == 1 ? 0 : 3) }' \
+    "$JOIN" > "$d/join-remediator-shards.sh" || return 1
+  ! cmp -s "$JOIN" "$d/join-remediator-shards.sh" && bash -n "$d/join-remediator-shards.sh" && [ -f "$d/partition-subject.sh" ]
+}
+pc_mut() { # <site> <broken name> <line above> <call line> -> the mutant join's path, or EMPTY on a lost or ambiguous anchor
+  local d="$PCB/m$1" b="$PCB/$2/join-remediator-shards.sh"
+  mkdir -p "$d" && cp -R "$PCB/$2"/. "$d/" || return 1
+  P="$3" L="$4" awk 'BEGIN { p = ENVIRON["P"]; l = ENVIRON["L"] } $0 == l && prev == p { prev = $0; print ":"; c++; next } { prev = $0; print } END { exit (c == 1 ? 0 : 3) }' \
+    "$b" > "$d/join-remediator-shards.sh" || return 1
+  [ "$(awk 'NR == FNR { a[FNR] = $0; n = FNR; next } { if (a[FNR] != $0) x++; m = FNR } END { print (n == m ? x + 0 : -1) }' "$b" "$d/join-remediator-shards.sh")" = 1 ] || return 1
+  bash -n "$d/join-remediator-shards.sh" || return 1
+  printf '%s' "$d/join-remediator-shards.sh"
+}
+PC_REC='### F-1 — MAJOR\n- disposition: escalated\n- edit: n/a\n'
+pcb_none() { printf '%s' -; }
+pcb_chk() { local w; w="$(mktemp -d "$WORK/pcchk.XXXXXX")" && mkdir -p "$w/.claude" && printf '%b' "$PC_REC" > "$w/part.md" && printf '%s' "$w"; }
+pcb_src() { local w; w="$(mktemp -d "$WORK/pcsrc.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 && printf '%s' "$w"; }
+pcb_files() { local w; w="$(new_world)" || return 1; three_writers "$w"; part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1; printf '%s' "$w"; }
+pcb_party() { local w; w="$(party_world)" || return 1
+  ppart "$w" 01 2.1 "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"; ppart "$w" 02 2.2 "_bmad-output/party-mode/s305/architecture-dev-4.md#D4-1"
+  ppart "$w" 03 3.1 "architecture-tea-1.md#F-4"; printf '%s' "$w"; }
+pcb_subj() { local w; w="$(subj_world)" || return 1; sj_all "$w"; printf '%s' "$w"; }
+pcd_esc() { esc_rec "$1" "$PC_REC"; }
+pcd_chk() { AI_DLC_PROJECT_ROOT="$2" bash "$1" --check-part "$2/part.md" > "$JO" 2>&1; RC=$?; }
+pcd_src() { src_rec "$2" '### F-1\n- disposition: repaired\n- source: architecture-dev-1.md#F-1 architecture-tea-1.md#F-1\n' "$1"; }
+pcd_files() { run_join "$1" "$2"; }
+pcd_party() { run_pjoin "$1" "$2"; }
+pcd_subj() { run_sjoin "$1" "$2"; }
+PCT_CT="the entry contract's self-probe failed: the disposition key and vocabulary read"
+PCT_SRC="the source resolver's self-probe failed: a resolving source read"
+PCT_SR="the SPEC render arm's self-probe failed: a decision after a render read"
+pc_site() { # <site> -> PB builder, PD drive, PK broken copy, PT die text, PV verdict, PP line above, PL call line, PS siblings
+  case "$1" in
+    1417) PB=pcb_none; PD=pcd_esc; PK=ct; PT="$PCT_CT"; PV="ESCALATED-COUNT: 1"; PP='  local _r _sp=0'; PL='  contract_probe'; PS="1756 2768" ;;
+    1423) PB=pcb_none; PD=pcd_esc; PK=sr; PT="$PCT_SR"; PV="ESCALATED-COUNT: 1"; PP='  done'; PL='  spec_render_probe'; PS="2779" ;;
+    1756) PB=pcb_chk; PD=pcd_chk; PK=ct; PT="$PCT_CT"; PV="CHECK-PART:"; PP='if [ "$PARTMODE" = 1 ]; then'; PL='  contract_probe'; PS="1417 2768" ;;
+    1773) PB=pcb_src; PD=pcd_src; PK=src; PT="$PCT_SRC"; PV="SOURCES:"; PP='    && die "${SRC_REC} names only part tokens (<N>.md, cross-<N>.md) in its source: lines, so it is not a party repair; its escalations are read with --escalations ${SRC_REC} --sprint ${SPRINT}"'; PL='  src_probe'; PS="2755" ;;
+    2755) PB=pcb_party; PD=pcd_party; PK=src; PT="$PCT_SRC"; PV="JOINED:"; PP='  if [ -d "$SEAT_DIR" ]; then'; PL='    src_probe'; PS="1773" ;;
+    2768) PB=pcb_files; PD=pcd_files; PK=ct; PT="$PCT_CT"; PV="JOINED:"; PP='# The entry contract over every part, in every mode (BL-508 siblings, BL-519 set-aside).'; PL='contract_probe'; PS="1417 1756" ;;
+    2779) PB=pcb_subj; PD=pcd_subj; PK=sr; PT="$PCT_SR"; PV="JOINED:"; PP='if [ "$SUBJMODE" = 1 ]; then'; PL='  spec_render_probe'; PS="1423" ;;
+  esac
+}
+pc_cell() { # <site> <join> <world> -> 0 when the join refused rc 2 with THAT probe's die text and printed no verdict
+  pc_site "$1"; "$PD" "$2" "$3"; [ "$RC" -eq 2 ] && has "$JO" "$PT" && ! has "$JO" "$PV"
+}
+pc_score() { # <base flag> <site> <world> <what> -- the site's call line replaced with `:` in its broken copy
+  local m s f row=""
+  pc_site "$2"; m="$(pc_mut "$2" "$PK" "$PP" "$PL")"
+  if [ -z "$m" ]; then bad "PCm$2: FIXTURE STALE -- the call line at join site $2 ('$PL' under '$PP') is absent or not unique, or the mutant differs by more than one line; re-anchor it, never relax the assertion"; return; fi
+  if [ "$MATRIX" = 1 ]; then
+    for s in $PS; do pc_site "$s"; f=1; pc_cell "$s" "$m" "$($PB)" && f=0; row="$row PC$s=$f"; done
+    pc_site "$2"
+  fi
+  "$PD" "$m" "$3"
+  if [ "$RC" -eq 0 ] && has "$JO" "$PV" && ! has "$JO" "self-probe failed"; then
+    mrow "PCm$2" "PC$2=1"$row
+    mutant_killed "$1" "PCm$2" "PCm$2 the $4 call at the join's site $2 replaced with ':' in the broken copy: KILLED by [PC$2] -- the join printed '$PV' (rc 0) with no self-probe refusal"
+  else
+    mrow "PCm$2" "PC$2=0"$row
+    bad "PCm$2: SURVIVED or did not run -- with the $4 call removed the join still did not reach '$PV' (rc=$RC): $(head -2 "$JO")"
+  fi
+}
+if ! pc_break ct 'VOC["not-reproduced"] = 1' 'VOC["not-reproduced-c877"] = 1' || ! pc_break src 'n++; ns++' 'n++' \
+   || ! pc_break sr '{ if (r) { n++; if (!f) f = NR } }' '{ }'; then
+  bad "PC: FIXTURE STALE -- a shared-grammar break (contract_check vocabulary, src_check source count, spec_render_scan decision count) matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"
+else
+  if [ -z "$(pc_mut 0 ct 'IMPOSSIBLE-PREV-c877-pc0' '  contract_probe')" ]; then ok "PC0: an anchor whose line above matches nothing applies no mutant (the uniqueness control)"
+  else bad "PC0: a mutant applied under an impossible anchor; pc_mut does not key on its context"; fi
+  _w="$(pcb_none)"; if pc_cell 1417 "$PCB/ct/join-remediator-shards.sh" "$_w"; then ok "PC1417: --escalations, contract_check broken in a whole-dir copy -> record_tail's contract_probe refuses rc 2 with its vocabulary die text, no ESCALATED-COUNT"; B_PC1417=1
+  else bad "PC1417: --escalations over the broken contract_check did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
+  pc_score "${B_PC1417:-0}" 1417 "$_w" contract_probe
+  _w="$(pcb_none)"; if pc_cell 1423 "$PCB/sr/join-remediator-shards.sh" "$_w"; then ok "PC1423: --escalations, spec_render_scan broken in a whole-dir copy -> record_tail's spec_render_probe refuses rc 2 with its stale-render die text, no ESCALATED-COUNT"; B_PC1423=1
+  else bad "PC1423: --escalations over the broken spec_render_scan did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
+  pc_score "${B_PC1423:-0}" 1423 "$_w" spec_render_probe
+  _w="$(pcb_chk)"; if pc_cell 1756 "$PCB/ct/join-remediator-shards.sh" "$_w"; then ok "PC1756: --check-part, contract_check broken -> the check-part contract_probe refuses rc 2 with its vocabulary die text, no CHECK-PART"; B_PC1756=1
+  else bad "PC1756: --check-part over the broken contract_check did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
+  pc_score "${B_PC1756:-0}" 1756 "$_w" contract_probe
+  _w="$(pcb_src)"; if pc_cell 1773 "$PCB/src/join-remediator-shards.sh" "$_w"; then ok "PC1773: --sources, src_check broken -> the --sources src_probe refuses rc 2 with its resolving-source die text, no SOURCES"; B_PC1773=1
+  else bad "PC1773: --sources over the broken src_check did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
+  pc_score "${B_PC1773:-0}" 1773 "$_w" src_probe
+  _w="$(pcb_party)"; if pc_cell 2755 "$PCB/src/join-remediator-shards.sh" "$_w"; then ok "PC2755: a party parts join, src_check broken -> the party src_probe refuses rc 2 with its resolving-source die text, nothing JOINED"; B_PC2755=1
+  else bad "PC2755: a party join over the broken src_check did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
+  pc_score "${B_PC2755:-0}" 2755 "$_w" src_probe
+  _w="$(pcb_files)"; if pc_cell 2768 "$PCB/ct/join-remediator-shards.sh" "$_w"; then ok "PC2768: a files parts join, contract_check broken -> the every-mode contract_probe refuses rc 2 with its vocabulary die text, nothing JOINED"; B_PC2768=1
+  else bad "PC2768: a files join over the broken contract_check did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
+  pc_score "${B_PC2768:-0}" 2768 "$_w" contract_probe
+  _w="$(pcb_subj)"; if pc_cell 2779 "$PCB/sr/join-remediator-shards.sh" "$_w"; then ok "PC2779: a subject join, spec_render_scan broken -> the subject-mode spec_render_probe refuses rc 2 with its stale-render die text, nothing JOINED"; B_PC2779=1
+  else bad "PC2779: a subject join over the broken spec_render_scan did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
+  pc_score "${B_PC2779:-0}" 2779 "$_w" spec_render_probe
 fi
 
 # PLAIN: rule 9 -- a plain (push) run prints no matrix-only cell; --matrix prints one row per mutant.

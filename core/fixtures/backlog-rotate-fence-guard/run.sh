@@ -648,8 +648,8 @@ else
   ok "no-write" "ledger and pre-existing archive byte-identical after the refused --apply"
 fi
 
-if expect_refusal "fires-bullet" "$B" --apply; then B_fires_bullet=1; fi
-if expect_refusal "fires-tilde"  "$C" --apply; then B_fires_tilde=1; fi
+expect_refusal "fires-bullet" "$B" --apply; RC_fires_bullet=$?
+expect_refusal "fires-tilde"  "$C" --apply; RC_fires_tilde=$?
 expect_refusal "fires-phantom" "$D" --apply
 expect_refusal "fires-unterm" "$E" --apply
 
@@ -664,7 +664,7 @@ if [ -z "$EXP_Q1" ] || [ -z "$EXP_Q2" ] || [ -z "$REAL_Q" ]; then
   echo "FIXTURE BROKEN: could not derive the seeded line numbers from $Q/pristine.ledger" >&2
   exit 2
 fi
-if expect_refusal "quotes-two" "$Q" --apply; then B_quotes_two=1; fi
+expect_refusal "quotes-two" "$Q" --apply; RC_quotes_two=$?
 Q_OUT="$LAST_OUT"
 Q_GOT="$(offender_lines "$Q_OUT")"
 if [ "$Q_GOT" = "$EXP_Q1 $EXP_Q2 " ]; then
@@ -722,7 +722,7 @@ expect_delim_refusal() { # <arm> <dir> <regex matching the seed's own delimiter 
     ok "$arm" "refused by position, naming exactly [$got], and wrote nothing"; return 0
   fi
 }
-if expect_delim_refusal "delim-indent"     "$DI" '^        ```'; then B_delim_indent=1; fi
+expect_delim_refusal "delim-indent"     "$DI" '^        ```'; RC_delim_indent=$?
 expect_delim_refusal "delim-tab"        "$DT" "$(printf '^\t```')"
 if expect_delim_refusal "delim-blockquote" "$DB" '^> ```'; then B_delim_blockquote=1; fi
 expect_delim_refusal "delim-crlf"       "$DC" '^```'
@@ -1297,7 +1297,7 @@ if [ -n "$M3" ]; then
   # this mutant as surviving. What the mutant actually did is silence the FENCE arm on the
   # bullet offender, and the tilde offender is the control that says the silence is specific.
   if ! has "$FENCE_SAYS" "$M3_B_OUT" && has "$FENCE_SAYS" "$M3_C_OUT"; then
-    mutant_killed "${B_fires_bullet:-0}" m3-heading-only "m3-heading-only: fires-bullet would FAIL: the FENCE arm went silent on the bullet offender while still firing on the tilde one" && KILLS=$((KILLS + 1))
+    mutant_killed "$([ "$RC_fires_bullet" -eq 0 ] && echo 1 || echo 0)" m3-heading-only "m3-heading-only: fires-bullet would FAIL: the FENCE arm went silent on the bullet offender while still firing on the tilde one" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m3-heading-only" "SURVIVED: bullet blinding did not silence the FENCE arm on the bullet offender alone (bullet fence-arm=$(has "$FENCE_SAYS" "$M3_B_OUT" && echo fired || echo silent), tilde fence-arm=$(has "$FENCE_SAYS" "$M3_C_OUT" && echo fired || echo silent))"
   fi
@@ -1317,7 +1317,7 @@ if [ -n "$M4" ]; then
   reseed "$C"; run_rt "$M4" "$C" --apply; M4_C_OUT="$LAST_OUT"
   reseed "$B"; run_rt "$M4" "$B" --apply; M4_B_OUT="$LAST_OUT"
   if ! has "$FENCE_SAYS" "$M4_C_OUT" && has "$FENCE_SAYS" "$M4_B_OUT"; then
-    mutant_killed "${B_fires_tilde:-0}" m4-backtick-only "m4-backtick-only: fires-tilde would FAIL: the FENCE arm went silent on the tilde offender while still firing on the bullet one" && KILLS=$((KILLS + 1))
+    mutant_killed "$([ "$RC_fires_tilde" -eq 0 ] && echo 1 || echo 0)" m4-backtick-only "m4-backtick-only: fires-tilde would FAIL: the FENCE arm went silent on the tilde offender while still firing on the bullet one" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m4-backtick-only" "SURVIVED: dropping '~~~' did not silence the FENCE arm on the tilde offender alone (tilde fence-arm=$(has "$FENCE_SAYS" "$M4_C_OUT" && echo fired || echo silent), bullet fence-arm=$(has "$FENCE_SAYS" "$M4_B_OUT" && echo fired || echo silent))"
   fi
@@ -1362,7 +1362,7 @@ if [ -n "$M6" ]; then
   reseed "$Q"; run_rt "$M6" "$Q" --apply; M6_Q_OUT="$LAST_OUT"
   reseed "$E"; run_rt "$M6" "$E" --apply; M6_E_OUT="$LAST_OUT"
   if ! has "$FENCE_SAYS" "$M6_Q_OUT" && has "$FENCE_SAYS" "$M6_E_OUT"; then
-    mutant_killed "${B_quotes_two:-0}" m6-unmasked-pass1 "m6-unmasked-pass1: quotes-two would FAIL: with pass 1 unmasked the FENCE arm goes silent on the two-quotation ledger while still firing on the unterminated one" && KILLS=$((KILLS + 1))
+    mutant_killed "$([ "$RC_quotes_two" -eq 0 ] && echo 1 || echo 0)" m6-unmasked-pass1 "m6-unmasked-pass1: quotes-two would FAIL: with pass 1 unmasked the FENCE arm goes silent on the two-quotation ledger while still firing on the unterminated one" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m6-unmasked-pass1" "SURVIVED: unmasking pass 1 did not silence the FENCE arm on the two-quotation seed alone (quotes-two fence-arm=$(has "$FENCE_SAYS" "$M6_Q_OUT" && echo fired || echo silent), unterminated fence-arm=$(has "$FENCE_SAYS" "$M6_E_OUT" && echo fired || echo silent))"
   fi
@@ -1423,7 +1423,7 @@ if [ -n "$M9" ]; then
   if [ "$M9_RC" -eq 0 ] && ! has "$DELIM_SAYS" "$M9_OUT" \
      && { [ $((M9_LIVE % 2)) -ne 0 ] || [ $((M9_ARCH % 2)) -ne 0 ]; } \
      && has "$DELIM_SAYS" "$M9_B_OUT"; then
-    mutant_killed "${B_delim_indent:-0}" m9-no-position-finding "m9-no-position-finding: delim-indent would FAIL: the attack ledger applies at exit 0 and the split leaves live=$M9_LIVE archive=$M9_ARCH honoured delimiters, while the blockquote branch still fires" && KILLS=$((KILLS + 1))
+    mutant_killed "$([ "$RC_delim_indent" -eq 0 ] && echo 1 || echo 0)" m9-no-position-finding "m9-no-position-finding: delim-indent would FAIL: the attack ledger applies at exit 0 and the split leaves live=$M9_LIVE archive=$M9_ARCH honoured delimiters, while the blockquote branch still fires" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m9-no-position-finding" "SURVIVED: removing the indent test did not let the attack ledger through with an odd honoured-delimiter count while leaving the blockquote branch alive (exit $M9_RC, live=$M9_LIVE, archive=$M9_ARCH, blockquote=$(has "$DELIM_SAYS" "$M9_B_OUT" && echo fired || echo silent))"
   fi

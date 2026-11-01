@@ -302,7 +302,7 @@ p_x9 "$PS" && ok "X9: --expect-sha in the <stem>@<sha> form, and mixed with <ste
 if bash "$HERE/receipt.sh" "$TREE" > "$OUT" 2>&1; then ok "R: receipt.sh exits 0 on $TREE"
 else bad "R: receipt.sh did not pass on $TREE: $(cat "$OUT")"; fi
 B_live=0   # set 1 only when every live predicate above held in THIS run: the flag every kill routes through
-if [ "$fails" -eq "$live_fails0" ]; then B_live=1; fi
+if [ "$fails" -eq "$live_fails0" ]; then ok "LIVE: every live predicate above held in this run, so each kill below reads an unmutated arm that passed"; B_live=1; fi
 
 # ------------------------------------------------------------------------------ the mutants
 mutdir() { local d; d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1; cp "$PS" "$SRCDIR/partition-document.sh" "$d/"; printf '%s' "$d"; }

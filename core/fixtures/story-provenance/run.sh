@@ -118,6 +118,7 @@ expect() {
     printf '  FAIL  %-46s exit=%s want=%s needle=%q\n' "$label" "$got" "$want" "$needle"
     printf '        out: %s\n' "$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
   fi
+  [ "$ok" -eq 1 ]
 }
 
 # ---- matrix plumbing. The header rows are the only source of a mutant's deciding cells and twin. ----
@@ -528,6 +529,7 @@ forge_unfolded_bug_block() { # $1 world  $2 writer
   in_world "$1" "$2" --terminal s1/scratch-oneshot-for-3.md --profile "$BUGP" "$S1U" >/dev/null 2>&1
 }
 
+RC_c="$(printf 1)"; RC_d="$(printf 1)"; RC_e="$(printf 1)"; RC_r="$(printf 1)"
 MW="$(mixed_world)"
 if [ -z "$MW" ] || [ ! -f "$MW/$ONESHOT" ]; then
   ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
@@ -547,7 +549,7 @@ else
   #     reported against some OTHER file cannot satisfy it. Its ALLOW twin is the arm above.
   expect "mixed: bug story FAILS --series arm" 1 "$S1B: block does not match" \
     in_world "$MW" "$WRITER" --series s1/stories-adversarial --check "$S1B"
-  if [ "$EXPECT_OK" = 1 ]; then B_c=1; fi
+  RC_c=$?
   # D — the convergence story FAILS the bug arm, on its BLOCK and not on the bind: the legacy
   #     one-shot names story-1, so the bind is satisfied and only the profile can refuse it.
   #     This is also the legacy near-miss: Check 17 reads no declaration from the legacy name at
@@ -555,7 +557,7 @@ else
   #     what would happen to it if the legacy name DID route it.
   expect "mixed: convergence story FAILS bug arm (legacy)" 1 "$S1C: block does not match" \
     in_world "$MW" "$WRITER" --terminal s1/bug-fix-oneshot.md --profile "$BUGP" --check "$S1C"
-  if [ "$EXPECT_OK" = 1 ]; then B_d=1; fi
+  RC_d=$?
   expect "mixed: legacy one-shot leaves story-1 on its arm" 0 "OK (1 story file(s) current)" \
     in_world "$MW" "$WRITER" --series s1/stories-adversarial --check "$S1C"
   # E — THE BIND. An unfolded story carrying a well-formed bug block, checked through a one-shot
@@ -566,7 +568,7 @@ else
     in_world "$MW" "$WRITER" --terminal s1/scratch-oneshot-for-3.md --profile "$BUGP" --check "$S1U"
   expect "mixed: bind refuses --check of an unnamed story" 1 "which is not the story being checked: $S1U" \
     in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" --check "$S1U"
-  if [ "$EXPECT_OK" = 1 ]; then B_e=1; fi
+  RC_e=$?
   expect "mixed: bind refuses stamping an unnamed story" 1 "which is not the story being stamped: $S1U" \
     in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" "$S1U"
   expect "mixed: bind refuses an artifact naming no file" 1 "which is not the story being checked: $S1B" \
@@ -587,7 +589,7 @@ else
   expect "mixed: bind resolves artifact via project root" 0 "stamped 1 of 1" \
     env AI_DLC_PROJECT_ROOT="$RW" bash -c 'cd "$1/s1" && bash "$2" --terminal "$3" --profile "$4" "$5"' _ \
       "$RW" "$WRITER" "${ONESHOT#s1/}" "$BUGP" "${S1B#s1/}"
-  if [ "$EXPECT_OK" = 1 ]; then B_r=1; fi
+  RC_r=$?
 fi
 
 # --- MUTANTS OF THE MIXED ARMS. Each is a copy of the writer in a scripts/ + schemas/ layout
@@ -651,9 +653,9 @@ fi
 # old ctl-plus-mut pair of worlds per cell: the real writer's own arms above are the control, and a mutant copy
 # that did not run prints neither row and reads BROKEN.
 MB="$(mk_mutx mb "$MB_PROG")"
-if mx_register MB "$MB"; then mx_score MB "${B_e:-0}"; fi
+if mx_register MB "$MB"; then mx_score MB "$([ "$RC_e" -eq 0 ] && echo 1 || echo 0)"; fi
 MC="$(mk_mutx mc "$MC_PROG")"
-if mx_register MC "$MC"; then mx_score MC "$(( ${B_c:-0} && ${B_d:-0} ))"; fi
+if mx_register MC "$MC"; then mx_score MC "$([ "$RC_c" -eq 0 ] && [ "$RC_d" -eq 0 ] && echo 1 || echo 0)"; fi
 
 # MR — the bind loses its project-root base: inside the predicate the one-shot guard calls, the
 # one statement appending the root to the candidate bases becomes a no-op. Arm R owns it: run
@@ -676,7 +678,7 @@ new_body = re.sub(r"(?m)^( +)bases\.append\([^\n]*\)\n", r"\1pass\n", body, coun
 open(sys.argv[2], "w").write(src[:m.start(1)] + new_body + src[m.end(1):])
 '
 MR="$(mk_mutx mr "$MR_PROG")"
-if mx_register MR "$MR"; then mx_score MR "${B_r:-0}"; fi
+if mx_register MR "$MR"; then mx_score MR "$([ "$RC_r" -eq 0 ] && echo 1 || echo 0)"; fi
 
 # --- F13: THE ALIAS IS READ-ONLY. A one-shot citing the pre-rename name is stamped onto its story
 # under the CURRENT name with the lens the old name implied, and the old name is never written. These
@@ -773,8 +775,8 @@ if [ -f "${VB:-/nonexistent}" ] && f13_stamp "$HD" "$F13_OLD" "$VB" "$MUTX" \
 else
   bad "F13 historical read: a pre-rename stamp was refused on read ($(tail -1 "$HD/chk" 2>/dev/null) / $(tail -1 "$HD/rd" 2>/dev/null))"
 fi
-B_f13h=0
-if [ -f "$HD/story.md" ] && bash "$(dirname "$WRITER")/validate-provenance-block.sh" "$HD/story.md" --require-skill bmad-review >/dev/null 2>&1; then B_f13h="${B_f13:-0}"; fi
+[ "${B_f13:-0}" = 1 ] && [ -f "$HD/story.md" ] && bash "$(dirname "$WRITER")/validate-provenance-block.sh" "$HD/story.md" --require-skill bmad-review >/dev/null 2>&1
+RC_f13h=$?
 # VB and LP are scored here, after the historical stamp exists: under --matrix their other cells include H, which reads it.
 if mx_register VB "$VB"; then mx_score VB "${B_f13:-0}"; fi
 # LP -- a copied schema loses lens_pins; the REAL writer is pinned to that copy's root. Precondition:
@@ -809,7 +811,7 @@ ASSERTIONS=$((ASSERTIONS + 1))
 if ! grep -q '"bmad-review-adversarial-general": "bmad-review"' "$AMR/core/schemas/provenance-block.json" \
    && [ "$(AI_DLC_PROJECT_ROOT="$AMR" bash "$WRITER" --print-schema 2>/dev/null)" -ef "$AMR/core/schemas/provenance-block.json" ]; then
   ok "F13 AM precondition: the copy lost the alias row and is the schema the pinned program loads"
-  mx_register AM "$AMR" && mx_score AM "$B_f13h"
+  mx_register AM "$AMR" && mx_score AM "$([ "$RC_f13h" -eq 0 ] && echo 1 || echo 0)"
 else
   bad "FIXTURE BROKEN: AM schema copy not mutated or not loaded"
 fi
@@ -916,7 +918,7 @@ for lbl in "consumer: writer resolves the install schema (CI)" \
   i=$((i + 1)); ASSERTIONS=$((ASSERTIONS + 1))
   c="$(printf '%s' "$BASEV" | cut -c"$i")"
   if [ "$c" = 0 ]; then
-    printf '  ok    %-46s\n' "$lbl"
+    ok "$lbl"
     case "$i" in 1) B_ci=1 ;; 2) B_cr=1 ;; 3) B_ni=1 ;; 4) B_nr=1 ;; esac
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s result=%s\n' "$lbl" "${c:-none}"; fi
 done
@@ -1020,21 +1022,23 @@ trace_of() { # $1 script basename in $NM/scripts/ai-dlc  then its args -> the xt
 [ -z "$NM" ] || printf '# probe\n' > "$NM/probe.md"
 # The two guarded scripts, unmutated: the trace names the override candidate and never stats the filesystem root.
 # These are the base-pass flags the two guard mutants are scored behind.
-g_ctl() { # <label> <flag name> <script> args...
-  local lbl="$1" fn="$2" sc="$3" tr; shift 3
+g_ctl() { # <label> <script> args...
+  local lbl="$1" sc="$2" tr; shift 2
   ASSERTIONS=$((ASSERTIONS + 1))
-  if [ -z "$NM" ]; then bad "FIXTURE BROKEN: no sandbox ($lbl)"; return; fi
+  if [ -z "$NM" ]; then bad "FIXTURE BROKEN: no sandbox ($lbl)"; return 1; fi
   tr="$(trace_of "$sc" "$@")"
   if ! grep -qF " -f $NM/f/.claude/schemas/$SCH" <<<"$tr" || ! grep -qF "$SCH not found" <<<"$tr"; then
-    bad "$lbl: FIXTURE BROKEN: control trace lacks the override candidate"
+    bad "$lbl: FIXTURE BROKEN: control trace lacks the override candidate"; return 1
   elif grep -qF -- "$ROOTSTAT" <<<"$tr"; then
-    bad "$lbl: the guarded script stats /.claude/schemas/ at the filesystem root"
-  else ok "$lbl"; eval "$fn=1"; fi
+    bad "$lbl: the guarded script stats /.claude/schemas/ at the filesystem root"; return 1
+  else ok "$lbl"; return 0; fi
 }
-g_ctl "arm G: the guarded writer never stats the filesystem-root schema" B_gw stamp-story-provenance.sh --print-schema
-g_ctl "arm G: the guarded reader never stats the filesystem-root schema" B_gr validate-provenance-block.sh "$NM/probe.md" --allow-missing
-mx_register ID "$(mk_imut "$WRITER" md-writer.sh "$UNGUARD_PROG")" && mx_score ID "${B_gw:-0}"
-mx_register ID2 "$(mk_imut "$READER" md2-reader.sh "$UNGUARD_PROG")" && mx_score ID2 "${B_gr:-0}"
+g_ctl "arm G: the guarded writer never stats the filesystem-root schema" stamp-story-provenance.sh --print-schema
+RC_gw=$?
+g_ctl "arm G: the guarded reader never stats the filesystem-root schema" validate-provenance-block.sh "$NM/probe.md" --allow-missing
+RC_gr=$?
+mx_register ID "$(mk_imut "$WRITER" md-writer.sh "$UNGUARD_PROG")" && mx_score ID "$([ "$RC_gw" -eq 0 ] && echo 1 || echo 0)"
+mx_register ID2 "$(mk_imut "$READER" md2-reader.sh "$UNGUARD_PROG")" && mx_score ID2 "$([ "$RC_gr" -eq 0 ] && echo 1 || echo 0)"
 
 # --- BL-302: THE WRITER AND THE READER LOAD ONE SCHEMA IN THE DISTRIBUTION LAYOUT TOO. The arms
 # above run in the consumer layout, where the script-relative candidate (`scripts/schemas/`) never
@@ -1117,8 +1121,7 @@ open(sys.argv[2], "w").write(src.replace(c, "").replace(h, h + c))
 '
 WR_MUT="$(mk_imut "$WRITER" wr-writer.sh "$WR_PROG")"
 # WR is scored behind the unmutated vector holding on all three cells (DP, DS and DC), so one flag needs all of them.
-if [ "$B302V" = 000 ]; then B_wr=1; fi
-if mx_register WR "$WR_MUT"; then mx_score WR "${B_wr:-0}"; fi
+if mx_register WR "$WR_MUT"; then mx_score WR "$([ "$B302V" = 000 ] && echo 1 || echo 0)"; fi
 
 # --- BL-729: --series resolves every spelling of the prefix to the highest REAL pass.
 # Check 24 takes `<stem>-adversarial-p` and excludes repair/resolution files by name; the writer
@@ -1147,7 +1150,7 @@ B729_CTL="$(b729_vector "$MUTX/scripts/b729-ctl.sh")"
 ASSERTIONS=$((ASSERTIONS + 1))
 # Positive conjunct: the seeded story really carries p10 tool_use_id (every other pass carries another), and all three spellings pass.
 if [ "$B729_CTL" = 000 ] && grep -qF "tool_use_id: toolu_FIXTUREdddddddd" "$B729/story.md"; then
-  printf '  ok    %-46s\n' "BL-729: three prefix spellings resolve p10 (--check 0)"; B_s=1
+  ok "BL-729: three prefix spellings resolve p10 (--check 0)"; B_s=1
 else
   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s vector %s, want 000\n' "BL-729: three prefix spellings resolve p10" "$B729_CTL"
 fi

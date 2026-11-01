@@ -234,14 +234,14 @@ drift_holds() { # drift_holds <arm> <drift-output>
   return 1
 }
 # Flags: set from the SHIPPED run's verdict on the arm each mutant is scored against, in THIS run.
-if drift_holds d-elsewhere "$DRIFT_OUT"; then B_d_elsewhere=1; fi
-if drift_holds d-vanished "$DRIFT_OUT"; then B_d_vanished=1; fi
-if drift_holds d-missmoved "$DRIFT_OUT"; then B_d_missmoved=1; fi
+DH_elsewhere="$(drift_holds d-elsewhere "$DRIFT_OUT" && echo held)"
+DH_vanished="$(drift_holds d-vanished "$DRIFT_OUT" && echo held)"
+DH_missmoved="$(drift_holds d-missmoved "$DRIFT_OUT" && echo held)"
 
 # Flags: set from the SHIPPED run's verdict on the arm each drift mutant is scored against, in THIS run.
-if drift_holds d-elsewhere "$DRIFT_OUT"; then B_d_elsewhere=1; fi
-if drift_holds d-vanished "$DRIFT_OUT"; then B_d_vanished=1; fi
-if drift_holds d-missmoved "$DRIFT_OUT"; then B_d_missmoved=1; fi
+DH_elsewhere="$(drift_holds d-elsewhere "$DRIFT_OUT" && echo held)"
+DH_vanished="$(drift_holds d-vanished "$DRIFT_OUT" && echo held)"
+DH_missmoved="$(drift_holds d-missmoved "$DRIFT_OUT" && echo held)"
 
 # EVERY CALLER INVOKES THIS INSIDE `$( )` TO CAPTURE THE MUTANT'S PATH, so this
 # function cannot report anything by calling bad(): the diagnostic is captured as
@@ -299,10 +299,10 @@ lstat() { bash "$1" "$BAD" 2>&1; }
 DMUT="$MDIR/reconcile"
 
 if m="$(mutate m1-no-narrowing "$DRIFT" 's/^  elif \[ -n "\$ext_ancs" \]; then$/  elif false; then/' "$DMUT")"; then
-  score m1-no-narrowing d "$(drift_run "$m")" d-elsewhere d-noanchor "${B_d_elsewhere:-0}" "with the anchor branch off, anchored-elsewhere drifts at file grain again"
+  score m1-no-narrowing d "$(drift_run "$m")" d-elsewhere d-noanchor "$([ "$DH_elsewhere" = held ] && echo 1 || echo 0)" "with the anchor branch off, anchored-elsewhere drifts at file grain again"
 fi
 if m="$(mutate m2-missing-is-ok "$DRIFT" 's/^      if \[ -z "\$ext_new" \]; then$/      if false; then/' "$DMUT")"; then
-  score m2-missing-is-ok d "$(drift_run "$m")" d-vanished d-elsewhere "${B_d_vanished:-0}" "without the guard, a vanished anchor stops being reported"
+  score m2-missing-is-ok d "$(drift_run "$m")" d-vanished d-elsewhere "$([ "$DH_vanished" = held ] && echo 1 || echo 0)" "without the guard, a vanished anchor stops being reported"
 fi
 if m="$(mutate m3-no-kind-enum "$LINTER" "s/^  if \[ -n \"\\\$kind\" \] \&\& /  if false \&\& /")"; then
   score m3-no-kind-enum e "$(lstat "$m")" e10 e11-nomatch "${B_e10:-0}" "with the enum off, a typo'd kind is accepted in silence"
@@ -323,7 +323,7 @@ if m="$(mutate m8-qualifier-any-anchors "$LINTER" 's/^    elif \[ "\$ext_n" -gt 
   score m8-qualifier-any-anchors e "$(lstat "$m")" e11-two e11-nomatch "${B_e11_two:-0}" "without the limit a qualifier with two sections to render into lints clean"
 fi
 if m="$(mutate m9-missing-masks-drift "$DRIFT" 's/^    if \[ -z "\$ext_moved" \]; then$/    if [ -z "$ext_moved" ] || [ -n "$ext_missing" ]; then/' "$DMUT")"; then
-  score m9-missing-masks-drift d "$(drift_run "$m")" d-missmoved d-vanished "${B_d_missmoved:-0}" "with MISSING masking DRIFT, the rewritten span of missing-and-moved goes unreported"
+  score m9-missing-masks-drift d "$(drift_run "$m")" d-missmoved d-vanished "$([ "$DH_missmoved" = held ] && echo 1 || echo 0)" "with MISSING masking DRIFT, the rewritten span of missing-and-moved goes unreported"
 fi
 if m="$(mutate m10-empty-parts-accepted "$LINTER" 's/^    if \[ "\$ext_n" -lt 1 \]; then$/    if false; then/')"; then
   score m10-empty-parts-accepted e "$(lstat "$m")" e11-emptyparts e11-noanchor "${B_e11_emptyparts:-0}" "without the arm, an extends: of only commas lints clean"

@@ -8,3 +8,4 @@
 !core/skills/ai-dlc-update/reconcile/layer-drift.sh
 !core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/fixtures/lib/

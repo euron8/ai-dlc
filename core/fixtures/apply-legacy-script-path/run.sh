@@ -523,7 +523,7 @@ if [ "$X_RUN" = 1 ]; then
     local v; v="$(x_vec "$d/apply.sh")"
     local tv; tv="$(trip_names "$v")"
     if [ "$MATRIX" = 1 ]; then mx "  MATRIX $1: tripped=[$tv] held=[$(held_names "$v")]"; fi
-    if [ "$v" = "$4" ]; then mutant_killed "$([ "$XCV" = "$X_WANT" ] && echo 1 || echo 0)" "$1" "$1 ($5): tripped=[$tv] -- killed exactly its arms"
+    if [ "$v" = "$4" ]; then mutant_killed "$([ "$XV" = "$X_WANT" ] && echo 1 || echo 0)" "$1" "$1 ($5): tripped=[$tv] -- killed exactly its arms"
     elif [ "$v" = "$X_WANT" ]; then bad "$1 SURVIVED ($5)"
     else bad "$1 ($5) scored $v, want $4"; fi
   }

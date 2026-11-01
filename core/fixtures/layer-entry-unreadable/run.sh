@@ -120,6 +120,8 @@ fails=0
 ok()  { ASSERTIONS=$((ASSERTIONS+1)); printf '  ok   %s\n' "$1"; }
 bad() { ASSERTIONS=$((ASSERTIONS+1)); fails=$((fails+1)); printf '  FAIL %s\n' "$1"; }
 say() { if [ "$1" = 1 ]; then ok "$2"; else bad "$2"; fi; }
+. "$(cd "$HERE/../lib" && pwd)/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # NO run() HELPER, deliberately. `OUT="$(run ...)"` evaluates the helper in a SUBSHELL, so an
 # rc it assigns to a global is discarded and every exit-code assertion below would read a
@@ -199,14 +201,20 @@ say "$([ "$(footer_field "$CONS_OUT" unreadable)" = 0 ] \
 # ERRORs, sets LC_CV empty and CARRIES ON, which is the reachable state in which the census
 # loop is skipped. These two rows are the unmutated baseline m2, m3 and m4 move.
 OVR_OUT="$(bash "$LINTER" "$OVRT" 2>&1)"; OVR_RC=$?
-say "$([ "$OVR_RC" -eq 2 ] && fatal_for "$OVR_OUT" 'overrides/subject-ovr.md' \
-       && [ "$(errs_naming "$OVR_OUT" 'overrides/subject-ovr.md')" -eq 0 ] && echo 1 || echo 0)" \
-  "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"
+if [ "$OVR_RC" -eq 2 ] && fatal_for "$OVR_OUT" 'overrides/subject-ovr.md' \
+   && [ "$(errs_naming "$OVR_OUT" 'overrides/subject-ovr.md')" -eq 0 ]; then
+  ok "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"; B_OVR=1
+else
+  bad "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"
+fi
 EXT_OUT="$(bash "$LINTER" "$EXTT" 2>&1)"; EXT_RC=$?
-say "$([ "$EXT_RC" -eq 2 ] && fatal_for "$EXT_OUT" 'extensions/subject-ext.md' \
-       && ! has "$EXT_OUT" 'EMPTY resolvability set' \
-       && [ "$(errs_naming "$EXT_OUT" 'extensions/subject-ext.md')" -eq 0 ] && echo 1 || echo 0)" \
-  "an unreadable EXTENSION refuses before the resolvability set is judged, so E16 makes no claim"
+if [ "$EXT_RC" -eq 2 ] && fatal_for "$EXT_OUT" 'extensions/subject-ext.md' \
+   && ! has "$EXT_OUT" 'EMPTY resolvability set' \
+   && [ "$(errs_naming "$EXT_OUT" 'extensions/subject-ext.md')" -eq 0 ]; then
+  ok "an unreadable EXTENSION refuses before the resolvability set is judged, so E16 makes no claim"; B_EXT=1
+else
+  bad "an unreadable EXTENSION refuses before the resolvability set is judged, so E16 makes no claim"
+fi
 
 # --------------------------------------------------------------------------------------
 # Part 4b — SURVIVAL: an unreadable entry does not suppress findings about its siblings
@@ -242,10 +250,14 @@ for _p in aa zz; do
   # read sits in, and the one whose abort this entry is about — raises an E17 naming it. A
   # finding raised by a later pass would survive a fix that only repaired the census.
   PT_SIB="$(errs_naming "$PT_OUT" 'extensions/no-receipt.md')"
-  say "$([ "$PT_RC" -eq 2 ] && [ "$PT_SIB" -ge 1 ] \
-         && [ "$(footer_field "$PT_OUT" unreadable)" = 1 ] \
-         && [ -n "$(footer_field "$PT_OUT" errors)" ] && echo 1 || echo 0)" \
-    "partial-$_p: the readable sibling's finding SURVIVES the unreadable one, the footer prints, and the run still refuses"
+  if [ "$PT_RC" -eq 2 ] && [ "$PT_SIB" -ge 1 ] \
+     && [ "$(footer_field "$PT_OUT" unreadable)" = 1 ] \
+     && [ -n "$(footer_field "$PT_OUT" errors)" ]; then
+    ok "partial-$_p: the readable sibling's finding SURVIVES the unreadable one, the footer prints, and the run still refuses"
+    case "$_p" in aa) B_PA=1 ;; esac
+  else
+    bad "partial-$_p: the readable sibling's finding SURVIVES the unreadable one, the footer prints, and the run still refuses"
+  fi
   # ATTRIBUTION, and it is the half that separates this from `defer-the-exit-only`. The sealed
   # entry draws no ERROR or WARN row of its own: the run makes no claim about content it never
   # read, and every row in that count is about a file it did.
@@ -293,17 +305,23 @@ mk() { # mk <name> <command...> -- build a mutant COPY, guarded by cmp -s and ba
 cp "$LINTER" "$TMP/control.sh"
 CTL_C_OUT="$(bash "$TMP/control.sh" "$CONS" 2>&1)"; CTL_C_RC=$?
 CTL_U_OUT="$(bash "$TMP/control.sh" "$UNR" 2>&1)"; CTL_U_RC=$?
-say "$([ "$CTL_C_RC" -eq 0 ] && [ "$(footer_field "$CTL_C_OUT" entries)" = 2 ] \
-       && [ "$CTL_U_RC" -eq 2 ] && fatal_for "$CTL_U_OUT" 'extensions/subject.md' && echo 1 || echo 0)" \
-  "CONTROL: an unmutated copy still counts 2 entries on the clean tree and still FATALs on the unreadable one"
+if [ "$CTL_C_RC" -eq 0 ] && [ "$(footer_field "$CTL_C_OUT" entries)" = 2 ] \
+   && [ "$CTL_U_RC" -eq 2 ] && fatal_for "$CTL_U_OUT" 'extensions/subject.md'; then
+  ok "CONTROL: an unmutated copy still counts 2 entries on the clean tree and still FATALs on the unreadable one"; B_CTL=1
+else
+  bad "CONTROL: an unmutated copy still counts 2 entries on the clean tree and still FATALs on the unreadable one"
+fi
 
 # --- m1: the census loop's guard — the site that READS FIRST -------------------------------
 # Without it the run still refuses, at a later site, having already printed one collapsed
 # finding. That single ERROR line is the whole of PC-S307 as it was reported.
 if mk m1 sed 's@^    ct="$(fm "$f" conforms_to)" || entry_unreadable "$f"$@    ct="$(fm "$f" conforms_to)"@'; then
   M1_OUT="$(bash "$TMP/m1.sh" "$UNR" 2>&1)"; M1_RC=$?
-  say "$(has "$M1_OUT" "extensions/subject.md: missing 'conforms_to:'" && echo 1 || echo 0)" \
-    "MUTANT m1 killed: the census loop invents a missing-key ERROR about a file awk could not open"
+  if has "$M1_OUT" "extensions/subject.md: missing 'conforms_to:'"; then
+    mutant_killed "${B_CTL:-0}" m1 "MUTANT m1 killed: the census loop invents a missing-key ERROR about a file awk could not open"
+  else
+    bad "MUTANT m1 SURVIVED: the census loop invents no missing-key ERROR about a file awk could not open"
+  fi
   # ATTRIBUTION. m1 must move exactly one cell. The run still exits 2 from a later guard, so
   # the kill above is the ERROR line and not a collapse of the whole guard set.
   say "$([ "$M1_RC" -eq 2 ] && fatal_for "$M1_OUT" 'extensions/subject.md' && echo 1 || echo 0)" \
@@ -320,8 +338,11 @@ if mk m2 sed 's@^  shadows="$(fm "$f" shadows)" || entry_unreadable "$f"$@  shad
   # now the last backstop for any unreadable file and no single earlier guard owns the abort
   # any more. What this guard alone still buys is the three false findings below never being
   # printed — which is PC-S307 as the consumer actually reported it.
-  say "$([ "$M2_RC" -eq 2 ] && has "$M2_OUT" "overrides/subject-ovr.md: missing 'shadows:'" && echo 1 || echo 0)" \
-    "MUTANT m2 killed: the overrides pass reports frontmatter it never read, ahead of the abort a later guard still makes"
+  if [ "$M2_RC" -eq 2 ] && has "$M2_OUT" "overrides/subject-ovr.md: missing 'shadows:'"; then
+    mutant_killed "${B_OVR:-0}" m2 "MUTANT m2 killed: the overrides pass reports frontmatter it never read, ahead of the abort a later guard still makes"
+  else
+    bad "MUTANT m2 SURVIVED: the overrides pass does not report frontmatter it never read"
+  fi
 fi
 
 # --- m3: the live-layer guard — the SILENT direction ---------------------------------------
@@ -332,8 +353,11 @@ fi
 # exactly ONE extension so that dropping it empties the set and E16 can speak.
 if mk m3 sed 's@^  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"$@  _lh="$(fm "$_lf" hooks)"@'; then
   M3_OUT="$(bash "$TMP/m3.sh" "$EXTT" 2>&1)"; M3_RC=$?
-  say "$(has "$M3_OUT" 'built an EMPTY resolvability set from the 1 layer entr(y/ies) present' && echo 1 || echo 0)" \
-    "MUTANT m3 killed: the entry drops out of the resolvability set and E16 judges the hole it left"
+  if has "$M3_OUT" 'built an EMPTY resolvability set from the 1 layer entr(y/ies) present'; then
+    mutant_killed "${B_EXT:-0}" m3 "MUTANT m3 killed: the entry drops out of the resolvability set and E16 judges the hole it left"
+  else
+    bad "MUTANT m3 SURVIVED: the entry stays in the resolvability set"
+  fi
   # ATTRIBUTION, and it is also the measurement that shapes m4: the run STILL exits 2, from
   # the extensions guard one loop later. So m3's cost is exactly the silent drop.
   say "$([ "$M3_RC" -eq 2 ] && fatal_for "$M3_OUT" 'extensions/subject-ext.md' && echo 1 || echo 0)" \
@@ -362,9 +386,12 @@ if mk m4 sed -e 's@^  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"$@  _lh
   # from the subject, which is this arm reporting a defect that is not its own.
   M4_LEFT="$(grep -c 'entry_unreadable' "$TMP/m4.sh")"
   M4_BASE="$(grep -c 'entry_unreadable' "$LINTER")"
-  say "$([ "$M4_RC" -eq 2 ] && [ "$M4_LEFT" -eq $((M4_BASE - 2)) ] \
-         && has "$M4_OUT" "extensions/subject-ext.md: missing 'kind:'" && echo 1 || echo 0)" \
-    "MUTANT m4 killed: with both extension-side guards gone the run reports missing-key findings about frontmatter nobody read"
+  if [ "$M4_RC" -eq 2 ] && [ "$M4_LEFT" -eq $((M4_BASE - 2)) ] \
+     && has "$M4_OUT" "extensions/subject-ext.md: missing 'kind:'"; then
+    mutant_killed "${B_EXT:-0}" m4 "MUTANT m4 killed: with both extension-side guards gone the run reports missing-key findings about frontmatter nobody read"
+  else
+    bad "MUTANT m4 SURVIVED: with both extension-side guards gone no missing-key finding about unread frontmatter appears"
+  fi
 fi
 
 # --- m10: `break` where `continue` belongs — the one-word regression Part 4b exists for ----
@@ -389,11 +416,14 @@ if mk m10 awk '{ if ($0 == "  continue" && p == "  esac") { print "  break" } el
   # a subject that emits nothing at all, so the refusal, the FATAL and a full footer must all
   # still be THERE — a plausible complete report with one finding silently absent is the exact
   # shape of the defect and nothing else produces it.
-  say "$([ "$M10_LEFT" -eq $((M10_BASE + 1)) ] && [ "$M10_RC" -eq 2 ] \
-         && [ "$(errs_naming "$M10_OUT" 'extensions/no-receipt.md')" -eq 0 ] \
-         && fatal_for "$M10_OUT" 'extensions/aa-sealed.md' \
-         && [ "$(footer_field "$M10_OUT" unreadable)" = 1 ] && echo 1 || echo 0)" \
-    "MUTANT m10 killed: with break for continue the sibling's finding vanishes while the refusal, the FATAL and the footer all stay"
+  if [ "$M10_LEFT" -eq $((M10_BASE + 1)) ] && [ "$M10_RC" -eq 2 ] \
+     && [ "$(errs_naming "$M10_OUT" 'extensions/no-receipt.md')" -eq 0 ] \
+     && fatal_for "$M10_OUT" 'extensions/aa-sealed.md' \
+     && [ "$(footer_field "$M10_OUT" unreadable)" = 1 ]; then
+    mutant_killed "${B_PA:-0}" m10 "MUTANT m10 killed: with break for continue the sibling's finding vanishes while the refusal, the FATAL and the footer all stay"
+  else
+    bad "MUTANT m10 SURVIVED: with break for continue the sibling's finding does not vanish"
+  fi
 fi
 
 # --------------------------------------------------------------------------------------
@@ -501,9 +531,13 @@ if [ "$SEAL_OK" = 1 ]; then
   # what P4 of the ledger receipt asserts separately in row terms.
   for _k in extends position gate_types; do
     sr "$TMP/sealed.sh" "$_k" "$PERM" "$PERM_SUBJ"
-    say "$([ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/role-entry.md' \
-           && [ "$(footer_field "$SR_OUT" unreadable)" = 1 ] && echo 1 || echo 0)" \
-      "a mid-run read failure on '$_k' REFUSES — exit 2, named, and a footer declaring unreadable=1"
+    if [ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/role-entry.md' \
+       && [ "$(footer_field "$SR_OUT" unreadable)" = 1 ]; then
+      ok "a mid-run read failure on '$_k' REFUSES — exit 2, named, and a footer declaring unreadable=1"
+      case "$_k" in extends) B_EXTENDS=1 ;; position) B_POSITION=1 ;; gate_types) B_GATE=1 ;; esac
+    else
+      bad "a mid-run read failure on '$_k' REFUSES — exit 2, named, and a footer declaring unreadable=1"
+    fi
   done
 
   # --- C7/C8: the acquittal site, which is the odd one of the eight ---------------------
@@ -511,8 +545,11 @@ if [ "$SEAL_OK" = 1 ]; then
   say "$([ "$SR_RC" -eq 0 ] && [ "$(nrows "$SR_OUT" W12 'extensions/cite-ext.md')" -eq 0 ] && echo 1 || echo 0)" \
     "READABLE, the cited entry is ACQUITTED by its own shadows anchor — no W12, exit 0"
   sr "$TMP/sealed.sh" shadows "$CITE" "$CITE_SUBJ"
-  say "$([ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/cite-ext.md' && echo 1 || echo 0)" \
-    "and a mid-run read failure on 'shadows' REFUSES rather than judging the citation"
+  if [ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/cite-ext.md'; then
+    ok "and a mid-run read failure on 'shadows' REFUSES rather than judging the citation"; B_SHADOWS=1
+  else
+    bad "and a mid-run read failure on 'shadows' REFUSES rather than judging the citation"
+  fi
 
   # --------------------------------------------------------------------------------------
   # Part 8 — mutants for the four permissive guards, built from the SEALED copy
@@ -538,34 +575,43 @@ if [ "$SEAL_OK" = 1 ]; then
   # exact shape of the defect and nothing else produces it.
   if mkfrom "$TMP/sealed.sh" m5 sed 's@^  _ext_raw="$(fm "$f" extends)"     || entry_unreadable "$f"$@  _ext_raw="$(fm "$f" extends)"@'; then
     sr "$TMP/m5.sh" extends "$PERM" "$PERM_SUBJ"
-    say "$([ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 0 ] \
+    if [ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 0 ] \
            && [ "$(nrows "$SR_OUT" E12 'extensions/role-entry.md')" -eq 1 ] \
            && [ "$(nrows "$SR_OUT" E13 'extensions/role-entry.md')" -eq 1 ] \
            && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 1))" ] && echo 1 || echo 0)" \
-      "MUTANT m5 killed: E11 vanishes while the other three rows and a full footer stay — a finding DELETED, not raised"
+           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 1))" ]; then
+      mutant_killed "${B_EXTENDS:-0}" m5 "MUTANT m5 killed: E11 vanishes while the other three rows and a full footer stay — a finding DELETED, not raised"
+    else
+      bad "MUTANT m5 SURVIVED: E11 does not vanish"
+    fi
   fi
 
   # --- m6: `position` -- it owns TWO rows, and both must go ----------------------------
   if mkfrom "$TMP/sealed.sh" m6 sed 's@^  _pos_raw="$(fm "$f" position)"    || entry_unreadable "$f"$@  _pos_raw="$(fm "$f" position)"@'; then
     sr "$TMP/m6.sh" position "$PERM" "$PERM_SUBJ"
-    say "$([ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E12 'extensions/role-entry.md')" -eq 0 ] \
+    if [ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E12 'extensions/role-entry.md')" -eq 0 ] \
            && [ "$(nrows "$SR_OUT" E13 'extensions/role-entry.md')" -eq 0 ] \
            && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 1 ] \
            && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 2))" ] && echo 1 || echo 0)" \
-      "MUTANT m6 killed: BOTH rows this key feeds vanish, and the two it does not feed remain"
+           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 2))" ]; then
+      mutant_killed "${B_POSITION:-0}" m6 "MUTANT m6 killed: BOTH rows this key feeds vanish, and the two it does not feed remain"
+    else
+      bad "MUTANT m6 SURVIVED: the two rows this key feeds do not vanish"
+    fi
   fi
 
   # --- m7: `gate_types` ------------------------------------------------------------------
   if mkfrom "$TMP/sealed.sh" m7 sed 's@^  _gt_raw="$(fm "$f" gate_types)"   || entry_unreadable "$f"$@  _gt_raw="$(fm "$f" gate_types)"@'; then
     sr "$TMP/m7.sh" gate_types "$PERM" "$PERM_SUBJ"
-    say "$([ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 0 ] \
+    if [ "$SR_RC" -eq 1 ] && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 0 ] \
            && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 1 ] \
            && [ "$(nrows "$SR_OUT" E12 'extensions/role-entry.md')" -eq 1 ] \
            && [ "$(nrows "$SR_OUT" E13 'extensions/role-entry.md')" -eq 1 ] \
-           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 1))" ] && echo 1 || echo 0)" \
-      "MUTANT m7 killed: E14 vanishes alone, so the guard is attributable to its own read"
+           && [ "$(footer_field "$SR_OUT" errors)" = "$((PERM_ERRS - 1))" ]; then
+      mutant_killed "${B_GATE:-0}" m7 "MUTANT m7 killed: E14 vanishes alone, so the guard is attributable to its own read"
+    else
+      bad "MUTANT m7 SURVIVED: E14 does not vanish"
+    fi
   fi
 
   # --- m8: the acquittal read, and it runs the OTHER WAY --------------------------------
@@ -579,8 +625,11 @@ if [ "$SEAL_OK" = 1 ]; then
   # trace anywhere — not a finding, not a message, not an exit code.
   if mkfrom "$TMP/sealed.sh" m8 sed 's@^  _sh_raw="$(fm "$f" shadows)" || entry_unreadable "$f"$@  _sh_raw="$(fm "$f" shadows)"@'; then
     sr "$TMP/m8.sh" shadows "$CITE" "$CITE_SUBJ"
-    say "$([ "$(nrows "$SR_OUT" W12 'extensions/cite-ext.md')" -eq 1 ] && [ "$SR_RC" -eq 0 ] && echo 1 || echo 0)" \
-      "MUTANT m8 killed: the lost acquittal RAISES a W12 the readable run does not — this site adds a finding, it does not delete one"
+    if [ "$(nrows "$SR_OUT" W12 'extensions/cite-ext.md')" -eq 1 ] && [ "$SR_RC" -eq 0 ]; then
+      mutant_killed "${B_SHADOWS:-0}" m8 "MUTANT m8 killed: the lost acquittal RAISES a W12 the readable run does not — this site adds a finding, it does not delete one"
+    else
+      bad "MUTANT m8 SURVIVED: no W12 is raised"
+    fi
   fi
 
   # --- m9: re-nest the read inside unquote, which is how the status gets swallowed -------
@@ -593,10 +642,13 @@ if [ "$SEAL_OK" = 1 ]; then
     M9_LEFT="$(grep -c 'entry_unreadable' "$TMP/m9.sh")"
     M9_BASE="$(grep -c 'entry_unreadable' "$TMP/sealed.sh")"
     sr "$TMP/m9.sh" extends "$PERM" "$PERM_SUBJ"
-    say "$([ "$SR_RC" -eq 1 ] && [ "$M9_LEFT" -eq "$M9_BASE" ] \
+    if [ "$SR_RC" -eq 1 ] && [ "$M9_LEFT" -eq "$M9_BASE" ] \
            && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 0 ] \
-           && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ] && echo 1 || echo 0)" \
-      "MUTANT m9 killed: with the read nested back inside unquote the guard is still THERE, still spelled right, and never fires"
+           && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ]; then
+      mutant_killed "${B_EXTENDS:-0}" m9 "MUTANT m9 killed: with the read nested back inside unquote the guard is still THERE, still spelled right, and never fires"
+    else
+      bad "MUTANT m9 SURVIVED: the nested read does not defeat the guard"
+    fi
 fi
 fi
 

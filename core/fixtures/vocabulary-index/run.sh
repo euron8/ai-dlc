@@ -488,7 +488,7 @@ if grep -qE 'decoy-before|decoy-after' "$TMP/controlB/docs/vocabulary-index.md";
   exit 1
 fi
 if outB2="$(check_in "$TMP/controlB")" && grep -q "in sync" <<<"$outB2"; then
-  note "ok    controlB -- seed renders every extractor, the derived columns, the consumer-owned row, and round-trips"
+  ok "controlB -- seed renders every extractor, the derived columns, the consumer-owned row, and round-trips"
   B_BASE=1
 else
   note "FIXTURE BROKEN: a freshly rendered index did not survive its own --check."

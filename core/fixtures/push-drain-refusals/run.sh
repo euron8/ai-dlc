@@ -347,16 +347,16 @@ n_bad="$(grep -c '^FAIL' "$WORK/real/arms" || true)"
 fails=$((fails + n_bad))
 # The base-pass flags: one per owner arm, set only in the passing branch of that arm in the SHIPPED reader's drive.
 # A mutant's kill reads its owner's flag, so a kill is refused when the unmutated arm it guards did not pass here.
-if grep -q '^ok    A2 ' "$WORK/real/arms"; then B_A2=1; fi
-if grep -q '^ok    A3 ' "$WORK/real/arms"; then B_A3=1; fi
-if grep -q '^ok    A3b ' "$WORK/real/arms"; then B_A3b=1; fi
-if grep -q '^ok    A4 ' "$WORK/real/arms"; then B_A4=1; fi
-if grep -q '^ok    A5 ' "$WORK/real/arms"; then B_A5=1; fi
-if grep -q '^ok    A6 ' "$WORK/real/arms"; then B_A6=1; fi
-if grep -q '^ok    A7 ' "$WORK/real/arms"; then B_A7=1; fi
-if grep -q '^ok    A10 ' "$WORK/real/arms"; then B_A10=1; fi
-if grep -q '^ok    A12 ' "$WORK/real/arms"; then B_A12=1; fi
-if grep -q '^ok    A19 ' "$WORK/real/arms"; then B_A19=1; fi
+V_A2="$(grep -c '^ok    A2 ' "$WORK/real/arms" || true)"
+V_A3="$(grep -c '^ok    A3 ' "$WORK/real/arms" || true)"
+V_A3b="$(grep -c '^ok    A3b ' "$WORK/real/arms" || true)"
+V_A4="$(grep -c '^ok    A4 ' "$WORK/real/arms" || true)"
+V_A5="$(grep -c '^ok    A5 ' "$WORK/real/arms" || true)"
+V_A6="$(grep -c '^ok    A6 ' "$WORK/real/arms" || true)"
+V_A7="$(grep -c '^ok    A7 ' "$WORK/real/arms" || true)"
+V_A10="$(grep -c '^ok    A10 ' "$WORK/real/arms" || true)"
+V_A12="$(grep -c '^ok    A12 ' "$WORK/real/arms" || true)"
+V_A19="$(grep -c '^ok    A19 ' "$WORK/real/arms" || true)"
 
 # PEQ -- THE END-TO-END RUNS KEPT, one per distinct CLI outcome: `bash <reader>` on the shipped world's
 # drain (exit 0, rows), its no-such-ref refusal (exit 2, REFUSED), and one --digest (exit 0). Each is
@@ -545,16 +545,16 @@ while IFS='|' read -r mid owner what; do
   if grep -q '^ok    A11 ' "$WORK/w-$mid/arms" && grep -q "^FAIL  $owner " "$WORK/w-$mid/arms"; then
     # The flag is the owner arm's own pass in the SHIPPED reader's drive above; each owner has its own literal flag.
     case "$owner" in
-      A2)  mutant_killed "${B_A2:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A3)  mutant_killed "${B_A3:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A3b) mutant_killed "${B_A3b:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A4)  mutant_killed "${B_A4:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A5)  mutant_killed "${B_A5:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A6)  mutant_killed "${B_A6:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A7)  mutant_killed "${B_A7:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A10) mutant_killed "${B_A10:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A12) mutant_killed "${B_A12:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
-      A19) mutant_killed "${B_A19:-0}" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A2)  mutant_killed "$([ "$V_A2" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A3)  mutant_killed "$([ "$V_A3" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A3b) mutant_killed "$([ "$V_A3b" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A4)  mutant_killed "$([ "$V_A4" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A5)  mutant_killed "$([ "$V_A5" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A6)  mutant_killed "$([ "$V_A6" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A7)  mutant_killed "$([ "$V_A7" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A10) mutant_killed "$([ "$V_A10" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A12) mutant_killed "$([ "$V_A12" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
+      A19) mutant_killed "$([ "$V_A19" -ne 0 ] && echo 1 || echo 0)" "$mid" "$mmsg" && n_scored=$((n_scored + 1)) ;;
       *)   broken "mutant $mid names owner arm $owner, which has no base-pass flag" ;;
     esac
   else

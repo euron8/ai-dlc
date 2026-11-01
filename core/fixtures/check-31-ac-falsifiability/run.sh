@@ -323,10 +323,10 @@ if [ "$AC_CTL_OK" = "1" ]; then
       build_mutant "$m" || continue
       d="$(mut_decides "$m")"; kt="$(mut_killtok "$m")"
       # SAME-RUN BASE PASS: the unmutated validator must pass the deciding arm in THIS run.
-      bflag=0; if [ "$(arm "$V" "$d")" = "$(arm_want "$d")" ]; then bflag=1; fi
+      bgot="$(arm "$V" "$d")"
       got="$(arm "$MCOPY" "$d")"
       if [ "$got" = "$kt" ]; then
-        mutant_killed "$bflag" "$m" "MUTANT $m: deciding arm $d fails ($got) -- the guard under test is what produced the verdict"
+        mutant_killed "$([ "$bgot" = "$(arm_want "$d")" ] && echo 1 || echo 0)" "$m" "MUTANT $m: deciding arm $d fails ($got) -- the guard under test is what produced the verdict"
       else
         bad "MUTANT $m SURVIVED: arm $d answered '$got', wanted '$kt' -- the guard under test is not what produced the verdict"
       fi

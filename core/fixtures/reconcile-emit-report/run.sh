@@ -282,7 +282,7 @@ rer_base() { eval "printf '%s' \"\${RER_BASE_$(printf '%s' "$1" | tr -c 'A-Za-z0
 # rer_mm_score <mutant> <cell-fn> <all-arms> -- read the row, run the cells, emit the verdict. <cell-fn>
 # <mutant> <arm> prints KILL, GREEN or DEAD (DEAD: the copy rendered no region, so no verdict).
 rer_mm_score() {
-  local m="$1" fn="$2" all="$3" row d tw a c why="" arms ok1=1 lc
+  local m="$1" fn="$2" all="$3" row d tw a c why="" arms base_miss lc
   row="$(rer_mm_row "$m")"
   if [ -z "$row" ] && [ "$RER_MATRIX" = 1 ]; then
     rer_mx
@@ -301,9 +301,9 @@ rer_mm_score() {
       *) case " $tw " in *" $a "*) [ "$c" = GREEN ] || why="$why twin $a read $c;" ;; esac ;;
     esac
   done
-  for a in $d; do [ "$(rer_base "$a")" = 1 ] || ok1=0; done
+  base_miss="$(for a in $d; do [ "$(rer_base "$a")" = 1 ] || printf '%s ' "$a"; done)"
   if [ -z "$why" ]; then
-    mutant_killed "$ok1" "$m" "mutant $m KILLED by [$d], twins [$tw] green"
+    mutant_killed "$([ "$base_miss" = "" ] && echo 1 || echo 0)" "$m" "mutant $m KILLED by [$d], twins [$tw] green"
   else
     bad "mutant $m not confined to its row (decides=$d twins=$tw):$why"
   fi

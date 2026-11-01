@@ -33,6 +33,11 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_2D=1 only beside the 2d control's own ok: a 2d mutant is scored only if the unmutated copy scored 1 1 1.
+B_2D=0
 
 echo "apply-drift-after-write:"
 
@@ -260,8 +265,8 @@ EOF
     V2D_REC="$(dirname "$APPLY")"
     V2D_CTL="$WORK/v2d-ctl"; mkdir -p "$V2D_CTL" && cp "$V2D_REC"/* "$V2D_CTL"/ 2>/dev/null
     v2d_c="$(v2d_vec "$V2D_CTL/apply.sh")"
-    [ "$v2d_c" = "1 1 1" ] && ok "2d CONTROL: an unmutated copy scores $v2d_c" \
-                           || bad "2d CONTROL: the unmutated copy scored '$v2d_c', want '1 1 1' — every 2d mutant verdict is unreadable"
+    if [ "$v2d_c" = "1 1 1" ]; then ok "2d CONTROL: an unmutated copy scores $v2d_c"; B_2D=1
+    else bad "2d CONTROL: the unmutated copy scored '$v2d_c', want '1 1 1' — every 2d mutant verdict is unreadable"; fi
     v2d_mut() { # <label> <anchor> <replacement> <want> <what>
       local d="$WORK/v2d-$1" n v
       n="$(grep -cF -- "$2" "$APPLY")" || n=0
@@ -270,7 +275,7 @@ EOF
       V_A="$2" V_R="$3" awk '{ i = index($0, ENVIRON["V_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["V_R"] substr($0, i + length(ENVIRON["V_A"])); print }' "$APPLY" > "$d/apply.sh"
       if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh"; then bad "2d $1 DID NOT APPLY or does not parse"; return; fi
       v="$(v2d_vec "$d/apply.sh")"
-      if [ "$v" = "$4" ]; then ok "2d $1 ($5): keep retire contradicts = $v — killed exactly its cells"
+      if [ "$v" = "$4" ]; then mutant_killed "$B_2D" "2d $1" "2d $1 ($5): keep retire contradicts = $v — killed exactly its cells"
       elif [ "$v" = "1 1 1" ]; then bad "2d $1 SURVIVED ($5)"
       else bad "2d $1 ($5) scored $v, want $4"; fi
     }

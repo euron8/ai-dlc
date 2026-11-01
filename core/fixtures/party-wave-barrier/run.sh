@@ -391,13 +391,22 @@ arm_refuse_emptyfile() {
 # Arm ids as the header spells them; an id's function is arm_<id with - as _>.
 ARMS="a b c cenv d dcap e f g h i j k l m n o p q qmeta r s t rem remseat adv deliv gp cross bprose set refuse-empty refuse-unread refuse-emptyfile"
 armfn() { printf 'arm_%s' "${1//-/_}"; }
-flagvar() { printf 'B_%s' "${1//-/_}"; }
 # armrc <arm> <detector>: 0 when the arm passes against that detector. A subshell, so FAILS is untouched.
 armrc() { ( ADET="$2"; FAILS=0; "$(armfn "$1")" >/dev/null 2>&1; [ "$FAILS" -eq 0 ] ); }
 # The live pass over the SHIPPED subject's base copy: every arm, every assertion. B_<arm>=1 when it passed.
+BASE_PASS=""
+base_missing() { # base_missing <arm>... -> the arms that did not pass in the live pass
+  local x
+  for x in "$@"; do
+    case " $BASE_PASS " in
+      *" $x "*) : ;;
+      *) printf '%s ' "$x" ;;
+    esac
+  done
+}
 for a in $ARMS; do
   f0="$FAILS"; ADET="$BASE_DET"; "$(armfn "$a")"
-  if [ "$FAILS" -eq "$f0" ]; then printf -v "$(flagvar "$a")" 1; else printf -v "$(flagvar "$a")" 0; fi
+  if [ "$FAILS" -eq "$f0" ]; then BASE_PASS="$(printf '%s %s' "$BASE_PASS" "$a")"; fi
 done
 ADET="$BASE_DET"
 
@@ -425,7 +434,7 @@ NP_O='wave_selfprobe || exit 2'; NP_N=': wave_selfprobe skipped'
 # of exactly those arms. With --matrix: every arm, plus the `probe` cell (the mutant with its self-probe
 # left in), one MATRIX line per cell.
 score() {
-  local id="$1" dec="$2" tw="$3" P Pp a c flag=1 good=1 want
+  local id="$1" dec="$2" tw="$3" P Pp a c nobase good=1 want
   shift 3
   if ! P="$(mut "$id" "$@" 1 "$NP_O" "$NP_N")"; then bad "$id: DID NOT APPLY"; return; fi
   if [ "$MATRIX" = 1 ]; then
@@ -441,11 +450,11 @@ score() {
     return
   fi
   [ "$tw" = "-" ] && tw=""
-  for a in $dec $tw; do [ "$(eval "printf '%s' \"\${$(flagvar "$a"):-0}\"")" = 1 ] || flag=0; done
+  nobase="$(base_missing $dec $tw)"
   for a in $dec; do armrc "$a" "$P" && good=0; done
   for a in $tw; do armrc "$a" "$P" || good=0; done
   if [ "$good" = 1 ]; then
-    mutant_killed "$flag" "$id" "$id killed: arm(s) $dec FAIL under it and twin(s) ${tw:--} hold"
+    mutant_killed "$([ "$nobase" = "" ] && echo 1 || echo 0)" "$id" "$id killed: arm(s) $dec FAIL under it and twin(s) ${tw:--} hold"
   else
     bad "$id SURVIVED or is entangled: arm(s) $dec must FAIL and twin(s) ${tw:--} must HOLD"
   fi

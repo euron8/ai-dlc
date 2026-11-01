@@ -30,6 +30,8 @@ echo "HERMETIC-CONSUMED $VALIDATOR"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 run() { # run <verdict_path> -> sets RC to the validator's exit code
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
@@ -837,10 +839,10 @@ fw_score() { # <label> <validator> <expected dead, e.g. "1 2 5" | NONE>
   for p in $FW_PREDS; do "fw_p$p" "$2" || dead="$dead $p"; done
   dead="${dead# }"
   if [ "$3" = "NONE" ]; then
-    [ -z "$dead" ] && ok "$1: FW1-FW5 all hold" || bad "$1: FW predicate(s) [$dead] failed"
-  elif [ "$dead" = "$3" ]; then ok "$1: KILLED by FW[$3] and nothing else"
+    if [ -z "$dead" ]; then ok "$1: FW1-FW5 all hold"; B_FW=1; else bad "$1: FW predicate(s) [$dead] failed"; B_FW=0; fi
+  elif [ "$dead" = "$3" ]; then mutant_killed "${B_FW:-0}" "$1" "$1: KILLED by FW[$3] and nothing else"
   elif [ -z "$dead" ]; then bad "$1 SURVIVED — no FW arm watches the line it edits"
-  else bad "$1 killed FW[$dead], expected exactly FW[$3]"; fi
+  else bad "$1 failed FW[$dead], expected exactly FW[$3]"; fi
 }
 # FW9/FW10: a waiver header carrying U+2028 mid-line. The sibling's rows are split on "\n" only, as
 # the remediation guard splits them; splitlines() would cut the header at the U+2028. FW9: waiver_id is
@@ -1365,18 +1367,18 @@ cv_score() { # cv_score <label> <validator> <expected-dead: MISSING|NONCE|BINDIN
   dead="${dead# }"
   if [ "$want" = "NONE" ]; then
     if [ -z "$dead" ]; then
-      ok "$label: all three coverage predicates HOLD against an unmutated copy in the sandbox — the copy runs, so every kill below is attributable to its mutation and not to a broken harness"
+      ok "$label: all three coverage predicates HOLD against an unmutated copy in the sandbox — the copy runs, so every kill below is attributable to its mutation and not to a broken harness"; B_CV=1
     else
-      bad "$label: the UNMUTATED copy failed [$dead]. The sandbox copy is not running the program this fixture scores, so every mutant verdict below is a verdict about nothing."
+      bad "$label: the UNMUTATED copy failed [$dead]. The sandbox copy is not running the program this fixture scores, so every mutant verdict below is a verdict about nothing."; B_CV=0
     fi
     return
   fi
   if [ -z "$dead" ]; then
     bad "$label SURVIVED — all three predicates still hold with that property removed, so no arm in this section is watching the line the mutation edited"
   elif [ "$dead" = "$want" ]; then
-    ok "$label: KILLED by $want, and by $want ALONE (the other two predicates still hold, so the arms are not entangled)"
+    mutant_killed "${B_CV:-0}" "$label" "$label: KILLED by $want, and by $want ALONE (the other two predicates still hold, so the arms are not entangled)"
   else
-    bad "$label killed [$dead], expected exactly [$want] — either it was killed by an arm that does not own this property, or it reached an arm it has no business reaching and that arm's assertion is entangled"
+    bad "$label failed [$dead], expected exactly [$want] — either it failed an arm that does not own this property, or it reached an arm it has no business reaching and that arm's assertion is entangled"
   fi
 }
 
@@ -1631,11 +1633,11 @@ if [ "$D4_OK" -eq 1 ]; then
     for p in $D4_PREDS; do "d4_p_$p" "$2" || dead="$dead $p"; done
     dead="${dead# }"
     if [ "$3" = "NONE" ]; then
-      [ -z "$dead" ] && ok "$1: all five merge predicates hold on the unmutated sandbox copy" \
-        || bad "$1: the UNMUTATED copy failed [$dead] -- every D4 mutant verdict is about a broken harness"
-    elif [ "$dead" = "$3" ]; then ok "$1: KILLED by [$3] and nothing else"
+      if [ -z "$dead" ]; then ok "$1: all five merge predicates hold on the unmutated sandbox copy"; B_D4=1
+      else bad "$1: the UNMUTATED copy failed [$dead] -- every D4 mutant verdict is about a broken harness"; B_D4=0; fi
+    elif [ "$dead" = "$3" ]; then mutant_killed "${B_D4:-0}" "$1" "$1: KILLED by [$3] and nothing else"
     elif [ -z "$dead" ]; then bad "$1 SURVIVED -- no D4 arm watches the line it edits"
-    else bad "$1 killed [$dead], expected exactly [$3]"; fi
+    else bad "$1 failed [$dead], expected exactly [$3]"; fi
   }
   d4_score "D4-M0 control (unmutated copy)" "$(cv_mutdir d4m0)/validate-gate-adjudication.sh" NONE
   D4_MU="$(cv_mutdir d4mu)"
@@ -1710,11 +1712,11 @@ open(p, "w", encoding="utf-8").write("".join(json.dumps(r) + "\n" for r in rows)
     for p in $D4_PREDS $D5_PREDS; do "d4_p_$p" "$2" || dead="$dead $p"; done
     dead="${dead# }"
     if [ "$3" = "NONE" ]; then
-      [ -z "$dead" ] && ok "$1: all eight merge and check-part predicates hold on the unmutated sandbox copy" \
-        || bad "$1: the UNMUTATED copy failed [$dead] -- every D5 mutant verdict is about a broken harness"
-    elif [ "$dead" = "$3" ]; then ok "$1: KILLED by [$3] and nothing else"
+      if [ -z "$dead" ]; then ok "$1: all eight merge and check-part predicates hold on the unmutated sandbox copy"; B_D5=1
+      else bad "$1: the UNMUTATED copy failed [$dead] -- every D5 mutant verdict is about a broken harness"; B_D5=0; fi
+    elif [ "$dead" = "$3" ]; then mutant_killed "${B_D5:-0}" "$1" "$1: KILLED by [$3] and nothing else"
     elif [ -z "$dead" ]; then bad "$1 SURVIVED -- no D5 arm watches the line it edits"
-    else bad "$1 killed [$dead], expected exactly [$3]"; fi
+    else bad "$1 failed [$dead], expected exactly [$3]"; fi
   }
   d5_score "D5-M0 control (unmutated copy)" "$(cv_mutdir d5m0)/validate-gate-adjudication.sh" NONE
   D5_MK="$(cv_mutdir d5mk)"

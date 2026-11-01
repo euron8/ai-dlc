@@ -59,6 +59,8 @@ trap 'rm -rf "$WORK"' EXIT
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "deploy-validate-smoke-classification: subject $STEP"
 
@@ -330,7 +332,7 @@ fi
 # nothing, and each must produce ITS OWN finding and no other.
 CTL="$WORK/control.md"; cp "$STEP" "$CTL"
 if [ -z "$(check "$CTL")" ] && [ -n "$(sec3 "$CTL")" ]; then
-  ok "CONTROL: an unmutated copy passes and §3 is non-empty, so a mutant's finding below is the mutation"
+  ok "CONTROL: an unmutated copy passes and §3 is non-empty, so a mutant's finding below is the mutation"; B_CTL=1
 else
   bad "CONTROL: an unmutated copy fails -- every mutant verdict below is uninterpretable"
 fi
@@ -363,7 +365,7 @@ mutant() { # <name> <awk-program> <expected-finding-prefix> <label>
   if [ -n "$others" ]; then
     bad "MUTATION '$1' fired other arms too ($others) -- the arms are entangled"
   else
-    ok "MUTATION '$1' killed by its own arm only: $4"
+    mutant_killed "${B_CTL:-0}" "$1" "MUTATION '$1' killed by its own arm only: $4"
   fi
 }
 

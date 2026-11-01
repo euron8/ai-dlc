@@ -1411,8 +1411,9 @@ MUTANTS="disarm pair head wide glob entries exitcode cwd manifest is457 existstr
 # --- THE SHIPPED SUBJECT, THROUGH EVERY ARM, BEFORE ANY MUTANT VERDICT IS READ -------------------
 base_fail=""
 for _a in $ARMS; do "arm_$_a" "$SUBJ" "$CPATHS" base || base_fail="$base_fail $_a"; done
-B_ALL=0; [ -z "$base_fail" ] && B_ALL=1
-if [ "$B_ALL" = 1 ]; then
+B_ALL=0
+if [ -z "$base_fail" ]; then
+  B_ALL=1
   ok "CONTROL unmutated-subject: the shipped audit-upstream-routing.sh and core-paths.sh pass every one of the 22 arms in this run — the same-run base pass every kill below is emitted behind"
 else
   bad "CONTROL unmutated-subject: the shipped subject FAILS arm(s)${base_fail} — a mutant verdict would read the arm failing, not the mutation"

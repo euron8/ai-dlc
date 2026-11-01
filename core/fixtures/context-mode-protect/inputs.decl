@@ -1,2 +1,3 @@
 core/hooks/ai-dlc-protect.sh
 !core/hooks/ai-dlc-context-provenance.sh
+core/fixtures/lib/

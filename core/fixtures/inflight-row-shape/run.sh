@@ -81,6 +81,8 @@ SNAP="$WORK/_bmad-output/pipeline-snapshot.md"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 
 # The seven canonical sections, with whatever body is passed for In-Flight.
 seed() { # seed <in-flight-body>
@@ -473,7 +475,9 @@ remedy_arms() {
     ok "${p}the unknown-status world does not print the struck-row remedy"
   fi
 }
+rem_before=$fails
 remedy_arms "$VALIDATOR" ""
+rem_base_fails=$((fails - rem_before))
 
 # 4o mutant: the two remedy lines swapped between the heredocs, built as a COPY.
 # The control is the unmutated run just above; cmp -s refuses a no-op sed.
@@ -490,7 +494,7 @@ remedy_arms "$SWAPMUT" "MUTANT remedy-swap: " >"$WORK/swap.txt"
 swap_fails=$((fails - swap_before))
 fails=$swap_before
 if [ "$swap_fails" -ge 4 ]; then
-  ok "MUTATION: swapping the two Remedy lines between heredocs fails all four remedy conjuncts ($swap_fails)"
+  mutant_killed "$([ "$rem_base_fails" = 0 ] && echo 1 || echo 0)" "remedy-swap" "MUTATION: swapping the two Remedy lines between heredocs fails all four remedy conjuncts ($swap_fails)"
 else
   bad "MUTATION: the remedy swap failed only $swap_fails of 4 conjuncts -- the remedy arms do not discriminate"
 fi
@@ -507,9 +511,15 @@ if cmp -s "$VALIDATOR" "$MUTANT"; then
 fi
 seed "$HEADER
 | ~~\`dev-s296-story-1\`~~ | \`dev-escalated\` | DELIVERED + CONSUMED | 2026-07-22 | — |"
+m5_base="$(run_validator "$VALIDATOR")"
+if [ "$m5_base" = "1" ]; then
+  ok "CONTROL: the unmutated validator refuses assertion 2's struck row"; B_5=1
+else
+  bad "CONTROL: unmutated validator exited $m5_base on assertion 2's input -- 5 proves nothing"
+fi
 mutant_status="$(run_validator "$MUTANT")"
 if [ "$mutant_status" = "0" ]; then
-  ok "MUTATION: removing the In-Flight check makes assertion 2 go green"
+  mutant_killed "${B_5:-0}" "5" "MUTATION: removing the In-Flight check makes assertion 2 go green"
 else
   bad "MUTATION: assertion 2 still fails (exit $mutant_status) without the check -- it proves nothing"
 fi
@@ -532,13 +542,13 @@ seed "$HEADER
 | \`qa-s296-story-1\` | \`qa\` | docs/reviews/y.md | 2026-07-22 | idle-reusable |"
 control_status="$(run_validator "$CONTROL")"
 if [ "$control_status" = "1" ]; then
-  ok "CONTROL: an unmutated copy still refuses the unrecognised token"
+  ok "CONTROL: an unmutated copy still refuses the unrecognised token"; B_5b=1
 else
   bad "CONTROL: unmutated copy exited $control_status -- the copy is broken, 5b proves nothing"
 fi
 smutant_status="$(run_validator "$SMUTANT")"
 if [ "$smutant_status" = "0" ]; then
-  ok "MUTATION: removing the status check makes assertion 4b go green"
+  mutant_killed "${B_5b:-0}" "5b" "MUTATION: removing the status check makes assertion 4b go green"
 else
   bad "MUTATION: assertion 4b still fails (exit $smutant_status) without the check -- it proves nothing"
 fi
@@ -596,7 +606,7 @@ seed "$HEADER
 | \`unknown-s308-beta\` | \`qa\` | docs/y.md | 2026-09-02 | idle-reusable |"
 alive_status="$(run_validator "$CONTROL")"
 if [ "$alive_status" = "1" ] && grep -q 'unknown-s308-beta' "$WORK/out.txt"; then
-  ok "CONTROL: the unmutated copy is alive (it still names an unrecognised token)"
+  ok "CONTROL: the unmutated copy is alive (it still names an unrecognised token)"; B_5ca=1
 else
   bad "CONTROL: unmutated copy exited $alive_status without naming the row -- 5c proves nothing"
 fi
@@ -604,14 +614,14 @@ fi
 seed "$STOPPED_ROW"
 base_status="$(run_validator "$CONTROL")"
 if [ "$base_status" = "0" ]; then
-  ok "CONTROL: the same live copy accepts the stopped row"
+  ok "CONTROL: the same live copy accepts the stopped row"; B_5cb=1
 else
   bad "CONTROL: the unmutated copy rejected the stopped row (exit $base_status)"
 fi
 
 tmutant_status="$(run_validator "$TMUTANT")"
 if [ "$tmutant_status" = "1" ] && grep -q 'stopped-s308-alpha' "$WORK/out.txt"; then
-  ok "MUTATION: removing the stopped entry indicts the stopped row again"
+  mutant_killed "$(( ${B_5ca:-0} && ${B_5cb:-0} ))" "5c" "MUTATION: removing the stopped entry indicts the stopped row again"
 else
   bad "MUTATION: without the whitelist entry the stopped row exited $tmutant_status unnamed -- 4f proves nothing"
 fi
@@ -671,13 +681,13 @@ $PROW_BAD
 $PROW_OK"
   d_ctl="$(run_validator "$CONTROL")"
   if [ "$d_ctl" = "1" ] && grep -q 'a2b2344be58b99e31' "$WORK/out.txt"; then
-    ok "CONTROL: the unmutated copy names the pipeless offender on 4i's own input"
+    ok "CONTROL: the unmutated copy names the pipeless offender on 4i's own input"; B_5d=1
   else
     bad "CONTROL: the unmutated copy exited $d_ctl without naming the pipeless row -- 5d proves nothing"
   fi
   d_out="$(run_validator "$D_MUT")"
   if [ "$d_out" = "0" ]; then
-    ok "MUTANT 5d: the pre-fix leading-pipe gate cannot see the pipeless row -- 4i goes green, so 4i is what tests the relaxation"
+    mutant_killed "${B_5d:-0}" "5d" "MUTANT 5d: the pre-fix leading-pipe gate cannot see the pipeless row -- 4i goes green, so 4i is what tests the relaxation"
   else
     bad "MUTANT 5d SURVIVED: the leading-pipe gate still exited $d_out on a pipeless row -- either the seed is not pipeless or 4i is fed by something else"
   fi
@@ -691,7 +701,7 @@ $PROW_OK"
   if [ "$d_piped" = "1" ] && grep -q 'piped-bad-s105' "$WORK/out.txt"; then
     ok "  and 5d still names the PIPED offender -- it reverts the gate, it does not disable the check"
   else
-    bad "  MUTANT 5d also killed the piped arm (exit $d_piped) -- it is a dead program, not the pre-fix gate, so its kill on 4i is unreadable"
+    bad "  MUTANT 5d also took the piped arm down (exit $d_piped) -- it is a dead program, not the pre-fix gate, so its result on 4i is unreadable"
   fi
 fi
 
@@ -706,13 +716,13 @@ $PROW_OK
 prose-s105 note: the branch is ahead by \`git log @{u}..HEAD --oneline | wc -l\` commits."
   e_ctl="$(run_validator "$CONTROL")"
   if [ "$e_ctl" = "0" ]; then
-    ok "CONTROL: the unmutated copy passes 4m's prose seed"
+    ok "CONTROL: the unmutated copy passes 4m's prose seed"; B_5e=1
   else
     bad "CONTROL: the unmutated copy exited $e_ctl on 4m's prose seed -- 5e proves nothing"
   fi
   e_out="$(run_validator "$E_MUT")"
   if [ "$e_out" = "1" ] && grep -q 'prose-s105' "$WORK/out.txt"; then
-    ok "MUTANT 5e: without the width test the prose line is convicted BY NAME -- 4m is what holds the measured false positive at zero"
+    mutant_killed "${B_5e:-0}" "5e" "MUTANT 5e: without the width test the prose line is convicted BY NAME -- 4m is what holds the measured false positive at zero"
   else
     bad "MUTANT 5e SURVIVED: the bare-pipe form exited $e_out without naming the prose line -- 4m's seed is not reaching the gate"
   fi
@@ -729,7 +739,7 @@ if mut_copy "$F_MUT" 's|if (!piped \&\& n != ncols) next|if (n != ncols) next|' 
 | \`plain-s105\` | \`qa\` | docs/z.md | 2026-09-14 | dispatched (fix-forward) |"
   f_ctl="$(run_validator "$CONTROL")"
   if [ "$f_ctl" = "1" ] && grep -q 'stray-s105' "$WORK/out.txt"; then
-    ok "CONTROL: the unmutated copy names the stray-pipe row on 4n's own input"
+    ok "CONTROL: the unmutated copy names the stray-pipe row on 4n's own input"; B_5f=1
   else
     bad "CONTROL: the unmutated copy exited $f_ctl without naming the stray-pipe row -- 5f proves nothing"
   fi
@@ -737,7 +747,7 @@ if mut_copy "$F_MUT" 's|if (!piped \&\& n != ncols) next|if (n != ncols) next|' 
   if grep -q 'stray-s105' "$WORK/out.txt"; then
     bad "MUTANT 5f SURVIVED: the uniform width test still named the stray-pipe row (exit $f_out) -- 4n cannot distinguish the two forms"
   elif grep -q 'plain-s105' "$WORK/out.txt"; then
-    ok "MUTANT 5f: the uniform width test ACQUITS the stray-pipe row while still naming the ordinary one -- 4n is what keeps the relaxation a superset"
+    mutant_killed "${B_5f:-0}" "5f" "MUTANT 5f: the uniform width test ACQUITS the stray-pipe row while still naming the ordinary one -- 4n is what keeps the relaxation a superset"
   else
     bad "MUTANT 5f: the copy named NEITHER row (exit $f_out) -- it is dead, not discriminating, and the kill is unreadable"
   fi
@@ -755,13 +765,13 @@ $PROW_BAD
 $PROW_OK"
   g_ctl="$(run_validator "$CONTROL")"
   if [ "$g_ctl" = "1" ] && grep -q 'a2b2344be58b99e31' "$WORK/out.txt"; then
-    ok "CONTROL: the unmutated copy names the pipeless offender before 5g is read"
+    ok "CONTROL: the unmutated copy names the pipeless offender before 5g is read"; B_5g=1
   else
     bad "CONTROL: the unmutated copy exited $g_ctl without naming the pipeless row -- 5g proves nothing"
   fi
   g_out="$(run_validator "$G_MUT")"
   if [ "$g_out" = "0" ]; then
-    ok "MUTANT 5g: with ncols not taken from the header row the pipeless offender escapes -- 4i is bound to the DERIVED width, not to any width"
+    mutant_killed "${B_5g:-0}" "5g" "MUTANT 5g: with ncols not taken from the header row the pipeless offender escapes -- 4i is bound to the DERIVED width, not to any width"
   else
     bad "MUTANT 5g SURVIVED: exit $g_out with the header's width recording deleted -- 4i passes under a width from somewhere else"
   fi
@@ -778,13 +788,13 @@ if mut_copy "$H_MUT" 's|{ declared = 1; ncols = n; next } # the header declares 
   seed "$PHEADER"
   h_ctl="$(run_validator "$CONTROL")"
   if [ "$h_ctl" = "0" ]; then
-    ok "CONTROL: the unmutated copy passes 4l's header-only seed"
+    ok "CONTROL: the unmutated copy passes 4l's header-only seed"; B_5h=1
   else
     bad "CONTROL: the unmutated copy exited $h_ctl on the pipeless header alone -- 5h proves nothing"
   fi
   h_out="$(run_validator "$H_MUT")"
   if [ "$h_out" = "1" ] && grep -q 'dispatched-at | status' "$WORK/out.txt"; then
-    ok "MUTANT 5h: without its exemption the pipeless HEADER is itself indicted -- 4l is a real arm and not an absence that passes against a dead check"
+    mutant_killed "${B_5h:-0}" "5h" "MUTANT 5h: without its exemption the pipeless HEADER is itself indicted -- 4l is a real arm and not an absence that passes against a dead check"
   else
     bad "MUTANT 5h SURVIVED: exit $h_out with the header exemption removed and the header unnamed -- 4l would pass against a check that reports nothing"
   fi

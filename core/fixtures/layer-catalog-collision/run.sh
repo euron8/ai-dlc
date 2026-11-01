@@ -34,6 +34,11 @@ trap 'rm -rf "$ROOT"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_CTRL=1 only beside the control's own ok: a mutant is scored only if the unmutated linter copy reproduced the shipped vector.
+B_CTRL=0
 
 echo "layer-catalog-collision:"
 
@@ -383,7 +388,7 @@ mkdir -p "$MDIR"
 cp "$LINTER" "$MDIR/control.sh"
 CTRL="$(band_vector "$MDIR/control.sh" "$MROOT")"
 if [ "$CTRL" = "$BAND_WANT" ]; then
-  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"
+  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"; B_CTRL=1
 else
   bad "CONTROL FAILED — an unmutated COPY of the linter does not reproduce the shipped vector.
           copy '$CTRL'
@@ -400,7 +405,7 @@ mutant() { # mutant <label> <sed> <want-vector> <why>
   fi
   got="$(band_vector "$f" "$MROOT")"
   if [ "$got" = "$want" ]; then
-    ok "MUTANT killed: $label"
+    mutant_killed "$B_CTRL" "$label" "MUTANT killed: $label"
   else
     bad "MUTANT '$label' did not produce its expected vector, so what it is meant to prove is unproven.
           got  '$got'

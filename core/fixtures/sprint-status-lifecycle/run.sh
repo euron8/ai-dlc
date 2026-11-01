@@ -1013,8 +1013,7 @@ else
     n="${MN[$mut_i]}"
     case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
     dec=" ${MD[$mut_i]//,/ } "; twn=" ${MT[$mut_i]//,/ } "
-    flag=1
-    for a in $dec $twn; do base_ok "$a" || flag=0; done
+    bsig="$(for a in $dec $twn; do base_ok "$a" || echo "$a"; done)"
     keys=" "
     for a in $twn $dec; do _k="$(key_of "$a")"; case "$keys" in *" $_k "*) ;; *) keys="$keys$_k " ;; esac; done
     RES=""
@@ -1025,11 +1024,11 @@ else
     for i in $FAIL_OUT; do case "$dec" in *" $i "*) ;; *) wrong="$wrong $i-tripped-outside-decides" ;; esac; done
     for a in $twn; do in_set "$a" "$PASS_OUT" || wrong="$wrong $a-twin-not-green"; done
     if [ -n "$wrong" ]; then
-      if [ "$flag" = 1 ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] and twin=[${MT[$mut_i]}] green"; else need_base "$flag" "$n" || true; fi
+      if [ "$bsig" = "" ]; then bad "MUTANT $n scored [$wrong ], wanted decides=[${MD[$mut_i]}] and twin=[${MT[$mut_i]}] green"; else need_base "$([ "$bsig" = "" ] && echo 1 || echo 0)" "$n" || true; fi
     elif ! mut_witness "$n"; then
       bad "MUTANT $n flipped its arm but its witness did not hold (archives='${TBWA_preamble:-}' none='${TBWN_preamble:-}')"
     else
-      mutant_killed "$flag" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
+      mutant_killed "$([ "$bsig" = "" ] && echo 1 || echo 0)" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
     fi
     mut_i=$((mut_i+1))
   done

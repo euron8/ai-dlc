@@ -73,6 +73,11 @@ fails=0
 made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_CTRL=1 only beside the unmutated control's own ok: a mutant is scored only if the harness reproduced both shipped vectors.
+B_CTRL=0
 
 # EXPECTED_ASSERTIONS is not bookkeeping. The first run of this fixture lost an entire
 # mutant to a missing space in a `mk_mutant` call: the helper got two arguments instead of
@@ -223,7 +228,7 @@ cp -R "$RECON" "$MDIR/control"
 c1="$(vector "$MDIR/control/$DRIFT_BN" "$BASE" "$MID")"
 c2="$(vector "$MDIR/control/$DRIFT_BN" "$MID" "$TIP")"
 if [ "$c1" = "$V1" ] && [ "$c2" = "$V2" ]; then
-  ok "CONTROL: an unmutated copy reproduces both shipped vectors (the harness runs)"
+  ok "CONTROL: an unmutated copy reproduces both shipped vectors (the harness runs)"; B_CTRL=1
 else
   bad "CONTROL FAILED: an unmutated COPY of reconcile/ does not reproduce the shipped verdicts (run1 copy='$c1' shipped='$V1'; run2 copy='$c2' shipped='$V2'). Every mutant below would be scored against a harness that is not working, and a copy that cannot run scores as a kill for all of them."
 fi
@@ -243,17 +248,17 @@ mk_mutant() { # mk_mutant <name> <file-relative-to-reconcile> <sed-expr> -> muta
 # ONE assertion per mutant: the exact six-cell vector it must produce. Stated as the
 # vector rather than as "the old row is gone" so a mutant that broke the script outright
 # fails its own assertion instead of passing it.
-expect() { # expect <name> <what-it-proves> <mutant-drift> <want-run1> <want-run2>
+expect() { # expect <base-flag> <name> <what-it-proves> <mutant-drift> <want-run1> <want-run2>
   local g1 g2
-  g1="$(vector "$3" "$BASE" "$MID")"; g2="$(vector "$3" "$MID" "$TIP")"
-  if [ "$g1" = "$4" ] && [ "$g2" = "$5" ]; then
-    ok "MUTANT $1 killed: $2"
+  g1="$(vector "$4" "$BASE" "$MID")"; g2="$(vector "$4" "$MID" "$TIP")"
+  if [ "$g1" = "$5" ] && [ "$g2" = "$6" ]; then
+    mutant_killed "$1" "$2" "MUTANT $2 killed: $3"
   else
-    bad "MUTANT $1 did not produce its expected vector, so the assertion it is meant to prove is unproven ($2).
+    bad "MUTANT $2 did not produce its expected vector, so the assertion it is meant to prove is unproven ($3).
           run1 got  '$g1'
-          run1 want '$4'
+          run1 want '$5'
           run2 got  '$g2'
-          run2 want '$5'"
+          run2 want '$6'"
   fi
 }
 
@@ -262,7 +267,7 @@ expect() { # expect <name> <what-it-proves> <mutant-drift> <want-run1> <want-run
 # nothing is ever compared against and every anchored entry reports OK forever. It is the
 # exact shape of "narrower means quieter", and it moves ONLY the two ANCHOR-DRIFT cells.
 if m="$(mk_mutant m1-no-base-side "$DRIFT_BN" 's|^      ext_old="[$](git_show .*|      ext_old="$ext_new"|')"; then
-  expect m1-no-base-side \
+  expect "$B_CTRL" m1-no-base-side \
     "with the BASE side of the span comparison gone, both ANCHOR-DRIFT cells become OK while the file-grain cells are untouched — the drift verdicts are produced by comparing the declared span at two refs, not by the entry having declared one" \
     "$m" \
     'alpha=EXTENSION-OK beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \
@@ -273,7 +278,7 @@ fi
 # fallback's status changes, so the four anchored cells are untouched and this mutant is
 # the one that proves the liveness witness is a witness rather than a constant.
 if m="$(mk_mutant m2-narrowing-leaks "$DRIFT_BN" 's|^    emit EXTENSION-HOOK-DRIFT |    emit EXTENSION-OK |')"; then
-  expect m2-narrowing-leaks \
+  expect "$B_CTRL" m2-narrowing-leaks \
     "an entry declaring no extends: stops keeping the whole file as its drift subject, and only that — so the six-cell table above cannot be satisfied by a classifier that reports OK for everything unanchored" \
     "$m" \
     'alpha=EXTENSION-OK beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-OK' \
@@ -286,7 +291,7 @@ fi
 # tracks Alpha, so it goes quiet in run 1 and reports in run 2 — the diagonal inverts. This
 # is the mutant the diagonal exists for, and nothing else in the table detects it.
 if m="$(mk_mutant m3-shared-anchor "$DRIFT_BN" 's|^      ext_anc="[$](printf .*|      ext_anc="Alpha gate"|')"; then
-  expect m3-shared-anchor \
+  expect "$B_CTRL" m3-shared-anchor \
     "when every anchored entry watches one shared span, the diagonal inverts — which is the only cell that moves, and the reason a sibling assertion is not a restatement of the load-bearing one" \
     "$m" \
     'alpha=EXTENSION-OK beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \
@@ -301,7 +306,7 @@ fi
 # It lands in lib.sh's section_of(), which is byte-identical to the authoring linter's
 # under I40 — mutating a throwaway copy does not touch that binding.
 if m="$(mk_mutant m4-span-is-file lib.sh 's|^  if \[ "[$]_rc" -eq 0 \] && \[ -n "[$]_s" \]; then LC_ALL=C sed -n .*|  if [ "$_rc" -eq 0 ] \&\& [ -n "$_s" ]; then cat "$_t" \|\| _rc=$?; fi|')"; then
-  expect m4-span-is-file \
+  expect "$B_CTRL" m4-span-is-file \
     "with the declared span widened back to the whole file, both EXTENSION-OK cells become ANCHOR-DRIFT — the quiet verdicts are produced by comparing the anchor's own bytes, not by the presence of an extends: line" \
     "$m" \
     'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT' \
@@ -313,7 +318,7 @@ fi
 # first, Gamma never moves, so multi goes quiet in run 1 — and that is the ONLY cell that moves.
 # Anchored on the staged capture of the parts, which the loop below reads.
 if m="$(mk_mutant m5-first-span-only "$DRIFT_BN" 's|^    _sp_rc=0; _sp_v="[$](shadow_parts "[$]extends")" [|][|] _sp_rc=[$]?$|    _sp_rc=0; _sp_v="$(shadow_parts "$extends" \| head -1)" \|\| _sp_rc=$?|')"; then
-  expect m5-first-span-only \
+  expect "$B_CTRL" m5-first-span-only \
     "reading only the first declared span lets the entry's second span move in silence, and nothing else in the table changes" \
     "$m" \
     'alpha=EXTENSION-OK beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \

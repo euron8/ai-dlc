@@ -158,17 +158,17 @@ mkfx_noisy() {                 # mkfx_noisy <tree> <name> <exitcode> <token>
 # THE KILL WAITS FOR ITS NEIGHBOUR TO HAVE STARTED. xargs stops launching units once a child dies of a signal,
 # and a nested pool is two wide, so whether the unit after the dropped one was launched at all followed the
 # order in which two workers happened to be reaped: the drop worlds then ran 12 or 15 starts of that unit and the
-# count moved with the load. The dropped unit now blocks (a `read -t 1` on a wake fifo, no process start) until
-# `started` exists, and the neighbour (mkfx_marker) writes it as its first act; the 300 bound is deadlock insurance.
+# count moved with the load. The dropped unit now blocks (a `read` on a wake fifo, no process start, no bound) until
+# `started` exists, and the neighbour (mkfx_marker) writes it as its first act and then wakes the read; a hook
+# that never launches the neighbour hangs here, which is a hang to read and not a verdict.
 mkfx_kill() {
   mkdir -p "$1/tests/fixtures/$2"
   cat > "$1/tests/fixtures/$2/run.sh" <<'FX'
 #!/usr/bin/env bash
 w="$(cd "$(dirname "$0")/../../.." && pwd)"
 exec 9<>"$w/wake"
-n=0; while [ ! -e "$w/started" ] && [ "$n" -lt 300 ]; do n=$((n + 1)); read -t 1 -u 9 x; done
+while [ ! -e "$w/started" ]; do read -u 9 x; done
 kill -9 "$PPID" 2>/dev/null
-sleep 5
 FX
 }
 mkfx_marker() {                # mkfx_marker <tree> <name> <exitcode> : a unit that announces it has started, then exits
@@ -195,8 +195,8 @@ FX
 # THE OVERLAP IS AWAITED ON A SENTINEL, NEVER ON A TIMER. Each unit holds its marker until it sees a
 # sibling's marker (or a `seen` line that already records an overlap), so the verdict does not depend
 # on how far apart a loaded scheduler starts the workers. CSP_BARRIER_N bounds the wait in 0.05s
-# steps: the default is deadlock insurance only, and the worlds that cannot overlap whatever the
-# scheduling (-P1, and the m3 mutant) set it small because their bound decides nothing.
+# steps only where it is set: unset, the wait is unbounded on its condition, and the worlds that cannot overlap
+# whatever the scheduling (-P1, and the m3 mutant) set it small because their bound decides nothing.
 mkfx_observe() {
   mkdir -p "$1/tests/fixtures/$2"
   cat > "$1/tests/fixtures/$2/run.sh" <<'FX'
@@ -207,7 +207,7 @@ while :; do
   c="$(ls "$CSP_OBSERVE" | wc -l | tr -d ' ')"
   [ "$c" -ge 2 ] && break
   grep -q '^[2-9]' "$CSP_OBSERVE/../seen" 2>/dev/null && break
-  n=$((n + 1)); [ "$n" -lt "${CSP_BARRIER_N:-6000}" ] || break
+  n=$((n + 1)); [ -z "${CSP_BARRIER_N:-}" ] || [ "$n" -lt "$CSP_BARRIER_N" ] || break
   sleep 0.05
 done
 echo "$c" >> "$CSP_OBSERVE/../seen"
@@ -300,11 +300,7 @@ cw_green() {                   # alpha waits for bravo's and charlie's verdicts 
   mkdir -p "$1/tests/fixtures/alpha"
   cat > "$1/tests/fixtures/alpha/run.sh" <<'FX'
 #!/usr/bin/env bash
-n=0
-while [ "$n" -lt 6000 ]; do
-  [ -s "$AI_DLC_FX_OUT/bravo" ] && [ -s "$AI_DLC_FX_OUT/charlie" ] && break
-  n=$((n + 1)); sleep 0.05
-done
+until [ -s "$AI_DLC_FX_OUT/bravo" ] && [ -s "$AI_DLC_FX_OUT/charlie" ]; do sleep 0.05; done
 exit 0
 FX
   mkfx_noisy "$1" bravo 0 GREENTOKEN; mkfx "$1" charlie 0
@@ -593,7 +589,7 @@ fi
 # fails for a reason that has nothing to do with the arm under test.
 if mut m1 '/if \[ "\$n_expected" -eq 0 \]/,+3d'; then
   cw_run empty "$WORK/m1" "$MUT"
-  csp_score m1 "$B_empty" "rc,nofix" "-" $'rc=0\nnofix=no' "rc,nofix" "$BASE_empty" \
+  csp_score m1 "$([ "$B_empty" = 1 ] && echo 1 || echo 0)" "rc,nofix" "-" $'rc=0\nnofix=no' "rc,nofix" "$BASE_empty" \
     "M1 without the empty-suite guard a driverless tree PASSES and the message is gone — the guard is what fails it"
 fi
 
@@ -629,7 +625,7 @@ fi
 #      hooks to say which of the two does the detecting.
 if mut m2b '/if \[ ! -f "\$out\/\$b" \]/,+2d'; then
   cw_run drop "$WORK/m2b" "$MUT"
-  csp_score m2b "$B_drop" "noverdict,countline" "rc" $'rc=1\nnoverdict=no\ncountline=no' "rc,noverdict,countline" "$BASE_drop" \
+  csp_score m2b "$([ "$B_drop" = 1 ] && echo 1 || echo 0)" "noverdict,countline" "rc" $'rc=1\nnoverdict=no\ncountline=no' "rc,noverdict,countline" "$BASE_drop" \
     "M2b without the per-fixture arm a lost worker is MISREPORTED as a failing fixture and the count assertion stays silent — so the count cannot fire alone"
 fi
 
@@ -638,7 +634,7 @@ if mut m3 's|xargs -P "\$FIXTURE_JOBS"|xargs -P 1|'; then
   export CSP_BARRIER_N=12
   cw_run pool "$WORK/m3" "$MUT"
   unset CSP_BARRIER_N
-  csp_score m3 "$B_pool" "maxpar_ge2" "rc" $'maxpar_ge2=no' "rc,maxpar_ge2" "$BASE_pool" \
+  csp_score m3 "$([ "$B_pool" = 1 ] && echo 1 || echo 0)" "maxpar_ge2" "rc" $'maxpar_ge2=no' "rc,maxpar_ge2" "$BASE_pool" \
     "M3 with the pool width pinned to 1 the fixtures no longer overlap — the pool is what produces the overlap"
 fi
 
@@ -649,7 +645,7 @@ fi
 # "only red units are captured" rather than "something did not happen".
 if mut m4 '/= ok \] && continue/d'; then
   cw_run green "$WORK/m4" "$MUT"
-  csp_score m4 "$B_green" "rec" "rc" $'rec=yes' "rc,rec" "$BASE_green" \
+  csp_score m4 "$([ "$B_green" = 1 ] && echo 1 || echo 0)" "rec" "rc" $'rec=yes' "rc,rec" "$BASE_green" \
     "M4 without the verdict selector a GREEN unit is captured too — so the control is what proves only red units are"
 fi
 
@@ -660,7 +656,7 @@ fi
 # the run did go red and record) while no stamped copy appears.
 if mut retain-off '/cp "\$FAILLOG_RECORD" "\$fl_copy"/d'; then
   cw_run retain "$WORK/retain-off" "$MUT"
-  csp_score retain-off "$B_retain" "copies" "rec,shaped" $'copies=0' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+  csp_score retain-off "$([ "$B_retain" = 1 ] && echo 1 || echo 0)" "copies" "rec,shaped" $'copies=0' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
     "retain-off without the copy a red run records only the overwritable primary — the copy statement is what retains"
 fi
 
@@ -668,7 +664,7 @@ fi
 # The fixed name is a seed's, so the overwrite is visible as that seed's content changing.
 if mut retain-fixed-name 's|fl_copy="\$GITDIR/ai-dlc-fixture-failures\.\$fl_stamp\.\$\$"|fl_copy="$GITDIR/ai-dlc-fixture-failures.20000101T000019Z.1"|'; then
   cw_run retain "$WORK/retain-fixed" "$MUT"
-  csp_score retain-fixed-name "$B_retain" "copies,seed19" "rec,h179" $'copies=0\nseed19=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+  csp_score retain-fixed-name "$([ "$B_retain" = 1 ] && echo 1 || echo 0)" "copies,seed19" "rec,h179" $'copies=0\nseed19=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
     "retain-fixed-name with one fixed copy name the earlier record is OVERWRITTEN — the per-run stamp is what keeps both"
 fi
 
@@ -676,7 +672,7 @@ fi
 # shaped copies must remain, the oldest seed among them.
 if mut prune-off '/^    for fl_f in "\$GITDIR"/,+5d'; then
   cw_run retain "$WORK/prune-off" "$MUT"
-  csp_score prune-off "$B_retain" "shaped,oldest" "copies,rec" $'shaped=21\noldest=yes' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+  csp_score prune-off "$([ "$B_retain" = 1 ] && echo 1 || echo 0)" "shaped,oldest" "copies,rec" $'shaped=21\noldest=yes' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
     "prune-off without the prune the twenty-first copy is kept too — the prune is what bounds retention"
 fi
 
@@ -686,7 +682,7 @@ fi
 # survives even here, which is why it cannot be the arm that kills this mutant.
 if mut prune-glob-wide 's|ai-dlc-fixture-failures\.2\[0-9\]\[0-9\]\[0-9\]\[01\]\[0-9\]\*Z\.\*|ai-dlc-fixture-failures.*|'; then
   cw_run retain "$WORK/prune-wide" "$MUT"
-  csp_score prune-glob-wide "$B_retain" "h179" "cleanc,rec" $'h179=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+  csp_score prune-glob-wide "$([ "$B_retain" = 1 ] && echo 1 || echo 0)" "h179" "cleanc,rec" $'h179=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
     "prune-glob-wide with the pattern widened a hand-saved record is DELETED — the anchor is what protects it"
 fi
 
@@ -696,7 +692,7 @@ fi
 # `.179.1` still survives here, which is why it cannot be the arm that kills this mutant.
 if mut prune-suffix-unanchored '/case "\${fl_f##\*\.}" in/d'; then
   cw_run retain "$WORK/prune-suffix" "$MUT"
-  csp_score prune-suffix-unanchored "$B_retain" "keepc" "h179,cleanc" $'keepc=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
+  csp_score prune-suffix-unanchored "$([ "$B_retain" = 1 ] && echo 1 || echo 0)" "keepc" "h179,cleanc" $'keepc=no' "rc,rec,copies,shaped,oldest,h179,keepc,cleanc,seed19" "$BASE_retain" \
     "prune-suffix-unanchored without the end anchor a .keep copy is DELETED — the all-digit last field is what protects it"
 fi
 
@@ -737,7 +733,7 @@ st_stub() {                    # st_stub <tree> <name> : writes the stub and its
     h) cat > "$d/run.sh" <<'FX'
 #!/usr/bin/env bash
 echo $$ >> "$CSP_PIDS/h"
-bash -c 'echo $$ >> "$1"; sleep 100000 & echo $! >> "$1"; wait $!; :' _ "$CSP_PIDS/h"
+bash -c 'echo $$ >> "$1"; /bin/cat < "$CSP_FIFO" > /dev/null & echo $! >> "$1"; wait $!; :' _ "$CSP_PIDS/h"
 FX
     ;;
     s) cat > "$d/run.sh" <<'FX'
@@ -766,7 +762,7 @@ done
 FX
       else cat > "$d/gc.sh" <<'FX'
 ps -o pgid= -p $$ | tr -d ' ' > "$CSP_PIDS/gh.pgid.gc"
-sleep 100000 & echo $! >> "$CSP_PIDS/gh"; wait $!
+/bin/cat < "$CSP_FIFO" > /dev/null & echo $! >> "$CSP_PIDS/gh"; wait $!
 FX
       fi
     ;;
@@ -777,7 +773,7 @@ echo $$ >> "$CSP_PIDS/p"
 . "$CSP_GLIB"; i=0; kid=""
 while [ $i -lt $((6 * CSP_STALL)) ]; do
   i=$((i + 1)); [ -z "$kid" ] || kill "$kid" 2>/dev/null
-  /bin/sleep 100000 & kid=$!; disown "$kid"   # disown: a reaped job prints "Terminated" to the log, which is progress
+  /bin/cat < "$CSP_FIFO" > /dev/null & kid=$!; disown "$kid"   # disown: a reaped job prints "Terminated" to the log, which is progress
   gstep p $i $((6 * CSP_STALL))
 done
 [ -z "$kid" ] || kill "$kid" 2>/dev/null
@@ -801,7 +797,7 @@ ST=3                           # AI_DLC_POOL_STALL for every drive in this secti
 # watcher's `sleep 1` through to /bin/sleep. For a watcher whose unit has a gate directory it counts its
 # own calls (k), marks poll k-1 measured (polled.<k-1>), and returns only once step k exists
 # (written.<k>); a unit (or, for the orphan arms, the harness) marks a step by creating written.<i>.
-# The 30000 x 0.02s bounds are deadlock insurance against a hook that never polls, not a deadline.
+# The waits are unbounded on their condition; the stub dies with the watcher's group, so none outlives its world.
 GBIN="$WORK/gate-bin"; mkdir -p "$GBIN" || broken "cannot create the gate stub dir"
 cat > "$GBIN/sleep" <<'FX'
 #!/usr/bin/env bash
@@ -813,7 +809,7 @@ if [ "${1:-}" = 1 ] && [ -n "${CSP_GATE:-}" ]; then
     k=0; [ -f "$d/k" ] && read -r k < "$d/k"
     k=$((k + 1)); echo "$k" > "$d/k"
     [ "$k" -gt 1 ] && : > "$d/polled.$((k - 1))"
-    n=0; while [ ! -e "$d/written.$k" ] && [ "$n" -lt 30000 ]; do n=$((n + 1)); /bin/sleep 0.02; done
+    while [ ! -e "$d/written.$k" ]; do /bin/sleep 0.02; done
     exit 0
   fi
 fi
@@ -821,12 +817,12 @@ exec /bin/sleep "$@"
 FX
 chmod +x "$GBIN/sleep"
 cat > "$GBIN/lib.sh" <<'FX'
-gwait() { local n=0; while [ ! -e "$1" ] && [ "$n" -lt 30000 ]; do n=$((n + 1)); /bin/sleep 0.02; done; }
+gwait() { while [ ! -e "$1" ]; do /bin/sleep 0.02; done; }
 # gpolls <unit>: an INSTANT unit's lockstep. It grants watcher poll 1, then holds until the watcher has STARTED
 # its second gated sleep, so the watcher's stub start count is exactly 2 whether the kill lands early or
 # late; without it, whether the watcher reached a stub start before the kill followed the load.
-gpolls() { local f="$CSP_GATE/$1" n=0 k=0; : > "$f/written.1"
-  while [ "$n" -lt 30000 ]; do [ -f "$f/k" ] && read -r k < "$f/k"; [ "${k:-0}" -ge 2 ] && return 0; n=$((n + 1)); /bin/sleep 0.02; done; }
+gpolls() { local f="$CSP_GATE/$1" k=0; : > "$f/written.1"
+  while :; do [ -f "$f/k" ] && read -r k < "$f/k"; [ "${k:-0}" -ge 2 ] && return 0; /bin/sleep 0.02; done; }
 gstep() { : > "$CSP_GATE/$1/written.$2"; gwait "$CSP_GATE/$1/polled.$2"; }   # the LAST step waits too: the watcher then starts exactly n+1 gated sleeps, so the start count is fixed
 FX
 [ -x "$GBIN/sleep" ] && [ -s "$GBIN/lib.sh" ] || broken "the gate stub was not built"
@@ -953,26 +949,26 @@ mutx() {                       # mutx <label> <old> <new> [<source>] -> sets MUT
 # st-a: the signature omits the log, so (s), whose only progress is its log, is refused.
 if mutx st-a 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls' 'cur="$(find "$wr" ${wx:+"$wx"} ${1+"$@"} -type f -ls'; then
   st_mrun st-a "$MUT" s
-  csp_score st-a "$B_stall" "v_s" "v_alpha" $'v_s=REFUSED' "v_s,v_alpha" "$BASE_stall" \
+  csp_score st-a "$([ "$B_stall" = 1 ] && echo 1 || echo 0)" "v_s" "v_alpha" $'v_s=REFUSED' "v_s,v_alpha" "$BASE_stall" \
     "st-a without the log in the signature a log-only unit is REFUSED -- the log is what keeps (s) alive"
 fi
 # st-w: the signature ignores the watched root, so (w), whose only progress is under it, is refused.
 if mutx st-w 'cur="$(find "$wr" "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls' 'cur="$(find "$lg" ${wx:+"$wx"} ${1+"$@"} -type f -ls'; then
   st_mrun st-w "$MUT" w
-  csp_score st-w "$B_stall" "v_w" "v_alpha" $'v_w=REFUSED' "v_w,v_alpha" "$BASE_stall" \
+  csp_score st-w "$([ "$B_stall" = 1 ] && echo 1 || echo 0)" "v_w" "v_alpha" $'v_w=REFUSED' "v_w,v_alpha" "$BASE_stall" \
     "st-w without the watched root in the signature a scratch-only unit is REFUSED -- the root is what keeps (w) alive"
 fi
 # st-cpu: the signature counts the tree's CPU and membership again, so (p) is never still and runs
 # to its own exit 0 -- ok, not refused.
 if mutx st-cpu '          if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi' '          cur="$cur;$wsig"; if [ "$cur" = "$sg" ]; then still=$((still + 1)); else still=0; sg="$cur"; fi'; then
   st_mrun st-cpu "$MUT" p
-  csp_score st-cpu "$B_stall" "v_p" "v_alpha" $'v_p=ok' "v_p,v_alpha" "$BASE_stall" \
+  csp_score st-cpu "$([ "$B_stall" = 1 ] && echo 1 || echo 0)" "v_p" "v_alpha" $'v_p=ok' "v_p,v_alpha" "$BASE_stall" \
     "st-cpu with CPU and membership back in the signature a polling loop is never refused -- bytes alone are what refuse (p)"
 fi
 # st-b: the refusal writes FAIL, so (h) reads FAIL and the push exits 1, not 2.
 if mutx st-b 'printf REFUSED > "$AI_DLC_FX_OUT/$b"' 'printf FAIL > "$AI_DLC_FX_OUT/$b"'; then
   st_mrun st-b "$MUT" h
-  csp_score st-b "$B_stall" "v_h,rc" "v_alpha" $'v_h=FAIL\nrc=1' "v_h,v_alpha,rc" "$BASE_stall" \
+  csp_score st-b "$([ "$B_stall" = 1 ] && echo 1 || echo 0)" "v_h,rc" "v_alpha" $'v_h=FAIL\nrc=1' "v_h,v_alpha,rc" "$BASE_stall" \
     "st-b a refusal written as FAIL reads as a red verdict at exit 1 -- the REFUSED record is what keeps it out of the verdicts"
 fi
 # st-c: the kill covers the leader pid only (both the tree kill and the unit's own group kill go), so
@@ -980,14 +976,14 @@ fi
 if mutx st-c1 '            pool_kill "$pid" "$self" "$kp" "$kg"' '            kill -KILL "$pid"' \
    && mutx st-c '            kill -KILL -- "-$pid" 2>/dev/null' '            :' "$MUT"; then
   st_mrun st-c "$MUT" h
-  csp_score st-c "$B_stall" "live_h" "v_h,v_alpha" "" "v_h,v_alpha,live_h" "$BASE_stall" \
+  csp_score st-c "$([ "$B_stall" = 1 ] && echo 1 || echo 0)" "live_h" "v_h,v_alpha" "" "v_h,v_alpha,live_h" "$BASE_stall" \
     "st-c killing the leader pid alone leaves recorded member(s) of (h)'s tree alive -- the tree kill is what reaps them"
 fi
 # st-d: the walk stays in the leader's group, so (gh)'s grandchild, in a group of its own, is never
 # reached by the kill and survives the refusal.
 if mutx st-d '} else if ((pp[i] in T) || (pg[i] in G)) { T[pid[i]] = 1; c = 1 }' '} else if (pg[i] == root) { T[pid[i]] = 1; c = 1 }'; then
   st_mrun st-d "$MUT" gh
-  csp_score st-d "$B_stall" "live_gh" "v_gh,v_alpha" $'v_gh=REFUSED' "v_gh,v_alpha,live_gh" "$BASE_stall" \
+  csp_score st-d "$([ "$B_stall" = 1 ] && echo 1 || echo 0)" "live_gh" "v_gh,v_alpha" $'v_gh=REFUSED' "v_gh,v_alpha,live_gh" "$BASE_stall" \
     "st-d a walk confined to the leader's group leaves (gh)'s cross-group grandchild alive -- the cross-group walk is what reaps it"
 fi
 
@@ -995,6 +991,31 @@ fi
 # one hanging stub; the worker is then SIGKILLed by its recorded pid. The watcher pid the worker recorded
 # (`.pr/<unit>.w`) must be gone within POOL_STALL polls, and so must every pid the stub recorded: a
 # watcher whose only exit was a refusal outlived its worker with ppid 1.
+# csp_state <pid>: sets CSP_ST to `gone`, `settled` or `moving`, read off kernel state alone, never off elapsed time.
+#   gone     kill -0 fails, or the pid is a zombie (state Z): it has exited, and only its reaping is outstanding.
+#   settled  alive and BLOCKED or STOPPED (state S, I or T): nothing it does will change whether it is alive.
+#   moving   anything else (R, U). The pid is then sent SIGSTOP, so the next read settles it: a live process that
+#            nobody signalled stops and reads T, a SURVIVOR; a pid already sent SIGKILL (or a default-action
+#            SIGTERM) exits instead, because the kernel delivers the lower-numbered pending signal first.
+# Every recorded pid at a settle point was either awaited by its parent or SIGKILLed by this fixture, so the
+# states that remain are dying (R, then gone or Z) or leaked; a leaked busy loop STOPs and is named, never waited on.
+# The `ps -o pending=` field is not used: on macOS it reads 0 even for a stopped process holding a caught signal
+# and for one that blocked a signal it was then sent, so it cannot see a pending signal at all.
+csp_state() {
+  local _cs
+  CSP_ST=gone
+  kill -0 "$1" 2>/dev/null || return 0
+  _cs="$(ps -o stat= -p "$1" 2>/dev/null)"; _cs="${_cs// /}"
+  if [ -z "$_cs" ]; then
+    kill -0 "$1" 2>/dev/null || return 0
+    broken "csp_state: ps gives no state for live pid $1, so whether it will end cannot be read"
+  fi
+  case "$_cs" in
+    Z*) CSP_ST=gone ;;
+    S*|I*|T*) CSP_ST=settled ;;
+    *) CSP_ST=moving; kill -STOP "$1" 2>/dev/null ;;
+  esac
+}
 st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir> [alive]] -> prints "<watcher-left> <unit-left>" or BROKEN
   local h="$1" R="$WORK/orph.$2" SB="${3:-}" AL="${4:-}" WK WP n p ul=0
   mkdir -p "$R/t/tests/fixtures/u" "$R/out/.log" "$R/out/.dur" "$R/out/.pr" "$R/gate/u"
@@ -1004,11 +1025,12 @@ st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir> [alive]] -> 
   [ -s "$R/body.sh" ] && [ -n "$POOL_WALK" ] || { echo BROKEN; return; }
   # The unit's hang is `/bin/sleep`, not the gated `sleep` on PATH: the gate stub is a bash script, so a bare `sleep 100000`
   # was one counted start per arm, started or not depending on how far the unit got before the watcher's kill landed.
-  printf 'echo $$ >> "%s/pids"\n/bin/sleep 100000 & echo $! >> "%s/pids"; wait $!\n' "$R" "$R" > "$R/t/tests/fixtures/u/run.sh"
+  mkfifo "$R/fifo" || broken "mkfifo failed"
+  printf 'echo $$ >> "%s/pids"\n/bin/cat < "%s/fifo" > /dev/null & echo $! >> "%s/pids"; wait $!\n' "$R" "$R" "$R" > "$R/t/tests/fixtures/u/run.sh"
   ( cd "$R/t" && PATH="$GBIN:${SB:+$SB:}$PATH" CSP_GATE="$R/gate" AI_DLC_FX_OUT="$R/out" AI_DLC_FX_TRACE="" AI_DLC_FX_TRACE_LIST="" AI_DLC_FX_DV="" \
      POOL_STALL=300 POOL_WALK="$POOL_WALK" exec bash -c "$(cat "$R/body.sh")" _ tests/fixtures/u/ ) >/dev/null 2>&1 &
   WK=$!
-  n=0; while [ ! -s "$R/out/.pr/u.w" ] && [ "$n" -lt 3000 ]; do n=$((n + 1)); sleep 0.1; done
+  while [ ! -s "$R/out/.pr/u.w" ] && kill -0 "$WK" 2>/dev/null; do sleep 0.1; done
   WP="$(cat "$R/out/.pr/u.w" 2>/dev/null)"
   case "$WP" in ''|*[!0-9]*) kill -KILL "$WK" 2>/dev/null; wait "$WK" 2>/dev/null
     [ -s "$R/pids" ] && while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$R/pids"
@@ -1016,24 +1038,28 @@ st_orphan() {                  # st_orphan <hook> <tag> [<stub-dir> [alive]] -> 
   kill -0 "$WP" 2>/dev/null || { echo BROKEN; return; }
   # The unit has recorded its own pid AND its sleep child before the worker is killed, or a survivor arm
   # would count a child that was never started (a condition, not a delay).
-  n=0; while [ "$(wc -l < "$R/pids" 2>/dev/null | tr -d ' ')" != 2 ] && [ "$n" -lt 3000 ]; do n=$((n + 1)); sleep 0.1; done
+  while [ "$(wc -l < "$R/pids" 2>/dev/null | tr -d ' ')" != 2 ] && kill -0 "$WK" 2>/dev/null; do sleep 0.1; done
+  [ "$(wc -l < "$R/pids" 2>/dev/null | tr -d ' ')" = 2 ] || { kill -KILL "$WK" 2>/dev/null; echo BROKEN; return; }
   kill -KILL "$WK" 2>/dev/null; wait "$WK" 2>/dev/null
   # The watcher's polls are GRANTED one at a time, exactly POOL_STALL of them, and each grant waits on the
   # CONDITION (that poll measured, or the watcher gone) -- never on elapsed seconds.
   n=0; while kill -0 "$WP" 2>/dev/null && [ "$n" -lt "$ST" ]; do
     n=$((n + 1)); : > "$R/gate/u/written.$n"
-    g=0; while kill -0 "$WP" 2>/dev/null && [ ! -e "$R/gate/u/polled.$n" ] && [ "$g" -lt 30000 ]; do g=$((g + 1)); sleep 0.02; done
+    while kill -0 "$WP" 2>/dev/null && [ ! -e "$R/gate/u/polled.$n" ]; do sleep 0.02; done
   done
   local wl=0; if kill -0 "$WP" 2>/dev/null; then wl=1; kill -KILL -- "-$WP" 2>/dev/null; fi
-  # A pid SIGKILLed a moment ago can still answer `kill -0` until it is reaped, so an arm asserting all gone blocks
-  # on the CONDITION (every recorded pid gone) for at most 50 polls before counting. An arm asserting a SURVIVOR
-  # (the `alive` argument: st-e, st-g) skips the poll and counts once, since the condition it waits for never comes.
-  n=0; while [ "$AL" != alive ] && [ "$n" -lt 3000 ]; do
-    ul=0; while read -r p; do kill -0 "$p" 2>/dev/null && ul=$((ul + 1)); done < "$R/pids"
+  # A pid SIGKILLed a moment ago can still answer `kill -0` until it is reaped, so the count blocks on the CONDITION:
+  # every recorded pid gone, or every one not gone csp_state `settled`. An arm asserting a SURVIVOR (the `alive`
+  # argument: st-e, st-g) reaches that at once, its survivor being a blocked `/bin/cat`; a busy survivor is STOPped
+  # by csp_state and counted, so no state of the unit's tree can hold this loop open.
+  while :; do
+    ul=0; set_=1
+    while read -r p; do csp_state "$p"; [ "$CSP_ST" = gone ] && continue; ul=$((ul + 1)); [ "$CSP_ST" = settled ] || set_=0; done < "$R/pids"
     [ "$ul" -eq 0 ] && break
-    n=$((n + 1)); sleep 0.1
+    [ "$set_" = 1 ] && break
+    sleep 0.1
   done
-  ul=0; while read -r p; do kill -0 "$p" 2>/dev/null && { ul=$((ul + 1)); kill -KILL "$p" 2>/dev/null; }; done < "$R/pids"
+  ul=0; while read -r p; do csp_state "$p"; [ "$CSP_ST" = gone ] || { ul=$((ul + 1)); kill -KILL "$p" 2>/dev/null; }; done < "$R/pids"
   # A STUBBED drive must prove the stub refused the worker's own `-p` lookup, or `self` was never empty.
   [ -z "$SB" ] || [ -s "$SB/refused" ] || { echo BROKEN; return; }
   echo "$wl $ul"
@@ -1057,7 +1083,7 @@ BASE_orph="wl=${o%% *}
 ul=${o##* }"
 # st-e: the watcher's worker-liveness check removed, so it outlives the worker.
 if mutx st-e '          if ! kill -0 "$$"; then pool_kill "$pid" "$self" "$kp" "$kg"; exit 0; fi' '          :' && orph_m st-e "$MUT" "" alive; then
-  csp_score st-e "$B_orph" "wl,ul" "-" $'wl=1' "wl,ul" "$BASE_orph" \
+  csp_score st-e "$([ "$B_orph" = 1 ] && echo 1 || echo 0)" "wl,ul" "-" $'wl=1' "wl,ul" "$BASE_orph" \
     "st-e without the worker-liveness check the watcher outlives its SIGKILLed worker -- the check is what ends it"
 fi
 # THE EMPTY-SELF PATH KILLS THE UNIT'S GROUP TOO (BL-677). A stub `ps` that FAILS on `-p` (and records that
@@ -1083,7 +1109,7 @@ ul=${o##* }"
 if mutx st-g '[ -n "$2" ] || { kill -KILL -- "-$1"; kill -KILL "$1"; return 0; }' '[ -n "$2" ] || { kill -KILL "$1"; return 0; }'; then
   : > "$SP/refused"
   if orph_m st-g "$MUT" "$SP" alive; then
-    csp_score st-g "$B_eself" "ul" "wl" "" "wl,ul" "$BASE_eself" \
+    csp_score st-g "$([ "$B_eself" = 1 ] && echo 1 || echo 0)" "ul" "wl" "" "wl,ul" "$BASE_eself" \
       "st-g without the group kill on the empty-self path the unit's child outlives the worker -- the group kill is what reaps it"
   fi
 fi
@@ -1146,13 +1172,13 @@ rv=$v_r"
 # st-x: the trace site does not watch the fixture's output, so (t) is REFUSED -- the defect itself.
 if mutx st-x '; wx="$tr/w/$b.log"' ''; then
   C_HOOK="$MUT"; C_TAG=st-x
-  csp_score st-x "$B_trace" "tv" "rv" $'tv=REFUSED' "tv,rv" "$BASE_trace" \
+  csp_score st-x "$([ "$B_trace" = 1 ] && echo 1 || echo 0)" "tv" "rv" $'tv=REFUSED' "tv,rv" "$BASE_trace" \
     "st-x without the fixture's output watched a traced output-only unit is REFUSED -- the watch is what keeps (t) alive"
 fi
 # st-r: the watch widened to the whole work dir takes in the .raw, so (r) is never refused.
 if mutx st-r 'wx="$tr/w/$b.log"' 'wx="$tr/w"'; then
   C_HOOK="$MUT"; C_TAG=st-r
-  csp_score st-r "$B_trace" "rv" "tv" $'rv=ok' "tv,rv" "$BASE_trace" \
+  csp_score st-r "$([ "$B_trace" = 1 ] && echo 1 || echo 0)" "rv" "tv" $'rv=ok' "tv,rv" "$BASE_trace" \
     "st-r with the whole work dir watched a .raw-only unit is never refused -- watching the .log alone is what refuses (r)"
 fi
 unset CSP_PIDS CSP_FIFO CSP_STALL CSP_GATE CSP_GLIB
@@ -1163,28 +1189,29 @@ unset CSP_PIDS CSP_FIFO CSP_STALL CSP_GATE CSP_GLIB
 # arm, so a leak here means a world was left running, which used to pass silently and burn a core.
 # The `.pgid.*` files hold process-group numbers, not pids to reap, so they are not read.
 # A pid killed a moment ago can still answer `kill -0` until it is reaped, so the count blocks on the CONDITION
-# (every recorded pid gone) with a builtin wait (`read -t 1` on a held fifo, no process start), for at most
-# 30 polls, before it names a survivor.
+# (every recorded pid gone, or every one not gone csp_state `settled`) with a builtin wait (`read -t 1` on a
+# held fifo, no process start, pacing only). A leaked busy loop is STOPped by csp_state and named here as a leak;
+# a SIGKILLed pid exits rather than stopping, so it is never named a survivor.
 mkfifo "$WORK/lk.fifo" || broken "mkfifo failed"; exec 8<>"$WORK/lk.fifo"
-_lk_try=0
 while :; do
-  _lk_n=0; _lk_live=""
+  _lk_n=0; _lk_live=""; _lk_settled=1
   for _lk_f in "$WORK"/*/pids/* "$WORK"/orph.*/pids "$WORK"/trace.*/pids; do
     [ -f "$_lk_f" ] || continue
     case "$_lk_f" in *.pgid.*) continue ;; esac
     while read -r _lk_p; do
       case "$_lk_p" in ''|*[!0-9]*) continue ;; esac
       _lk_n=$((_lk_n + 1))
-      kill -0 "$_lk_p" 2>/dev/null && _lk_live="$_lk_live $_lk_p"
+      csp_state "$_lk_p"
+      [ "$CSP_ST" = gone ] || { _lk_live="$_lk_live $_lk_p"; [ "$CSP_ST" = settled ] || _lk_settled=0; }
     done < "$_lk_f"
   done
   [ -z "$_lk_live" ] && break
-  _lk_try=$((_lk_try + 1)); [ "$_lk_try" -lt 30 ] || break
+  [ "$_lk_settled" = 1 ] && break
   read -t 1 -u 8 _lk_x
 done
 exec 8>&-
 if [ "$_lk_n" -gt 0 ] && [ -z "$_lk_live" ]; then
-  ok "no stall world leaked a process: all $_lk_n recorded pids are dead (kill -0 fails for each)"
+  ok "no stall world leaked a process: all $_lk_n recorded pids are dead (kill -0 fails, or the pid is an unreaped zombie)"
 else
   bad "stall worlds left ${_lk_live:-nothing} alive, or recorded no pid at all (read $_lk_n) -- a leaked unit tree burns a core after the fixture reports"
   for _lk_p in $_lk_live; do kill -KILL "$_lk_p" 2>/dev/null; done

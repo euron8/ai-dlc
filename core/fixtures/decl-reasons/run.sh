@@ -22,6 +22,8 @@ trap 'rm -rf "$T"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "decl-reasons:"
 
@@ -58,15 +60,23 @@ drive "$V" "$W_CORE"
 [ "$RC" -eq 1 ] && has "$SUBJ" && ok "a whole core/ line under a non-reason comment -> exit 1, offender named" \
   || bad "plain core/ with no reason: rc=$RC, want 1 naming $SUBJ: $OUT"
 drive "$V" "$W_REQ"
-[ "$RC" -eq 1 ] && has "$SUBJ" && ok "a REQUIRED !core/scripts/ line with no reason -> exit 1, offender named" \
-  || bad "!core/scripts/ with no reason: rc=$RC, want 1 naming $SUBJ: $OUT"
+if [ "$RC" -eq 1 ] && has "$SUBJ"; then
+  ok "a REQUIRED !core/scripts/ line with no reason -> exit 1, offender named"; B_REQ=1
+else
+  bad "!core/scripts/ with no reason: rc=$RC, want 1 naming $SUBJ: $OUT"
+fi
 drive "$V" "$W_NEAR"
-[ "$RC" -eq 0 ] && has "PASS -- 2 inputs.decl scanned" && ok "a near-miss naming one file under core/scripts/ -> exit 0, 2 scanned" \
-  || bad "near-miss core/scripts/x.sh: rc=$RC, want 0 with 2 scanned: $OUT"
+if [ "$RC" -eq 0 ] && has "PASS -- 2 inputs.decl scanned"; then
+  ok "a near-miss naming one file under core/scripts/ -> exit 0, 2 scanned"; B_NEAR=1
+else
+  bad "near-miss core/scripts/x.sh: rc=$RC, want 0 with 2 scanned: $OUT"
+fi
 drive "$V" "$W_CLEAN"
-[ "$RC" -eq 0 ] && has "PASS -- 1 inputs.decl scanned" && has "self-probe ok" \
-  && ok "CONTROL: a reasoned whole-directory line -> exit 0, the self-probe ran and 1 file was scanned" \
-  || bad "control: rc=$RC, want 0 with the self-probe line and 1 scanned: $OUT"
+if [ "$RC" -eq 0 ] && has "PASS -- 1 inputs.decl scanned" && has "self-probe ok"; then
+  ok "CONTROL: a reasoned whole-directory line -> exit 0, the self-probe ran and 1 file was scanned"; B_CLEAN=1
+else
+  bad "control: rc=$RC, want 0 with the self-probe line and 1 scanned: $OUT"
+fi
 drive "$V" "$W_EMPTY"
 [ "$RC" -eq 2 ] && has "EXAMINED NOTHING" && ok "an empty corpus -> exit 2 EXAMINED NOTHING, never a PASS" \
   || bad "empty corpus: rc=$RC, want 2 'EXAMINED NOTHING': $OUT"
@@ -87,8 +97,11 @@ mut() {
 if M="$(mut no-probe 's/^self_probe || exit 2$/: self-probe dropped/')"; then
   drive "$M" "$W_CLEAN"
   if [ "$RC" -eq 0 ] && has "PASS -- 1 inputs.decl scanned"; then
-    has "self-probe ok" && bad "M1 (self-probe dropped) SURVIVED: the run still printed the probe line" \
-      || ok "M1 (self-probe dropped) killed: the copy ran (PASS, 1 scanned) and printed no self-probe line"
+    if has "self-probe ok"; then
+      bad "M1 (self-probe dropped) SURVIVED: the run still printed the probe line"
+    else
+      mutant_killed "${B_CLEAN:-0}" no-probe "M1 (self-probe dropped) killed: the copy ran (PASS, 1 scanned) and printed no self-probe line"
+    fi
   else
     bad "M1: the mutated copy did not run to PASS on the clean world (rc=$RC), so its kill is unproven: $OUT"
   fi
@@ -106,8 +119,11 @@ WIDEN='s#/^!?core\\/(scripts\\/)?\$/#/^!?core\\/(scripts\\/)?/#'
 # M2: the `!?` prefix dropped, so a REQUIRED !core/scripts/ line is invisible.
 if M="$(mut no-bang "$BANG")"; then
   drive "$M" "$W_REQ"
-  [ "$RC" -eq 2 ] && has "SELF-PROBE FAILED" && ok "M2 (!? dropped) killed by the self-probe (rc 2, SELF-PROBE FAILED)" \
-    || bad "M2 (!? dropped) was not refused by the self-probe: rc=$RC: $OUT"
+  if [ "$RC" -eq 2 ] && has "SELF-PROBE FAILED"; then
+    mutant_killed "${B_REQ:-0}" no-bang "M2 (!? dropped) killed by the self-probe (rc 2, SELF-PROBE FAILED)"
+  else
+    bad "M2 (!? dropped) was not refused by the self-probe: rc=$RC: $OUT"
+  fi
 else bad "M2: mutant no-bang: did not apply -- see stderr"
 fi
 if M="$(mut no-bang-no-probe "$BANG; $NOPROBE")"; then
@@ -121,8 +137,11 @@ fi
 # M3: the whole-line anchor widened, so core/scripts/x.sh reads as a whole directory.
 if M="$(mut widen "$WIDEN")"; then
   drive "$M" "$W_NEAR"
-  [ "$RC" -eq 2 ] && has "SELF-PROBE FAILED" && ok "M3 (anchor widened) killed by the self-probe (rc 2, SELF-PROBE FAILED)" \
-    || bad "M3 (anchor widened) was not refused by the self-probe: rc=$RC: $OUT"
+  if [ "$RC" -eq 2 ] && has "SELF-PROBE FAILED"; then
+    mutant_killed "${B_NEAR:-0}" widen "M3 (anchor widened) killed by the self-probe (rc 2, SELF-PROBE FAILED)"
+  else
+    bad "M3 (anchor widened) was not refused by the self-probe: rc=$RC: $OUT"
+  fi
 else bad "M3: mutant widen: did not apply -- see stderr"
 fi
 if M="$(mut widen-no-probe "$WIDEN; $NOPROBE")"; then

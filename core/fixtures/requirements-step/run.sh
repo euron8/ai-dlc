@@ -776,8 +776,11 @@ awk -v s="  Rule 28 \"Split dispatch\" $OLD_SENT, so the round keeps one agent p
 awk -v m="$MANDATE" '!index($0, m)' "$REQMD" > "$IMUT/drop.md"
 for m in restore drop; do
   if cmp -s "$REQMD" "$IMUT/$m.md"; then bad "(i) MUTANT i-$m DID NOT APPLY"; continue; fi
-  if [ "$m" = restore ]; then fl="${B_axis:-0}"; else fl="${B_mand:-0}"; fi
-  rs_score "i-$m" "$fl" "(i) MUTANT i-$m scored by its own predicate alone: " "$IMUT/$m.md" "$GVMD" "$STEPS"
+  if [ "$m" = restore ]; then
+    rs_score "i-$m" "${B_axis:-0}" "(i) MUTANT i-$m scored by its own predicate alone: " "$IMUT/$m.md" "$GVMD" "$STEPS"
+  else
+    rs_score "i-$m" "${B_mand:-0}" "(i) MUTANT i-$m scored by its own predicate alone: " "$IMUT/$m.md" "$GVMD" "$STEPS"
+  fi
 done
 rm -rf "$IMUT"
 
@@ -805,12 +808,16 @@ j_strip "$GVMD" "$J_SWEEP_A" "$J_SWEEP_Z" "$J_TOK" > "$JMUT/sweep.md"
 j_strip "$REQMD" "$J_REQ_A" "$J_REQ_Z" "$J_REFUSE_2" > "$JMUT/refuse.md"
 for m in check sweep refuse; do
   case "$m" in
-    check)  src="$GVMD";  fl="${B_jcheck:-0}";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
-    sweep)  src="$GVMD";  fl="${B_jsweep:-0}";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
-    refuse) src="$REQMD"; fl="${B_jrefuse:-0}"; rq="$JMUT/$m.md";    gv="$GVMD" ;;
+    check)  src="$GVMD";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
+    sweep)  src="$GVMD";  rq="$REQMD";         gv="$JMUT/$m.md" ;;
+    refuse) src="$REQMD"; rq="$JMUT/$m.md";    gv="$GVMD" ;;
   esac
   if cmp -s "$src" "$JMUT/$m.md"; then bad "(j) MUTANT j-$m DID NOT APPLY"; continue; fi
-  rs_score "j-$m" "$fl" "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS"
+  case "$m" in
+    check)  rs_score "j-$m" "${B_jcheck:-0}"  "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS" ;;
+    sweep)  rs_score "j-$m" "${B_jsweep:-0}"  "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS" ;;
+    refuse) rs_score "j-$m" "${B_jrefuse:-0}" "(j) MUTANT j-$m scored by its own predicate alone: " "$rq" "$gv" "$STEPS" ;;
+  esac
 done
 rm -rf "$JMUT"
 

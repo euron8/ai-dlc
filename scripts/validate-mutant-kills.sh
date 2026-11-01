@@ -17,8 +17,9 @@
 # unmutated run actually set is the fixture's to bind -- check-22's NB BINDING arm does it.
 #
 # THE ARMS.
-#   M1  a non-comment line of core/fixtures/<fx>/run.sh carrying KILLED or killed that is not
-#       routed through mutant_killed, in a fixture NOT on the allowlist -> FAIL.
+#   M1  a non-comment line of core/fixtures/<fx>/run.sh carrying KILLED or killed (outside the
+#       enumerated non-kill senses, THE GRAMMAR below) that is not routed through mutant_killed,
+#       in a fixture NOT on the allowlist -> FAIL.
 #   M2  a fixture on the allowlist with no unrouted emission left (a STALE row), or a listed
 #       fixture whose run.sh is gone -> FAIL. Migrate a fixture and its row must go in the same
 #       change.
@@ -61,9 +62,12 @@
 #     positional bound as below.
 #   "$([ "$V" <op> <rhs> ] && ... && echo 1)", optionally ending `|| echo 0`, op one of = != -eq
 #     -ne, where every left operand is a quoted variable, assigned outside a heredoc, and EVERY
-#     assignment to it is a command substitution or a $? capture. REFUSED: a literal left operand
+#     assignment to it is a command substitution or a $? capture, and at least one is not a
+#     CONSTANT command substitution: $(( )) over digits and operators only, or $( ) whose body,
+#     quoted literals blanked, holds no $, backtick, < or parenthesis and runs only printf, echo,
+#     true, false or : (V="$(printf 0)", V="$(echo 'PASS' all)"). REFUSED: a literal left operand
 #     ([ 1 = 1 ]), a variable compared with itself, a variable never assigned or ever assigned a
-#     bare literal.
+#     bare literal, a variable whose every assignment is a constant command substitution.
 #   "$n" / "${n:-0}" -- a positional of the enclosing function, or a `local v="$n"` ALIAS of one
 #     passed as "$v", where EVERY caller of that function at command position passes one of the
 #     forms above as word n (continuation lines joined). A caller passing its own positional is
@@ -96,7 +100,7 @@
 # 4b593af56 and again on 1a408b46e, identical (257 run.sh, 79 calling a helper by
 # `grep -lE 'need_base|mutant_killed'`): 483 scored, 4 captured, 208 refused in 51 fixtures. The
 # current figure is the row count of scripts/mutant-sites-allowlist.txt, derived by --derive-m5:
-# 252 rows. It left 208 for 206 because the two `$(mx_flag "$t")` sites
+# 252 rows when this paragraph was written, 60 on 370d9df80. It left 208 for 206 because the two `$(mx_flag "$t")` sites
 # (layer-conforms-to, self-update-join-gate) were BOUND in the fixtures, as one literal
 # mutant_killed per arm inside a `case "$t"`; M5 was not taught to accept them. It rose to 253
 # on the b245-fx2 base: 47 sites written in ten fx2 fixtures after M5 was ruled, listed on the
@@ -131,10 +135,43 @@
 # (remediator-shard-join:1074) were unparsed. 218 -> 208, each step a removed row checked by
 # hand. Measured by `bash scripts/validate-mutant-kills.sh` (its FAIL M5 rows); control: the
 # precedents score 0 refused, and fb18675a4 120, on the same tree.
+# The constant-substitution refusal narrows NOTHING on the tree: --derive-m5 byte-identical
+# before and after on 370d9df80 (60 rows). Its population, dumped from testv itself in a copy:
+# 120 judgements of a test variable in 36 fixtures. Four carry a constant assignment, all
+# story-provenance RC_c/RC_d/RC_e/RC_r = "$(printf 1)" (:532), each later set by a $? capture
+# (:552/:560/:571/:592), so a skipped arm leaves the failing 1 -- accepted, correctly. The six
+# `$(printf '%s' ...)` bodies (fixture-git-env-seam _sd, SV_U; gate-resume _m4real_off;
+# shell-portability x26_v; transient-ignore-block live_rc; wait-stale-deliverable mx0) expand a
+# variable, so none is constant. Accepting a mixed variable is deliberate: refusing any constant
+# assignment would refuse story-provenance's four (mutant m2 below). RESIDUAL it acquits: a
+# constant default beside a $? capture that runs only under a condition reaches the test as the
+# constant when the condition is false; story-provenance is safe because its default 1 is the
+# FAILING value for -eq 0, which this rule does not check.
 # The quote tracker honours $'...': without it story-evidence-scaffold/run.sh:744 was lost to a
 # string opened at :661; the drift refusal above exists because that zero was false.
 #
-# THE GRAMMAR. Case-sensitive `KILLED|killed`, on a line not opening with `#`. A line is
+# THE GRAMMAR. Case-sensitive `KILLED|killed`, on a line not opening with `#`, after a DENY
+# mask. The deny list enumerates non-kill senses of the word; it is never an allow-list of kill
+# markers (most real kills carry no fixed marker: `$1: KILLED by FW[$3]`, `killed exactly its
+# cells`). A lowercase `killed` IMMEDIATELY followed (blanks only) by one of these words, ending
+# at a boundary that is not a letter, digit, `_` or `-` (so `killed worker-cap`, a cell name,
+# stays a kill), names a killed process or run and is masked to `XXXXXX`, same length:
+#   run / runs, group / groups, process group(s), pid(s), and `by|with|on SIG<NAME>`.
+# That is the contract's enumerated set (a killed run, a process group, a pid, SIGKILL-style
+# signal wording) and nothing more: no corpus line or BL entry needs worker, child, process,
+# subshell or a bare `signal`, so none is a deny sense. The mask is NOT applied when the text
+# BEFORE that `killed` names a mutant: a `mut` word opening at a non-letter (mutant, MUTANT,
+# mutation, Mutant) or a mutant id `[mM]<digit>` opening at a non-alphanumeric. The id grammar
+# is read off the corpus: every id before a lowercase `killed` on a code line is `m<digits>` or
+# `M<digits>` after a blank, `"`, `/` or `-` (derivation-capture `ok "M1 killed: ..."` carries no
+# mut word at all). So `mutant m4 killed runs past the cap` and `m8 killed pid arm P1` refuse.
+# The BL-903 instance names neither before its `killed` (`ok "INTERRUPTED GROUP: each `), so it
+# stays quiet; `commuted` and `dim3` are near-misses that name no mutant.
+# The BL-903 instance (`ok "INTERRUPTED GROUP: each killed run's recorded process group ..."`,
+# readset-skip/run.sh:5339 at 1a973b957) is the `killed run` sense. Bound to the NEXT word, so a
+# deny word later on the line acquits nothing (`mutant g killed by C1: the group arm` refuses; a
+# greedy `killed .* group` would acquit it), and only the matched word is masked, so a real kill
+# on the same line still refuses. `KILLED` is never masked. A line is
 # ROUTED when it calls `mutant_killed` (preceded by start-of-line, blank, `;`, `&`, `|` or `(`,
 # and outside a double-quoted string by quote parity) and no KILLED/killed token sits BEFORE
 # that call -- the helper name itself contains `killed`, so it is masked first;
@@ -151,11 +188,26 @@
 # (consumer-suite-pool 5, readset-skip 1, readset-stage1-verdict 1), none a mutant verdict.
 # Comment lines excluded: 234. Of the 875, 360 carry no `mut`/`MUT` word at all (`$lab: killed
 # by $w`, `killed exactly its cells`, `m3 also killed C1`): many are bad() lines or entanglement
-# checks, not kills. They are NOT narrowed further, because the arm is keyed per FIXTURE and a
-# per-line narrowing would be a second grammar of what a kill looks like, which is the thing
-# this arm refuses to guess. So the false-positive set is the whole allowlist: 127 fixtures,
-# derived by `--derive`, never typed. check-22-spawn-ledger left it in the change that shipped
-# this arm, so the committed list is 126.
+# checks, not kills. They are NOT narrowed by a description of what a kill looks like: that
+# would be a second grammar of kills, which this arm refuses to guess, and a kill it failed to
+# describe would pass. So the false-positive set was the whole allowlist: 127 fixtures, derived
+# by `--derive`, never typed; check-22-spawn-ledger left it in the change that shipped this arm,
+# so the committed list was 126.
+# The one narrowing taken is the DENY mask above, keyed on what is NOT a kill (BL-903: a prose
+# `ok` text about a killed run red the pre-suite on 1a973b957). Measured on origin/main
+# 47102ad20 (260 run.sh, the `scan()` U-row set dumped through M1_FN before and after): 149 U
+# rows in 30 fixtures and T 844 both times, the two U sets identical (comm: 0 dropped, 0 added),
+# `--derive` equal to the 30-row allowlist both times. The mask fires on ZERO corpus lines (the
+# shipped regex, extracted from M1_FN, run over the corpus with the extracted 5339 line appended
+# to the same file list as the control: 0 corpus lines, 1 control line), so today it narrows
+# nothing on the tree; the 5339 instance and one near-miss per deny sense are carried by the
+# self-probe. The 7 non-comment corpus lines near a process sense (a pid, SIGKILL, a group later
+# on the line) were each read: none is matched by the word-bound mask, and the one among the U
+# rows (postcompact-rulebook-recovery:2713, a killed write's `.<pid>` temp) stays refused, as
+# does :2652 (a killed stage write), checked separately. The mutant stop and the narrowing to the
+# contract's senses re-measured on 370d9df80 (M1_FN extracted from each version, run over every
+# run.sh): 69 U rows in 8 fixtures and T 835 both times, comm 0 dropped 0 added, `--derive` equal
+# to the 8-row allowlist; the mask fires on 0 corpus lines and on the 5339 control line.
 #
 # OUT OF POPULATION, by statement: the word in fixture files other than run.sh --
 # content-seal/merge-arms.sh (3 lines) and layer-reference-resolution/seed.sh (1).
@@ -165,27 +217,48 @@
 # file's emission sites are outside it. The known instance is story-evidence-scaffold/world.sh
 # :512, which is already routed through mutant_killed.
 #
-# M5 SELF-PROBE, before the corpus, 37 probe files under mktemp, scored by exact equality of
+# M5 SELF-PROBE, before the corpus, 39 probe files under mktemp, scored by exact equality of
 # every R row plus the T count and the rendered verdict's rc: refused -- a constant, an
 # unquoted flag, =1 after ||, =1 in a body calling bad, in one calling both ok and bad, in a
 # silent else, in a silent `if !` then-branch, in `if [ "$rc" -ne 0 ]; then B_w=1; fi`, after
 # `grep -q FAIL o &&`, at top level, after `t && ok "x";`, a flag
 # assigned from a variable, a helper positional one caller fills with a constant, an alias
 # whose function one caller passes an unbound flag, an alias assigned again, a flag never set,
-# [ 1 = 1 ], a test variable assigned a literal, a constant conjunction operand, a non-flag
+# [ 1 = 1 ], a test variable assigned a literal, a test variable assigned only $(printf 0),
+# $(echo 1) or a multi-word quoted literal body, a constant conjunction operand, a non-flag
 # variable, a bare constant beside the same constant captured, a call spelled inside a string;
 # accepted -- the plain then form in both spellings, an else after a test for failure, an `if !`
 # then-branch calling ok, a `local fl="$3"` alias every caller binds (one across a continuation
 # line, one through a second helper), `[ "${B_p:-0}${B_r:-0}" = 11 ] && B_pr=1`, a case arm and
 # an `&& { ok; B_x=1; }` group under a passing body, a conjunction, a heredoc spelling a bad
-# call, a same-run test over $( ) and $? (also `|| echo 0`), a positional conjunction operand,
-# W_BASE, a $'...' string, and single-quoted seed data. A mutant making M5 accept everything
-# exits 2 here.
+# call, a same-run test over $( ) and $? (also `|| echo 0`), a test variable from
+# $(some_cmd "$x"), from a $? capture, and from $(printf 1) later set by a $? capture, a
+# positional conjunction operand, W_BASE, a $'...' string, and single-quoted seed data. A mutant
+# making M5 accept everything exits 2 here; so do three of the constant refusal, each in a copy
+# of scripts/: the refusal removed (m1), any constant assignment refusing (m2), the classifier
+# always answering non-constant (m3).
 #
 # SELF-PROBE FIRST, both directions, under mktemp, scored by exact equality of the verdict
 # rows: an unlisted unrouted kill, a kill BEFORE a routed call and a helper name inside a
 # string are refused; a routed call, a
-# comment KILLED and a SIGKILLed line are accepted; a listed fixture with no offender, a listed
+# comment KILLED and a SIGKILLed line are accepted. DENY mask (BL-903), 24 probe files in all:
+# the 5339 instance text byte for byte, and one near-miss per deny sense (each a lowercase
+# `killed` inside an ok string on a code line, plus a `commuted` and a `dim3` line that name no
+# mutant, and one naming a mutant only AFTER its `killed run`), are QUIET; refused, one per kept deny sense on a line naming a mutant before `killed`
+# (`mutant m4 killed runs ...`, `m4 killed run arm`, `MUTANT g killed group ...`, `M6 killed
+# process group ...`, `m8 killed pid arm P1`, `mutant m9 killed by SIGTERM ...`) and the dropped
+# senses (`m2 killed by signal`, `m5 killed child`, `mutant m7 killed worker`); refused, one per distinct kill shape
+# among the 149 corpus U rows -- `ok "mutant m3 killed by C1"`, `ok "MUTANT y KILLED: ..."`,
+# `ok "m3 (desc): killed by C2"`, a KILLED-only no-`mut` line (`$1: KILLED by FW[$3]`), a
+# deny word LATER on a kill line (`mutant g killed by C1: the group arm`), and a deny sense and
+# a real kill on one line, and a hyphenated kill target opening with a deny word
+# (`m3 also killed worker-cap`). Measured mutants, each in a copy of the whole scripts/ dir, all exit 2
+# with "self-probe failed": the deny mask removed (old grammar; the near-misses refuse), M1
+# accepting every line, a regression dropping every ok-string line, and a greedy
+# `killed.*group` deny (o5 goes quiet), and a boundary admitting `-` (o7 goes quiet).
+# The probe adds no fork: its dirs ride the one mkdir, its seeds are printf builtins, and the
+# mask runs inside the existing awk (fork-profile --target this script: 105 before and after).
+# A listed fixture with no offender, a listed
 # fixture with no directory, and a duplicate row are each refused. M4 is probed against
 # scratch git repos whose refs/remotes/origin/main carries a base list: an added row and a
 # count-keeping swap are refused (rc 1, the rendered FAIL text compared whole), a shrink and an
@@ -235,6 +308,16 @@ M1_FN='
         if (length(q) % 2 == 1) pm = 0
       }
       m = s; gsub(/mutant_killed/, "mutant_XXXXXX", m)
+      # DENY senses: a lowercase `killed` that names a killed PROCESS or RUN, never a mutant, is
+      # masked to the same length (pk is compared against pm, a position in s). Each sense is
+      # bound to the word right after `killed`, so `mutant g killed by C1: the group arm` keeps
+      # its kill; only the matched word is masked, so a real kill on the same line still refuses.
+      # A line naming a MUTANT before the `killed` (a mut word, or an id m<digits>/M<digits>) is a
+      # kill whatever follows, so the mask stops there: `mutant m4 killed runs past the cap` refuses.
+      while (match(m, /killed[[:space:]]+(runs?|(process[[:space:]]+)?groups?|pids?|(by|with|on)[[:space:]]+SIG[A-Z]+)([^[:alnum:]_-]|$)/)) {
+        if (substr(m, 1, RSTART - 1) ~ /(^|[^[:alpha:]])(mut|Mut|MUT)|(^|[^[:alnum:]])[mM][0-9]/) break
+        m = substr(m, 1, RSTART - 1) "XXXXXX" substr(m, RSTART + 6)
+      }
       pk = 0
       if (match(m, /KILLED|killed/)) pk = RSTART
       if (pm > 0 || pk > 0) t1++
@@ -519,6 +602,26 @@ m5scan() {
       return s
     }
 
+    # cconst(w) -> 1 when assignment value word w is a command substitution that computes a
+    # constant: $(( )) over digits and operators only, or $( ) whose body, quoted literals blanked,
+    # holds no $, backtick, < or parenthesis and whose every command is printf, echo, true, false
+    # or : -- nothing it runs reads state. Anything else, a $? capture included, is not constant.
+    function cconst(w,   b, k, m, i, c) {
+      if (w ~ /^".*"$/) w = substr(w, 2, length(w) - 2)
+      if (w ~ /^\$\(\(.*\)\)$/) return (substr(w, 4, length(w) - 5) ~ /^[0-9 \t+*\/%<>=!&|-]*$/)
+      if (w !~ /^\$\(.*\)$/) return 0
+      b = substr(w, 3, length(w) - 3)
+      if (b ~ /[$`]/) return 0
+      gsub(sq "[^" sq "]*" sq, "X", b); gsub(/"[^"]*"/, "X", b)
+      if (b ~ /[<()"]/ || index(b, sq)) return 0
+      m = split(b, k, /[;&|]+/)
+      for (i = 1; i <= m; i++) {
+        c = k[i]; sub(/^[ \t]+/, "", c); sub(/[ \t].*$/, "", c)
+        if (c != "" && c !~ /^(printf|echo|true|false|:)$/) return 0
+      }
+      return 1
+    }
+
     function testv(a,   e, v, r, p, rest, why) {
       e = substr(a, 4, length(a) - 4 - length(" && echo 1)"))
       while (1) {
@@ -530,6 +633,7 @@ m5scan() {
         if (r == "\"$" v "\"") return "a same-run test comparing " v " with itself: " a
         if (!(sk(AFN, v) in NASSIGN)) return "test variable " v " is never assigned"
         if (sk(AFN, v) in NLITV) return "test variable " v " is assigned a literal at line " NLITV[sk(AFN, v)] ", not a command substitution or a $? capture"
+        if ((sk(AFN, v) in CCS) && !(sk(AFN, v) in NCC)) return "test variable " v " is only ever assigned a constant command substitution (line " CCS[sk(AFN, v)] "), so its value does not depend on the run"
         rest = substr(rest, p + 2)
         if (rest == "") return ""
         if (substr(rest, 1, 4) != " && ") return "a same-run test that does not parse: " a
@@ -575,6 +679,7 @@ m5scan() {
       if (!hit) return
       split("", H); split("", C); split("", M); split("", CUR)
       split("", N1); split("", NONLIT); split("", BAD1); split("", NASSIGN); split("", NLITV)
+      split("", CCS); split("", NCC)
       split("", SL); split("", SP); split("", SN)
       split("", ALIAS); split("", ALIASX); split("", SOK); split("", SBAD); split("", SF); split("", SK)
       split("", SPAR); split("", FBO); split("", AN); split("", AL); split("", AS); split("", AT)
@@ -684,6 +789,9 @@ m5scan() {
             }
             if (CUR[i] != "" && ((CUR[i] SUBSEP nm) in ALIAS) && !((CUR[i] SUBSEP nm) in ALIASX)) ALIASX[CUR[i] SUBSEP nm] = i
             if (val !~ /^"?\$[(?]/ && !(rk in NLITV)) NLITV[rk] = i
+            # a constant command substitution ($(printf 0)) is a literal laundered through $( );
+            # any other assignment, $? included, marks the name as able to carry a run-time value
+            if (cconst(nextword(L[i], pos + length(tk)))) { if (!(rk in CCS)) CCS[rk] = i } else NCC[rk] = 1
             if (val ~ /^1([^A-Za-z0-9_.]|$)/) {
               N1[rk]++; na++
               AN[na] = rk; AL[na] = i; AS[na] = encl(dep); AT[na] = ""
@@ -800,7 +908,46 @@ trap 'rm -rf "$WORK"' EXIT
 # --- self-probe, before the corpus --------------------------------------------------------
 P="$WORK/probe"
 mkdir -p "$P/core/fixtures/unl" "$P/core/fixtures/bef" "$P/core/fixtures/rou" \
-         "$P/core/fixtures/lst" "$P/core/fixtures/stl" "$P/core/fixtures/str"
+         "$P/core/fixtures/lst" "$P/core/fixtures/stl" "$P/core/fixtures/str" \
+         "$P/core/fixtures/prs" "$P/core/fixtures/nm" "$P/core/fixtures/o1" "$P/core/fixtures/o2" \
+         "$P/core/fixtures/o3" "$P/core/fixtures/o4" "$P/core/fixtures/o5" "$P/core/fixtures/o6" \
+         "$P/core/fixtures/o7" "$P/core/fixtures/d1" "$P/core/fixtures/d2" "$P/core/fixtures/d3" \
+         "$P/core/fixtures/d4" "$P/core/fixtures/d5" "$P/core/fixtures/d6" "$P/core/fixtures/d7" \
+         "$P/core/fixtures/d8" "$P/core/fixtures/d9"
+# BL-903: the instance text, byte for byte (readset-skip/run.sh:5339 at 1a973b957), must be quiet.
+BL903_TXT='      ok "INTERRUPTED GROUP: each killed run'\''s recorded process group was alive before the kill and empty after the reap ('\''1|0 1|0'\'', before|after for the run and the endonly run), so no orphan reaches IU'\''s trace root"'
+printf '%s\n' "$BL903_TXT" > "$P/core/fixtures/prs/run.sh"
+# one near-miss per deny sense, each a lowercase `killed` inside an ok string on a code line
+# (a `mut` inside a word and an `m<digit>` inside a token name no mutant, and a mutant named only
+# AFTER the `killed` does not stop the mask, so each stays quiet)
+printf '%s\n' 'ok "each killed runs record is swept"' 'ok "a killed group leaves no member"' \
+  'ok "the killed process group is empty"' 'ok "the killed pid is gone"' \
+  'ok "a worker killed by SIGTERM is reaped"' 'ok "a sleep killed with SIGKILL is reaped"' \
+  'ok "a commuted job: each killed run is swept"' 'ok "the dim3 grid: a killed run is swept"' \
+  'ok "each killed run is reaped before mutant m2 starts"' \
+  > "$P/core/fixtures/nm/run.sh"
+# a mutant named BEFORE `killed` keeps the kill whatever sense follows: one per kept deny sense,
+# and the five lines the narrower-than-contract mask used to acquit
+printf '%s\n' 'ok "mutant m4 killed runs past the cap"' > "$P/core/fixtures/d1/run.sh"
+printf '%s\n' 'ok "m2 killed by signal arm S3"' > "$P/core/fixtures/d2/run.sh"
+printf '%s\n' 'ok "m5 killed child arm C2"' > "$P/core/fixtures/d3/run.sh"
+printf '%s\n' 'ok "mutant m7 killed worker arm W2"' > "$P/core/fixtures/d4/run.sh"
+printf '%s\n' 'ok "m8 killed pid arm P1 (twin P2 holds)"' > "$P/core/fixtures/d5/run.sh"
+printf '%s\n' 'ok "MUTANT g killed group arm G1"' > "$P/core/fixtures/d6/run.sh"
+printf '%s\n' 'ok "M6 killed process group arm"' > "$P/core/fixtures/d7/run.sh"
+printf '%s\n' 'ok "mutant m9 killed by SIGTERM arm"' > "$P/core/fixtures/d8/run.sh"
+printf '%s\n' 'ok "m4 killed run arm R1"' > "$P/core/fixtures/d9/run.sh"
+# offenders, one per DISTINCT kill shape in the corpus's 149 unrouted lines
+printf '%s\n' 'ok "mutant m3 killed by C1"' > "$P/core/fixtures/o1/run.sh"
+printf '%s\n' 'ok "MUTANT y KILLED: the arm moves"' > "$P/core/fixtures/o2/run.sh"
+printf '%s\n' 'ok "m3 (drop the guard): killed by C2"' > "$P/core/fixtures/o3/run.sh"
+printf '%s\n' 'ok "$1: KILLED by FW[$3] and nothing else"' > "$P/core/fixtures/o4/run.sh"
+# a deny word later on the line must not acquit the kill before it (no greedy `killed .* group`)
+printf '%s\n' 'ok "mutant g killed by C1: the group arm moves"' > "$P/core/fixtures/o5/run.sh"
+# a deny sense and a real kill on one line: only the deny word is masked, the kill still refuses
+printf '%s\n' 'ok "each killed run is reaped; mutant r killed by C4"' > "$P/core/fixtures/o6/run.sh"
+# a hyphenated cell name that starts with a deny word is a kill target, not a deny sense
+printf '%s\n' 'ok "m3 also killed worker-cap"' > "$P/core/fixtures/o7/run.sh"
 printf '%s\n' 'ok "MUTANT x killed: the arm moves"' > "$P/core/fixtures/unl/run.sh"
 printf '%s\n' 'ok "mutant_killed refused: MUTANT x killed"' > "$P/core/fixtures/str/run.sh"
 printf '%s\n' 'ok "x killed"; mutant_killed "$B_x" x "msg"' > "$P/core/fixtures/bef/run.sh"
@@ -818,10 +965,10 @@ if ! cmp -s "$WORK/probe-scan.txt" "$WORK/probe-scan-m5.txt"; then
   exit 2
 fi
 judge "$WORK/probe-scan.txt" "$WORK/probe-allow.txt" | cut -f1,2 > "$WORK/probe-got.txt"
-printf 'DUP\tlst\nREFUSE\tbef\nREFUSE\tstr\nREFUSE\tunl\nSTALE\tgone\nSTALE\tstl\n' > "$WORK/probe-want.txt"
+printf 'DUP\tlst\nREFUSE\tbef\nREFUSE\td1\nREFUSE\td2\nREFUSE\td3\nREFUSE\td4\nREFUSE\td5\nREFUSE\td6\nREFUSE\td7\nREFUSE\td8\nREFUSE\td9\nREFUSE\to1\nREFUSE\to2\nREFUSE\to3\nREFUSE\to4\nREFUSE\to5\nREFUSE\to6\nREFUSE\to7\nREFUSE\tstr\nREFUSE\tunl\nSTALE\tgone\nSTALE\tstl\n' > "$WORK/probe-want.txt"
 probe_f="$(grep -c '^F' "$WORK/probe-scan.txt")" || probe_f=0
-if ! cmp -s "$WORK/probe-got.txt" "$WORK/probe-want.txt" || [ "$probe_f" -ne 6 ]; then
-  echo "validate-mutant-kills: REFUSED -- self-probe failed (scanned $probe_f of 6 probe files). Verdict rows:" >&2
+if ! cmp -s "$WORK/probe-got.txt" "$WORK/probe-want.txt" || [ "$probe_f" -ne 24 ]; then
+  echo "validate-mutant-kills: REFUSED -- self-probe failed (scanned $probe_f of 24 probe files). Verdict rows:" >&2
   sed 's/^/    got  /' "$WORK/probe-got.txt" >&2
   sed 's/^/    want /' "$WORK/probe-want.txt" >&2
   echo "  The arm cannot be shown to fire, so its verdict over the tree would be unattributable." >&2
@@ -907,7 +1054,8 @@ mkdir -p "$Q"/core/fixtures/r-const "$Q"/core/fixtures/r-unquoted "$Q"/core/fixt
   "$Q"/core/fixtures/r-alias "$Q"/core/fixtures/r-top "$Q"/core/fixtures/r-andline "$Q"/core/fixtures/r-realias \
   "$Q"/core/fixtures/r-silent "$Q"/core/fixtures/a-else "$Q"/core/fixtures/a-negated "$Q"/core/fixtures/a-alias \
   "$Q"/core/fixtures/a-andtest "$Q"/core/fixtures/a-case "$Q"/core/fixtures/a-group \
-  "$Q"/core/fixtures/a-casekw "$Q"/core/fixtures/r-casekw "$Q"/core/fixtures/r-stray
+  "$Q"/core/fixtures/a-casekw "$Q"/core/fixtures/r-casekw "$Q"/core/fixtures/r-stray \
+  "$Q"/core/fixtures/r-tccs "$Q"/core/fixtures/a-tccs
 m5f() { local d="$Q/core/fixtures/$1"; shift; printf '%s\n' "$@" > "$d/run.sh"; }
 m5f r-const    'mutant_killed 1 x "MUTANT x"'
 m5f r-unquoted 'if t; then ok "a"; B_u=1; fi' 'mutant_killed $B_u u "MUTANT u"'
@@ -958,6 +1106,12 @@ m5f a-group    'if t; then' '  for x in a b; do' '    [ -n "$x" ] && { ok "x ${x
 m5f a-casekw   'if t; then' '  case "$v" in' '    else) s=1 ;;' '    fi|then) s=2 ;;' '  esac' '  ok "a"; B_w=1' 'fi' 'mutant_killed "${B_w:-0}" w "MUTANT w"'
 m5f r-casekw   'if t; then' '  case "$v" in' '    ok) B_c=1 ;;' '  esac' 'fi' 'mutant_killed "${B_c:-0}" c "MUTANT c"'
 m5f r-stray    'if t; then ok "a"; B_s=1; fi' 'fi' 'mutant_killed "${B_s:-0}" s "MUTANT s"'
+m5f r-tccs     'V="$(printf 0)"' 'need_base "$([ "$V" -eq 0 ] && echo 1 || echo 0)" v' \
+               'W="$(echo 1)"' 'need_base "$([ "$W" = 1 ] && echo 1)" w' \
+               "X=\"\$(echo 'PASS' all \"ok here\")\"" 'need_base "$([ "$X" != FAIL ] && echo 1)" x'
+m5f a-tccs     'V="$(some_cmd "$x")"' 'need_base "$([ "$V" -eq 0 ] && echo 1 || echo 0)" v' \
+               'run_it; W=$?' 'need_base "$([ "$W" -eq 0 ] && echo 1 || echo 0)" w' \
+               'R="$(printf 1)"' 'if t; then run_it; R=$?; fi' 'need_base "$([ "$R" -eq 0 ] && echo 1 || echo 0)" r'
 m5scan "$Q" > "$WORK/m5-probe-scan.txt"; m5p_rc=$?
 cat > "$WORK/m5-probe-want.txt" <<'WANT'
 R	r-alias	3	mutant_killed: positional $2 of h: the caller at line 7 passes "${B_z:-0}" -- flag B_z is never set to 1
@@ -978,6 +1132,9 @@ R	r-silent	2	mutant_killed: flag B_q is set to 1 in a branch that calls neither 
 R	r-silent	4	mutant_killed: flag B_w is set to 1 in a branch that calls neither ok nor bad at line 3
 R	r-silent	6	mutant_killed: flag B_f is set to 1 outside any passing branch at line 5
 R	r-stray	3	if/case/group nesting does not balance at end of file (depth 0, 1 unmatched closer(s)), so no branch can be judged
+R	r-tccs	2	need_base: test variable V is only ever assigned a constant command substitution (line 1), so its value does not depend on the run
+R	r-tccs	4	need_base: test variable W is only ever assigned a constant command substitution (line 3), so its value does not depend on the run
+R	r-tccs	6	need_base: test variable X is only ever assigned a constant command substitution (line 5), so its value does not depend on the run
 R	r-tconst	1	need_base: a same-run test whose left operand is not a quoted variable: "$([ 1 = 1 ] && echo 1)"
 R	r-tlit	2	need_base: test variable V is assigned a literal at line 1, not a command substitution or a $? capture
 R	r-tlit	4	mutant_killed: a conjunction operand that is not a flag: "$(( $1 && 1 ))"
@@ -985,17 +1142,17 @@ R	r-top	2	mutant_killed: flag B_t is set to 1 outside any passing branch at line
 R	r-unquoted	2	mutant_killed: unquoted argument $B_u
 R	r-unset	1	mutant_killed: flag B_n is never set to 1
 R	r-var	2	mutant_killed: flag B_v is assigned a non-literal value at line 1
-T	40	1
+T	46	1
 WANT
 grep -v '^F' "$WORK/m5-probe-scan.txt" | cut -f1-4 > "$WORK/m5-probe-got.txt"
 m5p_f="$(grep -c '^F' "$WORK/m5-probe-scan.txt")" || m5p_f=0
 m5_out="$(m5_verdict "$WORK/m5-probe-scan.txt")"; m5_rc=$?
 grep -v '^R' "$WORK/m5-probe-scan.txt" > "$WORK/m5-probe-clean.txt"
 m5c_out="$(m5_verdict "$WORK/m5-probe-clean.txt")"; m5c_rc=$?
-if [ "$m5p_rc" -ne 0 ] || [ "$m5p_f" -ne 37 ] || ! cmp -s "$WORK/m5-probe-got.txt" "$WORK/m5-probe-want.txt" \
+if [ "$m5p_rc" -ne 0 ] || [ "$m5p_f" -ne 39 ] || ! cmp -s "$WORK/m5-probe-got.txt" "$WORK/m5-probe-want.txt" \
    || [ "$m5_rc" -ne 1 ] || [ "${m5_out%%:*}" != "FAIL M5" ] \
    || [ "$m5c_rc" -ne 0 ] || [ "$m5c_out" != "OK M5: every scored call site passes a bound flag" ]; then
-  echo "validate-mutant-kills: REFUSED -- M5 self-probe failed (awk rc $m5p_rc, scanned $m5p_f of 37, verdict rc $m5_rc/$m5c_rc). Rows:" >&2
+  echo "validate-mutant-kills: REFUSED -- M5 self-probe failed (awk rc $m5p_rc, scanned $m5p_f of 39, verdict rc $m5_rc/$m5c_rc). Rows:" >&2
   sed 's/^/    got  /' "$WORK/m5-probe-got.txt" >&2
   sed 's/^/    want /' "$WORK/m5-probe-want.txt" >&2
   echo "  M5 cannot be shown to both refuse and accept, so its verdict over the tree would be unattributable." >&2

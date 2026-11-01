@@ -77,9 +77,14 @@ echo "  subject: $SUBJ"
 echo "HERMETIC-CONSUMED $SUBJ"
 echo
 
-ok()  { printf '  ok    %-26s %s\n' "$1" "$2"; }
-bad() { printf '  FAIL  %-26s %s\n' "$1" "$2"; FAIL=1; }
+ok()  { if [ "$#" -eq 1 ]; then printf '  ok    %s\n' "$1"; else printf '  ok    %-26s %s\n' "$1" "$2"; fi; }
+bad() { if [ "$#" -eq 1 ]; then printf '  FAIL  %s\n' "$1"; else printf '  FAIL  %-26s %s\n' "$1" "$2"; fi; FAIL=1; }
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")" && pwd)/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_<arm>=1 only beside the unmutated arm's own ok: a mutant is scored only if its base arm passed.
+B_CTL=0; B_INFO=0; B_FHQ=0; B_BREC=0; B_BFLR=0; B_NC=0
 
 # HERE-STRING, NEVER A PIPE. `grep -q` leaves at its first match while the writer is still
 # pushing, and under pipefail the pipeline answers with the writer's EPIPE — a false NOT-FOUND on
@@ -940,7 +945,7 @@ if [ "$PI_RC" -ne 0 ] || has "$S_UNTERM" "$PI_OUT"; then
 elif ! has "LIVE-HAZARD-SENTINEL" "$PI_LIVE"; then
   bad "info-string-paragraph" "the plan rotated but the live section holding the paragraph did not survive"
 else
-  ok "info-string-paragraph" "a backtick run with a delimiter in its info string is a PARAGRAPH: the plan rotates"
+  ok "info-string-paragraph" "a backtick run with a delimiter in its info string is a PARAGRAPH: the plan rotates"; B_INFO=1
 fi
 
 drive "$RR" "$WORK/seeds/real-opener.md" probe --ceiling "$CEIL" --apply
@@ -965,7 +970,7 @@ if [ "$FH_RC" -ne 0 ]; then
 elif ! has "QUOTED-HEADING-INSIDE-A-FENCE" "$FH_LIVE"; then
   bad "fenced-heading-quiet" "the quoted heading was treated as a section boundary and its text left the live half"
 else
-  ok "fenced-heading-quiet" "a heading quoted inside a fence is not a boundary, and the live section keeps it"
+  ok "fenced-heading-quiet" "a heading quoted inside a fence is not a boundary, and the live section keeps it"; B_FHQ=1
 fi
 
 # =============================================================================================
@@ -1006,7 +1011,7 @@ elif has "$S_NOTHING" "$LAST_OUT" || has "at or under" "$LAST_OUT"; then
 elif [ "$LAST_WROTE" = yes ] || [ "$LAST_UNTOUCHED" != yes ]; then
   bad "no-candidates-refuses" "the refusal wrote to disk (archive=$LAST_WROTE, plan untouched=$LAST_UNTOUCHED)"
 else
-  ok "no-candidates-refuses" "over the ceiling with no span of any class: exit 2, its own sentence, plan byte-identical, no archive"
+  ok "no-candidates-refuses" "over the ceiling with no span of any class: exit 2, its own sentence, plan byte-identical, no archive"; B_NC=1
 fi
 drive "$RR" "$WORK/seeds/nocand.md" probe --ceiling "$NC_BYTES" --apply
 if [ "$LAST_RC" -eq 0 ] && has "$S_NOTHING" "$LAST_OUT" && ! has "$S_NOCAND" "$LAST_OUT" && [ "$LAST_UNTOUCHED" = yes ]; then
@@ -1140,7 +1145,7 @@ batch_verdict() {
 batch_run batch-records "$SUBJ" "$B_CEIL"
 BV="$(batch_verdict)"
 if [ "$BV" = ok ] && has "$S_ARM4OK" "$B_OUT"; then
-  ok "batch-records" "at $B_CEIL (R_$B_K=$B_RK + P/2, P=$B_P) records 101..$B_NMAX move oldest-first as one range beside the spent section; 140 and its fenced 999 stay live; the archive grew by exactly those lines"
+  ok "batch-records" "at $B_CEIL (R_$B_K=$B_RK + P/2, P=$B_P) records 101..$B_NMAX move oldest-first as one range beside the spent section; 140 and its fenced 999 stay live; the archive grew by exactly those lines"; B_BREC=1
 else
   bad "batch-records" "$BV$(has "$S_ARM4OK" "$B_OUT" || echo " (and no arm 4 PASS)")"
 fi
@@ -1153,7 +1158,7 @@ fi
 batch_run batch-floor "$SUBJ" "$B_FLOOR"
 if [ "$B_RC" -eq 2 ] && has "$S_UNREACH" "$B_OUT" && ! has "$S_ARM4" "$B_OUT" \
    && [ "$B_UNTOUCHED" = yes ] && [ "$B_ARCH_SAME" = yes ]; then
-  ok "batch-protected-floor" "at $B_FLOOR only archiving record 140 would reach the ceiling; the rotation refuses as unreachable and writes nothing"
+  ok "batch-protected-floor" "at $B_FLOOR only archiving record 140 would reach the ceiling; the rotation refuses as unreachable and writes nothing"; B_BFLR=1
 else
   bad "batch-protected-floor" "expected an UNREACHABLE refusal writing nothing (exit $B_RC, plan untouched=$B_UNTOUCHED, archive unchanged=$B_ARCH_SAME): $(head -2 <<<"$B_OUT" | tr '\n' '|')"
 fi
@@ -1246,7 +1251,6 @@ mutant_root() { # mutant_root <name> <sed-args...> -> echoes the root path, empt
   : > "$r/.mutant-built"
   printf '%s' "$r"
 }
-killed() { KILLS=$((KILLS + 1)); ok "$1" "$2"; }
 
 # THE BATCH-RECORD MUTANTS USE A FIXED-STRING REPLACEMENT WITH AN ASSERTED APPLY COUNT. `sed`
 # needs every `[`, `*`, `&` and `|` in the subject's awk escaped, and a mis-escaped pattern either
@@ -1282,7 +1286,7 @@ mutant_fixed() { # mutant_fixed <name> <literal-anchor> <literal-replacement> ->
 CTRL="$(mkroot control)" || broken "could not build the control sandbox root"
 drive "$CTRL" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
 if [ "$LAST_RC" -eq 0 ] && has "$S_ARM3OK" "$LAST_OUT" && has "SPENT-ONE-SENTINEL" "$(cat "$LAST_ARCH" 2>/dev/null)"; then
-  ok "mutant-control" "the unmutated copy in a sandbox root rotates, reports arm 3 PASS, and writes the archive"
+  ok "mutant-control" "the unmutated copy in a sandbox root rotates, reports arm 3 PASS, and writes the archive"; B_CTL=1
 else
   broken "the UNMUTATED copy in a sandbox root did not behave like the real script (exit $LAST_RC). Every kill below would be scored against a broken harness: $LAST_OUT"
 fi
@@ -1297,7 +1301,7 @@ if [ -z "$M1" ]; then
 else
   drive "$M1" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
   if [ "$LAST_RC" -ne 0 ] && has "$S_ARM3X" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    killed "mutant:m1" "the cross-check would FAIL: the two derivations of the live set disagree, and nothing was written"
+    mutant_killed "${B_CTL:-0}" "mutant:m1" "mutant:m1  the cross-check would FAIL: the two derivations of the live set disagree, and nothing was written" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m1" "the live-set join was deleted and arm 3's cross-check stayed silent (exit $LAST_RC): $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
   fi
@@ -1329,7 +1333,7 @@ else
     # mutant must exit 0 AND claim arm 3 PASS while the live half has lost its named sections.
     if [ "$T_RC" -eq 0 ] && has "$S_ARM3OK" "$T_OUT" \
        && ! has "LIVE-HAZARD-SENTINEL" "$T_LIVE" && ! has "LIVE-NEXTACTION-SENTINEL" "$T_LIVE"; then
-      killed "mutant:m1t" "live-set would FAIL: exit 0 and 'arm 3 ... PASS' while the archive ate the named-live sections — only the on-disk sentinel arm sees it"
+      mutant_killed "${B_CTL:-0}" "mutant:m1t" "mutant:m1t  live-set would FAIL: exit 0 and 'arm 3 ... PASS' while the archive ate the named-live sections — only the on-disk sentinel arm sees it" && KILLS=$((KILLS + 1))
     else
       bad "mutant:m1t" "the tautology did not reproduce: exit $T_RC, arm3-pass=$(has "$S_ARM3OK" "$T_OUT" && echo yes || echo no), hazard-live=$(has "LIVE-HAZARD-SENTINEL" "$T_LIVE" && echo yes || echo no)"
     fi
@@ -1363,7 +1367,7 @@ if [ -z "$M2" ]; then
 else
   drive "$M2" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
   if [ "$LAST_RC" -ne 0 ] && has "$S_ARM1" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    killed "mutant:m2" "arm 1 would FAIL: a line that reached neither half is reported as lost, and nothing was written"
+    mutant_killed "${B_CTL:-0}" "mutant:m2" "mutant:m2  arm 1 would FAIL: a line that reached neither half is reported as lost, and nothing was written" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m2" "a dropped line did not trip conservation (exit $LAST_RC): $(head -3 <<<"$LAST_OUT" | tr '\n' '|')"
   fi
@@ -1381,7 +1385,7 @@ if [ -z "$M3" ]; then
 else
   drive "$M3" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
   if [ "$LAST_RC" -ne 0 ] && has "$S_ARM2" "$LAST_OUT" && has "$S_ARM1OK" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    killed "mutant:m3" "arm 2 would FAIL: the multiset differs while arm 1 reports PASS on the same run, so the two arms are not entangled"
+    mutant_killed "${B_CTL:-0}" "mutant:m3" "mutant:m3  arm 2 would FAIL: the multiset differs while arm 1 reports PASS on the same run, so the two arms are not entangled" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m3" "a byte-conserving alteration did not trip the multiset arm alone (exit $LAST_RC, arm1-pass=$(has "$S_ARM1OK" "$LAST_OUT" && echo yes || echo no))"
   fi
@@ -1402,7 +1406,7 @@ else
   drive "$M4" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
   M4_B_RC="$LAST_RC"
   if [ "$M4_P_RC" -ne 0 ] && has "$S_UNTERM" "$M4_P_OUT" && [ "$M4_B_RC" -eq 0 ]; then
-    killed "mutant:m4" "info-string-paragraph would FAIL: the toggle opens an unterminated fence on the paragraph seed while the fence-free conforming plan still rotates"
+    mutant_killed "${B_INFO:-0}" "mutant:m4" "mutant:m4  info-string-paragraph would FAIL: the toggle opens an unterminated fence on the paragraph seed while the fence-free conforming plan still rotates" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m4" "removing the info-string rule did not make the paragraph read as a fence while leaving the fence-free plan alone (paragraph rc=$M4_P_RC, conforming rc=$M4_B_RC)"
   fi
@@ -1425,7 +1429,7 @@ else
   drive "$M5" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
   M5_B_RC="$LAST_RC"
   if [ "$M5_F_RC" -ne 0 ] && has "$S_FENCECUT" "$M5_F_OUT" && [ "$M5_F_WROTE" = no ] && [ "$M5_B_RC" -eq 0 ]; then
-    killed "mutant:m5" "fenced-heading-quiet would FAIL: a heading inside a fence becomes a boundary and the cut is refused, while the fence-free plan still rotates"
+    mutant_killed "${B_FHQ:-0}" "mutant:m5" "mutant:m5  fenced-heading-quiet would FAIL: a heading inside a fence becomes a boundary and the cut is refused, while the fence-free plan still rotates" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m5" "blinding the heading scan to fence state did not produce a fence-cut refusal on the fenced seed alone (fenced rc=$M5_F_RC, conforming rc=$M5_B_RC)"
   fi
@@ -1450,7 +1454,7 @@ else
   drive "$M6" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
   if [ "$LAST_RC" -ne 0 ] && has "$S_ARM3" "$LAST_OUT" && has "Hazards" "$LAST_OUT" \
      && ! has "$S_ARM3X" "$LAST_OUT" && [ "$LAST_WROTE" = no ]; then
-    killed "mutant:m6" "arm 3's MISSING branch would FAIL: 'Hazards' is named live and absent from the remainder, while the cross-check agrees and arms 1 and 2 conserve"
+    mutant_killed "${B_CTL:-0}" "mutant:m6" "mutant:m6  arm 3's MISSING branch would FAIL: 'Hazards' is named live and absent from the remainder, while the cross-check agrees and arms 1 and 2 conserve" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m6" "a named-live section forced into an archivable run was not caught by arm 3's MISSING branch (exit $LAST_RC): $(head -4 <<<"$LAST_OUT" | tr '\n' '|')"
   fi
@@ -1478,7 +1482,7 @@ else
   batch_run m7-drive "$M7/scripts/plan-rotate.sh" "$B_FLOOR"
   if [ "$B_RC" -eq 2 ] && has "$S_ARM4LOST" "$B_OUT" && has "REC-140-OPEN" "$B_OUT" \
      && [ "$B_UNTOUCHED" = yes ] && [ "$B_ARCH_SAME" = yes ]; then
-    killed "mutant:m7" "batch-protected-floor would FAIL: record 140 is archived to reach the floor, and arm 4 names it LOST and writes nothing"
+    mutant_killed "${B_BFLR:-0}" "mutant:m7" "mutant:m7  batch-protected-floor would FAIL: record 140 is archived to reach the floor, and arm 4 names it LOST and writes nothing" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m7" "removing the protection did not trip arm 4's LOST branch at the floor (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
   fi
@@ -1491,7 +1495,7 @@ if [ -z "$M8" ]; then
 else
   batch_run m8-drive "$M8/scripts/plan-rotate.sh" "$B_CEIL"
   if [ "$B_RC" -eq 2 ] && has "$S_ARM4INV" "$B_OUT" && [ "$B_UNTOUCHED" = yes ]; then
-    killed "mutant:m8" "batch-records would FAIL: newer records move while 101 stays, and arm 4 refuses the inversion"
+    mutant_killed "${B_BREC:-0}" "mutant:m8" "mutant:m8  batch-records would FAIL: newer records move while 101 stays, and arm 4 refuses the inversion" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m8" "newest-first selection did not trip arm 4's inversion branch (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
   fi
@@ -1507,7 +1511,7 @@ else
   batch_run m9-drive "$M9/scripts/plan-rotate.sh" "$B_CEIL"
   if [ "$B_RC" -eq 2 ] && { has "$S_UNREACH" "$B_OUT" || has "$S_BUDGET" "$B_OUT"; } \
      && [ "$B_UNTOUCHED" = yes ] && [ "$B_ARCH_SAME" = yes ]; then
-    killed "mutant:m9" "batch-records would FAIL: the selection stops one record short with the pointer unbudgeted, and the write is refused"
+    mutant_killed "${B_BREC:-0}" "mutant:m9" "mutant:m9  batch-records would FAIL: the selection stops one record short with the pointer unbudgeted, and the write is refused" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m9" "an unbudgeted pointer was not refused at C = R_k + P/2 (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
   fi
@@ -1522,7 +1526,7 @@ else
   batch_run m10-drive "$M10/scripts/plan-rotate.sh" "$B_CEIL"
   if [ "$B_RC" -eq 2 ] && has "$S_PARTITION" "$B_OUT" && has "(batch record 105) and (retrospective batch paragraphs)" "$B_OUT" \
      && [ "$B_UNTOUCHED" = yes ]; then
-    killed "mutant:m10" "batch-records would FAIL: the indented 77 paragraph is a second candidate over record 105's lines, and the partition refusal fires"
+    mutant_killed "${B_BREC:-0}" "mutant:m10" "mutant:m10  batch-records would FAIL: the indented 77 paragraph is a second candidate over record 105's lines, and the partition refusal fires" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m10" "an overlapping class-2 span was not refused as a non-partition (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
   fi
@@ -1536,7 +1540,7 @@ if [ -z "$M11" ]; then
 else
   batch_run m11-drive "$M11/scripts/plan-rotate.sh" "$B_CEIL"
   if [ "$B_RC" -eq 2 ] && has "$S_FENCECUT" "$B_OUT" && [ "$B_UNTOUCHED" = yes ]; then
-    killed "mutant:m11" "batch-records would FAIL: a fenced opener becomes a record boundary and the fence-cut refusal fires"
+    mutant_killed "${B_BREC:-0}" "mutant:m11" "mutant:m11  batch-records would FAIL: a fenced opener becomes a record boundary and the fence-cut refusal fires" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m11" "a fence-blind opener scan was not refused as a fence cut (exit $B_RC): $(head -3 <<<"$B_OUT" | tr '\n' '|')"
   fi
@@ -1551,7 +1555,7 @@ else
   batch_run m12-drive "$M12/scripts/plan-rotate.sh" "$B_CEIL"
   M12_V="$(batch_verdict)"
   case "$M12_V" in
-    "the pointer names "*) killed "mutant:m12" "batch-records would FAIL: $M12_V" ;;
+    "the pointer names "*) mutant_killed "${B_BREC:-0}" "mutant:m12" "mutant:m12  batch-records would FAIL: $M12_V" && KILLS=$((KILLS + 1)) ;;
     *) bad "mutant:m12" "uncoalesced ranges were not caught by the one-range check: $M12_V" ;;
   esac
 fi
@@ -1567,7 +1571,7 @@ if [ -z "$M13" ]; then
 else
   drive "$M13" "$WORK/seeds/nocand.md" probe --ceiling "$((NC_BYTES / 2))" --apply
   if [ "$LAST_RC" -eq 0 ] && has "$S_NOTHING" "$LAST_OUT" && ! has "$S_NOCAND" "$LAST_OUT"; then
-    killed "mutant:m13" "no-candidates-refuses would FAIL: the over-ceiling plan reads 'nothing to move' at exit 0 again"
+    mutant_killed "${B_NC:-0}" "mutant:m13" "mutant:m13  no-candidates-refuses would FAIL: the over-ceiling plan reads 'nothing to move' at exit 0 again" && KILLS=$((KILLS + 1))
   else
     bad "mutant:m13" "the reinstated early exit did not reproduce the under-ceiling sentence over the ceiling (exit $LAST_RC): $(head -2 <<<"$LAST_OUT" | tr '\n' '|')"
   fi
@@ -1595,7 +1599,7 @@ MUT_WANT=$((MUT_BUILT - MUT_TWINS + 1))
 if [ "$MUT_TRIED" -gt 0 ] && [ "$MUT_BUILT" -eq "$MUT_TRIED" ] && [ "$KILLS" -eq "$MUT_WANT" ]; then
   ok "mutants" "$MUT_BUILT of $MUT_TRIED mutant roots built ($MUT_TWINS twin) and $KILLS kills — $((MUT_BUILT - MUT_TWINS)) script mutants plus the re-seeded discharge pointer, which mutates the OUTPUT and so builds no root"
 else
-  bad "mutants" "$MUT_BUILT of $MUT_TRIED mutant roots built ($MUT_TWINS twin), $KILLS of $MUT_WANT kills — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_BUILT of $MUT_TRIED mutant roots built ($MUT_TWINS twin), $KILLS of $MUT_WANT kills — a mutant that scored no kill means an arm cannot fire"
 fi
 
 echo

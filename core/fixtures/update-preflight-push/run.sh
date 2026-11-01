@@ -637,16 +637,16 @@ while IFS='|' read -r mscope mname mold mnew mwant; do
   fi
   _k391="$B391"; if [ "$mscope" = pre ]; then B391=0; fi
   case "$mscope:$hdec" in
-    pre:refuse) score_row "${B_refpre:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:noup)    score_row "${B_noup:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:ahead)   score_row "${B_ahead:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:nopush)  score_row "${B_nopush:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:refuse)  score_row "${B_refuse:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:para)    score_row "${B_para:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    pre:refuse) { score_row "${B_refpre:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
+    *:noup)    { score_row "${B_noup:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
+    *:ahead)   { score_row "${B_ahead:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
+    *:nopush)  { score_row "${B_nopush:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
+    *:refuse)  { score_row "${B_refuse:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
+    *:para)    { score_row "${B_para:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
     *:step2)   score_row "${B_step2:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:detect)  score_row "${B_detect:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:cycle)   score_row "${B_cycle:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
-    *:discard) score_row "${B_discard:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf" ;;
+    *:detect)  { score_row "${B_detect:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
+    *:cycle)   { score_row "${B_cycle:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
+    *:discard) { score_row "${B_discard:-0}" "$mname" "$hdec" "$htw" "$mwant" "$mf"; } ;;
     *) bad "FIXTURE BROKEN: mutant $mname names an arm $hdec that is not one of the nine" ;;
   esac
   B391="$_k391"

@@ -34,6 +34,11 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "core-paths-audit-diff: FIXTURE BROKEN" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# B_M<n>=1 only beside the unmutated arm's own ok: the mutant is scored only if its base arm passed.
+B_M1=0; B_M2=0; B_M3=0; B_M4=0; B_M5=0; B_M6=0
 
 # audit <script> <base> <head> — never through a pipe: RC must be the script's own.
 audit() {
@@ -95,14 +100,14 @@ audit "$VALIDATOR" "$BASE" "$CLEAN"
 # range — two assertions on one string is how a mutant kills two arms and one of them turns
 # out to have been vacuous.
 audit "$VALIDATOR" "$BASE" "$DIRTY"
-[ "$RC" -eq 1 ] && ok "an in-place core edit by an ordinary commit exits 1" \
-  || bad "an in-place core edit exited $RC, want 1"
+if [ "$RC" -eq 1 ]; then ok "an in-place core edit by an ordinary commit exits 1"; B_M4=1
+else bad "an in-place core edit exited $RC, want 1"; fi
 
 # --- Assertion 3: a reconcile commit is the one legitimate author --------------
 audit "$VALIDATOR" "$BASE" "$RECONCILE"
-[ "$RC" -eq 0 ] && says "every touching commit is an /ai-dlc-update reconcile" \
-  && ok "the same edit authored by a chore(ai-dlc-update) commit passes" \
-  || bad "a reconcile-authored core edit did not pass by the reconcile arm (rc=$RC)"
+if [ "$RC" -eq 0 ] && says "every touching commit is an /ai-dlc-update reconcile"; then
+  ok "the same edit authored by a chore(ai-dlc-update) commit passes"; B_M3=1
+else bad "a reconcile-authored core edit did not pass by the reconcile arm (rc=$RC)"; fi
 
 # --- Assertion 4: a real operator citation is an escape hatch, not an exemption --
 # The arm delegates to validate-escalation-resolution.sh, which owns the escalations.md
@@ -127,9 +132,8 @@ esc_rc="$RC"
 # no citation exists or is required — the negation of the thing satisfying the check for it.
 printf -- '- Operator authorization: S1 core touch, adjudicated.\n' > "$ESC"
 audit "$VALIDATOR" "$BASE" "$DIRTY"
-[ "$RC" -eq 1 ] \
-  && ok "a bare 'Operator authorization:' line belonging to no entry does NOT clear the range" \
-  || bad "a line carrying only the label cleared an in-place core edit (rc=$RC) — the escape hatch is a string search again"
+if [ "$RC" -eq 1 ]; then ok "a bare 'Operator authorization:' line belonging to no entry does NOT clear the range"; B_M5=1
+else bad "a line carrying only the label cleared an in-place core edit (rc=$RC) — the escape hatch is a string search again"; fi
 
 # --- Assertion 4b: the lead's own call is not the operator's -------------------
 # Asserted on the STATUS, with the citation itself byte-identical to Assertion 4's, so this
@@ -152,9 +156,8 @@ mv "$WORKDIR/validate-escalation-resolution.sh" "$WORKDIR/esr.parked" || broken 
 audit "$CONTROL_VALIDATOR" "$BASE" "$DIRTY"
 del_rc="$RC"
 mv "$WORKDIR/esr.parked" "$WORKDIR/validate-escalation-resolution.sh" || broken "could not restore the delegate"
-[ "$del_rc" -eq 2 ] \
-  && ok "with the delegate absent the mode exits 2 (cannot determine), never 0" \
-  || bad "the citation delegate was missing and the mode answered $del_rc — an undecidable question came back as a verdict"
+if [ "$del_rc" -eq 2 ]; then ok "with the delegate absent the mode exits 2 (cannot determine), never 0"; B_M6=1
+else bad "the citation delegate was missing and the mode answered $del_rc — an undecidable question came back as a verdict"; fi
 rm -f "$ESC"
 
 # --- Assertion 5: a tree the check does not cover says so ----------------------
@@ -162,52 +165,46 @@ rm -f "$ESC"
 # any consumer-relative glob can match, so a clean-looking pass there is the check-cannot-fire
 # shape reported in the words of a check that ran.
 audit "$VALIDATOR" "$PRESPLIT" "$BASE"
-says "DORMANT" && ! says "PASS: no core path touched" \
-  && ok "a pre-layer-split range reports DORMANT, not a clean pass" \
-  || bad "a pre-layer-split range did not report DORMANT (rc=$RC)"
+if says "DORMANT" && ! says "PASS: no core path touched"; then ok "a pre-layer-split range reports DORMANT, not a clean pass"; B_M2=1
+else bad "a pre-layer-split range did not report DORMANT (rc=$RC)"; fi
 
 # --- Assertion 6: the manifest is read at <base-ref>, not from the working tree -
 # The range edits `scripts/ai-dlc/verdict.sh` AND deletes the manifest entry that claims it,
 # in one commit. Classified against the base-ref manifest the file is still core; classified
 # against the diff's own manifest it is not, and the diff has defined its own scope.
 audit_at "$VALIDATOR" shrink "$BASE" "$SHRINK"
-says "scripts/ai-dlc/verdict.sh" \
-  && ok "a diff that un-claims the file it edits is still classified against the base-ref manifest" \
-  || bad "the un-claimed path was not named — the manifest is being read from the diff under audit"
+if says "scripts/ai-dlc/verdict.sh"; then ok "a diff that un-claims the file it edits is still classified against the base-ref manifest"; B_M1=1
+else bad "the un-claimed path was not named — the manifest is being read from the diff under audit"; fi
 
 # --- Mutation 1: resolve the manifest from the working tree --------------------
 M="$(mutate base-manifest 's@git show "${BASE_REF}:${c}"@git show "${BASE_REF}:no-such-prefix/${c}"@')" || exit 2
 audit_at "$M" shrink "$BASE" "$SHRINK"
-says "scripts/ai-dlc/verdict.sh" \
-  && bad "MUTATION 1 SURVIVED: the un-claimed path is still named with base-ref resolution broken" \
-  || ok "mutation 1 killed: without the base-ref manifest, the un-claiming diff classifies itself out of scope"
+if says "scripts/ai-dlc/verdict.sh"; then bad "MUTATION 1 SURVIVED: the un-claimed path is still named with base-ref resolution broken"
+else mutant_killed "$B_M1" "mutation 1" "mutation 1 killed: without the base-ref manifest, the un-claiming diff classifies itself out of scope"; fi
 audit "$M" "$BASE" "$DIRTY"
 [ "$RC" -eq 1 ] || bad "MUTATION 1 ENTANGLED: it also changed the verdict on an ordinary in-place core edit"
 
 # --- Mutation 2: drop the activation rule -------------------------------------
 M="$(mutate dormancy 's@^  if \[ -n "\$dormant_why" \]; then@  if [ -n "" ]; then@')" || exit 2
 audit "$M" "$PRESPLIT" "$BASE"
-says "DORMANT" \
-  && bad "MUTATION 2 SURVIVED: DORMANT still reported with the activation rule removed" \
-  || ok "mutation 2 killed: without the activation rule an uncovered tree answers in the words of a covered one"
+if says "DORMANT"; then bad "MUTATION 2 SURVIVED: DORMANT still reported with the activation rule removed"
+else mutant_killed "$B_M2" "mutation 2" "mutation 2 killed: without the activation rule an uncovered tree answers in the words of a covered one"; fi
 audit "$M" "$BASE" "$CLEAN"
 [ "$RC" -eq 0 ] || bad "MUTATION 2 ENTANGLED: it also changed the verdict on a clean layered range"
 
 # --- Mutation 3: drop the reconcile exemption ---------------------------------
 M="$(mutate reconcile "s@'chore(ai-dlc-update):'\*) ;;@'zzz-not-a-real-subject:'*) ;;@")" || exit 2
 audit "$M" "$BASE" "$RECONCILE"
-[ "$RC" -eq 0 ] \
-  && bad "MUTATION 3 SURVIVED: a pull still passes with the reconcile subject no longer recognized" \
-  || ok "mutation 3 killed: without the exemption every /ai-dlc-update pull FAILs its own consumer"
+if [ "$RC" -eq 0 ]; then bad "MUTATION 3 SURVIVED: a pull still passes with the reconcile subject no longer recognized"
+else mutant_killed "$B_M3" "mutation 3" "mutation 3 killed: without the exemption every /ai-dlc-update pull FAILs its own consumer"; fi
 audit "$M" "$BASE" "$CLEAN"
 [ "$RC" -eq 0 ] || bad "MUTATION 3 ENTANGLED: it also changed the verdict on a clean layered range"
 
 # --- Mutation 4: the FAIL arm returns success ---------------------------------
 M="$(mutate fail-exit 's@^  printf .%s. "\$OFFENDERS"$@  printf "%s" "$OFFENDERS"; exit 0@')" || exit 2
 audit "$M" "$BASE" "$DIRTY"
-[ "$RC" -eq 1 ] \
-  && bad "MUTATION 4 SURVIVED: the FAIL arm still exits 1 with its exit replaced" \
-  || ok "mutation 4 killed: a finding that prints while the caller reads success is the whole failure class"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 4 SURVIVED: the FAIL arm still exits 1 with its exit replaced"
+else mutant_killed "$B_M4" "mutation 4" "mutation 4 killed: a finding that prints while the caller reads success is the whole failure class"; fi
 audit "$M" "$BASE" "$RECONCILE"
 [ "$RC" -eq 0 ] || bad "MUTATION 4 ENTANGLED: it also changed the verdict on a reconcile-authored edit"
 
@@ -218,9 +215,8 @@ audit "$M" "$BASE" "$RECONCILE"
 printf -- '- Operator authorization: S1 core touch, adjudicated.\n' > "$ESC"
 M="$(mutate citation-grep 's@^  if AUTH_OUT=.*--any-authorized.*then$@  if AUTH_OUT="" \&\& grep -q "Operator authorization:" "$ESC"; then@')" || exit 2
 audit "$M" "$BASE" "$DIRTY"
-[ "$RC" -eq 0 ] \
-  && ok "mutation 5 killed: with the delegation replaced by a whole-file search, a bare label clears an in-place core edit again" \
-  || bad "MUTATION 5 SURVIVED: the label-only line still failed the range with the arm reverted to a string search (rc=$RC)"
+if [ "$RC" -eq 0 ]; then mutant_killed "$B_M5" "mutation 5" "mutation 5 killed: with the delegation replaced by a whole-file search, a bare label clears an in-place core edit again"
+else bad "MUTATION 5 SURVIVED: the label-only line still failed the range with the arm reverted to a string search (rc=$RC)"; fi
 rm -f "$ESC"
 audit "$M" "$BASE" "$CLEAN"
 [ "$RC" -eq 0 ] || bad "MUTATION 5 ENTANGLED: it also changed the verdict on a clean layered range"
@@ -239,9 +235,8 @@ mv "$WORKDIR/validate-escalation-resolution.sh" "$WORKDIR/esr.parked" || broken 
 audit "$M" "$BASE" "$DIRTY"
 mut6_rc="$RC"
 mv "$WORKDIR/esr.parked" "$WORKDIR/validate-escalation-resolution.sh" || broken "could not restore the delegate after mutation 6"
-[ "$mut6_rc" -ne 2 ] \
-  && ok "mutation 6 killed: without the guard, an absent delegate stops answering 'cannot determine' and returns a verdict instead" \
-  || bad "MUTATION 6 SURVIVED: the mode still exited 2 with its missing-delegate guard disabled"
+if [ "$mut6_rc" -ne 2 ]; then mutant_killed "$B_M6" "mutation 6" "mutation 6 killed: without the guard, an absent delegate stops answering 'cannot determine' and returns a verdict instead"
+else bad "MUTATION 6 SURVIVED: the mode still exited 2 with its missing-delegate guard disabled"; fi
 audit "$M" "$BASE" "$DIRTY"
 [ "$RC" -eq 0 ] || bad "MUTATION 6 ENTANGLED: with the delegate present it also changed the verdict on a cited range (rc=$RC)"
 rm -f "$ESC"

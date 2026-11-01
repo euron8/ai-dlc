@@ -27,3 +27,5 @@ sort
 chmod
 mv
 cp
+ln
+readlink

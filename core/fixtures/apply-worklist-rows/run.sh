@@ -337,6 +337,15 @@ BASE_PASS=""
 for _a in $ARMS; do arm_ok "$_a" "$W/rec" && BASE_PASS="$BASE_PASS $_a"; done
 bflag() { case " $BASE_PASS " in *" $1 "*) echo 1 ;; *) echo 0 ;; esac; }
 . "$HERE/../lib/mutant.sh"
+BF_A1="$(bflag A1)"
+BF_A2="$(bflag A2)"
+BF_A3="$(bflag A3)"
+BF_A4="$(bflag A4)"
+BF_A5="$(bflag A5)"
+BF_A6="$(bflag A6)"
+BF_A8="$(bflag A8)"
+BF_S10="$(bflag S10)"
+BF_S13="$(bflag S13)"
 # twin_green <mutant> <rec> <arm>... -- each named twin is an arm the measured matrix shows GREEN
 # under the mutant, so a change in co-tripping is a failure here.
 twin_green() {
@@ -380,7 +389,7 @@ else
   M1="$(retire_rows "$W/mut1")"
   m1_detail="$(last_detail "$M1")"
   if [ -z "$m1_detail" ]; then
-    mutant_killed "$(bflag A2)" M1 "MUTANT 1 (say drops the 4th field): the detail assertion goes red — it is what holds the instruction in the row"
+    mutant_killed "$([ "$BF_A2" = 1 ] && echo 1 || echo 0)" M1 "MUTANT 1 (say drops the 4th field): the detail assertion goes red — it is what holds the instruction in the row"
   else
     bad "MUTANT 1 SURVIVED: the detail is still present with say() printing three fields, so assertion 2 is not testing the field"
   fi
@@ -404,7 +413,7 @@ else
   if assert_count "$M2"; then
     bad "MUTANT 2 SURVIVED: the sequence still emits both steps without the trailing newline, so assertion 1 is not testing the drop"
   else
-    mutant_killed "$(bflag A1)" M2 "MUTANT 2 (unterminated key stream): the count assertion goes red — the write-the-key step is the one that disappears"
+    mutant_killed "$([ "$BF_A1" = 1 ] && echo 1 || echo 0)" M2 "MUTANT 2 (unterminated key stream): the count assertion goes red — the write-the-key step is the one that disappears"
   fi
   case "$(last_detail "$M2")" in
     *ATOMIC*) ok "  and the DETAIL assertion stays green under it — the two arms are not entangled" ;;
@@ -422,7 +431,7 @@ if cmp -s "$REC/apply.sh" "$W/mut3/apply.sh"; then
   bad "MUTANT 3 did not apply — the retire_anchor= parse it targets has been respelled, so this mutant proves nothing"
 else
   case "$(last_detail "$(rows_for "$W/mut3" "$OVR_M")")" in
-    *"--stamp retire"*) mutant_killed "$(bflag A3)" M3 "MUTANT 3 (retire_anchor= unparsed): the multi-anchor row reverts to a retire stamp — the token is what redirects the action" ;;
+    *"--stamp retire"*) mutant_killed "$([ "$BF_A3" = 1 ] && echo 1 || echo 0)" M3 "MUTANT 3 (retire_anchor= unparsed): the multi-anchor row reverts to a retire stamp — the token is what redirects the action" ;;
     *)                  bad "MUTANT 3 SURVIVED: the row still narrows the shadow without parsing the token, so assertion 3 is not testing the parse" ;;
   esac
   M3_ONE="$(rows_for "$W/mut3" "$OVR")"
@@ -443,7 +452,7 @@ if cmp -s "$REC/apply.sh" "$W/mut4/apply.sh"; then
   bad "MUTANT 4 did not apply — the env_key prefix case it targets has been respelled, so this mutant proves nothing"
 else
   if [ "$(rows_for "$W/mut4" "$OVR_A" | grep -c 'ATOMIC' || true)" -ge 1 ]; then
-    mutant_killed "$(bflag A4)" M4 "MUTANT 4 (env_key read without its prefix): the env-less row renders an ATOMIC sequence naming a key that does not exist"
+    mutant_killed "$([ "$BF_A4" = 1 ] && echo 1 || echo 0)" M4 "MUTANT 4 (env_key read without its prefix): the env-less row renders an ATOMIC sequence naming a key that does not exist"
   else
     bad "MUTANT 4 SURVIVED: the env-less detail stayed key-less without the prefix guard, so assertion 4 is not testing it"
   fi
@@ -575,7 +584,7 @@ if cmp -s "$REC/apply.sh" "$W/mut5/apply.sh"; then
   bad "MUTANT 5 did not apply — the keep-verdict branch it targets is spelled differently or is not there, so this mutant proves nothing"
 else
   if [ "$(printf '%s\n' "$(rows_for "$W/mut5" "$OVR_J")" | grep -c . || true)" -ge 1 ]; then
-    mutant_killed "$(bflag A5)" M5 "MUTANT 5 (the keep branch never taken): the KEEP verdict is handed retire steps — assertion 5 is testing the suppression, not the presence of a NOTE"
+    mutant_killed "$([ "$BF_A5" = 1 ] && echo 1 || echo 0)" M5 "MUTANT 5 (the keep branch never taken): the KEEP verdict is handed retire steps — assertion 5 is testing the suppression, not the presence of a NOTE"
   else
     bad "MUTANT 5 SURVIVED: the keep verdict emitted no steps with its branch disabled, so assertion 5 would pass against an implementation that suppresses unconditionally"
   fi
@@ -605,7 +614,7 @@ elif ! grep -qF -- "$V_ACT2" "$W/mut6/apply.sh"; then
   bad "MUTANT 6 applied but its near-miss half did not: the verdict literals are absent from the mutant, so it is not testing a spelling-keyed arm"
 else
   if [ "$(printf '%s\n' "$(rows_for "$W/mut6" "$OVR_KR")" | grep -c . || true)" -eq 0 ]; then
-    mutant_killed "$(bflag A6)" M6 "MUTANT 6 (suppress on the token's PRESENCE, verdict names spelled in the text): the act-direction arms go red although apply.sh now names every verdict — they are keyed on the rows"
+    mutant_killed "$([ "$BF_A6" = 1 ] && echo 1 || echo 0)" M6 "MUTANT 6 (suppress on the token's PRESENCE, verdict names spelled in the text): the act-direction arms go red although apply.sh now names every verdict — they are keyed on the rows"
   else
     bad "MUTANT 6 SURVIVED: an act verdict still produced its sequence under a presence-keyed suppression, so assertion 6 is not testing the branch"
   fi
@@ -625,7 +634,7 @@ if cmp -s "$REC/apply.sh" "$W/mut7/apply.sh"; then
 else
   case "$(last_detail "$(rows_for "$W/mut7" "$OVR_AR")")" in
     *"remove the anchor"*) bad "MUTANT 7 SURVIVED: the env-less multi-anchor row still narrowed the shadow with the prefix attached, so assertion 8 is not testing the strip" ;;
-    *)                     mutant_killed "$(bflag A8)" M7 "MUTANT 7 (adjudication prefix not stripped): the env-less multi-anchor row loses its narrowing — the strip is what keeps the positional parse reachable" ;;
+    *)                     mutant_killed "$([ "$BF_A8" = 1 ] && echo 1 || echo 0)" M7 "MUTANT 7 (adjudication prefix not stripped): the env-less multi-anchor row loses its narrowing — the strip is what keeps the positional parse reachable" ;;
   esac
   if [ "$(printf '%s\n' "$(rows_for "$W/mut7" "$OVR_J")" | grep -c . || true)" -eq 0 ] && [ "$(notes_for "$W/mut7" "$OVR_J")" -ge 1 ]; then
     ok "  and the keep direction is untouched by it — assertions 5 and 8 are not entangled"
@@ -685,7 +694,7 @@ if cmp -s "$REC/apply.sh" "$W/mut8/apply.sh"; then
   bad "MUTANT 8 did not apply — the drop_anchor guard it targets is spelled differently or is not there, so arm 13 proves nothing"
 else
   if [ "$(subsumed_for "$W/mut8" "$OVR_HA")" -ge 1 ]; then
-    mutant_killed "$(bflag S13)" M8 "MUTANT 8 (subsumption guard widened to every supersession): the anchor-only entry is wrongly marked subsumed — arm 13 is what catches a guard that would strand live work"
+    mutant_killed "$([ "$BF_S13" = 1 ] && echo 1 || echo 0)" M8 "MUTANT 8 (subsumption guard widened to every supersession): the anchor-only entry is wrongly marked subsumed — arm 13 is what catches a guard that would strand live work"
   else
     bad "MUTANT 8 SURVIVED: widening the guard changed nothing, so arm 13 is not testing the drop_anchor exemption"
   fi
@@ -709,7 +718,7 @@ if cmp -s "$REC/apply.sh" "$W/mut9/apply.sh"; then
   bad "MUTANT 9 did not apply — the subsumption NOTE it keys on is spelled differently or is not there, so arm 10 proves nothing"
 else
   if [ "$(printf '%s\n' "$(rows_for "$W/mut9" "$OVR_H")" | grep -c . || true)" -eq 0 ]; then
-    mutant_killed "$(bflag S10)" M9 "MUTANT 9 (retire suppressed for a marked readopt): the retire sequence disappears — arm 10 is what catches a remedy that deletes the work instead of marking the readopt"
+    mutant_killed "$([ "$BF_S10" = 1 ] && echo 1 || echo 0)" M9 "MUTANT 9 (retire suppressed for a marked readopt): the retire sequence disappears — arm 10 is what catches a remedy that deletes the work instead of marking the readopt"
   else
     bad "MUTANT 9 SURVIVED: the retire sequence was still emitted with the loop short-circuited, so arm 10 is not testing that the work survives"
   fi

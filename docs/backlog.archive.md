@@ -39536,3 +39536,31 @@ Closed at batch b248 as a dead premise (operator ruling, "Close as dead premise 
 
 verify: sh bash core/fixtures/backlog-real-ledger/receipt-bl883.sh
 
+## BL-877 — the join's self-probes run on every invocation, cost about 33 process starts each, and no fixture notices their removal
+
+**LANDED (v0.992.0).**
+
+**DEFECT.** `core/scripts/join-remediator-shards.sh` runs `contract_probe`, `src_probe` and `spec_render_probe` from seven call sites, so a probe fires on every join invocation in every mode. Measured 2026-10-30 at e4d74ec2f: those seven call lines were replaced with `:` in clean detached worktrees, and every fixture that reads the join stayed green. Results with the probes stubbed, against unstubbed control runs on the same tree:
+
+| fixture | stubbed | control |
+|---|---|---|
+| remediator-shard-join | rc 0, the same 206 ok | rc 0, 206 ok |
+| adversarial-shard-merge | rc 0, 141 ok | rc 0, 141 ok |
+| content-seal | rc 0, 52 ok | rc 0, 52 ok |
+| process-rule-pins | rc 0, 1695 ok | rc 0, 1695 ok |
+| validator-path-resolution | rc 0, 125 ok | rc 0, 125 ok |
+
+A probe is the join's guard against its own grammar breaking, and its removal reads exactly like its presence. Owed first: an arm that fails when a probe call site is removed or neutered, which is what keeps the cost work below honest.
+
+**PERFORMANCE.** Measured on remediator-shard-join under a PATH shim logging every external command, from the repo root: 53180 process starts with the probes, 44019 with all seven call sites stubbed (−17%), over 275 join invocations, about 33 starts per invocation. Every consumer join pays this. That is a start count; the saving in wall clock and CPU is not measured, and the unit-test pilots above show a start count can misstate it by a factor of two either way. Dollar cost not measured. The lever is fewer starts INSIDE each probe: `contract_probe` makes 12 `contract_check` calls and 3 `checks_field` calls, each one awk start, over files it writes into a fresh `mktemp -d`; `src_probe` makes 2 `src_check` calls and `spec_render_probe` makes 4 `spec_render_scan` calls the same way. Batching those into one awk per probe is the candidate. Removing a probe, or adding a switch to skip one, is excluded: every arm self-probes by rule, and a skip switch is an opt-out.
+
+verify: sh bash core/fixtures/remediator-shard-join/receipt-bl877.sh
+
+## BL-903 — validate-mutant-kills.sh's M1 reads any non-comment "killed" as an unrouted mutant kill
+
+**LANDED (v0.992.0).**
+
+**NOTE.** Measured on owner 12's first 0.990.0 push (1a973b957): `scripts/validate-mutant-kills.sh` M1's grammar is a case-sensitive `KILLED|killed` match on any non-comment line of a fixture's `run.sh` (its header at 7c112dae5 says so at `:20` and `:137`). So a prose `ok` text containing "killed" reads as an unrouted mutant kill and reds the pre-suite. Instance: `core/fixtures/readset-skip/run.sh:5339` at 1a973b957, the `ok "INTERRUPTED GROUP: each killed run's recorded process group ..."` line, gave `FAIL M1 ... (1 unrouted line(s))`, and 260 fixtures were skipped on that earlier red; 0.990.0 got past it by rewording the line. Owed: narrow M1 to kill-shaped emissions, with a measured false-positive set.
+
+verify: sh bash core/fixtures/backlog-real-ledger/receipt-bl903.sh
+

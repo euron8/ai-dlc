@@ -1037,9 +1037,8 @@ for ((i = 0; i < nm; i++)); do need_cells="$need_cells ${M_DEC[$i]}"; for t in $
 ctl_n=0; ctl_bad=0
 if [ "$MATRIX" = "0" ]; then
   for c in $(printf '%s\n' $need_cells | sort -u); do
-    got="$(cell "$MCTL" "$c")"; ctl_n=$((ctl_n + 1))
-    if [ "$got" = "$(cell_want "$c")" ]; then printf -v "$(cell_key "$c")" '%s' 1
-    else printf -v "$(cell_key "$c")" '%s' 0; ctl_bad=$((ctl_bad + 1)); bad_ "control-$c" "an unmutated copy printed '$got', wanted '$(cell_want "$c")' -- the mutants below would be scoring the harness"; fi
+    got="$(cell "$MCTL" "$c")"; ctl_n=$((ctl_n + 1)); printf '%s' "$got" > "$MWORK/ctl.$(cell_key "$c")"
+    if [ "$got" != "$(cell_want "$c")" ]; then ctl_bad=$((ctl_bad + 1)); bad_ "control-$c" "an unmutated copy printed '$got', wanted '$(cell_want "$c")' -- the mutants below would be scoring the harness"; fi
   done
   [ "$ctl_bad" -eq 0 ] && ok_ mutant-control "an unmutated copy prints the shipped token on all $ctl_n deciding and twin cells, so the copies below can run"
 fi
@@ -1058,11 +1057,11 @@ for ((i = 0; i < nm; i++)); do
     mx_row "$n" "$d" "$mk" "${tr#,}" "${gr#,}"
     continue
   fi
-  bflag="$(cell_key "$d")"; bflag="${!bflag:-0}"
+  bctl="$(cat "$MWORK/ctl.$(cell_key "$d")" 2>/dev/null)"
   got="$(cell "$MUTP" "$d")"
   case "$got" in ""|*EMPTY*|NOCELL|E) got_real=0 ;; *) got_real=1 ;; esac
   if [ "$got" != "$(cell_want "$d")" ] && [ "$got_real" = 1 ]; then
-    mutant_killed "$bflag" "$n" "MUTANT $n: deciding cell $d reads '$got', not the shipped '$(cell_want "$d")'" && KILLS=$((KILLS + 1))
+    mutant_killed "$([ "$bctl" = "$(cell_want "$d")" ] && echo 1 || echo 0)" "$n" "MUTANT $n: deciding cell $d reads '$got', not the shipped '$(cell_want "$d")'" && KILLS=$((KILLS + 1))
   else
     bad_ "mutant-$n" "SURVIVED -- cell $d printed '$got' (shipped '$(cell_want "$d")'); a dead copy prints EMPTY and is refused"
   fi

@@ -95,6 +95,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1" >&2; exit 2; }
 
 # --- the case table --------------------------------------------------------------------
@@ -334,7 +336,7 @@ sig_diff() {
       g = (c[1] in got) ? got[c[1]] : ""
       if (g != c[4]) o = o c[1] "(want " c[4] " got " g ") "
     }
-    printf "%s", (o == "" ? "<NOTHING -- this mutant killed no case>" : o)
+    printf "%s", (o == "" ? "<NOTHING -- this mutant moved no case>" : o)
   }'
 }
 
@@ -419,7 +421,7 @@ run_mutant() { # run_mutant <id> <label> <dir> <expected-sig>   -> sets LAST_SIG
   got="$(vector "$dir")"
   LAST_SIG="$got"
   if [ "$got" = "$exp" ]; then
-    ok "$id $label -- killed by exactly $(sig_diff "$got")"
+    mutant_killed "${B_M0:-0}" "$id" "$id $label -- killed by exactly $(sig_diff "$got")"
   else
     bad "$id $label: the damage is not what this mutation is supposed to cause."
     bad "$id   expected: $exp"
@@ -468,7 +470,7 @@ if [ "$BATTERY" = yes ]; then
   cmp -s "$RECON/preclassify.sh" "$M0/preclassify.sh" || broken "the unmutated control copy already differs from the subject"
   SIG_M0="$(vector "$M0")"
   if [ "$SIG_M0" = "$EXPECTED" ]; then
-    ok "M0 control: an unmutated COPY of the reconcile dir reproduces the full expected signature"
+    ok "M0 control: an unmutated COPY of the reconcile dir reproduces the full expected signature"; B_M0=1
   else
     bad "M0 control: an unmutated copy does not reproduce the subject's own result -- the harness, not the subject, is what these mutants measure. got: $SIG_M0"
   fi
@@ -786,7 +788,7 @@ $U_ARM" '    elif [ "$ours_h" = "$base_h" ]; then bucket="ALREADY-AT-THEIRS"'
     u7_co="$(bash "$RECON/preclassify.sh" "$UD" "$UH" "$UH" "$UC" --untangle 2>/dev/null | grep -c .)" || u7_co=0
     u7_bare="$(u7_n "$RECON")"
     if [ "$u7_co" -gt 0 ] && [ "$u7_bare" = "$u7_co" ]; then
-      ok "BL-685 U7: with a BARE dist --untangle lists its rows from theirs' tree ($u7_bare, as from the checkout)"
+      ok "BL-685 U7: with a BARE dist --untangle lists its rows from theirs' tree ($u7_bare, as from the checkout)"; B_U7=1
     else
       bad "BL-685 U7: a bare dist listed $u7_bare untangle row(s) against $u7_co from the checkout -- the listing reads the dist index, not theirs' tree"
     fi
@@ -803,7 +805,7 @@ open(dst, "w", encoding="utf-8").write(s.replace(f, 'ls-files "$glob" || pc_fail
 PY
       then
         u7_m="$(u7_n "$_d")"
-        if [ "$u7_m" = 0 ]; then ok "MUTANT (BL-685 index-listing) killed: the plain ls-files lists 0 untangle rows against a bare dist"
+        if [ "$u7_m" = 0 ]; then mutant_killed "${B_U7:-0}" bl685-index-listing "MUTANT (BL-685 index-listing) killed: the plain ls-files lists 0 untangle rows against a bare dist"
         else bad "MUTANT SURVIVED [BL-685 index-listing]: the plain ls-files listed $u7_m rows against a bare dist"; fi
       else
         bad "FIXTURE STALE [BL-685 mutant index-listing]: its anchor did not match exactly once"
