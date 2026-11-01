@@ -161,6 +161,7 @@
 # MUTANT-MATRIX noghost decides=local-ghost twins=local-zz-kept
 # MUTANT-MATRIX ipnocanary decides=in-pool-canary twins=in-pool-clean
 # MUTANT-MATRIX endonly decides=interrupted twins=interrupted-other-rows
+# MUTANT-MATRIX reapfirst decides=interrupted-reap-fresh twins=interrupted-reap-survivor
 # MUTANT-MATRIX nocarry decides=digest-carry twins=digest-fxa-written
 # MUTANT-MATRIX nodeclfilter decides=digest-declared twins=digest-undeclared-written
 # MUTANT-MATRIX nolmt decides=local-listing twins=local-zz-kept
@@ -4194,7 +4195,10 @@ emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.readset-sentinel  0.000010  c
 while IFS= read -r p; do [ -n "$p" ] && emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/t/$p  0.000010  bash.2"; done < "$STUB_FS"
 # The last line it will ever report, under the marker dir so the capture keeps it and no set does: stubflush waits on it.
 emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.stub-fs-done  0.000010  cat.1"
-n=0; while [ "$n" -lt 300 ]; do sleep 0.2; emit heartbeat; n=$((n+1)); done
+# NO BOUND (BL-868): the heartbeat runs until its reader goes, and `emit`'s `|| exit 0` (or SIGPIPE) ends it then;
+# stub_reap kills it by pid either way. A 300-beat cap ended the stream on its own after 60s, so a deriver slowed past
+# that by load read a tracer gone early -- the stub's lifetime followed the clock instead of its reader.
+while :; do sleep 0.2; emit heartbeat; done
 STUB
     # THE INJECTED WAIT (the deriver's rs_sleep, READSET_SLEEP_CMD). The deriver's fixed `sleep 1` before it kills
     # fs_usage stands for "the tracer's last events have reached the capture". This stub's last event is its
@@ -5251,23 +5255,28 @@ STUB
     # output goes to its own `<map out>.out`, so a later run cannot overwrite the reason an earlier one printed.
     # The group's state is written to `<map out>.grp` as "<alive before the kill>|<alive after the reap>".
     #
-    # THE BOUND (IW_REAP_ROUNDS = 5 missed rounds) STANDS FOR: the generations of this run's process chain that a
-    # group SIGKILL can miss. A `kill -9 -- -<pgid>` reaches every member present when it is sent; the only member it
-    # can miss is one forked in flight, and that one is a generation deeper. The chain is subshell -> deriver ->
-    # stub sandbox-exec -> fixture run.sh -> its `sleep`, five deep, so no killable group needs a sixth. A ROUND IS
-    # A GENERATION, NOT AN INTERVAL: it is counted only when every live member reads aw_blocked (state S, I or T with
-    # nothing pending) right after a kill -- a member the kill provably did not take. A member that took SIGKILL and
-    # is still exiting on a loaded box is never blocked with nothing pending (aw_group_settled's contract), so it is
-    # polled without spending a round, and a correct reap cannot reach the bound at any load. OUTCOME ON HIT: the
-    # reaper stops and writes "BROKEN" and each surviving pid with its `ps` state into AW_STALL_LOG; the caller's
-    # shell refuses on it with aw_gate before any verdict is read, because iw_run runs inside `$( )` and a `broken`
-    # there would end only the subshell -- and the fixture's final aw_gate refuses on it again, so a dropped call-site
-    # gate is still FIXTURE BROKEN and never a verdict. LIMIT: a member stuck in the kernel with SIGKILL pending
-    # reads as dying forever and is polled, unbounded; that is a hang for the gate's watchdog, never a verdict.
+    # NO BOUND, A SETTLED-STATE REFUSAL (BL-868). The reaper loops until the group is gone, and refuses only on a
+    # member that SURVIVED A KILL: a pid read settled (every live member aw_blocked -- state S, I or T with nothing
+    # pending) that reads settled again after a later `kill -9 -- -<pgid>`. A SIGKILL wakes a blocked member at once,
+    # so a pid blocked with nothing pending on BOTH sides of a kill is one the kill provably did not take -- it is not
+    # in the group the kill named, or the kernel will not deliver to it. A FIRST settled read is never a refusal: a
+    # `kill -9 -- -<pgid>` reaches every member present when it is sent, and the one it can miss is a member forked in
+    # flight, which reads settled once and is taken by the next kill. So each settled read's pids are remembered, the
+    # group is killed again, and only a remembered pid read settled again refuses -- however many in-flight
+    # generations a run's chain forks, and however long its members take to exit. A member that took SIGKILL and is
+    # still exiting on a loaded box is never blocked with nothing pending (aw_group_settled's contract), so it is
+    # polled, and the remembered set is kept across those polls. The 5-round count this replaces assumed the chain
+    # was five generations deep, which a run whose in-flight members kept settling past the count turned into FIXTURE
+    # BROKEN. OUTCOME ON REFUSAL: the reaper writes "BROKEN" and each surviving remembered pid with its `ps` state into
+    # AW_STALL_LOG; the caller's shell refuses on it with aw_gate before any verdict is read, because iw_run runs
+    # inside `$( )` and a `broken` there would end only the subshell -- and the fixture's final aw_gate refuses on it
+    # again, so a dropped call-site gate is still FIXTURE BROKEN and never a verdict. LIMITS: a member stuck in the
+    # kernel with SIGKILL pending reads as dying forever and is polled, unbounded -- a hang for the gate's watchdog,
+    # never a verdict; and a remembered pid that dies and is REUSED by a new in-flight member of the same group before
+    # the next read would read as a survivor (a refusal, never a pass).
     # A zombie never answers `kill -0 -- -<pgid>` here (measured on Darwin: a zombie-only group reads rc 1, a live
     # one rc 0), so a killed leader not yet waited cannot hold the loop, and the reaper never `wait`s inside it:
-    # a wait on a leader that never dies would block before any round is counted.
-    IW_REAP_ROUNDS=5
+    # a wait on a leader that never dies would block before the group is read.
     # iw_group_state <pgid>: "gone", "dying" (a live member is not blocked), or "missed <pid>..." (every live member
     # blocked with nothing pending). THE SEAM: the reaper reads the group only through ${IW_GROUP_STATE:-iw_group_state},
     # so the unkillable-member cell drives the SAME iw_reap with a state that never leaves "missed".
@@ -5275,23 +5284,26 @@ STUB
       kill -0 -- -"$1" 2>/dev/null || { echo gone; return 0; }
       if aw_group_settled "$1"; then printf 'missed %s\n' "$(pgrep -g "$1" 2>/dev/null | tr '\n' ' ')"; else echo dying; fi
     }
-    iw_reap() { # <pgid> <refusal record>; 0 the group is gone, 1 the bound was reached
-      local g="$1" rec="$2" n=0 st p s l=""
-      # The first kill precedes the first read, so a group whose members all sleep before it is never a missed round.
+    iw_reap() { # <pgid> <refusal record>; 0 the group is gone, 1 a member read settled survived a later SIGKILL
+      local g="$1" rec="$2" seen=" " st p s l
+      # The first kill precedes the first read, so a group whose members all sleep before it is never read settled.
       kill -9 -- -"$g" 2>/dev/null
       while :; do
         st="$(${IW_GROUP_STATE:-iw_group_state} "$g")"
         case "$st" in
           gone) return 0 ;;
           missed*)
-            if [ "$n" -ge "$IW_REAP_ROUNDS" ]; then
-              for p in ${st#missed}; do
-                s="$(ps -o stat= -p "$p" 2>/dev/null | tr -d ' ')"; l="$l $p (${s:-state unreadable})"
-              done
-              printf 'BROKEN: iw_reap read group %s missed after %s SIGKILL round(s), and it still holds%s\n' "$g" "$n" "$l" >> "$rec"
+            l=""
+            for p in ${st#missed}; do
+              case "$seen" in *" $p "*)
+                s="$(ps -o stat= -p "$p" 2>/dev/null | tr -d ' ')"; l="$l $p (${s:-state unreadable})" ;;
+              esac
+            done
+            if [ -n "$l" ]; then
+              printf 'BROKEN: iw_reap read group %s settled on both sides of a SIGKILL, and it still holds%s\n' "$g" "$l" >> "$rec"
               return 1
             fi
-            n=$((n + 1)) ;;
+            for p in ${st#missed}; do seen="$seen$p "; done ;;
         esac
         kill -9 -- -"$g" 2>/dev/null
         [ "$st" = dying ] && sleep 0.1
@@ -5315,7 +5327,7 @@ STUB
         [ -e "$SX/kill.at" ] && at=yes
         # PRESENCE FIRST: the recorded group answers before the kill, so a group never created cannot read as reaped.
         kill -0 -- -"$pid" 2>/dev/null && gb=1
-        # GONE, ON A CONDITION, WITHIN THE BOUND: every member has taken SIGKILL once none answers, at any load.
+        # GONE, ON A CONDITION, WITH NO BOUND: every member has taken SIGKILL once none answers, at any load.
         iw_reap "$pid" "$AW_STALL_LOG" && wait "$pid" 2>/dev/null; r=sigkill
         kill -0 -- -"$pid" 2>/dev/null && ga=1
         printf '%s|%s\n' "$gb" "$ga" > "${out%.tsv}.grp"
@@ -5373,7 +5385,7 @@ STUB
     else
       bad "INTERRUPTED GROUP: expected '1|0 1|0' (recorded group alive before the kill | alive after the reap, for the run and the endonly run), got '$IWG'"
     fi
-    # THE REAP IS BOUNDED, AND ITS REFUSAL REACHES THE FIXTURE'S OWN SHELL (BL-900). A real group the kill cannot empty
+    # THE REAP REFUSES A SURVIVOR, AND ITS REFUSAL REACHES THE FIXTURE'S OWN SHELL (BL-900). A real group the kill cannot empty
     # is not constructible here: a zombie never answers `kill -0 -- -<pgid>` on Darwin. So the cell starts one `sleep`
     # WITHOUT `set -m` (pid recorded, killed by that pid after) and drives the SHIPPED iw_reap on the group id equal to
     # that pid -- a group that cannot exist while its would-be leader lives outside it, so every round's group kill
@@ -5382,7 +5394,8 @@ STUB
     # records into the cell's own file (never the real AW_STALL_LOG, which the fixture's final aw_gate reads). The
     # shipped aw_gate then runs in a separate `( )` reading that file, as the call site's does, and must exit 2 with
     # FIXTURE BROKEN naming the pid and its `ps` state: the refusal crossed the `$( )` boundary as a file.
-    # Its twin is INTERRUPTED GROUP above: the unseamed reap emptied both real groups without reaching the bound.
+    # Its twins are INTERRUPTED GROUP above (the unseamed reap emptied both real groups) and INTERRUPTED REAP FRESH
+    # below (seven settled reads of seven DIFFERENT members, then gone, is a reap that ends 0 -- no read count refuses).
     TRACE_ARMS=$((TRACE_ARMS+1))
     # A member that never exits on its own (BL-868): a `sleep 30` that ran out before `ps` read it left no state to name.
     tail -f /dev/null </dev/null >/dev/null 2>&1 & IWB_P=$!
@@ -5393,11 +5406,48 @@ STUB
     IWB_LEFT=0; kill -0 "$IWB_P" 2>/dev/null && IWB_LEFT=1
     case "$IWB_R|$IWB_RC|$IWB_LEFT|$IWB_OUT" in
       "1|2|0|"*"FIXTURE BROKEN"*)
-        if grep -Eq "group $IWB_P missed after $IW_REAP_ROUNDS SIGKILL round\(s\), and it still holds $IWB_P \([A-Z]" <<< "$IWB_OUT" && ! grep -q 'NOT REFUSED' <<< "$IWB_OUT"; then
-          ok "INTERRUPTED REAP BOUND: a group member no kill takes stops iw_reap after $IW_REAP_ROUNDS missed rounds inside \$( ), and aw_gate in the caller's shell refuses FIXTURE BROKEN naming pid $IWB_P and its ps state, never a spin and never a pass"
-        else bad "INTERRUPTED REAP BOUND: refused, but the refusal does not name the member and its state: $(tr '\n' ' ' <<< "$IWB_OUT")"; fi ;;
-      *) bad "INTERRUPTED REAP BOUND: expected reap rc 1, gate rc 2, the member reaped, FIXTURE BROKEN; got reap $IWB_R gate $IWB_RC left $IWB_LEFT: $(tr '\n' ' ' <<< "$IWB_OUT")" ;;
+        if grep -Eq "group $IWB_P settled on both sides of a SIGKILL, and it still holds $IWB_P \([A-Z]" <<< "$IWB_OUT" && ! grep -q 'NOT REFUSED' <<< "$IWB_OUT"; then
+          ok "INTERRUPTED REAP SURVIVOR: a group member read settled on both sides of a SIGKILL stops iw_reap inside \$( ), and aw_gate in the caller's shell refuses FIXTURE BROKEN naming pid $IWB_P and its ps state, never a spin and never a pass"
+        else bad "INTERRUPTED REAP SURVIVOR: refused, but the refusal does not name the member and its state: $(tr '\n' ' ' <<< "$IWB_OUT")"; fi ;;
+      *) bad "INTERRUPTED REAP SURVIVOR: expected reap rc 1, gate rc 2, the member reaped, FIXTURE BROKEN; got reap $IWB_R gate $IWB_RC left $IWB_LEFT: $(tr '\n' ' ' <<< "$IWB_OUT")" ;;
     esac
+    # INTERRUPTED REAP FRESH (BL-868): THE REFUSAL IS DECIDED ON SETTLED STATE, NEVER ON A COUNT. Seven live members, each
+    # read settled ONCE and then gone (the in-flight fork a group kill misses and the next kill takes), and then the group
+    # gone: the reap must end 0 with no BROKEN line. The 5-round count this replaced refused this sequence on its sixth
+    # read, so a chain deeper than the count, or one whose in-flight members kept settling, read FIXTURE BROKEN. The
+    # reads are driven through the same IW_GROUP_STATE seam, one per call, by a counter in a file (the seam runs in
+    # `$( )`). MUTANT reapfirst refuses on the FIRST settled read, the count-free form of a bound; it must refuse here
+    # and still refuse the survivor above (the twin).
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    IWF_P=""; for _i in 1 2 3 4 5 6 7; do tail -f /dev/null </dev/null >/dev/null 2>&1 & IWF_P="$IWF_P $!"; done
+    iwf_seq() { local k; k="$(grep -c . "$WORK/iwf.n")" || k=0; echo x >> "$WORK/iwf.n"; set -- $IWF_P
+      if [ "$k" -lt "$#" ]; then shift "$k"; printf 'missed %s\n' "$1"; else echo gone; fi; }
+    iwf_drive() { # <reaper fn>; prints "<rc>|<BROKEN lines>|<reads>"
+      : > "$WORK/iwf.n"; : > "$WORK/iwf.reap"
+      local r; r="$(IW_GROUP_STATE=iwf_seq; set -- "$1" $IWF_P; "$1" "$2" "$WORK/iwf.reap"; echo "$?")"
+      printf '%s|%s|%s' "$r" "$(grep -c BROKEN "$WORK/iwf.reap")" "$(grep -c . "$WORK/iwf.n")"
+    }
+    IWF="$(iwf_drive iw_reap)"
+    B_iwfresh=0
+    if [ "$IWF" = "0|0|8" ]; then B_iwfresh=1
+      ok "INTERRUPTED REAP FRESH: seven settled reads of seven different members, then gone, end iw_reap at 0 with no BROKEN line ('$IWF' rc|BROKEN|reads) -- no read count refuses"
+    else bad "INTERRUPTED REAP FRESH: expected '0|0|8' (rc|BROKEN lines|reads), got '$IWF' -- the reaper refused on a count, not on a survivor"; fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    _rf_src="$(declare -f iw_reap)"
+    _rf_mut="$(sed -e 's/^iw_reap ()/iw_reap_first ()/' -e 's/^\( *\)\*" \$p "\*)$/\1*)/' <<< "$_rf_src")"
+    if [ "$(sed 's/^iw_reap_first ()/iw_reap ()/' <<< "$_rf_mut")" = "$_rf_src" ] || ! eval "$_rf_mut"; then
+      bad "INTERRUPTED REAP MUTANT reapfirst did not apply: the survivor test in iw_reap was not found"
+    else
+      IWF_M="$(iwf_drive iw_reap_first)"
+      IWB_M="$(IW_GROUP_STATE=iwb_stuck; : > "$WORK/iwb.mreap"; iw_reap_first "$IWB_P" "$WORK/iwb.mreap"; echo "$?")"
+      [ "$F2C_MATRIX" = 1 ] && f2c_mx reapfirst "fresh $IWF_M stuck $IWB_M"
+      _tw=0; [ "$IWB_M" = 1 ] && _tw=1
+      case "$IWF_M" in
+        "1|1|1") if f2c_twin reapfirst "the survivor refusal" "$_tw"; then mutant_killed "${B_iwfresh:-0}" reapfirst "INTERRUPTED REAP MUTANT reapfirst is KILLED: refusing on the first settled read refuses the fresh-member sequence ('$IWF_M') while the survivor still refuses"; fi ;;
+        *) bad "INTERRUPTED REAP MUTANT reapfirst: expected '1|1|1' (rc|BROKEN lines|reads), got '$IWF_M'" ;;
+      esac
+    fi
+    for _i in $IWF_P; do kill -9 "$_i" 2>/dev/null; wait "$_i" 2>/dev/null; done
     # The identity arm. The fix's run must have written per fixture and reached a map that MOVED (new
     # rows, fxw2's OLD row dropped, the OMITTED line), so the cmp is not two untouched seeds agreeing;
     # the mutant must have written none. The per-fixture call's output lands in $WORK/fxw1.write; it
