@@ -947,7 +947,7 @@ ss_assert "ss-partial-anchor-ctl" \
 ss_stamp "$SS_R1"; ss_marker on
 if ss_assert_b "ss-partial-control" "$(ss_ack "$SSM/ctl/self-update-gate.sh" "$SS_R2")" \
   "row=1 acq=0 wh=1 pf=0" \
-  "an UNMUTATED copy beside its siblings (LAYOUT: the gate plus every reconcile/*.sh and *.md in ONE directory, the layout every mutant copy in this fixture uses) reproduces the withheld row, so a mutant's shift is the mutation"; then B_ssp=1; fi
+  "an UNMUTATED copy beside its siblings (LAYOUT: the gate plus every reconcile/*.sh and *.md in ONE directory, the layout every mutant copy in this fixture uses) reproduces the withheld row, so a mutant's shift is the mutation"; then B_ssp=1; ok "base-pass flag B_ssp set"; fi
 
 sed "s@${SS_ANCHOR}@      if false; then@" "$GATE" > "$SSM/mut/self-update-gate.sh"
 if cmp -s "$GATE" "$SSM/mut/self-update-gate.sh"; then
@@ -1041,14 +1041,14 @@ ss_assert "ss-classifier-only-pre" \
 
 nm_out="$(bash "$GATE" --safe-stop "$NM_N/dist" "$(cat "$NM_N/B")" "$(cat "$NM_N/R2")" "$NM_N/cons" 2>/dev/null)"; nm_rc=$?
 if ss_assert_b "ss-nomach" "${nm_out}|${nm_rc}" "|1" \
-  "a VERSION-only r1 lands no machinery, so the walk names nothing and exits 1 though r1 does not defer"; then B_nm1=1; fi
+  "a VERSION-only r1 lands no machinery, so the walk names nothing and exits 1 though r1 does not defer"; then B_nm1=1; ok "base-pass flag B_nm1 set"; fi
 ss_assert "ss-nomach-row" \
   "$(o="$(nm_cls "$GATE" "$NM_N" R2)"; awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}' <<< "$o")" "-" \
   "and the advisory says no safe stop exists, instead of sending the operator to a ref that lands nothing"
 if ss_assert_b "ss-classifier-only" "$(nm_ss "$GATE" "$NM_C")" "r1" \
-  "an r1 changing only a reconcile classifier IS the safe stop, though it changes no core/scripts/ path"; then B_nm2=1; fi
+  "an r1 changing only a reconcile classifier IS the safe stop, though it changes no core/scripts/ path"; then B_nm2=1; ok "base-pass flag B_nm2 set"; fi
 if ss_assert_b "ss-hook-only" "$(nm_ss "$GATE" "$NM_H")" "r1" \
-  "an r1 changing only core/git-hooks/pre-push IS the safe stop, though the changed-scripts set is empty"; then B_nm3=1; fi
+  "an r1 changing only core/git-hooks/pre-push IS the safe stop, though the changed-scripts set is empty"; then B_nm3=1; ok "base-pass flag B_nm3 set"; fi
 
 # --- MUTANTS OF THE KEEP TEST -----------------------------------------------------------------
 # Built by av_mut: a copy of the WHOLE reconcile directory (machinery_paths reads setup-sites.md
@@ -1068,7 +1068,7 @@ NM_GREP='grep -qxF -f <(printf '"'"'%s\n'"'"' "$ss_mset") <<<"$ss_diff" || conti
 # cannot run never prints.
 # That control is the three base arms above (ss-nomach, ss-classifier-only, ss-hook-only): the same three worlds, the same
 # argv, through $GATE. All three passing is the base-pass flag; the sibling-resolution layout is proved by ss-partial-control.
-if [ "${B_nm1:-0}" = 1 ] && [ "${B_nm2:-0}" = 1 ] && [ "${B_nm3:-0}" = 1 ]; then B_nm=1; fi
+if [ "${B_nm1:-0}" = 1 ] && [ "${B_nm2:-0}" = 1 ] && [ "${B_nm3:-0}" = 1 ]; then B_nm=1; ok "base-pass flag B_nm set (all three nomach base arms passed)"; fi
 nm_cell() { # <gate> <nomach|cls|hook>
   case "$2" in nomach) DRV_OUT="$(nm_ss "$1" "$NM_N")" ;; cls) DRV_OUT="$(nm_ss "$1" "$NM_C")" ;; hook) DRV_OUT="$(nm_ss "$1" "$NM_H")" ;; esac
 }
@@ -1207,7 +1207,7 @@ ss_assert "sc-nocarry" "$(sc_ack "$GATE")" "row=1 acq=1 pf=0 carry=0" \
 # the original pull-first advice stands in its place.
 sc_cons carry
 if ss_assert_b "sc-carried" "$(sc_ack "$GATE")" "row=1 acq=0 pf=1 carry=1" \
-  "a carried machinery path withholds the acquittal: the stamp is ahead of a path that did not land"; then B_scm=1; fi
+  "a carried machinery path withholds the acquittal: the stamp is ahead of a path that did not land"; then B_scm=1; ok "base-pass flag B_scm set"; fi
 
 # C -- THE SAME GUARD ON THE SEED WHERE THE ROW'S RATIONALE IS MOST FALSE. `preclassify.sh` IS the
 # classifier engine the acquittal claims has landed. Kept as its own world rather than folded into
@@ -1632,7 +1632,7 @@ ss_assert "carry-safe-stop" \
 # defect the `set -f` mutant models is CWD-dependent by nature. Same gate, same tree, a
 # directory built to make the expansion bite.
 if ss_assert_b "carry-cwd-invariant" "$(ac_carry "$GATE" "$AC/cons" "$AC/cwd")" "$AC_ALL" \
-  "the shipped gate answers identically from a CWD whose own core/ would swallow every globbed entry"; then B_acc=1; fi
+  "the shipped gate answers identically from a CWD whose own core/ would swallow every globbed entry"; then B_acc=1; ok "base-pass flag B_acc set"; fi
 
 # --- MUTANTS on arm C -----------------------------------------------------------------
 #
@@ -2070,7 +2070,7 @@ ss_assert "su-seed-fx-scope" \
 # comparison.
 su_stamp "$SU_MID"
 if ss_assert_b "su-carried" "$(su_buckets "$SU_PC" "$SU/cons")" "$SU_LIVE" \
-  "M and A both suppress a copy identical to the distribution at the stamp's skill_commit, while a real edit, a non-machinery path and a deleted path in the same tree all still reach ->CLASSIFY"; then B_su=1; fi
+  "M and A both suppress a copy identical to the distribution at the stamp's skill_commit, while a real edit, a non-machinery path and a deleted path in the same tree all still reach ->CLASSIFY"; then B_su=1; ok "base-pass flag B_su set"; fi
 
 # THE THREE GUARDS ON THE STAMP READ, EACH WITH ITS OWN SUBJECT. In every one of them the arms must
 # be unreachable and every OTHER bucket unchanged -- which is why the whole set is asserted rather
@@ -2272,7 +2272,7 @@ if ss_assert_b "su-gate-verdict" \
   "$(printf '%s\n' "$SU_GATE_MID" | awk -F'\t' \
       '$1 == "SELF-UPDATE-OK" || $1 == "SELF-UPDATE-DEFER" || $1 == "SELF-UPDATE-UNDECIDED" {print $1}' \
       | sort -u | tr '\n' ',')" \
-  "SELF-UPDATE-OK," "...and it still emits its own verdict, so the missing CARRY rows are a decision rather than a dead gate"; then B_sumf=1; fi
+  "SELF-UPDATE-OK," "...and it still emits its own verdict, so the missing CARRY rows are a decision rather than a dead gate"; then B_sumf=1; ok "base-pass flag B_sumf set"; fi
 
 # --- THE JOIN ITSELF: arm C now EVALS machinery_paths() out of preclassify.sh ----------
 # The population and the suppression scope are one derivation with one owner, loaded across a file
@@ -2542,7 +2542,7 @@ else
     "$VR_CTL_SKC" \
     "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" \
     "the SHIPPED gate on that same split-stamp world records skill_commit, so the kill above is the mutation and not the world"
-  if [ "$VR_CTL_SKC" = "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" ]; then B_skc=1; fi
+  if [ "$VR_CTL_SKC" = "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" ]; then B_skc=1; ok "base-pass flag B_skc set"; fi
   VR_MUT_C="$(vr_cons skcmut)"
   mkdir -p "$VR_MUT_C/.claude"
   # `commit` and `skill_commit` DELIBERATELY DIFFER in this stamp, which is what makes the two
@@ -2648,7 +2648,7 @@ VR_CTL_GOT="$(vr_score "$VR/m-control/self-update-gate.sh" ctl)"
 ss_assert "rec-mut-control" "$VR_CTL_GOT" \
   "n=1 rows=identical v=DEFER" \
   "an unmutated copy beside its siblings (LAYOUT: the gate plus every reconcile/*.sh and *.md in one directory; kept, because no base arm drives vr_score on this consumer, so there is no identical world and argv to fold into) records normally, so a mutant's shift is the mutation"
-if [ "$VR_CTL_GOT" = "n=1 rows=identical v=DEFER" ]; then B_vrctl=1; fi
+if [ "$VR_CTL_GOT" = "n=1 rows=identical v=DEFER" ]; then B_vrctl=1; ok "base-pass flag B_vrctl set"; fi
 
 vr_kill() { # vr_kill <label> <awk> <consumer-name> <want> <why>
   local g got
@@ -2793,7 +2793,7 @@ VR_RANGE_GOT="$(vr_range "$GATE" "$BASE" "$THEIRS" "$DIST")"
 ss_assert "range-control" "$VR_RANGE_GOT" \
   "und=1 f2=gate-agree.sh ok=2" \
   "the real range is untouched: two OK rows and the one UNDECIDED the differential produces"
-if [ "$VR_RANGE_GOT" = "und=1 f2=gate-agree.sh ok=2" ]; then B_range=1; fi
+if [ "$VR_RANGE_GOT" = "und=1 f2=gate-agree.sh ok=2" ]; then B_range=1; ok "base-pass flag B_range set"; fi
 
 # DIST IS NOT A REPOSITORY. Its own arm rather than a case of the ref check, because the two have
 # different SUBJECTS: naming two perfectly good refs as unresolvable sends the operator after the
@@ -2921,7 +2921,7 @@ ss_assert "prewritten-refused" "$(vr_pw_scan "$GATE" "$VR_PW")" "und=4 ok=0 pw=4
 VR_PWC_GOT="$(vr_pw_scan "$GATE" "$VR_RC")"
 ss_assert "prewritten-control" "$VR_PWC_GOT" "und=1 ok=2 pw=0" \
   "...while the un-written consumer keeps its two OK rows and its one differential UNDECIDED, so the refusal reads the tree"
-if [ "$VR_PWC_GOT" = "und=1 ok=2 pw=0" ]; then B_pw=1; fi
+if [ "$VR_PWC_GOT" = "und=1 ok=2 pw=0" ]; then B_pw=1; ok "base-pass flag B_pw set"; fi
 
 # --- THE NEAR-MISS THAT SITES THE SECOND CONJUNCT, IN ITS OWN MINIATURE DISTRIBUTION -----
 #
@@ -3246,7 +3246,7 @@ ss_assert "pl-w8-notgating" "$(pl_row "$GATE" "$PL_W8" moved.sh)" "SELF-UPDATE-O
 ss_assert "pl-w9-behindbase" "$(pl_row "$GATE" "$PL_W9" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
   "a skill_commit BEHIND base carrying theirs' bytes is not a self-update inside base..theirs (A4, base <= SK)"
 # The nine world cells above are the unmutated arms every pl mutant below is scored against.
-if [ "$FAILURES" = "$PL_F0" ]; then B_pl=1; fi
+if [ "$FAILURES" = "$PL_F0" ]; then B_pl=1; ok "base-pass flag B_pl set"; fi
 
 # --- MUTANTS on the acquittal and on the arm's position ----------------------------------
 # ANCHORS ARE COUNTED IN THE GATE, by `index`, never by an interactive grep: each must occur exactly
@@ -3508,7 +3508,7 @@ ss_assert "pp-enclosed-undecided" "$pp_enc_row|$pp_enc_hit" "pp=SELF-UPDATE-UNDE
   "a consumer that is a subdirectory of an enclosing repository is UNDECIDED on pre-push, which SKILL.md step 2 stops on, and the enclosing repository's hook is never run"
 rm -f "$PP/sent/sentinel"
 if ss_assert_b "pp-enclosed-names-layout" "$(pp_layout "$GATE" "$PP_ENC/sub")" "1" \
-  "...and the row names the unsupported layout, so the operator reads the remedy and not just a status"; then B_ppe=1; fi
+  "...and the row names the unsupported layout, so the operator reads the remedy and not just a status"; then B_ppe=1; ok "base-pass flag B_ppe set"; fi
 rm -f "$PP/sent/sentinel"
 # MUTANT: the UNDECIDED block's guard made false restores round 2's silence. Built beside the gate's
 # siblings (machinery_paths reads setup-sites.md beside $0) with an unmutated control that must
@@ -3562,7 +3562,7 @@ else
   ss_assert "pp-case-discriminates" "$([ "$pp_case_typed" != "$pp_case_git" ] && echo differ || echo same)" "differ" \
     "the miscased path's pwd -P [$pp_case_typed] differs from git's toplevel [$pp_case_git], so a string comparison WOULD misread it -- the input separates the two rules"
   if ss_assert_b "pp-case-ok" "$(pp_scan "$GATE" "$PP_GREEN_MIS")" "pp=none sum=1 ss=1 und=1" \
-    "the green consumer reached by a miscased path is its own toplevel: no pre-push row, not UNSUPPORTED LAYOUT"; then B_ppc=1; fi
+    "the green consumer reached by a miscased path is its own toplevel: no pre-push row, not UNSUPPORTED LAYOUT"; then B_ppc=1; ok "base-pass flag B_ppc set"; fi
   ppc_cell() { # <gate> <miscased|canonical>
     case "$2" in
       miscased) ppc_o="$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$PP_GREEN_MIS" 2>/dev/null)"   # ONE gate start, both cells read it
@@ -3600,7 +3600,7 @@ pp_mk PP_ENC_REAL encreal "$PP_SENT_HOOK" hooksPath yes
 if ss_assert_b "pp-gate-runs-no-hook" \
   "$(pp_scan "$GATE" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" \
   "pp=none sum=1 ss=1 und=1|absent" \
-  "a consumer that is its own repository, with a remote and an executable armed hook: the gate runs to its verdict and the hook never runs"; then B_pph=1; fi
+  "a consumer that is its own repository, with a remote and an executable armed hook: the gate runs to its verdict and the hook never runs"; then B_pph=1; ok "base-pass flag B_pph set"; fi
 rm -f "$PP/sent/sentinel"
 ss_assert "pp-enclosed-control" \
   "$( ( pp_enter "$PP_ENC_REAL" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); [ -e "$PP/sent/sentinel" ] && echo written || echo absent )" \
@@ -3657,14 +3657,14 @@ bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_LSREC" >/dev/null 2>&1
 if ss_assert_b "pp-record-out-of-tree" \
   "seen=$(sort -u "$PP_LSREC_LOG" | tr '\n' ',')|n=$(vr_n "$PP_LSREC")|$(sed -n 's/^# verdict: *//p' "$(vr_newest "$PP_LSREC")" | head -1)" \
   "seen=0,|n=1|DEFER" \
-  "a gating script the gate runs from the consumer root sees no record file while it runs, and exactly one complete record is in the tree afterwards"; then B_pprec1=1; fi
+  "a gating script the gate runs from the consumer root sees no record file while it runs, and exactly one complete record is in the tree afterwards"; then B_pprec1=1; ok "base-pass flag B_pprec1 set"; fi
 # CONTROL: the same script, run by hand from the consumer root with a record-shaped file present,
 # logs 1 -- so the 0 above is the record's absence and not a script that cannot see the directory.
 : > "$PP_LSREC_LOG.ctl"
 pp_lsrec_obs "$PP_LSREC" "$PP_LSREC_LOG.ctl"
 ( cd "$PP_LSREC" && bash scripts/ai-dlc/gate-pass.sh )
 if ss_assert_b "pp-record-control" "$(cat "$PP_LSREC_LOG.ctl")" "1" \
-  "...and the same script with a record-shaped file present logs 1, so it really can see that directory (kept: it differs from every base drive, because the observer script is run BY HAND in the consumer root and the gate is not run at all)"; then B_pprec2=1; fi
+  "...and the same script with a record-shaped file present logs 1, so it really can see that directory (kept: it differs from every base drive, because the observer script is run BY HAND in the consumer root and the gate is not run at all)"; then B_pprec2=1; ok "base-pass flag B_pprec2 set"; fi
 ppr_cell() { # <gate> <seen>
   local c
   c="$(vr_cons pplsrecm)"; pp_lsrec_obs "$c" "$PP_LSREC_LOG.m"; : > "$PP_LSREC_LOG.m"
@@ -3822,13 +3822,13 @@ pu_sc_refuse() { local d; d="$(pu_world "refuse-$2")"; : > "$d/refuse-all"
 PU_PASS="$(pu_sc_pass "$PU_SRC" shipped)"
 if pu_ss "pu-hook-passes" "$PU_PASS|stdout=$(wc -c < "$PU_D/pass-shipped/stdout" | tr -d ' ')|up=$(git -C "$PU_D/pass-shipped/W" rev-parse --abbrev-ref 'su@{upstream}' 2>/dev/null)" \
   "rc=0 ref=landed n=1|stdout=0|up=origin/su" \
-  "a passing hook: the remote ref is created at the local sha, the hook ran EXACTLY once, stdout is empty, and the upstream is origin/su"; then B_pupass=1; fi
+  "a passing hook: the remote ref is created at the local sha, the hook ran EXACTLY once, stdout is empty, and the upstream is origin/su"; then B_pupass=1; ok "base-pass flag B_pupass set"; fi
 PU_REF="$(pu_sc_refuse "$PU_SRC" shipped)"
 PU_REF_OUT="$(pu_out "$PU_D/refuse-shipped")"
 if pu_ss "pu-hook-refuses" \
   "$PU_REF|probe=$(grep -c '^# probe: ' "$PU_REF_OUT" 2>/dev/null)|blocked=$(grep -c '^# probe: pre-push: BLOCKED' "$PU_REF_OUT" 2>/dev/null)|stdout=$(grep -c . "$PU_D/refuse-shipped/stdout")/$(grep -c '^HOOK-REFUSED 1 artifact paths$' "$PU_D/refuse-shipped/stdout")|tracked=$(git -C "$PU_D/refuse-shipped/W" ls-files -- _bmad-output | grep -c .)" \
   "rc=3 ref=absent n=1|probe=6|blocked=1|stdout=1/1|tracked=0" \
-  "a refusing hook: exit 3, nothing pushed, the hook ran once, the record holds the header plus the hook's 5 output lines as '# probe:', stdout is the one HOOK-REFUSED line naming the FAIL phase, and the record is untracked"; then B_purefuse=1; fi
+  "a refusing hook: exit 3, nothing pushed, the hook ran once, the record holds the header plus the hook's 5 output lines as '# probe:', stdout is the one HOOK-REFUSED line naming the FAIL phase, and the record is untracked"; then B_purefuse=1; ok "base-pass flag B_purefuse set"; fi
 
 PU_W="$(pu_world prerecv)"
 printf '#!/usr/bin/env bash\necho "remote: refused by pre-receive" >&2\nexit 1\n' > "$PU_W/R1/hooks/pre-receive"; chmod +x "$PU_W/R1/hooks/pre-receive"
@@ -3864,7 +3864,7 @@ PU_BE_WRAP="$PU_BE/run-$(pu_n "$PU_BE")"
 if pu_ss "pu-argv-stdin-as-git" \
   "rc=$pu_be_rc|n=$(pu_n "$PU_BE")|$(cmp -s "$PU_BE_REAL" "$PU_BE_WRAP" && echo byte-equal || echo differ)|$(grep -c "^ARGV:origin|$PU_BE/R2\$" "$PU_BE_WRAP")|$(grep -vc '^ARGV:' "$PU_BE_WRAP")" \
   "rc=3|n=2|byte-equal|1|1" \
-  "the wrapper's hook argv (remote name, PUSH url) and its one stdin ref line are byte-equal to a real git push's to the same bare remote"; then B_puargv=1; fi
+  "the wrapper's hook argv (remote name, PUSH url) and its one stdin ref line are byte-equal to a real git push's to the same bare remote"; then B_puargv=1; ok "base-pass flag B_puargv set"; fi
 # MUTANTS scored on this world (the refusing hook keeps it unchanged between runs).
 pu_be_mut() { # pu_be_mut <mutant> -> byte-equal | differ
   local f; pu_run "$1" "$PU_BE" >/dev/null; f="$PU_BE/run-$(pu_n "$PU_BE")"
@@ -3895,7 +3895,7 @@ pu_sc_pushurl() { local d; d="$(pu_world "pushurl-$2")"
 PU_S_PUSHURL="$(pu_sc_pushurl "$PU_SRC" shipped)"
 if pu_ss "pu-pushurl-side" "$PU_S_PUSHURL|$(grep -c ' 0000000000000000000000000000000000000000$' "$PU_D/pushurl-shipped/run-2")" \
   "rc=3 R2=absent n=1 byte-equal|1" \
-  "fetch url already at the local sha, push url lacking it, hook refusing: exit 3, nothing on the push url, the hook ran once, fed the zero-sha line a real push feeds"; then B_pupushurl=1; fi
+  "fetch url already at the local sha, push url lacking it, hook refusing: exit 3, nothing on the push url, the hook ran once, fed the zero-sha line a real push feeds"; then B_pupushurl=1; ok "base-pass flag B_pupushurl set"; fi
 # (2) The remote is already at the local sha: git still runs the hook, on EMPTY stdin.
 pu_sc_current() { local d; d="$(pu_world "current-$2")"
   git -C "$d/W" push -q --no-verify origin su >/dev/null 2>&1; : > "$d/refuse-all"
@@ -3912,7 +3912,7 @@ pu_sc_current() { local d; d="$(pu_world "current-$2")"
 PU_S_CURRENT="$(pu_sc_current "$PU_SRC" shipped)"
 if pu_ss "pu-remote-current" "$PU_S_CURRENT" \
   "rc=3 real=1 n=1 stdin=0 byte-equal" \
-  "the remote already at the local sha: a real push runs the hook on empty stdin (real=1), and so does the wrapper -- exit 3 on a refusing hook, once, byte-equal"; then B_pucurrent=1; fi
+  "the remote already at the local sha: a real push runs the hook on empty stdin (real=1), and so does the wrapper -- exit 3 on a refusing hook, once, byte-equal"; then B_pucurrent=1; ok "base-pass flag B_pucurrent set"; fi
 # (3) The fetch url does not exist, the push url does: the push is decided on the push url alone.
 pu_sc_nofetch() { local d; d="$(pu_world "nofetch-$2")"
   git -C "$d/W" config remote.origin.pushurl "$d/R2"
@@ -3942,7 +3942,7 @@ else
     printf 'rc=%s ref=%s n=%s' "$(pu_run "$1" "$d" pu_dfl)" "$(pu_landed "$d" R1)" "$(pu_n "$d")"; }
   PU_S_SIGPIPE="$(pu_sc_sigpipe "$PU_SRC" shipped)"
   if pu_ss "pu-sigpipe" "$PU_S_SIGPIPE" "rc=0 ref=landed n=1" \
-    "a hook that fails iff yes|head -1 died of SIGPIPE passes under the wrapper, driven with SIGPIPE at its default"; then B_pusigpipe=1; fi
+    "a hook that fails iff yes|head -1 died of SIGPIPE passes under the wrapper, driven with SIGPIPE at its default"; then B_pusigpipe=1; ok "base-pass flag B_pusigpipe set"; fi
   PU_SP="$PU_D/sigpipe-shipped"
   ss_assert "pu-sigpipe-control" \
     "$( ( cd "$PU_SP/W" && pu_dfl .git/hooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )|$( ( cd "$PU_SP/W" && perl -e '$SIG{PIPE} = "IGNORE"; exec @ARGV or exit 127' .git/hooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" \
@@ -3979,7 +3979,7 @@ pu_sc_x1() { local d m; d="$(pu_world "x1-$2")"
 }
 PU_S_X1="$(pu_sc_x1 "$PU_SRC" shipped)"
 if pu_ss "pu-x1-refspec" "$PU_S_X1" "rc=0 main=kept su=landed n=1 up=origin/su" \
-  "remote.origin.push maps su onto main: the wrapper pushes refs/heads/su only, main is not moved, the upstream is origin/su"; then B_pux1=1; fi
+  "remote.origin.push maps su onto main: the wrapper pushes refs/heads/su only, main is not moved, the upstream is origin/su"; then B_pux1=1; ok "base-pass flag B_pux1 set"; fi
 PU_X="$(pu_world x1real)"; git -C "$PU_X/W" config remote.origin.push 'refs/heads/su:refs/heads/main'; printf 'refs/heads/main' > "$PU_X/refuse-stdin"
 pu_x1_m="$(pu_at "$PU_X" R1 refs/heads/main)"; pu_x1_rc="$(pu_real "$PU_X")"
 ss_assert "pu-x1-control" "rc=$pu_x1_rc|$(grep -c ' refs/heads/main ' "$PU_X/run-1")|$([ "$(pu_at "$PU_X" R1 refs/heads/main)" = "$pu_x1_m" ] && echo kept || echo moved)" \
@@ -3997,7 +3997,7 @@ pu_sc_x2() { local d; d="$(pu_world "x2-$2")"
 }
 PU_S_X2="$(pu_sc_x2 "$PU_SRC" shipped)"
 if pu_ss "pu-x2-followtags" "$PU_S_X2" "rc=0 tag=absent su=landed n=1" \
-  "push.followTags and an annotated tag on the pushed commit: the branch lands and the tag does not"; then B_pux2=1; fi
+  "push.followTags and an annotated tag on the pushed commit: the branch lands and the tag does not"; then B_pux2=1; ok "base-pass flag B_pux2 set"; fi
 PU_X="$(pu_world x2real)"; git -C "$PU_X/W" tag -a -m t v1; git -C "$PU_X/W" config push.followTags true; printf 'refs/tags/' > "$PU_X/refuse-stdin"
 pu_x2_rc="$(pu_real "$PU_X")"
 ss_assert "pu-x2-control" "rc=$pu_x2_rc|$(grep -c '^refs/tags/v1 ' "$PU_X/run-1")" "rc=1|1" \
@@ -4014,7 +4014,7 @@ pu_sc_x3() { local d; d="$(pu_world "x3-$2")"
 PU_S_X3="$(pu_sc_x3 "$PU_SRC" shipped)"
 PU_S_X3="$PU_S_X3 out=$(tr ' ' _ < "$PU_D/x3-shipped/stdout")"
 if pu_ss "pu-x3-multiurl" "${PU_S_X3% out=*}" "rc=2 n=0 R1=absent R2=absent" \
-  "a remote with two push urls: exit 2, the hook never ran, nothing pushed to either url"; then B_pux3=1; fi
+  "a remote with two push urls: exit 2, the hook never ran, nothing pushed to either url"; then B_pux3=1; ok "base-pass flag B_pux3 set"; fi
 pu_real "$PU_D/x3-shipped" >/dev/null
 ss_assert "pu-x3-control" "$(pu_n "$PU_D/x3-shipped")" "2" \
   "control: a real git push in the same world runs the hook twice, once per push url"
@@ -4029,7 +4029,7 @@ pu_sc_x4() { local d; d="$(pu_world "x4-$2")"; : > "$d/mutate"
 }
 PU_S_X4="$(pu_sc_x4 "$PU_SRC" shipped)"
 if pu_ss "pu-x4-moved" "$PU_S_X4" "rc=2 n=1 su=absent" \
-  "a hook that commits on the branch and passes: exit 2, the hook ran once, nothing pushed"; then B_pux4=1; fi
+  "a hook that commits on the branch and passes: exit 2, the hook ran once, nothing pushed"; then B_pux4=1; ok "base-pass flag B_pux4 set"; fi
 PU_M="$(pu_mut moved 'index($0, "[ \"$su_after\" = \"$LOCAL_SHA\" ] \\") == 1 { print "true || " $0; next } { print }')"
 pu_kill "${B_pux4:-0}" "pu-mut-moved" "$PU_M" "$(pu_sc_x4 "$PU_M" moved)" "rc=0 n=1 su=present" \
   "without the check the wrapper pushes after a hook that moved the branch" "$PU_S_X4" "rc su" "n"
@@ -4184,7 +4184,7 @@ sg_scan() {
     "$(grep -c . "$SG/fired" 2>/dev/null || echo 0)"
 }
 if ss_assert_b "stage-gating-refused" "$(sg_scan "$GATE" yes)" "und=1 defer=0 fired=1" \
-  "a gating-script set that cannot be staged is UNDECIDED, and the stub that broke it is shown to fire"; then B_stg=1; fi
+  "a gating-script set that cannot be staged is UNDECIDED, and the stub that broke it is shown to fire"; then B_stg=1; ok "base-pass flag B_stg set"; fi
 ss_assert "stage-gating-healthy" "$(sg_scan "$GATE" no)" "und=0 defer=1 fired=0" \
   "the same seed unstubbed reaches the differential and defers on gate-defer.sh, so the refusal is the staging write"
 rm -rf "$SG/m"; mkdir -p "$SG/m"
@@ -4353,15 +4353,15 @@ qr_scan() {
 for qloc in utf8 c; do
   if ss_assert_b "quote-script-$qloc" "$(qs_scan "$GATE" "$qloc")" "plain=SELF-UPDATE-OK cafe=SELF-UPDATE-DEFER" \
     "($qloc) a changed gating script named café.sh is invoked, changed and deferred on, beside a plain one that passes"; then
-    case "$qloc" in utf8) B_qs=1 ;; esac
+    case "$qloc" in utf8) B_qs=1; ok "base-pass flag B_qs set" ;; esac
   fi
   if sd_assert "quote-names-$qloc" "$(qn_scan "$GATE" "$qloc")" "a1.sh,a2.sh,ca.sh,$QU.sh,dq.sh,ea.sh,ha.sh,ka.sh,plain.sh,semi.sh,sq.sh," \
     "($qloc) every delimited hook name yields exactly its own row, two on one line yield two, and , : = # end a name"; then
-    case "$qloc" in c) B_qn_c=1 ;; esac
+    case "$qloc" in c) B_qn_c=1; ok "base-pass flag B_qn_c set" ;; esac
   fi
   if sd_assert "quote-r2-$qloc" "$(qr_scan "$GATE" "$qloc")" "r2=0 ok=1" \
     "($qloc) a consumer already holding theirs' café.md is not about to change it, so no rulebook DEFER"; then
-    case "$qloc" in utf8) B_qr_utf8=1 ;; esac
+    case "$qloc" in utf8) B_qr_utf8=1; ok "base-pass flag B_qr_utf8 set" ;; esac
   fi
 done
 # THE CONTROL THAT SAYS THE R2 CELL CAN FIRE: the same world with the consumer's copy removed IS
@@ -4480,7 +4480,7 @@ qr_fail() { # qr_fail <gate> [locale] -> "und=<n> defer=<n> ok=<n> fired=<0|1>"
 }
 if sd_assert "quote-r2-diff-failed" "$(qr_fail "$GATE")" "und=1 defer=0 ok=0 fired=1" \
   "a rulebook candidate listing that failed is UNDECIDED, and the shim that failed it is shown to fire"; then
-  B_qrf=1
+  B_qrf=1; ok "base-pass flag B_qrf set"
 fi
 qw_mut_pairs "${B_qrf:-0}" "quote-mut-r2rc" qr_fail "und=0 defer=0 ok=1 fired=1" "und=1 defer=0 ok=0 fired=1" und,ok defer \
   "with the listing's status unread a failed diff reads as no rulebook change and the gate says OK" \
@@ -4542,15 +4542,15 @@ bt_hook() {
 }
 if sd_assert "theirs-fx-checkout" "$(bt_checkout "$GATE")" "r2=1 und=0 ok=0" \
   "a dist checked out on main while theirs adds a rulebook-coupled fixture still DEFERs: the scan reads theirs' tree"; then
-  B_bt_co=1
+  B_bt_co=1; ok "base-pass flag B_bt_co set"
 fi
 if sd_assert "theirs-fx-bare" "$(bt_bare "$GATE")" "r2=1 und=0 ok=0" \
   "a BARE dist, which has no working tree, yields the same DEFER"; then
-  B_bt_bare=1
+  B_bt_bare=1; ok "base-pass flag B_bt_bare set"
 fi
 if sd_assert "theirs-hook-bare" "$(bt_hook "$GATE")" "und=0 ok=1 rec=same" \
   "with no consumer hook and a bare dist the fallback hook resolves from theirs, and the record carries theirs' blob id"; then
-  B_bt_hook=1
+  B_bt_hook=1; ok "base-pass flag B_bt_hook set"
 fi
 # THE CONTROL THAT SAYS THE CHECKOUT CELL DISCRIMINATES: the same world with the consumer's copy
 # already at theirs is not about to change, so the arm must NOT defer.
@@ -4632,7 +4632,7 @@ ss_assert "mp-gate-healthy" "$(mp_gate "$GATE" -)" "resolved=0 empty=0 carry=cor
   "unshimmed, the path deleted upstream over a consumer edit is CARRIED and the gate goes on to OK"
 if sd_assert "mp-gate-basefail" "$(mp_gate "$GATE" "$MP/gs")" "resolved=1 empty=0 carry= ok=0 fired=1" \
   "the BASE listing failing is UNDECIDED with its own wording, not an OK over a set missing the carried path"; then
-  B_mpbf=1
+  B_mpbf=1; ok "base-pass flag B_mpbf set"
 fi
 # THE HEALTHY-EMPTY CONTROL, under the gate's own `pipefail`: a manifest whose `machinery:` block is
 # empty is an ANSWER, rc 0, and reaches the EMPTY row -- never the producer-failure row.
@@ -4640,7 +4640,7 @@ MP_EE="$(mp_engine empty)"
 awk '/^machinery:/{print; skip=1; next} skip && /^[a-z_]+:/{skip=0} !skip' "$MP_EE/setup-sites.md" > "$MP_EE/.t" && mv "$MP_EE/.t" "$MP_EE/setup-sites.md"
 if sd_assert "mp-gate-empty" "$(mp_gate "$MP_EE/self-update-gate.sh" -)" "resolved=0 empty=1 carry= ok=1 fired=0" \
   "an empty machinery set from a readable manifest returns 0 under pipefail and reads as EMPTY, not as a failed producer"; then
-  B_mpge=1
+  B_mpge=1; ok "base-pass flag B_mpge set"
 fi
 e="$(mp_mut basestatus preclassify.sh \
   '--with-tree="$BASE" -- $_mgnorm 2>/dev/null)" || _mrc=4' '--with-tree="$BASE" -- $_mgnorm 2>/dev/null)"')" \
@@ -4690,7 +4690,7 @@ ss_assert "mp-pc-healthy" "$(mp_pc "$SU_PC" -)" "rc=0 rows=core/rules/added.md=U
   "unshimmed, the path born at skill_commit is suppressed by the machinery-scoped arm"
 if sd_assert "mp-pc-theirsfail" "$(mp_pc "$SU_PC" "$MP/ps")" "rc=2 rows= refused=machinery fired=1" \
   "the THEIRS listing failing refuses the run, never scopes the arm to a set without the added path"; then
-  B_mppt=1
+  B_mppt=1; ok "base-pass flag B_mppt set"
 fi
 MP_PE="$(mp_engine pcempty)"
 awk '/^machinery:/{print; skip=1; next} skip && /^[a-z_]+:/{skip=0} !skip' "$MP_PE/setup-sites.md" > "$MP_PE/.t" && mv "$MP_PE/.t" "$MP_PE/setup-sites.md"
@@ -4715,7 +4715,7 @@ PCS="$MP/pcs"; mkdir -p "$PCS/.claude/rules"; cp "$PCN/.claude/rules/"* "$PCS/.c
 MP_SU="$(mp_engine sitedgone)"; rm -f "$MP_SU/setup-sites.md"
 if sd_assert "mp-sited-missing" "$(mp_pc "$MP_SU/preclassify.sh" - "$PCS")" "rc=2 rows= refused=sited fired=0" \
   "a missing setup-sites.md refuses, never reads as a tree with no setup-sited file"; then
-  B_mpsm=1
+  B_mpsm=1; ok "base-pass flag B_mpsm set"
 fi
 MP_SN="$(mp_engine sitednone)"
 awk '!/^[ \t]*file:[ \t]*core\//' "$MP_SN/setup-sites.md" > "$MP_SN/.t" && mv "$MP_SN/.t" "$MP_SN/setup-sites.md"
@@ -4775,11 +4775,11 @@ ss_assert "mp-ud-healthy" "$(mp_ud "$(dirname "$GATE")/unregistered-drift.sh" -)
   "unshimmed, all three edited machinery hooks in the range are CARRIED"
 if sd_assert "mp-ud-basefail" "$(mp_ud "$(dirname "$GATE")/unregistered-drift.sh" "$MP/us")" "rc=2 rows= refused=1 fired=1" \
   "the BASE listing failing refuses the scan, never drops omega back to a HARD row whose remedy contradicts the worklist"; then
-  B_mpudb=1
+  B_mpudb=1; ok "base-pass flag B_mpudb set"
 fi
 if sd_assert "mp-ud-once" "$(mp_leak "$(dirname "$GATE")/unregistered-drift.sh")" "preclassify=1 derived=1 left=0 carried=3" \
   "three rows reach the carried test, and preclassify runs ONCE and its directory is removed by the trap"; then
-  B_mpuo=1
+  B_mpuo=1; ok "base-pass flag B_mpuo set"
 fi
 e="$(mp_mut udrc unregistered-drift.sh \
   'machinery_paths > "$CARRY_TMP/mach" 2>/dev/null || return 4' 'machinery_paths > "$CARRY_TMP/mach" 2>/dev/null || : > "$CARRY_TMP/mach"')" \
@@ -4846,13 +4846,13 @@ AV_A="$(av_run "$GATE" "$AV/a")"
 AV_B="$(av_run "$GATE" "$AV/b")"
 AV_D="$(av_run "$GATE" "$AV/d")"
 AV_SIG_FIX="render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same"
-if ss_assert_b "av-signature" "$(av_sig "$AV_A")" "$AV_SIG_FIX" "world A, every arm below in one row"; then B_av1=1; fi
+if ss_assert_b "av-signature" "$(av_sig "$AV_A")" "$AV_SIG_FIX" "world A, every arm below in one row"; then B_av1=1; ok "base-pass flag B_av1 set"; fi
 ss_assert "av-render-body" "$(av_st "$AV_A" render-agent-definitions.sh)" SELF-UPDATE-DEFER \
   "a renderer whose rendered body changes is refused: under --check --root . it goes 0 to 1, though a bare run exits 2 on both sides"
 ss_assert "av-render-comment" "$(av_st "$AV_B" render-agent-definitions.sh) refusals=$(av_ref "$AV_B")" "SELF-UPDATE-OK refusals=0" \
   "a renderer whose only change is a comment is OK and the pull carries no refusal at all"
 if ss_assert_b "av-render-drift" "$(av_st "$AV_D" render-agent-definitions.sh) refusals=$(av_ref "$AV_D")" "SELF-UPDATE-OK refusals=0" \
-  "the same comment-only pull on a consumer whose definitions already drifted is OK: 1,1 under the hook's argv predates the pull"; then B_av2=1; fi
+  "the same comment-only pull on a consumer whose definitions already drifted is OK: 1,1 under the hook's argv predates the pull"; then B_av2=1; ok "base-pass flag B_av2 set"; fi
 ss_assert "av-second-argv" "$(av_st "$AV_A" audit-rule-files.sh)" SELF-UPDATE-DEFER \
   "a SECOND argv-dependent script: --fail-on=deterministic goes 0 to 1 where its bare default exits 1 on both sides"
 ss_assert "av-not-gating" "$(av_st "$AV_A" derive-fixture-readsets.sh) $(av_has "$AV_A" derive-fixture-readsets.sh '^not gating')" "SELF-UPDATE-OK yes" \
@@ -4873,7 +4873,7 @@ ss_assert "av-dollar-nearmiss" "$(av_st "$AV_A" validate-quiet.sh)" SELF-UPDATE-
 # drifted world's OK, so every kill below is its mutation and not a copy that could not run.
 # (av-mut-control ran world A and the drifted world D through a copy: the SAME worlds and argv as av-signature and av-render-drift
 # above, which are its base captures. Both passing is the base-pass flag; the copy layout is proved once, by ss-partial-control.)
-if [ "${B_av1:-0}" = 1 ] && [ "${B_av2:-0}" = 1 ]; then B_avctl=1; fi
+if [ "${B_av1:-0}" = 1 ] && [ "${B_av2:-0}" = 1 ]; then B_avctl=1; ok "base-pass flag B_avctl set"; fi
 # av_kill <label> <gate|""> <world> <want-signature> <why> -- the mutant's whole world signature
 av_kill() { # av_kill <flag> <label> <gate|""> <world> <want-signature> <decides> <twins|-> <why>
   local got
@@ -4996,7 +4996,7 @@ C3_CTLA="$(c3_apply_mut control '')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ -n "$C3_CTLA" ] && [ "$(c3_cycle "$GATE" "$C3_CTLA" "$AV/a")" = "$C3_WANT" ]; then
   ok "c3-mut-control   an unmutated apply.sh copy beside its siblings (LAYOUT: apply.sh plus reconcile/*.sh, *.md and *.tsv in one directory, which no other copy here uses; kept) reaches the same cycle, so the kill below is its mutation"
-  B_c3ctl=1
+  B_c3ctl=1; ok "base-pass flag B_c3ctl set"
 else
   bad "c3-mut-control   the unmutated apply.sh copy did not reach the same cycle"
 fi
@@ -5088,7 +5088,7 @@ hk_sig() { # hk_sig <gate> [worlds] -> one token per world (default: all five)
 }
 HK_SIG_FIX="adds=DEFER reads=DEFER absent=DEFER same=OK deleted=OK+carried"
 if ss_assert_b "hk-signature" "$(hk_sig "$GATE")" "$HK_SIG_FIX" \
-  "the render row is judged against the hook the push will run, and an absent current copy is today's push passing"; then B_hkctl=1; fi
+  "the render row is judged against the hook the push will run, and an absent current copy is today's push passing"; then B_hkctl=1; ok "base-pass flag B_hkctl set"; fi
 # (The unmutated copy that stood here drove hk_sig with the SAME world and argv as hk-signature above, which is its base capture
 # and sets B_hkctl; the copy layout is proved once, by ss-partial-control.)
 hk_kill() { # hk_kill <flag> <label> <gate|""> <want> <decides> <twin> <why> -- a plain run drives only the decides worlds and the twin
@@ -5238,7 +5238,7 @@ ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$
   "lfail=1 lpass=0 gdel=0 udel=1 orecho=1 andand=0 andor=1 block=0 else=1 keeptest=1 awkif=1 y-in-range=0" \
   "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
 if ss_assert_b "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
-  "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"; then B_hu=1; fi
+  "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"; then B_hu=1; ok "base-pass flag B_hu set"; fi
 # (The unmutated copy that stood here drove hu_sig with the SAME world and argv as hu-signature above, which is its base capture
 # and sets B_hu; the copy layout is proved once, by ss-partial-control.)
 # KEYED ON THE LINE THAT DECIDES WHICH COPY RUNS: without it every script is judged by theirs' copy.
@@ -5425,7 +5425,7 @@ ss_assert "sh-pre-rc" \
   "01" "every stub exits 0 at base and 1 at theirs"
 SH_SIG_FIX="assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER"
 SH_S="$(av_run "$GATE" "$AV/s")"
-if ss_assert_b "sh-signature" "$(sh_sig "$SH_S")" "$SH_SIG_FIX" "world S, every shape arm below in one row"; then B_sh=1; fi
+if ss_assert_b "sh-signature" "$(sh_sig "$SH_S")" "$SH_SIG_FIX" "world S, every shape arm below in one row"; then B_sh=1; ok "base-pass flag B_sh set"; fi
 ss_assert "sh-assign" "$(av_st "$SH_S" sa-assign.sh) $(av_has "$SH_S" sa-assign.sh 'through a variable')" "SELF-UPDATE-UNDECIDED yes" \
   "a path assigned to a variable and run through it is UNDECIDED, never a mention read as not gating"
 ss_assert "sh-next-line" "$(av_st "$SH_S" sa-next.sh)" SELF-UPDATE-DEFER \

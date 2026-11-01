@@ -31,23 +31,6 @@ readset-skip	pm_rf	1	*) mutant_killed "$bf" "$1" "BL-452 MUTANT $1 is KILLED by 
 readset-skip	pt_kill	1	if [ "$flips" = "$w" ]; then mutant_killed "$bf" "$m" "BL-452 MUTANT $m (in-pool prep) is KILLED by $want alone: knob0 '$r0' main '$r1' linked '$rw'"
 readset-skip	rp_mut	1	if [ "$m" = "$2" ]; then mutant_killed "$B_LOC_r1" "$1" "MUTANT $1 is KILLED by (r1), on exactly [$2]"
 readset-stage1-verdict	smut	1	if [ "$(world_hit "$dst" "$w")" = 1 ]; then mutant_killed "$flag" "$name" "mutant $name KILLED on $w (applied; twin $twin green)"; else bad "mutant $name SURVIVED on $w"; fi
-self-update-gate	ac_kill	1	mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
-self-update-gate	ac_kill_pre	1	mutant_killed "${B_acc:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
-self-update-gate	cells_kill	1	if [ "$okc" = 1 ]; then mutant_killed "$flag" "$name" "$(printf '%-16s KILLED (%s)' "$name" "$why")"
-self-update-gate	pl_kill	1	mutant_killed "${B_pl:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$4")"
-self-update-gate	pu_kill	1	mutant_killed "$flag" "$label" "$(printf '%-16s KILLED (%s)' "$label" "$6")"
-self-update-gate	sc_none	1	mutant_killed "${B_acc:-0}" armc-mut-safestop "$(printf '%-16s KILLED (%s)' armc-mut-safestop \
-self-update-gate	sd_score	1	mutant_killed "$1" "$2" "$(printf '%-16s KILLED (%s)' "$2" "$8")"
-self-update-gate	sig_judge	1	if [ "$gp" = "$wp" ]; then mutant_killed "$2" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$6")"
-self-update-gate	sig_pick	1	mutant_killed "${B_pw:-0}" "prewritten-mut" "$(printf '%-16s KILLED (%s)' "prewritten-mut" \
-self-update-gate	sig_pick	1	mutant_killed "${B_pw:-0}" "prewritten-mut-conj" "$(printf '%-16s KILLED (%s)' "prewritten-mut-conj" \
-self-update-gate	sig_pick	1	mutant_killed "${B_range:-0}" "range-mut-refs" "$(printf '%-16s KILLED (%s)' "range-mut-refs" \
-self-update-gate	sig_pick	1	mutant_killed "${B_range:-0}" "range-mut-repo" "$(printf '%-16s KILLED (%s)' "range-mut-repo" \
-self-update-gate	sig_pick	1	mutant_killed "${B_skc:-0}" "rec-skc-mutant" "$(printf '%-16s KILLED (%s)' "rec-skc-mutant" "a reader keyed on commit: records the wrong field, and the arm says so")"
-self-update-gate	sig_pick	1	mutant_killed "${B_vrctl:-0}" "rec-mut-corepath" "$(printf '%-16s KILLED (%s)' "rec-mut-corepath" \
-self-update-gate	sig_pick	1	mutant_killed "${B_vrctl:-0}" "rec-mut-digest" "$(printf '%-16s KILLED (%s)' "rec-mut-digest" \
-self-update-gate	sig_pick	1	mutant_killed "${B_vrctl:-0}" "rec-mut-nested" "$(printf '%-16s KILLED (%s recorded verdicts; %s)' "rec-mut-nested" "$vr_m4_got" \
-self-update-gate	su_kill	1	mutant_killed "${B_su:-0}" "$1" "$(printf '%-16s KILLED (%s)' "$1" "$5")"
 spec-join-integrity	mut	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
 spec-join-integrity	mut2	1	if [ "$g" -eq "$exp" ]; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
 spec-join-integrity	mut2_says	1	if grep -qF -- "$want_s" <<<"$out"; then mx_reg "$n" "$m" - "$@"; mutant_killed "$B_BASE" "$n" "$lab"
