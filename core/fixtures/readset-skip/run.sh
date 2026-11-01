@@ -162,6 +162,7 @@
 # MUTANT-MATRIX ipnocanary decides=in-pool-canary twins=in-pool-clean
 # MUTANT-MATRIX endonly decides=interrupted twins=interrupted-other-rows
 # MUTANT-MATRIX nocarry decides=digest-carry twins=digest-fxa-written
+# MUTANT-MATRIX nodeclfilter decides=digest-declared twins=digest-undeclared-written
 # MUTANT-MATRIX nolmt decides=local-listing twins=local-zz-kept
 # MUTANT-MATRIX lmtswap decides=local-listing twins=local-zz-kept
 # MUTANT-MATRIX rc-nochanged decides=reconcile-list twins=reconcile-unmapped
@@ -5447,6 +5448,62 @@ STUB
         *) bad "DIGEST MUTANT nocarry: expected '0|0|1|0|0|3', got '$DWM'" ;;
       esac
     fi
+
+    # A DECLARED FIXTURE GETS NO DIGEST (BL-897). The hook maps a fixture carrying inputs.decl before it reads the map,
+    # so a `# digest` line for one is dead weight; the merge already drops its rows and its carried digest, and the
+    # digests this run writes must pass the same filter. Two seeds in ONE --list run: fxd is DECLARED (its inputs.decl
+    # committed into BR, so the trace copy carries it) and fxa is not. Both read src/a.sh, so the path is in the
+    # runner's universe through fxa's row and fxd's digest IS computable: without the filter it is written. Mutant
+    # nodeclfilter deletes the filter, and the same run must then write fxd's digest (the kill), with fxa's still
+    # written (the twin). The commit is undone after the arm, so every later world sees BR as it was.
+    mkdir -p "$BR/core/fixtures/fxd" || broken "mkdir failed"
+    printf '#!/bin/bash\ncat src/a.sh >/dev/null\n' > "$BR/core/fixtures/fxd/run.sh"
+    printf 'src/a.sh\n' > "$BR/core/fixtures/fxd/inputs.decl"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm declared ) >/dev/null 2>&1 || broken "could not commit the declared seed fxd"
+    printf '%s\n' core/fixtures/fxa/run.sh core/fixtures/fxd/run.sh src/a.sh > "$SX/decl.list"
+    dd_run() { # <deriver copy>; prints "<rc>|<fxa digests>|<fxd digests>|<keep digest>"
+      local r a d k
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/decl.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list "fxa fxd" --tracer sandbox ) > "$WORK/dd.out" 2>&1 </dev/null
+      r=$?
+      stub_reap "${SB:-}"
+      cp "$BR/.ai-dlc-fixture-readsets.tsv" "$WORK/dd.map"
+      a="$(grep -c '^# digest fxa [0-9a-f]\{64\}$' "$WORK/dd.map")" || a=0
+      d="$(grep -c '^# digest fxd [0-9a-f]\{64\}$' "$WORK/dd.map")" || d=0
+      k="$(grep -c '^# digest keep 1111' "$WORK/dd.map")" || k=0
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      printf '%s|%s|%s|%s' "$r" "$a" "$d" "$k"
+    }
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    DD="$(dd_run "$SB/deriver.sh")"
+    if [ "$DD" = "0|1|0|1" ]; then
+      ok "DIGEST DECLARED: one --list run tracing a declared fixture (fxd) and an undeclared one (fxa) that share src/a.sh writes fxa's digest and none for fxd, and carries the untraced one ('$DD' rc|fxa|fxd|keep)"
+      B_ddecl=1
+    else
+      bad "DIGEST DECLARED: expected '0|1|0|1' (rc|fxa digests|fxd digests|keep), got '$DD' — $(tail -2 "$WORK/dd.out" | tr '\n' ' ')"
+    fi
+    DD_L1='      readset_merge_map /dev/null "$WORK/digest.new" "" "$TREE/$FIXTURE_ROOT" > "$WORK/digest.new.f" \'
+    DD_L2='        && mv -f "$WORK/digest.new.f" "$WORK/digest.new" || die "could not filter the declared fixtures out of the new digests"'
+    DD_N="$(grep -cxF -- "$DD_L1" "$SB/deriver.sh")" || DD_N=0
+    DD_Z="$(grep -cxF -- "$DD_L1 NEVER-IN-THE-DERIVER" "$SB/deriver.sh")" || DD_Z=0
+    L1="$DD_L1" L2="$DD_L2" awk '$0 == ENVIRON["L1"] { s = 1; next } s == 1 && $0 == ENVIRON["L2"] { s = 0; next } { s = 0; print }' \
+      "$SB/deriver.sh" > "$SX/deriver.nodeclfilter.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$DD_N" != 1 ] || [ "$DD_Z" != 0 ] || [ "$(grep -cxF -- "$DD_L2" "$SX/deriver.nodeclfilter.sh")" != 0 ] || cmp -s "$SB/deriver.sh" "$SX/deriver.nodeclfilter.sh"; then
+      bad "DIGEST MUTANT nodeclfilter: the filter's anchor matched $DD_N time(s) (impossible-anchor control $DD_Z), not 1 and 0, or the edit left it in place -- DID NOT APPLY"
+    else
+      DDM="$(dd_run "$SX/deriver.nodeclfilter.sh")"
+      [ "$F2C_MATRIX" = 1 ] && f2c_mx nodeclfilter "$DDM"
+      # TWIN: the undeclared fixture's own digest (cell 2) is still written.
+      _tw=0; [ "$(printf '%s' "$DDM" | cut -d'|' -f2)" = 1 ] && _tw=1
+      case "$DDM" in
+        "0|"*"|1|1") if f2c_twin nodeclfilter "fxa's digest (cell 2)" "$_tw"; then mutant_killed "${B_ddecl:-0}" nodeclfilter "DIGEST MUTANT nodeclfilter: with the declared filter deleted the same run writes a digest for the declared fixture fxd ('$DDM')"; fi ;;
+        *) bad "DIGEST MUTANT nodeclfilter: expected '0|1|1|1' (the unfiltered deriver writes fxd's digest), got '$DDM' — $(tail -2 "$WORK/dd.out" | tr '\n' ' ')" ;;
+      esac
+    fi
+    ( cd "$BR" && git reset -q --hard HEAD^ ) >/dev/null 2>&1 || broken "could not undo the declared seed's commit in BR"
+    [ ! -e "$BR/core/fixtures/fxd" ] || broken "the declared seed fxd is still in BR after the undo, so later worlds would see it"
 
     # `--local-map` WITH THE RUNNER'S READSET_UNIVERSE SPAN (BL-480), DRIVEN WHOLE. The local-map world above
     # runs before the BR runner gained the span (:3608), so it sees only the fallback. Here the runner carries
