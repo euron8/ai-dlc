@@ -1846,7 +1846,7 @@ printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
 lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
 # A FLOOR, NOT A BOUND: the trace subshell must start in a later second than this driver. Load can only
 # lengthen it, and the sdiff control below asserts the property it buys in the same drive.
-sleep 1.1
+sleep 1.1  # bl868-allow: rs-trace-floor
 readset_live_trace "$o" > "$o/msg" 2>&1
 # THE STUB'S PPID, OR THE TRACE SUBSHELL'S DEATH. Nothing to wait for when no trace started.
 if grep -q 'started detached' "$o/msg"; then
@@ -2392,7 +2392,7 @@ esac
 readset_lock_stale "$lk" > "$o/out" 2>&1; echo "$?" > "$o/rc"
 PJ
 # A FLOOR, NOT A BOUND, DECIDING NO VERDICT: each judge must start in a later `lstart` second than the lock pid; load only lengthens it, and the `sdiff` control above (refused in pj_eval) asserts the property itself.
-while [ $(( $(date +%s) - LOCK_T0 )) -lt 2 ]; do sleep 0.2; done
+while [ $(( $(date +%s) - LOCK_T0 )) -lt 2 ]; do sleep 0.2; done  # bl868-allow: rs-lstart-floor
 pj_judge() { # <lib> <world> -> "<stale|held|err<rc>>|<ann|noann>"; refuses on a failed control
   local o rc c
   o="$(mktemp -d "$PJW/jo.$2.XXXXXX")" || broken "mktemp for the $2 judge failed"
