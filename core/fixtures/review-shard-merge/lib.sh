@@ -2331,6 +2331,72 @@ p_qclass() {
   VB_PROJ=""
   [ -z "$WHY" ]
 }
+# ---- FL1 (BL-809 item 2): THE FILES LINE. A part shard's Important finding carrying a `Files:` line is
+# checked by --check-shard: the well-formed CODE finding naming two paths tracked at the frozen sha is
+# SHARD-OK (fl-ok, the near-miss every refusal below is one property from); refused: Files: on an
+# EVIDENCE finding, two Files: lines, an empty list, a backticked entry, a `:line` entry, a bare basename
+# and a path tracked nowhere. Presence-shaped: SHARD-OK or the named refusal text must appear.
+fl_body() { # <class> <files line(s), each an argument>
+  local c="$1" l; shift
+  printf '%s\n' '## Summary' 'Shard 2 read its part.' '' '## Findings' '' '### Critical (must fix before merge)' '' 'None.' '' \
+    '### Important (should fix, can be follow-up)' '' '#### F-2-9 an unchecked return' 'parts: 2' "Class: $c"
+  for l in "$@"; do printf '%s\n' "$l"; done
+  printf '%s\n' '' 'Body.' '' '### Suggestions (optional improvements)' '' 'None.'
+}
+fl_shard() { local d="$1"; shift; local b; b="$(fl_body "$@")"; raw_shard "$d" 2 "$b"; }
+fl_refuse() { # <script-dir> <shard-dir> <case> <token>
+  run_check "$1" "$2" code-review "$2/2.md"
+  chk_refused "$4" && has "$CO" "$2/2.md" || WHY="$WHY $3{check rc=$CRC [$(reline "$CO")]}"
+}
+p_files() {
+  local sd="$1" d c
+  WHY=""
+  d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || { WHY="the code-review world was not built"; return 1; }
+  c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
+  if cell fl-ok; then fl_shard "$d" CODE 'Files: alpha/a1.txt, beta/b1.txt'; run_check "$sd" "$d" code-review "$d/2.md"
+    [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/2.md" || WHY="$WHY fl-ok{check rc=$CRC [$(reline "$CO")]}"; cs_reset "$d" "$c"; fi
+  if cell fl-nc; then fl_shard "$d" EVIDENCE 'Files: alpha/a1.txt'; fl_refuse "$sd" "$d" fl-nc "is a 'Files:' line on a Class EVIDENCE finding"; cs_reset "$d" "$c"; fi
+  if cell fl-dup; then fl_shard "$d" CODE 'Files: alpha/a1.txt' 'Files: beta/b1.txt'; fl_refuse "$sd" "$d" fl-dup "is a second 'Files:' line in one finding"; cs_reset "$d" "$c"; fi
+  if cell fl-empty; then fl_shard "$d" CODE 'Files:'; fl_refuse "$sd" "$d" fl-empty "'Files:' names no path"; cs_reset "$d" "$c"; fi
+  if cell fl-tick; then fl_shard "$d" CODE 'Files: `alpha/a1.txt`'; fl_refuse "$sd" "$d" fl-tick "entry '\`alpha/a1.txt\`' is not a bare repo-relative path"; cs_reset "$d" "$c"; fi
+  if cell fl-line; then fl_shard "$d" TEST 'Files: alpha/a1.txt:3'; fl_refuse "$sd" "$d" fl-line "entry 'alpha/a1.txt:3' is not a bare repo-relative path"; cs_reset "$d" "$c"; fi
+  if cell fl-base; then fl_shard "$d" CODE 'Files: a1.txt'; fl_refuse "$sd" "$d" fl-base "entry 'a1.txt' is neither tracked at the frozen sha"; cs_reset "$d" "$c"; fi
+  if cell fl-gone; then fl_shard "$d" CODE 'Files: alpha/a1.txt, alpha/zz.txt'; fl_refuse "$sd" "$d" fl-gone "entry 'alpha/zz.txt' is neither tracked at the frozen sha"; cs_reset "$d" "$c"; fi
+  if cell fl-del; then fl_del "$sd"; fi
+  [ -z "$WHY" ]
+}
+# fl-del: a Files: entry naming a file the range DELETED is accepted (it is not tracked at the frozen sha,
+# but `diff --name-only <base>..<sha>` names it). Its own frozen commit, minted on B_SHA in a scratch clone of
+# REPO_B so no other world's refs move: it deletes alpha/a1.txt and edits beta/b1.txt, two groups at
+# --min-files 2. Part shard 1 (alpha/) carries `parts: 1`, `Class: CODE`, `Files: alpha/a1.txt`: SHARD-OK.
+# Controls in the same world: a path tracked at the frozen sha (beta/b2.txt) is SHARD-OK, a path tracked
+# nowhere (alpha/zz.txt) is REFUSED; neither moves under M57, which drops the diff-name-only allowance.
+fl_del() {
+  local sd="$1" r w d s m b
+  r="$WORK/repo-fldel"
+  if [ ! -d "$r/.git" ]; then
+    G clone -q "$REPO_B" "$r" 2>/dev/null && G -C "$r" checkout -q --detach "$B_SHA" \
+      && G -C "$r" rm -q alpha/a1.txt && printf 'beta edited\n' >> "$r/beta/b1.txt" \
+      && G -C "$r" add -A && G -C "$r" commit -q -m fl-del || { WHY="$WHY fl-del{the deleting commit was not minted}"; return; }
+  fi
+  s="$(G -C "$r" rev-parse HEAD)" || { WHY="$WHY fl-del{no frozen sha}"; return; }
+  w="$(wdir)" || { WHY="$WHY fl-del{no world dir}"; return; }
+  d="$w/1-code-review-$(printf '%s' "$s" | cut -c1-12)"
+  ip_run "$sd/partition-review-diff.sh" prd_main --map "$r" "$B_SHA" "$s" --min-files 2 --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null \
+    && [ -f "$d/.manifest" ] && [ "$(cut -f2 "$w/map" | tr '\n' ' ')" = "alpha/* beta/ " ] \
+    || { WHY="$WHY fl-del{the two-group map was not written: $(head -1 "$w/map.err") $(tr '\n' ' ' < "$w/map")}"; return; }
+  for m in del:alpha/a1.txt tracked:beta/b2.txt gone:alpha/zz.txt; do
+    { printf '# Code Review shard 1\n\nreviewed-sha: %s\nshard-verdict: APPROVED\n' "$s"; adv_l; printf 'handovers: 0\n\n'
+      fl_body CODE "Files: ${m#*:}" | sed -e 's/^parts: 2$/parts: 1/' -e 's/^Shard 2 read/Shard 1 read/' -e 's/^#### F-2-9/#### F-1-9/'; } > "$d/1.md"
+    grep -qx "reviewed-sha: $s" "$d/1.md" && grep -qx 'parts: 1' "$d/1.md" || { WHY="$WHY fl-del{the shard was not seeded}"; return; }
+    run_check "$sd" "$d" code-review "$d/1.md"
+    case "${m%%:*}" in
+      del) [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/1.md" || WHY="$WHY fl-del{check rc=$CRC [$(reline "$CO")]}" ;;
+      tracked) [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/1.md" || WHY="$WHY fl-del-tracked{check rc=$CRC [$(reline "$CO")]}" ;;
+      gone) chk_refused "entry 'alpha/zz.txt' is neither tracked at the frozen sha" || WHY="$WHY fl-del-gone{check rc=$CRC [$(reline "$CO")]}" ;;
+    esac
+  done
+}
 # ---- VB3 (R3): the graph cross-1 shape. A qa cross-1 at NEEDS_REWORK whose ## Findings says the gap is
 # another group's shard's: REFUSED, byte-equal under --check-shard, naming BOTH exits and its owner.
 p_vb_r3() {

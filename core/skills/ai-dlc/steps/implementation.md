@@ -421,6 +421,27 @@ as at the pre-gate check, and dispatch one reviewer, `shard: 1/1 <story-index>`,
 `--list` line as below and the validator's output. Any other answer (`FULL:`, any exit but 0)
 is a full re-review as follows. Never route on the classes alone: a rework that edits a test
 under bookkeeping findings is exactly what a full pass catches.
+**Narrowing a mixed re-review.** On `FULL:` from `--route`, run
+`scripts/ai-dlc/partition-review-diff.sh --narrow <worktree> <pass M-1 file> <frozen-sha> --exclude-captures <captures file>`.
+On `NARROW:` (exit 0) the `NARROW:` line names the delta's code paths that the prior's CODE and
+TEST findings' `Files:` lines name, and the `RESIDUE:` line every other code path of the delta.
+Partition with
+`partition-review-diff.sh --map <worktree> <prior-sha> <frozen-sha> --exclude-captures <captures file> --narrow-from <pass M-1 file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>`,
+which partitions the named paths and puts every residue path in one last part, `residue`. On exit
+0, dispatch one reviewer per map line plus the cross reviewer, exactly as the gate-1 fan-out does.
+This REPLACES the un-narrowed delta partition in the next paragraph: never run the flagless `--map`
+into the same shard directory after it. When that run is refused (exit 2, including a narrowed map
+that would need more reviewers than the full delta map), record the refusal line in the gate log
+and run the un-narrowed delta partition of the next paragraph,
+`--map <worktree> <prior-sha> <frozen-sha> ...`, into the same shard directory; the refusal wrote
+no manifest there. On `SERIAL` the pass is one reviewer, `shard: 1/1 <story-index>`, briefed with
+the full delta and both lines, who reviews the WHOLE delta: every `NARROW:` path and every
+`RESIDUE:` path. The pass's EVIDENCE and BOOKKEEPING findings also go
+through `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`,
+whose output goes into the first cross reviewer's brief, or the serial reviewer's. Carried findings
+go as below, unchanged. Every delta code path is in exactly one part, or, under `SERIAL`, reviewed
+by the one reviewer. Any other answer from `--narrow` (`FULL:`, any exit but 0) is the full
+re-review below.
 A re-review, pass M >= 2, reviews the fix delta and dispatches through this same fan-out:
 run the partition with `<prior-sha>` in place of `<base>`,
 `partition-review-diff.sh --map <worktree> <prior-sha> <frozen-sha> --exclude-captures <captures file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>`,

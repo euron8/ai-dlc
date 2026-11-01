@@ -48,6 +48,19 @@
 #       record-only, canonical run, no replay and no handover-run: line) SERIAL-OK; the same root with
 #       no template line checks nothing (`Class: FOO` SERIAL-OK)
 #   S2  implementation.md names the gate-2 route invocation line, exactly; refused on a copy without it
+# BL-809 ITEM 2, THE NARROWED RE-REVIEW (--narrow, --map --narrow-from). The MIXED delta edits engine.py
+# and tests/test_engine.py; world.sh's nprior-* priors carry `Files:` as code-reviewer.md asks.
+#   N1  CODE `Files: rebalancer/engine.py` + EVIDENCE -> NARROW engine.py, RESIDUE the test (exact)
+#   N2  CODE Files: outside the delta, EVIDENCE Files: inside it -> FULL, empty named set
+#   N3  CODE Files: outside the delta only -> FULL, empty named set (N2's near-miss with no EVIDENCE path)
+#   N4  a second CODE finding with no Files: -> FULL naming it
+#   CV  the conservation predicate, asked in process: the exact split holds; a lost, doubled or foreign path fails
+#   NM  --map --narrow-from over MIXED_APP: the named part plus one `residue` part (2 parts, as flagless), the
+#       maps differ, `narrow-from` in the manifest, the merge succeeds; the manifest with narrow-from dropped
+#       is REFUSED by the map cmp and nothing is written
+#   NP  the part bound: MIXED at --min-files 2 (flagless SERIAL) and THREE at --max-parts 2 narrow to more
+#       parts than flagless and are REFUSED, exit 2, nothing printed or written; MIXED_APP is accepted
+#   S3  implementation.md names the --narrow invocation and the --narrow-from partition line
 # MUTANTS (each in a copy of the subject's WHOLE script directory; each must kill exactly its arm):
 #   m-classonly         the delta guard removed            -> R1 R6 Q2 (each a delta the guard alone sends full)
 #   m-failopen-missing  a finding with no Class routes     -> C1b Q4n
@@ -59,6 +72,16 @@
 #   m-qagate            the merge's Class lift for code review only (B1 reverted) -> QM
 #   m-qmd-none          qa.md's template deleted from the seeded tpl root -> QM (the merge's per-gate
 #                       activation reads qa.md, not code-reviewer.md)
+#   m-noconserve        the conservation assert always holds -> CV (no shipped input reaches the assert,
+#                       which is why CV asks the predicate directly)
+#   m-noresidue         the residue dropped from --narrow's split -> N1 (also trips N2 N3 NM NP: the
+#                       conservation assert turns the dropped path into FULL, which is the guard working)
+#   m-union             every class's Files: line narrows -> N2
+#   m-emptyok           an empty named set narrows -> N2 N3
+#   m-missingempty      a CODE finding with no Files: read as naming nothing -> N4
+#   m-nfdrop            the merge re-derives a narrowed manifest without --narrow-from -> NM
+#   m-nobound           the narrowed map's part bound removed -> NP
+#   m-narrowfirst       --narrow answers in place of --route -> R2 Q1 (also trips the other --route arms)
 # Each mutant co-trips no arm outside its decides list, measured at authoring (m-classonly's two deciding
 # arms R1 and R6 are both deltas that only the guard sends full). The matrix is re-measured whenever an arm
 # or mutant is added or changed, by the REMEASURE command below.
@@ -67,6 +90,14 @@
 # MUTANT-MATRIX m-strict decides=C1a twins=C3
 # MUTANT-MATRIX m-pyext decides=R6 twins=R1
 # MUTANT-MATRIX m-nodocstring decides=A4 twins=A3
+# MUTANT-MATRIX m-noconserve decides=CV twins=N1
+# MUTANT-MATRIX m-noresidue decides=N1 twins=N4
+# MUTANT-MATRIX m-union decides=N2 twins=N3
+# MUTANT-MATRIX m-emptyok decides=N2,N3 twins=N1
+# MUTANT-MATRIX m-missingempty decides=N4 twins=N1
+# MUTANT-MATRIX m-nfdrop decides=NM twins=N1
+# MUTANT-MATRIX m-nobound decides=NP twins=NM
+# MUTANT-MATRIX m-narrowfirst decides=R2,Q1 twins=A1
 # MUTANT-MATRIX m-noskip decides=Q4 twins=Q1
 # MUTANT-MATRIX m-nohrun decides=Q5 twins=Q5n
 # MUTANT-MATRIX m-qagate decides=QM twins=Q1
@@ -88,7 +119,7 @@ while [ -n "$d" ] && [ "$d" != "/" ]; do
   d="$(dirname "$d")"
 done
 [ -n "$SD" ] || { echo "FIXTURE ERROR: partition-review-diff.sh not found above $HERE in either layout; nothing was asserted" >&2; exit 2; }
-for f in merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh record-only-diff.sh; do
+for f in merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh record-only-diff.sh partition-document.sh content-seal.sh; do
   [ -f "$SD/$f" ] || { echo "FIXTURE ERROR: $f is not beside $SD/partition-review-diff.sh" >&2; exit 2; }
 done
 GRAMMAR=""; STEP=""; ROLE=""; GATEMD=""; QAMD=""
@@ -146,10 +177,10 @@ arm_CL()  {
   a="$(bash "$1/validate-carried-findings.sh" --classes "$W/prior-evidence.md" 2>/dev/null)" || return 1
   b="$(bash "$1/validate-carried-findings.sh" --classes "$W/prior-noclass.md" 2>/dev/null)" || return 1
   c="$(bash "$1/validate-carried-findings.sh" --list "$W/prior-evidence.md" 2>/dev/null)" || return 1
-  [ "$a" = "EVIDENCE${TAB}The capture records no head sha
-BOOKKEEPING${TAB}The story cites a stale line" ] \
-    && [ "$b" = "-${TAB}The capture records no head sha
--${TAB}The story cites a stale line" ] \
+  [ "$a" = "EVIDENCE${TAB}The capture records no head sha${TAB}-
+BOOKKEEPING${TAB}The story cites a stale line${TAB}-" ] \
+    && [ "$b" = "-${TAB}The capture records no head sha${TAB}-
+-${TAB}The story cites a stale line${TAB}-" ] \
     && [ "$c" = "The capture records no head sha
 The story cites a stale line" ]
 }
@@ -203,10 +234,64 @@ arm_QM() {
   qserial "$1" "$QR/none" "$W/qserial-foo.md"
   [ "$RC" -eq 0 ] && grep -q '^SERIAL-OK: .* verdict=PASS' <<<"$OUT"
 }
-ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7 Q1 Q2 Q3 Q4 Q4n Q5 Q5n QM"
+# BL-809 item 2: --narrow over the MIXED delta (engine.py, which nprior-a's CODE finding names, and
+# tests/test_engine.py, which nothing names), and the merge of a --narrow-from manifest.
+narrow() { OUT="$(bash "$1/partition-review-diff.sh" --narrow "$R" "$2" "$(rr_ref "$W" MIXED)" --exclude-captures "$W/captures" 2>&1)"; RC=$?; }
+arm_N1() { narrow "$1" "$W/nprior-a.md"; [ "$RC" -eq 0 ] && [ "$OUT" = "NARROW:${TAB}rebalancer/engine.py
+RESIDUE:${TAB}rebalancer/tests/test_engine.py" ]; }
+arm_N2() { narrow "$1" "$W/nprior-b.md"; [ "$RC" -eq 1 ] && grep -q '^FULL: no code path of the delta .* is a file the prior' <<<"$OUT"; }
+arm_N3() { narrow "$1" "$W/nprior-c.md"; [ "$RC" -eq 1 ] && grep -q '^FULL: no code path of the delta .* is a file the prior' <<<"$OUT"; }
+arm_N4() { narrow "$1" "$W/nprior-d.md"; [ "$RC" -eq 1 ] && grep -q "^FULL: the prior CODE finding 'The capture records no head sha' carries no Files: line" <<<"$OUT"; }
+# CV: the conservation predicate asked directly (the program sourced; clause 5's seam): a lost path, a
+# path on both lists and a list naming a path outside the delta each fail; the exact split holds.
+arm_CV() {
+  local d="$WORK/cv"; mkdir -p "$d" || return 1
+  printf 'M\ta.py\nM\tb.py\n' > "$d/code"; printf 'a.py\n' > "$d/n"; printf 'b.py\n' > "$d/r"; : > "$d/e"
+  printf 'a.py\nb.py\n' > "$d/both"; printf 'a.py\nc.py\n' > "$d/x"
+  ( . "$1/partition-review-diff.sh" && conserved "$d/n" "$d/r" "$d/code" && ! conserved "$d/n" "$d/e" "$d/code" \
+      && ! conserved "$d/both" "$d/r" "$d/code" && ! conserved "$d/x" "$d/e" "$d/code" )
+}
+# NM: the narrowed map and its merge, over MIXED_APP (MIXED plus a web/app.js edit) and nprior-app
+# (`Files: web/app.js`, inside the repository). Flagless that delta is 2 parts (rebalancer/*, web/); narrowed
+# it is web/app.js plus one last `residue` part, also 2, so the part bound admits it and the two maps differ.
+# The manifest records `narrow-from`, the merge of three APPROVED shards succeeds; the same manifest with
+# its narrow-from line dropped is REFUSED by the map cmp, and nothing is written.
+arm_NM() {
+  local s sd o
+  s="$(rr_ref "$W" MIXED_APP)"; sd="$R/docs/reviews/s1/shards/1-code-review-${s:0:12}-p2"; o="$R/docs/reviews/s1/1-code-review-p2.md"
+  rm -rf "$R/docs/reviews/s1/shards"; rm -f "$o"
+  OUT="$(bash "$1/partition-review-diff.sh" --map "$R" "$B0" "$s" --min-files 2 --narrow-from "$R/docs/reviews/s1/nprior-app.md" --shard-dir "$sd" 2>&1)"; RC=$?
+  [ "$RC" -eq 0 ] && [ "$OUT" = "1${TAB}web/*${TAB}web/app.js
+2${TAB}residue${TAB}rebalancer/engine.py${TAB}rebalancer/tests/test_engine.py" ] && grep -qx "narrow-from${TAB}docs/reviews/s1/nprior-app.md" "$sd/.manifest" || return 1
+  rr_nshard "$sd" 1 "$s"; rr_nshard "$sd" 2 "$s"; rr_nshard "$sd" cross "$s"
+  OUT="$(AI_DLC_PROJECT_ROOT="$ROOT" bash "$1/merge-review-shards.sh" "$sd" --gate code-review --out "$o" 2>&1)"; RC=$?
+  [ "$RC" -eq 0 ] && grep -q '^MERGED: .* parts=2 ' <<<"$OUT" || return 1
+  rm -f "$o"; grep -v "^narrow-from${TAB}" "$sd/.manifest" > "$sd/.m" && mv "$sd/.m" "$sd/.manifest" || return 1
+  OUT="$(AI_DLC_PROJECT_ROOT="$ROOT" bash "$1/merge-review-shards.sh" "$sd" --gate code-review --out "$o" 2>&1)"; RC=$?
+  # Re-derived flagless, this delta partitions (rc 0) into a different map, so the refusal is the map cmp.
+  [ "$RC" -eq 2 ] && grep -qE '^REFUSED: the part map re-derived from .* differs from the map it records' <<<"$OUT" && [ ! -e "$o" ]
+}
+# NP: the part bound. A narrowed map never has more parts than the un-narrowed map of the same delta and
+# options (SERIAL counts as one): MIXED at --min-files 2 (flagless SERIAL, narrowed 2) and THREE at
+# --max-parts 2 (flagless 2, narrowed 3) are each REFUSED, exit 2, nothing on stdout and no shard dir
+# written; MIXED_APP (2 against 2) is accepted.
+np_map() { # <script dir> <seed> <prior> <shard dir> [extra args...]
+  local sd="$1" s="$2" p="$3" d="$4"; shift 4
+  bash "$sd/partition-review-diff.sh" --map "$R" "$B0" "$(rr_ref "$W" "$s")" --min-files 2 "$@" --narrow-from "$R/docs/reviews/s1/$p" --shard-dir "$d" > "$WORK/np.out" 2> "$WORK/np.err"; RC=$?
+  OUT="$(cat "$WORK/np.err" "$WORK/np.out")"
+}
+np_refused() { [ "$RC" -eq 2 ] && [ ! -s "$WORK/np.out" ] && [ ! -e "$1" ] && grep -q "^partition-review-diff: REFUSED — .*the narrowed map would need more reviewers than the full delta map ($2 parts against $3)" "$WORK/np.err"; }
+arm_NP() {
+  local d; d="$(mktemp -d "$WORK/np.XXXXXX")" || return 1
+  np_map "$1" MIXED 1-code-review.md "$d/a"; np_refused "$d/a" 2 1 || return 1
+  np_map "$1" THREE nprior-two.md "$d/b" --max-parts 2; np_refused "$d/b" 3 2 || return 1
+  np_map "$1" MIXED_APP nprior-app.md "$d/c"; [ "$RC" -eq 0 ] && [ "$(grep -c . "$WORK/np.out")" = 2 ] && [ -f "$d/c/.manifest" ]
+}
+ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7 Q1 Q2 Q3 Q4 Q4n Q5 Q5n QM N1 N2 N3 N4 CV NM NP"
 # The arms that reach each mutated script. A mutant sweeps only these: every other arm never invokes the
-# mutated file, so it cannot move. partition-review-diff.sh is reached by --route and --gate1-rerun (and
-# --route shells validate-carried-findings.sh --classes); merge-review-shards.sh only by --check-serial.
+# mutated file, so it cannot move. partition-review-diff.sh is reached by --route, --gate1-rerun, --narrow
+# and --map --narrow-from (and --route and --narrow shell validate-carried-findings.sh --classes);
+# merge-review-shards.sh by --check-serial and by NM's merge of a narrowed shard directory.
 # S1: the step text routes by both modes, on their invocation lines; the role file states the rule.
 if grep -qF 'partition-review-diff.sh --route <worktree> <pass M-1 file> <frozen-sha>' "$STEP" \
    && grep -qF 'partition-review-diff.sh --gate1-rerun <worktree> <go-signal-sha> <frozen-sha>' "$STEP" \
@@ -224,12 +309,24 @@ if cmp -s "$WORK/s2-has.md" "$WORK/s2-not.md" || ! p_s2 "$WORK/s2-has.md" || p_s
 elif p_s2 "$STEP"; then ok "S2: implementation.md names the gate-2 route line: $S2_LINE"
 else bad "S2: implementation.md does not name the gate-2 route line '$S2_LINE' (a gate-2 re-validation is never routed)"; fi
 
+# S3: the step text narrows a mixed re-review through --narrow and partitions with --narrow-from, on
+# their invocation lines (exact strings), proved on a copy with them removed first.
+S3_A='scripts/ai-dlc/partition-review-diff.sh --narrow <worktree> <pass M-1 file> <frozen-sha> --exclude-captures <captures file>'
+S3_B='--narrow-from <pass M-1 file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>'
+p_s3() { grep -qF -- "$S3_A" "$1" && grep -qF -- "$S3_B" "$1"; }
+{ printf 'decoy step\n'; printf '%s\n' "$S3_A" "$S3_B"; } > "$WORK/s3-has.md"
+grep -vF -- "$S3_B" "$WORK/s3-has.md" > "$WORK/s3-not.md"
+if cmp -s "$WORK/s3-has.md" "$WORK/s3-not.md" || ! p_s3 "$WORK/s3-has.md" || p_s3 "$WORK/s3-not.md"; then
+  bad "S3: FIXTURE BROKEN -- the narrowing predicate does not tell a step carrying both lines from one without"
+elif p_s3 "$STEP"; then ok "S3: implementation.md names the --narrow invocation and the --narrow-from partition"
+else bad "S3: implementation.md does not name '$S3_A' and '$S3_B' (a mixed re-review is never narrowed)"; fi
+
 # ---- mutants ------------------------------------------------------------------------------------
 M="$WORK/mut"; mkdir -p "$M" || exit 2
 # The copy holds every sibling the three subjects resolve beside themselves, and nothing else.
 mkcopy() {
   local dst="$M/$1" f; mkdir -p "$dst" || return 1
-  for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh record-only-diff.sh; do
+  for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh record-only-diff.sh partition-document.sh content-seal.sh; do
     cp "$SD/$f" "$dst/$f" || return 1
   done
   echo "$dst"
@@ -244,7 +341,7 @@ mut() {
 CTL="$(mkcopy ctl)"
 # The copy is byte-identical to the subject, so one sweep of it is the live sweep: it is the control a
 # mutant is judged against AND the verdict on the subject itself.
-same=1; for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh; do
+same=1; for f in partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh artifact-path-config.sh partition-document.sh; do
   [ -n "$CTL" ] && cmp -s "$SD/$f" "$CTL/$f" || same=0
 done
 [ "$same" -eq 1 ] || { echo "FIXTURE BROKEN: the control copy differs from $SD or did not build" >&2; exit 2; }
@@ -257,6 +354,7 @@ for a in $ARMS; do
       R1) B_R1=1 ;; R2) B_R2=1 ;; R3) B_R3=1 ;; R4) B_R4=1 ;; R5) B_R5=1 ;; R6) B_R6=1 ;;
       A1) B_A1=1 ;; A2) B_A2=1 ;; A3) B_A3=1 ;; A4) B_A4=1 ;; A5) B_A5=1 ;; A6) B_A6=1 ;; A7) B_A7=1 ;;
       Q1) B_Q1=1 ;; Q2) B_Q2=1 ;; Q3) B_Q3=1 ;; Q4) B_Q4=1 ;; Q4n) B_Q4n=1 ;; Q5) B_Q5=1 ;; Q5n) B_Q5n=1 ;; QM) B_QM=1 ;;
+      N1) B_N1=1 ;; N2) B_N2=1 ;; N3) B_N3=1 ;; N4) B_N4=1 ;; CV) B_CV=1 ;; NM) B_NM=1 ;; NP) B_NP=1 ;;
     esac
   else died="$died $a"; bad "$a: rc=${RC:-?} out=$(head -2 <<<"${OUT:-}" | tr '\n' ' ')"; fi
 done
@@ -303,10 +401,19 @@ fi
 score "$(( ${B_C1a:-0} && ${B_C3:-0} ))" "$(mut strict merge-review-shards.sh 'ABSENT) continue ;;' 'ABSENT) refuse "$1:$cg_l_ carries no Class line" ;;')" "C1a" "C3" "m-strict, an absent Class is refused"
 score "$(( ${B_R6:-0} && ${B_R1:-0} ))" "$(mut pyext partition-review-diff.sh '    if ((p in X) && p ~ /\.(txt|log|out)$/) next' '    if ((p in X) && p ~ /\.(txt|log|out|py)$/) next')" "R6" "R1" "m-pyext, a cited .py leaves the code class"
 score "$(( ${B_A4:-0} && ${B_A3:-0} ))" "$(mut nodoc partition-review-diff.sh 'd = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next' 'print NR; next')" "A4" "A3" "m-nodocstring, the docstring filter removed"
+# BL-809 item 2.
+score "$(( ${B_CV:-0} && ${B_N1:-0} ))" "$(mut noconserve partition-review-diff.sh 'END { exit !(bad == 0 && n == m) }' 'END { exit 0 }')" "CV" "N1" "m-noconserve, the conservation assert always holds"
+score "$(( ${B_N1:-0} && ${B_N4:-0} ))" "$(mut noresidue partition-review-diff.sh 'else print $2 > ENVIRON["NR_R"]' 'else next')" "N1" "N4" "m-noresidue, the residue dropped from --narrow's split"
+score "$(( ${B_N2:-0} && ${B_N3:-0} ))" "$(mut union partition-review-diff.sh 'if ($1 == "CODE" || $1 == "TEST") { n = split($3' 'if ($1 != "") { n = split($3')" "N2" "N3" "m-union, every class's Files: line narrows"
+score "$(( ${B_N2:-0} && ${B_N3:-0} && ${B_N1:-0} ))" "$(mut emptyok partition-review-diff.sh '  [ "$nnam" -ge 1 ] || full' '  : || full')" "N2 N3" "N1" "m-emptyok, an empty named set narrows"
+score "$(( ${B_N4:-0} && ${B_N1:-0} ))" "$(mut missingempty partition-review-diff.sh '-|"") full "the prior $rc_ finding' '-|"") : "the prior $rc_ finding')" "N4" "N1" "m-missingempty, a CODE finding with no Files: read as naming nothing"
+score "$(( ${B_NM:-0} && ${B_N1:-0} ))" "$(mut nfdrop merge-review-shards.sh '  NF_ARGS=(--narrow-from "$NF_TOP/$M_NF")' '  NF_ARGS=()')" "NM" "N1" "m-nfdrop, the merge re-derives a narrowed manifest without --narrow-from"
+score "$(( ${B_NP:-0} && ${B_NM:-0} ))" "$(mut nobound partition-review-diff.sh '[ "$nm_n" -le "$fl_n" ] || refuse' ': || refuse')" "NP" "NM" "m-nobound, the narrowed map's part bound removed"
+score "$(( ${B_R2:-0} && ${B_Q1:-0} && ${B_A1:-0} ))" "$(mut narrowfirst partition-review-diff.sh '  --route) shift; route_mode "$@" ;;' '  --route) shift; narrow_mode "$@" ;;')" "R2 Q1" "A1" "m-narrowfirst, --narrow answers in place of --route"
 
 if [ "$MATRIX" = 1 ]; then echo "review-reroute: MATRIX measured, $MCELLS cells (mode FULL)"; [ "$fails" -eq 0 ] && exit 0; exit 1; fi
-# A plain run drives only deciding and twin cells: no matrix-only cell ran, and the cell count is exactly the 21 named by the MUTANT-MATRIX header (deciding arms plus twins).
-if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 21 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
-else bad "MODE PUSH: a plain run drove $MCELLS matrix-only cell(s) and $CELLS mutant cells (want 0 and 21)"; fi
+# A plain run drives only deciding and twin cells: no matrix-only cell ran, and the cell count is exactly the 39 named by the MUTANT-MATRIX header (deciding arms plus twins).
+if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 39 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
+else bad "MODE PUSH: a plain run drove $MCELLS matrix-only cell(s) and $CELLS mutant cells (want 0 and 39)"; fi
 if [ "$fails" -eq 0 ]; then echo "review-reroute: PASS"; exit 0; fi
 echo "review-reroute: $fails FAILED"; exit 1

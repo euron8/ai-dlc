@@ -43,6 +43,30 @@
 #       finding bookkeeping, its rework deleted an assertion, p4 caught two code findings). The
 #       delta guard is the safety property; the classes are the saving.
 #
+#   partition-review-diff.sh --narrow <worktree> <pass M-1 review file> <frozen-sha>
+#                            [--exclude-captures <file>]
+#       THE NARROWED RE-REVIEW of a mixed prior (implementation.md, "Narrowing a mixed re-review"),
+#       asked after --route answers FULL. stdout `NARROW:\t<path>...` then exactly one
+#       `RESIDUE:\t<path>...` line (possibly empty), exit 0. NAMED = the delta's CODE paths (THE CODE
+#       CLASS, the delta from the prior's reviewed-sha as --route reads it) that the column-0 `Files:`
+#       line of some CODE or TEST finding names, read through `validate-carried-findings.sh --classes`'
+#       third column; RESIDUE = every other CODE path of the delta. Before printing, the two are
+#       asserted to hold every delta CODE path exactly once between them (conservation). Every other
+#       outcome is `FULL: <reason>`, exit 1, never 2: a CODE or TEST finding
+#       with no `Files:` line, or two; a finding with no Class, or one outside CODE TEST and
+#       ROUTE_CLASSES; an empty NAMED set (which is also the answer to a prior with no CODE or TEST
+#       finding, which --route answers first); a failed conservation; and every refusal --route answers
+#       FULL on (one shared reader, prior_read and prior_delta, never a copy).
+#   --map ... --narrow-from <pass M-1 review file>
+#       The NAMED set of `--narrow <worktree> <that file> <frozen-sha>` is partitioned as THE PART SET
+#       says; every other reviewable file is ONE more part, last, group key `residue` (omitted when the
+#       residue is empty). <base> must be the prior's reviewed-sha. The manifest gains
+#       `narrow-from\t<the file, relative to its own work tree>` after max-parts, which the merge hands
+#       back. Without the flag the map and the manifest are byte-identical to a build without it.
+#       A narrowed map never has more parts than the un-narrowed map of the same delta and options
+#       (SERIAL counts as one part): one that would is REFUSED, exit 2, before anything is printed or
+#       written, and the lead runs the un-narrowed partition into the same shard directory.
+#
 #   partition-review-diff.sh --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]
 #       RULE A: whether gate 1 re-runs after a QA rework. <base>..<frozen-sha> is the rework range
 #       (the go-signal sha QA validated, then the new frozen sha). stdout ONE line:
@@ -125,6 +149,7 @@
 #   sha\t<full frozen sha>
 #   min-files\t<effective N>
 #   max-parts\t<effective K>
+#   narrow-from\t<repo-relative prior file>          only under --narrow-from
 #   part\t<one --map line>                          one per part, in order
 #   An existing manifest byte-identical to this run's is left alone; one that differs REFUSES.
 #
@@ -159,9 +184,14 @@ mode_setup() {
 
 full_sha_ok() { case "$1" in *[!0-9a-f]*|"") return 1 ;; esac; [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]; }
 
-route_mode() {
-  full() { printf 'FULL: %s\n' "$*"; exit 1; }
-  [ "$#" -eq 3 ] || [ "$#" -eq 5 ] || full "usage: partition-review-diff.sh --route <worktree> <pass M-1 review file> <frozen-sha> [--exclude-captures <file>]"
+full() { printf 'FULL: %s\n' "$*"; exit 1; }
+# ---- shared by --route and --narrow (header: THE RECORD-ONLY ROUTE, THE NARROWED RE-REVIEW) ---------
+# prior_read <mode> <worktree> <prior> <frozen-sha> [--exclude-captures <f>]: the inputs and the prior's
+# classes ($T/classes, `<class>\t<carry string>\t<files>`). prior_delta: the replay check, the delta from
+# the prior's reviewed-sha ($T/delta, PS_FULL) and its CODE rows ($T/code, ncode). Both answer FULL, exit 1.
+prior_read() {
+  PM="$1"; shift
+  [ "$#" -eq 3 ] || [ "$#" -eq 5 ] || full "usage: partition-review-diff.sh $PM <worktree> <pass M-1 review file> <frozen-sha> [--exclude-captures <file>]"
   RW="$1"; RP="$2"; RS="$3"; RX=""
   if [ "$#" -eq 5 ]; then
     [ "$4" = --exclude-captures ] || full "unknown argument $4"
@@ -178,15 +208,8 @@ route_mode() {
   nfind="$(grep -c . "$T/classes")" || nfind=0
   [ "$nfind" -ge 1 ] || full "$RP carries no Critical or Important finding; a re-review with nothing to route is a full review"
   TABC="$(printf '\t')"
-  while IFS="$TABC" read -r rc_ rd_; do
-    case " $ROUTE_CLASSES " in
-      *" $rc_ "*) ;;
-      *) case "$rc_" in
-           -) full "the prior finding '$rd_' carries no Class line" ;;
-           *) full "the prior finding '$rd_' is Class $rc_, not one of $ROUTE_CLASSES" ;;
-         esac ;;
-    esac
-  done < "$T/classes"
+}
+prior_delta() {
   # A replay that did not go RED is a failed hard gate, whatever the findings' classes.
   hrun="$(awk '
     f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { f = 0; next }
@@ -212,9 +235,69 @@ route_mode() {
   : > "$T/xcap"; [ -z "$RX" ] || cp "$RX" "$T/xcap" || full "cannot read $RX"
   awk -F'\t' "$CODE_CLASS_AWK" "$T/roots" "$T/xcap" "$T/delta" > "$T/code" || full "classifying the delta failed"
   ncode="$(grep -c . "$T/code")" || ncode=0
+}
+route_mode() {
+  prior_read --route "$@"
+  while IFS="$TABC" read -r rc_ rd_ rf_; do
+    case " $ROUTE_CLASSES " in
+      *" $rc_ "*) ;;
+      *) case "$rc_" in
+           -) full "the prior finding '$rd_' carries no Class line" ;;
+           *) full "the prior finding '$rd_' is Class $rc_, not one of $ROUTE_CLASSES" ;;
+         esac ;;
+    esac
+  done < "$T/classes"
+  prior_delta
   [ "$ncode" -eq 0 ] || full "the delta ${PS_FULL:0:12}..${RS_FULL:0:12} changes $ncode code path(s), first $(awk -F'\t' 'NR == 1 { print $2 }' "$T/code"); a rework that edits code or tests is re-reviewed in full whatever the findings' classes"
   printf 'ROUTE: %s Critical/Important finding(s), every one %s; the delta %s..%s (%s path(s)) carries no code path\n' \
     "$nfind" "$(printf '%s' "$ROUTE_CLASSES" | sed 's/ /|/g')" "${PS_FULL:0:12}" "${RS_FULL:0:12}" "$(grep -c . "$T/delta")"
+  exit 0
+}
+
+# ---- --narrow (header: THE NARROWED RE-REVIEW) ------------------------------------------------------
+# conserved <list> <list> <code rows>: 0 when every CODE path of the rows is on exactly one line of the
+# two lists together and the lists hold nothing else. The safety property of a narrowed pass.
+conserved() {
+  awk -F'\t' 'FILENAME == ARGV[1] || FILENAME == ARGV[2] { if ($0 != "") { C[$0]++; n++ }; next }
+              $2 != "" { m++; if (C[$2] != 1) bad = 1 }
+              END { exit !(bad == 0 && n == m) }' "$1" "$2" "$3"
+}
+narrow_mode() {
+  prior_read --narrow "$@"
+  while IFS="$TABC" read -r rc_ rd_ rf_; do
+    case "$rc_" in
+      CODE|TEST)
+        case "$rf_" in
+          -|"") full "the prior $rc_ finding '$rd_' carries no Files: line; a CODE or TEST finding that names no file is re-reviewed in full" ;;
+          \?) full "the prior $rc_ finding '$rd_' carries more than one Files: line" ;;
+        esac ;;
+      *) case " $ROUTE_CLASSES " in
+           *" $rc_ "*) ;;
+           *) case "$rc_" in
+                -) full "the prior finding '$rd_' is unclassed (no Class line), so its fix cannot be placed" ;;
+                *) full "the prior finding '$rd_' is Class $rc_, not one of CODE TEST $ROUTE_CLASSES" ;;
+              esac ;;
+         esac ;;
+    esac
+  done < "$T/classes"
+  prior_delta
+  # The NAMED set is the delta's code paths that a CODE or TEST finding's Files: line names; the RESIDUE
+  # is every other code path of the delta. EVIDENCE and BOOKKEEPING findings name nothing here.
+  : > "$T/named"; : > "$T/residue"
+  NR_N="$T/named" NR_R="$T/residue" awk -F'\t' '
+    FILENAME == ARGV[1] { if ($1 == "CODE" || $1 == "TEST") { n = split($3, a, ","); for (i = 1; i <= n; i++) { p = a[i]; gsub(/^[ \t]+|[ \t]+$/, "", p); if (p != "") N[p] = 1 } }; next }
+    $2 != "" { if ($2 in N) print $2 > ENVIRON["NR_N"]; else print $2 > ENVIRON["NR_R"] }' "$T/classes" "$T/code" \
+    || full "splitting the delta into the named set and the residue failed"
+  conserved "$T/named" "$T/residue" "$T/code" \
+    || full "the named set and the residue do not hold every code path of the delta exactly once; a narrowed pass would drop a reworked file"
+  nnam="$(grep -c . "$T/named")" || nnam=0
+  [ "$nnam" -ge 1 ] || full "no code path of the delta ${PS_FULL:0:12}..${RS_FULL:0:12} is a file the prior's CODE or TEST findings name; a rework of other files is re-reviewed in full"
+  if [ -n "${NARROW_OUT:-}" ]; then
+    cp "$T/named" "$NARROW_OUT/named" && cp "$T/residue" "$NARROW_OUT/residue" && printf '%s\n' "$PS_FULL" > "$NARROW_OUT/ps" \
+      || full "cannot stage the narrowed sets"
+  fi
+  printf 'NARROW:'; LC_ALL=C sort "$T/named" | awk '{ printf "\t%s", $0 }'; printf '\n'
+  printf 'RESIDUE:'; LC_ALL=C sort "$T/residue" | awk '{ printf "\t%s", $0 }'; printf '\n'
   exit 0
 }
 
@@ -272,7 +355,7 @@ gate1_rerun_mode() {
 prd_main() {
 export LC_ALL=C
 
-USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>] | --route <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]"
+USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>] [--narrow-from <prior-review-file>] | --route <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --narrow <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]"
 
 # ---- shared by --route and --gate1-rerun (header: THE CODE CLASS, THE LINE FILTER) -----------------
 # THE TEST NAME: the three basename expressions of THE PART SET step 3, the one test grammar here.
@@ -331,13 +414,15 @@ case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
   --map) shift ;;
   --route) shift; route_mode "$@" ;;
+  --narrow) shift; narrow_mode "$@" ;;
   --gate1-rerun) shift; gate1_rerun_mode "$@" ;;
   *) refuse "$USAGE" ;;
 esac
 
-WT=""; BASE=""; SHA=""; MINF=""; MAXP=""; SDIR=""; MINF_SET=0; XCAP=""; XCAP_SET=0
+WT=""; BASE=""; SHA=""; MINF=""; MAXP=""; SDIR=""; MINF_SET=0; XCAP=""; XCAP_SET=0; NFROM=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --narrow-from) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "--narrow-from needs the pass M-1 review file"; NFROM="$2"; shift 2 ;;
     --min-files) [ "$#" -ge 2 ] || refuse "--min-files needs a value"; MINF="$2"; MINF_SET=1; shift 2 ;;
     --max-parts) [ "$#" -ge 2 ] || refuse "--max-parts needs a value"; MAXP="$2"; shift 2 ;;
     --shard-dir) [ "$#" -ge 2 ] || refuse "--shard-dir needs a value"; SDIR="$2"; shift 2 ;;
@@ -451,7 +536,32 @@ elif [ "$NF_REV" -lt "$MINF" ]; then
   exit 3
 fi
 
-awk -F'\t' -v K="$MAXP" '
+# --narrow-from (header: THE NARROWED RE-REVIEW): the NAMED set alone is partitioned; every other
+# reviewable file is ONE more part, keyed `residue`. Without the flag NX is 0 and nothing below moves.
+NX=0
+if [ -n "$NFROM" ]; then
+  [ -f "$NFROM" ] && [ -r "$NFROM" ] || refuse "--narrow-from file $NFROM is not a readable file"
+  NF_ABS="$(cd "$(dirname "$NFROM")" 2>/dev/null && pwd -P)/$(basename "$NFROM")" || refuse "cannot enter the directory of --narrow-from $NFROM"
+  NF_TOP="$(git -C "$(dirname "$NF_ABS")" rev-parse --show-toplevel 2>/dev/null)" && NF_TOP="$(cd "$NF_TOP" && pwd -P)" \
+    || refuse "--narrow-from file $NF_ABS is not inside a git work tree, so the manifest cannot record it repo-relative"
+  NF_REL="${NF_ABS#"$NF_TOP"/}"
+  mkdir "$T/nw" || refuse "cannot stage the narrowed sets"
+  # Flagless on purpose: the merge re-derives with no captures list, so the split must not depend on one.
+  nout="$(NARROW_OUT="$T/nw" narrow_mode "$WT_ABS" "$NF_ABS" "$SHA_FULL")"; nrc=$?
+  [ "$nrc" -eq 0 ] && [ -f "$T/nw/ps" ] || refuse "--narrow-from $NF_REL does not narrow (--narrow answered '$(printf '%s' "$nout" | head -1)'); run the full re-review partition"
+  [ "$(cat "$T/nw/ps")" = "$BASE_FULL" ] || refuse "--narrow-from: the base $BASE_FULL is not the prior's reviewed-sha $(cat "$T/nw/ps"); a narrowed partition is of the delta from it"
+  awk -F'\t' 'FNR == NR { N[$0] = 1; next } ($2 in N)' "$T/nw/named" "$T/files" > "$T/files.n" \
+    && awk -F'\t' 'FNR == NR { N[$0] = 1; next } !($2 in N)' "$T/nw/named" "$T/files" > "$T/files.r" \
+    && awk -F'\t' '{ print $2 }' "$T/files.n" > "$T/files.np" && awk -F'\t' '{ print $2 }' "$T/files.r" > "$T/files.rp" || refuse "cannot stage the narrowed file lists"
+  # Every reviewable file in exactly one of the two, and every named path among the reviewable files.
+  conserved "$T/files.np" "$T/files.rp" "$T/files" \
+    && [ "$(grep -c . "$T/files.np")" = "$(grep -c . "$T/nw/named")" ] \
+    || refuse "the named parts and the residue part do not hold every reviewable file exactly once; a narrowed map would drop a reworked file"
+  grep -q . "$T/files.r" && NX=1
+  cp "$T/files" "$T/files.all" && mv "$T/files.n" "$T/files" || refuse "cannot stage the named file list"
+fi
+
+PACK_AWK='
   function ncomp(p,   a) { return split(p, a, "/") }
   function prefix(p, d,   a, n, i, s) {
     n = split(p, a, "/"); s = a[1]
@@ -501,7 +611,7 @@ awk -F'\t' -v K="$MAXP" '
     }
     ng = 0
     for (g in GW) { ng++; GK[ng] = g }
-    if (ng < 2) { printf "SERIAL: one group (%s); a review with one group has no independent parts\n", GK[1]; exit 3 }
+    if (ng + NX < 2) { printf "SERIAL: one group (%s); a review with one group has no independent parts\n", GK[1]; exit 3 }
     # ---- order groups: weight desc, key asc (insertion sort, bytewise) ----
     for (i = 2; i <= ng; i++) {
       x = GK[i]; j = i - 1
@@ -515,8 +625,8 @@ awk -F'\t' -v K="$MAXP" '
     }
     np = 0
     for (b = 1; b <= K; b++) if (BW[b] > 0) { np++; PB[np] = b }
-    if (np < 2) { print "SERIAL: one part after packing"; exit 3 }
-    fmt = "%0" length(np "") "d"
+    if (np + NX < 2) { print "SERIAL: one part after packing"; exit 3 }
+    fmt = "%0" length((np + NX) "") "d"
     for (o = 1; o <= np; o++) {
       b = PB[o]
       n = split(BG[b], ks, SUBSEP)
@@ -528,10 +638,30 @@ awk -F'\t' -v K="$MAXP" '
       for (i = 1; i <= nfl; i++) line = line "\t" FL[i]
       print line
     }
-  }' "$T/files" > "$T/map"
+    if (NX) {
+      nr = 0; while ((getline rl < RF) > 0) { split(rl, rr, "\t"); RL[++nr] = rr[2] }
+      if (nr < 1) exit 4
+      for (i = 2; i <= nr; i++) { x = RL[i]; j = i - 1; while (j >= 1 && RL[j] > x) { RL[j + 1] = RL[j]; j-- }; RL[j + 1] = x }
+      line = sprintf(fmt, np + 1) "\tresidue"; for (i = 1; i <= nr; i++) line = line "\t" RL[i]
+      print line
+    }
+  }'
+awk -F'\t' -v K="$MAXP" -v NX="$NX" -v RF="$T/files.r" "$PACK_AWK" "$T/files" > "$T/map"
 rc=$?
 if [ "$rc" -eq 3 ]; then cat "$T/map"; exit 3; fi
 [ "$rc" -eq 0 ] && grep -q . "$T/map" || refuse "the partition of ${BASE_FULL}..${SHA_FULL} failed (awk rc=$rc)"
+# --narrow-from (header: THE NARROWED RE-REVIEW): never more parts than the un-narrowed map of the same
+# delta and options, a SERIAL one counting as one part. Asked before anything is printed or written.
+if [ -n "$NFROM" ]; then
+  awk -F'\t' -v K="$MAXP" -v NX=0 -v RF=/dev/null "$PACK_AWK" "$T/files.all" > "$T/map.all"; frc=$?
+  case "$frc" in
+    0) fl_n="$(grep -c . "$T/map.all")" || fl_n=0 ;;
+    3) fl_n=1 ;;
+    *) refuse "the un-narrowed partition of ${BASE_FULL}..${SHA_FULL} failed (awk rc=$frc), so the narrowed part count cannot be bounded" ;;
+  esac
+  nm_n="$(grep -c . "$T/map")" || nm_n=0
+  [ "$nm_n" -le "$fl_n" ] || refuse "--narrow-from $NF_REL: the narrowed map would need more reviewers than the full delta map ($nm_n parts against $fl_n); run the un-narrowed partition"
+fi
 
 if [ -n "$SDIR" ]; then
   {
@@ -540,6 +670,7 @@ if [ -n "$SDIR" ]; then
     printf 'sha\t%s\n' "$SHA_FULL"
     printf 'min-files\t%s\n' "$MINF"
     printf 'max-parts\t%s\n' "$MAXP"
+    [ -z "$NFROM" ] || printf 'narrow-from\t%s\n' "$NF_REL"
     awk '{ print "part\t" $0 }' "$T/map"
   } > "$T/manifest" || refuse "cannot stage the manifest"
   if [ -e "$SDIR/.manifest" ]; then

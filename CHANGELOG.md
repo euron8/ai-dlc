@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.989.0] - 2026-11-01
+
+### A re-review of a mixed NEEDS_REWORK reviews the files its CODE findings name, plus one residue part (BL-809 item 2)
+
+- **Fix.** A CODE or TEST finding carries a column-0 `Files: <repo-relative path>[, ...]` line under its `Class:` line (`code-reviewer.md`). `merge-review-shards.sh` THE FILES LINE refuses one on any other class, two in one finding, an empty list, an entry that is not a bare repo-relative path, and, at the merge and `--check-shard`, an entry neither tracked at the frozen sha nor changed in the range (a file the rework deleted is accepted). A missing `Files:` is accepted. `validate-carried-findings.sh --classes` prints the value as a third column. After `--route` answers FULL, `partition-review-diff.sh --narrow` answers `NARROW:` (the delta's code paths the CODE and TEST findings name) and `RESIDUE:` (every other delta code path), asserting the two hold every delta code path exactly once; it answers `FULL:` on a CODE or TEST finding with no `Files:`, on an empty named set and on every `--route` refusal, and never exits 2. `--map ... --narrow-from <pass M-1 file>` partitions the named set and adds the residue as one last part, `residue`; the manifest records `narrow-from`, and the merge re-derives the map with it. A narrowed map with more parts than the un-narrowed map of the same delta and options (SERIAL counts as one) is refused, exit 2, before anything is written, and the lead runs the un-narrowed partition. The default `--map` output is unchanged. The step text is `implementation.md`'s "Narrowing a mixed re-review" paragraph.
+- **Why.** Operator rulings 2026-10-31: "I want to avoid unnecessary re-reviews." and "The one-in-19 miss rate doesn't matter to me. I want the re-reviews narrowed regardless of the measurement." The accepted miss is BL-809's 1 of 19 mixed-prior passes over graph s317 to s319 (s319 3-1-p3). With the residue reviewed as its own part (operator ruling, option A), that shape lands in the `residue` part and is reviewed.
+- **Limit.** `merge-review-shards.sh --check-serial` has no frozen sha, so it applies only the syntactic `Files:` refusals, not the tracked-or-changed path check. A wrong path there only moves a file between the named set and the residue, and both are reviewed.
+- **Held by.** `core/fixtures/review-reroute/receipt-bl809-narrow.sh` (main 1, fix 0), review-reroute arms N1-N4, NM, NP and CV with mutants m-noconserve, m-noresidue, m-union, m-emptyok, m-missingempty, m-nfdrop, m-narrowfirst and m-nobound, and review-shard-merge arm FL1 with mutants M52-M57.
+- **Measured.** Fixture J3 re-measured on the rebased tree, two agreeing counted runs: review-reroute 129 -> 224, review-shard-merge 514 -> 541; carried-findings 196 and validator-path-resolution 340 unchanged.
+- **Disclosure.** Before the file:// clone rule reached it, the contract adversary read the consumer repository directly with read-only commands (`ls`, `grep`, `grep -A6`); nothing was written there. Every later graph figure was taken on a file:// clone.
+- **Consumer reach.** Shipped engine and role text; a consumer receives it on its next pull. No graph prior carries a `Files:` line today, so every existing re-review answers FULL until reviewers write one.
+
 ## [0.988.0] - 2026-11-01
 
 ### Every pull runs the derivation differential, so a pull always leaves the owed-derivations record (BL-706)

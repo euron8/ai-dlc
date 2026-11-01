@@ -129,11 +129,13 @@ APPROVED | NEEDS_REWORK | BLOCKED
 
 #### <finding title>
 Class: CODE | TEST | EVIDENCE | BOOKKEEPING
+Files: <repo-relative path>[, <repo-relative path>...]
 
 ### Important (should fix, can be follow-up)
 
 #### <finding title>
 Class: CODE | TEST | EVIDENCE | BOOKKEEPING
+Files: <repo-relative path>[, <repo-relative path>...]
 
 ### Suggestions (optional improvements)
 
@@ -172,6 +174,14 @@ ANY code or test change is `CODE` or `TEST`, never `EVIDENCE` or
 lines (`implementation.md`, the re-review paragraph), so a code fix filed as
 evidence skips the review that would have caught it. The SHARD GRAMMAR section
 of `merge-review-shards.sh` refuses a value outside the set.
+A `CODE` or `TEST` finding also carries one column-0 `Files:` line directly
+under its `Class:` line, naming every file its fix changes as a full
+repo-relative path, entries separated by `, `, for example
+`Files: rebalancer/engine.py, rebalancer/tests/test_engine.py`: no backticks or
+bold, no leading `./`, no `:line` or `::node`. An `EVIDENCE` or `BOOKKEEPING`
+finding carries none; delete the template's `Files:` line from it. The next pass narrows to the files these lines name, and a
+`CODE` or `TEST` finding without `Files:` sends it to a full re-review. THE
+FILES LINE in `merge-review-shards.sh` refuses a malformed one.
 
 **A serial review writes its findings the way a shard does.** Each finding is a
 `#### ` heading under its `### Critical`, `### Important` or `### Suggestions`

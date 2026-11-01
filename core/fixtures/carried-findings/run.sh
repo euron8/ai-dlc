@@ -596,7 +596,7 @@ arm_TA() { local a b
            a="$(bash "$1" --list "$S/top.md" 2>/dev/null)" || return 1
            [ "$a" = "$T1$NLF$T2" ] || return 1
            b="$(bash "$1" --classes "$S/top.md" 2>/dev/null)" || return 1
-           [ "$b" = "EVIDENCE$TAB_$T1$NLF-$TAB_$T2" ]; }
+           [ "$b" = "EVIDENCE$TAB_$T1$TAB_-$NLF-$TAB_$T2$TAB_-" ]; }
 # TQ: the same prior at gate 2, the qa.md key present, a p2 with no carried: line for T2 -> 1.
 arm_TQ() { run "$VQ" "$RQ/docs/reviews/s9/1-2-qa-validation.md" "$RQ/docs/reviews/s9/1-2-qa-validation-p2.md"
            [ "$rc" -eq 1 ] && grep -qF "has no carried: line in $RQ/docs/reviews/s9/1-2-qa-validation-p2.md: $T2" <<<"$out" && [ "$(grep -c '^FAIL: prior' <<<"$out")" -eq 1 ]; }
