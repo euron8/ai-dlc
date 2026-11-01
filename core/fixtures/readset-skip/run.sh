@@ -181,6 +181,8 @@
 # MUTANT-MATRIX ident-drops-keyrows decides=vs-cell-g twins=vs-cell-t
 # MUTANT-MATRIX skew-refuses decides=vs-skew twins=vs-skew-key-only
 # MUTANT-MATRIX noreap decides=slot-reaped twins=slot-file
+# MUTANT-MATRIX reapdrop decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where the caller's reap is the sole reaper, every other world reaps itself
+# MUTANT-MATRIX liveunrec decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where an unrecorded group has no other reaper
 # MUTANT-MATRIX-FULL noacq worlds=slot-beat,slot-file,slot-foreign,slot-nested,slot-noparent,slot-oldempty,slot-order,slot-rebreak,slot-stale,slot-stalemark,slot-stray why=the kill asserts the exact eleven-scenario failing set; with no acquire every slotted scenario moves, so no single scenario decides it
 # MUTANT-MATRIX-FULL nostale worlds=slot-oldempty,slot-rebreak,slot-stale,slot-stray why=the kill asserts the exact failing set of the four scenarios reached only through a stale break; none alone separates it from nobound or normdir
 # MUTANT-MATRIX noreent decides=slot-nested twins=slot-order
@@ -7690,12 +7692,31 @@ if [ -z "$DERIVER" ] || [ ! -f "$SLOT_W" ]; then
 fi
 SLOT_T="$WORK/slot"; mkdir -p "$SLOT_T" || broken "mkdir failed"
 SLOT_WV="$SLOT_W"   # the slot-world program a score runs; the noreap mutant points it at a copy
+# THE CALLER'S REAP (BL-875). slot-world appends every process group it starts, its live-pid control's included, to
+# the SW_GROUPS file this caller names, and this caller kills every recorded group after the world returns, however
+# it ended: a world taken down by SIGKILL runs no EXIT trap, and its groups are not its own, so they outlive it. A
+# group the world already reaped is gone, and the kill finds nothing. A lib file, so the reapdrop mutant is a copy.
+SLOT_REAP_LIB="$SLOT_T/reap.sh"
+cat > "$SLOT_REAP_LIB" <<'SR'
+slot_reap() { # <group record>: kill every recorded group, then its leader by pid
+  local g
+  [ -f "$1" ] || return 0
+  while IFS= read -r g; do
+    case "$g" in ''|0|*[!0-9]*) continue ;; esac
+    kill -KILL -- "-$g" 2>/dev/null; kill -KILL "$g" 2>/dev/null
+  done < "$1"
+  return 0
+}
+SR
+. "$SLOT_REAP_LIB" || broken "could not load $SLOT_REAP_LIB"
 slot_score() { # <deriver copy> [scenario ...] -> "<rc>|<failed scenarios, sorted, space-joined>"
-  local o r d="$1"; shift
+  local o r d="$1" gf; shift
+  gf="$(mktemp "$SLOT_T/groups.XXXXXX")" || broken "mktemp failed for a slot-world group record"
   # slot-world itself runs in process; the derivers IT starts stay processes: the slot's decisions are keyed on the
   # holder's `$$` (readset_lock_write records it, rs_slot_release and readset_lock_stale judge it) and on reaping a
   # deriver's process group, so two derivers in one process would share the identity the slot exists to separate.
-  o="$( ( inproc TMPDIR="$SLOT_T" -- "$SLOT_WV" "$d" "$HOOK" "$@" ) 2>/dev/null)"; r=$?
+  o="$( ( inproc TMPDIR="$SLOT_T" SW_GROUPS="$gf" -- "$SLOT_WV" "$d" "$HOOK" "$@" ) 2>/dev/null)"; r=$?
+  slot_reap "$gf"
   printf '%s|%s' "$r" "$(printf '%s\n' "$o" | sed -n 's/^FAIL \([a-z]*\):.*/\1/p' | sort | tr '\n' ' ' | sed 's/ $//')"
   printf '%s\n' "$o" > "$SLOT_T/last.out"
 }
@@ -7754,6 +7775,67 @@ else
   else bad "SLOT MUTANT noreap: expected '1|reaped', got '$_g'"; fi
 fi
 SLOT_WV="$SLOT_W"
+# (slot-kill) THE WORLD ITSELF TAKEN DOWN BY SIGKILL (BL-875). The world runs `hold` in the background in a TMPDIR of its
+# own; once the fixture has recorded `a-hold`, the world writes SW_KILL_GATE and blocks with deriver A's tree still up (no
+# clock: left unblocked, the world's own hold kill races the caller's), then it is SIGKILLed, so its EXIT trap never runs, and the caller's
+# reap must leave no member of any recorded group and the live-pid control dead. The control's pid is read from the file
+# the world's FIXTURE wrote, never from the group record, so a world that failed to record it is still censused.
+# Survivors are judged by aw_wait on the settled-state predicates, never on a count of polls: a killed member is still
+# exiting, never blocked with nothing pending, so no load reads it as a survivor. Prints
+# "<pre>|<recorded groups>|<surviving groups>|<live control surviving>", pre=1 when the stream, the holding fixture,
+# the live control and the last recorded group were all up when the kill landed.
+# Whatever the verdict, every recorded group and the live control are reaped by their recorded ids before it returns.
+slot_kill_drive() { # <slot-world copy> <reap lib>
+  local T gf swp d lp pre=0 ng=0 sv=0 lv=0 g
+  T="$(mktemp -d "$SLOT_T/kd.XXXXXX")" || broken "mktemp failed for the slot-kill world"
+  gf="$T/groups"; : > "$gf"
+  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_KILL_GATE="$T/gate" -- "$1" "$DERIVER" "$HOOK" hold ) >/dev/null 2>&1 &
+  swp=$!
+  # The world writes the gate file only with A's tree up and then blocks until killed, so the KILL is never early or late.
+  aw_wait '[ -e "$T/gate" ]' 'echo "$swp"' ''
+  d="$(ls -d "$T"/slot-world.*/hold 2>/dev/null | head -1)"
+  lp="$(cat "$d/order.live" 2>/dev/null)"
+  g="$(tail -1 "$gf")"
+  if [ -e "$T/gate" ] && grep -qx a-hold "$d/order" 2>/dev/null && grep -qx a-stream-up "$d/order" && [ -n "$lp" ] && kill -0 "$lp" 2>/dev/null \
+     && [ -n "$g" ] && kill -0 -- "-$g" 2>/dev/null && kill -0 "$swp" 2>/dev/null; then pre=1; fi
+  kill -KILL "$swp" 2>/dev/null; wait "$swp" 2>/dev/null
+  ( . "$2" && slot_reap "$gf" )
+  while IFS= read -r g; do
+    [ -n "$g" ] || continue
+    ng=$((ng + 1))
+    aw_wait '! kill -0 -- "-$g" 2>/dev/null' '' 'aw_group_settled "$g"'; [ $? = 2 ] && sv=$((sv + 1))
+  done < "$gf"
+  if [ -n "$lp" ]; then aw_wait '! kill -0 "$lp" 2>/dev/null' '' 'aw_blocked "$lp"'; [ $? = 2 ] && lv=1; fi
+  slot_reap "$gf"; [ -n "$lp" ] && kill -KILL "$lp" 2>/dev/null
+  printf '%s|%s|%s|%s' "$pre" "$ng" "$sv" "$lv"
+}
+SLOT_ARMS=$((SLOT_ARMS+1))
+_k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB")"
+if [ "$_k" = "1|2|0|0" ]; then
+  ok "SLOT KILL: slot-world SIGKILLed mid-hold leaves no member of its 2 recorded groups (deriver A, live control) alive after the caller's reap ('$_k' pre|groups|surviving|live)"
+  B_slot_kill=1
+else bad "SLOT KILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k'"; fi
+# reapdrop: the caller's reap deleted from a COPY of the reap lib -> both recorded groups survive the KILL, live included.
+SLOT_ARMS=$((SLOT_ARMS+1))
+sed '/^    kill -KILL -- "-\$g" 2>\/dev\/null; kill -KILL "\$g" 2>\/dev\/null$/d' "$SLOT_REAP_LIB" > "$SLOT_T/reap.reapdrop.sh"
+if cmp -s "$SLOT_REAP_LIB" "$SLOT_T/reap.reapdrop.sh"; then bad "SLOT MUTANT reapdrop did not apply: the edit matched nothing in $SLOT_REAP_LIB"
+else
+  _k="$(slot_kill_drive "$SLOT_W" "$SLOT_T/reap.reapdrop.sh")"
+  [ "$F2C_MATRIX" = 1 ] && f2c_mx reapdrop "pre|groups|surviving|live $_k"
+  if [ "$_k" = "1|2|2|1" ]; then mutant_killed "${B_slot_kill:-0}" reapdrop "SLOT MUTANT reapdrop is KILLED: with the caller's reap deleted both recorded groups outlive the SIGKILLed world ('$_k')"
+  else bad "SLOT MUTANT reapdrop: expected '1|2|2|1' (pre|groups|surviving|live), got '$_k'"; fi
+fi
+# liveunrec: the live-pid control's group record deleted from a COPY of slot-world -> the reap misses it, and the pid
+# the world's fixture wrote reads it alive.
+SLOT_ARMS=$((SLOT_ARMS+1))
+sed '/^printf .%s\\n. "\$LIVE" >> "\$SW_GROUPS"$/d' "$SLOT_W" > "$SLOT_T/slot-world.liveunrec.sh"
+if cmp -s "$SLOT_W" "$SLOT_T/slot-world.liveunrec.sh"; then bad "SLOT MUTANT liveunrec did not apply: the edit matched nothing in slot-world.sh"
+else
+  _k="$(slot_kill_drive "$SLOT_T/slot-world.liveunrec.sh" "$SLOT_REAP_LIB")"
+  [ "$F2C_MATRIX" = 1 ] && f2c_mx liveunrec "pre|groups|surviving|live $_k"
+  if [ "$_k" = "1|1|0|1" ]; then mutant_killed "${B_slot_kill:-0}" liveunrec "SLOT MUTANT liveunrec is KILLED: with the live control unrecorded it outlives the SIGKILLed world ('$_k')"
+  else bad "SLOT MUTANT liveunrec: expected '1|1|0|1' (pre|groups|surviving|live), got '$_k'"; fi
+fi
 SLOT_TWELVE="order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty"
 slot_mut noacq   '/^  rs_slot_acquire$/d' 'beat file foreign nested noparent oldempty order rebreak stale stalemark stray' plain
 slot_mut nostale 's/^    if readset_lock_stale "\$RS_SLOT" >\/dev\/null; then$/    if false; then/' 'oldempty rebreak stale stray' beat
