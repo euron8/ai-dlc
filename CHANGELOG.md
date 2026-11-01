@@ -19,6 +19,59 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.991.0] - 2026-11-01
+
+Batch b248, lead ai-dlc-f8, cluster b248-docs. Docs-only: the diff from 47102ad20 touches `docs/backlog.md`, `docs/backlog.archive.md` and two tracked receipt drivers, and no shipped engine, hook, rule or fixture arm.
+
+### BL-902 closed: six older archive LANDED lines are re-anchored to the release squashes
+
+- **Fix.** Six `LANDED` lines in `docs/backlog.archive.md` cited an intermediate commit that is not an ancestor of main. Each line's claim was read, the claimed mechanism was found in the release squash tree, and only the sha changed: BL-702 (v0.845.0) cfcf0b5f8 becomes 55a931119; BL-647, BL-662, BL-670, BL-664 and BL-689 (v0.862.0) become aadf99a5b. A line whose claim was absent from the squash would not have been re-anchored; none was.
+- **Held by.** `core/fixtures/backlog-receipt-binding/receipt-bl902.sh`, a tracked driver that locates each of the six lines by entry heading, extracts the sha with the anchored form of `scripts/backlog-rotate.sh:533`, and requires it to be an ancestor of HEAD whose subject begins with the line's own version. It exits 9 when its anchor is absent.
+- **Related.** BL-874 gains a Progress paragraph measuring the remaining archive LANDED lines: of 817 extracted, 696 are ancestors of `origin/main`, 117 are commits that are not, and 4 do not resolve. It stays OPEN.
+
+### BL-883 closed as a dead premise (operator ruling "Close as dead premise")
+
+- **Fix.** The entry claimed `readset-stage1-verdict` cannot be traced and is permanently OMITTED. Its `inputs.decl` was added at f46867611 (0.753.0), the hook maps every declared fixture before the trace queue, so no trace is ever queued for it, and the `OMITTED` comment is absent from `.ai-dlc-fixture-readsets.tsv` at 47102ad20. A refuting verifier failed to refute it.
+- **Held by.** `core/fixtures/backlog-real-ledger/receipt-bl883.sh`, which anchors on the map, requires that no `OMITTED.*readset-stage1-verdict` line is present, and requires `inputs.decl` to be tracked.
+
+### BL-616 closed, folded into BL-868 (operator ruling "Fold into BL-868")
+
+- **Fix.** BL-616's three remaining owed items (the dropped-verdict trigger with candidates (b) and (c), census item 8, and owed item 3) move into BL-868 as items 12 to 14, each carried in substance and none re-measured. BL-616 closes with a line naming the fold and an `Outcome measured:` line naming the ai-dlc pre-push suite as the cost. The `MAXATT` code change is owned by another release.
+
+### BL-836 closed, folded into BL-899 (operator ruling "Fold into BL-899")
+
+- **Fix.** BL-899 already carried BL-836's three remaining shapes (a child's bare 127, a child sourcing a missing file, the driver form). BL-836 closes citing the ruling, which overrides the earlier "stays PARTIAL" lead ruling, and BL-899 gains a sentence stating the fold. Nothing was detected or moved.
+
+### BL-897 progress (stays OPEN)
+
+- **Measured.** The 19 exact `# digest` lines that 902d6f7e0 added are absent at 47102ad20, but the class is live: `derive-fixture-readsets.sh --list` writes a digest with no `inputs.decl` filter (`:1721-1732`, `:1763`), and 47102ad20 re-emitted such lines for two declared fixtures, `backlog-real-ledger` and `shipped-rule-version-floor`. They stay inert because `readset_committed_digests` keys only fixtures with rows. The earlier "Owed: nothing" is corrected; the owed fix belongs to b248-loadfree.
+
+### BL-812 progress (stays PARTIAL)
+
+- **Fix.** The projection table gains a row for BL-809 item 2 (0.989.0), with every figure's source named and "not derivable" wherever the tree does not record it. The combined row and the Status paragraph are updated; items 1 and 2 stay owed and item 3 stays OPEN.
+
+### BL-839 and BL-840 progress (stay PARTIAL)
+
+- **Fix.** The `<VERSION>` placeholders in both PARTIAL lines become v0.968.0, the release 909249c28 shipped.
+
+### BL-842 progress (stays PARTIAL)
+
+- **Fix.** The two `<pending>` placeholders in the mechanism paragraph are replaced by the real names, cited by file and line in `core/scripts/validate-spawn-ledger.sh` (`REMEDIABLE_CLASSES` at `:191`, `--remediated-keys` at `:1426-1439`, the `remediates` join at `:1830-1838`), and the Progress sentence that only superseded the placeholders is deleted.
+
+### BL-843 progress (stays PARTIAL)
+
+- **Fix.** The "seed it once is owed" sentence is corrected: the receipt's world is built once per run since v0.971.0 (902d6f7e0), at `core/fixtures/story-evidence-scaffold/run.sh:910`. The c3+c4 cut stays owed.
+
+### BL-538 progress (stays PARTIAL)
+
+- **Measured.** A Progress paragraph records two probes of the round-dispatcher design. In Claude Code 2.1.316, all 6 completion notifications from a subagent's background agents reached that subagent and 0 reached the parent. In headless `claude -p` with `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=2`, the 2nd and 3rd nested spawns were refused, not queued, while the control at cap 10 accepted all 4.
+
+### Release accounting
+
+- **Exemption.** The prose-only units (BL-812, BL-839, BL-840, BL-842, BL-843, BL-897, BL-538) carry no fixture arm and no mutant, because a placeholder guard's measured recurrence is 1 commit ever.
+- **NET.** entries closed 4 minus filed 0 = 4 (BL-902, BL-883, BL-616, BL-836). No `PC-` id is closed.
+- **Consumer reach.** None. No shipped engine, hook, rule or fixture arm moved; the two new receipt drivers are repository-only.
+
 ## [0.990.0] - 2026-11-01
 
 ### readset-skip's killed iw_run reaps its whole process group, so a flush-stub orphan cannot flip the IDENTITY verdict (BL-900)
