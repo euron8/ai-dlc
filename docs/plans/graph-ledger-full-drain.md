@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,28 +67,37 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 246 IS CLOSED: ONE RELEASE, `v0.970.0`. THE NEXT SESSION STARTS BATCH 247.**
-This block replaces the batch-245 record. Lead was ai-dlc-b5, in the no-owner shape: `ListAgents` showed no other `ai-dlc-*` session. No `graph-*` session was messaged. No graph watch ran.
-- **Operator scope ruling, this batch only:** "PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE is the only item allowed in this batch." Nothing else was scoped.
-- **Landed:** `v0.970.0` `aa6675b8f` #1345: BL-876 filed and closed. It closes PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE, which the squash message names. NET 0. BL-876's LANDED line in the archive is re-anchored on the squash.
-- **What it changed.**
-  - Rule 11(a)'s UNBADGED trigger is now a question deciding a value the operator alone owns that no operator words fix.
-  - A new Rule 12 subsection, `#### Operator decisions: sort before asking (Rule 11(a))`, sorts every question three ways.
-  - Rule 12 declares `**Carrier:** \`Check 2\``, because it now sits past I79's 20000-byte band.
-  - The continue hook's block reason and `steps/route.md` agree with the sort.
-  - Twelve `process-rule-pins` rows pin it.
-  - BL-876's receipt is the driver `core/fixtures/process-rule-pins/receipt-bl876.sh`.
-- **Facts for the next batch.**
-  - Rule 11(b)'s `**Absolute.**` paragraph ends at byte 20044 of `core/skills/ai-dlc/SKILL.md`. That is 77 bytes inside the measured 20121-byte re-attach cut, so any growth in Rules 1-11 pushes Rule 11(b) out of the re-attached head.
-  - `validator-fork-budget` reads 3467 of `FORK_BUDGET=3472`.
-  - The 0.970.0 gate's pole was `backlog-receipt-binding` at 344s loaded.
-- **Backlog.** Live at close: 49. Archive: 798. **The next free id is BL-877.** Nothing was filed at this close.
+**BATCH 247 IS CLOSED: NINETEEN RELEASES, `v0.972.0` THROUGH `v0.990.0`. THE NEXT SESSION STARTS BATCH 248.**
+This block replaces the batch-246 record. Lead was ai-dlc-79. Owners were 6a, d9, 70, 12, 1f and 8d. No `graph-*` session is ever messaged.
+- **Landed.** Each row is one squash on `origin/main` whose subject starts with its version (`git log origin/main`); 0.972.0 to 0.990.0 are all present.
+  - `v0.972.0` `f8174ba8e`: wrapper-mutant flags readable (BL-891).
+  - `v0.973.0` `6c70d332e`: the rule-file audit stops flagging pointer lines (BL-888).
+  - `v0.974.0` `91374cf9e`: Check 22 ordinal list ignores a prose suffix.
+  - `v0.975.0` `dc66d6165`: the five BMAD skills removed in 6.11 retargeted (BL-884).
+  - `v0.976.0` `f7ca63142`: apply.sh hands back template-derived files (BL-886).
+  - `v0.977.0` `fb4cb5f40`: a signal tears down the hook's pool (BL-881); BL-869 closed.
+  - `v0.978.0` `9e7232874`: record-only-diff resolves the story path at the top (BL-885).
+  - `v0.979.0` `dd784380c`: a side silent on every series is UNDECIDABLE (BL-893).
+  - `v0.980.0` `808dccef1`: seed-verdict-store red lines, `±` refused at J4 (BL-882, BL-892, BL-872).
+  - `v0.981.0` `99fe3afda`: the closer asks upstream about a `(filed …)` label (BL-890).
+  - `v0.982.0` `d7f5449f1`: self-update slice check accepts a support directory (BL-894).
+  - `v0.983.0` `0e190a93c`: I83 and I84 read their corpus with one grep per predicate (BL-898).
+  - `v0.984.0` `ba72d81e7`: readset-skip-b forces the perl fallback's day (BL-868).
+  - `v0.985.0` `c4dee56bc`: the receipts validator replays R1 and R7/R8 from a keyed record (BL-880).
+  - `v0.986.0` `bc1321bf1`: a fixture's separate-program start must be a declared cell (BL-879).
+  - `v0.987.0` `0809addae`: an open `sh` receipt asserts its anchor first (BL-836).
+  - `v0.988.0` `70c1be3f8`: every pull runs the derivation differential (BL-706).
+  - `v0.989.0` `8f25c6904`: a mixed NEEDS_REWORK re-review narrowed (BL-809).
+  - `v0.990.0` `7c112dae5`: readset-skip's killed run reaps its whole process group (BL-900, filed and closed; BL-881 gains a second instance and stays open).
+- **Operator rulings this batch.** BL-870, "Edit CLAUDE.md (Recommended)"; PC-S320-SUPPRESSION-LIFETIME C2, "Reverse it for OVERRIDDEN"; BL-836 A; BL-872 snapshot; BMAD 6.11 floor, "Ship with 6.11 floor (Recommended)"; install.sh refusal, "Ship the refusal (Recommended)"; BL-869, "Close as dead premise"; BL-880, "Allow the keyed replay"; BL-706, "why not make it run every pull?"; BL-809 item 2, "I want to avoid unnecessary re-reviews." and "The one-in-19 miss rate doesn't matter to me. I want the re-reviews narrowed regardless of the measurement.", with the residue "Check them too"; graph's pull, "I'll pull myself and doesn't need a rehearsal from this batch."
+- **New candidate.** PC-S321-READSET-SKIP-B-BL463-NONORM-MUTANT-CELL-FAILS-ON-THE-CONSUMER-AND-BLOCKS-EVERY-PRE-PUSH is absorbed by 0.984.0 and named in 0.987.0's squash message, not in its CHANGELOG.
+- **Facts for the next batch.** `FORK_BUDGET=2901`; `bash scripts/fork-profile.sh --section total` reads 2899, and `bash scripts/pregate-self-check.sh origin/main` exits 0. A docs-only release push re-keys six units: the five `+VERSION` declarers and `backlog-receipt-binding`.
+- **Backlog.** Live at close: 55 `^## BL-` headings. Archive: 819. BL-901 (red-push pole line), BL-902 (un-re-anchorable archive LANDED lines) and BL-903 (M1 "killed" grammar) were filed at this close. **The next free id is BL-904.**
 - **Graph at close.**
-  - Installed 0.969.0 on its checked-out branch `ai-dlc/feature/per-chain-rebalancer-instances` and on `main`, so it is 1 release behind after 0.970.0.
-  - The derive block at `d48335d52` found: qualifying refs 1 (graph has since pushed that branch, so the fresh-resume derive at 17e89f526 reads 2: the local and `origin/` refs of `ai-dlc/feature/per-chain-rebalancer-instances`, one sha, live 9, adds 1 each); live 9, archive 382; DISCHARGED 1 (`PC-S319-CHECK-17-…`, consumer-only BL-791); and 8 live ids no backlog entry cites. Those 8 are the 7 `PC-S320-…` ids plus this batch's PC-S321, which 0.970.0 now names.
-  - The seven S320 ids were out of scope by the operator's ruling and remain live.
-  - The ledger's md5 was unchanged across the batch (`08be313c0f0b8d189c58c1a9d1a2de96`).
-  - The pull is not preapproved, and no runbook was written.
+  - Installed 0.983.0 on `ai-dlc/feature/per-chain-rebalancer-instances` (`03b734fb3`, its 22:14 reconcile of 2026-10-31); its `main` is at 0.969.0.
+  - Its pre-push stays blocked on readset-skip-b until it pulls 0.984.0 or later: the `nonorm` mutant moves the `psfail` world from the 1st to the 9th of each month, so every push from 2026-11-01T00:00Z reads red.
+  - `team-roles__dev__bug-class-sweep.md:237` exists in graph's overrides and reads `` `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`, ``. It names no BMAD skill removed in 6.11.
+  - The pull is not preapproved; the newest runbook is `docs/plans/graph-pull-0891-to-0901.md`.
 
 ### Derive the state; do not trust the numbers below
 
@@ -863,9 +872,11 @@ candidate's surviving half is upstream's to file and build, never a question for
      happens only when NO TIMING RUNS allows it, and then after every release in the batch that is
      ready or in flight, unless a release depends on the result.
    - SHORTEST GATE FIRST. Among ready releases, a docs-only release gates first, then the others in
-     order of readiness. A docs-only push does NOT skip the suite: it re-keys only the units that
-     declare `docs/backlog.md`, `CHANGELOG.md` or `VERSION` (measured: five, backlog-real-ledger,
-     enforcement-map-sites a/b/c and schema-install-fallback), so its gate is the shortest.
+     order of readiness. A docs-only push does NOT skip the suite: it re-keys six units (the leading-`+`
+     lines of `core/fixtures/*/inputs.decl` at 8f25c6904): backlog-ledger, enforcement-map-sites
+     a/b/c and schema-install-fallback on `+VERSION`, and backlog-receipt-binding on
+     `+docs/backlog.archive.md`. No fixture keys `docs/backlog.md` or `CHANGELOG.md`, and
+     backlog-real-ledger reads its own `ledger.snapshot` since 0.980.0, so its gate is the shortest.
    - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
      item goes to an idle session at once. Build work (hands, edits only) never waits on box load;
      only runs load the box.
@@ -907,15 +918,28 @@ candidate's surviving half is upstream's to file and build, never a question for
    probe, the single fixture it edited, and each fixture that invokes the file it edited directly
    on a non-comment line, never a sharded battery or a mutant scorer, each through
    `core/scripts/hermetic-run.sh` with a `mktemp` verdict store, and named in its report). A
-   skipped own-fixture run cost batch 243 a whole second dress on three 5-19s fixtures. Killing and the verdict store:
+   skipped own-fixture run cost batch 243 a whole second gate run on three 5-19s fixtures. Killing and the verdict store:
    `.claude/rules/tool-hazards.md`.
 
-   **Verification step, every unit.** A unit's verification run is a push of its tip to a throwaway
-   ref, `git push origin HEAD:refs/heads/<throwaway>` (for example `<batch>-warm-<unit>`), whose pass
-   the hook records in the shared verdict cache for the release push to reuse. A run in a `mktemp`
-   store caches nothing. A green push's `verdict store: N fixture(s) skipped` line is the evidence
-   the seed worked. Order the pushes longest-first from `.git/ai-dlc-fixture-durations`, as `docs/plans/hermetic-pole.md` records. **Integrator rule:** merge checks
-   are VALIDATORS ONLY, with no fixture re-run.
+   **Verification step, every unit.** A unit's push is its gate, and it is merged as pushed:
+   `CLAUDE.md`, "Run the fixture suite the way the hook runs it", owns the rule. Never push a unit to
+   a throwaway ref. To pre-seed a push, run `scripts/seed-verdict-store.sh` from a clean worktree
+   detached at the exact sha; a plain or `mktemp`-store run seeds nothing, and the push's
+   `verdict store: N fixture(s) skipped` line is the evidence the seed worked. **Integrator rule:**
+   merge checks are VALIDATORS ONLY, with no fixture re-run.
+
+   **Receipts and new files.**
+   - Verify a receipt the way R8 and `scripts/backlog-rotate.sh` run it: from inside the hook's step
+     environment (the extracted pre-suite prefix of action "Gate it the way the hook runs it, and
+     read the GATE's own exit."), not only standalone.
+   - A new `scripts/*.sh` cost 3 forks before BL-898 (0.983.0) and measured 0 at 8f25c6904; a
+     root-resolving `core/scripts/*.sh` measured +10. Put a receipt under its fixture
+     (`core/fixtures/<f>/receipt-bl<N>.sh`); `bash scripts/fork-profile.sh --section total` in
+     your worktree, against `FORK_BUDGET`, decides.
+   - The archive append conflicts at every rebase. Resolve by union, then a count check: the
+     archive's `^## BL-` count equals base plus each side's additions.
+   - A new pre-push step needs its script in the `inputs.decl` of every fixture that reads the
+     hook's run list (`backlog-real-ledger` arm p3 is one); 0.986.0 went red on exactly that.
 
    **Owners build through hands.** You make NO edits. Every edit (code, fixture, receipt, entry
    prose, comment, script) goes to a hand; independent edits go to parallel hands at once. Your own
@@ -956,15 +980,15 @@ candidate's surviving half is upstream's to file and build, never a question for
       control that must fail. The carrier set is every fixture whose inputs.decl declares a file
       you edited or a directory prefix of it, or whose run.sh invokes it on a non-comment line; a
       pin fixture carries every file it pins. A carrier that is one only by its inputs.decl edit is
-      run by the dress, not pre-run.
+      run by the release push, not pre-run.
       Before you say ready, run `bash scripts/validate-enforcement-map.sh` on the collected tip, and
       run every fixture that seeds input to a subject whose accepted language you changed, each
       through `core/scripts/hermetic-run.sh`, never `bash run.sh` (a by-hand run sees tools the
       sandbox's declared PATH does not). That pre-run is the language-change set only, never a
-      serial pass over the carrier set: a `mktemp` verdict store records nothing the dress's
+      serial pass over the carrier set: a `mktemp` verdict store records nothing the push's
       content-key skip reuses, so a serial carrier pass runs every fixture twice, once at a
       fraction of the pool's width. When no other release holds GATE OPEN, skip it and go to the
-      dress; the pool is the run. Then tell <lead> you are ready to push. <lead> replies with
+      push; the pool is the run. Then tell <lead> you are ready to push. <lead> replies with
       your VERSION and your push turn; one push runs at a time. Never pick a version or a backlog id
       yourself. While you hold the push turn, never end a turn with nothing running: continue, or
       report the exact stopped state. <lead> checks the push turn about every 30 minutes.
@@ -975,17 +999,17 @@ candidate's surviving half is upstream's to file and build, never a question for
       and `--apply`, and confirm the archive count MOVED. Squash to ONE commit on `origin/main`.
       Subject `<version> — batch <batch>: <summary>`. The message names every `PC-` id the release
       closes and the net (closed minus filed). Read the squash message's NET and `Co-Authored-By`
-      lines before the dress. Derive the NET from `base..tip` (an entry filed AND closed on the
+      lines before the push. Derive the NET from `base..tip` (an entry filed AND closed on the
       branch counts as both, net 0), never copy it from a brief.
-   7. Run the pre-suite steps and the dress rehearsal exactly as `docs/plans/graph-ledger-full-drain.md`
-      action "Gate it the way the hook runs it, and read the GATE's own exit." says. Read each
-      changed fixture BY NAME in the rehearsal output, against an impossible-name control, and read
-      the dress's read list including directory-prefix declarers. A lead's release-text request
-      that arrives after a green dress rides the close docs; never amend a dressed commit. A release
-      that edits `.githooks/` is pushed from the MAIN checkout detached at the commit: ask <lead> to
-      do that push.
-   8. Call the advisor before the push and before the merge. The dress push is itself a `git push`,
-      so the order is: advisor, dress, advisor, real push, advisor, merge. Push; confirm `git ls-remote` shows the
+   7. Run the pre-suite steps exactly as `docs/plans/graph-ledger-full-drain.md`
+      action "Gate it the way the hook runs it, and read the GATE's own exit." says; the release
+      push is the gate. Read each changed fixture BY NAME in the push's output, against an
+      impossible-name control, and read the push's read list including directory-prefix declarers.
+      A lead's release-text request that arrives after the push has gone green rides the close
+      docs; never amend a pushed commit. A release that edits `.githooks/` is pushed from the MAIN
+      checkout detached at the commit: ask <lead> to do that push.
+   8. Call the advisor before the push and before the merge, so the order is: advisor, push,
+      advisor, merge. Push; confirm `git ls-remote` shows the
       ref moved. Open the PR; `gh pr merge <n> --squash --subject "$(git log -1 --format=%s <sha>)"
       --body-file <file of %b>`, no `--delete-branch`. Verify by CONTENT (`git diff --quiet <sha>
       origin/main`, VERSION, parent). Send <lead> the squash sha; your push turn ends there.
@@ -998,9 +1022,12 @@ candidate's surviving half is upstream's to file and build, never a question for
       `git branch -D`. The list also names every worktree under your scratchpad and
       `.claude/worktrees/` from `git worktree list --porcelain`, each HEAD shown reachable the same
       way: a hand's clean validation worktree is DETACHED, holds no branch, and a branch-keyed list
-      never sees it. Key the worktree half on PATHS (your scratchpad, and `.claude/worktrees/agent-<id>`
-      for each agent id your session spawned), never on branch names: a hand may name its own
-      branch, and batch 244's branch-keyed list missed three. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
+      never sees it. List the worktree half from `git worktree list --porcelain` by each entry's
+      `branch` field and its `locked` field (a lock names a pid: list it as yours only when that
+      pid is your own session's), and also by PATH (your scratchpad, and `.claude/worktrees/agent-<id>`
+      for each agent id your session spawned), never by the scratchpad path alone: a hand may name
+      its own branch, batch 244's branch-keyed list missed three, and batch 242's path-keyed list
+      missed a detached scratch worktree. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
 
    **Reporting.** Message <lead> at: contract folded, build collected, tip adversary done, ready to
    gate. Send every FAIL to <lead> before changing any declaration or budget. Every claim carries
@@ -1512,8 +1539,9 @@ given at batch 90.
    no-op and the hook gates nothing. Delete that ref (`git push --no-verify origin --delete`) and
    read `ls-remote` EMPTY before the gated push, so the post-gate check that the ref MOVED can fire.
 
-   **BEFORE THE GATE ASK, RUN THE STEPS ABOVE THE SUITE AND THEN A DRESS REHEARSAL, BOTH ON THE
-   TREE THAT WILL BE PUSHED.** Batch 235 gated twenty-nine releases this way, serially on one box.
+   **BEFORE THE GATE ASK, RUN THE STEPS ABOVE THE SUITE ON THE TREE THAT WILL BE PUSHED, THEN PUSH:
+   THE RELEASE PUSH IS THE GATE.** There is no rehearsal push and no push to a throwaway ref
+   (`CLAUDE.md`, "Run the fixture suite the way the hook runs it").
    - **The pre-suite run executes the hook's own bytes, never a list.** In a clean checkout detached
      at the release commit, take `.githooks/pre-push` from line 1 up to, not including, the single
      line beginning `step "fixture suite`, append `exit $fail`, and run it with stdin from
@@ -1521,11 +1549,8 @@ given at batch 90.
      extracted prefix and require exactly one PASS or FAIL per call, with none failing; a run that
      stopped early is not a pass of the steps it never reached. Then run
      `scripts/pregate-self-check.sh origin/main` last and read its exit.
-   - **The dress rehearsal is a hooked push to a throwaway ref**, `zz-dress-<session>-<version>`.
-     It runs the whole suite and records the content key. Delete that ref with `git push
-     --no-verify origin --delete` in a separate command, after the push has returned. The real push
-     of the same tree then skips the suite on the recorded key; read each changed fixture by name
-     in the rehearsal's output, never in the skip's.
+   - **The release push runs the whole suite once and records the verdicts and the content key.**
+     Read each changed fixture by name in that push's output, never in a skip line.
    - **Run both from the builder's worktree, and from the main checkout detached at the commit only
      when the release edits `.githooks/`** — the rule above about a linked worktree running the old
      hook. A release that edits `core/hooks/` is not that case.

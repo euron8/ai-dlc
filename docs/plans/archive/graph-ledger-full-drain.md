@@ -19394,3 +19394,26 @@ gone at roll call and the operator appointed none.
   IT. Not covered, though available: the reconcile `lib.sh`/`consumer-read.sh`/`emit-report.sh` changes from main act
   only in an apply; the S4 arm reads 0 today. The pull is not preapproved; no runbook.
 
+**BATCH 246 IS CLOSED: ONE RELEASE, `v0.970.0`. THE NEXT SESSION STARTS BATCH 247.**
+This block replaces the batch-245 record. Lead was ai-dlc-b5, in the no-owner shape: `ListAgents` showed no other `ai-dlc-*` session. No `graph-*` session was messaged. No graph watch ran.
+- **Operator scope ruling, this batch only:** "PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE is the only item allowed in this batch." Nothing else was scoped.
+- **Landed:** `v0.970.0` `aa6675b8f` #1345: BL-876 filed and closed. It closes PC-S321-RULE-11A-UNBADGED-TRIGGER-REACHES-DESIGN-CHOICES-THE-LEAD-CAN-SETTLE, which the squash message names. NET 0. BL-876's LANDED line in the archive is re-anchored on the squash.
+- **What it changed.**
+  - Rule 11(a)'s UNBADGED trigger is now a question deciding a value the operator alone owns that no operator words fix.
+  - A new Rule 12 subsection, `#### Operator decisions: sort before asking (Rule 11(a))`, sorts every question three ways.
+  - Rule 12 declares `**Carrier:** \`Check 2\``, because it now sits past I79's 20000-byte band.
+  - The continue hook's block reason and `steps/route.md` agree with the sort.
+  - Twelve `process-rule-pins` rows pin it.
+  - BL-876's receipt is the driver `core/fixtures/process-rule-pins/receipt-bl876.sh`.
+- **Facts for the next batch.**
+  - Rule 11(b)'s `**Absolute.**` paragraph ends at byte 20044 of `core/skills/ai-dlc/SKILL.md`. That is 77 bytes inside the measured 20121-byte re-attach cut, so any growth in Rules 1-11 pushes Rule 11(b) out of the re-attached head.
+  - `validator-fork-budget` reads 3467 of `FORK_BUDGET=3472`.
+  - The 0.970.0 gate's pole was `backlog-receipt-binding` at 344s loaded.
+- **Backlog.** Live at close: 49. Archive: 798. **The next free id is BL-877.** Nothing was filed at this close.
+- **Graph at close.**
+  - Installed 0.969.0 on its checked-out branch `ai-dlc/feature/per-chain-rebalancer-instances` and on `main`, so it is 1 release behind after 0.970.0.
+  - The derive block at `d48335d52` found: qualifying refs 1 (graph has since pushed that branch, so the fresh-resume derive at 17e89f526 reads 2: the local and `origin/` refs of `ai-dlc/feature/per-chain-rebalancer-instances`, one sha, live 9, adds 1 each); live 9, archive 382; DISCHARGED 1 (`PC-S319-CHECK-17-…`, consumer-only BL-791); and 8 live ids no backlog entry cites. Those 8 are the 7 `PC-S320-…` ids plus this batch's PC-S321, which 0.970.0 now names.
+  - The seven S320 ids were out of scope by the operator's ruling and remain live.
+  - The ledger's md5 was unchanged across the batch (`08be313c0f0b8d189c58c1a9d1a2de96`).
+  - The pull is not preapproved, and no runbook was written.
+

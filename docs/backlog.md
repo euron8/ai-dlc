@@ -1741,6 +1741,8 @@ verify: manual
 7. A cell stays end to end ONLY where a mechanism the subject relies on cannot exist in a subshell (example: `reconcile/lib.sh` exports its memo only at `BASH_SUBSHELL` 0). The reason is written next to the cell, in the grammar BL-879 reads.
 8. The fixture's row is deleted from `scripts/fixture-inprocess-allowlist.txt` in the same change, and BL-879's check passes on it.
 
+**NOTE (item 3, batch b247 close; read at 8f25c6904).** review-reroute starts its subjects only through relocated copies, so BL-879's C1 can never fire on it, and C1's header does not list it among the relocated-copy fixtures. `core/fixtures/review-reroute/run.sh:326-333` (`mkcopy`) copies partition-review-diff.sh, merge-review-shards.sh and the other siblings into `$M/<name>/`, and its `invocations.decl` declares 0 starts for the three subjects. C1's header at `scripts/validate-fixture-invocations.sh:101-106` names only ledger-reverify's mut-memo-*, artifact-derivations' s-m-* and the sib.* stubs. The conversion of review-reroute therefore reaches these starts through item 3's uncounted route, not through C1.
+
 No timing runs and no per-fixture before/after measurement are taken (operator ruling, 2026-10-30).
 
 **Owed items carried from BL-850 at its closing (batch b247).** Each is part of the conversion of the fixture it names, and none is a choice.
@@ -1836,5 +1838,30 @@ verify: manual
 ## BL-899 — a command-level sandbox tracer for an arbitrary receipt run, so a traced-removal arm can cover child-process deletions
 
 **NOTE.** Split from BL-836 at 0.987.0. R10 lints receipt TEXT, so it cannot see a child process's missing file (BL-836 shapes 2 and 3: a child's bare 127, and a child script sourcing a missing file) or a driver's internal grep (a `bash x.sh` receipt whose driver greps inside itself). A traced-removal arm would run the receipt in a scratch tree with each file it read removed and require exit 9. That needs a tracer for an arbitrary command. `core/scripts/derive-fixture-readsets.sh --tracer sandbox` traces fixtures only (its runner is at `:1878`), refuses linked worktrees (LW_GATE, `:205`) and copies the whole tree (`:1402`). The driver-absent-at-base exclusion (lead ruling L3) moved here from BL-836: it changes no outcome until an arm reads driver files.
+
+verify: manual
+
+## BL-901 — on a RED push the pre-push hook's pole line reads "no suite run, no pole" after a full suite has run
+
+**NOTE.** Seen on the f0f838a69 push (owner 70, batch 247): the suite ran in full and was red, and step 3a then printed `(no suite run, no pole)`. Cause, read at 8f25c6904: `.githooks/pre-push:2698` truncates `$LASTRUN_RECORD` before the suite, and `.githooks/pre-push:3053` copies the run's `.durations` into it only when `rc` is 0, so a red run leaves it empty. `pole_info_step` (`.githooks/pre-push:3428-3431`) then takes its `[ ! -s "$LASTRUN_RECORD" ]` branch and prints `(no suite run, no pole)` at `.githooks/pre-push:3429`, a sentence its comment at `:3426` reserves for a stopped or skipped suite. The pole is information only, so no verdict is wrong; the line misstates a red full run as no run. Not fixed here.
+
+verify: manual
+
+## BL-902 — older archive LANDED lines cite commits that are not on main and could not be re-anchored by content
+
+**NOTE.** Found at the batch 247 close. The `LANDED (vX, verified <sha>)` lines below cite a commit that is not an ancestor of origin/main. Each names a version with exactly one squash on origin/main, but the cited commit is an intermediate commit of that release, and lines it added were rewritten by a later commit of the same release, so its added lines are not all present in the squash tree (`docs/backlog.archive.md:35420` touches only the ledger, so there is nothing to compare). Each deferred sha is a pre-squash intermediate that a later commit in its release rewrote, so the line's version names its release squash, and re-anchoring one needs a reading of what the line claims, not a containment count. They were left unchanged rather than re-anchored on an unproven mapping.
+
+- `docs/backlog.archive.md:35420` cfcf0b5f8 — containment failed
+- `docs/backlog.archive.md:35622` e4e27f778 — containment failed
+- `docs/backlog.archive.md:35683` 59a75f7ac — containment failed
+- `docs/backlog.archive.md:35714` 3e9ff12ae — containment failed
+- `docs/backlog.archive.md:35724` ab97261aa — containment failed
+- `docs/backlog.archive.md:35740` 38f770aa9 — containment failed
+
+verify: manual
+
+## BL-903 — validate-mutant-kills.sh's M1 reads any non-comment "killed" as an unrouted mutant kill
+
+**NOTE.** Measured on owner 12's first 0.990.0 push (1a973b957): `scripts/validate-mutant-kills.sh` M1's grammar is a case-sensitive `KILLED|killed` match on any non-comment line of a fixture's `run.sh` (its header at 7c112dae5 says so at `:20` and `:137`). So a prose `ok` text containing "killed" reads as an unrouted mutant kill and reds the pre-suite. Instance: `core/fixtures/readset-skip/run.sh:5339` at 1a973b957, the `ok "INTERRUPTED GROUP: each killed run's recorded process group ..."` line, gave `FAIL M1 ... (1 unrouted line(s))`, and 260 fixtures were skipped on that earlier red; 0.990.0 got past it by rewording the line. Owed: narrow M1 to kill-shaped emissions, with a measured false-positive set.
 
 verify: manual
