@@ -35,3 +35,6 @@ shasum
 ln
 # arm AD: the unreadable-pass world makes one verdict file mode 000.
 chmod
+mkfifo
+ps
+pgrep

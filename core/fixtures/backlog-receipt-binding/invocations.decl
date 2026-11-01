@@ -5,5 +5,5 @@
 # BL-836: 5416 * / 2067 validator at bc1321bf1. Of the +356 / +123, +246 / +82 are BL-990/991 in R7's probe ledger (two
 # more receipts scored per FIRED run; a counted run with both removed read 5526 / 2108), and +110 / +41 are R10's own
 # cells: r10-m1's full run and the c5 worlds' R10 rows. r10-m2..m14 drive vbr_probe_r10 alone, in-process.
-5772 *
-2190 scripts/validate-backlog-receipts.sh
+5905 *
+2238 scripts/validate-backlog-receipts.sh

@@ -106,6 +106,7 @@
 # MUTANT-MATRIX m3b-no-scanroots decides=3b-r.md twins=3b-app.py
 # MUTANT-MATRIX m3b-no-claude-md decides=3b-CLAUDE.md twins=3b-.gitignore
 # MUTANT-MATRIX m3b-no-lex decides=3b-nx-app.py twins=3b-app.py
+# MUTANT-MATRIX m3b-no-giveup decides=3b-hang twins=3b-app.py
 # MUTANT-MATRIX-CONTROL m-crash-control why=a mutant that dies under set -u must be reported BROKEN (rc 2), never decided, so survival of the harness guard is the pass
 # MUTANT-MATRIX-CONTROL m-silent-control why=a mutant that exits 0 and logs no event must be reported BROKEN (rc 2), so the event half of the harness guard is what is asserted
 # MUTANT-MATRIX-CONTROL m-silent-allow-control why=a silent exit 0 where an allow was expected must be reported BROKEN, so the allow-event guard is what is asserted
@@ -2671,34 +2672,81 @@ lpe allow "3b: src/../docs/x.md (a .. that lands in docs/) is ALLOWED"          
 # A resolver that HANGS must not hang the edit: the bounded wait gives up and adds no roots.
 mkdir -p "$W.hang/scripts/ai-dlc"
 cp -R "$W/." "$W.hang/" 2>/dev/null
-# `exec`, so the pid the hook kills IS the sleeper; it records that pid first, so this arm can
-# prove the sleeper was reaped rather than assume it.
+# THE HUNG RESOLVER IS ONE PROCESS BLOCKED ON A FIFO THE FIXTURE OPENS ONLY AFTER THE VERDICT (BL-868).
+# It records its pid, blocks in `read` on a fresh fifo, and -- only if it is ever released -- writes a
+# `released` marker. Nothing but a signal ends it before the fixture releases it, so no elapsed time
+# can stand in for the hook's bound (an `exec sleep 600` target ended by itself once 600s passed).
 #
-# THE VERDICT IS BINARY, NEVER A WALL-CLOCK FIGURE. The hook gives up after 50 ticks of `sleep 0.1`,
-# and a tick is slower than 0.1s on a loaded box, so any elapsed-time threshold is a property of the
-# load. The proof that the bound fired is two attributes: the edit is DENIED, and the sleeper's
-# recorded pid is DEAD when `drive` returns. A hook with no bound would still be waiting on a live
-# 600s sleeper, so a dead pid cannot be reached without abandoning it. Elapsed is printed, not judged.
-_hpid="$W.hang.sleeper.pid"
-rm -f "$_hpid"
-printf '#!/bin/bash\necho "$$" > "%s"\nexec sleep 600\n' "$_hpid" > "$W.hang/scripts/ai-dlc/artifact-path-config.sh"
-_h0=$(date +%s)
-OUT="$(drive "$W.hang" Edit "$W.hang/src/app.py" "" "$TA")"
-_h1=$(date +%s)
-if denied "$OUT"; then ok "3b: a hung scan-roots resolver is abandoned and the product edit is still DENIED (elapsed $((_h1 - _h0))s, not judged)"
-else bad "3b: a hung scan-roots resolver: the product edit was not DENIED (elapsed $((_h1 - _h0))s)"; fi
-# THE SLEEPER IS GONE, by the pid it recorded -- never by a process-table grep. The hook `wait`s the
-# pid it killed before returning, so it is dead by the time `drive` returns. A missing pid file means
-# the resolver never ran, and then the bound above was never exercised.
-_hs="$(cat "$_hpid" 2>/dev/null)"
-case "$_hs" in
+# THE VERDICT IS BINARY, NEVER A WALL-CLOCK FIGURE. The hook gives up after LPE_RESOLVER_TICKS ticks,
+# an iteration bound. The proof that the bound fired: the edit is DENIED, the resolver's recorded pid
+# is DEAD, and its marker is ABSENT -- it was killed, not released. A hook with no bound would wait on
+# the resolver forever, and hd_run detects that as a FACT, never a timeout: the resolver and the hook
+# both blocked with no signal pending and the hook holding no other live child (its watcher gone).
+# Only then is the fifo released, so a hung hook is reported as a verdict instead of wedging the run.
+hd_blocked() { # <pid>: alive, in state S/I/T, no signal pending
+  local st pd
+  kill -0 "$1" 2>/dev/null || return 1
+  st="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; pd="$(ps -o pending= -p "$1" 2>/dev/null | tr -d ' ')"
+  [ -n "$st" ] || return 1
+  case "$st" in S*|I*|T*) ;; *) return 1 ;; esac
+  case "$pd" in ''|*[!0]*) return 1 ;; esac
+}
+HD="$W.hang.hd"; mkdir -p "$HD"
+hd_run() { # <hook> <tag> -> HD_OUT, HD_PID, HD_HUNG (1: seen waiting on the blocked resolver), HD_REL (1: marker)
+  local h="$1" f="$HD/$2.fifo" pf="$HD/$2.pid" mk="$HD/$2.released" dp r hp k st kids
+  rm -f "$pf" "$mk" "$f"; mkfifo "$f" && [ -p "$f" ] || { echo "FIXTURE ERROR: cannot make $f" >&2; exit 2; }
+  printf '#!/bin/bash\necho "$$" > "%s"\nread -r _ < "%s"\necho released > "%s"\n' "$pf" "$f" "$mk" > "$W.hang/scripts/ai-dlc/artifact-path-config.sh"
+  drive "$W.hang" Edit "$W.hang/src/app.py" "" "$TA" "$h" > "$HD/$2.out" &
+  dp=$!
+  HD_HUNG=0
+  while kill -0 "$dp" 2>/dev/null; do
+    r="$(cat "$pf" 2>/dev/null)"
+    case "$r" in ''|*[!0-9]*) sleep 0.05; continue ;; esac
+    hp="$(ps -o ppid= -p "$r" 2>/dev/null | tr -d ' ')"
+    # ORDER IS THE PROOF. The watcher is read gone FIRST, and the resolver blocked with nothing pending
+    # AFTER: a watcher that left by killing the resolver has already sent the signal, so from then on
+    # the resolver is dead, exiting or carries it pending -- never read blocked. Read the other way
+    # round, the resolver's state could predate a kill the watcher then made, at any load.
+    [ -n "$hp" ] || { sleep 0.05; continue; }
+    kids=0
+    for k in $(pgrep -P "$hp" 2>/dev/null); do
+      [ "$k" = "$r" ] && continue
+      st="$(ps -o stat= -p "$k" 2>/dev/null)"; case "$st" in ''|*Z*) ;; *) kids=$((kids + 1)) ;; esac
+    done
+    if [ "$kids" = 0 ] && hd_blocked "$r" && hd_blocked "$hp"; then HD_HUNG=1; break; fi
+    sleep 0.05
+  done
+  exec 9<>"$f"; exec 9>&-
+  wait "$dp"
+  HD_OUT="$(cat "$HD/$2.out")"; HD_PID="$(cat "$pf" 2>/dev/null)"
+  HD_REL=0; [ -f "$mk" ] && HD_REL=1
+  return 0
+}
+hd_run "$HOOK" base
+if denied "$HD_OUT" && [ "$HD_HUNG" = 0 ]; then ok "3b: a hung scan-roots resolver is abandoned and the product edit is still DENIED"
+else bad "3b: a hung scan-roots resolver: the product edit was not DENIED by a hook that gave up (hung=$HD_HUNG)"; fi
+# THE RESOLVER IS GONE, by the pid it recorded -- never by a process-table grep -- and it was KILLED:
+# its marker is absent, so the fifo release after the verdict is not what ended it. A missing pid file
+# means the resolver never ran, and then the bound above was never exercised.
+case "$HD_PID" in
   ''|*[!0-9]*) bad "3b: the hung resolver never recorded its pid, so the bound above was never exercised" ;;
-  *) if kill -0 "$_hs" 2>/dev/null; then
-       kill "$_hs" 2>/dev/null
-       bad "3b: the hung resolver (pid $_hs) was still alive after the hook returned -- abandoned but not reaped"
-     else ok "3b: the hung resolver (pid $_hs) was reaped, not left running"
+  *) if kill -0 "$HD_PID" 2>/dev/null; then
+       kill "$HD_PID" 2>/dev/null
+       bad "3b: the hung resolver (pid $HD_PID) was still alive after the hook returned -- abandoned but not reaped"
+     elif [ "$HD_REL" = 1 ]; then
+       bad "3b: the hung resolver (pid $HD_PID) ended only when the fixture released it -- the hook's bound never ended it"
+     else ok "3b: the hung resolver (pid $HD_PID) was ended by the hook's bound and reaped, not left running"; B_3bhang=1
      fi ;;
 esac
+# MUTANT m3b-no-giveup: the watcher's kill removed, so at the bound it leaves and the hook waits on the
+# resolver forever. hd_run must SEE that wait as a fact (hung=1) and release it; the twin, P1 with the
+# real resolver in $W, is still DENIED under the same mutant.
+if mut m3b-no-giveup 's@{ kill "\$_lpe_pid" 2>/dev/null; break; }@{ break; }@'; then
+  hd_run "$MW/m3b-no-giveup.sh" mut
+  mx_kill "${B_3bhang:-0}" m3b-no-giveup 3b-hang "$([ "$HD_HUNG" = 1 ] && [ "$HD_REL" = 1 ] && echo 1 || echo 0)" \
+    "M3b-giveup: without the watcher's kill the hook waits on the hung resolver until the fixture releases it -- the bound is load-bearing"
+  mx_hold t m3b-no-giveup 3b-app.py "$(lpe_hit deny "$W/src/app.py" "$TA" "$MW/m3b-no-giveup.sh")" "m3b-no-giveup: ...and the twin cell is UNCHANGED"
+fi
 
 # (iv) IS ONE RULE: the `LAST_SKILL=` statement and its `case` are byte-identical in this hook
 # and `ai-dlc-acknowledge.sh`. Both directions: the two shipped blocks agree, and a one-byte
@@ -2752,7 +2800,7 @@ if mut m3b-no-lex 's@^LPE_ABS="\$(lpe_lex "\$LPE_ABS")"$@:@'; then
   lpe_mut m3b-no-lex "${B_3b:-0}" allow "$W/docs/nx/../../src/app.py" "$TA" deny "$W/src/app.py" "$TA" "M3b-lex: without the lexical collapse docs/nx/../../src/app.py is ALLOWED — the collapse is load-bearing"
 fi
 git -C "$W" worktree remove --force "$SIB" >/dev/null 2>&1
-rm -rf "$W" "$SIB" "$W.hang"
+rm -rf "$W" "$SIB" "$W.hang" "$W.hang.hd"
 
 rm -rf "$MW"
 [ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"

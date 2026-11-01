@@ -2166,8 +2166,8 @@ fi
 # gate now waits up to R_NET (300s) for the call's own line and counts one refusal per message.
 #
 # Four predicates with their own control and mutants. They run in the BACKGROUND, every predicate
-# of every gate at once, because `rflush` waits 16s by construction and `rflush_ctl` waits out two
-# short nets; serially the battery would pay that wall clock once per gate. Each child's pid is
+# of every gate at once, because `rflush_ctl` waits out two short nets (`rflush` and `rwithdraw`
+# count the gate's ticks through a shim and wait no wall clock); serially the battery would pay that wall clock once per gate. Each child's pid is
 # recorded and `wait`ed, and each writes its verdict to a file named for the predicate.
 # =============================================================================
 
@@ -2212,23 +2212,36 @@ a_rmsg_ctl() {
 # R2. THE DISCRIMINATING WORLD: THE HOOK IS STILL PENDING WHEN ITS OWN MESSAGE'S LINE LANDS, AND IT
 # MUST DENY. This is a367e62c's calls 18 and 19, each refused by a hook still waiting at the flush
 # around 05:57:24, while calls 1-17 had already given up. The call's line is absent when the hook
-# starts; a background writer appends it at 16s, past the old 10s net and inside RECOVER_GATE_NET=30.
-# KEEP THE WRITER-VERSUS-NET10 WINDOW ABOVE THE POOL'S JITTER; do not shrink it again. The net10
-# mutant's loop ends at 10s and the writer lands at 16s. The 6s margin is chosen against an
-# UNMEASURED hook start-up and fork overhead under pool load, estimated at ~1s, which was the margin
-# when the writer sat at 11s. No jitter figure has been measured.
-# A gate that judges once at its start, or whose net is 10s, lets the call through uncounted.
+# starts, and it lands on the gate's 22nd wait tick: past every tick a 10s net can take (8 quarter
+# ticks then 1s ticks, 16 in all) and inside RECOVER_GATE_NET=30 (36 ticks).
+# THE LATE WRITER IS THE GATE'S OWN CLOCK, NEVER A RACING SLEEP (BL-868). The gate's wait loop calls a
+# bare `sleep` (the seam a_nogrant uses), so a per-predicate shim first on PATH counts each tick,
+# returns at once, and on tick R7_LATE_TICK appends the call's line. Which tick the line lands on is
+# therefore fixed, whatever the load: a writer racing the hook on wall time read a loaded pool as a
+# gate that gave up. A gate that judges once at its start, or whose net is 10s, never reaches that
+# tick and lets the call through uncounted.
+R7_LATE_TICK=22
+# r7_shim <project> <tick> <line file> -> a shim dir whose `sleep` appends <line file> to the
+# project's transcript on call <tick>, in ONE write; every call is counted in <project>/ticks.
+r7_shim() {
+  _sd="$(mktemp -d "$WORK/r7shim.XXXXXX")"; : > "$1/ticks"
+  printf '#!/bin/bash\necho x >> "%s"\nn=0; while read -r _; do n=$((n + 1)); done < "%s"\n[ "$n" -ne %s ] || cat "%s" >> "%s"\nexit 0\n' \
+    "$1/ticks" "$1/ticks" "$2" "$3" "$1/t.jsonl" > "$_sd/sleep"
+  chmod +x "$_sd/sleep"; printf '%s\n' "$_sd"
+}
+r7_ticks() { _tn=0; while read -r _; do _tn=$((_tn + 1)); done < "$1/ticks"; printf '%s\n' "$_tn"; }
 a_rflush() {
   _p="$(a_world "$1" grant boundary digest)"
   [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
-  ( sleep 16; mline M-late toolu_rflush_late >> "$_p/t.jsonl" ) &
-  _wp=$!
-  _t0=$SECONDS
-  d="$(rcall "$1" "$_p" toolu_rflush_late 30)"
-  _el=$((SECONDS - _t0))
-  wait "$_wp" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the background writer failed\n'; return; }
-  grep -qF toolu_rflush_late "$_p/t.jsonl" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the late line never landed\n'; return; }
-  [ "$d" = deny ] || { printf 'FAIL:a call whose own line landed at 16s while its hook still waited was let through (the hook answered after %ss)\n' "$_el"; return; }
+  mline M-late toolu_rflush_late > "$_p/late.line"
+  _sd="$(r7_shim "$_p" "$R7_LATE_TICK" "$_p/late.line")"
+  d="$(PATH="$_sd:$PATH" rcall "$1" "$_p" toolu_rflush_late 30)"
+  _tk="$(r7_ticks "$_p")"
+  # A gate that never reached the tick never saw the line; it lands now, so every later check reads
+  # one transcript whichever gate ran, and the verdict below is the one the gate gave without it.
+  grep -qF toolu_rflush_late "$_p/t.jsonl" || cat "$_p/late.line" >> "$_p/t.jsonl"
+  [ "$d" = deny ] || { printf 'FAIL:a call whose own line landed on wait tick %s while its hook still waited was let through (the hook waited %s tick(s))\n' "$R7_LATE_TICK" "$_tk"; return; }
+  [ "$_tk" = "$R7_LATE_TICK" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the deny came after %s wait tick(s), not on tick %s, where the line landed\n' "$_tk" "$R7_LATE_TICK"; return; }
   [ "$(owv "$_p" denies)" = 1 ] || { printf 'FAIL:the late-flush refusal counted %s, not 1\n' "$(owv "$_p" denies)"; return; }
   printf 'PASS\n'
 }
@@ -2248,19 +2261,20 @@ a_rflush_ctl() {
   printf 'PASS\n'
 }
 
-# R3. A GRANT WITHDRAWN DURING THE WAIT: the call's own line lands at about 3s together with an
-# `advisor_tool` attachment carrying available:false, toolChange:"remove". The hook must allow and
-# the owed file must be gone; a gate that tests the grant only before the wait denies.
+# R3. A GRANT WITHDRAWN DURING THE WAIT: the call's own line lands on the gate's 2nd wait tick, in
+# the same write as an `advisor_tool` attachment carrying available:false, toolChange:"remove" (the
+# r7_shim clock, as R2). The hook must allow and the owed file must be gone; a gate that tests the
+# grant only before the wait denies.
 a_rwithdraw() {
   _p="$(a_world "$1" grant boundary digest)"
   [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
-  ( sleep 3; mline M-wd toolu_rwd_late >> "$_p/t.jsonl"; printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":false,"toolChange":"remove"}}\n' >> "$_p/t.jsonl" ) &
-  _wp=$!
-  d="$(rcall "$1" "$_p" toolu_rwd_late 30)"
-  wait "$_wp" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the background writer failed\n'; return; }
-  grep -qF toolu_rwd_late "$_p/t.jsonl" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the call line never landed\n'; return; }
+  { mline M-wd toolu_rwd_late; printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":false,"toolChange":"remove"}}\n'; } > "$_p/wd.lines"
+  _sd="$(r7_shim "$_p" 2 "$_p/wd.lines")"
+  d="$(PATH="$_sd:$PATH" rcall "$1" "$_p" toolu_rwd_late 30)"
+  grep -qF toolu_rwd_late "$_p/t.jsonl" || cat "$_p/wd.lines" >> "$_p/t.jsonl"
   [ "$d" = deny ] && { printf 'FAIL:a call whose grant was withdrawn during the wait was denied\n'; return; }
   [ -e "$_p/$OW" ] && { printf 'FAIL:the withdrawn grant left the owed file in place\n'; return; }
+  [ "$(r7_ticks "$_p")" = 2 ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the allow came after %s wait tick(s), not on tick 2, where the withdrawal landed\n' "$(r7_ticks "$_p")"; return; }
   printf 'PASS\n'
 }
 
@@ -2314,7 +2328,7 @@ for _n in $R7PREDS; do
   case "$_n" in
     rmsg)       label="R (BL-730): two calls of one message are both refused and the message counts once (a_rmsg)" ;;
     rmsg_ctl)   label="R (BL-730): CONTROL -- a second message counts again, 1 then 2 (a_rmsg_ctl)" ;;
-    rflush)     label="R (BL-730): a hook still pending when its own line lands at 16s DENIES, counted once (a_rflush)" ;;
+    rflush)     label="R (BL-730): a hook still pending when its own line lands on wait tick 22 DENIES, counted once (a_rflush)" ;;
     rwithdraw)  label="R (BL-730): a grant withdrawn during the wait allows the call and removes the owed file (a_rwithdraw)" ;;
     rflush_ctl) label="R (BL-730): CONTROL -- a line that never lands is silent and uncounted, and a second expiry stands the stage down (a_rflush_ctl)" ;;
   esac

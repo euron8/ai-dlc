@@ -112,6 +112,7 @@
 # MUTANT-MATRIX r10-m12 decides=r10_m12 twins=c5_m5
 # MUTANT-MATRIX r10-m13 decides=r10_m13 twins=c5_m5
 # MUTANT-MATRIX r10-m14 decides=r10_m14 twins=c5_m5
+# MUTANT-MATRIX c1-whole decides=c1_whole twins=m6
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
 # IN PROCESS. Validator runs go through vin: the world's own copy of the validator (mutated or not)
@@ -278,6 +279,7 @@ arm_m13() { [ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1"
 arm_m14b() { [ "$(r_rc "$1")" = 0 ]; }
 arm_m15() { [ "$(r_rc "$1")" != 0 ]; }
 arm_m15b() { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "produced a verdict"; }
+arm_c1_whole() { r_line "$1" "SIDE added=1" && [ "$(r_rc "$1")" = 2 ] && r_has "$1" "are still registered in" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m16() { ! r_has "$1" "SIDE porc=0" && r_has "$1" "SIDE porc=" && ! { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "working tree changed"; }; }
 arm_m17() { [ "$(r_rc "$1")" != 0 ] && ! r_has "$1" "OK: validate-backlog-receipts" && r_has "$1" "not UNSTABLE"; }
 arm_m18() { ! { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED"; } && r_has "$1" "SIDE tree_complete=gone"; }
@@ -1181,21 +1183,51 @@ fi
 
 # c1 -- an unrelated worktree appears mid-run. The arm must not read it as its own leak.
 seed "$TMP/c1"
-( sleep 2; git -C "$TMP/c1" worktree add --detach -q "$TMP/c1-outsider" HEAD >/dev/null 2>&1 ) &
-c1_bg=$!
-c1_out="$(run_v "" "$TMP/c1" $DEF)"; c1_rc=$?
-wait "$c1_bg" 2>/dev/null
+# THE OUTSIDER LANDS AT A FORCED POINT, NEVER AFTER A RACING SLEEP (BL-868). A pass-through `git`
+# shim first on PATH adds it right after the subject's FIRST `worktree list` -- its BEFORE reading --
+# so it is registered for the whole run and every later read, the AFTER one included, sees it. A
+# `sleep 2` writer landed wherever the load put it: before the run began, or after it ended, where
+# the probe asserted nothing about a concurrent add.
+C1G="$(command -v git)"
+c1_shim() { # c1_shim <world> <shim dir> -- a `git` that adds <world>-outsider after the first `worktree list`
+  # Having added it, the shim replaces itself with a symlink to the real git, so every later call -- the
+  # AFTER reading included -- is the real binary and costs no counted start.
+  mkdir -p "$2"
+  printf '#!/bin/bash\n"%s" "$@"; r=$?\nif [ "${*: -1}" = list ] && [ "${*: -2:1}" = worktree ]; then\n  echo x >> "%s/lists"\n  [ -e "%s/added" ] || { "%s" -C "%s" worktree add --detach -q "%s" HEAD >/dev/null 2>&1 && : > "%s/added"; }\n  ln -sf "%s" "%s/git"\nfi\nexit $r\n' \
+    "$C1G" "$2" "$2" "$C1G" "$1" "$1-outsider" "$2" "$C1G" "$2" > "$2/git"
+  chmod +x "$2/git"
+  case "$2:$PATH" in *[[:space:]]*) note "FIXTURE BROKEN: c1's shim PATH carries whitespace, which run_v's env words split"; exit 2 ;; esac
+}
+C1S="$TMP/c1-shim"; c1_shim "$TMP/c1" "$C1S"
+c1_out="$(run_v "PATH=$C1S:$PATH" "$TMP/c1" $DEF)"; c1_rc=$?
 c1_saw="$(git -C "$TMP/c1" worktree list | grep -c 'c1-outsider' )" || c1_saw=0
-if [ "$c1_saw" -eq 0 ]; then
+c1_lists="$(grep -c . "$C1S/lists" 2>/dev/null)" || c1_lists=0
+if [ "$c1_saw" -eq 0 ] || [ ! -e "$C1S/added" ]; then
   note "FAIL  c1 -- the outsider worktree was never registered, so this probe asserts nothing about a concurrent add"; rc=1
+elif [ "$c1_lists" -ne 1 ]; then
+  # Exactly one shim reading: the BEFORE read added the outsider and the shim stood down, so the AFTER
+  # read was the real git. c1-whole's kill proves the order (its arm needs the AFTER leak message).
+  note "FAIL  c1 -- the shim saw $c1_lists registry reading(s), not 1, so it did not stand down after adding the outsider"; rc=1
 elif [ "$c1_rc" -ne 0 ]; then
   note "FAIL  c1 a concurrent worktree add broke the run -- the subject exited $c1_rc. The registry is shared; another process's checkout is not this run's leak."
   printf '%s\n' "$c1_out" | tail -3 | sed 's/^/      /'; rc=1
 else
-  note "ok    c1 -- a worktree added by another process mid-run leaves the verdict at 0"
+  ok "c1 -- a worktree added by another process mid-run leaves the verdict at 0"; B_c1=1
 fi
 git -C "$TMP/c1" worktree remove --force "$TMP/c1-outsider" >/dev/null 2>&1
 git -C "$TMP/c1" worktree prune >/dev/null 2>&1
+# c1-whole: the leak check counting the WHOLE registry, both readings (the shape before the fix). With
+# the outsider forced in after the BEFORE reading, BEFORE reads 0 and AFTER reads 1, so it is the AFTER
+# leak check that refuses -- the arm a racing writer landing early could never reach.
+seed "$TMP/c1m"
+if mut "$TMP/c1m" 's|awk -v p="\$WORK/" .index(\$1, p) == 1.|awk "NR > 1"|'; then
+  c1_shim "$TMP/c1m" "$TMP/c1m-shim"
+  drive c1-whole "$TMP/c1m" "PATH=$TMP/c1m-shim:$PATH" $DEF
+  side c1-whole "added=$([ -e "$TMP/c1m-shim/added" ] && echo 1 || echo 0)"
+  score c1-whole "${B_c1:-0}" "c1-whole -- a leak check over the whole registry reads the outsider added mid-run as this run's own leak"
+  git -C "$TMP/c1m" worktree remove --force "$TMP/c1m-outsider" >/dev/null 2>&1
+  git -C "$TMP/c1m" worktree prune >/dev/null 2>&1
+fi
 
 # c2 -- two concurrent runs against one repository. Both must exit 0; neither may see the
 # other's checkouts as its own.
@@ -2128,21 +2160,18 @@ c5r_seed() { # c5r_seed <dir> <closed|open> [<sed>] -- a mutant is applied BEFOR
   ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m c5rbranch >/dev/null 2>&1 )
   [ -s "$d/.c5base" ] || { echo "FIXTURE BROKEN: c5r probe has no base sha" >&2; exit 2; }
 }
-# THE TIMEOUT GUARD. The depth cap above bounds the recursion; the watchdog bounds everything else,
-# so a regression that hangs this arm turns into a FAIL instead of a wedged suite. It kills only
-# the pid it started.
-C5R_TIMEOUT=600
+# NO WALL-CLOCK WATCHDOG (BL-868). The receipt's depth cap above (exit 7 at depth 1) bounds the
+# recursion, which is the only way this arm can fail to end; a 600s watchdog turned a slow enough
+# box into a FAIL and decided nothing the cap does not. A run that leaves no `rc=` line died before
+# c5_run could print one.
 c5r_case() { # c5r_case <name> <closed|open> <sed-or-empty> -> sets C5R_OUT, C5R_RUNS
-  local d="$TMP/$1" p w
+  local d="$TMP/$1"
   c5r_seed "$d" "$2" "$3" || return 1
   : > "$TMP/$1.log"
-  ( export C5R_LOG="$TMP/$1.log"; c5_run "$d" > "$TMP/$1.out" ) & p=$!
-  ( sleep "$C5R_TIMEOUT" & s=$!; trap 'kill -TERM "$s" 2>/dev/null; exit 0' TERM; wait "$s"; kill -TERM "$p" 2>/dev/null ) >/dev/null 2>&1 & w=$!
-  wait "$p"
-  kill -TERM "$w" 2>/dev/null; wait "$w" 2>/dev/null
+  ( export C5R_LOG="$TMP/$1.log"; c5_run "$d" > "$TMP/$1.out" )
   C5R_OUT="$(cat "$TMP/$1.out")"
   grep -q '^rc=' <<<"$C5R_OUT" || C5R_OUT="$C5R_OUT
-rc=timeout"
+rc=none"
   C5R_RUNS="$(grep -c . "$TMP/$1.log")" || C5R_RUNS=0
   return 0
 }
@@ -2594,6 +2623,7 @@ twin_of() {
     r10-m12) echo c5_m5 ;;
     r10-m13) echo c5_m5 ;;
     r10-m14) echo c5_m5 ;;
+    c1-whole) echo m6 ;;
     *) echo "" ;;
 # TWINS-END
   esac
