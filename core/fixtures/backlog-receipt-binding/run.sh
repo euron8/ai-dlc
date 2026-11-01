@@ -267,7 +267,10 @@ arm_m1() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && ! r_has "
 arm_m2c() { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "are satisfied by a COMMENT"; }
 arm_m3() { [ "$(r_rc "$1")" != 0 ] && ! r_has "$1" "OK: validate-backlog-receipts" && grep -qE 'base-exit-9 receipt|exits 9 on' "$REC/$1.out"; }
 arm_m4() { [ "$(r_cls "$1" BL-805)" != "ALREADY-PASSING" ] && [ "$(r_rc "$1")" != 0 ]; }
-arm_m5b() { [ "$(r_cls "$1" BL-801)" != "UNSEEDED" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-801)" ]; }; }
+# m5b, m15 and gitdir_mutant each read only a capture of their OWN world, keyed on the SIDE line its
+# block writes after its drive. Without that key each arm was absence-shaped -- true on any refusing
+# capture -- and c1-whole's AFTER leak refusal (rc 2, no verdict on BL-801) tripped all three.
+arm_m5b() { r_line "$1" "SIDE world=unwritable" && [ "$(r_cls "$1" BL-801)" != "UNSEEDED" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-801)" ]; }; }
 arm_m6() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "DRIFTED" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m7b() { r_has "$1" "SIDE escaped=1" && [ "$(r_rc "$1")" != 0 ]; }
 arm_m8b_mut() { [ "$(r_rc "$1")" = 1 ] && r_has "$1" "produced ZERO scored receipts"; }
@@ -277,13 +280,13 @@ arm_m8d_mut() { [ "$(r_rc "$1")" = 0 ] && grep -q ' R2 declared-empty$' "$REC/$1
 arm_m12() { [ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
 arm_m13() { [ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
 arm_m14b() { [ "$(r_rc "$1")" = 0 ]; }
-arm_m15() { [ "$(r_rc "$1")" != 0 ]; }
+arm_m15() { r_line "$1" "SIDE world=lost-verdict" && [ "$(r_rc "$1")" != 0 ]; }
 arm_m15b() { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "produced a verdict"; }
 arm_c1_whole() { r_line "$1" "SIDE added=1" && [ "$(r_rc "$1")" = 2 ] && r_has "$1" "are still registered in" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m16() { ! r_has "$1" "SIDE porc=0" && r_has "$1" "SIDE porc=" && ! { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "working tree changed"; }; }
 arm_m17() { [ "$(r_rc "$1")" != 0 ] && ! r_has "$1" "OK: validate-backlog-receipts" && r_has "$1" "not UNSTABLE"; }
 arm_m18() { ! { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED"; } && r_has "$1" "SIDE tree_complete=gone"; }
-arm_gitdir_mutant() { { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "OUT-OF-POPULATION"; } || r_has "$1" "SIDE hookspath=changed"; }
+arm_gitdir_mutant() { r_has "$1" "SIDE hookspath=" && { { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "OUT-OF-POPULATION"; } || r_has "$1" "SIDE hookspath=changed"; }; }
 arm_m_loose() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && r_has "$1" "BL-632" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m_heading_only() { [ -z "$(r_cls "$1" BL-851)" ] && [ "$(r_cls "$1" BL-850)" = "PROSE-CLOSABLE" ] && grep -qE '^SUMMARY entries=1 sh-receipts=1 ' "$REC/$1.out"; }
 # The three memo halves, one arm per (drive, expected cells). A capture holds a NONE line and, only
@@ -1146,6 +1149,7 @@ if mut "$TMP/m15" 's|^  if \[ "$_sl_got" -ne "$_sl_i" \]; then|  if false; then|
   # so the receipt is dispatched, runs, and files nothing.
   if mut "$TMP/m15" 's|^  wr() { printf|  wr() { [ "$n" = "0001" ] \&\& return 0; printf|'; then
     drive m15 "$TMP/m15" "" $DEF
+    side m15 "world=lost-verdict"
   fi
 fi
 # m15b -- and the arm itself must FIRE on that same tree, unmutated but for the lost verdict.
@@ -2347,8 +2351,10 @@ arm_pr_m_ignore() { r_line "$1" "SIDE pre=REPLAYED"; }
 arm_pr_m_default() { r_has "$1" "PROBE-RECORD: REPLAYED"; }
 arm_pr_m_keylib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
 arm_pr_m_keyrlib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
-arm_pr_m_early() { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }
-arm_pr_m_between() { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }
+# Both read a pr_two capture only: `SIDE store=` is written by pr_two alone, so a capture from a world
+# that never measured a store (c1-whole's, the control's) cannot read as a surviving record.
+arm_pr_m_early() { r_has "$1" "SIDE store=" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
+arm_pr_m_between() { r_has "$1" "SIDE store=" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
 # Cell 6 negated on the capture: a replay whose run did not end in an all-driver OK line naming K
 # without "fired" (the deleted R7_PROBED is also unbound under set -u, which ends the run unreported).
 arm_pr_m_nostate() {
