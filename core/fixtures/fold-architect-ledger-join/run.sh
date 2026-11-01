@@ -31,6 +31,8 @@
 # changes. The recorded matrix plus the twin replaces an exact-vector assertion of every arm.
 # MUTANT-MATRIX SEAM-INVERTED decides=SEAM-mutant twins=SEAM-verdict
 # MUTANT-MATRIX PROBE-STUB decides=PROBE-refuses twins=PROBE-seam-skip
+# MUTANT-MATRIX st-nostate decides=NET-frozen twins=NET-changing
+# MUTANT-MATRIX st-noconfirm decides=NET-changing twins=NET-frozen
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fold-architect-ledger-join/run.sh --matrix
 set -uo pipefail
 
@@ -497,38 +499,133 @@ expect D5-dot 0 "PASS: $ONE -> $RES" "" 0 "residue artifact: with a leading ./ -
 # seconds are the subject's own work: load stretches the wall clock it takes to spend them, never
 # the amount. The 120s wall bound this replaced read a loaded box as a HANG.
 #
-# THE WATCHDOG IS A REFUSAL KEYED ON NO PROGRESS. A subject that BLOCKS -- burning no CPU, so the
-# cap never fires -- would wedge the gate. Every second the loop asks whether the subject has
-# ADVANCED: its output file `d6<flag>.out` grew, or its CPU time (`ps -o time=` on the pid it
-# recorded) moved. A spinning subject advances its CPU time on every check however loaded the box
-# is, and so always reaches its cap; only a subject that has neither exited nor advanced for
-# D6_IDLE seconds is reaped and the fixture refuses, exit 2. That is a harness that wedged, not a
-# verdict about the parse, so it is never a FAIL row. D6_IDLE is a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict.
+# THE WATCHDOG IS A REFUSAL KEYED ON A SETTLED TREE, NEVER ON ELAPSED TIME (BL-868). A subject that
+# BLOCKS -- burning no CPU, so the cap never fires -- would wedge the gate. The net (st_net, below)
+# refuses only when every live process of the subject's tree is blocked (S, I or T) with no signal
+# pending, on two consecutive polls that read the same pids, CPU times and output size: a tree in
+# that state will never move on its own, at any load. The 30-idle-seconds count it replaced read a
+# loaded box as a wedge. A spinning subject is runnable, so it is never settled and always reaches
+# its cap. A refusal is a harness that wedged, not a verdict about the parse: exit 2, never a FAIL row.
 D6_CPU=10
-D6_IDLE=30
-for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
-  o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"; pf="$WORK/d6${flag}.pid"
-  : > "$o"
-  ( ulimit -t "$D6_CPU"
-    bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag" \
-      > "$o" 2>&1 < /dev/null &
-    echo "$!" > "$pf"; wait "$!"; echo $? > "$s" ) 2>/dev/null &
-  wpid=$!; n=0; idle=0; lsz=""; lcpu=""
-  while [ ! -s "$s" ] && kill -0 "$wpid" 2>/dev/null; do
-    sleep 0.1; n=$((n+1))
-    [ "$((n % 10))" -eq 0 ] || continue
-    sz="$(wc -c < "$o" 2>/dev/null | tr -d ' ')"
-    cpu="$(ps -o time= -p "$(cat "$pf" 2>/dev/null)" 2>/dev/null | tr -d ' ')"
-    if [ "$sz" != "$lsz" ] || [ "$cpu" != "$lcpu" ]; then lsz="$sz"; lcpu="$cpu"; idle=0; continue; fi
-    idle=$((idle+1))
-    if [ "$idle" -ge "$D6_IDLE" ]; then
-      sp="$(cat "$pf" 2>/dev/null)"; [ -n "$sp" ] && { pkill -9 -P "$sp" 2>/dev/null; kill -9 "$sp" 2>/dev/null; }
-      pkill -P "$wpid" 2>/dev/null; kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
-      echo "FIXTURE BROKEN: [D6$flag] the subject neither exited nor advanced its output file $o or its CPU time for ${D6_IDLE}s; no verdict on the parse is readable" >&2
-      exit 2
-    fi
+# ST_NET_BEGIN -- the settled-tree net. A restated copy, byte-identical, in spec-join-integrity/run.sh;
+# the shape is readset-skip's aw_group_settled, with one difference: a member whose state `ps` will
+# not give is NOT settled (the net keeps waiting), so a refused `ps` can never make the net fire.
+st_alive() { kill -0 "$1" 2>/dev/null; }
+st_members() { # <pid>: "<pid> <stat> <pending> <cpu time>" for <pid> and every descendant
+  local p
+  st_alive "$1" || return 0
+  printf '%s %s\n' "$1" "$(ps -o stat=,pending=,time= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //')"
+  for p in $(pgrep -P "$1" 2>/dev/null); do st_members "$p"; done
+}
+st_settled() { # <members text>: 0 when there is a member and EVERY member is blocked with nothing pending
+  awk 'NF < 4 { bad = 1; next } { n++; if ($2 !~ /^[SIT]/ || $3 != "0") bad = 1 } END { exit (n > 0 && !bad) ? 0 : 1 }' <<<"$1"
+}
+st_net() { # <root pid> <progress file>: 0 when the root exits; 2 when the tree is settled on two consecutive identical polls
+  local cur prev="" sz
+  while st_alive "$1"; do
+    cur="$(st_members "$1")"; sz="$(wc -c < "$2" 2>/dev/null | tr -d ' ')"
+    if st_settled "$cur"; then
+      [ "$prev" = "$sz|$cur" ] && return 2
+      prev="$sz|$cur"
+    else prev=""; fi
+    sleep 0.1
   done
-  wait "$wpid" 2>/dev/null
+  return 0
+}
+st_reap() { # <pid>: SIGKILL the tree, leaves first (a stopped process takes SIGKILL)
+  local p
+  for p in $(pgrep -P "$1" 2>/dev/null); do st_reap "$p"; done
+  kill -9 "$1" 2>/dev/null
+}
+# ST_NET_END
+# d6_metered <out> <rcfile> <cmd...>: runs <cmd> under the CPU cap in a wrapper that records its rc;
+# returns st_net's answer, with the tree reaped on a refusal.
+d6_metered() {
+  local o="$1" s="$2" w r; shift 2
+  : > "$o"
+  ( ulimit -t "$D6_CPU"; "$@" > "$o" 2>&1 < /dev/null & wait "$!"; echo $? > "$s" ) 2>/dev/null &
+  w=$!
+  st_net "$w" "$o"; r=$?
+  if [ "$r" = 2 ]; then st_reap "$w"; wait "$w" 2>/dev/null; fi
+  wait "$w" 2>/dev/null
+  return "$r"
+}
+
+# THE NET HAS A SUBJECT, END TO END: a stub that STOPS itself (blocked, burning nothing, never ending)
+# is refused and its tree reaped; the twin, a stub that exits, is not refused. A net that never fires
+# reads exactly like a subject that always exits.
+# The net reads process state through `ps`. Where `ps` gives none (the read-set tracer's sandbox
+# refuses the setuid /bin/ps) no member is ever settled, so the net degrades to waiting for the
+# subject to exit -- it can never fire wrongly -- and this end-to-end arm, whose stub never exits,
+# stands down rather than wait forever. The scripted cells below still run.
+printf '%s\n' '#!/bin/bash' "echo \"\$\$\" > \"$WORK/st-stop.pid\"" 'kill -STOP $$' > "$WORK/st-stop.sh"
+printf '%s\n' '#!/bin/bash' 'exit 3' > "$WORK/st-exit.sh"
+if [ -z "$(ps -o stat= -p "$$" 2>/dev/null)" ]; then
+  sd "[NET-e2e] stood down: ps gives no process state here, so a never-ending stub could not be refused"
+else
+  d6_metered "$WORK/st-stop.out" "$WORK/st-stop.rc" bash "$WORK/st-stop.sh"; st_e2e=$?
+  st_left=gone; kill -0 "$(cat "$WORK/st-stop.pid" 2>/dev/null)" 2>/dev/null && st_left=alive
+  [ -s "$WORK/st-stop.pid" ] || st_left=never-started
+  d6_metered "$WORK/st-exit.out" "$WORK/st-exit.rc" bash "$WORK/st-exit.sh"; st_e2t=$?
+  if [ "$st_e2e" = 2 ] && [ "$st_left" = gone ] && [ "$st_e2t" = 0 ] && [ "$(cat "$WORK/st-exit.rc" 2>/dev/null)" = 3 ]; then
+    ok "[NET-e2e] a self-stopped subject is refused (net rc 2) and its tree reaped; a subject that exits (rc 3) is not refused"
+  else bad "[NET-e2e] the settled-tree net: stopped stub rc=$st_e2e left=[$st_left], exiting stub rc=$st_e2t recorded=$(cat "$WORK/st-exit.rc" 2>/dev/null)"; fi
+fi
+B_NET=0
+
+# THE NET'S TWO GUARDS, EACH WITH A SUBJECT THE OTHER CANNOT SEE. The block above is cut from this file
+# and driven over SCRIPTED trees (st_alive/st_members replaced, pacing a no-op), so each cell is a
+# fact about the predicate and costs no process. frozen: a RUNNING member, nothing changing, then
+# gone -> 0 (only the state test separates it; the confirm step sees identical polls). changing:
+# every poll settled but with a different pid set, then gone -> 0 (only the confirm step separates
+# it). stuck: settled and identical -> 2. A cell vector is "<frozen><changing><stuck>".
+st_cell() { # <block file> <frozen|changing|stuck> -> st_net's rc over that scripted tree (run in a subshell)
+  . "$1"
+  ST_POLL=0
+  st_alive() { ST_POLL=$((ST_POLL+1)); [ "$ST_POLL" -le 4 ]; }
+  sleep() { :; }
+  if [ "$2" = frozen ]; then st_members() { echo "100 R 0 0:01.00"; }
+  elif [ "$2" = changing ]; then st_members() { printf '100 S 0 0:00.00\n%s S 0 0:00.00\n' "$((200 + ST_POLL))"; }
+  else st_members() { echo "100 S 0 0:00.00"; }; fi
+  st_net 100 /dev/null; echo $?
+}
+st_cells() { # <block file> -> "<frozen rc><changing rc><stuck rc>"
+  local c v=""
+  for c in frozen changing stuck; do v="$v$(st_cell "$1" "$c")"; done
+  printf '%s' "$v"
+}
+awk '/^# ST_NET_BEGIN/ { f = 1; next } /^# ST_NET_END/ { f = 0 } f' "$0" > "$WORK/st-block.sh"
+grep -q '^st_net()' "$WORK/st-block.sh" || { echo "FIXTURE BROKEN: the ST_NET block could not be cut from $0" >&2; exit 2; }
+ST_BASE="$(st_cells "$WORK/st-block.sh")"
+if [ "$ST_BASE" = 002 ]; then ok "[NET-cells] the cut net reads frozen-running 0, changing-settled 0, stuck 2"; B_NET=1
+else bad "[NET-cells] the cut net read '$ST_BASE', want 002"; fi
+st_mut() { # <name> <sed> <want vector> <claim>
+  sed "$2" "$WORK/st-block.sh" > "$WORK/st-$1.sh"
+  if cmp -s "$WORK/st-block.sh" "$WORK/st-$1.sh"; then bad "[NET-$1] mutant DID NOT APPLY"; return; fi
+  local got; got="$(st_cells "$WORK/st-$1.sh")"
+  if [ "$MATRIX" = 1 ]; then
+    local i=0 c v
+    for c in NET-frozen NET-changing NET-stuck; do
+      v="$(printf '%s' "$got" | cut -c$((i + 1)))"; i=$((i + 1))
+      if [ "$v" = "$(printf '%s' "$ST_BASE" | cut -c"$i")" ]; then matrix_row "$1" "$c" "$v" GREEN no; else matrix_row "$1" "$c" "$v" TRIPPED yes; fi
+      MROWS=$((MROWS + 1))
+    done
+  fi
+  if [ "$got" = "$3" ]; then
+    if [ "$1" = st-nostate ]; then mutant_killed "${B_NET:-0}" st-nostate "[NET-$1] $4 (cells $got, base 002)"
+    else mutant_killed "${B_NET:-0}" st-noconfirm "[NET-$1] $4 (cells $got, base 002)"; fi
+  else bad "[NET-$1] mutant read '$got', want '$3'"; fi
+}
+st_mut st-nostate 's/\$2 !~ \/\^\[SIT\]\/ || //' 202 "a net that ignores process STATE refuses a running tree that merely shows no change"
+st_mut st-noconfirm 's/\[ "\$prev" = "\$sz|\$cur" \] && return 2/return 2/' 022 "a net that refuses on ONE settled poll refuses a tree whose members are still changing"
+
+for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
+  o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"
+  d6_metered "$o" "$s" bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag"
+  if [ "$?" = 2 ]; then
+    echo "FIXTURE BROKEN: [D6$flag] the subject's tree settled (every process blocked, nothing pending, nothing changing) without exiting; no verdict on the parse is readable" >&2
+    exit 2
+  fi
   frc="$(cat "$s" 2>/dev/null)"
   if [ "$frc" = 2 ] && grep -qF -- "FAIL: $flag takes" "$o"; then ok "[D6$flag] $flag given last with no value -> exit 2"
   elif [ "$frc" = 152 ]; then bad "[D6$flag] $flag given last with no value SPUN until its ${D6_CPU}s CPU cap ended it (rc=152), never refusing"
@@ -857,7 +954,7 @@ mkworld 313; oneshot "$SLOT/$ONE"; mkdir -p "$W/_bmad-output" "$W/shim"
 printf '%s\n' '# Pipeline Snapshot' '' '## Pipeline Position' '- pipeline_variant: carry-over' \
   '- current_step_file: retro.md' > "$W/_bmad-output/pipeline-snapshot.md"
 sstatus "$W" bug 313
-printf '%s\n' '#!/bin/sh' 'for a in "$@"; do case "$a" in *pipeline-snapshot.md) kill -KILL $$ ;; esac; done' \
+printf '%s\n' '#!/bin/bash' 'for a in "$@"; do case "$a" in *pipeline-snapshot.md) kill -KILL $$ ;; esac; done' \
   'exec /usr/bin/awk "$@"' > "$W/shim/awk" && chmod +x "$W/shim/awk"
 "$W/shim/awk" 'BEGIN { exit 0 }' /dev/null || { echo "FIXTURE BROKEN: the awk shim does not pass through" >&2; exit 2; }
 SHIM_PATH="$W/shim:$PATH"
@@ -922,7 +1019,7 @@ if [ "$MATRIX" = 1 ]; then
   matrix_row SEAM-INVERTED SEAM-verdict 0 "$([ "$c_verdict" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_verdict" = 1 ] && echo no || echo yes)"
   matrix_row PROBE-STUB PROBE-refuses "$s4rc" "$([ "$c_stub" = 1 ] && echo TRIPPED || echo GREEN)" "$(kd "$c_stub")"
   matrix_row PROBE-STUB PROBE-seam-skip "$s4src" "$([ "$c_stubtwin" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_stubtwin" = 1 ] && echo no || echo yes)"
-  MROWS=4
+  MROWS=$((MROWS + 4))
 fi
 if [ "$c_stub" = 1 ]; then
   mutant_killed "$B_SEAM" PROBE-STUB "[PROBE-refuses] a gate whose self-probe fails refuses with exit 2 and says so end to end; a gate that skipped or deleted the probe call would answer rc 0"
@@ -941,11 +1038,11 @@ else bad "[SEAM-verdict] the twin tripped: the mutant changed more than the bann
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
 else
-  if [ "$MROWS" -eq 4 ]; then ok "[MX] the matrix run measured 4 cells for the 2 mutants"; else bad "[MX] matrix rows=$MROWS, 4 expected"; fi
+  if [ "$MROWS" -eq 10 ]; then ok "[MX] the matrix run measured 10 cells for the 4 mutants"; else bad "[MX] matrix rows=$MROWS, 10 expected"; fi
 fi
 
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=82
+EXPECTED_ARMS=86
 if [ $((asserted + stood)) -ne "$EXPECTED_ARMS" ]; then
   echo "FIXTURE BROKEN: $((asserted + stood)) arms reported, $EXPECTED_ARMS expected" >&2; exit 1
 fi

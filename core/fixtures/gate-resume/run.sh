@@ -324,8 +324,16 @@ if [ -n "$CKPT" ]; then
   # A NEWER LEDGER THAT WAS NEVER OPENED must not become current -- this is the exact
   # regression the script's header documents as fixed (a concurrent session's ledger of
   # another gate type, newer by mtime, must not narrow this gate).
-  sleep 1
+  # The ORDER is stamped, never slept to (BL-868): `touch -c -t` gives the opened ledger an older
+  # mtime and the unopened one a newer one, and the order is asserted before the arm reads it, so
+  # the arm discriminates against an mtime scan however long each record took. `-c` never creates
+  # a file, so a wrong ledger path is caught by the order check rather than stamped into being.
   bash "$CKPT" --root "$_eroot" --nonce "$_n2" record 9 PASS >/dev/null 2>&1
+  _eld="$_eroot/_bmad-output/.gate-checkpoint"
+  touch -c -t 202601010000.00 "$_eld/${_n1}.tsv"; touch -c -t 202601010001.00 "$_eld/${_n2}.tsv"
+  if ! [ "$_eld/${_n2}.tsv" -nt "$_eld/${_n1}.tsv" ]; then
+    echo "FIXTURE BROKEN: the stamped ledgers ${_n1}.tsv/${_n2}.tsv under $_eld are not in mtime order, so the arm below cannot tell the OPEN marker from an mtime scan" >&2; exit 2
+  fi
   _ecur_after="$(bash "$CKPT" --root "$_eroot" current 2>/dev/null)"
   if [ "$_ecur_after" = "$_n1" ]; then
     ok "'current' still names ${_n1} after an unopened newer ledger (${_n2}) is written"
@@ -1016,8 +1024,14 @@ else
   bash "$CKPT" --root "$_m5root" --nonce "$_m5old" open   >/dev/null 2>&1
   bash "$CKPT" --root "$_m5root" --nonce "$_m5old" record 1 PASS >/dev/null 2>&1
   bash "$CKPT" --root "$_m5root" --nonce "$_m5old" close  >/dev/null 2>&1
-  sleep 1
   bash "$CKPT" --root "$_m5root" --nonce m5-new record 1 PASS >/dev/null 2>&1
+  # Stamped, never slept to (BL-868): m5-new is made the newer ledger by an explicit mtime, and the
+  # order is asserted, so the mutant's mtime scan meets the order it must misread at any load.
+  _m5ld="$_m5root/_bmad-output/.gate-checkpoint"
+  touch -c -t 202601010000.00 "$_m5ld/${_m5old}.tsv"; touch -c -t 202601010001.00 "$_m5ld/m5-new.tsv"
+  if ! [ "$_m5ld/m5-new.tsv" -nt "$_m5ld/${_m5old}.tsv" ]; then
+    echo "FIXTURE BROKEN: m5's stamped ledgers under $_m5ld are not in mtime order, so the mutant cannot be shown to read mtime" >&2; exit 2
+  fi
   _m5real="$(bash "$CKPT" --root "$_m5root" current 2>/dev/null)"
   _m5mut="$(bash "$MUT5"  --root "$_m5root" current 2>/dev/null)"
   mcell m5 current-mtime "$([ "$_m5mut" = m5-new ] && echo 0 || echo 1)"

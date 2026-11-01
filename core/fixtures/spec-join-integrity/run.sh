@@ -34,6 +34,8 @@
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/spec-join-integrity/run.sh --matrix
 # MUTANT-MATRIX-DYNAMIC mut-helpers why=mut, mut_says, mut2 and mut2_says pass the mutant id as a variable; every id they produce has its own row above
 # MUTANT-MATRIX-CONTROL lr-local-regex-baseform why=the same local matcher must stay GREEN (rc 0) on the bare closer in lr-below-marker.md; the survivor is the pass
+# MUTANT-MATRIX-FULL sj-st-nostate worlds=net-cells why=the kill reads the cut ST_NET block's scripted-tree cell vector (frozen, changing, stuck), not any argument list of the subject
+# MUTANT-MATRIX-FULL sj-st-noconfirm worlds=net-cells why=the kill reads the cut ST_NET block's scripted-tree cell vector (frozen, changing, stuck), not any argument list of the subject
 # MUTANT-MATRIX-FULL fold-hang worlds=fold-heavy-real,fold-heavy-hang why=the kill is read from the awk shim log (start/end/152), not from any arm verdict; no single argument list decides it
 # MUTANT-MATRIX-FULL lr-sibling-unchecked worlds=lr-no-anchor-mutant why=the mutant lives in a sibling-less directory, so no capture-keyed arm can drive it; one run names the misdiagnosis
 # MUTANT-MATRIX lr-off decides=spec.orphan-lr+prd.prd-ok.md twins=spec.orphan-lr+prd.prd-ok.md+baseline.nonexistent-baseline.txt
@@ -635,12 +637,8 @@ _mut3_build() { # <name> <f1> <t1> <f2> <t2> <f3> <t3>  -- each layer guarded on
 # after a handful of runs, and under the 16-way fixture pool that is sixteen per run. One
 # level of `pkill -P` was not enough either, because the chain is wrapper -> subshell ->
 # awk; two survived. Recursion is what makes it complete, and children must die before
-# their parent, since once the parent is gone `pgrep -P` can no longer find them.
-_kill_tree() { # <pid>
-  local kid
-  for kid in $(pgrep -P "$1" 2>/dev/null); do _kill_tree "$kid"; done
-  kill -9 "$1" 2>/dev/null
-}
+# their parent, since once the parent is gone `pgrep -P` can no longer find them. That is
+# st_reap, inside the ST_NET block below.
 
 discriminates() { # <label> <quiet-spec-dir> <offender-spec-dir> <prd>
   local lab="$1" q="$2" o="$3" pr="$4" a b
@@ -668,18 +666,16 @@ discriminates() { # <label> <quiet-spec-dir> <offender-spec-dir> <prd>
 # shim's `end` record is the observable, and it is binary: every awk that started ended 0, or
 # one ended 152.
 #
-# THE NET IS A NO-PROGRESS REFUSAL, NEVER A VERDICT. A hang that burns no CPU (a blocked read)
-# would never reach the budget. While the subject is alive, its progress signature is the
-# shim log's line count plus the CPU time of every process in its tree; any change resets the
-# count, so a spinning awk advances it every tick and only a tree that is alive, logging
-# nothing and burning nothing for SJ_STALL_TICKS ticks is refused -- `FIXTURE BROKEN`, exit 2.
-# UNDER sandbox-exec THE SETUID /bin/ps IS REFUSED, so there the signature degrades to the log count
-# alone. The verdicts do not move: the SIGXCPU kill is the kernel's and the real fold exits by itself;
-# only the net watching for a CPU-free hang is coarser.
-# SJ_STALL_TICKS=300 IS a margin over one observed step, not a measurement; a refusal costs a re-run,
-# never a verdict.
+# THE NET IS A SETTLED-TREE REFUSAL, NEVER A VERDICT AND NEVER A TICK COUNT (BL-868). A hang that
+# burns no CPU (a blocked read) would never reach the budget. The net (st_net, below) refuses only
+# when every live process of the subject's tree is blocked (S, I or T) with no signal pending, on
+# two consecutive polls that read the same pids, CPU times and shim-log size: a tree in that state
+# never moves on its own, at any load. The 300-still-ticks count it replaced read a loaded box as a
+# hang. A spinning awk is runnable, so it is never settled and always reaches its CPU budget.
+# UNDER sandbox-exec THE SETUID /bin/ps IS REFUSED, so no member is ever settled there and the net
+# degrades to waiting for the subject to exit -- it cannot fire wrongly. The verdicts do not move:
+# the SIGXCPU kill is the kernel's and the real fold exits by itself.
 SJ_CPU_BUDGET="${SJ_CPU_BUDGET:-2}"
-SJ_STALL_TICKS="${SJ_STALL_TICKS:-300}"
 SJ_REAL_AWK="$(command -v awk)"
 SJ_SHIM="$R/awk-shim"
 mkdir -p "$SJ_SHIM" || { echo "spec-join-integrity: FIXTURE BROKEN: could not create the awk shim dir" >&2; exit 2; }
@@ -687,30 +683,56 @@ printf '#!/bin/bash\nprintf "start %%s\\n" "$$" >> "$SJ_SHIM_LOG"\n"%s" "$@"; r=
   "$SJ_REAL_AWK" > "$SJ_SHIM/awk" && chmod +x "$SJ_SHIM/awk" \
   || { echo "spec-join-integrity: FIXTURE BROKEN: could not write the awk shim" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "spec-join-integrity: FIXTURE BROKEN: $1" >&2; exit 2; }
-_tree_pids() { # <pid>: the pid and every descendant, one per line
-  local kid
-  printf '%s\n' "$1"
-  for kid in $(pgrep -P "$1" 2>/dev/null); do _tree_pids "$kid"; done
+# ST_NET_BEGIN -- the settled-tree net. A restated copy, byte-identical, in fold-architect-ledger-join/run.sh;
+# the shape is readset-skip's aw_group_settled, with one difference: a member whose state `ps` will
+# not give is NOT settled (the net keeps waiting), so a refused `ps` can never make the net fire.
+st_alive() { kill -0 "$1" 2>/dev/null; }
+st_members() { # <pid>: "<pid> <stat> <pending> <cpu time>" for <pid> and every descendant
+  local p
+  st_alive "$1" || return 0
+  printf '%s %s\n' "$1" "$(ps -o stat=,pending=,time= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //')"
+  for p in $(pgrep -P "$1" 2>/dev/null); do st_members "$p"; done
 }
-run_metered() { # <log> <script> <args...> -- 0 the subject exited; 2 it neither exited nor advanced
-  # stdout+stderr land in <log>.out; the shim's records in <log>.
-  local log="$1" prog="$2"; shift 2
-  : > "$log"
-  ( ulimit -t "$SJ_CPU_BUDGET"; SJ_SHIM_LOG="$log" PATH="$SJ_SHIM:$PATH" exec bash "$prog" "$@" ) > "$log.out" 2>&1 &
-  local pid=$! sig last="" still=0 pl
-  while kill -0 "$pid" 2>/dev/null; do
-    pl="$(_tree_pids "$pid" | tr '\n' ',')"; pl="${pl%,}"
-    sig="$(grep -c '' "$log" 2>/dev/null)|$(ps -o time= -p "$pl" 2>/dev/null | tr -d ' \n')"
-    if [ "$sig" = "$last" ]; then still=$((still+1)); else still=0; last="$sig"; fi
-    if [ "$still" -ge "$SJ_STALL_TICKS" ]; then
-      _kill_tree "$pid"; wait "$pid" 2>/dev/null
-      return 2
-    fi
+st_settled() { # <members text>: 0 when there is a member and EVERY member is blocked with nothing pending
+  awk 'NF < 4 { bad = 1; next } { n++; if ($2 !~ /^[SIT]/ || $3 != "0") bad = 1 } END { exit (n > 0 && !bad) ? 0 : 1 }' <<<"$1"
+}
+st_net() { # <root pid> <progress file>: 0 when the root exits; 2 when the tree is settled on two consecutive identical polls
+  local cur prev="" sz
+  while st_alive "$1"; do
+    cur="$(st_members "$1")"; sz="$(wc -c < "$2" 2>/dev/null | tr -d ' ')"
+    if st_settled "$cur"; then
+      [ "$prev" = "$sz|$cur" ] && return 2
+      prev="$sz|$cur"
+    else prev=""; fi
     sleep 0.1
   done
-  wait "$pid" 2>/dev/null
   return 0
 }
+st_reap() { # <pid>: SIGKILL the tree, leaves first (a stopped process takes SIGKILL)
+  local p
+  for p in $(pgrep -P "$1" 2>/dev/null); do st_reap "$p"; done
+  kill -9 "$1" 2>/dev/null
+}
+# ST_NET_END
+run_metered() { # <log> <script> <args...> -- 0 the subject exited; 2 its tree settled without exiting
+  # stdout+stderr land in <log>.out; the shim's records in <log>.
+  local log="$1" prog="$2" pid r; shift 2
+  : > "$log"
+  ( ulimit -t "$SJ_CPU_BUDGET"; SJ_SHIM_LOG="$log" PATH="$SJ_SHIM:$PATH" exec bash "$prog" "$@" ) > "$log.out" 2>&1 &
+  pid=$!
+  st_net "$pid" "$log"; r=$?
+  if [ "$r" = 2 ]; then st_reap "$pid"; fi
+  wait "$pid" 2>/dev/null
+  return "$r"
+}
+# The net's subject, end to end: a script that STOPS itself is refused (rc 2) and its tree reaped, and
+# one that exits is not. Asserted once below, beside the termination arm. The net's two guards are
+# each held by a mutant in fold-architect-ledger-join, whose copy of the block is byte-identical
+# (by hand: no gate binds the two copies, since neither fixture may read the other's directory);
+# here the end-to-end pair proves this copy is wired.
+SJ_STOP="$R/st-stop.sh"; SJ_EXIT="$R/st-exit.sh"
+printf '%s\n' '#!/bin/bash' "echo \"\$\$\" > \"$R/st-stop.pid\"" 'kill -STOP $$' > "$SJ_STOP"
+printf '%s\n' '#!/bin/bash' 'exit 3' > "$SJ_EXIT"
 meter_read() { # <log> -> "<awk starts>|<ended 0>|<SIGXCPU-terminated>"
   local s z k
   s="$(grep -c '^start ' "$1")" || s=0
@@ -1601,7 +1623,7 @@ n_discrim "FOLD BOUND DISCRIMINATES: and so is an unclosed bold inside a descrip
 NEW_ARMS=$((NEW_ARMS+1))
 B_TERM=0
 run_metered "$R/meter.real" "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md" \
-  || broken "validate-spec-join.sh neither exited nor advanced its awk log or its CPU time over $SJ_STALL_TICKS ticks"
+  || broken "validate-spec-join.sh's tree settled (every process blocked, nothing pending, nothing changing) without exiting"
 SJ_M="$(meter_read "$R/meter.real")"
 case "$SJ_M" in
   0\|*) broken "the awk shim recorded no invocation on the real fold ('$SJ_M') -- the meter is not on the subject's PATH" ;;
@@ -1628,7 +1650,7 @@ if cmp -s "$V" "$HANG_M"; then
 elif ! bash -n "$HANG_M" 2>/dev/null; then
   bad "FIXTURE ERROR: the fold-hang mutant is not a valid shell script"
 elif ! run_metered "$R/meter.hang" "$HANG_M" --spec "$R/fold-heavy" --prd "$R/prd-ok.md"; then
-  broken "the fold-hang mutant neither exited nor advanced its awk log or its CPU time over $SJ_STALL_TICKS ticks -- a spinning awk must advance its CPU time"
+  broken "the fold-hang mutant's tree settled without exiting -- a spinning awk is runnable and must never read as settled"
 else
   SJ_MH="$(meter_read "$R/meter.hang")"
   case "$SJ_MH" in
@@ -1636,6 +1658,52 @@ else
     *\|0) bad "MUTATION: a non-terminating fold logged no SIGXCPU termination (starts|ended 0|SIGXCPU-terminated = '$SJ_MH') — the termination arm cannot fire" ;;
     *) mutant_killed "$B_TERM" fold-hang "MUTATION: a non-terminating fold is killed by its CPU budget and its awk logs exit 152 (SIGXCPU), so the arm above has a subject" ;;
   esac
+fi
+# THE NET HAS A SUBJECT TOO. A self-stopped script is refused (run_metered rc 2) and reaped; one that
+# exits is not. Where `ps` gives no state (sandbox-exec) the stopped stub would never be refused, so
+# the arm stands down there, printed, never read as a pass.
+if [ -z "$(ps -o stat= -p "$$" 2>/dev/null)" ]; then
+  printf '  --    NET-e2e stood down: ps gives no process state here, so a never-ending stub could not be refused\n'
+else
+  run_metered "$R/meter.stop" "$SJ_STOP"; sj_e2e=$?
+  sj_left=gone; kill -0 "$(cat "$R/st-stop.pid" 2>/dev/null)" 2>/dev/null && sj_left=alive
+  [ -s "$R/st-stop.pid" ] || sj_left=never-started
+  run_metered "$R/meter.exit" "$SJ_EXIT"; sj_e2t=$?
+  if [ "$sj_e2e" = 2 ] && [ "$sj_left" = gone ] && [ "$sj_e2t" = 0 ]; then
+    ok "NET-e2e: a self-stopped subject is refused (rc 2) and its tree reaped; a subject that exits is not refused"
+  else bad "NET-e2e: the settled-tree net read stopped rc=$sj_e2e left=$sj_left, exiting rc=$sj_e2t"; fi
+fi
+# THIS COPY'S TWO GUARDS, each with a subject the other cannot see (the same cells fold-architect-ledger-join
+# scores over its copy; nothing binds the two copies, so each is mutated where it lives). The ST_NET block is
+# cut from this file and driven over SCRIPTED trees: frozen (a RUNNING member, nothing changing) -> 0,
+# changing (settled but a different pid set each poll) -> 0, stuck -> 2. Vector "<frozen><changing><stuck>".
+sj_cell() { # <block file> <frozen|changing|stuck> -> st_net's rc (run in a subshell)
+  . "$1"
+  ST_POLL=0
+  st_alive() { ST_POLL=$((ST_POLL+1)); [ "$ST_POLL" -le 4 ]; }
+  sleep() { :; }
+  if [ "$2" = frozen ]; then st_members() { echo "100 R 0 0:01.00"; }
+  elif [ "$2" = changing ]; then st_members() { printf '100 S 0 0:00.00\n%s S 0 0:00.00\n' "$((200 + ST_POLL))"; }
+  else st_members() { echo "100 S 0 0:00.00"; }; fi
+  st_net 100 /dev/null; echo $?
+}
+sj_cells() { local c v=""; for c in frozen changing stuck; do v="$v$(sj_cell "$1" "$c")"; done; printf '%s' "$v"; }
+awk '/^# ST_NET_BEGIN/ { f = 1; next } /^# ST_NET_END/ { f = 0 } f' "$DIR/run.sh" > "$R/st-block.sh"
+grep -q '^st_net()' "$R/st-block.sh" || broken "the ST_NET block could not be cut from $DIR/run.sh"
+B_NETC=0
+SJ_NB="$(sj_cells "$R/st-block.sh")"
+if [ "$SJ_NB" = 002 ]; then ok "NET-cells: the cut net reads frozen-running 0, changing-settled 0, stuck 2"; B_NETC=1
+else bad "NET-cells: the cut net read '$SJ_NB', want 002"; fi
+sed 's/\$2 !~ \/\^\[SIT\]\/ || //' "$R/st-block.sh" > "$R/st-nostate.sh"
+sed 's/\[ "\$prev" = "\$sz|\$cur" \] && return 2/return 2/' "$R/st-block.sh" > "$R/st-noconfirm.sh"
+if cmp -s "$R/st-block.sh" "$R/st-nostate.sh" || cmp -s "$R/st-block.sh" "$R/st-noconfirm.sh"; then
+  bad "FIXTURE ERROR: a net mutation (sj-st-nostate or sj-st-noconfirm) matched nothing"
+else
+  [ "$MATRIX" -eq 1 ] && echo "  MATRIX-SUMMARY sj-st-nostate cells=$(sj_cells "$R/st-nostate.sh") sj-st-noconfirm cells=$(sj_cells "$R/st-noconfirm.sh") base=$SJ_NB"
+  if [ "$(sj_cells "$R/st-nostate.sh")" = 202 ]; then mutant_killed "${B_NETC:-0}" sj-st-nostate "MUTATION: a net that ignores process STATE refuses a running tree that merely shows no change (cells 202, base 002)"
+  else bad "MUTATION sj-st-nostate: the net cells did not read 202"; fi
+  if [ "$(sj_cells "$R/st-noconfirm.sh")" = 022 ]; then mutant_killed "${B_NETC:-0}" sj-st-noconfirm "MUTATION: a net that refuses on ONE settled poll refuses a tree whose members are still changing (cells 022, base 002)"
+  else bad "MUTATION sj-st-noconfirm: the net cells did not read 022"; fi
 fi
 
 # --- (33) after the first run, an item is PROSE -------------------------------

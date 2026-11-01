@@ -1260,7 +1260,10 @@ sed 's/timeout=30)/timeout=1)/' "$AUDIT" > "$SS/audit-rule-files.sh"
 if cmp -s "$AUDIT" "$SS/audit-rule-files.sh"; then
   bad "FIXTURE BROKEN — the timeout sed matched nothing, so the stall cannot be forced inside the unit's budget"
 else
-  printf '#!/usr/bin/env bash\nexec sleep 5\n' > "$SS/core-paths.sh"
+  # The stall NEVER ENDS (BL-868): the shim stops itself, so the timeout always fires first and no
+  # elapsed time decides the arm -- the `exec sleep 5` this replaced lost to a 1s timeout only while
+  # the box ran it within 4s. The timeout's SIGKILL ends a stopped process, so nothing is orphaned.
+  printf '#!/usr/bin/env bash\nkill -STOP $$\n' > "$SS/core-paths.sh"
   printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"
   rc_st="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
   if [ "$rc_st" = "2" ] && grep -q 'timed out after' "$SS/err" && ! grep -q '\[unknown\]' "$SS/out"; then

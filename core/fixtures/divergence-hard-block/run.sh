@@ -451,7 +451,7 @@ pend_world() { # <sprint-id> <existing s<K> dirs...> -> work dir
   mkdir -p "$w/_bmad-output/planning-artifacts" "$w/scripts/ai-dlc"
   : > "$w/_bmad-output/pipeline-snapshot.md"
   for k in "$@"; do mkdir -p "$w/_bmad-output/planning-artifacts/s$k"; done
-  printf '#!/bin/sh\necho %s\n' "$n" > "$w/scripts/ai-dlc/sprint-status.sh"
+  printf '#!/bin/bash\necho %s\n' "$n" > "$w/scripts/ai-dlc/sprint-status.sh"
   chmod +x "$w/scripts/ai-dlc/sprint-status.sh"
   printf '%s' "$w"
 }

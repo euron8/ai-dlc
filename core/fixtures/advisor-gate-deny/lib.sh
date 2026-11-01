@@ -75,9 +75,9 @@
 #                carrying `(forced update)`, a ran-OK push carrying `<old>..<new>`, and a ran-OK
 #                `Everything up-to-date` (the cell the is_error test alone holds)
 #   REREAD       THE RACE: the advisor line and the incoming push are appended to the transcript
-#                APPEND_DELAY (3s, past the old fixed 2 x 1s) after the hook starts -> SILENT, with
+#                on the hook's APPEND_AT-th poll sleep (the 9th, past the old fixed 2 x 1s) -> SILENT, with
 #                ADVISOR_GATE_REREADS unset (the 300s safety net); twins: the incoming push's line
-#                ALONE appended at 1s, knob unset -> DENY (rr-seen: decided by the transcript, not
+#                ALONE appended on the 4th poll sleep, knob unset -> DENY (rr-seen: decided by the transcript, not
 #                the clock), and nothing appended at 1 (2s bound) -> DENY (rr-none: `1` never fails
 #                open). NET cell rr-never: nothing appended, knob unset, ADVISOR_GATE_NET=2 -> SILENT
 #                with the rendered 2s figure on stderr once the net expires (BL-630, BL-752). rr-noid:
@@ -590,13 +590,15 @@ ct FAILED DENY f-ok-uptodate "$(bash_in "$P1/fokutd.jsonl" "$SPRINT" 'git push -
 # REREAD (THE RACE). The judged transcript is rebuilt from rr.tmpl before each score; a
 # `$CELLS/<n>.app` file tells score() to do that, to run the hook with ADVISOR_GATE_REREADS set to
 # its fourth field (`-` = unset, the default 300s net), and (for the appender cell) to append
-# rr.add APPEND_DELAY seconds after the hook starts. 3s: past the old fixed 2 x 1s re-read (graph's
-# advisor line landed >2s after PreToolUse), so a fixed-2s loop judges before the append and denies,
-# and well inside the net, where the poll sees it within a second and stops (rr.add carries the
+# rr.add on the hook's APPEND_AT-th poll sleep (BL-868: an event the hook emits, counted by the sleep
+# shim, never a background `sleep` racing it). 9: the hook's first 8 sleeps are its 2s of quarter
+# seconds, so the 9th is past the old fixed 2 x 1s re-read (graph's advisor line landed >2s after
+# PreToolUse) -- a fixed-2s loop judges before the append and denies -- and well inside the net, where
+# the next poll sees it and stops (rr.add carries the
 # incoming call's own line). rr-none appends nothing and runs at 1 (2s bound): that knob never
 # fails open, still judges its last scan and DENIES, and does not pay the net on every score.
 # THE DENY IS DECIDED BY THE TRANSCRIPT, NOT THE CLOCK (BL-630). rr-seen appends the incoming
-# call's own line ALONE at 1s with the knob unset: the transcript has advanced past the call with
+# call's own line ALONE on the 4th poll sleep with the knob unset: the transcript has advanced past the call with
 # no advisor line -> DENY, at ~1s, never waiting out the net. It is the only default-knob DENY cell,
 # so a default that always fails open dies on it. rr-never appends nothing with the knob unset:
 # the net, shortened by ADVISOR_GATE_NET, expires with the call's line absent -> SILENT, and stderr
@@ -605,24 +607,24 @@ ct FAILED DENY f-ok-uptodate "$(bash_in "$P1/fokutd.jsonl" "$SPRINT" 'git push -
 # the two builds, since they agree whenever the line lands inside the net -- so it is a NET cell
 # (`$CELLS/<n>.net`), scored only while NET_CELLS=1: on the shipped hook, and on the one mutant
 # that restores the time-only ceiling.
-APPEND_DELAY=3
+APPEND_AT=9
 # BL-752: the default net is 300s, and rr-never runs it at ADVISOR_GATE_NET=$RR_NET, the knob that
 # can only shorten it. The cell asserts the figure the hook RENDERS, so a hook that ignores the knob
 # both pays 300s and names the wrong figure.
 RR_NET=2
 ct REREAD SILENT rr-late "$(bash_in "$P1/rr-late.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-printf '%s\t%s\t%s\t%s\n' "$P1/rr-late.jsonl" "$P1/rr.add" "$APPEND_DELAY" - > "$CELLS/$nc.app"
+printf '%s\t%s\t%s\t%s\n' "$P1/rr-late.jsonl" "$P1/rr.add" "$APPEND_AT" - > "$CELLS/$nc.app"
 ct REREAD DENY rr-none "$(bash_in "$P1/rr-none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-none.jsonl" - - 1 > "$CELLS/$nc.app"
 ct REREAD DENY rr-seen "$(bash_in "$P1/rr-seen.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-printf '%s\t%s\t%s\t%s\n' "$P1/rr-seen.jsonl" "$P1/rr.self" 1 - > "$CELLS/$nc.app"
+printf '%s\t%s\t%s\t%s\n' "$P1/rr-seen.jsonl" "$P1/rr.self" 4 - > "$CELLS/$nc.app"
 cell REREAD SILENT "E:did not land within the ${RR_NET}s safety net" rr-never "$(bash_in "$P1/rr-never.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-never.jsonl" - - - > "$CELLS/$nc.app"
 printf '%s\n' "$RR_NET" > "$CELLS/$nc.net"
 # BL-752: an input with no `tool_use_id` can never be SEEN, so at the default knob an owed call is
 # SILENT at once, with the reason on stderr, rather than after the whole net. rr-noid runs with the
-# net shortened to 20s, its `.fast` figure: a hook that waits for a line it cannot recognise pays
-# those 20s, which the score() 5s wall-clock bound on this cell refuses. SELFLAST
+# net shortened to 20s, its `.fast` figure: a hook that waits for a line it cannot recognise calls
+# its poll's sleep, which the score() sleep count on this cell refuses (mutant noid-wait). SELFLAST
 # n-selflast-answered is its twin: the same missing id under the knob at 0 still DENIES.
 cell REREAD SILENT 'E:carries no tool_use_id' rr-noid "$(bash_in "$P1/rr-noid.jsonl" "$SPRINT" 'git push -u origin HEAD' '' -)"
 printf '%s\t%s\t%s\t%s\n' "$P1/rr-noid.jsonl" - - - > "$CELLS/$nc.app"
@@ -899,48 +901,76 @@ DECIDE='.hookSpecificOutput as $h
     elif (($h.permissionDecision? == null) and (($h.additionalContext? // "") | tostring | contains("NOT blocked"))) then "WARN\t-"
     else "OTHER\t-" end'
 
+# A FAST CELL IS JUDGED BY WHETHER THE HOOK WAITED, NEVER BY HOW LONG IT TOOK (BL-868). The hook's
+# only wait is its net poll's `sleep`, an external command on bash 3.2, resolved through the PATH the
+# hook inherits and never sets. So a FAST cell runs with a counting `sleep` shim first on PATH, and the
+# cell fails if the hook called it at all. The `$SECONDS -gt 5` bound this replaced read a slow box as a
+# hook that waited, and missed a hook that waited under 5s. The shim is checked to count before use.
+SLEEP_SHIM="$W/sleepshim"; SLEEP_LOG="$W/sleep.log"
+mkdir -p "$SLEEP_SHIM" || { echo "FIXTURE BROKEN: could not create the sleep shim dir" >&2; exit 2; }
+_real_sleep="$(command -v sleep)"
+[ -n "$_real_sleep" ] || { echo "FIXTURE BROKEN: no sleep on PATH for the shim to pass through to" >&2; exit 2; }
+# THE SAME SHIM IS THE APPENDER'S CLOCK. An appender cell (rr-late, rr-seen) used to append its line from a
+# background `sleep <s>`, so whether the line landed inside the hook's poll was a race against wall clock.
+# Now the shim appends it on the hook's ADG_APPEND_AT-th poll sleep -- an event the hook itself emits -- so
+# the line lands after exactly that many polls, at any load.
+cat > "$SLEEP_SHIM/sleep" <<SHIM || { echo "FIXTURE BROKEN: could not write the sleep shim" >&2; exit 2; }
+#!/bin/bash
+printf 'x\n' >> "\$ADG_SLEEP_LOG"
+if [ -n "\${ADG_APPEND_AT:-}" ] && [ "\$(grep -c . "\$ADG_SLEEP_LOG")" = "\$ADG_APPEND_AT" ]; then cat "\$ADG_APPEND_SRC" >> "\$ADG_APPEND_TGT"; fi
+exec "$_real_sleep" "\$@"
+SHIM
+chmod +x "$SLEEP_SHIM/sleep" || { echo "FIXTURE BROKEN: could not chmod the sleep shim" >&2; exit 2; }
+: > "$SLEEP_LOG"
+PATH="$SLEEP_SHIM:$PATH" ADG_SLEEP_LOG="$SLEEP_LOG" bash -c 'sleep 0'
+_sc="$(grep -c . "$SLEEP_LOG")" || _sc=0
+[ "$_sc" = 1 ] || { echo "FIXTURE BROKEN: the sleep shim counted $_sc call(s) of one, so a FAST cell could not see a wait" >&2; exit 2; }
+
 # score <hook> <cell-log> -> prints the space-separated, C-sorted set of arms that FAILED, or
-# nothing; writes the id of every failing cell to <cell-log>.
+# nothing; writes the id of every failing cell to <cell-log>. SCORE_IDS (space-separated cell ids,
+# `<arm>:<tag>`) restricts a score to those cells, for a mutant whose subject is one cell.
 score() {
   local h="$1" log="$2" failed="" exitbad=0 n id check arm want V REASON_TXT ERR_TXT
   : > "$log"
-  local tgt add dly rrk apid cpd
+  local tgt add dly rrk cpd
   while IFS=$'\t' read -r n id check arm want <&3; do
     # SCORE_ARMS (space-separated arm names) restricts a score to those arms' cells; unset scores every
     # cell. A pass whose subject differs from the shipped hook in one property only (its path, or one
     # default constant) is scored over the cells that read that property, not over all of them. netdef
     # below is not a cell and always runs.
     if [ -n "${SCORE_ARMS:-}" ]; then case " $SCORE_ARMS " in *" $arm "*) ;; *) continue ;; esac; fi
+    if [ -n "${SCORE_IDS:-}" ]; then case " $SCORE_IDS " in *" $id "*) ;; *) continue ;; esac; fi
     # A NET cell pays its whole (shortened) safety net by construction; it is scored only while NET_CELLS=1.
     if [ -f "$CELLS/$n.net" ] && [ "${NET_CELLS:-0}" != 1 ]; then continue; fi
     cpd="$CPD"; [ ! -f "$CELLS/$n.cpd" ] || cpd="$CONS"
     if [ -f "$CELLS/$n.app" ]; then
-      apid=""
       IFS=$'\t' read -r tgt add dly rrk < "$CELLS/$n.app"
       if ! cp "$P1/rr.tmpl" "$tgt"; then
         printf '%s\n' "$id" >> "$log"; case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac; continue
       fi
-      if [ "$add" != - ]; then ( sleep "$dly"; cat "$add" >> "$tgt" ) & apid=$!; fi
+      # <dly> is the hook POLL SLEEP on which the shim appends <add>, never seconds (BL-868).
+      local aat="" spath="$PATH"
+      if [ "$add" != - ]; then aat="$dly"; spath="$SLEEP_SHIM:$PATH"; : > "$SLEEP_LOG"; fi
       if [ "${rrk:--}" = - ]; then
         # A NET or FAST cell carries its ADVISOR_GATE_NET figure in its .net or .fast file; every
-        # other default-knob cell runs at the shipped 300s net. A FAST cell must answer inside 5s.
-        local rnet="" ft0=$SECONDS
+        # other default-knob cell runs at the shipped 300s net. A FAST cell must answer without waiting:
+        # it runs with the counting sleep shim first on PATH, and one call of it fails the cell.
+        local rnet="" nsl=0
         [ ! -f "$CELLS/$n.net" ] || rnet="$(cat "$CELLS/$n.net")"
-        [ ! -f "$CELLS/$n.fast" ] || rnet="$(cat "$CELLS/$n.fast")"
+        [ ! -f "$CELLS/$n.fast" ] || { rnet="$(cat "$CELLS/$n.fast")"; spath="$SLEEP_SHIM:$PATH"; : > "$SLEEP_LOG"; }
         if [ -n "$rnet" ]; then
-          env -u ADVISOR_GATE_REREADS ADVISOR_GATE_NET="$rnet" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+          PATH="$spath" ADG_SLEEP_LOG="$SLEEP_LOG" ADG_APPEND_AT="$aat" ADG_APPEND_SRC="$add" ADG_APPEND_TGT="$tgt" env -u ADVISOR_GATE_REREADS ADVISOR_GATE_NET="$rnet" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
         else
-          env -u ADVISOR_GATE_REREADS -u ADVISOR_GATE_NET ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+          PATH="$spath" ADG_SLEEP_LOG="$SLEEP_LOG" ADG_APPEND_AT="$aat" ADG_APPEND_SRC="$add" ADG_APPEND_TGT="$tgt" env -u ADVISOR_GATE_REREADS -u ADVISOR_GATE_NET ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
         fi
-        if [ -f "$CELLS/$n.fast" ] && [ $((SECONDS - ft0)) -gt 5 ]; then
+        [ ! -f "$CELLS/$n.fast" ] || { nsl="$(grep -c . "$SLEEP_LOG")" || nsl=0; }
+        if [ "$nsl" != 0 ]; then
           printf '%s\n' "$id" >> "$log"; case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac
-          [ -z "$apid" ] || wait "$apid"
           continue
         fi
       else
         ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
       fi
-      [ -z "$apid" ] || wait "$apid"
     elif [ -f "$CELLS/$n.seq" ]; then
       # A two-step sequence on ONE path in ONE judged transcript: step 1 runs, its tool_use and
       # a result (is_error when step 1 was denied, as the harness writes it) are appended, then

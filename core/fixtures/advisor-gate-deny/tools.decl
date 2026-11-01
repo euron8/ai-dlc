@@ -2,6 +2,7 @@
 awk
 bash
 cat
+chmod
 cp
 date
 dirname

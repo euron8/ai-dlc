@@ -36,7 +36,7 @@
 #       while a path truly absent at theirs renders `THEIRS absent`.
 #   A6  R1's shape: approve healthy, resolve the HARD drift, verify under a diff shim -> rc 1,
 #       UNDECIDED, one DETECTOR-REFUSED line (an indented refusal reads rc 3 BLOCKERS-RESOLVED).
-#   A7  the race itself, FORCED on the engine's own orientation-diff text (a delayed `diff`),
+#   A7  the race itself, FORCED on the engine's own orientation-diff text (a `diff` shadowed by one fork),
 #       against two reference spellings that must split 5/5 and 0/5 first.
 #   R6  the reconcile-emit-report guard: approve-side and score-side retry, baseline derivation,
 #       and the stub exemption, each with a mutant.
@@ -177,12 +177,14 @@ fi
 # A6's approval, rendered ONCE by the shipped engine at the copy's own path (the region embeds
 # the consumer path), then the HARD drift is resolved with base's own bytes.
 C3="$R/c3"; cp -R "$CONSUMER" "$C3"
-_a=0
-until [ "$_a" -ge 3 ]; do
-  _a=$((_a+1))
-  bash "$EMIT" "$DIST" "$BASE" "$C3" "$THEIRS" > "$R/a6-region.md" 2>/dev/null
-  cmp -s <(grep '^DETECTOR-REFUSED' "$R/a6-region.md") <(grep '^DETECTOR-REFUSED' "$REGION") && break
-done
+# ONE render, never a bounded retry (BL-868): the retry this replaced re-rendered up to 3 times until
+# the DETECTOR-REFUSED set matched, so how often load reached the orientation-diff race decided which
+# render A6 read. The engine's diff no longer races (A7's forced half proves it 5 of 5), so a single
+# render must match; a mismatch is a broken seed, refused here, never retried into agreement.
+bash "$EMIT" "$DIST" "$BASE" "$C3" "$THEIRS" > "$R/a6-region.md" 2>/dev/null
+grep '^DETECTOR-REFUSED' "$R/a6-region.md" > "$R/a6-refused.txt"; grep '^DETECTOR-REFUSED' "$REGION" > "$R/region-refused.txt"
+cmp -s "$R/a6-refused.txt" "$R/region-refused.txt" \
+  || { echo "FIXTURE BROKEN: A6's approval render refused a different detector set from the seed region's" >&2; exit 2; }
 { echo "# Reconcile report (fixture)"; echo; cat "$R/a6-region.md"; } > "$R/a6-approved.md"
 git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$C3/.claude/schemas/thing.json" 2>/dev/null
 grep -q 'HARD-UNREGISTERED-CORE-DRIFT' "$R/a6-region.md" && ! cmp -s "$C3/.claude/schemas/thing.json" "$CONSUMER/.claude/schemas/thing.json" \
@@ -836,21 +838,20 @@ fi
 # concurrent workers measured 3, 0 and 0 failures in three runs of 2000 calls, and 1, 1, 2 and 9
 # in four runs of 10000: a rate of roughly 0.01-0.15% that swings with load, where three expected
 # failures at the low end needs ~30000 calls and still passes the unfixed engine by chance. So the
-# interleaving is forced instead: `diff` is shadowed by a shell FUNCTION that sleeps before the
-# real fork, which lets the process-substitution child exit first. The process-substitution
+# interleaving is forced instead: `diff` is shadowed by a shell FUNCTION that runs one external
+# command before the real fork, which makes bash reap the substitution first. The process-substitution
 # spelling then fails EVERY call (`/dev/fd/63: Bad file descriptor`) and a temp-file spelling
 # fails none. Two reference bodies prove that split on this machine before the engine's body is
 # read, and a counter proves the shadow was the `diff` that ran, so a body that bypasses it
 # (`command diff`, `/usr/bin/diff`) cannot pass by never meeting the delay.
 #
-# A SAMPLED HALF RUNS BESIDE IT, because the brief asks the real race be observed and not only
-# modelled: the engine's body and the unfixed `<( )` spelling are interleaved per iteration in
-# the same 8 workers, 10000 calls each. Measured on this machine: the unfixed side 3, 5 and 4 of
-# 10000 (and 2 and 9 in earlier runs), the fixed side 0 of 30000. So 10000 is the smallest N whose
-# expected unfixed count is at least 3; it costs ~12s. An unfixed count of 0 means the load did
-# not reach the race on this run, which says NOTHING about the fixed side, so that case prints
-# INCONCLUSIVE -- never ok, and not a failure either, since an idle machine is not a defect. The
-# forced half above is what carries the arm on such a run.
+# THE SAMPLED HALF IS GONE (BL-868, operator ruling: zero tests depend on load). It ran the engine's
+# body beside the unfixed `<( )` spelling in 8 concurrent workers, 10000 calls each, and its printed
+# outcome (ok, or INCONCLUSIVE when load never reached the race) moved with load. Before it was cut
+# the forced half was shown to carry everything it asserted, in one run, three repeats: the unfixed
+# spelling refuses 5 of 5 under the forced order, the temp-file spelling and the shipped engine body
+# 0 of 5, and an engine body spelled as the unfixed `<( )` reads 5 of 5 refused, the forced half's
+# FAIL branch. The mutant table holds no A7 row, so no named mutant was killed by the sampled half.
 #
 # THE ENGINE'S BODY NEEDS ITS HELPER. Since 0.647.0 the site stages THEIRS into "$_er_tmp" and
 # pipes it through `er_pdiff`; both are cut from emit-report.sh here, so the arm drives the
@@ -874,31 +875,26 @@ else
   printf '%s\n' 'd="$(diff <(printf '"'"'%s\n'"'"' "$t") "$local_ours" 2>/dev/null)"; d_rc=$?' > "$R/ref-procsub.sh"
   printf '%s\n' '_tf="$(mktemp)"; printf '"'"'%s\n'"'"' "$t" > "$_tf"' \
     'd="$(diff "$_tf" "$local_ours" 2>/dev/null)"; d_rc=$?' 'rm -f "$_tf"' > "$R/ref-tmpfile.sh"
+  # THE FORCING IS A FORK, NOT A DELAY (BL-868). The shadow used to `sleep 0.05` before the real diff,
+  # which read as "give the substitution's child time to exit". Measured on bash 3.2.57, that is not
+  # what closes the fd: a FOREGROUND EXTERNAL command run in the shell that owns the substitution
+  # (sleep, /usr/bin/true, cat) makes bash reap the substitution and close /dev/fd/63 before diff opens
+  # it, refusing 5 of 5 with the writer delayed 0s, 0.3s or 2s. A builtin (`:`) or a forking command
+  # substitution refuses 0 of 5. So the shadow runs one `cat </dev/null`: the same forcing with no
+  # elapsed time in it, and a slow box cannot move it.
   cat > "$R/race.sh" <<'RACE'
 #!/usr/bin/env bash
-# race.sh <body> <ours> <iterations> <delay> <calls-file> <fn> -> "<refused> <shadow-calls>"
+# race.sh <body> <ours> <iterations> <calls-file> <fn> -> "<refused> <shadow-calls>"
 t="$(printf 'shared line\nSENTINEL-THEIRS-ONLY upstream process class\n')"; local_ours="$2"
-. "$6"; _er_tmp="$(mktemp -d)" || exit 3
-DELAY="$4"; CALLS="$5"; : > "$CALLS"
-diff() { echo x >> "$CALLS"; sleep "$DELAY"; command diff "$@"; }
+. "$5"; _er_tmp="$(mktemp -d)" || exit 3
+CALLS="$4"; : > "$CALLS"
+diff() { echo x >> "$CALLS"; command cat </dev/null; command diff "$@"; }
 n=0; i=0
 while [ "$i" -lt "$3" ]; do i=$((i+1)); . "$1"; case "$d_rc" in 0|1) : ;; *) n=$((n+1)) ;; esac; done
 rm -rf "$_er_tmp"; echo "$n $(grep -c . "$CALLS")"
 RACE
-  cat > "$R/sample.sh" <<'RACE'
-#!/usr/bin/env bash
-# sample.sh <body> <ours> <iterations> <fn> <unfixed-ref> -> "<unfixed-refused> <engine-refused>"
-t="$(printf 'shared line\nSENTINEL-THEIRS-ONLY upstream process class\n')"; local_ours="$2"
-. "$4"; _er_tmp="$(mktemp -d)" || exit 3
-a=0; b=0; i=0
-while [ "$i" -lt "$3" ]; do i=$((i+1))
-  . "$5"; case "$d_rc" in 0|1) : ;; *) a=$((a+1)) ;; esac
-  . "$1"; case "$d_rc" in 0|1) : ;; *) b=$((b+1)) ;; esac
-done
-rm -rf "$_er_tmp"; echo "$a $b"
-RACE
-  _rp="$(bash "$R/race.sh" "$R/ref-procsub.sh" "$R/race-ours" 5 0.05 "$R/calls.p" "$RF")"
-  _rf="$(bash "$R/race.sh" "$R/ref-tmpfile.sh" "$R/race-ours" 5 0.05 "$R/calls.f" "$RF")"
+  _rp="$(bash "$R/race.sh" "$R/ref-procsub.sh" "$R/race-ours" 5 "$R/calls.p" "$RF")"
+  _rf="$(bash "$R/race.sh" "$R/ref-tmpfile.sh" "$R/race-ours" 5 "$R/calls.f" "$RF")"
   # THE RACE IS A PROPERTY OF BASH 3.2, NOT OF EVERY BASH. Measured in `bash:5.2` against local
   # 3.2.57 on the same cut bodies: bash 5 holds the substitution's fd open across the call, so the
   # process-substitution reference reads `0 5` there and `5 5` here. A consumer whose PATH resolves
@@ -912,7 +908,7 @@ RACE
   elif [ "$_rp" != "5 5" ]; then
     bad "A7 HARNESS BROKEN: the process-substitution reference refused ${_rp% *} of 5 under the forced delay, neither every call (bash 3.2) nor none (a bash that holds the fd), so the forcing is not deterministic here"
   else
-    _rs="$(bash "$R/race.sh" "$RB" "$R/race-ours" 5 0.05 "$R/calls.s" "$RF")"
+    _rs="$(bash "$R/race.sh" "$RB" "$R/race-ours" 5 "$R/calls.s" "$RF")"
     if [ "${_rs#* }" != 5 ]; then
       bad "A7 the engine's orientation diff did not call the shadowed diff (calls: '${_rs#* }', want 5) — it bypasses \`diff\` by path or \`command\`, so this arm cannot reach it; re-point the arm, never relax it"
     elif [ "${_rs% *}" = 0 ]; then
@@ -920,23 +916,6 @@ RACE
     else
       bad "A7 forced: the engine's orientation diff refused ${_rs% *} of 5 under a forced interleaving that a temp file survives — an operand is a process substitution whose /dev/fd can close before diff opens it, which under load is the BL-230 transient"
     fi
-  fi
-  _k=0; while [ "$_k" -lt 8 ]; do _k=$((_k+1)); bash "$R/sample.sh" "$RB" "$R/race-ours" 1250 "$RF" "$R/ref-procsub.sh" > "$R/sample.$_k" & done
-  wait
-  _ua=0; _ub=0; _k=0
-  while [ "$_k" -lt 8 ]; do _k=$((_k+1))
-    read -r _x _y < "$R/sample.$_k" 2>/dev/null || { _x=; _y=; }
-    case "$_x:$_y" in *[!0-9:]*|:*|*:) _ua=X; break ;; esac
-    _ua=$((_ua+_x)); _ub=$((_ub+_y))
-  done
-  if [ "$_ua" = X ]; then
-    bad "A7 HARNESS BROKEN: a sampling worker printed no count, so the sampled half has no reading"
-  elif [ "$_ub" -ne 0 ]; then
-    bad "A7 sampled: the engine's orientation diff refused $_ub of 10000 calls across 8 concurrent workers (unfixed <( ) beside it: $_ua) — a healthy render can refuse under load"
-  elif [ "$_ua" -eq 0 ]; then
-    printf '  INCONCLUSIVE  A7 sampled: the unfixed <( ) control failed 0 of 10000 on this run, so the load never reached the race and the engine side'"'"'s 0 of 10000 discriminates nothing (the forced half above carries the arm)\n'
-  else
-    ok "A7 sampled: across 8 concurrent workers the unfixed <( ) spelling failed $_ua of 10000 and the engine's orientation diff 0 of 10000, interleaved in the same loop"
   fi
 fi
 

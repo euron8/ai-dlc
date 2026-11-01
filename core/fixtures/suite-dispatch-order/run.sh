@@ -101,15 +101,14 @@ mkfx() {                       # mkfx <tree> <name> <exitcode>
   printf '#!/usr/bin/env bash\nexit %s\n' "$3" > "$1/tests/fixtures/$2/run.sh"
 }
 
-# A fixture that RECORDS THE MOMENT IT WAS DISPATCHED and then costs a stated number of
-# seconds. The cost is what the hook writes into its record; the trace is how the next
-# run's dispatch order is read back.
-mkfx_trace() {                 # mkfx_trace <tree> <name> <seconds>
+# A fixture that RECORDS THE MOMENT IT WAS DISPATCHED. The trace is how a run's dispatch order is
+# read back. It sleeps for nothing (BL-868): every cost an arm sorts on is SEEDED into the record,
+# never slept to, so no verdict reads a wall clock -- the sleep this replaced was always `sleep 0`.
+mkfx_trace() {                 # mkfx_trace <tree> <name>
   mkdir -p "$1/tests/fixtures/$2"
   cat > "$1/tests/fixtures/$2/run.sh" <<FX
 #!/usr/bin/env bash
 printf '%s\n' '$2' >> "\$SDO_TRACE"
-sleep $3
 exit 0
 FX
 }
@@ -195,7 +194,7 @@ w_lpt() { # w_lpt <tag> <hook>
   local tag="$1" h="$2" T="$WORK/$1-lpt" rc order ctl_order bound nearmiss n_rec n_last p REC
   seed "$T" "$h" || broken "seed failed"
   export SDO_TRACE="$T/trace"
-  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 0; mkfx_trace "$T" zzz 0
+  mkfx_trace "$T" aaa; mkfx_trace "$T" mmm; mkfx_trace "$T" zzz
   cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" || broken "could not install the seeded durations record"
   : > "$SDO_TRACE"
   rc="$(drive1 "$T" "$WORK/$tag-lpt2.out")"
@@ -258,7 +257,7 @@ w_merge() { # w_merge <tag> <hook>   a run that dispatches a SUBSET keeps the co
   local tag="$1" h="$2" T="$WORK/$1-merge" rc n1 kept mg_order mg_last p
   seed "$T" "$h" || broken "seed failed"
   export SDO_TRACE="$WORK/$tag-merge.trace"
-  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 0; mkfx_trace "$T" zzz 0
+  mkfx_trace "$T" aaa; mkfx_trace "$T" mmm; mkfx_trace "$T" zzz
   seed_mapped "$T" || broken "could not seed the read-set map for arm 4"
   rc="$(narrow_by_skip "$T" "$tag-merge2" "$SEEDREC")"
   case "$rc" in broken:*) world_broken "$tag" "arm 4 ${rc#broken:}" merge mergeorder; unset SDO_TRACE; return 0 ;; esac
@@ -289,7 +288,7 @@ w_prune() { # w_prune <tag> <hook>   a row whose fixture DIRECTORY IS GONE is pr
   local tag="$1" h="$2" T="$WORK/$1-prune" rc pr_gone pr_aaa pr_n p
   seed "$T" "$h" || broken "seed failed"
   export SDO_TRACE="$WORK/$tag-prune.trace"
-  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 0; mkfx_trace "$T" zzz 0
+  mkfx_trace "$T" aaa; mkfx_trace "$T" mmm; mkfx_trace "$T" zzz
   mkdir -p "$T/tests/fixtures/dead" && : > "$T/tests/fixtures/dead/notes.txt" || broken "could not seed the run.sh-less dir"
   seed_mapped "$T" || broken "could not seed the read-set map for arm 4c"
   printf 'aaa 1\nmmm 5\nzzz 9\ngone 777\ndead 555\n' > "$WORK/prune.seed" || broken "could not write the arm 4c seed"
