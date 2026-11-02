@@ -1665,20 +1665,6 @@ Owed, not built: pass the consumer's escalations file by path to both sides, the
 
 verify: manual
 
-## BL-897 — 0.971.0 committed 19 dead `# digest` lines for declared fixtures, and the next read-set trace removes them
-
-**NOTE.** An earlier lead-level reading called this a destructive rewrite; the drop is the declared-fixture filter working as designed.
-
-Found at batch b247 (lead filing). Measured on the main checkout at fb4cb5f40: `derive-fixture-readsets.sh --list prepush-pool-depth --tracer sandbox`, which reported "this run traced 0", rewrote `.ai-dlc-fixture-readsets.tsv` by +1/-20 lines. The `# OMITTED by the last run` comment moved from readset-stage1-verdict to prepush-pool-depth (correct, because that run omitted it), and 19 `# digest` lines were dropped. All 19 belong to DECLARED fixtures (an `inputs.decl` exists) with 0 committed rows. `readset_merge_map`'s declared-fixture filter drops a declared fixture's rows and digest as dead weight (core/scripts/derive-fixture-readsets.sh:417-419 and :445). The two `.undeclarable` fixtures, which carry the map's only rows (hook-registration-join 42, retro-compliance-workflow 12), kept their digests.
-
-The digests' only readers are the hook's committed-row join for a matching fixture (.githooks/pre-push:1426-1433, and these fixtures have no rows) and the stale-reason message (.githooks/pre-push:2556), so the 19 lines were inert. They were committed by 902d6f7e0 (0.971.0). The write was restored with `git checkout`; nothing was committed.
-
-**Progress (batch b248).** The 19 exact `# digest` lines that 902d6f7e0 added are absent at 47102ad20. The defect class is live, though. `derive-fixture-readsets.sh --list` writes a digest for every fixture it traces, with no `inputs.decl` filter: `digest.rows` is appended at `core/scripts/derive-fixture-readsets.sh:2083-2084`, `digest.new` is built from it at `:1721-1732`, and the final write at `:1763` bypasses the declared-fixture filter of `readset_merge_map` (`:417-419` and `:457`). `--all` (`:530`) and `--reconcile` (`:368`) do skip declared fixtures. 47102ad20 re-emitted the digest line of `backlog-real-ledger` with a new hash and added a new digest line for `shipped-rule-version-floor`; both fixtures are declared and have 0 rows. They stay inert, because `readset_committed_digests` (`.githooks/pre-push:1321-1340`) keys only fixtures that have rows.
-
-Owed: filter `digest.new` by the decl set, or skip declared fixtures in the `--list` loop, with an arm in readset-skip, and drop the two dead lines. The b248-loadfree release owns that. The fix routes the deriver's `digest.new` through `readset_merge_map`'s declared filter, so the map's `# digest` lines go from 4 to 2 (the two that remain, hook-registration-join and retro-compliance-workflow, carry no `inputs.decl`), and the `DIGEST DECLARED` arm in readset-skip-c's `dw_run` world carries it, with the `nodeclfilter` mutant.
-
-verify: manual
-
 ## BL-899 — a command-level sandbox tracer for an arbitrary receipt run, so a traced-removal arm can cover child-process deletions
 
 **NOTE.** Split from BL-836 at 0.987.0. R10 lints receipt TEXT, so it cannot see a child process's missing file (BL-836 shapes 2 and 3: a child's bare 127, and a child script sourcing a missing file) or a driver's internal grep (a `bash x.sh` receipt whose driver greps inside itself). A traced-removal arm would run the receipt in a scratch tree with each file it read removed and require exit 9. That needs a tracer for an arbitrary command. `core/scripts/derive-fixture-readsets.sh --tracer sandbox` traces fixtures only (its runner is at `:1878`), refuses linked worktrees (LW_GATE, `:205`) and copies the whole tree (`:1402`). The driver-absent-at-base exclusion (lead ruling L3) moved here from BL-836: it changes no outcome until an arm reads driver files.

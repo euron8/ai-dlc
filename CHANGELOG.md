@@ -19,6 +19,44 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.994.0] - 2026-11-01
+
+Batch b248, cluster b248-loadfree. Closes BL-897 and advances BL-868, BL-828 and BL-875. No PC- id is closed.
+
+### BL-868 advanced (stays OPEN)
+
+- **Item 4.** Covered by the `AI_DLC_POOL_STALL=99999` pin at the scrub plus the `(no-refusal)` arm, which is self-probed in both directions.
+- **Item 5.** `ledger-reverify-unfalsifiable` is fixed: `big_v` and `pcgood` capture the writer's whole output and read it from a here-string, and ledger-reverify's `big_v` and `pcgood` are fixed the same way. Under a forced order the old shape counted 2 starts against 5 and the new shape 5 against 5. The 428 sites whose writer is a function are unclassified, so the item stays open.
+- **Item 7 closed.** Executed `#!/bin/sh` stubs are converted to bash across the cluster's fixtures, each `invocations.decl` re-counted from an armed hermetic run. `scripts/validate-fixture-hygiene.sh` H3 now refuses a written `#!/bin/sh` stub that is executed honouring its shebang (a direct path, `exec`, or a PATH lookup); its self-probe gains the heredoc and prefix near-misses and an env-sh offender, a PATH lookup ranks after a real run and is labelled, and H3 reads 0 rows on the real corpus. The two PATH shims in `prepush-pool-depth/receipt-bl881.sh` that H3 found are converted to bash.
+- **Item 8.** The verdict no longer depends on elapsed time in postcompact-rulebook-recovery (including `recover-gate`'s test-only wall-clock seam), readset-stage1-verdict, gate-remediation-deny, backlog-receipt-binding, check-24-adversarial-convergence, wait-beat-liveness, retro-audit-scans, gate-resume, divergence-hard-block, suite-dispatch-order, emit-report-refusal, advisor-gate-deny, fold-architect-ledger-join, spec-join-integrity, layer-reference-resolution, handoff-resume-guard, implementation-join-yield and readset-skip. consumer-suite-pool's barrier cap carries the `csp-barrier-cap` allow marker. The item stays open on two rows.
+- **Item 9.** The barrier, `pf_` and `pn_` wall-clock ceilings of prepush-pool-depth are replaced by flight files, gate FIFOs and a settled-tree primitive.
+- **Item 10.** NOT REPRODUCED. The structural census reads 87 counted deriver starts from 16 slot worlds and no conditional deriver start; the deriver row now reads 92 because of the BL-875 arms, not load. The item stays open.
+- **Item 11 fixed.** `stray-party-mode-provenance` attaches committed case-sensitive and HFS+ images instead of formatting one per run. Two concurrent `hdiutil create` runs released from a FIFO barrier failed 9 of 240 and 11 of 240 builds; the committed images failed 0 of 240.
+- **BL-616's `MAXATT=30` retry removed.** `readset-sandbox-root-clause` judges the workload's own errno on a mechanically denied profile, and `--matrix` printed the four MATRIX lines byte-identically on the old and new channel.
+- **Dead file removed.** `core/fixtures/layer-reference-resolution/.run-instrumented-profile.sh` was an instrumentation profile no fixture or script invoked.
+- **backlog-receipt-binding.** Every absence-shaped arm now reads its own world's refusal or row. Class (a) masking is fixed in m1, m4, m12/m13, c5_arm, the control green-form arms, m15's own cell, m16 (it was a byte copy of m7b; there is now an `m16-base` cell), the pr-m-early/pr-m-between SIDE gate, and pr_m_counter, pr_m_nostate and pr_m_generic. NOTE, class (b), precision only, no entry: the pairs m3/m17 (same R1 UNSTABLE self-probe line), m12/m13 (same two-file self-probe sentence), pr-m-early/pr-m-between (identical predicates over the same world class), pr_m_default/pr_m_keylib/pr_m_keyrlib (each needs a replayed or written record that their bases never replay) and c5-m2/c5_m3 (both corpus rows read `R8:BL-861, R7:`) cannot be separated by their arms.
+- **Open rows.** `bash core/fixtures/fixture-hygiene/receipt-bl868.sh` ends `receipt-bl868: OPEN -- 0 H3 row(s), 2 bounded-wait row(s), 0 stale allowlist row(s), 0 provisional decl row(s) over 503 fixture .sh`. The two rows are `prepush-pool-depth/run.sh:1086` (`td_more`, item 15) and `wait-stale-deliverable/run.sh:1104` (`now_at_least`). The receipt's allowlist now keys on a line marker, a stale row is a finding, and inert receipts are skipped.
+- **receipt-bl881.sh.** Its `ps` and `sleep` PATH shims start with bash, so H3 holds on the corpus.
+- **Cost.** `git diff da5b8bf49..HEAD -- '*/invocations.decl'` moves 54 decls, and 34 of them rise in `*` by more than 10%, each count re-taken with the invocation counter armed. In 28 of them the fixture's own executed sh stubs were converted to bash, which the counter now sees (BL-868 item 7); procsub-staged-refusal-boot-b, procsub-staged-refusal-boot-c and self-update-gate-d are shards that run a converted parent's run.sh; fixture-hygiene, ledger-reverify-unfalsifiable and postcompact-rulebook-recovery gained arms (H3, the here-string capture, and the recover-gate no-wall arm). The 34, by fixture name, `*` from old to new: apply-restamp-theirs 534 to 654, artifact-derivations 50 to 131, check5-anchor-base 289 to 385, content-seal 409 to 472, divergence-hard-block 173 to 213, escalation-status-vocabulary 92 to 114, fanout-payload-channel 18 to 28, file-mtime 16 to 19, fixture-hygiene 25 to 28, fold-architect-ledger-join 294 to 568, implementation-join-yield 514 to 1258, layer-adjudication-tier 117 to 163, layer-readopt-gate 143 to 218, ledger-reverify 702 to 986, ledger-reverify-unfalsifiable 78 to 119, mandatory-rules-skip-accounting 79 to 180, mandatory-rules-snapshot-position 193 to 478, postcompact-rulebook-recovery 83 to 149, prepush-ssh-keepalive 16 to 19, procsub-staged-refusal-boot 301 to 1197, procsub-staged-refusal-boot-b 341 to 763, procsub-staged-refusal-boot-c 358 to 1081, readset-stage1-verdict 28 to 41, retired-layer-contract 38 to 121, retro-branch-behind-main 57 to 81, route-read-required 30 to 34, self-update-gate-d 378 to 536, story-corpus-sprint-slot 51 to 123, story-evidence-scaffold 42 to 72, suppression-lifetime 171 to 200, trunk-audit-classes 28 to 33, trunk-audit-gate 94 to 123, updater-session-signals 61 to 102, validator-fork-budget 123 to 1117. backlog-receipt-binding `*` goes 5772 to 6091 across the release; this release's absence-arm change (f9ab78d00) took it from 5905 to 6091, because m7b and m16 now reach the porcelain comparison, and the old m16 was a byte copy of m7b and measured nothing. readset-skip `*` goes 959 to 999 and the deriver row 87 to 92, from the BL-875 slot-kill and slot-shellkill worlds.
+
+### BL-897 closed: `derive-fixture-readsets.sh --list` writes no `# digest` line for a declared fixture (`core/scripts/derive-fixture-readsets.sh`)
+
+- **Fix.** `digest.new` goes through `readset_merge_map`'s declared-fixture filter, so a `--list` run no longer writes a digest for a fixture that has an `inputs.decl`.
+- **Held by.** readset-skip's `DIGEST DECLARED` arm drives one `--list` run over a declared and an undeclared fixture and expects `0|1|0|1`, with the `nodeclfilter` mutant killed.
+- **Map.** The map's `# digest` lines go from 4 to 2; the two that remain, hook-registration-join and retro-compliance-workflow, carry no `inputs.decl`. hook-registration-join is re-traced with the sandbox tracer after recover-gate's test-only seam.
+
+### BL-828 advanced (stays OPEN)
+
+- **Both allowlists empty.** M1 (`scripts/mutant-kills-allowlist.txt`) goes 8 to 0 and M5 (`scripts/mutant-sites-allowlist.txt`) goes 60 to 0 across 19 fixtures, counted over non-comment lines at da5b8bf49 and at the release tip. Each kill is gated on a base flag its own arm raises, and the readset-skip migration was shown non-vacuous by neutralising every setter.
+- **Why it stays open.** Owed item 3, the keyword-free mutant-verdict residue that M1 cannot see in the 22 delisted fixtures, is untouched by either list.
+
+### BL-875 advanced (stays OPEN)
+
+- **Delivered.** `slot-world.sh` records every process group it starts in `SW_GROUPS`, and the caller's `slot_reap` kills each recorded group and then its leader. The `slot-kill` arm SIGKILLs a world mid-hold and reads no surviving group; the `slot-shellkill` arm tears the world down through the pre-push hook's own `pool_kill_tree`, and mutants `liveunrec`, `reapdrop` and `pktnowalk` are killed.
+- **Owed.** Claim (5), the measured count and cause of the original survivors, is not recorded anywhere, so the entry stays PARTIAL.
+
+- **NET.** 1 (closed 1 minus filed 0).
+
 ## [0.993.0] - 2026-11-01
 
 Batch b248, cluster b248-hooks. Closes BL-881 and BL-901 and advances BL-868. No PC- id is closed.
