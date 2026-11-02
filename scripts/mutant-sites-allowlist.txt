@@ -1,1 +1,0 @@
-prepush-pool-depth	finish_mutant	1	if [ "$3" = 1 ]; then mutant_killed "$1" "$2" "$4"; else bad "$5"; fi

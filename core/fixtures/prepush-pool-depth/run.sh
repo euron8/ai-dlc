@@ -544,7 +544,7 @@ for HOOK in $HOOKS; do
   MUTN=0
   # MUTANTS RUN AGAINST THE FIRST RESOLVED HOOK ONLY: I66 holds both blocks to one program.
   mutant() { # mutant <name> <sed-expr>; decides and twins come from the header row
-    local name="$1" ex="$2" m="$WORK/mut$HN.$1.sh" dec tw cells g moved B_mut=1 c cond=0 n_all n_run
+    local name="$1" ex="$2" m="$WORK/mut$HN.$1.sh" dec tw cells g moved B_mut c cond=0 n_all n_run
     dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
     [ -n "$dec" ] || { bad "[$TAG] MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
     dec="${dec//,/ }"; tw="${tw//,/ }"; [ "$tw" = - ] && tw=""
@@ -552,9 +552,9 @@ for HOOK in $HOOKS; do
     MUTN=$((MUTN+1))
     if cmp -s "$BLK" "$m"; then bad "[$TAG] MUTANT $name: the edit matched nothing, so it is not a mutant"; return 0; fi
     # the base-pass flag: the unmutated run held every cell this mutant is judged on
-    for c in $dec $tw; do
-      [ "$(printf '%s\n' "$GOT" | sed -n "s/^$c=//p")" = "$(printf '%s\n' "$WANT" | sed -n "s/^$c=//p")" ] || B_mut=0
-    done
+    B_mut="$(for c in $dec $tw; do
+      [ "$(printf '%s\n' "$GOT" | sed -n "s/^$c=//p")" = "$(printf '%s\n' "$WANT" | sed -n "s/^$c=//p")" ] || { echo 0; exit 0; }
+    done; echo 1)"
     if [ "$MATRIX" = 1 ]; then
       cells="$ARM_CELLS"; n_all="$(printf '%s\n' $cells | grep -c .)"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"
       MX_RAN=$((MX_RAN + n_all - n_run))
@@ -563,7 +563,7 @@ for HOOK in $HOOKS; do
     moved="$(moved_of "$g" "$WANT")"
     [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
     same_set "$moved" "$dec" && cond=1
-    finish_mutant "$B_mut" "$name" "$cond" \
+    finish_mutant "$([ "$B_mut" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
       "[$TAG] MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
       "[$TAG] MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}])"
   }
@@ -808,19 +808,19 @@ pn_mut m-novalidate 's/case "\${e##\*\/}" in fx\.??????) .* ;; esac$/set -- ${1+
 wantpn() { printf '%s\n' "$WANT_PN" | sed -n "s/^$1=//p"; }
 # pn_eval <mutant>: the mutant's cells against the fix set's values; decides moved, twins stayed
 pn_eval() {
-  local name="$1" dec tw cells c got="" moved B_mut=1 cond=0 ctl=1 n_run
+  local name="$1" dec tw cells c got="" moved B_mut cond=0 ctl=1 n_run
   dec="$(mrow "$name" decides)"; tw="$(mrow "$name" twins)"
   [ -n "$dec" ] || { bad "MUTANT $name: no MUTANT-MATRIX row in the header"; return 0; }
   dec="${dec//,/ }"; tw="${tw//,/ }"; [ "$tw" = - ] && tw=""
   if [ "$MATRIX" = 1 ]; then cells="$PN_ALL"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + 6 - n_run)); else cells="$dec $tw"; fi
   for c in $cells; do got="$got$c=$(pn_val "$name" "$c")"$'\n'; done
-  for c in $dec $tw; do [ "$(pn_val fix "$c")" = "$(wantpn "$c")" ] || B_mut=0; done
+  B_mut="$(for c in $dec $tw; do [ "$(pn_val fix "$c")" = "$(wantpn "$c")" ] || { echo 0; exit 0; }; done; echo 1)"
   moved="$(moved_of "$got" "$WANT_PN")"
   [ "$MATRIX" = 1 ] && mx_row "$name" "$cells" "$moved"
   # released once its tree settled, the hung unit then reaches ok: the drive ran and was only blocked
   if [ "$name" = m-nofifoguard ] && [ "$(pn_v m-nofifoguard_fifo)" != ok ]; then ctl=0; fi
   same_set "$moved" "$dec" && [ "$ctl" = 1 ] && cond=1
-  finish_mutant "$B_mut" "$name" "$cond" \
+  finish_mutant "$([ "$B_mut" = 1 ] && echo 1 || echo 0)" "$name" "$cond" \
     "MUTANT $name kill confirmed: decides [$dec] moved, twin [${tw:--}] stayed green" \
     "MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}]); released-fifo control read $(pn_v m-nofifoguard_fifo)"
 }
@@ -1420,11 +1420,11 @@ if [ "$(printf '%s\n' "$tl_m" | grep -c ' 9>&- &')" != 1 ]; then bad "MUTANT td-
 else
   ( eval "$(printf '%s\n' "$tl_m" | sed 's/ 9>&- &/ \&/')"; td_run "$PB" td-life-fd $TL_ALL )
   tl_got=""; for _c in $TL_ALL; do tl_got="$tl_got$_c=$(td_val td-life-fd "$_c")"$'\n'; done
-  tl_bm=1; for _c in $TL_ALL; do [ "$(td_val fix "$_c")" = "$(wanttd "$_c")" ] || tl_bm=0; done
+  tl_bm="$(for _c in $TL_ALL; do [ "$(td_val fix "$_c")" = "$(wanttd "$_c")" ] || { echo 0; exit 0; }; done; echo 1)"
   tl_moved="$(moved_of "$tl_got" "$WANT_TD")"
   [ "$MATRIX" = 1 ] && mx_row td-life-fd "$TL_ALL" "$tl_moved"
   tl_cond=0; same_set "$tl_moved" "$(mrow td-life-fd decides)" && tl_cond=1
-  finish_mutant "$tl_bm" td-life-fd "$tl_cond" \
+  finish_mutant "$([ "$tl_bm" = 1 ] && echo 1 || echo 0)" td-life-fd "$tl_cond" \
     "MUTANT td-life-fd kill confirmed: decides [td_life] moved ($(td_val td-life-fd td_life)), twin [td_life_alive] stayed green" \
     "MUTANT td-life-fd moved [${tl_moved% }], want [td_life] (read ${tl_got//$'\n'/ })"
 fi
@@ -1464,12 +1464,12 @@ PS_WANT=exited:130
 # the children are `bash`, never `sh`: tools.decl does not declare sh, so under the hermetic sandbox an
 # `exec sh` exits 127 and the signal world silently becomes a second exit world
 ps_fix_sig="$(ps_drive "$PB" sig)"; ps_fix_exit="$(ps_drive "$PB" exit)"
-B_ps=1
 for _c in sig exit; do
   eval "v=\$ps_fix_$_c"
   if [ "$v" = "$PS_WANT" ]; then ok "[$T] pool_stop ps_$_c=$v"
-  else bad "[$T] pool_stop ps_$_c read [$v], want [$PS_WANT]"; B_ps=0; fi
+  else bad "[$T] pool_stop ps_$_c read [$v], want [$PS_WANT]"; fi
 done
+B_ps="$([ "$ps_fix_sig" = "$PS_WANT" ] && [ "$ps_fix_exit" = "$PS_WANT" ] && echo 1 || echo 0)"
 PS_M="$WORK/ps.mut.sh"
 sed 's/^    wait "\$pool_xp"$/    while :; do wait "$pool_xp"; [ "$?" -gt 128 ] || break; done/' "$PB" > "$PS_M"
 if cmp -s "$PB" "$PS_M"; then bad "MUTANT ps-rewait: the edit matched nothing, so it is not a mutant"
@@ -1480,7 +1480,7 @@ else
   [ "$ps_m_exit" = "$PS_WANT" ] || ps_moved="${ps_moved}ps_exit "
   [ "$MATRIX" = 1 ] && mx_row ps-rewait "ps_sig ps_exit" "$ps_moved"
   ps_cond=0; same_set "$ps_moved" "$(mrow ps-rewait decides)" && ps_cond=1
-  finish_mutant "$B_ps" ps-rewait "$ps_cond" \
+  finish_mutant "$([ "$B_ps" = 1 ] && echo 1 || echo 0)" ps-rewait "$ps_cond" \
     "MUTANT ps-rewait kill confirmed: decides [ps_sig] moved ($ps_m_sig), twin [ps_exit] stayed green" \
     "MUTANT ps-rewait moved [${ps_moved% }], want [ps_sig] (sig read $ps_m_sig, exit read $ps_m_exit)"
 fi
