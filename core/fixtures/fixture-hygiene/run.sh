@@ -112,7 +112,7 @@ EOF
     cp "$w/tools.tmp" "$w/core/fixtures/fa/tools.decl"
   fi
   rm -f "$w/tools.tmp"
-  g init -q "$w" && g -C "$w" add -A core >/dev/null 2>&1
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -c core.hooksPath=/dev/null init -q "$w" && g -C "$w" add -A core >/dev/null 2>&1
 }
 mk_world "$WORK/w-dirty" dirty && mk_world "$WORK/w-clean" clean \
   || { echo "FIXTURE BROKEN: could not build the probe worlds byte-identical" >&2; exit 2; }
