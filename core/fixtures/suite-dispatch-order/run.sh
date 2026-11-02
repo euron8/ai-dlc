@@ -33,7 +33,7 @@
 # matrix is measured by `--matrix` (an argv flag; every mutant against every arm, one MATRIX row each) and
 # is re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
 # replaces a per-push check that no OTHER arm trips. The arms are the columns of the MATRIX rows:
-#   order glob format outside (world lpt), badrec, merge mergeorder (world merge), prune, red green (world red).
+#   order glob format outside (world lpt), badrec, merge mergeorder (world merge), prune, red redlast green (world red).
 # MUTANT-MATRIX m1 decides=order twins=badrec
 # MUTANT-MATRIX m2 decides=order twins=badrec
 # MUTANT-MATRIX m3 decides=format twins=badrec
@@ -41,6 +41,7 @@
 # MUTANT-MATRIX m5 decides=red twins=badrec
 # MUTANT-MATRIX m6 decides=prune twins=badrec
 # MUTANT-MATRIX m7 decides=prune twins=badrec
+# MUTANT-MATRIX m8 decides=redlast twins=red
 # MUTANT-MATRIX-DYNAMIC mutants-loop why=the loop for _m in $MUTANTS calls score_mutant, which passes "$m" to mutant_killed; every MUTANTS member carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suite-dispatch-order/run.sh --matrix
 set -uo pipefail
@@ -172,8 +173,8 @@ printf 'aaa 1\nmmm 5\nzzz 9\n' > "$SEEDREC" || broken "could not write the seede
 # passed, 1 = the arm failed). That is what makes the mutant x arm matrix measurable: one function per
 # world, the arms read off it. The arms (matrix columns) are:
 #   order glob format outside   (world lpt)      badrec (world bad)     merge mergeorder (world merge)
-#   prune (world prune)         red green (world red)
-ALL_ARMS="order glob format outside badrec merge mergeorder prune red green"
+#   prune (world prune)         red redlast green (world red)
+ALL_ARMS="order glob format outside badrec merge mergeorder prune red redlast green"
 RES="$WORK/res"; mkdir -p "$RES" || broken "could not create the result dir"
 setres() { printf '%s\n' "$3" > "$RES/$1.$2"; }                  # setres <tag> <arm> <0|1>
 getres() { if [ -f "$RES/$1.$2" ]; then cat "$RES/$1.$2"; else echo NA; fi; }
@@ -305,7 +306,7 @@ w_prune() { # w_prune <tag> <hook>   a row whose fixture DIRECTORY IS GONE is pr
 }
 
 w_red() { # w_red <tag> <hook>   a RED pool leaves the record exactly as it found it
-  local tag="$1" h="$2" T="$WORK/$1-red" rc g_good p
+  local tag="$1" h="$2" T="$WORK/$1-red" rc g_good p l_n l_names
   seed "$T" "$h" || broken "seed failed"
   mkfx "$T" good 0; mkfx "$T" sick 1
   printf 'good 900\nsick 900\n' > "$T/.git/ai-dlc-fixture-durations" || broken "could not seed the red-run record"
@@ -317,6 +318,13 @@ w_red() { # w_red <tag> <hook>   a RED pool leaves the record exactly as it foun
   chk "$tag" red "$p" \
     "a pool red on one unit leaves the durations record byte-identical, the ok unit it timed included" \
     "a red pool (rc=$rc) changed the durations record, or did not run as seeded: an ok unit of a red run is recorded at that run's load and becomes a phantom pole"
+  # `.last` is this run's own measurement and is published on a red run too: one line per unit the pool timed.
+  l_n="$(grep -c . "$T/.git/ai-dlc-fixture-durations.last" 2>/dev/null)" || l_n=0
+  l_names="$(awk 'NF == 2 && $2 ~ /^[0-9]+$/ { print $1 }' "$T/.git/ai-dlc-fixture-durations.last" 2>/dev/null | sort | tr '\n' ' ')"
+  p=1; [ "$l_n" -eq 2 ] && [ "$l_names" = "good sick " ] && p=0
+  chk "$tag" redlast "$p" \
+    "the same red pool published .last with one line per timed unit (good and sick), so the pole line has a run to read after a red push" \
+    ".last holds $l_n line(s) (units '$l_names') after a red pool, want good and sick — a red push prints (no suite run, no pole)"
   mkfx "$T" sick 0
   rc="$(drive "$T" "$WORK/$tag-green.out")"
   g_good="$(awk '$1 == "good" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
@@ -326,7 +334,7 @@ w_red() { # w_red <tag> <hook>   a RED pool leaves the record exactly as it foun
     "the green control (rc=$rc) left good at '${g_good:-gone}', not this run's cost -- the red arm cannot tell a gated merge from no merge at all"
 }
 
-world_of() { case "$1" in order|glob|format|outside) echo lpt ;; badrec) echo bad ;; merge|mergeorder) echo merge ;; prune) echo prune ;; red|green) echo red ;; esac; }
+world_of() { case "$1" in order|glob|format|outside) echo lpt ;; badrec) echo bad ;; merge|mergeorder) echo merge ;; prune) echo prune ;; red|redlast|green) echo red ;; esac; }
 run_world() { "w_$1" "$2" "$3"; }         # run_world <world> <tag> <hook>
 
 # ---------------------------------- THE SHIPPED HOOK, EVERY ARM ----------------------------------
@@ -378,6 +386,16 @@ MO="$M5_OLD" MN="$M5_NEW" awk '$0 == ENVIRON["MO"] { print ENVIRON["MN"]; next }
 n_m5="$(grep -c '^>' <<<"$(diff "$HOOK" "$M5")")" || n_m5=0
 [ "$n_m5" -eq 1 ] || bad "MUTANT m5 changed $n_m5 line(s), not 1 -- the merge gate's anchor is not unique, so the mutant proves nothing"
 
+# M8 THE RUN-VERDICT GATE RESTORED ON `.last`, and only there: the `.last` publish is the one line that
+# continues `; then cp`, which the merge line (M5's anchor) does not. awk, because the replacement carries `&&`.
+M8="$WORK/hook.m8"
+M8_OLD='  if [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD"'
+M8_NEW='  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD"'
+MO="$M8_OLD" MN="$M8_NEW" awk 'index($0, ENVIRON["MO"]) == 1 { print ENVIRON["MN"] substr($0, length(ENVIRON["MO"]) + 1); next } { print }' "$HOOK" > "$M8" \
+  || broken "could not write the M8 mutant"
+n_m8="$(grep -c '^>' <<<"$(diff "$HOOK" "$M8")")" || n_m8=0
+[ "$n_m8" -eq 1 ] || bad "MUTANT m8 changed $n_m8 line(s), not 1 -- the .last gate's anchor is not unique, so the mutant proves nothing"
+
 # Deciding arm and measured-green twin per mutant: the MEASURED matrix is the `--matrix` rows.
 DEC_m1=order;  TWIN_m1=glob
 DEC_m2=order;  TWIN_m2=badrec
@@ -386,7 +404,8 @@ DEC_m4=merge;  TWIN_m4=red
 DEC_m5=red;    TWIN_m5=badrec
 DEC_m6=prune;  TWIN_m6=badrec
 DEC_m7=prune;  TWIN_m7=badrec
-MUTANTS="m1 m2 m3 m4 m5 m6 m7"
+DEC_m8=redlast; TWIN_m8=red
+MUTANTS="m1 m2 m3 m4 m5 m6 m7 m8"
 
 score_mutant() { # score_mutant <name>
   local m="$1" dec twin w arm tripped="" worlds="" r hook="$WORK/hook.$1"
@@ -415,14 +434,15 @@ mutant_what() { case "$1" in
   m4) echo "the old record not read: the same narrowed run cuts it to 2 lines and loses aaa's seeded cost" ;;
   m5) echo "the run-verdict gate removed from the merge: the same red pool rewrites the record" ;;
   m6) echo "the prune removed: the deleted dir's and the run.sh-less dir's rows survive the merge" ;;
+  m8) echo "the run-verdict gate restored on .last: a red pool publishes no .last and the pole line reads no suite run" ;;
   m7) echo "the prune keyed on a literal core/fixtures/: on the consumer layout the record is frozen, not the 3-row pruned one" ;;
 esac; }
 for _m in $MUTANTS; do score_mutant "$_m"; done
 
 # --- 11. A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL, AND --matrix EXECUTES ALL OF THEM ---------------
 if [ "$MATRIX" = 1 ]; then
-  if [ "$MX_ROWS" -eq 7 ]; then ok "--matrix printed one MATRIX row per mutant ($MX_ROWS of 7)"
-  else bad "--matrix printed $MX_ROWS MATRIX rows, want 7"; fi
+  if [ "$MX_ROWS" -eq 8 ]; then ok "--matrix printed one MATRIX row per mutant ($MX_ROWS of 8)"
+  else bad "--matrix printed $MX_ROWS MATRIX rows, want 8"; fi
 else
   if [ "$MX_ROWS" -eq 0 ]; then ok "a plain run printed no MATRIX row ($MX_ROWS), so the matrix-only cells did not run"
   else bad "a plain run printed $MX_ROWS MATRIX rows -- the matrix path is running on every push"; fi
@@ -431,8 +451,8 @@ fi
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are emitted from inside a
 # conditional: an assertion that never executed prints nothing, and a short green report reads exactly
-# like a complete one. 10 shipped-hook arms + 1 control + 7 kills + 7 twins + 1 plain-run arm.
-EXPECTED_ASSERTIONS=26
+# like a complete one. 11 shipped-hook arms + 1 control + 8 kills + 8 twins + 1 plain-run arm.
+EXPECTED_ASSERTIONS=29
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
