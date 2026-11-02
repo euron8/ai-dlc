@@ -274,7 +274,10 @@ arm_m4() { r_has "$1" "the base-0 receipt was reported" &&[ "$(r_cls "$1" BL-805
 # m5b, m15 and gitdir_mutant each read only a capture of their OWN world, keyed on the SIDE line its
 # block writes after its drive. Without that key each arm was absence-shaped -- true on any refusing
 # capture -- and c1-whole's AFTER leak refusal (rc 2, no verdict on BL-801) tripped all three.
-arm_m5b() { r_line "$1" "SIDE world=unwritable" && [ "$(r_cls "$1" BL-801)" != "UNSEEDED" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-801)" ]; }; }
+# The SIDE line proves only that the block ran, so m5b also needs the VALIDATOR'S own answer in that
+# world: R1's refusal that its unwritable-path seed was not reported UNSEEDED, or a BL-801 row that is
+# present and not UNSEEDED. A validator that crashed before R1 (rc 2, no row, no refusal) trips neither.
+arm_m5b() { r_line "$1" "SIDE world=unwritable" && { { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "the receipt naming a path the seed cannot append to was reported" && r_has "$1" ", not UNSEEDED. A seed that did not apply"; } || { [ -n "$(r_cls "$1" BL-801)" ] && [ "$(r_cls "$1" BL-801)" != "UNSEEDED" ]; }; }; }
 arm_m6() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "DRIFTED" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m7b() { r_has "$1" "SIDE escaped=1" && [ "$(r_rc "$1")" != 0 ]; }
 arm_m8b_mut() { [ "$(r_rc "$1")" = 1 ] && r_has "$1" "produced ZERO scored receipts"; }
@@ -2381,8 +2384,12 @@ arm_pr_m_keyrlib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD:
 # Both read only a pr_two capture whose FIRST run was red (`SIDE rc1=2`): their worlds are m1's and
 # c5-m3's, where a record must not survive. A pr_two world whose first run was green writes a record
 # by design, so `store` non-zero there is the shipped behaviour, not this mutant's.
-arm_pr_m_early() { r_line "$1" "SIDE rc1=2" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
-arm_pr_m_between() { r_line "$1" "SIDE rc1=2" && { r_has "$1" "PROBE-RECORD: REPLAYED" || ! r_line "$1" "SIDE store=0"; }; }
+# `SIDE rc1=` and `SIDE store=` are written by pr_two whatever the validator did, so each arm also needs
+# the validator's own answer: the deciding run's REPLAYED line, or `SIDE pre=WRITTEN` (pr_verb's copy of
+# the first run's own PROBE-RECORD verb, `none` when it printed none) beside a non-empty store. A first
+# run that crashed before any probe printed no verb, so it trips neither.
+arm_pr_m_early() { r_line "$1" "SIDE rc1=2" && { r_has "$1" "PROBE-RECORD: REPLAYED" || { r_line "$1" "SIDE pre=WRITTEN" && ! r_line "$1" "SIDE store=0"; }; }; }
+arm_pr_m_between() { r_line "$1" "SIDE rc1=2" && { r_has "$1" "PROBE-RECORD: REPLAYED" || { r_line "$1" "SIDE pre=WRITTEN" && ! r_line "$1" "SIDE store=0"; }; }; }
 # Cell 6 negated on the capture: a replay whose run did not end in an all-driver OK line naming K
 # without "fired" (the deleted R7_PROBED is also unbound under set -u, which ends the run unreported).
 pr_nostate_body() {
