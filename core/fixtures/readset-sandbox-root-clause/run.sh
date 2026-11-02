@@ -9,25 +9,47 @@
 #
 # MEASURED, NOT READ OFF THE TEXT, AND FOR ALL THREE EMITTERS. Each emitter is extracted from the
 # deriver's own text and rendered for its own tiny tree: the default line is eval'd, the `--local-map`
-# block is sourced with the trip set stubbed, and the override branch is eval'd against an unscoped
-# profile. Each rendering runs one workload under an unprivileged sandbox-exec while one `log stream`
-# watches; a start sentinel opens the window and an end sentinel closes it. A text count of the clause
-# is kept as a CONTROL only: a mutant moving the override and `--local-map` clauses onto `$MARKDIR`
-# keeps that count at 3, and only the rendered runs see it.
+# block is sourced with the trip set stubbed, and the override branch is eval'd against a SCOPED
+# override profile (an `allow default (with report)` override would become `deny default` below, and
+# sandbox-exec then refuses to exec the workload at all, rc 71). A text count of the clause is kept as
+# a CONTROL only: a mutant moving the override and `--local-map` clauses onto `$MARKDIR` keeps that
+# count at 3, and only the rendered runs see it.
 #
-# WHY A SEPARATE FIXTURE. Inside the sandbox tracer `log stream` answers "Cannot run while sandboxed",
-# so this fixture SKIPs there by construction. Carried inside readset-stage1-verdict it made that
-# fixture's traced verdict differ from its untraced one, and every trace discarded it. Here the SKIP
-# costs only this small fixture.
+# THE CHANNEL IS THE WORKLOAD'S OWN ERRNO, NOT THE KERNEL LOG STREAM (BL-868, BL-616's MAXATT retry).
+# `/usr/bin/log stream` drops reports under load, so the stream judging needed a 30-attempt retry, a
+# polled start/end sentinel and two sleeps -- a verdict that depended on load. Every rendered `.sb`
+# is now MECHANICALLY REWRITTEN (deny_sb): each `(allow ... (with report) ...)` clause becomes `(deny
+# ...)` with every `(with ...)` modifier stripped, the `--local-map` FXTAG message and its TRIP clause
+# included. An operation the profile would REPORT is then an operation the kernel DENIES, so the
+# workload sees it as a non-zero rc, synchronously, and nothing can drop it. The root-literal clause
+# carries no `(with report)`, so it stays an ALLOW after the clause it follows and re-admits root
+# metadata/existence. The workload runs each operation separately and prints one rc per operation.
+# The scored ops: root `cd`, `[ -d ]`, `[ -e ]` (metadata/existence: rc 0 under the fix, non-zero
+# under every mutant of the clause), root `ls` (file-read-data: must stay DENIED, i.e. still reported),
+# a read and a test below the root (DENIED), and an `ls /` outside the tree (ALLOWED, the positive
+# control that the sandbox is not denying everything). The same workload unsandboxed reads 0 on every
+# op, so a non-zero rc is the profile's, not a missing file.
+# MEASURED EQUIVALENT BEFORE THE STREAM ARMS WERE DELETED: `--matrix` on the stream channel (its last
+# revision, run at 47102ad20, window judged on attempt 1 of 30) and on this errno channel printed the
+# four MATRIX lines below byte-identically (`cmp` of the extracted MATRIX lines: equal), twins included:
+#   MATRIX markdir-default decides=def:RED twins=lm:GREEN others=1/1
+#   MATRIX markdir-ov-lm decides=lm:RED,ov:RED twins=def:GREEN others=0/0
+#   MATRIX report-default decides=def:RED twins=ov:GREEN others=1/1
+#   MATRIX report-lm decides=lm:RED twins=ov:GREEN others=1/1
+#
+# WHY A SEPARATE FIXTURE. Carried inside readset-stage1-verdict, its old stream arms SKIPped under the
+# sandbox tracer and made that fixture's traced verdict differ from its untraced one. This fixture carries
+# `inputs.decl`, so it is keyed on its declaration and never traced; its own sandbox-exec runs nested too
+# (measured: a sandbox-exec under an allow-default profile ran a nested one, rc 0).
 #
 # Usage: run.sh [--matrix]
 # Exit:  0 = every arm and mutant holds (or SKIP, stated), 1 = one regressed, 2 = fixture broken.
 #
 # THE MUTANT MATRIX. A cell is one EMITTER of the deriver (def = the default profile, lm = the `--local-map`
 # profile, ov = the AI_DLC_READSET_SANDBOX_PROFILE override), RED on a mutant when that emitter, rendered from the
-# mutated deriver and run under the sandbox, reports root metadata/existence. A mutant's row lists the emitters it
-# breaks (decides) and the emitter it could plausibly co-trip but must leave GREEN (twins). One shared stream window
-# scores every mutant at once, so a twin costs no extra render and no extra stream. The matrix is re-measured
+# mutated deriver, deny-rewritten and run under the sandbox, denies root metadata/existence. A mutant's row lists the
+# emitters it breaks (decides) and the emitter it could plausibly co-trip but must leave GREEN (twins). Every rendering
+# runs once and every cell reads that run's rc file, so a twin costs no extra render and no extra run. The matrix is re-measured
 # whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root. It
 # scores every mutant against every emitter and prints one MATRIX line each.
 # MUTANT-MATRIX markdir-default decides=def twins=lm
@@ -55,9 +77,6 @@ DERIVER="$ROOT/core/scripts/derive-fixture-readsets.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-sandbox-root-clause.XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"
-LSP=""
-reap() { [ -z "$LSP" ] || kill "$LSP" 2>/dev/null; }
-trap reap EXIT
 
 FAILS=0; ASSERTS=0
 ok()     { printf '  ok    %s\n' "$1"; ASSERTS=$((ASSERTS + 1)); }
@@ -110,28 +129,24 @@ n="$(cl_count "$MD/markdir-ov-lm.sh")"
   || bad "the markdir-ov-lm mutant moved the text count to $n; it no longer shows why the rendered arms exist"
 
 # ------------------------------------------------------------------ the gate ----
-LS_WHY=""
-if ! command -v sandbox-exec >/dev/null 2>&1; then LS_WHY="no sandbox-exec (not macOS)"
-elif [ ! -x /usr/bin/log ]; then LS_WHY="no /usr/bin/log"
-elif [ "$(id -u)" = 0 ]; then LS_WHY="running as root"
-else
-  /usr/bin/log stream --style compact --timeout 1s --predicate 'sender == "readset-sandbox-root-clause-probe"' >/dev/null 2>"$WORK/ls.err"
-  lsrc=$?
-  if grep -q 'Cannot run while sandboxed' "$WORK/ls.err"; then LS_WHY="inside a sandbox: $(head -1 "$WORK/ls.err")"
-  elif [ "$lsrc" != 0 ]; then LS_WHY="log stream unavailable here (rc $lsrc): $(head -1 "$WORK/ls.err")"; fi
-fi
-if [ -n "$LS_WHY" ]; then
-  printf '  SKIP  rendered sandbox arms: %s\n' "$LS_WHY"
-  if [ "$MODE" = matrix ]; then echo "readset-sandbox-root-clause: MATRIX BROKEN: the rendered arms are SKIPPED here ($LS_WHY), so nothing was measured" >&2; exit 2; fi
+# A missing sandbox-exec is not normal use here (this fixture's subject is a macOS tracer), so it SKIPs. A
+# sandbox-exec that refuses a trivial profile is a broken harness, never a SKIP.
+SB_WHY=""
+if ! command -v sandbox-exec >/dev/null 2>&1; then SB_WHY="no sandbox-exec (not macOS)"; fi
+if [ -n "$SB_WHY" ]; then
+  printf '  SKIP  rendered sandbox arms: %s\n' "$SB_WHY"
+  if [ "$MODE" = matrix ]; then echo "readset-sandbox-root-clause: MATRIX BROKEN: the rendered arms are SKIPPED here ($SB_WHY), so nothing was measured" >&2; exit 2; fi
   echo
   if [ "$FAILS" -ne 0 ]; then echo "readset-sandbox-root-clause: $FAILS of $ASSERTS FAILED (work kept at $WORK)"; exit 1; fi
   case "$WORK" in */readset-sandbox-root-clause.??????) rm -rf "$WORK" ;; esac
-  echo "readset-sandbox-root-clause: all $ASSERTS assertions hold (rendered arms SKIPPED: $LS_WHY)"
+  echo "readset-sandbox-root-clause: all $ASSERTS assertions hold (rendered arms SKIPPED: $SB_WHY)"
   exit 0
 fi
 
 # ------------------------------------------------------------------ rendering ----
-# render3 <deriver> <dir>: writes <dir>/{def,lm,ov}.sb, each for its own tree <dir>/<e>/t.
+# render3 <deriver> <dir>: writes <dir>/{def,lm,ov}.sb, each for its own tree <dir>/<e>/t. The override is a
+# SCOPED profile in the shipped default's shape, written with the `@TREE@`/`@MARK@` tokens the override branch
+# substitutes, so its substitution is exercised too.
 render3() {
   local d="$1" o="$2" l ob e
   for e in def lm ov; do mkdir -p "$o/$e/t/d" "$o/$e/m" && echo x > "$o/$e/t/d/f" && echo y > "$o/$e/t/g" || return 1; done
@@ -144,9 +159,34 @@ render3() {
   ( TREE="$o/lm/t"; MARKDIR="$o/lm/m"; PROFILE="$o/lm.sb"; readset_trip_set() { echo /usr/bin/log; }; . "$o/lm.blk" ) || return 1
   ob="$(awk 'index($0, "if [ -n \"${AI_DLC_READSET_SANDBOX_PROFILE:-}\" ]; then") { f = 1; next } f && /^  elif / { exit } f { print }' "$d" | sed 's/ || die .*$//')"
   [ -n "$ob" ] || return 1
-  printf '(version 3)\n(allow default (with report))\n' > "$o/unscoped.sb"
-  ( TREE="$o/ov/t"; MARKDIR="$o/ov/m"; PROFILE="$o/ov.sb"; AI_DLC_READSET_SANDBOX_PROFILE="$o/unscoped.sb"; eval "$ob" ) || return 1
+  printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "@TREE@") (subpath "@MARK@") (with report))\n' > "$o/scoped.sb"
+  ( TREE="$o/ov/t"; MARKDIR="$o/ov/m"; PROFILE="$o/ov.sb"; AI_DLC_READSET_SANDBOX_PROFILE="$o/scoped.sb"; eval "$ob" ) || return 1
   for e in def lm ov; do [ -s "$o/$e.sb" ] || return 1; done
+}
+# deny_sb <in.sb> <out.sb>: THE CHANNEL. Every clause carrying `(with report)` must open `(allow `; it becomes
+# `(deny ` and loses every `(with ...)` modifier, nested parens included. Any other line is copied unchanged.
+# Refuses (rc 1) when a reported clause is not an allow, a modifier is unbalanced, no clause was rewritten, or a
+# `(with ` survives -- a rewrite that silently did nothing would score every cell GREEN.
+deny_sb() {
+  awk -v CF="$2.n" '
+    index($0, "(with report)") {
+      n++
+      if (!sub(/^\(allow /, "(deny ")) bad = 1
+      while ((i = index($0, " (with ")) > 0) {
+        dp = 0
+        for (j = i + 1; j <= length($0); j++) {
+          ch = substr($0, j, 1)
+          if (ch == "(") dp++
+          else if (ch == ")") { dp--; if (dp == 0) break }
+        }
+        if (dp != 0) { bad = 1; break }
+        $0 = substr($0, 1, i - 1) substr($0, j + 1)
+      }
+    }
+    { print }
+    END { print n + 0 > CF; exit bad }' "$1" > "$2" || return 1
+  [ "$(cat "$2.n")" -ge 1 ] || return 1
+  if grep -qF '(with ' "$2"; then return 1; fi
 }
 R="$WORK/r"
 render3 "$DERIVER" "$R/fix" || broken "cannot render the deriver's three emitters"
@@ -154,64 +194,64 @@ for e in def lm ov; do
   grep -qF "(literal \"$R/fix/$e/t\")" "$R/fix/$e.sb" || broken "the rendered $e profile carries no root literal: $(tr '\n' ' ' < "$R/fix/$e.sb")"
 done
 for m in markdir-default markdir-ov-lm report-default report-lm; do render3 "$MD/$m.sh" "$R/$m" || broken "cannot render mutant $m"; done
-# The clause-less control: the default profile as it was before BL-470, which MUST report root md/exist.
+# The clause-less control: the default profile as it was before BL-470, which MUST deny root md/exist once rewritten.
 mkdir -p "$R/base/def/t/d" "$R/base/def/m" && echo x > "$R/base/def/t/d/f" && echo y > "$R/base/def/t/g" || broken "base tree"
 printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$R/base/def/t" "$R/base/def/m" > "$R/base/def.sb"
-mkdir -p "$R/end/t" && echo s > "$R/end/t/s" && echo e > "$R/end/t/e" || broken "sentinel tree"
-printf '(version 3)\n(allow default)\n(allow file-read* (subpath "%s") (with report))\n' "$R/end/t" > "$R/end.sb"
 
-# ------------------------------------------------------------------ one stream ----
-# ONLY A WINDOW WITH ZERO DROP NOTICES IS JUDGED, AND A LOSSY ONE IS RETRIED, NOT SCORED. A dropped
-# report makes every count below a floor, so a lossy window can neither pass nor fail an arm. One
-# attempt refused as BROKEN on any notice, and on a loaded box that is most attempts: measured at
-# load 41-42, 2 of 3 single attempts dropped 1-2 notices. MAXATT attempts, a pause between them so a
-# load spike can pass; all MAXATT lossy is still BROKEN. The attempt count is printed on every run.
-sentinel() { local i=0; while [ "$i" -lt 50 ]; do sandbox-exec -f "$R/end.sb" /bin/cat "$R/end/t/$1" >/dev/null 2>&1 </dev/null; grep -qF "file-read-data $R/end/t/$1" "$WORK/raw" && return 0; sleep 0.2; i=$((i + 1)); done; return 1; }
-MAXATT=30; ATT=0; NDS=""
-while [ "$ATT" -lt "$MAXATT" ]; do
-  ATT=$((ATT + 1))
-  [ "$ATT" -eq 1 ] || sleep 2
-  /usr/bin/log stream --style compact --predicate "eventMessage CONTAINS \"$R/\"" > "$WORK/raw" 2>&1 &
-  LSP=$!
-  sentinel s || broken "the sandbox stream never delivered the start sentinel (attempt $ATT)"
-  for sb in "$R"/*/*.sb; do
-    case "$sb" in "$R/end/"*|*/unscoped.sb) continue ;; esac
-    t="${sb%.sb}/t"
-    sandbox-exec -D FXTAG=r -f "$sb" /bin/bash -c 'cd "$1" && [ -d "$1" ] && [ -e "$1" ] && ls "$1" >/dev/null && cat "$1/g" "$1/d/f" >/dev/null && [ -f "$1/d/f" ]' _ "$t" </dev/null \
-      || broken "the rendering $sb refused the probe workload"
-  done
-  sentinel e || broken "the sandbox stream never delivered the end sentinel (attempt $ATT)"
-  sleep 1; kill "$LSP" 2>/dev/null; wait "$LSP" 2>/dev/null; LSP=""
-  nd="$(grep -c 'dropped during' "$WORK/raw")" || nd=0
-  [ "$nd" = 0 ] && break
-  NDS="$NDS $nd"
+# ------------------------------------------------------------------ one run per rendering ----
+# The workload runs each operation SEPARATELY and prints its rc, in this fixed order, on one line:
+#   cd-root  [ -d root ]  [ -e root ]  ls root  cat below  [ -f below ]  ls /
+# The first three are the root metadata/existence ops the clause re-admits; `ls root` is the root's
+# file-read-data, which must stay reported (denied here); the two below-root ops must stay denied; `ls /`
+# is outside the tree and must be allowed, so a profile denying everything cannot read as a kill.
+WL='t="$1"
+if cd "$t" 2>/dev/null; then a=0; else a=$?; fi
+[ -d "$t" ]; b=$?
+[ -e "$t" ]; c=$?
+ls "$t" >/dev/null 2>&1; d=$?
+cat "$t/g" >/dev/null 2>&1; e=$?
+[ -f "$t/d/f" ]; f=$?
+ls / >/dev/null 2>&1; g=$?
+echo "$a $b $c $d $e $f $g"'
+# The same workload UNSANDBOXED on the fix tree, in a subshell (no new bash start): every op 0, so a non-zero rc
+# below is the profile's, not a missing file.
+( set -- "$R/fix/def/t"; eval "$WL" ) > "$WORK/nosb.rc" </dev/null || broken "the unsandboxed workload failed"
+[ "$(cat "$WORK/nosb.rc")" = "0 0 0 0 0 0 0" ] || broken "the unsandboxed workload read [$(cat "$WORK/nosb.rc")], not every op 0"
+for sb in "$R"/*/*.sb; do
+  case "$sb" in */scoped.sb|*.deny.sb) continue ;; esac
+  deny_sb "$sb" "${sb%.sb}.deny.sb" || broken "cannot deny-rewrite $sb: $(tr '\n' ' ' < "$sb")"
+  sandbox-exec -D FXTAG=r -f "${sb%.sb}.deny.sb" /bin/bash -c "$WL" _ "${sb%.sb}/t" > "${sb%.sb}.rc" 2>"${sb%.sb}.err" </dev/null \
+    || broken "sandbox-exec refused the rewritten $sb (rc $?): $(head -1 "${sb%.sb}.err")"
 done
-[ "$nd" = 0 ] || broken "the stream dropped reports in all $ATT of $MAXATT attempts (notices per attempt:$NDS); the counts below would be floors"
-printf '  note  stream window judged on attempt %s of %s (drop notices in the lossy attempts before it:%s)\n' "$ATT" "$MAXATT" "${NDS:- none}"
+# rcs <variant> <emitter>: binds C_CD C_TD C_TE C_LSR C_CATB C_TB C_LSO from that rendering's one run (no fork).
+rcs() {
+  C_LSO=""
+  read -r C_CD C_TD C_TE C_LSR C_CATB C_TB C_LSO < "$R/$1/$2.rc" || true
+  case "$C_CD$C_TD$C_TE$C_LSR$C_CATB$C_TB$C_LSO" in ''|*[!0-9]*) broken "the run of $1/$2 printed no seven rcs: [$(cat "$R/$1/$2.rc")]" ;; esac
+}
 
-# cnt <variant> <emitter> <op ERE> <suffix ERE>
-cnt() { local n; n="$(grep -cE "($3) $R/$1/$2/t$4( |\$)" "$WORK/raw")" || n=0; printf '%s' "$n"; }
-OPS='file-read-metadata|file-test-existence'
-
-echo " the deriver's three emitters, rendered and run:"
-b="$(cnt base def "$OPS" '')"
-if [ "$b" -gt 0 ]; then ok "control: the clause-less default profile reports root metadata/existence ($b)"; B_ctl=1; else bad "control: the clause-less profile reported no root metadata/existence, so a 0 below proves nothing"; fi
+echo " the deriver's three emitters, rendered, deny-rewritten and run:"
+rcs base def
+if [ "$C_CD" != 0 ] && [ "$C_TD" != 0 ] && [ "$C_TE" != 0 ] && [ "$C_LSO" = 0 ]; then
+  ok "control: the clause-less default profile denies root cd/test-d/test-e ($C_CD $C_TD $C_TE) and allows ls / ($C_LSO)"; B_ctl=1
+else bad "control: the clause-less profile read root cd/test-d/test-e $C_CD $C_TD $C_TE, ls / $C_LSO (want non-zero x3, then 0), so a 0 below proves nothing"; fi
 for e in def lm ov; do
-  rm="$(cnt fix "$e" "$OPS" '')"; rd="$(cnt fix "$e" file-read-data '')"; brd="$(cnt fix "$e" file-read-data '/.+')"; bmd="$(cnt fix "$e" "$OPS" '/.+')"
-  if [ "$rm" = 0 ] && [ "$rd" -gt 0 ] && [ "$brd" -gt 0 ] && [ "$bmd" -gt 0 ]; then
-    ok "$e emitter: root metadata/existence 0, root file-read-data $rd, below-root reads $brd, below-root metadata $bmd"
+  rcs fix "$e"
+  if [ "$C_CD$C_TD$C_TE" = 000 ] && [ "$C_LSR" != 0 ] && [ "$C_CATB" != 0 ] && [ "$C_TB" != 0 ] && [ "$C_LSO" = 0 ]; then
+    ok "$e emitter: root cd/test-d/test-e allowed (0 0 0), root ls denied ($C_LSR), below-root read and test denied ($C_CATB $C_TB), ls / allowed"
     case "$e" in def) B_def=1 ;; lm) B_lm=1 ;; ov) B_ov=1 ;; esac
   else
-    bad "$e emitter: root metadata/existence $rm (want 0), root file-read-data $rd, below-root reads $brd, below-root metadata $bmd (each want >0)"
+    bad "$e emitter: root cd/test-d/test-e $C_CD $C_TD $C_TE (want 0 0 0), root ls $C_LSR, below read $C_CATB, below test $C_TB (each want non-zero), ls / $C_LSO (want 0)"
   fi
 done
 
 echo " mutants:"
-# cell_red <emitter> <mutant>: RED when the emitter rendered from the mutated deriver reports root
+# cell_red <emitter> <mutant>: RED when the emitter rendered from the mutated deriver, deny-rewritten, denies root
 # metadata/existence. Returns 0 RED, 1 GREEN, 2 UNKNOWN CELL (an unknown name must never read as GREEN).
 cell_red() {
   case "$1" in def|lm|ov) ;; *) return 2 ;; esac
-  [ "$(cnt "$2" "$1" "$OPS" '')" != 0 ]
+  rcs "$2" "$1"
+  [ "$C_CD$C_TD$C_TE" != 000 ]
 }
 # The header IS the decides/twins list: nothing else in this file restates it.
 mx_row() { # mx_row <mutant> <decides|twins>
@@ -223,7 +263,7 @@ mx_row() { # mx_row <mutant> <decides|twins>
 }
 MXL="$WORK/mx.ledger"; : > "$MXL"
 BROKEN=0; MX_FAILS=0
-# mx_twins <mutant>: per-push, every twin emitter must be GREEN on the SAME stream window, which costs no render.
+# mx_twins <mutant>: per-push, every twin emitter must be GREEN on the SAME run's rc files, which costs no render.
 mx_twins() {
   local m="$1" tw t r
   tw="$(mx_row "$m" twins)"
@@ -232,7 +272,7 @@ mx_twins() {
   for t in $(printf '%s' "$tw" | tr ',' ' '); do
     cell_red "$t" "$m"; r=$?
     if [ "$r" -eq 2 ]; then BROKEN=$((BROKEN + 1)); printf '  FIXTURE BROKEN %s: twin %s names no cell\n' "$m" "$t"
-    elif [ "$r" -eq 0 ]; then bad "mutant $m: its twin $t also reported root metadata/existence, so the kill is not confined to its own emitter"; fi
+    elif [ "$r" -eq 0 ]; then bad "mutant $m: its twin $t also denied root metadata/existence, so the kill is not confined to its own emitter"; fi
   done
 }
 # mx_score <mutant>: MATRIX-ONLY. Scores the mutant against every emitter. It records itself in the ledger first (rule 9).
@@ -260,18 +300,21 @@ mx_score() {
   fi
 }
 # score_mutant <flag> <mutant>: the flag is the same-run base pass of the control and of every deciding emitter.
-# The mutant is killed when every deciding emitter reports root metadata/existence. Its twins are checked on the
-# same window. Only the passing branch of the unmutated arms ever sets a flag.
+# The mutant is killed when every deciding emitter, deny-rewritten, denies root metadata/existence. Its twins are
+# checked on the same run. Only the passing branch of the unmutated arms ever sets a flag.
 score_mutant() {
   local flag="$1" m="$2" dec c ran=1 miss=""
+  # RAN: every emitter's rendering still denies the below-root read and allows `ls /`, so the profile was in force
+  # and scoped, and a RED cell is the clause's doing rather than a profile that denied nothing or everything.
   for c in def lm ov; do
-    [ "$(cnt "$m" "$c" file-read-data '/.+')" -gt 0 ] || ran=0
+    rcs "$m" "$c"
+    [ "$C_CATB" != 0 ] && [ "$C_LSO" = 0 ] || ran=0
   done
   dec="$(mx_row "$m" decides)"
   for c in $(printf '%s' "$dec" | tr ',' ' '); do cell_red "$c" "$m" || miss="$miss $c"; done
-  if [ "$ran" = 0 ]; then bad "mutant $m did not run: an emitter shows no below-root reads"
-  elif [ -z "$miss" ]; then mutant_killed "$flag" "$m" "mutant $m KILLED (root metadata/existence reported by emitter(s) $dec)"
-  else bad "mutant $m SURVIVED (emitter(s)$miss reported no root metadata/existence)"; fi
+  if [ "$ran" = 0 ]; then bad "mutant $m did not run: an emitter allowed the below-root read or denied ls /"
+  elif [ -z "$miss" ]; then mutant_killed "$flag" "$m" "mutant $m KILLED (root metadata/existence denied by emitter(s) $dec)"
+  else bad "mutant $m SURVIVED (emitter(s)$miss allowed root metadata/existence)"; fi
   mx_twins "$m"
   if [ "$MODE" = matrix ]; then mx_score "$m"; fi
 }

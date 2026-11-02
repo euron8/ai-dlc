@@ -120,11 +120,11 @@ FXR="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$T/block.sh" | sort -u)
 mkdir -p "$T/s" "$T/store" "$T/shim" || exit 9
 # the ps shim answers as the sandboxed /bin/ps does (no output, exit 71); asked about the END RECORD's pid it
 # first marks `end.seen` (see NO CLOCK AND NO BOUND above)
-printf '#!/bin/sh\nread -r e < "$R881_DIR/end.pid" 2> /dev/null || e=x\nfor a in "$@"; do [ "$a" = "$e" ] && : > "$R881_DIR/end.seen"; done\nexit 71\n' > "$T/shim/ps" \
+printf '#!/bin/bash\nread -r e < "$R881_DIR/end.pid" 2> /dev/null || e=x\nfor a in "$@"; do [ "$a" = "$e" ] && : > "$R881_DIR/end.seen"; done\nexit 71\n' > "$T/shim/ps" \
   && chmod +x "$T/shim/ps" || exit 9
 SLP="$(command -v sleep)"; case "$SLP" in /*) ;; *) echo "REFUSED: no sleep binary on PATH for the poll shim" >&2; exit 9 ;; esac
 cat > "$T/shim/sleep" <<SHIM || exit 9
-#!/bin/sh
+#!/bin/bash
 [ -d "\$R881_DIR" ] || exec $SLP "\$@"
 echo x >> "\$R881_DIR/poll.\$PPID"
 if [ -e "\$R881_DIR/freeze.\$PPID" ]; then

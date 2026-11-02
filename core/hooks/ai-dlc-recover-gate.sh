@@ -264,8 +264,13 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   # The net is counted in slept quarter seconds (`_rq`), because SECONDS ticks on wall-clock second
   # boundaries and alone can cut the wait up to a second short; SECONDS bounds only a box so loaded
   # that the sleeps themselves overrun, at one second past the net.
-  _rt0=$SECONDS; _rq=0
-  while [ "$R_V" = owed ] && [ "${R_SEEN:-0}" != 1 ] && [ "$_rq" -lt $((R_NET * 4)) ] && [ $((SECONDS - _rt0)) -le "$R_NET" ]; do
+  # TEST-ONLY SEAM: AI_DLC_TEST_RECOVER_GATE_NO_WALL=1 (the literal 1, nothing else) DROPS that
+  # SECONDS clause, so the wait ends on the slept-tick bound or the verdict alone and a fixture that
+  # drives the loop through its own `sleep` shim reaches a fixed tick however loaded the box is. It
+  # never widens `_rq` or R_NET. Only fixtures set it; unset, the bounds, output and exit are unchanged.
+  _rt0=$SECONDS; _rq=0; _rw=1
+  case "${AI_DLC_TEST_RECOVER_GATE_NO_WALL:-}" in 1) _rw=0 ;; esac
+  while [ "$R_V" = owed ] && [ "${R_SEEN:-0}" != 1 ] && [ "$_rq" -lt $((R_NET * 4)) ] && { [ "$_rw" = 0 ] || [ $((SECONDS - _rt0)) -le "$R_NET" ]; }; do
     if [ "$_rq" -lt 8 ]; then sleep 0.25; _rq=$((_rq + 1)); else sleep 1; _rq=$((_rq + 4)); fi
     _rn="$(grep -cF -- "$R_TUID" "$R_TP" 2>/dev/null)" || _rn=0
     [ "${_rn:-0}" -gt 0 ] 2>/dev/null || continue

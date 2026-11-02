@@ -72,8 +72,8 @@ mkdir -p "$WORK/bin" "$WORK/schemas" "$WORK/mut"
 cp "$VMR" "$WORK/bin/validate-mandatory-rules.sh"
 cp "$VAA" "$WORK/bin/validate-audit-anchors.sh"
 cp "$SCHEMA" "$WORK/schemas/audit-anchors.json"
-printf '#!/bin/sh\nexit 0\n' > "$WORK/bin/validate-retro-evidence.sh"
-printf '#!/bin/sh\nexit 0\n' > "$WORK/bin/validate-cycle-commits.sh"
+printf '#!/bin/bash\nexit 0\n' > "$WORK/bin/validate-retro-evidence.sh"
+printf '#!/bin/bash\nexit 0\n' > "$WORK/bin/validate-cycle-commits.sh"
 chmod +x "$WORK/bin/validate-retro-evidence.sh" "$WORK/bin/validate-cycle-commits.sh"
 
 cd "$WORK" || exit 2

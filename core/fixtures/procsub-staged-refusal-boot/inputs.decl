@@ -6,3 +6,4 @@ core/skills/ai-dlc-update/reconcile/
 core/fixtures/reconcile-emit-report/
 core/fixtures/procsub-staged-refusal-boot-b/run.sh
 core/fixtures/procsub-staged-refusal-boot-c/run.sh
+core/fixtures/lib/mutant.sh

@@ -24,6 +24,10 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "escalation-status-vocabulary:"
 echo "HERMETIC-CONSUMED $VALIDATOR"
@@ -212,6 +216,7 @@ bash "$MUTD/control.sh" "$PROSE_BELOW" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_bad=$
 bash "$MUTD/control.sh" "$PROSE_BELOW_OK" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_ok=$?
 if [ "$rc_ctl_bad" -eq 1 ] && [ "$rc_ctl_ok" -eq 0 ]; then
   ok "mutant control: an unmutated copy REPORTS the offender and stays quiet on the near-miss"
+  B_MCTL=1
 else
   bad "mutant control: an unmutated copy answered offender=$rc_ctl_bad near-miss=$rc_ctl_ok — the mutants below would be scoring the harness, not the reader"
 fi
@@ -290,7 +295,7 @@ for mname in $MUT_NAMES; do
   want="$(mut_want "$mname")"
   bash "$copy" "$probe" "$SPEC_SRC" >/dev/null 2>&1; got=$?
   if [ "$got" -eq "$want" ]; then
-    ok "MUTANT $mname killed by $(mut_why "$mname")"
+    mutant_killed "${B_MCTL:-0}" "$mname" "MUTANT $mname killed by $(mut_why "$mname")"
   else
     bad "MUTANT $mname SURVIVED — $(basename "$probe") answered rc=$got, wanted rc=$want. The arm that should own this reading is not reading it."
   fi
@@ -526,7 +531,7 @@ if ! { [ -L "$VR_LINK" ] && [ ! -e "$VR_LINK" ]; }; then bad "FIXTURE BROKEN: th
 VR_STUB="$VR/stub"; mkdir -p "$VR_STUB"
 VR_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
 {
-  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '#!/bin/bash\ncase "$*" in\n'
   printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$VR_STUB"
   printf 'esac\nexec "%s" "$@"\n' "$VR_REALGREP"
 } > "$VR_STUB/grep"

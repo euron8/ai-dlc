@@ -158,8 +158,13 @@ case "$CASE" in
     pass 2 3 3 1 DIVERGENT_HARD_BLOCK   bbb2
     record brief-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000
     pass 3 0 0 0 EXIT_CONDITION_MET     aaa1 brief-resolution-p2.md
-    sleep 1
-    touch "$ART/brief-adversarial-p2.md"
+    # The "touch" is an explicit, NEWER stamp than every other series file, never a `sleep 1` before
+    # a plain touch (BL-868): the order the arm needs is written, not waited for. `-c` never creates
+    # a file, and the head of `ls -t` (the hooks' own series pick) is asserted to be p2.
+    for _f in "$ART"/*.md; do touch -c -t 202607120000.00 "$_f"; done
+    touch -c -t 202607120100.00 "$ART/brief-adversarial-p2.md"
+    [ "$(ls -t "$ART"/*adversarial*p*.md | head -1)" = "$ART/brief-adversarial-p2.md" ] \
+      || { echo "FIXTURE ERROR: the touched divergent pass p2 is not the newest series file" >&2; exit 2; }
     ;;
 
   *) echo "FIXTURE ERROR: unknown case '$CASE'" >&2; exit 2 ;;

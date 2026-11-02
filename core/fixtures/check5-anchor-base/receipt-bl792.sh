@@ -28,8 +28,8 @@ W="$(mktemp -d)" || exit 9
 W="$(cd "$W" && pwd -P)"
 mkdir -p "$W/bin" "$W/schemas" "$W/repo" || exit 9
 cp "$SUBJ" "$W/bin/validate-mandatory-rules.sh" && cp "$VAA" "$W/bin/" && cp "$SCH" "$W/schemas/" || exit 9
-printf '#!/bin/sh\nexit 0\n' > "$W/bin/validate-retro-evidence.sh"
-printf '#!/bin/sh\nexit 0\n' > "$W/bin/validate-cycle-commits.sh"
+printf '#!/bin/bash\nexit 0\n' > "$W/bin/validate-retro-evidence.sh"
+printf '#!/bin/bash\nexit 0\n' > "$W/bin/validate-cycle-commits.sh"
 R="$W/repo"
 ( cd "$R" && git -c init.defaultBranch=main init -q . && git config user.email r@example.com \
   && git config user.name Receipt && git config commit.gpgsign false \

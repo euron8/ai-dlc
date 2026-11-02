@@ -136,6 +136,10 @@ fails=0
 ok()     { printf '  ok    %s\n' "$1"; }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broken() { printf '  FIXTURE BROKEN  %s\n' "$1" >&2; exit 2; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # ============================================================================
 # THE SIGNATURES
@@ -229,7 +233,7 @@ run() {
 capture() {
   local subj="$1" tree="$2" base="$3" dest="$4" shimdir
   shimdir="$(mktemp -d "$WORK/shim.XXXXXX")" || return 2
-  printf '#!/bin/sh\ncat >/dev/null\nenv > "%s"\n' "$dest" > "$shimdir/python3" || return 2
+  printf '#!/bin/bash\ncat >/dev/null\nenv > "%s"\n' "$dest" > "$shimdir/python3" || return 2
   chmod +x "$shimdir/python3" || return 2
   ( cd "$tree" && PATH="$shimdir:$PATH" AI_DLC_PROJECT_ROOT="$tree" \
       bash "$subj" "$base" ) >/dev/null 2>&1
@@ -253,6 +257,7 @@ s_rc="$(sed -n 's/^rc=//p' <<<"$S_OUT")"
 s_rows="$(rows "$S_OUT")"
 if [ "$s_rc" = 0 ] && [ "$s_rows" -ge 1 ]; then
   ok "1. the subject resolves its scope and emits a worklist (rc=0, $s_rows rows)"
+  B_BASE=1
 else
   bad "1. the subject did not produce a usable baseline: rc=$s_rc rows=$s_rows — every arm below is about a run that did not happen"
   printf '%s\n' "$S_OUT" | sed 's/^/        /' >&2
@@ -317,7 +322,7 @@ fi
 mkshim() { # mkshim <dir> <env-assignment-or-empty>
   local d="$1" assign="$2"
   mkdir -p "$d" || return 2
-  { printf '#!/bin/sh\n'
+  { printf '#!/bin/bash\n'
     [ -n "$assign" ] && printf 'export %s\n' "$assign"
     printf 'exec "%s" "$@"\n' "$REAL_PY"
   } > "$d/python3" || return 2
@@ -416,7 +421,7 @@ expect_leak() {
   capture "$m" "$SMALL" "$SBASE" "$e" || {
     bad "MUTANT HARNESS BROKEN [$name]: the shim captured nothing from the copy"; return; }
   if grep -qE -- "$want" "$e"; then
-    ok "  mutant [$name] KILLED by assertion 2: the $name payload is back on the environment"
+    mutant_killed "${B_BASE:-0}" "$name" "  mutant [$name] KILLED by assertion 2: the $name payload is back on the environment"
     kills=$((kills+1))
   else
     bad "MUTANT SURVIVED [$name]: assertion 2 did not see the payload it re-exported, so it does not depend on the code it claims to guard"
@@ -460,7 +465,7 @@ if mutate m4-unnamed \
     if [ -n "$m4_leak" ]; then
       bad "MUTANT [m4-unnamed] IS ENTANGLED: its padding carries one of assertion 2's signatures, so it cannot show that assertion 3 fires on its own"
     elif [ "$m4g" -ge 4096 ]; then
-      ok "  mutant [m4-unnamed] KILLED by assertion 3 alone: +$m4g bytes with every named signature still absent"
+      mutant_killed "${B_BASE:-0}" m4-unnamed "  mutant [m4-unnamed] KILLED by assertion 3 alone: +$m4g bytes with every named signature still absent"
       kills=$((kills+1))
     else
       bad "MUTANT SURVIVED [m4-unnamed]: an unnamed tree-sized export grew the environment by only $m4g bytes, so assertion 3 cannot resolve the channel it exists for"
@@ -485,7 +490,7 @@ if mutate m5-permissive \
   if [ "$(sed -n 's/^rc=//p' <<<"$gout")" != 0 ] || [ "$(rows "$gout")" -lt 1 ]; then
     bad "MUTANT HARNESS BROKEN [m5-permissive]: the copy fails on a good payload too, so arm 4b would fire for the wrong reason"
   elif [ "$mrc" != 3 ]; then
-    ok "  mutant [m5-permissive] KILLED by assertion 4b: a missing payload now exits $mrc instead of 3"
+    mutant_killed "${B_BASE:-0}" m5-permissive "  mutant [m5-permissive] KILLED by assertion 4b: a missing payload now exits $mrc instead of 3"
     kills=$((kills+1))
   else
     bad "MUTANT SURVIVED [m5-permissive]: a permissive read still exited 3, so assertion 4b is not reading the payload guard"
@@ -503,7 +508,7 @@ if mutate m6-trap -e 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|'; t
   if [ "$(sed -n 's/^rc=//p' <<<"$gout")" != 0 ] || [ "$(rows "$gout")" -lt 1 ]; then
     bad "MUTANT HARNESS BROKEN [m6-trap]: the copy no longer produces a worklist"
   elif [ "$a" -gt "$b" ]; then
-    ok "  mutant [m6-trap] KILLED by assertion 5: the copy left $(( a - b )) payload directories behind"
+    mutant_killed "${B_BASE:-0}" m6-trap "  mutant [m6-trap] KILLED by assertion 5: the copy left $(( a - b )) payload directories behind"
     kills=$((kills+1))
     find "$M6_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} + 2>/dev/null
   else
@@ -514,9 +519,9 @@ fi
 # The battery's own floor. A run where every mutant silently failed to apply reports the
 # same six `ok` lines as a run where the arms are inert.
 if [ "$kills" -ge 6 ]; then
-  ok "mutant battery: $kills of 6 killed"
+  ok "mutant battery: $kills of 6 scored dead"
 else
-  bad "mutant battery: only $kills of 6 killed — the arms above cannot be read as evidence"
+  bad "mutant battery: only $kills of 6 scored dead — the arms above cannot be read as evidence"
 fi
 
 echo

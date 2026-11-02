@@ -54,6 +54,12 @@
 #   reaped     NOT A SCENARIO: printed after every run, over every group the run recorded. PASS requires at
 #              least one recorded group (a world that started nothing cannot read clean) and no live member
 #              of any of them.
+# THE GROUP RECORD IS THE CALLER'S TOO (BL-875). Every group this world starts -- each deriver A AND the live-pid
+# control -- is appended to $SW_GROUPS on the statement after its launch, before anything else runs. The caller
+# names that file (outside the world, which a clean exit deletes) and reaps every group in it after this world
+# returns, however it ended: the EXIT trap below never runs on a SIGKILL, and the groups are not this shell's
+# group, so a KILL of this world alone leaves every one of them alive. Run standalone, the record is $W/pgids.
+# RESIDUAL, NOT CLOSED: between a launch's fork and the append of `$!` a KILL leaves a group nobody recorded.
 set -uo pipefail
 
 [ $# -ge 2 ] || { echo "usage: slot-world.sh <deriver> <hook> [scenario ...]" >&2; exit 9; }
@@ -66,13 +72,15 @@ SCEN="$*"; [ -n "$SCEN" ] || SCEN="order nested stalemark foreign stale beat pla
 W="$(mktemp -d "${TMPDIR:-/tmp}/slot-world.XXXXXX")" || exit 9
 W="$(cd "$W" && pwd -P)"
 LIVE=""
+SW_GROUPS="${SW_GROUPS:-$W/pgids}"
+: >> "$SW_GROUPS" || { echo "slot-world: cannot write the group record $SW_GROUPS" >&2; exit 9; }
 # kill_tree <pgid>: the whole group, then its leader by pid (a leader that left its group is still ours).
 kill_tree() { kill -KILL -- "-$1" 2>/dev/null; kill -KILL "$1" 2>/dev/null; return 0; }
 # Every group this world started, so the exit path can reap them however the run ended.
 cleanup() {
   local g
-  [ -n "$LIVE" ] && kill "$LIVE" 2>/dev/null
-  [ -f "$W/pgids" ] && while IFS= read -r g; do kill -KILL -- "-$g" 2>/dev/null; done < "$W/pgids"
+  [ -n "$LIVE" ] && kill_tree "$LIVE"
+  [ -f "$SW_GROUPS" ] && while IFS= read -r g; do kill -KILL -- "-$g" 2>/dev/null; done < "$SW_GROUPS"
   [ -n "${SW_KEEP:-}" ] || rm -rf "$W"
 }
 trap cleanup EXIT
@@ -182,8 +190,12 @@ cat > "$R/core/fixtures/fa/run.sh" <<'FX'
 #!/bin/bash
 O="$SW_ORDER"; echo a-in >> "$O"
 if [ -n "${SW_HOLD:-}" ]; then
+  # The live-pid control's pid, written by the FIXTURE from its env and not from the world's group record, so a
+  # caller can census that control even when the record lost it.
+  echo "$SW_LIVEPID" > "$O.live"
   echo a-hold >> "$O"
-  i=0; while [ "$i" -lt 600 ]; do /bin/sleep 1; i=$((i + 1)); done
+  # A HANG TARGET WITH NO CLOCK (BL-868): it never exits on its own; the world's group kill ends it.
+  tail -f /dev/null </dev/null
 fi
 if [ -n "${SW_B_MODE:-}" ]; then
   case "$SW_B_MODE" in
@@ -207,8 +219,14 @@ FX
 printf '#!/bin/bash\necho b-in >> "$SW_ORDER"\necho b-out >> "$SW_ORDER"\n' > "$R/core/fixtures/fb/run.sh"
 ( cd "$R" && git init -q . && git add -A && git -c user.email=s@w -c user.name=s commit -qm slot-world ) >/dev/null 2>&1 || exit 9
 
-/bin/sleep 600 </dev/null >/dev/null 2>&1 &
+# The live-pid control never exits on its own (BL-868): a `sleep 600` would read dead in a world slower than its timer.
+# It leads a group of its own (job control around this one launch), recorded like every deriver A's, so a caller
+# can reap it by group after a KILL of this world, and the reaped line reads it.
+set -m
+tail -f /dev/null </dev/null >/dev/null 2>&1 &
 LIVE=$!
+printf '%s\n' "$LIVE" >> "$SW_GROUPS"
+set +m
 ( : ) & DEAD=$!; wait "$DEAD"
 kill -0 "$DEAD" 2>/dev/null && { echo "slot-world: the dead-pid control $DEAD is alive" >&2; exit 9; }
 
@@ -250,7 +268,7 @@ run_a() {
       bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
   APID=$!
   set +m
-  echo "$APID" >> "$W/pgids"
+  echo "$APID" >> "$SW_GROUPS"
 }
 order_of() { tr '\n' ' ' < "$1/order" | sed 's/ $//'; }
 pair() { # <scenario> <B mode> <expected order>
@@ -373,6 +391,10 @@ for s in $SCEN; do
       run_a hold "$d" "$W/deriver.in.sh" "" --list fa --tracer sandbox --in-pool "$d/ipA"
       wait_for "$APID" "$d/order" '^a-hold$' >/dev/null
       if grep -qx a-hold "$d/order" && grep -qx a-stream-up "$d/order" && kill -0 "$APID" 2>/dev/null; then
+        # SW_KILL_GATE (the caller's slot-kill arm): before this world reaps A itself, record that A's tree is up and
+        # BLOCK in the builtin `wait` on the live control, which never exits, so the caller's SIGKILL of this world
+        # is the only thing that can end it -- the KILL lands with every recorded group live, at any load.
+        if [ -n "${SW_KILL_GATE:-}" ]; then : > "$SW_KILL_GATE"; wait "$LIVE"; fi
         kill_tree "$APID"; reap "$APID"; pass hold
       else
         kill_tree "$APID"; reap "$APID"
@@ -385,7 +407,8 @@ done
 # until the group is EMPTY or every live member is BLOCKED WITH NO SIGNAL PENDING -- one the kill never
 # reached, which will never go. A killed member is runnable, exiting or carries the signal pending, so it is
 # never read as a leak at any load (BL-868; a fixed count of polls was the verdict here). At least one group
-# must have been recorded, or this line reads clean over a world that started nothing.
+# must have been recorded, or this line reads clean over a world that started nothing. The live-pid control is a
+# recorded group too, so it is taken down, and waited for (or it reads as a zombie member), before the read.
 sw_settled() { # <pgid>: 0 when it has a live member and every live member is blocked with nothing pending
   local p st pd n=0
   for p in $(pgrep -g "$1" 2>/dev/null); do
@@ -398,14 +421,14 @@ sw_settled() { # <pgid>: 0 when it has a live member and every live member is bl
   done
   [ "$n" -gt 0 ]
 }
+kill_tree "$LIVE"; wait "$LIVE" 2>/dev/null
 ng=0; live=""
-if [ -f "$W/pgids" ]; then
+if [ -f "$SW_GROUPS" ]; then
   while IFS= read -r g; do
     ng=$((ng + 1))
-    while pgrep -g "$g" >/dev/null 2>&1 && ! sw_settled "$g"; do /bin/sleep 0.1; done
-    m="$(pgrep -g "$g" 2>/dev/null | tr '\n' ',')"
-    [ -z "$m" ] || live="$live group $g: ${m%,};"
-  done < "$W/pgids"
+    while kill -0 -- "-$g" 2>/dev/null && ! sw_settled "$g"; do /bin/sleep 0.1; done
+    kill -0 -- "-$g" 2>/dev/null && live="$live group $g: $(pgrep -g "$g" 2>/dev/null | tr '\n' ',' | sed 's/,$//');"
+  done < "$SW_GROUPS"
 fi
 if [ "$ng" -gt 0 ] && [ -z "$live" ]; then echo "PASS reaped ($ng group(s), none alive)"
 elif [ "$ng" -eq 0 ]; then fail reaped "no process group was recorded, so a leak could not be seen"

@@ -77,7 +77,7 @@ NUM_E=1577934245; NUM_I=2020-01-02T03:04:05Z
 
 # A GNU-shaped stat: `-f` is --file-system (text, exit 0); `-c %Y` is the mtime.
 cat > "$SHIM/stat" <<EOF
-#!/bin/sh
+#!/bin/bash
 case "\$1" in
   -f) echo "  File: \"\$3\""; echo "    ID: 0 Namelen: 255 Type: ext2/ext3"; exit 0 ;;
   -c) echo 1792126782; exit 0 ;;

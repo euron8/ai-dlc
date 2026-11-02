@@ -82,13 +82,13 @@ mkrepo() { # $1 = dir, $2 = taxonomy body ("" = no taxonomy file at all), $3 = "
       > "$d/.claude/skills/ai-dlc/layer-contract.yaml"
   fi
   [ -n "$body" ] && printf 'x\n```\n%s\n```\n' "$body" > "$d/.claude/skills/ai-dlc/pr-classes.md"
-  printf '#!/bin/sh\nexit 0\n' > "$d/validators/ok.sh";  chmod +x "$d/validators/ok.sh"
-  printf '#!/bin/sh\nexit 1\n' > "$d/validators/bad.sh"; chmod +x "$d/validators/bad.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$d/validators/ok.sh";  chmod +x "$d/validators/ok.sh"
+  printf '#!/bin/bash\nexit 1\n' > "$d/validators/bad.sh"; chmod +x "$d/validators/bad.sh"
   # The capture arms' instrument. It accepts ONE value and rejects every other, so a
   # substitution that silently produced the wrong string -- or produced nothing and left the
   # literal `{sprint}` -- is a FAIL rather than a pass. A validator that ignored its argument
   # would make every capture assertion below vacuous.
-  printf '#!/bin/sh\necho "arg=$1"\n[ "$1" = "7" ] || exit 3\nexit 0\n' > "$d/validators/wants7.sh"
+  printf '#!/bin/bash\necho "arg=$1"\n[ "$1" = "7" ] || exit 3\nexit 0\n' > "$d/validators/wants7.sh"
   chmod +x "$d/validators/wants7.sh"
   git init -q "$d" >/dev/null 2>&1
   git -C "$d" symbolic-ref HEAD refs/heads/main

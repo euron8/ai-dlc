@@ -66,9 +66,32 @@
 #     and a bare `sh` (control: 116 `env -u` lines in the same corpus). `env -u NAME sh` is not parsed as a start. Final hits: 6, all OFFENDERS: readset-skip:1331
 #     (`exec sh -c`), readset-skip:1827 and :2177 and readset-stage1-verdict:900 (`sh -c 'exit 0' &`),
 #     self-update-gate:3401 (`sh scripts/…`), self-update-gate:5025 (`git show … | sh;`).
-#     STATED LIMITS: a variable-spelled interpreter (prepush-ssh-keepalive:46), a written `#!/bin/sh` stub executed
-#     directly, and an `sh` start INSIDE a `bash -c "…"` (or `'…'`) string -- masked as data like every string, so
-#     `bash -c "sh -c true"` is not seen -- are not seen.
+#     THE STUB JOIN. A file the script VISIBLY writes with a `#!/bin/sh` (or `#!/usr/bin/env sh`) shebang -- `printf
+#     '#!/bin/sh…' > P`, `echo '#!/bin/sh' > P` (a `\`-continued statement joined), or `cat > P <<W` whose first body
+#     line is the shebang -- JOINED to a line of the same file that executes P honouring the shebang: P in command
+#     position (bare, `exec`, `env`, `command`, `nohup`, after `VAR=val` words), or a `PATH=` word naming P's
+#     directory as one of its `:` entries (`${x:-D}` read as D). The shebang is read off the UNMASKED line: the
+#     masker Xes the printf string and the heredoc body. P is compared as written, `${v}` read as `$v`. A row names
+#     the write line and the nearest execution line after it (wrapping to the top for a function defined below).
+#     `bash P` and `cmp -s P …` are arguments, never command position; a line continuing a `\` is an argument list.
+#     FP SET, measured on 47102ad20 with b248-mutants' 50ef548a5 applied: raw, 229 `#!/bin/sh` lines across 54 files
+#     (control: 826 `#!/usr/bin/env bash` lines in the same corpus); most are dist/consumer DATA written for a subject
+#     the fixture never executes itself. First join: 29 rows. Narrowed by (a) reading PATH= off the unmasked line
+#     (`env "PATH=$D:$PATH"`, `he_run_env "PATH=…"`), which ADDED story-evidence-scaffold receipt-bl815:144 and
+#     prepush-ssh-keepalive:111/:112; (b) `${3:-D}` read as D; (c) dropping a `\`-continued argument line, which
+#     moved check5-anchor-base:75/:76 OUT of the joined set (P named only as a `cp` operand on :148 and :589) -- a
+#     wrong JOIN removed, not a false positive: those stubs ARE executed, by the subject, and are a stated limit;
+#     (d) a PATH= feeding only `command -v`/`type`/`which` ranks after every real run and is labelled a lookup:
+#     3 rows (dispatch-model-guard:1475, wait-beat-liveness:2787/:2853) whose stubs the fixture then runs through a
+#     variable PATH (`fo_cell … "$ML_SHIM:"`, `aged_shell_beat … "$sb_d_"`), the lookup proving the placement.
+#     Final: 32 rows, each read by hand: an executed stub, or for the 3 lookups a stub placed for its execution.
+#     STATED LIMITS: a variable-spelled interpreter (prepush-ssh-keepalive:46); an `sh` start INSIDE a `bash -c "…"`
+#     (or `'…'`) string -- masked as data like every string, so `bash -c "sh -c true"` is not seen; and, for the stub
+#     join, every execution the line grammar cannot join to the write: a PATH directory spelled through a variable
+#     (`PATH="$2$PATH"`), a stub path or PATH entry injected by `sed` or another program, a stub copied (`cp`) before
+#     it runs, a stub the SUBJECT executes by a path the fixture only seeds (check5-anchor-base:75/:76 run by
+#     validate-mandatory-rules.sh:199), a P spelled differently at the two sites, and a stub written in a loop
+#     whose name is the loop variable joined only when the execution spells P identically.
 # H4  DROPPED, with its numbers. The contract's form -- a bare `sed … IN > OUT` statement whose OUT is later compared
 #     with IN by `cmp -s` in the same file -- matched 857 raw sed-into-file lines, 400 bare statements, and 200 of
 #     them joined to a `cmp -s` on the same IN/OUT pair, across 78 fixtures (the contract adversary's naive form had
@@ -308,6 +331,81 @@ function loadtools(fx,   f, l) {
   while ((getline l < f) > 0) { sub(/\r$/, "", l); if (l ~ /^[[:space:]]*(#|$)/) continue; l = trim(l); sub(/^\?/, "", l); TOOLS[l] = 1 }
   close(f)
 }
+# --- H3's stub join: a visible write of a `#!/bin/sh` file joined to an execution that honours the shebang ---------
+function shebang_sh(t) { return t ~ /#!(\/bin\/sh|\/usr\/bin\/env[[:space:]]+sh)([^A-Za-z0-9_.\/-]|$)/ }
+# cmdpos: is a word starting right after <pre> (a MASKED prefix) in command position? Glued to the previous byte it
+# is only after an operator (`X="$P"` is an assignment); after a blank, `VAR=val` / `-i` words are stripped first.
+function cmdpos(pre,   pe) {
+  if (pre != "" && pre !~ /[[:space:]]$/) return pre ~ /[;&|(`{!]$/
+  sub(/[[:space:]]+$/, "", pre); pe = pre
+  while (sub(/(^|[[:space:]]+)([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|-i)$/, "", pe)) ;
+  return pe == "" || pe ~ /[;&|(`{!]$/ || pe ~ /(^|[^A-Za-z0-9_])(then|do|else|if|elif|while|until|exec|time|nohup|command|env)$/
+}
+# redir: the target word of the first code `>`/`>>` redirection that names a file (never `N>`, `>&N`, `&>`, /dev/*).
+function redir(m, o,   p, k, q, w) {
+  p = 0
+  while ((k = index(substr(m, p + 1), ">")) > 0) {
+    p += k; q = p + 1
+    if (p > 1 && substr(m, p - 1, 1) ~ /[0-9&>]/) continue
+    if (substr(m, q, 1) == ">") q++
+    if (substr(m, q, 1) == "&") continue
+    while (substr(o, q, 1) ~ /[[:space:]]/) q++
+    w = wordat(o, q); gsub(/["\047]/, "", w)
+    if (w == "" || w ~ /^\/dev\// || w ~ /\$\(/) continue
+    return w
+  }
+  return ""
+}
+# stubexec <P> <dir> <write line>: the first line executing P by path (direct or exec) or putting <dir> on PATH.
+# The search runs FORWARD from the write first, then from the top, so the execution reported is the nearest later one.
+function stubexec(pn, dir, wl,   x) {
+  LOOK = 0; x = stubexec1(pn, dir, wl, 0); if (x) return x
+  x = stubexec1(pn, dir, wl, 1); if (x) LOOK = 1; return x
+}
+# lookup: a line whose PATH= feeds only a name lookup (`command -v`, `type`, `which`) -- the stub is placed on PATH
+# but not run there; it is reported (the placement is the intent) only when no line runs it, and labelled a lookup.
+function lookup(o) { return o ~ /(command[[:space:]]+-v|(^|[^A-Za-z0-9_-])(type|which))[[:space:]]/ }
+function stubexec1(pn, dir, wl, look,   j, jj, off, k, st, a, n, x, v, pv, r) {
+  for (jj = 1; jj <= NL; jj++) {
+    j = wl + jj; if (j > NL) j -= NL
+    if (j == wl || HDL[j]) continue
+    off = 0
+    while ((k = index(substr(O[j], off + 1), pn)) > 0) {
+      st = off + k; off = st
+      a = substr(O[j], st + length(pn), 1)
+      if (a != "" && a !~ /[[:space:]"\047;)&|<>`]/) continue
+      if (substr(O[j], st - 1, 1) == "\"") st--
+      if (substr(M[j], st, 1) == "X") continue
+      # a `\`-continued previous line makes this one an argument list, never a command position
+      if (substr(M[j], 1, st - 1) ~ /^[[:space:]]*$/ && j > 1 && !HDL[j - 1] && M[j - 1] ~ /\\$/) continue
+      if (cmdpos(substr(M[j], 1, st - 1))) return j
+    }
+    # PATH= read off the UNMASKED line: `env "PATH=$D:$PATH"` and `he_run_env "PATH=…"` carry it inside quotes.
+    if (dir != "" && lookup(O[j]) == look) { r = O[j]; while (match(r, /(^|[^A-Za-z0-9_])PATH=/)) {
+      v = wordat(r, RSTART + RLENGTH); r = substr(r, RSTART + RLENGTH)
+      gsub(/["\047]/, "", v); gsub(/\$\{[A-Za-z0-9_]+:-/, "", v); gsub(/\$\{/, "$", v); gsub(/\}/, "", v)
+      n = split(v, pv, ":"); for (x = 1; x <= n; x++) if (pv[x] == dir) return j
+    } }
+  }
+  return 0
+}
+function stubjoin(   i, m, o, j, pn, dir, x) {
+  for (i = 1; i <= NL; i++) {
+    if (HDL[i]) continue
+    pn = ""
+    if (i < NL && HDL[i + 1] && index(M[i], "<<") && O[i + 1] ~ /^[[:space:]]*#!/ && shebang_sh(O[i + 1])) pn = redir(M[i], O[i])
+    else if (shebang_sh(O[i]) && M[i] ~ /(^|[^A-Za-z0-9_])(printf|echo)([[:space:]]|$)/) {
+      m = M[i]; o = O[i]; j = i
+      while (m ~ /\\$/ && j < NL && !HDL[j + 1]) { j++; m = m " " M[j]; o = o " " O[j] }
+      pn = redir(m, o)
+    }
+    if (pn == "") continue
+    gsub(/\$\{/, "$", pn); gsub(/\}/, "", pn)
+    dir = pn; if (sub(/\/[^\/]*$/, "", dir) == 0) dir = ""
+    x = stubexec(pn, dir, i)
+    if (x) print "H3\t" REL ":" i "\ta #!/bin/sh stub " pn " written here is " (LOOK ? "placed on PATH for a lookup" : "executed") " at :" x ": " trim(O[x])
+  }
+}
 function literal(w) { if (w ~ /[$`]/) return ""; gsub(/["\047]/, "", w); return (w ~ /^[A-Za-z0-9_:+-]+(\.[A-Za-z0-9_:+-]+)*$/ && w !~ /^-/) ? w : "" }
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   for (i = 1; i <= NL; i++) {
@@ -369,6 +467,7 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
     }
     if (ISRUN && !HDL[i] && O[i] ~ /^[[:space:]]*#[[:space:]]*MUTANT-MATRIX/) print "B\t" FX "\t" i "\t" O[i]
   }
+  stubjoin()
   if (STK != "c" || HDN > 0) print "Q\t" REL "\t" (HDN > 0 ? "inside a heredoc body" : "inside a quoted string (" STK ")")
 }
 pass == 1 {
@@ -643,6 +742,44 @@ myenv sh -c x
 x | sh=1
 command -v sh >/dev/null
 EOF
+seed core/fixtures/s3s/run.sh <<'EOF'
+#!/usr/bin/env bash
+printf '#!/bin/sh\necho hi\n' > "$W/stub" && chmod +x "$W/stub"
+"$W/stub" arg
+cat > "$W/bin/tool" <<'END'
+#!/bin/sh
+exit 0
+END
+chmod +x "$W/bin/tool"
+PATH="$W/bin:$PATH" bash "$X"
+echo '#!/bin/sh' > "$W/e"
+exec "$W/e"
+printf '#!/usr/bin/env sh\nexit 0\n' > "$W/v" && chmod +x "$W/v"
+"$W/v"
+EOF
+seed core/fixtures/s3sn/run.sh <<'EOF'
+#!/usr/bin/env bash
+printf '#!/bin/sh\necho hi\n' > "$W/stub" && chmod +x "$W/stub"
+cmp -s "$W/stub" "$W/other"
+X="$W/stub"
+printf '#!/bin/sh\nexit 0\n' > "$W/b" && chmod +x "$W/b"
+bash "$W/b" arg
+printf '#!/usr/bin/env bash\nexit 0\n' > "$W/c" && chmod +x "$W/c"
+"$W/c"
+printf '#!/bin/bash\nexit 0\n' > "$W/d" && chmod +x "$W/d"
+exec "$W/d"
+cat > "$W/h" <<'END'
+#!/bin/bash
+END
+"$W/h"
+cat > "$W/q/tool" <<'END'
+#!/bin/sh
+exit 0
+END
+chmod +x "$W/q/tool"
+printf '#!/bin/sh\nexit 0\n' > "$W/bin/sub/tool" && chmod +x "$W/bin/sub/tool"
+PATH="$W/bin:$PATH" bash "$X"
+EOF
 seed core/fixtures/m5a/run.sh <<'EOF'
 mkmut() { :; }
 EOF
@@ -783,7 +920,8 @@ cut -f1,2 "$WORK/p.verdict" | grep -v '^DERIVE' > "$WORK/p.got"
 want_rows() { case "$1" in
   H1) printf 'H1\tcore/fixtures/s1/run.sh:%s\n' 3 7 8 9 ;;
   H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 7 ;;
-  H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 10 ;;
+  H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 10
+      printf 'H3\tcore/fixtures/s3s/run.sh:%s\n' 2 4 10 12 ;;
   H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l
       printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15 20 21 22 23 24 25 26
       printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6

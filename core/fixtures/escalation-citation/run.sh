@@ -630,7 +630,7 @@ else FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: the dangling-symli
 ER_STUB="$ER/stub"; mkdir -p "$ER_STUB"
 ER_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
 {
-  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '#!/bin/bash\ncase "$*" in\n'
   printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$ER_STUB"
   printf 'esac\nexec "%s" "$@"\n' "$ER_REALGREP"
 } > "$ER_STUB/grep"

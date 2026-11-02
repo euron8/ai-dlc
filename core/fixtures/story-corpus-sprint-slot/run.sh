@@ -445,8 +445,7 @@ else
     n="${MN[$mut_i]}"
     case "$MUT_OK" in *" $n "*) ;; *) mut_i=$((mut_i+1)); continue ;; esac
     dec=" ${MD[$mut_i]//,/ } "; twn=" ${MT[$mut_i]//,/ } "
-    flag=1
-    for a in $dec $twn; do base_ok "$a" || flag=0; done
+    flag="$(r=1; for a in $dec $twn; do base_ok "$a" || r=0; done; echo "$r")"
     keys=" "
     for a in $dec $twn; do _k="$(key_of "$a")"; case "$keys" in *" $_k "*) ;; *) keys="$keys$_k " ;; esac; done
     RES=""
@@ -457,9 +456,9 @@ else
     for i in $FAIL_OUT; do case "$dec" in *" $i "*) ;; *) wrong="$wrong $i-tripped-outside-decides" ;; esac; done
     for a in $twn; do in_set "$a" "$PASS_OUT" || wrong="$wrong $a-twin-not-green"; done
     if [ -n "$wrong" ]; then
-      if [ "$flag" = 1 ]; then bad "MUTANT $n failed wrongly [$wrong ], expected decides=[${MD[$mut_i]}] with twin [${MT[$mut_i]}] green — entangled assertions, or the mutation is not reached"; else need_base "$flag" "$n" || true; fi
+      if [ "$flag" = 1 ]; then bad "MUTANT $n failed wrongly [$wrong ], expected decides=[${MD[$mut_i]}] with twin [${MT[$mut_i]}] green — entangled assertions, or the mutation is not reached"; else need_base "$([ "$flag" = 1 ] && echo 1 || echo 0)" "$n" || true; fi
     else
-      mutant_killed "$flag" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
+      mutant_killed "$([ "$flag" = 1 ] && echo 1 || echo 0)" "$n" "MUTANT $n dies on [${MD[$mut_i]}]; twin [${MT[$mut_i]}] stays green"
     fi
     mut_i=$((mut_i+1))
   done

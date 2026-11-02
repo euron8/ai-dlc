@@ -31,6 +31,8 @@
 # changes. The recorded matrix plus the twin replaces an exact-vector assertion of every arm.
 # MUTANT-MATRIX SEAM-INVERTED decides=SEAM-mutant twins=SEAM-verdict
 # MUTANT-MATRIX PROBE-STUB decides=PROBE-refuses twins=PROBE-seam-skip
+# MUTANT-MATRIX st-nostate decides=NET-frozen twins=NET-changing
+# MUTANT-MATRIX st-noconfirm decides=NET-changing twins=NET-frozen
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fold-architect-ledger-join/run.sh --matrix
 set -uo pipefail
 
@@ -98,6 +100,8 @@ MUT_LIB="$HERE/../lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$HERE/../lib/matrix.sh" || { echo "FIXTURE ERROR: lib/matrix.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
+. "$HERE/../lib/settled-net.sh" || { echo "FIXTURE ERROR: lib/settled-net.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/settled-net.sh"
 
 # --- the real inputs, and the controls that they can express the defect --------------------
 STORY="$(awk '/^artifact:/ { sub(/^artifact:[ \t]*/, ""); print; exit }' "$BLOCK_SRC")"
@@ -497,38 +501,102 @@ expect D5-dot 0 "PASS: $ONE -> $RES" "" 0 "residue artifact: with a leading ./ -
 # seconds are the subject's own work: load stretches the wall clock it takes to spend them, never
 # the amount. The 120s wall bound this replaced read a loaded box as a HANG.
 #
-# THE WATCHDOG IS A REFUSAL KEYED ON NO PROGRESS. A subject that BLOCKS -- burning no CPU, so the
-# cap never fires -- would wedge the gate. Every second the loop asks whether the subject has
-# ADVANCED: its output file `d6<flag>.out` grew, or its CPU time (`ps -o time=` on the pid it
-# recorded) moved. A spinning subject advances its CPU time on every check however loaded the box
-# is, and so always reaches its cap; only a subject that has neither exited nor advanced for
-# D6_IDLE seconds is reaped and the fixture refuses, exit 2. That is a harness that wedged, not a
-# verdict about the parse, so it is never a FAIL row. D6_IDLE is a margin over one observed step, not a measurement; a refusal costs a re-run, never a verdict.
+# THE WATCHDOG IS A REFUSAL KEYED ON A SETTLED TREE, NEVER ON ELAPSED TIME (BL-868). A subject that
+# BLOCKS -- burning no CPU, so the cap never fires -- would wedge the gate. The net (st_net, below)
+# refuses only when every live process of the subject's tree is blocked (S, I or T) with no signal
+# pending, on two consecutive polls that read the same pids, CPU times and output size: a tree in
+# that state will never move on its own, at any load. The 30-idle-seconds count it replaced read a
+# loaded box as a wedge. A spinning subject is runnable, so it is never settled and always reaches
+# its cap. A refusal is a harness that wedged, not a verdict about the parse: exit 2, never a FAIL row.
 D6_CPU=10
-D6_IDLE=30
-for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
-  o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"; pf="$WORK/d6${flag}.pid"
+# d6_metered <out> <rcfile> <cmd...>: runs <cmd> under the CPU cap in a wrapper that records its rc;
+# returns st_net's answer, with the tree reaped on a refusal.
+d6_metered() {
+  local o="$1" s="$2" w r; shift 2
   : > "$o"
-  ( ulimit -t "$D6_CPU"
-    bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag" \
-      > "$o" 2>&1 < /dev/null &
-    echo "$!" > "$pf"; wait "$!"; echo $? > "$s" ) 2>/dev/null &
-  wpid=$!; n=0; idle=0; lsz=""; lcpu=""
-  while [ ! -s "$s" ] && kill -0 "$wpid" 2>/dev/null; do
-    sleep 0.1; n=$((n+1))
-    [ "$((n % 10))" -eq 0 ] || continue
-    sz="$(wc -c < "$o" 2>/dev/null | tr -d ' ')"
-    cpu="$(ps -o time= -p "$(cat "$pf" 2>/dev/null)" 2>/dev/null | tr -d ' ')"
-    if [ "$sz" != "$lsz" ] || [ "$cpu" != "$lcpu" ]; then lsz="$sz"; lcpu="$cpu"; idle=0; continue; fi
-    idle=$((idle+1))
-    if [ "$idle" -ge "$D6_IDLE" ]; then
-      sp="$(cat "$pf" 2>/dev/null)"; [ -n "$sp" ] && { pkill -9 -P "$sp" 2>/dev/null; kill -9 "$sp" 2>/dev/null; }
-      pkill -P "$wpid" 2>/dev/null; kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
-      echo "FIXTURE BROKEN: [D6$flag] the subject neither exited nor advanced its output file $o or its CPU time for ${D6_IDLE}s; no verdict on the parse is readable" >&2
-      exit 2
-    fi
-  done
-  wait "$wpid" 2>/dev/null
+  ( ulimit -t "$D6_CPU"; "$@" > "$o" 2>&1 < /dev/null & wait "$!"; echo $? > "$s" ) 2>/dev/null &
+  w=$!
+  st_net "$w" "$o"; r=$?
+  if [ "$r" = 2 ]; then st_reap "$w"; wait "$w" 2>/dev/null; fi
+  wait "$w" 2>/dev/null
+  return "$r"
+}
+
+# THE NET HAS A SUBJECT, END TO END: a stub that STOPS itself (blocked, burning nothing, never ending)
+# is refused and its tree reaped; the twin, a stub that exits, is not refused. A net that never fires
+# reads exactly like a subject that always exits.
+# The net reads process state through `ps`. Where `ps` gives none (the read-set tracer's sandbox
+# refuses the setuid /bin/ps) no member is ever settled, so the net degrades to waiting for the
+# subject to exit -- it can never fire wrongly -- and this end-to-end arm, whose stub never exits,
+# stands down rather than wait forever. The scripted cells below still run.
+printf '%s\n' '#!/bin/bash' "echo \"\$\$\" > \"$WORK/st-stop.pid\"" 'kill -STOP $$' > "$WORK/st-stop.sh"
+printf '%s\n' '#!/bin/bash' 'exit 3' > "$WORK/st-exit.sh"
+if [ -z "$(ps -o stat= -p "$$" 2>/dev/null)" ]; then
+  sd "[NET-e2e] stood down: ps gives no process state here, so a never-ending stub could not be refused"
+else
+  d6_metered "$WORK/st-stop.out" "$WORK/st-stop.rc" bash "$WORK/st-stop.sh"; st_e2e=$?
+  st_left=gone; kill -0 "$(cat "$WORK/st-stop.pid" 2>/dev/null)" 2>/dev/null && st_left=alive
+  [ -s "$WORK/st-stop.pid" ] || st_left=never-started
+  d6_metered "$WORK/st-exit.out" "$WORK/st-exit.rc" bash "$WORK/st-exit.sh"; st_e2t=$?
+  if [ "$st_e2e" = 2 ] && [ "$st_left" = gone ] && [ "$st_e2t" = 0 ] && [ "$(cat "$WORK/st-exit.rc" 2>/dev/null)" = 3 ]; then
+    ok "[NET-e2e] a self-stopped subject is refused (net rc 2) and its tree reaped; a subject that exits (rc 3) is not refused"
+  else bad "[NET-e2e] the settled-tree net: stopped stub rc=$st_e2e left=[$st_left], exiting stub rc=$st_e2t recorded=$(cat "$WORK/st-exit.rc" 2>/dev/null)"; fi
+fi
+B_NET=0
+
+# THE NET'S TWO GUARDS, EACH WITH A SUBJECT THE OTHER CANNOT SEE. A copy of lib/settled-net.sh
+# is driven over SCRIPTED trees (st_alive/st_members replaced, pacing a no-op), so each cell is a
+# fact about the predicate and costs no process. frozen: a RUNNING member, nothing changing, then
+# gone -> 0 (only the state test separates it; the confirm step sees identical polls). changing:
+# every poll settled but with a different pid set, then gone -> 0 (only the confirm step separates
+# it). stuck: settled and identical -> 2. A cell vector is "<frozen><changing><stuck>".
+st_cell() { # <block file> <frozen|changing|stuck> -> st_net's rc over that scripted tree (run in a subshell)
+  . "$1"
+  ST_POLL=0
+  st_alive() { ST_POLL=$((ST_POLL+1)); [ "$ST_POLL" -le 4 ]; }
+  sleep() { :; }
+  if [ "$2" = frozen ]; then st_members() { echo "100 R 0 0:01.00"; }
+  elif [ "$2" = changing ]; then st_members() { printf '100 S 0 0:00.00\n%s S 0 0:00.00\n' "$((200 + ST_POLL))"; }
+  else st_members() { echo "100 S 0 0:00.00"; }; fi
+  st_net 100 /dev/null; echo $?
+}
+st_cells() { # <block file> -> "<frozen rc><changing rc><stuck rc>"
+  local c v=""
+  for c in frozen changing stuck; do v="$v$(st_cell "$1" "$c")"; done
+  printf '%s' "$v"
+}
+cp "$HERE/../lib/settled-net.sh" "$WORK/st-block.sh"
+grep -q '^st_net()' "$WORK/st-block.sh" || { echo "FIXTURE BROKEN: lib/settled-net.sh holds no st_net" >&2; exit 2; }
+ST_BASE="$(st_cells "$WORK/st-block.sh")"
+if [ "$ST_BASE" = 002 ]; then ok "[NET-cells] the cut net reads frozen-running 0, changing-settled 0, stuck 2"; B_NET=1
+else bad "[NET-cells] the cut net read '$ST_BASE', want 002"; fi
+st_mut() { # <name> <sed> <want vector> <claim>
+  sed "$2" "$WORK/st-block.sh" > "$WORK/st-$1.sh"
+  if cmp -s "$WORK/st-block.sh" "$WORK/st-$1.sh"; then bad "[NET-$1] mutant DID NOT APPLY"; return; fi
+  local got; got="$(st_cells "$WORK/st-$1.sh")"
+  if [ "$MATRIX" = 1 ]; then
+    local i=0 c v
+    for c in NET-frozen NET-changing NET-stuck; do
+      v="$(printf '%s' "$got" | cut -c$((i + 1)))"; i=$((i + 1))
+      if [ "$v" = "$(printf '%s' "$ST_BASE" | cut -c"$i")" ]; then matrix_row "$1" "$c" "$v" GREEN no; else matrix_row "$1" "$c" "$v" TRIPPED yes; fi
+      MROWS=$((MROWS + 1))
+    done
+  fi
+  if [ "$got" = "$3" ]; then
+    if [ "$1" = st-nostate ]; then mutant_killed "${B_NET:-0}" st-nostate "[NET-$1] $4 (cells $got, base 002)"
+    else mutant_killed "${B_NET:-0}" st-noconfirm "[NET-$1] $4 (cells $got, base 002)"; fi
+  else bad "[NET-$1] mutant read '$got', want '$3'"; fi
+}
+st_mut st-nostate 's/\$2 !~ \/\^\[SIT\]\/ || //' 202 "a net that ignores process STATE refuses a running tree that merely shows no change"
+st_mut st-noconfirm 's/\[ "\$prev" = "\$sz|\$cur" \] && return 2/return 2/' 022 "a net that refuses on ONE settled poll refuses a tree whose members are still changing"
+
+for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
+  o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"
+  d6_metered "$o" "$s" bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag"
+  if [ "$?" = 2 ]; then
+    echo "FIXTURE BROKEN: [D6$flag] the subject's tree settled (every process blocked, nothing pending, nothing changing) without exiting; no verdict on the parse is readable" >&2
+    exit 2
+  fi
   frc="$(cat "$s" 2>/dev/null)"
   if [ "$frc" = 2 ] && grep -qF -- "FAIL: $flag takes" "$o"; then ok "[D6$flag] $flag given last with no value -> exit 2"
   elif [ "$frc" = 152 ]; then bad "[D6$flag] $flag given last with no value SPUN until its ${D6_CPU}s CPU cap ended it (rc=152), never refusing"
@@ -857,7 +925,7 @@ mkworld 313; oneshot "$SLOT/$ONE"; mkdir -p "$W/_bmad-output" "$W/shim"
 printf '%s\n' '# Pipeline Snapshot' '' '## Pipeline Position' '- pipeline_variant: carry-over' \
   '- current_step_file: retro.md' > "$W/_bmad-output/pipeline-snapshot.md"
 sstatus "$W" bug 313
-printf '%s\n' '#!/bin/sh' 'for a in "$@"; do case "$a" in *pipeline-snapshot.md) kill -KILL $$ ;; esac; done' \
+printf '%s\n' '#!/bin/bash' 'for a in "$@"; do case "$a" in *pipeline-snapshot.md) kill -KILL $$ ;; esac; done' \
   'exec /usr/bin/awk "$@"' > "$W/shim/awk" && chmod +x "$W/shim/awk"
 "$W/shim/awk" 'BEGIN { exit 0 }' /dev/null || { echo "FIXTURE BROKEN: the awk shim does not pass through" >&2; exit 2; }
 SHIM_PATH="$W/shim:$PATH"
@@ -874,9 +942,12 @@ expect Dc-reader-lives 2 "FAIL: variant disagreement: snapshot says carry-over, 
 mkworld 313; oneshot "$SLOT/$ONE"
 ( cd "$W" && bash "$VSL" --probe-from-caller --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.seam" 2>&1
 ( cd "$W" && bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s1.e2e" 2>&1
+# B_SEAM, the base flag both seam mutants are gated on, is raised only by this arm's pass (BL-828): the
+# unmutated gate carries the banner on the seam run and none end to end.
+B_SEAM=0
 if [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && [ "$(sed -n 2p "$WORK/s1.seam")" = "$(sed -n 1p "$WORK/s1.e2e")" ] \
    && ! grep -qF 'PROBE-SKIPPED-BY-CALLER' "$WORK/s1.e2e"; then
-  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"
+  ok "[SEAM-banner] --probe-from-caller prints the banner as line 1 and then the gate's own verdict; the end-to-end run carries no banner"; B_SEAM=1
 else bad "[SEAM-banner] --probe-from-caller banner on the seam run and none end to end -- seam1='$(sed -n 1p "$WORK/s1.seam")' e2e1='$(sed -n 1p "$WORK/s1.e2e")'"; fi
 
 # S2 (no shipped caller passes --probe-from-caller) lives in derived-fence-binding, which is
@@ -890,8 +961,6 @@ sed 's/"\${FA_SKIP_PROBE:-0}" = 1/"${FA_SKIP_PROBE:-0}" != 1/' "$VSL" > "$MUTD/v
 if cmp -s "$VSL" "$MUTD/validate-spawn-ledger.sh"; then echo "FIXTURE BROKEN: the SEAM mutant's sed did not apply" >&2; exit 1; fi
 [ -f "$MUTD/validate-provenance-block.sh" ] || { echo "FIXTURE BROKEN: the mutant copy lacks its sibling" >&2; exit 1; }
 ( cd "$W" && bash "$MUTD/validate-spawn-ledger.sh" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF ) > "$WORK/s3.mut" 2>&1
-# The base flag: the real end-to-end run carried NO banner (the unmutated gate behaves as base).
-B_SEAM=0; [ "$(sed -n 1p "$WORK/s1.e2e")" != "$SEAM_BANNER" ] && [ "$(sed -n 1p "$WORK/s1.seam")" = "$SEAM_BANNER" ] && B_SEAM=1
 # Cells. SEAM-mutant: the end-to-end run of the mutant carries the banner. SEAM-verdict (the twin): with
 # the banner line dropped, the mutant's output equals the real end-to-end output, so the verdict itself is intact.
 c_mutant=0; [ "$(sed -n 1p "$WORK/s3.mut")" = "$SEAM_BANNER" ] && c_mutant=1
@@ -922,7 +991,7 @@ if [ "$MATRIX" = 1 ]; then
   matrix_row SEAM-INVERTED SEAM-verdict 0 "$([ "$c_verdict" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_verdict" = 1 ] && echo no || echo yes)"
   matrix_row PROBE-STUB PROBE-refuses "$s4rc" "$([ "$c_stub" = 1 ] && echo TRIPPED || echo GREEN)" "$(kd "$c_stub")"
   matrix_row PROBE-STUB PROBE-seam-skip "$s4src" "$([ "$c_stubtwin" = 1 ] && echo GREEN || echo TRIPPED)" "$([ "$c_stubtwin" = 1 ] && echo no || echo yes)"
-  MROWS=4
+  MROWS=$((MROWS + 4))
 fi
 if [ "$c_stub" = 1 ]; then
   mutant_killed "$B_SEAM" PROBE-STUB "[PROBE-refuses] a gate whose self-probe fails refuses with exit 2 and says so end to end; a gate that skipped or deleted the probe call would answer rc 0"
@@ -941,11 +1010,11 @@ else bad "[SEAM-verdict] the twin tripped: the mutant changed more than the bann
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
 else
-  if [ "$MROWS" -eq 4 ]; then ok "[MX] the matrix run measured 4 cells for the 2 mutants"; else bad "[MX] matrix rows=$MROWS, 4 expected"; fi
+  if [ "$MROWS" -eq 10 ]; then ok "[MX] the matrix run measured 10 cells for the 4 mutants"; else bad "[MX] matrix rows=$MROWS, 10 expected"; fi
 fi
 
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=82
+EXPECTED_ARMS=86
 if [ $((asserted + stood)) -ne "$EXPECTED_ARMS" ]; then
   echo "FIXTURE BROKEN: $((asserted + stood)) arms reported, $EXPECTED_ARMS expected" >&2; exit 1
 fi

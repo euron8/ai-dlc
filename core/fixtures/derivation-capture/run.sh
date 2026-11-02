@@ -36,6 +36,10 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to build 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 OUT="$WORK/stdout"; ERR="$WORK/stderr"
 # fire <json> -> sets RC, writes the hook's streams to $OUT/$ERR
@@ -988,6 +992,7 @@ if sup_world ctl "$HOOK" "$VALIDATOR" && cmp -s "$HOOK" "$SUPW/.claude/hooks/ai-
   sup_fire "$SUPW" 1; sup_jg_ok; _oj=$?
   if [ "$_o1" = 0 ] && [ "$_o5" = 0 ] && [ "$_oj" = 0 ]; then
     ok "mutant control: the unmutated copies give row 1 exit 0, row 5 FAIL (STALE) at :4, and the join line"
+    B_SUPCTL=1
   else
     bad "FIXTURE BROKEN: the unmutated copies gave row 1 rc $_c1, row 5 rc $_c5, join line $_oj -- every mutant verdict below is void"
   fi
@@ -1002,7 +1007,7 @@ if sup_mut "$HOOK" "$MH" 'AI_DLC_DERIV_SUPERSEDE_FROM="$FILE" bash "$VALIDATOR"'
    && sup_world m1 "$MH" "$VALIDATOR"; then
   _k=""
   for _r in 1 2 3 4; do sup_fire "$SUPW" "$_r"; sup_ok "$_r" || { sup_stale_at4 "$_r" && _k="$_k$_r"; }; done
-  [ "$_k" = 1234 ] && ok "M1 killed: the hook without SUPERSEDE_FROM refuses rows 1, 2, 3 and 4 at :4" \
+  [ "$_k" = 1234 ] && mutant_killed "${B_SUPCTL:-0}" M1 "M1 killed: the hook without SUPERSEDE_FROM refuses rows 1, 2, 3 and 4 at :4" \
     || bad "M1 survived: with the env dropped only rows '$_k' of 1-4 went red at :4 -- A54-A57 do not need the real file"
 else
   bad "M1 DID NOT APPLY: the hook's validator call no longer carries AI_DLC_DERIV_SUPERSEDE_FROM=\"\$FILE\""
@@ -1014,7 +1019,7 @@ if sup_mut "$VALIDATOR" "$MV.1" 'd="${sf%/*}"; [ "$d" = "$sf" ] && d="."' 'd="${
    && sup_mut "$MV.1" "$MV" '-v bn="${sf##*/}"' '-v bn="${f##*/}"' \
    && sup_world m2 "$HOOK" "$MV"; then
   sup_fire "$SUPW" 1
-  if ! sup_ok 1 && sup_stale_at4 1; then ok "M2 killed: is_record read off the mask's path refuses row 1 at :4"
+  if ! sup_ok 1 && sup_stale_at4 1; then mutant_killed "${B_SUPCTL:-0}" M2 "M2 killed: is_record read off the mask's path refuses row 1 at :4"
   else bad "M2 survived: is_record keyed on the argument's path gave row 1 rc $RC -- A54 does not need the real file's identity"; fi
 else
   bad "M2 DID NOT APPLY: the supersession pre-pass no longer takes par/bn from \$sf"
@@ -1029,7 +1034,7 @@ if sup_mut "$VALIDATOR" "$MV" 'substr($0, 1, 2) == "C " && !($0 in have)' 'subst
       bash "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh" "$SUPW/$(sup_path 1)" ) > "$WORK/sup-m3.txt" 2>&1
   _m3=$?
   if [ "$_m3" = 1 ] && ! grep -q '^REFUSED' "$WORK/sup-m3.txt" && grep -q 'FAIL (STALE): .*:4 records an output' "$WORK/sup-m3.txt"; then
-    ok "M3 killed: without the join guard a non-joining SUPERSEDE_FROM gives a verdict (rc 1, FAIL (STALE)), not REFUSED"
+    mutant_killed "${B_SUPCTL:-0}" M3 "M3 killed: without the join guard a non-joining SUPERSEDE_FROM gives a verdict (rc 1, FAIL (STALE)), not REFUSED"
   else
     bad "M3 survived: without the join guard the non-joining call gave rc $_m3: $(head -2 "$WORK/sup-m3.txt")"
   fi
@@ -1045,7 +1050,7 @@ if sup_mut "$HOOK" "$MH" "if _jg=\"\$(grep -m1 '^REFUSED: AI_DLC_DERIV_SUPERSEDE
   sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
   sup_fire "$SUPW" 1
   if ! sup_jg_ok && [ "$RC" = 2 ] && grep -q 'did not run to' "$ERR"; then
-    ok "M4 killed: without the join-guard arm the drift refuses the write under the 'did not run to completion' headline"
+    mutant_killed "${B_SUPCTL:-0}" M4 "M4 killed: without the join-guard arm the drift refuses the write under the 'did not run to completion' headline"
   else
     bad "M4 survived: without the join-guard arm the hook gave rc $RC: $(head -2 "$ERR")"
   fi
@@ -1061,7 +1066,7 @@ if sup_mut "$HOOK" "$MH" 'jq -n --arg context' ': --arg context' \
   sup_replay "$JR_TXT" "$JR_RC" "$SUPW/scripts/ai-dlc/validate-artifact-derivations.sh"
   sup_fire "$SUPW" 1
   if ! sup_jg_ok && [ "$RC" = 0 ] && [ ! -s "$OUT" ] && [ ! -s "$ERR" ]; then
-    ok "M5 killed: a join-guard arm that exits 0 silently (no stdout, no stderr) fails A64"
+    mutant_killed "${B_SUPCTL:-0}" M5 "M5 killed: a join-guard arm that exits 0 silently (no stdout, no stderr) fails A64"
   else
     bad "M5 survived: the silenced join-guard arm gave rc $RC with $(wc -c < "$OUT") stdout and $(wc -c < "$ERR") stderr bytes"
   fi
@@ -1086,7 +1091,7 @@ if sup_mut "$VALIDATOR" "$MV" 'if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -r "$SU
   ! grep -q "$SUP_PRE" "$WORK/sup-m6-two.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-two.txt" && _k6="${_k6}a"
   ! grep -q "$SUP_PRE" "$WORK/sup-m6-missing.txt" && grep -q 'does not carry the commands of' "$WORK/sup-m6-missing.txt" && _k6="${_k6}b"
   if [ "$_k6" = ab ]; then
-    ok "M6 killed: without the pre-check both A65's and A66's inputs reach the walk and are refused by the join guard instead (rc $_m6a, $_m6b)"
+    mutant_killed "${B_SUPCTL:-0}" M6 "M6 killed: without the pre-check both A65's and A66's inputs reach the walk and are refused by the join guard instead (rc $_m6a, $_m6b)"
   else
     bad "M6 survived: without the pre-check only inputs '$_k6' of ab lost the pre-check text for the join guard's (rc $_m6a, $_m6b): $(head -2 "$WORK/sup-m6-two.txt")"
   fi

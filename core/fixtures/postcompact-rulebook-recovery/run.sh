@@ -75,9 +75,9 @@
 # MUTANT-MATRIX M8-step-only decides=d_first twins=d_step
 # MUTANT-MATRIX M-base decides=d_base twins=d_step
 # MUTANT-MATRIX M-nofull decides=d_bounded twins=d_step
-# MUTANT-MATRIX M9-inplace decides=s_inode,s_killed,s_struct twins=s_garbage
-# MUTANT-MATRIX M10-no-rename decides=s_inode,s_struct twins=s_killed
-# MUTANT-MATRIX M-unlink decides=s_killed,s_struct twins=s_inode
+# MUTANT-MATRIX M9-inplace decides=s_inode,s_ulimit,s_struct twins=s_garbage
+# MUTANT-MATRIX M10-no-rename decides=s_inode,s_struct twins=s_ulimit
+# MUTANT-MATRIX M-unlink decides=s_ulimit,s_struct twins=s_inode
 # MUTANT-MATRIX M-fixedname decides=s_struct twins=s_inode
 # MUTANT-MATRIX M-684 decides=r_clear twins=r_owed
 # MUTANT-MATRIX M-730 decides=r_owed twins=r_clear
@@ -102,6 +102,12 @@
 # MUTANT-MATRIX M8-agreement-dup decides=S5 twins=S2
 # MUTANT-MATRIX PC-f decides=upd_nomark,upd_foreign twins=foreign
 # MUTANT-MATRIX PC-g decides=foreign twins=legacy
+# MUTANT-MATRIX M-reclear decides=reclear twins=- why=a one-world arm whose only cell is the re-clear predicate
+# MUTANT-MATRIX M-net-ceiling decides=net twins=- why=a one-world arm whose only cell is the net-expiry predicate
+# MUTANT-MATRIX M-nowall-ignored decides=nowall twins=- why=a one-arm pair whose set and unset cells are each the other's twin, and this mutant fails only the set cell
+# MUTANT-MATRIX M-nowall-always decides=nowall twins=- why=a one-arm pair whose set and unset cells are each the other's twin, and this mutant fails only the unset cell
+# MUTANT-MATRIX M-pc-deletes decides=sequence twins=- why=a one-world arm whose only cell is the three-hook sequence
+# MUTANT-MATRIX-DYNAMIC scorer why=each battery's scorer passes its own name argument to mutant_killed, every name carrying its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/postcompact-rulebook-recovery/run.sh --matrix
 set -uo pipefail
 
@@ -133,6 +139,10 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# Every mutant kill is emitted through mutant_killed, gated on its block's unmutated control having passed
+# in this run (BL-828): a kill read off a control that failed would be the harness failing, not the mutation.
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 skip() { # skip <what> <why> — tolerated only where the subject legitimately has not arrived
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -1167,7 +1177,7 @@ CTRL_G="$WORK/gate-control.sh"
 cp "$GATE" "$CTRL_G"
 cf="$(flips "$CTRL_G")"
 if [ -z "${cf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces all ${NPREDS} verdicts — the flips below are the mutations"
+  ok "control: an unmutated copy of the gate reproduces all ${NPREDS} verdicts — the flips below are the mutations"; B_ctl_g=1
 else
   bad "CONTROL FAILED — an unmutated copy already flips {${cf}}, so every mutant verdict below is uninterpretable"
 fi
@@ -1182,9 +1192,9 @@ mutant_arm() { # mutant_arm <label> <mutant> <expected flip set, in PREDS order>
   fi
   got="$(flips "$2" "$(mx_sel "$PREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
   if [ "$got" = "$3 " ]; then
-    ok "mutant: $1 — flips exactly {$3}"
+    mutant_killed "${B_ctl_g:-0}" "$5" "mutant: $1 — flips exactly {$3}"
   elif [ -z "${got// /}" ]; then
-    bad "MUTANT KILLED NOTHING: $1 — every gate arm stays green with the mutation applied, so {$3} cannot fire"
+    bad "MUTANT SURVIVED: $1 — every gate arm stays green with the mutation applied, so {$3} cannot fire"
   else
     bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}; the arms are entangled or one of them is vacuous"
   fi
@@ -1492,7 +1502,7 @@ RCTRL="$WORK/recover-control-producer.sh"
 cp "$HOOK" "$RCTRL"
 rcf="$(rflips "$RCTRL")"
 if [ -z "${rcf// /}" ]; then
-  ok "control: an unmutated copy of the producer reproduces both verdicts — the flips below are the mutations"
+  ok "control: an unmutated copy of the producer reproduces both verdicts — the flips below are the mutations"; B_ctl_r=1
 else
   bad "CONTROL FAILED — an unmutated copy of the producer already flips {${rcf}}, so every producer-mutant verdict below is uninterpretable"
 fi
@@ -1506,9 +1516,9 @@ rmutant_arm() { # rmutant_arm <label> <mutant> <expected flip set, in RPREDS ord
   fi
   got="$(rflips "$2" "$(mx_sel "$RPREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
   if [ "$got" = "$3 " ]; then
-    ok "mutant: $1 — flips exactly {$3}"
+    mutant_killed "${B_ctl_r:-0}" "$5" "mutant: $1 — flips exactly {$3}"
   elif [ -z "${got// /}" ]; then
-    bad "MUTANT KILLED NOTHING: $1 — both producer arms stay green with the mutation applied, so {$3} cannot fire"
+    bad "MUTANT SURVIVED: $1 — both producer arms stay green with the mutation applied, so {$3} cannot fire"
   else
     bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}; the arms are entangled or one of them is vacuous"
   fi
@@ -1698,7 +1708,7 @@ a_unavail() {
 # The pre-wait grant line of the hook is a COST fast-path, not the verdict guard: with it deleted
 # the post-wait grant check stands the same call down after the wait. So this arm asserts that the
 # wait loop is never ENTERED, as a COUNT load cannot move. The hook's loop calls a bare `sleep`
-# (recover-gate line 269, no path), so a shim `sleep` first on PATH appends a line per call and
+# (recover-gate line 274, no path), so a shim `sleep` first on PATH appends a line per call and
 # returns at once. No grant line, R owed, the call's own line NEVER lands, RECOVER_GATE_NET=8:
 # the real gate writes 0 lines; the mutant enters the loop and writes more. The CONTROL, same shim
 # and seed WITH a grant that stays on, must write >0 lines, which proves the shim is reached.
@@ -1782,16 +1792,16 @@ a_reclear() {
   printf 'PASS\n'
 }
 r_re="$(a_reclear "$HOOK")"
-if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"
+if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"; B_reclear=1
 else bad "R: a new recovery clears the advisor window the previous one left — ${r_re#FAIL:}"; fi
 MR_RECLEAR="$WORK/recover-no-reclear.sh"
 awk '!index($0,"rm -f \"${STATE_DIR}/.recover-advisor-owed\"")' "$HOOK" > "$MR_RECLEAR"
 if cmp -s "$HOOK" "$MR_RECLEAR" || ! bash -n "$MR_RECLEAR" 2>/dev/null; then
   bad "FIXTURE STALE: the window-clear mutant did not apply"
 elif [ "$(a_reclear "$MR_RECLEAR")" = PASS ]; then
-  bad "MUTANT KILLED NOTHING: a producer that does not clear the advisor window still passes"
+  bad "MUTANT SURVIVED: a producer that does not clear the advisor window still passes"
 else
-  ok "mutant: a producer that does not clear the advisor window fails the re-clear arm"
+  mutant_killed "${B_reclear:-0}" M-reclear "mutant: a producer that does not clear the advisor window fails the re-clear arm"
 fi
 
 APREDS="deny after before unavail nogrant mate nodigest bound session"
@@ -1819,7 +1829,7 @@ CTRL_A="$WORK/gate-control-adv.sh"
 cp "$GATE" "$CTRL_A"
 acf="$(aflips "$CTRL_A")"
 if [ -z "${acf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces every advisor-stage verdict"
+  ok "control: an unmutated copy of the gate reproduces every advisor-stage verdict"; B_ctl_a=1
 else
   bad "CONTROL FAILED — an unmutated copy already flips {${acf}}, so every advisor-stage mutant below is uninterpretable"
 fi
@@ -1828,8 +1838,8 @@ amutant_arm() { # amutant_arm <label> <mutant> <expected flip set, in APREDS ord
   if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
   if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
   got="$(aflips "$2" "$(mx_sel "$APREDS" "$3" "$4")")"; mx_note "$5" "$3" "$got"
-  if [ "$got" = "$3 " ]; then ok "mutant: $1 — flips exactly {$3}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$3} cannot fire"
+  if [ "$got" = "$3 " ]; then mutant_killed "${B_ctl_a:-0}" "$5" "mutant: $1 — flips exactly {$3}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$3} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}"; fi
 }
 amut() { # amut <name> <awk program> -> mutant path
@@ -2032,7 +2042,7 @@ SCTRL_H="$WORK/recover-control-whose.sh"; SCTRL_G="$WORK/gate-control-whose.sh"
 cp "$HOOK" "$SCTRL_H"; cp "$GATE" "$SCTRL_G"
 scf="$(sflips "$SCTRL_H" "$SCTRL_G")"
 if [ -z "${scf// /}" ]; then
-  ok "control: unmutated copies of the producer and the gate reproduce all 9 whose-recovery verdicts, deny cells included"
+  ok "control: unmutated copies of the producer and the gate reproduce all 9 whose-recovery verdicts, deny cells included"; B_ctl_s=1
 else
   bad "CONTROL FAILED — unmutated copies already flip {${scf}}, so every whose-recovery mutant verdict below is uninterpretable"
 fi
@@ -2050,8 +2060,8 @@ smutant_arm() { # smutant_arm <label> <hook> <gate> <expected flips in SPREDS or
   if [ "$3" != "$GATE" ] && cmp -s "$GATE" "$3"; then bad "FIXTURE STALE: $1 — the gate mutant is byte-identical"; return; fi
   if ! bash -n "$2" 2>/dev/null || ! bash -n "$3" 2>/dev/null; then bad "FIXTURE STALE: $1 — a mutant is not valid shell, and its silence would score as a kill"; return; fi
   got="$(sflips "$2" "$3" "$(mx_sel "$SPREDS" "$4" "$5")")"; mx_note "$6" "$4" "$got"
-  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — every whose-recovery arm stays green, so {$4} cannot fire"
+  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_s:-0}" "$6" "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — every whose-recovery arm stays green, so {$4} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}; the arms are entangled or one of them is vacuous"; fi
 }
 UPD_CASE='    *'"'"'/ai-dlc-update</command-name>'"'"'|*'"'"'"skill":"ai-dlc-update"'"'"') exit 0 ;;'
@@ -2127,7 +2137,7 @@ a_net() {
   _d0="$(sed -n 's/^denies=//p' "$_p/$OW")"
   _e="$_p/net.err"
   d="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"tin-never","tool_input":{}}' "$_p/t.jsonl" \
-    | RECOVER_GATE_NET=2 hook_run "$1" "$_p" 2>"$_e")"
+    | AI_DLC_TEST_RECOVER_GATE_NO_WALL=1 RECOVER_GATE_NET=2 hook_run "$1" "$_p" 2>"$_e")"
   d="$(dec_of "$d")"; d="${d%%|*}"
   [ "$d" = deny ] && { printf 'FAIL:an unseen call was denied when the safety net expired\n'; return; }
   grep -q 'did not land within the' "$_e" || { printf 'FAIL:the stand-down gave no stderr reason\n'; return; }
@@ -2136,16 +2146,16 @@ a_net() {
   printf 'PASS\n'
 }
 r_net="$(a_net "$GATE")"
-if [ "$r_net" = PASS ]; then ok "R: the safety net's expiry with the incoming call's line unseen allows, uncounted, with a stderr reason"
+if [ "$r_net" = PASS ]; then ok "R: the safety net's expiry with the incoming call's line unseen allows, uncounted, with a stderr reason"; B_net=1
 else bad "R: the safety net's expiry with the incoming call's line unseen — ${r_net#FAIL:}"; fi
 MR_NET="$WORK/gate-adv-net.sh"
 awk 'index($0,"if [ \"${R_SEEN:-0}\" != 1 ]; then"){print "  if false; then"; next} 1' "$GATE" > "$MR_NET"
 if cmp -s "$GATE" "$MR_NET" || ! bash -n "$MR_NET" 2>/dev/null; then
   bad "FIXTURE STALE: the time-only-ceiling mutant did not apply"
 elif [ "$(a_net "$MR_NET")" = PASS ]; then
-  bad "MUTANT KILLED NOTHING: a gate whose clock denies an unseen call still passes the net arm"
+  bad "MUTANT SURVIVED: a gate whose clock denies an unseen call still passes the net arm"
 else
-  ok "mutant: a gate whose net ceiling denies an unseen call fails the net arm"
+  mutant_killed "${B_net:-0}" M-net-ceiling "mutant: a gate whose net ceiling denies an unseen call fails the net arm"
 fi
 
 # =============================================================================
@@ -2158,15 +2168,15 @@ fi
 # gate now waits up to R_NET (300s) for the call's own line and counts one refusal per message.
 #
 # Four predicates with their own control and mutants. They run in the BACKGROUND, every predicate
-# of every gate at once, because `rflush` waits 16s by construction and `rflush_ctl` waits out two
-# short nets; serially the battery would pay that wall clock once per gate. Each child's pid is
+# of every gate at once, because `rflush_ctl` waits out two short nets (`rflush` and `rwithdraw`
+# count the gate's ticks through a shim and wait no wall clock); serially the battery would pay that wall clock once per gate. Each child's pid is
 # recorded and `wait`ed, and each writes its verdict to a file named for the predicate.
 # =============================================================================
 
 # rcall <gate> <project> <tool_use_id> <net> [stderr file] -> deny | empty, for an Agent call
 rcall() {
   _rco="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"%s","tool_input":{}}' "$2/t.jsonl" "$3" \
-    | RECOVER_GATE_NET="$4" hook_run "$1" "$2" 2>"${5:-/dev/null}")"
+    | AI_DLC_TEST_RECOVER_GATE_NO_WALL=1 RECOVER_GATE_NET="$4" hook_run "$1" "$2" 2>"${5:-/dev/null}")"
   _rco="$(dec_of "$_rco")"; printf '%s\n' "${_rco%%|*}"
 }
 # mline <message id> <tool_use id...> -> ONE assistant line carrying those Agent tool_use blocks,
@@ -2204,23 +2214,36 @@ a_rmsg_ctl() {
 # R2. THE DISCRIMINATING WORLD: THE HOOK IS STILL PENDING WHEN ITS OWN MESSAGE'S LINE LANDS, AND IT
 # MUST DENY. This is a367e62c's calls 18 and 19, each refused by a hook still waiting at the flush
 # around 05:57:24, while calls 1-17 had already given up. The call's line is absent when the hook
-# starts; a background writer appends it at 16s, past the old 10s net and inside RECOVER_GATE_NET=30.
-# KEEP THE WRITER-VERSUS-NET10 WINDOW ABOVE THE POOL'S JITTER; do not shrink it again. The net10
-# mutant's loop ends at 10s and the writer lands at 16s. The 6s margin is chosen against an
-# UNMEASURED hook start-up and fork overhead under pool load, estimated at ~1s, which was the margin
-# when the writer sat at 11s. No jitter figure has been measured.
-# A gate that judges once at its start, or whose net is 10s, lets the call through uncounted.
+# starts, and it lands on the gate's 22nd wait tick: past every tick a 10s net can take (8 quarter
+# ticks then 1s ticks, 16 in all) and inside RECOVER_GATE_NET=30 (36 ticks).
+# THE LATE WRITER IS THE GATE'S OWN CLOCK, NEVER A RACING SLEEP (BL-868). The gate's wait loop calls a
+# bare `sleep` (the seam a_nogrant uses), so a per-predicate shim first on PATH counts each tick,
+# returns at once, and on tick R7_LATE_TICK appends the call's line. Which tick the line lands on is
+# therefore fixed, whatever the load: a writer racing the hook on wall time read a loaded pool as a
+# gate that gave up. A gate that judges once at its start, or whose net is 10s, never reaches that
+# tick and lets the call through uncounted.
+R7_LATE_TICK=22
+# r7_shim <project> <tick> <line file> -> a shim dir whose `sleep` appends <line file> to the
+# project's transcript on call <tick>, in ONE write; every call is counted in <project>/ticks.
+r7_shim() {
+  _sd="$(mktemp -d "$WORK/r7shim.XXXXXX")"; : > "$1/ticks"
+  printf '#!/bin/bash\necho x >> "%s"\nn=0; while read -r _; do n=$((n + 1)); done < "%s"\n[ "$n" -ne %s ] || cat "%s" >> "%s"\nexit 0\n' \
+    "$1/ticks" "$1/ticks" "$2" "$3" "$1/t.jsonl" > "$_sd/sleep"
+  chmod +x "$_sd/sleep"; printf '%s\n' "$_sd"
+}
+r7_ticks() { _tn=0; while read -r _; do _tn=$((_tn + 1)); done < "$1/ticks"; printf '%s\n' "$_tn"; }
 a_rflush() {
   _p="$(a_world "$1" grant boundary digest)"
   [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
-  ( sleep 16; mline M-late toolu_rflush_late >> "$_p/t.jsonl" ) &
-  _wp=$!
-  _t0=$SECONDS
-  d="$(rcall "$1" "$_p" toolu_rflush_late 30)"
-  _el=$((SECONDS - _t0))
-  wait "$_wp" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the background writer failed\n'; return; }
-  grep -qF toolu_rflush_late "$_p/t.jsonl" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the late line never landed\n'; return; }
-  [ "$d" = deny ] || { printf 'FAIL:a call whose own line landed at 16s while its hook still waited was let through (the hook answered after %ss)\n' "$_el"; return; }
+  mline M-late toolu_rflush_late > "$_p/late.line"
+  _sd="$(r7_shim "$_p" "$R7_LATE_TICK" "$_p/late.line")"
+  d="$(PATH="$_sd:$PATH" rcall "$1" "$_p" toolu_rflush_late 30)"
+  _tk="$(r7_ticks "$_p")"
+  # A gate that never reached the tick never saw the line; it lands now, so every later check reads
+  # one transcript whichever gate ran, and the verdict below is the one the gate gave without it.
+  grep -qF toolu_rflush_late "$_p/t.jsonl" || cat "$_p/late.line" >> "$_p/t.jsonl"
+  [ "$d" = deny ] || { printf 'FAIL:a call whose own line landed on wait tick %s while its hook still waited was let through (the hook waited %s tick(s))\n' "$R7_LATE_TICK" "$_tk"; return; }
+  [ "$_tk" = "$R7_LATE_TICK" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the deny came after %s wait tick(s), not on tick %s, where the line landed\n' "$_tk" "$R7_LATE_TICK"; return; }
   [ "$(owv "$_p" denies)" = 1 ] || { printf 'FAIL:the late-flush refusal counted %s, not 1\n' "$(owv "$_p" denies)"; return; }
   printf 'PASS\n'
 }
@@ -2240,19 +2263,20 @@ a_rflush_ctl() {
   printf 'PASS\n'
 }
 
-# R3. A GRANT WITHDRAWN DURING THE WAIT: the call's own line lands at about 3s together with an
-# `advisor_tool` attachment carrying available:false, toolChange:"remove". The hook must allow and
-# the owed file must be gone; a gate that tests the grant only before the wait denies.
+# R3. A GRANT WITHDRAWN DURING THE WAIT: the call's own line lands on the gate's 2nd wait tick, in
+# the same write as an `advisor_tool` attachment carrying available:false, toolChange:"remove" (the
+# r7_shim clock, as R2). The hook must allow and the owed file must be gone; a gate that tests the
+# grant only before the wait denies.
 a_rwithdraw() {
   _p="$(a_world "$1" grant boundary digest)"
   [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
-  ( sleep 3; mline M-wd toolu_rwd_late >> "$_p/t.jsonl"; printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":false,"toolChange":"remove"}}\n' >> "$_p/t.jsonl" ) &
-  _wp=$!
-  d="$(rcall "$1" "$_p" toolu_rwd_late 30)"
-  wait "$_wp" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the background writer failed\n'; return; }
-  grep -qF toolu_rwd_late "$_p/t.jsonl" || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the call line never landed\n'; return; }
+  { mline M-wd toolu_rwd_late; printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":false,"toolChange":"remove"}}\n'; } > "$_p/wd.lines"
+  _sd="$(r7_shim "$_p" 2 "$_p/wd.lines")"
+  d="$(PATH="$_sd:$PATH" rcall "$1" "$_p" toolu_rwd_late 30)"
+  grep -qF toolu_rwd_late "$_p/t.jsonl" || cat "$_p/wd.lines" >> "$_p/t.jsonl"
   [ "$d" = deny ] && { printf 'FAIL:a call whose grant was withdrawn during the wait was denied\n'; return; }
   [ -e "$_p/$OW" ] && { printf 'FAIL:the withdrawn grant left the owed file in place\n'; return; }
+  [ "$(r7_ticks "$_p")" = 2 ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the allow came after %s wait tick(s), not on tick 2, where the withdrawal landed\n' "$(r7_ticks "$_p")"; return; }
   printf 'PASS\n'
 }
 
@@ -2306,7 +2330,7 @@ for _n in $R7PREDS; do
   case "$_n" in
     rmsg)       label="R (BL-730): two calls of one message are both refused and the message counts once (a_rmsg)" ;;
     rmsg_ctl)   label="R (BL-730): CONTROL -- a second message counts again, 1 then 2 (a_rmsg_ctl)" ;;
-    rflush)     label="R (BL-730): a hook still pending when its own line lands at 16s DENIES, counted once (a_rflush)" ;;
+    rflush)     label="R (BL-730): a hook still pending when its own line lands on wait tick 22 DENIES, counted once (a_rflush)" ;;
     rwithdraw)  label="R (BL-730): a grant withdrawn during the wait allows the call and removes the owed file (a_rwithdraw)" ;;
     rflush_ctl) label="R (BL-730): CONTROL -- a line that never lands is silent and uncounted, and a second expiry stands the stage down (a_rflush_ctl)" ;;
   esac
@@ -2314,7 +2338,7 @@ for _n in $R7PREDS; do
 done
 r7cf="$(r7_flips "$WORK/r7-ctrl")"
 if [ -z "${r7cf// /}" ]; then
-  ok "control: an unmutated copy of the gate reproduces every BL-730 verdict"
+  ok "control: an unmutated copy of the gate reproduces every BL-730 verdict"; B_ctl_r7=1
 else
   bad "CONTROL FAILED — an unmutated copy already flips {${r7cf}}, so every BL-730 mutant below is uninterpretable"
 fi
@@ -2322,8 +2346,8 @@ r7mutant_arm() { # r7mutant_arm <label> <mutant> <outdir> <expected flip set, in
   if cmp -s "$GATE" "$2"; then bad "FIXTURE STALE: $1 — the mutant is byte-identical to the gate"; return; fi
   if ! bash -n "$2" 2>/dev/null; then bad "FIXTURE STALE: $1 — the mutant is not valid shell"; return; fi
   got="$(r7_flips "$3")"; mx_note "$5" "$4" "$got"
-  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$4} cannot fire"
+  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_r7:-0}" "$5" "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$4} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
 }
 if grep -qxF '  R_NET=10' "$R7_NET10" && ! grep -qF '10#$RECOVER_GATE_NET' "$R7_NET10"; then
@@ -2334,6 +2358,51 @@ if ! grep -qF 'while [ "$R_V" = owed ]' "$R7_NORR"; then
 else bad "FIXTURE STALE: M-730-noreread did not remove the wait loop"; fi
 r7mutant_arm "M-730-count: the denied_msg comparison removed, every call counts" "$R7_COUNT" "$WORK/r7-count" "rmsg" M-730-count
 r7mutant_arm "M-730-grant: the post-wait grant check removed" "$R7_GRANT" "$WORK/r7-grant" "rwithdraw" M-730-grant
+
+# R4. THE NO-WALL SEAM (BL-868). rcall and a_net set AI_DLC_TEST_RECOVER_GATE_NO_WALL=1, which drops
+# the wait loop's SECONDS clause, so a loaded box cannot end the wait before the tick the r7_shim
+# writer lands on. Unset (every consumer), the clause stays. Both cells drive an INJECTED CLOCK: a
+# shell function `sleep` (functions win over PATH, and the sourced gate inherits it) counts the tick
+# and advances SECONDS by 100, so no wall time passes and none decides (a stall before the first
+# loop test would need 10 real seconds to move a cell). RECOVER_GATE_NET=10, the line never lands:
+# unset, the SECONDS clause ends the wait after exactly 1 tick; set, only the slept bound ends it,
+# after exactly 16 (8 quarter ticks, then 8 one-second ticks). Both cells are judged before the
+# verdict, so a mutant's flip set is read whole.
+a_nowall_run() { # a_nowall_run <gate> <project> <seam value|''> -> tick count
+  _nwt="$2/nwticks"; : > "$_nwt"
+  ( sleep() { echo x >> "$_nwt"; SECONDS=$((SECONDS + 100)); }
+    printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"toolu_nowall_never","tool_input":{}}' "$2/t.jsonl" \
+      | if [ -n "$3" ]; then AI_DLC_TEST_RECOVER_GATE_NO_WALL="$3" RECOVER_GATE_NET=10 hook_run "$1" "$2"; else RECOVER_GATE_NET=10 hook_run "$1" "$2"; fi ) >/dev/null 2>&1
+  r7_ticks_f "$2/nwticks"
+}
+r7_ticks_f() { _tn=0; while read -r _; do _tn=$((_tn + 1)); done < "$1"; printf '%s\n' "$_tn"; }
+a_nowall() { # a_nowall <gate> -> PASS | FAIL:<flipped cells>:<why>
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the advisor stage did not arm\n'; return; }
+  _u="$(a_nowall_run "$1" "$_p" '')"
+  _q="$(a_world "$1" grant boundary digest)"
+  _s="$(a_nowall_run "$1" "$_q" 1)"
+  _nf=""; _nwhy=""
+  [ "$_u" = 1 ] || { _nf="unset"; _nwhy="with the seam unset the wall clause did not end the wait after 1 tick ($_u ticks), so a consumer gate is no longer bounded by SECONDS"; }
+  [ "$_s" = 16 ] || { _nf="${_nf:+$_nf+}set"; _nwhy="${_nwhy:+$_nwhy; }with the seam set the wait ran $_s tick(s), not the 16 the slept bound allows, so the SECONDS clause still decides"; }
+  if [ -n "$_nf" ]; then printf 'FAIL:%s:%s\n' "$_nf" "$_nwhy"; else printf 'PASS\n'; fi
+}
+r_nw="$(a_nowall "$GATE")"
+if [ "$r_nw" = PASS ]; then ok "R (BL-868): the no-wall seam drops only the SECONDS clause; unset it still bounds the wait (a_nowall)"; B_nw=1
+else bad "R (BL-868): the no-wall seam — ${r_nw#FAIL:}"; fi
+MR_NWIGN="$WORK/gate-nowall-ignored.sh"; MR_NWON="$WORK/gate-nowall-always.sh"
+awk 'index($0,"in 1) _rw=0 ;; esac"){sub(/1\) _rw=0 ;;/, "1) : ;;")} 1' "$GATE" > "$MR_NWIGN"
+awk 'index($0,"_rt0=$SECONDS; _rq=0; _rw=1")==3{sub(/_rw=1/, "_rw=0")} 1' "$GATE" > "$MR_NWON"
+for _nm in "M-nowall-ignored:$MR_NWIGN:set" "M-nowall-always:$MR_NWON:unset"; do
+  _nn="${_nm%%:*}"; _nr="${_nm#*:}"; _nf="${_nr%:*}"; _nc="${_nr##*:}"
+  if cmp -s "$GATE" "$_nf" || ! bash -n "$_nf" 2>/dev/null; then bad "FIXTURE STALE: $_nn did not apply"; continue; fi
+  _nv="$(a_nowall "$_nf")"
+  case "$_nv" in
+    "FAIL:$_nc:"*) mutant_killed "${B_nw:-0}" "$_nn" "mutant: $_nn fails exactly the $_nc cell of the no-wall arm" ;;
+    PASS) bad "MUTANT SURVIVED: $_nn passes the no-wall arm" ;;
+    *) bad "MUTANT FLIP SET WRONG: $_nn — expected the $_nc cell, measured ${_nv#FAIL:}" ;;
+  esac
+done
 
 # =============================================================================
 # THE SAME-MESSAGE RACE AT THE READ STAGES (BL-658)
@@ -2644,12 +2713,12 @@ fi
   # A write killed by the file-size limit must leave the old stage whole. This arm alone cannot
   # tell a gate that never reached the write from one that wrote safely; rp_s_inode is the
   # presence-shaped half, and the unmutated control requires both.
-  rp_s_killed() {
+  rp_s_ulimit() {
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
     printf 'snapshot\n' > "$_rq/$pg"
     _rj="$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")"
     ( ulimit -f 0; gate_call "$1/$RG" "$_rq" "$_rj" >/dev/null ) 2>/dev/null
-    [ "$(cat "$_rq/$pg" 2>/dev/null)" = snapshot ] || { echo "FAIL:a killed stage write left the stage reading '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
+    [ "$(cat "$_rq/$pg" 2>/dev/null)" = snapshot ] || { echo "FAIL:a stage write cut off by ulimit left the stage reading '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
     echo PASS
   }
   rp_s_garbage() { # control: a garbage stage is allowed through and the file removed
@@ -2683,7 +2752,7 @@ fi
     [ "$_rv" = first ] || { echo "FAIL:a decoy Read after a new recovery answered '${_rv}', not the FIRST deny"; return; }
     echo PASS
   }
-  rp_r_owed() { # a new recovery clears an owed-file temp left by a killed owed_put
+  rp_r_owed() { # a new recovery clears an owed-file temp left by an interrupted owed_put
     _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
     : > "$_rq/${pg%/*}/.recover-advisor-owed.4242"
     [ -e "$_rq/${pg%/*}/.recover-advisor-owed.4242" ] || { echo 'FAIL:SEED — the owed temp was not seeded'; return; }
@@ -2706,11 +2775,11 @@ fi
       d_base)    echo "BL-658 control: a same-basename decoy x/postcompact-digest.md is denied at both stages" ;;
       d_bounded) echo "BL-658 control: a bounded digest Read (limit=1) is denied at both stages" ;;
       s_inode)   echo "BL-666: a full snapshot Read replaces the stage inode — the hard link still reads snapshot, the stage reads step" ;;
-      s_killed)  echo "BL-666: a stage write killed by ulimit -f 0 leaves the stage reading snapshot" ;;
+      s_ulimit)  echo "BL-666: a stage write cut off by ulimit -f 0 leaves the stage reading snapshot" ;;
       s_garbage) echo "BL-666 control: a garbage stage is allowed through and the file removed" ;;
       s_struct)  echo "BL-666 structural: the stage write's temp is spelled from \${PROGRESS}, carries \$\$, and is renamed onto \$PROGRESS" ;;
       r_clear)   echo "BL-684: a new recovery clears the previous stage and its temp, and a first-call decoy Read gets the FIRST deny" ;;
-      r_owed)    echo "BL-730: a new recovery clears an owed-file temp (.recover-advisor-owed.<pid>) left by a killed write" ;;
+      r_owed)    echo "BL-730: a new recovery clears an owed-file temp (.recover-advisor-owed.<pid>) left by an interrupted write" ;;
       r_ctl)     echo "BL-684 control: on a fresh recovery the same decoy Read gets the FIRST deny" ;;
     esac
   }
@@ -2720,8 +2789,8 @@ fi
     _rd="$(race_dir)"
     if [ -z "$_rd" ]; then bad "FIXTURE BROKEN: $2 — a whole-directory copy of the hooks did not carry every sibling"; return; fi
     _rg="$(rc_flips "$_rd" "$1")"
-    if [ -z "${_rg// /}" ]; then ok "control: $2 — an unmutated whole-directory copy passes every arm, so a flip below is its mutation"
-    else bad "CONTROL FAILED: $2 — an unmutated copy already flips {${_rg}}, so no mutant verdict below is evidence"; fi
+    if [ -z "${_rg// /}" ]; then ok "control: $2 — an unmutated whole-directory copy passes every arm, so a flip below is its mutation"; RC_CTL=1
+    else bad "CONTROL FAILED: $2 — an unmutated copy already flips {${_rg}}, so no mutant verdict below is evidence"; RC_CTL=0; fi
   }
   rc_score() { # rc_score <label> <dir> <file> <preds> <expected flips>
     if [ -z "$2" ]; then bad "FIXTURE STALE: $1 — the mutation did not apply to its anchor"; return; fi
@@ -2731,7 +2800,7 @@ fi
     _rtw="-"; for _rx in $4; do case " $5 " in *" $_rx "*) ;; *) _rtw="$_rx"; break ;; esac; done
     _rnm="${1%%:*}"; _rnm="$(printf '%s' "$_rnm" | tr -c 'A-Za-z0-9_+-' '_')"
     _rg="$(rc_flips "$2" "$(mx_sel "$4" "$5" "$_rtw")")"; mx_note "$_rnm" "$5" "$_rg"
-    if [ "$_rg" = "$5 " ]; then ok "mutant: $1 — applied (cmp differs), killed by exactly {$5}"
+    if [ "$_rg" = "$5 " ]; then mutant_killed "${RC_CTL:-0}" "$_rnm" "mutant: $1 — applied (cmp differs), flips exactly {$5}"
     elif [ -z "${_rg// /}" ]; then bad "MUTANT SURVIVED: $1 — every arm stays green, so {$5} cannot fire"
     else bad "MUTANT FLIP SET WRONG: $1 — expected {$5}, measured {${_rg}}"; fi
   }
@@ -2801,7 +2870,7 @@ END { if (inb) flush() }
   if [ "$_rk" -lt 1 ]; then
     skip "BL-666 renamed-stage-write arms" "the gate does not rename a temp onto the stage (key '${RC_RENKEY}', found 0); this fixture ships one pull ahead of its subject"
   else
-    RC_P666="s_inode s_killed s_garbage s_struct"
+    RC_P666="s_inode s_ulimit s_garbage s_struct"
     rc_arms "$RC_P666"
     rc_control "$RC_P666" "BL-666 stage write"
     _rsw="$(grep -F -- "$RC_SWKEY" "$RC_REAL/$RG" | head -1)"
@@ -2812,11 +2881,11 @@ END { if (inb) flush() }
       printf '%s\n' "$_rd"
     }
     rc_score "M9-inplace: the stage written in place" \
-      "$(rc_sw $'        printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_killed s_struct"
+      "$(rc_sw $'        printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_ulimit s_struct"
     rc_score "M10-no-rename: the temp written and never moved" \
       "$(rc_sw $'        printf \'step\\n\' >"${PROGRESS}.$$" 2>/dev/null || true')" "$RG" "$RC_P666" "s_inode s_struct"
     rc_score "M-unlink: the stage removed, then written in place" \
-      "$(rc_sw $'        rm -f "$PROGRESS" 2>/dev/null; printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_killed s_struct"
+      "$(rc_sw $'        rm -f "$PROGRESS" 2>/dev/null; printf \'step\\n\' >"$PROGRESS" 2>/dev/null || true')" "$RG" "$RC_P666" "s_ulimit s_struct"
     rc_score "M-fixedname: a fixed temp name with no \$\$" \
       "$(rc_sw "${_rsw//"$_rfa"/$_rfb}")" "$RG" "$RC_P666" "s_struct"
   fi
@@ -3362,7 +3431,7 @@ posmutant() { # posmutant <label> <mutant-path> <expected flip set> <what it pro
   _pg="$(posbattery "$2" "$(mx_sel "$POS_SEEDS" "$3" "$5")")"
   _pfl="$(posflips "$_pg")"; mx_note "$6" "$3" "$_pfl"
   if [ "$_pfl" = "$3" ]; then
-    ok "MUTANT $1: flips exactly {$3} — $4"
+    mutant_killed "${B_ctl_pos:-0}" "$6" "MUTANT $1: flips exactly {$3} — $4"
   elif [ -z "$_pfl" ]; then
     bad "MUTANT SURVIVED: $1 — every seed answers as the fixed hook does, so {$3} cannot fire and $4 is unproven"
   else
@@ -3379,7 +3448,7 @@ POS_CTRL="$WORK/recover-pos-control.sh"
 cp "$HOOK" "$POS_CTRL"
 POS_C="$(posbattery "$POS_CTRL")"
 if [ "$POS_C" = "$POS_EXPECTED" ]; then
-  ok "control: an unmutated copy of the hook, driven from a scratch project, reproduces all ten seed tokens — a mutant's flip below is its mutation and not the copy"
+  ok "control: an unmutated copy of the hook, driven from a scratch project, reproduces all ten seed tokens — a mutant's flip below is its mutation and not the copy"; B_ctl_pos=1
 else
   bad "CONTROL FAILED — an unmutated copy answers [$POS_C], not the battery the real hook answers, so every position-mutant verdict below is uninterpretable"
 fi
@@ -3521,7 +3590,7 @@ p_sequence() { # p_sequence <postcompact-hook> -> PASS | FAIL:<what it saw>
 
 r="$(p_sequence "$POSTCOMPACT")"
 if [ "$r" = PASS ]; then
-  ok "three-hook sequence: recover.sh -> postcompact.sh -> gate, the marker survives postcompact and the first non-mandated call is DENIED"
+  ok "three-hook sequence: recover.sh -> postcompact.sh -> gate, the marker survives postcompact and the first non-mandated call is DENIED"; B_seq=1
 else
   bad "three-hook sequence: ${r#FAIL:}"
 fi
@@ -3538,8 +3607,8 @@ elif ! bash -n "$MP_DEL" 2>/dev/null; then
 else
   rm_="$(p_sequence "$MP_DEL")"
   case "$rm_" in
-    FAIL:postcompact\ DELETED*) ok "mutant: postcompact.sh restored to deleting the marker — the sequence arm goes red on exactly that line" ;;
-    PASS) bad "MUTANT KILLED NOTHING: a postcompact.sh that deletes the marker still passes the sequence arm, so the arm cannot see the shipped defect" ;;
+    FAIL:postcompact\ DELETED*) mutant_killed "${B_seq:-0}" M-pc-deletes "mutant: postcompact.sh restored to deleting the marker — the sequence arm goes red on exactly that line" ;;
+    PASS) bad "MUTANT SURVIVED: a postcompact.sh that deletes the marker still passes the sequence arm, so the arm cannot see the shipped defect" ;;
     *) bad "MUTANT FLIP WRONG: expected the deletion finding, measured '${rm_#FAIL:}'" ;;
   esac
 fi
@@ -3608,7 +3677,8 @@ for _n in $PCPREDS; do
   if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
 done
 pcf="$(pcflips "$POSTCOMPACT")"
-[ -z "${pcf// /}" ] && ok "control: the unmutated postcompact hook reproduces all 4 verdicts" || bad "CONTROL FAILED — postcompact already flips {${pcf}}"
+if [ -z "${pcf// /}" ]; then ok "control: the unmutated postcompact hook reproduces all 4 verdicts"; B_ctl_pc=1
+else bad "CONTROL FAILED — postcompact already flips {${pcf}}"; fi
 
 pcmutant() { # pcmutant <label> <src-anchor-line> <replacement> <expected flips> <twins> <name>
   _m="$WORK/postcompact-whose-$$-$RANDOM.sh"
@@ -3616,8 +3686,8 @@ pcmutant() { # pcmutant <label> <src-anchor-line> <replacement> <expected flips>
   cmp -s "$POSTCOMPACT" "$_m" && { bad "FIXTURE STALE: $1 — byte-identical"; return; }
   bash -n "$_m" 2>/dev/null || { bad "FIXTURE STALE: $1 — not valid shell"; return; }
   got="$(pcflips "$_m" "$(mx_sel "$PCPREDS" "$4" "$5")")"; mx_note "$6" "$4" "$got"
-  if [ "$got" = "$4 " ]; then ok "mutant: $1 — flips exactly {$4}"
-  elif [ -z "${got// /}" ]; then bad "MUTANT KILLED NOTHING: $1 — {$4} cannot fire"
+  if [ "$got" = "$4 " ]; then mutant_killed "${B_ctl_pc:-0}" "$6" "mutant: $1 — flips exactly {$4}"
+  elif [ -z "${got// /}" ]; then bad "MUTANT SURVIVED: $1 — {$4} cannot fire"
   else bad "MUTANT FLIP SET WRONG: $1 — expected {$4}, measured {$got}"; fi
 }
 # (f) updater stand-down removed. Killed by upd_nomark (no marker -> logs `no` and prints the

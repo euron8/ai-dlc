@@ -14,6 +14,7 @@
 # replaces an exact-vector assertion and is re-measured whenever an arm or the mutant changes.
 # The arm names are the ones lib.sh documents (and `--matrix` prints).
 # MUTANT-MATRIX netcap10 decides=REREAD twins=UNAV
+# MUTANT-MATRIX noid-wait decides=REREAD twins=UNAV
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/advisor-gate-deny/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -42,7 +43,10 @@ printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 # NET_CELLS=1 for the shipped hook only: rr-never pays its ADVISOR_GATE_NET-shortened safety net once, here (lib.sh REREAD).
 GOT="$(NET_CELLS=1 score "$HOOK" "$W/failed.shipped")"
+# B_SHIP, the base flag both mutant kills are gated on, is raised only in this arm's passing branch (BL-828).
+B_SHIP=0
 if [ -z "$GOT" ]; then
+  B_SHIP=1
   ok "shipped hook passes every arm (PUSH REASON NOGRANT WITHDRAWN ORDER ERRCLEAR UNAV REARM MERGE CLOSE DELETE MENTION UPDATE UPDATEREF UPDATECUT WRAP STACK BASHC QUOTEDPAT QUOTEDALT PATHGIT BODY QUOTEDC QUOTEDENV GHREPO MCPNAME DETACHED MATE MATEABSENT MATEPUSH MATEPATH MATEREWRITE REDISPATCH DENIED ENVELOPE FAILED REREAD WINDOW BMADONLY SELF SELFLAST PERKIND TWRITE TWRITEREAD GATELOG NOVERIFY HDRONLY FAILOPEN EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT [cells: $(cells_of "$W/failed.shipped")]"
@@ -83,22 +87,43 @@ else
   else
     # Per push: the deciding arm REREAD (via the netdef read; SCORE_ARMS names no cell arm, so no cell
     # is driven) must fail and the twin UNAV must stay green. The base flag is the shipped pass.
-    _base=0; [ -z "$GOT" ] && _base=1
     MUTD="$(SCORE_ARMS="NONE" score "$MUT/hook-netcap10.sh" "$W/failed.netcap10")"
     TWIN="$(SCORE_ARMS="UNAV" score "$MUT/hook-netcap10.sh" "$W/failed.netcap10t")"
     if [ "$MUTD" = REREAD ] && grep -qx netdef "$W/failed.netcap10"; then
-      mutant_killed "$_base" netcap10 "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap"
+      mutant_killed "${B_SHIP:-0}" netcap10 "mutant netcap10: a second _netcap=10 line fails only REREAD, at the netdef read of the unset-knob cap"
     else bad "mutant netcap10: expected REREAD via netdef, got [$MUTD] cells [$(cells_of "$W/failed.netcap10")]"; fi
     # score() always runs the netdef read, so the twin's log holds exactly `netdef` when no UNAV cell tripped.
     [ "$(cells_of "$W/failed.netcap10t")" = netdef ] && ok "T-netcap10 twin UNAV stays GREEN under mutant netcap10 (only the netdef read, REREAD, trips)" \
       || bad "T-netcap10 twin UNAV tripped cells [$(cells_of "$W/failed.netcap10t")] from [$TWIN]"
   fi
 fi
+# BL-868 mutant noid-wait: one `sleep 0` before the no-tool_use_id stand-down. Its verdict and its stderr
+# are unchanged, so only the FAST cell's sleep count can see it: that is the cell's own subject, which
+# the `$SECONDS -gt 5` bound it replaced could never see (a 0s sleep costs no wall clock).
+awk '/carries no tool_use_id, so the incoming call/ && !d { print "  sleep 0"; d = 1 } { print }' "$HOOK" > "$MUT/hook-noidwait.sh"
+if cmp -s "$HOOK" "$MUT/hook-noidwait.sh"; then bad "mutant noid-wait: DID NOT APPLY -- no no-tool_use_id stand-down line to precede"
+elif [ "$MATRIX" = 1 ]; then
+  MXF="$(NET_CELLS=1 score "$MUT/hook-noidwait.sh" "$W/failed.matrix.noid")"
+  for _a in $ARMS; do
+    case " $MXF " in *" $_a "*) _w=TRIPPED; _k=yes ;; *) _w=GREEN; _k=no ;; esac
+    matrix_row noid-wait "$_a" 0 "$_w" "$_k"; MROWS=$((MROWS + 1))
+  done
+  ok "MATRIX noid-wait measured against the arms"
+else
+  # Deciding: the rr-noid cell alone (REREAD). Twin: UNAV, as netcap10's. The base flag is the shipped pass.
+  NMUT="$(SCORE_IDS="REREAD:rr-noid" score "$MUT/hook-noidwait.sh" "$W/failed.noid")"
+  NTWIN="$(SCORE_ARMS="UNAV" score "$MUT/hook-noidwait.sh" "$W/failed.noidt")"
+  if [ "$NMUT" = REREAD ] && grep -qx 'REREAD:rr-noid' "$W/failed.noid"; then
+    mutant_killed "${B_SHIP:-0}" noid-wait "mutant noid-wait: a sleep before the no-tool_use_id stand-down fails REREAD at the rr-noid cell, by its sleep count alone"
+  else bad "mutant noid-wait: expected REREAD at rr-noid, got [$NMUT] cells [$(cells_of "$W/failed.noid")]"; fi
+  [ -z "$NTWIN" ] && ok "T-noid-wait twin UNAV stays GREEN under mutant noid-wait" \
+    || bad "T-noid-wait twin UNAV tripped [$NTWIN] cells [$(cells_of "$W/failed.noidt")]"
+fi
 if [ "$MATRIX" = 0 ]; then
   [ "$MROWS" -eq 0 ] && ok "MX plain run executed no matrix-only cell (matrix rows=0)" || bad "MX plain run executed $MROWS matrix-only rows"
 else
   _na="$(printf '%s\n' $ARMS | grep -c .)" || _na=0
-  [ "$MROWS" -eq "$_na" ] && ok "MX matrix run measured $MROWS mutant x arm cells (1 mutant x $_na arms)" || bad "MX matrix run measured $MROWS cells, $_na expected"
+  [ "$MROWS" -eq $((_na * 2)) ] && ok "MX matrix run measured $MROWS mutant x arm cells (2 mutants x $_na arms)" || bad "MX matrix run measured $MROWS cells, $((_na * 2)) expected"
 fi
 
 echo

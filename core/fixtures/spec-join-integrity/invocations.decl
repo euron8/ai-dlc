@@ -1,3 +1,4 @@
 # Measured by an armed run through core/scripts/hermetic-run.sh (the judge J2/J3 output) at the committed tip, then verified by a second armed run.
-387 *
+# BL-868 (* 387->389): +2 the settled-tree net's end-to-end stubs (st-stop.sh, st-exit.sh); the net's poll forks no bash.
+389 *
 189 core/scripts/validate-spec-join.sh

@@ -401,7 +401,7 @@ k_drive() { # k_drive <reconcile-dir> <stub|none> -> "<rc> <sentinel> <left> <ou
     "$(find "$t" -maxdepth 1 -name 'norm-lines.*' | grep -c .)" "$(printf '%s' "$o" | tr '\n ' '|_')"
 }
 KSTUB="$WORK/k-stub"; mkdir -p "$KSTUB" || exit 2
-printf '#!/bin/sh\necho fired > "$FX_SENT"\nkill -9 $PPID\n' > "$KSTUB/sed" && chmod +x "$KSTUB/sed" || exit 2
+printf '#!/bin/bash\necho fired > "$FX_SENT"\nkill -9 $PPID\n' > "$KSTUB/sed" && chmod +x "$KSTUB/sed" || exit 2
 k_score() { # k_score <reconcile-dir> -> failing cells (K0, K1) then `.`, or BROKEN
   local r="" v
   set -- "$1" $(k_drive "$1" none)

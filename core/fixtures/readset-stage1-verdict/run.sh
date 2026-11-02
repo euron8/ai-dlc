@@ -131,7 +131,15 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-stage1-fx.XXXXXX")" || { echo "FIXTUR
 WORK="$(cd "$WORK" && pwd -P)"
 ORPHANS="$WORK/orphans"; : > "$ORPHANS"
 reap() { local p; [ -f "$ORPHANS" ] || return 0; while IFS= read -r p; do case "$p" in ''|*[!0-9]*) ;; *) kill "$p" 2>/dev/null ;; esac; done < "$ORPHANS"; }
-trap reap EXIT
+# THE HANG TARGET IS A FIFO READ, NEVER A LONG SLEEP (BL-868). Every process this file needs to "never exit on its
+# own" is a `cat` blocked opening this fifo, which no writer opens until hang_release, ONCE, at teardown -- after the
+# last orphan check. A `sleep 300` target exits by itself once 300s pass, so on a slow enough box a group kill that
+# never happened passed as one. Released earlier, every blocked reader would end on EOF and the kill arms would
+# read a process that left by itself.
+HANG="$WORK/hang.fifo"; mkfifo "$HANG" && [ -p "$HANG" ] || { echo "FIXTURE BROKEN: cannot make the hang fifo $HANG" >&2; exit 2; }
+export STUB_HANG="$HANG"
+hang_release() { [ -p "$HANG" ] || return 0; exec 9<>"$HANG"; exec 9>&-; }
+trap 'reap; hang_release' EXIT
 
 FAILS=0; ASSERTS=0
 ok()     { printf '  ok    %s\n' "$1"; ASSERTS=$((ASSERTS + 1)); }
@@ -428,7 +436,21 @@ case "$rc|$sp" in "0|self-probe: "*" probes answered as expected") B_sp=1; ok "-
 while IFS="$(printf '\t')" read -r name wrc wspec; do
   got="$(verdict "$SCORER" "$(w_of "$name")")"
   eval "GOT_${name//-/_}=\$got"
-  if matches "$got" "$wrc" "$wspec"; then ok "$name -> $got"; eval "B_w_${name//-/_}=1"; else bad "$name -> $got (want $wrc|$wspec)"; fi
+  if matches "$got" "$wrc" "$wspec"; then
+    ok "$name -> $got"
+    # Each base-pass flag a mutant gates on is assigned LITERALLY, here in the passing branch, so the
+    # flag is a value this run set beside its world's ok (validate-mutant-kills.sh M5 reads it).
+    case "$name" in
+      met) B_w_met=1 ;; a1) B_w_a1=1 ;; a2) B_w_a2=1 ;; a3) B_w_a3=1 ;; a3u) B_w_a3u=1 ;;
+      a4) B_w_a4=1 ;; a4-after) B_w_a4_after=1 ;; a5) B_w_a5=1 ;; a5n) B_w_a5n=1 ;;
+      a6) B_w_a6=1 ;; a6-gitignore) B_w_a6_gitignore=1 ;; a6-owntree) B_w_a6_owntree=1 ;;
+      a6-p2) B_w_a6_p2=1 ;; a6-dir) B_w_a6_dir=1 ;;
+      r0-log) B_w_r0_log=1 ;; r0-sb) B_w_r0_sb=1 ;; r0-profile) B_w_r0_profile=1 ;;
+      r2-link) B_w_r2_link=1 ;; r2-one) B_w_r2_one=1 ;; r6-omitted) B_w_r6_omitted=1 ;;
+      rl-rc) B_w_rl_rc=1 ;; rl-skip) B_w_rl_skip=1 ;; rl-started) B_w_rl_started=1 ;;
+      rl-foreign) B_w_rl_foreign=1 ;; rl-epoch) B_w_rl_epoch=1 ;; rl-head) B_w_rl_head=1 ;;
+    esac
+  else bad "$name -> $got (want $wrc|$wspec)"; fi
 done < "$TABLE"
 
 # THE EQUIVALENCE CELL, and the one end-to-end run per distinct CLI outcome (exit 0 MET, exit 1 NOT-MET, exit 2
@@ -665,8 +687,10 @@ case "${STUB_MODE:-ok}" in
   ok) exit 0 ;;
   fail) exit 1 ;;
   hang|hang-late)
-    sleep 300 & echo "$!" >> "$STUB_PIDS"
-    sleep 300 & echo "$!" >> "$STUB_PIDS"
+    # Each child blocks reading a fifo nobody writes until the fixture's teardown, so it ends only by a
+    # signal: no elapsed time can end it first (BL-868).
+    cat "$STUB_HANG" >/dev/null 2>&1 </dev/null & echo "$!" >> "$STUB_PIDS"
+    cat "$STUB_HANG" >/dev/null 2>&1 </dev/null & echo "$!" >> "$STUB_PIDS"
     echo "$$" >> "$STUB_PIDS"
     : > "$STUB_READY"
     wait
@@ -687,8 +711,15 @@ mkrepo() {
 # three DISTINCT loads, so a wrapper sampling the 5- or 15-minute figure records the wrong one. The
 # wrapper calls `sysctl` by PATH (bare name in sample()), so no override is needed to reach it.
 SBIN="$WORK/sbin"; mkdir -p "$SBIN" || broken "stub sysctl dir"
-printf '#!/bin/sh\n[ "$1 $2" = "-n vm.loadavg" ] || exit 9\necho "{ 1.11 2.22 3.33 }"\n' > "$SBIN/sysctl" && chmod +x "$SBIN/sysctl" || broken "stub sysctl"
+printf '#!/bin/bash\n[ "$1 $2" = "-n vm.loadavg" ] || exit 9\necho "{ 1.11 2.22 3.33 }"\n' > "$SBIN/sysctl" && chmod +x "$SBIN/sysctl" || broken "stub sysctl"
 [ "$(PATH="$SBIN:$PATH" sysctl -n vm.loadavg)" = "{ 1.11 2.22 3.33 }" ] || broken "the stub sysctl is not first on PATH"
+# A STUB sleep beside it, for the wrapper's sampler (`sleep 15` by bare name between samples): it blocks on the hang
+# fifo until the sampler TERMs it, so the run takes exactly its start and stop samples. With the real sleep a run slower
+# than 15s took a third -- one more counted sysctl start and one more load.tsv row, decided by the load (BL-868).
+# It is `cat` of the fifo through env -S, NOT a bash script: the sampler is sometimes TERMed before it forks its
+# sleep, so a counted bash stub was started 0 or 1 times per run, decided by the scheduler.
+printf '#!/usr/bin/env -S cat %s\n' "$HANG" > "$SBIN/sleep" && chmod +x "$SBIN/sleep" || broken "stub sleep"
+case "$HANG" in *[[:space:]]*) broken "the hang fifo path carries whitespace, which the sleep stub's env -S line splits" ;; esac
 # An inherited replacement profile, which the wrapper must not pass to the deriver.
 printf '(version 3)\n(allow default)\n' > "$WORK/narrow.sb"
 
@@ -804,6 +835,12 @@ wrap_term() {
   await "$R" "$wp" "the stub's ready file" is_file "$R/ready" \
     || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready: $AWAIT_WHY"; }
   cat "$R/pids" >> "$ORPHANS"
+  # CONTROL: the stub's two children are alive and blocked on the hang fifo before the TERM, so the tree arm
+  # below can only pass by the wrapper's group kill, never by children that left on their own.
+  sed -n '1,2p' "$R/pids" > "$R/kids"
+  await "$R" "$wp" "the stub's two children blocked on the hang fifo" st_settled "$R/kids" \
+    || { kill "$wp" 2>/dev/null; broken "[$t] the stub's children are not blocked on the hang fifo: $AWAIT_WHY"; }
+  [ "$(grep -c . "$R/kids")" = 2 ] || broken "[$t] the stub recorded $(grep -c . "$R/kids") children before its own pid, not 2"
   kill -TERM "$wp"
   # The wrapper's finish() TERMs the stub's group and then WAITS on the stub, so the wrapper alone is briefly
   # blocked with nothing pending while its child is still dying: read alone that is a false settle at any
@@ -813,15 +850,11 @@ wrap_term() {
   await "$R" - "the TERMed wrapper's exit" pid_gone "$wp" -- st_tree_settled "$R/wp.pid" "$wp" \
     || { kill -KILL "$wp" 2>/dev/null; broken "[$t] the TERMed wrapper did not exit: $AWAIT_WHY"; }
   wait "$wp"; rc=$?
-  # THE ONE WALL BOUND, AND WHY IT CANNOT BE PROGRESS. The wrapper's finish() TERMs the stub's whole
-  # process group but waits only on the stub itself, so its two `sleep 300` children can still be
-  # dying when the wrapper returns. A signalled process exiting is a single step with nothing
-  # observable in between, so nothing can be keyed on progress here; the property read is binary
-  # (every recorded pid gone, or one alive), and the bound only says how long a pid may take to
-  # die. It replaces a fixed `sleep 0.5`, which read a loaded box as a surviving tree. It must stay
-  # far below the children's 300s, or a group kill that never happened would pass once they exit
-  # on their own. NOW A FACT, NOT A BOUND: wait until every pid is gone or every survivor is blocked with
-  # no signal pending (st_settled) -- a child the kill never reached; a TERMed one is never read so.
+  # The wrapper's finish() TERMs the stub's whole process group but waits only on the stub itself, so its two
+  # hang-fifo children can still be dying when the wrapper returns. A FACT, NOT A BOUND: wait until every pid is
+  # gone or every survivor is blocked with no signal pending (st_settled) -- a child the kill never reached; a
+  # TERMed one is never read so. The children block on a fifo nothing writes until teardown, so none of them
+  # can exit on its own and pass for a group kill.
   while ! all_gone "$R/pids" && ! st_settled "$R/pids"; do sleep 0.1; done
   [ "$rc" = 143 ] || { echo "    [$t] the TERMed wrapper exited $rc, not 143"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map was not restored after TERM"; f=1; }
@@ -985,7 +1018,7 @@ ic_orphan() { # <wrapper copy> <dir> <live|dead>
   local pg rc out
   ic_repo "$2/repo" "$1"
   mkdir -p "$2/open"; printf '%s\tstarted\t%s\t%s\n' "$2/open" "$(date +%s)" deadbeef > "$2/ledger"
-  set -m; sleep 300 </dev/null >/dev/null 2>&1 & pg=$!; set +m
+  set -m; cat "$HANG" </dev/null >/dev/null 2>&1 & pg=$!; set +m
   echo "$pg" >> "$ORPHANS"; printf '%s\n' "$pg" > "$2/open/pgid"
   if [ "$3" = dead ]; then kill "$pg" 2>/dev/null; wait "$pg" 2>/dev/null; fi
   if [ "$3" = live ] && ! kill -0 -- "-$pg" 2>/dev/null; then echo "control: the seeded orphan group $pg is not alive"; return 1; fi
@@ -1018,12 +1051,18 @@ ic_groupkill() { # finish() TERMs the deriver's whole process group: a trap-less
     # The leader is a fresh trap-less bash with two background children, as the stub deriver is; `set -m` around
     # its launch gives it its own process group, exactly as stage1_launch does.
     set -m
-    PF="$2/pids" bash -c 'sleep 300 </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; sleep 300 </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; wait' </dev/null >/dev/null 2>&1 &
+    PF="$2/pids" bash -c 'cat "$STUB_HANG" </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; cat "$STUB_HANG" </dev/null >/dev/null 2>&1 & echo "$!" >> "$PF"; wait' </dev/null >/dev/null 2>&1 &
     DPID=$!
     set +m
     echo "$DPID" >> "$2/pids"
     while [ "$(grep -c . "$2/pids")" -lt 3 ] && kill -0 "$DPID" 2>/dev/null; do sleep 0.01; done
     [ "$(grep -c . "$2/pids")" = 3 ] || { echo "control: the seeded deriver group recorded $(grep -c . "$2/pids") pids, not 3"; exit 1; }
+    # CONTROL: both children are alive, blocked on the hang fifo with nothing pending, before the kill -- a child that
+    # had already left by itself would make the tree arm below pass without the group kill doing anything.
+    sed -n '1,2p' "$2/pids" > "$2/kids"
+    await "$2" "$DPID" "both seeded children blocked on the hang fifo" st_settled "$2/kids" \
+      || { echo "control: the seeded children are not both blocked on the hang fifo: $AWAIT_WHY"; exit 1; }
+    while IFS= read -r p; do kill -0 "$p" 2>/dev/null || { echo "control: seeded child $p is not alive before the kill"; exit 1; }; done < "$2/kids"
     finish > /dev/null 2>&1 )
   local r=$? p alive="" n=0
   cat "$2/pids" >> "$ORPHANS"
@@ -1124,14 +1163,16 @@ cl_count() { awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } substr(l, 1, 
 pk_lines() { # $1 deriver -> the uncommented lines carrying both `pkill` and `fs_usage`
   awk 'index($0, "pkill") && index($0, "fs_usage") { l = $0; sub(/^[ \t]+/, "", l); if (substr(l, 1, 1) != "#") print l }' "$1"
 }
-PKN="fsux$$"; PKB="$WORK/pkbin"; mkdir -p "$PKB" && ln -s /bin/sleep "$PKB/$PKN" || broken "cannot build the fs_usage stub"
+# The stub tracer is `cat` of the hang fifo under the fs_usage-like name: it never ends on its own, so only a
+# kill can make a probe read `dead` (BL-868; a `sleep 60` stub died by itself on a slow enough box).
+PKN="fsux$$"; PKB="$WORK/pkbin"; mkdir -p "$PKB" && ln -s /bin/cat "$PKB/$PKN" || broken "cannot build the fs_usage stub"
 # pk_probe <pkill line>: prints `child=<alive|dead> decoy=<alive|dead>`, or `child=none` if no child.
 pk_probe() {
   local d="$WORK/pk.$$.$RANDOM" dec
   mkdir -p "$d" || return 1
   printf '%s\n' "${1//fs_usage/$PKN}" > "$d/line"
   cat > "$d/deriver.sh" <<'PK_EOF'
-"$PKN" 60 2>/dev/null </dev/null | grep --line-buffered -F x > /dev/null &
+"$PKN" "$STUB_HANG" 2>/dev/null </dev/null | grep --line-buffered -F x > /dev/null &
 fs_pid=$!
 until child="$(pgrep -P $$ -x "$PKN")"; do kill -0 "$fs_pid" 2>/dev/null || break; sleep 0.01; done
 [ -n "$child" ] || { echo "child=none"; exit 0; }
@@ -1145,7 +1186,7 @@ done
 if kill -0 "$child" 2>/dev/null; then printf 'child=alive '; else printf 'child=dead '; fi
 kill "$child" "$fs_pid" 2>/dev/null
 PK_EOF
-  PATH="$PKB:$PATH" "$PKN" 60 >/dev/null 2>&1 </dev/null & dec=$!
+  PATH="$PKB:$PATH" "$PKN" "$HANG" >/dev/null 2>&1 </dev/null & dec=$!
   echo "$dec" >> "$ORPHANS"
   PATH="$PKB:$PATH" PKN="$PKN" PKD="$d" ORPHANS="$ORPHANS" bash "$d/deriver.sh" </dev/null
   if kill -0 "$dec" 2>/dev/null; then echo "decoy=alive"; else echo "decoy=dead"; fi
@@ -1229,7 +1270,7 @@ orphans_gone() {
 }
 # THE ARM'S OWN PROBE, BOTH DIRECTIONS, before it reads the corpus: a sleep that is never killed must
 # refuse, and a reaped pid beside it in a second file must read gone.
-OGP="$WORK/og-probe"; sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
+OGP="$WORK/og-probe"; cat "$HANG" </dev/null >/dev/null 2>&1 & ogl=$!
 bash -c 'exit 0' & ogd=$!; wait "$ogd"
 printf '%s\n' "$ogl" > "$OGP.live"; printf '%s\n' "$ogd" > "$OGP.dead"
 orphans_gone "$OGP.live" 50; ogr1=$?
@@ -1243,7 +1284,7 @@ export MUT_OLD='    if st_settled "$WORK/og.live"; then ORPHANS_WHY="recorded pi
   MUT_NEW='    if st_settled "$WORK/og.live"; then return 0; fi'
 mut "$OGM.src" "$OGM" \
   || broken "orphans_gone mutant og-pass DID NOT APPLY"
-sleep 300 </dev/null >/dev/null 2>&1 & ogl=$!
+cat "$HANG" </dev/null >/dev/null 2>&1 & ogl=$!
 printf '%s\n' "$ogl" > "$OGP.live"
 ( . "$OGM"; orphans_gone "$OGP.live" 50 ); ogr1=$?
 printf '%s\n' "$ogd" > "$OGP.dead"; ( . "$OGM"; orphans_gone "$OGP.dead" 50 ); ogr2=$?
@@ -1258,6 +1299,8 @@ else
   orphans_gone "$ORPHANS" 0 || broken "a stub or sampler pid outlived the fixture's own reap: $ORPHANS_WHY"
   ok "no stub or sampler pid is alive: 0 of $NREC recorded in the pid file"
 fi
+# The hang fifo is released once, here, after the last orphan check: any reader still blocked on it ends now.
+hang_release
 
 # A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL (the counter only moves under --matrix).
 if [ "$MATRIX" = 1 ]; then

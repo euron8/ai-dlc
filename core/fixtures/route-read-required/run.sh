@@ -92,7 +92,7 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 seed() { # <name> [nosnapshot|paused] -> absolute tree path
   local w="$WORK/$1"; shift
   mkdir -p "$w/_bmad-output/planning-artifacts/s7" "$w/scripts/ai-dlc"
-  printf '#!/bin/sh\necho 7\n' > "$w/scripts/ai-dlc/sprint-status.sh"
+  printf '#!/bin/bash\necho 7\n' > "$w/scripts/ai-dlc/sprint-status.sh"
   chmod +x "$w/scripts/ai-dlc/sprint-status.sh"
   case "${1:-}" in
     nosnapshot) ;;

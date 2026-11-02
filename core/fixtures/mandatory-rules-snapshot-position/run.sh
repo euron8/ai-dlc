@@ -204,9 +204,9 @@ toolchain() { # <dir> <script-to-install-as-validate-mandatory-rules.sh>
   mkdir -p "$1"
   cp "$2" "$1/validate-mandatory-rules.sh"
   cp "$VAA" "$1/validate-audit-anchors.sh"
-  printf '#!/bin/sh\nexit 0\n' > "$1/validate-cycle-commits.sh"
-  printf '#!/bin/sh\nexit 0\n' > "$1/validate-retro-evidence.sh"
-  printf '#!/bin/sh\nexit 0\n' > "$1/validate-retro-prereq.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$1/validate-cycle-commits.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$1/validate-retro-evidence.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$1/validate-retro-prereq.sh"
   chmod +x "$1"/*.sh
 }
 

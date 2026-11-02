@@ -1012,7 +1012,7 @@ else
     local d
     d="$(mktemp -d "$ROOT/e2dshim.XXXXXX")" || return 1
     cat > "$d/diff" <<EOF
-#!/bin/sh
+#!/bin/bash
 t1=\$(mktemp) || exit 3; t2=\$(mktemp) || exit 3
 cat "\$1" > "\$t1"; cat "\$2" > "\$t2"
 case "\$1" in /dev/fd/*|-) psub=y ;; *) psub=n ;; esac
@@ -1031,7 +1031,7 @@ EOF
     d="$(mktemp -d "$ROOT/e2mshim.XXXXXX")" || return 1
     echo 0 > "$d/n"; : > "$d/log"
     cat > "$d/mktemp" <<EOF
-#!/bin/sh
+#!/bin/bash
 if [ \$# -eq 0 ]; then
   n=\$(( \$(cat "$d/n") + 1 )); echo \$n > "$d/n"; echo noarg >> "$d/log"
   if [ "\$n" = "$1" ]; then : > "$d/.fired"; exit 1; fi

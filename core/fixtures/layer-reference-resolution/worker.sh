@@ -71,23 +71,23 @@ m="$work/mutant.sh"
 #
 # The nonce is not a secret and does not need to be: its whole job is to make the marker's
 # identity PROVABLE rather than inferred from a name anything can choose.
+#
+# AND THE WORKER NO LONGER COUNTS ITS OWN PEERS (BL-868). A count taken by each worker at its
+# own start is a count of whoever had ALSO started by then, so it measured scheduling: the old
+# arm needed a floor of 4 out of 6 "for a box that never schedules the full 6", a widened bound.
+# Now the worker writes its marker and PARKS (SIGSTOP on itself) until run.sh's pool_run releases
+# it. run.sh counts the live markers once the whole pool group is SETTLED (every member blocked,
+# nothing pending), which at the first settle is exactly the pool's width, at any load. A worker
+# that reaches this line after the release (`.released` present) does not park, and pool_run's
+# CONT sweep frees one that checked the flag just before it appeared, so nothing can stay parked.
 inflight_dir="$outdir/.inflight"
 mkdir -p "$inflight_dir"
 printf '%s\n' "${MUT_NONCE:?worker: missing MUT_NONCE}" > "$inflight_dir/$$"
-peers=0
-for _p in "$inflight_dir"/*; do
-  [ -f "$_p" ] || continue
-  _pid="${_p##*/}"
-  case "$_pid" in ''|*[!0-9]*) continue ;; esac
-  kill -0 "$_pid" 2>/dev/null || continue          # not a live process
-  grep -qxF "$MUT_NONCE" "$_p" 2>/dev/null || continue   # live, but not one of MY peers
-  peers=$((peers+1))
-done
+[ -e "$inflight_dir/.released" ] || kill -STOP $$
+rm -f "$inflight_dir/$$"
 
 report() {
-  rm -f "$inflight_dir/$$"
   { printf '%s\n' "$1"
-    printf 'inflight %s\n' "$peers"
     [ -f "$work/cells" ] && cat "$work/cells"
   } > "$outdir/$label"
   exit 0

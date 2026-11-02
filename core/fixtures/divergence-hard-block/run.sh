@@ -45,6 +45,10 @@ ACK_HOOK="$(pick "$HERE/../../hooks/ai-dlc-acknowledge.sh" \
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# Every mutant kill goes through mutant_killed, gated on the base flag of the arm it guards (BL-828).
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # Drive the Stop hook. A transcript is required by Check 0 but we give none, so Check 0
 # fails open and we land on Check 0b — which is what we are testing.
@@ -161,12 +165,13 @@ case "$CEIL" in
   "deny "*) ok "CEILING: the Agent dispatch is DENIED" ;;
   *) bad "CEILING: dispatch ALLOWED on a series past the resolution ceiling ($CEIL)" ;;
 esac
+B_CEIL_ACK=0; B_CEIL_STOP=0
 case "$CEIL" in
-  *" ceiling "*) ok "CEILING: the PreToolUse deny names the resolution ceiling, not a stall" ;;
+  *" ceiling "*) ok "CEILING: the PreToolUse deny names the resolution ceiling, not a stall"; B_CEIL_ACK=1 ;;
   *) bad "CEILING: the PreToolUse deny misnames the state ($CEIL)" ;;
 esac
 case "$CEIL" in
-  *" ceiling") ok "CEILING: the Stop-hook block names the resolution ceiling, not a stall" ;;
+  *" ceiling") ok "CEILING: the Stop-hook block names the resolution ceiling, not a stall"; B_CEIL_STOP=1 ;;
   *) bad "CEILING: the Stop-hook block misnames the state ($CEIL)" ;;
 esac
 
@@ -186,7 +191,7 @@ if [ "$MUT_OK" -ne 1 ] || [ ! -f "$MUTD/$(basename "$STOP_HOOK")" ]; then
 else
   MCEIL="$(drive_ceiling "$MUTD/$(basename "$ACK_HOOK")" "$MUTD/$(basename "$STOP_HOOK")")"
   case "$MCEIL" in
-    "deny stalled stalled") ok "mutant ceiling-as-stalled is KILLED by both message arms (both copies ran and printed the STALL text under a CEILING header)" ;;
+    "deny stalled stalled") mutant_killed "$(( ${B_CEIL_ACK:-0} && ${B_CEIL_STOP:-0} ))" ceiling-as-stalled "mutant ceiling-as-stalled is KILLED by both message arms (both copies ran and printed the STALL text under a CEILING header)" ;;
     *" none"*) bad "FIXTURE BROKEN: a mutant hook copy printed no CEILING message at all ($MCEIL) -- it did not run, so no kill is scored" ;;
     *) bad "mutant ceiling-as-stalled SURVIVED ($MCEIL) -- the CEILING message arms cannot tell CEILING from STALLED" ;;
   esac
@@ -282,12 +287,13 @@ drive_effects() { # <ack-hook> <stop-hook> -> "<ack-class> <stop-class>"
   printf '%s %s' "$(effects_class "$a")" "$(effects_class "$s")"
 }
 EFF="$(drive_effects "$ACK_HOOK" "$STOP_HOOK")"
+B_EFF_ACK=0; B_EFF_STOP=0
 case "$EFF" in
-  "yes "*) ok "ACK_HOOK: the ADJUDICATE step names the value each option leaves in force" ;;
+  "yes "*) ok "ACK_HOOK: the ADJUDICATE step names the value each option leaves in force"; B_EFF_ACK=1 ;;
   *) bad "ACK_HOOK: the dispatch deny does not name the value each option leaves in force ($EFF)" ;;
 esac
 case "$EFF" in
-  *" yes") ok "STOP_HOOK: the ADJUDICATE step names the value each option leaves in force" ;;
+  *" yes") ok "STOP_HOOK: the ADJUDICATE step names the value each option leaves in force"; B_EFF_STOP=1 ;;
   *) bad "STOP_HOOK: the Stop block does not name the value each option leaves in force ($EFF)" ;;
 esac
 # MUTANTS: delete the phrase from ONE hook at a time, in a copy of the whole hooks dir. Each
@@ -302,7 +308,8 @@ for _mh in ACK STOP; do
   else
     MEFF="$(drive_effects "$MUTD/$(basename "$ACK_HOOK")" "$MUTD/$(basename "$STOP_HOOK")")"
     case "$MEFF" in
-      "$_want") ok "mutant $_mh-effects-deleted is KILLED by its own arm only ($MEFF)" ;;
+      "$_want") if [ "$_mh" = ACK ]; then mutant_killed "${B_EFF_ACK:-0}" ACK-effects-deleted "mutant ACK-effects-deleted is KILLED by its own arm only ($MEFF)"
+                else mutant_killed "${B_EFF_STOP:-0}" STOP-effects-deleted "mutant STOP-effects-deleted is KILLED by its own arm only ($MEFF)"; fi ;;
       *none*) bad "FIXTURE BROKEN: a mutant hook copy printed no deny/block ($MEFF) -- it did not run, so no kill is scored" ;;
       *) bad "mutant $_mh-effects-deleted: got '$MEFF', wanted '$_want'" ;;
     esac
@@ -451,7 +458,7 @@ pend_world() { # <sprint-id> <existing s<K> dirs...> -> work dir
   mkdir -p "$w/_bmad-output/planning-artifacts" "$w/scripts/ai-dlc"
   : > "$w/_bmad-output/pipeline-snapshot.md"
   for k in "$@"; do mkdir -p "$w/_bmad-output/planning-artifacts/s$k"; done
-  printf '#!/bin/sh\necho %s\n' "$n" > "$w/scripts/ai-dlc/sprint-status.sh"
+  printf '#!/bin/bash\necho %s\n' "$n" > "$w/scripts/ai-dlc/sprint-status.sh"
   chmod +x "$w/scripts/ai-dlc/sprint-status.sh"
   printf '%s' "$w"
 }
@@ -481,13 +488,14 @@ pend_cells() { # <ack-hook> <stop-hook> -> "<ack class>/<stop class>" for worlds
 PEND_WANT="pending/pending loud/loud loud/loud none/none"
 PEND="$(pend_cells "$ACK_HOOK" "$STOP_HOOK")"
 set -- $PEND
-case "$1" in pending/pending) ok "PENDING: sprint-id 8 with s7/ present and no s8/ yet logs the pending form in BOTH hooks — no \"Fix the declared sprint\"" ;;
+B_PEND=0; B_SKIP=0; B_LATER=0; B_PRES=0
+case "$1" in pending/pending) ok "PENDING: sprint-id 8 with s7/ present and no s8/ yet logs the pending form in BOTH hooks — no \"Fix the declared sprint\""; B_PEND=1 ;;
   *) bad "PENDING: a sprint before its first artifact was not reported in the pending form by both hooks (ack/stop '$1')" ;; esac
-case "$2" in loud/loud) ok "SKIP: sprint-id 9 with only s7/ (no s8/) keeps the mis-declared form in BOTH hooks" ;;
+case "$2" in loud/loud) ok "SKIP: sprint-id 9 with only s7/ (no s8/) keeps the mis-declared form in BOTH hooks"; B_SKIP=1 ;;
   *) bad "SKIP: a declaration that skips a sprint was not reported as mis-declared by both hooks (ack/stop '$2')" ;; esac
-case "$3" in loud/loud) ok "LATER: sprint-id 8 with s7/ AND s9/ keeps the mis-declared form in BOTH hooks — a later sprint already wrote" ;;
+case "$3" in loud/loud) ok "LATER: sprint-id 8 with s7/ AND s9/ keeps the mis-declared form in BOTH hooks — a later sprint already wrote"; B_LATER=1 ;;
   *) bad "LATER: a sprint behind an existing later sprint was reported as pending (ack/stop '$3')" ;; esac
-case "$4" in none/none) ok "PRESENT: sprint-id 8 with s8/ present logs no UNADJUDICABLE row in either hook (the control)" ;;
+case "$4" in none/none) ok "PRESENT: sprint-id 8 with s8/ present logs no UNADJUDICABLE row in either hook (the control)"; B_PRES=1 ;;
   *) bad "PRESENT: the sprint's own directory exists and a hook still logged UNADJUDICABLE (ack/stop '$4')" ;; esac
 
 # MUTANTS, each in a copy of the WHOLE hooks dir. The I81 block is byte-identical in both hooks, so a
@@ -504,7 +512,8 @@ pend_mutant() { # <label> <want> <sed> <hook basenames...>
   if [ "$applied" -ne 1 ]; then bad "FIXTURE BROKEN: pending mutant $label did not apply to $*"
   else
     got="$(pend_cells "$d/$(basename "$ACK_HOOK")" "$d/$(basename "$STOP_HOOK")")"
-    if [ "$got" = "$want" ]; then ok "mutant $label is KILLED ($got)"
+    # A pend mutant is scored on the whole four-world vector, so its base is all four arms holding.
+    if [ "$got" = "$want" ]; then mutant_killed "$(( ${B_PEND:-0} && ${B_SKIP:-0} && ${B_LATER:-0} && ${B_PRES:-0} ))" "$label" "mutant $label is KILLED ($got)"
     else bad "mutant $label: got '$got', wanted '$want'"; fi
   fi
   rm -rf "$d"

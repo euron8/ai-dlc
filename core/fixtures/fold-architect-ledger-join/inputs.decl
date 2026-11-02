@@ -25,3 +25,4 @@ core/skills/ai-dlc/extensions/
 # The mutation helpers both fixtures source.
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/matrix.sh
+core/fixtures/lib/settled-net.sh

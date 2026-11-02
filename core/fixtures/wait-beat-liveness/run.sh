@@ -219,9 +219,10 @@ BEATOUT="$TMPROOT/beat.out"
 # once. The subject is unedited -- the shims are the same PATH lookup its every call already
 # makes. A world is the subject's AI_DLC_PROJECT_ROOT; it is ON only while `$WBL_CLOCK_DIR/<root
 # with / as _>` exists (fx_clock_on). Every other call -- the fixture's own, a world switched off,
-# a fractional sleep, any other `date` form -- execs the real binary, so the arms that need real
-# concurrency (a live lease holder handing off to a second live beat) keep the real clock and say
-# so (fx_clock_off).
+# a fractional sleep, any other `date` form -- execs the real binary. Concurrent beats (a lease
+# holder handing off to a live sibling, sections 18b and 21b) run on the world's clock too, ordered
+# by the per-beat poll gate (beat_gate); only section 20, whose beats block on a FIFO before any
+# poll, keeps the real clock (fx_clock_off), and nothing there is bounded by it.
 #
 # ONE CLOCK, BOTH SIDES. Whatever the fixture stamps INTO a clocked world (a transcript turn, a
 # round epoch) is read from the same offset (fx_now), never from the real clock, so a comparison
@@ -283,25 +284,30 @@ fx_settime() {  # $1 = file, $2 = epoch -- BSD then GNU, refuses on neither
 }
 
 # THE CLOCK'S OWN PROBE, BOTH DIRECTIONS, before any arm leans on it: in a clocked world a
-# `sleep 60` costs nothing and moves `date +%s` by 60; with the clock off the same world reads
-# the real clock and a fractional sleep is real. Measured on real time, so a shim that never
-# engaged (PATH order, an `env -i` farm that dropped it) fails here by name.
+# `sleep 60` reaches no real sleep and moves `date +%s` by exactly 60; with the clock off the same
+# world's shims fall through, so the sleep reaches the real binary and `date` reads the real clock.
+# STRUCTURAL, NOT TIMED. The real sleep the shims fall through to is `$WBL_REAL_SLEEP`, so for these
+# calls it names a RECORDER that logs its argument and returns: "no real sleep" is an empty log and
+# "the real sleep" is a logged `1`, and the real date is bracketed by two reads of the real clock. No
+# elapsed time decides either direction, so a loaded box cannot fail the probe (BL-868). A shim that
+# never engaged (PATH order, an `env -i` farm that dropped it) still fails here by name.
+CLOCK_REC="$TMPROOT/clock-probe.sleeps"; CLOCK_REC_BIN="$TMPROOT/clock-probe-sleep"
+{ printf '#!%s\n' "$WBL_BASH"; printf 'printf "%%s\\n" "$*" >> "%s"\n' "$CLOCK_REC"; } > "$CLOCK_REC_BIN" \
+  && chmod +x "$CLOCK_REC_BIN" || broken "cannot write the clock probe's sleep recorder"
 clock_probe() {
-  cp_w_="$TMPROOT/clock-probe"; mkdir -p "$cp_w_"; fx_clock_on "$cp_w_"
-  cp_t0_="$("$WBL_REAL_DATE" +%s)"
-  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" bash -c 'a=$(date +%s); sleep 60; b=$(date +%s); printf "%s %s %s" "$(command -v sleep)" "$a" "$b"')"
-  cp_t1_="$("$WBL_REAL_DATE" +%s)"
+  cp_w_="$TMPROOT/clock-probe"; mkdir -p "$cp_w_"; fx_clock_on "$cp_w_"; : > "$CLOCK_REC"
+  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" WBL_REAL_SLEEP="$CLOCK_REC_BIN" bash -c 'a=$(date +%s); sleep 60; b=$(date +%s); printf "%s %s %s" "$(command -v sleep)" "$a" "$b"')"  # bl868-allow: wbl-clock-shim-probe
   set -- $cp_out_
-  if [ "${1:-}" = "$WBL_CLOCK_BIN/sleep" ] && [ $(( ${3:-0} - ${2:-0} )) -ge 60 ] && [ $(( cp_t1_ - cp_t0_ )) -le 2 ]; then
-    ok "clock: in a clocked world the subject's PATH finds the shim, a sleep 60 returns at once, and date +%s moved 60"
-  else broken "clock: the shim did not engage (sleep=${1:-?}, date moved $(( ${3:-0} - ${2:-0} ))s, real ${cp_t1_}-${cp_t0_})"; fi
-  fx_clock_off "$cp_w_"
-  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" bash -c 'a=$(date +%s); sleep 1; b=$(date +%s); printf "%s %s" "$a" "$b"')"
-  fx_shims_on
-  set -- $cp_out_
-  if [ $(( ${2:-0} - ${1:-0} )) -ge 1 ] && [ $(( ${2:-0} - ${1:-0} )) -le 3 ]; then
-    ok "clock: CONTROL — the same world with its clock off reads the real clock and really sleeps"
-  else broken "clock: CONTROL FAILED — with the clock off date moved $(( ${2:-0} - ${1:-0} ))s across a 1s sleep"; fi
+  if [ "${1:-}" = "$WBL_CLOCK_BIN/sleep" ] && [ $(( ${3:-0} - ${2:-0} )) -eq 60 ] && [ ! -s "$CLOCK_REC" ]; then
+    ok "clock: in a clocked world the subject's PATH finds the shim, a sleep 60 reaches no real sleep, and date +%s moved exactly 60"
+  else broken "clock: the shim did not engage (sleep=${1:-?}, date moved $(( ${3:-0} - ${2:-0} ))s, real sleeps: $(tr '\n' ' ' < "$CLOCK_REC"))"; fi
+  fx_clock_off "$cp_w_"; fx_shims_on
+  cp_r0_="$("$WBL_REAL_DATE" +%s)"
+  cp_out_="$(cd "$cp_w_" && AI_DLC_PROJECT_ROOT="$cp_w_" WBL_REAL_SLEEP="$CLOCK_REC_BIN" bash -c 'sleep 1; date +%s')"  # bl868-allow: wbl-clock-shim-control
+  cp_r1_="$("$WBL_REAL_DATE" +%s)"
+  if [ "$(cat "$CLOCK_REC")" = 1 ] && [ "${cp_out_:-0}" -ge "$cp_r0_" ] && [ "${cp_out_:-0}" -le "$cp_r1_" ]; then
+    ok "clock: CONTROL — the same world with its clock off falls through: the sleep reached the real binary and date read the real clock"
+  else broken "clock: CONTROL FAILED — with the clock off the shims did not fall through (real sleeps: $(tr '\n' ' ' < "$CLOCK_REC"), date $cp_out_ against ${cp_r0_}..${cp_r1_})"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -331,13 +337,21 @@ fx_mtime() {
   else stat -c "%Y" "$1" 2>/dev/null || echo 0; fi
 }
 
-# Backdate a file by N seconds. BSD `date -v` and GNU `date -d` split here, and a
-# silent failure is the dangerous direction: an un-aged transcript makes every idle
-# arm read "not idle" while printing nothing wrong. So this returns nonzero and the
+# THE SEED CLOCK. A seed's age is measured against the clock of the world that reads it, never
+# against the fixture's real clock: a transcript stamped "1h ago" in real time and read on a world
+# clock started earlier is 1h PLUS however long the steps between took, so its age moved with load
+# (BL-868). mk_work records the world it made in $TMPROOT/last-world, and every seed helper stamps
+# relative to that world's virtual now (fx_seed_now) -- the age the subject reads is then the age asked
+# for plus the virtual seconds its own polls advanced, whatever any step cost in real time.
+fx_seed_now() { fs_w_=""; [ -f "$TMPROOT/last-world" ] && read -r fs_w_ < "$TMPROOT/last-world"; fx_now "${fs_w_:-/nonexistent}"; }
+
+# Backdate a file by N seconds, on the seed clock. BSD `date -r` and GNU `date -d` split
+# here, and a silent failure is the dangerous direction: an un-aged transcript makes every
+# idle arm read "not idle" while printing nothing wrong. So this returns nonzero and the
 # caller declares the fixture BROKEN rather than letting the arm score clean.
 fx_backdate() {  # $1 = file, $2 = seconds into the past
-  bd_st="$(date -v-"$2"S +%Y%m%d%H%M.%S 2>/dev/null || true)"
-  [ -n "$bd_st" ] || bd_st="$(date -d "-$2 seconds" +%Y%m%d%H%M.%S 2>/dev/null || true)"
+  bd_e_=$(( $(fx_seed_now) - $2 ))
+  bd_st="$("$WBL_REAL_DATE" -r "$bd_e_" +%Y%m%d%H%M.%S 2>/dev/null || "$WBL_REAL_DATE" -d "@$bd_e_" +%Y%m%d%H%M.%S 2>/dev/null || true)"
   [ -n "$bd_st" ] || return 1
   touch -t "$bd_st" "$1" 2>/dev/null || return 1
   return 0
@@ -353,23 +367,28 @@ fx_backdate() {  # $1 = file, $2 = seconds into the past
 # its own seed (mk_transcript_bare) and its own arm in section 23.
 mk_transcript() {  # $1 = dir, $2 = age seconds, $3 = basename
   mkdir -p "$1" || broken "cannot create $1"
-  mt_ts_="$(fx_iso $(( $(date +%s) - $2 )))"; [ -n "$mt_ts_" ] || broken "neither BSD nor GNU date can format an epoch"
+  mt_now_="$(fx_seed_now)"
+  mt_ts_="$(fx_iso $(( mt_now_ - $2 )))"; [ -n "$mt_ts_" ] || broken "neither BSD nor GNU date can format an epoch"
   { printf '{"parentUuid":null,"isSidechain":true,"agentId":"a1","type":"user","message":{"role":"user","content":[{"type":"text","text":"brief"}]},"timestamp":"%s.100Z"}\n' "$mt_ts_"
     printf '{"type":"api-request","sessionId":"s","agentId":"a1","id":"r1","timestamp":"%s.200Z","shapeHash":"7d7e1ada"}\n' "$mt_ts_"
     printf '{"parentUuid":"u1","isSidechain":true,"agentId":"a1","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"type":"assistant","timestamp":"%s.300Z"}\n' "$mt_ts_"
   } > "$1/$3" || broken "cannot write $1/$3"
-  if [ "$2" -gt 0 ]; then
-    fx_backdate "$1/$3" "$2" || broken "neither BSD nor GNU date can backdate a file here"
-    age=$(( $(date +%s) - $(fx_mtime "$1/$3") ))
-    [ "$age" -ge $(( $2 - 5 )) ] || broken "backdate did not take: asked $2s, measured ${age}s"
-  fi
+  # The mtime agrees with the lines: stamped at the seed clock's now minus the age, age 0 included.
+  fx_backdate "$1/$3" "$2" || broken "neither BSD nor GNU date can backdate a file here"
+  age=$(( mt_now_ - $(fx_mtime "$1/$3") ))
+  [ "$age" -eq "$2" ] || broken "backdate did not take: asked $2s, measured ${age}s"
 }
 
 mk_work() {  # a fresh join tree on the injected clock; prints its path
   w="$(mktemp -d "$TMPROOT/w.XXXXXX")" || broken "mktemp failed"
   mkdir -p "$w/_bmad-output" || broken "cannot create state dir"
   fx_clock_on "$w"; fx_shims_on
+  printf '%s\n' "$w" > "$TMPROOT/last-world" || broken "cannot record the seed clock's world"
   printf '%s' "$w"
+}
+fx_clock_copy() {  # $1 = source world, $2 = destination world: the destination reads the source's clock
+  cp "$(fx_clock_file "$1")" "$(fx_clock_file "$2")" && cp "$(fx_clock_file "$1").base" "$(fx_clock_file "$2").base" \
+    || broken "cannot copy the clock of $1"
 }
 
 # ---------------------------------------------------------------------------
@@ -444,23 +463,23 @@ wbl_clock_fns() {  # defines date and sleep as the in-process clock, in the call
 }
 # THE IN-PROCESS CLOCK'S OWN PROBE, BOTH DIRECTIONS, beside clock_probe: in a clocked world the
 # functions answer `sleep 60` at once and move `date +%s` by 60, and run the poll hook; with the clock
-# off the same world reads the real clock and a 1s sleep is real.
+# off the same world falls through to the real date and to `command sleep`. Structural, as
+# clock_probe is: the real sleep is the recorder for these calls, and nothing is timed.
 clock_probe_ip() {
-  cpi_w_="$TMPROOT/clock-probe-ip"; mkdir -p "$cpi_w_"; fx_clock_on "$cpi_w_"
+  cpi_w_="$TMPROOT/clock-probe-ip"; mkdir -p "$cpi_w_"; fx_clock_on "$cpi_w_"; : > "$CLOCK_REC"
   fx_onsleep "$cpi_w_" ": > '$cpi_w_/hooked'"
-  cpi_t0_="$("$WBL_REAL_DATE" +%s)"
-  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; wbl_clock_fns; a=$(date +%s); sleep 60; b=$(date +%s); printf '%s %s %s' "$(type -t sleep)" "$a" "$b" )"
-  cpi_t1_="$("$WBL_REAL_DATE" +%s)"
+  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; WBL_REAL_SLEEP="$CLOCK_REC_BIN"; wbl_clock_fns; a=$(date +%s); sleep 60; b=$(date +%s); printf '%s %s %s' "$(type -t sleep)" "$a" "$b" )"  # bl868-allow: wbl-clock-ip-probe
   set -- $cpi_out_
-  if [ "${1:-}" = function ] && [ $(( ${3:-0} - ${2:-0} )) -eq 60 ] && [ $(( cpi_t1_ - cpi_t0_ )) -le 2 ] && [ -e "$cpi_w_/hooked" ]; then
-    ok "clock: in process, a clocked world's sleep 60 returns at once, date +%s moves exactly 60, and the poll hook ran"
-  else broken "clock: the in-process clock did not engage (sleep=${1:-?}, date moved $(( ${3:-0} - ${2:-0} ))s, real ${cpi_t1_}-${cpi_t0_}, hook=$([ -e "$cpi_w_/hooked" ] && echo ran || echo no))"; fi
+  if [ "${1:-}" = function ] && [ $(( ${3:-0} - ${2:-0} )) -eq 60 ] && [ ! -s "$CLOCK_REC" ] && [ -e "$cpi_w_/hooked" ]; then
+    ok "clock: in process, a clocked world's sleep 60 reaches no real sleep, date +%s moves exactly 60, and the poll hook ran"
+  else broken "clock: the in-process clock did not engage (sleep=${1:-?}, date moved $(( ${3:-0} - ${2:-0} ))s, real sleeps: $(tr '\n' ' ' < "$CLOCK_REC"), hook=$([ -e "$cpi_w_/hooked" ] && echo ran || echo no))"; fi
   fx_clock_off "$cpi_w_"; fx_shims_on
-  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; wbl_clock_fns; a=$(date +%s); sleep 1; b=$(date +%s); printf '%s %s' "$a" "$b" )"
-  set -- $cpi_out_
-  if [ $(( ${2:-0} - ${1:-0} )) -ge 1 ] && [ $(( ${2:-0} - ${1:-0} )) -le 3 ]; then
-    ok "clock: in process, CONTROL — the same world with its clock off reads the real clock and really sleeps"
-  else broken "clock: in process, CONTROL FAILED — with the clock off date moved $(( ${2:-0} - ${1:-0} ))s across a 1s sleep"; fi
+  cpi_r0_="$("$WBL_REAL_DATE" +%s)"
+  cpi_out_="$( AI_DLC_PROJECT_ROOT="$cpi_w_"; export WBL_REAL_SLEEP="$CLOCK_REC_BIN"; wbl_clock_fns; sleep 1; date +%s )"  # bl868-allow: wbl-clock-ip-control
+  cpi_r1_="$("$WBL_REAL_DATE" +%s)"
+  if [ "$(cat "$CLOCK_REC")" = 1 ] && [ "${cpi_out_:-0}" -ge "$cpi_r0_" ] && [ "${cpi_out_:-0}" -le "$cpi_r1_" ]; then
+    ok "clock: in process, CONTROL — the same world with its clock off falls through: the sleep reached the real binary and date read the real clock"
+  else broken "clock: in process, CONTROL FAILED — with the clock off the functions did not fall through (real sleeps: $(tr '\n' ' ' < "$CLOCK_REC"), date $cpi_out_ against ${cpi_r0_}..${cpi_r1_})"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1754,80 +1773,6 @@ M34_status_no_delivered_record() {
     *) mutant_killed "${B_s15d:-0}" status-no-delivered-record "MUTANT status-no-delivered-record: without the record a consumed seat reads unarmed or UNSETTLED — section 15d catches it" ;; esac
 }
 
-# ---------------------------------------------------------------------------
-# THE GATED SLEEP STUB (BL-703). An arm that must place a fixture event BETWEEN two steps of a
-# beat cannot do it with a wall-clock `( sleep 1.5; edit ) &`: load stretches the beat's steps and
-# the edit lands before the first observation or after the beat gave up. The only executable
-# `sleep` in the subject is its poll sleep, so a `sleep` first on the beat's PATH is an EVENT the
-# subject writes: `gate_stub <dir> [tenths]` writes `<dir>/bin/sleep`, which appends its argument
-# to `<dir>/sleep.log`, then waits for `<dir>/gate` (bounded: `tenths` x 0.1s of the REAL sleep,
-# default 300), then execs the real sleep. A writer blocks on the log, acts, and touches the gate.
-# A pre-touched gate makes it a plain logging stub.
-#
-# THE BOUND FAILS LOUD. A gate never seen within the bound writes `<dir>/expired` and the stub
-# exits 3 without sleeping; every gated arm reads that marker and refuses as BROKEN, so an expired
-# wait can never read as a pass or as a finding. The real sleep and bash are resolved HERE, before
-# any PATH is prepended (under the hermetic runner PATH is a tool farm and `env -i`). The stub dir
-# must sit under this fixture's TMPROOT and only the beat's own PATH carries it; nothing exports it.
-# Sets STUB_DIR, STUB_PATH, STUB_LOG, STUB_GATE, STUB_EXPIRED.
-# ---------------------------------------------------------------------------
-STUB_DIR=""; STUB_PATH=""; STUB_LOG=""; STUB_GATE=""; STUB_EXPIRED=""
-gate_stub() {  # $1 = dir under $TMPROOT, $2 = bound in tenths (default 300)
-  gs_real_sleep_="$(command -v sleep)"; gs_real_bash_="$(command -v bash)"
-  [ -n "$gs_real_sleep_" ] && [ -n "$gs_real_bash_" ] || broken "cannot resolve sleep/bash for the gated sleep stub"
-  STUB_DIR="$1"
-  case "$STUB_DIR" in "$TMPROOT"/*) ;; *) broken "gated sleep stub dir '$STUB_DIR' is not under the fixture's mktemp root" ;; esac
-  mkdir -p "$STUB_DIR/bin" || broken "cannot create the gated sleep stub dir"
-  STUB_LOG="$STUB_DIR/sleep.log"; STUB_GATE="$STUB_DIR/gate"; STUB_EXPIRED="$STUB_DIR/expired"
-  : > "$STUB_LOG" || broken "cannot create the gated sleep stub log"
-  rm -f "$STUB_GATE" "$STUB_EXPIRED"
-  { printf '#!%s\n' "$gs_real_bash_"
-    printf 'printf "%%s\\n" "$*" >> "%s"\n' "$STUB_LOG"
-    printf 'n_=%s\n' "${2:-300}"
-    printf 'while [ ! -e "%s" ]; do\n' "$STUB_GATE"
-    printf '  [ "$n_" -gt 0 ] || { : > "%s"; exit 3; }\n' "$STUB_EXPIRED"
-    printf '  "%s" 0.1; n_=$(( n_ - 1 ))\n' "$gs_real_sleep_"
-    printf 'done\n'
-    printf 'exec "%s" "$@"\n' "$gs_real_sleep_"
-  } > "$STUB_DIR/bin/sleep" || broken "cannot write the gated sleep stub"
-  chmod +x "$STUB_DIR/bin/sleep" || broken "cannot make the gated sleep stub executable"
-  STUB_PATH="$STUB_DIR/bin:$PATH"
-}
-stub_has_log() { [ -s "$STUB_LOG" ]; }
-# THE STUB'S OWN CONTROL, IN BOTH DIRECTIONS, on a probe stub of its own: without the gate a
-# `sleep 0` through STUB_PATH is logged and stays blocked; the gate releases it with exit 0; and a
-# gate never written expires -- the `expired` marker appears and the stub exits non-zero. A stub
-# that never blocked would make every gated arm a wall-clock race again, and one that blocked
-# forever or expired silently would make it a false pass. Refuses as BROKEN on any miss.
-gate_stub_control() {
-  gate_stub "$(mktemp -d "$TMPROOT/gctl.XXXXXX")" 300
-  env PATH="$STUB_PATH" sleep 0 & gc_p_=$!
-  until_ok 300 stub_has_log || { kill "$gc_p_" 2>/dev/null; broken "gated stub control: a sleep through STUB_PATH logged nothing"; }
-  "$WBL_REAL_SLEEP" 0.3
-  pid_gone "$gc_p_" && broken "gated stub control: the stub did not block without its gate"
-  : > "$STUB_GATE"
-  until_ok 300 pid_gone "$gc_p_" || { kill "$gc_p_" 2>/dev/null; broken "gated stub control: the gate did not release the stub"; }
-  wait "$gc_p_"; gc_rc_=$?
-  [ "$gc_rc_" -eq 0 ] && [ ! -e "$STUB_EXPIRED" ] || broken "gated stub control: a released stub exited $gc_rc_ or wrote expired"
-  gate_stub "$(mktemp -d "$TMPROOT/gctl.XXXXXX")" 3
-  env PATH="$STUB_PATH" sleep 0; gc_rc_=$?
-  [ "$gc_rc_" -ne 0 ] && [ -e "$STUB_EXPIRED" ] || broken "gated stub control: an ungated stub past its bound exited $gc_rc_ with no expired marker"
-}
-# The writer every gated revision arm uses: block until the beat logs its first poll sleep (the
-# sweep's first observation always precedes it), edit rv.md above the marker, open the gate. A
-# writer whose wait ran out leaves `writer-timeout` and no gate, so the stub expires too.
-gated_revision_writer() {  # $1 = workdir
-  if until_ok 300 stub_has_log; then
-    printf '%s\n- an edit above the marker\n%s\n' "$SKELETON" "$MARKER" > "$1/rv.md"
-    : > "$STUB_GATE"
-  else : > "$STUB_DIR/writer-timeout"; fi
-}
-gated_refuse_if_expired() {  # $1 = arm label
-  [ -e "$STUB_EXPIRED" ] && broken "$1: the gated sleep stub's bound expired before its gate opened — no verdict"
-  [ -e "$STUB_DIR/writer-timeout" ] && broken "$1: the beat never entered its poll sleep, so the edit never landed — no verdict"
-  case "$STUB_DIR" in "$TMPROOT"/*) ;; *) broken "$1: gated stub dir '$STUB_DIR' left the fixture's mktemp root" ;; esac
-}
-
 # The REVISED-AFTER-MARKER count must outlive DELIVERED: a beat's printed line is read once and
 # gone, so `<key>.revised` is the record a repair brief reads. Only --reset (or a new round) clears it.
 # The edit is ordered by the gated stub, not by a clock: it lands inside the beat's first poll
@@ -2362,36 +2307,62 @@ S18a_dispatch_keeps_liveness() {
 
 # Beat B (armed --dispatch) holds the marker; a live registered sibling A stands behind it; B's
 # target lands and B exits. Its EXIT trap must hand the marker to A. A is a registration the
-# fixture plants -- `.lease-<pid>` with an unexpired epoch, naming a `sleep` this fixture started
-# -- rather than a second real beat, because a real A re-stamps the marker on its own next poll
-# and would mask a holder that dropped it. Every wait below is bounded on PROGRESS and refuses as
-# BROKEN (exit 2) on none; nothing FAILs on a clock.
+# fixture plants -- `.lease-<pid>` naming a process this fixture holds open -- rather than a second
+# real beat, because a real A re-stamps the marker on its own next poll and would mask a holder
+# that dropped it.
+#
+# NOTHING HERE IS BOUNDED BY TIME (BL-868). B runs on the world's injected clock and BLOCKS in its
+# first poll sleep (beat_gate) until the fixture has planted A and written b.md, so "B exited before
+# A registered" cannot happen however slow any step is. A is a subshell alive while the world dir
+# exists, until the fixture kills it (so a `broken` exit leaves no orphan), and its registration carries an epoch no run can
+# reach -- an expiring `sleep 120` and a `now + 300` epoch were the same bound twice. Every wait is
+# on a condition, and ends early only when the process that must produce it is gone.
 HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
-until_ok() {  # $1 = tenths, rest = command -> 0 once it holds, 1 when the bound runs out
-  uo_n_="$1"; shift
-  while [ "$uo_n_" -gt 0 ]; do "$@" && return 0; "$WBL_REAL_SLEEP" 0.1; uo_n_=$(( uo_n_ - 1 )); done
-  return 1
-}
 marker_pid() { mp_=""; IFS= read -r mp_ 2>/dev/null < "$1/_bmad-output/.beat-inflight"; case "$mp_" in *' '*) printf '%s' "${mp_#* }" ;; esac; }
-marker_present() { [ -n "$(marker_pid "$1")" ]; }
-marker_names() { [ "$(marker_pid "$1")" = "$2" ]; }  # $1 = workdir, $2 = pid
 pid_gone() { ! kill -0 "$1" 2>/dev/null; }
+# An UNBOUNDED condition wait: 0 once the command holds, 1 when the pid that must make it hold is
+# gone without it (the command is tried once more after the pid is gone, for a write just before exit).
+wait_until() {  # $1 = pid of the producer, rest = command
+  wu_p_="$1"; shift
+  while :; do
+    "$@" && return 0
+    pid_gone "$wu_p_" && { "$@"; return; }
+    "$WBL_REAL_SLEEP" 0.1
+  done
+}
+# THE PER-BEAT GATE, ON THE WORLD'S POLL HOOK. A beat run with WBL_BEAT_TAG=<t> (a variable exported
+# into that beat, never keyed on `$!`) writes `<world>/.asleep-<t>` on every poll sleep and blocks
+# there until `<world>/.go-<t>` exists or the world is gone; a beat with no tag passes straight through.
+# The first `.asleep-<t>` means the beat is past its arming lease, its sweep and its post-sweep lease,
+# and inside its poll loop -- an event the subject's own loop produces, not a clock. Once `.go-<t>`
+# exists every later poll returns at once and the beat runs out its quantum in virtual seconds, so a
+# released beat always ends, under any mutant.
+# Each poll is also numbered: poll <n> writes `.asleep-<t>.<n>` and is released by `.go-<t>.<n>` as well
+# as by `.go-<t>`, so a fixture can let a beat take exactly one more poll and wait for the next.
+beat_gate() {  # $1 = world
+  fx_onsleep "$1" "case \"\${WBL_BEAT_TAG:-}\" in ?*) g_t_=\"\$WBL_BEAT_TAG\"; g_n_=0
+  [ -f '$1/.polls-'\"\$g_t_\" ] && read -r g_n_ < '$1/.polls-'\"\$g_t_\"; g_n_=\$(( g_n_ + 1 ))
+  printf '%s' \"\$g_n_\" > '$1/.polls-'\"\$g_t_\"; : > '$1/.asleep-'\"\$g_t_\"; : > '$1/.asleep-'\"\$g_t_.\$g_n_\"
+  while [ ! -e '$1/.go-'\"\$g_t_\" ] && [ ! -e '$1/.go-'\"\$g_t_.\$g_n_\" ] && [ -d '$1' ]; do \"\$WBL_REAL_SLEEP\" 0.1; done ;; esac"
+}
 heir_world() {  # $1 = subject (in a sibling dir); leaves W, sets HEIR_*
-  W="$(mk_work)"; fx_clock_off "$W"; HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
+  W="$(mk_work)"; HEIR_A_PID=""; HEIR_B_PID=""; HEIR_AFTER=""
   mk_ledger_row "$W" toolu_wbl661heir $(( $(date +%s) - 30 ))
+  beat_gate "$W"
   ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
-      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" WBL_BEAT_TAG=B \
       AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" --dispatch toolu_wbl661heir b.md ) > "$BEATOUT.B" 2>&1 &
   hw_bg_=$!
-  until_ok 300 marker_present "$W" || broken "heir: the --dispatch beat never wrote the marker"
+  wait_until "$hw_bg_" test -e "$W/.asleep-B" || { wait "$hw_bg_"; broken "heir: the --dispatch beat exited before its first poll sleep"; }
   HEIR_B_PID="$(marker_pid "$W")"
-  sleep 120 & HEIR_A_PID=$!
-  printf '%s' "$(( $(date +%s) + 300 ))" > "$W/_bmad-output/.wait-beats/.lease-$HEIR_A_PID" || broken "heir: cannot plant A's registration"
+  ( while [ -d "$W" ]; do "$WBL_REAL_SLEEP" 0.1; done ) & HEIR_A_PID=$!
+  printf '%s' 9999999999 > "$W/_bmad-output/.wait-beats/.lease-$HEIR_A_PID" || broken "heir: cannot plant A's registration"
   printf 'b\n' > "$W/b.md"
-  until_ok 300 pid_gone "$HEIR_B_PID" || broken "heir: the --dispatch beat never exited after its target landed"
+  : > "$W/.go-B"
+  wait "$hw_bg_"
   HEIR_AFTER="$(marker_pid "$W")"
   kill "$HEIR_A_PID" 2>/dev/null; wait "$HEIR_A_PID" 2>/dev/null
-  wait "$hw_bg_" 2>/dev/null
+  return 0
 }
 S18b_dispatch_holder_hands_off() {
   heir_world "$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
@@ -2566,31 +2537,27 @@ M61_since_warn_ignores_dispatch() {
 #     steps are forced, each on a FIFO this fixture holds open: the --dispatch ledger read
 #     (20a, which the lease once followed) and the sweep's --shard-header check (20b, which it
 #     already preceded -- a pin). Each case first proves the beat REACHED the blocking read (the
-#     FIFO's writer opens only once a reader has); no progress there is FIXTURE BROKEN, exit 2,
-#     never a FAIL. Nothing here reads a clock.
+#     FIFO's writer opens only once a reader has); a beat that exits without reaching it is
+#     FIXTURE BROKEN, exit 2, never a FAIL. Nothing here reads a clock, and nothing is bounded by one.
 # ===========================================================================
 BLK_PID=""; BLK_MARK=""
-fifo_hold() {  # $1 = fifo, $2 = reached file, $3 = release file: opens the writer, records it, holds until released
-  ( exec 3> "$1"; : > "$2"; while [ ! -e "$3" ]; do "$WBL_REAL_SLEEP" 0.1; done; printf '%s\n' "${4:-}" >&3 ) &
+# THE SECOND OPEN CANNOT BLOCK. A mutant that re-reads the FIFO ledger once found no writer and blocked for
+# ever (a matrix cell hung 33 minutes), so the beat was once given 30s of real time and then killed -- an
+# elapsed-time bound that decided BLK_MARK, the arm's own assertion (BL-868). Instead, before the release the
+# path is replaced by a REGULAR file holding the same line: the beat already blocked in read() keeps the
+# FIFO it opened, and every later open of the path reads the file and returns. The beat then always ends,
+# and is waited for plainly.
+fifo_hold() {  # $1 = fifo, $2 = reached file, $3 = release file, $4 = the line: opens the writer, records it, holds until released
+  printf '%s\n' "${4:-}" > "$1.after" || broken "lease: cannot write the FIFO's replacement"
+  ( exec 3> "$1"; : > "$2"; while [ ! -e "$3" ] && [ -d "${3%/*}" ]; do "$WBL_REAL_SLEEP" 0.1; done; printf '%s\n' "${4:-}" >&3 ) &
   FH_PID=$!
 }
-# Ends a process AND every descendant (children first). Killing only the beat's bash leaves its `sed` reading a
-# FIFO that has no writer, and the final `wait` on the beat then never returns.
-kill_tree() {  # $1 = pid
-  local kt_c_
-  for kt_c_ in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$kt_c_"; done
-  kill "$1" 2>/dev/null
-  return 0
-}
-blocked_lease() {  # $1 = workdir, $2 = reached file, $3 = release file; reads BLK_PID; sets BLK_MARK
-  until_ok 300 test -e "$2" || { kill_tree "$BLK_PID"; kill "$FH_PID" 2>/dev/null; broken "lease: the beat never reached its blocking read"; }
+blocked_lease() {  # $1 = workdir, $2 = reached file, $3 = release file, $4 = the fifo; reads BLK_PID; sets BLK_MARK
+  wait_until "$BLK_PID" test -e "$2" || { : > "$3"; kill "$FH_PID" 2>/dev/null; wait "$FH_PID" 2>/dev/null; broken "lease: the beat exited without reaching its blocking read"; }
   BLK_MARK=0; [ -n "$(marker_pid "$1")" ] && [ "$(marker_pid "$1")" = "$BLK_PID" ] && BLK_MARK=1
+  mv -f "$4.after" "$4" || broken "lease: cannot replace the FIFO before the release"
   : > "$3"
-  # BOUNDED. A mutant that re-reads the FIFO ledger finds no writer and blocks for ever; waiting on it
-  # hung a matrix cell for 33 minutes. After the release the beat gets 30s of real time, then it is killed
-  # and the arm's own assertions score the missing WAITING line. The kill takes the beat's whole process tree.
   wait "$FH_PID" 2>/dev/null
-  until_ok 300 pid_gone "$BLK_PID" || { kill_tree "$BLK_PID"; BLK_MARK=0; }
   wait "$BLK_PID" 2>/dev/null
 }
 ledger_fifo_world() {  # $1 = subject (in a sibling dir); leaves W, sets BLK_MARK
@@ -2602,7 +2569,7 @@ ledger_fifo_world() {  # $1 = subject (in a sibling dir); leaves W, sets BLK_MAR
       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
       AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" --dispatch toolu_wbl541 deliv.md ) > "$BEATOUT" 2>&1 &
   BLK_PID=$!
-  blocked_lease "$W" "$W/reached" "$W/release"
+  blocked_lease "$W" "$W/reached" "$W/release" "$W/_bmad-output/spawn-ledger.jsonl"
   OUT="$(cat "$BEATOUT")"
 }
 S20a_lease_before_dispatch_read() {
@@ -2624,7 +2591,7 @@ S20b_lease_before_shard_check() {
       AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
       AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$SD/wait-for-deliverable.sh" --since "$(( $(date +%s) - 30 ))" --complete --shard-header convergence s.md ) > "$BEATOUT" 2>&1 &
   BLK_PID=$!
-  blocked_lease "$W" "$W/reached" "$W/release"
+  blocked_lease "$W" "$W/reached" "$W/release" "$W/hdr.fifo"
   OUT="$(cat "$BEATOUT")"
   if [ -e "$W/reached" ]; then ok "lease-early: CONTROL — the sweep reached the stub header check"
   else bad "lease-early: CONTROL FAILED — the sweep never ran the header check: $OUT"; fi
@@ -2648,20 +2615,23 @@ M40_lease_after_dispatch() {
 #     marker and its registration at the root's `_bmad-output`, while its counters stay in the
 #     custom dir -- the control that the state dir was honoured at all.
 # ===========================================================================
-# Re-evaluated on every poll: passed to until_ok as a NAME, never as an expanded `$(...)`.
 cs_counter_written() { for cw_ in "$1"/_bmad-output/seat-q/.wait-beats/*; do [ -f "$cw_" ] && return 0; done; return 1; }
+# Read once, at the beat's first poll sleep (beat_gate): by then the beat has armed its lease, swept (its
+# counters are written) and re-stamped the lease before the loop, so the marker is where it will ever be.
+# A 5s poll for the marker once decided the mutant's kill by timing out (BL-868); there is no wait now.
 custom_state_world() {  # $1 = subject; leaves W, sets CS_MARK (holder pid at root, or ''), CS_LEASE, CS_CTR
-  W="$(mk_work)"; fx_clock_off "$W"; CS_MARK=""; CS_LEASE=0; CS_CTR=0
+  W="$(mk_work)"; CS_MARK=""; CS_LEASE=0; CS_CTR=0
+  beat_gate "$W"
   ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=40 \
-      AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" WBL_BEAT_TAG=C \
       AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" deliv.md ) > "$BEATOUT" 2>&1 &
   cs_p_=$!
-  until_ok 300 cs_counter_written "$W" \
-    || { kill "$cs_p_" 2>/dev/null; broken "custom-state: the beat never wrote a counter in its state dir"; }
-  CS_CTR=1
-  until_ok 50 marker_present "$W" && CS_MARK="$(marker_pid "$W")"
+  wait_until "$cs_p_" test -e "$W/.asleep-C" || { wait "$cs_p_"; broken "custom-state: the beat exited before its first poll sleep"; }
+  cs_counter_written "$W" && CS_CTR=1
+  CS_MARK="$(marker_pid "$W")"
   [ -f "$W/_bmad-output/.wait-beats/.lease-$cs_p_" ] && CS_LEASE=1
   printf 'x\n' > "$W/deliv.md"
+  : > "$W/.go-C"
   wait "$cs_p_" 2>/dev/null
   CS_PID="$cs_p_"
 }
@@ -2677,32 +2647,42 @@ S21_lease_at_root_under_custom_state_dir() {
 # armed with a custom state dir, registers behind it; B's target lands and B exits. B's heir scan
 # must find A, so A's `.lease-<pid>` has to sit where B scans. A's post-sweep beat_alive (the one
 # before its poll loop) CAN re-take the marker -- under the mutant it sees no registration for B
-# and does -- so b.md is written only once A is past it and inside its 30s poll sleep (A's sleep
-# stub has logged), and only once the marker names B again (B's 1s poll re-takes a marker A took).
-# From there A cannot touch the marker inside the window read here, so a heir found is B's
-# handoff, not A's poll. Ordered on events the subject writes, never on a clock (BL-703).
+# and does -- so b.md is written only once A is past it and blocked in its first poll sleep, and only
+# once the marker names B again (B's next poll re-takes a marker A took).
+# ON THE WORLD'S CLOCK, GATED PER POLL (BL-868). Both beats share the world's injected clock and its poll
+# hook (beat_gate), each under its own tag, so the order is fixed by events and no real second passes in
+# any sleep. In virtual seconds from B's arming t0: B arms, sweeps, holds the marker (epoch t0+3) and
+# blocks in poll 1 at t0+1; A arms at t0+1 (B's registration is live, so the fixed A leaves the marker
+# alone; the mutant's A, seeing no registration where it scans, takes it), and blocks in its 30s poll at
+# t0+31; B's poll 1 is released, B re-takes the now-expired marker and blocks in poll 2 at t0+32; b.md is
+# written and B released, delivers and exits. A's registration reads t0+91 > t0+32 and A is alive, so the
+# heir scan finds it exactly when it scans the directory A registered in. The real clock enters only as
+# b.md's mtime, which is after the join epoch whatever the load.
 cross_heir_world() {  # $1 = subject; leaves W, sets XH_A, XH_B, XH_AFTER
-  W="$(mk_work)"; fx_clock_off "$W"; XH_A=""; XH_B=""; XH_AFTER=""
-  gate_stub "$(mktemp -d "$TMPROOT/xhstub.XXXXXX")"; : > "$STUB_GATE"   # a plain logging stub for A
-  A_STUB_LOG="$STUB_LOG"; A_STUB_PATH="$STUB_PATH"
+  W="$(mk_work)"; XH_A=""; XH_B=""; XH_AFTER=""
+  beat_gate "$W"
   ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS=40 AI_DLC_WAIT_POLL_SECS=1 \
-      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" WBL_BEAT_TAG=B \
       AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" b.md ) > "$BEATOUT.B" 2>&1 &
   XH_B=$!
-  until_ok 300 marker_present "$W" || { kill "$XH_B" 2>/dev/null; broken "cross-heir: beat B never wrote the marker"; }
-  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export PATH="$A_STUB_PATH" AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
-      AI_DLC_WAIT_POLL_SECS=30 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+  xh_stop_() { : > "$W/.go-A"; : > "$W/.go-B"; wait "$XH_A" 2>/dev/null; wait "$XH_B" 2>/dev/null; broken "cross-heir: $1"; }
+  wait_until "$XH_B" test -e "$W/.asleep-B.1" || xh_stop_ "beat B exited before its first poll sleep"
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_STATE_DIR=_bmad-output/seat-q AI_DLC_WAIT_BEAT_SECS=80 \
+      AI_DLC_WAIT_POLL_SECS=30 AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" WBL_BEAT_TAG=A \
       AI_DLC_PROJECT_ROOT="$PWD" WFD_SELF_PID="$("$WBL_BASH" -c 'echo $PPID')" && wbl_ip "$1" a.md ) > "$BEATOUT.A" 2>&1 &
   XH_A=$!
-  until_ok 300 cs_counter_written "$W" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never reached its sweep"; }
-  until_ok 300 [ -s "$A_STUB_LOG" ] || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat A never entered its poll sleep"; }
-  until_ok 300 marker_names "$W" "$XH_B" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: the marker never named B once A was asleep"; }
-  gated_refuse_if_expired cross-heir
+  wait_until "$XH_A" test -e "$W/.asleep-A.1" || xh_stop_ "beat A exited before its first poll sleep"
+  cs_counter_written "$W" || xh_stop_ "beat A swept without writing a counter in its own state dir"
+  : > "$W/.go-B.1"
+  wait_until "$XH_B" test -e "$W/.asleep-B.2" || xh_stop_ "beat B exited before its second poll sleep"
+  [ "$(marker_pid "$W")" = "$XH_B" ] || xh_stop_ "the marker names '$(marker_pid "$W")', not B, once A was asleep"
   printf 'b\n' > "$W/b.md"
-  until_ok 300 pid_gone "$XH_B" || { kill "$XH_A" "$XH_B" 2>/dev/null; broken "cross-heir: beat B never exited after its target landed"; }
+  : > "$W/.go-B"
+  wait "$XH_B" 2>/dev/null
   XH_AFTER="$(marker_pid "$W")"
-  for xp_ in $(pgrep -P "$XH_A" 2>/dev/null); do kill "$xp_" 2>/dev/null; done
-  kill "$XH_A" 2>/dev/null; wait "$XH_A" 2>/dev/null; wait "$XH_B" 2>/dev/null
+  : > "$W/.go-A"
+  wait "$XH_A" 2>/dev/null
+  return 0
 }
 S21b_heir_across_state_dirs() {
   cross_heir_world "$SUBJ"
@@ -2753,7 +2733,7 @@ aged_shell_beat() {  # $1 = subject, $2 = workdir, $3 = same|other, [$4 = a dir 
     r="$(cat "$m")"; r="$(( $(fx_now "$2") - 120 ))${r#"${r%% *}"}"
     [ "$3" = other ] && r="${r%% *} Thu Jan 1 00:00:00 1970"
     printf "%s" "$r" > "$m" || exit 3
-    touch -t "$("$WBL_REAL_DATE" -v-300S +%Y%m%d%H%M.%S 2>/dev/null || "$WBL_REAL_DATE" -d "-300 seconds" +%Y%m%d%H%M.%S)" "$m" || exit 3
+    fx_backdate "$m" 300 || exit 3   # on the world's clock: past the prune age whatever the steps cost
     fx_onsleep "$2" "[ -e '$2/deliv.md' ] || { printf 'x\n' > '$2/deliv.md'; fx_vtouch '$2/deliv.md'; }"
     case "${4:-}" in "") ;; =*) PATH="${4#=}" ;; *) PATH="$4:$PATH" ;; esac
     WBL_CHAIN=1 AI_DLC_WAIT_BEAT_SECS=60 wbl_ip "$1" deliv.md ) > "$BEATOUT" 2>&1
@@ -2784,7 +2764,7 @@ S22_chained_by_shell_identity() {
 # ===========================================================================
 nops_stubs() {  # -> $TMPROOT/nops (a `ps` that exits 1) and $TMPROOT/nops/both (that `ps` and a `perl` that exits 1)
   sb_d_="$TMPROOT/nops"; mkdir -p "$sb_d_/both" || broken "cannot create the ps stub dirs"
-  printf '#!/bin/sh\nexit 1\n' > "$sb_d_/ps" && chmod +x "$sb_d_/ps" && cp "$sb_d_/ps" "$sb_d_/both/ps" && cp "$sb_d_/ps" "$sb_d_/both/perl" \
+  printf '#!/bin/bash\nexit 1\n' > "$sb_d_/ps" && chmod +x "$sb_d_/ps" && cp "$sb_d_/ps" "$sb_d_/both/ps" && cp "$sb_d_/ps" "$sb_d_/both/perl" \
     || broken "cannot write the ps/perl stubs"
   [ "$(PATH="$sb_d_:$PATH" command -v ps)" = "$sb_d_/ps" ] || broken "the ps stub is not first on PATH"
 }
@@ -2850,7 +2830,7 @@ noperl_path() {  # -> $TMPROOT/noperl: links to every tools.decl tool except per
     case "$np_t_" in date) np_p_="$WBL_REAL_DATE" ;; sleep) np_p_="$WBL_REAL_SLEEP" ;; esac
     ln -sf "$np_p_" "$np_d_/$np_t_" || broken "cannot link $np_t_"
   done < "$HERE/tools.decl"
-  printf '#!/bin/sh\nexit 0\n' > "$np_d_/ps" && chmod +x "$np_d_/ps" || broken "cannot write the empty ps stub"
+  printf '#!/bin/bash\nexit 0\n' > "$np_d_/ps" && chmod +x "$np_d_/ps" || broken "cannot write the empty ps stub"
   [ -z "$(PATH="$np_d_" command -v perl)" ] && [ "$(PATH="$np_d_" command -v ps)" = "$np_d_/ps" ] \
     || broken "the no-perl PATH still finds perl, or not the empty ps"
 }
@@ -2918,7 +2898,7 @@ M43_chained_by_clock() {
 # ===========================================================================
 mk_wedged() {  # $1 = dir, $2 = basename, $3 = trailing request lines, $4 = line type (api-request|api-request-blob)
   mkdir -p "$1" || broken "cannot create $1"
-  mw_old_="$(fx_iso $(( $(date +%s) - 3600 )))"; mw_now_="$(fx_iso "$(date +%s)")"
+  mw_e_="$(fx_seed_now)"; mw_old_="$(fx_iso $(( mw_e_ - 3600 )))"; mw_now_="$(fx_iso "$mw_e_")"
   { printf '{"parentUuid":"u1","isSidechain":true,"agentId":"a1","message":{"role":"assistant","content":[{"type":"tool_use","name":"Skill"}]},"type":"assistant","timestamp":"%s.300Z"}\n' "$mw_old_"
     mw_i_=0; while [ "$mw_i_" -lt "$3" ]; do
       printf '{"type":"%s","sessionId":"s","agentId":"a1","id":"r%s","timestamp":"%s.200Z","shapeHash":"7d7e1ada"}\n' "$4" "$mw_i_" "$mw_now_"
@@ -2927,7 +2907,7 @@ mk_wedged() {  # $1 = dir, $2 = basename, $3 = trailing request lines, $4 = line
 }
 mk_recovered() {  # $1 = dir, $2 = basename: 3 requests, then a fresh assistant line -- the run was answered
   mkdir -p "$1" || broken "cannot create $1"
-  mr_old_="$(fx_iso $(( $(date +%s) - 3600 )))"; mr_now_="$(fx_iso "$(date +%s)")"
+  mr_e_="$(fx_seed_now)"; mr_old_="$(fx_iso $(( mr_e_ - 3600 )))"; mr_now_="$(fx_iso "$mr_e_")"
   { printf '{"isSidechain":true,"agentId":"a1","message":{"role":"assistant"},"type":"assistant","timestamp":"%s.300Z"}\n' "$mr_old_"
     for mr_i_ in 0 1 2; do
       printf '{"type":"api-request","sessionId":"s","agentId":"a1","id":"r%s","timestamp":"%s.200Z"}\n' "$mr_i_" "$mr_now_"; done
@@ -2997,7 +2977,8 @@ S23c_dispatch_judges_its_own_transcript() {
   else bad "stalled: a live sibling hid the dispatched agent's wedge under --dispatch: $OUT"; fi
   rm -rf "$W"
   # CONTROL: the same directory without --dispatch takes the newest turn across the session.
-  W="$(mk_work)"; beat "$SUBJ" "$W" 60 "$TD"
+  # The seeds were stamped on the first world's clock, so the second world reads that clock.
+  W0="$W"; W="$(mk_work)"; fx_clock_copy "$W0" "$W"; beat "$SUBJ" "$W" 60 "$TD"
   if has "$LIVE_LINE" && has "${STALL_LINE}agent-awedge.jsonl"; then ok "stalled: CONTROL — without --dispatch the session reads live and still names the stalled transcript"
   else bad "stalled: CONTROL FAILED — the whole-session reading is not the live sibling's: $OUT"; fi
   rm -rf "$W" "$TD"

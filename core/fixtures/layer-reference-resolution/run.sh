@@ -78,6 +78,7 @@
 # MUTANT-MATRIX w12-self-off decides=w12self twins=w12note
 # MUTANT-MATRIX w12-window-one-line decides=w12wrap21 twins=w12shadow5
 # MUTANT-MATRIX w12-section-rebuttal-off decides=w12sect23 twins=w12wrap21
+# MUTANT-MATRIX pool-width-2 decides=pool-width twins=pool-self-probe
 # MUTANT-MATRIX-DYNAMIC collector-loop why=Part 5b hands each worker verdict to mutant_killed by label, one row above per label
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-reference-resolution/run.sh --matrix
 set -uo pipefail
@@ -135,7 +136,8 @@ B_pristine=0
 # + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
 # + 1 W12 premise + 12 W12 mutants + 3 HOOK-namespace mutants + 1 pool-accounting arm + 3 collector self-probes
 # + 1 matrix-mode arm (matrix run: MATRIX lines emitted; plain run: no matrix-only cell executed).
-EXPECTED_ASSERTIONS=43
+# + 1 pool self-probe + 1 pool-width-2 mutant (the pool-width arm replaced the old in-flight floor one for one).
+EXPECTED_ASSERTIONS=45
 
 echo "layer-reference-resolution:"
 
@@ -561,16 +563,115 @@ collect_into "$probe_dir/list" "$probe_dir"
   && ok "self-probe: the list-walk reports a seeded missing verdict (1 absent, 1 present) — a directory listing would report 1 and 0 findings" \
   || bad "self-probe BROKEN: the list-walk scored $c_seen present / $c_missing missing on a 1-and-1 seed — the collector below cannot be trusted"
 
-# The concurrency arm is NOT here: it reads the workers' own start/end stamps, so it can only
-# run after collection. See "the pool ACTUALLY ran concurrently" below.
+# --- THE POOL'S WIDTH, READ AT A SETTLED STATE (BL-868: no verdict here depends on load) ------
+# Each worker writes a nonce marker and parks itself (SIGSTOP, worker.sh) before any work. The pool
+# runs as its own process group (`set -m`), and pool_run waits until that group is SETTLED: every
+# live member blocked with no signal pending. xargs then sits in wait(2) holding exactly as many
+# parked workers as its width allows -- it cannot hold fewer, because it only blocks once it is at
+# its limit or out of input -- so the live markers counted there ARE the width, at any load and in
+# any start order. The settle is read twice with the same parked set before it is believed, so a
+# non-atomic `ps` sweep cannot be the only reading. Then the driver writes `.released` and CONTs the group, and keeps CONTing until xargs exits, so a worker
+# that checked the flag just before it appeared is freed too. Every wait here is a condition wait
+# with no bound; no elapsed time and no iteration count decides anything. This replaces a count
+# each worker took of its peers at its own start, whose floor of 4 out of 6 was set "for a box
+# that never schedules the full 6" -- a bound widened for load.
+pool_blocked() { # <pid>: alive, state S/I/T, no signal pending (readset-skip's aw_blocked, without its stall log)
+  local _st _pd
+  kill -0 "$1" 2>/dev/null || return 1
+  _st="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; _pd="$(ps -o pending= -p "$1" 2>/dev/null | tr -d ' ')"
+  if [ -z "$_st" ]; then kill -0 "$1" 2>/dev/null || return 1; POOL_PS_BROKEN=1; return 0; fi
+  case "$_st" in S*|I*|T*) ;; *) return 1 ;; esac
+  case "$_pd" in ''|*[!0]*) return 1 ;; esac
+  return 0
+}
+pool_settled() { # <xargs pid = pgid>: 0 when xargs is pool_blocked and EVERY other live member is STOPPED
+  # Stricter than "every member blocked": a worker that has not parked yet can sit in S while it waits
+  # on a `mkdir` child, so S alone would let a half-started worker read as settled. Only a worker that
+  # wrote its marker and ran `kill -STOP $$` is T, so "every non-xargs member is T" is "every worker
+  # xargs holds has parked", and a worker's own child (any non-T member) defers the reading.
+  local _p _n=0 _st
+  pool_blocked "$1" || return 1
+  for _p in $(pgrep -g "$1" 2>/dev/null); do
+    [ "$_p" = "$1" ] && continue
+    kill -0 "$_p" 2>/dev/null || continue
+    _st="$(ps -o stat= -p "$_p" 2>/dev/null | tr -d ' ')"
+    if [ -z "$_st" ]; then kill -0 "$_p" 2>/dev/null || continue; POOL_PS_BROKEN=1; return 0; fi
+    case "$_st" in T*) _n=$((_n + 1)) ;; *) return 1 ;; esac
+  done
+  [ "$_n" -gt 0 ]
+}
+pool_parked() { # <outdir> -> "<n> <pid> <pid>..." of live markers carrying this run's nonce
+  local _p _n=0 _l=''
+  for _p in "$1/.inflight"/*; do
+    [ -f "$_p" ] || continue
+    case "${_p##*/}" in ''|*[!0-9]*) continue ;; esac
+    kill -0 "${_p##*/}" 2>/dev/null || continue
+    grep -qxF "$MUT_NONCE" "$_p" 2>/dev/null || continue
+    _n=$((_n + 1)); _l="$_l ${_p##*/}"
+  done
+  printf '%s%s\n' "$_n" "$_l"
+}
+pool_run() { # <width> <list> <outdir> -> runs the pool to completion; sets POOL_N, the parked count at the settle
+  local _w="$1" _list="$2" _od="$3" _xg _p _prev='' _cur
+  POOL_N=''; POOL_PS_BROKEN=0
+  mkdir -p "$_od/.inflight"
+  # I54: no `printf | xargs`. The list is a file; feed the pool from the file.
+  set -m
+  xargs -P "$_w" -I{} bash "$HERE/worker.sh" \
+      {} "$_od/{}.expr" "$_od/{}.want" "$LINTER" "$CONS" "$DOMAIN" "$_od" "$_od/{}.cells" < "$_list" &
+  _xg=$!
+  set +m
+  while kill -0 "$_xg" 2>/dev/null; do
+    if [ -z "$POOL_N" ] && pool_settled "$_xg"; then
+      _cur="$(pool_parked "$_od")"
+      if [ "$_cur" = "$_prev" ]; then POOL_N="${_cur%% *}"; : > "$_od/.inflight/.released"; else _prev="$_cur"; fi
+    fi
+    if [ -n "$POOL_N" ]; then
+      for _p in $(pgrep -g "$_xg" 2>/dev/null); do kill -CONT "$_p" 2>/dev/null; done
+    fi
+    sleep 0.05
+  done
+  wait "$_xg"
+}
+pool_width_ok() { # <parked> <width> <dispatched>: 0 when the parked count is exactly min(width, dispatched)
+  local _want="$2"; [ "$3" -lt "$_want" ] && _want="$3"
+  [ -n "$1" ] && [ "$POOL_PS_BROKEN" = 0 ] && [ "$1" -eq "$_want" ]
+}
+
+# THE ARM'S OWN DISCRIMINATION, ON A CHEAP POOL BEFORE THE REAL ONE. Four workers whose expression
+# matches nothing, so each parks, is released and reports BROKEN at once. At width 6 the settle
+# must read 4 (all of them); dispatched at width 2 -- the feared `xargs -P 2` beside an untouched
+# MUT_JOBS -- it must read 2, and the arm must refuse it. The width-2 pool also proves the barrier
+# ENDS when the pool is narrower than the expected count: it settles at 2 and finishes.
+PP="$ROOT/pool-probe"; mkdir -p "$PP"; : > "$PP/list"
+for _i in 1 2 3 4; do
+  printf 's/ZZ_POOL_PROBE_NO_SUCH_TOKEN_q9//' > "$PP/pp$_i.expr"; : > "$PP/pp$_i.want"; printf 'c7 alpha' > "$PP/pp$_i.cells"
+  printf 'pp%s\n' "$_i" >> "$PP/list"
+done
+B_pool=0
+pool_run "$MUT_JOBS" "$PP/list" "$PP"
+collect_into "$PP/list" "$PP"
+if pool_width_ok "$POOL_N" "$MUT_JOBS" 4 && [ "$c_seen" = 4 ]; then
+  ok "pool self-probe: a 4-worker pool at width $MUT_JOBS settles with exactly 4 parked, and all 4 reported"; B_pool=1
+else
+  bad "pool self-probe: a 4-worker pool at width $MUT_JOBS settled with '${POOL_N:-none}' parked (want 4, ps broken=$POOL_PS_BROKEN), $c_seen of 4 reported (missing:$c_labels) -- the width arm below cannot be trusted"
+fi
+PM="$ROOT/pool-probe-w2"; mkdir -p "$PM"; cp "$PP"/pp?.expr "$PP"/pp?.want "$PP"/pp?.cells "$PP/list" "$PM/"
+if need_base "$B_pool" pool-width-2; then
+  pool_run 2 "$PM/list" "$PM"
+  if pool_width_ok "$POOL_N" "$MUT_JOBS" 4; then
+    bad "mutant pool-width-2 SURVIVED: a pool dispatched at width 2 settled with ${POOL_N} parked and the width arm accepted it"
+  else
+    mutant_killed "$B_pool" pool-width-2 "mutant pool-width-2 killed: dispatched at width 2 the pool settles with ${POOL_N:-none} parked, the width arm refuses it, and the pool still ran to its end"
+  fi
+fi
+
 dispatched="$(wc -l < "$ROOT/mutant-list" | tr -d ' ')"
 if [ "$dispatched" -eq 0 ]; then
   bad "fixture BROKEN: no mutants were dispatched — the list is empty, so every kill below is vacuous"
 else
-  # I54: no `printf | xargs`. The list is a file; feed the pool from the file.
-  xargs -P "$MUT_JOBS" -I{} bash "$HERE/worker.sh" \
-      {} "$MUT_DIR/{}.expr" "$MUT_DIR/{}.want" "$LINTER" "$CONS" "$DOMAIN" "$MUT_DIR" "$MUT_DIR/{}.cells" \
-      < "$ROOT/mutant-list"
+  pool_run "$MUT_JOBS" "$ROOT/mutant-list" "$MUT_DIR"
+  POOL_REAL="${POOL_N:-}"
 
   # THE SAME WALK THE PROBE JUST EXERCISED. `collect_into` decides what is present and what
   # is missing; this loop only reads the verdicts it found. Point the walk at the directory
@@ -593,29 +694,15 @@ else
     esac
   done < "$ROOT/mutant-list"
 
-  # THE POOL ACTUALLY RAN CONCURRENTLY, OBSERVED FROM THE WORKERS' OWN STAMPS. A probe that
-  # reads the WIDTH VARIABLE is not this arm and cannot replace it: measured by an adversary,
-  # `xargs -P 1` beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU and printed an
-  # identical green "width 6" line, closing the receipt. Nothing joined the assertion to the
-  # dispatch. This counts workers whose [start,end] intervals OVERLAP, which is a property of
-  # the run rather than of a variable, and `consumer-suite-pool/run.sh:275` is the precedent.
-  #
-  # THE FLOOR IS 4, AND 2 WAS THE WRONG NUMBER FOR A NAMED REASON. "The pool ran concurrently"
-  # and "the pool ran at the width this release measured" are two claims, and a floor of 2
-  # makes only the first: measured, `xargs -P 2` reports 2 in flight and PASSES while costing
-  # 72.0s against the pool's 45.5s — a width regression eating more than half of what this
-  # change bought, shipping green. The floor cannot be $MUT_JOBS either, because a loaded box
-  # may never place all 6 at once and that failure would not be a regression. 4 refuses -P 2
-  # and -P 3 while leaving headroom for a box that never schedules the full 6.
-  max_inflight="$(
-    for _lbl in $(cat "$ROOT/mutant-list"); do
-      [ -f "$MUT_DIR/$_lbl" ] || continue
-      sed -n 's/^inflight \([0-9]*\)$/\1/p' "$MUT_DIR/$_lbl"
-    done | sort -n | tail -1
-  )"
-  [ "${max_inflight:-0}" -ge 4 ] \
-    && ok "self-probe: $max_inflight worker(s) observed in flight at once — the pool ran concurrently, read from the workers' own stamps and not from MUT_JOBS" \
-    || bad "self-probe: max ${max_inflight:-0} worker(s) in flight — the mutants ran SERIALLY and this fixture is the suite pole again, whatever MUT_JOBS says"
+  # THE POOL ACTUALLY RAN AT ITS WIDTH, READ FROM THE DISPATCH ITSELF. A probe that reads the
+  # WIDTH VARIABLE is not this arm and cannot replace it: measured by an adversary, `xargs -P 1`
+  # beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU and printed an identical green
+  # "width 6" line, closing the receipt. Nothing joined the assertion to the dispatch. This is the
+  # number of workers parked at once when the pool group settled (pool_run, above), and it must be
+  # EXACTLY min(MUT_JOBS, dispatched): `xargs -P 2` or `-P 5` reads 2 or 5 and fails, at any load.
+  pool_width_ok "$POOL_REAL" "$MUT_JOBS" "$dispatched" \
+    && ok "pool width: $POOL_REAL worker(s) parked at once when the pool settled — exactly min(MUT_JOBS=$MUT_JOBS, $dispatched dispatched), read from the dispatch and not from MUT_JOBS" \
+    || bad "pool width: ${POOL_REAL:-no} worker(s) parked when the pool settled (ps broken=$POOL_PS_BROKEN), want min(MUT_JOBS=$MUT_JOBS, $dispatched) — the mutants did not run at the pool's width and this fixture is the suite pole again"
 
   # The count arm, independent of the per-label arm above: it compares what the pool was
   # given against what the walk actually read a file for.

@@ -16,7 +16,7 @@ kill
 mkdir
 mktemp
 mv
-pkill
+pgrep
 ps
 python3
 rm

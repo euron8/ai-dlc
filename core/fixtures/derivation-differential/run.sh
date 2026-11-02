@@ -642,7 +642,7 @@ dstub() { # dstub <dir> <fail: 1|0> -- counts base-side calls in <dir>/SENT, fai
   mkdir -p "$d"; : > "$d/SENT"
   [ "$2" = 1 ] && act='echo "diff: /dev/fd/63: Bad file descriptor" >&2; exit 2'
   {
-    printf '#!/bin/sh\n'
+    printf '#!/bin/bash\n'
     printf 'if [ ! -f "${AI_DLC_PROJECT_ROOT:-}/.consumer-side" ]; then\n'
     printf '  echo x >> "%s/SENT"\n' "$d"
     printf '  if [ "$(wc -l < "%s/SENT" | tr -d " ")" = 1 ]; then %s; fi\n' "$d" "$act"

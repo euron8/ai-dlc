@@ -1730,6 +1730,11 @@ if [ "${RS_FINAL:-0}" = 1 ] && [ -s "$WORK/digest.rows" ]; then
        && ( cd "$REPO_ROOT" && readset_dir_values "$WORK/digest.rows" "$WORK/dgt/.now" "$WORK/dgm/.paths" "$WORK/dgm/rows2" \
             && readset_digests "$WORK/dgm/rows2" "$WORK/dgm/rows2.keep" "$MAP_REL" "$WORK/dg" ) > "$WORK/digest.out"; then
       awk -F'\t' 'NF == 2 { print "# digest " $1 " " $2 }' "$WORK/digest.out" > "$WORK/digest.new"
+      # A DECLARED FIXTURE GETS NO DIGEST (BL-897). The hook maps a fixture carrying inputs.decl before it reads
+      # this map, so its `# digest` line is dead weight. The carried digests passed readset_merge_map's declared
+      # filter above; this run's new ones pass the SAME filter here, so that predicate stays the single site.
+      readset_merge_map /dev/null "$WORK/digest.new" "" "$TREE/$FIXTURE_ROOT" > "$WORK/digest.new.f" \
+        && mv -f "$WORK/digest.new.f" "$WORK/digest.new" || die "could not filter the declared fixtures out of the new digests"
     else
       say "note: could not compute the runner's universe or the digests -- no # digest line written; the traced fixtures select but cannot clear a stale key record"
     fi

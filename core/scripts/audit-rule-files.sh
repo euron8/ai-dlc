@@ -65,6 +65,10 @@ set -euo pipefail
 # corpus seeded with tier-1 violations scores CLEAN under it — that is what
 # proves the tier-1 code catches those seeds, rather than an older class
 # matching them incidentally.
+#
+# AI_DLC_AUDIT_RESOLVER_TIMEOUT sets how long the ownership resolver's `--list`
+# may take: unset means the shipped 30s, a positive number replaces it, and
+# `none` waits for the answer. It exists for the fixture; nothing ships it set.
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -84,6 +88,7 @@ command -v python3 >/dev/null 2>&1 || { echo "audit-rule-files: FAIL — python3
 export AUDIT_MODE="$MODE"
 export AUDIT_FAIL_ON="$FAIL_ON"
 export AUDIT_MUTANT="${AI_DLC_AUDIT_MUTANT:-0}"
+export AUDIT_RESOLVER_TIMEOUT="${AI_DLC_AUDIT_RESOLVER_TIMEOUT:-}"
 
 # `gh` is resolved here, not in python, so an absent binary is reported as
 # SKIPPED-with-reason instead of silently scoring the dormancy scan clean.
@@ -155,9 +160,24 @@ def core_globs():
             "  it would report each finding as unresolved and gate on a fault rather than\n"
             "  on the corpus, so the audit refuses instead of reporting.\n")
         sys.exit(2)
+    # AI_DLC_AUDIT_RESOLVER_TIMEOUT is a TEST SEAM. Unset or empty, the wait is the
+    # shipped 30s. A positive number replaces it; `none` waits until the resolver
+    # answers, so a fixture can end the wait on an event it controls rather than
+    # on how long `--list` takes on a loaded box.
+    _seam = os.environ.get("AUDIT_RESOLVER_TIMEOUT", "")
+    _wait = 30
+    if _seam == "none":
+        _wait = None
+    elif _seam:
+        try:
+            _wait = float(_seam)
+        except ValueError:
+            _wait = -1.0
+        if not _wait > 0:
+            _refuse(f"AI_DLC_AUDIT_RESOLVER_TIMEOUT={_seam!r} is neither a positive number nor `none`")
     try:
         r = subprocess.run(["bash", RESOLVER, "--list"],
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, timeout=_wait)
     except subprocess.TimeoutExpired as e:
         _refuse(f"`core-paths.sh --list` timed out after {e.timeout}s")
     except Exception as e:                          # noqa: BLE001 — report, never swallow

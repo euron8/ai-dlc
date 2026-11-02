@@ -1,4 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-28 *
+41 *
 4 scripts/readset-stage1-verdict.sh
 8 scripts/readset-stage1-run.sh

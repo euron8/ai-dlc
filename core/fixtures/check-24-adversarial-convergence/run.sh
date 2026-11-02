@@ -1598,12 +1598,25 @@ else
   # accumulates, and every expression -- shipped and mutant alike -- reports CONTINUE. The
   # arm would then be green on all five rows while discriminating nothing, which is this
   # repo's own defect class inside the test written to catch it.
+  # THE MTIME ORDER IS STAMPED, NEVER SLEPT FOR (BL-868): the series, then the newer decoy, then
+  # the newest-of-all s8 files, each with an explicit `touch -t`, so no tick of the clock decides
+  # which file `ls -t` puts first.
   for i in 1 2 3; do prov "$SD/s9/stories-adversarial-p$i.md" "$i" 5 EXIT_CONDITION_NOT_MET; done
-  sleep 1
   cp "$SD/s9/stories-adversarial-p3.md" "$SD/s9/adversarial-pass1-discovery.md"
-  sleep 1
   prov "$SD/s8/prd-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET
   prov "$SD/s8/prd-adversarial-p2.md" 2 0 EXIT_CONDITION_MET
+  TZ=UTC touch -t 202608070101.01 "$SD/s9/stories-adversarial-p1.md"
+  TZ=UTC touch -t 202608070101.02 "$SD/s9/stories-adversarial-p2.md"
+  TZ=UTC touch -t 202608070101.03 "$SD/s9/stories-adversarial-p3.md"
+  TZ=UTC touch -t 202608070102.00 "$SD/s9/adversarial-pass1-discovery.md"
+  TZ=UTC touch -t 202608070103.01 "$SD/s8/prd-adversarial-p1.md"
+  TZ=UTC touch -t 202608070103.02 "$SD/s8/prd-adversarial-p2.md"
+  # The order is a precondition the arms below read; assert it rather than trust the stamps.
+  _ls9="$(ls -t "$SD/s9" | head -1)"; _lsa="$(ls -t "$SD"/s*/*.md | head -1)"
+  if [ "$_ls9" != adversarial-pass1-discovery.md ] || [ "${_lsa##*/}" != prd-adversarial-p2.md ]; then
+    FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+    printf '  FAIL  %-28s (seed order: newest in s9 is %s, newest overall is %s)\n' "live-series-seed-order" "$_ls9" "${_lsa##*/}"
+  fi
 
   # $1 label  $2 the derivation expression  $3 expected STATE  $4 expected rc  $5 why
   # SPRINT_N is the DECLARED sprint, supplied here the way the hook supplies it from

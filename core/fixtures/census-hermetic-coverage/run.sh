@@ -188,7 +188,7 @@ B_ctl=0
 echo "census-hermetic-coverage:"
 
 # --- worlds -------------------------------------------------------------------------------------
-XD="$WORK/xp"; mkdir -p "$XD" && printf '#!/bin/sh\necho farm-ran\n' > "$XD/b223tool" && chmod +x "$XD/b223tool" || exit 2
+XD="$WORK/xp"; mkdir -p "$XD" && printf '#!/bin/bash\necho farm-ran\n' > "$XD/b223tool" && chmod +x "$XD/b223tool" || exit 2
 COUNTER="$WORK/flaky.count"
 
 world_base() { # <dir>: the copied machinery, with the hook's READSET_TOOL_XP pointed at the farm-only tool dir

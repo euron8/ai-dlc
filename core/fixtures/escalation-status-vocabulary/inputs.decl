@@ -2,3 +2,5 @@
 core/skills/ai-dlc/escalations.md
 core/skills/ai-dlc/steps/gate-validation.md
 core/skills/ai-dlc/enforcement-map.yaml
+# The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
+core/fixtures/lib/

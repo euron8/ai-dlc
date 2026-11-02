@@ -324,8 +324,16 @@ if [ -n "$CKPT" ]; then
   # A NEWER LEDGER THAT WAS NEVER OPENED must not become current -- this is the exact
   # regression the script's header documents as fixed (a concurrent session's ledger of
   # another gate type, newer by mtime, must not narrow this gate).
-  sleep 1
+  # The ORDER is stamped, never slept to (BL-868): `touch -c -t` gives the opened ledger an older
+  # mtime and the unopened one a newer one, and the order is asserted before the arm reads it, so
+  # the arm discriminates against an mtime scan however long each record took. `-c` never creates
+  # a file, so a wrong ledger path is caught by the order check rather than stamped into being.
   bash "$CKPT" --root "$_eroot" --nonce "$_n2" record 9 PASS >/dev/null 2>&1
+  _eld="$_eroot/_bmad-output/.gate-checkpoint"
+  touch -c -t 202601010000.00 "$_eld/${_n1}.tsv"; touch -c -t 202601010001.00 "$_eld/${_n2}.tsv"
+  if ! [ "$_eld/${_n2}.tsv" -nt "$_eld/${_n1}.tsv" ]; then
+    echo "FIXTURE BROKEN: the stamped ledgers ${_n1}.tsv/${_n2}.tsv under $_eld are not in mtime order, so the arm below cannot tell the OPEN marker from an mtime scan" >&2; exit 2
+  fi
   _ecur_after="$(bash "$CKPT" --root "$_eroot" current 2>/dev/null)"
   if [ "$_ecur_after" = "$_n1" ]; then
     ok "'current' still names ${_n1} after an unopened newer ledger (${_n2}) is written"
@@ -740,19 +748,21 @@ print(len(c), int("Mechanical state captured immediately before this compaction"
   # The shipped hook: seven arms, each one ok line, and each arm's same-run base-pass flag
   # (B457_BASE_<arm>) that gates every mutant keyed on it. Scored on the dense sweep AND the subset on
   # every push (same tag, so the subset's worlds are the dense run's cached records).
+  # Each flag is set to 1 literally beside its own ok (BL-828), never by eval, so validate-mutant-kills
+  # M5 can see that every flag a kill passes was raised by a passing arm.
+  B457_BASE_S0=0; B457_BASE_S1=0; B457_BASE_S2=0; B457_BASE_S3=0; B457_BASE_WC=0; B457_BASE_RB=0; B457_BASE_NC=0
   for _arm in S0 S1 S2 S3 WC RB NC; do
     _vs="$(b457_arm "$HOOK" fix "$_arm" "$B457_SWEEP")"
     _vd="$(b457_arm "$HOOK" fix "$_arm" "$B457_SWEEP_DENSE")"
-    eval "B457_BASE_${_arm}=0"; [ "$_vd" = 1 ] && [ "$_vs" = 1 ] && eval "B457_BASE_${_arm}=1"
     if [ "$_vd" = 1 ] && [ "$_vs" = 1 ]; then
       case "$_arm" in
-        S0) ok "BL-457 S0: no world at/over the cliff still carries the droppable sidecar note, and the note IS dropped in a world it would have pushed over" ;;
-        S1) ok "BL-457 S1: every swept world at/over 10000 EMITTED records degraded=yes, worlds land inside the wrap band, and injected_bytes equals the emitted length in every world" ;;
-        S2) ok "BL-457 S2: a world under every bound records degraded=no" ;;
-        S3) ok "BL-457 S3: worlds between the excerpt bound (9500) and the cliff record degraded=no -- the threshold is the cliff, not the trim bound" ;;
-        WC) ok "BL-457 WC: the worst real gate-in-flight case (31-char implementation-<UTC> nonce, sidecar, unresolvable step file) keeps the sidecar note and emits under $((10000 - WC_MARGIN)) (WC_MARGIN=${WC_MARGIN})" ;;
-        RB) ok "BL-457 RB: with AI_DLC_HOOK_EXCERPT_RESERVE=50 the hook received it (emitted > 9500) and the fitted excerpt stays under 9950 EMITTED" ;;
-        NC) ok "BL-457 NC: one fire mints ONE provenance nonce and the emitted marker carries it -- the wrap is measured without a second mint" ;;
+        S0) ok "BL-457 S0: no world at/over the cliff still carries the droppable sidecar note, and the note IS dropped in a world it would have pushed over"; B457_BASE_S0=1 ;;
+        S1) ok "BL-457 S1: every swept world at/over 10000 EMITTED records degraded=yes, worlds land inside the wrap band, and injected_bytes equals the emitted length in every world"; B457_BASE_S1=1 ;;
+        S2) ok "BL-457 S2: a world under every bound records degraded=no"; B457_BASE_S2=1 ;;
+        S3) ok "BL-457 S3: worlds between the excerpt bound (9500) and the cliff record degraded=no -- the threshold is the cliff, not the trim bound"; B457_BASE_S3=1 ;;
+        WC) ok "BL-457 WC: the worst real gate-in-flight case (31-char implementation-<UTC> nonce, sidecar, unresolvable step file) keeps the sidecar note and emits under $((10000 - WC_MARGIN)) (WC_MARGIN=${WC_MARGIN})"; B457_BASE_WC=1 ;;
+        RB) ok "BL-457 RB: with AI_DLC_HOOK_EXCERPT_RESERVE=50 the hook received it (emitted > 9500) and the fitted excerpt stays under 9950 EMITTED"; B457_BASE_RB=1 ;;
+        NC) ok "BL-457 NC: one fire mints ONE provenance nonce and the emitted marker carries it -- the wrap is measured without a second mint"; B457_BASE_NC=1 ;;
       esac
     else
       bad "BL-457 arm ${_arm} FAILED on the shipped hook (subset=${_vs}, dense=${_vd}; see $WORK/b457-fix)"
@@ -791,9 +801,18 @@ PY
         case " $twins " in *" $a "*) [ "$v" = 1 ] || held=0 ;; esac
       fi
     done
-    eval "B457_FLAG=\${B457_BASE_${dec}}"
     if [ "$cells" = 0 ] && [ "$held" = 1 ]; then
-      mutant_killed "$B457_FLAG" "b457-$tag" "BL-457 mutant b457-$tag ($tag) $what -- killed by ${dec}, twin(s) [${twins}] hold"
+      local km="BL-457 mutant b457-$tag ($tag) $what -- dies on ${dec}, twin(s) [${twins}] hold"
+      case "$dec" in
+        S0) mutant_killed "${B457_BASE_S0:-0}" "b457-$tag" "$km" ;;
+        S1) mutant_killed "${B457_BASE_S1:-0}" "b457-$tag" "$km" ;;
+        S2) mutant_killed "${B457_BASE_S2:-0}" "b457-$tag" "$km" ;;
+        S3) mutant_killed "${B457_BASE_S3:-0}" "b457-$tag" "$km" ;;
+        WC) mutant_killed "${B457_BASE_WC:-0}" "b457-$tag" "$km" ;;
+        RB) mutant_killed "${B457_BASE_RB:-0}" "b457-$tag" "$km" ;;
+        NC) mutant_killed "${B457_BASE_NC:-0}" "b457-$tag" "$km" ;;
+        *) bad "FIXTURE BROKEN: BL-457 mutant b457-$tag names deciding arm '$dec', which has no base flag" ;;
+      esac
     elif [ "$cells" = 0 ]; then
       bad "BL-457 mutant b457-$tag ($tag) $what -- deciding arm ${dec} broke, but a twin [${twins}] also broke"
     else
@@ -1016,13 +1035,19 @@ else
   bash "$CKPT" --root "$_m5root" --nonce "$_m5old" open   >/dev/null 2>&1
   bash "$CKPT" --root "$_m5root" --nonce "$_m5old" record 1 PASS >/dev/null 2>&1
   bash "$CKPT" --root "$_m5root" --nonce "$_m5old" close  >/dev/null 2>&1
-  sleep 1
   bash "$CKPT" --root "$_m5root" --nonce m5-new record 1 PASS >/dev/null 2>&1
+  # Stamped, never slept to (BL-868): m5-new is made the newer ledger by an explicit mtime, and the
+  # order is asserted, so the mutant's mtime scan meets the order it must misread at any load.
+  _m5ld="$_m5root/_bmad-output/.gate-checkpoint"
+  touch -c -t 202601010000.00 "$_m5ld/${_m5old}.tsv"; touch -c -t 202601010001.00 "$_m5ld/m5-new.tsv"
+  if ! [ "$_m5ld/m5-new.tsv" -nt "$_m5ld/${_m5old}.tsv" ]; then
+    echo "FIXTURE BROKEN: m5's stamped ledgers under $_m5ld are not in mtime order, so the mutant cannot be shown to read mtime" >&2; exit 2
+  fi
   _m5real="$(bash "$CKPT" --root "$_m5root" current 2>/dev/null)"
   _m5mut="$(bash "$MUT5"  --root "$_m5root" current 2>/dev/null)"
   mcell m5 current-mtime "$([ "$_m5mut" = m5-new ] && echo 0 || echo 1)"
   if [ -z "$_m5real" ] && [ "$_m5mut" = "m5-new" ] && [ -f "$_m5root/_bmad-output/.gate-checkpoint/${_m5old}.tsv" ]; then
-    mutant_killed "$([ -z "$_m5real" ] && echo 1 || echo 0)" m5 "mutant m5: reverting 'current' to a directory mtime scan makes an unopened, never-armed ledger (m5-new) read as the live gate, where the real script correctly reports no gate in flight"
+    mutant_killed "$([ "$_m5real" = "" ] && echo 1 || echo 0)" m5 "mutant m5: reverting 'current' to a directory mtime scan makes an unopened, never-armed ledger (m5-new) read as the live gate, where the real script correctly reports no gate in flight"
   else
     bad "MUTANT DID NOT FAIL AS EXPECTED: m5 -- real current='${_m5real}' (want empty), mutant current='${_m5mut}' (want m5-new)"
   fi
@@ -1177,7 +1202,7 @@ PY
     _m9re="$(f2_regex_of "$MUT9")"
     mcell m9 loose-regex "$([ "$_m9rc" -eq 0 ] && echo 0 || echo 1)"
     if [ "$_m9rc" -eq 0 ] && [ "$_m9ctl" -eq 0 ] && [ -n "$_m9re" ] && [ "$_m9re" != "${_f2want:-}" ]; then
-      mutant_killed "$([ "$B_F2B$B_F2C$B_F2E" = 111 ] && echo 1 || echo 0)" m9 "mutant m9: a loose <word>- regex opens deploy-validate-s304-... (rc 0) and its text no longer equals the schema's pattern -- (b) and (e) kill it"
+      mutant_killed "$(( ${B_F2B:-0} && ${B_F2C:-0} && ${B_F2E:-0} ))" m9 "mutant m9: a loose <word>- regex opens deploy-validate-s304-... (rc 0) and its text no longer equals the schema's pattern -- (b) and (e) kill it"
     else
       bad "MUTANT DID NOT FAIL AS EXPECTED: m9 -- deploy-validate open rc=${_m9rc} (want 0), canonical rc=${_m9ctl} (want 0), regex '${_m9re}' vs schema '${_f2want:-}'"
     fi

@@ -108,8 +108,8 @@ printf 'Host keepalive-probe-alias\n  ServerAliveInterval 60\n  ServerAliveCount
 # A PATH `ssh` that is a wrapper pinned to the bad config — how the DEFAULT branch
 # (no GIT_SSH_COMMAND, no core.sshCommand, no GIT_SSH) is driven without reading ~/.ssh.
 WRAPBIN="$WORK/wrapbin"; mkdir -p "$WRAPBIN"
-printf '#!/bin/sh\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/ssh"
-printf '#!/bin/sh\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/myssh-wrapper"
+printf '#!/bin/bash\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/ssh"
+printf '#!/bin/bash\nexec "%s" -F "%s" "$@"\n' "$SSH_BIN" "$BAD_CFG" > "$WRAPBIN/myssh-wrapper"
 chmod +x "$WRAPBIN/ssh" "$WRAPBIN/myssh-wrapper"
 
 # A PATH with bash and sh and NO ssh, plus its twin that differs by one ssh symlink.
@@ -161,7 +161,7 @@ expect_silent() { # expect_silent <label> <out>
 # ---------------------------------------------------------------- the arms --
 P="PATH=/usr/bin:/bin"
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/a"  "$P" "GIT_SSH_COMMAND=ssh -F $BAD_CFG" -- origin "$SCP_URL"
-if expect_fire "A1 GIT_SSH_COMMAND, scp-style URL, config without keepalive" "$WORK/a"; then B_a1=1; fi
+expect_fire "A1 GIT_SSH_COMMAND, scp-style URL, config without keepalive" "$WORK/a"; rc_a1=$?
 
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/b"  "$P" "GIT_SSH_COMMAND=ssh -F $BAD_CFG" -- origin "$SSHURL"
 expect_fire "A2 ssh:// URL with a port, config without keepalive" "$WORK/b"
@@ -176,19 +176,19 @@ drive "$BLOCK" "$REPO_PLAIN" "$WORK/e"  "PATH=$WRAPBIN:/usr/bin:/bin" -- origin 
 expect_fire "A5 default branch (plain ssh on PATH), config without keepalive" "$WORK/e"
 
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/f"  "$P" "GIT_SSH_COMMAND=ssh -F $GOOD_CFG" -- origin "$SCP_URL"
-if expect_silent "N1 config WITH ServerAliveInterval 60 on the alias" "$WORK/f"; then B_n1=1; fi
+expect_silent "N1 config WITH ServerAliveInterval 60 on the alias" "$WORK/f"; rc_n1=$?
 
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/g"  "$P" "GIT_SSH_COMMAND=ssh -F $BAD_CFG -o ServerAliveInterval=60" -- origin "$SCP_URL"
 expect_silent "N2 same bad config, keepalive given by -o on the command (the EFFECTIVE value is read, not the file)" "$WORK/g"
 
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/h"  "$P" "GIT_SSH_COMMAND=ssh -F $BAD_CFG" -- origin "$HTTPS_URL"
-if expect_silent "N3 https URL with the bad config (not an ssh transport)" "$WORK/h"; then B_n3=1; fi
+expect_silent "N3 https URL with the bad config (not an ssh transport)" "$WORK/h"; rc_n3=$?
 
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/i"  "$P" "GIT_SSH_COMMAND=ssh -F $BAD_CFG" --
 expect_silent "N4 no arguments (a hand run, or a fixture driving the hook) under set -u" "$WORK/i"
 
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/j"  "PATH=$WRAPBIN:/usr/bin:/bin" "GIT_SSH_COMMAND=myssh-wrapper" -- origin "$SCP_URL"
-if expect_silent "N5 a non-ssh command (a wrapper that WOULD report interval 0 if asked)" "$WORK/j"; then B_n5=1; fi
+expect_silent "N5 a non-ssh command (a wrapper that WOULD report interval 0 if asked)" "$WORK/j"; rc_n5=$?
 
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/k"  "PATH=$NOSSH" "GIT_SSH_COMMAND=ssh -F $BAD_CFG" -- origin "$SCP_URL"
 drive "$BLOCK" "$REPO_PLAIN" "$WORK/k2" "PATH=$WITHSSH" "GIT_SSH_COMMAND=ssh -F $BAD_CFG" -- origin "$SCP_URL"
@@ -297,25 +297,25 @@ mx_score() {
 kills=0
 mkmut m_nocall '!/^ssh_keepalive_warn "\$\{1:-\}" "\$\{2:-\}"$/'
 cell_drive "$WORK/m_nocall.sh" A1 "$WORK/m1"
-if fired "$WORK/m1"; then bad "M1 invocation deleted: SURVIVED (A1's input still warned)"; else mutant_killed "${B_a1:-0}" M1 "M1 invocation deleted: KILLED (A1's input goes silent)" && kills=$((kills+1)); fi
+if fired "$WORK/m1"; then bad "M1 invocation deleted: SURVIVED (A1's input still warned)"; else mutant_killed "$([ "$rc_a1" -eq 0 ] && echo 1 || echo 0)" M1 "M1 invocation deleted: KILLED (A1's input goes silent)" && kills=$((kills+1)); fi
 mx_twins M1 "$WORK/m_nocall.sh"
 [ "$MODE" = matrix ] && mx_score M1 "$WORK/m_nocall.sh"
 
 mkmut m_nourlgate '!/^    \*:\/\/\*\) return 0 ;;$/'
 cell_drive "$WORK/m_nourlgate.sh" N3 "$WORK/m2"
-if grep -q 'pre-push: WARNING' "$WORK/m2"; then mutant_killed "${B_n3:-0}" M2 "M2 non-ssh URL gate deleted: KILLED (N3's shape now warns)" && kills=$((kills+1)); else bad "M2 non-ssh URL gate deleted: SURVIVED"; fi
+if grep -q 'pre-push: WARNING' "$WORK/m2"; then mutant_killed "$([ "$rc_n3" -eq 0 ] && echo 1 || echo 0)" M2 "M2 non-ssh URL gate deleted: KILLED (N3's shape now warns)" && kills=$((kills+1)); else bad "M2 non-ssh URL gate deleted: SURVIVED"; fi
 mx_twins M2 "$WORK/m_nourlgate.sh"
 [ "$MODE" = matrix ] && mx_score M2 "$WORK/m_nourlgate.sh"
 
 mkmut m_novalue '{ if ($0 ~ /^  \[ "\$iv" = 0 \] \|\| return 0$/) print "  :"; else print }'
 cell_drive "$WORK/m_novalue.sh" N1 "$WORK/m3"
-if fired "$WORK/m3"; then mutant_killed "${B_n1:-0}" M3 "M3 interval test deleted: KILLED (N1's configured alias now warns)" && kills=$((kills+1)); else bad "M3 interval test deleted: SURVIVED"; fi
+if fired "$WORK/m3"; then mutant_killed "$([ "$rc_n1" -eq 0 ] && echo 1 || echo 0)" M3 "M3 interval test deleted: KILLED (N1's configured alias now warns)" && kills=$((kills+1)); else bad "M3 interval test deleted: SURVIVED"; fi
 mx_twins M3 "$WORK/m_novalue.sh"
 [ "$MODE" = matrix ] && mx_score M3 "$WORK/m_novalue.sh"
 
 mkmut m_nosshname '!/^  \[ "\$\{first##\*\/\}" = ssh \] \|\| return 0$/'
 cell_drive "$WORK/m_nosshname.sh" N5 "$WORK/m4"
-if fired "$WORK/m4"; then mutant_killed "${B_n5:-0}" M4 "M4 ssh-basename guard deleted: KILLED (N5's wrapper is now handed -G)" && kills=$((kills+1)); else bad "M4 ssh-basename guard deleted: SURVIVED"; fi
+if fired "$WORK/m4"; then mutant_killed "$([ "$rc_n5" -eq 0 ] && echo 1 || echo 0)" M4 "M4 ssh-basename guard deleted: KILLED (N5's wrapper is now handed -G)" && kills=$((kills+1)); else bad "M4 ssh-basename guard deleted: SURVIVED"; fi
 mx_twins M4 "$WORK/m_nosshname.sh"
 [ "$MODE" = matrix ] && mx_score M4 "$WORK/m_nosshname.sh"
 

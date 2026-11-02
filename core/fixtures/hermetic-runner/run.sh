@@ -631,7 +631,7 @@ arm_J() {
   # (1) `?b207tool`: both sides carry the same rows as the probe without the line (control: a bare awk
   # line adds a row on BOTH sides), and the hook's decision is not `tool unresolved`. A hook copy that
   # treats `?` as a keyed name disagrees: it leaves the fixture unresolved.
-  mkdir -p "$WK/J.sb" && printf '#!/bin/sh\necho b207tool-ran\n' > "$WK/J.sb/b207tool" && chmod +x "$WK/J.sb/b207tool"
+  mkdir -p "$WK/J.sb" && printf '#!/bin/bash\necho b207tool-ran\n' > "$WK/J.sb/b207tool" && chmod +x "$WK/J.sb/b207tool"
   PQ="$WK/J2"; mk_probe "$PQ" stub_named 'data/a.txt' '?b207tool'
   edit_hook "$PQ" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
   hook_dump "$PQ" "$PQ/.githooks/pre-push" "$WK/J2.o"
@@ -707,7 +707,7 @@ arm_K() {
   local FXR_SAVE="$FXR" sb="$WK/K.bin" P0="$WK/K0" P1="$WK/K1" PB="$WK/K2" r0 r1 rb f hk n
   FXR="$(hook_fxroot)"
   [ -n "$FXR" ] || { bad "$CUR: cannot read FXROOT from $HOOK_SRC"; FXR="$FXR_SAVE"; return; }
-  mkdir -p "$sb" && printf '#!/bin/sh\necho b207tool-ran\n' > "$sb/b207tool" && chmod +x "$sb/b207tool" || exit 2
+  mkdir -p "$sb" && printf '#!/bin/bash\necho b207tool-ran\n' > "$sb/b207tool" && chmod +x "$sb/b207tool" || exit 2
   mk_probe "$P0" stub_k 'data/a.txt'
   mk_probe "$P1" stub_k 'data/a.txt' '?b207tool'
   edit_hook "$P1" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
@@ -768,7 +768,7 @@ arm_K() {
   yes "duplicated ?b207tool line: the stub ran" "$OUT" "b207tool-ran"
   hook_dump "$PD2" "$PD2/.githooks/pre-push" "$WK/K5.o"
   eq "duplicated ?b207tool line: the hook writes no .dunres row" "$(grep -c . "$WK/K5.o/.dunres")" 0
-  mkdir -p "$xd" && printf '#!/bin/sh\necho other-b207tool\n' > "$xd/b207tool" && chmod +x "$xd/b207tool"
+  mkdir -p "$xd" && printf '#!/bin/bash\necho other-b207tool\n' > "$xd/b207tool" && chmod +x "$xd/b207tool"
   mk_probe "$PD3" stub_k 'data/a.txt' $'b207tool\n?b207tool'
   edit_hook "$PD3" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
   edit_hook "$PD3" "s|^READSET_TOOL_XP=\"\"|READSET_TOOL_XP=\"$xd\"|"
@@ -1025,7 +1025,7 @@ arm_V() {
   CUR=V
   local FXR_SAVE="$FXR" sb="$WK/V.bin" P1="$WK/V1" P0="$WK/V0" PC="$WK/V2" mapper n
   mapper="$(dirname "$RUN")/core-paths.sh"
-  mkdir -p "$sb" && printf '#!/bin/sh\necho b207tool-ran\n' > "$sb/b207tool" && chmod +x "$sb/b207tool" || exit 2
+  mkdir -p "$sb" && printf '#!/bin/bash\necho b207tool-ran\n' > "$sb/b207tool" && chmod +x "$sb/b207tool" || exit 2
   FXR="$(hook_fxroot)"
   # V1: skew, `?b207tool` reachable on PATH.
   mk_probe "$P1" stub_k 'data/a.txt' '?b207tool'
@@ -1395,7 +1395,7 @@ arm_Z3() {
   mk_probe "$P" stub_named 'data/a.txt'
   mkdir -p "$x/sys/.claude" "$x/sys/T" "$x/bin" || exit 2
   px="$(cd "$x" && pwd -P)"
-  printf '#!/bin/sh\nif [ "$#" = 1 ] && [ "$1" = -d ]; then exec %s -d %s/sys/T/tmp.XXXXXXXX; fi\nexec %s "$@"\n' "$real" "$px" "$real" > "$x/bin/mktemp" && chmod +x "$x/bin/mktemp" || exit 2
+  printf '#!/bin/bash\nif [ "$#" = 1 ] && [ "$1" = -d ]; then exec %s -d %s/sys/T/tmp.XXXXXXXX; fi\nexec %s "$@"\n' "$real" "$px" "$real" > "$x/bin/mktemp" && chmod +x "$x/bin/mktemp" || exit 2
   OUT="$(PATH="$x/bin:$PATH" TMPDIR="$x/sys/T" bash "$RUN" --root "$P" probe 2>&1)"; RC=$?
   eq "bare mktemp -d ignores TMPDIR, marker above both: exit 2" "$RC" 2
   yes "bare mktemp -d ignores TMPDIR: the refusal names the marker above the system temp dir" "$OUT" "sandbox escape: $px/sys carries a project marker (.git, .claude/ or core/skills/ai-dlc) above the system temp dir"
@@ -1411,7 +1411,7 @@ arm_Z4() {
   mk_probe "$P" stub_named 'data/a.txt'
   mkdir -p "$x/home/.claude" "$x/home/T" "$x/home/out" "$x/bin" || exit 2
   px="$(cd "$x" && pwd -P)"
-  printf '#!/bin/sh\nif [ "$#" = 1 ] && [ "$1" = -d ]; then exec %s -d %s/home/T/tmp.XXXXXXXX; fi\nexec %s "$@"\n' "$real" "$px" "$real" > "$x/bin/mktemp" && chmod +x "$x/bin/mktemp" || exit 2
+  printf '#!/bin/bash\nif [ "$#" = 1 ] && [ "$1" = -d ]; then exec %s -d %s/home/T/tmp.XXXXXXXX; fi\nexec %s "$@"\n' "$real" "$px" "$real" > "$x/bin/mktemp" && chmod +x "$x/bin/mktemp" || exit 2
   OUT="$(PATH="$x/bin:$PATH" HOME="$px/home" TMPDIR="$x/home/out" bash "$RUN" --root "$P" probe 2>&1)"; RC=$?
   eq "system temp dir under a marked HOME: exit 2" "$RC" 2
   yes "system temp dir under a marked HOME: the refusal says the temp dir sits under \$HOME" "$OUT" "sits under \$HOME"
@@ -1628,11 +1628,11 @@ if [ "$NESTED" != 1 ] && [ -z "$STRAY" ]; then
     [ "$MATRIX" = 1 ] && continue
     eq "$mname fails exactly its own arms [$want]" "$got" "$want"
   done
-  B_XR=0; case " $(failed_set "$MAIN_FAILED") " in *" XR "*) ;; *) B_XR=1 ;; esac
+  xr_set=" $(failed_set "$MAIN_FAILED") "; xr_hit="$(grep -c ' XR ' <<<"$xr_set")" || true
   got="$(cat "$WORK/mut-M27.res" 2>/dev/null)"
   [ "$got" != BROKEN ] || { echo "FIXTURE ERROR: mutant M27 did not apply to $HOOK_SRC (the G-row line of readset_decl_keys moved)" >&2; exit 2; }
   if [ "$MATRIX" = 1 ]; then :
-  elif [ "$got" = "$(failed_set XR)" ]; then mutant_killed "$B_XR" M27 "M: M27 fails exactly its own arms [XR] (the range fold dropped from the composer)"
+  elif [ "$got" = "$(failed_set XR)" ]; then mutant_killed "$([ "$xr_hit" = 0 ] && echo 1 || echo 0)" M27 "M: M27 fails exactly its own arms [XR] (the range fold dropped from the composer)"
   else bad "M: M27 should fail exactly arm XR (got '$got')"; fi
   if [ "$MATRIX" = 1 ]; then
     for mname in M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 M15 M16 M17 M18 M19 M20 M21 M22 M23 M24 M25 M26 M27; do

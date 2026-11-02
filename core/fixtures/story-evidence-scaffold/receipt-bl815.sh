@@ -141,7 +141,7 @@ fi
 if want gu; then
 RG="$(command -v git)" || exit 9
 mkdir -p "$R/shim" || exit 9
-printf '#!/bin/sh\ncase " $* " in *" ls-tree -r --name-only --full-tree "*) echo "shim: ls-tree refused" >&2; exit 128 ;; esac\nexec "%s" "$@"\n' "$RG" > "$R/shim/git" \
+printf '#!/bin/bash\ncase " $* " in *" ls-tree -r --name-only --full-tree "*) echo "shim: ls-tree refused" >&2; exit 128 ;; esac\nexec "%s" "$@"\n' "$RG" > "$R/shim/git" \
   && chmod +x "$R/shim/git" || exit 9
 gw="WARN gitignore-unreadable ${T:0:12}: exemption set unknown"
 o3="$(he_run_env "PATH=$R/shim:$PATH" "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc3=$?

@@ -30,6 +30,18 @@ STOP="STOPPED DISPATCH agent-$AG"
 iso() { date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; }
 NOW="$(date +%s)"
 [ -n "$(iso "$NOW")" ] || { echo "REFUSED: neither BSD nor GNU date can format an epoch" >&2; exit 9; }
+# A FROZEN CLOCK (BL-868). LIVE is "the last turn is under BUDGET old", read as the subject's `date +%s`
+# minus the stamp seeded from NOW. On the real clock that age was NOW's age plus whatever every step since
+# had cost, so a slow box could read a fresh transcript as past BUDGET. The subject runs with a `date` first
+# on its PATH that answers `+%s` with NOW and execs the real binary for every other form, so the age it
+# reads is exactly the age seeded. The subject never sleeps here (each beat starts at its cap).
+REAL_DATE="$(command -v date)"; BASH_BIN="$(command -v bash)"
+CLK="$(mktemp -d)" || exit 9
+{ printf '#!%s\n' "$BASH_BIN"
+  printf '[ "$#" -eq 1 ] && [ "$1" = "+%%s" ] && { printf "%%s\\n" %s; exit 0; }\n' "$NOW"
+  printf 'exec "%s" "$@"\n' "$REAL_DATE"
+} > "$CLK/date" && chmod +x "$CLK/date" || { echo "REFUSED: cannot write the frozen date" >&2; exit 9; }
+[ "$(PATH="$CLK:$PATH" date +%s)" = "$NOW" ] || { echo "REFUSED: the frozen date did not engage" >&2; exit 9; }
 
 world() {  # $1 = age of the transcript's last turn (s) -> W, a fresh join tree at its cap
   W="$(mktemp -d)" || exit 9
@@ -48,7 +60,7 @@ world() {  # $1 = age of the transcript's last turn (s) -> W, a fresh join tree 
   printf '1' > "$W/_bmad-output/.wait-beats/$(printf '%s' never.marker | cksum | tr -d ' \t' | cut -c1-16)"
 }
 run() {  # argv -> OUT, RC
-  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_PROJECT_ROOT="$W" AI_DLC_TEAMMATE_DIR="$W/sub" \
+  ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID PATH="$CLK:$PATH" AI_DLC_PROJECT_ROOT="$W" AI_DLC_TEAMMATE_DIR="$W/sub" \
       AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_WAIT_BEAT_SECS=30 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
       AI_DLC_TEAMMATE_IDLE_SECS=1200 bash "$SUBJ" "$@" ) > "$W/out" 2>&1
   RC=$?; OUT="$(cat "$W/out")"

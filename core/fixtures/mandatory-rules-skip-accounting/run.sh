@@ -152,14 +152,14 @@ toolchain() {  # <dir> <script-to-install-as-validate-mandatory-rules.sh>
   mkdir -p "$1"
   cp "$2" "$1/validate-mandatory-rules.sh"
   cp "$VAA" "$1/validate-audit-anchors.sh"
-  printf '#!/bin/sh\nexit 0\n' > "$1/validate-cycle-commits.sh"
-  printf '#!/bin/sh\nexit 0\n' > "$1/validate-retro-evidence.sh"
-  printf '#!/bin/sh\nexit 0\n' > "$1/validate-retro-prereq.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$1/validate-cycle-commits.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$1/validate-retro-evidence.sh"
+  printf '#!/bin/bash\nexit 0\n' > "$1/validate-retro-prereq.sh"
   chmod +x "$1"/*.sh
 }
-prereq_on()   { printf '#!/bin/sh\nexit 0\n' > "$1/validate-retro-prereq.sh"; chmod +x "$1/validate-retro-prereq.sh"; }
+prereq_on()   { printf '#!/bin/bash\nexit 0\n' > "$1/validate-retro-prereq.sh"; chmod +x "$1/validate-retro-prereq.sh"; }
 prereq_off()  { rm -f "$1/validate-retro-prereq.sh"; }
-evidence_rc() { printf '#!/bin/sh\nexit %s\n' "$2" > "$1/validate-retro-evidence.sh"; chmod +x "$1/validate-retro-evidence.sh"; }
+evidence_rc() { printf '#!/bin/bash\nexit %s\n' "$2" > "$1/validate-retro-evidence.sh"; chmod +x "$1/validate-retro-evidence.sh"; }
 
 # battery <toolchain-dir> -> six space-separated tokens, one per arm.
 # Each arm withdraws exactly one input, so a mutant to one check's counter moves the arms
