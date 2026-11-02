@@ -861,7 +861,13 @@ fi
 # check; the control is synthetic, `git commit-tree -p <old base> origin/main^{tree}`). A6 WAS OBSERVED
 # FAILING AT 73611 AGAINST 73300 BEFORE THE CEILING MOVED. 73900 is the measured total rounded up to
 # 73700, plus 200.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-73900}"
+#
+# RAISED A TWENTY-THIRD TIME, 73900 -> 74240, ON AN OPERATOR RULING, BATCH 248, 2026-11-02
+# ("Raise to 74240 (Recommended)"), TO CARRY ONE RULE: `operator-rulings.md` gained "lead compaction
+# and resume are normal operation" (325 bytes, measured after drafting against 91 free). It cannot be
+# SCOPED, being prose-only, and it cannot be MECHANIZED, being a design principle and not an act an arm
+# can scan for.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-74240}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

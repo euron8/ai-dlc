@@ -117,6 +117,12 @@ exclusion once in the method.
 Running the lead on a local model is an operator goal. A defect exposed under a local lead is a
 pipeline fix, never a finding against the model or a reason to recommend a hosted lead.
 
+## Lead compaction and resume are normal operation
+
+"Compaction happens all the time ... completely normal operational aspect of the pipeline."
+Never design a mechanism that refuses, or forces a re-dispatch, because the lead compacted or
+resumed. A missing lead-held value degrades to the prior behaviour; it never refuses.
+
 ## Reaching the operator
 
 `AskUserQuestion` when a decision is genuinely theirs and the answer changes what happens
