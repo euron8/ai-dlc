@@ -184,6 +184,7 @@
 # MUTANT-MATRIX noreap decides=slot-reaped twins=slot-file
 # MUTANT-MATRIX reapdrop decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where the caller's reap is the sole reaper, every other world reaps itself
 # MUTANT-MATRIX liveunrec decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where an unrecorded group has no other reaper
+# MUTANT-MATRIX pktnowalk decides=slot-shellkill twins=- why=one world: the hold world torn down by the hook's pool_kill_tree is the only state the extracted teardown runs in, every other world reaps itself or is reaped by slot_reap
 # MUTANT-MATRIX-FULL noacq worlds=slot-beat,slot-file,slot-foreign,slot-nested,slot-noparent,slot-oldempty,slot-order,slot-rebreak,slot-stale,slot-stalemark,slot-stray why=the kill asserts the exact eleven-scenario failing set; with no acquire every slotted scenario moves, so no single scenario decides it
 # MUTANT-MATRIX-FULL nostale worlds=slot-oldempty,slot-rebreak,slot-stale,slot-stray why=the kill asserts the exact failing set of the four scenarios reached only through a stale break; none alone separates it from nobound or normdir
 # MUTANT-MATRIX noreent decides=slot-nested twins=slot-order
@@ -7835,7 +7836,9 @@ SLOT_WV="$SLOT_W"
 # "<pre>|<recorded groups>|<surviving groups>|<live control surviving>", pre=1 when the stream, the holding fixture,
 # the live control and the last recorded group were all up when the kill landed.
 # Whatever the verdict, every recorded group and the live control are reaped by their recorded ids before it returns.
-slot_kill_drive() { # <slot-world copy> <reap lib>
+# With a third argument (slot-shellkill) the teardown is that lib's pool_kill_tree applied to the world's shell pid, and the
+# caller's reap does NOT run before the census: the hook's own teardown is the only reaper the census reads.
+slot_kill_drive() { # <slot-world copy> <reap lib> [<pool_kill_tree lib>]
   local T gf swp d lp pre=0 ng=0 sv=0 lv=0 g
   T="$(mktemp -d "$SLOT_T/kd.XXXXXX")" || broken "mktemp failed for the slot-kill world"
   gf="$T/groups"; : > "$gf"
@@ -7848,8 +7851,12 @@ slot_kill_drive() { # <slot-world copy> <reap lib>
   g="$(tail -1 "$gf")"
   if [ -e "$T/gate" ] && grep -qx a-hold "$d/order" 2>/dev/null && grep -qx a-stream-up "$d/order" && [ -n "$lp" ] && kill -0 "$lp" 2>/dev/null \
      && [ -n "$g" ] && kill -0 -- "-$g" 2>/dev/null && kill -0 "$swp" 2>/dev/null; then pre=1; fi
-  kill -KILL "$swp" 2>/dev/null; wait "$swp" 2>/dev/null
-  ( . "$2" && slot_reap "$gf" )
+  if [ -n "${3:-}" ]; then
+    ( . "$3" && pool_kill_tree "$swp" "" "" ) 2>/dev/null; wait "$swp" 2>/dev/null
+  else
+    kill -KILL "$swp" 2>/dev/null; wait "$swp" 2>/dev/null
+    ( . "$2" && slot_reap "$gf" )
+  fi
   while IFS= read -r g; do
     [ -n "$g" ] || continue
     ng=$((ng + 1))
@@ -7885,6 +7892,43 @@ else
   [ "$F2C_MATRIX" = 1 ] && f2c_mx liveunrec "pre|groups|surviving|live $_k"
   if [ "$_k" = "1|1|0|1" ]; then mutant_killed "${B_slot_kill:-0}" liveunrec "SLOT MUTANT liveunrec is KILLED: with the live control unrecorded it outlives the SIGKILLed world ('$_k')"
   else bad "SLOT MUTANT liveunrec: expected '1|1|0|1' (pre|groups|surviving|live), got '$_k'"; fi
+fi
+# (slot-shellkill) THE WORLD TORN DOWN BY THE HOOK'S OWN TEARDOWN (BL-875). The same gated hold world as slot-kill, but the
+# KILL is the pre-push hook's pool_kill_tree applied to the world's shell pid, as the hook's xargs worker applies it to a
+# unit's, and the fixture's slot_reap does NOT run before the census: the hook's teardown alone must leave no member of any
+# recorded group and the live control dead. The functions are EXTRACTED from $HOOK at run time (pool_tree, which
+# pool_kill_tree walks with, and pool_kill_tree), never copied, so a hook edit to either changes what this arm runs; an
+# extraction that does not yield exactly those two definitions, each parsing and defined once sourced, is BROKEN.
+SLOT_PKT_LIB="$SLOT_T/pool-kill-tree.sh"
+awk '/^    pool_tree\(\) \{$/,/^    \}$/ {print} /^    pool_kill_tree\(\) \{$/,/^    \}$/ {print}' "$HOOK" > "$SLOT_PKT_LIB"
+[ "$(grep -c '^    [a-z_]*() {$' "$SLOT_PKT_LIB")" = 2 ] && [ "$(grep -cx '    pool_tree() {' "$SLOT_PKT_LIB")" = 1 ] \
+  && [ "$(grep -cx '    pool_kill_tree() {' "$SLOT_PKT_LIB")" = 1 ] \
+  && bash -n "$SLOT_PKT_LIB" && ( . "$SLOT_PKT_LIB" && declare -F pool_tree >/dev/null && declare -F pool_kill_tree >/dev/null ) \
+  || broken "could not extract exactly pool_tree and pool_kill_tree from ${HOOK#"$ROOT"/}"
+SLOT_ARMS=$((SLOT_ARMS+1))
+_k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "$SLOT_PKT_LIB")"
+if [ "$_k" = "1|2|0|0" ]; then
+  ok "SLOT SHELLKILL: slot-world torn down mid-hold by the hook's own pool_kill_tree on its shell pid, no caller reap, leaves no member of its 2 recorded groups alive ('$_k' pre|groups|surviving|live)"
+  B_slot_shellkill=1
+else bad "SLOT SHELLKILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k'"; fi
+# pktnowalk: pool_tree's descendant walk disabled in a COPY of the extracted functions -> pool_kill_tree lists the world's
+# shell pid alone, kills it, and both recorded groups (deriver A, live control) outlive the teardown, live included.
+# WHY NOT THE GROUP-KILL LINE: deleting `kill -KILL -- "-$p"` was measured and SURVIVES here ('1|2|0|0'), because every
+# member of both groups is still parented inside the world's tree when the KILL lands, so the walk lists each one and the
+# per-pid KILL after it covers them; that line is load-bearing only for a member the walk cannot reach, which this
+# gated world does not build. The walk is what this world's teardown depends on.
+SLOT_PKT_WALK='      while [ -n "$q" ]; do'
+SLOT_ARMS=$((SLOT_ARMS+1))
+if [ "$(grep -cxF -- "$SLOT_PKT_WALK" "$SLOT_PKT_LIB")" != 1 ]; then bad "SLOT MUTANT pktnowalk did not apply: the walk loop line is not in $SLOT_PKT_LIB exactly once"
+else
+  awk -v w="$SLOT_PKT_WALK" '$0 == w { print "      while false; do"; next } { print }' "$SLOT_PKT_LIB" > "$SLOT_T/pool-kill-tree.pktnowalk.sh"
+  if cmp -s "$SLOT_PKT_LIB" "$SLOT_T/pool-kill-tree.pktnowalk.sh"; then bad "SLOT MUTANT pktnowalk did not apply: the edit matched nothing in $SLOT_PKT_LIB"
+  else
+    _k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "$SLOT_T/pool-kill-tree.pktnowalk.sh")"
+    [ "$F2C_MATRIX" = 1 ] && f2c_mx pktnowalk "pre|groups|surviving|live $_k"
+    if [ "$_k" = "1|2|2|1" ]; then mutant_killed "${B_slot_shellkill:-0}" pktnowalk "SLOT MUTANT pktnowalk is KILLED: with the descendant walk disabled both recorded groups outlive the hook's teardown ('$_k')"
+    else bad "SLOT MUTANT pktnowalk: expected '1|2|2|1' (pre|groups|surviving|live), got '$_k'"; fi
+  fi
 fi
 SLOT_TWELVE="order nested stalemark foreign stale beat plain file stray noparent rebreak oldempty"
 slot_mut noacq   '/^  rs_slot_acquire$/d' 'beat file foreign nested noparent oldempty order rebreak stale stalemark stray' plain
