@@ -19449,3 +19449,20 @@ This block replaced the batch-246 record. Lead was ai-dlc-79. Owners were 6a, d9
   - `team-roles__dev__bug-class-sweep.md:237` exists in graph's overrides and reads `` `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`, ``. It names no BMAD skill removed in 6.11.
   - The pull is not preapproved; the newest runbook is `docs/plans/graph-pull-0891-to-0901.md`.
 
+**BATCH 248 IS CLOSED: FIVE RELEASES, `v0.991.0` THROUGH `v0.995.0`. THE NEXT SESSION STARTS BATCH 249.**
+This block replaces the batch-247 record, which `scripts/plan-rotate.sh` moved to `docs/plans/archive/graph-ledger-full-drain.md`. Leads were ai-dlc-f8, then ai-dlc-b5 by operator instruction. Owners were ai-dlc-92 (docs, then core until the operator moved core to ai-dlc-b7), ai-dlc-f5 (hooks) and ai-dlc-97 (loadfree, mutants). No `graph-*` session is ever messaged.
+- **Landed.** Each row is one squash on `origin/main` whose subject starts with its version (`git log origin/main`).
+  - `v0.991.0` `6a4442c2f`: six archive LANDED lines re-anchored (BL-902); BL-883 closed as a dead premise; BL-616 folded into BL-868, BL-836 into BL-899.
+  - `v0.992.0` `78966dd63`: M1 reads kill-shaped emissions only (BL-903); join probes batched (BL-877); BL-828 progress.
+  - `v0.993.0` `da5b8bf49`: pre-push pool teardown works with `ps` failing (BL-881); a red full run publishes `.last` (BL-901).
+  - `v0.994.0` `e311bf7e4`: BL-868 load-free fixtures (items 7 and 11); deriver `--list` drops declared digests (BL-897); BL-828 allowlists emptied; slot-world groups reaped (BL-875 partial).
+  - `v0.995.0` `05e39c1ae`: BL-895 closed. STORY-BIND binds a record-only `--story` to the listed story, letter-led indices included; the lead re-runs the serial check over a lead-owned dispatch record (`--record-dispatch`, `--lead-range`); the QA merge decides from a per-shard-dir partition record (`--record-partition`); both refuse a foreign git common dir and a symlinked shard dir. BL-842 six-site wording; BL-840 `--list-defers` J1 cells. Files BL-904 and BL-905, which are adversary findings outside the release's files, filed rather than fixed, so the release's net is not a reduction (NET -1).
+- **Operator rulings this batch.** BL-895: "Build design A (Recommended)", "b1: view history (Recommended)", "Build lead-side re-run now (Recommended)", and "Ship it in 0.995.0 (Recommended)" (the merge and `--record-partition` run from the lead checkout). BL-538: "Build in a later batch (Recommended)". BL-883 dead premise; BL-616 into BL-868; BL-836 into BL-899. "Lead compaction and resume are normal operation" (`.claude/rules/operator-rulings.md`), and the durable ceiling to 74240.
+- **Facts for the next batch.** `FORK_BUDGET=2901`; `bash scripts/fork-profile.sh --section total` reads 2899, at the A3b margin with no headroom. `review-shard-merge` is the suite pole and grew from 330s to 620s loaded under 0.995.0 (BL-906).
+- **Backlog.** Live at close: 49 `^## BL-` headings. Archive: 829. BL-904, BL-905 (0.995.0), BL-906 and BL-907 (this close) were filed. **The next free id is BL-908.**
+- **Ledger at close.** One live candidate, PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT, raised by graph on 2026-11-02 after this batch was scoped, is filed as BL-907 and unbuilt. It touches the update skill, a bootstrapping file. PENDING 0.
+- **Graph at close.**
+  - Installed 0.994.0 (`e311bf7e`) on `ai-dlc/feature/per-chain-rebalancer-instances` per its `.claude/.ai-dlc-version`; its `main` reads 0.969.0. Earlier notes saying 0.990.0 were wrong.
+  - The operator held graph's pipeline until 0.995.0 landed and pulls it themselves; no rehearsal is owed from this distribution. 0.995.0's consumer impact is in its CHANGELOG entry: 0 review or merge verdicts move over graph 02fee241b.
+  - The pull is not preapproved; the newest runbook is `docs/plans/graph-pull-0891-to-0901.md`.
+

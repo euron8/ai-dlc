@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,22 +67,20 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 248 IS CLOSED: FIVE RELEASES, `v0.991.0` THROUGH `v0.995.0`. THE NEXT SESSION STARTS BATCH 249.**
-This block replaces the batch-247 record, which `scripts/plan-rotate.sh` moved to `docs/plans/archive/graph-ledger-full-drain.md`. Leads were ai-dlc-f8, then ai-dlc-b5 by operator instruction. Owners were ai-dlc-92 (docs, then core until the operator moved core to ai-dlc-b7), ai-dlc-f5 (hooks) and ai-dlc-97 (loadfree, mutants). No `graph-*` session is ever messaged.
-- **Landed.** Each row is one squash on `origin/main` whose subject starts with its version (`git log origin/main`).
-  - `v0.991.0` `6a4442c2f`: six archive LANDED lines re-anchored (BL-902); BL-883 closed as a dead premise; BL-616 folded into BL-868, BL-836 into BL-899.
-  - `v0.992.0` `78966dd63`: M1 reads kill-shaped emissions only (BL-903); join probes batched (BL-877); BL-828 progress.
-  - `v0.993.0` `da5b8bf49`: pre-push pool teardown works with `ps` failing (BL-881); a red full run publishes `.last` (BL-901).
-  - `v0.994.0` `e311bf7e4`: BL-868 load-free fixtures (items 7 and 11); deriver `--list` drops declared digests (BL-897); BL-828 allowlists emptied; slot-world groups reaped (BL-875 partial).
-  - `v0.995.0` `05e39c1ae`: BL-895 closed. STORY-BIND binds a record-only `--story` to the listed story, letter-led indices included; the lead re-runs the serial check over a lead-owned dispatch record (`--record-dispatch`, `--lead-range`); the QA merge decides from a per-shard-dir partition record (`--record-partition`); both refuse a foreign git common dir and a symlinked shard dir. BL-842 six-site wording; BL-840 `--list-defers` J1 cells. Files BL-904 and BL-905, which are adversary findings outside the release's files, filed rather than fixed, so the release's net is not a reduction (NET -1).
-- **Operator rulings this batch.** BL-895: "Build design A (Recommended)", "b1: view history (Recommended)", "Build lead-side re-run now (Recommended)", and "Ship it in 0.995.0 (Recommended)" (the merge and `--record-partition` run from the lead checkout). BL-538: "Build in a later batch (Recommended)". BL-883 dead premise; BL-616 into BL-868; BL-836 into BL-899. "Lead compaction and resume are normal operation" (`.claude/rules/operator-rulings.md`), and the durable ceiling to 74240.
-- **Facts for the next batch.** `FORK_BUDGET=2901`; `bash scripts/fork-profile.sh --section total` reads 2899, at the A3b margin with no headroom. `review-shard-merge` is the suite pole and grew from 330s to 620s loaded under 0.995.0 (BL-906).
-- **Backlog.** Live at close: 49 `^## BL-` headings. Archive: 829. BL-904, BL-905 (0.995.0), BL-906 and BL-907 (this close) were filed. **The next free id is BL-908.**
-- **Ledger at close.** One live candidate, PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT, raised by graph on 2026-11-02 after this batch was scoped, is filed as BL-907 and unbuilt. It touches the update skill, a bootstrapping file. PENDING 0.
-- **Graph at close.**
-  - Installed 0.994.0 (`e311bf7e`) on `ai-dlc/feature/per-chain-rebalancer-instances` per its `.claude/.ai-dlc-version`; its `main` reads 0.969.0. Earlier notes saying 0.990.0 were wrong.
-  - The operator held graph's pipeline until 0.995.0 landed and pulls it themselves; no rehearsal is owed from this distribution. 0.995.0's consumer impact is in its CHANGELOG entry: 0 review or merge verdicts move over graph 02fee241b.
-  - The pull is not preapproved; the newest runbook is `docs/plans/graph-pull-0891-to-0901.md`.
+**BATCH 249 IS CLOSED: SIX RELEASES, `v0.996.0` THROUGH `v0.1001.0`. THE NEXT SESSION STARTS BATCH 250.**
+This block replaces the batch-248 record. Lead was ai-dlc-e3; owners ai-dlc-d4, 57, 9c, cb and 51. No `graph-*` session is ever messaged.
+- **Landed** (`git log origin/main`; each subject starts with its version). After `0.999.0` came `0.1000.0` (operator, over 1.0.0); `validate-release-version.sh` compares fields numerically. **The next VERSION is `0.1002.0`.**
+  - `v0.996.0` `d123c3565`: BL-908 (PC-S321-ADVERSARIAL-SHARD-DIR-IS-HAND-TYPED-BY-THE-LEAD).
+  - `v0.997.0` `1d1f7c368`: BL-907 (PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT).
+  - `v0.998.0` `0d00d6d36`: BL-510 arm, BL-828, BL-868 item 15; BL-909, BL-910 filed.
+  - `v0.999.0` `160216d97`: BL-874, BL-875, BL-896, BL-904, BL-905.
+  - `v0.1000.0` `1809d8589`: BL-538 progress, still PARTIAL.
+  - `v0.1001.0` `7a6d25d44`: BL-906, `review-shard-merge` in two shards.
+- **Operator rulings.** BL-510 fixed; BL-868 item 15 exempt; BL-842's seeded-run count dropped; BL-905 runner mode; BL-538 party rounds in c5; release commit rotates; `FORK_BUDGET` raised by owners (owner rules, Receipts).
+- **Facts.** `FORK_BUDGET=2901`, `fork-profile.sh --section total` 2899. A6 reads **74238/74240**: the next durable-channel edit fails A6. BL-538 closes only on an `Outcome measured:` line from a graph sprint on `0.1000.0` or later. In the guard replay 1154 of 1343 `mark_file` values were not party-mode tails and read field-less, as at base.
+- **Backlog.** Live 43, archive 838. **The next free id is BL-911.**
+- **Ledger.** 0 live over 11 qualifying refs plus graph's working tree (control 0); both batch candidates archived upstream. PENDING 0.
+- **Graph.** Installed `0.997.0` (`1d1f7c36`) on `ai-dlc/feature/per-chain-rebalancer-instances`, `main` 0.969.0; 0 writes by this batch. The pull is not preapproved.
 
 ### Derive the state; do not trust the numbers below
 
@@ -920,7 +918,11 @@ candidate's surviving half is upstream's to file and build, never a question for
    - A new `scripts/*.sh` cost 3 forks before BL-898 (0.983.0) and measured 0 at 8f25c6904; a
      root-resolving `core/scripts/*.sh` measured +10. Put a receipt under its fixture
      (`core/fixtures/<f>/receipt-bl<N>.sh`); `bash scripts/fork-profile.sh --section total` in
-     your worktree, against `FORK_BUDGET`, decides.
+     your worktree, against `FORK_BUDGET`, decides. A3b fires when TOTAL + 2 exceeds the budget.
+     When your tip's TOTAL rises, raise `FORK_BUDGET` in `fork-budget.txt` yourself, in your own
+     release, by EXACTLY the measured rise with the reading in its comment, and report base and
+     tip TOTAL when you say ready; no round trip to <lead> (operator: "an arbitrary budget that
+     can be raised when needed").
    - The archive append conflicts at every rebase. Resolve by union, then a count check: the
      archive's `^## BL-` count equals base plus each side's additions.
    - A new pre-push step needs its script in the `inputs.decl` of every fixture that reads the
@@ -962,7 +964,13 @@ candidate's surviving half is upstream's to file and build, never a question for
       scripts/validate-shell-portability.sh` on the hand's own branch before it reports done
       (fixture-only verification missed an I54b and an S12 finding at batch 240), and with
       `bash scripts/validate-no-dead-doc-refs.sh` and `bash scripts/validate-mutant-kills.sh`
-      on the same tree (batch 244: two releases failed their pre-suite on exactly these). A conflict
+      on the same tree (batch 244: two releases failed their pre-suite on exactly these), and
+      with `bash scripts/validate-fixture-hygiene.sh` (0.997.0 went red at H5 on a prose comment
+      opening `# MUTANT-MATRIX `). A hand's hermetic run can exit 0 while printing `No such file
+      or directory` or `command not found` (an undeclared input): grep its ANSI-stripped output
+      for both, beside a control line that must match. When a fixture gains arms, re-measure its
+      `invocations.decl` from two agreeing COUNTED runs; a plain hermetic run arms no counter, so
+      J3 is invisible to it. A conflict
       resolution inside pinned prose is its own hand unit. A hand runs vem on its COMMITTED tree: a
       clean `git worktree add` at its sha, never its working tree, and it reads I77 by seeding a
       control that must fail. The carrier set is every fixture whose inputs.decl declares a file
@@ -980,7 +988,10 @@ candidate's surviving half is upstream's to file and build, never a question for
       your VERSION and your push turn; one push runs at a time. Never pick a version or a backlog id
       yourself. While you hold the push turn, never end a turn with nothing running: continue, or
       report the exact stopped state. <lead> checks the push turn about every 30 minutes.
-   6. In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
+   6. While another release gates, pre-rebase onto its pushed commit; once it lands, move with
+      `git rebase --onto origin/main <that commit>` (a plain rebase replays it), and check the
+      landed tree equals the tree it PUSHED, which a red gate can change.
+      In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
       `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
       `**LANDED (v<version>).**` line at the START of each closed entry's backlog body, sha-less
       because no sha the release commit can name is on main yet (BL-874); a sha already on
@@ -992,7 +1003,7 @@ candidate's surviving half is upstream's to file and build, never a question for
       closes and the net (closed minus filed). Read the squash message's NET and `Co-Authored-By`
       lines before the push. Derive the NET from `base..tip` (an entry filed AND closed on the
       branch counts as both, net 0), never copy it from a brief.
-   7. Run the pre-suite steps exactly as `docs/plans/graph-ledger-full-drain.md`
+   7. Before EVERY push, a re-push included, run the pre-suite steps exactly as `docs/plans/graph-ledger-full-drain.md`
       action "Gate it the way the hook runs it, and read the GATE's own exit." says; the release
       push is the gate. Read each changed fixture BY NAME in the push's output, against an
       impossible-name control, and read the push's read list including directory-prefix declarers.
@@ -1007,7 +1018,8 @@ candidate's surviving half is upstream's to file and build, never a question for
    9. Cleanup only after <lead> verifies, one action per turn. A blob-equality "did it land" check takes a synthetic
       control, `git commit-tree -p <old base> origin/main^{tree}` (must read EQUAL) beside an unlanded sha as the
       negative, never a landed branch, which reads DIFF once main edits a shared file. Action 1 is worktree removal plus a
-      `git for-each-ref` list of every `<batch>-<cluster>*` and `worktree-agent-*` branch you
+      `git for-each-ref` list (save the full `git worktree list --porcelain` first, so a count
+      drift can be attributed) of every `<batch>-<cluster>*` and `worktree-agent-*` branch you
       created, each tip shown reachable from the kept `-dev` ref or `origin/main` (by ancestry,
       else by patch-id, else by every added line present), sent to <lead> BEFORE any
       `git branch -D`. The list also names every worktree under your scratchpad and
