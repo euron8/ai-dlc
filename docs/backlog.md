@@ -800,7 +800,7 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 
 **Progress (v0.968.0, batch b245).** Shipped: `validate-handoff-evidence.sh --render-dar <story-file> <frozen>` prints one generated `capture-heads` block, one line per capture in the `--list-captures` order (path, head as written with any `(+dirty)`, the command line from the command-line reader), with a count only for the capture cited on the `Full-collection run:` line. `--render-dar ... --check` refuses `dar-heads-stale`, `dar-heads-missing` and `dar-heads-duplicate`, and handoff mode runs the same check, so the existing pre-gate call refuses a stale block. A story older than the commit that added the mode gets `WARN dar-heads-missing` instead of a refusal. The block is stripped before capture citations are read, so rendered paths never create captures. `dev.md` tells the dev to cite captures by path only and paste the rendered block; `qa.md` stops comparing Dev Agent Record prose to capture headers; `implementation.md` runs the handoff call before every gate-2 dispatch, including the GATE1-SKIP path. Fixture arms in `story-evidence-scaffold`: r1 (rendered block, check 0), r2 (retyped head, `dar-heads-stale`), r3 (no block, retyped head, `dar-heads-missing`), r4 (legacy story, WARN only), r5 (two blocks, duplicate), r6 (replay capture with two `head:` lines renders the replay's own), r7 (a rendered command naming a second tracked `.log` pastes clean), r8 (a capture cited only inside the block drops out of `--list-captures`) and r9 (the `(+dirty)` suffix renders). Receipt scores under `set -uo pipefail`: fix 0, `reg1-legacy-any` 1, `reg2-no-strip` 1, second spelling (rev-list ancestry) 0. `qa.md` gains a sibling `## Carried Findings` section, so a gate-2 re-validation answers each carried finding of pass M-1 with a `carried:` line, and the gate-2 fan-out briefs carry the `validate-carried-findings.sh --list` lines. A replay capture renders no count (D-2). This entry stays `verify: manual` and closes only on an `Outcome measured:` line from a graph sprint (gate-2 passes per story, the BL-838 column); no LANDED line is written.
 
-**Progress (batch b245 close; batch b248).** The seed-once cut is done in v0.971.0 (902d6f7e0): the receipt's world is built once per run, at `core/fixtures/story-evidence-scaffold/run.sh:910`, where `b43_run` calls `rcpt_run "$WORK/rw-bl843"`. Before that commit this entry's receipt rebuilt its world on every mutant call, about 3600 of 8800 starts.
+**Progress (batch b245 close; batch b248).** The seed-once cut is done in v0.971.0 (902d6f7e0): the receipt's world is built once per run, at `core/fixtures/story-evidence-scaffold/run.sh:986`, where `b43_run` calls `rcpt_run "$WORK/rw-bl843"`. Before that commit this entry's receipt rebuilt its world on every mutant call, about 3600 of 8800 starts.
 
 verify: manual
 
@@ -1224,6 +1224,8 @@ Re-audit (BL-817): graph s317+s318 against s319, `docs/analysis/pipeline-efficie
 
 `dar-missing` in `validate-handoff-evidence.sh` handoff mode is a NEW gate-1 arm, ERROR, 3 of 141 historical snapshots refused, 0 false positives: it refuses a story whose `## Dev Agent Record` is absent or holds only template placeholders at the frozen sha, and names the remedy for a lead-executed story (a one-line DAR carrying `lead (self-executed`, under Check 6's waiver). The 3 are graph s317 4.2a, 4.3a and 2.7; the lead re-ruled 2.7 a true positive because its dev report carries a dev-written DAR.
 
+**NOTEs (batch b249 delta review of 0.998.0).** Three latent gaps in the `dar-missing` grammar of `core/scripts/validate-handoff-evidence.sh`, each measured at 0 graph stories. N1: a Dev Agent Record section made only of `###` subheadings that carry their values on the heading line reads as empty. N2: bullet-prefixed `TBD` or `{{x}}` skeleton lines still count as content. N3: an unclosed code fence swallows the rest of the section as content.
+
 verify: manual
 
 ## BL-512 — gate passes are discarded for lead paperwork, most often a Check 22 waiver
@@ -1317,8 +1319,6 @@ Former receipt (the mechanism, not the outcome): sh S=core/scripts/wait-for-deli
 
 Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
 
-**Progress (batch b249).** Owed item 1 is decided as PROSE: the four party-seat roles already carry the ugrep pattern-form sentence, and a derived path list was rejected at contract time as a hand regex. That sentence was added to `core/team-roles/adversary.md` `## Constraints` as its own bullet after the `git ls-files` bullet, pinned by the `process-rule-pins` R row `adv-grep-error`. This also discharges BL-550's second-instance residual, the ugrep-error greps in graph s319 requirements-adversarial-p1. Owed item 2, a receipt over the DISPATCHED brief, stays open. The entry is a DEFECT (efficiency) entry, so it closes only on an `Outcome measured:` line.
-
 verify: manual
 
 ## BL-543 — the serial remediator discovers its sibling and moved-cite worklist by hand, making it the longest single wait in the planning steps
@@ -1350,6 +1350,8 @@ Closed in 0.794.0 (verified 8aab009d) on a tree receipt, reopened by BL-817. The
 Former receipt (the mechanism, not the outcome): sh for r in architect dev pm tea; do s=$(LC_ALL=C awk "/^## As a party seat/{g=1} g&&/^## /&&!/party seat/{exit} g" "core/team-roles/$r.md"); case "$s" in *"list it first with \`git ls-files <dir-or-glob>\`"*) ;; *) exit 1;; esac; done
 
 Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+**Progress (batch b249).** The b249 residual for this entry is recorded under BL-615's batch b249 progress paragraph.
 
 verify: manual
 
@@ -1397,6 +1399,8 @@ Related: BL-550 (archived; both instances), I124, I123.
 Former receipt (the mechanism, not the outcome): sh t="$(awk '/^## Constraints/{p=1;next} p&&/^## /{exit} p' core/team-roles/adversary.md | tr '\n' ' ' | tr -s ' ')"; [ -n "$t" ] || exit 9; grep -qE 'path[^.]*(does not|do not|never|neither)[^.]*cite' <<<"$t" && grep -qE 'git ls-files <[^>]+>`[^.]*read only what' <<<"$t" && ! grep -qE '^#+ As a party seat' core/team-roles/adversary.md && bash scripts/validate-enforcement-map.sh --arms I123,I124 >/dev/null 2>&1
 
 Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy): before (s319 pooled, 20 stories) 2.12 h gap-inclusive, token-equivalent $56.4 (API $56.4), 100.9M tokens; after s320 (13 stories) 5.54 h gap-inclusive (gap 4.34 h), token-equivalent $78.9 (API $78.9), 137.6M tokens. Lead-seat local-model share of calls in this step group: s319 0%, s320 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+**Progress (batch b249).** Owed item 1 is decided as PROSE: the four party-seat roles already carry the ugrep pattern-form sentence, and a derived path list was rejected at contract time as a hand regex. That sentence was added to `core/team-roles/adversary.md` `## Constraints` as its own bullet after the `git ls-files` bullet, pinned by the `process-rule-pins` R row `adv-grep-error`. This also discharges BL-550's second-instance residual, the ugrep-error greps in graph s319 requirements-adversarial-p1. Owed item 2, a receipt over the DISPATCHED brief, stays open. The entry is a DEFECT (efficiency) entry, so it closes only on an `Outcome measured:` line.
 
 verify: manual
 
@@ -1536,6 +1540,8 @@ Close condition: every item above except item 15 (exempt by operator ruling 2026
 - BL-616's `MAXATT=30` retry in `readset-sandbox-root-clause` is removed. The fixture judges the workload's own errno on a mechanically denied profile, and `--matrix` printed the four MATRIX lines byte-identically on the old and new channel before the stream arms were deleted. This supersedes the log-stream channel that folded item 13 measured; items 12 and 14 are not touched here.
 
 The receipt is now `bash core/fixtures/fixture-hygiene/receipt-bl868.sh`, which sees executed sh starts (through H3), bounded real-time waits and `±` rows, and reads rc 1 with the open rows listed until every item closes; `scripts/check-no-provisional-invocations.sh` stays only as the `±` check.
+
+**NOTE N7 (batch b249 delta review of 0.998.0).** core/fixtures/fixture-hygiene/receipt-bl868.sh matches only a column-0 TD_CEIL= assignment, not export TD_CEIL= or readonly TD_CEIL= forms; latent, no such form exists in the tree.
 
 verify: manual
 

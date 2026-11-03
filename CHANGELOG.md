@@ -19,6 +19,10 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [Unreleased]
+
+0.998.0's BL-615 progress note sat under BL-541 in docs/backlog.md and is relocated under BL-615, with a pointer from BL-550.
+
 ## [0.1000.0] - 2026-11-03
 
 Batch b249, cluster b249-c5. BL-538 progress; the entry stays PARTIAL until its outcome measurement. Files none. No PC- id is closed.
