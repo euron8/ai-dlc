@@ -645,11 +645,16 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      the tree. Do NOT hand-hold the stamp back — the carry row already reaches the operator
      and step 7's gated apply is what closes it.
 
-     **A derived fixture is a consumer edit when, and only when, `preclassify.sh`'s BUCKET for
-     that path says so — never overwrite one that is.** Report the path, leave the file, and
+     **A derived fixture is a consumer edit when `preclassify.sh`'s BUCKET for that path says
+     so, or, for a path it has no row for, under the rule below — never overwrite one that is.** Report the path, leave the file, and
      continue the cycle. Only `.claude/skills/ai-dlc-update/**` is overwrite-safe by declaration;
      a fixture is not, and the derived set's FIRST term is grepped from the fixtures rather than
      from the diff, so it names fixtures this pull does not change.
+     In a directory written whole, a file with NO `preclassify.sh` row (upstream did not change
+     it) is a consumer edit when its consumer copy differs from the distribution blob at `base`
+     AND at the stamp's `skill_commit`, or when the consumer added it (absent upstream at both
+     refs); such a file holds its whole directory back under the ONE-UNIT rule below.
+     `preclassify.sh` buckets only the `base`..`theirs` diff, so it never classifies such a file.
 
      **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
      back as a consumer edit, write NONE of that directory and carry ALL of it** to the step-7
@@ -668,7 +673,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      it during the pull that delivers it is still reading the installed copy.
 
      **DO NOT DERIVE THE VERDICT BY COMPARING REFS. `preclassify.sh` has already answered this,
-     for these paths, in this run.** Take its bucket and apply the SAME subtraction that
+     for these paths, in this run.** This paragraph, and the ref-comparison passage
+     below it, bind only paths `preclassify.sh` buckets; a path it has no row for is decided by
+     the undiffed-file rule above. Take its bucket and apply the SAME subtraction that
      `reconcile/self-update-gate.sh` applies in the arm guarding its `SELF-UPDATE-CARRY` row —
      grep that token to find it. That arm is authoritative for which buckets mean consumer
      divergence, and its own header says keying on anything narrower names a set the downstream
@@ -695,7 +702,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      four derived fixtures `ALREADY-AT-THEIRS` while a hand-rolled ref comparison performed under
      this step called all four CONSUMER-EDITED. The suppression was never missing —
      `at_self_update()` was present in the installed copy throughout; it was BYPASSED by the
-     second derivation that this step does not call for. A ref comparison is wrong here in the direction
+     second derivation that this step does not call for. For a path `preclassify.sh` buckets, a
+     ref comparison is wrong here in the direction
      that REFUSES a legitimate write, and it is wrong on every split stamp, which is the normal
      state after any self-update and which this cycle itself CREATES.
 
@@ -715,6 +723,19 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      wrapper's record carrying the checker's lines where the hook's would be. Report the
      `GATE-RECORD-REFUSED` line instead of a `HOOK-REFUSED` one. Never fix a record refusal by
      re-running the gate on the written tree: that record is `PRE-WRITTEN` by construction.
+
+     **An `UNDIFFED-OVERWRITE` refusal has a sanctioned remedy that lands the cycle** and
+     supersedes the disposition above for that tag only. The commit overwrote a consumer-authored
+     file that upstream did not change. For each directory the `GATE-RECORD:` line names: restore
+     it from the parent commit with `git checkout HEAD^ -- <dir>`, `git rm` any file the commit
+     added under it, run `git commit --amend --no-edit`, and re-run the push wrapper with a NEW
+     `<out>` path. A re-run with the same `<out>` refuses `already exists`; that is not a
+     transport failure. The first `<out>` record stays untracked, is never staged into the
+     amend, and is carried to step 7 like the HOOK-REFUSED record, where the next gated apply
+     commits it. The restored directory is
+     carried whole to the step-7 gated apply under the ONE-UNIT rule. This re-runs the wrapper,
+     not the gate, so the rule against re-running the gate on the written tree still holds. The
+     HOOK-REFUSED sequence with `SELF-UPDATE-DEFER` remains a safe fallback.
    - **Then STOP this invocation and re-invoke `/ai-dlc-update` automatically —
      do NOT ask whether to.** The self-update landed, but THIS invocation is
      still executing the PRE-update logic — its reconcile/classify/apply behavior
