@@ -1397,6 +1397,7 @@ dg_mark_scan() {
       dot = (c == L && substr(t, L, 1) == ".")
       t = substr(t, 1, c - 1)
       sub(/^[[:space:]]+/, "", t); sub(/[[:space:]]+$/, "", t)
+      mt = t
       n = (t == "") ? 0 : split(t, f, /[[:space:]]+/)
       if (n < 2) continue
       last = f[n]
@@ -1412,14 +1413,30 @@ dg_mark_scan() {
       if (m >= 5 && h[m] ~ /^findings=([0-9]+|<x>)$/ && !dot) good++
       }
     }
-    END { if (!den && good > 0 && good == trig) print "rendered" }'
+    END { if (trig == 1) { u = mt; while (match(u, "party-mode/s[0-9]+/[^[:space:]\"\047]+")) { f[1] = substr(u, RSTART, RLENGTH); u = substr(u, RSTART + RLENGTH) } } }
+    END { if (!den && good > 0 && good == trig) { if (trig == 1) print "rendered\t" f[1]; else print "rendered" } }'
 }
+# THE SEAT FILE: when exactly ONE invocation triggered and it is well formed, `rendered` carries a
+# tab and that invocation's seat file, and the row records it as `mark_file`. Several invocations
+# record none: no single file is named, and the reference consumer's multi-mark briefs are all
+# non-party. The value is the LAST `party-mode/s<digits>/<non-blank, non-quote>` match in that
+# invocation's text (the first END block, which overwrites f[1] with it), else its <file> argument
+# f[1] as split. A `"` or `'` ends the tail: a brief that quotes its path would otherwise record a
+# tail ending in the quote with no opening one, which the join cannot strip and which names no seat.
+# The regex is a string so the apostrophe can be spelled \047 inside this single-quoted awk program.
+# The TAIL IS EXTRACTED so a blank in the consumer's root cannot cut it: split on whitespace,
+# `--mark /Users/n8/My Drive/graph/_bmad-output/party-mode/s321/x.md ...` gives f[1] = `/Users/n8/My`,
+# which names no seat, and the join reads such a row as field-less. It is copied from the brief and
+# is not proof the file exists; the reader (join-remediator-shards.sh seat_row_scan) keys on that
+# tail alone. Taken by parameter expansion and one awk match loop, so the field costs no fork.
 SPAWN_MARK=""
+SPAWN_MARK_FILE=""
 DG_MARK_OUT="$(printf '%s\n' "$PROMPT" | dg_mark_scan 2>/dev/null || true)"
 case "$(printf '%s\n' "$DG_MARK_OUT" | sed -n 1p)" in
   deny)
     dg_deny "AI/DLC dispatch guard: refused a dispatch whose brief tells the teammate to run a \`--mark\` that wait-for-deliverable.sh will refuse after the work is done: the last field must be findings=<n> (got '$(printf '%s\n' "$DG_MARK_OUT" | sed -n 2p)'). The line: $(printf '%s\n' "$DG_MARK_OUT" | sed -n 4p) -- Re-dispatch with the line rendered as: $(printf '%s\n' "$DG_MARK_OUT" | sed -n 3p) -- the grammar is <lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>, with <n> the number of findings in the file (0 when it carries none). Any other count goes in the deliverable, not on the marker line." ;;
-  rendered) SPAWN_MARK=rendered ;;
+  rendered*) SPAWN_MARK=rendered
+    case "$DG_MARK_OUT" in "rendered"$'\t'?*) SPAWN_MARK_FILE="${DG_MARK_OUT#*$'\t'}" ;; esac ;;
 esac
 
 mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true
@@ -1440,6 +1457,7 @@ jq -nc \
    --arg shardraw "${SPAWN_SHARD_RAW:-}" \
    --arg parent "${DG_AGENT_ID:-}" \
    --arg mark "${SPAWN_MARK:-}" \
+   --arg markfile "${SPAWN_MARK_FILE:-}" \
    --arg rem "${SPAWN_REMEDIATES:-}" \
    --arg reminv "${SPAWN_REMEDIATES_INVALID:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
@@ -1492,6 +1510,10 @@ jq -nc \
    # row without the KEY gets a bare beat. Derived from the brief bytes, never claimed by a hand.
    # NO APOSTROPHE HERE either.
    | if $mark != "" then . + {mark: $mark} else . end
+   # `mark_file` ONLY beside `mark` and only for a brief with exactly one invocation: the path
+   # argument COPIED FROM THE BRIEF as written, never proof that the file exists. The seat-row
+   # join matches a row carrying it to the one seat file its tail names. NO APOSTROPHE HERE either.
+   | if $markfile != "" then . + {mark_file: $markfile} else . end
    # `remediates` ONLY when the brief carries exactly one THE REMEDIATES LINE, and
    # `remediates_invalid` ONLY when it carries more than one; a row with neither KEY named
    # nothing. Intent, not a remedy: validate-spawn-ledger.sh decides. NO APOSTROPHE HERE either.

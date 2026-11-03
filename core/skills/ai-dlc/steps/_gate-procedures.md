@@ -290,10 +290,15 @@ Check 24 reads it.
 
 Execute the sub-skills back-to-back, with no pause for human input between them:
 
-1. `/bmad-party-mode --mode subagent --non-interactive` — the step's seats (bound
-   via the Rule 20 role-manifest preamble to their `.claude/team-roles/<role>.md`)
-   walk the step's subject and record findings; run the step's source-fidelity check if it
-   names one.
+1. Party mode — the step's seats walk the step's subject and record findings; run the
+   step's source-fidelity check if it names one. Its shape follows the subject. A sharded
+   round (the seats x parts, seats x sections and seats x subject-parts cases below) is
+   per-seat role-bound `Agent` spawns, one per (seat, ordinal) plus one cross agent per
+   seat, each bound by its Rule 19 role-contract line, spawned by the lead or by a
+   round-dispatcher under Rule 28 ("A wide round is run by a round-dispatcher."), and never
+   the `/bmad-party-mode` Skill. An unsharded round is
+   `/bmad-party-mode --mode subagent --non-interactive` through the Skill tool, its seats
+   bound via the Rule 20 role-manifest preamble to their `.claude/team-roles/<role>.md`.
 
    **Minimum mechanism (Rule 26(c)).** Failure caught: a capital-path or address defect in
    first-authored text that no later round raises, such as a partial request rebalancing a whole
@@ -377,25 +382,27 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    editing on it.
 
    **An unsharded round has the same write model.** One agent per seat over the whole subject
-   (a `SERIAL:` map, a one-part subject, or a subject that meets none of the cases below), the
-   seats still edit nothing, and ONE remediator briefed `shard: none (serial-document)` (Rule 28
+   (a `SERIAL:` map, a one-part subject, or a subject that meets none of the cases below), run
+   through the `/bmad-party-mode` Skill with both flags and the Rule 20 preamble, the seats
+   still edit nothing, and ONE remediator briefed `shard: none (serial-document)` (Rule 28
    exception 4) applies their findings and writes the party repair record itself, every entry
    carrying `source:`. No join runs, so the lead runs
    `scripts/ai-dlc/join-remediator-shards.sh --sources <that record> --sprint <N>`; a refusal
    re-dispatches that remediator.
 
    **When the subject is two or more files** (`stories/`), the round is sharded (Rule 28,
-   "Split dispatch": seats x parts axis). The invocation brief asks for one persona agent per
-   (seat, story ordinal) plus ONE cross-story agent per seat that reads every
-   story ("The cross agent" below). The
+   "Split dispatch": seats x parts axis). The lead or the round-dispatcher spawns one
+   role-bound agent per (seat, story ordinal) plus ONE cross-story agent per seat that reads
+   every story ("The cross agent" below). The
    ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints
    (`<shards-dir>` is the path `scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` prints for the next review pass, the directory shaped `s<N>/shards/<artifact>-p<M>/`; the lead builds every brief output path, `--map` argument, beat-join path and merge argument from that printed path and never types a shard dir name; "Shard a multi-file artifact" below states the mode's rules),
    and each agent's brief carries its `shard:` line. A round spawns seats x (K + 1)
    agents, K being the story count.
    **When the subject is a single document** (one path), the round is sharded (Rule 28,
    "Split dispatch": seats x sections axis) over the parts
-   `scripts/ai-dlc/partition-document.sh --map <doc>` prints: one persona agent per (seat,
-   part ordinal) plus ONE cross-part agent per seat that reads the whole document. A `SERIAL:` answer keeps one agent per seat
+   `scripts/ai-dlc/partition-document.sh --map <doc>` prints: the lead or the
+   round-dispatcher spawns one role-bound agent per (seat, part ordinal) plus ONE cross-part
+   agent per seat that reads the whole document. A `SERIAL:` answer keeps one agent per seat
    (Rule 28 serial exception 4) and has no cross agent. `PART_CAP` in `partition-document.sh` bounds the parts, so a round
    spawns at most seats x (`PART_CAP` + 1) agents.
    **The cross agent, on every axis**, is ONE per dispatch, one per seat in a party round
@@ -409,8 +416,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    **When the subject is the requirements subject** (`steps/requirements.md` section 5: the
    brief, `SPEC.md`, `prd.md` and `architecture-impact.md` under one base), the round is
    sharded (Rule 28, "Split dispatch": seats x subject-parts axis) over the parts
-   `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>` prints: one persona agent
-   per (seat, part ordinal) plus one cross-part agent per seat. This is the subject's first
+   `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>` prints: the lead or the
+   round-dispatcher spawns one role-bound agent per (seat, part ordinal) plus one cross-part
+   agent per seat. This is the subject's first
    map: the lead resolves `<base sha>` as `steps/requirements.md` section 5 states, the map
    records it in the subject manifest, and every later sub-pass passes the manifest's sha. The
    seats edit nothing, as above, and the party repair below applies their findings. Before wave 1 the lead writes the sha256 of every subject file, one `<stem>=<sha>`
@@ -438,7 +446,9 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    cross members are dispatched first in wave 1, ahead of the per-ordinal members: they are
    the round's longest seats, and the harness usually admits a message's earlier calls first,
    though not always.
-   The lead's join, before it proceeds, derives the EXPECTED set — `<step>-<seat>-<ordinal>.md`
+   The lead's join, which runs after the round-return file when a round-dispatcher ran the
+   round (Rule 28, "A wide round is run by a round-dispatcher."), before it proceeds derives
+   the EXPECTED set — `<step>-<seat>-<ordinal>.md`
    for every seat on the step's seat list (never from directory entries) and every ordinal the
    `--map` prints, plus `<step>-<seat>-cross.md` per seat — and takes as delivered only the paths
    a beat armed with `--complete --since <round epoch>` reports as `DELIVERED` (Rule 28 owns the epoch and
@@ -446,11 +456,15 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    expected minus delivered as the MISSING (seat, ordinal) and (seat, cross) members, which
    are re-dispatched after the join under the Rule 20 re-dispatch budget. A spawn the harness
    rejected is not MISSING: it is re-dispatched on the first agent exit since the rejection
-   (Rule 28, "A rejected spawn"), never held for the join. `/bmad-party-mode` internals are not
-   ai-dlc's, so this file-level join is the only check available.
-   **Both flags are load-bearing and neither is optional — SKILL.md Rule 20 (i)
-   owns why.**
-   **Every per-seat deliverable this invocation produces is written under
+   (Rule 28, "A rejected spawn"), never held for the join.
+   **On the Skill shape both flags are load-bearing and neither is optional — SKILL.md
+   Rule 20 (i) owns why.**
+   **The record of a sharded party round's seat is the dispatch guard's spawn-ledger row
+   for its spawn, written by the hook, and the seat's `--mark` line, written by
+   `wait-for-deliverable.sh`.** Its seats write no `SKILL_INVOCATION_PROVENANCE` block, and
+   Check 17 runs no arm on a seat file. A block stamped onto a seat file after the fact is a
+   forged record, never a remediation.
+   **Every per-seat deliverable this round produces is written under
    `_bmad-output/party-mode/s<N>/`**, one file per seat, named
    `<step>-<seat>.md`, or when sharded one per (seat, ordinal), named `<step>-<seat>-<ordinal>.md`
    and one cross file per seat, named `<step>-<seat>-cross.md`. That directory is the declared area for it

@@ -133,6 +133,7 @@
 # MUTANT-MATRIX drop-poll-reason decides=SUBPOLL twins=AGENT
 # MUTANT-MATRIX loopend-word decides=SUBPOLL twins=AGENT
 # MUTANT-MATRIX loopend-no-redirect decides=AGENT twins=SUBPOLL
+# MUTANT-MATRIX wfd-is-poll decides=AGENT twins=SUBPOLL
 # MUTANT-MATRIX m-amp decides=WAITERNEAR twins=WAITER
 # MUTANT-MATRIX m-scope decides=SCOPE twins=WAITER
 # MUTANT-MATRIX m-append decides=SNAPWRITE twins=SNAPREAD
@@ -422,6 +423,14 @@ arm_AGENT() {
   done
   call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/ci-local.sh' '')"; chk_rc
   [ "$DEC" = deny ] || note AGENT
+  # A round-dispatcher's beat: the foreground wait-for-deliverable.sh call at 600000, with the
+  # beat prefix and a real --dispatch, from a subagent (agent_id set) is allowed. Control: the same
+  # payload with no agent_id is the lead's and is denied on budget.
+  _wb='AI_DLC_WAIT_BEAT_SECS=540 scripts/ai-dlc/wait-for-deliverable.sh --complete --since 1700000000 --dispatch a0123456789abcdef _bmad-output/planning-artifacts/s1/shards/x-p1/1.md'
+  call "$h" "$REAL" - "$(jq -nc --arg c "$_wb" --arg a a1b2c3 '{tool_name:"Bash", agent_id:$a, tool_input:{command:$c, timeout:600000, run_in_background:false}}')"; chk_rc
+  [ "$DEC" = allow ] || note AGENT
+  call "$h" "$REAL" - "$(jq -nc --arg c "$_wb" '{tool_name:"Bash", tool_input:{command:$c, timeout:600000, run_in_background:false}}')"; chk_rc
+  [ "$DEC" = deny ] || note AGENT
 }
 
 arm_SUBPOLL() {
@@ -446,6 +455,9 @@ arm_SUBPOLL() {
     case "$REASON_TXT" in *'re-issue the job itself with `run_in_background: true`'*'do not poll it'*'wait-for-deliverable.sh --complete'*) ;; *) note SUBPOLL ;; esac
     case "$REASON_TXT" in *'declare a timeout of at most'*) note SUBPOLL ;; esac
   done
+  # The beat wrapped in a sleep loop is a poll again: the dispatcher exception is the bare call only.
+  call "$h" "$REAL" - "$(cmd_call "until AI_DLC_WAIT_BEAT_SECS=540 $W --complete --dispatch a0123456789abcdef x.md; do sleep 5; done" 'a1b2c3')"; chk_rc
+  [ "$DEC" = deny ] || note SUBPOLL
   # Its allow twins -- the loop backgrounded, at the budget, with no timeout, and a readiness
   # retry with no timeout -- sit in BG, BOUNDARY and NOTIMEOUT: those gates are shared with the
   # lead's arm, so the arm that owns each gate owns its poll twin too.
@@ -693,6 +705,9 @@ mut drop-poll-reason SUBPOLL AGENT "SUBPOLL" -e 's/^POLL="\${T##\* }"$/POLL=0/'
 mut loopend-word SUBPOLL AGENT "SUBPOLL" -e 's/(?!" + loopend + ")/(?!\\\\bdone\\\\b)/'
 # 23. the loop end without the redirect characters: `done>out; sleep 5` reads as a poll.
 mut loopend-no-redirect AGENT SUBPOLL "AGENT" -e 's/done(\[ \\t;&|)<>\\n\]|\$)/done([ \\t;\&|)\\n]|$)/'
+# 23b. wfd-is-poll: the subagent poll match widened to a bare wait-for-deliverable.sh call, so a
+#     round-dispatcher's foreground beat is denied as a poll.
+mut wfd-is-poll AGENT SUBPOLL "AGENT" -e 's/| tostring | (loopsleep or longsleep);/| tostring | (loopsleep or longsleep or test("wait-for-deliverable"));/'
 # 24. m-amp: the waiter's redirect alternative stops consuming the `&` of `2>&1`/`>&2`, so that
 #     `&` reads as the lone one and `wfd x 2>&1` is denied.
 mut m-amp WAITERNEAR WAITER "WAITERNEAR" -e 's/(?>\[<>\]+)(?:&\[0-9-\]\*|(?!&))/(?>[<>]+)/'
@@ -711,10 +726,10 @@ mut m-noatomic REGEXLIMIT WAITER "REGEXLIMIT" -e 's/|(?>\[<>\]+)(?:&/|[<>]+(?:\&
 mut m-blanktail REGEXLIMIT WAITER "REGEXLIMIT" -e 's/)\*?(?<!\[ \\t\])\[ \\t\]\*(?:/)*?[ \\t]*(?:/'
 # 30. m-notry: the shape tests lose their catch, so a regex error is a jq error and the call fails open.
 mut m-notry REGEXLIMIT WAITER "REGEXLIMIT" -e 's/def safetest(\$re): try test(\$re) catch (if (tostring | test("retry-limit")) then false else error end);/def safetest($re): test($re);/'
-# 31. m-badre: a compile error injected into wfdbg. The narrowed catch rethrows it, the jq pass fails
+# 31. m-badre: a compile error injected into wfdbg (the regex runs only for a command naming the waiter, so the AGENT beat cell and the SUBPOLL waiter-loop cell go red with it).The narrowed catch rethrows it, the jq pass fails
 # and the hook prints its fail-open message and allows: WAITER, SCOPE, REGEXLIMIT (no deny) and FAILOPEN (printed error)
 # both go red. The OLD broad catch with the same injection would print nothing and redden the no-deny arms (WAITER, SCOPE, REGEXLIMIT) but never FAILOPEN.
-mut m-badre FAILOPEN WAITERNEAR "FAILOPEN REGEXLIMIT SCOPE WAITER" -e 's/wait-for-deliverable\\\\\.sh/&(/'
+mut m-badre FAILOPEN WAITERNEAR "AGENT FAILOPEN REGEXLIMIT SCOPE SUBPOLL WAITER" -e 's/wait-for-deliverable\\\\\.sh/&(/'
 # 32. m-failopen: the parse sentinel allowed, as before the fix -- a lone surrogate appended to any
 #     refused command loses every deny again.
 mut m-failopen SURROGATE PROGFAULT "SURROGATE UNPARSEABLE" -e "s/^  '@PARSEFAIL@') printf .*; exit 0 ;;\$/  '@PARSEFAIL@') exit 0 ;;/"

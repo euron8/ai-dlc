@@ -502,6 +502,9 @@ seat_complete_check() {
         t = substr(v, RSTART, RLENGTH - 1); v = substr(v, RSTART + RLENGTH); sub(/.*\//, "", t); print t
       }
     }' "$@" | LC_ALL=C sort -u)"
+  # Before the marker era is read, which returns early when no seat is marked: a hand-written round
+  # carries no marker at all, and its rows are joined regardless.
+  seat_row_check "$sd" "$cited"
   # The steps in the marker era: every marker's own <step> token, over the WHOLE directory.
   for f in "$sd"/*.md; do
     [ -f "$f" ] || continue
@@ -521,6 +524,251 @@ seat_complete_check() {
   done <<SCEOF
 $cited
 SCEOF
+}
+# --- EVERY SHARDED SEAT HAS ITS SPAWN ROW. A sharded party round runs as per-seat role-bound Agent
+# spawns, and its per-seat RECORD is the dispatch guard's spawn-ledger row for that spawn (written by
+# the hook at PreToolUse, never by the seat), plus the seat's own `--mark` line. A seat writes no
+# provenance block and Check 17 runs no arm on a seat file, so without this join a seat spawned
+# outside the guard, or a seat file written by hand, carries no record at all and nothing refuses it.
+# This is the reader that runs after every sharded party round: the round's repair is joined (parts
+# mode) or checked (--sources), and both call seat_complete_check, which calls this.
+# THE JOIN KEY: a seat file `<step>-<seat>-<ordinal>.md` or `<step>-<seat>-cross[-<n>].md` (the
+# name is the population, never its marker: a hand-written seat may carry none) needs EITHER a row
+# whose `mark_file` (the dispatch guard copies it from the brief's `--mark` line; one pair of
+# surrounding `"` or `'` stripped) ends in `party-mode/s<N>/<that basename>`, role-bound, whose `role`
+# is the seat segment of that basename, and stamped at or after the install (matched by NAME, never
+# by step, ordinal or K), OR, when no such row names it, a field-less row of
+# `<state>/spawn-ledger.jsonl` with `sprint` N, `role` <seat>, `role_contract_cited: true`, and a
+# `shard` whose first token is `<ordinal>/<K>` or `cross/<K>`, K the round's ordinal count (the
+# largest ordinal among that step's seat files). Rows are consumed one per file, so two seat files
+# of one (seat, ordinal, K) need two rows. The step is the name minus `-<seat>-<ordinal>` (the seat
+# is the last hyphen segment before the ordinal); judged are the whole rounds of the steps the
+# record cites, not only the cited files.
+# NOT JUDGED: an unsharded seat file `<step>-<seat>.md` -- the Skill path's shape (i), one agent per
+# seat that `/bmad-party-mode` spawns, which writes no row the guard can bind to a shard and carries
+# the provenance block Check 17 reads instead. It has no ordinal suffix, so it never enters the scan.
+# THE LEGACY BOUNDARY IS THE INSTALLED RULEBOOK. A consumer runs this engine from step 3 of the pull
+# that delivers it, and the rulebook that moves sharded rounds off the Skill only at the reconcile
+# merge; between them a sharded round run through `/bmad-party-mode` as the old prose says has no
+# rows, correctly. So the join judges only when the installed
+# `.claude/skills/ai-dlc/steps/_gate-procedures.md` carries SEAT_ROW_TOKEN, and otherwise prints one
+# `SEAT-ROWS: SKIP` line naming why. The hole it leaves, stated: a consumer that has not merged the
+# rulebook is not judged at all. Block presence is not the boundary: s318 shows 40 blocks stamped
+# onto seat files after the fact, so a block is forgeable where the installed rulebook is not
+# written by the round.
+# FALSE-POSITIVE SET, MEASURED on copies of the reference consumer's party-mode/s318, s320, s321 and
+# its spawn ledger: s321's two rounds (requirements K=13, architecture K=6, 56 seat files, 0 blocks)
+# read 56 of 56 covered, 0 refused. Unbounded, s318 and s320 read 7 rounds uncovered in whole or part
+# (Skill-path sharded seats with blocks, a sharded round whose rows carry per-group `cross/K gN/6`
+# shards, a remediator-stamped round); every one predates the rulebook, so the boundary SKIPs them.
+# THE NARROWINGS: K enters the key (stories and sprint-review were both K=13 in one sprint, and
+# without K a row of one round covered a seat of the other); a file is matched on its NAME, not its
+# marker. RESIDUALS, stated: a round whose findings dispatch no repair is never joined, so nothing
+# runs this; a FIELD-LESS row (an older guard's, or one whose `mark_file` has no `party-mode/s<N>/`
+# tail after quote stripping, which names no seat file and is read as a field-less row) of another
+# round of the same sprint with the same (seat, ordinal, K) can cover a hand-written seat, and
+# another round's tail-less post-install rows, read as field-less, can date a legacy round as judged
+# and vote its K (the dispatch guard now extracts the tail from the brief, so a blank in the
+# consumer's root no longer cuts it: this is reachable only from a brief whose --mark path carries no
+# party-mode tail at all); a
+# field-row is matched on its seat basename alone, so a post-install field-row of an earlier run of
+# the same step and role covers the re-run's same-named seat at any K, and a round whose seats are
+# all field seats has no K to disagree on; a field-row is its seat's only record, so an uncited one,
+# or one of another role, refuses the seat even beside a field-less row that would cover it.
+SEAT_ROW_TOKEN="record of a sharded party round's seat is the dispatch guard's spawn-ledger row"
+# seat_row_scan: stdin `R<TAB>role<TAB>ord<TAB>K<TAB>ts` (a field-less row, or one whose `mark_file` has no
+# `party-mode/s<N>/` tail), `M<TAB>seat basename<TAB>role<TAB>covers 1|0<TAB>ts` (a row carrying `mark_file`,
+# quotes stripped and reduced to its `party-mode/s<SPRINT>/` tail; covers is `role_contract_cited`),
+# `C<TAB>cited basename`, `F<TAB>seat basename` -> per
+# cited step with seat files, in seat-file order: one `ROUND<TAB>step<TAB>latest ts or -1`, and when the install is
+# known and that date is before it a fourth field, the round's parsed seat basenames each led by `/` (the dating
+# list: the scan's own sharded-seat parse, so an unsharded `<step>-<seat>.md` never enters it), then either one
+# `DIS<TAB>step<TAB>the K values, sorted` or one `MISS<TAB>file<TAB>seat<TAB>ord<TAB>K<TAB>step` per seat file with
+# no row left. ONE KEY, ONE NORMALISATION, for the join and for the date: (role, ordinal) with the ordinal read
+# numerically on both sides (a file's `07` and a row's `7/13` are ordinal 7; every `cross` and `cross-N` is
+# `cross`). K IS THE ROWS', NEVER THE FILES': the step's K is a shard count that every seat file with a matched
+# row has a row at. Rows name no step, so a seat of one round also matches rows of another round of the sprint at
+# another K, which is why it is the COMMON K and not every K the rows name (measured on the reference consumer:
+# the union disagrees on both s321 rounds, the common set is {13} and {6}). No common K is a DISAGREEMENT and the
+# round is refused naming every K its seats' rows carry. Several common (s318 architecture {6,13}) cannot change
+# which seats join, since each row-bearing seat has a row at each, only the duplicate count: the smallest keys it.
+# A step none of whose seats has a row has no K (printed `K`) and every seat is a MISS. The round's date is the
+# LATEST ts of every row its seats matched, at any K. $1 is the install epoch (empty: unknown). A row stamped before
+# it still dates the round, and it neither names a K nor covers a seat: in a round judged at all (one with a
+# post-install row) a pre-install row is another round's, and letting it cover or vote K re-opens the mid-sprint hole.
+# A seat file some M row names is a FIELD SEAT: it never enters K inference, is dated by the latest of its M rows,
+# and is covered only when one of them covers, carries the role the seat file's name parses to, and is stamped at
+# or after $1; otherwise it is a MISS at the step's K, even beside an R row that would cover it. An M row of another
+# role still names and dates the seat. R rows judge only seats no M row names.
+seat_row_scan() {
+  awk -F'\t' -v INST="${1:-}" '
+    function parse(b,   s) {
+      s = b; sub(/[.]md$/, "", s)
+      if (match(s, /-cross(-[0-9]+)?$/)) { PO = "cross"; s = substr(s, 1, RSTART - 1) }
+      else if (match(s, /-[0-9]+$/)) { PO = substr(s, RSTART + 1) + 0; s = substr(s, 1, RSTART - 1) }
+      else return 0
+      if (!match(s, /-[^-]+$/) || RSTART == 1) return 0
+      PS = substr(s, RSTART + 1); PT = substr(s, 1, RSTART - 1); return 1
+    }
+    function srt(a,   v, m, i, j, x, o) {
+      m = 0; for (v in a) x[++m] = v + 0
+      for (i = 2; i <= m; i++) { v = x[i]; for (j = i - 1; j >= 1 && x[j] > v; j--) x[j + 1] = x[j]; x[j + 1] = v }
+      o = ""; for (i = 1; i <= m; i++) o = o (i > 1 ? " " : "") x[i]
+      return o
+    }
+    function later(a, b) { return a + 0 > b + 0 }
+    $1 == "R" { k = $2 SUBSEP $3
+      if ($5 != "-1" && (!(k in ma) || later($5, ma[k]))) ma[k] = $5 + 0
+      if (INST == "" || $5 == "-1" || $5 + 0 >= INST + 0) { n[k SUBSEP $4]++; KS[k] = KS[k] " " $4 }
+      next }
+    $1 == "M" { MF[$2] = 1
+      if ($5 != "-1" && (!($2 in MT) || later($5, MT[$2]))) MT[$2] = $5 + 0
+      if ($4 == "1" && (INST == "" || $5 == "-1" || $5 + 0 >= INST + 0) && parse($2) && PS == $3) MC[$2] = 1
+      next }
+    $1 == "C" { if (parse($2)) cs[PT] = 1; next }
+    $1 == "F" { if (!parse($2)) next
+      nf++; FB[nf] = $2; FT[nf] = PT; FSE[nf] = PS; FO[nf] = PO
+      next }
+    END {
+      for (t in cs) {
+        delete U; delete I; nu = 0; hb = 0; RT[t] = -1
+        for (i = 1; i <= nf; i++) if (FT[i] == t) {
+          if (FB[i] in MF) continue
+          m = split(KS[FSE[i] SUBSEP FO[i]], ka, " "); if (!m) continue
+          delete H
+          for (j = 1; j <= m; j++) { H[ka[j]] = 1; if (!(ka[j] in U)) { U[ka[j]] = 1; nu++ } }
+          if (!hb) { for (c in H) I[c] = 1; hb = 1 } else { for (c in I) if (!(c in H)) delete I[c] }
+        }
+        ni = 0; for (c in I) if (!ni++ || c + 0 < ik + 0) ik = c
+        if (ni) SK[t] = ik + 0; else if (nu) DS[t] = srt(U); else SK[t] = "K"
+        for (i = 1; i <= nf; i++) if (FT[i] == t) {
+          k = FSE[i] SUBSEP FO[i]; SL[t] = SL[t] "/" FB[i]
+          if (FB[i] in MF) v = (FB[i] in MT) ? MT[FB[i]] : -1; else
+          v = (k in ma) ? ma[k] : -1
+          if (v != -1 && (RT[t] == -1 || later(v, RT[t]))) RT[t] = v
+        }
+      }
+      for (i = 1; i <= nf; i++) {
+        t = FT[i]; if (!(t in cs)) continue
+        if (!(t in PR)) { PR[t] = 1; print "ROUND\t" t "\t" RT[t] (INST != "" && RT[t] + 0 < INST + 0 ? "\t" SL[t] : ""); if (t in DS) print "DIS\t" t "\t" DS[t] }
+        if (FB[i] in MF) { if (!(FB[i] in MC)) print "MISS\t" FB[i] "\t" FSE[i] "\t" FO[i] "\t" SK[t] "\t" t; continue }
+        if (t in DS) continue
+        k = FSE[i] SUBSEP FO[i] SUBSEP SK[t]
+        if (n[k] > 0) { n[k]--; continue }
+        print "MISS\t" FB[i] "\t" FSE[i] "\t" FO[i] "\t" SK[t] "\t" t
+      }
+    }'
+}
+# The self-probe, both directions, before the corpus is read: one round, K 2 from its rows (a padded `01`
+# file joins its `1/2` row and a `cross-1` file its `cross/2` row), its seat 2 with no row, a row of another
+# K that must not cover, and an unsharded Skill-path file that never enters. The K disagreement is held by
+# the fixture's SR7 and its mutant, and the latest-row date and the install coverage bound by SR8 and theirs, not
+# here (every probe row shares one ts), so each mutant fails its own cell rather than this probe.
+seat_row_probe() {
+  local o
+  o="$(printf 'R\ttea\t1\t2\t150\nR\ttea\tcross\t2\t150\nR\ttea\t1\t3\t150\nC\tp-tea-01.md\nF\tp-tea-01.md\nF\tp-tea-02.md\nF\tp-tea-cross-1.md\nF\tp-tea.md\n' | seat_row_scan | tr '\t\n' ' |')"
+  [ "$o" = "ROUND p 150|MISS p-tea-02.md tea 2 2 p|" ] || die "the seat spawn-row join's self-probe failed: a seeded round read '${o}'; no verdict"
+}
+# seat_row_check <seat dir> <cited basenames, one per line> -> refuse once per sharded seat file of a
+# cited step with no role-bound spawn-ledger row; SKIP (one line) under a rulebook before the shape.
+seat_row_check() {
+  local sd="$1" sl="${1%/party-mode/*}/spawn-ledger.jsonl" gp="${JR_ROOT}/.claude/skills/ai-dlc/steps/_gate-procedures.md" f out l s o k t inst why rts sl4 st dirty files nseat era skipped="" judged=""
+  [ -n "$2" ] || return 0
+  if ! grep -qF -e "$SEAT_ROW_TOKEN" "$gp" 2>/dev/null; then
+    echo "SEAT-ROWS: SKIP -- the installed ${gp} does not carry the sharded seat-record sentence, so sharded party seats are not joined to spawn-ledger rows under this rulebook"
+    return 0
+  fi
+  seat_row_probe
+  inst="$(git -C "$JR_ROOT" log -S"$SEAT_ROW_TOKEN" --format=%ct -- .claude/skills/ai-dlc/steps/_gate-procedures.md 2>/dev/null | tail -n 1)"
+  why="no commit of ${JR_ROOT} introduces the seat-record sentence into the tracked installed rulebook"
+  case "$inst" in *[!0-9]*) inst="" ;; esac
+  # A row carrying `mark_file` (the seat file its brief named, written by the dispatch guard), one pair of surrounding
+  # `"` or `'` stripped, is one `M<TAB>basename<TAB>role<TAB>covers 0|1<TAB>ts` when that path ends in
+  # `party-mode/s<SPRINT>/<basename>`, and nothing when it ends in another sprint's. A `mark_file` with no such tail
+  # names no seat file (a placeholder, or a path the guard cut at a blank), so the row is read as a field-less R row.
+  # Only the TAIL is compared, never a root: a brief may name the seat by an absolute path of the checkout it ran in,
+  # and the join may run under another root (a rehearsal copy, a worktree).
+  out="$({ [ -f "$sl" ] && jq -nrR --argjson s "$SPRINT" 'inputs | fromjson? | select(type == "object")
+      | ([.mark_file | strings | (if length > 1 and .[0:1] == .[-1:] and (.[0:1] == "\"" or .[0:1] == ([39] | implode)) then .[1:-1] else . end)
+          | capture("(^|/)party-mode/s(?<n>[0-9]+)/(?<b>[^/]+)$")?] | .[0]) as $m
+      | if $m != null then
+          select($m.n == ($s | tostring))
+          | ["M", $m.b, (.role | tostring), (if .role_contract_cited == true then "1" else "0" end), ((try (.ts | fromdateiso8601) catch -1) | tostring)]
+        else
+          select(.sprint == $s and .role_contract_cited == true and (.shard | type) == "string")
+          | (.shard | split(" ")[0]) as $t | select($t | test("^([0-9]+|cross)/[0-9]+$"))
+          | ($t | split("/")) as $p
+          | ["R", (.role | tostring), (if $p[0] == "cross" then "cross" else ($p[0] | tonumber | tostring) end), ($p[1] | tonumber | tostring),
+             ((try (.ts | fromdateiso8601) catch -1) | tostring)]
+        end
+      | @tsv' "$sl" 2>/dev/null
+    printf '%s\n' "$2" | sed '/^$/d; s/^/C	/'
+    for f in "$sd"/*.md; do [ -f "$f" ] && printf 'F\t%s\n' "${f##*/}"; done; } | seat_row_scan "$inst")"
+  [ -n "$out" ] || return 0
+  # The shallow probe sits after the empty-scan return: whether the scan prints anything does not depend on its
+  # INST (a ROUND line is printed for every cited step with a parsed seat whatever the install), so a join with no
+  # round pays for no probe, and a shallow clone still ends in install-date-unreadable below. `-S` cannot move:
+  # its epoch is the scan's coverage bound.
+  [ "$(git -C "$JR_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = true ] && { inst=""; why="${JR_ROOT} is a shallow clone, whose boundary commit git log -S reads as the install"; }
+  # THE LEGACY TEST IS PER ROUND, from records another event wrote, against the oldest commit that introduced
+  # SEAT_ROW_TOKEN into the tracked installed rulebook (unreadable, or a shallow clone whose boundary commit -S would
+  # read as the install: SKIP, judge nothing). A round with a matched spawn-ledger row (`ts` ISO-8601 UTC, read by jq
+  # fromdateiso8601, no date(1)) at or after the install is JUDGED. The round's date is its LATEST matched row, never
+  # its earliest: rows name no step, so a mid-sprint pull's post-install round also matches the pre-install round's
+  # rows at the same (role, ordinal, K), and the earliest of them acquitted it. And a pre-install row covers no seat
+  # and names no K (seat_row_scan's INST): in a judged round it is another round's, so a seat covered only by one is
+  # refused by name. A round with NO post-install row is dated by its seat files (the scan's parsed seat list, never a
+  # `<step>-*` glob), each by the NEWEST commit that added it (`git log` is newest-first, so its first `A` entry; a
+  # seat deleted and re-added after the install is judged): every seat added before the install is a legacy round
+  # (SKIP legacy-round); any seat added at or after it is judged, and every seat with no post-install row is refused;
+  # any seat never committed, or not clean in ONE `git status --porcelain` over the round's seats (modified, staged,
+  # untracked, or a failed status), makes the round undatable (SKIP round-undatable, never folded into legacy and
+  # never refused), since a re-run that overwrote committed seats carries no record of when it ran. A modification
+  # that IS committed is not seen: first-add dating reads adds only. A missing spawn ledger refuses only when a cited
+  # round is judged.
+  case "$inst" in '')
+    echo "SEAT-ROWS: SKIP install-date-unreadable -- ${why}, so no round can be told from a legacy one"
+    return 0 ;; esac
+  while IFS='	' read -r l t rts sl4; do
+    [ "$l" = ROUND ] || continue
+    if [ "$rts" != -1 ] && [ "$rts" -ge "$inst" ]; then judged=1; continue; fi
+    files=""; nseat=0; dirty=""
+    sl4="${sl4#/}"
+    while [ -n "$sl4" ]; do f="${sl4%%/*}"; files="$files ${sd}/${f}"; nseat=$((nseat + 1)); case "$sl4" in */*) sl4="${sl4#*/}" ;; *) sl4="" ;; esac; done
+    # An empty list is never handed to git: an empty pathspec is the whole tree, and its answer is no seat's.
+    if [ "$nseat" -eq 0 ]; then era=U
+    else
+      # shellcheck disable=SC2086
+      st="$(git -C "$JR_ROOT" status --porcelain -- $files 2>/dev/null)" || st=FAIL
+      [ -n "$st" ] && dirty=1
+      # shellcheck disable=SC2086
+      era="$(git -C "$JR_ROOT" log --diff-filter=A --format=@%ct --name-only -- $files 2>/dev/null | awk -v n="$nseat" -v inst="$inst" -v dirty="$dirty" '
+        /^@/ { ts = substr($0, 2) + 0; next }
+        NF { b = $0; sub(/.*\//, "", b); if (!(b in A)) A[b] = ts }
+        END { c = 0; late = 0; for (b in A) { c++; if (A[b] >= inst) late = 1 }; print (dirty != "" || c < n ? "U" : (late ? "J" : "L")) }')"
+    fi
+    case "$era" in
+      J) judged=1 ;;
+      L) echo "SEAT-ROWS: SKIP legacy-round ${t}"; skipped="$skipped $t " ;;
+      *) echo "SEAT-ROWS: SKIP round-undatable ${t} ${nseat} seats -- no spawn-ledger row at or after the install and a seat file never committed or not clean in the working tree, so the round cannot be dated"
+         skipped="$skipped $t " ;;
+    esac
+  done <<SRLEOF
+$out
+SRLEOF
+  [ -f "$sl" ] || { [ -z "$judged" ] || refuse "the cited steps' sharded seat files have no spawn ledger to be joined to (${sl} is absent); a sharded party seat's record is its role-bound spawn-ledger row"; return 0; }
+  while IFS='	' read -r l f s o k t; do
+    if [ "$l" = DIS ]; then
+      case "$skipped" in *" $f "*) continue ;; esac
+      refuse "the sharded party round ${f}'s spawn-ledger rows disagree on K: its seat files match role-bound rows (sprint ${SPRINT}) at shard counts ${s} with no single K every row-bearing seat shares, so no seat of the round can be joined to its row. Re-dispatch the round as role-bound Agent spawns under one K"
+      continue
+    fi
+    [ "$l" = MISS ] || continue
+    case "$skipped" in *" $t "*) continue ;; esac
+    refuse "seat file ${f} is a sharded party seat (${s}, shard ${o}/${k}) with no role-bound row in ${sl} (sprint ${SPRINT}, role ${s}, role_contract_cited true, shard ${o}/${k}); a seat spawned outside the dispatch guard or written by hand has no record, and Check 17 runs no arm on a seat file. Re-dispatch that seat as a role-bound Agent spawn"
+  done <<SROEOF
+$out
+SROEOF
 }
 # The self-probe, before any corpus is read: a resolving source passes, and an id that only ANOTHER
 # seat carries refuses. Both directions, or a resolver keyed on the id alone reads as working.

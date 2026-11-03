@@ -97,9 +97,10 @@ and at every other intensity, this sprint-level party mode is REQUIRED — it is
 not skipped, and gate-validation Check 20 resolves the sprint-review minimum by
 reading this gate.
 
-`/bmad-party-mode --mode subagent --non-interactive` — PM, Architect, Dev, TEA, QA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through the
+PM, Architect, Dev, TEA and QA walk through the
 entire sprint implementation. The round is sharded per `_gate-procedures.md`, "Validation
-cycle" item 1 (Rule 28, "Split dispatch": seats x parts axis). That means one persona agent per
+cycle" item 1 (Rule 28, "Split dispatch": seats x parts axis), so it is that item's per-seat
+role-bound `Agent` spawns, never the `/bmad-party-mode` Skill. That means one role-bound agent per
 (seat, story ordinal) from `merge-adversarial-shards.sh --map` over the sprint's stories, plus
 one cross-story agent per seat that reads every story, every seat writing early, closing with
 one final `seat-complete: ... sha=<hex> findings=<n>` line appended by `wait-for-deliverable.sh --mark`, and its join beat passing `--complete`. The lead's join counts the per-seat files against that map before

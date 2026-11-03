@@ -14,9 +14,12 @@ context (Rule 28). The `mode` field of the emitted provenance block MUST be
 party-mode) and FAILS gate-validation Check 17.
 
 Three provenance-bearing execution shapes, all `mode: subagent` (plus a fourth native shape
-(iv) below, which carries its own schema instead of a provenance block):
+(iv) below, which carries its own schema instead of a provenance block, and a fifth shape
+(v), the per-seat sharded party round, whose record is the spawn ledger instead of a
+provenance block):
 
 **(i) Persona-spawning (`/bmad-party-mode --mode subagent --non-interactive`).**
+This shape is an unsharded party round only; a sharded party round is shape (v).
 The lead invokes it via the Skill tool in its own conversation, **with both flags**;
 the sub-skill then spawns real persona subagents internally (bound by the
 role-manifest preamble below), and those internal spawns satisfy independence.
@@ -38,13 +41,11 @@ the old solo default that was absorbed — the lead voiced the personas in its o
 context and simply stopped. Under `subagent` it is a live stall. **The two flags
 must be passed together or the fix creates the deadlock.**
 
-If a future harness drops Skill arguments, this shape is void and party-mode
-personas must be dispatched by the lead as ordinary Agent spawns on per-seat
-deliverables (the shape `carry-over-evaluation.md` already produces; their path
-is prescribed once, in `steps/_gate-procedures.md` under "Validation cycle", and
-is not restated here). Verify with `/bmad-party-mode --list-groups`:
+Before relying on this shape, verify with `/bmad-party-mode --list-groups`:
 it returns the group menu and starts no party. If a party starts instead, the
-arguments did not arrive.
+arguments did not arrive, and the round runs as per-seat `Agent` spawns on
+per-seat deliverables (their path is prescribed once, in
+`steps/_gate-procedures.md` under "Validation cycle", and is not restated here).
 
 **(ii) Single-voice (`/bmad-advanced-elicitation`,
 `/bmad-review lenses=adversarial`, `/bmad-prd`).** These have no
@@ -99,7 +100,18 @@ is exactly the solo failure this rule forbids, and escalating them to a fresh, i
 context is what keeps the gate's judgment out of the context whose work it judges. Procedure:
 `_gate-procedures.md`, "Gate-adjudication dispatch".
 
-**Provenance block.** Every invocation MUST emit a
+**(v) Per-seat sharded party round (native — no provenance block).** A party round
+sharded under Rule 28 "Split dispatch" (seats x parts, seats x sections, seats x
+subject-parts) invokes no Skill: the lead, or a round-dispatcher under Rule 28, spawns
+one role-bound `Agent` per (seat, ordinal) plus one cross agent per seat, each bound by
+its Rule 19 role-contract line. The record of each seat is the dispatch guard's
+spawn-ledger row for its spawn, written by the hook, and the seat's `--mark` line,
+written by `wait-for-deliverable.sh`. Its seats write no `SKILL_INVOCATION_PROVENANCE`
+block, and Check 17 runs no arm on a seat file; a block stamped onto a seat file after
+the fact is a forged record, never a remediation. Procedure: `_gate-procedures.md`,
+"Validation cycle" item 1.
+
+**Provenance block.** Every invocation of shapes (i) to (iii) MUST emit a
 `SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces,
 **including `findings_critical` / `findings_major` / `findings_minor` —
 what this evaluation actually found, at each severity.** All five owe the
@@ -123,7 +135,8 @@ HARD_BLOCK.
 
 **Forbidden failure mode.** Skill-shaped output (role-played personas,
 findings lists) WITHOUT Skill tool invocation and WITHOUT provenance
-block is a rule violation. "The findings are real" is not a valid
+block is a rule violation. A shape (v) seat is not Skill-shaped output: its
+record is its spawn-ledger row and its `--mark` line. "The findings are real" is not a valid
 rationalization — the process IS the validation.
 
 **The brief names the file.** Every dispatch that expects content back MUST state
@@ -165,7 +178,7 @@ Wait for it with Rule 29's **bounded file-wait beat** — never with a single
 open-ended poll.
 
 **Solo mode is forbidden -- for ALL FIVE evaluations.** Every validation
-evaluation MUST run with real subagents (shape (i), (ii) or (iii) above), never
+evaluation MUST run with real subagents (shape (i), (ii), (iii) or (v) above), never
 roleplayed inline. Roleplaying perspectives / running a single-voice pass or a
 convergence review in the lead's own context (solo mode) produces convergent
 opinions from a single LLM and defeats independent evaluation. Any evaluation
@@ -198,4 +211,6 @@ convenes. Injection reaches the personas through the invocation context;
 ai-dlc does not own `/bmad-party-mode` internals, so the mandate is
 "MUST pass the preamble," not "MUST verify the sub-skill obeyed it."
 Absence of the preamble at a persona-spawning call site is a
-lead-conduct retro finding.
+lead-conduct retro finding. The preamble binds the Skill shape (i) only; a
+shape (v) seat brief is bound by the Rule 19 role-contract line the dispatch
+guard records.

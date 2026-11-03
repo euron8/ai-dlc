@@ -24,3 +24,5 @@ core/fixtures/lib/
 core/team-roles/pm-escalated.md
 # BL-716: the join runs the worklist beside itself after a document or subject assembly to derive MOVED-CITE lane edges.
 !core/scripts/serial-remediation-worklist.sh
+# SRT1 and SR_LINE read the real rulebook sentence the join's SEAT_ROW_TOKEN must match on one line.
+core/skills/ai-dlc/steps/_gate-procedures.md

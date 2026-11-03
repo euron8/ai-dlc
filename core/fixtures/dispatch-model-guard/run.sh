@@ -39,6 +39,12 @@
 # MUTANT-MATRIX always-field decides=none twins=good
 # MUTANT-MATRIX trig-field decides=nofind twins=fgood
 # MUTANT-MATRIX any-good decides=mixed twins=fgood
+# MUTANT-MATRIX field-dropped decides=gc1 twins=gc3
+# MUTANT-MATRIX any-trig decides=gc3 twins=gc1
+# MUTANT-MATRIX exact-case decides=gc1 twins=gc3
+# MUTANT-MATRIX tail-cut decides=gc4 twins=gc5
+# MUTANT-MATRIX quote-in decides=gc6 twins=gc5
+# MUTANT-MATRIX squote-in decides=gc7 twins=gc5
 # MUTANT-MATRIX first-only decides=samelinegb,sameline-deny twins=nosep
 # MUTANT-MATRIX no-bound decides=nosep twins=sameline-deny
 # MUTANT-MATRIX dot-accept decides=dot twins=nodot
@@ -54,6 +60,7 @@
 # MUTANT-MATRIX leadnull decides=lead twins=mate
 # MUTANT-MATRIX roleexit decides=exm,ntm twins=exl
 # MUTANT-MATRIX leadrow decides=exl twins=exm
+# MUTANT-MATRIX agentskip decides=mate twins=lead
 # MUTANT-MATRIX anytool decides=d twins=a
 # MUTANT-MATRIX nodesc decides=e twins=a
 # MUTANT-MATRIX nolead decides=f twins=a
@@ -141,6 +148,12 @@ fam_dt() {
     ML:backtick-only) echo "s319,prose|good" ;;
     ML:digits-strict) echo "ph|red" ;;
     ML:always-field) echo "none|good" ;;
+    GF:field-dropped) echo "gc1|gc3" ;;
+    GF:any-trig) echo "gc3|gc1" ;;
+    GF:exact-case) echo "gc1|gc3" ;;
+    GF:tail-cut) echo "gc4|gc5" ;;
+    GF:quote-in) echo "gc6|gc5" ;;
+    GF:squote-in) echo "gc7|gc5" ;;
     SL:first-only) echo "samelinegb,sameline-deny|nosep" ;;
     SL:no-bound) echo "nosep|sameline-deny" ;;
     SL:dot-accept) echo "dot|nodot" ;;
@@ -150,6 +163,7 @@ fam_dt() {
     PA:leadnull) echo "lead|mate" ;;
     RL:roleexit) echo "exm,ntm|exl" ;;
     RL:leadrow) echo "exl|exm" ;;
+    AB:agentskip) echo "mate|lead" ;;
     *) echo "|" ;;
   esac
 }
@@ -1354,15 +1368,95 @@ mf_cell() { # mf_cell <guard> <cell> -> that cell's "decision:rows:mark" value
   mcell "$1" "$j"; printf '%s' "$MCELL"
 }
 ALL_MF=nofind,zero,bare,fprose,short,paren,mixed,fgood; SEP_MF=";"; CELLFN_MF=mf_cell; BASE_MF="$(want_lines ';' "$MF_WANT")"
-_mf_a="    END { if (!den && good > 0 && good == trig) print \"rendered\" }'"
-_mf_r="    END { if (!den && trig > 0) print \"rendered\" }'"
+_mf_a="    END { if (!den && good > 0 && good == trig) { if (trig == 1) print \"rendered\t\" f[1]; else print \"rendered\" } }'"
+_mf_r="    END { if (!den && trig > 0) { if (trig == 1) print \"rendered\t\" f[1]; else print \"rendered\" } }'"
 fam_mut MF trig-field "$_mf_a" "$_mf_r" nofind fgood "$B_MF" 'nofind=allow:1:rendered;fgood=allow:1:rendered' \
   "MARK FIELD MUTANT trig-field scores a kill: a field on any trigger arms --complete on a line the engine refuses -- cell nofind catches it"
 # (m5) any-good: one well-formed line suffices, so a brief carrying a refused line beside it still
 # writes the field. Only cell mixed sees it.
-_mf_r2="    END { if (!den && good > 0) print \"rendered\" }'"
+_mf_r2="    END { if (!den && good > 0) { if (trig == 1) print \"rendered\t\" f[1]; else print \"rendered\" } }'"
 fam_mut MF any-good "$_mf_a" "$_mf_r2" mixed fgood "$B_MF" 'mixed=allow:1:rendered;fgood=allow:1:rendered' \
   "MARK FIELD MUTANT any-good scores a kill: one well-formed line beside a refused one arms --complete on the refused file -- cell mixed alone catches it"
+
+# THE SEAT FILE (`mark_file`): the row names the file its brief marks, copied from the brief, ONLY when exactly one
+# invocation triggered and the row carries `mark: "rendered"`. Each cell is `<decision>:<rows>:<mark>:<mark_file>`.
+# G-c1 one well-formed invocation -> its path, and `mark` still `rendered`; G-c2 no `--mark` -> neither key;
+# G-c3 two well-formed invocations -> `mark` but no `mark_file` (no single file is named).
+# G-c4 one invocation whose consumer root carries a BLANK -> `mark_file` is the `party-mode/s321/<basename>` tail, not
+# the text before the blank; G-c5 is the same brief with no blank, its twin. Both read `tail` when the recorded value
+# ends in `party-mode/s321/<seat basename>`, else the raw value, so the twin is equal whether the tail is extracted or not.
+GF_ONE='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark /g/_bmad-output/party-mode/s321/architecture-dev-01.md architecture dev 1/6 findings=0`.'
+GF_TWO='Run `/p/wait-for-deliverable.sh --mark /f.md s q k findings=0`, then `/p/wait-for-deliverable.sh --mark /f2.md s q k2 findings=1`.'
+GF_BLANK='Run `/Users/n8/My Drive/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark /Users/n8/My Drive/graph/_bmad-output/party-mode/s321/architecture-tea-01.md architecture tea 1/6 findings=0`.'
+GF_NOBLANK='Run `/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark /Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md architecture tea 1/6 findings=0`.'
+# G-c6: the same brief with its path double-quoted -> the tail stops before the closing `"`.
+GF_QUOTED='Run `/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark "/Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md" architecture tea 1/6 findings=0`.'
+# G-c7: the same brief with its path single-quoted -> the tail stops before the closing apostrophe.
+GF_SQUOTED="Run \`/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark '/Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md' architecture tea 1/6 findings=0\`."
+GCELL=""
+gcell() { # gcell <guard> <brief line> -> sets GCELL
+  local d n m f
+  rm -f "$LEDGER"
+  MOUT="$(dpayload remediator "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$MOUT" 2>/dev/null)"; [ -n "$d" ] || d=none
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
+  if [ "$n" = 1 ]; then m="$(jq -r '"\(.mark):\(.mark_file)"' "$LEDGER" 2>/dev/null)"; else m="-:-"; fi
+  GCELL="$d:$n:$m"
+}
+gf_cell() { # gf_cell <guard> <cell> -> that cell's value
+  local j
+  case "$2" in gc1) j="$GF_ONE" ;; gc2) j="$ML_NONE" ;; gc3) j="$GF_TWO" ;; gc4) j="$GF_BLANK" ;; gc5) j="$GF_NOBLANK" ;; gc6) j="$GF_QUOTED" ;; gc7) j="$GF_SQUOTED" ;; esac
+  gcell "$1" "$j"
+  case "$2:$GCELL" in gc[4567]:*:*party-mode/s321/architecture-tea-01.md) GCELL="${GCELL%:*}:tail" ;; esac
+  printf '%s' "$GCELL"
+}
+GF_WANT='gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:tail;gc7=allow:1:rendered:tail'
+GF_TIP="gc1=$(gf_cell "$HOOK" gc1);gc2=$(gf_cell "$HOOK" gc2);gc3=$(gf_cell "$HOOK" gc3);gc4=$(gf_cell "$HOOK" gc4);gc5=$(gf_cell "$HOOK" gc5);gc6=$(gf_cell "$HOOK" gc6);gc7=$(gf_cell "$HOOK" gc7)"
+_old_ifs="$IFS"; IFS=';'
+for _c in $GF_WANT; do
+  case ";$GF_TIP;" in
+    *";$_c;"*) ok "MARK FILE G-${_c%%=*}: '${_c#*=}' (decision:rows:mark:mark_file)" ;;
+    *) bad "MARK FILE G-${_c%%=*}: expected '${_c#*=}', got vector '$GF_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+B_GF=$([ "$GF_TIP" = "$GF_WANT" ] && echo 1 || echo 0)
+ALL_GF=gc1,gc2,gc3,gc4,gc5,gc6,gc7; SEP_GF=";"; CELLFN_GF=gf_cell; BASE_GF="$(want_lines ';' "$GF_WANT")"
+_gfc="$(mk_hooks_copy gf-control)"
+if [ -n "$_gfc" ]; then
+  fam_control GF "$_gfc" gc1 "MARK FILE MUTANT CONTROL: an unmutated hooks copy scores the field-carrying cell gc1 (positive; every cell under --matrix)"
+else
+  bad "MARK FILE MUTANT CONTROL is dead: no hooks copy"
+fi
+# (g1) the field dropped from the row -> gc1 loses its path; gc3 (no field either way) is the twin.
+fam_mut GF field-dropped '   | if $markfile != "" then . + {mark_file: $markfile} else . end' '   | .' gc1 gc3 "$B_GF" \
+  'gc1=allow:1:rendered:null;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:null;gc5=allow:1:rendered:null;gc6=allow:1:rendered:null;gc7=allow:1:rendered:null' \
+  "MARK FILE MUTANT field-dropped scores a kill: a row without mark_file -- cell G-gc1 catches it"
+# (g2) the one-invocation condition dropped -> gc3 names the LAST invocation as the seat file; gc1 is the twin.
+fam_mut GF any-trig "$_mf_a" "    END { if (!den && good > 0 && good == trig) print \"rendered\t\" f[1] }'" gc3 gc1 "$B_GF" \
+  'gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:/f2.md;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:tail;gc7=allow:1:rendered:tail' \
+  "MARK FILE MUTANT any-trig scores a kill: a brief with two invocations names one of them -- cell G-gc3 catches it"
+# (g3) the exact `rendered)` case restored -> a tab-carrying scan output matches nothing, so gc1 loses BOTH `mark` and
+# `mark_file`; gc3 (no tab) still reads `rendered`.
+fam_mut GF exact-case '  rendered*) SPAWN_MARK=rendered' '  rendered) SPAWN_MARK=rendered' gc1 gc3 "$B_GF" \
+  'gc1=allow:1:null:null;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:null:null;gc5=allow:1:null:null;gc6=allow:1:null:null;gc7=allow:1:null:null' \
+  "MARK FILE MUTANT exact-case scores a kill: an exact rendered case drops the existing mark field -- cell G-gc1 catches it"
+# (g4) the tail extraction reverted to f[1] -> gc4 records the text before the blank (`/Users/n8/My`), which names no
+# seat; gc5 (no blank) still ends in the seat tail and is the twin.
+_gf_x='    END { if (trig == 1) { u = mt; while (match(u, "party-mode/s[0-9]+/[^[:space:]\"\047]+")) { f[1] = substr(u, RSTART, RLENGTH); u = substr(u, RSTART + RLENGTH) } } }'
+fam_mut GF tail-cut "$_gf_x" '    END { }' gc4 gc5 "$B_GF" \
+  'gc1=allow:1:rendered:/g/_bmad-output/party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:/Users/n8/My;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:"/Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md";gc7=allow:1:rendered:'\''/Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md'\''' \
+  "MARK FILE MUTANT tail-cut scores a kill: a blank in the consumer root cuts mark_file to /Users/n8/My -- cell G-gc4 catches it"
+# (g5) the tail class lets `"` in -> gc6 (a double-quoted path) records a tail ending in `"` that the join cannot strip
+# and that names no seat; gc5 (unquoted) is the twin.
+fam_mut GF quote-in "$_gf_x" '    END { if (trig == 1) { u = mt; while (match(u, "party-mode/s[0-9]+/[^[:space:]\047]+")) { f[1] = substr(u, RSTART, RLENGTH); u = substr(u, RSTART + RLENGTH) } } }' gc6 gc5 "$B_GF" \
+  'gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:party-mode/s321/architecture-tea-01.md";gc7=allow:1:rendered:tail' \
+  "MARK FILE MUTANT quote-in scores a kill: a double-quoted brief path records a tail ending in a quote -- cell G-gc6 catches it"
+# (g6) the tail class lets the apostrophe in -> gc7 (a single-quoted path) records a tail ending in it, which the join
+# cannot strip and which names no seat; gc5 (unquoted) is the twin.
+fam_mut GF squote-in "$_gf_x" '    END { if (trig == 1) { u = mt; while (match(u, "party-mode/s[0-9]+/[^[:space:]\"]+")) { f[1] = substr(u, RSTART, RLENGTH); u = substr(u, RSTART + RLENGTH) } } }' gc7 gc5 "$B_GF" \
+  'gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:tail;gc7=allow:1:rendered:party-mode/s321/architecture-tea-01.md'\''' \
+  "MARK FILE MUTANT squote-in scores a kill: a single-quoted brief path records a tail ending in an apostrophe -- cell G-gc7 catches it"
 
 # THE SAME LINE: every invocation on a line is scanned, not only the first. A refused invocation
 # after a good one on the same line withholds the field (or denies, for a `name=` last field), and an
@@ -2518,6 +2612,46 @@ rl_mut roleexit "s/^  \[ -n \"\$(printf '%s' \"\$INPUT\" | jq -r '.agent_id \/\/
 rl_mut leadrow "s/^  \[ -n \"\$(printf '%s' \"\$INPUT\" | jq -r '.agent_id \/\/ empty' 2>\/dev\/null || true)\" \] || exit 0$/  :/" \
   "1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"$PA_ID\" 1|none|\"\"|\"\"" "recording every role-less dispatch writes rows for the lead's utility agents"
 [ "$RL_GOT" = "$RL_WANT" ] || bad "16d/e FIXTURE BROKEN: unmutated vector '$RL_GOT' is not '$RL_WANT'"
+
+# --- 16f-16h A ROLE-BOUND spawn from inside a subagent ---------------------------------------------
+# The round dispatcher spawns its members from INSIDE a subagent, so the guard must bind such a spawn
+# to its role exactly as it binds the lead's. The subject cites `analyst` (pinned sonnet) and requests
+# opus, so the correcting path must rewrite the model. The lead's call is the control: the identical
+# payload with no agent_id.
+#   16f the nested spawn gets the same decision, rewritten model and role row as the lead's twin
+#   16g that row carries role analyst and parent_agent_id = the payload agent_id
+#   16h the twin's row carries parent_agent_id ""
+AB_ID="a0123456789abcdef"
+AB_LEAD="$(mkjson Agent analyst opus | jq -c '.tool_use_id = "toolu_ab_lead"')"
+AB_MATE="$(printf '%s' "$AB_LEAD" | jq -c --arg a "$AB_ID" '.agent_id = $a | .tool_use_id = "toolu_ab_mate"')"
+# ab_cell <guard> <json> -> "<rows>|<decision>|<injected model>|<row role>|<row parent_agent_id>" on an empty ledger.
+ab_cell() {
+  local out n d m r
+  rm -f "$LEDGER"
+  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  d="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
+  m="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model // empty' 2>/dev/null)"
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
+  r="$(tail -1 "$LEDGER" 2>/dev/null | jq -r '"\(.role | tojson)|\(.parent_agent_id | tojson)"' 2>/dev/null)"
+  printf '%s|%s|%s|%s' "${n:-0}" "${d:-none}" "${m:-none}" "${r:-NOROW}"
+}
+AB_M="$(ab_cell "$HOOK" "$AB_MATE")"; AB_L="$(ab_cell "$HOOK" "$AB_LEAD")"
+[ "$AB_L" = '1|allow|sonnet|"analyst"|""' ] && [ "${AB_M%|*}" = "${AB_L%|*}" ] \
+  && ok "16f a nested analyst spawn gets the lead twin's decision and rewrite (allow, model sonnet, one row)" \
+  || bad "16f nested '$AB_M' differs from the lead twin '$AB_L' (expected the twin to be '1|allow|sonnet|\"analyst\"|\"\"')"
+[ "$AB_M" = "1|allow|sonnet|\"analyst\"|\"$AB_ID\"" ] && ok "16g the nested row carries role analyst and parent_agent_id = the payload agent_id" \
+  || bad "16g the nested spawn produced '$AB_M', expected '1|allow|sonnet|\"analyst\"|\"$AB_ID\"'"
+[ "${AB_L##*|}" = '""' ] && ok "16h the lead twin's row carries parent_agent_id \"\"" \
+  || bad "16h the lead twin produced '$AB_L', expected parent_agent_id \"\""
+ab_c() { case "$2" in mate) ab_cell "$1" "$AB_MATE" ;; lead) ab_cell "$1" "$AB_LEAD" ;; esac; }
+ALL_AB=mate,lead; SEP_AB=nl; CELLFN_AB=ab_c
+BASE_AB="mate=$AB_M
+lead=$AB_L"
+B_AB=$([ "$AB_M" = "1|allow|sonnet|\"analyst\"|\"$AB_ID\"" ] && [ "$AB_L" = '1|allow|sonnet|"analyst"|""' ] && echo 1 || echo 0)
+# 16f: role binding skipped for a call made from inside a subagent -- the guard leaves before binding.
+fam_sedmut AB agentskip 's/^ROLE_FILE="\$ROLES_DIR\/\$ROLE.md"$/[ -n "$(printf "%s" "$INPUT" | jq -r ".agent_id \/\/ empty" 2>\/dev\/null || true)" ] \&\& exit 0; &/' \
+  mate lead "$B_AB" "mate=0|none|none|NOROW"$'\n'"lead=$AB_L" \
+  "AB MUTANT agentskip scores a kill: skipping role binding for an agent_id caller leaves a nested member unbound and unrecorded"
 [ "$PA_GOT" = "$PA_WANT" ] || bad "16 FIXTURE BROKEN: the unmutated vector '$PA_GOT' is not '$PA_WANT', so every PA mutant above was scored against the wrong baseline"
 
 

@@ -312,6 +312,41 @@ else
     fails=$((fails + 1))
   fi
 
+  # ---- V8: an HONEST retro passes Check 17's retro arm, both validators --------
+  # The retro stays on the Skill: one `bmad-party-mode` block, its transcript committed on the retro
+  # branch with the persona and phase markers the floor counts, cited by the commit that holds it.
+  # Every cell above is a rejection or a half; this is the one that pins the whole arm ACCEPTING a
+  # retro, so a change that refuses the Skill shape outright cannot read as a tightened floor.
+  REPO8="$WORK/repo8"
+  mkdir -p "$REPO8/_bmad-output/party-mode-transcripts/s998" "$REPO8/docs/retro/s998"
+  (
+    cd "$REPO8" || exit 2
+    git init -q . && git config user.email fixture@ai-dlc.local && git config user.name "check-17-bypass fixture" \
+      && git commit -q --allow-empty -m base && git branch -M main && git checkout -q -b ai-dlc/retro/sprint-998 || exit 2
+    {
+      echo "# Sprint 998 Retro — Party Mode Transcript"
+      for p in "John (PM):" "Winston (Architect):" "Amelia (Dev):" "Bob (SM):" "Murat (TEA):"; do
+        for ph in "Phase 1" "Phase 2" "Phase 3"; do
+          printf '%s %s — what went well, what did not, and the one concrete change this persona carries forward into the next sprint, with its owner named.\n' "$p" "$ph"
+        done
+      done
+    } > _bmad-output/party-mode-transcripts/s998/retro.md
+    git add -A && git commit -q -m "Sprint 998 retro party-mode transcript" || exit 2
+    sha="$(git rev-parse --short=12 HEAD)" || exit 2
+    sed -e 's/s905/s998/g; s/Sprint 905/Sprint 998/' \
+      -e "s#transcript_path: .*#transcript_path: _bmad-output/party-mode-transcripts/s998/retro.md@${sha}#" \
+      -e '/^Every field is well-formed/,$d' "$WORK/docs/retro/s905/retro.md" > docs/retro/s998/retro.md || exit 2
+    git add -A && git commit -q -m "Sprint 998 retro doc" || exit 2
+  ) >/dev/null 2>&1 || { note "BAD" "sprint-998 (seed)" "the honest-retro repo subshell failed (cd or git) — V8 asserts nothing"; fails=$((fails + 1)); }
+  V8_PROV_RC=1; bash "$PROV" "$REPO8/docs/retro/s998/retro.md" >/dev/null 2>&1 && V8_PROV_RC=0
+  V8_OUT="$( cd "$REPO8" && bash "$EVID" ai-dlc/retro/sprint-998 998 2>&1 )"; V8_EV_RC=$?
+  if [ "$V8_PROV_RC" -eq 0 ] && [ "$V8_EV_RC" -eq 0 ] && grep -q 'VALIDATE-RETRO-EVIDENCE: PASS' <<<"$V8_OUT"; then
+    note "ok" "sprint-998 (V8 honest)" "an honest Skill-path retro passes validate-provenance-block.sh AND validate-retro-evidence.sh"
+  else
+    note "BAD" "sprint-998 (V8 honest)" "an honest retro was refused (provenance rc=$V8_PROV_RC, evidence rc=$V8_EV_RC): $(head -3 <<<"$V8_OUT" | tr '\n' ' ')"
+    fails=$((fails + 1))
+  fi
+
   # MUTATION control: revert the resolution to the old verbatim-name behaviour
   # (retro_branch stays the plain name) and require the origin-only branch to STOP
   # resolving — Marker 2 must flip to FAIL. A pass above is evidence for the
