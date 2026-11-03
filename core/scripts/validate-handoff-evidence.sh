@@ -321,9 +321,37 @@
 #   MEASURED, the reference consumer's 26 distinct review-status story blobs across its refs
 #   (s317-s319): the CHANGELOG's BL-768 entry carries the per-story verdicts and the narrowing.
 #
-#   Not checked, deliberately: a missing Dev Agent Record (implementation.md folds it into the
-#   story AFTER gate 1 approves, so its absence at gate 1 is the documented flow) and an empty
-#   evidence heading (operator ruling, batch 230).
+#   (p) DAR-MISSING (ERROR, a refusal, exit 1). Run on the story at
+#       <frozen> in the heading-demoted pass, with its heading grammar:
+#       `REFUSED dar-missing <story>: ... is absent` when no `## Dev Agent Record` heading sits at level
+#       2 outside a code fence, `... is empty` when the section, read to the next level-1 or level-2
+#       heading outside a fence, holds no CONTENT line. Not content: blank lines, HTML comments, a
+#       table separator and the header row above it, a table row whose every cell after the first is
+#       blank (`| Model | |`), a subheading (`### File List`), a line that is only a `{{...}}` token,
+#       `TBD`, `TODO` or `[TODO]`, a label with nothing after its colon (`- Model:`, `**Date:**`), and
+#       a template placeholder line (`(populated during implementation)`, `_To be populated during
+#       implementation._`, `*(To be filled by dev agent)*` and their spellings). Every other line
+#       is content, a line inside a code fence included. dev.md step 8 writes the DAR into the story file before the handoff;
+#       implementation.md's DAR fold after gate 1 copies it.
+#       A lead-executed story is not exempt: its remedy is a one-line DAR carrying `lead
+#       (self-executed`, the substring validate-mandatory-rules.sh Check 6 keys on (and fails
+#       without a DECIDED_AUTONOMOUSLY or HARD_BLOCK waiver naming the story). That line is
+#       content, so the arm accepts a DAR holding only it.
+#       Empty rule, this arm over every `_bmad-output/planning-artifacts/*/stories/*.md` of the
+#       reference consumer, read-only clone at c3d3c0a3f: 1132 files, 207 absent, 72 empty, 853
+#       pass. Against the grammar before fenced content and the skeleton shapes counted, 13 flip:
+#       8 empty to pass (s145 1, s148 1-3, s149 2, 3, 4 and 7, each DAR filled inside a fence) and
+#       5 pass to empty (s169 3, s170 4, 7, 9 and 11, each only subheadings, comments and the
+#       placeholder line), every one read by eye.
+#       MEASURED, read-only clone, at every s317-s320 gate-1 code-review pass whose `reviewed-sha:`
+#       resolves and names a story (141; 15 excluded and unmeasured: 8 record no reviewed-sha, 7
+#       name no story file): 3 refused, all `absent`, 0 `empty`; against origin/main's script on
+#       the same 141, the exit code moves 0 to 1 on s317 2.7 only (4.2a and 4.3a already exit 1)
+#       and the refusal is the only new line. All 3 are TRUE: s317 4.2a at bf8109edc, s317 4.3a at
+#       aab2ddf4a and s317 2.7 at 96345d422 (each DAR sits in the dev report, not the story; 2.7
+#       was re-ruled a true positive by the lead because its dev report carries a dev-written
+#       `## 8. Dev Agent Record`). FALSE-POSITIVE SET: 0 of 141.
+#   Not checked, deliberately: an empty evidence heading (operator ruling, batch 230).
 #
 # MEASURED, bookkeeping arms. Reference consumer, read-only clone, at every gate-1 code-review
 # pass's `reviewed-sha:` over s317/s318 (56 passes) plus, for the 7 passes that record none, the
@@ -1329,14 +1357,30 @@ fi
 # `## `-keyed reader finds. Code fences are stripped first. Absent entirely is not this arm's.
 if tracked "$FROZEN" "$STORY"; then
   demoted="$(G show "$FROZEN:$STORY" | LC_ALL=C awk "$HEADING_AWK"'
+    # dar_ph(t): 1 when a DAR line is not content. dar_tmpl(t, p): the template-skeleton shapes -- a
+    # subheading, a line that is only a {{...}} token, TBD / TODO / [TODO], and a label with nothing
+    # after its colon (`- Model:`, `**Date:**`).
+    function dar_tmpl(t, p) {
+      if (t ~ /^###/ || t ~ /^\{\{[^}]*\}\}$/ || p ~ /^(tbd|\[todo\]|todo)\.?$/) return 1
+      sub(/^([-+]|[0-9]+\.)[ \t]+/, "", p)
+      return (p ~ /^[^:]+:$/)
+    }
+    function dar_ph(t,   p) {
+      gsub(/^[ \t]+|[ \t]+$/, "", t)
+      if (t == "") return 1
+      p = tolower(t); gsub(/[*_()]/, "", p); gsub(/^[ \t]+|[ \t]+$/, "", p)
+      if (p ~ /^(to be )?(populated|filled)( in)?( by [a-z ]+)? (during|at) implementation/ || p ~ /^to be (populated|filled)( by [a-z ]+)?\.?$/) return 1
+      if (dar_tmpl(t, p)) return 1
+      return 0
+    }
     {
-      m = ""
+      m = ""; fl = 0
       if ($0 ~ /^[ \t]*```/) m = "```"
       else if ($0 ~ /^[ \t]*~~~/) m = "~~~"
       if (fence == "" && m != "") { fence = m; next }
-      if (fence != "") { if (m == fence) fence = ""; next }
+      if (fence != "") { if (m == fence) { fence = ""; next } fl = 1 }
     }
-    {
+    !fl {
       for (i = 1; i <= 4; i++) {
         l = ev_level($0, H[i]); if (!l) continue
         if (l == 2) two[i] = 1
@@ -1344,18 +1388,47 @@ if tracked "$FROZEN" "$STORY"; then
         else one[i] = 1
       }
     }
+    # (p) DAR-MISSING: the `## Dev Agent Record` section runs to the next level-1 or level-2 heading
+    # outside a fence; a heading inside a fence is never the section heading. A CONTENT line is any
+    # line left after HTML comments are cut, except a table separator, a table header (the row a
+    # separator follows), a table row whose every cell after the first is blank, and a dar_ph line.
+    # A line inside a code fence in the section is content unless dar_ph; comments are not cut there.
+    {
+      t = $0; sub(/\r$/, "", t)
+      if (fl) { if (ind && !dar_ph(t)) darn++; next }
+      if (ev_level(t, "Dev Agent Record") == 2) { dar = 1; ind = 1; com = 0; lastrow = 0; next }
+      if (ind && t ~ /^##?[ \t]/) ind = 0
+      if (!ind) next
+      if (com) { if (!index(t, "-->")) next; com = 0; sub(/^.*-->/, "", t) }
+      gsub(/<!--.*-->/, "", t)
+      if (index(t, "<!--")) { com = 1; sub(/<!--.*/, "", t) }
+      gsub(/^[ \t]+|[ \t]+$/, "", t)
+      if (t == "") next
+      if (t ~ /^\|?[ \t:|-]+\|?$/ && t ~ /-/) { if (lastrow) darn--; lastrow = 0; next }
+      if (t ~ /^\|/) {
+        r = t; sub(/^\|/, "", r); sub(/\|$/, "", r); k = split(r, c, "|"); full = (k < 2)
+        for (i = 2; i <= k; i++) { x = c[i]; gsub(/[ \t*_`]/, "", x); if (x != "") full = 1 }
+        lastrow = full; darn += full; next
+      }
+      lastrow = 0
+      if (dar_ph(t)) next
+      darn++
+    }
     BEGIN { H[1] = "Production Integrity Tests"; H[2] = "Smoke Test Updates"; H[3] = "Rename Verification"; H[4] = "Strategy Test IDs" }
     END {
       for (i = 1; i <= 4; i++) {
         if (!two[i] && deep[i]) print "deeper\t" H[i]
         if (!two[i] && one[i]) print "level1\t" H[i]
       }
+      if (!dar) print "dar\tabsent"; else if (darn <= 0) print "dar\tempty"
     }')"
   if [ -n "$demoted" ]; then
     while IFS="$(printf '\t')" read -r how h; do
       case "$how" in
         deeper) refuse "heading-demoted $STORY: '## $h' appears only below level 2 at ${FROZEN:0:12}; promote it to '## $h'" ;;
         level1) refuse "heading-demoted $STORY: '## $h' appears only at level 1 ('# $h') at ${FROZEN:0:12}; write it as '## $h'" ;;
+        # (p) DAR-MISSING: a refusal (header: HANDOFF MODE (p)).
+        dar) refuse "dar-missing $STORY: the '## Dev Agent Record' section is $h at ${FROZEN:0:12} (comments, blank table rows, subheadings, labels with no value and template placeholders are not content; a filled line inside a code fence is); the dev populates it in the story file before the handoff (dev.md step 8); for a lead-executed story the lead writes a one-line DAR carrying 'lead (self-executed', which validate-mandatory-rules.sh Check 6 then fails unless docs/escalations/pending.md has a DECIDED_AUTONOMOUSLY or HARD_BLOCK entry naming the story" ;;
       esac
     done <<<"$demoted"
   fi

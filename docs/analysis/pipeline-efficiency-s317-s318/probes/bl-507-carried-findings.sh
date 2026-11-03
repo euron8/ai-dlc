@@ -120,7 +120,7 @@ bash "$P" --map "$r" "$frozen" "$prior" --min-files 2 >/dev/null 2>&1
 [ $? -eq 2 ] || exit 1
 
 # The step text that tells the lead to do it.
-para="$(awk '/^\*\*Gate-1 dispatch/{on=1} on&&/^\*\*[A-Z]/&&!/^\*\*Gate-1 dispatch/{exit} on' "$I" | tr '\n' ' ' | tr -s ' ')"
+para="$(awk '/^\*\*Gate-1 dispatch/{on=1} on&&/^\*\*DAR-fold preflight/{exit} on' "$I" | tr '\n' ' ' | tr -s ' ')"
 case "$para" in *'run the partition with `<prior-sha>` in place of `<base>`'*) ;; *) exit 1 ;; esac
 case "$para" in *'run the full `<base>..<frozen-sha>` partition instead'*) ;; *) exit 1 ;; esac
 case "$para" in *'validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints'*) ;; *) exit 1 ;; esac

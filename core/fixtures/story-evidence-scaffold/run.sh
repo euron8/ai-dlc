@@ -161,8 +161,10 @@ check() {
     && has "$fl" 'validate-handoff-evidence.sh -C <worktree> --strategy <frozen-sha> <story-file>'; } \
     || echo "WIRE-IMP: implementation.md's pre-gate check does not run validate-handoff-evidence.sh in both modes"
   { has "$fl" '`status-not-review`' && has "$fl" '`status-yaml-mismatch`' && has "$fl" '`heading-demoted`' \
-    && has "$fl" 'A `SKIP STATUS (<reason>)` line'; } \
-    || echo "WIRE-BK: implementation.md's pre-gate paragraph does not name the status, row and heading refusals and the SKIP STATUS line"
+    && has "$fl" 'A `SKIP STATUS (<reason>)` line' \
+    && has "$fl" '`dar-missing` for a story whose `## Dev Agent Record` is absent' \
+    && has "$fl" 'a one-line DAR carrying `lead (self-executed`'; } \
+    || echo "WIRE-BK: implementation.md's pre-gate paragraph does not name the status, row, heading and dar-missing refusals, the dar-missing remedy and the SKIP STATUS line"
   # BL-845: the smoke surface is defined once, in Check 11's bold paragraph, and the gate-2 go-signal
   # runs --smoke before QA is dispatched.
   b="$(h3 "$gv" '^### 11\. ')"
@@ -305,6 +307,8 @@ mutant imp-unwired IMP '/^\*\*Pre-gate commit-presence check\.\*\*/{s=1} s && /^
 mutant imp-bk-moved IMP '/^Test IDs cell, `status-not-review`/{print ""} {print}' \
   "WIRE-BK:" "the bookkeeping kinds moved out of the pre-gate paragraph's first block is caught" \
   '`status-yaml-mismatch`'
+mutant imp-no-dar-missing IMP '/^\*\*Pre-gate commit-presence check\.\*\*/{s=1} s && /^$/{s=0} s{ gsub(/`dar-missing` for a story/, "`dar-gone` for a story") } {print}' \
+  "WIRE-BK:" "the pre-gate paragraph no longer naming the dar-missing refusal is caught"
 mutant c11-no-surface GV '{ gsub(/^\*\*Smoke surface\.\*\* /, "Smoke surface. "); print }' \
   "C11SURF:" "the smoke-surface definition losing its bold opening is caught"
 mutant c11-no-mech GV '{ gsub(/are enforced by$/, "are read by"); print }' \
@@ -400,6 +404,78 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     if [ "$got" = "$G2WANT" ]; then bad "MUTATION 'gate2-ignored' SURVIVED -- a validator ignoring --gate2 still skips arm (h)"
     else mutant_killed "${B_g2:-0}" gate2-ignored "MUTATION 'gate2-ignored' killed: a validator ignoring --gate2 refuses the story for (h) with the flag set [$got]"; fi
   else bad "FIXTURE ERROR: gate2 mutation 'gate2-ignored' matched nothing"; fi
+  # (p) DAR-MISSING, a REFUSAL (exit 1). dar_vec reads, per world, "<rc>:<R|W>:<absent|empty>" off the
+  # `REFUSED dar-missing` / `WARN dar-missing` line, or "<rc>:-" when neither prints. Refused: daroff
+  # (heading deleted) and darfence (heading only inside a fence) absent; darph (graph's placeholder,
+  # comment and blank-table template) empty. Passing twins, exit 0: darphok (the same plus one real
+  # line), darself (the same plus ONLY the lead's one-line `lead (self-executed` DAR, the remedy the
+  # refusal names) and clean (a filled DAR). Each mutant runs only the three refused worlds; the three
+  # passing twins are read from the control (an emit edit cannot move a world that never reaches it).
+  DAR_WORLDS='daroff darfence darph darphok darself clean'
+  DARWANT='1:R:absent 1:R:absent 1:R:empty 0:- 0:- 0:-'
+  dar_vec() { # <script> [firing-only]
+    local s="$1" v o="" k
+    for v in $DAR_WORLDS; do
+      if [ -n "${2:-}" ] && { [ "$v" = darphok ] || [ "$v" = darself ] || [ "$v" = clean ]; }; then o="$o 0:-"; continue; fi
+      verdict "$s" "$WORK/world-$v" h > /dev/null
+      k="$(awk '/^(REFUSED|WARN) dar-missing / { t = (/^REFUSED/) ? "R" : "W"; if (/ is absent at /) print t ":absent"; else if (/ is empty at /) print t ":empty"; else print t ":?" }' <<<"$VERDICT_OUT" | tr '\n' ',')"
+      k="${k%,}"
+      o="$o $VERDICT_RC:${k:--}"
+    done
+    printf '%s' "${o# }"
+  }
+  if build_world "$WORK/world-daroff" daroff && build_world "$WORK/world-darfence" darfence \
+     && build_world "$WORK/world-darph" darph && build_world "$WORK/world-darphok" darphok \
+     && build_world "$WORK/world-darself" darself; then
+    got="$(dar_vec "$HECTL")"
+    if [ "$got" = "$DARWANT" ]; then ok "DAR-MISSING: a deleted and a fenced-only Dev Agent Record heading are REFUSED absent and a section of template placeholders REFUSED empty, all exit 1; the same section with one real line, with only the lead's one-line 'lead (self-executed' DAR, and the filled DAR pass with exit 0"; B_dar=1
+    else bad "DAR-MISSING: want [$DARWANT] got [$got] for [$DAR_WORLDS]"; fi
+    if m="$(mkmut dar-unwired he '        dar) refuse "dar-missing' '        dar-NEVER) refuse "dar-missing')" && [ -n "$m" ]; then
+      got="$(dar_vec "$m" firing)"
+      if [ "$got" = '0:- 0:- 0:- 0:- 0:- 0:-' ]; then mutant_killed "${B_dar:-0}" dar-unwired "MUTATION 'dar-unwired' killed: a validator whose dar-missing emit never matches passes the three refused worlds with exit 0 and no dar-missing line"
+      elif [ "$got" = "$DARWANT" ]; then bad "MUTATION 'dar-unwired' SURVIVED -- the dar-missing refusal still prints with its emit disabled"
+      else bad "MUTATION 'dar-unwired' moved [$got], want [0:- 0:- 0:- 0:- 0:- 0:-]"; fi
+    else bad "FIXTURE ERROR: dar mutation 'dar-unwired' matched nothing"; fi
+    # dar-warn: the tier reverted to the U1b WARN. Killed on the WARN line PRESENT with exit 0, a
+    # positive observable, not on the refusal's absence.
+    if m="$(mkmut dar-warn he '        dar) refuse "dar-missing' '        dar) warn "dar-missing')" && [ -n "$m" ]; then
+      got="$(dar_vec "$m" firing)"
+      if [ "$got" = '0:W:absent 0:W:absent 0:W:empty 0:- 0:- 0:-' ]; then mutant_killed "${B_dar:-0}" dar-warn "MUTATION 'dar-warn' killed: a validator whose dar-missing arm is a WARN prints the WARN line and exits 0 on the three refused worlds"
+      elif [ "$got" = "$DARWANT" ]; then bad "MUTATION 'dar-warn' SURVIVED -- the dar-missing arm still refuses with its tier reverted to WARN"
+      else bad "MUTATION 'dar-warn' moved [$got], want [0:W:absent 0:W:absent 0:W:empty 0:- 0:- 0:-]"; fi
+    else bad "FIXTURE ERROR: dar mutation 'dar-warn' matched nothing"; fi
+  else
+    bad "FIXTURE BROKEN: could not seed the dar-missing worlds"
+  fi
+  # (p) the fence and skeleton grammar. darfill (a DAR filled only inside a fence) passes; darsub, darmus, dartbd,
+  # dartodo, dartodob and darlbl (a section holding only subheadings, a {{...}} token, TBD, TODO, [TODO], or labels
+  # with nothing after the colon) are REFUSED empty. Each mutant runs every one of these worlds, since each moves
+  # a world the control passes or refuses: dar-fence-stripped (a fenced line skipped again) refuses darfill
+  # empty; dar-skeleton-content (the skeleton shapes content again) passes the six.
+  DARG_WORLDS='darfill darsub darmus dartbd dartodo dartodob darlbl'
+  DARGWANT='0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty'
+  if build_world "$WORK/world-darfill" darfill && build_world "$WORK/world-darsub" darsub \
+     && build_world "$WORK/world-darmus" darmus && build_world "$WORK/world-dartbd" dartbd \
+     && build_world "$WORK/world-dartodo" dartodo && build_world "$WORK/world-dartodob" dartodob \
+     && build_world "$WORK/world-darlbl" darlbl; then
+    got="$(DAR_WORLDS="$DARG_WORLDS" dar_vec "$HECTL")"
+    if [ "$got" = "$DARGWANT" ]; then ok "DAR-GRAMMAR: a Dev Agent Record filled only inside a code fence passes with exit 0; one holding only subheadings, a {{...}} token, TBD, TODO, [TODO] or labels with no value is REFUSED empty, exit 1"; B_darg=1
+    else bad "DAR-GRAMMAR: want [$DARGWANT] got [$got] for [$DARG_WORLDS]"; fi
+    if m="$(mkmut dar-fence-stripped he 'if (m == fence) { fence = ""; next } fl = 1 }' 'if (m == fence) fence = ""; next }')" && [ -n "$m" ]; then
+      got="$(DAR_WORLDS="$DARG_WORLDS" dar_vec "$m")"
+      if [ "$got" = '1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty' ]; then mutant_killed "${B_darg:-0}" dar-fence-stripped "MUTATION 'dar-fence-stripped' killed: a validator that skips fenced lines again refuses darfill empty"
+      elif [ "$got" = "$DARGWANT" ]; then bad "MUTATION 'dar-fence-stripped' SURVIVED -- darfill still passes with fenced lines skipped"
+      else bad "MUTATION 'dar-fence-stripped' moved [$got], want [1:R:empty and six more]"; fi
+    else bad "FIXTURE ERROR: dar mutation 'dar-fence-stripped' matched nothing"; fi
+    if m="$(mkmut dar-skeleton-content he '      if (dar_tmpl(t, p)) return 1' '      if (0) return 1')" && [ -n "$m" ]; then
+      got="$(DAR_WORLDS="$DARG_WORLDS" dar_vec "$m")"
+      if [ "$got" = '0:- 0:- 0:- 0:- 0:- 0:- 0:-' ]; then mutant_killed "${B_darg:-0}" dar-skeleton-content "MUTATION 'dar-skeleton-content' killed: a validator counting subheadings, {{...}}, TBD, TODO, [TODO] and empty labels as content passes all six skeleton worlds"
+      elif [ "$got" = "$DARGWANT" ]; then bad "MUTATION 'dar-skeleton-content' SURVIVED -- the skeleton worlds still refuse with the widening reverted"
+      else bad "MUTATION 'dar-skeleton-content' moved [$got], want [0:- x7]"; fi
+    else bad "FIXTURE ERROR: dar mutation 'dar-skeleton-content' matched nothing"; fi
+  else
+    bad "FIXTURE BROKEN: could not seed the dar grammar worlds"
+  fi
   # The range warning: base == frozen and a base that is not an ancestor of frozen each WARN
   # (exit 0, never a refusal); the normal range carries neither. Each mutant silences one.
   range_vec() { # <script> -> "<eq rc>:<eq kinds> <rev rc>:<rev kinds> <normal kinds>"

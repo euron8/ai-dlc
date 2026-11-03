@@ -320,7 +320,12 @@ written only below or above `## `, `full-collection-missing` and
 or `Dependency setup:` line, `full-collection-none` for a `none` whose
 `<base>..<frozen-sha>` diff is not record-only, printing the changed-path count
 and the first non-record path, and `dependency-setup-none` for a `none` with no
-reason, and `dar-heads-stale`, `dar-heads-missing` or `dar-heads-duplicate` for a
+reason, `dar-missing` for a story whose `## Dev Agent Record` is absent or holds only
+template placeholders at the frozen SHA (the dev writes it in the story file, dev.md step 8; for a
+story the lead executed, the lead writes a one-line DAR carrying `lead (self-executed`, which
+`validate-mandatory-rules.sh` Check 6 fails unless `docs/escalations/pending.md` has a
+`DECIDED_AUTONOMOUSLY` or `HARD_BLOCK` entry naming the story),
+and `dar-heads-stale`, `dar-heads-missing` or `dar-heads-duplicate` for a
 capture-heads block in the Dev Agent Record that differs from the render, is
 absent while captures are cited, or appears twice) and do not dispatch code review while either
 exits 1. A `WARN dar-heads-missing` is a story authored before the block existed, or a
@@ -466,11 +471,10 @@ the two files.
 
 **DAR-fold preflight before gate-2 dispatch.** After gate1 (code
 review) approves a story and BEFORE dispatching gate2 (QA), the lead
-MUST fold the Dev Agent Record from the dev's completion report into
-the canonical sprint-branch story file, then verify that file's Dev
-Agent Record section is non-empty — a mechanical section-presence
-check, the same class as gate-validation check #4's Dev Agent Record
-completeness check. Failure caught: a QA reviewer dispatched against a
+MUST copy the Dev Agent Record the dev wrote on the story branch into the canonical sprint-branch story file,
+then verify that file's Dev Agent Record section is non-empty and equal to the story-branch section — a mechanical
+section-presence check, the same class as gate-validation check #4's Dev Agent Record
+completeness check. The dev authors the record in the story file before submission (dev.md step 8); the copy never authors it. Failure caught: a QA reviewer dispatched against a
 worktree-stale story copy reads an empty or old DAR and false-FAILs a
 story whose evidence is actually complete. False-positive cost: none —
 the check is a cheap section-presence test on a section the dev already

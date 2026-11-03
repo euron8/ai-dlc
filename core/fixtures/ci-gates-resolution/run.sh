@@ -66,9 +66,17 @@ PY
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 echo "ci-gates-resolution:"
+
+# MUTATION CONTROLS. Every mutant runs a COPY of the validator from $WORK, and each kill below is
+# either an exit code a copy that cannot resolve would also return (A's exit 2) or an ABSENCE a
+# copy that reads nothing also produces (B's missing DORMANT row). So each mutant is scored only
+# when an UNMUTATED copy at the same place, on the same seed, reproduces the base verdict in this
+# run; CG_<arm>=1 sits beside that control's own ok and nowhere else.
+cp "$VALIDATOR" "$WORK/control.sh" || { echo "FIXTURE ERROR: cannot copy the validator to $WORK" >&2; exit 2; }
+CG_A=0; CG_B=0; CG_E=0; CG_F=0; CG_G=0
 
 # ==================== A. EXAMINED NOTHING = exit 78 ==========================
 rc="$(run_ci "$VALIDATOR" "$WORK/does-not-exist")"
@@ -77,11 +85,20 @@ rc="$(run_ci "$VALIDATOR" "$WORK/does-not-exist")"
 # MUTATION: revert the exit-78 code to the old exit 2 and require the code to flip. This
 # mutation is keyed on `exit 78`, NOT on the verdict token, so renaming the token leaves it
 # working and RENUMBERING the code silently returns UNCHANGED -- which the guard below reports.
+rc="$(run_ci "$WORK/control.sh" "$WORK/does-not-exist")"
+if [ "$rc" = "78" ]; then
+  ok "A MUTATION CONTROL — an unmutated copy in \$WORK exits 78 on the missing surface"; CG_A=1
+else
+  bad "A MUTATION CONTROL — an unmutated copy in \$WORK exited $rc, not 78, so exit 2 from the mutant would be the copy failing"
+fi
 m="$(mutate 'exit 78' 'exit 2')"
 if [ "$m" != "CHANGED" ]; then bad "A MUTATION matched nothing (exit 78 renumbered)"; else
   rc="$(run_ci "$WORK/mutant.sh" "$WORK/does-not-exist")"
-  [ "$rc" = "2" ] && ok "A MUTATION — without the 78 code the surface-missing path is exit 2 again" \
-    || bad "A MUTATION — expected exit 2 from the reverted code, got $rc"
+  if [ "$rc" = "2" ]; then
+    mutant_killed "${CG_A:-0}" ci-A "A MUTATION — without the 78 code the surface-missing path is exit 2 again"
+  else
+    bad "A MUTATION — expected exit 2 from the reverted code, got $rc"
+  fi
 fi
 
 # ==================== B. comment-aware forward match =========================
@@ -95,13 +112,19 @@ else
   bad "B comment-only gate not dormant (rc=$rc) — the forward match is fail-open again"
 fi
 # MUTATION: neuter the comment strip (revert to the raw fail-open match).
+rc="$(run_ci "$WORK/control.sh" "$WORK/surface")"
+if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
+  ok "B MUTATION CONTROL — an unmutated copy in \$WORK reports the comment-only 'build' DORMANT"; CG_B=1
+else
+  bad "B MUTATION CONTROL — an unmutated copy in \$WORK did not report 'build' DORMANT (rc=$rc), so its absence below would be the copy failing"
+fi
 m="$(mutate "sed -e 's/^[[:space:]]*#.*\$//'" 'cat')"
 if [ "$m" != "CHANGED" ]; then bad "B MUTATION matched nothing (comment strip renamed)"; else
   rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface")"
   if grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
     bad "B MUTATION — 'build' still dormant without the comment strip; B proves nothing"
   else
-    ok "B MUTATION — without the comment strip the comment-only 'build' reads enforced (fail-open)"
+    mutant_killed "${CG_B:-0}" ci-B "B MUTATION — without the comment strip the comment-only 'build' reads enforced (fail-open)"
   fi
 fi
 
@@ -134,11 +157,20 @@ else
   bad "E an anchor present twice still resolved (rc=$rc) — leg (ii) exactly-once is dark"
 fi
 # MUTATION: relax exactly-once to at-least-once; the twice case must then resolve.
+rc="$(run_ci "$WORK/control.sh" "$WORK/surface" "$WORK/aliases.txt")"
+if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
+  ok "E MUTATION CONTROL — an unmutated copy in \$WORK keeps the twice-anchored gate DORMANT"; CG_E=1
+else
+  bad "E MUTATION CONTROL — an unmutated copy in \$WORK did not keep 'build' DORMANT on the twice case (rc=$rc)"
+fi
 m="$(mutate '"$a_anchor")" -eq 1 ] && return 0' '"$a_anchor")" -ge 1 ] && return 0')"
 if [ "$m" != "CHANGED" ]; then bad "E MUTATION matched nothing (leg ii test renamed)"; else
   rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface" "$WORK/aliases.txt")"
-  [ "$rc" = "0" ] && ok "E MUTATION — relaxing exactly-once to >=1 resolves the twice case (leg ii fires)" \
-    || bad "E MUTATION — twice case still dormant with >=1 (rc=$rc); E proves nothing"
+  if [ "$rc" = "0" ]; then
+    mutant_killed "${CG_E:-0}" ci-E "E MUTATION — relaxing exactly-once to >=1 resolves the twice case (leg ii fires)"
+  else
+    bad "E MUTATION — twice case still dormant with >=1 (rc=$rc); E proves nothing"
+  fi
 fi
 
 # F. leg (i): the enforcer is NOT wired (id absent from the surface) -> DORMANT,
@@ -152,11 +184,20 @@ else
   bad "F an unwired enforcer still resolved (rc=$rc) — leg (i) is dark"
 fi
 # MUTATION: force leg (i) to always pass; the unwired case must then resolve.
+rc="$(run_ci "$WORK/control.sh" "$WORK/surface" "$WORK/aliases.txt")"
+if [ "$rc" = "1" ] && grep -q "DORMANT: gate 'build'" "$WORK/out.txt"; then
+  ok "F MUTATION CONTROL — an unmutated copy in \$WORK keeps the unwired gate DORMANT"; CG_F=1
+else
+  bad "F MUTATION CONTROL — an unmutated copy in \$WORK did not keep 'build' DORMANT on the unwired case (rc=$rc)"
+fi
 m="$(mutate '[ "$(code_hits "$resolved_file" "$a_enf")" -ge 1 ] || continue' ': # MUTANT: leg (i) disabled')"
 if [ "$m" != "CHANGED" ]; then bad "F MUTATION matched nothing (leg i test renamed)"; else
   rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface" "$WORK/aliases.txt")"
-  [ "$rc" = "0" ] && ok "F MUTATION — disabling leg (i) resolves the unwired case (leg i fires)" \
-    || bad "F MUTATION — unwired case still dormant with leg (i) off (rc=$rc); F proves nothing"
+  if [ "$rc" = "0" ]; then
+    mutant_killed "${CG_F:-0}" ci-F "F MUTATION — disabling leg (i) resolves the unwired case (leg i fires)"
+  else
+    bad "F MUTATION — unwired case still dormant with leg (i) off (rc=$rc); F proves nothing"
+  fi
 fi
 
 # ===================== G. angle-bracket placeholder skip ====================
@@ -174,11 +215,17 @@ else
   bad "G placeholder not skipped (rc=$rc): $(tail -1 "$WORK/out.txt")"
 fi
 # MUTATION: neuter the placeholder skip; the <gate-name> token must then count and go DORMANT.
+rc="$(run_ci "$WORK/control.sh" "$WORK/surface")"
+if [ "$rc" = "0" ] && grep -q '2 gates declared' "$WORK/out.txt"; then
+  ok "G MUTATION CONTROL — an unmutated copy in \$WORK skips the placeholder (2 declared, exit 0)"; CG_G=1
+else
+  bad "G MUTATION CONTROL — an unmutated copy in \$WORK did not skip the placeholder cleanly (rc=$rc)"
+fi
 m="$(mutate '*"<"*">"*) continue' '*"<"*">"*) :')"
 if [ "$m" != "CHANGED" ]; then bad "G MUTATION matched nothing (placeholder skip renamed)"; else
   rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface")"
   if [ "$rc" = "1" ] && grep -q "DORMANT: gate '<gate-name>'" "$WORK/out.txt"; then
-    ok "G MUTATION — without the skip the <gate-name> placeholder counts and is DORMANT (skip is real)"
+    mutant_killed "${CG_G:-0}" ci-G "G MUTATION — without the skip the <gate-name> placeholder counts and is DORMANT (skip is real)"
   else
     bad "G MUTATION — placeholder still skipped without the guard (rc=$rc); G proves nothing"
   fi

@@ -36,6 +36,9 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # shellcheck source=/dev/null
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# Base-pass flags for the assertion 4 and BL-275 mutant kills, each raised only beside the ok of
+# the unmutated arm those mutants break: AD_A2 assertion 2, AD_275 the BL-275 site arm.
+AD_A2=0; AD_275=0
 # B_2D=1 only beside the 2d control's own ok: a 2d mutant is scored only if the unmutated copy scored 1 1 1.
 B_2D=0
 
@@ -122,7 +125,7 @@ DEC2="$(printf '%s\n' "$MANIFEST" | grep 'DECISION[[:space:]]*drift' \
 if [ -n "$DEC2" ]; then
   bad "apply.sh reported ITS OWN WRITE as consumer drift on a clean pull: $(printf '%s\n' "$DEC2" | head -1)"
 else
-  ok "no DECISION drift on any path phase 1 wrote — the drift set was measured before phase 1 wrote"
+  ok "no DECISION drift on any path phase 1 wrote — the drift set was measured before phase 1 wrote"; AD_A2=1
 fi
 
 # --- Assertion 2b: EXTENSION-HOOK-DRIFT is handed back as WORK, not stated as prose ---
@@ -601,7 +604,7 @@ else
   if [ "$(printf '%s\n' "$MUT_OUT" | grep -c 'RESOLVED.*pure-apply')" -ne 4 ]; then
     bad "FIXTURE BROKEN — the mutant did not apply both files, so any drift row below would have a different cause"
   elif grep -q 'DECISION[[:space:]]*drift.*beta.md' <<<"$MUT_OUT"; then
-    ok "mutant: measuring after the write turns a clean pull into 'refile-as-override or revert' — the fixture can fail"
+    mutant_killed "${AD_A2:-0}" capture-after-write "mutant: measuring after the write turns a clean pull into 'refile-as-override or revert' — the fixture can fail"
   else
     bad "MUTANT DID NOT FAIL — with the capture back below phase 1, apply.sh still reported no drift. This fixture cannot detect the defect it exists for."
   fi
@@ -784,7 +787,7 @@ bl275_got="$(bl275_score "$APPLY" "$BL275_EMIT")"
 if [ "$bl275_ctl" -ne 0 ]; then
   bad "BL-275 CONTROL the impossible-flag grammars matched $bl275_ctl executing lines, so the site counts establish nothing"
 elif [ "$bl275_got" = "." ]; then
-  ok "BL-275 U R E: apply.sh hands --bucket-rows to unregistered-drift.sh and to retired-tokens.sh, and emit-report.sh to retired-tokens.sh, each at an EXECUTING line (control: the same grammars with an impossible flag read 0)"
+  ok "BL-275 U R E: apply.sh hands --bucket-rows to unregistered-drift.sh and to retired-tokens.sh, and emit-report.sh to retired-tokens.sh, each at an EXECUTING line (control: the same grammars with an impossible flag read 0)"; AD_275=1
 else
   bad "BL-275 site(s) [${bl275_got%.}] no longer pass --bucket-rows at an executing line: that caller re-derives preclassify in a second process on every run"
 fi
@@ -803,7 +806,7 @@ bl275_mut() {
   case "$2" in apply) g="$(bl275_score "$out" "$BL275_EMIT")" ;; *) g="$(bl275_score "$APPLY" "$out")" ;; esac
   g="${g%.}"
   case "$g" in
-    "$6") ok "MUTANT BL-275 $1 (flag dropped at that site, flagged text left in a comment) fails exactly [$6]" ;;
+    "$6") mutant_killed "${AD_275:-0}" "bl275-$1" "MUTANT BL-275 $1 (flag dropped at that site, flagged text left in a comment) fails exactly [$6]" ;;
     "")   bad "MUTANT BL-275 $1 SURVIVED: the flag was dropped at its call site and every site arm still passed -- the grammar reads prose" ;;
     *)    bad "MUTANT BL-275 $1 failed [$g], expected exactly [$6] -- the site arms are entangled" ;;
   esac

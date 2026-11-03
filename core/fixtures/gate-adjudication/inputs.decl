@@ -13,3 +13,4 @@ core/skills/ai-dlc/enforcement-map.yaml
 core/skills/ai-dlc/steps/_gate-procedures.md
 core/skills/ai-dlc/steps/gate-validation.md
 core/team-roles/gate-adjudicator.md
+core/fixtures/lib/

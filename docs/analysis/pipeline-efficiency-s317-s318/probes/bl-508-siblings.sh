@@ -46,6 +46,7 @@ world() { # -> a project root with stories a.md and b.md, each edited by its own
   printf '%s' "$w"
 }
 entry() { # <story> <with siblings: yes|no> [claim tail]
+  printf -- '- advisor: called\n- derivations: replayed 1\n\n'
   printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: %s/stories/%s:1\n' "$SLOT" "$1"
   [ "$2" = yes ] && printf -- "- siblings:\n\n\`\`\`text\n\$ grep -rn -F 'loads eagerly' %s/stories/%s\n\$ grep -c -F 'loads on demand' %s/stories/%s\n1\n\`\`\`\n\n" "$SLOT" "$1" "$SLOT" "$1"
   [ "$2" = checked ] && printf -- '- siblings: checked\n'
@@ -55,7 +56,7 @@ entry() { # <story> <with siblings: yes|no> [claim tail]
 }
 join() { # <world> -> RC, OUT
   OUT="$(AI_DLC_PROJECT_ROOT="$1" bash "$J" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
-    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z 2>&1)"; RC=$?
+    --since 2000-01-01T00:00:00Z --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>&1)"; RC=$?
 }
 src() { # <body> -> RC, OUT: --sources over a record beside one seat file carrying F-1..F-3
   local w; w="$(mktemp -d)" || exit 9
@@ -97,7 +98,7 @@ printf '### S-1 — MAJOR\n- disposition: repaired\n- edit: %s/sections/1.md:2\n
 for o in 2 3; do
   printf '### S-%s — MAJOR\n- disposition: repaired\n- edit: %s/sections/%s.md:2\n- siblings: n/a (section shard; re-checked by the serial remediator after assembly)\n- derivation: n/a (no factual claim)\n' "$o" "$RD" "$o" > "$w/$RD/$o.md"
 done
-OUT="$(AI_DLC_PROJECT_ROOT="$w" bash "$J" --document "$DOC" "$w/$RD" --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z 2>&1)"; RC=$?
+OUT="$(AI_DLC_PROJECT_ROOT="$w" bash "$J" --document "$DOC" "$w/$RD" --since 2000-01-01T00:00:00Z --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>&1)"; RC=$?
 [ "$RC" -eq 2 ] || exit 1
 case "$OUT" in *"1.md: the S-1 — MAJOR $NOSIB"*) ;; *) exit 1 ;; esac
 case "$OUT" in *"2.md: the S-2 — MAJOR $NOSIB"*) exit 1 ;; esac
@@ -122,7 +123,7 @@ case "$OUT" in *"02.md: the F-1 — MAJOR entry's siblings control counts 'loads
 w="$(world)"; entry a.md yes ' The dashboard display in Story 1.4 is outside this shard.' > "$w/$SLOT/$D/01.md"
 entry b.md yes > "$w/$SLOT/$D/02.md"
 join "$w"; [ "$RC" -eq 2 ] || exit 1
-case "$OUT" in *"01.md:1: the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"*) ;; *) exit 1 ;; esac
+case "$OUT" in *"01.md:4: the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"*) ;; *) exit 1 ;; esac
 # SRC-ERA
 src '### F-1 — MAJOR\n- source: architecture-dev-1.md#F-1\n- disposition: repaired\n- edit: s305/stories/a.md:3\n\n### F-2 — MAJOR\n- source: architecture-dev-1.md#F-2\n- disposition: repaired\n- edit: s305/stories/a.md:9\n- siblings: n/a (insertion)\n\n### F-3 — MAJOR\n- source: architecture-dev-1.md#F-3\n- disposition: repaired\n- edit: s305/stories/a.md:12\n'
 [ "$RC" -eq 2 ] || exit 1

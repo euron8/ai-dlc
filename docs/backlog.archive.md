@@ -39640,3 +39640,53 @@ verify: sh bash core/fixtures/document-partition/receipt-bl908.sh
 **DEFECT.** Filed by the b248 lead at batch close from graph's push-candidate PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT, raised at graph's 0.990.0 -> 0.994.0 reconcile (graph ba50b14a4, 2026-11-02 11:06 EST) and found unfiled by the close sweep (fence 5 of the plan's derive block). `.claude/skills/ai-dlc-update/SKILL.md` step 2 (distribution source `core/skills/ai-dlc-update/SKILL.md`) writes each covered fixture directory WHOLE from theirs, and decides whether a file is a consumer edit only from `preclassify.sh`'s bucket for that path; `preclassify.sh` emits rows only for paths in the base..theirs diff, so a consumer-edited file the range never touched is overwritten with no bucket. Graph's run kept its `seed.sh` by hand (its PR #1290). Owed: bucket every file of a whole-written fixture directory, or hold back a directory holding any non-diffed file whose consumer copy differs from base, with a fixture world seeding exactly that file. This touches a bootstrapping file, so it ships alone.
 
 verify: sh bash core/fixtures/self-update-fixture-log/receipt-bl907.sh
+
+## BL-828 — mutant arms that score a kill without asserting their unmutated arm passed in the same run
+
+**LANDED (v0.998.0).** BL-828's three scoped items are met and it closes on core/fixtures/fixture-hygiene/receipt-bl828.sh, which runs validate-mutant-kills; the keyword-free residue is filed as BL-909.
+
+**DEFECT.** Filed at the batch-243 close. In c6b, a fold found that 41 of `check-22-spawn-ledger`'s 43 mutant arms scored a kill without first asserting that the arm passed on the unmutated tree in the same run. A mutant that breaks the arm's setup, rather than the subject, therefore read as killed. 0.952.0 fixed check-22: `need_base` now occurs 52 times in `core/fixtures/check-22-spawn-ledger/run.sh`. No census has been taken across the other fixtures.
+
+Owed: the census over `core/fixtures/*/run.sh`, with its false-positive set measured and enumerated before any arm ships. Then either a shared base-pass helper, or an arm that refuses a kill with no same-run base pass. Mechanism as `.claude/rules/fixture-mutants.md` states it.
+
+**PARTIAL: the mechanism is in, and three fixtures are migrated.** "No same-run base pass" is data flow, so it cannot be grepped. The emission site can be. `core/fixtures/lib/mutant.sh` now carries `need_base` and `mutant_killed <flag> <name> <message>`, which is the one sanctioned way to emit a kill. It refuses (FIXTURE BROKEN, return 2, no `ok`) unless the flag says the unmutated arm passed in the same run. `scripts/validate-mutant-kills.sh` is a standalone `.githooks/pre-push` step, not an arm of `validate-enforcement-map.sh`. Its arms:
+
+- M1 refuses a `KILLED`/`killed` on a non-comment line of a `run.sh` that is not routed through `mutant_killed`, in a fixture missing from `scripts/mutant-kills-allowlist.txt`.
+- M2 refuses a stale row: a listed fixture with no unrouted kill left, or with no `run.sh`.
+- M3 refuses a duplicate row.
+- M4 refuses a row whose fixture is not on the allowlist at `origin/main`, so an added row or a count-keeping swap fails. It SKIPs with its reason when `origin/main` does not resolve or carries no allowlist yet.
+
+So the allowlist only shrinks. A mktemp self-probe runs first and checks both directions.
+
+The census, at 7c8a88fd7, covered 262 `run.sh`:
+
+- Case-insensitive `killed` on non-comment lines: 882 lines in 127 fixtures.
+- Case-sensitive `KILLED|killed`: 875 lines in the same 127. The 7 dropped lines are `SIGKILLed`.
+- 234 comment lines are excluded.
+- 360 of the 875 lines carry no `mut` word. They are kept, because the arm is keyed per fixture.
+
+The allowlist is the output of `--derive`, never typed. That was 127 fixtures, and it is **124** rows now because three fixtures are migrated, `check-22-spawn-ledger`, `story-evidence-scaffold` and `handoff-resume-guard`:
+
+- Every kill goes through `mutant_killed`.
+- NB BINDING covers both kinds of call site.
+- A second NB mutant, `mutant_killed` skipping `need_base`, is refused.
+
+Owed: migrate the remaining allowlisted fixtures, removing each row in the change that migrates it.
+
+**Progress (batch b248; the entry stays PARTIAL).** The b248-loadfree release empties both allowlists. It migrates the last 8 fixtures out of `scripts/mutant-kills-allowlist.txt` (M1, 8 rows to 0 over the non-comment lines, `git show da5b8bf49:… | grep -vc '^#'` against the same at the release tip): derivation-capture, divergence-hard-block, escalation-status-vocabulary, fanout-payload-channel, postcompact-rulebook-recovery, process-rule-pins, procsub-staged-refusal-boot and scope-confirmation. It also deletes the last 60 rows from `scripts/mutant-sites-allowlist.txt` (M5, 60 to 0, matched on column 1) across 19 fixtures: self-update-gate 17, readset-skip 14, prepush-ssh-keepalive 4, spec-join-integrity 4, gate-resume 3, and 2 each for artifact-derivations, fold-architect-ledger-join, story-corpus-sprint-slot and suppression-lifetime, and 1 each for advisor-gate-deny, backlog-receipt-binding, emit-report-refusal, gate-remediation-deny, hermetic-runner, layer-adjudication-tier, prepush-pool-depth, readset-stage1-verdict, suite-dispatch-order and validator-fork-budget. Each kill is gated on a base flag that its own arm raises, and the readset-skip migration was shown non-vacuous by neutralising every setter, which turns each mutant into `FIXTURE BROKEN: MUTANT … not scored`. The `finish_mutant` row of prepush-pool-depth leaves too: five of its six `finish_mutant` callers compute their flag in one expression (`core/fixtures/prepush-pool-depth/run.sh` :566, :823, :1392, :1427, :1483), and the sixth, i66 at :901, passes `$B_i66`, which is set to 0 at :885 and raised only beside its own ok at :894; all six pass through a bound test. An empty M1 and M5 allowlist does not by itself meet the close condition, because the entry's owed item (3), the keyword-free mutant-verdict residue that M1 cannot see in the 22 delisted fixtures, is untouched by either list.
+
+**Progress (0.961.0, batch b245).** 33 more fixtures route their kills through `mutant_killed` behind a same-run base-pass flag, and each change deletes its own row, so `scripts/mutant-kills-allowlist.txt` falls from 124 rows to 91. The remaining 91 stay owed, and the entry stays open.
+
+**Progress (0.964.0, batch b245).** M5 is not in 0.964.0. The M5 sites owed, by owner: e2 23, f3 13, fb 9, 19 1, a total of 46.
+
+**Progress (v0.968.0, batch b245).** M5 ships: scripts/validate-mutant-kills.sh arm M5 refuses any `mutant_killed`/`need_base` site whose flag argument is not BOUND, that is, not a flag set to 1 only in a passing branch (one that calls `ok` and not `bad`), a `$(( ))` conjunction of such flags, a same-run test over a captured value, or a helper positional every caller fills with one of those; M6 refuses an allowlist row whose site is no longer refused (bound now, or gone) and a duplicate row; M7 refuses a row added against origin/main. The refused sites are listed in the derived, down-only `scripts/mutant-sites-allowlist.txt`, 258 rows on main be4736a50. The sites owed, by owner: e2 23, f3 14, fb 9, 19 1, f6 4, a total of 51, which replaces the 0.964.0 figure of 46.
+
+**Progress (batch b245 close).** The owed count is 52 sites; the +1 is gate-remediation-deny `mx_kill`, from v0.966.0. f6's owed-derivations rewrite f27af70a2 sits on local branch `b245-f6-h2` (worktree `.claude/worktrees/agent-a2db8126dba6b278a`). It was never delivered, and it has 32 MM rows against main's 28. The branch is kept.
+
+**Progress (v0.992.0, batch b248).** M1 now sees only kill-shaped emissions, so 22 fixtures route their kills through `mutant_killed` behind a same-run base-pass flag and leave `scripts/mutant-kills-allowlist.txt`, which goes 30 to 8 rows. inflight-row-shape is one of the 22: 9 kills routed, plus a new control arm for its mutant 5. M5 binds 45 more fixtures, so `scripts/mutant-sites-allowlist.txt` goes 254 to 60 rows (`--derive-m5` prints 60). M5 also now refuses a same-run test variable only ever assigned a constant command substitution (`$(printf|echo|true|false|: <literal>)` or a digits-only `$(( ))`). STATED LIMIT of M5: a constant default followed by a `$?` capture that runs only under a condition reaches the test as the constant on the false path. story-provenance RC_c/d/e/r at :532 are safe today only because the default 1 fails `-eq 0`.
+
+Owed: nothing. The entry is CLOSED: its three scoped items are met. (1) and (2): `grep -vc '^#'` reads 0 on both `scripts/mutant-kills-allowlist.txt` and `scripts/mutant-sites-allowlist.txt`, and the receipt reads both. (3): the 15 keyword-free mutant-kill verdict lines derived at 1faa430bf in the 22 fixtures delisted by 78966dd63 go through `mutant_killed` behind a same-run base flag (ci-gates-resolution, pause-hook-origin, layer-absorption-retire, apply-drift-after-write, h2-attest-scripts-dir, preclassify-mode-bucket; the sourcing hole in decl-reasons, gate-adjudication and deploy-validate-smoke-classification is closed). The receipt `core/fixtures/fixture-hygiene/receipt-bl828.sh` runs `scripts/validate-mutant-kills.sh` and requires exit 0 with its self-probe line. The corpus-wide keyword-free residue, which M1 cannot see, is carried by BL-909.
+
+The same keyword-free residue exists OUTSIDE the 22, for example postcompact-rulebook-recovery :525, :563, :583 (`mutant: a protocol without the mandate FAILS ...`) and process-rule-pins :1529, :1562 (`MUTANT slot-target`, `MUTANT bare-marker`). A loose grammar (non-comment `ok`/`note` lines naming a mutant or mutation, without `mutant_killed` and without KILLED/killed) hits about 669 lines in 154 fixtures, a figure from the b249-c4 contract derivation, not re-derived here, with its false-positive set unmeasured. That remainder is carried by BL-909.
+
+verify: sh bash core/fixtures/fixture-hygiene/receipt-bl828.sh

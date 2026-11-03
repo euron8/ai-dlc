@@ -96,8 +96,9 @@ build_world() { # <dir> <variant>
   # base reads a story the status arms can decide, and the cell stays about its range warning.
   # It carries both run-record lines too (a run and a reasoned none), so the reversed-range cell,
   # whose frozen sha IS this commit, stays about its range warning. A pointer (`see the work
-  # commit`) is a no-run claim since the grammar was inverted, so the line carries a count.
-  printf -- '---\nstatus: review\n---\n# Story 1\n\nFull-collection run: `pytest -q` from the root, 1 passed.\nDependency setup: none, system pytest.\n' > "$w/$STORY"
+  # commit`) is a no-run claim since the grammar was inverted, so the line carries a count. They sit
+  # under a `## Dev Agent Record` heading, so the reversed-range cell is not refused dar-missing.
+  printf -- '---\nstatus: review\n---\n# Story 1\n\n## Dev Agent Record\n\nFull-collection run: `pytest -q` from the root, 1 passed.\nDependency setup: none, system pytest.\n' > "$w/$STORY"
   gitw "$w" add -A && gitw "$w" commit -qm base || return 2
   b="$(gitw "$w" rev-parse HEAD)"
   printf 'class TestA:\n    def test_new(self):\n        assert 1 == 1\n' > "$w/tests/test_x.py"
@@ -290,6 +291,36 @@ EOS
     fcgone) story_awk "$w" '/^Full-collection run: /{next} {print}' || return 2 ;;
     dsgone) story_awk "$w" '/^Dependency setup: /{next} {print}' || return 2 ;;
     dsbare) story_awk "$w" '{ sub(/^Dependency setup: .*$/, "Dependency setup: none."); print }' || return 2 ;;
+    # (p) DAR-MISSING worlds, driven by run.sh's DAR arm, not CASES. daroff: the heading line deleted
+    # (its body joins the title, absent). darfence: the heading only inside a ``` fence (absent).
+    # darph: the heading kept, its body moved under a new `## Implementation Notes`, and the section
+    # holding only graph's own template shapes -- a placeholder line, an HTML comment and a blank
+    # `| Model | |` table (empty). darphok: darph plus one real line (passing near-miss). darself: darph
+    # plus ONLY the lead's one-line `lead (self-executed` DAR, the remedy the refusal names (passes).
+    daroff) story_awk "$w" '/^## Dev Agent Record$/{next} {print}' || return 2 ;;
+    darfence) story_awk "$w" '/^## Dev Agent Record$/{print "```"; print; print "```"; next} {print}' || return 2 ;;
+    darph|darphok|darself)
+           real=''; [ "$v" = darphok ] && real='print "- Model: claude-sonnet-5-5. Date: 2026-10-11.";'
+           [ "$v" = darself ] && real='print "Model: lead (self-executed), waiver in docs/escalations/pending.md";'
+           story_awk "$w" '/^## Dev Agent Record$/{print; print ""; print "(populated during implementation)"; print ""
+             print "<!-- Model: MUST match role file frontmatter for role spawned. -->"; print ""
+             print "| Field | Value |"; print "|-------|-------|"; print "| Model | |"; print "| Date | |"; '"$real"'
+             print ""; print "## Implementation Notes"; next} {print}' || return 2 ;;
+    # The fence and skeleton worlds, the same darph move with one shape as the whole section. darfill: a DAR filled
+    # only inside a ``` fence (graph s145/s148/s149's shape; passes). darsub, darmus, dartbd, dartodo, dartodob,
+    # darlbl: subheadings only; a subheading over a lone {{...}} token; TBD; TODO; [TODO]; labels with nothing after
+    # the colon (each empty).
+    darfill|darsub|darmus|dartbd|dartodo|dartodob|darlbl)
+           case "$v" in
+             darfill) sh='print "```"; print "Agent: claude-opus-4-6"; print "Date: 2026-04-16"; print "```";' ;;
+             darsub) sh='print "### Permissions Block Audit"; print "### Dispatch Test Output";' ;;
+             darmus) sh='print "### Agent Model Used"; print ""; print "{{agent_model_name_version}}";' ;;
+             dartbd) sh='print "TBD";' ;;
+             dartodo) sh='print "TODO";' ;;
+             dartodob) sh='print "[TODO]";' ;;
+             darlbl) sh='print "- Model:"; print "**Date:**"; print "Summary:";' ;;
+           esac
+           story_awk "$w" '/^## Dev Agent Record$/{print; print ""; '"$sh"' print ""; print "## Implementation Notes"; next} {print}' || return 2 ;;
     # The LEGACY gate: dev.md installed at <frozen> without the label prescription, over a story with
     # neither line -- not checked. devnew: the same story under a dev.md that carries it -- refused.
     devold|devnew)
