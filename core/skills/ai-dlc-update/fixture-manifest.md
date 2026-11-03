@@ -116,6 +116,7 @@ core_manifest:
   - core/fixtures/gate-repair-record/**
   - core/fixtures/adversarial-shard-merge/**
   - core/fixtures/review-shard-merge/**
+  - core/fixtures/review-shard-merge-b/**
   - core/fixtures/remediator-shard-join/**
   - core/fixtures/content-seal/**
   - core/fixtures/document-partition/**

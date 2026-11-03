@@ -3542,7 +3542,9 @@ p_canon_merge() {
   }
   if cell crm-ok; then
     crm_sh_=0
-    if hand_use "$sd" qw1; then crm_sh_=1   # Q1's all-PASS merge, unmodified
+    # Q1's all-PASS merge, unmodified, read only when Q1's arm passed in THIS run: shard b (BL-906) does not run Q1, so
+    # there it merges for itself rather than reading a hand-off nothing saved.
+    if [ "${ARMOK_q_worst:-0}" = 1 ] && hand_use "$sd" qw1; then crm_sh_=1
     else
       d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
       o="$(qout "$d")"; q_merge "$sd" "$d"
@@ -4061,6 +4063,9 @@ fi
 # rows relocated: the copy merges, as a fresh build does. The control is the same copy with its relocated rows
 # removed from the ledger, which the merge refuses as carrying no content-seal row -- so the copy merges
 # BECAUSE of the relocated rows, not because seal checking found nothing to check.
+# SW0 runs where the seal arms run (unit bl737, shard a, BL-906): the sealed-world cache it proves is read by them
+# alone, and building it starts content-seal.sh, which shard b otherwise never starts.
+if declare -F sg > /dev/null && ! sg bl737; then return 0; fi
 local sb0 sh0 sw1 sw2 swo swl
 sb0="$(tpl_n builds)"; sh0="$(tpl_n hits)"
 sw1="$(seal_world "$SRCDIR" code-review)"; sw2="$(seal_world "$SRCDIR" code-review)"
