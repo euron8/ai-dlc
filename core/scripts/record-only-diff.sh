@@ -9,6 +9,7 @@
 #   record-only-diff.sh run-shape <value> [<conventions file>]
 #   record-only-diff.sh setup-shape <value>
 #   record-only-diff.sh run-filter <value> [<conventions file>]
+#   record-only-diff.sh run-span <value>       (the invocation span RUN-FILTER reads, on stdout)
 #   record-only-diff.sh story-base [-C <repo>] <story-file> <base> [<frozen>]
 #
 # RUN-FILTER. Exit 0 when the invocation in <value> is the unfiltered canonical collection, 1 with
@@ -37,7 +38,9 @@
 # a <story-file> that is not a blob at <base> is decided first: a tree or commit there is exit 2, and
 # a path absent at <base> is exit 0 only when it is a blob at <frozen> (a story created after the
 # base), else exit 2 (a typo, a directory, a path inside .git/). The two-operand form keeps the old
-# reading below, where absent at <base> is exit 0. Exit 0 when <story-file> at <base> is absent, or carries no column-0
+# reading below, where absent at <base> is exit 0. In BOTH forms a story absent at <base> is exit 1 when the
+# path was ever in the history of <base> (`rev-list --full-history`: deleted, then re-added; BL-904), and exit 2
+# in a shallow repository. Exit 0 when <story-file> at <base> is absent, or carries no column-0
 # `Full-collection run:` label and a frontmatter `status:` other than `review` and `done` (the dev
 # has not handed off yet). <story-file> is read as PATHS reads it: repo-relative or absolute inside
 # the repository; any other spelling is exit 2. Exit 1 with the reason on stdout otherwise: <base> is a later sha (a
@@ -138,19 +141,21 @@ ro_label() {
       END { if (hit && !done) print ((post || inf) ? fb : ""); exit !hit }'
     exit $?
 }
+# rf_span <text> -> the invocation span RUN-FILTER reads (header: RUN-FILTER), the one definition: run-filter reads
+# it, and `run-span` prints it for merge-review-shards.sh's run binding, which compares it with the recorded invocation.
+rf_span() {
+  local t="$1" s
+  local sp=""
+  sp="$(grep -oE '`[^`]*`' <<<"$t")" || sp=""
+  s="$(awk '/(^|[[:space:]\/`])(pytest|py\.test)([[:space:]`]|$)/ { print; exit }' <<<"$sp")"
+  [ -n "$s" ] || s="$(awk 'NF { print; exit }' <<<"$sp")"
+  if [ -z "$s" ]; then
+    case "$t" in *'$ '*) s="${t#*\$ }" ;; *) s="$t" ;; esac
+  fi
+  s="${s#\`}"; printf '%s' "${s%\`}"
+}
 ro_run_filter() {
     [ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $ME run-filter <value> [<conventions file>]" >&2; exit 64; }
-    rf_span() { # <text> -> the invocation span
-      local t="$1" s
-      local sp=""
-      sp="$(grep -oE '`[^`]*`' <<<"$t")" || sp=""
-      s="$(awk '/(^|[[:space:]\/`])(pytest|py\.test)([[:space:]`]|$)/ { print; exit }' <<<"$sp")"
-      [ -n "$s" ] || s="$(awk 'NF { print; exit }' <<<"$sp")"
-      if [ -z "$s" ]; then
-        case "$t" in *'$ '*) s="${t#*\$ }" ;; *) s="$t" ;; esac
-      fi
-      s="${s#\`}"; printf '%s' "${s%\`}"
-    }
     rf_args() { # <span> -> one argument per line: the tokens after the pytest token, to the first operator
       local w seen=0 all="" aft="" dd=0
       set -f
@@ -266,6 +271,22 @@ ro_story_rel() {
         printf '%s\n' "$rs_p" ;;
     esac
 }
+# ro_story_never <base>: a story absent at <base> is a gate-1 base only when $sb_rel was never a path at <base> or
+# any ancestor of it (BL-904: a story `git rm`'d after its review and re-added later would otherwise read as created
+# after the base). --full-history, because default history simplification follows a TREESAME merge parent and
+# prunes the side that deleted the story (a merge of a branch that never held it hides the deletion). A shallow
+# repository cannot prove an absence (its boundary reads as a root), and a failed walk is UNEVALUABLE, never 0.
+# The pathspec is top-anchored and literal (BL-904): $sb_rel is relative to the repository top, and a bare pathspec
+# after `--` resolves against the -C directory, so a -C <subdirectory> would walk a path that never existed.
+ro_story_never() {
+    local sn_sh sn_h
+    sn_sh="$(git -C "$REPO" rev-parse --is-shallow-repository 2>/dev/null)" \
+      || { echo "$ME: UNEVALUABLE — cannot tell whether $REPO is a shallow repository" >&2; exit 2; }
+    [ "$sn_sh" = false ] || { echo "$ME: UNEVALUABLE — $REPO is a shallow repository, so the story's history before $1 is not all present" >&2; exit 2; }
+    sn_h="$(git -C "$REPO" rev-list -1 --full-history "$1" -- ":(top,literal)$sb_rel" 2>/dev/null)" \
+      || { echo "$ME: UNEVALUABLE — git rev-list over $sb_rel's history before $1 failed in $REPO" >&2; exit 2; }
+    [ -z "$sn_h" ] || { printf 'the story %s existed before %s and is absent at it (deleted, then re-added)\n' "$sb_rel" "$1"; exit 1; }
+}
 ro_story_base() {
     shift
     REPO=.
@@ -282,12 +303,13 @@ ro_story_base() {
       case "$sb_ty" in
         blob) ;;
         "") # absent at <base>: a story created after it is a blob at <frozen>; anything else is no story
-            [ "$(git -C "$REPO" cat-file -t "$3:$sb_rel" 2>/dev/null)" = blob ] && exit 0
-            echo "$ME: UNEVALUABLE — story is not a file at $2 or $3: $1" >&2; exit 2 ;;
+            [ "$(git -C "$REPO" cat-file -t "$3:$sb_rel" 2>/dev/null)" = blob ] \
+              || { echo "$ME: UNEVALUABLE — story is not a file at $2 or $3: $1" >&2; exit 2; }
+            ro_story_never "$2"; exit 0 ;;
         *) echo "$ME: UNEVALUABLE — story is not a file at $2: $1" >&2; exit 2 ;;
       esac
     else
-      git -C "$REPO" cat-file -e "$2:$sb_rel" 2>/dev/null || exit 0
+      git -C "$REPO" cat-file -e "$2:$sb_rel" 2>/dev/null || { ro_story_never "$2"; exit 0; }
     fi
     sb_t="$(git -C "$REPO" show "$2:$sb_rel" 2>/dev/null)"
     if (ro_label label 'Full-collection run:') <<<"$sb_t" >/dev/null; then
@@ -401,6 +423,10 @@ case "${1:-}" in
     ;;
   run-filter)
     ro_run_filter "$@"
+    ;;
+  run-span)
+    [ $# -eq 2 ] || { echo "usage: $ME run-span <value>" >&2; exit 64; }
+    rf_span "$2"; echo
     ;;
   story-base)
     ro_story_base "$@"

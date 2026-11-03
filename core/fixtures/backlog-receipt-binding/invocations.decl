@@ -7,5 +7,7 @@
 # cells: r10-m1's full run and the c5 worlds' R10 rows. r10-m2..m14 drive vbr_probe_r10 alone, in-process.
 # BL-868 (brb): +186 / +72 from 5905 / 2238. m7b and m16 now escape only the CORPUS seed, so both worlds run
 # every self-probe and the corpus before the porcelain comparison decides; both used to stop at R1's UNSEEDED refusal.
-6091 *
-2310 scripts/validate-backlog-receipts.sh
+# BL-874: +121 / +48 from 6091 / 2310. The two full R11 runs (r11-ctl, r11-m1) over the c5 world with an
+# R11 commit, and three probe-only drives of vbr_probe_r11 (r11d-ctl, r11-m2, r11-m3), sourced in-process.
+6212 *
+2358 scripts/validate-backlog-receipts.sh

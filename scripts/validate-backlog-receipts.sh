@@ -213,6 +213,10 @@
 #      population line as not fully parsed.
 #   HOW THE FALSE-POSITIVE SET REACHED ITS VALUE: see the R10 FP block beside DEFAULT_MAX_R10.
 #
+# R11 -- A VERIFIED SHA THIS BRANCH ADDS TO A LANDED LINE IS AN ANCESTOR OF --base (BL-874). Population,
+# rule, NOT DERIVED case, self-probe and the measured false-positive set: the R11 block above
+# r11_judge. `R11-POPULATION:` prints in every verbosity; ceiling 0.
+#
 # EMPTY IS NOT CLEAN. Both populations print a line in every verbosity -- `OPEN-POPULATION: EMPTY`
 # when the ledger has no live `sh` receipt (the state on every push when this shipped: 43 live
 # entries, 0 `sh` receipts; control, the same ledger's `^verify:` lines, 47, of which the one
@@ -2857,6 +2861,132 @@ done
 R10_PROBED="R10 fired both directions over ${R10P_N} text seeds"
 }
 
+# ---------------------------------------------------------------------------
+# R11 -- A VERIFIED SHA A BRANCH ADDS TO THE LEDGER IS ON --base (BL-874). A LANDED line written
+# before the squash names the pre-squash commit, which the squash leaves unreachable from main; b245
+# re-anchored six of them by hand. The release practice is now the sha-less `**LANDED (v<x>).**`
+# (scripts/backlog-rotate.sh binds it to CHANGELOG.md / VERSION), and a `verified <sha>` is written
+# only for a sha already on main. R11 holds that second half.
+#   POPULATION: the shas of `**LANDED (v..., verified <sha>)` lines -- the rotator's anchored form,
+#     so an inner PARTIAL and a dated `verified 2026-..` are never taken -- PRESENT at <head> in the
+#     ledger or its archive and ABSENT from BOTH at merge-base(<base>, <head>). Keyed on the SHA, not
+#     the line: a rotation moves a line between the two files and may re-prefix it, and a move is not
+#     an add. Pre-existing archive lines are out of scope: 121 of them were not ancestors of
+#     origin/main at 47102ad20 (BL-874's progress note), and an archive-wide arm would fail on those.
+#   RULE: each sha resolves to a commit and is an ancestor of <base> itself, not of the merge-base.
+#   NO MERGE-BASE (a probe repository with no origin/main, an unrelated --base): NOT DERIVED, said as
+#     such in both verbosities, never a failure and never EMPTY.
+#   FALSE-POSITIVE SET, MEASURED. The contract adversary replayed this population over the last 40
+#     first-parent commits of origin/main, each judged with base = its parent: 20 true positives
+#     (pre-squash shas the squash left unreachable) and 1 move, which this population excludes. A
+#     hand re-ran the SHIPPING r11_judge (this file, sourced) over the same window, in the main
+#     repository at afea572a5: `git rev-list --first-parent -40 afea572a5`, head = C, base = C^.
+#     r11_judge fires on 19 distinct shas across 14 commits (0.968.0 .. 0.983.0), all 19 resolving
+#     and not ancestors, out of an added population of 52. A line-keyed count over the same window
+#     reads 20: one sha sits on two added lines of one commit, and R11 keys on the sha. That matches
+#     the adversary's 20. A hand count of verified shas MOVED from the ledger into the archive in
+#     the window read 0, against the adversary's 1; that difference is unreconciled, and the probe's
+#     seed BL-1102 is what proves a move stays quiet. All 19 fired shas read not-an-ancestor of afea572a5. Same-invocation controls: a
+#     `commit-tree` side commit off afea572a5 reads not-an-ancestor (rc 1), and afea572a5~3 reads
+#     ancestor (rc 0). Every one of those fires is a TRUE positive, the pre-squash LANDED sha of
+#     a release that has since shipped. The gate judges only the pushing branch's adds, and the
+#     release practice above writes none, so the corpus ships with a ceiling of 0.
+# THE PROBE IS NEVER REPLAYED: vbr_main calls it after vbr_probe_r10, outside the probe record.
+# ---------------------------------------------------------------------------
+# r11_judge <root> <ledger-rel> <base> <head> -> `R11-COUNTS <derived 0|1> <mb9> <added> <fail>` then one
+# `R11-FAIL\t<sha>\tv<version>\t<reason>` row per failing sha. Self-contained: no $WORK, no $AWKF.
+r11_judge() {
+  local _r="$1" _rel="$2" _b="$3" _h="$4" _mb _arel _rows _n=0 _f=0 _out="" _s _v
+  case "$_rel" in */*) _arel="${_rel%/*}/backlog.archive.md" ;; *) _arel="backlog.archive.md" ;; esac
+  _mb=""; [ -n "$_rel" ] && { _mb="$(git -C "$_r" merge-base "$_b" "$_h" 2>/dev/null)" || _mb=""; }
+  if [ -z "$_mb" ]; then echo "R11-COUNTS 0 - 0 0"; return 0; fi
+  _rows="$( { echo '@@R11 MB'; git -C "$_r" show "${_mb}:${_rel}" 2>/dev/null; echo; git -C "$_r" show "${_mb}:${_arel}" 2>/dev/null
+              echo; echo '@@R11 HEAD'; git -C "$_r" show "${_h}:${_rel}" 2>/dev/null; echo; git -C "$_r" show "${_h}:${_arel}" 2>/dev/null; } \
+    | awk '
+      $0 == "@@R11 MB" { side = "mb"; next }
+      $0 == "@@R11 HEAD" { side = "head"; next }
+      /^(<br>)?\*\*LANDED \(v[^,]*, verified [0-9a-f]+[^0-9a-f]/ {
+        s = $0; sub(/^(<br>)?\*\*LANDED \(v/, "", s); v = s; sub(/,.*/, "", v)
+        sub(/^[^,]*, verified /, "", s); match(s, /^[0-9a-f]+/); s = substr(s, 1, RLENGTH)
+        if (length(s) < 7) next
+        if (side == "mb") was[s] = 1; else if (!(s in now)) { now[s] = v; ord[++n] = s }
+      }
+      END { for (i = 1; i <= n; i++) if (!(ord[i] in was)) printf "%s\t%s\n", ord[i], now[ord[i]] }')"
+  while IFS="$(printf '\t')" read -r _s _v; do
+    [ -n "$_s" ] || continue
+    _n=$(( _n + 1 ))
+    if ! git -C "$_r" cat-file -e "${_s}^{commit}" 2>/dev/null; then
+      _f=$(( _f + 1 )); _out="$_out$(printf 'R11-FAIL\t%s\tv%s\tdoes not resolve to a commit' "$_s" "$_v")
+"
+    elif ! git -C "$_r" merge-base --is-ancestor "$_s" "$_b" 2>/dev/null; then
+      _f=$(( _f + 1 )); _out="$_out$(printf 'R11-FAIL\t%s\tv%s\tis not an ancestor of %s' "$_s" "$_v" "$_b")
+"
+    fi
+  done <<EOF
+$_rows
+EOF
+  echo "R11-COUNTS 1 $(printf '%s' "$_mb" | cut -c1-9) $_n $_f"
+  printf '%s' "$_out"
+}
+r11_line() { # r11_line <judge output> -> the population line, printed in both verbosities
+  local _d _mb _n _f
+  read -r _ _d _mb _n _f <<<"$(printf '%s\n' "$1" | sed -n '/^R11-COUNTS /p')"
+  if [ "${_d:-0}" != 1 ]; then
+    echo "R11-POPULATION: NOT DERIVED -- base ref '$BASE_REF' has no merge-base with HEAD in the subject repository, or the ledger is not tracked there, so no LANDED sha added on this branch was checked against it; this is not a clean result."
+  elif [ "$_n" -eq 0 ]; then
+    echo "R11-POPULATION: EMPTY -- 0 verified LANDED sha(s) added since merge-base $_mb; nothing was observed, which is not a clean result."
+  else
+    echo "R11-POPULATION: $_n verified LANDED sha(s) added since merge-base $_mb, $_f not an ancestor of $BASE_REF."
+  fi
+}
+
+vbr_probe_r11() {
+# R11 SELF-PROBE, BOTH DIRECTIONS, BEFORE THE CORPUS, THROUGH r11_judge, over R11's OWN repository.
+#   root  C0                           an ancestor of the base
+#   side  S0, S1, S2 (commit-tree)     pre-squash commits no branch reaches
+#   base  M1  archive: an UNTOUCHED pre-existing line naming S0          -> quiet (not added)
+#             ledger:  an entry naming S1, moved to the archive by H1    -> quiet (a move)
+#   head  H1  ledger:  a line naming C0 (ancestor), a sha-less line, a line naming S2 (pre-squash),
+#             a line naming an unresolvable sha; the firing members are NOT first.
+r11_fail() { echo "$(me): SELF-PROBE FAILED -- R11: $1" >&2; exit 2; }
+local q="$WORK/r11repo" c0 s0 s1 s2 m1 o
+mkdir -p "$q/docs"
+printf '# p\n' > "$q/docs/backlog.md"; printf '# a\n' > "$q/docs/backlog.archive.md"
+o="$( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  cd "$q" && git init -q . >/dev/null 2>&1 && git add -A >/dev/null 2>&1 \
+    && git -c user.email=probe@local -c user.name=probe commit -q -m c0 >/dev/null 2>&1 || exit 1
+  c0="$(git rev-parse HEAD)" || exit 1
+  for i in 0 1 2; do git -c user.email=probe@local -c user.name=probe commit-tree "HEAD^{tree}" -p HEAD -m "side$i" || exit 1; done
+  printf '%s\n' "$c0" )" || r11_fail "R11's probe repository did not build."
+c0="$(sed -n '4p' <<<"$o")"; s0="$(sed -n '1p' <<<"$o")"; s1="$(sed -n '2p' <<<"$o")"; s2="$(sed -n '3p' <<<"$o")"
+[ -n "$c0" ] && [ -n "$s2" ] || r11_fail "R11's probe repository yielded no commits."
+printf '# a\n\n## BL-1101\n\n**LANDED (v0.0.1, verified %s).**\n\nverify: manual\n' "$s0" > "$q/docs/backlog.archive.md"
+printf '# p\n\n## BL-1102\n\n**LANDED (v0.0.2, verified %s).**\n\nverify: manual\n' "$s1" > "$q/docs/backlog.md"
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  cd "$q" && git add -A >/dev/null 2>&1 && git -c user.email=probe@local -c user.name=probe commit -q -m m1 >/dev/null 2>&1 ) \
+  || r11_fail "R11's probe base commit did not build."
+m1="$(git -C "$q" rev-parse HEAD 2>/dev/null)" || r11_fail "R11's probe has no base commit."
+printf '# a\n\n## BL-1101\n\n**LANDED (v0.0.1, verified %s).**\n\nverify: manual\n\n## BL-1102\n\n<br>**LANDED (v0.0.2, verified %s).** moved.\n\nverify: manual\n' "$s0" "$s1" > "$q/docs/backlog.archive.md"
+{ printf '# p\n\n## BL-1103\n\n**LANDED (v0.0.3, verified %s).**\n\nverify: manual\n\n' "$c0"
+  printf '## BL-1104\n\n**LANDED (v0.0.4).**\n\nverify: manual\n\n'
+  printf '## BL-1105\n\n<br>**LANDED (v0.0.5, verified %s).** pre-squash.\n\nverify: manual\n\n' "$s2"
+  printf '## BL-1106\n\n**LANDED (v0.0.6, verified 0badc0ffee1).**\n\nverify: manual\n'; } > "$q/docs/backlog.md"
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  cd "$q" && git add -A >/dev/null 2>&1 && git -c user.email=probe@local -c user.name=probe commit -q -m h1 >/dev/null 2>&1 ) \
+  || r11_fail "R11's probe branch commit did not build."
+o="$(r11_judge "$q" docs/backlog.md "$m1" HEAD)" || r11_fail "r11_judge refused its probe repository."
+# ORDER IS LOAD-BEARING: each mutant of this arm is killed by the FIRST seed it breaks, named `seed <id>:`.
+grep -qF "$(printf 'R11-FAIL\t%s\tv0.0.5\tis not an ancestor of' "$s2")" <<<"$o" || r11_fail "seed BL-1105: a pre-squash sha added on the branch did not fire."
+grep -qF "$(printf 'R11-FAIL\t0badc0ffee1\tv0.0.6\tdoes not resolve')" <<<"$o" || r11_fail "seed BL-1106: an unresolvable sha added on the branch did not fire."
+! grep -qF "$c0" <<<"$o" || r11_fail "seed BL-1103: an ancestor sha fired."
+! grep -qF "$s1" <<<"$o" || r11_fail "seed BL-1102: a line MOVED from the ledger to the archive fired; a move is not an add."
+! grep -qF "$s0" <<<"$o" || r11_fail "seed BL-1101: an untouched pre-existing archive line fired."
+case "$(sed -n '/^R11-COUNTS /p' <<<"$o")" in "R11-COUNTS 1 "*" 3 2") ;; *) r11_fail "the population read '$(sed -n '/^R11-COUNTS /p' <<<"$o")', want 3 added (the ancestor, the pre-squash and the unresolvable sha; never the moved or the untouched line, never the sha-less one) and 2 failing." ;; esac
+o="$(r11_judge "$q" docs/backlog.md refs/heads/no-such-base-zz HEAD)" || r11_fail "r11_judge refused an unresolvable base."
+[ "$(sed -n '/^R11-COUNTS /p' <<<"$o")" = "R11-COUNTS 0 - 0 0" ] || r11_fail "an unresolvable base read '$o', not NOT DERIVED."
+R11_PROBED="R11 fired both directions over 6 seeded LANDED lines"
+}
+
 vbr_sec_corpus() {
 # ---------------------------------------------------------------------------
 # THE CORPUS.
@@ -2868,6 +2998,7 @@ if [ -n "$RE_ENTRY" ]; then
   score_closed "$LEDGER" "$SUBJECT_ROOT" "$BASE_REF" >/dev/null || exit 2
   open_skip_line
   closed_line 0
+  echo "R11-POPULATION: SKIPPED -- re-entered from inside a receipt; the outer run checks the branch's added LANDED shas once."
   echo "R10-POPULATION: SKIPPED -- re-entered from inside a receipt, so the anchor convention judged no open receipt here; the outer run judges them once."
   eff_report || exit 1
   parent_cleanup_trees
@@ -2884,6 +3015,11 @@ R10_JOUT="R10-COUNTS 0 0 0 0"
 r10_counts "$R10_JOUT" || { echo "$(me): FAIL -- R10's judge printed no R10-COUNTS line; this is a refusal, not a reading." >&2; exit 2; }
 [ "$R10_SCAN" -eq "$SH_RECEIPTS" ] || { echo "$(me): FAIL -- R10 scanned $R10_SCAN of the scorer's $SH_RECEIPTS open sh receipts; a receipt it never read would read as anchored. This is a refusal, not a reading." >&2; exit 2; }
 CLOSED_OUT="$(score_closed "$LEDGER" "$SUBJECT_ROOT" "$BASE_REF")" || exit 2
+# R11 over the subject repository's own history: the ledger's tracked path, --base, and HEAD.
+_r11_abs="$(cd "$(dirname "$LEDGER")" && pwd)/$(basename "$LEDGER")"
+_r11_rel="$(git -C "$(dirname "$_r11_abs")" ls-files --full-name -- "$(basename "$_r11_abs")" 2>/dev/null | sed -n '1p')"
+R11_OUT="$(r11_judge "$SUBJECT_ROOT" "$_r11_rel" "$BASE_REF" HEAD)" || exit 2
+N_R11="$(printf '%s\n' "$R11_OUT" | grep -c '^R11-FAIL')" || N_R11=0
 
 n_of() { printf '%s\n' "$OUT" | awk -F'\t' -v s="$1" '$1 == s' | grep -c . ; }
 N_PC="$(n_of PROSE-CLOSABLE)"     || N_PC=0
@@ -2983,6 +3119,7 @@ fi
 # nothing", and the second reads exactly like the first in every other line this arm prints.
 open_empty_line "$SH_RECEIPTS"
 closed_line "$N_CFAIL"
+r11_line "$R11_OUT"
 if [ "$QUIET" != "1" ] && [ "$R10_N" -gt 0 ]; then
   printf '%s\n' "$R10_ROWS" | awk -F'\t' '$2 == "UNANCHORED" { printf "UNANCHORED\t%s\t%s\t%s\n", $1, $3, $4 }'
 fi
@@ -3025,6 +3162,11 @@ if [ "$N_CFAIL" -gt 0 ]; then
   echo "FAIL: R8: $N_CFAIL entr(ies) closed on this branch (stamped **LANDED (v in $LEDGER, or rotated into the archive, since the merge-base with $BASE_REF) carry a verify: sh receipt that does not exit 0 (named above with the exit and the reason). A close says the fix is present; a receipt that disagrees is either a subject renamed inside the release or a close that did not land. REMEDY: fix the receipt or the close, then re-run." >&2
   RC=1
 fi
+if [ "$N_R11" -gt 0 ]; then
+  printf '%s\n' "$R11_OUT" | awk -F'\t' '$1 == "R11-FAIL" { printf "FAIL: R11\t%s\t%s\t%s\n", $2, $3, $4 }' >&2
+  echo "FAIL: R11: $N_R11 verified sha(s) on LANDED lines this branch ADDED to $LEDGER or its archive (since the merge-base with $BASE_REF) are not commits on $BASE_REF (named above). A sha written before the squash names a commit the squash leaves unreachable, so the line attests to nothing on main. REMEDY: write the sha-less form \`**LANDED (v<version>).**\` (scripts/backlog-rotate.sh binds it to CHANGELOG.md or VERSION), or name a sha already on $BASE_REF." >&2
+  RC=1
+fi
 
 # THE POPULATION FLOOR. The three ceilings all bound a count WITHIN the `sh` population, so
 # the last escape is to leave it: rewrite `verify: sh` as `verify: manual`, or delete the
@@ -3057,7 +3199,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; R10 ${R10_N}/${MAX_R10} open receipts unanchored over ${R10_SCAN} read, ${R10_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; R11 ${N_R11} added LANDED shas not on ${BASE_REF}, ${R11_PROBED}; R10 ${R10_N}/${MAX_R10} open receipts unanchored over ${R10_SCAN} read, ${R10_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -3084,6 +3226,7 @@ vbr_probe_e0
 vbr_sec_eff
 vbr_probes
 vbr_probe_r10
+vbr_probe_r11
 vbr_sec_corpus
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0

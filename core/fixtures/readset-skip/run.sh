@@ -184,6 +184,7 @@
 # MUTANT-MATRIX noreap decides=slot-reaped twins=slot-file
 # MUTANT-MATRIX reapdrop decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where the caller's reap is the sole reaper, every other world reaps itself
 # MUTANT-MATRIX liveunrec decides=slot-kill twins=- why=one world: the SIGKILLed hold world is the only state where an unrecorded group has no other reaper
+# MUTANT-MATRIX selfrec decides=slot-forkkill twins=- why=one world: the hold world SIGKILLed on the statement after deriver A's launch is the only state where A's self-record is its group's sole record
 # MUTANT-MATRIX pktnowalk decides=slot-shellkill twins=- why=one world: the hold world torn down by the hook's pool_kill_tree is the only state the extracted teardown runs in, every other world reaps itself or is reaped by slot_reap
 # MUTANT-MATRIX-FULL noacq worlds=slot-beat,slot-file,slot-foreign,slot-nested,slot-noparent,slot-oldempty,slot-order,slot-rebreak,slot-stale,slot-stalemark,slot-stray why=the kill asserts the exact eleven-scenario failing set; with no acquire every slotted scenario moves, so no single scenario decides it
 # MUTANT-MATRIX-FULL nostale worlds=slot-oldempty,slot-rebreak,slot-stale,slot-stray why=the kill asserts the exact failing set of the four scenarios reached only through a stale break; none alone separates it from nobound or normdir
@@ -7885,13 +7886,54 @@ fi
 # liveunrec: the live-pid control's group record deleted from a COPY of slot-world -> the reap misses it, and the pid
 # the world's fixture wrote reads it alive.
 SLOT_ARMS=$((SLOT_ARMS+1))
-sed '/^printf .%s\\n. "\$LIVE" >> "\$SW_GROUPS"$/d' "$SLOT_W" > "$SLOT_T/slot-world.liveunrec.sh"
+sed '/^bash -c .echo \$\$ >> "\$1"; kill -0 \$PPID /s/echo \$\$ >> "\$1"; //' "$SLOT_W" > "$SLOT_T/slot-world.liveunrec.sh"
 if cmp -s "$SLOT_W" "$SLOT_T/slot-world.liveunrec.sh"; then bad "SLOT MUTANT liveunrec did not apply: the edit matched nothing in slot-world.sh"
 else
   _k="$(slot_kill_drive "$SLOT_T/slot-world.liveunrec.sh" "$SLOT_REAP_LIB")"
   [ "$F2C_MATRIX" = 1 ] && f2c_mx liveunrec "pre|groups|surviving|live $_k"
   if [ "$_k" = "1|1|0|1" ]; then mutant_killed "${B_slot_kill:-0}" liveunrec "SLOT MUTANT liveunrec is KILLED: with the live control unrecorded it outlives the SIGKILLed world ('$_k')"
   else bad "SLOT MUTANT liveunrec: expected '1|1|0|1' (pre|groups|surviving|live), got '$_k'"; fi
+fi
+# (slot-forkkill) THE WORLD SIGKILLed BETWEEN A LAUNCH AND THE STATEMENT AFTER IT (BL-875 item 5). The world once appended
+# deriver A's `$!` on the statement after its launch, so a KILL between the fork and that append left a group nobody
+# recorded. Now the launched child records itself. SW_FORK_GATE blocks the world on exactly that statement, once the child
+# has recorded itself and passed its liveness check (sentinels, no clock), and the caller SIGKILLs it there and reaps
+# the record. The census reads deriver A's group through the pid file the child wrote ($d/apid), never through the
+# record, so a child that failed to record itself is still seen. Prints "<pre>|<recorded groups>|<A surviving>", pre=1
+# when the gate, the pid file, A's live group and the world were all present when the KILL landed.
+slot_fork_drive() { # <slot-world copy>
+  local T gf swp d ap pre=0 ng sv=0
+  T="$(mktemp -d "$SLOT_T/fk.XXXXXX")" || broken "mktemp failed for the slot-forkkill world"
+  gf="$T/groups"; : > "$gf"
+  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_FORK_GATE="$T/gate" -- "$1" "$DERIVER" "$HOOK" hold ) >/dev/null 2>&1 &
+  swp=$!
+  aw_wait '[ -e "$T/gate" ]' 'echo "$swp"' ''
+  d="$(ls -d "$T"/slot-world.*/hold 2>/dev/null | head -1)"
+  ap="$(cat "$d/apid" 2>/dev/null)"
+  if [ -e "$T/gate" ] && grep -qx a-hold "$d/order" 2>/dev/null && [ -n "$ap" ] && kill -0 -- "-$ap" 2>/dev/null && kill -0 "$swp" 2>/dev/null; then pre=1; fi
+  kill -KILL "$swp" 2>/dev/null; wait "$swp" 2>/dev/null
+  slot_reap "$gf"
+  ng="$(grep -c . "$gf")" || ng=0
+  if [ -n "$ap" ]; then aw_wait '! kill -0 -- "-$ap" 2>/dev/null' '' 'aw_group_settled "$ap"'; [ $? = 2 ] && sv=1; fi
+  [ -n "$ap" ] && { kill -KILL -- "-$ap" 2>/dev/null; kill -KILL "$ap" 2>/dev/null; }
+  printf '%s|%s|%s' "$pre" "$ng" "$sv"
+}
+SLOT_ARMS=$((SLOT_ARMS+1))
+_k="$(slot_fork_drive "$SLOT_W")"
+if [ "$_k" = "1|2|0" ]; then
+  ok "SLOT FORKKILL: slot-world SIGKILLed on the statement after deriver A's launch leaves A's group recorded by A itself and reaped ('$_k' pre|groups|A surviving)"
+  B_slot_forkkill=1
+else bad "SLOT FORKKILL: expected '1|2|0' (pre|groups|A surviving), got '$_k'"; fi
+# selfrec: deriver A's self-record deleted from a COPY of slot-world -> nobody records A's group, the reap misses it, and
+# the pid file A wrote reads it alive after the SIGKILLed world.
+SLOT_ARMS=$((SLOT_ARMS+1))
+sed 's/^      bash -c .echo \$\$ >> "\$SW_REC"; echo/      bash -c '"'"'echo/' "$SLOT_W" > "$SLOT_T/slot-world.selfrec.sh"
+if cmp -s "$SLOT_W" "$SLOT_T/slot-world.selfrec.sh"; then bad "SLOT MUTANT selfrec did not apply: the edit matched nothing in slot-world.sh"
+else
+  _k="$(slot_fork_drive "$SLOT_T/slot-world.selfrec.sh")"
+  [ "$F2C_MATRIX" = 1 ] && f2c_mx selfrec "pre|groups|A surviving $_k"
+  if [ "$_k" = "1|1|1" ]; then mutant_killed "${B_slot_forkkill:-0}" selfrec "SLOT MUTANT selfrec is KILLED: with A's self-record deleted A's group outlives the SIGKILLed world ('$_k')"
+  else bad "SLOT MUTANT selfrec: expected '1|1|1' (pre|groups|A surviving), got '$_k'"; fi
 fi
 # (slot-shellkill) THE WORLD TORN DOWN BY THE HOOK'S OWN TEARDOWN (BL-875). The same gated hold world as slot-kill, but the
 # KILL is the pre-push hook's pool_kill_tree applied to the world's shell pid, as the hook's xargs worker applies it to a

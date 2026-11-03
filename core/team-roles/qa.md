@@ -336,6 +336,24 @@ For each completed task, verify:
   `conftest.py` or `pytest.ini`. A line with no backticked invocation, `$ `
   line or count is that claim, however it is worded. A NEEDS_REWORK written before the run finishes is
   allowed.
+  **The canonical run goes through the recorder, and the result is the recorder's line.** Write a
+  column-0 `Canonical result:` copied from `--record-run`, never typed: from the lead checkout run
+  `<lead engine>/merge-review-shards.sh --record-run <shard dir, or your serial validation file's path>
+  [--dir <subdirectory of the frozen worktree>] -- <the canonical invocation>`, `<lead engine>` being the
+  lead checkout's `scripts/ai-dlc` path your brief carries. The serial seat also passes
+  `--frozen <the full go-signal sha>` after its file's path, the sha from the lead's
+  `gate-2 go-signal:` line; a shard directory takes its sha from the manifest. It runs the invocation
+  in the frozen worktree itself, refuses when that worktree is not at the frozen sha, and records the
+  summary line, the exit code and the invocation in the lead's story record. Only the first cross
+  shard (`cross` or `cross-1`) or the serial seat runs it; `cross-2` and later never do. It takes up
+  to about 25 minutes, longer than one foreground tool call, so start it in the background and block
+  on its exit. Copy its `RECORDED-RESULT:` value verbatim and alone into `Canonical result:`, with any
+  commentary on the next line, and its `RECORDED-RUN:` invocation, inside one pair of backticks, into
+  `Canonical run:`. The merge and `--check-serial` refuse a result or an invocation that differs from
+  the recorded one, and a PASS with no recorded run.
+  Every pass runs it at its own frozen sha: an earlier pass's run is accepted when it ran at this
+  pass's frozen sha, or when the change since it is record-only by the same test the record-only
+  exemption uses; otherwise run `--record-run` again. `Canonical run: none, <reason>` needs no record.
 - [ ] **Permitted pre-existing failures are enumerated by test ID (HARD GATE).**
   If the story allows the suite to be non-green on failures it did not cause,
   the allowance MUST list the failing test IDs, and the run MUST fail exactly

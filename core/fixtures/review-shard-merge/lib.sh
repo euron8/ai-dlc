@@ -177,6 +177,14 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/$NAME.XXXXXX")" || exit 2
 WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
 RSM_TPL="$WORK/tpl"; mkdir "$RSM_TPL" || exit 2
+# BL-905, THE RUN RECORD's era. Every world seeded before BL-905 reads QA_MD, a copy of the installed qa.md WITHOUT the
+# run sentinel, so its canonical-run cells keep their meaning and its run claims read LEGACY for the run record;
+# p_run_rec's worlds read the installed file itself (QA_MD_RUN), which carries it exactly once.
+RR_SENT='column-0 `Canonical result:` copied from `--record-run`'
+QA_MD_RUN="$QA_MD"; QA_MD="$WORK/qa-norun.md"
+grep -vF -- "$RR_SENT" "$QA_MD_RUN" > "$QA_MD"
+_rrs="$(grep -cF -- "$RR_SENT" "$QA_MD_RUN")" || _rrs=0; _rrn="$(grep -cF -- "$RR_SENT" "$QA_MD")" || _rrn=0
+[ "$_rrs" = 1 ] && [ "$_rrn" = 0 ] || { echo "FIXTURE STALE: qa.md carries the run sentinel $_rrs time(s), its stripped copy $_rrn" >&2; exit 2; }
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -2875,6 +2883,9 @@ _ldn="$(grep -c 'story-1-1-x.md' <<<"$_ldup")" || _ldn=0
 #   CR_HR  (B3) over CR_REC, z under key story-1-9 and the view naming only it; in CR_REPL, a copy, a replace ref points
 #               CR_BASE's and CR_REC's view blobs at CR_LRD's, which names no x;
 #   CR_SHAL (B2) a copy whose .git/shallow names CR_LRD, so CR_LRD reads as a root.
+#   CR_LRDZ, CR_LRDZF (B2, BL-904) over CR_LRD, z at ready-for-dev (no label, view unchanged), then z at review and row
+#               story-1-1 repointed to it. z is a blob at the base, so story-base answers 0 and never reaches its own
+#               shallow refusal: in CR_SHAL the view history's shallow refusal is the only guard (m-shallow-ok's subject).
 #   CR_HS2OK    over CR_HS2, story-1-3-q.md in s2's stories directory and its row: sprint 2 at both ends, an ALLOW range;
 CR_ZZ=zz/story-1-1-z.md; CR_S2Z="${CR_SDIR%/s1/stories}/s2/stories/story-1-1-z.md"; CR_S2Q="${CR_S2Z%/*}/story-1-3-q.md"
 cr_v1() { printf 'sprint: %s\nstatus: in_progress\nstories:\n  story-1-1:\n    status: review\n    file: %s\n' "$1" "$2" > "$CR_REPO/$CR_VIEW"; }
@@ -2891,6 +2902,8 @@ G -C "$CR_REPO" checkout -q -b hq "$CR_LRD" && cr_z && cr_v1 1 stories/story-1-1
   && CR_HC="$(cr_lc hc)" && printf -- '---\nstatus: review\n---\n# Story 2\n' > "$CR_REPO/$CR_STORY2" && CR_HCOK="$(cr_lc hcok)" \
   && G -C "$CR_REPO" checkout -q -b hr "$CR_REC" && cr_z \
   && printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-9:\n    status: review\n    file: stories/story-1-1-z.md\n' > "$CR_REPO/$CR_VIEW" && CR_HR="$(cr_lc hr)" \
+  && G -C "$CR_REPO" checkout -q -b lrdz "$CR_LRD" && printf -- '---\nstatus: ready-for-dev\n---\n# Story Z\n' > "$CR_REPO/$CR_STORYZ" \
+  && CR_LRDZ="$(cr_lc lrdz)" && CR_LRDZF="$(cr_zf lrdz-f)" \
   && G -C "$CR_REPO" checkout -q "$cr_home" || { echo "FIXTURE ERROR: the history-trust branches were not seeded" >&2; exit 2; }
 CR_SHAL="$WORK/repo-cr-shallow"; CR_REPL="$WORK/repo-cr-replace"
 cp -R "$CR_REPO" "$CR_SHAL" && printf '%s\n' "$CR_LRD" > "$CR_SHAL/.git/shallow" && cp -R "$CR_REPO" "$CR_REPL" \
@@ -2908,6 +2921,9 @@ _hcv="$(G -C "$CR_REPO" show "${CR_HC}:$CR_VIEW")" || _hcv=""; _hcr="$(grep -c $
   && [ "$(G -C "$CR_REPO" diff --name-only "$CR_REC" "$CR_HR" | tr '\n' ' ')" = "$CR_VIEW $CR_STORYZ " ] \
   && _rpv="$(G -C "$CR_REPL" show "${CR_REC}:$CR_VIEW")" && _rpn="$(GIT_NO_REPLACE_OBJECTS=1 G -C "$CR_REPL" show "${CR_REC}:$CR_VIEW")" \
   && [ "$(G -C "$CR_SHAL" rev-parse --is-shallow-repository)" = true ] && ! grep -qF story-1-1-x.md <<<"$_rpv" \
+  && _lzs="$(G -C "$CR_REPO" show "${CR_LRDZ}:$CR_STORYZ")" && grep -qx 'status: ready-for-dev' <<<"$_lzs" && ! grep -qF 'Full-collection run:' <<<"$_lzs" \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$CR_LRD" "$CR_LRDZ")" = "$CR_STORYZ" ] \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$CR_LRDZ" "$CR_LRDZF" | tr '\n' ' ')" = "$CR_VIEW $CR_STORYZ " ] \
   && grep -qF story-1-1-x.md <<<"$_rpn" \
   || { echo "FIXTURE STALE: a history-trust world (HQ/HM, HZ, HS2, HC/HCOK, HR, the shallow or replaced copy) does not have the shape its cell names" >&2; exit 2; }
 # BL-895 U1h, THE REVIEW'S SPRINT. The sprint is <N> of the review's docs/reviews/s<N>/ path, never the view's.
@@ -3347,6 +3363,9 @@ p_canon() {
   # ALLOW twins: the same sprint at both ends, and a CRLF view at both ends (D2).
   if cell cr-hist-merge; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-hist-merge "$CR_BHIST" --story "$CR_STORYZ" --range "$CR_LRD" "$CR_HM"; fi
   if cell cr-hist-shallow; then SR_CANON="$SR_NONE" sr_file "$fsh" "$pv"; cr_no "$sd" "$fsh" cr-hist-shallow "$CR_BSHAL" --story "$CR_STORYZ" --range "$CR_LRD" "$CR_LRDF"; fi
+  # hist-shallow-blob (BL-904): z a blob at the base, so story-base answers 0 and only the view history's shallow
+  # refusal decides; hist-shallow above is refused by story-base's own shallow refusal as well.
+  if cell cr-hist-shallow-blob; then SR_CANON="$SR_NONE" sr_file "$fsh" "$pv"; cr_no "$sd" "$fsh" cr-hist-shallow-blob "$CR_BSHAL" --story "$CR_STORYZ" --range "$CR_LRDZ" "$CR_LRDZF"; fi
   if cell cr-hist-replace; then SR_CANON="$SR_NONE" sr_file "$frp" "$pv"; cr_no "$sd" "$frp" cr-hist-replace "$CR_BONE" --story "$CR_STORYZ" --range "$CR_REC" "$CR_HR"; fi
   if cell cr-hist-dir; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-hist-dir "$CR_BSDIR" --story "$CR_ZZ" --range "$CR_LRD" "$CR_HZ"; fi
   if cell cr-hist-sprint; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-hist-sprint "$CR_BSPR" --story "$CR_S2Z" --range "$CR_LRD" "$CR_HS2"; fi
@@ -3478,6 +3497,22 @@ p_story_frozen() { # <script-dir>
     n="$(grep -c '^ok ' <<<"$o")" || n=0
     [ "$rc" = 0 ] && [ "$n" = "$SF_CELLS" ] \
       || WHY="$WHY story-frozen{rc=$rc ok=$n/$SF_CELLS $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
+  fi
+  [ -z "$WHY" ]
+}
+# SH1 (BL-904): story-base over a story deleted and re-added, asked by receipt-bl904.sh over <script-dir>'s copy. The
+# same presence shape: every one of the receipt's 8 cells must print its `ok` row. The receipt's merge-hidden cell
+# (sh-merge) is the one plain `rev-list` accepts; BL-895's view binding does not see the deletion, so the kill is
+# asked of story-base directly, as SP2's is.
+SH_CELLS=8
+p_story_hist() { # <script-dir>
+  local sd="$1" o rc n
+  WHY=""
+  if cell story-hist; then
+    o="$(bash "$LIB_DIR/receipt-bl904.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
+    n="$(grep -c '^ok ' <<<"$o")" || n=0
+    [ "$rc" = 0 ] && [ "$n" = "$SH_CELLS" ] \
+      || WHY="$WHY story-hist{rc=$rc ok=$n/$SH_CELLS $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
   fi
   [ -z "$WHY" ]
 }
@@ -4308,9 +4343,9 @@ LR_MIS="is not the partition the lead recorded"
 LR_D1LINK="is reached through a symlink: its path below the worktree top reads differently as given and physically"
 LR_D1NONAME="so it names no story record s<N>-<idx>"
 LR_D1FIX="re-run from the lead checkout with the shard directory in place (no symlink); no re-dispatch is needed"
-lr_seed() { # <dir>: REPO_CRB's base
+lr_seed() { # <dir> [qa.md to install]: REPO_CRB's base
   new_repo "$1" old && mkdir -p "$1/.claude/team-roles" "$1/$CR_SDIR" "$1/${CR_VIEW%/*}" \
-    && cp "$QA_MD" "$1/.claude/team-roles/qa.md" && printf -- '---\nstatus: review\n---\n# Story 1\n' > "$1/$CRB_STORY" \
+    && cp "${2:-$QA_MD}" "$1/.claude/team-roles/qa.md" && printf -- '---\nstatus: review\n---\n# Story 1\n' > "$1/$CRB_STORY" \
     && printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: review\n    file: stories/story-1-x.md\n' > "$1/$CR_VIEW" \
     && G -C "$1" add -A && G -C "$1" commit -q --amend -m base
 }
@@ -4598,5 +4633,324 @@ p_lead_rec() {
     SR_CANON="$CANON_BLK" sr_file "$f" "$pv"; cr_ok "$sd" "$f" lr-run-ok-serial --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"
     rm -f "$f"
   fi
+  [ -z "$WHY" ]
+}
+
+# ---- BL-905, THE RUN RECORD (merge-review-shards.sh --record-run and run_bind). REPO_RR: lr_seed's base installing the
+# qa.md that carries the run sentinel (QA_MD_RUN), a code commit X (app/), then F adding six test-results/ files, so
+# B..F carries code and X..F is record-only. REPO_RRL is the same history over a qa.md without the sentinel (the LEGACY
+# twin, one property apart). The stub runner is awk printing a pytest-shaped summary; no bash is started for it.
+RR_RES="812 passed, 3 skipped in 1.0s"
+# RR_INV is --record-run's RECORDED-RUN spelling of rr_good's argv, typed by hand: one shell line, each argument that is
+# not a bare word single-quoted (rr_quote).
+RR_INV="awk 'BEGIN { print \"===== $RR_RES =====\" }'"
+RR_BLK="$(printf 'Canonical run: `%s` from the frozen worktree root\nCanonical result: %s' "$RR_INV" "$RR_RES")"
+RR_NOREC="no canonical run is recorded"; RR_NE="is not the recorded run's result"; RR_NOREUSE="no earlier pass's run is reusable"
+RR_LEG="LEGACY: canonical-run record not checked:"
+rr_repo() { # <dir> <qa.md>
+  lr_seed "$1" "$2" && lr_code "$1" && G -C "$1" add -A && G -C "$1" commit -q -m code \
+    && cm_six "$1" && G -C "$1" add -A && G -C "$1" commit -q -m frozen
+}
+rr_repos() { # REPO_RR, REPO_RRL and their B, X, F, built once
+  [ -z "${RR_BUILT:-}" ] || return 0
+  REPO_RR="$WORK/repo-rr"; REPO_RRL="$WORK/repo-rrl"
+  rr_repo "$REPO_RR" "$QA_MD_RUN" && rr_repo "$REPO_RRL" "$QA_MD" \
+    && RR_B="$(G -C "$REPO_RR" rev-parse HEAD~2)" && RR_X="$(G -C "$REPO_RR" rev-parse HEAD~1)" && RR_F="$(G -C "$REPO_RR" rev-parse HEAD)" \
+    && RRL_B="$(G -C "$REPO_RRL" rev-parse HEAD~2)" && RRL_F="$(G -C "$REPO_RRL" rev-parse HEAD)" \
+    && RR_BR="$(G -C "$REPO_RR" symbolic-ref -q --short HEAD)" || { WHY="$WHY FIXTURE ERROR: the BL-905 worlds were not seeded"; return 1; }
+  # Each world carries its property: the sentinel at REPO_RR's base and not at REPO_RRL's; B..F touches app/, X..F does not.
+  [ "$(G -C "$REPO_RR" show "${RR_B}:.claude/team-roles/qa.md" | grep -cF -- "$RR_SENT")" = 1 ] \
+    && [ "$(G -C "$REPO_RRL" show "${RRL_B}:.claude/team-roles/qa.md" | grep -cF -- "$RR_SENT")" = 0 ] \
+    && [ "$(G -C "$REPO_RR" diff --name-only "$RR_B" "$RR_F" -- app | grep -c .)" = 2 ] \
+    && [ "$(G -C "$REPO_RR" diff --name-only "$RR_X" "$RR_F" -- app | grep -c .)" = 0 ] \
+    || { WHY="$WHY FIXTURE STALE: a BL-905 world does not carry its property"; return 1; }
+  RR_BUILT=1
+}
+rr_world() { # <script-dir> <repo> <base> <sha> <canonical block> -> d, o, RR_SB
+  SHARD_SHA="$4"
+  d="$(WSLOT=1 CANON_BLK="$5" kworld "$1" "$2" "$3" "$4" 3 qa-validation PASS qa)" || { WHY="$WHY the BL-905 world over $2 was not built"; return 1; }
+  o="$(qout "$d")"; RR_SB="${d##*/}"
+}
+rr_rec() { # <script-dir> <shard dir | review file> <cwd> <runner argv...> -> RRC, $MO; RR_FZ: the serial form's --frozen
+  local sd="$1" t="$2" c="$3"; shift 3
+  ip_run -C "$c" -e "AI_DLC_PROJECT_ROOT=$PROJ" "$sd/merge-review-shards.sh" mrs_main --record-run "$t" ${RR_FZ:+--frozen "$RR_FZ"} -- "$@" > "$MO" 2>&1 < /dev/null; RRC=$?
+}
+rr_good() { rr_rec "$1" "$2" "${3:-${2%%/docs/reviews/*}}" awk "BEGIN { print \"===== $RR_RES =====\" }"; }
+rr_rekey() { # <record> <shard-dir basename> <new key> <new sha>: move this pass's run.* lines to <new key> at <new sha>
+  awk -v o="run.$2." -v n="run.$3." -v s="$4" 'index($0, o) == 1 { $0 = n substr($0, length(o) + 1); if ($0 ~ /\.sha: /) sub(/: .*/, ": " s) } { print }' "$1" > "$1.x" \
+    && mv "$1.x" "$1"
+}
+rr_nostory() { # <script-dir> <shard-dir>: the qa merge with no --story -> RC, $MO
+  ip_run -C "${2%%/docs/reviews/*}" -e "AI_DLC_PROJECT_ROOT=$PROJ" "$1/merge-review-shards.sh" mrs_main "$2" --gate qa --out "$(qout "$2")" > "$MO" 2>&1 < /dev/null; RC=$?
+}
+p_run_rec() {
+  local sd="$1" d o SHARD_SHA RR_SB f pv c blk n
+  WHY=""; LR_PATH=""; pv="$(printf '## Verdict\nPASS')"
+  rr_repos || return 1
+  # rr-fab (the BL-905 defect): a typed run and result, no recorded run, in a held era -> REFUSED [owner: cross...].
+  # rr-legacy (ALLOW, one property apart): the same pair over a qa.md without the sentinel -> MERGED, one LEGACY line.
+  if cell rr-fab; then
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$CANON_BLK" || return 1
+    if lr_prec "$sd" "$d" && grep -qxF "run-era.$RR_SB: held" "$LR_PATH"; then lr_merge "$sd" "$d" "$CRB_STORY"
+      refused_at "$RR_NOREC" "$o" && has "$MO" "[owner: cross" && has "$MO" "--record-run" \
+        || WHY="$WHY rr-fab{rc=$RC $(reline "$MO") $(grep -E '^(MERGED|LEGACY: canonical-run record)' "$MO" | head -2 | tr '\n' ' ')}"
+    else WHY="$WHY rr-fab{record not written or not held: $(head -1 "$MO")}"; fi
+    lr_done
+  fi
+  if cell rr-legacy; then
+    rr_world "$sd" "$REPO_RRL" "$RRL_B" "$RRL_F" "$CANON_BLK" || return 1
+    if lr_prec "$sd" "$d" && grep -qxF "run-era.$RR_SB: legacy" "$LR_PATH"; then lr_merge "$sd" "$d" "$CRB_STORY"
+      n="$(grep -c "^$RR_LEG" "$MO")" || n=0
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$n" = 1 ] && [ "$(nref "$MO")" = 0 ] || WHY="$WHY rr-legacy{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    else WHY="$WHY rr-legacy{record not written or not legacy: $(head -1 "$MO")}"; fi
+    lr_done
+  fi
+  # A recorded run, its RECORDED-RESULT copied verbatim (rr-ok) or inside backticks and `=` padding (rr-norm): MERGED.
+  # A result whose counts differ from the record (rr-diff): REFUSED naming the recorded value.
+  for c in rr-ok rr-norm rr-diff; do
+    cell "$c" || continue
+    case "$c" in
+      rr-ok) blk="$RR_BLK" ;;
+      rr-norm) blk="$(printf 'Canonical run: `%s`\nCanonical result: `= %s =`' "$RR_INV" "$RR_RES")" ;;
+      *) blk="$(printf 'Canonical run: `%s`\nCanonical result: 813 passed, 3 skipped in 1.0s' "$RR_INV")" ;;
+    esac
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$blk" || return 1
+    if lr_prec "$sd" "$d"; then rr_good "$sd" "$d"
+      if [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO" && has "$MO" "RECORDED-RUN: $RR_INV (in $REPO_RR, sha $RR_F)" \
+         && grep -qxF "run.$RR_SB.result: $RR_RES" "$LR_PATH"; then lr_merge "$sd" "$d" "$CRB_STORY"
+        if [ "$c" = rr-diff ]; then refused_at "$RR_NE" "$o" && has "$MO" "'$RR_RES'" || WHY="$WHY $c{rc=$RC $(reline "$MO")}"
+        else [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "$RR_LEG" || WHY="$WHY $c{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"; fi
+      else WHY="$WHY $c{--record-run rc=$RRC $(head -2 "$MO" | tr '\n' ' ')}"; fi
+    else WHY="$WHY $c{record not written: $(head -1 "$MO")}"; fi
+    lr_done
+  done
+  # THE RECORDED INVOCATION (BL-905 fold). rr-replay: a run recorded through the awk runner, its RECORDED-RESULT copied,
+  # and `Canonical run:` naming `python3 -m pytest -q` (a replayed capture standing behind the canonical command) ->
+  # REFUSED naming both invocations; rr-ok is its ALLOW twin, one property apart. rr-rfilter: the recorded invocation
+  # carries `--keyword=x` (RUN-FILTER refuses it) while `Canonical run:` carries `--keywordx`, which RUN-FILTER passes
+  # and which normalises (`=` removed) to the recorded one, so only the recorded invocation's RUN-FILTER can refuse it.
+  for c in rr-replay rr-rfilter; do
+    cell "$c" || continue
+    if [ "$c" = rr-replay ]; then blk="$(printf 'Canonical run: `python3 -m pytest -q` from the frozen worktree root\nCanonical result: %s' "$RR_RES")"
+    else blk="$(printf "Canonical run: \`awk 'BEGIN { print \"===== %s =====\"; exit }' --keywordx\`\\nCanonical result: %s" "$RR_RES" "$RR_RES")"; fi
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$blk" || return 1
+    if lr_prec "$sd" "$d"; then
+      if [ "$c" = rr-replay ]; then rr_good "$sd" "$d"; else rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk "BEGIN { print \"===== $RR_RES =====\"; exit }" --keyword=x; fi
+      if [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO"; then lr_merge "$sd" "$d" "$CRB_STORY"
+        if [ "$c" = rr-replay ]; then
+          refused_at "is not the recorded run's invocation" "$o" && has "$MO" "'Canonical run: \`python3 -m pytest -q\`'" && has "$MO" "\`$RR_INV\`" \
+            || WHY="$WHY $c{rc=$RC $(reline "$MO")}"
+        else refused_at "selects tests by name (--keyword=x)" "$o" || WHY="$WHY $c{rc=$RC $(reline "$MO")}"; fi
+      else WHY="$WHY $c{--record-run rc=$RRC $(head -2 "$MO" | tr '\n' ' ')}"; fi
+    else WHY="$WHY $c{record not written: $(head -1 "$MO")}"; fi
+    lr_done
+  done
+  # THE QUOTED INVOCATION (BL-905 fold). rr-mq: a run whose argv carries a quoted multi-word marker (`awk -f <program>
+  # pytest -m 'a and b'`, the operands a BEGIN-only program never reads), under a conventions file declaring
+  # `-m "a and b"` canonical: RECORDED-RUN, the record's invocation line and the `Canonical run:` copy are the one
+  # hand-typed line, and it MERGES (a `$*` record reads `-m a and b`, which RUN-FILTER reads as the marker `a`). rr-mu,
+  # its twin one property apart: `-m unit`, every argument a bare word, so both spellings agree and it merges.
+  for c in rr-mq rr-mu; do
+    cell "$c" || continue
+    case "$WORK" in *[!A-Za-z0-9_./-]*) WHY="$WHY $c{FIXTURE ERROR: $WORK is not a bare word}"; return 1 ;; esac
+    printf 'BEGIN { print "===== %s ====="; exit }\n' "$RR_RES" > "$WORK/rr-mq.awk" || return 1
+    if [ "$c" = rr-mq ]; then n="'a and b'"; set -- 'a and b'; else n=unit; set -- unit; fi
+    blk="awk -f $WORK/rr-mq.awk pytest -m $n"
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$(printf 'Canonical run: `%s`\nCanonical result: %s' "$blk" "$RR_RES")" || return 1
+    mkdir -p "$REPO_RR/docs" && printf -- '- canonical: `pytest -m "a and b"` and `pytest -m unit`\n' > "$REPO_RR/docs/coding-conventions.md" || return 1
+    if lr_prec "$sd" "$d"; then rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk -f "$WORK/rr-mq.awk" pytest -m "$1"
+      if [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO"; then
+        grep -qxF "RECORDED-RUN: $blk (in $REPO_RR, sha $RR_F)" "$MO" && grep -qxF "run.$RR_SB.invocation: $blk" "$LR_PATH" \
+          || WHY="$WHY $c{invocation not recorded as the Canonical run: copy: $(grep '^RECORDED-RUN' "$MO")}"
+        lr_merge "$sd" "$d" "$CRB_STORY"
+        [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "$RR_LEG" || WHY="$WHY $c{rc=$RC $(reline "$MO")}"
+      else WHY="$WHY $c{--record-run rc=$RRC $(head -2 "$MO" | tr '\n' ' ')}"; fi
+    else WHY="$WHY $c{record not written: $(head -1 "$MO")}"; fi
+    rm -f "$REPO_RR/docs/coding-conventions.md"; lr_done
+  done
+  # THE EARLIER PASS. The run recorded, then its key and sha moved: rr-stale, this pass's own key at B (B..F touches
+  # app/) -> REFUSED; rr-earlier-eq, another pass's key at F, merged with no --story -> MERGED (the equal-sha lookup
+  # alone); rr-cross-ok, another key at X (X..F record-only) -> MERGED; rr-cross-code, another key at B -> REFUSED
+  # naming B..F and the predicate's NOT-RECORD-ONLY line.
+  for c in rr-stale rr-earlier-eq rr-cross-ok rr-cross-code; do
+    cell "$c" || continue
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$RR_BLK" || return 1
+    if lr_prec "$sd" "$d" && { rr_good "$sd" "$d"; [ "$RRC" = 0 ]; }; then
+      case "$c" in
+        rr-stale) rr_rekey "$LR_PATH" "$RR_SB" "$RR_SB" "$RR_B" ;;
+        rr-earlier-eq) rr_rekey "$LR_PATH" "$RR_SB" 1-qa-validation-000000000000 "$RR_F" ;;
+        rr-cross-ok) rr_rekey "$LR_PATH" "$RR_SB" 1-qa-validation-000000000000 "$RR_X" ;;
+        rr-cross-code) rr_rekey "$LR_PATH" "$RR_SB" 1-qa-validation-000000000000 "$RR_B" ;;
+      esac
+      n="$(grep -c "^run\.$RR_SB\." "$LR_PATH")" || n=0
+      [ "$n" = "$([ "$c" = rr-stale ] && echo 5 || echo 0)" ] || { WHY="$WHY $c{FIXTURE ERROR: the record was not re-keyed ($n)}"; lr_done; return 1; }
+      if [ "$c" = rr-earlier-eq ]; then rr_nostory "$sd" "$d"; else lr_merge "$sd" "$d" "$CRB_STORY"; fi
+      case "$c" in
+        rr-stale|rr-cross-code) refused_at "$RR_NOREUSE" "$o" && has "$MO" "$RR_B..$RR_F: NOT-RECORD-ONLY" || WHY="$WHY $c{rc=$RC $(reline "$MO") $(grep '^MERGED' "$MO")}" ;;
+        *) [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || WHY="$WHY $c{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}" ;;
+      esac
+    else WHY="$WHY $c{record not written: $(head -2 "$MO" | tr '\n' ' ')}"; fi
+    lr_done
+  done
+  # --record-run's own answers. rr-head: the frozen worktree checked out at X -> REFUSED, nothing recorded. rr-exit1: a
+  # runner exiting 1 after a summary -> recorded with exit 1. rr-nosum: no summary line -> REFUSED, nothing recorded.
+  for c in rr-head rr-exit1 rr-nosum; do
+    cell "$c" || continue
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$RR_BLK" || return 1
+    if lr_prec "$sd" "$d"; then
+      case "$c" in
+        rr-head) G -C "$REPO_RR" checkout -q --detach "$RR_X" && rr_good "$sd" "$d"; G -C "$REPO_RR" checkout -q "$RR_BR"
+          [ "$RRC" = 2 ] && has "$MO" "so the run would test other code" && ! has "$MO" RECORDED-RESULT && ! grep -q '^run\.' "$LR_PATH" || WHY="$WHY $c{rc=$RRC $(head -1 "$MO")}" ;;
+        rr-exit1) rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk 'BEGIN { print "===== 1 failed, 811 passed in 1.0s ====="; exit 1 }'
+          [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: 1 failed, 811 passed in 1.0s" "$MO" && grep -qxF "run.$RR_SB.exit: 1" "$LR_PATH" || WHY="$WHY $c{rc=$RRC $(head -1 "$MO")}" ;;
+        rr-nosum) rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk 'BEGIN { print "collecting ..." }'
+          [ "$RRC" = 2 ] && has "$MO" "carries no summary line with a count" && ! grep -q '^run\.' "$LR_PATH" || WHY="$WHY $c{rc=$RRC $(head -1 "$MO")}" ;;
+      esac
+    else WHY="$WHY $c{record not written: $(head -1 "$MO")}"; fi
+    lr_done
+  done
+  # THE SUMMARY LINE (BL-905 fold). rr-sum-cut: a verbose run cut off mid-way, its last line a per-test progress line
+  # whose test name ends in a digit (`test_case_3 PASSED [ 99%]` reads `3 passed`) -> --record-run REFUSED, nothing
+  # recorded. rr-sum-log and rr-sum-q ask rr_summary itself (the function --record-run calls, loaded in process): a pytest
+  # session line followed by a log line carrying a count is the session line; quiet `-q` output with no `=` is its own
+  # line, through the generic fallback. The OSC title escape opening the session line must be stripped for `^=` to
+  # match it, so rr-sum-log also holds the OSC strip (unstripped, the log line wins).
+  if cell rr-sum-cut; then
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$RR_BLK" || return 1
+    if lr_prec "$sd" "$d"; then
+      rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk 'BEGIN { print "tests/a.py::test_case_2 PASSED [ 98%]"; print "tests/a.py::test_case_3 PASSED [ 99%]" }'
+      [ "$RRC" = 2 ] && has "$MO" "carries no summary line with a count" && ! grep -q '^run\.' "$LR_PATH" || WHY="$WHY rr-sum-cut{rc=$RRC $(head -1 "$MO")}"
+    else WHY="$WHY rr-sum-cut{record not written: $(head -1 "$MO")}"; fi
+    lr_done
+  fi
+  for c in rr-sum-log rr-sum-q; do
+    cell "$c" || continue
+    if [ "$c" = rr-sum-log ]; then printf 'tests/a.py ....\n\033]0;pytest\007\033[32m===== 5 passed, 1 skipped in 1.20s =====\033[0m\nINFO cleaned 2 errors\n' > "$WORK/rr-sum.in"; n="5 passed, 1 skipped in 1.20s"
+    else printf '....F...\n812 passed, 3 skipped in 1.0s\n' > "$WORK/rr-sum.in"; n="812 passed, 3 skipped in 1.0s"; fi
+    blk="$(rr_summary "$WORK/rr-sum.in")" || blk="<none>"
+    [ "$blk" = "$n" ] || WHY="$WHY $c{got '$blk'}"
+  done
+  # rr-none: a record-only pass (X..F) claiming `none, <reason>` in the held era needs no record -> MERGED.
+  if cell rr-none; then
+    rr_world "$sd" "$REPO_RR" "$RR_X" "$RR_F" "Canonical run: none, the diff is record-only (test-results)" || return 1
+    if lr_prec "$sd" "$d"; then lr_merge "$sd" "$d" "$CRB_STORY"
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "$RR_NOREC" || WHY="$WHY rr-none{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    else WHY="$WHY rr-none{record not written: $(head -1 "$MO")}"; fi
+    lr_done
+  fi
+  # --check-serial over a review in REPO_RR's own docs/reviews/s1/ (its on-disk qa.md carries the sentinel; the frozen
+  # sha is its HEAD, F): a typed pair REFUSED [owner: serial]; recorded through --record-run on the review path, SERIAL-OK.
+  f="$REPO_RR/docs/reviews/s1/1-qa-validation.md"; mkdir -p "${f%/*}"
+  if cell rr-s-fab; then
+    sr_file "$f" "$pv"; cr_no "$sd" "$f" rr-s-fab "$RR_NOREC"; rm -f "$f"
+    # With no range the remedy names no sha: the review repository's HEAD as --frozen would compare HEAD with HEAD.
+    has "$CO" "--frozen <the full go-signal sha>" || WHY="$WHY rr-s-fab{remedy --frozen: $(reline "$CO")}"
+  fi
+  if cell rr-s-ok; then
+    SR_CANON="$RR_BLK" sr_file "$f" "$pv"; RR_FZ="$RR_F" rr_good "$sd" "$f" "$REPO_RR"
+    if [ "$RRC" = 0 ] && has "$MO" "RECORDED-RESULT: $RR_RES"; then cr_ok "$sd" "$f" rr-s-ok
+    else WHY="$WHY rr-s-ok{--record-run rc=$RRC $(head -1 "$MO")}"; fi
+    rm -f "$f" "$REPO_RR/.git/ai-dlc/stories/s1-1"
+  fi
+  # rr-s-head (BL-905 fold): the serial form's frozen sha is --frozen, the go-signal sha, never the worktree's own HEAD.
+  # REPO_RR checked out at X with --frozen F -> REFUSED, nothing recorded (a HEAD-read frozen sha compares X with X).
+  if cell rr-s-head; then
+    rm -f "$REPO_RR/.git/ai-dlc/stories/s1-1"
+    G -C "$REPO_RR" checkout -q --detach "$RR_X" && RR_FZ="$RR_F" rr_good "$sd" "$f" "$REPO_RR"; G -C "$REPO_RR" checkout -q "$RR_BR"
+    [ "$RRC" = 2 ] && has "$MO" "so the run would test other code" && has "$MO" "not the frozen sha $RR_F" && ! has "$MO" RECORDED-RESULT \
+      && ! grep -q '^run\.' "$REPO_RR/.git/ai-dlc/stories/s1-1" 2> /dev/null || WHY="$WHY rr-s-head{rc=$RRC $(head -1 "$MO")}"
+    rm -f "$REPO_RR/.git/ai-dlc/stories/s1-1"
+  fi
+  # THE LEAD'S RE-RUN in the held era: the frozen sha is the go-signal sha (F), never the review repository's HEAD.
+  # rr-s-lrange: a run recorded at B (the worktree at B, --frozen B) and the lead's --lead-range at go-signal F with the
+  # worktree still at B -> REFUSED, no run at the frozen sha F. rr-s-lrok (ALLOW, one property apart): the run recorded
+  # at F -> SERIAL-OK.
+  for c in rr-s-lrange rr-s-lrok; do
+    cell "$c" || continue
+    rm -f "$REPO_RR/.git/ai-dlc/stories/s1-1"
+    SR_CANON="$RR_BLK" sr_file "$f" "$pv" "reviewed-sha: $RR_F"
+    if [ "$c" = rr-s-lrange ]; then G -C "$REPO_RR" checkout -q --detach "$RR_B" && RR_FZ="$RR_B" rr_good "$sd" "$f" "$REPO_RR"
+    else RR_FZ="$RR_F" rr_good "$sd" "$f" "$REPO_RR"; fi
+    if [ "$RRC" = 0 ] && has "$MO" "RECORDED-RESULT: $RR_RES"; then
+      ip_run -C "$REPO_RR" -e "AI_DLC_PROJECT_ROOT=$PROJ" "$sd/merge-review-shards.sh" mrs_main --check-serial "$f" --gate qa --lead-range "$RR_B" "$RR_F" > "$CO" 2>&1 < /dev/null; SRC=$?
+      if [ "$c" = rr-s-lrange ]; then
+        [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "no canonical run is recorded at the frozen sha $RR_F" && has "$CO" "$SR_OWN" && ! has "$CO" SERIAL-OK \
+          || WHY="$WHY $c{rc=$SRC $(reline "$CO")}"
+      else [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK:" || WHY="$WHY $c{rc=$SRC $(head -3 "$CO" | tr '\n' ' ')}"; fi
+    else WHY="$WHY $c{--record-run rc=$RRC $(head -1 "$MO")}"; fi
+    G -C "$REPO_RR" checkout -q "$RR_BR"
+    rm -f "$f" "$REPO_RR/.git/ai-dlc/stories/s1-1"
+  done
+  # rr-s-lead: the review in REPO_RRL, whose on-disk qa.md lacks the sentinel (a seat that stripped it), checked under a
+  # project root whose installed qa.md carries it (PROJ_RUN): ROLE_MD holds the era, so a typed pair is REFUSED.
+  # rr-s-leg (ALLOW, one property apart): the same file under PROJ, whose qa.md lacks it: SERIAL-OK, one LEGACY line.
+  f="$REPO_RRL/docs/reviews/s1/1-qa-validation.md"; mkdir -p "${f%/*}"
+  if [ -z "${PROJ_RUN:-}" ]; then
+    PROJ_RUN="$WORK/proj-run"; mkdir -p "$PROJ_RUN" && cp -R "$PROJ/." "$PROJ_RUN/" && cp "$QA_MD_RUN" "$PROJ_RUN/core/team-roles/qa.md" \
+      || { WHY="$WHY FIXTURE ERROR: PROJ_RUN was not built"; return 1; }
+  fi
+  if cell rr-s-lead; then
+    sr_file "$f" "$pv"; CR_ROOT="$PROJ_RUN" cr_no "$sd" "$f" rr-s-lead "$RR_NOREC"; rm -f "$f"
+  fi
+  if cell rr-s-leg; then
+    sr_file "$f" "$pv"; cr_ok "$sd" "$f" rr-s-leg
+    n="$(grep -c "^$RR_LEG" "$CO")" || n=0; [ "$n" = 1 ] || WHY="$WHY rr-s-leg{LEGACY lines: $n}"
+    rm -f "$f"
+  fi
+  # rr-s-lrl (BL-905 fold, after a pull): the lead's --lead-range over REPO_RRL, whose qa.md AT THE BASE lacks the
+  # sentinel, under PROJ_RUN, whose installed qa.md carries it, the story's dispatch recorded at that base ->
+  # SERIAL-OK with one LEGACY line: the tracked base blob alone decides, as the merge decides from qa.md at its base.
+  # rr-s-lru (DENY twin, one property apart): no dispatch record, so the base is the seat's own choice and never
+  # decides the era -> REFUSED, held by the installed qa.md, naming --record-dispatch or a re-run at the current base.
+  # rr-s-lead (no range: the seat's own form) keeps ROLE_MD's hold, and rr-s-lrange holds the tracked base blob's own.
+  for c in rr-s-lrl rr-s-lru; do
+    cell "$c" || continue
+    rm -f "$REPO_RRL/.git/ai-dlc/stories/s1-1"
+    if [ "$c" = rr-s-lrl ]; then
+      ( cd "$REPO_RRL" && ip_run "$sd/merge-review-shards.sh" mrs_main --record-dispatch s1-1 "$RRL_B" ) > "$CO" 2>&1 < /dev/null \
+        || { WHY="$WHY $c{--record-dispatch: $(head -1 "$CO")}"; continue; }
+    fi
+    sr_file "$f" "$pv" "reviewed-sha: $RRL_F"
+    ip_run -C "$REPO_RRL" -e "AI_DLC_PROJECT_ROOT=$PROJ_RUN" "$sd/merge-review-shards.sh" mrs_main --check-serial "$f" --gate qa --lead-range "$RRL_B" "$RRL_F" > "$CO" 2>&1 < /dev/null; SRC=$?
+    n="$(grep -c "^$RR_LEG" "$CO")" || n=0
+    if [ "$c" = rr-s-lrl ]; then
+      [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK:" && [ "$n" = 1 ] && has "$CO" "at $RRL_B prescribes no" || WHY="$WHY rr-s-lrl{rc=$SRC LEGACY lines: $n $(reline "$CO")}"
+    else
+      [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && [ "$n" = 0 ] && has "$CO" "$RR_NOREC" && has "$CO" "$SR_OWN" && ! has "$CO" SERIAL-OK \
+        && has "$CO" "--record-dispatch s1-1 <dispatch sha>' from the lead checkout" && has "$CO" "or re-run QA at the current base" \
+        || WHY="$WHY rr-s-lru{rc=$SRC LEGACY lines: $n $(reline "$CO")}"
+    fi
+    rm -f "$f" "$REPO_RRL/.git/ai-dlc/stories/s1-1"
+  done
+  # rr-c-lrl (BL-905 fold, the same shape for the canonical lines): the lead's --lead-range over REPO_CRL, whose qa.md AT
+  # THE BASE lacks the canonical-run label, under PROJ, whose installed qa.md carries it, the story's dispatch recorded
+  # at that base, and a PASS with no `Canonical run:` line -> SERIAL-OK with one canonical LEGACY line naming the base
+  # blob: that blob alone decides (sr_era). rr-c-seat (DENY twin, one property apart): the same file in the seat's own
+  # form (no range), where the installed qa.md holds the lines -> REFUSED, no run line. rr-c-lru (DENY twin): the
+  # rr-c-lrl world with no dispatch record, so the seat-supplied base never decides -> REFUSED, no run line, naming
+  # --record-dispatch or a re-run at the current base.
+  f="$REPO_CRL/docs/reviews/s1/1-qa-validation.md"; mkdir -p "${f%/*}"
+  for c in rr-c-lrl rr-c-lru rr-c-seat; do
+    cell "$c" || continue
+    rm -f "$REPO_CRL/.git/ai-dlc/stories/s1-1"
+    if [ "$c" = rr-c-lrl ]; then
+      ( cd "$REPO_CRL" && ip_run "$sd/merge-review-shards.sh" mrs_main --record-dispatch s1-1 "$CRL_BASE" ) > "$CO" 2>&1 < /dev/null \
+        || { WHY="$WHY $c{--record-dispatch: $(head -1 "$CO")}"; continue; }
+    fi
+    SR_CANON='' sr_file "$f" "$pv" "reviewed-sha: $CRL_SHA"
+    if [ "$c" = rr-c-lrl ]; then
+      ip_run -C "$REPO_CRL" -e "AI_DLC_PROJECT_ROOT=$PROJ" "$sd/merge-review-shards.sh" mrs_main --check-serial "$f" --gate qa --lead-range "$CRL_BASE" "$CRL_SHA" > "$CO" 2>&1 < /dev/null; SRC=$?
+      n="$(grep -c "^$CR_LEG" "$CO")" || n=0
+      [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK:" && [ "$n" = 1 ] && has "$CO" "$CR_LEG .claude/team-roles/qa.md at $CRL_BASE prescribes no" \
+        || WHY="$WHY rr-c-lrl{rc=$SRC canonical LEGACY lines: $n $(reline "$CO")}"
+    elif [ "$c" = rr-c-lru ]; then
+      ip_run -C "$REPO_CRL" -e "AI_DLC_PROJECT_ROOT=$PROJ" "$sd/merge-review-shards.sh" mrs_main --check-serial "$f" --gate qa --lead-range "$CRL_BASE" "$CRL_SHA" > "$CO" 2>&1 < /dev/null; SRC=$?
+      n="$(grep -c "^$CR_LEG" "$CO")" || n=0
+      [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && [ "$n" = 0 ] && has "$CO" "$CR_NORUN" && has "$CO" "$SR_OWN" && ! has "$CO" SERIAL-OK \
+        && has "$CO" "--record-dispatch s1-1 <dispatch sha>' from the lead checkout" && has "$CO" "or re-run QA at the current base" \
+        || WHY="$WHY rr-c-lru{rc=$SRC canonical LEGACY lines: $n $(reline "$CO")}"
+    else cr_no "$sd" "$f" rr-c-seat "$CR_NORUN"; fi
+    rm -f "$f" "$REPO_CRL/.git/ai-dlc/stories/s1-1"
+  done
   [ -z "$WHY" ]
 }

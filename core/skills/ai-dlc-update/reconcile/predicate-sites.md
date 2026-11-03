@@ -114,15 +114,19 @@ there. Every such input is therefore passed explicitly:
   validator looks for it compares identically. Only a change to how the file's CONTENT is read
   is still seen.
 - `validate-gate-adjudication.sh` resolves its schema, `enforcement-map.yaml`, its
-  `validate-adversarial-convergence.sh` sibling and its `gate_adjudication.py` module under the
-  pinned root, which is why all four are in `reads:`. Drop one and that side has no copy of it:
-  without the module the side prints a NOTE, exits 2 and yields no verdict on any series.
+  `validate-adversarial-convergence.sh` and `validate-suppression-lifetime.sh` siblings and its
+  `gate_adjudication.py` module under the pinned root, which is why all five are in `reads:`.
+  Drop one and that side has no copy of it: without the module the side prints a NOTE, exits 2
+  and yields no verdict on any series; without `validate-suppression-lifetime.sh` no waiver
+  resolves and every `FAIL_WAIVED` counts as a FAIL on both sides.
   `--series` is the form the consumer's own gate runs; the per-pass form needs a gate type per
-  file, which the `invoke:` grammar cannot derive. Its escalations default
-  (`$GA_MAP_ROOT/docs/escalations/pending.md`) IS read in `--series` mode, whenever a verdict in
-  scope carries `FAIL_WAIVED`. Under the pinned root neither side has an escalations file, so
-  both get the same empty input and agree; a change to how waivers are read is therefore not
-  observed by this site.
+  file, which the `invoke:` grammar cannot derive.
+- the escalations file is passed as `AI_DLC_ESCALATIONS`, resolved once from the consumer's
+  `docs/escalations/pending.md`. `validate-gate-adjudication.sh` reads it in `--series` mode
+  whenever a verdict in scope carries `FAIL_WAIVED`; searched under the probe root it is absent
+  on BOTH sides and every waiver fails to resolve identically. Passed by path, a change to how
+  waivers are read IS observed by this site. A consumer with no such file is handed a path that
+  does not exist, never an empty value, which the validator would read as "default to the root".
 - `validate-snapshot-conservation.sh` gets `--root .` and `validate-suppression-lifetime.sh`
   gets an explicit `--gate-metrics`. Without them, a predicate that cannot find its inputs reports
   NOT-APPLICABLE or an uncounted lifetime on both sides, and that parses as agreement.
@@ -160,7 +164,7 @@ invoke: {series}
 pass: s/^VALIDATE-PROVENANCE-BLOCK: PASS .*/PASS/p
 verdict: s/^FAIL: ([A-Za-z0-9_-]+).*/\1/p
 
-reads: core/scripts/validate-gate-adjudication.sh core/scripts/gate_adjudication.py core/schemas/gate-adjudication-verdict.json core/skills/ai-dlc/enforcement-map.yaml core/scripts/validate-adversarial-convergence.sh
+reads: core/scripts/validate-gate-adjudication.sh core/scripts/gate_adjudication.py core/schemas/gate-adjudication-verdict.json core/skills/ai-dlc/enforcement-map.yaml core/scripts/validate-adversarial-convergence.sh core/scripts/validate-suppression-lifetime.sh
 entry: core/scripts/validate-gate-adjudication.sh
 corpus: *.verdict.json
 series: s|/[^/]*\.verdict\.json$||

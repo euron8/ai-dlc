@@ -264,7 +264,9 @@
 #   (AI_DLC_PROJECT_ROOT, CLAUDE_PROJECT_DIR), so it can hold the rule but never skip it: LEGACY also
 #   needs the review's own repository (its git toplevel) to carry a qa.md, read at the range's base as THE LEAD'S
 #   RE-RUN reads it (on disk when no range is given), either layout, that lacks the phrase; one carrying it, or none,
-#   holds the rule and every refusal says why.
+#   holds the rule and every refusal says why. Under --lead-range with qa.md a tracked blob at the dispatch base, that
+#   blob alone decides, as the merge decides from qa.md at its sha; sr_era is the one decision, shared with THE RUN
+#   RECORD's era.
 #   OVERRIDES. A consumer `overrides/` entry shadowing qa.md's `Validation Checklist` (the section
 #   holding the sentinel) is not composed here: no existing program composes a role file with its
 #   overrides. After the pull the rule holds while QA reads the override's checklist, so the
@@ -287,6 +289,36 @@
 #   on disk, holds the rule. A shard directory with no recorded keys (partitioned before 0.995.0, or re-partitioned
 #   without --record-partition) merges as before, with one `LEGACY-UNRECORDED: story <idx> (s<N>-<idx>) ...` line. The record lives outside the story
 #   worktree and outside base..sha, in the .git the seat shares, so a deliberate overwrite is not defended.
+#   THE RUN RECORD (BL-905). `--record-run <qa shard-dir> [--dir <subdir>] -- <invocation...>` or `--record-run
+#   <serial review file> --frozen <go-signal sha> [--dir <subdir>] -- <invocation...>`,
+#   run by the execution owner (cross / cross-1, or the serial seat) from the lead checkout, is the canonical run
+#   itself: the record name s<N>-<idx> and the frozen sha come from the shard directory (shard_slot, .manifest's
+#   `worktree` and `sha`) or the review path (docs/reviews/s<N>/ in its repository) and --frozen, the full go-signal
+#   sha taken literally (nothing records it before the run, and the worktree's own HEAD would compare with itself); it
+#   REFUSES when the worktree's HEAD is not the frozen sha (untracked files never refuse) and a --dir that is absolute
+#   or carries `..`; it runs the invocation in <worktree>/<dir>, never refuses on its exit, and takes the summary line
+#   (OSC, SGR and CR stripped; vitest's last `Test Files` line joined to the next `Tests` line with `; `, else
+#   pytest's last `=== ... in <n>s` session line, else the last line carrying the count grammar above that is no
+#   per-test line -- no `::`, no ` PASSED`/` FAILED` with a `[ NN%]` tail; `=` runs and blanks trimmed). No summary
+#   line writes nothing and refuses.
+#   It writes run.<key>.sha, .exit, .dir, .invocation and .result (key: the shard directory's or review file's
+#   basename; the latest run wins; the invocation is the argv as one shell line, rr_quote, every argument that is not a
+#   bare word single-quoted, so `-m 'a and b'` stays the marker the conventions declare) and prints `RECORDED-RESULT: <line>` and `RECORDED-RUN: <invocation> (in <dir>,
+#   sha <sha>)`. The binding (run_bind) sits on canon_gate's RUN branch after the result's count check; a no-run
+#   claim never reaches it. ERA: held when qa.md prescribes RUN_SENTINEL -- in the merge, the partition record's
+#   run-era (written by --record-partition from qa.md at the base, unreadable held), else qa.md at the manifest's
+#   base (neither readable: legacy); in --check-serial, held when ROLE_MD carries it (it can hold, never acquit) or
+#   the review repository's qa.md at the range's base or on disk (SR_QA_AT) does -- except under --lead-range with
+#   qa.md a tracked blob at the dispatch base, where that blob alone decides, as the merge's base read does. Unheld: one `LEGACY: canonical-run record not checked: <qa.md read> prescribes no <RUN_SENTINEL> line`
+#   and the merge proceeds. Held: the story record must carry a run at the frozen sha (the manifest's, or the
+#   go-signal sha, else the review repository's HEAD) -- this pass's key first, then any earlier pass's key at the
+#   same sha, then (with --story only) an earlier pass's run whose change to the frozen sha is record-only by
+#   `record-only-diff.sh paths` (exit 0 only; 1 and 2 refuse) -- else REFUSED naming the shas found, the
+#   predicate's lines and the --record-run remedy. The recorded invocation is held to RUN-FILTER; the `Canonical
+#   run:` invocation (the span RUN-FILTER reads, `record-only-diff.sh run-span`) must equal the recorded invocation,
+#   and the `Canonical result:` value the recorded result, each pair with backticks and `=` removed and whitespace
+#   collapsed, else REFUSED naming both. RESIDUAL: a seat that records a stub (`--record-run -- printf '5561 passed'`)
+#   and copies its invocation is not stopped; binding the invocation to the conventions' declared one would.
 #
 # OWNER TAILS. Every REFUSED line ends in `[owner: <key>...]`, naming the shard whose FILE must
 #   change; the lead re-dispatches that seat with the line verbatim and never edits its shard.
@@ -762,15 +794,30 @@ lead_record_get() {
 # sr_qa_at <repo> <commit or empty> -> 0 with $T/qa-at-b holding the review repository's qa.md AT <commit> (tracked,
 # `.claude/team-roles/` then `core/team-roles/`), else its on-disk copy in <repo>; SR_QA_AT names what was read (the
 # bare on-disk path when no commit was given). 1, SR_QA_AT empty, when neither exists (header: CHECK-SERIAL, THE LEAD'S
-# RE-RUN).
+# RE-RUN). SR_QA_TRK is 1 only when $T/qa-at-b is the tracked blob at <commit>, else 0.
+# sr_era <sentinel> <base decides: 1 or 0> -> SR_ERA, after sr_qa_at, the one era decision of --check-serial's canonical
+# lines and run record (header: CANONICAL RUN, LEGACY; THE RUN RECORD). With <base decides> 1 (--lead-range, qa.md a
+# tracked blob at the dispatch base) that blob alone decides: `base` when it carries <sentinel>, else `legacy`.
+# Otherwise `role` when ROLE_MD carries it (it can hold, never acquit), `absent` when sr_qa_at read no qa.md, `base`
+# when the qa.md it read carries it, else `legacy`. Each caller maps `absent` itself.
+sr_era() {
+  if [ "$2" = 1 ]; then
+    if grep -qF -- "$1" "$T/qa-at-b"; then SR_ERA=base; else SR_ERA=legacy; fi
+    return 0
+  fi
+  if grep -qF -- "$1" "$ROLE_MD"; then SR_ERA=role
+  elif [ -z "$SR_QA_AT" ]; then SR_ERA=absent
+  elif grep -qF -- "$1" "$T/qa-at-b"; then SR_ERA=base
+  else SR_ERA=legacy; fi
+}
 sr_qa_at() {
-  SR_QA_AT=""
+  SR_QA_AT=""; SR_QA_TRK=0
   [ -n "$1" ] || return 1
   if [ -n "$2" ]; then
     for sq_p_ in ".claude/team-roles/$ROLE_NAME" "core/team-roles/$ROLE_NAME"; do
       git --no-replace-objects -C "$1" cat-file -e "${2}:${sq_p_}" 2> /dev/null < /dev/null || continue
       git --no-replace-objects -C "$1" show "${2}:${sq_p_}" > "$T/qa-at-b" 2> /dev/null < /dev/null || return 1
-      SR_QA_AT="$sq_p_ at $2"; return 0
+      SR_QA_AT="$sq_p_ at $2"; SR_QA_TRK=1; return 0
     done
   fi
   for sq_p_ in "$1/.claude/team-roles/$ROLE_NAME" "$1/core/team-roles/$ROLE_NAME"; do
@@ -832,10 +879,187 @@ pr_record() {
     done
   fi
   pr_nm_="s$pr_n_-$pr_i_"
+  # THE RUN RECORD's era (header: CANONICAL RUN, THE RUN RECORD), read at the base as qa-era is; unreadable is held.
+  pr_re_="$(era_at "$pr_wt_" "$pr_b_" "$RUN_SENTINEL")"; [ "$pr_re_" = legacy ] || pr_re_=held
   lead_record_put "$pr_d_" "$pr_nm_" "partition-base.$pr_sb_" "$pr_b_" && lead_record_put "$pr_d_" "$pr_nm_" "partition-sha.$pr_sb_" "$pr_s_" \
-    && lead_record_put "$pr_d_" "$pr_nm_" "qa-era.$pr_sb_" "$pr_e_" \
+    && lead_record_put "$pr_d_" "$pr_nm_" "qa-era.$pr_sb_" "$pr_e_" && lead_record_put "$pr_d_" "$pr_nm_" "run-era.$pr_sb_" "$pr_re_" \
     || refuse "cannot write the partition record $pr_nm_ under the git common dir of $pr_d_"
-  printf 'RECORDED: %s partition-base=%s partition-sha=%s qa-era=%s\n' "$(lead_record_path "$pr_d_" "$pr_nm_")" "$pr_b_" "$pr_s_" "$pr_e_"
+  printf 'RECORDED: %s partition-base=%s partition-sha=%s qa-era=%s run-era=%s\n' "$(lead_record_path "$pr_d_" "$pr_nm_")" "$pr_b_" "$pr_s_" "$pr_e_" "$pr_re_"
+}
+
+# era_at <worktree> <commit> <sentinel> -> `held` or `legacy` when qa.md AT <commit> (tracked, `.claude/team-roles/`
+# then `core/team-roles/`) carries <sentinel> or not, else the same of its on-disk copy in <worktree>; `none` when
+# neither is readable. Each caller decides what `none` means (header: CANONICAL RUN, THE RUN RECORD).
+era_at() {
+  for ea_p_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+    git --no-replace-objects -C "$1" cat-file -e "${2}:${ea_p_}" 2> /dev/null < /dev/null || continue
+    if git --no-replace-objects -C "$1" show "${2}:${ea_p_}" 2> /dev/null < /dev/null | grep -qF -- "$3"; then echo held; else echo legacy; fi
+    return 0
+  done
+  for ea_p_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+    [ -r "$1/$ea_p_" ] || continue
+    if grep -qF -- "$3" "$1/$ea_p_"; then echo held; else echo legacy; fi
+    return 0
+  done
+  echo none
+}
+# rr_summary <capture> -> the run's summary line (0), or 1 when the capture carries none (header: THE RUN RECORD). OSC
+# (ESC ] ... BEL) and SGR escapes and CRs stripped; a vitest run's last `Test Files` line joined to the `Tests` line
+# after it with `; `, else pytest's last session line (`=== ... passed|failed|error ... in <n>s`), else the last line
+# carrying canon_gate's count that is no per-test line (no `::`, no ` PASSED`/` FAILED` with a `[ NN%]` progress tail);
+# leading and trailing runs of `=` and whitespace stripped from each part.
+rr_summary() {
+  awk -v esc="$(printf '\033')" -v bel="$(printf '\007')" '
+    function trim(s) { sub(/^[[:space:]=]+/, "", s); sub(/[[:space:]=]+$/, "", s); return s }
+    { gsub(esc "\\][^" bel "]*" bel, ""); gsub(esc "\\[[0-9;?]*[A-Za-z]", ""); gsub(/\r/, ""); l[NR] = $0
+      if ($0 ~ /^=+ .*(passed|failed|errors?).* in [0-9.]+s/) ps = NR
+      if (tolower($0) ~ /[0-9]+[[:space:]]+(passed|failed|collected|errors?)([^a-z]|$)/ && $0 !~ /::/ && $0 !~ /( PASSED| FAILED).*\[ *[0-9]+%\]/) c = NR
+      if ($0 ~ /^[[:space:]]*Test Files[[:space:]]/) tf = NR }
+    END { if (tf) { s = trim(l[tf]); if (l[tf + 1] ~ /^[[:space:]]*Tests[[:space:]]/) s = s "; " trim(l[tf + 1]) }
+          else if (ps) s = trim(l[ps])
+          else if (c) s = trim(l[c])
+          if (s == "") exit 1
+          print s }' "$1"
+}
+# rr_norm <text> -> the text with backticks and `=` removed, whitespace collapsed and trimmed: the one comparison form
+# of a recorded result and a `Canonical result:` value.
+rr_norm() {
+  awk '{ gsub(/[`=\r]/, ""); gsub(/[[:space:]]+/, " "); sub(/^ /, ""); sub(/ $/, ""); print }' <<<"$1"
+}
+# rr_quote <arg...> -> RR_Q, the argv as one shell line a seat can copy and re-run: an argument of only
+# [A-Za-z0-9_./=:,+@-] bare, any other single-quoted (an embedded ' as '\''), joined by one space. Not `printf %q`: its
+# `a\ and\ b` is read by RUN-FILTER's marker scan as the marker `a\`, while `'a and b'` is read as `a and b`, the value
+# a conventions file's `-m "a and b"` declares. No fork.
+rr_quote() {
+  local a sq="'" rp="'\\''"
+  RR_Q=""
+  for a in "$@"; do
+    case "$a" in ''|*[!A-Za-z0-9_./=:,+@-]*) a="'${a//$sq/$rp}'" ;; esac
+    RR_Q="$RR_Q${RR_Q:+ }$a"
+  done
+}
+# rr_record <qa shard-dir | serial review file> [--dir <subdir>] -- <invocation...>: `--record-run` (header: THE RUN
+# RECORD). Runs the invocation in the frozen worktree and writes its summary line into the lead's story record.
+rr_record() {
+  rr_u_="usage: merge-review-shards.sh --record-run <qa shard-dir> [--dir <relative subdir>] -- <invocation...> | --record-run <serial review file> --frozen <go-signal sha> [--dir <relative subdir>] -- <invocation...>"
+  [ "$#" -ge 1 ] && [ -n "$1" ] || refuse "$rr_u_"
+  rr_a_="$1"; shift; rr_sub_=""; rr_fz_=""
+  while [ "${1:-}" = --dir ] || [ "${1:-}" = --frozen ]; do
+    [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$rr_u_"
+    if [ "$1" = --dir ]; then rr_sub_="$2"; else rr_fz_="$2"; fi
+    shift 2
+  done
+  [ "${1:-}" = -- ] && [ "$#" -ge 2 ] || refuse "$rr_u_"
+  shift
+  [ -z "$rr_sub_" ] || case "/$rr_sub_/" in //*|*/../*) refuse "--record-run --dir '$rr_sub_' is absolute or climbs out with '..'; name the subdirectory of the frozen worktree the canonical run starts in" ;; esac
+  if [ -d "$rr_a_" ]; then
+    [ -z "$rr_fz_" ] || refuse "--record-run --frozen is read only with a serial review file; a shard directory's frozen sha is its manifest's"
+    rr_l_="${rr_a_%/}"; rr_d_="$(cd "$rr_l_" && pwd -P)" || refuse "shard directory $rr_a_ is not enterable"
+    lead_checkout_only "$rr_d_" "--record-run: the shard directory"
+    shard_slot "$rr_l_" "--record-run: the shard directory"; rr_n_="$SS_N"
+    MF="$rr_d_/.manifest"
+    [ -f "$MF" ] || refuse "no manifest at $MF; --record-run takes the shard directory the gate-2 partition wrote"
+    for k in worktree sha; do
+      [ "$(awk -F'\t' -v k="$k" '$1 == k { n++ } END { print n + 0 }' "$MF")" = 1 ] || refuse "$MF carries no single '$k' line"
+    done
+    rr_wt_="$(mf worktree)"; rr_s_="$(mf sha)"
+    case "$rr_s_" in *[!0-9a-f]*|"") refuse "$MF names '$rr_s_', not a full hex object name" ;; esac
+    rr_sb_="${rr_d_##*/}"; rr_12_="$(printf '%s' "$rr_s_" | cut -c1-12)"
+    case "$rr_sb_" in
+      *-qa-validation-"$rr_12_") rr_i_="${rr_sb_%-qa-validation-"$rr_12_"}" ;;
+      *-qa-validation-"$rr_12_"-p*) rr_i_="${rr_sb_%-qa-validation-"$rr_12_"-p*}" ;;
+      *) refuse "shard directory $rr_sb_ is not <idx>-qa-validation-<sha12>[-p<M>] for the manifest's sha $rr_s_" ;;
+    esac
+    rr_rp_="$rr_d_"; rr_k_="run.$rr_sb_"
+  else
+    # A serial review file: it need not exist yet, its docs/reviews/s<N>/ directory must, in the frozen worktree.
+    rr_pd_="$(cd "$(dirname "$rr_a_")" 2> /dev/null && pwd -P)" || refuse "the directory of $rr_a_ does not exist; --record-run takes the shard directory or the serial validation file's path at docs/reviews/s<N>/ in the frozen worktree"
+    rr_wt_="$(cd "$rr_pd_" && unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR && git rev-parse --show-toplevel 2> /dev/null < /dev/null)" \
+      || refuse "$rr_a_ is not inside a git worktree; --record-run takes the serial validation file's path in the frozen worktree"
+    lead_checkout_only "$rr_wt_" "--record-run: the review's repository"
+    rr_n_="$(review_sprint "$(dirname "$rr_a_")")" && [ "$rr_pd_" = "$(cd "$rr_wt_" && pwd -P)/docs/reviews/s$rr_n_" ] \
+      || refuse "$rr_a_ is not at docs/reviews/s<N>/ in its own repository $rr_wt_; pass the validation file's path qa.md names"
+    rr_sb_="$(basename "$rr_a_")"; rr_i_=""
+    case "$rr_sb_" in
+      ?*-qa-validation.md) rr_i_="${rr_sb_%-qa-validation.md}" ;;
+      ?*-qa-validation-p*.md) rr_i_="${rr_sb_%-qa-validation-p*.md}" ;;
+    esac
+    # The frozen sha is the go-signal sha the lead sent, taken literally and never resolved, so the HEAD check below
+    # compares the worktree against it (a sha read off the worktree's own HEAD would compare HEAD with HEAD).
+    case "$rr_fz_" in
+      "") refuse "--record-run on a serial review file takes --frozen <the full go-signal sha>; $rr_u_" ;;
+      *[!0-9a-f]*) refuse "--record-run --frozen '$rr_fz_' is not a full lowercase hex sha; pass the full sha of the gate-2 go-signal" ;;
+    esac
+    { [ "${#rr_fz_}" = 40 ] || [ "${#rr_fz_}" = 64 ]; } || refuse "--record-run --frozen '$rr_fz_' is not a full sha; pass the full sha of the gate-2 go-signal"
+    rr_s_="$rr_fz_"; rr_rp_="$rr_wt_"; rr_k_="run.$rr_sb_"
+  fi
+  rec_idx_ok "$rr_i_" || refuse "$rr_a_ names no story index the lead record can be keyed on"
+  rr_nm_="s$rr_n_-$rr_i_"
+  rr_f_="$(lead_record_path "$rr_rp_" "$rr_nm_")" || refuse "--record-run: '$rr_nm_' names no lead record under the git common dir of $rr_rp_"
+  # The run tests the frozen tree only when the worktree's HEAD is the frozen sha; untracked files never refuse.
+  rr_h_="$(git --no-replace-objects -C "$rr_wt_" rev-parse -q --verify HEAD 2> /dev/null < /dev/null)" || rr_h_=""
+  [ -n "$rr_s_" ] && [ "$rr_h_" = "$rr_s_" ] \
+    || refuse "--record-run: the frozen worktree $rr_wt_ is at HEAD ${rr_h_:-<none>}, not the frozen sha ${rr_s_:-<none>}, so the run would test other code; nothing was recorded. Check out the frozen sha there (nothing else mutates the frozen worktree) and run it again"
+  rr_wd_="$rr_wt_${rr_sub_:+/$rr_sub_}"
+  [ -d "$rr_wd_" ] || refuse "--record-run: $rr_wd_ is not a directory of the frozen worktree; nothing was recorded"
+  rr_t_="$(mktemp -d "${TMPDIR:-/tmp}/record-run.XXXXXX")" || refuse "--record-run: mktemp failed"
+  rr_cap_="$rr_t_/capture.txt"
+  ( cd "$rr_wd_" && exec "$@" ) > "$rr_cap_" 2>&1 < /dev/null; rr_rc_=$?
+  # The exit is recorded and never refused on: a PASS may carry the story's permitted pre-existing failures.
+  rr_res_="$(rr_summary "$rr_cap_")" \
+    || refuse "--record-run: the run exited $rr_rc_ and its output ($rr_cap_) carries no summary line with a count, so it timed out, was interrupted or never finished; nothing was recorded. Run it again to completion"
+  rr_quote "$@"; rr_inv_="${RR_Q//$'\n'/ }"
+  lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.sha" "$rr_s_" && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.exit" "$rr_rc_" \
+    && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.dir" "$rr_wd_" && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.invocation" "$rr_inv_" \
+    && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.result" "$rr_res_" \
+    || refuse "--record-run: cannot write the run record $rr_f_"
+  printf 'RECORDED-RESULT: %s\n' "$rr_res_"
+  printf 'RECORDED-RUN: %s (in %s, sha %s)\n' "$rr_inv_" "$rr_wd_" "$rr_s_"
+  printf 'RECORDED-CAPTURE: %s (exit %s, record %s key %s)\n' "$rr_cap_" "$rr_rc_" "$rr_f_" "$rr_k_"
+}
+# run_bind <file> <owner> <Canonical result: value> <conventions file or empty> <Canonical run: value>: THE RUN RECORD's binding (header), on canon_gate's
+# run branch. The caller sets RB_ERA (`legacy` acquits), RB_AT (named in the LEGACY line), RB_REPO and RB_NAME (the
+# lead record), RB_KEY (this pass's run key), RB_SHA (this pass's frozen sha), RB_WT (the repository the frozen sha is
+# read in), RB_ARG (the --record-run operand the remedy names) and RB_FZ (the serial form's --frozen sha, empty for a
+# shard directory).
+run_bind() {
+  if [ "$RB_ERA" = legacy ]; then
+    printf 'LEGACY: canonical-run record not checked: %s prescribes no %s line\n' "$RB_AT" "$RUN_SENTINEL"; return 0
+  fi
+  rb_rr_="merge-review-shards.sh --record-run $RB_ARG${RB_FZ:+ --frozen $RB_FZ} [--dir <subdir>] --<the canonical invocation>, run from the lead checkout, and copy its RECORDED-RESULT line verbatim and alone into 'Canonical result:'"
+  rb_f_=""; [ -z "$RB_NAME" ] || [ -z "$RB_SHA" ] || rb_f_="$(lead_record_path "$RB_REPO" "$RB_NAME")" || rb_f_=""
+  [ -n "$rb_f_" ] || refuse_to "$2" "$1 reads PASS, and its canonical run cannot be looked up: no lead record name or no frozen sha (record ${RB_NAME:-<none>}, sha ${RB_SHA:-<none>}); write the review at the path qa.md names with its reviewed-sha: line, and run $rb_rr_"
+  # Every recorded run of the story, `<key>\t<sha>`, from the record's `run.<key>.sha` lines.
+  rb_all_="$(awk '/^run\..*\.sha: / { k = $1; sub(/^run\./, "", k); sub(/\.sha:$/, "", k); print k "\t" $2 }' "$rb_f_" 2> /dev/null)" || rb_all_=""
+  [ -n "$rb_all_" ] || refuse_to "$2" "$1 reads PASS, and no canonical run is recorded for this story ($rb_f_ holds none); run $rb_rr_"
+  # This pass's own key at the frozen sha first, then any earlier pass's run at the same sha.
+  rb_k_="$(awk -F'\t' -v k="${RB_KEY#run.}" -v s="$RB_SHA" '$1 == k && $2 == s { print $1; f = 1; exit } $2 == s && e == "" { e = $1 } END { if (!f && e != "") print e }' <<<"$rb_all_")"
+  if [ -z "$rb_k_" ]; then
+    rb_shas_="$(awk -F'\t' '{ printf "%s%s", (NR > 1 ? ", " : ""), $2 }' <<<"$rb_all_")"
+    [ -n "$STORY_F" ] \
+      || refuse_to "$2" "$1 reads PASS, and no canonical run is recorded at the frozen sha $RB_SHA (recorded at: $rb_shas_); an earlier pass's run is reused only over a record-only change, decided with --story: pass --story <story file>, or run $rb_rr_"
+    rb_why_=""
+    while IFS=$'\t' read -r rb_ek_ rb_es_; do
+      # An earlier pass's run, reused when the change since it is record-only by the exemption's own predicate.
+      rb_po_="$(mrs_sib "$RO" ro_main paths -C "$RB_WT" "$STORY_F" "$rb_es_" "$RB_SHA" 2>&1 < /dev/null)" && { rb_k_="$rb_ek_"; break; }
+      rb_why_="$rb_why_; $rb_es_..$RB_SHA: ${rb_po_%%$'\n'*}"
+    done <<<"$rb_all_"
+    [ -n "$rb_k_" ] \
+      || refuse_to "$2" "$1 reads PASS, and no canonical run is recorded at the frozen sha $RB_SHA, and no earlier pass's run is reusable (record-only-diff.sh paths${rb_why_}); an earlier pass's run is accepted only when it ran at this frozen sha or the change since it is record-only: run $rb_rr_"
+  fi
+  rb_rv_="$(lead_record_get "$RB_REPO" "$RB_NAME" "run.$rb_k_.result")" || rb_rv_=""
+  rb_ri_="$(lead_record_get "$RB_REPO" "$RB_NAME" "run.$rb_k_.invocation")" || rb_ri_=""
+  # The recorded invocation is held to the canonical profile as the `Canonical run:` line is (record-only-diff.sh RUN-FILTER).
+  rb_rf_="$(mrs_sib "$RO" ro_main run-filter "\`$rb_ri_\`" ${4:+"$4"})" \
+    || refuse_to "$2" "$1 reads PASS, and the recorded run (run.$rb_k_) invoked \`$rb_ri_\`, which $rb_rf_; run $rb_rr_ with the full collection"
+  # The `Canonical run:` invocation (the span RUN-FILTER reads, record-only-diff.sh run-span) is the recorded one, so a
+  # recorded replay of an old capture cannot stand behind a review naming the canonical command.
+  rb_rs_="$(mrs_sib "$RO" ro_main run-span "$5")" || rb_rs_=""
+  [ "$(rr_norm "$rb_rs_")" = "$(rr_norm "$rb_ri_")" ] \
+    || refuse_to "$2" "$1 'Canonical run: \`$rb_rs_\`' is not the recorded run's invocation \`$rb_ri_\` (run.$rb_k_ in $rb_f_); copy the RECORDED-RUN invocation into 'Canonical run:', or run $rb_rr_"
+  [ "$(rr_norm "$3")" = "$(rr_norm "$rb_rv_")" ] \
+    || refuse_to "$2" "$1 'Canonical result: $3' is not the recorded run's result '$rb_rv_' (run.$rb_k_ in $rb_f_, sha $(awk -F'\t' -v k="$rb_k_" '$1 == k { print $2; exit }' <<<"$rb_all_")); copy the RECORDED-RESULT line verbatim and alone, commentary on the next line"
+  return 0
 }
 
 canon_gate() {
@@ -927,6 +1151,8 @@ canon_gate() {
     && refuse_to "$cg_o_" "$cg_f_ 'Canonical result: $cg_res_' says the run has not finished; a PASS waits for the run's summary line"
   grep -qiE '[0-9]+[[:space:]]+(passed|failed|collected|errors?)([^A-Za-z]|$)' <<<"$cg_res_" \
     || refuse_to "$cg_o_" "$cg_f_ 'Canonical result: $cg_res_' carries no count; copy the run's summary line (e.g. '812 passed, 3 skipped')"
+  # THE RUN RECORD (header): the result is a recorded run's, in an era whose qa.md prescribes --record-run.
+  run_bind "$cg_f_" "$cg_o_" "$cg_res_" "$cg_c_" "$cg_run_"
   return 0
 }
 
@@ -1476,8 +1702,14 @@ export LC_ALL=C
 # Git's repository discovery is the review file's and the manifest's own (`-C`, `--show-toplevel`), never the seat's
 # environment: a GIT_WORK_TREE or GIT_DIR left in it would point every read at another checkout (header: THE EXEMPTION).
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+# THE RUN RECORD's era sentinel (header: CANONICAL RUN, THE RUN RECORD): qa.md's prescription of --record-run. Set here,
+# inside mrs_main, so --record-partition, --record-run and canon_gate all read it; an empty one would hold every era.
+RUN_SENTINEL='column-0 `Canonical result:` copied from `--record-run`'
+[ -n "$RUN_SENTINEL" ] || { echo "REFUSED: RUN_SENTINEL is empty [owner: lead]"; exit 2; }
 # --record-partition (header: THE PARTITION RECORD) is its own mode, taken before the argument loop.
 if [ "$#" -gt 0 ] && [ "$1" = "--record-partition" ]; then OWNER="lead"; shift; pr_record "$@"; exit $?; fi
+# --record-run (header: THE RUN RECORD) likewise.
+if [ "$#" -gt 0 ] && [ "$1" = "--record-run" ]; then OWNER="lead"; shift; rr_record "$@"; exit $?; fi
 
 # Every refusal names the shard whose file must CHANGE (header: OWNER TAILS). OWNER is `lead`
 # outside the per-shard function and that shard's key inside it; refuse_to names it explicitly.
@@ -1487,7 +1719,7 @@ OWNER="lead"
 # --check-shard target), so one pass names every duplicate (header: OWNER TAILS).
 DUP_N=0
 CG_NOTE=""
-USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>] | --check-serial <absolute file> --gate qa [--story <f>] --lead-range <seat base> <go-signal sha> | --record-dispatch s<N>-<story-index> <sha> | --record-partition <qa shard-dir>"
+USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>] | --check-serial <absolute file> --gate qa [--story <f>] --lead-range <seat base> <go-signal sha> | --record-dispatch s<N>-<story-index> <sha> | --record-partition <qa shard-dir> | --record-run <qa shard-dir> [--dir <subdir>] -- <invocation...> | --record-run <serial review file> --frozen <go-signal sha> [--dir <subdir>] -- <invocation...>"
 
 SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""; STORY_F=""; R_BASE=""; R_FROZEN=""; LEAD=0
 SEAT_B=""; RD_NAME=""; RD_SHA=""
@@ -1698,7 +1930,7 @@ if [ -n "$SERIAL" ]; then
       sr_top_="$(cd "$sr_repo_" 2> /dev/null && pwd -P)" && sr_pd_="$(cd "$(dirname "$SERIAL")" 2> /dev/null && pwd -P)" \
         && sr_ln_="$(review_sprint "$(dirname "$SERIAL")")" && [ "$sr_pd_" = "$sr_top_/docs/reviews/s$sr_ln_" ] \
         || refuse "$SERIAL is not at docs/reviews/s<N>/ in its own repository $sr_repo_ (physically ${sr_pd_:-unresolved}); the lead re-runs the check on the review path it assigned, never on a path the seat reports"
-      sr_li_=""
+      sr_li_=""; sr_rec_=0
       case "$(basename "$SERIAL")" in
         ?*-"$DSUF".md) sr_li_="$(basename "$SERIAL" ".md")"; sr_li_="${sr_li_%-"$DSUF"}" ;;
         ?*-"$DSUF"-p*.md) sr_li_="$(basename "$SERIAL" ".md")"; sr_li_="${sr_li_%-"$DSUF"-p*}" ;;
@@ -1709,6 +1941,7 @@ if [ -n "$SERIAL" ]; then
         && sr_b_="$(git --no-replace-objects -C "$sr_repo_" rev-parse -q --verify "${sr_rd_}^{commit}" 2> /dev/null < /dev/null)"; then
         GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts git -C "$sr_repo_" merge-base --is-ancestor "$sr_b_" "$sr_f_" 2> /dev/null < /dev/null \
           || refuse "the go-signal sha $sr_f_ does not descend from the dispatch sha $sr_b_ in $sr_rp_, so $SERIAL reviewed a history the story was not dispatched on; send the story back to the dev to rebuild it on its dispatched branch"
+        sr_rec_=1
       else
         sr_b_=""
         [ -z "$SEAT_B" ] || [ "$SEAT_B" = - ] \
@@ -1736,16 +1969,21 @@ if [ -n "$SERIAL" ]; then
     fi
     # ROLE_MD sits under a root the environment may choose (AI_DLC_PROJECT_ROOT, CLAUDE_PROJECT_DIR), so it can hold
     # the rule but never acquit it: LEGACY also needs the checked repo's own qa.md (at the range's base, else on disk,
-    # either layout) to lack the sentinel. An unreadable one holds (header: CANONICAL RUN, LEGACY).
-    sr_held_=1; sr_leg_="$ROLE_MD"
-    if grep -qF -- "$CANON_SENTINEL" "$ROLE_MD"; then
-      :
-    else
-      sr_leg_="$SR_QA_AT"
-      if [ -z "$sr_leg_" ]; then CG_NOTE=" (held: $ROLE_MD prescribes no $CANON_SENTINEL label, and the checked repo ${sr_repo_:-<none>} has no $ROLE_NAME in either layout${sr_b_:+ at $sr_b_ or on disk})"
-      elif grep -qF -- "$CANON_SENTINEL" "$T/qa-at-b"; then CG_NOTE=" (held: $sr_leg_ prescribes the $CANON_SENTINEL label; $ROLE_MD, under the project root, does not)"
-      else sr_held_=0; fi
-    fi
+    # either layout) to lack the sentinel. An unreadable one holds (header: CANONICAL RUN, LEGACY). Under --lead-range
+    # with qa.md a tracked blob at the dispatch base, that blob alone decides (sr_era), as the merge decides from qa.md
+    # at its frozen sha and as the run record's era is decided below. The blob decides only when the dispatch record
+    # named the base: a LEGACY-UNRECORDED story's base is the seat's own, and a seat must not choose its era by choosing
+    # an old base, so there the installed qa.md holds as before and its refusal names the remedy (sr_rh_).
+    sr_bd_=0; if [ "$LEAD" = 1 ] && [ "${SR_QA_TRK:-0}" = 1 ] && [ "${sr_rec_:-0}" = 1 ]; then sr_bd_=1; fi
+    sr_rh_=0; sr_unrec_=0; [ "$LEAD" = 0 ] || [ "${sr_rec_:-0}" = 1 ] || sr_unrec_=1
+    sr_era "$CANON_SENTINEL" "$sr_bd_"; sr_held_=1; sr_leg_="$ROLE_MD"
+    [ "$sr_unrec_" = 0 ] || [ "$SR_ERA" != role ] || grep -qF -- "$CANON_SENTINEL" "$T/qa-at-b" || sr_rh_=1
+    case "$SR_ERA" in
+      role) : ;;
+      absent) CG_NOTE=" (held: $ROLE_MD prescribes no $CANON_SENTINEL label, and the checked repo ${sr_repo_:-<none>} has no $ROLE_NAME in either layout${sr_b_:+ at $sr_b_ or on disk})" ;;
+      base) grep -qF -- "$CANON_SENTINEL" "$ROLE_MD" || CG_NOTE=" (held: $SR_QA_AT prescribes the $CANON_SENTINEL label; $ROLE_MD, under the project root, does not)" ;;
+      *) sr_held_=0; sr_leg_="$SR_QA_AT" ;;
+    esac
     if [ "$sr_held_" = 1 ]; then
       [ -z "$R_BASE" ] || [ -n "$sr_repo_" ] || refuse "--range was given and $SERIAL is not inside a git worktree to read it in"
       sr_conv_=""; [ -z "$sr_repo_" ] || [ ! -r "$sr_repo_/docs/coding-conventions.md" ] || sr_conv_="$sr_repo_/docs/coding-conventions.md"
@@ -1755,6 +1993,22 @@ if [ -n "$SERIAL" ]; then
         ?*-"$DSUF"-p*.md) sr_idx_="$(basename "$SERIAL" ".md")"; case "${sr_idx_##*-"$DSUF"-p}" in ''|*[!0-9]*) sr_idx_="" ;; *) sr_idx_="${sr_idx_%-"$DSUF"-p*}" ;; esac ;;
       esac
       sr_n_="$(cd "$(dirname "$SERIAL")" 2> /dev/null && review_sprint "$(pwd)")" || sr_n_=""
+      # THE RUN RECORD (header): the era is qa.md at the range's base in the review's repository (SR_QA_AT, on disk with
+      # no range), else the installed ROLE_MD; the frozen sha is the go-signal sha, else the review repository's HEAD.
+      # ROLE_MD can hold the era and never acquit it, as for the canonical lines: a seat that strips the sentinel from the
+      # review repository's on-disk qa.md does not reach LEGACY while the lead's installed qa.md prescribes --record-run.
+      # Under --lead-range, when qa.md is a tracked blob at the dispatch base, that blob ALONE decides, as the merge decides
+      # from qa.md at its base: a seat cannot edit a committed base, and a lead whose install moved past the base (a pull
+      # mid-sprint) must not hold a serial story the merge would read LEGACY for the same base.
+      # The decision is sr_era's, shared with the canonical lines above; only an absent qa.md differs (legacy here).
+      RB_ERA=legacy; RB_AT="${SR_QA_AT:-$ROLE_MD}"
+      sr_era "$RUN_SENTINEL" "$sr_bd_"
+      case "$SR_ERA" in role|base) RB_ERA=held ;; esac
+      [ "$sr_unrec_" = 0 ] || [ "$SR_ERA" != role ] || grep -qF -- "$RUN_SENTINEL" "$T/qa-at-b" || sr_rh_=1
+      [ "$sr_rh_" = 0 ] || CG_NOTE="$CG_NOTE (held by the installed $ROLE_MD, not by qa.md at the seat base ${SEAT_B:--}: $sr_rn_ has no dispatch record, and a seat-supplied base never decides the era; record the dispatch with 'merge-review-shards.sh --record-dispatch $sr_rn_ <dispatch sha>' from the lead checkout, or re-run QA at the current base)"
+      RB_SHA="$sr_f_"; [ -n "$RB_SHA" ] || [ -z "$sr_repo_" ] || RB_SHA="$(git --no-replace-objects -C "$sr_repo_" rev-parse -q --verify HEAD 2> /dev/null < /dev/null)" || RB_SHA=""
+      RB_REPO="$sr_repo_"; RB_NAME=""; [ -z "$sr_n_" ] || [ -z "$sr_idx_" ] || RB_NAME="s$sr_n_-$sr_idx_"
+      RB_KEY="run.$(basename "$SERIAL")"; RB_WT="$sr_repo_"; RB_ARG="$SERIAL"; RB_FZ="${sr_f_:-<the full go-signal sha>}"
       canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_" "$sr_idx_" "$sr_n_"
     else
       printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$sr_leg_" "$CANON_SENTINEL"
@@ -2051,6 +2305,13 @@ if [ "$GATE" = qa ]; then
     cr_conv_=""; [ ! -r "$M_WT/docs/coding-conventions.md" ] || cr_conv_="$M_WT/docs/coding-conventions.md"
     # The merge's sprint is the dispatch path's: <shard-dir> is docs/reviews/s<N>/shards/<idx>-...-<sha12>[-p<M>].
     cr_n_=""; [ "$(basename "$(dirname "$SDIR")")" != shards ] || cr_n_="$(review_sprint "$(dirname "$(dirname "$SDIR")")")" || cr_n_=""
+    # THE RUN RECORD (header): its era is the partition record's run-era, else qa.md at the manifest's base (none: legacy).
+    RB_ERA="$(lead_record_get "$SDIR" "s$pr_n_-$IDX" "run-era.$SB")" || RB_ERA=""; RB_AT="the partition record s$pr_n_-$IDX (run-era.$SB)"
+    if [ -z "$PR_ERA" ] || [ -z "$RB_ERA" ]; then
+      RB_ERA="$(era_at "$M_WT" "$M_BASE" "$RUN_SENTINEL")"; RB_AT="qa.md at the base $M_BASE in $M_WT"
+      [ "$RB_ERA" != none ] || { RB_ERA=legacy; RB_AT="$M_WT (no qa.md at the base $M_BASE or on disk)"; }
+    fi
+    RB_REPO="$SDIR"; RB_NAME="s$pr_n_-$IDX"; RB_KEY="run.$SB"; RB_SHA="$M_SHA"; RB_WT="$M_WT"; RB_ARG="$SDIR_IN"; RB_FZ=""
     canon_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$M_WT" "$M_BASE" "$M_SHA" "$cr_conv_" "$IDX" "$cr_n_"
   fi
   CG_NOTE=""

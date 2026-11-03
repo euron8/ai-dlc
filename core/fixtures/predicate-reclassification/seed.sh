@@ -295,4 +295,61 @@ git -C "$DG" add -A >/dev/null
 git -C "$DG" commit -qm "broken: the module no longer imports" >/dev/null
 printf '{}\n' > "$CG/_bmad-output/gate-adjudication/s1/p1.verdict.json"
 
+# ---- THE FAIL_WAIVED WORLD (part 18): the waiver is read from the CONSUMER's escalations ----------
+# Driven with the shipped manifest. The toy adjudicator mirrors validate-gate-adjudication.sh's
+# `--series` waiver lookup: when a verdict in scope carries FAIL_WAIVED it reads
+# ${AI_DLC_ESCALATIONS:-<project root>/docs/escalations/pending.md} through the
+# validate-suppression-lifetime.sh sibling BESIDE ITSELF, and FAILS CLOSED (the FAIL_WAIVED counts as
+# a FAIL) when either is absent. The consumer holds the OVERRIDDEN row that resolves the waiver.
+#   BASE      honours a resolving waiver -> PASS
+#   HEAD~1    an UNRELATED change (a comment line), waiver reading untouched -> PASS (the control)
+#   HEAD      stops honouring the row: every FAIL_WAIVED is a FAIL -> FAIL (the reclassification)
+DW="$ROOT/distw"; CW="$ROOT/consw"
+mkdir -p "$DW/core/scripts" "$CW/_bmad-output/gate-adjudication/s1" "$CW/docs/escalations"
+write_gaw() { # write_gaw <honour|ignore> [<extra comment line>]
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf '# toy gate adjudicator -- a FAIL_WAIVED passes only under a waiver its sibling resolves.\n'
+    [ -z "${2:-}" ] || printf '# %s\n' "$2"
+    printf 'honour=%s\n' "$1"
+    cat <<'PRED'
+d="${0%/*}"; v=PASS
+for f in "$2"/*.verdict.json; do
+  grep -q '"FAIL_WAIVED"' "$f" || continue
+  w="$(sed -n 's/.*"waiver_id": *"\([^"]*\)".*/\1/p' "$f")"
+  esc="${AI_DLC_ESCALATIONS:-}"
+  [ -n "$esc" ] || esc="${AI_DLC_PROJECT_ROOT:-.}/docs/escalations/pending.md"
+  ok=0
+  if [ "$honour" = honour ] && [ -f "$esc" ] && [ -f "$d/validate-suppression-lifetime.sh" ]; then
+    rows="$(bash "$d/validate-suppression-lifetime.sh" --waivers --escalations "$esc")"
+    grep -qxF "$w" <<<"$rows" && ok=1
+  fi
+  [ "$ok" -eq 1 ] || v=FAIL
+done
+echo "VALIDATE-GATE-ADJUDICATION: $v (--series)"
+[ "$v" = PASS ]
+PRED
+  } > "$DW/core/scripts/validate-gate-adjudication.sh"
+}
+cat > "$DW/core/scripts/validate-suppression-lifetime.sh" <<'PRED'
+#!/usr/bin/env bash
+# toy --waivers owner: each OVERRIDDEN entry's header, one per line.
+[ "${1:-}" = --waivers ] || { echo "toy: only --waivers"; exit 0; }
+awk '/^## / { h = substr($0, 4) } /^\*\*Status:\*\* OVERRIDDEN/ { print h }' "$3"
+PRED
+git -C "$DW" init -q 2>/dev/null
+git -C "$DW" config user.email fixture@example.invalid
+git -C "$DW" config user.name fixture
+write_gaw honour
+git -C "$DW" add -A >/dev/null
+git -C "$DW" commit -qm "base: a resolving waiver is honoured" >/dev/null
+write_gaw honour "an unrelated change: waiver reading is untouched"
+git -C "$DW" add -A >/dev/null
+git -C "$DW" commit -qm "control: an unrelated change" >/dev/null
+write_gaw ignore "an unrelated change: waiver reading is untouched"
+git -C "$DW" add -A >/dev/null
+git -C "$DW" commit -qm "theirs: the escalations row is no longer honoured" >/dev/null
+printf '{"verdicts": [{"check_id": "7", "verdict": "FAIL_WAIVED", "waiver_id": "W-S1-check-7"}]}\n' > "$CW/_bmad-output/gate-adjudication/s1/p1.verdict.json"
+printf '# Pending\n\n## W-S1-check-7\n\n**Status:** OVERRIDDEN\n' > "$CW/docs/escalations/pending.md"
+
 printf '%s\n' "$ROOT"

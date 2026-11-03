@@ -593,6 +593,7 @@ over, and writes the per-AC table and the
 run with the LEAD CHECKOUT as the working directory against the shard directory in the frozen worktree,
 passing the pass-specific name on a later pass (`-p2`, ...). The merge refuses a PASS whose
 first cross shard carries no `Canonical run:` and `Canonical result:` with counts,
+or, where qa.md at the base prescribes `--record-run`, whose `Canonical result:` is not a run recorded at the frozen sha (qa.md),
 unless it claims the record-only exemption over the manifest's base and sha, the whole
 story's range on every pass; it takes no `--range`. It refuses a `.manifest` whose base or sha
 differs from the story record `--record-partition` wrote, and binds `--story` on a run claim too. After a refused

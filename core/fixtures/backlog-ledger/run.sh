@@ -50,6 +50,9 @@
 # MUTANT-MATRIX mutation-sha-greedy decides=sha twins=census
 # MUTANT-MATRIX mutation-loose decides=phantom twins=parse
 # MUTANT-MATRIX mutation-heading-only decides=phantom twins=route
+# MUTANT-MATRIX mutation-shaless-unbound decides=shaless twins=sha
+# MUTANT-MATRIX mutation-shaless-absent decides=shaless twins=sha
+# MUTANT-MATRIX mutation-pending-applied decides=pending twins=sha
 # MUTANT-MATRIX-DYNAMIC score-mut-name why=score_route_mut() and score_leak_mut() pass their first argument "$1" to mutant_killed; each call (mutation-9-close, mutation-memo-export, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-ledger/run.sh --matrix
 set -uo pipefail
@@ -1194,7 +1197,103 @@ arm_declvalid() { local r d rcv; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/dv.XXX
 arm_sha() { local r o n; r="$(mk_root "$1")"; o="$(bash "$r/scripts/backlog-rotate.sh" "$LS" --check 2>&1)"
   n="$(grep -c "\[sha $GSHA resolves\]" <<<"$o")" || n=0
   [ "$n" -eq 4 ] && ! grep -q "DOES NOT RESOLVE" <<<"$o"; }
-ARMS="parse route stdin memo cm phantom checkempty applymarker quoted census declvalid sha"
+# SHA-LESS LANDED LINES ARE BOUND TO A RELEASE (BL-874). The ledger's tree is a git repository whose
+# VERSION is 0.995.0 and whose CHANGELOG.md carries `## [0.995.0]` and `## [0.990.0]`. ACCEPT ledger:
+# a heading below VERSION, VERSION itself (a heading), and v0.1000.0 -- PENDING, greater than VERSION only when
+# compared field by field (a string compare puts it below 0.995.0 and refuses it). REFUSE ledger: v0.991.0,
+# below VERSION with no heading. The discriminating members are not first.
+GSL="$WORK/sl/repo"; mkdir -p "$GSL"
+git -C "$GSL" init -q .
+printf '0.995.0\n' > "$GSL/VERSION"
+printf '# Changelog\n\n## [0.995.0] - 2026-11-02\n\n## [0.990.0] - 2026-10-30\n' > "$GSL/CHANGELOG.md"
+sl_entry() { printf '## %s — closed\n\nbody\n\n**LANDED (v%s).** Done.\n\nverify: manual\n\n' "$1" "$2"; }
+{ printf '# Probe\n\n'; sl_entry BL-811 0.990.0; sl_entry BL-812 0.995.0; sl_entry BL-813 0.1000.0
+  printf '## BL-814 — live\n\nbody\n\nverify: manual\n'; } > "$GSL/acc.md"
+{ printf '# Probe\n\n'; sl_entry BL-811 0.990.0; sl_entry BL-815 0.991.0
+  printf '## BL-814 — live\n\nbody\n\nverify: manual\n'; } > "$GSL/ref.md"
+arm_shaless() { local r o rcv; r="$(mk_root "$1")"
+  o="$(bash "$r/scripts/backlog-rotate.sh" "$GSL/acc.md" --check 2>&1)"; rcv=$?
+  [ "$rcv" -eq 0 ] && grep -qF '[sha-less, v0.990.0]' <<<"$o" && grep -qF '[sha-less, v0.995.0]' <<<"$o" \
+    && grep -qF 'BL-813  PENDING, not moved: v0.1000.0 is not yet released (VERSION 0.995.0)' <<<"$o" || return 1
+  o="$(bash "$r/scripts/backlog-rotate.sh" "$GSL/ref.md" --check 2>&1)"; rcv=$?
+  [ "$rcv" -eq 2 ] && grep -qF 'BL-815  sha-less LANDED v0.991.0 names no release in CHANGELOG.md or VERSION.' <<<"$o"; }
+# MUTANTS, each a copy guarded by `cmp -s`: the CHANGELOG/VERSION binding dropped (every sha-less line
+# accepted, so v0.991.0 rotates), and the sha-less form dropped (the line reads `sha ABSENT` and is refused).
+SL_NEEDLE='  elif [ -z "$SHA" ] && [ -n "$SLV" ]; then SHAV="$(shaless_verdict "$SLV")"'
+SLN="$(grep -cxF -- "$SL_NEEDLE" "$RT")" || SLN=0
+if [ "$SLN" -ne 1 ]; then bad "mutation-shaless" "the sha-less dispatch line appears $SLN times in the rotator; the mutations need exactly one"
+else
+  sl_mut() { # sl_mut <id> <replacement line, empty = delete>
+    SL_NEEDLE="$SL_NEEDLE" SL_REPL="$2" awk 'index($0, ENVIRON["SL_NEEDLE"]) == 1 && length($0) == length(ENVIRON["SL_NEEDLE"]) { if (ENVIRON["SL_REPL"] != "") print ENVIRON["SL_REPL"]; next } { print }' "$RT" > "$WORK/sl/$1.sh"
+    if cmp -s "$RT" "$WORK/sl/$1.sh"; then bad "$1" "DID NOT APPLY: the mutation matched nothing"; return 1; fi
+    keep_mut "$1" rt "$WORK/sl/$1.sh"
+  }
+  if arm_shaless -; then ok "shaless-bound" "sha-less LANDED lines: a CHANGELOG heading and VERSION accept, v0.1000.0 is PENDING, v0.991.0 is refused"; B_shaless=1
+  else bad "shaless-bound" "the unmutated rotator did not give the three sha-less outcomes"; fi
+  if sl_mut mutation-shaless-unbound '  elif [ -z "$SHA" ] && [ -n "$SLV" ]; then SHAV="sha-less, v$SLV"'; then
+    if arm_shaless mutation-shaless-unbound; then bad "mutation-shaless-unbound" "SURVIVED: with the binding dropped the arm stayed green"
+    else mutant_killed "${B_shaless:-0}" mutation-shaless-unbound "mutation-shaless-unbound: killed: without the CHANGELOG/VERSION binding a version that names no release rotates"; fi
+  fi
+  if sl_mut mutation-shaless-absent ''; then
+    if arm_shaless mutation-shaless-absent; then bad "mutation-shaless-absent" "SURVIVED: with the sha-less form dropped the arm stayed green"
+    else mutant_killed "${B_shaless:-0}" mutation-shaless-absent "mutation-shaless-absent: killed: without the sha-less form every release line reads sha ABSENT and is refused"; fi
+  fi
+fi
+
+# A PENDING SHA-LESS LINE IS KEPT, NEVER ARCHIVED (BL-874). Each run builds its own git tree (VERSION
+# 0.995.0, CHANGELOG `## [0.995.0]`), because cell (b) moves VERSION. (a) BL-821 at v9.9.9 alone under
+# --check --apply: rc 0, the PENDING line printed, the entry kept, a seeded one-entry archive still at 1.
+# (c) BL-821 beside BL-822 (v0.995.0, VERSION with a heading) in one ledger: only BL-822 moves. (b) VERSION
+# bumped to 9.9.9 and `## [9.9.9]` added: the next --apply on (a)'s ledger moves the held BL-821, archive 1 -> 2.
+pd_n() { local n; n="$(grep -c '^## BL-' "$1" 2>/dev/null)" || n=0; printf '%s' "$n"; }
+pd_live() { printf '## BL-823 — live\n\nbody\n\nverify: manual\n'; }
+arm_pending() { local r d o rcv; r="$(mk_root "$1")"; d="$(mktemp -d "$AX/pd.XXXXXX")"
+  git -C "$d" init -q . || return 1
+  mkdir "$d/a" "$d/c"
+  printf '0.995.0\n' > "$d/VERSION"
+  printf '# Changelog\n\n## [0.995.0] - 2026-11-02\n' > "$d/CHANGELOG.md"
+  printf '# Archive\n\n## BL-800 — old\n\nbody\n' > "$d/a/backlog.archive.md"
+  { printf '# Probe\n\n'; sl_entry BL-821 9.9.9; pd_live; } > "$d/a/backlog.md"
+  o="$(bash "$r/scripts/backlog-rotate.sh" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
+  [ "$rcv" -eq 0 ] && grep -qF 'BL-821  PENDING, not moved: v9.9.9 is not yet released (VERSION 0.995.0)' <<<"$o" \
+    && grep -q '^## BL-821 ' "$d/a/backlog.md" && [ "$(pd_n "$d/a/backlog.archive.md")" = 1 ] || return 1
+  { printf '# Probe\n\n'; sl_entry BL-821 9.9.9; sl_entry BL-822 0.995.0; pd_live; } > "$d/c/backlog.md"
+  o="$(bash "$r/scripts/backlog-rotate.sh" "$d/c/backlog.md" --check --apply 2>&1)"; rcv=$?
+  [ "$rcv" -eq 0 ] && grep -q '^## BL-821 ' "$d/c/backlog.md" && ! grep -q '^## BL-822 ' "$d/c/backlog.md" \
+    && grep -q '^## BL-822 ' "$d/c/backlog.archive.md" && [ "$(pd_n "$d/c/backlog.archive.md")" = 1 ] || return 1
+  printf '9.9.9\n' > "$d/VERSION"
+  printf '# Changelog\n\n## [9.9.9] - 2026-11-03\n\n## [0.995.0] - 2026-11-02\n' > "$d/CHANGELOG.md"
+  o="$(bash "$r/scripts/backlog-rotate.sh" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
+  [ "$rcv" -eq 0 ] && ! grep -q '^## BL-821 ' "$d/a/backlog.md" && grep -q '^## BL-821 ' "$d/a/backlog.archive.md" \
+    && [ "$(pd_n "$d/a/backlog.archive.md")" = 2 ]; }
+# MUTANT mutation-pending-applied: --apply takes PENDING lines. Both layers reverted on one copy: the split
+# still REPORTS the entry PENDING but moves it, and the release binding accepts any version it reported, so
+# the v9.9.9 entry is archived with rc 0 -- the tip adversary's seeded defect. Killed by cell (a).
+PD_ND="$WORK/sl/pd.needles"
+cat > "$PD_ND" <<'EON'
+  if (closed && pend) { print label "\t" pendv > PENDING; closed = 0 }
+  if (closed && pend) print label "\t" pendv > PENDING
+     && awk -v h="## [$1]" 'index($0, h) == 1 { f = 1; exit } END { exit !f }' "$LEDGER_TOP/CHANGELOG.md"; then
+     && { awk -v h="## [$1]" 'index($0, h) == 1 { f = 1; exit } END { exit !f }' "$LEDGER_TOP/CHANGELOG.md" || grep -qF "$1" "$AWKF.pending"; }; then
+EON
+pd_u1="$(grep -cxF -- "$(sed -n 1p "$PD_ND")" "$RT")" || pd_u1=0
+pd_u2="$(grep -cxF -- "$(sed -n 3p "$PD_ND")" "$RT")" || pd_u2=0
+if arm_pending -; then ok "pending-kept" "a v9.9.9 sha-less line is kept and reported PENDING under --check --apply; beside it a VERSION line moves alone; once VERSION and a heading reach v9.9.9 it moves"; B_pending=1
+else bad "pending-kept" "the unmutated rotator did not keep the PENDING entry, move the released one, and move the held one once VERSION reached it"; fi
+if [ "$pd_u1" -ne 1 ] || [ "$pd_u2" -ne 1 ]; then bad "mutation-pending-applied" "DID NOT APPLY: the two anchors appear $pd_u1 and $pd_u2 times in the rotator; each must appear once"
+else
+  awk -v NF0="$PD_ND" 'BEGIN { while ((getline l < NF0) > 0) nd[++k] = l }
+    $0 == nd[1] { print nd[2]; c++; next } $0 == nd[3] { print nd[4]; c++; next } { print }
+    END { if (c != 2) exit 1 }' "$RT" > "$WORK/sl/mutation-pending-applied.sh"; pd_rc=$?
+  if [ "$pd_rc" -ne 0 ] || cmp -s "$RT" "$WORK/sl/mutation-pending-applied.sh"; then bad "mutation-pending-applied" "DID NOT APPLY: the two-layer mutation did not replace both anchors"
+  else
+    keep_mut mutation-pending-applied rt "$WORK/sl/mutation-pending-applied.sh"
+    if arm_pending mutation-pending-applied; then bad "mutation-pending-applied" "SURVIVED: with --apply taking PENDING lines the arm stayed green"
+    else mutant_killed "${B_pending:-0}" mutation-pending-applied "mutation-pending-applied: killed: an --apply that takes a PENDING line archives the unreleased v9.9.9 entry"; fi
+  fi
+fi
+
+ARMS="parse route stdin memo cm phantom checkempty applymarker quoted census declvalid sha shaless pending"
 arm_run() { "arm_$1" "$2"; }   # arm_run <arm> <mutant id or -> -> 0 green, non-zero tripped
 twin_of() {
   case "$1" in
@@ -1216,6 +1315,9 @@ twin_of() {
     mutation-sha-greedy) echo census ;;
     mutation-loose) echo parse ;;
     mutation-heading-only) echo route ;;
+    mutation-shaless-unbound) echo sha ;;
+    mutation-shaless-absent) echo sha ;;
+    mutation-pending-applied) echo sha ;;
   esac
 }
 decider_of() {
@@ -1238,13 +1340,16 @@ decider_of() {
     mutation-sha-greedy) echo sha ;;
     mutation-loose) echo phantom ;;
     mutation-heading-only) echo phantom ;;
+    mutation-shaless-unbound) echo shaless ;;
+    mutation-shaless-absent) echo shaless ;;
+    mutation-pending-applied) echo pending ;;
   esac
 }
 # The unmutated control: every arm is GREEN on the real components. A harness that tripped here would
 # make every kill below the harness failing and not the mutation.
 ctl_bad=""
 for a in $ARMS; do arm_run "$a" - || ctl_bad="$ctl_bad $a"; done
-if [ -z "$ctl_bad" ]; then ok "mutant-control" "the UNMUTATED copy of every component is green on all 12 arms, so the roots below run the shipped behaviour"; B_matrix_ctl=1
+if [ -z "$ctl_bad" ]; then ok "mutant-control" "the UNMUTATED copy of every component is green on all 14 arms, so the roots below run the shipped behaviour"; B_matrix_ctl=1
 else bad "mutant-control" "the unmutated roots trip these arms:$ctl_bad -- every twin and matrix verdict below is void"; fi
 # PER PUSH: each mutant's deciding arm TRIPS and its twin stays GREEN.
 for m in $KM_IDS; do
@@ -1262,7 +1367,7 @@ if [ "$MATRIX" = 1 ]; then
     done
   done
   n_km="$(printf '%s\n' $KM_IDS | grep -c .)"
-  if [ "$n_km" -eq 18 ] && [ "$MROWS" -eq 216 ]; then ok "[MX]" "the matrix run measured $MROWS cells for $n_km mutants"; else bad "[MX]" "matrix rows=$MROWS for $n_km mutants, 216 for 18 expected"; fi
+  if [ "$n_km" -eq 21 ] && [ "$MROWS" -eq 294 ]; then ok "[MX]" "the matrix run measured $MROWS cells for $n_km mutants"; else bad "[MX]" "matrix rows=$MROWS for $n_km mutants, 294 for 21 expected"; fi
 else
   if [ "$MROWS" -eq 0 ]; then ok "[MX]" "a plain run executed no matrix-only cell (rows=0)"; else bad "[MX]" "a plain run executed $MROWS matrix rows"; fi
 fi

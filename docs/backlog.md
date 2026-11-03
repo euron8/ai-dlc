@@ -1541,16 +1541,6 @@ Progress (batch b247): the mandatory `AI_DLC_PRESUITE_SKIP=1` is removed from CL
 
 verify: manual
 
-## BL-874 — LANDED lines are written before the squash and name an unreachable pre-squash sha
-
-**DEFECT.** It happened 6 times in batch b245 (BL-685, BL-679, BL-851, BL-867, BL-866, BL-849), each re-anchored by hand at the close. Owed: re-anchor mechanically in the rotator or the close, and assert every `LANDED (..., verified <sha>)` sha is an ancestor of origin/main, with a pre-squash sha as the negative control. Provenance: batch b245 close filing.
-
-**Progress (batch b248; the entry stays OPEN, `verify: manual` unchanged, no LANDED line).** Measured at 47102ad20, with `origin/main` also at 47102ad20, over the 817 lines of `docs/backlog.archive.md` that the anchored `**LANDED (vX, verified <sha>).**` form of `scripts/backlog-rotate.sh:533` extracts (820 lines carry the marker; an inner `PARTIAL (..., verified <sha>)` is never taken): 696 shas are ancestors of `origin/main`, 117 resolve to commits that are not ancestors, and 4 do not resolve, so 121 are not reachable. The controls ran in the same invocation: `git merge-base --is-ancestor HEAD~3 origin/main` exited 0 and `cfcf0b5f8` exited 1. The contract adversary read 697 / 116 / 4 (120 not reachable) over the same 817 lines, and the lead's earlier hand read 117 non-ancestors plus 4 unresolvable; the one-sha difference between 696/117 and 697/116 is unreconciled, and the 117 and the 4 agree with the earlier hand. An archive-wide ancestry arm in `validate-backlog-receipts.sh` is therefore unshippable without scoping: its false-positive set equals that count (121 here, 120 on the adversary's reading), and on a squash-only main every release's pre-squash LANDED sha adds to it. BL-902 re-anchors six of these lines in this release through a standalone driver.
-
-**Progress (batch b248 close; the entry stays OPEN).** Batch b248's practice was sha-less: 0.991.0 to 0.994.0 squashed LANDED lines of the form `**LANDED (v<version>).**` (`git show <squash> -- docs/backlog.archive.md`), and only lines naming a sha already on `origin/main` carried `, verified <sha>`. `scripts/backlog-rotate.sh:535` reads a sha-less line as `sha ABSENT` and refuses it at :546, so those entries were moved by hand (0.991.0's message says so). Owner rule 6 of the plan's owner-rules block now states that practice. The mechanical re-anchor or a rotator that accepts a sha-less line is still owed.
-
-verify: manual
-
 ## BL-878 — every fixture is converted to in-process unit cells, and no session de-scopes a conversion
 
 **DEFECT.** Operator ruling, 2026-10-30: "those entries would not allow for future sessions to descope the conversions. We would move forward on everything, full stop." Every fixture under `core/fixtures/*/run.sh` is converted. No fixture is dropped, deferred or judged not worth converting; the scope changes only by an operator ruling.
@@ -1600,57 +1590,6 @@ Owed here: the validators the pre-suite runs are made faster themselves, whether
 **Progress (BL-880, the receipts validator's keyed probe replay).** Operator ruling, 2026-10-31: "Allow the keyed replay". For this keyed form the ruling reverses this entry's own sentence "a skip switch is an opt-out". `scripts/validate-backlog-receipts.sh` replays R1 and R7/R8, and only those, when its caller exports `BR_PROBE_RECORD`, and only from a record whose content equals the run's manifest. The manifest covers the validator's bytes, reconcile/lib.sh and scripts/backlog-receipt-lib.sh, the bash and git versions, the tool paths, git's global and system config, the euid, the umask and JOBS. The parent writes the record after R7/R8 return green. R0, E0 and R9 always run. There is no default store, and the pre-push gate never sets one: `.githooks/pre-push` runs `unset BR_PROBE_RECORD` at top level before its first step, so an exported store never reaches the "backlog receipts" step. The validator itself does not unset it. Backlog-real-ledger arm p3 requires that unset at top level above the first `step`/`pk_step` call, and requires 0 setting sites over both hooks and the 32 scripts they name. Each caller's own `$TMP` is its store. A replay also leaves an inherited `BR_PROBE_COUNTER` alone, because `vbr_sec_env` unsets it outside worker mode, and the key is hashed with `git hash-object --no-filters`. Counted starts by the owner with the hook's counter, all rc=0, before at 0e190a93c (0.983.0) and after on the release tip (v0.985.0): backlog-real-ledger 462 to 248 (validator 167 to 91); backlog-receipt-binding 6937 to 5416 (validator 2532 to 2067), with the nine pr-m-* mutants and the probe-record cells counted in; backlog-size-ceiling 61, unchanged (not a caller). The pre-push step's own run is unchanged, because it fires every probe. The enforcement-map-sites instance below is open.
 
 **Second instance: one validator arm per cell instead of the whole validator.** enforcement-map-sites still runs `scripts/validate-enforcement-map.sh` 139 times per push. Each cell decides one invariant, so `--arms <id>` would run that invariant's arm alone. This is step 6 of `docs/plans/pre-push-wall-clock.md`; `BL-274` there limits it, because an indented arm id runs its whole enclosing unit.
-
-verify: manual
-
-## BL-875 — readset-skip's slot-world `stub/logstream stream` processes outlive their run
-
-**NOTE.** Observed at the batch b245 close: `stub/logstream stream` processes from readset-skip's slot worlds survive their run. Not yet measured: count and cause. Owed: a measured census and a teardown. The related pre-push pool TERM defect is filed as BL-881. Provenance: batch b245 close filing.
-
-**Progress (batch b248; the entry stays PARTIAL).** Delivered, claim by claim, in `core/fixtures/readset-skip/run.sh` unless a file is named. (1) Processes that outlive a SIGKILLed world: `slot-world.sh` appends every process group it starts, each deriver A and the live-pid control, to `SW_GROUPS` (`slot-world.sh:57-61`, `:228`, `:271`), and the caller's `slot_reap` (`:7752`) kills each recorded group and then its leader. The `slot-kill` arm (`slot_kill_drive` at `:7841`, verdict at `:7870-7874`) SIGKILLs a world mid-hold, so its EXIT trap never runs, and reads 0 surviving groups and the live control dead (`1|2|0|0`). (2) An unrecorded live group: mutant `liveunrec` (`:7885-7894`) deletes the live control's record and reads `1|1|0|1`, and is killed; the live control is the census's own check that a group the record misses is still seen. (3) The caller's reap: mutant `reapdrop` (`:7875-7883`) deletes the kill from `slot_reap` and reads `1|2|2|1`, and is killed. The hook's own teardown is held too: the `slot-shellkill` arm (`:7896-7913`) tears the world down with the pre-push hook's own `pool_kill_tree` and `pool_tree`, extracted from the hook at run time, with no `slot_reap` first. It reads `1|2|0|0`, and mutant `pktnowalk` (`:7914-7930`, the tree walk disabled) reads `1|2|2|1` and is killed. The boundary: deleting `pool_kill_tree`'s group-kill line (`.githooks/pre-push:2889`) does not move this world, because every member is still parented inside the world's tree when the kill lands (`:7916-7920`). The reparented-orphan shape that line guards is held by prepush-pool-depth's `td-no-pidgrp` mutant, which deletes exactly that line (`core/fixtures/prepush-pool-depth/run.sh:1408-1409`), and by the `td-no-memgrp` and `td-no-mem` mutants (`:1410-1414`) for the remembered-group paths. (4) The `stub/logstream` stream process is a member of deriver A's recorded group: every deriver A starts in a group of its own that holds the deriver, its stub stream and that stream's `tail -f` (`core/fixtures/readset-skip/slot-world.sh:46-51`). Every member of a recorded group is judged by the survivor census, and `pre` is 1 only when `a-stream-up` was recorded before the kill (`core/fixtures/readset-skip/run.sh:7852`), so a killed world whose stream survived reads non-zero. Not delivered, which is why the entry stays PARTIAL: (5) the measured count of the original survivors and their cause on the original defect, which is not recorded anywhere, and the residual at `slot-world.sh:62`: between a launch's fork and the append of its pid, a KILL leaves a group nobody recorded.
-
-verify: manual
-
-## BL-896 — the gate-adjudication predicate site cannot observe a change to how waivers are read
-
-**DEFECT.** Tier: gate, false clean in `core/skills/ai-dlc-update/reconcile/predicate-differential.sh`. Verified at dc64ebe04.
-
-`core/scripts/validate-gate-adjudication.sh:776-780` reads `$GA_MAP_ROOT/docs/escalations/pending.md` in `--series` mode whenever a series carries a `"FAIL_WAIVED"` verdict. Under the predicate differential's pinned probe root neither side has that file, so both sides receive an identical empty input, which parses as agreement. A release that changes how waivers are read is therefore unobservable to the gate-adjudication site, and the site reads `PREDICATE-STABLE` where the consumer's stored verdicts would move. `core/skills/ai-dlc-update/reconcile/predicate-sites.md` states this in the corrected sentence beginning "Its escalations default (`$GA_MAP_ROOT/docs/escalations/pending.md`) IS read in `--series` mode".
-
-Measured reach, read-only with `git -C /Users/n8/git/graph` at HEAD: 4 of the 17 tracked `s320` gate-adjudication `verdict.json` files carry `FAIL_WAIVED`. Control: a token no file carries (`NO_SUCH_TOKEN_Q9Z`) matches 0 files in the same tree.
-
-Owed, not built: pass the consumer's escalations file by path to both sides, the way `AI_DLC_KNOWN_SKILLS_EXT` is passed.
-
-verify: manual
-
-## BL-904 — `record-only-diff.sh story-base` accepts a base where the story file was `git rm`'d with its row kept
-
-**DEFECT.** Filed from the b248 tip adversary on BL-895 (attack A4). If the story file is `git rm`'d with its view row kept and then re-added, a range containing a code change passes the record-only exemption. The gate-1 base property fails: `story-base` reads a story that is absent at the base as "created after the base", which is a gate-1 base by design. BL-895's binding holds, because the story is the one the view lists, under the review's index.
-
-Reproduction: `hand-tadv2/a4.sh` A4, a mktemp repo.
-- LX: story-1-1-x.md at `status: review`, listed as story-1-1.
-- LCODE: a code change, `tests/test_a.py`.
-- LDEL: a `git rm` of x, with its row kept.
-- FX: x re-added at review.
-
-Driven as `merge-review-shards.sh --check-serial <1-1-qa-validation.md> --gate qa --story <x> --range <B> FX` with `Canonical run: none, <reason>`:
-- base LX: rc=2, "is not the story's gate-1 base (the story at <LX> is already status: review)";
-- base LCODE: rc=2, the same refusal;
-- base LDEL: rc=0, SERIAL-OK. The LCODE..FX code change is outside LDEL..FX, so the range reads record-only.
-
-The da5b8bf49 engine has it too. It was re-run from a `git archive da5b8bf49` extract: LX rc=2, LCODE rc=2, LDEL rc=0.
-
-Owed, not built: a story absent at <base> is a gate-1 base only if the story was never a blob at an ancestor of <base>, or only if the view's row for it at <base> is absent too. Receipt idea: a tracked driver that builds the A4 world in a mktemp repo, drives `record-only-diff.sh story-base -C <repo> <x> LDEL FX`, and expects a refusal, with base LX as the same-invocation control.
-
-verify: manual
-
-## BL-905 — a canonical-run claim is not bound to an executed run
-
-**DEFECT.** Filed by the b248 lead from tip adversary 5a on BL-895. The merge and `--check-serial` read the execution owner's `Canonical run:` and `Canonical result:` lines as text. `record-only-diff.sh` holds them to a grammar: an invocation the conventions allow, no filter, and a result line with counts. Nothing ties either line to a run that happened. So a fabricated pair such as ``Canonical run: `pytest -q` `` with `Canonical result: 9 passed` passes a PASS through the gate when no run took place.
-
-Measured on main e311bf7e4. In the fixture's REPO_B world (six text files, with 0 paths matching `test|pytest|conftest` at the frozen sha), four PASS QA shards whose cross-1 carries exactly that pair merge with rc=0, `MERGED: 1-qa-validation.md verdict=PASS parts=3 findings=6 sha=<the world's frozen sha>` (the sha is the fixture world's own commit, so it differs on each run). Same-invocation control: the same world with the two lines removed is REFUSED with rc=2, "carries no 'Canonical run:' line". The driver is `hand-u1l2/bl905.sh`, run over a `git archive` extraction of e311bf7e4, a scratchpad driver that is not tracked.
-
-Not fixed. No receipt is written, because one that passed today would have to accept a fabricated pair, so any receipt that can fail is the fix itself. Its receipt would drive the merge over that REPO_B world twice. Once with the fabricated pair and no run artifact, which must refuse. Once with the same pair plus whatever binding the fix chooses, which must merge. Possible bindings are a run capture committed at the frozen sha whose counts match, or a ledger row the runner writes.
 
 verify: manual
 
