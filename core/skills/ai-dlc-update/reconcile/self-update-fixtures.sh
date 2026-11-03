@@ -789,6 +789,21 @@ if [ -n "$su_top" ] && [ "$su_top" = "$su_cons_p" ] \
   su_fx_dirs="$(sed -n -E "s#^${FX_ROOT}/([^/]+)/.*#\\1#p" "$SU_T/fx-raw" | sort -u)"
 fi
 su_slice_bad=""
+# A C-QUOTED PATH IS UNCONFIRMED. git quotes a name carrying `"`, `\` or a control character even under
+# quotePath=false, so its listing line opens with `"`: the directory extraction above cannot read it and
+# the UNDIFFED-OVERWRITE arm below never matches it, so without this it is skipped, which acquits it. Each
+# such line refuses on its own. A shell `case` over the staged listing gates the scan, so the common
+# listing (no quoted line) forks nothing here.
+case "${su_fx_raw:-}" in
+  '"'*|*'
+"'*)
+    while IFS= read -r _q_f; do
+      case "$_q_f" in
+        '"'*) su_slice_bad="$su_slice_bad
+  $_q_f — UNCONFIRMED: git listed this path C-quoted, so neither the directory checks nor the UNDIFFED-OVERWRITE arm can ask it and whether the write overwrote a consumer edit is unknown" ;;
+      esac
+    done < "$SU_T/fx-raw" ;;
+esac
 su_stage fx-dirs "$su_fx_dirs" "the self-update commit's fixture directories"
 while IFS= read -r d; do
   [ -n "$d" ] || continue
@@ -823,13 +838,112 @@ while IFS= read -r d; do
       fi
     fi
   fi
+  # --- UNDIFFED-OVERWRITE: a consumer edit the whole-directory write replaced with no row to hold it ---
+  # Step 2 writes each covered directory WHOLE from theirs and asks preclassify.sh's bucket whether a
+  # file is a consumer edit; preclassify buckets only paths in the base..theirs diff, so a file in a
+  # written directory that upstream did NOT change has no bucket and a consumer edit to it is
+  # overwritten silently. Measured on a reference-consumer pull: a repaired
+  # `seed.sh` (consumer blob b7a7becd, base blob 05f27ddc) beside a `run.sh` that was the only file
+  # upstream changed. So every FILE the commit changed under this directory is asked here, in two shapes:
+  #   undiffed  the dist blob at BASE equals the one at THEIRS, and the consumer's copy at HEAD^ is
+  #             neither that blob nor the blob at its own `skill_commit`;
+  #   absent    the core path is absent at BASE and at THEIRS, and the consumer held a copy at HEAD^
+  #             that the commit then changed or deleted — a consumer-added file the write took.
+  # A path present at exactly one ref is DIFFED, which is preclassify's question and not this arm's.
+  # The consumer read is FIRST: a file the consumer did not hold before the write cannot be either
+  # shape, so no dist read is paid for it, and the unreadable-dist worlds of the arms above stay one
+  # finding each.
+  #
+  # `skill_commit` IS READ FROM HEAD^'s STAMP, not the working tree's: step 2 advances the live stamp
+  # to theirs before this runs. Read at THAT ref, a consumer copy equal to upstream's bytes at its own
+  # earlier skill_commit would no longer be acquitted, so the arm would ADD refusals (UD3 goes red). The
+  # read mirrors preclassify.sh's: a skill_commit equal to BASE adds nothing; one that does not
+  # resolve in $DIST drops the acquitting conjunct, which can only add refusals (the safe direction);
+  # a rev-parse that did not answer 0 or 1 is UNCONFIRMED. An absent or unreadable stamp leaves the
+  # BASE comparison alone. It is read once, lazily, the first time a file reaches that comparison.
+  #
+  # EVERY READ THAT CANNOT BE CONFIRMED IS UNCONFIRMED, never an acquittal: memo_rev_parse answers 125
+  # where git said no and the absence could not be confirmed, and that is a refusal like any other.
+  while IFS= read -r _ud_f; do
+    case "$_ud_f" in "$FX_ROOT/$d/"*) ;; *) continue ;; esac
+    _ud_core="core/fixtures/${_ud_f#"$FX_ROOT/"}"
+    _ud_crc=0
+    _ud_c="$(memo_rev_parse "$CONSUMER" "HEAD^:${_ud_f}")" || _ud_crc=$?
+    [ "$_ud_crc" -eq 1 ] && continue
+    if [ "$_ud_crc" -ne 0 ] || [ -z "$_ud_c" ]; then
+      su_slice_bad="$su_slice_bad
+  $d — UNCONFIRMED: the consumer's copy of $_ud_f before the write (HEAD^) could not be read (exit $_ud_crc)"
+      continue
+    fi
+    _ud_brc=0; _ud_b="$(memo_rev_parse "$DIST" "${BASE}:${_ud_core}")" || _ud_brc=$?
+    _ud_trc=0; _ud_t="$(memo_rev_parse "$DIST" "${THEIRS}:${_ud_core}")" || _ud_trc=$?
+    if [ "$_ud_brc" -gt 1 ] || [ "$_ud_trc" -gt 1 ] \
+       || { [ "$_ud_brc" -eq 0 ] && [ -z "$_ud_b" ]; } || { [ "$_ud_trc" -eq 0 ] && [ -z "$_ud_t" ]; }; then
+      su_slice_bad="$su_slice_bad
+  $d — UNCONFIRMED: $_ud_core could not be confirmed present or absent at ${BASE} (exit $_ud_brc) and ${THEIRS} (exit $_ud_trc), so whether the write overwrote a consumer edit is unknown"
+      continue
+    fi
+    if [ "$_ud_brc" -eq 0 ] && [ "$_ud_trc" -eq 0 ] && [ "$_ud_b" = "$_ud_t" ]; then
+      [ "$_ud_c" != "$_ud_b" ] || continue
+      _ud_why="upstream left it unchanged (${BASE} and ${THEIRS} both hold blob $_ud_b) and the consumer held blob $_ud_c before the write"
+    elif [ "$_ud_brc" -eq 1 ] && [ "$_ud_trc" -eq 1 ]; then
+      _ud_why="it is absent at both ${BASE} and ${THEIRS}, so the consumer ADDED it (blob $_ud_c before the write) and the write changed or deleted it"
+    else
+      continue
+    fi
+    if [ -z "${_ud_sk_state:-}" ]; then
+      _ud_sk_state=none; _ud_sk=""
+      _ud_stamp="$(git -C "$CONSUMER" cat-file -p "HEAD^:.claude/.ai-dlc-version" 2>/dev/null)" || _ud_stamp=""
+      _ud_sk="$(printf '%s\n' "$_ud_stamp" | sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)"
+      if [ -n "$_ud_sk" ]; then
+        _ud_skrc=0
+        _ud_skr="$(git -C "$DIST" rev-parse --verify --quiet "${_ud_sk}^{commit}" 2>/dev/null)" || _ud_skrc=$?
+        if [ "$_ud_skrc" -eq 0 ] && [ -n "$_ud_skr" ]; then
+          [ "$_ud_skr" = "$gr_base" ] || { _ud_sk_state=ok; _ud_sk="$_ud_skr"; }
+        elif [ "$_ud_skrc" -ne 1 ]; then
+          _ud_sk_state=bad
+        fi
+      fi
+    fi
+    _ud_skb=""
+    if [ "$_ud_sk_state" = bad ]; then
+      su_slice_bad="$su_slice_bad
+  $d — UNCONFIRMED: the skill_commit '${_ud_sk}' in HEAD^'s .claude/.ai-dlc-version could not be resolved in $DIST, so whether $_ud_f holds upstream's bytes is unknown"
+      continue
+    elif [ "$_ud_sk_state" = ok ]; then
+      _ud_skrc=0; _ud_skb="$(memo_rev_parse "$DIST" "${_ud_sk}:${_ud_core}")" || _ud_skrc=$?
+      if [ "$_ud_skrc" -gt 1 ]; then
+        su_slice_bad="$su_slice_bad
+  $d — UNCONFIRMED: $_ud_core could not be confirmed present or absent at skill_commit ${_ud_sk} (exit $_ud_skrc)"
+        continue
+      fi
+    fi
+    [ -n "$_ud_skb" ] && [ "$_ud_c" = "$_ud_skb" ] && continue
+    su_slice_bad="$su_slice_bad
+  $d — UNDIFFED-OVERWRITE: $_ud_f — $_ud_why, with no preclassify row to hold the directory back"
+    if ! su_has_line "${_ud_dirs:-}" "$d"; then
+      _ud_dirs="${_ud_dirs:-}
+$d"
+      _ud_remedy="${_ud_remedy:-}
+    git checkout HEAD^ -- \"$FX_ROOT/$d\"
+    git rm -- <each path \`git diff --diff-filter=A --name-only HEAD^ HEAD -- \"$FX_ROOT/$d/\"\` lists>"
+    fi
+  done < "$SU_T/fx-raw"
 done < "$SU_T/fx-dirs"
 if [ -n "$su_slice_bad" ]; then
   printf '%s\n' "${su_slice_bad#
 }" | sed 's/^  /GATE-RECORD: SLICE /'
-  echo "self-update-fixtures: the self-update commit wrote fixture director(ies) no consumer can run:${su_slice_bad}" >&2
+  echo "self-update-fixtures: the self-update commit's fixture director(ies) cannot be pushed as written:${su_slice_bad}" >&2
   echo "  Step 2 writes the covering fixtures each directory WHOLE, and subtracts every path preclassify.sh" >&2
   echo "  buckets DIST-ONLY-SKIP. Nothing was pushed; the commit is local. Take the red-push disposition." >&2
+  if [ -n "${_ud_remedy:-}" ]; then
+    echo "  UNDIFFED-OVERWRITE: this supersedes the installed SKILL.md's GATE-RECORD-REFUSED disposition for this tag only; DEFER remains a safe fallback." >&2
+    echo "  Restore each named directory to the consumer's copy on this branch, so it is carried whole to the step-7" >&2
+    echo "  gated apply, then amend the self-update commit:${_ud_remedy}" >&2
+    echo "    git commit --amend --no-edit" >&2
+    echo "  and re-run the SAME self-update-push.sh invocation with a NEW <out> path (the record this run wrote stays" >&2
+    echo "  untracked and is carried to step 7). The gate record stays valid: restoring a fixture directory moves none of its inputs." >&2
+  fi
   exit 2
 fi
 

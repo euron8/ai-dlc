@@ -9,7 +9,7 @@
 #   G1-G23   the recorded gate verdict authorises the push, bound to the range and to the consumer
 #            tree, with the delivery-pull NOT-REQUIRED tolerance and the state it must not cover
 #   J1-J14   every verdict the gate can write has a SKILL.md bullet claiming its record
-#   W1-W7    SKILL.md step 2's fixture-write rule, the gate-write-commit-push order and the RED-PUSH
+#   W1-W9    SKILL.md step 2's fixture-write rule, the gate-write-commit-push order and the RED-PUSH
 #            paragraph, scored on the text an agent reads
 #   BH       given fixture names, the checker runs NO fixture (0 hermetic-run invocations), against a
 #            mutant that restores the deleted fixture run and runs 1
@@ -20,6 +20,11 @@
 #            ships with no run.sh (lib/, a seed-only one) is accepted, an unconfirmable run.sh read
 #            or directory read refused
 #   D12p     through the real self-update-push.sh, the push is judged by the checker the commit wrote
+#   UD1-UD9  a whole-directory write over a consumer edit no preclassify row covers: an undiffed repaired
+#            file and a consumer-added file the write took are refused UNDIFFED-OVERWRITE; a copy equal to
+#            base or to the HEAD^ skill_commit blob, and a diffed file, are not; an unreadable base read is
+#            UNCONFIRMED; the remedy lands through the real push wrapper; the DEFER path's apply.sh keeps the
+#            edit; a path git lists C-quoted is UNCONFIRMED
 #
 # The G arms drive the checker through `ck` (lib.sh), which passes exactly the four arguments the
 # checker takes and keeps its stdout as the log the arm reads. Arms written against the old runner
@@ -32,7 +37,7 @@
 # only the FIRST cell of its decides list plus its twin, each first cell killing it alone. Each mutant co-trips no
 # other arm, measured at authoring. The matrix is re-measured whenever an arm or a mutant is added or changed.
 # Cells: J mutants score the verdict cells DEFER/OK/UNDECIDED/STRANDED (1 = the reader reports that verdict
-# unclaimed), WM mutants score W1-W7 (1 = that cell moved off 1), BH-mut scores BH (1 = the 5-argument drive
+# unclaimed), WM mutants score W1-W9 (1 = that cell moved off 1), BH-mut scores BH (1 = the 5-argument drive
 # differs from the shipped refusal) and BH-ctl (1 = the 4-argument drive differs from the shipped verdict).
 # MUTANT-MATRIX J5 decides=DEFER,UNDECIDED twins=OK
 # MUTANT-MATRIX J6 decides=STRANDED twins=DEFER
@@ -48,6 +53,8 @@
 # MUTANT-MATRIX WM5 decides=W5 twins=W4
 # MUTANT-MATRIX WM6 decides=W6 twins=W5
 # MUTANT-MATRIX WM7 decides=W1,W7 twins=W2
+# MUTANT-MATRIX WM8 decides=W9 twins=W7
+# MUTANT-MATRIX WM9 decides=W8 twins=W7
 # MUTANT-MATRIX BH-mut decides=BH twins=BH-ctl
 # MUTANT-MATRIX d12-unfixed decides=D12s-lib,D12s-seed,D12u,D12d twins=D12x
 # MUTANT-MATRIX d12-literal-lib decides=D12s-seed,D12u,D12d twins=D12s-lib
@@ -57,11 +64,18 @@
 # MUTANT-MATRIX d12-unconfirmed-accepts decides=D12u twins=D12x
 # MUTANT-MATRIX d12-dir-unconfirmed-accepts decides=D12d twins=D12x
 # MUTANT-MATRIX push-checker-from-dist decides=D12p-mark twins=D12p-landed
+# MUTANT-MATRIX ud-no-skill-commit decides=UD3 twins=UD2
+# MUTANT-MATRIX ud-no-undiffed decides=UD7 twins=UD1
+# MUTANT-MATRIX ud-head-not-parent decides=UD1,UD8 twins=UD2
+# MUTANT-MATRIX ud-unreadable-acquits decides=UD5 twins=UD1
+# MUTANT-MATRIX ud-no-absent-shape decides=UD8 twins=UD1
+# MUTANT-MATRIX ud-quoted-skipped decides=UD9 twins=UD2
 # MUTANT-MATRIX-CONTROL J12 why=an alternate phrasing of the correct fix must be ACCEPTED, so the correct outcome is that the mutation survives
 # MUTANT-MATRIX-CONTROL J13 why=a second alternate phrasing of the correct fix must be ACCEPTED, so the correct outcome is that the mutation survives
 # MUTANT-MATRIX-DYNAMIC j_mut why=one helper scores J5 J7 J8 J9 J10 J11 and each name has its own row above
 # MUTANT-MATRIX-DYNAMIC w_mut why=one helper scores WM1-WM7 and each name has its own row above
 # MUTANT-MATRIX-DYNAMIC d12_kill why=one helper scores the seven d12- checker mutants and each name has its own row above
+# MUTANT-MATRIX-DYNAMIC ud_kill why=one helper scores the six ud- checker mutants and each name has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/self-update-fixture-log/run.sh --matrix
 set -uo pipefail
 
@@ -1138,7 +1152,7 @@ else
   esac
 fi
 
-# --- Parts W1-W7: STEP 2's FIXTURE-WRITE RULE, ORDER AND RED-PUSH DISPOSITION, IN THE SHIPPED SKILL.md ----
+# --- Parts W1-W9: STEP 2's FIXTURE-WRITE RULE, ORDER AND RED-PUSH DISPOSITION, IN THE SHIPPED SKILL.md ----
 # No program reads this prose, so the observable is the declared text, whitespace-collapsed (a
 # wrapped line cannot hide a phrase):
 #   W1 a fixture directory is ONE unit -- and the sentence sits INSIDE the fixture-write rule, between
@@ -1151,6 +1165,10 @@ fi
 #   W5 every OLD order ("GATE, THEN WRITE, THEN RUNNER") is ABSENT and the new one,
 #      "GATE, THEN WRITE, THEN COMMIT, THEN PUSH", is present
 #   W6 the HARD-STOPS clause is ABSENT and that sentence says DEFERS
+#   W8 a file with NO preclassify row is a consumer edit when it differs from the base AND skill_commit blobs or
+#      was added by the consumer, and holds its directory back (BL-907 subject 2, the rule)
+#   W9 the UNDIFFED-OVERWRITE remedy: restore from HEAD^, git rm the added files, amend, re-run the wrapper
+#      with a NEW <out> -- all four parts, in order, after the W8 rule (BL-907 subject 2, the remedy)
 #   W7 the W phrases are not ONLY inside an HTML comment (the text read is the file with every
 #      `<!-- ... -->` span deleted first, so W1-W6 are scored on what an agent actually reads)
 # W4, W5 and W6 are absence-shaped, so each sits beside a presence conjunct that only the fixed text
@@ -1171,8 +1189,8 @@ w_flat() {
 wmask() { # <vector> <cells> -> the vector with every cell not named replaced by x
   printf '%s' "$1" | awk -F- -v c=" $2 " '{ o = ""; for (i = 1; i <= NF; i++) { v = (index(c, " " i " ") ? $i : "x"); o = o (i > 1 ? "-" : "") v } print o }'
 }
-wsig() { # <skill.md> [cells] -> seven cells, x for a cell not asked for
-  local t w1=0 w2=0 w3=0 w4=0 w5=0 w6=0 w7=0
+wsig() { # <skill.md> [cells] -> nine cells, x for a cell not asked for
+  local t w1=0 w2=0 w3=0 w4=0 w5=0 w6=0 w7=0 w8=0 w9=0
   t="$(w_flat "$1")"
   case "$t" in *"A derived fixture is a consumer edit when"*"A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held back as a consumer edit, write NONE of that directory and carry ALL of it"*"DO NOT DERIVE THE VERDICT BY COMPARING REFS"*) w1=1 ;; esac
   case "$t" in *"if its set and yours disagree on a machinery path, stop"*"A fixture path is outside that comparison by construction"*) w2=1 ;; esac
@@ -1181,25 +1199,30 @@ wsig() { # <skill.md> [cells] -> seven cells, x for a cell not asked for
   case "$t" in *"THE ORDER IS GATE, THEN WRITE, THEN RUNNER"*) ;; *"THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE"*) w5=1 ;; esac
   case "$t" in *"HARD-STOPS"*) ;; *"a red derived fixture DEFERS the cycle"*) w6=1 ;; esac
   case "$(tr '\n' ' ' < "$1" | tr -s ' \t' '  ')" in *"A FIXTURE DIRECTORY IS ONE UNIT"*) [ "$w1" = 1 ] && w7=1 ;; esac
-  wmask "$(printf '%s-%s-%s-%s-%s-%s-%s' "$w1" "$w2" "$w3" "$w4" "$w5" "$w6" "$w7")" "${2:-1 2 3 4 5 6 7}"
+  # W8 the consumer-edit rule for a file with no preclassify row, ordered before its ONE-UNIT consequence (BL-907)
+  case "$t" in *'In a directory written whole, a file with NO `preclassify.sh` row'*'is a consumer edit when its consumer copy differs from the distribution blob at `base` AND at the stamp'*'or when the consumer added it (absent upstream at both refs)'*'holds its whole directory back under the ONE-UNIT rule below'*) w8=1 ;; esac
+  # W9 the UNDIFFED-OVERWRITE remedy, its four parts in order, after the W8 rule: restore from HEAD^, git rm the
+  # added files, amend, re-run the wrapper with a NEW <out>
+  case "$t" in *'In a directory written whole, a file with NO `preclassify.sh` row'*'An `UNDIFFED-OVERWRITE` refusal has a sanctioned remedy that lands the cycle'*'restore it from the parent commit with `git checkout HEAD^ -- <dir>`'*'`git rm` any file the commit added under it'*'run `git commit --amend --no-edit`'*'re-run the push wrapper with a NEW `<out>` path'*) w9=1 ;; esac
+  wmask "$(printf '%s-%s-%s-%s-%s-%s-%s-%s-%s' "$w1" "$w2" "$w3" "$w4" "$w5" "$w6" "$w7" "$w8" "$w9")" "${2:-1 2 3 4 5 6 7 8 9}"
 }
-W_OK="1-1-1-1-1-1-1"
+W_OK="1-1-1-1-1-1-1-1-1"
 W_SKILL="$(pick "$HERE/../../skills/ai-dlc-update/SKILL.md" \
                 "$HERE/../../../core/skills/ai-dlc-update/SKILL.md" \
                 "$HERE/../../../.claude/skills/ai-dlc-update/SKILL.md")"
 W_DIST=0; [ "$W_SKILL" = "$HERE/../../skills/ai-dlc-update/SKILL.md" ] && W_DIST=1
 if [ -z "$W_SKILL" ]; then
   # The J arms' convention: the fixture has landed and its subject has not. Never an `ok`.
-  echo "  SKIP  Parts W1-W7 -- ai-dlc-update/SKILL.md resolves in neither layout from $HERE, so these assert nothing here"
+  echo "  SKIP  Parts W1-W9 -- ai-dlc-update/SKILL.md resolves in neither layout from $HERE, so these assert nothing here"
 else
   w_got="$(wsig "$W_SKILL")"
   if [ "$w_got" = "$W_OK" ]; then
-    ok "Parts W1-W7: the shipped SKILL.md carries a fixture directory as one unit inside the fixture-write rule, scopes the gate-set stop to machinery, spells the RED-PUSH paragraph, requires no pre-commit fixture run, orders gate-write-commit-push, and keeps the HARD-STOPS clause out"
+    ok "Parts W1-W9: the shipped SKILL.md carries a fixture directory as one unit inside the fixture-write rule, scopes the gate-set stop to machinery, spells the RED-PUSH paragraph, requires no pre-commit fixture run, orders gate-write-commit-push, and keeps the HARD-STOPS clause out"
     B_w=1
-  elif [ "$W_DIST" = 0 ] && { [ "$w_got" = "1-1-0-0-0-1-1" ] || [ "$w_got" = "0-0-0-0-0-0-0" ]; }; then
-    echo "  SKIP  Parts W1-W7 -- the installed SKILL.md predates the gate-write-commit-push order ($w_got); they land with the pull that carries it"
+  elif [ "$W_DIST" = 0 ] && { [ "$w_got" = "1-1-0-0-0-1-1-0-0" ] || [ "$w_got" = "0-0-0-0-0-0-0-0-0" ] || [ "$w_got" = "1-1-1-1-1-1-1-0-0" ]; }; then
+    echo "  SKIP  Parts W1-W9 -- the installed SKILL.md predates the gate-write-commit-push order ($w_got); they land with the pull that carries it"
   else
-    bad "Parts W1-W7: vector $w_got, want $W_OK (cells: W1 dir-is-a-unit in place, W2 disagree-scoped, W3 red-push paragraph, W4 no pre-commit run, W5 old order gone, W6 HARD-STOPS gone, W7 not comment-only)"
+    bad "Parts W1-W9: vector $w_got, want $W_OK (cells: W1 dir-is-a-unit in place, W2 disagree-scoped, W3 red-push paragraph, W4 no pre-commit run, W5 old order gone, W6 HARD-STOPS gone, W7 not comment-only, W8 undiffed-file consumer-edit rule, W9 UNDIFFED-OVERWRITE remedy with its four parts)"
   fi
   # MUTANT TWINS: one change per cell on a COPY, and the vector must move in that cell only.
   W_CP="$(mktemp -d)"; sufl_tmp "$W_CP"
@@ -1209,7 +1232,7 @@ else
       || { bad "FIXTURE ERROR: W mutant $2 DID NOT APPLY (anchor not exactly once)"; return; }
     cmp -s "$W_SKILL" "$m" && { bad "FIXTURE ERROR: W mutant $2 produced an identical copy"; return; }
     if [ "$MATRIX" = 1 ]; then
-      cells="1 2 3 4 5 6 7"
+      cells="1 2 3 4 5 6 7 8 9"
       got="$(wsig "$m" "$cells")"; want="$5"
       mrow "$2" "$(printf '%s' "$got" | awk -F- '{ o = ""; for (i = 1; i <= NF; i++) o = o (i > 1 ? " " : "") "W" i ":" ($i == 1 ? 0 : 1); print o }')"
     else
@@ -1218,23 +1241,28 @@ else
     if [ "$got" = "$want" ]; then mutant_killed "$1" "$2" "W mutant $2 killed: vector $got"
     else bad "W mutant $2 scored $got, want $want"; fi
   }
+  W8_PARA="$(awk '/^     \*\*An `UNDIFFED-OVERWRITE` refusal has a sanctioned remedy/ {p=1} p {print} p && /safe fallback\.$/ {exit}' "$W_SKILL")"
   if [ "$W_DIST" = 1 ] || [ "$w_got" = "$W_OK" ]; then
-    w_mut "${B_w:-0}" WM1 'write NONE of that directory and carry ALL of it' 'write the upstream-only files of it' "0-1-1-1-1-1-0" "1 7" "2"
-    w_mut "${B_w:-0}" WM2 'disagree on a machinery path, stop' 'disagree, stop' "1-0-1-1-1-1-1" "2" "1"
-    w_mut "${B_w:-0}" WM3 'A RED PUSH LEAVES AN UNPUSHED LOCAL COMMIT, AND THAT IS RECOVERABLE.' 'A RED PUSH IS HANDLED LATER.' "1-1-0-1-1-1-1" "3" "4"
+    w_mut "${B_w:-0}" WM1 'write NONE of that directory and carry ALL of it' 'write the upstream-only files of it' "0-1-1-1-1-1-0-1-1" "1 7" "2"
+    w_mut "${B_w:-0}" WM2 'disagree on a machinery path, stop' 'disagree, stop' "1-0-1-1-1-1-1-1-1" "2" "1"
+    w_mut "${B_w:-0}" WM3 'A RED PUSH LEAVES AN UNPUSHED LOCAL COMMIT, AND THAT IS RECOVERABLE.' 'A RED PUSH IS HANDLED LATER.' "1-1-0-1-1-1-1-1-1" "3" "4"
     # WM4 puts the REQUIRED pre-commit run back beside the sentence that denies it: the absence half
     # must catch it.
     w_mut "${B_w:-0}" WM4 'There is
    no separate covering-fixture run before the commit.' 'There is
-   no separate covering-fixture run before the commit. Run the derived fixtures and require green BEFORE the commit and the push.' "1-1-1-0-1-1-1" "4" "5"
+   no separate covering-fixture run before the commit. Run the derived fixtures and require green BEFORE the commit and the push.' "1-1-1-0-1-1-1-1-1" "4" "5"
     # WM5 re-inserts the OLD order beside the new one: the absence half must catch it.
-    w_mut "${B_w:-0}" WM5 '   **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' '   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE.** **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' "1-1-1-1-0-1-1" "5" "4"
-    w_mut "${B_w:-0}" WM6 'a red derived fixture DEFERS the' 'a red derived fixture HARD-STOPS the' "1-1-1-1-1-0-1" "6" "5"
+    w_mut "${B_w:-0}" WM5 '   **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' '   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, THEN COMMIT, AND THE GATE RUNS ONCE.** **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.**' "1-1-1-1-0-1-1-1-1" "5" "4"
+    w_mut "${B_w:-0}" WM6 'a red derived fixture DEFERS the' 'a red derived fixture HARD-STOPS the' "1-1-1-1-1-0-1-1-1" "6" "5"
     # WM7 wraps the W1 sentence, in place, in a CLOSED HTML comment: the adversary's stub shape. The
     # phrase is still in the file, so only the comment-stripping read can tell it was never instruction.
     w_mut "${B_w:-0}" WM7 '     **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
      back as a consumer edit, write NONE of that directory and carry ALL of it**' '     <!-- **A FIXTURE DIRECTORY IS ONE UNIT: if ANY path under a derived fixture directory is held
-     back as a consumer edit, write NONE of that directory and carry ALL of it** -->' "0-1-1-1-1-1-0" "1 7" "2"
+     back as a consumer edit, write NONE of that directory and carry ALL of it** -->' "0-1-1-1-1-1-0-1-1" "1 7" "2"
+    # WM8 deletes the whole UNDIFFED-OVERWRITE remedy paragraph; WM9 turns the undiffed-file rule into a
+    # sentence that no longer makes such a file a consumer edit. Each flips its own cell only.
+    w_mut "${B_w:-0}" WM8 "$W8_PARA" '' "1-1-1-1-1-1-1-1-0" "9" "7"
+    w_mut "${B_w:-0}" WM9 'is a consumer edit when its consumer copy differs from the distribution blob at `base`' 'is never a consumer edit; the write may replace its consumer copy differing from the distribution blob at `base`' "1-1-1-1-1-1-1-0-1" "8" "7"
   fi
 fi
 
@@ -1561,6 +1589,244 @@ if [ -f "$PP_PUSH" ] && pp_build shipped "$PP_PUSH"; then
   fi
 else
   bad "FIXTURE ERROR: Part D12p's consumer did not build, or self-update-push.sh is not beside the checker ($PP_PUSH)"
+fi
+
+# --- Parts UD1-UD9: A WHOLE-DIRECTORY WRITE OVER A CONSUMER EDIT THE DIFF NEVER SAW --------------------
+# Step 2 writes each covered directory WHOLE from theirs and asks preclassify's bucket whether a file is
+# a consumer edit; a file upstream did not change has no bucket, so a consumer repair to it was
+# overwritten silently (the reference consumer's `artifact-path-conformance/seed.sh`, kept by hand). Its
+# own distribution, so no other part's range moves: `udx/seed.sh` is equal at base and theirs and holds a
+# third content at the intermediate SK; `udx/run.sh` moves base -> theirs. Each consumer is its own repo
+# whose installed commit carries a stamp naming its skill_commit, and whose self-update commit writes the
+# directory whole from theirs and advances the stamp.
+#   UD1  the consumer repaired seed.sh                          -> rc 2, ONE SLICE UNDIFFED-OVERWRITE naming seed.sh,
+#                                                                  the remedy's supersession sentence on stderr
+#   UD2  seed.sh equal to base, the write changes only its mode -> rc 0, no SLICE line
+#   UD3  seed.sh equal to the skill_commit (SK) blob            -> rc 0, no SLICE line
+#   UD4  the remedy through the real push wrapper: same <out> refuses `already exists`, a new <out> exits 0
+#        with GATE-RECORD: OK and the push lands
+#   UD5  UD1's consumer against a dist COPY whose base udx TREE is removed -> rc 2, UNCONFIRMED, no UNDIFFED line
+#   UD6  the DEFER path: apply.sh --carried-machinery-slice over the pre-write tree leaves seed.sh's bytes and
+#        writes run.sh at theirs
+#   UD7  the consumer edited the DIFFED run.sh                  -> rc 0, no SLICE line (preclassify's question)
+#   UD8  a consumer-added local.sh the write deleted            -> rc 2, ONE SLICE UNDIFFED-OVERWRITE naming local.sh
+#   UD9  the write also adds `q"x.sh`, which git lists C-quoted  -> rc 2, ONE SLICE UNCONFIRMED naming the quoted line
+# The seed control asserts every world's commit lists its subject file, so no silent cell is silent for
+# want of being asked. UD2 needs a mode-only change for that: an equal-bytes write lists nothing.
+# The matrix rows for this section are in the file header. ud-head-not-parent moves UD1 and UD8 both,
+# measured: the two shapes share the one HEAD^ consumer read, which is the property the mutant removes.
+UDW="$(mktemp -d)"; sufl_tmp "$UDW"
+UDD="$UDW/dist"
+udg() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+          git -c init.templateDir= -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@" ) >/dev/null 2>&1; }
+udput() { mkdir -p "$(dirname "$1/$2")" && printf '%s\n' "$3" > "$1/$2"; }
+UD_SEED='udx seed, never changed upstream'
+ud_built=1
+{ udg init -q "$UDD" && udput "$UDD" core/fixtures/udx/run.sh 'udx run at base' && udput "$UDD" core/fixtures/udx/seed.sh "$UD_SEED" \
+  && udg -C "$UDD" add -A && udg -C "$UDD" commit -q --no-verify -m base \
+  && udput "$UDD" core/fixtures/udx/seed.sh 'udx seed at the skill_commit release' \
+  && udg -C "$UDD" add -A && udg -C "$UDD" commit -q --no-verify -m sk \
+  && udput "$UDD" core/fixtures/udx/seed.sh "$UD_SEED" && udput "$UDD" core/fixtures/udx/run.sh 'udx run at theirs' \
+  && udg -C "$UDD" add -A && udg -C "$UDD" commit -q --no-verify -m theirs; } || ud_built=0
+UD_B="$(git -C "$UDD" rev-parse -q --verify HEAD~2 2>/dev/null)" || UD_B=""
+UD_SK="$(git -C "$UDD" rev-parse -q --verify HEAD~1 2>/dev/null)" || UD_SK=""
+UD_T="$(git -C "$UDD" rev-parse -q --verify HEAD 2>/dev/null)" || UD_T=""
+[ -n "$UD_B" ] && [ -n "$UD_SK" ] && [ -n "$UD_T" ] || ud_built=0
+ud_world() { # ud_world <dir> <skill_commit> <seed-before> <run-before> <local-before|-> <write: 1 or 0> [chmod]
+  local c="$1" fx="$1/tests/fixtures/udx"
+  udg init -q "$c" || return 1
+  printf 'base\n' > "$c/README" || return 1
+  udput "$c" .claude/.ai-dlc-version "version: 1.0.0
+commit: $UD_B
+skill_commit: $2" && udput "$c" tests/fixtures/udx/seed.sh "$3" && udput "$c" tests/fixtures/udx/run.sh "$4" || return 1
+  [ "$5" = - ] || udput "$c" tests/fixtures/udx/local.sh "$5" || return 1
+  udg -C "$c" add -A && udg -C "$c" commit -q --no-verify -m installed || return 1
+  [ "$6" = 1 ] || return 0
+  rm -f "$fx/run.sh" "$fx/seed.sh" "$fx/local.sh" || return 1
+  git -C "$UDD" show "${UD_T}:core/fixtures/udx/run.sh" > "$fx/run.sh" && git -C "$UDD" show "${UD_T}:core/fixtures/udx/seed.sh" > "$fx/seed.sh" || return 1
+  [ "${7:-}" != chmod ] || chmod 755 "$fx/seed.sh" || return 1
+  udput "$c" .claude/.ai-dlc-version "version: 1.0.0
+commit: $UD_B
+skill_commit: $UD_T" || return 1
+  udg -C "$c" add -A && udg -C "$c" commit -q --no-verify -m self-update
+}
+if [ "$ud_built" = 1 ] \
+   && ud_world "$UDW/c1" "$UD_B" 'udx seed, REPAIRED by the consumer' 'udx run at base' - 1 \
+   && ud_world "$UDW/c2" "$UD_B" "$UD_SEED" 'udx run at base' - 1 chmod \
+   && ud_world "$UDW/c3" "$UD_SK" 'udx seed at the skill_commit release' 'udx run at base' - 1 \
+   && ud_world "$UDW/c4" "$UD_B" 'udx seed, REPAIRED by the consumer' 'udx run at base' - 1 \
+   && ud_world "$UDW/c6" "$UD_B" 'udx seed, REPAIRED by the consumer' 'udx run at base' - 0 \
+   && ud_world "$UDW/c7" "$UD_B" "$UD_SEED" 'udx run, edited by the consumer' - 1 \
+   && ud_world "$UDW/c8" "$UD_B" "$UD_SEED" 'udx run at base' 'a consumer-added helper' 1 \
+   && ud_world "$UDW/c9" "$UD_B" "$UD_SEED" 'udx run at base' - 1 \
+   && udput "$UDW/c9" 'tests/fixtures/udx/q"x.sh' 'a file whose name git C-quotes' \
+   && udg -C "$UDW/c9" add -A && udg -C "$UDW/c9" commit -q --amend --no-edit --no-verify; then :; else ud_built=0; fi
+# Seed control: each checker world's commit lists the file its cell is about; c9's listing carries a line
+# that opens with `"` under the checker's own quotePath=false, or UD9 asks nothing.
+for _ud in c1:seed.sh c2:seed.sh c3:seed.sh c7:run.sh c8:local.sh; do
+  _udl="$(git -C "$UDW/${_ud%%:*}" diff --name-only 'HEAD^' HEAD -- tests/fixtures/udx/ 2>/dev/null)" || _udl=""
+  case "$_udl" in *"tests/fixtures/udx/${_ud#*:}"*) ;; *) ud_built=0 ;; esac
+done
+_udl="$(git -C "$UDW/c9" -c core.quotePath=false diff --name-only 'HEAD^' HEAD -- tests/fixtures/udx/ 2>/dev/null)" || _udl=""
+case "$_udl" in '"tests/fixtures/udx/q\"x.sh"'*|*'
+"tests/fixtures/udx/q\"x.sh"'*) ;; *) ud_built=0 ;; esac
+# UD5's dist COPY: the base-only udx tree removed, proved unique to base and gone from the copy only.
+UDDU="$UDW/dist-u"
+if [ "$ud_built" = 1 ] && mkdir -p "$UDDU" && cp -R "$UDD/." "$UDDU/"; then
+  _udtr="$(git -C "$UDD" rev-parse -q --verify "${UD_B}:core/fixtures/udx" 2>/dev/null)" || _udtr=""
+  if [ -n "$_udtr" ] && [ "$_udtr" != "$(git -C "$UDD" rev-parse -q --verify "${UD_T}:core/fixtures/udx" 2>/dev/null)" ] \
+     && [ "$_udtr" != "$(git -C "$UDD" rev-parse -q --verify "${UD_SK}:core/fixtures/udx" 2>/dev/null)" ] \
+     && [ -f "$UDDU/.git/objects/${_udtr:0:2}/${_udtr:2}" ] && rm -f "$UDDU/.git/objects/${_udtr:0:2}/${_udtr:2}" \
+     && ! git -C "$UDDU" cat-file -e "$_udtr" 2>/dev/null && git -C "$UDD" cat-file -e "$_udtr" 2>/dev/null; then :
+  else ud_built=0; fi
+else ud_built=0; fi
+[ "$ud_built" = 1 ] || bad "FIXTURE ERROR: the UD worlds did not build, a world's commit does not list its subject file, or the base udx tree was not a removable loose object unique to base, so no UNDIFFED-OVERWRITE cell was asserted"
+UD_CELLS="UD1 UD2 UD3 UD5 UD7 UD8 UD9"
+ud_cell() { # ud_cell <checker> <cell> -> 1 when the cell's assertion holds, 0 when not, X when the checker never reached its gate-record arm
+  local r="$1" c="$2" dist="$UDD" cons rc=0 o n
+  case "$c" in
+    UD1) cons="$UDW/c1" ;; UD2) cons="$UDW/c2" ;; UD3) cons="$UDW/c3" ;;
+    UD5) cons="$UDW/c1"; dist="$UDDU" ;; UD7) cons="$UDW/c7" ;; UD8) cons="$UDW/c8" ;; UD9) cons="$UDW/c9" ;;
+    *) printf X; return ;;
+  esac
+  o="$UDW/$c.$(basename "$(dirname "$(dirname "$r")")").out"
+  bash "$r" "$dist" "$UD_B" "$UD_T" "$cons" > "$o" 2>&1 || rc=$?
+  grep -q '^GATE-RECORD: NOT-REQUIRED' "$o" || { printf X; return; }
+  n="$(grep -c '^GATE-RECORD: SLICE' "$o")" || n=0
+  case "$c" in
+    UD1) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -q '^GATE-RECORD: SLICE udx — UNDIFFED-OVERWRITE: tests/fixtures/udx/seed.sh — upstream left it unchanged' "$o" \
+           && grep -qF "supersedes the installed SKILL.md's GATE-RECORD-REFUSED disposition for this tag only; DEFER remains a safe fallback" "$o" \
+           && grep -qF 'git checkout HEAD^ -- "tests/fixtures/udx"' "$o" ;;
+    UD2|UD3|UD7) [ "$rc" = 0 ] && [ "$n" = 0 ] ;;
+    UD5) [ "$rc" = 2 ] && grep -q '^GATE-RECORD: SLICE udx — UNCONFIRMED: core/fixtures/udx/seed.sh could not be confirmed' "$o" \
+           && ! grep -q 'UNDIFFED-OVERWRITE' "$o" ;;
+    UD8) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -q '^GATE-RECORD: SLICE udx — UNDIFFED-OVERWRITE: tests/fixtures/udx/local.sh — it is absent at both' "$o" ;;
+    UD9) [ "$rc" = 2 ] && [ "$n" = 1 ] && grep -qF 'GATE-RECORD: SLICE "tests/fixtures/udx/q\"x.sh" — UNCONFIRMED: git listed this path C-quoted' "$o" ;;
+  esac && printf 1 || printf 0
+}
+if [ "$ud_built" = 1 ]; then
+  if [ "$(ud_cell "$RUNNER" UD1)" = 1 ]; then B_ud1=1; ok "Part UD1: a whole-directory write over a consumer repair to a file upstream did not change is refused UNDIFFED-OVERWRITE naming the file, with the remedy that supersedes the old disposition"
+  else bad "Part UD1: a consumer-repaired undiffed seed.sh overwritten by the write was not refused with one SLICE UNDIFFED-OVERWRITE line and the remedy text ($UDW/UD1.*.out)"; fi
+  if [ "$(ud_cell "$RUNNER" UD2)" = 1 ]; then B_ud2=1; ok "Part UD2: a listed undiffed file whose consumer copy equals base is not refused"
+  else bad "Part UD2: a seed.sh equal to base (mode-only change) was refused or the run did not exit 0 ($UDW/UD2.*.out)"; fi
+  if [ "$(ud_cell "$RUNNER" UD3)" = 1 ]; then B_ud3=1; ok "Part UD3: a consumer copy equal to the blob at its own HEAD^ skill_commit is upstream's bytes and is not refused"
+  else bad "Part UD3: a seed.sh equal to the skill_commit blob was refused ($UDW/UD3.*.out)"; fi
+  if [ "$(ud_cell "$RUNNER" UD5)" = 1 ]; then B_ud5=1; ok "Part UD5: a base read that can confirm neither presence nor absence is UNCONFIRMED, never an acquittal"
+  else bad "Part UD5: with the base udx tree unreadable the checker did not refuse seed.sh UNCONFIRMED ($UDW/UD5.*.out)"; fi
+  if [ "$(ud_cell "$RUNNER" UD7)" = 1 ]; then B_ud7=1; ok "Part UD7: a consumer edit to a file upstream DID change is preclassify's question and emits no UNDIFFED-OVERWRITE line"
+  else bad "Part UD7: a consumer-edited diffed run.sh was refused by the undiffed arm ($UDW/UD7.*.out)"; fi
+  if [ "$(ud_cell "$RUNNER" UD8)" = 1 ]; then B_ud8=1; ok "Part UD8: a consumer-added file absent at base and theirs that the write deleted is refused UNDIFFED-OVERWRITE"
+  else bad "Part UD8: a consumer-added local.sh deleted by the write was not refused with one SLICE UNDIFFED-OVERWRITE line ($UDW/UD8.*.out)"; fi
+  if [ "$(ud_cell "$RUNNER" UD9)" = 1 ]; then B_ud9=1; ok "Part UD9: a fixture path git lists C-quoted (a name carrying a double quote) is UNCONFIRMED, never skipped"
+  else bad "Part UD9: a C-quoted fixture path in the self-update commit was not refused with one SLICE UNCONFIRMED line ($UDW/UD9.*.out)"; fi
+
+  # UD4: the remedy, through the real push wrapper, on a consumer with a bare origin and a matching OK record.
+  UD4C="$UDW/c4"; UD4_PUSH="$RECONCILE/self-update-push.sh"
+  ud4_push() { # ud4_push <out> <tag> -> the wrapper's exit; stdout/stderr in $UDW/ud4-<tag>.{out,err}
+    local rc=0
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+      cd / && bash "$UD4_PUSH" "$UD4C" origin su "$1" "$UDD" "$UD_B" "$UD_T" ) > "$UDW/ud4-$2.out" 2> "$UDW/ud4-$2.err" || rc=$?
+    printf '%s' "$rc"
+  }
+  ud4_ok=0
+  # The write also ADDS new.sh, so the remedy's `git rm` step is exercised and the restored tree is compared whole.
+  if udg init -q --bare "$UDW/o4.git" && udg -C "$UD4C" remote add origin "$UDW/o4.git" && udg -C "$UD4C" checkout -q -b su \
+     && udput "$UD4C" tests/fixtures/udx/new.sh 'a file the write added' && udg -C "$UD4C" add -A \
+     && udg -C "$UD4C" commit -q --amend --no-edit --no-verify \
+     && SR_INPUTS="$(printf '# input: README\t%s\t-' "$(git hash-object "$UD4C/README")")" \
+          seed_record "$UD4C/_bmad-output/ai-dlc-update" "$UDD" "$UD_B" "$UD_T" OK ud4 >/dev/null; then
+    r1="$(ud4_push _bmad-output/ai-dlc-update/self-update-push-1.md first)"
+    udg -C "$UD4C" checkout 'HEAD^' -- tests/fixtures/udx
+    ud4_added="$(git -C "$UD4C" diff --diff-filter=A --name-only 'HEAD^' HEAD -- tests/fixtures/udx/ 2>/dev/null)"
+    [ -z "$ud4_added" ] || udg -C "$UD4C" rm -q -- $ud4_added
+    udg -C "$UD4C" commit -q --amend --no-edit --no-verify
+    r2="$(ud4_push _bmad-output/ai-dlc-update/self-update-push-1.md same)"
+    r3="$(ud4_push _bmad-output/ai-dlc-update/self-update-push-2.md new)"
+    ud4_l=0
+    [ -n "$(git -C "$UD4C" rev-parse -q --verify refs/heads/su 2>/dev/null)" ] \
+      && [ "$(git --git-dir="$UDW/o4.git" rev-parse -q --verify refs/heads/su 2>/dev/null)" = "$(git -C "$UD4C" rev-parse -q --verify refs/heads/su 2>/dev/null)" ] && ud4_l=1
+    ud4_trk=0; git -C "$UD4C" ls-files --error-unmatch -- _bmad-output/ai-dlc-update/self-update-push-1.md >/dev/null 2>&1 && ud4_trk=1
+    if [ "$r1" = 2 ] && grep -q '^GATE-RECORD-REFUSED GATE-RECORD: SLICE udx — UNDIFFED-OVERWRITE' "$UDW/ud4-first.out" \
+       && grep -qF 'supersedes the installed SKILL.md' "$UDW/ud4-first.err" \
+       && [ "$r2" = 2 ] && grep -q 'already exists' "$UDW/ud4-same.err" \
+       && [ "$r3" = 0 ] && grep -q '^GATE-RECORD: OK ' "$UDW/ud4-new.err" && [ "$ud4_l" = 1 ] && [ "$ud4_trk" = 0 ] \
+       && [ -n "$ud4_added" ] && [ "$(git -C "$UD4C" rev-parse -q --verify 'HEAD:tests/fixtures/udx')" = "$(git -C "$UD4C" rev-parse -q --verify 'HEAD^:tests/fixtures/udx')" ]; then
+      ud4_ok=1
+    fi
+    if [ "$ud4_ok" = 1 ]; then ok "Part UD4: the remedy (restore the directory from HEAD^, amend, re-run the wrapper) lands: the same <out> refuses 'already exists', a new <out> exits 0 with GATE-RECORD: OK, the first record stays untracked"
+    else bad "Part UD4: the remedy read first=$r1 same=$r2 new=$r3 landed=$ud4_l first-record-tracked=$ud4_trk added='$ud4_added', want 2/2/0 landed=1 tracked=0, a non-empty added list and the udx tree equal to HEAD^'s ($UDW/ud4-*.err)"; fi
+  else
+    bad "FIXTURE ERROR: Part UD4's origin, branch or gate record did not build"
+  fi
+
+  # UD6: the DEFER path. apply.sh drives preclassify's rows only, so a file with no row is never written.
+  UD6_APPLY="$RECONCILE/apply.sh"
+  if [ -f "$UD6_APPLY" ]; then
+    echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh"
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+      bash "$UD6_APPLY" --carried-machinery-slice "$UDD" "$UD_B" "$UDW/c6" "$UD_T" ) > "$UDW/ud6.out" 2>&1
+    if [ "$(git hash-object "$UDW/c6/tests/fixtures/udx/run.sh" 2>/dev/null)" = "$(git -C "$UDD" rev-parse -q --verify "${UD_T}:core/fixtures/udx/run.sh")" ] \
+       && [ "$(cat "$UDW/c6/tests/fixtures/udx/seed.sh" 2>/dev/null)" = 'udx seed, REPAIRED by the consumer' ]; then
+      ok "Part UD6: the DEFER path's apply.sh writes the diffed run.sh at theirs and leaves the consumer's undiffed seed.sh repair in place"
+    else
+      bad "Part UD6: apply.sh over the pre-write tree did not write run.sh at theirs with seed.sh's repair intact ($UDW/ud6.out)"
+    fi
+  else
+    bad "FIXTURE ERROR: Part UD6 has no apply.sh beside the checker ($UD6_APPLY)"
+  fi
+
+  # MUTANTS of the UNDIFFED-OVERWRITE arm, each a copy of the whole reconcile directory, `cmp -s` guarded.
+  UDM="$UDW/mut"
+  ud_kill() { # ud_kill <flag> <mutant> <decides> <twin> <why> <old> <new>
+    local flag="$1" name="$2" dec="$3" twin="$4" why="$5" m c v row="" ok_all=1
+    m="$UDM/$name/reconcile"
+    if ! { mkdir -p "$m" && cp -R "$RECONCILE/." "$m/" && aw_replace_once "$RUNNER" "$UDM/$name/s1" "$6" "$7" \
+           && ! cmp -s "$RUNNER" "$UDM/$name/s1" && mv -f "$UDM/$name/s1" "$m/self-update-fixtures.sh" \
+           && [ -f "$m/lib.sh" ] && [ -f "$m/preclassify.sh" ]; }; then
+      bad "FIXTURE ERROR: mutant $name DID NOT APPLY (its anchor is not exactly once in the checker, or the copy is incomplete)"; return
+    fi
+    m="$m/self-update-fixtures.sh"
+    if [ "$MATRIX" = 1 ]; then
+      for c in $UD_CELLS; do
+        v="$(ud_cell "$m" "$c")"
+        [ "$v" = X ] && { bad "FIXTURE ERROR: mutant $name never reached its gate-record arm in cell $c"; return; }
+        row="$row${row:+ }$c:$([ "$v" = 1 ] && echo 0 || echo 1)"
+      done
+      mrow "$name" "$row"
+    fi
+    for c in $dec; do
+      v="$(ud_cell "$m" "$c")"
+      [ "$v" = X ] && { bad "FIXTURE ERROR: mutant $name never reached its gate-record arm in cell $c"; return; }
+      [ "$v" = 0 ] || ok_all=0
+    done
+    v="$(ud_cell "$m" "$twin")"
+    [ "$v" = X ] && { bad "FIXTURE ERROR: mutant $name never reached its gate-record arm in cell $twin"; return; }
+    [ "$v" = 1 ] || ok_all=0
+    if [ "$ok_all" = 1 ]; then mutant_killed "$flag" "$name" "Part UD mutant $name killed by $dec ($twin unmoved): $why"
+    else bad "Part UD mutant $name SURVIVED: want $dec moved and $twin unmoved. $why"; fi
+  }
+  ud_kill "$(( ${B_ud3:-0} && ${B_ud2:-0} ))" ud-no-skill-commit UD3 UD2 \
+    "a copy equal to upstream at the consumer's own skill_commit refused as a consumer edit" \
+    '    [ -n "$_ud_skb" ] && [ "$_ud_c" = "$_ud_skb" ] && continue' '    :'
+  ud_kill "$(( ${B_ud7:-0} && ${B_ud1:-0} ))" ud-no-undiffed UD7 UD1 \
+    "a consumer edit to a file upstream changed is taken from preclassify's bucket" \
+    '    if [ "$_ud_brc" -eq 0 ] && [ "$_ud_trc" -eq 0 ] && [ "$_ud_b" = "$_ud_t" ]; then' \
+    '    if [ "$_ud_brc" -eq 0 ] && [ "$_ud_trc" -eq 0 ]; then'
+  ud_kill "$(( ${B_ud1:-0} && ${B_ud8:-0} && ${B_ud2:-0} ))" ud-head-not-parent "UD1 UD8" UD2 \
+    "the consumer copy read after the write is theirs' own bytes, so nothing is ever overwritten" \
+    '"HEAD^:${_ud_f}"' '"HEAD:${_ud_f}"'
+  ud_kill "$(( ${B_ud5:-0} && ${B_ud1:-0} ))" ud-unreadable-acquits UD5 UD1 \
+    "a dist read that confirmed neither presence nor absence acquits the file" \
+    '    if [ "$_ud_brc" -gt 1 ] || [ "$_ud_trc" -gt 1 ] \' '    if false \'
+  ud_kill "$(( ${B_ud8:-0} && ${B_ud1:-0} ))" ud-no-absent-shape UD8 UD1 \
+    "a consumer-added file the write deleted is not asked" \
+    '    elif [ "$_ud_brc" -eq 1 ] && [ "$_ud_trc" -eq 1 ]; then' '    elif false; then'
+  ud_kill "$(( ${B_ud9:-0} && ${B_ud2:-0} ))" ud-quoted-skipped UD9 UD2 \
+    "a fixture path git lists C-quoted is skipped, which acquits it" \
+    'case "${su_fx_raw:-}" in' 'case "" in'
 fi
 
 if [ "$MATRIX" = 0 ]; then

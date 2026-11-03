@@ -19,6 +19,50 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.997.0] - 2026-11-03
+
+Batch b249, cluster b249-c1. Closes BL-907 and PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT. Files none. Machinery-only; it ships alone because it touches the ai-dlc-update skill, a bootstrapping file.
+
+### BL-907 closed: a whole-fixture-directory write over a consumer edit that no preclassify row covers is refused, with a remedy that lands the cycle
+
+- **UNDIFFED-OVERWRITE.** `reconcile/self-update-fixtures.sh` asks, for every file the self-update commit changed under a covered fixture directory, whether the write replaced a consumer-authored file that `preclassify.sh` never bucketed. `preclassify.sh` rows cover only the `base`..`theirs` diff, so such a file had no row to hold its directory back.
+  - Undiffed shape: the distribution blob at BASE equals the one at THEIRS, and the consumer's copy at `HEAD^` is neither that blob nor the blob at the stamp's `skill_commit`.
+  - Absent shape: the core path is absent at BASE and at THEIRS, and the consumer held a copy at `HEAD^` that the commit then changed or deleted (a consumer-added file the write took).
+  - A path present at exactly one ref is diffed, which is `preclassify.sh`'s question and not this arm's.
+  - Each hit emits one `GATE-RECORD: SLICE <d> — UNDIFFED-OVERWRITE: <file> …` line and exits 2 through the existing `su_slice_bad` path. No new exit code, tag family, script or fixture directory.
+- **UNCONFIRMED, never an acquittal.** Any read that cannot be confirmed present or absent is reported UNCONFIRMED: the consumer blob at `HEAD^`, the BASE and THEIRS blobs, a `skill_commit` that cannot be resolved, or its blob. So is a fixture path git lists C-quoted (a name carrying `"`, `\` or a control character), which the directory extraction cannot read.
+- **The `skill_commit` conjunct.** `skill_commit` is read from `HEAD^`'s stamp, not the working tree's, because step 2 has already advanced the live stamp. A consumer copy equal to upstream at its own `skill_commit` loses nothing and is acquitted. An absent or unreadable stamp, or a `skill_commit` equal to BASE, leaves the BASE comparison alone.
+- **The remedy rides in stderr.** The refusal's stderr states that it supersedes the installed SKILL.md's `GATE-RECORD-REFUSED` disposition for this tag only. It gives the sequence:
+  - `git checkout HEAD^ -- <dir>` for each named directory;
+  - `git rm` for any file the commit added under it;
+  - `git commit --amend --no-edit`;
+  - a re-run of the same `self-update-push.sh` invocation with a NEW `<out>` path.
+
+  The wrapper refuses an existing `<out>`, and the first record stays untracked and is carried to step 7. DEFER (the HOOK-REFUSED sequence) remains a safe fallback. The stderr lead-in changed from "wrote fixture director(ies) no consumer can run" to "fixture director(ies) cannot be pushed as written".
+- **SKILL.md prose.** Step 2's fixture-write rule now treats a file with no `preclassify.sh` row as a consumer edit when its consumer copy differs from the distribution blob at `base` and at `skill_commit`, or when the consumer added it. Such a file holds its whole directory back under the ONE-UNIT rule. The "only when" sentence and the ref-comparison passage are now scoped to paths `preclassify.sh` buckets, so step 2 reads as one rule. A new paragraph mirrors the remedy and cites the refusal by token. The prose takes effect on the invocation after a landed self-update; the checker arm protects the delivering pull.
+- **The delivering pull is protected.** Step 2 writes the skill tree, including the new checker, before `self-update-push.sh` runs, and the wrapper runs its sibling checker from the installed skill directory. `self-update-gate.sh` has 0 non-comment references to the checker. A `file://` clone rehearsal found marker 1 with the marked THEIRS checker run through the consumer wrapper, marker 0 with the BASE checker, and marker 0 with the marked checker run through the distribution wrapper.
+- **False-positive set: empty.** Over 103 graph self-update commits touching `tests/fixtures/` (147 self-update-subject commits in all) and 1852 changed fixture files there were 0 hits. `skill_commit` differed from the `HEAD^` commit on 17 of the 103, so the conjunct was exercised. The positive control, the measured `artifact-path-conformance/seed.sh` instance, fires. The real corpus holds no positive, because graph kept that file by hand; the fixture world is the only positive the arm sees.
+- **Fixture arms UD1-UD9** in `core/fixtures/self-update-fixture-log/run.sh`:
+  - UD1: repaired consumer file is refused, naming it.
+  - UD2: consumer copy equal to base is silent.
+  - UD3: consumer copy equal to the `skill_commit` blob is silent.
+  - UD4: the remedy through the real push wrapper. The same `<out>` refuses `already exists`; a new `<out>` exits 0 with `GATE-RECORD: OK`.
+  - UD5: an unreadable base tree gives UNCONFIRMED with no UNDIFFED line.
+  - UD6: the DEFER path, where `apply.sh --carried-machinery-slice` leaves the consumer file's bytes unchanged.
+  - UD7: a consumer edit to a diffed file gives no UNDIFFED line.
+  - UD8: a consumer-added file the write deleted is refused.
+  - UD9: a C-quoted path reads UNCONFIRMED.
+
+  `inputs.decl` now declares the `apply.sh` siblings UD6 reads, including `unregistered-drift.sh` and `relabel-extension-checks.sh`. `invocations.decl` goes from 65 to 97 in total and from 39 to 48 for the checker.
+- **Six `ud-` mutants** are bound in the fixture's MUTANT-MATRIX: `ud-no-skill-commit` (UD3), `ud-no-undiffed` (UD7), `ud-head-not-parent` (UD1 and UD8), `ud-unreadable-acquits` (UD5), `ud-no-absent-shape` (UD8) and `ud-quoted-skipped` (UD9).
+- **SKILL.md W arms.** W8 binds the undiffed-file rule and W9 binds the remedy, each scored on the text an agent reads, with mutants WM8 and WM9.
+- **Receipt.** `core/fixtures/self-update-fixture-log/receipt-bl907.sh` runs the checker and never greps it. It has six modes: tip 0, unfixed 1, no-skill-commit 1, no-remedy-prose 1, no-undiffed 1, hash-object 0. BL-907's `verify:` line moves from `manual` to `sh bash core/fixtures/self-update-fixture-log/receipt-bl907.sh`.
+- **Consumer costs.**
+  - The checker makes 693 git execs against 15 for the base checker on a synthetic 226-file commit, about 3 per changed file and linear in the commit's size.
+  - `self-update-fixture-log` gains one `apply.sh --carried-machinery-slice` run (UD6).
+  - The fork total is 2899 at base and at tip.
+- **Allowlist regeneration.** `scripts/fixture-inprocess-allowlist.txt` was regenerated in-release by `validate-fixture-inprocess.sh --derive`. Column 1 is unchanged at 177 rows; the moved rows are counters only, and no reader treats them as a ceiling.
+
 ## [0.996.0] - 2026-11-03
 
 Batch b249, cluster b249-c2. Files and closes BL-908. PC-S321-ADVERSARIAL-SHARD-DIR-IS-HAND-TYPED-BY-THE-LEAD is closed. The consumer's filing of that id was uncommitted in its ledger when this release shipped, so the consumer's reverify finds the citation once that filing is committed.

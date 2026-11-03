@@ -2,7 +2,9 @@
 # consumer trees it builds under mktemp. The checker sources lib.sh and reads map_consumer() out of
 # preclassify.sh beside it; G4 drives self-update-gate.sh, which reads setup-sites.md. The J and W
 # arms read SKILL.md. The preamble is sourced first by run.sh. lib.sh and seed.sh sit in the
-# fixture's own directory. D12p drives self-update-push.sh.
+# fixture's own directory. D12p and UD4 drive self-update-push.sh; UD6 drives apply.sh, which reads its
+# reconcile siblings below.
+# setup-site-drift.sh is not declared: UD6 never runs it; apply.sh:1645-1646 calls setup_site_merge only in the *CLASSIFY* arm with rt_rc 0 and no retired tokens, and apply.sh:774 returns 1 unless the path is in setup-sites.md.
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/skills/ai-dlc-update/reconcile/self-update-gate.sh
@@ -12,3 +14,12 @@ core/fixtures/lib/
 core/skills/ai-dlc-update/SKILL.md
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/self-update-push.sh
+core/skills/ai-dlc-update/reconcile/apply.sh
+core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+core/skills/ai-dlc-update/reconcile/emit-report.sh
+core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+core/skills/ai-dlc-update/reconcile/settings-merge.sh
+core/skills/ai-dlc-update/reconcile/template-sites.md
+core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
