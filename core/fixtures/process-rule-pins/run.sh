@@ -581,6 +581,8 @@ hand-gaps-rule24|S|rule-bodies/rule-24.md||**Excluded.**|## Gaps|contains
 hand-design-role|R|ux.md||## Escalation|## Design decisions|contains
 hand-design-step|S|steps/ui-direction.md||### 5.|## Design decisions|contains
 r32-i-window|S|SKILL.md|- **I -- before an irreversible step.**|Weigh what it returns.|the window of `ai-dlc-advisor-gate.sh` (`ADVISOR_GATE_WINDOW`|contains
+r19-c22-impl|S|rule-bodies/rule-19.md||**Config is authoritative.**|**(a) Model.**|para|Check 22 records at the implementation gate.
+r19-no-retro|S|rule-bodies/rule-19.md|||at retro|absent
 pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repository writes nowhere at that sha is REJECT, unless the|contains
 pred-lit-qa-fence|R|qa.md|## Validation Checklist|## Communication|`git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded|contains
 pred-lit-pm|R|pm.md|## Responsibilities|## The evidence contract|so the predicate names the AC of this story that requires the literal, and|contains

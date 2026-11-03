@@ -58,6 +58,8 @@
 # MUTANT-MATRIX d10-d11-misindent-dropped-again decides=D10,D11 twins=D9
 # MUTANT-MATRIX d10-only-tab-caught decides=D10 twins=D11
 # MUTANT-MATRIX d11-only-deeper-spaces-caught decides=D11 twins=D10
+# MUTANT-MATRIX j1-join-off decides=J1,J1CASE twins=J1N
+# MUTANT-MATRIX j1-id-case-folded decides=J1CASE twins=J1
 # MUTANT-MATRIX l4-planning-view-read decides=L4 twins=L1
 # MUTANT-MATRIX l2-absent-printed-empty decides=L2 twins=L1
 # MUTANT-MATRIX l3-no-canonical-exits-0 decides=L3 twins=L1
@@ -656,6 +658,53 @@ d_misindent() { # <tool> <D10|D11>
 a_D10() { d_misindent "$1" D10; }
 a_D11() { d_misindent "$1" D11; }
 
+# J1 — a `done` story whose AC carries `defers_to:` that `deferred_acs` does not list (BL-840). A REPORT in
+# writer_forgot's tier: it never moves the exit code, compares AC ids exactly (case-sensitive) and never the CO
+# value, and fires only when `deferred_acs` parsed ok. The id list comes from the sibling validator's
+# --list-defers, so a mutant copy of the tool runs beside a copy of that sibling (MUT below).
+story_defers() { # <name> <live_ops> <CO>: AC4 carries defers_to, AC5 does not
+  printf -- '---\nstatus: done\nsprint: 291\nlayered_ac_count:\n  unit: 2\n  live_ops: %s\n  manual_operator: 0\n---\n\n# story\n\n- **AC4 (unit).** thing\n  defers_to: %s\n- **AC5 (unit).** other\n' "$2" "$3" > "$CSTORIES/$1.md"
+}
+j1_world() { # <tool> <deferred_acs field line(s) or ''> <live_ops> <CO> -> CS_OUT CS_RC, both views alike
+  cs_reset; story_defers story-1 "$3" "$4"
+  env_one "$2" > "$CIMPL/sprint-status.yaml"
+  env_one "$2" > "$CPLAN/sprint-status.yaml"
+  cs_run "$1"
+}
+a_J1() { # AC4 defers, `deferred_acs: []`: J1 names AC4 only (never AC5), and the exit code equals the same world without the defers_to line
+  j1_world "$1" '    deferred_acs: []
+' 0 CO-S1-x
+  local out="$CS_OUT" rc="$CS_RC"
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: []
+' > "$CIMPL/sprint-status.yaml"; cp "$CIMPL/sprint-status.yaml" "$CPLAN/sprint-status.yaml"
+  cs_run "$1"
+  if [ "$rc" -eq "$CS_RC" ] && [ "$rc" -eq 0 ] \
+     && grep -q 'REPORT \[story-291-1\] `done` with 1 AC(s) carrying `defers_to` in story-1.md that `deferred_acs` does not list: AC4 ' <<<"$out" \
+     && ! grep -q 'list: AC4, AC5\|AC5 —' <<<"$out" \
+     && ! grep -q 'carrying `defers_to`' <<<"$CS_OUT"; then res J1 PASS; else res J1 FAIL; fi
+}
+a_J1N() { # near-miss: AC4 is listed, so no J1 line
+  j1_world "$1" '    deferred_acs: [AC4]
+' 0 CO-S1-x
+  if [ "$CS_RC" -eq 0 ] && grep -q 'DEFERRED \[story-291-1\]' <<<"$CS_OUT" && ! grep -q 'carrying `defers_to`' <<<"$CS_OUT"; then res J1N PASS; else res J1N FAIL; fi
+}
+a_J1X() { # near-miss: AC4 is listed and its CO is a different id from J1's other worlds: the join is on the AC id, never the CO
+  j1_world "$1" '    deferred_acs: [AC4]
+' 0 CO-S1-other
+  if [ "$CS_RC" -eq 0 ] && grep -q 'DEFERRED \[story-291-1\]' <<<"$CS_OUT" && ! grep -q 'carrying `defers_to`' <<<"$CS_OUT"; then res J1X PASS; else res J1X FAIL; fi
+}
+a_J1ABS() { # no `deferred_acs` field: writer_forgot's REPORT only, never J1 (J1 needs a parsed deferred_acs)
+  j1_world "$1" '' 1 CO-S1-x
+  if [ "$CS_RC" -eq 0 ] && grep -q 'REPORT \[story-291-1\] `done` with 1 live_ops/manual_operator' <<<"$CS_OUT" \
+     && ! grep -q 'carrying `defers_to`' <<<"$CS_OUT"; then res J1ABS PASS; else res J1ABS FAIL; fi
+}
+a_J1CASE() { # `[ac4]` against `AC4`: ids are compared case-sensitively, so J1 still fires
+  j1_world "$1" '    deferred_acs: [ac4]
+' 0 CO-S1-x
+  if [ "$CS_RC" -eq 0 ] && grep -q 'REPORT \[story-291-1\] `done` with 1 AC(s) carrying `defers_to` in story-1.md that `deferred_acs` does not list: AC4 ' <<<"$CS_OUT"; then res J1CASE PASS; else res J1CASE FAIL; fi
+}
+
 # ===== PART 4 — `list-stories`: the implementation view's entries, one tab-separated line each ====
 # The mode exists so a validator never parses the yaml itself. Every arm is PRESENCE-shaped on
 # stdout or on the exit code, so a subject that prints nothing fails L1, L2 and L4 by construction.
@@ -745,7 +794,7 @@ story-291-2${TAB}in-progress${TAB}stories/story-2.md"
 }
 
 # ===== registry: keys (one function each) and the ids they print =================================
-ALL_KEYS="P0 P1 P2 P3 TB_preamble TB_empty TB_done6 TB_inprog7 TB_none TB_implpre P5 roll legacy divergent greenroll H8 H9 R10 R11 A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 L1 L2 L3 L4"
+ALL_KEYS="P0 P1 P2 P3 TB_preamble TB_empty TB_done6 TB_inprog7 TB_none TB_implpre P5 roll legacy divergent greenroll H8 H9 R10 R11 A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 J1 J1N J1X J1ABS J1CASE L1 L2 L3 L4"
 ids_of() { case "$1" in roll) echo "R6a R6b R6c R6d R7" ;; legacy) echo "R7a1 R7a2 R7a3" ;; divergent) echo "R7ac" ;; greenroll) echo "R7b1 R7b2" ;; *) echo "$1" ;; esac; }
 ALL_IDS=""; ID_KEY=" "
 for _k in $ALL_KEYS; do for _i in $(ids_of "$_k"); do ALL_IDS="$ALL_IDS $_i"; ID_KEY="$ID_KEY$_i:$_k "; done; done
@@ -789,6 +838,7 @@ okmsg() { case "$1" in
   R11) echo "fail-closed on an unreadable schema (never guesses the grammar)" ;;
   A*) echo "$1 consistent-status battery" ;;
   D*) echo "$1 deferred_acs battery" ;;
+  J1*) echo "$1 defers_to join battery" ;;
   L*) echo "$1 list-stories battery" ;;
 esac; }
 badmsg() { case "$1" in
@@ -839,6 +889,8 @@ if [ -z "$cs_bad" ]; then ok "check-stories: all 12 assertions pass on the shipp
 if in_set A24 "$SHIP_PASS"; then ok "check-stories: A24 reported PASS on the shipping tool"; else bad "check-stories: A24 printed no PASS line on the shipping tool"; fi
 ds_bad=""; for i in D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11; do in_set "$i" "$SHIP_PASS" || ds_bad="$ds_bad $i"; done
 if [ -z "$ds_bad" ]; then ok "deferred_acs: all 11 assertions pass on the shipping tool"; else bad "deferred_acs battery failed on the SHIPPING tool:$ds_bad"; fi
+j1_bad=""; for i in J1 J1N J1X J1ABS J1CASE; do in_set "$i" "$SHIP_PASS" || j1_bad="$j1_bad $i"; done
+if [ -z "$j1_bad" ]; then ok "defers_to join: all 5 assertions pass on the shipping tool"; else bad "defers_to join battery failed on the SHIPPING tool:$j1_bad"; fi
 ls_bad=""; for i in L1 L2 L3 L4; do in_set "$i" "$SHIP_PASS" || ls_bad="$ls_bad $i"; done
 if [ -z "$ls_bad" ]; then ok "list-stories: all 4 assertions pass on the shipping tool"; else bad "list-stories battery failed on the SHIPPING tool:$ls_bad"; fi
 
@@ -914,6 +966,10 @@ defm d9-close-refuses-on-empty D9 D7 's/^            elif state == "ok" and ids:
 defm d10-d11-misindent-dropped-again D10,D11 D9 "s/^${DMI}/            if False:/"
 defm d10-only-tab-caught D10 D11 "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" in dm.group(1):/"
 defm d11-only-deeper-spaces-caught D11 D10 "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" not in dm.group(1):/"
+# J1: the join disabled (no AC is ever missing), so neither the plain world nor the case world reports.
+defm j1-join-off J1,J1CASE J1N 's/missing = \[a for a in (dacs or \[\]) if a not in dids\]/missing = []/'
+# J1: the id comparison case-folded, so `[ac4]` is taken to list AC4; only the case world flips.
+defm j1-id-case-folded J1CASE J1 's/if a not in dids\]/if a.lower() not in [d.lower() for d in dids]]/'
 # L4: the planning view read in place of the implementation view.
 defm l4-planning-view-read L4 L1 's/^    lp = VIEWS\[PRIMARY\]$/    lp = VIEWS["planning"]/'
 # L2: an absent field printed as an empty cell rather than `-`.
@@ -924,9 +980,15 @@ defm l3-no-canonical-exits-0 L3 L1 '/list-stories UNEVALUABLE — no %s canonica
 defm l1-sorted-not-yaml-order L1 L2 's/^    for key, fields, _ in entries:$/    for key, fields, _ in sorted(entries):/'
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
+# J1 reads its ids through the sibling validator beside the tool; a mutant copy finds none and J1
+# never fires, which would score a kill for the wrong reason. One sibling copy serves every mutant.
+J1_SIB="$(dirname "$TOOL")/validate-ac-falsifiability.sh"
+echo "HERMETIC-CONSUMED core/scripts/validate-ac-falsifiability.sh"
+[ -f "$J1_SIB" ] || { echo "FIXTURE ERROR: validate-ac-falsifiability.sh is not beside $TOOL; J1 has no id source" >&2; exit 2; }
+cp "$J1_SIB" "$MUT/validate-ac-falsifiability.sh" || { echo "FIXTURE ERROR: could not copy the J1 sibling" >&2; exit 2; }
 mk_4d() { # the PRE-CHANGE behaviour: the degenerate branch returns max frozen archive + 1, else 1
   cp "$TOOL" "$1"
-  python3 - "$1" <<'PYEOF'
+  python3 -I - "$1" <<'PYEOF'
 import sys
 p = sys.argv[1]
 t = open(p).read()

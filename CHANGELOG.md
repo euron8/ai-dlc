@@ -19,6 +19,91 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.995.0] - 2026-11-02
+
+Batch b248, cluster b248-core. Closes BL-895 and advances BL-840 and BL-842. Files BL-904 and BL-905. No PC- id is closed.
+
+### BL-895 closed: a record-only exemption's `--story` is bound to the story it names, and the lead re-runs the serial check on its own inputs
+
+- **STORY-BIND.** `merge-review-shards.sh` `canon_gate`'s record-only branch now runs STORY-BIND on `--check-serial` and on the merge.
+  - `--story` is normalised by `record-only-diff.sh ro_story_rel`. Its basename must be `story-<idx>.md` or `story-<idx>-*.md`.
+  - `<idx>` is parsed from the review file name (`<idx>-qa-validation(-p<M>)?.md`) in `--check-serial`, and is `$IDX` in the merge.
+  - `sprint-status.sh story-status --ref <frozen sha>` must print exactly one `row` line naming an entry with a status. The binding keys on that `row` field, never on the exit code. Every refusal carries `STORY-BIND`.
+  - `--story` must be the only story under the index that the implementation view lists at the base or the frozen sha, whatever its status. A view that gives no answer at either ref refuses.
+  - `sprint-status.sh view-history --ref <frozen>` walks the view from the commit that created the sprint's stories directory (chosen by ancestry) to the frozen sha. Any `file:` value added or removed under the index that is not `--story` refuses. A shallow repository refuses. Replace objects and grafts are ignored. A CRLF view reads as LF.
+  - The index grammar is `[0-9]+[a-z]?(-[0-9]+[a-z]?)*`, because 13 of graph's 109 bound reviews carry letter-suffixed indices (`2-3a`, `4-2a`). `1-1-z` still refuses.
+  - Letter-led indices (`B1`, `DASH`) bind by a literal match of the index against `--story`'s basename and the view's entries, never a pattern built from it. An index carrying `/`, `.`, whitespace or a leading `-`, an empty one, a digit-led slug name and any index the view does not list refuse.
+  - STORY-BIND also runs on the run branch, so a `Canonical run:` that is a run, with another story's `--story`, is refused on `--check-serial` and on the merge.
+- **U1h: the sprint is bound to the review path.** The sprint is `<N>` of the review's own lead-assigned `docs/reviews/s<N>/` path, passed to `view-history --sprint <N>`.
+  - The view must read `<N>` at both ends, and `--story` must sit in `stories_dir(<N>)`.
+  - A claimed exemption whose review path carries no `s<N>` is refused.
+  - The merge takes `<N>` from the shard directory's `docs/reviews/s<N>/shards/` parent, so a manifest base taken after a faked sprint roll is refused there too.
+  - A review slot is exactly `s<N>`, so `s2x/` and `s2.Ab12/` carry no sprint.
+- **U1i: the sentinel is read from the checked repo.** `--check-serial` skips the canonical-run rule as LEGACY only when the review's own repository also carries a `qa.md` lacking the `Canonical run:` sentinel, read at the range's base. An `AI_DLC_PROJECT_ROOT` or `CLAUDE_PROJECT_DIR` naming a sentinel-less root can no longer skip the rule, STORY-BIND included. The merge reads `qa.md` at the manifest's frozen sha in the manifest's worktree and never the root.
+- **U1j: the lead re-runs the serial check.**
+  - Dispatch records are written with `merge-review-shards.sh --record-dispatch s<N>-<story-index> <sprint-branch-HEAD>` at dispatch (`_dispatch-protocol.md` item 1). A second call keeps the first value and prints `RECORD-KEPT:`.
+  - Before recording a serial gate-2 verdict, the lead runs `--check-serial <assigned review path> --gate qa --story <story> --lead-range <seat base> <go-signal sha>` under `env -i` (`implementation.md`, "The lead re-runs a serial QA's check"). The base it decides over is the dispatch record. The seat base is read only when the record is absent.
+  - The dispatch record is `<git common dir>/ai-dlc/stories/s<N>-<story-index>`, one file per story, `key: value` lines, read and written through `lead_record_path`, `lead_record_put` and `lead_record_get`. The story index in the record name takes the grammar `rec_idx_ok`, which accepts any index graph uses (`B1`, `B6-rebind`, `5-browser-smoke`) and never one carrying `/`, `.` or a leading `-`.
+  - With no record, the run prints one `LEGACY-UNRECORDED:` line naming the story and checks over the seat base as 0.994.0 did. It passes (rc 0).
+  - The re-run refuses a go-signal that does not descend from the recorded dispatch sha. It also refuses a review whose physical directory is not its repository's `docs/reviews/s<N>/` (a `foo/s2` path, a symlinked `s2`, a relative path).
+  - `qa.md` is read at the base, never at the frozen sha or off the working tree when the base tracks it, under `--range` and `--lead-range` alike. An edit to `qa.md` inside the range or on disk cannot reach either LEGACY skip.
+  - Where `qa.md` at the base prescribes the serial line, the re-run requires a `reviewed-sha:` equal to the go-signal sha. Where it does not, a LEGACY line prints instead.
+- **U1k: isolation and sprint identity.**
+  - `sprint-status.sh` runs its python as `python3 -I`, so a `json.py` planted in the caller's working directory or on `PYTHONPATH` cannot answer `story-status` or `view-history`.
+  - STORY-BIND refuses, on `--check-serial` and on the merge, a review or shard directory whose logical and physical paths name different sprints. The refusal names both.
+  - `record-only-diff.sh paths` reads each entry's mode: a range that commits a symlink (120000) or gitlink (160000) under a record class is not record-only.
+- **U1l: the partition record.**
+  - The lead runs `merge-review-shards.sh --record-partition <shard dir>` right after the gate-2 partition, before any QA seat is dispatched, and again on every re-partition. It writes the manifest's base, sha and `qa.md`'s canonical-run era read at the base into the story's record under the git common dir, held per shard directory.
+  - The merge refuses a `.manifest` whose base or sha differs from the record, and holds the canonical-run rule whenever the record's era is `held`.
+  - A partition with no record merges as before with one `LEGACY-UNRECORDED` line.
+- **The fold.**
+  - Common-dir check: `--lead-range`, `--record-partition` and the QA merge refuse (`lead_checkout_only`) a review or shard repository whose git common dir is not the lead checkout's, so a gitfile redirect cannot degrade them to LEGACY-UNRECORDED. The merge and `--record-partition` run with the LEAD CHECKOUT as working directory (`implementation.md`).
+  - Record-name grammar: `rec_idx_ok`, the one name check behind `--record-dispatch`, the lead's re-run lookup and `--record-partition`.
+  - STORY-BIND binds letter-led indices by a literal match.
+- **D1.** The QA merge and `--record-partition` resolve the shard directory through one helper, `shard_slot`, and refuse a shard directory whose path below the worktree top differs as given and physically (a symlink), or whose record name cannot be derived. The comparison is relative to the worktree top, so a checkout reached through a symlinked prefix still works. The merge-path sprint check (`one_sprint`) is kept for `--check-shard`, where the record block does not run. An existing cell, `crm-sprint-link-ok`, was renamed `crm-sprint-link-out` and flipped to assert the refusal. Cells: `d1-ok`, `d1-symlink-sprint`, `d1-symlink-wrongstory`, `d1-record-link`, `d1-outside`, `d1-prefix-alias` and `crm-sprint-link-check`. Graph cost 0: 0 symlinks ever in graph history, and all 40 QA shard dirs derivable.
+- **Consumer impact.**
+  - New lead steps: `--record-dispatch` at dev dispatch, `--record-partition` at the gate-2 partition, and the `--lead-range` re-run before a serial gate-2 verdict is recorded.
+  - The merge and `--record-partition` must run with the lead checkout as the working directory.
+  - A re-run of a review with no dispatch record checks over the seat base as 0.994.0 did.
+  - In-flight stories need no action.
+  - The merge and `--record-partition` refuse a shard directory whose path below the worktree top differs as given and physically (a symlink), or whose record name cannot be derived.
+  - Measured graph sweep at graph 02fee241b (read-only, private clone): 0 of the reachable serial reviews, 0 QA merges and 0 code-review reviews change verdict between 0.994.0 and 0.995.0, and no new refusal fires on graph's history.
+    - Serial reviews: 117 as-is, 106 reachable in the real layout, 0 of 106 moved.
+    - QA merges: 40, 0 moved.
+    - Code review: 286 serial and 55 merges, 0 moved.
+    - Canonical-run refusals only on the 0.995.0 path (split ii): 0.
+- **Limits, recorded in BL-895.**
+  - The lead's record shares the user and the `.git` with the seat. An overwrite of it, including one naming a sha that does not resolve, or its deletion, degrades the story to LEGACY-UNRECORDED and is not defended. The record does not defend against it, and the reviewed-sha gate does not defend the no-record branch either.
+  - R2: an unused index with a fresh story. This includes a letter-led twin, such as `B1-z-qa-validation.md` with a fresh `story-B1-z.md` listed under another key, which gives SERIAL-OK.
+  - A view-row delete that carries no `file:` line (key-only).
+  - A legitimate in-sprint slug rename, or a correction of a mistyped `file:`, under the index is refused.
+  - N1: `rec_idx_ok` accepts names differing only in case (`s1-b1` and `s1-B1`), which are one file on case-insensitive APFS. The graph census shows 0 case-only collisions among story indices (control: s316 `story-B1` found). Latent, not fixed.
+  - D1 notes, none fixed: two inputs outside the normal lead flow refuse with a misleading message, a shard path that spells the worktree top in another case on APFS and a project whose `docs/` sits below the git top, and both fail closed. Every tracked graph QA shard path matches `^docs/reviews/s[0-9]+/shards/[^/]+/[^/]+$`, 0 do not. A leaf symlink to the same relative path in a sibling worktree of the same repo passes with the correct name and binds against `.manifest`, which is harmless. A swap between `SDIR` resolving and `shard_slot` running leaves the name correct, and the record check catches it.
+- **Held by.** `core/fixtures/review-shard-merge/receipt-bl895.sh`. The fixture's `# MUTANT-MATRIX` headers go from 59 to 128, and `invocations.decl` goes from `541 *` to `636 *` with a new `0 core/scripts/sprint-status.sh` row.
+- **Consumer reach.** `merge-review-shards.sh`, `sprint-status.sh`, `record-only-diff.sh`, `qa.md`, `implementation.md` and `_dispatch-protocol.md` ship. Fixture and receipt files are repository-only.
+
+### BL-840 progress (stays PARTIAL)
+
+- `sprint-status.sh check-stories` gains join J1, a REPORT in writer_forgot's tier that never moves the exit code. It fires when a story is `done`, its `deferred_acs` parses, and the story file carries an AC with `defers_to:` whose id `deferred_acs` omits. The AC id is compared exactly and case-sensitively.
+- `validate-ac-falsifiability.sh --list-defers <story-file>...` prints `<story>\t<AC-id>\t<CO-id>` per AC carrying `defers_to`, and `sprint-status.sh` calls it.
+- J2 is ruled out: all 44 graph fires (s319 and s320 closes) were legitimate gate-3 deferrals per `deploy-validate.md:427-441`.
+- Held by `sprint-status-lifecycle` (`invocations.decl` `200 *` to `257 *`, `64` to `70` `sprint-status.sh` starts) and `check-31-ac-falsifiability`.
+- The `Outcome measured:` line is owed. The entry stays PARTIAL.
+
+### BL-842 progress (stays PARTIAL)
+
+- Six sites said Check 22 records, fires or re-derives "at retro", but it is an implementation-gate check (`gate-validation.md:1805`). All six now read "at the implementation gate": `rule-19.md` (two), `_dispatch-protocol.md`, `implementation.md` (two) and `stories-test-strategy.md`.
+- Derived by an awk two-line window over `git ls-files 'core/**/*.md'`: 6 at 6a4442c2f, 0 after the fix. The control, the total "Check 22" lines, reads 15.
+- Pinned by `process-rule-pins`. The rest of BL-842 is owed.
+
+### BL-904 filed
+
+- `record-only-diff.sh story-base` accepts a base where the story file was `git rm`'d with its view row kept and then re-added, so a range with a code change passes the record-only exemption (rc 0 at base LDEL, against rc 2 at LX and LCODE). The da5b8bf49 engine has it too. BL-895's binding holds. Not fixed.
+
+### BL-905 filed
+
+- A canonical-run claim is not bound to an executed run. A fabricated pair, ``Canonical run: `pytest -q` `` with `Canonical result: 9 passed`, merges with rc=0 on main e311bf7e4 when no run took place. The same world without the two lines is refused with rc=2. Not fixed.
+
 ## [0.994.0] - 2026-11-01
 
 Batch b248, cluster b248-loadfree. Closes BL-897 and advances BL-868, BL-828 and BL-875. No PC- id is closed.

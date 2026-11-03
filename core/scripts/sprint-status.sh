@@ -34,6 +34,19 @@
 #                                              # row's status, both read AT <sha> (git show),
 #                                              # never the working tree. validate-handoff-evidence.sh
 #                                              # calls it at gate 1's frozen sha.
+#   sprint-status.sh list-stories --ref <sha> [--root <repo>]
+#                                              # every implementation-view entry AT <sha>:
+#                                              # key, status, declared file:, resolved file;
+#                                              # exit 2 when the view gives no answer there.
+#                                              # merge-review-shards.sh STORY-BIND reads it.
+#   sprint-status.sh view-history --ref <sha> [--base <sha>] [--root <repo>] <story-file>
+#                                              # every declared `file:` value some commit of the
+#                                              # implementation view added or removed, from the
+#                                              # commit that created the sprint's stories directory
+#                                              # (by ancestry) to <sha>; `since` line first, exit 2
+#                                              # on any git error, a shallow repository, a story
+#                                              # outside that directory, or a `sprint:` that differs
+#                                              # at --base. merge-review-shards.sh STORY-BIND reads it.
 #   sprint-status.sh derive-stories [--check] [--sprint <N>] [--root <dir>]
 #                                              # the WRITE half of that same join: rewrite each
 #                                              # derivable field's value from the story file
@@ -196,15 +209,18 @@ case "${1:-}" in
   derive-stories) MODE="derive-stories"; shift ;;
   story-status) MODE="story-status"; shift ;;
   list-stories) MODE="list-stories"; shift ;;
-  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>] | list-stories | story-status --ref <sha> [--root <repo>] <story-file>" >&2; exit 2 ;;
+  view-history) MODE="view-history"; shift ;;
+  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>] | list-stories | story-status --ref <sha> [--root <repo>] <story-file> | view-history --ref <sha> [--base <sha>] [--root <repo>] <story-file>" >&2; exit 2 ;;
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
-DRY=""; REQUIRE_DONE=""; REF=""
+DRY=""; REQUIRE_DONE=""; REF=""; BASE=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ref)       [ "$MODE" = "story-status" ] || { echo "sprint-status: --ref is a flag of story-status" >&2; exit 2; }
+    --ref)       [ "$MODE" = "story-status" ] || [ "$MODE" = "list-stories" ] || [ "$MODE" = "view-history" ] || { echo "sprint-status: --ref is a flag of story-status, list-stories and view-history" >&2; exit 2; }
                  REF="${2:-}"; shift 2 2>/dev/null || shift ;;
+    --base)      [ "$MODE" = "view-history" ] || { echo "sprint-status: --base is a flag of view-history" >&2; exit 2; }
+                 BASE="${2:-}"; shift 2 2>/dev/null || shift ;;
     --require-done) [ "$MODE" = "check-stories" ] || { echo "sprint-status: --require-done is a flag of check-stories" >&2; exit 2; }
                  REQUIRE_DONE="1"; shift ;;
     --check)     [ "$MODE" = "derive-stories" ] || { echo "sprint-status: --check is a mode of its own, or a flag of derive-stories" >&2; exit 2; }
@@ -218,12 +234,12 @@ while [ $# -gt 0 ]; do
     --closed-at) CLOSED_AT="${2:-}"; shift 2 ;;
     --retro-doc) RETRO_DOC="${2:-}"; shift 2 ;;
     -*)          echo "sprint-status: unknown option '$1'" >&2; exit 2 ;;
-    *)           if [ "$MODE" = "story-status" ] && [ -z "$FILE" ]; then FILE="$1"; shift
+    *)           if { [ "$MODE" = "story-status" ] || [ "$MODE" = "view-history" ]; } && [ -z "$FILE" ]; then FILE="$1"; shift
                  else echo "sprint-status: unknown option '$1'" >&2; exit 2; fi ;;
   esac
 done
-if [ "$MODE" = "story-status" ] && { [ -z "$REF" ] || [ -z "$FILE" ]; }; then
-  echo "usage: sprint-status.sh story-status --ref <sha> [--root <repo>] <story-file>" >&2; exit 2
+if { [ "$MODE" = "story-status" ] || [ "$MODE" = "view-history" ]; } && { [ -z "$REF" ] || [ -z "$FILE" ]; }; then
+  echo "usage: sprint-status.sh $MODE --ref <sha> [--root <repo>] <story-file>" >&2; exit 2
 fi
 
 if [ "$MODE" = "check" ] && [ -z "$FILE" ]; then
@@ -258,11 +274,15 @@ for _lc in "$PROJECT_ROOT/.claude/skills/ai-dlc/layer-contract.yaml" \
   break
 done
 
+# `python3 -I`: isolated, so neither the caller's cwd (sys.path[0] for `-`) nor PYTHONPATH nor user site-packages can
+# supply a module this program imports; a planted json.py there would otherwise answer story-status and view-history
+# for STORY-BIND. The body imports the standard library only, and every input arrives in the variables below.
 MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" PROJECT_ROOT="$PROJECT_ROOT" \
 SPRINT="$SPRINT" NAME="$NAME" VARIANT="$VARIANT" INTENSITY="$INTENSITY" \
 EVIDENCE="$EVIDENCE" CLOSED_AT="$CLOSED_AT" RETRO_DOC="$RETRO_DOC" \
-DRY="$DRY" REQUIRE_DONE="$REQUIRE_DONE" REF="$REF" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
-STORY_FIELDS_REL="${STORY_FIELDS_REL:-}" python3 - <<'PY'
+DRY="$DRY" REQUIRE_DONE="$REQUIRE_DONE" REF="$REF" BASE="$BASE" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
+STORY_FIELDS_REL="${STORY_FIELDS_REL:-}" SELF_DIR="$SCRIPT_DIR" \
+GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts python3 -I - <<'PY'
 import json, os, re, sys
 from pathlib import Path
 
@@ -331,6 +351,11 @@ def parse(text):
     s = STATUS_RE.search(text)
     return (int(m.group(1)) if m else None,
             s.group(1) if s else None)
+
+def view_newlines(text):
+    """A view read from a ref, with the newlines a working-tree read_text() gives: `\\r\\n` and a lone
+    `\\r` become `\\n`, so a CRLF view parses as the same view rather than as one with no `sprint:`."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 def read_view(view):
     p = VIEWS[view]
@@ -643,6 +668,31 @@ def deferred_acs_of(fields):
     return ("ok", ids)
 
 
+def deferring_acs(path, root):
+    """AC ids that carry `defers_to:` in a story file, as the validator's own `--list-defers`
+    reports them (one grammar, no copy here). None when the validator is not beside this script
+    or did not run clean, because this feeds a REPORT and must not invent an id."""
+    import subprocess
+    sib = Path(os.environ.get("SELF_DIR", "")) / "validate-ac-falsifiability.sh"
+    if not sib.is_file():
+        return None
+    env = dict(os.environ)
+    env["AI_DLC_PROJECT_ROOT"] = str(root)
+    try:
+        r = subprocess.run(["bash", str(sib), "--list-defers", str(path)],
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env)
+    except OSError:
+        return None
+    if r.returncode != 0:
+        return None
+    ids = []
+    for ln in r.stdout.decode("utf-8", "replace").splitlines():
+        parts = ln.split("\t")
+        if len(parts) == 3 and parts[1] not in ids:
+            ids.append(parts[1])
+    return ids
+
+
 def layered_owed(path):
     """live_ops + manual_operator from a story file's frontmatter `layered_ac_count`, or None
     when the file carries no such count. Those two layers are the ones stories-test-strategy.md
@@ -908,6 +958,7 @@ def check_stories():
     deferred_view = {}
     deferred_owed = {}     # key -> (status, ids): printed as DEFERRED, a state and not a finding
     writer_forgot = {}     # key -> (count, file name): REPORT only, never moves the exit code
+    defer_unlisted = {}    # key -> (AC ids, file name): J1, REPORT only, never moves the exit code
 
     print("sprint-status check-stories: sprint %d" % target)
 
@@ -1009,6 +1060,11 @@ def check_stories():
                 owed_n = layered_owed(resolved)
                 if owed_n:
                     writer_forgot[key] = (owed_n, resolved.name)
+            if ystatus == "done" and dstate == "ok":
+                dacs = deferring_acs(resolved, root)
+                missing = [a for a in (dacs or []) if a not in dids]
+                if missing:
+                    defer_unlisted[key] = (missing, resolved.name)
         print("  %-15s %d entr%s, %d comparison(s)"
               % (view + ":", len(entries), "y" if len(entries) == 1 else "ies", view_compared))
 
@@ -1045,6 +1101,13 @@ def check_stories():
         print("sprint-status: REPORT [%s] `done` with %d live_ops/manual_operator AC(s) in %s and "
               "no `deferred_acs` field — list the ids still owed to §4b, or write `deferred_acs: []`"
               % (key, n, fname))
+    # J1, a REPORT in writer_forgot's tier: an AC the story file marks `defers_to:` that the
+    # envelope's `deferred_acs` does not list. The AC id is compared exactly, never the CO value.
+    for key in sorted(defer_unlisted):
+        miss, fname = defer_unlisted[key]
+        print("sprint-status: REPORT [%s] `done` with %d AC(s) carrying `defers_to` in %s that "
+              "`deferred_acs` does not list: %s — list them if still owed to §4b"
+              % (key, len(miss), fname, ", ".join(miss)))
     if findings:
         for f in findings:
             sys.stderr.write("sprint-status: FINDING %s\n" % f)
@@ -1468,10 +1531,23 @@ def story_status_at_ref():
 
     Existence is asked per path (one `cat-file --batch-check` process for every candidate) and a
     directory is listed one level deep, so the cost tracks the candidates the join tries, not the
-    size of the whole tree at the ref."""
+    size of the whole tree at the ref.
+
+    `list-stories --ref <sha>` runs this same reader and prints every entry of the view at the
+    ref as `<key>\\t<status>\\t<declared file:>\\t<resolved file>` ("-" for an absent cell; the
+    resolved file is "-" when no candidate or several exist), exit 2 with ONE stderr line when
+    the view gives no answer there: absent, no `sprint:`, or a `stories:` block that is not ok."""
     import subprocess
     ref = os.environ.get("REF", "")
     story = os.environ.get("FILE", "")
+    listing = mode == "list-stories"
+
+    def no_answer(msg):
+        if listing:
+            sys.stderr.write("sprint-status: list-stories UNEVALUABLE — %s\n" % msg)
+            return 2
+        print("row\t\t%s" % msg)
+        return 0
 
     def git(*a):
         r = subprocess.run(["git", "-c", "core.quotePath=off", "-C", str(root)] + list(a),
@@ -1508,7 +1584,9 @@ def story_status_at_ref():
 
     story_rel = os.path.normpath(story)
 
-    if not at(story_rel):
+    if listing:
+        pass
+    elif not at(story_rel):
         print("story\t\tnot tracked at %s" % full[:12], flush=True)
     else:
         sv, how = story_text_status(git("show", "%s:%s" % (full, story_rel)) or "")
@@ -1516,17 +1594,14 @@ def story_status_at_ref():
 
     view_rel = os.path.relpath(str(VIEWS[PRIMARY]), str(root))
     if not at(view_rel):
-        print("row\t\tno %s view tracked at %s (%s)" % (PRIMARY, full[:12], view_rel))
-        return 0
-    text = git("show", "%s:%s" % (full, view_rel)) or ""
+        return no_answer("no %s view tracked at %s (%s)" % (PRIMARY, full[:12], view_rel))
+    text = view_newlines(git("show", "%s:%s" % (full, view_rel)) or "")
     vsprint, _ = parse(text)
     if vsprint is None:
-        print("row\t\t%s carries no `sprint:` at %s" % (view_rel, full[:12]))
-        return 0
+        return no_answer("%s carries no `sprint:` at %s" % (view_rel, full[:12]))
     state, entries = parse_story_entries(text)
     if state != "ok":
-        print("row\t\t%s `stories:` is %s at %s" % (view_rel, state, full[:12]))
-        return 0
+        return no_answer("%s `stories:` is %s at %s" % (view_rel, state, full[:12]))
 
     def rel(p):
         return os.path.normpath(os.path.relpath(str(p), str(root)))
@@ -1557,10 +1632,17 @@ def story_status_at_ref():
     for key, fields, lineno in entries:
         r = resolve_story_file(root / view_rel, key, fields.get("file"), vsprint,
                                exists=exists_at, lister=list_at)
+        if listing:
+            res = "-" if r is None or isinstance(r, list) else rel(r)
+            print("\t".join(("-" if v is None or v == "" else str(v).replace("\t", " "))
+                            for v in (key, fields.get("status"), fields.get("file"), res)))
+            continue
         if r is None or isinstance(r, list):
             continue
         if rel(r) == story_rel:
             hits.append((key, fields.get("status"), lineno))
+    if listing:
+        return 0
     if not hits:
         print("row\t\tno entry of %s (sprint %d) names %s at %s"
               % (view_rel, vsprint, story_rel, full[:12]))
@@ -1571,6 +1653,161 @@ def story_status_at_ref():
         print("row\t\tentry %s carries no `status:` (line %d)" % (hits[0][0], hits[0][2]))
     else:
         print("row\t%s\t%s (%s line %d)" % (hits[0][1], hits[0][0], view_rel, hits[0][2]))
+    return 0
+
+
+def view_history():
+    """`view-history --ref <sha> <story-file>`: every declared `file:` value that some commit of
+    the PRIMARY (implementation) view ADDED or REMOVED, from the commit reachable from <sha> that
+    created the sprint's stories directory (stories_dir of the view's `sprint:` at <sha>), through
+    <sha>. The creation is chosen by ANCESTRY, never by date: a commit adding a file under the
+    directory whose first parent has none; of several, the one that is an ancestor of all the
+    others, else the history is unknown. <story-file> must sit directly in that directory. A
+    shallow repository is unknown history (its boundary reads as a root), and so is a --base whose
+    view carries a different `sprint:`. Every git call here runs with replace objects and grafts
+    off (ss_main's environment).
+
+    Per commit C of that walk (`git rev-list --full-history`, merges included), the `file:` set of
+    the view at C is compared with the set at C's first parent, both through parse_story_entries,
+    so this file stays the one reader of the `stories:` grammar; a view absent at either side (or
+    a root commit) is the empty set. Only the symmetric difference is printed: a value every
+    version of the view carried unchanged was never added or removed.
+
+    Output, stdout: `since<TAB><creation sha>` FIRST, then `file<TAB><value>`, one per distinct
+    value, sorted. The `since` line is the positive marker a caller keys on, so an exit 0 with an
+    empty stdout can never read as "the view named nothing". Exit 2 with ONE stderr line on any
+    git error, an unresolvable ref, or no commit that created the directory: the history is then
+    unknown, never empty."""
+    import subprocess
+    ref = os.environ.get("REF", "")
+    story = os.path.normpath(os.environ.get("FILE", ""))
+
+    def unknown(msg):
+        sys.stderr.write("sprint-status: view-history UNEVALUABLE — %s\n" % msg)
+        return 2
+
+    def git(*a):
+        r = subprocess.run(["git", "-c", "core.quotePath=off", "-C", str(root)] + list(a),
+                           capture_output=True)
+        return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else None
+
+    # One rev-parse answers both: a shallow boundary reads as a root, so the history is unknown there.
+    head = (git("rev-parse", "--is-shallow-repository", "--verify", "--quiet", ref + "^{commit}") or "").split()
+    if len(head) != 2:
+        return unknown("ref does not resolve in %s: %s" % (root, ref))
+    if head[0] != "false":
+        return unknown("%s is a shallow repository (--is-shallow-repository: %s); its boundary reads as a root"
+                       % (root, head[0]))
+    full = head[1]
+    view_rel = os.path.relpath(str(VIEWS[PRIMARY]), str(root))
+    p = subprocess.Popen(["git", "-C", str(root), "cat-file", "--batch"],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    def obj(spec):
+        """(type, text) of <spec>, or (None, None) when it names nothing."""
+        p.stdin.write(("%s\n" % spec).encode("utf-8", errors="surrogateescape"))
+        p.stdin.flush()
+        hdr = p.stdout.readline().decode("utf-8", errors="replace").rstrip("\n").split(" ")
+        if len(hdr) == 3:
+            return hdr[1], view_newlines(p.stdout.read(int(hdr[2]) + 1)[:-1].decode("utf-8", errors="replace"))
+        if len(hdr) == 2 and hdr[1] == "missing":
+            return None, None
+        raise OSError("cat-file answered %r for %s" % (" ".join(hdr), spec))
+
+    def files_at(spec):
+        t, body = obj(spec)
+        if t == "blob":
+            state, entries = parse_story_entries(body)
+            return {f.get("file") for _, f, _ in entries if f.get("file")}
+        if t is None:
+            return set()
+        raise OSError("%s is a %s, not a blob" % (spec, t))
+
+    def stop(msg):
+        p.kill()
+        return unknown(msg)
+
+    want = os.environ.get("SPRINT", "")
+    if not want.isdigit():
+        return unknown("--sprint <N> (the sprint the review is filed under, docs/reviews/s<N>/) is required, got %r" % want)
+    want = int(want)
+    try:
+        # THE SPRINT IS THE REVIEW'S (--sprint, from its lead-assigned path), never the view's: a seat writes the view.
+        sprint = want
+        # The view must read that sprint at <sha> and at --base: a range, or a base, whose view moved to another sprint
+        # is unknown history, never a different stories directory.
+        for at, label in ((full, ""), (os.environ.get("BASE", ""), "the base ")):
+            if not at:
+                continue
+            t, vtext = obj("%s:%s" % (at, view_rel))
+            vsprint = parse(vtext)[0] if t == "blob" else None
+            if vsprint != sprint:
+                return stop("%s reads `sprint: %s` at %s%s, which is not the review's sprint %s (docs/reviews/s%s/); the "
+                            "exemption is decided only over a range whose view is the review's sprint at both ends"
+                            % (view_rel, vsprint, label, at[:12], want, want))
+        # THE SPRINT'S STORIES DIRECTORY, stories_dir of the review's sprint, never --story's own directory.
+        sdir = os.path.normpath(stories_dir(sprint))
+        if os.path.dirname(story) != sdir:
+            return stop("%s is not in sprint %s's stories directory %s" % (story, sprint, sdir))
+        # THE CREATION, BY ANCESTRY: a commit adding a file under sdir whose first parent has no sdir. One
+        # candidate is the start; several must have one that is an ancestor of all the others; else ambiguous.
+        adds = git("log", "--full-history", "--no-renames", "--diff-filter=A", "--format=%H", full, "--", sdir)
+        if adds is None:
+            return stop("git log over %s failed at %s" % (sdir, full[:12]))
+        born = [c for c in adds.split() if obj("%s^1:%s" % (c, sdir))[0] is None]
+        if not born:
+            return stop("no commit reachable from %s created %s" % (full[:12], sdir))
+        if len(born) > 1:
+            low = (git("merge-base", "--octopus", *born) or "").split()
+            if len(low) != 1 or low[0] not in born:
+                return stop("%d commits reachable from %s created %s and none is an ancestor of the others (%s)"
+                            % (len(born), full[:12], sdir, ", ".join(c[:12] for c in born)))
+            born = low
+        born = born[0]
+        walk = git("rev-list", "--full-history", full, "--not", born + "^@", "--", view_rel)
+        if walk is None:
+            return stop("git rev-list over %s failed between %s and %s" % (view_rel, born[:12], full[:12]))
+        def prior_sprint(c, vals):
+            """The values of <vals> the view at c^1 carried as an EARLIER sprint's stories: c^1's view reads a sprint
+            other than the review's and resolve_story_file, over the files tracked at c^1, places the value in that
+            sprint's stories directory. Asked only at the creation commit, where the roll retires the earlier sprint's
+            rows; at any later commit the view's own sprint is the seat's to write, so nothing is dropped there."""
+            t, ptext = obj("%s^1:%s" % (c, view_rel))
+            psprint = parse(ptext)[0] if t == "blob" else None
+            if psprint is None or psprint == sprint:
+                return set()
+            pdir = os.path.normpath(stories_dir(psprint))
+
+            def blob_at(p):
+                rp = os.path.normpath(os.path.relpath(str(p), str(root)))
+                return (not rp.startswith("..") and not os.path.isabs(rp) and "\n" not in rp
+                        and obj("%s^1:%s" % (c, rp))[0] == "blob")
+            out = set()
+            for v in vals:
+                r = resolve_story_file(root / view_rel, "-", v, psprint, exists=blob_at, lister=lambda d, pat: [])
+                if (r is not None and not isinstance(r, list)
+                        and os.path.dirname(os.path.normpath(os.path.relpath(str(r), str(root)))) == pdir):
+                    out.add(v)
+            return out
+
+        named = set()
+        for c in walk.split():
+            cur, prev = files_at("%s:%s" % (c, view_rel)), files_at("%s^1:%s" % (c, view_rel))
+            delta = cur ^ prev
+            # THE ROLL: a value the creation commit removed, which its parent's view resolved into an earlier sprint's
+            # stories directory, is that sprint's story, retired by the roll, never this sprint's.
+            if c == born:
+                delta -= prior_sprint(c, prev - cur)
+            named |= delta
+    except (OSError, ValueError) as e:
+        p.kill()
+        return unknown("reading %s up to %s: %s" % (view_rel, full[:12], e))
+    p.stdin.close()
+    if p.wait() != 0:
+        return unknown("git cat-file over %s exited %d" % (view_rel, p.returncode))
+    print("since\t%s" % born)
+    for v in sorted(named):
+        print("file\t%s" % v.replace("\t", " "))
     return 0
 
 
@@ -1630,7 +1867,9 @@ elif mode == "derive-stories":
 elif mode == "story-status":
     sys.exit(story_status_at_ref())
 elif mode == "list-stories":
-    sys.exit(list_stories())
+    sys.exit(story_status_at_ref() if os.environ.get("REF") else list_stories())
+elif mode == "view-history":
+    sys.exit(view_history())
 else:
     fail("unknown mode '%s'" % mode, code=2)
 PY

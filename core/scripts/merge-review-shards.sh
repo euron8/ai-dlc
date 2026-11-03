@@ -166,6 +166,26 @@
 #   0; else one `REFUSED: ... [owner: serial]` line, exit 2 -- the serial seat's own file, fixed and
 #   checked again. It reads no shard directory and no manifest. The MERGE keeps its stricter count:
 #   the assembled file carries exactly one match.
+#   THE LEAD'S RE-RUN. `--check-serial <file> --gate qa [--story <f>] --lead-range <seat base> <go-signal>` is the
+#   same check run by the lead on its own inputs (implementation.md, "The lead re-runs a serial QA's check"), so a
+#   seat's SERIAL-OK binds nothing it chose. The base is the `dispatch:` line of the story's LEAD RECORD,
+#   `<git common dir>/ai-dlc/stories/s<N>-<story-index>` (<story-index> by rec_idx_ok: any index the lead dispatches
+#   under, letters and slugs included, never `/`, `.` or a leading `-`; one file per story, plain `key: value` lines, every reader
+#   and writer through lead_record_path / lead_record_put / lead_record_get), named from the review's own verified
+#   slot and index and written once at dev dispatch by `--record-dispatch s<N>-<story-index> <sha>` (a second call
+#   keeps the first value, `RECORD-KEPT:`). With a record, <seat base> is never read. With none (a story dispatched
+#   before the record existed, or a missed write), stdout carries exactly one
+#       LEGACY-UNRECORDED: s<N>-<idx> has no dispatch record at <path>; checked over the seat base <b> as 0.994.0 did ...
+#   and the check runs over <seat base> as the seat's own --range run does, STORY-BIND included. REFUSED, [owner:
+#   serial]: a go-signal sha that does not descend from the record's dispatch sha, a review path whose PHYSICAL directory is not exactly
+#   <its repository>/docs/reviews/s<N>/ with <N> read from the directory as spelled (a relative `./<file>` spells no
+#   slot, and a symlink spelling another sprint's slot differs from its target). THE REVIEWED SHA: when qa.md AT
+#   THE BASE prescribes the serial line (RSHA_SENTINEL), the file carries exactly one column-0 `reviewed-sha:` outside
+#   fences (parse_shard's reader) whose whole value is the go-signal sha; otherwise stdout carries
+#       LEGACY: reviewed-sha not checked: <qa.md read> prescribes no column-0 `reviewed-sha: <full go-signal sha>` line
+#   Under --range and --lead-range alike, qa.md is read at the BASE (tracked, `.claude/team-roles/` then
+#   `core/team-roles/`, else on disk), never at the frozen sha and never off the working tree when the base tracks it,
+#   so a commit inside the range cannot move the rule the review is held to.
 #
 # CANONICAL RUN (--gate qa only; the merge over CROSS_FIRST's file, the execution owner's, and
 #   --check-serial over its one file). Read only when the verdict (merged after any forced
@@ -197,6 +217,42 @@
 #   seat passes <f> as story-base's third operand, so a story that is no file at <b> or at <f> (a typo,
 #   a directory, a path inside .git/) is UNEVALUABLE and REFUSED rather than read as absent. A
 #   claimed exemption with no --story or no range is REFUSED; a bare `none` is REFUSED.
+#   `--story` must be the story file sprint-status lists at the frozen sha, and its basename must
+#   carry the review's index (`story-<idx>.md`, or `story-<idx>-<slug>.md` whose slug does not open
+#   with a digit, so index `1` never names `story-1-2-y.md`), else STORY-BIND REFUSES. The review's
+#   <idx> is `-`-joined components, each digits with at most one trailing lower-case letter (`1-1`,
+#   `2-3a`), so a review named for a slug (`1-1-z-qa-validation.md`) carries no index; or a letter-led index (`B1`,
+#   `B-1`, `DASH`), any text with no `/`, `.` or whitespace, bound the same way: the index is compared with --story's
+#   basename and the view's entries LITERALLY (no pattern is built from it), so an index the view lists under no story
+#   is REFUSED by the row and basename checks. Empty and a leading `-` carry no index. And --story must
+#   be the ONLY story under that index: every entry of the implementation view at <base> and at
+#   <frozen> (`sprint-status.sh list-stories --ref`) whose declared `file:` or resolved file passes the
+#   same index rule is REFUSED unless it IS --story, WHATEVER its status; and a view that gives no
+#   answer at either ref (absent, no `sprint:`, a `stories:` block that is not ok) is REFUSED, never
+#   read as "nothing listed". A range that adds a fresh story under the index, and lists it under
+#   another key or by repointing the row's `file:`, still has the real story named at <base>; a base
+#   one record-only commit made by deleting the view, stripping the row's status, naming the story
+#   twice or renaming its file (the row keeps its `file:`) is refused the same way. And every `file:`
+#   value that a commit of the implementation view added or removed between the commit that created
+#   --story's directory and <frozen> (`sprint-status.sh view-history`, which owns the view's path and
+#   grammar) refuses when it is under the index, in this sprint and not --story, so a base whose row
+#   was deleted or repointed off the index still has the real story named in the view's history; a
+#   history that cannot be read is REFUSED, and a key-only row (no `file:`) is not seen. THE SPRINT is the review's own:
+#   <N> of its lead-assigned slot `docs/reviews/s<N>/` (qa.md; in the merge, the shard directory's
+#   `docs/reviews/s<N>/shards/` parent), and a claimed exemption on a review path carrying no `s<N>` is REFUSED. The
+#   view's `sprint:` must read <N> at <base> and at <frozen>, and --story must sit in stories_dir(<N>), so a seat
+#   that rolls the view to another sprint cannot move the directory the walk starts from. That walk starts at
+#   stories_dir(<N>)'s creation, chosen by ancestry and refused when ambiguous, and refuses a shallow repository; at
+#   that creation commit only, a `file:` value its parent's view (an earlier sprint) resolves into that sprint's own
+#   stories directory (sprint-status.sh resolve_story_file) is the earlier sprint's story retired by the roll and is
+#   not named. Replace objects and grafts are ignored by every git call that reads it, sprint-status.sh is called
+#   with the seat's AI_DLC_SPRINT_STATUS_SCHEMA and AI_DLC_PROJECT_ROOT unset (so it reads the schema its own install
+#   ships), the merge unsets git's GIT_DIR and GIT_WORK_TREE family at entry, and --check-serial reads <N> from the
+#   review's logical directory, so a relative review path names its slot. A slot is named exactly `s<N>`, `s` then
+#   digits and nothing else (`s2x`, `s2.Ab12` carry no sprint). Measured on
+#   the reference consumer's 109 bound QA reviews (s317-s320), each driven as a none claim with its
+#   bound story: 0 STORY-BIND refusals at every recorded, recovered or derived gate-1 base, the same
+#   109 verdicts as the binding before this rule.
 #   LEGACY. The merge holds a set to this rule only when qa.md AS INSTALLED at the manifest's frozen
 #   sha (`.claude/team-roles/qa.md`, then `core/team-roles/qa.md`, read in the manifest's worktree),
 #   or, when neither is TRACKED there, the on-disk copy in that worktree (the one QA read), carries
@@ -204,12 +260,33 @@
 #       LEGACY: canonical-run lines not checked: <path> prescribes no column-0 `Canonical run:` label
 #   and the rule is skipped. Neither tracked nor on disk is held to the rule, and each refusal names
 #   both paths tried. --check-serial reads no manifest and keys on the qa.md it already reads
-#   (ROLE_MD), the same way.
+#   (ROLE_MD), the same way, except that ROLE_MD lives under a root the environment may name
+#   (AI_DLC_PROJECT_ROOT, CLAUDE_PROJECT_DIR), so it can hold the rule but never skip it: LEGACY also
+#   needs the review's own repository (its git toplevel) to carry a qa.md, read at the range's base as THE LEAD'S
+#   RE-RUN reads it (on disk when no range is given), either layout, that lacks the phrase; one carrying it, or none,
+#   holds the rule and every refusal says why.
 #   OVERRIDES. A consumer `overrides/` entry shadowing qa.md's `Validation Checklist` (the section
 #   holding the sentinel) is not composed here: no existing program composes a role file with its
 #   overrides. After the pull the rule holds while QA reads the override's checklist, so the
 #   reconcile's HARD-OVERRIDE-DRIFT-SECTION adjudication adopts the two `Canonical run` lines into
 #   the override; until it does, the first PASS refuses with a message naming that fix.
+#   STORY-BIND ON THE RUN BRANCH. The index rule and the view-row rule above also hold a `Canonical run:` that IS a
+#   run, whenever --story and a frozen sha are given (the merge always has its manifest's sha), so a run claim never
+#   carries another story's --story. The one-story, history and record-only rules stay the exemption's own.
+#   THE PARTITION RECORD. `--record-partition <qa shard-dir>`, run by the lead right after the gate-2 partition and
+#   before any QA is dispatched, writes the story's `partition-base`, `partition-sha` (the manifest's) and `qa-era`
+#   (`held` when qa.md as installed AT THE BASE, tracked first, else on disk in the manifest's worktree at that moment,
+#   carries CANON_SENTINEL or is unreadable; else `legacy`) as `key: value` lines in the lead's story record,
+#   `<git common dir>/ai-dlc/stories/s<N>-<idx>` (lead_record_path), named by the shard directory's physical
+#   `docs/reviews/s<N>/shards/` parent and its <idx>. Each key carries the shard directory's basename
+#   (`partition-sha.<idx>-qa-validation-<sha12>[-p<M>]`), so every pass has its own and a later pass, recorded or not,
+#   is never compared with an earlier one's; re-recording one shard directory replaces its three keys and no other. The
+#   --gate qa merge reads them back from the same name: .manifest's base and sha must equal the record's, else
+#   REFUSED [owner: lead] naming the re-partition (implementation.md Gate-2 dispatch) and a re-dispatch; and LEGACY
+#   (above) also needs the record's era to be `legacy`, so a range that strips, deletes or rewrites qa.md, tracked or
+#   on disk, holds the rule. A shard directory with no recorded keys (partitioned before 0.995.0, or re-partitioned
+#   without --record-partition) merges as before, with one `LEGACY-UNRECORDED: story <idx> (s<N>-<idx>) ...` line. The record lives outside the story
+#   worktree and outside base..sha, in the .git the seat shares, so a deliberate overwrite is not defended.
 #
 # OWNER TAILS. Every REFUSED line ends in `[owner: <key>...]`, naming the shard whose FILE must
 #   change; the lead re-dispatches that seat with the line verbatim and never edits its shard.
@@ -568,26 +645,276 @@ fail_gate() {
 
 adv_has() { grep -qF -- "$ADVISOR_SENTINEL" "$1"; } # <role file> -> 0 when it prescribes the line
 
+# story_idx_ok <basename> <idx>: 0 when <basename> carries story index <idx> (header: THE EXEMPTION), as
+# `story-<idx>.md` or `story-<idx>-<slug>.md` whose slug does not open with a digit (index 1 is not story-1-2-y.md).
+# Every comparison against <idx> is a LITERAL string comparison: no pattern is built from the index text, so an index
+# carrying `*`, `?` or `[` names only itself.
+story_idx_ok() {
+  si_p_="story-$2"
+  [ "$1" != "$si_p_.md" ] || return 0
+  [ "${1:0:${#si_p_}+1}" = "$si_p_-" ] || return 1
+  si_r_="${1:${#si_p_}+1}"
+  case "$si_r_" in [0-9]*) return 1 ;; esac
+  case "$si_r_" in ?*.md) return 0 ;; esac
+  return 1
+}
+
+# idx_ok <idx>: 0 when <idx> is a story index (header: THE EXEMPTION). A digit-led index is `-`-joined components, each
+# digits with at most one trailing lower-case letter (`1-1`, `2-3a`), so a review named for a slug
+# (`1-1-z-qa-validation.md`) carries no index. A letter-led index (`B1`, `B-1`, `DASH`, `SR1`) is any text with no `/`,
+# `.` or whitespace; STORY-BIND then binds it as it binds a numeric one, by story_idx_ok's literal match against
+# --story and the implementation view's row listing that story, so a letter-led index no listed story carries is REFUSED
+# there. Empty and a leading `-` are refused by the digit-led grammar.
+idx_ok() {
+  ix_s_="$1"
+  case "$ix_s_" in [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]*) case "$ix_s_" in */* | *.* | *[[:space:]]*) return 1 ;; esac; return 0 ;; esac
+  while :; do
+    ix_c_="${ix_s_%%-*}"; case "$ix_c_" in *[a-z]) ix_c_="${ix_c_%?}" ;; esac
+    case "$ix_c_" in '' | *[!0-9]*) return 1 ;; esac
+    [ "$ix_s_" != "${ix_s_#*-}" ] || return 0
+    ix_s_="${ix_s_#*-}"
+  done
+}
+
+# review_sprint <dir>: the sprint <N> a review path files under, from its lead-assigned slot directory, named exactly
+# `s<N>` (`s` then digits and nothing else, so `s2x` and `s2.Ab12` are no slot); nothing when <dir> is no slot.
+review_sprint() {
+  rs_d_="${1%/}"; rs_d_="${rs_d_##*/}"
+  case "$rs_d_" in s[0-9]*) ;; *) return 1 ;; esac
+  rs_n_="${rs_d_#s}"
+  case "$rs_n_" in *[!0-9]*) return 1 ;; esac
+  printf '%s' "$rs_n_"
+}
+# rec_idx_ok <idx>: 0 when <idx> may key a lead record, its own grammar beside idx_ok: any story index the lead
+# dispatches under (`1-1`, `B1`, `B6-rebind`, `5-browser-smoke`), ASCII letters, digits, `_` and `-`, opening with a
+# letter or digit. Never `/`, `.`, whitespace, a leading `-` or empty: the name is one path component under stories/.
+# idx_ok stays STORY-BIND's grammar, so a digit-led slug-named review (`1-1-z`, `5-browser-smoke`) carries no index there.
+rec_idx_ok() {
+  case "$1" in '' | -* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]*) return 1 ;; esac
+}
+# THE LEAD RECORD (header: CHECK-SERIAL, THE LEAD'S RE-RUN): one file per story, `<git common dir>/ai-dlc/stories/<name>`,
+# <name> `s<N>-<story-index>`, plain `key: value` lines. Every writer and reader of the directory goes through these
+# three helpers, so its path and format live here once. lead_record_path <repo or dir> <name> -> the path (0), or 1
+# when <name> is not `s<digits>-<index>` (<index> by rec_idx_ok) or git names no common dir there.
+lead_record_path() {
+  case "$2" in s[0-9]*-?*) ;; *) return 1 ;; esac
+  lr_n_="${2%%-*}"; lr_n_="${lr_n_#s}"; lr_i_="${2#*-}"
+  case "$lr_n_" in '' | *[!0-9]*) return 1 ;; esac
+  rec_idx_ok "$lr_i_" || return 1
+  lr_c_="$(cd "$1" 2> /dev/null && unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR && git rev-parse --git-common-dir 2> /dev/null < /dev/null)" || return 1
+  case "$lr_c_" in /*) ;; ?*) lr_c_="$(cd "$1" && cd "$lr_c_" 2> /dev/null && pwd -P)" || return 1 ;; *) return 1 ;; esac
+  printf '%s/ai-dlc/stories/%s' "$lr_c_" "$2"
+}
+# common_dir_phys <path> -> the physical git common dir of <path> (0), or 1 when git names none there (header: THE
+# LEAD CHECKOUT). One subshell: enter <path>, ask git, enter the answer (relative or absolute) and print pwd -P.
+common_dir_phys() {
+  ( cd "$1" 2> /dev/null && unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR && cdp_c_="$(git rev-parse --git-common-dir 2> /dev/null < /dev/null)" \
+      && [ -n "$cdp_c_" ] && cd "$cdp_c_" 2> /dev/null && pwd -P )
+}
+# lead_checkout_only <path> <what>: REFUSED [owner: lead] unless <path>'s physical git common dir is this run's working
+# directory's (header: THE LEAD CHECKOUT). The lead record lives under the lead checkout's common dir, so a reviewed or
+# shard repository keyed elsewhere (a redirected gitfile, a clone, a run from another checkout) would read no record.
+lead_checkout_only() {
+  lc_h_="$(common_dir_phys .)" || lc_h_=""; lc_t_="$(common_dir_phys "$1")" || lc_t_=""
+  [ -n "$lc_h_" ] && [ "$lc_h_" = "$lc_t_" ] \
+    || refuse_to lead "$2 $1 keeps its git common dir at ${lc_t_:-<none>}, and this run's working directory $(pwd) keeps it at ${lc_h_:-<none>}, so the lead record cannot be read: run it again from the lead checkout (the repository the dev worktrees were added from); no re-dispatch is needed"
+}
+# slot_rel <dir as given> -> <dir>'s path below its worktree top (0); 1 when that path reads differently through the
+# spelling given (logical) and physically (pwd -P), 3 when <dir> is not enterable or git names no top there. Both
+# sides are taken RELATIVE TO THE TOP, never as absolute paths, so a checkout reached through a symlinked prefix
+# (/tmp on macOS) is one path: the logical spelling must end in the physical path below the top.
+slot_rel() {
+  ( cd "$1" 2> /dev/null || exit 3
+    sl_l_="$(pwd)"; sl_p_="$(pwd -P)"
+    sl_t_="$(unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git rev-parse --show-toplevel 2> /dev/null < /dev/null)" && [ -n "$sl_t_" ] \
+      && sl_t_="$(cd "$sl_t_" 2> /dev/null && pwd -P)" || exit 3
+    case "$sl_p_" in "$sl_t_"/?*) sl_r_="${sl_p_#"$sl_t_"/}" ;; *) exit 3 ;; esac
+    case "$sl_l_" in */"$sl_r_") ;; *) exit 1 ;; esac
+    printf '%s' "$sl_r_" )
+}
+# shard_slot <shard dir as given> <what> -> SS_N, the sprint <N> of the lead record name s<N>-<idx> (header: THE
+# PARTITION RECORD), read off the shard directory's own path below its worktree top, which must be exactly
+# docs/reviews/s<N>/shards/<dir>. REFUSED [owner: lead] when the directory is reached through a symlink (a seat that
+# moves it under another slot or out of shards/ and links it back would move the record name), and when the path
+# names no slot: that is no lead-assigned shard directory, never a partition recorded before 0.995.0.
+shard_slot() {
+  SS_N=""
+  ss_r_="$(slot_rel "$1")"; ss_c_=$?
+  [ "$ss_c_" != 1 ] || refuse_to lead "$2 $1 is reached through a symlink: its path below the worktree top reads differently as given and physically, so the record name it derives is not the one the lead assigned. The shard directory must not be reached through a symlink: re-run from the lead checkout with the shard directory in place (no symlink); no re-dispatch is needed"
+  [ "$ss_c_" = 0 ] || refuse_to lead "$2 $1 is not enterable or git names no worktree top there, so it names no lead record: re-run from the lead checkout with the shard directory in place (no symlink); no re-dispatch is needed"
+  ss_t_="${ss_r_#docs/reviews/}"; ss_s_="${ss_t_%%/*}"; ss_b_="${ss_t_#"$ss_s_"/shards/}"
+  case "$ss_b_" in "$ss_t_" | "" | */*) ;; *) SS_N="$(review_sprint "$ss_s_")" || SS_N="" ;; esac
+  [ "$ss_t_" != "$ss_r_" ] && [ -n "$SS_N" ] \
+    || refuse_to lead "$2 $1 sits at $ss_r_ below its worktree top, not at docs/reviews/s<N>/shards/<dir>, so it names no story record s<N>-<idx>: partition into the path implementation.md names (Gate-2 dispatch: partition-review-diff.sh --map, then --record-partition) and run from the lead checkout"
+}
+# lead_record_put <repo or dir> <name> <key> <value>: replaces <key>'s line (or appends it), keeping every other key.
+lead_record_put() {
+  lp_f_="$(lead_record_path "$1" "$2")" || return 1
+  mkdir -p "${lp_f_%/*}" || return 1
+  { [ ! -f "$lp_f_" ] || awk -v k="$3: " 'index($0, k) != 1' "$lp_f_"; printf '%s: %s\n' "$3" "$4"; } > "$lp_f_.tmp.$$" \
+    && mv "$lp_f_.tmp.$$" "$lp_f_"
+}
+# lead_record_get <repo or dir> <name> <key> -> the value of <key>'s first line (0), or 1 when the file or key is absent.
+lead_record_get() {
+  lg_f_="$(lead_record_path "$1" "$2")" && [ -f "$lg_f_" ] || return 1
+  awk -v k="$3: " 'index($0, k) == 1 { print substr($0, length(k) + 1); f = 1; exit } END { exit !f }' "$lg_f_"
+}
+# sr_qa_at <repo> <commit or empty> -> 0 with $T/qa-at-b holding the review repository's qa.md AT <commit> (tracked,
+# `.claude/team-roles/` then `core/team-roles/`), else its on-disk copy in <repo>; SR_QA_AT names what was read (the
+# bare on-disk path when no commit was given). 1, SR_QA_AT empty, when neither exists (header: CHECK-SERIAL, THE LEAD'S
+# RE-RUN).
+sr_qa_at() {
+  SR_QA_AT=""
+  [ -n "$1" ] || return 1
+  if [ -n "$2" ]; then
+    for sq_p_ in ".claude/team-roles/$ROLE_NAME" "core/team-roles/$ROLE_NAME"; do
+      git --no-replace-objects -C "$1" cat-file -e "${2}:${sq_p_}" 2> /dev/null < /dev/null || continue
+      git --no-replace-objects -C "$1" show "${2}:${sq_p_}" > "$T/qa-at-b" 2> /dev/null < /dev/null || return 1
+      SR_QA_AT="$sq_p_ at $2"; return 0
+    done
+  fi
+  for sq_p_ in "$1/.claude/team-roles/$ROLE_NAME" "$1/core/team-roles/$ROLE_NAME"; do
+    [ -r "$sq_p_" ] || continue
+    cp "$sq_p_" "$T/qa-at-b" || return 1
+    SR_QA_AT="$sq_p_"; [ -z "$2" ] || SR_QA_AT="$sq_p_ (on disk, untracked at $2)"; return 0
+  done
+  return 1
+}
+# ss_bound <args...>: sprint-status.sh beside this script, in this shell's subshell, with the seat's schema override
+# ignored, so STORY-BIND reads stories_dir from the schema the install ships (header: THE EXEMPTION). AI_DLC_PROJECT_ROOT
+# is ignored for the same reason: in the consumer layout it is what locates .claude/schemas/, so a seat-set root would
+# choose the schema; without it sprint-status.sh walks up from its own install path.
+ss_bound() { ( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$cg_ss_" && ss_main "$@" ); }
+
+# pr_record <qa shard-dir>: `--record-partition`, written through the lead-record helpers above (the one copy of the
+# record's path and format). Run by the lead right after the gate-2 partition writes the shard
+# directory and before any QA is dispatched, so the manifest it copies is the partition's own. Writes the story's
+# partition-base, partition-sha (the manifest's base and sha) and qa-era (`held` or `legacy`: qa.md as installed AT
+# THE BASE, tracked first, else on disk in the manifest's worktree now; neither readable is `held`) into the record
+# named by the shard directory's physical `docs/reviews/s<N>/shards/` parent and its <idx>. A re-partition replaces
+# these three keys and touches no other.
+pr_record() {
+  [ "$#" -eq 1 ] && [ -n "$1" ] || refuse "usage: merge-review-shards.sh --record-partition <qa shard-dir>"
+  pr_d_="${1%/}"
+  [ -d "$pr_d_" ] || refuse "shard directory $pr_d_ does not exist; run partition-review-diff.sh --map ... --shard-dir <it> first"
+  pr_l_="$pr_d_"; pr_d_="$(cd "$pr_d_" && pwd -P)" || refuse "shard directory $1 is not enterable"
+  lead_checkout_only "$pr_d_" "--record-partition: the shard directory"
+  shard_slot "$pr_l_" "--record-partition: the shard directory"; pr_n_="$SS_N"
+  MF="$pr_d_/.manifest"
+  [ -f "$MF" ] || refuse "no manifest at $MF; --record-partition runs right after the partition writes it"
+  for k in worktree base sha; do
+    [ "$(awk -F'\t' -v k="$k" '$1 == k { n++ } END { print n + 0 }' "$MF")" = 1 ] || refuse "$MF carries no single '$k' line"
+  done
+  pr_wt_="$(mf worktree)"; pr_b_="$(mf base)"; pr_s_="$(mf sha)"
+  for pr_x_ in "$pr_b_" "$pr_s_"; do
+    case "$pr_x_" in *[!0-9a-f]*|"") refuse "$MF names '$pr_x_', not a full hex object name" ;; esac
+    git --no-replace-objects -C "$pr_wt_" rev-parse -q --verify "${pr_x_}^{commit}" > /dev/null 2>&1 < /dev/null \
+      || refuse "$pr_x_ is not a commit in the manifest's worktree $pr_wt_"
+  done
+  pr_sb_="${pr_d_##*/}"; pr_12_="$(printf '%s' "$pr_s_" | cut -c1-12)"
+  case "$pr_sb_" in
+    *-qa-validation-"$pr_12_") pr_i_="${pr_sb_%-qa-validation-"$pr_12_"}" ;;
+    *-qa-validation-"$pr_12_"-p*) pr_i_="${pr_sb_%-qa-validation-"$pr_12_"-p*}" ;;
+    *) refuse "shard directory $pr_sb_ is not <idx>-qa-validation-<sha12>[-p<M>] for the manifest's sha $pr_s_" ;;
+  esac
+  rec_idx_ok "$pr_i_" || refuse "shard directory $pr_sb_ names no story index"
+  pr_e_=held; pr_at_=""
+  for pr_p_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+    git --no-replace-objects -C "$pr_wt_" cat-file -e "${pr_b_}:${pr_p_}" 2> /dev/null < /dev/null || continue
+    pr_at_=1; git --no-replace-objects -C "$pr_wt_" show "${pr_b_}:${pr_p_}" 2> /dev/null < /dev/null | grep -qF -- 'column-0 `Canonical run:`' || pr_e_=legacy
+    break
+  done
+  if [ -z "$pr_at_" ]; then
+    for pr_p_ in .claude/team-roles/qa.md core/team-roles/qa.md; do
+      [ -r "$pr_wt_/$pr_p_" ] || continue
+      grep -qF -- 'column-0 `Canonical run:`' "$pr_wt_/$pr_p_" || pr_e_=legacy
+      break
+    done
+  fi
+  pr_nm_="s$pr_n_-$pr_i_"
+  lead_record_put "$pr_d_" "$pr_nm_" "partition-base.$pr_sb_" "$pr_b_" && lead_record_put "$pr_d_" "$pr_nm_" "partition-sha.$pr_sb_" "$pr_s_" \
+    && lead_record_put "$pr_d_" "$pr_nm_" "qa-era.$pr_sb_" "$pr_e_" \
+    || refuse "cannot write the partition record $pr_nm_ under the git common dir of $pr_d_"
+  printf 'RECORDED: %s partition-base=%s partition-sha=%s qa-era=%s\n' "$(lead_record_path "$pr_d_" "$pr_nm_")" "$pr_b_" "$pr_s_" "$pr_e_"
+}
+
 canon_gate() {
-  cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"
+  cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"; cg_i_="${7:-}"; cg_n_="${8:-}"
   [ "$WORST" = PASS ] || return 0
   [ -f "$RO" ] || refuse_to lead "record-only-diff.sh is not beside this script at $AI_DLC_SELF_DIR; the canonical-run check reads its grammar there"
   cg_run_="$(mrs_sib "$RO" ro_main label 'Canonical run:' < "$cg_f_")" \
     || refuse_to "$cg_o_" "$cg_f_ reads PASS and carries no 'Canonical run:' line; a PASS waits for QA's own canonical full-collection run: write 'Canonical run: <invocation and working directory>' and 'Canonical result: <its summary line with counts>' (or 'Canonical run: none, <reason>' when the story's diff is record-only). A consumer whose overrides/ entry shadows qa.md's Validation Checklist adopts these two lines into it (the reconcile's HARD-OVERRIDE-DRIFT-SECTION adjudication)"
   # A value that is not a run (record-only-diff.sh RUN-SHAPE) is a no-run claim, however it is spelled.
+  cg_x_=0
   if ! mrs_sib "$RO" ro_main run-shape "$cg_run_" ${cg_c_:+"$cg_c_"}; then
+    cg_x_=1
     mrs_sib "$RO" ro_main none-reason "$cg_run_" 2>/dev/null; cg_nr_=$?
     [ "$cg_nr_" -ne 1 ] \
       || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' gives no reason; write 'none, <reason>' (accepted only on a record-only diff) or the run itself"
     [ -n "$STORY_F" ] && [ -n "$cg_b_" ] && [ -n "$cg_z_" ] \
       || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count), so it claims the record-only exemption, and no --story and --range were given to decide it; re-run with --story <story file> --range <base> <frozen>, or record the run"
+  fi
+  # STORY-BIND ON BOTH BRANCHES (header: THE EXEMPTION): the index and view-row binding below runs for a no-run claim
+  # and for a run claim alike whenever --story and a frozen sha are given (the merge always has the manifest's sha), so
+  # a run claim cannot carry another story's --story. The one-story, history and record-only checks stay the exemption's.
+  if [ "$cg_x_" = 1 ] || { [ -n "$STORY_F" ] && [ -n "$cg_z_" ]; }; then
+    # STORY-BIND (header: THE EXEMPTION): --story is the story file the implementation view lists at <frozen>.
+    [ -n "$cg_i_" ] && idx_ok "$cg_i_" \
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption and its name carries no story index (<idx>-$DSUF.md or <idx>-$DSUF-p<M>.md, <idx> digits joined by '-', each with at most one trailing letter, or opening with a letter and carrying no '/', '.' or whitespace); write the review at the path qa.md names"
+    [ -n "$cg_n_" ] \
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption and its path carries no sprint (docs/reviews/s<N>/, the slot qa.md names); write the review at the path qa.md names"
+    cg_sr_="$(ME=record-only-diff mrs_sib "$RO" ro_story_rel "$cg_r_" "$STORY_F" 2>&1)" \
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption and --story $STORY_F is not a path inside the repository ($cg_sr_); pass the story file"
+    story_idx_ok "${cg_sr_##*/}" "$cg_i_" \
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and --story $STORY_F is not story-$cg_i_.md or story-$cg_i_-*.md, or its slug opens with a digit (a longer index); pass the story file the review is for"
+    cg_ss_="$AI_DLC_SELF_DIR/sprint-status.sh"
+    [ -f "$cg_ss_" ] \
+      || refuse_to "$cg_o_" "STORY-BIND: sprint-status.sh is not beside this script at $AI_DLC_SELF_DIR; the record-only exemption binds --story to its sprint-status row there"
+    cg_row_="$(ss_bound story-status --ref "$cg_z_" --root "$cg_r_" "$cg_sr_" 2>&1 < /dev/null)"
+    # Keyed on the `row` line naming an entry with a status, never on the exit: story-status exits 0
+    # on a path no entry names.
+    cg_rw_="$(awk -F'\t' '$1 == "row" { n++; s = $2; w = $3 } END { if (n == 1 && s != "") print "ok"; else if (n == 1) print w; else print "story-status printed " n + 0 " row line(s)" }' <<<"$cg_row_")"
+    [ "$cg_rw_" = ok ] \
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption, and --story $cg_sr_ is not a story the implementation view lists at $cg_z_ (${cg_rw_:-$cg_row_}); pass the story file sprint-status lists at the frozen sha"
+    STORY_F="$cg_sr_"
+  fi
+  if [ "$cg_x_" = 1 ]; then
     if [ "$cg_o_" = serial ]; then
       # The seat supplies its own range, so its base is held to a gate-1 base's shape (header).
-      git -C "$cg_r_" merge-base --is-ancestor "$cg_b_" "$cg_z_" 2> /dev/null < /dev/null \
+      GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts git -C "$cg_r_" merge-base --is-ancestor "$cg_b_" "$cg_z_" 2> /dev/null < /dev/null \
         || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not an ancestor of $cg_z_; pass the base gate 1 used"
       cg_sb_="$(mrs_sib "$RO" ro_main story-base -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \
         || refuse_to "$cg_o_" "$cg_f_ claims the record-only exemption over --range $cg_b_ $cg_z_, and $cg_b_ is not the story's gate-1 base ($cg_sb_); the exemption is decided over the WHOLE story, from the base gate 1 used, on every pass"
     fi
+    # STORY-BIND, ONE STORY PER INDEX (header: THE EXEMPTION): no OTHER entry of the implementation view at <base> or at
+    # <frozen> names a file under the review's index, by its declared `file:` or its resolved file, WHATEVER its status;
+    # a view that gives no answer at either ref (absent, no `sprint:`, a `stories:` block that is not ok) is REFUSED,
+    # never read as "nothing listed". It runs after the serial base checks, so a base that is no gate-1 base is refused
+    # with that remedy, not this one.
+    for cg_ref_ in "$cg_b_" "$cg_z_"; do
+      cg_ls_="$(ss_bound list-stories --ref "$cg_ref_" --root "$cg_r_" 2>&1 < /dev/null)" \
+        || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view gives no answer at $cg_ref_ (${cg_ls_##*$'\n'}), so the stories under that index are unknown; the exemption is decided only over a range whose view lists the sprint's stories at both ends"
+      while IFS=$'\t' read -r cg_k_ cg_s_ cg_d_ cg_p_; do
+        { [ "${cg_d_##*/}" != "${STORY_F##*/}" ] && story_idx_ok "${cg_d_##*/}" "$cg_i_"; } \
+          || { [ "$cg_p_" != "$STORY_F" ] && story_idx_ok "${cg_p_##*/}" "$cg_i_"; } || continue
+        refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and --story $STORY_F is not the only story under that index: the implementation view's entry $cg_k_ (status $cg_s_, file $cg_d_) names another story under it at $cg_ref_; pass the story the view listed for this index before the range, and decide the exemption over it"
+      done <<<"$cg_ls_"
+    done
+    # STORY-BIND, THE VIEW'S HISTORY (header: THE EXEMPTION): every `file:` value a commit of the implementation view added
+    # or removed, from the commit that created --story's directory to <frozen> (`sprint-status.sh view-history`, which
+    # owns the view's path and grammar), under the index, in this sprint and not --story, refuses; no `since` line refuses.
+    cg_vh_="$(ss_bound view-history --ref "$cg_z_" --base "$cg_b_" --sprint "$cg_n_" --root "$cg_r_" "$STORY_F" 2>&1 < /dev/null)" \
+      && [ "${cg_vh_%%$'\t'*}" = since ] \
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view's history up to $cg_z_ is unknown (${cg_vh_##*$'\n'}); the exemption is decided only where that history can be read"
+    cg_bd_="${cg_vh_%%$'\n'*}"; cg_bd_="${cg_bd_#since$'\t'}"
+    while IFS=$'\t' read -r cg_k_ cg_d_; do
+      [ "$cg_k_" = file ] && [ "${cg_d_##*/}" != "${STORY_F##*/}" ] && story_idx_ok "${cg_d_##*/}" "$cg_i_" || continue
+      # This sprint only: the declared directory, its leading ../ and ./ stripped, is a component suffix of --story's.
+      cg_dd_="${cg_d_%/*}"; [ "$cg_dd_" != "$cg_d_" ] || cg_dd_=""
+      while :; do case "$cg_dd_" in ../*) cg_dd_="${cg_dd_#../}" ;; ./*) cg_dd_="${cg_dd_#./}" ;; *) break ;; esac; done
+      case "/${STORY_F%/*}" in "/$cg_dd_" | *"/$cg_dd_") : ;; *) [ -z "$cg_dd_" ] || continue ;; esac
+      refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view named $cg_d_ under that index between ${cg_bd_:0:12} (where ${STORY_F%/*} was created) and $cg_z_; pass the story the view listed for this index, and decide the exemption over it"
+    done <<<"$cg_vh_"
     cg_ro_="$(mrs_sib "$RO" ro_main paths -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \
       || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' claims the record-only exemption, and $cg_b_..$cg_z_ is not record-only for $STORY_F (${cg_ro_}); run the canonical full collection and record it"
     return 0
@@ -1146,6 +1473,11 @@ pat_owners() {
 
 mrs_main() {
 export LC_ALL=C
+# Git's repository discovery is the review file's and the manifest's own (`-C`, `--show-toplevel`), never the seat's
+# environment: a GIT_WORK_TREE or GIT_DIR left in it would point every read at another checkout (header: THE EXEMPTION).
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+# --record-partition (header: THE PARTITION RECORD) is its own mode, taken before the argument loop.
+if [ "$#" -gt 0 ] && [ "$1" = "--record-partition" ]; then OWNER="lead"; shift; pr_record "$@"; exit $?; fi
 
 # Every refusal names the shard whose file must CHANGE (header: OWNER TAILS). OWNER is `lead`
 # outside the per-shard function and that shard's key inside it; refuse_to names it explicitly.
@@ -1155,9 +1487,10 @@ OWNER="lead"
 # --check-shard target), so one pass names every duplicate (header: OWNER TAILS).
 DUP_N=0
 CG_NOTE=""
-USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>]"
+USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>] | --check-serial <absolute file> --gate qa [--story <f>] --lead-range <seat base> <go-signal sha> | --record-dispatch s<N>-<story-index> <sha> | --record-partition <qa shard-dir>"
 
-SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""; STORY_F=""; R_BASE=""; R_FROZEN=""
+SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""; STORY_F=""; R_BASE=""; R_FROZEN=""; LEAD=0
+SEAT_B=""; RD_NAME=""; RD_SHA=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
@@ -1167,16 +1500,34 @@ while [ "$#" -gt 0 ]; do
     --check-shard) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; CHECK="$2"; shift 2 ;;
     --findings) [ "$#" -ge 2 ] || refuse "$USAGE"; CHECK_N="$2"; CHECK_N_SET=1; shift 2 ;;
     --story) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; STORY_F="${2#./}"; shift 2 ;;
-    --range) [ "$#" -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] || refuse "$USAGE"; R_BASE="$2"; R_FROZEN="$3"; shift 3 ;;
+    --range) [ "$#" -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] && [ "$LEAD$R_BASE" = 0 ] || refuse "$USAGE"; R_BASE="$2"; R_FROZEN="$3"; shift 3 ;;
+    --lead-range) [ "$#" -ge 3 ] && [ -n "$3" ] && [ "$LEAD$R_BASE" = 0 ] || refuse "$USAGE"; LEAD=1; SEAT_B="$2"; R_FROZEN="$3"; shift 3 ;;
+    --record-dispatch) [ "$#" -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] || refuse "$USAGE"; RD_NAME="$2"; RD_SHA="$3"; shift 3 ;;
     --*) refuse "unknown flag $1; $USAGE" ;;
     *) [ -z "$SDIR" ] || refuse "unexpected argument $1; $USAGE"; SDIR="$1"; shift ;;
   esac
 done
+# ---- --record-dispatch (header: CHECK-SERIAL, THE LEAD'S RE-RUN): the dispatch step writes the story's dispatch sha to
+# its lead record, once (a rework keeps the original), through the shared record helpers. Run from the lead checkout.
+if [ -n "$RD_NAME" ]; then
+  [ -z "$SERIAL$SDIR$GATE$OUT$CHECK$STORY_F$R_BASE$R_FROZEN" ] && [ "$LEAD" = 0 ] || refuse "--record-dispatch takes no other argument; $USAGE"
+  rd_sha_="$(git --no-replace-objects rev-parse -q --verify "${RD_SHA}^{commit}" 2> /dev/null < /dev/null)" \
+    || refuse "--record-dispatch: $RD_SHA is not a commit in $(pwd); pass the sprint-branch HEAD the dev worktree was cut from"
+  rd_f_="$(lead_record_path . "$RD_NAME")" || refuse "--record-dispatch: '$RD_NAME' is not s<N>-<story-index>, or $(pwd) is not in a git repository"
+  if rd_v_="$(lead_record_get . "$RD_NAME" dispatch)"; then
+    printf 'RECORD-KEPT: %s dispatch: %s\n' "$rd_f_" "$rd_v_"; exit 0
+  fi
+  lead_record_put . "$RD_NAME" dispatch "$rd_sha_" || refuse "--record-dispatch: cannot write $rd_f_"
+  printf 'RECORDED: %s dispatch: %s\n' "$rd_f_" "$rd_sha_"; exit 0
+fi
 if [ -n "$SERIAL" ]; then
   OWNER="serial"
   [ -z "$SDIR" ] && [ -z "$OUT" ] && [ -z "$CHECK" ] && [ "$CHECK_N_SET" = 0 ] && [ -n "$GATE" ] \
     || refuse "--check-serial takes only --gate, --story and --range; $USAGE"
   [ -f "$SERIAL" ] || refuse "$SERIAL is not a regular file; write the review file, then check it"
+  [ "$LEAD" = 0 ] || [ "$GATE" = qa ] || refuse "--lead-range is read only under --gate qa; $USAGE"
+elif [ "$LEAD" = 1 ]; then
+  refuse "--lead-range is read only by --check-serial; $USAGE"
 elif [ -n "$CHECK" ]; then
   [ -n "$SDIR" ] && [ -n "$GATE" ] && [ -z "$OUT" ] || refuse "--check-shard takes no --out; $USAGE"
   [ -z "$STORY_F$R_BASE" ] || refuse "--story and --range are read only by the qa merge and --check-serial; $USAGE"
@@ -1201,11 +1552,22 @@ esac
 # The merge decides the exemption over the manifest's base..sha, the whole story on every pass; a
 # caller-supplied range could only narrow it.
 [ -n "$SERIAL" ] || [ -z "$R_BASE" ] || refuse "--range is read only by --check-serial; the merge decides the record-only exemption over the manifest's base and sha (the whole story's range on every pass); $USAGE"
+# ONE SPRINT PER PATH (STORY-BIND, --gate qa). --check-serial reads the sprint <N> from the review's logical directory
+# and the merge from the shard directory's physical `docs/reviews/s<N>/shards/` parent, so a symlinked directory naming
+# another s<M> would choose the sprint for either reader. one_sprint <slot dir, logical> <slot dir, physical> refuses
+# when the two spellings name different sprints (compared as review_sprint answers, never as paths), naming both.
+one_sprint() {
+  os_l_="$(review_sprint "$1")" || os_l_=""; os_p_="$(review_sprint "$2")" || os_p_=""
+  [ "$os_l_" = "$os_p_" ] \
+    || refuse "STORY-BIND: the review path names two sprints: the logical directory $1 reads sprint ${os_l_:-<none>} and the physical directory $2 reads sprint ${os_p_:-<none>}; write the review at the path qa.md names, with no symlink choosing its sprint"
+}
+[ -z "$SERIAL" ] || [ "$GATE" != qa ] || one_sprint "$(cd "$(dirname "$SERIAL")" 2> /dev/null && pwd)" "$(cd "$(dirname "$SERIAL")" 2> /dev/null && pwd -P)"
 if [ -n "$SERIAL" ]; then :
 else
 SDIR="${SDIR%/}"
 [ -d "$SDIR" ] || refuse "shard directory $SDIR does not exist"
-SDIR="$(cd "$SDIR" && pwd -P)" || refuse "shard directory is not enterable"
+[ "$GATE" != qa ] || one_sprint "$(cd "$SDIR/../.." 2> /dev/null && pwd)" "$(cd "$SDIR/../.." 2> /dev/null && pwd -P)"
+SDIR_IN="$SDIR"; SDIR="$(cd "$SDIR" && pwd -P)" || refuse "shard directory is not enterable"
 if [ -z "$CHECK" ]; then
 case "$OUT" in */) refuse "--out $OUT names a directory" ;; esac
 OUT_DIR="$(dirname "$OUT")"
@@ -1287,6 +1649,8 @@ fi
 CANON_SENTINEL='column-0 `Canonical run:`'
 # THE ADVISOR LINE's era sentinel (header: SHARD GRAMMAR, ADVISOR LINE), matched as CANON_SENTINEL is.
 ADVISOR_SENTINEL='column-0 `advisor:`'
+# The serial reviewed-sha line's era sentinel (header: CHECK-SERIAL, THE LEAD'S RE-RUN), qa.md's own prescription.
+RSHA_SENTINEL='column-0 `reviewed-sha: <full go-signal sha>`'
 RO="$AI_DLC_SELF_DIR/record-only-diff.sh"
 # ---- THE ADVISOR LINE (header: SHARD GRAMMAR). adv_gate <file>: one function for the per-shard check
 # and --check-serial. The caller sets ADV_AT (`legacy` acquits an absent line; any other value holds
@@ -1316,13 +1680,84 @@ if [ -n "$SERIAL" ]; then
     WORST="$C1V"
     printf '%s\n' "$SERIAL" > "$T/serialfiles" || refuse "cannot stage the serial file"
     fail_gate "$SERIAL" serial "$T/serialfiles"
+    sr_repo_="$(git -C "$(dirname "$SERIAL")" rev-parse --show-toplevel 2>/dev/null < /dev/null)" || sr_repo_=""
+    # THE RANGE'S TWO COMMITS (header: CHECK-SERIAL, THE LEAD'S RE-RUN): qa.md is read at the base, never at the frozen
+    # sha the seat's range ends at, so a commit inside the range cannot change the rule the review is held to.
+    sr_b_=""; sr_f_=""
+    if [ -n "$sr_repo_" ]; then
+      [ -z "$R_BASE" ] || sr_b_="$(git --no-replace-objects -C "$sr_repo_" rev-parse -q --verify "${R_BASE}^{commit}" 2> /dev/null < /dev/null)" || sr_b_=""
+      [ -z "$R_FROZEN" ] || sr_f_="$(git --no-replace-objects -C "$sr_repo_" rev-parse -q --verify "${R_FROZEN}^{commit}" 2> /dev/null < /dev/null)" || sr_f_=""
+    fi
+    if [ "$LEAD" = 1 ]; then
+      # THE LEAD'S RE-RUN (header: CHECK-SERIAL): the review is the lead-assigned file at its physical docs/reviews/s<N>/
+      # slot in its own repository, the go-signal sha the frozen end, and the base the story's lead record's `dispatch:`
+      # (written by --record-dispatch at dev dispatch). With no record, LEGACY-UNRECORDED: the seat's base, as before.
+      [ -n "$sr_repo_" ] || refuse "$SERIAL is not inside a git worktree; the lead re-runs the check on the review file at the path it assigned"
+      lead_checkout_only "$sr_repo_" "--lead-range: the review's repository"
+      [ -n "$sr_f_" ] || refuse "--lead-range go-signal sha '${R_FROZEN}' is not a commit in $sr_repo_; pass the full sha the lead recorded at the gate-2 go-signal"
+      sr_top_="$(cd "$sr_repo_" 2> /dev/null && pwd -P)" && sr_pd_="$(cd "$(dirname "$SERIAL")" 2> /dev/null && pwd -P)" \
+        && sr_ln_="$(review_sprint "$(dirname "$SERIAL")")" && [ "$sr_pd_" = "$sr_top_/docs/reviews/s$sr_ln_" ] \
+        || refuse "$SERIAL is not at docs/reviews/s<N>/ in its own repository $sr_repo_ (physically ${sr_pd_:-unresolved}); the lead re-runs the check on the review path it assigned, never on a path the seat reports"
+      sr_li_=""
+      case "$(basename "$SERIAL")" in
+        ?*-"$DSUF".md) sr_li_="$(basename "$SERIAL" ".md")"; sr_li_="${sr_li_%-"$DSUF"}" ;;
+        ?*-"$DSUF"-p*.md) sr_li_="$(basename "$SERIAL" ".md")"; sr_li_="${sr_li_%-"$DSUF"-p*}" ;;
+      esac
+      sr_rn_="s$sr_ln_-$sr_li_"
+      sr_rp_="$(lead_record_path "$sr_repo_" "$sr_rn_")" || refuse "$SERIAL names no story index the lead record can be keyed on (s$sr_ln_-${sr_li_:-<none>}); write the review at the path qa.md names"
+      if sr_rd_="$(lead_record_get "$sr_repo_" "$sr_rn_" dispatch)" \
+        && sr_b_="$(git --no-replace-objects -C "$sr_repo_" rev-parse -q --verify "${sr_rd_}^{commit}" 2> /dev/null < /dev/null)"; then
+        GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts git -C "$sr_repo_" merge-base --is-ancestor "$sr_b_" "$sr_f_" 2> /dev/null < /dev/null \
+          || refuse "the go-signal sha $sr_f_ does not descend from the dispatch sha $sr_b_ in $sr_rp_, so $SERIAL reviewed a history the story was not dispatched on; send the story back to the dev to rebuild it on its dispatched branch"
+      else
+        sr_b_=""
+        [ -z "$SEAT_B" ] || [ "$SEAT_B" = - ] \
+          || sr_b_="$(git --no-replace-objects -C "$sr_repo_" rev-parse -q --verify "${SEAT_B}^{commit}" 2> /dev/null < /dev/null)" || sr_b_=""
+        printf 'LEGACY-UNRECORDED: %s has no dispatch record at %s; checked over the seat base %s as 0.994.0 did (the dispatch step writes it with --record-dispatch)\n' "$sr_rn_" "$sr_rp_" "${SEAT_B:--}"
+      fi
+      R_BASE="$sr_b_"
+    fi
+    sr_qa_at "$sr_repo_" "$sr_b_" || SR_QA_AT=""
+    if [ "$LEAD" = 1 ]; then
+      # THE REVIEWED SHA (header: CHECK-SERIAL, THE LEAD'S RE-RUN), held when qa.md at the dispatch sha prescribes the
+      # serial line; LEGACY otherwise. Exactly one column-0 line outside fences, its value the go-signal sha alone.
+      if [ -n "$SR_QA_AT" ] && grep -qF -- "$RSHA_SENTINEL" "$T/qa-at-b"; then
+        # The merge's own per-shard reader (parse_shard's R line: the count, then the first value, `-` when empty).
+        sr_rl_="$(parse_shard "$SERIAL" | awk '$1 == "R" { n = $2; sub(/^R [0-9]+ /, ""); print n "\t" $0; exit }')" \
+          || refuse "parsing $SERIAL did not run"
+        [ "${sr_rl_%%$'\t'*}" = 1 ] \
+          || refuse "$SERIAL carries ${sr_rl_%%$'\t'*} 'reviewed-sha:' line(s) outside a fence; $SR_QA_AT prescribes exactly one, naming the go-signal sha $sr_f_"
+        sr_rv_="${sr_rl_#*$'\t'}"
+        [ "$sr_rv_" = "$sr_f_" ] \
+          || refuse "$SERIAL reviewed '${sr_rv_:-<empty>}', not the go-signal sha $sr_f_ alone; the validation is of another tree, or its reviewed-sha: line carries more than the full sha"
+      else
+        printf 'LEGACY: reviewed-sha not checked: %s prescribes no %s line\n' "${SR_QA_AT:-$ROLE_NAME (absent at $sr_b_ and on disk)}" "$RSHA_SENTINEL"
+      fi
+    fi
+    # ROLE_MD sits under a root the environment may choose (AI_DLC_PROJECT_ROOT, CLAUDE_PROJECT_DIR), so it can hold
+    # the rule but never acquit it: LEGACY also needs the checked repo's own qa.md (at the range's base, else on disk,
+    # either layout) to lack the sentinel. An unreadable one holds (header: CANONICAL RUN, LEGACY).
+    sr_held_=1; sr_leg_="$ROLE_MD"
     if grep -qF -- "$CANON_SENTINEL" "$ROLE_MD"; then
-      sr_repo_="$(git -C "$(dirname "$SERIAL")" rev-parse --show-toplevel 2>/dev/null < /dev/null)" || sr_repo_=""
+      :
+    else
+      sr_leg_="$SR_QA_AT"
+      if [ -z "$sr_leg_" ]; then CG_NOTE=" (held: $ROLE_MD prescribes no $CANON_SENTINEL label, and the checked repo ${sr_repo_:-<none>} has no $ROLE_NAME in either layout${sr_b_:+ at $sr_b_ or on disk})"
+      elif grep -qF -- "$CANON_SENTINEL" "$T/qa-at-b"; then CG_NOTE=" (held: $sr_leg_ prescribes the $CANON_SENTINEL label; $ROLE_MD, under the project root, does not)"
+      else sr_held_=0; fi
+    fi
+    if [ "$sr_held_" = 1 ]; then
       [ -z "$R_BASE" ] || [ -n "$sr_repo_" ] || refuse "--range was given and $SERIAL is not inside a git worktree to read it in"
       sr_conv_=""; [ -z "$sr_repo_" ] || [ ! -r "$sr_repo_/docs/coding-conventions.md" ] || sr_conv_="$sr_repo_/docs/coding-conventions.md"
-      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_"
+      sr_idx_=""
+      case "$(basename "$SERIAL")" in
+        ?*-"$DSUF".md) sr_idx_="$(basename "$SERIAL" ".md")"; sr_idx_="${sr_idx_%-"$DSUF"}" ;;
+        ?*-"$DSUF"-p*.md) sr_idx_="$(basename "$SERIAL" ".md")"; case "${sr_idx_##*-"$DSUF"-p}" in ''|*[!0-9]*) sr_idx_="" ;; *) sr_idx_="${sr_idx_%-"$DSUF"-p*}" ;; esac ;;
+      esac
+      sr_n_="$(cd "$(dirname "$SERIAL")" 2> /dev/null && review_sprint "$(pwd)")" || sr_n_=""
+      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_" "$sr_idx_" "$sr_n_"
     else
-      printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$ROLE_MD" "$CANON_SENTINEL"
+      printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$sr_leg_" "$CANON_SENTINEL"
     fi
   fi
   printf 'SERIAL-OK: %s verdict=%s\n' "$SERIAL" "$C1V"
@@ -1364,6 +1799,32 @@ case "$OB" in
 esac
 [ "$OPASS" = "$DPASS" ] \
   || refuse "pass marker mismatch: shard directory $SB is $(pass_name "$DPASS") and --out $OB is $(pass_name "$OPASS"); a shard directory is merged only into its own pass's review file"
+fi
+# THE PARTITION RECORD (header), --gate qa merge only: the lead's record of the partition, named by the shard
+# directory's s<N> (shard_slot: its docs/reviews/s<N>/shards/ path below the worktree top, read the same through the
+# spelling given and physically) and $IDX, decides the base, the sha and (with the frozen tree) the canonical-run era.
+# No record, or one missing a key: LEGACY-UNRECORDED and the 0.994.0 merge. A record: .manifest's base and sha must equal it.
+PR_ERA=""
+if [ "$GATE" = qa ] && [ -z "$CHECK" ]; then
+  lead_checkout_only "$SDIR" "the qa merge: the shard directory"
+  shard_slot "$SDIR_IN" "the qa merge: the shard directory"; pr_n_="$SS_N"
+  pr_nm_="s$pr_n_-$IDX"; pr_b_=""; pr_s_=""
+  # Keyed PER SHARD DIRECTORY (<idx>-qa-validation-<sha12>[-p<M>]): each pass's partition has its own keys, so an
+  # earlier pass's values are never compared with a later pass's manifest.
+  pr_k_="$SB"
+  pr_b_="$(lead_record_get "$SDIR" "$pr_nm_" "partition-base.$pr_k_")" || pr_b_=""
+  pr_s_="$(lead_record_get "$SDIR" "$pr_nm_" "partition-sha.$pr_k_")" || pr_s_=""
+  PR_ERA="$(lead_record_get "$SDIR" "$pr_nm_" "qa-era.$pr_k_")" || PR_ERA=""
+  if [ -z "$pr_b_" ] || [ -z "$pr_s_" ] || [ -z "$PR_ERA" ]; then
+    PR_ERA=""
+    printf 'LEGACY-UNRECORDED: story %s (%s) has no partition record for %s (merge-review-shards.sh --record-partition, at the gate-2 partition); base, sha and the canonical-run era are read from %s and the frozen tree as before 0.995.0\n' "$IDX" "$pr_nm_" "$SB" "$MF"
+  else
+    [ "$PR_ERA" = legacy ] || PR_ERA=held
+    [ "$pr_b_" = "$M_BASE" ] \
+      || refuse "the lead's partition record $pr_nm_ names base $pr_b_, and $MF names base $M_BASE: this shard directory is not the partition the lead recorded. Remove it, re-partition (implementation.md Gate-2 dispatch: partition-review-diff.sh --map, then --record-partition) and re-dispatch every QA seat of the story"
+    [ "$pr_s_" = "$M_SHA" ] \
+      || refuse "the lead's partition record $pr_nm_ names sha $pr_s_, and $MF names sha $M_SHA: this shard directory is not the partition the lead recorded. Remove it, re-partition (implementation.md Gate-2 dispatch: partition-review-diff.sh --map, then --record-partition) and re-dispatch every QA seat of the story"
+  fi
 fi
 
 PART="$SELF_DIR/partition-review-diff.sh"
@@ -1579,13 +2040,18 @@ if [ "$GATE" = qa ]; then
   fi
   # Neither readable: held (an unreadable role file never acquits), and every refusal names both paths tried.
   [ -n "$cr_inst_" ] || CG_NOTE=" (held: qa.md is neither tracked at ${M_SHA}:.claude/team-roles/qa.md nor on disk at $M_WT/.claude/team-roles/qa.md, either layout)"
+  # LEGACY also needs the lead's recorded era to be legacy (header: THE PARTITION RECORD): a held record holds the rule
+  # whatever the range did to qa.md at the frozen sha or on disk.
+  [ "$PR_ERA" != held ] || cr_held_=1
   if [ "$cr_held_" = 0 ]; then
     printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$cr_inst_" "$CANON_SENTINEL"
   else
     # The exemption is decided over the WHOLE story: the manifest's base is gate 1's base on every
     # pass (implementation.md Gate-2 dispatch), and the merge takes no --range to narrow it.
     cr_conv_=""; [ ! -r "$M_WT/docs/coding-conventions.md" ] || cr_conv_="$M_WT/docs/coding-conventions.md"
-    canon_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$M_WT" "$M_BASE" "$M_SHA" "$cr_conv_"
+    # The merge's sprint is the dispatch path's: <shard-dir> is docs/reviews/s<N>/shards/<idx>-...-<sha12>[-p<M>].
+    cr_n_=""; [ "$(basename "$(dirname "$SDIR")")" != shards ] || cr_n_="$(review_sprint "$(dirname "$(dirname "$SDIR")")")" || cr_n_=""
+    canon_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$M_WT" "$M_BASE" "$M_SHA" "$cr_conv_" "$IDX" "$cr_n_"
   fi
   CG_NOTE=""
 fi
