@@ -1408,7 +1408,14 @@ bug-fix story (the implementation gate arm below): that obligation is keyed
 on the declaration on disk, not on what the gate produces, so an
 implementation gate owes it whether or not the gate itself produced a
 provenance-bearing artifact. A gate matching none of these three runs no arm
-of this check.
+of this check. A sharded party round's seats are not a block-bearing evaluation:
+the record of a seat is the dispatch guard's spawn-ledger row for its spawn,
+written by the hook, and the seat's `--mark` line (Rule 20 (v)). This check runs
+no arm on a seat file. A sharded party round's seat record is joined by
+`join-remediator-shards.sh` (`seat_row_check`, in the party parts join and in
+`--sources`), which refuses any sharded seat file `<step>-<seat>-<ordinal|cross>.md`
+of a cited step that has no `spawn-ledger.jsonl` row of that sprint, role,
+`role_contract_cited: true` and shard `<ordinal>/<K>` or `cross/<K>`.
 
 **Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Owned by
 `.claude/schemas/provenance-block.json`. It is rendered into the role files of the agents
@@ -1432,7 +1439,8 @@ the values, and a genuine zero is a valid reading. Fixture:
 **Check.** Invoke `scripts/ai-dlc/validate-provenance-block.sh` against the
 gate's primary artifact. An artifact carrying NO block at all is a FINDING by
 default, flag or no flag; `--allow-missing` is the only opt-out and it belongs
-to a caller that has decided this artifact class carries none.
+to a caller that has decided this artifact class carries none. A party seat file
+under `_bmad-output/party-mode/s<N>/` is never this check's artifact.
 
 - **Retro gate:** run `scripts/ai-dlc/validate-provenance-block.sh
   docs/retro/s<N>/retro.md` AND `scripts/ai-dlc/validate-retro-evidence.sh

@@ -330,4 +330,24 @@ mkworld nometadir "$LEDGER_ROW" "$CTX_OTHER" "NONE" "$EMPTY_TABLE" > "$ROOT/.w_n
 #     resolve to a spawn meta, and neither of those reaches a ledger row).
 mkworld unrelatedrow "$LEDGER_ROW" "$CTX_OTHER" "$META_TUI" "$UNRELATED_TABLE" > "$ROOT/.w_unrelatedrow"
 
+# (N) NESTED DISPATCH, ONE LEVEL. The lead dispatched a ROLE-LESS round dispatcher (ledger row
+#     with no role, meta keyed on its spawn). The dispatcher spawned a member, whose tool_use
+#     id is in the DISPATCHER's transcript and so never in the lead's: only the ledger row's
+#     `parent_agent_id` (the dispatcher's agent id) and the member's meta link it.
+TUIM="toolu_01FIXTUREmember0000000000"
+mknested() { # mknested <name> <parent-agent-id> <ctx-jsonl>
+  local w
+  w="$(mkworld "$1" "$(jq -nc --arg t "$TUI" '{v:1, ts:"2026-09-14T05:28:04Z", name:"round-dispatcher", role:null, tool_use_id:$t, parent_agent_id:""}')" "$3" "$META_TUI" "$EMPTY_TABLE")"
+  jq -nc --arg t "$TUIM" --arg p "$2" '{v:1, ts:"2026-09-14T05:29:04Z", name:null, role:"dev", model_bound:"opus", definition_bound:true, tool_use_id:$t, parent_agent_id:$p}' >> "$w/_bmad-output/spawn-ledger.jsonl"
+  jq -nc --arg t "$TUIM" '{agentType:"dev", toolUseId:$t}' > "$w/lead/subagents/agent-amember00000000001.meta.json"
+  printf '%s' "$w"
+}
+# (N1) member of the lead's dispatcher, no stop row -> OPEN (BLOCK).
+mknested nested "afixture0000000001" "$CTX_OTHER" > "$ROOT/.w_nested"
+# (N2) the same with the member's stop row -> ALLOW.
+MEMBER_STOP="$(jq -nc --arg t "$TUIM" '{v:3, ts:"2026-09-14T05:31:00Z", agent_id:"amember00000000001", role:"dev", peak_tokens:1000, tool_use_id:$t}')"
+mknested nestedstop "afixture0000000001" "$(printf '%s\n%s' "$CTX_OTHER" "$MEMBER_STOP")" > "$ROOT/.w_nestedstop"
+# (N3) member whose parent is an agent the lead did NOT dispatch -> not counted (ALLOW).
+mknested nestedforeign "aforeign0000000001" "$CTX_OTHER" > "$ROOT/.w_nestedforeign"
+
 printf '%s\n' "$ROOT"

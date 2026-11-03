@@ -10,7 +10,10 @@ action falls in the **non-delegable set**:
   dependency wiring, wave/DAG planning, branch and worktree management,
   merge and land-order integration (including merge-conflict resolution,
   `implementation.md` -- integration is orchestration), and discharge-
-  predicate execution at deploy gates.
+  predicate execution at deploy gates. Spawning the leaf members of a
+  round that "A wide round is run by a round-dispatcher." names may be
+  delegated to ONE round-dispatcher; the round's epoch, its join program,
+  the Rule 20 re-dispatch decision and the disposition stay with the lead.
 - **(b) Routing** -- pipeline-variant selection, step sequencing, and
   story-to-role routing (an `escalate_model` tag set before a story's first
   dev dispatch, `implementation.md` "Pre-dispatch routing").
@@ -188,6 +191,75 @@ wave sized from deliveries can over-dispatch slightly; the rejected-spawn
 rule below absorbs that. Every per-role site that fans out cites this
 paragraph and does not restate it.
 
+**A wide round is run by a round-dispatcher.** An adversarial-pass round
+(files, sections and subject axes, with its cross agent), an elicitation
+round, and a sharded party round (seats x parts, seats x sections, seats x
+subject-parts) may be run by ONE round-dispatcher. An unsharded party round
+runs on the Skill and is not dispatcher-run. A repair round is lead-dispatched,
+never run by a dispatcher: `join-remediator-shards.sh` folds a nested
+writer into its dispatcher, so every shard of one dispatcher would read as
+ONE writer. A code review or QA round is lead-dispatched, never run by a
+dispatcher: its members build detached worktrees, which is (a). A
+gate-adjudicator round, a dev story wave and every round not named here
+are lead-dispatched too. The lead records the round's epoch as below,
+writes each member's brief to a file, spawns the dispatcher as one plain
+background `Agent` briefed from `_dispatch-protocol.md` "Round-dispatcher
+brief", arms its beat over the round-return file and ends its turn. The
+dispatcher spawns the members in waves exactly as "Waves" and "A rejected
+spawn is undelivered" say, and joins them with FOREGROUND
+`wait-for-deliverable.sh --complete [--shard-header <axis>] --since <epoch> --dispatch <agentId> --dispatch <agentId> ...`
+calls (one `--dispatch` per member; `--shard-header convergence` for a `shards/<artifact>-p<M>/` round, `elicitation` for a `-elicitation/` round, none for party seats), never `run_in_background`, each prefixed
+`AI_DLC_WAIT_BEAT_SECS=540` and each passing the Bash `timeout: 600000`;
+at the default timeout the harness backgrounds the call. It never sets
+`AI_DLC_MAX_WAIT_BEATS`, which clears every beat counter in the shared
+state, the lead's included, and never passes `--reset` on a member path,
+so each path's sequence ends at the beat's own ceiling. It re-calls the
+beat while any path reads `WAITING` or `PROGRESS` and never ends its turn
+before every path is DELIVERED, MISSING, FAILED, REJECTED or UNLAUNCHED:
+a dispatcher that ends its turn with a live member wakes the lead anyway,
+and one held in the foreground wakes it once. Each beat return is where
+it reads queued exits, releases undispatched members into freed slots and
+re-dispatches a held rejected set on the evidence "A rejected spawn is
+undelivered" names. A member path the beat reports as NON-DELIVERY is not
+re-dispatched by the dispatcher: it is written as
+`MISSING <path> <agentId> <kind>`, `<kind>` being the exhaustion kind the
+beat printed for that path (`absent`, `UNFINISHED`, `UNSETTLED` or
+`UNCHANGED`), and only `absent` is Rule 20 non-delivery for the lead,
+which reads a present file before deciding anything. As its last act, in
+ONE write, the dispatcher writes
+`_bmad-output/planning-artifacts/s<N>/rounds/<round>.return`, outside
+`shards/`, `<round>` being the basename of the round's shard directory or
+`<step>-party` for a party round: one line per member path,
+`DELIVERED|MISSING|FAILED|REJECTED|UNLAUNCHED <path> <agentId|->`, and
+one `rejected: <description> cap=<N>` line per refusal it received,
+whether or not that member later launched. It returns at once, every
+remaining path REJECTED or UNLAUNCHED, when it holds a rejected or
+undispatched set and has no live member of its own. It runs no merge,
+judges nothing, edits no artifact and sends nothing with `SendMessage`.
+It holds one slot for the whole round, so a round of M members needs M+1
+slots, beside every other live subagent, to go out in one wave. The lead
+joins with one background `wait-for-deliverable.sh --since <epoch>
+<return path>` and then runs the round's join program unchanged: MISSING
+and FAILED are Rule 20 non-delivery, which the lead re-dispatches itself;
+REJECTED and UNLAUNCHED are a held rejected set, which the lead
+dispatches without spending the Rule 20 budget; a return with no launched
+member means the lead runs the round itself. No dispatcher notification
+decides anything, because a notification that the dispatcher is waiting
+on its own work also reads `completed`. A beat NON-DELIVERY on the return
+file is re-armed with `--reset` only while the dispatcher is live: its
+`subagents/agent-<agentId>.meta.json` lacks `"finished": true` and its
+`subagents/agent-<agentId>.jsonl` took a turn within
+`AI_DLC_TEAMMATE_IDLE_SECS`. A dispatcher silent past that threshold with
+no return file is STALLED: the lead reads its last message, runs the
+round's join program over the member files that exist and treats expected
+minus delivered as Rule 20 non-delivery, never re-dispatching a member
+whose file is delivered. The dispatcher itself is non-delivered only when
+a notification for it reads `failed`, or its meta file reads
+`"finished": true` with the return file absent; the lead reads its
+transcript's last message before any re-dispatch, because its members may
+be live. Its In-Flight Teammates row carries the round epoch as
+`dispatched-at`.
+
 **The round's epoch is written down before wave 1.** Before the first
 wave spawns, the lead records the round's start as an epoch in the
 snapshot's Open Items -- one line, `fan-out round <subject> since
@@ -196,6 +268,9 @@ Every beat that passes `--since` also passes `--dispatch <agentId>` for
 each agent it joins, the `agentId` (or a named teammate's `agent_id`) its
 Agent result returned: the beat reads that dispatch's time from the spawn
 ledger and refuses a `--since` later than it.
+The lead's beat over a round-return file is exempt on every arm, a re-arm
+after a compaction included: it passes `--since <epoch>` alone, and the
+dispatcher's own member beats keep `--dispatch` per member.
 The `<epoch>` is the one recorded before wave 1, never one minted at the
 beat. A beat outside a fan-out round, on an agent this session
 dispatched, has no round epoch and passes `--dispatch` alone, which sets
@@ -256,7 +331,11 @@ path you passed to your still-running `wait-for-deliverable.sh` beat,
 the beat reports that path: post no status line for the agent, restate
 none of its findings or counts, re-check nothing, read nothing, and end
 the turn. Inside a `--complete` join the round is reported once, from
-the merge, never per seat. Three notifications are not covered. One whose
+the merge, never per seat. While the lead's beat over a round-return
+file is live, every notification for that round's dispatcher, and for a
+member exiting after the return, is covered, and the lead acts on that
+beat alone; a dispatcher notification whose status is failed is not
+covered. Three notifications are not covered. One whose
 status is failed: that agent is dead and its deliverable will never
 arrive, so it is handled now. The first exit since a spawn was
 rejected while that rejected set is held: it releases the set, which is

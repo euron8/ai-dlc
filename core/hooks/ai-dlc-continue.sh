@@ -842,13 +842,50 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && { [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || [ "$
             | select(type == "object" and .type == "tool_use"
                      and (.name == "Agent" or .name == "Task"))
             | .id' "$TRANSCRIPT" 2>/dev/null | sort -u)" || _if_disp=""
-        _if_led="$(jq -r 'select(type == "object" and .v == 1 and .role != null and .tool_use_id != null)
-            | .tool_use_id' "$_if_ledger" 2>/dev/null | sort -u)" || _if_led=""
-        # ONE SLURP OVER THE GLOB. `-s` also makes an empty glob harmless: with no
-        # matching file jq reads stdin, which is closed here, and the result is empty
-        # rather than an error -- the same answer the fail-open path would give.
-        _if_metaids="$(jq -rs '.[] | select(type == "object") | .toolUseId // empty' \
-            "$_if_meta"/agent-*.meta.json 2>/dev/null </dev/null | sort -u)" || _if_metaids=""
+        # ONE LEVEL OF NESTED DISPATCH. A round-dispatcher subagent spawns the round's
+        # members, so a member's tool_use id lives in the DISPATCHER's transcript and never
+        # in the lead's: without this block a handoff taken mid-round reads 0 open teammates
+        # while the members run. The dispatcher is an agent whose meta `toolUseId` is in the
+        # lead's dispatched set; its members are the role-bound ledger rows whose
+        # `parent_agent_id` is that agent's id (file name `agent-<id>.meta.json`). ONE LEVEL
+        # ONLY, never recursive. Both extra reads ride the existing passes, tagged `P ` (a
+        # dispatcher id) and `M ` (a member id), and are split with shell builtins, so a
+        # session with no nested dispatch costs no process beyond the two it always paid.
+        # ONE PASS OVER THE META GLOB (`-n` + `inputs` so `input_filename` names each file;
+        # an empty glob is harmless: the missing path errors to /dev/null and the result is
+        # empty, the same answer the fail-open path gives).
+        _if_metaout="$(jq -rn --arg d "$_if_disp" '($d | split("\n")) as $D
+            | inputs | select(type == "object") | select((.toolUseId // "") != "")
+            | .toolUseId,
+              (select(.toolUseId as $t | any($D[]; . == $t))
+               | "P " + (input_filename | split("/") | last | sub("^agent-"; "") | sub("\\.meta\\.json$"; "")))' \
+            "$_if_meta"/agent-*.meta.json 2>/dev/null </dev/null | sort -u)" || _if_metaout=""
+        _if_metaids=""; _if_par=""
+        while IFS= read -r _if_l; do
+          case "$_if_l" in
+            "P "*) _if_par="${_if_par}${_if_l#P }"$'\n' ;;
+            ?*) _if_metaids="${_if_metaids}${_if_l}"$'\n' ;;
+          esac
+        done <<< "$_if_metaout"
+        _if_metaids="${_if_metaids%$'\n'}"
+        _if_ledout="$(jq -r --arg p "$_if_par" '($p | split("\n")) as $P
+            | select(type == "object" and .v == 1 and .role != null and .tool_use_id != null)
+            | .tool_use_id,
+              (select((.parent_agent_id // "") != "" and (.parent_agent_id as $x | any($P[]; . == $x)))
+               | "M " + .tool_use_id)' "$_if_ledger" 2>/dev/null | sort -u)" || _if_ledout=""
+        _if_led=""; _if_mem=""
+        while IFS= read -r _if_l; do
+          case "$_if_l" in
+            "M "*) _if_mem="${_if_mem}${_if_l#M }"$'\n' ;;
+            ?*) _if_led="${_if_led}${_if_l}"$'\n' ;;
+          esac
+        done <<< "$_if_ledout"
+        _if_led="${_if_led%$'\n'}"
+        # The member ids join the dispatched set only when there are any (sort is the one
+        # extra process, paid only by a session that nested a dispatch).
+        if [ -n "$_if_mem" ]; then
+          _if_disp="$(printf '%s\n%s' "$_if_disp" "$_if_mem" | sort -u)" || _if_disp=""
+        fi
         _if_stop="$(jq -r 'select(type == "object" and .tool_use_id != null)
             | .tool_use_id' "$_if_ctx" 2>/dev/null | sort -u)" || _if_stop=""
         # THE SET ALGEBRA IS THREE NAMED STEPS AND NOT ONE CHAINED PIPELINE. Each step

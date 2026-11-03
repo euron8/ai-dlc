@@ -130,9 +130,12 @@ exercise stories.
 
 ### 3. Party Mode Evaluation
 
-`/bmad-party-mode --mode subagent --non-interactive` — PM, Architect, Dev, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) evaluate every item. The evaluation is one document, so the
+PM, Architect, Dev, TEA evaluate every item. The evaluation is one document, so the
 round is sharded per `_gate-procedures.md`, "Validation cycle" item 1 (Rule 28, "Split dispatch":
 seats x sections axis, serial exception 4 when `partition-document.sh --map` reports it SERIAL).
+A sharded round is that item's per-seat role-bound `Agent` spawns, never the Skill; a SERIAL
+answer is an unsharded round, run as `/bmad-party-mode --mode subagent --non-interactive`
+with the seats bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`.
 - Valid or close? If valid, rough story shape?
 - Surface any items that have become higher/lower priority
 - Surface any that are clearly no longer worth doing

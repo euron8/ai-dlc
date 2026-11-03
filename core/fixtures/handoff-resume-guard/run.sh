@@ -618,6 +618,33 @@ if hook_mut "$M_TAIL" 's|            . .id. "$TRANSCRIPT" 2>/dev/null . sort -u)
                    || bad "MUTANT m4 HARNESS BROKEN — the copy blocks case B ($r); it is not running the arm at all"
 fi
 
+# --- NESTED DISPATCH: ONE LEVEL (cells N1-N3, mutant m9) ------------------------------
+#
+# A round-dispatcher subagent spawns the members, so a member's tool_use id is in the
+# dispatcher's transcript and never the lead's. Without the one-level extension a handoff
+# mid-round reads 0 open teammates. N1 is the offender, N2 and N3 are its twins one
+# property apart (member returned; member's parent not dispatched by the lead).
+r="$(drive_world "$(cat "$ROOT/.w_nested")" 2>/dev/null)"
+[ "$r" = block ] && ok "N1: a member spawned by the lead's role-less dispatcher, no stop row -> BLOCK (counted open through parent_agent_id)" \
+                 || bad "N1: ALLOWED ($r) — a handoff mid-round reads 0 open teammates because the dispatcher's members are not in the lead transcript"
+r="$(drive_world "$(cat "$ROOT/.w_nestedstop")" 2>/dev/null)"
+[ "$r" = allow ] && ok "N2: the same member with a stop row -> ALLOW" \
+                 || bad "N2: BLOCKED ($r) with the member's stop row present"
+r="$(drive_world "$(cat "$ROOT/.w_nestedforeign")" 2>/dev/null)"
+[ "$r" = allow ] && ok "N3: a member whose parent the lead did not dispatch -> ALLOW (not counted)" \
+                 || bad "N3: BLOCKED ($r) — a member of an undispatched parent was counted"
+
+# m9: the one-level extension is dropped (the member ids never join the dispatched set).
+M_NONEST="$ROOT/continue-nonest.sh"
+if hook_mut "$M_NONEST" 's|if \[ -n "$_if_mem" \]; then|if false; then|' "m9 no-nested-extension"; then
+  r="$(drive_world "$(cat "$ROOT/.w_nested")" "$M_NONEST" 2>/dev/null)"
+  [ "$r" = allow ] && ok "m9 (drop the one-level extension): N1 is ALLOWED — the extension is what counts a dispatcher's member" \
+                   || bad "MUTANT m9 DID NOT FAIL — N1 still returned $r without the extension"
+  r="$(drive_world "$W_OFF" "$M_NONEST" 2>/dev/null)"
+  [ "$r" = block ] && ok "m9 control: the same copy still BLOCKS the plain offender (A) — it loads and runs" \
+                   || bad "MUTANT m9 HARNESS BROKEN — the copy allows case A ($r)"
+fi
+
 # --- THE LIVE-BEAT DEFERRAL ---------------------------------------------------------
 #
 # THE DEFECT. `steps/handoff.md` step 1 ends the turn on ONE backgrounded

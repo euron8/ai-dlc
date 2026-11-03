@@ -225,6 +225,50 @@ dispatch reads it from cache instead of re-writing. Reordering or
 re-wording the shared block per dispatch defeats this and forces a
 cold write on each spawn.
 
+**Round-dispatcher brief.** A round that Rule 28 "A wide round is run by
+a round-dispatcher" names goes out through this brief. The lead writes
+each member's brief, verbatim as the step file renders it (its
+role-contract line, `shard:` line and `--mark` line), to
+`_bmad-output/planning-artifacts/s<N>/rounds/<round>/<i>.brief`, and the
+dispatcher brief LISTS every brief path and states their count; the
+dispatcher never globs that directory, because a reused round name would
+spawn an earlier round's briefs. The dispatcher is spawned with no `name`
+and no `subagent_type`, and its own brief names no `team-roles/` path and
+carries no `shard:` line, since the dispatch guard binds a spawn to the
+first role file its prompt names. Copy the block below, stable block
+first; only the tail varies per round.
+
+    You are a round-dispatcher. Spawn every member below, the cross
+    agent included, with the `Agent` tool, `run_in_background: true`, no `name`, the member's
+    role as `subagent_type` and the bytes of its brief file as
+    `prompt`, in waves exactly as Rule 28 "Waves" and "A rejected
+    spawn is undelivered" say. Join them with FOREGROUND Bash calls,
+    each `timeout: 600000`, never `run_in_background`:
+    `AI_DLC_WAIT_BEAT_SECS=540 scripts/ai-dlc/wait-for-deliverable.sh --complete [--shard-header <axis>] --since <epoch> --dispatch <agentId> --dispatch <agentId> ... <path>...`
+    (one `--dispatch` per member). Pass `--shard-header <axis>` with the tail's Axis, `convergence`
+    or `elicitation`, and omit it when the tail's Axis is `none`.
+    Never set `AI_DLC_MAX_WAIT_BEATS` and never pass `--reset`.
+    Re-call the beat while any path reads WAITING or PROGRESS; at each
+    return read the queued exits, release undispatched members into
+    freed slots and re-dispatch a held rejected set. Do not end your
+    turn until every path is DELIVERED, MISSING, FAILED, REJECTED or
+    UNLAUNCHED. Never re-dispatch a member that launched: a path the
+    beat reports NON-DELIVERY is written MISSING. As your last act, in ONE
+    write, write the return file: one line per member path,
+    `DELIVERED|MISSING|FAILED|REJECTED|UNLAUNCHED <path> <agentId|->`,
+    a MISSING line ending in the beat's kind for that path
+    (`absent`, `UNFINISHED`, `UNSETTLED` or `UNCHANGED`), and one
+    `rejected: <description> cap=<N>` line per refusal you received.
+    Return at once, the rest REJECTED or UNLAUNCHED, when you hold a
+    rejected or undispatched set and no member of yours is live. Run
+    no merge, judge nothing, edit no artifact, and send nothing with
+    `SendMessage`.
+    ---
+    Round: <round>. Epoch: <epoch>. Axis: <axis>. Return file:
+    _bmad-output/planning-artifacts/s<N>/rounds/<round>.return
+    Members (<count>), one `<role> <brief path> <deliverable path>` per line:
+    <role> <brief path> <deliverable path>
+
 **Dev-brief bug-class checklist.** When the dev-brief includes a
 bug-class finding from the code-reviewer (see `code-reviewer.md`
 bug-class audit mandate), the dev MUST grep for same-shape call-sites
