@@ -1580,6 +1580,8 @@ verify: manual
 
 **Progress (batch b248; the entry stays OPEN, `verify: manual` unchanged, no LANDED line).** Measured at 47102ad20, with `origin/main` also at 47102ad20, over the 817 lines of `docs/backlog.archive.md` that the anchored `**LANDED (vX, verified <sha>).**` form of `scripts/backlog-rotate.sh:533` extracts (820 lines carry the marker; an inner `PARTIAL (..., verified <sha>)` is never taken): 696 shas are ancestors of `origin/main`, 117 resolve to commits that are not ancestors, and 4 do not resolve, so 121 are not reachable. The controls ran in the same invocation: `git merge-base --is-ancestor HEAD~3 origin/main` exited 0 and `cfcf0b5f8` exited 1. The contract adversary read 697 / 116 / 4 (120 not reachable) over the same 817 lines, and the lead's earlier hand read 117 non-ancestors plus 4 unresolvable; the one-sha difference between 696/117 and 697/116 is unreconciled, and the 117 and the 4 agree with the earlier hand. An archive-wide ancestry arm in `validate-backlog-receipts.sh` is therefore unshippable without scoping: its false-positive set equals that count (121 here, 120 on the adversary's reading), and on a squash-only main every release's pre-squash LANDED sha adds to it. BL-902 re-anchors six of these lines in this release through a standalone driver.
 
+**Progress (batch b248 close; the entry stays OPEN).** Batch b248's practice was sha-less: 0.991.0 to 0.994.0 squashed LANDED lines of the form `**LANDED (v<version>).**` (`git show <squash> -- docs/backlog.archive.md`), and only lines naming a sha already on `origin/main` carried `, verified <sha>`. `scripts/backlog-rotate.sh:535` reads a sha-less line as `sha ABSENT` and refuses it at :546, so those entries were moved by hand (0.991.0's message says so). Owner rule 6 of the plan's owner-rules block now states that practice. The mechanical re-anchor or a rotator that accepts a sha-less line is still owed.
+
 verify: manual
 
 ## BL-878 — every fixture is converted to in-process unit cells, and no session de-scopes a conversion
@@ -1693,3 +1695,15 @@ Folded from BL-836 (batch b248, operator ruling): BL-836's three remaining shape
 
 verify: manual
 
+
+## BL-906 — review-shard-merge, the suite's pole, nearly doubled its loaded cost in 0.995.0
+
+**DEFECT.** Filed by the b248 lead at batch close, under the operator ruling that a wall clock is a defect until it is justified. The hook's own pole line on the first 0.995.0 push (3f03be196's predecessor 7a9657608, 2026-11-02 21:36-21:49 EST) read `review-shard-merge 620s loaded (was 330s before this run, +290s)`; `.git/ai-dlc-fixture-durations` still records 330 for it. These are loaded figures from the hook, not a timing run. The growth is the BL-895 battery: `^# MUTANT-MATRIX` lines in `core/fixtures/review-shard-merge/run.sh` went from 62 at e311bf7e4 to 131 at 05e39c1ae, with the new lead-record, common-dir and shard-slot cells. Owed: a read-only diagnosis from the code and the recorded durations of which cells and mutant worlds carry the cost, then a reshape (shared world builds, sharding the matrix, or retiring mutants a sibling already kills) that brings the pole back without dropping a kill. No timing run unless a named fix cannot be chosen without one.
+
+verify: manual
+
+## BL-907 — the self-update writes a fixture directory whole and overwrites a consumer edit the diff never saw
+
+**DEFECT.** Filed by the b248 lead at batch close from graph's push-candidate PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT, raised at graph's 0.990.0 -> 0.994.0 reconcile (graph ba50b14a4, 2026-11-02 11:06 EST) and found unfiled by the close sweep (fence 5 of the plan's derive block). `.claude/skills/ai-dlc-update/SKILL.md` step 2 (distribution source `core/skills/ai-dlc-update/SKILL.md`) writes each covered fixture directory WHOLE from theirs, and decides whether a file is a consumer edit only from `preclassify.sh`'s bucket for that path; `preclassify.sh` emits rows only for paths in the base..theirs diff, so a consumer-edited file the range never touched is overwritten with no bucket. Graph's run kept its `seed.sh` by hand (its PR #1290). Owed: bucket every file of a whole-written fixture directory, or hold back a directory holding any non-diffed file whose consumer copy differs from base, with a fixture world seeding exactly that file. This touches a bootstrapping file, so it ships alone.
+
+verify: manual

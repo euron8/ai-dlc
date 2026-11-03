@@ -19417,3 +19417,35 @@ This block replaces the batch-245 record. Lead was ai-dlc-b5, in the no-owner sh
   - The ledger's md5 was unchanged across the batch (`08be313c0f0b8d189c58c1a9d1a2de96`).
   - The pull is not preapproved, and no runbook was written.
 
+**BATCH 247 IS CLOSED: NINETEEN RELEASES, `v0.972.0` THROUGH `v0.990.0`.**
+This block replaced the batch-246 record. Lead was ai-dlc-79. Owners were 6a, d9, 70, 12, 1f and 8d. No `graph-*` session is ever messaged.
+- **Landed.** Each row is one squash on `origin/main` whose subject starts with its version (`git log origin/main`); 0.972.0 to 0.990.0 are all present.
+  - `v0.972.0` `f8174ba8e`: wrapper-mutant flags readable (BL-891).
+  - `v0.973.0` `6c70d332e`: the rule-file audit stops flagging pointer lines (BL-888).
+  - `v0.974.0` `91374cf9e`: Check 22 ordinal list ignores a prose suffix.
+  - `v0.975.0` `dc66d6165`: the five BMAD skills removed in 6.11 retargeted (BL-884).
+  - `v0.976.0` `f7ca63142`: apply.sh hands back template-derived files (BL-886).
+  - `v0.977.0` `fb4cb5f40`: a signal tears down the hook's pool (BL-881); BL-869 closed.
+  - `v0.978.0` `9e7232874`: record-only-diff resolves the story path at the top (BL-885).
+  - `v0.979.0` `dd784380c`: a side silent on every series is UNDECIDABLE (BL-893).
+  - `v0.980.0` `808dccef1`: seed-verdict-store red lines, `±` refused at J4 (BL-882, BL-892, BL-872).
+  - `v0.981.0` `99fe3afda`: the closer asks upstream about a `(filed …)` label (BL-890).
+  - `v0.982.0` `d7f5449f1`: self-update slice check accepts a support directory (BL-894).
+  - `v0.983.0` `0e190a93c`: I83 and I84 read their corpus with one grep per predicate (BL-898).
+  - `v0.984.0` `ba72d81e7`: readset-skip-b forces the perl fallback's day (BL-868).
+  - `v0.985.0` `c4dee56bc`: the receipts validator replays R1 and R7/R8 from a keyed record (BL-880).
+  - `v0.986.0` `bc1321bf1`: a fixture's separate-program start must be a declared cell (BL-879).
+  - `v0.987.0` `0809addae`: an open `sh` receipt asserts its anchor first (BL-836).
+  - `v0.988.0` `70c1be3f8`: every pull runs the derivation differential (BL-706).
+  - `v0.989.0` `8f25c6904`: a mixed NEEDS_REWORK re-review narrowed (BL-809).
+  - `v0.990.0` `7c112dae5`: readset-skip's killed run reaps its whole process group (BL-900, filed and closed; BL-881 gains a second instance and stays open).
+- **Operator rulings this batch.** BL-870, "Edit CLAUDE.md (Recommended)"; PC-S320-SUPPRESSION-LIFETIME C2, "Reverse it for OVERRIDDEN"; BL-836 A; BL-872 snapshot; BMAD 6.11 floor, "Ship with 6.11 floor (Recommended)"; install.sh refusal, "Ship the refusal (Recommended)"; BL-869, "Close as dead premise"; BL-880, "Allow the keyed replay"; BL-706, "why not make it run every pull?"; BL-809 item 2, "I want to avoid unnecessary re-reviews." and "The one-in-19 miss rate doesn't matter to me. I want the re-reviews narrowed regardless of the measurement.", with the residue "Check them too"; graph's pull, "I'll pull myself and doesn't need a rehearsal from this batch."
+- **New candidate.** PC-S321-READSET-SKIP-B-BL463-NONORM-MUTANT-CELL-FAILS-ON-THE-CONSUMER-AND-BLOCKS-EVERY-PRE-PUSH is absorbed by 0.984.0 and named in 0.987.0's squash message, not in its CHANGELOG.
+- **Facts for the next batch.** `FORK_BUDGET=2901`; `bash scripts/fork-profile.sh --section total` reads 2899, and `bash scripts/pregate-self-check.sh origin/main` exits 0. A docs-only release push re-keys six units: the five `+VERSION` declarers and `backlog-receipt-binding`.
+- **Backlog.** Live at close: 55 `^## BL-` headings. Archive: 819. BL-901 (red-push pole line), BL-902 (un-re-anchorable archive LANDED lines) and BL-903 (M1 "killed" grammar) were filed at this close. **The next free id is BL-904.**
+- **Graph at close.**
+  - Installed 0.983.0 on `ai-dlc/feature/per-chain-rebalancer-instances` (`03b734fb3`, its 22:14 reconcile of 2026-10-31); its `main` is at 0.969.0.
+  - Its pre-push stays blocked on readset-skip-b until it pulls 0.984.0 or later: the `nonorm` mutant moves the `psfail` world from the 1st to the 9th of each month, so every push from 2026-11-01T00:00Z reads red.
+  - `team-roles__dev__bug-class-sweep.md:237` exists in graph's overrides and reads `` `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`, ``. It names no BMAD skill removed in 6.11.
+  - The pull is not preapproved; the newest runbook is `docs/plans/graph-pull-0891-to-0901.md`.
+

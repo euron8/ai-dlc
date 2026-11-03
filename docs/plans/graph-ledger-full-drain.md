@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,36 +67,21 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 247 IS CLOSED: NINETEEN RELEASES, `v0.972.0` THROUGH `v0.990.0`. THE NEXT SESSION STARTS BATCH 248.**
-This block replaces the batch-246 record. Lead was ai-dlc-79. Owners were 6a, d9, 70, 12, 1f and 8d. No `graph-*` session is ever messaged.
-- **Landed.** Each row is one squash on `origin/main` whose subject starts with its version (`git log origin/main`); 0.972.0 to 0.990.0 are all present.
-  - `v0.972.0` `f8174ba8e`: wrapper-mutant flags readable (BL-891).
-  - `v0.973.0` `6c70d332e`: the rule-file audit stops flagging pointer lines (BL-888).
-  - `v0.974.0` `91374cf9e`: Check 22 ordinal list ignores a prose suffix.
-  - `v0.975.0` `dc66d6165`: the five BMAD skills removed in 6.11 retargeted (BL-884).
-  - `v0.976.0` `f7ca63142`: apply.sh hands back template-derived files (BL-886).
-  - `v0.977.0` `fb4cb5f40`: a signal tears down the hook's pool (BL-881); BL-869 closed.
-  - `v0.978.0` `9e7232874`: record-only-diff resolves the story path at the top (BL-885).
-  - `v0.979.0` `dd784380c`: a side silent on every series is UNDECIDABLE (BL-893).
-  - `v0.980.0` `808dccef1`: seed-verdict-store red lines, `±` refused at J4 (BL-882, BL-892, BL-872).
-  - `v0.981.0` `99fe3afda`: the closer asks upstream about a `(filed …)` label (BL-890).
-  - `v0.982.0` `d7f5449f1`: self-update slice check accepts a support directory (BL-894).
-  - `v0.983.0` `0e190a93c`: I83 and I84 read their corpus with one grep per predicate (BL-898).
-  - `v0.984.0` `ba72d81e7`: readset-skip-b forces the perl fallback's day (BL-868).
-  - `v0.985.0` `c4dee56bc`: the receipts validator replays R1 and R7/R8 from a keyed record (BL-880).
-  - `v0.986.0` `bc1321bf1`: a fixture's separate-program start must be a declared cell (BL-879).
-  - `v0.987.0` `0809addae`: an open `sh` receipt asserts its anchor first (BL-836).
-  - `v0.988.0` `70c1be3f8`: every pull runs the derivation differential (BL-706).
-  - `v0.989.0` `8f25c6904`: a mixed NEEDS_REWORK re-review narrowed (BL-809).
-  - `v0.990.0` `7c112dae5`: readset-skip's killed run reaps its whole process group (BL-900, filed and closed; BL-881 gains a second instance and stays open).
-- **Operator rulings this batch.** BL-870, "Edit CLAUDE.md (Recommended)"; PC-S320-SUPPRESSION-LIFETIME C2, "Reverse it for OVERRIDDEN"; BL-836 A; BL-872 snapshot; BMAD 6.11 floor, "Ship with 6.11 floor (Recommended)"; install.sh refusal, "Ship the refusal (Recommended)"; BL-869, "Close as dead premise"; BL-880, "Allow the keyed replay"; BL-706, "why not make it run every pull?"; BL-809 item 2, "I want to avoid unnecessary re-reviews." and "The one-in-19 miss rate doesn't matter to me. I want the re-reviews narrowed regardless of the measurement.", with the residue "Check them too"; graph's pull, "I'll pull myself and doesn't need a rehearsal from this batch."
-- **New candidate.** PC-S321-READSET-SKIP-B-BL463-NONORM-MUTANT-CELL-FAILS-ON-THE-CONSUMER-AND-BLOCKS-EVERY-PRE-PUSH is absorbed by 0.984.0 and named in 0.987.0's squash message, not in its CHANGELOG.
-- **Facts for the next batch.** `FORK_BUDGET=2901`; `bash scripts/fork-profile.sh --section total` reads 2899, and `bash scripts/pregate-self-check.sh origin/main` exits 0. A docs-only release push re-keys six units: the five `+VERSION` declarers and `backlog-receipt-binding`.
-- **Backlog.** Live at close: 55 `^## BL-` headings. Archive: 819. BL-901 (red-push pole line), BL-902 (un-re-anchorable archive LANDED lines) and BL-903 (M1 "killed" grammar) were filed at this close. **The next free id is BL-904.**
+**BATCH 248 IS CLOSED: FIVE RELEASES, `v0.991.0` THROUGH `v0.995.0`. THE NEXT SESSION STARTS BATCH 249.**
+This block replaces the batch-247 record, which `scripts/plan-rotate.sh` moved to `docs/plans/archive/graph-ledger-full-drain.md`. Leads were ai-dlc-f8, then ai-dlc-b5 by operator instruction. Owners were ai-dlc-92 (docs, then core until the operator moved core to ai-dlc-b7), ai-dlc-f5 (hooks) and ai-dlc-97 (loadfree, mutants). No `graph-*` session is ever messaged.
+- **Landed.** Each row is one squash on `origin/main` whose subject starts with its version (`git log origin/main`).
+  - `v0.991.0` `6a4442c2f`: six archive LANDED lines re-anchored (BL-902); BL-883 closed as a dead premise; BL-616 folded into BL-868, BL-836 into BL-899.
+  - `v0.992.0` `78966dd63`: M1 reads kill-shaped emissions only (BL-903); join probes batched (BL-877); BL-828 progress.
+  - `v0.993.0` `da5b8bf49`: pre-push pool teardown works with `ps` failing (BL-881); a red full run publishes `.last` (BL-901).
+  - `v0.994.0` `e311bf7e4`: BL-868 load-free fixtures (items 7 and 11); deriver `--list` drops declared digests (BL-897); BL-828 allowlists emptied; slot-world groups reaped (BL-875 partial).
+  - `v0.995.0` `05e39c1ae`: BL-895 closed. STORY-BIND binds a record-only `--story` to the listed story, letter-led indices included; the lead re-runs the serial check over a lead-owned dispatch record (`--record-dispatch`, `--lead-range`); the QA merge decides from a per-shard-dir partition record (`--record-partition`); both refuse a foreign git common dir and a symlinked shard dir. BL-842 six-site wording; BL-840 `--list-defers` J1 cells. Files BL-904 and BL-905, which are adversary findings outside the release's files, filed rather than fixed, so the release's net is not a reduction (NET -1).
+- **Operator rulings this batch.** BL-895: "Build design A (Recommended)", "b1: view history (Recommended)", "Build lead-side re-run now (Recommended)", and "Ship it in 0.995.0 (Recommended)" (the merge and `--record-partition` run from the lead checkout). BL-538: "Build in a later batch (Recommended)". BL-883 dead premise; BL-616 into BL-868; BL-836 into BL-899. "Lead compaction and resume are normal operation" (`.claude/rules/operator-rulings.md`), and the durable ceiling to 74240.
+- **Facts for the next batch.** `FORK_BUDGET=2901`; `bash scripts/fork-profile.sh --section total` reads 2899, at the A3b margin with no headroom. `review-shard-merge` is the suite pole and grew from 330s to 620s loaded under 0.995.0 (BL-906).
+- **Backlog.** Live at close: 49 `^## BL-` headings. Archive: 829. BL-904, BL-905 (0.995.0), BL-906 and BL-907 (this close) were filed. **The next free id is BL-908.**
+- **Ledger at close.** One live candidate, PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT, raised by graph on 2026-11-02 after this batch was scoped, is filed as BL-907 and unbuilt. It touches the update skill, a bootstrapping file. PENDING 0.
 - **Graph at close.**
-  - Installed 0.983.0 on `ai-dlc/feature/per-chain-rebalancer-instances` (`03b734fb3`, its 22:14 reconcile of 2026-10-31); its `main` is at 0.969.0.
-  - Its pre-push stays blocked on readset-skip-b until it pulls 0.984.0 or later: the `nonorm` mutant moves the `psfail` world from the 1st to the 9th of each month, so every push from 2026-11-01T00:00Z reads red.
-  - `team-roles__dev__bug-class-sweep.md:237` exists in graph's overrides and reads `` `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`, ``. It names no BMAD skill removed in 6.11.
+  - Installed 0.994.0 (`e311bf7e`) on `ai-dlc/feature/per-chain-rebalancer-instances` per its `.claude/.ai-dlc-version`; its `main` reads 0.969.0. Earlier notes saying 0.990.0 were wrong.
+  - The operator held graph's pipeline until 0.995.0 landed and pulls it themselves; no rehearsal is owed from this distribution. 0.995.0's consumer impact is in its CHANGELOG entry: 0 review or merge verdicts move over graph 02fee241b.
   - The pull is not preapproved; the newest runbook is `docs/plans/graph-pull-0891-to-0901.md`.
 
 ### Derive the state; do not trust the numbers below
@@ -969,7 +954,10 @@ candidate's surviving half is upstream's to file and build, never a question for
       have a hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
       lines), so your gate starts the moment its turn comes. The tip adversary reviews the tree
       that SHIPS: after any rebase that resolves a conflict, spawn a short delta adversary pass on
-      the rebased tip.
+      the rebased tip. An adversary round may escalate the threat model beyond the entry's stated
+      problem. A finding whose fix adds a trust root or a new consumer cost goes to <lead> with its
+      measured consumer cost, and <lead> takes it to the operator; the lead never rules it.
+      Findings fixable in the release's own files at no consumer cost are fixed in-release.
    5. Every hand brief ends with `bash scripts/validate-enforcement-map.sh` and `bash
       scripts/validate-shell-portability.sh` on the hand's own branch before it reports done
       (fixture-only verification missed an I54b and an S12 finding at batch 240), and with
@@ -994,9 +982,12 @@ candidate's surviving half is upstream's to file and build, never a question for
       report the exact stopped state. <lead> checks the push turn about every 30 minutes.
    6. In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
       `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
-      `**LANDED (v<version>, verified <sha>).**` line at the START of each closed entry's backlog
-      body (a PARTIAL gets its text but no rotating line), then `scripts/backlog-rotate.sh --check`
-      and `--apply`, and confirm the archive count MOVED. Squash to ONE commit on `origin/main`.
+      `**LANDED (v<version>).**` line at the START of each closed entry's backlog body, sha-less
+      because no sha the release commit can name is on main yet (BL-874); a sha already on
+      `origin/main` may be named as `, verified <sha>`. A PARTIAL gets its text but no rotating
+      line. `scripts/backlog-rotate.sh --check` refuses a sha-less line as `sha ABSENT`
+      (`scripts/backlog-rotate.sh:535`), so move a sha-less entry by hand, say so in the release
+      message, and confirm the archive count MOVED. Squash to ONE commit on `origin/main`.
       Subject `<version> — batch <batch>: <summary>`. The message names every `PC-` id the release
       closes and the net (closed minus filed). Read the squash message's NET and `Co-Authored-By`
       lines before the push. Derive the NET from `base..tip` (an entry filed AND closed on the

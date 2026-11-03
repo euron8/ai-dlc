@@ -39611,7 +39611,7 @@ verify: manual
 
 ## BL-895 — the serial seat's `--story` is bound to no story
 
-**LANDED (v0.995.0, verified <SQUASH>).**
+**LANDED (v0.995.0, verified 05e39c1ae).**
 
 **DEFECT.** Filed from the b247 delta adversary on BL-885. `merge-review-shards.sh --check-serial --gate qa --story <S> --range <B> <F>` binds `--story` to nothing. `record-only-diff.sh story-base <S> <B> <F>` exits 0 for any path absent at B and a blob at F, by design: a story created after the base is a gate-1 base. So naming any blob created in the range as the "story", for example a review file, passes the narrowed-base refusal for a real story already at `status: review` at B.
 
