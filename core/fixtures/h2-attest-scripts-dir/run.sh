@@ -93,6 +93,9 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 . "$HERE/../lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# H2_A=1 only beside assertion A's ok: the C mutation is scored only when the unmutated drive
+# located its validators and attested in this run.
+H2_A=0
 
 # --- a FAITHFUL installed consumer ---------------------------------------------
 # .git is the walk-up marker. The core validators go to scripts/ai-dlc/ and NOWHERE
@@ -156,7 +159,7 @@ if [ "$ATT_RC" -ne 0 ]; then
   printf '%s\n' "$ATT_OUT" | sed 's/^/        /'
 elif grep -qE '^H2_ATTESTED v1 sprint=999 digest=[0-9a-f]{16} at=.+ items=1,2,3 mechanical=check-17-bypass:PASS$' \
      <<<"$ATT_OUT"; then
-  ok "--attest drove check-17-bypass and printed the H2_ATTESTED v1 line"
+  ok "--attest drove check-17-bypass and printed the H2_ATTESTED v1 line"; H2_A=1
 else
   bad "--attest exited 0 but printed no well-formed H2_ATTESTED v1 line"
   printf '%s\n' "$ATT_OUT" | tail -5 | sed 's/^/        /'
@@ -202,7 +205,7 @@ else
     echo "        Bare scripts/ or core/scripts/ must hold no core validator, or the guess" >&2
     echo "        lands on a real one and the regression is invisible here." >&2
   elif grep -q 'cannot locate validate-provenance-block.sh' <<<"$MUT_OUT"; then
-    ok "MUTATION: the pre-relocation derivation fails exactly as it did in the consumer"
+    mutant_killed "${H2_A:-0}" pre-relocation "MUTATION: the pre-relocation derivation fails exactly as it did in the consumer"
   else
     bad "MUTATION: the derivation failed, but not on validator location (rc=$MUT_RC)"
     printf '%s\n' "$MUT_OUT" | tail -5 | sed 's/^/        /' >&2

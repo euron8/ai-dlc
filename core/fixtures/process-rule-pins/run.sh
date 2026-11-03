@@ -491,6 +491,9 @@ qa-sweep-template-lines2|R|qa.md|## Findings Template|## As a Shard|Instances: <
 smoke-def-absent-qa|R|qa.md|||one git pathspec per line|absent
 smoke-def-absent-stories|S|steps/stories-test-strategy.md|||one git pathspec per line|absent
 impl-rework-instances|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|The dev rework brief carries each finding's `Instances:` list verbatim.|contains
+dev-dar-before-submit|R|dev.md|## Workflow Per Task|## QA Handoff Evidence|Populate the Dev Agent Record in the story file|contains
+impl-dar-copy|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|copy the Dev Agent Record the dev wrote on the story branch|contains
+impl-dar-no-report|S|steps/implementation.md|||from the dev's completion report|absent
 sts-smoke-cite|S|steps/stories-test-strategy.md|### Story-Authoring Pre-Flight Checklist|### Story-AC Out-of-Scope Declaration Rule|Its surface is `gate-validation.md` Check 11, **Smoke surface.**|contains
 sts-hardgate-map|S|steps/stories-test-strategy.md|### 2b.|### 3. Sprint Planning|an unmapped triggered item blocks story authoring.|contains
 dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
@@ -566,6 +569,7 @@ r28-epoch-recorded|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent
 r28-serial-join|S|rule-bodies/rule-28.md|**A notification the live beat already covers is not a turn's work.**|**The join names what is missing, never what it counted.**|**The serial remediator's join is armed on the record it appends to.**|para|`**Join**`, with `--complete-repair` and `--dispatch` alone
 impl-cross-statedir|S|steps/implementation.md|### 6. Orchestrate|### 7.|**Gate-2 dispatch: the validation partitions by changed-file group too.**|para|a beat state directory of its own, given as an absolute path outside the shard directory, and never the lead's.
 adv-ls-files|R|adversary.md|## Constraints|## Escalation|- **List a code path your brief does not cite before you open it.**|para|list it with `git ls-files <dir-or-glob>` and read only what that returns.
+adv-grep-error|R|adversary.md|## Constraints|## Escalation|- **A search that errors found nothing, and nothing is not an absence.**|para|searched nothing, so its silence is not an absence
 elic-header-region|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The brief carries the shard header as the generated `provenance-block/elicitation` region below: copy this region verbatim
 elic-header-strip|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|The shard copies the region verbatim and then deletes each line's trailing ` #` comment (the space, the `#` and everything after it), because the merge reads every value literally.
 adv-header-strip|R|adversary.md|## The verdict|## |**A shard copies the region above verbatim and then deletes each line's trailing ` #` comment**|para|(the space, the `#` and everything after it), because the merge reads every value literally.
@@ -1153,6 +1157,8 @@ ff-specs-lead-run|S|steps/deploy-validate.md|### 4. Visual Verification|### 4b.|
 rem-serial-replay|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|The two lines after each triple you write say which checks this dispatch ran.|para|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The serial or unsharded remediator replays before its join, which runs before `--mark-repair`, and writes `replayed <n>` itself.|The record is replayed by `--mark` and `--mark-repair` themselves.
 arch-ready-nostatus|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|and do not create or modify sprint-status.yaml.|contains|| and do not create or modify sprint-status.yaml.|.
 arch-ready-intent|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|Invoke `/bmad-sprint-planning intent=readiness`|contains||`/bmad-sprint-planning intent=readiness`|`/bmad-sprint-planning`
+dev-dar-before-submit|R|dev.md|## Workflow Per Task|## QA Handoff Evidence|Populate the Dev Agent Record in the story file|contains||Populate the Dev Agent Record in the story file|Report the Dev Agent Record in the completion report
+impl-dar-copy|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|copy the Dev Agent Record the dev wrote on the story branch|contains||copy the Dev Agent Record the dev wrote on the story branch|fold the Dev Agent Record from the dev's completion report
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1180,7 +1186,7 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   if [ "${out%% *}" = "0" ]; then mutant_killed "${B_named:-0}" "$id/named" "$id/named: rewritten to '$new'"
   else bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"; fi
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 10 ] || bad "named: $n_named named mutant(s) read, wanted 10"
+[ "$n_named" -eq 12 ] || bad "named: $n_named named mutant(s) read, wanted 12"
 # m3's TWINS. The two readiness rows share architecture.md §3's one line, so each named rewrite must
 # move ONLY its own row: the clause dropped leaves the intent pinned, the intent dropped leaves the
 # clause pinned. Otherwise the two rows are one row spelled twice and either kill is unearned.

@@ -48,6 +48,9 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # B_P2=1 only beside the part 2 control's own ok: a part 2 mutant is scored only if the unmutated copy scored all-ok.
 B_P2=0
+# LA_CTL=1 only beside the MUTANT 1/2 control's own ok: both kills are a row DISAPPEARING, which a
+# copy that cannot run also produces.
+LA_CTL=0
 
 echo "layer-absorption-retire:"
 
@@ -196,7 +199,7 @@ cp "$DRIFT" "$MUT/layer-drift.sh"
 CTL="$(run_drift "$MUT/layer-drift.sh")"
 ctl_n="$(printf '%s\n' "$CTL" | awk -F'\t' '$1=="EXTENSION-RETIRE-CANDIDATE"' | grep -c . || true)"
 if [ "$ctl_n" -eq 2 ]; then
-  ok "CONTROL: an unmutated copy in a fresh directory reproduces both LC-E6 rows"
+  ok "CONTROL: an unmutated copy in a fresh directory reproduces both LC-E6 rows"; LA_CTL=1
 else
   bad "CONTROL: the unmutated copy produced $ctl_n LC-E6 row(s), not 2 — the mutant verdicts below are unreadable"
 fi
@@ -213,7 +216,7 @@ else
   if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(m1_st 'ABSORBED\.md$')"; then
     bad "MUTANT 1 SURVIVED: LC-E6 still fires with the tag forced PRE-EXISTING, so assertion 1 is not testing the base comparison"
   else
-    ok "MUTANT 1 (tag forced PRE-EXISTING): LC-E6 goes silent — the base comparison is what makes it an absorption rather than a duplicate"
+    mutant_killed "${LA_CTL:-0}" mutant-1 "MUTANT 1 (tag forced PRE-EXISTING): LC-E6 goes silent — the base comparison is what makes it an absorption rather than a duplicate"
   fi
   if grep -qx EXTENSION-RESTATES-CORE <<<"$(m1_st 'PREEXISTING\.md$')"; then
     ok "  and the LC-E5 control is unmoved by it — the two arms are not entangled"
@@ -234,7 +237,7 @@ else
   if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(m2_st 'RENUMBERED\.md$')"; then
     bad "MUTANT 2 SURVIVED: the renumbered entry still fires with the title search disabled, so assertion 3 is not testing that emit site"
   else
-    ok "MUTANT 2 (renumbered title search disabled): only the renumbered row disappears"
+    mutant_killed "${LA_CTL:-0}" mutant-2 "MUTANT 2 (renumbered title search disabled): only the renumbered row disappears"
   fi
   if grep -qx EXTENSION-RETIRE-CANDIDATE <<<"$(m2_st 'ABSORBED\.md$')"; then
     ok "  and the same-number row survives it — the two emit sites are asserted separately"

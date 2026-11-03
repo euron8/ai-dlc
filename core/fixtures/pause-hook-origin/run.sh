@@ -48,6 +48,9 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # shellcheck source=/dev/null
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# Base-pass flags for the mutant kills below, each raised only beside the ok of the arm its
+# mutants break: PH_A1 assertion 1, PH_BIND the session-test control, PH_R10 the resume control.
+PH_A1=0; PH_BIND=0; PH_R10=0
 # B_LEG=1 only beside the battery control's own ok: a legend mutant is scored only if the unmutated copies read SAME.
 B_LEG=0
 
@@ -73,7 +76,7 @@ fi
 # --- Assertion 1: an EMPTY prompt does not pause ------------------------------
 fire '""'
 if [ ! -f "$FLAG" ]; then
-  ok "empty prompt: no pause flag created"
+  ok "empty prompt: no pause flag created"; PH_A1=1
 else
   bad "an empty prompt still created the pause flag — the lead blocks on a pause no human initiated"
 fi
@@ -138,7 +141,7 @@ else
   printf '{"session_id":"fixture","prompt":""}' \
     | CLAUDE_PROJECT_DIR="$PROJECT" bash "$MUT" >/dev/null 2>&1
   if [ -f "$FLAG" ]; then
-    ok "mutant: with the predicate disabled an empty prompt pauses again — the fixture can fail"
+    mutant_killed "${PH_A1:-0}" no-predicate "mutant: with the predicate disabled an empty prompt pauses again — the fixture can fail"
   else
     bad "MUTANT DID NOT FAIL — an empty prompt creates no flag even with the guard disabled, so assertion 1 proves nothing"
   fi
@@ -250,7 +253,7 @@ BM="$WORK/bind-mutants"; mkdir -p "$BM"
 cp "$HOOK" "$BM/control.sh"
 B_CTRL="$(b_world "$BM/control.sh")"
 if [ "$B_CTRL" = "$B_EXPECT" ]; then
-  ok "session-test mutant control: an unmutated copy under $BM reads [$B_CTRL]"
+  ok "session-test mutant control: an unmutated copy under $BM reads [$B_CTRL]"; PH_BIND=1
 else
   bad "SESSION-TEST MUTANT HARNESS BROKEN — the unmutated copy reads [$B_CTRL], so no kill below is readable"
 fi
@@ -263,7 +266,7 @@ b_mut() {
   fi
   got="$(b_world "$BM/$name.sh")"
   if [ "$got" = "$want" ]; then
-    ok "session-test mutant $name: [$got]"
+    mutant_killed "${PH_BIND:-0}" "session-$name" "session-test mutant $name: [$got]"
   else
     bad "SESSION-TEST MUTANT $name read [$got], expected [$want] — the arm cannot fire, or the cells are entangled"
   fi
@@ -592,8 +595,11 @@ else
     RM10="$WORK/resume-mutants"; mkdir -p "$RM10"
     cp "$ACK_HOOK" "$RM10/ack.sh"; cp "$SKILL_FILE" "$RM10/SKILL.md"
     VC10="$(resume_verdict "$RM10" "$RM10/ack.sh" "$RM10/SKILL.md")"
-    [ "$VC10" = "SAME" ] && ok "resume mutant control: unmutated copies under $RM10 read SAME" \
-      || bad "RESUME MUTANT HARNESS BROKEN — unmutated copies read $VC10"
+    if [ "$VC10" = "SAME" ]; then
+      ok "resume mutant control: unmutated copies under $RM10 read SAME"; PH_R10=1
+    else
+      bad "RESUME MUTANT HARNESS BROKEN — unmutated copies read $VC10"
+    fi
     # The verify dropped from the hook: the regression this arm exists for.
     sed 's/then run \\`\[ ! -e _bmad-output\/pipeline-paused\.flag \]\\` as a separate call that must exit 0 before anything advances; on a non-zero exit, repeat the rm alone\. //' \
       "$RM10/ack.sh" > "$RM10/ack.noverify.sh"
@@ -602,8 +608,11 @@ else
     else
       printf '        mutant 10b edits: %s\n' "$RM10/ack.noverify.sh"
       VM10="$(resume_verdict "$RM10" "$RM10/ack.noverify.sh" "$RM10/SKILL.md")"
-      [ "$VM10" = "NO-VERIFY:hook" ] && ok "mutant 10b: the hook without its [ ! -e ] verify -> $VM10 (assertion 10 can fire)" \
-        || bad "MUTANT 10b DID NOT FAIL AS EXPECTED — the hook without its verify read $VM10"
+      if [ "$VM10" = "NO-VERIFY:hook" ]; then
+        mutant_killed "${PH_R10:-0}" 10b "mutant 10b: the hook without its [ ! -e ] verify -> $VM10 (assertion 10 can fire)"
+      else
+        bad "MUTANT 10b DID NOT FAIL AS EXPECTED — the hook without its verify read $VM10"
+      fi
     fi
     # Near-miss: verify and own-call clause both present, one word of the pair changed.
     sed 's/on a non-zero exit, repeat the rm alone\. A denied call/on a non-zero exit, repeat the rm. A denied call/' \
@@ -613,8 +622,11 @@ else
     else
       printf '        mutant 10c edits: %s\n' "$RM10/ack.reworded.sh"
       VN10="$(resume_verdict "$RM10" "$RM10/ack.reworded.sh" "$RM10/SKILL.md")"
-      [ "$VN10" = "DIFFER" ] && ok "mutant 10c: verify present, pair reworded in the hook -> DIFFER (the byte-compare can fire)" \
-        || bad "MUTANT 10c DID NOT FAIL AS EXPECTED — a reworded pair with its verify read $VN10"
+      if [ "$VN10" = "DIFFER" ]; then
+        mutant_killed "${PH_R10:-0}" 10c "mutant 10c: verify present, pair reworded in the hook -> DIFFER (the byte-compare can fire)"
+      else
+        bad "MUTANT 10c DID NOT FAIL AS EXPECTED — a reworded pair with its verify read $VN10"
+      fi
     fi
   else
     printf '        resume battery: STOOD DOWN — assertion 10 already reported %s\n' "$V10"

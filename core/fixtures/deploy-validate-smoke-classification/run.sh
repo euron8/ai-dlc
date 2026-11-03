@@ -59,7 +59,7 @@ trap 'rm -rf "$WORK"' EXIT
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
-. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "deploy-validate-smoke-classification: subject $STEP"

@@ -596,6 +596,12 @@ changed** — the repair is the artifact under review. You MUST:
   returns. A path you guessed and did not list is not evidence that the code is
   absent, and a finding built on it is an invented one.
 
+- **A search that errors found nothing, and nothing is not an absence.** A `grep`
+  that exits with an error (`exceeds complexity limits`, `empty (sub)expression`)
+  searched nothing, so its silence is not an absence: narrow the pattern, drop a
+  long bounded repeat or a `\b` inside an alternation, or search a fixed string
+  with `grep -F`, and run it again.
+
 ## Escalation
 
 If the review surfaces a concern that blocks the artifact and cannot be resolved

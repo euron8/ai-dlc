@@ -97,6 +97,9 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 . "$HERE/../lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# PM_U=1 only beside the --untangle cells' own ok: a BL-100 mutant is scored only when the
+# unmutated preclassify passed every U cell in this run.
+PM_U=0
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1" >&2; exit 2; }
 
 # --- the case table --------------------------------------------------------------------
@@ -719,7 +722,7 @@ if [ "$U_RUN" = 1 ]; then
   u_subj="$got"
   if [ -z "$got" ]; then
     ok "BL-100 U1-U4: --untangle buckets base's bytes with the wrong exec bit UPSTREAM-ONLY-ADD in BOTH directions, and the mode-matched copies ALREADY-AT-THEIRS"
-    ok "BL-364 U5: --untangle lists an accented manifest file once, under its raw path, at ALREADY-AT-THEIRS; U6 a content edit is still CLASSIFY"
+    ok "BL-364 U5: --untangle lists an accented manifest file once, under its raw path, at ALREADY-AT-THEIRS; U6 a content edit is still CLASSIFY"; PM_U=1
   else
     bad "BL-100/BL-364 cell(s) [$got] failed on --untangle"
   fi
@@ -738,7 +741,7 @@ PY
       bad "FIXTURE STALE [BL-100 mutant $1]: the mutation did not apply or does not parse"; return; fi
     u_verdict "$_d"
     case "$got" in
-      "$2") ok "MUTANT (BL-100 $1) fails exactly [$2]" ;;
+      "$2") mutant_killed "${PM_U:-0}" "BL-100-$1" "MUTANT (BL-100 $1) fails exactly [$2]" ;;
       "")   bad "MUTANT SURVIVED [BL-100 $1]: every untangle cell still passed" ;;
       *)    bad "MUTANT [BL-100 $1] failed [$got], expected exactly [$2]" ;;
     esac

@@ -19,6 +19,65 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.998.0] - 2026-11-03
+
+Batch b249, cluster b249-c4, first half. Closes BL-828 and advances BL-510, BL-868, BL-615 and BL-550; files BL-909 and BL-910.
+
+### BL-510 advanced (stays OPEN): `dar-missing` is a gate-1 refusal, and the DAR-fold preflight copies the dev-written record
+
+- **`dar-missing` (ERROR).** `validate-handoff-evidence.sh` handoff mode gains arm (p): `REFUSED dar-missing <story>` when the story at the frozen sha has no level-2 `## Dev Agent Record` heading (`is absent`), or the section holds only template placeholders, blank lines, HTML comments or empty table rows (`is empty`).
+  - It is a NEW gate-1 arm, ERROR, 3 of 141 historical snapshots refused, 0 false positives. The three are graph s317 2.7, s317 4.2a and s317 4.3a. The lead re-ruled 2.7 a true positive because its dev report carries a dev-written DAR.
+  - It first landed as a WARN and was promoted to a refusal (exit 1) in the same release.
+  - A lead-executed story is not exempt. Its remedy is a one-line DAR carrying `lead (self-executed`, the substring `validate-mandatory-rules.sh` Check 6 keys on, which still fails without a `DECIDED_AUTONOMOUSLY` or `HARD_BLOCK` waiver naming the story.
+  - `implementation.md` lists `dar-missing` among the gate-1 refusals that stop code-review dispatch.
+  - `story-evidence-scaffold` gains the DAR worlds (`daroff`, `darfence`, `darph`, `darphok`, `darself`) in `world.sh`, and its base world now carries a `## Dev Agent Record` heading.
+- **Grammar fix.** A filled DAR inside a code fence is content. A template skeleton reads empty: `###` subheadings only, `{{…}}`-only lines, TBD, TODO, [TODO], and labels with no value. Measured: the 141-snapshot gate-1 replay is unchanged at 3 refusals (s317 2.7, 4.2a, 4.3a), 0 false positives. A sweep of 1132 graph stories gives 13 flips: 8 fenced filled DARs now pass (s145 story-1, s148 stories 1-3, s149 stories 2, 3, 4, 7), and 5 unfilled skeletons now read empty (s169 story-3, s170 stories 4, 7, 9, 11).
+- **Preflight.** The DAR-fold preflight in `implementation.md` no longer folds the record from the dev's completion report. It copies the dev-written story-branch Dev Agent Record and checks the copy is non-empty and equal to it. This reconciles it with `core/team-roles/dev.md`, which already requires the dev to write the record in the story file before submission. `process-rule-pins` binds both texts (`dev-dar-before-submit`, `impl-dar-copy`, `impl-dar-no-report`, with two new named mutants).
+- Graph s317-s320 walk recorded in the entry: 138 of 141 gate-1 snapshots carry a dev-written DAR, and 7 of 8 lead fold commits are byte-equal to the story-branch DAR.
+
+### BL-868 advanced (stays OPEN): item 15 is exempt by name
+
+- Per operator ruling 2026-11-03, item 15 (`prepush-pool-depth`'s `td-plain-amp` mutant on its 5-second observer ceiling) is exempt from closing and is not owed. It does not close.
+- `core/fixtures/fixture-hygiene/receipt-bl868.sh` exempts it by name through `exempt_split`: only the `td_more` definition line of `core/fixtures/prepush-pool-depth/run.sh`, only while that line carries `[ -z "$TD_CEIL" ] ||`, only while the file's LAST global `TD_CEIL=` is empty, and only while the definition line carries no second wait. It prints as an `EXEMPT` line on stderr and is never counted. A `td_more` at another path, a definition without the guard, a non-empty global `TD_CEIL`, a non-empty last `TD_CEIL=` after an earlier empty one, a definition line with a second wait and a call-site line all still list. The last-`TD_CEIL=` and second-wait shapes are seeded in the self-probe as rows that must still list.
+- Item 8 now lists one open site (wait-stale-deliverable `run.sh:1104`, `now_at_least`) instead of two.
+
+### BL-828 closed: mutant kills route through `mutant_killed`, and a receipt runs the kill validator
+
+- All three scoped items are met. Items 1 and 2: both mutant allowlists read 0 non-comment rows. Item 3: the 15 keyword-free mutant-kill verdict lines in the 22 delisted fixtures now go through `mutant_killed`, each gated on a base flag raised only beside the ok of the arm its mutant breaks: ci-gates-resolution A/B/E/F/G, pause-hook-origin (3 sites plus the session-test control), layer-absorption-retire MUTANT 1/2, apply-drift-after-write (BL-275 and assertion 2), h2-attest-scripts-dir, preclassify-mode-bucket.
+- ci-gates-resolution gains an unmutated-copy control arm per mutant, because a copy that cannot run returns A's exit 2 and B's missing DORMANT row too. Its invocation count moves from 52 to 57.
+- The entry now closes on `core/fixtures/fixture-hygiene/receipt-bl828.sh`, which lives under its fixture so it adds no profiled subject starts, and RUNS `validate-mutant-kills.sh` (exit 0 plus its self-probe line) and reads both allowlists. Scored: fix tree 0; an unrouted KILLED-token kill 1; a re-added allowlist row 1; a second correct spelling 0; a keyword-free kill 0. The last is BL-909's residue, filed in this release.
+
+### Lib-decl defect: four fixtures sourced `lib/mutant.sh` without declaring it
+
+- decl-reasons, gate-adjudication and deploy-validate-smoke-classification, plus ci-gates-resolution under the BL-828 unit, sourced `core/fixtures/lib/mutant.sh` without declaring `core/fixtures/lib/`. In the hermetic sandbox the file was absent, so `mutant_killed` printed `command not found` (3, 10 and 83 times for the first three) and the fixture still read PASS with rc=0.
+- Now `core/fixtures/lib/` is declared in each `inputs.decl`, and each source line carries an exit-2 guard (`FIXTURE ERROR: lib/mutant.sh not found`). Fixed, the first three score 3, 10 and 83 kills with start counts unchanged at 12, 559 and 2.
+
+### BL-909 filed
+
+- `validate-mutant-kills.sh` M1 refuses an unrouted kill only on a line carrying a KILLED/killed token, so a mutant verdict worded without one is never asked to go through `mutant_killed`. Examples: postcompact-rulebook-recovery :525, :563, :583 and process-rule-pins :1529, :1562. A loose grammar hits about 669 lines in 154 fixtures, a figure from the contract derivation with its false-positive set unmeasured; measuring that set is the owed work.
+
+### BL-910 filed
+
+- `enforcement-map-sites` I81-M3's C4 cell read differently under the push's pool than solo. In this release's gated push (pool width 8, 54 fixtures run) M3 scored 1100 where 1101 is expected, with rc tuple `rc scratch=1 live-root=1 relative=2 inherited-VEM_SELF=1`. Run solo through hermetic-run, counted, with a mktemp store, this tree and its base 1d1f7c368 both score 1101 with the identical tuple. Neither the validator nor the fixture changed in this release. Finding the shared resource or timing C4 reads, and fixing it in the test, is the owed work (BL-868).
+
+### Rotted former receipts repaired
+
+- BL-507 and BL-508: the probes `bl-507-carried-findings.sh` and `bl-508-siblings.sh` under `docs/analysis/pipeline-efficiency-s317-s318/probes/` are re-anchored.
+- BL-510: the former receipt is retired to a fixture. The validator now needs inputs the s317-s318 probes' thin worlds lack, so `story-evidence-scaffold` is the carrier; the probe files stay in the tree.
+- BL-552: the former receipt is reworded to follow the current rule text.
+
+### Ledger corrections
+
+- BL-541: its text now points to the 0.828.0 close line above it.
+- BL-584: a sentence that `tools.decl` made untrue is dropped.
+
+### Counts
+
+- `docs/backlog.md` holds 49 `## BL-` entries at afea572a5 and 50 at f28ac3f87 (before the BL-910 filing). The new headings are BL-909 and BL-910; BL-828 is still a heading because its closing LANDED line is added in the release commit.
+- `git diff --shortstat afea572a5..f28ac3f87`: 25 files changed, 482 insertions(+), 79 deletions(-).
+
+NET +1: closes BL-828 and files BL-909 and BL-910. It is not negative because BL-909 is the corpus-wide keyword-free mutant-kill residue that BL-828 scoped out, and BL-910 is a load-dependent flake this release's own gate exposed in a fixture it does not touch. Every other entry touched stays PARTIAL, each owing: BL-510 an `Outcome measured:` line from a graph sprint; BL-868 items 5, 8 and 10 (item 15 is exempt by ruling); BL-615 item 2 (a receipt over the dispatched brief); BL-840 and BL-842 their `Outcome measured:` lines. BL-397, BL-541 and BL-584 are text corrections.
+
 ## [0.997.0] - 2026-11-03
 
 Batch b249, cluster b249-c1. Closes BL-907 and PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT. Files none. Machinery-only; it ships alone because it touches the ai-dlc-update skill, a bootstrapping file.
