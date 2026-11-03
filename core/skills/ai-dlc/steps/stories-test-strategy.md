@@ -39,8 +39,8 @@ model from `aiDlcRoles` and rebinds any call-site override back to it), so
 this story to a different role file."
 
 **Routing map (canonical — `implementation.md` binds from it at dispatch,
-gate-validation Check 22 re-derives from it at retro; add a row here, in
-ONE place, to add a route):**
+gate-validation Check 22 re-derives from it at the implementation gate;
+add a row here, in ONE place, to add a route):**
 
 | Frontmatter flag           | Routed role file                        | Why |
 |----------------------------|-----------------------------------------|-----|

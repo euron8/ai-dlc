@@ -633,7 +633,13 @@ finding, and skip the mutation and null-impl replays. Before you return, run
 from the lead checkout's `scripts/ai-dlc` path your brief carries, adding
 `--story <story file> --range <base> <go-signal sha>` (the base gate 1 used, on
 every pass; a later sha is refused) when your record claims the
-record-only exemption. It reads your
+record-only exemption. `--story` must be the story file sprint-status lists at
+the go-signal sha, its basename must carry this review's `<story-index>`, and it must be
+the only story under that index that sprint-status lists at the base or the go-signal sha.
+No other story under that index may appear in the sprint-status history either, from the commit that created the
+story's directory up to the go-signal sha. The sprint is the one in your validation file's
+`docs/reviews/s<N>/` path: the view's `sprint:` must read `<N>` at the base and at the go-signal sha, and
+`--story` must sit in sprint `<N>`'s stories directory. It reads your
 verdict exactly as `gate-validation.md` Check 1 does (at least one verdict line, every
 one reading the same member of the `## Verdict` set) and applies the merge's per-AC
 FAIL-row rules to your table and findings, and holds a PASS to the canonical-run

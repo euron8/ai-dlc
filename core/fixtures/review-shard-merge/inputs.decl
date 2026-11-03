@@ -4,6 +4,7 @@
 !core/scripts/wait-for-deliverable.sh
 !core/hooks/ai-dlc-content-seal.sh
 !core/scripts/record-only-diff.sh
+!core/scripts/sprint-status.sh
 core/scripts/partition-document.sh
 # BL-755: siblings wait-for-deliverable.sh resolves beside itself, so the derived mutant copy (run.sh
 # sib_set) holds them in the sandbox as it does in the tree; arm SIB requires each.
@@ -16,4 +17,5 @@ core/skills/ai-dlc/steps/gate-validation.md
 core/skills/ai-dlc/steps/implementation.md
 core/team-roles/code-reviewer.md
 core/team-roles/qa.md
+core/schemas/sprint-status.json
 core/fixtures/lib/

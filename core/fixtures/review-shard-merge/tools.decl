@@ -18,6 +18,7 @@ ln
 mkdir
 mktemp
 mv
+python3
 rm
 sed
 shasum

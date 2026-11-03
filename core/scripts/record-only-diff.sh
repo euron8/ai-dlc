@@ -96,6 +96,8 @@
 #     collection or a runner can load: a `*.py`, `*.sh`, `*.toml` or `*.cfg`, a `conftest.py` or a
 #     `pytest.ini` under those directories is NOT a record path (`test-results/test_evil.py` is
 #     collected by a bare `pytest` from the root). The reference consumer tracks 15 such files there.
+#     Nor is an entry there whose new mode is a symlink (120000) or a gitlink (160000): a committed
+#     `docs/reviews/s1` link to `s2` would choose where the merge's shards physically land.
 # Every other path is one the canonical collection may read, so a diff touching it owes a run.
 # `docs/coding-conventions.md` and `docs/architecture.md` are NOT record paths: a docs-only story
 # that edits them owes the full collection (a test can read either), and is refused a `none`.
@@ -357,17 +359,22 @@ ro_paths() {
       || { echo "$ME: UNEVALUABLE — base does not resolve: $2" >&2; exit 2; }
     git -C "$REPO" rev-parse --verify --quiet "$3^{commit}" >/dev/null 2>&1 \
       || { echo "$ME: UNEVALUABLE — frozen does not resolve: $3" >&2; exit 2; }
-    changed="$(git -C "$REPO" diff --name-only --no-renames "$2" "$3" 2>/dev/null)" \
+    # --raw, one row per path: `:<old mode> <new mode> <old> <new> <status>` TAB <path>. The new mode is read so a
+    # record-class entry committed as a symlink (120000) or a gitlink (160000) is not a record: a `docs/reviews/s1`
+    # link to `s2` moves where the merge's partition lands, and nothing under it is a file the partition can class.
+    changed="$(git -C "$REPO" diff --raw --no-renames "$2" "$3" 2>/dev/null)" \
       || { echo "$ME: UNEVALUABLE — git diff $2 $3 failed in $REPO" >&2; exit 2; }
     n=0; first=""
     while IFS= read -r p; do
       [ -n "$p" ] || continue
+      rp_m="${p%%$'\t'*}"; p="${p#*$'\t'}"; rp_m="${rp_m#:* }"; rp_m="${rp_m%% *}"
       n=$((n + 1))
       [ -z "$first" ] || continue
       case "$p" in
         "$story") ;;
         _bmad-output/implementation-artifacts/sprint-status.yaml|_bmad-output/planning-artifacts/sprint-status.yaml) ;;
         docs/reviews/*|test-results/*|docs/escalations/*)
+          case "$rp_m" in 120000|160000) first="$p (mode $rp_m, a symlink or gitlink, not a record file)"; continue ;; esac
           case "${p##*/}" in
             *.py|*.sh|*.toml|*.cfg|conftest.py|pytest.ini) first="$p" ;;
           esac ;;
@@ -384,6 +391,8 @@ ro_paths() {
 ro_main() {
 set -u
 export LC_ALL=C
+# Every git call below reads the history as committed: a replace ref or a graft rewrites what a base holds.
+local -x GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts
 ME=record-only-diff
 
 case "${1:-}" in

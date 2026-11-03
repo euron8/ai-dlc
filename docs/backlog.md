@@ -786,7 +786,7 @@ Owed: the stories step (or readiness) refuses an AC whose earliest permitted run
 - A whole-dir run (`--stories-dir`) prints one `EARLIEST-CLOSE <iso>` line, the max over non-deferred windows, and the wave plan copies that rendered value.
 - Fixture `check-31-ac-falsifiability` gains arms w1 (the s320 1.3 AC4 shape, refused), w2 (the same with `defers_to`, accepted), w3, w4, w4b, w4n, w5, w5d, w6 and w6n. Its mutants defer-ignored, cmp-inverted, floor-ignored and earliest-counts-deferred each die on exactly their deciding arms (w2; w1 and w3; w4; w6), measured by `--matrix`.
 
-Residual and next step: the join from each `defers_to` AC to the closing writer's `deferred_acs` is still prose. The mechanical join belongs in `sprint-status.sh check-stories`, at `layered_owed` (`core/scripts/sprint-status.sh:645`).
+Residual, shipped as join J1 (batch b248). `sprint-status.sh check-stories` prints a `REPORT [<key>]` when a story is `done`, its `deferred_acs` parses, and the story file carries an AC with `defers_to:` whose id `deferred_acs` does not list. The AC id is compared exactly and case-sensitively, never the CO value. A missing `deferred_acs` is left to the existing writer_forgot REPORT. J1 is a REPORT in writer_forgot's tier and never moves the exit code. The story's ACs come from one grammar: `validate-ac-falsifiability.sh --list-defers <story-file>...`, which prints `<story>\t<AC-id>\t<CO-id>` per AC carrying `defers_to`, and `sprint-status.sh` calls that mode as its sibling. J2 (a `deferred_acs` id whose AC has no `defers_to`) is ruled out: all 44 graph fires (s319 and s320 closes) were legitimate gate-3 deferrals per `deploy-validate.md:427-441`, so it would flag correct closes. The fixture cells for J1 and for `--list-defers` are still owed. BL-840 stays PARTIAL until the `Outcome measured:` line.
 
 verify: manual
 
@@ -822,7 +822,7 @@ B1. graph's S320 Check 22 waivers, including the 10-27 incidents this entry cite
 
 **Progress (v0.967.0, batch b245).** The remediation path, the two dispatch-time denies and their fixtures ship. The close still waits on BL-817's `Outcome measured:` line.
 
-NOTE, recorded and not fixed: `rule-19.md:27,75` say Check 22 fires "at retro", but it is an implementation-gate check.
+**Progress (batch b248).** The NOTE named two sites (`rule-19.md:27,75`); the derivation found six that claimed Check 22 records, fires or re-derives "at retro" when it is an implementation-gate check (gate-validation.md:1805): `core/skills/ai-dlc/rule-bodies/rule-19.md:27`, `rule-19.md:76`, `core/skills/ai-dlc/steps/_dispatch-protocol.md:245`, `core/skills/ai-dlc/steps/implementation.md:62`, `implementation.md:106` and `core/skills/ai-dlc/steps/stories-test-strategy.md:42`. Derivation: an awk two-line window over `git ls-files 'core/**/*.md'` for a "Check 22" line followed by a line (or the same line) carrying "at retro" returned 6 at 6a4442c2f; the control, the total "Check 22" lines in those files (`git ls-files 'core/**/*.md' | xargs grep -F "Check 22" | wc -l`), read 15 in the same tree, and the same window returns 0 after the fix. All six now read "at the implementation gate". No fixture or script pins the old text (`grep -rlF` of each old sentence over `core/fixtures` and `scripts` read 0 for every one, control "Before any question reaches the operator" read 1).
 
 The entry stays PARTIAL, with `verify: manual`.
 
@@ -1642,17 +1642,6 @@ verify: manual
 
 verify: manual
 
-## BL-895 — the serial seat's `--story` is bound to no story
-
-**DEFECT.** Filed from the b247 delta adversary on BL-885. `merge-review-shards.sh --check-serial --gate qa --story <S> --range <B> <F>` binds `--story` to nothing. `record-only-diff.sh story-base <S> <B> <F>` exits 0 for any path absent at B and a blob at F, by design: a story created after the base is a gate-1 base. So naming any blob created in the range as the "story", for example a review file, passes the narrowed-base refusal for a real story already at `status: review` at B.
-
-Evidence (re-measured on branch b247-pc-s320-record-only with `adv3-fin.sh`, a mktemp repo with `stories/s.md` at `status: review` at L, then F adds `docs/reviews/s1/new.md`): `story-base stories/s.md L F` gives rc=1 "already status: review" (the control). `story-base docs/reviews/s1/new.md L F` gives rc=0. `paths docs/reviews/s1/new.md L F` gives rc=0 `RECORD-ONLY: 1 changed path(s)`.
-
-Not fixed in 0.978.0: the fix needs a story binding, which is a design decision (what names the story: the handoff, the sprint plan, or the verdict).
-
-verify: manual — no predicate over the tree can test it until the binding is designed.
-
-
 ## BL-896 — the gate-adjudication predicate site cannot observe a change to how waivers are read
 
 **DEFECT.** Tier: gate, false clean in `core/skills/ai-dlc-update/reconcile/predicate-differential.sh`. Verified at dc64ebe04.
@@ -1662,6 +1651,37 @@ verify: manual — no predicate over the tree can test it until the binding is d
 Measured reach, read-only with `git -C /Users/n8/git/graph` at HEAD: 4 of the 17 tracked `s320` gate-adjudication `verdict.json` files carry `FAIL_WAIVED`. Control: a token no file carries (`NO_SUCH_TOKEN_Q9Z`) matches 0 files in the same tree.
 
 Owed, not built: pass the consumer's escalations file by path to both sides, the way `AI_DLC_KNOWN_SKILLS_EXT` is passed.
+
+verify: manual
+
+## BL-904 — `record-only-diff.sh story-base` accepts a base where the story file was `git rm`'d with its row kept
+
+**DEFECT.** Filed from the b248 tip adversary on BL-895 (attack A4). If the story file is `git rm`'d with its view row kept and then re-added, a range containing a code change passes the record-only exemption. The gate-1 base property fails: `story-base` reads a story that is absent at the base as "created after the base", which is a gate-1 base by design. BL-895's binding holds, because the story is the one the view lists, under the review's index.
+
+Reproduction: `hand-tadv2/a4.sh` A4, a mktemp repo.
+- LX: story-1-1-x.md at `status: review`, listed as story-1-1.
+- LCODE: a code change, `tests/test_a.py`.
+- LDEL: a `git rm` of x, with its row kept.
+- FX: x re-added at review.
+
+Driven as `merge-review-shards.sh --check-serial <1-1-qa-validation.md> --gate qa --story <x> --range <B> FX` with `Canonical run: none, <reason>`:
+- base LX: rc=2, "is not the story's gate-1 base (the story at <LX> is already status: review)";
+- base LCODE: rc=2, the same refusal;
+- base LDEL: rc=0, SERIAL-OK. The LCODE..FX code change is outside LDEL..FX, so the range reads record-only.
+
+The da5b8bf49 engine has it too. It was re-run from a `git archive da5b8bf49` extract: LX rc=2, LCODE rc=2, LDEL rc=0.
+
+Owed, not built: a story absent at <base> is a gate-1 base only if the story was never a blob at an ancestor of <base>, or only if the view's row for it at <base> is absent too. Receipt idea: a tracked driver that builds the A4 world in a mktemp repo, drives `record-only-diff.sh story-base -C <repo> <x> LDEL FX`, and expects a refusal, with base LX as the same-invocation control.
+
+verify: manual
+
+## BL-905 — a canonical-run claim is not bound to an executed run
+
+**DEFECT.** Filed by the b248 lead from tip adversary 5a on BL-895. The merge and `--check-serial` read the execution owner's `Canonical run:` and `Canonical result:` lines as text. `record-only-diff.sh` holds them to a grammar: an invocation the conventions allow, no filter, and a result line with counts. Nothing ties either line to a run that happened. So a fabricated pair such as ``Canonical run: `pytest -q` `` with `Canonical result: 9 passed` passes a PASS through the gate when no run took place.
+
+Measured on main e311bf7e4. In the fixture's REPO_B world (six text files, with 0 paths matching `test|pytest|conftest` at the frozen sha), four PASS QA shards whose cross-1 carries exactly that pair merge with rc=0, `MERGED: 1-qa-validation.md verdict=PASS parts=3 findings=6 sha=<the world's frozen sha>` (the sha is the fixture world's own commit, so it differs on each run). Same-invocation control: the same world with the two lines removed is REFUSED with rc=2, "carries no 'Canonical run:' line". The driver is `hand-u1l2/bl905.sh`, run over a `git archive` extraction of e311bf7e4, a scratchpad driver that is not tracked.
+
+Not fixed. No receipt is written, because one that passed today would have to accept a fabricated pair, so any receipt that can fail is the fix itself. Its receipt would drive the merge over that REPO_B world twice. Once with the fabricated pair and no run artifact, which must refuse. Once with the same pair plus whatever binding the fix chooses, which must merge. Possible bindings are a run capture committed at the frozen sha whose counts match, or a ledger row the runner writes.
 
 verify: manual
 

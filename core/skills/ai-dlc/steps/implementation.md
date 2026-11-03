@@ -59,7 +59,7 @@ effort binding. Reach the spawned hand afterward by `SendMessage` to its
 `ListAgents` agent id.
 
 Violation of (a), (b), or (c) fails gate-validation Check 22 on
-detection at retro. Per SKILL.md Rule 19.
+detection at the implementation gate. Per SKILL.md Rule 19.
 
 **Pre-dispatch routing (Rule 28).** Before dispatching for any story,
 the lead MUST inspect the story's frontmatter for a **routing tag** and,
@@ -103,7 +103,7 @@ NOT hardcode a second copy here. The two routes today:
 Lead MAY invoke validation sub-skills via the Skill tool per Rule 20.
 Catalog and field semantics defined in `stories-test-strategy.md` "Story
 Routing Tags" subsection. Violation fails gate-validation Check 22 on
-detection at retro.
+detection at the implementation gate.
 
 **Pre-dispatch auth check.** Before any dev dispatch, run:
 ```
@@ -518,7 +518,12 @@ there too. Then run in the frozen dev worktree
 fresh on that SHA, `<captures file>` written by `--list-captures` at `<go-signal-sha>` as at gate 1
 (on its exit 2, without the flag, the line recorded in the gate log), where `<root>` is the absolute path of the frozen worktree,
 `<base>` is the same two-dot base gate 1 used, `<go-signal-sha>` is the full
-SHA and `<sha12>` its first twelve characters. A later pass appends its pass
+SHA and `<sha12>` its first twelve characters. When it writes the shard directory, run, with the LEAD CHECKOUT as
+the working directory and the shard directory as the argument,
+`scripts/ai-dlc/merge-review-shards.sh --record-partition <shard dir>` at once, BEFORE ANY QA SEAT IS
+DISPATCHED, because it trusts the shard directory's `.manifest` only while no seat has touched it: it
+records that partition's base, sha and qa.md era in the lead's story record, which the merge reads
+back, and it is re-run on every re-partition. A later pass appends its pass
 marker, `<story-index>-qa-validation-<sha12>-p<M>`, matching the `-p<M>` of the
 validation file it merges into. The threshold is gate 1's: the built-in default
 in `partition-review-diff.sh`, overridden by `AI_DLC_REVIEW_SHARD_MIN_FILES`,
@@ -581,11 +586,12 @@ canonical run in the frozen worktree and the RED replays a part QA handed
 over, and writes the per-AC table and the
 `## Deferred ACs` section (`qa.md` "As a Shard"). Join with the LEAD checkout's
 `scripts/ai-dlc/merge-review-shards.sh <shard-dir> --gate qa --out <root>/docs/reviews/s<N>/<story-index>-qa-validation.md --story <story-file>`,
-run against the shard directory in the frozen worktree,
+run with the LEAD CHECKOUT as the working directory against the shard directory in the frozen worktree,
 passing the pass-specific name on a later pass (`-p2`, ...). The merge refuses a PASS whose
 first cross shard carries no `Canonical run:` and `Canonical result:` with counts,
 unless it claims the record-only exemption over the manifest's base and sha, the whole
-story's range on every pass; it takes no `--range`. After a refused
+story's range on every pass; it takes no `--range`. It refuses a `.manifest` whose base or sha
+differs from the story record `--record-partition` wrote, and binds `--story` on a run claim too. After a refused
 merge, re-dispatch each seat that every REFUSED line's `[owner: <key>]` names, in one wave,
 handing it every line naming it verbatim: it corrects its own shard, re-runs `--check-shard`
 and re-marks, then the lead re-merges. The lead never edits, moves findings
@@ -597,6 +603,17 @@ reads, verdict recomputed as the worst shard verdict. A QA shard does NOT make
 any closing write; the closing writer makes them, after gate 3, reading the
 merged file. The lead persists the shard directory together with the merged
 file.
+
+**The lead re-runs a serial QA's check.** Before recording a gate-2 verdict from a `shard: 1/1` QA, the
+lead runs, from its own checkout and its own working directory,
+with `<lead engine>` the LEAD checkout's `scripts/ai-dlc` that every serial brief carries,
+`env -i PATH="$PATH" HOME="$HOME" <lead engine>/merge-review-shards.sh --check-serial <root>/docs/reviews/s<N>/<story-index>-qa-validation[-p<M>].md --gate qa --story <story-file> --lead-range <seat base> <go-signal sha>`,
+the review path being the one the lead assigned, `<story-file>` the lead's own, `<go-signal sha>` the
+full sha of the go-signal, and `<seat base>` the `--range` base the QA's own check used. The base the
+check decides over is the dispatch sha `--record-dispatch` recorded at dev dispatch (`_dispatch-protocol.md`
+item 1), which the engine reads itself; `<seat base>` is read only when that record is absent, and then
+one `LEGACY-UNRECORDED:` line names the story; record it in the gate log. Anything but `SERIAL-OK` refuses
+the verdict: the QA's own `SERIAL-OK` is not evidence.
 
 **Worktree gate-verification freeze.** Once the lead dispatches a gate
 reviewer (gate-1 code review or gate-2 QA) against a dev worktree, that

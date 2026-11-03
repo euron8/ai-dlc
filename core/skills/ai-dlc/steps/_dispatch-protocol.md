@@ -31,6 +31,9 @@ follow the worktree-explicit dispatch protocol:
 1. Lead pre-creates a physical worktree per dispatched story BEFORE
    issuing the Agent call:
    `git worktree add <repo>-s<N>-story-<X> -b dev/sprint-<N>/story-<X> <sprint-branch-HEAD>`
+   and, from the lead checkout, records that sha as the story's dispatch:
+   `scripts/ai-dlc/merge-review-shards.sh --record-dispatch s<N>-<story-index> <sprint-branch-HEAD>`.
+   A rework re-dispatch runs it again and the first value is kept (`RECORD-KEPT:`).
 2. Dev branches MUST branch off the current sprint-branch HEAD at
    dispatch time. The lead MUST NOT branch dev worktrees off `main`
    unless the sprint branch has not diverged from main.
@@ -242,7 +245,7 @@ because the canonical spec lives on an unmerged PR, the lead MUST
 either merge that PR first or pin the dev branch base to a commit
 that includes it. Dispatching dev without both conditions satisfied
 is a story-scope failure mode. Violation fails gate-validation
-Check 22 on detection at retro.
+Check 22 on detection at the implementation gate.
 
 **Dev-dispatch exploration budget.** Every dev brief MUST bound
 exploration and force an early write. The brief MUST state: (a) an

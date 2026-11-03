@@ -4,6 +4,7 @@
 # Usage: ./scripts/ai-dlc/validate-ac-falsifiability.sh <story-file> [<story-file>...]
 #        ./scripts/ai-dlc/validate-ac-falsifiability.sh --lexicon-from <path> <story-file>
 #        ./scripts/ai-dlc/validate-ac-falsifiability.sh --stories-dir <dir> [<story-file>...]
+#        ./scripts/ai-dlc/validate-ac-falsifiability.sh --list-defers <story-file>...   # one `<story>\t<AC-id>\t<CO-id>` line per AC carrying defers_to; no verdict, exit 0
 #
 # Gate-validation Check 31 enforcer (story gates).
 #
@@ -134,13 +135,15 @@ set -u
 PROG="validate-ac-falsifiability.sh"
 LEXICON=""
 STORIES_DIR=""
+LIST_DEFERS=0
 FILES=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --lexicon-from) LEXICON="${2:-}"; shift 2 || { echo "$PROG: --lexicon-from needs a path" >&2; exit 2; } ;;
     --stories-dir) STORIES_DIR="${2:-}"; shift 2 || { echo "$PROG: --stories-dir needs a directory" >&2; exit 2; } ;;
-    -h|--help) echo "usage: $PROG [--lexicon-from PATH] [--stories-dir DIR] <story-file>..." >&2; exit 2 ;;
+    --list-defers) LIST_DEFERS=1; shift ;;
+    -h|--help) echo "usage: $PROG [--lexicon-from PATH] [--stories-dir DIR] [--list-defers] <story-file>..." >&2; exit 2 ;;
     -*) echo "$PROG: unknown option $1" >&2; exit 2 ;;
     *) FILES+=("$1"); shift ;;
   esac
@@ -200,6 +203,9 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 }
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
+TERMS=""; TERM_COUNT=0
+# --list-defers reads no term list, so a root without the lexicon still lists.
+if [ "$LIST_DEFERS" -eq 0 ]; then
 if [ -z "$LEXICON" ]; then
   ROOT="$AI_DLC_ROOT"
   for cand in \
@@ -222,6 +228,7 @@ if [ "$TERM_COUNT" -eq 0 ]; then
   echo "$PROG: DISARMED — EXAMINED NOTHING — the AC_UNBOUNDED_TERMS block in $LEXICON parsed to ZERO terms. Either the sentinels moved or the list was emptied. Exiting 2: a zero-term scan passes every story and prints the same shape of output as a full one." >&2
   exit 2
 fi
+fi # LIST_DEFERS=0
 
 rc=0
 waivers=0
@@ -345,6 +352,7 @@ for story in "${FILES[@]}"; do
     body="$(sed -n "${start},${end}p" "$story")"
     checked=$((checked+1))
 
+    if [ "$LIST_DEFERS" -eq 0 ]; then
     waived=0
     grep -qE '^[[:space:]]*falsifiability_waiver:[[:space:]]*[^[:space:]]' <<<"$body" && waived=1
 
@@ -363,8 +371,10 @@ for story in "${FILES[@]}"; do
         break
       fi
     done <<< "$TERMS"
+    fi # LIST_DEFERS=0: the term scan does not run in the --list-defers listing
 
     printf '%s\n' "$body" > "$ACF_T/ac-body" || acf_refuse "staging $story $ac_id" "$?"
+    if [ "$LIST_DEFERS" -eq 0 ]; then
     _acf_rc=0
     sed -n 's/^[[:space:]]*prior_evidence:[[:space:]]*//p' "$ACF_T/ac-body" > "$ACF_T/ac-cites-raw" || _acf_rc=$?
     [ "$_acf_rc" -eq 0 ] || acf_refuse "reading the prior_evidence citations of $story $ac_id" "$_acf_rc"
@@ -388,6 +398,7 @@ for story in "${FILES[@]}"; do
         rc=1
       fi
     done < "$ACF_T/ac-cites"
+    fi # LIST_DEFERS=0: the prior_evidence check does not run in the --list-defers listing
 
     # Clause (c), collection only. Judged after every story is read, so the canonical and
     # the floor are resolved once and only when a window exists.
@@ -398,6 +409,10 @@ for story in "${FILES[@]}"; do
     [ "$_acf_rc" -eq 0 ] || acf_refuse "reading the defers_to line of $story $ac_id" "$_acf_rc"
     rnb_raw=""; IFS= read -r rnb_raw < "$ACF_T/ac-rnb"
     dto_raw=""; IFS= read -r dto_raw < "$ACF_T/ac-dto"
+    if [ "$LIST_DEFERS" -eq 1 ]; then
+      [ -s "$ACF_T/ac-dto" ] && printf '%s\t%s\t%s\n' "$story" "$ac_id" "$(rw_clean "$dto_raw")"
+      continue
+    fi
     deferred=0
     if [ -s "$ACF_T/ac-dto" ]; then
       dto="$(rw_clean "$dto_raw")"
@@ -420,6 +435,8 @@ for story in "${FILES[@]}"; do
     fi
   done
 done
+
+[ "$LIST_DEFERS" -eq 1 ] && exit 0
 
 # --- clause (c), judged ---------------------------------------------------------------
 if [ -s "$ACF_T/windows" ]; then

@@ -24,7 +24,7 @@ role-to-model mapping here or in step files; a second mapping drifts
 from the role file and is itself a violation. A spawn that omits
 `model` on the fallback path, names a different key, or lacks a
 matching definition where one is expected, is still a Rule 19 violation
-Check 22 records at retro.
+Check 22 records at the implementation gate.
 
 **Config is authoritative.** `aiDlcRoles.<role>` states the model and the
 effort; the rendered definition (a) is what binds both. The guard also
@@ -73,4 +73,4 @@ when `name` is absent, and Rule 20 joins every teammate on its
 deliverable file, never on `name`.
 
 Violation of (a), (b), or (c) fails gate-validation Check 22 on detection
-at retro.
+at the implementation gate.

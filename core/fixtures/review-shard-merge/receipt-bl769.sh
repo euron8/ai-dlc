@@ -15,7 +15,7 @@
 #   PASS, `npx vitest run web/src/foo.test.jsx --root web`            -> REFUSED (a test-file argument)
 #   PASS, `pytest tests -x --lf`                                      -> REFUSED (last failures only)
 #   PASS, 'none, `pytest -q` is not needed here' over the code range  -> REFUSED (a none, not a run)
-#   PASS, no run line, under a root whose qa.md lacks the sentinel    -> SERIAL-OK with a LEGACY: line
+#   PASS, no run line, in a repo that is also the root, its qa.md lacking the sentinel -> SERIAL-OK with a LEGACY: line
 # 0 = every case answered as above. 1 = a case did not. 9 = the receipt could not run.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -37,7 +37,7 @@ trap 'rm -rf "$R"' EXIT
     else got=broken; fi
     printf '%s %s %s\n' "$c" "$w" "$got"
   }
-  f="$CR_REPO/docs/reviews/s1/r-1-qa-validation.md"; pv="$(printf '## Verdict\nPASS')"
+  f="$CR_REPO/docs/reviews/s1/1-1-qa-validation.md"; pv="$(printf '## Verdict\nPASS')"
   SR_CANON="$CANON_BLK" sr_file "$f" "$pv"; one counted ok "$f"
   SR_CANON="$(printf 'RED replay: 1 failed, 4 passed')" sr_file "$f" "$pv"; one redonly refused "$f" "$CR_NORUN"
   SR_CANON="$(printf 'Canonical run: `pytest -k test_new` from the root\nCanonical result: 9 passed')" sr_file "$f" "$pv"; one filtered refused "$f" "$CR_FILT"
@@ -55,7 +55,7 @@ trap 'rm -rf "$R"' EXIT
   SR_CANON="$(printf 'Canonical run: `pytest tests -x --lf`\nCanonical result: 9 passed')" sr_file "$f" "$pv"; one lf refused "$f" "re-runs only the last failures"
   SR_CANON='Canonical run: none, `pytest -q` is not needed here' sr_file "$f" "$pv"
   one nonebt refused "$f" "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"
-  SR_CANON='' sr_file "$f" "$pv"
+  f="$PROJ_CRS/docs/reviews/s1/1-1-qa-validation.md"; SR_CANON='' sr_file "$f" "$pv"
   CR_ROOT="$PROJ_CRS" cr_run "$SD" "$f"
   if [ "$SRC" -eq 0 ] && has "$CO" "LEGACY: canonical-run lines not checked:" && has "$CO" "SERIAL-OK:"; then echo "legacy ok ok"; else echo "legacy ok refused"; fi
   exit 0

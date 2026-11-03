@@ -428,6 +428,23 @@ rw_base_flag() { # <space-separated arms> -> 1 iff every one passed unmutated in
   echo 1
 }
 
+# --list-defers: the id source sprint-status.sh check-stories reads for its J1 REPORT. A story shaped
+# like rw-deferred.md prints exactly `<story>\tAC2\tCO-...` and exits 0; a story with no defers_to
+# prints nothing and exits 0. The two are asserted in one cell so the empty half cannot pass for a
+# listing that never ran.
+LD_TAB="$(printf '\t')"
+ld_run() { # <story> -> LD_OUT LD_RC
+  LD_OUT="$(cd "$WORK" && AI_DLC_PROJECT_ROOT="$RW_IN" bash "$V" --list-defers "$1" 2>"$WORK/ld.err")"; LD_RC=$?
+}
+ld_run "$DIR/rw-deferred.md"; ld_yes_out="$LD_OUT"; ld_yes_rc=$LD_RC
+ld_run "$DIR/rw-none.md"; ld_no_out="$LD_OUT"; ld_no_rc=$LD_RC
+if [ "$ld_yes_rc" -eq 0 ] && [ "$ld_yes_out" = "$DIR/rw-deferred.md${LD_TAB}AC2${LD_TAB}CO-S320-HODL-PRESS-LIVE-DISCHARGE" ] \
+   && [ "$ld_no_rc" -eq 0 ] && [ -z "$ld_no_out" ]; then
+  ok "(ld) --list-defers prints <story>/AC2/CO for a defers_to story and nothing for one without, both exit 0"
+else
+  bad "(ld) --list-defers rc/out wrong: yes rc=$ld_yes_rc out='$ld_yes_out'; none rc=$ld_no_rc out='$ld_no_out'"
+fi
+
 # MUTANTS. Each is a copy of the validator in its own directory beside a copy of its floor
 # sibling, built by an anchor that occurs ONCE. Per push a mutant runs its DECIDING arms (each
 # must fail) and its TWINS (each must stay green), the cells the header's MUTANT-MATRIX rows
