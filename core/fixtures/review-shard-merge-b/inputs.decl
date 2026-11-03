@@ -1,0 +1,23 @@
+!core/scripts/partition-review-diff.sh
+!core/scripts/merge-review-shards.sh
+!core/scripts/content-seal.sh
+!core/scripts/wait-for-deliverable.sh
+!core/hooks/ai-dlc-content-seal.sh
+!core/scripts/record-only-diff.sh
+!core/scripts/sprint-status.sh
+core/scripts/partition-document.sh
+# Shard b of review-shard-merge (BL-906): every input the parent declares, since the driver execs the parent's run.sh,
+# which sources its lib.sh and seeds the same worlds; the parent's whole directory, because a fixture's OWN directory
+# is copied by the runner and this shard's own is only the driver.
+core/fixtures/review-shard-merge/
+core/scripts/merge-adversarial-shards.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/wfd-start-of.sh
+core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/steps/implementation.md
+core/team-roles/code-reviewer.md
+core/team-roles/qa.md
+core/schemas/sprint-status.json
+core/fixtures/lib/

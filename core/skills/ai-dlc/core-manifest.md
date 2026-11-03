@@ -242,6 +242,7 @@ core_manifest:
   - fixtures/gate-repair-record/**
   - fixtures/adversarial-shard-merge/**
   - fixtures/review-shard-merge/**
+  - fixtures/review-shard-merge-b/**
   - fixtures/remediator-shard-join/**
   - fixtures/content-seal/**
   - fixtures/document-partition/**

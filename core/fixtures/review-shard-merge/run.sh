@@ -267,6 +267,11 @@
 # every mutant outside RSM_MATRIX_SLICE, so each slice's populations shrink; MX1's slice arm refuses it, and so
 # does --merge-slices. MX1.plain is its twin, because a run with no slice never reaches the filter.
 # MUTANT-MATRIX M73 decides=MX1.slice twins=MX1.plain
+# K1-K3 are scored by hand, not per push, the same way: run.sh copies that switch KS1 off (K1), make its kill set its
+# deal (K2), or make its FAIL branch print ok (K3). KS1-CTL kills each (its block, beside KS1, spells the three edits).
+# MUTANT-MATRIX K1 decides=KS1-CTL twins=KS1
+# MUTANT-MATRIX K2 decides=KS1-CTL twins=KS1
+# MUTANT-MATRIX K3 decides=KS1-CTL twins=KS1
 # MUTANT-MATRIX M74 decides=run_rec.rr-mq twins=run_rec.rr-mu
 # MUTANT-MATRIX M75 decides=run_rec.rr-c-lrl twins=run_rec.rr-c-lru
 # MUTANT-MATRIX M76 decides=run_rec.rr-s-lru twins=run_rec.rr-c-lrl
@@ -316,14 +321,45 @@ rsm_merge_slices() {
       printf "MERGE-SLICES: %d slices of n=%s, %d MATRIX pairs = the recorded population, none missing, none twice\n", nf, n, NM > "/dev/stderr"
     }' "$@"
 }
-# --matrix runs the mutant x cell matrix in place of the twins (MATRIX lines); a plain run never does.
-RSM_MATRIX=0
-case "${1:-}" in
-  "") ;;
-  --matrix) RSM_MATRIX=1 ;;
-  --merge-slices) shift; rsm_merge_slices "$@"; exit $? ;;
-  *) echo "usage: run.sh [--matrix | --merge-slices <slice output>...]" >&2; exit 2 ;;
-esac
+# ---------------------------------------------------------------------------- shards (BL-906)
+# THIS FILE IS TWO SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT BOUNDARY (the
+# readset-skip shape). Every top-level arm sits inside a UNIT, `if sg <unit>; then` ... `fi # sg <unit>`, and `--group
+# <x>` runs the units dealt to shard <x>. The sibling `review-shard-merge-b/run.sh` is a one-line driver that execs this
+# file with `--group b`; no `--group` is shard a. A MUTANT RIDES WITH ITS PREDICATE'S ARM: its unit is the unit whose
+# guard holds the `arm`/`arm2` line of the predicate its mut_run names, so its base-pass flag is set in the same shard.
+# The seed (lib.sh, seed_controls), the mutant machinery (SIB, the control copy) and the closing tally run in every shard.
+#   a  seam arms bl737 bl885 bl808 docs   the in-process seam (EQ0-EQ8, every subject start), the P/V/R/Q/H/X/G arms, CS1-
+#                                         SR1, the BL-885 story arms, both lead arms (LR0), AD1-AD3, SR2, QC1, VB3-XC5, the pins
+#   b  canon canon_merge files            CR1, CR2, FL1, BL-904's story history (receipt-bl904.sh, M58 M59 M66) and
+#      story_hist run_rec                 BL-905's RR1 (M60-M72, M74-M76), each with its mutants
+# M73 (MX1.slice) and K1-K3 (KS1-CTL) are hand-scored, never dealt: they have no mut_run call. MX1 is per-run accounting and runs in both shards.
+# THE COVERAGE JOIN (J0) runs in EVERY shard, and under --deal, before lib.sh builds anything: the declared units are
+# DERIVED from this file's `if sg <unit>; then` lines, the dealt lists must be disjoint and their union exact, every
+# arm line must sit inside a unit, every mutant (read off its mut_run call with a stub, the emission site) must map to
+# a dealt unit, the mutant total must be 146, and every declared shard must have a driver directory. It proves it can
+# fire first, on a seeded duplicate and a seeded omission. --matrix runs every unit's arms and records every mutant;
+# alone it scores all 146 rows, with --group <x> only shard <x>'s dealt rows, printing every row's population as
+# MATRIX-ALLPOP so the two shards' MATRIX pairs join to the unsharded population. A plain run's KS1 asserts the shard
+# killed exactly the mutants it was dealt, and its KS1-CTL proves KS1 refuses that run's kill set less one id.
+# --deal prints each shard's dealt units, arms, mutants and its static unit-cell count (an arm's `cell` declarations in
+# its lib.sh predicate, at least 1; a mutant's deciding cell plus its twins), then exits 0: the BL-906 receipt reads it.
+SHARDS="a b"
+UNITS_a="seam arms bl737 bl885 bl808 docs"
+UNITS_b="canon canon_merge files story_hist run_rec"
+GROUP=a; RSM_MATRIX=0; RSM_DEAL=0; _grp=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --group) _grp=1; GROUP="${2:-}"
+      [ -n "$GROUP" ] || { echo "usage: run.sh [--group <shard> | --matrix | --deal]: --group needs a shard name" >&2; exit 2; }
+      shift; shift ;;
+    --matrix) RSM_MATRIX=1; shift ;;
+    --deal) RSM_DEAL=1; shift ;;
+    --merge-slices) shift; [ "$GROUP" = a ] || NAME="review-shard-merge-$GROUP"; rsm_merge_slices "$@"; exit $? ;;
+    *) echo "usage: run.sh [--group <shard>] [--matrix] | --deal | [--group <shard>] --merge-slices <slice output>..." >&2; exit 2 ;;
+  esac
+done
+# --group with --matrix scores that shard's dealt mutants only (the per-shard matrix); --matrix alone scores every unit.
+[ $((RSM_MATRIX + RSM_DEAL)) -le 1 ] && [ $((_grp + RSM_DEAL)) -le 1 ] || { echo "usage: run.sh [--group <shard>] [--matrix] | --deal: --deal takes neither" >&2; exit 2; }
 # RSM_MATRIX_SLICE=k/n (header): parsed here so a malformed value refuses before any world is built.
 RSM_SLICE_K=""; RSM_SLICE_N=""
 if [ -n "${RSM_MATRIX_SLICE+set}" ]; then
@@ -336,6 +372,94 @@ if [ -n "${RSM_MATRIX_SLICE+set}" ]; then
   [ "$RSM_SLICE_K" -lt "$RSM_SLICE_N" ] || { echo "run.sh: RSM_MATRIX_SLICE='$RSM_MATRIX_SLICE' is not k/n with integers 0 <= k < n" >&2; exit 2; }
   [ "$RSM_MATRIX" = 1 ] || { echo "run.sh: RSM_MATRIX_SLICE is read only with --matrix" >&2; exit 2; }
 fi
+case " $SHARDS " in *" $GROUP "*) ;; *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;; esac
+eval "MINE=\"\${UNITS_$GROUP:-}\""
+# MINE is the units whose ARMS run; DEALT the units whose MUTANTS this run scores. A plain run: both the shard's deal.
+# --matrix runs every arm and records every mutant (a drive declaring fewer than two cells borrows the deciding cells of
+# its file's other mutants from the full record), and scores the rows of DEALT: all of them with no --group, the
+# shard's with one, so the per-shard matrices partition the unsharded pair population (MATRIX-POP, below).
+DEALT="$MINE"
+[ "$RSM_MATRIX" = 0 ] && [ "$RSM_DEAL" = 0 ] || MINE="$UNITS_a $UNITS_b"
+{ [ "$RSM_MATRIX" = 1 ] && [ "$_grp" = 0 ]; } || [ "$RSM_DEAL" = 1 ] && DEALT="$MINE"
+[ "$GROUP" = a ] || NAME="review-shard-merge-$GROUP"
+rsm_broken() { echo "FIXTURE BROKEN: $1" >&2; echo "$NAME: FIXTURE BROKEN" >&2; exit 2; }
+[ -n "$MINE" ] || rsm_broken "shard '$GROUP' has no UNITS_$GROUP list; a shard dealt nothing passes everything it never checked"
+sg() { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+dg() { case " $DEALT " in *" $1 "*) return 0 ;; esac; return 1; }
+rsm_partition_ok() { # <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared exactly
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+RSM_JW="$(mktemp -d "${TMPDIR:-/tmp}/review-shard-merge-join.XXXXXX")" || rsm_broken "mktemp failed"
+printf '%s\n' u1 u2 u3 > "$RSM_JW/pd"; printf '%s\n' u1 u2 u2 u3 > "$RSM_JW/pdup"; printf '%s\n' u1 u3 > "$RSM_JW/pmiss"; printf '%s\n' u3 u1 u2 > "$RSM_JW/pok"
+if rsm_partition_ok "$RSM_JW/pd" "$RSM_JW/pdup" > /dev/null || rsm_partition_ok "$RSM_JW/pd" "$RSM_JW/pmiss" > /dev/null \
+   || ! rsm_partition_ok "$RSM_JW/pd" "$RSM_JW/pok" > /dev/null; then
+  rm -rf "$RSM_JW"; rsm_broken "the coverage join's self-probe did not discriminate (duplicate, omission, exact)"
+fi
+RSM_SELF="$HERE/run.sh"
+sed -n 's/^if sg \([a-z0-9_][a-z0-9_]*\); then$/\1/p' "$RSM_SELF" > "$RSM_JW/declared"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s}" | tr ' ' '\n'; done | grep . > "$RSM_JW/dealt"
+_ndecl="$(grep -c . "$RSM_JW/declared")" || _ndecl=0
+_ndup="$(sort "$RSM_JW/declared" | uniq -d | grep -c .)" || _ndup=0
+[ "$_ndecl" -gt 0 ] && [ "$_ndup" = 0 ] || { rm -rf "$RSM_JW"; rsm_broken "$_ndecl unit guards derived from $RSM_SELF ($_ndup declared twice)"; }
+_why="$(rsm_partition_ok "$RSM_JW/declared" "$RSM_JW/dealt")" || { rm -rf "$RSM_JW"; rsm_broken "the shard partition does not cover the guarded units exactly -- $_why"; }
+for _s in $SHARDS; do
+  [ "$_s" = a ] && continue
+  _drv="$HERE/../review-shard-merge-$_s/run.sh"
+  [ -f "$_drv" ] && grep -qF -- "--group $_s" "$_drv" || { rm -rf "$RSM_JW"; rsm_broken "shard '$_s' is declared but $_drv does not drive it"; }
+done
+# Each arm line's unit (one awk): `<predicate> <unit>`, the unit `-` for an arm outside every guard.
+awk '/^if sg [a-z0-9_]+; then$/ { u = $3; sub(/;$/, "", u) } /^fi # sg [a-z0-9_]+$/ { u = "" }
+  /^[[:space:]]*arm2? [a-z0-9_]+ / { print $2 " " (u == "" ? "-" : u) }' "$RSM_SELF" > "$RSM_JW/arms"
+_nout="$(grep -c ' -$' "$RSM_JW/arms")" || _nout=0
+_narm="$(grep -c . "$RSM_JW/arms")" || _narm=0
+[ "$_narm" -gt 0 ] && [ "$_nout" = 0 ] || { rm -rf "$RSM_JW"; rsm_broken "$_nout of $_narm arm line(s) sit outside every unit guard"; }
+# Each mutant, read off its mut_run call by a stub (receipt-bl755.sh's reading): `<id>\t<predicate>\t<file old new>`.
+_calls="$(awk '/^[[:space:]]*(CS_ONLY=[^ ]+[[:space:]]+)?mut_run [A-Za-z]/ { p = 1 } p { print; if ($0 !~ /\\$/) p = 0 }' "$RSM_SELF")"
+( mut_run() { printf '%s\t%s\t%s\037%s\037%s\n' "$1" "$5" "$2" "$3" "$4"; }; eval "$_calls" ) > "$RSM_JW/muts" 2> /dev/null \
+  || { rm -rf "$RSM_JW"; rsm_broken "the mut_run calls in $RSM_SELF did not execute under the stub"; }
+# MUT_ROWS: `<id> <unit> <shared>` per mutant, shared 1 when an earlier mutant of the SAME SHARD made the identical edit.
+_unitshard="$(for _s in $SHARDS; do eval "_us=\"\${UNITS_$_s}\""; for _u in $_us; do printf '%s %s\n' "$_u" "$_s"; done; done)"
+MUT_ROWS="$(US="$_unitshard" awk -F'\t' 'BEGIN { n = split(ENVIRON["US"], l, "\n"); for (i = 1; i <= n; i++) { split(l[i], f, " "); sh[f[1]] = f[2] } }
+  FILENAME == ARGV[1] { split($0, f, " "); pu[f[1]] = f[2]; next }
+  { u = ($2 in pu) ? pu[$2] : "-"; k = sh[u] SUBSEP $3; s = (k in seen) ? 1 : 0; seen[k] = 1; print $1, u, s }' "$RSM_JW/arms" "$RSM_JW/muts")"
+_mall="$(printf '%s\n' "$MUT_ROWS" | grep -c .)" || _mall=0
+_mnou="$(printf '%s\n' "$MUT_ROWS" | awk '$2 == "-"' | grep -c .)" || _mnou=0
+_mdup="$(printf '%s\n' "$MUT_ROWS" | awk '{ print $1 }' | sort | uniq -d | grep -c .)" || _mdup=0
+[ "$_mall" = 146 ] && [ "$_mnou" = 0 ] && [ "$_mdup" = 0 ] \
+  || { rm -rf "$RSM_JW"; rsm_broken "the mut_run calls name $_mall mutants (want 146), $_mdup id(s) twice, $_mnou whose predicate has no unit-guarded arm"; }
+MUT_MINE=" "; MUT_MINE_N=0; MUT_MINE_SHARED=0
+while read -r _id _u _sh; do
+  dg "$_u" || continue
+  MUT_MINE="$MUT_MINE$_id "; MUT_MINE_N=$((MUT_MINE_N + 1)); MUT_MINE_SHARED=$((MUT_MINE_SHARED + _sh))
+done <<< "$MUT_ROWS"
+if [ "$RSM_DEAL" = 1 ]; then
+  # The static unit-cell count: an arm's `cell` declarations in its lib.sh body (at least 1), a mutant's 1 + its twins.
+  awk 'match($0, /^p_[a-z0-9_]+\(\) *\{/) { p = substr($0, 3, RLENGTH - 2); sub(/\(.*/, "", p); n[p] += 0 }
+    /^[[:space:]]*#/ { next } p != "" { s = $0; while (match(s, /(^|[^a-z_])cell [a-z0-9]/)) { n[p]++; s = substr(s, RSTART + RLENGTH) } }
+    /^}/ { p = "" } END { for (k in n) print k, n[k] }' "$HERE/lib.sh" > "$RSM_JW/cells"
+  sed -n 's/^# MUTANT-MATRIX \([^ ]*\) decides=[^ ]* twins=\([^ ]*\)$/\1 \2/p' "$RSM_SELF" | awk '{ print $1, 1 + split($2, t, ",") }' > "$RSM_JW/mcells"
+  _total=0
+  for _s in $SHARDS; do
+    eval "_us=\"\${UNITS_$_s}\""
+    _out="$(awk -v us=" $_us " 'FILENAME == ARGV[1] { c[$1] = $2; next } FILENAME == ARGV[2] { m[$1] = $2; next }
+      FILENAME == ARGV[3] { if (index(us, " " $2 " ")) { na++; x = ($1 in c) && c[$1] > 0 ? c[$1] : 1; cl += x } next }
+      { split($0, f, " "); if (index(us, " " f[2] " ")) { nm++; ids = ids (ids == "" ? "" : ",") f[1]; cl += (f[1] in m) ? m[f[1]] : 2 } }
+      END { printf "arms=%d mutants=%d cells=%d ids=%s\n", na, nm, cl, ids }' "$RSM_JW/cells" "$RSM_JW/mcells" "$RSM_JW/arms" <(printf '%s\n' "$MUT_ROWS"))"
+    echo "DEAL $_s units=$(printf '%s' "$_us" | tr ' ' ',') $_out"
+    _c="${_out#*cells=}"; _total=$((_total + ${_c%% *}))
+  done
+  echo "DEAL-TOTAL cells=$_total"
+fi
+rm -rf "$RSM_JW"
+echo "  [J0] coverage join: $_ndecl units derived from the sg guards, dealt disjointly across {$SHARDS}, union exact; $_narm arm lines each inside a unit; $_mall mutants each dealt with its predicate's arm; this shard runs {$MINE} and $MUT_MINE_N mutant(s)"
+[ "$RSM_DEAL" = 1 ] || echo "DEALT-IDS $(printf '%s' "${MUT_MINE# }" | tr ' ' ',' | sed 's/,$//')"
+[ "$RSM_DEAL" = 0 ] || exit 0
 # I10 reads run.sh, not lib.sh, for the ambient-env scrub; this is the same scrub lib.sh performs.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 . "$HERE/lib.sh"
@@ -353,6 +477,7 @@ echo "HERMETIC-CONSUMED core/scripts/sprint-status.sh"
 echo "$NAME:"
 seed_controls
 
+if sg seam; then
 # ---------------------------------------------------------------- the in-process seam (EQ1-EQ8)
 # Every arm below asks its subject IN PROCESS (lib.sh ip_run). These are the end-to-end runs kept, one per
 # distinct CLI outcome of each subject: the same CLI line run in process and as a process must answer
@@ -426,6 +551,7 @@ if EQ_CLI_TAIL="--max-parts=junk" eq_pair eq0 "$PART" prd_main --map "$REPO_B" "
   bad "EQ0: FIXTURE BROKEN -- eq_pair called a CLI run with an extra argument byte-equal to the in-process run"
 else ok "EQ0: eq_pair reports a CLI run given one extra argument as differing from the in-process run (${EQ_WHY# })"; fi
 eq_arm EQ8 "the recorder hook sourced in process answers byte-for-byte what the CLI does on a review-shard Write (one ledger row appended) and on a path outside the sealed set (no row)" hk_row hk_none
+fi # sg seam
 
 arm() { # <predicate> <label-ok> <label-bad>
   if "p_$1" "$SRCDIR"; then ok "$2"; eval "ARMOK_$1=1"; else bad "$3 (rc=${RC:-?}): $(cat "$MO" 2>/dev/null | head -3)"; fi
@@ -434,6 +560,7 @@ arm2() { # <predicate> <label-ok> <label-bad> -- the predicate sets WHY to what 
   WHY=""
   if "p_$1" "$SRCDIR"; then ok "$2"; eval "ARMOK_$1=1"; else bad "$3:${WHY:- (no reason recorded)}"; fi
 }
+if sg arms; then
 arm part "P1: repo A (all files under app/) partitions to >= 2 parts above --min-files 4, app/ split across parts, no part keyed on bare app/, the docs/reviews/ artifact excluded" \
          "P1: repo A did not partition by adaptive depth"
 arm dflt_lo "P2: key unset, no flag, $((DFLT - 1)) reviewable files ($DFLT in the diff, one under a scan root) -> exit 3, 'SERIAL:' naming the built-in default $DFLT and $KEY, no manifest" \
@@ -585,7 +712,9 @@ arm cr_ho_runtwice "G4: --gate code-review, one hand-over replayed twice by cros
                    "G4: a hand-over replayed twice was merged"
 arm cr_hc_missing "G5: --gate code-review, a part shard with no 'handovers:' line -> REFUSED, nothing at --out" \
                   "G5: a gate-1 part shard without its declared hand-over count was merged"
+fi # sg arms
 
+if sg bl737; then
 # ------------------------------------------------------------------------------------ BL-737
 # Each predicate sets WHY to what it saw. A predicate that never ran leaves no `ok` line, so every arm
 # here is presence-shaped: the receipt counts these labels' `ok` lines, never the exit alone. arm2
@@ -638,20 +767,22 @@ arm2 fr_remedy "FR3: the orphan remedy is satisfiable -- cross-1 filing the AC4 
                "FR3: the orphan FAIL row's remedy cannot be satisfied under the owner rule"
 arm2 serial "SR1: --check-serial, gate 3's Check 1 rule and no stricter -- '## Verdict / PASS', 'Verdict: NEEDS_REWORK', 'Verdict: PASS (all ACs)', '## Verdict / PASS.' and two matches both reading PASS answer SERIAL-OK; the heading-then-'Verdict: PASS' union and two different values, 'PASS-pending', APPROVED under --gate qa, a renamed '## Result' code review (0 matches), a PASS over a FAIL or FAILED row (the latter under '### Acceptance criteria'), and FAIL rows named only by 'AC-4.1' or a 'handover:' line each REFUSED [owner: serial]; code-review APPROVED and a backed NEEDS_REWORK FAIL row answer SERIAL-OK" \
              "SR1: --check-serial accepted a malformed serial verdict, or refused a correct one"
+fi # sg bl737
+if sg canon; then
 arm2 canon "CR1: --check-serial --gate qa, a PASS waits for its canonical run -- the run line plus a counted result, a bulleted pair and a '-p no:cacheprovider' near-miss answer SERIAL-OK; no run line, counts only on a RED replay line, -k in four spellings, --deselect, a file and a node id, a path root and a marker the conventions do not declare, no result line, a NOT FINISHED result and a result with no count each REFUSED [owner: serial]; NEEDS_REWORK with no run SERIAL-OK; 'none, <reason>' over a record-only --range SERIAL-OK, over a range touching a test, a test module under test-results/, a seat-narrowed rework range, an empty range (also with --story absolute) and a non-ancestor base, and with no range REFUSED; BL-895 STORY-BIND: a typo or a directory --story, a review-like file created in a record-only range, a listed story whose index is not the review's, a fresh story under the review's index listed under another key or by repointing the row while the real one is listed at the base, and a review index that is a prefix of the story's (2 for story-2-1-y.md) REFUSED; the listed story whose row exists only at the frozen sha (not HEAD), absolute, under a -p2 review name, and a bare story-<idx>.md SERIAL-OK; --story absolute over a record-only range, and a story created after the base, SERIAL-OK; N/A, TBD and skipped held to the same partition; a bare none REFUSED; -m unit accepted with no conventions and declared, a declared path root accepted; a root whose qa.md lacks the sentinel prints LEGACY and accepts" \
            "CR1: --check-serial accepted a PASS with no canonical run, or refused a correct one"
+fi # sg canon
+if sg canon_merge; then
 arm2 canon_merge "CR2: the qa merge -- four PASS shards carrying the run merge with no LEGACY line; the execution owner's run lines removed REFUSED [owner: cross-1]; the same with a NEEDS_REWORK part merges NEEDS_REWORK; frozen over an installed qa.md with no label, LEGACY and merges; qa.md untracked at the frozen sha and on disk without the label LEGACY, with it held; neither, held naming both paths; --range on the merge REFUSED; BL-895: a record-only sharded diff whose execution owner claims none, with a non-story --story, REFUSED naming that owner; with the listed story MERGED" \
                  "CR2: the merge did not hold the execution owner's PASS to its canonical run, or held a legacy set"
+fi # sg canon_merge
+if sg bl885; then
 arm2 story_path "BL-885 STORY PATH: record-only-diff.sh's story-base and paths resolve an absolute story spelled through a symlink, its physical spelling under a link-spelled -C, './' and './/' to the repo-relative story (status: review at the base -> 1; a story-only diff RECORD-ONLY, a diff adding app.py NOT-RECORD-ONLY naming it); /etc/hosts, 'stories/./s.md', 'stories//s.md', 'stories/../stories/s.md' and '' are exit 2 UNEVALUABLE (receipt-bl885.sh, all $SP_CELLS cells)" \
                 "BL-885 STORY PATH: record-only-diff.sh resolved a story path wrongly"
 arm2 story_frozen "BL-885 STORY FROZEN: record-only-diff.sh's story-base with the third operand <frozen> -- a typo, '<top>/.git/HEAD' and '.git/HEAD' (no file at the base or at the frozen sha), 'stories' (a tree at the base) and 'stories/later' (absent at the base, a tree at the frozen sha) exit 2 UNEVALUABLE; a story created after the base exits 0, one at status: review at the base 1; the two-operand typo keeps the old 0 (receipt-bl885-frozen.sh, all $SF_CELLS cells)" \
                   "BL-885 STORY FROZEN: record-only-diff.sh's story-base read a story that is no file as a gate-1 base, or refused a real one"
-arm2 story_hist "BL-904 STORY HISTORY: record-only-diff.sh's story-base refuses (1, 'existed before') a base where the story was \`git rm\`'d and later re-added, under both operand forms and behind a merge whose first-parent side never held it (plain rev-list hides that deletion); a story never in the base's history exits 0 under both forms, one at status: review at the base 1, a shallow repository exits 2, and a deleted-and-re-added story asked with -C a subdirectory refuses as from the top (receipt-bl904.sh, all \$SH_CELLS cells)" \
-                "BL-904 STORY HISTORY: record-only-diff.sh's story-base read a deleted-and-re-added story as created after the base, or refused one that never existed"
 arm2 lead_rec "LR1: the lead's partition record (U1l) -- no record: LEGACY-UNRECORDED and MERGED, its wrong --story REFUSED STORY-BIND; --record-partition's record read back by the merge MERGED; a record whose sha or base (a seat-moved .manifest) differs REFUSED [owner: lead]; a held era REFUSES a none claim over code in range whatever the range or the seat did to qa.md (9a strip, 9b delete, 9c disk rewrite), a legacy era merges LEGACY; a run claim with the wrong --story REFUSED STORY-BIND on the merge and --check-serial, the right one accepted" \
               "LR1: the merge did not decide from the lead's partition record, or a run claim's --story went unbound"
-arm2 run_rec "RR1 (BL-905): the canonical run is bound to a recorded run -- in a held era (qa.md at the base prescribes --record-run) a typed run and result with no record REFUSED [owner: cross], the same pair over a qa.md without the sentinel MERGED with one LEGACY line; --record-run's RECORDED-RESULT copied verbatim, and inside backticks and = padding, MERGED, a result with other counts REFUSED; a recorded run behind a Canonical run: naming another invocation REFUSED naming both, a recorded invocation RUN-FILTER narrows REFUSED; a verbose run cut off at a per-test progress line records nothing, pytest's session line is the summary over a later log line carrying a count, quiet output's own count line is the summary; this pass's run at another sha over code REFUSED, an earlier pass's run at the frozen sha MERGED with no --story, one at a sha whose change since is record-only MERGED, one whose change since touches code REFUSED naming the predicate's line; --record-run with the frozen worktree at another HEAD refused recording nothing, a runner exiting 1 after a summary recorded with exit 1, no summary refused recording nothing; a none claim needs no record; --check-serial a typed pair REFUSED [owner: serial], a recorded one SERIAL-OK; serial --record-run with the worktree at another sha than --frozen refused recording nothing; the lead's --lead-range over a run recorded at another sha than the go-signal REFUSED, at the go-signal SERIAL-OK; the lead's --lead-range over a base whose tracked qa.md lacks the sentinel SERIAL-OK with one LEGACY line though the installed qa.md carries it; a recorded run whose argv carries a quoted multi-word marker the conventions declare canonical recorded as the one shell line the Canonical run: copies, and MERGED, its bare-word twin MERGED; the lead's --lead-range over a base whose tracked qa.md lacks the canonical-run label SERIAL-OK with one canonical LEGACY line though the installed qa.md carries it, the seat's own form over the same file REFUSED" \
-             "RR1: a canonical result was accepted with no run recorded at the frozen sha, or a recorded one refused"
 # BL-790: THE ADVISOR LINE, per shard under both gates and through --check-serial, its absence keyed on
 # the gate's role file AT THE FROZEN SHA (lead worlds a and b; the untracked fallback refuses).
 AD_ARM="the sentinel world: absent REFUSED [owner: 1] naming the role file that prescribes it, called, unavailable and 'unavailable' with trailing blanks and CR merge with no LEGACY line, maybe, two lines, '- advisor: called' (naming the remediator near-miss) and '**advisor:** called' REFUSED; a fenced 'advisor: maybe' above the bare line, and graph's prose 'Advisor: ...' line beside it, merge; a role file at the frozen sha without the sentinel accepts the absence, and that prose line alone, with the LEGACY line by value and still refuses maybe; a role file unreadable at the sha REFUSED; world (a), frozen over the old role file with the new one on disk, LEGACY and merges; world (b), frozen over the new one with the old on disk, REFUSED; untracked at the sha with the new copy on disk REFUSED naming the on-disk fallback and the commit remedy, with the old copy on disk LEGACY naming it"
@@ -659,6 +790,12 @@ arm2 adv_qa "AD1: --gate qa -- $AD_ARM" "AD1: the qa merge did not hold the advi
 arm2 adv_cr "AD2: --gate code-review -- $AD_ARM" "AD2: the code-review merge did not hold the advisor line to its era"
 arm2 lead "LR1: the lead's re-run (--check-serial --lead-range <seat base> <go-signal sha>, its base the dispatch record --record-dispatch wrote) -- the writer prints RECORDED, keeps the first value on a second call (RECORD-KEPT) and its record reads back SERIAL-OK; the real world and a compacted lead passing no base SERIAL-OK with no LEGACY line; no record SERIAL-OK with exactly one LEGACY-UNRECORDED line, and with the wrong story still REFUSED by STORY-BIND; a go-signal not descending from the recorded dispatch sha (a3's orphan pair), a pre-prescription seat base beside the record, a missing reviewed-sha line with the live sprint ref rewound to a pre-prescription commit, a reviewed-sha naming another sha or the go-signal sha with trailing prose, and a qa.md whose reviewed-sha prescription is stripped inside the range each REFUSED [owner: serial]; a dispatch sha whose qa.md prescribes neither line SERIAL-OK with the LEGACY reviewed-sha line; the canonical-run label stripped inside the range, and the review repository's working-tree qa.md edited to drop it, never LEGACY and REFUSED; s1x, s1.Ab12, foo/s1, a symlink spelled s2 onto s1 and a relative path REFUSED by the physical slot; the seat's own run under docs/reviews/s1x/ REFUSED as carrying no sprint; a letter-led index (B1) RECORDED by --record-dispatch and read back SERIAL-OK by the lead's re-run, a slug index (5-browser-smoke) RECORDED, and s1-a/b, s1-.. and s1--x REFUSED with no record written" \
            "LR1: the lead's re-run accepted a review bound to a range, path or qa.md the lead did not choose, or refused the real one"
+# LR0 (BL-906): the shared LR_D record. Exactly two subject writes of it over SRCDIR, the second byte-identical to the
+# first in record and output, and at least one later cell served from those bytes: a share that never served, or served
+# without the proof, fails here rather than reading like a cache that saved nothing.
+if [ "$LR_REC_N" = 2 ] && [ "$LR_REC_PROOF" = 1 ] && [ "$LR_REC_HITS" -ge 1 ]; then
+  ok "LR0: the lead cells' LR_D record is written by the subject twice, byte-identical, and served to $LR_REC_HITS later SRCDIR cells from those bytes"
+else bad "LR0: the shared LR_D record read writes=$LR_REC_N proof=$LR_REC_PROOF served=$LR_REC_HITS, want 2, 1 and at least 1"; fi
 arm2 adv_serial "AD3: --check-serial under both gates, over the installed role file carrying the sentinel -- absent, maybe, two lines and '- advisor: called' REFUSED [owner: serial], called, unavailable, a trailing CR and a fenced 'advisor: maybe' above the bare line SERIAL-OK; over a root whose role files lack it, absent SERIAL-OK with the LEGACY line by value" \
                  "AD3: --check-serial did not hold the advisor line to the installed role file's era"
 # SR2 (BL-742 role text): qa.md's and code-reviewer.md's serial passages each name the --check-serial
@@ -676,8 +813,20 @@ else
 fi
 arm2 qclass "QC1: --gate qa, the Class line lifted from qa.md -- a part shard's 'Class: FOO' REFUSED byte-equal under --check-shard naming qa.md's set, 'Class: EVIDENCE' merges and is SHARD-OK, and over a qa.md declaring no Class template the FOO shard merges and is SHARD-OK (nothing checked)" \
              "QC1: the qa merge did not hold the Class line to qa.md's template, or checked one with no template"
+fi # sg bl885
+if sg story_hist; then
+arm2 story_hist "BL-904 STORY HISTORY: record-only-diff.sh's story-base refuses (1, 'existed before') a base where the story was \`git rm\`'d and later re-added, under both operand forms and behind a merge whose first-parent side never held it (plain rev-list hides that deletion); a story never in the base's history exits 0 under both forms, one at status: review at the base 1, a shallow repository exits 2, and a deleted-and-re-added story asked with -C a subdirectory refuses as from the top (receipt-bl904.sh, all \$SH_CELLS cells)" \
+                "BL-904 STORY HISTORY: record-only-diff.sh's story-base read a deleted-and-re-added story as created after the base, or refused one that never existed"
+fi # sg story_hist
+if sg run_rec; then
+arm2 run_rec "RR1 (BL-905): the canonical run is bound to a recorded run -- in a held era (qa.md at the base prescribes --record-run) a typed run and result with no record REFUSED [owner: cross], the same pair over a qa.md without the sentinel MERGED with one LEGACY line; --record-run's RECORDED-RESULT copied verbatim, and inside backticks and = padding, MERGED, a result with other counts REFUSED; a recorded run behind a Canonical run: naming another invocation REFUSED naming both, a recorded invocation RUN-FILTER narrows REFUSED; a verbose run cut off at a per-test progress line records nothing, pytest's session line is the summary over a later log line carrying a count, quiet output's own count line is the summary; this pass's run at another sha over code REFUSED, an earlier pass's run at the frozen sha MERGED with no --story, one at a sha whose change since is record-only MERGED, one whose change since touches code REFUSED naming the predicate's line; --record-run with the frozen worktree at another HEAD refused recording nothing, a runner exiting 1 after a summary recorded with exit 1, no summary refused recording nothing; a none claim needs no record; --check-serial a typed pair REFUSED [owner: serial], a recorded one SERIAL-OK; serial --record-run with the worktree at another sha than --frozen refused recording nothing; the lead's --lead-range over a run recorded at another sha than the go-signal REFUSED, at the go-signal SERIAL-OK; the lead's --lead-range over a base whose tracked qa.md lacks the sentinel SERIAL-OK with one LEGACY line though the installed qa.md carries it; a recorded run whose argv carries a quoted multi-word marker the conventions declare canonical recorded as the one shell line the Canonical run: copies, and MERGED, its bare-word twin MERGED; the lead's --lead-range over a base whose tracked qa.md lacks the canonical-run label SERIAL-OK with one canonical LEGACY line though the installed qa.md carries it, the seat's own form over the same file REFUSED" \
+             "RR1: a canonical result was accepted with no run recorded at the frozen sha, or a recorded one refused"
+fi # sg run_rec
+if sg files; then
 arm2 files "FL1: the Files: line -- a CODE finding naming two paths tracked at the frozen sha is SHARD-OK; Files: on an EVIDENCE finding, two Files: lines, an empty list, a backticked entry, a ':line' entry, a bare basename and a path tracked nowhere are each REFUSED by --check-shard naming the line; a path the range deleted is SHARD-OK (fl-del)" \
            "FL1: --check-shard did not hold the Files: line to its grammar"
+fi # sg files
+if sg bl808; then
 arm2 vb_r3 "VB3: graph s319 3.1's cross-1 shape (qa NEEDS_REWORK, its ## Findings saying the gap is another group's) REFUSED byte-equal under --check-shard, naming the set 'shard-verdict: PASS' exit first, then the file-here exit, and [owner: cross-1]" \
            "VB3: the cross-1 refusal does not name both exits and its owner"
 arm2 vb_mark "VB4: --mark findings=0 on an empty NEEDS_REWORK code-review shard exits 64 relaying the stem, the file byte-unchanged; the same file with one Important finding re-written marks findings=1 key=2" \
@@ -698,6 +847,7 @@ arm2 xc_one "XC4: one code file and five captures under --min-files 1 partition 
             "XC4: a one-counted-file review was sharded, or a two-file one was not"
 arm2 xc_missing "XC5: --exclude-captures naming a file that does not exist -> REFUSED exit 2, nothing on stdout, no manifest" \
                 "XC5: an unreadable capture list was not refused"
+fi # sg bl808
 
 # ------------------------------------------------- BL-737 mutants (distribution layout only, in-process)
 # Each is a copy of the WHOLE resolved script directory (the merge, --mark and the seal resolve their
@@ -777,11 +927,28 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # a subshell holding the mutant's functions; SRCDIR's merge is loaded back after it. Only the owning cell
   # and the named twins run per mutant, never the fixture.
   mut_run() {
+    # Dealt to another shard (J0 holds the deal): a plain run skips it; --matrix records every mutant and scores DEALT's.
+    [ "$RSM_MATRIX" = 1 ] || case "$MUT_MINE" in *" $1 "*) ;; *) return 0 ;; esac
     mut_run_one "$@"
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "$1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the mutant"
   }
+  # ONE COPY PER DISTINCT MUTATION (BL-906). Twelve mutants are the byte-identical edit of their partner (each -merge
+  # row: the same <file> <old> <new>, scored on the merge's cell where its partner is scored on --check-serial's), so
+  # the second of a pair drives the copy the first built rather than building and mutating its own. The registry is
+  # keyed on the three strings, compared in the shell, and a reused copy must still differ from SRCDIR's file (cmp),
+  # so a copy that is no longer a mutant cannot score. Each id keeps its own control, kill and twins.
+  MUT_KN=0
+  mut_dir_of() { # <file> <old> <new> -> the copy an earlier identical mutation built (0), else 1
+    local i=0
+    while [ "$i" -lt "$MUT_KN" ]; do
+      if [ "${MUT_KF[$i]}" = "$1" ] && [ "${MUT_KO[$i]}" = "$2" ] && [ "${MUT_KW[$i]}" = "$3" ]; then printf '%s' "${MUT_KD[$i]}"; return 0; fi
+      i=$((i + 1))
+    done
+    return 1
+  }
+  MUT_SHARED=0; MUT_SCORED=""
   mut_run_one() { # <id> <file> <old> <new> <predicate> <reason token> <label>; CS_ONLY names the cell
-    local id="$1" md="$WORK/mut-$1" hl dec tw a tp tc
+    local id="$1" md="$WORK/mut-$1" hl dec tw a tp tc mshare=0
     B_rsm_ctl=0
     [ -n "${CS_ONLY:-}" ] || { bad "$id: FIXTURE ERROR -- no CS_ONLY selector names the cell this mutant is scored on"; return; }
     [ "$VB_CTL_OK" = 1 ] || { bad "$id: FIXTURE ERROR -- the unmutated control copy $vb_ctl was not built from the derived set"; return; }
@@ -794,18 +961,26 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     elif "p_$5" "$vb_ctl" && [ "$CS_RAN" = 1 ]; then
       VB_CTL_N=$((VB_CTL_N + 1)); ok "VBCTL $id: cell '$CS_ONLY' of $5 passed over the unmutated copy, one cell run"; B_rsm_ctl=1
     else bad "$id: FIXTURE ERROR -- the unmutated copy failed cell '$CS_ONLY' of $5 (cells run: $CS_RAN):${WHY}"; return; fi
-    sib_copy "$md" || { bad "$id: FIXTURE ERROR -- the derived sibling set was not copied fresh into $md"; return; }
-    [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
-      || { bad "$id: FIXTURE ERROR -- a sibling is absent from $md"; return; }
-    mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
+    if a="$(mut_dir_of "$2" "$3" "$4")"; then
+      md="$a"; mshare=1
+      [ -f "$md/$2" ] && ! cmp -s "$md/$2" "$SRCDIR/$2" || { bad "$id: FIXTURE ERROR -- the shared copy $md/$2 is no longer a mutant of $SRCDIR/$2"; return; }
+      MUT_SHARED=$((MUT_SHARED + 1))
+    else
+      sib_copy "$md" || { bad "$id: FIXTURE ERROR -- the derived sibling set was not copied fresh into $md"; return; }
+      [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
+        || { bad "$id: FIXTURE ERROR -- a sibling is absent from $md"; return; }
+      mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
+      MUT_KF[$MUT_KN]="$2"; MUT_KO[$MUT_KN]="$3"; MUT_KW[$MUT_KN]="$4"; MUT_KD[$MUT_KN]="$md"; MUT_KN=$((MUT_KN + 1))
+    fi
     ip_load "$md/merge-review-shards.sh" || { bad "$id: FIXTURE ERROR -- the mutant copy's merge could not be loaded in process"; return; }
     WHY=""; CS_RAN=0
     if "p_$5" "$md"; then bad "$id: SURVIVED -- $7 ($5 passed over $md/$2)"
-    elif case "$WHY" in *"$6"*) true ;; *) false ;; esac; then mutant_killed "${B_rsm_ctl:-0}" "$id" "$id: killed -- $7 ($5:${WHY})"
+    elif case "$WHY" in *"$6"*) true ;; *) false ;; esac; then mutant_killed "${B_rsm_ctl:-0}" "$id" "$id: killed -- $7 ($5:${WHY})" && MUT_SCORED="$MUT_SCORED$id
+"
     else bad "$id: died for another reason than '$6' -- $7 ($5:${WHY})"; fi
     [ "$CS_RAN" -le 1 ] || bad "$id: FIXTURE ERROR -- the mutant ran $CS_RAN cells of $5 under CS_ONLY=$CS_ONLY, not one"
     [ "$CS_RAN" -ge 1 ] || echo "CS-UNSELECTED: $id ran no cell of $5 for CS_ONLY=$CS_ONLY"
-    if [ "$RSM_MATRIX" = 1 ]; then printf '%s\t%s\t%s\t%s\n' "$id" "$2" "$5" "$CS_ONLY" >> "$MX_ROWS"; return; fi
+    if [ "$RSM_MATRIX" = 1 ]; then printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$2" "$5" "$CS_ONLY" "$md" >> "$MX_ROWS"; return; fi
     hl="$(mx_line "$id")" || { bad "$id: FIXTURE STALE -- run.sh carries no single '# MUTANT-MATRIX $id' line; re-measure the matrix"; return; }
     dec="$(mx_field "$hl" decides | cut -d, -f1)"; tw="$(mx_field "$hl" twins)"
     [ "$dec" = "$5.$CS_ONLY" ] || { bad "$id: FIXTURE STALE -- its MUTANT-MATRIX line decides=$dec, but mut_run scores $5.$CS_ONLY; re-measure the matrix"; return; }
@@ -844,11 +1019,10 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # row's population (MATRIX-POP) for --merge-slices. MX_SROWS/MX_SPOP/MX_TPOP feed MX1's slice arm.
   MX_SROWS=0; MX_SPOP=0; MX_TPOP=0
   matrix_score() {
-    local id f p c cl pop q pc ms cs key dec tw ri=-1
+    local id f p c mdir cl pop q pc ms cs key dec tw ri=-1
     mkdir -p "$WORK/mx-cells" "$WORK/mx-ctl"
     [ -z "$RSM_SLICE_N" ] || echo "MATRIX-SLICE $RSM_SLICE_K/$RSM_SLICE_N"
-    while IFS='	' read -r id f p c <&3; do
-      ri=$((ri + 1))
+    while IFS='	' read -r id f p c mdir <&3; do
       cl="$WORK/mx-cells/$p"
       [ -f "$cl" ] || { CS_LIST="$cl.tmp"; : > "$CS_LIST"; WHY=""; "p_$p" "$vb_ctl" > /dev/null 2>&1 < /dev/null || :; CS_LIST=""
         awk '!s[$0]++' "$cl.tmp" > "$cl"; }
@@ -856,6 +1030,13 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
       if [ "$(grep -c . "$cl")" -lt 2 ]; then
         pop="$(printf '%s\n%s\n' "$pop" "$(awk -F'\t' -v id="$id" -v f="$f" '$1 != id && $2 == f { print $3 "." $4 }' "$MX_ROWS")" | awk 'NF && !s[$0]++')"
       fi
+      # A per-shard matrix (--group with --matrix) prints the WHOLE fixture's population (MATRIX-ALLPOP) and scores
+      # only its dealt rows, so the shards' MATRIX pairs can be joined against the unsharded population.
+      if [ "$_grp" = 1 ]; then
+        for q in $pop; do echo "MATRIX-ALLPOP $id $q"; done
+        case "$MUT_MINE" in *" $id "*) ;; *) continue ;; esac
+      fi
+      ri=$((ri + 1))
       if [ -n "$RSM_SLICE_N" ]; then
         for q in $pop; do echo "MATRIX-POP $id $q"; MX_TPOP=$((MX_TPOP + 1)); done
         [ $((ri % RSM_SLICE_N)) = "$RSM_SLICE_K" ] || continue
@@ -865,7 +1046,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
       for q in $pop; do
         pc="${q#*.}"; key="$WORK/mx-ctl/$(printf '%s' "$q" | tr '.' '_')"
         [ -f "$key" ] || mx_state "${q%%.*}" "$pc" "$vb_ctl" > "$key"
-        cs="$(cat "$key")"; ms="$(mx_state "${q%%.*}" "$pc" "$WORK/mut-$id")"; MX_CELLS=$((MX_CELLS + 1))
+        cs="$(cat "$key")"; ms="$(mx_state "${q%%.*}" "$pc" "$mdir")"; MX_CELLS=$((MX_CELLS + 1))
         echo "MATRIX $id $q mutant=$ms control=$cs" | tee -a "$WORK/mx-log"
         [ "$q" = "$p.$c" ] && continue
         if [ "$ms" = RED ] && [ "$cs" = GREEN ]; then also="$also,$q"; fi
@@ -1349,9 +1530,9 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "MX1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the matrix"
     reuse_proof
     if [ -n "$RSM_SLICE_N" ]; then
-      # A slice records all 146 rows, scores exactly the cells of the rows its k/n selects (their populations, read
-      # off the full record), and runs no twin.
-      _mx_want=0; [ "$RSM_SLICE_K" -ge 146 ] || _mx_want=$(( (145 - RSM_SLICE_K) / RSM_SLICE_N + 1 ))
+      # A slice records all 146 rows, scores exactly the cells of the rows its k/n selects among the rows this run is
+      # dealt (all 146 with no --group; the shard's with one), their populations read off the full record, and runs no twin.
+      _mx_want=0; [ "$RSM_SLICE_K" -ge "$MUT_MINE_N" ] || _mx_want=$(( (MUT_MINE_N - 1 - RSM_SLICE_K) / RSM_SLICE_N + 1 ))
       if [ "$_mx_n" = 146 ] && [ "$MX_SROWS" = "$_mx_want" ] && [ "$MX_CELLS" = "$MX_SPOP" ] && [ "$TWIN_N" = 0 ]; then
         ok "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS mutant x cell pairs, the populations of its $MX_SROWS of $_mx_n recorded mutants ($MX_TPOP pairs in all), and ran no twin"
       else bad "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS pairs over $MX_SROWS rows (want $_mx_want rows and $MX_SPOP pairs, of $MX_TPOP), $_mx_n recorded mutants (want 146), twins run $TWIN_N"; fi
@@ -1359,17 +1540,61 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
   else
-    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 146 ]; then
-      ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant, each passing over its mutant copy"
-    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 146"; fi
+    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge "$MUT_MINE_N" ] && [ "$MUT_MINE_N" -gt 0 ]; then
+      ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant of the $MUT_MINE_N this shard is dealt, each passing over its mutant copy"
+    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least $MUT_MINE_N (this shard's deal)"; fi
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 146 ]; then ok "VBCTL: CONTROL -- each of M1-M72, M74, M75, M76, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name and m-d1-abs's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of 146): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 146 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  # The count is the shard's DEAL, derived by J0 from the mut_run calls before any mutant ran; under --matrix every unit
+  # records all 146, each control first (J0 refuses any other total).
+  if { [ "$RSM_MATRIX" = 0 ] && [ "$VB_CTL_N" = "$MUT_MINE_N" ]; } || { [ "$RSM_MATRIX" = 1 ] && [ "$VB_CTL_N" = 146 ]; }; then ok "VBCTL: CONTROL -- this shard's dealt mutants among each of M1-M72, M74, M75, M76, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name and m-d1-abs's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of the $MUT_MINE_N dealt here, 146 in all): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of the $MUT_MINE_N mutants dealt to this shard had their cells pass over the unmutated copy, so the other verdicts are not evidence"; fi
+  # MS1 (BL-906): the twelve byte-identical pairs share one copy each; every other mutant built its own.
+  # The pairs dealt here: J0 counts, per shard, each mutant whose (file, old, new) an earlier mutant of the same shard made.
+  # Under --matrix every mutant is recorded, so the whole fixture's 12 pairs share and 134 copies are built.
+  if { [ "$RSM_MATRIX" = 0 ] && [ "$MUT_SHARED" = "$MUT_MINE_SHARED" ] && [ "$MUT_KN" = $((MUT_MINE_N - MUT_MINE_SHARED)) ] && [ "$MUT_SHARED" -ge 1 ]; } \
+     || { [ "$RSM_MATRIX" = 1 ] && [ "$MUT_SHARED" = 12 ] && [ "$MUT_KN" = 134 ]; }; then ok "MS1: the $MUT_SHARED byte-identical mutant pair(s) dealt here drove one shared copy each ($MUT_KN copies built for $([ "$RSM_MATRIX" = 1 ] && echo 146 || echo "$MUT_MINE_N") mutants)"
+  else bad "MS1: $MUT_SHARED mutants drove a shared copy and $MUT_KN copies were built, want $MUT_MINE_SHARED and $((MUT_MINE_N - MUT_MINE_SHARED))"; fi
+  # KS1 (BL-906): the KILL SET of a plain run is exactly the shard's deal -- every mutant J0 dealt here was killed
+  # through mutant_killed in THIS run, once, and nothing else was. J0 proves the deal covers the fixture; KS1 proves the
+  # shard killed what it was dealt, so a deal that skips a mutant at run time cannot read as coverage. The join is
+  # rsm_partition_ok, whose self-probe ran in J0. --matrix records rows and kills nothing, so KS1 is a plain-run arm.
+  # ks1_judge is KS1's whole verdict (receipt-bl906.sh check (4) extracts and runs it); KS1_N counts its runs here.
+  KS1_N=0
+  ks1_judge() { # reads MUT_MINE MUT_MINE_N MUT_SCORED WORK -> one KS1 ok or FAIL line
+    KS1_N=$((KS1_N + 1))
+    printf '%s\n' $MUT_MINE > "$WORK/ks-dealt"; printf '%s' "$MUT_SCORED" > "$WORK/ks-scored"
+    if _ks="$(rsm_partition_ok "$WORK/ks-dealt" "$WORK/ks-scored")" && [ "$MUT_MINE_N" -gt 0 ]; then
+      ok "KS1: every one of the $MUT_MINE_N mutants dealt to this shard scored its kill here through mutant_killed, once, and no other did"
+    else bad "KS1: this shard's kill set is not its deal of $MUT_MINE_N -- scored twice / dealt but not scored / scored but not dealt: $_ks"; fi
+  }
+  if [ "$RSM_MATRIX" = 0 ]; then
+    ks1_judge
+  fi
+  # KS1-CTL (BL-906): KS1 must be able to fail. On every plain run it hands ks1_judge, in a subshell, THIS run's kill
+  # set less its first id, and asserts the FAIL line naming exactly that id as dealt to no shard -- so a ks-scored that
+  # is not MUT_SCORED (K2) or a verdict that cannot fail (K3) breaks it. It also asserts KS1 itself ran once (K1).
+  # Its guard is spelled apart from KS1's so one edit cannot switch both off. K1-K3 are hand-scored mutants of this
+  # file, like M73, with no mut_run call:
+  #   K1: the RSM_MATRIX test guarding the ks1_judge call compares with 1, not 0 -- KS1 never runs on a plain run.
+  #   K2: ks1_judge writes ks-scored from MUT_MINE, one id per line, not from MUT_SCORED -- the deal joins itself.
+  #   K3: ks1_judge's else branch calls ok, not bad -- KS1 cannot fail.
+  case "$RSM_MATRIX" in 0)
+    _ks_nl=$'\n'; _ks_drop="${MUT_SCORED%%"$_ks_nl"*}"; _ks_rest="${MUT_SCORED#*"$_ks_nl"}"
+    _ks_ctl="$(MUT_SCORED="$_ks_rest"; ks1_judge)"
+    _ks_want="dealt twice: {} dealt to no shard: {$_ks_drop} dealt but not declared: {}"
+    if [ "$KS1_N" = 1 ] && [ -n "$_ks_drop" ] && [ "$_ks_rest" != "$MUT_SCORED" ] \
+       && case "$_ks_ctl" in "  FAIL  KS1: "*"$_ks_want") true ;; *) false ;; esac \
+       && [ "$(printf '%s\n' "$_ks_ctl" | grep -c .)" = 1 ]; then
+      ok "KS1-CTL: KS1 ran once, and refused this run's kill set less $_ks_drop, naming it as dealt to no shard"
+    else bad "KS1-CTL: KS1 ran $KS1_N time(s) (want 1), and over this run's kill set less '$_ks_drop' it printed: ${_ks_ctl:-nothing}"; fi
+    ;;
+  esac
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi
 
+if sg docs; then
 # THE PROGRAMS ARE NOTHING IF THE LEAD IS NEVER TOLD TO RUN THEM. Every arm above drives the two
 # programs directly, so a release that built them and never rewired the step file passes all of
 # them and every consumer keeps dispatching one reviewer. Keyed on the EMISSION SITE: the
@@ -1931,6 +2156,7 @@ if [ -z "$_s12" ]; then
 else
   bad "S12: [${_s12# }] does not tell a part shard to write its declared 'handovers: <n>' count"
 fi
+fi # sg docs
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
 echo "$NAME: $fails assertion(s) FAILED" >&2

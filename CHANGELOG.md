@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1001.0] - 2026-11-03
+
+Batch b249, cluster b249-c4b. Closes BL-906. No PC- id is closed. NET -1.
+
+### BL-906 closed: review-shard-merge, the suite's pole, runs as two shards
+
+- **Shard a** is `core/fixtures/review-shard-merge`: units seam, arms, bl737, bl885, bl808 and docs; 64 per-push mutants.
+- **Shard b** is `core/fixtures/review-shard-merge-b`, which drives the shared `run.sh` and `lib.sh` with `--group b`: units canon, canon_merge, files, story_hist and run_rec; 82 per-push mutants.
+- M73, K1, K2 and K3 are hand-scored, in no deal.
+- **Shard sizes, both ways.**
+  - In the `--deal` count, which is the method of the 379 bound (the unsharded fixture at e311bf7e4 in that count): a 359 and b 315, against 379.
+  - Counted fully, including `cell "$var"` loop cells: a 392 and b 338, against e311bf7e4's full count of 410.
+- **The coverage join.**
+  - `--deal` assigns each arm and mutant unit to one shard.
+  - J0 refuses unless the union of dealt mutant ids equals the 146 per-push mutants, with no duplicate.
+  - KS1 refuses on a plain shard run unless every dealt mutant scored a kill.
+  - KS1-CTL feeds KS1's own judge that run's kill set less one id and requires the refusal. It kills hand-scored mutants K1-K3, which disable KS1 or make it always true.
+- **Slicing.** `RSM_MATRIX_SLICE=k/n` and `--merge-slices` work in both shards. The two shards' 2-slice `--matrix` runs (a 1213 pairs, b 5409 pairs) merge to 6622 unique pairs, equal to the unsharded population, none missing or twice. No twins or also-trips row changed.
+- **Shared mutant copies.** Byte-identical mutant copies are built once and shared (12 shared, 134 built). The lead cells' LR_D record is shared when it is byte-identical.
+- **Receipt.** `receipt-bl906.sh` check (4) runs the shipped `rsm_partition_ok` and `ks1_judge`. It must refuse a short set, accept an equal one, and fail on an empty extraction.
+- **Budget.** `invocations.decl`: shard a `544 *`, shard b `137 *`. Fork TOTAL unchanged at 2899.
+
+### Ledger corrections from the 0.998.0 review
+
+- 0.998.0's BL-615 progress note sat under BL-541 in docs/backlog.md and is relocated under BL-615, with a pointer from BL-550.
+- BL-843's cite moved from `story-evidence-scaffold/run.sh:910` to `:986`.
+- NOTEs N1-N3 (latent dar-missing grammar gaps) are recorded under BL-510.
+- NOTE N7 (receipt-bl868 sees only a column-0 `TD_CEIL=`) is recorded under BL-868.
+
 ## [0.1000.0] - 2026-11-03
 
 Batch b249, cluster b249-c5. BL-538 progress; the entry stays PARTIAL until its outcome measurement. Files none. No PC- id is closed.
