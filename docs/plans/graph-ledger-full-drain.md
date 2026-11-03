@@ -985,9 +985,9 @@ candidate's surviving half is upstream's to file and build, never a question for
       `**LANDED (v<version>).**` line at the START of each closed entry's backlog body, sha-less
       because no sha the release commit can name is on main yet (BL-874); a sha already on
       `origin/main` may be named as `, verified <sha>`. A PARTIAL gets its text but no rotating
-      line. `scripts/backlog-rotate.sh --check` refuses a sha-less line as `sha ABSENT`
-      (`scripts/backlog-rotate.sh:535`), so move a sha-less entry by hand, say so in the release
-      message, and confirm the archive count MOVED. Squash to ONE commit on `origin/main`.
+      line. `scripts/backlog-rotate.sh` moves a sha-less line only at a CHANGELOG heading
+      VERSION has reached; a PENDING line stays put, so confirm the archive count MOVED. An added
+      `verified <sha>` off `--base` fails R11. Squash to ONE commit on `origin/main`.
       Subject `<version> — batch <batch>: <summary>`. The message names every `PC-` id the release
       closes and the net (closed minus filed). Read the squash message's NET and `Co-Authored-By`
       lines before the push. Derive the NET from `base..tip` (an entry filed AND closed on the

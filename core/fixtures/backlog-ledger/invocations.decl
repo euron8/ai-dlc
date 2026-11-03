@@ -1,4 +1,10 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-350 *
-141 scripts/backlog-reverify.sh
-42 scripts/backlog-rotate.sh
+# BL-874: 350 / 141 / 42 -> 404 / 163 / 52. The shaless arm and its two mutants (mutation-shaless-unbound,
+# mutation-shaless-absent), plus the shaless cell in the per-push mutant-control and twin loops, run the
+# rotator on two sha-less ledgers each time; every rotator run also starts backlog-reverify.sh.
+# BL-874 (PENDING kept): 404 / 163 / 52 -> 469 / 190 / 63, measured. The pending arm runs the rotator up to
+# three times (cells a, c, b) and is driven unmutated, in the mutant-control loop and against
+# mutation-pending-applied, whose twin (sha) also runs once; each rotator run also starts backlog-reverify.sh.
+469 *
+190 scripts/backlog-reverify.sh
+63 scripts/backlog-rotate.sh

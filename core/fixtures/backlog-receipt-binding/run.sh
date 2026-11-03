@@ -112,6 +112,9 @@
 # MUTANT-MATRIX r10-m12 decides=r10_m12 twins=c5_m5
 # MUTANT-MATRIX r10-m13 decides=r10_m13 twins=c5_m5
 # MUTANT-MATRIX r10-m14 decides=r10_m14 twins=c5_m5
+# MUTANT-MATRIX r11-m1 decides=r11_m1 twins=c5_m1
+# MUTANT-MATRIX r11-m2 decides=r11_m2 twins=r11_m3
+# MUTANT-MATRIX r11-m3 decides=r11_m3 twins=r11_m2
 # MUTANT-MATRIX c1-whole decides=c1_whole twins=m6
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
@@ -2353,6 +2356,84 @@ r10_direct r10-m13 's|^  s = v; gsub(/\\\[\\\[:\[a-z\]+:\\\]\\\]/, "", s)$|  s =
 r10_direct r10-m14 's|^      if (cap != "" \&\& !INV \&\& patok(PAT, p)) |      if (cap != "" \&\& patok(PAT, p)) |' \
   "unreachable" "with a grep -v capture settled by [ -n ], seed BL-1044 reads ANCHORED" BL-1044
 
+# ===== BL-874, R11 (a verified sha a branch ADDS to a LANDED line is an ancestor of --base). ========
+# The corpus cell: the c5 world plus a third commit that files BL-871 with a LANDED line naming a
+# `commit-tree` side commit -- a pre-squash sha no branch reaches -- and BL-872 naming the base sha
+# itself (an ancestor). R11 must name BL-871's sha alone, and R7/R8's rows must be unchanged.
+# r11-m1 blanks the corpus call (R11 reads NOT DERIVED and names nothing); r11-m2 drops the ancestry
+# test and r11-m3 drops the move filter, each killed by the FIRST seed of vbr_probe_r11 it breaks,
+# driven through R11's probe ALONE (r11_probe_only), the same function a full run calls.
+r11_seed() { # r11_seed <dir> -- c5_seed, then the R11 commit; the side sha is kept in <dir>/.r11side
+  local d="$1" side base
+  c5_seed "$d"
+  base="$(cat "$d/.c5base")"
+  side="$( cd "$d" && git -c user.email=p@local -c user.name=p commit-tree "HEAD^{tree}" -p HEAD -m presquash 2>/dev/null )"
+  [ -n "$side" ] || { echo "FIXTURE BROKEN: r11 probe has no side commit" >&2; exit 2; }
+  printf '%s\n' "$side" > "$d/.r11side"
+  { cat "$d/docs/backlog.md"
+    printf '## BL-872\n\n**LANDED (v0.0.2, verified %s).**\n\nverify: manual\n\n' "$base"
+    printf '## BL-871\n\n**LANDED (v0.0.3, verified %s).**\n\nverify: manual\n\n' "$side"; } > "$d/docs/backlog.md.new"
+  mv "$d/docs/backlog.md.new" "$d/docs/backlog.md"
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m r11 >/dev/null 2>&1 )
+}
+r11_rows() { printf '%s\n' "$1" | awk -F'\t' '$1 == "FAIL: R11" { printf "%s,", $2 }'; }
+r11_cell() { # r11_cell <name> [<sed>] -- one full run over an r11 world; records rows, R11 rows and the side sha
+  local n="$1" d="$TMP/$1" o r
+  r11_seed "$d"
+  if [ -n "${2:-}" ]; then mut "$d" "$2" || return 1; fi
+  o="$(c5_run "$d")"
+  r="$(tail -1 <<<"$o" | sed 's/^rc=//')"
+  record "$n" "$r" "$o"
+  side "$n" "rows=$(c5_rows "$o")"
+  side "$n" "r11=$(r11_rows "$o")"
+  side "$n" "side=$(cut -c1-40 "$d/.r11side")"
+}
+R11_BASE_OK=0
+r11_cell r11-ctl
+r11c_side="$(sed -n 's/^SIDE side=//p' "$REC/r11-ctl.out")"
+if [ "$(r_rc r11-ctl)" = 1 ] && r_line r11-ctl "SIDE rows=R8:BL-861, R7:BL-862," && r_line r11-ctl "SIDE r11=$r11c_side," \
+   && r_has r11-ctl "R11-POPULATION: 2 verified LANDED sha(s) added since merge-base " && r_has r11-ctl ", 1 not an ancestor of " \
+   && ! r_has r11-ctl "SELF-PROBE FAILED"; then
+  ok "r11-control -- R11 names the pre-squash sha BL-871 added (and not BL-872's ancestor sha) over 2 added, R7/R8 rows unchanged"; R11_BASE_OK=1
+else
+  bad "r11-control -- rc=$(r_rc r11-ctl): $(grep -E '^SIDE|R11|SELF-PROBE' "$REC/r11-ctl.out" | head -4 | tr '\n' '|')"
+fi
+arm_r11_m1() { local s; s="$(sed -n 's/^SIDE side=//p' "$REC/$1.out")"
+  ! r_has "$1" "SELF-PROBE FAILED" && r_line "$1" "SIDE rows=R8:BL-861, R7:BL-862," && ! r_line "$1" "SIDE r11=$s," && r_has "$1" "R11-POPULATION: NOT DERIVED"; }
+r11_cell r11-m1 's#^R11_OUT="\$(r11_judge "\$SUBJECT_ROOT" "\$_r11_rel" "\$BASE_REF" HEAD)" || exit 2$#R11_OUT="R11-COUNTS 0 - 0 0"#' \
+  && score r11-m1 "$R11_BASE_OK" "r11-m1 -- with the corpus call blanked, the pre-squash sha the branch added is never judged"
+r11_probe_only() { # r11_probe_only <world> -> vbr_probe_r11's output and status
+  local d="$1"
+  ( cd "$d" || exit 2
+    # shellcheck source=/dev/null
+    . "$d/scripts/validate-backlog-receipts.sh" || exit 2
+    declare -F vbr_probe_r11 >/dev/null || { echo "FIXTURE BROKEN: $d defined no vbr_probe_r11 when sourced" >&2; exit 3; }
+    WORK="$d/.r11work"; mkdir -p "$WORK" || exit 2; BASE_REF=origin/main
+    vbr_probe_r11
+    echo "R11D: $R11_PROBED" ) 2>&1
+}
+R11D_BASE_OK=0
+seed "$TMP/r11d-ctl"
+r11d_ctl="$(r11_probe_only "$TMP/r11d-ctl")"; r11d_crc=$?
+if [ "$r11d_crc" = 0 ] && grep -qxF "R11D: R11 fired both directions over 6 seeded LANDED lines" <<<"$r11d_ctl"; then
+  ok "r11d-control -- R11's probe alone, over the unmutated copy, fired both directions"; R11D_BASE_OK=1
+else bad "r11d-control -- rc=$r11d_crc: $(head -2 <<<"$r11d_ctl" | tr '\n' '|')"; fi
+r11_arm() { [ "$(r_rc "$1")" = 2 ] && grep -F 'SELF-PROBE FAILED -- R11:' "$REC/$1.out" | grep -qF "seed $2:"; }
+arm_r11_m2() { r11_arm "$1" BL-1105; }
+arm_r11_m3() { r11_arm "$1" BL-1102; }
+r11_direct() { # r11_direct <name> <sed> <what>
+  local n="$1" d="$TMP/$1" o r
+  seed "$d"
+  mut "$d" "$2" || return
+  o="$(r11_probe_only "$d")"; r=$?
+  record "$n" "$r" "$o"
+  score "$n" "$R11D_BASE_OK" "$n -- $3"
+}
+r11_direct r11-m2 's|^    elif ! git -C "\$_r" merge-base --is-ancestor "\$_s" "\$_b" 2>/dev/null; then$|    elif false; then|' \
+  "with the ancestry test dropped, the pre-squash seed BL-1105 does not fire"
+r11_direct r11-m3 's|^      END { for (i = 1; i <= n; i++) if (!(ord\[i\] in was)) printf|      END { for (i = 1; i <= n; i++) printf|' \
+  "with the move filter dropped, the moved seed BL-1102 fires as an add"
+
 # ===== PR. THE PROBE RECORD (BL-880), PART TWO: CELLS 2-7, P2, AND ITS EIGHT MUTANTS. ===========
 # Every mutant below edits the validator, so its key is its OWN and never the control's K0: each is
 # therefore driven TWICE in a fresh store of its own (pr_two), the first run writing the mutant's
@@ -2670,6 +2751,9 @@ twin_of() {
     r10-m13) echo c5_m5 ;;
     r10-m14) echo c5_m5 ;;
     c1-whole) echo m6 ;;
+    r11-m1) echo c5_m1 ;;
+    r11-m2) echo r11_m3 ;;
+    r11-m3) echo r11_m2 ;;
     *) echo "" ;;
 # TWINS-END
   esac

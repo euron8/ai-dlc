@@ -55,11 +55,19 @@
 #              least one recorded group (a world that started nothing cannot read clean) and no live member
 #              of any of them.
 # THE GROUP RECORD IS THE CALLER'S TOO (BL-875). Every group this world starts -- each deriver A AND the live-pid
-# control -- is appended to $SW_GROUPS on the statement after its launch, before anything else runs. The caller
-# names that file (outside the world, which a clean exit deletes) and reaps every group in it after this world
-# returns, however it ended: the EXIT trap below never runs on a SIGKILL, and the groups are not this shell's
-# group, so a KILL of this world alone leaves every one of them alive. Run standalone, the record is $W/pgids.
-# RESIDUAL, NOT CLOSED: between a launch's fork and the append of `$!` a KILL leaves a group nobody recorded.
+# control -- RECORDS ITSELF: the launched child is an exec'd `bash -c` whose first statement appends its own `$$`
+# (its pid, which is its pgid under job control) to $SW_GROUPS, whose second (deriver A) writes it to an independent
+# pid file, and which then exits unless the world that forked it is still alive (`kill -0 $PPID`: the world's pid
+# as the child saw it at its start, never `$$`, which in an in-process world is the caller's), and only then writes
+# a `.checked` sentinel and execs its work. This world appends nothing for a child, so each group has exactly one
+# record line, and the world waits on each child's sentinel before it goes on. The caller names the record (outside
+# the world, which a clean exit deletes) and reaps every group in it after this world returns, however it ended:
+# the EXIT trap below never runs on a SIGKILL, and the groups are not this shell's group, so a KILL of this world
+# alone leaves every one of them alive. Run standalone, the record is $W/pgids.
+# NO FORK-TO-RECORD WINDOW REMAINS: a KILL of this world before a child's record leaves a child that has started
+# nothing, and that child then records itself, finds its world dead, and exits; a KILL after its liveness check
+# finds its record already on disk before the world died, so before the caller's reap. What remains is outside the
+# record: a reuse of the dead world's pid inside that one check, and a KILL of the CALLER itself, which reaps nothing.
 set -uo pipefail
 
 [ $# -ge 2 ] || { echo "usage: slot-world.sh <deriver> <hook> [scenario ...]" >&2; exit 9; }
@@ -170,6 +178,12 @@ if [ -n "${SW_SLEEP_MARK:-}" ] && [ -n "${SW_AOUT:-}" ] && grep -q 'slot: waitin
   : > "$SW_AOUT.blocked"
   exec tail -f /dev/null
 fi
+# The same for an unbounded breaker (a mutant with no break bound): the sleep after its 20th `slot: broke` line
+# BLOCKS, so it takes exactly 20 sleeps before failopen's kill, never 19 or 20 by how the kill raced the next one.
+if [ -n "${SW_SLEEP_MARK:-}" ] && [ -n "${SW_AOUT:-}" ]; then
+  nb="$(grep -c 'slot: broke' "$SW_AOUT" 2>/dev/null)" || nb=0
+  [ "$nb" -ge 20 ] && { : > "$SW_AOUT.blocked"; exec tail -f /dev/null; }
+fi
 exec /bin/sleep "$@"
 STUB
 chmod +x "$ST/sandbox-exec" "$ST/logstream" "$W/beatbin/sleep" || exit 9
@@ -220,13 +234,14 @@ printf '#!/bin/bash\necho b-in >> "$SW_ORDER"\necho b-out >> "$SW_ORDER"\n' > "$
 ( cd "$R" && git init -q . && git add -A && git -c user.email=s@w -c user.name=s commit -qm slot-world ) >/dev/null 2>&1 || exit 9
 
 # The live-pid control never exits on its own (BL-868): a `sleep 600` would read dead in a world slower than its timer.
-# It leads a group of its own (job control around this one launch), recorded like every deriver A's, so a caller
-# can reap it by group after a KILL of this world, and the reaped line reads it.
+# It leads a group of its own (job control around this one launch) and records itself like every deriver A, so a
+# caller can reap it by group after a KILL of this world, and the reaped line reads it. The world goes on only once
+# its sentinel is written (or it is gone), so its record line precedes deriver A's.
 set -m
-tail -f /dev/null </dev/null >/dev/null 2>&1 &
+bash -c 'echo $$ >> "$1"; kill -0 $PPID 2>/dev/null || exit 0; : > "$2"; exec tail -f /dev/null' sw-live "$SW_GROUPS" "$W/live.checked" </dev/null >/dev/null 2>&1 &
 LIVE=$!
-printf '%s\n' "$LIVE" >> "$SW_GROUPS"
 set +m
+while [ ! -e "$W/live.checked" ] && kill -0 "$LIVE" 2>/dev/null; do /bin/sleep 0.1; done
 ( : ) & DEAD=$!; wait "$DEAD"
 kill -0 "$DEAD" 2>/dev/null && { echo "slot-world: the dead-pid control $DEAD is alive" >&2; exit 9; }
 
@@ -259,16 +274,28 @@ run_a() {
   cp "$dv" "$R/core/scripts/derive-fixture-readsets.sh" || exit 9
   local P="$ST:$PATH" M="" H="" C=""
   case "$s" in beat) P="$W/beatbin:$P"; C=3 ;; rebreak) P="$W/beatbin:$P"; M=1 ;; hold) H=1 ;; esac
-  # JOB CONTROL FOR THIS ONE LAUNCH: the deriver leads a process group of its own, whose id is its pid.
+  # JOB CONTROL FOR THIS ONE LAUNCH: the deriver leads a process group of its own, whose id is its pid. The exec'd
+  # `bash -c` records that pid itself, in the group record and in $d/apid, before it checks its world is alive.
   set -m
   ( cd "$R" && exec env -u READSET_SLOT_HOLDER PATH="$P" STUB_FEED="$d/feedA" \
       AI_DLC_READSET_TRACE_ROOT="$d/trA" SW_ORDER="$d/order" SW_B_MODE="$bm" SW_R="$R" SW_FEEDB="$d/feedB" \
       SW_TRB="$d/trB" SW_IPB="$d/ipB" SW_BOUT="$d/bout" SW_BPID="$d/bpid" SW_DEADPID="$DEAD" SW_LIVEPID="$LIVE" \
       SW_SLEEPS="$d/sleeps" SW_SLEEP_MARK="$M" SW_SLEEP_CAP="$C" SW_AOUT="$d/aout" SW_HOLD="$H" AI_DLC_READSET_SLOT="${SW_SLOT_AT:-$d/slot}" \
-      bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
+      SW_REC="$SW_GROUPS" SW_APID="$d/apid" \
+      bash -c 'echo $$ >> "$SW_REC"; echo $$ > "$SW_APID"; kill -0 $PPID 2>/dev/null || exit 0; : > "$SW_APID.checked"; exec bash "$@"' sw-deriver \
+      core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
   APID=$!
   set +m
-  echo "$APID" >> "$SW_GROUPS"
+  # SW_FORK_GATE (the caller's slot-forkkill arm): the statement where this world once appended `$!` itself. Once the
+  # child has recorded itself and passed its check, record that, and BLOCK in the builtin `wait` on the live control,
+  # which never exits, so the caller's SIGKILL of this world lands here, with no record line written by this world.
+  # The gate waits for A's fixture to reach `a-hold` first, so A's whole tree has started before the KILL, and the
+  # number of programs A started does not depend on where in its startup the KILL landed.
+  while [ ! -e "$d/apid.checked" ] && kill -0 "$APID" 2>/dev/null; do /bin/sleep 0.1; done
+  if [ -n "${SW_FORK_GATE:-}" ]; then
+    while ! grep -qx a-hold "$d/order" 2>/dev/null && kill -0 "$APID" 2>/dev/null; do /bin/sleep 0.1; done
+    : > "$SW_FORK_GATE"; wait "$LIVE"
+  fi
 }
 order_of() { tr '\n' ' ' < "$1/order" | sed 's/ $//'; }
 pair() { # <scenario> <B mode> <expected order>
@@ -299,8 +326,12 @@ failopen() {
     /bin/sleep 0.1
   done
   # A rebreak waiter (a mutant that never breaks) is killed only once its first wait sleep has BLOCKED, so the
-  # number of sleeps it took is one whatever the load. Bounded; the bound reads as the waiter's own exit.
-  if [ "$s" = rebreak ] && grep -q 'slot: waiting' "$d/aout"; then
+  # number of sleeps it took is one whatever the load; an unbounded breaker that sleeps between breaks (nobound)
+  # only once the sleep after its 20th break has BLOCKED, so it took twenty. An unbounded breaker that never
+  # slept would have no sleep to block, so the wait is skipped for it rather than hung. Bounded; the bound reads
+  # as the waiter's own exit.
+  n="$(grep -c 'slot: broke' "$d/aout")" || n=0
+  if [ "$s" = rebreak ] && { grep -q 'slot: waiting' "$d/aout" || { [ "$n" -ge 20 ] && [ -s "$d/sleeps" ]; }; }; then
     while [ ! -e "$d/aout.blocked" ] && kill -0 "$APID" 2>/dev/null; do /bin/sleep 0.1; done
   fi
   grep -q 'slot: UNSLOTTED' "$d/aout" || kill_tree "$APID"

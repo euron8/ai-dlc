@@ -72,7 +72,6 @@
 # also trips: M28 canon.cr-exempt-empty,canon.cr-exempt-abs
 # also trips: M29 canon.cr-m-other,canon.cr-filter-ff,canon.cr-path-super,canon.cr-conv-runner
 # also trips: M30 canon.cr-conv-runner-none,canon.cr-norun-other,canon.cr-norun-rec
-# also trips: M32 canon.cr-serial-redirect
 # also trips: M49 canon.cr-exempt-abs,canon.cr-bind-abs
 # also trips: m-no-index canon.cr-bind-trunc,canon.cr-b1-wrong,canon.cr-glob-literal
 # also trips: m-single-file canon.cr-bind-repoint-k,canon.cr-bind-repoint-a,canon.cr-launder-ren,canon.cr-launder-nostat,canon.cr-launder-dup,canon.cr-bind-xdir-nostat,canon.cr-hist-replace
@@ -84,7 +83,7 @@
 # also trips: m-story-dir-merge canon_merge.crm-schema-env,canon_merge.crm-root-env
 # also trips: m-sprint-merge canon_merge.crm-hist-sprint,canon_merge.crm-sprint-roll,canon_merge.crm-sprint-roll1,canon_merge.crm-sprint-roll3
 # also trips: m-endpoint-only-merge canon_merge.crm-hist-merge,canon_merge.crm-hist-replace,canon_merge.crm-py-cwd,canon_merge.crm-py-path
-# also trips: m-worktree canon.cr-exempt-created,canon.cr-bind-repoint-k,canon.cr-bind-repoint-a,canon.cr-bind-trunc-ok,canon.cr-launder-viewdel,canon.cr-launder-ren,canon.cr-launder-nostat,canon.cr-launder-dup,canon.cr-bind-xdir,canon.cr-bind-xdir-nostat,canon.cr-launder-rowdel,canon.cr-launder-renrp,canon.cr-launder-rowdel-ok,canon.cr-hist-merge,canon.cr-hist-shallow,canon.cr-hist-replace,canon.cr-hist-dir,canon.cr-hist-sprint,canon.cr-hist-sprint-ok,canon.cr-sprint-roll1,canon.cr-sprint-roll2,canon.cr-sprint-roll3,canon.cr-sprint-view,canon.cr-schema-env,canon.cr-roll-ok,canon.cr-root-env,canon.cr-sprint-relpath,canon.cr-roll-mid,canon.cr-hist-crlf,canon.cr-bind-letter,canon.cr-b1-right,canon.cr-bind-abs,canon.cr-bind-bare,canon.cr-py-cwd,canon.cr-py-path,canon.cr-sprint-link-ok
+# also trips: m-worktree canon.cr-exempt-created,canon.cr-bind-repoint-k,canon.cr-bind-repoint-a,canon.cr-bind-trunc-ok,canon.cr-launder-viewdel,canon.cr-launder-ren,canon.cr-launder-nostat,canon.cr-launder-dup,canon.cr-bind-xdir,canon.cr-bind-xdir-nostat,canon.cr-launder-rowdel,canon.cr-launder-renrp,canon.cr-launder-rowdel-ok,canon.cr-hist-merge,canon.cr-hist-shallow,canon.cr-hist-shallow-blob,canon.cr-hist-replace,canon.cr-hist-dir,canon.cr-hist-sprint,canon.cr-hist-sprint-ok,canon.cr-sprint-roll1,canon.cr-sprint-roll2,canon.cr-sprint-roll3,canon.cr-sprint-view,canon.cr-schema-env,canon.cr-roll-ok,canon.cr-root-env,canon.cr-sprint-relpath,canon.cr-roll-mid,canon.cr-hist-crlf,canon.cr-bind-letter,canon.cr-b1-right,canon.cr-bind-abs,canon.cr-bind-bare,canon.cr-py-cwd,canon.cr-py-path,canon.cr-sprint-link-ok
 # also trips: m-serial-only canon_merge.crm-b1-wrong,canon_merge.crm-bind-hist,canon_merge.crm-hist-merge,canon_merge.crm-hist-shallow,canon_merge.crm-hist-replace,canon_merge.crm-hist-dir,canon_merge.crm-hist-sprint,canon_merge.crm-sprint-roll,canon_merge.crm-sprint-roll1,canon_merge.crm-sprint-roll3,canon_merge.crm-sprint-view,canon_merge.crm-schema-env,canon_merge.crm-root-env,canon_merge.crm-py-cwd,canon_merge.crm-py-path
 # also trips: m-view-sprint-merge canon_merge.crm-sprint-roll1,canon_merge.crm-sprint-roll3
 # also trips: m-py-isolated canon.cr-py-path
@@ -114,6 +113,13 @@
 # also trips: m-rec-base lead_rec.a2-redirect
 # also trips: m-lc-merge lead_rec.a2-cwd
 # also trips: m-d1-merge lead_rec.d1-symlink-wrongstory
+# also trips: M60 run_rec.rr-legacy,run_rec.rr-diff,run_rec.rr-replay,run_rec.rr-rfilter,run_rec.rr-stale,run_rec.rr-cross-code,run_rec.rr-s-fab,run_rec.rr-s-lrange,run_rec.rr-s-lead,run_rec.rr-s-leg,run_rec.rr-s-lrl,run_rec.rr-s-lru
+# also trips: M61 run_rec.rr-s-lrange
+# also trips: M62 run_rec.rr-s-fab,run_rec.rr-s-lead,run_rec.rr-s-lru
+# also trips: M64 run_rec.rr-stale
+# also trips: M65 run_rec.rr-s-lru
+# also trips: M74 run_rec.rr-ok,run_rec.rr-norm,run_rec.rr-diff,run_rec.rr-replay,run_rec.rr-earlier-eq,run_rec.rr-cross-ok,run_rec.rr-s-ok,run_rec.rr-s-lrok
+# also trips: M76 run_rec.rr-c-lru
 # MUTANT-MATRIX M1 decides=cs.partcite twins=cs.crossone
 # MUTANT-MATRIX M2 decides=owner.dup-merge twins=owner.dup-check-owner-unsealed
 # MUTANT-MATRIX M3 decides=mark.shard-3 twins=mark.caller-key
@@ -145,7 +151,7 @@
 # MUTANT-MATRIX M29 decides=canon.cr-path-conv twins=canon.cr-path-other
 # MUTANT-MATRIX M30 decides=canon.cr-norun-na twins=canon.cr-norun-nonebt
 # MUTANT-MATRIX M31 decides=canon.cr-exempt-evil twins=canon.cr-exempt-narrow
-# MUTANT-MATRIX M32 decides=canon.cr-serial-legacy twins=canon.cr-py-cwd
+# MUTANT-MATRIX M32 decides=canon.cr-serial-legacy twins=canon.cr-serial-redirect
 # MUTANT-MATRIX M33 decides=canon_merge.crm-disk-legacy twins=canon_merge.crm-disk-held
 # MUTANT-MATRIX M34 decides=canon.cr-filter-suffix twins=canon.cr-filter-gorun
 # MUTANT-MATRIX M35 decides=canon.cr-filter-gorun twins=canon.cr-filter-lf
@@ -157,6 +163,9 @@
 # MUTANT-MATRIX M49 decides=canon.cr-exempt-abs-rec twins=canon.cr-exempt-typo
 # MUTANT-MATRIX M50 decides=story_path.story-path twins=canon.cr-exempt-evil
 # MUTANT-MATRIX M51 decides=story_frozen.story-frozen twins=canon.cr-exempt-evil
+# MUTANT-MATRIX M58 decides=story_hist.story-hist twins=canon.cr-exempt-evil
+# MUTANT-MATRIX M59 decides=story_hist.story-hist twins=canon.cr-exempt-evil
+# MUTANT-MATRIX M66 decides=story_hist.story-hist twins=canon.cr-exempt-evil
 # MUTANT-MATRIX m-row-exit decides=canon.cr-bind-seed twins=canon.cr-bind-sibling
 # MUTANT-MATRIX m-no-index decides=canon.cr-bind-sibling twins=canon.cr-bind-repoint-k
 # MUTANT-MATRIX m-single-file decides=canon.cr-bind-xdir twins=canon.cr-launder-rowdel
@@ -164,7 +173,7 @@
 # MUTANT-MATRIX m-index-grammar decides=canon.cr-bind-longidx twins=canon.cr-bind-letter
 # MUTANT-MATRIX m-endpoint-only decides=canon.cr-launder-rowdel twins=canon.cr-launder-rowdel-ok
 # MUTANT-MATRIX m-date-born decides=canon.cr-hist-merge twins=canon.cr-hist-shallow
-# MUTANT-MATRIX m-shallow-ok decides=canon.cr-hist-shallow twins=canon.cr-hist-replace
+# MUTANT-MATRIX m-shallow-ok decides=canon.cr-hist-shallow-blob twins=canon.cr-hist-replace
 # MUTANT-MATRIX m-replace decides=canon.cr-hist-replace twins=canon.cr-hist-dir
 # MUTANT-MATRIX m-story-dir decides=canon.cr-hist-dir twins=canon.cr-hist-sprint
 # MUTANT-MATRIX m-crlf decides=canon.cr-hist-crlf twins=canon.cr-bind-longidx
@@ -242,19 +251,91 @@
 # MUTANT-MATRIX m-d1-record decides=lead_rec.d1-record-link twins=lead_rec.d1-outside
 # MUTANT-MATRIX m-d1-name decides=lead_rec.d1-outside twins=lead_rec.d1-prefix-alias
 # MUTANT-MATRIX m-d1-abs decides=lead_rec.d1-prefix-alias twins=lead_rec.lr-run-bind
+# MUTANT-MATRIX M60 decides=run_rec.rr-fab twins=run_rec.rr-ok
+# MUTANT-MATRIX M61 decides=run_rec.rr-stale twins=run_rec.rr-earlier-eq
+# MUTANT-MATRIX M62 decides=run_rec.rr-fab twins=run_rec.rr-legacy
+# MUTANT-MATRIX M63 decides=run_rec.rr-earlier-eq twins=run_rec.rr-cross-ok
+# MUTANT-MATRIX M64 decides=run_rec.rr-cross-code twins=run_rec.rr-head
+# MUTANT-MATRIX M65 decides=run_rec.rr-s-lead twins=run_rec.rr-s-leg
+# MUTANT-MATRIX M67 decides=run_rec.rr-s-head twins=run_rec.rr-s-lrange
+# MUTANT-MATRIX M68 decides=run_rec.rr-replay twins=run_rec.rr-rfilter
+# MUTANT-MATRIX M69 decides=run_rec.rr-rfilter twins=run_rec.rr-mq
+# MUTANT-MATRIX M70 decides=run_rec.rr-sum-cut twins=run_rec.rr-sum-log
+# MUTANT-MATRIX M71 decides=run_rec.rr-sum-log twins=run_rec.rr-sum-q
+# MUTANT-MATRIX M72 decides=run_rec.rr-s-lrl twins=run_rec.rr-s-lru
+# M73 is scored by hand, not per push: the run.sh copy whose --matrix recording (mut_run_one's MX_ROWS append) skips
+# every mutant outside RSM_MATRIX_SLICE, so each slice's populations shrink; MX1's slice arm refuses it, and so
+# does --merge-slices. MX1.plain is its twin, because a run with no slice never reaches the filter.
+# MUTANT-MATRIX M73 decides=MX1.slice twins=MX1.plain
+# MUTANT-MATRIX M74 decides=run_rec.rr-mq twins=run_rec.rr-mu
+# MUTANT-MATRIX M75 decides=run_rec.rr-c-lrl twins=run_rec.rr-c-lru
+# MUTANT-MATRIX M76 decides=run_rec.rr-s-lru twins=run_rec.rr-c-lrl
 # MUTANT-MATRIX-CONTROL VBCTL why=no mutation: each mutant's deciding cell reuses the passing top-level arm of the same predicate from this run as its base-pass flag, and runs over the unmutated sibling copy only when no such arm passed or under --matrix
 # MUTANT-MATRIX-DYNAMIC mut_run why=mut_run hands its <id> argument to mutant_killed; every id it is called with has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/review-shard-merge/run.sh --matrix
+# REMEASURE, SLICED: the same matrix in five parallel parts, each with its own verdict store and output, then merged:
+#   for k in 0 1 2 3 4; do RSM_MATRIX_SLICE=$k/5 AI_DLC_VERDICT_STORE="$(mktemp -d)" \
+#     bash core/fixtures/review-shard-merge/run.sh --matrix > slice-$k.out 2>&1 & done; wait
+#   bash core/fixtures/review-shard-merge/run.sh --merge-slices slice-0.out slice-1.out slice-2.out slice-3.out slice-4.out
+# RSM_MATRIX_SLICE=k/n (integers, 0 <= k < n, --matrix only; anything else exits 2) is read only by matrix_score's
+# row loop: every slice still RECORDS all mutants, because a drive declaring fewer than two cells borrows the
+# deciding cell of every other mutant of its file from the full record, and it SCORES the rows whose 0-based index
+# mod n is k, printing for them the MATRIX, MATRIX-HEADER and MATRIX-ALSO lines the unsliced run prints. It also
+# prints one MATRIX-POP line per (mutant, cell) of EVERY row and one MATRIX-SLICE line. --merge-slices prints the
+# slices' MATRIX* lines and exits 1 unless the files are n slices k = 0..n-1 of one n, each ending in PASS, their
+# MATRIX-POP sets agree, and the MATRIX pairs equal that population with none missing and none twice.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="review-shard-merge"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; nothing was asserted" >&2; exit 2; }
+# rsm_merge_slices <slice output>...: the join of a sliced --matrix (header above). One awk, no world built.
+rsm_merge_slices() {
+  [ $# -ge 1 ] || { echo "usage: run.sh --merge-slices <slice output>..." >&2; return 2; }
+  awk -v name="$NAME" '
+    FNR == 1 { nf++; F[nf] = FILENAME; sl[nf] = ""; pass[nf] = 0 }
+    $1 == "MATRIX-SLICE" { if (sl[nf] != "") err = err "\n  " FILENAME ": two MATRIX-SLICE lines"; sl[nf] = $2 }
+    $0 == name ": PASS" { pass[nf] = 1 }
+    $1 == "MATRIX-POP" && NF == 3 { k = $2 SUBSEP $3; if (!((nf, k) in PS)) { PS[nf, k] = 1; PN[nf]++; if (nf == 1) { P[k] = 1; NP++ } } }
+    $1 == "MATRIX" && NF == 5 { k = $2 SUBSEP $3; M[k]++; NM++ }
+    /^MATRIX(-HEADER|-ALSO)? / { print }
+    END {
+      for (i = 1; i <= nf; i++) {
+        if (sl[i] !~ /^[0-9]+\/[0-9]+$/) { err = err "\n  " F[i] ": no MATRIX-SLICE k/n line; not a sliced --matrix output"; continue }
+        split(sl[i], a, "/")
+        if (n == "") n = a[2]; else if (a[2] != n) err = err "\n  " F[i] ": slice " sl[i] " is not of n=" n
+        if (a[1] in K) err = err "\n  " F[i] ": slice " sl[i] " given twice"; K[a[1]] = 1
+        if (!pass[i]) err = err "\n  " F[i] ": the slice did not end in " name ": PASS"
+        if (PN[i] != NP) err = err "\n  " F[i] ": its MATRIX-POP set has " PN[i] + 0 " pairs, the first slice " NP + 0
+      }
+      if (n != "" && nf != n) err = err "\n  " nf " slice file(s) for n=" n
+      for (j = 0; n != "" && j < n; j++) if (!(j in K)) err = err "\n  slice " j "/" n " is absent"
+      for (x in PS) { split(x, b, SUBSEP); if (!((b[2], b[3]) in P)) { err = err "\n  " F[b[1]] ": MATRIX-POP " b[2] " " b[3] " is not in the first slice"; break } }
+      if (NP == 0) err = err "\n  no MATRIX-POP population was read"
+      for (k in M) { split(k, c, SUBSEP); if (M[k] > 1) err = err "\n  MATRIX " c[1] " " c[2] " appears " M[k] " times"; if (!(k in P)) err = err "\n  MATRIX " c[1] " " c[2] " is outside the recorded population" }
+      for (k in P) if (!(k in M)) { split(k, c, SUBSEP); err = err "\n  MATRIX " c[1] " " c[2] " is missing"; miss++ }
+      if (err != "") { printf "MERGE-SLICES: REFUSED:%s\n", err > "/dev/stderr"; exit 1 }
+      printf "MERGE-SLICES: %d slices of n=%s, %d MATRIX pairs = the recorded population, none missing, none twice\n", nf, n, NM > "/dev/stderr"
+    }' "$@"
+}
 # --matrix runs the mutant x cell matrix in place of the twins (MATRIX lines); a plain run never does.
 RSM_MATRIX=0
 case "${1:-}" in
   "") ;;
   --matrix) RSM_MATRIX=1 ;;
-  *) echo "usage: run.sh [--matrix]" >&2; exit 2 ;;
+  --merge-slices) shift; rsm_merge_slices "$@"; exit $? ;;
+  *) echo "usage: run.sh [--matrix | --merge-slices <slice output>...]" >&2; exit 2 ;;
 esac
+# RSM_MATRIX_SLICE=k/n (header): parsed here so a malformed value refuses before any world is built.
+RSM_SLICE_K=""; RSM_SLICE_N=""
+if [ -n "${RSM_MATRIX_SLICE+set}" ]; then
+  case "$RSM_MATRIX_SLICE" in
+    [0-9]*/[0-9]*) RSM_SLICE_K="${RSM_MATRIX_SLICE%%/*}"; RSM_SLICE_N="${RSM_MATRIX_SLICE#*/}" ;;
+  esac
+  case "$RSM_SLICE_K/$RSM_SLICE_N" in
+    */*/*|*[!0-9/]*|/*|*/|0[0-9]*|*/0*) echo "run.sh: RSM_MATRIX_SLICE='$RSM_MATRIX_SLICE' is not k/n with integers 0 <= k < n" >&2; exit 2 ;;
+  esac
+  [ "$RSM_SLICE_K" -lt "$RSM_SLICE_N" ] || { echo "run.sh: RSM_MATRIX_SLICE='$RSM_MATRIX_SLICE' is not k/n with integers 0 <= k < n" >&2; exit 2; }
+  [ "$RSM_MATRIX" = 1 ] || { echo "run.sh: RSM_MATRIX_SLICE is read only with --matrix" >&2; exit 2; }
+fi
 # I10 reads run.sh, not lib.sh, for the ambient-env scrub; this is the same scrub lib.sh performs.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 . "$HERE/lib.sh"
@@ -565,8 +646,12 @@ arm2 story_path "BL-885 STORY PATH: record-only-diff.sh's story-base and paths r
                 "BL-885 STORY PATH: record-only-diff.sh resolved a story path wrongly"
 arm2 story_frozen "BL-885 STORY FROZEN: record-only-diff.sh's story-base with the third operand <frozen> -- a typo, '<top>/.git/HEAD' and '.git/HEAD' (no file at the base or at the frozen sha), 'stories' (a tree at the base) and 'stories/later' (absent at the base, a tree at the frozen sha) exit 2 UNEVALUABLE; a story created after the base exits 0, one at status: review at the base 1; the two-operand typo keeps the old 0 (receipt-bl885-frozen.sh, all $SF_CELLS cells)" \
                   "BL-885 STORY FROZEN: record-only-diff.sh's story-base read a story that is no file as a gate-1 base, or refused a real one"
+arm2 story_hist "BL-904 STORY HISTORY: record-only-diff.sh's story-base refuses (1, 'existed before') a base where the story was \`git rm\`'d and later re-added, under both operand forms and behind a merge whose first-parent side never held it (plain rev-list hides that deletion); a story never in the base's history exits 0 under both forms, one at status: review at the base 1, a shallow repository exits 2, and a deleted-and-re-added story asked with -C a subdirectory refuses as from the top (receipt-bl904.sh, all \$SH_CELLS cells)" \
+                "BL-904 STORY HISTORY: record-only-diff.sh's story-base read a deleted-and-re-added story as created after the base, or refused one that never existed"
 arm2 lead_rec "LR1: the lead's partition record (U1l) -- no record: LEGACY-UNRECORDED and MERGED, its wrong --story REFUSED STORY-BIND; --record-partition's record read back by the merge MERGED; a record whose sha or base (a seat-moved .manifest) differs REFUSED [owner: lead]; a held era REFUSES a none claim over code in range whatever the range or the seat did to qa.md (9a strip, 9b delete, 9c disk rewrite), a legacy era merges LEGACY; a run claim with the wrong --story REFUSED STORY-BIND on the merge and --check-serial, the right one accepted" \
               "LR1: the merge did not decide from the lead's partition record, or a run claim's --story went unbound"
+arm2 run_rec "RR1 (BL-905): the canonical run is bound to a recorded run -- in a held era (qa.md at the base prescribes --record-run) a typed run and result with no record REFUSED [owner: cross], the same pair over a qa.md without the sentinel MERGED with one LEGACY line; --record-run's RECORDED-RESULT copied verbatim, and inside backticks and = padding, MERGED, a result with other counts REFUSED; a recorded run behind a Canonical run: naming another invocation REFUSED naming both, a recorded invocation RUN-FILTER narrows REFUSED; a verbose run cut off at a per-test progress line records nothing, pytest's session line is the summary over a later log line carrying a count, quiet output's own count line is the summary; this pass's run at another sha over code REFUSED, an earlier pass's run at the frozen sha MERGED with no --story, one at a sha whose change since is record-only MERGED, one whose change since touches code REFUSED naming the predicate's line; --record-run with the frozen worktree at another HEAD refused recording nothing, a runner exiting 1 after a summary recorded with exit 1, no summary refused recording nothing; a none claim needs no record; --check-serial a typed pair REFUSED [owner: serial], a recorded one SERIAL-OK; serial --record-run with the worktree at another sha than --frozen refused recording nothing; the lead's --lead-range over a run recorded at another sha than the go-signal REFUSED, at the go-signal SERIAL-OK; the lead's --lead-range over a base whose tracked qa.md lacks the sentinel SERIAL-OK with one LEGACY line though the installed qa.md carries it; a recorded run whose argv carries a quoted multi-word marker the conventions declare canonical recorded as the one shell line the Canonical run: copies, and MERGED, its bare-word twin MERGED; the lead's --lead-range over a base whose tracked qa.md lacks the canonical-run label SERIAL-OK with one canonical LEGACY line though the installed qa.md carries it, the seat's own form over the same file REFUSED" \
+             "RR1: a canonical result was accepted with no run recorded at the frozen sha, or a recorded one refused"
 # BL-790: THE ADVISOR LINE, per shard under both gates and through --check-serial, its absence keyed on
 # the gate's role file AT THE FROZEN SHA (lead worlds a and b; the untracked fallback refuses).
 AD_ARM="the sentinel world: absent REFUSED [owner: 1] naming the role file that prescribes it, called, unavailable and 'unavailable' with trailing blanks and CR merge with no LEGACY line, maybe, two lines, '- advisor: called' (naming the remediator near-miss) and '**advisor:** called' REFUSED; a fenced 'advisor: maybe' above the bare line, and graph's prose 'Advisor: ...' line beside it, merge; a role file at the frozen sha without the sentinel accepts the absence, and that prose line alone, with the LEGACY line by value and still refuses maybe; a role file unreadable at the sha REFUSED; world (a), frozen over the old role file with the new one on disk, LEGACY and merges; world (b), frozen over the new one with the old on disk, REFUSED; untracked at the sha with the new copy on disk REFUSED naming the on-disk fallback and the commit remedy, with the old copy on disk LEGACY naming it"
@@ -755,16 +840,26 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     done
     return 0
   }
+  # RSM_MATRIX_SLICE=k/n (header): the row loop scores only rows whose 0-based index mod n is k; it still lists every
+  # row's population (MATRIX-POP) for --merge-slices. MX_SROWS/MX_SPOP/MX_TPOP feed MX1's slice arm.
+  MX_SROWS=0; MX_SPOP=0; MX_TPOP=0
   matrix_score() {
-    local id f p c cl pop q pc ms cs key dec tw
+    local id f p c cl pop q pc ms cs key dec tw ri=-1
     mkdir -p "$WORK/mx-cells" "$WORK/mx-ctl"
+    [ -z "$RSM_SLICE_N" ] || echo "MATRIX-SLICE $RSM_SLICE_K/$RSM_SLICE_N"
     while IFS='	' read -r id f p c <&3; do
+      ri=$((ri + 1))
       cl="$WORK/mx-cells/$p"
       [ -f "$cl" ] || { CS_LIST="$cl.tmp"; : > "$CS_LIST"; WHY=""; "p_$p" "$vb_ctl" > /dev/null 2>&1 < /dev/null || :; CS_LIST=""
         awk '!s[$0]++' "$cl.tmp" > "$cl"; }
       pop="$(sed "s|^|$p.|" "$cl")"
       if [ "$(grep -c . "$cl")" -lt 2 ]; then
         pop="$(printf '%s\n%s\n' "$pop" "$(awk -F'\t' -v id="$id" -v f="$f" '$1 != id && $2 == f { print $3 "." $4 }' "$MX_ROWS")" | awk 'NF && !s[$0]++')"
+      fi
+      if [ -n "$RSM_SLICE_N" ]; then
+        for q in $pop; do echo "MATRIX-POP $id $q"; MX_TPOP=$((MX_TPOP + 1)); done
+        [ $((ri % RSM_SLICE_N)) = "$RSM_SLICE_K" ] || continue
+        MX_SROWS=$((MX_SROWS + 1)); for q in $pop; do MX_SPOP=$((MX_SPOP + 1)); done
       fi
       dec="$p.$c"; tw=""; also=""
       for q in $pop; do
@@ -869,7 +964,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     canon "cr-norun-na{" "a no-run claim spelled other than none read as a run"
   CS_ONLY=cr-exempt-evil mut_run M31 record-only-diff.sh '            *.py|*.sh|*.toml|*.cfg|conftest.py|pytest.ini) first="$p" ;;' '            NEVER-A-SUFFIX) first="$p" ;;' \
     canon "cr-exempt-evil{" "a collectable module under a record directory classed record-only"
-  CS_ONLY=cr-serial-legacy mut_run M32 merge-review-shards.sh '    if grep -qF -- "$CANON_SENTINEL" "$ROLE_MD"; then' '    if true; then' canon "cr-serial-legacy{" \
+  CS_ONLY=cr-serial-legacy mut_run M32 merge-review-shards.sh '      *) sr_held_=0; sr_leg_="$SR_QA_AT" ;;' '      *) : ;;' canon "cr-serial-legacy{" \
     "the --check-serial LEGACY branch forced off"
   CS_ONLY=crm-disk-legacy mut_run M33 merge-review-shards.sh '  if [ -z "$cr_inst_" ]; then' '  if false; then' canon_merge "crm-disk-legacy{" \
     "the merge's on-disk qa.md read dropped"
@@ -895,17 +990,29 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # BL-885, both in record-only-diff.sh's ro_story_rel. M49 the helper reverted to the old `${1#./}` strip, so an
   # absolute --story names no blob at the base or at the frozen sha and a genuinely record-only range is REFUSED end
   # to end (the receipt's absolute and `.//` cells fail too; cr-exempt-abs, the empty range, refuses either way).
-  # M50 an absolute path outside the repository passed through as itself.
+  # M50 an absolute path outside the repository passed through as itself. Its kill is the paths mode's hosts cell: since
+  # BL-904 story-base's history walk refuses a path outside the repository itself (rev-list fails, exit 2).
   CS_ONLY=cr-exempt-abs-rec mut_run M49 record-only-diff.sh '    local rs_repo="$1" rs_p="$2" rs_top rs_dir rs_base' \
     '    printf '"'"'%s\n'"'"' "${2#./}"; return 0; local rs_repo="$1" rs_p="$2" rs_top rs_dir rs_base' \
     canon "cr-exempt-abs-rec{rc=2" "the story path stripped of a leading ./ only, so an absolute --story over a record-only range is refused"
   CS_ONLY=story-path mut_run M50 record-only-diff.sh '*) echo "$ME: UNEVALUABLE — story path is outside the repository: $2" >&2; return 2 ;;' \
-    '*) printf '"'"'%s\n'"'"' "$rs_p" ;;' story_path "FAIL sb-hosts:" "an absolute story path outside the repository passed through"
+    '*) printf '"'"'%s\n'"'"' "$rs_p" ;;' story_path "FAIL paths-hosts:" "an absolute story path outside the repository passed through"
   # BL-885, record-only-diff.sh's ro_story_base. M51 the <frozen> operand ignored, so a story absent at the base exits
   # 0 unconditionally (the frozen-blob and non-blob checks both gone): story-base's own typo cell reads 0. BL-895's
   # binding refuses a typo --story before story-base runs, so the kill is asked of story-base directly (D4).
   CS_ONLY=story-frozen mut_run M51 record-only-diff.sh '    if [ $# -eq 3 ]; then' '    if false; then' \
     story_frozen "FAIL sf-typo:" "a story that is no file at the base or at the frozen sha read as a gate-1 base"
+  # BL-904, record-only-diff.sh's ro_story_never. M58 drops --full-history, so default history simplification follows
+  # the merge's TREESAME side and the deletion behind it reads as no history (sh-merge reads 0). M59 drops the history
+  # test itself, so a story `git rm`'d before the base and re-added reads as created after it (sh-ldel reads 0).
+  CS_ONLY=story-hist mut_run M58 record-only-diff.sh 'rev-list -1 --full-history "$1"' 'rev-list -1 "$1"' \
+    story_hist "FAIL sh-merge:" "a deletion hidden behind a merge read as a story that was never in the base's history"
+  CS_ONLY=story-hist mut_run M59 record-only-diff.sh '    [ -z "$sn_h" ] || { printf' '    true || { printf' \
+    story_hist "FAIL sh-ldel:" "a story deleted before the base and re-added read as created after it"
+  # M66 restores the unanchored pathspec, so under -C a subdirectory the walk names a cwd-relative path that never
+  # existed and the deleted-and-re-added story reads as created after the base (sh-subdir reads 0).
+  CS_ONLY=story-hist mut_run M66 record-only-diff.sh '-- ":(top,literal)$sb_rel"' '-- "$sb_rel"' \
+    story_hist "FAIL sh-subdir:" "the story history walked a pathspec relative to the -C directory, not the repository top"
   # BL-895, canon_gate's STORY-BIND. m-row-exit keys the row binding on story-status's EXIT (it exits 0 on a path no
   # entry names), so the review-like seed passes. m-no-index drops the basename-index check, so a listed sibling story
   # passes for the wrong review. m-worktree reads the row at the checked-out HEAD instead of the frozen sha, so a story
@@ -940,14 +1047,15 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     canon "cr-launder-rowdel{rc=0 SERIAL-OK:" "the view's history walk reduced to its endpoint marker"
   # BL-895, THE HISTORY'S OWN TRUST (sprint-status.sh view_history). m-date-born picks the creation commit by date (the
   # oldest-dated adder), so a backdated side commit merged --no-ff moves the walk past the launder. m-shallow-ok drops the
-  # shallow refusal, so a boundary at the base reads as the root. m-replace drops GIT_NO_REPLACE_OBJECTS from ss_main's
+  # shallow refusal, so a boundary at the base reads as the root; it is scored on hist-shallow-blob, where z is a blob at
+  # the base, because story-base's own shallow refusal (BL-904) also refuses hist-shallow. m-replace drops GIT_NO_REPLACE_OBJECTS from ss_main's
   # python line, so a replace ref rewrites the base's view. m-story-dir keys the stories directory on --story's own
   # directory again, so a story in a directory created in the range starts the walk there. m-crlf reads a ref's view with
   # its \r kept, so a CRLF view gives no `sprint:`. m-sprint drops the base-versus-frozen sprint check.
   CS_ONLY=cr-hist-merge mut_run m-date-born sprint-status.sh '        born = [c for c in adds.split() if obj("%s^1:%s" % (c, sdir))[0] is None]' \
     '        born = adds.split()[-1:]' canon "cr-hist-merge{rc=0 SERIAL-OK:" "the stories directory's creation chosen by date, not ancestry"
-  CS_ONLY=cr-hist-shallow mut_run m-shallow-ok sprint-status.sh '    if head[0] != "false":' '    if False:' \
-    canon "cr-hist-shallow{rc=0 SERIAL-OK:" "a shallow repository's boundary read as the root"
+  CS_ONLY=cr-hist-shallow-blob mut_run m-shallow-ok sprint-status.sh '    if head[0] != "false":' '    if False:' \
+    canon "cr-hist-shallow-blob{rc=0 SERIAL-OK:" "a shallow repository's boundary read as the root"
   CS_ONLY=cr-hist-replace mut_run m-replace sprint-status.sh "GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts python3 -I - <<'PY'" \
     "GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts python3 -I - <<'PY'" canon "cr-hist-replace{rc=0 SERIAL-OK:" "a replace ref honoured by the view's readers"
   CS_ONLY=cr-hist-dir mut_run m-story-dir sprint-status.sh '        sdir = os.path.normpath(stories_dir(sprint))' '        sdir = os.path.dirname(story)' \
@@ -983,7 +1091,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # U1i. m-legacy-env drops the checked repository's own qa.md from the --check-serial LEGACY decision, so the qa.md under
   # the seat-chosen AI_DLC_PROJECT_ROOT acquits alone and a redirect skips the whole canonical-run rule, STORY-BIND included.
   # The merge path has no row: it reads qa.md at the manifest's frozen sha in the manifest's worktree and never ROOT.
-  CS_ONLY=cr-serial-redirect mut_run m-legacy-env merge-review-shards.sh '      else sr_held_=0; fi' '      fi; sr_held_=0; sr_leg_="$ROLE_MD"' \
+  CS_ONLY=cr-serial-redirect mut_run m-legacy-env merge-review-shards.sh '      base) grep -qF -- "$CANON_SENTINEL" "$ROLE_MD" ||' '      base) sr_held_=0; sr_leg_="$ROLE_MD"; grep -qF -- "$CANON_SENTINEL" "$ROLE_MD" ||' \
     canon "cr-serial-redirect{rc=0" "the seat's project root alone deciding the canonical-run LEGACY skip"
   # U1g. The same six history mutants scored on the MERGE path: a second row each, with its own id, deciding on the
   # canon_merge cell of the same refusal, because the matrix scores a mutant on the cells of its own predicate only.
@@ -1022,7 +1130,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     canon "cr-b1-right{rc=2" "STORY-BIND's index grammar reverted to digits only, so B1 is refused"
   CS_ONLY=cr-glob-literal mut_run m-idx-pattern merge-review-shards.sh '  [ "${1:0:${#si_p_}+1}" = "$si_p_-" ] || return 1' \
     '  case "$1" in story-$2-*) ;; *) return 1 ;; esac' \
-    canon "cr-glob-literal{rc=0 SERIAL-OK:" "the index matched as a pattern, so B? names story-B1-x.md"
+    canon "cr-glob-literal{rc=0 " "the index matched as a pattern, so B? names story-B1-x.md"
   CS_ONLY=cr-bind-ok mut_run m-worktree merge-review-shards.sh 'ss_bound story-status --ref "$cg_z_" --root' 'ss_bound story-status --ref HEAD --root' \
     canon "cr-bind-ok{rc=2" "the row read at the checked-out HEAD, not the frozen sha"
   CS_ONLY=crm-bind mut_run m-serial-only merge-review-shards.sh '    # STORY-BIND (header: THE EXEMPTION): --story is the story file the implementation view lists at <frozen>.' \
@@ -1182,6 +1290,57 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     lead_rec "d1-outside{" "a shard directory naming no s<N> slot merged as an unrecorded partition"
   CS_ONLY=d1-prefix-alias mut_run m-d1-abs merge-review-shards.sh '    case "$sl_l_" in */"$sl_r_") ;; *) exit 1 ;; esac' \
     '    [ "$sl_l_" = "$sl_p_" ] || exit 1' lead_rec "d1-prefix-alias{" "the shard directory's two spellings compared as absolute paths"
+  # BL-905, THE RUN RECORD. M60 skips the binding, so a typed pair merges in a held era. M61 drops the sha from the
+  # lookup, so this pass's run recorded at another sha binds. M62 reads a story with no recorded run as LEGACY. M63
+  # restricts the lookup to this pass's own key, so an earlier pass's run at the same sha is refused. M64 skips the
+  # record-only predicate, so an earlier pass's run over a code change is reused.
+  CS_ONLY=rr-fab mut_run M60 merge-review-shards.sh '  run_bind "$cg_f_" "$cg_o_" "$cg_res_" "$cg_c_"' '  :' \
+    run_rec "rr-fab{rc=0" "the canonical result not bound to a recorded run"
+  CS_ONLY=rr-stale mut_run M61 merge-review-shards.sh '$1 == k && $2 == s { print $1; f = 1; exit }' '$1 == k { print $1; f = 1; exit }' \
+    run_rec "rr-stale{rc=0" "this pass's run accepted at another sha"
+  CS_ONLY=rr-fab mut_run M62 merge-review-shards.sh '  [ -n "$rb_all_" ] || refuse_to' '  [ -n "$rb_all_" ] || return 0 || refuse_to' \
+    run_rec "rr-fab{rc=0" "a story with no recorded run read as LEGACY in a held era"
+  CS_ONLY=rr-earlier-eq mut_run M63 merge-review-shards.sh '$2 == s && e == "" { e = $1 }' '$2 == s && e == "" && 0 { e = $1 }' \
+    run_rec "rr-earlier-eq{rc=2" "the lookup restricted to this pass's own key"
+  CS_ONLY=rr-cross-code mut_run M64 merge-review-shards.sh 'rb_po_="$(mrs_sib "$RO" ro_main paths -C "$RB_WT" "$STORY_F" "$rb_es_" "$RB_SHA" 2>&1 < /dev/null)"' 'rb_po_=""' \
+    run_rec "rr-cross-code{rc=0" "an earlier pass's run reused without the record-only predicate"
+  # M65 drops the installed qa.md (ROLE_MD) from the serial era, so a review repository's stripped qa.md acquits.
+  CS_ONLY=rr-s-lead mut_run M65 merge-review-shards.sh '      case "$SR_ERA" in role|base) RB_ERA=held ;; esac' '      case "$SR_ERA" in base) RB_ERA=held ;; esac' \
+    run_rec "rr-s-lead{rc=0" "the serial run-record era acquitted by the review repository's own qa.md"
+  # M67 reads the serial form's frozen sha off the worktree's own HEAD again, so the HEAD check compares HEAD with HEAD
+  # and a run in a worktree checked out at another sha than --frozen is recorded.
+  CS_ONLY=rr-s-head mut_run M67 merge-review-shards.sh '    rr_s_="$rr_fz_"; rr_rp_="$rr_wt_"' \
+    '    rr_s_="$(git --no-replace-objects -C "$rr_wt_" rev-parse -q --verify HEAD 2> /dev/null < /dev/null)"; rr_rp_="$rr_wt_"' \
+    run_rec "rr-s-head{rc=0" "the serial --record-run's frozen sha read off the worktree's own HEAD"
+  # M68 drops the compare of the `Canonical run:` invocation with the recorded one, so a recorded replay merges behind a
+  # review naming the canonical command. M69 drops the recorded invocation's RUN-FILTER, so a recorded `--keyword=x` run
+  # merges behind a `Canonical run:` line that RUN-FILTER passes and that normalises to the recorded invocation.
+  CS_ONLY=rr-replay mut_run M68 merge-review-shards.sh '  [ "$(rr_norm "$rb_rs_")" = "$(rr_norm "$rb_ri_")" ] \' '  true \' \
+    run_rec "rr-replay{rc=0" "the Canonical run: invocation not compared with the recorded invocation"
+  CS_ONLY=rr-rfilter mut_run M69 merge-review-shards.sh '  rb_rf_="$(mrs_sib "$RO" ro_main run-filter "\`$rb_ri_\`" ${4:+"$4"})" \' '  rb_rf_="" \' \
+    run_rec "rr-rfilter{rc=0" "the recorded invocation not held to RUN-FILTER"
+  # M70 restores the generic last-count-line rule over per-test lines, so a cut-off verbose run records `test_case_3
+  # PASSED [ 99%]` as its summary. M71 drops the pytest session line's preference, so a log line after it is recorded.
+  CS_ONLY=rr-sum-cut mut_run M70 merge-review-shards.sh ' && $0 !~ /::/ && $0 !~ /( PASSED| FAILED).*\[ *[0-9]+%\]/) c = NR' ') c = NR' \
+    run_rec "rr-sum-cut{rc=0" "a per-test progress line recorded as the run's summary"
+  CS_ONLY=rr-sum-log mut_run M71 merge-review-shards.sh '          else if (ps) s = trim(l[ps])' '          else if (0) s = trim(l[ps])' \
+    run_rec "rr-sum-log{got 'INFO cleaned 2 errors'" "a log line after pytest's session line recorded as the run's summary"
+  # M72 restores the installed qa.md's (ROLE_MD's) hold under --lead-range, so after a pull a serial story whose base
+  # qa.md prescribes no --record-run is refused where the merge reads the same base LEGACY.
+  CS_ONLY=rr-s-lrl mut_run M72 merge-review-shards.sh '      sr_era "$RUN_SENTINEL" "$sr_bd_"' '      sr_era "$RUN_SENTINEL" 0' \
+    run_rec "rr-s-lrl{rc=2" "the lead's re-run era held by the installed qa.md over the tracked base blob"
+  # M75 restores the installed qa.md's hold for the canonical lines under --lead-range (sr_era's base flag dropped at
+  # that call alone), so a PASS with no run line over a base whose qa.md predates the label is refused.
+  CS_ONLY=rr-c-lrl mut_run M75 merge-review-shards.sh 'sr_era "$CANON_SENTINEL" "$sr_bd_"' 'sr_era "$CANON_SENTINEL" 0' \
+    run_rec "rr-c-lrl{rc=2" "the lead's re-run canonical-lines era held by the installed qa.md over the tracked base blob"
+  # M76 lets the tracked base blob decide the era whether or not the story's dispatch is recorded, so a LEGACY-UNRECORDED
+  # story's seat chooses its own era by choosing an old base, and a typed pair the installed qa.md holds reads SERIAL-OK.
+  CS_ONLY=rr-s-lru mut_run M76 merge-review-shards.sh '] && [ "${sr_rec_:-0}" = 1 ]; then sr_bd_=1; fi' ']; then sr_bd_=1; fi' \
+    run_rec "rr-s-lru{rc=0" "the seat-supplied base of an unrecorded story deciding the lead's re-run era"
+  # M74 records the invocation as `$*` again, so a quoted multi-word marker (`-m 'a and b'`) is recorded as `-m a and b`,
+  # which RUN-FILTER reads as the marker `a`, and a run the conventions declare canonical cannot merge.
+  CS_ONLY=rr-mq mut_run M74 merge-review-shards.sh 'rr_quote "$@"; rr_inv_="${RR_Q' 'rr_inv_="$*"; rr_inv_="${rr_inv_' \
+    run_rec "rr-mq{" "the recorded invocation joined with \$*, its quoting dropped"
   # The matrix, or the twins. A plain run scores no matrix cell and runs at least one twin per mutant; a
   # --matrix run scores the matrix and runs no twin. Either way the count below is the mode's own.
   _mx_n="$(grep -c . "$MX_ROWS")" || _mx_n=0
@@ -1189,17 +1348,24 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     : > "$WORK/mx-log"; matrix_score
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "MX1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the matrix"
     reuse_proof
-    if [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 128 ]; then
+    if [ -n "$RSM_SLICE_N" ]; then
+      # A slice records all 146 rows, scores exactly the cells of the rows its k/n selects (their populations, read
+      # off the full record), and runs no twin.
+      _mx_want=0; [ "$RSM_SLICE_K" -ge 146 ] || _mx_want=$(( (145 - RSM_SLICE_K) / RSM_SLICE_N + 1 ))
+      if [ "$_mx_n" = 146 ] && [ "$MX_SROWS" = "$_mx_want" ] && [ "$MX_CELLS" = "$MX_SPOP" ] && [ "$TWIN_N" = 0 ]; then
+        ok "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS mutant x cell pairs, the populations of its $MX_SROWS of $_mx_n recorded mutants ($MX_TPOP pairs in all), and ran no twin"
+      else bad "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS pairs over $MX_SROWS rows (want $_mx_want rows and $MX_SPOP pairs, of $MX_TPOP), $_mx_n recorded mutants (want 146), twins run $TWIN_N"; fi
+    elif [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 146 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
   else
-    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 128 ]; then
+    if [ "$MX_CELLS" = 0 ] && [ "$_mx_n" = 0 ] && [ "$TWIN_N" -ge 146 ]; then
       ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant, each passing over its mutant copy"
-    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 128"; fi
+    else bad "MX1: a plain run scored $MX_CELLS matrix cells ($_mx_n recorded mutants) and ran $TWIN_N twins, want 0, 0 and at least 146"; fi
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
-  if [ "$VB_CTL_N" = 128 ]; then ok "VBCTL: CONTROL -- each of M1-M57, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name and m-d1-abs's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of 128): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
-  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 128 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  if [ "$VB_CTL_N" = 146 ]; then ok "VBCTL: CONTROL -- each of M1-M72, M74, M75, M76, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name and m-d1-abs's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of 146): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+  else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 146 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi

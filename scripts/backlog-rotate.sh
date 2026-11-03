@@ -261,18 +261,39 @@ fi
 # unmatched open to that counter. Measured while writing backlog-reverify.sh: the shell
 # swallowed the rest of the file and reported `unexpected EOF` a hundred lines later.
 AWKF="$(mktemp)" || { echo "backlog-rotate: mktemp failed" >&2; exit 2; }
-trap 'rm -f "$AWKF" "$AWKF.live" "$AWKF.moved" "$AWKF.nooutcome"' EXIT
+trap 'rm -f "$AWKF" "$AWKF.live" "$AWKF.moved" "$AWKF.nooutcome" "$AWKF.pending"' EXIT
+
+# The LEDGER'S tree (its git top level), never this script's: its VERSION decides which sha-less
+# LANDED lines are PENDING (BL-874), and the evidence guard below reads its CHANGELOG.md.
+LEDGER_TOP="$(git -C "$(dirname "$LEDGER")" rev-parse --show-toplevel 2>/dev/null)" || LEDGER_TOP=""
+LEDGER_VERSION=""
+[ -n "$LEDGER_TOP" ] && [ -f "$LEDGER_TOP/VERSION" ] && LEDGER_VERSION="$(sed -n '1p' "$LEDGER_TOP/VERSION" | tr -d '[:space:]')"
 
 { ledger_entry_awk; printf '%s\n' "$BACKLOG_LABEL_AWK"; backlog_efficiency_tag_awk; cat <<'AWK'
 # Emits the ledger split in two: LIVE lines to one file, CLOSED entries to another, with every
 # byte accounted for. The preamble -- everything before the first id-shaped entry -- always
 # stays live.
+# vgt(a, b): a > b numerically, field by field (0.1000.0 is greater than 0.995.0).
+function vgt(a, b,   x, y, na, nb, n, i) {
+  na = split(a, x, "."); nb = split(b, y, "."); n = (na > nb) ? na : nb
+  for (i = 1; i <= n; i++) { if ((x[i] + 0) > (y[i] + 0)) return 1; if ((x[i] + 0) < (y[i] + 0)) return 0 }
+  return 0
+}
+# A SHA-LESS LANDED LINE ABOVE THE LEDGER TREE'S VERSION IS PENDING AND STAYS LIVE (BL-874). Keyed on
+# the entry's FIRST LANDED line, the one the evidence guard reads, in the form its SLV sed reads.
+function pending(s,   v) {
+  if (VERSIONV == "" || s !~ /^(<br>)?\*\*LANDED \(v[0-9][0-9.]*\)\.\*\*/) return 0
+  v = s; sub(/^(<br>)?\*\*LANDED \(v/, "", v); sub(/\).*$/, "", v)
+  if (!vgt(v, VERSIONV)) return 0
+  pendv = v; return 1
+}
 function flush(   i) {
   if (label == "") return
+  if (closed && pend) { print label "\t" pendv > PENDING; closed = 0 }
   if (closed && tagged && !outcome) print label > NOOUTCOME
   if (closed) { for (i = 1; i <= n; i++) print buf[i] > MOVED; movedn++ }
   else        { for (i = 1; i <= n; i++) print buf[i] > LIVE }
-  label = ""; closed = 0; n = 0; tagged = 0; outcome = 0
+  label = ""; closed = 0; n = 0; tagged = 0; outcome = 0; pend = 0
 }
 {
   # Via the shared helper, so the fence guard above and this split can never disagree about what
@@ -318,16 +339,20 @@ function flush(   i) {
   #   - the annotation must OPEN a line (a bare `<br>` prefix is allowed, since that is how the
   #     form is written in practice); a quotation of it sits mid-sentence.
   #   - the version must be NUMERIC; a quotation writes `(vX.Y.Z` or `(v<version>`.
-  if ($0 ~ /^(<br>)?\*\*LANDED \(v[0-9]/) closed = 1
+  if ($0 ~ /^(<br>)?\*\*LANDED \(v[0-9]/) { if (!closed) pend = pending($0); closed = 1 }
   buf[++n] = $0
 }
 END { flush(); print movedn+0 > "/dev/stderr" }
 AWK
 } > "$AWKF"
 
-: > "$AWKF.nooutcome"
-MOVED_COUNT="$(awk -v LIVE="$AWKF.live" -v MOVED="$AWKF.moved" -v NOOUTCOME="$AWKF.nooutcome" -f "$AWKF" "$LEDGER" 2>&1 >/dev/null)"
+: > "$AWKF.nooutcome"; : > "$AWKF.pending"
+MOVED_COUNT="$(awk -v LIVE="$AWKF.live" -v MOVED="$AWKF.moved" -v NOOUTCOME="$AWKF.nooutcome" -v PENDING="$AWKF.pending" -v VERSIONV="$LEDGER_VERSION" -f "$AWKF" "$LEDGER" 2>&1 >/dev/null)"
 MOVED_COUNT="${MOVED_COUNT:-0}"
+# A PENDING entry is reported and kept; it is never refused, so --check and --apply still exit 0.
+while IFS="$(printf '\t')" read -r PL PV; do
+  [ -n "$PL" ] && echo "  $PL  PENDING, not moved: v$PV is not yet released (VERSION $LEDGER_VERSION)"
+done < "$AWKF.pending"
 
 # THE OUTCOME GUARD (BL-817). An efficiency entry -- one carrying a bold efficiency tag in any of
 # the four forms `**DEFECT (efficiency).**`, `**DEFECT, efficiency.**`, `**NOTE (efficiency).**` or
@@ -524,6 +549,21 @@ if [ "$WANT_LABELS" != "$GOT_LABELS" ]; then
   exit 2
 fi
 
+# A SHA-LESS LANDED LINE IS BOUND TO A RELEASE, NOT REFUSED (BL-874). A release commit cannot name its
+# own squash, so the owner writes `**LANDED (v<version>).**` with no sha. It MOVES only when <version>
+# is a `## [<version>]` heading in the LEDGER tree's CHANGELOG.md AND that tree's VERSION has reached
+# it. A <version> numerically greater than VERSION is PENDING: the split above kept it live and printed
+# `PENDING, not moved`, so it never reaches this guard -- a heading that exists while VERSION is below
+# it is PENDING too, by the same compare. Any other version refuses: the line names no release.
+shaless_verdict() { # shaless_verdict <version> -> the SHAV for a sha-less LANDED line (never PENDING here)
+  if [ -n "$LEDGER_TOP" ] && [ -f "$LEDGER_TOP/CHANGELOG.md" ] \
+     && awk -v h="## [$1]" 'index($0, h) == 1 { f = 1; exit } END { exit !f }' "$LEDGER_TOP/CHANGELOG.md"; then
+    printf 'sha-less, v%s' "$1"
+  else
+    printf 'sha-less LANDED v%s names no release in CHANGELOG.md or VERSION' "$1"
+  fi
+}
+
 EVID_TABLE=""; EVID_REFUSE=""; OLDIFS="$IFS"
 while IFS="$(printf '\t')" read -r ST LB DT; do
   [ -n "$LB" ] || continue
@@ -531,7 +571,11 @@ while IFS="$(printf '\t')" read -r ST LB DT; do
   # ANN is the WHOLE annotation line (an optional `<br>` prefix, then the bold form, then any prose).
   # Anchored on the form so a later "verified <word>" in the prose cannot replace the sha.
   SHA="$(printf '%s\n' "$ANN" | sed -n 's/^\(<br>\)\{0,1\}\*\*LANDED (v[^,]*, verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p')"
+  # The sha-less form, `**LANDED (v<version>).**`, and only that form: a dated `(v.., verified <date>)`
+  # line is neither form and stays ABSENT.
+  SLV="$(printf '%s\n' "$ANN" | sed -n 's/^\(<br>\)\{0,1\}\*\*LANDED (v\([0-9][0-9.]*\))\.\*\*.*/\2/p')"
   if   [ "$R1_SKIP" = true ]; then SHAV="sha SKIPPED (ledger is not in a git repository)"
+  elif [ -z "$SHA" ] && [ -n "$SLV" ]; then SHAV="$(shaless_verdict "$SLV")"
   elif [ -z "$SHA" ];          then SHAV="sha ABSENT"
   elif git -C "$(dirname "$LEDGER")" cat-file -e "${SHA}^{commit}" 2>/dev/null; then SHAV="sha $SHA resolves"
   else SHAV="sha $SHA DOES NOT RESOLVE"; fi
@@ -545,6 +589,9 @@ while IFS="$(printf '\t')" read -r ST LB DT; do
   case "$SHAV" in
     *"DOES NOT RESOLVE"|*ABSENT)
       EVID_REFUSE="$EVID_REFUSE  $LB  the annotation's $SHAV, so it attests to no commit in this repository.
+" ;;
+    *"names no release in CHANGELOG.md or VERSION")
+      EVID_REFUSE="$EVID_REFUSE  $LB  $SHAV.
 " ;;
   esac
 done <<EOF

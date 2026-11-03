@@ -230,7 +230,9 @@ arm_QM() {
   qserial "$1" "$t" "$W/qserial-foo.md"
   [ "$RC" -eq 2 ] && grep -q "^REFUSED: .*'Class: FOO' is not one of BOOKKEEPING CODE EVIDENCE TEST (qa.md's template)" <<<"$OUT" || return 1
   qserial "$1" "$t" "$W/qserial-evidence.md"
-  [ "$RC" -eq 0 ] && grep -q '^SERIAL-OK: .* verdict=PASS' <<<"$OUT" && ! grep -q '^LEGACY' <<<"$OUT" || return 1
+  # The run-record LEGACY line (BL-905) is expected here: the seeded qa.md roots drop its sentinel (world.sh rr_qroot).
+  [ "$RC" -eq 0 ] && grep -q '^SERIAL-OK: .* verdict=PASS' <<<"$OUT" \
+    && [ "$(awk '/^LEGACY/ && !/^LEGACY: canonical-run record not checked:/ { n++ } END { print n + 0 }' <<<"$OUT")" = 0 ] || return 1
   qserial "$1" "$QR/none" "$W/qserial-foo.md"
   [ "$RC" -eq 0 ] && grep -q '^SERIAL-OK: .* verdict=PASS' <<<"$OUT"
 }

@@ -19,6 +19,81 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.999.0] - 2026-11-03
+
+Batch b249, cluster b249-c3. Closes BL-874, BL-875, BL-896, BL-904 and BL-905. No PC- id is closed. The durable rule channel is now at `A6 ok -- compaction-durable channel 74238/74240 bytes`, which leaves 2 bytes of headroom, so the next batch's first durable-channel edit will hit A6.
+
+### BL-874 closed: a sha-less LANDED line above VERSION is held by the rotator, and added verified shas must reach `--base`
+
+- **PENDING hold.**
+  - `scripts/backlog-rotate.sh --apply` keeps in the ledger an entry whose first LANDED line is sha-less and names a version above the ledger tree's VERSION (`pending()`, numeric field compare).
+  - It prints `PENDING, not moved: v<x> is not yet released (VERSION <v>)`. `--check` and `--apply` still exit 0.
+  - A heading above VERSION is PENDING by the same compare.
+  - A sha-less entry moves only when its version is a `## [<version>]` CHANGELOG heading that VERSION has reached.
+  - A version equal to VERSION with no heading falls to the existing refusal `sha-less LANDED v<x> names no release in CHANGELOG.md or VERSION`.
+  - Before this, `--apply` archived such a line: v9.9.9 gave `--check --apply` rc 0 and the archive moved 829 to 830.
+- **Sha-less lines are accepted through `shaless_verdict`.** A `**LANDED (v<version>).**` line is judged by CHANGELOG heading and VERSION. A dated `verified <date>` line still reads `sha ABSENT`.
+- **R11.** `validate-backlog-receipts.sh` arm R11 (`r11_judge`, probe `vbr_probe_r11`) requires every verified sha added on a LANDED line to resolve and be an ancestor of `--base`. It reads NOT DERIVED with no merge-base, and its ceiling is 0. Over the 40 first-parent commits to afea572a5, 19 shas (20 lines) fire, all true positives, and 0 moves fire.
+- **Fixtures.**
+  - backlog-ledger arms `shaless` and `pending`, with mutants including `mutation-pending-applied`.
+  - backlog-receipt-binding R11 cells, with three mutants.
+  - Receipt `core/fixtures/backlog-receipt-binding/receipt-bl874.sh`.
+- Plan owner rule 6 no longer says PENDING rotates.
+
+### BL-875 closed: a slot-world's launched children record their own process group
+
+- The live-pid control and each deriver A are now an exec'd `bash -c` whose first statement appends its own pid (its pgid under job control) to `SW_GROUPS`. The child exits unless `kill -0 $PPID` finds its world alive, and only then writes a sentinel and execs its work. This closes the fork-to-record window.
+- New arm `slot-forkkill` blocks the world with `SW_FORK_GATE` after the child's sentinel and SIGKILLs it there. It reads `1|2|0`. Mutant `selfrec` reads `1|1|1` and is killed. Sentinels decide every step and no sleep synchronises anything.
+- Receipt `core/fixtures/readset-skip/receipt-bl875.sh`.
+
+### BL-896 closed: the gate-adjudication predicate site observes a change to how waivers are read
+
+- `predicate-differential.sh` resolves the consumer's `docs/escalations/pending.md` once (`PD_ESC`) and passes `AI_DLC_ESCALATIONS` to both sides. Under the pinned probe root both sides used to receive the same empty input, so a change to how waivers are read read as `PREDICATE-STABLE`.
+- `predicate-sites.md` adds `validate-suppression-lifetime.sh` to the gate-adjudication site's `reads:`, without which no waiver resolves under the probe root.
+- `predicate-reclassification` part 18 adds a `FAIL_WAIVED` world. A waiver-reading change reads RECLASSIFIES and an unrelated entry change reads STABLE having compared. Mutant `m-escbase` is killed. Receipt `receipt-bl896.sh` replaces `verify: manual`.
+
+### BL-904 closed: the story-base history walk refuses a deleted-then-re-added story, and its pathspec is anchored at the repository top
+
+- `record-only-diff.sh` `ro_story_never` asks `rev-list -1 --full-history <base> -- <story>` in both operand forms of `story-base`. A commit there exits 1, and a shallow repository or a failed walk exits 2. `--full-history` catches a deletion hidden behind a merge whose side never held the story.
+- The pathspec is `:(top,literal)$sb_rel`. Under `-C <subdirectory>` (the merge passes the manifest's raw `worktree` field) the bare top-relative pathspec resolved against the -C directory, so a story deleted and re-added read as never in history and was accepted.
+- Receipt `receipt-bl904.sh` has 8 cells, including `sh-subdir`, plus a seed-shape check that the world expresses the defect. Arm `story_hist` carries mutants M58, M59 and M66 (the unanchored pathspec restored).
+
+### BL-905 closed: a canonical-run claim is bound to an executed run
+
+- **`merge-review-shards.sh --record-run <qa shard-dir | serial review file> [--dir <subdir>] -- <invocation>`.**
+  - It derives the record key and frozen sha, and refuses when the frozen worktree's HEAD is not the frozen sha.
+  - It runs the invocation in the frozen worktree and extracts the summary line.
+  - It writes `run.<key>.{sha,exit,dir,invocation,result}` into the lead's story record.
+  - It prints `RECORDED-RESULT:` and `RECORDED-RUN:`.
+  - It never refuses on a non-zero exit. With no summary line it writes nothing and exits non-zero.
+- **The run binding.**
+  - The merge and `--check-serial` hold a PASS in a held era to a recorded run at the frozen sha (`run_bind`, on the canonical-run RUN branch only; the record-only `none, <reason>` path is untouched).
+  - The recorded invocation is held to RUN-FILTER.
+  - The `Canonical result:` value must equal the recorded line after normalisation: backticks stripped, `=` runs stripped, whitespace collapsed.
+  - Latest run wins within a key.
+- **Cross-sha reuse.** The lookup order is this pass's key, then an earlier pass's run at the same sha (equal sha), then, with `--story`, an earlier pass's run whose change since is record-only by `record-only-diff.sh paths`. Anything else refuses.
+- **The held-era sentinel.** A new sentinel, `RUN_SENTINEL`, is read from qa.md at the base. `--record-partition` records the era as `run-era.<key>`. A held era with no matching record refuses and names the `--record-run` command.
+- **LEGACY.** A qa.md at the base without the sentinel reads one `LEGACY: canonical-run record not checked:` line and the merge proceeds as before. The old `CANON_SENTINEL` is not reused, because a consumer's installed qa.md already carries it and has no recorder.
+- **The serial form requires `--frozen <go-signal sha>`.** It used to read the frozen worktree's own HEAD as the frozen sha and compare HEAD with HEAD, a check that could not fire. It now compares the operand literally (never resolved) with the worktree's HEAD, and a shard directory refuses `--frozen` and keeps the manifest's sha.
+- **Role prose.** `qa.md` prescribes the recorder, which only cross-1 or the serial seat runs, in the background because it can take about 25 minutes. It tells the seat to copy `RECORDED-RESULT:` verbatim and alone into `Canonical result:`, and `RECORDED-RUN:` into `Canonical run:`. `implementation.md` names the refusal.
+- **Quoting and era.** The recorded invocation keeps its quoting through `rr_quote`, so a quoted `-m` marker can merge. `sr_era` is the one era decision, shared by the merge and `--check-serial`. Under `--lead-range`, the base blob decides the era only for a story whose dispatch is recorded. Otherwise the installed qa.md decides, and the refusal names `--record-dispatch s<N>-<idx> <sha>` from the lead checkout, or a QA re-run at the current base.
+- **Fixtures.** `review-shard-merge` predicate `run_rec` (32 cells) with mutants M60-M65, M67-M72 and M74-M76, and `receipt-bl905.sh`. review-reroute's seeded qa.md roots drop the run sentinel. `invocations.decl`'s `*` row is 672.
+- **Sliced matrix.** `review-shard-merge/run.sh --matrix` takes `RSM_MATRIX_SLICE=k/n`, and `--merge-slices` joins the slices against the recorded population. Measured on this tip, 5 slices gave 6622 pairs, with none missing and none counted twice. Mutant M73 is scored by hand.
+- **readset-skip determinism (BL-868).** The slot-world stub sleep now blocks once the nobound deriver's output holds twenty breaks, and failopen waits for that block before it kills, so the fixture's subject-start count no longer moves with scheduling. Its invocations.decl row stays 1109.
+- **Measured cost, operator-accepted.** 1 extra full run in 16 s320 QA passes (2-1 p2, de17fddaa8e5..6a665733f34d, 9 changed paths, first non-record path `_bmad-output/implementation-artifacts/s320/pool-pnl-il-investigation.md`).
+- **Consumers must:**
+  - Pull this release so that qa.md carries the new sentinel. Until then the consumer reads LEGACY (graph's installed qa.md has 0 copies of the sentinel).
+  - Run each QA canonical run through `--record-run` from the lead checkout, at that pass's own frozen sha. An earlier pass's run is refused unless it is at the same sha or record-only.
+  - Pass `--frozen <full go-signal sha>` for the serial form.
+  - Copy the printed lines into `Canonical result:` and `Canonical run:` unedited. A hand-typed pair is refused in a held era.
+  - Keep the `Canonical result:` line a bare copy. Commentary goes on the next line. All 3 of graph's s320 serial reviews put commentary on that line, and each would be refused in a held era. This is the first behaviour change a consumer's QA seat will hit.
+- **No timeout on `--record-run`.** A hung runner blocks the seat until the harness kills it. Nothing is recorded, so it fails closed. graph's s320 serial canonical runs took 91-124s.
+- **Residual, accepted.** Runner mode binds a PASS's claim to an executed run and its recorded invocation. It does not stop a seat that deliberately runs a stub. That is deliberate fabrication, which the operator accepted when choosing runner mode over a lead re-run. The remedy, if it is ever wanted, is binding the recorded invocation to the conventions' declared canonical invocation.
+
+### The release commit runs `backlog-rotate.sh --apply`
+
+- `CLAUDE.md` now says the release commit adds `VERSION` and the heading and runs `scripts/backlog-rotate.sh --apply`, so an entry archives in its release. The sentence cost the durable channel its headroom: `A6 ok -- compaction-durable channel 74238/74240 bytes`.
+
 ## [0.998.0] - 2026-11-03
 
 Batch b249, cluster b249-c4, first half. Closes BL-828 and advances BL-510, BL-868, BL-615 and BL-550; files BL-909 and BL-910.

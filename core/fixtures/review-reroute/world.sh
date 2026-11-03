@@ -162,7 +162,8 @@ rr_qroot() {
   for s in tpl none; do
     mkdir -p "$1/$s/core/skills/ai-dlc/steps" "$1/$s/core/team-roles" || return 1
     cp "$2" "$1/$s/core/skills/ai-dlc/steps/gate-validation.md" && cp "$3" "$1/$s/core/team-roles/code-reviewer.md" || return 1
-    grep -v '^Class:' "$4" > "$1/$s/core/team-roles/qa.md"
+    # The run sentinel (BL-905) is dropped too: these roots test the Class template, not the run record.
+    grep -v -e '^Class:' -e 'copied from `--record-run`' "$4" > "$1/$s/core/team-roles/qa.md"
   done
   d="$(awk '/^Class: [A-Z_]+( \| [A-Z_]+)+$/ { print; exit }' "$3")"
   [ -n "$d" ] || return 1

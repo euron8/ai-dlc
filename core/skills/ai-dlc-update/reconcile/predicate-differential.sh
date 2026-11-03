@@ -148,6 +148,23 @@ else
   done
 fi
 
+# THE CONSUMER'S ESCALATIONS FILE, RESOLVED ONCE, THE SAME WAY. validate-gate-adjudication.sh reads
+# it in `--series` mode whenever a series carries a FAIL_WAIVED verdict, defaulting to
+# `$AI_DLC_PROJECT_ROOT/docs/escalations/pending.md` -- the probe root on each side, which holds no
+# such file, so both sides read the same absent input and agree: a release that changes how waivers
+# are read was unobservable. It is consumer DATA, so both sides get the consumer's copy, by path. A
+# caller that set the variable explicitly keeps its value. An absent file (or one the consumer reader
+# refuses) is passed as a path that does NOT exist, never as an empty value: the predicate reads an
+# empty value as "default to the probe root", which would silently pick up distribution data the
+# day a docs/ path entered a read-set. No other site's entry reads AI_DLC_ESCALATIONS.
+if [ -n "${AI_DLC_ESCALATIONS+x}" ]; then
+  PD_ESC="$AI_DLC_ESCALATIONS"
+elif cr_test "$CONSUMER" -f docs/escalations/pending.md; then
+  PD_ESC="$CONSUMER/docs/escalations/pending.md"
+else
+  PD_ESC="$TMP/no-escalations/pending.md"
+fi
+
 if [ ! -s "$TMP/sites.tsv" ]; then
   emit PREDICATE-UNDECIDABLE "predicate-sites.md" "the manifest parsed to ZERO complete sites. An empty site set produces no rows and reads exactly like a clean differential, so it is reported instead."
   exit 0
@@ -271,14 +288,14 @@ $TMP/root-$side/${f%/*}" ;; esac
     # the cwd is the consumer, and `CLAUDE_PROJECT_DIR` or an inherited `AI_DLC_PROJECT_ROOT`
     # point there too -- so a schema-only change compares one schema with itself and reads
     # STABLE. A walk-up marker alone does not fix that: an inherited AI_DLC_PROJECT_ROOT wins
-    # over the walk. Consumer data the probe root cannot hold is passed by path (PD_EXT above).
+    # over the walk. Consumer data the probe root cannot hold is passed by path (PD_EXT and PD_ESC above).
     # The predicate runs AT the consumer root (cr_run), as the `( cd … )` it replaces did. `$inv`
     # is split into words under the run's `set -f` and never pathname-expanded: an argument such
     # as `--root .` or a gate-metrics path is the predicate's to resolve.
     # PREFIX ASSIGNMENTS, NEVER `env`: bash exports them to cr_run's command, and an `env` binary is
     # a fork of a tool the hermetic farm does not declare (it exited 127 in ledger-reverify).
-    AI_DLC_PROJECT_ROOT="$TMP/root-base" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" cr_run "$CONSUMER" bash "$TMP/root-base/$P_ENTRY"   $inv > "$TMP/out-base" 2>&1
-    AI_DLC_PROJECT_ROOT="$TMP/root-theirs" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" cr_run "$CONSUMER" bash "$TMP/root-theirs/$P_ENTRY" $inv > "$TMP/out-theirs" 2>&1
+    AI_DLC_PROJECT_ROOT="$TMP/root-base" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" AI_DLC_ESCALATIONS="$PD_ESC" cr_run "$CONSUMER" bash "$TMP/root-base/$P_ENTRY"   $inv > "$TMP/out-base" 2>&1
+    AI_DLC_PROJECT_ROOT="$TMP/root-theirs" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" AI_DLC_ESCALATIONS="$PD_ESC" cr_run "$CONSUMER" bash "$TMP/root-theirs/$P_ENTRY" $inv > "$TMP/out-theirs" 2>&1
     a_base="$(sed -nE "$P_VERDICT" "$TMP/out-base" | sort -u | tr '\n' ',')"
     a_theirs="$(sed -nE "$P_VERDICT" "$TMP/out-theirs" | sort -u | tr '\n' ',')"
     # WHETHER EACH SIDE SPOKE ON THIS SERIES, recorded per side in columns 4 and 5 of the pairs
