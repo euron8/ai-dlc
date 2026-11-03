@@ -389,7 +389,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    (seat, story ordinal) plus ONE cross-story agent per seat that reads every
    story ("The cross agent" below). The
    ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints
-   (`<shards-dir>` is the next review pass's `s<N>/shards/<artifact>-p<M>/`, which must exist),
+   (`<shards-dir>` is the path `scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` prints for the next review pass, the directory shaped `s<N>/shards/<artifact>-p<M>/`; the lead builds every brief output path, `--map` argument, beat-join path and merge argument from that printed path and never types a shard dir name; "Shard a multi-file artifact" below states the mode's rules),
    and each agent's brief carries its `shard:` line. A round spawns seats x (K + 1)
    agents, K being the story count.
    **When the subject is a single document** (one path), the round is sharded (Rule 28,
@@ -485,8 +485,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `<ordinals>` every ordinal 1..K comma-joined without padding, plus the whole map, and it closes with `--mark`
    under the shard word `cross`. The story ordinals are the ones
    `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints, `<shards-dir>` being
-   the next review pass's `s<N>/shards/<artifact>-p<M>/`, which the lead creates first, as item 1
-   does for the party round; `--map` refuses the `<artifact>-elicitation/` directory, whose name is
+   the path `scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` prints for the next review pass (shaped `s<N>/shards/<artifact>-p<M>/`), which the lead runs first and from which it builds every brief output path, `--map` argument, beat-join path and merge argument, never typing a shard dir name; `--map` refuses the `<artifact>-elicitation/` directory, whose name is
    not `<artifact>-p<M>`. A `stories/` holding ONE file is ONE `adversary` briefed
    `shard: 1/1 <story-index>` (Rule 28, files axis) with no cross shard, never `shard: none (…)`.
    One document that `partition-document.sh --map` partitions
@@ -701,8 +700,16 @@ Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` tok
 
 **Shard a multi-file artifact (Rule 28, "Split dispatch": files axis).** When the artifact under
 review is two or more files (`stories/`), dispatch one `adversary` shard per story plus ONE
-cross-story shard, in waves (Rule 28, "Split dispatch"). The part set is derived: create
-`_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/`, then run
+cross-story shard, in waves (Rule 28, "Split dispatch"). The part set is derived: run
+`scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]`, which creates
+the pass directory (shaped `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/`) and prints its
+physical absolute path; that printed path is `<that dir>` everywhere below and the lead never types a shard
+dir name. `--sprint` is required when the artifact is not under `planning-artifacts/s<N>/`, and then it is
+the route snapshot's `sprint_id`. A refusal before any member of pass M is dispatched names the next pass;
+take it. Once any member of pass M is dispatched, pass M is resumed with `partition-document.sh --shard-dir
+--existing <artifact path> <M> [--sprint <N>]`, which creates nothing and prints the same path, never
+skipped: every beat-join, MISSING re-dispatch, `--rerun` merge and post-compaction recovery uses
+`--existing`, and only the first creation of a pass uses the creating form. Then run
 `scripts/ai-dlc/merge-adversarial-shards.sh --map <that dir>`, which prints
 `<ordinal>\t<basename>` per story. Each per-story shard gets its ordinal and basename, the line
 `shard: <ordinal>/<K> <basename>`, and the output path `<that dir>/<ordinal>.md`. The cross-story
@@ -723,8 +730,11 @@ serial (exception 2).
 review is one file, run `scripts/ai-dlc/partition-document.sh --map <artifact path>`. Exit 3 with a
 `SERIAL:` line means the document does not partition: dispatch ONE adversary whose brief carries
 `shard: none (serial-document)` (Rule 28 exception 4). Otherwise the map prints
-`<ordinal>\t<first-line>\t<last-line>\t<heading>` per part; create
-`_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/` and dispatch, in waves (Rule 28,
+`<ordinal>\t<first-line>\t<last-line>\t<heading>` per part; run
+`scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` (creating form for the
+first creation of pass M, `--shard-dir --existing` once any member of pass M is dispatched, as in "Shard a
+multi-file artifact"), which creates the pass directory (shaped `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/`)
+and prints its physical absolute path, that printed path being `<that dir>` below, and dispatch, in waves (Rule 28,
 "Split dispatch"), one `adversary` per part plus ONE cross-section shard. Each part shard gets its ordinal, its line
 range and heading, the line `shard: <ordinal>/<K> <heading>`, and the output path
 `<that dir>/<ordinal>.md`; it reads its line range of the REAL document, read-only, never a copy.
@@ -742,8 +752,11 @@ no cross finding outside its owner's shard repeats the owner's identical cited s
 
 **Shard the requirements subject (Rule 28, "Split dispatch": subject axis).** When the artifact
 under review is the requirements subject (`steps/requirements.md` section 5), the series is
-`s<N>/requirements-adversarial-p<M>` and every pass of it is sharded. Create
-`_bmad-output/planning-artifacts/s<N>/shards/requirements-p<M>/` and run
+`s<N>/requirements-adversarial-p<M>` and every pass of it is sharded. Run
+`scripts/ai-dlc/partition-document.sh --shard-dir <the subject manifest path> <M> [--sprint <N>]` (creating form for the first creation of pass M,
+`--shard-dir --existing` once any member of pass M is dispatched, as in "Shard a multi-file artifact"), which creates the
+pass directory (shaped `_bmad-output/planning-artifacts/s<N>/shards/requirements-p<M>/`) and prints its physical absolute path,
+that printed path being `<that dir>` below, and run
 `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>`, with the base read from the
 subject manifest, never re-derived. The map prints
 `<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>` per part. A subject that maps to one
@@ -960,8 +973,9 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    — a cycle that cannot converge because the sprint grows under it. Opposite failure, opposite
    remedy. Conflating the two parked a live pipeline for a day.)
 
-   **`RESTART_CYCLE` must MOVE the abandoned passes**, not leave them. A restart writes p1, p2, p3
-   over the dead cycle's files — and if the dead cycle ran to p17, then p4…p17 are still on disk,
+   **`RESTART_CYCLE` must MOVE the abandoned passes**, not leave them. A restart takes fresh pass
+   numbers from `partition-document.sh --shard-dir`, never p1, p2, p3 over the dead cycle's files, since write-ledger rows never expire and a
+   dir that holds them is refused — and if the dead cycle ran to p17, then p4…p17 are still on disk,
    the glob chains them onto the new series, and the gate adjudicates the corpse. `git mv` them to
    `planning-artifacts/archive/<series>-cycle-<n>/`. Do not delete them; retro reads them.
 

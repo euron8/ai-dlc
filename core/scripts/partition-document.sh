@@ -14,6 +14,29 @@
 #       writes the sections back over the document the manifest names. Exit 0 on
 #       `ASSEMBLED:` or `UNCHANGED:` (stdout).
 #
+#   partition-document.sh --shard-dir [--existing] <artifact path> <M> [--sprint <N>]
+#       stdout: ONE line, the physical absolute path of <state>/planning-artifacts/s<N>/shards/<name>-p<M>
+#       (no trailing slash), created if absent. <name> is the artifact path's basename without `.md`
+#       or a trailing `/`, except requirements-subject -> requirements and carry-over-evaluation ->
+#       coe; a name ending -adversarial or carrying -repair, -elicitation or -party refuses. N is K
+#       for a path under planning-artifacts/s<K>/ (a disagreeing --sprint refuses); else --sprint is
+#       required. The artifact is never stat-ed for naming and the sprint-status envelope is never read.
+#       <state> is AI_DLC_STATE_DIR when set; else the `_bmad-output`-style dir above planning-artifacts/s<K>/;
+#       else <parent of the git common dir>/_bmad-output, the root content-seal.sh writes the write ledger
+#       under (seal_review_locate), so a linked worktree's copy of an artifact resolves to the main checkout.
+#       For a path under planning-artifacts/s<K>/ inside a git repo, that dir's parent must equal the common-dir
+#       parent or the mode refuses (exit 2), the artifact belonging to another checkout's state. Any other
+#       artifact that exists in a linked worktree must be byte-identical to the lead checkout's copy at the same
+#       repo-relative path, else exit 2 (pass the lead checkout's copy). A tree with no git repo trusts the
+#       planning-artifacts/s<K>/ ancestor as written and refuses any other path.
+#       Refuses (exit 2, nothing created) when pass M has write-ledger rows under its
+#       `<state-basename>/planning-artifacts/s<N>/shards/<name>-p<M>/` prefix, a merged record
+#       s<N>/<name>-adversarial-p<M>.md, or a non-empty dir; the message names the next free pass.
+#       --existing resumes a dispatched pass: creates nothing, skips the ledger and non-empty
+#       refusals, refuses only an absent dir. A bad pass or sprint number is exit 64.
+#       The mode reads no project-root environment variable: its root is the git common-dir parent
+#       (or AI_DLC_STATE_DIR, or the planning-artifacts ancestor).
+#
 #   partition-document.sh --cross-groups <K>
 #       stdout: the CROSS GROUPS over parts 1..K, one line per group, `<g>\t<ordinal,ordinal,...>`.
 #   partition-document.sh --cross-owner <K> <ordinal,ordinal,...>
@@ -397,6 +420,142 @@ case "${1:-}" in
     [ -n "$3" ] || usage64 "--cross-owner needs the cited ordinals"
     cross_of "$((10#$2))" "$3"; exit $? ;;
 
+  --shard-dir)
+    shift
+    EXISTING=0; ART=""; PASS=""; SPR=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --existing) EXISTING=1; shift ;;
+        --sprint) [ "$#" -ge 2 ] || usage64 "--sprint needs a value"; SPR="$2"; shift 2 ;;
+        --*) usage64 "unknown flag $1" ;;
+        *) if [ -z "$ART" ]; then ART="$1"; elif [ -z "$PASS" ]; then PASS="$1"; else usage64 "unexpected argument $1"; fi; shift ;;
+      esac
+    done
+    [ -n "$ART" ] && [ -n "$PASS" ] || usage64 "--shard-dir [--existing] <artifact path> <pass> [--sprint <N>]"
+    case "$PASS" in [1-9]*) ;; *) usage64 "pass must be a positive integer with no leading zero (got '$PASS')" ;; esac
+    case "$PASS" in *[!0-9]*) usage64 "pass must be a positive integer with no leading zero (got '$PASS')" ;; esac
+    [ "${#PASS}" -le 4 ] || usage64 "pass must be at most 4 digits (got '$PASS')"
+    if [ -n "$SPR" ]; then
+      case "$SPR" in [1-9]*) ;; *) usage64 "--sprint must be a positive integer with no leading zero (got '$SPR')" ;; esac
+      case "$SPR" in *[!0-9]*) usage64 "--sprint must be a positive integer with no leading zero (got '$SPR')" ;; esac
+    fi
+    A="$ART"
+    while [ "${#A}" -gt 1 ] && [ "${A%/}" != "$A" ]; do A="${A%/}"; done
+    NAME="${A##*/}"; NAME="${NAME%.md}"
+    case "$NAME" in
+      requirements-subject) NAME=requirements ;;
+      carry-over-evaluation) NAME=coe ;;
+    esac
+    case "$NAME" in
+      ''|.|..) usage64 "cannot derive an artifact name from '$ART'" ;;
+      *-adversarial) refuse "'$ART' derives the name '$NAME', which names the adversarial series and not an artifact; pass the artifact path" ;;
+      *-repair*|*-elicitation*|*-party*) refuse "'$ART' derives the name '$NAME', which is a repair, elicitation or party round and not a review artifact; this mode creates review pass dirs only" ;;
+    esac
+    case "$A" in /*) ;; *) A="$PWD/$A" ;; esac
+    PK=""
+    case "$A" in
+      */planning-artifacts/s[0-9]*/*)
+        PK="${A#*/planning-artifacts/s}"; PK="${PK%%/*}"
+        case "$PK" in ''|*[!0-9]*) PK="" ;; esac ;;
+    esac
+    if [ -n "$PK" ]; then
+      [ -z "$SPR" ] || [ "$SPR" = "$PK" ] || refuse "--sprint $SPR disagrees with the sprint s$PK in '$ART'"
+      SN="$PK"
+    else
+      [ -n "$SPR" ] || usage64 "'$ART' is not under planning-artifacts/s<N>/; pass --sprint <N> (the route snapshot's sprint_id)"
+      SN="$SPR"
+    fi
+    # THE STATE DIR, by the artifact path alone: (1) AI_DLC_STATE_DIR when set, (2) the component above
+    # planning-artifacts/s<K>/ when the path carries it, (3) the PARENT OF THE GIT COMMON DIR of the
+    # path's nearest existing ancestor plus /_bmad-output. A relative AI_DLC_STATE_DIR is read against
+    # (3)'s root. The common-dir parent is the root content-seal.sh writes the ledger under, resolved the
+    # same way (seal_review_locate: GIT_* unset, --path-format=absolute with the older-git fallback,
+    # physical), so a linked worktree's own copy of an artifact still yields the main checkout's dir.
+    # Case (2) is checked against that root when a git repo exists: a state dir whose parent differs
+    # refuses, because its ledger rows would land in the other checkout. No git repo: (2) is trusted
+    # as written and (3) refuses. AI_DLC_STATE_DIR skips the check. In (3), an artifact that EXISTS in a
+    # linked worktree must be byte-identical to the lead checkout's copy at the same repo-relative path
+    # (the later --map and merge read the document), else it refuses; an absent artifact is not stat-ed.
+    SD_TOP=""
+    sd_top() {
+      SD_P="${A%/*}"
+      while [ ! -d "$SD_P" ] && [ -n "$SD_P" ]; do SD_P="${SD_P%/*}"; done
+      SD_TOP="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "${SD_P:-/}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )"
+      case "$SD_TOP" in
+        /*) ;;
+        *) SD_TOP="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "${SD_P:-/}" rev-parse --git-common-dir 2>/dev/null )" || SD_TOP=""
+           case "$SD_TOP" in /*|'') ;; *) SD_TOP="${SD_P:-/}/$SD_TOP" ;; esac ;;
+      esac
+      [ -n "$SD_TOP" ] || return 1
+      SD_O="$PWD"; cd -P "$SD_TOP" 2>/dev/null || return 1; SD_TOP="$PWD"; cd "$SD_O"
+      SD_TOP="${SD_TOP%/*}"
+    }
+    sd_twin() { # the artifact, when it exists in a linked worktree, must equal the lead checkout's copy
+      [ -f "$A" ] || return 0
+      SD_WT="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "${SD_P:-/}" rev-parse --show-toplevel 2>/dev/null )" || return 0
+      [ -n "$SD_WT" ] && [ "$SD_WT" != "$SD_TOP" ] || return 0
+      SD_O="$PWD"; cd -P "${A%/*}" 2>/dev/null && SD_AP="$PWD/${A##*/}" || SD_AP="$A"; cd "$SD_O"
+      case "$SD_AP" in "$SD_WT"/*) SD_TW="$SD_TOP/${SD_AP#"$SD_WT"/}" ;; *) return 0 ;; esac
+      [ -f "$SD_TW" ] && cmp -s "$SD_AP" "$SD_TW" || refuse "'$SD_AP' is in the linked worktree $SD_WT and differs from, or has no counterpart at, the lead checkout's copy $SD_TW; pass the lead checkout's copy so the document partitioned and the document merged are one file"
+    }
+    if [ -n "${AI_DLC_STATE_DIR:-}" ]; then
+      SD_STATE="${AI_DLC_STATE_DIR%/}"
+      case "$SD_STATE" in /*) ;; *) sd_top || refuse "cannot find a git repository above '$ART'; give a path under planning-artifacts/s<N>/ or set AI_DLC_STATE_DIR"; SD_STATE="$SD_TOP/$SD_STATE" ;; esac
+    else
+      case "$A" in
+        */planning-artifacts/s[0-9]*/*)
+          SD_STATE="${A%%/planning-artifacts/s[0-9]*}"
+          if sd_top; then
+            SD_PAR="${SD_STATE%/*}"
+            if [ -d "$SD_PAR" ]; then SD_O="$PWD"; cd -P "$SD_PAR" && SD_PAR="$PWD"; cd "$SD_O"; fi
+            [ "$SD_PAR" = "$SD_TOP" ] || refuse "'$ART' sits under the state dir $SD_STATE, whose parent is $SD_PAR, but the write ledger for this repository is under $SD_TOP; the artifact belongs to another checkout's state"
+          fi ;;
+        *) sd_top || refuse "cannot find a git repository above '$ART'; give a path under planning-artifacts/s<N>/ or set AI_DLC_STATE_DIR"
+           sd_twin
+           SD_STATE="$SD_TOP/_bmad-output" ;;
+      esac
+    fi
+    SD_PLAN="$SD_STATE/planning-artifacts"
+    SD_LEDGER="$SD_PLAN/.artifact-writes.jsonl"
+    # The ledger is read ONCE, with grep -F on the literal `"path":"<prefix>` (and the one-space
+    # spelling) up to `-p`, and every pass is then tested in-shell: the ledger is one JSON object per
+    # line written by one hook, the prefix carries regex metacharacters so -F is the safe matcher, and
+    # this script has no jq. The quote before `path` keeps `transcript_path` from matching, and the
+    # trailing `/` on each tested prefix keeps a -p10 sibling from matching p1.
+    SD_BASE="${SD_STATE##*/}/planning-artifacts/s$SN/shards/$NAME-p"
+    SD_ROWS=""
+    if [ -f "$SD_LEDGER" ]; then SD_ROWS="$(grep -F -e "\"path\":\"$SD_BASE" -e "\"path\": \"$SD_BASE" "$SD_LEDGER")"; fi
+    sd_nonempty() { # <dir>: 0 when the dir holds any entry (dotfiles included), no fork
+      for _e in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$_e" ] || [ -L "$_e" ] && return 0; done
+      return 1
+    }
+    sd_why() { # <M>: sets SD_WHY to why pass M is spent, empty when it is free
+      SD_WHY=""
+      case "$SD_ROWS" in
+        *"\"path\":\"$SD_BASE$1/"*|*"\"path\": \"$SD_BASE$1/"*) SD_WHY="the write ledger already holds rows under ${SD_BASE}$1/"; return 0 ;;
+      esac
+      if [ -e "$SD_PLAN/s$SN/$NAME-adversarial-p$1.md" ]; then SD_WHY="the merged record s$SN/$NAME-adversarial-p$1.md already exists"; return 0; fi
+      if [ -d "$SD_PLAN/s$SN/shards/$NAME-p$1" ] && sd_nonempty "$SD_PLAN/s$SN/shards/$NAME-p$1"; then SD_WHY="$SD_PLAN/s$SN/shards/$NAME-p$1 is non-empty on disk"; fi
+      return 0
+    }
+    SD_DIR="$SD_PLAN/s$SN/shards/$NAME-p$PASS"
+    if [ "$EXISTING" -eq 1 ]; then
+      [ -d "$SD_DIR" ] || refuse "pass $PASS has no shard dir at $SD_DIR; --existing resumes a dispatched pass and creates nothing"
+    else
+      sd_why "$PASS"
+      if [ -n "$SD_WHY" ]; then
+        SD_FIRST="$SD_WHY"; SD_NEXT=$((PASS + 1))
+        case "$SD_WHY" in "the write ledger"*) [ -e "$SD_PLAN/s$SN/$NAME-adversarial-p$PASS.md" ] || SD_FIRST="$SD_FIRST (dispatched, unmerged: resume it with --existing)" ;; esac
+        sd_why "$SD_NEXT"
+        while [ -n "$SD_WHY" ] && [ "$SD_NEXT" -le 9999 ]; do SD_NEXT=$((SD_NEXT + 1)); sd_why "$SD_NEXT"; done
+        refuse "pass $PASS of $NAME in s$SN is spent: $SD_FIRST; take pass $SD_NEXT (resume a dispatched pass with --existing)"
+      fi
+      mkdir -p "$SD_DIR" || refuse "cannot create $SD_DIR"
+    fi
+    cd "$SD_DIR" 2>/dev/null || refuse "cannot resolve $SD_DIR"
+    pwd -P
+    exit 0 ;;
+
   --map)
     shift
     DOC=""; REF=""
@@ -563,7 +722,7 @@ EOF
     printf 'ASSEMBLED: %s sha256=%s\n' "$DOC" "$NEW"
     exit 0 ;;
 
-  *) refuse "usage: partition-document.sh --map <doc> [--scope-ref <sha>] | --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>] | --assemble <dir>" ;;
+  *) refuse "usage: partition-document.sh --map <doc> [--scope-ref <sha>] | --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>] | --assemble <dir> | --shard-dir [--existing] <artifact path> <pass> [--sprint <N>]" ;;
 esac
 }
 # The program runs only when executed; sourced (a fixture asking a decision in process), it defines

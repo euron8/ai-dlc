@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # document-partition/run.sh -- partition-document.sh: the map, the split, and the assembler.
 #
 # WHAT IS AT STAKE. The partitioner decides where a single document is cut for sharded review and
@@ -28,7 +29,7 @@
 #     DECIDING arm, which must FAIL, and one named TWIN, an arm the measured matrix shows GREEN for
 #     that mutant, which must PASS. The kill is emitted through mutant_killed behind the same-run
 #     base pass of the deciding arm (B_<arm>, set beside that arm's ok above) and of the MX0
-#     control (B_MX0). The unmutated copy MX0 is asserted byte-identical to the subject the 35 arms
+#     control (B_MX0). The unmutated copy MX0 is asserted byte-identical to the subject the 47 arms
 #     just passed, so the arms' own verdicts are its verdicts and are not re-run on it.
 #   - MATRIX (`--matrix`): the unmutated copy and every mutant are scored against EVERY predicate,
 #     one MATRIX row each (printed by matrix.sh, every cell `<predicate>:killed=yes|no`), and each
@@ -47,7 +48,10 @@
 #   MX14 serial_dominant fence_table sep_outside_fence two_row prose_run single_line
 #   MX15 single_line | MX20 scope_changed scope_h3 scope_deletion scope_gap | MX21 scope_h3
 #   MX22 scope_deletion | MX23 scope_gap | MX24 cross_cover | MX25 cross_cover cross_owner
-#   MX26 cross_owner | MX27 cross_owner | MX0 (the unmutated copy, a CONTROL) none
+#   MX26 cross_owner | MX27 cross_owner | MX28 sd_merge sd_ledger | MX29 sd_name
+#   MX30 sd_name sd_merge sd_record sd_state sd_wt_state sd_wt_cmp sd_nogit | MX31 sd_merge sd_ledger | MX32 sd_p10 | MX33 sd_existing
+#   MX34 sd_wt_state sd_wt_cmp | MX35 sd_wt_cmp
+#   MX0 (the unmutated copy, a CONTROL) none
 # Each twin is the green arm nearest the deciding arm in subject: the sibling refusal, the sibling
 # fence/comment world, or the sibling --scope-ref / --cross-* arm.
 # MUTANT-MATRIX-DYNAMIC mutant-id why=mutant() passes its id argument "$mt_id" to mutant_killed; each mutant call (MX1, MX2, ...) names a literal id that carries its own row in this block
@@ -80,6 +84,14 @@
 # MUTANT-MATRIX MX25 decides=cross_cover twins=cross_refuse
 # MUTANT-MATRIX MX26 decides=cross_owner twins=cross_refuse
 # MUTANT-MATRIX MX27 decides=cross_owner twins=cross_refuse
+# MUTANT-MATRIX MX28 decides=sd_ledger twins=sd_state
+# MUTANT-MATRIX MX29 decides=sd_name twins=sd_state
+# MUTANT-MATRIX MX30 decides=sd_name twins=sd_xsprint
+# MUTANT-MATRIX MX31 decides=sd_ledger twins=sd_state
+# MUTANT-MATRIX MX32 decides=sd_p10 twins=sd_state
+# MUTANT-MATRIX MX33 decides=sd_existing twins=sd_state
+# MUTANT-MATRIX MX34 decides=sd_wt_state twins=sd_state
+# MUTANT-MATRIX MX35 decides=sd_wt_cmp twins=sd_state
 set -uo pipefail
 MATRIX=0
 case "${1:-}" in
@@ -495,7 +507,7 @@ sprint9() { # a `##` section that carries three `###` subsections
 g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -c user.name=fixture -c user.email=fixture@example.invalid "$@"; }
 git_world() { # -> world path; doc_eight committed as d.md, the base sha in $w/.B
   local w; w="$(world)" || return 1
-  g -C "$w" init -q && doc_eight > "$w/d.md" && g -C "$w" add d.md && g -C "$w" commit -qm base || return 1
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$w" init -q && doc_eight > "$w/d.md" && g -C "$w" add d.md && g -C "$w" commit -qm base || return 1
   g -C "$w" rev-parse HEAD > "$w/.B" || return 1
   printf '%s' "$w"
 }
@@ -629,7 +641,199 @@ p_cross_owner() { # the lowest g holding the two smallest cited ordinals; under 
   [ "$rc" -eq 64 ] && case "$o" in *'"2 7"'*) : ;; *) return 1 ;; esac
 }
 
-P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite scope_changed scope_h3 scope_deletion scope_absent scope_gap cross_cover cross_refuse cross_owner"
+# ----------------------------------------------------------- the shard dir (--shard-dir, BL-908)
+# Every world is a `git init` tree under mktemp. The artifact paths are NEVER created: the mode derives
+# from the path string alone, so a lightweight requirements p1 can create its dir before its manifest exists.
+# Arms own filesystem effects and exit codes; only sd_name, sd_merge and sd_state assert the printed path.
+sdw() { # -> a physical git world path with the state root's parent present
+  local sw; sw="$(world)" || return 1
+  sw="$(cd "$sw" && pwd -P)" || return 1
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$sw" init -q || return 1
+  printf '%s' "$sw"
+}
+sd() { # <script> <cwd> <args...> -> SD_OUT SD_ERR SD_RC of `--shard-dir <args>` run from <cwd>
+  local sd_s="$1" sd_c="$2"; shift 2
+  SD_OUT="$(cd "$sd_c" && bash "$sd_s" --shard-dir "$@" 2>"$sd_c/.sd-err")"; SD_RC=$?
+  SD_ERR="$(cat "$sd_c/.sd-err")"
+}
+sdrow() { printf '{"v":1,"kind":"artifact-write","path":"%s"}\n' "$1"; }
+sd_count() { local sc_n=0 sc_e; for sc_e in "$1"/* "$1"/.[!.]*; do [ -e "$sc_e" ] && sc_n=$((sc_n + 1)); done; printf '%s' "$sc_n"; }
+p_sd_name() { # each table row and the plain stem derive their name; a series name or round word refuses, creating nothing
+  local w pa r art fl nm ents
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"
+  for r in 'docs/architecture.md|--sprint 5|architecture' \
+           '_bmad-output/planning-artifacts/s5/stories/||stories' \
+           "$pa/s5/requirements-subject.md||requirements" \
+           '_bmad-output/planning-artifacts/s5/test-strategy.md||test-strategy' \
+           "$pa/s5/carry-over-evaluation.md||coe" \
+           'docs/prd.md|--sprint 5|prd'; do
+    art="${r%%|*}"; nm="${r##*|}"; fl="${r#*|}"; fl="${fl%|*}"
+    sd "$1" "$w" "$art" 1 $fl
+    [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$pa/s5/shards/$nm-p1" ] && [ -d "$SD_OUT" ] || return 1
+  done
+  for r in "$pa/s5/shards"/*adversarial*; do [ -e "$r" ] && return 1; done
+  [ ! -e "$w/docs/architecture.md" ] || return 1
+  ents="$(sd_count "$pa/s5/shards")"
+  for art in docs/architecture-adversarial.md docs/architecture-repair.md docs/requirements-elicitation.md docs/x-party-mode.md; do
+    sd "$1" "$w" "$art" 1 --sprint 5
+    [ "$SD_RC" -eq 2 ] && case "$SD_ERR" in "partition-document: REFUSED"*) : ;; *) return 1 ;; esac || return 1
+  done
+  [ "$(sd_count "$pa/s5/shards")" = "$ents" ]
+}
+p_sd_merge() { # the printed path is accepted by the SHIPPING merge's phases, and REC_PREFIX is the prefix the ledger refusal keys on
+  local w pa mg r art fl nm rp want
+  mg="$(dirname "$PD")/merge-adversarial-shards.sh"
+  [ -f "$mg" ] || return 1
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"
+  for r in 'docs/architecture.md|--sprint 5' '_bmad-output/planning-artifacts/s5/stories/|' "$pa/s5/requirements-subject.md|" "$pa/s5/carry-over-evaluation.md|"; do
+    art="${r%%|*}"; fl="${r#*|}"
+    sd "$1" "$w" "$art" 1 $fl
+    [ "$SD_RC" -eq 0 ] || return 1
+    nm="${SD_OUT##*/}"
+    rp="$( . "$mg"; merge_locate "$SD_OUT" && merge_rec_paths && printf '%s|%s' "$REC_PREFIX" "$SHARD_BASE" )" || return 1
+    want="_bmad-output/planning-artifacts/s5/shards/$nm/"
+    [ "$rp" = "$want|$nm" ] || return 1
+    # The binding: a ledger row at exactly the merge's REC_PREFIX spends the pass in the mode's own refusal.
+    sdrow "${rp%%|*}1.md" > "$pa/.artifact-writes.jsonl"
+    sd "$1" "$w" "$art" 1 $fl
+    [ "$SD_RC" -eq 2 ] && case "$SD_ERR" in *"take pass 2"*) : ;; *) return 1 ;; esac || return 1
+    rm -f "$pa/.artifact-writes.jsonl"
+  done
+}
+p_sd_ledger() { # refusal a: rows under the prefix refuse, name the next free pass, create nothing -- the dir never existed
+  local w pa sh
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"; sh="$pa/s5/shards"
+  mkdir -p "$pa" && { sdrow "_bmad-output/planning-artifacts/s5/shards/architecture-p1/1.md"; } > "$pa/.artifact-writes.jsonl" || return 1
+  sd "$1" "$w" docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 2 ] && [ -z "$SD_OUT" ] && [ "$(printf '%s\n' "$SD_ERR" | grep -c .)" -eq 1 ] || return 1
+  case "$SD_ERR" in "partition-document: REFUSED"*"write ledger"*"take pass 2"*) : ;; *) return 1 ;; esac
+  [ ! -e "$sh/architecture-p1" ] && [ ! -e "$sh/architecture-p2" ] || return 1
+  # p2 and p3 are spent too (p3 spelled with the one-space `"path": "` form): the chain walks to p4.
+  sdrow "_bmad-output/planning-artifacts/s5/shards/architecture-p2/9.md" >> "$pa/.artifact-writes.jsonl"
+  printf '{"kind":"artifact-write", "path": "_bmad-output/planning-artifacts/s5/shards/architecture-p3/2.md"}\n' >> "$pa/.artifact-writes.jsonl"
+  sd "$1" "$w" docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 2 ] && case "$SD_ERR" in *"take pass 4"*) : ;; *) return 1 ;; esac || return 1
+  # No merged record for p1: the unmerged suffix appears; once the record exists it does not.
+  case "$SD_ERR" in *"(dispatched, unmerged: resume it with --existing)"*) : ;; *) return 1 ;; esac
+  mkdir -p "$pa/s5" && : > "$pa/s5/architecture-adversarial-p1.md" || return 1
+  sd "$1" "$w" docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 2 ] && case "$SD_ERR" in *"unmerged: resume it with --existing)"*) return 1 ;; *"take pass 4"*) : ;; *) return 1 ;; esac || return 1
+  rm "$pa/s5/architecture-adversarial-p1.md" || return 1
+  sd "$1" "$w" docs/architecture.md 2 --sprint 5
+  [ "$SD_RC" -eq 2 ] && [ ! -e "$sh" ] || return 1
+  sd "$1" "$w" docs/architecture.md 4 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ -d "$sh/architecture-p4" ]
+}
+p_sd_xsprint() { # a row under the same dir name in ANOTHER sprint must not refuse
+  local w pa
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"
+  mkdir -p "$pa" && sdrow "_bmad-output/planning-artifacts/s4/shards/architecture-p1/1.md" > "$pa/.artifact-writes.jsonl" || return 1
+  sd "$1" "$w" docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ -d "$pa/s5/shards/architecture-p1" ]
+}
+p_sd_p10() { # rows under a -p10 sibling must not refuse p1
+  local w pa
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"
+  mkdir -p "$pa" && sdrow "_bmad-output/planning-artifacts/s5/shards/architecture-p10/1.md" > "$pa/.artifact-writes.jsonl" || return 1
+  sd "$1" "$w" docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ -d "$pa/s5/shards/architecture-p1" ]
+}
+p_sd_record() { # refusals b and c and the idempotent empty dir
+  local w pa sh
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"; sh="$pa/s5/shards"
+  mkdir -p "$pa/s5" "$sh/prd-p2" "$sh/prd-p3" "$sh/prd-p4" && : > "$pa/s5/prd-adversarial-p1.md" \
+    && : > "$sh/prd-p2/x.md" && : > "$sh/prd-p3/.hidden" || return 1
+  sd "$1" "$w" docs/prd.md 1 --sprint 5
+  [ "$SD_RC" -eq 2 ] && [ ! -e "$sh/prd-p1" ] && case "$SD_ERR" in *"merged record"*"take pass 4"*) : ;; *) return 1 ;; esac || return 1
+  sd "$1" "$w" docs/prd.md 2 --sprint 5
+  [ "$SD_RC" -eq 2 ] && case "$SD_ERR" in *"non-empty"*"take pass 4"*) : ;; *) return 1 ;; esac || return 1
+  [ "$(sd_count "$sh/prd-p2")" = 1 ] || return 1
+  sd "$1" "$w" docs/prd.md 3 --sprint 5
+  [ "$SD_RC" -eq 2 ] && case "$SD_ERR" in *"non-empty"*) : ;; *) return 1 ;; esac || return 1
+  sd "$1" "$w" docs/prd.md 4 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$sh/prd-p4" ] || return 1
+  sd "$1" "$w" docs/prd.md 5 --sprint 5; [ "$SD_RC" -eq 0 ] || return 1
+  sd "$1" "$w" docs/prd.md 5 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$sh/prd-p5" ]
+}
+p_sd_existing() { # --existing resumes without creating, skips refusals a and c, and refuses an absent dir
+  local w pa sh n
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"; sh="$pa/s5/shards"
+  sd "$1" "$w" --existing docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 2 ] && [ -z "$SD_OUT" ] && [ ! -e "$w/_bmad-output" ] && case "$SD_ERR" in "partition-document: REFUSED"*) : ;; *) return 1 ;; esac || return 1
+  sd "$1" "$w" docs/architecture.md 1 --sprint 5; [ "$SD_RC" -eq 0 ] || return 1
+  : > "$sh/architecture-p1/1.md"; sdrow "_bmad-output/planning-artifacts/s5/shards/architecture-p1/1.md" > "$pa/.artifact-writes.jsonl"
+  sd "$1" "$w" --existing docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ -n "$SD_OUT" ] || return 1
+  n="$(sd_count "$sh")"
+  sd "$1" "$w" --existing docs/architecture.md 2 --sprint 5
+  [ "$SD_RC" -eq 2 ] && [ ! -e "$sh/architecture-p2" ] && [ "$(sd_count "$sh")" = "$n" ]
+}
+p_sd_sprint() { # --sprint required outside s<K>/, refused on disagreement; a bad pass or sprint is exit 64
+  local w pa a
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"
+  sd "$1" "$w" docs/architecture.md 1
+  [ "$SD_RC" -eq 64 ] && [ ! -e "$w/_bmad-output" ] || return 1
+  sd "$1" "$w" _bmad-output/planning-artifacts/s5/test-strategy.md 1 --sprint 6
+  [ "$SD_RC" -eq 2 ] && [ ! -e "$w/_bmad-output" ] && case "$SD_ERR" in *disagrees*) : ;; *) return 1 ;; esac || return 1
+  sd "$1" "$w" _bmad-output/planning-artifacts/s5/test-strategy.md 1 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ -d "$pa/s5/shards/test-strategy-p1" ] || return 1
+  for a in "01" "0" "x" "" "12345"; do
+    sd "$1" "$w" docs/prd.md "$a" --sprint 5; [ "$SD_RC" -eq 64 ] || return 1
+  done
+  sd "$1" "$w" docs/prd.md 1 --sprint 05; [ "$SD_RC" -eq 64 ] && [ ! -e "$pa/s5/shards/prd-p1" ]
+}
+p_sd_state() { # AI_DLC_STATE_DIR is honoured; the answer is the same from the root and from a subdirectory
+  local w pa o1 o2 o3
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"
+  SD_OUT="$(cd "$w" && AI_DLC_STATE_DIR="$w/alt state" bash "$1" --shard-dir docs/architecture.md 1 --sprint 5 2>/dev/null)" || return 1
+  [ "$SD_OUT" = "$w/alt state/planning-artifacts/s5/shards/architecture-p1" ] && [ -d "$SD_OUT" ] && [ ! -e "$w/_bmad-output" ] || return 1
+  mkdir -p "$w/sub/deep" || return 1
+  sd "$1" "$w" docs/architecture.md 1 --sprint 5; o1="$SD_OUT"; [ "$SD_RC" -eq 0 ] || return 1
+  sd "$1" "$w/sub/deep" --existing ../../docs/architecture.md 1 --sprint 5; o2="$SD_OUT"; [ "$SD_RC" -eq 0 ] || return 1
+  sd "$1" "$w/sub" --existing "$w/docs/architecture.md" 1 --sprint 5; o3="$SD_OUT"; [ "$SD_RC" -eq 0 ] || return 1
+  [ "$o1" = "$pa/s5/shards/architecture-p1" ] && [ "$o1" = "$o2" ] && [ "$o1" = "$o3" ] || return 1
+  sd "$1" "$w/sub/deep" ../../docs/architecture.md 2 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$pa/s5/shards/architecture-p2" ] && [ ! -e "$w/sub/deep/_bmad-output" ] && [ ! -e "$w/sub/_bmad-output" ]
+}
+
+sdwt() { # -> SDM (a main repo with docs/architecture.md committed) and SDW (a linked worktree of it), both physical
+  local sw; sw="$(world)" || return 1
+  sw="$(cd "$sw" && pwd -P)" || return 1
+  SDM="$sw/main"; SDW="$sw/wt"
+  mkdir -p "$SDM/docs" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$SDM" init -q && printf '# Architecture\n' > "$SDM/docs/architecture.md" \
+    && g -C "$SDM" add docs/architecture.md && g -C "$SDM" commit -qm base && g -C "$SDM" worktree add -q --detach "$SDW" || return 1
+}
+p_sd_wt_state() { # (a) an s<K>/ path in a linked worktree's state is refused naming both roots; the same path in the main checkout prints the main shard dir
+  sdwt || return 1
+  sd "$1" "$SDW" "$SDW/_bmad-output/planning-artifacts/s5/stories/a.md" 1
+  [ "$SD_RC" -eq 2 ] && [ -z "$SD_OUT" ] && [ ! -e "$SDW/_bmad-output" ] && [ ! -e "$SDM/_bmad-output" ] || return 1
+  case "$SD_ERR" in "partition-document: REFUSED"*"$SDW"*"$SDM"*) : ;; *) return 1 ;; esac
+  sd "$1" "$SDW" "$SDM/_bmad-output/planning-artifacts/s5/stories/a.md" 1
+  [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$SDM/_bmad-output/planning-artifacts/s5/shards/a-p1" ] && [ -d "$SD_OUT" ]
+}
+p_sd_wt_cmp() { # (b) an artifact differing in the linked worktree is refused; an identical copy, and the main checkout's own path, print the main shard dir
+  sdwt || return 1
+  local pa="$SDM/_bmad-output/planning-artifacts/s5/shards"
+  sd "$1" "$SDW" docs/architecture.md 1 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$pa/architecture-p1" ] || return 1
+  printf 'edited in the worktree\n' >> "$SDW/docs/architecture.md"
+  sd "$1" "$SDW" docs/architecture.md 2 --sprint 5
+  [ "$SD_RC" -eq 2 ] && [ -z "$SD_OUT" ] && [ ! -e "$pa/architecture-p2" ] && [ ! -e "$SDW/_bmad-output" ] || return 1
+  sd "$1" "$SDW" "$SDM/docs/architecture.md" 3 --sprint 5
+  [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$pa/architecture-p3" ]
+}
+p_sd_nogit() { # (c) no git repo: an s<K>/ path is accepted as written, any other path is refused
+  local w; w="$(world)" || return 1
+  w="$(cd "$w" && pwd -P)" || return 1
+  mkdir -p "$w/n" || return 1
+  SD_OUT="$(cd "$w/n" && GIT_CEILING_DIRECTORIES="$w" bash "$1" --shard-dir "$w/n/_bmad-output/planning-artifacts/s5/stories/" 1 2>/dev/null)"; SD_RC=$?
+  [ "$SD_RC" -eq 0 ] && [ "$SD_OUT" = "$w/n/_bmad-output/planning-artifacts/s5/shards/stories-p1" ] && [ -d "$SD_OUT" ] || return 1
+  SD_OUT="$(cd "$w/n" && GIT_CEILING_DIRECTORIES="$w" bash "$1" --shard-dir docs/architecture.md 1 --sprint 5 2>/dev/null)"; SD_RC=$?
+  [ "$SD_RC" -eq 2 ] && [ -z "$SD_OUT" ] && [ ! -e "$w/n/_bmad-output/planning-artifacts/s5/shards/architecture-p1" ]
+}
+
+P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite scope_changed scope_h3 scope_deletion scope_absent scope_gap cross_cover cross_refuse cross_owner sd_name sd_merge sd_ledger sd_xsprint sd_p10 sd_record sd_existing sd_sprint sd_state sd_wt_state sd_wt_cmp sd_nogit"
 
 arm() { # <predicate> <label> -- returns 0 only when the predicate held, so the caller binds B_<predicate>
   if "p_$1" "$PD"; then ok "$2"; return 0; else bad "$2"; return 1; fi
@@ -669,6 +873,18 @@ if p_scope_gap "$PD"; then ok "A32: --scope-ref --split -> gap rows around the p
 if p_cross_cover "$PD"; then ok "A33: --cross-groups K=2..24 -> every pair covered (the fixture's own check, control: K=8 minus its last row has a hole), 1<=G<=6, rows <= 2*ceil(K/4), identical on two runs; K=2 one row '1<TAB>1,2'; K=8 six rows"; B_cross_cover=1; else bad "A33: --cross-groups K=2..24 -> every pair covered (the fixture's own check, control: K=8 minus its last row has a hole), 1<=G<=6, rows <= 2*ceil(K/4), identical on two runs; K=2 one row '1<TAB>1,2'; K=8 six rows"; fi
 if p_cross_refuse "$PD"; then ok "A34: --cross-groups K in {1,0,x,2.5,-3,''} -> exit 64, nothing on stdout; the K=8 twin exits 0 with rows"; B_cross_refuse=1; else bad "A34: --cross-groups K in {1,0,x,2.5,-3,''} -> exit 64, nothing on stdout; the K=8 twin exits 0 with rows"; fi
 if p_cross_owner "$PD"; then ok "A35: --cross-owner -> the lowest g holding the two smallest cited ordinals (order and padding free); under two distinct or out of range -> exit 64"; B_cross_owner=1; else bad "A35: --cross-owner -> the lowest g holding the two smallest cited ordinals (order and padding free); under two distinct or out of range -> exit 64"; fi
+if p_sd_name "$PD"; then ok "A36: --shard-dir derives the name for each row of the table and the plain stem (architecture, stories, requirements, test-strategy, coe, prd); a series name or a round word refuses and creates nothing"; B_sd_name=1; else bad "A36: --shard-dir derives the name for each row of the table and the plain stem (architecture, stories, requirements, test-strategy, coe, prd); a series name or a round word refuses and creates nothing"; fi
+if p_sd_merge "$PD"; then ok "A37: the printed path is accepted by the shipping merge's merge_locate and merge_rec_paths, and the merge's REC_PREFIX is the prefix the ledger refusal keys on"; B_sd_merge=1; else bad "A37: the printed path is accepted by the shipping merge's merge_locate and merge_rec_paths, and the merge's REC_PREFIX is the prefix the ledger refusal keys on"; fi
+if p_sd_ledger "$PD"; then ok "A38: ledger rows under the pass prefix refuse (exit 2, one REFUSED line, nothing created) and name the next free pass, through a pass spelled with the one-space form"; B_sd_ledger=1; else bad "A38: ledger rows under the pass prefix refuse (exit 2, one REFUSED line, nothing created) and name the next free pass, through a pass spelled with the one-space form"; fi
+if p_sd_xsprint "$PD"; then ok "A39: ledger rows under the same dir name in ANOTHER sprint do not refuse"; B_sd_xsprint=1; else bad "A39: ledger rows under the same dir name in ANOTHER sprint do not refuse"; fi
+if p_sd_p10 "$PD"; then ok "A40: ledger rows under a -p10 sibling do not refuse pass 1"; B_sd_p10=1; else bad "A40: ledger rows under a -p10 sibling do not refuse pass 1"; fi
+if p_sd_record "$PD"; then ok "A41: a merged record and a non-empty dir (dotfile included) refuse naming the next pass; an existing EMPTY dir is accepted twice"; B_sd_record=1; else bad "A41: a merged record and a non-empty dir (dotfile included) refuse naming the next pass; an existing EMPTY dir is accepted twice"; fi
+if p_sd_existing "$PD"; then ok "A42: --existing prints without creating, skips the ledger and non-empty refusals, and refuses an absent dir"; B_sd_existing=1; else bad "A42: --existing prints without creating, skips the ledger and non-empty refusals, and refuses an absent dir"; fi
+if p_sd_sprint "$PD"; then ok "A43: --sprint is required outside s<K>/ and refused when it disagrees; a bad pass or sprint is exit 64"; B_sd_sprint=1; else bad "A43: --sprint is required outside s<K>/ and refused when it disagrees; a bad pass or sprint is exit 64"; fi
+if p_sd_state "$PD"; then ok "A44: AI_DLC_STATE_DIR is honoured; the same path prints from the root and from a subdirectory"; B_sd_state=1; else bad "A44: AI_DLC_STATE_DIR is honoured; the same path prints from the root and from a subdirectory"; fi
+if p_sd_wt_state "$PD"; then ok "A45: an s<K>/ path under a linked worktree's own state is REFUSED naming the worktree and the main checkout, nothing created; the main checkout's path prints the main shard dir"; B_sd_wt_state=1; else bad "A45: an s<K>/ path under a linked worktree's own state is REFUSED naming the worktree and the main checkout, nothing created; the main checkout's path prints the main shard dir"; fi
+if p_sd_wt_cmp "$PD"; then ok "A46: an artifact differing in the linked worktree is REFUSED; an identical copy, and the main checkout's absolute path while the worktree differs, print the main checkout's shard dir"; B_sd_wt_cmp=1; else bad "A46: an artifact differing in the linked worktree is REFUSED; an identical copy, and the main checkout's absolute path while the worktree differs, print the main checkout's shard dir"; fi
+if p_sd_nogit "$PD"; then ok "A47: with no git repo an s<K>/ path is accepted as written and any other path is REFUSED"; B_sd_nogit=1; else bad "A47: with no git repo an s<K>/ path is accepted as written and any other path is REFUSED"; fi
 
 # ------------------------------------------------------------------------------ the mutants
 apply() { # <file> then (old, new) pairs through M_1_OLD.. env -- every anchor exactly once
@@ -738,12 +954,12 @@ if [ -f "$C0/partition-document.sh" ] && has "$CW/m" "## Section 4" && cmp -s "$
     score_all "$C0/partition-document.sh"
     matrix_row MX0 "$SC_DEAD"
     if [ -z "$SC_DEAD" ]; then
-      ok "CONTROL MX0 (unmutated copy): every one of the 35 predicates HOLDS on it, tripped=[] (matrix)"; B_MX0=1
+      ok "CONTROL MX0 (unmutated copy): every one of the 47 predicates HOLDS on it, tripped=[] (matrix)"; B_MX0=1
     else
       bad "MX0 control (unmutated copy) failed [$SC_DEAD]; every mutant verdict below is about a broken harness"
     fi
   else
-    ok "CONTROL MX0 (unmutated copy): byte-identical to the subject the 35 arms above passed, and it maps the baseline to 4 parts ending '## Section 4'"; B_MX0=1
+    ok "CONTROL MX0 (unmutated copy): byte-identical to the subject the 47 arms above passed, and it maps the baseline to 4 parts ending '## Section 4'"; B_MX0=1
   fi
 else
   bad "MX-pre: FIXTURE BROKEN -- the sandbox copy did not map the baseline document, or it is not the subject's bytes"
@@ -824,14 +1040,41 @@ mutant MX27 "the per-element blank trim removed" cross_owner cross_refuse "cross
   '      gsub(/^[ \t]+|[ \t]+$/, "", C[i])
 ' ''
 
+mutant MX28 "the shard-dir ledger refusal dropped" sd_ledger sd_state "sd_merge sd_ledger" "$(( ${B_sd_ledger:-0} && ${B_MX0:-0} ))" \
+  'SD_WHY="the write ledger already holds rows under ${SD_BASE}$1/"; return 0 ;;' 'SD_WHY="" ;;'
+mutant MX29 "the shard-dir exception table dropped" sd_name sd_state "sd_name" "$(( ${B_sd_name:-0} && ${B_MX0:-0} ))" \
+  '      requirements-subject) NAME=requirements ;;
+      carry-over-evaluation) NAME=coe ;;' '      none-of-these) NAME=x ;;'
+mutant MX30 "the shard-dir path printed relative" sd_name sd_xsprint "sd_name sd_merge sd_record sd_state sd_wt_state sd_wt_cmp sd_nogit" "$(( ${B_sd_name:-0} && ${B_MX0:-0} ))" \
+  '    pwd -P
+    exit 0 ;;' '    printf '"'"'%s\n'"'"' "_bmad-output/planning-artifacts/s$SN/shards/$NAME-p$PASS"
+    exit 0 ;;'
+mutant MX31 "the sprint component dropped from the ledger prefix" sd_ledger sd_state "sd_merge sd_ledger" "$(( ${B_sd_ledger:-0} && ${B_MX0:-0} ))" \
+  'SD_BASE="${SD_STATE##*/}/planning-artifacts/s$SN/shards/$NAME-p"' 'SD_BASE="${SD_STATE##*/}/planning-artifacts/shards/$NAME-p"'
+mutant MX32 "the trailing slash dropped from the ledger prefix" sd_p10 sd_state "sd_p10" "$(( ${B_sd_p10:-0} && ${B_MX0:-0} ))" \
+  '*"\"path\":\"$SD_BASE$1/"*|*"\"path\": \"$SD_BASE$1/"*)' '*"\"path\":\"$SD_BASE$1"*|*"\"path\": \"$SD_BASE$1"*)'
+mutant MX33 "--existing creates the dir" sd_existing sd_state "sd_existing" "$(( ${B_sd_existing:-0} && ${B_MX0:-0} ))" \
+  '[ -d "$SD_DIR" ] || refuse "pass $PASS has no shard dir' '[ -d "$SD_DIR" ] || mkdir -p "$SD_DIR" || refuse "pass $PASS has no shard dir'
+
+mutant MX34 "the git fallback reverted to the toplevel of the path" sd_wt_state sd_state "sd_wt_state sd_wt_cmp" "$(( ${B_sd_wt_state:-0} && ${B_MX0:-0} ))" \
+  'rev-parse --path-format=absolute --git-common-dir 2>/dev/null )"
+      case "$SD_TOP" in
+        /*) ;;' 'rev-parse --show-toplevel 2>/dev/null )"
+      case "$SD_TOP" in
+        /*) ;;' \
+  '      SD_TOP="${SD_TOP%/*}"
+    }' '    }'
+mutant MX35 "the byte comparison with the lead checkout's copy removed" sd_wt_cmp sd_state "sd_wt_cmp" "$(( ${B_sd_wt_cmp:-0} && ${B_MX0:-0} ))" \
+  '[ -f "$SD_TW" ] && cmp -s "$SD_AP" "$SD_TW" || refuse' '[ -f "$SD_TW" ] || refuse'
+
 # THE MODE ARM. A plain run (the per-push one) must print NO matrix row, so the matrix cannot
-# silently ride every push; --matrix must print one row per mutant plus MX0 (27 + 1).
+# silently ride every push; --matrix must print one row per mutant plus MX0 (35 + 1).
 if [ "$MATRIX" -eq 0 ]; then
   if [ "$MATRIX_ROWS" -eq 0 ]; then ok "PLAIN-RUN: no MATRIX row printed -- the full matrix runs only under --matrix"
   else bad "PLAIN-RUN: a plain run printed $MATRIX_ROWS MATRIX row(s); the matrix-only path ran per push"; fi
 else
-  if [ "$MATRIX_ROWS" -eq 28 ]; then ok "MATRIX-RUN: 28 MATRIX rows printed (27 mutants + MX0)"
-  else bad "MATRIX-RUN: $MATRIX_ROWS MATRIX row(s) printed, expected 28"; fi
+  if [ "$MATRIX_ROWS" -eq 36 ]; then ok "MATRIX-RUN: 36 MATRIX rows printed (35 mutants + MX0)"
+  else bad "MATRIX-RUN: $MATRIX_ROWS MATRIX row(s) printed, expected 36"; fi
 fi
 
 echo

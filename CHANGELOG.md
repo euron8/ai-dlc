@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.996.0] - 2026-11-03
+
+Batch b249, cluster b249-c2. Files and closes BL-908. PC-S321-ADVERSARIAL-SHARD-DIR-IS-HAND-TYPED-BY-THE-LEAD is closed. The consumer's filing of that id was uncommitted in its ledger when this release shipped, so the consumer's reverify finds the citation once that filing is committed.
+
+### BL-908 closed: `partition-document.sh --shard-dir` derives, creates and prints an adversarial review pass's shard directory (`core/scripts/partition-document.sh`, `core/skills/ai-dlc/steps/_gate-procedures.md`)
+
+- `partition-document.sh --shard-dir <artifact> <M> [--sprint N]` derives the shard directory from the artifact path, creates it and prints its absolute path. The artifact name comes from the path (`requirements-subject` gives `requirements`, `carry-over-evaluation` gives `coe`), and the sprint comes from the path or `--sprint`.
+- It refuses a pass whose ledger rows, merged record or non-empty directory is already spent, and names the next free pass; a pass with ledger rows and no merged record is reported as dispatched and resumable. `--existing` resumes a pass without creating anything.
+- The root is the parent of the git common dir, the same place `content-seal.sh` writes the ledger. A linked worktree refuses another checkout's `s<K>/` state, and refuses a linked-worktree document that is not byte-identical to the lead checkout's.
+- The review-pass sentences in `_gate-procedures.md` build every brief output path, `--map`, beat-join and merge argument from the printed path. The lead no longer types the shard directory.
+- The `document-partition` fixture gains arms A36-A47 and mutants MX28-MX35, and `receipt-bl908.sh` drives the shipping script. The `elic-shape-ordinals` pin in `process-rule-pins` follows the wording change.
+
 ## [0.995.0] - 2026-11-02
 
 Batch b248, cluster b248-core. Closes BL-895 and advances BL-840 and BL-842. Files BL-904 and BL-905. No PC- id is closed.
