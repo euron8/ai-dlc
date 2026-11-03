@@ -659,6 +659,12 @@ arm2 adv_qa "AD1: --gate qa -- $AD_ARM" "AD1: the qa merge did not hold the advi
 arm2 adv_cr "AD2: --gate code-review -- $AD_ARM" "AD2: the code-review merge did not hold the advisor line to its era"
 arm2 lead "LR1: the lead's re-run (--check-serial --lead-range <seat base> <go-signal sha>, its base the dispatch record --record-dispatch wrote) -- the writer prints RECORDED, keeps the first value on a second call (RECORD-KEPT) and its record reads back SERIAL-OK; the real world and a compacted lead passing no base SERIAL-OK with no LEGACY line; no record SERIAL-OK with exactly one LEGACY-UNRECORDED line, and with the wrong story still REFUSED by STORY-BIND; a go-signal not descending from the recorded dispatch sha (a3's orphan pair), a pre-prescription seat base beside the record, a missing reviewed-sha line with the live sprint ref rewound to a pre-prescription commit, a reviewed-sha naming another sha or the go-signal sha with trailing prose, and a qa.md whose reviewed-sha prescription is stripped inside the range each REFUSED [owner: serial]; a dispatch sha whose qa.md prescribes neither line SERIAL-OK with the LEGACY reviewed-sha line; the canonical-run label stripped inside the range, and the review repository's working-tree qa.md edited to drop it, never LEGACY and REFUSED; s1x, s1.Ab12, foo/s1, a symlink spelled s2 onto s1 and a relative path REFUSED by the physical slot; the seat's own run under docs/reviews/s1x/ REFUSED as carrying no sprint; a letter-led index (B1) RECORDED by --record-dispatch and read back SERIAL-OK by the lead's re-run, a slug index (5-browser-smoke) RECORDED, and s1-a/b, s1-.. and s1--x REFUSED with no record written" \
            "LR1: the lead's re-run accepted a review bound to a range, path or qa.md the lead did not choose, or refused the real one"
+# LR0 (BL-906): the shared LR_D record. Exactly two subject writes of it over SRCDIR, the second byte-identical to the
+# first in record and output, and at least one later cell served from those bytes: a share that never served, or served
+# without the proof, fails here rather than reading like a cache that saved nothing.
+if [ "$LR_REC_N" = 2 ] && [ "$LR_REC_PROOF" = 1 ] && [ "$LR_REC_HITS" -ge 1 ]; then
+  ok "LR0: the lead cells' LR_D record is written by the subject twice, byte-identical, and served to $LR_REC_HITS later SRCDIR cells from those bytes"
+else bad "LR0: the shared LR_D record read writes=$LR_REC_N proof=$LR_REC_PROOF served=$LR_REC_HITS, want 2, 1 and at least 1"; fi
 arm2 adv_serial "AD3: --check-serial under both gates, over the installed role file carrying the sentinel -- absent, maybe, two lines and '- advisor: called' REFUSED [owner: serial], called, unavailable, a trailing CR and a fenced 'advisor: maybe' above the bare line SERIAL-OK; over a root whose role files lack it, absent SERIAL-OK with the LEGACY line by value" \
                  "AD3: --check-serial did not hold the advisor line to the installed role file's era"
 # SR2 (BL-742 role text): qa.md's and code-reviewer.md's serial passages each name the --check-serial
@@ -780,8 +786,23 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     mut_run_one "$@"
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "$1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the mutant"
   }
+  # ONE COPY PER DISTINCT MUTATION (BL-906). Twelve mutants are the byte-identical edit of their partner (each -merge
+  # row: the same <file> <old> <new>, scored on the merge's cell where its partner is scored on --check-serial's), so
+  # the second of a pair drives the copy the first built rather than building and mutating its own. The registry is
+  # keyed on the three strings, compared in the shell, and a reused copy must still differ from SRCDIR's file (cmp),
+  # so a copy that is no longer a mutant cannot score. Each id keeps its own control, kill and twins.
+  MUT_KN=0
+  mut_dir_of() { # <file> <old> <new> -> the copy an earlier identical mutation built (0), else 1
+    local i=0
+    while [ "$i" -lt "$MUT_KN" ]; do
+      if [ "${MUT_KF[$i]}" = "$1" ] && [ "${MUT_KO[$i]}" = "$2" ] && [ "${MUT_KW[$i]}" = "$3" ]; then printf '%s' "${MUT_KD[$i]}"; return 0; fi
+      i=$((i + 1))
+    done
+    return 1
+  }
+  MUT_SHARED=0
   mut_run_one() { # <id> <file> <old> <new> <predicate> <reason token> <label>; CS_ONLY names the cell
-    local id="$1" md="$WORK/mut-$1" hl dec tw a tp tc
+    local id="$1" md="$WORK/mut-$1" hl dec tw a tp tc mshare=0
     B_rsm_ctl=0
     [ -n "${CS_ONLY:-}" ] || { bad "$id: FIXTURE ERROR -- no CS_ONLY selector names the cell this mutant is scored on"; return; }
     [ "$VB_CTL_OK" = 1 ] || { bad "$id: FIXTURE ERROR -- the unmutated control copy $vb_ctl was not built from the derived set"; return; }
@@ -794,10 +815,17 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     elif "p_$5" "$vb_ctl" && [ "$CS_RAN" = 1 ]; then
       VB_CTL_N=$((VB_CTL_N + 1)); ok "VBCTL $id: cell '$CS_ONLY' of $5 passed over the unmutated copy, one cell run"; B_rsm_ctl=1
     else bad "$id: FIXTURE ERROR -- the unmutated copy failed cell '$CS_ONLY' of $5 (cells run: $CS_RAN):${WHY}"; return; fi
-    sib_copy "$md" || { bad "$id: FIXTURE ERROR -- the derived sibling set was not copied fresh into $md"; return; }
-    [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
-      || { bad "$id: FIXTURE ERROR -- a sibling is absent from $md"; return; }
-    mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
+    if a="$(mut_dir_of "$2" "$3" "$4")"; then
+      md="$a"; mshare=1
+      [ -f "$md/$2" ] && ! cmp -s "$md/$2" "$SRCDIR/$2" || { bad "$id: FIXTURE ERROR -- the shared copy $md/$2 is no longer a mutant of $SRCDIR/$2"; return; }
+      MUT_SHARED=$((MUT_SHARED + 1))
+    else
+      sib_copy "$md" || { bad "$id: FIXTURE ERROR -- the derived sibling set was not copied fresh into $md"; return; }
+      [ -f "$md/merge-review-shards.sh" ] && [ -f "$md/wait-for-deliverable.sh" ] && [ -f "$md/content-seal.sh" ] && [ -f "$md/partition-review-diff.sh" ] \
+        || { bad "$id: FIXTURE ERROR -- a sibling is absent from $md"; return; }
+      mutate "$md" "$2" "$3" "$4" || { bad "$id: DID NOT APPLY -- '$3' does not occur exactly once in $2"; return; }
+      MUT_KF[$MUT_KN]="$2"; MUT_KO[$MUT_KN]="$3"; MUT_KW[$MUT_KN]="$4"; MUT_KD[$MUT_KN]="$md"; MUT_KN=$((MUT_KN + 1))
+    fi
     ip_load "$md/merge-review-shards.sh" || { bad "$id: FIXTURE ERROR -- the mutant copy's merge could not be loaded in process"; return; }
     WHY=""; CS_RAN=0
     if "p_$5" "$md"; then bad "$id: SURVIVED -- $7 ($5 passed over $md/$2)"
@@ -805,7 +833,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     else bad "$id: died for another reason than '$6' -- $7 ($5:${WHY})"; fi
     [ "$CS_RAN" -le 1 ] || bad "$id: FIXTURE ERROR -- the mutant ran $CS_RAN cells of $5 under CS_ONLY=$CS_ONLY, not one"
     [ "$CS_RAN" -ge 1 ] || echo "CS-UNSELECTED: $id ran no cell of $5 for CS_ONLY=$CS_ONLY"
-    if [ "$RSM_MATRIX" = 1 ]; then printf '%s\t%s\t%s\t%s\n' "$id" "$2" "$5" "$CS_ONLY" >> "$MX_ROWS"; return; fi
+    if [ "$RSM_MATRIX" = 1 ]; then printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$2" "$5" "$CS_ONLY" "$md" >> "$MX_ROWS"; return; fi
     hl="$(mx_line "$id")" || { bad "$id: FIXTURE STALE -- run.sh carries no single '# MUTANT-MATRIX $id' line; re-measure the matrix"; return; }
     dec="$(mx_field "$hl" decides | cut -d, -f1)"; tw="$(mx_field "$hl" twins)"
     [ "$dec" = "$5.$CS_ONLY" ] || { bad "$id: FIXTURE STALE -- its MUTANT-MATRIX line decides=$dec, but mut_run scores $5.$CS_ONLY; re-measure the matrix"; return; }
@@ -844,10 +872,10 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # row's population (MATRIX-POP) for --merge-slices. MX_SROWS/MX_SPOP/MX_TPOP feed MX1's slice arm.
   MX_SROWS=0; MX_SPOP=0; MX_TPOP=0
   matrix_score() {
-    local id f p c cl pop q pc ms cs key dec tw ri=-1
+    local id f p c mdir cl pop q pc ms cs key dec tw ri=-1
     mkdir -p "$WORK/mx-cells" "$WORK/mx-ctl"
     [ -z "$RSM_SLICE_N" ] || echo "MATRIX-SLICE $RSM_SLICE_K/$RSM_SLICE_N"
-    while IFS='	' read -r id f p c <&3; do
+    while IFS='	' read -r id f p c mdir <&3; do
       ri=$((ri + 1))
       cl="$WORK/mx-cells/$p"
       [ -f "$cl" ] || { CS_LIST="$cl.tmp"; : > "$CS_LIST"; WHY=""; "p_$p" "$vb_ctl" > /dev/null 2>&1 < /dev/null || :; CS_LIST=""
@@ -865,7 +893,7 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
       for q in $pop; do
         pc="${q#*.}"; key="$WORK/mx-ctl/$(printf '%s' "$q" | tr '.' '_')"
         [ -f "$key" ] || mx_state "${q%%.*}" "$pc" "$vb_ctl" > "$key"
-        cs="$(cat "$key")"; ms="$(mx_state "${q%%.*}" "$pc" "$WORK/mut-$id")"; MX_CELLS=$((MX_CELLS + 1))
+        cs="$(cat "$key")"; ms="$(mx_state "${q%%.*}" "$pc" "$mdir")"; MX_CELLS=$((MX_CELLS + 1))
         echo "MATRIX $id $q mutant=$ms control=$cs" | tee -a "$WORK/mx-log"
         [ "$q" = "$p.$c" ] && continue
         if [ "$ms" = RED ] && [ "$cs" = GREEN ]; then also="$also,$q"; fi
@@ -1366,6 +1394,9 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
   if [ "$VB_CTL_N" = 146 ]; then ok "VBCTL: CONTROL -- each of M1-M72, M74, M75, M76, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name and m-d1-abs's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of 146): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
   else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of 146 mutants' cells passed over the unmutated copy, so the other verdicts are not evidence"; fi
+  # MS1 (BL-906): the twelve byte-identical pairs share one copy each; every other mutant built its own.
+  if [ "$MUT_SHARED" = 12 ] && [ "$MUT_KN" = $((146 - 12)) ]; then ok "MS1: the twelve byte-identical mutant pairs drove one shared copy each ($MUT_KN copies built for 146 mutants)"
+  else bad "MS1: $MUT_SHARED mutants drove a shared copy and $MUT_KN copies were built, want 12 and 134"; fi
 else
   echo "  (BL-737 mutants M1-M6, and BL-740's CONTROL and M7-M11, not run: $SRCDIR is the consumer layout, whose scripts the consumer cannot edit)"
 fi

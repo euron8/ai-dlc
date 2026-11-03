@@ -4189,8 +4189,25 @@ LR_REF="does not descend from the dispatch sha"; LR_RSHA="reviewed-sha:"; LR_UNR
 # removed by lr_unrec for the LEGACY-UNRECORDED cells; LR_RECF is its path, derived from git, never hand-spelled twice.
 LR_RECF="$(cd "$REPO_LR" && git rev-parse --git-common-dir)" && LR_RECF="$(cd "$REPO_LR" && cd "$LR_RECF" && pwd -P)/ai-dlc/stories/s1-1-1" \
   || { echo "FIXTURE ERROR: REPO_LR's git common dir did not resolve" >&2; exit 2; }
+# ONE RECORD OF LR_D, SHARED (BL-906). Thirteen SRCDIR lead cells each began by having the subject write the same
+# record of LR_D. The first two SRCDIR writes of LR_D still go through the subject, and the second must be byte-identical
+# to the first (LR_REC_PROOF=1); every later one rewrites those captured bytes and output with builtins (LR_REC_HITS).
+# Never shared: a mutant or control copy (always its own writer, so a writer mutant is scored on its own record), any
+# other sha (lr-rsha-legacy records LR_OLD), and LR_REC_FRESH=1 (lr-record, whose subject IS the writer).
+LR_REC_N=0; LR_REC_PROOF=0; LR_REC_HITS=0; LR_REC_BYTES=""; LR_REC_OUT=""
 lr_rec() { # <script-dir> <sha> -> RRC, $CO: the dispatch record written by the subject, from REPO_LR
+  if [ "$1" = "$SRCDIR" ] && [ "$2" = "$LR_D" ] && [ -z "${LR_REC_FRESH:-}" ] && [ "$LR_REC_PROOF" = 1 ] && [ -d "${LR_RECF%/*}" ]; then
+    printf '%s' "$LR_REC_BYTES" > "$LR_RECF" && printf '%s' "$LR_REC_OUT" > "$CO"; RRC=$?
+    [ "$RRC" != 0 ] || LR_REC_HITS=$((LR_REC_HITS + 1)); return
+  fi
   rm -f "$LR_RECF"; ( cd "$REPO_LR" && ip_run "$1/merge-review-shards.sh" mrs_main --record-dispatch s1-1-1 "$2" ) > "$CO" 2>&1 < /dev/null; RRC=$?
+  [ "$1" = "$SRCDIR" ] && [ "$2" = "$LR_D" ] && [ -z "${LR_REC_FRESH:-}" ] && [ "$RRC" = 0 ] && [ -f "$LR_RECF" ] || return 0
+  local b o
+  IFS= read -r -d '' b < "$LR_RECF"; IFS= read -r -d '' o < "$CO"
+  LR_REC_N=$((LR_REC_N + 1))
+  if [ "$LR_REC_N" = 1 ]; then LR_REC_BYTES="$b"; LR_REC_OUT="$o"
+  elif [ "$LR_REC_N" = 2 ] && [ -n "$b" ] && [ "$b" = "$LR_REC_BYTES" ] && [ "$o" = "$LR_REC_OUT" ]; then LR_REC_PROOF=1; fi
+  return 0
 }
 lr_unrec() { rm -f "$LR_RECF"; }
 LR_SLOT="is not at docs/reviews/s<N>/ in its own repository"; LR_LEG="LEGACY: reviewed-sha not checked:"
@@ -4222,7 +4239,7 @@ p_lead() {
   # the seat base, so a record-present verdict cannot have read the seat base; lr-seatbase passes a WRONG seat base.
   # lr-record (ALLOW, the writer): --record-dispatch prints RECORDED naming the record path; a second call with another
   # sha prints RECORD-KEPT and leaves `dispatch:` unchanged; a --lead-range run then reads it back and passes.
-  if cell lr-record; then lr_rec "$sd" "$LR_D"
+  if cell lr-record; then LR_REC_FRESH=1 lr_rec "$sd" "$LR_D"
     { [ "$RRC" = 0 ] && has "$CO" "RECORDED: $LR_RECF dispatch: $LR_D"; } || WHY="$WHY lr-record{write rc=$RRC $(head -1 "$CO")}"
     ( cd "$REPO_LR" && ip_run "$sd/merge-review-shards.sh" mrs_main --record-dispatch s1-1-1 "$LR_OLD" ) > "$CO" 2>&1 < /dev/null
     { has "$CO" "RECORD-KEPT: $LR_RECF dispatch: $LR_D" && [ "$(grep -c . "$LR_RECF" 2> /dev/null)" = 1 ] && grep -qxF "dispatch: $LR_D" "$LR_RECF"; } \
