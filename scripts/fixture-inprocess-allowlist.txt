@@ -21,7 +21,7 @@ askuserquestion-citation	core/scripts/validate-steering-budget.sh declares 18 st
 audit-anchors-schema	core/scripts/validate-audit-anchors.sh declares 29 start(s) against 0 cell(s)
 backlog-ledger	scripts/backlog-rotate.sh declares 42 start(s) against 0 cell(s); scripts/backlog-reverify.sh declares 141 start(s) against 0 cell(s)
 backlog-real-ledger	scripts/backlog-reverify.sh declares 8 start(s) against 0 cell(s); scripts/validate-backlog-receipts.sh declares 95 start(s) against 0 cell(s); scripts/validate-backlog-size.sh declares 4 start(s) against 0 cell(s)
-backlog-receipt-binding	scripts/validate-backlog-receipts.sh declares 2310 start(s) against 0 cell(s)
+backlog-receipt-binding	scripts/validate-backlog-receipts.sh declares 2342 start(s) against 0 cell(s)
 backlog-rotate-fence-guard	scripts/backlog-rotate.sh declares 69 start(s) against 0 cell(s)
 backlog-size-ceiling	scripts/backlog-reverify.sh declares 28 start(s) against 0 cell(s); scripts/validate-backlog-size.sh declares 32 start(s) against 0 cell(s)
 bmad-invocation-resolve	core/scripts/validate-bmad-invocations.sh declares 15 start(s) against 0 cell(s)

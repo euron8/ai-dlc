@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1007.0] - 2026-11-05
+
+Batch b250, BL-918 audit. BL-918 ships PARTIAL. Closes no PC- id. NET +1 (filed 1 minus closed 0).
+
+### BL-918 (PARTIAL) — backlog-receipt-binding keeps only the arms its kill matrix supports, and its archive join moves to its own fixture
+
+- Counts for `backlog-receipt-binding`, base 3987c6b0e against this release: arms 78 -> 63; mutants 76 -> 76 (no mutant removed); counted starts 6192 -> 6151, with the validator row unchanged at 2342; triggers over the last 60 first-parent main commits at 3987c6b0e, measured by `trigger-count.sh`, 38 -> 7; static repo build sites 3 -> 3 (`seed_memo` now builds one repository and copies it, as `seed()` does).
+- Justification: the fixture's `--matrix` at 3987c6b0e (78 arms, 76 mutants, 4 control captures, all 76 killed). The cover was recomputed with these arms pinned: every twin target; m15b; the PLAIN-RUN and [MX] arms; the arms a control block calls (m_loose in pr3, pr_m_early and pr_m_between under `!` in pr5, where a missing arm returns 127 and passes silently); and the arms that trip a control capture (m1 on pr5a, c5_m3 on pr5b, pr_m_default on r11-ctl). `c5_open` is kept, and that keep is unattributed rather than measured: the code does not show whether the REPLAYED line in that capture is base behaviour or the mutant's inner re-entry.
+- Removed (15 arms), each with the arm that now decides its mutants:
+  - m13: decides on m12 (m12 and m13 trip on exactly {m12, m13}).
+  - c5_m12: decides on c5_m11, set by c5-m11's own `c5_mut` call, which runs first.
+  - memo_caller_both: its only kill, m-memo-unset, is decided by the pinned m_memo_unset.
+  - pr_m_keyrlib: byte-identical to the pinned pr_m_keylib; pr-m-keyrlib decides on pr_m_keylib.
+  - m_noclose, m_widenostep, m_noseat, m_seatword, m_nofiling, m_nopathnarrow, m_nofigs, m_nostep, m_nobaseline, m_nomovement, m_noscope: all twelve efficiency arms tripped on the same twelve captures, each through E0, so all twelve mutants decide on m_noscript. `ef_green` and the two SIDE lines only the removed arms read go with them.
+- New guard: the twin loop now fails a twin that names no defined arm. Before this, an undefined twin exited 127 and read as "stays green". Probe: a copy with one twin pointed at `nosuch_twin` fails on that line only; the real tree reports all 76 twins ok.
+- The BL-278 receipt / fixture-arm join MOVED; it was not removed. It is the only check of the live archive (`docs/backlog.archive.md`, `gate-validation.md`, `gate-verdict-grep-shape`), and no pre-push step covers it: `.githooks/pre-push` names none of its tokens (0), against a control of 3 for validate-backlog-receipts. It now lives in the new `.dist-only` fixture `core/fixtures/backlog-receipt-fixture-join` (in-process, no git repo, 42 counted starts from two agreeing runs, 35/60 triggers), byte-for-byte the same block except two HERMETIC-CONSUMED lines. Kept on the lead's ruling. An archive edit now keys this small fixture, not `backlog-receipt-binding`.
+- BL-278's archived receipt (`docs/backlog.archive.md`, its `verify: sh` line) is re-pointed from `backlog-receipt-binding` to `backlog-receipt-fixture-join`. It exited 0 at 3987c6b0e, would have exited 1 after the move, and exits 0 re-pointed (control: the unedited line exits 1 on the same tree). No gate runs archived receipts, so only the tip adversary saw this.
+- Fork budget: `scripts/fork-profile.sh --section total` reads 2910 at this release against FORK_BUDGET 2912 (BL-913's tip reading), so no raise.
+- Still owed under BL-918, so the entry stays open and carries no `**LANDED` line: `ledger-reverify`, `apply-restamp-worklist` (a, b, c), `review-shard-merge` (and -b), and `adversarial-shard-merge`.
+
 ## [0.1006.0] - 2026-11-05
 
 Batch b250, cluster BL-913. BL-913 lands PARTIAL: it closes only on a graph `Outcome measured:` line. No PC- id is closed. Filed 0, closed 0, NET 0.

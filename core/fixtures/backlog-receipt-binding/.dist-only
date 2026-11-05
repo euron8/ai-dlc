@@ -9,8 +9,8 @@ consumer tree gets no docs/backlog.md at all. On a consumer this fixture would r
 validator and no ledger, and could only pass -- a unit that cannot fail scores as a pass in
 the consumer's own suite verdict.
 
-It also copies scripts/backlog-reverify.sh into every seed and reads docs/backlog.archive.md for
-its receipt join (rj). Neither exists on a consumer. Its real-ledger population join (j1) moved
+It also copies scripts/backlog-reverify.sh into every seed, which does not exist on a consumer.
+Its receipt join (rj) moved to core/fixtures/backlog-receipt-fixture-join/ under BL-918. Its real-ledger population join (j1) moved
 to core/fixtures/backlog-real-ledger/, which runs it over a frozen ledger snapshot; against the
 live docs/backlog.md it runs as arm R9 of scripts/validate-backlog-receipts.sh at pre-push.
 

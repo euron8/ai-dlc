@@ -1836,3 +1836,28 @@ Held:
 
 verify: manual
 
+## BL-918 — the slowest fixtures carry arms that kill no mutant another arm does not, and set the push wall clock
+
+**DEFECT.** Batch b250, operator, on `review-shard-merge` (406s loaded, the suite's pole): "it seems like overkill", then "file it and fix in this batch."
+
+Measured at `3987c6b0e` (origin/main) in the main checkout:
+- `review-shard-merge` has `run.sh` 2163 lines and `lib.sh` 4978 lines. It has 136 distinct arm ids (`grep -oE '\b(P|Q|S|M|CS|FT|VB|EQ|W)[0-9]+[a-z]?\b' run.sh | sort -u | wc -l`), about 447 lines naming a mutant, 8 `git init` sites in `lib.sh`, and 544 declared starts in `invocations.decl`.
+- Its subject is four claims (run.sh header, "WHAT IS AT STAKE"): the part set is re-derived from the manifest; the merged verdict is the worst shard verdict; the output matches Check 1's pattern exactly once; and a refusal writes nothing at `--out`.
+- The arms grew per entry (BL-737, 740, 742, 746, 747, 755, 763 and others), each adding its own block of arms and mutants. That is the same per-entry test growth BL-915 removed at receipt level. BL-915's audit rule (b), that an arm stays only if it kills a mutant no other arm kills, was never applied arm by arm here, because doing so needs a kill matrix.
+- The top of `.git/ai-dlc-fixture-durations` (loaded): review-shard-merge 406, adversarial-shard-merge 347, backlog-receipt-binding 309, apply-restamp-worklist-b 290, review-shard-merge-b 278 and ledger-reverify 268. The suite is pole-bound, so these set every push's wall clock that reaches them.
+
+Fix, required, in this order for each fixture in the set {review-shard-merge (with -b), adversarial-shard-merge, backlog-receipt-binding, apply-restamp-worklist (with -b), ledger-reverify}:
+1. **Kill matrix.** Run every mutant the fixture declares, and record, per mutant, the set of arms that fail on it. Use the fixture's own `--matrix` mode where it has one, otherwise the shipped mutant runner. Count only; no timing runs.
+2. **Remove** every arm whose kill set is covered by other arms (it kills no mutant that no other arm kills), and every mutant that no arm kills, unless that mutant's subject is a shipped behaviour with no other guard. In that case, keep it and add the one arm that kills it. Remove every arm and world that serves only removed arms. Keep no recovery copy.
+3. **Reshape** the survivors to their cheapest construction: a world built once and copied per cell (`wc_get` in adversarial-shard-merge is the pattern), and hand-written inputs where a property does not need a git repository.
+4. Re-measure `invocations.decl` from two agreeing counted runs. Every remaining mutant must still be KILLED with its twin holding.
+
+Rules: BL-868 (zero load-dependent arms). No arm is added except under step 2. A fixture in this set that another release in the batch is editing is rebased onto that release before its own edit, with the lead sequencing it.
+
+Close condition: for each fixture in the set, the arm count, mutant count and counted starts before and after are recorded here, with the kill-matrix file that justified each removal named in the release text, and those removals are landed on `origin/main`. This entry closes by its own landing. It needs no `Outcome measured:` line and no new test.
+
+Provenance: batch b250 operator instruction; lead ai-dlc-be; owner ai-dlc-bf.
+
+**Progress (batch b250, 0.1007.0; the entry stays PARTIAL, so it carries no `**LANDED` line).** `backlog-receipt-binding` is done: arms 78 -> 63, mutants 76 -> 76, counted starts 6192 -> 6151 (validator row 2342 unchanged), triggers over the last 60 first-parent main commits at 3987c6b0e 38 -> 7 (`trigger-count.sh`), static repo build sites 3 -> 3 (`seed_memo` builds once and copies). The kill matrix is the fixture's `--matrix` at 3987c6b0e (78 arms, 76 mutants, all killed). Fifteen arms were removed (m13, c5_m12, memo_caller_both, pr_m_keyrlib and the eleven efficiency arms m_noclose, m_widenostep, m_noseat, m_seatword, m_nofiling, m_nopathnarrow, m_nofigs, m_nostep, m_nobaseline, m_nomovement, m_noscope). m13 decides on m12, c5-m12 on c5_m11, m-memo-unset on m_memo_unset, pr-m-keyrlib on pr_m_keylib, and all twelve efficiency mutants on m_noscript. The twin loop now fails an undefined twin arm. The BL-278 receipt join MOVED to the new `.dist-only` fixture `backlog-receipt-fixture-join` (42 starts, in-process, 35/60 triggers) because it is the only check of the live archive and no pre-push step covers it; BL-278's archived receipt is re-pointed to it. Still owed: `ledger-reverify`, `apply-restamp-worklist` (a, b, c), `review-shard-merge` (and -b), `adversarial-shard-merge`.
+
+verify: manual

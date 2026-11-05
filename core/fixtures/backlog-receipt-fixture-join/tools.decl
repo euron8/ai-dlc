@@ -1,0 +1,17 @@
+# Tools run.sh invokes: the join's awk extraction, the seed builder and oracle (python3), and the
+# derived receipt it runs under bash, which itself uses awk, grep, printf and wc.
+awk
+bash
+cat
+cmp
+cp
+cut
+dirname
+grep
+mkdir
+mktemp
+python3
+rm
+sed
+tr
+wc

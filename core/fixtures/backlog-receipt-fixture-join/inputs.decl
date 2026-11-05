@@ -1,0 +1,8 @@
+# backlog-receipt-fixture-join reads these paths outside its own directory, all three only through the
+# receipt / fixture-arm join (rj, BL-278) that BL-918 moved here from backlog-receipt-binding. The archive
+# is keyed (`+`) because the join derives BL-040's receipt from it at run time; a missing receipt is
+# FIXTURE BROKEN, so a run that never read it cannot pass. gate-verdict-grep-shape is named by its
+# run.sh alone: the join reads its seed builder, join oracle and verdict tables, and nothing else there.
++docs/backlog.archive.md
+!core/skills/ai-dlc/steps/gate-validation.md
+!core/fixtures/gate-verdict-grep-shape/run.sh

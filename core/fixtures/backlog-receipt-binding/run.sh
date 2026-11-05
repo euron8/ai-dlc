@@ -47,7 +47,7 @@
 # MUTANT-MATRIX m14b decides=m14b twins=m3
 # MUTANT-MATRIX m5b decides=m5b twins=m7b
 # MUTANT-MATRIX m12 decides=m12 twins=m7b
-# MUTANT-MATRIX m13 decides=m13 twins=m7b
+# MUTANT-MATRIX m13 decides=m12 twins=m7b
 # MUTANT-MATRIX m16 decides=m16 twins=m7b
 # MUTANT-MATRIX gitdir-mutant decides=gitdir_mutant twins=m7b
 # MUTANT-MATRIX m6 decides=m6 twins=m1
@@ -64,18 +64,18 @@
 # MUTANT-MATRIX m-memo-unset decides=m_memo_unset twins=m_memo_name
 # MUTANT-MATRIX m-memo-name decides=m_memo_name twins=m_memo_derive
 # MUTANT-MATRIX m-memo-derive decides=m_memo_derive twins=m_memo_unset
-# MUTANT-MATRIX m-noclose decides=m_noclose twins=m6
-# MUTANT-MATRIX m-widenostep decides=m_widenostep twins=m6
-# MUTANT-MATRIX m-nopathnarrow decides=m_nopathnarrow twins=m6
-# MUTANT-MATRIX m-noseat decides=m_noseat twins=m6
-# MUTANT-MATRIX m-seatword decides=m_seatword twins=m6
-# MUTANT-MATRIX m-nofiling decides=m_nofiling twins=m6
+# MUTANT-MATRIX m-noclose decides=m_noscript twins=m6
+# MUTANT-MATRIX m-widenostep decides=m_noscript twins=m6
+# MUTANT-MATRIX m-nopathnarrow decides=m_noscript twins=m6
+# MUTANT-MATRIX m-noseat decides=m_noscript twins=m6
+# MUTANT-MATRIX m-seatword decides=m_noscript twins=m6
+# MUTANT-MATRIX m-nofiling decides=m_noscript twins=m6
 # MUTANT-MATRIX m-noscript decides=m_noscript twins=m6
-# MUTANT-MATRIX m-nofigs decides=m_nofigs twins=m6
-# MUTANT-MATRIX m-nostep decides=m_nostep twins=m6
-# MUTANT-MATRIX m-nobaseline decides=m_nobaseline twins=m6
-# MUTANT-MATRIX m-nomovement decides=m_nomovement twins=m6
-# MUTANT-MATRIX m-noscope decides=m_noscope twins=m6
+# MUTANT-MATRIX m-nofigs decides=m_noscript twins=m6
+# MUTANT-MATRIX m-nostep decides=m_noscript twins=m6
+# MUTANT-MATRIX m-nobaseline decides=m_noscript twins=m6
+# MUTANT-MATRIX m-nomovement decides=m_noscript twins=m6
+# MUTANT-MATRIX m-noscope decides=m_noscript twins=m6
 # MUTANT-MATRIX c5-m1 decides=c5_m1 twins=c5_m2
 # MUTANT-MATRIX c5-m4 decides=c5_m4 twins=c5_m1
 # MUTANT-MATRIX c5-m2 decides=c5_m2 twins=c5_m1
@@ -86,13 +86,13 @@
 # MUTANT-MATRIX c5-m8 decides=c5_m8 twins=c5_m7
 # MUTANT-MATRIX c5-m9 decides=c5_m9 twins=c5_m10
 # MUTANT-MATRIX c5-m11 decides=c5_m11 twins=c5_m10
-# MUTANT-MATRIX c5-m12 decides=c5_m12 twins=c5_m10
+# MUTANT-MATRIX c5-m12 decides=c5_m11 twins=c5_m10
 # MUTANT-MATRIX c5-m10 decides=c5_m10 twins=c5_m9
 # MUTANT-MATRIX c5-m4-open decides=c5_open twins=c5_m4
 # MUTANT-MATRIX pr-m-ignore decides=pr_m_ignore twins=pr_m_keylib
 # MUTANT-MATRIX pr-m-default decides=pr_m_default twins=pr_m_ignore
 # MUTANT-MATRIX pr-m-keylib decides=pr_m_keylib twins=pr_m_ignore
-# MUTANT-MATRIX pr-m-keyrlib decides=pr_m_keyrlib twins=pr_m_ignore
+# MUTANT-MATRIX pr-m-keyrlib decides=pr_m_keylib twins=pr_m_ignore
 # MUTANT-MATRIX pr-m-early decides=pr_m_early twins=pr_m_ignore
 # MUTANT-MATRIX pr-m-between decides=pr_m_between twins=pr_m_ignore
 # MUTANT-MATRIX pr-m-nostate decides=pr_m_nostate twins=pr_m_ignore
@@ -266,9 +266,9 @@ score() {
 }
 
 # ARMS. Each is the kill condition of the base fixture's chain for that mutant.
-# m1, m4, m12, m13 and m15 each read only a refusal or a row about THEIR OWN seed: R1's token-free
+# m1, m4, m12 and m15 each read only a refusal or a row about THEIR OWN seed: R1's token-free
 # answer (got: BOUND), BL-805's base-0 receipt, BL-807's two-file receipt, a lost verdict (got: ).
-# Without the key, m1 read any self-probe refusal as its kill, and m4, m12 and m13 read a MISSING row
+# m12 decides both BL-807 mutants (m12, m13). Without the key, m1 read any self-probe refusal as its kill, and m4 and m12 read a MISSING row
 # as a wrong one, so every refusing capture in the matrix tripped all four.
 arm_m1() { r_has "$1" "did NOT flip under a seed carrying its own grep literal (got: BOUND)" && [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m2c() { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "are satisfied by a COMMENT"; }
@@ -288,7 +288,6 @@ arm_m8c_mut() { [ "$(r_rc "$1")" = 0 ] && grep -qE '^OK: validate-backlog-receip
 arm_m8e_mut() { [ "$(r_rc "$1")" != 0 ] && ! grep -qE '^FAIL: UNRECOGNISED.BL-851' "$REC/$1.out" && r_has "$1" "unrecognised-value arm did not name"; }
 arm_m8d_mut() { [ "$(r_rc "$1")" = 0 ] && grep -q ' R2 declared-empty$' "$REC/$1.out"; }
 arm_m12() { r_has "$1" "the TWO-file TWO-literal receipt was reported" &&[ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
-arm_m13() { r_has "$1" "the TWO-file TWO-literal receipt was reported" &&[ "$(r_cls "$1" BL-807)" != "PROSE-CLOSABLE" ] && ! { [ "$(r_rc "$1")" = 0 ] && [ -z "$(r_cls "$1" BL-807)" ]; }; }
 # m14b and m8c-mut read only a PASS that names their own breach: R4 over a ceiling of 0, and the
 # near-miss ledger accepted as all-manual. A bare rc 0 was true on every passing capture.
 arm_m14b() { [ "$(r_rc "$1")" = 0 ] && grep -qE '^OK: validate-backlog-receipts -- .* R4 [1-9][0-9]*/0 out of population' "$REC/$1.out"; }
@@ -305,29 +304,16 @@ arm_gitdir_mutant() { r_has "$1" "SIDE hookspath=" && { { [ "$(r_rc "$1")" != 0 
 arm_m_loose() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && r_has "$1" "BL-632" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m_heading_only() { [ -z "$(r_cls "$1" BL-851)" ] && [ "$(r_cls "$1" BL-850)" = "PROSE-CLOSABLE" ] && grep -qE '^SUMMARY entries=1 sh-receipts=1 ' "$REC/$1.out"; }
 # The three memo halves, one arm per (drive, expected cells). A capture holds a NONE line and, only
-# under --matrix, a CALLER line.
+# under --matrix, a CALLER line. m-memo-unset's CALLER-both arm was removed under BL-918: its only kill
+# was m-memo-unset, which m_memo_unset already decides on the NONE line a plain run writes.
 arm_m_memo_unset() { r_line "$1" "NONE $LEAK_BOTH"; }
 arm_m_memo_derive() { r_line "$1" "NONE $LEAK_PROBE"; }
 arm_m_memo_name() { r_line "$1" "CALLER $LEAK_MEMO"; }
-arm_memo_caller_both() { r_line "$1" "CALLER $LEAK_BOTH"; }
-# The efficiency arms: a mutant is caught when the subject's own E0 self-probe refuses (exit 2) or,
-# for the world-turned-green form, when the world red on the shipped subject exits 0.
-# The green form reads the efficiency-only pass's own OK line, not a bare rc 0, which every passing
-# capture in the file carries.
+# The efficiency arm: every one of the twelve efficiency mutants is caught by the subject's own E0
+# self-probe refusing (exit 2). The kill matrix measured all twelve per-mutant arms tripping on the
+# same twelve captures, each through E0, so BL-918 keeps this one and every efficiency mutant decides on it.
 ef_e0() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" 'SELF-PROBE FAILED -- E0'; }
-ef_green() { [ "$(r_rc "$1")" = 0 ] && r_has "$1" "OK: validate-backlog-receipts --efficiency-only -- "; }
-arm_m_noclose() { ef_e0 "$1" || ef_green "$1"; }
-arm_m_widenostep() { ef_e0 "$1" || ef_green "$1"; }
-arm_m_noseat() { ef_e0 "$1" || ef_green "$1"; }
-arm_m_seatword() { ef_e0 "$1" || ef_green "$1"; }
-arm_m_nofiling() { ef_e0 "$1" || ef_green "$1"; }
-arm_m_nopathnarrow() { ef_e0 "$1" || { [ "$(r_rc "$1")" = 1 ] && r_has "$1" "SIDE rows=SHAPE BL-979|"; }; }
 arm_m_noscript() { ef_e0 "$1"; }
-arm_m_nofigs() { ef_e0 "$1"; }
-arm_m_nostep() { ef_e0 "$1"; }
-arm_m_nobaseline() { ef_e0 "$1"; }
-arm_m_nomovement() { ef_e0 "$1"; }
-arm_m_noscope() { ef_e0 "$1"; }
 # The BL-836 corpus mutants. The wanted rows and the self-probe target a mutant names are set by
 # c5_mut at its call, keyed by the mutant, so each arm reads the values its own call states.
 c5_arm() { # c5_arm <capture> <mutant key>
@@ -341,7 +327,7 @@ c5_arm() { # c5_arm <capture> <mutant key>
   fi
   r_line "$c" "SIDE rows=$w"
 }
-for _k in c5_m1 c5_m2 c5_m3 c5_m5 c5_m6 c5_m7 c5_m8 c5_m9 c5_m10 c5_m11 c5_m12 r10_m2 r10_m3 r10_m4 r10_m5 r10_m6 r10_m7 r10_m8 r10_m9 r10_m10 r10_m11 r10_m12 r10_m13 r10_m14; do
+for _k in c5_m1 c5_m2 c5_m3 c5_m5 c5_m6 c5_m7 c5_m8 c5_m9 c5_m10 c5_m11 r10_m2 r10_m3 r10_m4 r10_m5 r10_m6 r10_m7 r10_m8 r10_m9 r10_m10 r10_m11 r10_m12 r10_m13 r10_m14; do
   eval "arm_$_k() { c5_arm \"\$1\" $_k; }"
 done
 # r10-m1: every self-probe passed, and the corpus pass, handed no records, REFUSED with exit 2
@@ -1145,7 +1131,7 @@ fi
 seed "$TMP/m13"
 if mut "$TMP/m13" 's|^      emitpat(q); break|      emitpat(q); p = nt; break|'; then
   drive m13 "$TMP/m13" "" $DEF
-  score m13 "$B_CTRL" "m13 -- reading only the first grep stops the two-literal receipt flipping, so every grep in a receipt is load-bearing"
+  score m13 "$B_CTRL" "m13 -- reading only the first grep stops the two-literal receipt flipping, so every grep in a receipt is load-bearing" m12
 fi
 
 # ===== M14-M16. THREE ARMS NOTHING ELSE HERE EVER DRIVES OVER THEIR THRESHOLD. =============
@@ -1523,7 +1509,15 @@ else note "FAIL  m-heading-only -- the label mutation DID NOT APPLY"; rc=1; fi
 # derivation would pass every drive of an unmodified copy. BL-823 keys on the synthesised one.
 # TWO DRIVES: no inbound memo (lib.sh makes one, so it is NEW to the parent) and a CALLER-exported
 # memo (already there before lib.sh ran, so only the outright name removes it).
+# BUILT ONCE AND COPIED (BL-918, clause 4): seed_memo_build makes the repository under $TMP/.memo-tpl
+# once; every memo world after that copies it, history and all, as seed() does.
 seed_memo() { # seed_memo <dir>
+  local d="$1" t="$TMP/.memo-tpl"
+  [ -d "$t/.git" ] || seed_memo_build "$t"
+  mkdir -p "$d" && cp -Rp "$t/." "$d/" || { echo "FIXTURE BROKEN: could not copy the memo world into $d" >&2; exit 2; }
+  [ -d "$d/.git" ] || { echo "FIXTURE BROKEN: the memo probe repository at $d has no .git" >&2; exit 2; }
+}
+seed_memo_build() { # seed_memo_build <dir>
   local d="$1"
   mkdir -p "$d/scripts" "$d/docs" "$d/core/skills/ai-dlc-update/reconcile" "$d/probe"
   echo "0.0.0" > "$d/VERSION"
@@ -1770,30 +1764,29 @@ Outcome measured: no graph pipeline step; the cost lives in this repo's analysis
 "
 ef_world ef-pathsprint "$TMP/efps" "$EF_PATHSPRINT" "" 0
 
-# ef_mut <name> <sed> <world-dir-name> <ledger> -- the mutant must turn its world from red to green
-# (the arm stopped firing) OR be refused by the subject's own E0 self-probe (exit 2 naming E0).
+# ef_mut <name> <sed> <world-dir-name> <ledger> -- the mutant must be refused by the subject's own E0
+# self-probe (exit 2 naming E0), which the kill matrix measured for every efficiency mutant.
 ef_mut() { # ef_mut <name> <sed> <world-dir-name> <ledger>
   local d="$TMP/$1" out rc_v
   ef_seed "$d" "$4"
   mut "$d" "$2" || return
   out="$(vin "$d" "$d/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   record "$1" "$rc_v" "$out"
-  side "$1" "world=$3"
   # The base-pass flag is read LITERALLY per world, so it is a value this run set beside that world's ok.
   case "$3" in
-    ef-good) score "$1" "${B_ef_good:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-noclose) score "$1" "${B_ef_noclose:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-sprintless) score "$1" "${B_ef_sprintless:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-untagged) score "$1" "${B_ef_untagged:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-second) score "$1" "${B_ef_second:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-noseat) score "$1" "${B_ef_noseat:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-pathsprint) score "$1" "${B_ef_pathsprint:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-noscript) score "$1" "${B_ef_noscript:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-dirbase) score "$1" "${B_ef_dirbase:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-nofigs) score "$1" "${B_ef_nofigs:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-topair) score "$1" "${B_ef_topair:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-filing) score "$1" "${B_ef_filing:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
-    ef-filing-noref) score "$1" "${B_ef_filing_noref:-0}" "$1 -- refused by the subject's own E0 self-probe, or the $3 world, red on the shipped subject, reads green with the arm mutated" ;;
+    ef-good) score "$1" "${B_ef_good:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-noclose) score "$1" "${B_ef_noclose:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-sprintless) score "$1" "${B_ef_sprintless:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-untagged) score "$1" "${B_ef_untagged:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-second) score "$1" "${B_ef_second:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-noseat) score "$1" "${B_ef_noseat:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-pathsprint) score "$1" "${B_ef_pathsprint:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-noscript) score "$1" "${B_ef_noscript:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-dirbase) score "$1" "${B_ef_dirbase:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-nofigs) score "$1" "${B_ef_nofigs:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-topair) score "$1" "${B_ef_topair:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-filing) score "$1" "${B_ef_filing:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
+    ef-filing-noref) score "$1" "${B_ef_filing_noref:-0}" "$1 -- refused by the subject's own E0 self-probe before the $3 world is read" m_noscript ;;
     *) bad "$1 -- ef_mut names world $3, which has no base-pass flag" ;;
   esac
 }
@@ -1817,14 +1810,13 @@ Outcome measured: the cost fell.
 "
 # m-nopathnarrow reverts the standalone-word narrowing: the raw line is matched again, so the
 # path-embedded s317 reads as a sprint. The ef-pathsprint world (green on the subject) is used as the
-# seed, so a survivor is rc 0 there; the kill is E0's own BL-966 case refusing first (exit 2), or
-# the world turning red. ef_mut scores rc 0 as a kill, so this one is scored here instead.
+# seed, so a survivor is rc 0 there; the kill is E0's own BL-966 case refusing first (exit 2), read
+# by m_noscript like every efficiency mutant. It is scored here because its world is ef-pathsprint's seed.
 d_pn="$TMP/m-nopathnarrow"; ef_seed "$d_pn" "$EF_PATHSPRINT"
 if mut "$d_pn" 's/^  _t="\$(sed -e .*$/  _t="$1"/'; then
   out="$(vin "$d_pn" "$d_pn/scripts/validate-backlog-receipts.sh" "" --efficiency-only)"; rc_v=$?
   record m-nopathnarrow "$rc_v" "$out"
-  side m-nopathnarrow "rows=$(ef_rows "$out")"
-  score m-nopathnarrow "${B_ef_pathsprint:-0}" "m-nopathnarrow -- refused by the subject's own E0 self-probe (BL-966), or the ef-pathsprint world reads SHAPE BL-979 with the narrowing reverted"
+  score m-nopathnarrow "${B_ef_pathsprint:-0}" "m-nopathnarrow -- refused by the subject's own E0 self-probe (BL-966) with the narrowing reverted" m_noscript
 fi
 # m-noseat: eff_shape_ok back to the three-label form, eff_seat_ok defined and never called.
 ef_mut m-noseat 's#^eff_shape_ok() .*$#eff_shape_ok() { case "$1" in *token-equivalent*) ;; *) return 1 ;; esac; case "$1" in *API*) ;; *) return 1 ;; esac; case "$1" in *gap-inclusive*) return 0 ;; esac; return 1; }#' ef-noseat "$EF_NOSEAT"
@@ -1916,8 +1908,8 @@ ef_mut0() { # ef_mut0 <name> <sed> <ledger>
   # Each mutant's base-pass flag is read literally (its unmutated control world's flag).
   case "$1" in
     m-noscript) score "$1" "${B_ef_noscript:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" ;;
-    m-nofigs) score "$1" "${B_ef_nofigs:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" ;;
-    *) score "$1" "${B_ef_filing:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" ;;
+    m-nofigs) score "$1" "${B_ef_nofigs:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" m_noscript ;;
+    *) score "$1" "${B_ef_filing:-0}" "$1 -- refused by the subject's own E0 self-probe before the corpus" m_noscript ;;
   esac
 }
 ef_mut0 m-noscript 's/^eff_script_ok() {$/eff_script_ok() { return 0;/' "$EF_SL_HEAD measured by docs/analysis/gone.py, before 2.0 h and after 1.0 h; fell.
@@ -1927,134 +1919,6 @@ ef_mut0 m-nostep 's/^eff_step_ok() {$/eff_step_ok() { return 0;/' "$EF_FADDED"
 ef_mut0 m-nobaseline 's/f != "@NONE@" \&\& f ~ \/^`?s3\[0-9\]\[0-9\](\[^0-9\]|\$)\/) bas = 1/1) bas = 1/' "$EF_FADDED"
 ef_mut0 m-nomovement 's/f != "@NONE@" \&\& f ~ \/\[A-Za-z0-9\]\/) mv = 1/1) mv = 1/' "$EF_FADDED"
 ef_mut0 m-noscope 's/ \&\& \[ -n "\${4:-}" \] \&\& grep -qxF -- "\$_l" "\$4"; then$/; then/' "$EF_FADDED"
-
-# ===== THE RECEIPT / FIXTURE-ARM JOIN (BL-278). ==============================================
-# A closed entry's receipt and the fixture arms covering the same subject divide the work: the
-# receipt establishes the fix is present, the arms establish what the receipt cannot express. That
-# division lived in a COMMENT in gate-verdict-grep-shape, and a comment goes stale in silence -- the
-# next hand to widen the receipt reads an arm as redundant and deletes it. This arm asserts it.
-#
-# THE RECEIPT IS DERIVED, NEVER COPIED. It is read out of BL-040's archived entry at run time, so
-# there is no second definition to drift; the entry id is the join key, the body is not in this
-# file. A hardcoded body is the defect one level down, and BL-278's own receipt refuses it.
-#
-# THE SHAPES ARE DERIVED FROM THE PRODUCER. Every `mode == "..."` branch of gate-verdict-grep-shape's
-# seed builder is a shape somebody decided to seed; each is built over a copy of gate-validation.md
-# and the derived receipt run against it. A shape on which the receipt exits 0 is RECEIPT-BLIND --
-# the receipt would close the entry over it -- so it MUST carry a row in one of that fixture's
-# three verdict tables, and that row's verdict must be what that fixture's own join oracle actually
-# returns on the seed: a row that is listed but not reproduced is not coverage, and a blind shape
-# relabelled as a GREEN near-miss is the receipt's blindness blessed. A shape the receipt
-# already fails (non-zero, STILL-LIVE in backlog-reverify.sh's polarity) is receipt-owned and needs
-# no row. Known limit: deleting a seed branch AND its row together is invisible here.
-#
-# SELF-PROBED BEFORE THE CORPUS, IN BOTH DIRECTIONS, through the SAME scan function: a copy of the
-# fixture with the `comment` row deleted must be reported UNCOVERED by name (a receipt-blind shape),
-# and a copy with the `no-read` row deleted must stay quiet (the receipt exits 1 there, so it owns
-# it). The two copies are one property apart and each is cmp-guarded, so a deletion that matched
-# nothing cannot pass as a probe.
-RJ_GVGS=""; RJ_GATE=""; RJ_ARCHIVE=""
-for cand in "$DIR/../gate-verdict-grep-shape/run.sh"; do
-  [ -f "$cand" ] && RJ_GVGS="$cand" && break
-done
-for cand in "$DIR/../../skills/ai-dlc/steps/gate-validation.md" "$DIR/../../../.claude/skills/ai-dlc/steps/gate-validation.md"; do
-  [ -f "$cand" ] && RJ_GATE="$cand" && break
-done
-for cand in "$DIR/../../../docs/backlog.archive.md" "$DIR/../../docs/backlog.archive.md"; do
-  [ -f "$cand" ] && RJ_ARCHIVE="$cand" && break
-done
-if [ -z "$RJ_GVGS" ] || [ -z "$RJ_GATE" ] || [ -z "$RJ_ARCHIVE" ]; then
-  echo "FIXTURE BROKEN: receipt join cannot resolve gvgs='$RJ_GVGS' gate='$RJ_GATE' archive='$RJ_ARCHIVE'" >&2; exit 2
-fi
-RJ_ID="BL-040"
-RJ_REC="$(awk -v id="$RJ_ID" '$0 == "## " id || index($0, "## " id " ") == 1 { f = 1; next }
-  f && /^## / { exit }
-  f && /^verify: sh / { sub(/^verify: sh /, ""); print; exit }' "$RJ_ARCHIVE")"
-if [ -z "$RJ_REC" ]; then
-  echo "FIXTURE BROKEN: no 'verify: sh' receipt derivable for $RJ_ID from $RJ_ARCHIVE" >&2; exit 2
-fi
-RJ="$TMP/rj"; mkdir -p "$RJ/tree/core/skills/ai-dlc/steps"
-RJ_TGT="$RJ/tree/core/skills/ai-dlc/steps/gate-validation.md"
-
-# rj_scan <gvgs-run.sh> -> one line per finding, then "SCANNED <n> BLIND <b> OWNED <o>".
-# Exit 2 when the harness itself could not measure (a heredoc not found, a seed that did not build).
-rj_scan() {
-  local g="$1" w m want got r
-  w="$(mktemp -d "$RJ/scan.XXXXXX")" || { echo "HARNESS mktemp failed"; return 2; }
-  awk '/<<.GVSEEDPY.$/ { f = 1; next } /^GVSEEDPY$/ { f = 0 } f' "$g" > "$w/seed.py"
-  awk '/<<.GVJOINPY.$/ { f = 1; next } /^GVJOINPY$/ { f = 0 } f' "$g" > "$w/join.py"
-  [ -s "$w/seed.py" ] && [ -s "$w/join.py" ] || { echo "HARNESS seed.py or join.py not extractable"; return 2; }
-  awk '/<<.GVMUTANTS.$/ { t = "M"; next } /<<.GVBOUNDS.$/ { t = "B"; next } /<<.GVNEARMISS.$/ { t = "N"; next }
-    /^GV(MUTANTS|BOUNDS|NEARMISS)$/ { t = ""; next }
-    t != "" && NF { split($0, a, "|"); w = (t == "M") ? a[2] : (t == "B") ? "BLOWN" : "GREEN"; print a[1] "|" w }' "$g" > "$w/rows"
-  grep -oE 'mode == "[a-z0-9-]+"' "$w/seed.py" | sed 's/^mode == "//; s/"$//' > "$w/modes"
-  local n=0 b=0 o=0
-  while IFS= read -r m; do
-    [ -n "$m" ] || continue
-    python3 "$w/seed.py" "$RJ_GATE" "$RJ_TGT" "$m" >/dev/null 2>&1 || { echo "HARNESS seed $m did not build"; return 2; }
-    cmp -s "$RJ_GATE" "$RJ_TGT" && { echo "HARNESS seed $m changed no bytes"; return 2; }
-    n=$((n + 1))
-    ( cd "$RJ/tree" && bash -c "$RJ_REC" </dev/null >/dev/null 2>&1 ); r=$?
-    if [ "$r" -ne 0 ]; then o=$((o + 1)); continue; fi
-    b=$((b + 1))
-    want="$(awk -F'|' -v m="$m" '$1 == m { print $2; exit }' "$w/rows")"
-    if [ -z "$want" ]; then echo "UNCOVERED $m"; continue; fi
-    got="$(python3 "$w/join.py" "$RJ_TGT" join 2>/dev/null)"
-    case "$got" in "$want"*) ;; *) echo "UNREPRODUCED $m listed $want, oracle read '${got%% *}'" ;; esac
-  done < "$w/modes"
-  echo "SCANNED $n BLIND $b OWNED $o"
-}
-
-# Positive control first: the derived receipt must CLOSE on the live file, or every "blind" below
-# is a receipt that fails everywhere rather than a shape it cannot see.
-cp "$RJ_GATE" "$RJ_TGT"
-( cd "$RJ/tree" && bash -c "$RJ_REC" </dev/null >/dev/null 2>&1 ); rj_live=$?
-if [ "$rj_live" -ne 0 ]; then
-  note "FAIL  rj-control -- $RJ_ID's derived receipt exits $rj_live on the live gate-validation.md, so it cannot distinguish any shape from the fix"; rc=1
-else
-  note "ok    rj-control -- $RJ_ID's receipt, derived from the archive, closes on the live gate-validation.md"
-fi
-
-# Self-probes, before the corpus.
-rj_probe() { # rj_probe <name> <sed-expr>
-  sed "$2" "$RJ_GVGS" > "$RJ/$1.sh"
-  if cmp -s "$RJ_GVGS" "$RJ/$1.sh"; then echo "NOAPPLY"; return; fi
-  rj_scan "$RJ/$1.sh"
-}
-rj_off="$(rj_probe probe-off '/^comment|/d')"
-case "$rj_off" in
-  *NOAPPLY*|*HARNESS*) note "FAIL  rj-probe-offender -- the probe did not measure: $rj_off"; rc=1 ;;
-  *"UNCOVERED comment"*) note "ok    rj-probe-offender -- with the 'comment' row deleted the receipt-blind shape is reported UNCOVERED by name" ;;
-  *) note "FAIL  rj-probe-offender -- a receipt-blind shape with no fixture row went unreported: $rj_off"; rc=1 ;;
-esac
-rj_nm="$(rj_probe probe-nm '/^no-read|/d')"
-case "$rj_nm" in
-  *NOAPPLY*|*HARNESS*) note "FAIL  rj-probe-near-miss -- the probe did not measure: $rj_nm"; rc=1 ;;
-  *UNCOVERED*|*UNREPRODUCED*) note "FAIL  rj-probe-near-miss -- a shape the receipt already fails was reported as a gap: $rj_nm"; rc=1 ;;
-  *SCANNED*) note "ok    rj-probe-near-miss -- with the receipt-owned 'no-read' row deleted the arm stays quiet" ;;
-  *) note "FAIL  rj-probe-near-miss -- the scan printed no summary: $rj_nm"; rc=1 ;;
-esac
-# The row is present but its verdict is wrong: a blind shape relabelled as a near-miss.
-rj_rl="$(rj_probe probe-relabel 's/^comment|RED|/comment|GREEN|/')"
-case "$rj_rl" in
-  *NOAPPLY*|*HARNESS*) note "FAIL  rj-probe-relabel -- the probe did not measure: $rj_rl"; rc=1 ;;
-  *"UNREPRODUCED comment"*) note "ok    rj-probe-relabel -- a listed row whose verdict the oracle does not return is not coverage" ;;
-  *) note "FAIL  rj-probe-relabel -- a relabelled row was accepted as coverage: $rj_rl"; rc=1 ;;
-esac
-
-# The corpus.
-rj_out="$(rj_scan "$RJ_GVGS")"; rj_rc=$?
-rj_sum="$(sed -n 's/^SCANNED \([0-9]*\) BLIND \([0-9]*\) OWNED \([0-9]*\)$/\1 \2 \3/p' <<<"$rj_out")"
-rj_n="${rj_sum%% *}"; rj_b="$(printf '%s' "$rj_sum" | cut -d' ' -f2)"
-if [ "$rj_rc" -ne 0 ] || [ -z "$rj_sum" ]; then
-  note "FAIL  rj-join -- the scan did not measure: $rj_out"; rc=1
-elif [ "$rj_b" -lt 1 ]; then
-  note "FAIL  rj-join -- 0 receipt-blind shapes over $rj_n seeds: either the receipt got strong enough to retire the arms, or the scan reached nothing -- re-derive before reading it as either"; rc=1
-elif grep -qE '^(UNCOVERED|UNREPRODUCED) ' <<<"$rj_out"; then
-  note "FAIL  rj-join -- a shape $RJ_ID's receipt closes over has no fixture arm that fails it: $(grep -E '^(UNCOVERED|UNREPRODUCED) ' <<<"$rj_out" | tr '\n' ';')"; rc=1
-else
-  note "ok    rj-join -- $rj_b of $rj_n seeded shapes are receipt-blind, and every one carries a gate-verdict-grep-shape row its own oracle reproduces"
-fi
 
 # ===== BL-836. OPEN receipts that CANNOT MEASURE (R7), and closes on the branch whose receipts
 # do not exit 0 (R8). =============================================================================
@@ -2120,8 +1984,8 @@ else
   ok "c5-control -- R8 names BL-861 (closed on the branch, renamed symbol, exit 1), R7 names BL-862 (open, exit 9), BL-863 (open, exit 2) is in neither, R10 names BL-801 (unanchored) of 3 open receipts read"
   C5_BASE_OK=1
 fi
-c5_mut() { # c5_mut <name> <sed> <want-rows> <what> [<target seed id a self-probe refusal must name>]
-  local n="$1" d="$TMP/$1" o r
+c5_mut() { # c5_mut <name> <sed> <want-rows> <what> [<target seed id a self-probe refusal must name> [<deciding arm>]]
+  local n="$1" d="$TMP/$1" o r a="${6:-}"
   c5_seed "$d"
   mut "$d" "$2" || return
   o="$(c5_run "$d")"
@@ -2130,7 +1994,7 @@ c5_mut() { # c5_mut <name> <sed> <want-rows> <what> [<target seed id a self-prob
   record "$n" "$r" "$o"
   side "$n" "rows=$(c5_rows "$o")"
   side "$n" "r10=$(c5_r10 "$o")"
-  score "$n" "${C5_BASE_OK:-0}" "$n -- $4"
+  score "$n" "${C5_BASE_OK:-0}" "$n -- $4" $a
 }
 # Both mutants sit where the self-probe cannot see them -- the corpus call and the shipped ceiling --
 # so the CORPUS row is what scores each. c5-m3 empties the FAIL set itself, which the self-probe's
@@ -2267,7 +2131,7 @@ c5_mut c5-m11 "s|^  \\[ -n \"\\\$1\" \\] \\&\\& \\[ \"\\\$1\" = \"\\\$2\" \\] \\
   "unreachable" "with the skip keyed on presence only, a foreign-ledger run reads as a re-entry and would score nothing" BL-979
 # The key without its repository half: two repositories with a ledger at one relative path share it.
 c5_mut c5-m12 "s/^  printf '%s|%s' \"\\\$_lk_cd\" \"\\\$_lk_led\"\$/  printf '%s' \"\$_lk_led\"/" \
-  "unreachable" "with the common dir dropped from the key, two repositories' docs/backlog.md share one key" BL-979
+  "unreachable" "with the common dir dropped from the key, two repositories' docs/backlog.md share one key" BL-979 c5_m11
 # ===== BL-836, R10 (the anchor convention). r10-m1 sits where the self-probe cannot see it -- the
 # corpus call -- so ONE full validator run scores it on the corpus row. r10-m2..m6 break the grammar,
 # and each is killed by the FIRST seed of vbr_probe_r10 it breaks, named `seed <id>:`. Those five are
@@ -2443,7 +2307,6 @@ pr_ok_of() { grep '^OK: validate-backlog-receipts' "$REC/$1.out" | sed -n '1p'; 
 arm_pr_m_ignore() { r_line "$1" "SIDE pre=REPLAYED"; }
 arm_pr_m_default() { r_has "$1" "PROBE-RECORD: REPLAYED"; }
 arm_pr_m_keylib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
-arm_pr_m_keyrlib() { r_line "$1" "SIDE pre=WRITTEN" && r_has "$1" "PROBE-RECORD: REPLAYED" && ! r_has "$1" "SELF-PROBE FAILED"; }
 # Both read only a pr_two capture whose FIRST run was red (`SIDE rc1=2`): their worlds are m1's and
 # c5-m3's, where a record must not survive. A pr_two world whose first run was green writes a record
 # by design, so `store` non-zero there is the shipped behaviour, not this mutant's.
@@ -2613,7 +2476,7 @@ if mut "$TMP/pr-m-keyrlib.a" "s#$PR_KEYLINE#  _pk_ids=\"\$(git hash-object --no-
    && pr_rlib_mut "$TMP/pr-m-keyrlib.b"; then
   cp "$TMP/pr-m-keyrlib.a/scripts/validate-backlog-receipts.sh" "$TMP/pr-m-keyrlib.b/scripts/validate-backlog-receipts.sh"
   pr_two pr-m-keyrlib "$TMP/pr-m-keyrlib.a" "" "$DEF" "$TMP/pr-m-keyrlib.b" "" "$DEF"
-  score pr-m-keyrlib "$B_PR4" "pr-m-keyrlib -- with backlog-receipt-lib.sh out of the key a cant_measure that never marks replays"
+  score pr-m-keyrlib "$B_PR4" "pr-m-keyrlib -- with backlog-receipt-lib.sh out of the key a cant_measure that never marks replays" pr_m_keylib
 else bad "pr-m-keyrlib -- a mutation DID NOT APPLY"; fi
 # pr-m-early (cell 5): the record written BEFORE the probes; over m1 the red R1 still leaves a record.
 seed "$TMP/pr-m-early"
@@ -2743,6 +2606,8 @@ twin_of() {
 for m in $SCORED; do
   t="$(twin_of "$m")"
   [ -n "$t" ] && [ "$t" != "-" ] || continue
+  # An undefined twin would exit 127 and read as "stays green"; it is a broken table, so it fails.
+  declare -F "arm_$t" >/dev/null || { bad "[twin] $m -- its twin arm_$t is not defined, so the twin check cannot fire"; continue; }
   if "arm_$t" "$m"; then bad "[twin] $m -- the twin arm $t TRIPPED on $m's capture, so the kill is not confined to its deciding arm"
   else ok "[twin] $m -- twin $t stays green on $m's capture: the kill is confined to its deciding arm"; fi
 done

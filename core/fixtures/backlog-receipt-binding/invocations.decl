@@ -9,5 +9,9 @@
 # every self-probe and the corpus before the porcelain comparison decides; both used to stop at R1's UNSEEDED refusal.
 # BL-874: +121 / +48 from 6091 / 2310. The two full R11 runs (r11-ctl, r11-m1) over the c5 world with an
 # R11 commit, and three probe-only drives of vbr_probe_r11 (r11d-ctl, r11-m2, r11-m3), sourced in-process.
-6192 *
+# BL-918: unchanged, re-measured by two agreeing counted runs (6192 / 2342 each). The fifteen arms removed were
+# predicates over existing captures and two SIDE lines only they read; no subject run was removed.
+# BL-918 T1: -41 / 0 from 6192 / 2342, two agreeing counted runs. The receipt / fixture-arm join (rj) and its
+# derived-receipt runs moved to core/fixtures/backlog-receipt-fixture-join/; no validator start moved.
+6151 *
 2342 scripts/validate-backlog-receipts.sh
