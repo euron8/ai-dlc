@@ -678,6 +678,90 @@ fall.
 
 verify: manual
 
+## BL-911 — a planning convergence pass after the first re-dispatches the whole shard map, so every extra pass costs a full-width round of wall clock
+
+**DEFECT (efficiency).** Planning (carry-over-evaluation, requirements, architecture and stories-test-strategy, each with its gate) ran 38.3, 33.1, 35.5, 34.8 and 35.9 machine hours in graph s317 to s321 (s321 open, through stories), whatever the story count. The convergence loop runs in series, and a pass at or after p2 re-dispatches the same width as p1, although `_gate-procedures.md` "Adversarial review dispatch" says pass 2+ "reviews the REPAIR, not the document again".
+
+Adversary spawns per pass, and the span from the pass's first adversary start to its last adversary end:
+
+| Series | p1 | p2 | p3 | p4 | p5 |
+|---|---|---|---|---|---|
+| s321 stories-test-strategy | 36, 179 min | 35, 150 min | 35, 213 min | | |
+| s321 architecture | 8, 72 min | 7, 63 min | 7, 72 min | 7, 44 min | 7, 6 min |
+| s321 requirements | 13, 63 min | 13, 13 min | 13, 10 min | | |
+| s320 stories-test-strategy, p4 to p7 | 19, 16 min | 19, 15 min | 14, 14 min | 14, 8 min | |
+
+Pass-2-and-later adversary plus remediator spawns, dollars and agent-hours: s319 architecture 39, $64, 4.5 h; s320 stories 155, $211, 14.1 h; s321 architecture 52, $105, 11.3 h; s321 stories 96, $95, 10.6 h.
+
+Derivation: `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` and `docs/analysis/pipeline-efficiency-s317-s318/scripts/spawns.py`, run on scratch copies with the s320 edge at 2026-10-29T23:20Z and s321 open (token control units==segs 19,866,167,441 on both sides). Then a pass regex `(?:\bp|pass[ _-]?)(\d+)\b` over adversary and remediator spawn descriptions in those steps, with elicitation and party rows excluded. The counts are a FLOOR: 24 of 184 s321 stories rows carry no parseable pass number. s320 stories p1 to p3 span a session handoff and are left out of the table.
+
+BL-508's `siblings:` mechanism (0.786.0) did not cut the pass count. The step-value verdict keeps passes 2 and 3 "while repairs write defects", so the passes stay. This entry removes their width and bounds their number.
+
+Fix, both items required:
+1. **A pass at or after p2 reviews only the repair.** Its shard set is the parts, sections or story files that pass M−1's joined repair record edited, plus the one cross agent briefed with the whole subject. It is derived by shipping code from the repair record (`join-remediator-shards.sh` already records each part's `edit:` set), never chosen by the lead. A part the repair did not edit is not re-dispatched. `validate-adversarial-convergence.sh` refuses a pass M≥2 whose shard set is wider than that derived set.
+2. **The series is bounded at p3.** A p3 that does not stamp `EXIT_CONDITION_MET` goes to "Divergence resolution dispatch", never to p4. `validate-adversarial-convergence.sh` refuses a p4 or later that does not declare `resolves_divergence:`. This is Rule 8's "divergence is a HARD_BLOCK, not a reason for another pass", given an enforcer.
+
+Fixture arms in the series' own fixture: a seeded p2 whose repair edited 2 of 8 parts dispatches 2 parts plus cross, and the full map is refused. A p4 with no divergence record is refused, and one with it is accepted.
+
+Not discharged by a measurement, a decision record, a prose instruction or a WARN. The entry closes on the shipped refusals plus an `Outcome measured:` line on the first graph sprint that runs them.
+
+Baseline: s321
+Step: stories-test-strategy
+Expected movement: in every planning step, adversary spawns per pass at or after p2 fall to the edited-part count plus one, no series runs past p3, and planning machine hours fall below the 33 to 38 h band of s317 to s321.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-508, BL-538 (round-dispatcher), BL-543 and BL-716 (serial remediator).
+
+verify: manual
+
+## BL-912 — the lead hand-edits `pipeline-snapshot.md` hundreds of times a sprint, and that bookkeeping is the largest single class of lead time
+
+**DEFECT (efficiency).** Lead Edit/Write calls on `_bmad-output/pipeline-snapshot.md`: s320 930 and s321 444. Calls to `snapshot-update.sh`, the sanctioned writer since 0.952.0 (BL-819 L3): s320 2 and s321 0. Of s321's 437 Edits, 242 change In-Flight Teammates rows (agent ids, roles, deliverables, status), 72 change Recent Activity and 6 change table rows.
+
+Lead active time following a snapshot Edit (the gap from that Edit to the lead's next record, gaps of 300 s or less, attributed to the class of the previous lead tool call): s320 planning 4.6 h of 18.2 h (25%), s320 implementation 2.8 h of 15.8 h (17%), s321 planning 4.3 h of 19.1 h (23%). Wait beats are the only class of comparable size (3.2 to 4.9 h), and BL-538 owns them. This attribution is a heuristic over graph's lead transcripts, read only. It was not taken by the shipping extractor.
+
+Fix, both items required:
+1. **Hooks write the In-Flight Teammates table, never the lead.** A PostToolUse hook on `Agent`/`Task` appends the row: agent id from the tool result, role, the deliverable from the brief's `--mark` path (the dispatch guard already parses it into `mark_file`), and dispatched-at from `date`. `wait-for-deliverable.sh` sets the status cell when a path reads DELIVERED, MISSING, FAILED, REJECTED or UNLAUNCHED, and the SubagentStop hook sets it when the agent exits. Every write goes through `snapshot-update.sh` `--row-add` and `--row-status`, so the stamp check still runs.
+2. **A PreToolUse hook denies Edit and Write of `pipeline-snapshot.md`.** Its remedy text names the `snapshot-update.sh` op for the change. Before it ships, the deny is driven over graph's s319 to s321 lead snapshot Edits. Each Edit no op can express gets a new op in `snapshot-update.sh`. None is exempted from the deny.
+
+Fixture arms: an `Agent` dispatch writes its row with no lead call. A `--mark` delivery flips its status. A lead Edit of the snapshot is denied and names the op. A handoff finalisation is expressible as ops.
+
+Not discharged by a measurement, a decision record, a prose instruction or a WARN. The entry closes on the shipped hooks plus an `Outcome measured:` line on the first graph sprint that runs them.
+
+Baseline: s321
+Step: stories-test-strategy
+Expected movement: lead snapshot Edit/Write calls fall to 0 and lead active hours in every planning step and in implementation fall by about the 2.8 to 4.6 h this class takes today, at flat agent wait.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-819 (parent, lead time), BL-806 (snapshot stamps).
+
+verify: manual
+
+## BL-913 — a story's gate transition is a dozen hand-run validator calls by the lead, serially, at every gate pass
+
+**DEFECT (efficiency).** Implementation plus its gate ran 1.80 machine hours per story in s319 and 1.67 in s320. Lead active time was 72% of it, and narrowing review fan-outs (BL-808, BL-811) left that time in place: gate-1 shards per pass fell from 5.5 to 1.9 and subagent dollars per story from $30.7 to $10.8, while machine hours per story fell 7%.
+
+The s320 lead's script calls, all sprint: `verdict.sh` 262, `validate-handoff-evidence.sh` 209, `gate-checkpoint.sh` 185, `partition-review-diff.sh` 101, `validate-gate-adjudication.sh` 77, `validate-artifact-derivations.sh` 70, `validate-adversarial-convergence.sh` 54, `validate-escalation-resolution.sh` 50 and `merge-review-shards.sh` 44. That is over 1,000 calls for 13 stories. Lead active time following a validator or gate-script call (same heuristic as BL-912): s320 implementation 2.9 h of 15.8 h (18%), the largest class there after wait beats. Each call is a lead turn that reads its output and decides the next call, in series, at every gate pass of every story.
+
+Fix, required: **one program per gate transition.** `scripts/ai-dlc/gate-transition.sh <story> <gate> [--pass M]` runs, in core's order, every check the step files prescribe before dispatching that gate:
+- the handoff evidence and smoke arms;
+- the capture list;
+- `partition-review-diff.sh` `--route`, `--narrow` and `--map`;
+- the carried-findings list;
+- opening the checkpoint.
+
+It prints ONE dispatch plan: the refusals with their remedies, or the shard list, the route and the brief inputs. A refusal exits non-zero and opens nothing. `implementation.md` replaces each per-gate list of validator calls with that one call. The dispatch guard denies a gate-1, gate-2 or gate-3 dispatch whose story has no plan from `gate-transition.sh` at the current frozen sha.
+
+Fixture arms: a seeded story at gate 1 yields one plan whose shard list equals the one `partition-review-diff.sh --map` gives alone. A story with a stale Dev Agent Record refuses with the handoff refusal. A gate dispatch with no plan at the frozen sha is denied.
+
+Not discharged by a measurement, a decision record, a prose instruction or a WARN. The entry closes on the shipped program and deny plus an `Outcome measured:` line on the first graph sprint that runs them.
+
+Baseline: s320
+Step: implementation
+Expected movement: lead script calls in implementation fall from about 80 per story toward one per gate pass, and lead active hours in implementation plus its gate fall by most of the 2.9 h this class takes in s320.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-819 (parent, lead time), BL-809 and BL-844 (routes), BL-843 (rendered Dev Agent Record).
+
+verify: manual
+
 ## Graph s320 implementation review (filed 2026-10-27)
 
 Found by reading graph's s320 lead transcripts (`0de9fe4e`, `ca14f3b7`), its spawn ledger, its commit log and the `docs/reviews/s320/` gate records, read only, at graph `b975b7746`. Times are EDT. At filing, 10 of 13 stories were done after about 16 hours of implementation; 1.3 was in review and 2.1 and 2.2 had never been dispatched. Derivations are named in each entry.
