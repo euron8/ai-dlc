@@ -38,11 +38,9 @@ those when a rule looks arbitrary or when you need the evidence behind a figure.
 instruction from them.**
 
 **MOST OF THAT HISTORY IS NO LONGER IN THIS FILE, AND THAT IS THE CHANGE YOU MOST NEED TO KNOW
-ABOUT.** At `v0.580.0` this file was rotated from **1158744 bytes to 138435** — the per-batch
-records, the adjudication register, `## Status record`, `## Phases` and `## Verdict vocabulary` all
-moved to `docs/plans/archive/graph-ledger-full-drain.md`, named by the pointer at the top. Nothing
-was deleted; conservation was asserted three ways. **Go there for the evidence behind any figure,
-and expect a rule here to cite a measurement whose story lives in the archive.** `## Context` and
+ABOUT.** The per-batch records, the adjudication register, `## Status record`, `## Phases` and
+`## Verdict vocabulary` moved to `docs/plans/archive/graph-ledger-full-drain.md`, named by the
+pointer at the top. **Go there for the evidence behind any figure.** `## Context` and
 `## What the pull produced` are still in this file.
 
 **A CITATION INTO THE ARCHIVE IS A PLAIN PATH, NEVER `path:line`.** A later rotation re-numbers
@@ -51,9 +49,8 @@ correct rotation.
 
 **ROTATE THIS FILE AFTER YOU WRITE YOUR OWN BLOCK — IT IS SOMETHING EVERY BATCH FROM HERE
 OWES.** Each close rotates the file back to just under `P8`'s 150000 ceiling, so the next resume
-block takes it over again and your push WILL fail on it. That is the designed order and not a surprise: `plan-rotate.sh` refuses to move anything while
-the file is UNDER the ceiling ("a plan under the ceiling rotates to itself"), so a batch cannot
-rotate pre-emptively however much it wants to. Let the arm fire, then `bash
+block takes it over again and your push WILL fail on it. `plan-rotate.sh` refuses to move anything
+while the file is UNDER the ceiling, so let the arm fire, then `bash
 scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves and `--apply` to
 move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
 file.
@@ -61,23 +58,16 @@ file.
 **THE ROTATOR NOW SEES THIS BLOCK'S BATCH RECORDS, SO DO NOT ROTATE BY HAND.** Each column-0
 `**BATCH <n>` paragraph opens a record that runs to the next one. Once the spent sections are
 exhausted, the rotator takes records OLDEST-FIRST, and it never takes the newest record or the first
-one in the section. It budgets its own pointer line, and it refuses with exit 2 rather than
-claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scratch copy at
-`--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
-exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
-it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+one in the section. It refuses with exit 2 when it cannot reach the ceiling. **A record is moved
+whole, including any standing rule written inside it**, so a rule that must outlive its batch
+belongs in `### NEXT ACTIONS`, not in a batch record.
 
 **BATCH 249 IS CLOSED: SIX RELEASES, `v0.996.0` THROUGH `v0.1001.0`. THE NEXT SESSION STARTS BATCH 250.**
 This block replaces the batch-248 record. Lead was ai-dlc-e3; owners ai-dlc-d4, 57, 9c, cb and 51. No `graph-*` session is ever messaged.
 - **Landed** (`git log origin/main`; each subject starts with its version). After `0.999.0` came `0.1000.0` (operator, over 1.0.0); `validate-release-version.sh` compares fields numerically. **The next VERSION is `0.1002.0`.**
-  - `v0.996.0` `d123c3565`: BL-908 (PC-S321-ADVERSARIAL-SHARD-DIR-IS-HAND-TYPED-BY-THE-LEAD).
-  - `v0.997.0` `1d1f7c368`: BL-907 (PC-S321-SELF-UPDATE-WHOLE-FIXTURE-DIR-WRITE-OVERWRITES-AN-UNDIFFED-CONSUMER-EDIT).
-  - `v0.998.0` `0d00d6d36`: BL-510 arm, BL-828, BL-868 item 15; BL-909, BL-910 filed.
-  - `v0.999.0` `160216d97`: BL-874, BL-875, BL-896, BL-904, BL-905.
-  - `v0.1000.0` `1809d8589`: BL-538 progress, still PARTIAL.
-  - `v0.1001.0` `7a6d25d44`: BL-906, `review-shard-merge` in two shards.
+  - `v0.996.0` BL-908; `v0.997.0` BL-907; `v0.998.0` BL-510 arm, BL-828, BL-868 item 15; `v0.999.0` BL-874, BL-875, BL-896, BL-904, BL-905; `v0.1000.0` BL-538 progress, still PARTIAL; `v0.1001.0` `7a6d25d44` BL-906.
 - **Operator rulings.** BL-510 fixed; BL-868 item 15 exempt; BL-842's seeded-run count dropped; BL-905 runner mode; BL-538 party rounds in c5; release commit rotates; `FORK_BUDGET` raised by owners (owner rules, Receipts).
-- **Facts.** `FORK_BUDGET=2901`, `fork-profile.sh --section total` 2899. A6 reads **74238/74240**: the next durable-channel edit fails A6. BL-538 closes only on an `Outcome measured:` line from a graph sprint on `0.1000.0` or later. In the guard replay 1154 of 1343 `mark_file` values were not party-mode tails and read field-less, as at base.
+- **Facts.** `FORK_BUDGET=2901`, `fork-profile.sh --section total` 2899. A6 reads **74238/74240**: the next durable-channel edit fails A6. BL-538 closes only on an `Outcome measured:` line from a graph sprint on `0.1000.0` or later.
 - **Backlog.** Live 43, archive 838. **The next free id is BL-911.**
 - **Ledger.** 0 live over 11 qualifying refs plus graph's working tree (control 0); both batch candidates archived upstream. PENDING 0.
 - **Graph.** Installed `0.997.0` (`1d1f7c36`) on `ai-dlc/feature/per-chain-rebalancer-instances`, `main` 0.969.0; 0 writes by this batch. The pull is not preapproved.
@@ -915,6 +905,9 @@ candidate's surviving half is upstream's to file and build, never a question for
    - Verify a receipt the way R8 and `scripts/backlog-rotate.sh` run it: from inside the hook's step
      environment (the extracted pre-suite prefix of action "Gate it the way the hook runs it, and
      read the GATE's own exit."), not only standalone.
+   - When a fixture's counted starts rise, name the new arms that account for the rise. A reshape
+     or a per-script split is owed only for a rise NOT accounted for by the release's own new
+     arms, meaning one from the engine or a shared lib.
    - A new `scripts/*.sh` cost 3 forks before BL-898 (0.983.0) and measured 0 at 8f25c6904; a
      root-resolving `core/scripts/*.sh` measured +10. Put a receipt under its fixture
      (`core/fixtures/<f>/receipt-bl<N>.sh`); `bash scripts/fork-profile.sh --section total` in
@@ -937,7 +930,9 @@ candidate's surviving half is upstream's to file and build, never a question for
    **Flow.**
    1. Write your contract to a file in your scratchpad. Spawn a contract adversary (`opus`,
       read-only, `isolation: "remote"`) on it BEFORE any builder. Fold its BLOCKERs and DEFECTs. A
-      blocker is a fix list unless it proves no fix exists.
+      blocker is a fix list unless it proves no fix exists. A docs-only release, one that changes
+      no script, hook, fixture or step file, spawns NO contract adversary. Its tip adversary still
+      runs, and every CLOSE verdict still gets its second independent `opus` verifier.
    2. Build through hands, each `isolation: "remote"`, model stated with its one-clause reason.
       Every brief carries the two verbatim spawn sentences of `docs/plans/graph-ledger-full-drain.md`
       action "DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.", this sentence
@@ -947,16 +942,22 @@ candidate's surviving half is upstream's to file and build, never a question for
       commit subject carries no version number. Release text, including a docs-only release's, is
       a hand unit. `isolation: "remote"` runs on this box, so a macOS-only experiment is not a
       reason to spawn locally.
-   3. Each entry: its own commit (naming NO `PC-` id), its own fixture arm and mutant, and a
-      replaced `verify:` receipt scored under `set -uo pipefail` against the fix (0), two plausible
-      regressions (non-zero) and a second correct spelling (0). A PARTIAL entry keeps
-      `verify: manual` while any owed item is open.
+   3. Each entry gets its own commit, naming NO `PC-` id. A records-only close, one that changes
+      no shipped behaviour, adds NO test code: no fixture, no arm, no receipt, no stub. A fixture
+      arm and mutant are owed only for a behaviour change, and a receipt only where a `run.sh`,
+      `seed.sh` or `lib.sh` invokes it (BL-915's E1 fails the push on any receipt nothing
+      invokes). A test of a mechanism lives in a fixture keyed on that mechanism's files, never
+      in one that re-keys on `docs/backlog.md`. Every contract states BL-868, zero
+      load-dependent tests. A PARTIAL entry keeps `verify: manual` while any owed item is open.
    4. Tip adversary (`opus`, read-only) on the finished branch. Fold. Re-verify ONLY your own
       units. RELEASE TEXT IS PREPARED IN ADVANCE: before you tell <lead> you are ready to push,
       have a hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
       lines), so your gate starts the moment its turn comes. The tip adversary reviews the tree
-      that SHIPS: after any rebase that resolves a conflict, spawn a short delta adversary pass on
-      the rebased tip. An adversary round may escalate the threat model beyond the entry's stated
+      that SHIPS: after a rebase whose resolved conflict touched code, a hook, a fixture or a step
+      file, spawn a short delta adversary pass on the rebased tip. A conflict confined to
+      `VERSION`, `CHANGELOG`, `fork-budget.txt`, `docs/backlog.md`, `docs/backlog.archive.md` or a
+      re-rendered derived index is resolved by its existing rule (union plus count check, take main
+      and re-measure) with no adversary. An adversary round may escalate the threat model beyond the entry's stated
       problem. A finding whose fix adds a trust root or a new consumer cost goes to <lead> with its
       measured consumer cost, and <lead> takes it to the operator; the lead never rules it.
       Findings fixable in the release's own files at no consumer cost are fixed in-release.
@@ -1544,7 +1545,11 @@ given at batch 90.
 
    **BEFORE THE GATE ASK, RUN THE STEPS ABOVE THE SUITE ON THE TREE THAT WILL BE PUSHED, THEN PUSH:
    THE RELEASE PUSH IS THE GATE.** There is no rehearsal push and no push to a throwaway ref
-   (`CLAUDE.md`, "Run the fixture suite the way the hook runs it").
+   (`CLAUDE.md`, "Run the fixture suite the way the hook runs it"). The owner runs the extracted
+   pre-suite prefix before the gate ask only when the release adds or changes a pre-push step, a
+   script a pre-push step runs, a receipt, or `.githooks/`. Otherwise it skips the prefix run and
+   the release push is the gate, because the push runs the same steps first and fails at the same
+   point.
    - **The pre-suite run executes the hook's own bytes, never a list.** In a clean checkout detached
      at the release commit, take `.githooks/pre-push` from line 1 up to, not including, the single
      line beginning `step "fixture suite`, append `exit $fail`, and run it with stdin from
