@@ -1,7 +1,35 @@
 # apply-restamp-worklist and its two shard drivers (b, c, which exec the parent's run.sh --group) share ONE declaration shape.
 # apply-restamp-worklist sources the shared preamble, drives apply.sh and its reconcile siblings from copies of that directory, reads the real pre-push for the C6 premise, copies the transient-ignore renderer and its schema into seeded consumers, and runs the real hook-registration validator.
-core/fixtures/lib/
-core/skills/ai-dlc-update/reconcile/
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+core/skills/ai-dlc-update/reconcile/emit-report.sh
+core/skills/ai-dlc-update/reconcile/hard-blockers.sh
+core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/ledger-rotate.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/skills/ai-dlc-update/reconcile/predicate-differential.sh
+core/skills/ai-dlc-update/reconcile/predicate-sites.md
+core/skills/ai-dlc-update/reconcile/readopt-override.sh
+core/skills/ai-dlc-update/reconcile/register-drift.sh
+core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+core/skills/ai-dlc-update/reconcile/retired-fixtures.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-token.sh
+core/skills/ai-dlc-update/reconcile/retired-tokens.sh
+core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+core/skills/ai-dlc-update/reconcile/self-update-push.sh
+core/skills/ai-dlc-update/reconcile/settings-merge.sh
+core/skills/ai-dlc-update/reconcile/setup-site-drift.sh
+core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/reconcile/template-sites.md
+core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
 !core/skills/ai-dlc-update/reconcile/apply.sh
 core/git-hooks/pre-push
 !core/scripts/sync-transient-ignore.sh

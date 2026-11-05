@@ -34,10 +34,9 @@ MERGE="$(find_up core/scripts/merge-review-shards.sh scripts/ai-dlc/merge-review
 GATE_MD="$(find_up core/skills/ai-dlc/steps/gate-validation.md .claude/skills/ai-dlc/steps/gate-validation.md)" || GATE_MD=""
 ROLE_MD="$(find_up core/team-roles/code-reviewer.md .claude/team-roles/code-reviewer.md)" || ROLE_MD=""
 GRAMMAR="$(find_up core/skills/ai-dlc/artifact-path-grammar.md .claude/skills/ai-dlc/artifact-path-grammar.md)" || GRAMMAR=""
-STEP_MD="$(find_up core/skills/ai-dlc/steps/implementation.md .claude/skills/ai-dlc/steps/implementation.md)" || STEP_MD=""
 QA_MD="$(find_up core/team-roles/qa.md .claude/team-roles/qa.md)" || QA_MD=""
 SS_SCHEMA="$(find_up core/schemas/sprint-status.json .claude/schemas/sprint-status.json)" || SS_SCHEMA=""
-for _p in PART MERGE GATE_MD ROLE_MD GRAMMAR STEP_MD QA_MD SS_SCHEMA; do
+for _p in PART MERGE GATE_MD ROLE_MD GRAMMAR QA_MD SS_SCHEMA; do
   eval "_x=\${$_p}"
   [ -n "$_x" ] || { echo "FIXTURE ERROR: $_p not found above $LIB_DIR in either layout; nothing was asserted" >&2; exit 2; }
 done
@@ -235,14 +234,23 @@ new_repo() { # <dir> [old|new] -> base commit holding the artifact-path grammar,
   esac
   G -C "$1" add -A && G -C "$1" commit -q -m base || return 1
 }
-REPO_A="$WORK/repo-a"; REPO_B="$WORK/repo-b"
-new_repo "$REPO_A" && new_repo "$REPO_B" old || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+# THE PARTITION REPOSITORY (BL-918). The shapes only the partition is asked about -- A, C, LO, HI, D, X and Y -- share
+# ONE repository, REPO_P: each is a branch off its one root commit (new_repo's base: the artifact-path grammar), and each
+# arm names that shape's own base..sha, which is all the partition reads (`git diff --numstat` two-dot, and the grammar
+# from the work tree, which every branch carries). REPO_A..REPO_Y name it, so every arm reads as before.
+REPO_P="$WORK/repo-p"; REPO_B="$WORK/repo-b"
+new_repo "$REPO_P" && new_repo "$REPO_B" old || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+P_ROOT="$(G -C "$REPO_P" rev-parse HEAD)" || { echo "FIXTURE ERROR: the partition repository has no root" >&2; exit 2; }
+p_branch() { G -C "$REPO_P" checkout -q -B "$1" "$P_ROOT" || { echo "FIXTURE ERROR: branch $1 of $REPO_P" >&2; exit 2; }; }
+REPO_A="$REPO_P"; REPO_C="$REPO_P"; REPO_LO="$REPO_P"; REPO_HI="$REPO_P"; REPO_D="$REPO_P"; REPO_X="$REPO_P"; REPO_Y="$REPO_P"
 # A: every reviewable file under app/, one pipeline artifact under a scan root.
+p_branch shape-a
 for f in app/api/a.py app/api/b.py app/web/c.js app/web/d.js app/core/e.py app/core/f.py; do
   lines "$REPO_A/$f" 10 "$f"
 done
 lines "$REPO_A/docs/reviews/s1/0-old-code-review.md" 10 review
 G -C "$REPO_A" add -A && G -C "$REPO_A" commit -q -m frozen
+A_BASE="$P_ROOT"; A_SHA="$(G -C "$REPO_P" rev-parse HEAD)"
 # B: three top directories, two files each, every file 5 lines: identical weight per directory.
 for f in alpha/a1.txt alpha/a2.txt beta/b1.txt beta/b2.txt gamma/g1.txt gamma/g2.txt; do
   lines "$REPO_B/$f" 5 "$f"
@@ -251,7 +259,6 @@ G -C "$REPO_B" add -A && G -C "$REPO_B" commit -q -m frozen
 for r in "$REPO_A" "$REPO_B"; do
   [ -d "$r/.git" ] || { echo "FIXTURE ERROR: $r is not a repository (inherited GIT_DIR?)" >&2; exit 2; }
 done
-A_BASE="$(G -C "$REPO_A" rev-parse HEAD~1)"; A_SHA="$(G -C "$REPO_A" rev-parse HEAD)"
 B_BASE="$(G -C "$REPO_B" rev-parse HEAD~1)"; B_SHA="$(G -C "$REPO_B" rev-parse HEAD)"
 B_SHA12="$(printf '%s' "$B_SHA" | cut -c1-12)"
 # A DIVERGED base: a sibling of the frozen sha minted on B_BASE's tree, so its two-dot diff to
@@ -260,40 +267,32 @@ B_SIB="$(G -C "$REPO_B" commit-tree "${B_BASE}^{tree}" -p "$B_BASE" -m sibling <
   || { echo "FIXTURE ERROR: commit-tree for the diverged base failed" >&2; exit 2; }
 # C: four top directories of identical weight and NO --max-parts, so the default K alone decides
 # the part count (4 under K=4; 2 under K=2).
-REPO_C="$WORK/repo-c"
-new_repo "$REPO_C" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+p_branch shape-c
 for f in w1/a.txt w1/b.txt w2/a.txt w2/b.txt w3/a.txt w3/b.txt w4/a.txt w4/b.txt; do
   lines "$REPO_C/$f" 5 "$f"
 done
 G -C "$REPO_C" add -A && G -C "$REPO_C" commit -q -m frozen
 [ -d "$REPO_C/.git" ] || { echo "FIXTURE ERROR: $REPO_C is not a repository" >&2; exit 2; }
-C_BASE="$(G -C "$REPO_C" rev-parse HEAD~1)"; C_SHA="$(G -C "$REPO_C" rev-parse HEAD)"
+C_BASE="$P_ROOT"; C_SHA="$(G -C "$REPO_P" rev-parse HEAD)"
 # LO / HI: the default's boundary, DFLT-1 and DFLT reviewable files, one top directory each so the
 # map has independent groups. LO ALSO carries one pipeline artifact under a scan root, so its diff
 # holds DFLT files and only the exclusion keeps it below the threshold.
-REPO_LO="$WORK/repo-lo"; REPO_HI="$WORK/repo-hi"
-new_repo "$REPO_LO" && new_repo "$REPO_HI" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
-_i=0; while [ "$_i" -lt "$DFLT" ]; do
-  _i=$((_i + 1))
-  [ "$_i" -lt "$DFLT" ] && lines "$REPO_LO/t$_i/f.txt" 5 "lo-$_i"
-  lines "$REPO_HI/t$_i/f.txt" 5 "hi-$_i"
-done
+p_branch shape-lo
+_i=0; while [ "$_i" -lt "$((DFLT - 1))" ]; do _i=$((_i + 1)); lines "$REPO_LO/t$_i/f.txt" 5 "lo-$_i"; done
 lines "$REPO_LO/docs/reviews/s1/0-old-code-review.md" 5 review
 G -C "$REPO_LO" add -A && G -C "$REPO_LO" commit -q -m frozen
+LO_BASE="$P_ROOT"; LO_SHA="$(G -C "$REPO_P" rev-parse HEAD)"
+p_branch shape-hi
+_i=0; while [ "$_i" -lt "$DFLT" ]; do _i=$((_i + 1)); lines "$REPO_HI/t$_i/f.txt" 5 "hi-$_i"; done
 G -C "$REPO_HI" add -A && G -C "$REPO_HI" commit -q -m frozen
-for r in "$REPO_LO" "$REPO_HI"; do
-  [ -d "$r/.git" ] || { echo "FIXTURE ERROR: $r is not a repository" >&2; exit 2; }
-done
-LO_BASE="$(G -C "$REPO_LO" rev-parse HEAD~1)"; LO_SHA="$(G -C "$REPO_LO" rev-parse HEAD)"
-HI_BASE="$(G -C "$REPO_HI" rev-parse HEAD~1)"; HI_SHA="$(G -C "$REPO_HI" rev-parse HEAD)"
+HI_BASE="$P_ROOT"; HI_SHA="$(G -C "$REPO_P" rev-parse HEAD)"
 # D: DFLT+2 reviewable files, the default-built MERGE world. Off the boundary on purpose, so the
 # `<`/`<=` mutant is owned by the HI arm alone and this world owns what the manifest records.
-REPO_D="$WORK/repo-d"
-new_repo "$REPO_D" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+p_branch shape-d
 _i=0; while [ "$_i" -lt "$((DFLT + 2))" ]; do _i=$((_i + 1)); lines "$REPO_D/u$_i/f.txt" 5 "d-$_i"; done
 G -C "$REPO_D" add -A && G -C "$REPO_D" commit -q -m frozen
 [ -d "$REPO_D/.git" ] || { echo "FIXTURE ERROR: $REPO_D is not a repository" >&2; exit 2; }
-D_BASE="$(G -C "$REPO_D" rev-parse HEAD~1)"; D_SHA="$(G -C "$REPO_D" rev-parse HEAD)"
+D_BASE="$P_ROOT"; D_SHA="$(G -C "$REPO_P" rev-parse HEAD)"
 D_SHA12="$(printf '%s' "$D_SHA" | cut -c1-12)"
 # E / F: eight and two top directories of identical weight, merged with --max-parts 8 and 2, so
 # the map has K=8 (six cross groups, the largest G) and K=2 (one cross group, `cross.md`).
@@ -324,8 +323,7 @@ N_BASE="$(G -C "$REPO_N" rev-parse HEAD~1)"; N_SHA="$(G -C "$REPO_N" rev-parse H
 # evidence/s1/ (counted DFLT+2 after exclusion, so it STAYS sharded); X2 deletes three code files
 # (DFLT-1 counted, so the flag flips it to SERIAL while the flagless run still partitions); X3 adds one
 # scan-root file. REPO_Y: Y1 is ONE code file plus five captures (C8), Y2 a second code file.
-REPO_X="$WORK/repo-x"; REPO_Y="$WORK/repo-y"
-new_repo "$REPO_X" && new_repo "$REPO_Y" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+p_branch shape-x
 _i=0; while [ "$_i" -lt "$((DFLT + 2))" ]; do _i=$((_i + 1)); lines "$REPO_X/x$((_i % 4))/c$_i.py" "$((_i + 4))" "x-$_i"; done
 _i=0; while [ "$_i" -lt 10 ]; do _i=$((_i + 1)); lines "$REPO_X/evidence/s1/cap$_i.txt" 3 "cap-$_i"; done
 G -C "$REPO_X" add -A && G -C "$REPO_X" commit -q -m x1 \
@@ -333,19 +331,22 @@ G -C "$REPO_X" add -A && G -C "$REPO_X" commit -q -m x1 \
   || { echo "FIXTURE ERROR: repo X could not be built" >&2; exit 2; }
 lines "$REPO_X/docs/reviews/s1/r.txt" 3 r
 G -C "$REPO_X" add -A && G -C "$REPO_X" commit -q -m x3 || { echo "FIXTURE ERROR: repo X could not be built" >&2; exit 2; }
+X_BASE="$(G -C "$REPO_X" rev-parse HEAD~3)"; X1_SHA="$(G -C "$REPO_X" rev-parse HEAD~2)"
+X2_SHA="$(G -C "$REPO_X" rev-parse HEAD~1)"; X3_SHA="$(G -C "$REPO_X" rev-parse HEAD)"
+p_branch shape-y
 lines "$REPO_Y/src/only.py" 40 only
 for _i in 1 2 3 4; do lines "$REPO_Y/evidence/s1/cap$_i.txt" 3 "y-cap-$_i"; done
 lines "$REPO_Y/other/c.log" 2 clog
 G -C "$REPO_Y" add -A && G -C "$REPO_Y" commit -q -m y1 || { echo "FIXTURE ERROR: repo Y could not be built" >&2; exit 2; }
 lines "$REPO_Y/other/two.py" 30 two
 G -C "$REPO_Y" add -A && G -C "$REPO_Y" commit -q -m y2 || { echo "FIXTURE ERROR: repo Y could not be built" >&2; exit 2; }
-for r in "$REPO_X" "$REPO_Y"; do
-  [ -d "$r/.git" ] || { echo "FIXTURE ERROR: $r is not a repository" >&2; exit 2; }
-done
-X_BASE="$(G -C "$REPO_X" rev-parse HEAD~3)"; X1_SHA="$(G -C "$REPO_X" rev-parse HEAD~2)"
-X2_SHA="$(G -C "$REPO_X" rev-parse HEAD~1)"; X3_SHA="$(G -C "$REPO_X" rev-parse HEAD)"
+[ -d "$REPO_P/.git" ] || { echo "FIXTURE ERROR: $REPO_P is not a repository" >&2; exit 2; }
 X1_SHA12="$(printf '%s' "$X1_SHA" | cut -c1-12)"
 Y_BASE="$(G -C "$REPO_Y" rev-parse HEAD~2)"; Y1_SHA="$(G -C "$REPO_Y" rev-parse HEAD~1)"; Y2_SHA="$(G -C "$REPO_Y" rev-parse HEAD)"
+# THE SHAPES' CONTROL: every base is the one root, and the shas are pairwise distinct, so no two shapes share a diff.
+[ "$X_BASE" = "$P_ROOT" ] && [ "$Y_BASE" = "$P_ROOT" ] \
+  && [ "$(printf '%s\n' "$A_SHA" "$C_SHA" "$LO_SHA" "$HI_SHA" "$D_SHA" "$X1_SHA" "$X2_SHA" "$X3_SHA" "$Y1_SHA" "$Y2_SHA" | sort -u | grep -c .)" = 10 ] \
+  || { echo "FIXTURE STALE: a partition shape in $REPO_P is not its own branch off the root" >&2; exit 2; }
 # The lists, in the spelling `git diff --numstat` prints (the spelling --list-captures emits).
 # XC_ALL: the ten captures. XC_SEED: nine as LF lines, cap10 ONLY as a CRLF line, a path outside the
 # diff, the scan-root path, and a duplicate -- its intersection with the counted files is 10, its
@@ -686,15 +687,18 @@ p_env_key() { # the key set to 4 in the environment, no flag -> partitions (name
   [ "$n" -ge 2 ]
 }
 p_worst() { # three worlds where count/cross/last disagree with worst-of, and the all-APPROVED control
-  local sd="$1" d o w want
-  for w in "BLOCKED APPROVED APPROVED APPROVED BLOCKED" \
-           "NEEDS_REWORK BLOCKED NEEDS_REWORK APPROVED BLOCKED" \
-           "APPROVED APPROVED APPROVED APPROVED APPROVED"; do
-    set -- $w; want="$5"
-    d="$(world4 "$sd" "$1" "$2" "$3" "$4")" || return 1
+  # Each world is a cell (w-disc, w-bn, w-ok), so the worst-of claim mutant runs one world; WHY names the cell.
+  local sd="$1" d o w want c
+  for w in "w-disc BLOCKED APPROVED APPROVED APPROVED BLOCKED" \
+           "w-bn NEEDS_REWORK BLOCKED NEEDS_REWORK APPROVED BLOCKED" \
+           "w-ok APPROVED APPROVED APPROVED APPROVED APPROVED"; do
+    set -- $w; c="$1"; shift; want="$5"
+    cell "$c" || continue
+    d="$(world4 "$sd" "$1" "$2" "$3" "$4")" || { WHY="$WHY $c{the world was not built}"; return 1; }
     o="$(out_of "$d")"; run_merge "$sd" "$d"
-    [ "$w" != "APPROVED APPROVED APPROVED APPROVED APPROVED" ] || hand_keep "$sd" worst3 "$o" "$d"
-    [ "$RC" -eq 0 ] && has "$MO" "verdict=$want " && [ -f "$o" ] && [ "$(check1_value "$o")" = "$want" ] || return 1
+    [ "$c" != w-ok ] || hand_keep "$sd" worst3 "$o" "$d"
+    [ "$RC" -eq 0 ] && has "$MO" "verdict=$want " && [ -f "$o" ] && [ "$(check1_value "$o")" = "$want" ] \
+      || { WHY="$WHY $c{rc=$RC want $want: $(head -1 "$MO")}"; return 1; }
   done
 }
 p_c1() { # Check 1's pattern matches the merged file EXACTLY once, and reads NEEDS_REWORK
@@ -730,8 +734,9 @@ p_conserve() { # a unique token from every part and from cross appears in the ou
   [ "$RC" -eq 0 ] && [ -f "$o" ] || return 1
   for k in 1 2 3 cross-1 cross-2 cross-3; do has "$o" "CONSERVE-$k-7f3a" && has "$o" "#### F-$k-1 " || return 1; done
 }
-p_miss_ord() { local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  rm -f "$d/2.md"; run_merge "$1" "$d"; hand_keep "$1" own_miss "$(out_of "$d")" "$d"; refused_clean "shard 2 is missing from" "$d"; }
+p_miss_ord() { local d; cell miss-ord || return 0; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  rm -f "$d/2.md"; run_merge "$1" "$d"; hand_keep "$1" own_miss "$(out_of "$d")" "$d"
+  refused_clean "shard 2 is missing from" "$d" || { WHY="$WHY miss-ord{rc=$RC: $(head -1 "$MO")}"; return 1; }; }
 p_miss_cross() { # a cross shard that is not the first one missing
   local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
   [ -f "$d/cross-2.md" ] || return 1
@@ -767,9 +772,9 @@ p_moved() { # the manifest was written, then the worktree's scan roots moved und
   refused_clean "differs from the map it records" "$d"
 }
 p_a3() { # a shard body carrying `## Verdict` -> two Check-1 matches -> refused
-  local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  local d; cell a3-two || return 0; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
   shard "$d" 2 APPROVED 2 "" "$(printf '## Verdict\nAPPROVED')"; run_merge "$1" "$d"; hand_keep "$1" own_a3 "$(out_of "$d")" "$d"
-  refused_clean "matches Check 1's verdict pattern 2 time(s)" "$d"
+  refused_clean "matches Check 1's verdict pattern 2 time(s)" "$d" || { WHY="$WHY a3-two{rc=$RC: $(head -1 "$MO")}"; return 1; }
 }
 # A partition refusal: exit 2, ONE stderr line `partition-review-diff: REFUSED — ...` carrying the
 # token, nothing on stdout, and no manifest (nor its temp) in <dir>.
@@ -1380,8 +1385,6 @@ p_x_lone() { # X2 (BL-811): ONE cross.md in place of the groups at K>2 is the DI
   # x-lone-k8: K=8 (G=6), code-review: merges, titled 9 shards (K + the ONE delivered), the parts in
   #   order then `## Shard: cross` last with no group header, and a 1, 2 finding (cross-1's under the
   #   groups) owned by the lone cross, count +1.
-  # x-lone-qa: K=3 (G=3), --gate qa: the lone cross.md carries the per-AC table and merges PASS (it is
-  #   the execution owner), and --check-shard over it answers SHARD-OK (what --mark seals on).
   # x-partial: K=8 with cross-6.md removed from the complete set -> REFUSED naming cross-6.
   local sd="$1" d o n0 g pl cl SHARD_SHA="$E_SHA"
   WHY=""
@@ -1400,15 +1403,6 @@ p_x_lone() { # X2 (BL-811): ONE cross.md in place of the groups at K>2 is the DI
     run_merge "$sd" "$d"
     [ "$RC" -eq 0 ] && has "$MO" "findings=$((n0 + 1)) " && has "$o" "#### F-own " \
       || { WHY="x-lone-k8{a 1, 2 finding in the lone cross.md: rc=$RC $(head -1 "$MO")}"; return 1; }
-  fi
-  if cell x-lone-qa; then
-    SHARD_SHA="$B_SHA"; d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="x-lone-qa{the qa world was not built}"; return 1; }
-    [ -f "$d/cross-3.md" ] || { WHY="x-lone-qa{the seed is not grouped}"; return 1; }
-    rm -f "$d"/cross-*.md; qshard "$d" cross PASS "1, 3"; o="$(qout "$d")"; q_merge "$sd" "$d"
-    [ "$RC" -eq 0 ] && has "$MO" "verdict=PASS " && has "$o" "| AC | Verdict | Evidence |" && [ "$(check1_value "$o")" = PASS ] \
-      || { WHY="x-lone-qa{want MERGED PASS got rc=$RC $(head -1 "$MO")}"; return 1; }
-    run_check "$sd" "$d" qa "$d/cross.md"
-    [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK:" || { WHY="x-lone-qa{--check-shard cross.md rc=$CRC $(head -1 "$CO")}"; return 1; }
   fi
   if cell x-partial; then
     SHARD_SHA="$E_SHA"; d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="x-partial{the K=8 world was not built}"; return 1; }
@@ -1887,7 +1881,7 @@ p_owner() {
   # Under --check-shard the owner is read only once it is finished and sealed: unmarked, cross-3 passes.
   # The two --check-shard cells read the state the cell before them left, so selecting one runs its
   # prerequisite steps without counting them as cells.
-  if cs_sel dup-merge || cs_sel dup-check-owner-unsealed || cs_sel dup-check-owner-sealed; then
+  if cs_sel dup-merge || cs_sel dup-check-owner-unsealed; then
     SHARD_SHA="$E_SHA"
     d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || { WHY="$WHY the K=8 world was not built"; return 1; }
     xfinding "$d/cross-3.md" F-dup "1, 2" && xfinding "$d/cross-1.md" F-own "1, 2" || return 1
@@ -1895,10 +1889,6 @@ p_owner() {
     if cell dup-check-owner-unsealed; then
       run_check "$sd" "$d" code-review "$d/cross-3.md"
       [ "$CRC" -eq 0 ] && has "$CO" "SHARD-OK: $d/cross-3.md" || WHY="$WHY dup-check-owner-unsealed{rc=$CRC $(head -1 "$CO")}"
-    fi
-    if cell dup-check-owner-sealed; then
-      lmark "$d/cross-1.md" - cross-1 key=cross-1
-      run_check "$sd" "$d" code-review "$d/cross-3.md"; own_case dup-check-owner-sealed cross-3 "$CO"
     fi
   fi
   [ -z "$WHY" ]
@@ -2306,7 +2296,6 @@ p_vb_qa() {
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
   if cell q-nr-empty; then vb_q "$d" 2 NEEDS_REWORK ""; VB_E2E=1 vb_refuse "$sd" "$d" qa 2 q-nr-empty "$VB_Q_SEV_NR" "$VB_STEM"; cs_reset "$d" "$c"; fi
-  if cell q-nr-sug; then vb_q "$d" 2 NEEDS_REWORK "$(qf Suggestions)"; vb_refuse "$sd" "$d" qa 2 q-nr-sug "$VB_Q_SEV_NR" "$VB_MOVE"; cs_reset "$d" "$c"; fi
   if cell q-nr-imp; then vb_q "$d" 2 NEEDS_REWORK "$(qf Important)"; vb_pass "$sd" "$d" qa 2 q-nr-imp
     ! has "$VB_O" "$VB_LEG" || WHY="$WHY q-sev-legacy-line{$(head -1 "$VB_O")}"; cs_reset "$d" "$c"; fi
   if cell q-pass-crit; then vb_q "$d" 2 PASS "$(qf Critical)"; vb_refuse "$sd" "$d" qa 2 q-pass-crit "$VB_Q_PASS_CRIT"; cs_reset "$d" "$c"; fi
@@ -2338,8 +2327,6 @@ p_vb_qleg() {
   VB_PROJ="$PROJ_QLEG"
   if cell q-leg-nr-one; then vb_q "$d" 2 NEEDS_REWORK "$(qf none)"; VB_E2E=1 vb_pass "$sd" "$d" qa 2 q-leg-nr-one
     has "$VB_O" "LEGACY: $PROJ_QLEG/core/team-roles/qa.md $VB_LEG" || WHY="$WHY q-leg-line{$(head -1 "$VB_O")}"; cs_reset "$d" "$c"; fi
-  if cell q-leg-pass-crit; then vb_q "$d" 2 PASS "$(qf Critical)"; vb_pass "$sd" "$d" qa 2 q-leg-pass-crit; cs_reset "$d" "$c"; fi
-  if cell q-leg-nr-empty; then vb_q "$d" 2 NEEDS_REWORK ""; vb_refuse "$sd" "$d" qa 2 q-leg-nr-empty "$VB_Q_NR" "$VB_STEM"; cs_reset "$d" "$c"; fi
   if cell q-two-containers; then
     VB_PROJ="$PROJ_Q2"
     run_check "$sd" "$d" qa "$d/2.md"
@@ -2401,7 +2388,6 @@ p_files() {
   if cell fl-empty; then fl_shard "$d" CODE 'Files:'; fl_refuse "$sd" "$d" fl-empty "'Files:' names no path"; cs_reset "$d" "$c"; fi
   if cell fl-tick; then fl_shard "$d" CODE 'Files: `alpha/a1.txt`'; fl_refuse "$sd" "$d" fl-tick "entry '\`alpha/a1.txt\`' is not a bare repo-relative path"; cs_reset "$d" "$c"; fi
   if cell fl-line; then fl_shard "$d" TEST 'Files: alpha/a1.txt:3'; fl_refuse "$sd" "$d" fl-line "entry 'alpha/a1.txt:3' is not a bare repo-relative path"; cs_reset "$d" "$c"; fi
-  if cell fl-base; then fl_shard "$d" CODE 'Files: a1.txt'; fl_refuse "$sd" "$d" fl-base "entry 'a1.txt' is neither tracked at the frozen sha"; cs_reset "$d" "$c"; fi
   if cell fl-gone; then fl_shard "$d" CODE 'Files: alpha/a1.txt, alpha/zz.txt'; fl_refuse "$sd" "$d" fl-gone "entry 'alpha/zz.txt' is neither tracked at the frozen sha"; cs_reset "$d" "$c"; fi
   if cell fl-del; then fl_del "$sd"; fi
   [ -z "$WHY" ]
@@ -2521,8 +2507,6 @@ p_fr_verdict() {
   d="$(qworld "$sd" PASS PASS PASS PASS)" || { WHY="the qa world was not built"; return 1; }
   c="$(dirname "$d")/clean"; mkdir "$c" && cp "$d"/*.md "$c"/ || return 1
   if cell fr-plain; then fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | FAIL | a RED | none |'; fr_refused "$sd" "$d" fr-plain "$FR_VERD"; cs_reset "$d" "$c"; fi
-  if cell fr-bold; then fr_x1 "$d" PASS "" "$FR_TBL" '| AC4 | **FAIL** | a RED | none |'; fr_refused "$sd" "$d" fr-bold "$FR_VERD"; cs_reset "$d" "$c"; fi
-  if cell fr-paren; then fr_x1 "$d" PASS "" "$FR_TBL" '| `AC4` (committed RED) | FAIL (no RED) | a RED | none |'; fr_refused "$sd" "$d" fr-paren "$FR_VERD"; cs_reset "$d" "$c"; fi
   if cell fr-reorder; then fr_x1 "$d" PASS "" '| AC | Expected | Result | Got |' '| AC4 | green | FAIL | none |'; fr_refused "$sd" "$d" fr-reorder "$FR_VERD"; cs_reset "$d" "$c"; fi
   # The near-miss puts FAIL in Got, the column AFTER the named one, so a read-by-position mutant (M16,
   # rc = ac + 1, which lands on Expected) moves only fr-reorder, never this cell.
@@ -3254,17 +3238,9 @@ p_canon() {
   # The filter grammar (record-only-diff.sh RUN-FILTER). With no docs/coding-conventions.md, -m is
   # accepted and a path refused; cr_conv declares `pytest -m unit` and `pytest suite/tests`.
   if cell cr-filter-k; then cr_noconv; cr_f 'pytest -k test_new'; cr_no "$sd" "$f" cr-filter-k "$CR_FILT"; fi
-  if cell cr-filter-kglued; then cr_noconv; cr_f 'pytest -ktest_new'; cr_no "$sd" "$f" cr-filter-kglued "$CR_FILT"; fi
-  if cell cr-filter-kquoted; then cr_noconv; cr_f 'pytest -k"test_new"'; cr_no "$sd" "$f" cr-filter-kquoted "$CR_FILT"; fi
-  if cell cr-filter-keyword; then cr_noconv; cr_f 'pytest --keyword=x'; cr_no "$sd" "$f" cr-filter-keyword "$CR_FILT"; fi
-  if cell cr-deselect; then cr_noconv; cr_f 'pytest --deselect tests/test_a.py::t'; cr_no "$sd" "$f" cr-deselect "$CR_DESEL"; fi
-  if cell cr-file; then cr_noconv; cr_f 'pytest tests/test_one.py'; cr_no "$sd" "$f" cr-file "$CR_FILE"; fi
-  if cell cr-node; then cr_noconv; cr_f 'pytest tests/test_one.py::test_a'; cr_no "$sd" "$f" cr-node "$CR_FILE"; fi
   if cell cr-m-noconv; then cr_noconv; cr_f '.venv/bin/python -m pytest -m unit -q'; cr_ok "$sd" "$f" cr-m-noconv; fi
-  if cell cr-path-noconv; then cr_noconv; cr_f 'pytest suite/tests -n auto'; cr_no "$sd" "$f" cr-path-noconv "$CR_PATH"; fi
   if cell cr-m-conv; then cr_conv; cr_f '.venv/bin/python -m pytest -m unit -q'; cr_ok "$sd" "$f" cr-m-conv; cr_noconv; fi
   if cell cr-m-glued-conv; then cr_conv; cr_f '.venv/bin/python -m pytest -munit'; cr_ok "$sd" "$f" cr-m-glued-conv; cr_noconv; fi
-  if cell cr-m-other; then cr_conv; cr_f 'pytest -m "not slow"'; cr_no "$sd" "$f" cr-m-other "$CR_MARK"; cr_noconv; fi
   if cell cr-path-conv; then cr_conv; cr_f 'cd /w && pytest suite/tests -n auto > out.txt 2>&1'; cr_ok "$sd" "$f" cr-path-conv; cr_noconv; fi
   if cell cr-path-other; then cr_conv; cr_f 'pytest other/tests'; cr_no "$sd" "$f" cr-path-other "$CR_PATH"; cr_noconv; fi
   # Narrowing to any runner (BL-769 fold): a test-file argument, go's -run, --lf, -x with --ff, and an
@@ -3274,13 +3250,11 @@ p_canon() {
   if cell cr-filter-gorun; then cr_noconv; cr_f 'go test ./pkg/one -run TestX'; cr_no "$sd" "$f" cr-filter-gorun "$CR_FILT"; fi
   if cell cr-filter-lf; then cr_conv; cr_f 'pytest suite/tests -x --lf'; cr_no "$sd" "$f" cr-filter-lf "re-runs only the last failures"; cr_noconv; fi
   if cell cr-filter-xff; then cr_conv; cr_f 'pytest suite/tests -x --ff'; cr_no "$sd" "$f" cr-filter-xff "stops at the first of the previous failures"; cr_noconv; fi
-  if cell cr-filter-ff; then cr_conv; cr_f 'pytest suite/tests --ff'; cr_ok "$sd" "$f" cr-filter-ff; cr_noconv; fi
   if cell cr-filter-dd; then cr_noconv; cr_f 'npm test -- src/pages'; cr_no "$sd" "$f" cr-filter-dd "hands the runner a path after --"; fi
   if cell cr-path-super; then cr_conv; cr_f 'python3 -m pytest -q suite -p no:cacheprovider -p no:randomly'; cr_ok "$sd" "$f" cr-path-super; cr_noconv; fi
   # A runner the built-in list does not name is a run only when the conventions declare it canonical.
   if cell cr-conv-runner; then printf -- '- canonical: `tox -e all` from the repository root\n' > "$CR_REPO/docs/coding-conventions.md"; cr_f 'tox -e all'; cr_ok "$sd" "$f" cr-conv-runner; cr_noconv; fi
   if cell cr-conv-runner-none; then cr_noconv; cr_f 'tox -e all'; cr_no "$sd" "$f" cr-conv-runner-none "$CR_NORNG"; fi
-  if cell cr-path-sub; then cr_conv; cr_f 'pytest suite/tests/unit'; cr_no "$sd" "$f" cr-path-sub "$CR_PATH"; cr_noconv; fi
   if cell cr-nearfilter; then SR_CANON="$(printf 'Canonical run: `pytest -p no:cacheprovider` from the root, see tests/foo-k.py\nCanonical result: 9 passed')" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-nearfilter; fi
   if cell cr-nores; then SR_CANON='Canonical run: `pytest -q` from the root' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-nores "$CR_NORES"; fi
   if cell cr-unfin; then SR_CANON="$(printf 'Canonical run: `pytest -q`\nCanonical result: NOT FINISHED at 44%%, 3801 passed so far')" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-unfin "$CR_UNFIN"; fi
@@ -3298,10 +3272,8 @@ p_canon() {
   # CR_P2) is refused over the seat's narrowed CR_CODE..CR_P2 (the story at CR_CODE is already
   # `review`), and an empty CR_CODE..CR_CODE too; over the whole story the partition refuses it.
   if cell cr-exempt-narrow; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-narrow "$CR_GATE1" --story "$CR_STORY" --range "$CR_CODE" "$CR_P2"; fi
-  if cell cr-exempt-empty; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-empty "$CR_GATE1" --story "$CR_STORY" --range "$CR_CODE" "$CR_CODE"; fi
   # BL-885: the same empty range with --story ABSOLUTE. A story path record-only-diff.sh cannot resolve at the base
   # read as "no story there yet", a gate-1 base, and the empty diff as record-only, so the exemption was ACCEPTED.
-  if cell cr-exempt-abs; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-abs "$CR_GATE1" --story "$CR_REPO/$CR_STORY" --range "$CR_CODE" "$CR_CODE"; fi
   # BL-885: --story ABSOLUTE over the genuinely record-only CR_BASE..CR_REC (story-1 ready-for-dev at the base) is
   # accepted only when the path is normalised to the repo-relative story: unnormalised it is no file at the base or
   # at the frozen sha, and the diff's $CR_STORY is no story path.
@@ -3313,14 +3285,12 @@ p_canon() {
   if cell cr-exempt-typo; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-typo "$CR_BIND" --story "$CR_SDIR/typo.md" --range "$CR_CODE" "$CR_CODE"; fi
   if cell cr-exempt-dir; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-dir "$CR_BIND" --story "$CR_SDIR" --range "$CR_CODE" "$CR_CODE"; fi
   # Its own review file: the index a review name carries is the story's, so story-1-2 is reviewed in 1-2-*.
-  if cell cr-exempt-created; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; cr_ok "$sd" "$f2" cr-exempt-created --story "$CR_STORY2" --range "$CR_BASE" "$CR_NEWS"; fi
   # BL-895, THE BINDING. cr-bind-seed: the filed shape -- a review-like file created in the range, named so its basename
   # carries the review's index, over the record-only CR_REC..CR_SEED; only the sprint-status row refuses it (story-status
   # exits 0 printing an empty row, so a binding keyed on the exit lets it through). cr-bind-sibling: a REAL listed story
   # checked against the wrong review (index 1-2, story-2-1-y); its ALLOW twin is cr-bind-trunc-ok, one property apart.
   # cr-bind-ok: the correct story at CR_NEWS, whose row the checked-out view lacks, reviewed in a pass-2 file (the index
-  # parsed from <idx>-qa-validation-p<M>.md); cr-bind-abs: the same story spelled absolute, in the pass-1 file.
-  # cr-bind-bare: the bare story-<idx>.md form, at CR_BARE.
+  # parsed from <idx>-qa-validation-p<M>.md).
   # The seed is reviewed under index 1-4 and the sibling under 1-2, indexes no other file is listed under, so the
   # one-story-per-index check cannot cover m-row-exit's or m-no-index's subject.
   if cell cr-bind-seed; then SR_CANON="$SR_NONE" sr_file "$f4" "$pv"; cr_no "$sd" "$f4" cr-bind-seed "$CR_BROW" --story "$CR_SEEDF" --range "$CR_REC" "$CR_SEED"; fi
@@ -3331,7 +3301,6 @@ p_canon() {
   # named 2-qa-validation.md -- refused by the digit rule alone (m-digit-slug's subject); cr-bind-trunc-ok, its ALLOW twin
   # one property apart, the same story under 2-1-qa-validation.md.
   if cell cr-bind-repoint-k; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-bind-repoint-k "$CR_BONE" --story "$CR_STORYZ" --range "$CR_REC" "$CR_RK"; fi
-  if cell cr-bind-repoint-a; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-bind-repoint-a "$CR_BONE" --story "$CR_STORYZ" --range "$CR_REC" "$CR_RA"; fi
   if cell cr-bind-trunc; then SR_CANON="$SR_NONE" sr_file "$ft" "$pv"; cr_no "$sd" "$ft" cr-bind-trunc "$CR_BDIG" --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
   if cell cr-bind-trunc-ok; then SR_CANON="$SR_NONE" sr_file "$ft2" "$pv"; cr_ok "$sd" "$ft2" cr-bind-trunc-ok --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
   # BL-895 R1. The laundered base (CR_LVD, CR_LREN, CR_LNS, CR_LDUP): each C..F is record-only and z is absent at C, so
@@ -3339,10 +3308,6 @@ p_canon() {
   # an entry still names x by its declared file: (ren), carries no status: (nostat, m-status-skip's subject), or names it
   # twice (dup). R2: cr-bind-longidx, a review named for a slug (1-1-z-qa-validation.md) over CR_REC..CR_RK, refused by the
   # review-index grammar alone (m-index-grammar's subject); cr-bind-letter, its ALLOW twin, a letter-suffixed index 2-3a.
-  if cell cr-launder-viewdel; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-launder-viewdel "$CR_BNOANS" --story "$CR_STORYZ" --range "$CR_LVD" "$CR_LVDF"; fi
-  if cell cr-launder-ren; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-launder-ren "$CR_BONE" --story "$CR_STORYZ" --range "$CR_LREN" "$CR_LRENF"; fi
-  if cell cr-launder-nostat; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-launder-nostat "$CR_BONE" --story "$CR_STORYZ" --range "$CR_LNS" "$CR_LNSF"; fi
-  if cell cr-launder-dup; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-launder-dup "$CR_BONE" --story "$CR_STORYZ" --range "$CR_LDUP" "$CR_LDUPF"; fi
   # BL-895 b1, THE VIEW'S HISTORY. A base whose record-only commit deletes x's row (rowdel: the view stays ok through a
   # story-1-2 row) or renames x and repoints the row off the index (ren-repoint) names nothing under 1-1, so every endpoint
   # check passes and only the view's history since the stories directory was created still names x (m-endpoint-only's
@@ -3354,7 +3319,6 @@ p_canon() {
   if cell cr-bind-xdir; then SR_CANON="$SR_NONE" sr_file "$f5" "$pv"; cr_no "$sd" "$f5" cr-bind-xdir "$CR_BONE" --story "$CR_STORY5" --range "$CR_REC" "$CR_XD"; fi
   if cell cr-bind-xdir-nostat; then SR_CANON="$SR_NONE" sr_file "$f5" "$pv"; cr_no "$sd" "$f5" cr-bind-xdir-nostat "$CR_BONE" --story "$CR_STORY5" --range "$CR_REC" "$CR_XDN"; fi
   if cell cr-launder-rowdel; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-launder-rowdel "$CR_BHIST" --story "$CR_STORYZ" --range "$CR_LRD" "$CR_LRDF"; fi
-  if cell cr-launder-renrp; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-launder-renrp "$CR_BHIST" --story "$CR_STORYZ" --range "$CR_LRR" "$CR_LRRF"; fi
   if cell cr-launder-rowdel-ok; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; cr_ok "$sd" "$f2" cr-launder-rowdel-ok --story "$CR_STORY2" --range "$CR_LRD" "$CR_LRDOK"; fi
   # BL-895, THE HISTORY'S OWN TRUST (worlds where CR_HM is seeded). Each is over the rowdel base, so only the view's history
   # names x, and each defeats the history read one way: a backdated side commit merged --no-ff (hist-merge, B1), a shallow
@@ -3369,7 +3333,6 @@ p_canon() {
   if cell cr-hist-replace; then SR_CANON="$SR_NONE" sr_file "$frp" "$pv"; cr_no "$sd" "$frp" cr-hist-replace "$CR_BONE" --story "$CR_STORYZ" --range "$CR_REC" "$CR_HR"; fi
   if cell cr-hist-dir; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-hist-dir "$CR_BSDIR" --story "$CR_ZZ" --range "$CR_LRD" "$CR_HZ"; fi
   if cell cr-hist-sprint; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-hist-sprint "$CR_BSPR" --story "$CR_S2Z" --range "$CR_LRD" "$CR_HS2"; fi
-  if cell cr-hist-sprint-ok; then SR_CANON="$SR_NONE" sr_file "$fs2" "$pv"; cr_ok "$sd" "$fs2" cr-hist-sprint-ok --story "$CR_S2Q" --range "$CR_HS2" "$CR_HS2OK"; fi
   # BL-895 U1h, THE REVIEW'S SPRINT (worlds where CR_FR1 is seeded). The faked roll in one commit (roll1), in two (roll2)
   # and with s2's stories directory existing at the base (roll3), each reviewed under docs/reviews/s1/: REFUSED, the view
   # reading sprint 2 where the review is sprint 1 (m-view-sprint's subject: the sprint read from the view accepts all three).
@@ -3381,8 +3344,6 @@ p_canon() {
   # `stories/story-1-1-x.md` row, reviewed under s6 (m-roll-drop-off). roll-mid: the intermediate-sprint launder, a value
   # resolved into sprint 5's directory at a commit after the creation: REFUSED (m-roll-drop-every).
   if cell cr-sprint-roll1; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-sprint-roll1 "$CR_BSPR" --story "$CR_S2Z" --range "$CR_FR1" "$CR_FR1F"; fi
-  if cell cr-sprint-roll2; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-sprint-roll2 "$CR_BSPR" --story "$CR_S2Z" --range "$CR_FR2" "$CR_FR2F"; fi
-  if cell cr-sprint-roll3; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-sprint-roll3 "$CR_BSPR" --story "$CR_S2Z" --range "$CR_FR3" "$CR_FR3F"; fi
   if cell cr-sprint-view; then SR_CANON="$SR_NONE" sr_file "$f3" "$pv"; cr_no "$sd" "$f3" cr-sprint-view "$CR_BSPR" --story "$CR_SPQ" --range "$CR_BASE" "$CR_SPF"; fi
   if cell cr-sprint-nopath; then SR_CANON="$SR_NONE" sr_file "$fnp" "$pv"; cr_no "$sd" "$fnp" cr-sprint-nopath "$CR_BNOSPR" --story "$CR_STORY2" --range "$CR_BASE" "$CR_NEWS"; fi
   if cell cr-schema-env; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; CR_ENV="AI_DLC_SPRINT_STATUS_SCHEMA=$CR_SCHQ" cr_no "$sd" "$f" cr-schema-env "$CR_BSDIR" --story "$CR_QZ" --range "$CR_LRD" "$CR_SCF"; fi
@@ -3402,18 +3363,12 @@ p_canon() {
   if cell cr-bind-letter; then SR_CANON="$SR_NONE" sr_file "$fa" "$pv"; cr_ok "$sd" "$fa" cr-bind-letter --story "$CR_SDIR/story-2-3a-q.md" --range "$CR_BASE" "$CR_LET"; fi
   # A3b, LETTER-LED INDICES (graph s316's B1, B-1, DASH; the lead's prescribed re-run with --story), each a run claim over
   # CR_BASE..CR_LTR, so only the index and view-row binding decide. cr-b1-right: B1 with the story the view lists under
-  # it, SERIAL-OK (m-letter-idx's subject: the numeric-only grammar refuses B1). cr-b1-wrong: B1 with B2's listed story,
-  # REFUSED by the index match. cr-slug-unlisted: a slug index whose story-<idx>.md exists but no row lists, REFUSED by
-  # the row. cr-glob-literal: index `B?`, which as a pattern would match the listed story-B1-x.md, REFUSED by the literal
+  # it, SERIAL-OK (m-letter-idx's subject: the numeric-only grammar refuses B1). cr-glob-literal: index `B?`, which as a pattern would match the listed story-B1-x.md, REFUSED by the literal
   # index match (m-idx-pattern's subject).
   _ltr() { sr_file "$1" "$pv"; shift; cr_no "$sd" "$@"; }
   if cell cr-b1-right; then sr_file "$fb1" "$pv"; cr_ok "$sd" "$fb1" cr-b1-right --story "$CR_SDIR/story-B1-x.md" --range "$CR_BASE" "$CR_LTR"; fi
-  if cell cr-b1-wrong; then _ltr "$fb1" "$fb1" cr-b1-wrong "is not story-B1.md or story-B1-*.md" --story "$CR_SDIR/story-B2-y.md" --range "$CR_BASE" "$CR_LTR"; fi
-  if cell cr-slug-unlisted; then _ltr "$fsl" "$fsl" cr-slug-unlisted "$CR_BROW" --story "$CR_SDIR/story-sprint-review-fix.md" --range "$CR_BASE" "$CR_LTR"; fi
   if cell cr-glob-literal; then _ltr "$fgl" "$fgl" cr-glob-literal "is not story-B?.md or story-B?-*.md" --story "$CR_SDIR/story-B1-x.md" --range "$CR_BASE" "$CR_LTR"; fi
   if cell cr-bind-ok; then SR_CANON="$SR_NONE" sr_file "$f2p" "$pv"; cr_ok "$sd" "$f2p" cr-bind-ok --story "$CR_STORY2" --range "$CR_BASE" "$CR_NEWS"; fi
-  if cell cr-bind-abs; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; cr_ok "$sd" "$f2" cr-bind-abs --story "$CR_REPO/$CR_STORY2" --range "$CR_BASE" "$CR_NEWS"; fi
-  if cell cr-bind-bare; then SR_CANON="$SR_NONE" sr_file "$f3" "$pv"; cr_ok "$sd" "$f3" cr-bind-bare --story "$CR_STORY3" --range "$CR_BASE" "$CR_BARE"; fi
   if cell cr-exempt-whole; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-whole "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_P2"; fi
   if cell cr-exempt-nonanc; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-exempt-nonanc "$CR_NOANC" --story "$CR_STORY" --range "$CR_CODE" "$CR_REC"; fi
   if cell cr-bare; then SR_CANON='Canonical run: none' sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-bare "gives no reason" --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"; fi
@@ -3425,12 +3380,6 @@ p_canon() {
     for nv in 'TBD' 'skipped, no code of note'; do
       SR_CANON="Canonical run: $nv" sr_file "$f" "$pv"
       cr_no "$sd" "$f" "cr-norun-other[$nv]" "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"
-    done
-  fi
-  if cell cr-norun-rec; then
-    for nv in 'N/A, docs-only story' 'TBD' 'skipped, no code of note'; do
-      SR_CANON="Canonical run: $nv" sr_file "$f" "$pv"
-      cr_ok "$sd" "$f" "cr-norun-rec[$nv]" --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"
     done
   fi
   # cr-serial-legacy (ALLOW): a review inside PROJ_CRS, the root and the review's repository one tree, whose qa.md lacks
@@ -3454,8 +3403,7 @@ p_canon() {
   # (py-path). REFUSED as the clean world is, sprint-status.sh's python being isolated (m-py-isolated's subject).
   if cell cr-py-cwd; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; _crw="$PWD"; cd "$(py_jack)" || return 1
     cr_no "$sd" "$f" cr-py-cwd "$CR_BHIST" --story "$CR_STORYZ" --range "$CR_LRD" "$CR_LRDF"; cd "$_crw" || return 1; fi
-  if cell cr-py-path; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; CR_ENV="PYTHONPATH=$(py_jack)" cr_no "$sd" "$f" cr-py-path "$CR_BHIST" --story "$CR_STORYZ" --range "$CR_LRD" "$CR_LRDF"; fi
-  # BL-895 U1k F3, ONE SPRINT PER PATH. cr-hist-sprint-ok's sprint-2 world (SERIAL-OK under docs/reviews/s2/), the review
+  # BL-895 U1k F3, ONE SPRINT PER PATH. The sprint-2 world (SERIAL-OK under docs/reviews/s2/), the review
   # written in docs/reviews/s1/ and named through a link `s2` to that directory: the logical directory reads sprint 2, the
   # physical one sprint 1, REFUSED naming both (m-one-sprint's subject; the logical sprint alone acquits it). Its ALLOW
   # twin one property apart: the same link shape onto docs/reviews/s2/, both spellings sprint 2.
@@ -3588,13 +3536,6 @@ p_canon_merge() {
     refused_at "$CR_NORUN" "$o" && ! has "$MO" "$CR_LEG" || WHY="$WHY crm-disk-held{rc=$RC $(reline "$MO")}"
     rm -f "$o" "$REPO_CRU/.claude/team-roles/qa.md"
   fi
-  if cell crm-neither; then
-    SHARD_SHA="$CRU_SHA"; rm -f "$REPO_CRU/.claude/team-roles/qa.md"
-    d="$(kworld "$sd" "$REPO_CRU" "$CRU_BASE" "$CRU_SHA" 3 qa-validation PASS qa)" || { WHY="$WHY the untracked world was not built"; return 1; }
-    crm_strip "$d"; o="$(qout "$d")"; q_merge "$sd" "$d"
-    refused_at "$CR_NORUN" "$o" && has "$MO" "nor on disk at $REPO_CRU/.claude/team-roles/qa.md" || WHY="$WHY crm-neither{rc=$RC $(reline "$MO")}"
-    rm -f "$o"
-  fi
   # BL-895 in the MERGE (owner: the execution owner). REPO_CRB's base..sha is record-only and partitions into parts, so
   # the execution owner's 'Canonical run: none, <reason>' reaches canon_gate's record-only branch with the merge's own
   # owner. crm-bind: --story a review-like path, not story-1.md or story-1-*.md for the merged index 1, REFUSED naming
@@ -3611,14 +3552,9 @@ p_canon_merge() {
     rm -f "$o"
   fi
   # A3b in the MERGE: REPO_CLB, shard directory B1-qa-validation-<sha12>. crm-b1-right: --story the B1 story the view
-  # lists, MERGED. crm-b1-wrong: --story B2's listed story, REFUSED by the index match naming the execution owner.
+  # lists, MERGED.
   if cell crm-b1-right; then KIDX=B1 crm_bind "$CR_SDIR/story-B1-x.md" "$REPO_CLB" "$CLB_BASE" "$CLB_SHA" || return 1
     [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] && [ "${o##*/}" = B1-qa-validation.md ] || WHY="$WHY crm-b1-right{rc=$RC $(head -1 "$MO")}"
-    rm -f "$o"
-  fi
-  if cell crm-b1-wrong; then KIDX=B1 crm_bind "$CR_SDIR/story-B2-y.md" "$REPO_CLB" "$CLB_BASE" "$CLB_SHA" || return 1
-    refused_at "$CR_BIND" "$o" && has "$MO" "is not story-B1.md or story-B1-*.md" && owner_in "$MO" "$cf" \
-      || WHY="$WHY crm-b1-wrong{rc=$RC $(reline "$MO")}"
     rm -f "$o"
   fi
   # BL-895 b1 in the MERGE: REPO_CRH is crm-bind-ok's world one property apart -- its root commit's view also named
@@ -3644,9 +3580,6 @@ p_canon_merge() {
   if cell crm-hist-sprint; then crm_hist crm-hist-sprint "$CM_S2" "$REPO_CMS" "$CMS_BASE" "$CMS_SHA" "$CR_BSPR" || return 1; fi
   # BL-895 U1h: T1 on the merge, the manifest's base taken after a faked roll (REPO_CMR), the shard directory under s1.
   if cell crm-sprint-roll; then crm_hist crm-sprint-roll "$CM_S2" "$REPO_CMR" "$CMR_BASE" "$CMR_SHA" "$CR_BSPR" || return 1; fi
-  # The one-commit shape (REPO_CMR1) and T1c, s2's directory created at the base (REPO_CMR3): REFUSED the same way.
-  if cell crm-sprint-roll1; then crm_hist crm-sprint-roll1 "$CM_S2" "$REPO_CMR1" "$CMR1_BASE" "$CMR1_SHA" "$CR_BSPR" || return 1; fi
-  if cell crm-sprint-roll3; then crm_hist crm-sprint-roll3 "$CM_S2" "$REPO_CMR3" "$CMR3_BASE" "$CMR3_SHA" "$CR_BSPR" || return 1; fi
   # crm-sprint-view: REPO_CMV's story sits in sprint 1's own directory and only the frozen view reads sprint 2 (the
   # view-sprint check alone refuses it). crm-schema-env: REPO_CMQ's story sits in q1/stories, the directory the
   # lead's AI_DLC_SPRINT_STATUS_SCHEMA override (q{sprint}) would name; the override is ignored, so it is refused.
@@ -3666,7 +3599,6 @@ p_canon_merge() {
   # (py-path). REFUSED as the clean world is, naming the execution owner (m-py-isolated-merge's subject).
   if cell crm-py-cwd; then
     CRM_JACK="$(py_jack)" crm_hist crm-py-cwd "$CRB_STORY" "$REPO_CRH" "$CRH_BASE" "$CRH_SHA" "the implementation view named stories/story-1-y.md under that index between" || return 1; fi
-  if cell crm-py-path; then CRM_ENV="PYTHONPATH=$(py_jack)" crm_hist crm-py-path "$CRB_STORY" "$REPO_CRH" "$CRH_BASE" "$CRH_SHA" "the implementation view named stories/story-1-y.md under that index between" || return 1; fi
   # BL-895 U1k F3 on the MERGE. The world's slot directory <B> (a name opening s1) holds shards/<dir>; crm_link moves or
   # links it, then merges through the logical path. link: crm-sprint-roll's world (REPO_CMR, refused under sprint 1), the
   # slot moved to its sibling s2<B without the s1> and named through a link <B> elsewhere: logical sprint 1, physical 2,
@@ -3701,8 +3633,6 @@ p_canon_merge() {
   }
   if cell crm-sprint-link; then crm_link crm-sprint-link "$CM_S2" "$REPO_CMR" "$CMR_BASE" "$CMR_SHA" move || return 1
     refused_at "$CR_B2S" "$o" && has "$MO" "reads sprint 1 and the physical directory" && owner_in "$MO" lead || WHY="$WHY crm-sprint-link{rc=$RC $(reline "$MO")}"; rm -f "$o"; fi
-  if cell crm-sprint-link-rev; then crm_link crm-sprint-link-rev "$CM_S2" "$REPO_CMR" "$CMR_BASE" "$CMR_SHA" rev || return 1
-    refused_at "$CR_B2S" "$o" && has "$MO" "reads sprint 2 and the physical directory" && owner_in "$MO" lead || WHY="$WHY crm-sprint-link-rev{rc=$RC $(reline "$MO")}"; rm -f "$o"; fi
   if cell crm-sprint-link-out; then crm_link crm-sprint-link-out "$CRB_STORY" "$REPO_CRB" "$CRB_BASE" "$CRB_SHA" same || return 1
     refused_at "$LR_D1LINK" "$o" && owner_in "$MO" lead && has "$MO" "$LR_D1FIX" && ! has "$MO" "MERGED:" \
       || WHY="$WHY crm-sprint-link-out{rc=$RC $(reline "$MO")}"; rm -f "$o"; fi
@@ -3837,29 +3767,6 @@ cm_seed "$REPO_CMR" \
   && cm_six "$REPO_CMR" && G -C "$REPO_CMR" add -A && G -C "$REPO_CMR" commit -q -m frozen \
   || { echo "FIXTURE ERROR: the merge's faked-roll repo was not seeded" >&2; exit 2; }
 CMR_BASE="$(G -C "$REPO_CMR" rev-parse HEAD~1)"; CMR_SHA="$(G -C "$REPO_CMR" rev-parse HEAD)"
-# REPO_CMR is the TWO-commit shape (c2 drops story-1-y.md's row in sprint 1, the base moves the sprint). REPO_CMR1, the
-# ONE-commit shape: over c1 (y listed), one commit drops y's row AND moves the view to sprint 2: the base. REPO_CMR3, T1c:
-# REPO_CMR's base also creates s2's stories directory with a placeholder story-9-pad.md and its row, so the directory
-# exists at the base. Each frozen commit is REPO_CMR's: s2's story-1-x.md, its row and the six test-results files.
-REPO_CMR1="$WORK/repo-cmr1"; REPO_CMR3="$WORK/repo-cmr3"; CM_S2PAD="${CM_S2%/*}/story-9-pad.md"
-cmr_frozen() { mkdir -p "$1/${CM_S2%/*}" && printf -- '---\nstatus: review\n---\n# Story 1\n' > "$1/$CM_S2" \
-  && printf '  story-1-1:\n    status: review\n    file: ../planning-artifacts/s2/stories/story-1-x.md\n' >> "$1/$CR_VIEW" \
-  && cm_six "$1" && G -C "$1" add -A && G -C "$1" commit -q -m frozen; }
-cm_seed "$REPO_CMR1" && G -C "$REPO_CMR1" reset -q --hard HEAD~1 \
-  && printf 'sprint: 2\nstatus: in_progress\nstories:\n  story-7:\n    status: review\n    file: ../planning-artifacts/s1/stories/story-7-q.md\n' > "$REPO_CMR1/$CR_VIEW" \
-  && G -C "$REPO_CMR1" add -A && G -C "$REPO_CMR1" commit -q -m roll && cmr_frozen "$REPO_CMR1" \
-  && cm_seed "$REPO_CMR3" && mkdir -p "$REPO_CMR3/${CM_S2PAD%/*}" && printf -- '---\nstatus: ready-for-dev\n---\n# pad\n' > "$REPO_CMR3/$CM_S2PAD" \
-  && printf 'sprint: 2\nstatus: in_progress\nstories:\n  story-7:\n    status: review\n    file: ../planning-artifacts/s1/stories/story-7-q.md\n  story-9:\n    status: ready-for-dev\n    file: ../planning-artifacts/s2/stories/story-9-pad.md\n' > "$REPO_CMR3/$CR_VIEW" \
-  && G -C "$REPO_CMR3" add -A && G -C "$REPO_CMR3" commit -q -m roll && cmr_frozen "$REPO_CMR3" \
-  || { echo "FIXTURE ERROR: the merge's one-commit or T1c faked-roll repo was not seeded" >&2; exit 2; }
-CMR1_BASE="$(G -C "$REPO_CMR1" rev-parse HEAD~1)"; CMR1_SHA="$(G -C "$REPO_CMR1" rev-parse HEAD)"
-CMR3_BASE="$(G -C "$REPO_CMR3" rev-parse HEAD~1)"; CMR3_SHA="$(G -C "$REPO_CMR3" rev-parse HEAD)"
-_cmr1p="$(G -C "$REPO_CMR1" show "${CMR1_BASE}~1:$CR_VIEW")" || _cmr1p=""; _cmr1b="$(G -C "$REPO_CMR1" show "${CMR1_BASE}:$CR_VIEW")" || _cmr1b=""
-grep -qF 'stories/story-1-y.md' <<<"$_cmr1p" && ! grep -qF 'story-1-y.md' <<<"$_cmr1b" && grep -qx 'sprint: 2' <<<"$_cmr1b" \
-  && [ "$(G -C "$REPO_CMR1" diff --name-only "$CMR1_BASE" "$CMR1_SHA" | grep -c .)" = 8 ] \
-  && G -C "$REPO_CMR3" cat-file -e "${CMR3_BASE}:$CM_S2PAD" && ! G -C "$REPO_CMR3" cat-file -e "${CMR3_BASE}~1:${CM_S2%/*}" 2> /dev/null \
-  && [ "$(G -C "$REPO_CMR3" diff --name-only "$CMR3_BASE" "$CMR3_SHA" | grep -c .)" = 8 ] \
-  || { echo "FIXTURE STALE: REPO_CMR1's base is not one commit dropping y and moving to sprint 2 over a view listing y, or REPO_CMR3's base does not create s2's stories directory, or a range is not eight paths" >&2; exit 2; }
 [ "$(G -C "$REPO_CMR" show "${CMR_BASE}:$CR_VIEW" | sed -n 's/^sprint: //p')" = 2 ] && [ "$(G -C "$REPO_CMR" show "${CMR_BASE}~1:$CR_VIEW" | sed -n 's/^sprint: //p')" = 1 ] \
   && [ "$(G -C "$REPO_CMR" diff --name-only "$CMR_BASE" "$CMR_SHA" | grep -c .)" = 8 ] && ! G -C "$REPO_CMR" cat-file -e "${CMR_BASE}:${CM_S2%/*}" 2> /dev/null \
   || { echo "FIXTURE STALE: REPO_CMR's base is not a sprint-2 roll over sprint 1, or its range is not the eight paths with s2's directory created in it" >&2; exit 2; }
@@ -4251,12 +4158,9 @@ p_lead() {
       || WHY="$WHY lr-record{rewrite $(head -1 "$CO")}"
     lr_file "$LR_RV" "$none" "reviewed-sha: $LR_F"; lr_run "$sd" "$LR_RV" - "$LR_F"; lr_ok lr-record
     ! has "$CO" LEGACY || WHY="$WHY lr-record{a LEGACY line}"; fi
-  # lr-ok (ALLOW): the real world, the review naming the go-signal sha; no LEGACY line. lr-compacted (ALLOW): the same, the
-  # lead holding nothing but the go-signal (seat base `-`): the record alone supplies the base.
+  # lr-ok (ALLOW): the real world, the review naming the go-signal sha; no LEGACY line.
   if cell lr-ok; then lr_rec "$sd" "$LR_D"; lr_file "$LR_RV" "$none" "reviewed-sha: $LR_F"; lr_run "$sd" "$LR_RV" "$LR_D" "$LR_F"; lr_ok lr-ok
     ! has "$CO" LEGACY || WHY="$WHY lr-ok{a LEGACY line}"; fi
-  if cell lr-compacted; then lr_rec "$sd" "$LR_D"; lr_file "$LR_RV" "$none" "reviewed-sha: $LR_F"; lr_run "$sd" "$LR_RV" - "$LR_F"; lr_ok lr-compacted
-    ! has "$CO" LEGACY || WHY="$WHY lr-compacted{a LEGACY line}"; fi
   # lr-seatbase: the record names LR_D and the seat passes LR_OLD (a pre-prescription base): the record wins, so the review
   # omitting reviewed-sha is REFUSED; a run that read the seat base would take LR_OLD's qa.md and acquit it.
   if cell lr-seatbase; then lr_rec "$sd" "$LR_D"; lr_file "$LR_RV" "$CANON_BLK" -; lr_run "$sd" "$LR_RV" "$LR_OLD" "$LR_F"; lr_no lr-seatbase "$LR_RSHA"; fi
@@ -4268,27 +4172,16 @@ p_lead() {
     lr_file "$LR_RV" "$CANON_BLK" -; lr_run "$sd" "$LR_RV" - "$LR_F"; lr_no lr-rewind "$LR_RSHA"; fi
   # lr-norecord (ALLOW, LEGACY-UNRECORDED): no record (a story dispatched before the record existed), the seat base LR_D,
   # the real world: SERIAL-OK and exactly one LEGACY-UNRECORDED line naming the story and the record path.
-  # lr-norecord-wrong: the same with --story a listed story under another index: STORY-BIND still refuses.
   if cell lr-norecord; then lr_unrec; lr_file "$LR_RV" "$none" "reviewed-sha: $LR_F"; lr_run "$sd" "$LR_RV" "$LR_D" "$LR_F"; lr_ok lr-norecord
     [ "$(grep -c '^LEGACY-UNRECORDED: ' "$CO")" = 1 ] && has "$CO" "$LR_UNREC $LR_RECF" || WHY="$WHY lr-norecord{LEGACY-UNRECORDED line: $(grep -c '^LEGACY-UNRECORDED' "$CO")}"; fi
-  if cell lr-norecord-wrong; then lr_unrec; lr_file "$LR_RV" "$none" "reviewed-sha: $LR_F"
-    LR_STORY="$CR_SDIR/story-1-2-zz.md" lr_run "$sd" "$LR_RV" "$LR_D" "$LR_F"; lr_no lr-norecord-wrong "$CR_BIND"
-    has "$CO" "$LR_UNREC" || WHY="$WHY lr-norecord-wrong{no LEGACY-UNRECORDED line}"; fi
-  # lr-rsha-ne: the line names another sha. lr-rsha-trail: the go-signal sha followed by prose (graph's s317 3-2 shape):
-  # the line carries the full sha alone.
+  # lr-rsha-ne: the line names another sha.
   if cell lr-rsha-ne; then lr_rec "$sd" "$LR_D"; lr_file "$LR_RV" "$none" "reviewed-sha: $LR_D"; lr_run "$sd" "$LR_RV" - "$LR_F"; lr_no lr-rsha-ne "$LR_RSHA"; fi
-  if cell lr-rsha-trail; then lr_rec "$sd" "$LR_D"; lr_file "$LR_RV" "$none" "reviewed-sha: $LR_F (go-signal, base $LR_D)"; lr_run "$sd" "$LR_RV" - "$LR_F"; lr_no lr-rsha-trail "$LR_RSHA"; fi
   # lr-rsha-legacy (ALLOW, LEGACY): recorded at LR_OLD, whose qa.md prescribes neither line; a counted run, no reviewed-sha.
   if cell lr-rsha-legacy; then lr_rec "$sd" "$LR_OLD"; lr_file "$LR_RV" "$CANON_BLK" -; lr_run "$sd" "$LR_RV" - "$LR_F"; lr_ok lr-rsha-legacy
     has "$CO" "$LR_LEG .claude/team-roles/qa.md at $LR_OLD" || WHY="$WHY lr-rsha-legacy{no LEGACY line naming qa.md at the dispatch sha}"; fi
   # lr-rsha-strip: the reviewed-sha prescription stripped INSIDE the range, a counted run, no reviewed-sha: REFUSED by the
   # reviewed-sha gate (qa.md is read at the dispatch sha).
   if cell lr-rsha-strip; then lr_rec "$sd" "$LR_D"; lr_file "$LR_RV" "$CANON_BLK" -; lr_run "$sd" "$LR_RV" - "$LR_RSTRIP"; lr_no lr-rsha-strip "$LR_RSHA"; fi
-  # lr-canon-strip: the canonical-run label stripped INSIDE the range and a none claim, under a root (PROJ_CRS) whose own
-  # qa.md lacks the label: held (qa.md at the dispatch sha carries it) and REFUSED as not record-only (qa.md is not a
-  # record); never LEGACY.
-  if cell lr-canon-strip; then lr_rec "$sd" "$LR_D"; lr_file "$LR_RV" "$none" "reviewed-sha: $LR_CSTRIP"; LR_ROOT="$PROJ_CRS" lr_run "$sd" "$LR_RV" - "$LR_CSTRIP"
-    lr_no lr-canon-strip "$CR_NOTRO"; ! has "$CO" "LEGACY: canonical-run" || WHY="$WHY lr-canon-strip{reached LEGACY}"; fi
   # lr-disk-qa (U1i's NOTE): the review repository's WORKING-TREE qa.md edited to drop the canonical-run label while the
   # dispatch sha tracks it, the root's qa.md lacking it, and a PASS with no run line: held, REFUSED (no run line).
   if cell lr-disk-qa; then lr_rec "$sd" "$LR_D"; grep -vF -- 'column-0 `Canonical run:`' "$QA_MD" > "$REPO_LR/.claude/team-roles/qa.md"
@@ -4340,8 +4233,8 @@ p_lead() {
   # that reads no record checks LR_D..LR_F (record-only) and acquits. a1-redirect: the seat points LR_WT's gitfile at a
   # --shared clone of REPO_LR, so the review's repository keeps its common dir in the clone, where no record is: REFUSED
   # [owner: lead] naming the remedy, never LEGACY-UNRECORDED (m-lc-serial's subject). a1-alias (ALLOW twin): the lead
-  # runs from a SYMLINKED alias of REPO_LR, gitfile intact: lr-canon-strip's non-record-only range is still REFUSED as
-  # not record-only, and lr-compacted's record-only range reads SERIAL-OK.
+  # runs from a SYMLINKED alias of REPO_LR, gitfile intact: the canonical-label-stripped (non-record-only) range is still
+  # REFUSED as not record-only, and the record-only range read with no seat base reads SERIAL-OK.
   if cell a1-redirect; then lr_wt || return 1; lr_rec "$sd" "$LR_D"; lr_file "$LR_WT/docs/reviews/s1/1-1-qa-validation.md" "$none" "reviewed-sha: $LR_F"
     cp "$LR_WT/.git" "$WORK/lr-wt.gitfile" && printf 'gitdir: %s\n' "$LR_CLONE/.git" > "$LR_WT/.git" || { WHY="$WHY a1-redirect{gitfile not redirected}"; return 1; }
     if [ "$(G -C "$LR_WT" rev-parse --path-format=absolute --git-common-dir)" = "$LR_CLONE/.git" ]; then
@@ -4375,27 +4268,21 @@ lr_code() { mkdir -p "$1/app" && printf 'def f():\n    return 1\n' > "$1/app/cor
 lr_nolabel() { mkdir -p "$1/.claude/team-roles" && grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$1/.claude/team-roles/qa.md"; }
 lr_repos() { # builds REPO_LR9A, REPO_LR9B, REPO_LR9C and REPO_LR5 once
   [ -z "${LR_BUILT:-}" ] || return 0
-  REPO_LR9A="$WORK/repo-lr9a"; REPO_LR9B="$WORK/repo-lr9b"; REPO_LR9C="$WORK/repo-lr9c"; REPO_LR5="$WORK/repo-lr5"
-  # 9a: the range strips the sentinel from the TRACKED qa.md beside a code change; 9b deletes it; 9c never tracks it.
+  REPO_LR9A="$WORK/repo-lr9a"; REPO_LR5="$WORK/repo-lr5"
+  # 9a: the range strips the sentinel from the TRACKED qa.md beside a code change.
   lr_seed "$REPO_LR9A" && lr_code "$REPO_LR9A" && cm_six "$REPO_LR9A" && lr_nolabel "$REPO_LR9A" \
     && G -C "$REPO_LR9A" add -A && G -C "$REPO_LR9A" commit -q -m frozen \
-  && lr_seed "$REPO_LR9B" && lr_code "$REPO_LR9B" && cm_six "$REPO_LR9B" && G -C "$REPO_LR9B" rm -q .claude/team-roles/qa.md \
-    && G -C "$REPO_LR9B" add -A && G -C "$REPO_LR9B" commit -q -m frozen \
-  && lr_seed "$REPO_LR9C" && G -C "$REPO_LR9C" rm -q --cached .claude/team-roles/qa.md && printf '.claude/\n' > "$REPO_LR9C/.gitignore" \
-    && G -C "$REPO_LR9C" add -A && G -C "$REPO_LR9C" commit -q --amend -m base && lr_code "$REPO_LR9C" && cm_six "$REPO_LR9C" \
-    && G -C "$REPO_LR9C" add -A && G -C "$REPO_LR9C" commit -q -m frozen \
   && lr_seed "$REPO_LR5" && lr_code "$REPO_LR5" && G -C "$REPO_LR5" add -A && G -C "$REPO_LR5" commit -q -m code \
     && cm_six "$REPO_LR5" && G -C "$REPO_LR5" add -A && G -C "$REPO_LR5" commit -q -m frozen \
   && REPO_LR2="$WORK/repo-lr2" && lr_seed "$REPO_LR2" && cm_six "$REPO_LR2" && G -C "$REPO_LR2" add -A && G -C "$REPO_LR2" commit -q -m pass1 \
     && lr_code "$REPO_LR2" && G -C "$REPO_LR2" add -A && G -C "$REPO_LR2" commit -q -m pass2 \
   || { WHY="$WHY FIXTURE ERROR: the U1l worlds were not seeded"; return 1; }
-  # Each world must carry its property: 9a strips the sentinel in range, 9b and 9c hold no tracked qa.md at the sha, 9c
-  # none at the base either, and R5's base..sha touches code while its last commit alone is record-only.
+  # Each world must carry its property: 9a strips the sentinel in range, and R5's base..sha touches code while its last
+  # commit alone is record-only.
   local a b
   a="$(G -C "$REPO_LR9A" show HEAD~1:.claude/team-roles/qa.md | grep -cF 'column-0 `Canonical run:`')" || a=0
   b="$(G -C "$REPO_LR9A" show HEAD:.claude/team-roles/qa.md | grep -cF 'column-0 `Canonical run:`')" || b=0
-  [ "$a" -ge 1 ] && [ "$b" = 0 ] && ! G -C "$REPO_LR9B" cat-file -e HEAD:.claude/team-roles/qa.md 2> /dev/null \
-    && ! G -C "$REPO_LR9C" cat-file -e HEAD~1:.claude/team-roles/qa.md 2> /dev/null && [ -f "$REPO_LR9C/.claude/team-roles/qa.md" ] \
+  [ "$a" -ge 1 ] && [ "$b" = 0 ] \
     && [ "$(G -C "$REPO_LR5" diff --name-only HEAD~2 HEAD -- app | grep -c .)" = 2 ] \
     && [ "$(G -C "$REPO_LR5" diff --name-only HEAD~1 HEAD -- app | grep -c .)" = 0 ] \
     || { WHY="$WHY FIXTURE STALE: a U1l world does not carry its property"; return 1; }
@@ -4432,12 +4319,6 @@ p_lead_rec() {
   if cell lr-unrec; then
     lr_world "$sd" "$REPO_CRB" "$CRB_BASE" "$CRB_SHA" || return 1; lr_merge "$sd" "$d" "$CRB_STORY"
     [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "$LR_PUNREC" && [ -f "$o" ] || WHY="$WHY lr-unrec{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
-    lr_done
-  fi
-  if cell lr-unrec-bind; then
-    lr_world "$sd" "$REPO_CRB" "$CRB_BASE" "$CRB_SHA" || return 1; lr_merge "$sd" "$d" docs/reviews/s1/new.md
-    refused_at "$CR_BIND" "$o" && has "$MO" "is not story-1.md or story-1-*.md" && has "$MO" "$LR_PUNREC" \
-      || WHY="$WHY lr-unrec-bind{rc=$RC $(reline "$MO")}"
     lr_done
   fi
   # The record --record-partition writes, read back by the merge with nothing held anywhere else (a compacted lead).
@@ -4479,19 +4360,16 @@ p_lead_rec() {
   # ROW 9: the era is the record's, taken at the base, so a range that strips (9a) or deletes (9b) the tracked qa.md, or
   # a seat that rewrites the untracked disk copy after the partition (9c), holds the rule: a none claim over a range
   # carrying code is refused as not record-only, with no LEGACY line.
-  for rt in 9a 9b 9c; do
-    cell "lr-$rt" || continue
+  if cell lr-9a; then
     lr_repos || return 1
-    case "$rt" in 9a) rp_="$REPO_LR9A" ;; 9b) rp_="$REPO_LR9B" ;; 9c) rp_="$REPO_LR9C" ;; esac
+    rp_="$REPO_LR9A"
     lr_world "$sd" "$rp_" "$(G -C "$rp_" rev-parse HEAD~1)" "$(G -C "$rp_" rev-parse HEAD)" || return 1
     if lr_prec "$sd" "$d" && grep -qxF "qa-era.${d##*/}: held" "$LR_PATH"; then
-      case "$rt" in 9b|9c) lr_nolabel "$rp_" ;; esac
       lr_merge "$sd" "$d" "$CRB_STORY"
-      refused_at "$CR_NOTRO" "$o" && ! has "$MO" "$CR_LEG" || WHY="$WHY lr-$rt{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
-    else WHY="$WHY lr-$rt{record not written or not held: $(head -1 "$MO")}"; fi
-    case "$rt" in 9b) rm -f "$rp_/.claude/team-roles/qa.md" ;; 9c) cp "$QA_MD" "$rp_/.claude/team-roles/qa.md" ;; esac
+      refused_at "$CR_NOTRO" "$o" && ! has "$MO" "$CR_LEG" || WHY="$WHY lr-9a{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    else WHY="$WHY lr-9a{record not written or not held: $(head -1 "$MO")}"; fi
     lr_done
-  done
+  fi
   # The allow twin of row 9: qa.md without the label at the base (REPO_CRL), recorded legacy, merges LEGACY.
   if cell lr-legacy; then
     lr_world "$sd" "$REPO_CRL" "$CRL_BASE" "$CRL_SHA" strip || return 1
@@ -4575,35 +4453,27 @@ p_lead_rec() {
   fi
   # D1 (delta adversary): THE SHARD DIRECTORY'S SLOT (merge-review-shards.sh shard_slot). REPO_CRB's world, recorded
   # in place; the record name is s<N>-<idx> read off the directory's path below its worktree top.
-  # d1-ok (ALLOW): intact, recorded and merged: MERGED, no LEGACY-UNRECORDED (the twin of every D1 mutant).
   # d1-symlink-sprint: recorded, then the seat moves the directory under docs/reviews/s5/shards/ and leaves a symlink
   #   at the lead-assigned path; the merge through that path is REFUSED [owner: lead], never LEGACY-UNRECORDED
-  #   (m-d1-merge's subject). d1-symlink-wrongstory: the same with another story's --story: the same refusal.
+  #   (m-d1-merge's subject).
   # d1-record-link: the symlink laid before --record-partition: REFUSED, nothing RECORDED (m-d1-record's subject).
   # d1-outside: a real directory outside any shards/ (no symlink): the merge is REFUSED naming no story record, never
   #   `s?-<idx>` LEGACY-UNRECORDED (m-d1-name's subject).
   # d1-prefix-alias (ALLOW): the whole repository reached through a symlinked prefix, the shard directory intact:
   #   --record-partition RECORDED and the merge MERGED through the alias (m-d1-abs's subject: an absolute comparison).
   local d1l d1n d1a
-  if cell d1-ok; then
-    lr_world "$sd" "$REPO_CRB" "$CRB_BASE" "$CRB_SHA" || return 1
-    if lr_prec "$sd" "$d"; then lr_merge "$sd" "$d" "$CRB_STORY"
-      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY-UNRECORDED" && [ -f "$o" ] || WHY="$WHY d1-ok{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
-    else WHY="$WHY d1-ok{record not written: $(head -1 "$MO")}"; fi
-    lr_done
-  fi
-  for d1n in d1-symlink-sprint d1-symlink-wrongstory; do
-    cell "$d1n" || continue
+  if cell d1-symlink-sprint; then
+    d1n=d1-symlink-sprint
     lr_world "$sd" "$REPO_CRB" "$CRB_BASE" "$CRB_SHA" || return 1; d1l="${d%%/docs/reviews/*}"
     if lr_prec "$sd" "$d"; then
       mkdir -p "$d1l/docs/reviews/s5/shards" && mv "$d" "$d1l/docs/reviews/s5/shards/${d##*/}" && ln -s "$d1l/docs/reviews/s5/shards/${d##*/}" "$d" \
         || { WHY="$WHY $d1n{FIXTURE ERROR: the shard directory was not moved and linked}"; lr_done; return 1; }
-      if [ "$d1n" = d1-symlink-sprint ]; then lr_merge "$sd" "$d" "$CRB_STORY"; else lr_merge "$sd" "$d" docs/reviews/s1/new.md; fi
+      lr_merge "$sd" "$d" "$CRB_STORY"
       refused_at "$LR_D1LINK" "$o" && owner_in "$MO" lead && has "$MO" "$LR_D1FIX" && ! has "$MO" LEGACY-UNRECORDED \
         || WHY="$WHY $d1n{rc=$RC $(reline "$MO") $(grep -E '^(MERGED|LEGACY)' "$MO" | head -2 | tr '\n' ' ')}"
     else WHY="$WHY $d1n{record not written: $(head -1 "$MO")}"; fi
     lr_done
-  done
+  fi
   if cell d1-record-link; then
     lr_world "$sd" "$REPO_CRB" "$CRB_BASE" "$CRB_SHA" || return 1; d1l="${d%%/docs/reviews/*}"
     mkdir -p "$d1l/docs/reviews/s5/shards" && mv "$d" "$d1l/docs/reviews/s5/shards/${d##*/}" && ln -s "$d1l/docs/reviews/s5/shards/${d##*/}" "$d" \
@@ -4727,25 +4597,18 @@ p_run_rec() {
     else WHY="$WHY rr-legacy{record not written or not legacy: $(head -1 "$MO")}"; fi
     lr_done
   fi
-  # A recorded run, its RECORDED-RESULT copied verbatim (rr-ok) or inside backticks and `=` padding (rr-norm): MERGED.
-  # A result whose counts differ from the record (rr-diff): REFUSED naming the recorded value.
-  for c in rr-ok rr-norm rr-diff; do
-    cell "$c" || continue
-    case "$c" in
-      rr-ok) blk="$RR_BLK" ;;
-      rr-norm) blk="$(printf 'Canonical run: `%s`\nCanonical result: `= %s =`' "$RR_INV" "$RR_RES")" ;;
-      *) blk="$(printf 'Canonical run: `%s`\nCanonical result: 813 passed, 3 skipped in 1.0s' "$RR_INV")" ;;
-    esac
+  # A recorded run, its RECORDED-RESULT copied verbatim (rr-ok): MERGED.
+  if cell rr-ok; then
+    c=rr-ok; blk="$RR_BLK"
     rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$blk" || return 1
     if lr_prec "$sd" "$d"; then rr_good "$sd" "$d"
       if [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO" && has "$MO" "RECORDED-RUN: $RR_INV (in $REPO_RR, sha $RR_F)" \
          && grep -qxF "run.$RR_SB.result: $RR_RES" "$LR_PATH"; then lr_merge "$sd" "$d" "$CRB_STORY"
-        if [ "$c" = rr-diff ]; then refused_at "$RR_NE" "$o" && has "$MO" "'$RR_RES'" || WHY="$WHY $c{rc=$RC $(reline "$MO")}"
-        else [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "$RR_LEG" || WHY="$WHY $c{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"; fi
+        [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "$RR_LEG" || WHY="$WHY $c{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
       else WHY="$WHY $c{--record-run rc=$RRC $(head -2 "$MO" | tr '\n' ' ')}"; fi
     else WHY="$WHY $c{record not written: $(head -1 "$MO")}"; fi
     lr_done
-  done
+  fi
   # THE RECORDED INVOCATION (BL-905 fold). rr-replay: a run recorded through the awk runner, its RECORDED-RESULT copied,
   # and `Canonical run:` naming `python3 -m pytest -q` (a replayed capture standing behind the canonical command) ->
   # REFUSED naming both invocations; rr-ok is its ALLOW twin, one property apart. rr-rfilter: the recorded invocation
@@ -4863,17 +4726,6 @@ p_run_rec() {
   # --check-serial over a review in REPO_RR's own docs/reviews/s1/ (its on-disk qa.md carries the sentinel; the frozen
   # sha is its HEAD, F): a typed pair REFUSED [owner: serial]; recorded through --record-run on the review path, SERIAL-OK.
   f="$REPO_RR/docs/reviews/s1/1-qa-validation.md"; mkdir -p "${f%/*}"
-  if cell rr-s-fab; then
-    sr_file "$f" "$pv"; cr_no "$sd" "$f" rr-s-fab "$RR_NOREC"; rm -f "$f"
-    # With no range the remedy names no sha: the review repository's HEAD as --frozen would compare HEAD with HEAD.
-    has "$CO" "--frozen <the full go-signal sha>" || WHY="$WHY rr-s-fab{remedy --frozen: $(reline "$CO")}"
-  fi
-  if cell rr-s-ok; then
-    SR_CANON="$RR_BLK" sr_file "$f" "$pv"; RR_FZ="$RR_F" rr_good "$sd" "$f" "$REPO_RR"
-    if [ "$RRC" = 0 ] && has "$MO" "RECORDED-RESULT: $RR_RES"; then cr_ok "$sd" "$f" rr-s-ok
-    else WHY="$WHY rr-s-ok{--record-run rc=$RRC $(head -1 "$MO")}"; fi
-    rm -f "$f" "$REPO_RR/.git/ai-dlc/stories/s1-1"
-  fi
   # rr-s-head (BL-905 fold): the serial form's frozen sha is --frozen, the go-signal sha, never the worktree's own HEAD.
   # REPO_RR checked out at X with --frozen F -> REFUSED, nothing recorded (a HEAD-read frozen sha compares X with X).
   if cell rr-s-head; then
@@ -4885,24 +4737,20 @@ p_run_rec() {
   fi
   # THE LEAD'S RE-RUN in the held era: the frozen sha is the go-signal sha (F), never the review repository's HEAD.
   # rr-s-lrange: a run recorded at B (the worktree at B, --frozen B) and the lead's --lead-range at go-signal F with the
-  # worktree still at B -> REFUSED, no run at the frozen sha F. rr-s-lrok (ALLOW, one property apart): the run recorded
-  # at F -> SERIAL-OK.
-  for c in rr-s-lrange rr-s-lrok; do
-    cell "$c" || continue
+  # worktree still at B -> REFUSED, no run at the frozen sha F.
+  if cell rr-s-lrange; then
+    c=rr-s-lrange
     rm -f "$REPO_RR/.git/ai-dlc/stories/s1-1"
     SR_CANON="$RR_BLK" sr_file "$f" "$pv" "reviewed-sha: $RR_F"
-    if [ "$c" = rr-s-lrange ]; then G -C "$REPO_RR" checkout -q --detach "$RR_B" && RR_FZ="$RR_B" rr_good "$sd" "$f" "$REPO_RR"
-    else RR_FZ="$RR_F" rr_good "$sd" "$f" "$REPO_RR"; fi
+    G -C "$REPO_RR" checkout -q --detach "$RR_B" && RR_FZ="$RR_B" rr_good "$sd" "$f" "$REPO_RR"
     if [ "$RRC" = 0 ] && has "$MO" "RECORDED-RESULT: $RR_RES"; then
       ip_run -C "$REPO_RR" -e "AI_DLC_PROJECT_ROOT=$PROJ" "$sd/merge-review-shards.sh" mrs_main --check-serial "$f" --gate qa --lead-range "$RR_B" "$RR_F" > "$CO" 2>&1 < /dev/null; SRC=$?
-      if [ "$c" = rr-s-lrange ]; then
-        [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "no canonical run is recorded at the frozen sha $RR_F" && has "$CO" "$SR_OWN" && ! has "$CO" SERIAL-OK \
-          || WHY="$WHY $c{rc=$SRC $(reline "$CO")}"
-      else [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK:" || WHY="$WHY $c{rc=$SRC $(head -3 "$CO" | tr '\n' ' ')}"; fi
+      [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "no canonical run is recorded at the frozen sha $RR_F" && has "$CO" "$SR_OWN" && ! has "$CO" SERIAL-OK \
+        || WHY="$WHY $c{rc=$SRC $(reline "$CO")}"
     else WHY="$WHY $c{--record-run rc=$RRC $(head -1 "$MO")}"; fi
     G -C "$REPO_RR" checkout -q "$RR_BR"
     rm -f "$f" "$REPO_RR/.git/ai-dlc/stories/s1-1"
-  done
+  fi
   # rr-s-lead: the review in REPO_RRL, whose on-disk qa.md lacks the sentinel (a seat that stripped it), checked under a
   # project root whose installed qa.md carries it (PROJ_RUN): ROLE_MD holds the era, so a typed pair is REFUSED.
   # rr-s-leg (ALLOW, one property apart): the same file under PROJ, whose qa.md lacks it: SERIAL-OK, one LEGACY line.

@@ -16,7 +16,6 @@ core/scripts/wfd-start-of.sh
 core/scripts/artifact-path-config.sh
 core/skills/ai-dlc/artifact-path-grammar.md
 core/skills/ai-dlc/steps/gate-validation.md
-core/skills/ai-dlc/steps/implementation.md
 core/team-roles/code-reviewer.md
 core/team-roles/qa.md
 core/schemas/sprint-status.json

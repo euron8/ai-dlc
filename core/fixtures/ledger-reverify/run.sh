@@ -42,7 +42,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # MUTANT-MATRIX mutation-normalize decides=mutation-normalize twins=Entry_SH-SUBJECT-GONE
 # MUTANT-MATRIX mutation-prefix decides=mutation-prefix,Entry_SH-DIST-BARE-CORE twins=Entry_A
 # MUTANT-MATRIX mutation-nogit decides=mutation-nogit,Entry_SH-GITHOOK-GONE twins=Entry_SH-SUBJECT-GONE
-# MUTANT-MATRIX mutation-dotfile decides=mutation-dotfile,Entry_SH-GIT-BARE-TOKEN,Entry_SH-GLOB-BARE-EXT twins=Entry_SH-SUBJECT-GONE
+# MUTANT-MATRIX mutation-dotfile decides=mutation-dotfile,Entry_SH-GLOB-BARE-EXT twins=Entry_SH-SUBJECT-GONE
 # MUTANT-MATRIX mutation-bail decides=mutation-bail twins=Entry_SH-GITHOOK-GONE
 # MUTANT-MATRIX mutation-undecided decides=mutation-undecided twins=Entry_I
 # MUTANT-MATRIX-FULL sbc-mut-refs-guard worlds=sbc-preconditions why=each kill reads the RECEIPTS-UNDECIDED detail, one run-scoped row whose numerator, denominator and refused clause together are the verdict
@@ -98,15 +98,15 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # MUTANT-MATRIX-FULL mutation-unread-base worlds=unreadable-control why=each layer mutant is scored as a per-world letter vector over three worlds (healthy, broken base blob, broken theirs blob) and must move only its own letter
 # MUTANT-MATRIX-FULL mutation-unread-version worlds=unreadable-control why=each layer mutant is scored as a per-world letter vector over three worlds (healthy, broken base blob, broken theirs blob) and must move only its own letter
 # MUTANT-MATRIX mutation-guard decides=mutation-guard,Entry_A twins=Entry_B
-# MUTANT-MATRIX mutation-bound decides=mutation-bound,PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK,PC-FIXTURE-NAMED-MANUAL,PC-S901,PC-S902,PC-S950-DOCS-ONLY-NAMING,PC-S951-TEMPLATES-ONLY-NAMING,PC-S952-MERGE-NAMING,PC-S954-RELEASE-COMMIT-NAMING,PC-S905-ONE-NAMING-COMMIT-ONLY,PC-S955-FORM-ONLY-CITATION,PC-S956-BOTH-FORMS-CITATION,PC-S957-ORDINARY-X,PC-S957-FORM-Y,PC-S958-FORM-CORE-ORDINARY-DOCS,PC-S959-INLINE-FORM-CITATION,PC-S907-NAMED-UPSTREAM-SURVIVES-A-REFUSED-RECEIPT,PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM twins=Entry_A
+# MUTANT-MATRIX mutation-bound decides=mutation-bound,PC-FIXTURE-NAMED-MANUAL,PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM,PC-S905-ONE-NAMING-COMMIT-ONLY,PC-S907-NAMED-UPSTREAM-SURVIVES-A-REFUSED-RECEIPT,PC-S951-TEMPLATES-ONLY-NAMING,PC-S952-MERGE-NAMING,PC-S954-RELEASE-COMMIT-NAMING,PC-S956-BOTH-FORMS-CITATION,PC-S957-FORM-Y,PC-S958-FORM-CORE-ORDINARY-DOCS,PC-S959-INLINE-FORM-CITATION twins=Entry_A
 # MUTANT-MATRIX mutation-named-head decides=mutation-named-head twins=PC-S905-ONE-NAMING-COMMIT-ONLY
 # MUTANT-MATRIX mutation-named-tail decides=mutation-named-tail,PC-S958-FORM-CORE-ORDINARY-DOCS twins=PC-S905-ONE-NAMING-COMMIT-ONLY
 # MUTANT-MATRIX mutation-named-maxcount decides=mutation-named-maxcount twins=Entry_A
 # MUTANT-MATRIX mutation-named-twoends decides=mutation-named-twoends twins=The_derivation
-# MUTANT-MATRIX mutation-colon decides=mutation-colon,Entry_C,Entry_D,a-real-entry.sh,Second_no-colon_prose_bullet,legacy-entry.sh twins=Entry_B
-# MUTANT-MATRIX mutation-idrule decides=mutation-idrule,PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL,PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0,PC-FIXTURE-QUOTED-INSIDE-FENCE,PC-FIXTURE-QUOTED-TWICE-A,PC-FIXTURE-AFTER-TWO-QUOTES,PC-FIXTURE-EOF-FENCE,PC-FIXTURE-AFTER-UNTERMINATED,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-BARE-BACKTICK,PC-FIXTURE-LITERAL-BACKSLASH,PC-FIXTURE-REGEX-ANCHOR,PC-FIXTURE-SECOND-SUBSTRING,PC-FIXTURE-ESCAPED-QUOTE,PC-FIXTURE-ESCAPED-PATH,PC-FIXTURE-CLEAN-PATH,PC-FIXTURE-ESCAPED-ON-MISSING-PATH,PC-FIXTURE-SH-WITH-BACKSLASH,PC-FIXTURE-SH-TWO-LINE,PC-FIXTURE-SH-TRAILING-COMMENT,PC-FIXTURE-SH-TRAILING-BACKSLASH,PC-FIXTURE-SH-OPEN-HEREDOC,PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM,PC-FIXTURE-BARE-BOLD-RECORD,PC-FIXTURE-BARE-BOLD-EOL,PC-FIXTURE-BARE-BOLD-MENTION-HOST twins=Entry_B
+# MUTANT-MATRIX mutation-colon decides=mutation-colon,Entry_C,Entry_D,a-real-entry.sh,legacy-entry.sh twins=Entry_B
+# MUTANT-MATRIX mutation-idrule decides=mutation-idrule,PC-FIXTURE-BARE-BACKTICK,PC-FIXTURE-BARE-BOLD-RECORD,PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL,PC-FIXTURE-EOF-FENCE,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-ESCAPED-PATH,PC-FIXTURE-ESCAPED-QUOTE,PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM,PC-FIXTURE-SECOND-SUBSTRING,PC-FIXTURE-SH-TRAILING-BACKSLASH twins=Entry_B
 # MUTANT-MATRIX mutation-prevclosed decides=mutation-prevclosed,legacy-entry.sh twins=Entry_B
-# MUTANT-MATRIX mutation-prevhadv decides=mutation-prevhadv,a-real-entry.sh,Second_no-colon_prose_bullet twins=Entry_B
+# MUTANT-MATRIX mutation-prevhadv decides=mutation-prevhadv,a-real-entry.sh twins=Entry_B
 # MUTANT-MATRIX mutation-midline-off decides=mutation-midline-off,Entry_ORPHAN-RECEIPT-MIDLINE twins=Entry_A
 # MUTANT-MATRIX mutation-midline-backtick decides=mutation-midline-backtick,Entry_ONLY-IN-TICKS twins=Entry_A
 # MUTANT-MATRIX mutation-midline-anchored decides=mutation-midline-anchored,Entry_ROW-ANCHORED-PLUS-MENTION twins=Entry_A
@@ -116,13 +116,13 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # MUTANT-MATRIX mutation-midline-blockquote decides=mutation-midline-blockquote,Entry_QUOTED-IN-A-BLOCKQUOTE twins=Entry_A
 # MUTANT-MATRIX mutation-midline-comment decides=mutation-midline-comment,Entry_NOTED-IN-AN-HTML-COMMENT twins=Entry_A
 # MUTANT-MATRIX mutation-midline-lastwins decides=mutation-midline-lastwins twins=Entry_SH-REAL
-# MUTANT-MATRIX mutation-subject decides=mutation-subject,Entry_SH-SUBJECT-GONE,Entry_SH-GITHOOK-GONE twins=Entry_A
+# MUTANT-MATRIX mutation-subject decides=mutation-subject,Entry_SH-GITHOOK-GONE,Entry_SH-SUBJECT-GONE twins=Entry_A
 # MUTANT-MATRIX mutation-uescape decides=mutation-uescape twins=The_derivation
-# MUTANT-MATRIX mutation-fence-blind decides=mutation-fence-blind,PC-FIXTURE-FENCED-NON-ID-HEADING,FENCED-TS-EVENT-,PC-FIXTURE-QUOTED-INSIDE-FENCE,PC-FIXTURE-QUOTED-TWICE-A,PC-FIXTURE-AFTER-TWO-QUOTES,PC-FIXTURE-EOF-FENCE,PC-FIXTURE-TILDE-FENCE,PC-FIXTURE-INDENTED-FENCE,INDENTED-TS-EVENT,PC-FIXTURE-AFTER-UNTERMINATED twins=PC-FIXTURE-COLON-CONTROL
-# MUTANT-MATRIX mutation-naive-opener decides=mutation-naive-opener,inline-span-control.sh,PC-FIXTURE-QUOTED-INSIDE-FENCE,PC-FIXTURE-AFTER-QUOTE twins=PC-FIXTURE-NAMED-MANUAL
+# MUTANT-MATRIX mutation-fence-blind decides=mutation-fence-blind,PC-FIXTURE-EOF-FENCE,PC-FIXTURE-TILDE-FENCE twins=PC-FIXTURE-COLON-CONTROL
+# MUTANT-MATRIX mutation-naive-opener decides=mutation-naive-opener,PC-FIXTURE-AFTER-QUOTE twins=PC-FIXTURE-NAMED-MANUAL
 # MUTANT-MATRIX mutation-no-stray decides=mutation-no-stray,PC-FIXTURE-AFTER-QUOTE twins=PC-FIXTURE-NAMED-MANUAL
 # MUTANT-MATRIX mutation-no-tilde decides=mutation-no-tilde,PC-FIXTURE-TILDE-FENCE twins=PC-FIXTURE-NAMED-MANUAL
-# MUTANT-MATRIX mutation-no-reset decides=mutation-no-reset,PC-FIXTURE-QUOTED-INSIDE-FENCE,PC-FIXTURE-QUOTED-TWICE-A,PC-FIXTURE-AFTER-TWO-QUOTES,PC-FIXTURE-EOF-FENCE,PC-FIXTURE-AFTER-UNTERMINATED,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-BARE-BACKTICK,PC-FIXTURE-LITERAL-BACKSLASH,PC-FIXTURE-REGEX-ANCHOR,PC-FIXTURE-SECOND-SUBSTRING,PC-FIXTURE-ESCAPED-QUOTE,PC-FIXTURE-ESCAPED-PATH,PC-FIXTURE-CLEAN-PATH,PC-FIXTURE-ESCAPED-ON-MISSING-PATH,PC-FIXTURE-SH-WITH-BACKSLASH,PC-FIXTURE-SH-TWO-LINE,PC-FIXTURE-SH-TRAILING-COMMENT,PC-FIXTURE-SH-TRAILING-BACKSLASH,PC-FIXTURE-SH-OPEN-HEREDOC,PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM,PC-FIXTURE-BARE-BOLD-RECORD,PC-FIXTURE-BARE-BOLD-EOL,PC-FIXTURE-BARE-BOLD-MENTION-HOST twins=PC-FIXTURE-NAMED-MANUAL
+# MUTANT-MATRIX mutation-no-reset decides=mutation-no-reset,PC-FIXTURE-BARE-BACKTICK,PC-FIXTURE-BARE-BOLD-RECORD,PC-FIXTURE-EOF-FENCE,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-ESCAPED-PATH,PC-FIXTURE-ESCAPED-QUOTE,PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM,PC-FIXTURE-SECOND-SUBSTRING,PC-FIXTURE-SH-TRAILING-BACKSLASH twins=PC-FIXTURE-NAMED-MANUAL
 # MUTANT-MATRIX wreckage-subject decides=wreckage-subject twins=PC-FIXTURE-NAMED-MANUAL
 # MUTANT-MATRIX mut-delete-reset decides=mut-delete-reset twins=PC-FIXTURE-NAMED-MANUAL
 # MUTANT-MATRIX mut-topreset decides=mut-topreset twins=PC-FIXTURE-NAMED-MANUAL
@@ -130,36 +130,36 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # MUTANT-MATRIX mut-emitreset decides=mut-emitreset twins=PC-FIXTURE-NAMED-MANUAL
 # MUTANT-MATRIX mut-swallowedonly decides=mut-swallowedonly twins=PC-FIXTURE-NAMED-MANUAL
 # MUTANT-MATRIX mut-comment-only decides=mut-comment-only twins=PC-FIXTURE-NAMED-MANUAL
-# MUTANT-MATRIX mutation-sh-no-parse decides=mutation-sh-no-parse,PC-FIXTURE-SH-TWO-LINE,PC-FIXTURE-SH-TRAILING-BACKSLASH,PC-FIXTURE-SH-OPEN-HEREDOC twins=PC-FIXTURE-EOF-FENCE
-# MUTANT-MATRIX mutation-sh-parse-bare decides=mutation-sh-parse-bare,PC-FIXTURE-SH-TRAILING-COMMENT,PC-FIXTURE-SH-TRAILING-BACKSLASH,PC-FIXTURE-SH-OPEN-HEREDOC twins=PC-FIXTURE-EOF-FENCE
-# MUTANT-MATRIX mutation-sh-parse-inverted decides=mutation-sh-parse-inverted,Entry_SH-REAL,Entry_SH-RELATIVE-SUBJECT,Entry_SH-DIST-PATH,Entry_SH-DIST-BARE-CORE,Entry_SH-REVPATH-DOCS,Entry_SH-GIT-BARE-TOKEN,Entry_SH-GLOB-BARE-EXT,Entry_SH-LIVE,Entry_SH-CWD,PC-FIXTURE-SH-WITH-BACKSLASH,PC-FIXTURE-SH-TWO-LINE,PC-FIXTURE-SH-TRAILING-COMMENT,PC-FIXTURE-SH-TRAILING-BACKSLASH,PC-FIXTURE-SH-OPEN-HEREDOC,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-PATH,Entry_SH-THEIRS-TREE-BRACED,Entry_SH-THEIRS-TREE-BRACED-SUBJECT,Entry_SH-DIST-AS-PATH,Entry_SH-DIST-REVSPEC,Entry_SH-DIST-REVSPEC-BRACED,Entry_SH-DIST-CD-GIT twins=PC-FIXTURE-EOF-FENCE
-# MUTANT-MATRIX mutation-bs-no-guard decides=mutation-bs-no-guard,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-LITERAL-BACKSLASH,PC-FIXTURE-REGEX-ANCHOR,PC-FIXTURE-SECOND-SUBSTRING,PC-FIXTURE-ESCAPED-QUOTE,PC-FIXTURE-ESCAPED-ON-MISSING-PATH twins=PC-FIXTURE-BARE-BACKTICK
-# MUTANT-MATRIX mutation-bs-unescape decides=mutation-bs-unescape,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-LITERAL-BACKSLASH,PC-FIXTURE-REGEX-ANCHOR,PC-FIXTURE-SECOND-SUBSTRING,PC-FIXTURE-ESCAPED-QUOTE,PC-FIXTURE-ESCAPED-ON-MISSING-PATH twins=PC-FIXTURE-BARE-BACKTICK
-# MUTANT-MATRIX mutation-bs-backtick-only decides=mutation-bs-backtick-only,PC-FIXTURE-REGEX-ANCHOR,PC-FIXTURE-ESCAPED-QUOTE twins=PC-FIXTURE-ESCAPED-BACKTICK
+# MUTANT-MATRIX mutation-sh-no-parse decides=mutation-sh-no-parse,PC-FIXTURE-SH-TRAILING-BACKSLASH twins=PC-FIXTURE-EOF-FENCE
+# MUTANT-MATRIX mutation-sh-parse-bare decides=mutation-sh-parse-bare,PC-FIXTURE-SH-TRAILING-BACKSLASH twins=PC-FIXTURE-EOF-FENCE
+# MUTANT-MATRIX mutation-sh-parse-inverted decides=mutation-sh-parse-inverted,Entry_SH-CWD,Entry_SH-DIST-BARE-CORE,Entry_SH-DIST-REVSPEC,Entry_SH-GLOB-BARE-EXT,Entry_SH-REAL,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-BRACED-SUBJECT,Entry_SH-THEIRS-TREE-PATH,PC-FIXTURE-SH-TRAILING-BACKSLASH twins=PC-FIXTURE-EOF-FENCE
+# MUTANT-MATRIX mutation-bs-no-guard decides=mutation-bs-no-guard,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-ESCAPED-QUOTE,PC-FIXTURE-SECOND-SUBSTRING twins=PC-FIXTURE-BARE-BACKTICK
+# MUTANT-MATRIX mutation-bs-unescape decides=mutation-bs-unescape,PC-FIXTURE-ESCAPED-BACKTICK,PC-FIXTURE-ESCAPED-QUOTE twins=PC-FIXTURE-BARE-BACKTICK
+# MUTANT-MATRIX mutation-bs-backtick-only decides=mutation-bs-backtick-only,PC-FIXTURE-ESCAPED-QUOTE twins=PC-FIXTURE-ESCAPED-BACKTICK
 # MUTANT-MATRIX mutation-bs-first-only decides=mutation-bs-first-only,PC-FIXTURE-SECOND-SUBSTRING twins=PC-FIXTURE-ESCAPED-BACKTICK
 # MUTANT-MATRIX mutation-bs-two-escapes decides=mutation-bs-two-escapes,PC-FIXTURE-ESCAPED-QUOTE twins=PC-FIXTURE-ESCAPED-BACKTICK
 # MUTANT-MATRIX mutation-bs-no-path-guard decides=mutation-bs-no-path-guard,PC-FIXTURE-ESCAPED-PATH twins=PC-FIXTURE-ESCAPED-BACKTICK
-# MUTANT-MATRIX mutation-tt-is-dist decides=mutation-tt-is-dist,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-BRACED,Entry_SH-THEIRS-TREE-BRACED-SUBJECT twins=Entry_SH-THEIRS-TREE-PATH
-# MUTANT-MATRIX mutation-refuse-slash-only decides=mutation-refuse-slash-only,Entry_SH-DIST-AS-ENV,Entry_SH-DIST-CD-BARE twins=Entry_SH-THEIRS-TREE
-# MUTANT-MATRIX mutation-refuse-git-c decides=mutation-refuse-git-c,Entry_SH-DIST-PATH,Entry_SH-DIST-BARE-CORE,Entry_SH-REVPATH-DOCS,Entry_SH-DIST-REVSPEC twins=Entry_SH-THEIRS-TREE
+# MUTANT-MATRIX mutation-tt-is-dist decides=mutation-tt-is-dist,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-BRACED-SUBJECT twins=Entry_SH-THEIRS-TREE-PATH
+# MUTANT-MATRIX mutation-refuse-slash-only decides=mutation-refuse-slash-only,Entry_SH-DIST-CD-BARE twins=Entry_SH-THEIRS-TREE
+# MUTANT-MATRIX mutation-refuse-git-c decides=mutation-refuse-git-c,Entry_SH-DIST-BARE-CORE,Entry_SH-DIST-REVSPEC twins=Entry_SH-THEIRS-TREE
 # MUTANT-MATRIX mutation-cd-exempt-bare decides=mutation-cd-exempt-bare,Entry_SH-DIST-CD-BARE twins=Entry_SH-THEIRS-TREE
-# MUTANT-MATRIX mutation-partition-no-tt decides=mutation-partition-no-tt,Entry_SH-THEIRS-TREE-BRACED,Entry_SH-THEIRS-TREE-BRACED-SUBJECT twins=Entry_SH-THEIRS-TREE
-# MUTANT-MATRIX mutation-partition-no-tt-status decides=mutation-partition-no-tt-status,Entry_SH-THEIRS-TREE-BRACED,Entry_SH-THEIRS-TREE-BRACED-SUBJECT twins=Entry_SH-THEIRS-TREE
+# MUTANT-MATRIX mutation-partition-no-tt decides=mutation-partition-no-tt,Entry_SH-THEIRS-TREE-BRACED-SUBJECT twins=Entry_SH-THEIRS-TREE
+# MUTANT-MATRIX mutation-partition-no-tt-status decides=mutation-partition-no-tt-status,Entry_SH-THEIRS-TREE-BRACED-SUBJECT twins=Entry_SH-THEIRS-TREE
 # MUTANT-MATRIX mutation-tt-no-cleanup decides=mutation-tt-no-cleanup twins=Entry_SH-THEIRS-TREE
 # MUTANT-MATRIX mutation-tt-eager decides=mutation-tt-eager twins=Entry_SH-THEIRS-TREE
 # MUTANT-MATRIX mutation-tt-eager-leak decides=mutation-tt-eager-leak twins=Entry_SH-THEIRS-TREE
 # MUTANT-MATRIX mutation-refuse-after-run decides=mutation-refuse-after-run,Entry_SH-DIST-AS-PATH-ZERO twins=Entry_SH-THEIRS-TREE
-# MUTANT-MATRIX mutation-nonid-no-fix decides=mutation-nonid-no-fix,A_narrative_closure_record_written_as_a_bullet,validate-fixture-prereq.sh twins=PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN
-# MUTANT-MATRIX mutation-nonid-narrow-grammar decides=mutation-nonid-narrow-grammar,Entry_A,Entry_B,A_narrative_closure_record_written_as_a_bullet,validate-fixture-prereq.sh,Entry_G,Entry_H,Entry_I,Entry_J,Entry_K,Entry_L,Entry_SH-MOVED,Entry_SH-REAL,Entry_SH-RELATIVE-SUBJECT,Entry_SH-SUBJECT-GONE,Entry_SH-DIST-PATH,Entry_SH-DIST-BARE-CORE,Entry_SH-REVPATH-DOCS,Entry_SH-GITHOOK-GONE,Entry_SH-GIT-BARE-TOKEN,Entry_SH-GLOB-BARE-EXT,Entry_SH-LIVE,Entry_M,Entry_SH-CWD,Entry_TH-UNDECIDED,Entry_TH-DECIDED,The_derivation,False_CLOSE-CANDIDATE,Entry_ORPHAN-RECEIPT-MIDLINE,Entry_ROW-ANCHORED-PLUS-MENTION,inline-span-control.sh,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-PATH,Entry_SH-THEIRS-TREE-BRACED,Entry_SH-THEIRS-TREE-BRACED-SUBJECT,Entry_SH-DIST-AS-PATH,Entry_SH-DIST-AS-ENV,Entry_SH-DIST-AS-PATH-ZERO,Entry_SH-DIST-REVSPEC,Entry_SH-DIST-REVSPEC-BRACED,Entry_SH-DIST-CD-GIT,Entry_SH-DIST-CD-BARE,PC-S907-NAMED-UPSTREAM-SURVIVES-A-REFUSED-RECEIPT twins=PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN
+# MUTANT-MATRIX mutation-nonid-no-fix decides=mutation-nonid-no-fix,validate-fixture-prereq.sh twins=PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN
+# MUTANT-MATRIX mutation-nonid-narrow-grammar decides=mutation-nonid-narrow-grammar,PC-S907-NAMED-UPSTREAM-SURVIVES-A-REFUSED-RECEIPT,Entry_A,Entry_B,Entry_H,Entry_I,Entry_K,Entry_M,Entry_ORPHAN-RECEIPT-MIDLINE,Entry_SH-CWD,Entry_SH-DIST-AS-PATH-ZERO,Entry_SH-DIST-BARE-CORE,Entry_SH-DIST-CD-BARE,Entry_SH-DIST-REVSPEC,Entry_SH-GITHOOK-GONE,Entry_SH-GLOB-BARE-EXT,Entry_SH-REAL,Entry_SH-SUBJECT-GONE,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-PATH,The_derivation,validate-fixture-prereq.sh twins=PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN
 # MUTANT-MATRIX mutation-nonid-local-idshape decides=mutation-nonid-local-idshape,PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL twins=validate-fixture-prereq.sh
 # MUTANT-MATRIX mutation-nonid-period-form decides=mutation-nonid-period-form,validate-fixture-prereq.sh twins=a-real-entry.sh
-# MUTANT-MATRIX mutation-nonid-all-verbs decides=mutation-nonid-all-verbs,Entry_A,Entry_B,a-real-entry.sh,Entry_G,Entry_L,Entry_SH-REAL,Entry_SH-RELATIVE-SUBJECT,Entry_SH-DIST-PATH,Entry_SH-DIST-BARE-CORE,Entry_SH-REVPATH-DOCS,Entry_SH-GIT-BARE-TOKEN,Entry_SH-GLOB-BARE-EXT,Entry_SH-LIVE,Entry_M,Entry_SH-CWD,Entry_TH-UNDECIDED,Entry_TH-DECIDED,Entry_ROW-ANCHORED-PLUS-MENTION,inline-span-control.sh,Entry_I,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-PATH,Entry_SH-THEIRS-TREE-BRACED,Entry_SH-THEIRS-TREE-BRACED-SUBJECT,Entry_SH-DIST-AS-PATH,Entry_SH-DIST-REVSPEC,Entry_SH-DIST-REVSPEC-BRACED,Entry_SH-DIST-CD-GIT twins=PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM
+# MUTANT-MATRIX mutation-nonid-all-verbs decides=mutation-nonid-all-verbs,Entry_A,Entry_B,Entry_I,Entry_M,Entry_ROW-ANCHORED-PLUS-MENTION,Entry_SH-CWD,Entry_SH-DIST-BARE-CORE,Entry_SH-DIST-REVSPEC,Entry_SH-GLOB-BARE-EXT,Entry_SH-REAL,Entry_SH-THEIRS-TREE,Entry_SH-THEIRS-TREE-BRACED-SUBJECT,Entry_SH-THEIRS-TREE-PATH,a-real-entry.sh twins=PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM
 # MUTANT-MATRIX mutation-receiptless-gate decides=mutation-receiptless-gate,PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM twins=validate-fixture-prereq.sh
 # MUTANT-MATRIX mutation-receiptless-local-guard decides=mutation-receiptless-local-guard,FIXTURE-CAPS-HEADING-NOT-AN-ID twins=validate-fixture-prereq.sh
-# MUTANT-MATRIX mutation-receiptless-no-skip decides=mutation-receiptless-no-skip,PC-FIXTURE-HEADING-NO-VERIFY,PC-FIXTURE-NORECEIPT-NEVER-CITED twins=validate-fixture-prereq.sh
-# MUTANT-MATRIX mutation-bare-bold-no-shape decides=mutation-bare-bold-no-shape,PC-FIXTURE-BARE-BOLD-RECORD,PC-FIXTURE-BARE-BOLD-EOL twins=validate-fixture-prereq.sh
-# MUTANT-MATRIX mutation-bare-bold-narrow-strip decides=mutation-bare-bold-narrow-strip,PC-FIXTURE-BARE-BOLD-RECORD,PC-FIXTURE-BARE-BOLD-EOL twins=validate-fixture-prereq.sh
-# MUTANT-MATRIX mutation-bare-bold-loose decides=mutation-bare-bold-loose,PC-FIXTURE-BARE-BOLD-MENTION-HOST,PC-FIXTURE-MENTIONED-IN-A-BODY twins=validate-fixture-prereq.sh
+# MUTANT-MATRIX mutation-receiptless-no-skip decides=mutation-receiptless-no-skip,PC-FIXTURE-HEADING-NO-VERIFY twins=validate-fixture-prereq.sh
+# MUTANT-MATRIX mutation-bare-bold-no-shape decides=mutation-bare-bold-no-shape,PC-FIXTURE-BARE-BOLD-RECORD twins=validate-fixture-prereq.sh
+# MUTANT-MATRIX mutation-bare-bold-narrow-strip decides=mutation-bare-bold-narrow-strip,PC-FIXTURE-BARE-BOLD-RECORD twins=validate-fixture-prereq.sh
+# MUTANT-MATRIX mutation-bare-bold-loose decides=mutation-bare-bold-loose,PC-FIXTURE-MENTIONED-IN-A-BODY twins=validate-fixture-prereq.sh
 # MUTANT-MATRIX mutation-memo-unowned decides=mutation-memo-unowned twins=Entry_SH-DIST-REVSPEC
 # MUTANT-MATRIX mutation-memo-handler-first decides=mutation-memo-handler-first twins=Entry_A
 # MUTANT-MATRIX mutation-memo-no-setguard decides=mutation-memo-no-setguard twins=Entry_A
@@ -181,6 +181,11 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # MUTANT-MATRIX-FULL mutation-bl890-bare-prefix worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (r6; twin s1)
 # MUTANT-MATRIX-FULL mutation-bl890-amb-equality worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (amb; twin s1)
 # MUTANT-MATRIX-FULL mutation-bl890-sib-full-label worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (sib; twin sibY)
+# MUTANT-MATRIX mutation-claim-base-as-theirs decides=mutation-claim-base-as-theirs,Entry_B,Entry_M,PC-FIXTURE-BARE-BACKTICK,PC-FIXTURE-BARE-BOLD-RECORD twins=Entry_A
+# MUTANT-MATRIX mutation-claim-basename-first decides=mutation-claim-basename-first,Entry_H twins=Entry_B
+# MUTANT-MATRIX mutation-claim-joined-subs decides=mutation-claim-joined-subs,Entry_M twins=Entry_B
+# MUTANT-MATRIX mutation-claim-manual-malformed decides=mutation-claim-manual-malformed,PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN,PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL,PC-FIXTURE-ENTRY-E-DECLARES-MANUAL,PC-FIXTURE-ENTRY-F-MANUAL-BACKTICK,PC-FIXTURE-NAMED-MANUAL twins=Entry_B
+# MUTANT-MATRIX mutation-claim-vacuous-closes decides=mutation-claim-vacuous-closes,Entry_K twins=Entry_B
 # MUTANT-MATRIX-CONTROL CONTROL-acquit-before-if why=a correct fix placed just above the undecided if must read clean on all three suffix shapes
 # MUTANT-MATRIX-CONTROL CONTROL-acquit-cond-ord why=a reset guarded on the leftover ordinal fires unconditionally at EOF and must read clean on all three suffix shapes
 # MUTANT-MATRIX-DYNAMIC stdin-mut why=a loop over the two redirect sites produces stdin-mut-eval and stdin-mut-base, each rowed above
@@ -689,8 +694,6 @@ lr_unit_nonid_manual() {
 # the other with an inline code span and an arrow. A fix keyed on either surface form rather
 # than on `ledger_entry_id()` reports one and misses the other, and both spellings are real:
 # both are lifted from the reference consumer's live ledger.
-row_is "A narrative closure record written as a bullet" NEEDS-REVIEW \
-  "a manual receipt under a prose label names no entry an operator can find — entry-shape defect, not hand-review"
 row_is "validate-fixture-prereq.sh" NEEDS-REVIEW \
   "the SECOND spelling: code span and arrow rather than a capitalised sentence, so a surface-form fix misses it"
 
@@ -725,8 +728,6 @@ row_lacks "PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN" NEEDS-REVIEW \
 # THE SECOND NEAR-MISS IS THE CHARACTER CLASS, where this has already been wrong: `^[A-Z0-9-]+$`
 # excludes `_` and `.` and scored two real consumer entries as annotations. A fix that restates
 # the id test locally instead of asking `ledger_entry_id()` re-introduces exactly that.
-row_is "PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL" HAND-REVIEW \
-  "an id carrying . and _ is still an id — a locally-restated id test loses both characters"
 row_lacks "PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL" NEEDS-REVIEW \
   "...and is not reported as a shape defect, the exact false negative the shared rule was widened to close"
 
@@ -741,7 +742,6 @@ row_lacks "a-real-entry.sh" NEEDS-REVIEW \
 # the consumer install layout. Before the basename fallback it reported NEEDS-REVIEW: the
 # substring was never compared, so the closer said nothing about a claim upstream had already
 # absorbed. G and B must agree; that they can disagree at all is the defect.
-row_is "Entry G" CLOSE-CANDIDATE "consumer-namespace path resolves by basename -> same verdict as Entry B"
 
 # ...and the fallback must REFUSE to guess. H's basename matches two files at theirs, I's
 # matches none. A fallback that picked the first match would classify H on the wrong file
@@ -754,7 +754,6 @@ row_is "Entry I" NEEDS-REVIEW    "basename matches nothing at theirs -> nothing 
 # J's substring is absent at base AND theirs, K's is present at both. A closer that tests only
 # theirs emits a confident close for a claim no upstream change touched, and a drain acts on
 # it. Six entries on the reference consumer had exactly this shape, every one a live defect.
-row_is "Entry J" NEEDS-REVIEW    "theirs_has on a substring absent at base too -> vacuous, not absorbed"
 row_is "Entry K" NEEDS-REVIEW    "theirs_lacks on a substring present at base too -> vacuous, not absorbed"
 
 # THE SIXTH DIFFERENTIAL — more than one substring in a directive. Joined into a single
@@ -762,18 +761,15 @@ row_is "Entry K" NEEDS-REVIEW    "theirs_lacks on a substring present at base to
 # lacks" and only L is right. M is the damage: theirs carries both markers, and the entry
 # would sit open forever against an upstream that had already absorbed it. Matching each
 # substring separately is what makes the pair disagree, which is what makes the test real.
-row_is "Entry L" STILL-LIVE      "two substrings, neither at theirs -> genuinely still live"
 } # end lr_unit_nonid_manual
 lr_unit_sh_missing_subject() {
 # --- the `sh` verb: a MISSING SUBJECT is not a fix -----------------------------
 # Three outcomes, because two would let a verb that always reports one thing pass.
-row_is "Entry SH-MOVED" NEEDS-REVIEW "exit 127 = subject renamed/deleted, NOT absorbed. A close here records an absorption that never happened, and closing is the direction that loses information permanently"
 row_is "Entry SH-REAL"  CLOSE-CANDIDATE "OVER-FIRE CONTROL: a plain non-zero exit still closes, or the guard pins every sh entry open forever"
 
 # THE POSITIVE OUTCOME, asserted rather than the absence of the old failure. A receipt naming a
 # BARE consumer-relative subject that is PRESENT must read STILL-LIVE from this fixture's cwd,
 # which is not the consumer root. The equality above cannot make that claim on its own.
-row_is "Entry SH-RELATIVE-SUBJECT" STILL-LIVE "a BARE consumer-relative subject that EXISTS reproduces whatever directory the caller stands in; evaluated elsewhere its grep exits 2 and the entry reads as absorbed"
 # A MOVED SUBJECT INSIDE AN && CHAIN IS NOT A FIX, and the exit status cannot say so: the chain
 # short-circuits with 1, exactly like a genuine fix. The 126/127 guard cannot reach it, and the
 # residue used to be a NOTE in the CLOSE-CANDIDATE detail telling the operator to check the paths
@@ -784,17 +780,11 @@ row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a M
 # assertion: that entry names a consumer path that is genuinely absent and must stay flagged,
 # this one names a distribution path inside a rev-spec and must not be. An extractor that sees
 # neither passes the first arm alone; one that sees both passes the second alone.
-row_is "Entry SH-DIST-PATH" CLOSE-CANDIDATE "a \`core/scripts/<x>\` rev-spec names no consumer subject; reading one out of it withholds the close on a receipt that works"
 row_is "Entry SH-DIST-BARE-CORE" CLOSE-CANDIDATE "a bare \`core/scripts/<x>\` pathspec is a distribution path; the whitelist's first-character test is what keeps it out"
 # A `docs/` PATH AT A REF IS A DISTRIBUTION PATH TOO, AND `docs/` IS A CONSUMER PREFIX. Splitting
 # the rev-spec at its colon left `docs/zz-dist-only-a.md` standing, the whitelist admitted it, it is
 # absent on the consumer, and a receipt that works read as naming a missing subject. Five spellings
 # of the ref in one receipt, so a strip that handles only one leaves the row NEEDS-REVIEW.
-if [ "$B2_RUN" = 1 ]; then
-row_is "Entry SH-REVPATH-DOCS" CLOSE-CANDIDATE "every <ref>:<path> token is a distribution read, whatever prefix its right-hand side carries"
-else
-  printf '  SKIP  SH-REVPATH-DOCS -- the installed ledger-reverify.sh predates the rev-spec strip; it lands with the pull that carries this fixture\n'
-fi
 # `.git/` IS A CONSUMER HOME THE WHITELIST DID NOT CARRY, AND IT IS THE ONE A FRESH CHECKOUT MOST
 # OFTEN LACKS. `git clone` does not carry `.git/hooks/`, so the receipt exits non-zero for the
 # ABSENCE and the tip read it as a fix. Measured on the reference consumer: the 0.471.0→0.479.0
@@ -805,10 +795,9 @@ row_is "Entry SH-GITHOOK-GONE" NEEDS-REVIEW "an absent \`.git/hooks/<x>\` subjec
 # admitting it puts a token nobody wrote into the accusing population; the tokenizer strips `*`
 # before any guard sees it, so `core/hooks/*.sh` arrives as the bare token `.sh` and a dotfile arm
 # turns every `*.ext` in every receipt into a spurious NEEDS-REVIEW — which SUPPRESSES A REAL
-# CLOSE. Both must still close, or the fix is the wider one this entry exists to refuse.
-row_is "Entry SH-GIT-BARE-TOKEN" CLOSE-CANDIDATE "the bare token \`.git\` is not a subject — a path segment after \`.git/\` is required, or a directory every consumer has becomes an accusation"
+# CLOSE. The surviving control, the glob-bare-extension entry below, must still close, or the fix is
+# the wider one this entry exists to refuse.
 row_is "Entry SH-GLOB-BARE-EXT" CLOSE-CANDIDATE "\`core/hooks/*.sh\` tokenizes to the bare \`.sh\`, which carries no glob character for the glob guard to refuse — admitting it files every \`*.ext\` receipt as unresolved"
-row_is "Entry SH-LIVE"  STILL-LIVE "exit 0 still means it reproduces"
 
 row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"
 
@@ -818,8 +807,6 @@ row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, mu
 # no row, exit 0, indistinguishable from "nothing to close". Measured on the reference
 # consumer, where every entry filed after 2026-07-20 used this shape and the one entry that
 # had adopted the verify: convention at all was invisible while upstream had already fixed it.
-row_is "PC-FIXTURE-HEADING-ABSORBED"  CLOSE-CANDIDATE "heading entry, theirs has MARKER_B -> same verdict as Entry B"
-row_is "PC-FIXTURE-HEADING-CLOSED"    ABSENT          "heading entry annotated ADOPTED UPSTREAM -> closed"
 row_is "PC-FIXTURE-HEADING-NO-VERIFY" ABSENT          "heading opens an entry, so it ends the one above -> no inherited directive"
 
 # TWO WAYS TO BE DONE. `ADOPTED UPSTREAM` was the only closure token, so an entry WITHDRAWN
@@ -827,7 +814,6 @@ row_is "PC-FIXTURE-HEADING-NO-VERIFY" ABSENT          "heading opens an entry, s
 # cannot settle it, since no upstream change can make a defect that never existed stop existing.
 # Measured on the reference consumer: two of nine HAND-REVIEW rows were one withdrawn entry,
 # counted twice. Matched as loosely as its sibling token, and for the same reason.
-row_is "PC-FIXTURE-WITHDRAWN"        ABSENT          "premise was false -> finished, exactly like ADOPTED UPSTREAM"
 
 # A close row must name the version where the substring APPEARED, not theirs' tip.
 #
@@ -1409,8 +1395,6 @@ lr_unit_receipts_undecided() {
 # substring is at BOTH refs (this pull moved neither side of the predicate); TH-DECIDED's
 # arrived inside base..theirs. The pair is what makes the tally a finding rather than a count
 # of still-live rows.
-row_is "Entry TH-UNDECIDED" STILL-LIVE "present at theirs -> stays open, exactly like the control below"
-row_is "Entry TH-DECIDED"   STILL-LIVE "also STILL-LIVE, so the STATUS cannot be what distinguishes them"
 
 # The numerator and the denominator are both asserted. A row saying "4 of 4" would be a count of
 # still-live theirs_has receipts wearing this row's name; the claim is specifically about the
@@ -1980,10 +1964,6 @@ lr_unit_close_anchor() {
 # <br> the entry bodies use); a mention sits inside a sentence.
 row_is "PROSE-MENTIONS-THE-VOCABULARY" STILL-LIVE \
   "an OPEN entry quoting the close markers in prose, a blockquote and a code span still reports"
-row_is "BOLD-ANNOTATION-WITH-A-PREFIX" ABSENT \
-  "a real annotation whose bold span opens with words before the marker still closes"
-row_is "retained for the record" ABSENT \
-  "the copy a withdrawal supersedes carries no marker of its own and must not re-report forever"
 
 # MUTATION — restore the unanchored predicate. The prose entry must vanish, and it must be the
 # ONLY thing that changes: an anchor that also drops a real close is a different bug.
@@ -2056,8 +2036,6 @@ lr_unit_every_receipt() {
 # This pair disagrees on purpose: a close and a still-live in one entry. The scalar kept the close.
 row_has "PC-FIXTURE-TWO-RECEIPTS" STILL-LIVE \
   "receipt 1 of 2 is genuinely live and must not be swallowed by the close that follows it"
-row_has "PC-FIXTURE-TWO-RECEIPTS" CLOSE-CANDIDATE \
-  "receipt 2 of 2 is a real close and must still report"
 
 # The ordinal has to be on the row, or two rows for one entry are unattributable.
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -2120,8 +2098,6 @@ lr_unit_name_signal() {
 # Measured on the reference consumer: 51 heading labels, 37 id-shaped, 4 named — all four true
 # positives, each invisible to every other predicate in this file, and 33 id-shaped labels
 # silent. That 33 is the control that this discriminates rather than rubber-stamps.
-row_has "PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK" NAMED-UPSTREAM \
-  "upstream's history names the id -> the absorption is visible even though the receipt cannot see it"
 row_has "PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK" STILL-LIVE \
   "the receipt's own verdict still prints — the pair IS the finding, and suppressing either half loses a fact"
 row_has "PC-FIXTURE-NAMED-MANUAL" NAMED-UPSTREAM \
@@ -2144,8 +2120,6 @@ lr_unit_short_id() {
 # distinct prefixes appeared in upstream's history. Among the misses were three entries that
 # consumer had filed and upstream had just fixed — so on the entries where the third signal was
 # most needed, it was silent.
-row_has "PC-S901" NAMED-UPSTREAM-AMBIGUOUS \
-  "upstream cites the SHORT id and ONE open entry carries that prefix -> still the unattributed prefix row, so the citation is visible though the full slug appears nowhere"
 row_lacks "PC-S901-SHORT-ID-UNIQUE-PREFIX" NAMED-UPSTREAM \
   "and the lone carrier is NOT attributed by name: a count of one says what this ledger still holds, not what the commit meant, and it would change if sprint history were deleted"
 
@@ -2156,8 +2130,6 @@ row_lacks "PC-S902-SHARED-PREFIX-FIRST" NAMED-UPSTREAM \
   "a prefix carried by two entries is NOT attributed to either — a wrong close is worse than the silence it replaces"
 row_lacks "PC-S902-SHARED-PREFIX-SECOND" NAMED-UPSTREAM \
   "and not to the other one either — the refusal is symmetric, not first-wins"
-row_has "PC-S902" NAMED-UPSTREAM-AMBIGUOUS \
-  "the shared prefix is reported ONCE, keyed on the prefix itself, because the prefix is the subject"
 
 # ONE ROW, NOT ONE PER ENTRY. Per-entry emission produced 45 rows from 11 prefixes on the
 # reference consumer, all saying the same unresolvable thing — noise added by the fix for a
@@ -2191,18 +2163,12 @@ if [ "$B2_RUN" = 0 ]; then
   LR_SKIPPED=1  # this unit's whole body is the SKIP below; the floor reads this, not silence
   printf '  SKIP  BL-145/BL-066 reach and citing-commit arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
 else
-row_has   "PC-S950-DOCS-ONLY-NAMING" NAMED-UPSTREAM-DOCS-ONLY \
-  "the one naming commit is a docs(plan): commit -> the row stays, under the kind that says it is no absorption"
-row_lacks "PC-S950-DOCS-ONLY-NAMING" NAMED-UPSTREAM \
-  "and it is never reported as the plain kind a pull session reads as 'upstream took it'"
 row_has   "PC-S951-TEMPLATES-ONLY-NAMING" NAMED-UPSTREAM \
   "templates/ is installed on a consumer -> a templates-only commit can be the absorption (a core/-only predicate demotes it)"
 row_has   "PC-S952-MERGE-NAMING" NAMED-UPSTREAM \
   "a MERGE whose side branch changed core/ -> listed with -m, so the merge is not scored as touching nothing"
 row_has   "PC-S954-RELEASE-COMMIT-NAMING" NAMED-UPSTREAM \
   "the only naming commit is a RELEASE (VERSION + CHANGELOG.md, fix in its parent) -> the plain kind, because that release is what a consumer pulls"
-row_lacks "PC-S954-RELEASE-COMMIT-NAMING" NAMED-UPSTREAM-DOCS-ONLY \
-  "and never the docs-only kind, whose row would send the operator away from a real absorption"
 row_has   "PC-S905-ONE-NAMING-COMMIT-ONLY" NAMED-UPSTREAM \
   "the control: a core-touching single naming commit keeps the plain kind"
 # THE AMBIGUOUS ROW: every citing commit, and the reach. Derived from the repo, not from the row:
@@ -2339,14 +2305,8 @@ if ! grep -qF 'NAMED-UPSTREAM-CITED-ONLY' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; the
   printf '  SKIP  BL-145 not-discharged citation arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
   return 0
 fi
-row_has   "PC-S955-FORM-ONLY-CITATION" NAMED-UPSTREAM-CITED-ONLY \
-  "named ONLY on a Not-discharged: line of a core commit -> the citation kind, which is no absorption claim"
-row_lacks "PC-S955-FORM-ONLY-CITATION" NAMED-UPSTREAM \
-  "and never the plain kind a pull session reads as 'upstream took it' -- the third class this closes"
 row_has   "PC-S956-BOTH-FORMS-CITATION" NAMED-UPSTREAM \
   "named in the subject AND on a form line -> the ordinary mention still counts"
-row_has   "PC-S957-ORDINARY-X" NAMED-UPSTREAM \
-  "discharged in a subject whose commit cites ANOTHER id in the form -> this one is untouched"
 row_has   "PC-S957-FORM-Y" NAMED-UPSTREAM-CITED-ONLY \
   "the other id on that same commit, cited only in the form -> the citation kind"
 row_has   "PC-S958-FORM-CORE-ORDINARY-DOCS" NAMED-UPSTREAM-DOCS-ONLY \
@@ -3244,9 +3204,13 @@ else
   }
   u_row() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" 'NR > 1 && $2 == l {print $1 "|" $3; exit}'; }
   u_unread() { case "$(u_row "$1" "$2")" in NEEDS-REVIEW\|unreadable:*) return 0 ;; esac; return 1; }
-  for _w in blob tree cached base ver; do u_world "$_w"; done
+  # BUILD ONCE, COPY PER WORLD: the six worlds are byte-identical until each loses its own object
+  # below, so one repo is built and copied whole (its B and T files with it). Each copy is its own
+  # .git, so deleting an object in one cannot reach another.
+  u_world healthy
+  for _w in blob tree cached base ver; do cp -R "$UW/healthy" "$UW/$_w"; rm -rf "$UW/$_w/m"; mkdir -p "$UW/$_w/m"; done
   # Healthy control on an untouched world: every entry decides as before, nothing reads unreadable.
-  u_world healthy; U_H="$(u_run "$CLOSER" healthy)"
+  U_H="$(u_run "$CLOSER" healthy)"
   ASSERTIONS=$((ASSERTIONS + 1))
   case "$(u_row "$U_H" "Entry U-HAS")|$(u_row "$U_H" "Entry U-KEEP")|$(u_row "$U_H" "Entry U-NEW")|$(u_row "$U_H" "Entry U-NOWHERE")" in
     STILL-LIVE*"|NEEDS-REVIEW|vacuous predicate:"*"|STILL-LIVE"*"|NEEDS-REVIEW|unresolved:"*)
@@ -3825,8 +3789,6 @@ lr_unit_no_colon_swallow() {
 # annotation bullets that really are swallowing entries. An annotation whose bold span does
 # NOT end in a colon truncates the entry above it exactly as a colon one does, captures its
 # receipt, and produced no row anywhere until the second signal existed.
-row_has "False CLOSE-CANDIDATE" ENTRY-SWALLOWED \
-  "a NO-COLON annotation that captured a receipt is REPORTED — the colon signal is blind to this one"
 
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /False CLOSE-CANDIDATE/ && $3 ~ /PC-FIXTURE-NO-COLON-SWALLOWED/{f=1} END{exit !f}'; then
@@ -3841,12 +3803,8 @@ fi
 # non-id bullet carrying a receipt. Predicate (2) ALONE — a receipt under a non-id label —
 # reports 11 rows on the reference consumer's live ledger; the conjunction reports 1. These
 # three are the classes the conjunction subtracts, and each is a REAL entry.
-row_lacks "Second no-colon prose bullet" ENTRY-SWALLOWED \
-  "the entry above emitted its OWN row (its receipt sits ABOVE the annotation) — nothing was lost, so nothing is reported"
 row_lacks "legacy-entry.sh" ENTRY-SWALLOWED \
   "a real id-less entry below a CLOSED one stays silent: a closed entry emits no row BY DESIGN, so 'no row above' is true of every entry that follows a close"
-row_lacks "PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0" ENTRY-SWALLOWED \
-  "an id carrying '_' and '.' is an ID, not an annotation — the two shapes the reference consumer really files"
 
 # ...and that last one is a REAL entry, so it must still report its own verdict. A silence
 # bought by the entry disappearing from the classifier is not the silence being asserted.
@@ -4048,8 +4006,6 @@ row_lacks "Entry ONLY-IN-TICKS" STILL-LIVE \
   "and it emits nothing at all, exactly like Entry D: the backtick strip must not turn a quotation into a receipt either"
 row_lacks "Entry ROW-ANCHORED-PLUS-MENTION" NEEDS-REVIEW \
   "an entry with a REAL anchored receipt is not silent, whatever its summary line says — reporting it would say move a receipt that already ran"
-row_is "Entry ROW-ANCHORED-PLUS-MENTION" STILL-LIVE \
-  "...and its anchored receipt still produces its own verdict, so the silence is not bought by the entry disappearing"
 row_lacks "Entry ZAPPED-CLOSED-MIDLINE" NEEDS-REVIEW \
   "closed on its ENTRY LINE — the classifier skips it by design, so a receipt it never runs costs nothing"
 row_lacks "Entry WALLED-BY-BODY-ANNOTATION" NEEDS-REVIEW \
@@ -4448,16 +4404,8 @@ lr_unit_fenced_entries() {
 # rather than read as a new opener. Each of those four clauses has its own seed, its own arm and
 # its own mutant, because a battery that seeds only the filed shape proves the rule accepts the
 # filed shape and nothing else.
-row_is "PC-FIXTURE-FENCED-NON-ID-HEADING" STILL-LIVE \
-  "the entry reports under its OWN id — the fenced timestamp headings did not open an entry"
-row_is "FENCED-TS-EVENT-" ABSENT \
-  "no row is labelled with a fenced timestamp heading (any of the three seeded)"
 row_is "PC-FIXTURE-INLINE-SPAN-LINE" STILL-LIVE \
   "an entry whose body opens a line with an inline code span still reports"
-row_is "inline-span-control.sh" STILL-LIVE \
-  "the PROSE-titled entry after that inline-span line still reports — the span did not open a fence"
-row_has "PC-FIXTURE-QUOTED-INSIDE-FENCE" ENTRY-SWALLOWED \
-  "an id-keyed heading QUOTED inside a fence is REPORTED — it still opens an entry, and the operator is told"
 ASSERTIONS=$((ASSERTIONS + 1))
 if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-QUOTED-INSIDE-FENCE/ && $3 ~ /PC-FIXTURE-QUOTING-ENTRY/ && $3 ~ /fenced code block/{f=1} END{exit !f}'; then
   printf '  ok    %-22s the fence row names the entry it truncated and says the line sits inside a fence\n' "fence-names-entry"
@@ -4471,28 +4419,16 @@ row_lacks "PC-FIXTURE-AFTER-QUOTE" ENTRY-SWALLOWED \
 # THE TWO-QUOTATION FENCE, PINNED AS THE STATED COST rather than dodged by seed ordering. If
 # `after-two-quotes-cost` ever FAILS because the false row disappeared while every other arm
 # holds, that is an improvement: update this arm, do not restore the row.
-row_has "PC-FIXTURE-QUOTED-TWICE-A" ENTRY-SWALLOWED \
-  "the first of two quoted headings is reported"
 row_has "PC-FIXTURE-AFTER-TWO-QUOTES" STILL-LIVE \
   "the entry after a two-quotation fence is never HIDDEN — its receipt reports (row_has: two rows)"
-row_has "PC-FIXTURE-AFTER-TWO-QUOTES" ENTRY-SWALLOWED \
-  "after-two-quotes-cost: and it carries the ONE false fence row the stray rule costs on this shape (the measured alternative cost seven false resets on the consumer archive)"
 row_has "PC-FIXTURE-EOF-FENCE" STILL-LIVE \
   "an entry whose fence is still open at end of file still reports its receipt (row_has: two rows)"
 row_has "PC-FIXTURE-EOF-FENCE" ENTRY-SWALLOWED \
   "and the fence left open at end of file is REPORTED by the END rule — the shape a rotation split leaves behind"
 row_is "PC-FIXTURE-AFTER-QUOTE" STILL-LIVE \
   "and it is classified normally"
-row_has "PC-FIXTURE-AFTER-UNTERMINATED" STILL-LIVE \
-  "an id-keyed entry after an UNTERMINATED fence still reports — the fence cannot hide it (row_has: this entry emits two rows)"
 row_is "PC-FIXTURE-TILDE-FENCE" STILL-LIVE \
   "a ~~~ fence is a fence too: the heading-shaped line inside it did not open an entry"
-row_is "PC-FIXTURE-INDENTED-FENCE" STILL-LIVE \
-  "a fence indented two spaces (the consumer's second-commonest delimiter shape) is a fence: the column-0 heading inside it did not open an entry"
-row_is "INDENTED-TS-EVENT" ABSENT \
-  "no row is labelled with the heading inside the indented fence"
-row_has "PC-FIXTURE-AFTER-UNTERMINATED" ENTRY-SWALLOWED \
-  "and the reset through the unterminated fence is REPORTED, naming the entry whose fence never closed"
 
 # FIVE MUTANTS, ONE CLAUSE EACH, ALL ON lib.sh COPIES. Every mutant copies the reconcile
 # directory and rewrites ONE clause of the shape rule; the `cmp -s` guard refuses a sed that
@@ -4996,34 +4932,14 @@ detail_lacks "PC-FIXTURE-ESCAPED-BACKTICK" "vacuous predicate" \
   "the filed defect's wrong reason is gone — the predicate was never vacuous, its spelling was"
 row_is "PC-FIXTURE-BARE-BACKTICK" CLOSE-CANDIDATE \
   "the same text with bare backticks closes: backticks are fine, and base/theirs discriminate on this line"
-row_is "PC-FIXTURE-LITERAL-BACKSLASH" NEEDS-REVIEW \
-  "an anchor whose backslashes are the source text is refused too — the stated limit, pinned"
-detail_has "PC-FIXTURE-LITERAL-BACKSLASH" "contains a backslash" \
-  "and it is refused for the backslash, with the re-anchor remedy"
-row_is "PC-FIXTURE-REGEX-ANCHOR" NEEDS-REVIEW \
-  "a regex escape is a backslash like any other — theirs_lacks is refused on the same rule"
-detail_has "PC-FIXTURE-REGEX-ANCHOR" "contains a backslash" \
-  "and says so"
 # THE THREE SHAPES THE ADVERSARIAL HAND ADDED, each the seed that separates the shipped guard
 # from a narrower one that passed every single-anchor arm above.
 row_is "PC-FIXTURE-SECOND-SUBSTRING" NEEDS-REVIEW \
   "a backslash in the SECOND of two anchors is refused — the whole quoted run is covered, not its first member"
-detail_has "PC-FIXTURE-SECOND-SUBSTRING" "contains a backslash" \
-  "and for the backslash, not for the multi-anchor shape"
-row_is "PC-FIXTURE-ESCAPED-QUOTE" NEEDS-REVIEW \
-  "a backslash before a double quote is refused — the rule is any backslash, not the two escapes the other seeds use"
 detail_has "PC-FIXTURE-ESCAPED-QUOTE" "contains a backslash" \
   "and says so"
 row_is "PC-FIXTURE-ESCAPED-PATH" NEEDS-REVIEW \
   "a markdown-escaped PATH is refused before the basename fallback can guess it right"
-detail_has "PC-FIXTURE-ESCAPED-PATH" "the path" \
-  "and the row names the PATH as the field at fault"
-row_is "PC-FIXTURE-CLEAN-PATH" CLOSE-CANDIDATE \
-  "the same receipt with the path bare closes: the underscore is not what is refused, and the token discriminates"
-row_is "PC-FIXTURE-ESCAPED-ON-MISSING-PATH" NEEDS-REVIEW \
-  "an escaped anchor on an unresolvable path is still a refusal"
-detail_has "PC-FIXTURE-ESCAPED-ON-MISSING-PATH" "contains a backslash" \
-  "and it is refused for the BACKSLASH — the guard sits before path resolution, so the missing path does not pre-empt it"
 detail_has "Entry I" "does not resolve" \
   "the near-miss: a clean anchor on a missing path still reads as an unresolvable path"
 # THE REMEDY IS PART OF THE ROW. A refusal that names the fault and not the fix sends the author
@@ -5032,14 +4948,9 @@ detail_has "PC-FIXTURE-ESCAPED-BACKTICK" "Write backticks and quotes bare" \
   "the anchor row carries its remedy"
 detail_has "PC-FIXTURE-ESCAPED-BACKTICK" "verify: sh" \
   "and names the escape hatch for text that genuinely contains a backslash"
-detail_has "PC-FIXTURE-ESCAPED-PATH" "Write the path bare" \
-  "the path row carries its remedy"
-# THE ESCAPE HATCH IS PINNED. The scope hand built a guard refusing a backslash for EVERY verb;
-# the receipt as first written accepted it, and it would silence fifteen of the reference
-# consumer's thirty-six live `sh` receipts. An `sh` receipt is a program and its backslashes
-# are its own.
-row_is "PC-FIXTURE-SH-WITH-BACKSLASH" STILL-LIVE \
-  "an sh receipt carrying a backslash is EVALUATED, not refused — the remedy the refusal row offers exists"
+# THE ESCAPE HATCH IS NAMED. The surviving arms above assert that the anchor row's remedy carries
+# the two halves: write backticks and quotes bare, and name `verify: sh` for text that genuinely
+# contains a backslash. An `sh` receipt is a program and its backslashes are its own.
 
 } # end lr_unit_backslash_anchor
 lr_unit_two_line_sh() {
@@ -5051,26 +4962,12 @@ lr_unit_two_line_sh() {
 # truncated receipt is refused with the MALFORMED reason, and the trailing-comment near-miss —
 # valid on its own line, a syntax error under a `{ …; }` wrapper — is evaluated and reads
 # STILL-LIVE. The near-miss is what separates "parse the receipt" from "parse the wrapper".
-row_is "PC-FIXTURE-SH-TWO-LINE" NEEDS-REVIEW \
-  "a receipt cut inside its quote is refused, not evaluated"
-detail_has "PC-FIXTURE-SH-TWO-LINE" "MALFORMED sh receipt" \
-  "and the refusal names the cause"
-detail_has "PC-FIXTURE-SH-TWO-LINE" "Rewrite the receipt on one line" \
-  "and carries its remedy"
-row_lacks "PC-FIXTURE-SH-TWO-LINE" CLOSE-CANDIDATE \
-  "the syntax error's exit 2 must never read as an absorption"
-row_is "PC-FIXTURE-SH-TRAILING-COMMENT" STILL-LIVE \
-  "a valid receipt ending in a comment is evaluated under the wrapper — the guard parses the string that RUNS, and the wrapper closes on its own line"
 # THE TWO SHAPES A BARE PARSE ACQUITS. A trailing backslash and an open heredoc both parse clean
 # as one-line fragments on bash 3.2; the second wrapper line is what turns each into a syntax
 # error. The backslash fragment EXITS 0, so without the wrap it read STILL-LIVE here and a CLOSE
 # on the distribution engine — a verdict from half a receipt either way.
 row_is "PC-FIXTURE-SH-TRAILING-BACKSLASH" NEEDS-REVIEW \
   "a receipt cut after a trailing backslash is refused — the closer line becomes the continuation"
-detail_has "PC-FIXTURE-SH-TRAILING-BACKSLASH" "MALFORMED sh receipt" \
-  "and the refusal names the cause"
-row_is "PC-FIXTURE-SH-OPEN-HEREDOC" NEEDS-REVIEW \
-  "a receipt cut after a heredoc opener is refused — the closer line becomes heredoc body"
 
 # THREE MUTANTS, each on a whole-directory copy so the closer finds its siblings, each scored
 # over a sub-ledger holding the four `sh` seeds above (lr_subledger), the only rows they read.
@@ -5333,35 +5230,19 @@ row_is "Entry SH-THEIRS-TREE-PATH" CLOSE-CANDIDATE \
 # the UNBRACED form matches one by accident. Without its own alternation this entry is accused of
 # being unfalsifiable while it reads upstream at theirs — a NEEDS-REVIEW, not a wrong status,
 # which is why the arm reads the STATUS and not merely the presence of a row.
-row_is "Entry SH-THEIRS-TREE-BRACED" STILL-LIVE \
-  "\${THEIRS_TREE} braced reaches the upstream-consulting partition; without its own alternation it falls into the falsifiability branch"
-row_lacks "Entry SH-THEIRS-TREE-BRACED" NEEDS-REVIEW \
-  "and is never filed as an unfalsifiable receipt — it consults theirs"
 # THE STATUS CANNOT SEE THIS ONE. Both partitions emit STILL-LIVE for a receipt naming no
 # path-shaped subject, so the arm reads the DETAIL, which is where they diverge: the upstream
 # partition says only "still reproduces", the falsifiability branch appends "falsifiability NOT
 # checked". A status-only assertion here passes against the very mutant written to kill it.
-detail_lacks "Entry SH-THEIRS-TREE-BRACED" "falsifiability NOT checked" \
-  "and it is decided by the UPSTREAM partition, not by the consumer-only branch that cannot settle it"
 # ...and the braced receipt that ALSO names an upstream-shipped subject diverges by STATUS, not
 # merely by detail. The entry above names no path-shaped subject, so both partitions reach
 # STILL-LIVE and only the wording separates them; this one resolves through the derived
 # consumer->core table, so the falsifiability branch ACCUSES it. Two observables for one
 # property, and the status-keyed one is the half a detail-only arm cannot supply.
-row_is "Entry SH-THEIRS-TREE-BRACED-SUBJECT" STILL-LIVE \
-  "a braced \$THEIRS_TREE receipt naming an upstream-shipped subject is decided by the upstream partition"
 row_lacks "Entry SH-THEIRS-TREE-BRACED-SUBJECT" NEEDS-REVIEW \
   "and is never accused of being unfalsifiable — it reads theirs through the materialized tree"
 
-# B. $DIST READ AS A PATH IS REFUSED — both consumer shapes, and both exit directions.
-row_is "Entry SH-DIST-AS-PATH " NEEDS-REVIEW \
-  "the slash shape (\$DIST/VERSION) is refused, not scored"
-detail_has "Entry SH-DIST-AS-PATH " "reads \$DIST as a filesystem path" \
-  "and the refusal names the cause"
-detail_has "Entry SH-DIST-AS-PATH " "THEIRS_TREE" \
-  "and its remedy names the value that IS path-readable"
-row_is "Entry SH-DIST-AS-ENV" NEEDS-REVIEW \
-  "the no-slash shape (AI_DLC_PROJECT_ROOT=\"\$DIST\") is refused — this is the shape BOTH live consumer offenders were written in"
+# B. $DIST READ AS A PATH IS REFUSED — the surviving arm seeds the exit-0 direction.
 row_is "Entry SH-DIST-AS-PATH-ZERO" NEEDS-REVIEW \
   "a \$DIST path read that EXITS 0 is refused too — a refusal sited after the run leaves this one as a healthy-looking STILL-LIVE"
 # C. A CONFORMING RECEIPT IS BYTE-UNCHANGED. 26 of the reference consumer's 28 `$DIST`-naming
@@ -5369,13 +5250,9 @@ row_is "Entry SH-DIST-AS-PATH-ZERO" NEEDS-REVIEW \
 # healthy receipts as broken. Both spellings, because `$DIST` is not a substring of `${DIST}`.
 row_is "Entry SH-DIST-REVSPEC " STILL-LIVE \
   "git -C \"\$DIST\" show \"\${THEIRS}:...\" is the conforming form and is untouched"
-row_is "Entry SH-DIST-REVSPEC-BRACED" STILL-LIVE \
-  "git -C \"\${DIST}\" is the spelling this distribution's rev-path rule REQUIRES and is untouched"
 # ...and the `cd "$DIST" && git` form, which the reference consumer's ARCHIVE carries six of.
 # Its NEAR-MISS sits one property apart — same `cd "$DIST"`, no `git` after it — so an exemption
 # that acquits the good form without requiring the `git ` acquits its own arm's subject too.
-row_is "Entry SH-DIST-CD-GIT" STILL-LIVE \
-  "cd \"\$DIST\" && git show \"\${THEIRS}:...\" reads the same blob as git -C and is accepted"
 row_is "Entry SH-DIST-CD-BARE" NEEDS-REVIEW \
   "a bare cd \"\$DIST\" NOT followed by git reads the CHECKOUT and is refused — the exemption requires the git that follows"
 
@@ -5956,8 +5833,6 @@ elif grep -q 'no receipt in this entry can see\|re-anchor or drop the stale rece
 else
   printf '  ok    %-22s exactly one row, and its detail says the entry carries no receipt and closes by annotation\n' "receiptless-one-row"
 fi
-row_is "PC-FIXTURE-NORECEIPT-NEVER-CITED" ABSENT \
-  "receipt-less and id-keyed but never named upstream -> no row of any kind"
 row_is "FIXTURE-CAPS-HEADING-NOT-AN-ID" ABSENT \
   "all-caps and hyphenated, named by a commit verbatim, but not an entry id -> the shared id rule keeps it silent"
 
@@ -5970,8 +5845,6 @@ lr_unit_bare_bold_record() {
 # named it. The strict rule is an id-only bold span followed by an em dash or end of line.
 row_is "PC-FIXTURE-BARE-BOLD-RECORD" CLOSE-CANDIDATE \
   "a column-0 bold id with an em dash opens its own entry, and its own receipt reports under it"
-row_is "PC-FIXTURE-BARE-BOLD-EOL" STILL-LIVE \
-  "the second spelling, the bold id alone on its line, opens its own entry too"
 bb_above='$2 ~ /PC-FIXTURE-DASHED-ABOVE-BARE-BOLD/ {n++} END{print n+0}'
 ASSERTIONS=$((ASSERTIONS + 1))
 bb_n="$(printf '%s\n' "$OUT" | awk -F'\t' "$bb_above")"
@@ -5984,8 +5857,6 @@ fi
 # THE NEAR-MISS. A body line OPENING with a bold id that closes before a comma is a MENTION. The
 # looser `^-? ?\*\*PC-` rule matches it, splits the host, and moves the host receipt onto the
 # mentioned id -- measured on the reference consumer archive, where such a line sits mid-body.
-row_is "PC-FIXTURE-BARE-BOLD-MENTION-HOST" STILL-LIVE \
-  "a bolded id opening a body line and closing before a comma is a mention -> the host keeps its row"
 row_is "PC-FIXTURE-MENTIONED-IN-A-BODY" ABSENT \
   "...and the mentioned id does not become an entry of its own"
 
@@ -6646,6 +6517,53 @@ lr_unit_label_prefix() {
     esac
   done
 } # end lr_unit_label_prefix
+lr_unit_claims() {
+# --- THE HEADER'S DIFFERENTIALS, EACH BROKEN ALONE IN THE ENGINE ------------------------------------
+# The seeded pairs at the top of this file (A/B, G/H/I, J/K, L/M, E/F) state what the closer must
+# do; before these mutants only the whole-grammar wreck mutants ever moved their rows, so no kill
+# was attributable to the claim itself. Each mutant below breaks ONE claim in a whole copy of the
+# reconcile directory and runs once over a ten-entry sub-ledger holding those pairs; the kill reads
+# the claim's row and the control reads its twin in the same run.
+  local _sl _d
+  _sl="$(lr_subledger claims 'Entry A still lacked' 'Entry B was live' 'Entry G is Entry B' 'Entry H names' \
+    'Entry J has' 'Entry K is' 'Entry L names' 'Entry M names' 'PC-FIXTURE-ENTRY-E-DECLARES-MANUAL' \
+    'PC-FIXTURE-ENTRY-F-MANUAL-BACKTICK')" || _sl="$DIST/no-such-sub-ledger"
+  # theirs is the ref probed: read base's blob as theirs and B's absorbed marker is never seen.
+  _d="$(rl_dir claim-base-as-theirs)" && rl_mutant "$_d" ledger-reverify.sh \
+    'LR_TB="$(theirs_show "$path")"; _ts=$?' 'LR_TB="$(base_show "$path")"; _ts=$?' 1 || _d=""
+  dp_kill mutation-claim-base-as-theirs "$_d" \
+    '$2 ~ /^Entry B / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+    '$2 ~ /^Entry A / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+    'probing base where theirs belongs reads the absorbed Entry B as STILL-LIVE' 'Entry A STILL-LIVE' "$_sl"
+  # the basename fallback refuses to guess: take the first of H's two matches and H is judged.
+  _d="$(rl_dir claim-basename-first)" && rl_mutant "$_d" ledger-reverify.sh \
+    'matches="$(theirs_basename_matches "${path##*/}")"' 'matches="$(theirs_basename_matches "${path##*/}" | head -1)"' 1 || _d=""
+  dp_kill mutation-claim-basename-first "$_d" \
+    '$2 ~ /^Entry H / && $1!="NEEDS-REVIEW" {f=1} END{exit !f}' \
+    '$2 ~ /^Entry G / && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+    'a fallback that picks the first of two basename matches classifies Entry H on a guessed file' 'Entry G CLOSE-CANDIDATE' "$_sl"
+  # a close nothing upstream produced is not a close: both vacuous refusals emit CLOSE-CANDIDATE.
+  _d="$(rl_dir claim-vacuous-closes)" && rl_mutant "$_d" ledger-reverify.sh \
+    'emit NEEDS-REVIEW "$label" "vacuous predicate: ' 'emit CLOSE-CANDIDATE "$label" "vacuous predicate: ' 2 || _d=""
+  dp_kill mutation-claim-vacuous-closes "$_d" \
+    '$2 ~ /^Entry J / && $1=="CLOSE-CANDIDATE" {j=1} $2 ~ /^Entry K / && $1=="CLOSE-CANDIDATE" {k=1} END{exit !(j && k)}' \
+    '$2 ~ /^Entry B / && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+    'a predicate that could never have reported STILL-LIVE closes Entry J and Entry K' 'Entry B CLOSE-CANDIDATE' "$_sl"
+  # each substring is matched separately: joined into one literal, Entry M never closes.
+  _d="$(rl_dir claim-joined-subs)" && rl_mutant "$_d" ledger-reverify.sh \
+    'subs="$(printf '"'"'%s'"'"' "$sub" | lr_split_subs)"' 'subs="$sub"' 1 || _d=""
+  dp_kill mutation-claim-joined-subs "$_d" \
+    '$2 ~ /^Entry M / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+    '$2 ~ /^Entry L / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+    'two substrings joined into one literal leave the absorbed Entry M STILL-LIVE' 'Entry L STILL-LIVE' "$_sl"
+  # verify: manual is a declaration: route it with the malformed lines and E and F lose HAND-REVIEW.
+  _d="$(rl_dir claim-manual-malformed)" && rl_mutant "$_d" ledger-reverify.sh \
+    'emit HAND-REVIEW "$label" "verify: manual' 'emit NEEDS-REVIEW "$label" "verify: manual' 1 || _d=""
+  dp_kill mutation-claim-manual-malformed "$_d" \
+    '$2 ~ /^PC-FIXTURE-ENTRY-E-/ && $1=="NEEDS-REVIEW" {e=1} $2 ~ /^PC-FIXTURE-ENTRY-F-/ && $1=="NEEDS-REVIEW" {g=1} END{exit !(e && g)}' \
+    '$2 ~ /^Entry A / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+    'a declared manual entry reported as a malformed receipt' 'Entry A STILL-LIVE' "$_sl"
+} # end lr_unit_claims
 
 # --- DISPATCH: every unit, then the joins that say they all ran ---------------------------------
 printf '  ok    %s\n' "$LR_JOIN_LINE"
@@ -6692,7 +6610,14 @@ for _u in $LR_MINE; do
   LR_ENTERED="$LR_ENTERED $_u"; LR_CUR="$_u"
   LR_UNIT_ERR="$(dirname "$DIST")/lr-unit-$_u.err"
   _before="$ASSERTIONS"; LR_SKIPPED=""
-  "lr_unit_$_u" 2>"$LR_UNIT_ERR"
+  # Under --matrix the unit's stdout is also kept, so the matrix phase can read each battery's OWN
+  # verdict line per mutant (MATRIX-OWN, MATRIX-CONTROL). A redirect on a function call is no subshell.
+  if [ "$LR_MATRIX" = 1 ]; then
+    "lr_unit_$_u" >"$LR_MX_DIR/out-$_u" 2>"$LR_UNIT_ERR"
+    cat "$LR_MX_DIR/out-$_u"
+  else
+    "lr_unit_$_u" 2>"$LR_UNIT_ERR"
+  fi
   cat "$LR_UNIT_ERR" >&2
   # J2: a call to a helper this file does not define, or a variable another unit used to set,
   # prints to stderr and the unit runs on with fewer assertions -- which otherwise reads PASS.
@@ -6734,7 +6659,9 @@ if [ "$LR_MATRIX" = 0 ]; then
 else
   # THE MATRIX PHASE. Every stashed mutant is run ONCE over the full seeded ledger from `/`, exactly as
   # the baseline was, and every registered $OUT-reading assertion is replayed against that output in a
-  # subshell (its counters cannot leak). One line per cell: MATRIX <mutant> <unit> <helper> <label> ok|FAIL.
+  # subshell (its counters cannot leak). One line per cell: MATRIX <mutant> <unit> <helper> <label> <want>
+  # ok|FAIL. <want> is the arm's second argument (expected status or detail string): two arms on one
+  # label with different wants are two assertions, and a key without it would merge them.
   echo "MATRIX-BEGIN arms=$(grep -c . "$LR_MX_DIR/arms") mutants=$(ls "$LR_MX_DIR/stash" | grep -c .)"
   for _k in $(ls "$LR_MX_DIR/stash"); do
     _mo="$(cd / && lr_eng "$LR_MX_DIR/stash/$_k/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
@@ -6742,8 +6669,22 @@ else
     while IFS="$(printf '\037')" read -r _au _af _a1 _a2 _a3; do
       _r="$(OUT="$_mo"; LR_MX_REPLAY=1; "$_af" "$_a1" "$_a2" "$_a3" 2>/dev/null | head -1)"
       case "$_r" in "  ok "*) _c=ok ;; *) _c=FAIL ;; esac
-      printf 'MATRIX\t%s\t%s\t%s\t%s\t%s\n' "$_k" "$_au" "$_af" "$_a1" "$_c"
+      printf 'MATRIX\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_k" "$_au" "$_af" "$_a1" "$_a2" "$_c"
     done < "$LR_MX_DIR/arms"
+  done
+  # THE BATTERIES' OWN VERDICTS. A mutant no replayed arm fails is decided inside its own unit, over
+  # its own world, by the ok/FAIL line labelled with its name; a CONTROL row is an acquittal whose ok
+  # line means it held. Read off the units' kept stdout, one line per labelled verdict line, and
+  # NOLINE where the name printed no verdict at all. The CONTROL verdict is spelled HELD or MOVED, not
+  # in the kill vocabulary: this is a report of a line already scored, never a kill emission.
+  for _k in $(ls "$LR_MX_DIR/stash") $(sed -n 's/^# MUTANT-MATRIX-CONTROL \([^ ]*\) .*/\1/p' "$LR_SELF"); do
+    _tag=MATRIX-OWN; case "$_k" in CONTROL-*) _tag=MATRIX-CONTROL ;; esac
+    _hit="$(for _f in "$LR_MX_DIR"/out-*; do
+      awk -v n="$_k" -v u="${_f##*/out-}" -v t="$_tag" '($1 == "ok" || $1 == "FAIL") && $2 == n {
+        v = $1; if (t == "MATRIX-CONTROL") v = ($1 == "ok") ? "HELD" : "MOVED"
+        printf "%s\t%s\t%s\t%s\n", t, n, u, v }' "$_f"
+    done)"
+    if [ -n "$_hit" ]; then printf '%s\n' "$_hit"; else printf '%s\t%s\t-\tNOLINE\n' "$_tag" "$_k"; fi
   done
   echo "MATRIX-END"
 fi
