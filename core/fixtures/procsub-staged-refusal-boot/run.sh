@@ -2140,16 +2140,19 @@ nopd() { # nopd <stub-dir>
 # replacement would read any `&` in the heading as the whole match. Exactly ONE line must be
 # replaced: zero means the heading moved and the carry stopped matching; two means the prefix is no
 # longer a single site. Both are FIXTURE BROKEN, never a silent skip. The `<<<"$want"` count below
-# still proves the staged engine is the pre-fix one, which this carry does not touch.
-_erh="$("$REAL_GREP" -F '  sub "Push-candidate ledger — ' "$RECON/emit-report.sh")" || _erh=""
-_erhn="$(printf '%s\n' "$_erh" | "$REAL_GREP" -c .)" || _erhn=0
-if [ "$_erhn" -ne 1 ]; then
-  echo "FIXTURE BROKEN: the tip emit-report.sh carries $_erhn push-candidate ledger heading line(s), want exactly 1 to carry into the staged base" >&2; exit 2
-fi
-ERH="$_erh" awk 'index($0, "  sub \"Push-candidate ledger — ") == 1 { print ENVIRON["ERH"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
-  "$ER_BASE/emit-report.sh" > "$ER_BASE/emit-report.sh.carry" \
-  && mv "$ER_BASE/emit-report.sh.carry" "$ER_BASE/emit-report.sh" \
-  || { echo "FIXTURE BROKEN: the push-candidate ledger heading did not replace exactly ONE line of the staged ${ER_BASE_SHA} emit-report.sh" >&2; exit 2; }
+# still proves the staged engine is the pre-fix one, which this carry does not touch. The Deletions
+# heading is carried by the same loop for the same reason: BL-916 reworded it, which is not a BL-360 site.
+for _erp in 'Push-candidate ledger — ' 'Deletions (apply would git rm a consumer file — '; do
+  _erh="$("$REAL_GREP" -F "  sub \"${_erp}" "$RECON/emit-report.sh")" || _erh=""
+  _erhn="$(printf '%s\n' "$_erh" | "$REAL_GREP" -c .)" || _erhn=0
+  if [ "$_erhn" -ne 1 ]; then
+    echo "FIXTURE BROKEN: the tip emit-report.sh carries $_erhn '${_erp}' heading line(s), want exactly 1 to carry into the staged base" >&2; exit 2
+  fi
+  ERH="$_erh" ERP="  sub \"${_erp}" awk 'index($0, ENVIRON["ERP"]) == 1 { print ENVIRON["ERH"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+    "$ER_BASE/emit-report.sh" > "$ER_BASE/emit-report.sh.carry" \
+    && mv "$ER_BASE/emit-report.sh.carry" "$ER_BASE/emit-report.sh" \
+    || { echo "FIXTURE BROKEN: the '${_erp}' heading did not replace exactly ONE line of the staged ${ER_BASE_SHA} emit-report.sh" >&2; exit 2; }
+done
 _h="$("$REAL_GREP" -cF '<<<"$want"' "$ER_BASE/emit-report.sh")" || _h=0
 if cmp -s "$RECON/emit-report.sh" "$ER_BASE/emit-report.sh" || [ "$_h" -ne 2 ]; then
   echo "FIXTURE BROKEN: the staged ${ER_BASE_SHA} emit-report.sh is not the pre-fix engine (identical to tip, or it carries $_h \`<<<\"\$want\"\` line(s), want 2)" >&2; exit 2

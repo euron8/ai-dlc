@@ -1579,7 +1579,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    orphan, name the path it now lives at, so the operator can see the file is being
    retired, not lost), consumer untouched,
    each with its reason line, since applying one `git rm`s a consumer file
-   and is gated per-path at apply (step 7) — and, for the **template changes**,
+   (step 7 approves the `UPSTREAM-DELETED` rows as one listed batch and each
+   `ORPHANED-RELOCATED` row per path) — and, for the **template changes**,
    the region's own "Template pre-classification" section carries every bucket
    row, so you add ONLY what it does not: a one-line summary of the upstream
    boilerplate delta being synced per `TEMPLATE-PROSE-MERGE` /
@@ -1825,7 +1826,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      constraint the entry was widening onto a consumer whose artifacts already violate it, and
      the next gate then fails on a tree you just repaired. Each step states its own consequence.
    - `DECISION …` — a genuine operator call: an unknown drift's refile-vs-revert, a deletion, a
-     token with no default. Ask ONE closed question per row.
+     token with no default. Ask ONE closed question per row, except the `DECISION deletion` rows
+     for `UPSTREAM-DELETED` paths, which step 7 asks as one listed question.
    - `DECISION <detector>-refused` (`unregistered-drift`, `retired-tokens`,
      `retired-layer-passage`, `layer-drift`) — that detector refused, or could not write all of
      its rows, so its section is **NOT a finding of "none"**. The detail carries its exit and its
@@ -2205,15 +2207,16 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    - conflicts → apply only operator-adjudicated resolutions.
    - `UPSTREAM-DELETED` files (upstream removed the file, consumer untouched
      vs base) → **`git rm` the consumer file, but ONLY after an explicit
-     operator confirmation for that path.** Deletion is destructive and
+     operator confirmation.** Deletion is destructive and
      irreversible in a way an overwrite is not, so every `UPSTREAM-DELETED`
-     path is gated exactly like a flagged block: at the dry-run report (step
+     path is gated: at the dry-run report (step
      5) it appears in a dedicated **deletions list** with the reason
      (`upstream removed <path> at <theirs>; consumer copy unmodified since
-     base`), and mid-apply you STOP at each such path and apply the removal
-     only on the operator's explicit yes for that path. Never batch-approve
-     deletions, and never infer approval from the `apply` argument — `apply`
-     authorizes writes, not this specific destroy. A `UPSTREAM-DELETED-NOOP`
+     base`), and mid-apply you STOP and ask ONE question that lists every
+     such path with its reason line, then apply the removals only on the
+     operator's explicit yes to that question. Any answer other than an
+     unqualified yes declines the batch: ask per path. Never infer approval from the `apply` argument —
+     `apply` authorizes writes, not this specific destroy. A `UPSTREAM-DELETED-NOOP`
      path (consumer already lacks it) is a silent noop — nothing to remove,
      no gate. A `UPSTREAM-DELETED+consumer-modified` path went through
      semantic classify (the consumer changed a file upstream then deleted):
@@ -2222,8 +2225,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      extension rather than deleting; operator adjudicates, default keep-ours.
    - `ORPHANED-RELOCATED` files (this distribution moved where it ships a subtree;
      the copy left at the old consumer path still hash-matches the blob we wrote
-     there) → **`git rm` the stale copy, under the exact same per-path operator
-     gate as `UPSTREAM-DELETED`.** Same destructiveness, same rule: never
+     there) → **`git rm` the stale copy, only after an explicit operator
+     confirmation for that path.** Each orphan is its own question: never
      batch-approve, never infer approval from the `apply` argument. State the new
      path in the prompt — the file is being *retired*, not lost, and an operator who
      cannot see that will refuse a safe deletion. `ORPHANED-UNKNOWN` and

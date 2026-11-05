@@ -1829,3 +1829,4 @@ Held:
 - 6 inert receipts are allowlisted in `scripts/inert-receipt-allowlist.txt`: `adversarial-shard-merge/receipt-bl718.sh`, `adversarial-shard-merge/receipt-bl719.sh`, `check-24-adversarial-convergence/receipt-bl829.sh`, `check-24-adversarial-convergence/receipt.sh`, `fixture-hygiene/receipt-bl868.sh` and `process-rule-pins/receipt-bl538.sh`. `remediator-shard-join/receipt-bl804.sh` was removed under BL-915 as unreferenced.
 
 verify: manual
+

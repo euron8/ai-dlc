@@ -642,7 +642,7 @@ render() {
     pc_refusal
   fi
 
-  sub "Deletions (apply would git rm a consumer file — gated per-path):"
+  sub "Deletions (apply would git rm a consumer file — UPSTREAM-DELETED rows are approved as one listed batch, ORPHANED-RELOCATED rows per path):"
   del="$(printf '%s\n' "$pc" | awk -F'\t' '$4=="UPSTREAM-DELETED" || $4 ~ /^ORPHANED-RELOCATED/ {print $4"  "$2}' | sort -u)"
   if [ -n "$pc_refused" ]; then pc_refusal; else none_or "$del"; fi
 
