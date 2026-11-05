@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1003.0] - 2026-11-05
+
+Batch b250, cluster fixes. Closes nothing. Files BL-914. No PC- id is closed. NET +1 (filed 1 minus closed 0). The only filing is BL-914, a defect this batch's own gate exposed; BL-880 cannot close without narrowing its scope; BL-804 and BL-615 each got a measured null.
+
+### BL-880 progress (PARTIAL, not closed): both named instances are struck, the general subject stays owed
+
+- Instance 2 was struck earlier as a dead premise. `vrun` in `core/fixtures/enforcement-map-sites/run.sh` has passed `--arms "$id"` since d4fd318cb, and the 139 is the family total of validator starts, not a count of full runs.
+- Instance 1's remedy is refuted on measurement. It proposed reusing the per-receipt `git worktree add --detach` in `scripts/validate-backlog-receipts.sh` (`mktree`, `:505-524`). Two independent hands counted git processes with `GIT_TRACE2_EVENT` at a797fd022, running the validator with the pre-push hook's arguments and `JOBS=8`. The control (3 commands, 3 processes) held.
+- The run made 71 worktree adds and 482 git processes. The specified reset-based reuse saves 0. The cheapest variant (`checkout -f` plus `clean -ffdxq`) saves 27 of 482 (5.6%), from 482 to 455, and is rejected on that saving alone: it does fire `post-checkout` and does remove nested repos. The live ledger has 45 entries and 2 sh receipts, so reuse saves 0 there. Only the reset-based reuse breaks the self-probe's fresh-tree properties: `reset` and `read-tree` never fire `post-checkout`, and a nested repo survives `clean -fdx`.
+- A cheaper design that is not reuse is recorded as a NOTE and not built: drop the per-tree `worktree remove`, delete the directories, and run one `git worktree prune` at parent cleanup, projected at 482 to about 412 git processes (14.5%). It is not built because `prune` acts on the whole shared registry at the gate, and the saving's value is unmeasured.
+- The general subject stays owed and the entry stays LIVE: pre-suite validators re-running self-probes and setup on every push, including the pre-push step's own probe replay.
+
+### BL-914 filed: one `log stream` drop notice disables the pre-suite step key record for every later step
+
+- DEFECT. `.githooks/pre-push:244` starts one `/usr/bin/log stream` per push, and `pk_step` (`:266`) greps `dropped` over the whole push-long stream file at `:301`. A single drop notice therefore deletes the record of every later step and prints `not recorded: the sandbox report stream dropped reports`. It was observed at 2026-11-05T03:29Z, on 22 of 23 steps.
+- The failure is fail-safe: steps run instead of skipping, so it costs time and never a false skip. No fix is built. A per-step window is not obviously safe, because a drop notice printed after a step's end sentinel would record that step with reports missing. Any fix pairs with a forced-drop test.
+
+### BL-804: close predicate struck as a dead premise (PARTIAL, not closed)
+
+- The old predicate, "no `not replayed` refusal at the join", cannot be met by a correct engine, because the refusal is correct whenever derivation fences go stale. `--mark-repair` already runs the replay (`core/scripts/wait-for-deliverable.sh:650-665`, asserted by `remediator-shard-join` arm EC41).
+- The question is re-keyed to re-dispatches per refusal. After the fix reached graph there were 3 refusals and 0 re-dispatches. At the before-rate those 3 predict 0.6 re-dispatches, below 1, so the zero is non-discriminating. The entry stays open.
+
+### BL-615: the role file is the single documented carrier (PARTIAL, not closed)
+
+- Owed item 2's shape is decided: the carrier is the `git ls-files` bullet in `core/team-roles/adversary.md`, enforced generically by the dispatch guard. No test is added.
+- The s321 figures are null or adverse. Nonexistent-path grep errors per transcript were 0.38 before and 0.37 in s321, and per grep they fell from 1.59% to 0.85%. The seat figures are UNMEASURABLE because stories-test-strategy is incomplete. The entry stays open.
+
 ## [0.1002.0] - 2026-11-04
 
 Batch b250, cluster close. Closes BL-870. No PC- id is closed. NET -1.
