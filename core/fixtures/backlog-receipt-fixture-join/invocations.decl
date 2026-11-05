@@ -1,0 +1,5 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
+# BL-918: the receipt / fixture-arm join moved here from backlog-receipt-binding. Its starts are the derived receipt run
+# per seed shape and per self-probe copy; gate-verdict-grep-shape's run.sh is read and never started.
+42 *
+0 core/fixtures/gate-verdict-grep-shape/run.sh
