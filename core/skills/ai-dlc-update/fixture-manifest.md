@@ -163,6 +163,7 @@ core_manifest:
   - core/fixtures/pause-question-in-prose/**
   - core/fixtures/postcompact-rulebook-recovery/**
   - core/fixtures/gate-resume/**
+  - core/fixtures/gate-transition/**
   - core/fixtures/fanout-payload-channel/**
   - core/fixtures/fanout-untracked-corpus/**
   - core/fixtures/preclassify-mode-bucket/**

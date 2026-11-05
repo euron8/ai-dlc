@@ -172,6 +172,10 @@ follow-up tasks with dependencies:
    already past gate 3 without its closing writes** — still `review`, or `done`
    with no `deferred_acs` field in both views, including every such story a
    pull finds in flight: the lead dispatches it at the lead's next turn.
+   The closing writer's brief carries `gate-plan: <plan path>` naming the story's g3
+   plan, or, for a story already past gate 3 with no g3 plan,
+   the `close` plan that `gate-transition.sh <story> close <flags>` writes after verifying
+   the story's last gate-3 ledger holds a `26 PASS` row.
 
 ### 4. Self-Validate Task List
 
@@ -279,6 +283,11 @@ Monitor task progress:
   (`qa.md` Validation Checklist), ask the operator by `AskUserQuestion`
   under Rule 3(a), with no flag, before dispatching any dev rework.
 - Track gate approvals (gate1: code review, gate2: QA, gate3: story validation)
+- The implementation `gate-adjudicator` brief at a one-story gate 3 carries `gate-plan: <plan path>`
+  naming the g3 plan, beside the `story:` line `gate-validation.md` requires. A gate 3
+  dispatched over several stories, or over none, carries neither line and runs no
+  `gate-transition.sh <story> 3`: the lead runs its script arms, mints and opens, as
+  `gate-validation.md` prescribes for every gate without a `story:` line.
 
 **Gate type for validation loading (Rule 21 / Lever 2).** The gates run
 at this step are `implementation` gates — when running gate validation
@@ -295,14 +304,47 @@ slot is run through that same command too. That arm leaves out the bug-fix
 arm's cross-check, because the Scope Verification, Dev Agent Record and
 `Status:` the dev writes into the story move the bytes the stamp hashed.
 
-**Pre-gate commit-presence check.** Before dispatching code review
-(gate1) for any story, run `git -C <worktree> log --oneline
-<base>..HEAD` on the story branch and confirm at least one non-merge
-commit exists. Zero commits = the dev produced no deliverable; resume
-or re-dispatch the dev BEFORE gating. Gating a zero-commit story is a
-process violation; surface at retro. Beside it, at the frozen SHA, run
-`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`
-and `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --strategy <frozen-sha> <story-file>`.
+<!-- ai-dlc: gate-transition-plan-required v1 -->
+
+**One call per gate transition.** Before any gate-1, gate-2 or gate-3 reviewer,
+QA, adjudicator or closing-writer dispatch (the gate-3 call and the adjudicator only
+at a one-story gate 3, one whose adjudicator brief carries a `story:` line), run in the lead checkout
+
+`scripts/ai-dlc/gate-transition.sh <story> <gate> [--pass M] -C <worktree> --base <sha> --sprint <N> --story-file <path> [--transcript-dir <dir>]`
+
+where `<gate>` is `1`, `2`, `3` or `close`, `<story>` is the story index,
+`<sha>` is the base the gate-1 partition records, `<N>` is the `sprint_id` line of
+`_bmad-output/pipeline-snapshot.md`, `<path>` is the story file's canonical path
+relative to the worktree top, and `--transcript-dir` is required at gate 3 only: the
+directory the lead's own session transcript (`transcript_path`) sits in. Every later
+`gate-transition.sh <story> …` in this file means that call with the same flags
+(`<flags>`). The plan's `<gate>` segment is `gclose` for `close`; at gate 3 the program
+mints the nonce and runs `gate-checkpoint.sh open`, but records no verdict at it — the
+lead's `gate-checkpoint.sh --nonce <n> record` calls stay the lead's. Check 25 is written
+into the plan as a `steering-count:` input for the lead to judge. The program runs, in order, every
+validator and partition call that gate needs: the commit-presence check, the
+handoff-evidence arms, the capture list, the route, narrow and map calls with the
+captures excluded where they apply, the carried-findings list, at gate 2 the
+`GATE1-RERUN` test, the DAR-fold verification, the smoke arm and the partition
+record, and at gate 3 every `adjudication: script` arm of `gate-validation.md`
+followed by `gate-checkpoint.sh open`. It writes
+`_bmad-output/implementation-artifacts/s<N>/gate-transition/<idx>-g<gate>-p<M>.plan` only after every
+sub-check has exited 0. The plan lists the shards, the route and the brief inputs
+(the frozen sha, the worktree, the manifest, the `--map` lines, the carried-findings
+lines and the handoff output). A refusal exits 1, prints its remedies, and writes no
+plan: correct the named input and re-run the same command, which is idempotent and
+calls no `open` at gates 1 and 2. Every gated brief below carries
+`gate-plan: <plan path relative to the project root>`; the dispatch guard denies a
+code-reviewer, code-reviewer-escalated, qa or one-story gate-adjudicator brief whose plan is
+absent or does not match the story and the frozen sha. A gate-adjudicator brief with no
+`story:` line is not judged against a plan. The decisions stay with the
+lead, and the paragraphs below state what each outcome means.
+
+**Pre-gate commit-presence check.** The program confirms that the story branch
+holds at least one non-merge commit in `<base>..HEAD`. Zero commits = the dev
+produced no deliverable; resume or re-dispatch the dev BEFORE gating. Gating a
+zero-commit story is a process violation; surface at retro. At the frozen SHA the
+program also runs the handoff-evidence validator and its `--strategy` arm.
 `<base>` is the gate-1 partition manifest's `base`, the parent of the dev's
 first commit, on every handoff including a rework re-handoff.
 Exit 1 refuses the handoff: send the dev its `REFUSED` lines (a capture with
@@ -344,14 +386,12 @@ and glob checks read every capture the whole story cites.
 
 **Gate-1 dispatch: the review partitions by changed-file group.** At the
 commit-presence check, with the frozen SHA recorded (the freeze below),
-run in the frozen dev worktree
-`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --list-captures <story-file> <frozen-sha> > <captures file>`,
-then
-`partition-review-diff.sh --map <worktree> <base> <frozen-sha> --exclude-captures <captures file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`,
-where `<base>` is the base of the two-dot range the check above logs,
-`<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters. When
-`--list-captures` exits 2, partition without `--exclude-captures` and record its
-line in the story's gate log. The cited captures leave the threshold COUNT
+`gate-transition.sh <story> 1 <flags>` lists the captures and partitions the diff, the shard
+directory being `docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>` for the
+full `<base>` range, `<frozen-sha>` the full SHA and `<sha12>` its first twelve
+characters. When the capture list exits 2 the program partitions without the capture
+exclusion and the plan carries that line, which the lead records in the story's gate
+log. The cited captures leave the threshold COUNT
 only: they stay in the parts and in the range every reviewer reads. Under the
 flag, a range of at most one counted file answers `SERIAL`. A
 later pass appends its pass marker to the directory,
@@ -387,7 +427,7 @@ the frozen worktree and the RED replays for any anchor in no part's files, then
 joins the part shard files as the first cross QA does below and runs every
 handed-over replay there, recorded as `handover-run:` lines; every other cross
 reviewer executes nothing.
-Every shard brief carries the absolute path of the LEAD checkout's `scripts/ai-dlc` (`<lead engine>`); the seat runs both scripts from it, never from its worktree.
+Every shard brief carries the absolute path of the LEAD checkout's `scripts/ai-dlc` (`<lead engine>`); the seat runs both scripts from it, never from its worktree. Every gate-1 brief, shard, cross, serial and record-only, for `code-reviewer` and `code-reviewer-escalated` alike, carries `gate-plan: <plan path>` naming the g1 plan.
 Every shard writes its header first, appends each finding as it is verified,
 checks itself with `<lead engine>/merge-review-shards.sh <shard dir> --gate code-review --check-shard <shard file>`
 until SHARD-OK, and, once finished, closes it with ONE Bash call, never with its header:
@@ -416,54 +456,48 @@ the shard directory together with the merged file. A serial review writes its fi
 shard does, each a `#### ` heading under its container, never a bullet, and carries one column-0
 `reviewed-sha: <full frozen sha>` line, because the next pass carries by that heading and
 partitions from that sha.
-**The record-only route of a re-review.** Before partitioning a re-review, pass M >= 2, run
-`scripts/ai-dlc/partition-review-diff.sh --route <worktree> <pass M-1 file> <frozen-sha> --exclude-captures <captures file>`.
-On `ROUTE:` (exit 0) every Critical and Important finding of pass M-1 carries
+**The record-only route of a re-review.** For a re-review, pass M >= 2,
+`gate-transition.sh <story> 1 --pass M <flags>` first asks `partition-review-diff.sh --route` of the
+pass M-1 file. On `ROUTE:` every Critical and Important finding of pass M-1 carries
 `Class: EVIDENCE` or `Class: BOOKKEEPING` and the delta from its `reviewed-sha:` carries no
-code or test path. The pass is then the handoff validator plus ONE serial reviewer: run
-`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`
-as at the pre-gate check, and dispatch one reviewer, `shard: 1/1 <story-index>`, carrying every
-`--list` line as below and the validator's output. Any other answer (`FULL:`, any exit but 0)
-is a full re-review as follows. Never route on the classes alone: a rework that edits a test
-under bookkeeping findings is exactly what a full pass catches.
-**Narrowing a mixed re-review.** On `FULL:` from `--route`, run
-`scripts/ai-dlc/partition-review-diff.sh --narrow <worktree> <pass M-1 file> <frozen-sha> --exclude-captures <captures file>`.
-On `NARROW:` (exit 0) the `NARROW:` line names the delta's code paths that the prior's CODE and
-TEST findings' `Files:` lines name, and the `RESIDUE:` line every other code path of the delta.
-Partition with
-`partition-review-diff.sh --map <worktree> <prior-sha> <frozen-sha> --exclude-captures <captures file> --narrow-from <pass M-1 file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>`,
-which partitions the named paths and puts every residue path in one last part, `residue`. On exit
-0, dispatch one reviewer per map line plus the cross reviewer, exactly as the gate-1 fan-out does.
-This REPLACES the un-narrowed delta partition in the next paragraph: never run the flagless `--map`
-into the same shard directory after it. When that run is refused (exit 2, including a narrowed map
-that would need more reviewers than the full delta map), record the refusal line in the gate log
-and run the un-narrowed delta partition of the next paragraph,
-`--map <worktree> <prior-sha> <frozen-sha> ...`, into the same shard directory; the refusal wrote
-no manifest there. On `SERIAL` the pass is one reviewer, `shard: 1/1 <story-index>`, briefed with
-the full delta and both lines, who reviews the WHOLE delta: every `NARROW:` path and every
-`RESIDUE:` path. The pass's EVIDENCE and BOOKKEEPING findings also go
-through `scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>`,
-whose output goes into the first cross reviewer's brief, or the serial reviewer's. Carried findings
+code or test path. The pass is then the handoff validator plus ONE serial reviewer: the plan
+records `route: record-only` and the validator's output, and the lead dispatches one reviewer,
+`shard: 1/1 <story-index>`, carrying every carried-findings line the plan lists and that output.
+Any other answer (`FULL:`, any exit but 0) is a full re-review as follows. Never route on the
+classes alone: a rework that edits a test under bookkeeping findings is exactly what a full pass catches.
+**Narrowing a mixed re-review.** On `FULL:` the program asks `--narrow` of the same file.
+On `NARROW:` the plan carries the `NARROW:` line, which names the delta's code paths that the
+prior's CODE and TEST findings' `Files:` lines name, and the `RESIDUE:` line, every other code
+path of the delta. The plan's shard lines are the `--narrow-from` map, which partitions the named
+paths and puts every residue path in one last part, `residue`, into the shard directory
+`docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>`. Dispatch one reviewer per shard
+line plus the cross reviewer, exactly as the gate-1 fan-out does. The narrowed map REPLACES the
+un-narrowed delta partition in the next paragraph, and the program never runs the flagless `--map`
+into the same shard directory after it. When the narrowed run is refused (including a narrowed map
+that would need more reviewers than the full delta map), the plan records the refusal line, the
+lead records it in the gate log, and the plan's map is the un-narrowed delta partition of the next
+paragraph, written into the same shard directory; the refusal wrote no manifest there. On `SERIAL`
+the pass is one reviewer, `shard: 1/1 <story-index>`, briefed with the full delta and both lines,
+who reviews the WHOLE delta: every `NARROW:` path and every `RESIDUE:` path. The pass's EVIDENCE
+and BOOKKEEPING findings also go through the handoff-evidence validator, whose output the plan
+carries into the first cross reviewer's brief, or the serial reviewer's. Carried findings
 go as below, unchanged. Every delta code path is in exactly one part, or, under `SERIAL`, reviewed
 by the one reviewer. Any other answer from `--narrow` (`FULL:`, any exit but 0) is the full
 re-review below.
 A re-review, pass M >= 2, reviews the fix delta and dispatches through this same fan-out:
-run the partition with `<prior-sha>` in place of `<base>`,
-`partition-review-diff.sh --map <worktree> <prior-sha> <frozen-sha> --exclude-captures <captures file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>`,
-where `<prior-sha>` is the
-column-0 `reviewed-sha:` of the pass M-1 review file and `<captures file>` is
-`--list-captures` read at `<frozen-sha>` as above, so
-the manifest's `base` line records the prior sha, and dispatch on its answer exactly as
-above, `SERIAL` included: a delta of at most one counted file is one reviewer, `shard: 1/1 <story-index>`. When that run is refused (exit 2: the prior sha does not resolve
-or is not an ancestor of the frozen sha, after a rebase or a force-push), record the refusal
-line in the gate log and run the full `<base>..<frozen-sha>` partition instead; a re-review
+the partition runs with `<prior-sha>` in place of `<base>`, where `<prior-sha>` is the
+column-0 `reviewed-sha:` of the pass M-1 review file and the captures are listed at
+`<frozen-sha>` as above, so the manifest's `base` line records the prior sha, and dispatch on
+the plan's answer exactly as above, `SERIAL` included: a delta of at most one counted file is one reviewer, `shard: 1/1 <story-index>`. When that run is refused (the prior sha does not resolve
+or is not an ancestor of the frozen sha, after a rebase or a force-push), the program records the refusal
+line in the plan and partitions the full `<base>..<frozen-sha>` range instead; a re-review
 never dispatches a `shard: 1/1` delta of no stated range. The partition drops the scan
 roots (the story file, its Dev Agent Record, RED evidence, `pending.md`), so the first cross
 reviewer, or the serial reviewer, is briefed with the whole story record and the full
 `git diff <prior-sha>..<frozen-sha>` including scan-root paths, and every part reviewer gets
 the story record as context. Every Critical and Important `#### ` finding of pass M-1 is
 carried: to each delta part holding a file it cites, else to the first cross reviewer.
-Run `scripts/ai-dlc/validate-carried-findings.sh --list <pass M-1 file>` and paste each line it prints into the brief of the shard that carries that finding, verbatim, as the string its `carried:` line must name. The
+Paste each carried-findings line the plan lists (the program ran `validate-carried-findings.sh --list` of the pass M-1 file) into the brief of the shard that carries that finding, verbatim, as the string its `carried:` line must name. The
 new review answers each with one column-0 line `carried: <prior heading> — resolved` or
 `carried: <prior heading> — open`, and an `open` one is re-emitted as a finding of this
 pass, so it carries again. Gate validation Check 1 runs `validate-carried-findings.sh` on
@@ -471,8 +505,8 @@ the two files.
 
 **DAR-fold preflight before gate-2 dispatch.** After gate1 (code
 review) approves a story and BEFORE dispatching gate2 (QA), the lead
-MUST copy the Dev Agent Record the dev wrote on the story branch into the canonical sprint-branch story file,
-then verify that file's Dev Agent Record section is non-empty and equal to the story-branch section — a mechanical
+MUST copy the Dev Agent Record the dev wrote on the story branch into the canonical sprint-branch story file;
+`gate-transition.sh <story> 2 <flags>` then verifies that file's Dev Agent Record section is non-empty and equal to the story-branch section, performs no copy, and refuses when the fold is not done — a mechanical
 section-presence check, the same class as gate-validation check #4's Dev Agent Record
 completeness check. The dev authors the record in the story file before submission (dev.md step 8); the copy never authors it. Failure caught: a QA reviewer dispatched against a
 worktree-stale story copy reads an empty or old DAR and false-FAILs a
@@ -486,46 +520,46 @@ section is a retro finding.
 **Gate 1 after a QA rework (Rule A).** When a QA `NEEDS_REWORK` sends the
 story back to dev, gate 1 re-runs on the rework iff the range adds a test file
 or changes a code or test file on a line that is not blank, a comment or a
-docstring. Captures and records never trigger it. Run
-`scripts/ai-dlc/partition-review-diff.sh --gate1-rerun <worktree> <go-signal-sha> <frozen-sha> --exclude-captures <captures file>`,
-`<go-signal-sha>` being the sha QA validated. `GATE1-SKIP:` dispatches QA's
-re-validation directly, after the handoff preflight below; `GATE1-RERUN:`, or any refusal, runs gate 1 as a
-re-review pass first.
+docstring. Captures and records never trigger it. At gate 2 the program asks
+`partition-review-diff.sh --gate1-rerun` first, `<go-signal-sha>` being the sha QA validated.
+`GATE1-SKIP:` leaves the transition a gate-2 one and dispatches QA's
+re-validation directly, after the handoff preflight below; `GATE1-RERUN:`, or any refusal,
+makes the transition a gate-1 re-review: the plan's `gate:` line reads `rerun`, and the lead
+runs gate 1 as a re-review pass first.
 
 **Handoff preflight before every gate-2 dispatch.** Before every gate-2
-dispatch, including one that follows `GATE1-SKIP:`, run in the frozen dev worktree
-`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --gate2 <story-file> <base> <go-signal-sha>`
+dispatch, including one that follows `GATE1-SKIP:`, the program runs the `--gate2` arm of the
+handoff-evidence validator in the frozen dev worktree.
 Exit 1 refuses the dispatch: send the dev its `REFUSED` lines.
 
-**The record-only route of a QA re-validation.** Before partitioning a QA
-re-validation, pass M >= 2, run
-`scripts/ai-dlc/partition-review-diff.sh --route <worktree> <QA pass M-1 file> <go-signal-sha> --exclude-captures <captures file>`.
-On `ROUTE:` (exit 0) every Critical and Important finding of pass M-1 carries
+**The record-only route of a QA re-validation.** For a QA
+re-validation, pass M >= 2, `gate-transition.sh <story> 2 --pass M <flags>` first asks `--route` of the
+QA pass M-1 file.
+On `ROUTE:` every Critical and Important finding of pass M-1 carries
 `Class: EVIDENCE` or `Class: BOOKKEEPING` and the delta from its `reviewed-sha:` carries no
-code or test path. The pass is then the handoff validator plus ONE serial QA: run
-`scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --gate2 <story-file> <base> <go-signal-sha>`
-as at the preflight above, and dispatch one QA, `shard: 1/1 <story-index>`, briefed
-`route: record-only`, carrying every `validate-carried-findings.sh --list` line and the
-validator's output. Any other answer (`FULL:`, any exit but 0) is the full fan-out below.
-Never route on the classes alone.
+code or test path. The pass is then the handoff validator plus ONE serial QA: the plan records
+`route: record-only` and the `--gate2` validator's output, and the lead dispatches one QA,
+`shard: 1/1 <story-index>`, briefed `route: record-only`, carrying every carried-findings line
+the plan lists and the validator's output. Any other answer (`FULL:`, any exit but 0) is the
+full fan-out below. Never route on the classes alone.
 
 **Gate-2 dispatch: the validation partitions by changed-file group too.**
 After the DAR-fold preflight, with the go-signal SHA recorded (it may differ
-from gate 1's frozen SHA after a rework pass), and before any QA is dispatched, run
-`validate-handoff-evidence.sh -C <worktree> --smoke <story-file> <base> <go-signal-sha>`
+from gate 1's frozen SHA after a rework pass), and before any QA is dispatched,
+`gate-transition.sh <story> 2 <flags>` runs the `--smoke` arm of the handoff-evidence validator
 (the mechanical half of `gate-validation.md` Check 11, **Smoke surface.**). Exit 1
 refuses the go-signal: no QA is dispatched, and the story returns to the dev with the
 `REFUSED` lines verbatim. A `SKIP SMOKE-SURFACE (<reason>)` or `SMOKE NO-SURFACE`
-line is recorded in the story's gate log and does not refuse; exit 2 is recorded
-there too. Then run in the frozen dev worktree
-`partition-review-diff.sh --map <worktree> <base> <go-signal-sha> --exclude-captures <captures file> --shard-dir <root>/docs/reviews/s<N>/shards/<story-index>-qa-validation-<sha12>`,
-fresh on that SHA, `<captures file>` written by `--list-captures` at `<go-signal-sha>` as at gate 1
-(on its exit 2, without the flag, the line recorded in the gate log), where `<root>` is the absolute path of the frozen worktree,
-`<base>` is the same two-dot base gate 1 used, `<go-signal-sha>` is the full
-SHA and `<sha12>` its first twelve characters. When it writes the shard directory, run, with the LEAD CHECKOUT as
-the working directory and the shard directory as the argument,
-`scripts/ai-dlc/merge-review-shards.sh --record-partition <shard dir>` at once, BEFORE ANY QA SEAT IS
-DISPATCHED, because it trusts the shard directory's `.manifest` only while no seat has touched it: it
+line is carried in the plan, the lead records it in the story's gate log, and it does not refuse; exit 2 is recorded
+there too. The program then partitions in the frozen dev worktree, fresh on that SHA,
+into `<root>/docs/reviews/s<N>/shards/<story-index>-qa-validation-<sha12>`, with the captures
+listed at `<go-signal-sha>` as at gate 1 (on the capture list's exit 2, without the exclusion,
+the line recorded in the gate log), where `<root>` is the absolute path of the frozen worktree,
+the base is the same two-dot base gate 1 used, `<go-signal-sha>` is the full
+SHA and `<sha12>` its first twelve characters. When it writes the shard directory, the program
+runs `merge-review-shards.sh --record-partition` on it with the LEAD CHECKOUT as the working
+directory, AFTER the map and BEFORE ANY QA SEAT IS
+DISPATCHED, because the record trusts the shard directory's `.manifest` only while no seat has touched it: it
 records that partition's base, sha and qa.md era in the lead's story record, which the merge reads
 back, and it is re-run on every re-partition. A later pass appends its pass
 marker, `<story-index>-qa-validation-<sha12>-p<M>`, matching the `-p<M>` of the
@@ -569,7 +603,7 @@ SHARD-OK, and, once finished, closes it with ONE Bash call, never with its heade
 which runs the same check and appends `seat-complete: implementation qa <shard> key=<k> sha=<hex> findings=<n>`; the join beat is
 `wait-for-deliverable.sh --complete <path> [<path> ...]`, and the merge refuses a count that disagrees.
 Each shard gets the go-signal
-`gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records.
+`gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records, and every gate-2 QA brief, shard, cross, serial and record-only, carries `gate-plan: <plan path>` naming the g2 plan.
 Part QAs read their part, score the part-local checklist items and replay the
 mutation-REDs and null-impl REDs anchored in their part, each in its own
 detached worktree at that SHA; they run no suite. In that worktree a part QA

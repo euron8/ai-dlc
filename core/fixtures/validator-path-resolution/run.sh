@@ -309,6 +309,10 @@ argv_for() {
     # A relative <repair-dir> resolves under the project root and the refusal names the path it
     # resolved, so the two roots answer differently. Same floor: the root is CONSULTED.
     serial-remediation-worklist.sh) printf '%s' "_bmad-output/planning-artifacts/s1/shards/vpr-repair" ;;
+    # A bare run stops at "the gate must be 1, 2, 3 or close", byte-identical from any root. With a
+    # full argv and a -C that names no directory, the run removes any stale plan under the resolved
+    # root and refuses naming that plan path, without creating a directory. Same floor: the root is CONSULTED.
+    gate-transition.sh)             printf '%s' "vpr-1 1 -C $WORK/vpr-no-worktree --base vpr-base --sprint 1 --story-file docs/stories/story-1.md" ;;
     *)                              printf '%s' "" ;;
   esac
 }

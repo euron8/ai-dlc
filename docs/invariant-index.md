@@ -130,7 +130,7 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I110 | the In-Flight `status` token set is ONE set across its owner and its readers |
 | I111 | the reasoning-effort level set is ONE set across every file that validates it |
 | I112 | the code-review verdict set is ONE set across its owner and the gate that reads it |
-| I113 | the single-valued position-bullet COUNT is one grammar in three copies |
+| I113 | the single-valued position-bullet COUNT is one grammar in four copies |
 | I114 | a shipped skill's frontmatter sets nothing on the session that invokes it |
 | I115 | no file that sources reconcile/lib.sh can take the memo's EXIT cleanup away |
 | I116 | a SHIPPING fixture that uses a sibling fixture requires that sibling to ship |

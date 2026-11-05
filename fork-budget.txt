@@ -52,4 +52,10 @@
 # marked fixture. Measured with `scripts/fork-profile.sh --section total`, each run from inside its own
 # clean detached worktree: base 963de2dd6 read 2947 (line 1415 alone 55 forks), the tip read 2899, both
 # EXIT 0. The budget is the tip reading plus HEADROOM_MARGIN 2.
-FORK_BUDGET=2901
+#
+# Raised 2901 -> 2912 when BL-913 added `core/scripts/gate-transition.sh` and its gate-plan arm. Measured
+# with `scripts/fork-profile.sh --section total`, each run from inside its own clean detached worktree:
+# base 5bcb5aaf1 read 2899, EXIT 0; the release tip read 2910, EXIT 0. The rise of 11 is the new script's
+# per-file AI_DLC_ROOT block at arm I75 (431 -> 441, +10, because the script resolves its root) plus the
+# guard's gate-plan arm (+1). No validator code changed. The budget is the tip reading plus HEADROOM_MARGIN 2.
+FORK_BUDGET=2912

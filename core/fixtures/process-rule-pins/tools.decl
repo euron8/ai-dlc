@@ -21,3 +21,4 @@ tr
 wc
 mv
 shasum
+env
