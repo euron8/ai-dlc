@@ -1,14 +1,11 @@
 # The renderer under test, REQUIRED: the sentinel prints where run.sh locates it. REPO is found by a VERSION marker.
-# controlA runs the renderer over the real tree, whose vocabulary markers and owners sit across these subtrees.
 !scripts/render-vocabulary-index.sh
 scripts/
 .githooks/
 templates/
-# reason: core/ is read by content -- controlA (run.sh:306) runs the renderer over the real tree, which globs core/schemas/*.json (scripts/render-vocabulary-index.sh:74) and opens owners derived from validator headers, which may live anywhere under core/ (scripts/render-vocabulary-index.sh:1256, :1290).
+# reason: core/ is read by content -- the renderer globs core/schemas/*.json (scripts/render-vocabulary-index.sh:74) and opens owners derived from validator headers, which may live anywhere under core/ (scripts/render-vocabulary-index.sh:1256, :1290).
 core/
-+docs/invariant-index.md
-+docs/vocabulary-index.md
-# copy-only: core/fixtures/vocabulary-index/run.sh:132 run.sh tests for the marker beside the renderer; nothing reads its content
+# copy-only: core/fixtures/vocabulary-index/run.sh:131 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
 # The mutation helpers run.sh sources.
 core/fixtures/lib/mutant.sh

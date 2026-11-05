@@ -1,3 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-411 *
-163 core/scripts/validate-adversarial-convergence.sh
+# Re-measured when unit tstrat moved to requirements-step arm (m): its 10 validator starts left this shard.
+371 *
+153 core/scripts/validate-adversarial-convergence.sh

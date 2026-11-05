@@ -109,8 +109,8 @@ it to the three field lines it extracts from the template, plus their bold and i
 It runs that code rather than a copy: a restated regex could be wrong in the fixture and right
 in the validator, and the join would report clean. Its controls — prose, an absent file, and
 the renamed fields — are what stop a `repair_field` that returns 0 unconditionally from
-passing every other assertion. A fourth arm joins `gate-validation.md`, which states the same
-three labels to the lead.
+passing every other assertion. `gate-validation.md`, which states the same three labels to the
+lead, is joined by `requirements-step` arm (k).
 
 **A zero here is not a finding.** If the definition were renamed, or the template reworded,
 every assertion would pass over an empty set and report clean — so the extraction counts are
@@ -126,7 +126,7 @@ passes 80 of 80:
 | reader narrowed to the 0.354.0 class | `repaired-delegated-bold`, `H-BIND` grammar (2) |
 | `remediator.md` relabels one template field | `H-BIND` extraction guard only (1) |
 | `repair_field` returns 0 unconditionally | `repair-record-empty`, `repair-record-off-label`, both messages, `H-BIND` controls (5) |
-| `gate-validation.md` drops the `derivation:` label | `H-BIND` teaching arm only (1) |
+| `gate-validation.md` drops the `derivation:` label | `requirements-step` arm (k) only (1) |
 
 The control must be a **full-tree** copy. A partial one — the four files this arm reads,
 copied into a skeleton — fails 8 unrelated assertions because the other arms cannot resolve
@@ -252,25 +252,13 @@ The mutant restores the old `tr -cd '0-9a-fA-F'` read at all three sites. That r
 hex letters of the stem names onto the shas, so the reordered case flips to F4 "never saw" while
 the partial case still fails on F5, and the unmutated copy is the control.
 
-## Unit `tstrat` — the test-strategy series, bound from Check 24's text to the program (BL-723)
+## The prose-only arms live in `requirements-step`
 
-`stories-test-strategy.md` §5 step 2 converges `test-strategy.md` through the native review/repair
-cycle, and Check 24 runs that series. The unit joins the two documents through the shipping validator
-rather than through a typed copy of the prefix:
-
-| Cell | What it runs | Must |
-|---|---|---|
-| `ts-bind` | the prefix EXTRACTED from Check 24's section (`### 24.` to `### 25.`), `s<N>` resolved to a seeded sprint, over a terminal MET pass (0C, 3 derived MAJOR) and a verdict-less one | exit 0, then exit 1 with `FAIL (A -- VOCABULARY)`; an empty extraction FAILs naming the token |
-| `ts-absent` | the §5 span (`### 5.` to `### 6.`) | no `bmad-review` (a substring of its old name `bmad-review-adversarial-general`, so both spellings count); control: `bug-investigation.md` names it, and a zero control is BROKEN |
-| `ts-names` | the §5 span | names `test-strategy-adversarial-p`, `Adversarial review dispatch`, `Adversarial repair dispatch`, and step 3's precondition (``does not stamp `verdict: EXIT_CONDITION_MET` ``) |
-| `ts-arm-l-silent` | the MET run's output | no elicitation line — a characterization, not a kill |
-
-The section extractor self-probes first, on a hit inside the section and on the same grammar one
-section either side. Three committed mutants, each a copy guarded by `cmp -s`, move exactly their own
-cell against an unmutated `ok ok ok` control: the one-shot restored into §5 step 2 (`ok FAIL ok`),
-every test-strategy prefix stripped from `gate-validation.md` (`FAIL ok ok`), and step 3's
-precondition paragraph deleted from §5 (`ok ok FAIL`; the copy must carry zero precondition stamps
-against one in the original).
+Three arms read step prose and nothing this fixture seeds: the test-strategy series bound from
+Check 24's text to the program (BL-723, formerly unit `tstrat`), `gate-validation.md`'s statement
+of arm H's three labels (formerly H-BIND's fourth arm), and the `J3_SUCCESSORS` binding to the step
+files (J3-MAP). They are `requirements-step` arms (m), (k) and (l), keyed on the steps directory
+there, so an edit to that prose no longer re-runs these four shards.
 
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 

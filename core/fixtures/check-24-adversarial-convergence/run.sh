@@ -56,12 +56,12 @@ fi
 # file's own `if sg <unit>; then` lines, the dealt lists must be disjoint and their union must equal the
 # declared set exactly, so no unit can fall out of every shard, and every declared shard must have a
 # driver directory. The join proves it can fire first, on a seeded duplicate and a seeded omission.
-#   a  core corp pair tstrat   the v0.52-v0.103 cases, --cycle-state and the stall exit, the corpus third state, pairing, the test-strategy series (BL-723)
+#   a  core corp pair   the v0.52-v0.103 cases, --cycle-state and the stall exit, the corpus third state, pairing
 #   b  hook k2 elic j3  the live-series derivation, H-BIND, exit ceiling, arm K, arm K2 and its mutants, arm L, arm J3 (BL-814)
 #   c  arms_ij pass1 j2h  arm J and I, the pass-1 guard, arm J2 and J's door, arm H by series
 #   d  k3               arm K3, K3 widened, J2 per stem, K3 cross groups (every world a git repository)
 SHARDS="a b c d"
-UNITS_a="core corp pair tstrat"
+UNITS_a="core corp pair"
 UNITS_b="hook k2 elic j3"
 UNITS_c="arms_ij pass1 j2h"
 UNITS_d="k3"
@@ -429,14 +429,10 @@ fi
 # MUTANT-MATRIX MUTATION-cdiv-always-resolves decides=MUTATION-cdiv-always-resolves.cdiv-verified-invalid twins=MUTATION-cdiv-always-resolves.cdiv-verified,MUTATION-cdiv-always-resolves.cdiv-verified-unresolved
 # MUTANT-MATRIX MUTATION-cdiv-terminal-silent decides=MUTATION-cdiv-terminal-silent.cdiv-terminal-resolved twins=MUTATION-cdiv-terminal-silent.cdiv-verified-unresolved
 # MUTANT-MATRIX MUTATION-sha-key decides=MUTATION-sha-key.sharded-revert-reordered twins=MUTATION-sha-key.sharded-revert-partial
-# MUTANT-MATRIX MUTATION-ts-bmad-restored decides=MUTATION-ts-bmad-restored.cell2 twins=MUTATION-ts-bmad-restored.cell1,MUTATION-ts-bmad-restored.cell3
-# MUTANT-MATRIX MUTATION-ts-bmad-restored-new decides=MUTATION-ts-bmad-restored-new.cell2 twins=MUTATION-ts-bmad-restored-new.cell1,MUTATION-ts-bmad-restored-new.cell3
-# MUTANT-MATRIX MUTATION-ts-gate-prefix-dropped decides=MUTATION-ts-gate-prefix-dropped.cell1 twins=MUTATION-ts-gate-prefix-dropped.cell2,MUTATION-ts-gate-prefix-dropped.cell3
-# MUTANT-MATRIX MUTATION-ts-precondition-deleted decides=MUTATION-ts-precondition-deleted.cell3 twins=MUTATION-ts-precondition-deleted.cell1,MUTATION-ts-precondition-deleted.cell2
 # MUTANT-MATRIX K3WX6-b-K3B-conjunct-dropped decides=K3WX6-b-K3B-conjunct-dropped.k3w-subj twins=K3WX6-applied-discriminates.kept-binding
 # MUTANT-MATRIX live-series-unfiltered decides=live-series-unfiltered.decoy-world twins=live-series-control-unfiltered.no-decoy-world
 # MUTANT-MATRIX live-series-unscoped decides=live-series-unscoped.two-sprint-world twins=live-series-control-unscoped.one-sprint-world
-# The thirteen rows above are measured row-whole: each row is 2-3 cells, its deciding cell plus its twins ARE
+# The nine rows above are measured row-whole: each row is 2-3 cells, its deciding cell plus its twins ARE
 # the row, and the whole row runs on every push, so the per-push match IS the matrix measurement.
 # MUTANT-MATRIX-CONTROL CONTROL-chrono-copy why=the unmutated copy beside the arm-G mutants must reproduce the shipped row
 # MUTANT-MATRIX-CONTROL CONTROL-third-state-copy why=the unmutated copy in the third-state mutants' directory must reproduce the shipped row
@@ -449,10 +445,8 @@ fi
 # MUTANT-MATRIX-CONTROL H-series-named-record why=the shipped validator must reproduce the H row the mutants are read against
 # MUTANT-MATRIX-CONTROL CONTROL-h-copy why=the unmutated copy in the J2 mutants' directory must reproduce the H row
 # MUTANT-MATRIX-CONTROL MUTATION-cdiv-control why=the unmutated copy beside the cdiv mutants must pass the verified series
-# MUTANT-MATRIX-CONTROL CONTROL-ts-unmutated why=the shipped documents must score ok on all three test-strategy cells
 # MUTANT-MATRIX-CONTROL MUTATION-g-anchor why=the arm-G anchor is unique against an impossible-anchor control, or every G mutant proves nothing
 # MUTANT-MATRIX-CONTROL MUTATION-sg-anchor why=the scope-grew anchor is unique against an impossible-anchor control
-# MUTANT-MATRIX-CONTROL MUTATION-ts-anchor why=the test-strategy step-2 anchor is unique against an impossible-anchor control
 # MUTANT-MATRIX-CONTROL J3-shipped-validator why=the receipt's own verdict on the shipped validator, every world judged
 # MUTANT-MATRIX-CONTROL J3-0-control-unmutated why=the unmutated copy beside the J3 mutants, every world judged, so a partial copy tree cannot pass
 # MUTANT-MATRIX-CONTROL J2T-shipped-validator why=the receipt's own verdict on the shipped validator, every world judged
@@ -1726,16 +1720,12 @@ for cand in \
   "$DIR/../../../.claude/team-roles/remediator.md"; do
   [ -f "$cand" ] && REMEDIATOR="$cand" && break
 done
-GATEDOC=""
-for cand in \
-  "$DIR/../../skills/ai-dlc/steps/gate-validation.md" \
-  "$DIR/../../../.claude/skills/ai-dlc/steps/gate-validation.md"; do
-  [ -f "$cand" ] && GATEDOC="$cand" && break
-done
+# The third statement of the same three labels, gate-validation.md's arm-H teaching, is joined by
+# requirements-step arm (k): it is prose only that arm reads, so it is keyed there and not here.
 
 ASSERTIONS=$((ASSERTIONS + 1))
-if [ -z "$REMEDIATOR" ] || [ -z "$GATEDOC" ]; then
-  bind_fail "FIXTURE BROKEN: remediator.md=${REMEDIATOR:-<not found>} gate-validation.md=${GATEDOC:-<not found>} from $DIR"
+if [ -z "$REMEDIATOR" ]; then
+  bind_fail "FIXTURE BROKEN: remediator.md=<not found> from $DIR"
 else
   # --- extract the reader ----------------------------------------------------
   # Exactly one one-line definition, or the eval below silently binds the wrong thing.
@@ -1784,23 +1774,6 @@ else
     else
       bind_ok "reader accepts all 3 taught labels plain/bold/italic and rejects prose + renamed fields"
     fi
-  fi
-
-  # --- the third statement of the same three labels --------------------------
-  # gate-validation.md teaches arm H to the lead. It is prose, so this is a token join,
-  # not a grammar one -- but a label dropped from it is a label nobody is taught.
-  ASSERTIONS=$((ASSERTIONS + 1))
-  gv_miss=""
-  for lbl in disposition edit derivation; do
-    grep -qF "\`$lbl:\`" "$GATEDOC" || gv_miss="$gv_miss $lbl"
-  done
-  gv_ctl="$(grep -c 'REPAIR-RECORD\|arm H' "$GATEDOC")"
-  if [ "$gv_ctl" -eq 0 ]; then
-    bind_fail "FIXTURE BROKEN: $GATEDOC names no arm H at all, so the label check below reads a file that moved"
-  elif [ -n "$gv_miss" ]; then
-    bind_fail "$GATEDOC teaches arm H but no longer names:$gv_miss (control: $gv_ctl arm-H mentions in the same file)"
-  else
-    bind_ok "gate-validation.md names all 3 labels the reader reads"
   fi
 fi
 
@@ -2987,45 +2960,8 @@ RM_TWIN=unkeyed rcpt_mut  "J3-12 keys counted with repeats" "$R814" "1|$J3NF dup
   'if (!seen[k]++) print k } } }'"' \"\$1\"" 'print k } } }'"' \"\$1\""
 RM_TWIN=wrongstep rcpt_mut  "J3-13 remedy says write"  "$R814" "1|$J3NF undeferred(rc=1)" \
   'DEFER    dispatch a remediator to write $j3_dir' 'DEFER    write $j3_dir'
-
-# THE DEFERRAL MAP IS BOUND TO THE STEP FILES. Each J3_SUCCESSORS row `<stem>:<step>:<succ>:<ctx>` names
-# a step file whose `nextStepFile:` is `./<succ>.md`, and a successor step file that writes `s<N>/<ctx>`.
-# Self-probe first, both directions: a seeded row whose successor is wrong is refused.
-J3_STEPS=""
-for cand in "$DIR/../../skills/ai-dlc/steps" "$DIR/../../../.claude/skills/ai-dlc/steps"; do
-  [ -f "$cand/carry-over-evaluation.md" ] && [ -f "$cand/requirements.md" ] && { J3_STEPS="$cand"; break; }
-done
-[ -n "$J3_STEPS" ] || broken "BL-814: the step files are not under either layout from $DIR"
-j3_bind() {  # $1 one map row -> 0 when it agrees with the step files
-  local step succ ctx r="$1"
-  r="${r#*:}"; step="${r%%:*}"; r="${r#*:}"; succ="${r%%:*}"; ctx="${r#*:}"
-  [ -f "$J3_STEPS/$step.md" ] && [ -f "$J3_STEPS/$succ.md" ] || return 1
-  grep -qx "nextStepFile: ./$succ.md" "$J3_STEPS/$step.md" || return 1
-  grep -qF "s<N>/$ctx" "$J3_STEPS/$succ.md"
-}
-ASSERTIONS=$((ASSERTIONS + 1))
-if ! j3_bind "coe:carry-over-evaluation:requirements:requirements-context.md" \
-   || j3_bind "coe:carry-over-evaluation:architecture:architecture-context.md" \
-   || j3_bind "requirements:requirements:architecture:requirements-context.md"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-28s the binding self-probe did not discriminate (a true row, a wrong successor, a wrong digest)\n' "J3-MAP"
-else
-  j3_rows="$(awk '/^J3_SUCCESSORS="/ { on = 1; sub(/^J3_SUCCESSORS="/, "") } on { l = $0; e = sub(/"$/, "", l); print l; if (e) exit }' "$VALIDATOR")"
-  j3_n=0; j3_off=""
-  while IFS= read -r j3_r; do
-    [ -n "$j3_r" ] || continue
-    j3_n=$((j3_n + 1))
-    j3_bind "$j3_r" || j3_off="$j3_off {$j3_r}"
-  done <<J3EOF
-$j3_rows
-J3EOF
-  if [ "$j3_n" -lt 2 ] || [ -n "$j3_off" ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s %s J3_SUCCESSORS row(s) read; disagreeing with the step files:%s\n' "J3-MAP" "$j3_n" "${j3_off:- none (too few rows read)}"
-  else
-    printf '  ok    %-28s %s J3_SUCCESSORS rows each agree with nextStepFile: and the successor digest\n' "J3-MAP" "$j3_n"
-  fi
-fi
+# The deferral map's binding to the step files (J3-MAP) is requirements-step arm (l): it reads only step prose
+# and the validator's J3_SUCCESSORS text, so it is keyed on those there rather than re-running this shard.
 fi
 if sg k3; then
 echo
@@ -4298,232 +4234,6 @@ if [ -n "$PAIR_MISSING" ]; then
     "state-mode-pairing" "$PAIR_MISSING"
 else
   printf '  ok    %-28s every denying case asserts the state the hooks read\n' "state-mode-pairing"
-fi
-fi
-if sg tstrat; then
-echo
-# --- BL-723: THE TEST-STRATEGY SERIES, bound from Check 24's own text to the program ---------
-# stories-test-strategy.md §5 step 2 converges `test-strategy.md` through the native cycle, and
-# Check 24 runs that series. Two documents name one prefix, and nothing but this unit joins them:
-#   bind    the prefix is EXTRACTED from Check 24's section (`### 24.` to `### 25.`), never typed
-#           here. `s<N>` resolves to a seeded sprint, the series is seeded at the prefix §5 names,
-#           and the SHIPPING validator runs with Check 24's prefix: exit 0 on a terminal MET pass at
-#           0 CRITICAL and 3 derived MAJOR, exit 1 with rung A on a verdict-less pass. An empty
-#           extraction is a FAIL naming the token; a prefix §5 does not write matches nothing.
-#   absent  §5 (`### 5.` to `### 6.`) names no bmad-review (nor its old name), against a
-#           same-invocation control that bug-investigation.md does (control zero is BROKEN).
-#   names   §5 names test-strategy-adversarial-p, "Adversarial review dispatch", "Adversarial repair
-#           dispatch", and step 3's precondition (the highest pass "does not stamp
-#           `verdict: EXIT_CONDITION_MET`" -> return to step 2), each once-unique in §5 today.
-# Arm L's silence on this series is a CHARACTERIZATION (L keys on stories-adversarial-p only), not
-# a kill. Worlds live under $ROOT/.ts-worlds, hidden, so the pairing loop's `$ROOT/*/` never walks them.
-# THE ABSENCE ARM IS WHY THE MUTANTS ARE COMMITTED: an absence passes for a span that read nothing,
-# so the unmutated docs must score `ok ok ok` (the positive control) and each mutant must move
-# exactly its own cell.
-TS_GATE=""; TS_STEP=""; TS_CTL=""
-for cand in "$DIR/../../skills/ai-dlc/steps" "$DIR/../../../.claude/skills/ai-dlc/steps"; do
-  if [ -f "$cand/gate-validation.md" ] && [ -f "$cand/stories-test-strategy.md" ] && [ -f "$cand/bug-investigation.md" ]; then
-    TS_GATE="$cand/gate-validation.md"; TS_STEP="$cand/stories-test-strategy.md"; TS_CTL="$cand/bug-investigation.md"; break
-  fi
-done
-[ -n "$TS_GATE" ] || broken "BL-723: gate-validation.md, stories-test-strategy.md and bug-investigation.md are not together under either layout from $DIR"
-TS_TOKEN='_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p'
-TS_RE='_bmad-output/planning-artifacts/s<N>/test-strategy[A-Za-z0-9_-]*-p'
-# The one-shot runs under its current name, `bmad-review` (BMAD 6.11 renamed it from
-# bmad-review-adversarial-general). The current name is a SUBSTRING of the old one, so one fixed-string
-# count sees both spellings: the old-name mutant below still kills, and the new-form mutant beside it
-# proves the absence arm reads the current call-site spelling too.
-TS_BMAD='bmad-review'
-ts_span() { awk -v s="$2" -v e="$3" 'index($0, s) == 1 { f = 1; next } index($0, e) == 1 { f = 0 } f' "$1"; }
-ts_prefixes() { ts_span "$1" "$2" "$3" | grep -oE -- "$TS_RE" | sort -u; }
-ts_count() { local n; n="$(ts_span "$1" "$2" "$3" | grep -cF -- "$4")" || n=0; printf '%s\n' "$n"; }
-TSW="$ROOT/.ts-worlds"
-mkdir -p "$TSW/probe" || broken "cannot create $TSW"
-
-# SELF-PROBE, BEFORE THE CORPUS, BOTH DIRECTIONS. The extractor reports the in-section token and
-# stays quiet on the same grammar one section either side; the span count sees a §5 offender and
-# stays quiet on one in §6.
-printf '%s\n' '### 23. a' 'x `_bmad-output/planning-artifacts/s<N>/test-strategy-before-p` x' '### 24. b' \
-  'y `_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p` y' '### 25. c' \
-  'z `_bmad-output/planning-artifacts/s<N>/test-strategy-after-p` z' > "$TSW/probe/hit.md"
-printf '%s\n' '### 23. a' 'x `_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p` x' '### 24. b' 'y' \
-  '### 25. c' 'z `_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p` z' > "$TSW/probe/miss.md"
-printf '%s\n' '### 5. a' '2. `/bmad-review-adversarial-general` x' '### 6. b' > "$TSW/probe/s5hit.md"
-printf '%s\n' '### 5. a' '2. converge' '### 6. b' '`/bmad-review-adversarial-general`' > "$TSW/probe/s5miss.md"
-if [ "$(ts_prefixes "$TSW/probe/hit.md" '### 24.' '### 25.')" != "$TS_TOKEN" ] \
-   || [ -n "$(ts_prefixes "$TSW/probe/miss.md" '### 24.' '### 25.')" ] \
-   || [ "$(ts_count "$TSW/probe/s5hit.md" '### 5.' '### 6.' "$TS_BMAD")" != 1 ] \
-   || [ "$(ts_count "$TSW/probe/s5miss.md" '### 5.' '### 6.' "$TS_BMAD")" != 0 ]; then
-  broken "BL-723: the section extractor's self-probe did not discriminate (in-section hit, out-of-section near-miss)"
-fi
-echo "  [TS0] section extractor self-probe: reports the in-section token, silent one section either side"
-
-ts_sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
-ts_pass() { # <pass file> <artifact sha> <verdict line | ""> -- one unsharded pass, the shipped block shape
-  { printf '# test-strategy -- adversarial pass 1\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\n'
-    printf 'mode: subagent\nlead_role: architect\ninvoked_at: 2026-07-12T02:00:00Z\ntool_use_id: toolu_fixture_ts1\n'
-    printf 'artifact: test-strategy.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_critical_prior_scope: 0\n' "$2"
-    printf 'findings_major: 3\nfindings_major_underived: 0\nfindings_minor: 0\n'
-    if [ -n "$3" ]; then printf '%s\n' "$3"; fi
-    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$1"
-}
-# ts_eval <label> <gate doc> <step doc> -> TS_BIND TS_ABS TS_NAMES (ok|FAIL), each with a _WHY, and
-# TS_MET_OUT (the MET run's output). Every cell is PRESENCE-shaped toward `ok`: a cell reads ok only
-# when its program ran and said the specific thing, so a harness that ran nothing cannot score `ok ok ok`.
-ts_eval() {
-  local w="$TSW/$(printf '%s' "$1" | tr -c 'A-Za-z0-9_-' '_')" g="$2" s="$3" n gp sp ng nsp sprint f sha out rc tok
-  TS_BIND=ok; TS_ABS=ok; TS_NAMES=ok; TS_BIND_WHY=""; TS_ABS_WHY=""; TS_NAMES_WHY=""; TS_MET_OUT=""
-  n="$(ts_span "$s" '### 5.' '### 6.' | grep -c .)" || n=0
-  if [ "$n" -eq 0 ]; then
-    TS_ABS=FAIL; TS_ABS_WHY="the §5 span (### 5. to ### 6.) of $(basename "$s") is empty -- an absence over nothing"
-  else
-    n="$(ts_count "$s" '### 5.' '### 6.' "$TS_BMAD")"
-    [ "$n" -eq 0 ] || { TS_ABS=FAIL; TS_ABS_WHY="§5 names $TS_BMAD on $n line(s); the test strategy converges through the native cycle"; }
-  fi
-  for tok in 'test-strategy-adversarial-p' 'Adversarial review dispatch' 'Adversarial repair dispatch' \
-             'does not stamp `verdict: EXIT_CONDITION_MET`'; do
-    n="$(ts_count "$s" '### 5.' '### 6.' "$tok")"
-    [ "$n" -gt 0 ] || { TS_NAMES=FAIL; TS_NAMES_WHY="$TS_NAMES_WHY §5 does not name \"$tok\";"; }
-  done
-  gp="$(ts_prefixes "$g" '### 24.' '### 25.')"; sp="$(ts_prefixes "$s" '### 5.' '### 6.')"
-  ng="$(printf '%s' "$gp" | grep -c .)" || ng=0
-  nsp="$(printf '%s' "$sp" | grep -c .)" || nsp=0
-  if [ "$ng" -eq 0 ]; then
-    TS_BIND=FAIL; TS_BIND_WHY="Check 24's section (### 24. to ### 25.) names no \`$TS_TOKEN\` -- the gate runs no test-strategy series"; return 0
-  elif [ "$ng" -ne 1 ]; then
-    TS_BIND=FAIL; TS_BIND_WHY="Check 24's section names $ng distinct test-strategy prefixes: $(echo $gp)"; return 0
-  elif [ "$nsp" -ne 1 ]; then
-    TS_BIND=FAIL; TS_BIND_WHY="§5 names $nsp distinct test-strategy series prefixes (want 1): $(echo $sp)"; return 0
-  fi
-  # s9 carries the terminal MET pass; s8 the same pass with no verdict: key (rung A). Each artifact_sha
-  # is the sha of the test-strategy.md beside it, so nothing but the verdict separates them.
-  for sprint in s9 s8; do
-    f="$w/${sp/s<N>/$sprint}"
-    mkdir -p "${f%/*}" || { TS_BIND=FAIL; TS_BIND_WHY="could not seed ${f%/*}"; return 0; }
-    printf '# Sprint %s test strategy\n\nEvery acceptance criterion maps to a case.\n' "${sprint#s}" > "${f%/*}/test-strategy.md"
-    sha="$(ts_sha "${f%/*}/test-strategy.md")"
-    [ "${#sha}" -eq 64 ] || { TS_BIND=FAIL; TS_BIND_WHY="no sha256 of the seeded test-strategy.md"; return 0; }
-    if [ "$sprint" = s9 ]; then ts_pass "${f}1.md" "$sha" 'verdict: EXIT_CONDITION_MET'; else ts_pass "${f}1.md" "$sha" ''; fi
-  done
-  TS_MET_OUT="$(bash "$VALIDATOR" --series "$w/${gp/s<N>/s9}" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ]; then
-    TS_BIND=FAIL; TS_BIND_WHY="Check 24's prefix over a terminal MET pass (0C, 3 derived MAJOR) exits $rc, want 0: $(printf '%s' "$TS_MET_OUT" | head -3 | tr '\n' ' ')"; return 0
-  fi
-  out="$(bash "$VALIDATOR" --series "$w/${gp/s<N>/s8}" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"; rc=$?
-  if [ "$rc" -ne 1 ] || ! grep -qF -- "FAIL (A -- VOCABULARY)" <<<"$out" || ! grep -qF -- "declares no 'verdict:'" <<<"$out"; then
-    TS_BIND=FAIL; TS_BIND_WHY="Check 24's prefix over a verdict-less pass exits $rc without rung A (want 1, FAIL (A -- VOCABULARY))"; return 0
-  fi
-  return 0
-}
-
-ts_eval shipped "$TS_GATE" "$TS_STEP"
-ASSERTIONS=$((ASSERTIONS + 1))
-if [ "$TS_BIND" = ok ]; then
-  printf '  ok    %-28s %s\n' "ts-bind" "Check 24's own prefix runs the §5 series: MET exits 0, a verdict-less pass fails rung A"
-else
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s %s\n' "ts-bind" "$TS_BIND_WHY"
-fi
-ASSERTIONS=$((ASSERTIONS + 1))
-ts_ctl="$(grep -cF -- "$TS_BMAD" "$TS_CTL")" || ts_ctl=0
-if [ "$ts_ctl" -eq 0 ]; then
-  broken "BL-723 CONTROL: bug-investigation.md names $TS_BMAD 0 times -- the absence arm below cannot tell a clean §5 from a token no file carries"
-elif [ "$TS_ABS" = ok ]; then
-  printf '  ok    %-28s %s\n' "ts-absent" "§5 names no $TS_BMAD (control: bug-investigation.md names it $ts_ctl times)"
-else
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s %s\n' "ts-absent" "$TS_ABS_WHY"
-fi
-ASSERTIONS=$((ASSERTIONS + 1))
-if [ "$TS_NAMES" = ok ]; then
-  printf '  ok    %-28s %s\n' "ts-names" "§5 names test-strategy-adversarial-p, both Adversarial dispatches and step 3's MET precondition"
-else
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s %s\n' "ts-names" "${TS_NAMES_WHY# }"
-fi
-# CHARACTERIZATION, not a kill: arm L keys on stories-adversarial-p and has nothing to say here.
-if [ "$TS_BIND" = ok ]; then
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if grep -qi -- 'elicitation' <<<"$TS_MET_OUT"; then
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s %s\n' "ts-arm-l-silent" "arm L spoke about elicitation on the test-strategy series"
-  else
-    printf '  ok    %-28s %s\n' "ts-arm-l-silent" "arm L says nothing about elicitation on the test-strategy series"
-  fi
-fi
-
-# --- MUTATION: one per cell the subject fix carries, each built as a COPY, cmp -s guarded ----------
-#                               bind  absent  names
-#   shipped (control)           ok    ok      ok
-#   bmad restored in §5 step 2  ok    FAIL    ok   (old name, and again in the current lenses= form)
-#   Check 24 drops the prefix   FAIL  ok      ok
-#   step 3 precondition deleted ok    ok      FAIL
-ts_score() { # <label> <gate doc> <step doc> <expected row>
-  local got
-  ts_eval "$1" "$2" "$3"; got="$TS_BIND $TS_ABS $TS_NAMES"
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ "$got" = "$4" ]; then
-    printf '  ok    %-28s [%s]\n' "$1" "$got"
-  else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$got" "$4"
-  fi
-}
-ts_mut() { # <label> <python re> <replacement> <source doc> <copy> -> 0 when the mutation applied and is complete
-  MUT_RE="$2" MUT_NEW="$3" python3 -c 'import os,re,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(re.sub(os.environ["MUT_RE"],os.environ["MUT_NEW"],s,count=1 if os.environ["MUT_NEW"] else 0))' "$4" "$5"
-  if [ ! -s "$5" ] || cmp -s "$4" "$5"; then
-    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s DID NOT APPLY -- the mutation matched nothing; this assertion proves nothing\n' "MUTATION $1"
-    return 1
-  fi
-  return 0
-}
-TSM="$TSW/mut"; mkdir -p "$TSM" || broken "cannot create $TSM"
-ts_score "CONTROL ts unmutated" "$TS_GATE" "$TS_STEP" "ok ok ok"
-# M1: the one-shot comes back as §5 step 2. Anchored on step 2's own opening, which must be unique.
-ts_a="$(grep -c '^2\. \*\*Converge the test strategy\.\*\*' "$TS_STEP")" || ts_a=0
-ts_actl="$(grep -c '^2\. \*\*Converge the test strategy no-such-line' "$TS_STEP")" || ts_actl=0
-ASSERTIONS=$((ASSERTIONS + 1))
-if [ "$ts_a" -ne 1 ] || [ "$ts_actl" -ne 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-28s step 2 anchor matches %s line(s) (want 1; impossible-anchor control %s, want 0)\n' "MUTATION ts-anchor" "$ts_a" "$ts_actl"
-else
-  printf '  ok    %-28s step 2 anchor is unique (impossible-anchor control: 0)\n' "MUTATION ts-anchor"
-fi
-if ts_mut ts-bmad-restored '(?m)^2\. \*\*Converge the test strategy\.\*\*' \
-     '2. `/bmad-review-adversarial-general` — review test strategy. **Converge the test strategy.**' \
-     "$TS_STEP" "$TSM/stories-test-strategy.m1.md"; then
-  ts_score "MUTATION ts-bmad-restored" "$TS_GATE" "$TSM/stories-test-strategy.m1.md" "ok FAIL ok"
-fi
-# M1b: the same step restored in the CURRENT call-site spelling, the directive form the rulebook now
-# writes everywhere else. Without this the absence arm is proven only against the old name.
-if ts_mut ts-bmad-restored-new '(?m)^2\. \*\*Converge the test strategy\.\*\*' \
-     '2. `/bmad-review lenses=adversarial` — review test strategy. **Converge the test strategy.**' \
-     "$TS_STEP" "$TSM/stories-test-strategy.m1b.md"; then
-  ts_score "MUTATION ts-bmad-restored-new" "$TS_GATE" "$TSM/stories-test-strategy.m1b.md" "ok FAIL ok"
-fi
-# M2: Check 24 stops naming the series. Keyed on the extractor's own grammar over the whole file, and
-# the copy must carry ZERO matches against a non-zero original.
-if ts_mut ts-gate-prefix-dropped "$TS_RE" '' "$TS_GATE" "$TSM/gate-validation.m2.md"; then
-  ts_m2="$(grep -cE -- "$TS_RE" "$TSM/gate-validation.m2.md")" || ts_m2=0
-  ts_m2o="$(grep -cE -- "$TS_RE" "$TS_GATE")" || ts_m2o=0
-  if [ "$ts_m2" -ne 0 ] || [ "$ts_m2o" -eq 0 ]; then
-    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s the copy keeps %s match(es) (original %s) -- an incomplete mutation\n' "MUTATION ts-gate-prefix-dropped" "$ts_m2" "$ts_m2o"
-  else
-    ts_score "MUTATION ts-gate-prefix-dropped" "$TSM/gate-validation.m2.md" "$TS_STEP" "FAIL ok ok"
-  fi
-fi
-# M3: step 3's precondition paragraph is deleted, from its own opening line up to the bind paragraph
-# that follows it. The em dash is matched by `.` so the pattern stays ASCII. The copy must carry
-# ZERO precondition stamps against exactly one in the original, or the mutation is incomplete.
-TS_PRE='does not stamp `verdict: EXIT_CONDITION_MET`'
-if ts_mut ts-precondition-deleted \
-     '(?ms)^3\. \*\*Precondition . the step-2 series has exited\.\*\*.*?(?=^   \*\*Bind every strategy case)' '' \
-     "$TS_STEP" "$TSM/stories-test-strategy.m3.md"; then
-  ts_m3="$(grep -cF -- "$TS_PRE" "$TSM/stories-test-strategy.m3.md")" || ts_m3=0
-  ts_m3o="$(grep -cF -- "$TS_PRE" "$TS_STEP")" || ts_m3o=0
-  if [ "$ts_m3" -ne 0 ] || [ "$ts_m3o" -ne 1 ]; then
-    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s the copy keeps %s precondition stamp(s) (original %s, want 1) -- an incomplete mutation\n' "MUTATION ts-precondition-deleted" "$ts_m3" "$ts_m3o"
-  else
-    ts_score "MUTATION ts-precondition-deleted" "$TS_GATE" "$TSM/stories-test-strategy.m3.md" "ok ok FAIL"
-  fi
 fi
 fi
 

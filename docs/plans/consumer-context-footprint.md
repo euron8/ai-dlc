@@ -126,7 +126,7 @@ Both joins this plan warned about were measured absent BEFORE the move rather th
 `gate-validation.md`) and `layer-contract.yaml` names it zero times (control: 6 `verify:`
 lines), so the stranded-call-site arm at `scripts/validate-enforcement-map.sh:3374` had no
 subject. The live joins are content greps that sit in section 5 and did not move —
-`core/fixtures/story-fields-derive/run.sh:536` requires the `derive-stories` write form in
+`core/fixtures/process-rule-pins/run.sh:2631` requires the `derive-stories` write form in
 `implementation.md`, and `core/scripts/validate-layer-entries.sh:462` harvests its bold
 `**QA — validate every AC …**` line. The measured detail is the CHANGELOG entry beside the
 release, not this file.

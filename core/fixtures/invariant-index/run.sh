@@ -2,10 +2,9 @@
 # Exercise scripts/render-invariant-index.sh -- the renderer that derives docs/invariant-index.md
 # from the arm headers in scripts/validate-enforcement-map.sh and byte-compares it at pre-push.
 #
-# Two controls, a near-miss and seven mutants, each a throwaway repo under a temp dir.
+# One control, a near-miss and seven mutants, each a throwaway repo under a temp dir.
 # Exit 0 iff every control is green AND every mutant is killed by its own arm.
 #
-#   controlA  the REAL repo: `--check` against the committed index   -> must PASS
 #   controlB  a synthetic seed: render, then `--check`                -> must PASS
 #   m1  drift      a byte appended to the rendered index             -> must FAIL
 #   m2  missing    the index deleted                                 -> must FAIL
@@ -21,11 +20,9 @@
 # silently stopped parsing would produce exactly that same green line. Every arm here exists
 # to prove one specific way the thing can still fail.
 #
-# WHY TWO CONTROLS AND NOT ONE. controlB proves the synthetic seed is well-formed, so a
-# mutant's FAIL is attributable to the mutation rather than to a seed that never rendered.
-# controlA proves the shipping path -- the real 6,000-line validator, the real committed
-# index -- because a fixture that only ever sees a four-arm toy source would keep passing
-# after the grammar stopped matching anything in the file it actually guards.
+# WHY ONE CONTROL. controlB proves the synthetic seed is well-formed, so a mutant's FAIL is attributable to
+# the mutation rather than to a seed that never rendered. The real tree's `--check` is not repeated here: the
+# pre-push hook runs `scripts/render-invariant-index.sh --check` itself before the suite starts.
 #
 # WHY `cmp -s` GUARDS EVERY sed. A sed whose pattern stopped matching produces a
 # byte-identical copy; the renderer then correctly passes and the arm reports SURVIVED for a
@@ -55,7 +52,6 @@
 # A MATRIX row is a measurement and not a second kill emission: its kill goes through mutant_killed behind the
 # same base-pass flag as the original. The mutant name reaches mutant_killed as a variable:
 # MUTANT-MATRIX-DYNAMIC mx_cell why=reads the mutant names m1 to m7 as a variable and every name keeps its own row
-# MUTANT-MATRIX-CONTROL CONTROL-A why=the real repo's committed index must pass --check before any mutant is read
 # MUTANT-MATRIX-CONTROL CONTROL-B why=the synthetic seed must render and round-trip so a mutant's failure is attributable to the mutation
 set -u
 MATRIX=0
@@ -119,16 +115,6 @@ EOF
 
 render_in() { ( cd "$1" && bash scripts/render-invariant-index.sh 2>&1 ); }
 check_in()  { ( cd "$1" && bash scripts/render-invariant-index.sh --check 2>&1 ); }
-
-# --- controlA: the real repo ------------------------------------------------
-if outA="$( cd "$REPO" && bash scripts/render-invariant-index.sh --check 2>&1 )" \
-   && grep -q "^OK: docs/invariant-index.md in sync" <<<"$outA"; then
-  note "ok    CONTROL-A -- the committed index matches the real validator's arm headers"
-else
-  note "FIXTURE BROKEN: --check does not pass against the real repo. Every verdict below is meaningless."
-  printf '%s\n' "$outA" | sed 's/^/      /' | head -8
-  exit 1
-fi
 
 # --- controlB: a synthetic seed renders and round-trips ----------------------
 seed "$TMP/controlB"
@@ -306,6 +292,6 @@ elif [ "$MX_OFFSUBSET" -eq 0 ]; then ok "MX0 per-push run: matrix-only cells run
 else bad "MX0 per-push run: $MX_OFFSUBSET matrix-only cell(s) ran"; fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  invariant-index -- 2 controls + 1 near-miss green, 7/7 mutants scored on their own arm"
+  note "PASS  invariant-index -- 1 control + 1 near-miss green, 7/7 mutants scored on their own arm"
 fi
 exit "$rc"
