@@ -3,7 +3,25 @@
 # story-evidence-scaffold's build_world (world.sh sources he-inproc.sh beside it), and the lead checkout
 # carries artifact-path-grammar.md, which partition-review-diff.sh resolves under .claude/skills/ai-dlc/.
 !core/scripts/gate-transition.sh
-core/scripts/
+core/scripts/artifact-path-config.sh
+core/scripts/content-seal.sh
+core/scripts/core-paths.sh
+core/scripts/gate-checkpoint.sh
+core/scripts/merge-review-shards.sh
+core/scripts/partition-document.sh
+core/scripts/partition-review-diff.sh
+core/scripts/record-only-diff.sh
+core/scripts/sprint-status.sh
+core/scripts/validate-carried-findings.sh
+core/scripts/validate-escalation-resolution.sh
+core/scripts/validate-h2-attestation.sh
+core/scripts/validate-handoff-evidence.sh
+core/scripts/validate-mutation-red.sh
+core/scripts/validate-provenance-block.sh
+core/scripts/validate-spawn-ledger.sh
+core/scripts/validate-steering-budget.sh
+core/scripts/validate-stub-audit.sh
+core/scripts/verdict.sh
 # story-evidence-scaffold and lib rows derived from the reads: run.sh:107 world.sh (which sources he-inproc.sh, world.sh:15) and run.sh:2,122,123 preamble.sh, mutant.sh, matrix.sh.
 core/fixtures/story-evidence-scaffold/world.sh
 core/fixtures/story-evidence-scaffold/he-inproc.sh

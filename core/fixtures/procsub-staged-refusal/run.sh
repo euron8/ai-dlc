@@ -2013,7 +2013,7 @@ fi
 # script finds lib.sh, setup-sites.md, preclassify.sh and artifact-path-config.sh beside it.
 # ================================================================================================
 MT="$W/mt"; mkdir -p "$MT"
-cp -R "$SC" "$MT/scripts" && cp -R "$RC_" "$MT/reconcile" && cp -R "$TREE/core/schemas" "$MT/schemas" \
+cp -R "$SC" "$MT/scripts" && cp -R "$RC_" "$MT/reconcile" && mkdir -p "$MT/schemas" && cp "$TREE/core/schemas/provenance-block.json" "$MT/schemas/" \
   || { echo "FIXTURE BROKEN: could not copy the subject directories" >&2; exit 2; }
 # THE NO-LIB DIRECTORY IS BUILT ONCE. The arm table's QF fallback cells and the QP-FB mutants both need a copy of reconcile/ with
 # lib.sh removed; they only READ it (a mutant adds its own _m_ sibling), so one copy serves both instead of two.

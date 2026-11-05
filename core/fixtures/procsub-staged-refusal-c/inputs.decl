@@ -8,6 +8,6 @@ core/hooks/
 core/scripts/
 core/session-driver/
 core/skills/
-core/schemas/
+core/schemas/provenance-block.json
 core/fixtures/procsub-staged-refusal-b/run.sh
 core/fixtures/procsub-staged-refusal/

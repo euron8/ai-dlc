@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1014.0] - 2026-11-05
+
+Batch b250, cluster triggers. BL-920 lands PARTIAL and stays LIVE. Files BL-923. No PC- id is closed. NET +1 (filed 1, BL-923, minus closed 0).
+
+### BL-920 (PARTIAL) — the fifth pass: eleven fixtures drop directory rows wider than what they read, and I55 arm 3 recognises any walk-up root
+
+Fifth pass. Over the 60 first-parent commits ending at 0443bfbfe, total triggered runs fall from 2889 at the 4fd08794f declarations to 2830, counted with the hook's own key function, and from 2948 at the 0443bfbfe declarations over the union of fixtures in either tree.
+
+- adversarial-citation and escalation-citation narrow `core/scripts/` to `validate-steering-budget.sh`, the one sibling their validators resolve.
+- gate-transition narrows `core/scripts/` to the 20 scripts its closure runs. Nothing lists the directory: the listing key came from `mk_tree`'s `cp -R`, which now copies only declared files.
+- fixture-git-env-seam, preclassify-mode-bucket and preclassify-rename-row narrow `core/skills/ai-dlc-update/reconcile/` to the files their closures source or read. In fixture-git-env-seam, dropping `unregistered-drift.sh` fails arm b2; its other six rows rest on the static read.
+- h2-attest-scripts-dir copies its three validators by name instead of every `*.sh` and `*.js`, and replaces the fewer-than-10 floor with a per-name presence check that exits 2 on any absence; its `core/scripts/` and `core/schemas/` rows narrow to those files and `provenance-block.json`.
+- procsub-staged-refusal (with -b and -c) copies only `provenance-block.json` where it copied the whole `core/schemas/`, and narrows the row to it.
+- I55 arm 3 in `validate-enforcement-map.sh` treats a walk-up for any marker file as setting the distribution root, so schema-install-fallback's `ROOT_DIR` walk-up is covered again. Self-probes q and r fire both ways, and the new mutant A30-m5 in enforcement-map-sites-c, which narrows the rule back to `VERSION`, is killed.
+
+Each edited fixture gives identical tallies under its base and new declarations, a dropped read file turns its run red, and every shipping one keys clean in a fresh consumer install. Kept, with the reason: every directory row that is a validator's corpus or a directory the fixture lists, and every prose row all of a fixture's arms read. Still owed: `core/fixtures/lib/` across 131 fixtures, and the arms that read a prose row only some of their fixture's arms read.
+
+Two adversary notes. adversarial-citation never reaches the convergence validator's K2, K3 and L arms, because no seed creates the `coe.md` its passes name; that coverage gap is filed as BL-923. fixture-git-env-seam's seven reconcile rows are over-declared at worst: the adversary could not trace every one from the fixture's own run, and a real read of an undeclared file would fail the hermetic run.
+
+### BL-923 — filed: adversarial-citation never reaches the convergence validator's K2, K3 and L arms
+
+Filed, not fixed: every adversarial-citation seed names `artifact: coe.md` and none creates it, so the K2 sections arm, the K3 subject-manifest exception and arm L are never exercised.
+
 ## [0.1013.0] - 2026-11-05
 
 Batch b250, cluster triggers. BL-920 lands PARTIAL and stays LIVE. No PC- id is closed. NET 0 (filed 0 minus closed 0).

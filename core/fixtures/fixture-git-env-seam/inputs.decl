@@ -5,6 +5,12 @@
 core/fixtures/
 core/scripts/validate-audit-anchors.sh
 core/schemas/audit-anchors.json
-core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/reconcile/template-sites.md
+core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 # copy-only: scripts/validate-fixture-git-env.sh:41 the validator walks up for the marker; nothing reads its content
 VERSION
