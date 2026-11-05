@@ -58,13 +58,12 @@ SIZE="$(find_one "$DIR/../../scripts/validate-backlog-size.sh" "$DIR/../../../sc
 REVERIFY="$(find_one "$DIR/../../scripts/backlog-reverify.sh" "$DIR/../../../scripts/backlog-reverify.sh")" || REVERIFY=""
 LIBSRC="$(find_one "$DIR/../../skills/ai-dlc-update/reconcile/lib.sh" "$DIR/../../../core/skills/ai-dlc-update/reconcile/lib.sh")" || LIBSRC=""
 REVSRC="$(find_one "$DIR/../../skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$DIR/../../../core/skills/ai-dlc-update/reconcile/ledger-reverify.sh")" || REVSRC=""
-EXTRACT="$(find_one "$DIR/../../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py" "$DIR/../../docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py")" || EXTRACT=""
 # The could-not-measure rule both the classifier and the receipts validator source from beside them.
 RLIB="$(find_one "$DIR/../../scripts/backlog-receipt-lib.sh" "$DIR/../../../scripts/backlog-receipt-lib.sh")" || RLIB=""
 # The frozen ledger (BL-872); see the header. REAL_LEDGER keeps its name: it is a real ledger, frozen.
 REAL_LEDGER=""
 [ -f "$DIR/ledger.snapshot" ] && REAL_LEDGER="$DIR/ledger.snapshot"
-for _p in RECEIPTS SIZE REVERIFY LIBSRC REVSRC EXTRACT RLIB REAL_LEDGER; do
+for _p in RECEIPTS SIZE REVERIFY LIBSRC REVSRC RLIB REAL_LEDGER; do
   eval "_v=\${$_p}"
   [ -n "$_v" ] || { echo "FIXTURE BROKEN: backlog-real-ledger could not resolve $_p" >&2; exit 2; }
 done
@@ -202,7 +201,11 @@ seed_r() { # seed_r <dir>
   cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
   # The receipts validator reads its F-STEP vocabulary from the extractor and the step basenames.
   mkdir -p "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts" "$d/core/skills/ai-dlc/steps"
-  cp "$EXTRACT" "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py"
+  # A seeded extractor: the validator reads only these two lines of it, and the step set is the one step file
+  # seeded below, so the live extractor's content cannot move a verdict.
+  printf '%s\n' 'STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")' \
+    'SUBPROC = {"_gate-procedures", "_dispatch-protocol"}' \
+    > "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py"
   : > "$d/core/skills/ai-dlc/steps/implementation.md"
   cp "$RLIB" "$d/scripts/backlog-receipt-lib.sh"
   printf 'alpha\nbeta\n' > "$d/probe/subject.txt"

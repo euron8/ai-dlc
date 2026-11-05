@@ -79,6 +79,24 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$RT")" && pwd)/${RT##*/}"
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
+# THE ENGINES RUN FROM A SEEDED ROOT, NEVER THE LIVE ONE. Both walk up from their own directory for
+# `VERSION`, so run from the live tree every `has VERSION "."` receipt read the real file and the
+# fixture re-ran on each release. VERSION here is only a file that is always present; the copies are
+# byte-identical to the shipped engines, so every grep, cmp and sed below that reads $RV/$RT reads the
+# same text. The HERMETIC-CONSUMED lines above name the real paths, as the sandbox tracer needs.
+LR="$WORK/live-root"
+mkdir -p "$LR/scripts" "$LR/core/skills/ai-dlc-update/reconcile"
+printf '0.0.0\n' > "$LR/VERSION"
+cp "$(dirname "$RV")/../core/skills/ai-dlc-update/reconcile/lib.sh" "$LR/core/skills/ai-dlc-update/reconcile/lib.sh" 2>/dev/null \
+  || cp "$(dirname "$RV")/../../core/skills/ai-dlc-update/reconcile/lib.sh" "$LR/core/skills/ai-dlc-update/reconcile/lib.sh" \
+  || { echo "FIXTURE ERROR: cannot locate reconcile/lib.sh" >&2; exit 2; }
+cp "$RLIB" "$LR/scripts/backlog-receipt-lib.sh"
+cp "$RV" "$LR/scripts/backlog-reverify.sh"
+cp "$RT" "$LR/scripts/backlog-rotate.sh"
+RV="$LR/scripts/backlog-reverify.sh"
+RT="$LR/scripts/backlog-rotate.sh"
+RLIB="$LR/scripts/backlog-receipt-lib.sh"
+
 FAIL=0
 echo "backlog-ledger fixture"
 echo

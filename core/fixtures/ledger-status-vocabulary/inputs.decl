@@ -9,5 +9,4 @@ scripts/
 templates/
 patterns/
 .claude/rules/
-+CLAUDE.md
 .ai-dlc-fixture-readsets.tsv

@@ -1,0 +1,3 @@
+# presuite-present-key starts no counted subject as a separate program: .githooks/pre-push is read as text, its
+# pk_py heredoc is run under python3 (not a bash subject), and its pk_* shell span is SOURCED into a subshell, never
+# executed as the hook. The `bash -c` each traced pk_step starts runs the stub step, not the subject. No cell to declare.

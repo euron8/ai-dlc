@@ -1,0 +1,40 @@
+# Tools run.sh invokes; python3 runs the pk.py extracted from the hook. The W.* cells source the hook's pk_* span and
+# run pk_init, pk_step and pk_finish in a git repo, so every tool those functions and the READSET spans pk_init
+# sources call is declared too.
+awk
+bash
+basename
+cat
+chmod
+cmp
+comm
+cp
+cut
+dirname
+env
+find
+git
+grep
+head
+ln
+ls
+lsof
+mkdir
+mkfifo
+mktemp
+mv
+ps
+python3
+readlink
+rm
+sed
+shasum
+sleep
+sort
+tail
+tee
+touch
+tr
+uniq
+wc
+xargs

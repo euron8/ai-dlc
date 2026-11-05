@@ -92,6 +92,10 @@ mkdir -p "$BASE"
 # working-tree content, for two forks in place of thousands. The COPIED floor below is what
 # catches a pipeline that produced nothing.
 git -C "$REPO" ls-files -z | (cd "$REPO" && tar -cf - --null -T - 2>/dev/null) | tar -xf - -C "$BASE"
+# CLAUDE.md is a scanned-corpus member of the validator (the I108/I121-I124 walks read it for copies of a
+# taught passage), never a subject of these assertions. A fixed sample stands in for the live file, so the
+# repository's CLAUDE.md is neither declared nor read here and its edits cannot move any verdict.
+printf '# Sample CLAUDE.md\n\nA seeded stand-in for the repository file; it carries no rule text.\n' > "$BASE/CLAUDE.md"
 COPIED="$(find "$BASE" -type f | wc -l | tr -d ' ')"
 if [ "$COPIED" -lt 100 ]; then
   echo "ledger-status-vocabulary: FIXTURE ERROR — copied only $COPIED files; an incomplete tree fails every invariant and would score every mutant as a kill." >&2
