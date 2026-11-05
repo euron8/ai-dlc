@@ -19,6 +19,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1017.0] - 2026-11-05
+
+Batch b250, BL-918 audit, release 2. BL-918 closes: `adversarial-shard-merge` is the last fixture in its set, and this release carries the entry's `**LANDED` line. Closes no PC- id. NET -1 (filed 0 minus closed 1, BL-918).
+
+### BL-918 — adversarial-shard-merge keeps only the arms its kill matrix supports, and BL-918 closes
+
+- Arms: 38 -> 38, counted the same way at both ends as the base `ARMS_ALL` words plus the K arms that join when `KOK=1`. At `c3179fa45` that is 22 + 16; at this release it is 28 + 10. Nine arms are cut (DV1, DV6, DV7 and the six layout arms K2ps_inst, K2ps_core, K2sch_inst, K2sch_core, KEps_core, KEsch_inst) and nine arms that were plain-run assertions join `ARMS_ALL` (M0, R6, D2, D3, D4, D5, D6, TR1, FG2); eight decide a claim mutant (`decides=` at this release), and R6 decides none (no `MUTANT-MATRIX` line has `decides=R6` or `twins=R6`).
+- Mutants: 27 -> 35, counted as `MUTANT-MATRIX` header lines (MX0, the control, is a separate `MUTANT-MATRIX-CONTROL` line and is not counted). Two are removed and ten claim mutants are added, each mapping a header claim to the arm that kills it (`decides=`), with its twin holding, in a plain hermetic run:
+  - CM-verdict-from-shards decides=A1 (the merged verdict is recomputed from the summed residue, not taken from the shards).
+  - CM-ordinal-story-only decides=M0 (the ordinal map covers the non-`story-` seeds).
+  - CM-axis-guard-gone decides=D2 (the wrong-axis guard).
+  - CM-doc-path-unchecked decides=D4 and CM-doc-sha-unchecked decides=D3 (the `--document` path and sha checks).
+  - CM-merged-unparseable decides=A1 (the convergence validator accepts the merged file).
+  - CM-major-count-unchecked decides=FG2 and CM-other-root-not-refused decides=TR1 (the worded-heading count and the other-root refusal, the two claims the tip adversary found unmapped).
+  - CM-serial-not-refused decides=D5 and CM-files-bytes-moved decides=D6.
+  - KMb-core and KMc-inst are removed: after the cut each scored the same mutated file against the same deciding cell as KMb-inst or KMc-core (they went with the six K layout arms they probed; KEM keeps one row per layout).
+- Counted starts: 2175 -> 2227 (declared 2175 -> 2227), the `*` row of `invocations.decl` being the counted total of two agreeing armed runs at this release (re-measured by two agreeing armed runs, commit `e9cf8fc7d`); merge-adversarial-shards.sh 35 -> 29 and content-seal.sh 427 -> 418. The rise is the ten claim mutants' deciding and twin runs and DV10's added shard write, refused merge and gate run; the cut arms removed 10 starts of the original 2175 before the claim mutants were added.
+- Triggers per 60 first-parent commits (`trigger-count.sh adversarial-shard-merge origin/main --decl`, like for like at `c3179fa45`): 9 -> 8. `inputs.decl` names `preamble.sh`, `matrix.sh` and `mutant.sh` in place of the whole `core/fixtures/lib/` directory, and the one trigger removed is e311bf7e4, the directory-only one (this release's T1 change).
+- The cut was decided on the kill matrix of record, `matrix.raw` in the `asm-mx.CBGMSq` scratch directory: `run.sh --matrix` at `c3179fa45`, 38 arms, 27 mutants plus MX0, 1064 rows, every mutant killed, MX0 green on every arm. That file justifies each removal: DV1 (DV3, DV4, DV10 and DVRS also kill DV-full-map; decides= moves to DV4); DV6 (DV-gate-supersets-only is also killed by DVRS and DVRSS; decides= moves to DVRS); DV7 (DV-notarize-dispatched-only is also killed by DV10; decides= moves to DV10, twin DV2); the six K layout arms (KEps_inst and KEsch_core cover all six layout rows of KMb, KMc and KEM; K2 now builds only the vac world, the K mutants' twin).
+- DV1, DV6 and DV7 are folded into DV10 rather than dropped, because no surviving arm asserted them: the refusal of an underived shard 1, the notarization of all 8 stems at their disk shas, and the superset dispatch failing arm N. DV10 builds the same world, so the fold adds one shard write, one refused merge and one gate run, where kept arms would each seed a fresh set (DV6 a second world). The DV6 superset half moves into DV10; its subset half stays held by DVRS. The DV1 and DV6 sub-claims have no discriminating mutant and are kept unjudged; the DV7 sub-claim is judged by the existing DV-notarize-dispatched-only.
+- T1: `inputs.decl` as above. T2: the section-mode derived world is copied from the shipped-sequence world through `wc_get` and adds only the repair, which drops one rulebook repository, 10 hook-driven shard writes and one merge from every run.
+- Fork budget: TOTAL 2924 against FORK_BUDGET 2926 (`scripts/fork-profile.sh --section total` on this release), unchanged from main, so no raise (`scripts/fork-profile.sh --section total` on this release).
+- Kill matrices of record, one per fixture, each with the sha it was taken at. They are kept in the owner's batch-b250 scratchpad directory, not in the tree:
+  - backlog-receipt-binding: `run.sh --matrix` at `3987c6b0e` (0.1007.0 text; no file was kept).
+  - ledger-reverify: `lr-mx-v2.out`, taken at `aa1077203`.
+  - apply-restamp-worklist: `arw-matrix-r1.txt` at `c2656d88f` (the matrix that scored the nine claim mutants and decided the cut) and `arw-matrix-before.txt` at `8dd3676d3` (the shipped matrix, which scored nothing for units cf, u and t).
+  - review-shard-merge: `bl918.FNBHY4/merged.out`, the merge of five matrix slices over the 146 mutants of the pre-M77 fixture (the file records no sha).
+  - adversarial-shard-merge: `asm-mx.CBGMSq/matrix.raw` at `c3179fa45`.
+- BL-918 closes by this landing. Arms, mutants and counted starts before and after are recorded in the entry for every fixture of its set: backlog-receipt-binding (0.1007.0 Progress paragraph), ledger-reverify, apply-restamp-worklist a/b/c and review-shard-merge and -b (0.1015.0 Progress paragraph), and adversarial-shard-merge (0.1017.0 Progress paragraph). The review-shard-merge-b arm and mutant counts and the ledger-reverify 145 -> 150 of the 0.1015.0 text are not derivable from the files named here; see the entry.
+
 ## [0.1016.0] - 2026-11-05
 
 Batch b250, cluster triggers, the split release. BL-920 lands PARTIAL and stays LIVE. Files BL-924. No PC- id is closed. NET +1 (filed 1, BL-924, minus closed 0).
