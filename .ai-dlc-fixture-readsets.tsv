@@ -14,7 +14,7 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 2    entries: 54
+# fixtures mapped: 2    entries: 56
 hook-registration-join	core
 hook-registration-join	core/.claude
 hook-registration-join	core/.git
@@ -40,6 +40,7 @@ hook-registration-join	core/hooks/ai-dlc-foreground-budget.sh
 hook-registration-join	core/hooks/ai-dlc-gate-remediation-guard.sh
 hook-registration-join	core/hooks/ai-dlc-handoff-entry.sh
 hook-registration-join	core/hooks/ai-dlc-handoff-pending.sh
+hook-registration-join	core/hooks/ai-dlc-inflight-row.sh
 hook-registration-join	core/hooks/ai-dlc-pause.sh
 hook-registration-join	core/hooks/ai-dlc-postcompact.sh
 hook-registration-join	core/hooks/ai-dlc-precompact.sh
@@ -47,6 +48,7 @@ hook-registration-join	core/hooks/ai-dlc-protect.sh
 hook-registration-join	core/hooks/ai-dlc-recover-gate.sh
 hook-registration-join	core/hooks/ai-dlc-recover.sh
 hook-registration-join	core/hooks/ai-dlc-rules-floor.sh
+hook-registration-join	core/hooks/ai-dlc-snapshot-edit-deny.sh
 hook-registration-join	core/hooks/ai-dlc-subagent-probe.sh
 hook-registration-join	core/hooks/ai-dlc-usage-tokens.sh
 hook-registration-join	core/hooks/ai-dlc-window.sh
@@ -69,5 +71,5 @@ retro-compliance-workflow	core/fixtures/retro-compliance-workflow/run.sh
 retro-compliance-workflow	core/fixtures/retro-compliance-workflow/seed.sh
 retro-compliance-workflow	core/schemas/provenance-block.json
 retro-compliance-workflow	core/scripts/validate-provenance-block.sh
-# digest hook-registration-join 7afaf3e2db298e4da86545c7c722c2aa0019ebdc130845495ce4f804a51e1685
+# digest hook-registration-join 40c9fd3160f08545efa79e4b57e1c5e09742ac93062c9e0ca671a4e65c33e4f8
 # digest retro-compliance-workflow 96bb6a7c7b56928fd395cadf7436b84cb8706cf9af77f8057c2ed7e8484ee674

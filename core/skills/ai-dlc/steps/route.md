@@ -89,8 +89,9 @@ previous session.
      them, per this file's own In-Flight schema below; one that followed a
      crash or context blow-out still carries `in-flight` rows. DISCHARGE the
      `stopped` rows once you have read them: delete them at your first
-     snapshot write after this resume, having carried anything they tell you
-     into Recent Activity or Open Items. They are a handoff RECORD with a
+     snapshot write after this resume, one `scripts/ai-dlc/snapshot-update.sh
+     --row-delete <agent>` per row, having carried anything they tell you
+     into Recent Activity or Open Items with `--activity` or `--open-item`. They are a handoff RECORD with a
      reader, not permanent history, and nothing else ever removes them.)
    - Skip the rest of this routing sequence. Steps 1–6 are for fresh
      pipeline starts; on resume they would misclassify the input and
@@ -148,8 +149,11 @@ Run these integrity checks in order:
    them there rather than from a restatement here. If the verdict names
    a stamp later than the current UTC time, apply the stamp remedy its
    first FAIL line prints, also without asking and before any trim:
-   rewrite each `FUTURE` stamp to `date -u` in place, keep line order,
-   and add the one `CLOCK CORRECTION` line that line spells. Then re-run
+   rewrite each `FUTURE` stamp to `date -u` in place with
+   `snapshot-update.sh --line-replace <section> <match> <text>` (or
+   `--row-set <agent> dispatched-at <value>` for a teammate row), keep line
+   order, and add the one `CLOCK CORRECTION` line that line spells with
+   `--activity`. Then re-run
    the same verdict.
 
    **The trim performs the whole read this check guards, and that is
@@ -189,8 +193,13 @@ Run these integrity checks in order:
    > this snapshot aside and start fresh, `edit` to have me fill in
    > the missing sections from git history, or `abort` to stop."*
 
+   On `edit`, add each missing section with
+   `snapshot-update.sh --section-add <heading>`, then fill it with
+   `--line-add`, `--activity` or `--open-item`.
+
    **`In-Flight Teammates` is the seventh section and AUTO-HEALS — it
-   does NOT fail this check.** If absent, create it empty, say so in one
+   does NOT fail this check.** If absent, create it empty with
+   `snapshot-update.sh --section-add 'In-Flight Teammates'`, say so in one
    line, and continue. Its absence is unambiguous (a snapshot predating
    the section recorded no teammates, and empty is the correct default),
    so failing on it would strand every snapshot written by a prior
@@ -214,6 +223,9 @@ Run these integrity checks in order:
    > `git checkout {snapshot_branch}` and resume, `continue-here`
    > to resume on the current branch (I will update the snapshot's
    > branch field), or `abort`."*
+
+   On `continue-here`, record it with
+   `snapshot-update.sh --set branch <current_branch> 'Pipeline Position'`.
 
 6. **`last_gate_passed` recency.** Parse the timestamp from the loaded
    `last_gate_passed` field. If more than 7 days old relative to
@@ -325,7 +337,8 @@ script names per artifact — they are not interchangeable:
   (Rule 25).
 - `trim` → **move** the superseded content verbatim to
   `pipeline-snapshot-history.md` (write-only, Rule 25(a)), **then** delete it from
-  `pipeline-snapshot.md`. Never delete it outright. The live file keeps all seven
+  `pipeline-snapshot.md`, with `snapshot-update.sh --move-to-history <section> <match>`
+  (one call per line; it appends to the history first). Never delete it outright. The live file keeps all seven
   sections: a section is trimmed by moving its superseded entries out, never by
   dropping the section. Then run:
 
@@ -423,8 +436,9 @@ defect into a carry-over/feature story. The "Do NOT ask" allowance below does
 NOT cover it: co-occurring defect + carry-over is ambiguous by definition,
 because the two route to different pipelines (`bug` → repro-first triage;
 `carry-over` → full planning). Record the outcome in the snapshot's
-`clarification_asked` field (Step 6): `yes` if you asked, `n-a` if the
-operator pre-directed the priority.
+`clarification_asked` field (Step 6) with
+`snapshot-update.sh --set clarification_asked <value> 'Pipeline Position'`:
+`yes` if you asked, `n-a` if the operator pre-directed the priority.
 
 **The question MUST offer triage now, then fold the fix** among its options:
 READ AND FOLLOW `bug-investigation.md` sections 0–2c for the defect — so any
@@ -525,7 +539,8 @@ For carry-over and bug variants where story count is not yet known,
 estimate from the user's input. The intensity MAY be revised upward
 (never downward) at stories-test-strategy if the actual story scope
 differs from the estimate. Record the intensity in the snapshot's
-Sprint Context section.
+Sprint Context section with
+`snapshot-update.sh --set validation_intensity <value> 'Sprint Context'`.
 
 **Resolve `sprint_id` (MANDATORY — this is the pipeline's sprint
 identity).** A fresh pipeline start is the only place the sprint number
@@ -669,8 +684,9 @@ and which you must say out loud if you conclude it.
 the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
 
 - **If the file does NOT exist, or exists and is EMPTY (0 bytes):**
-  create it with initial state (if the file exists, Read it first, then
-  Write):
+  create it with `snapshot-update.sh --init <step-file> <sprint-id>`, then
+  record the rest of the initial state below with `--set <key> <value>
+  '<section>'`, `--set-block`, `--row-add` and `--line-add` (never Write):
   - Pipeline Position (detected variant, first step file, no
     last-completed step yet, no gates passed yet, current git
     branch from `git branch --show-current`; plus the **routing record**,
@@ -773,15 +789,16 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
      Writing over the snapshot destroys the only copy the pipeline reads.
   2. **On exit 0** the rotator has appended the stale snapshot to the
      archive and TRUNCATED the file to 0 bytes. Read the now-empty
-     `_bmad-output/pipeline-snapshot.md`, then Write the initial state
-     as above into it. Announce the archival in the output so the user
+     `_bmad-output/pipeline-snapshot.md`, then write the initial state
+     as above into it with `snapshot-update.sh --init <step-file> <sprint-id>`, setting the
+     multi-line Pipeline Position value with `--set-block`. Announce the archival in the output so the user
      knows the previous state was preserved.
 
   **The file is emptied, never removed:** every control hook keys "a
   pipeline is active" on the snapshot's existence, so a removed snapshot
   turns off stall detection, the pause flag, Rule 29's deny and
   compaction recovery until the new one is written, and a turn can end
-  between the rotator call and that Write. An empty snapshot is not a
+  between the rotator call and that `--init`. An empty snapshot is not a
   resume: Step 0 item 1 requires the file to exist AND be non-empty.
 
   **One destination, one writing program, no dated files.** A per-occasion

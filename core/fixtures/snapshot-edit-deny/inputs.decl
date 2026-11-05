@@ -1,0 +1,4 @@
+# snapshot-edit-deny drives the hook under test (`!`) on static payloads; nothing else is read.
+!core/hooks/ai-dlc-snapshot-edit-deny.sh
+# The same-run kill helper, sourced by run.sh.
+!core/fixtures/lib/mutant.sh

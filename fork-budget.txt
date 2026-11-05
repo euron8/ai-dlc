@@ -58,4 +58,12 @@
 # base 5bcb5aaf1 read 2899, EXIT 0; the release tip read 2910, EXIT 0. The rise of 11 is the new script's
 # per-file AI_DLC_ROOT block at arm I75 (431 -> 441, +10, because the script resolves its root) plus the
 # guard's gate-plan arm (+1). No validator code changed. The budget is the tip reading plus HEADROOM_MARGIN 2.
-FORK_BUDGET=2912
+#
+# Raised 2912 -> 2926 for BL-912. Measured with `scripts/fork-profile.sh --section total`, each run
+# from inside its own clean detached worktree: base origin/main 943cd72ae read 2910, the release tip
+# read 2924. The rise is 14, attributed by `--section by-arm`: I110 +2 (9 -> 11, the reader-scan edit
+# in `validate-enforcement-map.sh`), I13 +4 (56 -> 60) and I14 +8 (104 -> 112). I13 and I14 iterate
+# `core/hooks/`, which gained `ai-dlc-inflight-row.sh` and `ai-dlc-snapshot-edit-deny.sh`, so each new
+# hook costs +2 in I13 and +4 in I14. I83 and I84 did not move. The budget is the tip reading plus
+# HEADROOM_MARGIN 2.
+FORK_BUDGET=2926

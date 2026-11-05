@@ -547,17 +547,17 @@ snapshot's \`In-Flight Teammates\` section:
   \`STOPPED DISPATCH\` beat, read its transcript first.
 
 Re-dispatching a live or already-delivered teammate is a lead-conduct retro
-finding. If the snapshot has no \`In-Flight Teammates\` section, treat it as empty
-(it predates the section) -- and add the section at your next snapshot write.
+finding. A snapshot with no \`In-Flight Teammates\` section predates it: treat
+it as empty, and add it: \`snapshot-update.sh --section-add "In-Flight Teammates"\`.
 
 ## Context-reminder fire state MUST be reset
 
-Compaction reset the context-window token count, but the snapshot's fire-state
-fields still describe the pre-compaction window. Before the next gate, set
-\`context_reminders_sent\` to \`none\` and clear \`last_yellow_fire_tokens\`,
-\`last_red_fire_tokens\`, \`last_yellow_fire_turns\`, and \`last_red_fire_turns\`.
-Leaving them stale makes the lead believe red has already fired and causes the
-auto-handoff evaluation to mis-decide.
+Compaction reset the context-window token count; the snapshot's fire-state
+fields are stale. Before the next gate, run
+\`snapshot-update.sh --set <key> none "Context Reminders"\` for
+\`context_reminders_sent\`, \`last_yellow_fire_tokens\`, \`last_red_fire_tokens\`,
+\`last_yellow_fire_turns\` and \`last_red_fire_turns\`. If left stale, they make
+the lead believe red has already fired, and the auto-handoff evaluation mis-decides.
 
 ## Rationale the snapshot schema cannot hold
 

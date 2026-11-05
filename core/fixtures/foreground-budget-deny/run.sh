@@ -64,12 +64,29 @@
 #               graph's 25 backgrounded waiters are denied; these wrappers are the 2 misses), so
 #               a widening of the matcher flips them here visibly
 #   SNAPWRITE   Deny B: `sed -i` (BSD, GNU, `.bak`, `--in-place`), `perl -pi`, `>`/`>>`, `tee
-#               [-a]`, cp/mv onto, git checkout/restore, python open(p,'w') and write_text, node
+#               [-a]`, cp/mv/install/ln onto (with flags, and with a trailing redirect run:
+#               `2>/dev/null`, `>/dev/null`, `2>&1`, `</dev/null`, `1>&2`, `2>/dev/null; echo`),
+#               git checkout/restore, python open(p,'w') and write_text, node
 #               writeFileSync, a variable-held path, at 600000 -> deny; reason names
-#               pipeline-snapshot.md and the Edit tool, not the budget
-#   SNAPREAD    its allow twins at 5000: cat/grep/sed -n/`<`, git add/show/diff, cp FROM, a
-#               `.bak` copy, `>> ...-history.md`, open(p) and open(p,'r'), a redirect to another
-#               file, and `bash script --write <snapshot>`
+#               pipeline-snapshot.md, snapshot-update.sh and its ops (`--line-replace`,
+#               `--row-replace`), and neither the Edit tool nor Write, not the budget
+#   SNAPREAD    its allow twins at 5000: cat/grep/sed -n/`<`, git add/show/diff, cp FROM (also
+#               with `2>/dev/null` after the other target), a `.bak` copy, `.bak` onto the
+#               history file, `>> ...-history.md`, open(p) and open(p,'r'), a redirect to another
+#               file, `bash script --write <snapshot>`, and case variants of the `.bak` and history file
+#   SNAPSKIP    one segment running snapshot-update.sh or the rotator whose ARGUMENT text reads as a
+#               write shape onto the snapshot, at 5000 -> allow (the F3 false refusal); two of them
+#               quote the command word in a BALANCED pair, `'...snapshot-update.sh'` and `"..."`,
+#               and one carries `$'` inside double quotes (`--activity "a$'b"`), which is literal
+#   SNAPCHAIN   its deny twins at 600000: the writer then `; sed -i`, `&& >`, `| tee`, `&`, a newline,
+#               a redirect onto the snapshot, a `$(...)` and a backtick argument, the command
+#               words `x/not-snapshot-update.sh` and `snapshot-update.sh.bak`, and three UNBALANCED
+#               quotes on the command word (`'...sh '; sed -i ...`, the `"` form, `...sh' '; sed -i ...`),
+#               which bash runs as a sed of the snapshot, and an ANSI-C `$'x\''` argument hiding
+#               `; sed -i ...`, `; cp /dev/null <snapshot>` and the same cp with a trailing
+#               `2>/dev/null`, behind a `#'` -> deny, Deny B reason
+#   SNAPCASE    `Pipeline-Snapshot.md`, `PIPELINE-SNAPSHOT.MD` and a variable bound to a case
+#               variant, written by shell at 600000 -> deny with the Deny B reason
 #   SCOPE       both shapes with no detector and no timeout, and under agent_id +
 #               run_in_background: true -> deny with each one's own reason
 #   REGEXLIMIT  commands long enough to exhaust the regex retry limit: a waiter then 1000 ` >>f` redirects
@@ -100,7 +117,7 @@
 #     and the tripped set must EQUAL the recorded set that mut passes as its `want` argument
 #     (the old exact-vector assertion), contain the deciding arm and exclude the twin. The
 #     recorded sets plus the twin replace the per-push exact-vector assertion.
-# The columns are the 26 names in ALL_ARMS. REASON is read off the OVER call, FAILOPEN off the
+# The columns are the 29 names in ALL_ARMS. REASON is read off the OVER call, FAILOPEN off the
 # WAITER seeds and EXIT off every call's exit status, so those three are driven through the unit
 # that carries them (unit_of).
 # THE MATRIX IS RE-MEASURED WHENEVER AN ARM OR A MUTANT IS ADDED OR CHANGED, from the repo root,
@@ -138,6 +155,15 @@
 # MUTANT-MATRIX m-scope decides=SCOPE twins=WAITER
 # MUTANT-MATRIX m-append decides=SNAPWRITE twins=SNAPREAD
 # MUTANT-MATRIX m-read decides=SNAPREAD twins=SNAPWRITE
+# MUTANT-MATRIX m-noskip decides=SNAPSKIP twins=SNAPCHAIN
+# MUTANT-MATRIX m-skipwide decides=SNAPCHAIN twins=SNAPSKIP
+# MUTANT-MATRIX m-unpaired decides=SNAPCHAIN twins=SNAPSKIP
+# MUTANT-MATRIX m-ansic decides=SNAPCHAIN twins=SNAPSKIP
+# MUTANT-MATRIX m-cpcomment decides=SNAPWRITE twins=SNAPREAD
+# MUTANT-MATRIX m-cpredir decides=SNAPWRITE twins=SNAPREAD
+# MUTANT-MATRIX m-caseps decides=SNAPCASE twins=SNAPWRITE
+# MUTANT-MATRIX m-caseprefilter decides=SNAPCASE twins=SNAPWRITE
+# MUTANT-MATRIX m-oldremedy decides=SNAPWRITE twins=SNAPREAD
 # MUTANT-MATRIX m-noatomic decides=REGEXLIMIT twins=WAITER
 # MUTANT-MATRIX m-blanktail decides=REGEXLIMIT twins=WAITER
 # MUTANT-MATRIX m-notry decides=REGEXLIMIT twins=WAITER
@@ -178,14 +204,14 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 [ -f "$HERE/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh not found in $HERE" >&2; exit 2; }
-ALL_ARMS="OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SCOPE REGEXLIMIT FAILOPEN EXIT"
+ALL_ARMS="OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT FAILOPEN EXIT"
 P_ALL="$ALL_ARMS"
 . "$HERE/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/foreground-budget-deny/matrix.sh"
 
 # The arms that own a call of their own. REASON is read off the OVER call, FAILOPEN off the
 # WAITER seeds, EXIT off the exit status of whichever calls ran.
-ALL_UNITS="OVER PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SCOPE REGEXLIMIT"
+ALL_UNITS="OVER PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT"
 unit_of() { case "$1" in REASON|EXIT) echo OVER ;; FAILOPEN) echo WAITER ;; *) echo "$1" ;; esac; }
 
 OUTF="$WORK/out"; ERRF="$WORK/err"
@@ -507,7 +533,9 @@ arm_SNAPWRITE() {
   for _c in "sed -i '' 's/a/b/' $S" "sed -i 's/a/b/' $S" "sed -i.bak 's/a/b/' $S" \
             "sed --in-place 's/a/b/' $S" "perl -pi -e 's/a/b/' $S" \
             "echo x > $S" "echo x >> $S" "printf x >\"$S\"" "echo x | tee $S" "echo x | tee -a $S" \
-            "cp /tmp/s.md $S" "mv /tmp/s.md $S" "git checkout HEAD -- $S" "git restore $S" \
+            "cp /tmp/s.md $S" "mv /tmp/s.md $S" "cp /dev/null $S #'" "git checkout HEAD -- $S" "git restore $S" \
+            "cp /dev/null $S 2>/dev/null" "cp x $S >/dev/null" "mv x $S 2>&1" "cp a $S 2>/dev/null; echo" \
+            "cp a $S </dev/null" "cp a $S 1>&2" "cp -f a $S" "install -m 644 a $S" "ln -sf a $S" \
             "python3 -c \"open('$S','w').write('x')\"" \
             $'python3 - <<\'EOF\'\np=\''"$S"$'\'\nL=open(p).read()\nopen(p,\'w\').write(L)\nEOF' \
             $'python3 - <<\'EOF\'\nfrom pathlib import Path\np=Path(\''"$S"$'\')\np.write_text(\'x\')\nEOF' \
@@ -515,8 +543,74 @@ arm_SNAPWRITE() {
             "S=$S; sed -i '' \"s/a/b/\" \"\$S\""; do
     call "$h" "$REAL" - "$(cmd_call "$_c" '')"; chk_rc
     [ "$DEC" = deny ] || note SNAPWRITE
-    case "$REASON_TXT" in *'writes pipeline-snapshot.md'*'Edit tool'*) ;; *) note SNAPWRITE ;; esac
+    snap_reason_ok || note SNAPWRITE
     case "$REASON_TXT" in *'steering budget'*) note SNAPWRITE ;; esac
+  done
+}
+
+# snap_reason_ok: the Deny B reason names the snapshot write, the sanctioned writer and an op
+# (presence), and never routes the write to a file tool (the old remedy).
+snap_reason_ok() {
+  case "$REASON_TXT" in *'writes pipeline-snapshot.md'*'snapshot-update.sh'*'--line-replace'*'--row-replace'*) ;; *) return 1 ;; esac
+  case "$REASON_TXT" in *'Edit tool'*|*'(or Write)'*) return 1 ;; esac
+  return 0
+}
+
+arm_SNAPSKIP() {
+  local h="$1"
+  # SNAPSKIP (F3, the false refusal): ONE segment running snapshot-update.sh or the rotator, whose
+  # ARGUMENT text reads as a write shape onto the snapshot. At 5000, so only Deny B could refuse.
+  for _c in "bash scripts/ai-dlc/snapshot-update.sh --snapshot $S --activity 'fixed the > $S redirect'" \
+            "bash scripts/ai-dlc/snapshot-update.sh --snapshot $S --open-item \"tee $S was used\"" \
+            "AI_DLC_STATE_DIR=x bash scripts/ai-dlc/snapshot-update.sh --snapshot $S --activity 'perl -pi on $S'" \
+            "scripts/ai-dlc/snapshot-update.sh --snapshot $S --activity 'echo y >> $S'" \
+            "bash core/scripts/rotate-snapshot-archive.sh h.md --absorb $S --apply --note 'x > $S'" \
+            "'scripts/ai-dlc/snapshot-update.sh' --snapshot $S --activity 'echo y > $S'" \
+            "\"scripts/ai-dlc/snapshot-update.sh\" --snapshot $S --activity 'echo y > $S'" \
+            "bash scripts/ai-dlc/snapshot-update.sh --snapshot $S --activity \"a\$'b\" --open-item 'tee $S'"; do
+    call "$h" "$REAL" - "$(jq -nc --arg c "$_c" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')"; chk_rc
+    [ "$DEC" = allow ] || note SNAPSKIP
+  done
+}
+
+arm_SNAPCHAIN() {
+  local h="$1"
+  # SNAPCHAIN: the skip's deny twins. Each starts with the sanctioned writer, then writes the
+  # snapshot by shell: chained, piped, backgrounded, on a new line, redirected, or inside a `$(...)`
+  # or backtick argument, and a command word that only resembles the writer. Driven at 600000.
+  for _c in "bash scripts/ai-dlc/snapshot-update.sh --activity x; sed -i '' 's/a/b/' $S" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity x && echo y > $S" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity x | tee $S" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity x & echo y > $S" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity x"$'\n'"echo y > $S" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity x > $S" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity \"\$(echo y > $S)\"" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity \"\`echo y > $S\`\"" \
+            "bash x/not-snapshot-update.sh --activity 'echo y > $S'" \
+            "bash scripts/ai-dlc/snapshot-update.sh.bak --activity 'echo y > $S'" \
+            "'scripts/ai-dlc/snapshot-update.sh '; sed -i '' s/a/b/ $S #'" \
+            "\"scripts/ai-dlc/snapshot-update.sh \"; sed -i '' s/a/b/ $S #\"" \
+            "scripts/ai-dlc/snapshot-update.sh' '; sed -i '' s/a/b/ $S #'" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity \$'x\\''; sed -i '' s/a/b/ $S #'" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity \$'x\\''; cp /dev/null $S #'" \
+            "bash scripts/ai-dlc/snapshot-update.sh --activity \$'x\\''; cp /dev/null $S 2>/dev/null #'"; do
+    call "$h" "$REAL" - "$(cmd_call "$_c" '')"; chk_rc
+    [ "$DEC" = deny ] || note SNAPCHAIN
+    snap_reason_ok || note SNAPCHAIN
+  done
+}
+
+arm_SNAPCASE() {
+  local h="$1"
+  # SNAPCASE (F4): a case variant of the snapshot name is the snapshot on a case-insensitive
+  # filesystem. Driven at 600000; its allow twins (case variants of .bak and the history file)
+  # are in SNAPREAD.
+  for _c in "sed -i '' 's/a/b/' _bmad-output/Pipeline-Snapshot.md" \
+            "echo x > _bmad-output/PIPELINE-SNAPSHOT.MD" \
+            "p=_bmad-output/Pipeline-Snapshot.md; echo x > \"\$p\""; do
+    call "$h" "$REAL" - "$(cmd_call "$_c" '')"; chk_rc
+    [ "$DEC" = deny ] || note SNAPCASE
+    case "$REASON_TXT" in *'writes pipeline-snapshot.md'*) ;; *) note SNAPCASE ;; esac
   done
 }
 
@@ -526,10 +620,12 @@ arm_SNAPREAD() {
   # read-only interpreter open, a script given the path -- within budget, so only Deny B could refuse.
   for _c in "cat $S" "grep -n x $S" "sed -n '1,5p' $S" "wc -l < $S" \
             "git add $S && git commit -m x" "git show HEAD:$S" "git diff -- $S" \
-            "cp $S /tmp/s.md" "cp $S $S.bak" "echo x >> _bmad-output/pipeline-snapshot-history.md" \
+            "cp $S /tmp/s.md" "cp $S /tmp/s.md #c" "cp $S $S.bak" "echo x >> _bmad-output/pipeline-snapshot-history.md" \
+            "cp $S /tmp/x 2>/dev/null" "cp $S.bak _bmad-output/pipeline-snapshot-history.md" \
             $'python3 - <<\'EOF\'\np=\''"$S"$'\'\nh=\'_bmad-output/pipeline-snapshot-history.md\'\nL=open(p).read()\nopen(h,\'a\').write(L)\nEOF' \
             "python3 -c \"print(open('$S').read())\"" "python3 -c \"print(open('$S','r').read())\"" \
             "grep x $S > /tmp/out.txt 2>&1" \
+            "echo x > _bmad-output/Pipeline-Snapshot.md.bak" "echo x >> _bmad-output/PIPELINE-SNAPSHOT-HISTORY.md" \
             "scripts/ai-dlc/validate-artifact-budget.sh --only pipeline-snapshot.md 2>&1 | head" \
             "bash scripts/ai-dlc/render-x.sh --write $S"; do
     call "$h" "$REAL" - "$(jq -nc --arg c "$_c" '{tool_name:"Bash", tool_input:{command:$c, timeout:5000}}')"; chk_rc
@@ -553,7 +649,7 @@ arm_SCOPE() {
             "$(jq -nc --arg c "echo x > $S" '{tool_name:"Bash", agent_id:"a1b2c3", tool_input:{command:$c, timeout:600000, run_in_background:true}}')"; do
     call "$h" "$NONE" - "$_p"; chk_rc
     [ "$DEC" = deny ] || note SCOPE
-    case "$REASON_TXT" in *'writes pipeline-snapshot.md'*'Edit tool'*) ;; *) note SCOPE ;; esac
+    snap_reason_ok || note SCOPE
   done
 }
 
@@ -590,7 +686,7 @@ printf 'HERMETIC-CONSUMED %s\n' "$DETECTOR"
 sc_run "$HOOK" $ALL_UNITS
 GOT="$SC_DEAD"
 if [ -z "$GOT" ]; then
-  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SCOPE REGEXLIMIT FAILOPEN EXIT)"
+  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR UNPARSEABLE SURROGATE PROGFAULT NOJQ PUSH PUSHNEAR AGENT SUBPOLL WAITER WAITERNEAR SNAPWRITE SNAPREAD SNAPSKIP SNAPCHAIN SNAPCASE SCOPE REGEXLIMIT FAILOPEN EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
@@ -656,7 +752,7 @@ fi
 # Mutants 1 and 12 remove the whole deny channel rather than one guard, so they fail every arm
 # holding a deny cell; each of the others fails its own arm alone.
 # 1. warning-only: the same text as context, no decision. The rejected design.
-mut warn-only OVER BG "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPWRITE SUBPOLL WAITER" \
+mut warn-only OVER BG "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPCASE SNAPCHAIN SNAPWRITE SUBPOLL WAITER" \
   -e '/permissionDecision: "deny",/d' -e 's/permissionDecisionReason: \$reason/additionalContext: $reason/'
 # 2. denies a call already sent to the background.
 mut denies-background BG OVER "BG" -e '/and \.tool_input\.run_in_background != true/d'
@@ -681,7 +777,7 @@ mut reason-drops-background REASON PUSHCHAIN "REASON" -e 's/Re-issue the same ca
 # 11. the deny path exits non-zero.
 mut deny-exits-nonzero EXIT OVER "EXIT" -e '$s/^exit 0$/exit 2/'
 # 12. the whole subject replaced by silence: every presence-shaped arm must fail.
-mut silence OVER BG "AGENT BOUNDARY DEFAULT ENV NODETECTOR NOJQ OVER PROGFAULT PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPWRITE SUBPOLL SURROGATE UNPARSEABLE WAITER" -e '2i\
+mut silence OVER BG "AGENT BOUNDARY DEFAULT ENV NODETECTOR NOJQ OVER PROGFAULT PUSHCHAIN PUSHNEAR REASON REGEXLIMIT SCOPE SNAPCASE SNAPCHAIN SNAPWRITE SUBPOLL SURROGATE UNPARSEABLE WAITER" -e '2i\
 exit 0'
 # 13. no push allowance: the pipeline's required foreground push is denied.
 mut drop-push PUSH PUSHNEAR "PUSH" -e '/and (is_push | not)/d'
@@ -717,7 +813,31 @@ mut m-scope SCOPE WAITER "SCOPE" -e 's/and (\$cmd | safetest(wfdbg)) then "DENY 
 # 26. m-append: the redirect write drops `>>`, so an append onto the snapshot is not seen.
 mut m-append SNAPWRITE SNAPREAD "SNAPWRITE" -e 's/\[0-9\]\*>>?\[|\]?/[0-9]*>(?!>)[|]?/'
 # 27. m-read: Deny B made fail-closed on any mention of the snapshot, so a read is refused.
-mut m-read SNAPREAD SNAPWRITE "SNAPREAD" -e 's/ and (\$cmd | snapwrite) then "DENY B"/ then "DENY B"/'
+mut m-read SNAPREAD SNAPWRITE "SNAPREAD SNAPSKIP" -e 's/ and (\$cmd | suskip | not) and (\$cmd | snapwrite) then "DENY B"/ then "DENY B"/'
+# 26b. m-noskip: the single-segment skip removed, so the sanctioned writer whose argument text reads
+#     as a write shape is refused again (the F3 false refusal).
+mut m-noskip SNAPSKIP SNAPCHAIN "SNAPSKIP" -e 's/ and (\$cmd | suskip | not) and / and /'
+# 26c. m-skipwide: the skip keyed on the writer's name anywhere, so a writer call chained to a shell
+#     write of the snapshot rides it.
+mut m-skipwide SNAPCHAIN SNAPSKIP "SNAPCHAIN" -e 's/^  def suskip: safetest(.*);$/  def suskip: safetest("(?:snapshot-update|rotate-snapshot-archive)");/'
+# 26d. m-caseps: the snapshot-name regex case-sensitive again; the prefilter still lowers the case.
+# 26g. m-unpaired: the command word's closing quote no longer has to match its opening one, so an
+#     unbalanced quote opens a string that swallows `; sed -i ... <snapshot>` and the chain rides the skip.
+mut m-unpaired SNAPCHAIN SNAPSKIP "SNAPCHAIN" -e 's/(?:bash\[ \\t\]+)?(\[\\"\\u0027\]?)/(?:bash[ \\t]+)?[\\"\\u0027]?/' -e 's/\.sh\\\\1(?=/.sh[\\"\\u0027]?(?=/'
+# 26h. m-ansic: an unquoted `$'` is allowed in the skip's rest again, so an ANSI-C `$'x\''` reads as
+#     `$` plus a closed `'x\'` and the `; sed -i ... <snapshot> #'` bash runs rides the skip.
+mut m-ansic SNAPCHAIN SNAPSKIP "SNAPCHAIN" -e 's/|\\\\$(?!\[(\\u0027\]))\*)\[ \\t\]\*\\\\z");$/|\\\\$(?![(]))*)[ \\t]*\\\\z");/'
+# 26i. m-cpcomment: the cp/mv shape no longer counts a snapshot target followed by a `#` comment.
+mut m-cpcomment SNAPWRITE SNAPREAD "SNAPCHAIN SNAPWRITE" -e 's/(?:\[ \\t\]\*(?:\$|\[;&|\\n)\])|\[ \\t\]+#)/[ \\t]*(?:$|[;\&|\\n)])/'
+# 26j. m-cpredir: the cp/mv shape's redirect run after the target matches nothing (a `(?!)` heads
+#     each repetition), restoring the old terminator, so `cp x <snapshot> 2>/dev/null` is allowed again.
+mut m-cpredir SNAPWRITE SNAPREAD "SNAPCHAIN SNAPWRITE" -e 's/(?>(?:\[ \\t\]\*(?:\[0-9\]\*/(?>(?:(?!)[ \\t]*(?:[0-9]*/'
+mut m-caseps SNAPCASE SNAPWRITE "SNAPCASE" -e's/def ps: "(?i:pipeline-snapshot\\\\\.md)/def ps: "(?:pipeline-snapshot\\\\.md)/'
+# 26e. m-caseprefilter: the prefilter case-sensitive again; the regex is still (?i:).
+mut m-caseprefilter SNAPCASE SNAPWRITE "SNAPCASE" -e 's/(\$cmd | ascii_downcase | contains("pipeline-snapshot\.md"))/($cmd | contains("pipeline-snapshot.md"))/'
+# 26f. m-oldremedy: Deny B's remedy routed back to the Edit tool, which ai-dlc-snapshot-edit-deny.sh
+#     refuses -- a deny loop. SCOPE reads the same reason, so it trips too.
+mut m-oldremedy SNAPWRITE SNAPREAD "SCOPE SNAPCHAIN SNAPWRITE" -e "s/A shell write skips the stamp judge\. Make the change with scripts\/ai-dlc\/snapshot-update\.sh, .* Reading the snapshot by shell is not refused\./A shell write reaches no PostToolUse hook. Make the change with the Edit tool (or Write). Reading the snapshot by shell is not refused./"
 # 28. m-noatomic: the redirect run loses its atomic group, so a waiter segment of 1000 `>` that
 #     ends in `;` exhausts the retry limit and, caught, hides the LATER waiter's lone `&`.
 mut m-noatomic REGEXLIMIT WAITER "REGEXLIMIT" -e 's/|(?>\[<>\]+)(?:&/|[<>]+(?:\&/'

@@ -691,7 +691,9 @@ After human validates:
   1. Refresh `## Pipeline Position` in `_bmad-output/pipeline-snapshot.md`
      FIRST, OVERWRITING the existing `current_step_file` bullet rather than
      adding a second live one — `steps/gate-validation.md`'s Pipeline Position
-     bullet states the rule and the labelled-key exception:
+     bullet states the rule and the labelled-key exception. Write it with
+     `snapshot-update.sh --set current_step_file retro.md 'Pipeline Position'`
+     and `--set last_completed_step_file deploy-validate.md 'Pipeline Position'`:
      `current_step_file: retro.md`,
      `last_completed_step_file: deploy-validate.md` (production validation
      checkpoint confirmed). Leave `last_gate_passed` as it stands — this step

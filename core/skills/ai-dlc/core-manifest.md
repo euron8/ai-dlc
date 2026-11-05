@@ -263,6 +263,8 @@ core_manifest:
   - fixtures/update-preflight-push/**
   - fixtures/push-drain-refusals/**
   - fixtures/inflight-row-shape/**
+  - fixtures/inflight-row-hook/**
+  - fixtures/snapshot-edit-deny/**
   - fixtures/known-skills-extension/**
   - fixtures/layer-anchor-declaration/**
   - fixtures/layer-catalog-collision/**

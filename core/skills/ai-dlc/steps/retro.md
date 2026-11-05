@@ -1414,12 +1414,13 @@ follow their audit, these must follow the merge.
    `_bmad-output/pipeline-snapshot.md`'s `## Pipeline Position`, OVERWRITE the
    existing `current_step_file` bullet — never add a second live one; see
    `steps/gate-validation.md`'s Pipeline Position bullet for the rule and its
-   labelled-key exception — setting
-   `current_step_file: retro.md` and
-   `last_completed_step_file: retro.md (sprint <N> closed — retro PR merged,
-   records rotated)`. Leave `last_gate_passed` as it stands. DROP the routing
+   labelled-key exception — with `snapshot-update.sh`:
+   `--set current_step_file retro.md 'Pipeline Position'` and
+   `--set last_completed_step_file 'retro.md (sprint <N> closed — retro PR merged,
+   records rotated)' 'Pipeline Position'`. Leave `last_gate_passed` as it stands. DROP the routing
    record fields — they belong to the sprint that just closed and the next
-   `route.md` Step 6 writes its own. Commit to `main`:
+   `route.md` Step 6 writes its own — with one
+   `snapshot-update.sh --key-delete 'Pipeline Position' <field>` per field. Commit to `main`:
    `chore(s<N>): finalize snapshot — sprint <N> closed`. Without this write the
    snapshot still names `deploy-validate.md` and the next session reads a
    shipped sprint as pending deploy work.

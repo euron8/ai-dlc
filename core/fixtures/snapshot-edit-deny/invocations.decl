@@ -1,0 +1,6 @@
+# Measured by a counted run through core/scripts/hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR armed as
+# .githooks/pre-push arms them, a fresh --gen-rc dir per run; the judge's own J2 output), then verified by a second
+# counted run. Hook starts: 12 shipped units, 1 control, 2 per mutant (16 mutants). The rest is run.sh itself.
+46 *
+45 core/hooks/ai-dlc-snapshot-edit-deny.sh
+0 core/fixtures/lib/mutant.sh

@@ -1,6 +1,15 @@
 # snapshot-update-stamps drives the program under test and the stamp validator it calls as a
-# sibling; every mutant copies both into one directory. Its own directory is copied by the runner.
+# sibling; every mutant copies both into one directory. Its own directory is copied by the runner
+# (live-snapshot.md, the scrubbed live world, included).
 !core/scripts/snapshot-update.sh
 !core/scripts/validate-artifact-budget.sh
+# READERS and SETBOLD run the SHIPPED position readers over op-written snapshots, and evaluate the
+# dispatch guard's sprint_id sed extracted from the guard itself.
+!core/hooks/ai-dlc-continue.sh
+!core/hooks/ai-dlc-recover.sh
+!core/hooks/ai-dlc-dispatch-guard.sh
+# POSLINE runs Check 8 of the SHIPPED validate-mandatory-rules.sh, the third position reader.
+!core/scripts/validate-mandatory-rules.sh
+# graph-skeleton.md and swallowed-row.md sit in the fixture's own directory, copied with it.
 # The same-run kill helper, sourced by run.sh.
 core/fixtures/lib/mutant.sh
