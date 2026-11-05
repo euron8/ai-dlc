@@ -15,8 +15,7 @@ It does not tell you what to do.
 BEFORE ACTING:**
 
 1. **`## Start here`** — the two repos and the READ/WRITE boundary. **Read this FIRST, before any
-   command.** One of those repos is READ ONLY and a write there is the most expensive mistake
-   available in this program.
+   command.**
 2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. Jump to the
    heading BY NAME; do not scroll.
 3. **`### Ping the operator`** — when to stop and report.
@@ -29,27 +28,23 @@ BEFORE ACTING:**
 **THE HISTORY BOUNDARY IS BY HEADING, NOT BY POSITION.** `## Start here`, `## Hazards`,
 `## Verdict vocabulary` and `### Done when` all sit BELOW `## Context`, so a rule reading
 "everything from `## Context` down is HISTORY" would skip this plan's own read/write boundary and
-write to the consumer. `scripts/validate-plan-shape.sh:73` cannot catch this: it greps that
-`## Start here` EXISTS and never asks whether the reader was told to ignore it.
+write to the consumer.
 
 So: the five sections above are LIVE. Everything else is HISTORY: measured episodes, refuted
 hypotheses, and status records that were current when written and that THIS BLOCK REPLACES. Read
 those when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from them.**
 
-**MOST OF THAT HISTORY IS NO LONGER IN THIS FILE, AND THAT IS THE CHANGE YOU MOST NEED TO KNOW
-ABOUT.** The per-batch records, the adjudication register, `## Status record`, `## Phases` and
+**MOST OF THAT HISTORY IS NO LONGER IN THIS FILE.** The per-batch records, the adjudication register, `## Status record`, `## Phases` and
 `## Verdict vocabulary` moved to `docs/plans/archive/graph-ledger-full-drain.md`, named by the
-pointer at the top. **Go there for the evidence behind any figure.** `## Context` and
+pointer at the top. **Go there for evidence.** `## Context` and
 `## What the pull produced` are still in this file.
 
-**A CITATION INTO THE ARCHIVE IS A PLAIN PATH, NEVER `path:line`.** A later rotation re-numbers
-that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
-correct rotation.
+**A CITATION INTO THE ARCHIVE IS A PLAIN PATH, NEVER `path:line`.** A rotation re-numbers
+that file.
 
 **ROTATE THIS FILE AFTER YOU WRITE YOUR OWN BLOCK — IT IS SOMETHING EVERY BATCH FROM HERE
-OWES.** Each close rotates the file back to just under `P8`'s 150000 ceiling, so the next resume
-block takes it over again and your push WILL fail on it. `plan-rotate.sh` refuses to move anything
+OWES.** Each new resume block takes the file over P8's ceiling. `plan-rotate.sh` moves nothing
 while the file is UNDER the ceiling, so let the arm fire, then `bash
 scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves and `--apply` to
 move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
@@ -63,11 +58,12 @@ whole, including any standing rule written inside it**, so a rule that must outl
 belongs in `### NEXT ACTIONS`, not in a batch record.
 
 **BATCH 250 IS CLOSED: RELEASES `v0.1002.0` THROUGH `v0.1019.0`. THE NEXT SESSION STARTS BATCH 251.**
-This block replaces the batch-249 record below it. Lead was ai-dlc-be. No `graph-*` session is ever messaged.
-- **Landed** (`git log origin/main`). `v0.1002.0` through `v0.1009.0` and `v0.1011.0` through `v0.1019.0`; `0.1010.0` is not on `origin/main`. **The next VERSION is `0.1020.0`.**
+Batch 249: `docs/plans/archive/`. `ai-dlc-be` was the lead. No `graph-*` session is ever messaged.
+- **Landed** (`git log origin/main`). `v0.1002.0` through `v0.1009.0` and `v0.1011.0` through `v0.1019.0`; `0.1010.0` was allocated, never shipped. **The next VERSION is `0.1020.0`.**
 - **Backlog.** Live 52 at the `v0.1019.0` tip (`grep -c '^## BL-' docs/backlog.md`), archive 844. **The next free id is BL-926.**
-- **Open follow-ups.** BL-915 (PARTIAL: Fix item 1's arm-by-arm audit outside the BL-918 set); BL-911; BL-912, awaiting an `Outcome measured:` line on the first graph sprint that runs its hooks (baseline s321); BL-914, closed only by two pushes of one sha from clean worktrees with identical present sets; BL-921; BL-922; BL-923; and BL-868's receipt, the last row of `scripts/inert-receipt-allowlist.txt`, which BL-868's close wires or deletes.
-- **Graph.** Installed `0.1001.0` (`ff653a40`). The pull is not preapproved.
+- **Open follow-ups.** BL-915 (PARTIAL: Fix item 1's arm-by-arm audit outside the BL-918 set); BL-911; BL-912, awaiting an `Outcome measured:` line on the first graph sprint that runs its hooks (baseline: graph sprint 321); BL-914, closed only by two pushes of one sha from clean worktrees with identical present sets (the pre-suite record's paths); BL-921; BL-922; BL-923; and BL-868's receipt, the last row of `scripts/inert-receipt-allowlist.txt`, which BL-868's close wires or deletes.
+- **Graph.** Branch `ai-dlc/feature/per-chain-rebalancer-instances` reads `0.1001.0` (stamp `3a8895c57`), `main` `0.969.0`. Pull OWED: PENDING 3; main 50 behind, branch 18. Differential diverges: ledger-reverify adds 6 NAMED-UPSTREAM rows (PC-S320); predicate-differential's installed copy over-reports PREDICATE-RECLASSIFIES (14/14) where `0.1019.0` reads STABLE; derivation-differential refused. The pull is the operator's; none run.
+- **NOTE.** Derive fences write fixed `/tmp/live.txt`, `/tmp/arch.txt`, `/tmp/cand_arch.md`; sessions may collide (hypothesis).
 
 ### Derive the state; do not trust the numbers below
 
@@ -1641,7 +1637,7 @@ given at batch 90.
    - **Merge the docs commit FIRST.** A resume block that lives only on a branch is invisible
      to a fresh session. `git log -1 --format=%h origin/main -- docs/plans/graph-ledger-full-drain.md`
      must name the commit that carries the new block.
-   - **Read it from a FRESH CHECKOUT, as a stranger.** `W="$(mktemp -d)/wt"; git worktree add
+   - **Read it from a FRESH CHECKOUT, as a stranger.** `W="$(mktemp -d)/wt"; git worktree add --detach
      "$W" origin/main`, then in `$W` read ONLY the five live sections `## RESUME HERE` names,
      in the order it names them, with no memory of this session. If any sentence needs this
      session's context to make sense, it is not resumable; fix it and go back to action 6.
