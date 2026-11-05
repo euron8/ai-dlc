@@ -11,4 +11,4 @@ core/scripts/validate-adversarial-convergence.sh
 # The --waivers owner the rung asks whether a FAIL_WAIVED waiver resolves.
 core/scripts/validate-suppression-lifetime.sh
 # The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh

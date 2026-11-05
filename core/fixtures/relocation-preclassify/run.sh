@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # relocation-preclassify — preclassify.sh detects the pre-0.126.0 validators at the OLD
 # path, distinguishes a locally edited copy from an identical one, and is silent on the
 # consumer's own scripts.

@@ -3,4 +3,4 @@
 # fixture builds under mktemp. Its own directory is copied by the runner without being named.
 !core/scripts/report-propagation-fanout.sh
 # The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh

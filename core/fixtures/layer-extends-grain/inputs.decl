@@ -7,4 +7,5 @@
 !core/scripts/artifact-path-config.sh
 core/skills/ai-dlc-update/reconcile/
 core/skills/ai-dlc/layer-contract.yaml
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

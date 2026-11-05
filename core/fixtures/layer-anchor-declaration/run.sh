@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # Exercise the anchor-declaration checks in validate-layer-entries.sh: E7 (a `shadows:` anchor
 # must FORWARD-match a heading), E8 (`reason:` required), E9 (`push_candidate:` required), and
 # E3's widening to every comma-part of `shadows:`.

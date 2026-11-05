@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # Hermetic against ambient AI_DLC_* tunables (enforcement-map I10). The BL-292 arms write hook
 # registrations and drive `--finish` through the real validator, so an operator's exported
 # tunable would otherwise be tested instead of the code.

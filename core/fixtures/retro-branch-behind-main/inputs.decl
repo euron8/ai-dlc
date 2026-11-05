@@ -9,4 +9,4 @@ core/scripts/sprint-status.sh
 core/schemas/audit-anchors.json
 core/schemas/sprint-status.json
 # The preamble sourced first by run.sh.
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh

@@ -4,4 +4,5 @@
 !core/hooks/ai-dlc-derivation-capture.sh
 !core/scripts/validate-artifact-derivations.sh
 # run.sh sources the shared preamble (the GIT_DIR scrub) before any git call.
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

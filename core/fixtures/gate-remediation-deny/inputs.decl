@@ -15,4 +15,5 @@ core/scripts/validate-suppression-lifetime.sh
 core/scripts/partition-document.sh
 core/skills/ai-dlc/enforcement-map.yaml
 # lib/ carries preamble.sh and mutant.sh (mutant_killed), sourced by run.sh.
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

@@ -8,4 +8,5 @@ core/hooks/
 !core/hooks/ai-dlc-recover.sh
 !core/hooks/ai-dlc-handoff-pending.sh
 !core/schemas/pause-routing.json
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # review-shard-merge/run.sh -- partition-review-diff.sh and merge-review-shards.sh, the part set
 # and the JOIN of a sharded gate-1 code review and of a sharded gate-2 QA validation (--gate qa;
 # arms Q1-Q16, S7-S10), and (BL-737) the seat's shard pre-check, the owner tails, the marker key, the
@@ -453,7 +453,7 @@ echo "  [J0] coverage join: $_ndecl units derived from the sg guards, dealt disj
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 . "$HERE/lib.sh"
 # The kill emitter (BL-828): a kill is scored only behind the same run's base-pass flag.
-. "$(cd "$HERE/../lib" && pwd)/mutant.sh"
+. "$(cd "$HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
 echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"

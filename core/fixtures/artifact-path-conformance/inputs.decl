@@ -7,4 +7,5 @@ core/scripts/artifact-path-config.sh
 core/skills/ai-dlc/artifact-path-grammar.md
 core/team-roles/code-reviewer.md
 core/team-roles/qa.md
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

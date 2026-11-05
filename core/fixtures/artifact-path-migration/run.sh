@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # artifact-path-migration — migrate-artifact-paths.sh moves every path onto the declared
 # grammar, REFUSES what it cannot derive, and its own output conforms to the rule it enforces.
 #

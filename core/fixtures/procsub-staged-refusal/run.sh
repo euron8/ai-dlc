@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # procsub-staged-refusal — a producer that FAILED must refuse, never read as an empty input.
 #
 # THE DEFECT. `done < <(producer)` and `comm <(a) <(b)` discard the producer's exit status, so a

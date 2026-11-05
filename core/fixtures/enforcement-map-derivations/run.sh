@@ -88,8 +88,8 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # `killed` token sits on a code line of this file (validate-mutant-kills.sh M1).
 [ -f "$HERE/../lib/mutant.sh" ] && [ -f "$HERE/../lib/matrix.sh" ] || {
   echo "FIXTURE ERROR: core/fixtures/lib/mutant.sh or matrix.sh not found beside this fixture" >&2; exit 2; }
-. "$HERE/../lib/mutant.sh"
-. "$HERE/../lib/matrix.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: cannot source lib/matrix.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 

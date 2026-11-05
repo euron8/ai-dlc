@@ -9,4 +9,5 @@
 # The exit route asks it whether the entry naming the FAIL sha is operator-resolved; wedge-* discriminate on it.
 !core/scripts/validate-escalation-resolution.sh
 # Sourced first by run.sh; non-discriminating (the sandbox env is already scrubbed), declared because it is read.
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/preamble.sh"
 # cycle-commits-enforce — prove validate-cycle-commits.sh enforces the >=3-cycle
 # floor with matching log rows, that the enforcement is not vacuous (a guard

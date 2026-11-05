@@ -91,7 +91,7 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # H2_A=1 only beside assertion A's ok: the C mutation is scored only when the unmutated drive
 # located its validators and attested in this run.
@@ -131,7 +131,12 @@ printf '#!/usr/bin/env bash\n# consumer-authored, not core\nexit 0\n' \
 
 # The three fixture dirs --attest needs: all three feed the digest, and check-17-bypass
 # is the one it drives (so its seed.sh must travel with its run.sh).
-for d in check-h1-recursion check-17-bypass check-manifest-bypass; do
+# `lib` travels as a fourth directory because install.sh ships it exactly that way: its
+# fixture loop (scripts/install.sh, the "THE SHIP LIST IS DERIVED" block) copies every
+# core/fixtures/<dir>/ without a `.dist-only` marker to tests/fixtures/<dir>/, and lib/
+# carries no marker, so a consumer has tests/fixtures/lib/ beside tests/fixtures/check-17-bypass/.
+# check-17-bypass/run.sh:2 sources ../lib/preamble.sh and exits 2 without it.
+for d in check-h1-recursion check-17-bypass check-manifest-bypass lib; do
   [ -d "$FIXSRC/$d" ] || { echo "FIXTURE ERROR: missing source fixture $FIXSRC/$d" >&2; exit 2; }
   cp -R "$FIXSRC/$d" "$WORK/tests/fixtures/" || exit 2
 done
@@ -158,7 +163,10 @@ fi
 # also this fixture's only real cost: one full check-17-bypass drive.
 ATT_OUT="$( cd "$WORK" && bash "$SUT" --attest --sprint 999 2>&1 )"
 ATT_RC=$?
-if [ "$ATT_RC" -ne 0 ]; then
+if grep -q 'FIXTURE BROKEN: cannot source' <<<"$ATT_OUT"; then
+  bad "HARNESS BROKEN: the copied check-17-bypass could not source its lib file, so --attest never drove it — the consumer tree lacks tests/fixtures/lib/, not a finding about H2"
+  printf '%s\n' "$ATT_OUT" | grep 'cannot source' | sed 's/^/        /'
+elif [ "$ATT_RC" -ne 0 ]; then
   bad "--attest FAILED in a consumer layout (rc=$ATT_RC) — H2 cannot attest"
   printf '%s\n' "$ATT_OUT" | sed 's/^/        /'
 elif grep -qE '^H2_ATTESTED v1 sprint=999 digest=[0-9a-f]{16} at=.+ items=1,2,3 mechanical=check-17-bypass:PASS$' \
@@ -204,7 +212,10 @@ if cmp -s "$SUT" "$MUT"; then
 else
   MUT_OUT="$( cd "$WORK" && bash "$MUT" --attest --sprint 999 2>&1 )"
   MUT_RC=$?
-  if [ "$MUT_RC" -eq 0 ]; then
+  if grep -q 'FIXTURE BROKEN: cannot source' <<<"$MUT_OUT"; then
+    bad "HARNESS BROKEN: the mutant's drive stopped at a lib source failure, not at validator location — no mutant verdict is read"
+    printf '%s\n' "$MUT_OUT" | grep 'cannot source' | sed 's/^/        /' >&2
+  elif [ "$MUT_RC" -eq 0 ]; then
     bad "MUTATION: the pre-relocation derivation PASSED — this tree is not a faithful consumer"
     echo "        Bare scripts/ or core/scripts/ must hold no core validator, or the guess" >&2
     echo "        lands on a real one and the regression is invisible here." >&2

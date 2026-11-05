@@ -61,7 +61,7 @@ fanout-untracked-corpus	core/scripts/report-propagation-fanout.sh declares 6 sta
 file-mtime	core/scripts/file-mtime.sh declares 6 start(s) against 0 cell(s)
 fixture-drivability	core/scripts/validate-fixture-drivability.sh declares 3 start(s) against 0 cell(s)
 fixture-git-env-seam	scripts/validate-fixture-git-env.sh declares 3 start(s) against 0 cell(s)
-fixture-hygiene	scripts/validate-fixture-invocations.sh declares 20 start(s) against 0 cell(s); scripts/validate-fixture-hygiene.sh declares 10 start(s) against 0 cell(s)
+fixture-hygiene	scripts/validate-fixture-invocations.sh declares 22 start(s) against 0 cell(s); scripts/validate-fixture-hygiene.sh declares 11 start(s) against 0 cell(s)
 fixture-invocation-budget	scripts/validate-fixture-invocations.sh declares 48 start(s) against 0 cell(s); core/scripts/hermetic-run.sh declares 25 start(s) against 0 cell(s)
 fold-architect-ledger-join	core/scripts/validate-spawn-ledger.sh declares 65 start(s) against 0 cell(s)
 foreground-budget-deny	core/hooks/ai-dlc-foreground-budget.sh declares 116 start(s) against 0 cell(s)

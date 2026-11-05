@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # owed-derivations — assert a derivation an operator LEAVES broken stays owed until it is re-pointed.
 #
 # Usage: run.sh [--matrix] [<check-owed-derivations.sh> [<derivation-differential.sh>]]

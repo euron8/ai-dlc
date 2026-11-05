@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # ledger-reverify-dist-only-reach/run.sh -- two properties of ledger-reverify.sh, each with its
 # own world, its own controls and its own committed mutants.
 #

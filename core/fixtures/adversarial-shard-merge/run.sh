@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # adversarial-shard-merge/run.sh -- merge-adversarial-shards.sh, the JOIN that turns one
 # adversary per story ordinal plus one cross-story adversary into the ONE pass file every gate
 # reads. The behavioural arms only: the mutation battery that once proved each of them can fail

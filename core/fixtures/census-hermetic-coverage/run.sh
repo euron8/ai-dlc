@@ -126,7 +126,7 @@
 # token at all.
 #
 # Exit: 0 = every assertion holds, 1 = an assertion failed, 2 = the fixture could not run.
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -173,8 +173,8 @@ bad() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
 MATRIX=0
 if [ "${1:-}" = --matrix ]; then MATRIX=1; fi
 MWIDE=0; MROWS=0
-. "$HERE/../lib/matrix.sh"
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: cannot source lib/matrix.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # mcell <mutant> <arm> <result 0 green|1 tripped>: one matrix row, printed by the sourced matrix_row, and only

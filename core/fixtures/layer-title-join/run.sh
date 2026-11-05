@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-title-join — assert the absorption question is asked of PROSE headings, and that
 # the two exclusions that make it bearable are real rather than aspirational.
 #
@@ -60,7 +60,7 @@ DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 echo "layer-title-join:"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # artifact-derivations — validate-artifact-derivations.sh must FAIL on a stale claim.
 #
 # WHY THIS FIXTURE IS SHAPED AS A DIFFERENTIAL. The validator's whole value is that it

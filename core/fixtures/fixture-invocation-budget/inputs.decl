@@ -10,4 +10,5 @@ core/scripts/core-paths.sh
 # The content-key declaration every probe carries (the hook's EXCLUDE span reader).
 scripts/suite-content-key.sh
 # preamble.sh, and mutant.sh: sourced here, copied into every subject tree and every probe.
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

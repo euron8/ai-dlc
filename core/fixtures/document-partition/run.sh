@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # document-partition/run.sh -- partition-document.sh: the map, the split, and the assembler.
 #
 # WHAT IS AT STAKE. The partitioner decides where a single document is cut for sharded review and

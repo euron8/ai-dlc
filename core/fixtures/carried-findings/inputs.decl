@@ -1,4 +1,6 @@
 # carried-findings drives validate-carried-findings.sh on seeded review files and a seeded repository.
 !core/scripts/validate-carried-findings.sh
 core/team-roles/code-reviewer.md
-core/fixtures/lib/
+core/fixtures/lib/matrix.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

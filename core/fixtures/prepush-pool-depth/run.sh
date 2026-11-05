@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # prepush-pool-depth -- a fixture that drives a pre-push hook must not be able to recurse.
 #
 # THE DEFECT. A fixture drives a copy of the hook, the hook opens its own fixture pool over the
@@ -1546,6 +1546,23 @@ else
   finish_mutant "$([ "$B_ps" = 1 ] && echo 1 || echo 0)" ps-rewait "$ps_cond" \
     "MUTANT ps-rewait kill confirmed: decides [ps_sig] moved ($ps_m_sig), twin [ps_exit] stayed green" \
     "MUTANT ps-rewait moved [${ps_moved% }], want [ps_sig] (sig read $ps_m_sig, exit read $ps_m_exit)"
+fi
+
+# ------------------------------------------------- BL-924's RECEIPT, against THIS run.sh ---------
+# The receipt builds ONE scratch copy of this file, forces the two schedules BL-924 names (fx6 writes its flight
+# file only after the barrier drive has settled; the first step of fix_hlink, fix_fifo and fix_silent waits until
+# the fixture has recorded or rejected that drive), and prints a `CELL <name> PASS|FAIL` line per cell. Its copy
+# ends at the watcher mutant loop, so it never reaches this arm. Exit 9 is a refusal to measure: FIXTURE BROKEN.
+# NECESSITY: the forced schedules are states no unforced drive above reaches, so no cheaper call shows them.
+RCPT924="$(dirname "$0")/receipt-bl924.sh"
+[ -f "$RCPT924" ] || { echo "FIXTURE ERROR: missing $RCPT924" >&2; exit 2; }
+bash "$RCPT924" "$0" > "$WORK/rcpt924.out" 2> "$WORK/rcpt924.err"; rcpt924_rc=$?
+if [ "$rcpt924_rc" = 0 ] && [ "$(grep -c '^CELL [a-z_0-9-]* PASS' "$WORK/rcpt924.out")" = 5 ]; then
+  ok "[$T] BL-924 receipt: under the forced late-flight-file and late-writer schedules, $(grep '^CELL barrier ' "$WORK/rcpt924.out" | cut -d' ' -f4-9); pn_hlink, pn_fifo and pn_silent REFUSED; not-exported moves only its own decides"
+elif [ "$rcpt924_rc" = 9 ]; then
+  broken "receipt-bl924.sh refused to measure: $(sed -n 1p "$WORK/rcpt924.err")"
+else
+  bad "[$T] BL-924 receipt exited $rcpt924_rc against this run.sh: $(grep '^CELL [a-z_0-9-]* FAIL' "$WORK/rcpt924.out" | cut -d' ' -f2 | tr '\n' ' ')"
 fi
 
 # a plain run executes no matrix-only cell: the counter moves only on the --matrix path

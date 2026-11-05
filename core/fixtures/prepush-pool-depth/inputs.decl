@@ -1,11 +1,12 @@
 # prepush-pool-depth extracts the pool block from each pre-push hook this layout carries and sources it in scratch
 # repositories it builds itself. It needs a git work tree only for `rev-parse --show-toplevel` (git.decl: seed).
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh
 core/git-hooks/pre-push
 .githooks/pre-push
-core/fixtures/lib/mutant.sh
 scripts/validate-enforcement-map.sh
 scripts/render-invariant-index.sh
 core/scripts/hermetic-run.sh
 core/scripts/derive-fixture-readsets.sh
 core/skills/ai-dlc/enforcement-map.yaml
+core/fixtures/prepush-pool-depth/receipt-bl924.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-artifact-path-prescriptions — LC-R4 / W11: an artifact path a layer entry PRESCRIBES is
 # held to artifact-path-grammar.md.
 #

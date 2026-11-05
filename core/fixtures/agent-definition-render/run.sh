@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # agent-definition-render/run.sh — prove render-agent-definitions.sh projects `aiDlcRoles` into
 # `.claude/agents/<role>.md`, that `--check` discriminates a current projection from a drifted
 # one, and that it neither defines a model-less role nor touches a definition it did not write.

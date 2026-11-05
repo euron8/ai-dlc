@@ -4,4 +4,6 @@
 # resolves it.
 !.githooks/pre-push
 # run.sh sources ../lib/preamble.sh, ../lib/mutant.sh and ../lib/matrix.sh.
-core/fixtures/lib/
+core/fixtures/lib/matrix.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

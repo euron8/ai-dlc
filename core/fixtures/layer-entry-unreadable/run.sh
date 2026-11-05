@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-entry-unreadable — prove that "I could not READ this entry" and "this entry has no
 # such key" are two facts and not one. PC-S307.
 #
@@ -120,7 +120,7 @@ fails=0
 ok()  { ASSERTIONS=$((ASSERTIONS+1)); printf '  ok   %s\n' "$1"; }
 bad() { ASSERTIONS=$((ASSERTIONS+1)); fails=$((fails+1)); printf '  FAIL %s\n' "$1"; }
 say() { if [ "$1" = 1 ]; then ok "$2"; else bad "$2"; fi; }
-. "$(cd "$HERE/../lib" && pwd)/mutant.sh"
+. "$(cd "$HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # NO run() HELPER, deliberately. `OUT="$(run ...)"` evaluates the helper in a SUBSHELL, so an

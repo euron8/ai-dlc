@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # ledger-rotate/run.sh — prove rotation removes CLOSED entries, keeps OPEN ones, loses
 # nothing, and does not change what the classifier says about the work still open.
 #

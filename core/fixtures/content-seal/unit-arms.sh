@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # content-seal/unit-arms.sh -- the content seal's LIBRARY decisions, asked IN PROCESS. Driven by run.sh.
 #
@@ -45,7 +45,7 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
-. "$CS_HERE/../lib/mutant.sh"
+. "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 MX=0; [ "${1:-}" = --matrix ] && MX=1
 US="$(printf '\037')"
 TOKEN="changed after its last sealed write"

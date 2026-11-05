@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # readset-stage1-verdict -- drive scripts/readset-stage1-verdict.sh (the stage-1 scorer) and
 # scripts/readset-stage1-run.sh (the stage-1 run wrapper) over SEEDED worlds, and kill a mutant of
 # every arm, refusal and wrapper property they claim.

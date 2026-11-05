@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # consumer-suite-pool — the consumer's pre-push fixture suite ran SERIALLY and
 # PASSED WHEN IT RAN NOTHING, and this is what stops either from coming back.
 #

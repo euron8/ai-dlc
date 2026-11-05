@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # self-update-reinvoke-liveness -- a change to what step 3 onward executes is LIVE on the pull that
 # delivers it, because step 2 STOPS and re-invokes /ai-dlc-update and the fresh invocation loads the
 # updated logic. Only what the FIRST invocation's step 1 executed ran the pre-update version.

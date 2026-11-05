@@ -307,7 +307,7 @@ if [ "$N_UNSCRUBBED" -gt 0 ]; then
   echo "  without scrubbing the inherited git environment. Run directly from a linked worktree"
   echo "  (\`bash core/fixtures/X/run.sh\`), each can redirect its git calls onto the caller's"
   echo "  repository and wipe that index while reporting PASS. Remedy: source the seam first --"
-  echo "    . \"\$(cd \"\$(dirname \"\$0\")/../lib\" && pwd)/preamble.sh\""
+  echo "    . \"\$(cd \"\$(dirname \"\$0\")/../lib\" && pwd)/preamble.sh\" || { echo \"FIXTURE BROKEN: cannot source lib/preamble.sh\" >&2; exit 2; }"
   for f in $UNSCRUBBED; do echo "    ${f}"; done
 fi
 

@@ -2,4 +2,5 @@
 # offender.md and nearmiss.md are in the fixture's own directory, which the runner copies without being named.
 # The subject is REQUIRED and its sentinel is printed only after the subject resolves, so the SKIP exit (subject absent) cannot satisfy it.
 !core/skills/ai-dlc-update/SKILL.md
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

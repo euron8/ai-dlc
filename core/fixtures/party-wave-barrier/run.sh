@@ -98,7 +98,7 @@
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/party-wave-barrier/run.sh --matrix
 #
 # Exit: 0 = every assertion holds, 1 = an assertion failed, 2 = the fixture could not run.
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 set -uo pipefail
 # --matrix is parsed and shifted first. A plain run executes no matrix-only cell (asserted at the end).
 MATRIX=0

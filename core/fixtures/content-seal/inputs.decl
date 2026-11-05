@@ -1,8 +1,8 @@
 # content-seal drives the recorder hook and the seal library it sources (every seal row), and the three
 # join readers that compare against it. Without the two seal files declared, the sandbox omits them and
 # every arm runs the absent-sibling path, so both are REQUIRED. The arm scripts borrow the worlds of
-# adversarial-shard-merge and remediator-shard-join by sourcing their lib.sh, so those directories and
-# every sibling those libs check at startup are declared too.
+# adversarial-shard-merge and remediator-shard-join by sourcing their lib.sh, so those directories' libs and
+# every seed remediator-shard-join/lib.sh checks at startup are declared too.
 !core/scripts/content-seal.sh
 !core/hooks/ai-dlc-content-seal.sh
 !core/scripts/merge-adversarial-shards.sh
@@ -29,5 +29,20 @@ core/team-roles/remediator.md
 core/hooks/ai-dlc-gate-remediation-guard.sh
 core/hooks/ai-dlc-derivation-capture.sh
 core/fixtures/adversarial-shard-merge/
-core/fixtures/remediator-shard-join/
-core/fixtures/lib/
+core/fixtures/remediator-shard-join/lib.sh
+core/fixtures/remediator-shard-join/seed.block-2.1.md
+core/fixtures/remediator-shard-join/seed.block-2.2.md
+core/fixtures/remediator-shard-join/seed.block-3.1.md
+core/fixtures/remediator-shard-join/seed.block-epics.md
+core/fixtures/remediator-shard-join/seed.block-handoff.md
+core/fixtures/remediator-shard-join/seed.block-setaside.md
+core/fixtures/remediator-shard-join/seed.block-sib.md
+core/fixtures/remediator-shard-join/seed.seat-architecture-architect-1.md
+core/fixtures/remediator-shard-join/seed.seat-architecture-dev-1.md
+core/fixtures/remediator-shard-join/seed.seat-architecture-dev-4.md
+core/fixtures/remediator-shard-join/seed.seat-architecture-tea-1.md
+core/fixtures/remediator-shard-join/seed.story-2.1-positions-on-demand.md
+core/fixtures/remediator-shard-join/seed.story-2.2-lifetime-pnl-on-demand.md
+core/fixtures/remediator-shard-join/seed.story-3.1-dark-theme.md
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

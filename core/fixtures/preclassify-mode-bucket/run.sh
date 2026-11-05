@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # preclassify-mode-bucket — the noop arms of the `A` and `M` branches must bucket on the
 # consumer's EXEC BIT, not on content alone, and must not collapse the two mode-only cases
 # into one.
@@ -95,7 +95,7 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # PM_U=1 only beside the --untangle cells' own ok: a BL-100 mutant is scored only when the
 # unmutated preclassify passed every U cell in this run.

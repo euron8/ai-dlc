@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # architecture-fast-track — assert the architecture step's declared-no-impact
 # fast-track (release 0.532.0) is wired end to end: the intensity bullet names
 # the predicate and the impact file at ANY intensity (not lightweight-only),

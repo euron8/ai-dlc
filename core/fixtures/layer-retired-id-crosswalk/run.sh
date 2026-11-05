@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-retired-id-crosswalk — E16: an id that LEFT the rulebook needs a crosswalk row.
 #
 # THE ASSERTION. The migration LC-N5 requires renames consumer ids into the band. Every
@@ -47,7 +47,7 @@ fails=0
 made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant to a

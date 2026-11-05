@@ -4,4 +4,6 @@
 !scripts/validate-shell-portability.sh
 # copy-only: core/fixtures/shell-portability/run.sh:197 run.sh tests for the marker beside the validator; nothing reads its content
 VERSION
-core/fixtures/lib/
+core/fixtures/lib/matrix.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

@@ -13,7 +13,8 @@ core/skills/ai-dlc-update/reconcile/preclassify.sh
 # S10 copies the reader the way apply.sh does, beside the REAL sprint-status.sh and its schema.
 !core/scripts/sprint-status.sh
 !core/schemas/sprint-status.json
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 # BL-706: the B7 cells and mutants drive apply.sh, which resolves preclassify.sh and every other reconcile sibling beside itself, and each mutant copies the whole directory.
 core/skills/ai-dlc-update/reconcile/

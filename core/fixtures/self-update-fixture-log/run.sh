@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # self-update-fixture-log — assert step 2's GATE-RECORD CHECKER, the file at
 # reconcile/self-update-fixtures.sh that the push wrapper runs before the consumer's pre-push hook.
 #
@@ -93,7 +93,7 @@ SUFL_RUNNER_ARG="${1:-}"
 [ -f "$HERE/lib.sh" ] || { echo "FIXTURE BROKEN: $HERE/lib.sh is absent; no world exists to assert against" >&2; exit 2; }
 # shellcheck source=lib.sh
 . "$HERE/lib.sh"
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh"
 if [ "$MATRIX" = 1 ]; then echo "MODE: FULL"; else echo "MODE: PUSH"; fi
 mrow() { MATRIX_CELLS=$((MATRIX_CELLS + 1)); printf 'MATRIX-ROW %s %s\n' "$1" "$2"; }

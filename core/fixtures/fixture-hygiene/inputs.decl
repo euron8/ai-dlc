@@ -4,4 +4,5 @@
 !scripts/validate-fixture-hygiene.sh
 !scripts/validate-fixture-invocations.sh
 # preamble.sh and mutant.sh, sourced here.
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

@@ -3,4 +3,5 @@
 # lib.sh and reads setup-sites.md beside itself. Declared whole; the detector is the subject (!).
 !core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
 core/skills/ai-dlc-update/reconcile/
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

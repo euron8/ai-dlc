@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # Drives the pre-push suite's per-fixture READ-SET SKIP.
 #
 # WHAT IS BEING PROVEN, and why each arm has to exist. The skip decides which fixtures do not
@@ -224,7 +224,7 @@ asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserts=$((asserts+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE BROKEN" >&2; exit 2; }
-. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
 # BOUNDARY. Every section below is a UNIT guarded by `if sg <unit>; then ... fi`; `--group <x>` runs
