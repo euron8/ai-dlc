@@ -65,6 +65,30 @@ drive_ack() { # <work> <tool> [file_path] -> stdout
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
 
+# Each distinct world is built by seed.sh ONCE per run, into a pristine cache, and every cell that uses it gets
+# its own `cp -Rp` copy (mtimes kept: the resolved-then-touched world orders its series by them). No cell ever
+# touches the cache, so no cell can mutate a world another cell reads. Called inside $( ), so the cache is on disk.
+WORLD_CACHE="$(mktemp -d "${TMPDIR:-/tmp}/divergence-cache-XXXXXX")"
+# Removed on EVERY exit, early ones included, and only when it is the mktemp directory made above:
+# non-empty, a directory, and directly under the TMPDIR it was made in, with the mktemp prefix.
+drop_world_cache() {
+  case "$WORLD_CACHE" in "${TMPDIR:-/tmp}"/divergence-cache-??????) ;; *) return 0 ;; esac
+  [ -d "$WORLD_CACHE" ] && [ ! -L "$WORLD_CACHE" ] && rm -rf -- "$WORLD_CACHE"
+  return 0
+}
+trap drop_world_cache EXIT
+seed_world() { # <case> -> a fresh private copy of the case's world
+  local c="$1" w
+  if [ ! -d "$WORLD_CACHE/$c" ]; then
+    w="$(bash "$HERE/seed.sh" "$c")" || return 1
+    [ -d "$w" ] || return 1
+    mv "$w" "$WORLD_CACHE/$c" || return 1
+  fi
+  w="$(mktemp -d "${TMPDIR:-/tmp}/divergence-XXXXXX")" || return 1
+  cp -Rp "$WORLD_CACHE/$c/." "$w/" || return 1
+  printf '%s' "$w"
+}
+
 echo "divergence-hard-block:"
 
 # =============================================================================
@@ -73,7 +97,7 @@ echo "divergence-hard-block:"
 # Under v0.57.0 the acknowledge hook ALLOWED every one of these: it knew nothing about the
 # adversarial cycle, and the pause flag it did know about is cleared by the lead as its
 # sanctioned resume. So the dispatch went through and the cycle ran pass 16, and pass 17.
-W="$(bash "$HERE/seed.sh" divergent)"
+W="$(seed_world divergent)"
 OUT="$(drive_ack "$W" Agent)"
 if denied "$OUT"; then ok "DIVERGENT: the Agent dispatch is DENIED (the lead cannot run another pass)"
 else bad "DIVERGENT: the Agent dispatch was ALLOWED — the hard block has no teeth"; fi
@@ -122,7 +146,7 @@ rm -rf "$W"
 
 # --- a STALL must deny too. v0.57.0 read only the verdict field, and a stall has no verdict
 # of its own — it is a property of the series. So it denied nothing.
-W="$(bash "$HERE/seed.sh" stalled)"
+W="$(seed_world stalled)"
 OUT="$(drive_ack "$W" Agent)"
 if denied "$OUT"; then
   ok "STALLED: the Agent dispatch is DENIED (a plateau is not a reason for another pass)"
@@ -151,7 +175,7 @@ ceiling_msg_class() { # <out> -> ceiling | stalled | none
 }
 drive_ceiling() { # <ack-hook> <stop-hook> -> "<ack-verdict> <ack-class> <stop-class>"
   local w a s r=""
-  w="$(bash "$HERE/seed.sh" ceiling)"
+  w="$(seed_world ceiling)"
   a="$(printf '{"session_id":"t","transcript_path":"","tool_name":"Agent","tool_input":{"file_path":""}}' \
         | CLAUDE_PROJECT_DIR="$w" bash "$1" 2>/dev/null)"
   s="$(printf '{"session_id":"t","transcript_path":""}' | CLAUDE_PROJECT_DIR="$w" bash "$2" 2>/dev/null)"
@@ -201,7 +225,7 @@ rm -rf "$MUTD"
 # =============================================================================
 # 2. THE RESUME — a resolved cycle CAN dispatch. If this fails, the deadlock is back.
 # =============================================================================
-W="$(bash "$HERE/seed.sh" divergent-resolved)"
+W="$(seed_world divergent-resolved)"
 OUT="$(drive_ack "$W" Agent)"
 if denied "$OUT"; then bad "RESOLVED: the verification pass was DENIED — there is no exit and the pipeline is wedged"
 else ok "RESOLVED: the verification pass is ALLOWED (the record is the sanctioned exit)"; fi
@@ -210,7 +234,7 @@ rm -rf "$W"
 # --- and the record itself must be WRITEABLE while paused. Check 2a denies every dispatch
 # until the record exists; if the pause flag then denies the record, the two checks lock the
 # pipeline against itself and the only way out is to switch off a hook.
-W="$(bash "$HERE/seed.sh" divergent)"
+W="$(seed_world divergent)"
 drive_stop "$W" >/dev/null                      # raises the pause flag
 REC="$W/_bmad-output/planning-artifacts/s7/brief-resolution-p2.md"
 OUT="$(drive_ack "$W" Write "$REC")"
@@ -251,7 +275,7 @@ rm -rf "$W"
 # =============================================================================
 # 3. SURFACING — the Stop hook still raises the flag and blocks, so a human hears about it.
 # =============================================================================
-W="$(bash "$HERE/seed.sh" divergent)"
+W="$(seed_world divergent)"
 OUT="$(drive_stop "$W")"
 if [ -f "$W/_bmad-output/pipeline-paused.flag" ]; then
   ok "raises the pause flag so the operator is asked to adjudicate"
@@ -278,7 +302,7 @@ effects_class() { # <out> -> yes | no | none
 }
 drive_effects() { # <ack-hook> <stop-hook> -> "<ack-class> <stop-class>"
   local w a s
-  w="$(bash "$HERE/seed.sh" divergent)"
+  w="$(seed_world divergent)"
   a="$(printf '{"session_id":"t","transcript_path":"","tool_name":"Agent","tool_input":{"file_path":""}}' \
         | CLAUDE_PROJECT_DIR="$w" bash "$1" 2>/dev/null)"
   rm -f "$w/_bmad-output/pipeline-paused.flag"
@@ -322,7 +346,7 @@ unset _mh _mf _want
 # 4. THE DECOYS — a guard that fires on a working cycle gets ripped out.
 # =============================================================================
 for c in converged in-progress; do
-  W="$(bash "$HERE/seed.sh" "$c")"
+  W="$(seed_world "$c")"
   drive_stop "$W" >/dev/null
   OUT="$(drive_ack "$W" Agent)"
   if [ -f "$W/_bmad-output/pipeline-paused.flag" ]; then
@@ -344,7 +368,7 @@ done
 # hard block on a finished cycle. This is order_key()'s original bug, whose own comment reads
 # "THIS FUNCTION WAS THE BUG, AND IT FAILED EXACTLY WHERE IT MATTERED" — reintroduced in a
 # hook nine releases later, in the one file that documents it.
-W="$(bash "$HERE/seed.sh" resolved-then-touched)"
+W="$(seed_world resolved-then-touched)"
 drive_stop "$W" >/dev/null
 OUT="$(drive_ack "$W" Agent)"
 if [ -f "$W/_bmad-output/pipeline-paused.flag" ]; then
@@ -361,11 +385,10 @@ rm -rf "$W"
 # =============================================================================
 # `.divergence-raised` was written and never removed by anything: not the hook, not the
 # retro rotation. State that only accumulates is a stale-flag bug waiting for its turn.
-W="$(bash "$HERE/seed.sh" divergent)"
+W="$(seed_world divergent)"
 drive_stop "$W" >/dev/null
 [ -f "$W/_bmad-output/.adversarial-stop" ] || bad "no .adversarial-stop written on a STOP"
 # the operator resolves it; the state must self-heal on the next turn
-bash "$HERE/seed.sh" divergent-resolved >/dev/null 2>&1 || true
 cat > "$W/_bmad-output/planning-artifacts/s7/brief-resolution-p2.md" <<'EOF'
 <!-- ADVERSARIAL_RESOLUTION v1
 resolves: brief-adversarial-p2.md
@@ -394,7 +417,7 @@ rm -rf "$W"
 # The `core/git-hooks/` failure: an enforcer shipped to a path nothing reads, and nothing
 # said so for two minor releases. If the validator is missing the hooks fail OPEN (a hook
 # that wedges the pipeline on its own bug gets switched off) — but they must leave a trace.
-W="$(bash "$HERE/seed.sh" divergent)"
+W="$(seed_world divergent)"
 rm -f "$W/scripts/ai-dlc/validate-adversarial-convergence.sh"
 OUT="$(drive_ack "$W" Agent)"
 if denied "$OUT"; then bad "a missing validator DENIED the dispatch — hooks must fail OPEN on their own breakage"
@@ -419,7 +442,7 @@ rm -rf "$W"
 # quietly widened its glob would still find the DIVERGENT series and still deny. An arm that
 # also deleted the pass files could not tell "found nothing because unscoped-and-empty" from
 # "found nothing because correctly scoped".
-W="$(bash "$HERE/seed.sh" divergent)"
+W="$(seed_world divergent)"
 rm -f "$W/_bmad-output/implementation-artifacts/sprint-status.yaml" \
       "$W/_bmad-output/planning-artifacts/sprint-status.yaml"
 [ -f "$W/_bmad-output/planning-artifacts/s7/brief-adversarial-p2.md" ] \
@@ -530,6 +553,152 @@ pend_mutant ack-emitter-swapped "loud/pending loud/loud loud/loud none/none" \
 pend_mutant stop-emitter-swapped "pending/loud loud/loud loud/loud none/none" \
   's/^  if \[ "\$SPRINT_PENDING" -eq 1 \]; then$/  if false; then/' "$SB"
 set --
+
+# =============================================================================
+# 10. THE CAP AND ITS ERA (BL-911) -- a series is bounded at p3, and the bound reaches the hooks.
+# =============================================================================
+# A pass numbered 3 or more that does not stamp EXIT_CONDITION_MET STOPS the series (`--cycle-state` CAPPED,
+# rc 3) until a resolution record resolving it exists; a later pass that walked past it without a valid one
+# keeps it CAPPED. Both hooks shell out to the SAME validator, so each cell drives the world's own
+# scripts/ai-dlc/ copy and reads three things: the PreToolUse dispatch (`capped` = denied AND naming
+# "CAPPED at p3", `allow`, `other` = denied for some other reason), the Stop hook's message (`capped` = it names
+# "CAPPED at p3", `none` otherwise -- the Stop hook blocks every active pipeline that yields, so its decision
+# is not the signal), and, for the era worlds, the GATE's arms M and N (`pending` = both PENDING lines and no
+# FAIL (M/N), `fail` = a FAIL (M or (N, `none`). Every deny cell has an ALLOW twin one property apart:
+#   cap-notoken   the real rulebook with the token sentence reworded; no git     allow none
+#   cap-bound     p1 p2 p3(NOT_MET), token committed 2026-07-01 before the series capped capped
+#   cap-from-p2   p2 p3(NOT_MET): p3 is the SECOND pass; the cap keys on NUMBER   capped capped
+#   cap-inprog    p1 p2(NOT_MET): no p3                                            allow none
+#   cap-norecord  p4 MET walked past the capped p3 with no resolves_divergence:    capped capped fail
+#   cap-record    the same p4 declaring a valid record resolving p3               allow none none
+#   cap-badrecord the same p4 declaring a record that resolves p9, which is absent capped capped fail
+#                 (the three record worlds read the GATE too, handed the seeded operator transcript, so the
+#                 gate is shown ACCEPTING the valid record, not only the fail-open --cycle-state path)
+#   era-between   engine committed 07-01, the token committed 07-20, the series   allow none pending
+#                 opened 07-12: the era is the token's commit, so it is LEGACY at the gate AND at the hooks
+#   era-bound     the same, token committed 07-05: bound, and its sharded p2 lacks capped capped fail
+#                 shard_set_derived_from: (arm N)
+#   era-merge-before  the token committed on main 07-05, --no-ff merged into the  allow none pending
+#                 sprint branch 07-20, the series opened 07-10: dated by the merge (first parent), LEGACY
+#   era-merge-after   the same topology, the series opened 07-21: bound            capped capped fail
+# All dates are literal (BL-868); seed.sh commits with fixed GIT_COMMITTER_DATE.
+cap_cell() { # <validator copy or -> <case> [gate] -> "<ack> <stop>[ <gate>]"
+  local w a s ac sc gc g
+  w="$(seed_world "$2")" || { printf 'SEED SEED SEED'; return 0; }
+  [ "$1" = - ] || cp "$1" "$w/scripts/ai-dlc/validate-adversarial-convergence.sh"
+  a="$(drive_ack "$w" Agent)"
+  rm -f "$w/_bmad-output/pipeline-paused.flag"
+  s="$(drive_stop "$w")"
+  if denied "$a"; then case "$a" in *"CAPPED at p3"*) ac=capped ;; *) ac=other ;; esac; else ac=allow; fi
+  case "$s" in *"CAPPED at p3"*) sc=capped ;; *) sc=none ;; esac
+  if [ "${3:-}" = gate ]; then
+    # The record worlds carry the operator transcript the gate verifies their citation against (F6); a gate run
+    # without one fails CLOSED on the citation, which would read as the cap refusing a valid record.
+    g="$(bash "$w/scripts/ai-dlc/validate-adversarial-convergence.sh" --series "$w/_bmad-output/planning-artifacts/s7/brief-adversarial-p" \
+          ${4:+--transcript "$w/operator-transcript.jsonl"} 2>&1)"
+    case "$g" in
+      *"adversarial convergence --"*) ;;
+      *) printf '%s %s norun' "$ac" "$sc"; rm -rf "$w"; return 0 ;;
+    esac
+    case "$g" in
+      *"FAIL (M -- CAP)"*|*"FAIL (N -- WIDTH)"*) gc=fail ;;
+      *"PENDING (M -- CAP)"*"PENDING (N -- WIDTH)"*) gc=pending ;;
+      *) gc=none ;;
+    esac
+    printf '%s %s %s' "$ac" "$sc" "$gc"
+  else
+    printf '%s %s' "$ac" "$sc"
+  fi
+  rm -rf "$w"
+}
+cap_want() { # <case> -> the shipped validator's row
+  case "$1" in
+    cap-notoken|cap-inprog) echo "allow none" ;;
+    cap-bound|cap-from-p2) echo "capped capped" ;;
+    cap-norecord|cap-badrecord) echo "capped capped fail" ;;
+    cap-record) echo "allow none none" ;;
+    era-between|era-merge-before) echo "allow none pending" ;;
+    era-bound|era-merge-after) echo "capped capped fail" ;;
+  esac
+}
+# The era worlds and the three record worlds also read the GATE; the record worlds hand it their transcript.
+cap_gate() { case "$1" in era-*) echo gate ;; cap-norecord|cap-record|cap-badrecord) echo "gate t" ;; esac; }
+CAP_CASES="cap-notoken cap-bound cap-from-p2 cap-inprog cap-norecord cap-record cap-badrecord era-between era-bound era-merge-before era-merge-after"
+CAP_N=0; B_CAPROW=0; CAP_WANT_N=0
+for _c in $CAP_CASES; do CAP_WANT_N=$((CAP_WANT_N + 1)); done
+for _c in $CAP_CASES; do
+  _g="$(cap_cell - "$_c" $(cap_gate "$_c"))"; _w="$(cap_want "$_c")"
+  if [ "$_g" = "$_w" ]; then ok "CAP $_c: dispatch/stop$([ -n "$(cap_gate "$_c")" ] && echo /gate) = $_g"; CAP_N=$((CAP_N + 1))
+  else bad "CAP $_c: dispatch/stop$([ -n "$(cap_gate "$_c")" ] && echo /gate) = '$_g', want '$_w'"; fi
+done
+# Every cap mutant is gated on the WHOLE shipped row having held in this run (each mutant reads two of its cells).
+if [ "$CAP_N" -eq "$CAP_WANT_N" ]; then ok "CAP row: all $CAP_WANT_N cap/era cells hold on the shipped validator and hooks"; B_CAPROW=1
+else bad "CAP row: $CAP_N of $CAP_WANT_N cap/era cells hold; no cap mutant can be scored"; fi
+# MUTANTS of the validator, each a copy of the shipped file with every anchor applied exactly once (python
+# refuses a missing or repeated anchor), copied into the world's scripts/ai-dlc/ in place of the shipped one.
+# Each runs only its DECIDING case and one TWIN case that must keep the shipped row. The kill is gated on both
+# cases' base rows having held in this run.
+cap_mut() { # <label> <deciding case> <twin case> <old> <new> [<old> <new>]...
+  local label="$1" dec="$2" twin="$3" d f gd gt wd wt; shift 3
+  d="$(mktemp -d "${TMPDIR:-/tmp}/divergence-cmut-XXXXXX")"; f="$d/validate-adversarial-convergence.sh"
+  if ! python3 - "$W_VALIDATOR" "$f" "$@" <<'PY'
+import sys
+s = open(sys.argv[1], encoding="utf-8").read(); a = sys.argv[3:]
+for i in range(0, len(a), 2):
+    if s.count(a[i]) != 1: sys.exit(3)
+    s = s.replace(a[i], a[i + 1])
+open(sys.argv[2], "w", encoding="utf-8").write(s)
+PY
+  then bad "FIXTURE STALE: mutant $label -- an anchor is not in the validator exactly once"; rm -rf "$d"; return; fi
+  if cmp -s "$W_VALIDATOR" "$f" || ! bash -n "$f" 2>/dev/null; then bad "FIXTURE STALE: mutant $label DID NOT APPLY or is not valid shell"; rm -rf "$d"; return; fi
+  wd="$(cap_want "$dec")"; wt="$(cap_want "$twin")"
+  gd="$(cap_cell "$f" "$dec" $(cap_gate "$dec"))"; gt="$(cap_cell "$f" "$twin" $(cap_gate "$twin"))"
+  if [ "$gt" != "$wt" ]; then bad "mutant $label: its twin $twin moved too ('$gt', want '$wt') -- the kill is not its own arm's"
+  elif [ "$gd" = "$wd" ]; then bad "mutant $label SURVIVED: $dec still reads '$gd'"
+  else mutant_killed "${B_CAPROW:-0}" "$label" "mutant $label is KILLED by CAP $dec ('$gd', shipped '$wd'); twin $twin holds"; fi
+  rm -rf "$d"
+}
+W_VALIDATOR="$(pick "$HERE/../../scripts/validate-adversarial-convergence.sh" \
+                    "$HERE/../../../scripts/ai-dlc/validate-adversarial-convergence.sh" \
+                    "$HERE/../../core/scripts/validate-adversarial-convergence.sh")"
+if [ -z "$W_VALIDATOR" ]; then bad "FIXTURE BROKEN: the validator is not found; no cap mutant is scored"
+else
+  # Cap at p4, the self-probe moved with it (a cap_capped mutant alone exits 2 on that probe, no verdict).
+  cap_mut cap-at-p4 cap-bound cap-inprog \
+    'cap_capped() { case "${1:-}" in ""|*[!0-9]*) return 1 ;; esac; [ "$1" -ge 3 ]' \
+    'cap_capped() { case "${1:-}" in ""|*[!0-9]*) return 1 ;; esac; [ "$1" -ge 4 ]' \
+    'if ! cap_capped 3 EXIT_CONDITION_NOT_MET || cap_capped 3 EXIT_CONDITION_MET || cap_capped 2 EXIT_CONDITION_NOT_MET' \
+    'if ! cap_capped 4 EXIT_CONDITION_NOT_MET || cap_capped 4 EXIT_CONDITION_MET || cap_capped 3 EXIT_CONDITION_NOT_MET'
+  # Cap by POSITION in the series instead of by pass number.
+  cap_mut cap-by-position cap-from-p2 cap-bound \
+    'for ((i = 0; i < N; i++)); do cap_capped "${P_NUM[$i]}"' 'for ((i = 0; i < N; i++)); do cap_capped "$((i + 1))"' \
+    '      cap_capped "${P_NUM[$i]}" "${P_VERDICT[$i]}" || continue' '      cap_capped "$((i + 1))" "${P_VERDICT[$i]}" || continue' \
+    'if cap_capped "${P_NUM[$((N - 1))]}" "$LAST_VERDICT"' 'if cap_capped "$N" "$LAST_VERDICT"'
+  # Accept any record FILE a walked-past pass names, whatever pass it resolves (one that does not exist).
+  cap_mut cap-accepts-nonexistent-pass cap-badrecord cap-norecord \
+    'if ! validate_record "$cap_rec" "${P_FILE[$i]}" "$i"; then' 'if [ ! -f "$cap_rec" ]; then'
+  # The era: the token check dropped (a tree whose rulebook carries no token is bound anyway).
+  cap_mut era-token-check-dropped cap-notoken cap-bound \
+    'grep -qF -- "$ERA_TOKEN" "$ERA_ROOT/.claude/skills/ai-dlc/steps/_gate-procedures.md" 2>/dev/null || return 0' ':'
+  # The era: the date gate dropped (a token committed AFTER the series opened binds it anyway).
+  cap_mut era-date-gate-dropped era-between era-bound \
+    'era_cmp "${2:-}" "$ERA_STAMP" || ERA_STATE=legacy ;;' ': ;;'
+  # Legacy keyed on the field's ABSENCE: a bound sharded pass without shard_set_derived_from: is skipped.
+  cap_mut legacy-on-field-absence era-bound era-between \
+    '      if [ -z "$n_from" ]; then' '      if [ -z "$n_from" ]; then continue; fi; if false; then'
+  # The era keyed on the ENGINE's install commit, not the rulebook's: `-S` over the validator, which carries
+  # the ERA_TOKEN literal, finds the 07-01 engine commit and binds a series the rulebook did not yet carry.
+  cap_mut era-on-engine-commit era-between era-bound \
+    '      -- .claude/skills/ai-dlc/steps/_gate-procedures.md 2>/dev/null | tail -n 1)"' \
+    '      -- scripts/ai-dlc/validate-adversarial-convergence.sh 2>/dev/null | tail -n 1)"'
+  # The era dated by the token's ORIGINAL commit, not its first-parent arrival: without --first-parent the 07-05
+  # commit on main dates a token the sprint branch carried only from its 07-20 merge, and binds the 07-10 series.
+  # The era-merge cells exercise only the hooks and the gate, not era_resolve.
+  cap_mut era-not-first-parent era-merge-before era-merge-after \
+    'log --first-parent --diff-merges=first-parent --no-patch' 'log --diff-merges=first-parent --no-patch'
+fi
+unset _c _g _w
+drop_world_cache
 
 echo
 if [ "$fails" -eq 0 ]; then echo "divergence-hard-block: PASS"; exit 0; fi

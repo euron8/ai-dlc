@@ -179,11 +179,14 @@ STEER_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-steering-bu
 #              resolution record for it exists. The VERIFICATION pass is permitted.
 #   DIVERGENT  the terminal pass stamps DIVERGENT_HARD_BLOCK, unresolved.
 #   STALLED    arm E fires, unresolved.
+#   CAPPED     arm M fires, in a series the era binds: the terminal pass is p3 or later and does not
+#              stamp EXIT_CONDITION_MET, unresolved; or a pass walked past a capped one with no valid
+#              record. Ranked after STALLED, before CONVERGED.
 #   REOPENED   arm J fires: a pass ran after EXIT_CONDITION_MET on different artifact bytes.
 #   CEILING    arm I fires: the resolution ceiling is spent on unanchored resolution kinds.
 #
 # exit 0  CONTINUE | CONVERGED | RESOLVED  -- another pass is permitted
-# exit 3  DIVERGENT | STALLED | REOPENED | CEILING  -- another pass is NOT the remedy
+# exit 3  DIVERGENT | STALLED | CAPPED | REOPENED | CEILING  -- another pass is NOT the remedy
 # exit 1  no series, or the series is un-adjudicable (ordering/vocabulary broken)
 #
 # THE HOOKS HOLD NO LOGIC. They shell out, read the exit code, and deny on 3. They
@@ -434,6 +437,75 @@ DISPATCH_ID_ERE='^(toolu_[0-9A-Za-z]{24}|toolu_[0-9]{13}_[0-9]+|call_[0-9a-f]{32
 # which is a different failure with a different shape. The two got conflated because
 # they look alike from the outside. They have opposite remedies.)
 VALID_RESOLUTIONS="REVERT_REPAIR CHANGE_APPROACH CUT_SCOPE RESTART_CYCLE REOPEN_AFTER_MET"
+
+# THE ERA OF THE CAP (arm M, CAPPED) AND THE DERIVED WIDTH (arm N), ONE EVENT FOR THE GATE AND THE HOOKS.
+# A series is BOUND when the installed rulebook above its passes
+# (`.claude/skills/ai-dlc/steps/_gate-procedures.md`, the first found walking up from the series' first
+# pass) carries ERA_TOKEN, AND its FIRST pass's invoked_at is at or after the OLDEST commit that added
+# ERA_TOKEN to that installed file ON THIS BRANCH (`git log --first-parent --diff-merges=first-parent -S`,
+# committer date, UTC): a token that arrives by a merge is dated by the merge, never by the commit on
+# the merged branch, which predates its arrival here. Never the engine's install
+# commit: an engine self-update lands before the rulebook's reconcile merge, and a series opened between
+# the two is still under the old rulebook. The hooks reach the same verdict because they do not compute
+# it: they read `--cycle-state`, which calls the same era_resolve.
+#   no installed rulebook, or no token in it     NOTOKEN: neither arm binds, and nothing is printed.
+#   token, first pass before the commit          LEGACY: nothing binds; the gate prints PENDING.
+#   token, first invoked_at not ISO 8601 UTC     LEGACY.
+#   token, inside a git work tree with no commit adding it (untracked, only uncommitted, or a shallow
+#   clone, whose boundary commit `-S` would read as the install)   LEGACY: the commit that will add it
+#                                                postdates every series now on disk, so this is the
+#                                                verdict the committed state gives them.
+#   token, and no git work tree at all           BOUND: the installed token is the only evidence, and
+#                                                every series is bound.
+# ONE IMPLEMENTATION. ERA_TOKEN, era_cmp and era_resolve are read by merge-adversarial-shards.sh from
+# this file (count-guarded, as it reads at_key), so the merge narrows exactly where arm N binds.
+ERA_TOKEN='A p3 that does not stamp'
+ERA_STATE=""
+ERA_STAMP=""
+ERA_ROOT=""
+# era_cmp <first invoked_at> <stamp> -> 0 when the series opened at or after the stamp. Fork-free.
+era_cmp() {
+  local a="${1:0:19}"
+  case "$a" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]) ;; *) return 1 ;; esac
+  ! [[ "${a}Z" < "$2" ]]
+}
+# era_resolve <series first pass file> <its invoked_at> -> ERA_STATE notoken|legacy|bound, ERA_STAMP,
+# ERA_ROOT. Computed once per process, lazily: only a run with a cap or width candidate pays for it.
+era_resolve() {
+  [ -z "$ERA_STATE" ] || return 0
+  local w g
+  ERA_STATE=notoken; ERA_STAMP=""; ERA_ROOT=""
+  w="$(cd "$(dirname "$1")" 2>/dev/null && pwd)"
+  while [ -n "$w" ]; do
+    if [ -f "$w/.claude/skills/ai-dlc/steps/_gate-procedures.md" ]; then ERA_ROOT="$w"; break; fi
+    w="${w%/*}"
+  done
+  [ -n "$ERA_ROOT" ] || return 0
+  grep -qF -- "$ERA_TOKEN" "$ERA_ROOT/.claude/skills/ai-dlc/steps/_gate-procedures.md" 2>/dev/null || return 0
+  # One subshell: `NOGIT`, `NOSTAMP`, or the oldest committer date (UTC) of a commit adding the token.
+  # A git hook exports GIT_DIR/GIT_WORK_TREE, which would redirect `git -C`; unset, as arm K does.
+  g="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    command -v git >/dev/null 2>&1 || { echo NOGIT; exit 0; }
+    [ "$(git -C "$ERA_ROOT" rev-parse --is-inside-work-tree 2>/dev/null)" = true ] || { echo NOGIT; exit 0; }
+    [ "$(git -C "$ERA_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = false ] || { echo NOSTAMP; exit 0; }
+    s="$(TZ=UTC0 git -C "$ERA_ROOT" log --first-parent --diff-merges=first-parent --no-patch --no-color -S"$ERA_TOKEN" --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd \
+      -- .claude/skills/ai-dlc/steps/_gate-procedures.md 2>/dev/null | tail -n 1)"
+    echo "${s:-NOSTAMP}" ) )"
+  case "$g" in
+    NOGIT) ERA_STATE=bound ;;
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z)
+      ERA_STAMP="$g"; ERA_STATE=bound; era_cmp "${2:-}" "$ERA_STAMP" || ERA_STATE=legacy ;;
+    *) ERA_STATE=legacy ;;
+  esac
+}
+# THE CAP. A pass numbered 3 or more that does not stamp EXIT_CONDITION_MET caps its series. Keyed on
+# the pass NUMBER, never on its position in the series (s321 architecture starts at p2).
+cap_capped() { case "${1:-}" in ""|*[!0-9]*) return 1 ;; esac; [ "$1" -ge 3 ] && [ "$2" != "EXIT_CONDITION_MET" ]; }
+# n_keys <shard_tool_use_ids value> -> its NUMERIC keys de-padded, sorted, space-joined (cross keys dropped).
+n_keys() {
+  printf '%s\n' $1 | awk -F"$PAIR_SEP" -v re="^(${DISPATCH_ID_PREFIXES// /|})." 'NF >= 2 && $1 ~ /^[0-9]+$/ && $2 ~ re { print $1 + 0 }' \
+    | LC_ALL=C sort -n -u | tr '\n' ' '
+}
 
 # Passes that found CRITICALs in scope the previous pass never saw. Derived from
 # findings_critical vs findings_critical_prior_scope; Check D turns it into the
@@ -1771,6 +1843,71 @@ for ((i = 0; i + 1 < N; i++)); do
 done
 
 # =============================================================================
+# M. CAP -- the series is bounded at p3 (BL-911).
+# =============================================================================
+# A pass numbered 3 or more that does not stamp EXIT_CONDITION_MET (cap_capped) STOPS the series as a
+# stall does. Runs in --cycle-state and at the gate, for a BOUND series only (era_resolve, above).
+#   terminal   a capped terminal pass is CAP_LIVE: --cycle-state answers CAPPED (rc 3) until a resolution
+#              record validate_record accepts against it exists (terminal_record_resolves, the
+#              RESOLVED_TERMINAL site below), then RESOLVED (rc 0) and the verification pass may run.
+#   walked     a pass after a capped pass must declare that record in `resolves_divergence:`, held to
+#              validate_record (F2: it resolves the capped pass itself). Missing or invalid is FAIL (M)
+#              and CAP_UNRESOLVED, which --cycle-state reads as CAPPED. A capped pass that is
+#              DIVERGENT_HARD_BLOCK, or diverged by arm C's residue, is arm F's and the arm-C block's.
+#   The record kinds are VALID_RESOLUTIONS, unchanged: "repair it once more" is CHANGE_APPROACH, which
+#   arm I's RESOLUTION_CEILING counts; CUT_SCOPE and REVERT_REPAIR are byte-anchored.
+#   LEGACY     a series the era leaves unbound: nothing binds; the gate prints one PENDING line.
+# Fork-free unless a capped pass exists; the self-probe runs before the series is judged.
+CAP_LIVE=0
+CAP_UNRESOLVED=0
+cap_any=0
+for ((i = 0; i < N; i++)); do cap_capped "${P_NUM[$i]}" "${P_VERDICT[$i]}" && { cap_any=1; break; }; done
+if [ "$cap_any" -eq 1 ]; then
+  if ! cap_capped 3 EXIT_CONDITION_NOT_MET || cap_capped 3 EXIT_CONDITION_MET || cap_capped 2 EXIT_CONDITION_NOT_MET \
+     || ! cap_capped 6 DIVERGENT_HARD_BLOCK || cap_capped "" EXIT_CONDITION_NOT_MET \
+     || ! era_cmp 2026-01-02T00:00:00Z 2026-01-02T00:00:00Z || ! era_cmp 2026-01-02T00:00:00.5Z 2026-01-01T23:59:59Z \
+     || era_cmp 2026-01-01T23:59:59Z 2026-01-02T00:00:00Z || era_cmp 2026-01-02 2026-01-01T00:00:00Z; then
+    echo "validate-adversarial-convergence.sh: arm M self-probe failed (cap_capped or era_cmp); no verdict" >&2
+    exit 2
+  fi
+  era_resolve "${P_FILE[0]}" "${P_AT[0]:-}"
+  if [ "$ERA_STATE" = bound ]; then
+    for ((i = 0; i + 1 < N; i++)); do
+      cap_capped "${P_NUM[$i]}" "${P_VERDICT[$i]}" || continue
+      [ "${P_VERDICT[$i]}" = "DIVERGENT_HARD_BLOCK" ] && continue
+      [ "${P_CDIV[$i]}" = "1" ] && continue
+      cap_ver="${P_FILE[$((i + 1))]}"
+      cap_rec="${P_RESOLVES[$((i + 1))]}"
+      cap_name="$(basename "${P_FILE[$i]}")"
+      if [ -z "$cap_rec" ]; then
+        err "M -- CAP" "$cap_name is pass ${P_NUM[$i]} and stamps ${P_VERDICT[$i]:-<none>}, which CAPS the
+      series, and $(basename "$cap_ver") ran after it without declaring 'resolves_divergence:'.
+      A series is bounded at p3: a p3 that does not converge STOPS exactly as a stall does.
+        STOP -> ADJUDICATE -> RESOLVE -> VERIFY
+      FIX: write the record the operator's adjudication authorized --
+      $(dirname "$cap_ver")/<artifact>-resolution-p${P_NUM[$i]}.md, 'resolves: $cap_name', one of
+      $VALID_RESOLUTIONS ('repair it once more' is CHANGE_APPROACH) -- and have the next pass declare it."
+        CAP_UNRESOLVED=1
+        continue
+      fi
+      [ -f "$cap_rec" ] || [ -z "${cap_rec##/*}" ] || cap_rec="$(dirname "$cap_ver")/$(basename "$cap_rec")"
+      if ! validate_record "$cap_rec" "${P_FILE[$i]}" "$i"; then
+        err "M -- CAP" "$(basename "$cap_ver") follows $cap_name, which CAPS the series, and claims to
+      resolve it, but $F_WHY"
+        CAP_UNRESOLVED=1
+      fi
+    done
+    if cap_capped "${P_NUM[$((N - 1))]}" "$LAST_VERDICT" && [ "$LAST_VERDICT" != "DIVERGENT_HARD_BLOCK" ]; then
+      CAP_LIVE=1
+      [ "$RESOLVED_TERMINAL" -eq 1 ] || { terminal_record_resolves "$((N - 1))" && RESOLVED_TERMINAL=1; }
+    fi
+  elif [ "$ERA_STATE" = legacy ] && [ "$CYCLE_STATE" -eq 0 ]; then
+    echo "PENDING (M -- CAP): the series opened (${P_AT[0]:-<none>}) before the installed rulebook's cap"
+    echo "      sentence was committed (${ERA_STAMP}). Legacy series: a capped pass in it is not bound."
+  fi
+fi
+
+# =============================================================================
 # --cycle-state: emit and exit. Arm D does NOT run.
 # =============================================================================
 if [ "$CYCLE_STATE" -eq 1 ]; then
@@ -1810,9 +1947,11 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
     STATE="DIVERGENT"; RC=3
   elif [ "$STALL_LIVE" -eq 1 ] && [ "$RESOLVED_TERMINAL" -ne 1 ]; then
     STATE="STALLED"; RC=3
+  elif [ "$CAP_UNRESOLVED" -eq 1 ] || { [ "$CAP_LIVE" -eq 1 ] && [ "$RESOLVED_TERMINAL" -ne 1 ]; }; then
+    STATE="CAPPED"; RC=3
   elif [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
     STATE="CONVERGED"
-  elif [ "$DIV_LIVE" -eq 1 ] || [ "$STALL_LIVE" -eq 1 ]; then
+  elif [ "$DIV_LIVE" -eq 1 ] || [ "$STALL_LIVE" -eq 1 ] || [ "$CAP_LIVE" -eq 1 ]; then
     STATE="RESOLVED"
   fi
   printf '%s\t%s\n' "$STATE" "$LAST_FILE"
@@ -2663,6 +2802,8 @@ EOF
           fi
           if [ -z "$k3_pending" ]; then
             k3_want_s="$(k3_want "$AC_T/k3-real" "$k3_xk" | tr '\n' ' ')"
+            # A requirements (subject) pass is never narrowed (merge-adversarial-shards.sh derive_set), so
+            # its want-set is the full map even after the first pass.
             if [ "$k3_have" != "$k3_want_s" ]; then
               k3_lone=0; [ "$k3_have" = "$(k3_want "$AC_T/k3-real" cross | tr '\n' ' ')" ] && k3_lone=1
               # THE LONE CROSS (K3D_RELEASE): ordinals plus one `cross` is the dispatched shape for a
@@ -2722,6 +2863,87 @@ EOF
       shard line. Re-run the pass that way and write it as the NEXT pass number; this arm reads only
       the series' terminal pass."
     fi
+  fi
+fi
+
+# =============================================================================
+# N. WIDTH -- a sharded pass after the series' first reviews the REPAIR (BL-911).
+# =============================================================================
+# GATE ONLY: it re-derives through merge-adversarial-shards.sh and reads git (era_resolve).
+#   subject    every pass after the series' first whose `shard_tool_use_ids:` carries a numeric
+#              `<key>=<id>` token (k_has_ids) -- a merged sharded pass, a cross-only one included: a
+#              cross-only pass is the narrowest subset, the one this arm most exists to judge.
+#   owed       `merge-adversarial-shards.sh --derived-set <pass>`, the merge's own derivation, recomputed
+#              from the pass's notarized record: the parts whose bytes changed since the series
+#              predecessor, and the parts the predecessor's CRITICAL and MAJOR findings cite. An input it
+#              cannot read widens the owed set to the full map, never narrows it. A document or subject
+#              pass always owes the full map (the merge does not narrow those modes).
+#   FAIL      (a) no `shard_set_derived_from:`; (b) it names another file than the series predecessor
+#              (the previous pass IN SERIES ORDER, never literal M-1); (c) the dispatched ordinal set is
+#              not EQUAL to the owed set -- a superset re-reviews what nothing changed, a subset (the
+#              false-MET direction) leaves a changed or still-open part unreviewed.
+#   PENDING    printed, never counted: the derivation refused, or the series is LEGACY (era_resolve).
+#   NOTOKEN    the installed rulebook carries no ERA_TOKEN: the arm is silent and forks nothing.
+# The self-probe stages a three-story series and fires the derivation both ways before the corpus.
+n_cand=""
+for ((i = 1; i < N; i++)); do
+  k_has_ids "$(block_field "${P_FILE[$i]}" 'shard_tool_use_ids')" && n_cand="$n_cand $i"
+done
+if [ -n "$n_cand" ]; then
+  era_resolve "${P_FILE[0]}" "${P_AT[0]:-}"
+  if [ "$ERA_STATE" = legacy ]; then
+    echo "PENDING (N -- WIDTH): the series opened (${P_AT[0]:-<none>}) before the installed rulebook's derived-width"
+    echo "      sentence was committed (${ERA_STAMP}). Legacy series: its later passes owe the full map."
+  elif [ "$ERA_STATE" = bound ]; then
+    N_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
+    [ -f "$N_MERGE" ] || { echo "validate-adversarial-convergence.sh: arm N cannot re-derive: $N_MERGE is absent; no verdict" >&2; exit 2; }
+    # THE SELF-PROBE. p1 notarizes c at other bytes and cites 02 in a MAJOR; p2 owes {2, 3}, never 1.
+    np="$AC_T/n/s1"
+    mkdir -p "$np/stories" && printf 'a\n' > "$np/stories/a.md" && printf 'b\n' > "$np/stories/b.md" && printf 'c\n' > "$np/stories/c.md" \
+      || { echo "validate-adversarial-convergence.sh: arm N self-probe could not stage; no verdict" >&2; exit 2; }
+    n_sa="$(k2_sha "$np/stories/a.md")"; n_sb="$(k2_sha "$np/stories/b.md")"; n_sc="$(k2_sha "$np/stories/c.md")"
+    n_pass() {  # $1 file, $2 c's sha, $3 findings body, $4 major count
+      printf '# p\n\n## Shard ordinal map\n\n```text\n1\ta.md\n2\tb.md\n3\tc.md\n```\n\n## Shard: story 02\n\n## Findings\n\n%s\n<!-- SKILL_INVOCATION_PROVENANCE v1\nartifact_sha: a@%s b@%s c@%s\nfindings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
+        "$3" "$n_sa" "$n_sb" "$2" "$4" > "$1"
+    }
+    n_pass "$np/stories-adversarial-p1.md" "$(printf '%064d' 0)" "$(printf '### F-1 — MAJOR — x\nstories: 02\n')" 1 \
+      && n_pass "$np/stories-adversarial-p2.md" "$n_sc" "" 0 \
+      || { echo "validate-adversarial-convergence.sh: arm N self-probe could not stage; no verdict" >&2; exit 2; }
+    n_p1="$(bash "$N_MERGE" --derived-set "$np/stories-adversarial-p2.md" 2>/dev/null | awk -F'\t' 'NF == 1' | tr '\n' ' ')"
+    n_p2="$(bash "$N_MERGE" --derived-set "$np/stories-adversarial-p1.md" >/dev/null 2>&1; echo $?)"
+    if [ "$n_p1" != "2 3 " ] || [ "$n_p2" != 3 ] || [ "$(n_keys " 01=toolu_a 3=toolu_b cross=toolu_c")" != "1 3 " ] \
+       || [ -n "$(n_keys " 1=xyz_a cross=toolu_c")" ]; then
+      echo "validate-adversarial-convergence.sh: arm N self-probe failed (derived '$n_p1' want '2 3 ', first-pass rc '$n_p2' want 3); no verdict" >&2
+      exit 2
+    fi
+    for i in $n_cand; do
+      n_f="${P_FILE[$i]}"; n_b="$(basename "$n_f")"; n_pred="$(basename "${P_FILE[$((i - 1))]}")"
+      n_from="$(block_field "$n_f" 'shard_set_derived_from')"; n_from="${n_from%%[[:space:]]*}"
+      if [ -z "$n_from" ]; then
+        err "N -- WIDTH" "$n_b is a sharded pass after the series' first and carries no 'shard_set_derived_from:'.
+      A pass after the first reviews the REPAIR: dispatch the parts
+      scripts/ai-dlc/merge-adversarial-shards.sh --derived-map <its shard dir> prints, plus the cross shard,
+      and merge them; the merge stamps the line. Re-run the pass that way as the NEXT pass number."
+        continue
+      fi
+      if [ "$(basename "$n_from")" != "$n_pred" ]; then
+        err "N -- WIDTH" "$n_b derives its shard set from '$n_from', but its predecessor in this series is $n_pred."
+        continue
+      fi
+      n_out="$(bash "$N_MERGE" --derived-set "$n_f" 2>&1)"; n_rc=$?
+      case "$n_rc" in
+        0)
+          n_owe="$(printf '%s\n' "$n_out" | awk -F'\t' 'NF == 1 && /^[0-9]+$/' | LC_ALL=C sort -n -u | tr '\n' ' ')"
+          n_have="$(n_keys "$(block_field "$n_f" 'shard_tool_use_ids')")"
+          if [ "$n_have" != "$n_owe" ]; then
+            err "N -- WIDTH" "$n_b dispatched parts {${n_have% }} but owed {${n_owe% }}, derived from $n_pred
+      (the parts the repair changed, and the parts its CRITICAL and MAJOR findings cite$(printf '%s\n' "$n_out" | awk -F'\t' '$1 == "FULL" { print "; full width: " $2; exit }')).
+      The dispatched set must EQUAL the derived set: a superset re-reviews what nothing changed, and a
+      subset leaves a changed or still-open part unreviewed, which is how a pass stamps a false MET."
+          fi ;;
+        *) echo "PENDING (N -- WIDTH): $n_b: the derivation did not answer (exit $n_rc): $(printf '%s\n' "$n_out" | head -1)" ;;
+      esac
+    done
   fi
 fi
 

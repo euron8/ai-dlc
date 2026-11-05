@@ -43,3 +43,5 @@ tr
 uniq
 wc
 xargs
+# The gate verifies a resolution record's operator citation (F6) through validate-steering-budget.sh, which runs node (the cap record worlds, BL-911).
+?node

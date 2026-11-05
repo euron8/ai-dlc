@@ -58,16 +58,19 @@ bash "$WORK/scripts/ai-dlc/sprint-status.sh" roll --sprint "$SPRINT" --intensity
   || { echo "FIXTURE ERROR: sprint-id does not resolve to $SPRINT in the seeded tree" >&2; exit 2; }
 
 # $1 n  $2 crit  $3 prior  $4 major  $5 verdict  $6 sha  $7 resolves(optional)
+# $8 shard_tool_use_ids (optional): a merged SHARDED pass's dispatch ids, which arm N reads
+# PASS_DAY (optional, default 12): the July day every invoked_at falls on; the era-merge worlds move it.
 pass() {
-  local n="$1" crit="$2" prior="$3" major="$4" v="$5" sha="$6" res="${7:-}"
+  local n="$1" crit="$2" prior="$3" major="$4" v="$5" sha="$6" res="${7:-}" ids="${8:-}"
   {
     printf '# Adversarial pass %s\n\n' "$n"
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
     printf 'skill: ai-dlc-adversary-review\n'
     printf 'mode: subagent\n'
-    printf 'invoked_at: %s\n' "$(printf '2026-07-12T%02d:00:00Z' "$n")"
+    printf 'invoked_at: %s\n' "$(printf '2026-07-%02dT%02d:00:00Z' "${PASS_DAY:-12}" "$n")"
     printf 'artifact: product-brief.md\n'
     printf 'artifact_sha: %s\n' "$sha"
+    [ -n "$ids" ] && printf 'shard_tool_use_ids: %s\n' "$ids"
     [ -n "$res" ] && printf 'resolves_divergence: %s\n' "$res"
     printf 'findings_critical: %s\n' "$crit"
     printf 'findings_critical_prior_scope: %s\n' "$prior"
@@ -96,6 +99,72 @@ record() {
     printf 'operator_authorization: 2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"\n'
     printf 'ADVERSARIAL_RESOLUTION_END -->\n'
   } > "$ART/brief-resolution-p${7:-2}.md"
+}
+
+# THE CAP AND THE ERA (BL-911). The cap (arm M, `--cycle-state` CAPPED) and the derived width (arm N)
+# bind only a series the ERA binds: the installed rulebook `.claude/skills/ai-dlc/steps/_gate-procedures.md`
+# above the series carries the validator's ERA_TOKEN, and the series' FIRST invoked_at is at or after the
+# OLDEST commit that added the token to that file. So the cap cases install the REAL rulebook, and every
+# token world is a git repository whose commits carry FIXED literal dates (BL-868: no `date`, no clock):
+#   rulebook notoken   the real file with the token sentence's opening reworded (count 0, asserted)
+#   rulebook token     the real file (count 1, asserted)
+# The engine's merge and its siblings are copied beside the validator: arm N's self-probe re-derives through
+# the merge, and a gate run without it refuses with "no verdict".
+RULEBOOK="$(pick_one "$HERE/../../skills/ai-dlc/steps/_gate-procedures.md" \
+                     "$HERE/../../../.claude/skills/ai-dlc/steps/_gate-procedures.md" \
+                     "$HERE/../../core/skills/ai-dlc/steps/_gate-procedures.md")"
+ERA_TOKEN_LINE="$(grep -E "^ERA_TOKEN='[^']+'\$" "$VALIDATOR")" || ERA_TOKEN_LINE=""
+ERA_TOKEN="${ERA_TOKEN_LINE#ERA_TOKEN=\'}"; ERA_TOKEN="${ERA_TOKEN%\'}"
+cap_rulebook() { # <token|notoken>
+  local rb="$WORK/.claude/skills/ai-dlc/steps/_gate-procedures.md" n
+  [ -n "$RULEBOOK" ] && [ -n "$ERA_TOKEN" ] || { echo "FIXTURE ERROR: the rulebook or the validator's ERA_TOKEN line is not found" >&2; exit 2; }
+  mkdir -p "$(dirname "$rb")"
+  if [ "$1" = token ]; then cp "$RULEBOOK" "$rb"
+  else T="$ERA_TOKEN" perl -pe 's/\Q$ENV{T}\E/A p3 that fails to stamp/g' "$RULEBOOK" > "$rb"; fi
+  n="$(grep -cF -- "$ERA_TOKEN" "$rb")" || n=0
+  case "$1:$n" in token:1|notoken:0) ;; *) echo "FIXTURE ERROR: the $1 rulebook carries the era token $n time(s)" >&2; exit 2 ;; esac
+}
+cap_siblings() {
+  local s d; d="$(dirname "$VALIDATOR")"
+  for s in merge-adversarial-shards.sh partition-document.sh partition-subject.sh validate-provenance-block.sh \
+           validate-artifact-budget.sh validate-steering-budget.sh content-seal.sh; do
+    [ -f "$d/$s" ] || { echo "FIXTURE ERROR: $s is not beside the validator" >&2; exit 2; }
+    cp "$d/$s" "$WORK/scripts/ai-dlc/$s"
+  done
+}
+cap_git() { # <iso date> <message> -- commit the scripts and the installed rulebook at that FIXED date
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$WORK" -c user.name=f -c user.email=f@example.invalid \
+          -c core.hooksPath=/dev/null -c commit.gpgsign=false "$@"; }
+    [ -d "$WORK/.git" ] || g init -q . || exit 1
+    g add scripts .claude || exit 1
+    GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" g commit -q -m "$2" || exit 1 ) >/dev/null 2>&1 \
+    || { echo "FIXTURE ERROR: git could not commit the $2 world" >&2; exit 2; }
+}
+# The capped series: p3 does not stamp EXIT_CONDITION_MET. CRITICALs fall 2 -> 1 -> 1 and MAJOR stays at 1
+# (under the exit ceiling), so neither arm C (divergence) nor arm E (stall) claims the stop.
+cap_series() {
+  pass 1 2 2 1 EXIT_CONDITION_NOT_MET aaa1
+  pass 2 1 1 1 EXIT_CONDITION_NOT_MET bbb2
+  pass 3 1 1 1 EXIT_CONDITION_NOT_MET ccc3
+}
+cap_record() { # <the pass it resolves>
+  {
+    printf '# Cap resolution\n\n<!-- ADVERSARIAL_RESOLUTION v1\n'
+    printf 'resolves: %s\nresolution: REVERT_REPAIR\nadjudicated_by: operator\nartifact: product-brief.md\n' "$1"
+    printf 'artifact_sha_before: ccc3\nartifact_sha_after: aaa1\nartifact_bytes_before: 4200\nartifact_bytes_after: 4000\n'
+    printf 'scope_delta: reverted the p1 to p3 repairs wholesale\n'
+    printf 'operator_authorization: 2026-07-12T03:30:00Z | "revert the repairs back to the p1 text"\n'
+    printf 'options_presented: 3\nrecommended_option: REVERT_REPAIR\n'
+    printf 'ADVERSARIAL_RESOLUTION_END -->\n'
+  } > "$ART/brief-resolution-p3.md"
+  # The harness transcript the GATE verifies the citation against (F6): one genuine operator turn at the
+  # cited time, after p3 opened (03:00), carrying the quoted words. Literal timestamps (BL-868).
+  {
+    printf '{"type":"user","timestamp":"2026-07-12T01:00:00Z","message":{"content":"/ai-dlc Sprint 7. Kick off the cycle."}}\n'
+    printf '{"type":"assistant","timestamp":"2026-07-12T03:10:00Z","message":{"content":[{"type":"text","text":"p3 is CAPPED; pausing for your adjudication."}]}}\n'
+    printf '{"type":"user","timestamp":"2026-07-12T03:30:00Z","message":{"content":"Revert the repairs back to the p1 text, then verify."}}\n'
+  } > "$WORK/operator-transcript.jsonl"
 }
 
 case "$CASE" in
@@ -166,6 +235,72 @@ case "$CASE" in
     [ "$(ls -t "$ART"/*adversarial*p*.md | head -1)" = "$ART/brief-adversarial-p2.md" ] \
       || { echo "FIXTURE ERROR: the touched divergent pass p2 is not the newest series file" >&2; exit 2; }
     ;;
+
+  # ---- BL-911: the cap (arm M) and the era. Every token world commits its rulebook at a FIXED date before
+  # the series opens (2026-07-12T01:00:00Z), so the era binds it; cap-notoken carries no token and no git.
+  cap-notoken)
+    cap_rulebook notoken; cap_siblings; cap_series ;;
+  cap-bound)
+    cap_rulebook token; cap_siblings; cap_git 2026-07-01T00:00:00Z engine-and-rulebook; cap_series ;;
+  # A series that STARTS at p2 (s321 architecture's shape): p3 is its SECOND pass. The cap keys on the pass
+  # NUMBER, so this caps; a cap keyed on position, or at p4, reads CONTINUE here.
+  cap-from-p2)
+    cap_rulebook token; cap_siblings; cap_git 2026-07-01T00:00:00Z engine-and-rulebook
+    pass 2 1 1 1 EXIT_CONDITION_NOT_MET bbb2
+    pass 3 1 1 1 EXIT_CONDITION_NOT_MET ccc3 ;;
+  # p1, p2 unconverged in a bound tree: no pass is p3, nothing caps.
+  cap-inprog)
+    cap_rulebook token; cap_siblings; cap_git 2026-07-01T00:00:00Z engine-and-rulebook
+    pass 1 2 2 1 EXIT_CONDITION_NOT_MET aaa1
+    pass 2 1 1 1 EXIT_CONDITION_NOT_MET bbb2 ;;
+  # A p4 WALKED past the capped p3: with no record, with a valid one, with one resolving a pass that is not there.
+  cap-norecord|cap-record|cap-badrecord)
+    cap_rulebook token; cap_siblings; cap_git 2026-07-01T00:00:00Z engine-and-rulebook; cap_series
+    case "$CASE" in
+      cap-norecord)  pass 4 0 0 0 EXIT_CONDITION_MET aaa1 ;;
+      cap-record)    cap_record brief-adversarial-p3.md; pass 4 0 0 0 EXIT_CONDITION_MET aaa1 brief-resolution-p3.md ;;
+      cap-badrecord) cap_record brief-adversarial-p9.md; pass 4 0 0 0 EXIT_CONDITION_MET aaa1 brief-resolution-p3.md ;;
+    esac ;;
+  # THE ERA, dated by the commit that put the token in the INSTALLED rulebook, never by the engine's install.
+  # Both worlds commit the engine and a token-free rulebook at 2026-07-01, then the token: era-between at
+  # 2026-07-20 (AFTER the series opened, 07-12: legacy), era-bound at 2026-07-05 (before it: bound). p2 is a
+  # merged SHARDED pass with no shard_set_derived_from:, the field arm N requires of a bound series.
+  era-between|era-bound)
+    cap_rulebook notoken; cap_siblings; cap_git 2026-07-01T00:00:00Z engine-update
+    cap_rulebook token
+    if [ "$CASE" = era-between ]; then cap_git 2026-07-20T00:00:00Z rulebook-merge; else cap_git 2026-07-05T00:00:00Z rulebook-merge; fi
+    pass 1 2 2 1 EXIT_CONDITION_NOT_MET aaa1
+    pass 2 1 1 1 EXIT_CONDITION_NOT_MET bbb2 "" "1=toolu_01EraShardOne 2=toolu_01EraShardTwo cross=toolu_01EraShardCross"
+    pass 3 1 1 1 EXIT_CONDITION_NOT_MET ccc3 ;;
+  # THE ERA BY MERGE TOPOLOGY. The token is committed on main at 07-05 and reaches the sprint branch only by a
+  # --no-ff merge at 07-20, so the token is dated by the merge, its first-parent arrival on this branch. The
+  # series opens 07-10 (era-merge-before: legacy, the branch did not carry the token yet) or 07-21
+  # (era-merge-after: bound). A plain `git log -S` dates it by the 07-05 commit and binds both.
+  era-merge-before|era-merge-after)
+    cap_rulebook notoken; cap_siblings
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+      g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$WORK" -c user.name=f -c user.email=f@example.invalid \
+            -c core.hooksPath=/dev/null -c commit.gpgsign=false "$@"; }
+      at() { GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" g "${@:2}"; }
+      g init -q . && g checkout -q -b main && g add scripts .claude && at 2026-07-01T00:00:00Z commit -q -m engine-update \
+        && g checkout -q -b sprint || exit 1
+      g checkout -q main && cap_rulebook token && g add .claude && at 2026-07-05T00:00:00Z commit -q -m rulebook-reconcile || exit 1
+      g checkout -q sprint && printf 'sprint work\n' > "$WORK/sprint-note" && g add sprint-note \
+        && at 2026-07-08T00:00:00Z commit -q -m sprint-work || exit 1
+      at 2026-07-20T00:00:00Z merge -q --no-ff -m "merge main into sprint" main || exit 1
+      # The topology the arm needs, asserted: the token on this branch, its commit reachable but OFF the first
+      # parent chain (a fast-forward would put it there and both era implementations would agree).
+      t="$(g log --format=%H -S"$ERA_TOKEN" main -- .claude/skills/ai-dlc/steps/_gate-procedures.md)" && [ -n "$t" ] || exit 1
+      g merge-base --is-ancestor "$t" HEAD || exit 1
+      ! g rev-list --first-parent HEAD | grep -qx "$t" || exit 1
+      [ "$(g rev-parse --abbrev-ref HEAD)" = sprint ] || exit 1 ) >/dev/null 2>&1 \
+      || { echo "FIXTURE ERROR: the era-merge topology (token on main 07-05, --no-ff merged into sprint 07-20) did not build" >&2; exit 2; }
+    [ "$(grep -cF -- "$ERA_TOKEN" "$WORK/.claude/skills/ai-dlc/steps/_gate-procedures.md")" = 1 ] \
+      || { echo "FIXTURE ERROR: the merged rulebook does not carry the era token once" >&2; exit 2; }
+    if [ "$CASE" = era-merge-before ]; then PASS_DAY=10; else PASS_DAY=21; fi
+    pass 1 2 2 1 EXIT_CONDITION_NOT_MET aaa1
+    pass 2 1 1 1 EXIT_CONDITION_NOT_MET bbb2 "" "1=toolu_01EraShardOne 2=toolu_01EraShardTwo cross=toolu_01EraShardCross"
+    pass 3 1 1 1 EXIT_CONDITION_NOT_MET ccc3 ;;
 
   *) echo "FIXTURE ERROR: unknown case '$CASE'" >&2; exit 2 ;;
 esac

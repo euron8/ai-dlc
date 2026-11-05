@@ -678,7 +678,12 @@ Agent tool, bound to `.claude/team-roles/adversary.md` per
 SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read line). Give it: the
 artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
-again. Every adversary brief, sharded or not, also carries the early-write instruction of
+again. A sharded pass after the series' first dispatches only the parts
+`scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>`
+prints (the mode flags are the ones the mode's join takes; only files mode narrows, and the other modes print the full map with
+the engine's `full width:` reason on the header line), plus the cross shard
+(which still reads the whole subject); the merge refuses a shard outside that set and the convergence
+validator refuses a dispatched set that differs from it. Every adversary brief, sharded or not, also carries the early-write instruction of
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
 act once it has finished, never with the header: the ONE Bash call
 `scripts/ai-dlc/wait-for-deliverable.sh --mark <shard path> <step> adversary <shard> findings=<n>`,
@@ -724,7 +729,8 @@ take it. Once any member of pass M is dispatched, pass M is resumed with `partit
 --existing <artifact path> <M> [--sprint <N>]`, which creates nothing and prints the same path, never
 skipped: every beat-join, MISSING re-dispatch, `--rerun` merge and post-compaction recovery uses
 `--existing`, and only the first creation of a pass uses the creating form. Then run
-`scripts/ai-dlc/merge-adversarial-shards.sh --map <that dir>`, which prints
+`scripts/ai-dlc/merge-adversarial-shards.sh --map <that dir>` for the series' first pass, and
+`scripts/ai-dlc/merge-adversarial-shards.sh --derived-map <that dir>` for every pass after it, which prints
 `<ordinal>\t<basename>` per story. Each per-story shard gets its ordinal and basename, the line
 `shard: <ordinal>/<K> <basename>`, and the output path `<that dir>/<ordinal>.md`. The cross-story
 shard gets `shard: cross/<K> g1/1 <ordinals>` (every ordinal 1..K), the whole map, every
@@ -744,7 +750,8 @@ serial (exception 2).
 review is one file, run `scripts/ai-dlc/partition-document.sh --map <artifact path>`. Exit 3 with a
 `SERIAL:` line means the document does not partition: dispatch ONE adversary whose brief carries
 `shard: none (serial-document)` (Rule 28 exception 4). Otherwise the map prints
-`<ordinal>\t<first-line>\t<last-line>\t<heading>` per part; run
+`<ordinal>\t<first-line>\t<last-line>\t<heading>` per part (a pass after the series' first dispatches only the
+rows `scripts/ai-dlc/merge-adversarial-shards.sh --document <artifact path> --derived-map <that dir>` prints, plus the cross shard; document mode is not narrowed, so that is the full map); run
 `scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` (creating form for the
 first creation of pass M, `--shard-dir --existing` once any member of pass M is dispatched, as in "Shard a
 multi-file artifact"), which creates the pass directory (shaped `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/`)
@@ -773,7 +780,8 @@ pass directory (shaped `_bmad-output/planning-artifacts/s<N>/shards/requirements
 that printed path being `<that dir>` below, and run
 `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>`, with the base read from the
 subject manifest, never re-derived. The map prints
-`<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>` per part. A subject that maps to one
+`<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>` per part (a pass after the series' first dispatches only the
+rows `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> --derived-map <that dir>` prints, plus the cross shard; subject mode is not narrowed, so that is the full map). A subject that maps to one
 part gets ONE adversary whose brief carries `shard: none (serial-document)` (Rule 28 exception
 4); it writes `requirements-adversarial-p<M>.md` itself, with `artifact:` = the subject manifest
 and `artifact_sha:` as one `<stem>=<sha>` entry per subject file (write the separator as `@`
@@ -808,6 +816,13 @@ edit a correct artifact, and the edit is where new defects come from.
 When the cycle **STOPS** — a pass stamps `DIVERGENT_HARD_BLOCK`, or Check E fires a STALL — the
 Rule 8 cycle does not end. It waits. Execute this, in this order. You cannot skip a step: the
 PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 has produced a file.
+
+A p3 that does not stamp `EXIT_CONDITION_MET` CAPS the series (`--cycle-state` state `CAPPED`, exit 3)
+and STOPS it exactly as a STALL does: its record is `s<N>/<artifact>-resolution-p3.md`, resolving
+`<artifact>-adversarial-p3.md`, and the next pass declares it in `resolves_divergence:`. Every sharded
+pass after a series' first reviews the REPAIR: dispatch it over the parts
+`scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>` prints (files mode narrows to the parts the engine derives from the repair; document and subject modes print the full map and name the reason) plus the cross shard,
+and the merge stamps `shard_set_derived_from:`.
 
 **STOP → ADJUDICATE → RESOLVE → VERIFY**
 

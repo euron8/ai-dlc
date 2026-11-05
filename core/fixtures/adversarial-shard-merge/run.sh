@@ -72,6 +72,18 @@
 # MUTANT-MATRIX KMc-core decides=K2sch_core twins=K2vac_core
 # MUTANT-MATRIX KEM-inst decides=KEps_inst twins=KEvac_inst
 # MUTANT-MATRIX KEM-core decides=KEps_core twins=KEvac_core
+# MUTANT-MATRIX DV-full-map decides=DV1 twins=A1
+# MUTANT-MATRIX DV-joined-record-only decides=DV2 twins=DV5
+# MUTANT-MATRIX DV-open-findings-dropped decides=DV3 twins=DV2
+# MUTANT-MATRIX DV-files-key-ordinal decides=DV4 twins=DV3
+# MUTANT-MATRIX DV-sections-silent-full decides=DV4D,DVRS,DVRSS twins=DV3
+# MUTANT-MATRIX DV-reason-blank decides=DVRS,DVRSS,DV4D twins=DV5
+# MUTANT-MATRIX DV-doc-narrow-consumed decides=DVRS twins=DV4D
+# MUTANT-MATRIX DV-subj-narrow-consumed decides=DVRSS twins=DVRS
+# MUTANT-MATRIX DV-narrow-on-unread decides=DV5 twins=DV2
+# MUTANT-MATRIX DV-gate-supersets-only decides=DV6 twins=DV2
+# MUTANT-MATRIX DV-notarize-dispatched-only decides=DV7 twins=DV1
+# MUTANT-MATRIX DV-literal-m-minus-1 decides=DV10 twins=DV2
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="adversarial-shard-merge"
@@ -723,6 +735,31 @@ else
   fi
 fi
 
+# ---- THE DERIVED SET (BL-911): a pass after a series' first reviews only the repair. lib.sh's dv worlds: eight
+# stories, the rulebook carrying the era token committed at a fixed 2026-01-01, p1 merged, stories 3 and 6
+# repaired on disk, only 3 cited by the joined repair record.
+if ! dv_rulebook; then bad "DV: FIXTURE BROKEN -- _gate-procedures.md not found above $LIB_DIR; no derived-set arm can bind"
+else
+  echo "HERMETIC-CONSUMED $RULEBOOK"
+  p_dv1 "$MERGE" && ok "DV1: 2 of 8 stories repaired -> --derived-map prints {$DV_ORDS} derived from p1, not the full map, and a p2 that adds underived shard 1 is REFUSED, nothing written" \
+    || bad "DV1: ords [$DV_ORDS] hdr [$DV_HDR] rc=$RC $(head -2 "$MO")"
+  p_dv2 "$MERGE" && ok "DV2: story 6, changed on disk and cited by no edit: line (a serial edit), is in the set {$DV_ORDS}" || bad "DV2: ords [$DV_ORDS]"
+  p_dv3 "$MERGE" && ok "DV3: p1's MAJOR on unedited story 5 and its repaired + 'edit: n/a' MAJOR on story 7 keep both in: {3 5 6 7}" || bad "DV3: ords [$DV_ORDS], want [3 5 6 7]"
+  p_dv4 "$MERGE" && ok "DV4: a story sorting FIRST shifts every ordinal; keyed on basename the set is {1 4 6 7 8}" || bad "DV4: ords [$DV_ORDS], want [1 4 6 7 8]"
+  p_dv4d "$MERGE" && ok "DV4D: --document after p1: the FULL map, and the header names why (document mode is not narrowed)" || bad "DV4D: ords [$DV_ORDS] hdr [$DV_HDR], want the full map with a reason"
+  p_dv5 "$MERGE" && ok "DV5: p1's sha list unreadable -> the FULL map, and the header says why" || bad "DV5: ords [$DV_ORDS] hdr [$DV_HDR]"
+  p_dv6 "$MERGE" && ok "DV6: arm N on the merged p2: {3 6} passes; the same pass dispatching {3} (narrower) and {1 3 6} (wider) each FAIL owed {3 6}" || bad "DV6: $(grep -m2 'FAIL (N' "$CO")"
+  p_dv7 "$MERGE" && ok "DV7: the merge of shards 3 and 6 notarizes all 8 stems at their disk shas and stamps shard_set_derived_from: p1" || bad "DV7: (rc=$RC) $(head -2 "$MO")"
+  p_dv10 "$MERGE" && ok "DV10: p3 with no p2 on disk derives from p1 (series order), merges stamping it, and arm N reads p1 as its predecessor" || bad "DV10: ords [$DV_ORDS] hdr [$DV_HDR] $(grep -m2 'FAIL (N' "$CO")"
+  if [ -f "$SRCDIR/serial-remediation-worklist.sh" ]; then
+    echo "HERMETIC-CONSUMED $SRCDIR/serial-remediation-worklist.sh"
+    p_dvrs "$MERGE" && ok "DVRS: document mode, the shipped sequence (split on p1's sha, a section edited, assembled, the worklist consuming .before): --derived-map prints the whole --map and names why, the full-width p2 merges derived from p1, the gate reads no FAIL (N; a files world in the same arm still narrows to {3 6}" \
+      || bad "DVRS: rc=$RC ords [$DV_ORDS] $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(grep -m2 'FAIL (N' "$CO")"
+    p_dvrss "$MERGE" && ok "DVRSS: subject mode, the shipped sequence (split on p1's sha list, a prd section edited, assembled, the worklist consuming prd's and SPEC's .before): the whole --map with its reason, p2 merges derived from p1, the gate reads no FAIL (N" \
+      || bad "DVRSS: rc=$RC $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(head -2 "$WORK/dvrss.split" 2>/dev/null) | $(grep -m2 'FAIL (N' "$CO")"
+  else bad "DVRS: FIXTURE BROKEN -- serial-remediation-worklist.sh is not beside the merge; the shipped sequence cannot run"; fi
+fi
+
 # ---- THE MUTANTS. Each is a COPY of the merge's whole sibling set (or of the provenance schema) with one
 # anchor changed, built by mut_merge, which refuses a lost or repeated anchor. PER PUSH a mutant runs its
 # DECIDING arm, which must FAIL, and one TWIN, an arm the measured matrix shows GREEN for it, which must
@@ -730,7 +767,7 @@ fi
 # the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
 # prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
 n_mut=0; n_kill=0
-ARMS_ALL="A1 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE"
+ARMS_ALL="A1 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE DV1 DV2 DV3 DV4 DV4D DV5 DV6 DV7 DV10 DVRS DVRSS"
 [ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2ps_inst K2sch_inst K2vac_core K2ps_core K2sch_core KEnone_inst KEvac_inst KEps_inst KEsch_inst KEnone_core KEvac_core KEps_core KEsch_core"
 karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
   local w a
@@ -756,6 +793,17 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
     B726H) p_bl726h "$2" ;;
     P1) p_pb "$2" ;;
     PBARE) p_pbbare "$2" ;;
+    DV1) p_dv1 "$2" ;;
+    DV2) p_dv2 "$2" ;;
+    DV3) p_dv3 "$2" ;;
+    DV4) p_dv4 "$2" ;;
+    DV4D) p_dv4d "$2" ;;
+    DV5) p_dv5 "$2" ;;
+    DV6) p_dv6 "$2" ;;
+    DV7) p_dv7 "$2" ;;
+    DV10) p_dv10 "$2" ;;
+    DVRS) p_dvrs "$2" ;;
+    DVRSS) p_dvrss "$2" ;;
     K1_*) karm "$2" none "${1#K1_}" "@" ;;
     K2vac_*) karm "$2" vac "${1#K2vac_}" "=" ;;
     K2ps_*) karm "$2" ps "${1#K2ps_}" "=" ;;
@@ -815,6 +863,21 @@ mut() { # <name> <deciding arm> <twin arm> <merge file>
   else n_kill=$((n_kill + 1)); mutant_killed "$([ "$fl" = 111 ] && echo 1 || echo 0)" "$name" "mutant $name KILLED by [$dec]; twin [$twin] holds"
   fi
 }
+mutc() { # <name> <deciding arm> <twin arm> <old> <new> -- the CONVERGENCE VALIDATOR mutated beside an unmutated merge
+  local md s
+  md="$(mktemp -d "$WORK/rc.XXXXXX")" || return 1
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
+    [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
+  done
+  if ! M_OLD="$4" M_NEW="$5" python3 - "$md/validate-adversarial-convergence.sh" <<'PY' || cmp -s "$CONV" "$md/validate-adversarial-convergence.sh" || ! bash -n "$md/validate-adversarial-convergence.sh"
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  then bad "$1: FIXTURE STALE -- its anchor is not in the validator exactly once; re-anchor it, never relax the arm"; n_mut=$((n_mut + 1)); return; fi
+  mut "$1" "$2" "$3" "$md/merge-adversarial-shards.sh"
+}
 mutm() { # <name> <deciding arm> <twin arm> <old> <new>
   local mm; mm="$(mut_merge "$4" "$5")"
   if [ -z "$mm" ]; then bad "$1: FIXTURE STALE -- its anchor is not in the merge exactly once; re-anchor it, never relax the arm"; n_mut=$((n_mut + 1)); return; fi
@@ -842,6 +905,35 @@ mutm m-k2only X1 X4 'if [ "$x_plain" -eq 1 ]; then cross_shape lone; fi' \
 mutm m-nomix X4 A1 '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \'
 mutm RM-A RS1 A1 'if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } ' ''
 mutm RM-B CH2 A1 '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;' '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|"") ;;'
+# THE DERIVED SET's mutants (BL-911), each the regression its arm names.
+mutm DV-full-map DV1 A1 \
+  'else ORDINALS="$(awk -v w="$W" '"'"'{ printf "%s%0*d", (NR > 1 ? " " : ""), w, $1 }'"'"' "$T/d.out")"; fi' 'else :; fi'
+mutm DV-joined-record-only DV2 DV5 \
+  '"$T/d.psha" "$csrc" > "$T/d.src" || return 1' \
+  '"$T/d.psha" "$csrc" | while IFS="$(printf '"'"'\t'"'"')" read -r _b _s; do if [ "$_s" = changed ] && ! grep -rqF -- "$_b" "$sd/shards/$art"-repair-p* 2>/dev/null; then _s=same; fi; printf '"'"'%s\t%s\n'"'"' "$_b" "$_s"; done > "$T/d.src" || return 1'
+mutm DV-open-findings-dropped DV3 DV2 'if (K["P", j] in CKEY) OP[CKEY[K["P", j]]] = 1' 'if (0) OP[1] = 1'
+mutm DV-files-key-ordinal DV4 DV3 'key = $2 }' 'key = $1 + 0 }'
+mutm DV-sections-silent-full DV4D DV3 'D_FULL="$mode mode is not narrowed: ' 'D_FULL=""; : "'
+# The reason blanked while the full map is kept: every row still prints, so only the header's reason separates it.
+mutm DV-reason-blank DVRS DV5 'D_FULL="$mode mode is not narrowed: ' \
+  'awk '"'"'{ print $1 + 0 }'"'"' "$cmap" > "$T/d.out"; D_FULL=""; : "'
+# Narrowing a document (or a subject) pass whenever its pre-repair snapshot is GONE -- the state the worklist
+# always leaves -- to part 1. DV4D (snapshot kept) and the other mode's real-sequence arm are each its twin.
+DVN_ANCHOR='  if [ "$mode" != files ]; then'
+DVN_BODY='then awk '"'"'NR == 1 { print $1 + 0 }'"'"' "$cmap" > "$T/d.out"; return 0; fi'
+mutm DV-doc-narrow-consumed DVRS DV4D "$DVN_ANCHOR" \
+  '  if [ "$mode" = document ] && [ -z "$(find "$sd/shards" -path "*/$art-repair-p*" -name .before 2>/dev/null)" ]; '"$DVN_BODY
+$DVN_ANCHOR"
+mutm DV-subj-narrow-consumed DVRSS DVRS "$DVN_ANCHOR" \
+  '  if [ "$mode" = subject ] && [ -z "$(find "$sd/shards" -path "*/$art-repair-p*" -name .before 2>/dev/null)" ]; '"$DVN_BODY
+$DVN_ANCHOR"
+mutm DV-narrow-on-unread DV5 DV2 \
+  '[ -s "$T/d.psha" ] || { D_FULL="$(basename "$D_PRED") notarizes no <stem>=<sha> list"; return 0; }' '[ -s "$T/d.psha" ] || return 0'
+mutc DV-gate-supersets-only DV6 DV2 'if [ "$n_have" != "$n_owe" ]; then' 'if [ "$n_have" != "$n_owe" ] && [ "${#n_have}" -gt "${#n_owe}" ]; then'
+mutm DV-notarize-dispatched-only DV7 DV1 'if [ -n "$DERIVED_FROM" ] && [ -z "$DOCUMENT" ] && [ -z "$SUBJECT" ]; then' 'if false; then'
+mutm DV-literal-m-minus-1 DV10 DV2 \
+  'if [ "$k" -lt "$3" ] && [ "$k" -gt "$best" ]; then best="$k"; D_PRED="$f"; fi' \
+  'if [ "$k" -eq "$(($3 - 1))" ]; then best="$k"; D_PRED="$f"; fi'
 mutm BM-1 B726B B726H '| if ($s.e - $ae) > $tol then' '| if false then'
 mutm BM-2 B726C B726H '| if ($ae - $w.e) > $tol then' '| if false then'
 mutm BM-3 B726F B726B 'def verdict($bound): if $bound then "REFUSE" else "WARN" end;' 'def verdict($bound): "REFUSE";'
