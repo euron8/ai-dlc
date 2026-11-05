@@ -9,3 +9,5 @@ core/team-roles/
 # The --mark arm runs the engine against a scratch file.
 !core/scripts/wait-for-deliverable.sh
 core/fixtures/lib/mutant.sh
+# Section 4i reads partition-review-diff.sh as text: its THRESHOLD header, its AI_DLC_ key and its built-in default.
+core/scripts/partition-review-diff.sh

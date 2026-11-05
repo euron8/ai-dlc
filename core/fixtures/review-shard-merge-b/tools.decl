@@ -29,3 +29,4 @@ tail
 tr
 uniq
 wc
+rmdir

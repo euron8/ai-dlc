@@ -150,17 +150,16 @@ GROUP=a
 # every world of its battery. Never per push. A unit carrying a full-vector mode adds itself to
 # MATRIX_UNITS; every other unit prints that it has none, so a partial matrix cannot read as complete.
 # The matrix is measured once and re-measured whenever an arm or a mutant is added or changed, and per push each mutant runs its deciding arm(s).
-#   also trips (consequence, not decided): m1 C6,C7; m2 F1; m5 C6,C7; m6 C5,C8,F1,F2,F3; m7 F1; m11 C4,C5,C8; A1 RA2;
-#   A2 RA1,RA2,RA3; MR1 U5,RA3; M1 R2,A,F1,F2A,F2,G1,G2,I3,J1,KF2,N1,N2E,N3; M2 A,F1,F2A,F2,I3;
-#   M3 F1,F2A,F2,G1,G2,I3,N1,N2E,N3; M5 F2; M6 F2A,F2,G2,I1,I3,N3; M7b F1,F2;
+#   also trips (consequence, not decided): m1 C6,C7; m2 F1; m5 C6,C7; m6 F1,F2,U4; m7 F1; A1 RA2,RA9a,RA9f;
+#   A2 RA1,RA2,RA3,RA8,RA9a,RA9f; MR1 U5,RA3; M1 R2,A,F1,J1,KF2,N1,N3; M2 A,F1; M3 F1,N1,N3; M6 N3;
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-restamp-worklist/run.sh --matrix
 # MUTANT-MATRIX BL-m1 decides=BL-1 twins=BL-3
 # MUTANT-MATRIX BL-m2 decides=BL-1 twins=BL-3
 # MUTANT-MATRIX BL-m3 decides=BL-2 twins=BL-1
-# MUTANT-MATRIX BL-m4 decides=BL-5,BL-1 twins=BL-3
+# MUTANT-MATRIX BL-m4 decides=BL-1 twins=BL-3
 # MUTANT-MATRIX BL-m5 decides=BL-2 twins=BL-1
 # MUTANT-MATRIX BL-m6 decides=BL-4 twins=BL-1
-# MUTANT-MATRIX HR-M-a decides=a,b,c,e,g twins=d
+# MUTANT-MATRIX HR-M-a decides=a,b,c,g twins=d
 # MUTANT-MATRIX HR-M-c decides=c twins=g
 # MUTANT-MATRIX HR-M-d decides=d twins=a
 # MUTANT-MATRIX HR-M-b decides=b twins=a
@@ -176,11 +175,11 @@ GROUP=a
 # MUTANT-MATRIX m4 decides=C6 twins=C1
 # MUTANT-MATRIX m5 decides=C1 twins=C3
 # MUTANT-MATRIX m6 decides=C4 twins=C3
-# MUTANT-MATRIX m7 decides=C5 twins=C4
-# MUTANT-MATRIX m8 decides=C8 twins=C4
+# MUTANT-MATRIX m7 decides=U4 twins=C4
+# MUTANT-MATRIX m8 decides=U4 twins=C4
 # MUTANT-MATRIX m9 decides=F1 twins=F2
 # MUTANT-MATRIX m10 decides=F2 twins=F1
-# MUTANT-MATRIX m11 decides=F3 twins=F2
+# MUTANT-MATRIX m11 decides=C4 twins=F2
 # MUTANT-MATRIX m12 decides=U2 twins=C3
 # MUTANT-MATRIX A1 decides=U5 twins=C3
 # MUTANT-MATRIX A2 decides=U5 twins=U1
@@ -188,23 +187,23 @@ GROUP=a
 # MUTANT-MATRIX MR1 decides=RA1 twins=RA2
 # MUTANT-MATRIX MR2 decides=RA3 twins=RA2
 # MUTANT-MATRIX VF-m-cmp decides=r4 twins=r1
-# MUTANT-MATRIX VF-m-distonly decides=r3,r4,do2 twins=r1
+# MUTANT-MATRIX VF-m-distonly decides=r3,r4 twins=r1
 # MUTANT-MATRIX VF-m-noadd decides=r2 twins=r1
-# MUTANT-MATRIX VF-m-first decides=r1,r2,ro twins=r3
+# MUTANT-MATRIX VF-m-first decides=r1,r2 twins=r3
 # MUTANT-MATRIX VF-m-order decides=r6 twins=r1
-# MUTANT-MATRIX VF-m-base decides=r5,r5b twins=r1
-# MUTANT-MATRIX VF-m-wt decides=do1,do2,do3 twins=r1
+# MUTANT-MATRIX VF-m-base decides=r5 twins=r1
+# MUTANT-MATRIX VF-m-wt decides=do1 twins=r1
 # MUTANT-MATRIX M1 decides=R1 twins=I1
 # MUTANT-MATRIX M2 decides=R2 twins=R1
 # MUTANT-MATRIX M3 decides=A twins=R2
 # MUTANT-MATRIX M4 decides=M-bad twins=M-absent
 # MUTANT-MATRIX M5 decides=F1 twins=A
-# MUTANT-MATRIX M6 decides=G1 twins=KF2
+# MUTANT-MATRIX M6 decides=I1 twins=I2
 # MUTANT-MATRIX M7a decides=I2 twins=I1
-# MUTANT-MATRIX M7b decides=I3 twins=I2
+# MUTANT-MATRIX M7b decides=F1 twins=A
 # MUTANT-MATRIX M8 decides=J1 twins=R1
 # MUTANT-MATRIX M9 decides=KF2 twins=KA3
-# MUTANT-MATRIX M10 decides=N1,N2E twins=N3
+# MUTANT-MATRIX M10 decides=N1 twins=N3
 # MUTANT-MATRIX-CONTROL BL-CTL why=knock-out control: an unmutated copy of the reconcile directory must reproduce both verdicts, so a BL mutant's red cell is the mutation and not the copy
 # MUTANT-MATRIX-CONTROL HR-CTL why=knock-out control: the cmp -s identical copy must hold all seven cells and emit the UNREGISTERED settings-merge row, so a mutant's cells are the mutation and not the copy
 # MUTANT-MATRIX-CONTROL HU-CTL why=knock-out control: the cmp -s identical copy must score a, t, the quiet X world and the registered R world, so a mutant's cells are the mutation and not the copy
@@ -212,13 +211,27 @@ GROUP=a
 # MUTANT-MATRIX-CONTROL CONTROL-id why=knock-out control: the unmutated copy refuses the offender and passes the docs-only near-miss, the flag source for m9-m11
 # MUTANT-MATRIX-CONTROL CONTROL-m12 why=knock-out control: the unmutated copy refuses a stale region, the flag source for m12
 # MUTANT-MATRIX-CONTROL CONTROL-MR why=knock-out control: the unmutated copy refuses RA1's world, the flag source for MR1 and MR2
+# MUTANT-MATRIX MU3 decides=U3 twins=C3
+# MUTANT-MATRIX MU4 decides=U4 twins=C4
+# MUTANT-MATRIX MRA8 decides=RA8 twins=RA1
+# MUTANT-MATRIX MRA9a decides=RA9a twins=RA1
+# MUTANT-MATRIX MRA9f decides=RA9f twins=RA1
+# MUTANT-MATRIX MT1 decides=T1 twins=T3
+# MUTANT-MATRIX MT3 decides=T3 twins=T5
+# MUTANT-MATRIX MT8 decides=T8 twins=T5
+# MUTANT-MATRIX MT6 decides=T6 twins=T7
+# MUTANT-MATRIX-CONTROL T-CTL why=knock-out control: the unmutated apply.sh copy holds every T cell through the same seam, so a T mutant's red cell is the mutation and not the extraction
 # MUTANT-MATRIX-CONTROL VF-CTL why=knock-out control: the staged copy is byte-identical to the shipped directory and holds VF-R1, so a vf mutant's cells are the mutation and not the copy
 # MUTANT-MATRIX-CONTROL CONTROL-AR why=knock-out control: the unmutated copy exits 0 and writes the record, the flag source for M1-M10
 # MUTANT-MATRIX-DYNAMIC hr_mscore why=every call passes a literal id and each id has its own MUTANT-MATRIX row
 # MUTANT-MATRIX-DYNAMIC hu_try why=every call passes a literal id and each id has its own MUTANT-MATRIX row
 # MUTANT-MATRIX-DYNAMIC vf_score why=every call passes a literal id and each id has its own MUTANT-MATRIX row
 # MUTANT-MATRIX-DYNAMIC ar_score why=every call passes a literal id and each id has its own MUTANT-MATRIX row
-MATRIX=0; MATRIX_UNITS="bl hr hu mut vf ar arm"
+# MUTANT-MATRIX-DYNAMIC mut_claim why=every call passes a literal id and each id has its own MUTANT-MATRIX row
+# MUTANT-MATRIX-DYNAMIC t_score why=every call passes a literal id and each id has its own MUTANT-MATRIX row
+# Units cf and u have no matrix block of their own: their cells are scored as columns of unit mut's block
+# (mut_cell), so they are listed here with it.
+MATRIX=0; MATRIX_UNITS="cf u t bl hr hu mut vf ar arm"
 MX_CELLS=0   # matrix-only blocks entered; the MATRIX-PLAIN arm at the foot reads it
 if [ "${1:-}" = "--matrix" ]; then MATRIX=1; shift; fi
 if [ "${1:-}" = "--group" ]; then
@@ -533,32 +546,8 @@ u5_build() { # u5_build <consumer> [unseen] — approve WITH the blocker, then r
   u5_seed_unseen "$1"
 }
 run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
-# u5_score <apply-path> -> "<rc>|<stamp>|<marker>|<CAUSE|->|<REMEDY|->|<FWD|->"
-# PRESENCE-SHAPED IN EVERY FIELD, and a fresh consumer per drive so no arm reads a previous
-# one's leftovers.
-#
-# THE WORLD CARRIES ONE UNSEEN ROW. A resolution that leaves NO unseen row now PROCEEDS (RA0
-# below), so the refusal this scorer reads is the unseen>0 one with no recorded re-approval.
-# REMEDY is keyed on `RE-APPROVAL OWED`, which only the exit-3 branch prints, plus the re-run.
-#
-# FWD IS THE FORWARDED STDERR, and it is keyed on the two things only the forward produces: a
-# `cause:` LINE at --verify's own indent, and at least one `<`/`>` diff line. The refusal message
-# itself interpolates the cause TEXT, so a `BLOCKERS-RESOLVED` conjunct is satisfied whether or
-# not the forward happened; and the message ends by telling the operator to read a diff, which
-# without the forward apply.sh has discarded — a pointer to a tool they must re-run.
-u5_score() {
-  local a="$1" c="$WORK/u5-$$-$RANDOM" e rc
-  u5_build "$c" unseen || { echo "BROKEN|||||"; return; }
-  e="$c/stderr.txt"
-  run_apply_err "$a" "$c" "$e" >/dev/null; rc=$?
-  printf '%s|%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")" \
-    "$(grep -q 'BLOCKERS-RESOLVED' "$e" && echo CAUSE || echo -)" \
-    "$(grep -qF 'apply: RE-APPROVAL OWED.' "$e" \
-       && grep -q 're-run apply with the same four arguments' "$e" && echo REMEDY || echo -)" \
-    "$(grep -qE '^[[:space:]]*cause: ' "$e" && grep -qE '^[<>] ' "$e" && echo FWD || echo -)"
-}
 
-# --- THE RECORDED RE-APPROVAL (RA0-RA5, MR1-MR2) -------------------------------------------------
+# --- THE RECORDED RE-APPROVAL (RA1-RA3, RA8-RA9f, MR1-MR2) -----------------------------------------
 # --verify exit 3 prints `re-approval: digest=<sha256> unseen=<N> label="..."`, and apply.sh decides
 # from it: unseen=0 proceeds; unseen>0 proceeds only on an AskUserQuestion record in
 # _bmad-output/operator-answers-history.md whose Question line carries the full digest and whose
@@ -570,9 +559,7 @@ u5_score() {
 # RECORDS ARE WRITTEN BY DRIVING THE REAL HOOK with a synthetic PostToolUse payload, never by
 # hand, so the record grammar the gate reads is the one the hook writes. `ra_answer` asserts the
 # record LANDED (the AskUserQuestion header count rose): the hook exits 0 silently without jq,
-# and a proceed arm would then go red for the wrong reason. RA5 is the one derived record: no hook
-# writes a non-AskUserQuestion header into that file, so a hook-written correct record has its
-# header token replaced exactly once — every other property kept, the near-miss for that conjunct.
+# and a proceed arm would then go red for the wrong reason.
 ANSWER_HOOK=""
 for cand in "$ROOT/core/hooks/ai-dlc-answer-capture.sh" "$ROOT/.claude/hooks/ai-dlc-answer-capture.sh"; do
   [ -f "$cand" ] && ANSWER_HOOK="$cand" && break
@@ -615,28 +602,6 @@ if n != 1:
 open(p, "w").write(s.replace(old, new))
 PYREP
 }
-# ra_world <consumer> <plain|unseen> <none|right|wrongdg|wronglabel|pause> -> 0 when built as asked
-ra_world() {
-  local c="$1" ra dg lb wrong
-  u5_build "$c" "$2" || return 1
-  [ "$3" = none ] && return 0
-  ra="$(ra_line "$c")"
-  dg="${ra#digest=}"; dg="${dg%% *}"; lb="${ra#* label=\"}"; lb="${lb%\"}"
-  [ "${#dg}" -eq 64 ] && [ -n "$lb" ] || return 1
-  wrong="$(printf 'a different region\n' | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
-  case "$3" in
-    right)      ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb" ;;
-    wrongdg)    ra_answer "$c" "Re-approve the reconcile report? Region digest ${wrong}." "$lb" ;;
-    wronglabel) ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "Not yet, keep the report" ;;
-    embedded)   ra_answer "$c" "Re-approve the reconcile report? Region digest ab${dg}cd." "$lb" ;;
-    labelplus)  ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb -- no wait" ;;
-    pause)      ra_answer "$c" "Re-approve the reconcile report? Region digest ${dg}." "$lb" \
-                  && py_replace_once "$c/_bmad-output/operator-answers-history.md" " -- AskUserQuestion
-" " -- USER_PAUSE
-" ;;
-    *) return 1 ;;
-  esac
-}
 # ra_score <apply-path> <consumer> -> "<rc>|<stamp>|<WRITTEN|UNWRITTEN>|<NOTE|->"
 # WRITTEN is read off a target file's BYTES (the session driver theirs rewrites), not off a row.
 ra_score() {
@@ -648,13 +613,6 @@ ra_score() {
 }
 RA_GO="0|$THEIRS_VER|WRITTEN|NOTE"
 RA_STOP="1|1.0.0|UNWRITTEN|-"
-# ra_drive <apply-path> <tag> <plain|unseen> <record-kind> -> the ra_score cell, or BROKEN
-ra_drive() {
-  local c="$WORK/ra-$2-$$-$RANDOM"
-  ra_world "$c" "$3" "$4" || { echo "BROKEN"; return; }
-  ra_score "$1" "$c"
-  cp "$c/ra-stderr.txt" "$WORK/ra-$2.stderr" 2>/dev/null
-}
 # ra_shim <dir> <grep|sha> -> a PATH directory whose one tool FAILS where the arm needs it to.
 #   grep  exits 2 when its pattern is unseen_rows()'s (the only caller passing `0 HARD blockers`),
 #         and runs the real grep otherwise -- the count's filter fails, nothing else does.
@@ -686,20 +644,6 @@ ar_notool() {
   rm -f "$1/shasum" "$1/sha256sum"
   PATH="$1" command -v git >/dev/null 2>&1 && PATH="$1" command -v awk >/dev/null 2>&1 \
     && ! PATH="$1" command -v shasum >/dev/null 2>&1 && ! PATH="$1" command -v sha256sum >/dev/null 2>&1
-}
-# ra_drive_shim <tag> <grep|sha|none> -> "<ra_score cell>|<the re-approval line under the shim>"
-# `none` REPLACES PATH with the farm; the others PREPEND the shim, so the real tool stays behind it.
-ra_drive_shim() {
-  local c="$WORK/ra-$1-$$-$RANDOM" s="$WORK/ra-shim-$1" out rc l sp
-  u5_build "$c" unseen || { echo "BROKEN"; return; }
-  ra_shim "$s" "$2" || { echo "BROKEN"; return; }
-  sp="$s:$PATH"; [ "$2" = none ] && sp="$s"
-  l="$(PATH="$sp" bash "$EMIT" --verify "$c/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c" "$THEIRS" 2>&1 >/dev/null)"
-  l="$(sed -n 's/^[[:space:]]*re-approval: //p' <<< "$l")"
-  out="$(PATH="$sp" bash "$APPLY" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$WORK/ra-$1.stderr")"; rc=$?
-  printf '%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" \
-    "$(grep -q 'UPSTREAM' "$c/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
-    "$(has_row "$out" NOTE blockers-resolved && echo NOTE || echo -)" "$l"
 }
 
 # Each is a COPY of the whole reconcile directory — apply.sh `eval`s map_consumer() out of its
@@ -835,20 +779,6 @@ else
   bad "C1 .ai-dlc-applying was removed on a run that handed back a semantic merge. pre-push re-enables the fixture suite over a partially reconciled tree, which is the one state the marker exists to keep unjudged"
 fi
 
-# --- C2: the manifest says so, in the row vocabulary the operator reads -----------------------
-# Both directions in one arm. A withheld stamp reported as `RESOLVED restamp` is worse than
-# either failure alone: the operator reads the resolution and stops looking.
-if has_row "$OUT_WORK" DECISION restamp-withheld; then
-  ok "C2 the run emits DECISION restamp-withheld"
-else
-  bad "C2 the run withheld nothing the operator can see — no DECISION restamp-withheld row"
-fi
-if has_row "$OUT_WORK" RESOLVED restamp || has_row "$OUT_WORK" RESOLVED consistent; then
-  bad "C2 the same run also reported RESOLVED restamp / RESOLVED consistent. 'the tree matches theirs; fixture suite re-enabled' beside an outstanding merge is the strongest false claim this manifest can make"
-else
-  ok "C2 and does NOT also claim RESOLVED restamp or RESOLVED consistent"
-fi
-
 # --- C3: the pre-existing green path does not regress -----------------------------------------
 # THE ARM THAT CATCHES AN OVER-BROAD FIX. A guard that counts rows emitted after it — or that is
 # read at exit rather than at the guard — withholds the stamp on every clean pull, and a consumer
@@ -887,41 +817,10 @@ else
   bad "C4 --finish left the stamp at 'version: ${F_VER:-<absent>} / commit: ${F_SHA:-<absent>}' with the marker $F_MK. This is the ONLY exit from a withheld stamp: with the marker present pre-push refuses every push, so a --finish that does not stamp leaves the consumer with no way forward"
 fi
 
-# C5 ON A MERGED TREE. The operator resolved the semantic merge into a copy that differs from BOTH
-# base and theirs. --finish must leave those bytes exactly as they are AND stamp: a finisher that
-# ran the resolution phases would re-bucket the merged file to CLASSIFY and withhold forever, and a
-# finisher that compared each copy against theirs would withhold on it the same way.
-C_MRG="$WORK/cons-merged"
-mk_consumer "$C_MRG" merged hrv || { echo "FIXTURE BROKEN — could not build the merged consumer" >&2; exit 2; }
-printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_MRG/.claude/.ai-dlc-applying"
-cp "$C_MRG/$DRIVER_REL" "$WORK/merged-driver.before"
-OUT_MRG="$(run_apply "$APPLY" "$C_MRG" --finish)"
-if cmp -s "$WORK/merged-driver.before" "$C_MRG/$DRIVER_REL" \
-   && [ "$(stamp_ver "$C_MRG")" = "$THEIRS_VER" ] && [ "$(marker "$C_MRG")" = GONE ] \
-   && ! has_row "$OUT_MRG" WORKLIST finish-unapplied; then
-  ok "C5 --finish over a hand-merged $DRIVER_REL leaves its bytes unchanged AND stamps $THEIRS_VER — no resolution work, and a merged file is not counted as unapplied"; B_C5=1
-else
-  bad "C5 --finish over a hand-merged tree: driver bytes $(cmp -s "$WORK/merged-driver.before" "$C_MRG/$DRIVER_REL" && echo unchanged || echo CHANGED), stamp '$(stamp_ver "$C_MRG")', marker $(marker "$C_MRG"), finish-unapplied $(has_row "$OUT_MRG" WORKLIST finish-unapplied && echo present || echo absent). In the real workflow a BOTH-CHANGED file the operator has just merged re-buckets to CLASSIFY on every run, so a finisher that resolves or that compares to theirs never reaches the stamp"
-fi
-
-# --- C8: --finish TERMINATES over a DECISION row it cannot clear -------------------------------
-# The same tree as C4 minus the hook-registration validator, so apply.sh emits
-# `DECISION hook-registration-unchecked` and — under --finish alone — emits it BEFORE the stamp.
-# A finisher gating on the same counter as the ordinary run withholds on that row, and the row's
-# own remedy is to re-run the apply, which is the phase --finish exists to skip. The consumer is
-# then wedged with the marker on disk and no invocation that can clear it, which is the failure
-# this whole change exists to prevent, reintroduced one layer down by the change itself.
-C_TERM="$WORK/cons-terminate"
-mk_consumer "$C_TERM" finished || { echo "FIXTURE BROKEN — could not build the terminate consumer" >&2; exit 2; }
-printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_TERM/.claude/.ai-dlc-applying"
-OUT_TERM="$(run_apply "$APPLY" "$C_TERM" --finish)"
-if ! has_row "$OUT_TERM" DECISION hook-registration-unchecked; then
-  bad "C8 setup: --finish emitted no DECISION row on a consumer with no validate-hook-registration.sh, so this arm cannot distinguish the two counters and its pass is vacuous"
-elif [ "$(stamp_ver "$C_TERM")" = "$THEIRS_VER" ] && [ "$(marker "$C_TERM")" = GONE ]; then
-  ok "C8 --finish stamps over a DECISION row it has no phase to clear — the escape terminates"; B_C8=1
-else
-  bad "C8 --finish withheld on DECISION hook-registration-unchecked (stamp '$(stamp_ver "$C_TERM")', marker $(marker "$C_TERM")). That row's remedy is to re-run the apply, which is the phase --finish skips, so the operator has a refused push, a marker on disk and no invocation that clears it"
-fi
+# C5 (--finish over a hand-merged tree) and C8 (--finish over a DECISION row it cannot clear) were cut
+# by the BL-918 kill matrix: every mutant either killed (m7, m8, m11) is also killed by U4 or C4, which stay.
+# U4's world is the same shape as C8's (no hook-registration validator, so --finish emits the DECISION
+# before its stamp), so U4 carries C8's property as well as its own.
 
 # === F1/F2/F3: --finish CHECKS THE IDENTITY OF <theirs>, NOT MERELY THAT IT RESOLVES ==========
 #
@@ -1004,17 +903,8 @@ else
     bad "F2 a <theirs> differing from the record by a docs-only commit did not finish cleanly: stamp '$F2_VER @ $F2_SHA' (expected $THEIRS_VER @ $DOCS_SHORT), marker $F2_MK (expected GONE), mismatch row $(has_row "$OUT_IDD" DECISION restamp-identity-mismatch && echo present || echo absent), unchecked row $(has_row "$OUT_IDD" DECISION restamp-identity-unchecked && echo present || echo absent). ${DOCS} and ${THEIRS} carry the identical core/ tree $S3_T, so the bytes this pull writes are the same at both — a guard that stops here is keyed on the commit and wedges every finisher naming the newer of two equivalent refs"
   fi
 
-  # --- F3: IT NEVER FAILS FOR WANT OF THE RECORD ----------------------------------------------
-  # The over-broad fix — refusing whenever identity could not be CONFIRMED — wedges the consumer
-  # whose marker was cleared by hand, which is the remedy `core/git-hooks/pre-push` itself prints.
-  # F0 above owns the ROW on this run; F3 owns the EFFECT, so neither is a restatement of the
-  # other. Mutant m11 below is that over-broad fix.
-  F3_VER="$(stamp_ver "$C_IDN")"; F3_MK="$(marker "$C_IDN")"
-  if [ "$F3_VER" = "$OTHER_VER" ] && [ "$F3_MK" = GONE ] && has_row "$OUT_IDN" RESOLVED restamp; then
-    ok "F3 an unusable record is UNCHECKED and not refused — the stamp still advanced to $OTHER_VER and the marker cleared"; B_F3=1
-  else
-    bad "F3 --finish with no in-flight record refused to stamp: version '$F3_VER' (expected $OTHER_VER), marker $F3_MK (expected GONE), RESOLVED restamp $(has_row "$OUT_IDN" RESOLVED restamp && echo present || echo absent). A consumer that cleared the marker by hand — the remedy pre-push prints — then has a refused push, and the one invocation that clears it now refuses too"
-  fi
+  # F3 (an unusable record does not refuse) was cut by the BL-918 kill matrix: its one killer, m11,
+  # is killed by C4 too (identical kill column), and m11's per-push kill now reads C4.
 fi
 
 # --- C6: the withheld row hands the operator the escape ---------------------------------------
@@ -1143,7 +1033,7 @@ fi
 # but the manifest says nobody checked rather than staying silent about it.
 if [ "$RC_U3" -eq 0 ] && has_row "$OUT_U3" NOTE report-unverified \
    && [ "$(stamp_ver "$C_U3")" = "$THEIRS_VER" ]; then
-  ok "U3 an absent report does not block, and says so as NOTE report-unverified rather than passing silently"
+  ok "U3 an absent report does not block, and says so as NOTE report-unverified rather than passing silently"; B_U3=1
 else
   bad "U3 an absent report changed the outcome (rc=$RC_U3, stamp '$(stamp_ver "$C_U3")', row $(has_row "$OUT_U3" NOTE report-unverified && echo present || echo ABSENT)) — either it wedged a driver that has never required a report, or it passed with no row at all"
 fi
@@ -1153,7 +1043,7 @@ fi
 printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_U4/.claude/.ai-dlc-applying"
 OUT_U4="$(run_finish_as "$APPLY" "$C_U4" "$THEIRS")"; RC_U4=$?
 if [ "$RC_U4" -eq 0 ] && [ "$(stamp_ver "$C_U4")" = "$THEIRS_VER" ]; then
-  ok "U4 --finish stamps over a STALE report — the escape cannot be blocked by the gate that guards writes it does not make"
+  ok "U4 --finish stamps over a STALE report — the escape cannot be blocked by the gate that guards writes it does not make"; B_U4=1
 else
   bad "U4 --finish was blocked by a stale report (rc=$RC_U4, stamp '$(stamp_ver "$C_U4")') — the consumer is wedged: the marker is down, pre-push refuses the suite, and the run that clears it just refused"
 fi
@@ -1207,7 +1097,6 @@ fi
 C_U5="$WORK/cons-u5ra1"
 cfu_copy "$U5_SRC" "$C_U5" || { echo "FIXTURE BROKEN — could not copy the U5/RA1 world" >&2; exit 2; }
 OUT_U5="$(run_apply_err "$APPLY" "$C_U5" "$C_U5/stderr.txt")"; RC_U5=$?
-cp "$C_U5/stderr.txt" "$WORK/ra-a1.stderr" 2>/dev/null
 # PRESENCE-SHAPED IN EVERY FIELD. REMEDY is keyed on `RE-APPROVAL OWED`, which only the exit-3 branch
 # prints, plus the re-run. FWD is the FORWARDED stderr, keyed on the two things only the forward
 # produces: a `cause:` LINE at --verify's own indent and at least one `<`/`>` diff line. The refusal
@@ -1241,7 +1130,7 @@ esac
 # into each copy by the real hook. A copy carries the same report bytes (cfu_copy refuses otherwise) and
 # the render is deterministic, so RA2's PROCEED is itself the control that the one digest is the digest
 # of every copy: a record quoting a digest that differed would not proceed.
-cfu_ra_world() { # cfu_ra_world <src> <dst> <none|right|wrongdg|wronglabel|pause|embedded|labelplus> -> 0 when built as asked
+cfu_ra_world() { # cfu_ra_world <src> <dst> <none|right|wrongdg> -> 0 when built as asked
   local dg lb wrong
   cfu_copy "$1" "$2" || return 1
   [ "$3" = none ] && return 0
@@ -1251,13 +1140,6 @@ cfu_ra_world() { # cfu_ra_world <src> <dst> <none|right|wrongdg|wronglabel|pause
   case "$3" in
     right)      ra_answer "$2" "Re-approve the reconcile report? Region digest ${dg}." "$lb" ;;
     wrongdg)    ra_answer "$2" "Re-approve the reconcile report? Region digest ${wrong}." "$lb" ;;
-    wronglabel) ra_answer "$2" "Re-approve the reconcile report? Region digest ${dg}." "Not yet, keep the report" ;;
-    embedded)   ra_answer "$2" "Re-approve the reconcile report? Region digest ab${dg}cd." "$lb" ;;
-    labelplus)  ra_answer "$2" "Re-approve the reconcile report? Region digest ${dg}." "$lb -- no wait" ;;
-    pause)      ra_answer "$2" "Re-approve the reconcile report? Region digest ${dg}." "$lb" \
-                  && py_replace_once "$2/_bmad-output/operator-answers-history.md" " -- AskUserQuestion
-" " -- USER_PAUSE
-" ;;
     *) return 1 ;;
   esac
 }
@@ -1301,17 +1183,11 @@ else
       bad "RA-0 setup: unseen world [$RA_L], plain world [$RA_L0], or the hook ($ANSWER_HOOK) wrote no record — the arms below cannot express the case"
     fi
   fi
-  RA0="$(cfu_ra_drive "$APPLY" a0 "$RA_PLAIN" none)"
-  # RA1 was scored above, off the same run as U5.
+  # RA1 was scored above, off the same run as U5. RA0, RA1-Q, RA1-R and RA4-RA7 were cut by the BL-918
+  # kill matrix: each one's kill column is a subset of a surviving arm's (RA0 = RA2; RA4, RA5, RA7 = RA1;
+  # RA6 = RA3; RA1-Q, RA1-R inside RA1 + RA2), so no mutant they kill escapes the arms that remain.
   RA2="$(cfu_ra_drive "$APPLY" a2 "$U5_SRC" right)"
   RA3="$(cfu_ra_drive "$APPLY" a3 "$U5_SRC" wrongdg)"
-  RA4="$(cfu_ra_drive "$APPLY" a4 "$U5_SRC" wronglabel)"
-  RA5="$(cfu_ra_drive "$APPLY" a5 "$U5_SRC" pause)"
-  if [ "$RA0" = "$RA_GO" ]; then
-    ok "RA0 exit 3 with unseen=0 and no record PROCEEDS with a NOTE blockers-resolved row — the approval saw a superset, so no pull that had a blocker is wedged"; B_RA0=1
-  else
-    bad "RA0 unseen=0 did not proceed ($RA0, want $RA_GO) — every pull that resolved a blocker now needs a question nobody can be asked"
-  fi
   if [ "$RA1" = "$RA_STOP" ]; then
     ok "RA1 exit 3 with unseen>0 and no record REFUSES, the target file unwritten and the stamp at base"; B_RA1=1
   else
@@ -1327,51 +1203,12 @@ else
   else
     bad "RA3 a wrong-digest record passed ($RA3, want $RA_STOP) — the label is a constant, so the digest is the only thing binding the record to this region"
   fi
-  if [ "$RA4" = "$RA_STOP" ]; then
-    ok "RA4 a record quoting the digest but answered with something other than the label refuses"; B_RA4=1
-  else
-    bad "RA4 a non-label answer passed ($RA4, want $RA_STOP) — a 'Not yet' re-approves"
-  fi
-  if [ "$RA5" = "$RA_STOP" ]; then
-    ok "RA5 the digest and label inside a record that is not an AskUserQuestion answer refuse"; B_RA5=1
-  else
-    bad "RA5 a non-AskUserQuestion record passed ($RA5, want $RA_STOP) — any record the lead can cause to exist re-approves"
-  fi
-  # The refusal prints the question and label to ask, so a session on old prose recovers in one ask.
-  if grep -qF 'apply: RE-APPROVAL OWED.' "$WORK/ra-a1.stderr" 2>/dev/null \
-     && grep -Eq '^  option label: Re-approve [0-9a-f]{12}, run apply$' "$WORK/ra-a1.stderr"; then
-    ok "RA1 and the refusal prints the question and the exact option label to ask"
-  else
-    bad "RA1 the refusal did not print the question and option label — a session cannot recover without composing the label itself"
-  fi
-  # RA1-R: the forwarded --verify stderr carries NO re-render instruction. The mismatch header's
-  # generic "Re-render with emit-report.sh and re-emit the report." used to be line 2 of this
-  # refusal, twenty lines above "Do NOT re-render". A present `Do NOT re-render` is the positive half.
-  if [ -s "$WORK/ra-a1.stderr" ] && ! grep -qF 'Re-render with emit-report.sh' "$WORK/ra-a1.stderr" \
-     && grep -qF 'Do NOT re-render' "$WORK/ra-a1.stderr"; then
-    ok "RA1-R the exit-3 refusal carries no 'Re-render with emit-report.sh' line, only 'Do NOT re-render'"
-  else
-    bad "RA1-R the exit-3 refusal still tells the session to re-render, or says nothing either way — the evidence-destroying path is offered in the same message that forbids it"
-  fi
-  # RA6/RA7: the digest must stand alone and the answer must EQUAL the label.
-  RA6="$(cfu_ra_drive "$APPLY" a6 "$U5_SRC" embedded)"
-  RA7="$(cfu_ra_drive "$APPLY" a7 "$U5_SRC" labelplus)"
-  if [ "$RA6" = "$RA_STOP" ]; then
-    ok "RA6 a question quoting the digest inside a longer hex run (ab<digest>cd) refuses"
-  else
-    bad "RA6 an embedded digest passed ($RA6, want $RA_STOP) — a different, longer hash re-approves this region"
-  fi
-  if [ "$RA7" = "$RA_STOP" ]; then
-    ok "RA7 an answer that starts with the label and goes on ('<label> -- no wait') refuses"
-  else
-    bad "RA7 a label-prefixed answer passed ($RA7, want $RA_STOP) — a retraction typed after the label re-approves"
-  fi
   # RA8: the unseen count's filter FAILS (grep exit 2 on unseen_rows' own pattern). The count must
   # read UNDECIDED, never 0, and apply must refuse with the target unwritten. Before the fix it read
   # 0 and apply wrote with no ask.
   RA8="$(cfu_ra_drive_shim a8 grep)"
   case "$RA8" in
-    "$RA_STOP|digest="*" unseen=UNDECIDED label="*) ok "RA8 a failing unseen filter prints unseen=UNDECIDED and the apply refuses, the target file unwritten" ;;
+    "$RA_STOP|digest="*" unseen=UNDECIDED label="*) ok "RA8 a failing unseen filter prints unseen=UNDECIDED and the apply refuses, the target file unwritten"; B_RA8=1 ;;
     *) bad "RA8 a failing unseen filter scored [$RA8], want $RA_STOP with unseen=UNDECIDED — the count fails open and a region nobody re-approved is written" ;;
   esac
   # RA9a/RA9f: the two digest states, one property apart. RA9 used to PREPEND two `exit 1` stubs and
@@ -1384,7 +1221,7 @@ else
   case "$RA9" in
     "$RA_STOP|digest=UNAVAILABLE unseen=1 "*)
       if grep -qF 'no sha256 tool: install shasum' "$WORK/ra-a9.stderr" && ! grep -qF 'RE-APPROVAL OWED' "$WORK/ra-a9.stderr"; then
-        ok "RA9a with no sha256 tool on PATH the digest is UNAVAILABLE and the apply refuses naming shasum, printing no unanswerable question"
+        ok "RA9a with no sha256 tool on PATH the digest is UNAVAILABLE and the apply refuses naming shasum, printing no unanswerable question"; B_RA9a=1
       else
         bad "RA9a the refusal did not name the missing tool, or still printed a question quoting UNAVAILABLE"
       fi ;;
@@ -1399,7 +1236,7 @@ else
          && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$WORK/ra-a9f.stderr" \
          && ! grep -qF 'no sha256 tool: install shasum' "$WORK/ra-a9f.stderr" \
          && ! grep -qF 'RE-APPROVAL OWED' "$WORK/ra-a9f.stderr"; then
-        ok "RA9f with a shasum that exists and exits 1 the digest is FAILED-shasum and the apply refuses naming the failed tool, not the missing one"
+        ok "RA9f with a shasum that exists and exits 1 the digest is FAILED-shasum and the apply refuses naming the failed tool, not the missing one"; B_RA9f=1
       else
         bad "RA9f the refusal did not name the failed shasum, or read it as a missing tool, or printed a question"
       fi ;;
@@ -1484,18 +1321,29 @@ mut_ra_world() {
   case "$3" in
     right)      ra_answer "$2" "Re-approve the reconcile report? Region digest ${dg}." "$lb" ;;
     wrongdg)    ra_answer "$2" "Re-approve the reconcile report? Region digest ${wrong}." "$lb" ;;
-    wronglabel) ra_answer "$2" "Re-approve the reconcile report? Region digest ${dg}." "Not yet, keep the report" ;;
-    pause)      ra_answer "$2" "Re-approve the reconcile report? Region digest ${dg}." "$lb" \
-                  && py_replace_once "$2/_bmad-output/operator-answers-history.md" " -- AskUserQuestion
-" " -- USER_PAUSE
-" ;;
     *) return 1 ;;
   esac
 }
-mut_ra_drive() { # mut_ra_drive <apply-path> <tag> <src> <record-kind> -> the ra_score cell, or BROKEN
+mut_ra_drive() { # mut_ra_drive <apply-path> <tag> <src> <record-kind> -> the ra_score cell, or BROKEN; stderr kept at $WORK/mra-<tag>.stderr
   local c="$WORK/mra-$2-$$-$RANDOM"
+  rm -f "$WORK/mra-$2.stderr"
   mut_ra_world "$3" "$c" "$4" || { echo "BROKEN"; return; }
   ra_score "$1" "$c"
+  cp "$c/ra-stderr.txt" "$WORK/mra-$2.stderr" 2>/dev/null
+}
+# mut_ra_shim <apply-path> <tag> <grep|sha|none> -> cfu_ra_drive_shim's cell for <apply-path>, off a copy of the
+# unseen world; the --verify reading is taken from the emit-report.sh beside <apply-path>, stderr kept at $WORK/mra-<tag>.stderr.
+mut_ra_shim() {
+  local a="$1" c="$WORK/mrs-$2-$$-$RANDOM" s="$WORK/mrs-shim-$2-$$-$RANDOM" out rc l sp
+  mut_copy "$MUT_U5" "$c" || { echo "BROKEN"; return; }
+  ra_shim "$s" "$3" || { echo "BROKEN"; return; }
+  sp="$s:$PATH"; [ "$3" = none ] && sp="$s"
+  l="$(PATH="$sp" bash "$(dirname "$a")/emit-report.sh" --verify "$c/$MUT_RPT" "$DIST" "$BASE" "$c" "$THEIRS" 2>&1 >/dev/null)"
+  l="$(sed -n 's/^[[:space:]]*re-approval: //p' <<< "$l")"
+  out="$(PATH="$sp" bash "$a" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$WORK/mra-$2.stderr")"; rc=$?
+  printf '%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" \
+    "$(grep -q 'UPSTREAM' "$c/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
+    "$(has_row "$out" NOTE blockers-resolved && echo NOTE || echo -)" "$l"
 }
 
 # THE UNMUTATED CONTROL, and it carries a POSITIVE conjunct. A control asserting only "nothing
@@ -1610,25 +1458,16 @@ else
   bad "m5 did not apply — the guard does not compare \`\"\$outstanding\" -gt 0\`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
-# --- m8: the two counters collapsed into one. Must die on C8. ----------------------------------
+# --- m8: the two counters collapsed into one. Must die on U4. ----------------------------------
 # `--finish` gating on `handback` instead of `worklist_n`. Measured by the implementer on the
 # first end-to-end run of this change: the finisher counted the hook-registration DECISION row it
 # had itself just emitted and withheld forever. C4's tree cannot see it — that consumer carries
-# the validator, so no such row exists — which is why C8 has a tree of its own.
+# the validator, so no such row exists. U4's tree carries no validator, so --finish emits that
+# DECISION before its stamp there, and U4 is the arm that kills this (the BL-918 matrix: m8 kills
+# C8 and U4 only, and C8 was cut as covered by U4).
 if sed 's/^if \[ "$FINISH" = 1 \]; then outstanding="$worklist_n";/if [ "$FINISH" = 1 ]; then outstanding="$handback";/' \
    "$REC/apply.sh" | mut_apply "$WORK/m8"; then
-  M8="$(mut_stamp "$WORK/m8" finished - --finish)"
-  case "$M8" in
-    "1.0.0|PRESENT|WITHHELD|"*) mutant_killed "$(( ${B_C8:-0} && ${B_mctl:-0} ))" m8 "m8 (--finish gates on handback): C8 goes red — the finisher withholds over the DECISION row it emitted itself, and no invocation can clear it" ;;
-    "$THEIRS_VER|GONE|"*)       bad "m8 SURVIVED: --finish still stamped while gating on handback, so C8's tree emits no DECISION row and the arm is vacuous ($M8)" ;;
-    *)                          bad "m8 produced an unrecognised verdict ($M8)" ;;
-  esac
-  M8H="$(mut_stamp "$WORK/m8" finished hrv --finish)"
-  if [ "${M8H%%|*}" = "$THEIRS_VER" ]; then
-    ok "m8 and C4 stays green under it — the two counters are separately observable, which is the whole reason C8 exists beside C4"
-  else
-    bad "m8 also moved C4 ($M8H): C4's consumer is emitting a hand-back row it should not, so the two arms read one input"
-  fi
+  : # scored by mut_claim below, once mut_cell and its drivers are defined
 else
   bad "m8 did not apply — no \`outstanding=\"\$worklist_n\"\` assignment under the FINISH branch, so the two-counter design is unproven"
 fi
@@ -1659,27 +1498,13 @@ else
   bad "m6 could not be built: apply.sh declares no \`FINISH=0\`, so this mutant cannot name the flag it must make the guard read. C4 is unproven against an over-broad fix until it is re-anchored on the real variable."
 fi
 
-# --- m7: `--finish` runs the full phases. Must die on C5. --------------------------------------
+# --- m7: `--finish` runs the full phases. Must die on U4. --------------------------------------
 # Anchored on the option-parser branch rather than on any variable, so it holds whatever the flag
-# is called: the option is still accepted and sets nothing, which is exactly a full run.
-#
-# DRIVEN ON C5's MERGED TREE. A full run re-buckets the hand-merged driver to CLASSIFY and hands it
-# back as a semantic merge, so the stamp is withheld -- the real-workflow deadlock C5 names. The
-# merged bytes survive either way (a CLASSIFY file is never overwritten), so the kill is the stamp
-# half of C5, and `mut_stamp`'s driver field reads UNTOUCHED under both programs: the merged text
-# carries no `UPSTREAM`.
+# is called: the option is still accepted and sets nothing, which is exactly a full run. A full run
+# consults the union gate, and U4's report is stale, so the "finisher" refuses (the BL-918 matrix:
+# m7 kills C5, F1 and U4; C5 was cut as covered by U4). C4 (a finished tree, no report) holds.
 if sed 's/^\([[:space:]]*\)--finish).*$/\1--finish) : ;;/' "$REC/apply.sh" | mut_apply "$WORK/m7"; then
-  M7="$(mut_stamp "$WORK/m7" merged hrv --finish)"
-  case "$M7" in
-    "1.0.0|PRESENT|WITHHELD|UNTOUCHED") mutant_killed "$(( ${B_C5:-0} && ${B_mctl:-0} ))" m7 "m7 (--finish runs the phases): C5 goes red — the hand-merged driver re-buckets to CLASSIFY, is handed back as a semantic merge, and the stamp is withheld over a tree the operator has finished" ;;
-    "$THEIRS_VER|GONE|"*)               bad "m7 SURVIVED: the merged tree still stamped with the --finish branch neutered ($M7), so C5 is not testing the phase skip" ;;
-    *)                                  bad "m7 produced an unrecognised verdict ($M7)" ;;
-  esac
-  M7F="$(mut_stamp "$WORK/m7" finished hrv --finish)"
-  case "$M7F" in
-    "$THEIRS_VER|GONE|"*) ok "m7 and C4 stays green under it — a full run on a finished consumer stamps too, so only C5's merged tree separates the two modes" ;;
-    *)                    bad "m7 also moved C4 ($M7F): the two arms are entangled" ;;
-  esac
+  : # scored by mut_claim below, once mut_cell and its drivers are defined
 else
   bad "m7 did not apply — the option parser carries no \`--finish)\` branch, so this mutant proves nothing"
 fi
@@ -1764,26 +1589,15 @@ else
   bad "m10 did not apply — the guard no longer resolves \`\${_m_theirs}:core\` and \`\${THEIRS}:core\`, so this mutant proves nothing"
 fi
 
-# --- m11: over-broad — an UNCHECKED identity refuses too. Must die on F3. ----------------------
+# --- m11: over-broad — an UNCHECKED identity refuses too. Must die on C4. ----------------------
 # The fix that looks stricter and is worse: a consumer whose marker was cleared by hand, which is
 # the remedy `core/git-hooks/pre-push` prints, then has a refused push and no invocation that
-# clears it. Widening is safe to assert here because the observable genuinely changes — an
-# unchecked run stops stamping — so this is not the case where a widened guard prints what the
-# original did.
+# clears it. C4's marker carries no `theirs:` line, so its identity is UNCHECKED and the widened
+# refusal withholds it (the BL-918 matrix: C4 and F3 share an identical kill column, so F3 was cut
+# and C4 decides). F2 — a usable record — holds.
 if sed 's/elif \[ -n "$finish_id_mismatch" \]; then/elif [ -n "$finish_id_mismatch" ] || [ -n "$finish_id_note" ]; then/' "$REC/apply.sh" \
    | mut_apply "$WORK/m11"; then
-  M11="$(mut_finish_id "$WORK/m11" "$OTHER" nomarker)"
-  case "$M11" in
-    "1.0.0|"*"|MISMATCH") mutant_killed "$(( ${B_F3:-0} && ${B_mid:-0} ))" m11 "m11 (unchecked treated as mismatched): F3 goes red — a consumer with no in-flight record can no longer finish at all" ;;
-    "$OTHER_VER|GONE|NO") bad "m11 SURVIVED: the no-record run still stamped with the note folded into the refusal, so F3 is not reading the unchecked path ($M11)" ;;
-    *) bad "m11 produced a verdict this fixture does not recognise ($M11) — F3's kill is unearned" ;;
-  esac
-  M11D="$(mut_finish_id "$WORK/m11" "$DOCS")"
-  if [ "$M11D" = "$THEIRS_VER|GONE|NO" ]; then
-    ok "m11 and F2 stays green under it — a run with a usable record is untouched, so F3 owns this case alone"
-  else
-    bad "m11 also moved the near-miss ($M11D): F2 and F3 are entangled"
-  fi
+  : # scored by mut_claim below, once mut_cell and its drivers are defined
 else
   bad "m11 did not apply — the re-stamp no longer branches on \`elif [ -n \"\$finish_id_mismatch\" ]; then\`, so this mutant proves nothing"
 fi
@@ -1969,29 +1783,91 @@ mut_cell() { # mut_cell <cell> <rec-dir> -> 0 when the cell holds
     C3)  o="$(mut_stamp "$r" green -)"; [ "${o%%|*}" = "$THEIRS_VER" ] ;;
     C7)  o="$(mut_stamp "$r" decision -)"; case "$o" in "1.0.0|"*) true ;; *) false ;; esac ;;
     C4)  o="$(mut_stamp "$r" finished hrv --finish)"; [ "${o%%|*}" = "$THEIRS_VER" ] ;;
-    C8)  o="$(mut_stamp "$r" finished - --finish)"; [ "${o%%|*}" = "$THEIRS_VER" ] ;;
-    C5)  o="$(mut_stamp "$r" merged hrv --finish)"; case "$o" in "$THEIRS_VER|GONE|"*) true ;; *) false ;; esac ;;
     C6)  c="$WORK/mxc6-$$-$RANDOM"; mk_consumer "$c" worklist || return 1
          o="$(run_apply "$r/apply.sh" "$c")"; case "$(detail_of "$o" DECISION restamp-withheld)" in *--finish*) true ;; *) false ;; esac ;;
     F1)  [ "$(mut_finish_id "$r" "$OTHER")" = "1.0.0|PRESENT|MISMATCH" ] ;;
     F2)  [ "$(mut_finish_id "$r" "$DOCS")" = "$THEIRS_VER|GONE|NO" ] ;;
-    F3)  o="$(mut_finish_id "$r" "$OTHER" nomarker)"; [ "$o" = "$OTHER_VER|GONE|NO" ] ;;
     U1)  [ "$(mut_union_current "$r")" = "0|$THEIRS_VER|GONE" ] ;;
     U2)  [ "$(mut_union "$r")" = "1|1.0.0|GONE" ] ;;
     U5)  [ "$(mut_u5_score "$r/apply.sh")" = "1|1.0.0|GONE|CAUSE|REMEDY|FWD" ] ;;
     RA1) [ "$(mut_ra_drive "$r/apply.sh" mx1 "$MUT_U5" none)" = "$RA_STOP" ] ;;
     RA2) [ "$(mut_ra_drive "$r/apply.sh" mx2 "$MUT_U5" right)" = "$RA_GO" ] ;;
     RA3) [ "$(mut_ra_drive "$r/apply.sh" mx3 "$MUT_U5" wrongdg)" = "$RA_STOP" ] ;;
+    U3)  c="$WORK/mxu3-$$-$RANDOM"; mk_consumer "$c" green || return 1
+         o="$(run_apply "$r/apply.sh" "$c")" || return 1
+         has_row "$o" NOTE report-unverified && [ "$(stamp_ver "$c")" = "$THEIRS_VER" ] ;;
+    U4)  c="$WORK/mxu4-$$-$RANDOM"; mut_copy "$MUT_UST" "$c" && seed_ref "$DIST" "$BASE" "$THEIRS" "$c" || return 1
+         printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$c/.claude/.ai-dlc-applying"
+         run_finish_as "$r/apply.sh" "$c" "$THEIRS" >/dev/null || return 1
+         [ "$(stamp_ver "$c")" = "$THEIRS_VER" ] ;;
+    RA8) o="$(mut_ra_shim "$r/apply.sh" mx8 grep)"
+         case "$o" in "$RA_STOP|digest="*" unseen=UNDECIDED label="*) true ;; *) false ;; esac ;;
+    RA9a) o="$(mut_ra_shim "$r/apply.sh" mx9a none)"
+         case "$o" in "$RA_STOP|digest=UNAVAILABLE unseen=1 "*) true ;; *) false ;; esac \
+           && grep -qF 'no sha256 tool: install shasum' "$WORK/mra-mx9a.stderr" && ! grep -qF 'RE-APPROVAL OWED' "$WORK/mra-mx9a.stderr" ;;
+    RA9f) o="$(mut_ra_shim "$r/apply.sh" mx9f sha)"
+         case "$o" in "$RA_STOP|digest=FAILED-shasum unseen=1 "*) true ;; *) false ;; esac \
+           && grep -qF 'could not digest the fresh region: shasum exists on this box' "$WORK/mra-mx9f.stderr" \
+           && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$WORK/mra-mx9f.stderr" \
+           && ! grep -qF 'no sha256 tool: install shasum' "$WORK/mra-mx9f.stderr" \
+           && ! grep -qF 'RE-APPROVAL OWED' "$WORK/mra-mx9f.stderr" ;;
     *)   false ;;
   esac
 }
+
+# --- CLAIM MUTANTS of unit u: each breaks ONE claim the u arms make of the shipped apply.sh --------------
+# Added because no mutant above reached these arms' code (the --matrix columns U3, U4, RA8, RA9a and RA9f read 1
+# under every one of them). Each is an exact-once replace in a whole-directory copy (ra_mut), and each kill reads
+# the deciding cell(s) red AND its twin holding, off the same mut_cell the matrix scores.
+# mut_claim <flag> <id> <dir> <decides> <twins> <what>
+mut_claim() {
+  local bf="$1" id="$2" d="$3" dec="$4" tw="$5" what="$6" a ok=1 got=""
+  for a in $dec; do if mut_cell "$a" "$d"; then ok=0; got="$got $a=1"; else got="$got $a=0"; fi; done
+  for a in $tw;  do if mut_cell "$a" "$d"; then got="$got $a=1"; else ok=0; got="$got $a=0"; fi; done
+  if [ "$ok" = 1 ]; then
+    mutant_killed "$bf" "$id" "$id ($what): {$dec} goes red while {$tw} holds —$got"
+  else
+    bad "$id ($what) scored$got, want {$dec} red and {$tw} holding — it survived, or moved an arm it should not"
+  fi
+}
+# m7, m8 and m11 are built above; their deciding arms (C5, C8, F3) were cut by the BL-918 matrix, and each is
+# scored here on the surviving cell its matrix row kills.
+[ -f "$WORK/m7/apply.sh" ]  && mut_claim "$(( ${B_U4:-0} && ${B_C4:-0} && ${B_mctl:-0} ))" m7 "$WORK/m7" U4 C4 "--finish runs the phases: the finisher runs the union gate over a stale report and refuses"
+[ -f "$WORK/m8/apply.sh" ]  && mut_claim "$(( ${B_U4:-0} && ${B_C4:-0} && ${B_mctl:-0} ))" m8 "$WORK/m8" U4 C4 "--finish gates on handback: it withholds over the hook-registration DECISION it emitted itself"
+[ -f "$WORK/m11/apply.sh" ] && mut_claim "$(( ${B_C4:-0} && ${B_F2:-0} && ${B_mid:-0} ))" m11 "$WORK/m11" C4 F2 "an UNCHECKED identity refused: a consumer with no usable in-flight record can never finish"
+# MU3: the absent-report NOTE deleted. The claim: no report does not block AND says so (U3); the stamp half is C3's.
+if ra_mut "$WORK/mu3" '    say NOTE report-unverified ""' '    : NOTE report-unverified ""'; then
+  mut_claim "$(( ${B_U3:-0} && ${B_C3:-0} && ${B_mctl:-0} ))" MU3 "$WORK/mu3" U3 C3 "an absent report passes silently, with no report-unverified row"
+else bad "MU3 DID NOT APPLY — \`    say NOTE report-unverified \"\"\` is not in apply.sh exactly once"; fi
+# MU4: the union gate consulted under --finish too. The claim: --finish cannot be blocked by a stale report (U4).
+if ra_mut "$WORK/mu4" 'if [ "$FINISH" = 0 ]; then
+  if [ -f "$UNION_REPORT" ]; then' 'if true; then
+  if [ -f "$UNION_REPORT" ]; then'; then
+  mut_claim "$(( ${B_U4:-0} && ${B_C4:-0} && ${B_mctl:-0} ))" MU4 "$WORK/mu4" U4 C4 "the union gate runs under --finish"
+else bad "MU4 DID NOT APPLY — the union gate's \`if [ \"\$FINISH\" = 0 ]; then\` opener is not in apply.sh exactly once"; fi
+if [ -z "$RA_SKIP" ]; then
+  # MRA8: an uncountable unseen figure read as 0. The claim: a failing count refuses, never proceeds (RA8).
+  if ra_mut "$WORK/mra8" "        case \"\$_ra_un\" in ''|*[!0-9]*) _ra_ok=bad ;; *) _ra_ok=ok ;; esac" \
+                         "        case \"\$_ra_un\" in '') _ra_ok=bad ;; *[!0-9]*) _ra_un=0; _ra_ok=ok ;; *) _ra_ok=ok ;; esac"; then
+    mut_claim "$(( ${B_RA8:-0} && ${B_RA1:-0} && ${B_mr:-0} ))" MRA8 "$WORK/mra8" RA8 RA1 "unseen=UNDECIDED read as unseen=0"
+  else bad "MRA8 DID NOT APPLY — the unseen-count case is not in apply.sh exactly once"; fi
+  # MRA9a: the no-sha256-tool refusal disarmed. The claim: UNAVAILABLE refuses naming the tool and asks nothing (RA9a).
+  if ra_mut "$WORK/mra9a" '        elif [ "$_ra_un" -ne 0 ] && [ "$_ra_dg" = UNAVAILABLE ]; then' '        elif false; then'; then
+    mut_claim "$(( ${B_RA9a:-0} && ${B_RA1:-0} && ${B_mr:-0} ))" MRA9a "$WORK/mra9a" RA9a RA1 "digest=UNAVAILABLE no longer refused by name"
+  else bad "MRA9a DID NOT APPLY — the UNAVAILABLE branch is not in apply.sh exactly once"; fi
+  # MRA9f: the failed-tool refusal disarmed. The claim: a tool that exists and fails is never read as missing (RA9f).
+  if ra_mut "$WORK/mra9f" '        elif [ "${_ra_dg#FAILED-}" != "$_ra_dg" ]; then' '        elif false; then'; then
+    mut_claim "$(( ${B_RA9f:-0} && ${B_RA1:-0} && ${B_mr:-0} ))" MRA9f "$WORK/mra9f" RA9f RA1 "digest=FAILED-<tool> no longer refused by name"
+  else bad "MRA9f DID NOT APPLY — the FAILED-<tool> branch is not in apply.sh exactly once"; fi
+fi
 if [ "$MATRIX" = 1 ]; then
   MX_CELLS=$((MX_CELLS + 1))
-  MUT_CELLS="C1 C3 C4 C5 C6 C7 C8 F1 F2 F3 U1 U2 U5 RA1 RA2 RA3"
+  MUT_CELLS="C1 C3 C4 C6 C7 F1 F2 U1 U2 U3 U4 U5 RA1 RA2 RA3 RA8 RA9a RA9f"
   echo "MATRIX-BEGIN mut cells=$MUT_CELLS"
   # <id>:<dir> pairs. The four controls are unmutated copies; CONTROL-id has its own copy, the others share mut-ctl.
   for _mp in CONTROL:mut-ctl CONTROL-id:mut-id-ctl CONTROL-m12:mut-ctl CONTROL-MR:mut-ctl \
-             m1:m1 m2:m2 m3:m3 m4:m4 m5:m5 m6:m6 m7:m7 m8:m8 m9:m9 m10:m10 m11:m11 m12:m12 A1:a1 A2:a2 A3:a3 MR1:mr1 MR2:mr2; do
+             m1:m1 m2:m2 m3:m3 m4:m4 m5:m5 m6:m6 m7:m7 m8:m8 m9:m9 m10:m10 m11:m11 m12:m12 A1:a1 A2:a2 A3:a3 MR1:mr1 MR2:mr2 \
+             MU3:mu3 MU4:mu4 MRA8:mra8 MRA9a:mra9a MRA9f:mra9f; do
     _id="${_mp%%:*}"; _dir="$WORK/${_mp#*:}"
     if [ ! -f "$_dir/apply.sh" ]; then bad "MATRIX mut $_id: no staged copy at ${_dir}, so its row cannot be measured"; continue; fi
     _row="MATRIX $_id"
@@ -2049,39 +1925,66 @@ ti_seam_guard() {
     fi
   done
 }
-ti_helpers() {
+ti_helpers() { # [apply-file] -- the staging helpers, extracted from <apply-file> (default $APPLY)
   printf 'AP_TMP="$(mktemp -d "%s/ti-stage.XXXXXX")"; ap_stage_dead=0; FINISH=0; mech_fail=0\n' "$WORK"
-  sed -n -e '/^ap_stage() {/,/^}$/p' -e '/^ap_staging_refused() {/,/^}$/p' -e '/^ap_stage_or_refuse() {/,/^}$/p' "$APPLY"
+  sed -n -e '/^ap_stage() {/,/^}$/p' -e '/^ap_staging_refused() {/,/^}$/p' -e '/^ap_stage_or_refuse() {/,/^}$/p' "${1:-$APPLY}"
 }
-ti_row_out() { # <consumer> -> the row types this consumer draws, or -NONE-
-  local c="$1" out
-  out="$( CONSUMER="$c" DIST="$DIST" bash -c '
+ti_row_out() { # <consumer> [apply-file] -> the row types this consumer draws, or -NONE-
+  local c="$1" a="${2:-$APPLY}" out
+  out="$( CONSUMER="$c" DIST="$DIST" GIT_CEILING_DIRECTORIES="$TI_CEIL" bash -c '
     handback=0; worklist_n=0
     say() { printf "%s|%s\n" "$1" "$2"; }
-    '"$(ti_helpers)"'
-    '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$APPLY")"'
+    '"$(ti_helpers "$a")"'
+    '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$a")"'
     transient_ignore_row' 2>/dev/null | tr '\n' ' ' )"
   printf '%s' "${out:--NONE-}"
 }
-ti_row_text() { # <consumer> -> the row's PROSE, for the arms that discriminate on diagnosis
-  local c="$1"
-  CONSUMER="$c" DIST="$DIST" bash -c '
+ti_row_text() { # <consumer> [apply-file] -> the row's PROSE, for the arms that discriminate on diagnosis
+  local c="$1" a="${2:-$APPLY}"
+  CONSUMER="$c" DIST="$DIST" GIT_CEILING_DIRECTORIES="$TI_CEIL" bash -c '
     handback=0; worklist_n=0
     say() { printf "%s\n" "${4:-}"; }
-    '"$(ti_helpers)"'
-    '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$APPLY")"'
+    '"$(ti_helpers "$a")"'
+    '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$a")"'
     transient_ignore_row' 2>/dev/null | tr '\n' ' '
 }
-mk_ti_consumer() { # <dir> <render yes|no> <ondisk yes|no> <tracked yes|no> <break yes|no>
-  local c="$1" rnd="$2" od="$3" tr_="$4" brk="$5"
+# t_cell <cell> <apply-file> -> 0 when the T arm holds for the transient_ignore_row() extracted from <apply-file>.
+# The SAME predicate each T arm below asserts, over the same worlds; none of them writes to its world.
+t_cell() {
+  local a="$2" o n
+  case "$1" in
+    T1) case "$(ti_row_out "$TI_UNREADABLE" "$a")" in *"DECISION|transient-ignore-unreadable"*) true ;; *) false ;; esac ;;
+    T3) [ "$(ti_row_out "$TI_ONDISK" "$a")" = "-NONE-" ] ;;
+    T5) case "$(ti_row_out "$TI_T5" "$a")" in *"WORKLIST|transient-ignore-tracked"*) true ;; *) false ;; esac ;;
+    T8) o="$(ti_row_text "$TI_DUR" "$a")"
+        case "$o" in *"${ti_dur_root}/${ti_dur_name}"*) false ;; *".handoff-in-progress"*) true ;; *) false ;; esac ;;
+    T6) o="$(ti_row_text "$TI_NEVER" "$a")"; n="$(ti_row_text "$TI_DRIFT" "$a")"
+        [ "$o" != "$n" ] && case "$o" in *"NEVER had a transient-state ignore block"*) true ;; *) false ;; esac ;;
+    T7) n="$(ti_row_text "$TI_DRIFT" "$a")"
+        case "$n" in *"no longer matches the declaration"*) true ;; *) false ;; esac ;;
+    *) false ;;
+  esac
+}
+# A REPOSITORY ONLY WHERE A CELL READS THE INDEX (BL-918 T2). The row's tracked half runs `ls-files`
+# and is reached only when `rev-parse --git-dir` answers; T3, T5 and T8 read that half and MT3's kill
+# IS the index answering differently from the worktree, so those worlds keep a git-dir. T1, T6 and T7
+# read only the renderer's exit and its text, so their worlds are hand-written files with no repo.
+# TI_CEIL bounds git's upward discovery at $WORK, so a no-git world under an enclosing repository
+# cannot read that repository's index; T-NOGIT asserts it in both directions before any T arm.
+TI_CEIL="$WORK"
+mk_ti_consumer() { # <dir> <render yes|no> <ondisk yes|no> <tracked yes|no> <break yes|no> <git yes|no>
+  local c="$1" rnd="$2" od="$3" tr_="$4" brk="$5" g="$6"
+  [ "$g" = yes ] || [ "$tr_" = no ] || return 1
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude/schemas" "$c/_bmad-output" || return 1
-  git -C "$c" init -q . 2>/dev/null || return 1
-  git -C "$c" config user.email t@t; git -C "$c" config user.name t
+  if [ "$g" = yes ]; then
+    git -C "$c" init -q . 2>/dev/null || return 1
+    git -C "$c" config user.email t@t; git -C "$c" config user.name t
+  fi
   cp "$TI_SCHEMA"   "$c/.claude/schemas/pipeline-state-paths.json" || return 1
   cp "$TI_RENDERER" "$c/scripts/ai-dlc/sync-transient-ignore.sh"   || return 1
   printf 'node_modules/\n' > "$c/.gitignore"
-  git -C "$c" add -A >/dev/null 2>&1; git -C "$c" commit -qm base >/dev/null 2>&1
-  [ "$rnd" = yes ] && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --root "$c" >/dev/null 2>&1
+  [ "$g" = yes ] && { git -C "$c" add -A >/dev/null 2>&1; git -C "$c" commit -qm base >/dev/null 2>&1; }
+  [ "$rnd" = yes ] && GIT_CEILING_DIRECTORIES="$TI_CEIL" bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --root "$c" >/dev/null 2>&1
   [ "$od"  = yes ] && : > "$c/_bmad-output/.handoff-in-progress"
   if [ "$tr_" = yes ]; then
     git -C "$c" add -f _bmad-output/.handoff-in-progress >/dev/null 2>&1
@@ -2092,7 +1995,7 @@ mk_ti_consumer() { # <dir> <render yes|no> <ondisk yes|no> <tracked yes|no> <bre
     sed -i.bak 's/"block_begin": "[^"]*"/"block_begin": ""/' "$c/.claude/schemas/pipeline-state-paths.json"
     rm -f "$c/.claude/schemas/pipeline-state-paths.json.bak"
   fi
-  git -C "$c" add -A >/dev/null 2>&1; git -C "$c" commit -qm state >/dev/null 2>&1
+  [ "$g" = yes ] && { git -C "$c" add -A >/dev/null 2>&1; git -C "$c" commit -qm state >/dev/null 2>&1; }
   return 0
 }
 
@@ -2112,8 +2015,16 @@ else
   [ -f "$TI_SCHEMA" ] && echo "HERMETIC-CONSUMED $TI_SCHEMA"
   ti_seam_guard
   TI_UNREADABLE="$WORK/ti-unreadable"; TI_ONDISK="$WORK/ti-ondisk"; TI_TRACKED="$WORK/ti-tracked"
-  if mk_ti_consumer "$TI_UNREADABLE" yes no no yes && mk_ti_consumer "$TI_ONDISK" yes yes no no \
-     && mk_ti_consumer "$TI_TRACKED" yes yes yes no; then
+  if mk_ti_consumer "$TI_UNREADABLE" yes no no yes no && mk_ti_consumer "$TI_ONDISK" yes yes no no yes \
+     && mk_ti_consumer "$TI_TRACKED" yes yes yes no yes; then
+    # T-NOGIT: the no-git world is outside every repository under the ceiling the row runs with, and a
+    # git world beside it is inside its own -- so T1 reads the renderer alone, and T3 still reads an index.
+    if ! GIT_CEILING_DIRECTORIES="$TI_CEIL" git -C "$TI_UNREADABLE" rev-parse --git-dir >/dev/null 2>&1 \
+       && GIT_CEILING_DIRECTORIES="$TI_CEIL" git -C "$TI_ONDISK" rev-parse --git-dir >/dev/null 2>&1; then
+      ok "T-NOGIT setup: the hand-written T1 world resolves no git-dir under the row's ceiling and the T3 world resolves its own"
+    else
+      bad "T-NOGIT setup: the hand-written T1 world resolved a git-dir, or the T3 world did not — a no-git world would read an enclosing index"
+    fi
     T_UNREAD="$(ti_row_out "$TI_UNREADABLE")"
     T_DISK="$(ti_row_out "$TI_ONDISK")"
     T_TRACK="$(ti_row_out "$TI_TRACKED")"
@@ -2134,7 +2045,7 @@ else
 
     case "$T_UNREAD" in
       *"DECISION|transient-ignore-unreadable"*)
-        ok "T1 a renderer that exits 2 is reported UNREADABLE, not as a stale block — re-rendering an unresolvable declaration is not the remedy" ;;
+        ok "T1 a renderer that exits 2 is reported UNREADABLE, not as a stale block — re-rendering an unresolvable declaration is not the remedy"; B_T1=1 ;;
       *"WORKLIST|transient-ignore"*)
         bad "T2 the row told the operator to RE-RENDER a consumer whose declaration cannot be resolved at all ($T_UNREAD). \`--check\` exited 2, not 1; those are different facts with different remedies, and this row lands in the WORKLIST hand-back bucket where a DECISION is owed" ;;
       *) bad "T1 a consumer whose renderer exits 2 drew '$T_UNREAD' — neither the unreadable DECISION nor the stale WORKLIST, so the rc branches are not reached at all" ;;
@@ -2142,13 +2053,13 @@ else
 
     case "$T_DISK" in
       "-NONE-")
-        ok "T3 a transient path present ON DISK and untracked, with the block current, draws NO row — the ordinary mid-pipeline state of every healthy consumer" ;;
+        ok "T3 a transient path present ON DISK and untracked, with the block current, draws NO row — the ordinary mid-pipeline state of every healthy consumer"; B_T3=1 ;;
       *) bad "T4 the row fired on a consumer that is CORRECT ($T_DISK): the marker is on disk and untracked, which is exactly what a transient path should be. The property is whether git TRACKS it, which only \`ls-files\` answers; a worktree test flags every healthy consumer on every pull" ;;
     esac
 
     case "$T_TRACK" in
       *"WORKLIST|transient-ignore-tracked"*)
-        ok "T5 the same path, TRACKED, does draw the row — so T3's silence is discrimination and not a row that never fires" ;;
+        ok "T5 the same path, TRACKED, does draw the row — so T3's silence is discrimination and not a row that never fires"; B_T5=1 ;;
       *) bad "T5 a TRACKED transient path drew '$T_TRACK' — the arm T3 relies on cannot fire, so T3's silence proves nothing" ;;
     esac
 
@@ -2175,6 +2086,8 @@ else
     # the identical builder call T5's consumer came from, so the two were one state built twice. T5
     # has already read T_TRACK off it above, and nothing below reads TI_TRACKED again, so mutating
     # its schema here moves no other arm. The `.git` test keeps the setup arm reachable.
+    # T5's world is copied ONCE before T8 rewrites it, so the matrix's T5 cell below reads T5's own state.
+    TI_T5="$WORK/ti-t5"; cp -Rp "$TI_TRACKED" "$TI_T5" 2>/dev/null || TI_T5=""
     TI_DUR="$TI_TRACKED"
     if [ -d "$TI_DUR/.git" ] && [ -n "$T_TRACK" ]; then
       ti_dur_name="$(jq -r '[.paths[] | select(.transient|not)][0].name // empty' \
@@ -2213,7 +2126,7 @@ else
             *"${ti_dur_root}/${ti_dur_name}"*)
               bad "T8 the row named the DURABLE path '${ti_dur_root}/${ti_dur_name}' as transient state to untrack. That path is a pipeline artifact the consumer is supposed to commit, and this row is telling them to \`git rm --cached\` it — the one direction of this arm that costs a consumer real work" ;;
             *".handoff-in-progress"*)
-              ok "T8 with a durable entry carrying an ignore pattern, the row reports the TRANSIENT tracked path and NOT the durable one — \`select(.transient)\` is load-bearing on a declaration that can tell them apart" ;;
+              ok "T8 with a durable entry carrying an ignore pattern, the row reports the TRANSIENT tracked path and NOT the durable one — \`select(.transient)\` is load-bearing on a declaration that can tell them apart"; B_T8=1 ;;
             *)
               bad "T8 the row named neither path in a world where a transient one IS tracked ('$(printf '%s' "$D_TXT" | cut -c1-70)') — the arm cannot discriminate because nothing fired" ;;
           esac
@@ -2230,27 +2143,84 @@ else
     # happened. Keyed on the row's PROSE and not on its type, because both are the same row type;
     # the type is what an earlier revision got right while the diagnosis was wrong.
     TI_NEVER="$WORK/ti-never"; TI_DRIFT="$WORK/ti-drift"
-    if mk_ti_consumer "$TI_NEVER" no no no no && mk_ti_consumer "$TI_DRIFT" yes no no no; then
+    if mk_ti_consumer "$TI_NEVER" no no no no no && mk_ti_consumer "$TI_DRIFT" yes no no no no; then
       # Drift the rendered block by deleting one pattern, leaving the markers in place.
       sed -i.bak '/handoff-in-progress/d' "$TI_DRIFT/.gitignore"; rm -f "$TI_DRIFT/.gitignore.bak"
-      git -C "$TI_DRIFT" add -A >/dev/null 2>&1; git -C "$TI_DRIFT" commit -qm drift >/dev/null 2>&1
       N_TXT="$(ti_row_text "$TI_NEVER")"; D_TXT="$(ti_row_text "$TI_DRIFT")"
       if [ "$N_TXT" = "$D_TXT" ]; then
         bad "T6 a never-rendered consumer and a drifted one drew the SAME text — the row is flattening two causes that \`--check\` separates, and one of the two diagnoses is therefore wrong"
       else
         case "$N_TXT" in
           *"NEVER had a transient-state ignore block"*)
-            ok "T6 a consumer whose block was never written is told so, rather than that something 'no longer matches' a declaration nothing changed" ;;
+            ok "T6 a consumer whose block was never written is told so, rather than that something 'no longer matches' a declaration nothing changed"; B_T6=1 ;;
           *) bad "T6 a never-rendered consumer drew '$(printf '%s' "$N_TXT" | cut -c1-90)' — it must name the absence, not a mismatch" ;;
         esac
         case "$D_TXT" in
           *"no longer matches the declaration"*)
-            ok "T7 a consumer whose block DRIFTED is told that, so T6's wording is a diagnosis and not the only sentence the row can say" ;;
+            ok "T7 a consumer whose block DRIFTED is told that, so T6's wording is a diagnosis and not the only sentence the row can say"; B_T7=1 ;;
           *) bad "T7 a drifted consumer drew '$(printf '%s' "$D_TXT" | cut -c1-90)' — T6 cannot be read as discrimination if this one does not say mismatch" ;;
         esac
       fi
     else
       bad "T6/T7 setup: could not build the never-rendered and drifted consumers"
+    fi
+
+    # --- T CLAIM MUTANTS: the four wrong implementations this unit's header names -------------------
+    # Each is a COPY of apply.sh with one exact-once edit, `cmp -s`-guarded; the seam extracts the row from
+    # the copy, so nothing else of the reconcile directory is needed. T-CTL is the unmutated copy, and it
+    # must hold every T cell, so a mutant's red cell is the mutation and not the extraction.
+    t_mut() { # t_mut <dir> <anchor-line> <replacement-line>
+      local n; n="$(grep -cxF -- "$2" "$APPLY")" || n=0
+      [ "$n" = 1 ] || return 1
+      mkdir -p "$1" || return 1
+      T_A="$2" T_R="$3" awk '$0 == ENVIRON["T_A"] { print ENVIRON["T_R"]; next } { print }' "$APPLY" > "$1/apply.sh" || return 1
+      ! cmp -s "$APPLY" "$1/apply.sh"
+    }
+    T_CELLS="T1 T3 T5 T6 T7 T8"
+    # t_score <flag> <id> <apply-file> <decides> <twins> <what>
+    t_score() {
+      local bf="$1" id="$2" a="$3" dec="$4" tw="$5" what="$6" c ok=1 got=""
+      for c in $dec; do if t_cell "$c" "$a"; then ok=0; got="$got $c=1"; else got="$got $c=0"; fi; done
+      for c in $tw;  do if t_cell "$c" "$a"; then got="$got $c=1"; else ok=0; got="$got $c=0"; fi; done
+      if [ "$ok" = 1 ]; then mutant_killed "$bf" "$id" "$id ($what): {$dec} goes red while {$tw} holds —$got"
+      else bad "$id ($what) scored$got, want {$dec} red and {$tw} holding — it survived, or moved an arm it should not"; fi
+    }
+    mkdir -p "$WORK/t-ctl" && cp "$APPLY" "$WORK/t-ctl/apply.sh"
+    t_ctl_ok=1; for _c in $T_CELLS; do t_cell "$_c" "$WORK/t-ctl/apply.sh" || t_ctl_ok=0; done
+    if cmp -s "$APPLY" "$WORK/t-ctl/apply.sh" && [ "$t_ctl_ok" = 1 ]; then
+      ok "T-CTL an unmutated copy of apply.sh holds every T cell ($T_CELLS) through the same seam, so a T mutant's red cell is the mutation and not the extraction"; B_tctl=1
+    else
+      bad "T-CTL the unmutated copy did not hold every T cell ($T_CELLS) — every T mutant verdict below is unreadable"
+    fi
+    # MT1: `!= "0"` for `= "1"` -- an exit 2 read as a stale block.
+    if t_mut "$WORK/t-m1" '  if [ "$ti_rc" = "1" ]; then' '  if [ "$ti_rc" != "0" ]; then'; then
+      t_score "$(( ${B_T1:-0} && ${B_T3:-0} && ${B_tctl:-0} ))" MT1 "$WORK/t-m1/apply.sh" T1 T3 "an exit-2 renderer reported as a stale block"
+    else bad "MT1 DID NOT APPLY — the \`--check\` exit-1 test is not in apply.sh exactly once"; fi
+    # MT3: the WORKTREE asked instead of the index -- every untracked transient file on disk fires.
+    if t_mut "$WORK/t-m3" '      ti_n="$(git -C "$CONSUMER" -c core.quotePath=false ls-files -- "$ti_p" "${ti_p%/}" 2>/dev/null | wc -l | tr -d '"' '"')"' \
+                          '      ti_n=0; [ -e "$CONSUMER/${ti_p%/}" ] && ti_n=1'; then
+      t_score "$(( ${B_T3:-0} && ${B_T5:-0} && ${B_tctl:-0} ))" MT3 "$WORK/t-m3/apply.sh" T3 T5 "the worktree tested instead of the index"
+    else bad "MT3 DID NOT APPLY — the ls-files count is not in apply.sh exactly once"; fi
+    # MT8: `select(.transient)` dropped -- the durable half of the declaration reported as scratch state.
+    if t_mut "$WORK/t-m8" "    ti_pats=\"\$(jq -r '.paths[] | select(.transient) | .ignore // empty' \"\$TI_SCHEMA\" 2>/dev/null)\"" \
+                          "    ti_pats=\"\$(jq -r '.paths[] | .ignore // empty' \"\$TI_SCHEMA\" 2>/dev/null)\""; then
+      t_score "$(( ${B_T8:-0} && ${B_T5:-0} && ${B_tctl:-0} ))" MT8 "$WORK/t-m8/apply.sh" T8 T5 "durable ignore patterns counted as transient"
+    else bad "MT8 DID NOT APPLY — the transient-pattern jq is not in apply.sh exactly once"; fi
+    # MT6: the never-rendered diagnosis made unreachable -- both causes flattened into the drift sentence.
+    if t_mut "$WORK/t-m6" '      *"carries no AI/DLC transient-state block"*)' '      __mt6_never__)'; then
+      t_score "$(( ${B_T6:-0} && ${B_T7:-0} && ${B_tctl:-0} ))" MT6 "$WORK/t-m6/apply.sh" T6 T7 "never-rendered reported as drifted"
+    else bad "MT6 DID NOT APPLY — the never-rendered case pattern is not in apply.sh exactly once"; fi
+    if [ "$MATRIX" = 1 ]; then
+      MX_CELLS=$((MX_CELLS + 1))
+      echo "MATRIX-BEGIN t cells=$T_CELLS"
+      for _mp in T-CTL:t-ctl MT1:t-m1 MT3:t-m3 MT8:t-m8 MT6:t-m6; do
+        _a="$WORK/${_mp#*:}/apply.sh"
+        if [ ! -f "$_a" ]; then bad "MATRIX t ${_mp%%:*}: no staged copy, so its row cannot be measured"; continue; fi
+        _row="MATRIX ${_mp%%:*}"
+        for _c in $T_CELLS; do if t_cell "$_c" "$_a"; then _row="$_row $_c=1"; else _row="$_row $_c=0"; fi; done
+        echo "$_row"
+      done
+      echo "MATRIX-END t"
     fi
   else
     bad "T1-T5 setup: could not build the transient-ignore consumers, so the row was never driven"
@@ -2367,7 +2337,7 @@ fi
 BL_CHANGED_CONS=".claude/skills/ai-dlc/SKILL.md"
 BL_UNCHANGED_CONS="scripts/ai-dlc/validate-synthetic.sh"
 
-# bl_consumer <dir> <layer:hit|miss|none> <deriv:hit|miss|empty|hitzero|past|cur|none> <validator:yes|no>
+# bl_consumer <dir> <layer:hit|miss|none> <deriv:hit|miss|past|cur|none> <validator:yes|no>
 #
 # EVERY WORLD IS DEFINED WHOLE, INCLUDING WHAT IT DOES NOT WRITE. A builder that leaves the
 # previous world's layer file or artifact behind hands the next arm a shape nobody seeded, and
@@ -2406,14 +2376,6 @@ bl_consumer() {
             printf '\nQuoted below as prose, deliberately not inside a fence:\n\n'
             printf '$ grep -c shadow %s\n' "$BL_CHANGED_CONS"
           } > "$c/_bmad-output/planning/plan.md" ;;
-    empty) mkdir -p "$c/_bmad-output" || return 1 ;;
-    # The firing artifact plus a ZERO-BYTE markdown file beside it. An empty file has no first
-    # record, so a scan counting `FNR == 1` as "opened" scores it unread and the corpus reads as
-    # partly unreadable; it is readable, and the WORKLIST row must still be drawn.
-    hitzero) mkdir -p "$c/_bmad-output/planning" || return 1
-          printf '# plan\n\n```derived\n$ grep -c shadow %s\n3\n```\n' "$BL_CHANGED_CONS" \
-            > "$c/_bmad-output/planning/plan.md"
-          : > "$c/_bmad-output/empty-log.md" ;;
     # BL-631: the SAME firing fence, in a slotted directory, beside a canonical sprint-status.yaml
     # reading `sprint: 1` / `status: in_progress`. `past` is s0/ (a past sprint's artifact: the
     # classifier calls it PAST and the row must not exist at all); `cur` is s1/ (the current sprint:
@@ -2628,24 +2590,8 @@ if bl_run nolayer none hit yes; then
 else
   bad "BL-3 setup: could not build the no-layer consumer"
 fi
-if bl_run noart hit none yes; then
-  case "$BL_VEC" in
-    "1|0|0|0") ok "BL-3 and a consumer with no _bmad-output draws the passage row alone — neither row depends on the other's subject" ;;
-    *)         bad "BL-3 a consumer with no artifact corpus drew $BL_VEC, not 1|0|0|0" ;;
-  esac
-else
-  bad "BL-3 setup: could not build the no-artifact consumer"
-fi
-# The near-miss of BL-3's first world, one property apart: a zero-byte markdown file sits in the
-# corpus beside the firing artifact. It is readable, so the vector must be the same 0|1|0|0.
-if bl_run zerobyte none hitzero yes; then
-  case "$BL_VEC" in
-    "0|1|0|0") ok "BL-3z a zero-byte markdown file in the corpus is counted as opened — the derivation row is still drawn, not the unreadable DECISION" ;;
-    *)         bad "BL-3z a corpus carrying one zero-byte markdown file drew $BL_VEC, not 0|1|0|0 — the scan scores an EMPTY file as unopened, so one empty log turns every pull into artifact-derivations-unreadable" ;;
-  esac
-else
-  bad "BL-3z setup: could not build the zero-byte-file consumer"
-fi
+# BL-3's no-artifact half, BL-3z (zero-byte file) and BL-4's empty-corpus half were cut by the BL-918
+# kill matrix: every mutant they kill is killed by BL-1 or BL-3 (identical kill columns).
 
 # --- BL-4: THE ABSENT-VALIDATOR BRANCH IS A DECISION, AND IT IS GATED ON THE JOIN -------------
 #
@@ -2664,44 +2610,8 @@ if bl_run noval hit hit no; then
 else
   bad "BL-4 setup: could not build the validator-absent consumer"
 fi
-if bl_run emptyart hit empty yes; then
-  case "$BL_VEC" in
-    "1|0|0|0") ok "BL-4 and a consumer whose _bmad-output holds no markdown draws NEITHER derivation branch — the gate is the non-empty join, not the presence of the tool, so a consumer predating the mechanism is not handed a row about work it does not have" ;;
-    *)         bad "BL-4 an empty artifact corpus drew $BL_VEC, not 1|0|0|0 — a branch keyed on the tool rather than on the join fires on every older consumer, which is the C4 shape" ;;
-  esac
-else
-  bad "BL-4 setup: could not build the empty-artifact consumer"
-fi
-
-# --- BL-5: THE SITING. NEITHER ROW IS EMITTED UNDER --finish, AND THE STAMP IS WRITTEN --------
-#
-# THIS IS THE ARM THE WHOLE SITING EXISTS FOR, AND IT IS THE ONE THAT CANNOT BE READ OFF THE
-# ROWS ALONE. `say` raises `worklist_n`, and `--finish` gates its stamp on that counter. Both
-# rows are re-derived from state `--finish` never writes -- a layer file is consumer-owned and
-# this program never rewrites one, and the derivation remedy re-anchors a citation at a path
-# that is itself in the changed set -- so a row sited beside `hook_registration_row` /
-# `transient_ignore_row` / `agent_definitions_row`, which run under `--finish` BEFORE
-# `write_stamp`, would withhold the stamp on every finish over this tree. `.ai-dlc-applying`
-# would stay, `core/git-hooks/pre-push`'s applying guard would refuse every push, and the
-# consumer would have no exit. The tree driven here is the SAME one BL-1 fires both rows on, so
-# the zeros below are a property of the mode and not of the input.
-if bl_run finish hit hit yes --finish; then
-  BL_FV="$(sed -n 's/^version:[[:space:]]*//p' "$BL_LAST_CONS/.claude/.ai-dlc-version" 2>/dev/null | head -1)"
-  BL_FM="$([ -f "$BL_LAST_CONS/.claude/.ai-dlc-applying" ] && echo PRESENT || echo GONE)"
-  BL_FR="$(bl_n "$BL_OUT" RESOLVED restamp)"
-  if [ "$BL_VEC" = "0|0|0|0" ]; then
-    ok "BL-5 --finish over the very tree BL-1 fires both rows on emits NEITHER — the rows sit inside the FINISH=0 span, so the finisher never re-derives them"; B_BL5=1
-  else
-    bad "BL-5 --finish emitted $BL_VEC over a tree it cannot change: these rows raise worklist_n, which is the counter --finish gates its stamp on, and neither has work that clears in that mode. The consumer is wedged with .ai-dlc-applying on disk and pre-push refusing every push"
-  fi
-  if [ "$BL_FV" = "$BL_THEIRS_VER" ] && [ "$BL_FM" = GONE ] && [ "$BL_FR" -ge 1 ]; then
-    ok "BL-5 and the finisher STAMPS — version $BL_FV, marker cleared, RESOLVED restamp — which is the exit the siting exists to preserve"; B_BL5S=1
-  else
-    bad "BL-5 --finish did not stamp (version='${BL_FV:-<absent>}' expected $BL_THEIRS_VER, marker=$BL_FM, RESOLVED restamp=$BL_FR). A row this mode cannot clear withholds the stamp forever, and the applying marker keeps pre-push refusing"
-  fi
-else
-  bad "BL-5 setup: could not build the finish consumer"
-fi
+# BL-5 (--finish emits neither row and stamps) was cut by the BL-918 kill matrix: its one killer,
+# BL-m4, is also killed by BL-1 (the re-sited row leaves the ordinary path), and BL-m4's kill reads BL-1.
 
 # --- BL-6: THE ROW IS SCOPED BY THE CLASSIFIER THE DISTRIBUTION CARRIES AT THEIRS (BL-631) -------
 #
@@ -2810,25 +2720,14 @@ bl_mut() { # bl_mut <dir> ; transform reads apply.sh on stdin, writes stdout
   ! cmp -s "$REC/apply.sh" "$1/apply.sh"
 }
 # bl_mut_vec <rec-dir> <layer> <deriv> <val> [flags...] -> the four-observable vector
-# THE CONSUMER IT BUILT IS RECORDED IN A FILE, NOT IN A VARIABLE, AND THAT IS A MEASUREMENT.
-# An arm may need the STAMP and the MARKER a mutant's run wrote rather than only the rows it
-# printed — BL-m4's consequence is a withheld stamp, and a row count is true either way. The
-# obvious shape is a global naming the directory this function built. It CANNOT be a global:
-# every call site reads this function through `$( )`, and an assignment made inside a command
-# substitution is lost to the subshell. Measured here while building BL-m4: the arm read
-# `version=<absent> marker=GONE` off a path the caller never learned, which reads exactly like a
-# mutation that failed to wedge the finisher. A file survives the subshell; a variable does not.
 bl_mut_vec() {
   local rec="$1"; shift
   local layer="$1" deriv="$2" val="$3"; shift 3
   local c="$BLROOT/mc-$$-$RANDOM" out
   bl_consumer "$c" "$layer" "$deriv" "$val" || { echo "BROKEN"; return; }
-  printf '%s' "$c" > "$BLROOT/.last-mut-consumer"
-  [ "${1:-}" = --finish ] && printf 'theirs: %s\n' "$BL_THEIRS" > "$c/.claude/.ai-dlc-applying"
   out="$(bl_drive "$rec/apply.sh" "$c" "$@")"
   bl_vec "$out"
 }
-bl_last_mut_consumer() { cat "$BLROOT/.last-mut-consumer" 2>/dev/null; }
 # bl_twin <mutant> <rec-dir> <twin-arm> <unmutated-vector> <layer> <deriv> <val>
 # THE PER-PUSH TWIN: one arm the mutant could plausibly co-trip, driven through the MUTANT and
 # required to read its UNMUTATED vector exactly. The vector carries at least one 1, so a copy that
@@ -2958,35 +2857,12 @@ if awk '
     /^if \[ "\$FINISH" = 1 \]; then$/ { print; if (blk != "") { printf "%s", blk; blk="" } ; next }
     { print }
   ' "$REC/apply.sh" | bl_mut "$BLROOT/bl-m4"; then
-  BLM4_F="$(bl_mut_vec "$BLROOT/bl-m4" hit hit yes --finish)"
-  # THE WEDGE ITSELF, READ OFF THE TREE RATHER THAN OFF THE ROW COUNT. `bl_mut_vec` leaves its
-  # consumer on disk, so the stamp and the marker this mutant's finisher wrote are still there.
-  # A row count is the symptom; the stamp left at BASE with `.ai-dlc-applying` still present is
-  # the CONSEQUENCE, and it is what `core/git-hooks/pre-push`'s applying guard acts on. This
-  # repo has shipped a guard whose refusal was asserted by a row count that was true either way.
-  BLM4_FC="$(bl_last_mut_consumer)"
-  BLM4_FV="$(sed -n 's/^version:[[:space:]]*//p' "$BLM4_FC/.claude/.ai-dlc-version" 2>/dev/null | head -1)"
-  BLM4_FM="$([ -n "$BLM4_FC" ] && [ -f "$BLM4_FC/.claude/.ai-dlc-applying" ] && echo PRESENT || echo GONE)"
-  # THIS MUTANT TRIPS TWO ARMS BY DESIGN (BL-5 and BL-1), so both are asserted, on behaviour: the
-  # ordinary run shows the row left the FINISH=0 path, and its derivation field at 1 is the presence
-  # conjunct a copy that never ran cannot print.
+  # The row leaves the ordinary path, so BL-1 goes red; that kill is the one the BL-918 matrix keeps
+  # (its --finish-world kill was BL-5's, cut as covered by BL-1).
   BLM4_O="$(bl_mut_vec "$BLROOT/bl-m4" hit hit yes)"
-  if [ -z "$BLM4_FC" ]; then
-    bad "BL-m4 could not recover the consumer directory its finisher ran against, so the wedge conjunct below has no subject to read — this arm is unproven"
-  elif [ "$BLM4_FV" = "1.0.0" ] && [ "$BLM4_FM" = PRESENT ]; then
-    mutant_killed "$(( ${B_BL5S:-0} && ${B_BLCTL:-0} ))" BL-m4 "BL-m4 and the wedge is observed on the TREE, not inferred from a row: the mutant's finisher left the stamp at 1.0.0 with .ai-dlc-applying still on disk, which is the state pre-push refuses every push over and which no further --finish can clear"
-  else
-    bad "BL-m4 SURVIVED: the re-sited row did not withhold the finisher's stamp (version='${BLM4_FV:-<absent>}' marker=$BLM4_FM) — BL-5's second conjunct is then asserting a consequence this mutation does not produce, and the siting claim rests on the row count alone"
-  fi
-  case "$BLM4_F" in 1\|*) blm_k=1 ;; *) blm_k=0 ;; esac
-  if [ "$blm_k" = 1 ]; then
-    mutant_killed "$(( ${B_BL5:-0} && ${B_BLCTL:-0} ))" BL-m4 "BL-m4 (the passage row re-sited beside the trailing rows, under --finish): BL-5 goes red — the finisher re-derives a row over a tree it never writes, raising worklist_n before write_stamp"
-  else
-    bad "BL-m4 SURVIVED: --finish drew $BLM4_F, no passage row with the block moved into its branch, so BL-5 is not testing the siting"
-  fi
   case "$BLM4_O" in 0\|1\|*) blm_k=1 ;; *) blm_k=0 ;; esac
   if [ "$blm_k" = 1 ]; then
-    mutant_killed "$(( ${B_BL1:-0} && ${B_BLCTL:-0} ))" BL-m4 "BL-m4 and BL-1 goes red with it — the row left the ordinary path, which is the half a --finish-only fix gets wrong in the other direction"
+    mutant_killed "$(( ${B_BL1:-0} && ${B_BLCTL:-0} ))" BL-m4 "BL-m4 (the passage row re-sited under --finish): BL-1 goes red — the row left the ordinary path"
   else
     bad "BL-m4 SURVIVED on BL-1: the ordinary run drew $BLM4_O, not 0|1|.. — the mutation did not move the block, so BL-5's kill above is not attributable to the siting"
   fi
@@ -3071,23 +2947,18 @@ if [ "$MATRIX" = 1 ]; then
       both)     v="$(bl_mut_vec "$r" hit hit yes)" ;;
       near)     v="$(bl_mut_vec "$r" miss miss yes)" ;;
       nolayer)  v="$(bl_mut_vec "$r" none hit yes)" ;;
-      noart)    v="$(bl_mut_vec "$r" hit none yes)" ;;
-      zerobyte) v="$(bl_mut_vec "$r" none hitzero yes)" ;;
       noval)    v="$(bl_mut_vec "$r" hit hit no)" ;;
-      emptyart) v="$(bl_mut_vec "$r" hit empty yes)" ;;
-      finish)   v="$(bl_mut_vec "$r" hit hit yes --finish)"; c="$(bl_last_mut_consumer)"
-                v="$v/$(sed -n 's/^version:[[:space:]]*//p' "$c/.claude/.ai-dlc-version" | head -1)/$([ -f "$c/.claude/.ai-dlc-applying" ] && echo PRESENT || echo GONE)" ;;
       sixb)     BL_DRIVE_THEIRS="${BL_NOCLS:-}"; v="$(bl_mut_vec "$r" none hit yes)"; BL_DRIVE_THEIRS="" ;;
       sixc)     v="$(bl_mut_vec "$r" none past yes)" ;;
       sixcc)    v="$(bl_mut_vec "$r" none cur yes)" ;;
     esac
     printf '%s=%s' "$w" "$v"
   }
-  echo "MATRIX-BEGIN worlds(arm)=both(BL-1),near(BL-2),nolayer(BL-3/BL-6a),noart(BL-3),zerobyte(BL-3z),noval(BL-4),emptyart(BL-4),finish(BL-5 vec/stamp/marker),sixb(BL-6b),sixc(BL-6c),sixcc(BL-6c control) vector=row1|wl2|unreadable|unchecked"
+  echo "MATRIX-BEGIN worlds(arm)=both(BL-1),near(BL-2),nolayer(BL-3/BL-6a),noval(BL-4),sixb(BL-6b),sixc(BL-6c),sixcc(BL-6c control) vector=row1|wl2|unreadable|unchecked"
   for _mr in mut-ctl bl-m1 bl-m2 bl-m3 bl-m4 bl-m5 bl-m6; do
     [ -f "$BLROOT/$_mr/apply.sh" ] || { bad "MATRIX $_mr has no staged copy, so its row cannot be measured"; continue; }
     _row="MATRIX $_mr"
-    for _w in both near nolayer noart zerobyte noval emptyart finish sixb sixc sixcc; do
+    for _w in both near nolayer noval sixb sixc sixcc; do
       _row="$_row $(mx_world "$BLROOT/$_mr" "$_w")"
     done
     echo "$_row"
@@ -3355,12 +3226,8 @@ hr_arm_c() { # local-only dangling
 hr_arm_d() { # settings.json is []
   [ "$(hk_n "$1" DECISION hook-registration-unparsed)" = 1 ] && [ "$(hk_n "$1" WORKLIST settings-merge)" = 0 ]
 }
-hr_arm_e() { # <world> <its end-to-end rows> -- --finish over the dangling-only tree withholds, read off the TREE
-  [ "$(stamp_ver "$1")" = "1.0.0" ] && [ "$(marker "$1")" = PRESENT ] && [ "$(hk_n "$2" DECISION restamp-withheld)" -ge 1 ]
-}
-hr_arm_e_row() { # <seam rows> -- the counter that withhold is decided on, raised over the same tree
-  [ "$(hk_wl "$1")" -ge 1 ]
-}
+# (e) --finish over the dangling-only tree withholds was cut by the BL-918 kill matrix: (e)'s kill column
+# equals (a)'s. (f), the clean / live-local near-misses, is kept with no discriminating mutant.
 hr_arm_f() { # <clean rows> <livelocal rows>
   local m l
   hk_ran "$1" && [ "$(hk_any "$1")" = 0 ] || return 1
@@ -3382,7 +3249,7 @@ hr_cell() {
   local r="$HR_R/$2"
   case "$1" in
     a) hr_arm_a "$r.D" ;; b) hr_arm_b "$r.B" ;; c) hr_arm_c "$r.L" ;; d) hr_arm_d "$r.E" ;;
-    e) hr_arm_e_row "$r.D" ;; f) hr_arm_f "$r.C" "$r.V" ;; g) hr_arm_g "$r.G" ;;
+    f) hr_arm_f "$r.C" "$r.V" ;; g) hr_arm_g "$r.G" ;;
     *) false ;;
   esac && echo 1 || echo 0
 }
@@ -3480,11 +3347,6 @@ if [ "$(stamp_ver "$HRW_E")" = "$THEIRS_VER" ] && [ "$(marker "$HRW_E")" = GONE 
 else
   bad "HR-d --finish withheld over DECISION hook-registration-unparsed (stamp '$(stamp_ver "$HRW_E")', marker $(marker "$HRW_E")) — the C8 wedge, reached through the new row"
 fi
-if hr_arm_e "$HRW_D" "$HR_R/e2e.D"; then
-  ok "HR-e --finish over the dangling-only tree WITHHOLDS on the tree: version 1.0.0, .ai-dlc-applying present, DECISION restamp-withheld"; B_hre=1
-else
-  bad "HR-e --finish over a dangling registration stamped (version '$(stamp_ver "$HRW_D")', marker $(marker "$HRW_D")) — the invocation meant to verify the finished tree passed a hook Claude Code cannot run"
-fi
 if hr_arm_f "$HR_R/sub.C" "$HR_R/sub.V"; then
   ok "HR-f near-misses: a clean tree draws no hook-registration row; a LIVE hook listed under the validator's settings.local.json NOTE is named in neither WORKLIST row, while that tree's real dangling hook still draws one"
 else
@@ -3561,7 +3423,7 @@ hr_why_mg() { [ "$(hk_n "$HR_R/$1.G" WORKLIST settings-local-dangling)" = 0 ] &&
 # green as the twin, and (g) dies with the rest: its name reaches the function only through the D list.
 HR_MA='    index($0, "  DANGLING ") == 1 { m = "D"; next }'
 if awk -v a="$HR_MA" '$0 == a { next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-ma" "$HR_MA"; then
-  hr_mscore "$(( ${B_hrctl:-0} && ${B_hra:-0} && ${B_hrb:-0} && ${B_hrc:-0} && ${B_hrd:-0} && ${B_hre:-0} && ${B_hrg:-0} ))" "HR-M-a" "$WORK/hr-ma" "the DANGLING block parse deleted" "D B L E G" "a b c d e g" "0 0 0 1 0 0" hr_why_ma
+  hr_mscore "$(( ${B_hrctl:-0} && ${B_hra:-0} && ${B_hrb:-0} && ${B_hrc:-0} && ${B_hrd:-0} && ${B_hrg:-0} ))" "HR-M-a" "$WORK/hr-ma" "the DANGLING block parse deleted" "D B L E G" "a b c d g" "0 0 0 1 0" hr_why_ma
 else
   bad "HR-M-a DID NOT APPLY — the DANGLING parse line is no longer spelled \`$HR_MA\` exactly once in apply.sh; HR-a/b/e are unproven. Re-anchor it."
 fi
@@ -3606,10 +3468,10 @@ else
 fi
 
 # --- HR MUTANT-BY-ARM MATRIX: a re-measurement mode, never run per push ------------------------
-# Every HR mutant (and the unmutated copy) scored on EVERY world, all seven cells, one `MATRIX` row each.
+# Every HR mutant (and the unmutated copy) scored on EVERY world, all six cells, one `MATRIX` row each.
 if [ "$MATRIX" = 1 ]; then
   MX_CELLS=$((MX_CELLS + 1))
-  echo "MATRIX-BEGIN hr cells=a(D),b(B),c(L),d(E),e(D rows),f(C+V),g(G) vector per mutant: a b c d e f g"
+  echo "MATRIX-BEGIN hr cells=a(D),b(B),c(L),d(E),f(C+V),g(G) vector per mutant: a b c d f g"
   for _mr in sub ma mc md mb mg; do
     _d="$WORK/hr-$_mr"; [ "$_mr" = sub ] && _d="$HR_SUB"
     if ! hr_seam_set "$_d/apply.sh" "mx$_mr" D B L E C V G U; then
@@ -3617,7 +3479,7 @@ if [ "$MATRIX" = 1 ]; then
     fi
     case "$_mr" in sub) _id=HR-CTL ;; *) _id="HR-M-${_mr#m}" ;; esac # the id its mutant_killed call carries
     _row="MATRIX $_id"
-    for _c in a b c d e f g; do _row="$_row $_c=$(hr_cell "$_c" "mx$_mr")"; done
+    for _c in a b c d f g; do _row="$_row $_c=$(hr_cell "$_c" "mx$_mr")"; done
     echo "$_row"
   done
   echo "MATRIX-END hr"
@@ -3772,6 +3634,7 @@ if hu_quiet "$HU_R/sub.X"; then
 else
   bad "HU-c deleting the orphan still drew a gating row (worklist_n=$(hk_wl "$HU_R/sub.X")) — the finisher stays withheld"
 fi
+# HU-c is kept with no discriminating mutant: its cell x killed no mutant in the BL-918 kill matrix.
 if hu_arm_t "$HU_R/sub.N"; then
   ok "HU-t a hook in the template only and one in core/hooks only both stay on the ONE settings-merge row, and no hook-unshipped row fires"; B_hut=1
 else
@@ -3923,13 +3786,11 @@ if [ "$VF_OK" = 1 ]; then
 fi
 VT_SHORT="$(git -C "$VD" rev-parse --short "$VT" 2>/dev/null)"
 
-# vf_consumer <dir> <none|noadd|zonly|full|merged|noship>
+# vf_consumer <dir> <none|noadd|full|merged>
 #   none    installed at VB, nothing applied
 #   noadd   theirs applied except the ADDED core file
-#   zonly   theirs applied except z-second, which is NOT first in ls-tree order
 #   full    theirs applied; dist-fx (dist-only at THEIRS) correctly never written
 #   merged  full, with a-first hand-merged to differ from BOTH base and theirs
-#   noship  full, with ship-fx (a SHIPPING fixture, modified in range) left at base
 vf_consumer() {
   local c="$1" st="$2" p cp
   mkdir -p "$c/.claude" "$c/scripts/ai-dlc" || return 1
@@ -3944,9 +3805,7 @@ vf_consumer() {
   case "$st" in
     none|full) : ;;
     noadd)  rm -f "$c/.claude/session-driver/m-added.sh" ;;
-    zonly)  git -C "$VD" show "${VB}:core/session-driver/z-second.sh" > "$c/.claude/session-driver/z-second.sh" ;;
     merged) printf '# a v1 and v2 hand-merged by the operator\n' > "$c/.claude/session-driver/a-first.sh" ;;
-    noship) git -C "$VD" show "${VB}:core/fixtures/ship-fx/run.sh" > "$c/tests/fixtures/ship-fx/run.sh" ;;
     *) return 1 ;;
   esac
   printf 'version: 1.0.0\ncommit: %s\n' "$VB" > "$c/.claude/.ai-dlc-version"
@@ -3982,17 +3841,11 @@ vf_names() {
 vf_r2() { vf_run "$1" noadd "$VD" "$VB" "$VT" || return 1
   vf_held "$VF_C" && vf_names "$VF_C" .claude/session-driver/m-added.sh \
     .claude/session-driver/a-first.sh .claude/session-driver/z-second.sh tests/fixtures/ship-fx/run.sh; }
-vf_ro() { vf_run "$1" zonly "$VD" "$VB" "$VT" || return 1
-  vf_held "$VF_C" && vf_names "$VF_C" .claude/session-driver/z-second.sh \
-    .claude/session-driver/a-first.sh .claude/session-driver/m-added.sh tests/fixtures/ship-fx/run.sh; }
 vf_r3() { vf_run "$1" full "$VD" "$VB" "$VT" || return 1
   vf_stamp "$VF_C" && [ ! -e "$VF_C/tests/fixtures/dist-fx" ]; }
 vf_r4() { vf_run "$1" merged "$VD" "$VB" "$VT" || return 1
   vf_stamp "$VF_C" && grep -q 'hand-merged' "$VF_C/.claude/session-driver/a-first.sh"; }
 vf_r5() { vf_run "$1" none "$VD" "$VT" "$VT" || return 1
-  vf_held "$VF_C" && [ "$(vf_n "$VF_C" WORKLIST finish-base-unverified)" = 1 ]; }
-vf_r5b() {
-  if [ "$1" = "$REC" ] && [ -n "${VF_PROBE_C:-}" ]; then VF_C="$VF_PROBE_C"; else vf_run "$1" none "$VD" vf-no-such-base-ref "$VT" || return 1; fi
   vf_held "$VF_C" && [ "$(vf_n "$VF_C" WORKLIST finish-base-unverified)" = 1 ]; }
 # R6 IS NOT `vf_held`: an identity refusal is the `restamp-identity-mismatch` branch of the
 # re-stamp, reached because nothing raised `worklist_n`, so no `restamp-withheld` row prints. The
@@ -4010,11 +3863,7 @@ vf_do1() {
   [ "$(awk -F'\t' '$2=="core/fixtures/dist-fx/run.sh" {print $4}' <<< "$rows")" = DIST-ONLY-SKIP ] \
     && [ "$(awk -F'\t' '$2=="core/fixtures/ship-fx/run.sh" {print $4}' <<< "$rows")" = UPSTREAM-ONLY ]
 }
-vf_do2() { vf_run "$1" full "$VDW" "$VB" "$VT" || return 1; vf_stamp "$VF_C"; }
-vf_do3() { vf_run "$1" noship "$VDW" "$VB" "$VT" || return 1
-  vf_held "$VF_C" && vf_names "$VF_C" tests/fixtures/ship-fx/run.sh \
-    .claude/session-driver/a-first.sh .claude/session-driver/m-added.sh .claude/session-driver/z-second.sh; }
-VF_ARMS="r1 r2 ro r3 r4 r5 r5b r6 do1 do2 do3"
+VF_ARMS="r1 r2 r3 r4 r5 r6 do1"
 vf_vec() { # vf_vec <rec> -> one 1/0 per arm, in VF_ARMS order
   local a v=""
   for a in $VF_ARMS; do
@@ -4079,7 +3928,6 @@ fi
 # which of them the absent subject fails.
 VF_PRESENT=1
 vf_run "$REC" none "$VD" vf-no-such-base-ref "$VT"
-VF_PROBE_C="$VF_C"   # VF0's world IS VF-R5b's state; vf_r5b reads it for the shipped program instead of building a second one
 if [ "$(vf_n "$VF_C" WORKLIST finish-base-unverified)" = 0 ]; then
   VF_PRESENT=0
   if [ "$IS_DIST" = 1 ]; then
@@ -4095,8 +3943,8 @@ if [ "$VF_PRESENT" = 1 ] || [ "$IS_DIST" = 1 ]; then
 vf_report() { # vf_report <arm-fn> <label> <ok-text> <bad-text>
   if "$1" "$REC"; then ok "$2 $3"
     case "$1" in
-      vf_r1) B_vf_r1=1 ;; vf_r2) B_vf_r2=1 ;; vf_ro) B_vf_ro=1 ;; vf_r3) B_vf_r3=1 ;; vf_r4) B_vf_r4=1 ;;
-      vf_r5) B_vf_r5=1 ;; vf_r5b) B_vf_r5b=1 ;; vf_r6) B_vf_r6=1 ;; vf_do1) B_vf_do1=1 ;; vf_do2) B_vf_do2=1 ;; vf_do3) B_vf_do3=1 ;;
+      vf_r1) B_vf_r1=1 ;; vf_r2) B_vf_r2=1 ;; vf_r3) B_vf_r3=1 ;; vf_r4) B_vf_r4=1 ;;
+      vf_r5) B_vf_r5=1 ;; vf_r6) B_vf_r6=1 ;; vf_do1) B_vf_do1=1 ;;
     esac
   else
     bad "$2 $4 (stamp '$(stamp_ver "$VF_C") @ $(stamp_sha "$VF_C")', marker $(marker "$VF_C"), finish-unapplied: '$(vf_subj "$VF_C" WORKLIST finish-unapplied)', base-unverified=$(vf_n "$VF_C" WORKLIST finish-base-unverified), identity-mismatch=$(vf_n "$VF_C" DECISION restamp-identity-mismatch))"
@@ -4106,24 +3954,18 @@ vf_report vf_r1 VF-R1 "nothing applied: --finish withholds, the stamp stays at b
   "--finish over a tree where NOTHING was applied did not withhold naming z-second"
 vf_report vf_r2 VF-R2 "only the ADDED file missing: --finish withholds naming exactly .claude/session-driver/m-added.sh" \
   "--finish over a tree missing only the file this range ADDED did not withhold naming exactly that file"
-vf_report vf_ro VF-RO "two changed files, the unapplied one NOT first in ls-tree order: --finish withholds naming exactly z-second" \
-  "--finish with a-first applied and z-second still at base did not withhold naming exactly z-second — a scan that stops at its first changed path reads this tree as finished"
 vf_report vf_r3 VF-R3 "fully applied, the .dist-only fixture added in range and correctly absent: --finish stamps 2.0.0 @ $VT_SHORT and clears the marker" \
   "--finish over a FULLY APPLIED tree did not stamp — a correctly finished consumer is wedged"
 vf_report vf_r4 VF-R4 "a hand-merged file (differs from base AND theirs): --finish stamps and leaves the merge in place" \
   "--finish over a tree with a hand-merged file did not stamp — a merged file must never count as unapplied"
 vf_report vf_r5 VF-R5 "BASE typed as THEIRS: --finish withholds with WORKLIST finish-base-unverified over a tree where nothing was applied" \
   "--finish with BASE typed as THEIRS did not withhold on the base — an empty range acquits every file"
-vf_report vf_r5b VF-R5b "BASE unresolvable: --finish withholds with WORKLIST finish-base-unverified" \
-  "--finish naming an unresolvable BASE did not withhold with finish-base-unverified"
 vf_report vf_r6 VF-R6 "identity mismatch over an unapplied tree: the identity row prints, and NO finish-unapplied / finish-base-unverified / finish-unverified-tree row is computed against the fumbled ref" \
   "--finish naming a ref the marker disputes, over an unapplied tree, did not print the identity row alone"
 vf_report vf_do1 VF-DO1 "preclassify classifies by THEIRS against a skewed checkout: dist-fx (marker at THEIRS, not on disk) is DIST-ONLY-SKIP, ship-fx (marker on disk, not at THEIRS) is UPSTREAM-ONLY" \
   "preclassify's dist_only() did not answer from THEIRS against a checkout that disagrees with it"
-vf_report vf_do2 VF-DO2 "and --finish over the fully applied tree, driven from that skewed checkout, still stamps" \
-  "--finish from a checkout lacking a .dist-only that THEIRS carries withheld over a correctly finished tree"
-vf_report vf_do3 VF-DO3 "and with the SHIPPING fixture left at base, driven from that skewed checkout, --finish withholds naming exactly tests/fixtures/ship-fx/run.sh" \
-  "--finish from a checkout carrying a .dist-only THEIRS lacks acquitted a shipping fixture that was never applied"
+# VF-RO, VF-R5b, VF-DO2 and VF-DO3 were cut by the BL-918 kill matrix: their kill columns equal VF-R1's, VF-R5's
+# and VF-DO1's respectively (VF-DO2 also VF-R3's), so every mutant they kill is killed by an arm that stays.
 # CWD: the decisive withhold, re-driven from `/`.
 if VF_CWD=/ vf_r1 "$REC"; then
   ok "VF-CWD VF-R1 driven from / reaches the same withheld verdict"
@@ -4135,7 +3977,6 @@ fi
 # Copies of the whole reconcile directory; every anchor asserted to occur EXACTLY ONCE in the file
 # it edits, and the copy asserted to DIFFER from the original, before any verdict is read. Each is
 # scored on the whole arm vector so an entangled kill cannot hide.
-VF_WANT_CTL="1 1 1 1 1 1 1 1 1 1 1"
 vf_mut() { # vf_mut <dir> <apply.sh|preclassify.sh> <anchor-line> <replacement>
   local n; n="$(grep -cxF -- "$3" "$REC/$2")" || n=0
   [ "$n" = 1 ] || return 1
@@ -4189,7 +4030,7 @@ fi
 # exemption no finished tree over that range can ever stamp. R4's own subject is the merge (m-cmp),
 # DO2's is the skewed checkout (m-wt); each of them has its own mutant that R3 does not see.
 if vf_mut "$WORK/vf-mdo" apply.sh "$VF_CASE" '      UPSTREAM-ONLY|UPSTREAM-ONLY-ADD|*SETUP-TOKENS*|DIST-ONLY-SKIP)'; then
-  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r3:-0} && ${B_vf_r4:-0} && ${B_vf_do2:-0} && ${B_vf_r1:-0} ))" VF-m-distonly "$WORK/vf-mdo" "r3 r4 do2" "r1" "a DIST-ONLY-SKIP row counted as unapplied"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r3:-0} && ${B_vf_r4:-0} && ${B_vf_r1:-0} ))" VF-m-distonly "$WORK/vf-mdo" "r3 r4" "r1" "a DIST-ONLY-SKIP row counted as unapplied"
 else
   bad "VF-m-distonly DID NOT APPLY — \`$VF_CASE\` is not in apply.sh exactly once; VF-R3 is unproven"
 fi
@@ -4205,7 +4046,7 @@ if vf_mut "$WORK/vf-mfp" apply.sh "$VF_LOOP" "$VF_LOOP
     [ -n \"\${_fv_one:-}\" ] && break
     case \"\$_fv_bucket\" in DIST-ONLY-SKIP) continue ;; esac
     _fv_one=1"; then
-  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r1:-0} && ${B_vf_r2:-0} && ${B_vf_ro:-0} && ${B_vf_r3:-0} ))" VF-m-first "$WORK/vf-mfp" "r1 r2 ro" "r3" "only the first changed path is checked"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r1:-0} && ${B_vf_r2:-0} && ${B_vf_r3:-0} ))" VF-m-first "$WORK/vf-mfp" "r1 r2" "r3" "only the first changed path is checked"
 else
   bad "VF-m-first DID NOT APPLY — \`$VF_LOOP\` is not in apply.sh exactly once; VF-RO is unproven"
 fi
@@ -4221,7 +4062,7 @@ fi
 VF_WHY='  if [ -n "$_fv_why" ]; then'
 if vf_mut "$WORK/vf-mbs" apply.sh "$VF_WHY" "  _fv_why=\"\"
 $VF_WHY"; then
-  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r5:-0} && ${B_vf_r5b:-0} && ${B_vf_r1:-0} ))" VF-m-base "$WORK/vf-mbs" "r5 r5b" "r1" "BASE trusted from argv, never checked against the stamp"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_r5:-0} && ${B_vf_r1:-0} ))" VF-m-base "$WORK/vf-mbs" "r5" "r1" "BASE trusted from argv, never checked against the stamp"
 else
   bad "VF-m-base DID NOT APPLY — \`$VF_WHY\` is not in apply.sh exactly once; VF-R5/R5b are unproven"
 fi
@@ -4236,7 +4077,7 @@ if ! grep -qxF -- "$VF_DO" "$REC/preclassify.sh"; then
   VF_DO_R='      [ -f "$DIST/core/fixtures/$_f/.dist-only" ]'
 fi
 if vf_mut "$WORK/vf-mwt" preclassify.sh "$VF_DO" "$VF_DO_R"; then
-  vf_score "$(( ${B_vfctl:-0} && ${B_vf_do1:-0} && ${B_vf_do2:-0} && ${B_vf_do3:-0} && ${B_vf_r1:-0} ))" VF-m-wt "$WORK/vf-mwt" "do1 do2 do3" "r1" "dist_only() reads the dist working tree instead of THEIRS"
+  vf_score "$(( ${B_vfctl:-0} && ${B_vf_do1:-0} && ${B_vf_r1:-0} ))" VF-m-wt "$WORK/vf-mwt" "do1" "r1" "dist_only() reads the dist working tree instead of THEIRS"
 else
   bad "VF-m-wt DID NOT APPLY — \`$VF_DO\` is not in preclassify.sh exactly once; VF-DO1..3 are unproven"
 fi
@@ -4418,61 +4259,6 @@ ar_flowA_f() {
   fi
 }
 
-# FLOW F2 -- approved with NO blocker, one unseen row appears, hand re-render, plain --verify 0, apply:
-# RE-RENDERED-SINCE-APPROVAL (exit 3), then R3 from the printed question and label.
-ar_flowF2() {
-  local r="$1" w rc q l dg2
-  AR_V=""; AR_W=""
-  w="$(ar_w F green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
-  AR_W="$w"
-  ar_render "$w"
-  grep -q '^HARD-' "$w/c/$AR_RPT" && { AR_V=BROKEN; return; }
-  ar_ver "$r" "$w"; rc=$?; [ "$rc" -eq 0 ] && av FV0 || av FV0!
-  u5_seed_unseen "$w/c" || { av BROKEN; return; }
-  ar_render "$w"; dg2="$(ar_dg "$w")"
-  ar_ver "$r" "$w"; rc=$?; [ "$rc" -eq 0 ] && av FV0b || av FV0b!
-  ar_app "$r" "$w"; rc=$?
-  [ "$rc" -ne 0 ] && ar_owed "$w" RE-RENDERED-SINCE-APPROVAL "$dg2" && av F2A || av F2A!
-  q="$(sed -n 's/^  question: //p' "$w/a.err")"; l="$(sed -n 's/^  option label: //p' "$w/a.err")"
-  if [ -n "$q" ] && [ -n "$l" ] && ra_answer "$w/c" "$q" "$l"; then
-    ar_app "$r" "$w"; rc=$?
-    ar_went "$w" "$rc" blockers-resolved "were re-approved" && ar_note_has "$w" blockers-resolved "$dg2" \
-      && av F2 || av F2!
-  else
-    av F2!
-  fi
-}
-
-# FLOW G -- the withheld-stamp reapply path: a WORKLIST consumer is verified and applied (written,
-# stamp withheld), the report re-rendered as reapply_remedy says, apply re-run: it ASKS, printing the
-# question; with a record of that question answered with the label it proceeds.
-# ar_flowG <rec-dir> <stop: g1|g2>
-ar_flowG() {
-  local r="$1" w rc q dg
-  AR_V=""; AR_W=""
-  w="$(ar_w G worklist "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
-  AR_W="$w"
-  ar_render "$w"
-  ar_ver "$r" "$w"; rc=$?
-  ar_app "$r" "$w"
-  if [ "$rc" -eq 0 ] && ar_wrote "$w" && [ "$(stamp_ver "$w/c")" = 1.0.0 ] \
-     && has_row "$(cat "$w/a.out")" DECISION restamp-withheld; then av G0; else av G0!; fi
-  ar_render "$w"; dg="$(ar_dg "$w")"
-  ar_app "$r" "$w"; rc=$?
-  q="$(sed -n 's/^  question: //p' "$w/a.err")"
-  # The tree was already written by the first run, so ar_owed's unwritten conjunct does not apply:
-  # the refusal is read off its own lines.
-  if [ "$rc" -ne 0 ] && grep -qF 'apply: RE-APPROVAL OWED.' "$w/a.err" \
-     && grep -q '^  cause: RE-RENDERED-SINCE-APPROVAL ' "$w/a.err" && [ -n "$dg" ] && grep -qF -- "$dg" "$w/a.err" \
-     && [ -n "$q" ] && [ "$(grep -c '^  question: ' "$w/a.err")" = 1 ]; then av G1; else av G1!; fi
-  [ "$2" = g1 ] && return
-  if [ -n "$q" ] && ra_answer "$w/c" "$q" "$(ar_lbl "$dg")"; then
-    ar_app "$r" "$w"; rc=$?
-    [ "$rc" -eq 0 ] && ar_note_has "$w" blockers-resolved "were re-approved" && av G2 || av G2!
-  else
-    av G2!
-  fi
-}
 
 # FLOW I -- R1 approved, R2 = R1 with one row more, a record quoting R2's digest, apply. Compared
 # against the twin world AR_I0 (no re-render, written), whose tree is the CURRENT state.
@@ -4634,48 +4420,28 @@ ar_flowN() {
   ar_app "$r" "$w"; rc=$?
   ar_flowN_score "$w" "$rc" "$2"
 }
-# ar_flowN2 <rec-dir> <n2|n3>
-#   n2: record R1 WITH a HARD blocker, resolve it leaving NO unseen row, re-render to R2 with the
-#       shipped renderer, then hand-edit R2 to R2' (one row changed). UNSEEN=0 IS THE DISCRIMINATING
-#       SEED: without the edited-report comparison, record-vs-fresh reads BLOCKERS-RESOLVED unseen=0
-#       and PROCEEDS (RA0), so only that comparison can refuse it. An unseen>0 seed refuses either way
-#       and could not fail on the property this cell exists for. n2 is (n)'s case in a second shape.
-#   n3: record R1, an unseen row appears, and the fresh region is spliced in by awk so the report
-#       EQUALS the fresh render byte for byte: it keeps the re-render verdict.
+# ar_flowN2 <rec-dir> n3 -- record R1, an unseen row appears, and the fresh region is spliced in by awk so the
+# report EQUALS the fresh render byte for byte: it keeps the re-render verdict. (Its n2 shape was cut by the
+# BL-918 kill matrix: N2E's kill column equals N1's.)
 ar_flowN2() {
   local r="$1" w rc
   AR_V=""; AR_W=""
   w="$(ar_w "$2" green "$THEIRS")"; [ -d "$w" ] || { AR_V=BROKEN; return; }
   AR_W="$w"
-  [ "$2" = n2 ] && { u5_seed_blocker "$w/c" || { AR_V=BROKEN; return; }; }
   ar_render "$w"
-  [ "$2" = n2 ] && { grep -q '^HARD-' "$w/c/$AR_RPT" || { AR_V=BROKEN; return; }; }
   ar_ver "$r" "$w"; rc=$?
   [ "$rc" -eq 0 ] && [ -s "$(ar_rec "$w")" ] && av N0 || av N0!
-  if [ "$2" = n2 ]; then
-    rm -rf "$w/c/.claude/skills/ai-dlc/overrides"
-  else
-    u5_seed_unseen "$w/c" || { av BROKEN; return; }
-  fi
-  if [ "$2" = n3 ]; then
-    # Not emit-report.sh's file: the fresh region is spliced in by awk over a report holding R1.
-    { printf '# reconcile report (fixture)\n\n'
-      bash "$EMIT" "$DIST" "$(ar_B "$w")" "$w/c" "$(ar_T "$w")" 2>/dev/null
-    } > "$w/fresh.md"
-    awk 'NR==FNR {print; next}' "$w/fresh.md" "$w/c/$AR_RPT" > "$w/c/$AR_RPT.new" && mv "$w/c/$AR_RPT.new" "$w/c/$AR_RPT"
-    cmp -s "$w/fresh.md" "$w/c/$AR_RPT" || { av BROKEN; return; }
-  else
-    ar_render "$w"; cp "$w/c/$AR_RPT" "$w/r2.md"
-    awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} /END GENERATED: reconcile-mechanical/{f=0}
-      f && !done && index($0, "ai-dlc-session-driver.sh") {sub(/ai-dlc-session-driver\.sh/, "ai-dlc-session-driver.sh EDITED"); done=1} {print}' \
-      "$w/r2.md" > "$w/c/$AR_RPT"
-    [ "$(cmp -l "$w/r2.md" "$w/c/$AR_RPT" 2>/dev/null | wc -l)" -gt 0 ] && grep -qF 'ai-dlc-session-driver.sh EDITED' "$w/c/$AR_RPT" \
-      || { av BROKEN; return; }
-  fi
+  u5_seed_unseen "$w/c" || { av BROKEN; return; }
+  # Not emit-report.sh's file: the fresh region is spliced in by awk over a report holding R1.
+  { printf '# reconcile report (fixture)\n\n'
+    bash "$EMIT" "$DIST" "$(ar_B "$w")" "$w/c" "$(ar_T "$w")" 2>/dev/null
+  } > "$w/fresh.md"
+  awk 'NR==FNR {print; next}' "$w/fresh.md" "$w/c/$AR_RPT" > "$w/c/$AR_RPT.new" && mv "$w/c/$AR_RPT.new" "$w/c/$AR_RPT"
+  cmp -s "$w/fresh.md" "$w/c/$AR_RPT" || { av BROKEN; return; }
   ar_app "$r" "$w"; rc=$?
   ar_flowN_score "$w" "$rc" "$2"
 }
-# ar_flowN_score <world> <rc> <edit|plain|n2|n3>
+# ar_flowN_score <world> <rc> <edit|plain|n3>
 ar_flowN_score() {
   local w="$1" rc="$2"
   case "$3" in
@@ -4683,14 +4449,6 @@ ar_flowN_score() {
       if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF 'apply: RE-APPROVAL OWED.' "$w/a.err" \
          && grep -q '^  cause: RE-RENDERED-SINCE-APPROVAL ' "$w/a.err" && ! grep -qF -- "$AR_N_CAUSE" "$w/a.err" \
          && ! has_row "$(cat "$w/a.out")" NOTE report-verified; then av N3; else av N3!; fi
-      return ;;
-    n2) # (n)'s case, second shape: the same cause, presence-shaped
-      if [ "$rc" -ne 0 ] && ! ar_wrote "$w" && grep -qF -- "$AR_N_CAUSE" "$w/a.err" \
-         && grep -qF 'NOTHING HAS BEEN WRITTEN.' "$w/a.err" && ! has_row "$(cat "$w/a.out")" NOTE report-verified; then av N2E; else av N2E!; fi
-      # N2P is the MEASUREMENT that unseen=0 is the discriminating seed: held only when the world
-      # PROCEEDED (exit 0, written, a blockers-resolved NOTE). It must read N2P! on the shipped engine
-      # and N2P under M10, or n2 is not a cell that only the edited-report comparison refuses.
-      [ "$rc" -eq 0 ] && ar_wrote "$w" && has_row "$(cat "$w/a.out")" NOTE blockers-resolved && av N2P || av N2P!
       return ;;
   esac
   if [ "$3" = edit ]; then
@@ -4818,29 +4576,19 @@ else
   else
     bad "AR-f1 apply's own printed question and label do not satisfy its own gate on the BLOCKERS-RESOLVED path [$FF1]"
   fi
-  ar_flowF2 "$REC"; FF2="$AR_V"
-  tk "$FF2" F2A && ok "AR-f2 the F3 path: a re-render after a blocker-free approval REFUSES as RE-RENDERED-SINCE-APPROVAL with RE-APPROVAL OWED and the full digest, tree unwritten" \
-                || bad "AR-f2 a re-render after a blocker-free approval was not refused as RE-RENDERED-SINCE-APPROVAL [$FF2]"
-  tk "$FF2" F2 && ok "AR-f2 R3 on the F3 path: the printed question and label, recorded by the hook, let the re-run write" \
-               || bad "AR-f2 apply's own printed question and label do not satisfy its own gate on the F3 path [$FF2]"
-  ar_flowG "$REC" g2; FG="$AR_V"
-  if tk "$FG" G0 && tk "$FG" G1 && tk "$FG" G2; then
-    ok "AR-g the withheld-stamp reapply path ASKS once, printing the question, and with that question recorded and the label answered it proceeds"; B_ar_g=1
-  else
-    bad "AR-g the withheld-stamp reapply path is wedged or unasked [$FG]"
-  fi
+  # AR-f2 (flow F2), AR-g (flow G) and AR-i3 were cut by the BL-918 kill matrix: cells F2A, F2, G1, G2 and I3
+  # kill only mutants a surviving cell also kills (R1, A, F1, I1, N3). G0 and the flows' FV0 tokens were
+  # those flows' own preconditions and went with them.
   ar_flowI "$REC"; FI="$AR_V"
-  tk "$FI" I0 && tk "$FI" I1 && ok "AR-i1 a re-render cleared by a recorded re-approval writes a tree byte-identical, file by file, to the one the same world writes with no re-render" \
-              || bad "AR-i1 the re-approved re-render wrote a tree that is not the current state [$FI]"
+  if tk "$FI" I0 && tk "$FI" I1; then
+    ok "AR-i1 a re-render cleared by a recorded re-approval writes a tree byte-identical, file by file, to the one the same world writes with no re-render"; B_ar_i1=1
+  else
+    bad "AR-i1 the re-approved re-render wrote a tree that is not the current state [$FI]"
+  fi
   if tk "$FI" I2; then
     ok "AR-i2 the report still holds the re-rendered region R2 after apply — apply mode never wrote the first region back"; B_ar_i2=1
   else
     bad "AR-i2 the report no longer holds R2 after apply [$FI]"
-  fi
-  if tk "$FI" I3; then
-    ok "AR-i3 the NOTE names R2's digest, not R1's"; B_ar_i3=1
-  else
-    bad "AR-i3 the NOTE does not name the re-approved region's digest, or names the first one [$FI]"
   fi
   ar_flowJ "$REC"; FJ="$AR_V"
   if tk "$FJ" J0 && tk "$FJ" J1 && tk "$FJ" J2 && tk "$FJ" J3; then
@@ -4904,12 +4652,7 @@ else
   else
     bad "AR-n4 the unedited world did not write cleanly, or its three regions differ [$FNT]"
   fi
-  ar_flowN2 "$REC" n2; FN2="$AR_V"
-  if tk "$FN2" N2E && tk "$FN2" N2P!; then
-    ok "AR-n2 a hand edit made AFTER a legitimate re-render (unseen=0, so nothing but the edited-report comparison refuses it) REFUSES with the same cause, tree unwritten"; B_ar_n2=1
-  else
-    bad "AR-n2 an edit of a re-rendered report was not refused as edited [$FN2]"
-  fi
+  # AR-n2 was cut by the BL-918 kill matrix: N2E's kill column equals N1's (M10 only). Its N2P probe qualified N2E alone.
   ar_flowN2 "$REC" n3; FN3="$AR_V"
   if tk "$FN3" N3; then
     ok "AR-n3 a report spliced by awk to EQUAL the fresh render byte for byte keeps the re-render verdict: RE-RENDERED-SINCE-APPROVAL, RE-APPROVAL OWED, not acquitted as report-verified, not called edited"; B_ar_n3=1
@@ -4980,7 +4723,7 @@ else
     ar_flowA "$WORK/arm5" f; ar_score "$(( ${B_ar_f1:-0} && ${B_arctl:-0} ))" M5 "$AR_V" F1 A "one character of the PRINTED label changed"
   else bad "M5 DID NOT APPLY — the printed option label is not in apply.sh exactly once"; fi
   if ar_mut "$WORK/arm6" emit-report.sh '[ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 3' '[ "$cause" = RE-RENDERED-SINCE-APPROVAL ] && exit 1'; then
-    ar_flowG "$WORK/arm6" g1; ar_score "$(( ${B_ar_g:-0} && ${B_arctl:-0} ))" M6 "$AR_V" G1 G0 "F3 classifies a re-render as exit 1"
+    ar_flowI "$WORK/arm6"; ar_score "$(( ${B_ar_i1:-0} && ${B_ar_i2:-0} && ${B_arctl:-0} ))" M6 "$AR_V" I1 I2 "F3 classifies a re-render as exit 1: the re-approved re-render no longer writes"
   else bad "M6 DID NOT APPLY — the RE-RENDERED-SINCE-APPROVAL exit is not in emit-report.sh exactly once"; fi
   # M7a/M7b re-drive cell (i), whose I1 conjunct compares against the twin; build it here too.
   ar_twin || bad "M7 could not build cell (i)'s twin world, so I1 cannot hold under either M7 mutant"
@@ -4988,7 +4731,7 @@ else
     ar_flowI "$WORK/arm7a"; ar_score "$(( ${B_ar_i2:-0} && ${B_arctl:-0} ))" M7a "$AR_V" I2 I1 "apply mode writes the first region back to the report"
   else bad "M7a DID NOT APPLY — the record substitution is not in emit-report.sh exactly once"; fi
   if ar_mut "$WORK/arm7b" apply.sh "quoting digest \${_ra_dg} answered '\${_ra_lb}'.\${_ar_note}\"" "quoting digest \${_ar_first} answered '\${_ra_lb}'.\${_ar_note}\""; then
-    ar_flowI "$WORK/arm7b"; ar_score "$(( ${B_ar_i3:-0} && ${B_arctl:-0} ))" M7b "$AR_V" I3 I2 "the NOTE names the first region's digest as the re-approved one"
+    ar_flowA "$WORK/arm7b" f; ar_score "$(( ${B_ar_f1:-0} && ${B_arctl:-0} ))" M7b "$AR_V" F1 A "the NOTE names the first region's digest as the re-approved one"
   else bad "M7b DID NOT APPLY — the re-approved NOTE is not in apply.sh exactly once"; fi
   if ar_mut "$WORK/arm8" emit-report.sh '  [ "$(sed -n 2p "$_ar_rec" 2>/dev/null)" = "key $_ar_key" ] || return 1' '  :'; then
     ar_flowJ "$WORK/arm8"; ar_score "$(( ${B_ar_j:-0} && ${B_arctl:-0} ))" M8 "$AR_V" J1 J0 "the record's key ignored"
@@ -5003,12 +4746,9 @@ else
   # re-render verdict and the unedited world still writes.
   if ar_mut "$WORK/arm10" emit-report.sh 'if [ "$_ar_sub" = 1 ] && [ "$_ar_report_got" != "$got" ] && [ "$_ar_report_got" != "$want" ]; then' 'if false; then'; then
     ar_flowN "$WORK/arm10" edit; M10N="$AR_V"
-    ar_flowN2 "$WORK/arm10" n2; M10N2="$AR_V"
     ar_flowN2 "$WORK/arm10" n3; M10N3="$AR_V"
     ar_flowN "$WORK/arm10" plain; M10N4="$AR_V"
     ar_score "$(( ${B_ar_n:-0} && ${B_arctl:-0} ))" M10 "$M10N" N1 N0 "the edited-report comparison deleted: (n)"
-    tk "$M10N2" N2E! && tk "$M10N2" N2P && ok "M10 and n2 goes red the same way: its unseen=0 world PROCEEDS (exit 0, written, blockers-resolved NOTE) [$M10N2]" \
-                                       || bad "M10 n2 did not proceed under the deleted comparison [$M10N2] — n2 is not a cell only that comparison refuses"
     tk "$M10N3" N3 && tk "$M10N4" NT && tk "$M10N4" N4S && ok "M10 and n3 and n4 HOLD — the splice keeps its re-render verdict and the unedited world writes" \
                                                        || bad "M10 moved n3 or n4 [$M10N3 | $M10N4]"
   else bad "M10 DID NOT APPLY — the edited-report comparison is not in emit-report.sh exactly once"; fi
@@ -5018,7 +4758,7 @@ fi
 # `MATRIX` row each, 1 = the token held, 0 = it went red. The row label is the id the kill site passes to mutant_killed.
 if [ "$MATRIX" = 1 ] && [ -z "$AR_SKIP" ]; then
   MX_CELLS=$((MX_CELLS + 1))
-  AR_MX_CELLS="R1 R2 A F1 F2A F2 G1 G2 I1 I2 I3 J1 KF2 KA3 M-bad M-absent N1 N2E N3"
+  AR_MX_CELLS="R1 R2 A F1 I1 I2 J1 KF2 KA3 M-bad M-absent N1 N3"
   echo "MATRIX-BEGIN arm cells=$AR_MX_CELLS"
   ar_twin
   for _mp in CONTROL-AR:arm-ctl M1:arm1 M2:arm2 M3:arm3 M4:arm4 M5:arm5 M6:arm6 M7a:arm7a M7b:arm7b M8:arm8 M9:arm9 M10:arm10; do
@@ -5026,15 +4766,12 @@ if [ "$MATRIX" = 1 ] && [ -z "$AR_SKIP" ]; then
     if [ ! -f "$_d/apply.sh" ]; then bad "MATRIX arm $_id: no staged copy, so its row cannot be measured"; continue; fi
     _t=""
     ar_flowA "$_d" f; _t="$_t $AR_V"
-    ar_flowF2 "$_d"; _t="$_t $AR_V"
-    ar_flowG "$_d" g2; _t="$_t $AR_V"
     ar_flowI "$_d"; _t="$_t $AR_V"
     ar_flowJ "$_d"; _t="$_t $AR_V"
     ar_flowK "$_d"; _t="$_t $AR_V"
     ar_flowM "$_d" bad; _t="$_t $AR_V"
     ar_flowM "$_d" absent; _t="$_t $AR_V"
     ar_flowN "$_d" edit; _t="$_t $AR_V"
-    ar_flowN2 "$_d" n2; _t="$_t $AR_V"
     ar_flowN2 "$_d" n3; _t="$_t $AR_V"
     _row="MATRIX $_id"
     for _c in $AR_MX_CELLS; do
@@ -5050,7 +4787,7 @@ fi  # ---- end of unit arm
 # --- matrix-only cells: a plain run enters none, --matrix enters them (every shard reaches this)
 if ( MX_CELLS=0; MX_CELLS=$((MX_CELLS + 1)); [ "$MX_CELLS" = 1 ] ); then
   if [ "$MATRIX" = 0 ]; then
-    if [ "$MX_CELLS" -eq 0 ]; then ok "MATRIX-PLAIN a plain run executed no matrix-only cell (0 of 8 matrix blocks entered)"
+    if [ "$MX_CELLS" -eq 0 ]; then ok "MATRIX-PLAIN a plain run executed no matrix-only cell (0 of 9 matrix blocks entered)"
     else bad "MATRIX-PLAIN a plain run entered $MX_CELLS matrix-only block(s) -- --matrix is the only mode that may run them"; fi
   else
     if [ "$MX_CELLS" -gt 0 ]; then ok "MATRIX-PLAIN matrix run entered $MX_CELLS matrix-only block(s)"
