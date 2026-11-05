@@ -8,13 +8,15 @@ For each sprint it counts:
   cap_rejected   those whose matching tool_result carries "Concurrent subagent limit reached"
 The sprint is that of the tool_use record's timestamp.
 """
-import json, glob, os, collections, datetime as dt
+import ast, json, glob, os, collections, datetime as dt
 
 ROOT = os.environ.get("EXTRACT_ROOT") or os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
 WIN_START = os.environ.get("EXTRACT_WIN_START") or "2026-09-26T00:35:00Z"
 WIN_END = os.environ.get("EXTRACT_WIN_END") or None
-EDGES = [("2026-09-28T19:10:00Z",314),("2026-09-30T20:58:00Z",315),("2026-10-05T14:00:00Z",316),
-         ("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),("2099-01-01T00:00:00Z",320)]
+# extract.py owns EDGES. It runs on import, so its EDGES assignment is read out of the source, not executed.
+_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "extract.py")).read()
+EDGES = next(ast.literal_eval(n.value) for n in ast.parse(_src).body
+             if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) == "EDGES")
 CAP = "Concurrent subagent limit reached"
 
 def ts(s):

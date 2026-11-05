@@ -22,7 +22,9 @@ HOSTED = ('opus', 'sonnet', 'haiku', 'fable')
 # top-level "model" key, and aiDlcModels only maps role names to ids. So s314 is priced at the NEAREST sprint's
 # hosted lead mix (s315) and labelled a fallback wherever printed.
 FALLBACK = {314: 315}
-STORIES = {317: 21, 318: 13, 319: 20, 320: 13}   # graph sprint-status.yaml at each close
+# graph sprint-status.yaml at each close; s321 is still open, so its 25 is the planned count from
+# _bmad-output/planning-artifacts/s321/sprint-status.yaml@e32f9ce2f (written once, a6afc3eba "6 epics, 25 stories").
+STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25}
 
 def hosted_mix(rows, pre):
     """{sprint: {family: calls}} over the pipeline bucket: the HOSTED calls on one seat, per sprint."""
@@ -70,7 +72,7 @@ GROUPS = [
     ('sprint-review plus gate-validation[sprint-review]', 'pipeline', {'sprint-review', 'gate[sprint-review]'}),
     ('the ai-dlc-update bucket', 'ai-dlc-update', None),
 ]
-POPS = [('before s317+s318 pooled', (317, 318)), ('s317', (317,)), ('s318', (318,)), ('s319', (319,)), ('s320', (320,))]
+POPS = [('before s317+s318 pooled', (317, 318)), ('s317', (317,)), ('s318', (318,)), ('s319', (319,)), ('s320', (320,)), ('s321', (321,))]
 
 def seat_sum(rows, HM, bucket, steps, sprints):
     """Sums one population's steps.csv rows per seat. Hours are gap-inclusive lead-segment elapsed; lead active

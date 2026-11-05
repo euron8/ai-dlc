@@ -1,6 +1,9 @@
-import json,glob,os,datetime as dt,collections
+import ast,json,glob,os,datetime as dt,collections
 ROOT=os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
-E=[("2026-10-05T14:00:00Z",None),("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),("2099",320)]
+# extract.py owns the sprint edges; read its EDGES out of the source (it runs on import). Before s317 is not counted.
+_src=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),"extract.py")).read()
+EDGES=next(ast.literal_eval(n.value) for n in ast.parse(_src).body if isinstance(n,ast.Assign) and getattr(n.targets[0],"id",None)=="EDGES")
+E=[("2026-10-05T14:00:00Z",None)]+[(e,n) for e,n in EDGES if n>=317]
 def sp(t):
     for e,n in E:
         if t<e: return n
@@ -23,6 +26,6 @@ for p in glob.glob(ROOT+"/*.jsonl"):
                 if isinstance(x,dict) and x.get("tool_use_id") in pend:
                     t0,nq=pend.pop(x["tool_use_id"]); c=C[sp(t0)]; w=ts(t)-ts(t0)
                     c[0]+=1;c[1]+=nq;c[2]+=w;c[3].append(w)
-for n in (317,318,319,320):
+for n in [n for e,n in E if n]:
     c=C[n]; ws=sorted(c[3])
     print(f"s{n}: AskUserQuestion calls {c[0]}, questions {c[1]}, total answer wait {c[2]/3600:.1f}h, median {ws[len(ws)//2]/60 if ws else 0:.0f} min, >1h: {sum(w>3600 for w in ws)}")

@@ -28,8 +28,14 @@ WIN_END_TS = ts(WIN_END) if WIN_END else None
 # Each edge is the END of sprint n: graph's last close commit for that sprint plus a few minutes
 # (36f74d63c s314 2026-09-28T15:07:38-04, 7b74011a9 s315 2026-09-30T16:55:42-04,
 #  8eb9429a1 s316 2026-10-05T09:58:27-04; the s317-s319 edges follow the same rule).
+# s320 ends at the lead-session handover, not at the s320 PR merge 72e1cd749 (2026-10-29T17:01Z): the retro,
+# ff2-ff4 and the close sweep ran after it, in lead dd2df1d7, through graph's last s320 commit 0672c7221
+# (2026-10-29T23:37:29Z, the s321 fork base) and "Sprint 320 closed" (23:39:18Z). dd2df1d7's last record is
+# 2026-10-30T00:10:01.416Z; the s321 lead 2c84f6b7 (/ai-dlc for sprint 321) opens at 00:10:05.572Z. No
+# transcript carries a record stamped 00:10:03, so the string compare in sprint_of() is exact here.
 EDGES = [("2026-09-28T19:10:00Z",314),("2026-09-30T20:58:00Z",315),("2026-10-05T14:00:00Z",316),
-         ("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),("2099-01-01T00:00:00Z",320)]
+         ("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),
+         ("2026-10-30T00:10:03Z",320),("2099-01-01T00:00:00Z",321)]
 def sprint_of(t):
     if t < WIN_START: return None
     for e, n in EDGES:
