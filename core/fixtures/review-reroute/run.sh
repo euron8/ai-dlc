@@ -295,14 +295,14 @@ ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7 Q1 Q2 Q3 Q4 Q4n Q5
 # and --map --narrow-from (and --route and --narrow shell validate-carried-findings.sh --classes);
 # merge-review-shards.sh by --check-serial and by NM's merge of a narrowed shard directory.
 # S1: the step text routes by both modes, on their invocation lines; the role file states the rule.
-if grep -qF 'partition-review-diff.sh --route <worktree> <pass M-1 file> <frozen-sha>' "$STEP" \
-   && grep -qF 'partition-review-diff.sh --gate1-rerun <worktree> <go-signal-sha> <frozen-sha>' "$STEP" \
+if grep -qF '`gate-transition.sh <story> 1 --pass M <flags>` first asks `partition-review-diff.sh --route`' "$STEP" \
+   && grep -qF 'partition-review-diff.sh --gate1-rerun` first' "$STEP" \
    && [ "$(grep -c 'TEST is code-class' "$ROLE")" = 1 ]; then
   ok "S1: implementation.md invokes --route and --gate1-rerun; code-reviewer.md states 'TEST is code-class' once"
 else bad "S1: implementation.md lost a --route/--gate1-rerun invocation, or code-reviewer.md does not state 'TEST is code-class' exactly once"; fi
 # S2: the gate-2 re-validation routes through --route on its own invocation line (exact string). The
 # predicate is proved on a copy with the line removed before it reads the shipped step.
-S2_LINE='scripts/ai-dlc/partition-review-diff.sh --route <worktree> <QA pass M-1 file> <go-signal-sha> --exclude-captures <captures file>'
+S2_LINE='`gate-transition.sh <story> 2 --pass M <flags>` first asks `--route` of the'
 p_s2() { grep -qF -- "$S2_LINE" "$1"; }
 { printf 'decoy step\n'; printf '%s\n' "$S2_LINE"; } > "$WORK/s2-has.md"
 grep -vF -- "$S2_LINE" "$WORK/s2-has.md" > "$WORK/s2-not.md"
@@ -313,8 +313,8 @@ else bad "S2: implementation.md does not name the gate-2 route line '$S2_LINE' (
 
 # S3: the step text narrows a mixed re-review through --narrow and partitions with --narrow-from, on
 # their invocation lines (exact strings), proved on a copy with them removed first.
-S3_A='scripts/ai-dlc/partition-review-diff.sh --narrow <worktree> <pass M-1 file> <frozen-sha> --exclude-captures <captures file>'
-S3_B='--narrow-from <pass M-1 file> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>-p<M>'
+S3_A='On `FULL:` the program asks `--narrow` of the same file.'
+S3_B='shard lines are the `--narrow-from` map'
 p_s3() { grep -qF -- "$S3_A" "$1" && grep -qF -- "$S3_B" "$1"; }
 { printf 'decoy step\n'; printf '%s\n' "$S3_A" "$S3_B"; } > "$WORK/s3-has.md"
 grep -vF -- "$S3_B" "$WORK/s3-has.md" > "$WORK/s3-not.md"

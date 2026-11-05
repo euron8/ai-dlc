@@ -13081,14 +13081,16 @@ EOF
     fi
   fi
 fi
-# --- I113: the single-valued position-bullet COUNT is one grammar in three copies ---
+# --- I113: the single-valued position-bullet COUNT is one grammar in four copies ----
 # =============================================================================
 # WHAT IT BINDS. `current_step_file` in the snapshot's `## Pipeline Position` section is
 # single-valued and overwritten in place (core/skills/ai-dlc/steps/gate-validation.md states
-# the rule). Three readers resolve that field and each now REFUSES rather than taking whichever
+# the rule). Four readers resolve that field; the first three REFUSE rather than taking whichever
 # match came first: ai-dlc-recover.sh drops the post-compact mandate and writes
 # `step_file_resolved=0`, ai-dlc-continue.sh resolves empty, and Check 8 of
-# validate-mandatory-rules.sh SKIPs. Refusal is only coherent while the three agree on WHAT A
+# validate-mandatory-rules.sh SKIPs. The fourth, ai-dlc-dispatch-guard.sh, reads it to scope THE
+# GATE-PLAN DENY: two bullets naming different files resolve EMPTY there too, and EMPTY arms no
+# deny. Refusal is only coherent while the four agree on WHAT A
 # SECOND LIVE BULLET IS: a grammar that drifted in one copy would have the recovery hook refuse
 # a snapshot the retro gate decides on, or the reverse.
 #
@@ -13116,7 +13118,8 @@ fi
 # declared sites, and this file, which carries the strings in its own probe.
 i113_declared='core/hooks/ai-dlc-recover.sh
 core/hooks/ai-dlc-continue.sh
-core/scripts/validate-mandatory-rules.sh'
+core/scripts/validate-mandatory-rules.sh
+core/hooks/ai-dlc-dispatch-guard.sh'
 
 # The four canonical strings, spelled here exactly as the three copies assign them. Each is
 # compared with `grep -qF` against the assignment line, so a copy that reshapes the expression
@@ -13249,7 +13252,7 @@ EOF
   done <<EOF
 $i113_hits
 EOF
-  [ -z "$i113_extra" ] || err "I113: a FOURTH reader of the snapshot position field exists at:$i113_extra. Three copies are already the most this field can carry safely; a fourth written the pre-fix way takes whichever bullet came first and reproduces the coin-toss in a file no arm names. Add it to i113_declared here in the same change, carrying all four canonical strings, or route it through one of the three."
+  [ -z "$i113_extra" ] || err "I113: an UNDECLARED reader of the snapshot position field exists at:$i113_extra. The four declared copies are already the most this field can carry safely; a fifth written the pre-fix way takes whichever bullet came first and reproduces the coin-toss in a file no arm names. Add it to i113_declared here in the same change, carrying all four canonical strings, or route it through one of the three."
 fi
 
 # --- I114: a shipped skill's frontmatter sets nothing on the session that invokes it ---

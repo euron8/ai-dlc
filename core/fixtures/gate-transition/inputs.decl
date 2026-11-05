@@ -1,0 +1,12 @@
+# gate-transition drives core/scripts/gate-transition.sh, which shells to its siblings in core/scripts/;
+# the mutant and gate-3 stub trees are whole copies of that directory. The story world is
+# story-evidence-scaffold's build_world (world.sh sources he-inproc.sh beside it), and the lead checkout
+# carries artifact-path-grammar.md, which partition-review-diff.sh resolves under .claude/skills/ai-dlc/.
+!core/scripts/gate-transition.sh
+core/scripts/
+core/fixtures/story-evidence-scaffold/
+core/fixtures/lib/
+core/skills/ai-dlc/artifact-path-grammar.md
+# JOIN drives the real dispatch guard (!) with this tree's implementation.md copied into the guard's project.
+!core/hooks/ai-dlc-dispatch-guard.sh
+core/skills/ai-dlc/steps/implementation.md

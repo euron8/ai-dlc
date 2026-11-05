@@ -166,7 +166,10 @@ fresh, independent `gate-adjudicator` context.
 
 SKILL.md Rule 32 touchpoint G1 applies here, before the script arms run.
 
-**Script arms before the adjudicator.** At gate entry, BEFORE minting `gate_nonce` and before
+**Script arms before the adjudicator.** At an implementation gate 3 dispatched for exactly one story (its adjudicator brief carries a `story:` line), the lead runs
+`scripts/ai-dlc/gate-transition.sh <story> 3 -C <worktree> --base <sha> --sprint <N> --story-file <path> --transcript-dir <dir>` (`<N>` the snapshot `sprint_id`, `<path>` the story file's canonical path, `<dir>` the directory the lead's session `transcript_path` sits in, as Check 2a below passes it), which runs the arms
+below and then `gate-checkpoint.sh open` in one call (see `implementation.md`, "One call per
+gate transition"); a refusal there is a **Gate Failure** and writes no plan. A gate 3 dispatched over several stories, or over none, runs no `gate-transition.sh`, which takes one story per call. At every gate except a one-story implementation gate 3 (where `gate-transition.sh` ran these arms above), multi-story and storyless gate 3 included, at gate entry, BEFORE minting `gate_nonce` and before
 dispatching anything, the lead runs every `adjudication: script` check in the manifest AND the
 script arm of every `adjudication: llm` check whose enforcement-map entry carries an
 `enforcer:` — Check 2's `validate-escalation-status-vocabulary.sh` and
@@ -176,9 +179,9 @@ whose script checks already pass. Measured on the reference consumer: Check 2's 
 validator failed on a single token after the adjudicator had already been dispatched, and the
 gate paid a second full adjudication for a FAIL a script reports in under a second.
 
-At gate entry, once those pass: generate `gate_nonce` as `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)` (`open` refuses any other form), run
-`scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> open`,
-then decide this dispatch's `gate_series_id` before the brief is written.
+At a one-story implementation gate 3, do NOT mint a nonce and do NOT run `open`: `gate_nonce` is the plan's `nonce:` line, because `gate-transition.sh <story> 3 …` already minted it and ran `open`. It records no verdict at that nonce, so the `record` calls below are the lead's, and Check 25 arrives in the plan as `steering-count:` for the lead to compare. At every other gate, a multi-story or storyless implementation gate 3 included, once the script checks pass: generate `gate_nonce` as `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)` (`open` refuses any other form), run
+`scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> open`.
+At every gate, then decide this dispatch's `gate_series_id` before the brief is written.
 
 **The series id is decided at dispatch, never from `close`.** Its form is exactly `<gate_type>-<slug>-s<N>-<TS>` for a gate dispatched for exactly one story and exactly `<gate_type>-s<N>-<TS>` for every other gate, with nothing between the fields: `<slug>` is `story` followed by lowercase `[a-z0-9]`, `<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`) with no leading zero, and `<TS>` is the series-entry time as `YYYYMMDDTHHMMSSZ`, never later than the nonce of a pass that carries it. `scripts/ai-dlc/validate-gate-adjudication.sh` refuses any other form on a new pass. The field order is load-bearing because the dispatch guard's nonce regex is unanchored and cannot match a timestamp that directly follows `-s<N>-`, so the slug goes before the sprint field and never after it.
 
@@ -203,13 +206,13 @@ check, or an adjudicator verdict adopted through Check 26 — run
 `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <check-id> <PASS|FAIL|SKIP|PENDING>`.
 A post-compaction resume reads this ledger to skip settled checks (Rule 21). Record a
 `FAIL` too. A `FAIL_WAIVED` check is checkpointed `PASS`: the checkpoint records gate progress,
-as `26 PASS` does, and the per-check `FAIL_WAIVED` lives in the verdict and in GATE_METRIC. On a re-dispatch, mint the fresh nonce and `open` it; the old ledger needs no
+as `26 PASS` does, and the per-check `FAIL_WAIVED` lives in the verdict and in GATE_METRIC. On a re-dispatch at a one-story implementation gate 3, re-run `scripts/ai-dlc/gate-transition.sh <story> 3 <flags>` (the same call as above): it mints the fresh nonce, opens it, and writes the new g3 plan the dispatch guard checks. On a re-dispatch at any other gate, mint the fresh nonce and `open` it; the old ledger needs no
 clearing. After Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close` (SKILL.md
 Rule 32 touchpoint G2 applies before it).
 Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
 A verdict is valid ONLY for the dispatch that produced it. If you re-dispatch — because
-state moved, or the prior verdict cited state that has since changed — generate a fresh
-`gate_nonce` and re-derive every check from current state; never carry forward, cite, or
+state moved, or the prior verdict cited state that has since changed — obtain a fresh
+`gate_nonce` (at a one-story implementation gate 3, by re-running `gate-transition.sh <story> 3 <flags>`; at any other gate, by minting one) and re-derive every check from current state; never carry forward, cite, or
 reconcile against a verdict from a superseded dispatch. The `gate_series_id` is exempt from
 that: the same-series rule above decides whether it carries forward. The nonce is that dispatch's
 identity, not a staleness comparator: deleting inheritance dissolves the freshness problem

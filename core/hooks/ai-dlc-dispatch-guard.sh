@@ -127,7 +127,9 @@
 #   A false correction would silently mis-bind a teammate's model, so fail-open
 #   (exit 0, no change) is the safe direction; the teeth are precise and
 #   positive-match only. The MODEL/DEFINITION path only ever ADDS or CORRECTS --
-#   it never denies. Six separate arms below DO deny, and only those six: the two
+#   it never denies. Seven separate arms below DO deny, and only those seven: THE
+#   GATE-PLAN DENY (an implementation-step gate dispatch whose `gate-plan:` names no plan
+#   gate-transition.sh wrote, or one another program's record contradicts), the two
 #   deny arms here, THE SHARD DENY under THE SHARD LINE, THE COVER DENY beside it (a one-cross
 #   brief, `cross/<K> g1/1 <ordinals>`, whose ordinals omit part of 1..K), THE CITATION DENY (a
 #   declared aiDlcRoles role the Rule 19(b) line reached by neither carrier), and THE MARK LINE (a
@@ -755,10 +757,42 @@ SPAWN_TUI="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null ||
 # records null -- an invented exception laundered to the omitted-line state. The unwrap strips
 # a run of `*`, `_`, backticks and straight double quotes from both ends of the value, and is
 # applied only when what remains begins with `none`, so an ordinal part key keeps its text.
+#
+# THE GATE-PLAN LINE RIDES THIS SAME AWK, so a dispatch that carries none pays no fork for it. A
+# line, after leading blanks and an optional `-`/`*` list marker, whose key is `gate-plan:`
+# (case-folded, emphasis around the key stripped), outside any fence. Its value is the first
+# blank-separated token with `*`, backtick and `"` wrappers and trailing `.,;:)` removed; `_` is
+# never stripped, because the plan path itself begins `_bmad-output/`. Exactly one such line
+# prints `<US><value>` as the FIRST output line (US is octal 037, which no shard value can carry);
+# two or more print a bare `<US>`, read as no line at all. The shell strips that first line by
+# parameter expansion before the shard split below, so SPAWN_SHARD_OUT reaches it unchanged.
+#
+# THE STORY LINE RIDES IT TOO, for the gate-plan subject test below. A line read the same way
+# whose key is `story:` and whose value is non-empty sets DG_STORY: the awk prints a bare RS
+# (octal 036) as the very first output line, ahead of the gate-plan line, and the shell strips it
+# by parameter expansion, so a dispatch that carries no story line pays nothing for it.
 SPAWN_SHARD_OUT="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
   function fold(s) { return tolower(s) }
   /^[ \t]*(```|~~~)/ { fence = !fence; next }
   fence { next }
+  {
+    gl = $0
+    sub(/^[ \t]*([-*][ \t]+)?/, "", gl)
+    if (match(fold(gl), /^[*_`]*story[*_`]*:/)) {
+      sv = substr(gl, RLENGTH + 1); gsub(/[*_` \t]/, "", sv)
+      if (sv != "") story = 1
+      next
+    }
+    if (match(fold(gl), /^[*_`]*gate-plan[*_`]*:/)) {
+      gv = substr(gl, RLENGTH + 1)
+      sub(/^[*` \t]+/, "", gv); sub(/[ \t].*$/, "", gv)
+      sub(/^[*`"]+/, "", gv); sub(/[*`".,;:)]+$/, "", gv)
+      gpn++; gp = gv
+      next
+    }
+  }
+  END { if (story) printf "\036\n" }
+  END { if (gpn == 1 && gp != "") printf "\037%s\n", gp; else if (gpn > 1) printf "\037\n" }
   {
     line = $0
     sub(/^[ \t]*([-*][ \t]+)?/, "", line)
@@ -793,6 +827,27 @@ SPAWN_SHARD_OUT="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
   }
   END { if (bad) { print "invalid-exception"; print raw } else if (keys == 1 && good == 1) print out }
 ' 2>/dev/null || true)"
+DG_GP=""
+DG_GP_MULTI=false
+DG_STORY=false
+DG_US=$'\037'
+case "$SPAWN_SHARD_OUT" in
+  $'\036'*)
+    DG_STORY=true
+    case "$SPAWN_SHARD_OUT" in
+      *$'\n'*) SPAWN_SHARD_OUT="${SPAWN_SHARD_OUT#*$'\n'}" ;;
+      *) SPAWN_SHARD_OUT="" ;;
+    esac ;;
+esac
+case "$SPAWN_SHARD_OUT" in
+  "$DG_US"*)
+    DG_GP="${SPAWN_SHARD_OUT%%$'\n'*}"; DG_GP="${DG_GP#"$DG_US"}"
+    [ -n "$DG_GP" ] || DG_GP_MULTI=true
+    case "$SPAWN_SHARD_OUT" in
+      *$'\n'*) SPAWN_SHARD_OUT="${SPAWN_SHARD_OUT#*$'\n'}" ;;
+      *) SPAWN_SHARD_OUT="" ;;
+    esac ;;
+esac
 SPAWN_SHARD="$(printf '%s\n' "$SPAWN_SHARD_OUT" | sed -n 1p)"
 SPAWN_SHARD_RAW=""
 [ "$SPAWN_SHARD" = "invalid-exception" ] && SPAWN_SHARD_RAW="$(printf '%s\n' "$SPAWN_SHARD_OUT" | sed -n 2p)"
@@ -1332,6 +1387,204 @@ case "${SPAWN_SHARD:-}" in
     esac ;;
 esac
 
+# THE GATE-PLAN DENY. An implementation-step gate dispatch runs only on a plan that
+# scripts/ai-dlc/gate-transition.sh wrote AFTER every check that gate prescribes exited 0, so a
+# reviewer, a QA or the gate-3 adjudicator cannot be dispatched over checks the lead skipped.
+#
+# SUBJECT: `code-reviewer`, `code-reviewer-escalated` or `qa` with a parsed shard line, or a
+# `gate-adjudicator` brief whose nonce is an implementation one (DG_IMPL_GATE, read above) or whose
+# shard key is `implementation`, and which carries a `story:` line (DG_STORY). Every
+# other dispatch skips this block before any fork, and the `gate-plan:` line was read for free by
+# THE SHARD LINE awk.
+#
+# ERA GATE, FIRST. The deny is live only once the reconcile lands the whole-line sentinel in the
+# consumer's own implementation.md; `grep -qxF` matches the full line and nothing longer, so a step
+# file that only MENTIONS the token, or quotes the sentinel inside other text, stays legacy. A legacy
+# tree gets one context line and no deny, because its step file prescribes no plan.
+#
+# STEP SCOPE, SECOND. `current_step_file` of the snapshot's `## Pipeline Position`, read with the
+# grammar I113 binds across this file, ai-dlc-recover.sh, ai-dlc-continue.sh and
+# validate-mandatory-rules.sh: the key alternation is never narrowed, and two live bullets naming
+# different basenames resolve EMPTY. Only `implementation.md` and `gate-validation.md` arm the deny;
+# a resolved other step (a deploy-validate re-review) passes silently. An EMPTY position passes
+# with one context line naming it, because silence there reads as a deny that ran and passed.
+#
+# THE PLAN, read with `read` and no git: `story:`, `gate:`, `pass:`, `sha:`, `worktree:`,
+# `manifest:`, `route:`, `nonce:`, then the `--map` lines (`<ordinal><TAB><groups><TAB>...`). The
+# path is relative to the project root, or absolute under it, and lies in
+# `<state>/implementation-artifacts/s<N>/gate-transition/<idx>-g<gate>-p<M>.plan`. It is NEVER compared with HEAD: a commit in the frozen worktree
+# would wedge every re-dispatch. What binds it is a record a DIFFERENT program wrote: the
+# partition manifest's `sha<TAB>` line, the gate-checkpoint OPEN marker, or a nonce ledger.
+#
+# THE DECISION IS READ FROM THE BRIEF, NEVER FROM THE PLAN. A brief `shard: i/N` with N>1 or a
+# `cross/` line is a partitioned dispatch, so a plan claiming `manifest: none` for it is refused.
+# A `1/1` code-reviewer is either a serial gate-1 reviewer or the closing writer; no brief wording
+# separates them and none is read. A g3 or `close` plan makes it the closing writer, which is bound
+# to the nonce ledger `.gate-checkpoint/<nonce>.tsv` (and, for `close`, its `26 PASS` row) rather
+# than to the OPEN marker, which gate-validation.md's `close` has already removed by then.
+#
+# FAIL-OPEN on nothing that the plan controls: every refusal names the remedy command.
+#
+# A SHARDED gate-adjudicator (`shard: <i>/<N> implementation`, _gate-procedures.md) is judged as
+# the unsharded one is: its part key is the gate type, not a story, so it binds through the plan's
+# gate and nonce. ROLE TO GATE: the adjudicator takes only a `gate: 3` plan; a `3` or `close` plan
+# is otherwise accepted only for the `1/1` code-reviewer (the closing writer); every other
+# reviewer takes only a `1` plan and QA only a `2` plan; a `rerun` plan (gate 2 answered
+# GATE1-RERUN, so the transition is a gate-1 re-review) authorizes no seat. The gate is always
+# read from the plan's `gate:` line, never from its filename.
+dg_gp_check() {
+  local rem rel abs line k v p_story="" p_gate="" p_sha="" p_man="" p_nonce="" nmap=0 hit=0
+  local s_i="" s_n="" s_k="" ord grp mabs m_sha="" o="" ok26=0
+  rem="Remedy: run \`scripts/ai-dlc/gate-transition.sh <story> <1|2|3|close> [--pass M] -C <worktree> --base <sha> --sprint <N> --story-file <path>\` (gate 3 also takes \`--transcript-dir <dir>\`, and re-opens the checkpoint under a fresh nonce; a story already past gate 3 takes the \`close\` form), then re-send this brief with the \`gate-plan: <path>\` line it prints."
+  case "$SPAWN_SHARD" in
+    cross/*) s_n="${SPAWN_SHARD#cross/}"; s_n="${s_n%% *}"; s_i=cross; s_k="${SPAWN_SHARD#* }" ;;
+    */*" "*) s_i="${SPAWN_SHARD%%/*}"; s_n="${SPAWN_SHARD#*/}"; s_n="${s_n%% *}"; s_k="${SPAWN_SHARD#* }" ;;
+    none*) dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` gate dispatch at ${DG_GP_STEP}, because its brief declares \"shard: ${SPAWN_SHARD}\". An implementation gate dispatches a reviewer or QA as \`shard: 1/1 <story-index>\` or \`shard: <i>/<N> <group>\` from its plan, never under a serial exception, so no plan can describe this dispatch. Re-send it with the shard line its gate-transition plan names. ${rem}" ;;
+  esac
+  # (a) no gate-plan line, or more than one.
+  [ "$DG_GP_MULTI" = true ] && dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` gate dispatch (\"shard: ${SPAWN_SHARD}\") at ${DG_GP_STEP}, because its brief carries more than one \`gate-plan:\` line, so it names no single plan. Keep exactly one. ${rem}"
+  [ -n "$DG_GP" ] || dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` gate dispatch (\"shard: ${SPAWN_SHARD:-none}\") at ${DG_GP_STEP}, because its brief carries no \`gate-plan:\` line. This tree's implementation.md requires every gated reviewer, QA, adjudicator and closing-writer brief to cite the plan gate-transition.sh writes once every check of that gate has exited 0. ${rem}"
+  rel="$DG_GP"
+  case "$rel" in
+    "$PROJECT_DIR"/*) rel="${rel#"$PROJECT_DIR"/}" ;;
+    /*) rel="" ;;
+  esac
+  case "/$rel/" in */../*|*/./*) rel="" ;; esac
+  case "$rel" in
+    _bmad-output/implementation-artifacts/s[0-9]*/gate-transition/*.plan) abs="$PROJECT_DIR/$rel" ;;
+    *) abs="" ;;
+  esac
+  # (b) the plan file is absent (or the path is not a plan path at all). The directory is the
+  # literal one gate-transition.sh writes (its PDIR), never AI_DLC_STATE_DIR: the two must agree.
+  [ -n "$abs" ] && [ -f "$abs" ] && [ -r "$abs" ] \
+    || dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` gate dispatch, because its \`gate-plan: ${DG_GP}\` names no readable plan at _bmad-output/implementation-artifacts/s<N>/gate-transition/<idx>-g<gate>-p<M>.plan. gate-transition.sh writes the plan only after every check of the gate has exited 0 and removes a stale one before it starts, so an absent plan means the gate's checks have not all passed. ${rem}"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      [0-9]*"	"*)
+        nmap=$((nmap + 1))
+        ord="${line%%	*}"; grp="${line#*	}"; grp="${grp%%	*}"
+        while [ "${ord#0}" != "$ord" ] && [ -n "${ord#0}" ]; do ord="${ord#0}"; done
+        # The part key is the map's groups column (the packed part's group keys, comma-joined) or
+        # one of its keys: the brief template names `<group>` and a packed part carries several.
+        if [ "$ord" = "$s_i" ]; then
+          case ",$grp," in *",$s_k,"*) hit=1 ;; esac
+          [ "$grp" = "$s_k" ] && hit=1
+        fi
+        continue ;;
+    esac
+    case "$line" in *": "*) k="${line%%: *}"; v="${line#*: }" ;; *) continue ;; esac
+    case "$k" in
+      story) [ -n "$p_story" ] || p_story="$v" ;;
+      gate) [ -n "$p_gate" ] || p_gate="$v" ;;
+      sha) [ -n "$p_sha" ] || p_sha="$v" ;;
+      manifest) [ -n "$p_man" ] || p_man="$v" ;;
+      nonce) [ -n "$p_nonce" ] || p_nonce="$v" ;;
+    esac
+  done < "$abs"
+  # ROLE TO GATE.
+  case "$ROLE:$p_gate" in
+    gate-adjudicator:3) ;;
+    gate-adjudicator:*) dg_deny "AI/DLC dispatch guard: refused a gate-adjudicator dispatch, because its plan ${DG_GP} is a \`gate: ${p_gate:-<none>}\` plan and the implementation adjudicator runs only on a gate-3 plan. ${rem}" ;;
+    code-reviewer:3|code-reviewer:close)
+      [ "$s_i/$s_n" = 1/1 ] || dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch (\"shard: ${SPAWN_SHARD}\"), because its plan ${DG_GP} is a \`gate: ${p_gate}\` plan, which only the 1/1 closing writer may cite. ${rem}" ;;
+    code-reviewer:1|code-reviewer-escalated:1|qa:2) ;;
+    *) case "$ROLE" in qa) g_want=2 ;; *) g_want=1 ;; esac
+       dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its plan ${DG_GP} carries \`gate: ${p_gate:-<none>}\`, which is not a gate this role is dispatched at (a ${ROLE} takes only a gate-${g_want} plan). Remedy: run \`scripts/ai-dlc/gate-transition.sh <story> ${g_want}\` for the gate this seat runs at, then cite the plan it prints. ${rem}" ;;
+  esac
+  # (c) story / part key. N>1 and cross match against the plan's own --map lines (F5).
+  if [ "$ROLE" != gate-adjudicator ]; then
+    if [ "$s_i" = cross ]; then
+      [ "$nmap" -ge 2 ] && [ "$nmap" = "$s_n" ] \
+        || dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` cross dispatch (\"shard: ${SPAWN_SHARD}\"), because its plan ${DG_GP} carries ${nmap} map line(s) where the brief declares ${s_n} parts. ${rem}"
+    elif [ "$s_n" = 1 ]; then
+      [ "$s_k" = "$p_story" ] \
+        || dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch (\"shard: ${SPAWN_SHARD}\"), because its plan ${DG_GP} is for story \`${p_story:-<none>}\`, not \`${s_k}\`. ${rem}"
+    else
+      [ "$hit" = 1 ] && [ "$nmap" = "$s_n" ] \
+        || dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch (\"shard: ${SPAWN_SHARD}\"), because no line of its plan ${DG_GP}'s ${nmap}-part map is part ${s_i} \`${s_k}\` of ${s_n}. ${rem}"
+    fi
+  fi
+  # (F1) a partitioned brief is owed a manifest, whatever the plan claims.
+  if [ "$ROLE" != gate-adjudicator ] && { [ "$s_i" = cross ] || [ "${s_n:-1}" != 1 ]; } && [ "$p_man" = none ]; then
+    dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch (\"shard: ${SPAWN_SHARD}\"), because the brief is a partitioned dispatch and its plan ${DG_GP} says \`manifest: none\`. A partitioned run always writes the partition manifest, so this plan does not describe this dispatch. ${rem}"
+  fi
+  # (d) the plan's sha against the manifest partition-review-diff.sh wrote.
+  if [ -n "$p_man" ] && [ "$p_man" != none ]; then
+    case "$p_man" in /*) mabs="$p_man" ;; *) mabs="$PROJECT_DIR/$p_man" ;; esac
+    if [ -r "$mabs" ]; then
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in "sha	"*) m_sha="${line#sha	}"; break ;; esac
+      done < "$mabs"
+    fi
+    [ -n "$p_sha" ] && [ "$p_sha" = "$m_sha" ] \
+      || dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its plan ${DG_GP} records \`sha: ${p_sha:-<none>}\` and the partition manifest ${p_man} records \`${m_sha:-<unreadable>}\`. The plan does not describe the frozen tree this partition was cut from. ${rem}"
+  fi
+  # (e) the gate-3 adjudicator: the live OPEN marker carries the plan's nonce.
+  if [ "$ROLE" = gate-adjudicator ]; then
+    [ -r "$SPAWN_STATE_DIR/.gate-checkpoint/OPEN" ] && IFS= read -r o < "$SPAWN_STATE_DIR/.gate-checkpoint/OPEN"
+    o="${o//[[:space:]]/}"
+    [ -n "$p_nonce" ] && [ "$o" = "$p_nonce" ] \
+      || dg_deny "AI/DLC dispatch guard: refused a gate-adjudicator dispatch, because no live gate-checkpoint OPEN marker carries its plan's nonce (plan ${DG_GP}: \`${p_nonce:-<none>}\`; OPEN: \`${o:-<none>}\`). The adjudicator runs only inside the gate gate-transition.sh opened. ${rem}"
+  fi
+  # (F2) the closing writer: its g3 or close plan's nonce ledger exists; a close plan needs 26 PASS.
+  if [ "$ROLE" = code-reviewer ] && { [ "$p_gate" = 3 ] || [ "$p_gate" = close ]; }; then
+    [ -n "$p_nonce" ] && [ -f "$SPAWN_STATE_DIR/.gate-checkpoint/${p_nonce}.tsv" ] \
+      || dg_deny "AI/DLC dispatch guard: refused the closing-writer \`code-reviewer\` dispatch, because its \`gate: ${p_gate}\` plan ${DG_GP} names nonce \`${p_nonce:-<none>}\` and no ledger .gate-checkpoint/${p_nonce:-<none>}.tsv exists. The closing writer runs only after a gate 3 that recorded its checks. ${rem}"
+    if [ "$p_gate" = close ]; then
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in "26	PASS	"*|"26	PASS") ok26=1; break ;; esac
+      done < "$SPAWN_STATE_DIR/.gate-checkpoint/${p_nonce}.tsv"
+      [ "$ok26" = 1 ] \
+        || dg_deny "AI/DLC dispatch guard: refused the closing-writer \`code-reviewer\` dispatch, because its close plan ${DG_GP} names nonce \`${p_nonce}\` and that ledger has no \`26 PASS\` row, so that gate 3 did not pass. ${rem}"
+    fi
+  fi
+  return 0
+}
+DG_GP_NOTE=""
+DG_GP_SUBJECT=false
+case "$ROLE" in
+  code-reviewer|code-reviewer-escalated|qa)
+    case "${SPAWN_SHARD:-}" in [0-9]*/*|cross/*|none*) DG_GP_SUBJECT=true ;; esac ;;
+  gate-adjudicator)
+    [ "$DG_IMPL_GATE" = true ] && DG_GP_SUBJECT=true
+    case "${SPAWN_SHARD:-}" in [0-9]*/*" implementation") DG_GP_SUBJECT=true ;; esac
+    # A STORYLESS ADJUDICATOR IS NO SUBJECT. gate-transition.sh runs one story per call, so a
+    # gate dispatched over several stories or over none has no plan to cite, and its brief carries
+    # no `story:` line (gate-validation.md "The slug names the one story"); the lead runs that
+    # gate's script arms, mints and opens itself. Residual, unbounded here and at
+    # validate-gate-adjudication.sh (its series-form check treats the slug as optional and counts no
+    # stories): a one-story implementation gate-3 adjudicator brief that omits its `story:` line is not
+    # judged against a plan, and the gate-3 script arms then rest on the lead.
+    [ "$DG_STORY" = true ] || DG_GP_SUBJECT=false ;;
+esac
+if [ "$DG_GP_SUBJECT" = true ]; then
+  DG_GP_SENTINEL='<!-- ai-dlc: gate-transition-plan-required v1 -->'
+  if grep -qxF -- "$DG_GP_SENTINEL" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/implementation.md" 2>/dev/null; then
+    AI_DLC_POS_SECTION_AWK='/^## Pipeline Position/{f=1;next} /^## /{f=0} f'
+    AI_DLC_POS_BULLET_RE='^[[:space:]]*-[^:]*(current_step_file|current[ _]step|current[ _]phase)[^:]*:'
+    AI_DLC_POS_LABEL_RE='^[^:]*(prior|superseded|retained history)'
+    AI_DLC_POS_BASE_SED='s/[`*,.;:)]*$//; s|^.*/||'
+    _dg_pb="$(awk "$AI_DLC_POS_SECTION_AWK" "$SPAWN_SNAPSHOT" 2>/dev/null \
+      | grep -iE "$AI_DLC_POS_BULLET_RE" 2>/dev/null \
+      | grep -ivE "$AI_DLC_POS_LABEL_RE" 2>/dev/null)"
+    # Every live bullet reduced to its basename in ONE awk pass: the value after the first colon,
+    # list and emphasis marks and an em-dash comment stripped, then the canonical basename sed.
+    _dg_pbase=""
+    if [ -n "$_dg_pb" ]; then
+      _dg_pbase="$(printf '%s\n' "$_dg_pb" | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//' \
+        | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' \
+        | sed -E 's/^[`*]+//; s/[`*]+$//' | awk '{print $1}' | sed "$AI_DLC_POS_BASE_SED" \
+        | awk 'NF && !seen[$0]++ { n++; b = $0 } END { if (n == 1) print b }')"
+    fi
+    DG_GP_STEP="$_dg_pbase"
+    if [ -z "$DG_GP_STEP" ]; then
+      DG_GP_NOTE="bl913 gate-plan deny inactive: Pipeline Position unresolved (EMPTY) -- _bmad-output/pipeline-snapshot.md names no single current_step_file, so this \`${ROLE}\` dispatch is not judged against a gate plan."
+    elif [ "$DG_GP_STEP" = implementation.md ] || [ "$DG_GP_STEP" = gate-validation.md ]; then
+      dg_gp_check
+    fi
+  fi
+fi
+
 # THE MARK LINE. A seat brief tells the teammate to close its deliverable with
 #   <lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>
 # and the engine refuses any other last field ("the last field must be findings=<n>"), AFTER the
@@ -1522,6 +1775,23 @@ jq -nc \
 # A failed append is recorded in _sl_rc and never blocks a dispatch: nothing reads it, and the hook goes on.
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
+# THE GATE-PLAN NOTE (an EMPTY position) reaches the lead as context only, with no
+# decision, on a dispatch the guard does not otherwise correct; a correcting dispatch carries it
+# inside emit()'s context instead. A note that cannot be built is dropped: it never blocks.
+dg_gp_note_only() {
+  local c
+  _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+  if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+  else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+  c="$(ai_dlc_provenance_wrap ai-dlc-dispatch-guard PreToolUse "dispatch-guard: $DG_GP_NOTE")"
+  jq -n --arg ctx "$c" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $ctx}}' 2>/dev/null
+  exit 0
+}
+if [ -n "$DG_GP_NOTE" ]; then
+  [ "$ROLE_FILE_READABLE" = true ] || dg_gp_note_only
+  [ "$NEEDS_MODEL" = true ] || [ "$NEEDS_TYPE" = true ] || dg_gp_note_only
+fi
+
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
 
 # Nothing to set — exit 0 with no decision.
@@ -1595,6 +1865,8 @@ emit() {
   elif [ "$DEFINITION_BOUND" != true ] && [ -n "$PIN_EFFORT" ]; then
     ctx="${ctx} — NOTE: no rendered .claude/agents/${ROLE}.md, so the configured effort (${PIN_EFFORT}) binds nothing and this teammate runs at whatever effort its session resolved. Render it: scripts/ai-dlc/render-agent-definitions.sh"
   fi
+
+  [ -n "$DG_GP_NOTE" ] && ctx="${ctx} — ${DG_GP_NOTE}"
 
   # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
   # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a

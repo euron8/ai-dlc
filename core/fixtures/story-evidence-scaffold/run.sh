@@ -157,8 +157,7 @@ check() {
     || echo "DEV: label -- dev.md's handoff evidence does not prescribe the column-0 run-record labels the validator keys on"
   b="$(awk '/^\*\*Pre-gate commit-presence check\.\*\*/{on=1} on && /^$/{exit} on{print}' "$imp")"
   fl="$(flat <<<"$b")"
-  { has "$fl" 'validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>' \
-    && has "$fl" 'validate-handoff-evidence.sh -C <worktree> --strategy <frozen-sha> <story-file>'; } \
+  { has "$fl" 'program also runs the handoff-evidence validator and its `--strategy` arm'; } \
     || echo "WIRE-IMP: implementation.md's pre-gate check does not run validate-handoff-evidence.sh in both modes"
   { has "$fl" '`status-not-review`' && has "$fl" '`status-yaml-mismatch`' && has "$fl" '`heading-demoted`' \
     && has "$fl" 'A `SKIP STATUS (<reason>)` line' \
@@ -176,7 +175,7 @@ check() {
     || echo "C11MECH: Check 11 does not say its two mechanical sub-clauses are enforced by validate-handoff-evidence.sh"
   b="$(awk '/^\*\*Gate-2 dispatch: the validation partitions/{on=1} on && /^$/{exit} on{print}' "$imp")"
   fl="$(flat <<<"$b")"
-  { has "$fl" 'before any QA is dispatched, run `validate-handoff-evidence.sh -C <worktree> --smoke <story-file> <base> <go-signal-sha>`' \
+  { has "$fl" 'before any QA is dispatched, `gate-transition.sh <story> 2 <flags>` runs the `--smoke` arm of the handoff-evidence validator' \
     && has "$fl" 'Exit 1 refuses the go-signal'; } \
     || echo "WIRE-SMOKE: implementation.md's gate-2 dispatch does not run --smoke before QA is dispatched"
   b="$(h3 "$sr" '^### 4\. Gate Validation and Proceed$')"
@@ -300,7 +299,7 @@ mutant dev-no-label DEV '{ gsub(/a column-0 `Full-collection run:` line/, "a ful
   "DEV: label --" "dropping the column-0 label the validator's LEGACY gate keys on is caught"
 mutant dev-no-capture-header DEV '{ gsub(/opens with `\$ <the exact command>` on its first line/, "opens with the output"); print }' \
   "DEV: capture --" "dropping the capture header from dev.md's handoff evidence is caught"
-mutant imp-unwired IMP '/^\*\*Pre-gate commit-presence check\.\*\*/{s=1} s && /^$/{s=0} s{ gsub(/validate-handoff-evidence\.sh -C <worktree> --strategy/, "validate-story.sh --strategy") } {print}' \
+mutant imp-unwired IMP '/^\*\*Pre-gate commit-presence check\.\*\*/{s=1} s && /^$/{s=0} s{ gsub(/and its `--strategy` arm/, "and its strategy arm") } {print}' \
   "WIRE-IMP:" "the pre-gate check not running the strategy mode is caught"
 # A MOVE: the bookkeeping kinds pushed past the paragraph's first blank line, which every reader of
 # that block (this check, the shipped probes) stops at. They stay in the file.
@@ -313,7 +312,7 @@ mutant c11-no-surface GV '{ gsub(/^\*\*Smoke surface\.\*\* /, "Smoke surface. ")
   "C11SURF:" "the smoke-surface definition losing its bold opening is caught"
 mutant c11-no-mech GV '{ gsub(/are enforced by$/, "are read by"); print }' \
   "C11MECH:" "Check 11 no longer naming the mechanical enforcement is caught"
-mutant imp-no-smoke IMP '{ gsub(/ --smoke <story-file>/, " <story-file>"); print }' \
+mutant imp-no-smoke IMP '{ gsub(/runs the `--smoke` arm of/, "runs the arm of"); print }' \
   "WIRE-SMOKE:" "the gate-2 dispatch not running --smoke is caught"
 mutant sr-unwired SR '{ gsub(/validate-handoff-evidence\.sh --strategy HEAD/, "a re-read of"); print }' \
   "WIRE-SR:" "sprint-review §4 not running the strategy mode is caught"
@@ -1020,8 +1019,8 @@ fi
 # Rule A's GATE1-SKIP sentence and the preflight before every gate-2 dispatch run. Substring match on
 # the line (the prose backticks it). The gate-1 line `... <base> <frozen-sha>` is a near-miss that must
 # NOT satisfy it: asserted present and distinct. Absent, this arm FAILS (never green on absence).
-B3_LINE='scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> --gate2 <story-file> <base> <go-signal-sha>'
-B3_NEAR='scripts/ai-dlc/validate-handoff-evidence.sh -C <worktree> <story-file> <base> <frozen-sha>'
+B3_LINE='the program runs the `--gate2` arm of the'
+B3_NEAR='program also runs the handoff-evidence validator and its `--strategy` arm'
 b3_has() { grep -qF -- "$B3_LINE" "$1"; }
 if ! grep -qF -- "$B3_NEAR" "$IMP"; then
   bad "B3: FIXTURE BROKEN -- the gate-1 near-miss line is absent from implementation.md, so the arm cannot show it discriminates"
@@ -1031,7 +1030,7 @@ else
   bad "B3: implementation.md carries no line naming '$B3_LINE' (the GATE1-SKIP and gate-2 preflight handoff call); the gate-1 <frozen-sha> line does not count"
 fi
 if [ "${B_b3:-0}" = 1 ]; then
-  awk -v s="$B3_LINE" '{ while ((p = index($0, s))) $0 = substr($0, 1, p - 1) "validate-handoff-evidence.sh <story-file>" substr($0, p + length(s)); print }' "$IMP" > "$WORK/imp-no-b3.md"
+  awk -v s="$B3_LINE" '{ while ((p = index($0, s))) $0 = substr($0, 1, p - 1) "the program runs the arm of the" substr($0, p + length(s)); print }' "$IMP" > "$WORK/imp-no-b3.md"
   if cmp -s "$IMP" "$WORK/imp-no-b3.md"; then bad "FIXTURE ERROR: mutation 'b3-unwired' matched nothing"
   elif b3_has "$WORK/imp-no-b3.md"; then bad "MUTATION 'b3-unwired' SURVIVED -- implementation.md without the go-signal handoff line"
   else mutant_killed "${B_b3:-0}" b3-unwired "MUTATION 'b3-unwired' killed: implementation.md without the go-signal handoff line fails B3"; fi

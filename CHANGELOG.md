@@ -19,6 +19,68 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1006.0] - 2026-11-05
+
+Batch b250, cluster BL-913. BL-913 lands PARTIAL: it closes only on a graph `Outcome measured:` line. No PC- id is closed. Filed 0, closed 0, NET 0.
+
+### BL-913 — one program per implementation gate transition, and a dispatch-guard deny that needs its plan
+
+- `scripts/ai-dlc/gate-transition.sh <story-index> 1|2|3|close [--pass M] -C <worktree> --base <sha> --sprint <N> --story-file <path> [--transcript-dir <dir>]` (shipped from `core/scripts/`) runs every check that one implementation gate prescribes, in the step files' order.
+  - Only after all of them exit 0 does it write the plan `_bmad-output/implementation-artifacts/s<N>/gate-transition/<idx>-g<gate>-p<M>.plan` and print its path.
+  - On a refusal it prints each refused check with its remedy on stderr, exits 1 and leaves no plan.
+  - A stale plan at that path is removed before the first check.
+  - Exit 2 means it could not run.
+- At gate 3 the program runs the script arms of `gate-validation.md`, then mints the nonce and runs `gate-checkpoint.sh open`.
+  - `open` runs at gate 3 only: it writes the one global OPEN marker, so a gate 1 or 2 that opened would overwrite a live gate 3.
+  - At a one-story implementation gate 3 the lead no longer mints or opens a nonce. The nonce is the plan's `nonce:` line, and a gate-3 re-dispatch re-runs the program.
+  - `close` verifies that the ledger of the nonce it resolves carries a `26 PASS` row, and never calls `open`.
+- `close` resolves its nonce in three steps, and the first step that finds one wins.
+  - First, the nonce of the story's own gate-3 plan.
+  - Second, the newest gate-adjudication verdict whose `gate_series_id` is the story-scoped form `implementation-story<slug>-s<N>-`.
+  - Third, the newest live storyless verdict whose `gate_series_id` is `implementation-s<N>-<TS>`. On this last one the plan carries a `gate3-scope:` input line saying the close rests on a sprint-scoped gate 3 and cannot bind to the story, because the verdict schema names no story.
+  - The third step is newest-wins. If that verdict's ledger lacks a `26 PASS` row, `close` refuses; it does not fall back to an older storyless verdict.
+  - With no nonce from any of the three steps, `close` refuses and names `gate-transition.sh <story> 3` as the remedy.
+- Check 22 exit 3 (PRE-LEDGER, or NO ROLE-BOUND ROWS: EXAMINED NOTHING) does not refuse. The plan records the script's own first line, and its COUNTS line when it prints one, as `gate-log:` inputs.
+- `core/hooks/ai-dlc-dispatch-guard.sh` denies an implementation-step gate dispatch that cites no valid plan.
+  - The subjects are `code-reviewer`, `code-reviewer-escalated` and `qa` with a shard line, and an implementation `gate-adjudicator` brief that carries a `story:` line, sharded or not.
+  - It reads the plan's `story:`, `gate:`, `sha:`, `manifest:` and `nonce:` lines, and binds `sha:` to the partition `.manifest`.
+  - It never compares the plan with HEAD.
+  - It decides from the brief, not from the plan, whether a manifest is owed. A partitioned brief whose plan says `manifest: none` is denied.
+  - Every deny names its remedy command.
+- Role to gate:
+  - The reviewer and the escalated reviewer take a gate-1 plan.
+  - QA takes a gate-2 plan.
+  - The gate-3 adjudicator takes a gate-3 plan.
+  - The 1/1 closing-writer code-reviewer takes a gate-3 or close plan, bound to the nonce ledger `.gate-checkpoint/<nonce>.tsv`. A close plan also needs that ledger's `26 PASS` row.
+  - A `rerun` plan, written when gate 2 answers GATE1-RERUN, authorizes no seat.
+- Gate-3 condition (e) binds the OPEN marker's nonce only: the adjudicator is denied unless the live OPEN marker carries the plan's nonce.
+- The deny is era-gated.
+  - It is live only when the consumer's `implementation.md` carries the whole line `<!-- ai-dlc: gate-transition-plan-required v1 -->`.
+  - It fires only when the snapshot's single `current_step_file` is `implementation.md` or `gate-validation.md`.
+  - Before the era the guard is silent and byte-identical to the base guard.
+  - An EMPTY or unresolvable position allows the dispatch and adds one context line.
+  - The guard is now the fourth reader of that field under I113.
+- A storyless implementation `gate-adjudicator` brief, one with no `story:` line, is not a plan subject. A multi-story or storyless gate 3 keeps the lead-run procedure: the lead runs the script arms, mints and opens.
+- `implementation.md` replaces each per-gate list of validator calls with the one call. The reviewer, QA, adjudicator and closing-writer briefs, in `implementation.md`, `gate-validation.md` and `_gate-procedures.md`, carry `gate-plan: <path>`.
+- `core/fixtures/gate-transition` ships.
+  - Its JOIN arm runs the real program, then the real guard. The guard allows the brief citing the plan the program wrote, and denies the same brief citing that plan's twin with only `sha:` changed.
+  - Arm CLOSEM runs `close` for a story with no gate-3 plan and no slugged verdict. It takes the newest storyless sprint verdict and checks the nonce, `gate: close`, and the `gate3-scope:` line.
+  - Arm CLOSEMX is the same, with that newest verdict's ledger lacking `26 PASS`. It carries an older storyless sprint verdict whose ledger has `26 PASS`, and newer decoys in sprint 12 and in a slugged series that also have it. It expects exit 1, the script's own refusal naming the newest verdict's nonce, and no plan.
+  - Arm CLOSEP (precedence) has a story whose slugged verdict is older than the storyless one. It checks that `close` takes the slugged nonce and writes no `gate3-scope:` line.
+  - Mutant m-nosprint drops the sprint-scoped fallback and is killed by CLOSEM. Mutant m-slugok lets the fallback's series-id match admit a slugged id, so story 2-1 closes on story 4-1's gate, and is killed by CLOSEMX.
+  - Mutant m-skipolder skips a storyless verdict whose ledger lacks `26 PASS` and takes an older passing one. CLOSEMX kills it.
+  - A counted run reads `invocation budget ok: 266` in the distribution, and in an installed tree whose own fixture is judged by the distribution's counter.
+- `dispatch-model-guard` gains arms for the role-to-gate map, the era gate, the step scope and the EMPTY position.
+- Fork budget: `scripts/fork-profile.sh --section total` reads 2899 at origin/main 5bcb5aaf1 and 2910 at this release's tip, and `FORK_BUDGET` is 2912. The rise is the new script's root block at I75 (+10) plus the guard's gate-plan arm (+1).
+- Backlog headings, counting `^## BL-` in `docs/backlog.md` and `docs/backlog.archive.md`: 47 live and 840 archived at both 5bcb5aaf1 and the tip.
+- Undeclared fixture tools declared (lead, batch close): `id` and `perl` in `core/fixtures/remediator-shard-join/tools.decl`, `env` in `core/fixtures/process-rule-pins/tools.decl`.
+- For consumers:
+  - Until the reconcile PR merges, the deny is inactive and silent.
+  - After it merges, every implementation reviewer and QA dispatch with a shard line, and every gate-3 adjudicator brief carrying a `story:` line, needs a plan.
+  - A story in flight at the pull re-runs `gate-transition.sh` for its gate. A story already past gate 3 runs `gate-transition.sh <story> close`.
+- Known gap, ruled "name it, build nothing": a one-story implementation gate-3 adjudicator brief that omits its `story:` line is not judged against a plan at dispatch, because the guard treats a storyless adjudicator as no subject. `validate-gate-adjudication` does not catch it either: the series-form check in `core/scripts/gate_adjudication.py` treats the slug as optional (the pattern at line 1297, the slug test at line 1306) and counts no stories. The gate-3 script arms for such a gate then rest on the lead.
+- No receipt file ships, by operator ruling ("no test written just to close a backlog entry"). The entry keeps `verify: manual`.
+
 ## [0.1005.0] - 2026-11-05
 
 Batch b250, cluster `batching`. Files and closes BL-916. No PC- id is closed. NET 0 (filed 1 minus closed 1).

@@ -98,6 +98,29 @@
 # MUTANT-MATRIX predfail decides=gap twins=full,group,zpad
 # MUTANT-MATRIX notrunc decides=sfxp,sfxs twins=sfxgap,plain
 # MUTANT-MATRIX nocover decides=r15r twins=- why=its drive has one cell (is 15r denied though the predicate ran), and deleting the ledger-coverage path flips it
+# MUTANT-MATRIX nogpline decides=nogp,esc,cwword,adjsh,gv,adjnp twins=match
+# MUTANT-MATRIX noabsent decides=absent twins=match
+# MUTANT-MATRIX nostory decides=story twins=match
+# MUTANT-MATRIX nopartkey decides=partx,packedx twins=part
+# MUTANT-MATRIX nosha decides=sha twins=part
+# MUTANT-MATRIX trustnone decides=mnone,qamnone twins=match
+# MUTANT-MATRIX noopen decides=adjno twins=adj
+# MUTANT-MATRIX noledger decides=cwnoled twins=cw
+# MUTANT-MATRIX no26 decides=close26 twins=close
+# MUTANT-MATRIX wording decides=cwword twins=nogp
+# MUTANT-MATRIX noescalated decides=esc twins=nogp
+# MUTANT-MATRIX noshardadj decides=adjsh twins=adj
+# MUTANT-MATRIX erasubstr decides=near twins=legacy
+# MUTANT-MATRIX legacynote decides=legacy,near twins=match
+# MUTANT-MATRIX noscope decides=deploy twins=nogp
+# MUTANT-MATRIX emptydeny decides=empty twins=deploy
+# MUTANT-MATRIX emptysilent decides=empty twins=deploy
+# MUTANT-MATRIX wrongseat decides=rerunqa,qag1,rvg2,rerunrv twins=match,qag2
+# MUTANT-MATRIX nocrosscount decides=crossx twins=cross
+# MUTANT-MATRIX noneexempt decides=nonex twins=match
+# MUTANT-MATRIX anyshard decides=noshard twins=nogp
+# MUTANT-MATRIX wholegroups decides=packed twins=part
+# MUTANT-MATRIX nostoryless decides=adjsl,adjslsh twins=adjnp
 # MUTANT-MATRIX-DYNAMIC queue_run why=the cap and adjudicator mutants are registered by name and judged in one loop per family; every name it produces carries its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-DYNAMIC fam_mut why=the vector-family helpers pass the mutant name as a variable; every name they produce carries its own MUTANT-MATRIX row above
 set -uo pipefail
@@ -2752,6 +2775,201 @@ queue_run() { # queue_run <CAP|ADJ> <queue file> <base guard> <script prefix>
 }
 queue_run CAP "$WORK/capq" "$HOOK" cap
 queue_run ADJ "$WORK/adjq" "$ADJCTL" adj
+
+# --- THE GATE-PLAN DENY: AN IMPLEMENTATION GATE DISPATCH RUNS ONLY ON A PLAN -------------------
+# One cell per contract bullet, scored as `<decision>:<note>:<reason>`. decision is read literally
+# (`none` when the hook printed no permissionDecision). note is L for a pre-era note (the guard must never emit one), E for the
+# EMPTY-position line, - for neither. reason is the deny condition the reason text names (a, b, c,
+# c5, d, f1, e, f2, f26, g) or - for no deny, so two conditions that would both refuse one cell
+# stay distinguishable. code-reviewer, its escalated twin and qa have no role file here, so an
+# allowed dispatch of theirs prints nothing; gate-adjudicator is pinned, so its allow carries the
+# model binding. Worlds are built once. The armed world GW carries the whole-line sentinel and a
+# single `implementation.md` position; the plans are the program's line spellings.
+GP_NS='implementation-20261104T010101Z'; GP_NX='implementation-20261104T020202Z'; GP_NF='implementation-20261104T030303Z'
+GP_S1=1111111111111111111111111111111111111111; GP_S2=2222222222222222222222222222222222222222
+GP_SENT='<!-- ai-dlc: gate-transition-plan-required v1 -->'
+GP_PD='_bmad-output/implementation-artifacts/s320/gate-transition'
+GP_MAN='_bmad-output/implementation-artifacts/s320/7-3-review-shards/.manifest'
+gp_world() { # gp_world <name> <step-file body> <position block> -> prints the project dir
+  local p="$WORK/gp-$1"
+  mkdir -p "$p/.claude/skills/ai-dlc/steps" "$p/_bmad-output/.gate-checkpoint" "$p/$GP_PD" "$(dirname "$p/$GP_MAN")"
+  cp -R "$CONSUMER/.claude/team-roles" "$p/.claude/"
+  cp "$CONSUMER/.claude/.ai-dlc-version" "$CONSUMER/.claude/settings.json" "$p/.claude/"
+  printf '%s\n' "$2" > "$p/.claude/skills/ai-dlc/steps/implementation.md"
+  printf '# Pipeline Snapshot\n\n## Pipeline Position\n%s\n- sprint_id: 320\n\n## Recent Activity\n- none\n' "$3" > "$p/_bmad-output/pipeline-snapshot.md"
+  gp_plan() { # gp_plan <file> <story> <gate> <sha> <manifest> [nonce] [map lines...]
+    local f="$p/$GP_PD/$1" st="$2" g="$3" sh="$4" mn="$5" nc="${6-}"
+    shift 6 2>/dev/null || shift $#
+    { printf 'story: %s\ngate: %s\npass: 1\nsha: %s\nworktree: /w/%s\nmanifest: %s\nroute: full\n' "$st" "$g" "$sh" "$st" "$mn"
+      [ -n "$nc" ] && printf 'nonce: %s\n' "$nc"
+      for l in "$@"; do printf '%s\n' "$l"; done
+      printf 'brief: story file _bmad-output/implementation-artifacts/%s.md\n' "$st"; } > "$f"
+  }
+  gp_plan 7-2-g1-p1.plan 7-2 1 "$GP_S1" none ''
+  gp_plan 7-3-g1-p1.plan 7-3 1 "$GP_S1" "$GP_MAN" '' $'1\tcore\tsrc/a.sh' $'2\tdocs\tdocs/b.md'
+  gp_plan 7-8-g1-p1.plan 7-8 1 "$GP_S1" "$GP_MAN" '' $'1\tcore,lib\tsrc/a.sh\tlib/c.sh' $'2\tdocs\tdocs/b.md'
+  gp_plan 7-4-g1-p1.plan 7-4 1 "$GP_S2" "$GP_MAN" '' $'1\tcore\tsrc/a.sh' $'2\tdocs\tdocs/b.md'
+  gp_plan 7-5-g1-p1.plan 7-5 1 "$GP_S1" none '' $'1\tcore\tsrc/a.sh' $'2\tdocs\tdocs/b.md'
+  gp_plan 7-2-g3-p1.plan 7-2 3 "$GP_S1" none "$GP_NS"
+  gp_plan 7-6-g3-p1.plan 7-6 3 "$GP_S1" none "$GP_NX"
+  gp_plan 7-2-gclose-p1.plan 7-2 close "$GP_S1" none "$GP_NS"
+  gp_plan 7-7-gclose-p1.plan 7-7 close "$GP_S1" none "$GP_NF"
+  gp_plan 7-2-g2-p1.plan 7-2 rerun "$GP_S1" none ''
+  gp_plan 7-2-g2-p3.plan 7-2 2 "$GP_S1" none ''
+  gp_plan 7-5-g2-p1.plan 7-5 2 "$GP_S1" none '' $'1\tcore\tsrc/a.sh' $'2\tdocs\tdocs/b.md'
+  printf 'worktree\t/w/7-3\nbase\t%s\nsha\t%s\nmin-files\t2\nmax-parts\t8\npart\t1\tcore\tsrc/a.sh\npart\t2\tdocs\tdocs/b.md\n' "$GP_S2" "$GP_S1" > "$p/$GP_MAN"
+  printf '%s\n' "$GP_NS" > "$p/_bmad-output/.gate-checkpoint/OPEN"
+  printf '1\tPASS\t2026-11-04T01:02:00Z\t\n26\tPASS\t2026-11-04T01:09:00Z\t\n' > "$p/_bmad-output/.gate-checkpoint/$GP_NS.tsv"
+  printf '26\tFAIL\t2026-11-04T03:09:00Z\t\n' > "$p/_bmad-output/.gate-checkpoint/$GP_NF.tsv"
+  printf '%s\n' "$p"
+}
+GP_POS='- current_step_file: steps/implementation.md'
+GW="$(gp_world armed "$(printf '# Implementation\n%s\nbody' "$GP_SENT")" "$GP_POS")"
+GL="$(gp_world legacy '# Implementation (no sentinel)' "$GP_POS")"
+# TWO near-misses: prose naming the gate-planning token, and a line QUOTING the whole sentinel
+# inside longer text. Only a whole-line match arms the deny; a substring match arms it on the second.
+GN="$(gp_world near "$(printf '# Implementation\nThe gate-planning pass names gate-transition-plan-required.\nThe era line is `%s` once the reconcile lands.' "$GP_SENT")" "$GP_POS")"
+GD="$(gp_world deploy "$(printf '# Implementation\n%s' "$GP_SENT")" '- current_step_file: steps/deploy-validate.md')"
+GV="$(gp_world gatev "$(printf '# Implementation\n%s' "$GP_SENT")" '- **Current step file:** `steps/gate-validation.md`')"
+GE="$(gp_world empty "$(printf '# Implementation\n%s' "$GP_SENT")" "$(printf '%s\n%s' "$GP_POS" '- current_step_file: steps/deploy-validate.md')")"
+gp_pay() { # gp_pay <role> <brief lines...> -> an Agent dispatch of <role> carrying the lines
+  local p l; p="Your operating contract is \`.claude/team-roles/$1.md\`. Read it first."; shift
+  for l in "$@"; do p="$p"$'\n'"$l"; done
+  jq -nc --arg p "$p"$'\n'"Do the work." '{tool_name:"Agent",tool_input:{name:"gate-plan",prompt:$p}}'
+}
+gp_run() { # gp_run <guard> <world> <role> <brief lines...> -> "<decision>:<note>:<reason>"
+  local g="$1" w="$2" o d n r rs; shift 2
+  o="$(gp_pay "$@" | CLAUDE_PROJECT_DIR="$w" bash "$g" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
+  case "$o" in *"LEGACY: gate-plan deny inactive"*) n=L ;; *"gate-plan deny inactive: Pipeline Position unresolved (EMPTY)"*) n=E ;; *) n=- ;; esac
+  r=-
+  if [ "$d" = deny ]; then
+    rs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$o" 2>/dev/null)"
+    case "$rs" in
+      *"cross dispatch"*) r=cx ;; *"under a serial exception"*) r=nx ;; *"more than one \`gate-plan:\` line"*) r=m ;;
+      *"carries no \`gate-plan:\` line"*) r=a ;; *"names no readable plan"*) r=b ;; *"is for story"*) r=c ;;
+      *"no line of its plan"*) r=c5 ;; *"says \`manifest: none\`"*) r=f1 ;; *"partition manifest"*) r=d ;;
+      *"no live gate-checkpoint OPEN"*) r=e ;; *"no ledger"*) r=f2 ;; *"no \`26 PASS\` row"*) r=f26 ;;
+      *"plan, which only"*|*"runs only on a gate-3 plan"*|*"not a gate this role"*) r=g ;; *) r=o ;;
+    esac
+    case "$rs" in *"scripts/ai-dlc/gate-transition.sh <story> <1|2|3|close>"*) ;; *) r="$r!noremedy" ;; esac
+  fi
+  printf '%s:%s:%s' "$d" "$n" "$r"
+}
+gp_cell() { # gp_cell <guard> <cell>
+  local P="$GP_PD"
+  case "$2" in
+    nogp)    gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-2' ;;
+    absent)  gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-2' "gate-plan: $P/7-2-g2-p2.plan" ;;
+    story)   gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-9' "gate-plan: $P/7-2-g1-p1.plan" ;;
+    match)   gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-2' "gate-plan: \`$P/7-2-g1-p1.plan\`" ;;
+    part)    gp_run "$1" "$GW" code-reviewer 'shard: 2/2 docs' "gate-plan: $P/7-3-g1-p1.plan" ;;
+    partx)   gp_run "$1" "$GW" code-reviewer 'shard: 2/2 core' "gate-plan: $P/7-3-g1-p1.plan" ;;
+    sha)     gp_run "$1" "$GW" code-reviewer 'shard: 1/2 core' "gate-plan: $P/7-4-g1-p1.plan" ;;
+    mnone)   gp_run "$1" "$GW" code-reviewer 'shard: 1/2 core' "gate-plan: $P/7-5-g1-p1.plan" ;;
+    qamnone) gp_run "$1" "$GW" qa 'shard: 1/2 core' "gate-plan: $P/7-5-g2-p1.plan" ;;
+    esc)     gp_run "$1" "$GW" code-reviewer-escalated 'shard: 1/1 7-2' ;;
+    escok)   gp_run "$1" "$GW" code-reviewer-escalated 'shard: 1/1 7-2' "gate-plan: $P/7-2-g1-p1.plan" ;;
+    cw)      gp_run "$1" "$GW" code-reviewer 'You are the closing writer for story 7-2.' 'shard: 1/1 7-2' "gate-plan: $P/7-2-g3-p1.plan" ;;
+    cwword)  gp_run "$1" "$GW" code-reviewer 'You are the closing writer for story 7-2.' 'shard: 1/1 7-2' ;;
+    cwnoled) gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-6' "gate-plan: $P/7-6-g3-p1.plan" ;;
+    close)   gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-2' "gate-plan: $P/7-2-gclose-p1.plan" ;;
+    close26) gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-7' "gate-plan: $P/7-7-gclose-p1.plan" ;;
+    rerunqa) gp_run "$1" "$GW" qa 'shard: 1/1 7-2' "gate-plan: $P/7-2-g2-p1.plan" ;;
+    rerunrv) gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-2' "gate-plan: $P/7-2-g2-p1.plan" ;;
+    qag1)    gp_run "$1" "$GW" qa 'shard: 1/1 7-2' "gate-plan: $P/7-2-g1-p1.plan" ;;
+    rvg2)    gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-2' "gate-plan: $P/7-2-g2-p3.plan" ;;
+    qag2)    gp_run "$1" "$GW" qa 'shard: 1/1 7-2' "gate-plan: $P/7-2-g2-p3.plan" ;;
+    packed)  gp_run "$1" "$GW" code-reviewer 'shard: 1/2 lib' "gate-plan: $P/7-8-g1-p1.plan" ;;
+    packedx) gp_run "$1" "$GW" code-reviewer 'shard: 1/2 docs' "gate-plan: $P/7-8-g1-p1.plan" ;;
+    cross)   gp_run "$1" "$GW" code-reviewer 'shard: cross/2 g1/1 1,2' "gate-plan: $P/7-3-g1-p1.plan" ;;
+    crossx)  gp_run "$1" "$GW" code-reviewer 'shard: cross/3 g1/1 1,2,3' "gate-plan: $P/7-3-g1-p1.plan" ;;
+    nonex)   gp_run "$1" "$GW" qa 'shard: none (4)' "gate-plan: $P/7-2-g1-p1.plan" ;;
+    noshard) gp_run "$1" "$GW" code-reviewer 'Read the story.' ;;
+    multi)   gp_run "$1" "$GW" code-reviewer 'shard: 1/1 7-2' "gate-plan: $P/7-2-g1-p1.plan" "gate-plan: $P/7-2-g1-p1.plan" ;;
+    g3sh)    gp_run "$1" "$GW" code-reviewer 'shard: 1/2 core' "gate-plan: $P/7-2-g3-p1.plan" ;;
+    adj)     gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" 'story: 7-2' "gate-plan: $P/7-2-g3-p1.plan" ;;
+    adjno)   gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NX" 'story: 7-6' "gate-plan: $P/7-6-g3-p1.plan" ;;
+    adjsh)   gp_run "$1" "$GW" gate-adjudicator 'shard: 1/3 implementation' 'story: 7-2' ;;
+    adjnp)   gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" 'story: 7-2' ;;
+    adjsl)   gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" ;;
+    adjslsh) gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" 'shard: 1/2 implementation' ;;
+    legacy)  gp_run "$1" "$GL" code-reviewer 'shard: 1/1 7-2' ;;
+    near)    gp_run "$1" "$GN" code-reviewer 'shard: 1/1 7-2' ;;
+    deploy)  gp_run "$1" "$GD" code-reviewer 'shard: 1/1 7-2' ;;
+    gv)      gp_run "$1" "$GV" qa 'shard: 1/1 7-2' ;;
+    empty)   gp_run "$1" "$GE" code-reviewer 'shard: 1/1 7-2' ;;
+  esac
+}
+ALL_GP=nogp,absent,story,match,part,partx,sha,mnone,esc,escok,cw,cwword,cwnoled,close,close26,g3sh,adj,adjno,adjsh,legacy,near,deploy,gv,empty,rerunqa,rerunrv,qag1,rvg2,qag2,qamnone,packed,packedx,cross,crossx,nonex,noshard,multi,adjnp,adjsl,adjslsh
+GP_WANT='nogp=deny:-:a;absent=deny:-:b;story=deny:-:c;match=none:-:-;part=none:-:-;partx=deny:-:c5;sha=deny:-:d;mnone=deny:-:f1;esc=deny:-:a;escok=none:-:-;cw=none:-:-;cwword=deny:-:a;cwnoled=deny:-:f2;close=none:-:-;close26=deny:-:f26;g3sh=deny:-:g;adj=allow:-:-;adjno=deny:-:e;adjsh=deny:-:a;legacy=none:-:-;near=none:-:-;deploy=none:-:-;gv=deny:-:a;empty=none:E:-;rerunqa=deny:-:g;rerunrv=deny:-:g;qag1=deny:-:g;rvg2=deny:-:g;qag2=none:-:-;qamnone=deny:-:f1;packed=none:-:-;packedx=deny:-:c5;cross=none:-:-;crossx=deny:-:cx;nonex=deny:-:nx;noshard=none:-:-;multi=deny:-:m;adjnp=deny:-:a;adjsl=allow:-:-;adjslsh=allow:-:-'
+GP_TIP="$(for _c in ${ALL_GP//,/ }; do printf '%s=%s;' "$_c" "$(gp_cell "$HOOK" "$_c")"; done)"
+_old_ifs="$IFS"; IFS=';'
+for _c in $GP_WANT; do
+  case ";$GP_TIP" in
+    *";$_c;"*) ok "GATE-PLAN ${_c%%=*}: '${_c#*=}' (decision:note:reason)" ;;
+    *) bad "GATE-PLAN ${_c%%=*}: expected '${_c#*=}', got vector '$GP_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+SEP_GP=";"; CELLFN_GP=gp_cell; BASE_GP="$(want_lines ';' "$GP_WANT")"
+B_GP=$([ "$GP_TIP" = "$GP_WANT;" ] && echo 1 || echo 0)
+GP_CTL="$(mk_hooks_copy gp-control)"
+if [ -n "$GP_CTL" ]; then
+  fam_control GP "$GP_CTL" nogp "GATE-PLAN MUTANT CONTROL: an unmutated hooks copy scores the deny cell nogp (positive; every cell under --matrix)"
+else bad "GATE-PLAN MUTANT CONTROL is dead: no hooks copy"; fi
+gp_mut() { # gp_mut <tag> <exact-anchor-line> <replacement-line> <decides> <twins> <expected cell=value;...> <label>
+  fam_mut GP "$1" "$2" "$3" "$4" "$5" "$B_GP" "$6" "GATE-PLAN MUTANT $1 scores a kill: $7"
+}
+gp_mut nogpline "$(grep -m1 -F '  [ -n "$DG_GP" ] || dg_deny' "$HOOK")" '  :' nogp,esc,cwword,adjsh,gv,adjnp match 'nogp=deny:-:b;esc=deny:-:b;cwword=deny:-:b;adjsh=deny:-:b;gv=deny:-:b;adjnp=deny:-:b;match=none:-:-' \
+  "without condition (a) a brief with no gate-plan line is refused only as an absent plan -- the six no-plan cells move (a to b), the matching plan does not"
+gp_mut noabsent '  [ -n "$abs" ] && [ -f "$abs" ] && [ -r "$abs" ] \' '  true \' absent match 'absent=deny:-:g;match=none:-:-' \
+  "without condition (b) an absent plan reads as an empty one, refused only for its missing gate -- cell absent alone moves (b to g)"
+gp_mut nostory '      [ "$s_k" = "$p_story" ] \' '      true \' story match 'story=none:-:-;match=none:-:-' \
+  "without condition (c) a plan for another story is accepted -- cell story alone moves"
+gp_mut nopartkey '      [ "$hit" = 1 ] && [ "$nmap" = "$s_n" ] \' '      true \' partx,packedx part 'partx=none:-:-;packedx=none:-:-;part=none:-:-' \
+  "without the F5 part-key match a shard the plan's map does not hold is accepted -- cells partx and packedx move"
+gp_mut nosha '    [ -n "$p_sha" ] && [ "$p_sha" = "$m_sha" ] \' '    true \' sha part 'sha=none:-:-;part=none:-:-' \
+  "without the sha compare (d) a plan for another frozen tree is accepted -- cell sha alone moves"
+gp_mut trustnone '  if [ "$ROLE" != gate-adjudicator ] && { [ "$s_i" = cross ] || [ "${s_n:-1}" != 1 ]; } && [ "$p_man" = none ]; then' '  if false; then' \
+  mnone,qamnone match 'mnone=none:-:-;qamnone=none:-:-;match=none:-:-' \
+  "a guard that trusts the plan's manifest: none accepts a partitioned brief with no manifest bound -- cells mnone and qamnone move"
+gp_mut noopen '    [ -n "$p_nonce" ] && [ "$o" = "$p_nonce" ] \' '    true \' adjno adj 'adjno=allow:-:-;adj=allow:-:-' \
+  "without condition (e) an adjudicator outside the live OPEN gate is accepted -- cell adjno alone moves"
+gp_mut noledger '    [ -n "$p_nonce" ] && [ -f "$SPAWN_STATE_DIR/.gate-checkpoint/${p_nonce}.tsv" ] \' '    true \' cwnoled cw 'cwnoled=none:-:-;cw=none:-:-' \
+  "without the F2 ledger binding a closing writer whose g3 nonce recorded nothing is accepted -- cell cwnoled alone moves"
+gp_mut no26 '      [ "$ok26" = 1 ] \' '      true \' close26 close 'close26=none:-:-;close=none:-:-' \
+  "without the 26 PASS row a close plan for a failed gate 3 is accepted -- cell close26 alone moves"
+gp_mut wording '  # (a) no gate-plan line, or more than one.' '  case "$PROMPT" in *"closing writer"*) return 0 ;; esac' cwword nogp 'cwword=none:-:-;nogp=deny:-:a' \
+  "an exemption keyed on closing-writer wording lets a 1/1 brief through with no plan -- cell cwword alone moves"
+gp_mut noescalated '  code-reviewer|code-reviewer-escalated|qa)' '  code-reviewer|qa)' esc nogp 'esc=none:-:-;nogp=deny:-:a' \
+  "a deny that skips code-reviewer-escalated lets the escalated reviewer through with no plan -- cell esc alone moves"
+gp_mut noshardadj '    case "${SPAWN_SHARD:-}" in [0-9]*/*" implementation") DG_GP_SUBJECT=true ;; esac' '    :' adjsh adj 'adjsh=allow:-:-;adj=allow:-:-' \
+  "a deny that reads only the adjudicator nonce lets a sharded implementation adjudicator through with no plan -- cell adjsh alone moves"
+gp_mut erasubstr '  if grep -qxF -- "$DG_GP_SENTINEL" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/implementation.md" 2>/dev/null; then' \
+  '  if grep -qF -- "$DG_GP_SENTINEL" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/implementation.md" 2>/dev/null; then' near legacy 'near=deny:-:a;legacy=none:-:-' \
+  "an era gate matching a substring arms the deny on a step file that only quotes the sentinel -- cell near alone moves"
+gp_mut legacynote '  if grep -qxF -- "$DG_GP_SENTINEL" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/implementation.md" 2>/dev/null; then' \
+  '  if ! grep -qxF -- "$DG_GP_SENTINEL" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/implementation.md" 2>/dev/null; then DG_GP_NOTE="LEGACY: gate-plan deny inactive"; fi; if grep -qxF -- "$DG_GP_SENTINEL" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/implementation.md" 2>/dev/null; then' legacy,near match 'legacy=none:L:-;near=none:L:-;match=none:-:-' \
+  "a guard that says anything on a pre-era tree breaks the silence a consumer without the sentinel is owed -- cells legacy and near move"
+gp_mut noscope '    elif [ "$DG_GP_STEP" = implementation.md ] || [ "$DG_GP_STEP" = gate-validation.md ]; then' '    else' deploy nogp 'deploy=deny:-:a;nogp=deny:-:a' \
+  "a deny not scoped to the step refuses a deploy-validate re-review -- cell deploy alone moves"
+gp_mut emptydeny "$(grep -m1 -F '      DG_GP_NOTE="bl913 gate-plan deny inactive: Pipeline Position unresolved (EMPTY)' "$HOOK")" '      dg_gp_check' empty deploy 'empty=deny:-:a;deploy=none:-:-' \
+  "a guard that denies on an EMPTY position refuses a dispatch it cannot place -- cell empty alone moves"
+gp_mut emptysilent '    if [ -z "$DG_GP_STEP" ]; then' '    if false; then' empty deploy 'empty=none:-:-;deploy=none:-:-' \
+  "a guard that skips an EMPTY position silently drops the line naming it -- cell empty alone moves"
+gp_mut nocrosscount '      [ "$nmap" -ge 2 ] && [ "$nmap" = "$s_n" ] \' '      true \' crossx cross 'crossx=none:-:-;cross=none:-:-' \
+  "without the cross count a one-cross brief over more parts than the plan's map is accepted -- cell crossx alone moves"
+gp_mut noneexempt "$(grep -m1 -F '    none*) dg_deny "AI/DLC dispatch guard: refused a' "$HOOK")" '    none*) return 0 ;;' nonex match 'nonex=none:-:-;match=none:-:-' \
+  "a serial-exception shard line exempting a QA from the plan is the self-declared bypass -- cell nonex alone moves"
+gp_mut anyshard '    case "${SPAWN_SHARD:-}" in [0-9]*/*|cross/*|none*) DG_GP_SUBJECT=true ;; esac ;;' '    DG_GP_SUBJECT=true ;;' noshard nogp 'noshard=deny:-:a;nogp=deny:-:a' \
+  "a subject test without the shard condition refuses a reviewer that is no gate dispatch -- cell noshard alone moves"
+gp_mut wholegroups '          case ",$grp," in *",$s_k,"*) hit=1 ;; esac' '          :' packed part 'packed=deny:-:c5;part=none:-:-' \
+  "a part-key match on the whole groups column refuses a packed part briefed with one of its groups -- cell packed alone moves"
+gp_mut wrongseat "$(grep -m1 -F '    code-reviewer:1|code-reviewer-escalated:1|qa:2) ;;' "$HOOK")" '    *:1|*:2|*:rerun) ;;' rerunqa,qag1,rvg2,rerunrv match,qag2 'rerunqa=none:-:-;qag1=none:-:-;rvg2=none:-:-;rerunrv=none:-:-;match=none:-:-;qag2=none:-:-' \
+  "a guard that accepts any reviewer or QA seat on a gate 1, 2 or rerun plan dispatches QA over a g1 plan, a reviewer over a g2 plan and a reviewer or QA over a rerun plan -- cells rerunqa, qag1, rvg2 and rerunrv move"
+gp_mut nostoryless '    [ "$DG_STORY" = true ] || DG_GP_SUBJECT=false ;;' '    ;;' adjsl,adjslsh adjnp 'adjsl=deny:-:a;adjslsh=deny:-:a;adjnp=deny:-:a' \
+  "without the storyless exemption a multi-story or storyless implementation adjudicator, which gate-transition.sh can write no plan for, is refused for having none -- cells adjsl and adjslsh move, the story-bearing adjnp does not"
 
 # ===== the matrix machinery itself, and the plain-run arm ===================================
 mx_probe && ok "matrix machinery probe: a seeded deciding trip is judged a kill, a seeded survivor is not, and a twin that trips is refused" \

@@ -2136,20 +2136,21 @@ xc_step_counts() { # <file> -> "<invocations> <flagged>"
   b="$(grep -F -- 'partition-review-diff.sh --map <worktree>' "$1" | grep -cF -- '--exclude-captures')" || b=0
   printf '%s %s' "$a" "$b"
 }
-p_xc_step() { [ "$(xc_step_counts "$1")" = "4 4" ]; }
-awk '!done && index($0, "partition-review-diff.sh --map <worktree>") && sub(/ --exclude-captures/, "") { done = 1 } { print }' \
-  "$STEP_MD" > "$WORK/xc-step-drop.md"
+p_xc_step() { [ "$(xc_step_counts "$1")" = "0 0" ]; }
+# gate-transition.sh now runs every partition call, so the step file carries none: a literal
+# invocation reappearing there is a second, unflagged path beside the program.
+{ cat "$STEP_MD"; printf '%s\n' 'partition-review-diff.sh --map <worktree> <base> <sha>'; } > "$WORK/xc-step-drop.md"
 if cmp -s "$STEP_MD" "$WORK/xc-step-drop.md"; then
-  bad "XC-STEP-pre: FIXTURE STALE -- the drop-the-flag offender matched no invocation carrying ' --exclude-captures', so the probe would score the shipped text"
+  bad "XC-STEP-pre: FIXTURE STALE -- the literal-invocation offender did not change the copy"
 elif p_xc_step "$WORK/xc-step-drop.md"; then
-  bad "XC-STEP-pre: FIXTURE BROKEN -- the step pin passed a copy with --exclude-captures dropped from one invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
+  bad "XC-STEP-pre: FIXTURE BROKEN -- the step pin passed a copy carrying a literal unflagged partition invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
 else
-  ok "XC-STEP-pre: the step pin refuses a copy with --exclude-captures dropped from one invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
+  ok "XC-STEP-pre: the step pin refuses a copy carrying a literal unflagged partition invocation ($(xc_step_counts "$WORK/xc-step-drop.md"))"
 fi
 if p_xc_step "$STEP_MD"; then
-  ok "XC-STEP: implementation.md carries exactly 4 'partition-review-diff.sh --map <worktree>' invocations (gate 1, the re-review, the narrowed re-review, gate 2), each passing --exclude-captures on the same line"
+  ok "XC-STEP: implementation.md carries no literal 'partition-review-diff.sh --map <worktree>' invocation; gate-transition.sh owns them"
 else
-  bad "XC-STEP: implementation.md's partition invocations and flagged ones read [$(xc_step_counts "$STEP_MD")], want [4 4]"
+  bad "XC-STEP: implementation.md's partition invocations and flagged ones read [$(xc_step_counts "$STEP_MD")], want [0 0]"
 fi
 if [ -z "$_s12" ]; then
   ok "S12: qa.md's As a Shard and implementation.md's Gate-2 paragraph tell every part shard to write 'handovers: <n>', 0 when it handed nothing over"
