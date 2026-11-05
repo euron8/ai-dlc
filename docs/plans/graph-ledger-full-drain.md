@@ -947,10 +947,13 @@ candidate's surviving half is upstream's to file and build, never a question for
       commit subject carries no version number. Release text, including a docs-only release's, is
       a hand unit. `isolation: "remote"` runs on this box, so a macOS-only experiment is not a
       reason to spawn locally.
-   3. Each entry: its own commit (naming NO `PC-` id), its own fixture arm and mutant, and a
-      replaced `verify:` receipt scored under `set -uo pipefail` against the fix (0), two plausible
-      regressions (non-zero) and a second correct spelling (0). A PARTIAL entry keeps
-      `verify: manual` while any owed item is open.
+   3. Each entry gets its own commit, naming NO `PC-` id. A records-only close, one that changes
+      no shipped behaviour, adds NO test code: no fixture, no arm, no receipt, no stub. A fixture
+      arm and mutant are owed only for a behaviour change, and a receipt only where a `run.sh`,
+      `seed.sh` or `lib.sh` invokes it (BL-915's E1 fails the push on any receipt nothing
+      invokes). A test of a mechanism lives in a fixture keyed on that mechanism's files, never
+      in one that re-keys on `docs/backlog.md`. Every contract states BL-868, zero
+      load-dependent tests. A PARTIAL entry keeps `verify: manual` while any owed item is open.
    4. Tip adversary (`opus`, read-only) on the finished branch. Fold. Re-verify ONLY your own
       units. RELEASE TEXT IS PREPARED IN ADVANCE: before you tell <lead> you are ready to push,
       have a hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
