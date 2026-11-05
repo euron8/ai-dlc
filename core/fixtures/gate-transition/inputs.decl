@@ -4,8 +4,12 @@
 # carries artifact-path-grammar.md, which partition-review-diff.sh resolves under .claude/skills/ai-dlc/.
 !core/scripts/gate-transition.sh
 core/scripts/
-core/fixtures/story-evidence-scaffold/
-core/fixtures/lib/
+# story-evidence-scaffold and lib rows derived from the reads: run.sh:107 world.sh (which sources he-inproc.sh, world.sh:15) and run.sh:2,122,123 preamble.sh, mutant.sh, matrix.sh.
+core/fixtures/story-evidence-scaffold/world.sh
+core/fixtures/story-evidence-scaffold/he-inproc.sh
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh
 core/skills/ai-dlc/artifact-path-grammar.md
 # JOIN drives the real dispatch guard (!) with this tree's implementation.md copied into the guard's project.
 !core/hooks/ai-dlc-dispatch-guard.sh

@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1011.0] - 2026-11-05
+
+Batch b250, cluster triggers. BL-920 lands PARTIAL and stays LIVE. Files BL-922. No PC- id is closed. NET +1 (filed 1, BL-922, minus closed 0).
+
+### BL-920 (PARTIAL) — the third pass: 22 fixtures drop input rows wider than what they read
+
+Third pass. 22 fixtures stop keying on inputs their verdicts cannot see. Over the 60 first-parent commits ending at 0443bfbfe, total triggered runs fall from 2926 at the a5c1193f0 declarations to 2881, counted with the hook's own key function. The four remaining `+VERSION` fixtures drop the row: enforcement-map-sites (with -b and -c) seeds its decoy root's VERSION instead of copying the live one, and schema-install-fallback walks up for `scripts/install.sh`. Directory rows that no script lists or walks are narrowed to the named files read under them: core/hooks/, core/scripts/ and core/fixtures/lib/ in gate-resume; core/skills/ai-dlc/ in extension-check-adoption; core/hooks/ in upstream-routing; reconcile/ in dist-clone; story-evidence-scaffold/ in gate-transition; SKILL.md for existence in h2-attest-scripts-dir; and core/fixtures/lib/ across 16 more fixtures. Each edited fixture gives identical tallies under its base and new declarations, every shipping one keys clean in a fresh consumer install, and a static audit of every dropped file against the fixtures' source lines found none sourced (control: h2-attest-scripts-dir's preamble.sh, restored in this release). Kept as genuine: every directory row that is a validator's corpus, and gate-resume's core/skills/ai-dlc/, which gate-slice.sh walks.
+
+### BL-922 — filed: h2-attest-scripts-dir's consumer-layout arms run the distribution layout
+
+Filed, not fixed: h2-attest-scripts-dir's consumer-layout arms run the distribution layout, because the validator walks up to the sandbox root.
+
 ## [0.1009.0] - 2026-11-05
 
 Batch b250. Combined release: BL-914 (cluster bl914) and BL-920 (cluster triggers). Closes nothing. Files BL-917, BL-919 and BL-920. No PC- id is closed. NET +3 (filed 3, BL-917, BL-919 and BL-920, minus closed 0). BL-914 and BL-920 are PARTIAL and stay LIVE.

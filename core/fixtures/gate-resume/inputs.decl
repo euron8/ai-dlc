@@ -3,8 +3,11 @@
 !core/scripts/gate-slice.sh
 !core/scripts/gate-checkpoint.sh
 !core/schemas/gate-adjudication-verdict.json
-core/hooks/
+# The core/hooks/ and core/scripts/ rows are narrowed to the files the fixture reads (seed.sh:26,36,41; run.sh:489-499); the list is derived from those reads.
+# The recover hook's two same-directory libraries, copied into each scratch consumer.
+core/hooks/ai-dlc-handoff-pending.sh
+core/hooks/ai-dlc-context-provenance.sh
+# core/skills/ai-dlc/ stays whole: gate-slice.sh os.walk()s its overrides/ and extensions/ (gate-slice.sh:260-266, 318-319, 329-330).
 core/skills/ai-dlc/
-core/scripts/
-# Sourced by run.sh for mutant_killed.
-core/fixtures/lib/
+# Sourced by run.sh for mutant_killed (run.sh:62-64).
+core/fixtures/lib/mutant.sh

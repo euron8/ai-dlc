@@ -2,4 +2,4 @@ core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 core/scripts/validate-gate-manifest.sh
 !core/skills/ai-dlc/enforcement-map.yaml
 !core/skills/ai-dlc/steps/gate-validation.md
-core/skills/ai-dlc/
+# No core/skills/ai-dlc/ directory row: the list is derived from run.sh:333-348, the only reads of that tree, and both files are declared above.

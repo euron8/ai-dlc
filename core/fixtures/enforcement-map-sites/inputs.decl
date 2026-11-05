@@ -1,5 +1,5 @@
 # enforcement-map-sites and its shard drivers (b, c, which exec the parent's run.sh --group) share ONE declaration.
-# seed.sh copies core/, scripts/, .githooks/ and templates/ whole and mutates the copies; the decoy root also takes VERSION.
+# seed.sh copies core/, scripts/, .githooks/ and templates/ whole and mutates the copies; the decoy root also takes a seeded VERSION.
 # The validator under test, REQUIRED: the sentinel prints where run.sh passes its distribution-only guard.
 !scripts/validate-enforcement-map.sh
 scripts/
@@ -7,5 +7,3 @@ scripts/
 templates/
 # reason: core/ is copied whole -- cp -RX "$DIST/core", core/fixtures/enforcement-map-sites/seed.sh:38; the enforcement-map validator then walks the copy by content.
 core/
-# +VERSION: VERSION is a content-key-EXCLUDED top, and run.sh:3054 copies it into the decoy root, so it is keyed per fixture (I55 arm 3).
-+VERSION

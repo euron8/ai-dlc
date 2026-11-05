@@ -4,4 +4,6 @@
 !core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/
 core/skills/ai-dlc-update/fixture-manifest.md
-core/fixtures/lib/
+# lib rows derived from run.sh:2,125 (preamble.sh, mutant.sh).
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

@@ -3,13 +3,14 @@
 # core/scripts/ is NOT declared whole: nothing enumerates it. The subject reads core-paths.sh from its own directory by name
 # (run.sh:67), and the mutants copy exactly those two (run.sh:558-559), so both are declared one by one, against a fresh sandbox
 # read-set trace.
-# core/hooks/ is declared whole: the guard sources ai-dlc-context-provenance.sh as a same-directory sibling.
+# core/hooks/ is declared as the guard and the one file it sources as a same-directory sibling (ai-dlc-core-guard.sh:209,
+# ai-dlc-context-provenance.sh), derived from run.sh:118 and :389.
 # The four resolved inputs are REQUIRED and printed where the fixture resolves them.
 !core/scripts/audit-upstream-routing.sh
 !core/hooks/ai-dlc-core-guard.sh
 !core/skills/ai-dlc/core-manifest.md
 !core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/scripts/core-paths.sh
-core/hooks/
-# The shared mutant-kill helper the fixture sources (mutant_killed / need_base).
-core/fixtures/lib/
+core/hooks/ai-dlc-context-provenance.sh
+# The shared mutant-kill helper the fixture sources (mutant_killed / need_base), run.sh:146-149.
+core/fixtures/lib/mutant.sh
