@@ -1,6 +1,7 @@
 import json,glob,os,collections,sys
 S=sys.argv[1]
-STORIES={317:21,318:13,319:20,320:13}
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+from roll import STORIES   # roll.py owns STORIES; it runs nothing on import
 sp=[json.loads(l) for l in open(S+"/spawns.jsonl")]
 # first-call context per subagent
 ROOT=os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
@@ -29,7 +30,7 @@ for s in sp:
 print("subagents: spawns/story | $/spawn | calls/spawn | agent-min/spawn | first-call context tokens | $/story")
 for k in ('planning','impl','close','ALL'):
     print(k)
-    for n in (317,318,319,320):
+    for n in sorted(STORIES):
         a=A[(n,k)]
         if not a['n']: continue
         print(f"  s{n}: {a['n']/STORIES[n]:5.1f} | ${a['usd']/a['n']:.2f} | {a['calls']/a['n']:5.1f} | {a['min']/a['n']:5.1f} | {a['ctx']/max(1,a['nctx']):7.0f} | ${a['usd']/STORIES[n]:6.1f}")

@@ -19,6 +19,53 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1002.0] - 2026-11-04
+
+Batch b250, cluster close. Closes BL-870. No PC- id is closed. NET -1.
+
+### BL-870 closed: the keyed pre-suite skip is shown by a real push
+
+- The close rests on a real push. The 0.975.0 push to `b247-pc-s321-bmad-rel` printed `pre-suite keys: 4 of 23 step(s) skipped on a recorded pass`, then `pre-push: all gates green.`, with exit 0. The four skipped steps were path mapping, post-compact digest, re-attach budget and agent definitions. A "recorded pass" is per step, not a green gate, and the `b247-su-rel` push is excluded because its step names are truncated. The pre-suite is 23 steps, where the entry's title says 24.
+- Absent-path keying is proven for two of the four skipped steps. Their key records were written before the push and read by it. The re-attach-budget record carried 6 traced absent paths and the agent-definitions record carried `.claude/settings.json`, each absent from the pushed tree. The owner and an independent refuting verifier both re-checked this.
+- Two gaps are stated. The empty-sidecar control came from the current record set, not from that push's own, and the other two skipped steps' records were overwritten on 2026-11-03.
+- The two cited key records were deleted at about 2026-11-05T03:29Z by a pre-suite prefix run during this release's gate, which could not write them. Their `.key.absent` sidecars survive. The figures stand on the verification taken before the deletion.
+
+### BL-841: claim 2 is a measured null on s321
+
+- 0 of 24 graph s321 asks named a held lane, with item (4) installed, against 5 of 63 s320 asks that carry the word. Item (4)'s prose did not change behaviour on s321. Claim 1, lane-idle minutes, is UNMEASURABLE because s321 is planning only. The entry stays open.
+
+### BL-811: s321 cross-story spawns recorded, not yet comparable
+
+- 18 cross spawns over 688 subagent spawns, 0.72 per story over 25 stories, read from graph's working-tree spawn ledger. The baselines are whole-sprint figures, so the s321 figure is not comparable until s321 reaches implementation. The entry stays open.
+
+### BL-398: UNMEASURABLE on s321
+
+- Stories-test-strategy is incomplete on s321: its test-strategy adversarial pass 3 has not met its exit condition. The entry stays open.
+
+### BL-508: UNMEASURABLE on s321
+
+- Stories-test-strategy is incomplete on s321, and carry-over-evaluation did not run, so the four-step group is not like-for-like with its baseline. The entry stays open.
+
+### BL-847: the authoring half measured on s321
+
+- All 25 s321 stories carry a smoke-test section: 17 give a reason it does not apply, 2 name the smoke script and 6 defer to the developer. The second subject, the shared smoke surface, is unmeasured because no s321 story has reached gate 2. The entry stays open.
+
+### BL-810: UNMEASURABLE on s321
+
+- s321 ran no carry-over-evaluation round: 0 of 719 s321 planning files carry that name. The entry stays open.
+
+### BL-880: instance 2 is a dead premise
+
+- `vrun` has passed `--arms "$id"` since d4fd318cb, and the "139" was the family total of three fixtures (61, 34 and 43, which sum to 138). Instance 1 stays owed.
+
+### BL-584: the undeclarable count is 2
+
+- Two fixtures carry `.undeclarable` (`hook-registration-join` and `retro-compliance-workflow`), and the census is 261 / 259 / 2.
+
+### Efficiency scripts separate s321 from s320
+
+- `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` adds the s320/s321 edge at 2026-10-30T00:10:03Z, the s320 lead's handover, and `roll.py` adds `STORIES[321]=25`. `cap_rejections.py` and `operator_asks.py` read the edges from `extract.py`, and `decompose.py` imports `STORIES` from `roll.py`. Every output for sprints up to 320 is byte-identical before and after.
+
 ## [0.1001.0] - 2026-11-03
 
 Batch b249, cluster b249-c4b. Closes BL-906. No PC- id is closed. NET -1.
