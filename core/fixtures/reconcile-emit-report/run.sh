@@ -2053,37 +2053,22 @@ VMD="$WORK/v-mutants"; mkdir -p "$VMD"
 
 v_copy()    { local d="$VW/$1"; rm -rf "$d"; mkdir -p "$d" && cp -R "$CONSUMER" "$d/consumer"; }
 
-# R6 — A WORLD BUILT OR SCORED UNDER A TRANSIENT REFUSAL IS RE-BUILT, NOT READ AS A VERDICT.
+# R6 — A WORLD BUILT OR SCORED UNDER A REFUSAL THE HEALTHY WORLD DOES NOT CARRY IS NOT A VERDICT.
 #
-# THE FLAKE THIS CLOSES. Batch 160's pool put E3 on V-N at `3|BLOCKERS-RESOLVED|1|1|4|4`: the
-# orientation `diff` failed once at APPROVE time and the engine rendered `ONLY IN …: none`, so
-# the approval recorded a sample that never ran. The engine now NAMES that failure (a column-0
-# `DETECTOR-REFUSED  orientation …` line), which makes the render honest and does NOT stop the
-# kill arms going red: an approval carrying the refusal still scores `…|4|4` under E3, and one
-# forced refusal while --verify scores E1 on V-HC moves that cell to `1|UNDECIDED|0|0|1|0` and
-# reports `[V-R V-U V-HC]` — every kill set becomes a flake arm. Measured unforced too: this unit
-# run ALONE went red with CONTROL(V), E4 and E7 each moved by one spontaneous
-# `orientation diff exited 2` in a verify render, and an approve-time `ONLY IN …: none` appeared
-# on its own under ~5 concurrent copies; `diff <(…) file` under four concurrent workers fails
-# `/dev/fd/63: Bad file descriptor` on roughly 0.4% of calls, where a temp file fails none.
-#
-# SO BOTH SIDES RETRY, BOUNDED AT THREE, AND ONLY ON A REFUSAL THE HEALTHY WORLD DOES NOT CARRY.
-# A retry is legitimate here only because the engine now NAMES the failure; before it, this
-# would have retried straight into a silent `none`. Three refusals in a row are not transient.
-# When the last one names a detector that is a file beside the engine under test and the seed
-# world does not refuse it, the guard reports ENGINE REGRESSION naming the world and the
-# detector: a shipped detector refusing on this world and not on the seed is a defect in that
-# detector, and reporting it as FIXTURE BROKEN sent the reader to the wrong file (BL-338).
-# Anything else — `orientation`, which is no file, or a name the seed itself refuses — stays
-# FIXTURE BROKEN, and `emit-report-refusal` holds both of those shapes to that prefix. R6-VN
-# below drives the ENGINE REGRESSION branch.
+# Every render here is ONE render, never a bounded retry (BL-868: zero tests depend on load). The
+# retry this replaced re-rendered up to three times on a spontaneous `orientation diff exited 2`,
+# so how often load reached that race decided how many renders ran. The race was bash 3.2's
+# `/dev/fd/63: Bad file descriptor` on the engine's old `diff <(…) file`; the engine now stages
+# THEIRS in its own per-process `mktemp -d` and pipes it through `er_pdiff`, and
+# `emit-report-refusal`'s A7 forces that interleaving on the engine's own text (5 of 5 survive).
+# So a foreign refusal in a single render is a broken world or an engine defect, reported here,
+# never retried into agreement.
 #
 # THE BASELINE IS DERIVED, NEVER LISTED. The seed world carries one legitimate refusal on every
-# clean run (`retired-layer-token.sh`), so keying on `^DETECTOR-REFUSED` at large would retry
-# every approval three times and fail the unit. `V_REFUSE_OK` is the set of detector NAMES the
-# seed region refuses; a scoring program built by `v_stub` adds the one sibling it killed, read
-# from the `.stubbed` file `v_stub` writes beside it.
-V_TRIES=3
+# clean run (`retired-layer-token.sh`), so keying on `^DETECTOR-REFUSED` at large would fail every
+# approval. `V_REFUSE_OK` is the set of detector NAMES the seed region refuses; a scoring program
+# built by `v_stub` adds the one sibling it killed, read from the `.stubbed` file `v_stub` writes
+# beside it.
 V_REFUSE_OK="$(awk 'index($0, "DETECTOR-REFUSED  ") == 1 { split($0, f, " "); printf "%s ", f[2] }' "$REGION")"
 # v_foreign <file> <line-lead> [<extra-ok-name>] -> the first column-0 refusal (after the lead,
 # which is `< ` for the fresh-render side of a --verify diff) naming a detector outside the
@@ -2096,27 +2081,11 @@ v_foreign() {
     }' "$1"
 }
 v_approve() { # v_approve <world> <ref-to-render-at>
-  local d="$VW/$1" a=0 x="" n=""
+  local d="$VW/$1" x=""
   printf '%s\n' "$2" > "$d/ref"
-  # `until`, where v_score's loop is `while`: the two retries are mutated separately by
-  # `emit-report-refusal`, whose battery extracts these helpers from this file and drives them.
-  until [ "$a" -ge "$V_TRIES" ]; do
-    a=$((a+1))
-    bash "$EMIT" "$DIST" "$BASE" "$d/consumer" "$2" > "$d/region.md" 2>/dev/null
-    x="$(v_foreign "$d/region.md" "")"
-    [ -z "$x" ] && break
-  done
-  if [ -n "$x" ]; then
-    n="$(printf '%s\n' "$x" | awk '{ print $2; exit }')"
-    # The seed test reads `$REGION` itself, never `V_REFUSE_OK`: a baseline that failed to
-    # derive must not turn the seed's own refusal into an accusation against the engine.
-    if [ -f "$(dirname "$EMIT")/$n" ] \
-      && ! awk -v n="$n" 'index($0, "DETECTOR-REFUSED  " n " ") == 1 { f = 1 } END { exit !f }' "$REGION"; then
-      bad "ENGINE REGRESSION — $1 approval: $n refused on $V_TRIES attempts and the seed world does not refuse it: $x — a detector emit-report.sh ships refusing deterministically on this world is a defect in $n, not in this fixture"
-    else
-      bad "FIXTURE BROKEN — $1 approval rendered DETECTOR-REFUSED on $V_TRIES attempts: $x — it names no detector emit-report.sh ships, or one the seed world itself refuses, so the retry or the baseline is what failed"
-    fi
-  fi
+  bash "$EMIT" "$DIST" "$BASE" "$d/consumer" "$2" > "$d/region.md" 2>/dev/null
+  x="$(v_foreign "$d/region.md" "")"
+  [ -n "$x" ] && bad "FIXTURE BROKEN — $1 approval's one render carried a refusal the seed world does not: $x — a detector refusing on this world and not on the seed is an engine defect or a broken world, never a transient to retry"
   { echo "# Reconcile report (fixture)"; echo; cat "$d/region.md"; } > "$d/approved.md"
   [ -s "$d/region.md" ]
 }
@@ -2159,8 +2128,8 @@ v_stub() { # v_stub <emit-path> <dest-dir> <sibling-to-refuse> -> prints the emi
 # R6-BASE — THE DERIVED BASELINE IS PINNED TO THE ONE REFUSAL THE SEED IS KNOWN TO CARRY (BL-338).
 # `V_REFUSE_OK` is read off the engine's own seed render, so an engine regression that refuses on
 # EVERY world — the seed included — lands in the accepted set and R6 absorbs it: every approval
-# and every score then reads clean. The derivation stays (it is what keeps the retries off the
-# seed's legitimate refusal); this arm is the independent side of the join, a FIXED name.
+# and every score then reads clean. The derivation stays (it is what keeps the foreign-refusal
+# check off the seed's legitimate refusal); this arm is the independent side of the join, a FIXED name.
 # THE MUTANT is an engine copy whose `ledger-reverify.sh` refuses everywhere, rendered once over
 # the seed world and put through the SAME derivation line — extracted from this file, so a change
 # to how `V_REFUSE_OK` is derived is a change to what the mutant measures. Its positive control
@@ -2201,63 +2170,6 @@ else
   esac
 fi
 
-# --- R6-VN begin ---
-# R6-VN — A SHIPPED DETECTOR REFUSING ON ONE WORLD IS REPORTED AS AN ENGINE REGRESSION (BL-338).
-# R6-BASE owns the global case. This is the other half: an engine copy whose `ledger-reverify.sh`
-# refuses only when the consumer it is handed is a V-N world, so the seed render — and therefore
-# `V_REFUSE_OK` — stays exactly as healthy as the real one, and nothing but v_approve's own
-# message can say what went wrong. The shipped v_approve is driven, not restated, against two
-# worlds built from the seed consumer through that ONE engine:
-#   V-N  the refusing world   -> exactly one `ENGINE REGRESSION — V-N approval: ledger-reverify.sh`
-#                                line, no FIXTURE BROKEN, and the stub fired exactly V_TRIES times
-#   V-R  the near-miss        -> no line at all, and its Push-candidate ledger section is non-empty,
-#                                carries no refusal, and is byte-identical to the SHIPPED engine's
-#                                section for the same world, so the stub is keyed on the world and
-#                                not refusing everywhere (which is R6-BASE's case). Compared against a
-#                                live render, never a row count: the shared consumer's ledger is
-#                                rewritten earlier in this file, so a count seeded from the seed
-#                                ledger reads 0 here and 2 in isolation.
-# Both run as background jobs; `bad` cannot count there, so each job writes its lines to a file
-# read below. PRESENCE-SHAPED on the refusing side: a v_approve that reports nothing fails it.
-_r6v="$WORK/r6-vn"; rm -rf "$_r6v"; mkdir -p "$_r6v/vw/V-N" "$_r6v/vw/V-R"
-cp -R "$(dirname "$EMIT")" "$_r6v/eng"
-awk -v fired="$_r6v/stub.fired" 'NR == 1 { print; print "case \"${3:-}\" in */V-N/consumer) echo x >> \"" fired "\"; exit 2 ;; esac"; next } { print }' \
-  "$(dirname "$EMIT")/ledger-reverify.sh" > "$_r6v/eng/ledger-reverify.sh"
-cp -R "$CONSUMER" "$_r6v/vw/V-N/consumer"; cp -R "$CONSUMER" "$_r6v/vw/V-R/consumer"
-if cmp -s "$(dirname "$EMIT")/ledger-reverify.sh" "$_r6v/eng/ledger-reverify.sh"; then
-  bad "FIXTURE BROKEN [R6-VN]: the V-N-only ledger-reverify.sh stub did not apply"
-else
-  for _w in V-N V-R; do
-    ( EMIT="$_r6v/eng/emit-report.sh"; VW="$_r6v/vw"
-      bad() { printf '%s\n' "$1" >> "$_r6v/$_w.bad"; }
-      : > "$_r6v/$_w.bad"; v_approve "$_w" "$THEIRS"; : > "$_r6v/$_w.done" ) & # RENDER: conflicting-state -- the V-N-only refusing engine (3 attempts), and its V-R near-miss
-  done
-  wait
-  # [compare-side] the SHIPPED engine's render of the pristine V-R consumer at that path: the seed render with the
-  # path replaced (V-SUB proves that equals a real render), so the shipped engine is not rendered a second time here.
-  v_subst "$REGION" "$_r6v/vw/V-R/consumer" > "$_r6v/V-R.shipped.md"
-  _r6v_fired="$(grep -c . "$_r6v/stub.fired" 2>/dev/null)" || _r6v_fired=0
-  _r6v_lines="$(grep -c . "$_r6v/V-N.bad" 2>/dev/null)" || _r6v_lines=0
-  _r6v_rt="$(grep -c '^DETECTOR-REFUSED  retired-layer-token\.sh ' "$_r6v/vw/V-N/region.md" 2>/dev/null)" || _r6v_rt=0
-  if [ ! -f "$_r6v/V-N.done" ] || [ ! -f "$_r6v/V-R.done" ] || [ "$_r6v_rt" != 1 ]; then
-    bad "FIXTURE BROKEN [R6-VN]: an approval job did not finish, or the stubbed engine's V-N render lacks the seed's retired-layer-token refusal ($_r6v_rt) — the copy never ran"
-  elif [ "$_r6v_lines" = 1 ] && [ "$_r6v_fired" = "$V_TRIES" ] \
-    && grep -q '^ENGINE REGRESSION — V-N approval: ledger-reverify\.sh refused on 3 attempts and the seed world does not refuse it: DETECTOR-REFUSED  ledger-reverify\.sh exited 2 ' "$_r6v/V-N.bad"; then
-    ok "R6-VN a shipped detector (ledger-reverify.sh) refusing on the V-N approval only is reported as ENGINE REGRESSION naming the world and the detector, after $_r6v_fired attempts, and not as FIXTURE BROKEN"
-  else
-    bad "R6-VN the V-N-only ledger-reverify.sh refusal was reported as [$(head -1 "$_r6v/V-N.bad" | cut -c1-160)] ($_r6v_lines line(s), stub fired $_r6v_fired times), want one ENGINE REGRESSION line naming V-N and ledger-reverify.sh after $V_TRIES attempts — a deterministic engine refusal must not read as a fixture fault"
-  fi
-  _r6v_sec() { awk 'f && /^$/ { exit } f { print } index($0, "**Push-candidate ledger") == 1 { f = 1 }' "$1" 2>/dev/null; }
-  _r6v_got="$(_r6v_sec "$_r6v/vw/V-R/region.md")"; _r6v_want="$(_r6v_sec "$_r6v/V-R.shipped.md")"
-  if [ -f "$_r6v/V-R.done" ] && [ ! -s "$_r6v/V-R.bad" ] && [ -n "$_r6v_got" ] \
-    && [ "$_r6v_got" = "$_r6v_want" ] && ! grep -q 'DETECTOR-REFUSED' <<< "$_r6v_got"; then
-    ok "R6-VN near-miss: the same stubbed engine approves V-R clean, its Push-candidate ledger section byte-identical to the shipped engine's — the refusal is the V-N world's, not the engine's everywhere"
-  else
-    bad "R6-VN near-miss: V-R through the V-N-only stub reported [$(head -1 "$_r6v/V-R.bad" 2>/dev/null | cut -c1-160)], ledger section [$(printf '%s' "$_r6v_got" | head -1 | cut -c1-100)] vs shipped [$(printf '%s' "$_r6v_want" | head -1 | cut -c1-100)], want nothing and an identical non-refused section"
-  fi
-fi
-# --- R6-VN end ---
-
 # v_score <emit> <world> <tag> -> "<rc>|<cause>|<resolved-lines>|<n1>|<n2>|<unseen-lines>"
 #
 # PRESENCE-SHAPED IN EVERY FIELD. `rc` alone is what a subject replaced by `exit 1` also produces,
@@ -2271,28 +2183,24 @@ fi
 # so each is killed on the diagnosis fields, and E11 is what shows the pair is load-bearing.
 #
 # R6 ON THE SCORING SIDE. A refusal in the FRESH render (the `< ` side of the forwarded diff) that
-# the healthy world does not carry is re-scored, up to V_TRIES. Scoring runs in background jobs
-# where `bad` cannot count, so three refusals in a row leave `broken.<tag>` beside the score and
-# the foreground reports it (`v_broken_scan`).
+# the healthy world does not carry is not a verdict. Scoring is ONE --verify, never re-scored, and
+# runs in background jobs where `bad` cannot count, so such a refusal leaves `broken.<tag>` beside
+# the score and the foreground reports it (`v_broken_scan`).
 v_score() {
-  local e="$1" d="$VW/$2" f="$VW/$2/stderr.$3" rc cause nres nuns c1 c2 a=0 x="" sok="" rf="${4:-}"
+  local e="$1" d="$VW/$2" f="$VW/$2/stderr.$3" rc cause nres nuns c1 c2 x="" sok="" rf="${4:-}"
   [ -f "${e%/*}/.stubbed" ] && read -r sok < "${e%/*}/.stubbed"
-  while [ "$a" -lt "$V_TRIES" ]; do
-    a=$((a+1))
-    if [ -n "$rf" ]; then
-      # THE SEAM: compare against the world's ONE render (<rf>) instead of rendering again.
-      bash "$e" --verify --region-from "$rf" "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >"$d/seam.$3.out" 2>"$f"
-      rc=$?
-      if [ "$(sed -n 1p "$d/seam.$3.out")" = "$RER_SEAM_MARK" ]; then echo "MARK v-$2-$3" >> "$WORK/seam.log"
-      else echo "NOMARK v-$2-$3 rc=$rc" >> "$WORK/seam.log"; fi
-    else
-      # RENDER: mutant-deciding (or the one ctl-V end-to-end control) -- a render-side program renders and compares itself.
-      bash "$e" --verify "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >/dev/null 2>"$f"
-      rc=$?
-    fi
-    x="$(v_foreign "$f" "< " "$sok")"
-    [ -z "$x" ] && break
-  done
+  if [ -n "$rf" ]; then
+    # THE SEAM: compare against the world's ONE render (<rf>) instead of rendering again.
+    bash "$e" --verify --region-from "$rf" "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >"$d/seam.$3.out" 2>"$f"
+    rc=$?
+    if [ "$(sed -n 1p "$d/seam.$3.out")" = "$RER_SEAM_MARK" ]; then echo "MARK v-$2-$3" >> "$WORK/seam.log"
+    else echo "NOMARK v-$2-$3 rc=$rc" >> "$WORK/seam.log"; fi
+  else
+    # RENDER: mutant-deciding (or the one ctl-V end-to-end control) -- a render-side program renders and compares itself.
+    bash "$e" --verify "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >/dev/null 2>"$f"
+    rc=$?
+  fi
+  x="$(v_foreign "$f" "< " "$sok")"
   rm -f "$d/broken.$3"
   [ -n "$x" ] && printf '%s\n' "$x" > "$d/broken.$3"
   cause="$(awk '/^  cause: /{print $2; exit}' "$f")"
@@ -2529,16 +2437,12 @@ v_copy V-HB && v_approve_sub V-HB || bad "FIXTURE BROKEN — could not build wor
 # the fresh render is the approval render by construction.
 V_DEAD_DRIFT="$(v_stub "$EMIT" "$VMD/probe-dead-drift" unregistered-drift.sh)"
 V_DEAD_HB="$(v_stub "$EMIT" "$VMD/probe-dead-hb" hard-blockers.sh)"
-v_fresh() { # v_fresh <world> <emit> <out> — render with the R6 retry on a foreign refusal
-  local a=0 x="" sok=""
+v_fresh() { # v_fresh <world> <emit> <out> — ONE render; a foreign refusal in it is recorded, never retried
+  local x="" sok=""
   [ -f "${2%/*}/.stubbed" ] && read -r sok < "${2%/*}/.stubbed"
-  while [ "$a" -lt "$V_TRIES" ]; do
-    a=$((a+1))
-    # RENDER: producer-side -- world $1's own consumer at its final state (one per world, shared by every compare-side program).
-    v_render "$1" "$2" > "$3"
-    x="$(v_foreign "$3" "" "$sok")"
-    [ -z "$x" ] && break
-  done
+  # RENDER: producer-side -- world $1's own consumer at its final state (one per world, shared by every compare-side program).
+  v_render "$1" "$2" > "$3"
+  x="$(v_foreign "$3" "" "$sok")"
   [ -n "$x" ] && printf '%s\n' "$x" > "$VW/$1/fresh.broken"
   return 0
 }
@@ -2558,7 +2462,7 @@ for _vf_w in $V_WORLDS $V_CONTROL_WORLD; do
 done
 wait
 for _vf_w in $V_WORLDS $V_CONTROL_WORLD; do
-  [ -f "$VW/$_vf_w/fresh.broken" ] && bad "FIXTURE BROKEN — $_vf_w's one render carried DETECTOR-REFUSED on $V_TRIES attempts: $(cat "$VW/$_vf_w/fresh.broken")"
+  [ -f "$VW/$_vf_w/fresh.broken" ] && bad "FIXTURE BROKEN — $_vf_w's one render carried a refusal the seed world does not: $(cat "$VW/$_vf_w/fresh.broken")"
 done
 
 # --- SELF-PROBES, BEFORE ANY VERDICT IS READ ------------------------------------------------
@@ -2774,13 +2678,13 @@ for _m in $V_APPLIED; do
 done
 v_par ship ctl $V_APPLIED
 v_score "$V_DEAD_DRIFT" "$V_CONTROL_WORLD" ship "$VW/$V_CONTROL_WORLD/fresh.ship.md" > "$VW/$V_CONTROL_WORLD/score.ship"
-# The foreground half of R6's scoring guard: a cell whose fresh render refused on every attempt.
+# The foreground half of R6's scoring guard: a cell whose one fresh render carried a foreign refusal.
 v_broken_scan() {
   local n t b
   for n in $V_WORLDS $V_CONTROL_WORLD; do
     for t in ship ctl $V_APPLIED; do
       b="$VW/$n/broken.$t"
-      [ -f "$b" ] && bad "FIXTURE BROKEN — $n scoring under $t rendered DETECTOR-REFUSED on $V_TRIES attempts: $(cat "$b")"
+      [ -f "$b" ] && bad "FIXTURE BROKEN — $n scoring under $t rendered a refusal the seed world does not: $(cat "$b")"
     done
   done
   return 0

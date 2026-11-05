@@ -19404,7 +19404,7 @@ This block replaces the batch-245 record. Lead was ai-dlc-b5, in the no-owner sh
   - Rule 12 declares `**Carrier:** \`Check 2\``, because it now sits past I79's 20000-byte band.
   - The continue hook's block reason and `steps/route.md` agree with the sort.
   - Twelve `process-rule-pins` rows pin it.
-  - BL-876's receipt is the driver `core/fixtures/process-rule-pins/receipt-bl876.sh`.
+  - BL-876's receipt was a driver in `core/fixtures/process-rule-pins/`, since removed.
 - **Facts for the next batch.**
   - Rule 11(b)'s `**Absolute.**` paragraph ends at byte 20044 of `core/skills/ai-dlc/SKILL.md`. That is 77 bytes inside the measured 20121-byte re-attach cut, so any growth in Rules 1-11 pushes Rule 11(b) out of the re-attached head.
   - `validator-fork-budget` reads 3467 of `FORK_BUDGET=3472`.

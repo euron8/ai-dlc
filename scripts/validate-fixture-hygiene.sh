@@ -147,13 +147,70 @@
 #     fixture is not a row of the list at origin/main FAILs (keyed on field 1, so rewording a reason is not an added
 #     row). Two states have no base and SKIP with the reason printed: origin/main does not resolve, and origin/main
 #     carries no list (the release that first ships it).
+# E1  an INERT receipt: a tracked `core/fixtures/*/receipt*.sh` or `scripts/receipt*.sh` that nothing reads, so no gate
+#     ever runs it. THE PREDICATE is `inert()` between the `# INERT_BEGIN` / `# INERT_END` markers below, the ONE copy:
+#     core/fixtures/fixture-hygiene/receipt-bl868.sh extracts and sources it for its class W skip, in its `ledger`
+#     mode; E1 calls its `runners` mode. For E1 a READER is a RUNNER only: a non-comment line of a tracked
+#     core/fixtures/*/{run,seed,lib}.sh or .githooks/* naming `<fixture>/<file>`, or the bare basename from a file in
+#     the receipt's own directory; for a scripts/ receipt, also any tracked scripts/*.sh other than itself. That is
+#     BL-915's rule: a receipt file no `run.sh` invokes fails the push.
+#     WHY A `verify:` LINE IS NOT A READER HERE. An earlier E1 counted a live `verify:` line of docs/backlog.md, plus a
+#     `verify:` line added to docs/backlog.archive.md since the merge-base -- the latter only on the branch that
+#     rotates the entry. So the release that rotates an entry like BL-538 (docs/backlog.md:128, `verify: sh bash
+#     core/fixtures/process-rule-pins/receipt-bl538.sh`, named by no run.sh) passes, and every LATER unrelated
+#     branch's push fails E1 on a receipt it never touched -- and cannot allowlist it, because E1-M4 refuses a row
+#     absent from origin/main. Its push is wedged. With runners only, E1 reads nothing another branch's ledger edit can
+#     change: a receipt named only by its verify: line is inert from the day it lands. After the first release that
+#     ships scripts/inert-receipt-allowlist.txt, the down-only check refuses an added row, so a new receipt that only
+#     a verify: line names cannot ship until a runner invokes it; the one exception is the release that first ships
+#     the allowlist. receipt-bl868 keeps the ledger clause on purpose: a receipt reached through a
+#     live verify: line IS executed, by the backlog-receipts pre-push step, so its class W scan must still read it.
+#     KNOWN ACQUITTALS, asserted by the self-probe: a name inside a message string (zz9, `echo "receipt-x.sh …"`)
+#     counts as a reader, and so does a name in a TRAILING comment after code (zz13, `cmd # bash "$HERE/receipt-x.sh"`),
+#     because only lines whose first non-blank character is `#` are skipped. A line grammar cannot acquit
+#     `bash "$R736"` and convict `echo receipt.sh` without resolving variables, and the variable form (zz3,
+#     `R="$HERE/receipt-zz3.sh"; bash "$R"`) is a real invocation; stripping a trailing comment needs a quote-aware
+#     scan, since `#` inside a string or `${#x}` is not a comment.
+#     STATED LIMITS: a receipt called only from a helper that run.sh sources (a matrix.sh, world.sh or *-arms.sh) is
+#     not a reader file, so the arm reads it as INERT even though run.sh executes it. Measured: 0 such receipts today
+#     (control: 30 run.sh files carry the token). The remedy is to make the call from run.sh, seed.sh or lib.sh. The
+#     failure is fail-closed.
+#     A receipt reached only through a computed name (`bash "$HERE/receipt-bl$N.sh"`) reads as inert;
+#     a reader outside the listed files (a docs/ runbook, a plan) is not a reader, because no gate runs it.
+#     THE ALLOWLIST scripts/inert-receipt-allowlist.txt, rows `<path>\t<reason>`, DOWN-ONLY by the shared m4 (arm
+#     E1-M4): an unlisted inert receipt FAILs; a row whose file is gone or is now read is STALE and FAILs; a duplicate
+#     row and a row with no reason FAIL; a row not on the list at origin/main FAILs.
+#     FP SET, how it reached its value. The predicate was lifted unchanged from receipt-bl868.sh, where it decided
+#     which receipts that receipt skips; on bb9284bcc its old and its lifted copy give byte-identical output over
+#     receipt-bl868's own list (86 inert, 367 reader files). Widening the population to scripts/receipt*.sh added
+#     scripts/*.sh as readers for those receipts only, with self-reference excluded (a receipt naming itself, e.g. in a
+#     usage line, is not a reader). The corpus does not exercise that exclusion today (0 of the 4 names itself on a
+#     non-comment line; measured both ways, 4 inert either way); the self-probe's zz12 is its subject. On
+#     bb9284bcc E1 flags 90: the 72 the BL-915 census classed uninvoked (68 fixture receipts plus the 4 scripts/
+#     receipts, every one flagged, none missed) and 18 more, each read by hand -- 6 non-BL receipt.sh / receipt-*.sh
+#     run by no gate (apply-restamp-worklist x2, check-24, layer-adjudication-tier, serial-remediation-worklist,
+#     wait-stale-deliverable; the seventh non-BL receipt, subject-partition's, is invoked and stays quiet), 3
+#     archived-entry receipts (adversarial-shard-merge bl718 and bl719, check-24 bl829), and 9 live-entry receipts
+#     whose entries carry `verify: manual` or no verify line and name the receipt only in prose (bl868, bl716, bl804,
+#     bl809 x3, bl844, bl808, bl811). Six of the nine are also named in backlog-real-ledger's ledger.snapshot, in prose
+#     only (0 of the 18 on a snapshot `verify:` line, against 60 verify lines there), so that snapshot is no reader.
+#     None is invoked by any gate, so the extra 18 are TRUE positives, not false ones; measured false positives: 0.
+#     With the 72 deleted (the BL-915 tip), E1 flags exactly those 18, which are the allowlist's rows.
+#     NARROWED TO RUNNERS (the verify: clause and the archive clause removed). Re-measured on a797fd022 with this
+#     file and the previous one over the same detached tree: 91 against 90, the one new row
+#     process-rule-pins/receipt-bl538.sh, the only receipt any `verify:` line of docs/backlog.md names (50 verify lines,
+#     none indented; the archive clause added nothing at that base). It is run by no runner, so it is a true positive
+#     under BL-915's rule and carries an allowlist row; measured false positives: still 0.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
 # integrated tip, where this list is also re-derived.
 #
 # COST: a constant number of forks -- one git ls-files, one resolver call, one awk scan (two passes over the corpus),
-# one judge awk, sorts -- the same again for the probe tree, and the M4 probe repos.
+# one judge awk, sorts -- the same again for the probe tree, and the M4 probe repos. E1 adds one probe repository
+# (one commit), two e1_run passes (one over the probe, one over the tree), each a git ls-files, the inert() awk and
+# the judge awk, and one ledger-mode inert() over the probe: measured with PATH shims in clean worktrees inside the
+# repo, 213 execs on bb9284bcc and 322 with E1; with the archive clause removed, 306 against 325 on the same tree.
 set -uo pipefail
 
 MODE=check
@@ -172,6 +229,7 @@ fi
 RESOLVER="$HERE/validate-fixture-invocations.sh"
 [ -f "$RESOLVER" ] || { echo "validate-fixture-hygiene: FAIL -- the shard-stub resolver $RESOLVER is absent" >&2; exit 2; }
 ALLOW_REL="scripts/fixture-matrix-allowlist.txt"
+E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
 MKA_REL="scripts/mutant-kills-allowlist.txt"
 
 WORK="$(mktemp -d)" || { echo "validate-fixture-hygiene: mktemp failed" >&2; exit 2; }
@@ -645,6 +703,82 @@ m4() {
 }
 # M4_END
 
+# inert <root> <list> <out> <ledger|runners>: E1's predicate, THE ONE SHARED COPY. The INERT receipts, one
+# repo-relative path per line. core/fixtures/fixture-hygiene/receipt-bl868.sh extracts this function (awk, every line
+# strictly between the `# INERT_BEGIN` and `# INERT_END` marker lines, refusing with exit 9 unless exactly one
+# `inert() {` sits between them) and calls it in `ledger` mode; this file's E1 calls it in `runners` mode. Only a file
+# named `receipt*.sh` in <list> can be inert (a sourced helper never is). It is inert when nothing reads it: no
+# non-comment line of a tracked core/fixtures/*/run.sh, seed.sh, lib.sh or .githooks/* file names it -- nor, for a
+# scripts/ receipt, of a tracked scripts/*.sh other than itself -- and, in `ledger` mode only, no `verify:` line of
+# docs/backlog.md names it. The 4th argument is REQUIRED, and any other value returns 1. The two modes answer
+# different questions: E1 asks whether a RUNNER executes the receipt; receipt-bl868 asks whether ANY pre-push step
+# executes it, and the backlog-receipts step runs a live `verify:` line, so bl868 must still scan such a receipt.
+# "Names it" is `<dir>/<basename>` anywhere on the line (`scripts/<basename>` for a scripts/ receipt), or the bare
+# basename from a file in the receipt's OWN directory (`bash "$HERE/receipt.sh"`), so one fixture's call never makes
+# another fixture's same-named receipt live. A scripts/*.sh reader is consulted only for scripts/ receipts, and is
+# listed only when <list> carries one, so a caller listing no scripts/ receipt reads exactly the files it always read.
+# Returns 1 when the ledger (ledger mode) or a referencing file cannot be read (awk reads an unopenable file as empty,
+# so reads are counted).
+# INERT_BEGIN
+inert() {
+  local r="$1" n v="${4:-}"
+  case "$v" in ledger) [ -f "$r/docs/backlog.md" ] || return 1 ;; runners) ;; *) return 1 ;; esac
+  if grep -q '^scripts/receipt[^/]*\.sh$' "$2"; then
+    git -C "$r" ls-files -- 'core/fixtures/*/run.sh' 'core/fixtures/*/seed.sh' 'core/fixtures/*/lib.sh' '.githooks/*' 'scripts/*.sh' > "$3.refs" 2>/dev/null || return 1
+  else
+    git -C "$r" ls-files -- 'core/fixtures/*/run.sh' 'core/fixtures/*/seed.sh' 'core/fixtures/*/lib.sh' '.githooks/*' > "$3.refs" 2>/dev/null || return 1
+  fi
+  n="$(awk 'END { print NR }' "$3.refs")"
+  awk -v R="$r" -v RL="$3.refs" -v NREF="$n" -v LEDGER="$v" '
+    function named(l, s,   i, t) {  # s in l, with no name character before it (so `dir/receipt.sh` is not `r/receipt.sh`)
+      t = l
+      while ((i = index(t, s)) > 0) { if (i == 1 || substr(t, i - 1, 1) !~ /[A-Za-z0-9_.-]/) return 1; t = substr(t, i + 1) }
+      return 0 }
+    { b = $0; sub(/^.*\//, "", b); if (b !~ /^receipt[^\/]*\.sh$/) next
+      d = $0; sub(/\/[^\/]*$/, "", d); C[$0] = 1; BASE[$0] = b; DIR[$0] = d; t = d; sub(/^.*\//, "", t); SUF[$0] = t "/" b }
+    END {
+      if (LEDGER == "ledger") {
+        if ((getline l < (R "/docs/backlog.md")) < 0) exit 3
+        do { if (l ~ /^verify:/) for (c in C) if (named(l, SUF[c])) LIVE[c] = 1 } while ((getline l < (R "/docs/backlog.md")) > 0)
+      }
+      got = 0
+      while ((getline f < RL) > 0) {
+        fd = f; sub(/\/[^\/]*$/, "", fd); p = R "/" f
+        if ((getline l < p) < 0) exit 3
+        got++
+        do { if (!index(l, "receipt") || l ~ /^[[:space:]]*#/) continue
+             for (c in C) { if (c == f || (fd == "scripts" && DIR[c] != "scripts")) continue
+               if (named(l, SUF[c])) { LIVE[c] = 1; continue }
+               if (fd == DIR[c] && named(l, BASE[c])) LIVE[c] = 1 }
+        } while ((getline l < p) > 0)
+        close(p)
+      }
+      if (got != NREF) exit 3
+      for (c in C) if (!(c in LIVE)) print c
+    }' "$2" > "$3" || return 1
+  return 0
+}
+# INERT_END
+
+# e1_run <repo> <out-prefix>: E1 over <repo>. Writes <out>.verdict (`INERT|STALE|DUP|NOREASON\t<path>`, sorted) and
+# <out>.e1list (the population, counted: zero is BROKEN); prints the BROKEN reason and returns 2 when it could not
+# measure. It reads only the tree's runner files and the allowlist, nothing another branch's ledger edit can change.
+e1_run() {
+  local repo="$1" o="$2"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+    git -C "$repo" ls-files -- 'core/fixtures/*/receipt*.sh' 'scripts/receipt*.sh' ) > "$o.e1list" 2>/dev/null \
+    || { echo "BROKEN: git ls-files failed under $repo"; return 2; }
+  [ -s "$o.e1list" ] || { echo "BROKEN: E1 listed 0 tracked receipt*.sh under $repo; an empty population has no inert receipt by construction"; return 2; }
+  inert "$repo" "$o.e1list" "$o.inert" runners || { echo "BROKEN: a reader file could not be read under $repo"; return 2; }
+  [ -f "$repo/$E1_ALLOW_REL" ] && cp "$repo/$E1_ALLOW_REL" "$o.allow" || : > "$o.allow"
+  awk -F'\t' 'FILENAME == ARGV[1] { if ($0 != "") I[$0] = 1; next }
+    /^[[:space:]]*(#|$)/ { next }
+    { x = $1; gsub(/[[:space:]]/, "", x); r = (NF >= 2) ? $2 : ""; gsub(/[[:space:]]/, "", r)
+      if (x in L) print "DUP\t" x; L[x] = 1; if (r == "") print "NOREASON\t" x }
+    END { for (x in I) if (!(x in L)) print "INERT\t" x; for (x in L) if (!(x in I)) print "STALE\t" x }' "$o.inert" "$o.allow" \
+    | LC_ALL=C sort -u > "$o.verdict" || { echo "BROKEN: the E1 judge awk failed"; return 2; }
+}
+
 # --- self-probe, before the corpus ---------------------------------------------------------------------------------
 pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
   git -c user.name=probe -c user.email=probe@invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null \
@@ -969,6 +1103,85 @@ m4_case nofile "$RN" 0 "SKIP M4: origin/main carries no $ALLOW_REL -- this is th
 m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" "$(printf 'c\tr')" || m4ok=1
 [ "$m4ok" = 0 ] && sp_line M4 "ok (added and swapped rows refused; shrink and a reworded reason pass; both no-base states SKIP)"
 
+# E1's probe: one repository, one commit (E1 lists tracked files). Fires: zz1 (named by nothing), zz5 (named only by
+# a live `verify:` line of docs/backlog.md -- NOT a reader for E1), zz8's twin zza (named only in a comment),
+# zd/receipt.sh (its bare name called from ANOTHER fixture), scripts/receipt-zz10 (named by nothing) and
+# scripts/receipt-zz12 (named only by itself). Quiet: zz2 (`bash "$HERE/receipt-zz2.sh"`), zz3 (`R="$HERE/…"` then
+# `bash "$R"`), zz4 (called from another fixture's lib.sh), zz9 (inside an echo message) and zz13 (in a trailing
+# comment after code) -- THE TWO KNOWN ACQUITTALS, asserted -- and scripts/receipt-zz11 (called from
+# scripts/zz-other.sh). The allowlist: zz8 listed (quiet) and listed twice (DUP), zz2 listed while read and `gone`
+# listed while absent (STALE), zz12 listed with no reason (NOREASON). Then inert() runs once more in receipt-bl868's
+# `ledger` mode over the same list: its set must be E1's INERT set minus exactly zz5, so the verify:-only seed fires
+# in one mode and stays quiet in the other, and every other unread receipt still fires in both.
+E="$WORK/e1probe"; ef() { mkdir -p "$(dirname "$E/$1")" && cat > "$E/$1"; }
+mkdir -p "$E/scripts" "$E/docs" && : > "$E/VERSION"
+for x in za/receipt-zz1 za/receipt-zz2 za/receipt-zz3 za/receipt-zz13 zb/receipt-zz4 zb/receipt-zz5 \
+         zb/receipt-zz8 zb/receipt-zza zb/receipt-zz9 zd/receipt; do ef "core/fixtures/$x.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+done
+ef core/fixtures/za/run.sh <<'EOF'
+#!/usr/bin/env bash
+HERE="$(cd "$(dirname "$0")" && pwd)"
+bash "$HERE/receipt-zz2.sh" || exit 1
+R="$HERE/receipt-zz3.sh"
+bash "$R" || exit 1
+bash "$HERE/receipt.sh"
+true # bash "$HERE/receipt-zz13.sh"
+EOF
+ef core/fixtures/zc/lib.sh <<'EOF'
+zc_check() { bash "$HERE/../zb/receipt-zz4.sh"; }
+EOF
+ef core/fixtures/zb/run.sh <<'EOF'
+#!/usr/bin/env bash
+# bash "$HERE/receipt-zza.sh" -- a comment, never a reader
+echo "the receipt-zz9.sh receipt is run by hand"
+EOF
+ef scripts/receipt-zz10.sh <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+ef scripts/receipt-zz11.sh <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+ef scripts/receipt-zz12.sh <<'EOF'
+#!/usr/bin/env bash
+bash scripts/receipt-zz12.sh --self
+EOF
+ef scripts/zz-other.sh <<'EOF'
+#!/usr/bin/env bash
+bash scripts/receipt-zz11.sh
+EOF
+printf '%s\n' '# ledger' '' '## BL-1 -- live' '' 'verify: sh bash core/fixtures/zb/receipt-zz5.sh' > "$E/docs/backlog.md"
+printf '%s\n' '# probe' "core/fixtures/zb/receipt-zz8.sh	held" "core/fixtures/zb/receipt-zz8.sh	again" \
+  "core/fixtures/za/receipt-zz2.sh	read" "core/fixtures/gone/receipt.sh	absent" "scripts/receipt-zz12.sh" > "$E/scripts/inert-receipt-allowlist.txt"
+{ pgit init -q "$E" && pgit -C "$E" add -A && pgit -C "$E" commit -q -m base; } >/dev/null 2>&1 \
+  || { echo "validate-fixture-hygiene: REFUSED -- could not build the E1 probe repository" >&2; exit 2; }
+printf '%s\n' 'DUP	core/fixtures/zb/receipt-zz8.sh' 'INERT	core/fixtures/za/receipt-zz1.sh' \
+  'INERT	core/fixtures/zb/receipt-zz5.sh' 'INERT	core/fixtures/zb/receipt-zza.sh' 'INERT	core/fixtures/zd/receipt.sh' \
+  'INERT	scripts/receipt-zz10.sh' 'NOREASON	scripts/receipt-zz12.sh' 'STALE	core/fixtures/gone/receipt.sh' \
+  'STALE	core/fixtures/za/receipt-zz2.sh' | LC_ALL=C sort > "$WORK/e1p.want"
+e1ok=0
+eo="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; e1_run "$E" "$WORK/e1p")" || { sp_line E1 "FAIL -- $eo"; e1ok=1; }
+if [ "$e1ok" = 0 ] && ! cmp -s "$WORK/e1p.want" "$WORK/e1p.verdict"; then
+  e1ok=1; sp_line E1 "FAIL -- runners mode: verdict rows differ from the seeded set:"
+  diff "$WORK/e1p.want" "$WORK/e1p.verdict" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
+fi
+if [ "$e1ok" = 0 ]; then
+  grep -vxF 'core/fixtures/zb/receipt-zz5.sh' "$WORK/e1p.inert" | LC_ALL=C sort > "$WORK/e1p-ledger.want"
+  if ! ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; inert "$E" "$WORK/e1p.e1list" "$WORK/e1p-ledger" ledger ); then
+    e1ok=1; sp_line E1 "FAIL -- ledger mode: inert() returned non-zero over the probe"
+  elif LC_ALL=C sort "$WORK/e1p-ledger" | cmp -s "$WORK/e1p-ledger.want" - && [ -s "$WORK/e1p-ledger.want" ] \
+    && grep -qxF 'core/fixtures/zb/receipt-zz5.sh' "$WORK/e1p.inert"; then :
+  else
+    e1ok=1; sp_line E1 "FAIL -- ledger mode: inert() is not E1's INERT set minus exactly the verify:-only receipt zz5"
+  fi
+fi
+if [ "$e1ok" = 0 ]; then sp_line E1 "ok (6 unread receipts fire, among them a verify:-only one, a comment-only one, another fixture's same-named one and a self-named scripts/ one; invocation by path, by variable, from a lib.sh, from scripts/, a message string and a trailing comment after code stay quiet; DUP, NOREASON and both STALE shapes fire; receipt-bl868's ledger mode reads the verify:-only one as read and every other unread one as inert)"
+else SP_RED=1; fi
+
 # --- the corpus ----------------------------------------------------------------------------------------------------
 out="$(run_all "$ROOT" "$WORK/c")"; crc=$?
 if [ "$crc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- $out" >&2; exit 2; fi
@@ -1006,12 +1219,23 @@ if grep -qE '^(FLOOR|ROW|JOIN|STALE|DUP|NOREASON|STUB)	' "$WORK/c.verdict"; then
 fi
 m4_out="$(m4 "$ROOT" "$ROOT/$ALLOW_REL" "$WORK/m4-root-base.txt")" || rc=1
 echo "$m4_out"
+e1_out="$(e1_run "$ROOT" "$WORK/e1c")"; e1rc=$?
+if [ "$e1rc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- E1: $e1_out" >&2; exit 2; fi
+ne1="$(awk 'END { print NR }' "$WORK/e1c.e1list")"; ni1="$(awk 'END { print NR }' "$WORK/e1c.inert")"
+if [ -s "$WORK/e1c.verdict" ]; then
+  rc=1; echo "FAIL E1:"
+  awk -F'\t' '{ print "    " $1 " " $2 }' "$WORK/e1c.verdict"
+  echo "  INERT: a tracked receipt*.sh that no run/seed/lib.sh, hook or scripts/*.sh runs -- no fixture executes it (a verify: line is not a runner). Wire it into its fixture's run.sh, or delete it. STALE/DUP/NOREASON: fix $E1_ALLOW_REL."
+fi
+e1m4_out="$(m4 "$ROOT" "$ROOT/$E1_ALLOW_REL" "$WORK/e1m4-root-base.txt" "$E1_ALLOW_REL" E1-M4 \
+  "do not list the receipt; wire it into its fixture's run.sh, or delete it, and drop the row.")" || rc=1
+echo "$e1m4_out"
 if [ "$SP_RED" != 0 ]; then
   echo "validate-fixture-hygiene: REFUSED -- the self-probe is red (above), so the verdict over the tree is unattributable." >&2
   exit 2
 fi
 nlist="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ "$rc" = 0 ]; then
-  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row."
+  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row; E1 $ne1 receipt(s), $ni1 inert and allowlisted."
 fi
 exit "$rc"

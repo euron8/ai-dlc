@@ -43,7 +43,6 @@ changelog-sprint-slot	b	none	25	yes	ROOT = HERE/../../..	core/skills/ai-dlc/step
 check-15-bypass	a	none	18	yes	HERE/../../.. (IS_DIST test at line 65)	core/skills/ai-dlc/core-manifest.md (seed.sh:532)	seed.sh builds the tree under $WORK and copies only the manifest. SKIP check-15-bypass for a missing validator is at line 71. The enforcement-map match at 267 is a comment.
 check-17-bypass	b	own	17	yes	HERE/../../scripts candidate list (4 layouts)	none	validators resolved and run in place (L16), data seeded under mktemp (L51); git init scratch repo (L246); SKIP L234
 check-17-counts	b	none	15	no	ROOT=HERE/../../..	none	VALIDATOR, SCHEMA, RETRO_DOC read in place from core/ (L7-10, L37)
-check-1c-bypass	a	own	4	no	HERE (preamble L2)	none (seed.sh builds repo)	sandbox repo from seed.sh (L43), git only inside it; not read in full, seed.sh may resolve a validator
 check-22-spawn-ledger	b	none	3	no	ROOT=HERE/../../..	none	validator and steps/gate-validation.md read in place (L6-9, L714)
 check-23-draft-stamps	b	none	4	no	DIR/../../scripts candidate list	none	validator located in place (L6-8), trees seeded under TMP (L40)
 check-24-adversarial-convergence	b	own	0	no	DIR/../../scripts candidate list; seed.sh to mktemp	+cp of validator dir *.sh for mutants	validator and hooks in place (L34-36, L846); scratch git repos with GIT_DIR unset (L1370)

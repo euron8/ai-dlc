@@ -66,7 +66,6 @@ core_manifest:
   - core/fixtures/check-15-bypass/**
   - core/fixtures/check-17-bypass/**
   - core/fixtures/check-17-counts/**
-  - core/fixtures/check-1c-bypass/**
   - core/fixtures/check-23-draft-stamps/**
   - core/fixtures/check-24-adversarial-convergence/**
   - core/fixtures/check-24-adversarial-convergence-b/**

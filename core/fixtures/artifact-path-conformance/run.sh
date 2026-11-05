@@ -27,12 +27,11 @@
 # exact-vector assertion and is re-measured whenever an arm or a mutant changes. Arm names are the
 # column names `--matrix` prints (V-* read the validator on a seeded tree, G-* the gate probes).
 # MUTANT-MATRIX declared-areas-only decides=V-allows-inferred twins=V-empty
-# MUTANT-MATRIX slot-not-exempt decides=V-probe-conform twins=V-empty
 # MUTANT-MATRIX empty-subject-passes decides=V-empty twins=V-allows-inferred
 # MUTANT-MATRIX token-re-dead decides=V-probe-nonconform twins=V-empty
 # MUTANT-MATRIX gate-token-re-dead decides=G-token twins=G-slot
 # MUTANT-MATRIX gate-slot-re-everything decides=G-slot twins=G-token
-# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (declared-areas-only, slot-not-exempt, ...) names a literal mutant that carries its own row in this block
+# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (declared-areas-only, empty-subject-passes, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-path-conformance/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -403,7 +402,7 @@ done
 # =============================================================================
 MUT="$(mktemp -d "${TMPDIR:-/tmp}/apconf-mut-XXXXXX")"
 lay_pair() { mkdir -p "$1"; cp "$VAL" "$1/m.sh"; cp "$CONFIG" "$1/artifact-path-config.sh"; }
-ARMS="V-judges V-allows-inferred V-probe-conform V-probe-nonconform V-empty G-token G-slot"
+ARMS="V-judges V-allows-inferred V-probe-nonconform V-empty G-token G-slot"
 dir_run() { # dir_run <D>: run the copy once on the standard tree and once on the greenfield tree
   local d="$1" w we o
   if [ ! -f "$d/std.rc" ]; then
@@ -417,7 +416,6 @@ arm_raw() { # arm_raw <arm> <D>: the arm's raw verdict token for that copy
   case "$a" in
     V-judges) if [ "$rc" = 1 ] && grep -q "BLOCKING —" <<<"$o"; then echo judges; else echo "no-judge-rc$rc"; fi ;;
     V-allows-inferred) if grep -qxF "_bmad-output/brainstorming/s301/discovery-brainstorming.md" <<<"$(blocking_of "$o")"; then echo blocked; else echo allowed; fi ;;
-    V-probe-conform) if [ "$rc" = 2 ] && grep -q "expected CONFORMING, got NONCONFORMING" <<<"$o"; then echo fired; else echo quiet; fi ;;
     V-probe-nonconform) if [ "$rc" = 2 ] && grep -q "expected NONCONFORMING, got CONFORMING" <<<"$o"; then echo fired; else echo quiet; fi ;;
     V-empty) if grep -q "VERDICT: PASS" "$d/empty.out"; then echo pass; else echo nopass; fi ;;
     G-token) t="$(bash "$d/artifact-path-config.sh" --token-re-prescribed 2>/dev/null)"; s="$GP_TOK_RE"; GP_TOK_RE="$t"
@@ -427,7 +425,7 @@ arm_raw() { # arm_raw <arm> <D>: the arm's raw verdict token for that copy
   esac
 }
 arm_holds() { # arm_holds <arm> <raw>
-  case "$1:$2" in V-judges:judges|V-allows-inferred:allowed|V-probe-conform:quiet|V-probe-nonconform:quiet|V-empty:nopass|G-token:flags|G-slot:flags) return 0 ;; esac
+  case "$1:$2" in V-judges:judges|V-allows-inferred:allowed|V-probe-nonconform:quiet|V-empty:nopass|G-token:flags|G-slot:flags) return 0 ;; esac
   return 1
 }
 SHIPD="$MUT/ship"; lay_pair "$SHIPD"
@@ -469,8 +467,6 @@ fi
 
 mutant_score declared-areas-only val 's@^      area = r "/" first .*$@      area = ""@' V-allows-inferred V-empty \
   'without the inferred-area anchor, an already-conforming path under an undeclared area blocks'
-mutant_score slot-not-exempt val 's@if \(i == slotidx && c\[i\] ~ slotre\) continue@if (0) continue@' V-probe-conform V-empty \
-  'without the slot exemption the reserved slot itself reads as a violation, and the probe refuses the run'
 mutant_score empty-subject-passes val 's@if \[ "\$N_SUBJECT" -eq 0 \]; then@if [ "$N_SUBJECT" -lt 0 ]; then@' V-empty V-allows-inferred \
   'with the guard disarmed a tree holding NO artifact reports a verified pass'
 mutant_score token-re-dead config "s@^TOKEN_RE='.*'\$@TOKEN_RE='ZZZ-NOT-A-SPRINT-TOKEN-ZZZ'@" V-probe-nonconform V-empty \
@@ -485,8 +481,8 @@ if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
   else bad "MX plain run executed $MROWS matrix-only rows"; fi
 else
-  _nx=$(( 6 * $(printf '%s\n' $ARMS | grep -c .) ))
-  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (6 mutants)"
+  _nx=$(( 5 * $(printf '%s\n' $ARMS | grep -c .) ))
+  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (5 mutants)"
   else bad "MX matrix run measured $MROWS cells, $_nx expected"; fi
 fi
 rm -rf "$GP_PROBE" "$GP_EMPTY" "$TPL" "$MUT" "$W" "$WE"

@@ -1,3 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-476 *
+# BL-868 (* 476->416): -60, the sibling's R6-VN arm (its V-N-only stubbed engine copy and V-R near-miss approvals) removed with the R6 retry; two agreeing counted runs.
+416 *
 20 core/skills/ai-dlc-update/reconcile/emit-report.sh

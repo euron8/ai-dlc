@@ -30,7 +30,6 @@ context-sensor	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 core-paths-audit-diff	no MUTANT-MATRIX block; floor: S1 mutate(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 core-script-boundary	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
 cycle-commits-enforce	no MUTANT-MATRIX block; floor: S2 cmp -s + mutant
-decl-reasons	no MUTANT-MATRIX block; floor: S1 mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 deploy-validate-smoke-classification	no MUTANT-MATRIX block; floor: S1 mutant(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 derivation-capture	no MUTANT-MATRIX block; floor: S1 sup_mut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row
 derivation-capture-worktree-root	no MUTANT-MATRIX block; floor: S1 mkmut(),S2 cmp -s + mutant,MKA mutant-kills allowlist row

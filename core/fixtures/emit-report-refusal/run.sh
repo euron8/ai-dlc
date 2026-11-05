@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # emit-report-refusal/run.sh — a sample or detector that did not run renders DETECTOR-REFUSED in
-# the reconcile report, never `none`; and the reconcile-emit-report fixture's R6 guard retries a
-# world built or scored under such a refusal instead of reading it as a verdict.
+# the reconcile report, never `none`.
 #
 # THE DEFECT (BL-230). emit-report.sh's orientation block read no status at all: `diff` exit 2
 # was swallowed with exit 1, the grep|sed|grep sample chain and its `grep -c` swallowed their own
@@ -18,8 +17,7 @@
 # WHY A SEPARATE UNIT. reconcile-emit-report is the suite's heaviest reconcile unit; these arms
 # re-render the seed world roughly fifty times across the mutant programs, and added there they
 # would move a pole-adjacent directory. The seed is SHARED, not copied: this unit runs the
-# sibling's own `seed.sh`, so both units read one world, and the R6 battery below extracts the
-# guard helpers from the sibling's own `run.sh` and drives them, so it binds the shipping text.
+# sibling's own `seed.sh`, so both units read one world.
 #
 # ARMS (each runs against every program in its group; the ctl copy must pass all of them):
 #   A0  CONTROL: an unmutated copy of reconcile/ renders the seed world byte-identically to the
@@ -38,20 +36,15 @@
 #       UNDECIDED, one DETECTOR-REFUSED line (an indented refusal reads rc 3 BLOCKERS-RESOLVED).
 #   A7  the race itself, FORCED on the engine's own orientation-diff text (a `diff` shadowed by one fork),
 #       against two reference spellings that must split 5/5 and 0/5 first.
-#   R6  the reconcile-emit-report guard: approve-side and score-side retry, baseline derivation,
-#       and the stub exemption, each with a mutant.
 #
-# MUTANTS. Each is a copy of the whole reconcile/ directory with ONE edit (or, for the R6 guard, a copy of
-# the guard helpers cut from reconcile-emit-report/run.sh). A UNIT is one render or scenario of one program,
+# MUTANTS. Each is a copy of the whole reconcile/ directory with ONE edit. A UNIT is one render or scenario of one program,
 # run as a background job that writes only under its own directory; nothing is asserted in a job.
 #   - PER PUSH the unmutated copy runs EVERY unit (the base pass), and each mutant runs the units of its
 #     DECIDING arm, which must FAIL, and of one named TWIN, an arm the measured matrix shows GREEN for it,
 #     which must PASS. The kill is emitted through mutant_killed behind the same-run base pass of both arms
 #     and of the whole unmutated copy. The twin proves the kill stays confined to the deciding arm.
 #   - `--matrix` runs every unit of every program and prints one MATRIX row per (program, arm) cell,
-#     `killed=yes` iff THAT arm tripped under THAT program. An arm whose subject a program does not touch
-#     (an R6 arm under an emit-report.sh mutant, an emit-report arm under an R6 variant) reads the control's
-#     verdict, which is the verdict the shipping subject earns; it is reused, not re-run.
+#     `killed=yes` iff THAT arm tripped under THAT program.
 # The matrix is re-measured whenever an arm or a mutant is added or changed, from the repo root, by the
 # command on the MUTANT-MATRIX-REMEASURE line, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is
 # not run through hermetic-run.sh, which forwards no argument.
@@ -75,12 +68,6 @@
 # MUTANT-MATRIX h1-unstable decides=H1 twins=A8
 # MUTANT-MATRIX a8-stable-filter decides=A8 twins=A9
 # MUTANT-MATRIX a9-counts-in-projection decides=A9 twins=H1
-# MUTANT-MATRIX r6-approve-noretry decides=R6APPR twins=R6SCORE
-# MUTANT-MATRIX r6-approve-noguard decides=R6APPR twins=R6SCORE
-# MUTANT-MATRIX r6-baseline-empty decides=R6APPR twins=R6SCORE
-# MUTANT-MATRIX r6-score-noretry decides=R6SCORE twins=R6APPR
-# MUTANT-MATRIX r6-score-noguard decides=R6SCORE twins=R6APPR
-# MUTANT-MATRIX r6-score-nostub decides=R6STUB twins=R6APPR
 set -uo pipefail
 MATRIX=0; MATRIX_ROWS=0
 for _a in "$@"; do
@@ -96,8 +83,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SIB="$HERE/../reconcile-emit-report"
-[ -f "$SIB/seed.sh" ] && [ -f "$SIB/run.sh" ] \
-  || { echo "FIXTURE ERROR: sibling reconcile-emit-report/ (seed.sh, run.sh) not found beside this unit" >&2; exit 2; }
+[ -f "$SIB/seed.sh" ] \
+  || { echo "FIXTURE ERROR: sibling reconcile-emit-report/seed.sh not found beside this unit" >&2; exit 2; }
 WORK="$(bash "$SIB/seed.sh")" || { echo "FIXTURE ERROR: the sibling seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
@@ -148,10 +135,6 @@ shim git-split    git 'case " $* " in' \
   "  *' --full-tree '*) exec '$REAL_GIT' \"\$@\" ;;" \
   "  *' ls-tree '*' -- $CL '*) $FIRE; exit 128 ;;" \
   "  *' show '*':$ZE '*) $FIRE; exit 128 ;;" 'esac' "exec '$REAL_GIT' \"\$@\""
-# ONE-SHOT: fails the first classes.md diff after its latch is cleared, then passes. `mkdir` is
-# the latch because it is atomic; the latch directory's existence afterwards proves it FIRED.
-shim diff-once diff "case \"\$#:\${2:-}\" in 2:*templates/classes.md) mkdir \"\$ONESHOT\" 2>/dev/null && exit 2 ;; esac" \
-  "exec '$REAL_DIFF' \"\$@\""
 
 # --- WORLDS -------------------------------------------------------------------------------
 # W0 is the sibling's seed as it stands. T2 adds a SECOND both-added CLASSIFY file (zeta, sorted
@@ -371,8 +354,8 @@ if mkprog a9-counts-in-projection; then
 fi
 
 # --- UNITS ----------------------------------------------------------------------------------------
-# A unit is one render of one program (or one R6 scenario). It is a background job that writes ONLY under
-# $R/out/<prog>/ (or $R6/), is idempotent through its .done file, and asserts nothing; every verdict is
+# A unit is one render or scenario of one program. It is a background job that writes ONLY under
+# $R/out/<prog>/, is idempotent through its .done file, and asserts nothing; every verdict is
 # read in the foreground, where `bad` counts. Which units run is decided by the mode (see the header).
 STUBS="retired-tokens.sh:2 relabel-extension-checks.sh:2 ledger-reverify.sh:3 predicate-differential.sh:1 retired-fixtures.sh:3 retired-layer-contract.sh:2 retired-layer-passage.sh:1"
 ren() { # ren <prog> <arm> <shim-or-> <theirs> <consumer> [<emit>]
@@ -386,7 +369,6 @@ unit_of() { # <arm> -> the unit whose run decides it
   case "$1" in
     A0) echo w0 ;; A1-*) echo a1 ;; A2) echo a2 ;; A3) echo a3 ;; A4a) echo a4a ;; A4b) echo a4b ;;
     A5) echo a5 ;; A6) echo a6 ;; H1) echo H1 ;; A8) echo A8 ;; A9) echo A9 ;;
-    R6APPR) echo appr ;; R6SCORE) echo score ;; R6STUB) echo stub ;;
   esac
 }
 h1_unit() { # <prog> -> $R/out/<prog>/H1.v = "<identical yes|no> <verify rc> <unregistered named yes|no>"
@@ -409,12 +391,7 @@ a9_unit() { # <prog> -> A9.v = "<verify rc before the write> <after>"; A9.live w
   grep -qF 'records=1 ' "$R/a9-$1.region" && : > "$o/A9.live"
 }
 unit_run() { # <prog> <unit>
-  local p="$1" u="$2" o d s n c v
-  case "$u" in appr|score|stub)
-    v="${p#r6-}"; [ "$p" = ship ] && v=ship
-    [ -f "$R6/$v.$u.done" ] || r6run "$u" "$v"
-    return 0 ;;
-  esac
+  local p="$1" u="$2" o d s n c
   o="$R/out/$p"; d="$R/prog/$p"; mkdir -p "$o"
   [ -f "$o/$u.done" ] && return 0
   case "$u" in
@@ -440,79 +417,6 @@ unit_run() { # <prog> <unit>
     A9)  a9_unit "$p" ;;
   esac
   : > "$o/$u.done"
-}
-
-# --- R6: the reconcile-emit-report guard, extracted from the sibling's own run.sh ---------------
-# The helpers are cut from the SHIPPING file by their definitions, so a change there is a change
-# here. Positive control: all four definitions and the baseline derivation must be present.
-R6="$R/r6"; mkdir -p "$R6"
-awk '
-  /^V_TRIES=3$/ { p = 1 }
-  /^v_resolve\(\) / { p = 0 }
-  /^v_stub\(\) \{/ || /^v_score\(\) \{/ { q = 1 }
-  p || q { print }
-  q && /^}$/ { q = 0 }' "$SIB/run.sh" > "$R6/ship.sh"
-_r6n="$(grep -cE '^(v_foreign|v_approve|v_stub|v_score)\(\) \{|^V_REFUSE_OK=' "$R6/ship.sh")" || _r6n=0
-R6_ON=1
-if [ "$_r6n" -ne 5 ]; then
-  R6_ON=0
-  bad "R6 HARNESS BROKEN: extracted $_r6n of 5 definitions (v_foreign, v_approve, v_stub, v_score, V_REFUSE_OK) from reconcile-emit-report/run.sh — the guard was renamed or moved; re-anchor the extraction, never relax it"
-fi
-r6mut() { # r6mut <name> <anchor-regex> <sed-expr>
-  local h; h="$(grep -c -e "$2" "$R6/ship.sh")" || h=0
-  if [ "$h" -ne 1 ]; then bad "R6 MUTANT STALE [$1]: anchor matches $h lines, not 1"; return 1; fi
-  sed -e "$3" "$R6/ship.sh" > "$R6/$1.sh" || { bad "R6 MUTANT DID NOT APPLY [$1]: sed failed"; return 1; }
-  cmp -s "$R6/ship.sh" "$R6/$1.sh" && { bad "R6 MUTANT DID NOT APPLY [$1]: matched nothing"; return 1; }
-  bash -n "$R6/$1.sh" 2>/dev/null || { bad "R6 MUTANT STALE [$1]: does not parse"; return 1; }
-}
-R6MUTS=""
-r6m() { r6mut "$@" && R6MUTS="$R6MUTS r6-$1"; }
-r6m approve-noretry '^  until \[ "\$a" -ge "\$V_TRIES" \]; do$' 's/^  until \[ "\$a" -ge "\$V_TRIES" \]; do$/  until [ "$a" -ge 1 ]; do/'
-r6m approve-noguard '^    x="\$(v_foreign "\$d/region.md" "")"$' 's/^    x="\$(v_foreign "\$d\/region.md" "")"$/    x=""/'
-r6m baseline-empty  '^V_REFUSE_OK=' 's/^V_REFUSE_OK=.*/V_REFUSE_OK=""/'
-r6m score-noretry   '^  while \[ "\$a" -lt "\$V_TRIES" \]; do$' 's/^  while \[ "\$a" -lt "\$V_TRIES" \]; do$/  while [ "$a" -lt 1 ]; do/'
-r6m score-noguard   '^    x="\$(v_foreign "\$f" "< " "\$sok")"$' 's/^    x="\$(v_foreign "\$f" "< " "\$sok")"$/    x=""/'
-r6m score-nostub    '^  \[ -f "\${e%/\*}/\.stubbed" \] && read' 's/^  \[ -f "\${e%\/\*}\/\.stubbed" \] && read.*/  :/'
-# E3 exactly as reconcile-emit-report builds it: V-N's recorded wrong verdict needs that program.
-E3D="$R6/e3"; rm -rf "$E3D"; cp -R "$RDIR" "$E3D"
-sed -e 's/^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$/elif [ "$hard_gone" -gt 0 ] \&\& [ "$refused_new" -eq 0 ]; then/' "$EMIT" > "$E3D/emit-report.sh"
-cmp -s "$EMIT" "$E3D/emit-report.sh" && bad "R6 HARNESS BROKEN: the E3 mutation matched nothing in emit-report.sh"
-
-# r6run <kind appr|score|stub> <variant> — one subshell, its own VW, results in $R6/<variant>.<kind>.*
-r6run() {
-  local kind="$1" var="$2" key="$2.$1"
-  (
-    VW="$R6/vw-$key"; mkdir -p "$VW"
-    bad() { printf '%s\n' "$1" >> "$R6/$key.bad"; }
-    # shellcheck source=/dev/null
-    . "$R6/$var.sh"
-    export ONESHOT="$R6/$key.fired"; rmdir "$ONESHOT" 2>/dev/null
-    w() { mkdir -p "$VW/$1" && cp -R "$CONSUMER" "$VW/$1/consumer"; }
-    resolve() { git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$VW/$1/consumer/.claude/schemas/thing.json"; }
-    case "$kind" in
-      appr)   # V-N approved under a one-shot orientation failure, then scored by E3
-        w V-N
-        PATH="$R/sh/diff-once:$PATH" v_approve V-N "$THEIRS"
-        resolve V-N
-        mkdir -p "$VW/V-N/consumer/.claude/skills/ai-dlc/overrides"
-        printf -- '---\nshadows: core/rules/nonexistent.md#Nope\nbase_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\nreason: probe\n---\n\n## Nope\n\nprobe body\n' \
-          > "$VW/V-N/consumer/.claude/skills/ai-dlc/overrides/probe.md"
-        v_score "$E3D/emit-report.sh" V-N E3 > "$R6/$key.cell"
-        grep -c '^DETECTOR-REFUSED  retired-layer-token\.sh' "$VW/V-N/region.md" > "$R6/$key.base" ;;
-      score)  # V-HC approved healthy, scored under a one-shot failure
-        w V-HC; v_approve V-HC "$THEIRS"
-        awk '/^HARD-UNREGISTERED-CORE-DRIFT/ && !d { d = 1; next } { print }' "$VW/V-HC/region.md" > "$VW/V-HC/half.md"
-        { echo "# Reconcile report (fixture)"; echo; cat "$VW/V-HC/half.md"; } > "$VW/V-HC/approved.md"
-        PATH="$R/sh/diff-once:$PATH" v_score "$EMIT" V-HC ship > "$R6/$key.cell"
-        [ -f "$VW/V-HC/broken.ship" ] && cp "$VW/V-HC/broken.ship" "$R6/$key.broken" ;;
-      stub)   # V-HB: the stubbed sibling's own refusal is the world's subject, not a transient
-        w V-HB; v_approve V-HB "$THEIRS"
-        dh="$(v_stub "$EMIT" "$VW/dead-hb" hard-blockers.sh)"
-        v_score "$dh" V-HB ship > "$R6/$key.cell"
-        [ -f "$VW/V-HB/broken.ship" ] && cp "$VW/V-HB/broken.ship" "$R6/$key.broken" ;;
-    esac
-    : > "$R6/$key.done"
-  )
 }
 
 # --- JUDGES: each prints nothing and returns 0 on PASS, prints its reason and returns 1 ------
@@ -612,22 +516,8 @@ arm_text() {
 }
 
 # --- ARM VERDICTS ----------------------------------------------------------------------------------
-# armv <program> <arm> -> 0 the arm HOLDS, 1 it TRIPPED, X its unit never ran. An arm whose subject a
-# program does not touch reads the control's verdict (header): an R6 arm under an emit-report.sh mutant reads
-# the shipping guard (variant ship), an emit-report arm under an R6 variant reads the control program.
+# armv <program> <arm> -> 0 the arm HOLDS, 1 it TRIPPED, X its unit never ran.
 oldid() { case "$1" in A1-*) echo "a1:${1#A1-}" ;; *) printf '%s' "$1" | tr 'A-Z' 'a-z' ;; esac; }
-r6f() { cat "$R6/$1" 2>/dev/null; }
-r6_verdict() { # <arm> <variant>
-  local k
-  case "$1" in
-    R6APPR) k="$2.appr"; [ -f "$R6/$k.done" ] || { echo X; return 0; }
-      if [ -d "$R6/$k.fired" ] && [ ! -s "$R6/$k.bad" ] && [ "$(r6f "$k.cell")" = '3|BLOCKERS-RESOLVED|1|1|0|0' ] && [ "$(r6f "$k.base")" = 1 ]; then echo 0; else echo 1; fi ;;
-    R6SCORE) k="$2.score"; [ -f "$R6/$k.done" ] || { echo X; return 0; }
-      if [ -d "$R6/$k.fired" ] && [ ! -f "$R6/$k.broken" ] && [ "$(r6f "$k.cell")" = '1|UNDECIDED|0|0|0|0' ]; then echo 0; else echo 1; fi ;;
-    R6STUB) k="$2.stub"; [ -f "$R6/$k.done" ] || { echo X; return 0; }
-      if [ ! -f "$R6/$k.broken" ] && [ "$(r6f "$k.cell")" = '1|UNDECIDED|0|0|1|0' ]; then echo 0; else echo 1; fi ;;
-  esac
-}
 a8_judge_s() { [ "$(cat "$1/A8.s" 2>/dev/null)" = "$a8_want_s" ]; }
 a8_judge_b() {
   local b n r; b="$(cat "$1/A8.b" 2>/dev/null)"
@@ -645,13 +535,7 @@ emit_verdict() { # <program> <arm>
     *)  if judge "$(oldid "$a")" >/dev/null; then echo 0; else echo 1; fi ;;
   esac
 }
-armv() { # <program> <arm>
-  local p="$1" a="$2"
-  case "$a" in
-    R6*) case "$p" in r6-*) r6_verdict "$a" "${p#r6-}" ;; *) r6_verdict "$a" ship ;; esac ;;
-    *)   case "$p" in r6-*) p=ctl ;; esac; emit_verdict "$p" "$a" ;;
-  esac
-}
+armv() { emit_verdict "$1" "$2"; } # <program> <arm>
 
 # --- THE MUTANT TABLE: name | program | deciding arm | twin arm ---------------------------------------
 # The deciding arm is the one arm the base's exact-vector assertion named first (the minimal one); the twin
@@ -672,12 +556,6 @@ m-rlp|m-rlp|A1-retired-layer-passage.sh|A2
 h1-unstable|h1-unstable|H1|A8
 a8-stable-filter|a8-stable-filter|A8|A9
 a9-counts-in-projection|a9-counts-in-projection|A9|H1
-r6-approve-noretry|r6-approve-noretry|R6APPR|R6SCORE
-r6-approve-noguard|r6-approve-noguard|R6APPR|R6SCORE
-r6-baseline-empty|r6-baseline-empty|R6APPR|R6SCORE
-r6-score-noretry|r6-score-noretry|R6SCORE|R6APPR
-r6-score-noguard|r6-score-noguard|R6SCORE|R6APPR
-r6-score-nostub|r6-score-nostub|R6STUB|R6APPR
 "
 # A kill is evidence only if the mutant produced the observable its defect names, for the right reason: a
 # unit that died for another reason also reads TRIPPED. These three arms assert the exact observable.
@@ -686,12 +564,6 @@ kobs_ok() { # <mutant> <program>
     h1-unstable)             [ "$(cat "$R/out/$2/H1.v" 2>/dev/null)" = "no 1 yes" ] ;;
     a8-stable-filter)        [ "$(cat "$R/out/$2/A8.s" 2>/dev/null)" = none ] ;;
     a9-counts-in-projection) [ "$(cat "$R/out/$2/A9.v" 2>/dev/null)" = "0 1" ] ;;
-    r6-approve-noretry) grep -q '^FIXTURE BROKEN — V-N approval rendered DETECTOR-REFUSED on 3 attempts: DETECTOR-REFUSED  orientation diff exited 2 ' "$R6/${2#r6-}.appr.bad" 2>/dev/null ;;
-    r6-approve-noguard) [ ! -s "$R6/${2#r6-}.appr.bad" ] && [ "$(r6f "${2#r6-}.appr.cell")" = '3|BLOCKERS-RESOLVED|1|1|4|4' ] ;;
-    r6-baseline-empty)  grep -q '^FIXTURE BROKEN — V-N approval rendered DETECTOR-REFUSED on 3 attempts: DETECTOR-REFUSED  retired-layer-token\.sh' "$R6/${2#r6-}.appr.bad" 2>/dev/null ;;
-    r6-score-noretry)   [ "$(r6f "${2#r6-}.score.cell")" = '1|UNDECIDED|0|0|1|0' ] && grep -q '^DETECTOR-REFUSED  orientation diff exited 2 ' "$R6/${2#r6-}.score.broken" 2>/dev/null ;;
-    r6-score-noguard)   [ "$(r6f "${2#r6-}.score.cell")" = '1|UNDECIDED|0|0|1|0' ] && [ ! -f "$R6/${2#r6-}.score.broken" ] ;;
-    r6-score-nostub)    grep -q '^DETECTOR-REFUSED  hard-blockers\.sh' "$R6/${2#r6-}.stub.broken" 2>/dev/null ;;
     *) true ;;
   esac
 }
@@ -702,23 +574,17 @@ EUNITS="$EUNITS A8 A9"
 ARMS_ALL="A0 A1-retired-tokens.sh A1-relabel-extension-checks.sh A1-ledger-reverify.sh A1-predicate-differential.sh A1-retired-fixtures.sh A1-retired-layer-contract.sh A1-retired-layer-passage.sh A2 A3 A4a A4b A5 A6"
 [ "$H1_STATE" = on ] && ARMS_ALL="$ARMS_ALL H1"
 ARMS_ALL="$ARMS_ALL A8 A9"
-[ "$R6_ON" = 1 ] && ARMS_ALL="$ARMS_ALL R6APPR R6SCORE R6STUB"
 in_set() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; } # <word> <space-separated set>
 
 # --- SCHEDULE: every unit the mode needs, 4 at a time ------------------------------------------------
 NEEDS=""
 need() { NEEDS="$NEEDS $1:$2"; }
 for _u in $EUNITS; do need ctl "$_u"; done
-[ "$R6_ON" = 1 ] && for _u in appr score stub; do need ship "$_u"; done
 while IFS='|' read -r _n _p _d _t; do
   [ -n "$_n" ] || continue
-  in_set "$_p" "$MUTS $EMUTS $R6MUTS" || continue
-  case "$_p" in
-    r6-*) if [ "$MATRIX" -eq 1 ]; then for _u in appr score stub; do need "$_p" "$_u"; done
-          else need "$_p" "$(unit_of "$_d")"; need "$_p" "$(unit_of "$_t")"; fi ;;
-    *)    if [ "$MATRIX" -eq 1 ]; then for _u in $EUNITS; do need "$_p" "$_u"; done
-          else need "$_p" "$(unit_of "$_d")"; need "$_p" "$(unit_of "$_t")"; fi ;;
-  esac
+  in_set "$_p" "$MUTS $EMUTS" || continue
+  if [ "$MATRIX" -eq 1 ]; then for _u in $EUNITS; do need "$_p" "$_u"; done
+  else need "$_p" "$(unit_of "$_d")"; need "$_p" "$(unit_of "$_t")"; fi
 done <<EOF
 $MT
 EOF
@@ -770,18 +636,6 @@ if [ "$(armv ctl A9)" = 0 ]; then
 else
   bad "A9 verify before/after the corpus write read [$(cat "$R/out/ctl/A9.v" 2>/dev/null)], want [0 0]"; CTLBAD="$CTLBAD A9"
 fi
-if [ "$R6_ON" = 1 ]; then
-  for _j in appr score stub; do [ -f "$R6/ship.$_j.done" ] || bad "R6 scenario ship.$_j never completed"; done
-  [ "$(armv ctl R6APPR)" = 0 ] \
-    && ok "R6 approve: a one-shot orientation failure at approve is retried away — E3 on V-N scores its recorded kill verdict 3|BLOCKERS-RESOLVED|1|1|0|0, nothing reads FIXTURE BROKEN, and the seed's own retired-layer-token refusal (the derived baseline) is kept without a retry" \
-    || { bad "R6 approve: fired=$([ -d "$R6/ship.appr.fired" ] && echo y || echo n) bad=[$(head -1 "$R6/ship.appr.bad" 2>/dev/null)] E3 cell=[$(r6f ship.appr.cell)] baseline-refusals=$(r6f ship.appr.base), want fired, no bad, 3|BLOCKERS-RESOLVED|1|1|0|0, 1"; CTLBAD="$CTLBAD R6APPR"; }
-  [ "$(armv ctl R6SCORE)" = 0 ] \
-    && ok "R6 score: a one-shot orientation failure while --verify scores V-HC is re-scored away — the cell stays 1|UNDECIDED|0|0|0|0" \
-    || { bad "R6 score: fired=$([ -d "$R6/ship.score.fired" ] && echo y || echo n) broken=[$(r6f ship.score.broken)] cell=[$(r6f ship.score.cell)], want fired, none, 1|UNDECIDED|0|0|0|0"; CTLBAD="$CTLBAD R6SCORE"; }
-  [ "$(armv ctl R6STUB)" = 0 ] \
-    && ok "R6 score: a program built by v_stub keeps its OWN sibling's refusal as the world's subject — V-HB scores 1|UNDECIDED|0|0|1|0, unmarked" \
-    || { bad "R6 score: V-HB under its stub scored [$(r6f ship.stub.cell)] broken=[$(r6f ship.stub.broken)]"; CTLBAD="$CTLBAD R6STUB"; }
-fi
 CTLBAD="${CTLBAD# }"
 mrow() { matrix_row "$1" "$2" 0 "$3" "$4"; MATRIX_ROWS=$((MATRIX_ROWS + 1)); } # <id> <arm> <GREEN|TRIPPED> <yes|no>
 mx_cells() { # <id> <program>
@@ -805,9 +659,8 @@ n_scored=0; n_exp=0
 while IFS='|' read -r name p dec twin; do
   [ -n "$name" ] || continue
   [ "$name" = h1-unstable ] && [ "$H1_STATE" != on ] && continue
-  case "$name" in r6-*) [ "$R6_ON" = 1 ] || continue ;; esac
   n_exp=$((n_exp + 1))
-  in_set "$p" "$MUTS $EMUTS $R6MUTS" || continue
+  in_set "$p" "$MUTS $EMUTS" || continue
   n_scored=$((n_scored + 1))
   [ "$MATRIX" -eq 1 ] && mx_cells "$name" "$p"
   dv="$(armv "$p" "$dec")"; tv="$(armv "$p" "$twin")"

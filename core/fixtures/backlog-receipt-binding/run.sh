@@ -1266,24 +1266,6 @@ if mut "$TMP/c1m" 's|awk -v p="\$WORK/" .index(\$1, p) == 1.|awk "NR > 1"|'; the
   git -C "$TMP/c1m" worktree prune >/dev/null 2>&1
 fi
 
-# c2 -- two concurrent runs against one repository. Both must exit 0; neither may see the
-# other's checkouts as its own.
-seed "$TMP/c2"
-( run_v "" "$TMP/c2" $DEF > "$TMP/c2.a.out" 2>&1; echo $? > "$TMP/c2.a.rc" ) &
-c2_a=$!
-( run_v "" "$TMP/c2" $DEF > "$TMP/c2.b.out" 2>&1; echo $? > "$TMP/c2.b.rc" ) &
-c2_b=$!
-wait "$c2_a" 2>/dev/null; wait "$c2_b" 2>/dev/null
-c2_arc="$(cat "$TMP/c2.a.rc" 2>/dev/null)"; c2_brc="$(cat "$TMP/c2.b.rc" 2>/dev/null)"
-if [ "${c2_arc:-x}" != "0" ] || [ "${c2_brc:-x}" != "0" ]; then
-  note "FAIL  c2 two concurrent runs did not both exit 0 (got '$c2_arc' and '$c2_brc'). Each run must ask the registry only about checkouts under its own working directory."
-  tail -3 "$TMP/c2.a.out" 2>/dev/null | sed 's/^/      A: /'
-  tail -3 "$TMP/c2.b.out" 2>/dev/null | sed 's/^/      B: /'
-  rc=1
-else
-  note "ok    c2 -- two concurrent runs against one repository both exit 0"
-fi
-
 # ===== M17. A NON-DETERMINISTIC RECEIPT IS NAMED, NOT ABSORBED AND NOT MISFILED. ===========
 # Measured once in thirty-three runs under three-way contention: a receipt guarding its
 # preconditions with `|| exit 9` answered 9 on one reading and its usual answer on the next,

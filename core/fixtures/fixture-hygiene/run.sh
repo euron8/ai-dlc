@@ -10,14 +10,17 @@
 #
 # THE WORLDS, each built once as a git repository (index only; the validator lists tracked files):
 #   dirty  one offender per arm: H1 a `-d …/.git` skip, H2 a declared-tool skip, H3 a `sh -c` start and a written
-#          `#!/bin/sh` stub run by path, H5 a battery with a mutation helper and no block, not on the allowlist.
+#          `#!/bin/sh` stub run by path, H5 a battery with a mutation helper and no block, not on the allowlist, E1 a
+#          receipt-x.sh that nothing reads.
 #   clean  the near-miss of each, carrying the property a regression would key on: a `-d …/.git` that exits 2, a
 #          declared tool that exits 2, `sh` inside an awk program, the same chmod'ed stub run as `bash P` (which
-#          ignores the shebang), and a battery WITH a valid block.
+#          ignores the shebang), a battery WITH a valid block, and the same receipt-x.sh run by its run.sh.
+#   Both carry a docs/backlog.md (E1 does not read it; receipt-bl868's ledger mode of the shared inert() does).
 # THE ARMS, each one read of a validator run:
-#   D1 D2 D3 D5  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:`
-#   C   the clean run is rc 0 with the OK line (the positive control: a run that scanned nothing cannot print it)
-#   R   the clean run's OK line names the probe's corpus count (2 files), so the root walk resolved to the probe
+#   D1 D2 D3 D5 DE1  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:` / `FAIL E1:`
+#   C   the clean run is rc 0 with the OK line, which counts 1 receipt and 0 inert (the positive control: a run that
+#       scanned nothing cannot print it)
+#   R   the clean run's OK line names the probe's corpus count (3 files), so the root walk resolved to the probe
 #   DV  --derive over the dirty world prints exactly the battery's row
 #   NM  a plain run executes no matrix-only cell (control: the per-push mutant drives ran)
 # THE MUTANTS are copies of the dirty world with the validator's arm silenced, guarded by cmp -s and an exactly-once
@@ -25,12 +28,13 @@
 # (exit 2) on any silenced arm, so no arm of this fixture can hold under it -- what a mutant proves is that the
 # validator's own self-probe catches the silenced arm, which is the defence a regression would meet first. Per push
 # each runs its own D arm only, and the kill is scored on the refusal line naming that arm.
-# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
-# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
-# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
-# MUTANT-MATRIX MH3S decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when the H3 stub join is silenced
-# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
-# MUTANT-MATRIX MH5N decides=D1,D2,D3,D5,C,R,DV twins=- why=the self-probe refuses the whole run when H5 reads a helper argument as a name
+# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
+# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
+# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
+# MUTANT-MATRIX MH3S decides=D1,D2,D3,D5,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when the H3 stub join is silenced
+# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
+# MUTANT-MATRIX MH5N decides=D1,D2,D3,D5,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H5 reads a helper argument as a name
+# MUTANT-MATRIX ME1 decides=D1,D2,D3,D5,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when E1 reads every receipt as read
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-hygiene/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed.
 #   MH1  H1's branch verdict made false        -> D1 reads the self-probe refusal naming H1
@@ -41,6 +45,8 @@
 #   MH5N H5's join re-reads the 1st argument of the fixture's mutation helper as a mutant name (the extraction the
 #        emission-site join removed) -> D5 reads the self-probe refusal naming H5 AND its got-only JOIN row on the
 #        seeded world-letter call `ck_mut A mutant-x` (m5m:5), so the kill is the world-letter cell, not MH5's
+#   ME1  E1's inert print made false (every receipt read as a reader, the arm disabled) -> DE1 reads the self-probe
+#        refusal naming E1
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "fixture-hygiene: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
@@ -90,6 +96,7 @@ EOF
 mkmut() { :; }
 EOF
     cp "$w/tools.tmp" "$w/core/fixtures/fa/tools.decl"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$w/core/fixtures/fb/receipt-x.sh"
   else
     put "$w/core/fixtures/fa/run.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -108,11 +115,14 @@ EOF
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fb/run.sh --matrix
 mkmut() { :; }
 mkmut MA x
+bash "$HERE/receipt-x.sh"
 EOF
     cp "$w/tools.tmp" "$w/core/fixtures/fa/tools.decl"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$w/core/fixtures/fb/receipt-x.sh"
   fi
   rm -f "$w/tools.tmp"
-  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -c core.hooksPath=/dev/null init -q "$w" && g -C "$w" add -A core >/dev/null 2>&1
+  mkdir -p "$w/docs" && printf '# ledger\n' > "$w/docs/backlog.md"
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -c core.hooksPath=/dev/null init -q "$w" && g -C "$w" add -A core docs >/dev/null 2>&1
 }
 mk_world "$WORK/w-dirty" dirty && mk_world "$WORK/w-clean" clean \
   || { echo "FIXTURE BROKEN: could not build the probe worlds byte-identical" >&2; exit 2; }
@@ -140,6 +150,8 @@ mk_mutant MH5 'if (!(f in LISTED)) print "FLOOR\t"' 'if (0) print "FLOOR\t"' \
 mk_mutant MH5N 'if (ISRUN && !HDL[i] && O[i] ~' 'if (S1[FX] != "" && match(s, "(^|[[:space:];&|(!])" S1[FX] "[[:space:]]+")) { k = literal(wordat(O[i], RSTART + RLENGTH)); if (k != "") print "K\t" FX "\t" REL ":" i "\t" k }
     if (ISRUN && !HDL[i] && O[i] ~' \
   || { echo "FIXTURE BROKEN: mutant MH5N DID NOT APPLY" >&2; exit 2; }
+mk_mutant ME1 'for (c in C) if (!(c in LIVE)) print c' 'for (c in C) if (0) print c' \
+  || { echo "FIXTURE BROKEN: mutant ME1 DID NOT APPLY" >&2; exit 2; }
 
 # --- one validator run per distinct state -------------------------------------------------------------------------
 drive() { # <tag> <world dir> [--derive]
@@ -158,8 +170,9 @@ verdict() { # <arm> <tag>
     D3) rcis "$t" 1 && [ "$(section "$t" H3)" = "    core/fixtures/fa/run.sh:7: sh -c 'exit 0' & p=\$!
     core/fixtures/fa/run.sh:8: a #!/bin/sh stub \$W/stub written here is executed at :9: \"\$W/stub\"" ] ;;
     D5) rcis "$t" 1 && [ "$(section "$t" H5)" = '    FLOOR fb: S1 mkmut()' ] ;;
-    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- self-probe fired both ways' ;;
-    R)  rcis "$t" 0 && has "$t" '; 2 fixture .sh scanned;' ;;
+    DE1) rcis "$t" 1 && [ "$(section "$t" E1)" = '    INERT core/fixtures/fb/receipt-x.sh' ] ;;
+    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- self-probe fired both ways' && has "$t" 'E1 1 receipt(s), 0 inert' ;;
+    R)  rcis "$t" 0 && has "$t" '; 3 fixture .sh scanned;' ;;
     DV) rcis "$t" 0 && [ "$(cat "$WORK/c.$t.out")" = "$(printf 'fb\tno MUTANT-MATRIX block; floor: S1 mkmut()')" ] ;;
     *) return 1 ;;
   esac
@@ -168,14 +181,14 @@ REFUSAL() { printf 'self-probe %s: FAIL' "$1"; }
 
 if [ "$MODE" = matrix ]; then
   : > "$WORK/mx.ran"
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1; do
     cp -R "$WORK/w-clean" "$WORK/mclean-$m" && cp -p "$WORK/mut-$m/$VREL" "$WORK/mclean-$m/$VREL" \
       || { echo "FIXTURE BROKEN: could not build the clean world for $m" >&2; exit 2; }
     drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & drive "$m.c" "$WORK/mclean-$m" &
   done; wait
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1; do
     dec=""; tw=""
-    for a in D1 D2 D3 D5; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
+    for a in D1 D2 D3 D5 DE1; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     for a in C R; do if verdict "$a" "$m.c"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     if verdict DV "$m.v"; then tw="$tw,DV"; else dec="$dec,DV"; fi
     printf 'MATRIX %s decides=%s twins=%s\n' "$m" "${dec#,}" "${tw#,}"
@@ -184,17 +197,17 @@ if [ "$MODE" = matrix ]; then
 fi
 
 drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & drive derive "$WORK/w-dirty" --derive &
-for m in MH1 MH2 MH3 MH3S MH5 MH5N; do drive "$m" "$WORK/mut-$m" & done
+for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1; do drive "$m" "$WORK/mut-$m" & done
 wait
 B_DIRTY=0
-for a in D1 D2 D3 D5; do
+for a in D1 D2 D3 D5 DE1; do
   if verdict "$a" dirty; then ok "$a the dirty world names exactly its seeded line"; : > "$WORK/base.$a"
   else bad "$a fails on the unmutated validator (rc $(cat "$WORK/c.dirty.rc")): $(head -c 800 "$WORK/c.dirty.out" | tr '\n' ' ')"; fi
 done
 verdict C clean && ok "C the clean world (every near-miss) is rc 0 with the OK line" \
   || bad "C the clean world is not clean (rc $(cat "$WORK/c.clean.rc")): $(head -c 800 "$WORK/c.clean.out" | tr '\n' ' ')"
-verdict R clean && ok "R the validator resolved the PROBE root (2 fixture .sh scanned, not this repository's corpus)" \
-  || bad "R the clean run did not report the probe's 2-file corpus"
+verdict R clean && ok "R the validator resolved the PROBE root (3 fixture .sh scanned, not this repository's corpus)" \
+  || bad "R the clean run did not report the probe's 3-file corpus"
 verdict DV derive && ok "DV --derive prints exactly the unblocked battery's row" \
   || bad "DV --derive printed: $(head -c 400 "$WORK/c.derive.out" | tr '\n' '|')"
 if [ -e "$WORK/base.D1" ] && verdict C clean; then
@@ -208,7 +221,8 @@ score() { # <mutant> <arm> <arm label in the self-probe>; 0 when the arm fails f
   rcis "$1" 2 && has "$1" "$(REFUSAL "$3")" || { bad "$1: arm $2 fails under it, but not by the self-probe naming $3 (rc $(cat "$WORK/c.$1.rc"))"; return 1; }
 }
 flag() { [ -e "$WORK/base.$1" ] && echo 1 || echo 0; }
-BASE_D1="$(flag D1)"; BASE_D2="$(flag D2)"; BASE_D3="$(flag D3)"; BASE_D5="$(flag D5)"
+BASE_D1="$(flag D1)"; BASE_D2="$(flag D2)"; BASE_D3="$(flag D3)"; BASE_D5="$(flag D5)"; BASE_DE1="$(flag DE1)"
+score ME1 DE1 E1 && mutant_killed "$([ "$BASE_DE1" = 1 ] && echo 1 || echo 0)" ME1 "ME1: arm DE1 fails by the self-probe refusal naming E1"
 score MH1 D1 H1 && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MH1 "MH1: arm D1 fails by the self-probe refusal naming H1"
 score MH2 D2 H2 && mutant_killed "$([ "$BASE_D2" = 1 ] && echo 1 || echo 0)" MH2 "MH2: arm D2 fails by the self-probe refusal naming H2"
 score MH3 D3 H3 && mutant_killed "$([ "$BASE_D3" = 1 ] && echo 1 || echo 0)" MH3 "MH3: arm D3 fails by the self-probe refusal naming H3"

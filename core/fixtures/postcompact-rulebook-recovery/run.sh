@@ -1717,7 +1717,7 @@ a_nogrant_run() { # a_nogrant_run <gate> <project> <counter> -> decision on stdo
   printf '#!/bin/bash\necho x >> "%s"\nexit 0\n' "$3" > "$_sd/sleep"; chmod +x "$_sd/sleep"
   : > "$3"
   _no="$(printf '{"tool_name":"Agent","session_id":"sess-A","transcript_path":"%s","tool_use_id":"toolu_nogrant_never","tool_input":{}}' "$2/t.jsonl" \
-    | PATH="$_sd:$PATH" RECOVER_GATE_NET=8 hook_run "$1" "$2" 2>/dev/null)"
+    | PATH="$_sd:$PATH" AI_DLC_TEST_RECOVER_GATE_NO_WALL=1 RECOVER_GATE_NET=8 hook_run "$1" "$2" 2>/dev/null)"
   _nd="$(dec_of "$_no")"; printf '%s\n' "${_nd%%|*}"
 }
 a_nogrant() {

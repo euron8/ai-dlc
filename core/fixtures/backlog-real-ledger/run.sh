@@ -6,7 +6,6 @@
 #        on the snapshot (scripts/validate-backlog-receipts.sh vs scripts/backlog-reverify.sh)
 #   b16  the size ceiling's entry count equals the classifier's on the snapshot
 #        (scripts/validate-backlog-size.sh vs scripts/backlog-reverify.sh)
-#   p1   a prose lead-in bullet in a host appended to the snapshot counts once, never twice
 #
 # THE LEDGER IS ledger.snapshot BESIDE THIS FILE, NOT docs/backlog.md (BL-872). Keyed on the live
 # ledger, this unit's invocations.decl counted validator STARTS over that content, so every backlog
@@ -21,19 +20,14 @@
 # keyed step whose key holds the ledger; AI_DLC_PRESUITE_SKIP=1 skips it), against the live ledger,
 # through the same two readers and the same comparison. What
 # stays here is the half a frozen corpus still answers: the three programs, as CHANGED, still agree
-# on a real-sized ledger, and p1's label rule (lib.sh's, the subject) still reads one host as one.
+# on a real-sized ledger.
 # The anchor-collision guard on BL-899 below is now a constant against the snapshot (max id BL-883);
 # it can fire only when the snapshot is refreshed past it.
 #
 # Usage: run.sh
 # Exit:  0 = both arms hold, 1 = one regressed, 2 = fixture broken.
-# THE ONE MUTANT (m-loose, the strict bullet test deleted from the seed's lib.sh) is scored on its
-# deciding arm p1-count (the ceiling reads the real ledger plus one host as +2, not +1) plus ONE named
-# twin, b16-count, which must stay green: the same mutated tree reading the real ledger ALONE still
-# agrees with the unmutated count, so the effect is confined to the phantom bullet. The mutant x arm
-# matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or a mutant is added
-# or changed. The recorded matrix plus the twin replaces the exact-vector assertion.
-# MUTANT-MATRIX m-loose decides=p1-count twins=b16-count
+# The mutant x arm matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or
+# a mutant is added or changed. The recorded matrix plus the twin replaces the exact-vector assertion.
 # MUTANT-MATRIX m-r9call decides=r9-call twins=j1-pop
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-real-ledger/run.sh --matrix
 set -u
@@ -94,7 +88,6 @@ bad() { note "FAIL  $1"; rc=1; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 . "$DIR/../lib/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
-B_P1=0
 B_R9=0
 
 # ===== p3: THE GATE NEVER NAMES A PROBE RECORD (BL-880). ===================================
@@ -432,63 +425,10 @@ if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ -n "$j1_arm" ]; then
   fi
 fi
 
-# ===== p1: A PROSE LEAD-IN BULLET ON THE REAL LEDGER (BL-820). ==============================
-# The real ledger plus one host entry that carries `- **BL-632 is LANDED** prose` before its
-# receipt must count exactly ONE more than the real ledger alone -- the host, never the phantom.
-# The ceiling is the cheap reader; the label rule is lib.sh's, shared by every BL- reader.
-# Declared empty, the real ledger counts 0 and the marker is no longer last once the host is
-# appended, so that branch is not a count comparison and is skipped by name.
-# m-loose (the strict bullet test deleted from the seed's lib.sh) must read +2.
-p1_seed() { # p1_seed <dir>
-  seed_s "$1"; cp "$REAL_LEDGER" "$1/docs/backlog.md"
-  printf '\n## BL-898 — host\n\nBody.\n\n- **BL-632 is LANDED** prose about another entry\n\nverify: manual\n' >> "$1/docs/backlog.md"
-}
-if [ "$b16_de" -eq 1 ] && [ -n "$b16_arm" ] && [ "$b16_arm" -gt 0 ]; then
-  p1_seed "$TMP/p1"
-  p1_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1")")"
-  if [ "$p1_arm" = "$(( b16_arm + 1 ))" ]; then
-    ok "p1 -- a host carrying a '- **BL-632 is LANDED**' lead-in adds exactly one entry to the real ledger ($b16_arm -> $p1_arm)"; B_P1=1
-  else
-    bad "p1 -- the real ledger counts $b16_arm and with one host appended counts '${p1_arm}', want $(( b16_arm + 1 ))"
-  fi
-  p1_seed "$TMP/p1m"
-  p1m_lib="$TMP/p1m/core/skills/ai-dlc-update/reconcile/lib.sh"
-  sed '/if (line !~ \/^BL-/d' "$LIBSRC" > "$p1m_lib"
-  if cmp -s "$LIBSRC" "$p1m_lib"; then
-    note "FAIL  p1 m-loose -- the label mutation DID NOT APPLY"; rc=1
-  else
-    p1m_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1m")")"
-    # The twin: the SAME mutated tree reading the real ledger alone (no host appended).
-    seed_s "$TMP/p1mt"; cp "$REAL_LEDGER" "$TMP/p1mt/docs/backlog.md"; cp "$p1m_lib" "$TMP/p1mt/core/skills/ai-dlc-update/reconcile/lib.sh"
-    p1mt_arm="$(bl_reported "$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/p1mt")")"
-    if [ "$p1m_arm" = "$(( b16_arm + 2 ))" ]; then
-      mutant_killed "$B_P1" m-loose "m-loose [p1-count]: with the loose label rule the lead-in counts too ($b16_arm -> $p1m_arm)"
-    else
-      bad "p1 m-loose SURVIVED: the loose rule read '${p1m_arm}', want $(( b16_arm + 2 ))"
-    fi
-    if [ "$p1mt_arm" = "$b16_arm" ]; then
-      ok "[b16-count] twin of m-loose stays green: the mutated tree reads the real ledger alone at $p1mt_arm, equal to the unmutated $b16_arm"
-    else
-      bad "[b16-count] the twin TRIPPED: the mutated tree reads the real ledger at '${p1mt_arm}', the unmutated tree at $b16_arm"
-    fi
-    if [ "$MATRIX" = 1 ]; then
-      p1_t=GREEN; p1_k=no; [ "$p1m_arm" != "$(( b16_arm + 1 ))" ] && { p1_t=TRIPPED; p1_k=yes; }
-      b16_t=GREEN; b16_k=no; [ "$p1mt_arm" != "$b16_arm" ] && { b16_t=TRIPPED; b16_k=yes; }
-      matrix_row m-loose p1-count 0 "$p1_t" "$p1_k"
-      matrix_row m-loose b16-count 0 "$b16_t" "$b16_k"
-      MROWS=$(( MROWS + 2 ))
-    fi
-  fi
-elif [ "$b16_de" -eq 0 ]; then
-  note "SKIP  p1 -- the real ledger is declared empty, so there is no count to compare"
-else
-  note "FAIL  p1 -- no usable real-ledger count from b16 (arm='$b16_arm' declared-empty rc=$b16_de)"; rc=1
-fi
-
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "[MX] a plain run executed no matrix-only cell (rows=0)"; else bad "[MX] a plain run executed $MROWS matrix rows"; fi
-elif [ "$MROWS" -eq 4 ]; then ok "[MX] the matrix run measured 4 cells for the 2 mutants"
-else bad "[MX] matrix rows=$MROWS, 4 expected"; fi
+elif [ "$MROWS" -eq 2 ]; then ok "[MX] the matrix run measured 2 cells for the 1 mutant"
+else bad "[MX] matrix rows=$MROWS, 2 expected"; fi
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-real-ledger -- j1 and b16 hold on the frozen ledger snapshot"

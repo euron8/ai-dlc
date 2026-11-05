@@ -800,8 +800,8 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #
 #   RAISED TO 3339 FOR ONE NEW DISTRIBUTION SCRIPT AND ONE NEW `.dist-only` FIXTURE DIRECTORY, NOT
 #   FOR A NEW ARM. `fork-profile.sh --section by-arm --stable`, base fc957e40 (0.770.0, whose
-#   tree the readings were taken on) and then the tip carrying `scripts/validate-decl-reasons.sh` and
-#   `core/fixtures/decl-reasons/`, twice each in ONE worktree at the same path, every file committed:
+#   tree the readings were taken on) and then the tip carrying one new distribution script (since
+#   removed) and one new `.dist-only` fixture directory (since removed), twice each in ONE worktree at the same path, every file committed:
 #   base 3329 and 3329 (STABLE 2 both), tip 3333 and 3332 (STABLE 2 and 3), so +3 to +4. I8 97 -> 98
 #   walks the new fixture directory; I84 305 -> 307 and I83 151 -> 152 walk the new script; I106
 #   43 -> 43 does not move, because the new script resolves no VERSION marker; I93 32 <-> 31 is the
@@ -5158,8 +5158,8 @@ fi
 #
 # directly beneath the comment "a fixture never driven is a green light nobody earned."
 # A fixture with no run.sh is therefore SKIPPED on every push, silently, while still
-# being declared an adversarial self-test in the map. check-1c-bypass and
-# check-15-bypass sat in that hole for their entire existence: both were `echo`
+# being declared an adversarial self-test in the map. Two fixtures (one since removed)
+# sat in that hole for their entire existence: both were `echo`
 # statements describing artifacts they never created, both were bound to a check, and
 # no gate, hook or suite could tell them from fixtures that passed.
 #
@@ -7046,8 +7046,8 @@ else
     # inside the sandbox, so the FILE must be copied while its CONTENT is never read. Keying it would
     # re-run those 12 fixtures on every release bump for nothing; deleting it breaks the walk-up. So a
     # line may be acquitted by a `# copy-only: <path>:<line> <text>` comment DIRECTLY above it, the
-    # `# <key>:` comment grammar scripts/validate-decl-reasons.sh reads for `# reason:` (that script is
-    # unchanged: it ignores every other comment). The citation is RESOLVED, not trusted: the cited
+    # `# <key>:` comment grammar of the `# reason:` line on a whole-tree declaration (every other
+    # comment is ignored). The citation is RESOLVED, not trusted: the cited
     # line of the cited file, under the scanned tree, must hold a `-f`, `-e` or `-d` test naming the
     # declared path's basename, must not read that file (`cat`, `<`, `grep`, `awk` and kin), and must
     # not be a shell comment: a cited line whose first non-blank character is `#` tests nothing. A
@@ -11243,7 +11243,6 @@ EOF
     ESV_EXEMPT='scripts/validate-plan-shape.sh does not ship, while core/skills/ai-dlc/enforcement-map.yaml does, so declaring it would write an emitter path into every consumer tree that resolves nowhere and can never be falsified at the only place it is wrong.
 scripts/validate-enforcement-map.sh does not ship either -- it checks the distribution s own two writers against each other, which a consumer has neither of -- so the same reason holds: a declared path would resolve nowhere in a consumer tree.
 scripts/ab-lead-model.js does not ship; it prices this repository s own transcript corpus against two model tiers and no consumer has that corpus, so a declared path would resolve nowhere in one.
-scripts/validate-decl-reasons.sh does not ship; it checks this repository s own core/fixtures/*/inputs.decl and its fixture is .dist-only, so a declared path would resolve nowhere in a consumer tree.
 scripts/pregate-self-check.sh does not ship; it runs this repository s own validators and fixtures over a builder s diff before a gate slot, and no consumer has that gate, so a declared path would resolve nowhere in a consumer tree.'
 
     esv_exempt_paths=""

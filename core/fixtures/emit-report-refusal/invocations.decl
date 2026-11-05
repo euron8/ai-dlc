@@ -1,5 +1,6 @@
 # Measured by an armed run through core/scripts/hermetic-run.sh (the judge's own J2/J3 output) at the tip carrying the mutant_killed/--matrix rewrite, then verified by a warm push of the committed tip.
 # BL-868 (* 2135->2127): -8, the A7 sampled half's eight `bash sample.sh` workers, removed (its outcome moved with load).
-2127 *
+# BL-868 (* 2127->1388, emit-report.sh 35->2): the R6APPR/R6SCORE/R6STUB scenarios and the six r6-* mutants, which drove the sibling's retry helpers, removed; two agreeing counted runs.
+1388 *
 0 core/scripts/validate-hook-registration.sh
-35 core/skills/ai-dlc-update/reconcile/emit-report.sh
+2 core/skills/ai-dlc-update/reconcile/emit-report.sh
