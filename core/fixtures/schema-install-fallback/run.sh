@@ -117,10 +117,10 @@ for _v in $(env | sed -n 's/^\(CLAUDE_CODE_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "
 unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# Walk up for VERSION, never count hops. ROOT_DIR, not ROOT: VERSION is read as the walk-up
-# marker, and it is keyed by `+VERSION` in inputs.decl.
+# Walk up for scripts/install.sh, never count hops. ROOT_DIR, not ROOT: scripts/install.sh is read as
+# the walk-up marker, and it is keyed by its `!` row in inputs.decl.
 ROOT_DIR="$HERE"
-while [ "$ROOT_DIR" != "/" ] && [ ! -f "$ROOT_DIR/VERSION" ]; do ROOT_DIR="$(dirname "$ROOT_DIR")"; done
+while [ "$ROOT_DIR" != "/" ] && [ ! -f "$ROOT_DIR/scripts/install.sh" ]; do ROOT_DIR="$(dirname "$ROOT_DIR")"; done
 INSTALL="$ROOT_DIR/scripts/install.sh"
 if [ ! -f "$INSTALL" ]; then
   echo "FIXTURE ERROR: no scripts/install.sh above $HERE (root resolved to $ROOT_DIR)" >&2

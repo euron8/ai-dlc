@@ -202,7 +202,7 @@ echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh" >&2
 # exits 2, because a silent fallback re-creates the cost this removes and reads identically.
 #
 # EMS_DECOY is the A40-A43 cwd-battery root, a SECOND argument slot, built by the driver beside the
-# template: a copy of it plus the distribution's VERSION and a `git init`. Cells never copy it, so
+# template: a copy of it plus a seeded VERSION and a `git init`. Cells never copy it, so
 # every seeded ROOT still lacks VERSION (the validator's I45 guard keys on that); the decoy carries
 # both markers so a validator that walks UP from its cwd for one resolves to the decoy, exactly as
 # it resolved to the live root before. Same fail-closed rule: no usable decoy, exit 2.
@@ -2871,7 +2871,7 @@ rm -f "$esv_bak"
 # seed. Every cell requires rc 1 AND the finding naming the seeded file AND output byte-equal
 # to C1 -- a cell keyed on equality alone scores two identical "schema missing" runs as a pass:
 #   C1  from a fresh `mktemp -d` cwd.
-#   C2  from a DECOY ROOT ($EMS_DECOY): the shard's seed template plus the distribution's VERSION
+#   C2  from a DECOY ROOT ($EMS_DECOY): the shard's seed template plus a seeded VERSION
 #       and a `git init`, a complete tree carrying no offender. It used to be the LIVE distribution root, and it
 #       is not any more because every mutant run from there read the whole live tree (~45 heavy
 #       greps per traced run). The decoy discriminates for the same reason the live root did:
@@ -3332,7 +3332,7 @@ $FN
   EMS_TEMPLATE="${4:-}"
   if [ -z "$EMS_TEMPLATE" ] || [ ! -d "$EMS_TEMPLATE" ] || [ ! -f "$EMS_TEMPLATE/scripts/validate-enforcement-map.sh" ]; then
     echo "FIXTURE ERROR: --run-one needs a seeded template as its 4th argument (EMS_TEMPLATE, after <assertion> and <vrun-ledger>); got '$EMS_TEMPLATE', which is unset, empty, not a directory, or carries no scripts/validate-enforcement-map.sh." >&2
-    echo "  Build one by hand with: T=\"\$(bash core/fixtures/enforcement-map-sites/seed.sh)\"; D=\"\$(mktemp -d)\"; cp -RX \"\$T/.\" \"\$D/\"; cp VERSION \"\$D/\"; git init -q \"\$D\"; bash core/fixtures/enforcement-map-sites/run.sh --run-one $FN \"\" \"\$T\" \"\$D\"" >&2
+    echo "  Build one by hand with: T=\"\$(bash core/fixtures/enforcement-map-sites/seed.sh)\"; D=\"\$(mktemp -d)\"; cp -RX \"\$T/.\" \"\$D/\"; printf 'seeded\\n' > \"\$D/VERSION\"; git init -q \"\$D\"; bash core/fixtures/enforcement-map-sites/run.sh --run-one $FN \"\" \"\$T\" \"\$D\"" >&2
     echo "  There is no fallback to seed.sh or to the live root on purpose." >&2
     exit 2
   fi
@@ -3535,7 +3535,7 @@ SELF="$HERE/$(basename "$0")"
 
 # THE SHARD'S ONE SEED AND ONE DECOY, built ABOVE the control so the control runs on the same
 # trees as every cell after it. Every `--run-one` copies the template; A40-A43 run their C2, C4
-# and full-mode cells from the decoy (the template plus the distribution's VERSION and a
+# and full-mode cells from the decoy (the template plus a seeded VERSION and a
 # `git init`). Two checks before anything reads them, and the second is repeated after the pool:
 #   presence  -- the validator, preclassify, and templates/ (I22 joins against
 #                templates/settings.json.template; seed.sh copies it for that reason), and for
@@ -3549,9 +3549,9 @@ SELF="$HERE/$(basename "$0")"
 #                other directory refuses instead of comparing two equal readings of the wrong tree.
 TPL="$(bash "$HERE/seed.sh")" || { echo "$NAME: FIXTURE ERROR — seed.sh failed to build the shard template" >&2; exit 2; }
 DCY="$(mktemp -d "${TMPDIR:-/tmp}/enforcement-map-sites-decoy.XXXXXX")" || { echo "$NAME: FIXTURE ERROR — mktemp failed for the decoy" >&2; exit 2; }
-cp -RX "$TPL/." "$DCY/" && cp "$HERE/../../../VERSION" "$DCY/VERSION" \
+cp -RX "$TPL/." "$DCY/" && printf 'seeded\n' > "$DCY/VERSION" \
   && ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; git init -q "$DCY" ) >/dev/null 2>&1 \
-  || { echo "$NAME: FIXTURE ERROR — could not build the decoy root $DCY (copy of the template, the distribution's VERSION, git init)" >&2; exit 2; }
+  || { echo "$NAME: FIXTURE ERROR — could not build the decoy root $DCY (copy of the template, a seeded VERSION, git init)" >&2; exit 2; }
 for _p in scripts/validate-enforcement-map.sh core/skills/ai-dlc-update/reconcile/preclassify.sh templates/settings.json.template; do
   [ -f "$TPL/$_p" ] || { echo "$NAME: FIXTURE ERROR — the seed template $TPL carries no $_p" >&2; exit 2; }
   [ -f "$DCY/$_p" ] || { echo "$NAME: FIXTURE ERROR — the decoy root $DCY carries no $_p" >&2; exit 2; }

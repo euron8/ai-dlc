@@ -5,4 +5,6 @@
 # diffs is the range git.decl packs, not files named here.
 !core/skills/ai-dlc-update/reconcile/self-update-gate.sh
 core/skills/ai-dlc-update/
-core/fixtures/lib/
+# lib rows derived from run.sh:2,112 (preamble.sh, mutant.sh).
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

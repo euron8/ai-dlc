@@ -1907,3 +1907,19 @@ Close condition: the census is re-run with the hook's own key function (`readset
 Provenance: batch b250 operator instruction; lead ai-dlc-be.
 
 verify: manual
+
+## BL-922 — h2-attest-scripts-dir's consumer-layout arms run the distribution layout
+
+**DEFECT.** Found by the b250 triggers-cluster tip adversary (BL-920 fast-track 3); it predates that change.
+
+`core/fixtures/h2-attest-scripts-dir/run.sh:146` says `--digest` "resolves tests/fixtures/ in a consumer", and the `--attest` arm at :155 is this fixture's consumer-layout proof. Neither reaches a `tests/fixtures/` lookup. `validate-h2-attestation.sh` sets `AI_DLC_ROOT` by walking up from its own directory (:60-74), and the SUT is always `$ROOT/core/scripts/validate-h2-attestation.sh` (run.sh:73); the `cd "$WORK"` at :143 and :155 does not move the root. The hermetic sandbox carries `.git` from `git init` at `core/scripts/hermetic-run.sh:523`, so the root is the sandbox in the distribution layout. Its fixture search (`validate-h2-attestation.sh:106-110`) finds `core/fixtures`, never `$WORK/tests/fixtures`. The consumer branch the arms claim to cover is untested, so a regression there is invisible.
+
+Fix: run the `--digest` and `--attest` arms against a mktemp consumer tree whose root resolves to the consumer layout (`tests/fixtures/` present, no `core/fixtures/`), assert the resolved fixture path, and keep the :146 message honest about which directory was resolved.
+
+Close condition: an arm that fails when the validator resolves `core/fixtures` for a consumer-layout root, with its mutant that forces the `core/fixtures` candidate first.
+
+Rules: BL-868.
+
+Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
+
+verify: manual
