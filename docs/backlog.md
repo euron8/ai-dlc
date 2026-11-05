@@ -1829,3 +1829,15 @@ Held:
 - 6 inert receipts are allowlisted in `scripts/inert-receipt-allowlist.txt`: `adversarial-shard-merge/receipt-bl718.sh`, `adversarial-shard-merge/receipt-bl719.sh`, `check-24-adversarial-convergence/receipt-bl829.sh`, `check-24-adversarial-convergence/receipt.sh`, `fixture-hygiene/receipt-bl868.sh` and `process-rule-pins/receipt-bl538.sh`. `remediator-shard-join/receipt-bl804.sh` was removed under BL-915 as unreferenced.
 
 verify: manual
+
+## BL-916 — the update skill asks one destructive-delete question per UPSTREAM-DELETED row, even where the consumer never modified the file
+
+**DEFECT.** SKILL.md step 7 said "Never batch-approve deletions", so a release deleting N core-owned files the consumer never touched costs N operator questions: ~72 per-file questions on graph's next pull become one.
+
+Operator ruling, batch b250: "the fix is to soften or remove the line 'Never batch-approve deletions'. Simple. Elegant."
+
+Fix: the step-7 rule text (and the step-5 deletions-list sentence) — one listed approval for `UPSTREAM-DELETED`, per-path on decline; consumer-modified and `ORPHANED-RELOCATED` unchanged.
+
+Provenance: batch b250, operator ruling.
+
+verify: manual
