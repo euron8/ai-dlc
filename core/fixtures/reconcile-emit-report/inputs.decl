@@ -4,6 +4,8 @@
 # mktemp by seed.sh; nothing walks up for VERSION.
 !core/skills/ai-dlc-update/reconcile/emit-report.sh
 core/skills/ai-dlc-update/reconcile/
-core/fixtures/lib/
+# lib rows derived from run.sh:2,242,3202 (preamble.sh, mutant.sh).
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh
 core/fixtures/reconcile-emit-report-b/run.sh
 core/fixtures/reconcile-emit-report-c/run.sh

@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1013.0] - 2026-11-05
+
+Batch b250, cluster triggers. BL-920 lands PARTIAL and stays LIVE. No PC- id is closed. NET 0 (filed 0 minus closed 0).
+
+### BL-920 (PARTIAL) — the fourth pass: four shard fixtures drop directory rows wider than what they read
+
+Fourth pass. procsub-staged-refusal-boot, procsub-staged-refusal-boot-c, reconcile-emit-report and reconcile-emit-report-b narrow `core/fixtures/lib/` to the two files their closures source, `preamble.sh` and `mutant.sh`, and the two procsub fixtures narrow `core/fixtures/reconcile-emit-report/` to the `seed.sh` they execute, matching the siblings narrowed in 0.1011.0. Over the 60 first-parent commits ending at 0443bfbfe, total triggered runs fall from 2881 at the 943cd72ae declarations to 2875, counted with the hook's own key function. Each edited fixture gives identical tallies under its base and new declarations, the shipping ones key clean in a fresh consumer install, and a static audit found no listing, glob or copy of either directory and no source line naming a dropped file.
+
 ## [0.1012.0] - 2026-11-05
 
 Batch b250, BL-912. BL-912 ships PARTIAL. Closes no PC- id. NET 0 (filed 0 minus closed 0).
