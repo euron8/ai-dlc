@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -62,15 +62,12 @@ one in the section. It refuses with exit 2 when it cannot reach the ceiling. **A
 whole, including any standing rule written inside it**, so a rule that must outlive its batch
 belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 249 IS CLOSED: SIX RELEASES, `v0.996.0` THROUGH `v0.1001.0`. THE NEXT SESSION STARTS BATCH 250.**
-This block replaces the batch-248 record. Lead was ai-dlc-e3; owners ai-dlc-d4, 57, 9c, cb and 51. No `graph-*` session is ever messaged.
-- **Landed** (`git log origin/main`; each subject starts with its version). After `0.999.0` came `0.1000.0` (operator, over 1.0.0); `validate-release-version.sh` compares fields numerically. **The next VERSION is `0.1002.0`.**
-  - `v0.996.0` BL-908; `v0.997.0` BL-907; `v0.998.0` BL-510 arm, BL-828, BL-868 item 15; `v0.999.0` BL-874, BL-875, BL-896, BL-904, BL-905; `v0.1000.0` BL-538 progress, still PARTIAL; `v0.1001.0` `7a6d25d44` BL-906.
-- **Operator rulings.** BL-510 fixed; BL-868 item 15 exempt; BL-842's seeded-run count dropped; BL-905 runner mode; BL-538 party rounds in c5; release commit rotates; `FORK_BUDGET` raised by owners (owner rules, Receipts).
-- **Facts.** `FORK_BUDGET=2901`, `fork-profile.sh --section total` 2899. A6 reads **74238/74240**: the next durable-channel edit fails A6. BL-538 closes only on an `Outcome measured:` line from a graph sprint on `0.1000.0` or later.
-- **Backlog.** Live 43, archive 838. **The next free id is BL-911.**
-- **Ledger.** 0 live over 11 qualifying refs plus graph's working tree (control 0); both batch candidates archived upstream. PENDING 0.
-- **Graph.** Installed `0.997.0` (`1d1f7c36`) on `ai-dlc/feature/per-chain-rebalancer-instances`, `main` 0.969.0; 0 writes by this batch. The pull is not preapproved.
+**BATCH 250 IS CLOSED: RELEASES `v0.1002.0` THROUGH `v0.1019.0`. THE NEXT SESSION STARTS BATCH 251.**
+This block replaces the batch-249 record below it. Lead was ai-dlc-be. No `graph-*` session is ever messaged.
+- **Landed** (`git log origin/main`). `v0.1002.0` through `v0.1009.0` and `v0.1011.0` through `v0.1019.0`; `0.1010.0` is not on `origin/main`. **The next VERSION is `0.1020.0`.**
+- **Backlog.** Live 52 at the `v0.1019.0` tip (`grep -c '^## BL-' docs/backlog.md`), archive 844. **The next free id is BL-926.**
+- **Open follow-ups.** BL-915 (PARTIAL: Fix item 1's arm-by-arm audit outside the BL-918 set); BL-911; BL-912, awaiting an `Outcome measured:` line on the first graph sprint that runs its hooks (baseline s321); BL-914, closed only by two pushes of one sha from clean worktrees with identical present sets; BL-921; BL-922; BL-923; and BL-868's receipt, the last row of `scripts/inert-receipt-allowlist.txt`, which BL-868's close wires or deletes.
+- **Graph.** Installed `0.1001.0` (`ff653a40`). The pull is not preapproved.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1004,9 +1001,10 @@ candidate's surviving half is upstream's to file and build, never a question for
       closes and the net (closed minus filed). Read the squash message's NET and `Co-Authored-By`
       lines before the push. Derive the NET from `base..tip` (an entry filed AND closed on the
       branch counts as both, net 0), never copy it from a brief.
-   7. Before EVERY push, a re-push included, run the pre-suite steps exactly as `docs/plans/graph-ledger-full-drain.md`
-      action "Gate it the way the hook runs it, and read the GATE's own exit." says; the release
-      push is the gate. Read each changed fixture BY NAME in the push's output, against an
+   7. Run the pre-suite steps exactly as `docs/plans/graph-ledger-full-drain.md` action "Gate it
+      the way the hook runs it, and read the GATE's own exit." says only when the release changes
+      a pre-push step, a script one of those steps runs, a receipt, or `.githooks/` (action 4's
+      rule). A fixture-only fix after a red push owes no prefix re-run. The release push is the gate. Read each changed fixture BY NAME in the push's output, against an
       impossible-name control, and read the push's read list including directory-prefix declarers.
       A lead's release-text request that arrives after the push has gone green rides the close
       docs; never amend a pushed commit. A release that edits `.githooks/` is pushed from the MAIN
@@ -1026,12 +1024,18 @@ candidate's surviving half is upstream's to file and build, never a question for
       `git branch -D`. The list also names every worktree under your scratchpad and
       `.claude/worktrees/` from `git worktree list --porcelain`, each HEAD shown reachable the same
       way: a hand's clean validation worktree is DETACHED, holds no branch, and a branch-keyed list
-      never sees it. List the worktree half from `git worktree list --porcelain` by each entry's
-      `branch` field and its `locked` field (a lock names a pid: list it as yours only when that
-      pid is your own session's), and also by PATH (your scratchpad, and `.claude/worktrees/agent-<id>`
-      for each agent id your session spawned), never by the scratchpad path alone: a hand may name
-      its own branch, batch 244's branch-keyed list missed three, and batch 242's path-keyed list
-      missed a detached scratch worktree. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
+      never sees it. Select the worktree half from `git worktree list --porcelain` as a union:
+      every entry whose `branch` field matches your cluster prefix, and every entry whose path is
+      under your own scratchpad or `.claude/worktrees/` pid-locked. Never select by remembered agent ids. A `locked` entry whose lock
+      names your own session's pid is yours. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
+
+   **Standing owner rules.**
+   - Act when the rulings decide it. Never ask <lead> for a ruling the rules already make.
+   - Run no kill matrix after a cut; the push runs the surviving mutants.
+   - A simple mechanical fix that misses the current release ships on its own fast-track release.
+   - Combine releases only when every part is built and needs no rebuild, and state the saving and
+     the cost when you propose it.
+   - A filing names a runner-wired `verify:` receipt when it is filed.
 
    **Reporting.** Message <lead> at: contract folded, build collected, tip adversary done, ready to
    gate. Send every FAIL to <lead> before changing any declaration or budget. Every claim carries

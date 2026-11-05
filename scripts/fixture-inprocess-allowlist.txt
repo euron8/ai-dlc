@@ -32,7 +32,7 @@ check-15-bypass	core/scripts/validate-stub-audit.sh declares 4 start(s) against 
 check-24-adversarial-convergence	core/scripts/validate-adversarial-convergence.sh declares 153 start(s) against 0 cell(s)
 check-24-adversarial-convergence-b	core/scripts/validate-adversarial-convergence.sh declares 113 start(s) against 0 cell(s)
 check-24-adversarial-convergence-c	core/scripts/validate-adversarial-convergence.sh declares 89 start(s) against 0 cell(s)
-check-24-adversarial-convergence-d	core/scripts/validate-adversarial-convergence.sh declares 53 start(s) against 0 cell(s)
+check-24-adversarial-convergence-d	core/scripts/validate-adversarial-convergence.sh declares 54 start(s) against 0 cell(s)
 check-25-steering-conduct	core/scripts/validate-steering-budget.sh declares 85 start(s) against 0 cell(s)
 claude-rules-joins	scripts/validate-claude-rules.sh declares 16 start(s) against 0 cell(s)
 command-args-citation	core/scripts/validate-steering-budget.sh declares 7 start(s) against 0 cell(s)
