@@ -1046,12 +1046,20 @@ post-`/compact` recovery, and lead self-orientation.
 **Canonical snapshot structure — seven required sections.** Lightweight
 markdown, no YAML frontmatter. This is the authoritative definition of
 the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
-`route.md` Step 0 on resume). Refresh these sections at every gate:
+`route.md` Step 0 on resume). Refresh these sections at every gate, every
+write through `scripts/ai-dlc/snapshot-update.sh` and never an Edit or Write
+of the file: `--set current_step_file <step-file> 'Pipeline Position'` (and
+`last_completed_step_file`, `last_gate_passed`, `branch` likewise),
+`--activity <text>` for the Recent Activity entry,
+`--line-add 'Locked Decisions' <text> --bottom` for a new locked decision, and
+`--set context_reminders_sent <value> 'Context Reminders'` for the reminder
+fields:
 
 - **Pipeline Position** — variant; update `current_step_file` (just
   completed), `last_completed_step_file`, `last_gate_passed` (gate name +
-  timestamp), and `current_branch` (refresh from
-  `git branch --show-current`).
+  timestamp), and `branch` (refresh from
+  `git branch --show-current`, recorded with
+  `--set branch <value> 'Pipeline Position'`).
   **`current_step_file` is SINGLE-VALUED and is OVERWRITTEN IN PLACE.** Edit
   the existing bullet; never add a second live one above or below it. A
   superseded position is recorded under a LABELLED key — `(prior)`,
@@ -1065,7 +1073,8 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   the three copies of that rule byte-identically.
   Plus any handoff-only resume instruction
   not derivable from the other fields (e.g., a bg watcher PID the
-  successor must re-arm) so that a bare `/ai-dlc resume` is
+  successor must re-arm), recorded with
+  `--set resume_instruction <value> 'Pipeline Position'`, so that a bare `/ai-dlc resume` is
   self-sufficient. This section also carries the **routing record**
   written once by `route.md` Step 6 and never rewritten after: the
   verbatim request and the routing signals Check 27 re-adjudicates —
@@ -1112,7 +1121,7 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   `stopped`, and `dispatched-at` is the output of
   `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId>` (the
   timestamp of the dispatch's spawn-ledger row), never a clock reading. A row is
-  added at dispatch as `in-flight`; at join it becomes `delivered-reachable`
+  written at dispatch as `in-flight` by the hook; at join it becomes `delivered-reachable`
   if the teammate is still alive and may be messaged again, and is
   **DELETED** once it will not be (see `_gate-procedures.md` "Sub-step
   snapshot update"). A teammate STOPPED before it delivered takes `stopped`
@@ -1189,12 +1198,14 @@ Exit 1 → **Check 14 FAILS**, on any of these independent verdicts:
 
 - **Over budget.** Trim the snapshot (the `Recent Activity` section holds the last
   ~10 entries and nothing more; superseded narrative and handoff appendices move to
-  `pipeline-snapshot-history.md`, which is write-only). Then run
+  `pipeline-snapshot-history.md`, which is write-only, each with
+  `snapshot-update.sh --move-to-history <section> <match>`). Then run
   `bash scripts/ai-dlc/rotate-snapshot-archive.sh _bmad-output/pipeline-snapshot-history.md --apply`
   so the destination this trim just fed stays bounded (Rule 25(a)). On a non-zero
   exit, read the rotator's stderr and fix what it names before re-running.
 - **Outside the seven-section schema.** The validator names each unknown section.
-  Move it verbatim to `pipeline-snapshot-history.md` and delete it here. Do **not**
+  Move it verbatim to `pipeline-snapshot-history.md` and delete it here, each line
+  with `snapshot-update.sh --section-move-to-history <heading>`. Do **not**
   fold its content into one of the seven — that keeps the bytes and loses the
   finding. A section nothing in core writes is a section nothing in core reads:
   not recovered after compaction, not consumed at any gate, not part of the handoff
@@ -1209,8 +1220,10 @@ Exit 1 → **Check 14 FAILS**, on any of these independent verdicts:
 - **A stamp later than the current UTC time.** The validator names each `Recent
   Activity` stamp or In-Flight `dispatched-at` cell more than 10 minutes ahead of
   `date -u`. Apply the remedy its first FAIL line prints, without asking and
-  before any trim: rewrite each Recent Activity stamp to `date -u`, and rewrite each
-  In-Flight `dispatched-at` cell to its dispatch's ledger ts, never from a clock —
+  before any trim: rewrite each Recent Activity stamp to `date -u` with
+  `snapshot-update.sh --line-replace 'Recent Activity' <match> <text>`, and rewrite each
+  In-Flight `dispatched-at` cell with `snapshot-update.sh --row-set <agent> dispatched-at <ts>`
+  to its dispatch's ledger ts, never from a clock —
   when the agent cell is an agentId, a toolu_ id or a `<name>@<team>`, what
   `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>` prints; otherwise
   that teammate's spawn-ledger row `ts`. Keep line order, and add the one
@@ -1218,30 +1231,32 @@ Exit 1 → **Check 14 FAILS**, on any of these independent verdicts:
   placeholder stamps, and date-only stamps are not checked.
 - **A dispatched-at earlier than its dispatch (`BACKDATED`).** The validator names
   each In-Flight row whose `dispatched-at` precedes its own spawn-ledger dispatch.
-  Re-stamp each named row from the dispatch itself: when the agent cell is an
+  Re-stamp each named row with `snapshot-update.sh --row-set <agent> dispatched-at <ts>`
+  from the dispatch itself: when the agent cell is an
   agentId, a toolu_ id or a `<name>@<team>`, what `scripts/ai-dlc/wait-for-deliverable.sh
   --dispatch-ts <id>` prints; otherwise that teammate's spawn-ledger row `ts`.
   Never back-date a row to make an older deliverable count.
 - **A dispatched-at that is not its dispatch's ledger ts (`LATE`).** The validator
   names each In-Flight row whose `dispatched-at` is not byte-equal to the ledger ts
   of the dispatch its agent cell resolves to, and each `LATE` line names that ts.
-  Replace each `LATE` row's `dispatched-at` cell with the ts its line names, then
-  re-run. Never stamp `dispatched-at` from a clock.
+  Replace each `LATE` row's `dispatched-at` cell with the ts its line names, through
+  `snapshot-update.sh --row-set <agent> dispatched-at <ts>`, then re-run. Never stamp `dispatched-at` from a clock.
 - **Superseded content marked in place.** The validator names each line that marks
   content superseded (strikethrough, a bracketed SUPERSEDED annotation, or a bare
   all-caps SUPERSEDED stamp). Move each marked line's superseded content verbatim to
-  `pipeline-snapshot-history.md` (write-only, Rule 25a) and delete it here.
+  `pipeline-snapshot-history.md` (write-only, Rule 25a) and delete it here, with
+  `snapshot-update.sh --move-to-history <section> <match>`.
 - **Struck-through In-Flight rows.** A row is deleted when the teammate will not be
   messaged again, never struck. A teammate that has delivered but is still alive and
   re-messageable gets `status: delivered-reachable` instead.
-  Remedy: DELETE each struck row whose teammate will not be messaged again; give a
-  delivered, still-reachable teammate `status: delivered-reachable`.
+  Remedy: `--row-delete <agent>` each struck row whose teammate will not be messaged again; give a
+  delivered, still-reachable teammate `--row-status <agent> delivered-reachable`.
 - **An unrecognised In-Flight status.** The leading token of the status cell must be
   `in-flight`, `delivered-reachable` or `stopped`. A teammate that delivered and will
   not be messaged again has no token: delete its row. A teammate stopped at a handoff
   keeps its row and takes `stopped`.
-  Remedy: KEEP the row and set the leading token of its status cell to `in-flight`,
-  `delivered-reachable` or `stopped`. Do not delete it.
+  Remedy: KEEP the row and set its status cell with `--row-set <agent> status <word>`, where
+  `<word>` is exactly `in-flight`, `delivered-reachable` or `stopped`. Do not delete it.
 
 Then re-run Check 14 and Check 15.
 

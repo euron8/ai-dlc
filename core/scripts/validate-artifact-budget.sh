@@ -163,7 +163,6 @@ GATE_LOG=""
 FAIL_ON=""
 STAMPS_ONLY=""
 PAYLOAD_FILE=""
-WHOLE_WRITE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -190,12 +189,11 @@ while [ $# -gt 0 ]; do
     --quiet)          QUIET=1; shift ;;
     --check-evidence) CHECK_EVIDENCE=1; shift ;;
     --gate-log)       GATE_LOG="${2:-}"; shift 2 ;;
-    # --stamps-only <snapshot> --payload <file>: the WRITE-TIME mode, called by the
-    # derivation-capture PostToolUse hook on a write to pipeline-snapshot.md. It judges only
+    # --stamps-only <snapshot> --payload <file>: the WRITE-TIME mode, called by
+    # snapshot-update.sh on the candidate snapshot before it writes. It judges only
     # the lines this write carried; see "THE WRITE-TIME MODE" below.
     --stamps-only)    STAMPS_ONLY="${2:-}"; shift 2 ;;
     --payload)        PAYLOAD_FILE="${2:-}"; shift 2 ;;
-    --whole-write)    WHOLE_WRITE=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -1979,11 +1977,11 @@ if [ "$PPROBE_HIT" != "### CO-S1-C" ] || [ -n "$PPROBE_MISS" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# THE WRITE-TIME MODE. `--stamps-only <snapshot> --payload <file>`: the derivation-capture
-# PostToolUse hook calls this on every Write|Edit|MultiEdit of pipeline-snapshot.md, so a
-# future stamp, a placeholder stamp or a back-dated or LATE dispatched-at is named at the write that
-# creates it, not at the next gate. Before this the arm ran only at Check 14 and Step 0a,
-# and a lead wrote three future stamps in four Edits with nothing said.
+# THE WRITE-TIME MODE. `--stamps-only <snapshot> --payload <file>`: snapshot-update.sh calls
+# this on the candidate snapshot before every write, so a future stamp, a placeholder stamp or
+# a back-dated or LATE dispatched-at is named at the write that creates it, not at the next
+# gate. The derivation-capture caller and the whole-write flag are deleted. MALFORMED
+# always runs under --stamps-only, its only caller.
 #
 # ONLY THE LINES THIS WRITE CARRIED ARE JUDGED. The snapshot is masked: a line equal to a
 # payload line is kept, every `## ` heading and every row naming `dispatched-at` is kept so
@@ -1992,13 +1990,9 @@ fi
 # touches one line must not be refused for another -- the malformed arm in particular fires
 # on 45 of the reference consumer committed revisions, newest included.
 #
-# THE PAYLOAD IS WHAT THE WRITE ADDED, NOT WHAT IT CARRIED. The hook subtracts each Edit's
-# old_string lines from its new_string, so a placeholder kept as context is not re-judged
-# (measured: 9 of 2961 real snapshot Edits on the reference consumer carried one). A full
-# Write has no before-state in its PostToolUse payload, so `--whole-write` skips MALFORMED
-# there -- RESIDUAL: a placeholder introduced by a whole-file Write is caught by nothing at
-# write time. FUTURE and BACKDATED still run on a Write: an old line they fire on is still a
-# live defect, where an old placeholder is only old text.
+# THE PAYLOAD IS WHAT THE WRITE ADDED, NOT WHAT IT CARRIED. snapshot-update.sh passes only the
+# lines the op added, so a placeholder kept as context is not re-judged (measured: 9 of 2961
+# real snapshot Edits on the reference consumer carried one).
 #
 # LATE runs here too, on the masked rows. Its SKIP lines (no sibling, no ledger, the count of
 # unresolved agent cells) are filtered at write time BY DESIGN, exactly as BACKDATED's are: a
@@ -2006,11 +2000,10 @@ fi
 # them.
 #
 # NOT the full validator: budget, schema and marker findings stay at the gate, where their
-# remedies apply. Exit 1 on a finding, 0 clean, 2 on bad usage -- the hook fails OPEN on 2.
+# remedies apply. Exit 1 on a finding, 0 clean, 2 on bad usage -- snapshot-update.sh refuses
+# the write on 1 (exit 1, file unchanged) and on 2 (a refusal).
 #
-# IT IS ADVISORY BY CONSTRUCTION. PostToolUse runs after the write landed; the hook exit 2
-# only returns this text to the model. And a Bash `sed -i` on the snapshot is not a
-# Write|Edit|MultiEdit, so it reaches no PostToolUse hook at all -- the gate scan is the
+# A Bash `sed -i` on the snapshot never reaches snapshot-update.sh, so the gate scan is the
 # only check that sees it.
 if [ -n "$STAMPS_ONLY" ]; then
   [ -f "$STAMPS_ONLY" ] && [ -f "$PAYLOAD_FILE" ] || {
@@ -2028,7 +2021,7 @@ if [ -n "$STAMPS_ONLY" ]; then
   _rel="${STAMPS_ONLY##*/}"
   {
     check_future_stamps "$_mask" "$_rel" "$SNAP_NOW"
-    [ "$WHOLE_WRITE" -eq 1 ] || check_malformed_stamps "$_mask" "$_rel"
+    check_malformed_stamps "$_mask" "$_rel"
     check_backdated_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")/spawn-ledger.jsonl" | grep -v '^SKIP '
     check_late_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")" | grep -v '^SKIP '
   } > "$TMPROOT/stamps-out"
@@ -2256,9 +2249,9 @@ report_future_stamps() {
   SAW_FUTURE=1
   say ""
   if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
-    echo "WARN: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below in place (keep line order) -- a Recent Activity stamp to \`date -u\`, an In-Flight dispatched-at cell to its dispatch's ledger ts (for an agentId, toolu_ id or <name>@<team> cell, what \`scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>\` prints, verbatim; otherwise that teammate's spawn-ledger row \`ts\`) -- then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\` (written so even for dispatched-at cells, <n> counting every rewritten stamp); do this WITHOUT ASKING and before any trim or move."
+    echo "WARN: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below in place (keep line order) -- a Recent Activity stamp to \`date -u\`, an In-Flight dispatched-at cell to its dispatch's ledger ts (for an agentId, toolu_ id or <name>@<team> cell, what \`scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>\` prints, verbatim; otherwise that teammate's spawn-ledger row \`ts\`) -- then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\` (written so even for dispatched-at cells, <n> counting every rewritten stamp); do this WITHOUT ASKING and before any trim or move. Edit the snapshot only through scripts/ai-dlc/snapshot-update.sh: \`--line-replace 'Recent Activity' <old-line> <new-line>\` for a Recent Activity stamp, \`--row-set <agent> dispatched-at <ts>\` for an In-Flight cell, and \`--line-add 'Recent Activity'\` for the CLOCK CORRECTION line."
   else
-    echo "FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below in place (keep line order) -- a Recent Activity stamp to \`date -u\`, an In-Flight dispatched-at cell to its dispatch's ledger ts (for an agentId, toolu_ id or <name>@<team> cell, what \`scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>\` prints, verbatim; otherwise that teammate's spawn-ledger row \`ts\`) -- then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\` (written so even for dispatched-at cells, <n> counting every rewritten stamp); do this WITHOUT ASKING and before any trim or move." >&2
+    echo "FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp below in place (keep line order) -- a Recent Activity stamp to \`date -u\`, an In-Flight dispatched-at cell to its dispatch's ledger ts (for an agentId, toolu_ id or <name>@<team> cell, what \`scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <id>\` prints, verbatim; otherwise that teammate's spawn-ledger row \`ts\`) -- then add ONE Recent Activity line \`<date -u> CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>\` (written so even for dispatched-at cells, <n> counting every rewritten stamp); do this WITHOUT ASKING and before any trim or move. Edit the snapshot only through scripts/ai-dlc/snapshot-update.sh: \`--line-replace 'Recent Activity' <old-line> <new-line>\` for a Recent Activity stamp, \`--row-set <agent> dispatched-at <ts>\` for an In-Flight cell, and \`--line-add 'Recent Activity'\` for the CLOCK CORRECTION line." >&2
     RC=1
   fi
   cat "$FUTURE_FILE" >&2
@@ -2465,7 +2458,9 @@ if [ -s "$SCHEMA_FILE" ]; then
       gate-validation.md Check 14 defines them; nothing else may be added.
 
       Remedy: move each unknown section verbatim to pipeline-snapshot-history.md
-      (write-only, Rule 25(a)) and delete it here. Do NOT fold its content into one
+      (write-only, Rule 25(a)) and delete it here, with
+      `scripts/ai-dlc/snapshot-update.sh --section-move-to-history <heading>`; a
+      missing seven-section heading is added with `--section-add <heading>`. Do NOT fold its content into one
       of the seven -- that keeps the bytes and loses the finding.
 
       A section nothing in core writes is a section nothing in core reads. It is

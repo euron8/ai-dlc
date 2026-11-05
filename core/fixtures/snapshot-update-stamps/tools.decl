@@ -22,3 +22,16 @@ sort
 tail
 tr
 wc
+jq
+touch
+sleep
+git
+uname
+stat
+find
+ln
+ps
+perl
+shasum
+rmdir
+kill

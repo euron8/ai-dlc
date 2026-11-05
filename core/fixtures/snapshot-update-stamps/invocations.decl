@@ -1,5 +1,19 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # Re-measured at slot sha 1a408b46e plus the m1-ii tip, armed through hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR), two runs, identical counts (p1's rows replaced: * 37->36).
-36 *
-10 core/scripts/snapshot-update.sh
-7 core/scripts/validate-artifact-budget.sh
+# Re-measured for the BL-912a arms (LOCK*, BLOCK*, STATUSVOC, READERS, SETBOLD, LIVE and their six mutants), armed as
+# .githooks/pre-push arms it with a fresh --gen-rc dir per run, two counted runs, identical counts: * 36->83.
+# Re-measured for the BL-912b arms (SECADD, SECMOVE, SWALLOW, ROWREPLACE, WRAPPED, KEYLINE, SETCREATE and their eight
+# mutants), armed the same way, two counted runs, identical counts: * 83->175, snapshot-update.sh 20->38,
+# validate-artifact-budget.sh 12->21.
+# Re-measured for the BL-912b fix-K arms (ROWIDDUP, HDRREMEDY, SECDUP, POSLINE, the SECADD and SETCREATE additions)
+# and their nine mutants (BLOCKCONTENT's fallback-state pair and m-blockfb included), armed the same way, two
+# counted runs, identical counts: * 175->344, snapshot-update.sh 38->59, validate-artifact-budget.sh 21->32,
+# ai-dlc-continue.sh 5->18, ai-dlc-recover.sh 2->15, validate-mandatory-rules.sh new at 10 (POSLINE and SECDUP run
+# Check 8, the third shipped position reader).
+344 *
+59 core/scripts/snapshot-update.sh
+32 core/scripts/validate-artifact-budget.sh
+18 core/hooks/ai-dlc-continue.sh
+15 core/hooks/ai-dlc-recover.sh
+0 core/hooks/ai-dlc-dispatch-guard.sh
+10 core/scripts/validate-mandatory-rules.sh

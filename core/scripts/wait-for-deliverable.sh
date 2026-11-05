@@ -1755,6 +1755,7 @@ if [ -n "$DISPATCH" ]; then
       done
     fi
     if [ -n "$dp_ag_" ]; then DP_AGENTS_="${DP_AGENTS_}${DP_AGENTS_:+ }$dp_ag_"; else dp_scope_ok_=0; fi
+    [ -z "$dp_ag_" ] || DP_ROW_AGENTS_="${DP_ROW_AGENTS_:-}${DP_ROW_AGENTS_:+ }$dp_ag_"
   done
   [ "$dp_scope_ok_" = 1 ] || DP_AGENTS_=""
   if [ -n "$SINCE" ] && [ "$SINCE" -gt "$DISPATCH_EPOCH" ]; then
@@ -1767,6 +1768,58 @@ if [ -n "$DISPATCH" ]; then
   if [ -n "$DISPATCH_TS_ONLY" ]; then printf '%s\n' "$DISPATCH_TS"; exit 0; fi
 fi
 SINCE_WARNED=0
+
+# THE IN-FLIGHT ROW ON DELIVERY (BL-912). A beat armed with `--dispatch <id>` that DELIVERS a path
+# sets that dispatch's In-Flight Teammates row to `delivered-reachable`, through the sibling
+# `snapshot-update.sh --row-status`. Only a row the in-flight-row hook's shape names is touched:
+# its agent cell's FIRST word is the dispatch's resolved agentId, its status is `in-flight`, and
+# its deliverable cell is the delivered path (root-relative or as passed).
+# THE ERA GATE. The write happens only in the era whose installed step file carries the sentence the
+# in-flight-row hook's own era gate reads (RD_ERA_SENTINEL, grep -F, the installed
+# `.claude/skills/ai-dlc/steps/_gate-procedures.md` first, else core's; the first readable file
+# decides). Before that era the lead still Edits the rows itself, and its hand-written rows mostly
+# carry a BARE agentId as the first word, so the shape alone does NOT keep the waiter out: measured
+# over graph transcripts, 1,916 of 2,237 hand-written in-flight rows had a bare agentId first word,
+# and 341 armed beats over 125 agents would have matched. The literal is the hook's ERA_SENTINEL;
+# the inflight-row-hook fixture's WBEAT cell goes red if it stops matching the real step file.
+# No such row, no snapshot, no sibling, no era sentence: silent.
+# A refused write is one WARN line on stderr and never changes the beat's verdict or exit.
+# --status and --dispatch-ts never reach here: both exit before any DELIVERED line is said.
+DP_ROW_AGENTS_="${DP_ROW_AGENTS_:-}"
+RD_ERA_SENTINEL='rows are written by the ai-dlc-inflight-row hook'
+RD_ERA_=""   # the era read, once per process: 1 held, 0 not
+rd_era_held() {
+  if [ -z "$RD_ERA_" ]; then
+    RD_ERA_=0
+    for rd_f_ in "$WD_ROOT/.claude/skills/ai-dlc/steps/_gate-procedures.md" "$WD_ROOT/core/skills/ai-dlc/steps/_gate-procedures.md"; do
+      [ -r "$rd_f_" ] || continue
+      grep -qF -- "$RD_ERA_SENTINEL" "$rd_f_" && RD_ERA_=1
+      break
+    done
+  fi
+  [ "$RD_ERA_" = 1 ]
+}
+row_on_delivery() {  # $1 = the delivered target
+  [ -n "$DP_ROW_AGENTS_" ] || return 0
+  rd_snap_="${STATE_DIR}/pipeline-snapshot.md"; rd_su_="${WD_SCRIPT_DIR}/snapshot-update.sh"
+  [ -f "$rd_snap_" ] && [ -f "$rd_su_" ] || return 0
+  rd_era_held || return 0
+  for rd_ag_ in $DP_ROW_AGENTS_; do
+    rd_dl_="$(RD_AG="$rd_ag_" LC_ALL=C awk -F'|' '
+      function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+      /^## / { ins = (index($0, "## In-Flight Teammates") == 1); next }
+      !ins || index($0, "|") == 0 { next }
+      { line = $0; sub(/^[ \t]*\|/, "", line); sub(/\|[ \t]*$/, "", line); k = split(line, c, "|")
+        if (!hdr) { for (j = 1; j <= k; j++) { h = trim(c[j]); if (h == "status") sc = j; if (h == "deliverable") dc = j; if (h == "dispatched-at") hdr = 1 }; next }
+        split(trim(c[1]), aw, /[ \t]+/)
+        if (aw[1] == ENVIRON["RD_AG"] && sc && dc && trim(c[sc]) == "in-flight") { d = trim(c[dc]); gsub(/`/, "", d); print d; exit } }' "$rd_snap_")"
+    [ -n "$rd_dl_" ] || continue
+    [ "$rd_dl_" = "$1" ] || [ "${WD_ROOT}/$rd_dl_" = "$1" ] || continue
+    rd_out_="$(bash "$rd_su_" --snapshot "$rd_snap_" --row-status "$rd_ag_" delivered-reachable 2>&1)" \
+      || echo "WARN: wait-for-deliverable: the In-Flight row of $rd_ag_ was not set delivered-reachable (snapshot-update.sh exit $?: $(printf '%s' "$rd_out_" | head -1)). Run: bash scripts/ai-dlc/snapshot-update.sh --row-status $rd_ag_ delivered-reachable" >&2
+  done
+  return 0
+}
 
 # ---------------------------------------------------------------------------
 # A TURN IS AN ASSISTANT OR USER (TOOL-RESULT) LINE, NOT A WRITE TO THE FILE. The harness also
@@ -2139,7 +2192,7 @@ for t in $TARGETS; do
   done
 
   if is_delivered "$t" "$j"; then
-    say "DELIVERED $t"
+    say "DELIVERED $t"; row_on_delivery "$t"
     say_revised "$t" "$c"
     record_delivered "$t" "$c"
     rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null || true
@@ -2508,7 +2561,7 @@ for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
   s="${c}.since"
   if is_delivered "$t" "$(join_of "$t")"; then
-    say "DELIVERED $t"
+    say "DELIVERED $t"; row_on_delivery "$t"
     say_revised "$t" "$c"
     record_delivered "$t" "$c"
     rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" 2>/dev/null || true

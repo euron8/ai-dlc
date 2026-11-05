@@ -25,7 +25,9 @@ sub-step updates are narrower in scope.
 each carry one change, the call applies them all, runs the write-time stamp check on the lines it
 added, and writes nothing on a finding (exit 1, the stamp remedy is printed) or on a target matching
 zero or several lines (exit 2). Fix what it names and re-run the whole call. A trim or a move to
-`pipeline-snapshot-history.md` (step 5) stays an Edit or Write.
+`pipeline-snapshot-history.md` (step 5) is `--move-to-history <section> <match>`, which appends the
+line to the history file first and removes it from the snapshot second. Every snapshot write in this
+procedure is a `snapshot-update.sh` op, never an Edit or Write.
 
 When a step file says "run sub-step snapshot update", execute:
 
@@ -48,15 +50,28 @@ When a step file says "run sub-step snapshot update", execute:
    Run `scripts/ai-dlc/validate-held-stories.sh`. On exit 1, dispatch or hold
    each UNACCOUNTED story before the next wave, re-act on each AGED-HOLD, and
    close each STALE-HOLD.
-3. Reconcile **In-Flight Teammates**: add a row for every teammate
-   dispatched since the last update (`agent name | role | deliverable
-   path | dispatched-at | status`, `status: in-flight`) — the deliverable
-   path is COPIED FROM THE BRIEF, which Rule 20 requires to name it, never
-   invented here to fill the cell, and `dispatched-at` is the output of
-   `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId>` (the
-   timestamp of the dispatch's spawn-ledger row), never a clock reading.
-   When a deliverable is consumed, set that row's `status` to `delivered-reachable` if the teammate is still alive and
-   you may message it again, and **DELETE** the row outright once you will not.
+3. Reconcile **In-Flight Teammates** (`agent name | role | deliverable
+   path | dispatched-at | status`).
+   In-Flight Teammates rows are written by the ai-dlc-inflight-row hook; the lead never adds one by Edit or Write.
+   The hook takes the deliverable path from the brief's `Deliverable: <path>`
+   line and stamps `dispatched-at` from the dispatch's spawn-ledger row.
+   **Every dispatch brief that owns an In-Flight row carries one line,
+   `Deliverable: <path>`, at line start, naming one path** (the path Rule 20
+   requires the brief to name, never invented to fill the cell); each sharded
+   dispatch's brief carries its own path. Add this line to the brief's ending
+   described in the `--mark` paragraph of the bounded-join procedure below.
+   When a brief lacks the line the hook writes no row and you receive its
+   message naming the call. Make that call, with `<ts>` the output of
+   `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId>`, never a
+   clock reading, and the path the brief named:
+
+       bash scripts/ai-dlc/snapshot-update.sh --row-add '<agentId> <toolu_id> | <role> | <path> | <ts> | in-flight'
+
+   When a deliverable is consumed, set that row's status with
+   `snapshot-update.sh --row-status <agent> delivered-reachable` if the teammate is still alive and
+   you may message it again, and `snapshot-update.sh --row-delete <agent>` once you will not.
+   The status cell is exactly `in-flight`, `delivered-reachable` or `stopped`;
+   free text goes to `--activity` or `--open-item`, never into the cell.
    This step does not delete a story's last In-Flight row while that story is
    still `ready-for-dev`.
    The one exception is a teammate STOPPED before it delivered: `steps/handoff.md`
@@ -70,8 +85,8 @@ When a step file says "run sub-step snapshot update", execute:
    an unbounded section — this one has overrun its byte budget before, which is
    why the `inflight-row-shape` fixture exists.
    Rows only — no prose, no struck-through history; `status` is how a row
-   says it has delivered. This section must be written **at
-   dispatch**, not only at the transition that follows it — a teammate
+   says it has delivered. The row exists **from dispatch**, not only from the
+   transition that follows it — a teammate
    dispatched and compacted-over before its row is written is exactly the
    teammate the lead will re-dispatch blind.
 4. Do NOT refresh other sections (Pipeline Position, Sprint Context,
@@ -1542,11 +1557,14 @@ carry the no-human-present additions:
    Halt any Agent-spawned teammate not bound to a task. Wait until every
    teammate has returned before proceeding. Record stopped teammates and
    in-flight artifacts in the snapshot's Open Items in Step 3, and set each
-   stopped teammate's **In-Flight Teammates** row `status` to `stopped` —
+   stopped teammate's **In-Flight Teammates** row `status` to `stopped` with
+   `snapshot-update.sh --row-status <agent> stopped` —
    rewrite the row, never delete it. Record the `TaskStop` task id in each
-   stopped row's agent cell. For each stopped row, run
+   stopped row's agent cell with
+   `snapshot-update.sh --row-replace <agent> <row>`. For each stopped row, run
    `scripts/ai-dlc/join-remediator-shards.sh --agent-writes <task id>` and
-   write its output into the snapshot's Open Items as that agent's
+   write its output into the snapshot's Open Items with
+   `snapshot-update.sh --open-item-file <file>` as that agent's
    unrecorded partial edits, never inferring them from `git status`.
    `steps/handoff.md` step 1 owns why. Where `ai-dlc-continue.sh` Check 0 is armed it blocks the stop
    while any row still reads `in-flight`, deferring only while a beat's
@@ -1644,8 +1662,10 @@ not.
 
 Read the Context Reminders block from the snapshot. If any required
 field is absent (e.g., snapshot predates this rule), initialize
-missing fields before proceeding: `context_reminders_sent: none`
-and each `last_*_fire_tokens`/`last_*_fire_turns` to `null`.
+missing fields before proceeding with
+`snapshot-update.sh --set <key> <value> 'Context Reminders'`:
+`context_reminders_sent: none` and each
+`last_*_fire_tokens`/`last_*_fire_turns` to `null`.
 
 The active thresholds are DERIVED by the sensor from the resolved
 effective window — each band is a clamped percentage of the window, a
@@ -1676,7 +1696,8 @@ effective_window=<int>
 window_source=<string>
 ```
 
-Reconcile the snapshot's Context Reminders fields to it:
+Reconcile the snapshot's Context Reminders fields to it with
+`snapshot-update.sh --set <key> <value> 'Context Reminders'`:
 
 - `context_reminders_sent` := `last_level`
 - `last_yellow_fire_tokens` / `last_yellow_fire_turns` := the

@@ -137,6 +137,8 @@ core_manifest:
   - core/fixtures/update-preflight-push/**
   - core/fixtures/push-drain-refusals/**
   - core/fixtures/inflight-row-shape/**
+  - core/fixtures/inflight-row-hook/**
+  - core/fixtures/snapshot-edit-deny/**
   - core/fixtures/known-skills-extension/**
   - core/fixtures/layer-anchor-declaration/**
   - core/fixtures/layer-catalog-collision/**

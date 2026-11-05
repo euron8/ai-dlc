@@ -1,0 +1,17 @@
+# Tools run.sh and the hook invoke.
+awk
+bash
+cat
+cmp
+cp
+cut
+dirname
+env
+jq
+mkdir
+mktemp
+mv
+rm
+rmdir
+sed
+tr

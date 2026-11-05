@@ -1,0 +1,15 @@
+# inflight-row-hook drives the hook under test and the waiter under test (each `!`), and copies the hook's and the
+# waiter's siblings into a consumer-layout world: the hook runs snapshot-update.sh, which runs the stamp validator,
+# which resolves a LATE candidate through wait-for-deliverable.sh and reads its id grammar from
+# validate-adversarial-convergence.sh; the waiter sources wfd-start-of.sh and resolves merge-adversarial-shards.sh.
+!core/hooks/ai-dlc-inflight-row.sh
+!core/scripts/wait-for-deliverable.sh
+core/scripts/snapshot-update.sh
+core/scripts/validate-artifact-budget.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/merge-adversarial-shards.sh
+core/scripts/wfd-start-of.sh
+# The era gate reads this step file; the fixture installs it, and a copy with the era sentence removed.
+!core/skills/ai-dlc/steps/_gate-procedures.md
+# The same-run kill helper, sourced by run.sh.
+!core/fixtures/lib/mutant.sh

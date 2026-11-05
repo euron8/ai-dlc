@@ -48,15 +48,18 @@ Execute this 5-step procedure in order:
    Halt any Agent-spawned teammate not bound to a task. Wait until every
    teammate has returned before proceeding. Record stopped teammates and
    in-flight artifacts in the snapshot's Open Items in Step 3, and set each
-   stopped teammate's **In-Flight Teammates** row `status` to `stopped`.
+   stopped teammate's **In-Flight Teammates** row `status` to `stopped` with
+   `snapshot-update.sh --row-status <agent> stopped`.
    **Rewrite the row; do not delete it** — at a handoff the successor
    needs to know what was running, and a deleted row is
    indistinguishable from a teammate that never existed. Record the
-   `TaskStop` task id in each stopped row's agent cell. For each stopped
+   `TaskStop` task id in each stopped row's agent cell with
+   `snapshot-update.sh --row-replace <agent> <row>`. For each stopped
    row, run `scripts/ai-dlc/join-remediator-shards.sh --agent-writes
    <task id>` and write its output into the snapshot's Open Items as
-   that agent's unrecorded partial edits, never inferring them from
-   `git status`.
+   that agent's unrecorded partial edits with
+   `snapshot-update.sh --open-item-file <file>` (save the output to the file
+   first), never inferring them from `git status`.
    `ai-dlc-continue.sh` Check 0 defers while this step's beat holds a
    live `.beat-inflight` lease, so the turn ends on the beat; once the
    lease has expired it blocks the stop while any row still reads

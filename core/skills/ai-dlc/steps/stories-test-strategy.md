@@ -772,7 +772,8 @@ are committed per-story by dev teammates during implementation.
 Scan all sprint stories for new visual surfaces (new UI components, pages,
 layout changes):
 
-- If **new visual surfaces found**: set `is_ui_epic = true`
+- If **new visual surfaces found**: set `is_ui_epic = true` with
+  `snapshot-update.sh --set is_ui_epic true 'Sprint Context'`.
   Run auto-handoff evaluation at `Seam B` with the label
   `stories-test-strategy end-of-step pre-gate (UI)` (see
   `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
@@ -780,7 +781,8 @@ layout changes):
   then:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/ui-direction.md`
 
-- If **no new visual surfaces**: set `is_ui_epic = false`
+- If **no new visual surfaces**: set `is_ui_epic = false` with
+  `snapshot-update.sh --set is_ui_epic false 'Sprint Context'`.
   Run auto-handoff evaluation at `Seam B` with the label
   `stories-test-strategy end-of-step pre-gate (no-UI)` (see
   `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation

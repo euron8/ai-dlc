@@ -8313,7 +8313,7 @@ fi
 # BOTH DIRECTIONS, and the probe runs FIRST. A seeded pair of identical copies must read SAME and a
 # seeded pair one byte apart must read DIFFER, before the shipped hooks are compared, so a broken
 # extractor (two empty strings compare equal) cannot report agreement.
-i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-advisor-gate.sh core/hooks/ai-dlc-recover.sh core/hooks/ai-dlc-recover-gate.sh core/hooks/ai-dlc-postcompact.sh core/hooks/ai-dlc-gate-remediation-guard.sh"
+i126_hooks="core/hooks/ai-dlc-acknowledge.sh core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-advisor-gate.sh core/hooks/ai-dlc-recover.sh core/hooks/ai-dlc-recover-gate.sh core/hooks/ai-dlc-postcompact.sh core/hooks/ai-dlc-gate-remediation-guard.sh core/hooks/ai-dlc-inflight-row.sh"
 i126_open='>>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>'
 # ONE awk, ONE fork, FOR THE PROBE AND THE CORPUS TOGETHER. The first draft ran a grep and an awk
 # per file inside a per-call subshell, four calls, plus a mktemp/mkdir/rm probe directory -- about
@@ -12192,7 +12192,7 @@ fi
 # vocabulary-invariant: I110
 # vocabulary-owner: core/scripts/validate-artifact-budget.sh
 # vocabulary-extract: inflight-statuses
-# vocabulary-readers: core/skills/ai-dlc/steps/route.md, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/_gate-procedures.md, core/skills/ai-dlc/steps/implementation.md, core/skills/ai-dlc/steps/handoff.md, core/skills/ai-dlc/SKILL.md, core/hooks/ai-dlc-continue.sh, core/hooks/ai-dlc-recover.sh
+# vocabulary-readers: core/skills/ai-dlc/steps/route.md, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/_gate-procedures.md, core/skills/ai-dlc/steps/implementation.md, core/skills/ai-dlc/steps/handoff.md, core/skills/ai-dlc/SKILL.md, core/hooks/ai-dlc-continue.sh, core/hooks/ai-dlc-recover.sh, core/scripts/snapshot-update.sh
 #
 # WHAT IT BINDS. The `status` column of the snapshot's `## In-Flight Teammates` section is a
 # closed set of three, and `check_inflight_status` in validate-artifact-budget.sh is the only
@@ -12459,6 +12459,22 @@ EOF
                       | sed "s|^$REPO_ROOT/||" | tr '\n' ',')"
       done
       err "I110: the In-Flight Teammates \`status\` column is taught with token(s) check_inflight_status does not accept:$i110_extra. A lead following the step writes that value into the snapshot and validate-artifact-budget.sh then fails the row it was told to write -- that is BL-147 exactly, and it was green in every gate for the life of the contradiction. The whitelist in core/scripts/validate-artifact-budget.sh is the owner: either add the member there, or stop teaching it. Taught in:$i110_where"
+    fi
+    # THE MACHINE WRITER'S COPY. core/scripts/snapshot-update.sh admits a status through its
+    # `status_ok` function, a chain of the SAME `if (tok == "<member>") next` lines the owner
+    # branches on, so the one sed that reads the owner reads it. Equality both ways: a member the
+    # writer lacks refuses a status the validator accepts, and one it adds writes a status the
+    # validator then fails. An empty extraction is a finding, not an agreement.
+    i110_su="$REPO_ROOT/core/scripts/snapshot-update.sh"
+    if [ ! -f "$i110_su" ]; then
+      err "I110: $i110_su is missing. It is the machine writer of the In-Flight status column and carries a copy of the status set that this arm binds to the owner."
+    else
+      i110_su_set="$(sed -n 's/^[[:space:]]*if (tok == "\([a-z][a-z-]*\)") next$/\1/p' "$i110_su" | LC_ALL=C sort -u)"
+      if [ -z "$i110_su_set" ]; then
+        err "I110 could not derive the status set from $i110_su: its \`if (tok == \"<member>\") next\` chain changed shape, so its copy of the set is unbound."
+      elif [ "$i110_su_set" != "$i110_set" ]; then
+        err "I110: core/scripts/snapshot-update.sh admits a status set that differs from check_inflight_status. Writer: $(printf '%s' "$i110_su_set" | tr '\n' ' ')| owner: $(printf '%s' "$i110_set" | tr '\n' ' '). Make the \`status_ok\` chain there list exactly the owner's members."
+      fi
     fi
     if [ -n "$i110_missing" ]; then
       err "I110: check_inflight_status accepts status token(s) no core file teaches:$i110_missing. A member of the set that appears in no step file, no SKILL.md rule and no hook is one a lead can never learn to write, so the whitelist is enforcing a value nothing produces -- which is how the FIRST spelling of this column (\`idle-reusable\`) survived its own rename. Teach it in the reader that owns the transition, or remove it from the whitelist."

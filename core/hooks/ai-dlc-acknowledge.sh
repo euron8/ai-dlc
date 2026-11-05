@@ -797,8 +797,8 @@ case "$TOOL_NAME" in
       # action -- a handoff), and Rule 2(c) then requires finalizing this very file before the
       # handoff. So the flag the handoff sets would deny the snapshot the handoff must write, and
       # a stale snapshot is a broken resume. Same shape and reasoning as the two carve-outs above.
-      # Bash can write it too (and is allowed while paused), but the lead edits an existing 40KB
-      # file with Edit, not a heredoc -- routing it to Bash is a trap, not a fix.
+      # Bash is allowed while paused, and the snapshot is written through snapshot-update.sh ops
+      # run from Bash; this arm stays because a raw Edit or Write of it must not deadlock a handoff.
       */_bmad-output/pipeline-snapshot.md|_bmad-output/pipeline-snapshot.md) ;;
 
       # THE ARCHIVE HALF OF THE FILE DIRECTLY ABOVE, and it is one arm rather than a wildcard

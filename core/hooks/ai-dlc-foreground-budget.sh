@@ -88,18 +88,60 @@
 # checkout|restore` of it, or an interpreter write -- `open(<it>, 'w'|'a'|'x'|'+')`,
 # `.write_text(`, `.write_bytes(`, `.open('w')`, `writeFileSync`/`appendFile*` -- on the literal
 # path or on a variable assigned that path earlier in the same command (`p='...snapshot.md'` then
-# `open(p,'w')`, `S=...; sed -i '' ... "$S"`). A shell write reaches no PostToolUse hook, so
-# `ai-dlc-derivation-capture.sh` (which judges `*/pipeline-snapshot.md` writes made by Edit or
-# Write) never sees the stamps it wrote; the remedy routes the same change through that judge.
+# `open(p,'w')`, `S=...; sed -i '' ... "$S"`). A shell write skips the stamp judge, which lives in
+# `snapshot-update.sh`; the Edit, Write, MultiEdit and NotebookEdit tools are refused on the
+# snapshot by `ai-dlc-snapshot-edit-deny.sh`. So the remedy names `snapshot-update.sh` ops and
+# never a tool: the ONE sanctioned writer is that script.
 # Reads stay allowed: `cat`, `grep`, `sed -n`, `<`, a `python3` `open(p)` or `open(p,'r')`, a
 # redirect whose TARGET is another file, `git add/commit/show/diff`, `cp` FROM it, and a
 # `bash <core script> ... pipeline-snapshot.md` call. ONE core script writes the snapshot:
 # `snapshot-update.sh`, the shell writer `_gate-procedures.md` "Sub-step snapshot update" names.
-# It passes under that same rule, not under an exemption -- no verdict here names it -- and it
-# carries the judge this deny routes writes to: it runs `validate-artifact-budget.sh
-# --stamps-only` on the lines it adds BEFORE it writes, and writes nothing on a finding
-# (`core/fixtures/snapshot-update-stamps`, with a mutant per removed layer). Any OTHER script
-# handed the path is unjudged, as before. `rotate-snapshot-archive.sh` writes the ARCHIVE.
+# It carries the judge: it runs `validate-artifact-budget.sh --stamps-only` on the lines it adds
+# BEFORE it writes, and writes nothing on a finding (`core/fixtures/snapshot-update-stamps`, with a
+# mutant per removed layer). Any OTHER script handed the path is unjudged, as before.
+# `rotate-snapshot-archive.sh` writes the ARCHIVE.
+#
+# THE SINGLE-SEGMENT SKIP (`suskip`). A call to either of those two scripts passes the write-shape
+# test anyway, because its own arguments write nothing -- except when an ARGUMENT's text reads as a
+# write shape: `--activity 'fixed the > .../pipeline-snapshot.md redirect'` was refused, a false
+# refusal of the sanctioned writer. So the test is skipped when the WHOLE command is one segment
+# whose command word, after optional `VAR=x` prefixes and an optional `bash`, is a path ending
+# `/snapshot-update.sh` or `/rotate-snapshot-archive.sh`, either bare or wrapped in ONE PAIRED
+# quote (the opening quote is captured and the closing one must be the same character, `\1`), and
+# whose rest is built only of single-quoted strings, double-quoted strings holding no `$(` or
+# backtick, and unquoted characters other than `;` `&` `|` newline `<` `>` `(` `)` `{` `}`
+# backslash, quote and backtick, with an unquoted `$` allowed only where neither `(` nor `'`
+# follows (inside double quotes `$'` is literal and stays allowed). The `'` exclusion is
+# load-bearing: an ANSI-C `$'x\''; sed -i '' s/a/b/ <snapshot> #'` read as `$` plus a closed
+# `'x\'`, while bash reads `\'` as an escaped quote and runs the sed (the SNAPCHAIN seeds and
+# mutant m-ansic). An unquoted backslash already falls through, so `x\'` cannot hide one. The
+# `cp`/`mv`/`install`/`ln` shape also counts a snapshot target followed by a blank and a `#`
+# comment, which `cp /dev/null <snapshot> #'` (that seed's other variant) needs, and which was
+# allowed even with no writer in front of it (mutant m-cpcomment). Between the target and that
+# end, separator or comment it also admits a run of redirections, each `[0-9]*` then `>`, `>>`,
+# `<`, `<<`, `<<<` or `<>`, an optional `&` and `|`, or `&>`/`&>>`, then one operand: a quoted
+# string or an unquoted word. Before that, `cp x <snapshot> 2>/dev/null`, `>/dev/null`, `1>&2`
+# and `</dev/null` were all allowed, a trailing redirect hiding the write (mutant m-cpredir). The
+# run is an atomic group, so a long one cannot be re-split. The snapshot as the SOURCE,
+# `cp <snapshot> /tmp/x 2>/dev/null`, stays allowed: the redirect run must follow the TARGET. The pairing is
+# load-bearing: with an optional quote on each side independently, an UNBALANCED one --
+# `'scripts/ai-dlc/snapshot-update.sh '; sed -i '' s/a/b/ <snapshot> #'` -- read as the command
+# word plus a quoted rest, was skipped, and bash runs it as the sed write it hides (the SNAPCHAIN
+# seeds and mutant m-unpaired). Anything else -- a chained `; sed -i ...`, a redirect onto the
+# snapshot, a `$(...)` or backtick that executes inside the argument, `x/not-snapshot-update.sh`,
+# `snapshot-update.sh.bak`, an unbalanced quote on the command word -- falls through to the
+# ordinary test. So the skip removes a deny only from a single-segment command whose command word
+# is a path ENDING in one of those two names; it does not prove that path is the sanctioned
+# script. Known misses, stated rather than prevented: a command word naming a same-named script
+# in another directory (`/tmp/x/snapshot-update.sh`), and a `VAR=x` prefix that changes what bash
+# loads (`BASH_ENV=...`). The skip test goes through `safetest` with an atomic rest-of-segment
+# group: exhaustion is "no skip".
+#
+# THE SNAPSHOT NAME IS MATCHED CASE-INSENSITIVELY, in both layers: the `contains` prefilter reads
+# the command through `ascii_downcase`, and `ps` is `(?i:...)`, which `bind` inherits. On a
+# case-insensitive filesystem (macOS default) `Pipeline-Snapshot.md` IS the snapshot. The census
+# figures below were measured BEFORE the skip, the case-insensitive match and the cp/mv
+# redirect run; none was re-swept, so read them as the base reading, not this hook's.
 # Measured on graph's transcripts: 4,617 Bash calls name the snapshot (4,346 distinct). The
 # shipped hook denies 1,912 (1,873 distinct); an independent second reading, keyed on the
 # variable's LAST binding before each interpreter write site plus a tokenised shell-write scan,
@@ -239,14 +281,14 @@ command -v jq >/dev/null 2>&1 || { say "jq not found, so the tool call cannot be
 T="$(jq -Rrs '
   def cmdtext: (if (.tool_input | type) == "object" then .tool_input.command else "" end) // "" | tostring;
   def wfdbg: "(?:^|[;&|\n(]|(?:^|[ \t;\n])(?:then|do|else)[ \t\n])[ \t\n]*(?:(?:nohup|env|exec|bash|sh)[ \t]+|[A-Za-z_][A-Za-z0-9_]*=[^ \t;&|\n]*[ \t]+)*[\"\u0027]?[^ \t\n;&|()<>\"\u0027]*wait-for-deliverable\\.sh[\"\u0027]?(?=[ \t\n;&|)<>]|$)(?:\"[^\"\n]*\"|\u0027[^\u0027\n]*\u0027|\\$\\([^()\n]*\\)|[^;&|\n()<>\"\u0027]|[|](?![|&])|(?>[<>]+)(?:&[0-9-]*|(?!&))|&>>?)*?(?<![ \t])[ \t]*(?:\\)[ \t]*)*&(?![&>])";
-  def ps: "pipeline-snapshot\\.md(?![A-Za-z0-9_.-])";
+  def ps: "(?i:pipeline-snapshot\\.md)(?![A-Za-z0-9_.-])";
   def seg: "(?:\u0027[^\u0027\n]*\u0027|\"[^\"\n]*\"|[^;&|\n\u0027\"])*";
   def bw: "(?:^|[^A-Za-z0-9_./-])";
   def inplaceverb: "(?:g?sed|perl)";
   def shwrite($tg): bw + inplaceverb + "[ \t](?:" + seg + "[ \t])?(?:-[A-Za-z]*i|--in-place)" + seg + $tg
     + "|(?:^|[^0-9&>=-])[0-9]*>>?[|]?[ \t]*" + $tg
     + "|" + bw + "tee[ \t]" + seg + $tg
-    + "|" + bw + "(?:cp|mv|install|ln)[ \t]" + seg + $tg + "[\"\u0027]?[ \t]*(?:$|[;&|\n)])"
+    + "|" + bw + "(?:cp|mv|install|ln)[ \t]" + seg + $tg + "[\"\u0027]?(?>(?:[ \t]*(?:[0-9]*(?:>>?|<<?<?|<>)&?[|]?|&>>?)[ \t]*(?:\"[^\"\n]*\"|\u0027[^\u0027\n]*\u0027|[^ \t\n;&|()<>\"\u0027]+))*)(?:[ \t]*(?:$|[;&|\n)])|[ \t]+#)"
     + "|" + bw + "git[ \t]" + seg + "(?:checkout|restore)[ \t]" + seg + $tg;
   def pywrite($tg): "open\\([ \t]*(?:Path\\([ \t]*)?" + $tg + "[ \t]*\\)?[ \t]*,[ \t]*(?:mode[ \t]*=[ \t]*)?[\"\u0027][rbt]*[wax+]"
     + "|(?:Path\\([ \t]*)?" + $tg + "[ \t]*\\)?\\.(?:write_text|write_bytes)\\("
@@ -256,6 +298,7 @@ T="$(jq -Rrs '
   def bind: "(?:^|[^A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:Path\\([ \t]*)?[\"\u0027]?[^ \t\n;&|()<>\"\u0027]*" + ps + "[\\s\\S]*?(?:";
   def var: "[\"\u0027]?(?:\\$\\{?)?(?<![A-Za-z0-9_.])\\1\\}?(?![A-Za-z0-9_/-])(?!\\.(?!write_|open\\())[\"\u0027]?";
   def safetest($re): try test($re) catch (if (tostring | test("retry-limit")) then false else error end);
+  def suskip: safetest("\\A[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*=[^ \t\n;&|()<>{}\"\u0027`$\\\\]*[ \t]+)*(?:bash[ \t]+)?([\"\u0027]?)[^ \t\n;&|()<>{}\"\u0027`$\\\\]*/(?:snapshot-update|rotate-snapshot-archive)\\.sh\\1(?=[ \t]|\\z)(?>(?:\u0027[^\u0027\n]*\u0027|\"(?:[^\"\n`$\\\\]|\\$(?![(]))*\"|[^;&|\n<>(){}\"\u0027`$\\\\]|\\$(?![(\u0027]))*)[ \t]*\\z");
   def snapwrite: safetest(shwrite(lit) + "|" + pywrite(lit)) or safetest(bind + shwrite(var) + "|" + pywrite(var) + ")");
   def cmdpos: "(^|[;&|\n(]|(^|[ \t;\n])(then|do|else)[ \t\n])[ \t\n]*";
   def loopend: "[;&|\n][ \t]*done([ \t;&|)<>\n]|$)";
@@ -273,7 +316,7 @@ T="$(jq -Rrs '
   else $w[0] | (
   (if .tool_name == "Bash" then cmdtext else "" end) as $cmd
   | if ($cmd | contains("wait-for-deliverable.sh")) and ($cmd | safetest(wfdbg)) then "DENY A"
-  elif ($cmd | contains("pipeline-snapshot.md")) and ($cmd | snapwrite) then "DENY B"
+  elif ($cmd | ascii_downcase | contains("pipeline-snapshot.md")) and ($cmd | suskip | not) and ($cmd | snapwrite) then "DENY B"
   else
   pushchain as $pc
   | if .tool_name == "Bash"
@@ -314,7 +357,7 @@ case "$T" in
   # The `\\u` is JSON for a literal backslash-u.
   '@PARSEFAIL@') printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"AI/DLC: the tool call payload could not be parsed as JSON, so this hook cannot read the command or its timeout and refuses the call rather than skip every check it carries. The usual cause is an escape JSON cannot decode, such as a lone surrogate `\\ud800` in the command. Re-issue the command without the unparseable escape. If this recurs on an ordinary command, check the jq install (`jq --version`)."}}'; exit 0 ;;
   'DENY A') deny "AI/DLC: this Bash call backgrounds wait-for-deliverable.sh with a shell \`&\`. The waiter's completion notification then never reaches you: the call returns at once and the beat is orphaned. Re-issue the same command WITHOUT the trailing \`&\` and with run_in_background: true, one waiter per call, and act on its completion notification." ;;
-  'DENY B') deny "AI/DLC: this Bash call writes pipeline-snapshot.md by shell (sed -i, perl -i, a > or >> redirect, tee, cp/mv/install/ln onto it, git checkout/restore of it, or an interpreter open/write_text on it). A shell write reaches no PostToolUse hook, so the stamps it writes are never judged. Make the change with the Edit tool (or Write) so ai-dlc-derivation-capture.sh judges the written stamps. Reading the snapshot by shell is not refused." ;;
+  'DENY B') deny "AI/DLC: this Bash call writes pipeline-snapshot.md by shell (sed -i, perl -i, a > or >> redirect, tee, cp/mv/install/ln onto it, git checkout/restore of it, or an interpreter open/write_text on it). A shell write skips the stamp judge. Make the change with scripts/ai-dlc/snapshot-update.sh, which judges the stamps before it writes: one Bash call, nothing chained after it, ops applied in order -- --set <key> <value> [<section>], --set-block <section> <key> <file>, --key-delete <section> <key>, --line-add <section> <text> [--bottom], --line-replace <section> <match> <text>, --line-delete <section> <match>, --move-to-history <section> <match>, --activity <text>, --open-item <text>, --open-item-file <file>, --close-item <match>, --row-add <c1 | c2 | ...>, --row-replace <agent> <row>, --row-status <agent> <status>, --row-set <agent> <col> <value>, --row-delete <agent>, --section-add <heading>, --section-move-to-history <heading>, --init <step-file> <sprint-id>. Reading the snapshot by shell is not refused." ;;
 esac
 
 [ -n "$T" ] || exit 0

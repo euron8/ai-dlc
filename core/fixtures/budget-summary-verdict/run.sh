@@ -611,6 +611,7 @@ wcheck() { # wcheck <label> -> 0 when the wrapper output carries the remedy and 
   _o="$WORK/runs/$1.out"
   [ "$(status_of "$1")" = "1" ] || return 1
   grep -q 'FAIL: pipeline-snapshot.md carries stamp(s) later than the current UTC time -- rewrite each FUTURE stamp' "$_o" || return 1
+  grep -q -- "--line-replace 'Recent Activity'" "$_o" || return 1   # the remedy names a snapshot-update.sh op
   grep -q 'CLOCK CORRECTION: rewrote <n> future stamp(s) to date -u: <old stamps as bare HH:MMZ>' "$_o" || return 1
   [ "$(grep -c 'FUTURE  _bmad-output/pipeline-snapshot.md line' "$_o")" = "5" ] || return 1
   grep -q 'OVER  ' "$_o" && return 1   # the cap is spent on the stamp verdict: proves co-occurrence was cut, not absent
