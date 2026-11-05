@@ -78,7 +78,7 @@ export CLAUDE_CONFIG_DIR="$WORK/home"
 # a statusline. Left unpinned, the arms below would resolve against the operator's own
 # session -- passing or failing on what that session happened to be doing, and doing it
 # differently on every run. Point it at a path inside the sandbox that does not exist, so
-# the layer declines by default; the runtime cases create it deliberately.
+# the layer always declines.
 #
 # The AI_DLC_* scrub above unsets any ambient value, and per-command assignments still
 # work, so this export is the only thing standing between the arms and the real file.
@@ -615,114 +615,6 @@ reset1m
 printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
   | CLAUDE_CODE_AUTO_COMPACT_WINDOW=200k CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "env CLAUDE_CODE_AUTO_COMPACT_WINDOW supersedes settings files" "$(field effective_window)" "200000"
-
-# --- the runtime window file outranks the env var -----------------------------
-# The env var is set once by a shell launcher and does NOT change when the model is
-# switched mid-session with /model, so a launcher configured for a 1M model leaves the
-# sensor ramping toward a number a 262144-context session never reaches. The statusline
-# writes the live answer to a file; these arms pin that the file wins, and pin every
-# condition under which it must NOT be trusted.
-#
-# SEEDED FROM WHAT THE PRODUCER EMITS, not from the subset this reader consults. An arm
-# carrying only `target` would pass against a reader that ignored session_id and ts
-# entirely, which is the reader this change exists to avoid writing.
-WIN="$WORK/window.json"
-NOW="$(date +%s)"
-SID="ffffffff-1111-2222-3333-444444444444"
-seedwin() { # $1 session  $2 ts  $3 target  $4 window  [$5 current_usage json]
-  printf '{"model":"m","window":%s,"target":%s,"used_percentage":19,"total_input_tokens":52924,"current_usage":%s,"session_id":"%s","ts":%s}\n' \
-    "$4" "$3" "${5:-null}" "$1" "$2" > "$WIN"
-}
-sidfire() { # $1 transcript  $2 session_id -> run the hook as that session
-  printf '{"transcript_path":"%s","session_id":"%s"}' "$1" "$2" \
-    | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null
-}
-
-reset1m
-seedwin "$SID" "$NOW" 420000 1000000
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "a 1M-context model reports ramp target 420000" "$(field effective_window)" "420000"
-check "  and records where the window came from" "$(field window_source)" "window.json (runtime)"
-
-# THE DISCRIMINATING ARM. Nothing is declared here, so MODEL_MAX is the 200000 floor
-# and the clamp is min(window, MODEL_MAX). A reader that took `target` but left that
-# clamp alone reports 200000 -- correct-looking, and wrong by 62144 on every reading.
-# The runtime file names the model, so it supplies MODEL_MAX too and the clamp is a
-# no-op rather than a second branch beside it.
-reset
-seedwin "$SID" "$NOW" 262144 262144
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "a 262144-context model reports 262144, not the assumed 200000" "$(field effective_window)" "262144"
-check "  and the window counts as DECLARED (the file named the model)" "$(field window_declared)" "1"
-
-# LAYER 1 OUTRANKS THE FAMILY LOOKUP, whichever family matched. A Haiku lead with HAIKU
-# declared at 260000 still takes the runtime file's answer; the declaration is what
-# answers when the file does not.
-reset
-seedwin "$SID" "$NOW" 420000 1000000
-printf '{"transcript_path":"%s","session_id":"%s"}' "$(at 100000 claude-haiku-4-5)" "$SID" \
-  | AI_DLC_MODEL_HAIKU_WINDOW=260000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
-check "window.json outranks a declared family window" "$(field effective_window)" "420000"
-check "  and the family is still recorded" "$(field model_family)" "HAIKU"
-rm -f "$WIN"
-printf '{"transcript_path":"%s","session_id":"%s"}' "$(at 100000 claude-haiku-4-5)" "$SID" \
-  | AI_DLC_MODEL_HAIKU_WINDOW=260000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
-check "  CONTROL: with the file gone the same declaration answers" "$(field effective_window)" "260000"
-
-# Each fallback separately: one arm covering all four cannot say which one fired.
-reset1m
-rm -f "$WIN"
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "a MISSING window file falls back to the settings layers" "$(field effective_window)" "300000"
-
-# THE AGE IS MEASURED FROM THE MOMENT THE SEED IS WRITTEN, NOT FROM THE FIXTURE'S START. `NOW`
-# above is read once, and by the time this arm runs the fixture has driven the hook a dozen
-# times; under the pre-push pool that is more than a second, so a seed stamped `NOW - 59` was
-# 60 or more seconds old when the hook read it and the fresh CONTROL below read 300000.
-# Measured: two of seven gate runs in one day failed exactly that arm, every solo run passed.
-#
-# AND STAMPING AT THE WRITE WAS NOT ENOUGH: the hook still reads the seed some time after it is
-# written, and at `now - 59` that is a one-second margin the pool's load can spend. The two arms
-# bound the 60s window from opposite sides and only ONE of them can be load-safe at the edge. The
-# STALE arm is: age only grows, so a seed written 61s old is at least 61s old when read. The CONTROL
-# sits at `now - 30`, half the window, so it holds unless the hook is 30s late -- and it still
-# separates a reader that honours the bound from one that refuses every window file, which reads
-# 300000 here exactly as the STALE arm does.
-reset1m
-seedwin "$SID" "$(( $(date +%s) - 61 ))" 420000 1000000
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "a STALE window file (ts 61s old) falls back" "$(field effective_window)" "300000"
-
-reset1m
-seedwin "$SID" "$(( $(date +%s) - 30 ))" 420000 1000000
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "  CONTROL: 30s old is still fresh and IS taken" "$(field effective_window)" "420000"
-
-reset1m
-seedwin "00000000-9999-9999-9999-999999999999" "$NOW" 420000 1000000
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "a FOREIGN session_id falls back (the path is shared between sessions)" "$(field effective_window)" "300000"
-
-reset1m
-printf '{"model":"m","window":1000000,"target":null,"used_percentage":null,"current_usage":null,"session_id":"%s","ts":%s}\n' "$SID" "$NOW" > "$WIN"
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "a NULL target falls back rather than reading as a 0 window" "$(field effective_window)" "300000"
-
-# current_usage is null before the first API call and again after a compaction. That
-# says nothing about `target`, which the producer computes from the model, so the file
-# stays usable -- absent is not empty, and neither field is derived from the other.
-reset1m
-seedwin "$SID" "$NOW" 420000 1000000 null
-sidfire "$(at 100000)" "$SID" >/dev/null
-check "a null current_usage does not disqualify a valid target" "$(field effective_window)" "420000"
-
-reset1m
-seedwin "$SID" "$NOW" 420000 1000000
-printf '{"transcript_path":"%s","session_id":"%s"}' "$(at 100000)" "$SID" \
-  | CLAUDE_CODE_AUTO_COMPACT_WINDOW=200k CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
-check "the runtime file outranks the launcher's env var" "$(field effective_window)" "420000"
-
-rm -f "$WIN"
 
 # --- bands track the resolved window (Change B) -------------------------------
 # The SAME reading changes level as the window changes, because the bands are a

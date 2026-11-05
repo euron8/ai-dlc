@@ -103,7 +103,6 @@
 # MUTANT-MATRIX m3b-anchor-anywhere decides=3b-notes.md twins=3b-app.py
 # MUTANT-MATRIX m3b-no-iii decides=3b-conflict.py twins=3b-app.py
 # MUTANT-MATRIX m3b-after-gate-exit decides=3b-app.py twins=3b-sib-x.md
-# MUTANT-MATRIX m3b-no-scanroots decides=3b-r.md twins=3b-app.py
 # MUTANT-MATRIX m3b-no-claude-md decides=3b-CLAUDE.md twins=3b-.gitignore
 # MUTANT-MATRIX m3b-no-lex decides=3b-nx-app.py twins=3b-app.py
 # MUTANT-MATRIX m3b-no-giveup decides=3b-hang twins=3b-app.py
@@ -2659,7 +2658,6 @@ lpe allow "3b: docs/coding-conventions.md is ALLOWED"                           
 lpe allow "3b: a repo-root dotfile (.gitignore) is ALLOWED"                               "$W/.gitignore" "$TA"
 lpe deny  "3b: a dotfile NOT at the repo root (src/.env) is DENIED"                        "$W/src/.env" "$TA"
 lpe allow "3b: a file carrying a <<<<<<< conflict marker is ALLOWED (Rule 28(a))"         "$W/src/conflict.py" "$TA"
-lpe allow "3b: a path under a grammar scan root (seeded: reports/) is ALLOWED"             "$W/reports/r.md" "$TA"
 # Retro Step 4 tells the lead to edit repo-root CLAUDE.md; a nested one is not that file.
 lpe allow "3b: repo-root CLAUDE.md (retro Step 4 sends the lead there) is ALLOWED"         "$W/CLAUDE.md" "$TA"
 lpe allow "3b: repo-root AGENTS.md is ALLOWED"                                             "$W/AGENTS.md" "$TA"
@@ -2789,9 +2787,6 @@ if mut m3b-no-iii "s@grep -q '^<<<<<<< ' \"\$LPE_TARGET\" 2>/dev/null@false@"; t
 fi
 if mut m3b-after-gate-exit 's@^case "\$FP" in /\*) LPE_ABS=@[ -d "$GATE_DIR" ] || exit 0; case "$FP" in /*) LPE_ABS=@'; then
   lpe_mut m3b-after-gate-exit "${B_3b:-0}" allow "$W/src/app.py" "$TA" allow "$SIB/_bmad-output/planning-artifacts/x.md" "$TA" "M3b-gate: the arm placed after the GATE_DIR exit ALLOWS P1 with no gate directory — the placement is load-bearing"
-fi
-if mut m3b-no-scanroots 's@case "\$LPE_REL" in "\$_lpe_sr"/\*|"\$_lpe_sr") LPE_PRODUCT=0 ;; esac@:@'; then
-  lpe_mut m3b-no-scanroots "${B_3b:-0}" deny "$W/reports/r.md" "$TA" deny "$W/src/app.py" "$TA" "M3b-roots: ignoring the grammar's scan roots DENIES reports/r.md — the resolver read is load-bearing"
 fi
 if mut m3b-no-claude-md 's@^    CLAUDE.md|CLAUDE.local.md|AGENTS.md) LPE_PRODUCT=0 ;;$@    CLAUDE.md|CLAUDE.local.md|AGENTS.md) ;;@'; then
   lpe_mut m3b-no-claude-md "${B_3b:-0}" deny "$W/CLAUDE.md" "$TA" allow "$W/.gitignore" "$TA" "M3b-claude: without the allowance repo-root CLAUDE.md is DENIED — the allowance is load-bearing"

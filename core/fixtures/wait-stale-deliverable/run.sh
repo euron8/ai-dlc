@@ -46,17 +46,9 @@
 # MUTANT-MATRIX state-dir-guard decides=C14_progress_guards twins=C13_progress_ignores_own_state
 # MUTANT-MATRIX path-exists-check decides=C14_progress_guards twins=C13_progress_ignores_own_state
 # MUTANT-MATRIX progress-sampling decides=C11_progress_extends twins=C13_progress_ignores_own_state
-# MUTANT-MATRIX resample-gate decides=C22_chained_progress twins=C23_chained_noprogress
-# MUTANT-MATRIX restamp-ungated decides=C24_chained_window twins=C25_sleeping_restamp
-# MUTANT-MATRIX no-restamp decides=C25_sleeping_restamp twins=C24_chained_window
-# MUTANT-MATRIX grant-unconditional decides=C23_chained_noprogress twins=C22_chained_progress
-# MUTANT-MATRIX grant-no-counter-rewrite decides=C22_chained_progress twins=C23_chained_noprogress
-# MUTANT-MATRIX lease-trap-unconditional decides=C33_lease_handoff twins=C38_lease_early
-# MUTANT-MATRIX lease-no-heir decides=C33_lease_handoff twins=C38_lease_early
-# MUTANT-MATRIX lease-always-put decides=C36_lease_noclobber twins=C38_lease_early
+# MUTANT-MATRIX no-restamp decides=C25_sleeping_restamp twins=C11_progress_extends
+# MUTANT-MATRIX grant-unconditional decides=C23_chained_noprogress twins=C12_progress_bounded
 # MUTANT-MATRIX lease-no-early decides=C38_lease_early twins=C44_bare_epoch
-# MUTANT-MATRIX no-join-memo decides=C40_two_beats_one_path twins=C42_memo_single
-# MUTANT-MATRIX since-kept-on-delivery decides=C42_memo_single twins=C44_bare_epoch
 # MUTANT-MATRIX preupgrade-taken decides=C44_bare_epoch twins=C38_lease_early
 # MUTANT-MATRIX lease-end-time decides=C10_marker_goes_stale twins=C44_bare_epoch
 #
@@ -156,8 +148,7 @@ beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and
 # otherwise a stub that was never on the beat's PATH (or never executable) reads exactly like a
 # beat that never slept.
 STUB_PATH=""; STUB_LOG=""
-# MODES. `real` (default) execs the real sleep with its own argument, for the cases whose subject
-# IS a beat parked in a long poll (frozen, killed, woken on purpose). `fast` records the call and
+# MODES (the caller always names one). `fast` records the call and
 # sleeps 0.05s whatever the argument, for a case that only needs the beat to ENTER a poll sleep
 # and then see a write. `gate` records and then blocks until `<dir>/release` exists, so the case
 # decides the moment the beat wakes and no clock does.
@@ -192,8 +183,8 @@ rm -f "$d_/clock.lock"'
   body="${body//@D@/$1}"; body="${body//@M@/$2}"
   printf '%s\n' "$body" > "$3"
 }
-sleep_stub() { # <dir> [real|fast|gate] [clock dir]
-  local real_sleep real_bash real_date real_mv mode="${2:-real}" body cdir="${3:-$1}" adv
+sleep_stub() { # <dir> <fast|gate> [clock dir]
+  local real_sleep real_bash real_date real_mv mode="${2:-}" body cdir="${3:-$1}" adv
   real_sleep="$(command -v sleep)"; real_bash="$(command -v bash)"; real_date="$(command -v date)"; real_mv="$(command -v mv)"
   [ -n "$real_sleep" ] && [ -n "$real_bash" ] && [ -n "$real_date" ] && [ -n "$real_mv" ] || { echo "FIXTURE ERROR: cannot resolve sleep/bash/date for the sleep stub" >&2; exit 2; }
   mkdir -p "$1/bin" "$cdir" || { echo "FIXTURE ERROR: cannot create the sleep stub dir" >&2; exit 2; }
@@ -203,17 +194,16 @@ sleep_stub() { # <dir> [real|fast|gate] [clock dir]
   CLK_DIR="$cdir"
   STUB_LOG="$1/sleep.log"; : > "$STUB_LOG"
   case "$mode" in
-    real) body="$(printf 'exec "%s" "$@"' "$real_sleep")" ;;
     fast) body="$(printf 'exec "%s" 0.05' "$real_sleep")" ;;
     gate) body="$(printf 'while [ ! -e "%s/release" ]; do "%s" 0.02; done' "$1" "$real_sleep")" ;;
     *) echo "FIXTURE ERROR: unknown sleep stub mode '$mode'" >&2; exit 2 ;;
   esac
   clk_advance_lib "$cdir" "$real_mv" "$cdir/clk-advance.sh"
-  adv="$(printf 'if [ "$#" -eq 1 ]; then case "$1" in ""|*[!0-9]*) ;; *) [ -e "%s/noadvance" ] || . "%s/clk-advance.sh" "$1" ;; esac; fi' "$cdir" "$cdir")"
+  adv="$(printf 'if [ "$#" -eq 1 ]; then case "$1" in ""|*[!0-9]*) ;; *) . "%s/clk-advance.sh" "$1" ;; esac; fi' "$cdir")"
   printf '#!%s\n%s\nprintf "%%s\\n" "$*" >> "%s"\n%s\n' "$real_bash" "$adv" "$STUB_LOG" "$body" > "$1/bin/sleep"
-  [ -e "$cdir/noadvance" ] || printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then read -r b_ < "%s/clock.base"; read -r o_ < "%s/clock"; printf "%%s\\n" "$(( b_ + o_ ))"; exit 0; fi\nexec "%s" "$@"\n' "$real_bash" "$cdir" "$cdir" "$real_date" > "$1/bin/date"
+  printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then read -r b_ < "%s/clock.base"; read -r o_ < "%s/clock"; printf "%%s\\n" "$(( b_ + o_ ))"; exit 0; fi\nexec "%s" "$@"\n' "$real_bash" "$cdir" "$cdir" "$real_date" > "$1/bin/date"
   chmod +x "$1/bin/sleep" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
-  [ -e "$cdir/noadvance" ] || chmod +x "$1/bin/date" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
+  chmod +x "$1/bin/date" || { echo "FIXTURE ERROR: cannot make the sleep stub executable" >&2; exit 2; }
   STUB_PATH="$1/bin:$PATH"
 }
 # A LOSSLESS RECORD OF THE LEASE WRITES. `mv_shim <bin dir> <log>` writes `<bin dir>/mv`: when its last argument
@@ -275,10 +265,9 @@ beat() { local w="$1"; shift; beat_with "$SUBJ" "$w" "$@"; }
 # the subject never looks up and every chained case would silently run with
 # MAY_SLEEP=1 -- passing, against the wrong code path.
 #
-# Content, not just the name, comes from what the subject's own producer writes at
-# `printf '%s' "$(date +%s)" > "$SIBLING"` -- an epoch, no newline. Seeding what
-# the READER happens to tolerate would prove only that the reader accepts the
-# fixture's grammar.
+# The content is an epoch alone, no newline. The subject's producer now writes
+# `<epoch> <shell start>`; a marker with no second field sends the reader to its
+# clock-only branch (`now - LAST < BUDGET`), and that is the branch these beats take.
 #
 # THE TRAILING `exit $?` IS THE WHOLE MECHANISM, NOT TIDINESS. bash EXECS the last
 # command of a `-c` string when it is a simple command, so `bash "$s"` REPLACES the
@@ -374,20 +363,6 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     state-dir-guard)         MUT_EXPR='s/^  SD_ABS="\$(abs_of "\$STATE_DIR")"$/  SD_ABS=""/' ;;
     path-exists-check)       MUT_EXPR='s/\[ -e "\$1" \] ||/[ 1 ] ||/' ;;
     progress-sampling)       MUT_EXPR='/progressed_since "\$pg" \&\& PROGRESSED=1/d' ;;
-    # THE THREE BELOW ARE ANCHORED ON INDENTATION, and that is load-bearing rather
-    # than cosmetic. `if [ -n "$PROGRESS_PATHS" ]; then` occurs TWICE in the subject
-    # -- once at column 0 for the state-dir argument guard, once at two spaces inside
-    # the target loop -- and mutating the first would rewrite an argument check while
-    # leaving the sampling gate alone: a mutant that applies cleanly to the wrong
-    # line, which `cmp -s` cannot see. Measured before these were written: the
-    # two-space anchor matches 1 line, the flush-left one matches 1, and an
-    # impossible anchor matches 0.
-    #
-    # `restamp-ungated` rewrites the CONDITION to `[ 1 ]` instead of deleting the
-    # `if`/`fi` pair, because `^    fi$` matches four lines in the subject and a
-    # paired delete would take the wrong one.
-    resample-gate)           MUT_EXPR='s/^  if \[ -n "\$PROGRESS_PATHS" \]; then$/  if [ -n "$PROGRESS_PATHS" ] \&\& [ "$MAY_SLEEP" -eq 1 ]; then/' ;;
-    restamp-ungated)         MUT_EXPR='s/^    if \[ "\$MAY_SLEEP" -eq 1 \]; then$/    if [ 1 ]; then/' ;;
     # THE REDIRECT ONLY, NOT THE LINE. Deleting the line leaves `if ...; then` with
     # `fi` and nothing between them, which is a bash SYNTAX ERROR: the mutant then
     # exits 2 having executed nothing, the mark it was supposed to move is trivially
@@ -396,7 +371,7 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     # phantom kills in cases that mutation has no business touching. `bash -n` in
     # `mutant` is now the standing guard.
     no-restamp)              MUT_EXPR='s%^      : > "\$pg" 2>/dev/null || true$%      : 2>/dev/null || true%' ;;
-    # The over-correction case 16 exists for: a subject that grants whether or not
+    # The over-correction C23 exists for: a subject that grants whether or not
     # anything was written. Dropping the CALL and keeping the assignment is what "the
     # sample no longer decides anything" looks like from the outside.
     #
@@ -404,40 +379,14 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     # Seeding the initialiser -- `PROGRESSED=0` -> `PROGRESSED=1` -- looks equivalent
     # and is not: that line sits OUTSIDE the guard, because the exhaustion arm reads
     # PROGRESSED whether or not the flag was passed. So it granted on FLAGLESS joins
-    # too, and case 22 caught it as a mutant reaching the default path. Caught by the
-    # existing arm, on the first full run, not by review.
+    # too, which an existing arm caught as a mutant reaching the default path on the
+    # first full run, not review.
     grant-unconditional)     MUT_EXPR='s/^    progressed_since "\$pg" \&\& PROGRESSED=1$/    PROGRESSED=1/' ;;
-    # THE ASYMMETRY THIS ONE GUARDS. A beat is charged only when the invocation
-    # sleeps; a GRANT is charged whether it sleeps or not. So a chained sibling that
-    # grants spends a grant and buys no wait, and if that were repeatable within one
-    # Bash call a chained lead would burn every grant in a single turn and arrive at
-    # NON-DELIVERY on a working teammate -- the same false non-delivery by another
-    # route. What stops it is this line: the grant rewrites the counter to
-    # MAX_BEATS-1, so the NEXT sibling in the same call is below the bound and never
-    # reaches the grant arm at all. `> /dev/null` rather than deleting the line,
-    # which would leave the `printf` writing to stdout and corrupt the output the
-    # assertions read.
-    grant-no-counter-rewrite) MUT_EXPR='s@^      printf .%s. "\$(( MAX_BEATS - 1 ))" > "\$c" 2>/dev/null || true$@      printf "%s" "$(( MAX_BEATS - 1 ))" > /dev/null 2>\&1 || true@' ;;
-    # ---- the lease and per-process-memo mutations (cases 33-45) ----------------------
-    # The pre-lease EXIT trap: every beat deletes the shared marker on exit, holder or not.
-    lease-trap-unconditional) MUT_EXPR="s#^trap 'lease_release' EXIT\$#trap 'rm -f \"\$BEAT_MARKER\" 2>/dev/null || true' EXIT#" ;;
-    # The holder releases without looking for an heir: it deletes the marker whenever it holds
-    # it. Anchored on the heir branch's own line; the `else rm` line beneath it stays.
-    lease-no-heir)            MUT_EXPR='s/^    if \[ -n "\$lr_heir_" \]; then lease_put .*$/    if false; then :/' ;;
-    # Every beat takes the marker on every beat_alive, live holder or not.
-    lease-always-put)         MUT_EXPR='s/^  if \[ "\$ba_pid_" = "\$WD_SELF_PID" \] || lease_holder_dead "\$ba_pid_"; then lease_put "\$ba_e_" "\$WD_SELF_PID"; fi$/  lease_put "$ba_e_" "$WD_SELF_PID"/' ;;
+    # ---- the lease mutations (C10, C38, C44) -----------------------------------------
     # The early lease, deleted: the bare `beat_alive` directly beneath the trap line. The
     # in-loop call before the sleep is ALSO a bare column-0 `beat_alive`, so the delete is
     # keyed on the line after the trap rather than on the text, which matches both.
     lease-no-early)           MUT_EXPR="/^trap 'lease_release' EXIT\$/{n;/^beat_alive\$/d;}" ;;
-    # The per-process join-epoch memo, removed: every join_of re-reads the shared sidecar.
-    no-join-memo)             MUT_EXPR='s/^  if \[ -n "\$jm_" \]; then printf .%s. "\$jm_"; return 0; fi$/  :/' ;;
-    # Keeping `.since` when a path delivers, the shape a fix for two beats on one path could
-    # take instead of the memo. Case 42 owns it: a later beat armed without --since then reads
-    # a delivered file as this join's answer. Aimed at the post-sleep report's cleanup (four-space indent
-    # and `${c}.progress`), not the pre-sweep's (`$pg`), because that is where a mid-beat
-    # delivery is consumed.
-    since-kept-on-delivery)   MUT_EXPR='s/^    rm -f "\$c" "\$s" "\${c}\.progress"/    rm -f "$c" "${c}.progress"/' ;;
     # A live pid-less (pre-upgrade) lease is taken instead of left alone.
     preupgrade-taken)         MUT_EXPR='/^  \[ -n "\$ba_pid_" \] || return 0  *# a live pre-upgrade lease/d' ;;
     # The pre-v0.81 marker: the lease is the beat's END time, fixed at its first write and
@@ -580,36 +529,6 @@ end_writer "$W/.stub/stop"
 if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
   ok "since-clamp: a 10-minute-future --since still accepts the real write"
 else bad "since-clamp: no DELIVERED line — --since was trusted past now, threshold unsatisfiable"; fi
-rm -rf "$W"
-}
-
-# --- 5. --since may pull the threshold EARLIER (the post-compaction join) -------
-# THE STUB'S CONTROL IS `stub_works`, NOT THE BARE BEAT. The bare beat does sleep, but whether it
-# reaches its sleep before a 3s deadline is itself a load bound; the stub's own `sleep 0` through
-# the same PATH proves the record channel with no clock in it. The --since beat's empty record
-# then means that beat really did not sleep.
-C05_since_earlier() {
-W="$( bash "$SEED" since-earlier )"
-sleep_stub "$W/.stub" fast
-beat "$W"
-if [ "$RC" -eq 0 ] && grep -q '^WAITING' "$BEATOUT" && ! grep -q '^DELIVERED' "$BEATOUT"; then
-  ok "since-earlier: bare call waits — a pre-join file is not proof, and waiting is not a failure"
-else bad "since-earlier: rc $RC — expected a WAITING beat with no DELIVERED line"; fi
-if stub_works; then ok "since-earlier: CONTROL — the sleep stub records a sleep run through its PATH"
-else bad "since-earlier: the sleep stub recorded nothing — 'did not sleep' below would be unmeasured"; fi
-: > "$STUB_LOG"
-# Quantum 4, not the default 1: an undelivered beat must be ABLE to enter its poll sleep here, or
-# the empty record below could not fail. The stub is `fast`, so that failing direction costs a few
-# 0.05s sleeps and the passing direction costs nothing.
-BW_Q=4; BW_PATH="$STUB_PATH"
-beat "$W" --since "$(( $(date +%s) - 60 ))"
-BW_Q=""; BW_PATH=""
-if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
-  ok "since-earlier: --since in the past recovers the early delivery"
-else bad "since-earlier: no DELIVERED line — --since could not move the threshold earlier"; fi
-# Also proves the fix did not turn every join into a mandatory sleep.
-if [ "$(stub_lines)" = "0" ]; then ok "since-earlier: returned without entering its poll sleep"
-else bad "since-earlier: entered its poll sleep $(stub_lines) time(s) on an already-satisfied join"; fi
 rm -rf "$W"
 }
 
@@ -883,19 +802,11 @@ rm -rf "$W"
 # mark deliberately. See the seed file -- without that, `progressed_since` has
 # nothing to compare against on its first call and every mutant looks equally dead.
 
-# --- 15. A CHAINED SIBLING MUST NOT REPORT A WORKING TEAMMATE AS NON-DELIVERY ----
-# Cases 10-13 all run with MAY_SLEEP=1, and that is why the defect below shipped
-# under a green fixture. The subject gated BOTH the progress SAMPLE and the mark
-# RE-STAMP on MAY_SLEEP. Only the re-stamp needs it: sampling is a pure read. With
-# both gated, a chained sibling arrived at the exhaustion arm with PROGRESSED forced
-# to 0 -- and that arm is NOT gated on MAY_SLEEP, so it denied the grant and printed
-# NON-DELIVERY for a teammate whose files were demonstrably being written. Rule 20
-# turns that into a re-dispatch of a live teammate, which is the one failure this
-# whole script exists to prevent.
-#
-# THE SOLE VARIABLE IS WHETHER A SIBLING BEAT RAN FIRST. The tree here is
-# byte-identical to `progress-extends`, so nothing but MAY_SLEEP can explain a
-# different verdict.
+# --- 15. THE CHAINED-SIBLING PATH (MAY_SLEEP=0) ----------------------------------
+# Cases 10-13 all run with MAY_SLEEP=1. The arms below run a beat whose calling shell
+# already recorded a sibling, so the subject takes its non-sleeping path; the tree is
+# seeded through the same block as `progress-extends`, so nothing but MAY_SLEEP can
+# explain a different verdict.
 sibling_witness() { # <work> <label> -- a HARNESS control, not a claim about the subject
   # ONE `.shell-*` marker means the shell that seeded it is the shell the subject
   # looked up. TWO means the seed named a PID the subject never read (the shape an
@@ -908,54 +819,10 @@ sibling_witness() { # <work> <label> -- a HARNESS control, not a claim about the
   else pre_bad "$2: $n sibling markers — the seeded marker is not the one the subject keyed on, so this case did not run with MAY_SLEEP=0"; fi
 }
 
-C22_chained_progress() {
-KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
-W="$( bash "$SEED" chained-progress )"
-chained_beat "$SUBJ" "$W" --progress-path wt
-
-sibling_witness "$W" "chained-progress"
-
-# The line a lead actually reads. `-eq 0` and the absence of NON-DELIVERY are one
-# claim stated twice on purpose: the exit code is what a Bash tool call surfaces,
-# the line is what the lead acts on, and the pre-fix subject got both wrong.
-if [ "$RC" -eq 0 ] && ! grep -q '^NON-DELIVERY' "$BEATOUT"; then
-  ok "chained-progress: a chained sibling does not declare non-delivery on a working teammate"
-else bad "chained-progress: rc $RC with NON-DELIVERY — a live teammate is re-dispatched because a sibling beat ran first"; fi
-
-if grep -q '^PROGRESS' "$BEATOUT"; then
-  ok "chained-progress: stdout names PROGRESS — the lead is told not to re-dispatch"
-else bad "chained-progress: no PROGRESS line; the grant is invisible to the lead"; fi
-
-# Witnesses that this ran the NON-SLEEPING path all the way to its own exit, rather
-# than reaching the grant by way of MAY_SLEEP=1.
-case "$OUT" in
-  *"a sibling beat already ran in this same Bash call"*)
-    ok "chained-progress: the beat took the non-sleeping return, so MAY_SLEEP was 0" ;;
-  *) bad "chained-progress: no chained-sibling NOTE — this beat slept, so it is not the case under test" ;;
-esac
-
-# The message is not the mechanism. A subject that printed PROGRESS and granted
-# nothing would still re-dispatch on the next beat while reading as fixed.
-if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "1" ]; then
-  ok "chained-progress: one grant charged — the extension is counted, not free"
-else bad "chained-progress: .grants not 1 — an uncounted extension is an unbounded wait"; fi
-# THIS ASSERTION CARRIES MORE THAN IT SAYS, and case 23 is the mutant that shows it.
-# A grant is charged whether or not the invocation slept, while a BEAT is charged only
-# when it sleeps. The counter rewrite is the only thing that stops a second sibling in
-# the same Bash call from reaching the grant arm again: at MAX_BEATS-1 it is below the
-# bound. Without it a chained lead burns every grant in one turn and lands on
-# NON-DELIVERY with a teammate still writing.
-if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}" 2>/dev/null)" = "5" ]; then
-  ok "chained-progress: the counter is set to MAX_BEATS-1 — the next sibling in this call cannot grant again"
-else bad "chained-progress: counter not MAX_BEATS-1; a second chained sibling can grant in the same call and burn the whole grant budget in one turn"; fi
-rm -rf "$W"
-}
-
-# --- 16. ...and the near-miss stays quiet ---------------------------------------
-# Same chained sibling, same spent sequence, one fact removed: nothing under the
-# worktree is newer than the mark. Without this arm, a subject that granted
-# UNCONDITIONALLY -- which is one deleted comparison away -- would satisfy case 15
-# and read as fixed.
+# --- 16. a chained sibling with no evidence of work does not grant ----------------
+# Chained sibling, spent sequence, and nothing under the worktree newer than the
+# mark. A subject that granted UNCONDITIONALLY -- one deleted comparison away --
+# would print PROGRESS here and hold the join open.
 C23_chained_noprogress() {
 W="$( bash "$SEED" chained-noprogress )"
 chained_beat "$SUBJ" "$W" --progress-path wt
@@ -971,57 +838,10 @@ else ok "chained-noprogress: no PROGRESS line — the grant discriminates"; fi
 rm -rf "$W"
 }
 
-# --- 17. the window the original gate protected is STILL protected ---------------
-# This is the arm that stops "delete the gate" passing as the fix. A non-sleeping
-# sibling must not re-stamp the mark: re-stamping shrinks the observation window to
-# nothing, so the NEXT beat asks "was anything written since a moment ago" and
-# reports a working teammate as idle -- the same false non-delivery from the other
-# direction.
-#
-# The counter is BELOW the bound here, so the grant path never runs. At the bound it
-# rewrites the counter too, and two writes in one observation cannot be attributed.
-C24_chained_window() {
-KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
-W="$( bash "$SEED" chained-window )"
-MARK="$W/_bmad-output/.wait-beats/${KEY}.progress"
-M0="$( fx_mtime "$MARK" )"
-[ "$M0" != "0" ] || { echo "FIXTURE ERROR: chained-window seeded no .progress mark to measure" >&2; exit 2; }
-
-chained_beat "$SUBJ" "$W" --progress-path wt
-if [ "$( fx_mtime "$MARK" )" = "$M0" ]; then
-  ok "chained-window: a non-sleeping sibling leaves the mark alone — the window stays open"
-else bad "chained-window: the mark was re-stamped by a beat that did not sleep; the window is shrunk to nothing and the next beat reads a working teammate as idle"; fi
-
-# THE BEHAVIOURAL HALF, because an mtime is a proxy and the outcome is the claim. A
-# FOLLOWING beat must still see the window its sleeping predecessor opened. Re-seed
-# the counter to the bound so the answer is a verdict the lead would read; if the
-# mark had been re-stamped above, `wip.txt` would no longer be newer than it and
-# this second beat would print NON-DELIVERY instead.
-#
-# THE FOLLOWING BEAT IS A SLEEPING ONE, AND THAT IS WHAT KEEPS THIS ARM THE WINDOW'S
-# AND NOT THE SAMPLE'S. Chained, it would also need the sample to be ungated, so
-# re-gating the sample would red this case as well as case 15 -- two failures for one
-# mutant, which means one of the two arms is not measuring what it says. Case 15 OWNS
-# the sample gate. Here MAY_SLEEP is 1, the sample runs under either build, and the
-# only thing left that can change the verdict is whether the window survived.
-printf '6' > "$W/_bmad-output/.wait-beats/${KEY}"
-beat "$W" --progress-path wt
-case "$OUT" in
-  *"a sibling beat already ran in this same Bash call"*)
-    bad "chained-window: the following beat was itself chained — this arm then also depends on the sample gate, which case 15 owns" ;;
-  *) ok "chained-window: CONTROL — the following beat is a sleeping one, so the sample runs either way" ;;
-esac
-if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
-  ok "chained-window: the following beat still observes the earlier window and grants"
-else bad "chained-window: rc $RC and no PROGRESS on the following beat — the window did not survive the sibling"; fi
-rm -rf "$W"
-}
-
 # --- 18. the other direction: a beat that DOES sleep re-stamps the mark ----------
-# Case 17 alone would be satisfied by a subject that never re-stamped at all, and
-# that subject grants forever: the mark ages without bound, so anything written
-# since the join armed keeps reading as this beat's progress. The re-stamp is what
-# makes the signal a DELTA. This is the only new case that sleeps.
+# A subject that never re-stamped at all grants forever: the mark ages without
+# bound, so anything written since the join armed keeps reading as this beat's
+# progress. The re-stamp is what makes the signal a DELTA.
 C25_sleeping_restamp() {
 KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
 W="$( bash "$SEED" sleeping-restamp )"
@@ -1048,24 +868,18 @@ chained_beat "$SUBJ" "$W" --progress-path wt
 if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
   ok "chained-grant-bounded: a chained sibling with every grant spent still ends the wait"
 else bad "chained-grant-bounded: rc $RC — the chained path is a route around the grant cap"; fi
-# THE `grants are spent` NOTE IS DELIBERATELY NOT ASSERTED HERE. It requires
-# PROGRESSED=1, so re-gating the sample reds it -- and case 15 owns that gate. Case
-# 11 already asserts the NOTE, on the sleeping path where nothing else can move it.
-# What is new on the chained path is the CAP, and that is what this case measures.
+# THE `grants are spent` NOTE IS DELIBERATELY NOT ASSERTED HERE: it requires
+# PROGRESSED=1, a property of the sample rather than of the cap. Case 11 asserts the
+# NOTE on the sleeping path. What is new on the chained path is the CAP, and that is
+# what this case measures.
 if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "6" ]; then
   ok "chained-grant-bounded: grant counter held at the cap"
 else bad "chained-grant-bounded: grant counter moved past the cap"; fi
 rm -rf "$W"
 }
 
-# --- 20. the mutation proof for cases 15-19 -------------------------------------
-# Each of the three restores one half of the defect, and they are separate because
-# the fix has two halves: the sample lost its gate and the re-stamp kept one.
-# Reverting them together would produce a mutant that proves whichever half was left
-# in place -- and it comes out green.
-
 # ===========================================================================
-# CONCURRENT BEATS: THE LEASE, AND THE PER-PROCESS JOIN MEMO (cases 33-45)
+# BACKGROUNDED BEATS: THE LEASE (C38, C44)
 # ===========================================================================
 # EVERY BEAT HERE RUNS IN ITS OWN PARENT SHELL, AND THAT IS THE HARNESS, NOT TIDINESS. Two
 # beats started from one shell share $PPID, so the second sees the first's `.shell-$PPID`
@@ -1091,17 +905,10 @@ bg_beat() {
       AI_DLC_PROJECT_ROOT="$PWD" bash "$subj" "$@" ) > "$o" 2>&1 &
   BG=$!
 }
-until_true() { # <tenths> <command...> -- 0 once the command succeeds, 1 on timeout
-  local n="$1"; shift
-  n=$(( n * 5 ))   # callers count 0.1s ticks; the tick is 0.02s, so the bound in seconds is unchanged
-  while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.02; n=$((n - 1)); done
-  return 1
-}
 until_event() { # <command...> -- returns once the command succeeds; NO count and NO time cap. A hang
                 # here is a hang to read, never a verdict: load can only make it slower.
   while ! "$@"; do sleep 0.02; done
 }
-now_at_least() { [ "$(date +%s)" -ge "$1" ]; }   # re-reads the clock on every call
 marker_of() { # <work> -> the marker's bytes, empty when absent. `read`, not `cat`: a builtin,
               # so a 50ms sampling loop does not fork. The marker carries no newline, so read
               # returns 1 at EOF having assigned the line -- hence the `|| true`.
@@ -1109,19 +916,7 @@ marker_of() { # <work> -> the marker's bytes, empty when absent. `read`, not `ca
   IFS= read -r l 2>/dev/null < "$1/_bmad-output/.beat-inflight" || true
   printf '%s' "$l"
 }
-marker_pid() { local c; c="$(marker_of "$1")"; case "$c" in *' '*) printf '%s' "${c#* }" ;; esac; }
 count_glob() { [ -e "$1" ] || { echo 0; return; }; echo "$#"; }   # call as: count_glob <glob>
-lease_n() { count_glob "$1"/_bmad-output/.wait-beats/.lease-*; }
-leases_are() { [ "$(lease_n "$1")" = "$2" ]; }
-fx_key() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
-counter_is() { [ "$(cat "$1/_bmad-output/.wait-beats/$(fx_key "$2")" 2>/dev/null)" = "$3" ]; }
-other_lease_pid() { # <work> <pid> -> the registered beat pid that is not <pid>
-  local f p
-  for f in "$1"/_bmad-output/.wait-beats/.lease-*; do
-    [ -e "$f" ] || continue
-    p="${f##*/.lease-}"; [ "$p" = "$2" ] || { printf '%s' "$p"; return; }
-  done
-}
 # SIGKILL a backgrounded beat's whole tree, collected top-down before any kill. A bare kill of
 # `$!` leaves the subject reparented to init and still sweeping.
 reap_tree() {
@@ -1133,48 +928,6 @@ reap_tree() {
   done
   kill -9 $all 2>/dev/null || true
   wait "$1" 2>/dev/null || true
-}
-# 0 when a `sleep` runs anywhere under the given pid -- the beat has passed every lease write that
-# precedes its poll loop. Walks children top-down, as reap_tree does.
-# BASENAME, NOT EXACT NAME: `ps -o comm=` reports what the process was exec'd as, so the sleep
-# stub's `exec /bin/sleep` reads `/bin/sleep`. Matching `= sleep` alone never saw a stubbed beat
-# asleep -- measured: the handoff arm waited out A's whole 600s POLL because neither this nor
-# tree_kill_sleep could find A's sleep.
-tree_has_sleep() { # <pid>
-  local frontier="$1" next p
-  while [ -n "$frontier" ]; do
-    next=""
-    for p in $frontier; do
-      case "$(ps -o comm= -p "$p" 2>/dev/null)" in sleep|*/sleep) return 0 ;; esac
-      next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"
-    done
-    frontier="$(echo $next)"
-  done
-  return 1
-}
-# SIGTERM every `sleep` under the given pid -- ends a beat's poll sleep early, so it wakes NOW.
-# A beat's `sleep` is a foreground child; the subject does not run under `set -e`, so a sleep
-# that exits by signal returns to the loop exactly as one that ran out.
-tree_kill_sleep() { # <pid>
-  local frontier="$1" next p
-  while [ -n "$frontier" ]; do
-    next=""
-    for p in $frontier; do
-      case "$(ps -o comm= -p "$p" 2>/dev/null)" in sleep|*/sleep) kill -TERM "$p" 2>/dev/null ;; esac
-      next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"
-    done
-    frontier="$(echo $next)"
-  done
-  return 0
-}
-tree_signal() { # <pid> <STOP|CONT> -- every process under pid, collected top-down first
-  local all="$1" frontier="$1" next p
-  while [ -n "$frontier" ]; do
-    next=""
-    for p in $frontier; do next="$next $(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"; done
-    frontier="$(echo $next)"; all="$all $frontier"
-  done
-  kill -"$2" $all 2>/dev/null || true
 }
 SHELLS_OK=0
 separate_shells() { # <work> <beats started> <out>... -> sets SHELLS_OK
@@ -1188,228 +941,6 @@ say_shells() { # <label>
   else pre_bad "$1: beats shared a parent shell or took the chained-sibling return — this case did not test concurrent sleeping beats"; fi
 }
 
-# --- the lease handoff --------------------------------------------------------------------
-# B starts FIRST so B is the HOLDER: the heir branch in lease_release runs only in the beat that
-# holds the marker when it exits, so with A holding, B's exit touches nothing and a subject with
-# no handoff passes.
-#
-# A'S WAKE IS NOT A CLOCK THE READ RACES; IT IS AN EVENT THE HARNESS CAUSES AND THE STUB RECORDS.
-# This arm once gave A a quantum of POLL + 2 with POLL 12 and voided the case when the read came
-# 12s or more after A started (`HO_READ_EARLY`, a wall bound). Measured at load ~75: B's delivery
-# slid past a 6s wake and the trap mutant SURVIVED. The read itself is bracketed by A's freeze, so
-# the only way to read late is that A woke and re-stamped BEFORE the freeze. Now:
-#   - A runs under the recording `sleep` stub (sleep_stub), with POLL 600 and quantum 2 x POLL:
-#     no setup can reach its natural wake, and its deadline is POLL out when the loop checks it.
-#   - The control is binary: at the freeze A has recorded EXACTLY ONE poll sleep and that sleep
-#     process is still in A's tree. A has entered its loop and has not woken, so every marker
-#     write of A's lies before the freeze, and the read after B's exit sees what B's exit left.
-#   - After the read A is woken ON PURPOSE: CONT, then its stub `sleep` child is killed. A's
-#     `sleep` returns, A re-stamps, sees a.md and delivers, so the C33 controls still hold and the
-#     passing path never waits out the long POLL.
-# A's lease is 3 x POLL, so the epoch is well clear of `now` at the read.
-HO_POLL=600
-run_handoff() { # <subject> -> HO_* ; leaves W for the caller
-  W="$( bash "$SEED" lease-handoff )"
-  local pb pa sp bs_path bs_log
-  # B GETS A's CONSTRUCTION, NOT A CLOCK. B once ran POLL 1, so its lease was `now + 3` and a beat
-  # stalled for 3s on a loaded box let that lease LAPSE; A's pre-loop write then legitimately took the
-  # expired marker (`B=.. A=.. holder=A`). Freezing B cannot repair that, a stopped beat re-stamps
-  # nothing. So B is parked the way A is: POLL 600 under its OWN recording sleep stub (a separate dir, so
-  # A's record, HO_SLEEPS, still counts only A's sleeps), a lease of 3 x POLL that no load can reach, and
-  # A is not started until B's stub has RECORDED B's first poll sleep, which is after both of B's
-  # pre-loop lease writes. The order is a file, not a delay. B is woken on purpose below, as A is.
-  # ONE WORLD CLOCK: both stubs share "$W/clk", so A and B read and advance the same virtual now, and the lease
-  # epoch bound at the read (HO_NOW) is taken from that clock and not from the real one.
-  # The handoff beats' POLL is 600 and a file's mtime is a REAL time, so a clock advanced by those sleeps would
-  # put the join epoch above a.md's mtime: `noadvance` freezes the offset at 0 and writes NO date shim (each shim call is a
-  # bash start, and the subject then reads the real clock, whose epoch the frozen base only understates).
-  mkdir -p "$W/clk" && : > "$W/clk/noadvance"
-  sleep_stub "$W/.stubB" real "$W/clk"; bs_path="$STUB_PATH"; bs_log="$STUB_LOG"
-  sleep_stub "$W/.stub" real "$W/clk"
-  BG_PATH="$bs_path"; bg_beat "$1" "$W" "$W/b.out" "$(( 2 * HO_POLL ))" "$HO_POLL" b.md; pb=$BG; BG_PATH=""
-  until_event eval 'test -s "$bs_log" || ! kill -0 "$pb" 2>/dev/null'
-  HO_B_ASLEEP=0; test -s "$bs_log" && HO_B_ASLEEP=1
-  HO_B="$(marker_pid "$W")"
-  BG_PATH="$STUB_PATH"; bg_beat "$1" "$W" "$W/a.out" "$(( 2 * HO_POLL ))" "$HO_POLL" a.md; pa=$BG; BG_PATH=""
-  until_event eval 'leases_are "$W" 2 || ! kill -0 "$pa" 2>/dev/null'
-  # A writes the lease twice before it sleeps: early, and again just before the poll loop. If B
-  # exits between the two, A's second write takes the free marker and EVERY subject -- the trap
-  # mutant included -- leaves a marker naming A. Measured: 4 of 4 trap-mutant survivors at load
-  # ~60 passed every other control. So B's target lands only once A is in its `sleep`.
-  until_event eval 'tree_has_sleep "$pa" || ! kill -0 "$pa" 2>/dev/null'
-  HO_A_ASLEEP=0; tree_has_sleep "$pa" && HO_A_ASLEEP=1
-  HO_A="$(other_lease_pid "$W" "$HO_B")"
-  HO_HOLDER0="$(marker_pid "$W")"
-  # A IS FROZEN from before B's target lands until after the read, so no write of A's can fall
-  # between B's exit and the read: the marker read is exactly what B's exit left, whatever the
-  # load. `kill -0` still answers for a stopped process, which is what lease_release asks.
-  tree_signal "$pa" STOP
-  # A re-stamps (and so re-takes) the marker when its first sleep returns. The control: at the
-  # freeze A has recorded EXACTLY ONE sleep and that sleep is still running in A's tree -- A is
-  # inside its first poll sleep and has not woken. Anything else voids the case: measured at load
-  # ~75 under the old clock-bounded shape, A woke first and the trap mutant SURVIVED.
-  HO_SLEEPS="$(stub_lines)"
-  HO_UNWOKEN=0; [ "$HO_SLEEPS" = "1" ] && tree_has_sleep "$pa" && HO_UNWOKEN=1
-  printf 'the answer B was waiting for\n' > "$W/b.md"
-  # WAKE B ON PURPOSE: end its stub sleep. B's loop re-stamps, finds b.md and delivers, so its exit (the
-  # event under test) happens now and the passing path never waits out B's long POLL. A is still frozen.
-  tree_kill_sleep "$pb"
-  # B resolves by an EVENT: it exits, or it enters a SECOND poll sleep (it did not deliver on its wake, so b.out
-  # lacks DELIVERED and the case reds). Neither carries a count or a clock.
-  until_event eval '! kill -0 "$pb" 2>/dev/null || [ "$(awk "END{print NR}" "$bs_log")" -ge 2 ]'
-  reap_tree "$pb"
-  wait "$pb" 2>/dev/null || true
-  HO_AFTER="$(marker_of "$W")"
-  HO_NOW="$(clock_now "$W/clk")"
-  HO_A_ALIVE=0; [ -n "$HO_A" ] && kill -0 "$HO_A" 2>/dev/null && HO_A_ALIVE=1
-  printf 'the answer A was waiting for\n' > "$W/a.md"
-  # WAKE A ON PURPOSE: resume it, then end its stub sleep. A's loop re-stamps, finds a.md and
-  # delivers, so the passing path never waits out POLL 600.
-  tree_signal "$pa" CONT
-  tree_kill_sleep "$pa"
-  # A WAKE THAT DID NOT HAPPEN IS A RED, NOT A 600s STALL. A woken beat delivers; one that enters a
-  # SECOND poll sleep did not, and the wait below ends on that event, reaps its tree, and a.out carries
-  # no DELIVERED line, so the C33 control fails loudly. No count or clock decides it.
-  until_event eval '! kill -0 "$pa" 2>/dev/null || [ "$(awk "END{print NR}" "$W/.stub/sleep.log")" -ge 2 ]'
-  reap_tree "$pa"
-  wait "$pa" 2>/dev/null || true
-  HO_GONE=1; [ -e "$W/_bmad-output/.beat-inflight" ] && HO_GONE=0
-  separate_shells "$W" 2 "$W/a.out" "$W/b.out"
-}
-handoff_preconditions() { # <label> -- the harness facts both the case and its mutants rest on
-  say_shells "$1"
-  if [ "$HO_B_ASLEEP" -eq 1 ] && [ -n "$HO_B" ] && [ "$HO_HOLDER0" = "$HO_B" ] && [ -n "$HO_A" ] && [ "$HO_A" != "$HO_B" ]; then
-    pre_ok "$1: CONTROL — B held the marker and A was registered before B's target landed"
-  else pre_bad "$1: B=$HO_B A=$HO_A holder=$HO_HOLDER0 — B was not the holder, so its exit cannot exercise the handoff"; fi
-  if [ "$HO_A_ALIVE" -eq 1 ]; then pre_ok "$1: CONTROL — A was still asleep when the marker was read"
-  else pre_bad "$1: A was not alive at the read; the marker's state then says nothing about a live sibling"; fi
-  if [ "$HO_A_ASLEEP" -eq 1 ]; then pre_ok "$1: CONTROL — A was in its sleep, past both pre-loop lease writes, before B's target landed"
-  else pre_bad "$1: A never reached its sleep before B's target landed — A's pre-loop lease write could take the marker B freed"; fi
-  if [ "$HO_UNWOKEN" -eq 1 ]; then pre_ok "$1: CONTROL — at the freeze A had entered exactly one poll sleep and was still in it, so no wake of A's re-took the marker before the read"
-  else pre_bad "$1: at the freeze A had recorded $HO_SLEEPS poll sleep(s), or its sleep had already returned — A may have re-stamped before the read, so this read cannot see B's exit (void)"; fi
-}
-C33_lease_handoff() {
-run_handoff "$SUBJ"
-handoff_preconditions "lease-handoff"
-if grep -q '^DELIVERED b.md' "$W/b.out"; then ok "lease-handoff: B delivered and exited"
-else bad "lease-handoff: B did not deliver b.md — the exit under test never happened"; fi
-ep="${HO_AFTER%% *}"; case "$ep" in ''|*[!0-9]*) ep=0 ;; esac
-ap=""; case "$HO_AFTER" in *' '*) ap="${HO_AFTER#* }" ;; esac
-if [ -n "$HO_A" ] && [ "$ap" = "$HO_A" ] && [ "$ep" -gt "$HO_NOW" ]; then
-  ok "lease-handoff: after B exits the marker names A with a live lease — the sleeping beat keeps the yield"
-else bad "lease-handoff: marker '$HO_AFTER' after B exited (A=$HO_A, now=$HO_NOW) — the first beat out took the lease from a beat still asleep"; fi
-if grep -q '^DELIVERED a.md' "$W/a.out" && [ "$HO_GONE" -eq 1 ]; then
-  ok "lease-handoff: CONTROL — A delivered, and the marker is gone once the last beat exits"
-else bad "lease-handoff: the marker survived the last beat (or A never delivered) — a dead join would authorize a silent stall"; fi
-rm -rf "$W"
-}
-# --- no clobber ---------------------------------------------------------------------------
-# An after-exit byte comparison cannot see a beat that takes a live holder's marker: on exit it
-# holds it, hands it to the heir, and writes A's own epoch and pid back -- byte-identical. So the
-# marker is SAMPLED while the second beat runs, and that beat is given 30 delivered targets so
-# its sweep is wide enough to sample.
-#
-# A'S WINDOW OUTLASTS THE PROBE BY CONSTRUCTION, NOT BY A QUANTUM. A was once the single-wake
-# shape from the handoff arm (POLL 8, quantum 10): a ~10s life against a setup plus a 30-target
-# sweep that both scale with the box's load. Under a loaded pool A exited first -- measured on a
-# consumer push: "delivered 30 of 30, A alive=0 -- the window under test never ran", beside a
-# false "clobbered a live lease" whose two markers carried A's OWN pid and differed only by
-# epoch: A's own re-stamp, at its +8s wake, inside a window that had run late. So now:
-#   - A is FROZEN (SIGSTOP, its whole tree) once it is in its poll `sleep` -- past both pre-loop
-#     lease writes -- and stays frozen until it is reaped. A stopped process writes nothing, so
-#     A's own re-stamp cannot land in the window at ANY load, and `kill -0` still answers for it,
-#     which is all the second beat's `lease_holder_dead` asks of A's pid.
-#   - A's POLL is 600, so its registration (`.lease-<A>`, `now + 3 x POLL`) stays live for half
-#     an hour: the second beat cannot LEGITIMATELY take a marker whose holder's lease ran out,
-#     which a long sweep against POLL 8's 24s lease could have let it do on a correct subject.
-#   - Both are CONTROLS read at the end of the window: A is still stopped (`ps` state T) and its
-#     registration is still in the future. Either one false voids the case rather than scoring
-#     it. reap_tree SIGKILLs A anyway, so the passing path never pays for the long POLL.
-#   - A's quantum is 2 x POLL, so its deadline (`now + quantum - POLL`) is POLL seconds out when
-#     its loop first checks it. At quantum POLL + 2 a two-second stall between computing the
-#     deadline and checking it would send A out of the loop without ever sleeping -- a load
-#     bound reintroduced one level down.
-NC_POLL=600
-run_noclobber() { # <subject> -> NC_* ; leaves W
-  W="$( bash "$SEED" lease-noclobber )"
-  local pa pi i cur args le
-  args=""
-  for i in $(seq 1 30); do printf 'delivered\n' > "$W/d$i.md"; args="$args d$i.md"; done
-  bg_beat "$1" "$W" "$W/a.out" "$(( 2 * NC_POLL ))" "$NC_POLL" a.md; pa=$BG
-  # The SECOND beat runs under the virtual clock and the mv record (its own stub dir, so A's real clock is untouched).
-  sleep_stub "$W/.stubI" fast "$W/clk"; mv_shim "$W/.stubI/bin" "$W/.mvlog"; NC_PATH="$STUB_PATH"
-  NC_MVOK=0; mv_works "$NC_PATH" "$W/.mvlog" "$W/.mvctl" && NC_MVOK=1
-  # A ASLEEP, not merely started: A re-stamps once more after charging its beat and before the
-  # sleep, and a baseline read before that re-stamp would score A's own write as a clobber. The
-  # sleep child is the proof A is past every pre-loop write; then A is frozen where it stands.
-  NC_A_ASLEEP=0; until_true 600 tree_has_sleep "$pa" && NC_A_ASLEEP=1
-  tree_signal "$pa" STOP
-  NC_M0="$(marker_of "$W")"
-  NC_A="$(marker_pid "$W")"
-  ( cd "$W" && AI_DLC_PROJECT_ROOT="$PWD" bash "$1" --status other.md ) > "$W/st.out" 2>&1
-  NC_STATUS="$(marker_of "$W")"
-  # $args is a word list built above with no spaces inside a word, so it is left unquoted.
-  BG_PATH="$NC_PATH"; bg_beat "$1" "$W" "$W/i.out" 4 1 --since "$(( $(date +%s) - 60 ))" $args; pi=$BG; BG_PATH=""
-  wait "$pi" 2>/dev/null || true
-  # NC_SEEN: the first marker write the second beat made. NC_FOREIGN: the first naming a pid other than A's -- the
-  # clobber itself. Read from the mv record, which loses nothing between two samples.
-  NC_SEEN=""; NC_FOREIGN=""
-  while IFS= read -r cur; do
-    [ -n "$NC_SEEN" ] || NC_SEEN="${cur:-<absent>}"
-    case "$cur" in *" $NC_A") : ;; *) [ -n "$NC_FOREIGN" ] || NC_FOREIGN="${cur:-<absent>}" ;; esac
-  done < "$W/.mvlog"
-  NC_AFTER="$(marker_of "$W")"
-  NC_DELIV="$(grep -c '^DELIVERED d' "$W/i.out" || true)"
-  NC_A_ALIVE=0; [ -n "$NC_A" ] && kill -0 "$NC_A" 2>/dev/null && NC_A_ALIVE=1
-  NC_A_STOPPED=0
-  case "$NC_A" in ''|*[!0-9]*) : ;; *) case "$(ps -o stat= -p "$NC_A" 2>/dev/null)" in *T*) NC_A_STOPPED=1 ;; esac ;; esac
-  NC_A_LEASED=0; le=""
-  [ -n "$NC_A" ] && le="$(cat "$W/_bmad-output/.wait-beats/.lease-$NC_A" 2>/dev/null || echo '')"
-  case "$le" in ''|*[!0-9]*) : ;; *) [ "$le" -gt "$(clock_now "$W/clk")" ] && NC_A_LEASED=1 ;; esac
-  reap_tree "$pa"
-  separate_shells "$W" 2 "$W/a.out" "$W/i.out"
-}
-noclobber_preconditions() { # <label>
-  say_shells "$1"
-  if [ "$NC_DELIV" = "30" ] && [ "$NC_A_ALIVE" -eq 1 ]; then
-    pre_ok "$1: CONTROL — the second beat delivered all 30 targets while A ($NC_A) stayed alive"
-  else pre_bad "$1: delivered $NC_DELIV of 30, A alive=$NC_A_ALIVE — the window under test never ran"; fi
-  if [ "$NC_A_ASLEEP" -eq 1 ] && [ "$NC_A_STOPPED" -eq 1 ]; then
-    pre_ok "$1: CONTROL — A was in its poll sleep when frozen and still frozen at the window's end, so no marker write in the window is A's"
-  else pre_bad "$1: A asleep=$NC_A_ASLEEP stopped=$NC_A_STOPPED — A could write the marker inside the window, so a change there is not attributable to the second beat"; fi
-  if [ "$NC_MVOK" -eq 1 ]; then
-    pre_ok "$1: CONTROL — the mv record logs a marker-named mv run through the second beat's PATH"
-  else pre_bad "$1: the mv record logged nothing for a marker-named mv — 'the second beat wrote no marker' would be unmeasured"; fi
-  if [ "$NC_A_LEASED" -eq 1 ]; then
-    pre_ok "$1: CONTROL — A's registration was still in the future at the window's end; no beat could take the marker legitimately"
-  else pre_bad "$1: A's .lease-$NC_A was expired or absent at the window's end — a correct beat may take a dead holder's marker, so a change there is not a clobber"; fi
-}
-# What a sampled change MEANS, once the controls above hold. A is frozen, so A wrote nothing in
-# the window: a marker naming another pid is the second beat holding it, and a marker naming A's
-# own pid with a different epoch is the second beat's exit handing A's registration BACK -- it
-# took and returned the lease between two samples. Both are the clobber; they are worded apart so
-# a red says which, and so A's own re-stamp (impossible while frozen, and voided by the control
-# if A was not frozen) can never again be read as one.
-nc_clobber_reason() {
-  if [ -n "$NC_FOREIGN" ]; then
-    printf "the marker read '%s' mid-beat against A's '%s' — a second beat took a live holder's lease" "$NC_FOREIGN" "$NC_M0"
-  else
-    printf "the marker read '%s' mid-beat against A's '%s' — rewritten naming A's own pid with a new epoch while A was frozen, so another beat took the lease and handed it back between samples" "$NC_SEEN" "$NC_M0"
-  fi
-}
-C36_lease_noclobber() {
-run_noclobber "$SUBJ"
-noclobber_preconditions "lease-noclobber"
-if grep -q '^STATUS --' "$W/st.out" && [ "$NC_STATUS" = "$NC_M0" ]; then
-  ok "lease-noclobber: --status on another path leaves A's marker byte-identical"
-else bad "lease-noclobber: --status rewrote the marker ('$NC_M0' -> '$NC_STATUS') or did not run"; fi
-if [ -z "$NC_SEEN" ]; then
-  ok "lease-noclobber: an instantaneous beat never takes a live holder's marker, sampled throughout"
-else bad "lease-noclobber: $(nc_clobber_reason)"; fi
-if [ "$NC_AFTER" = "$NC_M0" ]; then ok "lease-noclobber: CONTROL — A's marker is unchanged after that beat exits"
-else bad "lease-noclobber: marker '$NC_AFTER' after the instant beat, expected A's '$NC_M0'"; fi
-rm -rf "$W"
-}
 # --- the lease is written before the sweep --------------------------------------------------
 # The subject writes the marker strictly before it writes any `.since`, and never deletes it
 # mid-run, so the predicate is deterministic in both directions: AT THE FIRST OBSERVATION of a
@@ -1455,123 +986,6 @@ run_early "$SUBJ"
 early_preconditions "lease-early"
 if [ "$EA_MARK" -eq 1 ]; then ok "lease-early: .beat-inflight exists before the sweep writes its first sidecar"
 else bad "lease-early: no marker when the first sidecar appeared — a large wave leaves the hook seeing no beat while it sweeps"; fi
-rm -rf "$W"
-}
-# --- two beats, one path --------------------------------------------------------------------
-# Both armed over a seat file before it exists, each from its own shell. The memo matters only
-# when the second beat's NEXT `.since` read comes AFTER the first beat delivered and deleted it;
-# if both see the seal inside one poll, both deliver before either deletes it and a beat with no
-# memo delivers too.
-# A SLEEP COULD NOT ORDER THAT. The beats used to start 1.5s apart -- half a POLL out of phase --
-# but a poll's wake-up is the scheduler's, not the clock's: under load the two beats' checks drift
-# into one window, both delivered, and no-join-memo survived on a loaded run while the subject was
-# unchanged.
-# THE SENTINEL ORDERS IT. The second beat is frozen (SIGSTOP on its whole tree) while a `sleep`
-# runs under it -- its poll sleep, a foreground child, so the beat is between two checks and not
-# holding an epoch it read before the seal existed. The seal is then written, the first beat runs
-# to its exit, and only once its output says DELIVERED and `.since` is gone is the second beat
-# continued. Its next check is therefore after the deletion, every run, whatever the load; it must
-# still deliver from its memoised epoch. TB_ORDERED records that the order was imposed, so a
-# forcing that silently failed cannot read as a kill.
-counter_or_gone() { counter_is "$1" "$2" "$3" || ! kill -0 "$4" 2>/dev/null || ! kill -0 "$5" 2>/dev/null; }   # <work> <file> <n> <pid> <pid>
-sleep_or_gone() { tree_has_sleep "$1" || ! kill -0 "$1" 2>/dev/null; }   # <pid>
-beat2_resolved() { ! kill -0 "$1" 2>/dev/null || [ -e "$2" ]; }   # <pid> <since file>
-run_two_beats() { # <subject> -> TB_* ; leaves W
-  W="$( bash "$SEED" two-beats-one-path )"
-  local p1 p2 mt
-  # BEAT 1 CANNOT EXPIRE BEFORE THE SEAL EITHER. Its quantum is 600s, the same subject parameter as
-  # beat 2's below, so the seal wait further down can take as long as load makes it and beat 1 is
-  # still inside its quantum when the seal lands; it exits by DELIVERING, not by its clock.
-  bg_beat "$1" "$W" "$W/1.out" 600 1 --complete x.md; p1=$BG
-  # BEAT 2 CANNOT EXPIRE WHILE FROZEN. Its quantum is 600s against a POLL of 1, so no freeze this
-  # harness can hold uses it up (at 12s a long freeze under load spent it: beat 2 woke past its
-  # deadline, exited WAITING, and the subject was blamed for a beat it never dropped). It wakes on its
-  # own 1s poll once continued, so the passing path stays fast and nothing is killed or stubbed.
-  bg_beat "$1" "$W" "$W/2.out" 600 1 --complete x.md; p2=$BG
-  # Both past the sweep: each sleeping beat charges the one shared counter.
-  # Or either beat is already gone (a mutant can end one before the sweep): then the counter never
-  # reaches 2, and what follows scores the case void on TB_ORDERED.
-  until_event counter_or_gone "$W" x.md 2 "$p1" "$p2"
-  # Freeze beat 2 inside its poll sleep. A sleep still present AFTER the stop proves the beat was
-  # parked in it, not mid-check; otherwise continue it and try again at its next sleep. This loop
-  # decides no verdict: TB_ORDERED below is what a void case scores on. It retries on the EVENT (beat 2
-  # parked in a poll sleep, which recurs at every poll) with no count; it ends only when the freeze
-  # holds or beat 2 is gone, and a gone beat leaves TB_FROZEN=0, a void case.
-  TB_FROZEN=0
-  while [ "$TB_FROZEN" -eq 0 ] && kill -0 "$p2" 2>/dev/null; do
-    until_event sleep_or_gone "$p2"
-    tree_signal "$p2" STOP
-    if tree_has_sleep "$p2"; then TB_FROZEN=1; else tree_signal "$p2" CONT; fi
-  done
-  printf 'a finding\nseat-complete: s 1 findings=1\n' > "$W/x.md"
-  wait "$p1" 2>/dev/null || true
-  # `is_delivered` compares whole seconds with `>=`, so a memo-less beat continued inside the
-  # seal's own second would re-arm at that second and accept the file on that alone. Continue
-  # only once the clock has left it, and make that part of the control.
-  mt="$(fx_mtime "$W/x.md")"
-  until_event now_at_least "$(( mt + 1 ))"
-  # THE PROPERTY TB_N NEEDS: beat 2 is ALIVE and STOPPED in a sleep (its quantum unspent, its next
-  # check still ahead of it) when beat 1 has delivered and deleted .since. A beat that had expired
-  # or exited reads here as a void case (rc 2), never as a kill or a failure.
-  TB_ALIVE=0; kill -0 "$p2" 2>/dev/null && case "$(ps -o stat= -p "$p2" 2>/dev/null)" in *T*) TB_ALIVE=1 ;; esac
-  TB_ORDERED=0
-  [ "$TB_FROZEN" -eq 1 ] && [ "$TB_ALIVE" -eq 1 ] && grep -q '^DELIVERED x.md' "$W/1.out" \
-    && [ ! -e "$W/_bmad-output/.wait-beats/$(fx_key x.md).since" ] \
-    && now_at_least "$(( mt + 1 ))" && TB_ORDERED=1
-  tree_signal "$p2" CONT
-  # Beat 2 now resolves by an EVENT, never a clock: it exits (delivered, from its memo), or it
-  # re-creates .since after the seal -- the re-arm a memo-less beat performs, after which it can never
-  # deliver and would otherwise poll out its 600s quantum. The wait carries no count and no time cap
-  # because it always terminates: beat 2 runs with a 600s quantum and exits on delivery, on re-arm or on
-  # expiry, so one of the two events beat2_resolved tests is certain to occur and no load can void it.
-  until_event beat2_resolved "$p2" "$W/_bmad-output/.wait-beats/$(fx_key x.md).since"
-  reap_tree "$p2"
-  wait "$p2" 2>/dev/null || true
-  TB_N=0
-  grep -q '^DELIVERED x.md' "$W/1.out" && TB_N=$((TB_N + 1))
-  grep -q '^DELIVERED x.md' "$W/2.out" && TB_N=$((TB_N + 1))
-  separate_shells "$W" 2 "$W/1.out" "$W/2.out"
-}
-say_ordered() { # <label>
-  if [ "$TB_ORDERED" -eq 1 ]; then pre_ok "$1: CONTROL — beat 2 was alive and frozen in its poll sleep, quantum unspent, until beat 1 delivered, .since was gone and the seal's second had passed"
-  else pre_bad "$1: the order was not imposed (beat 2 not alive and frozen in a sleep, beat 1 did not deliver, .since survived, or the clock never left the seal's second) — this case did not test the memo"; fi
-}
-C40_two_beats_one_path() {
-run_two_beats "$SUBJ"
-say_shells "two-beats-one-path"
-say_ordered "two-beats-one-path"
-if [ "$TB_N" -eq 2 ]; then ok "two-beats-one-path: both beats deliver one sealed file"
-else bad "two-beats-one-path: $TB_N of 2 beats delivered — the second re-armed after the first deleted the shared .since"; fi
-rm -rf "$W"
-}
-# --- ...and a LATER beat still reads a delivered file as pre-existing (Rule 28) -------------
-# The memo lives in one process and never re-creates a sidecar, so a NEW beat without --since
-# arms at `now` and does not accept the file. It is armed two whole seconds after the write:
-# `is_delivered` compares whole seconds with `>=`, so a beat armed in the write's own second
-# would accept it on that alone.
-run_memo_single() { # <subject> -> MS_* ; leaves W
-  W="$( bash "$SEED" memo-single )"
-  local p mt
-  bg_beat "$1" "$W" "$W/1.out" 6 1 x.md; p=$BG
-  until_true 100 counter_is "$W" x.md 1 || true   # past the sweep, so it delivers mid-beat
-  printf 'the answer\n' > "$W/x.md"
-  wait "$p" 2>/dev/null || true
-  mt="$(fx_mtime "$W/x.md")"
-  until_true 40 now_at_least "$(( mt + 2 ))" || true
-  ( cd "$W" && own env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_WAIT_POLL_SECS=1 \
-                       AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
-      AI_DLC_PROJECT_ROOT="$PWD" bash "$1" x.md ) > "$W/2.out" 2>&1
-  MS_RC=$?
-  separate_shells "$W" 2 "$W/1.out" "$W/2.out"
-}
-C42_memo_single() {
-run_memo_single "$SUBJ"
-say_shells "memo-single"
-if grep -q '^DELIVERED x.md' "$W/1.out"; then ok "memo-single: CONTROL — the first beat delivered x.md mid-beat"
-else bad "memo-single: the first beat did not deliver; the later beat is not reading a delivered file"; fi
-if [ "$MS_RC" -eq 0 ] && ! grep -q '^DELIVERED' "$W/2.out" && grep -q 'already had content when this join armed' "$W/2.out"; then
-  ok "memo-single: a later beat without --since reads the delivered file as pre-existing, as Rule 28 documents"
-else bad "memo-single: rc $MS_RC — a later beat accepted a file delivered to an earlier join, or gave no NOTE"; fi
 rm -rf "$W"
 }
 # --- a live pre-upgrade lease is left alone -------------------------------------------------

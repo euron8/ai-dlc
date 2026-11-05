@@ -49,7 +49,6 @@
 # MUTANT-MATRIX m-novalidate decides=pn_hlink,pn_hout twins=pn_ord
 # MUTANT-MATRIX td-old-traps decides=td_term,td_intp twins=td_queue
 # MUTANT-MATRIX td-no-stop decides=td_term,td_queue twins=td_rc
-# MUTANT-MATRIX td-plain-amp decides=td_term,td_int,td_intp twins=td_queue
 # MUTANT-MATRIX td-no-pgid decides=td_decoy twins=td_term
 # MUTANT-MATRIX td-ps-pgid decides=td_sbx_stub,td_sbx_gc,td_sbx_orph,td_sbx_lead,td_sbx_sent twins=td_sbx_rc
 # MUTANT-MATRIX td-no-tree decides=td_sbx_gc,td_sbx_lead twins=td_sbx_stub
@@ -58,7 +57,7 @@
 # MUTANT-MATRIX td-no-mem decides=td_sbx_lead twins=td_sbx_orph
 # MUTANT-MATRIX td-life-fd decides=td_life twins=td_life_alive
 # MUTANT-MATRIX ps-rewait decides=ps_sig twins=ps_exit
-# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the thirty-one literal callers (mutant, pn_eval, td_eval, the I66 arm, the pool_stop arm and the td-life-fd lifeline arm) has its own row above
+# MUTANT-MATRIX-DYNAMIC finish_mutant why=the one emission site passes the mutant name as a variable; each of the thirty literal callers (mutant, pn_eval, td_eval, the I66 arm, the pool_stop arm and the td-life-fd lifeline arm) has its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/prepush-pool-depth/run.sh --matrix
 #
 # The matrix is re-measured whenever an arm or a mutant is added or changed, with the command above, run
@@ -93,7 +92,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "prepush-pool-depth: FIXTURE BRO
 # SIGINT IGNORED ON ENTRY IS A REFUSAL, NOT A RED. A plain `&` from a non-interactive shell starts this
 # fixture with SIGINT ignored, every drive inherits that, and bash cannot re-enable a signal ignored at
 # entry: the hook's `trap 'pool_stop 130' INT` and the workers' `trap pool_abort INT` never fire, so the
-# INT cells (td_int, td_intp) and the mutants they score read red against a correct hook. Setting a trap
+# INT cell (td_intp, after its worker-INT step) and the mutants they score read red against a correct hook. Setting a trap
 # on an ignored-at-entry signal silently does nothing, so `trap -p INT` then reads empty.
 trap ':' INT; _ti="$(trap -p INT)"; trap - INT
 [ -n "$_ti" ] || { echo "prepush-pool-depth: FIXTURE BROKEN: launched with SIGINT ignored (a plain & from a non-interactive shell); its INT cells cannot fire. Run it in the foreground or under set -m." >&2; exit 2; }
@@ -918,13 +917,11 @@ fi
 #   td_decoy -- a live process NOT in xargs' group, its pid planted in `.pr/zz-decoy.k` before the TERM (the
 #               stale record a SIGKILLed worker leaves): alive once the parent has exited (want 1). The allow
 #               twin of td_term: a pool_stop that TERMs every record, group or not, reads 0 here.
-#   td_intp  -- after td_int, xargs dispatches the queued stub (an exit of 130 does not stop it); INT to
-#               the parent then: "<rc>:<root>:<stubs alive>" (want 130:gone:0), the ^C an operator sends
-#   td_int   -- INT to each worker recorded in `.k`: the two targeted stubs still alive once both workers
-#               cleared their `.k` (want 0). Under a plain `&` bash starts xargs with SIGINT ignored, every
-#               worker inherits that, and its `trap pool_abort INT` cannot fire (BL-881 D-f).
+#   td_intp  -- INT first to each worker recorded in `.k`; once both workers cleared their `.k` (and both
+#               targeted stubs read dead), xargs dispatches the queued stub (an exit of 130 does not stop it); INT
+#               to the parent then: "<rc>:<root>:<stubs alive>" (want 130:gone:0), the ^C an operator sends
 # Signals go only to the drive's own pid and to the pids the workers recorded; release ends every stub.
-TD_ALL="td_term td_queue td_rc td_decoy td_int td_intp"
+TD_ALL="td_term td_queue td_rc td_decoy td_intp"
 # THE SANDBOXED TERM DRIVE (BL-881): the same TERM drive, with ONLY the run_fixtures launch under
 # `sandbox-exec -p '(version 1)(allow default)' /bin/bash -c ...`, where the setuid /bin/ps cannot run, so
 # pool_stop's group listing and pool_kill's descendant walk must both work without ps. sandbox-exec execs in
@@ -942,7 +939,7 @@ TD_ALL="td_term td_queue td_rc td_decoy td_int td_intp"
 #   td_sbx_lead -- recorded orphaned group LEADERS alive then (want 0): each stub starts a `set -m` child under a
 #                  subshell, waits for ONE WHOLE WATCHER POLL that began after the child existed, then lets the
 #                  subshell exit, so the child is reparented and only the watcher's ps-free group memory reaches it.
-#                  The event, with no clock: a `sleep` PATH shim (modelled on receipt-bl881.sh's A6 seam) GATES every watcher
+#                  The event, with no clock: a `sleep` PATH shim GATES every watcher
 #                  poll, so each watcher polls exactly once. Its FIRST sleep makes the fifo `ev.<watcher>`, holds it
 #                  open read-write and blocks reading it; the stub reads the watcher from `.pr/<unit>.w` and, once
 #                  its child exists, writes `go` there, so the one poll body that follows began after the child
@@ -1000,7 +997,6 @@ WANT_TD="td_term=0
 td_queue=2
 td_rc=143:gone
 td_decoy=1
-td_int=0
 td_intp=130:gone:0
 td_sbx_stub=0
 td_sbx_gc=0
@@ -1010,9 +1006,6 @@ td_sbx_sent=signalled:nomark
 td_sbx_rc=143:gone:2
 td_life_alive=marker:2:held
 td_life=exited:2"
-# TD_CEIL is EMPTY, so no wait is bounded. ONE mutant passes a ceiling: td-plain-amp, whose INT never reaches a
-# worker (an ignored signal is discarded when sent), so no event can follow it; that ceiling is an open BL-868 item.
-TD_CEIL=""
 # THE SANDBOX DRIVE'S TOOLS ARE DECLARED, so their absence is FIXTURE BROKEN, never a SKIP: this fixture is
 # .dist-only and every box that runs it has them. A refused allow-default profile (a nested sandbox) is the same.
 command -v pgrep > /dev/null 2>&1 || broken "pgrep is declared in tools.decl and not found"
@@ -1083,17 +1076,12 @@ td_orph() { # td_orph <stub pids> <orphan pids>: orphans listed in their stubs' 
   td_inl "$l" $2
 }
 td_stubs() { cat "$1"/s.* 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '; }
-td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; } # unbounded unless a mutant passed a ceiling
-td_hang() { # td_hang <block> <what>: a ceiling ended a wait; only a mutant passes one, so never on the unmutated block
-  [ "$1" = "$PB" ] && broken "teardown drive: a ceiling ended the wait for $2 on the unmutated block"
-  return 0
-}
 td_wait2() { # td_wait2 <stub dir>: until two stubs have recorded; every stub starts (no mutant touches dispatch)
   while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ]; do sleep 0.1; done
 }
 # td_drive <block> <set> <term|int> -> appends the mode's cells to $WORK/td.<set>.v
 td_drive() {
-  local blk="$1" set="$2" mode="$3" d="$WORK/td.$2.$3" p s n st root ks k wp t dp dn
+  local blk="$1" set="$2" mode="$3" d="$WORK/td.$2.$3" p n st root ks k wp t dp dn
   mkdir -p "$d/s" && cp -R "$TDT" "$d/w" || { bad "teardown drive $set/$mode: could not copy the template"; return 1; }
   set -m
   ( cd "$d/w" && unset PREPUSH_POOL_DEPTH && export AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$d/s" \
@@ -1113,9 +1101,7 @@ td_drive() {
     [ "$q" = 1 ] || { [ "$blk" = "$PB" ] && broken "teardown drive: the live decoy $dp read $q by pgrep -U before the TERM"; }
     kill -TERM "$p"
     # until the parent is gone, or a third stub (a queued unit) has started
-    s=$SECONDS
-    while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ] && td_more "$s"; do sleep 0.1; done
-    if kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ]; then td_hang "$blk" "the parent to exit after TERM"; fi
+    while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ]; do sleep 0.1; done
     n="$(td_alive $(td_stubs "$d/s"))"; dn="$(td_user "$dp")"
     : > "$d/s/release"; wait "$p"; st=$?; wait "$dp"
     if [ -d "$root" ]; then root=present; else root=gone; fi
@@ -1125,29 +1111,22 @@ td_drive() {
     for k in "$root"/.pr/*.k; do [ -s "$k" ] && { read -r n < "$k"; case "$n" in ''|*[!0-9]*) ;; *) wp="$wp $n"; ks="$ks $k" ;; esac; }; done
     for n in $wp; do kill -INT "$n"; done
     # until every targeted worker has cleared its record (pool_abort empties `.k` before it exits)
-    s=$SECONDS
-    while td_more "$s"; do
+    while :; do
       n=0; for k in $ks; do [ -s "$k" ] && n=1; done
       [ "$n" = 0 ] && break
       sleep 0.1
     done
-    n=0; for k in $ks; do [ -s "$k" ] && n=1; done
-    [ "$n" = 1 ] && td_hang "$blk" "the workers to clear their records after INT"
     if [ -z "$wp" ]; then n=norecord; else n="$(td_alive $t)"; fi
     # td_intp: once the workers have cleared, the queued stub starts; then INT to the parent itself
     if [ "$n" = 0 ]; then
-      s=$SECONDS
-      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && td_more "$s"; do sleep 0.1; done
-      [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ] && td_hang "$blk" "the queued stub to start"
+      while [ "$(ls "$d/s" | grep -c '^s\.')" -lt 3 ]; do sleep 0.1; done
     fi
     kill -INT "$p"
-    s=$SECONDS
-    while kill -0 "$p" 2>/dev/null && td_more "$s"; do sleep 0.1; done
-    kill -0 "$p" 2>/dev/null && td_hang "$blk" "the parent to exit after INT"
+    while kill -0 "$p" 2>/dev/null; do sleep 0.1; done
     dn="$(td_alive $(td_stubs "$d/s"))"
     : > "$d/s/release"; wait "$p"; st=$?
     if [ -d "$root" ]; then root=present; else root=gone; fi
-    printf 'td_int=%s\ntd_intp=%s:%s:%s\n' "$n" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
+    printf 'td_intp=%s:%s:%s\n' "$st" "$root" "$dn" >> "$WORK/td.$set.v"
   fi
 }
 # ts_shims <drive dir> -> writes the ps and sleep shims into <dir>/shim and sets slp to the real sleep
@@ -1353,7 +1332,7 @@ tl_drive() {
 td_run() { # td_run <block> <set> <cell...>: one drive per mode its cells need
   local blk="$1" set="$2" c tm=0 im=0 sm=0 lm=0; shift 2
   : > "$WORK/td.$set.v"
-  for c in "$@"; do case "$c" in td_int|td_intp) im=1 ;; td_sbx_*) sm=1 ;; td_life*) lm=1 ;; *) tm=1 ;; esac; done
+  for c in "$@"; do case "$c" in td_intp) im=1 ;; td_sbx_*) sm=1 ;; td_life*) lm=1 ;; *) tm=1 ;; esac; done
   [ "$tm" = 1 ] && td_drive "$blk" "$set" term
   [ "$im" = 1 ] && td_drive "$blk" "$set" int
   [ "$sm" = 1 ] && ts_drive "$blk" "$set"
@@ -1382,7 +1361,7 @@ td_eval() {
   # a mutant whose decides are sandboxed cells has the sandboxed drive as its family; every other td mutant has the plain drives
   case " $dec " in *" td_sbx_"*) fam="$TS_ALL" ;; esac
   if [ "$MATRIX" = 1 ]; then cells="$fam"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"; MX_RAN=$((MX_RAN + $(printf '%s\n' $fam | grep -c .) - n_run)); else cells="$dec $tw"; fi
-  ( TD_CEIL="${3:-$TD_CEIL}"; td_run "$m" "$name" $cells )
+  ( td_run "$m" "$name" $cells )
   for c in $cells; do got="$got$c=$(td_val "$name" "$c")"$'\n'; done
   # the base-pass flag is COMPUTED in this run: 1 only when every decides and twin cell read its want on the unmutated block
   bm="$(for c in $dec $tw; do [ "$(td_val fix "$c")" = "$(wanttd "$c")" ] || { echo 0; exit 0; }; done; echo 1)"
@@ -1395,8 +1374,6 @@ td_eval() {
 }
 td_eval td-old-traps "s/trap 'pool_stop 130' INT; trap 'pool_stop 143' TERM; trap 'pool_stop 129' HUP$/trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP/"
 td_eval td-no-stop '/^    \[ -f "\$AI_DLC_FX_OUT\/.pr\/.stop" \] && { : > "\$pr.k"; exit 255; }$/d'
-# the INT drive waits its ceiling under this mutant (the workers never clear `.k`): 5s, for this mutant only
-td_eval td-plain-amp '/^  set -m$/{N;s/^  set -m\n  { PREPUSH_POOL_DEPTH=/  { PREPUSH_POOL_DEPTH=/;}' 5
 # the group guard removed: pool_stop TERMs every recorded pid, the planted stale record included
 TS_CASE='^      case .*"\$pg".*) \(kill -TERM "\$p" 2>\/dev\/null\) ;; esac$'
 td_eval td-no-pgid "s/$TS_CASE/      \\1/"

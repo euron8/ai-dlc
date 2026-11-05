@@ -115,7 +115,7 @@ checks:
     adjudication: llm
     enforcer: []
     ci_workflow: ~
-    fixtures: [tests/fixtures/check-1c-bypass]
+    fixtures: []        # llm-adjudicated; no fixture can stand in for the judgement
 
   - id: "2"
     title: No unresolved HARD_BLOCKs?

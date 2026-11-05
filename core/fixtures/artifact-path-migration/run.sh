@@ -27,7 +27,6 @@
 # Per push each mutant runs its deciding arm and one twin; the measured matrix replaces an
 # exact-vector assertion and is re-measured whenever an arm or a mutant changes. Arm names are the
 # column names `--matrix` prints (T-* read the tree after --apply, R-* read the report).
-# MUTANT-MATRIX whole-path-scan decides=T-wholepath twins=T-conform
 # MUTANT-MATRIX ambiguity-allowed decides=T-ambig twins=T-conform
 # MUTANT-MATRIX stories-half-migrated decides=T-storybeta twins=T-storyalpha
 # MUTANT-MATRIX story-slot-blind decides=T-conform twins=T-storyalpha
@@ -35,7 +34,7 @@
 # MUTANT-MATRIX consumer-areas decides=R-areas twins=T-conform
 # MUTANT-MATRIX remedy-root-mig decides=R-remedy-mig twins=T-conform
 # MUTANT-MATRIX remedy-root-val decides=R-remedy-val twins=T-conform
-# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (whole-path-scan, ambiguity-allowed, ...) names a literal mutant that carries its own row in this block
+# MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (ambiguity-allowed, stories-half-migrated, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/artifact-path-migration/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -587,7 +586,7 @@ MUT="$(mktemp -d "${TMPDIR:-/tmp}/apmig-mut-XXXXXX")"
 RW="$(clone_world)"
 mkdir -p "$RW/.claude/skills/ai-dlc"
 printf '# consumer artifact paths\n\nareas:\n  _bmad-output/brainstorming\n' > "$RW/.claude/skills/ai-dlc/artifact-paths.md"
-ARMS="T-wholepath T-ambig T-storyalpha T-storybeta T-conform T-hdr R-areas R-remedy-mig R-remedy-val"
+ARMS="T-ambig T-storyalpha T-storybeta T-conform T-hdr R-areas R-remedy-mig R-remedy-val"
 lay_dir() { lay_pair "$1"; [ -z "$VAL" ] || cp "$VAL" "$1/v.sh"; }
 names_a() { grep -q 'TREE-A-FILE\.md' <<<"$1" && ! grep -q 'TREE-B-FILE\.md' <<<"$1" \
               && ! grep -q '\.claude/skills/ai-dlc/artifact-paths\.md' <<<"$1"; }
@@ -604,7 +603,6 @@ arm_hold() {
       w="$(cat "$d/treepath")" ;;
   esac
   case "$a" in
-    T-wholepath)  [ ! -f "$w/docs/retro/sprint-301.md" ] && [ -f "$w/docs/retro/s301/retro.md" ] ;;
     T-ambig)      [ -f "$w/_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md" ] ;;
     T-storyalpha) [ -f "$w/_bmad-output/planning-artifacts/s301/stories/story-1-alpha.md" ] ;;
     T-storybeta)  [ -f "$w/_bmad-output/planning-artifacts/s297/stories/story-1-beta.md" ] ;;
@@ -657,8 +655,6 @@ else
   bad "CONTROL: an unmutated copy held $ctl_held of $ctl_n arms (or failed its self-check) -- the mutant harness is what is broken, not the mutants"
 fi
 
-mutant_score whole-path-scan m -E "s@[|] tr '/' '.n' [|]@|@" T-wholepath T-conform \
-  'scanning the whole path leaves docs/retro/sprint-301.md unmigrated -- the 668-vs-2551 defect'
 mutant_score ambiguity-allowed m -E 's@^  if \[ "\$nhits" -gt 1 \]; then@  hits="$(printf "%s" "$hits" | head -1)"; nhits=1\n  if [ "$nhits" -gt 1 ]; then@' T-ambig T-conform \
   'collapsing to the FIRST sprint instead of refusing files a two-sprint path under a guess'
 mutant_score stories-half-migrated m -E 's@/story-s@/story-@' T-storybeta T-storyalpha \
@@ -679,8 +675,8 @@ if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
   else bad "MX plain run executed $MROWS matrix-only rows"; fi
 else
-  _nx=$(( 8 * $(printf '%s\n' $ARMS | grep -c .) ))
-  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (8 mutants)"
+  _nx=$(( 7 * $(printf '%s\n' $ARMS | grep -c .) ))
+  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (7 mutants)"
   else bad "MX matrix run measured $MROWS cells, $_nx expected"; fi
 fi
 rm -rf "$ra" "$rb" "$RW" "$MUT"

@@ -111,7 +111,6 @@
 # MUTANT-MATRIX BL706-M13 decides=B7e2 twins=B7e
 # MUTANT-MATRIX-DYNAMIC b7_mut why=b7_mut passes its mutant id (BL706-M1, M2, M4 to M13) to mutant_killed as a variable; each id keeps its own MUTANT-MATRIX row above
 # BL706 (B7 cells) measured by: bash core/fixtures/owed-derivations/receipt-bl706.sh, whose CELL lines the B7 arms read; mutants M1 to M8 each copy the whole reconcile/ directory.
-# receipt-bl587.sh drives the real reader over S1's seed; receipt-bl801.sh drives the world filter.
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -865,7 +864,7 @@ rc_is "PUc control: the validator lists NO command in the PU file (its only copy
 v13="$( ( cd "$LS13" && AI_DLC_PROJECT_ROOT="$LS13" bash scripts/ai-dlc/validate-artifact-derivations.sh "$LS13/$LPRD" "$LS13/_bmad-output/planning-artifacts/notes.md" > /dev/null 2> "$WORK/v13.err" ); echo $?)"
 rc_is "S13c0 control: the wrapper's run exits 2 with NO UNRUN line, and the removed file is back afterwards" 0 "$([ "$v13" = 2 ] && ! grep -q '^UNRUN: ' "$WORK/v13.err" && [ -f "$LS13/_bmad-output/planning-artifacts/notes.md" ] && echo 0 || echo 1)"
 
-# ---- lw-harness: begin (receipt-bl801.sh sources the lines between these two markers) ----------------
+# ---- lw-harness: begin (the lines between these two markers are extracted into a harness file below) ----------------
 # THE WORLD FILTER. Every LIVING-sweep world is one gated block, `if lw_world <name>; then <its reader
 # invocations> <its lw_arm lines>; lw_end; fi`. The REAL pass runs every world and records each arm's
 # world in LW_MAP as it is asserted, so the map is derived from the lw_arm calls themselves and never

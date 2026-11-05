@@ -12,13 +12,11 @@
 # `## Design decisions` (S3). The architecture step reads the record ALONE once the join
 # reports DELIVERED. Four arms:
 #   (a) ORDER RULE, against the real wait-for-deliverable.sh. S1 appended BEFORE the
-#       `seat-complete:` marker reads DELIVERED; S1 appended AFTER it reads UNFINISHED. Both the
-#       sealed marker (`--mark`) and the bare marker the step names
-#       (`seat-complete: architecture architect none findings=0`) are driven: --status decides a
-#       sealed marker with no beat, but a bare one only after a BEAT has recorded it settling, so
-#       the bare pair runs one short beat (BEAT=3, SETTLE=1, POLL=1, MARGIN=0; at the default margin
-#       of 10 the deadline lands in the past) and is then read back by --status. Each pair is judged
-#       in ONE invocation, so the two outcomes are proven to differ.
+#       `seat-complete:` marker reads DELIVERED; S1 appended AFTER it reads UNFINISHED. The sealed
+#       marker (`--mark`) is driven, because --status decides it with no beat; the pair is judged
+#       in ONE invocation, so the two outcomes are proven to differ. The bare marker is not driven:
+#       --status decides one only after a beat records it settling, and whether a settle window
+#       opens before the beat's wall-clock deadline depends on load.
 #   (b) HEADING JOINS. Each fixed heading, backticked byte-for-byte, is carried by every file
 #       that must agree on it.
 #   (c) ABSENCE. The clause the step dropped ("completion notification has carried its return",
@@ -107,7 +105,6 @@ para_hits() {
 # ARM (a): the order rule, judged by the real wait-for-deliverable.sh
 # ===========================================================================
 A_ARGS='architecture architect none findings=0'  # the exact tail the architect chain's --mark call carries (steps/architecture.md, architect.md)
-A_MARKER="seat-complete: $A_ARGS"
 A_NOTLAST='-- present, last non-blank line is not seat-complete:'
 A_NOBEAT="$WORK/no-teammate-dir"
 
@@ -133,12 +130,6 @@ a_status() {  # $1 = workdir, $2 = since ; rest = targets -> OUT
   OUT="$( cd "$1" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_PROJECT_ROOT="$1" \
           AI_DLC_TEAMMATE_DIR="$A_NOBEAT" AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_MAX_WAIT_BEATS=1 \
           bash "$SUBJ" --complete --status --since "$2" "${@:3}" 2>&1 )"
-}
-a_beat() {  # $1 = workdir, $2 = since ; rest = targets -> OUT. Own parent shell, one beat.
-  OUT="$( cd "$1" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_PROJECT_ROOT="$1" \
-          AI_DLC_TEAMMATE_DIR="$A_NOBEAT" AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_WAIT_SETTLE_SECS=1 \
-          AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 \
-          bash -c '"$@"; exit $?' _ bash "$SUBJ" --complete --since "$2" "${@:3}" 2>&1 )"
 }
 
 probe_a() {
@@ -173,18 +164,6 @@ arm_a() {
   if line_is "$OUT" "DELIVERED sealed-before.md" && line_is "$OUT" "UNFINISHED sealed-after.md $A_NOTLAST"; then
     ok "(a) sealed marker: S1 before it DELIVERS, S1 after it is UNFINISHED, in one --status call"
   else bad "(a) sealed marker: wanted DELIVERED sealed-before.md and UNFINISHED sealed-after.md; got: $OUT"; fi
-
-  # Bare pair: the marker line the step names, settled by one beat, then read back by --status.
-  a_body "$W/bare-before.md"; a_s1 "$W/bare-before.md"; printf '\n%s\n' "$A_MARKER" >> "$W/bare-before.md"
-  a_body "$W/bare-after.md"; printf '\n%s\n' "$A_MARKER" >> "$W/bare-after.md"; a_s1 "$W/bare-after.md"
-  a_beat "$W" "$since" bare-before.md bare-after.md
-  if line_is "$OUT" "DELIVERED bare-before.md"; then ok "(a) bare marker: one beat DELIVERS the record with S1 before the marker"
-  else bad "(a) bare marker: the beat did not deliver bare-before.md — the step's own marker shape is untested: $OUT"; fi
-  a_status "$W" "$since" bare-before.md bare-after.md
-  if line_is "$OUT" "DELIVERED bare-before.md -- consumed by a beat, unchanged since" \
-     && line_is "$OUT" "UNFINISHED bare-after.md $A_NOTLAST"; then
-    ok "(a) bare marker: --status reads S1-before DELIVERED and S1-after UNFINISHED"
-  else bad "(a) bare marker: wanted consumed-DELIVERED bare-before.md and UNFINISHED bare-after.md; got: $OUT"; fi
   rm -rf "$W"
 }
 

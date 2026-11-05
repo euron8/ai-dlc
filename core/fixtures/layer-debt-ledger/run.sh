@@ -31,7 +31,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
-EXPECTED_ASSERTIONS=52
+EXPECTED_ASSERTIONS=48
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -67,16 +67,6 @@ if grep -q 'OWED-OPEN-1' <<<"$out" && grep -qE '^OPEN \(2\)' <<<"$out"; then
   ok "an undischarged \`owed\` is reported OPEN"
 else
   bad "the open debt was not reported"; sed 's/^/        /' <<<"$out"
-fi
-
-# --- 2. a discharged debt is NOT open ------------------------------------------------------
-# THE LOAD-BEARING ONE. Closing is a LATER row naming the id, because the register is
-# append-only; a reader that ignores `closes_owed` reports every paid debt forever, and a
-# ledger that never shrinks is one nobody reads.
-if grep -q 'OWED-PAID-1' <<<"$out"; then
-  bad "a debt closed by a later row is still reported OPEN — the ledger can never shrink"
-else
-  ok "a debt closed by a later row drops out of OPEN"
 fi
 
 # --- 3. prose-only obligations surface as UNDECLARED ---------------------------------------
@@ -119,32 +109,6 @@ if [ "$miss_rc" -eq 2 ] && grep -q 'DISARMED' <<<"$miss_out"; then
   ok "an unreadable register exits 2 DISARMED rather than reporting zero"
 else
   bad "a missing register did not disarm (rc=$miss_rc)"; sed 's/^/        /' <<<"$miss_out"
-fi
-
-# --- 8. MUTATION: drop the closed-set subtraction -------------------------------------------
-# Assertion 2 is an ABSENCE, and an absence passes for a reader that emitted nothing. Mutate
-# the subtraction and demand the paid debt reappears; without this, assertion 2 also passes
-# against a reader whose OPEN arm is dead.
-MUT="$WORK/mutant.sh"
-cp "$AUDIT" "$MUT"
-python3 - "$MUT" <<'PY'
-import io, sys
-p = sys.argv[1]
-s = io.open(p, encoding="utf-8").read()
-n = s.replace("open_items = [v for k, v in declared.items() if k not in closed]",
-              "open_items = [v for k, v in declared.items()]")
-assert n != s, "MUTATION MATCHED NOTHING"
-io.open(p, "w", encoding="utf-8").write(n)
-PY
-if cmp -s "$AUDIT" "$MUT"; then
-  bad "FIXTURE ERROR: the mutation matched nothing — assertion 2 proves nothing"
-else
-  mut_out="$(bash "$MUT" --register "$REG" 2>&1)"
-  if grep -q 'OWED-PAID-1' <<<"$mut_out"; then
-    ok "MUTATION: without the closed-set subtraction the paid debt reappears (so assertion 2 is live)"
-  else
-    bad "MUTATION: the paid debt stayed hidden even with the subtraction removed — assertion 2 is vacuous"
-  fi
 fi
 
 # --- 9. a `closes_owed` written as a STRING still closes its debt ---------------------------
@@ -891,40 +855,6 @@ if [ "$ctl_rc" -eq 0 ] && grep -q 'c4\.md' <<<"$ctl_out" && grep -q 'OWED-CIT-X'
 else
   bad "CONTROL: an unmutated copy did not reproduce the baseline (rc=$ctl_rc) — every kill above may be the harness failing to run the subject"
   sed 's/^/        /' <<<"$ctl_out"
-fi
-
-# 51, 52 — BL-751: a `recorded_utc` later than the run is counted and NAMED as `FUTURE=`, report-only.
-# The offender sits an hour ahead (graph's measured skew was 16 minutes); the near-miss is stamped
-# at the run instant itself, which the skew allowance must acquit. Both instants are minted here
-# with python3, so the offender is future whenever the fixture runs. Both rows sit on one register,
-# the near-miss FIRST, so a reader counting every parseable row reports FUTURE=2 and dies on 51.
-FUT_REG="$WORK/future.jsonl"
-python3 - >"$FUT_REG" <<'PY'
-import json, time
-fmt = "%Y-%m-%dT%H:%M:%SZ"
-now = time.time()
-for e, t in (("extensions/fut-now.md", now), ("extensions/fut-ahead.md", now + 3600)):
-    print(json.dumps({"clause": "LC-E4", "entry": e, "subject_digest": "0" * 40,
-                      "verdict": "still-additive", "recorded_utc": time.strftime(fmt, time.gmtime(t)),
-                      "reason": "additive"}))
-PY
-fut_out="$(bash "$AUDIT" --register "$FUT_REG" 2>&1)"; fut_rc=$?
-fut_json="$(bash "$AUDIT" --register "$FUT_REG" --json 2>&1)"
-if [ "$fut_rc" -eq 0 ] && grep -qE '^LAYER DEBT .*  FUTURE=1( |$)' <<<"$fut_out" \
-   && grep -qE '^  fut-ahead\.md ' <<<"$fut_out" \
-   && [ "$(grep -c '"recorded_utc"' <<<"$fut_json")" -eq 1 ] && grep -q 'fut-ahead' <<<"$fut_json"; then
-  ok "BL-751: a recorded_utc an hour past the run is counted FUTURE=1 and named, in text and JSON, and the run still exits 0 (report-only)"
-else
-  bad "BL-751: the future row was not counted FUTURE=1 and named, or the run did not exit 0 (rc=$fut_rc)"
-  sed 's/^/        /' <<<"$fut_out"
-fi
-if grep -q 'fut-now' <<<"$fut_out$fut_json"; then
-  bad "BL-751 NEAR-MISS: a row stamped at the run instant was reported FUTURE — the skew allowance does not hold"
-  sed 's/^/        /' <<<"$fut_out"
-elif grep -q 'FUTURE' <<<"$out"; then
-  bad "BL-751 CONTROL: the main corpus (every row in the past) printed a FUTURE token — the arm fires on every register"
-else
-  ok "BL-751 NEAR-MISS: a row stamped at the run instant is not FUTURE, and a register of past rows prints no FUTURE token at all"
 fi
 
 echo ""

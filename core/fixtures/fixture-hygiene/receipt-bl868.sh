@@ -63,22 +63,9 @@
 #   recorded beside W_ALLOW below, one row per site with its reason, each keyed on a `# bl868-allow: <id>` marker;
 #   a row bound to no line or to several is a W-ALLOW-STALE row, so the list cannot go stale silently. The per-pass
 #   reset and the unchecked-`read -t` pause narrowings came from consumer-suite-pool at 5991e017c (:1055, :1210).
-#   INERT RECEIPTS are not scanned: a `receipt*.sh` that no `verify:` line of docs/backlog.md names and that no
-#   non-comment line of a tracked core/fixtures/*/run.sh, seed.sh, lib.sh or .githooks/* file names (as
-#   `<fixture>/<file>`, or by bare name from its own directory). No gate runs one. This replaced a test on the BL
-#   heading, which missed `wait-stale-deliverable/receipt.sh` because that name carries no id.
-#
-# EXEMPTION, BY NAME (operator ruling 2026-11-03, BL-868 item 15; the b248 ceiling ruling stands). The `td_more`
-#   DEFINITION line of core/fixtures/prepush-pool-depth/run.sh is not an offender row and is not counted: it prints as
-#   `EXEMPT\t<path>:<line>\ttd_more\toperator ruling 2026-11-03, BL-868 item 15` on STDERR, never on stdout, and the
-#   exit code and the row totals are computed without it. It stays narrow on purpose. It applies only while BOTH hold:
-#   the line is exactly the guarded definition `td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; }`
-#   plus at most a trailing comment, and the file's LAST column-0 TD_CEIL assignment is `TD_CEIL=""` (so the wait is
-#   unbounded unless a mutant passes a ceiling). A `td_more` defined at any other path, a different bounded wait at that
-#   path, a definition without the guard, a guarded definition sharing its line with a second wait, a file whose last
-#   global TD_CEIL is non-empty (an empty one followed by `TD_CEIL="5"` included), and a call-site line such as
-#   `while td_more "$s" && [ $((SECONDS-x)) -lt 5 ]` all still list. The
-#   self-probe seeds each of those, and the exempt definition, before the corpus.
+#   INERT RECEIPTS are not scanned: a `receipt*.sh` nothing reads, by the predicate of arm E1 of
+#   scripts/validate-fixture-hygiene.sh (its `inert()`, extracted and sourced below, never restated). No gate runs
+#   one. This replaced a test on the BL heading, which missed a receipt with no id in its name.
 #
 # CLASS PM -- a `±` row in a tracked invocations.decl (items 1-3, 6). The existing check, unchanged in meaning.
 #
@@ -269,43 +256,19 @@ HD != "" {
 }
 AWK
 
-# inert <root> <list> <out>: the INERT receipts, one repo-relative path per line. Only a file named `receipt*.sh` can
-# be inert (a sourced helper never is). It is inert when BOTH hold: no `verify:` line of docs/backlog.md names it, and
-# no non-comment line of a tracked core/fixtures/*/run.sh, seed.sh, lib.sh or .githooks/* names it. "Names it" is
-# `<fixture-dir>/<basename>` anywhere on the line, or the bare basename from a file in the receipt's OWN directory
-# (`bash "$HERE/receipt.sh"`), so one fixture's call never makes another fixture's same-named receipt live. Returns 1
-# when the ledger or a referencing file cannot be read (awk reads an unopenable file as empty, so reads are counted).
-inert() {
-  local r="$1" n
-  [ -f "$r/docs/backlog.md" ] || return 1
-  git -C "$r" ls-files -- 'core/fixtures/*/run.sh' 'core/fixtures/*/seed.sh' 'core/fixtures/*/lib.sh' '.githooks/*' > "$3.refs" 2>/dev/null || return 1
-  n="$(awk 'END { print NR }' "$3.refs")"
-  awk -v R="$r" -v RL="$3.refs" -v NREF="$n" '
-    function named(l, s,   i, t) {  # s in l, with no name character before it (so `dir/receipt.sh` is not `r/receipt.sh`)
-      t = l
-      while ((i = index(t, s)) > 0) { if (i == 1 || substr(t, i - 1, 1) !~ /[A-Za-z0-9_.-]/) return 1; t = substr(t, i + 1) }
-      return 0 }
-    { b = $0; sub(/^.*\//, "", b); if (b !~ /^receipt[^\/]*\.sh$/) next
-      d = $0; sub(/\/[^\/]*$/, "", d); C[$0] = 1; BASE[$0] = b; DIR[$0] = d; t = d; sub(/^.*\//, "", t); SUF[$0] = t "/" b }
-    END {
-      if ((getline l < (R "/docs/backlog.md")) < 0) exit 3
-      do { if (l ~ /^verify:/) for (c in C) if (named(l, SUF[c])) LIVE[c] = 1 } while ((getline l < (R "/docs/backlog.md")) > 0)
-      got = 0
-      while ((getline f < RL) > 0) {
-        fd = f; sub(/\/[^\/]*$/, "", fd); p = R "/" f
-        if ((getline l < p) < 0) exit 3
-        got++
-        do { if (!index(l, "receipt") || l ~ /^[[:space:]]*#/) continue
-             for (c in C) { if (named(l, SUF[c])) { LIVE[c] = 1; continue }
-               if (fd == DIR[c] && named(l, BASE[c])) LIVE[c] = 1 }
-        } while ((getline l < p) > 0)
-        close(p)
-      }
-      if (got != NREF) exit 3
-      for (c in C) if (!(c in LIVE)) print c
-    }' "$2" > "$3" || return 1
-  return 0
-}
+# inert <root> <list> <out>: the INERT receipts. NOT RESTATED HERE: the predicate is E1's in
+# scripts/validate-fixture-hygiene.sh, extracted between its `# INERT_BEGIN` and `# INERT_END` lines (the way
+# validate-fixture-inprocess.sh extracts that file's m4) and sourced, so this class W skip and E1 run one function.
+# Called in `ledger` mode: a receipt named by a live `verify:` line of docs/backlog.md is executed by the
+# backlog-receipts pre-push step, so it is read here and this receipt keeps scanning it (E1 calls `runners` mode,
+# where it is not). This receipt's list carries no scripts/ receipt, so it reads the ledger and the
+# run/seed/lib/hook files it always read. An extraction that does not yield exactly one `inert() {` is a 9.
+awk '/^# INERT_BEGIN$/ { on = 1; next } /^# INERT_END$/ { on = 0 } on' "$ROOT/scripts/validate-fixture-hygiene.sh" > "$WORK/inert.sh" \
+  || { echo "receipt-bl868: REFUSED -- could not read scripts/validate-fixture-hygiene.sh for its inert()" >&2; exit 9; }
+[ "$(grep -c '^inert() {$' "$WORK/inert.sh")" = 1 ] && [ "$(tail -1 "$WORK/inert.sh")" = "}" ] \
+  || { echo "receipt-bl868: REFUSED -- could not extract exactly one inert() between # INERT_BEGIN and # INERT_END in scripts/validate-fixture-hygiene.sh" >&2; exit 9; }
+# shellcheck source=/dev/null
+. "$WORK/inert.sh" || { echo "receipt-bl868: REFUSED -- the extracted inert() did not source" >&2; exit 9; }
 
 # scan_w <root> <out>: class W rows into <out>; returns 9 on a broken corpus
 scan_w() {
@@ -313,7 +276,7 @@ scan_w() {
   git -C "$r" ls-files -- 'core/fixtures/**/*.sh' > "$o.list" 2>/dev/null || { echo "receipt-bl868: REFUSED -- git ls-files failed under $r" >&2; return 9; }
   n="$(awk 'END { print NR }' "$o.list")"
   [ "$n" -gt 0 ] || { echo "receipt-bl868: REFUSED -- core/fixtures/**/*.sh lists 0 tracked files under $r" >&2; return 9; }
-  inert "$r" "$o.list" "$o.inert" || { echo "receipt-bl868: REFUSED -- docs/backlog.md or a referencing run/seed/lib/hook file could not be read under $r" >&2; return 9; }
+  inert "$r" "$o.list" "$o.inert" ledger || { echo "receipt-bl868: REFUSED -- docs/backlog.md or a referencing run/seed/lib/hook file could not be read under $r" >&2; return 9; }
   awk -v R="$r" '{ print R "/" $0 }' "$o.list" > "$o.abs"
   set -f; IFS='
 '
@@ -350,26 +313,6 @@ allow_join() {
       for (s in SUP) if (!(s in HIT)) print "receipt-bl868: NOTE -- " s " carries # bl868-allow: " SUP[s] " and the scan flags nothing there (the wait was fixed; drop the row and the marker)" > NOTES
       close(KEEP); close(NOTES) }' "$1" "$2" "$3" || return 2
   [ -f "$4" ] || : > "$4"; [ -f "$5" ] || : > "$5"
-  return 0
-}
-
-# exempt_split <root> <rows-in> <rows-out> <exempt-out>: the by-name exemption of the header. Rows go to <rows-out>
-# unless exempt; each exempt row goes to <exempt-out> as its EXEMPT line. Prints nothing itself. Exit 1 if awk fails.
-exempt_split() {
-  local r="$1" ok=0 c f="core/fixtures/prepush-pool-depth/run.sh"
-  # the LAST column-0 TD_CEIL assignment decides: an empty one followed by a non-empty one is a bounded file
-  if [ -f "$r/$f" ]; then
-    c="$(awk '/^TD_CEIL=/ { v = $0 } END { print v }' "$r/$f")" || c=""
-    if [ "$c" = 'TD_CEIL=""' ]; then ok=1; fi
-  fi
-  : > "$3"; : > "$4"
-  # the definition line must be EXACTLY the guarded body plus an optional trailing comment: a second construct on
-  # the line (a wait after the closing brace, or one inside it) makes the whole line list
-  EXD='td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; }' EXP="$f" EXOK="$ok" awk -F'\t' -v KEEPF="$3" -v EXF="$4" '
-    BEGIN { d = ENVIRON["EXD"]; p = ENVIRON["EXP"]; ok = ENVIRON["EXOK"] + 0 }
-    { q = $2; sub(/:[0-9]+$/, "", q); t = $3; sub(/^[[:space:]]+/, "", t); rest = substr(t, length(d) + 1)
-      if ($1 == "W-CLOCK" && ok && q == p && substr(t, 1, length(d)) == d && rest ~ /^([[:space:]]+#.*)?[[:space:]]*$/) print "EXEMPT\t" $2 "\ttd_more\toperator ruling 2026-11-03, BL-868 item 15" > EXF
-      else print > KEEPF }' "$2" || return 1
   return 0
 }
 
@@ -477,20 +420,6 @@ printf '%s\n' '#!/usr/bin/env bash' 'sleep 3  # bl868-allow: pm-one' 'sleep 3' '
   'sleep 6 # bl868-allow: pm-elsewhere' > "$P/core/fixtures/m/run.sh"
 printf '%s\n' 'core/fixtures/m/run.sh	pm-one	probe' 'core/fixtures/m/run.sh	pm-fixed	probe' \
   'core/fixtures/m/run.sh	pm-two	probe' 'core/fixtures/m/run.sh	pm-gone	probe' 'core/fixtures/p/run.sh	pm-elsewhere	probe' > "$WORK/p.allow"
-# the exemption's seeds. prepush-pool-depth/run.sh carries the file guard (:2), then: :3 the exempt definition; :4 a
-# definition WITHOUT the TD_CEIL guard; :5 a call-site line; :6 a different bounded wait; :7 the guarded definition
-# sharing its line with a second bounded wait. m2/run.sh holds the guarded definition at ANOTHER path. All six rows
-# list in the scan; only :3 is exempted by exempt_split below.
-mkdir -p "$P/core/fixtures/prepush-pool-depth" "$P/core/fixtures/m2" || exit 9
-printf '%s\n' '#!/usr/bin/env bash' 'TD_CEIL=""' \
-  'td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; } # unbounded unless a mutant passed a ceiling' \
-  'td_more() { [ $((SECONDS - $1)) -lt 9 ]; }' \
-  'while td_more "$s" && [ $((SECONDS-x)) -lt 5 ]; do sleep 0.1; done' \
-  'while [ $((SECONDS - s)) -lt 60 ]; do sleep 0.1; done' \
-  'td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; }; while [ $((SECONDS-s)) -lt 60 ]; do sleep 1; done' \
-  > "$P/core/fixtures/prepush-pool-depth/run.sh"
-printf '%s\n' '#!/usr/bin/env bash' 'TD_CEIL=""' \
-  'td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; }' > "$P/core/fixtures/m2/run.sh"
 { git init -q "$P" && git -C "$P" add -A && git -C "$P" -c user.name=p -c user.email=p@p commit -q -m probe; } >/dev/null 2>&1 \
   || { echo "receipt-bl868: REFUSED -- could not build the probe repository" >&2; exit 9; }
 scan_w "$P" "$WORK/p" || exit 9
@@ -505,38 +434,11 @@ printf '%s\n' 'W-SLEEP	core/fixtures/p/run.sh:2' 'W-CLOCK	core/fixtures/p/run.sh
   'W-SLEEP	core/fixtures/q/receipt-bl901.sh:2' 'W-SLEEP	core/fixtures/q/receipt-lib.sh:2' 'W-SLEEP	core/fixtures/s/receipt.sh:2' \
   'W-SLEEP	core/fixtures/m/run.sh:2' 'W-SLEEP	core/fixtures/m/run.sh:3' 'W-SLEEP	core/fixtures/m/run.sh:4' \
   'W-SLEEP	core/fixtures/m/run.sh:6' 'W-SLEEP	core/fixtures/m/run.sh:7' 'W-SLEEP	core/fixtures/m/run.sh:8' \
-  'PM	core/fixtures/p/invocations.decl:1' | LC_ALL=C sort > "$WORK/p.want0"
-{ cat "$WORK/p.want0"; printf 'W-CLOCK\t%s\n' core/fixtures/prepush-pool-depth/run.sh:3 core/fixtures/prepush-pool-depth/run.sh:4 \
-  core/fixtures/prepush-pool-depth/run.sh:5 core/fixtures/prepush-pool-depth/run.sh:6 core/fixtures/prepush-pool-depth/run.sh:7 \
-  core/fixtures/m2/run.sh:3; } | LC_ALL=C sort > "$WORK/p.want"
+  'PM	core/fixtures/p/invocations.decl:1' | LC_ALL=C sort > "$WORK/p.want"
 if ! cmp -s "$WORK/p.got" "$WORK/p.want"; then
   echo "receipt-bl868: REFUSED -- the self-probe's rows differ from the seeded set:" >&2
   diff "$WORK/p.want" "$WORK/p.got" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
   exit 9
-fi
-# the by-name exemption: exactly the exempt definition leaves the rows, as an EXEMPT line, and nothing reaches stdout
-exempt_split "$P" "$WORK/p.rows" "$WORK/p.xkeep" "$WORK/p.xex" > "$WORK/p.xout" \
-  || { echo "receipt-bl868: REFUSED -- the self-probe's exemption split failed" >&2; exit 9; }
-xwant="$(printf 'EXEMPT\tcore/fixtures/prepush-pool-depth/run.sh:3\ttd_more\toperator ruling 2026-11-03, BL-868 item 15\n')"
-grep -v '	core/fixtures/prepush-pool-depth/run.sh:3	' "$WORK/p.rows" | cut -f1,2 | LC_ALL=C sort > "$WORK/p.xkwant"
-cut -f1,2 "$WORK/p.xkeep" | LC_ALL=C sort > "$WORK/p.xkgot"
-if [ "$(cat "$WORK/p.xex")" != "$xwant" ] || [ -s "$WORK/p.xout" ] || ! cmp -s "$WORK/p.xkgot" "$WORK/p.xkwant"; then
-  echo "receipt-bl868: REFUSED -- the self-probe's exemption is wrong: exempt [$(cat "$WORK/p.xex")] stdout [$(cat "$WORK/p.xout")]" >&2
-  diff "$WORK/p.xkwant" "$WORK/p.xkgot" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
-  exit 9
-fi
-# the file guard: the same definition at the exempt path while the global TD_CEIL is non-empty still lists, and so
-# does a file whose empty TD_CEIL="" is followed by a later non-empty assignment (the LAST one decides)
-P2="$WORK/probe2"; mkdir -p "$P2/core/fixtures/prepush-pool-depth" "$P2/docs" || exit 9
-printf '%s\n' '# l' > "$P2/docs/backlog.md"
-printf '%s\n' '#!/usr/bin/env bash' 'TD_CEIL=""' 'TD_CEIL="5"' \
-  'td_more() { [ -z "$TD_CEIL" ] || [ $((SECONDS - $1)) -lt "$TD_CEIL" ]; }' > "$P2/core/fixtures/prepush-pool-depth/run.sh"
-{ git init -q "$P2" && git -C "$P2" add -A && git -C "$P2" -c user.name=p -c user.email=p@p commit -q -m probe; } >/dev/null 2>&1 \
-  || { echo "receipt-bl868: REFUSED -- could not build the second probe repository" >&2; exit 9; }
-scan_w "$P2" "$WORK/p2" || exit 9
-exempt_split "$P2" "$WORK/p2.rows" "$WORK/p2.xkeep" "$WORK/p2.xex" > /dev/null || exit 9
-if [ "$(awk 'END { print NR }' "$WORK/p2.rows")" != 1 ] || [ "$(awk 'END { print NR }' "$WORK/p2.xkeep")" != 1 ] || [ -s "$WORK/p2.xex" ]; then
-  echo "receipt-bl868: REFUSED -- the self-probe's exemption held with a non-empty LAST global TD_CEIL" >&2; exit 9
 fi
 # the allowlist join over the same probe: the marker, not the line text, suppresses; every stale shape is a row
 allow_join "$WORK/p.allow" "$WORK/p.rows" "$WORK/p.marks" "$WORK/p.keep" "$WORK/p.notes" > "$WORK/p.stale" \
@@ -557,7 +459,7 @@ printf '%s\n' 'core/fixtures/m/run.sh	pm-one	a' 'core/fixtures/m/run.sh	pm-one	b
 if allow_join "$WORK/p.dup" "$WORK/p.rows" "$WORK/p.marks" "$WORK/p.k2" "$WORK/p.n2" > /dev/null 2>&1; then
   echo "receipt-bl868: REFUSED -- the self-probe's duplicate allowlist id was accepted" >&2; exit 9
 fi
-echo "receipt-bl868: self-probe ok ($(awk 'END { print NR }' "$WORK/p.want") seeded rows exact; the unbounded waits, the pauses, the per-pass counts, the data and the inert receipts stayed quiet; the allowlist suppressed only its marked line, and 3 stale rows and 1 NOTE printed; the exemption took only the guarded td_more definition)" >&2
+echo "receipt-bl868: self-probe ok ($(awk 'END { print NR }' "$WORK/p.want") seeded rows exact; the unbounded waits, the pauses, the per-pass counts, the data and the inert receipts stayed quiet; the allowlist suppressed only its marked line, and 3 stale rows and 1 NOTE printed)" >&2
 
 # ---- the corpus ----------------------------------------------------------------------------------------------------
 scan_w "$ROOT" "$WORK/c" || exit 9
@@ -567,10 +469,6 @@ printf '%s\n' "$W_ALLOW" > "$WORK/allow"
 allow_join "$WORK/allow" "$WORK/c.rows" "$WORK/c.marks" "$WORK/c.keep" "$WORK/c.notes" > "$WORK/c.stale" \
   || { echo "receipt-bl868: REFUSED -- the allowlist join failed" >&2; exit 9; }
 cat "$WORK/c.notes" >&2
-# the by-name exemption: its rows leave the offender set and print on stderr
-exempt_split "$ROOT" "$WORK/c.keep" "$WORK/c.keep2" "$WORK/c.exempt" > /dev/null \
-  || { echo "receipt-bl868: REFUSED -- the exemption split failed" >&2; exit 9; }
-cat "$WORK/c.exempt" >&2
 
 # ---- class H3, delegated -------------------------------------------------------------------------------------------
 HYG="$ROOT/scripts/validate-fixture-hygiene.sh"
@@ -582,8 +480,8 @@ hp="$(grep -c '^self-probe H3: ok' "$WORK/hyg.out")" || hp=0
 awk '/^FAIL H3:/ { on = 1; next } on && /^    / { l = $0; sub(/^    /, "", l); p = l; sub(/: .*$/, "", p); t = l; sub(/^[^ ]*: /, "", t); print "H3\t" p "\t" t; next } { on = 0 }' \
   "$WORK/hyg.out" > "$WORK/c.h3" || exit 9
 
-cat "$WORK/c.h3" "$WORK/c.keep2" "$WORK/c.stale" "$WORK/c.pm" > "$WORK/c.all"
-n3="$(awk 'END { print NR }' "$WORK/c.h3")"; nw="$(awk 'END { print NR }' "$WORK/c.keep2")"; np="$(awk 'END { print NR }' "$WORK/c.pm")"
+cat "$WORK/c.h3" "$WORK/c.keep" "$WORK/c.stale" "$WORK/c.pm" > "$WORK/c.all"
+n3="$(awk 'END { print NR }' "$WORK/c.h3")"; nw="$(awk 'END { print NR }' "$WORK/c.keep")"; np="$(awk 'END { print NR }' "$WORK/c.pm")"
 ns="$(awk 'END { print NR }' "$WORK/c.stale")"; nf="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ -s "$WORK/c.all" ]; then
   cat "$WORK/c.all"

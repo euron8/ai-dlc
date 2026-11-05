@@ -190,9 +190,8 @@ case "$CASE" in
   # --- arm 3b, THE LEAD'S PRODUCT EDIT --------------------------------------------------
   # NO gate directory: arm 3b must fire before arm 4's exit. A real git repo with ONE
   # registered sibling worktree OUTSIDE the project (the reference consumer's layout:
-  # `graph-s316-ff1` beside `graph`), the shipped scan-roots resolver and grammar with one
-  # extra seeded root (`reports`, so the scan-roots conjunct has a subject no other conjunct
-  # covers), and three transcripts in the harness's own record shapes.
+  # `graph-s316-ff1` beside `graph`), the shipped scan-roots resolver and grammar, and three
+  # transcripts in the harness's own record shapes.
   product)
     rmdir "$W/_bmad-output/gate-adjudication"
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
@@ -201,19 +200,15 @@ case "$CASE" in
     _gram="$(pick "$HERE/../../skills/ai-dlc/artifact-path-grammar.md" \
                   "$HERE/../../../.claude/skills/ai-dlc/artifact-path-grammar.md")"
     [ -n "$_cfg" ] && [ -n "$_gram" ] || { echo "seed.sh: cannot locate artifact-path-config.sh or artifact-path-grammar.md; the scan-roots conjunct would have no resolver" >&2; rm -rf "$W"; exit 2; }
-    mkdir -p "$W/.claude/skills/ai-dlc" "$W/reports" "$W/sessions-jsonl"
+    mkdir -p "$W/.claude/skills/ai-dlc" "$W/sessions-jsonl"
     cp "$_cfg" "$W/scripts/ai-dlc/artifact-path-config.sh" || { rm -rf "$W"; exit 2; }
-    awk '{ print } /^```scan-roots$/ { print "reports" }' "$_gram" > "$W/.claude/skills/ai-dlc/artifact-path-grammar.md"
-    _roots="$(bash "$W/scripts/ai-dlc/artifact-path-config.sh" --scan-roots --root "$W" 2>/dev/null)"
-    grep -qx 'reports' <<<"$_roots" \
-      || { echo "seed.sh: the seeded grammar does not resolve the extra scan root 'reports'" >&2; rm -rf "$W"; exit 2; }
+    cp "$_gram" "$W/.claude/skills/ai-dlc/artifact-path-grammar.md" || { rm -rf "$W"; exit 2; }
     printf 'line\n' > "$W/src/app.py"
     printf 'line\n' > "$W/src/.env"
     printf 'a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> topic\n' > "$W/src/conflict.py"
     printf '# Conventions\n' > "$W/docs/coding-conventions.md"
     printf 'node_modules/\n' > "$W/.gitignore"
     printf '# Project rules\n' > "$W/CLAUDE.md"
-    printf '# r\n' > "$W/reports/r.md"
     git -C "$W" init -q >/dev/null 2>&1 \
       && git -C "$W" -c user.name=fixture -c user.email=fixture@example.invalid commit -q --allow-empty -m seed >/dev/null 2>&1 \
       && git -C "$W" worktree add -q --detach "$W.sib" >/dev/null 2>&1 \

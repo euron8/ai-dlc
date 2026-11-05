@@ -192,7 +192,6 @@ core_manifest:
   - fixtures/check-15-bypass/**
   - fixtures/check-17-bypass/**
   - fixtures/check-17-counts/**
-  - fixtures/check-1c-bypass/**
   - fixtures/check-23-draft-stamps/**
   - fixtures/check-24-adversarial-convergence/**
   - fixtures/check-24-adversarial-convergence-b/**

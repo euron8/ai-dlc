@@ -9,5 +9,5 @@
 # every self-probe and the corpus before the porcelain comparison decides; both used to stop at R1's UNSEEDED refusal.
 # BL-874: +121 / +48 from 6091 / 2310. The two full R11 runs (r11-ctl, r11-m1) over the c5 world with an
 # R11 commit, and three probe-only drives of vbr_probe_r11 (r11d-ctl, r11-m2, r11-m3), sourced in-process.
-6212 *
-2358 scripts/validate-backlog-receipts.sh
+6192 *
+2342 scripts/validate-backlog-receipts.sh

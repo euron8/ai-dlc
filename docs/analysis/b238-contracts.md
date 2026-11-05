@@ -235,7 +235,7 @@ ORDER: commit BL-688 FIRST, then BL-687 (same `snapshot)` arm; each receipt scor
   replaces the bare remedy (no grant, still exit 1; LIVE still grants only under --complete-repair). Third band: transcript
   older than IDLE_SECS under a resolved --dispatch with the path absent prints a STOPPED line (names the transcript; a writer
   with no deliverable file finishes without writing one; read its last message before any re-dispatch) in place of
-  ~:2061-2062. Fixture: new arm in core/fixtures/wait-beat-liveness reusing receipt-bl605.sh's ledger/meta seeds,
+  ~:2061-2062. Fixture: new arm in core/fixtures/wait-beat-liveness with its own ledger/meta seeds,
   AI_DLC_MAX_WAIT_BEATS=1, plain `--dispatch <agentId>` on a never-written path, subject not first in the ledger: fresh
   transcript prints LIVE DISPATCH and not "Re-dispatch the teammate ONCE"; stale prints STOPPED. Mutants: gate restored
   (bare remedy back); widened to no-`--dispatch` beats (near-miss arm without --dispatch must still print the bare remedy).

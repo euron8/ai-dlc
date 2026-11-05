@@ -37,13 +37,6 @@ case "$CASE" in
     age_file "$TARGET" 2160000
     ;;
 
-  # Delivered 30s before this join armed -- indistinguishable from `stale` on the
-  # filesystem alone, which is the whole reason --since exists.
-  since-earlier)
-    printf 'the teammate answered before the lead got around to joining\n' > "$TARGET"
-    age_file "$TARGET" 30
-    ;;
-
   # Nothing on disk: the case that already worked, kept as a regression guard.
   absent)
     ;;
@@ -99,14 +92,14 @@ case "$CASE" in
   # `.shell-$PPID` on the PID of the shell that INVOKES the subject, which this
   # process is not. run.sh writes it from inside that shell -- see `chained_beat`.
   #
-  # `chained-window` and `sleeping-restamp` seed the counter BELOW the bound. They
-  # are about the mark's re-stamp, not about the grant, and at the bound the grant
-  # path rewrites the counter as well -- two writes in one observation.
+  # `sleeping-restamp` seeds the counter BELOW the bound. It is about the mark's
+  # re-stamp, not about the grant, and at the bound the grant path rewrites the
+  # counter as well -- two writes in one observation.
   progress-extends|progress-bounded|progress-ignores-own-state|\
-  chained-progress|chained-noprogress|chained-window|sleeping-restamp)
+  chained-noprogress|sleeping-restamp)
     mkdir -p "$WORK/_bmad-output/.wait-beats"
     case "$CASE" in
-      chained-window|sleeping-restamp) printf '1' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)" ;;
+      sleeping-restamp) printf '1' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)" ;;
       *)                               printf '6' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)" ;;
     esac
     printf '6' > "$WORK/_bmad-output/.wait-beats/.bound"
@@ -122,11 +115,11 @@ case "$CASE" in
 
     case "$CASE" in
       # A file written since the last beat: the teammate is demonstrably working.
-      progress-extends|chained-progress|chained-window|sleeping-restamp)
+      progress-extends|sleeping-restamp)
         printf 'a partial result written during the last beat\n' > "$WORK/wt/wip.txt"
         ;;
       # THE NEAR-MISS, and it is the arm that stops "grants unconditionally" from
-      # passing. Everything about `chained-progress` holds except the one fact the
+      # passing. Everything about `progress-extends` holds except the one fact the
       # grant is supposed to turn on: nothing under the worktree is newer than the
       # mark. `settled.txt` above is 600s old against a 300s mark, so the tree is
       # non-empty and the absence of a hit is a real answer rather than an empty
@@ -153,12 +146,10 @@ case "$CASE" in
     esac
     ;;
 
-  # ---- the lease and per-process-memo cases -----------------------------------
-  # Concurrent beats over ONE state dir. Nothing on disk but the bound, which MATCHES
-  # the bound the run uses: the first beat would otherwise wipe `.wait-beats/` (sparing
-  # only `.lease-*`) while a second beat is mid-sweep, and a case about who holds the
-  # lease would then also be a case about the bound wipe.
-  lease-handoff|lease-noclobber|lease-early|two-beats-one-path|memo-single|bare-epoch)
+  # ---- the lease cases ---------------------------------------------------------
+  # Nothing on disk but the bound, which MATCHES the bound the run uses, so the beat's
+  # bound wipe of `.wait-beats/` is not part of a case about the lease.
+  lease-early|bare-epoch)
     mkdir -p "$WORK/_bmad-output/.wait-beats"
     printf '6' > "$WORK/_bmad-output/.wait-beats/.bound"
     case "$CASE" in

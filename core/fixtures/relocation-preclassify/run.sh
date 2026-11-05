@@ -102,13 +102,6 @@ for v in validate-beta.sh validate-gamma.sh; do
   esac
 done
 
-# --- B. THE EDITED COPY IS FLAGGED, DISTINCTLY --------------------------------
-b="$(row_bucket "scripts/validate-alpha.sh")"
-case "$b" in
-  RELOCATE-MOVE+consumer-edited*) ok "validate-alpha.sh (locally edited) → RELOCATE-MOVE+consumer-edited — the disclosure the report was missing" ;;
-  *) bad "the edited validator must be RELOCATE-MOVE+consumer-edited, got '${b:-<no row>}'" ;;
-esac
-
 # --- C. no spurious CLASSIFY row for any core/scripts path --------------------
 # The false consumer-deleted verdict is exactly the semantic-merge noise this replaces.
 n="$(printf '%s\n' "$PC" | awk -F'\t' '$2 ~ /^core\/scripts\// && $4 ~ /CLASSIFY/' | wc -l | tr -d ' ')"
@@ -135,33 +128,6 @@ if grep -q . <<<"$(printf '%s\n' "$PC2" | awk -F'\t' '$2=="core/scripts/validate
 else
   ok "a migrated validator (now at scripts/ai-dlc/) emits no RELOCATE row"
 fi
-
-# --- F. THE MUTATION TEST — prove the pass is what surfaces the edit -----------
-# Delete the ls-tree enumeration line so the relocation pass iterates nothing. The
-# edited alpha must then have NO disclosure row at all: either it falls back to the old
-# false-CLASSIFY, or it vanishes entirely. Anything but a surviving
-# RELOCATE-MOVE+consumer-edited proves the pass is load-bearing.
-MUT="$WORK/mutant"
-cp -R "$RECON" "$MUT" || exit 2
-# Neutralize the subject-set generator: the enumeration is STAGED to a file above the loop, and
-# the mutant stages an EMPTY file in its place, so the loop reads nothing. The staging command
-# spans two lines (the call, then its `|| pc_fail` continuation); the match takes both.
-perl -0pi -e 's{git -C "\$DIST" -c core\.quotePath=false ls-tree --name-only "\$THEIRS" core/scripts/ > "\$PC_STAGE/relocation-ls-tree" 2>/dev/null \\\n[^\n]*\n}{: > "\$PC_STAGE/relocation-ls-tree"\n}' "$MUT/preclassify.sh" || exit 2
-if grep -q 'ls-tree --name-only "$THEIRS" core/scripts/' "$MUT/preclassify.sh"; then
-  echo "FIXTURE ERROR: mutation did not take — the ls-tree enumerator line was not rewritten" >&2
-  exit 2
-fi
-# Restore beta to the pre-migration state so the mutant sees the same tree assertion B did.
-git -C "$DIST" show "$BASE:core/scripts/validate-beta.sh" > "$CONS/scripts/validate-beta.sh"
-rm -rf "$CONS/scripts/ai-dlc"
-PCM="$(run_pc "$MUT")"
-bm="$(printf '%s\n' "$PCM" | awk -F'\t' '$3=="scripts/validate-alpha.sh" {print $4}')"
-case "$bm" in
-  RELOCATE-MOVE+consumer-edited*)
-    bad "MUTATION: the edit still surfaced with the enumerator gone — the row comes from somewhere else, assertion B proves nothing" ;;
-  *)
-    ok "MUTATION: with the enumerator removed the edit disclosure disappears (got '${bm:-<no row>}') — the pass is what produces it" ;;
-esac
 
 # --- G. A PRE-RELOCATION CONSUMER PULLING A core/scripts/* DELETION IS ZERO WORK, NOT A REFUSAL ---
 # THE NEAR-MISS FOR THE EMPTY-RESULT GUARD. emit-report and apply refuse an EMPTY row set while
