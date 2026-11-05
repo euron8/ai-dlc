@@ -267,6 +267,12 @@ the same way. CRITICALs in scope ADDED
 mid-cycle are NOT divergence: no cycle converges on a growing artifact -- freeze
 scope, shrink the sprint, restart. Contract: `team-roles/adversary.md`.
 
+**A series is bounded at p3.** A p3 that does not stamp `EXIT_CONDITION_MET` stops the
+cycle as a STALL does, and the next pass must declare `resolves_divergence:`. A pass after
+the first is dispatched over the parts `merge-adversarial-shards.sh --derived-map` prints; in files mode that
+is narrowed to the repair, and in document and subject modes it is the full map. Procedure:
+`steps/_gate-procedures.md`, "Divergence resolution dispatch".
+
 **A stop is not the end of the cycle: STOP -> ADJUDICATE -> RESOLVE -> VERIFY.** A repair
 edits the artifact on UNCHANGED scope -- that is what diverged. A RESOLUTION changes what
 is under review, is written to a record the gate reads, and is followed by ONE verification

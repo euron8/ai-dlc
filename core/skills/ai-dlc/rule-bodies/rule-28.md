@@ -60,7 +60,9 @@ WHETHER work is delegated; this clause decides the SHAPE of a
 delegation. When a dispatch's scope partitions along an independent
 axis, the lead dispatches one agent per part, plus ONE cross-part agent
 (one per seat on a seats axis) where the axis says parts interact, in the waves described below, and
-joins them with bounded-join beats (Rule 29). The axes:
+joins them with bounded-join beats (Rule 29). A convergence pass after the
+series' first dispatches only the parts `merge-adversarial-shards.sh [--document | --subject] --derived-map` prints, plus the
+cross agent (`_gate-procedures.md`, "Adversarial review dispatch"); only files mode narrows, and document and subject modes print the full map. The axes:
 
 - **files** -- an artifact that is two or more files (`stories/`), or a
   story's changed-file set as `partition-review-diff.sh --map` prints it:

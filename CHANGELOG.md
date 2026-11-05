@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1008.0] - 2026-11-05
+
+Batch b250, cluster BL-911. BL-911 lands PARTIAL: it closes only on a graph `Outcome measured:` line. No PC- id is closed. Filed 0, closed 0, NET 0.
+
+### BL-911 — a planning convergence pass after the first no longer re-dispatches the whole shard map in files mode, and a series is bounded at p3
+
+Status: PARTIAL. Filed 0, closed 0, net 0.
+
+Files-mode narrowing. In files (stories) mode, `merge-adversarial-shards.sh --derived-map` prints only the parts a pass after the first owes: the parts whose bytes changed since the series predecessor, the parts the predecessor's CRITICAL and MAJOR findings cite, and the cross shard. The merge refuses a shard outside that set and stamps `shard_set_derived_from:`, and arm N of `validate-adversarial-convergence.sh` holds the dispatched set to the recomputed one. Expected movement, from graph's real stories transitions: s320 p1->p2 12/13, p2->p3 8/13, p3->p4 8/13; s321 p1->p2 20/25, p2->p3 11/25 parts, plus the cross shard.
+
+Sections and subject modes are not narrowed yet. Their pre-repair snapshot is consumed by `serial-remediation-worklist.sh` before the next pass, and keeping it would commit it into the consumer's tree: graph tracks 12 sections-mode `.before` files and 4 subject-mode snapshot files, 16 files and 1,844,635 bytes, in a copy of the s319 to s321 slots. For those modes `--derived-map` prints the full map with a `(full width: <mode> mode is not narrowed: ...)` reason, and arm N requires that full width. `--derived-map` stays the dispatch command for every pass after the first in all modes. Both modes are still owed.
+
+The p3 cap. A p3 that does not stamp `EXIT_CONDITION_MET` is `CAPPED` (`--cycle-state` exit 3), and the next pass must declare `resolves_divergence:`. With the era forced on, the cap would have refused 5 of graph's 6 real p4+ passes; s320 p6 is exempt because its predecessor was MET.
+
+Era. The cap and the narrowing bind only a series whose first pass opened after the token's first-parent arrival on the branch, so series begun before that arrival are unaffected, and a token that reaches a branch by merge dates from the merge.
+
+Cost, counted starts per fixture, base 20784dea2 -> tip 343a3f313: divergence-hard-block 213 -> 415 (new cap and era cells, including the merge-topology era cells; each world is built once); adversarial-shard-merge 1812 -> 2175 (the DV arms and the real document and subject sequence arms, DVRS and DVRSS); check-24-adversarial-convergence-d 1004 -> 1004 (k3-derived removed with document-mode narrowing); content-seal 472 -> 474 (the engine's era-function load). Fork TOTAL is unchanged at 2899.
+
 ## [0.1007.0] - 2026-11-05
 
 Batch b250, BL-918 audit. BL-918 ships PARTIAL. Closes no PC- id. NET +1 (filed 1 minus closed 0).

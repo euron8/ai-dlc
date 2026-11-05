@@ -519,7 +519,8 @@ converged.** Say the outcome in the field.
 
 ## `resolves_divergence` — you are the VERIFICATION pass
 
-If the pass before you stamped `DIVERGENT_HARD_BLOCK`, or the cycle had stalled, then you
+If the pass before you stamped `DIVERGENT_HARD_BLOCK`, the cycle had stalled, or the pass
+before you was a p3 that did not stamp `EXIT_CONDITION_MET`, then you
 are not an ordinary next pass. The cycle **stopped**, the operator adjudicated it, and
 someone changed *what is under review*. You are here to check that it worked.
 
@@ -554,7 +555,8 @@ You review the RESOLVED artifact. You do not re-adjudicate the operator's decisi
 ## Later passes review the REPAIR, not the document again
 
 Pass 1 reviews the artifact. **Pass 2 and beyond review what the previous pass
-changed** — the repair is the artifact under review. You MUST:
+changed** — the repair is the artifact under review, including when your shard is one of
+a full-width map (`merge-adversarial-shards.sh --derived-map` narrows files mode only). You MUST:
 
 1. **Verify the prior pass's findings were repaired**, one by one: for each, state
    `repaired` / `partially repaired` / `not repaired` / `repaired wrongly`. A
