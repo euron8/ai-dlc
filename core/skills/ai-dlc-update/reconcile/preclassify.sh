@@ -898,8 +898,8 @@ done < "$PC_STAGE/changed-rows"
 # the orphan's content must hash-match the distribution's own blob (at base or theirs)
 # for the core file it came from. A consumer-modified orphan, or a file at the old path
 # that upstream never shipped, is surfaced for adjudication and NEVER auto-deleted —
-# the same posture as UPSTREAM-DELETED, whose deletions are also gated per-path at
-# apply (step 7).
+# the same posture as UPSTREAM-DELETED, whose deletions are also operator-gated at
+# apply (step 7, as one listed approval).
 #
 # THE WALK IS STAGED ALONE AND ITS STATUS READ BEFORE ANY SORT. This file has no `pipefail`, so
 # `find … | sort > f || refuse` would read only sort's status; `find` is written to its own file
