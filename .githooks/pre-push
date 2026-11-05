@@ -121,11 +121,14 @@ fail=0
 # whose checks already passed. The suite and its judges still run. The operator's switch.
 #
 # PRE-SUITE STEP KEYS: A STEP RUNS ONLY WHEN SOMETHING IT READ MOVED SINCE ITS LAST PASS. Each
-# pre-suite step (every `step` before PRESUITE_DONE=1) is keyed the way a fixture is, in the same
-# record grammar (`#format k1`, `#state ok`, `#tools canonical`, `<path>\t<sha256>`,
-# `<dir>/\t#listing:<sha256>`, `<tool path>\t<sha256>`), one record per step under
-# `<git common dir>/ai-dlc-presuite-keys/<step slug>.key`, and skipped on a recorded pass when
-# every key still holds. A skipped step prints `skipped on a recorded pass` and then PASS, the way
+# pre-suite step (every `step` before PRESUITE_DONE=1) is keyed the way a fixture is, in a record
+# grammar of its own (`#format k2`, `#state ok`, `#tools canonical`, `#cmd <sha256>`, then the
+# row `@present\t<sha256>`, then `<path>\t<sha256>`, `<dir>/\t#listing:<sha256>`,
+# `<tool path>\t<sha256>`), records under `<git common dir>/ai-dlc-presuite-keys/`, named
+# `<step slug>.<first 16 hex of the present key>.key`, and skipped on a recorded pass when every
+# key still holds. The filename hash is advisory; the `@present` row is what the check compares. A
+# k1 record (`<step slug>.key`, written by an older hook in the same common dir) is never read,
+# and an older hook refuses a k2 record as malformed. A skipped step prints `skipped on a recorded pass` and then PASS, the way
 # the suite's content-key skip prints SKIPPED and then PASS, so the verdict count per step is
 # unchanged; one `pre-suite keys:` line at PRESUITE_DONE names every step skipped.
 #
@@ -150,28 +153,42 @@ fail=0
 #     worktree housekeeping are not keyed. ANY OTHER git subcommand against this repository, or a
 #     git command elsewhere that names it, makes the step UNRECORDABLE: it runs on every push and
 #     says why.
-#   * ABSENT PATHS: an existence test or a stat of a path that does not exist moves no atime and runs
-#     no git, so a step that asks `[ -f x ]` of nothing would skip on a stale pass once x appears.
-#     The step therefore runs under `sandbox-exec` with a profile that allows everything and REPORTS
-#     only `file-test-existence` / `file-read-metadata` under the work tree on a path that is NOT
-#     one of the paths present when the push began (every present path is allowed by literal after
-#     the reporting rule, and `.git` by subpath, so they are silent). The kernel's reports are read
-#     through `log stream`, the deriver's sandbox tracer: a liveness sentinel before the first step,
-#     an end sentinel after each one, each step tagged by its own profile message, and a stream that
-#     printed a drop notice or never delivered the end sentinel records nothing. Every reported path
-#     is keyed on its value now, `-` while absent, so creating it moves the key. A git-ignored path is
-#     reported the same way (the census found `.claude/settings.json` for agent definitions).
-#     Where sandbox-exec or `log stream` is unavailable or refuses (a push from inside a sandbox),
-#     nothing is traced and nothing recorded: every step runs.
+#   * ABSENT PATHS, BY THE PRESENT KEY: an existence test or a stat of a path that does not exist
+#     moves no atime and runs no git, so a step that asks `[ -f x ]` of nothing would skip on a stale
+#     pass once x appears. No tracer is used for these: the kernel's sandbox reports reach `log stream`
+#     incompletely and with no reliable drop signal. Instead every record carries the PRESENT KEY, the
+#     sha256 of the raw NUL-separated walk `/usr/bin/find . -path ./.git -prune -o -print0` taken in
+#     pk_present from pk_init (git-ignored paths included, never the universe listing), one C-sorted
+#     line per path, `<path>\t<f|d|l|o>\t<symlink target or empty>` (lstat; no size, no mtime), with
+#     backslash, TAB and newline escaped in the path and the target so no name spells another tree's
+#     lines. A walk that find could not finish (non-zero exit, or anything on its stderr, such as an
+#     unsearchable directory) turns the keys off rather than hash a partial set. Creating, deleting or
+#     renaming any path, a file becoming a directory, or a symlink retarget moves it, and a record
+#     whose `@present` row differs is not used. pk_init writes a START MARK immediately before that
+#     walk, and after every traced step any path under the work tree newer than the mark makes the
+#     run unrecordable (the NEVER RECORDED clause below), so a path created after the walk -- still
+#     present, or created and removed again before the step ended -- moves its parent directory's
+#     mtime past the mark and leaves no record keyed on the tree without it. When the push recorded
+#     anything, pk_finish walks again with the same function and, if the key moved, deletes every
+#     record this push wrote, for a path created by a writer that restored its parent's mtime and
+#     still present when the pre-suite steps end. A content-only edit does not move the present key;
+#     the read keys above carry content. Residual, unkeyed: a size, mode or mtime test on a present
+#     file the step never read.
+#     Residual false skip: a path created and removed during the pre-suite steps by a writer that restores its parent directory's mtime both times is seen by neither check; see BL-919.
 #   * COMMAND: the step's argv and the body of the wrapper function it calls, so a ceiling edited in
 #     this hook moves that step's key.
-# NEVER RECORDED: a step that failed or was interrupted; a step during which any path under the
-# work tree changed mtime (and then no later step on this push is skipped or recorded either,
-# because the manifest every decision reads is the pre-run one); any run whose controls failed --
-# the atime canary (a read file moves, an unread one stays) or the trace sentinel (a git call
-# writes a trace file). Without python3, or when the tree cannot be hashed, nothing is skipped and
-# the hook says so. AI_DLC_FIXTURE_NO_SKIP=1 runs every step (and still records).
-PK_ON=""; PK_TR=""; PK_DIRTY=0; PK_NSKIP=0; PK_NSTEP=0; PK_SKIPPED=""; PK_LP=""
+# NEVER RECORDED: a step that failed or was interrupted; a step at whose end any path under the
+# work tree has an mtime newer than pk_init's start mark (and then no later step on this push is
+# skipped or recorded either, because the manifest every decision reads is the pre-run one); and
+# any run whose controls failed -- the atime canary (a read file moves, an unread one stays) or the
+# trace sentinel (a git call writes a trace file); and every record of a push whose present key,
+# walked again at pk_finish, differs from pk_init's (deleted there). The former clause about sandbox-exec or `log stream` refusing is now vacuous:
+# neither is used, so a push from inside a sandbox records like any other. Without python3, or when
+# the tree cannot be hashed, nothing is skipped and the hook says so. AI_DLC_FIXTURE_NO_SKIP=1 runs
+# every step (and still records). A successful record deletes the step's k1 `<slug>.key` and its
+# `.key.absent` sidecar and keeps the newest 4 `<slug>.<hash>.key`; a red, unrecordable or
+# tree-moving run deletes only the record at its own present key.
+PK_ON=""; PK_TR=""; PK_DIRTY=0; PK_NSKIP=0; PK_NSTEP=0; PK_SKIPPED=""; PK_PH=""
 pk_off() { PK_ON=0; printf '   ..    pre-suite keys OFF: %s -- every step runs\n' "$1"; return 1; }
 pk_init() {
   [ -z "$PK_ON" ] || { [ "$PK_ON" = 1 ]; return; }
@@ -208,13 +225,30 @@ pk_init() {
     [ -s "$PK_W/u/.ls.now" ] && [ -s "$PK_W/u/.pathcmds" ] && [ -f "$PK_W/u/.ftools" ] && [ -f "$PK_W/u/.tools" ] \
       || { echo "the listing or tool tables came out empty"; exit 1; }
   ) > "$PK_W/init.log" 2>&1 || { pk_off "could not hash the working tree ($(head -1 "$PK_W/init.log"))"; return 1; }
-  # THE PRESENT SET, for the absent-path profile: every path under the work tree when the push began, as SBPL
-  # literals. Walked HERE, before any atime reset, so the walk is never read as a step's readdir.
-  /usr/bin/find . -path ./.git -prune -o -print 2>/dev/null | python3 -I "$PK_W/pk.py" literals "$PK_TOP" > "$PK_W/present.sb" \
-    || { pk_off "could not list the work tree for the absent-path profile"; return 1; }
+  # THE PRESENT KEY: every path under the work tree when the push began, hashed with its kind and symlink target.
+  # Walked HERE, before any atime reset, so the walk is never read as a step's readdir. The answer is validated
+  # by shape, never by the pipeline's status.
+  # THE START MARK is written immediately BEFORE the walk, with a plain redirect (nanosecond mtime; never `touch -t` or
+  # `-r` from a coarser source): every later mtime check compares against it, so a path created or removed anywhere
+  # under the tree after the walk -- even created and removed again in the same second -- moves its parent's mtime
+  # past this mark.
+  : > "$PK_W/start" || { pk_off "no start mark"; return 1; }
+  PK_PH="$(pk_present)" || { pk_off "could not hash the present set of the work tree ($(head -1 "$PK_W/walk.err" 2>/dev/null))"; return 1; }
   PK_ON=1
   [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = 1 ] && printf '   ..    pre-suite keys: skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- every step runs and is recorded on a pass\n'
   return 0
+}
+pk_present() { # prints the 64-hex present key; non-zero when the walk was partial or could not be hashed
+  # find's status and its stderr are both read: a dir it cannot search yields a PARTIAL walk that hashes the same on
+  # every push. The walk goes to a file first, so find's own exit is captured with no pipeline.
+  local rc ph
+  /usr/bin/find . -path ./.git -prune -o -print0 > "$PK_W/walk" 2> "$PK_W/walk.err"; rc=$?
+  [ "$rc" = 0 ] || { [ -s "$PK_W/walk.err" ] || printf 'find exited %s\n' "$rc" > "$PK_W/walk.err"; return 1; }
+  [ -s "$PK_W/walk.err" ] && return 1
+  ph="$(python3 -I "$PK_W/pk.py" present "$PK_TOP" < "$PK_W/walk" 2>> "$PK_W/walk.err")" || return 1
+  case "$ph" in *[!0-9a-f]*|"") return 1 ;; esac
+  [ "${#ph}" = 64 ] || return 1
+  printf '%s\n' "$ph"
 }
 # EVERY WALK OF THE TREE IS A READDIR, AND A READDIR MOVES A DIRECTORY'S ATIME. So the reset runs immediately before
 # each traced step and nothing walks the tree between it and the step; after the step the atime scan walks FIRST
@@ -235,46 +269,20 @@ pk_trace_init() { # the two controls, once per push; true when a traced run can 
   mkdir -p "$PK_W/t2.probe" && GIT_TRACE2_EVENT="$PK_W/t2.probe" git rev-parse --git-dir > /dev/null 2>&1
   [ -n "$(ls "$PK_W/t2.probe" 2>/dev/null)" ] \
     || { printf '   ..    pre-suite keys: the git trace sentinel wrote no trace file -- nothing is recorded on this push\n'; return 1; }
-  # THE ABSENT-PATH TRACER. One `log stream` for the push, stopped by pid in pk_finish (or the EXIT trap).
-  command -v sandbox-exec > /dev/null 2>&1 && [ -x /usr/bin/log ] \
-    || { printf '   ..    pre-suite keys: sandbox-exec or /usr/bin/log is unavailable, so absent-path tests cannot be traced -- nothing is recorded on this push\n'; return 1; }
-  PK_TAG="PKSTEP$$x$(date +%s)"
-  pk_profile live > "$PK_W/live.sb" && sandbox-exec -f "$PK_W/live.sb" /usr/bin/true 2> /dev/null \
-    || { printf '   ..    pre-suite keys: sandbox-exec refused the profile (a push from inside a sandbox?) -- nothing is recorded on this push\n'; return 1; }
-  /usr/bin/log stream --style compact --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$PK_TAG\"" > "$PK_W/stream" 2>&1 &
-  PK_LP=$!
-  trap 'pk_finish > /dev/null' EXIT
-  pk_sentinel live || { printf '   ..    pre-suite keys: log stream delivered no sandbox report within 10s -- nothing is recorded on this push\n'; return 1; }
   PK_TR=1
 }
-pk_profile() { # <step slug>: report existence tests and stats of every path under the work tree absent at the push start
-  printf '(version 1)\n(allow default)\n(allow file-read-metadata file-test-existence (subpath "%s") (with report) (with message "%s;%s"))\n' \
-    "$PK_TOP" "$PK_TAG" "$1"
-  cat "$PK_W/present.sb"
-}
-pk_sentinel() { # <slug>: probe .pk-end-<slug> under the step profile until the stream shows it; up to 10s
-  local i=0 n
-  [ -f "$PK_W/$1.sb" ] || pk_profile "$1" > "$PK_W/$1.sb"
-  while [ "$i" -lt 100 ]; do
-    sandbox-exec -f "$PK_W/$1.sb" /bin/test -e "$PK_TOP/.pk-end-$PK_TAG-$1" 2> /dev/null
-    n="$(grep -c -F ".pk-end-$PK_TAG-$1" "$PK_W/stream")" || n=0
-    [ "$n" -gt 0 ] && return 0
-    sleep 0.1; i=$((i + 1))
-  done
-  return 1
-}
 pk_step() { # <title> <cmd...>: the keyed form of step(); prints the verdict and sets fail
-  local title="$1" slug rec cmdsha why rc moved lost n
+  local title="$1" slug rec cmdsha why rc moved
   shift; PK_NSTEP=$((PK_NSTEP + 1))
   if ! pk_init || [ "$PK_DIRTY" = 1 ]; then
     if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
     return 0
   fi
   slug="$(printf '%s' "$title" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c1-80)"
-  rec="$PK_DIR/$slug.key"
+  rec="$PK_DIR/$slug.${PK_PH:0:16}.key"
   cmdsha="$( { printf '%s\n' "$@"; declare -f "$1" 2>/dev/null; } | shasum -a 256 | cut -d' ' -f1)"
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" != 1 ] && [ -f "$rec" ]; then
-    why="$(python3 -I "$PK_W/pk.py" check "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" 2>&1)"; rc=$?
+    why="$(python3 -I "$PK_W/pk.py" check "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" "$PK_PH" 2>&1)"; rc=$?
     if [ "$rc" = 0 ]; then
       printf '   skipped on a recorded pass: none of its %s changed\n   PASS\n' "$why"
       PK_NSKIP=$((PK_NSKIP + 1)); PK_SKIPPED="$PK_SKIPPED $slug"
@@ -286,37 +294,49 @@ pk_step() { # <title> <cmd...>: the keyed form of step(); prints the verdict and
     if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
     return 0
   fi
-  # THE STEP RUNS UNDER ITS OWN PROFILE in a fresh bash that sources every function this hook defines, so a wrapper
-  # function is run exactly as written. Only the profile's report rule is new; it allows everything.
-  pk_profile "$slug" > "$PK_W/$slug.sb" && declare -f > "$PK_W/fns.sh"
-  mkdir "$PK_W/t2.$slug" && touch "$PK_W/mmark" && pk_reset_all
+  # THE STEP RUNS in a fresh bash that sources every function this hook defines, so a wrapper function is run
+  # exactly as written.
+  declare -f > "$PK_W/fns.sh"
+  mkdir "$PK_W/t2.$slug" && pk_reset_all
   ( export GIT_TRACE2_EVENT="$PK_W/t2.$slug" GIT_TRACE2_ENV_VARS="PWD,GIT_INDEX_FILE"
-    sandbox-exec -f "$PK_W/$slug.sb" bash -c '. "$1"; shift; "$@"' pk-step "$PK_W/fns.sh" "$@" ); rc=$?
+    bash -c '. "$1"; shift; "$@"' pk-step "$PK_W/fns.sh" "$@" ); rc=$?
   if [ "$rc" = 0 ]; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
   /usr/bin/find . -path ./.git -prune -o -neweram "$PK_W/mark" -print 2>/dev/null | sed 's|^\./||' > "$PK_W/r.$slug"
-  moved="$(/usr/bin/find . -path ./.git -prune -o -newer "$PK_W/mmark" -print 2>/dev/null | sed -n 1,3p | tr '\n' ' ')"
-  # A REPORT WINDOW IS WHOLE ONLY WHEN ITS END SENTINEL ARRIVED AND THE STREAM PRINTED NO DROP NOTICE.
-  lost=""
-  pk_sentinel "$slug" || lost="the sandbox report stream never delivered this step's end sentinel"
-  [ -n "$lost" ] || { n="$(grep -c 'dropped' "$PK_W/stream")" || n=0; [ "$n" = 0 ] || lost="the sandbox report stream dropped reports"; }
-  if [ -n "$lost" ] && [ "$rc" = 0 ] && [ -z "$moved" ]; then
-    rm -f "$rec"; printf '   ..    not recorded: %s\n' "$lost"; return 0
-  fi
+  # THE MTIME CHECK IS AGAINST THE START MARK, not a per-step one: a path created after pk_init's walk and removed
+  # again before this step ended is in neither walk, yet this step may have run while it existed. Its creation or
+  # removal moved its parent directory's mtime past the mark, so it is caught here.
+  moved="$(/usr/bin/find . -path ./.git -prune -o -newer "$PK_W/start" -print 2>/dev/null | sed -n 1,3p | tr '\n' ' ')"
   # A RED OR UNRECORDABLE RUN DELETES THE OLD RECORD: a pass recorded on these same keys would otherwise
   # skip the step next time over a verdict this run just contradicted.
   if [ -n "$moved" ]; then
     PK_DIRTY=1; rm -f "$rec"
-    printf '   ..    not recorded: the step changed the work tree (%s); no later step is skipped or recorded on this push\n' "$moved"
+    printf '   ..    not recorded: the work tree changed since the present walk (%s); no later step is skipped or recorded on this push\n' "$moved"
   elif [ "$rc" = 0 ]; then
-    why="$(python3 -I "$PK_W/pk.py" record "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" "$PK_W/r.$slug" "$PK_W/t2.$slug" "$PK_W/stream" "$PK_TAG;$slug" "$@" 2>&1)" \
-      || { rm -f "$rec"; printf '   ..    not recorded: %s\n' "$why"; }
+    if why="$(python3 -I "$PK_W/pk.py" record "$rec" "$PK_W/u" "$PK_TOP" "$cmdsha" "$PK_PH" "$PK_W/r.$slug" "$PK_W/t2.$slug" "$@" 2>&1)"; then
+      printf '%s\n' "$rec" >> "$PK_W/wrote"
+    else
+      rm -f "$rec"; printf '   ..    not recorded: %s\n' "$why"
+    fi
   else
     rm -f "$rec"
   fi
   return 0
 }
-pk_finish() { # the one summary line, the stream, and the scratch dir
-  if [ -n "$PK_LP" ]; then kill "$PK_LP" 2> /dev/null; wait "$PK_LP" 2> /dev/null; PK_LP=""; trap - EXIT; fi
+pk_finish() { # the end-of-prefix re-walk, the one summary line and the scratch dir
+  local ph2 r
+  # THE PRESENT SET IS RE-WALKED ONCE THIS PUSH HAS RECORDED ANYTHING. The start-mark check in pk_step catches every
+  # creation or removal that moves an mtime; this catches the one that does not -- a path created by a writer that
+  # restores its parent's mtime (`cp -p` plus `touch -m -r`, `rsync -a` into an existing dir, `tar x` of `./`) and
+  # still present here, which would otherwise leave a record keyed on a tree its step never ran against.
+  if [ "$PK_ON" = 1 ] && [ -s "$PK_W/wrote" ]; then
+    ph2="$(pk_present)" || ph2=""
+    if [ "$ph2" != "$PK_PH" ]; then
+      while IFS= read -r r; do rm -f -- "$r"; done < "$PK_W/wrote"
+      [ -n "$ph2" ] || ph2="(the re-walk failed)"
+      printf '   ..    pre-suite keys: a path was created, deleted or retyped during the pre-suite steps (present key %s at the start, %s at the end) -- every record this push wrote is deleted: %s\n' \
+        "${PK_PH:0:16}" "${ph2:0:20}" "$(grep -c . "$PK_W/wrote")"
+    fi
+  fi
   if [ "$PK_ON" = 1 ]; then
     printf '\n   ..    pre-suite keys: %s of %s step(s) skipped on a recorded pass%s\n' "$PK_NSKIP" "$PK_NSTEP" "${PK_SKIPPED:+:$PK_SKIPPED}"
   fi
@@ -324,7 +344,7 @@ pk_finish() { # the one summary line, the stream, and the scratch dir
   return 0
 }
 pk_py() { cat <<'PK_PY_END'
-import hashlib, json, os, subprocess, sys
+import hashlib, json, os, re, stat, subprocess, sys
 REPLAY = set("rev-parse show cat-file ls-files ls-tree log rev-list merge-base grep diff status symbolic-ref for-each-ref diff-files diff-index diff-tree check-ignore show-ref describe name-rev var".split())
 CFG_READ = set(["--get", "--get-all", "--get-regexp", "--list", "-l"])
 IGNORED = set(["maintenance", "hash-object", "commit-tree", "write-tree", "mktree"])
@@ -384,15 +404,20 @@ class Tree:
             except OSError:
                 self.git[spec] = "-"
         return self.git[spec]
-def check(rec, u, top, cmdsha):
-    t = Tree(u, top)
+def check(rec, u, top, cmdsha, present):
+    # Order: header, command, present key, and only then the tree, so a refusal never depends on the hashes.
     lines = open(rec, encoding="utf-8", errors="surrogateescape").read().split("\n")
-    if lines[:3] != ["#format k1", "#state ok", "#tools canonical"]:
+    if lines[:3] != ["#format k2", "#state ok", "#tools canonical"]:
         print("malformed record"); return 1
     if len(lines) < 4 or lines[3] != "#cmd " + cmdsha:
         print("the command, its declaration or its wrapper body changed"); return 1
+    if len(lines) < 5 or not lines[4].startswith("@present\t"):
+        print("malformed record"); return 1
+    if lines[4] != "@present\t" + present:
+        print("the set of paths present under the work tree changed"); return 1
+    t = Tree(u, top)
     specs = {}; n = 0
-    for l in lines[4:]:
+    for l in lines[5:]:
         if l.startswith("#gitcmd "):
             k, s = l[8:].split("\t", 1); specs[k] = s; continue
         if not l or l.startswith("#"):
@@ -474,46 +499,64 @@ def trace(t2, top):
                 bad.append("git " + name + " ran from a directory that is gone"); continue
         specs.add(json.dumps([argv[0], totop(cwd, top, rtop), [totop(a, top, rtop) for a in args]]))
     return specs, bad
-def sbpl(s):
-    return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-def literals(top):
-    # The present set as allow-literals AFTER the reporting rule (later rules win), and .git by subpath, so only an
-    # ABSENT path under the work tree is reported. A name SBPL cannot carry (a newline) is left out: it reports.
-    out = ["(allow file-read-metadata file-test-existence (subpath %s)" % sbpl(top + "/.git")]
-    out.append(" (literal %s)" % sbpl(top))
-    for l in sys.stdin.read().split("\n"):
-        if not l or l == "." or not l.startswith("./"):
+def present(top):
+    # The PRESENT KEY over the raw NUL-separated walk `/usr/bin/find . -path ./.git -prune -o -print0` on stdin: one
+    # line per path but the root, `<rel path>\t<f|d|l|o>\t<readlink target or empty>`, sorted as bytes (C order),
+    # sha256 printed. Path and target are escaped (`\` -> `\\`, TAB -> `\t`, LF -> `\n`) so the encoding is injective:
+    # a name or target holding a TAB or newline cannot spell another tree's lines. No size, no mtime: content is
+    # keyed by the read rows. A path that cannot be lstat-ed (it vanished mid-walk) fails the whole key, exit 1, so
+    # the caller turns the keys off rather than hash a partial set.
+    def esc(b):
+        return b.replace(b"\\", b"\\\\").replace(b"\t", b"\\t").replace(b"\n", b"\\n")
+    btop = os.fsencode(top); out = []
+    for l in sys.stdin.buffer.read().split(b"\0"):
+        if not l or l == b"." or not l.startswith(b"./"):
             continue
-        out.append(" (literal %s)" % sbpl(top + "/" + l[2:]))
-    out.append(")\n")
-    sys.stdout.write("".join(out))
+        rel = l[2:]; p = btop + b"/" + rel
+        try:
+            st = os.lstat(p)
+        except OSError:
+            return 1
+        if stat.S_ISLNK(st.st_mode):
+            try:
+                k, tgt = b"l", os.readlink(p)
+            except OSError:
+                return 1
+        elif stat.S_ISDIR(st.st_mode): k, tgt = b"d", b""
+        elif stat.S_ISREG(st.st_mode): k, tgt = b"f", b""
+        else: k, tgt = b"o", b""
+        out.append(esc(rel) + b"\t" + k + b"\t" + esc(tgt) + b"\n")
+    out.sort()
+    print(h(b"".join(out)))
     return 0
-def absent(stream, tag, top):
-    # `Sandbox: <proc>(<pid>) allow file-test-existence|file-read-metadata <path>` lines followed by the tag line.
-    rtop = os.path.realpath(top); out = set(); pend = None
-    for l in open(stream, encoding="utf-8", errors="surrogateescape"):
-        l = l.rstrip("\n")
-        if l == tag and pend is not None:
-            out.add(pend); pend = None; continue
-        pend = None
-        for op in (" allow file-test-existence ", " allow file-read-metadata "):
-            i = l.find(op)
-            if i >= 0 and "Sandbox:" in l:
-                p = l[i + len(op):]
-                for t in (rtop, top):
-                    if p.startswith(t + "/"):
-                        r = p[len(t) + 1:]
-                        if r and not r.startswith(".pk-end-") and r != ".git" and not r.startswith(".git/"):
-                            pend = r
-                        break
-                break
-    return out
-def record(rec, u, top, cmdsha, readlist, t2, stream, tag, argv):
+def prune(rec):
+    # After a successful record: the k1 record and its sidecar go, and the newest 4 hash-addressed records stay.
+    d, b = os.path.split(rec)
+    slug = b[:-len(".0123456789abcdef.key")]
+    for x in (slug + ".key", slug + ".key.absent"):
+        try:
+            os.remove(os.path.join(d, x))
+        except OSError:
+            pass
+    pat = re.compile("^" + re.escape(slug) + r"\.[0-9a-f]{16}\.key$")
+    mine = []
+    for x in os.listdir(d):
+        if pat.match(x):
+            try:
+                mine.append((os.stat(os.path.join(d, x)).st_mtime, x))
+            except OSError:
+                pass
+    mine.sort(reverse=True)
+    for _, x in mine[4:]:
+        try:
+            os.remove(os.path.join(d, x))
+        except OSError:
+            pass
+def record(rec, u, top, cmdsha, presentkey, readlist, t2, argv):
     t = Tree(u, top)
     specs, bad = trace(t2, top)
     if bad:
         print("unrecordable, it runs on every push: " + bad[0]); return 3
-    gone = absent(stream, tag, top)
     keys = set()
     ftools = {}
     for l in open(os.path.join(u, ".ftools"), encoding="utf-8", errors="surrogateescape"):
@@ -521,9 +564,6 @@ def record(rec, u, top, cmdsha, readlist, t2, stream, tag, argv):
         if "\t" in l:
             a, b = l.split("\t", 1); ftools.setdefault(a, set()).add(b)
     reads = [l.rstrip("\n") for l in open(readlist, encoding="utf-8", errors="surrogateescape") if l.strip()]
-    for p in gone:
-        # an absent path keys `-` now; its creation moves the key. Its parent listing is keyed only if it exists.
-        keys.add(p)
     for p in reads:
         if p == ".":
             keys.add("./"); continue
@@ -541,7 +581,7 @@ def record(rec, u, top, cmdsha, readlist, t2, stream, tag, argv):
     for w in argv:
         if w in tl: keys.add(tl[w])
         elif w.startswith("/") and os.path.isfile(w): keys.add(w)
-    out = ["#format k1", "#state ok", "#tools canonical", "#cmd " + cmdsha]
+    out = ["#format k2", "#state ok", "#tools canonical", "#cmd " + cmdsha, "@present\t" + presentkey]
     body = []
     for i, s in enumerate(sorted(specs)):
         out.append("#gitcmd %d\t%s" % (i, s))
@@ -552,17 +592,20 @@ def record(rec, u, top, cmdsha, readlist, t2, stream, tag, argv):
     with open(tmp, "w", encoding="utf-8", errors="surrogateescape") as f:
         f.write("\n".join(out + body) + "\n")
     os.replace(tmp, rec)
-    with open(rec + ".absent", "w", encoding="utf-8", errors="surrogateescape") as f:
-        f.write("".join(p + "\n" for p in sorted(gone)))
-    print("%d key(s), %d git, %d absent" % (len(body), len(specs), len(gone)))
+    prune(rec)
+    print("%d key(s), %d git" % (len(body), len(specs)))
     return 0
-m = sys.argv[1]
-if m == "check":
-    sys.exit(check(*sys.argv[2:6]))
-if m == "literals":
-    sys.exit(literals(sys.argv[2]))
-if m == "record":
-    sys.exit(record(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10:]))
+# CLI (the fixture calls these from this heredoc's own bytes):
+#   present <top>                                            stdin: the raw -print0 walk; prints the 64-hex present key
+#   check <rec> <u> <top> <cmdsha> <present>                 exit 0 = the record holds; else prints why, exit 1
+#   record <rec> <u> <top> <cmdsha> <present> <readlist> <t2> <argv...>
+m = sys.argv[1] if len(sys.argv) > 1 else ""
+if m == "present" and len(sys.argv) == 3:
+    sys.exit(present(sys.argv[2]))
+if m == "check" and len(sys.argv) == 7:
+    sys.exit(check(*sys.argv[2:7]))
+if m == "record" and len(sys.argv) >= 9:
+    sys.exit(record(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9:]))
 sys.exit(2)
 PK_PY_END
 }

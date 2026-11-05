@@ -1,0 +1,7 @@
+# presuite-present-key extracts the pk_py heredoc, pk_present and the whole pk_* span out of the distribution hook,
+# runs pk.py with python3, sources the span in a mktemp git repo (whose own .githooks/pre-push is a copy of this
+# file, read by pk_init for the READSET spans), and scans the span as text. REQUIRED, printed where the fixture
+# resolves it.
+!.githooks/pre-push
+# run.sh sources ../lib/preamble.sh, ../lib/mutant.sh and ../lib/matrix.sh.
+core/fixtures/lib/

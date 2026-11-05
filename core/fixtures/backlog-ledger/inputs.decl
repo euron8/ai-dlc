@@ -1,10 +1,9 @@
 # backlog-ledger drives two engines against seeded ledgers and sources one library beneath the root
-# the engines find by walking up for VERSION. VERSION is keyed: run.sh seeds `has VERSION "."` and
-# `lacks VERSION "."` receipts, which backlog-reverify.sh answers by grepping the file's content.
+# the engines find by walking up for VERSION. run.sh copies the engines into a mktemp root that seeds its
+# own VERSION, so the `has VERSION "."` receipts read a seeded file and VERSION is not keyed.
 !scripts/backlog-reverify.sh
 !scripts/backlog-rotate.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
-+VERSION
 core/fixtures/lib/preamble.sh
 scripts/backlog-receipt-lib.sh
 core/fixtures/lib/mutant.sh

@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1009.0] - 2026-11-05
+
+Batch b250. Combined release: BL-914 (cluster bl914) and BL-920 (cluster triggers). Closes nothing. Files BL-917, BL-919 and BL-920. No PC- id is closed. NET +3 (filed 3, BL-917, BL-919 and BL-920, minus closed 0). BL-914 and BL-920 are PARTIAL and stay LIVE.
+
+### BL-914 (partial): the pre-suite step key no longer depends on the `log stream` tracer
+
+- The `/usr/bin/log stream` absent-path tracer in `.githooks/pre-push` is deleted, with `pk_sentinel`, `pk_profile`, the `sandbox-exec` wrapper in `pk_step`, the EXIT-trap stream kill, `PK_LP`, the `live.sb` refusal probe, `present.sb`, `PK_TAG`, the `absent()` and `literals()` helpers in `pk_py`, and the `.absent` sidecar handling. A drop notice can no longer delete the record of any step, because no step reads a stream. The atime canary, the git-trace sentinel and the `PK_DIRTY`/mtime-moved rule are kept.
+- Records are keyed on the raw present set. `pk_present` walks `/usr/bin/find . -path ./.git -prune -o -print0` (never the universe listing, which cannot see a git-ignored path such as `.claude/settings.json`), NUL-separated, and `pk.py present` emits sha256 over C-sorted lines of `<rel path>`, kind (`f`, `d`, `l` or `o`) and readlink target, with backslash, TAB and newline escaped in the path and the target by `esc()` so the encoding is injective. No size, no mtime. Keys are turned off on any find error, so a partial walk is never hashed.
+- A start mark is written to `$PK_W/start` immediately before the walk, and after each step the hook runs a cumulative `-newer` check against it. A change since the walk leaves that step and every later step on the push unrecorded. `pk_finish` re-walks, and deletes this push's records when the present key moved or the re-walk failed.
+- Records are `#format k2`, at `$PK_DIR/<slug>.<first 16 hex of PK_PH>.key`, with a non-`#` row `@present<TAB><full PK_PH>`. `check()` refuses anything but k2 (`malformed record`) and compares `@present` to the current hash; the filename hash is advisory. On a successful record the step's `<slug>.key`, `<slug>.key.absent` and every `<slug>.*.key` beyond the newest 4 by mtime are deleted. A red, unrecordable or moved run deletes only its own `<slug>.<hash>.key`.
+- Old and new hooks share the git common dir, so the format is chosen to be refused by the old reader and ignored by the new one. The old `check()` skips `#` rows and accepted a k1 record with a wrong `#`-row key (adversary measurement E11, rc=0), and it refuses a k2 header (rc=1). The new hook never reads `<slug>.key` (k1). Until this release lands, any new-hook run in a worktree prunes the shared k1 records that peers' old-hook pushes rewrite.
+- New fixture `core/fixtures/presuite-present-key` (`.dist-only`, in-process, with `cells.decl` and `inputs.decl` from its first commit, so no read-set trace is owed): 30 arms and 20 mutants, `invocations.decl` 58 starts. It drives the hook's own `pk_present`, the `pk_*` shell span and `pk_py` as extracted from the hook's bytes, so it never re-implements them. It includes the shipped L1.leak arm, which lists every process whose cwd is under the fixture's scratch dir, with one `lsof -a -d cwd` call and no name filter. A forked child inherits its cwd at fork, so a leak is visible the instant it exists, and no wait or retry is involved. It has two mutants: `m_leak`, which leaks a real `log stream`, and `m_bash`, which leaks a child that never execs and that a name filter would miss.
+- P1 ("no false skip") is NOT fully met. BL-919 is a measured residual false skip: a path created and removed during the prefix by a writer that restores its parent directory's mtime both times. It is filed, not fixed.
+- Yield limit, not built: pushes from the main checkout will rarely skip. The raw walk there is 158091 paths (taken on the main checkout `/Users/n8/git/ai-dlc` by the contract adversary on 2026-11-05) and includes the agent worktrees and `.DS_Store` churn, and the unrecordable window now runs from `pk_init` to the last step, so any write under the tree during the whole prefix leaves the rest of that push unrecorded. Pruning nested repos from the walk was ruled out because it would be a declared exemption. The key also costs cross-release yield, since the present set moves on many commits (adversary measurement E7: 32 of 60).
+- Cost, as counts: walks per push are 1 at base and 2 on a push that records (1 on an all-skip push); find execs 72 to 73; python3 24 to 25. Fork TOTAL in `fork-budget.txt` is 2910 against FORK_BUDGET 2912; the budget is unchanged from main.
+- Close condition: BL-914 closes on two pushes from worktrees sharing one git common dir; the later one prints N>=1 of 23 pre-suite steps skipped. Until then the entry keeps `verify: manual`, gets no LANDED line and does not rotate.
+
+### BL-917 filed
+
+- A pre-existing residual, filed here and not fixed: a metadata-only test (`[ -s x ]`, `-nt`, `-x`) of a present, never-read file is unkeyed, and stays so (size, mode or mtime change). No fix and no test; `verify: manual`.
+
+### BL-919 filed
+
+- A residual of BL-914, filed here and not fixed: a path created and removed with its parent's mtime restored both times escapes the start-mark `-newer` check and the `pk_finish` re-walk, and can produce a false step skip (measured by the delta adversary). ctime cannot close it, because `pk_reset_all` moves every path's ctime. No fix and no test; `verify: manual`.
+
+### BL-920 (PARTIAL) — three fixtures stop keying on live files their verdicts never read
+
+BL-920 is filed in this release and lands PARTIAL. Over the 60 first-parent commits ending at 0443bfbfe, the 258 declared fixtures produce 2948 triggered runs at the base declarations and 2905 at this release's, counted with the hook's own key function. backlog-ledger drops its `+VERSION` row (42 runs to 2): every VERSION probe reads the same for any version string, and its engine cases now run in a seeded mktemp root holding VERSION=0.0.0 and byte-identical copies of the engines. ledger-status-vocabulary drops `+CLAUDE.md` (47 to 45) and writes a sample CLAUDE.md into its mktemp base, because no arm asserts on that file's content. backlog-real-ledger stops copying the live pipeline-efficiency `extract.py` (34 to 33) and seeds the two lines `validate-backlog-receipts.sh` reads; the live file stays checked by backlog-receipt-binding and by the pre-push receipts run. Each edited fixture gives identical tallies under its base and new declarations. Five `+` rows stay because a validator or render check reads the live file: `+CLAUDE.md` on layer-contract-conformance, validator-arm-selection and validator-fork-budget, and the two index rows on invariant-index and vocabulary-index.
+
 ## [0.1008.0] - 2026-11-05
 
 Batch b250, cluster BL-911. BL-911 lands PARTIAL: it closes only on a graph `Outcome measured:` line. No PC- id is closed. Filed 0, closed 0, NET 0.
