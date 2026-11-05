@@ -1920,7 +1920,7 @@ Rules: BL-868. No new arm except a moved one. Do not touch a fixture another in-
 
 Close condition: the census is re-run with the hook's own key function (`readset_decl_keys`) over the 60 first-parent commits ending at 0443bfbfe, BEFORE = the decls at 0443bfbfe, AFTER = the decls at the landed tip, over the union of fixtures in either tree; the headline is total triggered runs, and the before and after totals are recorded here. Every fixture whose broad-only count did not fall is listed with the reason its broad row is genuine. It closes by its own landing, with no `Outcome measured:` line.
 
-**Progress (batch b250; the entry stays PARTIAL, so it carries no `**LANDED` line).** Every figure is total triggered runs over the fixed 60-commit window ending at 0443bfbfe, counted with `readset_decl_keys`. 0.1009.0 (backlog-ledger, ledger-status-vocabulary, backlog-real-ledger): 2948 -> 2926 at the a5c1193f0 decls; that release's text says 2905, from an earlier census that did not model the listing keys, and 2926 is the re-measure with the census that models them. 0.1011.0 (22 fixtures): 2926 -> 2881 at 943cd72ae. 0.1013.0 (procsub-staged-refusal-boot, -boot-c, reconcile-emit-report, -b): 2881 -> 2875. Still owed: the directory rows the b250 closure traces found narrowable, the I55 arm 3 recognition of a `ROOT_DIR` walk-up, and the close-condition census.
+**Progress (batch b250; the entry stays PARTIAL, so it carries no `**LANDED` line).** Every figure is total triggered runs over the fixed 60-commit window ending at 0443bfbfe, counted with `readset_decl_keys`. 0.1009.0 (backlog-ledger, ledger-status-vocabulary, backlog-real-ledger): 2948 -> 2926 at the a5c1193f0 decls; that release's text says 2905, from an earlier census that did not model the listing keys, and 2926 is the re-measure with the census that models them. 0.1011.0 (22 fixtures): 2926 -> 2881 at 943cd72ae. 0.1013.0 (procsub-staged-refusal-boot, -boot-c, reconcile-emit-report, -b): 2881 -> 2875. 0.1014.0 (adversarial-citation, escalation-citation, gate-transition, fixture-git-env-seam, preclassify-mode-bucket, preclassify-rename-row, h2-attest-scripts-dir, procsub-staged-refusal with -b and -c; I55 arm 3 any-marker walk-up): 2889 -> 2830 at the 4fd08794f decls; 0443bfbfe decls to this release, 2948 -> 2830. Kept as genuine, by reason: validator-corpus rows (vocabulary-index, layer-contract-conformance and -b, consumer-machinery-home, crosswalk-home-declaration, derived-fence-binding, enforcement-map-derivations, validator-arm-selection and -b, validator-fork-budget, shipped-rule-version-floor, hermetic-consumption, enforcement-map-sites and -b and -c, schema-install-fallback, bmad-invocation-resolve, validator-path-resolution, taught-schema `!core/scripts/`); listed directories (handoff-record-carries-return, requirements-step steps/, backlog-real-ledger core/scripts/ whose names derive from the hooks at run time, story-evidence-scaffold, ledger-reverify, ledger-reverify-unfalsifiable, process-rule-pins, absorbed-specifics-survive, divergence-hard-block, dispatch-model-guard); prose read by every arm (requirements-step, path-mapping-render SKILL.md, story-evidence-scaffold, blocker-adjudication-record, gate-verdict-grep-shape, absorbed-specifics-survive SKILL.md, escalation-status-vocabulary, fold-architect-ledger-join, review-reroute, review-carry-over-clauses, artifact-section-heading-level, check-31-ac-falsifiability, consolidation-residue, resume-whole-read, retro-branch-behind-main). Still owed: `core/fixtures/lib/` across 131 fixtures, the arms that read a prose row only some of their fixture's arms read, and the close-condition census.
 
 Provenance: batch b250 operator instruction; lead ai-dlc-be.
 
@@ -1941,3 +1941,18 @@ Rules: BL-868.
 Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
 
 verify: manual
+
+## BL-923 — adversarial-citation never reaches the convergence validator's K2, K3 and L arms
+
+**DEFECT.** Found by the b250 triggers-cluster tip adversary (BL-920 main release); it predates that change.
+
+`core/fixtures/adversarial-citation` seeds every terminal pass with `artifact: coe.md` (`seed.sh:26`, `seed.sh:44`) and never creates `coe.md`, so `k2_resolve_file` in `core/scripts/validate-adversarial-convergence.sh` (the K2 arm, :2385-2398) resolves no file and the arm is skipped. K3 and L need `shard_tool_use_ids` and a `sprint-status.yaml`, which no seed writes. The fixture's floor mutants therefore never exercise the K2 sections partition, the K3 subject-manifest exception or arm L, and the decl's claim that the mutants read only the two validators holds only because those arms are unreached. If a later seed creates `coe.md`, K2 prints `PENDING (K2 -- SECTIONS)` for the absent `partition-document.sh` (:2394), and a PENDING does not fail the run.
+
+Fix: seed `coe.md` and the shard ids and sprint-status the K2, K3 and L arms need, in one world each, declare `partition-document.sh`, `partition-subject.sh` and `merge-adversarial-shards.sh` for that world, and assert each arm's verdict.
+
+Close condition: a mutant for each of K2, K3 and L that this fixture kills, with each arm's verdict asserted on a seeded world that reaches it.
+
+Rules: BL-868.
+
+Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
+

@@ -52,7 +52,7 @@ emit-report-refusal	core/skills/ai-dlc-update/reconcile/emit-report.sh declares 
 enforcement-map-derivations	scripts/validate-enforcement-map.sh declares 93 start(s) against 0 cell(s)
 enforcement-map-sites	scripts/validate-enforcement-map.sh declares 61 start(s) against 0 cell(s)
 enforcement-map-sites-b	scripts/validate-enforcement-map.sh declares 34 start(s) against 0 cell(s)
-enforcement-map-sites-c	scripts/validate-enforcement-map.sh declares 43 start(s) against 0 cell(s)
+enforcement-map-sites-c	scripts/validate-enforcement-map.sh declares 44 start(s) against 0 cell(s)
 escalation-citation	core/scripts/validate-escalation-resolution.sh declares 56 start(s) against 0 cell(s)
 escalation-delivery	core/hooks/ai-dlc-escalation-delivery.sh declares 7 start(s) against 0 cell(s)
 escalation-status-vocabulary	core/scripts/validate-escalation-status-vocabulary.sh declares 23 start(s) against 0 cell(s)

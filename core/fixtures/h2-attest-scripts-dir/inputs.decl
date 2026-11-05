@@ -1,8 +1,10 @@
-# h2-attest-scripts-dir copies every core script into a synthetic consumer and drives --attest, which runs check-17-bypass against sibling fixture dirs.
+# h2-attest-scripts-dir copies three named core scripts into a synthetic consumer and drives --attest, which runs check-17-bypass against sibling fixture dirs.
 !core/scripts/validate-h2-attestation.sh
-# reason: core/scripts/ is enumerated -- for f in "$SRC"/*.sh "$SRC"/*.js copies every script into the synthetic consumer, core/fixtures/h2-attest-scripts-dir/run.sh:106.
-core/scripts/
-core/schemas/
+# run.sh:114 copies exactly these by name and exits 2 on any absent; check-17-bypass/run.sh:48-49 runs them as PROV and EVID.
+core/scripts/validate-provenance-block.sh
+core/scripts/validate-retro-evidence.sh
+# validate-provenance-block.sh:180 loads core/schemas/provenance-block.json; run.sh:107 copies the schemas dir, and no other schema is read.
+core/schemas/provenance-block.json
 # lib rows: run.sh:94 sources mutant.sh; validate-h2-attestation.sh:107,624 runs check-17-bypass, whose run.sh:2 sources preamble.sh. check-h1-recursion and check-manifest-bypass have no run.sh (seed.sh only, no lib/ source).
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh

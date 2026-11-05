@@ -94,6 +94,7 @@
 # MUTANT-MATRIX A30-m2 decides=A30-m2 twins=A30-m1
 # MUTANT-MATRIX A30-m3 decides=A30-m3 twins=A30-m1
 # MUTANT-MATRIX A30-m4 decides=A30-m4 twins=A30-m3
+# MUTANT-MATRIX A30-m5 decides=A30-m5 twins=A30-m3
 # MUTANT-MATRIX A31-m1 decides=A31-m1 twins=A31-m2
 # MUTANT-MATRIX A31-m2 decides=A31-m2 twins=A31-m3
 # MUTANT-MATRIX A31-m3 decides=A31-m3 twins=A31-m2
@@ -351,6 +352,7 @@ mx_sig() { # mx_sig <arm> -> sets MXM (grep mode), MXP and MXQ; returns 1 for an
     A30-m2) MXI=I55; MXM=q; MXP="no longer excludes .git" ;;
     A30-m3) MXI=I55; MXM=q; MXP="reach a content-key-EXCLUDED path" ;;
     A30-m4) MXI=I55; MXM=q; MXP="inside the working tree" ;;
+    A30-m5) MXI=I55; MXM=q; MXP="exemption self-probe flagged" ;;
     A31-m1) MXI=I56; MXM=q; MXP="the model pin has forked" ;;
     A31-m2) MXI=I56; MXM=q; MXP="validate-spawn-ledger.sh (found 0)" ;;
     A31-m3) MXI=I56; MXM=q; MXP="ai-dlc-dispatch-guard.sh (found 2)" ;;
@@ -1730,7 +1732,8 @@ cp "$V_BAK" "$V"; rm -f "$V_BAK"
 A30_i55_suite_content_key() {
 # I55 guards the fixture-suite content key: the pre-push hook skips the entire suite when
 # the key is unchanged since the last fully green run, and the ONLY thing holding that up
-# is that the key covers a superset of the suite's inputs. Four arms, four mutants, each
+# is that the key covers a superset of the suite's inputs. Four arms, five mutants (arm 3 has
+# two: a reach, and its any-marker walk-up root), each
 # asserted on its own distinct wording rather than on the shared token "I55" -- row 4's
 # recorded trap, where two arms quoting the same subject let a reverted fix pass.
 KEY="$ROOT/scripts/suite-content-key.sh"
@@ -1842,6 +1845,26 @@ else
   mx_twins A30-m4 "$out"
 fi
 mv "$PREPUSH.orig" "$PREPUSH"
+
+# --- arm 3's derived roots: a walk-up for a marker OTHER than VERSION -----------
+# The mutant narrows the awk WALK rule back to the VERSION marker alone, the shape it had before a
+# fixture walked up for scripts/install.sh. Its self-probe fixture q binds ROOT_DIR by exactly that
+# walk-up, so the narrowed rule stops rooting it and the probe answer loses q. One site suffices:
+# the grep stage still passes the walk-up line, and the awk alone decides what it roots.
+V_BAK="$(mkbak "$V")"
+sed 's@/\[^\\"\]+\\" \]; do \[A-Za-z_\]@/VERSION\\" ]; do [A-Za-z_]@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
+  bad "FIXTURE BROKEN: the I55 any-marker walk-up mutation matched nothing, so the derived-root rule is unproven"
+else
+  out="$(vrun)"
+  if mx_red A30-m5 "$out"; then
+    mutant_killed "$([ "$CTL_RC" = 0 ] && echo 1 || echo 0)" A30-m5 "A30-m5: a walk-up root recognised only for the VERSION marker is REPORTED by arm 3's self-probe (a fixture walking up for any other file would read excluded paths unseen)"
+  else
+    bad "A30-m5 SURVIVED: arm 3 stopped rooting a variable found by walking up for a marker other than VERSION and its self-probe stayed silent"
+  fi
+  mx_twins A30-m5 "$out"
+fi
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 }
 
 # --- Assertion 31: I56 — the model pin cannot fork, and cannot be defined twice --

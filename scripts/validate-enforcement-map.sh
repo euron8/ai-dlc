@@ -6927,8 +6927,10 @@ else
     # stayed green over a real instance (BL-674). Those four are now a FLOOR, still read in every
     # file because most fixtures bind them through a helper this scan cannot follow. On top of the
     # floor a file roots any name it assigns (1) `$(cd "$HERE/../../.." ...)` or
-    # `$(cd "$(dirname "$0")/../../.." ...)`, a climb to the distribution root; (2) a VERSION
-    # walk-up target, `[ ! -f "$X/VERSION" ]; do X=`; (3) an alias of a floor name, `X="$ROOT"`.
+    # `$(cd "$(dirname "$0")/../../.." ...)`, a climb to the distribution root; (2) the target of a
+    # walk-up for ANY marker file, `[ ! -f "$X/<marker>" ]; do X=`, because a fixture finds the root
+    # by walking up for whatever file it needs (`VERSION`, `scripts/install.sh`, its own subject);
+    # (3) an alias of a floor name, `X="$ROOT"`.
     # A literal `$HERE/../../../<entry>` climb is a reach with no variable at all and is read too.
     # The same one grep selects those assignment lines beside the reach lines, and the awk buffers a
     # file, derives its roots from every line of it, then judges its reaches, so a root assigned
@@ -6941,13 +6943,27 @@ else
     # moved that fixture onto its own frozen ledger.snapshot and dropped the `$ROOT` climb, so those
     # three reaches and their acquittal are gone, and the live ledger's joins run as R9 of
     # scripts/validate-backlog-receipts.sh), schema-install-fallback's `$ROOT_DIR/VERSION` walk-up
-    # and enforcement-map-sites' climb
-    # `$HERE/../../../VERSION`, the last two disposed of by `+VERSION` in their inputs.decl. A
-    # mktemp root (`TMPROOT="$(mktemp -d)"`) is acquitted because nothing roots it.
+    # and enforcement-map-sites' `$HERE/../../../VERSION` climb. Neither of the last two reads
+    # VERSION any more: schema-install-fallback walks up for `scripts/install.sh` and
+    # enforcement-map-sites climbs to `scripts/validate-enforcement-map.sh`, both included paths,
+    # and neither inputs.decl carries a `+` line. Today the excluded-entry scan reports 0.
+    # THE ANY-MARKER WALK-UP, AND ITS FALSE-POSITIVE SET. Keyed on the VERSION marker alone, the
+    # walk-up rule stopped seeing schema-install-fallback's `ROOT_DIR` the moment that fixture
+    # switched markers, and a later `$ROOT_DIR/docs/...` read would have passed. Generalised to any
+    # marker, it matched 6 lines over core/fixtures/*/*.sh: 5 bind `ROOT`, already a floor name, and
+    # 1 binds `ROOT_DIR`; every one walks up to the distribution root, so the false-positive set is
+    # empty. The same count without the `do X=` anchor is also 6: every such line assigns its
+    # variable, and the corpus's wait loops (`while [ ! -e "$d/release" ]; do sleep`, or a
+    # path-less `! -f "$STUB_GO"`) fall out before the anchor applies, on `-e` or on the missing
+    # `/<marker>`. The anchor removes nothing today. It is there for a `-f "$W/<marker>"` wait loop
+    # that assigns nothing, and probe fixture r holds that near-miss. Measured through this
+    # function, the included-path control rose by exactly schema-install-fallback's one
+    # `$ROOT_DIR/core/...` reach and the excluded-entry scan stayed at 0.
+    # A mktemp root (`TMPROOT="$(mktemp -d)"`) is acquitted because nothing roots it.
     # WHAT THIS CANNOT SPELL: a climb from any base other than $HERE or `dirname $0`, a walk-up not
-    # written as one `! -f ... ]; do X=` line (`if [ -f "$d/VERSION" ]` inside a loop body), an
-    # alias of a DERIVED name, a root bound in a sourced file, and a read reached through `exec` of a
-    # sibling fixture's run.sh.
+    # written as one `! -f "..." ]; do X=` line (an `-e` or `-d` test, a marker holding a double
+    # quote, or `if [ -f "$d/VERSION" ]` inside a loop body), an alias of a DERIVED name, a root
+    # bound in a sourced file, and a read reached through `exec` of a sibling fixture's run.sh.
     i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'
     i55_reach_scan() { # <tree root> <excluded entries, space-separated> -> unacquitted `<abs file>:<line>:<match>` hits, grouped by entry in argument order
       local alt id='[A-Za-z_][A-Za-z0-9_]*' s e
@@ -6964,11 +6980,11 @@ else
       #   `/../../..` -- the HERE reach and both climbs spell `/\.\./\.\./\.\.` after their base;
       #   `ROOT"` and `ROOT}"` -- the alias pattern ends `(REPO_ROOT|ROOT|D_ROOT|C_ROOT)\}?"`,
       #     and every alternative ends in ROOT;
-      #   `/VERSION" ]; do ` -- the walk-up spells `}?/VERSION" \]; do ` before its target.
+      #   `" ]; do ` -- the walk-up spells `/<marker>" \]; do ` before its target, for any marker.
       # The list is a superset per pattern, so the prefilter drops only lines no regex matches.
       # A prefilter that matches nothing hands the regex an empty stream, the same empty stream
       # the one-stage grep wrote, so the awk answers the empty corpus and the hitless one alike.
-      lits=(-e '/../../..' -e 'ROOT"' -e 'ROOT}"' -e '/VERSION" ]; do ')
+      lits=(-e '/../../..' -e 'ROOT"' -e 'ROOT}"' -e '" ]; do ')
       s="$2 "
       while [ -n "$s" ]; do
         e="${s%% *}"; s="${s#* }"
@@ -6979,7 +6995,7 @@ else
                   -e '\$\{?HERE\}?/\.\./\.\./\.\./('"$alt"')([/"'"'"' ]|$)' \
                   -e "$id"'="?\$\(cd "?(\$\{?HERE\}?|\$\(dirname "\$0"\))/\.\./\.\./\.\.' \
                   -e "$id"'="?\$\{?'"$i55_roots"'\}?"' \
-                  -e '! -f "\$\{?'"$id"'\}?/VERSION" \]; do '"$id"'=' \
+                  -e '! -f "\$\{?'"$id"'\}?/[^"]+" \]; do '"$id"'=' \
         | awk -v el="$2" -v rootre="$i55_roots" '
           function plusset(dir,   f, l, c, x) {
             if (dir in PD) return; PD[dir] = 1; f = dir "/inputs.decl"
@@ -7001,7 +7017,7 @@ else
           BEGIN { ne = split(el, E, " ")
             CLIMB = "(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*=\"?\\$\\(cd \"?(\\$\\{?HERE\\}?|\\$\\(dirname \"\\$0\"\\))/\\.\\./\\.\\./\\.\\."
             ALIAS = "(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*=\"?\\$\\{?" rootre "\\}?\""
-            WALK = "! -f \"\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?/VERSION\" ]; do [A-Za-z_][A-Za-z0-9_]*=" }
+            WALK = "! -f \"\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?/[^\"]+\" ]; do [A-Za-z_][A-Za-z0-9_]*=" }
           { line = $0; t = index(line, ":"); f = substr(line, 1, t - 1); rest = substr(line, t + 1)
             t = index(rest, ":"); src = substr(rest, t + 1)
             if (f != cf) { flush(); cf = f }
@@ -7099,7 +7115,7 @@ else
     i55_tops="${i55_tops# }"
     i55_bprobe=""; i55_nl='
 '
-    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Fifteen fixtures, each one
+    # SELF-PROBE, BOTH DIRECTIONS, through i55_reach_scan, before the corpus. Seventeen fixtures, each one
     # property from the acquitted one: (a) `+` declared, literal path -> acquitted; (b) declared without
     # `+` -> flagged; (c) `+` on another docs path -> flagged; (d) a variable path -> flagged; (e) its
     # SIBLING (a) declares the `+` -> flagged; (f) two reaches on one line, one declared -> flagged;
@@ -7109,8 +7125,11 @@ else
     # and a redirect -> acquitted, the near-miss that keeps the boundary rule from flagging everything.
     # THE DERIVED ROOTS, none of them a floor name and none declared: (k) `OWN` assigned a climb to
     # the distribution root, (l) `RD` the target of a VERSION walk-up, (m) a literal
-    # `$HERE/../../../docs` climb, (o) `R` assigned a climb from `dirname "$0"` -> each flagged; (n) `TMPROOT="$(mktemp -d)"` reading the same path
-    # -> acquitted, because a scratch root is not the distribution and nothing derives it.
+    # `$HERE/../../../docs` climb, (o) `R` assigned a climb from `dirname "$0"`, (q) `ROOT_DIR` the
+    # target of a walk-up for `scripts/install.sh`, a marker other than VERSION -> each flagged;
+    # (n) `TMPROOT="$(mktemp -d)"` reading the same path -> acquitted, because a scratch root is not
+    # the distribution and nothing derives it; (r) a `! -f "$W/<marker>" ]; do sleep` wait loop
+    # whose `do` assigns nothing, reading `$W/docs/x.md` -> acquitted, the near-miss of (q).
     i55_pd="$(mktemp -d 2>/dev/null)"
     if [ -z "$i55_pd" ] || [ ! -d "$i55_pd" ]; then
       err "I55 arm 3 could not create its + exemption probe directory, so neither direction of the exemption was proven this run."
@@ -7120,6 +7139,7 @@ else
                "$i55_pd"/core/fixtures/g "$i55_pd"/core/fixtures/h "$i55_pd"/core/fixtures/i \
                "$i55_pd"/core/fixtures/j "$i55_pd"/core/fixtures/k "$i55_pd"/core/fixtures/l \
                "$i55_pd"/core/fixtures/m "$i55_pd"/core/fixtures/n "$i55_pd"/core/fixtures/o \
+               "$i55_pd"/core/fixtures/q "$i55_pd"/core/fixtures/r \
                "$i55_pd"/a5/core/fixtures/p1 "$i55_pd"/a5/core/fixtures/p2 "$i55_pd"/a5/core/fixtures/p3 \
                "$i55_pd"/a5/core/fixtures/p4 "$i55_pd"/a5/core/fixtures/p5 "$i55_pd"/a5/core/fixtures/p6 \
                "$i55_pd"/a5/cite
@@ -7144,6 +7164,8 @@ else
       printf 'cat "$HERE/../../../docs/x"\n' > "$i55_pd/core/fixtures/m/run.sh"
       printf 'TMPROOT="$(mktemp -d)"; cat "$TMPROOT/docs/x"\n' > "$i55_pd/core/fixtures/n/run.sh"
       printf 'R="$(cd "$(dirname "$0")/../../.." && pwd)"; cat "$R/docs/x"\n' > "$i55_pd/core/fixtures/o/run.sh"
+      printf 'ROOT_DIR="$HERE"\nwhile [ "$ROOT_DIR" != "/" ] && [ ! -f "$ROOT_DIR/scripts/install.sh" ]; do ROOT_DIR="$(dirname "$ROOT_DIR")"; done\ncat "$ROOT_DIR/docs/x.md"\n' > "$i55_pd/core/fixtures/q/run.sh"
+      printf 'W="$(mktemp -d)"\nwhile [ ! -f "$W/scripts/ready" ]; do sleep 0.1; done\ncat "$W/docs/x.md"\n' > "$i55_pd/core/fixtures/r/run.sh"
       for i55_c in g h i j; do printf '+docs/backlog.md\n' > "$i55_pd/core/fixtures/$i55_c/inputs.decl"; done
       printf 'L="$ROOT/docs/backlog.md$sfx"\n'      > "$i55_pd/core/fixtures/g/run.sh"
       printf 'cat "$ROOT/docs/backlog.md"*\n'       > "$i55_pd/core/fixtures/h/run.sh"
@@ -7159,7 +7181,7 @@ else
       printf 'L="$ROOT/docs/$name"\n' > "$i55_pd/core/fixtures/d/run.sh"
       printf 'cp "$ROOT/docs/backlog.md" "$ROOT/docs/plans/x.md" "$ROOT/zz/y"\n' > "$i55_pd/core/fixtures/f/run.sh"
       # FAST PATH WITH BUILTINS, EXACT PATH ON ANY DOUBT. The expected answer is the name set
-      # {b..i, k, l, m}; each hit line is cut to its fixture name with parameter expansion and the set is
+      # {b..i, k, l, m, o, q}; each hit line is cut to its fixture name with parameter expansion and the set is
       # checked without a fork. Any other outcome -- a missing name, an extra one, an empty one --
       # recomputes the string with the original sed|sort -u|tr, so a failing message is the same
       # bytes it always was. Only the passing run is cheaper.
@@ -7169,15 +7191,15 @@ else
       i55_pset=" "; i55_pok=1
       while IFS= read -r i55_l; do
         i55_c="${i55_l#"$i55_pd"/core/fixtures/}"; i55_c="${i55_c%%/*}"
-        case "$i55_c" in b|c|d|e|f|g|h|i|k|l|m|o) i55_pset="${i55_pset}${i55_c} " ;; *) i55_pok=0 ;; esac
+        case "$i55_c" in b|c|d|e|f|g|h|i|k|l|m|o|q) i55_pset="${i55_pset}${i55_c} " ;; *) i55_pok=0 ;; esac
       done <<<"$i55_praw"
-      for i55_c in b c d e f g h i k l m o; do
+      for i55_c in b c d e f g h i k l m o q; do
         case "$i55_pset" in *" $i55_c "*) ;; *) i55_pok=0 ;; esac
       done
       if [ -z "$i55_praw" ]; then
         i55_pr=""
       elif [ "$i55_pok" = 1 ]; then
-        i55_pr="b c d e f g h i k l m o "
+        i55_pr="b c d e f g h i k l m o q "
       else
         i55_pr="$(printf '%s\n' "$i55_praw" | sed "s@^${i55_pd}/core/fixtures/@@; s@/.*@@" | LC_ALL=C sort -u | tr '\n' ' ')"
       fi
@@ -7190,7 +7212,7 @@ else
       i55_pw="${i55_pd}/core/fixtures/f/run.sh:1:\$ROOT/${i55_pe%% *}/${i55_nl}${i55_praw}"
       rm -rf "$i55_pd"
       [ "$i55_p2" = "$i55_pw" ] || err "I55 arm 3's self-probe is BROKEN on the two-entry regrouping: i55_reach_scan '$i55_pe' did not print the '${i55_pe%% *}' group (fixture f's line) followed by exactly the '${i55_pe#* }' answer above. Either the groups came out in a different order from the entry list, or a line reaching both entries was attributed to only one -- and the corpus scan below passes every EXCLUDE entry in one such call. Got:${i55_nl}${i55_p2}"
-      [ "$i55_pr" = "b c d e f g h i k l m o " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i k l m o '. Fixtures a and j (a + declared, literal reach ending at a boundary) and n (a mktemp root nothing derives) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, or the derived root set misses a climb, a VERSION walk-up or a literal climb, and the corpus scan below would be read through it."
+      [ "$i55_pr" = "b c d e f g h i k l m o q " ] || err "I55 arm 3's + exemption self-probe flagged '${i55_pr}', want 'b c d e f g h i k l m o q '. Fixtures a and j (a + declared, literal reach ending at a boundary), n (a mktemp root nothing derives) and r (a wait loop that assigns nothing) must be ACQUITTED and every other one flagged; anything else means the exemption either acquits its own subject or cannot acquit at all, or the derived root set misses a climb, a walk-up for some marker or a literal climb, or roots a variable no walk-up assigns, and the corpus scan below would be read through it."
     fi
     # ARM 5'S PROBE VERDICT. Exactly p1, p4, p5 and p6 flagged, each for its own reason, and a CTL
     # line that read all six declarations; built from builtins so a pass costs no fork.

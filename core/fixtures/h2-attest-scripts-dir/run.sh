@@ -107,14 +107,18 @@ mkdir -p "$WORK/.git" "$WORK/.claude/schemas" "$WORK/scripts/ai-dlc" "$WORK/test
 cp "$SCHEMAS"/*.json "$WORK/.claude/schemas/" 2>/dev/null || {
   echo "FIXTURE ERROR: no schemas to copy from $SCHEMAS" >&2; exit 2; }
 
+# Exactly the validators the drive reaches: the subject, and the two check-17-bypass/run.sh
+# runs as PROV and EVID (its :48-49). Each is required by name; an absent one is fatal,
+# never a quietly smaller install.
 n_installed=0
-for f in "$SRC"/*.sh "$SRC"/*.js; do
-  [ -f "$f" ] || continue
-  cp "$f" "$WORK/scripts/ai-dlc/" || exit 2
+for f in validate-h2-attestation.sh validate-provenance-block.sh validate-retro-evidence.sh; do
+  [ -f "$SRC/$f" ] || {
+    echo "FIXTURE ERROR: core script $f not found in $SRC" >&2; exit 2; }
+  cp "$SRC/$f" "$WORK/scripts/ai-dlc/" || exit 2
+  [ -f "$WORK/scripts/ai-dlc/$f" ] || {
+    echo "FIXTURE ERROR: $f was not copied into the consumer tree" >&2; exit 2; }
   n_installed=$((n_installed + 1))
 done
-[ "$n_installed" -ge 10 ] || {
-  echo "FIXTURE ERROR: only $n_installed core scripts found in $SRC" >&2; exit 2; }
 
 printf '#!/usr/bin/env bash\n# consumer-authored, not core\nexit 0\n' \
   > "$WORK/scripts/audit-dormant-gates.sh"
