@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # prepush-ssh-keepalive — the distribution pre-push hook WARNS when the push remote's
 # effective ssh config carries no keepalive, and stays silent when it does.
 #

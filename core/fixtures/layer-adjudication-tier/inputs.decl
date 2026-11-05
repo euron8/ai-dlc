@@ -4,4 +4,5 @@
 # exits 1 without it. The validator under test is the required input.
 !core/skills/ai-dlc-update/reconcile/layer-drift.sh
 core/skills/ai-dlc-update/reconcile/
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

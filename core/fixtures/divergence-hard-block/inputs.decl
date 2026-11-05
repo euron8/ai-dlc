@@ -3,7 +3,7 @@ core/scripts/validate-adversarial-convergence.sh
 core/scripts/sprint-status.sh
 core/schemas/sprint-status.json
 core/hooks/
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
 # The cap and era worlds (BL-911): the installed rulebook carrying ERA_TOKEN, and the siblings arm N's self-probe re-derives through.
 core/skills/ai-dlc/steps/_gate-procedures.md
 core/scripts/merge-adversarial-shards.sh

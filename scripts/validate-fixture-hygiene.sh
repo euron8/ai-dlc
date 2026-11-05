@@ -201,6 +201,33 @@
 #     process-rule-pins/receipt-bl538.sh, the only receipt any `verify:` line of docs/backlog.md names (50 verify lines,
 #     none indented; the archive clause added nothing at that base). It is run by no runner, so it is a true positive
 #     under BL-915's rule and carries an allowlist row; measured false positives: still 0.
+# H6  an UNGUARDED lib source (BL-925). A `.`/`source` in command position (masked: never inside a string, comment
+#     or heredoc body) whose word names core/fixtures/lib/<x>.sh -- `…/lib/<f>`, `"$(cd …/lib" && pwd)/<f>"`, or a
+#     variable this file assigned a value containing `/lib/` (`MUT_LIB=…; . "$MUT_LIB"`) -- in any fixture .sh outside
+#     core/fixtures/lib/. It is GUARDED, and quiet, when (a) the same statement continues `|| exit N`, `|| { … exit N;
+#     }` with N > 0, or `|| broken …` where this file defines, ABOVE that line, a broken() that exits non-zero; or
+#     (b) an EARLIER line tests the IDENTICAL word with `[ -f W ]`/`[ -r W ]` whose `||` branch exits that way (a test
+#     line ending in `{`, `\`, `||` or `&&` is joined to the next), or `[ ! -f W ]` followed by such an exit within two
+#     lines; or (c) an earlier `for V in <words>; do [ -f "PFX$V" ] || … exit N` names it as PFX<word>. `&& …`,
+#     `|| true`, `|| exit 0`, `|| { …; exit 0; }`, a `broken` undefined or defined only BELOW the source (an unset
+#     function is rc 127 and the script runs on), a test of a DIFFERENT path, and a test whose failing branch only
+#     echoes all FIRE. Why: a source of a missing file sets $? and runs on,
+#     so the fixture loses every arm that lib supplied and still exits 0 -- measured, held-stories without
+#     lib/mutant.sh read rc 0 with ok 24 -> 19.
+#     FP SET, how it reached zero. Population: 303 lib sources in 199 fixture .sh on the BL-925 tip; an independent
+#     derivation (python, not this awk) lists the same 303 plus 2 lines inside fixture-hygiene's heredoc seeds, which
+#     the masker correctly reads as data. First cut, on-line guards only: 113 hits, every one a pre-tested source
+#     (form b) -- read as guarded by its author, and a change to the form would be churn; (b) was added keyed on the
+#     IDENTICAL word, which keeps a test of `$HERE/lib.sh` from acquitting `. "$HERE/../lib/mutant.sh"` beside it.
+#     Then 3 hits: fixture-inprocess:78 and fixture-invocation-budget:94 (form c, added) and
+#     prepush-worktree-env-scrub:109 (a broken() whose `exit 2` sits on its fourth line; the definition window
+#     widened to five lines). Final hits: 0, measured false positives: 0. On base 540b76ecb the arm flags 146
+#     sources, the derivation's unguarded set row for row. A drop-one control (each lib file absent from a copied
+#     tree) refuted an earlier 148: enforcement-map-derivations:91/:92 were already guarded by a two-line
+#     `[ -f A ] && [ -f B ] || {` / `… exit 2; }`, which both scans missed the same way until (b) joined a test line
+#     ending in `{`. A drop-one is the check that does not share the scan's grammar. STATED LIMITS: a lib path spelled through
+#     a variable assigned in ANOTHER file, or built by concatenation across lines, is not a candidate; a loop body
+#     sourcing `…/lib/$_l` is a candidate and is acquitted only by a pre-test of the identical word.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -465,7 +492,85 @@ function stubjoin(   i, m, o, j, pn, dir, x) {
   }
 }
 function literal(w) { if (w ~ /[$`]/) return ""; gsub(/["\047]/, "", w); return (w ~ /^[A-Za-z0-9_:+-]+(\.[A-Za-z0-9_:+-]+)*$/ && w !~ /^-/) ? w : "" }
+# --- H6: a source of core/fixtures/lib/<x>.sh with no failure guard ---------------------------------------------
+# wend6 <masked line> <start>: the end (exclusive) of the shell word starting at <start>, across `$( )` and quotes.
+function wend6(s, p,   d, dq, c) {
+  d = 0; dq = 0
+  for (; p <= length(s); p++) {
+    c = substr(s, p, 1)
+    if (c == "\\") { p++; continue }
+    if (c == "\"") { dq = !dq; continue }
+    if (c == "(") { d++; continue }
+    if (c == ")") { if (d > 0) d--; continue }
+    if (!dq && d == 0 && c ~ /[[:space:];&|<>]/) break
+  }
+  return p
+}
+# a word naming the shared lib: `…/lib/<f>`, `…/lib" && pwd)/<f>`, or a variable this file assigned a lib path.
+function libref6(w,   n) {
+  if (w ~ /(\/|^"?)lib(\/|"[^"]*\)\/)/) return 1
+  if (match(w, /^"?\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { n = substr(w, RSTART, RLENGTH); sub(/^"?\$\{?/, "", n); return (n in LV6) }
+  return 0
+}
+# exits6 <text after `||`>: the branch exits non-zero (`exit N`, a `{ … exit N; }` group, or a defined broken()).
+function exits6(t) {
+  if (t ~ /^[[:space:]]*(\{[^}]*[^A-Za-z0-9_])?exit[[:space:]]+[1-9]/) return 1
+  return HB6 && HB6 < AT6 && t ~ /^[[:space:]]*(\{[^}]*[^A-Za-z0-9_])?broken([[:space:]]|$)/
+}
+function prep6(   i, s, m, nm, v, q, w, t, neg, n, k, x, a6) {
+  split("", LV6); split("", FT6); HB6 = 0
+  for (i = 1; i <= NL; i++) {
+    if (HDL[i]) continue
+    s = M[i]
+    if (!HB6 && s ~ /(^|[[:space:];&|({])broken[[:space:]]*\(\)/ && (s " " M[i + 1] " " M[i + 2] " " M[i + 3] " " M[i + 4]) ~ /exit[[:space:]]+[1-9]/) HB6 = i
+    if (match(s, /^[[:space:]]*(export[[:space:]]+|local[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=/)) {
+      nm = substr(s, RSTART, RLENGTH); sub(/^[[:space:]]*(export[[:space:]]+|local[[:space:]]+)?/, "", nm); sub(/=$/, "", nm)
+      v = substr(O[i], RSTART + RLENGTH); if (v ~ /(\/|^"?)lib(\/|"|$)/) LV6[nm] = 1
+    }
+  }
+  # a preceding `[ -f W ]` / `[ ! -f W ]` whose failing branch exits non-zero guards a later source of W
+  for (i = 1; i <= NL; i++) {
+    if (HDL[i]) continue
+    s = M[i]; m = 0
+    # `for V in <words>; do [ -f "PFX$V" ] || … exit N` within three lines: every listed word is tested as PFX<word>
+    if (match(O[i], /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]+/)) {
+      nm = O[i]; sub(/^[[:space:]]*for[[:space:]]+/, "", nm); sub(/[[:space:]].*/, "", nm)
+      v = substr(O[i], RSTART + RLENGTH); t = v; sub(/;[[:space:]]*do([[:space:]].*)?$/, "", v)
+      t = O[i] " " O[i + 1] " " O[i + 2]
+      if (match(t, "\\[[[:space:]]+-f[[:space:]]+\"[^\"]*\\$\\{?" nm "\\}?\"[[:space:]]*\\][[:space:]]*\\|\\|")) {
+        w = substr(t, RSTART, RLENGTH); q = substr(t, RSTART + RLENGTH)
+        if (exits6(q)) {
+          sub(/^\[[[:space:]]+-f[[:space:]]+"/, "", w); sub(/\$\{?[A-Za-z_][A-Za-z0-9_]*\}?".*$/, "", w)
+          n = split(v, a6, /[[:space:]]+/)
+          for (k = 1; k <= n; k++) { x = a6[k]; gsub(/["\047]/, "", x); if (x != "" && !((w x) in FT6)) FT6[w x] = i }
+        }
+      }
+    }
+    while (match(substr(s, m + 1), /(^|[[:space:]])-[fr][[:space:]]+/)) {
+      q = m + RSTART + RLENGTH; m = q - 1
+      w = wordat(O[i], q); gsub(/["\047]/, "", w); if (w == "") continue
+      neg = (substr(s, 1, q - 1) ~ /![[:space:]]+-[fr][[:space:]]+$/)
+      t = substr(s, WEND); if (t ~ /(\\|&&|\|\||\{)[[:space:]]*$/ && i < NL) t = t " " M[i + 1]
+      AT6 = i
+      if ((match(t, /\|\|/) && substr(t, 1, RSTART - 1) !~ /;/ && exits6(substr(t, RSTART + 2))) \
+          || (neg && (s " " M[i + 1] " " M[i + 2]) ~ /(^|[^A-Za-z0-9_])exit[[:space:]]+[1-9]/)) { if (!(w in FT6)) FT6[w] = i }
+    }
+  }
+}
+function h6(i,   s, off, st, q, e, w, wn, t) {
+  s = M[i]; off = 0
+  while (match(substr(s, off + 1), /(^[[:space:]]*|[;&|({!][[:space:]]*|(^|[[:space:]])(then|do|else)[[:space:]]+)(\.|source)[[:space:]]+/)) {
+    q = off + RSTART + RLENGTH; e = wend6(s, q); off = e - 1
+    w = substr(O[i], q, e - q); if (!libref6(w)) continue
+    T6++; AT6 = i
+    t = substr(s, e); if (t ~ /(\\|\{)[[:space:]]*$/ && i < NL) t = t " " M[i + 1]
+    if (match(t, /\|\|/) && substr(t, 1, RSTART - 1) !~ /;|&&/ && exits6(substr(t, RSTART + 2))) continue
+    wn = w; gsub(/["\047]/, "", wn); if ((wn in FT6) && FT6[wn] < i) continue
+    print "H6\t" REL ":" i "\t" trim(O[i])
+  }
+}
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
+  if (FX != "" && FX != "lib") prep6()
   for (i = 1; i <= NL; i++) {
     s = M[i]
     # H1
@@ -514,6 +619,7 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       print "H3\t" REL ":" i "\t" trim(O[i])
     }
     if (FX == "" || FX == "lib") continue
+    if (!HDL[i]) h6(i)
     # H5 facts
     if (s ~ /(^|[^A-Za-z0-9_])cmp[[:space:]]+-s([[:space:]]|$)/) CMP[FX] = 1
     if (O[i] ~ /[Mm][Uu][Tt][Aa][Nn][Tt]/) MUTW[FX] = 1
@@ -548,7 +654,7 @@ END {
   for (f in S1) print "P\t" f "\tS1 " S1[f] "()"
   for (f in CMP) if (f in MUTW) print "P\t" f "\tS2 cmp -s + mutant"
   for (f in MKC) print "P\t" f "\tMKC mutant_killed caller"
-  print "T\tH1\t" (T1 + 0); print "T\tH2\t" (T2 + 0)
+  print "T\tH1\t" (T1 + 0); print "T\tH2\t" (T2 + 0); print "T\tH6\t" (T6 + 0)
 }
 AWK
 
@@ -574,7 +680,7 @@ function claim(f, name, form, where) {
 FILENAME == ARGV[1] { IMPL[$1] = $2; next }
 FILENAME == ARGV[2] { if ($0 !~ /^[[:space:]]*(#|$)/) { x = $1; gsub(/[[:space:]]/, "", x); MKA[x] = 1 } next }
 FILENAME == ARGV[3] {
-  if ($1 == "H1" || $1 == "H2" || $1 == "H3") { print; next }
+  if ($1 == "H1" || $1 == "H2" || $1 == "H3" || $1 == "H6") { print; next }
   if ($1 == "P") { addtag(map($2), $3); next }
   if ($1 == "B") { if ($2 in IMPL) { print "ROW\t" $2 ":" $3 "\ta MUTANT-MATRIX block line in a shard stub; the block lives in its IMPL"; next }
                    NB[$2]++; BL[$2, NB[$2]] = $3; BR[$2, NB[$2]] = $4; next }
@@ -858,6 +964,45 @@ cat "$X/s" | sh
 command sh "$X/c.sh"
 env sh -c x
 EOF
+seed core/fixtures/s6/run.sh <<'EOF'
+#!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$HERE/../lib/mutant.sh"
+MUT_LIB="$HERE/../lib/mutant.sh"
+. "$MUT_LIB"
+[ -f "$HERE/../lib/matrix.sh" ] || echo "matrix.sh missing"
+. "$HERE/../lib/matrix.sh"
+[ -f "$HERE/lib.sh" ] || exit 2
+. "$HERE/../lib/settled-net.sh"
+. "$HERE/../lib/inproc.sh" || true
+. "$HERE/../lib/mutant.sh" && run_it
+. "$HERE/../lib/mutant.sh" || broken "no broken() is defined in this file"
+. "$HERE/../lib/mutant.sh" || { echo "skip"; exit 0; }
+broken() { echo "FIXTURE BROKEN: $1" >&2; exit 2; }
+EOF
+seed core/fixtures/s6n/run.sh <<'EOF'
+#!/usr/bin/env bash
+broken() { echo "FIXTURE BROKEN: $1" >&2; exit 2; }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
+MUT_LIB="$HERE/../lib/mutant.sh"
+[ -f "$MUT_LIB" ] || broken "no lib/mutant.sh"
+. "$MUT_LIB"
+[ -f "$HERE/../lib/matrix.sh" ] || { echo "FIXTURE ERROR: matrix.sh" >&2; exit 2; }
+. "$HERE/../lib/matrix.sh"
+for p in scripts/x.sh core/fixtures/lib/settled-net.sh; do [ -f "$ROOT/$p" ] || { echo "absent: $p" >&2; exit 2; }; done
+. "$ROOT/core/fixtures/lib/settled-net.sh"
+. "$HERE/lib.sh"
+# . "$HERE/../lib/mutant.sh"
+echo '. "$HERE/../lib/mutant.sh"'
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: inproc.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || broken "cannot source lib/mutant.sh"
+cat > "$W/x.sh" <<'E'
+. "$HERE/../lib/mutant.sh"
+E
+[ -f "$D/../lib/a.sh" ] && [ -f "$D/../lib/settled-net.sh" ] || {
+  echo "FIXTURE ERROR: lib absent" >&2; exit 2; }
+. "$D/../lib/settled-net.sh"
+EOF
 seed core/fixtures/s3n/run.sh <<'EOF'
 #!/usr/bin/env bash
 awk '{ if (sh != "") print sh }' f
@@ -1056,6 +1201,7 @@ want_rows() { case "$1" in
   H2) printf 'H2\tcore/fixtures/s2/run.sh:%s\n' 2 3 7 ;;
   H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 10
       printf 'H3\tcore/fixtures/s3s/run.sh:%s\n' 2 4 10 12 ;;
+  H6) printf 'H6\tcore/fixtures/s6/run.sh:%s\n' 2 3 5 7 9 10 11 12 13 ;;
   H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l
       printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15 20 21 22 23 24 25 26
       printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6
@@ -1065,7 +1211,7 @@ want_rows() { case "$1" in
       printf 'STALE\t%s\n' gone m5e m5x
       printf 'DUP\tm5b\nNOREASON\tm5x\n' ;;
   esac; }
-for arm in H1 H2 H3 H5; do
+for arm in H1 H2 H3 H5 H6; do
   case "$arm" in H5) pat='^(FLOOR|ROW|JOIN|STALE|DUP|NOREASON|STUB)	' ;; *) pat="^$arm	" ;; esac
   grep -E "$pat" "$WORK/p.got" | LC_ALL=C sort > "$WORK/got.$arm" || :
   want_rows "$arm" | LC_ALL=C sort > "$WORK/want.$arm"
@@ -1186,10 +1332,11 @@ else SP_RED=1; fi
 out="$(run_all "$ROOT" "$WORK/c")"; crc=$?
 if [ "$crc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- $out" >&2; exit 2; fi
 t1="$(awk -F'\t' '$1 == "T" && $2 == "H1" { print $3 }' "$WORK/c.scan")"; t2="$(awk -F'\t' '$1 == "T" && $2 == "H2" { print $3 }' "$WORK/c.scan")"
+t6="$(awk -F'\t' '$1 == "T" && $2 == "H6" { print $3 }' "$WORK/c.scan")"
 nmem="$(grep -c '^DERIVE	' "$WORK/c.verdict")" || nmem=0
 nblk="$(awk -F'\t' '$1 == "B" { print $2 }' "$WORK/c.scan" | LC_ALL=C sort -u | awk 'END { print NR }')"
-if [ "${t1:-0}" -lt 1 ] || [ "${t2:-0}" -lt 1 ] || [ $((nmem + nblk)) -lt 1 ]; then
-  echo "validate-fixture-hygiene: REFUSED -- a grammar stopped matching on the corpus (H1 candidates ${t1:-0}, H2 candidates ${t2:-0}, H5 members $((nmem + nblk))); this is not a clean tree." >&2
+if [ "${t1:-0}" -lt 1 ] || [ "${t2:-0}" -lt 1 ] || [ "${t6:-0}" -lt 1 ] || [ $((nmem + nblk)) -lt 1 ]; then
+  echo "validate-fixture-hygiene: REFUSED -- a grammar stopped matching on the corpus (H1 candidates ${t1:-0}, H2 candidates ${t2:-0}, H6 lib sources ${t6:-0}, H5 members $((nmem + nblk))); this is not a clean tree." >&2
   exit 2
 fi
 
@@ -1201,7 +1348,7 @@ fi
 
 rc=0
 echo "validate-fixture-hygiene: $(awk 'END { print NR }' "$WORK/c.list") fixture .sh scanned; judged $t1 H1 \`-d …/.git\` test(s) and $t2 H2 declared-tool \`command -v\` site(s); H5 $nblk block(s), $nmem unblocked member(s)"
-for arm in H1 H2 H3; do
+for arm in H1 H2 H3 H6; do
   if grep -q "^$arm	" "$WORK/c.verdict"; then
     rc=1; echo "FAIL $arm:"
     awk -F'\t' -v A="$arm" '$1 == A { print "    " $2 ": " substr($3, 1, 160) }' "$WORK/c.verdict"
@@ -1209,6 +1356,7 @@ for arm in H1 H2 H3; do
       H1) echo "  A \`-d …/.git\` whose absent branch exits 0 SKIPs green in every linked worktree, where .git is a file. Use \`git -C <root> rev-parse --git-dir\`, or exit 2 FIXTURE BROKEN." ;;
       H2) echo "  A declared tool (tools.decl) whose absence exits 0 is a green skip on a direct run. Exit 2, FIXTURE BROKEN." ;;
       H3) echo "  /bin/sh reads no BASH_ENV, so the invocation counter cannot see this start. Start it with bash." ;;
+      H6) echo "  A source of core/fixtures/lib/<x>.sh with no failure guard runs on when the file is absent, and the fixture reads green with fewer arms. End the line with: || { echo \"FIXTURE BROKEN: cannot source lib/<x>.sh\" >&2; exit 2; }" ;;
     esac
   fi
 done
@@ -1236,6 +1384,6 @@ if [ "$SP_RED" != 0 ]; then
 fi
 nlist="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ "$rc" = 0 ]; then
-  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row; E1 $ne1 receipt(s), $ni1 inert and allowlisted."
+  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row; E1 $ne1 receipt(s), $ni1 inert and allowlisted."
 fi
 exit "$rc"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # write-format-steering-multiformat/run.sh — prove that ONE shared append-only artifact may carry
 # MORE THAN ONE declared entry format, that the second one is bound to the right STRING inside the
 # right FILE, and that a consumer between two pulls is SKIPPED rather than wedged.

@@ -2,4 +2,5 @@
 !core/skills/ai-dlc-update/reconcile/layer-drift.sh
 core/skills/ai-dlc-update/reconcile/
 core/schemas/layer-adjudication-register.json
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

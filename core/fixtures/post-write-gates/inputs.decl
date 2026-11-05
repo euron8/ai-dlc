@@ -4,4 +4,5 @@
 # mutants symlink every sibling of the runner, so the whole directory is enumerated.
 !core/skills/ai-dlc-update/reconcile/
 core/scripts/validate-hook-registration.sh
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # transient-ignore-block/run.sh — prove sync-transient-ignore.sh renders the declared transient
 # paths into a consumer's .gitignore, edits ONLY the region between its markers, and refuses to
 # write rather than guessing when the declaration is unusable.
@@ -423,7 +423,7 @@ kills=0
 
 # Sourced after ok() and bad(); a kill is emitted ONLY through mutant_killed, behind the flag the
 # live run set for the deciding arm (B_<arm>, set beside that arm's ok above).
-. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 mutate() { # <label> <sed-expr> <arm-that-must-fail> <twin-arm>; the base pass is read from the LIVE run of the same invocation
   local label="$1" expr="$2" want="$3" twin="$4"

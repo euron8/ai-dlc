@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # apply-machinery-stamp — the stamp's MACHINERY pair advances only when this apply carried the
 # machinery slice, and is withheld with the rulebook pair when anything failed to place.
 #

@@ -5,4 +5,5 @@
 !core/scripts/sync-transient-ignore.sh
 !core/schemas/pipeline-state-paths.json
 # Sourced first by run.sh; it unsets GIT_* variables, which are already absent under env -i.
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

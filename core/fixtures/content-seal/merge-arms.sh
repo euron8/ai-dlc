@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # content-seal/merge-arms.sh -- the content seal at merge-adversarial-shards.sh. Driven by run.sh.
 # Worlds, shards and harness records come from adversarial-shard-merge/lib.sh (one copy of the shard
@@ -342,7 +342,7 @@ else bad "CS-A2: current=[$sA] none=[$sN] legacy=[$sL] epics=[$sE] (epics in set
 # compared against (rule: a cell is `killed=yes` when the mutant's verdict diverges from the shipped verdict on
 # the SAME world). Order: refusals (they write nothing), then the merging runs, each followed by removing the
 # merged output so the next driver of that world reads it clean.
-. "$CS_HERE/../lib/mutant.sh"
+. "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 MX=0; [ "${1:-}" = --matrix ] && MX=1
 mx_pp=0; mx_only=0
 vrd() { # <merge> <world dir> -> VRD (MERGED|REFUSED), RSN; asked IN PROCESS (ip), or end to end when MXE=1, whose merged output is removed afterwards

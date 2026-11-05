@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-adjudication-tier — assert `level: ADJUDICATED` is a mechanism and not a declaration.
 #
 # Usage: run.sh [path-to-layer-drift.sh]
@@ -73,7 +73,7 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 # ONE DRIFT RUN PER DISTINCT STATE. blocks/drifts/digest/hookdetail/spentnote each re-ran the whole
 # drift computation over a state a neighbour had just run. `dcf` keys a run on everything the engine

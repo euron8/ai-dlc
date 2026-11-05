@@ -7,4 +7,6 @@
 scripts/suite-content-key.sh
 core/scripts/hermetic-run.sh
 core/scripts/core-paths.sh
-core/fixtures/lib/
+core/fixtures/lib/matrix.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

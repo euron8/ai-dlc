@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # extract-push-flag-decision — prove the untangle extract site DECIDES `push_candidate`
 # on the `domain-local` bullet instead of leaving it defaulted, and that `domain-local`
 # gains no push route of its own. A second subject in the same step: 7u must act on the

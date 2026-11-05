@@ -3,5 +3,5 @@
 !core/skills/ai-dlc-update/reconcile/setup-site-drift.sh
 core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/skills/ai-dlc-update/reconcile/preclassify.sh
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh

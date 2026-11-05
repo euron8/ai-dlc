@@ -12,4 +12,4 @@
 !core/hooks/ai-dlc-context-provenance.sh
 !core/schemas/pause-routing.json
 !core/skills/ai-dlc/SKILL.md
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh

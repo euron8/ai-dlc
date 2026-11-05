@@ -1875,33 +1875,6 @@ Held:
 
 verify: manual
 
-## BL-920 — half of all fixture runs on a push are triggered only by a broad input the fixture does not test
-
-**DEFECT.** Batch b250, operator: "it runs a shit ton of tests that I would argue are pointless (except for the "narrow" few)", and on this entry: "Build it this batch".
-
-Measured at `origin/main` 0443bfbfe with a census modelling the hook's own key function (`readset_decl_keys` in `.githooks/pre-push`): every `inputs.decl` at 0443bfbfe applied to the same 60 first-parent commits, with the content key's EXCLUDE tops dropped, another fixture's `invocations.decl` skipped under a directory row, and the fixture's own directory and `hermetic-run.sh` always keyed. `tools.decl` and `git.decl` keys are not modelled. A plain `docs/`, `VERSION`, `CHANGELOG.md` or `CLAUDE.md` row keys nothing, because those are excluded tops; only a `+` row there triggers.
-- 258 fixtures produced 2948 triggered runs over those 60 commits. 1846 of them (63%) were triggered ONLY by a broad row: a directory row, a `.md` row, or a `+` row under the excluded tops, with no narrow input, no own-directory file and no runner change. 181 fixtures have at least one such run. Each commit read at its own decl gives 2897 runs and 1818 broad-only.
-- The worst offenders, as broad-only runs out of total: vocabulary-index 43/45, layer-contract-conformance 40/47, backlog-ledger 40/42 (all through `+VERSION`, which moves on every release), enforcement-map-sites (and -b, -c) 39/47, hermetic-consumption 39/40, consumer-machinery-home 38/45, layer-contract-conformance-b 38/45, schema-install-fallback 38/43, fixture-git-env-seam 38/40.
-- BL-918 already measured the same pattern exactly, for six slow fixtures (backlog-receipt-binding went from 38 to 7 triggers per 60 commits).
-
-A broad-only trigger is not always pointless: a fixture that pins prose must re-run when that prose changes. The defect is a broad row wider than what the fixture reads, which re-runs the whole fixture for a change it cannot see.
-
-Fix, required, per fixture, worst first by broad-only count:
-1. **Directory rows.** Replace each with the files the fixture actually executes, sources or reads. Derive the list from a traced run, using the existing read-set tracer (`core/scripts/derive-fixture-readsets.sh --tracer sandbox`, run by the lead from the main checkout) or the fixture's own run; never write it by hand. A green `hermetic-run.sh` run proves the list is complete, because an undeclared read is a missing file in the sandbox.
-2. **Prose rows.** Where only some arms read the prose, move those arms into a small fixture keyed only on that prose (prefer an existing pin fixture for the same subject), and drop the prose row from the rest. Where the whole fixture is a prose pin, keep the row.
-3. **`docs/` rows.** A test of a mechanism is keyed on the mechanism's files, never on docs (owner rule, Flow step 3). Seed the doc under mktemp; if a corpus check has no other carrier, move it as BL-918 did for the receipt join.
-4. Every moved arm keeps its mutant kills, and no mutant becomes unkilled. The push checks that.
-
-Rules: BL-868. No new arm except a moved one. Do not touch a fixture another in-flight release edits; the lead sequences those.
-
-Close condition: the census is re-run with the hook's own key function (`readset_decl_keys`) over the 60 first-parent commits ending at 0443bfbfe, BEFORE = the decls at 0443bfbfe, AFTER = the decls at the landed tip, over the union of fixtures in either tree; the headline is total triggered runs, and the before and after totals are recorded here. Every fixture whose broad-only count did not fall is listed with the reason its broad row is genuine. It closes by its own landing, with no `Outcome measured:` line.
-
-**Progress (batch b250; the entry stays PARTIAL, so it carries no `**LANDED` line).** Every figure is total triggered runs over the fixed 60-commit window ending at 0443bfbfe, counted with `readset_decl_keys`. 0.1009.0 (backlog-ledger, ledger-status-vocabulary, backlog-real-ledger): 2948 -> 2926 at the a5c1193f0 decls; that release's text says 2905, from an earlier census that did not model the listing keys, and 2926 is the re-measure with the census that models them. 0.1011.0 (22 fixtures): 2926 -> 2881 at 943cd72ae. 0.1013.0 (procsub-staged-refusal-boot, -boot-c, reconcile-emit-report, -b): 2881 -> 2875. 0.1014.0 (adversarial-citation, escalation-citation, gate-transition, fixture-git-env-seam, preclassify-mode-bucket, preclassify-rename-row, h2-attest-scripts-dir, procsub-staged-refusal with -b and -c; I55 arm 3 any-marker walk-up): 2889 -> 2830 at the 4fd08794f decls; 0443bfbfe decls to this release, 2948 -> 2830. Kept as genuine, by reason: validator-corpus rows (vocabulary-index, layer-contract-conformance and -b, consumer-machinery-home, crosswalk-home-declaration, derived-fence-binding, enforcement-map-derivations, validator-arm-selection and -b, validator-fork-budget, shipped-rule-version-floor, hermetic-consumption, enforcement-map-sites and -b and -c, schema-install-fallback, bmad-invocation-resolve, validator-path-resolution, taught-schema `!core/scripts/`); listed directories (handoff-record-carries-return, requirements-step steps/, backlog-real-ledger core/scripts/ whose names derive from the hooks at run time, story-evidence-scaffold, ledger-reverify, ledger-reverify-unfalsifiable, process-rule-pins, absorbed-specifics-survive, divergence-hard-block, dispatch-model-guard); prose read by every arm (requirements-step, path-mapping-render SKILL.md, story-evidence-scaffold, blocker-adjudication-record, gate-verdict-grep-shape, absorbed-specifics-survive SKILL.md, escalation-status-vocabulary, fold-architect-ledger-join, review-reroute, review-carry-over-clauses, artifact-section-heading-level, check-31-ac-falsifiability, consolidation-residue, resume-whole-read, retro-branch-behind-main). 0.1016.0 (the split: story-fields-derive's derive-stories arms to process-rule-pins 4j, check-24's tstrat, H-BIND join and J3-MAP to requirements-step, prepush-pool-depth's I66 prose stubbed, vocabulary-index controlA and invariant-index CONTROL-A deleted): 2819 -> 2786 at the 36985c11f decls. Kept as genuine, prose input to the subject: core-write-guard (the core-guard hook's manifests; architect.md and dev.md are edit-arm targets), gate-remediation-deny (the grammar, through artifact-path-config.sh), check-15-bypass (core-manifest.md, through core-paths.sh --is-core), postcompact-rulebook-recovery (SKILL.md, read by validate-reattach-budget.sh), content-seal (adversary.md, read by content-seal.sh's admit-marker check). Still owed: `core/fixtures/lib/` across 131 fixtures, and the close-condition census.
-
-Provenance: batch b250 operator instruction; lead ai-dlc-be.
-
-verify: manual
-
 ## BL-922 — h2-attest-scripts-dir's consumer-layout arms run the distribution layout
 
 **DEFECT.** Found by the b250 triggers-cluster tip adversary (BL-920 fast-track 3); it predates that change.
@@ -1931,18 +1904,4 @@ Close condition: a mutant for each of K2, K3 and L that this fixture kills, with
 Rules: BL-868.
 
 Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
-
-## BL-924 — prepush-pool-depth decides cells on a process-table sample that load moves
-
-**DEFECT.** Found by the b250 triggers-cluster split hand on prepush-pool-depth; it predates that change. Operator ruling BL-868: a test whose verdict moves with load is a defect, fixed in the test.
-
-Under box load the cell `[.githooks] MUTANT not-exported` failed once (`obs_d0_max` moved) and passed on the next run with no change. The plain-run `mutant()` diffed every cell the mutant's group printed, and `grp_BAR` also prints `obs_d0_max`, the barrier poller's flight-file count taken when two consecutive `ps` tables agree (`pd_settle`). A worker xargs had started but that had not yet written its flight file read as absent.
-
-Fix: score a plain-run mutant on its decides and twins only; read the depth-0 barrier at a rendezvous the workers write (one xargs whose child count equals the flight files); a drive that never meets is FIXTURE BROKEN, never a count.
-
-Close condition: under a forced schedule in which one worker writes its flight file after the pool settles, the old code misreads and the new code reads the true count, with the not-exported and pool-width mutants killed.
-
-Rules: BL-868.
-
-Provenance: batch b250, split hand on the triggers cluster; lead ai-dlc-be.
 

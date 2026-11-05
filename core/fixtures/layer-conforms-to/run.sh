@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-conforms-to — prove the per-entry contract receipt (E17 / W6) and the
 # LAYER_CONFORMANCE machine footer can FAIL, and prove the one property that is an
 # ABSENCE: the receipt never silences a clause.

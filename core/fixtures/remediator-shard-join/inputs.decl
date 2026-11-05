@@ -20,7 +20,8 @@ core/scripts/content-seal.sh
 # EC37 closes its parts with the real --mark, resolved beside the join.
 core/scripts/wait-for-deliverable.sh
 core/team-roles/remediator.md
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh
 core/team-roles/pm-escalated.md
 # BL-716: the join runs the worklist beside itself after a document or subject assembly to derive MOVED-CITE lane edges.
 !core/scripts/serial-remediation-worklist.sh

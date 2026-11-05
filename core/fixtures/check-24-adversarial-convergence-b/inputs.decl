@@ -15,7 +15,7 @@ core/schemas/provenance-block.json
 # Read by the live-series and H-BIND arms (extracted and compared, not run).
 core/hooks/ai-dlc-acknowledge.sh
 core/team-roles/remediator.md
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh
 # The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/check-24-adversarial-convergence-b/run.sh
 core/fixtures/check-24-adversarial-convergence-c/run.sh

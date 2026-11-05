@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # presuite-present-key -- drive the PRESENT KEY, the record lookup and the shell wiring of the distribution hook's
 # pre-suite step keys (BL-914), from .githooks/pre-push's own bytes, and assert what each tree shape does.
 #

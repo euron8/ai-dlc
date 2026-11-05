@@ -4,4 +4,5 @@
 !.githooks/pre-push
 !core/git-hooks/pre-push
 # run.sh sources ../lib/preamble.sh first; the runner copies only the fixture's own directory.
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

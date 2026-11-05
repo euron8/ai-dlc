@@ -9,4 +9,5 @@
 !core/hooks/ai-dlc-context-provenance.sh
 !core/schemas/pause-routing.json
 !core/schemas/harness-origin.json
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

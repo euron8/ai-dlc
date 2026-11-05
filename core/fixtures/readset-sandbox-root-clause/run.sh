@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # readset-sandbox-root-clause -- BL-470, measured. Every sandbox-profile emitter in
 # core/scripts/derive-fixture-readsets.sh (the AI_DLC_READSET_SANDBOX_PROFILE override, the
 # `--local-map` profile and the default profile) ends with an allow clause on the tree ROOT literal

@@ -3,4 +3,4 @@
 # read from the reconcile directory; run.sh also copies the whole directory to build mutants.
 !core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 core/skills/ai-dlc-update/reconcile/
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # Ambient AI_DLC_* cleared, as the suite does: the R arms drive the real hook-registration gate, and
 # an inherited tunable would test the operator's config, not the runner. AI_DLC_PROJECT_ROOT is set
 # per invocation below, never inherited, so clearing it here loses nothing.
@@ -57,7 +57,7 @@ HRV="$(pick "$HERE/../../scripts/validate-hook-registration.sh" \
 fails=0; asserts=0
 ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
 bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/pwg-fx-XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }

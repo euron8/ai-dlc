@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # carried-findings/run.sh -- validate-carried-findings.sh, the Check 1 arm that makes a gate-1
 # re-review answer every Critical and Important finding of the pass before it.
 #
@@ -182,8 +182,8 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 MATRIX=0
 if [ "${1:-}" = --matrix ]; then MATRIX=1; fi
 MWIDE=0; MROWS=0
-. "$HERE/../lib/matrix.sh"
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/matrix.sh" || { echo "FIXTURE BROKEN: cannot source lib/matrix.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # mcell <mutant> <arm> <result 0 green|1 tripped>: one matrix row, printed by the sourced matrix_row, and only

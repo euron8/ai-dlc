@@ -3,4 +3,5 @@
 # its own repository and copies both the validator and the schema into a scratch dir.
 !core/scripts/validate-audit-anchors.sh
 core/schemas/audit-anchors.json
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

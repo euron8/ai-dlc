@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-qualifier-grain — assert the `extends:` / `kind: qualifier` grain is real:
 # that declaring an anchor NARROWS pull-time drift to that anchor's span, that the
 # narrowing cannot invent silence, and that the authoring arms discriminate.
@@ -47,7 +47,7 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 echo "layer-qualifier-grain:"
 [ "$MATRIX" = 1 ] && echo "MATRIX-MODE on"
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 # status_for <entry-substring>  -> the status column of that entry's row
 status_for() { printf '%s\n' "$DRIFT_OUT" | awk -v e="$1" -F'\t' '$2 ~ e {print $1}' | sort -u | tr '\n' ' '; }

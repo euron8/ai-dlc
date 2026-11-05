@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # fixture-git-env-seam — a fixture run DIRECTLY, with git's repository environment
 # inherited, must not touch the caller's index. This asserts the BEHAVIOUR, by
 # driving a real fixture against a real victim repository, not that a scrub line
@@ -79,7 +79,7 @@ while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/core/fixtures/lib/preamble.sh" ]; do R
 [ -f "$ROOT/core/fixtures/lib/preamble.sh" ] || broken "no core/fixtures/lib/preamble.sh above $0 — cannot locate the repo root, and the seam is this fixture's subject"
 
 SEAM="$ROOT/core/fixtures/lib/preamble.sh"
-. "$ROOT/core/fixtures/lib/mutant.sh"
+. "$ROOT/core/fixtures/lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 # The DRIVEN fixture. Chosen because it builds a scratch repo and is unrelated to
 # this subject, so it is not co-maintained with the thing under test.

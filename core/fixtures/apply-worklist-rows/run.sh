@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # apply-worklist-rows/run.sh — prove a WORKLIST row reaches the operator with its INSTRUCTION,
 # and that an ATOMIC sequence emits every step it numbers.
 #
@@ -336,7 +336,7 @@ ARMS="A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 S9 S10 S11 S12 S13"
 BASE_PASS=""
 for _a in $ARMS; do arm_ok "$_a" "$W/rec" && BASE_PASS="$BASE_PASS $_a"; done
 bflag() { case " $BASE_PASS " in *" $1 "*) echo 1 ;; *) echo 0 ;; esac; }
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 BF_A1="$(bflag A1)"
 BF_A2="$(bflag A2)"
 BF_A3="$(bflag A3)"

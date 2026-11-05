@@ -6,4 +6,4 @@ core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/register-drift.sh
 !core/skills/ai-dlc-update/reconcile/layer-drift.sh
 # Sourced as the first line of run.sh.
-core/fixtures/lib/
+core/fixtures/lib/preamble.sh

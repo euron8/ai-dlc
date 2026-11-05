@@ -4,7 +4,8 @@
 .githooks/pre-push
 # The deriver: its READSET_* spans are extracted and driven. REQUIRED, printed where the LOCALMAP span is read.
 !core/scripts/derive-fixture-readsets.sh
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh
 # The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
 # run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/readset-skip/run.sh

@@ -19,6 +19,62 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1018.0] - 2026-11-05
+
+Batch b250, cluster triggers, the lib-pass release. BL-920 closes. BL-924 closes with its receipt. BL-925 is filed and closed. Closes no PC- id. NET -2 (filed 1, BL-925, minus closed 3, BL-920, BL-924 and BL-925).
+
+### BL-920 — the lib pass, and the close-condition census
+
+Over the 60 first-parent commits ending at 0443bfbfe, counted with the hook's own key function (`readset_decl_keys`, extracted from `.githooks/pre-push`) over the union of fixtures in either tree, total triggered runs fall from 2948 at the 0443bfbfe declarations to 2653 at this release's. Broad-only runs fall from 1665 to 1490, and the number of fixtures with a broad-only run falls from 180 to 125. This release's own delta, the 7ea7f59af declarations against this release's on the same window, is 2785 -> 2653. The same census reads 2786 at the 9b0eae7f8 (0.1016.0) decls and 2785 at 7ea7f59af's, the one trigger 0.1017.0 removed.
+
+- 124 fixtures replace a whole `core/fixtures/lib/` row with the lib files they source, and check-17-counts, which sources none, drops the row. The fixtures carrying that row fall from 126 at 7ea7f59af (151 at 0443bfbfe) to 1. content-seal names `remediator-shard-join/lib.sh` and its seeds instead of that whole directory, and path-mapping-render names `preclassify.sh` instead of the whole reconcile directory.
+- hermetic-runner keeps its whole `core/fixtures/lib/` row because it reads the directory whole: run.sh:1514 copies a declared directory row with `cp -R`, and the DC3 cell at run.sh:1614 runs on `core/fixtures/lib/` itself. It has no broad-only run (10 triggers, 0 broad-only, at both ends).
+- The 56 fixtures whose broad-only count did not fall, each kept with a reason, are listed in the entry. Most reasons are already recorded there:
+  - Validator corpus (19): vocabulary-index, layer-contract-conformance and -b, hermetic-consumption, consumer-machinery-home, crosswalk-home-declaration, derived-fence-binding, enforcement-map-derivations, validator-arm-selection and -b, validator-fork-budget, shipped-rule-version-floor, taught-schema, bmad-invocation-resolve, validator-path-resolution, enforcement-map-sites and -b and -c, and schema-install-fallback. The last four rose (5 -> 37, 38 and 38; 1 -> 36) while their total triggers fell (47 -> 45; 43 -> 41). 0.1014.0 dropped their narrow `+VERSION` row, so the same directory triggers stopped counting as mixed.
+  - Listed directories (7) and prose read by every arm (13, with story-evidence-scaffold and absorbed-specifics-survive in both).
+  - Prose input to the subject (4): core-write-guard, gate-remediation-deny, check-15-bypass and postcompact-rulebook-recovery.
+  - Twelve are newly recorded here, each because it copies the directory its row names:
+    - suite-content-key copies `scripts/`, `.githooks/` and `templates/` whole (run.sh:80-82).
+    - layer-adjudication-tier, layer-readopt-gate, retired-layer-contract, retired-layer-passage, emit-report-refusal, apply-restamp-theirs and self-update-gate with -b, -c and -d copy the reconcile directory's siblings into their mutant directories. layer-readopt-gate and the self-update-gate family copy only its `.sh` and `.md` files, and the one other file there, `push-refusals.tsv`, changed in no commit of the window.
+    - handoff-completion-assertion copies every hook; `core/hooks/` holds 29 files, all `.sh`.
+  - Three are rows this batch added or moved:
+    - adversarial-shard-merge rose 1 -> 3 on its added `!_gate-procedures.md` row, prose the subject reads for its era token.
+    - inflight-row-hook is a new fixture whose era gate reads `_gate-procedures.md`.
+    - backlog-receipt-fixture-join is a new fixture that holds the `+docs/backlog.archive.md` row BL-918 moved out of backlog-receipt-binding (30 -> 0 broad-only).
+- 78 fixtures have no broad-only run at either end, and 2 new fixtures (presuite-present-key, snapshot-edit-deny) have none at this release, so there is nothing in them to fall.
+- BL-920 closes by this landing, with no `Outcome measured:` line, as its close condition states.
+
+### BL-924 — prepush-pool-depth's receipt lands, and BL-924 closes
+
+`core/fixtures/prepush-pool-depth/receipt-bl924.sh` forces both schedules in one scratch copy: a worker that writes its flight file after the pool settles, and a FIFO writer that writes late. prepush-pool-depth runs the receipt whenever that fixture runs.
+
+- Against the shipped run.sh (exit 0), the receipt reads:
+  - the depth-0 barrier at 6 of 6, with fx6 held past a rejected settle;
+  - the cells `pn_hlink`, `pn_fifo` and `pn_silent` as REFUSED;
+  - the not-exported pool mutant as killed, moving only its own decides.
+- Against the pre-fix run.sh at 8f3177620 (exit 1), it reads 5 of 6, `pn_hlink` ok, `pn_fifo` none and `pn_silent` ok, and not-exported fails on `obs_d0_max`.
+- It exits 9 when an anchor is missing or a forcing never fired.
+- prepush-pool-depth's `invocations.decl` rises from 400 to 492. The added starts come from the receipt's scratch copy, which runs the baseline barrier battery, the not-exported pool mutant and the watcher cells. One counted hermetic run on this release passes all 72 assertions with `invocation budget ok: 492 start(s)`.
+
+### BL-925 — a fixture that sourced a `core/fixtures/lib/*.sh` file with no guard kept running when the file was absent
+
+Filed and closed. Measured: held-stories without `lib/mutant.sh` stayed at rc 0, with its ok count falling from 24 to 19.
+
+- A script derivation over every `core/fixtures/**/*.sh` outside `lib/` found 303 sources of a lib file in 199 scripts:
+  - 42 carried a guard on the sourcing line;
+  - 115 had a preceding `[ -f ]` test of the identical path that exits;
+  - 146 had neither (119 `preamble.sh`, 25 `mutant.sh` and 2 `matrix.sh`, in 123 scripts).
+- 148 lines now end in `|| { echo "FIXTURE BROKEN: cannot source lib/<x>.sh" >&2; exit 2; }`: the 146, plus enforcement-map-derivations:91 and :92, which a two-line pre-test already guarded.
+- `scripts/validate-fixture-hygiene.sh` gains arm H6, which refuses an unguarded lib source:
+  - It accepts three guards: an exiting `||` on the same statement, an earlier exiting `[ -f ]` test of the identical word, or a for-loop existence test that names the word.
+  - Its self-probe seeds 9 offenders and 14 near-misses.
+  - fixture-hygiene gains D6 and the mutant MH6.
+  - On this release it reports `H6 303 lib source(s), all guarded`.
+- Two fixtures built copies of other fixtures in worlds that lacked the lib files those copies source, and read the silent failure as a verdict; with the guard, the copies stopped at their first source and the release's first gate went red on both. h2-attest-scripts-dir's consumer world now carries `tests/fixtures/lib/`, where `install.sh`'s ship loop puts it beside the fixtures it copies, and reconcile-emit-report's world-guard mutant harness copies every lib file its own source lines name, derived at build time. Both refuse a copy that stopped at `cannot source` as HARNESS BROKEN rather than scoring it, and the six world-guard mutants score KILLED again on their own arms.
+- `validate-fixture-git-env.sh`'s remedy now prints the guarded preamble form.
+
+- Fork budget: TOTAL 2924 against FORK_BUDGET 2926 (`scripts/fork-profile.sh --section total` on this release), unchanged from 7ea7f59af, so no raise.
+
 ## [0.1017.0] - 2026-11-05
 
 Batch b250, BL-918 audit, release 2. BL-918 closes: `adversarial-shard-merge` is the last fixture in its set, and this release carries the entry's `**LANDED` line. Closes no PC- id. NET -1 (filed 0 minus closed 1, BL-918).

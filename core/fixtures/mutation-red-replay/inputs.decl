@@ -1,2 +1,2 @@
 !core/scripts/validate-mutation-red.sh
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh

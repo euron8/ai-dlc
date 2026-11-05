@@ -1,8 +1,8 @@
 # path-mapping-render drives the renderer against the real tree (controlA) and against seeded copies of it, so it reads the renderer,
-# the VERSION marker the renderer and run.sh walk up for, SKILL.md (the rewritten target) and map_consumer()'s home, which sources lib.sh beside itself.
+# the VERSION marker the renderer and run.sh walk up for, SKILL.md (the rewritten target) and preclassify.sh, whose map_consumer() the renderer scrapes with awk and eval's (it never sources the file, so reconcile/lib.sh is not read).
 !scripts/render-path-mapping.sh
 # copy-only: core/fixtures/path-mapping-render/run.sh:92 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
 core/skills/ai-dlc-update/SKILL.md
-core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/fixtures/lib/mutant.sh

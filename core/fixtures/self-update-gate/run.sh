@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # Exercise reconcile/self-update-gate.sh.
 #
 # THE DIFFERENTIAL IS THE WHOLE MECHANISM. `gate-defer`, `gate-broken` and `gate-agree` all exit
@@ -267,7 +267,7 @@ ASSERTIONS=0
 # closing count is the number of assertion sites and a routed kill is counted exactly where it was.
 ok() { printf '  ok    %s\n' "$1"; }
 bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
-. "$DIR/../lib/mutant.sh"
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "self-update-gate fixture"
 if [ "$MATRIX" = 1 ]; then echo "MODE: FULL"; else echo "MODE: PUSH"; fi
 echo

@@ -4,4 +4,5 @@
 # seed.sh copies the shipping contract into every seeded consumer.
 core/skills/ai-dlc/layer-contract.yaml
 # run.sh sources the preamble.
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh

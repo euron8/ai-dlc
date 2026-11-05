@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # dist-clone -- the update skill's private, main-only, bare distribution clone (BL-685).
 #
 # Usage: run.sh
@@ -62,7 +62,7 @@ FAILS=0
 ok()  { echo "ok   $1"; }
 bad() { echo "FAIL $1"; FAILS=$((FAILS+1)); }
 # shellcheck source=/dev/null
-. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 G() { git -c user.name=fx -c user.email=fx@fx -c commit.gpgsign=false "$@"; }
 REALGIT="$(command -v git)"
 

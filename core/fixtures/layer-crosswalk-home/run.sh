@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # layer-crosswalk-home — LC-N7 / W8: crosswalk rows live in a file the CONSUMER owns.
 #
 # THE ASSERTION. LC-N6 is an ERROR, and through contract version 10 the only way to satisfy

@@ -9,7 +9,8 @@
 !core/skills/ai-dlc-update/reconcile/
 !core/git-hooks/pre-push
 # Sourced by the parent run.sh's first line.
-core/fixtures/lib/
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/preamble.sh
 # The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/self-update-gate-b/run.sh
 core/fixtures/self-update-gate-c/run.sh

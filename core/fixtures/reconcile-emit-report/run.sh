@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # reconcile-emit-report/run.sh — prove the reconcile report's mechanical sections are driver-owned:
 # emit-report.sh renders them, and --verify fails a report whose region is missing OR hand-edited.
 #
@@ -239,7 +239,7 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 RER_MXLOG="$WORK/matrix-only.log"; : > "$RER_MXLOG"
 rer_mx() { [ -n "${RER_MXLOG:-}" ] && echo x >> "$RER_MXLOG"; return 0; }
 # shellcheck source=/dev/null
-. "$HERE/../lib/mutant.sh"
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 # --- THE COMPARISON SEAM, AND WHY THIS FILE RENDERS ALMOST NOTHING TWICE ------------------------
 # `emit-report.sh --verify --region-from <file>` skips the render and hands <file>'s bytes to the one
@@ -3199,8 +3199,17 @@ wgmut() { # wgmut <name> <sed-arg>... -> sets WG_MUT
   d="$r/core/fixtures/reconcile-emit-report"
   WG_MUT=""
   rm -rf "$r"; mkdir -p "$d" "$r/core/fixtures/lib"
-  cp "$HERE/../lib/preamble.sh" "$r/core/fixtures/lib/" 2>/dev/null \
-    || { bad "MUTANT HARNESS BROKEN [$name]: could not copy the fixture preamble; the copy would die on line 2 and its silence would score as a kill"; return 1; }
+  # THE LIB LIST IS DERIVED FROM THIS FILE'S OWN SOURCE LINES, never hand-listed: a copy
+  # that lacks one lib file the run.sh sources exits 2 at that line (preamble.sh at :2,
+  # mutant.sh further down), and a hand list went stale exactly that way.
+  local libs lf nlib=0
+  libs="$(awk '/^[[:space:]]*\.[[:space:]].*lib/ { if (match($0, /\/[A-Za-z0-9_.-]+\.sh"/)) print substr($0, RSTART+1, RLENGTH-2) }' "$WG_SELF")"
+  for lf in $libs; do
+    cp "$HERE/../lib/$lf" "$r/core/fixtures/lib/" 2>/dev/null \
+      || { bad "MUTANT HARNESS BROKEN [$name]: could not copy lib/$lf, which this run.sh sources; the copy would exit 2 at that line and its silence would score as a kill"; return 1; }
+    nlib=$((nlib+1))
+  done
+  [ "$nlib" -ge 2 ] || { bad "MUTANT HARNESS BROKEN [$name]: derived $nlib lib file(s) from this run.sh's source lines, expected preamble.sh and mutant.sh at least; the derivation lost its grammar"; return 1; }
   cp "$HERE/seed.sh" "$d/seed.sh" 2>/dev/null || true
   cp "$HERE/README.md" "$d/README.md" 2>/dev/null || true
   sed "$@" "$WG_SELF" > "$d/run.sh" || { bad "MUTANT DID NOT APPLY [$name]: sed exited non-zero"; return 1; }
@@ -3235,6 +3244,10 @@ wg_score() { # wg_score <name> <min-expected-fails> <killmsg>
   local o n; o="$(wg_out "$WG_MUT")"
   if grep -q 'FIXTURE ERROR' <<<"$o"; then
     bad "MUTANT HARNESS BROKEN [$1]: the copy refused at startup (FIXTURE ERROR) and never reached an assertion. Its zero failures are a copy that did not run, not a mutation that survived — check the copy tree carries lib/preamble.sh"
+    return
+  fi
+  if grep -q 'FIXTURE BROKEN: cannot source' <<<"$o"; then
+    bad "MUTANT HARNESS BROKEN [$1]: the copy stopped at a lib source line ($(grep -o 'cannot source [^ ]*' <<<"$o" | head -1)) and never reached an assertion — its zero failures are a copy that did not run, not a mutation that survived"
     return
   fi
   n="$(wg_verdict_fails "$o")" || n=0
