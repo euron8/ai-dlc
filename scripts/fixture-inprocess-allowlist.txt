@@ -3,7 +3,7 @@
 # Never typed: regenerate with `bash scripts/validate-fixture-inprocess.sh --derive`. A row is never added (M4); a
 # conversion deletes its fixture's row in the same change, and the invocation judge FAILs a listed fixture that passes.
 adversarial-citation	core/scripts/validate-adversarial-convergence.sh declares 21 start(s) against 0 cell(s)
-adversarial-shard-merge	core/scripts/merge-adversarial-shards.sh declares 11 start(s) against 0 cell(s); core/scripts/content-seal.sh declares 397 start(s) against 0 cell(s)
+adversarial-shard-merge	core/scripts/merge-adversarial-shards.sh declares 29 start(s) against 0 cell(s); core/scripts/content-seal.sh declares 418 start(s) against 0 cell(s)
 advisor-gate-deny	core/hooks/ai-dlc-advisor-gate.sh declares 229 start(s) against 0 cell(s)
 agent-definition-render	core/scripts/render-agent-definitions.sh declares 29 start(s) against 0 cell(s)
 answer-handoff-routing	core/hooks/ai-dlc-answer-capture.sh declares 11 start(s) against 0 cell(s); core/hooks/ai-dlc-pause.sh declares 1 start(s) against 0 cell(s)

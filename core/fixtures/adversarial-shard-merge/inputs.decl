@@ -14,7 +14,11 @@ core/scripts/validate-provenance-block.sh
 core/scripts/validate-steering-budget.sh
 core/scripts/validate-artifact-budget.sh
 core/schemas/provenance-block.json
-core/fixtures/lib/
+# The shared fixture libs this fixture sources (run.sh:2 preamble.sh, run.sh:104-107 matrix.sh and mutant.sh; lib.sh
+# sources none), file by file: the whole directory keyed every push that touched an unrelated lib file.
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/matrix.sh
+core/fixtures/lib/mutant.sh
 # The merge derives each shard dispatch id from the write ledger this hook appends; every shard the fixture writes drives it.
 core/hooks/ai-dlc-gate-remediation-guard.sh
 # The installed rulebook every derived-set world commits: the merge narrows only where it carries the validator's ERA_TOKEN (BL-911).

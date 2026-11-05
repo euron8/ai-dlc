@@ -33,7 +33,7 @@
 # `seed.doc-serial-epics.md` a real one it calls SERIAL; D0 reads both off --map rather than
 # assuming them. D2's seed is the one the receipt could not build: a finding carrying ONE
 # `sections:` line and a `stories:` line, so the one-citation count passes it and only the axis
-# guard refuses -- the battery's MX6b asserts that, with the guard gone, the same seed merges. D4's
+# guard refuses -- the mutant CM-axis-guard-gone asserts that, with the guard gone, the same seed merges. D4's
 # shard names a byte-identical COPY of the document, so the sha check passes and only the path
 # check refuses; D3 is the mirror, the right path with other bytes' sha.
 # `seed.files-b3-merged.expected` is the B3 output of the merge BEFORE section mode existed
@@ -60,19 +60,27 @@
 # MUTANT-MATRIX m-nomix decides=X4 twins=A1
 # MUTANT-MATRIX RM-A decides=RS1 twins=A1
 # MUTANT-MATRIX RM-B decides=CH2 twins=A1
+# MUTANT-MATRIX CM-verdict-from-shards decides=A1 twins=RS1
+# MUTANT-MATRIX CM-ordinal-story-only decides=M0 twins=D3
+# MUTANT-MATRIX CM-axis-guard-gone decides=D2 twins=D3
+# MUTANT-MATRIX CM-doc-path-unchecked decides=D4 twins=D3
+# MUTANT-MATRIX CM-doc-sha-unchecked decides=D3 twins=D4
+# MUTANT-MATRIX CM-merged-unparseable decides=A1 twins=RS1
+# MUTANT-MATRIX CM-major-count-unchecked decides=FG2 twins=A1
+# MUTANT-MATRIX CM-other-root-not-refused decides=TR1 twins=A1
+# MUTANT-MATRIX CM-serial-not-refused decides=D5 twins=D3
+# MUTANT-MATRIX CM-files-bytes-moved decides=D6 twins=A1
 # MUTANT-MATRIX BM-1 decides=B726B twins=B726H
 # MUTANT-MATRIX BM-2 decides=B726C twins=B726H
 # MUTANT-MATRIX BM-3 decides=B726F twins=B726B
 # MUTANT-MATRIX BM-4 decides=B726H twins=B726B
 # MUTANT-MATRIX PM1 decides=P1 twins=PBARE
-# MUTANT-MATRIX-DYNAMIC KMb-KMc-KEM-by-layout why=one loop over the layouts inst and core names each of the six mutants below
-# MUTANT-MATRIX KMb-inst decides=K2ps_inst twins=K2vac_inst
-# MUTANT-MATRIX KMb-core decides=K2ps_core twins=K2vac_core
-# MUTANT-MATRIX KMc-inst decides=K2sch_inst twins=K2vac_inst
-# MUTANT-MATRIX KMc-core decides=K2sch_core twins=K2vac_core
+# MUTANT-MATRIX-DYNAMIC mut-name-argument why=mut() emits mutant_killed with the name it is called with; every name it is called with is a literal row of this block
+# MUTANT-MATRIX KMb-inst decides=KEps_inst twins=K2vac_inst
+# MUTANT-MATRIX KMc-core decides=KEsch_core twins=K2vac_core
 # MUTANT-MATRIX KEM-inst decides=KEps_inst twins=KEvac_inst
-# MUTANT-MATRIX KEM-core decides=KEps_core twins=KEvac_core
-# MUTANT-MATRIX DV-full-map decides=DV1 twins=A1
+# MUTANT-MATRIX KEM-core decides=KEsch_core twins=KEvac_core
+# MUTANT-MATRIX DV-full-map decides=DV4 twins=A1
 # MUTANT-MATRIX DV-joined-record-only decides=DV2 twins=DV5
 # MUTANT-MATRIX DV-open-findings-dropped decides=DV3 twins=DV2
 # MUTANT-MATRIX DV-files-key-ordinal decides=DV4 twins=DV3
@@ -81,8 +89,8 @@
 # MUTANT-MATRIX DV-doc-narrow-consumed decides=DVRS twins=DV4D
 # MUTANT-MATRIX DV-subj-narrow-consumed decides=DVRSS twins=DVRS
 # MUTANT-MATRIX DV-narrow-on-unread decides=DV5 twins=DV2
-# MUTANT-MATRIX DV-gate-supersets-only decides=DV6 twins=DV2
-# MUTANT-MATRIX DV-notarize-dispatched-only decides=DV7 twins=DV1
+# MUTANT-MATRIX DV-gate-supersets-only decides=DVRS twins=DV2
+# MUTANT-MATRIX DV-notarize-dispatched-only decides=DV10 twins=DV2
 # MUTANT-MATRIX DV-literal-m-minus-1 decides=DV10 twins=DV2
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -117,10 +125,13 @@ echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"
 echo "$NAME:"
 
 # M0: the ordinal map covers every *.md, whatever its name, in C order.
-d="$(new_world)"
-map="$($ASM_RUN "$MERGE" --map "$d")"
-want="$(printf '1\t192-ff-A-token-decimal-resolution.md\n2\tbug-192-il-accuracy.md\n3\tstory-1-rebalancer-il-accuracy.md')"
-if [ "$map" = "$want" ]; then
+p_m0() { # <merge> -> 0 iff --map keys the three real files, the two non-story- names included, in C order
+  local d want; d="$(new_world)" || return 1
+  map="$($ASM_RUN "$1" --map "$d")"
+  want="$(printf '1\t192-ff-A-token-decimal-resolution.md\n2\tbug-192-il-accuracy.md\n3\tstory-1-rebalancer-il-accuracy.md')"
+  [ "$map" = "$want" ]
+}
+if p_m0 "$MERGE"; then
   ok "M0: --map keys all three real files by ordinal, the two NON-story- names (192-ff-, bug-) included, in LC_ALL=C order"
 else
   bad "M0: --map printed [$map], not the three ordinals over the real listing"
@@ -512,13 +523,16 @@ done
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
-d="$(b3_world)"
-{
-  printf '## Findings\n\n%s\n\nstories: 1\n\n' "$(sed -n 1p "$HERE/seed.finding-headings.txt")"
-  sed -n '/SKILL_INVOCATION_PROVENANCE v1/,$p' "$d/1.md" | sed 's/^findings_major: 2$/findings_major: 1/'
-} > "$d/1.tmp" && mv "$d/1.tmp" "$d/1.md"
-run_merge "$MERGE" "$d"
-refused_clean "Findings section heads 0 CRITICAL / 0 MAJOR" "$d" \
+p_r6() { # <merge> -> 0 iff the real-pass heading (no severity word) under findings_major: 1 is REFUSED on its count
+  local d; d="$(b3_world)"
+  {
+    printf '## Findings\n\n%s\n\nstories: 1\n\n' "$(sed -n 1p "$HERE/seed.finding-headings.txt")"
+    sed -n '/SKILL_INVOCATION_PROVENANCE v1/,$p' "$d/1.md" | sed 's/^findings_major: 2$/findings_major: 1/'
+  } > "$d/1.tmp" && mv "$d/1.tmp" "$d/1.md"
+  run_merge "$1" "$d"
+  refused_clean "Findings section heads 0 CRITICAL / 0 MAJOR" "$d"
+}
+p_r6 "$MERGE" \
   && ok "R6: a real-pass heading with no severity word -> REFUSED on the count, never merged as 0 MAJOR" \
   || bad "R6: a heading without a severity word was not refused on its count (rc=$RC): $(cat "$MO")"
 
@@ -682,7 +696,9 @@ else
     [ "$a" = "@" ] && ok "K1-$L: $L layout, every reader current -> --pair-sep prints exactly one byte '@', exit 0" \
       || bad "K1-$L: $L layout with current readers gave '$a' (want @)"
     # K2: ONE old reader, derived from the current file (K0) -> `=`, each world first proven to differ from the current one.
-    for S in vac ps sch; do
+    # Only the vac world is a base cell here: it is the K mutants' twin. The ps and sch old readers are scored
+    # end to end by KE below (KEps_inst, KEsch_core), the cells the kill matrix shows kill every K mutant.
+    for S in vac; do
       w="$(kl_world "$L" "$S" "$MERGE")" || { bad "K2$S-$L: FIXTURE BROKEN -- world did not build"; continue; }
       if ! k_differs "$w" "$L" "$S"; then bad "K2$S-$L: FIXTURE BROKEN -- the old-$S world is byte-identical to the current one"; continue; fi
       a="$(k_ps "$w" "$L")"
@@ -723,12 +739,13 @@ else
   if [ -z "$KE_SD" ] || [ "$ke_n" -lt 1 ]; then
     bad "KE: FIXTURE BROKEN -- the subject world for the end-to-end drives did not build"
   else
+    # One old-reader killer per layout: ps in inst, sch in core (the irredundant cover of the K mutants).
     for L in inst core; do
       row=""
-      for S in none vac ps sch; do
+      if [ "$L" = inst ]; then ke_sw="none vac ps"; want=" none=@ vac== ps=="; else ke_sw="none vac sch"; want=" none=@ vac== sch=="; fi
+      for S in $ke_sw; do
         w="$(kl_world "$L" "$S" "$MERGE")" && row="$row $S=$(k_drive "$w" "$w/$(k_dir "$L")/merge-adversarial-shards.sh")" || row="$row $S=BUILD"
       done
-      want=" none=@ vac== ps== sch=="
       [ "$row" = "$want" ] && ok "KE-$L: $L layout, the merge itself (subject mode) writes every artifact_sha pair with '@' when every reader is current and '=' in each old-reader world:$row" \
         || bad "KE-$L: the merge's emitted separators were$row (want$want)"
     done
@@ -741,16 +758,13 @@ fi
 if ! dv_rulebook; then bad "DV: FIXTURE BROKEN -- _gate-procedures.md not found above $LIB_DIR; no derived-set arm can bind"
 else
   echo "HERMETIC-CONSUMED $RULEBOOK"
-  p_dv1 "$MERGE" && ok "DV1: 2 of 8 stories repaired -> --derived-map prints {$DV_ORDS} derived from p1, not the full map, and a p2 that adds underived shard 1 is REFUSED, nothing written" \
-    || bad "DV1: ords [$DV_ORDS] hdr [$DV_HDR] rc=$RC $(head -2 "$MO")"
   p_dv2 "$MERGE" && ok "DV2: story 6, changed on disk and cited by no edit: line (a serial edit), is in the set {$DV_ORDS}" || bad "DV2: ords [$DV_ORDS]"
   p_dv3 "$MERGE" && ok "DV3: p1's MAJOR on unedited story 5 and its repaired + 'edit: n/a' MAJOR on story 7 keep both in: {3 5 6 7}" || bad "DV3: ords [$DV_ORDS], want [3 5 6 7]"
   p_dv4 "$MERGE" && ok "DV4: a story sorting FIRST shifts every ordinal; keyed on basename the set is {1 4 6 7 8}" || bad "DV4: ords [$DV_ORDS], want [1 4 6 7 8]"
   p_dv4d "$MERGE" && ok "DV4D: --document after p1: the FULL map, and the header names why (document mode is not narrowed)" || bad "DV4D: ords [$DV_ORDS] hdr [$DV_HDR], want the full map with a reason"
   p_dv5 "$MERGE" && ok "DV5: p1's sha list unreadable -> the FULL map, and the header says why" || bad "DV5: ords [$DV_ORDS] hdr [$DV_HDR]"
-  p_dv6 "$MERGE" && ok "DV6: arm N on the merged p2: {3 6} passes; the same pass dispatching {3} (narrower) and {1 3 6} (wider) each FAIL owed {3 6}" || bad "DV6: $(grep -m2 'FAIL (N' "$CO")"
-  p_dv7 "$MERGE" && ok "DV7: the merge of shards 3 and 6 notarizes all 8 stems at their disk shas and stamps shard_set_derived_from: p1" || bad "DV7: (rc=$RC) $(head -2 "$MO")"
-  p_dv10 "$MERGE" && ok "DV10: p3 with no p2 on disk derives from p1 (series order), merges stamping it, and arm N reads p1 as its predecessor" || bad "DV10: ords [$DV_ORDS] hdr [$DV_HDR] $(grep -m2 'FAIL (N' "$CO")"
+  p_dv10 "$MERGE" && ok "DV10: p3 with no p2 on disk derives from p1 (series order); a dispatch adding underived shard 1 is REFUSED, nothing written (DV1); the merge of 3 and 6 stamps p1 and notarizes all 8 stems at their disk shas (DV7); arm N reads p1 as its predecessor, and the same pass dispatching {1 3 6} (a superset) FAILS owed {3 6} (DV6 superset half; the subset half is held by DVRS)" \
+    || bad "DV10: failed at stage ${DV_STAGE:-?}: rc=$RC ords [$DV_ORDS] hdr [$DV_HDR] $(head -1 "$MO") $(grep -m2 'FAIL (N' "$CO")"
   if [ -f "$SRCDIR/serial-remediation-worklist.sh" ]; then
     echo "HERMETIC-CONSUMED $SRCDIR/serial-remediation-worklist.sh"
     p_dvrs "$MERGE" && ok "DVRS: document mode, the shipped sequence (split on p1's sha, a section edited, assembled, the worklist consuming .before): --derived-map prints the whole --map and names why, the full-width p2 merges derived from p1, the gate reads no FAIL (N; a files world in the same arm still narrows to {3 6}" \
@@ -767,8 +781,8 @@ fi
 # the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
 # prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
 n_mut=0; n_kill=0
-ARMS_ALL="A1 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE DV1 DV2 DV3 DV4 DV4D DV5 DV6 DV7 DV10 DVRS DVRSS"
-[ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2ps_inst K2sch_inst K2vac_core K2ps_core K2sch_core KEnone_inst KEvac_inst KEps_inst KEsch_inst KEnone_core KEvac_core KEps_core KEsch_core"
+ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2"
+[ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2vac_core KEnone_inst KEvac_inst KEps_inst KEnone_core KEvac_core KEsch_core"
 karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
   local w a
   w="$(kl_world "$3" "$2" "$1")" && a="$(k_ps "$w" "$3")" || return 1
@@ -783,6 +797,13 @@ kearm() { # <merge file> <swap> <layout> <want> -- the separator the merge itsel
 arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
   case "$1" in
     A1) p_b3 "$2" ;;
+    M0) p_m0 "$2" ;;
+    R6) p_r6 "$2" ;;
+    D2) p_doc_axis "$2" ;;
+    D3) p_doc_sha "$2" ;;
+    D4) p_doc_path "$2" ;;
+    D5) p_doc_serial "$2" ;;
+    D6) p_files_golden "$2" ;;
     X1) p_xfiles "$2" ;;
     X4) p_xmix "$2" ;;
     RS1) p_rs1 "$2" ;;
@@ -793,21 +814,18 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
     B726H) p_bl726h "$2" ;;
     P1) p_pb "$2" ;;
     PBARE) p_pbbare "$2" ;;
-    DV1) p_dv1 "$2" ;;
     DV2) p_dv2 "$2" ;;
     DV3) p_dv3 "$2" ;;
     DV4) p_dv4 "$2" ;;
     DV4D) p_dv4d "$2" ;;
     DV5) p_dv5 "$2" ;;
-    DV6) p_dv6 "$2" ;;
-    DV7) p_dv7 "$2" ;;
     DV10) p_dv10 "$2" ;;
     DVRS) p_dvrs "$2" ;;
     DVRSS) p_dvrss "$2" ;;
+    TR1) p_tree "$2" ;;
+    FG2) p_fence_unclosed "$2" ;;
     K1_*) karm "$2" none "${1#K1_}" "@" ;;
     K2vac_*) karm "$2" vac "${1#K2vac_}" "=" ;;
-    K2ps_*) karm "$2" ps "${1#K2ps_}" "=" ;;
-    K2sch_*) karm "$2" sch "${1#K2sch_}" "=" ;;
     KEnone_*) kearm "$2" none "${1#KEnone_}" "@" ;;
     KEvac_*) kearm "$2" vac "${1#KEvac_}" "=" ;;
     KEps_*) kearm "$2" ps "${1#KEps_}" "=" ;;
@@ -818,7 +836,7 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
 armlabel() { # <arm> -> the label of the ok line that records the arm passing on the SHIPPED merge in this run
   case "$1" in
     B726B) echo BL726b ;; B726C) echo BL726c ;; B726F) echo BL726f ;; B726H) echo BL726h ;; PBARE) echo P1 ;;
-    K2vac_*|K2ps_*|K2sch_*) echo "${1%%_*}-${1#*_}" ;;
+    K2vac_*) echo "${1%%_*}-${1#*_}" ;;
     KE*_*) echo "KE-${1#*_}" ;;
     K1_*) echo "K1-${1#K1_}" ;;
     *) echo "$1" ;;
@@ -906,7 +924,7 @@ mutm m-nomix X4 A1 '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' 'false \'
 mutm RM-A RS1 A1 'if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } ' ''
 mutm RM-B CH2 A1 '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;' '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|"") ;;'
 # THE DERIVED SET's mutants (BL-911), each the regression its arm names.
-mutm DV-full-map DV1 A1 \
+mutm DV-full-map DV4 A1 \
   'else ORDINALS="$(awk -v w="$W" '"'"'{ printf "%s%0*d", (NR > 1 ? " " : ""), w, $1 }'"'"' "$T/d.out")"; fi' 'else :; fi'
 mutm DV-joined-record-only DV2 DV5 \
   '"$T/d.psha" "$csrc" > "$T/d.src" || return 1' \
@@ -929,11 +947,37 @@ mutm DV-subj-narrow-consumed DVRSS DVRS "$DVN_ANCHOR" \
 $DVN_ANCHOR"
 mutm DV-narrow-on-unread DV5 DV2 \
   '[ -s "$T/d.psha" ] || { D_FULL="$(basename "$D_PRED") notarizes no <stem>=<sha> list"; return 0; }' '[ -s "$T/d.psha" ] || return 0'
-mutc DV-gate-supersets-only DV6 DV2 'if [ "$n_have" != "$n_owe" ]; then' 'if [ "$n_have" != "$n_owe" ] && [ "${#n_have}" -gt "${#n_owe}" ]; then'
-mutm DV-notarize-dispatched-only DV7 DV1 'if [ -n "$DERIVED_FROM" ] && [ -z "$DOCUMENT" ] && [ -z "$SUBJECT" ]; then' 'if false; then'
+mutc DV-gate-supersets-only DVRS DV2 'if [ "$n_have" != "$n_owe" ]; then' 'if [ "$n_have" != "$n_owe" ] && [ "${#n_have}" -gt "${#n_owe}" ]; then'
+mutm DV-notarize-dispatched-only DV10 DV2 'if [ -n "$DERIVED_FROM" ] && [ -z "$DOCUMENT" ] && [ -z "$SUBJECT" ]; then' 'if false; then'
 mutm DV-literal-m-minus-1 DV10 DV2 \
   'if [ "$k" -lt "$3" ] && [ "$k" -gt "$best" ]; then best="$k"; D_PRED="$f"; fi' \
   'if [ "$k" -eq "$(($3 - 1))" ]; then best="$k"; D_PRED="$f"; fi'
+# THE CLAIM MUTANTS (BL-918): one per core claim the header states and no mutant above breaks.
+# The verdict is taken from the shards rather than recomputed from the summed residue: every B3 shard says MET.
+mutm CM-verdict-from-shards A1 RS1 'elif [ "$S_CRIT" -le "$CRIT_CEIL" ] && [ "$BLOCKING" -le "$MAJOR_CEIL" ]; then' 'elif true; then'
+# The ordinal map understands only story-<n>- names, so the two real non-story- seeds drop out of it. Every
+# files-mode arm seeds those names and trips with M0, so the twin is a document-mode arm, which reads no listing.
+mutm CM-ordinal-story-only M0 D3 'for f in "$STORIES_DIR"/*.md; do' 'for f in "$STORIES_DIR"/story-*.md; do'
+# The wrong-axis guard gone: a section finding that also carries a stories: line is keyed on one axis and merges.
+mutm CM-axis-guard-gone D2 D3 '[ "${wrong:-0}" = "0" ] ||' 'true ||'
+# The document path check gone: a shard notarizing a byte-identical COPY passes; the sha check (D3) still holds.
+mutm CM-doc-path-unchecked D4 D3 '[ "$ART_ABS" = "$DOCUMENT" ] \' 'true \'
+# The document sha check gone: a shard notarizing other bytes at the right path passes; D4's copy carries the right bytes.
+mutm CM-doc-sha-unchecked D3 D4 '[ "$sha" = "$DOC_SHA" ] ||' 'true ||'
+# The merged pass loses its findings_major line: the MERGED line and the verdict line still read NOT_MET, so only
+# the convergence validator, which must ACCEPT the merged file, separates it. RS1 refuses before any write.
+mutm CM-merged-unparseable A1 RS1 "  printf 'findings_major: %s\\n' \"\$S_MAJOR\"
+" ''
+# The worded-heading MAJOR count no longer compared: an unclosed fence hides a finding, the heading count falls short
+# of the stated major, and the pass merges (rc 0, major=7) where the shipped merge refuses (rc 2). FG2 decides because
+# R6's seed is refused earlier by the reserved-heading guard, so R6 trips only on a missing output token, not on this count.
+mutm CM-major-count-unchecked FG2 A1 '[ "$nc" -eq "$crit" ] && [ "$nm" -eq "$major" ] \' '[ "$nc" -eq "$crit" ] \'
+# The other-root refusal gone: a write-ledger row naming a worktree's copy no longer refuses; TR1 asserts the refusal.
+mutm CM-other-root-not-refused TR1 A1 '    refuse "${_op} carries a write-ledger row by agent' '    : "${_op} carries a write-ledger row by agent'
+# The SERIAL refusal gone, and the exit-3 answer read as a partition: a SERIAL document is not refused with its reason.
+mutm CM-serial-not-refused D5 D3 '  refuse "$DOCUMENT does not partition (' '  prc=0; : "$DOCUMENT does not partition ('
+# One byte of files-mode output moved in the pass header: every count, verdict and id still reads right.
+mutm CM-files-bytes-moved D6 A1 "shard verdicts are advisory.\\n'" "shard verdicts are advisory!\\n'"
 mutm BM-1 B726B B726H '| if ($s.e - $ae) > $tol then' '| if false then'
 mutm BM-2 B726C B726H '| if ($ae - $w.e) > $tol then' '| if false then'
 mutm BM-3 B726F B726B 'def verdict($bound): if $bound then "REFUSE" else "WARN" end;' 'def verdict($bound): "REFUSE";'
@@ -954,11 +998,13 @@ PY
   else PBROOT="$pm1_mt" mut PM1 P1 PBARE "$MERGE"; fi
 fi
 if [ "$KOK" = 1 ]; then
-  for _L in inst core; do
-    mut "KMb-$_L" "K2ps_$_L" "K2vac_$_L" "$KMB"
-    mut "KMc-$_L" "K2sch_$_L" "K2vac_$_L" "$KMC"
-    mut "KEM-$_L" "KEps_$_L" "KEvac_$_L" "$KM593"
-  done
+  # The deciding cells are the irredundant cover of the kill matrix: the old-ps world in inst kills KMb and KEM,
+  # the old-sch world in core kills KMc and KEM.
+  # KMb and KMc are each ONE mutated file with ONE deciding cell, so each is scored once; KEM keeps a row per layout.
+  mut KMb-inst KEps_inst K2vac_inst "$KMB"
+  mut KMc-core KEsch_core K2vac_core "$KMC"
+  mut KEM-inst KEps_inst KEvac_inst "$KM593"
+  mut KEM-core KEsch_core KEvac_core "$KM593"
 else
   bad "KMb/KMc/KEM: not scored -- the K section did not build (see K0)"
 fi

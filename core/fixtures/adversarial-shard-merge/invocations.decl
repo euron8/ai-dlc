@@ -1,4 +1,5 @@
-# Measured by an armed run through core/scripts/hermetic-run.sh (the judge's own J2/J3 output) at the tip carrying the mutant_killed/--matrix rewrite, then verified by two more armed runs at the committed tip.
-2175 *
-35 core/scripts/merge-adversarial-shards.sh
-427 core/scripts/content-seal.sh
+# Measured by two agreeing armed runs through core/scripts/hermetic-run.sh (the judge's own J3 output), the counter armed
+# as .githooks/pre-push fxcount_arm arms it, on a clean detached worktree of the commit carrying the BL-918 cut, claim mutants and T2 reshape, the four further claim mutants, the DV1/DV6/DV7 assertions folded into DV10, and the other-root and worded-heading claim mutants (TR1, FG2, CM-other-root-not-refused).
+2227 *
+29 core/scripts/merge-adversarial-shards.sh
+418 core/scripts/content-seal.sh
