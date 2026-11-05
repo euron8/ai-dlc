@@ -1826,7 +1826,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      constraint the entry was widening onto a consumer whose artifacts already violate it, and
      the next gate then fails on a tree you just repaired. Each step states its own consequence.
    - `DECISION …` — a genuine operator call: an unknown drift's refile-vs-revert, a deletion, a
-     token with no default. Ask ONE closed question per row.
+     token with no default. Ask ONE closed question per row, except the `DECISION deletion` rows
+     for `UPSTREAM-DELETED` paths, which step 7 asks as one listed question.
    - `DECISION <detector>-refused` (`unregistered-drift`, `retired-tokens`,
      `retired-layer-passage`, `layer-drift`) — that detector refused, or could not write all of
      its rows, so its section is **NOT a finding of "none"**. The detail carries its exit and its
@@ -2213,8 +2214,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      (`upstream removed <path> at <theirs>; consumer copy unmodified since
      base`), and mid-apply you STOP and ask ONE question that lists every
      such path with its reason line, then apply the removals only on the
-     operator's explicit yes to that question. If the operator declines the
-     batch, ask per path. Never infer approval from the `apply` argument —
+     operator's explicit yes to that question. Any answer other than an
+     unqualified yes declines the batch: ask per path. Never infer approval from the `apply` argument —
      `apply` authorizes writes, not this specific destroy. A `UPSTREAM-DELETED-NOOP`
      path (consumer already lacks it) is a silent noop — nothing to remove,
      no gate. A `UPSTREAM-DELETED+consumer-modified` path went through
