@@ -1830,14 +1830,3 @@ Held:
 
 verify: manual
 
-## BL-916 — the update skill asks one destructive-delete question per UPSTREAM-DELETED row, even where the consumer never modified the file
-
-**DEFECT.** SKILL.md step 7 said "Never batch-approve deletions", so a release deleting N core-owned files the consumer never touched costs N operator questions: ~72 per-file questions on graph's next pull become one.
-
-Operator ruling, batch b250: "the fix is to soften or remove the line 'Never batch-approve deletions'. Simple. Elegant."
-
-Fix: the step-7 rule text (and the step-5 deletions-list sentence) — one listed approval for `UPSTREAM-DELETED`, per-path on decline; consumer-modified and `ORPHANED-RELOCATED` unchanged.
-
-Provenance: batch b250, operator ruling.
-
-verify: manual

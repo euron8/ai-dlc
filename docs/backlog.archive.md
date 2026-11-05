@@ -39795,3 +39795,16 @@ The real push cited above is the evidence for the traced absent-path records. Th
 
 verify: manual
 
+## BL-916 — the update skill asks one destructive-delete question per UPSTREAM-DELETED row, even where the consumer never modified the file
+
+**LANDED (v0.1005.0).** SKILL.md step 7 asks one listed approval for every UPSTREAM-DELETED path the consumer never modified, per-path on decline; consumer-modified and ORPHANED-RELOCATED unchanged; the DECISION-row sentence, the step-5 list sentence and the emit-report deletions heading agree.
+
+**DEFECT.** SKILL.md step 7 said "Never batch-approve deletions", so a release deleting N core-owned files the consumer never touched costs N operator questions: ~72 per-file questions on graph's next pull become one.
+
+Operator ruling, batch b250: "the fix is to soften or remove the line 'Never batch-approve deletions'. Simple. Elegant."
+
+Fix: the step-7 rule text (and the step-5 deletions-list sentence) — one listed approval for `UPSTREAM-DELETED`, per-path on decline; consumer-modified and `ORPHANED-RELOCATED` unchanged.
+
+Provenance: batch b250, operator ruling.
+
+verify: manual

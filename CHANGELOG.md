@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1005.0] - 2026-11-05
+
+Batch b250, cluster `batching`. Files and closes BL-916. No PC- id is closed. NET 0 (filed 1 minus closed 1).
+
+### BL-916 closed: the update skill confirms every untouched upstream deletion with one listed approval
+
+- DEFECT. `core/skills/ai-dlc-update/SKILL.md` step 7 said "Never batch-approve deletions". A release that deletes N core-owned files the consumer never modified therefore cost N operator questions. On graph's next pull, about 72 per-file questions become one.
+- Operator ruling, batch b250: "the fix is to soften or remove the line 'Never batch-approve deletions'. Simple. Elegant." The fix is that rule text, plus the wording that has to agree with it. No program logic changes and no test is added.
+- Step 7 now asks ONE question listing every `UPSTREAM-DELETED` path (consumer copy unmodified since base) with its reason line. If the operator declines the batch, it falls back to per-path questions. "Never infer approval from the `apply` argument" is kept.
+- Unchanged: an `UPSTREAM-DELETED+consumer-modified` path stays a per-path conflict (default keep-ours), and `UPSTREAM-DELETED-NOOP` stays a silent noop. `ORPHANED-RELOCATED` keeps its own per-path gate. Its bullet used to say "the exact same per-path operator gate as `UPSTREAM-DELETED`", which this change would have made false, so it now states its gate directly. The step-5 deletions-list sentence matches step 7.
+- The dry-run report's deletions heading (`reconcile/emit-report.sh`) said "gated per-path", which every pull would have shown the operator as wrong text. It now reads "UPSTREAM-DELETED rows are approved as one listed batch, ORPHANED-RELOCATED rows per path". The change is to the string only, and the prefix that `reconcile-emit-report` pins is byte-identical. A `preclassify.sh` comment is reworded to match. `procsub-staged-refusal-boot` byte-compares tip renders against the pre-fix engine at 1749b545. It already carried the reworded Push-candidate ledger heading into that staged base, and it now carries the Deletions heading through the same loop, with the same exactly-one-line guards. Without the carry, shard b fails 2 of 52 assertions.
+- `apply.sh` still emits one `DECISION deletion` row per path. The skill now turns those rows into one listed question.
+- The `DECISION …` handling sentence in the apply-output section ("Ask ONE closed question per row") now excepts the `DECISION deletion` rows for `UPSTREAM-DELETED` paths, so the two texts agree. Any answer other than an unqualified yes declines the batch and falls back to per-path questions.
+- Bootstrap: the consumer runs its installed skill. On a clean self-update, step 2 re-invokes the skill and the new rule applies from step 3 of the delivering pull, in time for steps 5 and 7. Under `SELF-UPDATE-DEFER` the delivering pull keeps the old per-path text throughout. Both outcomes are safe: no path removes a file without an operator yes.
+- No fixture or validator pins the changed sentences. Grepping `core/fixtures`, `scripts` and `.githooks` for `batch-approve`, `explicit yes for that path`, `exact same per-path` and `gated per-path` found 0. The same grep against the pre-change SKILL.md (the control) found 4.
+
 ## [0.1004.0] - 2026-11-05
 
 Batch b250, BL-915 audit. BL-915 ships PARTIAL. Closes no PC- id. NET +1 (filed 1 minus closed 0).
