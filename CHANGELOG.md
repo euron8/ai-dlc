@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1016.0] - 2026-11-05
+
+Batch b250, cluster triggers, the split release. BL-920 lands PARTIAL and stays LIVE. Files BL-924. No PC- id is closed. NET +1 (filed 1, BL-924, minus closed 0).
+
+### BL-920 (PARTIAL) — the split pass: prose read only by some of a fixture's arms moves out, and two controls a pre-push step already runs are deleted
+
+Over the 60 first-parent commits ending at 0443bfbfe, total triggered runs fall from 2819 at the 36985c11f declarations to 2786, counted with the hook's own key function.
+
+- story-fields-derive's seven derive-stories wiring arms move to process-rule-pins as section 4j, and story-fields-derive drops its `gate-validation.md` and `implementation.md` rows: the two fixtures' runs per window fall from 29 to 21. sprint-status.sh, the subject, names those files only in comments and a message.
+- check-24-adversarial-convergence's tstrat unit, its H-BIND label join and its J3-MAP arm move to requirements-step, which already keys `steps/`, and the four shards drop seven step-prose rows: runs per window fall from 50 to 38. The four tstrat mutants are killed in their new home.
+- prepush-pool-depth's I66 copy writes empty stubs for the four prose files I66 needs only to exist, and drops their rows: real content and empty stubs give the same verdict both ways, and an absent file is a refusal.
+- vocabulary-index's controlA and invariant-index's CONTROL-A are deleted, with the `+docs/vocabulary-index.md` and `+docs/invariant-index.md` rows that only they read: each ran the renderer's `--check`, which the pre-push hook already runs before the suite, and neither decided a mutant.
+
+Kept, with the reason: core-write-guard, gate-remediation-deny, check-15-bypass, postcompact-rulebook-recovery and content-seal, whose prose rows are input to the subject under test (the core-guard hook's manifests, the remediation guard's grammar through `artifact-path-config.sh`, the stub audit's manifest through `core-paths.sh --is-core`, the reattach-budget validator's SKILL.md, content-seal's admit-marker check of `adversary.md`) or the file an edit arm targets; a split would add runs or save none. Still owed: `core/fixtures/lib/` across 131 fixtures.
+
+### BL-924 (PARTIAL) — prepush-pool-depth decided cells on process-table samples that load moves
+
+Filed, and fixed here; it closes when its receipt lands. Under load the not-exported mutant failed once and then passed with no change, because the cell's group also printed `obs_d0_max`, the depth-0 barrier's flight count, taken when two consecutive `ps` tables agreed. A plain-run mutant is now scored on its decides and twins only (`--matrix` still reports co-trips), and the barrier is read at a rendezvous the workers write: a settle is accepted only when the tree holds one xargs whose child count equals the flight files, so every started worker is held on the gate. A drive that never meets becomes FIXTURE BROKEN, never a count. Under a forced schedule, with one worker writing its flight file late, the old code read 5 of 6 and failed three mutants; the new code reads 6 of 6 (5 with the pool capped) and kills them, and the pool-width mutants stay killed. A second sample, the watcher-verdict wait, recorded each verdict as it stood when two `ps` tables agreed and released a drive on any such settle; it now ends only on the verdict file or a sentinel the FIFO writer writes when a watcher opens the FIFO, and under a forced schedule the old code read `ok` and `none` where the new reads REFUSED on both, with all five watcher mutants killed.
+
 ## [0.1015.0] - 2026-11-05
 
 Batch b250, BL-918 audit, release 1. BL-918 ships PARTIAL. Closes no PC- id. NET 0 (filed 0 minus closed 0; `git log 943cd72ae..01fd55d8e` carries no `docs/backlog.md` change).

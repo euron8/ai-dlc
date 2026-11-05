@@ -2606,6 +2606,66 @@ else
   bad "S12: [${_s12# }] does not tell a part shard to write its declared 'handovers: <n>' count"
 fi
 
+# --- 4j. derive-stories wiring and remedy prose (moved from story-fields-derive) ----------------
+# Moved here so story-fields-derive keys only on the program it drives; this fixture already
+# keys the whole skill tree, so the arms add no input row anywhere.
+#
+# THE MODE IS INVOKED BY A STEP FILE. v0.238.0, and it is the defect graph named
+# as its second reason for not retiring: `derive-stories` had 0 invocation sites in the consumer
+# against 9 for the generator it replaces, so retiring the consumer arm would have removed the
+# only live enforcement of frontmatter-as-SSOT and put nothing in its place. A capability with no
+# invocation site is not delivered, whatever the pull report says.
+#
+# BOTH SITES ARE ASSERTED AND THEY ARE DIFFERENT MODES ON PURPOSE. The gate runs `--check`, which
+# reports and never writes; the write belongs where a human is already editing the story. A gate
+# that edits the artifact it validates can pass a tree it just changed.
+DS_STEPS="$SKILL_DIR/steps"
+grep -rq -- 'sprint-status.sh derive-stories --check' "$DS_STEPS/gate-validation.md" 2>/dev/null \
+  && ok "the gate invokes derive-stories in its READ-ONLY mode (--check)" \
+  || bad "no gate step invokes derive-stories --check — the mode ships and nothing runs it"
+# THE BACKTICK IS THE TERMINATOR, not end-of-line. Every command in these step files is written
+# inside a code span, so an arm anchored on `$` matches nothing and reads exactly like a wiring
+# that is present. The first cut of these two arms was anchored that way: one reported UNMUTATED
+# under its own mutant — caught — and the other went GREEN under a mutation that added the
+# writing form to the gate, which is the failure it exists to prevent.
+grep -rq -- 'sprint-status.sh derive-stories`' "$DS_STEPS/implementation.md" 2>/dev/null \
+  && ok "the WRITE is invoked from the authoring step, not from the gate" \
+  || bad "no authoring step invokes the write — the derive can only ever be run by hand"
+# The control: the gate must NOT carry the writing form. This is the arm that would catch a
+# future edit collapsing the two sites into one.
+grep -rq -- 'sprint-status.sh derive-stories`' "$DS_STEPS/gate-validation.md" 2>/dev/null \
+  && bad "the GATE invokes the writing form — a gate that edits what it validates can pass a tree it just changed" \
+  || ok "the gate does NOT carry the writing form (the read/write split is asserted, not assumed)"
+# THE REMEDY PROSE AND THE TOOL AGREE ON WHAT THE TOOL DOES. The step file names
+# this mode as the repair for a stale entry, so its description of the mode is part of the
+# mode's contract: prose promising a capability the program refuses sends a session down a
+# no-op and costs it a hand transcription. The PRESENCE arm is first and it is what makes the
+# ABSENCE arm below safe — a missing or unreadable gate-validation.md reddens the presence arm
+# rather than acquitting the absence one.
+grep -q -- 'and NEVER creates one' "$DS_STEPS/gate-validation.md" 2>/dev/null \
+  && ok "Check 5's stale-entry remedy states that derive-stories never creates an entry" \
+  || bad "the gate's stale-entry remedy does not say the mode cannot create an entry — the prose promises what exit 3 refuses"
+grep -q -- 'writes the entry from the story file' "$DS_STEPS/gate-validation.md" 2>/dev/null \
+  && bad "the gate still describes derive-stories as writing the ENTRY from the story file — it writes VALUES into an entry that already exists" \
+  || ok "the gate no longer describes the mode as writing the entry itself"
+# THE NEGATIVE GREP IS A LITERAL AND IT IS NOT A COVERAGE CLAIM. The same wrong promise restated
+# in new words — "the derive will lay the entry down for you" — passes both arms above. That is
+# a stated limit, not a gap to close by enumerating wordings: a list of phrasings goes vacuous on
+# the first paraphrase and reads as though it were exhaustive. The PRESENCE arm is what carries
+# the correction; this one only stops the exact sentence coming back.
+#
+# THE CONFIRMATION TOKEN IS `--check`'s, NOT THE WRITE'S. The same bullet says
+# Check 5 runs the read-only mode, so a remedy citing `N value(s) written` cites a mode the
+# reader has just been told not to run — and the write is the wrong confirmation on its own
+# terms: handed a WRONG transcription it rewrites it from the story file and exits 0, so the
+# number that was supposed to confirm the entry is the number produced by silently replacing it.
+grep -q -- '0 drifted key(s)' "$DS_STEPS/gate-validation.md" 2>/dev/null \
+  && ok "the remedy confirms the hand-written entry with \`--check\`'s own token (\`0 drifted key(s)\`)" \
+  || bad "the remedy names no read-only confirmation token — the reader is left to pick a mode"
+grep -q -- '0 value(s) written' "$DS_STEPS/gate-validation.md" 2>/dev/null \
+  && bad "the remedy cites the WRITE mode's token as the confirmation — that mode overwrites a wrong transcription and exits 0" \
+  || ok "the remedy does NOT cite the write mode's token as a confirmation"
+
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""
 echo "  corpus:"

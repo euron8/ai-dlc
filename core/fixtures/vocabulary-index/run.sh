@@ -4,10 +4,9 @@
 # scripts/validate-enforcement-map.sh plus every enum in core/schemas/*.json, and
 # byte-compares it at pre-push.
 #
-# Two controls, two near-miss controls and a mutant per failure mode, each a throwaway repo
+# One control, two near-miss controls and a mutant per failure mode, each a throwaway repo
 # under a temp dir. Exit 0 iff every control is green AND every mutant is killed by its own arm.
 #
-#   controlA  the REAL repo: `--check` against the committed index      -> must PASS
 #   controlB  a synthetic seed: render, then `--check`                   -> must PASS
 #   m1  drift        a row appended to the rendered index                -> must FAIL
 #   m2  missing      the index deleted                                   -> must FAIL
@@ -380,22 +379,12 @@ EOF
 
 # VI_FAST=1 drives the renderer with its --skip-selfprobe test seam. The self-probes read only their
 # own seeds under the renderer's PROBE_DIR, never the corpus, so every world below that varies the
-# CORPUS gets the same probe verdict as controlB. They are paid in full by controlA, controlB, the seam
+# CORPUS gets the same probe verdict as controlB. They are paid in full by controlB, the seam
 # arm, m1 (the one kill end to end) and n1 (the one green end to end): one per distinct outcome.
 # Everything after the probes is the same code, called unchanged.
 VI_FAST=0
 render_in() { ( cd "$1" && if [ "$VI_FAST" = 1 ]; then bash scripts/render-vocabulary-index.sh --skip-selfprobe 2>&1; else bash scripts/render-vocabulary-index.sh 2>&1; fi ); }
 check_in()  { ( cd "$1" && if [ "$VI_FAST" = 1 ]; then bash scripts/render-vocabulary-index.sh --check --skip-selfprobe 2>&1; else bash scripts/render-vocabulary-index.sh --check 2>&1; fi ); }
-
-# --- controlA: the real repo -------------------------------------------------
-if outA="$( cd "$REPO" && bash scripts/render-vocabulary-index.sh --check 2>&1 )" \
-   && grep -q "^OK: docs/vocabulary-index.md in sync" <<<"$outA"; then
-  note "ok    controlA -- the committed index matches the real markers and schemas"
-else
-  note "FIXTURE BROKEN: --check does not pass against the real repo. Every verdict below is meaningless."
-  printf '%s\n' "$outA" | sed 's/^/      /' | head -8
-  exit 1
-fi
 
 # --- controlB: the synthetic seed renders and round-trips --------------------
 seed "$TMP/controlB"
@@ -1062,6 +1051,6 @@ else
 fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 2 controls + 4 near-miss green, 24/24 mutants scored on their own arm with the twin green"
+  note "PASS  vocabulary-index -- 1 control + 4 near-miss green, 24/24 mutants scored on their own arm with the twin green"
 fi
 exit "$rc"
