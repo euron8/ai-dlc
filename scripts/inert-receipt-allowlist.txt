@@ -1,11 +1,6 @@
 # scripts/inert-receipt-allowlist.txt -- the DOWN-ONLY allowlist of validate-fixture-hygiene.sh's arm E1: a tracked
 # receipt*.sh that no runner reads (no non-comment line of a run/seed/lib.sh, hook or, for a scripts/ receipt,
 # scripts/*.sh names it; a verify: line is not a runner). Rows `<path>\t<reason>`. A row whose file is gone or is now
-# read is STALE and FAILs; a row not on this list at origin/main FAILs (E1-M4). These are the lead-held receipts of
-# BL-915 (batch b250), each to be wired into its fixture's run.sh or deleted -- then its row goes.
-core/fixtures/adversarial-shard-merge/receipt-bl718.sh	BL-915 lead-held: archived entry, receipt run by no gate; lead routes wire-or-delete
-core/fixtures/adversarial-shard-merge/receipt-bl719.sh	BL-915 lead-held: archived entry, receipt run by no gate; lead routes wire-or-delete
-core/fixtures/check-24-adversarial-convergence/receipt-bl829.sh	BL-915 lead-held: archived entry, receipt run by no gate; lead routes wire-or-delete
-core/fixtures/check-24-adversarial-convergence/receipt.sh	BL-915 lead-held (D1 non-BL receipt): run by no gate; lead routes wire-or-delete
-core/fixtures/fixture-hygiene/receipt-bl868.sh	BL-915 lead-held: BL-868 live, but its entry says verify: manual and names the receipt only in prose
-core/fixtures/process-rule-pins/receipt-bl538.sh	BL-915 lead-held: live entry, named only by its verify: line
+# read is STALE and FAILs; a row not on this list at origin/main FAILs (E1-M4). The one row left is BL-868's:
+# BL-868's close wires that receipt into a runner or deletes it, and then its row goes.
+core/fixtures/fixture-hygiene/receipt-bl868.sh	BL-868 holds it: its close wires this receipt into a runner or deletes it; wiring it into fixture-hygiene would re-key that fixture on docs/backlog.md and the whole fixture corpus

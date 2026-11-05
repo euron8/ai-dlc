@@ -155,14 +155,14 @@
 #     by a round-dispatcher", _dispatch-protocol.md "Round-dispatcher brief"): repair, code review and
 #     QA rounds stay lead-dispatched, each excluded in its own sentence so a scope inversion fails;
 #     the dispatcher joins in the FOREGROUND and ends in one return-file write; the lead joins that
-#     file alone. The r28-rd-* and dp-rd-* rows are para pins, driven by receipt-bl538.sh.
+#     file alone. The r28-rd-* and dp-rd-* rows are para pins, read by the corpus arm below (--report).
 #   - a sharded party round is per-seat role-bound `Agent` spawns and an unsharded one stays on the
 #     Skill (_gate-procedures.md "Validation cycle" item 1, rule-20.md (i) and (v), rule-28.md's
 #     dispatcher scope, carry-over-evaluation.md §3, sprint-review.md §2); the record of a seat is
 #     its spawn-ledger row and its `--mark` line, its seats write no provenance block, and Check 17
 #     runs no arm on a seat file. The gp-party-*, r20-i-*, r20-v-*, gv17-seat-record,
 #     coe-party-per-seat, srev-party-per-seat and r28-rd-party-skill rows are para pins, also
-#     driven by receipt-bl538.sh.
+#     read by the corpus arm below (--report).
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient

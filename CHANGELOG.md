@@ -19,6 +19,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1019.0] - 2026-11-05
+
+Batch b250 close release. BL-915 stays PARTIAL. BL-921 is filed. Closes no PC- id. NET -1 (closed 0, minus filed 1, BL-921).
+
+### BL-915 PARTIAL — the six held receipts
+
+- Five inert receipts are deleted, and their rows leave `scripts/inert-receipt-allowlist.txt`:
+  - `adversarial-shard-merge/receipt-bl718.sh` and `receipt-bl719.sh`, covered by that fixture's K1, K2, K3 and KE arms and the KMb, KMc and KEM matrix rows. Files mode and subject mode share one separator (`merge-adversarial-shards.sh:922`).
+  - `check-24-adversarial-convergence/receipt.sh`, covered by the arm-C cdiv cells and mutants.
+  - `check-24-adversarial-convergence/receipt-bl829.sh`.
+  - `process-rule-pins/receipt-bl538.sh`, covered by that fixture's corpus arm.
+- receipt-bl829's uncovered half moves into `check-24-adversarial-convergence` (shard d) as the `k3w-subj-req` world and cell. A `requirements-` series stamped between K3_RELEASE and K3B_RELEASE FAILs on branch (b)'s key set. The cell fails on a mutant that dates every branch-(b) miss against K3B_RELEASE. Shard d's `invocations.decl` moves from 1004 to 1034 total starts and from 53 to 54 validator starts, from two agreeing counted runs. Its `fixture-inprocess-allowlist.txt` row moves from 53 to 54 with it.
+- `fixture-hygiene/receipt-bl868.sh` keeps the one remaining row. It is re-attributed to BL-868, whose close wires it into a runner or deletes it.
+- BL-538's `verify:` line runs `process-rule-pins/run.sh --report` directly.
+- BL-915 stays PARTIAL: Fix item 1's arm-by-arm audit has not been applied outside the BL-918 set.
+- BL-915's counts, from base a797fd022 to this tip: fixtures 261 to 264, fixture receipt files 103 to 18, fixture `receipt-bl*.sh` files 96 to 17, and `scripts/receipt*.sh` files 4 to 0.
+
+### BL-921 — filed
+
+No shipped check verifies that a MUTANT-MATRIX `twins=` token names a real arm. It is filed with a `verify:` line that reads the receipt its fix adds.
+
+### Batch-close records
+
+- BL-914's close condition now requires two pushes of one sha from clean worktrees with identical present sets.
+- BL-922 records that arm A read green with the copied `lib/` removed.
+- BL-923 gains its `verify:` line.
+- In the owner-rules block of `docs/plans/graph-ledger-full-drain.md` action 0:
+  - Flow step 7 owes the prefix run only for a change to a pre-push step, a script one of those steps runs, a receipt or `.githooks/`.
+  - Step 9 selects worktrees by branch prefix and scratchpad path.
+  - Five standing owner rules are added.
+- The plan's RESUME HERE block is batch 250's close record, handing off to batch 251. `scripts/plan-rotate.sh --apply` moved the batch-249 record (1516 bytes) to the archive.
+
 ## [0.1018.0] - 2026-11-05
 
 Batch b250, cluster triggers, the lib-pass release. BL-920 closes. BL-924 closes with its receipt. BL-925 is filed and closed. Closes no PC- id. NET -2 (filed 1, BL-925, minus closed 3, BL-920, BL-924 and BL-925).

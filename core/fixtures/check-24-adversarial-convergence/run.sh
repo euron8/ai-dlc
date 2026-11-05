@@ -3221,6 +3221,14 @@ w="$(k3_world k3w-subj "$K3_POST" "" "" "$K3W_MID")" && [ -n "$K3W_MID" ] && k3_
   && grep -q '^artifact: .*s9/requirements-subject\.md$' "$w/$K3PA/s9/prd-adversarial-p1.md" \
   && grep -q '^shard_tool_use_ids:.* 99=' "$w/$K3PA/s9/prd-adversarial-p1.md" \
   && [ "$(grep -c '^file: ' "$w/$K3PA/s9/requirements-subject.md")" -eq 4 ] || k3w_bad k3w-subj
+# k3w-subj-req: the same branch-(b) key-set miss on the `requirements-` series itself, stamped at the
+# same K3W_MID. It is not widened, so it is dated against K3_RELEASE and must FAIL; a rebind that
+# dates every branch-(b) miss against K3B_RELEASE reads it PENDING "not owed yet".
+w="$(k3_world k3w-subj-req "$K3_POST" "" "" "$K3W_MID")" && [ -n "$K3W_MID" ] && k3_subject_pass "$w" "$K3S" \
+  && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/$K3PA/s9/req.tmp" \
+  && mv "$w/$K3PA/s9/req.tmp" "$w/$K3PA/s9/requirements-adversarial-p1.md" \
+  && grep -q '^artifact: .*s9/requirements-subject\.md$' "$w/$K3PA/s9/requirements-adversarial-p1.md" \
+  && grep -q '^shard_tool_use_ids:.* 99=' "$w/$K3PA/s9/requirements-adversarial-p1.md" || k3w_bad k3w-subj-req
 
 # --- J2 PER STEM (J2S_RELEASE): a subject stem moved after the requirements series met ---------
 # Each world is k3-subject's (a MET `merge --subject` pass notarizing the four stems, so K3 itself is
@@ -3380,6 +3388,7 @@ else
   k3w_base k3_other 'K3 -- SUBJECT' k3w-other "$VALIDATOR" "$K3W/k3w-other" test-strategy 0 - "K3 -- SUBJECT"
   k3w_cell k3w-subj  "$VALIDATOR" "$K3W/k3w-subj"  prd 0 "at ${K3W_B} or later -- not owed yet." "FAIL (K3"
   k3w_cell k3w-subj-b "$VALIDATOR" "$K3W/k3w-subj" prd 0 "is not the subject map's ordinals plus cross groups" "FAIL (K3"
+  k3w_cell k3w-subj-req "$VALIDATOR" "$K3W/k3w-subj-req" requirements 1 "FAIL (K3 -- SUBJECT): requirements-adversarial-p1.md: its shard_tool_use_ids key set" "not owed yet."
   # The FAIL is J2's own, not K3's: K3 reads only PENDING (its byte gate) in every J2S world.
   k3w_base j2_nochain 'J2 -- DRIFT' j2s-nochain  "$VALIDATOR" "$K3W/j2s-nochain"  requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
   k3w_cell j2s-nochain-j2 "$VALIDATOR" "$K3W/j2s-nochain" requirements 1 "FAIL (J2 -- DRIFT)" "architecture-impact (_bmad-output"

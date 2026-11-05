@@ -19466,3 +19466,13 @@ This block replaces the batch-247 record, which `scripts/plan-rotate.sh` moved t
   - The operator held graph's pipeline until 0.995.0 landed and pulls it themselves; no rehearsal is owed from this distribution. 0.995.0's consumer impact is in its CHANGELOG entry: 0 review or merge verdicts move over graph 02fee241b.
   - The pull is not preapproved; the newest runbook is `docs/plans/graph-pull-0891-to-0901.md`.
 
+**BATCH 249 IS CLOSED: SIX RELEASES, `v0.996.0` THROUGH `v0.1001.0`. THE NEXT SESSION STARTS BATCH 250.**
+This block replaces the batch-248 record. Lead was ai-dlc-e3; owners ai-dlc-d4, 57, 9c, cb and 51. No `graph-*` session is ever messaged.
+- **Landed** (`git log origin/main`; each subject starts with its version). After `0.999.0` came `0.1000.0` (operator, over 1.0.0); `validate-release-version.sh` compares fields numerically. **The next VERSION is `0.1002.0`.**
+  - `v0.996.0` BL-908; `v0.997.0` BL-907; `v0.998.0` BL-510 arm, BL-828, BL-868 item 15; `v0.999.0` BL-874, BL-875, BL-896, BL-904, BL-905; `v0.1000.0` BL-538 progress, still PARTIAL; `v0.1001.0` `7a6d25d44` BL-906.
+- **Operator rulings.** BL-510 fixed; BL-868 item 15 exempt; BL-842's seeded-run count dropped; BL-905 runner mode; BL-538 party rounds in c5; release commit rotates; `FORK_BUDGET` raised by owners (owner rules, Receipts).
+- **Facts.** `FORK_BUDGET=2901`, `fork-profile.sh --section total` 2899. A6 reads **74238/74240**: the next durable-channel edit fails A6. BL-538 closes only on an `Outcome measured:` line from a graph sprint on `0.1000.0` or later.
+- **Backlog.** Live 43, archive 838. **The next free id is BL-911.**
+- **Ledger.** 0 live over 11 qualifying refs plus graph's working tree (control 0); both batch candidates archived upstream. PENDING 0.
+- **Graph.** Installed `0.997.0` (`1d1f7c36`) on `ai-dlc/feature/per-chain-rebalancer-instances`, `main` 0.969.0; 0 writes by this batch. The pull is not preapproved.
+
