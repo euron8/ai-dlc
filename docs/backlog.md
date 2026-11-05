@@ -1920,6 +1920,8 @@ Rules: BL-868. No new arm except a moved one. Do not touch a fixture another in-
 
 Close condition: the census is re-run with the hook's own key function (`readset_decl_keys`) over the 60 first-parent commits ending at 0443bfbfe, BEFORE = the decls at 0443bfbfe, AFTER = the decls at the landed tip, over the union of fixtures in either tree; the headline is total triggered runs, and the before and after totals are recorded here. Every fixture whose broad-only count did not fall is listed with the reason its broad row is genuine. It closes by its own landing, with no `Outcome measured:` line.
 
+**Progress (batch b250; the entry stays PARTIAL, so it carries no `**LANDED` line).** Every figure is total triggered runs over the fixed 60-commit window ending at 0443bfbfe, counted with `readset_decl_keys`. 0.1009.0 (backlog-ledger, ledger-status-vocabulary, backlog-real-ledger): 2948 -> 2926 at the a5c1193f0 decls; that release's text says 2905, from an earlier census that did not model the listing keys, and 2926 is the re-measure with the census that models them. 0.1011.0 (22 fixtures): 2926 -> 2881 at 943cd72ae. 0.1013.0 (procsub-staged-refusal-boot, -boot-c, reconcile-emit-report, -b): 2881 -> 2875. Still owed: the directory rows the b250 closure traces found narrowable, the I55 arm 3 recognition of a `ROOT_DIR` walk-up, and the close-condition census.
+
 Provenance: batch b250 operator instruction; lead ai-dlc-be.
 
 verify: manual
