@@ -38,3 +38,5 @@ core/fixtures/gate-transition/receipt-bl926.sh
 # verdict template from these two files under the walked-up root.
 core/skills/ai-dlc/steps/gate-validation.md
 core/team-roles/code-reviewer.md
+# BL-931: run.sh invokes its receipt, which reads the RA1, RA0, RAN, RAX, RAA and RAM outputs and starts no subject.
+core/fixtures/gate-transition/receipt-bl931.sh

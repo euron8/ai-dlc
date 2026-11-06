@@ -5,6 +5,7 @@
 # USAGE
 #   merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file>
 #   merge-review-shards.sh <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>]
+#   merge-review-shards.sh --read-verdict <file> --gate code-review|qa
 #
 #   --check-shard runs the merge's OWN per-shard check (one function, `check_shard`, which the
 #   merge calls for every shard) over ONE shard, after the same manifest/map re-derivation and
@@ -166,6 +167,15 @@
 #   0; else one `REFUSED: ... [owner: serial]` line, exit 2 -- the serial seat's own file, fixed and
 #   checked again. It reads no shard directory and no manifest. The MERGE keeps its stricter count:
 #   the assembled file carries exactly one match.
+#
+# READ-VERDICT. `merge-review-shards.sh --read-verdict <file> --gate code-review|qa` is a READ, not a seat
+#   check: the same check1_read and the same lifted verdict set as --check-serial, over ONE review file,
+#   serial or merged, and nothing else. At least one match of Check 1's pattern, every match reading the
+#   SAME value, and that value a member of the gate's lifted set: stdout `VERDICT: <file> verdict=<v>`,
+#   exit 0. Otherwise one `REFUSED: ... [owner: serial]` line, exit 2. It applies NO advisor line, FAIL
+#   ROWS, canonical-run, Class or backing rule (those bind the seat's own file, and a merged review
+#   carries one advisor line per shard, which --check-serial refuses), and it writes nothing. Its caller
+#   is gate-transition.sh's gate-2 Rule A, reading the latest gate-1 re-review's verdict.
 #   THE LEAD'S RE-RUN. `--check-serial <file> --gate qa [--story <f>] --lead-range <seat base> <go-signal>` is the
 #   same check run by the lead on its own inputs (implementation.md, "The lead re-runs a serial QA's check"), so a
 #   seat's SERIAL-OK binds nothing it chose. The base is the `dispatch:` line of the story's LEAD RECORD,
@@ -1719,10 +1729,10 @@ OWNER="lead"
 # --check-shard target), so one pass names every duplicate (header: OWNER TAILS).
 DUP_N=0
 CG_NOTE=""
-USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>] | --check-serial <absolute file> --gate qa [--story <f>] --lead-range <seat base> <go-signal sha> | --record-dispatch s<N>-<story-index> <sha> | --record-partition <qa shard-dir> | --record-run <qa shard-dir> [--dir <subdir>] -- <invocation...> | --record-run <serial review file> --frozen <go-signal sha> [--dir <subdir>] -- <invocation...>"
+USAGE="usage: merge-review-shards.sh <shard-dir> --gate code-review|qa --out <review-file> [--story <f>] | <shard-dir> --gate code-review|qa --check-shard <file>.md [--findings <n>] | --check-serial <file> --gate code-review|qa [--story <f> --range <base> <frozen>] | --check-serial <absolute file> --gate qa [--story <f>] --lead-range <seat base> <go-signal sha> | --read-verdict <file> --gate code-review|qa | --record-dispatch s<N>-<story-index> <sha> | --record-partition <qa shard-dir> | --record-run <qa shard-dir> [--dir <subdir>] -- <invocation...> | --record-run <serial review file> --frozen <go-signal sha> [--dir <subdir>] -- <invocation...>"
 
 SDIR=""; GATE=""; OUT=""; CHECK=""; CHECK_N=""; CHECK_N_SET=0; SERIAL=""; STORY_F=""; R_BASE=""; R_FROZEN=""; LEAD=0
-SEAT_B=""; RD_NAME=""; RD_SHA=""
+SEAT_B=""; RD_NAME=""; RD_SHA=""; RV=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
@@ -1730,6 +1740,7 @@ while [ "$#" -gt 0 ]; do
     --out) [ "$#" -ge 2 ] || refuse "$USAGE"; OUT="$2"; shift 2 ;;
     --check-serial) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; SERIAL="$2"; shift 2 ;;
     --check-shard) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; CHECK="$2"; shift 2 ;;
+    --read-verdict) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; RV="$2"; shift 2 ;;
     --findings) [ "$#" -ge 2 ] || refuse "$USAGE"; CHECK_N="$2"; CHECK_N_SET=1; shift 2 ;;
     --story) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "$USAGE"; STORY_F="${2#./}"; shift 2 ;;
     --range) [ "$#" -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] && [ "$LEAD$R_BASE" = 0 ] || refuse "$USAGE"; R_BASE="$2"; R_FROZEN="$3"; shift 3 ;;
@@ -1742,7 +1753,7 @@ done
 # ---- --record-dispatch (header: CHECK-SERIAL, THE LEAD'S RE-RUN): the dispatch step writes the story's dispatch sha to
 # its lead record, once (a rework keeps the original), through the shared record helpers. Run from the lead checkout.
 if [ -n "$RD_NAME" ]; then
-  [ -z "$SERIAL$SDIR$GATE$OUT$CHECK$STORY_F$R_BASE$R_FROZEN" ] && [ "$LEAD" = 0 ] || refuse "--record-dispatch takes no other argument; $USAGE"
+  [ -z "$SERIAL$SDIR$GATE$OUT$CHECK$STORY_F$R_BASE$R_FROZEN$RV" ] && [ "$LEAD" = 0 ] || refuse "--record-dispatch takes no other argument; $USAGE"
   rd_sha_="$(git --no-replace-objects rev-parse -q --verify "${RD_SHA}^{commit}" 2> /dev/null < /dev/null)" \
     || refuse "--record-dispatch: $RD_SHA is not a commit in $(pwd); pass the sprint-branch HEAD the dev worktree was cut from"
   rd_f_="$(lead_record_path . "$RD_NAME")" || refuse "--record-dispatch: '$RD_NAME' is not s<N>-<story-index>, or $(pwd) is not in a git repository"
@@ -1752,7 +1763,12 @@ if [ -n "$RD_NAME" ]; then
   lead_record_put . "$RD_NAME" dispatch "$rd_sha_" || refuse "--record-dispatch: cannot write $rd_f_"
   printf 'RECORDED: %s dispatch: %s\n' "$rd_f_" "$rd_sha_"; exit 0
 fi
-if [ -n "$SERIAL" ]; then
+if [ -n "$RV" ]; then
+  OWNER="serial"
+  [ -z "$SERIAL$SDIR$OUT$CHECK$STORY_F$R_BASE$R_FROZEN" ] && [ "$CHECK_N_SET$LEAD" = 00 ] && [ -n "$GATE" ] \
+    || refuse "--read-verdict takes only --gate; $USAGE"
+  [ -f "$RV" ] || refuse "$RV is not a regular file; name the review file whose verdict is read"
+elif [ -n "$SERIAL" ]; then
   OWNER="serial"
   [ -z "$SDIR" ] && [ -z "$OUT" ] && [ -z "$CHECK" ] && [ "$CHECK_N_SET" = 0 ] && [ -n "$GATE" ] \
     || refuse "--check-serial takes only --gate, --story and --range; $USAGE"
@@ -1794,7 +1810,7 @@ one_sprint() {
     || refuse "STORY-BIND: the review path names two sprints: the logical directory $1 reads sprint ${os_l_:-<none>} and the physical directory $2 reads sprint ${os_p_:-<none>}; write the review at the path qa.md names, with no symlink choosing its sprint"
 }
 [ -z "$SERIAL" ] || [ "$GATE" != qa ] || one_sprint "$(cd "$(dirname "$SERIAL")" 2> /dev/null && pwd)" "$(cd "$(dirname "$SERIAL")" 2> /dev/null && pwd -P)"
-if [ -n "$SERIAL" ]; then :
+if [ -n "$SERIAL$RV" ]; then :
 else
 SDIR="${SDIR%/}"
 [ -d "$SDIR" ] || refuse "shard directory $SDIR does not exist"
@@ -1858,6 +1874,18 @@ VSET="$(awk '/^## Verdict$/ { on = 1; next }
     | LC_ALL=C sort -u | tr '\n' ' ')"
 [ "$VSET" = "$WANT_VSET" ] \
   || refuse "$ROLE_NAME's ## Verdict template declares '${VSET% }', not exactly $RANKED; the worst-of ranking orders only those $NWORD"
+# ---- --read-verdict (header: READ-VERDICT). check1_read and the lifted set, nothing else; before the severity lift,
+# so a qa read prints no container LEGACY line.
+if [ -n "$RV" ]; then
+  check1_read "$RV"
+  [ "$C1N" -ge 1 ] || refuse "$RV matches Check 1's verdict pattern 0 time(s), so it carries no verdict to read"
+  [ "$C1D" -eq 1 ] || refuse "$RV matches Check 1's verdict pattern $C1N time(s) reading $C1D different values ($C1L); one review file carries one verdict"
+  rv_in_=0
+  for rv_v_ in $RANKED; do [ "$rv_v_" != "$C1V" ] || rv_in_=1; done
+  [ "$rv_in_" = 1 ] || refuse "Check 1 reads '$C1V' from $RV, which is not one of $RANKED ($ROLE_NAME's ## Verdict set)"
+  printf 'VERDICT: %s verdict=%s\n' "$RV" "$C1V"
+  exit 0
+fi
 # THE FINDING-CLASS SET (header: SHARD GRAMMAR, THE CLASS LINE). Byte-identical to CLASS_SET_AWK in
 # scripts/render-vocabulary-index.sh (I129). Lifted for BOTH gates from the gate's own role file;
 # empty when the installed role file declares none.

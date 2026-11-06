@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1028.0] - 2026-11-06
+
+### BL-931 closed
+
+At gate 2 pass M >= 2, Rule A's base is now the reviewed sha of the latest gate-1 review (highest pass by number, `.md` names only) when that review's verdict is APPROVED and its sha descends from the QA sha inside the frozen history. Otherwise the base stays the QA sha. The plan records `rule-a-base: <qa|gate1> <sha> <file>`, so a gate-1 re-review of a QA rework no longer sends the story back to gate 1 forever.
+
+The verdict is read by a new `merge-review-shards.sh --read-verdict <file> --gate code-review|qa` mode. It uses the lifted Check 1 reader and verdict set and applies no seat rule, so a merged review reads, where `--check-serial` refuses one on its advisor lines.
+
+The `next:` line names the index form gate 1 runs under (`1.2` for gate-2 `1-2`) with `--pass <P+1>`. Gate-1 files under two forms, unrelated ancestry and an unreadable verdict each refuse `gate1-review` with remedy text.
+
+Receipt: `core/fixtures/gate-transition/receipt-bl931.sh` over starts RA1, RA0, RAN, RAX, RAA and RAM, with mutants m-ra-nog1, m-ra-noverdict, m-ra-lexsort, m-ra-noanc, m-ra-noambig and m-ra-dashnext. `core/fixtures/review-reroute` arm RV, with mutant m-rv-noset, holds the new mode.
+
 ## [0.1027.0] - 2026-11-06
 
 ### BL-917 closed

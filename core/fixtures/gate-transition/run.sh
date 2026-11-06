@@ -43,6 +43,17 @@
 #   QAD     a merged QA prior naming WK, B, WK: exit 1, `REFUSED prior-validation` naming 2 distinct values, no plan.
 #           control: QAM.
 #   receipt-bl926.sh reads the PRIORM, PRIORD, QAM and QAD outputs and prints `receipt-bl926: PASS` (BL-926).
+#   RULE A's GATE-1 CANDIDATE (BL-931), each gate 2 pass 2 over a rework worktree off WK (G1 adds a code line, the
+#   frozen sha after it adds only a docs .md), its gate-2 index dash form and its gate-1 files dot form:
+#   RA1     p1 APPROVED at B, p2 APPROVED at G1, a p3 .md.draft beside them: exit 0, `gate: 2`, `rule-a-base: gate1 <G1>
+#           <p2 file>`, a GATE1-SKIP gate-log line. control: RA0.
+#   RA0     the RA1 world without p2: `gate: rerun`, `rule-a-base: qa <WK> ...`, next: naming `5.1` and `--pass 2`.
+#   RAN     p9 APPROVED and p10 NEEDS_REWORK at G1: p10 decides by number, `gate: rerun`, base qa. control: RA1.
+#   RAX     the re-review APPROVED at a side commit not ancestor-related to WK: exit 1, REFUSED gate1-review, no plan.
+#   RAA     gate-1 files under both the dot and the dash form: exit 1, REFUSED gate1-review ambiguous, no plan.
+#   RAM     the re-review a MERGED file (the real merge's output, every reviewed-sha naming G1): RA1's answer.
+#   receipt-bl931.sh reads the six outputs and prints `receipt-bl931: PASS` (BL-931), after asserting RA1 and RA0
+#   differ by exactly the p2 file, --gate1-rerun from WK answers RERUN and from G1 answers SKIP.
 #   G3X     gate 3 with one refusing arm exits 1, writes no g3 plan and leaves OPEN byte-identical.
 #           control: G3.
 #   G3      gate 3 with every arm passing exits 0, its plan carries `nonce: <N>`, and OPEN now reads <N>.
@@ -73,8 +84,8 @@
 #
 # THE MUTANTS, each a copy of the whole scripts directory with gate-transition.sh edited and cmp-checked;
 # per push each runs only its deciding world, scored against that step's base flag (lib/mutant.sh).
-# Measured by the --matrix run below (16 mutants x 24 arms, every other cell GREEN).
-# MUTANT-MATRIX m-early decides=DAR,PRIORD,FENCEC,QAD,G3X,CLOSEX,CLOSEMX twins=- why=per push it runs only G3X, and its one cheap green twin G3 would mint a second gate-3 nonce in the same second as the real G3 run, blinding that run's OPEN-moved check
+# Measured by the --matrix run below (22 mutants x 30 arms, 660 cells, every other cell GREEN).
+# MUTANT-MATRIX m-early decides=DAR,PRIORD,PRIORX,FENCEC,QAD,RAX,RAA,G3X,CLOSEX,CLOSEMX twins=- why=per push it runs only G3X, and its one cheap green twin G3 would mint a second gate-3 nonce in the same second as the real G3 run, blinding that run's OPEN-moved check
 # MUTANT-MATRIX m-pre3 decides=G3P,G3N twins=G3Q
 # MUTANT-MATRIX m-open12 decides=OPEN12 twins=MAP
 # MUTANT-MATRIX m-noxcap decides=MAPX twins=OPEN12
@@ -85,11 +96,17 @@
 # MUTANT-MATRIX m-slugok decides=CLOSEMX twins=- why=its cheap green twin CLOSEM seeds a newer storyless verdict that hides the slugged decoy, so it runs only the CLOSEMX start
 # MUTANT-MATRIX m-nosprint decides=CLOSEM,CLOSEMX twins=- why=its one cheap green twin CLOSEP needs a story-3-1 world the CLOSEM start does not leave, so a twin would add a second start for no new cell
 # MUTANT-MATRIX m-skipolder decides=CLOSEMX twins=- why=its cheap green twin CLOSEM seeds a newer storyless verdict carrying 26 PASS, which the mutant takes like the original, so it runs only the CLOSEMX start
-# MUTANT-MATRIX m-rs1 decides=PRIORM,PRIORD,PRIORX,FENCE,QAM,QAD twins=- why=per push it runs only the PRIORM start; its one green cell FENCEC is a refusal both programs give for the same cause, so a twin start would add a start and no discriminating cell
+# MUTANT-MATRIX m-rs1 decides=PRIORM,PRIORD,PRIORX,FENCE,QAM,QAD,RAM twins=- why=per push it runs only the PRIORM start; its one green cell FENCEC is a refusal both programs give for the same cause, so a twin start would add a start and no discriminating cell
 # MUTANT-MATRIX m-rsany decides=PRIORD,QAD twins=- why=per push it runs only the PRIORD start; its green twins PRIORM and QAM name one value, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
 # MUTANT-MATRIX m-nofence decides=FENCE,FENCEC twins=- why=per push it runs only the FENCE start; every other prior carries no fence, so no twin start can move
 # MUTANT-MATRIX m-raw decides=QAM,PRIORX twins=- why=per push it runs only the QAM start; every other pass-2 prior is plain, so raw and normalised values agree on each and no twin start can move
 # MUTANT-MATRIX m-nohex decides=PRIORX twins=- why=per push it runs only the PRIORX start; every other prior names hex values, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
+# MUTANT-MATRIX m-ra-nog1 decides=RA1,RA0,RAN,RAX,RAM twins=- why=per push it runs only the RA1 start; its one green cell RAA refuses before the candidate is read, so a twin start would only repeat the unmutated refusal
+# MUTANT-MATRIX m-ra-noverdict decides=RAN twins=- why=per push it runs only the RAN start; every other RA world reads an APPROVED latest file, where counting any verdict changes nothing, so a twin start would only repeat the unmutated run
+# MUTANT-MATRIX m-ra-lexsort decides=RAN twins=- why=per push it runs only the RAN start; every other RA world has passes below 10, where lexical and numeric order agree, so a twin start would only repeat the unmutated run
+# MUTANT-MATRIX m-ra-noanc decides=RAX twins=- why=per push it runs only the RAX start; every other RA world is ancestor-related, where the dropped check never fires, so a twin start would only repeat the unmutated run
+# MUTANT-MATRIX m-ra-noambig decides=RAA twins=- why=per push it runs only the RAA start; every other RA world carries one index form, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
+# MUTANT-MATRIX m-ra-dashnext decides=RA0,RAN twins=- why=per push it runs only the RA0 start; every other RA world writes no next: line, so a twin start would only repeat the unmutated run
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-transition/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -396,6 +413,87 @@ st_qd() { # gate 2 pass 2 over a merged QA prior naming WK, B, WK: QAD
   V_QAD=0
   [ "$RC" = 1 ] && grep -q 'REFUSED prior-validation: .* carries 2 distinct column-0 reviewed-sha values' "$WD/qd.err" && [ ! -e "$P/4-2-g2-p2.plan" ] && V_QAD=1
 }
+# --- Rule A's gate-1 candidate (BL-931) -------------------------------------------------------------------------
+# seed_ra : the rework worktree WRA off WK (the go-signal sha QA validated): G1, a commit adding a code line, then
+# RSHA, a commit adding only a docs .md (records, never code). So --gate1-rerun answers RERUN from WK and SKIP from
+# G1. XS is a commit off B on no branch: neither ancestor nor descendant of WK. The gate-2 indexes are dash form and
+# their gate-1 files dot form, as the consumer's are; each start owns one index, so no start reads another's files.
+# The lead checkout gets the two files the merge lifts its verdict reader from (it resolves them under its root).
+seed_ra() {
+  local i c g="" r=""
+  WRA="$WD/wra"; RV="$L/docs/reviews/s1"
+  gitw "$L" worktree add -q --detach "$WRA" "$WK" || return 1
+  printf 'def a():\n    return 2\n' > "$WRA/src/a.py" && gitw "$WRA" commit -qam rework || return 1
+  G1="$(gitw "$WRA" rev-parse HEAD)" || return 1
+  mkdir -p "$WRA/docs" && printf '# notes\n' > "$WRA/docs/notes.md" && gitw "$WRA" add docs/notes.md && gitw "$WRA" commit -qm notes || return 1
+  RSHA="$(gitw "$WRA" rev-parse HEAD)" || return 1
+  XS="$(gitw "$L" commit-tree "${B}^{tree}" -p "$B" -m side)" || return 1
+  for i in 5-1 6-1 7-1 8-1 9-1; do printf '# QA Validation: %s\n\nreviewed-sha: %s\n' "$i" "$WK" > "$RV/$i-qa-validation.md" || return 1; done
+  for c in "$_d/core/skills/ai-dlc/steps/gate-validation.md" "$_d/.claude/skills/ai-dlc/steps/gate-validation.md"; do [ -f "$c" ] && { g="$c"; break; }; done
+  for c in "$_d/core/team-roles/code-reviewer.md" "$_d/.claude/team-roles/code-reviewer.md"; do [ -f "$c" ] && { r="$c"; break; }; done
+  [ -n "$g" ] && [ -n "$r" ] && cp "$g" "$L/.claude/skills/ai-dlc/steps/gate-validation.md" && cp "$r" "$L/.claude/team-roles/code-reviewer.md" || return 1
+  # The shape the receipt checks first: the two bases separate, RERUN from WK and SKIP from G1.
+  bash "$SCR/partition-review-diff.sh" --gate1-rerun "$WRA" "$WK" "$RSHA" > "$WD/ra-go.out" 2>&1
+  bash "$SCR/partition-review-diff.sh" --gate1-rerun "$WRA" "$G1" "$RSHA" > "$WD/ra-g1.out" 2>&1
+  printf '%s\n' "$WK" > "$WD/.GO"; printf '%s\n' "$G1" > "$WD/.G1"; printf '%s\n' "$RSHA" > "$WD/.RSHA"
+}
+g1f() { # <file> <verdict> <reviewed sha> : a serial gate-1 review file
+  printf '# Code Review: %s\n\nreviewed-sha: %s\n\n## Verdict\n%s\n\n## Findings\n\nNone.\n' "${1##*/}" "$3" "$2" > "$1"
+}
+rarun() { # <cell> <gt> <tag> <idx> : one gate-2 pass-2 start over the rework worktree; its exit, plan and review listing kept
+  local wt0="$WT"
+  WT="$WRA"; gtrun "$1" "$2" "$3" 2 - "$4" 2 --pass 2; WT="$wt0"
+  printf '%s\n' "$RC" > "$WD/$3.rc"
+  rm -f "$WD/$3.plan"; [ ! -f "$P/$4-g2-p2.plan" ] || cp "$P/$4-g2-p2.plan" "$WD/$3.plan"
+  ( cd "$RV" && for f in "${4%%-*}"[.-]*; do [ -f "$f" ] && printf '%s\n' "$f"; done ) > "$WD/$3.ls"
+}
+st_ra1() { # p1 APPROVED at B, p2 APPROVED at G1, a p3 .md.draft NEEDS_REWORK beside them: RA1
+  g1f "$RV/5.1-code-review.md" APPROVED "$B"; g1f "$RV/5.1-code-review-p2.md" APPROVED "$G1"; g1f "$RV/5.1-code-review-p3.md.draft" NEEDS_REWORK "$G1"
+  rarun "$1" "$2" ra1 5-1
+  V_RA1=0
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$WD/ra1.plan" && grep -qxF "rule-a-base: gate1 $G1 $RV/5.1-code-review-p2.md" "$WD/ra1.plan" \
+    && grep -q '^gate-log: GATE1-SKIP' "$WD/ra1.plan" && V_RA1=1
+  V_OPEN=$OPEN_SAME
+}
+st_ra0() { # the RA1 world without the p2 file: RA0
+  rm -f "$RV/5.1-code-review-p2.md"
+  rarun "$1" "$2" ra0 5-1
+  V_RA0=0
+  [ "$RC" = 0 ] && grep -qx 'gate: rerun' "$WD/ra0.plan" && grep -qxF "rule-a-base: qa $WK $RV/5-1-qa-validation.md" "$WD/ra0.plan" \
+    && grep -q '^next: gate-transition.sh 5\.1 1 --pass 2 -C ' "$WD/ra0.plan" && V_RA0=1
+  V_OPEN=$OPEN_SAME
+}
+st_ran() { # p9 APPROVED and p10 NEEDS_REWORK, both at G1: the numerically latest decides, RAN
+  g1f "$RV/6.1-code-review-p9.md" APPROVED "$G1"; g1f "$RV/6.1-code-review-p10.md" NEEDS_REWORK "$G1"
+  rarun "$1" "$2" ran 6-1
+  V_RAN=0
+  [ "$RC" = 0 ] && grep -qx 'gate: rerun' "$WD/ran.plan" && grep -qxF "rule-a-base: qa $WK $RV/6-1-qa-validation.md" "$WD/ran.plan" \
+    && grep -qF "6.1-code-review-p10.md reads verdict=NEEDS_REWORK" "$WD/ran.plan" && grep -q '^next: gate-transition.sh 6\.1 1 --pass 11 ' "$WD/ran.plan" && V_RAN=1
+  V_OPEN=$OPEN_SAME
+}
+st_rax() { # the re-review APPROVED at XS, on a side branch neither ancestor nor descendant of the QA sha: RAX
+  g1f "$RV/7.1-code-review-p2.md" APPROVED "$XS"
+  rarun "$1" "$2" rax 7-1
+  V_RAX=0
+  [ "$RC" = 1 ] && grep -q 'REFUSED gate1-review: .* not ancestor-related; refusing to guess' "$WD/rax.err" && grep -q '  remedy: re-run gate 1 for story 7\.1 as a full-range re-review pass' "$WD/rax.err" \
+    && [ ! -e "$WD/rax.plan" ] && V_RAX=1
+  V_OPEN=$OPEN_SAME
+}
+st_raa() { # gate-1 files under both the dot and the dash form: RAA
+  g1f "$RV/8.1-code-review-p2.md" APPROVED "$G1"; g1f "$RV/8-1-code-review.md" APPROVED "$G1"
+  rarun "$1" "$2" raa 8-1
+  V_RAA=0
+  [ "$RC" = 1 ] && grep -q 'REFUSED gate1-review: gate-1 review files sit under 2 index forms (8-1, 8\.1) .* ambiguous' "$WD/raa.err" && [ ! -e "$WD/raa.plan" ] && V_RAA=1
+  V_OPEN=$OPEN_SAME
+}
+st_ram() { # the re-review a MERGED review (the real merge's output over the shards seed_priors built), every line naming G1: RAM
+  awk -v g="$G1" '/^reviewed-sha:/ { print "reviewed-sha: " g; next } { print }' "$RV/1-1-code-review.md" > "$RV/9.1-code-review-p2.md"
+  rarun "$1" "$2" ram 9-1
+  V_RAM=0
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$WD/ram.plan" && grep -qxF "rule-a-base: gate1 $G1 $RV/9.1-code-review-p2.md" "$WD/ram.plan" \
+    && grep -q '^gate-log: GATE1-SKIP' "$WD/ram.plan" && V_RAM=1
+  V_OPEN=$OPEN_SAME
+}
 st_g3x() { # gate 3, the H2 arm refusing: G3X
   gtrun "$1" "$2" g3x 2 validate-h2-attestation.sh 1-1 3 --transcript-dir "$WD/td"
   V_G3X=0
@@ -509,8 +607,20 @@ P_NOFENCE='$0 != "    f { next }" { print }'
 # m-nohex: the hex check made unable to fire; any single value answers.
 P_NOHEX='{ i = index($0, "if (s !~ /^[0-9a-f]+$/)"); if (i) $0 = substr($0, 1, i - 1) "if (s !~ /^/)" substr($0, i + 24) } { print }'
 P_RAW='index($0, "gsub(/[") { $0 = "      v = $2" } { print }'
-MUTS="m-early:P_EARLY:1 m-open12:P_OPEN12:2 m-noxcap:P_NOXCAP:2 m-norm:P_NORM:1 m-close26:P_CLOSE26:2 m-pdir:P_PDIR:2 m-pre3:P_PRE3:2 m-fixed3:P_FIXED3:2 m-nosprint:P_NOSPRINT:2 m-slugok:P_SLUGOK:2 m-skipolder:P_SKIPOLDER:1 m-rs1:P_RS1:2 m-rsany:P_RSANY:2 m-nofence:P_NOFENCE:1 m-raw:P_RAW:2 m-nohex:P_NOHEX:2"
-ARMS="MAP JOIN MAPX DAR RECP OPEN12 RERUN PRIORM PRIORD PRIORX FENCE FENCEC QAM QAD G3X G3Q G3 CLOSEX CLOSE G3P G3N CLOSEMX CLOSEM CLOSEP"
+# BL-931, Rule A's gate-1 candidate. m-ra-nog1: the candidate dropped, the base always the QA sha.
+P_RA_NOG1='$0 == "    g1_scan" { $0 = "    g1_scan; G1P=0" } { print }'
+# m-ra-noverdict: any verdict of the latest gate-1 review counts.
+P_RA_NOVERDICT='$0 == "      if [ \"$G1V\" != APPROVED ]; then" { $0 = "      if false; then" } { print }'
+# m-ra-noanc: the re-review's sha taken whenever it is not older than the QA sha, with no further ancestry check.
+P_RA_NOANC='$0 == "        elif [ \"$A_GOG1\" = yes ] && [ \"$A_G1SHA\" = yes ]; then" { $0 = "        elif true; then" } { print }'
+# m-ra-dashnext: the next: line names the gate-2 index, as before BL-931.
+P_RA_DASHNEXT='{ i = index($0, "\"gate-transition.sh $G1IDX 1 --pass $NEXTP"); if (i) $0 = substr($0, 1, i + 19) "$IDX" substr($0, i + 26) } { print }'
+# m-ra-noambig: the first index form carrying files wins; files under two forms never refuse.
+P_RA_NOAMBIG='index($0, "    [ \"$G1NF\" -le 1 ] || {") == 1 { $0 = "    :" } { print }'
+# m-ra-lexsort: the latest pass chosen by LEXICAL order of the pass number, so p9 outranks p10.
+P_RA_LEXSORT='$0 == "        if [ \"$n_\" -gt \"$fp_\" ]; then fp_=\"$n_\"; frel_=\"docs/reviews/s${SPRINT}/$b\"; fi" { $0 = "        if [[ \"$n_\" > \"$fp_\" ]]; then fp_=\"$n_\"; frel_=\"docs/reviews/s${SPRINT}/$b\"; fi" } { print }'
+MUTS="m-early:P_EARLY:1 m-open12:P_OPEN12:2 m-noxcap:P_NOXCAP:2 m-norm:P_NORM:1 m-close26:P_CLOSE26:2 m-pdir:P_PDIR:2 m-pre3:P_PRE3:2 m-fixed3:P_FIXED3:2 m-nosprint:P_NOSPRINT:2 m-slugok:P_SLUGOK:2 m-skipolder:P_SKIPOLDER:1 m-rs1:P_RS1:2 m-rsany:P_RSANY:2 m-nofence:P_NOFENCE:1 m-raw:P_RAW:2 m-nohex:P_NOHEX:2 m-ra-nog1:P_RA_NOG1:2 m-ra-noverdict:P_RA_NOVERDICT:2 m-ra-noanc:P_RA_NOANC:2 m-ra-dashnext:P_RA_DASHNEXT:2 m-ra-noambig:P_RA_NOAMBIG:2 m-ra-lexsort:P_RA_LEXSORT:2"
+ARMS="MAP JOIN MAPX DAR RECP OPEN12 RERUN PRIORM PRIORD PRIORX FENCE FENCEC QAM QAD RA1 RA0 RAN RAX RAA RAM G3X G3Q G3 CLOSEX CLOSE G3P G3N CLOSEMX CLOSEM CLOSEP"
 
 if [ "$MATRIX" = 1 ]; then
   rows=0
@@ -529,6 +639,8 @@ if [ "$MATRIX" = 1 ]; then
     st_g2k x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
     seed_priors || { echo "FIXTURE BROKEN: the matrix priors for $n did not build" >&2; exit 2; }
     for s in st_pm st_pd st_px st_fe st_fc st_qm st_qd; do "$s" x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0; done
+    seed_ra || { echo "FIXTURE BROKEN: the matrix Rule A world for $n did not build" >&2; exit 2; }
+    for s in st_ra1 st_ra0 st_ran st_rax st_raa st_ram; do "$s" x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0; done
     st_g3x x "$d/stub/core/scripts/gate-transition.sh"
     st_g3q x "$d/stub/core/scripts/gate-transition.sh"
     st_g3 x "$d/stub/core/scripts/gate-transition.sh"
@@ -715,6 +827,57 @@ if mut_tree m-raw "$P_RAW" 2; then
     mutant_killed "$([ "$B_QAM" = 1 ] && echo 1)" m-raw "mutant m-raw (raw field 2, no normalisation): the backticked line reads as a second value, killed by QAM" && KILLS=$((KILLS + 1))
   else bad "mutant m-raw SURVIVED or for another reason: QAM=$V_QAM rc=$RC"; fi
 fi
+# --- Rule A's gate-1 candidate (BL-931): six starts of the real subject, then BL-931's receipt over their outputs ----
+seed_ra || { echo "FIXTURE BROKEN: the Rule A rework world did not build (the worktree off WK, its two commits, or the lifted role files)" >&2; exit 2; }
+for s in ra1:RA1 ra0:RA0 ran:RAN rax:RAX raa:RAA ram:RAM; do
+  t="${s%%:*}"; a="${s#*:}"
+  "st_$t" "$t" "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+  eval "v=\$V_$a"
+  if [ "$v" = 1 ]; then
+    # Each arm's base flag, set only in the passing branch of its unmutated start.
+    case "$a" in RA1) B_RA1=1 ;; RA0) B_RA0=1 ;; RAN) B_RAN=1 ;; RAX) B_RAX=1 ;; RAA) B_RAA=1 ;; esac
+    ok "$a gate 2 pass 2 over the Rule A world: $(grep -E '^(gate|rule-a-base):' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ')$(grep -m1 'REFUSED' "$WD/$t.err" | cut -c1-120)"
+  else bad "$a rc=$RC: $(grep -E '^(gate|rule-a-base|next):' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ') $(head -3 "$WD/$t.err" | tr '\n' ' ' | cut -c1-400)"; fi
+done
+bash "$HERE/receipt-bl931.sh" "$WD" "$RV" > "$WD/r931.out" 2>&1; r931=$?
+case "$r931" in
+  0) sed -n '1p' "$WD/r931.out"; ok "BL-931 receipt: an APPROVED latest gate-1 re-review of the rework is Rule A's base, and the next: line names the gate-1 index form" ;;
+  9) echo "FIXTURE BROKEN: receipt-bl931.sh refused to measure: $(head -1 "$WD/r931.out")" >&2; exit 2 ;;
+  *) bad "BL-931 receipt exited $r931: $(tr '\n' ' ' < "$WD/r931.out" | cut -c1-300)" ;;
+esac
+# ra_mut <mutant> <prog var> <start> <arm> <expect> <label>: one BL-931 mutant in its deciding start. <expect> is the
+# answer the mutant gives there: rerun (a gate: rerun plan), plan (any plan at exit 0), dashnext (a next: naming 5-1),
+# skip (a gate: 2 plan).
+ra_mut() {
+  local n="$1" pv="$2" t="$3" a="$4" e="$5" prog hit=0
+  eval "prog=\"\$$pv\""
+  mut_tree "$n" "$prog" 2 || return 0
+  [ "$t" != ra0 ] || rm -f "$RV/5.1-code-review-p2.md"
+  "st_$t" "$n" "$d/core/scripts/gate-transition.sh"
+  case "$e" in
+    rerun) [ "$(cat "$WD/$t.rc")" = 0 ] && grep -qx 'gate: rerun' "$WD/$t.plan" 2> /dev/null && hit=1 ;;
+    skip) [ "$(cat "$WD/$t.rc")" = 0 ] && grep -qx 'gate: 2' "$WD/$t.plan" 2> /dev/null && hit=1 ;;
+    plan) [ "$(cat "$WD/$t.rc")" = 0 ] && [ -f "$WD/$t.plan" ] && hit=1 ;;
+    dashnext) grep -q '^next: gate-transition.sh 5-1 1 --pass 2 ' "$WD/$t.plan" 2> /dev/null && hit=1 ;;
+  esac
+  eval "v=\$V_$a"
+  [ "$v" = 0 ] && [ "$hit" = 1 ] && return 0
+  bad "mutant $n SURVIVED or for another reason: $a=$v rc=$(cat "$WD/$t.rc") $(grep -E '^(gate|rule-a-base|next):' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ')"
+  return 1
+}
+# ra_mut returns 0 only for a kill; each kill is scored at its own literal call, against its arm's own base flag.
+ra_mut m-ra-nog1 P_RA_NOG1 ra1 RA1 rerun \
+  && mutant_killed "${B_RA1:-0}" m-ra-nog1 "mutant m-ra-nog1 (the gate-1 candidate dropped, the base always the QA sha): killed by RA1" && KILLS=$((KILLS + 1))
+ra_mut m-ra-noverdict P_RA_NOVERDICT ran RAN skip \
+  && mutant_killed "${B_RAN:-0}" m-ra-noverdict "mutant m-ra-noverdict (any verdict of the latest gate-1 review counts): killed by RAN" && KILLS=$((KILLS + 1))
+ra_mut m-ra-lexsort P_RA_LEXSORT ran RAN skip \
+  && mutant_killed "${B_RAN:-0}" m-ra-lexsort "mutant m-ra-lexsort (the latest pass chosen lexically, so p9 outranks p10): killed by RAN" && KILLS=$((KILLS + 1))
+ra_mut m-ra-noanc P_RA_NOANC rax RAX plan \
+  && mutant_killed "${B_RAX:-0}" m-ra-noanc "mutant m-ra-noanc (the re-review sha taken with no ancestry check): killed by RAX" && KILLS=$((KILLS + 1))
+ra_mut m-ra-noambig P_RA_NOAMBIG raa RAA plan \
+  && mutant_killed "${B_RAA:-0}" m-ra-noambig "mutant m-ra-noambig (the first index form wins, files under two forms never refuse): killed by RAA" && KILLS=$((KILLS + 1))
+ra_mut m-ra-dashnext P_RA_DASHNEXT ra0 RA0 dashnext \
+  && mutant_killed "${B_RA0:-0}" m-ra-dashnext "mutant m-ra-dashnext (the next: line names the gate-2 index): killed by RA0" && KILLS=$((KILLS + 1))
 [ "$O12" = 1 ] && ok "OPEN12 the live OPEN is byte-identical across every gate-1 and gate-2 run" || bad "OPEN12 a gate-1 or gate-2 run moved the live OPEN"
 
 st_g3x g3x "$GT3"
@@ -807,7 +970,7 @@ if mut_tree m-nosprint "$P_NOSPRINT" 2; then
   else bad "mutant m-nosprint SURVIVED or for another reason: CLOSEM=$V_CLOSEM rc=$RC"; fi
 fi
 # Every mutant was built, applied and killed: KILLS counts mutant_killed calls that returned 0.
-[ "$KILLS" = 16 ] && ok "MK all 16 mutants applied and scored" || bad "MK $KILLS of 16 mutants scored"
+[ "$KILLS" = 22 ] && ok "MK all 22 mutants applied and scored" || bad "MK $KILLS of 22 mutants scored"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-transition: PASS"; exit 0; fi
