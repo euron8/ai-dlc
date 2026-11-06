@@ -1,3 +1,9 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-131 *
-21 core/scripts/validate-adversarial-convergence.sh
+# Re-measured for BL-923 (131 -> 248, +117, 21 -> 27), the rise of 117 tallied by path from the counted start log, then +2 -> 250 from the --pair-sep calls:
+# seed.sh asks the producer for its pair separator once per K3 world, one --pair-sep call per K3 world (+2, counted on top of the 248); the six bl923 cells start the real validator once each (+6); seed.sh's K3 worlds start the real
+# partition-subject.sh twice and partition-document.sh --cross-groups twice; the real validator's K2/K3/L arms
+# start partition-document.sh, merge-adversarial-shards.sh and their staged K3 copies (partition-document 40,
+# partition-subject 10, under the validator's own tmp); and the four BL-923 whole-directory copies (control, K2,
+# K3, L) start 24 validator, 17 partition-document and 4 merge copies.
+250 *
+27 core/scripts/validate-adversarial-convergence.sh

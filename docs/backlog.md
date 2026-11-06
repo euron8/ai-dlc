@@ -1954,40 +1954,6 @@ Remainder, why the entry stays PARTIAL: Fix item 1 is not done on `origin/main`.
 
 verify: manual
 
-## BL-922 — h2-attest-scripts-dir's consumer-layout arms run the distribution layout
-
-**DEFECT.** Found by the b250 triggers-cluster tip adversary (BL-920 fast-track 3); it predates that change.
-
-`core/fixtures/h2-attest-scripts-dir/run.sh:146` says `--digest` "resolves tests/fixtures/ in a consumer", and the `--attest` arm at :155 is this fixture's consumer-layout proof. Neither reaches a `tests/fixtures/` lookup. `validate-h2-attestation.sh` sets `AI_DLC_ROOT` by walking up from its own directory (:60-74), and the SUT is always `$ROOT/core/scripts/validate-h2-attestation.sh` (run.sh:73); the `cd "$WORK"` at :143 and :155 does not move the root. The hermetic sandbox carries `.git` from `git init` at `core/scripts/hermetic-run.sh:523`, so the root is the sandbox in the distribution layout. Its fixture search (`validate-h2-attestation.sh:106-110`) finds `core/fixtures`, never `$WORK/tests/fixtures`. The consumer branch the arms claim to cover is untested, so a regression there is invisible.
-
-Fix: run the `--digest` and `--attest` arms against a mktemp consumer tree whose root resolves to the consumer layout (`tests/fixtures/` present, no `core/fixtures/`), assert the resolved fixture path, and keep the :146 message honest about which directory was resolved.
-
-Close condition: an arm that fails when the validator resolves `core/fixtures` for a consumer-layout root, with its mutant that forces the `core/fixtures` candidate first.
-
-In 0.1018.0, arm A (`core/fixtures/h2-attest-scripts-dir/run.sh:161-178`) read green with the copied `lib/` removed, by the same walk-up.
-
-Rules: BL-868.
-
-Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
-
-verify: manual
-
-## BL-923 — adversarial-citation never reaches the convergence validator's K2, K3 and L arms
-
-**DEFECT.** Found by the b250 triggers-cluster tip adversary (BL-920 main release); it predates that change.
-
-`core/fixtures/adversarial-citation` seeds every terminal pass with `artifact: coe.md` (`seed.sh:26`, `seed.sh:44`) and never creates `coe.md`, so `k2_resolve_file` in `core/scripts/validate-adversarial-convergence.sh` (the K2 arm, :2385-2398) resolves no file and the arm is skipped. K3 and L need `shard_tool_use_ids` and a `sprint-status.yaml`, which no seed writes. The fixture's floor mutants therefore never exercise the K2 sections partition, the K3 subject-manifest exception or arm L, and the decl's claim that the mutants read only the two validators holds only because those arms are unreached. If a later seed creates `coe.md`, K2 prints `PENDING (K2 -- SECTIONS)` for the absent `partition-document.sh` (:2394), and a PENDING does not fail the run.
-
-Fix: seed `coe.md` and the shard ids and sprint-status the K2, K3 and L arms need, in one world each, declare `partition-document.sh`, `partition-subject.sh` and `merge-adversarial-shards.sh` for that world, and assert each arm's verdict.
-
-Close condition: a mutant for each of K2, K3 and L that this fixture kills, with each arm's verdict asserted on a seeded world that reaches it. The fix wires a `receipt-bl923` arm into `core/fixtures/adversarial-citation/run.sh` that drives the shipped validator over the three seeded worlds and prints `receipt-bl923: PASS` only when K2, K3 and L each print their own verdict; the `verify:` line below reads that token from the fixture's output, and it does not print until the fix lands.
-
-Rules: BL-868.
-
-Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
-
-verify: sh o="$(bash core/fixtures/adversarial-citation/run.sh 2>&1)"; grep -qF 'receipt-bl923: PASS' <<<"$o"
-
 ## BL-927 — the s317–s320 extractor charges a subagent's own spawns to `pre-step`, keeps a closed gate open under the next step's label, and reads a corpus that Claude Code prunes at 30 days
 
 **DEFECT (efficiency).** `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` is the extractor behind every efficiency `Outcome measured:` line. At origin/main f9c1196c0 its blob is identical to `d0b523eaf:` (`git diff --quiet f9c1196c0 d0b523eaf -- docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` exits 0, and a control pair of differing blobs, `git diff --quiet f9c1196c0 0f5313376 -- docs/backlog.md`, exits 1). Graph s321 was read only, with the window running from the s320/s321 edge 2026-10-30T00:10:03Z to EXTRACT_WIN_END=2026-11-06T03:23:00Z, and three defects were found. None of them is BL-819 item 1's subject. BL-819 item 1 attributes the lead's time inside a step, which assumes the step boundaries and the subagent joins are already right. Defects a1 and a2 break that assumption, so this entry is a precondition of BL-819 item 1, not a part of it.
@@ -2012,3 +1978,4 @@ Expected movement: on a re-extraction of s321, the s321 `pre-step` subagent row 
 Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). This entry cannot apply that ruling while a step's cost is charged to another step. Related: BL-819 (item 1 depends on this entry), BL-813 (archived; a2 defeats its rule), BL-817 (outcome lines read this extractor).
 
 verify: manual
+

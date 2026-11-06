@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1023.0] - 2026-11-06
+
+### BL-922 — h2-attest-scripts-dir resolves the consumer fixture set
+
+The consumer-layout arms ran the distribution layout. Every drive of `validate-h2-attestation.sh` now runs with `AI_DLC_PROJECT_ROOT` set to the synthetic consumer, so the validator's fixture search reads `tests/fixtures` rather than `core/fixtures`. A new presence arm asserts the default `--digest` equals the consumer digest and differs from the distribution digest, after checking the two explicit digests differ. A candidate-order swap mutant, run against a root that also holds `core/fixtures`, is killed; with the shared-resolution export reverted the arm FAILs. `invocations.decl` re-measured: 303 -> 307, validator starts 91 -> 93.
+
+### BL-923 — adversarial-citation reaches the K2, K3 and L arms
+
+The fixture never reached K2, K3 or L: its passes named `artifact: coe.md`, which nothing created, and no seed wrote shard ids or a sprint-status. `seed.sh` now builds six stamped git repositories, an accept and a refuse world for each arm, and `run.sh` drives each with `--arms`. Accept cells assert rc 0, the converged line and no line from their arm; refuse cells assert their arm's FAIL line. Three whole-directory mutants each disable one arm's decision and are killed by their own refuse cell alone; an unmutated control scores all six cells first. `receipt-bl923: PASS` prints only when all six cells hold and all three mutants are killed. `tools.decl` gains `ln`, `mv` and `shasum`; the validator is not edited. The fixture now scrubs inherited `AI_DLC_*` tunables, so the worlds build under any caller environment, and the K3 seed takes its separator from `merge-adversarial-shards.sh --pair-sep`. `invocations.decl` re-measured from two agreeing counted runs: 131 -> 250, validator starts 21 -> 27. Fork TOTAL 2924 at base and tip; `FORK_BUDGET` unchanged.
+
+This is the first release to ship after 0.1022.0's H7, and H7 failed it on rebase: the six BL-923 cell labels were built at runtime from `BL_WORLDS`, so the fifteen `twins=` tokens of the three new MUTANT-MATRIX rows named no label H7 could read. The labels are now literal, with `--matrix` output byte-identical before and after and each mutant still killed by its own cell. Every future fixture whose cell labels are built at runtime pays this cost: write the labels literally, or list a genuinely built one in `scripts/twin-built-allowlist.txt`.
+
+### BL-928 — the allowlist's stored start count is joined to nothing
+
+Each row of `scripts/fixture-inprocess-allowlist.txt` stored `declares N start(s) against M cell(s)` in field 2, and no check compared that N with the fixture's `invocations.decl`. Nine rows had drifted, seven below their decl and two above. `derive_rows` in `scripts/validate-fixture-inprocess.sh` now writes count-free reasons (`runs outside a declared cell`); the live count stays in arm R's diagnostic, computed fresh on every run. Nothing reads field 2, so no guard arm was added. The allowlist was re-derived and then regenerated, with field 1 byte-equal. `receipt-bl928: PASS` comes from the DV field-2 assertion in `core/fixtures/fixture-inprocess/run.sh`. `scripts/validate-fixture-invocations.sh` is unchanged.
+
 ## [0.1022.0] - 2026-11-06
 
 Batch b251, fixture-hygiene cluster. BL-921 closes and BL-868 stays PARTIAL. Closes no PC- id. NET: filed 0, closed 1 (BL-921); closed minus filed = +1; live backlog −1.

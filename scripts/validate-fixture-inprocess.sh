@@ -144,7 +144,7 @@ verdict() {
 derive_rows() { # <out prefix>: the allowlist rows, sorted
   awk -F'\t' 'FILENAME == ARGV[1] { if ($1 == "X") X[$2] = $3; next }
     $1 == "B2" && $2 == "GAP" { G[$3] = G[$3] " " $4 }
-    END { for (f in X) print f "\t" X[f]; for (f in G) if (!(f in X)) print f "\tB2 gap(s):" G[f] }' "$1.join" <(tr ' ' '\t' < "$1.census") | LC_ALL=C sort
+    END { for (f in X) { r = X[f]; gsub(/ declares [0-9]+ start\(s\) against [0-9]+ cell\(s\)/, " runs outside a declared cell", r); print f "\t" r }; for (f in G) if (!(f in X)) print f "\tB2 gap(s):" G[f] }' "$1.join" <(tr ' ' '\t' < "$1.census") | LC_ALL=C sort
 }
 
 # --- the self-probe, before the corpus, in mktemp, both directions ------------------------------------------------
@@ -197,7 +197,8 @@ if judge_tree "$P" "$WORK/p"; then
   grep -qxF 'EXEMPT (undeclarable) und' "$WORK/p.census" && grep -qxF 'O	und	undeclarable' "$WORK/p.join" \
     && spl ok "EXEMPT (undeclarable) printed from the B2 census, and the join holds it out of population" || spl FAIL "the undeclarable probe fixture's EXEMPT line"
   derive_rows "$WORK/p" > "$WORK/p.d1"; derive_rows "$WORK/p" > "$WORK/p.d2"
-  if cmp -s "$WORK/p.d1" "$WORK/p.d2" && [ "$(cut -f1 "$WORK/p.d1" | tr '\n' ' ')" = "adata adup aextra aheld anew aunq awhy " ]; then
+  if cmp -s "$WORK/p.d1" "$WORK/p.d2" && [ "$(cut -f1 "$WORK/p.d1" | tr '\n' ' ')" = "adata adup aextra aheld anew aunq awhy " ] \
+      && [ "$(awk -F'\t' '$1 == "anew" { print $2 }' "$WORK/p.d1")" = "core/scripts/g.sh runs outside a declared cell" ]; then
     spl ok "--derive lists exactly the refused set (aheld included, its row derived rather than typed), twice byte-identical"
   else spl FAIL "--derive listed [$(cut -f1 "$WORK/p.d1" | tr '\n' ' ')]"; fi
   printf '# probe\naheld\tseeded\naheld\tagain\nazap\tgone\naok\t \n' > "$WORK/p-allow2.txt"
@@ -258,7 +259,9 @@ if [ "$MODE" = derive ]; then
   { printf '%s\n' "# $ALLOW_REL -- the DERIVED, DOWN-ONLY allowlist of scripts/validate-fixture-inprocess.sh (BL-879): the fixtures" \
       "# that still run a subject as a separate program outside a declared cell. Rows <fixture><TAB><reason>, LC_ALL=C sorted." \
       "# Never typed: regenerate with \`bash scripts/validate-fixture-inprocess.sh --derive\`. A row is never added (M4); a" \
-      "# conversion deletes its fixture's row in the same change, and the invocation judge FAILs a listed fixture that passes."
+      "# conversion deletes its fixture's row in the same change, and the invocation judge FAILs a listed fixture that passes." \
+      "# The reason names the subjects and carries NO count: nothing reads field 2, so a name that goes stale is accepted, and the" \
+      "# live count is the validator's R diagnostic, computed fresh on every run."
     derive_rows "$WORK/c"; } > "$ROOT/$ALLOW_REL.tmp.$$" && mv "$ROOT/$ALLOW_REL.tmp.$$" "$ROOT/$ALLOW_REL" \
     || { echo "validate-fixture-inprocess: could not write $ROOT/$ALLOW_REL" >&2; exit 2; }
   echo "validate-fixture-inprocess: --derive wrote $(awk -F'\t' '$0 !~ /^[[:space:]]*(#|$)/' "$ROOT/$ALLOW_REL" | awk 'END { print NR }') row(s) to $ALLOW_REL"

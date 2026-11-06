@@ -39948,3 +39948,71 @@ Provenance: batch b250 close; lead ai-dlc-be.
 
 verify: sh o="$(bash core/fixtures/fixture-hygiene/run.sh 2>&1)"; grep -qF 'receipt-bl921: PASS' <<<"$o"
 
+## BL-922 — h2-attest-scripts-dir's consumer-layout arms run the distribution layout
+
+**LANDED (v0.1023.0).** The consumer-layout arm and its candidate-order swap mutant now prove the validator resolves `$WORK/tests/fixtures` for a consumer root, and the arm FAILs with the shared-resolution export reverted.
+
+**DEFECT.** Found by the b250 triggers-cluster tip adversary (BL-920 fast-track 3); it predates that change.
+
+`core/fixtures/h2-attest-scripts-dir/run.sh:146` says `--digest` "resolves tests/fixtures/ in a consumer", and the `--attest` arm at :155 is this fixture's consumer-layout proof. Neither reaches a `tests/fixtures/` lookup. `validate-h2-attestation.sh` sets `AI_DLC_ROOT` by walking up from its own directory (:60-74), and the SUT is always `$ROOT/core/scripts/validate-h2-attestation.sh` (run.sh:73); the `cd "$WORK"` at :143 and :155 does not move the root. The hermetic sandbox carries `.git` from `git init` at `core/scripts/hermetic-run.sh:523`, so the root is the sandbox in the distribution layout. Its fixture search (`validate-h2-attestation.sh:106-110`) finds `core/fixtures`, never `$WORK/tests/fixtures`. The consumer branch the arms claim to cover is untested, so a regression there is invisible.
+
+Fix: run the `--digest` and `--attest` arms against a mktemp consumer tree whose root resolves to the consumer layout (`tests/fixtures/` present, no `core/fixtures/`), assert the resolved fixture path, and keep the :146 message honest about which directory was resolved.
+
+Close condition: an arm that fails when the validator resolves `core/fixtures` for a consumer-layout root, with its mutant that forces the `core/fixtures` candidate first.
+
+In 0.1018.0, arm A (`core/fixtures/h2-attest-scripts-dir/run.sh:161-178`) read green with the copied `lib/` removed, by the same walk-up.
+
+Rules: BL-868.
+
+Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
+
+verify: manual
+
+## BL-923 — adversarial-citation never reaches the convergence validator's K2, K3 and L arms
+
+**LANDED (v0.1023.0).** Three whole-directory mutants for K2, K3 and L are each killed by their own refuse cell across six seeded worlds, and the fixture prints `receipt-bl923: PASS`.
+
+**DEFECT.** Found by the b250 triggers-cluster tip adversary (BL-920 main release); it predates that change.
+
+`core/fixtures/adversarial-citation` seeds every terminal pass with `artifact: coe.md` (`seed.sh:26`, `seed.sh:44`) and never creates `coe.md`, so `k2_resolve_file` in `core/scripts/validate-adversarial-convergence.sh` (the K2 arm, :2385-2398) resolves no file and the arm is skipped. K3 and L need `shard_tool_use_ids` and a `sprint-status.yaml`, which no seed writes. The fixture's floor mutants therefore never exercise the K2 sections partition, the K3 subject-manifest exception or arm L, and the decl's claim that the mutants read only the two validators holds only because those arms are unreached. If a later seed creates `coe.md`, K2 prints `PENDING (K2 -- SECTIONS)` for the absent `partition-document.sh` (:2394), and a PENDING does not fail the run.
+
+Fix: seed `coe.md` and the shard ids and sprint-status the K2, K3 and L arms need, in one world each, declare `partition-document.sh`, `partition-subject.sh` and `merge-adversarial-shards.sh` for that world, and assert each arm's verdict.
+
+Close condition: a mutant for each of K2, K3 and L that this fixture kills, with each arm's verdict asserted on a seeded world that reaches it. The fix wires a `receipt-bl923` arm into `core/fixtures/adversarial-citation/run.sh` that drives the shipped validator over the three seeded worlds and prints `receipt-bl923: PASS` only when K2, K3 and L each print their own verdict; the `verify:` line below reads that token from the fixture's output, and it does not print until the fix lands.
+
+Rules: BL-868.
+
+Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
+
+verify: sh o="$(bash core/fixtures/adversarial-citation/run.sh 2>&1)"; grep -qF 'receipt-bl923: PASS' <<<"$o"
+
+## BL-928 — the stored start count in scripts/fixture-inprocess-allowlist.txt is joined to invocations.decl by nothing
+
+**LANDED (v0.1023.0).** Derived reasons in the fixture-inprocess allowlist are count-free, so a stored start count can no longer drift from `invocations.decl`, and `receipt-bl928: PASS` holds on the DV field-2 assertion.
+
+**DEFECT.** Found while the b251 fixture-seeds cluster re-derived the allowlist after its decl counts moved.
+
+Each row of `scripts/fixture-inprocess-allowlist.txt` stored `declares N start(s) against M cell(s)` in field 2, copied from the fixture's `invocations.decl` when `--derive` last ran, and no check joins that N to the decl afterwards. `scripts/validate-fixture-inprocess.sh` arm A (`verdict()`, :133-136) checks only a duplicate, a missing reason and a name that is no fixture. Arm R (:137-138) tests only `f in L`, so it reads field 1. M4 is down-only by field 1. `C stale` in `scripts/validate-fixture-invocations.sh` (:111, :673) fires only once a listed fixture passes C1-C5, so a fixture that stays listed never reaches it. Nothing compares a row's count with `invocations.decl`.
+
+Measured on origin/main e22a2994e (`bash scripts/validate-fixture-inprocess.sh --derive` in a clean worktree, stored count compared with the derived one, row count 176 before and after, field 1 byte-equal): nine rows had drifted. Seven were BELOW their decl (backlog-ledger 42 and 141 against 63 and 190, foreground-budget-deny 116 against 161, h2-attest-scripts-dir, handoff-resume-guard 34 against 37, readset-skip 92 against 94, remediator-shard-join 44 against 73, snapshot-update-stamps 7 against 15) and two ABOVE (gate-remediation-deny 186 against 185, handoff-record-carries-return 5 against 3). The h2-attest-scripts-dir row stored 91 where the decl read 93 at 19239ff87; the other eight are the ones the single `--derive` rewrote at e22a2994e.
+
+Control, from a mktemp world declaring 5 starts, driving the shipped `verdict()`:
+
+| Row | Result |
+|---|---|
+| no row | FAIL arm R, rc 1 |
+| row at 5 | OK |
+| row at 99 | OK, rc 0 |
+| row at 1 | OK, rc 0 |
+
+A row at 99 and a row at 1 are accepted exactly like the true one, so the stored count constrains nothing.
+
+Fix as built: nothing reads field 2. Every reader keys on field 1: `.githooks/pre-push:2046` and `:3499`, `core/git-hooks/pre-push:1426`, `fxc_inproc_listed` (`scripts/validate-fixture-invocations.sh:548-551`) and M4. So `derive_rows` (`scripts/validate-fixture-inprocess.sh:144`) writes a count-free reason, `runs outside a declared cell`, and the live count stays in arm R's diagnostic, computed fresh on every run. The allowlist is regenerated with `--derive` and field 1 is byte-equal. No guard arm is added, because `--derive` is the only writer of the file and a guard over a count that is no longer stored would have no subject.
+
+Close condition: `core/fixtures/fixture-inprocess/run.sh` prints `receipt-bl928: PASS` only when DV's field-2 byte assertion holds (DV derives twice on a seeded world, requires the two files byte-identical, and requires fnew's field 2 to equal `core/scripts/g.sh runs outside a declared cell`). It prints `receipt-bl928: FAIL` against the old `derive_rows`.
+
+Rules: BL-868.
+
+Provenance: batch b251, fixture-seeds cluster; lead ai-dlc-e6, owner ai-dlc-8f.
+
+verify: sh o="$(bash core/fixtures/fixture-inprocess/run.sh 2>&1)"; grep -qF 'receipt-bl928: PASS' <<<"$o"
