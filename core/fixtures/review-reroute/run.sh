@@ -48,6 +48,9 @@
 #       record-only, canonical run, no replay and no handover-run: line) SERIAL-OK; the same root with
 #       no template line checks nothing (`Class: FOO` SERIAL-OK)
 #   S2  implementation.md names the gate-2 route invocation line, exactly; refused on a copy without it
+#   RV  merge-review-shards.sh --read-verdict (BL-931): a serial APPROVED and a merged NEEDS_REWORK (shard table,
+#       three shard sections with their own reviewed-sha and advisor lines) read VERDICT; two values, no match and
+#       PASS under --gate code-review REFUSED; control: --check-serial refuses the merged file on its advisor lines
 # BL-809 ITEM 2, THE NARROWED RE-REVIEW (--narrow, --map --narrow-from). The MIXED delta edits engine.py
 # and tests/test_engine.py; world.sh's nprior-* priors carry `Files:` as code-reviewer.md asks.
 #   N1  CODE `Files: rebalancer/engine.py` + EVIDENCE -> NARROW engine.py, RESIDUE the test (exact)
@@ -82,6 +85,7 @@
 #   m-nfdrop            the merge re-derives a narrowed manifest without --narrow-from -> NM
 #   m-nobound           the narrowed map's part bound removed -> NP
 #   m-narrowfirst       --narrow answers in place of --route -> R2 Q1 (also trips the other --route arms)
+#   m-rv-noset          --read-verdict accepts a value outside the lifted set -> RV (its PASS cell)
 # Each mutant co-trips no arm outside its decides list, measured at authoring (m-classonly's two deciding
 # arms R1 and R6 are both deltas that only the guard sends full). The matrix is re-measured whenever an arm
 # or mutant is added or changed, by the REMEASURE command below.
@@ -102,6 +106,7 @@
 # MUTANT-MATRIX m-nohrun decides=Q5 twins=Q5n
 # MUTANT-MATRIX m-qagate decides=QM twins=Q1
 # MUTANT-MATRIX m-qmd-none decides=QM twins=Q1
+# MUTANT-MATRIX m-rv-noset decides=RV twins=C3
 # MUTANT-MATRIX-DYNAMIC score why=the name is the fifth argument of each literal score call and reaches mutant_killed as "$name", so each m- name above is one literal call site
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/review-reroute/run.sh --matrix
 # The unmutated copy must pass every arm first (CTL), so a copy that cannot run is FIXTURE BROKEN.
@@ -236,6 +241,30 @@ arm_QM() {
   qserial "$1" "$QR/none" "$W/qserial-foo.md"
   [ "$RC" -eq 0 ] && grep -q '^SERIAL-OK: .* verdict=PASS' <<<"$OUT"
 }
+# RV (BL-931): merge-review-shards.sh --read-verdict, the lifted Check 1 reader and verdict set over ONE review file,
+# serial or merged, and no seat rule. A serial APPROVED and a merged NEEDS_REWORK (a shard table, two shard sections,
+# each with its own reviewed-sha and advisor line) read; two values, no match, and PASS under --gate code-review
+# (outside code-reviewer.md's set) each REFUSED. The control: --check-serial refuses the same merged file on its
+# advisor lines, so RV's merged cell is not --check-serial's policy.
+rv_files() {
+  printf '# Code Review: 1\n\nreviewed-sha: %s\n\n## Verdict\nAPPROVED\n\n## Findings\n\nNone.\n' "$B0" > "$W/rv-serial.md"
+  { printf '# Code Review: 1 (merged from 3 shards)\n\n## Summary\n\nThree shards reviewed.\n\n## Verdict\nNEEDS_REWORK\n\n'
+    printf '| Shard | Verdict |\n|---|---|\n| 1 | NEEDS_REWORK |\n| 2 | APPROVED |\n| cross | APPROVED |\n'
+    for k in 1 2 cross; do printf '\n## Shard: %s\n\nreviewed-sha: %s\nshard-verdict: APPROVED\nadvisor: called\n\n## Findings\n\nNone.\n' "$k" "$B0"; done
+  } > "$W/rv-merged.md"
+  printf '# Code Review: 1\n\n## Verdict\nAPPROVED\n\nVerdict: NEEDS_REWORK\n' > "$W/rv-two.md"
+  printf '# Code Review: 1\n\n## Result\nAPPROVED\n' > "$W/rv-none.md"
+  printf '# Code Review: 1\n\n## Verdict\nPASS\n' > "$W/rv-pass.md"
+}
+rv() { OUT="$(AI_DLC_PROJECT_ROOT="$ROOT" bash "$1/merge-review-shards.sh" --read-verdict "$2" --gate code-review 2>&1)"; RC=$?; }
+arm_RV() {
+  rv "$1" "$W/rv-serial.md"; [ "$RC" -eq 0 ] && [ "$OUT" = "VERDICT: $W/rv-serial.md verdict=APPROVED" ] || return 1
+  rv "$1" "$W/rv-merged.md"; [ "$RC" -eq 0 ] && [ "$OUT" = "VERDICT: $W/rv-merged.md verdict=NEEDS_REWORK" ] || return 1
+  rv "$1" "$W/rv-two.md"; [ "$RC" -eq 2 ] && grep -q '^REFUSED: .* reading 2 different values (APPROVED NEEDS_REWORK)' <<<"$OUT" || return 1
+  rv "$1" "$W/rv-none.md"; [ "$RC" -eq 2 ] && grep -q "^REFUSED: .* matches Check 1's verdict pattern 0 time(s)" <<<"$OUT" || return 1
+  rv "$1" "$W/rv-pass.md"; [ "$RC" -eq 2 ] && grep -q "^REFUSED: Check 1 reads 'PASS' from .*, which is not one of APPROVED NEEDS_REWORK BLOCKED" <<<"$OUT" || return 1
+  serial "$1" "$W/rv-merged.md"; [ "$RC" -eq 2 ] && grep -q "^REFUSED: .* carries 3 'advisor:' lines" <<<"$OUT"
+}
 # BL-809 item 2: --narrow over the MIXED delta (engine.py, which nprior-a's CODE finding names, and
 # tests/test_engine.py, which nothing names), and the merge of a --narrow-from manifest.
 narrow() { OUT="$(bash "$1/partition-review-diff.sh" --narrow "$R" "$2" "$(rr_ref "$W" MIXED)" --exclude-captures "$W/captures" 2>&1)"; RC=$?; }
@@ -289,7 +318,8 @@ arm_NP() {
   np_map "$1" THREE nprior-two.md "$d/b" --max-parts 2; np_refused "$d/b" 3 2 || return 1
   np_map "$1" MIXED_APP nprior-app.md "$d/c"; [ "$RC" -eq 0 ] && [ "$(grep -c . "$WORK/np.out")" = 2 ] && [ -f "$d/c/.manifest" ]
 }
-ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7 Q1 Q2 Q3 Q4 Q4n Q5 Q5n QM N1 N2 N3 N4 CV NM NP"
+ARMS="C1a C1b C2 C3 CL R1 R2 R3 R4 R5 R6 A1 A2 A3 A4 A5 A6 A7 Q1 Q2 Q3 Q4 Q4n Q5 Q5n QM N1 N2 N3 N4 CV NM NP RV"
+rv_files
 # The arms that reach each mutated script. A mutant sweeps only these: every other arm never invokes the
 # mutated file, so it cannot move. partition-review-diff.sh is reached by --route, --gate1-rerun, --narrow
 # and --map --narrow-from (and --route and --narrow shell validate-carried-findings.sh --classes);
@@ -356,7 +386,7 @@ for a in $ARMS; do
       R1) B_R1=1 ;; R2) B_R2=1 ;; R3) B_R3=1 ;; R4) B_R4=1 ;; R5) B_R5=1 ;; R6) B_R6=1 ;;
       A1) B_A1=1 ;; A2) B_A2=1 ;; A3) B_A3=1 ;; A4) B_A4=1 ;; A5) B_A5=1 ;; A6) B_A6=1 ;; A7) B_A7=1 ;;
       Q1) B_Q1=1 ;; Q2) B_Q2=1 ;; Q3) B_Q3=1 ;; Q4) B_Q4=1 ;; Q4n) B_Q4n=1 ;; Q5) B_Q5=1 ;; Q5n) B_Q5n=1 ;; QM) B_QM=1 ;;
-      N1) B_N1=1 ;; N2) B_N2=1 ;; N3) B_N3=1 ;; N4) B_N4=1 ;; CV) B_CV=1 ;; NM) B_NM=1 ;; NP) B_NP=1 ;;
+      N1) B_N1=1 ;; N2) B_N2=1 ;; N3) B_N3=1 ;; N4) B_N4=1 ;; CV) B_CV=1 ;; NM) B_NM=1 ;; NP) B_NP=1 ;; RV) B_RV=1 ;;
     esac
   else died="$died $a"; bad "$a: rc=${RC:-?} out=$(head -2 <<<"${OUT:-}" | tr '\n' ' ')"; fi
 done
@@ -400,6 +430,7 @@ else
   if [ "$died" = " QM" ]; then mutant_killed "$(( ${B_QM:-0} && ${B_Q1:-0} ))" m-qmd-none "MUTANT m-qmd-none: killed by QM alone, twin Q1 green (the --gate qa activation reads qa.md)"
   else bad "MUTANT m-qmd-none: arms that died:${died:- none} (want exactly QM)"; fi
 fi
+score "$(( ${B_RV:-0} && ${B_C3:-0} ))" "$(mut rvnoset merge-review-shards.sh '[ "$rv_in_" = 1 ] ||' 'true ||')" "RV" "C3" "m-rv-noset, --read-verdict accepts a value outside the lifted set"
 score "$(( ${B_C1a:-0} && ${B_C3:-0} ))" "$(mut strict merge-review-shards.sh 'ABSENT) continue ;;' 'ABSENT) refuse "$1:$cg_l_ carries no Class line" ;;')" "C1a" "C3" "m-strict, an absent Class is refused"
 score "$(( ${B_R6:-0} && ${B_R1:-0} ))" "$(mut pyext partition-review-diff.sh '    if ((p in X) && p ~ /\.(txt|log|out)$/) next' '    if ((p in X) && p ~ /\.(txt|log|out|py)$/) next')" "R6" "R1" "m-pyext, a cited .py leaves the code class"
 score "$(( ${B_A4:-0} && ${B_A3:-0} ))" "$(mut nodoc partition-review-diff.sh 'd = substr(u, 1, 3); if (cnt(u, d) < 2) { ds = d; dk = "doc" }; next' 'print NR; next')" "A4" "A3" "m-nodocstring, the docstring filter removed"
@@ -414,8 +445,8 @@ score "$(( ${B_NP:-0} && ${B_NM:-0} ))" "$(mut nobound partition-review-diff.sh 
 score "$(( ${B_R2:-0} && ${B_Q1:-0} && ${B_A1:-0} ))" "$(mut narrowfirst partition-review-diff.sh '  --route) shift; route_mode "$@" ;;' '  --route) shift; narrow_mode "$@" ;;')" "R2 Q1" "A1" "m-narrowfirst, --narrow answers in place of --route"
 
 if [ "$MATRIX" = 1 ]; then echo "review-reroute: MATRIX measured, $MCELLS cells (mode FULL)"; [ "$fails" -eq 0 ] && exit 0; exit 1; fi
-# A plain run drives only deciding and twin cells: no matrix-only cell ran, and the cell count is exactly the 39 named by the MUTANT-MATRIX header (deciding arms plus twins).
-if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 39 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
-else bad "MODE PUSH: a plain run drove $MCELLS matrix-only cell(s) and $CELLS mutant cells (want 0 and 39)"; fi
+# A plain run drives only deciding and twin cells: no matrix-only cell ran, and the cell count is exactly the 41 named by the MUTANT-MATRIX header (deciding arms plus twins).
+if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 41 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
+else bad "MODE PUSH: a plain run drove $MCELLS matrix-only cell(s) and $CELLS mutant cells (want 0 and 41)"; fi
 if [ "$fails" -eq 0 ]; then echo "review-reroute: PASS"; exit 0; fi
 echo "review-reroute: $fails FAILED"; exit 1

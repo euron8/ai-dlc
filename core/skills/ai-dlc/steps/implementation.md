@@ -521,7 +521,7 @@ section is a retro finding.
 story back to dev, gate 1 re-runs on the rework iff the range adds a test file
 or changes a code or test file on a line that is not blank, a comment or a
 docstring. Captures and records never trigger it. At gate 2 the program asks
-`partition-review-diff.sh --gate1-rerun` first, `<go-signal-sha>` being the sha QA validated.
+`partition-review-diff.sh --gate1-rerun` first, `<go-signal-sha>` being the base the program takes: the QA reviewed-sha, or the reviewed-sha of an APPROVED latest gate-1 re-review that descends from it.
 `GATE1-SKIP:` leaves the transition a gate-2 one and dispatches QA's
 re-validation directly, after the handoff preflight below; `GATE1-RERUN:`, or any refusal,
 makes the transition a gate-1 re-review: the plan's `gate:` line reads `rerun`, and the lead

@@ -40110,3 +40110,20 @@ Evidence:
 
 verify: sh bash scripts/validate-shell-portability.sh
 
+## BL-931 — gate-transition.sh gate-2 Rule A ignores an APPROVED gate-1 re-review of the QA rework, and its next: line names the gate-2 index form
+
+**LANDED (v0.1028.0).** Rule A now takes an APPROVED latest gate-1 re-review that descends from the QA sha as its base, and the `next:` line names the gate-1 index form with `--pass <P+1>`.
+
+**DEFECT.** At gate 2, pass M >= 2, `core/scripts/gate-transition.sh` (`:302-320` at `f461fe195`) took Rule A's base only from the `reviewed_sha` of the prior QA pass file and ran `partition-review-diff.sh --gate1-rerun "$WT" "$GO" "$SHA"`. No gate-1 review file was read. So once gate 1 had re-reviewed the rework and APPROVED it, gate 2 still measured the rework from the QA sha, answered GATE1-RERUN, and sent the story back to gate 1 again. Its `next:` line also named `$IDX`, the gate-2 index, verbatim. The consumer runs gate 1 for story 1.2 under the index `1.2` (`1.2-code-review{,-p2..-p6}.md`) and gate 2 under `1-2` (`1-2-qa-validation.md`), so a `next:` naming `1-2` reads `1-2-code-review...` and refuses `prior-review` there.
+
+Consumer evidence, read only, graph worktree `graph-s321-story-1.2`: `--is-ancestor` QA sha `fe25770fd` <= gate-1 p6 sha `656a46dae` rc=0 (reverse rc=1), and `656a46dae` <= HEAD `114ca5053` rc=0 (reverse rc=1); a bad object rc=128 as the control. Over 3549 graph code-review files in 238 (sprint, story, form) groups, 0 stories carry gate-1 files under more than one index form (a seeded dash row scored 1), so the ambiguity refusal's false-positive set on that corpus is empty.
+
+Fix: at gate 2 pass M >= 2 the program locates the one gate-1 index form carrying review files (the gate-2 index, or it with its first `-` made `.` or its first `.` made `-`; files under two forms REFUSE `gate1-review`). It takes the LATEST gate-1 review by pass number (p10 > p9; `.md` names only, worktree then root), reads its reviewed sha, and reads its verdict through a new `merge-review-shards.sh --read-verdict <file> --gate code-review|qa` mode: the lifted Check 1 reader and verdict set, with no advisor, fail-row, canonical-run or backing rule, so a merged review reads. An APPROVED re-review whose sha descends from the QA sha and is an ancestor of the frozen sha becomes the base. One at or before the QA sha leaves the base at QA. Any other ancestry, an unresolvable sha or an unreadable verdict REFUSES `gate1-review`, and the remedy names re-running gate 1 as a full-range re-review pass. The plan records `rule-a-base: <qa|gate1> <sha> <file>`, and its `next:` line names the gate-1 form with `--pass <P+1>`.
+
+Close condition: `core/fixtures/gate-transition/run.sh` invokes `core/fixtures/gate-transition/receipt-bl931.sh` and prints `receipt-bl931: PASS`, and its m-ra-nog1, m-ra-noverdict, m-ra-noanc, m-ra-dashnext, m-ra-noambig and m-ra-lexsort mutants are each killed by their named start in the same run. `core/fixtures/review-reroute` arm RV and mutant m-rv-noset hold the new merge mode.
+
+Rules: BL-868.
+
+Provenance: batch b251, consumer filing on graph s321 story 1.2; lead ai-dlc-e6.
+
+verify: sh o="$(bash core/fixtures/gate-transition/run.sh 2>&1)"; grep -qF 'receipt-bl931: PASS' <<<"$o"

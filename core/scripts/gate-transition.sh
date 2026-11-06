@@ -25,9 +25,16 @@
 #            --exclude-captures, the line recorded); pass M >= 2: --route, then --narrow and the
 #            narrowed map with its two fallbacks; partition-review-diff.sh --map;
 #            pass M >= 2: validate-carried-findings.sh --list.
-#   gate 2   --list-captures at the go-signal sha; pass M >= 2: --gate1-rerun from the prior QA
-#            pass's reviewed-sha (GATE1-RERUN or any refusal stops here and writes a `gate: rerun`
-#            plan with no shard lines, which authorizes no seat -- the lead runs the plan's `next:` gate-1 command); the DAR-fold preflight,
+#   gate 2   --list-captures at the go-signal sha; pass M >= 2: --gate1-rerun from Rule A's base (GATE1-RERUN or any
+#            refusal stops here and writes a `gate: rerun` plan with no shard lines, which authorizes no seat -- the lead
+#            runs the plan's `next:` gate-1 command). The base is the prior QA pass's reviewed-sha, or the reviewed-sha of
+#            the LATEST gate-1 review (the highest pass by number, `<g1idx>-code-review[-p<P>].md`, worktree then root)
+#            when its verdict, read by merge-review-shards.sh --read-verdict, is APPROVED and that sha descends from the
+#            QA sha and is an ancestor of the frozen sha; the plan's `rule-a-base:` line names which file decided.
+#            <g1idx> is the one index form (the gate-2 index, or it with its first `-` made `.` or its first `.` made
+#            `-`) that carries gate-1 review files; the `next:` line names that form and `--pass <P+1>`. Files under
+#            two forms, a reviewed-sha that is not ancestor-related to the QA sha or not in the frozen history, an
+#            unreadable verdict or sha each REFUSE `gate1-review`; the DAR-fold preflight,
 #            VERIFIED and never performed; handoff --gate2; --smoke; pass M >= 2: --route;
 #            --map; merge-review-shards.sh --record-partition, AFTER --map and only when --map
 #            wrote a manifest; pass M >= 2: the carried-findings list.
@@ -185,6 +192,44 @@ reviewed_sha() {
     }' "$1"
 }
 
+# g1_scan: Rule A's gate-1 candidate (header, gate 2). The index forms are IDX, IDX with its first `-` made `.`, and
+# IDX with its first `.` made `-`, deduplicated. A form's gate-1 review files sit under docs/reviews/s<N>/ in $WT or
+# $ROOT: `<form>-code-review.md` (pass 1) and `<form>-code-review-p<P>.md` (P >= 2, no leading zero); no other name
+# counts, so `*.md.draft` never does. Sets G1FORMS (the forms carrying a file), G1NF (their count), G1IDX (the first
+# such form, else IDX), G1P (that form's highest pass, compared as a NUMBER, 0 when none) and G1REL (its name under
+# the root; the caller resolves it worktree first).
+g1_scan() {
+  local f2="$IDX" f3="$IDX" fm d f b n_ fp_ frel_ seen=" "
+  case "$IDX" in *-*) f2="${IDX%%-*}.${IDX#*-}" ;; esac
+  case "$IDX" in *.*) f3="${IDX%%.*}-${IDX#*.}" ;; esac
+  G1FORMS=""; G1NF=0; G1IDX="$IDX"; G1P=0; G1REL=""
+  for fm in "$IDX" "$f2" "$f3"; do
+    case "$seen" in *" $fm "*) continue ;; esac
+    seen="$seen$fm "; fp_=0; frel_=""
+    for d in "$WT" "$ROOT"; do
+      for f in "$d/docs/reviews/s${SPRINT}/${fm}-code-review.md" "$d/docs/reviews/s${SPRINT}/${fm}-code-review-p"*.md; do
+        [ -f "$f" ] || continue
+        b="${f##*/}"
+        if [ "$b" = "${fm}-code-review.md" ]; then n_=1
+        else
+          n_="${b#"${fm}"-code-review-p}"; n_="${n_%.md}"
+          case "$n_" in '' | *[!0-9]* | 0* | 1) continue ;; esac
+        fi
+        if [ "$n_" -gt "$fp_" ]; then fp_="$n_"; frel_="docs/reviews/s${SPRINT}/$b"; fi
+      done
+    done
+    [ "$fp_" -gt 0 ] || continue
+    G1NF=$((G1NF + 1)); G1FORMS="${G1FORMS:+$G1FORMS, }$fm"
+    if [ "$G1NF" = 1 ]; then G1IDX="$fm"; G1P="$fp_"; G1REL="$frel_"; fi
+  done
+}
+# is_anc <a> <b>: ANC is yes when <a> is an ancestor of (or equal to) <b> in $WT, no when it is not, and err on any
+# other git answer, which the caller refuses and never reads as no.
+is_anc() {
+  git -C "$WT" merge-base --is-ancestor "$1" "$2" > /dev/null 2>&1 < /dev/null
+  case "$?" in 0) ANC=yes ;; 1) ANC=no ;; *) ANC=err ;; esac
+}
+
 # captures <sha>: --list-captures into $CAP. Sets XCAP to the --exclude-captures pair, or empty on exit 2.
 XCAP_ON=1
 captures() {
@@ -305,15 +350,53 @@ case "$GATE" in
     PRIOR="$(prior_file qa-validation)" || { refuse prior-validation "no QA pass $((PASS - 1)) file docs/reviews/s${SPRINT}/${IDX}-qa-validation${PSFX}.md in $WT or $ROOT" "merge QA pass $((PASS - 1)) first"; stop_if_refused; }
     GO="$(reviewed_sha "$PRIOR")" || { refuse prior-validation "$PRIOR carries $GO" "every column-0 reviewed-sha line of the QA pass $((PASS - 1)) file (one per shard in a merged validation) must name the one full go-signal sha it validated"; stop_if_refused; }
     input prior "$PRIOR"
+    # RULE A's BASE (header, gate 2): the QA sha, unless the latest gate-1 review is an APPROVED re-review of the rework.
+    g1_scan
+    G1REM="re-run gate 1 for story $G1IDX as a full-range re-review pass (its review file then names a sha in the frozen history), then re-run gate-transition.sh $IDX 2 --pass $PASS"
+    [ "$G1NF" -le 1 ] || { refuse gate1-review "gate-1 review files sit under $G1NF index forms ($G1FORMS) in docs/reviews/s${SPRINT}/ of $WT or $ROOT; ambiguous, refusing to guess which one gate 1 wrote" "keep story $IDX's gate-1 review files under the one index form gate 1 ran under, then re-run gate-transition.sh $IDX 2 --pass $PASS"; stop_if_refused; }
+    BASE_A="$GO"; BKIND=qa; BFILE="$PRIOR"; NEXTP='<next gate-1 pass>'
+    if [ "$G1P" = 0 ]; then
+      input gate-log "Rule A: no gate-1 review file docs/reviews/s${SPRINT}/${G1IDX}-code-review[-p<P>].md in $WT or $ROOT; the base is the QA reviewed-sha"
+    else
+      NEXTP=$((G1P + 1))
+      G1F="$WT/$G1REL"; [ -f "$G1F" ] || G1F="$ROOT/$G1REL"
+      G1SHA="$(reviewed_sha "$G1F")" || { refuse gate1-review "the latest gate-1 review $G1F carries $G1SHA" "$G1REM"; stop_if_refused; }
+      # The lifted Check 1 reader, run from the project root as --record-partition is, so its role files resolve there.
+      ( cd "$ROOT" && bash "$SELF/merge-review-shards.sh" --read-verdict "$G1F" --gate code-review ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
+      l="$(first_line "$W.out")"; [ -n "$l" ] || l="$(first_line "$W.err")"
+      case "$RC:$l" in
+        "0:VERDICT: "*" verdict="*) G1V="${l##* verdict=}" ;;
+        *) refuse gate1-review "merge-review-shards.sh --read-verdict $G1F --gate code-review exited $RC: $l" "$G1REM"; stop_if_refused ;;
+      esac
+      if [ "$G1V" != APPROVED ]; then
+        input gate-log "Rule A: the latest gate-1 review $G1F reads verdict=$G1V, not APPROVED, so it does not count; the base is the QA reviewed-sha"
+      else
+        GOR="$(git -C "$WT" rev-parse -q --verify "${GO}^{commit}" 2> /dev/null)" || { refuse gate1-review "the QA reviewed-sha $GO of $PRIOR names no commit in $WT" "$G1REM"; stop_if_refused; }
+        G1R="$(git -C "$WT" rev-parse -q --verify "${G1SHA}^{commit}" 2> /dev/null)" || { refuse gate1-review "the reviewed-sha $G1SHA of $G1F names no commit in $WT" "$G1REM"; stop_if_refused; }
+        is_anc "$G1R" "$GOR"; A_G1GO="$ANC"; is_anc "$GOR" "$G1R"; A_GOG1="$ANC"; is_anc "$G1R" "$SHA"; A_G1SHA="$ANC"
+        case "$A_G1GO $A_GOG1 $A_G1SHA" in *err*) refuse gate1-review "git merge-base --is-ancestor gave no yes or no over $G1R ($G1F), $GOR ($PRIOR) and $SHA12 in $WT" "$G1REM"; stop_if_refused ;; esac
+        if [ "$A_G1GO" = yes ]; then
+          input gate-log "Rule A: the latest gate-1 review $G1F is APPROVED at $G1R, the QA reviewed-sha or an ancestor of it, so it predates the rework; the base is the QA reviewed-sha"
+        elif [ "$A_GOG1" = yes ] && [ "$A_G1SHA" = yes ]; then
+          BASE_A="$G1R"; BKIND=gate1; BFILE="$G1F"
+        elif [ "$A_GOG1" = yes ]; then
+          refuse gate1-review "the latest gate-1 review $G1F is APPROVED at $G1R, which descends from the QA reviewed-sha $GOR ($PRIOR) but is not an ancestor of the frozen sha $SHA: the reviewed sha is not in the frozen history" "$G1REM"
+        else
+          refuse gate1-review "the latest gate-1 review $G1F is APPROVED at $G1R and the QA reviewed-sha $GOR ($PRIOR) is neither its ancestor nor its descendant: not ancestor-related; refusing to guess" "$G1REM"
+        fi
+        stop_if_refused
+      fi
+    fi
+    input rule-a-base "$BKIND $BASE_A $BFILE"
     set -f
     # shellcheck disable=SC2046
-    bash "$SELF/partition-review-diff.sh" --gate1-rerun "$WT" "$GO" "$SHA" $(xcap) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
+    bash "$SELF/partition-review-diff.sh" --gate1-rerun "$WT" "$BASE_A" "$SHA" $(xcap) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
     set +f
     l="$(first_line "$W.out")"; [ -n "$l" ] || l="$(first_line "$W.err")"
     case "$RC:$l" in
       0:GATE1-SKIP*) input gate-log "$l" ;;
       *) MANIFEST=none; ROUTE="rerun $l"
-         input next "gate-transition.sh $IDX 1 --pass <next gate-1 pass> -C $WT --base $BASE --sprint $SPRINT --story-file $STORY"
+         input next "gate-transition.sh $G1IDX 1 --pass $NEXTP -C $WT --base $BASE --sprint $SPRINT --story-file $STORY"
          printf 'gate-transition: Rule A answered %s; gate 1 re-runs as a re-review pass first. This plan authorizes no seat; the lead runs the next: gate-1 command.\n' "$l" >&2
          write_plan rerun ;;
     esac
