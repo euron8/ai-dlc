@@ -19,6 +19,71 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1021.0] - 2026-11-06
+
+Batch b251, outcome-records cluster. Records only: `docs/backlog.md` is the one file changed. No entry closes and BL-927 is filed. Closes no PC- id. NET: filed 1 (BL-927), closed 0; closed minus filed = -1; live backlog +1.
+
+### BL-398 PARTIAL — stories-test-strategy measured on graph s321
+
+- The step is complete on graph s321, so its per-story figure is now taken. Per story over 25 stories it is 0.62 h gap-inclusive, token-equivalent $20.6 (API $19.8), 37.3M tokens. The lead seat is 0.33 h and $2.8, and the subagent seat is 1.99 h and $17.8.
+- The baseline is s314+s315 pooled (9 stories): 1.28 h, $20.3 (API $17.5), 34.8M tokens, lead 0.71 h and $5.0, subagent 1.35 h and $15.2. Hours and the lead seat fell. Tokens, API dollars and the subagent seat rose.
+- The entry stays PARTIAL. The only value row, `docs/analysis/step-value-s317-s319.md:136`, covers the party sub-step, about 8% of the step's subagent spend. The adversarial-pass row at `:139` rules "Keep as the convergence exit; BL-508 owns the cost".
+- The 104 party seat spawns are charged to `pre-step`, not to this step. BL-927 records that attribution defect.
+- `verify: manual` stays.
+
+### BL-847 PARTIAL — the strategy-row leg is measured, the smoke leg stays owed
+
+- The test-strategy step finished on graph s321, so the strategy-row leg is taken. `test-strategy.md` at 1ff134602 has 0 lines matching `computed.?style|visual consistency`, so no Visual consistency row is mapped for story 4.3, which owns `web/src` paths. The count is over one strategy file of one sprint, so it is a floor and not a rate.
+- The smoke leg stays owed. `docs/smoke-surface.txt` is not tracked in graph at 1ff134602, because `.gitignore:29` ignores `*.txt`. So `smoke-not-updated` stays inert there.
+- The second subject is unmeasured: no gate 2 or gate 3 has run on any s321 story.
+
+### BL-507 — the retired receipt is named as retired
+
+- The former-receipt line now says the s317-s318 probe `bl-507-carried-findings.sh` is retired. It exits 1 at its prose `case` on lines 124-125, which require two sentences that `implementation.md` lines 488 and 493 no longer carry.
+- The carriers are named: `core/fixtures/carried-findings` (`arm_LIST` at `run.sh:586-591`) and `core/fixtures/gate-transition` (`st_g2r`, `st_g2k` and the RERUN cells). The probe's `--map` with the prior sha as the base is asserted by neither.
+
+### BL-615 — corrected citations
+
+- The delivery deny is `core/hooks/ai-dlc-dispatch-guard.sh:1374` (`dg_deny`, scope test `row_in_scope` at `:1357-1367`). Lines 1313-1320 are the Rule 28 serial-exception deny, a different arm.
+- The fixture citation is `dispatch-model-guard/run.sh:662-667`. Owed item 2 stays owed and no test is added.
+
+### BL-514 PARTIAL — s321 subagent polls
+
+- Read-only over graph's subagent transcripts, s320/s321 edge to the corpus end: 19 polls in s321. 6 were denied, 11 ran backgrounded and 2 ran with no timeout. None ran in the foreground over budget. The pre-mechanism window had 212 polls and 140 foreground over budget (13.73 h), so the classifier can fire.
+- The entry does not close. The figures measure the mechanism, not the outcome, and a denied poll was re-issued backgrounded 3 s later, so a wait moved rather than vanished. No committed script separates a poll's wait from the agent wait it moved into.
+
+### BL-695 PARTIAL — the s320 rise explained
+
+- BL-812 item 3's explanation for this step is recorded. s320's stories-test-strategy rise comes from the sprint's own record: four adversarial passes against s319's two, two operator-ruled re-opens after the exit condition was met, and cross party seats that cost more each over 13 stories instead of 20. The wave barrier played no part.
+- Per story, the subagent seat rose from $22.9 to $42.0 and the step from $26.0 to $47.6. The earlier $39.1 figure is consistent with a basis taken part-way through the step.
+- The entry stays PARTIAL, owing a measured graph-sprint figure by the committed scripts, or step-value evidence.
+
+### BL-809 and BL-812 — status brought current
+
+- BL-809 item 3: CAPTURE-UNRESOLVED already warns on an untracked capture cited in a per-AC table cell. It reaches a path token with a `/` ending in `.txt`, `.log` or `.out`, so an untracked `tests/test_ac2.py::test_x` in a per-AC row printed no warning.
+- BL-809 item 3 stays owed for citations outside that capture grammar and for any refusal-grade form. BL-812's Status carries the same wording.
+
+### BL-817 — adjudicated for close, not closed
+
+- Items 1 and 2 are discharged. `validate-backlog-receipts.sh --archive` on the tip archive exits 0 with E0 firing both ways over 46 seeded entries, and 31 entries sit in the close population, all valid.
+- Of the 32 ids the entry names, 19 are archived with an outcome line, 13 are reopened in the live ledger, 0 are in neither and 0 are in both.
+- The heading `## Entries filed after the re-audit` now closes the "Reopened by BL-817's re-audit" section. Its heading awk read 28 before and reads 15 now. The 13 entries from BL-868 to BL-923 sat in the section only because no unlabelled `##` heading closed it.
+- The batch-245 "Still open" claim holds for filings only. BL-911, BL-912 and BL-913 carry `Baseline:`, `Step:` and `Expected movement:` lines. Item 3's outcome lines from a graph sprint after s320 do not exist yet.
+- The batch-245 c5 progress paragraph is restored byte-identical to `0443bfbfe^`. BL-817 stays PARTIAL.
+
+### BL-913 — revision note
+
+- A note records that commit 0443bfbfe (0.1006.0) wrote a revised expected movement into BL-817 by mistake. It was never applied to BL-913, and this release removed it from BL-817.
+
+### BL-927 — filed
+
+- The s317-s320 extractor has three defects, found on graph s321: a1, subagent spawns join to `pre-step` (s321 `pre-step` subagent $4.8 per story, all 104 depth-2 party units); a2, a gate segment outlives its gate (the architecture gate's lead time lands in `gate-validation[stories-test-strategy]`); and b, transcripts are pruned at Claude Code's 30-day default (`cleanupPeriodDays` is unset), so s318's go from about 2026-11-11.
+- The fix is sized, not built, and the owner rules whether it is built. The entry sits under the new `## Entries filed after the re-audit` heading with `verify: manual`.
+
+### Examined, unchanged
+
+- BL-583: the wall-clock item does not close from the b235 gate times. They are gate durations, not a removal measurement, and the analysis records no dollar rate.
+
 ## [0.1020.0] - 2026-11-06
 
 Batch b251. BL-926 filed and closed. Closes PC-S321-GATE-TRANSITION-REVIEWED-SHA-REFUSES-MERGED-SHARDED-REVIEW. NET 0 (closed 1, filed 1).
