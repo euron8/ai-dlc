@@ -573,7 +573,7 @@ fi
 # The scoped listing must see a live process under $T (control), or L1.leak cannot fire. The sleep is a direct child
 # forked while the main shell stands in $T, so it holds that cwd from fork, whatever its name, and `wait` reaps it.
 L1PWD="$(pwd -P)" && cd "$T" || broken "cannot enter $T for L1.control"
-sleep 4711 & SLP=$!
+sleep 4711 & SLP=$!  # bl868-allow: ppk-l1-control-child
 cd "$L1PWD" || broken "cannot return to $L1PWD after L1.control"
 if scoped_pids | grep -qx "$SLP"; then ok "L1.control the scoped listing sees a live child forked under the scratch dir, by pid"; else bad "L1.control the scoped listing did not see a live child under the scratch dir -- L1.leak cannot fire"; fi
 kill "$SLP" 2>/dev/null; wait "$SLP" 2>/dev/null

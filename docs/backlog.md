@@ -1753,6 +1753,8 @@ The receipt is now `bash core/fixtures/fixture-hygiene/receipt-bl868.sh`, which 
 
 At the BL-915 tip, `bash core/fixtures/fixture-hygiene/receipt-bl868.sh` exits 0 ("CLEAN"), measured; BL-868's close remains its owner's.
 
+**Progress (batch b251).** The `presuite-present-key` row that `bash core/fixtures/fixture-hygiene/receipt-bl868.sh` listed (`run.sh:576`, `sleep 4711 & SLP=$!`) was a false positive: it is L1.control's live child, which must exist while the scoped listing is read and is killed by pid and reaped, so no elapsed time decides a verdict. It is now marked through the allow channel (`# bl868-allow: ppk-l1-control-child`, with its `W_ALLOW` row), and the receipt now reads rc 0 CLEAN. That is NOT a close, because the receipt cannot see what is still open: item 5 is OPEN (the 428 sites whose writer is a function are unclassified); item 8's receipt-visible sites are all cleared, since the ppk row was the receipt's last W-SLEEP row and `now_at_least` appears nowhere under `core/fixtures`, so item 8 is a close candidate for its owner, who must confirm it, and it is not closed here; item 9 has nothing left in `core/fixtures/prepush-pool-depth/run.sh`, because BL-915 removed `PS_HANG`, `td_more` and `td_hang`, so it is likewise a close candidate for its owner; item 10 is OPEN (NOT REPRODUCED, and readset-skip's deriver row now reads 94, not the 92 recorded above, with the extra starts not attributed to load by any measurement here); item 12 is OPEN (candidates (b) and (c) cannot be forced, so it waits on a field red); item 14 is owed (no per-unit solo-versus-pool receipt exists). Item 11 is fixed and item 7 is done, as recorded above; item 13's log-stream channel was superseded, as the b248 progress records, so its full-pool rate is no longer a live measurement. `verify:` stays manual and the last row of `scripts/inert-receipt-allowlist.txt` stays.
+
 This entry owns the last row of `scripts/inert-receipt-allowlist.txt`, `core/fixtures/fixture-hygiene/receipt-bl868.sh` (re-attributed from BL-915 in 0.1019.0). BL-868's close wires that receipt into a runner or deletes it, and deletes the row in the same change. Wiring it into `fixture-hygiene` is the wrong home: the receipt reads `docs/backlog.md` and every fixture file, so that fixture would re-key on both.
 
 **NOTE N7 (batch b249 delta review of 0.998.0).** core/fixtures/fixture-hygiene/receipt-bl868.sh matches only a column-0 TD_CEIL= assignment, not export TD_CEIL= or readonly TD_CEIL= forms; latent, no such form exists in the tree. Moot since BL-915: that match left the receipt with item 15's exemption.
@@ -1985,20 +1987,6 @@ Rules: BL-868.
 Provenance: batch b250, tip adversary on the triggers cluster; lead ai-dlc-be.
 
 verify: sh o="$(bash core/fixtures/adversarial-citation/run.sh 2>&1)"; grep -qF 'receipt-bl923: PASS' <<<"$o"
-
-## BL-921 — no shipped check verifies that a MUTANT-MATRIX `twins=` token names a real arm
-
-**DEFECT.** 130 fixture `run.sh` files carry a `# MUTANT-MATRIX` row with `twins=` (`git grep -l '^# MUTANT-MATRIX.*twins=' -- 'core/fixtures/*/run.sh' | wc -l`; the impossible token `twinsZZQQ=` reads 0). H5 in `scripts/validate-fixture-hygiene.sh` parses the token list at `:716-724` (`tw = substr(a[5], 7)` at `:717`, `toks(tw, TOK, "twins", where)` at `:723`) against the grammar at `:111-124`. It checks only shape: an opaque id matching the token class, no duplicates, and no twin inside its `decides`. Nothing joins a twin to an arm or cell label the fixture can print, so a twin naming an arm that was renamed or removed, or one that never existed, passes. `.claude/rules/fixture-mutants.md` clause 2 makes the matrix the record of which worlds a mutant runs, so a dangling twin is a matrix row recording a world the push never runs.
-
-Fix: a check that resolves every `twins=` token to an arm or cell label the fixture emits, keyed on the emission site and not on prose, with its false-positive set measured over the 130 files before it ships. Its receipt is `core/fixtures/fixture-hygiene/receipt-bl921.sh`. It seeds one row whose twin names no arm (want FAIL) and one whose twins are all real (want quiet), and `core/fixtures/fixture-hygiene/run.sh` invokes it, so arm E1 sees a runner, and prints `receipt-bl921: PASS` when it exits 0, which is the line the `verify:` receipt reads.
-
-Close condition: that receipt exits 0 from a `run.sh` that invokes it, and the check's FP set over the corpus is recorded here.
-
-Rules: BL-868.
-
-Provenance: batch b250 close; lead ai-dlc-be.
-
-verify: sh o="$(bash core/fixtures/fixture-hygiene/run.sh 2>&1)"; grep -qF 'receipt-bl921: PASS' <<<"$o"
 
 ## BL-927 — the s317–s320 extractor charges a subagent's own spawns to `pre-step`, keeps a closed gate open under the next step's label, and reads a corpus that Claude Code prunes at 30 days
 

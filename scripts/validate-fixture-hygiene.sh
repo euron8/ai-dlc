@@ -228,6 +228,85 @@
 #     ending in `{`. A drop-one is the check that does not share the scan's grammar. STATED LIMITS: a lib path spelled through
 #     a variable assigned in ANOTHER file, or built by concatenation across lines, is not a candidate; a loop body
 #     sourcing `…/lib/$_l` is a candidate and is acquitted only by a pre-test of the identical word.
+# H7  a twin that names no arm (BL-921). POPULATION: the `<fixture>:<twin>` pairs of the MUTANT-MATRIX rows H5
+#     ACCEPTED with real twins (a malformed row is H5's, never reported twice), mapped to the IMPL like every H5 fact.
+#     FILE SET: every tracked .sh of the fixture's directory, plus every shard stub `--impl-of` maps to it
+#     (unit-parts.sh, unit-arms.sh, matrix.sh, lib.sh are in it). A twin T RESOLVES when T, or its label before the
+#     first `.` (`<label>.<cell>`), is a label the file set EMITS. THE JOIN is keyed on enumerated EMISSION FORMS, each
+#     read off its argument position on the UNMASKED line (a `\`-continued statement joined), CODE lines only: a
+#     comment and a heredoc body are never read. A word carrying `$` or a backtick is never a label.
+#     NO FORM YIELDS A BARE NUMBER (a count, an rc, a cell index is never a label).
+#       1   the first word of the message argument of `ok`, `bad`, `pass` or `fail` in command position. This is the
+#           label the program PRINTS for that arm -- the emission site the verdict line is read from, not prose
+#           about the program -- which is why a message string counts here and nowhere else. A message opening
+#           with an article and ONE blank (`ok "a dispatch wrote …"`) is prose and yields nothing; `eq "a: …"`
+#           and `bad "a  the …"` (a column) keep `a`.
+#       1b  the first word of the FIRST quoted message (one carrying a blank) passed to a function the file set or
+#           core/fixtures/lib defines: the fixture's own `ok`-like printer (`element1-item-ref "V15 …"`, `rc_is "B7a …"`).
+#           A later quoted argument is data (a program text, a replacement), and the article rule of 1 applies.
+#       2   `matrix_row`'s 2nd argument.          3  the <T> of an `arm_<T>()` definition.
+#       4   a `case` pattern opening a line, or after `;;` on it, `T)`, `A|B)`, `*" T "*)`: each `|` alternative that
+#           is a bare word or one quoted word -- the arm dispatch of a verdict switch.
+#       5   a literal argument of a call, in command position, to a function the file set or lib defines (`want T`,
+#           `arm2 T`, `mcell X T`). NEVER an external tool's: `grep -q T`, `printf T`, `awk -v T=` hand a program
+#           data, and the self-probe seeds exactly those beside a dangling twin.
+#       6   a quoted literal list with a blank, assigned in command position or by local/export, of roster
+#           characters only (`ARMS="a b"`, `CC_WANT="a=allow:1 b=deny:0"`): a pure word list gives every word, any
+#           other gives each item's key and every part of two or more characters. A list carrying an option, a
+#           path or an English function word (`m="the label is absent"`) is a command or a sentence, never a roster.
+#       7   a word of a `for <v> in <words>` list.  9  `B_<T>=`, the arm's baseline flag the mutant scoring reads.
+#       8   a function name defined on a code line (the cell IS the function), joined in the judge and dropped for
+#           any function that forms 1, 1b or 5 read as the PRINTER or callee (`ok`, `bad`, `want`, `tell`).
+#     BUILT LABELS: scripts/twin-built-allowlist.txt, rows `<fixture>:<mutant>:<token>\t<reason>`, per KEY and
+#     DOWN-ONLY (arm H7-M4, the shared m4, keyed on the full `<fixture>:<mutant>:<token>`, with M4's two SKIPs).
+#     <mutant> is the MUTANT-MATRIX row's NAME, stable under line moves: a listed key acquits that one row's twin, so
+#     a new row, or a new mutant reusing a listed built token, is an unlisted key and FAILs. An unresolved unlisted
+#     key FAILs (H7, naming the key); a listed key whose twin now resolves, or that no accepted row of that fixture
+#     and mutant carries, is H7STALE; a duplicate or a reasonless row FAILs. It is not a MUTANT-MATRIX-DYNAMIC
+#     extension: nothing proves twins at runtime, and DYNAMIC is fixture-wide where this is per key.
+#     STATED LIMITS: a listed `<fixture>:<mutant>:<token>` stays acquitted while its built label is unresolvable, so
+#     it can go stale invisibly. Where the label before `.` is emitted (ledger-reverify's `row_is "Entry A"`
+#     reaching any `Entry.<x>`), only the label half is checked, never the cell. A label emitted only through a variable, a data table (`echo "ph|red"`), an
+#     arm_name()-style join, or a non-first word of a multi-word message is not seen -- those are the allowlist's
+#     rows. An emission form still ACQUITS a twin that shares a real label word of its fixture's grammar: `a` in
+#     dispatch-model-guard is a real cell (`CC_WANT`, `a)`), so a twin `a` there resolves whether or not that row
+#     meant it.
+#     NARROWING STORY, measured on f9c1196c0's tree plus this change's fixture-hygiene edits (432 fixture .sh before
+#     receipt-bl921.sh was added, 433 after; the counts below are identical on both): 3093 twin occurrences in accepted rows, 1606
+#     distinct `<fixture>:<twin>` pairs. Forms 1-3 only: 408 resolved, 1198 unresolved over 103 fixtures. A census
+#     of what preceded each unresolved token showed case dispatch, roster lists, helper arguments and for-lists, so
+#     forms 4-7 were added; a first form 5 taking EVERY literal word of a code line resolved all but 231 and was
+#     REJECTED (it is a token grep: `awk -v c=`, a `grep -q` pattern and a printf format acquitted twins), replaced
+#     by form 5 as above: 260 left. `\`-continuation joining, 1b, 8 and 9 took it to 222. Pairs resolved, by the FIRST
+#     form in order 1,2,3,4,6,7,5,1b,8,9 that yields them: 1 203, 2 3, 3 219, 4 374, 6 293, 7 22, 5 237, 1b 17, 8 6,
+#     9 10 (1384); resolved by that form ALONE: 5 232, 3 49, 6 46, 4 22, 1b 16, 7 16, 9 10, 8 6. 222 pairs were left.
+#     SECOND NARROWING (BL-921 fold, a tip adversary's D2): the weak forms acquitted common non-label words. Measured
+#     by seeding one row `twins=1,0,2,a,x,y,ok,bad,want,label,alpha,c7,Entry.bogus` into each of ledger-reverify,
+#     dispatch-model-guard and layer-reference-resolution (39 seeded keys) and running the SHIPPED arm in a detached
+#     worktree: 21 of 39 acquitted on 0adc3cf9f, 4 of 39 after. The four left: dispatch-model-guard `a` and
+#     layer-reference-resolution `alpha`, `c7` are REAL labels of those fixtures (a cell roster, a case dispatch),
+#     and ledger-reverify `Entry.bogus` resolves through its label half `Entry` (`row_is "Entry A"`, run.sh:600) --
+#     the label-half limit above. The narrowings: no bare number from any form; form 8 dropped for a printer or
+#     callee; form 1/1b skip an article-led prose message; 1b reads only the first quoted argument; form 4 reads
+#     whole `|` alternatives, not every token-class fragment of a glob; form 6 refuses a list carrying an option,
+#     a path, an English function word or a non-roster character, and drops one-character parts of a non-pure
+#     list. One WIDENING: form 4 also reads a pattern after `;;` on the same line, which resolved 9 pairs the old
+#     list carried (dispatch-model-guard exl, nodot, red, sameline-deny, zpad; story-provenance CR, DC, NR, S3).
+#     Each of these 12 narrowings and the widening has a self-probe seed that its revert turns red (form 8's callee
+#     join, the bare number, the article rule at both 1 and 1b, 1b's first-argument rule, form 4's whole
+#     alternatives, form 6's option/path, function-word and character refusals and its one-character drop, the
+#     `;;` widening, and the D1 key); a guard that stopped a word walk at an unclosed `$(` moved neither the probe
+#     nor the corpus and was deleted. Over the corpus: 3093 keys
+#     (`<fixture>:<mutant>:<token>`), 2692 resolved, 401 listed; 1383 of 1606 `<fixture>:<token>` pairs resolved,
+#     223 listed. Pairs resolved by FIRST form in the order above: 1 201, 2 3, 3 219, 4 411, 6 244, 7 23, 5 251,
+#     1b 16, 8 5, 9 10; by that form ALONE: 5 249, 3 49, 4 29, 6 26, 1b 15, 7 14, 9 10, 8 5; 883 pairs resolve only
+#     through forms 4, 5, 6, 7, 1b or 8. Newly unresolved by the narrowing, 10 pairs, every one a built label, none a
+#     true positive: spec-join-integrity 9 (arm_name() joins) and self-update-gate `ok` (an mx_row cell string).
+#     The 401 keys are the allowlist, each reason citing the site that builds or prints the label, read in its
+#     fixture: check-24 97, readset-skip 94, spec-join-integrity 66, ledger-reverify 48 (multi-word `row_is`
+#     messages, of which H7 reads one word), self-update-gate 24, self-update-fixture-log 11, enforcement-map-sites
+#     10, gate-remediation-deny 9, requirements-step 8, retired-layer-passage 6, and 28 over 12 more fixtures.
+#     TRUE POSITIVES (a twin no code path emits): 0.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -257,6 +336,7 @@ RESOLVER="$HERE/validate-fixture-invocations.sh"
 [ -f "$RESOLVER" ] || { echo "validate-fixture-hygiene: FAIL -- the shard-stub resolver $RESOLVER is absent" >&2; exit 2; }
 ALLOW_REL="scripts/fixture-matrix-allowlist.txt"
 E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
+H7_ALLOW_REL="scripts/twin-built-allowlist.txt"
 MKA_REL="scripts/mutant-kills-allowlist.txt"
 
 WORK="$(mktemp -d)" || { echo "validate-fixture-hygiene: mktemp failed" >&2; exit 2; }
@@ -569,6 +649,137 @@ function h6(i,   s, off, st, q, e, w, wn, t) {
     print "H6\t" REL ":" i "\t" trim(O[i])
   }
 }
+# --- H7: the labels a fixture EMITS, read off their argument positions on the unmasked line ----------------------
+# `L <fx> <form> <label>`: form 1 the first word of the message argument of `ok`/`bad`/`pass`/`fail` in command
+# position, 2 `matrix_row`'s 2nd argument, 3 the <T> of an `arm_<T>()` definition. A non-literal word is no label.
+function lab7(w, f) {  # emit w as a form-f label when it is one token-class word and not a bare number (a count, an rc)
+  if (w ~ /^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$/ && w !~ /^[0-9]+$/) print "L\t" FX "\t" f "\t" w
+}
+function case7(w,   n, a, k, x) {  # form 4: each `|` alternative that is a bare word or one quoted word (`*" T "*`)
+  n = split(w, a, "|")
+  for (k = 1; k <= n; k++) {
+    x = a[k]
+    if (x ~ /^\*["\047][[:space:]]*[^[:space:]"\047*]+[[:space:]]*["\047]\*$/ || x ~ /^["\047][^[:space:]"\047*]+["\047]$/) { gsub(/[*"\047[:space:]]/, "", x); lab7(x, 4) }
+    else if (x !~ /[*?["\047[:space:]]/) lab7(x, 4)
+  }
+}
+function list7(w,   n, a, k, x, m, b, j, pure) {  # form 6: the labels of a quoted literal roster list
+  gsub(/^["\047]|["\047]$/, "", w)
+  if (w ~ /[^A-Za-z0-9_.+:=|\/,()*;[:space:]-]/) return  # a program text or a sentence, never a roster
+  n = split(w, a, /[[:space:]]+/)
+  # an option or a path is a command string, and an English function word is prose (`m="the label is absent"`):
+  # neither is a roster
+  for (k = 1; k <= n; k++) if (a[k] ~ /^[-\/]/ || a[k] ~ /^(the|is|are|was|of|to|and|or|not|with|from|that|this|by|as|an)$/) return
+  pure = 1; for (k = 1; k <= n; k++) if (a[k] !~ /^[A-Za-z0-9_.+-]+$/) pure = 0
+  for (k = 1; k <= n; k++) {
+    # a pure roster (`ARMS="A B C"`) gives every word; in any other list an item `K=V` or `K:V` (`a=allow:1`,
+    # `R:gate-whole`) gives its key, and every part only when it is a word of two or more characters -- never the
+    # `x` of `ord=3/7 x|null`
+    m = split(a[k], b, /[*|:=]/)
+    for (j = 1; j <= m; j++) if (pure || length(b[j]) > 1 || (j == 1 && a[k] ~ /^[A-Za-z0-9_.+-]+[=:]/)) lab7(b[j], 6)
+  }
+}
+# a message opening with an English article and ONE blank (`ok "a dispatch wrote …"`, `ok "a PLAIN …"`,
+# `"a ~~~ fence …"`) is prose; `eq "a: …"` and `bad "a  the …"` (two blanks: a column) keep `a` as the label
+function article7(w) { return (w ~ /^["\047](a|an|the|A|An|The) [^[:space:]]/) }
+function callee7(c) { if (!((FX, c) in CAL7)) { CAL7[FX, c] = 1; print "C\t" FX "\t" c } }  # a 1b/5 callee: never a form-8 label
+function h7(i,   s, o, off, st, q, w, nm, cw, c, p, e, atc, fn, fs, dcl, rd, j) {
+  # a `\`-continued statement is read once, joined, from its first line: a continuation line is never command position
+  if (i > 1 && !HDL[i - 1] && M[i - 1] ~ /\\$/) return
+  s = M[i]; o = O[i]; j = i
+  while (s ~ /\\$/ && j < NL && !HDL[j + 1]) { j++; s = substr(s, 1, length(s) - 1) " " M[j]; o = substr(o, 1, length(o) - 1) " " O[j] }
+  # a multibyte character tested alone against a bracket class aborts this awk (towc), so the word walk reads an
+  # ASCII copy: each non-ASCII character becomes one `?`, keeping every position equal to the masked line's
+  gsub(/[^\t -~]/, "?", o)
+  # the code part of the unmasked line: cut at the masked comment (a `#` whose masked run of X reaches the end)
+  if (match(s, /(^|[[:space:]])X+$/)) { c = RSTART + (substr(s, RSTART, 1) ~ /[[:space:]]/); if (substr(o, c, 1) == "#") o = substr(o, 1, c - 1) }
+  # form 4: a `case` pattern opening the line, `T)`, `A|B)`, `*" T "*)`, the arm dispatch of a verdict switch
+  if (match(s, /^[[:space:]]*(case[[:space:]].*[[:space:]]in[[:space:]]+)?\(?[^[:space:]()]+\)/)) {
+    w = substr(o, 1, RSTART + RLENGTH - 2); sub(/^[[:space:]]*(case[[:space:]].*[[:space:]]in[[:space:]]+)?\(?/, "", w)
+    if (w !~ /[$`]/ && w !~ /^[A-Za-z_][A-Za-z0-9_]*=/) case7(w)
+  }
+  # form 4, continued: a pattern after `;;` on the same line (`gap) … ;; full) …`)
+  off = 0
+  while (match(substr(s, off + 1), /;;[[:space:]]+\(?[^[:space:]()]+\)/)) {
+    st = off + RSTART; q = st + RLENGTH; off = q - 1
+    w = substr(o, st + 2, q - st - 3); sub(/^[[:space:]]+\(?/, "", w)
+    if (w !~ /[$`]/) case7(w)
+  }
+  # forms 5-7, one walk over the shell words of the code part, tracking command position (line start, after
+  # `;`, `&`, `|`, `(`, `)`, or a keyword). Form 5: a literal argument of a call to a FUNCTION the fixture's own
+  # files or core/fixtures/lib define (`want T`, `arm2 T`, `mcell X T`) -- never of an external tool (`grep -q T`,
+  # `printf T`, `awk -v T=`), whose arguments are data the fixture hands a program, not a label it prints. Form 6: a
+  # quoted literal LIST with a blank in it, assigned in command position or by `local`/`export`/`readonly`
+  # (`ARMS="a b c"`), the arm roster a dispatch loop walks. Form 7: a literal word of a `for <v> in <words>` list.
+  p = 1; e = length(o); atc = 1; fn = 0; fs = 0; dcl = 0; rd = 0
+  while (p <= e) {
+    c = substr(o, p, 1)
+    if (c ~ /[;&|()]/) { atc = 1; fn = 0; fs = 0; dcl = 0; rd = 0; p++; continue }
+    if (c ~ /[<>]/) { rd = 1; p++; continue }
+    if (c ~ /[[:space:]]/) { p++; continue }
+    w = wordat(o, p); if (WEND <= p) { p++; continue }; p = WEND
+    if (rd) { rd = 0; continue }
+    if (atc && w ~ /^(then|do|else|elif|if|while|until|!|\{|\}|time|command|exec|nohup)$/) continue
+    if ((atc || dcl) && match(w, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
+      # form 9: `B_<T>=…`, the arm's own baseline flag, which the mutant scoring reads as that arm's verdict
+      if (w ~ /^B_[A-Za-z0-9_]+=/) { nm = w; sub(/^B_/, "", nm); sub(/=.*$/, "", nm); print "L\t" FX "\t9\t" nm }
+      w = substr(w, RLENGTH + 1)
+      if (w ~ /^["\047]/ && w !~ /[$`]/ && w ~ /[[:space:]]/) list7(w)
+      continue
+    }
+    if (atc) {
+      atc = 0; fn = ((FX, w) in FN7) || (w in LFN7); fs = (w == "for"); dcl = (w ~ /^(local|export|readonly|declare|typeset)$/)
+      cw7 = w; nq7 = 0; continue
+    }
+    if (fs == 1) { fs = 2; continue }
+    if (fs == 2) { fs = (w == "in") ? 3 : 0; continue }
+    # any argument makes the defined function a CALLEE (`want "$1"`), which form 8 then never reads as a label
+    if (fn) callee7(cw7)
+    # form 1b: the first word of a quoted MESSAGE argument (one carrying a blank) of a fixture-defined function --
+    # the label the fixture's own `ok`-like printer prints (`element1-item-ref "V15 bare …"`, `rc_is "B7a …"`).
+    # Only the FIRST such argument is the message: a later one is data (`rl_mutant … 'label ~ /…/'`, a replacement
+    # program text). A message opening with an article is prose, and its first word is no label.
+    if (fn && w ~ /^["\047][^[:space:]"\047]+[[:space:]]/) {
+      if (nq7++ > 0 || article7(w)) continue
+      nm = substr(w, 2); sub(/[[:space:]].*$/, "", nm); sub(/^[(\[]/, "", nm); sub(/[]:,;)]+$/, "", nm)
+      if (nm !~ /[$`\\]/) { lab7(nm, "1b"); callee7(cw7) }
+      continue
+    }
+    if (w ~ /[$`\\]/) continue
+    gsub(/["\047]/, "", w)
+    if (w !~ /^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$/ || w ~ /^-/) continue
+    if (fs == 3) lab7(w, 7)
+    else if (fn) { lab7(w, 5); callee7(cw7) }
+  }
+  # form 8: the name of a function DEFINED on a code line, where the cell IS the function (`C11_progress_extends() {`)
+  if (match(s, /^[[:space:]]*(function[[:space:]]+)?[A-Za-z_][A-Za-z0-9_+-]*[[:space:]]*\(\)/)) {
+    nm = substr(s, RSTART, RLENGTH); sub(/^[[:space:]]*(function[[:space:]]+)?/, "", nm); sub(/[[:space:]]*\(\)$/, "", nm)
+    print "L\t" FX "\t8\t" nm
+  }
+  if (s !~ /(ok|bad|pass|fail|matrix_row)[[:space:]]/ && index(s, "arm_") == 0) return
+  if (match(s, /^[[:space:]]*(function[[:space:]]+)?arm_[A-Za-z0-9_+-]+[[:space:]]*\(\)/)) {
+    nm = substr(s, RSTART, RLENGTH); sub(/^[[:space:]]*(function[[:space:]]+)?arm_/, "", nm); sub(/[[:space:]]*\(\)$/, "", nm)
+    print "L\t" FX "\t3\t" nm
+  }
+  off = 0
+  while (match(substr(s, off + 1), /(ok|bad|pass|fail|matrix_row)[[:space:]]+/)) {
+    st = off + RSTART; q = off + RSTART + RLENGTH; off = q - 1
+    if (st > 1 && substr(s, st - 1, 1) ~ /[A-Za-z0-9_.\/$-]/) continue
+    if (!cmdpos(substr(s, 1, st - 1))) continue
+    cw = substr(s, st, q - st); sub(/[[:space:]]+$/, "", cw)
+    w = wordat(o, q)
+    if (cw == "matrix_row") {
+      q = WEND; while (substr(o, q, 1) ~ /[[:space:]]/) q++
+      w = literal(wordat(o, q)); if (w != "") print "L\t" FX "\t2\t" w
+      continue
+    }
+    if (w !~ /^["\047]?[^"\047[:space:]]/) continue
+    callee7(cw); if (article7(w)) continue
+    sub(/^["\047]/, "", w); sub(/[[:space:]].*$/, "", w); sub(/["\047]$/, "", w); sub(/^\(/, "", w); sub(/[:,;)]+$/, "", w)
+    if (w ~ /[$`\\"\047]/ || w == "") continue
+    lab7(w, 1)
+  }
+}
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   if (FX != "" && FX != "lib") prep6()
   for (i = 1; i <= NL; i++) {
@@ -619,7 +830,7 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       print "H3\t" REL ":" i "\t" trim(O[i])
     }
     if (FX == "" || FX == "lib") continue
-    if (!HDL[i]) h6(i)
+    if (!HDL[i]) { h6(i); h7(i) }
     # H5 facts
     if (s ~ /(^|[^A-Za-z0-9_])cmp[[:space:]]+-s([[:space:]]|$)/) CMP[FX] = 1
     if (O[i] ~ /[Mm][Uu][Tt][Aa][Nn][Tt]/) MUTW[FX] = 1
@@ -636,6 +847,11 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
 }
 pass == 1 {
   if (FNR == 1) FX = fxof(relof(FILENAME))
+  # H7 form 5's callee set: every function a fixture's own files (or core/fixtures/lib) define, by name
+  if (FX != "" && match($0, /^[[:space:]]*(function[[:space:]]+)?[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*\(\)/)) {
+    fnm = $0; sub(/^[[:space:]]*(function[[:space:]]+)?/, "", fnm); sub(/[[:space:]]*\(\).*/, "", fnm)
+    if (FX == "lib") LFN7[fnm] = 1; else FN7[FX, fnm] = 1
+  }
   if (FX != "" && FX != "lib" && match($0, /^[[:space:]]*(function[[:space:]]+)?[A-Za-z0-9_]*[mM][uU][tT][A-Za-z0-9_]*[[:space:]]*\(\)/)) {
     nm = $0; sub(/^[[:space:]]*(function[[:space:]]+)?/, "", nm); sub(/[[:space:]]*\(\).*/, "", nm)
     if (!(FX in S1)) S1[FX] = nm
@@ -685,6 +901,17 @@ FILENAME == ARGV[3] {
   if ($1 == "B") { if ($2 in IMPL) { print "ROW\t" $2 ":" $3 "\ta MUTANT-MATRIX block line in a shard stub; the block lives in its IMPL"; next }
                    NB[$2]++; BL[$2, NB[$2]] = $3; BR[$2, NB[$2]] = $4; next }
   if ($1 == "K") { f = map($2); NK[f]++; KL[f, NK[f]] = $3; KN[f, NK[f]] = $4; next }
+  if ($1 == "C") { CAL7[map($2), $3] = 1; next }
+  if ($1 == "L" && $3 == "8") { F8[map($2), $4] = 1; next }
+  if ($1 == "L") { f = map($2); if (!((f, $4) in LAB)) LAB[f, $4] = $3; else if (index(" " LAB[f, $4] " ", " " $3 " ") == 0) LAB[f, $4] = LAB[f, $4] " " $3; next }
+  next
+}
+FILENAME == ARGV[5] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  x = $1; gsub(/[[:space:]]/, "", x); r = (NF >= 2) ? $2 : ""; gsub(/[[:space:]]/, "", r)
+  if (x in TLISTED) print "H7DUP\t" x
+  TLISTED[x] = 1
+  if (r == "") print "H7NOREASON\t" x
   next
 }
 FILENAME == ARGV[4] {
@@ -722,9 +949,12 @@ END {
           if (("," tw ",") ~ /,-,/) { print "ROW\t" where "\ttwins=- cannot be mixed into a list"; continue }
           if (!toks(tw, TOK, "twins", where)) continue
           if (n >= 6) { print "ROW\t" where "\t" (a[6] ~ /^why=/ ? "why= is refused on a row with real twins" : "unknown field " a[6]); continue }
-          split(dec, d, ","); split(tw, t, ","); bad = ""
+          split(dec, d, ","); nt = split(tw, t, ","); bad = ""
           for (u in t) for (v in d) if (t[u] == d[v]) bad = t[u]
           if (bad != "") { print "ROW\t" where "\ttwin " bad " is inside its decides"; continue }
+          # keyed on `<fixture>:<mutant>:<token>`: the mutant name is the row's, stable under line moves, so a listed
+          # built token acquits that one row's twin and never a new row, or a new mutant, reusing the token
+          for (u = 1; u <= nt; u++) { y = f ":" a[3] ":" t[u]; if (!(y in TW7)) NTW7++; TW7[y] = 1; TWW7[y] = where; TWT7[y] = t[u] }
         }
         nmut++; claim(f, a[3], form, where)
       } else if (form == "MUTANT-MATRIX-FULL") {
@@ -748,6 +978,19 @@ END {
   }
   for (f in MEM) if (!(f in NB)) { DER[f] = 1; print "DERIVE\t" f "\tno MUTANT-MATRIX block; floor: " TAG[f]; if (!(f in LISTED)) print "FLOOR\t" f "\t" TAG[f] }
   for (x in LISTED) if (!(x in DER)) print "STALE\t" x
+  # H7: every twin of an ACCEPTED MUTANT-MATRIX row resolves to a label its fixture emits, or is a listed built token.
+  # Form 8 is joined here, once every C row is in: a defined function that forms 1, 1b or 5 read as the PRINTER or
+  # callee (`ok`, `bad`, `want`) is the emitter, never a label.
+  for (y in F8) { if (!(y in CAL7)) { if (!(y in LAB)) LAB[y] = "8"; else LAB[y] = LAB[y] " 8" } }
+  for (x in TW7) {
+    k = index(x, ":"); f = substr(x, 1, k - 1); tk = TWT7[x]; lb = tk; sub(/\..*$/, "", lb)
+    fm = ((f, tk) in LAB) ? LAB[f, tk] : (((f, lb) in LAB) ? LAB[f, lb] : "")
+    if (fm != "") { RES7[x] = 1; print "R7\t" x "\t" fm }
+    else if (x in TLISTED) print "B7\t" x
+    else print "H7\t" TWW7[x] ":" tk "\ttwin " tk " names no label the fixture emits (no emission form of H7 yields " (tk == lb ? tk : tk " or " lb) " on a code line of its files); unlisted key " x
+  }
+  for (x in TLISTED) { if (!(x in TW7)) print "H7STALE\t" x "\tno accepted MUTANT-MATRIX row of that fixture and mutant carries the twin"; else if (x in RES7) print "H7STALE\t" x "\tthe twin now resolves to an emitted label" }
+  print "N7\t" (NTW7 + 0)
 }
 AWK
 
@@ -776,13 +1019,15 @@ run_all() {
   fi
   [ -f "$r/$MKA_REL" ] && cp "$r/$MKA_REL" "$o.mka" || : > "$o.mka"
   [ -f "$r/$ALLOW_REL" ] && cp "$r/$ALLOW_REL" "$o.allow" || : > "$o.allow"
-  awk -F'\t' "$JUDGE_AWK" "$o.stubs" "$o.mka" "$o.scan" "$o.allow" | LC_ALL=C sort -u > "$o.verdict" \
+  [ -f "$r/$H7_ALLOW_REL" ] && cp "$r/$H7_ALLOW_REL" "$o.tallow" || : > "$o.tallow"
+  awk -F'\t' "$JUDGE_AWK" "$o.stubs" "$o.mka" "$o.scan" "$o.allow" "$o.tallow" | LC_ALL=C sort -u > "$o.verdict" \
     || { echo "BROKEN: the judge awk failed, so its verdict is empty rather than clean"; return 2; }
   return 0
 }
 
-# m4 <repo> <current list> <scratch> [<rel> <arm> <remedy>]: the down-only arm, keyed on field 1. With no 4th-6th
-# argument it judges this file's H5 list ($ALLOW_REL, arm M4, its remedy). THE ONE SHARED COPY:
+# m4 <repo> <current list> <scratch> [<rel> <arm> <remedy> <noun>]: the down-only arm, keyed on field 1. With no 4th-7th
+# argument it judges this file's H5 list ($ALLOW_REL, arm M4, its remedy); <noun> names field 1 in the FAIL line
+# (default `fixture`; H7-M4 passes its `<fixture>:<mutant>:<token>` key). THE ONE SHARED COPY:
 # scripts/validate-fixture-inprocess.sh extracts this function by its own boundaries (awk, every line strictly between
 # the `# M4_BEGIN` and `# M4_END` marker lines below, refusing unless exactly one `m4() {` sits between them) and passes
 # all three, so the two down-only fixture lists run one function.
@@ -792,6 +1037,7 @@ run_all() {
 m4() {
   local repo="$1" cur="$2" base="$3" rel="${4:-$ALLOW_REL}" arm="${5:-M4}" sha added
   local remedy="${6:-do not list the fixture; give it its MUTANT-MATRIX block (fixture-mutants.md) and delete the row.}"
+  local noun="${7:-fixture}"
   sha="$(git -C "$repo" rev-parse -q --verify 'origin/main^{commit}' 2>/dev/null)" || sha=""
   if [ -z "$sha" ]; then echo "SKIP $arm: origin/main does not resolve here, so there is no base allowlist to compare against"; return 0; fi
   if ! git -C "$repo" cat-file -e "${sha}:${rel}" 2>/dev/null; then
@@ -800,7 +1046,7 @@ m4() {
   added="$(awk -F'\t' '/^[[:space:]]*(#|$)/ { next } { x = $1; gsub(/[[:space:]]/, "", x) }
     FNR == NR { b[x] = 1; next } !(x in b) && !(x in seen) { seen[x] = 1; print x }' "$base" "$cur" | LC_ALL=C sort)"
   if [ -n "$added" ]; then
-    echo "FAIL $arm: allowlist row(s) whose fixture is not on $rel at origin/main -- the list is DOWN-ONLY:"
+    echo "FAIL $arm: allowlist row(s) whose $noun is not on $rel at origin/main -- the list is DOWN-ONLY:"
     printf '%s\n' "$added" | sed 's/^/    /'
     echo "  Remedy: $remedy"
     return 1
@@ -1181,6 +1427,89 @@ seed core/fixtures/m5n/run.sh <<'EOF'
 cmp -s "$a" "$b" && bad "the copy did not apply"
 reap_kill() { :; }
 EOF
+# H7's emitters for the H5 seeds above whose accepted rows carry the twin R2 (m5c, m5d's D12, m5e, m5k, m5m),
+# appended so no H5 row's line number moves.
+for x in m5c m5d m5e m5k m5m; do printf 'ok "R2 the twin cell"\n' >> "$P/core/fixtures/$x/run.sh"; done
+# H7 FIRE: Z9 sits on code lines only in NON-emission positions (an external tool's argument, an unquoted
+# assignment, a printf format, an echo string, an awk -v, a quoted ok, a comment, a heredoc body) -- the input that
+# separates the arm from a bare token grep; Q8.cell's label Q8 dangles beside the near-miss `ok "Q8x …"`; Z8 is a
+# listed built token with no reason (NOREASON, and B7 rather than H7). The D2 seeds, each a non-label word in a
+# weak form's position: `tell` is a defined function that is also the PRINTER (`tell "A1 …"`), so form 8 must not
+# acquit it (the uncalled `T8()` of m7q stays QUIET); `3` a bare number (`want2 3`, `for … in 3 4`, `3)`); `a` the
+# article opening a prose message (`tell "a prose message"`); `program` a later quoted argument (`tell "A1 …"
+# "program text"`); `absent` a word of a prose list (`m="the label is absent"`); `x` a one-character part of a
+# non-roster list item (`SV="ord=3/7 q|null"`); `a` again through form 1 (`ok "a prose line …"`); `fragw` a
+# fragment of a glob case pattern (`*fragw*)`), not a whole alternative; `optw` a word of a list carrying an
+# option (`CMD="run -v optw"`); `chw` a word of a list carrying a non-roster character (`PROG="chw { print }"`).
+seed core/fixtures/m7f/run.sh <<'EOF'
+#!/usr/bin/env bash
+# MUTANT-MATRIX MF decides=A1 twins=Z9,Q8.cell,Z8,tell,3,a,program,absent,q,fragw,optw,chw
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/m7f/run.sh --matrix
+tell() { :; }
+want2() { :; }
+ok "A1 holds"
+ok "Q8x is not Q8"
+grep -q Z9 "$f"
+x=Z9
+printf 'Z9 %s\n' y
+echo "Z9 done"
+awk -v Z9=1 'BEGIN { }'
+echo 'ok "Z9 inside a string"'
+# ok "Z9 in a comment"
+cat <<'E'
+ok "Z9 in a heredoc"
+E
+tell x
+tell "A1 the printed label" "program text the helper is handed"
+tell "a prose message, not a label"
+want2 3
+for n in 3 4; do :; done
+case "$n" in
+  3) : ;;
+esac
+m="the label is absent"
+SV="ord=3/7 q|null"
+ok "a prose line through ok"
+case "$n" in
+  *fragw*) : ;;
+esac
+CMD="run -v optw"
+PROG="chw { print }"
+EOF
+# H7 QUIET: one twin per emission form -- T1 ok message (form 1), T2 matrix_row (2), T3 arm_T3() (3), T4 a case
+# pattern (4), T5 a defined function's argument (5), T6 a quoted list assignment (6), T7 a for-in word (7), T1b a
+# defined function's quoted message, on a `\`-continued line (1b), T8 a defined function's name (8), B_T9= (9),
+# T10.cellA a <label>.<cell> twin whose label is emitted, TB a listed built token (its key `m7q:MQ:TB`), T4b a
+# case pattern after `;;` on the same line (4), and T11/T12 the keys of a `K=V` list (6). D1: MQ2 reuses TB on
+# another mutant row of the same fixture, which its key does not acquit, so it FIREs while MQ's TB stays B7.
+seed core/fixtures/m7q/run.sh <<'EOF'
+#!/usr/bin/env bash
+# MUTANT-MATRIX MQ decides=A1 twins=T1,T2,T3,T4,T5,T6,T7,T1b,T8,T9,T10.cellA,TB,T4b,T11
+# MUTANT-MATRIX MQ2 decides=A1 twins=TB,T12
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/m7q/run.sh --matrix
+want() { :; }
+say() { :; }
+arm_T3() { :; }
+T8() { :; }
+ok "A1 holds"
+ok "T1 holds"
+matrix_row MQ T2 0 GREEN yes
+case "$c" in
+  T4) echo x ;; T4b) echo y ;;
+esac
+want T5
+WANT="T11=allow:1 T12=deny:0"
+ARMS="T6 other"
+for a in T7 z; do :; done
+say \
+  "T1b the continued message"
+B_T9=1
+bad "T10 the label of a label.cell twin"
+EOF
+# The H7 list, keyed `<fixture>:<mutant>:<token>`: m7q:MQ:TB quiet and DUP; m7q:MQ:T1 STALE (resolves);
+# m7q:MQ:NOPE STALE (no such twin); m7q:GONE:TB STALE (TB is a twin of MQ and MQ2, never of a mutant GONE -- the
+# mutant part of the key is read); m7f:MF:Z8 NOREASON. No m7q:MQ2:TB row, so MQ2's TB fires.
+printf '# probe\nm7q:MQ:TB\tbuilt at runtime\nm7q:MQ:TB\tagain\nm7q:MQ:T1\tresolves now\nm7q:MQ:NOPE\tnot a twin\nm7q:GONE:TB\twrong mutant\nm7f:MF:Z8\n' > "$P/$H7_ALLOW_REL"
 printf '%s\n' '# probe' m5h > "$P/$MKA_REL"
 printf '# probe allowlist\nm5b\tS1\nm5f\tS1\nm5e\tS1\ngone\tS1\nm5b\tdup\nm5x\n' > "$P/$ALLOW_REL"
 { pgit init -q "$P" && pgit -C "$P" add -A && pgit -C "$P" commit -q -m probe; } >/dev/null 2>&1 \
@@ -1210,9 +1539,14 @@ want_rows() { case "$1" in
       printf "JOIN\tcore/fixtures/m5m/run.sh:6\n"
       printf 'STALE\t%s\n' gone m5e m5x
       printf 'DUP\tm5b\nNOREASON\tm5x\n' ;;
+  H7) printf 'H7\tm7f:2:%s\n' Z9 Q8.cell tell 3 a program absent q fragw optw chw
+      printf 'H7\tm7q:3:TB\n'
+      printf 'B7\t%s\n' m7f:MF:Z8 m7q:MQ:TB
+      printf 'H7STALE\t%s\n' m7q:MQ:T1 m7q:MQ:NOPE m7q:GONE:TB
+      printf 'H7DUP\tm7q:MQ:TB\nH7NOREASON\tm7f:MF:Z8\n' ;;
   esac; }
-for arm in H1 H2 H3 H5 H6; do
-  case "$arm" in H5) pat='^(FLOOR|ROW|JOIN|STALE|DUP|NOREASON|STUB)	' ;; *) pat="^$arm	" ;; esac
+for arm in H1 H2 H3 H5 H6 H7; do
+  case "$arm" in H5) pat='^(FLOOR|ROW|JOIN|STALE|DUP|NOREASON|STUB)	' ;; H7) pat='^(H7|H7STALE|H7DUP|H7NOREASON|B7)	' ;; *) pat="^$arm	" ;; esac
   grep -E "$pat" "$WORK/p.got" | LC_ALL=C sort > "$WORK/got.$arm" || :
   want_rows "$arm" | LC_ALL=C sort > "$WORK/want.$arm"
   if cmp -s "$WORK/got.$arm" "$WORK/want.$arm"; then sp_line "$arm" "ok ($(awk 'END { print NR }' "$WORK/want.$arm") seeded offender row(s) exact; the near-misses stayed quiet)"
@@ -1365,6 +1699,18 @@ if grep -qE '^(FLOOR|ROW|JOIN|STALE|DUP|NOREASON|STUB)	' "$WORK/c.verdict"; then
   awk -F'\t' '$1 ~ /^(FLOOR|ROW|JOIN|STALE|DUP|NOREASON|STUB)$/ { print "    " $1 " " $2 (NF >= 3 ? ": " $3 : "") }' "$WORK/c.verdict"
   echo "  FLOOR: a mutant battery with no MUTANT-MATRIX block (fixture-mutants.md 'One run per distinct state'). STALE/DUP/NOREASON: fix $ALLOW_REL. ROW/JOIN: fix the block."
 fi
+n7="$(awk -F'\t' '$1 == "N7" { print $2 }' "$WORK/c.verdict")"; r7="$(grep -c '^R7	' "$WORK/c.verdict")" || r7=0
+b7="$(grep -c '^B7	' "$WORK/c.verdict")" || b7=0
+echo "validate-fixture-hygiene: H7 ${n7:-0} twin(s) of accepted MUTANT-MATRIX rows: $r7 resolved to an emitted label, $b7 listed built"
+if grep -qE '^(H7|H7STALE|H7DUP|H7NOREASON)	' "$WORK/c.verdict"; then
+  rc=1; echo "FAIL H7:"
+  awk -F'\t' '$1 ~ /^H7(STALE|DUP|NOREASON)?$/ { print "    " $1 " " $2 (NF >= 3 ? ": " $3 : "") }' "$WORK/c.verdict"
+  echo "  H7: a twins= token that none of H7's emission forms (its header: an ok/bad/pass/fail message word, matrix_row, arm_<T>(), a case pattern, a fixture function's argument or first message, a roster list, a for-list, a defined function that is not a printer, B_<T>=) reads off its fixture's code records a world the push never runs. Correct the row by re-measuring it with the block's REMEASURE command; a label BUILT at runtime is a row of $H7_ALLOW_REL keyed <fixture>:<mutant>:<token>. H7STALE/H7DUP/H7NOREASON: fix $H7_ALLOW_REL."
+fi
+h7m4_out="$(m4 "$ROOT" "$ROOT/$H7_ALLOW_REL" "$WORK/h7m4-root-base.txt" "$H7_ALLOW_REL" H7-M4 \
+  "do not list the token; make the twin a label the fixture emits, or correct the MUTANT-MATRIX row by re-measuring it." \
+  "<fixture>:<mutant>:<token> key")" || rc=1
+echo "$h7m4_out"
 m4_out="$(m4 "$ROOT" "$ROOT/$ALLOW_REL" "$WORK/m4-root-base.txt")" || rc=1
 echo "$m4_out"
 e1_out="$(e1_run "$ROOT" "$WORK/e1c")"; e1rc=$?
@@ -1384,6 +1730,6 @@ if [ "$SP_RED" != 0 ]; then
 fi
 nlist="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ "$rc" = 0 ]; then
-  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row; E1 $ne1 receipt(s), $ni1 inert and allowlisted."
+  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row; H7 ${n7:-0} twin(s), $r7 emitted, $b7 listed built; E1 $ne1 receipt(s), $ni1 inert and allowlisted."
 fi
 exit "$rc"
