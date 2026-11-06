@@ -27,6 +27,22 @@
 #   RERUN   gate 2 pass 2 whose prior QA pass reviewed the base: Rule A answers GATE1-RERUN, and the plan
 #           reads `gate: rerun`, `manifest: none`, a `route: rerun GATE1-RERUN` line and no shard line.
 #           control: the prior QA pass reviewed the frozen sha, GATE1-SKIP, and the plan is `gate: 2` with shard lines.
+#   PRIORM  gate 1 pass 2 over a pass-1 prior written by the REAL merge-review-shards.sh, one column-0 reviewed-sha
+#           line per shard (non-adjacent, all naming MID, the commit between B and WK): exit 0, `gate: 1`, its `prior:`
+#           line names that file, the manifest's `base` is MID, and no gate-log line records a --map refusal fallback.
+#           control: PRIORD.
+#   PRIORD  the same prior with its third line naming B (A A B A A): exit 1, `REFUSED prior-review` naming 2 distinct
+#           values, no plan. control: PRIORM.
+#   FENCE   the PRIORM prior plus a fenced `reviewed-sha: B`: the fenced line is not read, so exit 0 with manifest base
+#           MID. control: FENCEC, the prior whose only reviewed-sha line sits in a fence, exits 1 naming no line.
+#   PRIORX  the same prior with every line reading `reviewed-sha: <MID> (base <B>)`, the shape 7 consumer files carry: one
+#           distinct value once normalised, so only the hex check can refuse it: exit 1, `REFUSED prior-review` naming
+#           `not a hex object name`, no plan. control: PRIORM.
+#   QAM     gate 2 pass 2 over a merged QA prior (byte-shape copy of a consumer one: three shard sections, one line each,
+#           all naming WK, the middle one backticked): `gate: 2` with shard lines. control: QAD.
+#   QAD     a merged QA prior naming WK, B, WK: exit 1, `REFUSED prior-validation` naming 2 distinct values, no plan.
+#           control: QAM.
+#   receipt-bl926.sh reads the PRIORM, PRIORD, QAM and QAD outputs and prints `receipt-bl926: PASS` (BL-926).
 #   G3X     gate 3 with one refusing arm exits 1, writes no g3 plan and leaves OPEN byte-identical.
 #           control: G3.
 #   G3      gate 3 with every arm passing exits 0, its plan carries `nonce: <N>`, and OPEN now reads <N>.
@@ -57,8 +73,8 @@
 #
 # THE MUTANTS, each a copy of the whole scripts directory with gate-transition.sh edited and cmp-checked;
 # per push each runs only its deciding world, scored against that step's base flag (lib/mutant.sh).
-# Measured by the --matrix run below (11 mutants x 17 arms, every other cell GREEN).
-# MUTANT-MATRIX m-early decides=DAR,G3X,CLOSEX,CLOSEMX twins=- why=per push it runs only G3X, and its one cheap green twin G3 would mint a second gate-3 nonce in the same second as the real G3 run, blinding that run's OPEN-moved check
+# Measured by the --matrix run below (16 mutants x 24 arms, every other cell GREEN).
+# MUTANT-MATRIX m-early decides=DAR,PRIORD,FENCEC,QAD,G3X,CLOSEX,CLOSEMX twins=- why=per push it runs only G3X, and its one cheap green twin G3 would mint a second gate-3 nonce in the same second as the real G3 run, blinding that run's OPEN-moved check
 # MUTANT-MATRIX m-pre3 decides=G3P,G3N twins=G3Q
 # MUTANT-MATRIX m-open12 decides=OPEN12 twins=MAP
 # MUTANT-MATRIX m-noxcap decides=MAPX twins=OPEN12
@@ -69,6 +85,11 @@
 # MUTANT-MATRIX m-slugok decides=CLOSEMX twins=- why=its cheap green twin CLOSEM seeds a newer storyless verdict that hides the slugged decoy, so it runs only the CLOSEMX start
 # MUTANT-MATRIX m-nosprint decides=CLOSEM,CLOSEMX twins=- why=its one cheap green twin CLOSEP needs a story-3-1 world the CLOSEM start does not leave, so a twin would add a second start for no new cell
 # MUTANT-MATRIX m-skipolder decides=CLOSEMX twins=- why=its cheap green twin CLOSEM seeds a newer storyless verdict carrying 26 PASS, which the mutant takes like the original, so it runs only the CLOSEMX start
+# MUTANT-MATRIX m-rs1 decides=PRIORM,PRIORD,PRIORX,FENCE,QAM,QAD twins=- why=per push it runs only the PRIORM start; its one green cell FENCEC is a refusal both programs give for the same cause, so a twin start would add a start and no discriminating cell
+# MUTANT-MATRIX m-rsany decides=PRIORD,QAD twins=- why=per push it runs only the PRIORD start; its green twins PRIORM and QAM name one value, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
+# MUTANT-MATRIX m-nofence decides=FENCE,FENCEC twins=- why=per push it runs only the FENCE start; every other prior carries no fence, so no twin start can move
+# MUTANT-MATRIX m-raw decides=QAM,PRIORX twins=- why=per push it runs only the QAM start; every other pass-2 prior is plain, so raw and normalised values agree on each and no twin start can move
+# MUTANT-MATRIX m-nohex decides=PRIORX twins=- why=per push it runs only the PRIORX start; every other prior names hex values, where the dropped refusal never fires, so a twin start would only repeat the unmutated run
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-transition/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -290,6 +311,91 @@ st_g2k() { # gate 2 pass 2, prior QA reviewed the frozen sha: RERUN's control, O
   [ "$RC" = 0 ] && grep -qx 'gate: 2' "$P/1-1-g2-p2.plan" && [ "$(nshards "$P/1-1-g2-p2.plan")" -gt 0 ] && V_RERUNC=1
   V_OPEN=$OPEN_SAME
 }
+# --- the pass-2 priors (BL-926): every column-0 reviewed-sha line of a merged review names one sha --------------
+# seed_priors : the pass-1 priors under $L/docs/reviews/s1/, built once per world. 1-1 is a REAL merge-review-shards.sh
+# output over shards reviewing MID (the commit between B and WK, so a fallback to --base reads differently): one
+# reviewed-sha line per shard, non-adjacent, separated by the shard sections the merge writes. 1-2 is that file with
+# its third reviewed-sha line naming B (A A B A A: two distinct values, the odd one in the middle). 1-3 is that file
+# plus a fenced `reviewed-sha: B` block; 1-4 carries its one reviewed-sha line only inside a fence. The QA priors are
+# byte-shape copies of a consumer merged QA validation (three shard sections, one reviewed-sha line each): 4-1 names
+# WK on all three, the middle one backticked; 4-2 names WK, B, WK.
+seed_priors() {
+  local sd o k r="$L/docs/reviews/s1"
+  MID="$(gitw "$L" rev-parse "$WK^")" || return 1
+  sd="$WT/docs/reviews/s1/shards/1-1-code-review-$(printf '%s' "$MID" | cut -c1-12)"
+  mkdir -p "$r" || return 1
+  bash "$SCR/validate-handoff-evidence.sh" -C "$WT" --list-captures "$STORY" "$MID" > "$WD/capm" 2> /dev/null || return 1
+  AI_DLC_REVIEW_SHARD_MIN_FILES=2 bash "$SCR/partition-review-diff.sh" --map "$WT" "$B" "$MID" --exclude-captures "$WD/capm" --shard-dir "$sd" > "$WD/mapm" 2> /dev/null || return 1
+  for k in $(cut -f1 "$WD/mapm") cross; do
+    { printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: APPROVED\nadvisor: called\n' "$k" "$MID"
+      [ "$k" = cross ] || printf 'handovers: 0\n'
+      printf '\n## Summary\nRead.\n\n## Findings\n\n### Critical (must fix before merge)\n\nNone.\n\n### Important (should fix, can be follow-up)\n\nNone.\n\n### Suggestions (optional improvements)\n\nNone.\n'
+    } > "$sd/$k.md" || return 1
+  done
+  o="$r/1-1-code-review.md"
+  ( cd "$L" && AI_DLC_PROJECT_ROOT="$_d" bash "$SCR/merge-review-shards.sh" "$sd" --gate code-review --out "$o" ) > "$WD/merge.out" 2>&1 || return 1
+  grep -q '^MERGED: ' "$WD/merge.out" || return 1
+  awk -v b="$B" '/^reviewed-sha:/ && ++n == 3 { print "reviewed-sha: " b; next } { print }' "$o" > "$r/1-2-code-review.md"
+  awk -v b="$B" '{ print } NR == 1 { print ""; print "```"; print "reviewed-sha: " b; print "```" }' "$o" > "$r/1-3-code-review.md"
+  awk -v m="$MID" '/^reviewed-sha:/ { next } { print } NR == 1 { print ""; print "```"; print "reviewed-sha: " m; print "```" }' "$o" > "$r/1-4-code-review.md"
+  awk -v m="$MID" -v b="$B" '/^reviewed-sha:/ { print $0 " (base " b ")"; next } { print }' "$o" > "$r/1-5-code-review.md"
+  qa_prior "$r/4-1-qa-validation.md" "$WK" "\`$WK\`" "$WK"
+  qa_prior "$r/4-2-qa-validation.md" "$WK" "$B" "$WK"
+}
+qa_prior() { # <file> <sha of part 1> <of part 2> <of cross>
+  { printf '# QA Validation: %s (merged from 3 shards)\n\n## Summary\n\nThree shards validated.\n\n## Verdict\n\nPASS\n' "${1##*/}"
+    printf '\n## Shard: part 1\n\nshard-verdict: PASS\nreviewed-sha: %s\n\n## Findings\n\nNone.\n' "$2"
+    printf '\n## Shard: part 2\n\nshard-verdict: PASS\nreviewed-sha: %s\n\n## Findings\n\nNone.\n' "$3"
+    printf '\n## Shard: cross\n\nshard-verdict: PASS\nreviewed-sha: %s\n\n## Findings\n\nNone.\n' "$4"
+  } > "$1"
+}
+nrs() { # <file> -> the count of distinct normalised reviewed-sha values, fences not consulted (the seeds carry none here)
+  awk '/^reviewed-sha:/ { v = $0; sub(/^reviewed-sha:[[:space:]]*/, "", v); gsub(/[`[:space:]]/, "", v); if (!(v in S)) { S[v] = 1; n++ } } END { print n + 0 }' "$1"
+}
+mbase() { # <plan> -> the base line of the manifest the plan names
+  local m; m="$(sed -n 's#^manifest: ##p' "$1" 2> /dev/null)"
+  [ -f "$m" ] && awk -F'\t' '$1 == "base" { print $2 }' "$m"
+}
+p2run() { # <cell> <gt> <tag> <idx> <gate> : one pass-2 start, its exit kept beside its output
+  gtrun "$1" "$2" "$3" 2 - "$4" "$5" --pass 2; printf '%s\n' "$RC" > "$WD/$3.rc"
+}
+st_pm() { # gate 1 pass 2 over the real merged prior, five identical lines: PRIORM
+  p2run "$1" "$2" pm 1-1 1
+  V_PRIORM=0
+  [ "$RC" = 0 ] && grep -qx 'gate: 1' "$P/1-1-g1-p2.plan" && grep -qxF "prior: $L/docs/reviews/s1/1-1-code-review.md" "$P/1-1-g1-p2.plan" \
+    && [ "$(mbase "$P/1-1-g1-p2.plan")" = "$MID" ] && ! grep -q '^gate-log: partition-review-diff' "$P/1-1-g1-p2.plan" && V_PRIORM=1
+}
+st_pd() { # gate 1 pass 2 over the same prior with its middle line naming B: PRIORD
+  p2run "$1" "$2" pd 1-2 1
+  V_PRIORD=0
+  [ "$RC" = 1 ] && grep -q 'REFUSED prior-review: .* carries 2 distinct column-0 reviewed-sha values' "$WD/pd.err" && [ ! -e "$P/1-2-g1-p2.plan" ] && V_PRIORD=1
+}
+st_fe() { # gate 1 pass 2, the prior's A lines plus a fenced reviewed-sha B: FENCE
+  p2run "$1" "$2" fe 1-3 1
+  V_FENCE=0
+  [ "$RC" = 0 ] && grep -qx 'gate: 1' "$P/1-3-g1-p2.plan" && [ "$(mbase "$P/1-3-g1-p2.plan")" = "$MID" ] && V_FENCE=1
+}
+st_fc() { # gate 1 pass 2, the prior's only reviewed-sha line inside a fence: FENCEC
+  p2run "$1" "$2" fc 1-4 1
+  V_FENCEC=0
+  [ "$RC" = 1 ] && grep -q 'REFUSED prior-review: .* carries no column-0 reviewed-sha line outside a fence' "$WD/fc.err" && [ ! -e "$P/1-4-g1-p2.plan" ] && V_FENCEC=1
+}
+st_px() { # gate 1 pass 2, every line `reviewed-sha: <MID> (base <B>)`: PRIORX
+  p2run "$1" "$2" px 1-5 1
+  V_PRIORX=0
+  [ "$RC" = 1 ] && grep -q 'REFUSED prior-review: .* carries a column-0 reviewed-sha value that is not a hex object name' "$WD/px.err" && [ ! -e "$P/1-5-g1-p2.plan" ] && V_PRIORX=1
+}
+st_qm() { # gate 2 pass 2 over a merged QA prior, three lines naming WK, the middle one backticked: QAM
+  p2run "$1" "$2" qm 4-1 2
+  V_QAM=0
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$P/4-1-g2-p2.plan" && [ "$(nshards "$P/4-1-g2-p2.plan")" -gt 0 ] \
+    && grep -qxF "prior: $L/docs/reviews/s1/4-1-qa-validation.md" "$P/4-1-g2-p2.plan" && V_QAM=1
+}
+st_qd() { # gate 2 pass 2 over a merged QA prior naming WK, B, WK: QAD
+  p2run "$1" "$2" qd 4-2 2
+  V_QAD=0
+  [ "$RC" = 1 ] && grep -q 'REFUSED prior-validation: .* carries 2 distinct column-0 reviewed-sha values' "$WD/qd.err" && [ ! -e "$P/4-2-g2-p2.plan" ] && V_QAD=1
+}
 st_g3x() { # gate 3, the H2 arm refusing: G3X
   gtrun "$1" "$2" g3x 2 validate-h2-attestation.sh 1-1 3 --transcript-dir "$WD/td"
   V_G3X=0
@@ -393,8 +499,18 @@ P_SLUGOK='{ i = index($0, "implementation-s${SPRINT}-[0-9]{8}"); if (i) $0 = sub
 # m-skipolder: the fallback skips a verdict whose ledger lacks 26 PASS and moves on, so an OLDER passing gate 3 is taken
 # where newest-wins refuses on the newest one.
 P_SKIPOLDER='{ print } index($0, "implementation-s${SPRINT}-[0-9]{8}T[0-9]{6}Z\\\"\" \"$v\" || continue") { print "      n=\"${v##*/}\"; grep -qE \"^26[[:space:]]+PASS\" <<< \"$(bash \"$SELF/gate-checkpoint.sh\" --nonce \"${n%.verdict.json}\" list 2> /dev/null)\" || continue" }'
-MUTS="m-early:P_EARLY:1 m-open12:P_OPEN12:2 m-noxcap:P_NOXCAP:2 m-norm:P_NORM:1 m-close26:P_CLOSE26:2 m-pdir:P_PDIR:2 m-pre3:P_PRE3:2 m-fixed3:P_FIXED3:2 m-nosprint:P_NOSPRINT:2 m-slugok:P_SLUGOK:2 m-skipolder:P_SKIPOLDER:1"
-ARMS="MAP JOIN MAPX DAR RECP OPEN12 RERUN G3X G3Q G3 CLOSEX CLOSE G3P G3N CLOSEMX CLOSEM CLOSEP"
+# m-rs1: reviewed_sha counts LINES, so a prior must carry exactly one, as the program did before BL-926.
+P_RS1='index($0, "if (!(v in S)) {") { $0 = "      n++; s = v }" } { print }'
+# m-rsany: the distinct-value refusal dropped; any number of lines answers, whatever they name.
+P_RSANY='{ i = index($0, "if (n > 1)"); if (i) $0 = substr($0, 1, i - 1) "if (n < 0)" substr($0, i + 10) } { print }'
+# m-nofence: a reviewed-sha line inside a fence is read like any other.
+P_NOFENCE='$0 != "    f { next }" { print }'
+# m-raw: the value is the raw second field, with no label, backtick, CR or blank normalisation.
+# m-nohex: the hex check made unable to fire; any single value answers.
+P_NOHEX='{ i = index($0, "if (s !~ /^[0-9a-f]+$/)"); if (i) $0 = substr($0, 1, i - 1) "if (s !~ /^/)" substr($0, i + 24) } { print }'
+P_RAW='index($0, "gsub(/[") { $0 = "      v = $2" } { print }'
+MUTS="m-early:P_EARLY:1 m-open12:P_OPEN12:2 m-noxcap:P_NOXCAP:2 m-norm:P_NORM:1 m-close26:P_CLOSE26:2 m-pdir:P_PDIR:2 m-pre3:P_PRE3:2 m-fixed3:P_FIXED3:2 m-nosprint:P_NOSPRINT:2 m-slugok:P_SLUGOK:2 m-skipolder:P_SKIPOLDER:1 m-rs1:P_RS1:2 m-rsany:P_RSANY:2 m-nofence:P_NOFENCE:1 m-raw:P_RAW:2 m-nohex:P_NOHEX:2"
+ARMS="MAP JOIN MAPX DAR RECP OPEN12 RERUN PRIORM PRIORD PRIORX FENCE FENCEC QAM QAD G3X G3Q G3 CLOSEX CLOSE G3P G3N CLOSEMX CLOSEM CLOSEP"
 
 if [ "$MATRIX" = 1 ]; then
   rows=0
@@ -411,6 +527,8 @@ if [ "$MATRIX" = 1 ]; then
     st_g2 x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
     st_g2r x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
     st_g2k x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0
+    seed_priors || { echo "FIXTURE BROKEN: the matrix priors for $n did not build" >&2; exit 2; }
+    for s in st_pm st_pd st_px st_fe st_fc st_qm st_qd; do "$s" x "$d/core/scripts/gate-transition.sh"; [ "$V_OPEN" = 1 ] || o=0; done
     st_g3x x "$d/stub/core/scripts/gate-transition.sh"
     st_g3q x "$d/stub/core/scripts/gate-transition.sh"
     st_g3 x "$d/stub/core/scripts/gate-transition.sh"
@@ -524,7 +642,80 @@ st_g2r g2r "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
 st_g2k g2k "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
 [ "$V_RERUNC" = 1 ] && ok "RERUN control: GATE1-SKIP at gate 2 pass 2 writes gate: 2 with $(nshards "$P/1-1-g2-p2.plan") shard lines" \
   || bad "RERUN control rc=$RC: $(head -3 "$WD/g2k.err" | tr '\n' ' ')"
-[ "$O12" = 1 ] && ok "OPEN12 the live OPEN is byte-identical across all six gate-1 and gate-2 runs" || bad "OPEN12 a gate-1 or gate-2 run moved the live OPEN"
+seed_priors || { echo "FIXTURE BROKEN: the pass-1 priors did not build (the real merge-review-shards.sh merge over MID's shards refused: $(head -2 "$WD/merge.out" | tr '\n' ' '))" >&2; exit 2; }
+# The seeds separate what the arms need: the real merge wrote more than one line naming one sha, the A A B A A copy
+# names two, and the backticked QA prior reads one distinct value only once normalised.
+[ "$(grep -c '^reviewed-sha:' "$L/docs/reviews/s1/1-1-code-review.md")" -ge 2 ] && [ "$(nrs "$L/docs/reviews/s1/1-1-code-review.md")" = 1 ] \
+  && [ "$(nrs "$L/docs/reviews/s1/1-2-code-review.md")" = 2 ] && [ "$(nrs "$L/docs/reviews/s1/1-5-code-review.md")" = 1 ] \
+  && [ "$(grep -c '^reviewed-sha: .* (base ' "$L/docs/reviews/s1/1-5-code-review.md")" = "$(grep -c '^reviewed-sha:' "$L/docs/reviews/s1/1-5-code-review.md")" ] && [ "$MID" != "$B" ] && [ "$MID" != "$WK" ] \
+  && [ "$(awk '/^reviewed-sha:/ { print $2 }' "$L/docs/reviews/s1/4-1-qa-validation.md" | sort -u | grep -c .)" = 2 ] \
+  && [ "$(nrs "$L/docs/reviews/s1/4-1-qa-validation.md")" = 1 ] \
+  || { echo "FIXTURE BROKEN: the seeded priors do not separate one distinct value from two, or raw from normalised" >&2; exit 2; }
+st_pm pm "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+B_PRIORM="$([ "$V_PRIORM" = 1 ] && echo 1)"
+[ "$V_PRIORM" = 1 ] && ok "PRIORM gate 1 pass 2 over a real merged prior ($(grep -c '^reviewed-sha:' "$L/docs/reviews/s1/1-1-code-review.md") reviewed-sha lines, one sha): plan written, its prior line names the file, the manifest base is the prior's sha" \
+  || bad "PRIORM rc=$RC: $(head -2 "$WD/pm.err" | tr '\n' ' ') base=$(mbase "$P/1-1-g1-p2.plan")"
+st_pd pd "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+B_PRIORD="$([ "$V_PRIORD" = 1 ] && echo 1)"
+[ "$V_PRIORD" = 1 ] && ok "PRIORD control: the same prior with its middle line naming the base exits 1, REFUSED prior-review naming 2 distinct values, no plan" \
+  || bad "PRIORD rc=$RC: $(head -2 "$WD/pd.err" | tr '\n' ' ')"
+st_px px "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+B_PRIORX="$([ "$V_PRIORX" = 1 ] && echo 1)"
+[ "$V_PRIORX" = 1 ] && ok "PRIORX gate 1 pass 2 over a prior whose lines read 'reviewed-sha: <sha> (base <sha>)': exit 1, REFUSED prior-review naming a value that is not a hex object name, no plan" \
+  || bad "PRIORX rc=$RC: $(head -2 "$WD/px.err" | tr '\n' ' ')"
+st_fe fe "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+B_FENCE="$([ "$V_FENCE" = 1 ] && echo 1)"
+[ "$V_FENCE" = 1 ] && ok "FENCE a fenced reviewed-sha naming the base is not read: gate 1 pass 2 proceeds with manifest base $(printf '%s' "$MID" | cut -c1-12)" \
+  || bad "FENCE rc=$RC: $(head -2 "$WD/fe.err" | tr '\n' ' ')"
+st_fc fc "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+[ "$V_FENCEC" = 1 ] && ok "FENCE control: a prior whose only reviewed-sha line is fenced exits 1, REFUSED prior-review naming no line outside a fence" \
+  || bad "FENCE control rc=$RC: $(head -2 "$WD/fc.err" | tr '\n' ' ')"
+st_qm qm "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+B_QAM="$([ "$V_QAM" = 1 ] && echo 1)"
+[ "$V_QAM" = 1 ] && ok "QAM gate 2 pass 2 over a merged QA prior, three lines naming the frozen sha (one backticked): gate: 2 with $(nshards "$P/4-1-g2-p2.plan") shard lines" \
+  || bad "QAM rc=$RC: $(head -2 "$WD/qm.err" | tr '\n' ' ')"
+st_qd qd "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+B_QAD="$([ "$V_QAD" = 1 ] && echo 1)"
+[ "$V_QAD" = 1 ] && ok "QAD control: a merged QA prior naming WK, B, WK exits 1, REFUSED prior-validation naming 2 distinct values, no plan" \
+  || bad "QAD rc=$RC: $(head -2 "$WD/qd.err" | tr '\n' ' ')"
+# BL-926's receipt reads the outputs the PRIORM, PRIORD, QAM and QAD starts above left on disk; it starts no subject.
+bash "$HERE/receipt-bl926.sh" "$WD" "$L" "$P" > "$WD/r926.out" 2>&1; r926=$?
+case "$r926" in
+  0) sed -n '1p' "$WD/r926.out"; ok "BL-926 receipt: the multi-line identical priors proceed and the distinct-value priors refuse" ;;
+  9) echo "FIXTURE BROKEN: receipt-bl926.sh refused to measure: $(head -1 "$WD/r926.out")" >&2; exit 2 ;;
+  *) bad "BL-926 receipt exited $r926: $(tr '\n' ' ' < "$WD/r926.out" | cut -c1-300)" ;;
+esac
+if mut_tree m-rs1 "$P_RS1" 2; then
+  st_pm m-rs1 "$d/core/scripts/gate-transition.sh"
+  if [ "$V_PRIORM" = 0 ] && [ "$RC" = 1 ] && grep -q 'REFUSED prior-review' "$WD/pm.err"; then
+    mutant_killed "$([ "$B_PRIORM" = 1 ] && echo 1)" m-rs1 "mutant m-rs1 (exactly one reviewed-sha line, as before BL-926): the real merged prior is refused, killed by PRIORM" && KILLS=$((KILLS + 1))
+  else bad "mutant m-rs1 SURVIVED or for another reason: PRIORM=$V_PRIORM rc=$RC"; fi
+fi
+if mut_tree m-rsany "$P_RSANY" 2; then
+  st_pd m-rsany "$d/core/scripts/gate-transition.sh"
+  if [ "$V_PRIORD" = 0 ] && [ "$RC" = 0 ]; then
+    mutant_killed "$([ "$B_PRIORD" = 1 ] && echo 1)" m-rsany "mutant m-rsany (any number of lines, no distinct check): the A A B A A prior proceeds, killed by PRIORD" && KILLS=$((KILLS + 1))
+  else bad "mutant m-rsany SURVIVED or for another reason: PRIORD=$V_PRIORD rc=$RC"; fi
+fi
+if mut_tree m-nofence "$P_NOFENCE" 1; then
+  st_fe m-nofence "$d/core/scripts/gate-transition.sh"
+  if [ "$V_FENCE" = 0 ] && [ "$RC" = 1 ] && grep -q 'carries 2 distinct' "$WD/fe.err"; then
+    mutant_killed "$([ "$B_FENCE" = 1 ] && echo 1)" m-nofence "mutant m-nofence (fenced lines read): the fenced base sha is a second value, killed by FENCE" && KILLS=$((KILLS + 1))
+  else bad "mutant m-nofence SURVIVED or for another reason: FENCE=$V_FENCE rc=$RC"; fi
+fi
+if mut_tree m-nohex "$P_NOHEX" 2; then
+  st_px m-nohex "$d/core/scripts/gate-transition.sh"
+  if [ "$V_PRIORX" = 0 ] && [ "$RC" = 0 ] && [ -e "$P/1-5-g1-p2.plan" ]; then
+    mutant_killed "$([ "$B_PRIORX" = 1 ] && echo 1)" m-nohex "mutant m-nohex (hex check unable to fire): a 'sha (base sha)' prior proceeds, killed by PRIORX" && KILLS=$((KILLS + 1))
+  else bad "mutant m-nohex SURVIVED or for another reason: PRIORX=$V_PRIORX rc=$RC"; fi
+fi
+if mut_tree m-raw "$P_RAW" 2; then
+  st_qm m-raw "$d/core/scripts/gate-transition.sh"
+  if [ "$V_QAM" = 0 ] && [ "$RC" = 1 ] && grep -q 'REFUSED prior-validation' "$WD/qm.err"; then
+    mutant_killed "$([ "$B_QAM" = 1 ] && echo 1)" m-raw "mutant m-raw (raw field 2, no normalisation): the backticked line reads as a second value, killed by QAM" && KILLS=$((KILLS + 1))
+  else bad "mutant m-raw SURVIVED or for another reason: QAM=$V_QAM rc=$RC"; fi
+fi
+[ "$O12" = 1 ] && ok "OPEN12 the live OPEN is byte-identical across every gate-1 and gate-2 run" || bad "OPEN12 a gate-1 or gate-2 run moved the live OPEN"
 
 st_g3x g3x "$GT3"
 B_G3X="$([ "$V_G3X" = 1 ] && echo 1)"
@@ -616,7 +807,7 @@ if mut_tree m-nosprint "$P_NOSPRINT" 2; then
   else bad "mutant m-nosprint SURVIVED or for another reason: CLOSEM=$V_CLOSEM rc=$RC"; fi
 fi
 # Every mutant was built, applied and killed: KILLS counts mutant_killed calls that returned 0.
-[ "$KILLS" = 11 ] && ok "MK all 11 mutants applied and scored" || bad "MK $KILLS of 11 mutants scored"
+[ "$KILLS" = 16 ] && ok "MK all 16 mutants applied and scored" || bad "MK $KILLS of 16 mutants scored"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-transition: PASS"; exit 0; fi

@@ -164,8 +164,26 @@ prior_file() {
   local rel="docs/reviews/s${SPRINT}/${IDX}-$1${PSFX}.md"
   if [ -f "$WT/$rel" ]; then printf '%s' "$WT/$rel"; elif [ -f "$ROOT/$rel" ]; then printf '%s' "$ROOT/$rel"; else return 1; fi
 }
-# reviewed_sha <file> -> its single column-0 `reviewed-sha:` value.
-reviewed_sha() { awk '/^reviewed-sha:[[:space:]]*[0-9a-f]+[[:space:]]*$/ { v = $2; n++ } END { if (n == 1) print v; else exit 1 }' "$1"; }
+# reviewed_sha <file> -> the prior's reviewed sha, read as partition-review-diff.sh's prior_delta reads the same
+# file for --route and --narrow (the same extraction, except that a bare `reviewed-sha:` line with an empty value counts here): every column-0 `reviewed-sha:` line OUTSIDE a ``` / ~~~ fence, each value with
+# the label, backticks, CR and blanks stripped. A merged (sharded) review carries one such line per shard, so the
+# file answers when its lines name exactly ONE distinct value and that value is hex. Otherwise exit 1, the cause
+# on stdout: no line, N distinct values, or a non-hex value (a value carrying prose).
+reviewed_sha() {
+  awk '
+    f && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { f = 0; next }
+    !f && /^[ \t]*(```|~~~)/ { f = 1; next }
+    f { next }
+    /^reviewed-sha:/ { v = $0; sub(/^reviewed-sha:[ \t]*/, "", v)
+      gsub(/[`\r \t]/, "", v)
+      if (!(v in S)) { S[v] = 1; n++; s = v } }
+    END {
+      if (n == 0) { print "no column-0 reviewed-sha line outside a fence"; exit 1 }
+      if (n > 1) { print n " distinct column-0 reviewed-sha values outside a fence, where every line must name the one reviewed sha"; exit 1 }
+      if (s !~ /^[0-9a-f]+$/) { print "a column-0 reviewed-sha value that is not a hex object name (" s ")"; exit 1 }
+      print s
+    }' "$1"
+}
 
 # captures <sha>: --list-captures into $CAP. Sets XCAP to the --exclude-captures pair, or empty on exit 2.
 XCAP_ON=1
@@ -247,7 +265,7 @@ case "$GATE" in
   SD="$WT/docs/reviews/s${SPRINT}/shards/${IDX}-code-review-${SHA12}${SFX}"
   if [ "$PASS" -ge 2 ]; then
     PRIOR="$(prior_file code-review)" || { refuse prior-review "no pass $((PASS - 1)) review file docs/reviews/s${SPRINT}/${IDX}-code-review${PSFX}.md in $WT or $ROOT" "merge pass $((PASS - 1)) before re-reviewing"; stop_if_refused; }
-    PSHA="$(reviewed_sha "$PRIOR")" || { refuse prior-review "$PRIOR carries no single column-0 reviewed-sha line" "the pass $((PASS - 1)) review must carry one reviewed-sha line"; stop_if_refused; }
+    PSHA="$(reviewed_sha "$PRIOR")" || { refuse prior-review "$PRIOR carries $PSHA" "every column-0 reviewed-sha line of the pass $((PASS - 1)) review (one per shard in a merged review) must name the one full sha it reviewed"; stop_if_refused; }
     input prior "$PRIOR"
     set -f
     # shellcheck disable=SC2046
@@ -285,7 +303,7 @@ case "$GATE" in
   captures "$SHA"
   if [ "$PASS" -ge 2 ]; then
     PRIOR="$(prior_file qa-validation)" || { refuse prior-validation "no QA pass $((PASS - 1)) file docs/reviews/s${SPRINT}/${IDX}-qa-validation${PSFX}.md in $WT or $ROOT" "merge QA pass $((PASS - 1)) first"; stop_if_refused; }
-    GO="$(reviewed_sha "$PRIOR")" || { refuse prior-validation "$PRIOR carries no single column-0 reviewed-sha line" "the QA pass $((PASS - 1)) file must carry one reviewed-sha line"; stop_if_refused; }
+    GO="$(reviewed_sha "$PRIOR")" || { refuse prior-validation "$PRIOR carries $GO" "every column-0 reviewed-sha line of the QA pass $((PASS - 1)) file (one per shard in a merged validation) must name the one full go-signal sha it validated"; stop_if_refused; }
     input prior "$PRIOR"
     set -f
     # shellcheck disable=SC2046
