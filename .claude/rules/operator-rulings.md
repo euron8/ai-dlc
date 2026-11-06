@@ -17,7 +17,7 @@ Measure the delivery gap,
 write the runbook, rehearse it, report the number — then STOP. A runbook that is written,
 rehearsed and green is READY, never AUTHORIZED, and neither a `PENDING` count nor an earlier
 answer about WHETHER a pull should happen is a decision about WHEN. Never dispatch one, and
-never hand one to a peer session.
+never hand one to a peer session. Never restate this ruling in a status or ETA report: "I am well aware of that already."
 
 Before sending any peer work at all, check what it is DOING and put that state into the
 QUESTION you ask the operator. `busy` in `ListAgents`
@@ -144,3 +144,11 @@ one register: the two that matter become unfindable.
 When a peer session holds no further work (its releases merged and verified, its branches and
 worktrees cleaned up, and no slot, filing, relay or close duty owed), the lead says so plainly to
 the operator AND messages that session that it is CLOSABLE.
+
+## A tightly scoped defect is fast-tracked
+
+"A tightly scoped issue like that should be fast tracked and not be crushed under the machinery
+that we use to solve complex problems with." Fold only the contract adversary's BLOCKERs, and a
+DEFECT only inside the reported subjects; one hand builds it; one tip-adversary pass, BLOCKERs
+only; the lead adds no conditions; it takes the next free push slot, never waiting on another
+release's readiness.

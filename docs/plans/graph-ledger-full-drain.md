@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -57,13 +57,14 @@ one in the section. It refuses with exit 2 when it cannot reach the ceiling. **A
 whole, including any standing rule written inside it**, so a rule that must outlive its batch
 belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 250 IS CLOSED: RELEASES `v0.1002.0` THROUGH `v0.1019.0`. THE NEXT SESSION STARTS BATCH 251.**
-Batch 249: `docs/plans/archive/`. `ai-dlc-be` was the lead. No `graph-*` session is ever messaged.
-- **Landed** (`git log origin/main`). `v0.1002.0` through `v0.1009.0` and `v0.1011.0` through `v0.1019.0`; `0.1010.0` was allocated, never shipped. **The next VERSION is `0.1020.0`.**
-- **Backlog.** Live 52 at the `v0.1019.0` tip (`grep -c '^## BL-' docs/backlog.md`), archive 844. **The next free id is BL-926.**
-- **Open follow-ups.** BL-915 (PARTIAL: Fix item 1's arm-by-arm audit outside the BL-918 set); BL-911; BL-912, awaiting an `Outcome measured:` line on the first graph sprint that runs its hooks (baseline: graph sprint 321); BL-914, closed only by two pushes of one sha from clean worktrees with identical present sets (the pre-suite record's paths); BL-921; BL-922; BL-923; and BL-868's receipt, the last row of `scripts/inert-receipt-allowlist.txt`, which BL-868's close wires or deletes.
-- **Graph.** Branch `ai-dlc/feature/per-chain-rebalancer-instances` reads `0.1001.0` (stamp `3a8895c57`), `main` `0.969.0`. Pull OWED: PENDING 3; main 50 behind, branch 18. Differential diverges: ledger-reverify adds 6 NAMED-UPSTREAM rows (PC-S320); predicate-differential's installed copy over-reports PREDICATE-RECLASSIFIES (14/14) where `0.1019.0` reads STABLE; derivation-differential refused. The pull is the operator's; none run.
-- **NOTE.** Derive fences write fixed `/tmp/live.txt`, `/tmp/arch.txt`, `/tmp/cand_arch.md`; sessions may collide (hypothesis).
+**BATCH 251 IS CLOSED: RELEASES `v0.1020.0` THROUGH `v0.1028.0`. THE NEXT SESSION STARTS BATCH 252.**
+Batch 250: `docs/plans/archive/`. `ai-dlc-e6` was the lead. No `graph-*` session is ever messaged.
+- **Landed** (`git log origin/main`). `v0.1020.0` through `v0.1028.0`, none skipped. **The next VERSION is `0.1029.0`.**
+- **Backlog.** Live 49 (`grep -c '^## BL-' docs/backlog.md`), archive 854. **The next free id is BL-933.** Closed: BL-917, 921-923, 926-931.
+- **Open follow-ups.** BL-932 (filed at close, fast-track); BL-819 (PARTIAL); BL-806(b), FP census first; BL-538 reads CLOSE-CANDIDATE but is PARTIAL; BL-868's receipt; BL-911; BL-912; BL-914; BL-915.
+- **Graph.** Branch `0.1027.0` (1 behind), `main` `0.969.0` (58 behind, WIDE). PENDING 1 by the release-message join: PC-S321-GATE2-RULE-A-IGNORES-GATE1-REREVIEW-OF-THE-QA-REWORK (`0.1028.0`), holding story 1.2 at gate 2; the fences read it as untouched because of BL-932's dotted label. Differential diverges: installed `gate-transition.sh` reads GATE1-RERUN on graph's case, `0.1028.0` GATE1-SKIP. Bootstrapping: none on the branch range; the main range changes `preclassify.sh`, `apply.sh`, `ledger-reverify.sh`, update `SKILL.md`.
+- **Rulings** are in `operator-rulings.md`; A6 ceiling 74800; `cleanupPeriodDays` 365.
+- **NOTEs** are in the batch-251 close commit message. Derive fences write fixed `/tmp/live.txt`, `/tmp/arch.txt`, `/tmp/cand_arch.md`; sessions may collide (hypothesis).
 
 ### Derive the state; do not trust the numbers below
 
@@ -838,11 +839,9 @@ candidate's surviving half is upstream's to file and build, never a question for
      happens only when NO TIMING RUNS allows it, and then after every release in the batch that is
      ready or in flight, unless a release depends on the result.
    - SHORTEST GATE FIRST. Among ready releases, a docs-only release gates first, then the others in
-     order of readiness. A docs-only push does NOT skip the suite: it re-keys six units (the leading-`+`
-     lines of `core/fixtures/*/inputs.decl` at 8f25c6904): backlog-ledger, enforcement-map-sites
-     a/b/c and schema-install-fallback on `+VERSION`, and backlog-receipt-binding on
-     `+docs/backlog.archive.md`. No fixture keys `docs/backlog.md` or `CHANGELOG.md`, and
-     backlog-real-ledger reads its own `ledger.snapshot` since 0.980.0, so its gate is the shortest.
+     order of readiness. A docs-only push still runs the gate; which fixtures it re-runs is the
+     read-set skip's answer, every fixture whose `inputs.decl` names a changed path. Read it in
+     the push's `read-set keys:` line; never quote a count.
    - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
      item goes to an idle session at once. Build work (hands, edits only) never waits on box load;
      only runs load the box.
@@ -905,6 +904,9 @@ candidate's surviving half is upstream's to file and build, never a question for
      root-resolving `core/scripts/*.sh` measured +10. Put a receipt under its fixture
      (`core/fixtures/<f>/receipt-bl<N>.sh`); `bash scripts/fork-profile.sh --section total` in
      your worktree, against `FORK_BUDGET`, decides. A3b fires when TOTAL + 2 exceeds the budget.
+     TOTAL cannot see validator-fork-budget's own row: every file added under `scripts/`,
+     `.githooks/` or non-fixture `core/**/*.sh` moves it by +4 (I84 corpus), so take a counted
+     run of that fixture too (0.1027.0's first push went red on exactly this).
      When your tip's TOTAL rises, raise `FORK_BUDGET` in `fork-budget.txt` yourself, in your own
      release, by EXACTLY the measured rise with the reading in its comment, and report base and
      tip TOTAL when you say ready; no round trip to <lead> (operator: "an arbitrary budget that

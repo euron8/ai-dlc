@@ -23,6 +23,8 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 
 ### BL-931 closed
 
+Closes PC-S321-GATE2-RULE-A-IGNORES-GATE1-REREVIEW-OF-THE-QA-REWORK.
+
 At gate 2 pass M >= 2, Rule A's base is now the reviewed sha of the latest gate-1 review (highest pass by number, `.md` names only) when that review's verdict is APPROVED and its sha descends from the QA sha inside the frozen history. Otherwise the base stays the QA sha. The plan records `rule-a-base: <qa|gate1> <sha> <file>`, so a gate-1 re-review of a QA rework no longer sends the story back to gate 1 forever.
 
 The verdict is read by a new `merge-review-shards.sh --read-verdict <file> --gate code-review|qa` mode. It uses the lifted Check 1 reader and verdict set and applies no seat rule, so a merged review reads, where `--check-serial` refuses one on its advisor lines.
