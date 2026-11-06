@@ -19,6 +19,23 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1022.0] - 2026-11-06
+
+Batch b251, fixture-hygiene cluster. BL-921 closes and BL-868 stays PARTIAL. Closes no PC- id. NET: filed 0, closed 1 (BL-921); closed minus filed = +1; live backlog −1.
+
+### BL-921 — CLOSED, a MUTANT-MATRIX twin that names no arm now fails the push
+- `scripts/validate-fixture-hygiene.sh` gains arm H7. It joins every twin of an H5-accepted MUTANT-MATRIX row to a label its fixture emits, reading each label from its argument position on a code line.
+- Measured on the shipped tip (434 fixture .sh): 3093 twin occurrences, of which 2692 resolve to an emitted label and 401 are listed as built in the new down-only `scripts/twin-built-allowlist.txt` (arm H7-M4). True positives: 0.
+- The allowlist is keyed `<fixture>:<mutant>:<token>`, so reusing a built token on a new mutant row FAILs.
+- A token-grep design was rejected. Narrowing the weak emission forms cut the seeded non-label acquittal rate from 21/39 to 4/39; those 4 are real labels or fall under the stated label-half limit.
+- Open limit: a listed key can go stale invisibly while its label stays unresolvable.
+- `core/fixtures/fixture-hygiene/receipt-bl921.sh` is arm D7, run over the unmutated validator and over the MH7 copy.
+- invocations.decl: 34 to 42 (validator 11 to 13, resolver 22 to 26).
+
+### BL-868 PARTIAL — one false-positive row marked, receipt-bl868 now CLEAN
+- presuite-present-key `run.sh:576` is L1.control's live child, killed by pid and reaped. It now carries `# bl868-allow: ppk-l1-control-child`, and the receipt gains an 8th allow row.
+- The receipt exits 0 CLEAN. The entry stays open: items 5, 10 and 12 are OPEN, items 8 and 9 are close candidates for their owner and are not closed here, and item 14 is owed. `verify:` stays manual, and the inert-receipt-allowlist row stays.
+
 ## [0.1021.0] - 2026-11-06
 
 Batch b251, outcome-records cluster. Records only: `docs/backlog.md` is the one file changed. No entry closes and BL-927 is filed. Closes no PC- id. NET: filed 1 (BL-927), closed 0; closed minus filed = -1; live backlog +1.

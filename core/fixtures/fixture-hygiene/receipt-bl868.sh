@@ -334,6 +334,8 @@ scan_pm() {
 # (exit 1, a finding to fix, never a 9 -- R8/R10 read a row count, not a broken receipt). A marked line the scan no
 # longer flags is a NOTE on stderr. A marker with no row here suppresses nothing.
 # FP SET (2a9dd73b4): the scan returned 53 rows; 6 are below, each a line where no elapsed time can decide a verdict.
+# Two rows were added after that measurement: csp-barrier-cap (consumer-suite-pool, 5991e017c) and ppk-l1-control-child
+# (presuite-present-key :576, batch b251, the one W-SLEEP row the receipt then listed). That makes 8 rows.
 # Every other row is an open site. Narrowings already applied in the grammar, each measured on the same tree: masking
 # (jq/JSON transcript seeds in foreground-budget-deny and check-25, sed mutant text in readset-skip and advisor-gate-deny,
 # the SECONDS variable-name lists in five shims: 0 rows), a sleep inside a loop counted only through its header (the
@@ -347,6 +349,7 @@ core/fixtures/wait-beat-liveness/run.sh	wbl-clock-shim-probe	the clock shim prob
 core/fixtures/wait-beat-liveness/run.sh	wbl-clock-shim-control	the clock shim control: one real 1s sleep whose outcome is which binary it reached
 core/fixtures/wait-beat-liveness/run.sh	wbl-clock-ip-probe	the in-process clock probe: sleep is the clock function, no real sleep
 core/fixtures/wait-beat-liveness/run.sh	wbl-clock-ip-control	the in-process clock control: which binary the sleep reached
+core/fixtures/presuite-present-key/run.sh	ppk-l1-control-child	L1.control's live child: it must exist while the scoped listing is read, and is killed by pid and reaped at :579; no elapsed time decides a verdict
 ALLOW
 
 # ---- self-probe ----------------------------------------------------------------------------------------------------

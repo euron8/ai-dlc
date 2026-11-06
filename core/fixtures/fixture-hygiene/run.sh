@@ -19,6 +19,9 @@
 #   Both carry a docs/backlog.md (E1 does not read it; receipt-bl868's ledger mode of the shared inert() does).
 # THE ARMS, each one read of a validator run:
 #   D1 D2 D3 D5 D6 DE1  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:` / `FAIL E1:`
+#   D7  IS receipt-bl921.sh (its exit and its `receipt-bl921: PASS` line): it seeds its OWN world, a new fixture dir
+#       fx7 whose twin GONE7 no code path emits beside an all-real row, and drives the byte-identical validator (or,
+#       for MH7, the mutant copy) over it. The clean world's fb emits its twin R2, so H7 is quiet there.
 #   C   the clean run is rc 0 with the OK line, which counts 1 receipt and 0 inert (the positive control: a run that
 #       scanned nothing cannot print it)
 #   R   the clean run's OK line names the probe's corpus count (3 files), so the root walk resolved to the probe
@@ -29,14 +32,15 @@
 # (exit 2) on any silenced arm, so no arm of this fixture can hold under it -- what a mutant proves is that the
 # validator's own self-probe catches the silenced arm, which is the defence a regression would meet first. Per push
 # each runs its own D arm only, and the kill is scored on the refusal line naming that arm.
-# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
-# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
-# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
-# MUTANT-MATRIX MH3S decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when the H3 stub join is silenced
-# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
-# MUTANT-MATRIX MH5N decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H5 reads a helper argument as a name
-# MUTANT-MATRIX ME1 decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when E1 reads every receipt as read
-# MUTANT-MATRIX MH6 decides=D1,D2,D3,D5,D6,DE1,C,R,DV twins=- why=the self-probe refuses the whole run when H6 is silenced
+# MUTANT-MATRIX MH1 decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when H1 is silenced
+# MUTANT-MATRIX MH2 decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when H2 is silenced
+# MUTANT-MATRIX MH3 decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when H3 is silenced
+# MUTANT-MATRIX MH3S decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when the H3 stub join is silenced
+# MUTANT-MATRIX MH5 decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when H5 is silenced
+# MUTANT-MATRIX MH5N decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when H5 reads a helper argument as a name
+# MUTANT-MATRIX ME1 decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when E1 reads every receipt as read
+# MUTANT-MATRIX MH6 decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when H6 is silenced
+# MUTANT-MATRIX MH7 decides=D1,D2,D3,D5,D6,DE1,D7,C,R,DV twins=- why=the self-probe refuses the whole run when H7 is silenced
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-hygiene/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed.
 #   MH1  H1's branch verdict made false        -> D1 reads the self-probe refusal naming H1
@@ -50,6 +54,8 @@
 #   ME1  E1's inert print made false (every receipt read as a reader, the arm disabled) -> DE1 reads the self-probe
 #        refusal naming E1
 #   MH6  H6's offender print removed           -> D6 reads the self-probe refusal naming H6
+#   MH7  H7's offender print made false        -> D7 (receipt-bl921.sh driving the mutant copy) reads the self-probe
+#        refusal naming H7
 #
 # Usage: run.sh [--matrix]     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "fixture-hygiene: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
@@ -120,6 +126,7 @@ EOF
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fb/run.sh --matrix
 mkmut() { :; }
 mkmut MA x
+ok "R2 the twin cell"
 bash "$HERE/receipt-x.sh"
 EOF
     cp "$w/tools.tmp" "$w/core/fixtures/fa/tools.decl"
@@ -159,10 +166,18 @@ mk_mutant ME1 'for (c in C) if (!(c in LIVE)) print c' 'for (c in C) if (0) prin
   || { echo "FIXTURE BROKEN: mutant ME1 DID NOT APPLY" >&2; exit 2; }
 mk_mutant MH6 'print "H6\t" REL ":" i "\t" trim(O[i])' 'H6N++' \
   || { echo "FIXTURE BROKEN: mutant MH6 DID NOT APPLY" >&2; exit 2; }
+mk_mutant MH7 'else print "H7\t" TWW7[x]' 'else H7N++; if (0) print "H7\t" TWW7[x]' \
+  || { echo "FIXTURE BROKEN: mutant MH7 DID NOT APPLY" >&2; exit 2; }
 
 # --- one validator run per distinct state -------------------------------------------------------------------------
 drive() { # <tag> <world dir> [--derive]
   ( cd "$2" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && bash "$2/$VREL" ${3:+"$3"} ) > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
+  echo $? > "$WORK/c.$1.rc"
+}
+# d7drive <tag> [<validator>]: arm D7 IS receipt-bl921.sh, which seeds its own world (a NEW fixture dir fx7 with a
+# dangling twin, beside an all-real row) and drives the byte-identical validator, or the named mutant copy, over it.
+d7drive() {
+  bash "$HERE/receipt-bl921.sh" ${2:+--validator "$2"} > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
   echo $? > "$WORK/c.$1.rc"
 }
 has()  { grep -qF -- "$2" "$WORK/c.$1.out" "$WORK/c.$1.err"; }
@@ -179,6 +194,7 @@ verdict() { # <arm> <tag>
     D5) rcis "$t" 1 && [ "$(section "$t" H5)" = '    FLOOR fb: S1 mkmut()' ] ;;
     D6) rcis "$t" 1 && [ "$(section "$t" H6)" = '    core/fixtures/fa/run.sh:10: . "$HERE/../lib/mutant.sh"' ] ;;
     DE1) rcis "$t" 1 && [ "$(section "$t" E1)" = '    INERT core/fixtures/fb/receipt-x.sh' ] ;;
+    D7) rcis "$t" 0 && { has "$t" 'receipt-bl921: PASS' || has "$t" 'receipt-bl921: held under a substituted validator'; } ;;
     C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- self-probe fired both ways' && has "$t" 'E1 1 receipt(s), 0 inert' ;;
     R)  rcis "$t" 0 && has "$t" '; 3 fixture .sh scanned;' ;;
     DV) rcis "$t" 0 && [ "$(cat "$WORK/c.$t.out")" = "$(printf 'fb\tno MUTANT-MATRIX block; floor: S1 mkmut()')" ] ;;
@@ -189,14 +205,16 @@ REFUSAL() { printf 'self-probe %s: FAIL' "$1"; }
 
 if [ "$MODE" = matrix ]; then
   : > "$WORK/mx.ran"
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7; do
     cp -R "$WORK/w-clean" "$WORK/mclean-$m" && cp -p "$WORK/mut-$m/$VREL" "$WORK/mclean-$m/$VREL" \
       || { echo "FIXTURE BROKEN: could not build the clean world for $m" >&2; exit 2; }
     drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & drive "$m.c" "$WORK/mclean-$m" &
+    d7drive "$m.7" "$WORK/mut-$m/$VREL" &
   done; wait
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7; do
     dec=""; tw=""
     for a in D1 D2 D3 D5 D6 DE1; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
+    if verdict D7 "$m.7"; then tw="$tw,D7"; else dec="$dec,D7"; fi
     for a in C R; do if verdict "$a" "$m.c"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     if verdict DV "$m.v"; then tw="$tw,DV"; else dec="$dec,DV"; fi
     printf 'MATRIX %s decides=%s twins=%s\n' "$m" "${dec#,}" "${tw#,}"
@@ -206,12 +224,17 @@ fi
 
 drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & drive derive "$WORK/w-dirty" --derive &
 for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6; do drive "$m" "$WORK/mut-$m" & done
+d7drive d7 & d7drive MH7 "$WORK/mut-MH7/$VREL" &
 wait
 B_DIRTY=0
 for a in D1 D2 D3 D5 D6 DE1; do
   if verdict "$a" dirty; then ok "$a the dirty world names exactly its seeded line"; : > "$WORK/base.$a"
   else bad "$a fails on the unmutated validator (rc $(cat "$WORK/c.dirty.rc")): $(head -c 800 "$WORK/c.dirty.out" | tr '\n' ' ')"; fi
 done
+if verdict D7 d7 && grep -qxF 'receipt-bl921: PASS' "$WORK/c.d7.out"; then
+  ok "D7 receipt-bl921.sh: a dangling twin in its own world FAILs H7 by name, the all-real row stays quiet"; : > "$WORK/base.D7"
+  grep -xF 'receipt-bl921: PASS' "$WORK/c.d7.out"   # the receipt's own line, re-emitted for BL-921's verify: line
+else bad "D7 receipt-bl921.sh did not PASS on the unmutated validator (rc $(cat "$WORK/c.d7.rc")): $(head -c 800 "$WORK/c.d7.out" | tr '\n' ' ')"; fi
 verdict C clean && ok "C the clean world (every near-miss) is rc 0 with the OK line" \
   || bad "C the clean world is not clean (rc $(cat "$WORK/c.clean.rc")): $(head -c 800 "$WORK/c.clean.out" | tr '\n' ' ')"
 verdict R clean && ok "R the validator resolved the PROBE root (3 fixture .sh scanned, not this repository's corpus)" \
@@ -229,7 +252,8 @@ score() { # <mutant> <arm> <arm label in the self-probe>; 0 when the arm fails f
   rcis "$1" 2 && has "$1" "$(REFUSAL "$3")" || { bad "$1: arm $2 fails under it, but not by the self-probe naming $3 (rc $(cat "$WORK/c.$1.rc"))"; return 1; }
 }
 flag() { [ -e "$WORK/base.$1" ] && echo 1 || echo 0; }
-BASE_D1="$(flag D1)"; BASE_D2="$(flag D2)"; BASE_D3="$(flag D3)"; BASE_D5="$(flag D5)"; BASE_D6="$(flag D6)"; BASE_DE1="$(flag DE1)"
+BASE_D1="$(flag D1)"; BASE_D2="$(flag D2)"; BASE_D3="$(flag D3)"; BASE_D5="$(flag D5)"; BASE_D6="$(flag D6)"; BASE_DE1="$(flag DE1)"; BASE_D7="$(flag D7)"
+score MH7 D7 H7 && mutant_killed "$([ "$BASE_D7" = 1 ] && echo 1 || echo 0)" MH7 "MH7: arm D7 fails by the self-probe refusal naming H7"
 score MH6 D6 H6 && mutant_killed "$([ "$BASE_D6" = 1 ] && echo 1 || echo 0)" MH6 "MH6: arm D6 fails by the self-probe refusal naming H6"
 score ME1 DE1 E1 && mutant_killed "$([ "$BASE_DE1" = 1 ] && echo 1 || echo 0)" ME1 "ME1: arm DE1 fails by the self-probe refusal naming E1"
 score MH1 D1 H1 && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MH1 "MH1: arm D1 fails by the self-probe refusal naming H1"
@@ -244,7 +268,7 @@ if score MH5N D5 H5; then
   else bad "MH5N: the self-probe refused, but not on the world-letter JOIN row m5m:5"; fi
 fi
 
-if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MH5.out" ] && [ -e "$WORK/c.MH1.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
+if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MH5.out" ] && [ -e "$WORK/c.MH1.out" ] && [ -e "$WORK/c.MH7.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
 else bad "NM a plain run reached the matrix, or its per-push mutant drives did not run"; fi
 
 [ "$FAILS" = 0 ] || { echo "fixture-hygiene: $FAILS FAILED"; exit 1; }
