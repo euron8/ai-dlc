@@ -6,6 +6,7 @@ cmp
 cp
 dirname
 diff
+env
 find
 grep
 mkdir

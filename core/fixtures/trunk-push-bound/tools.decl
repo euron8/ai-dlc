@@ -1,6 +1,7 @@
 bash
 basename
 dirname
+env
 mktemp
 rm
 mkdir

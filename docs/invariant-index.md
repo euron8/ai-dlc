@@ -22,7 +22,6 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I7 | check-manifest-bypass fixture vs the manifest it exists to test |
 | I8 | fixture packaging (core/fixtures == install loop == uninstall loop == |
 | I9 | every script enforcer declares WHERE it is invoked |
-| I10 | fixture hermeticity |
 | I11 | the convergence-cycle scope list is DERIVED, not remembered |
 | I12 | unregistered-drift scan set is BOUND, not hand-listed |
 | I13 | every shipped hook is REGISTERED. install.sh copies core/hooks/*.sh by GLOB, so a |

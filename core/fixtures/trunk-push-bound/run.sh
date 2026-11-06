@@ -23,6 +23,9 @@
 # EVERY OUTCOME IS ASSERTED ON ITS OWN WORDING. The pass, the two rejections, the
 # not-my-ref case and the read-nothing case would all match a grep for "trunk-push".
 set -uo pipefail
+# Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 fails=0

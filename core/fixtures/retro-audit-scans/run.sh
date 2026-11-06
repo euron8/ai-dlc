@@ -35,6 +35,9 @@
 # Every other mutant changes rows in exactly its deciding world. The matrix is re-measured whenever an arm
 # or mutant is added or changed, by the command above. A plain run never drives a matrix-only cell.
 set -uo pipefail
+# Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MATRIX=0

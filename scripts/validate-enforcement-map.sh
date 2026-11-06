@@ -72,9 +72,6 @@
 #                         does not exist, while the catalog claims coverage. Dist-only
 #                         fixtures are DERIVED from a `.dist-only` marker beside the
 #                         fixture, not a hand-maintained exemption string.
-#   I10 fixture hermeticity — a fixture that drives a hook must scrub ambient AI_DLC_*
-#                         first, or a consumer's sanctioned tunable makes it fail against
-#                         a hook behaving correctly, and the pre-push gate blocks every push.
 #   I11 convergence-cycle scope — the three sets that must be one set (steps that dispatch
 #                         an adversarial REVIEW, steps that reference the REPAIR dispatch,
 #                         and Check 24's Scope sentence) are DERIVED and asserted equal. A
@@ -962,8 +959,8 @@ _i38_body_of=""; _i38_body=""
 # falling through -- a syntax error must never be reported as exit 1, which a battery would
 # read as the mutant it seeded being killed.
 #
-# WHY IT IS A FLAG AND NOT AN ENVIRONMENT KEY. I10 requires a fixture driving a hook to scrub
-# every ambient `AI_DLC_*` name and `enforcement-map-sites/run.sh` does exactly that, so an
+# WHY IT IS A FLAG AND NOT AN ENVIRONMENT KEY. Arm H8 of scripts/validate-fixture-hygiene.sh
+# requires a fixture to scrub every ambient `AI_DLC_*` name and `enforcement-map-sites/run.sh` does exactly that, so an
 # `AI_DLC_ARMS` would be unset before it was read and every caller would silently fall back
 # to running everything -- a mechanism that cannot fire, reading exactly like one that fired.
 #
@@ -1461,115 +1458,6 @@ miss_entry="$(comm -23 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtur
 [ -n "$miss_entry" ] && err "fixture(s) install.sh ships to every consumer with NO core_manifest entry, so the core guard permits an in-place edit to upstream test data and Check 16 audits it as consumer-authored: $(echo $miss_entry). Add 'fixtures/<name>/**' to core-manifest.md and 'core/fixtures/<name>/**' to core/skills/ai-dlc-update/fixture-manifest.md (never to reconcile/setup-sites.md)."
 ghost_entry="$(comm -13 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtures"))"
 [ -n "$ghost_entry" ] && err "core_manifest claims fixture(s) that are not shippable — dist-only, or absent from core/fixtures/: $(echo $ghost_entry). The guard would deny edits to a path no consumer has, and a deny that protects nothing reads as protection."
-
-# --- I10: fixture hermeticity -------------------------------------------------
-# A fixture that invokes a hook and INHERITS the operator's ambient config tests the
-# CONFIG, not the code. The hooks honour thirteen AI_DLC_* tunables; a consumer that sets
-# any one of them in settings.json exports it into every session, `git push` inherits it,
-# and the pre-push gate then runs the fixture against a hook configured differently from
-# what its assertions assume.
-#
-# Observed live: a consumer pinned AI_DLC_MODEL_ROW=1M — the documented way to declare the
-# model row — and SEVEN context-sensor assertions failed against a sensor behaving exactly
-# as specified. The gate blocked every push on that repo. The distribution never caught it
-# because the distribution sets none of these: THE CHECK COULD NOT FIRE WHERE IT WAS
-# AUTHORED, which is the same defect this file has now shipped three fixes for.
-#
-# So: any fixture that drives a hook must scrub AI_DLC_* first. Asserted, not trusted.
-# Two greps over the whole set rather than two per fixture: `-l` lists the hook-driving
-# fixtures, `-L` lists those of them that do NOT scrub. Both preserve argument order, so the
-# reported set and its order are what the per-file loop produced.
-#
-# SELF-PROBE, before the corpus, both ways and on exact equality, through the SAME function the
-# corpus scan calls: a seeded fixture naming core/hooks/ai-dlc-*.sh with no scrub AND a seeded
-# fixture naming only `$HOOK` with no scrub must be reported as exactly those two, in glob order
-# (dropping `|\$HOOK` from the population pattern loses the second), while a `$HOOK` fixture carrying the `unset "$_v"` loop, one carrying
-# `env -u AI_DLC_*`, and one naming no hook at all must not be. A scan that never reports and one
-# that reports everything both fail here. The population is deliberately NOT narrowed to hooks
-# run.sh visibly EXECUTES, although a fixture that only reads a hook's text satisfies this arm by
-# carrying the scrub idiom. Measured: a command-position grammar drops a large share of the
-# hook-naming fixtures, and many of the dropped ones do execute a hook by a route run.sh's text cannot spell
-# -- a hook passed to a function that runs it, one copied to .githooks/pre-push and run by
-# relative path, extracted hook spans sourced, a path resolved by a helper from a basename, an
-# invoker in lib.sh -- so the narrower grammar would exempt real hook drivers.
-#
-# THE UNIT IS run.sh PLUS lib.sh, WHEN ONE EXISTS. A fixture whose hook invoker and scrub both
-# live in lib.sh was outside the run.sh-only population: adversarial-shard-merge runs its hook
-# at lib.sh:183 and scrubs at lib.sh:10, and its run.sh names neither. Measured when the unit was
-# widened: it added adversarial-shard-merge and nothing else, with no offender either way. Derive
-# the populations rather than quote them: `grep -lE 'hooks/ai-dlc|\$HOOK' core/fixtures/*/run.sh`
-# for run.sh, and i10_fx inside the function below for the unit. run.sh keeps its pattern VERBATIM -- applying the lib grammar below
-# to run.sh drops mandatory-rules-snapshot-position from the population. A lib.sh adds its
-# fixture only on a NON-comment line (first non-blank character not `#`) naming `hooks/ai-dlc`
-# or `$HOOK` once the glob form `hooks/ai-dlc-*` is removed from it; there is no yaml-form clause,
-# because no lib.sh carries hook names as seed data. A lib.sh scrub counts only on a non-comment
-# line. advisor-gate-deny/lib.sh runs its hook as `bash "$h"`, which this grammar cannot spell --
-# a known false negative, harmless because that fixture's run.sh is in the population and scrubs.
-# OUTSIDE THE UNIT, each for its own reason: seed.sh writes the fixture's seeded tree, and
-# BL-786 measured its two hook-naming hits as false positives -- a comment naming the
-# `hooks/ai-dlc-*.sh` glob, and `- hooks/ai-dlc-*.sh` yaml seed data; receipt*.sh are receipts
-# run by the backlog-receipt validator, not by the fixture; content-seal/seal-lib.sh resolves
-# the content-seal hook but is sourced by merge-arms.sh and join-arms.sh, which name no hook and
-# each scrub on their own line 3 before sourcing it. One grep over every lib.sh and one awk filter,
-# never a loop over directories, because this block runs under the suite pole. The probe below
-# adds seven lib.sh cases: an unscrubbed lib-only path-naming invoker, an unscrubbed lib-only
-# `$HOOK` invoker and one whose only scrub is a comment are REPORTED; a lib.sh `unset` scrub, a
-# lib.sh `env -u AI_DLC_*` scrub, a comment-only hook mention and the glob form are NOT.
-i10_unscrubbed() {
-  local i10_fx
-  i10_fx="$( { grep -lE 'hooks/ai-dlc|\$HOOK' "$1"/*/run.sh 2>/dev/null
-    printf '%s\n' '@@i10@@'
-    grep -HE 'hooks/ai-dlc|\$HOOK|unset "\$_v"|env -u AI_DLC' "$1"/*/lib.sh 2>/dev/null; } | LC_ALL=C awk '
-    $0 == "@@i10@@" { lib = 1; next }
-    !lib { unit[$0] = 1; next }
-    {
-      i = index($0, "/lib.sh:"); if (i == 0) next
-      d = substr($0, 1, i - 1); t = substr($0, i + 8)
-      c = (t ~ /^[[:blank:]]*#/)
-      if (!c && t ~ /unset "\$_v"|env -u AI_DLC/) scrub[d] = 1
-      gsub(/hooks\/ai-dlc-\*/, "", t)
-      if (!c && t ~ /hooks\/ai-dlc|\$HOOK/) unit[d "/run.sh"] = 1
-    }
-    END { for (r in unit) if (!(substr(r, 1, length(r) - 7) in scrub)) print r }' | LC_ALL=C sort)"
-  [ -n "$i10_fx" ] || return 0
-  printf '%s\n' "$i10_fx" | tr '\n' '\0' | xargs -0 grep -LE 'unset "\$_v"|env -u AI_DLC' 2>/dev/null
-}
-i10_probe="$(mktemp -d 2>/dev/null)"
-if [ -n "$i10_probe" ] && [ -d "$i10_probe" ]; then
-  mkdir "$i10_probe/unscrubbed" "$i10_probe/varonly" "$i10_probe/unset-loop" "$i10_probe/env-u" "$i10_probe/hookless"
-  printf '%s\n' 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null' > "$i10_probe/unscrubbed/run.sh"
-  printf '%s\n' 'bash "$HOOK" </dev/null' > "$i10_probe/varonly/run.sh"
-  printf '%s\n' 'for _v in $(compgen -e); do case "$_v" in AI_DLC_*) unset "$_v" ;; esac; done' 'bash "$HOOK"' > "$i10_probe/unset-loop/run.sh"
-  printf '%s\n' 'env -u AI_DLC_MODEL_ROW bash "$HOOK"' > "$i10_probe/env-u/run.sh"
-  printf '%s\n' 'echo "no hook here"' > "$i10_probe/hookless/run.sh"
-  mkdir "$i10_probe/liboff" "$i10_probe/libscrub" "$i10_probe/libcomment" "$i10_probe/libglob" "$i10_probe/libscrubcomment"
-  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/liboff/run.sh"
-  printf '%s\n' 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null' > "$i10_probe/liboff/lib.sh"
-  printf '%s\n' '. "$(dirname "$0")/lib.sh"' 'bash "$HOOK" </dev/null' > "$i10_probe/libscrub/run.sh"
-  printf '%s\n' 'for _v in $(compgen -e); do case "$_v" in AI_DLC_*) unset "$_v" ;; esac; done' > "$i10_probe/libscrub/lib.sh"
-  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libcomment/run.sh"
-  printf '%s\n' '  # runs hooks/ai-dlc-x.sh' > "$i10_probe/libcomment/lib.sh"
-  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libglob/run.sh"
-  printf '%s\n' 'cp core/hooks/ai-dlc-*.sh "$T"' > "$i10_probe/libglob/lib.sh"
-  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libscrubcomment/run.sh"
-  printf '%s\n' '# unset "$_v"' 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null' > "$i10_probe/libscrubcomment/lib.sh"
-  mkdir "$i10_probe/libvar" "$i10_probe/libenvu"
-  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libvar/run.sh"
-  printf '%s\n' 'bash "$HOOK" </dev/null' > "$i10_probe/libvar/lib.sh"
-  printf '%s\n' '. "$(dirname "$0")/lib.sh"' > "$i10_probe/libenvu/run.sh"
-  printf '%s\n' 'env -u AI_DLC_X bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null' > "$i10_probe/libenvu/lib.sh"
-  i10_pgot="$(i10_unscrubbed "$i10_probe")"
-  i10_pwant="$(printf '%s\n' "$i10_probe/unscrubbed/run.sh" "$i10_probe/varonly/run.sh" "$i10_probe/liboff/run.sh" "$i10_probe/libscrubcomment/run.sh" "$i10_probe/libvar/run.sh" | LC_ALL=C sort)"
-  rm -rf "$i10_probe"
-  [ "$i10_pgot" = "$i10_pwant" ] || err "I10 hermeticity self-probe failed: over a seeded tree it reported [${i10_pgot}], want exactly [${i10_pwant}] -- the unscrubbed path-naming fixture, the unscrubbed \$HOOK-only fixture, the unscrubbed lib.sh-only path-naming invoker, the unscrubbed lib.sh-only \$HOOK invoker and the lib.sh invoker whose only scrub is a comment, and nothing else. The scan cannot be shown to fire, so its silence over core/fixtures/ below means nothing."
-else
-  err "I10 could not create its probe directory, so neither direction of its hermeticity scan was proven this run."
-fi
-while IFS= read -r r; do
-  [ -n "$r" ] || continue
-  d="${r%/run.sh}"
-  err "fixture '${d##*/}' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
-done < <(i10_unscrubbed "$REPO_ROOT/core/fixtures")
 
 # --- I13: every shipped hook is REGISTERED. install.sh copies core/hooks/*.sh by GLOB, so a
 # new hook always reaches the consumer's .claude/hooks/ — but it only ever RUNS if

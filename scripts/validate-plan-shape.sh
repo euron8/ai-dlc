@@ -200,7 +200,7 @@ plan_action_windows() {
 # THE CEILING IS A POLICY NUMBER, NOT A MEASUREMENT, and it is the operator's to set.
 # `AI_DLC_PLAN_BYTES` overrides it exactly as `AI_DLC_DURABLE_BYTES` overrides A6's ceiling at
 # `scripts/validate-claude-rules.sh:779`. The override is also how a fixture fires this arm
-# without committing an oversized file -- `core/fixtures/claude-rules-joins/run.sh:214` drives
+# without committing an oversized file -- `core/fixtures/claude-rules-joins/run.sh:222` drives
 # A6 the same way, at `AI_DLC_DURABLE_BYTES=10`, so the arm is tested at its real comparison
 # and not at its file arithmetic.
 #

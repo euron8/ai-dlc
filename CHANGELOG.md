@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1025.0] - 2026-11-06
+
+### BL-929 — fixtures that ran bare under a consumer's AI_DLC_* tunables now scrub them, and arm H8 holds the class
+
+Sixteen fixtures gave a different verdict when run bare under a caller's inherited `AI_DLC_*` tunables, and neither the pre-push hook (which launches every fixture under `env -i`) nor I87 could see it. Each now carries the reference inline scrub as its first statement after `set -u`: 18 scrubs are inserted, and agent-definition-render's existing scrub is moved ahead of the point where it sources `$MATRIX_SH`. `scripts/validate-fixture-hygiene.sh` gains arm H8, which fails any fixture whose `run.sh` (or, for a shard stub, its IMPL) does not clear `AI_DLC_*` before it starts anything, unless the fixture is a row of the down-only `scripts/env-scrub-allowlist.txt`. The dead `AI_DLC_TAC_VALIDATOR` override is deleted. `env` is declared in seven `tools.decl` files, and nine line citations are re-derived.
+
+Measured: the census covers 264 fixtures and 108 tunables, and 16 fixtures were exposed. Before the edit 15 of the 16 exit non-zero under hostile tunables. All 19 edited fixtures now exit 0 bare-plain, bare-hostile and under `hermetic-run.sh`. H8 reads 163 SCRUBBED rows, with 101 allowlisted rows in `scripts/env-scrub-allowlist.txt`, down-only through arm H8-M4 against origin/main. Over the 125 fixtures that already cleared their environment there are 0 measured false positives: 123 read SCRUBBED, agent-definition-render is fixed, and story-evidence-scaffold is allowlisted with its reason.
+
+### BL-930 — I10 is retired into H8
+
+`i10_unscrubbed` in `scripts/validate-enforcement-map.sh` decided that a hook-driver fixture was scrubbed by matching `unset "$_v"` or `env -u AI_DLC` in `run.sh` or `lib.sh`. It was a weaker second copy of the question H8 now asks of every fixture, so the function and its invariant are deleted rather than ported forward.
+
+Measured: I10's population was 62 fixtures, and H8 misses none of them (0 misses). The control is a driver that scrubs only `GIT_` variables: I10 acquits it and H8 flags it. The validator's execs fall from 3667 to 3649. Fork TOTAL falls from 2924 to 2906 against `FORK_BUDGET` 2926, which is unchanged. `invocations.decl` re-measured: fixture-hygiene 42 to 70, validator-fork-budget 1117 to 1121, enforcement-map-derivations 444 to 439, validator-arm-selection 552 to 549, validator-arm-selection-b 607 to 604; every other fixture that invokes either validator (33 counted) is unchanged.
+
 ## [0.1024.0] - 2026-11-06
 
 Batch b251, evidence-join cluster. It changes `core/scripts/validate-handoff-evidence.sh`, `core/fixtures/story-evidence-scaffold/run.sh` and `world.sh`, and `docs/backlog.md`. No entry closes. Closes no PC- id. NET: filed 0, closed 0; closed minus filed = 0; live backlog 0.

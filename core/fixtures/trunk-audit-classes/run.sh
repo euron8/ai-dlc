@@ -31,16 +31,14 @@
 #      never ran reads exactly like a clean trunk.
 
 set -uo pipefail
+# Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
-if [ -n "${AI_DLC_TAC_VALIDATOR:-}" ] && [ -f "${AI_DLC_TAC_VALIDATOR}" ]; then
-  # The mutant battery re-executes this script with a mutated copy. Without reading the
-  # override here every mutant would exercise the real script, report zero reds, and score a
-  # survival.
-  VAL="${AI_DLC_TAC_VALIDATOR}"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-cycle-commits.sh" ]; then
+if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-cycle-commits.sh" ]; then
   VAL="$ROOT/core/scripts/validate-cycle-commits.sh"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-cycle-commits.sh" ]; then
   VAL="$ROOT/scripts/ai-dlc/validate-cycle-commits.sh"

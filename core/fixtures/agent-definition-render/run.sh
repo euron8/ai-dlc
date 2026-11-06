@@ -81,6 +81,10 @@
 #       2 = fixture broken.
 set -uo pipefail
 
+# The gate inherits every AI_DLC_* tunable a consumer set in settings.json. A fixture that drives
+# a script while inheriting them tests the CONFIG, not the code (I10).
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 # --matrix (argv, never an env var) re-measures the mutant x arm matrix recorded in the header.
 # A plain run executes NO matrix-only cell; MATRIX_CELLS counts the ones that ran and an arm at the
 # foot asserts it is 0 on a plain run (and non-zero under --matrix, so the counter can fire).
@@ -94,10 +98,6 @@ MATRIX_SH="$(cd "$(dirname "$0")" && pwd)/matrix.sh"
 echo "HERMETIC-CONSUMED core/fixtures/agent-definition-render/matrix.sh"
 # shellcheck source=/dev/null
 . "$MATRIX_SH"
-
-# The gate inherits every AI_DLC_* tunable a consumer set in settings.json. A fixture that drives
-# a script while inheriting them tests the CONFIG, not the code (I10).
-for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"

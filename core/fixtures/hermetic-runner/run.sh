@@ -115,6 +115,9 @@
 # redoes the preamble's work, so a declaration that drops core/fixtures/lib/ passed (DC3).
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "hermetic-runner: FIXTURE BROKEN: core/fixtures/lib/preamble.sh is absent" >&2; exit 2; }
 set -uo pipefail
+# Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 for _v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 MATRIX=0

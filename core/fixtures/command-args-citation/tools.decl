@@ -6,6 +6,7 @@ cat
 cmp
 cp
 dirname
+env
 mktemp
 rm
 sed

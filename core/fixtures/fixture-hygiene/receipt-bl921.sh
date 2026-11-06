@@ -72,6 +72,8 @@ ok "A1 holds"
 ok "B2 holds"
 bad "C3 broke"
 EOF
+# None of the three scrubs ambient AI_DLC_*, which H8 would report beside H7: they are rows of the world's own H8 list.
+printf '# probe\nfx7\tH7 seed\nfy7\tH7 seed\nfz7\tH7 seed\n' > "$W/scripts/env-scrub-allowlist.txt"
 { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -c core.hooksPath=/dev/null init -q "$W" \
   && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -C "$W" add -A core; } >/dev/null 2>&1 \
   || { echo "receipt-bl921: REFUSED -- could not index the probe world" >&2; exit 9; }

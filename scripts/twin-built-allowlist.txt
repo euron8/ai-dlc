@@ -141,7 +141,7 @@ gate-remediation-deny:m1b-unparseable-denies:1b-A1	a prefix plus a variable, bui
 gate-remediation-deny:m3b-after-gate-exit:3b-sib-x.md	built by printf '3b-%s' over the seeded paths (run.sh:2628)
 gate-remediation-deny:m3b-no-claude-md:3b-.gitignore	built by printf '3b-%s' over the seeded paths (run.sh:2628)
 gate-remediation-deny:m3b-no-iv:3b-sib-x.md	built by printf '3b-%s' over the seeded paths (run.sh:2628)
-layer-contract-conformance:skip-name-mut:skip-name-a	printed by a literal printf of an ok line, `printf '  ok    skip-name-mut: twin skip-name-a holds'` (run.sh:997)
+layer-contract-conformance:skip-name-mut:skip-name-a	printed by a literal printf of an ok line, `printf '  ok    skip-name-mut: twin skip-name-a holds'` (run.sh:1000)
 layer-reference-resolution:pool-width-2:pool-self-probe	a multi-word message label (`ok "pool self-probe: ..."`, run.sh:655); H7 reads only its first word
 ledger-reverify:mutation-bail:Entry_SH-GITHOOK-GONE	a multi-word message label (`row_is "Entry SH-GITHOOK-GONE"`, run.sh:792); H7 reads only its first word
 ledger-reverify:mutation-bound:Entry_A	a multi-word message label (`row_is "Entry A"`, run.sh:600); H7 reads only its first word

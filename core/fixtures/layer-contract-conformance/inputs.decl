@@ -3,7 +3,7 @@
 # The validator walks the whole distribution tree and renders its arm map via render-invariant-index.sh --arm-lines <src>, which needs no root marker.
 !scripts/validate-enforcement-map.sh
 scripts/
-# reason: core/ is walked by content -- the validator this fixture runs (run.sh:750) finds every core/*.sh and derives core/*/, scripts/validate-enforcement-map.sh:2476 and :3327.
+# reason: core/ is walked by content -- the validator this fixture runs (run.sh:863) finds every core/*.sh and derives core/*/, scripts/validate-enforcement-map.sh:2476 and :3327.
 core/
 templates/
 .githooks/
