@@ -38,6 +38,41 @@ Token control: the units==segs sums must be equal; they were at 15.66 B on both 
 still running, so a re-run reads a larger total and slightly different s320 figures. 1 of 4098 subagents is
 unjoined.
 
+## Lead tool-call classes (BL-819 item 1)
+
+`extract.py` also writes `classes.jsonl`, one row per (lead unit, step, class) with `active` and `gap` seconds,
+`calls` and `tok` per model in the `segs.jsonl` shape. It changes no other output. Print it with:
+
+```
+EXTRACT_WIN_END=<ISO instant> python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT
+python3 docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT
+python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --classes
+```
+
+The vocabulary is closed. Each message.id is decided over all of its content blocks, and the first class that
+matches wins:
+
+1. `compaction-recovery`: messages from an `isCompactSummary` record until the first tool_use that is not Read, Grep
+   or Glob.
+2. `snapshot`: Bash invoking `snapshot-update.sh`, or naming the file `pipeline-snapshot.md` (any directory prefix)
+   outside heredoc bodies, or feeding a heredoc that names it to an interpreter (`python`, `python3`, `awk`, `sed`,
+   `perl`, `ruby`, `node`); or an Edit or Write of `pipeline-snapshot.md`. Other names such as
+   `pipeline-snapshot-history.md` and the bare word snapshot do not match.
+3. `repair`: an Agent or Task call whose description says fix, repair, re-run, retry or re-dispatch, or repeats an
+   earlier description in the same unit.
+4. `dispatch`: any other Agent or Task call, a SendMessage, or a Write of a file that a later Agent or Task prompt
+   names.
+5. `gate-run`: Bash invoking `gate-checkpoint.sh`, `gate-slice*`, `gate-transition.sh`, a `validate-*.sh` program or
+   a `*-validator`.
+6. `step-reread`: a Read of a step file the unit has already read.
+7. `merge`: a Read, Grep, Glob or Bash call naming a path that an earlier Agent or Task prompt of the unit named, or
+   a TaskOutput or BashOutput call.
+8. `other`: everything else.
+
+Time is charged to the class of the record that opened each interval, on a monotone clock. `--classes` asserts that
+the class tokens equal `segs.jsonl` tokens for every (lead unit, step). It prints `segs` active minus class-sum
+active as the "out-of-order overcount", and it prints the `other` share beside every table.
+
 ## Instrument corrections (c6b, Unit E)
 
 - **Window.** `extract.py` selects transcripts by the last in-file timestamp against `WIN_START`, never by mtime
