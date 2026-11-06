@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1020.0] - 2026-11-06
+
+Batch b251. BL-926 filed and closed. Closes PC-S321-GATE-TRANSITION-REVIEWED-SHA-REFUSES-MERGED-SHARDED-REVIEW. NET 0 (closed 1, filed 1).
+
+### BL-926 — gate-transition.sh accepts a merged sharded prior
+
+- `reviewed_sha()` in `core/scripts/gate-transition.sh` no longer demands exactly one column-0 `reviewed-sha:` line. It reads the prior with `partition-review-diff.sh`'s `prior_delta` extraction, except that an empty value counts, and answers when exactly one distinct value remains and that value is hex.
+- Gate 1 and gate 2 at `--pass` >= 2 therefore proceed on a merged (sharded) prior, which carries one line per shard. The consumer's stories 3.3 and 1.2, held at gate 1, are unblocked.
+- A prior with no line, N distinct values, or a non-hex value (including a prose-suffixed one) is still refused, and the refusal names which. The remedy no longer asks for "one reviewed-sha line".
+- `core/fixtures/gate-transition` gains arms PRIORM, PRIORD, FENCE with its control, QAM, QAD and PRIORX, mutants m-rs1, m-rsany, m-nofence, m-raw and m-nohex, and `receipt-bl926.sh`.
+
 ## [0.1019.0] - 2026-11-05
 
 Batch b250 close release. BL-915 stays PARTIAL. BL-921 is filed. Closes no PC- id. NET -1 (closed 0, minus filed 1, BL-921).
