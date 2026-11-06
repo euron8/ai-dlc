@@ -173,4 +173,145 @@ for _fl in padded:'          yes' blank:'            ' whole:'1. Yes. 2. Yes.'; 
     s-adversarial-p2.md CHANGE_APPROACH bbb2 ccc3 "reframed item-1 AC as a class invariant" "2026-07-12T03:00:00Z | \"$_fq\""
 done
 
+# --- BL-923: the gate-only arms K2, K3 and L, each reached on its own world -----------------------
+# Every world above names `artifact: coe.md`, which no line creates, and none is a git repository, so
+# arms K2, K3 and L never reached a verdict here. Each world below is its OWN stamped git repository
+# under $ROOT, carrying every precondition its arm reads, with an ACCEPT twin and a REFUSE twin one
+# property apart. The shapes are copied from check-24-adversarial-convergence (seed.sh k2_world, run.sh
+# k3_world and l_world), the provenance lines from merge-adversarial-shards.sh's own printf (`shard_tool_use_ids:`
+# with no space, then ` <ordinal>=<id> ... cross=<id>`); no merge runs. The documents live inside their
+# own world dirs under their own names; nothing here writes a coe.md. Git runs with the hook's exported
+# variables unset, fixed identity, no signing, no hooks, and literal dates (BL-868: no load, no clock).
+# A world that fails to build leaves no `bl923-built` marker, which run.sh reports as FIXTURE BROKEN.
+# $1 is the directory of the validator run.sh resolved (its candidate list spans both install layouts),
+# so this seed walks up from nothing; without it, or without the partitioner there, no world is built.
+BL_SD=""
+[ -n "${1:-}" ] && [ -f "$1/partition-subject.sh" ] && BL_SD="$(cd "$1" && pwd)"
+blg() { # <dir> <git args...>
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=fixture -c user.email=fixture@example.invalid \
+      -c commit.gpgsign=false -c core.hooksPath=/dev/null "${@:2}" )
+}
+blcommit() { # <dir> <iso date> <message>
+  ( export GIT_AUTHOR_DATE="$2" GIT_COMMITTER_DATE="$2"; blg "$1" commit -q -m "$3" ) >/dev/null
+}
+blsha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+bllorem() { local i=0; while [ "$i" -lt "$2" ]; do i=$((i + 1)); printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
+
+# K2 (SECTIONS): k2_world's shape -- a repo stamped at 0.665.0 at 10:00, a four-section prd.md that
+# partition-document.sh --map splits, and ONE MET pass at 11:00 notarizing its bytes. ACCEPT carries the
+# merge's shard_tool_use_ids: line; REFUSE is the same pass without it (a whole-document review, owed).
+bl_k2() { # <world> <shard ids | "">
+  mkdir -p "$1/.claude" || return 1
+  printf 'version: 0.665.0\n' > "$1/.claude/.ai-dlc-version"
+  printf '# PRD\n\n## One\n\nalpha alpha\n\n## Two\n\nbravo bravo\n\n## Three\n\ncharlie charlie\n\n## Four\n\ndelta delta\n' > "$1/prd.md"
+  blg "$1" init -q . >/dev/null && blg "$1" add .claude/.ai-dlc-version && blcommit "$1" 2026-09-29T10:00:00Z stamp || return 1
+  {
+    printf '# prd -- adversarial pass 1\n\n'
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: 2026-09-29T11:00:00Z\n'
+    printf 'tool_use_id: toolu_fixture_k2\n'
+    [ -n "$2" ] && printf 'shard_tool_use_ids:%s\n' "$2"
+    printf 'mode: subagent\nlead_role: pm\nartifact: prd.md\n'
+    printf 'artifact_sha: %s\n' "$(blsha "$1/prd.md")"
+    printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\n'
+    printf 'verdict: EXIT_CONDITION_MET\n'
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$1/prd-adversarial-p1.md"
+}
+
+# K3 (SUBJECT): k3_world's shape -- a repo whose `main` holds the stamp commit (9.0.0, above every
+# release K3 binds) and whose `sprint-9` branch changes the four subject files; the REAL
+# partition-subject.sh --map 9 writes the manifest and prints the map. The terminal pass
+# s9/requirements-adversarial-p1.md names the manifest, notarizes each stem's sha, and carries one id
+# per map ordinal plus the cross keys partition-document.sh --cross-groups names. ACCEPT is that set;
+# REFUSE is the same COUNT over another SET (k3-wrongset's ` 1=` -> ` 99=`).
+BL_PA=_bmad-output/planning-artifacts
+bl_k3() { # <world> accept|refuse
+  local w="$1" pa="$1/$BL_PA" o ids="" k g i sl sep
+  mkdir -p "$pa/s9" "$w/_bmad-output/specs/s9/kernel" "$w/.claude" || return 1
+  blg "$w" init -q . >/dev/null && blg "$w" checkout -q -b main || return 1
+  { printf '# Brief\n\n## Vision\n\n'; bllorem vision 10; } > "$pa/product-brief.md"
+  { printf '# PRD\n\n## Current state\n\n'; bllorem current 20; printf '\n## Sprint 8\n\n'; bllorem s8 20; printf '\n'; } > "$pa/prd.md"
+  printf -- '- FR-S8-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
+  printf 'version: 9.0.0\n' > "$w/.claude/.ai-dlc-version"
+  blg "$w" add -A && blcommit "$w" 2026-01-01T00:00:00Z stamp && blg "$w" checkout -q -b sprint-9 || return 1
+  printf '# SPEC\n\ncap-1: THE system SHALL x.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md"
+  printf 'A new brief line.\n' >> "$pa/product-brief.md"
+  { printf '## Sprint 9\n\n### Goals\n\n'; bllorem s9g 30; printf '\n### Requirements\n\n'; bllorem s9r 30; } >> "$pa/prd.md"
+  printf -- '- FR-S9-1: architecture_impact: none\n' >> "$pa/s9/architecture-impact.md"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    AI_DLC_PROJECT_ROOT="$w" bash "$BL_SD/partition-subject.sh" --map 9 ) > "$w/subject.map" 2> "$w/subject.err" \
+    || { echo "seed.sh: partition-subject.sh --map 9 refused in $w: $(head -2 "$w/subject.err")" >&2; return 1; }
+  [ -f "$pa/s9/requirements-subject.md" ] || return 1
+  k=0; for o in $(cut -f1 "$w/subject.map"); do k=$((k + 1)); ids="$ids $o=toolu_fixture_k3s$k"; done
+  [ "$k" -ge 2 ] || return 1
+  g="$(bash "$BL_SD/partition-document.sh" --cross-groups "$k" | grep -c .)" || g=0
+  [ "$g" -ge 1 ] || return 1
+  if [ "$g" -eq 1 ]; then ids="$ids cross=toolu_fixture_k3x"
+  else i=0; while [ "$i" -lt "$g" ]; do i=$((i + 1)); ids="$ids cross-$i=toolu_fixture_k3x$i"; done; fi
+  if [ "$2" = refuse ]; then
+    case "$ids" in " 1="*|*" 1="*) ;; *) return 1 ;; esac
+    ids="$(printf '%s' "$ids" | sed 's/ 1=/ 99=/')"
+  fi
+  # The pair separator is the producer's (merge-adversarial-shards.sh --pair-sep), not whatever the reader happens to accept.
+  sep="$(bash "$BL_SD/merge-adversarial-shards.sh" --pair-sep)" && [ -n "$sep" ] || { echo "FIXTURE BROKEN: merge-adversarial-shards.sh --pair-sep printed no separator" >&2; return 1; }
+  sl="product-brief${sep}$(blsha "$pa/product-brief.md") SPEC${sep}$(blsha "$w/_bmad-output/specs/s9/kernel/SPEC.md") prd${sep}$(blsha "$pa/prd.md") architecture-impact${sep}$(blsha "$pa/s9/architecture-impact.md")"
+  {
+    printf '# requirements -- adversarial pass 1 (merged from %s shards)\n\n' "$((k + g))"
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: 2026-10-01T10:00:00Z\n'
+    printf 'tool_use_id: toolu_fixture_k3x\n'
+    printf 'shard_tool_use_ids:%s\n' "$ids"
+    printf 'mode: subagent\nlead_role: requirements\n'
+    printf 'artifact: %s/s9/requirements-subject.md\n' "$BL_PA"
+    printf 'artifact_sha: %s\n' "$sl"
+    printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\n'
+    printf 'verdict: EXIT_CONDITION_MET\n'
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$pa/s9/requirements-adversarial-p1.md"
+}
+
+# L (ELICITATION): l_world's shape -- s9/stories/ with three stories, s9/sprint-status.yaml declaring
+# sprint 9 at validation_intensity full, a MET shard-merged stories pass, and a stamp history of 0.781.0
+# then 0.782.0 (L_RELEASE). ACCEPT is the sharded shape (01..03 plus one cross.md, l-legacy's set);
+# REFUSE is l-voice's: one stories-elicitation.md record and no shard dir, dated after the stamp.
+bl_lprov() { # <file> -- one elicitation record, the shipped block shape
+  { printf '# Stories elicitation\n\nFindings: 0 critical, 0 major, 0 minor.\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: bmad-advanced-elicitation\n'
+    printf 'invoked_at: 2026-10-06T00:00:00Z\ntool_use_id: NOT_ACCESSIBLE\nmode: subagent\nlead_role: stories\nartifact: s9/stories/\n'
+    printf 'findings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$1"
+}
+bl_l() { # <world> accept|refuse
+  local w="$1" i n
+  mkdir -p "$w/.claude" "$w/s9/stories" || return 1
+  for i in 1 2 3; do printf '# Story %s\n\nAs the operator, I want %s.\n' "$i" "$i" > "$w/s9/stories/story-$i.md"; done
+  printf 'sprint: 9\nvalidation_intensity: full\n' > "$w/s9/sprint-status.yaml"
+  { printf '# stories -- adversarial pass 1\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: 2026-10-07T00:00:00Z\ntool_use_id: toolu_fixture_l1\n'
+    printf 'shard_tool_use_ids: 1=toolu_fixture_l1a 2=toolu_fixture_l1b cross=toolu_fixture_l1x\n'
+    printf 'mode: subagent\nlead_role: architect\nartifact: stories/\nfindings_critical: 0\nfindings_critical_prior_scope: 0\n'
+    printf 'findings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$w/s9/stories-adversarial-p1.md"
+  if [ "$2" = accept ]; then
+    mkdir -p "$w/s9/shards/stories-elicitation" || return 1
+    for n in 01 02 03 cross; do bl_lprov "$w/s9/shards/stories-elicitation/$n.md"; done
+  else
+    bl_lprov "$w/s9/stories-elicitation.md"
+  fi
+  printf 'version: 0.781.0\n' > "$w/.claude/.ai-dlc-version"
+  blg "$w" init -q . >/dev/null && blg "$w" add -A && blcommit "$w" 2026-10-01T00:00:00Z stamp-0.781.0 || return 1
+  printf 'version: 0.782.0\n' > "$w/.claude/.ai-dlc-version"
+  blg "$w" add -A && blcommit "$w" 2026-10-05T00:00:00Z stamp-0.782.0
+}
+
+if [ -n "$BL_SD" ] \
+   && bl_k2 "$ROOT/k2-accept" ' 1=toolu_fixture_d1 2=toolu_fixture_d2 cross=toolu_fixture_dx' \
+   && bl_k2 "$ROOT/k2-refuse" "" \
+   && bl_k3 "$ROOT/k3-accept" accept && bl_k3 "$ROOT/k3-refuse" refuse \
+   && bl_l "$ROOT/l-accept" accept && bl_l "$ROOT/l-refuse" refuse; then
+  : > "$ROOT/bl923-built"
+fi
+
 printf '%s\n' "$ROOT"

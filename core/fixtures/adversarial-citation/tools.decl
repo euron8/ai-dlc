@@ -11,11 +11,14 @@ dirname
 git
 grep
 head
+ln
 ls
 mkdir
 mktemp
+mv
 rm
 sed
+shasum
 sort
 tail
 tr

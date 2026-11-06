@@ -185,7 +185,8 @@ verdict() { # <arm> <tag> [<world dir> for DV]
     C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-inprocess -- self-probe fired both ways; 5 fixture(s) scanned' ;;
     N)  rcis "$t" 0 && has "$t" 'judges GRAMMAR only' && has "$t" '; 5 fixture(s) scanned; 5 predicted to pass, 0 refused' ;;
     DV) rcis "$t" 0 && has "$t" '--derive wrote 3 row(s)' && [ "$(rows "$3/scripts/fixture-inprocess-allowlist.txt")" = "fguard fnew fwhy " ] \
-          && cmp -s "$3/scripts/fixture-inprocess-allowlist.txt" "$3.first" ;;
+          && cmp -s "$3/scripts/fixture-inprocess-allowlist.txt" "$3.first" \
+          && [ "$(awk -F'\t' '$1 == "fnew" { print $2 }' "$3/scripts/fixture-inprocess-allowlist.txt")" = "core/scripts/g.sh runs outside a declared cell" ] ;;
     K)  rcis "$t" 1 && has "$t" '  INCOMPLETE  1 allowlist row(s) remain in scripts/fixture-inprocess-allowlist.txt' ;;
     DG) [ "$(grep -c '^DG ok ' "$WORK/c.$t.out")" = 2 ] && ! grep -q '^DG BAD' "$WORK/c.$t.out" ;;
     DS) [ "$(grep -c '^DS ok ' "$WORK/c.$t.out")" = 2 ] && ! grep -q '^DS BAD' "$WORK/c.$t.out" ;;
@@ -229,7 +230,9 @@ if verdict D5 dirty; then ok "D5 holds on the dirty world"; B_D5=1; else dfail D
 if verdict DQ dirty; then ok "DQ holds on the dirty world"; else dfail DQ; fi
 if verdict C clean; then ok "C holds on the clean world"; B_C=1; else cfail C; fi
 if verdict N clean; then ok "N holds on the clean world"; B_N=1; else cfail N; fi
-if verdict DV derive "$WORK/dv-derive"; then ok "DV --derive writes exactly the three refused fixtures, byte-identical twice"; else bad "DV: $(tr '\n' ' ' < "$WORK/c.derive.out") rows [$(rows "$WORK/dv-derive/scripts/fixture-inprocess-allowlist.txt")]"; fi
+if verdict DV derive "$WORK/dv-derive"; then
+  ok "DV --derive writes exactly the three refused fixtures, byte-identical twice, each reason count-free"; echo "receipt-bl928: PASS"
+else echo "receipt-bl928: FAIL";  bad "DV: $(tr '\n' ' ' < "$WORK/c.derive.out") rows [$(rows "$WORK/dv-derive/scripts/fixture-inprocess-allowlist.txt")]"; fi
 if verdict K k; then ok "K --complete refuses a non-empty allowlist"; B_K=1; else bad "K (rc $(cat "$WORK/c.k.rc")): $(head -c 400 "$WORK/c.k.out" | tr '\n' ' ')"; fi
 B_DG=0; B_DS=0
 if verdict DG dg; then ok "DG both hooks' digest inputs carry the fixture's own #inproc row (listed with its cells.decl sha, unlisted none)"; B_DG=1; else bad "DG: $(tr '\n' ' ' < "$WORK/c.dg.out")"; fi

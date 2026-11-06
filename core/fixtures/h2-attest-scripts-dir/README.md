@@ -63,9 +63,11 @@ bare invocation exits at the usage line — the blind spot its own comments name
 | | |
 |---|---|
 | **D** | `--digest` resolves `tests/fixtures/` in a consumer and prints 16 hex chars. |
+| **D2** | *Resolution differential.* The default `--digest` equals the digest of an explicit `--fixtures tests/fixtures` and differs from the digest of `--fixtures core/fixtures`, so it resolved the consumer set and not the distribution's. Its result gates the swap mutant's kill. |
 | **A** | `--attest --sprint 999` exits 0 and prints a well-formed `H2_ATTESTED v1` line. The run that failed in every consumer. One full `check-17-bypass` drive — this fixture's only real cost. |
 | **B** | *Non-vacuity control.* The same command with `--scripts <nonexistent>` — the exact path the shipped code computed — must FAIL. Without it, A passing would say nothing about whether the drive depends on locating the validators. |
 | **C** | *Mutation control.* The pre-v0.139.0 derivation is `sed` back in and must fail with `cannot locate validate-provenance-block.sh`. Guarded by `cmp -s`: a sed that matched nothing is reported as a FAIL, never as a pass. This is the assertion that goes red the day someone re-adds a guessed `SCRIPTS_DIR`. |
+| **C2** | *Swap mutant.* A copy of the validator with the candidate order swapped (`core/fixtures` tried before `tests/fixtures`), driven against a root holding both. The unmutated copy must print the consumer digest; the mutant is KILLED only on a well-formed digest that differs from it, by C2's inline differential and gated on D2. A crash or malformed output is BROKEN, never a kill. |
 | **E** | A table-cell attestation `--verify`s. The motivating case: a consumer pasted the line into the H2 row's Evidence cell and was told the sprint had never attested. |
 | **F** | The canonical column-1 attestation still `--verify`s. A widening that breaks it is a regression E cannot see. |
 | **G** | A table-cell attestation at a MOVED digest reports **`the fixture set CHANGED`**, not first-gate. Asserts the MESSAGE, because both branches exit 1 and only the message distinguishes them. |

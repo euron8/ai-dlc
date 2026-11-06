@@ -25,9 +25,18 @@
 # MUTANT-MATRIX W decides=dir-empty+silent.jsonl twins=dir-empty,dir-silent,dir-real
 # MUTANT-MATRIX F-m2 decides=gate-padded twins=gate-whole,hook-padded,hook-blank,hook-whole
 # MUTANT-MATRIX F-m1+m2 decides=gate-padded twins=gate-whole,hook-whole
+# BL-923 cells (seeded K2/K3/L worlds): bl923-k2-accept, bl923-k2-refuse, bl923-k3-accept, bl923-k3-refuse,
+# bl923-l-accept, bl923-l-refuse.
+# MUTANT-MATRIX BL923-K2 decides=bl923-k2-refuse twins=bl923-k2-accept,bl923-k3-accept,bl923-k3-refuse,bl923-l-accept,bl923-l-refuse
+# MUTANT-MATRIX BL923-K3 decides=bl923-k3-refuse twins=bl923-k2-accept,bl923-k2-refuse,bl923-k3-accept,bl923-l-accept,bl923-l-refuse
+# MUTANT-MATRIX BL923-L decides=bl923-l-refuse twins=bl923-k2-accept,bl923-k2-refuse,bl923-k3-accept,bl923-k3-refuse,bl923-l-accept
+# MUTANT-MATRIX-CONTROL BL923-control why=the unmutated whole-directory copy must score all six BL-923 cells before any mutant is read
 # MUTANT-MATRIX-CONTROL F-m1 why=the predicate floor is removed but the caller's normalised-length refusal fires first, so all six floor cells hold and survival is the pass
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-citation/run.sh --matrix
 set -u
+# Inherited AI_DLC_* tunables (e.g. AI_DLC_TRUNK) change what the seeded worlds and the validator resolve; scrub them so the run is the same under any caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
 MX_RAN=0
 mx() { MX_RAN=$((MX_RAN + 1)); echo "$@"; }
@@ -42,7 +51,7 @@ for cand in \
 done
 [ -n "$VALIDATOR" ] || { echo "FAIL: cannot locate validate-adversarial-convergence.sh from $DIR"; exit 1; }
 
-ROOT="$(bash "$DIR/seed.sh" | tail -1)"
+ROOT="$(bash "$DIR/seed.sh" "$(cd "$(dirname "$VALIDATOR")" && pwd)" | tail -1)"
 MEMO="$(mktemp -d)"
 trap 'rm -rf "$ROOT" "$MEMO"' EXIT
 FAIL=0; N=0
@@ -439,6 +448,129 @@ fl_score "F-m1" 111111 m1 validate-steering-budget.sh "$FL_M1_A" '  if (false) {
 # tiers; the whole-quote twin is unmoved.
 fl_score "F-m1+m2" 001001 m12 "$FL_BASE" "$FL_M2_A" "$FL_M2_R" \
   validate-steering-budget.sh "$FL_M1_A" '  if (false) {'
+
+# --- BL-923: the gate-only arms K2, K3 and L, each on its own seeded world --------------------------
+# seed.sh builds six stamped git repositories (an ACCEPT and a REFUSE twin per arm, one property apart)
+# and drops `bl923-built` only when all six built. Each world is driven with `--arms <its arm>`, so a
+# line in its output is that arm's alone. SIX CELLS, every one presence- or shape-asserted:
+#   k2-accept  rc 0, `PASS: the cycle converged`, no `K2 -- SECTIONS` token (K2 prints nothing on accept)
+#   k2-refuse  `FAIL (K2 -- SECTIONS):`
+#   k3-accept  rc 0, `PASS: the cycle converged`, no `K3 -- SUBJECT` token
+#   k3-refuse  `FAIL (K3 -- SUBJECT):`
+#   l-accept   rc 0, `OK (L -- ELICITATION)`, no `PENDING (L` and no `FAIL (L`
+#   l-refuse   `FAIL (L -- ELICITATION)`
+# A PENDING on any of them fails its cell: accept cells refuse the arm's token (K2/K3) or require the
+# OK line (L), and refuse cells require the FAIL line. The FALLBACK (K2/K3 partitioner) lines this
+# distribution layout prints are expected and are not suppressed.
+echo
+echo "  -- BL-923: arms K2, K3 and L reach their own verdicts on seeded worlds --"
+BL_WORLDS="k2-accept:K2:prd-adversarial-p k2-refuse:K2:prd-adversarial-p k3-accept:K3:_bmad-output/planning-artifacts/s9/requirements-adversarial-p k3-refuse:K3:_bmad-output/planning-artifacts/s9/requirements-adversarial-p l-accept:L:s9/stories-adversarial-p l-refuse:L:s9/stories-adversarial-p"
+BL_CELLS=""
+bl_cells() {  # $1 validator -> BL_CELLS, one 1/0 per world in BL_WORLDS order
+  local v="$1" c="" e wn arm stem tok o
+  for e in $BL_WORLDS; do
+    wn="${e%%:*}"; arm="${e#*:}"; stem="${arm#*:}"; arm="${arm%%:*}"
+    vcall "$v" --series "$ROOT/$wn/$stem" --transcript "$ROOT/silent.jsonl" --arms "$arm"
+    o="$VC_OUT
+$VC_ERR"
+    case "$arm" in K2) tok="K2 -- SECTIONS" ;; K3) tok="K3 -- SUBJECT" ;; *) tok="L -- ELICITATION" ;; esac
+    case "$wn" in
+      l-accept)
+        if [ "$VC_RC" -eq 0 ] && grep -qF -- "OK ($tok)" <<<"$o" && ! grep -qF -- "PENDING (L" <<<"$o" && ! grep -qF -- "FAIL (L" <<<"$o"; then c="${c}1"; else c="${c}0"; fi ;;
+      *-accept)
+        if [ "$VC_RC" -eq 0 ] && grep -qF -- "PASS: the cycle converged" <<<"$o" && ! grep -qF -- "$tok" <<<"$o"; then c="${c}1"; else c="${c}0"; fi ;;
+      *)
+        if grep -qF -- "FAIL ($tok)" <<<"$o"; then c="${c}1"; else c="${c}0"; fi ;;
+    esac
+  done
+  BL_CELLS="$c"
+}
+# bl_silent <validator> <world index 1..6> -> 0 when that world's run under <validator> is a WELL-FORMED
+# silent pass: rc 0, the converged line, and no line of the world's arm. A mutant's refuse cell must read
+# this way to score as a kill -- a crash, an exit 2 self-probe or a PENDING is BROKEN, not KILLED.
+bl_silent() {
+  local v="$1" e wn arm stem tok o
+  e="$(printf '%s\n' $BL_WORLDS | sed -n "${2}p")"
+  wn="${e%%:*}"; arm="${e#*:}"; stem="${arm#*:}"; arm="${arm%%:*}"
+  case "$arm" in K2) tok="K2 -- SECTIONS" ;; K3) tok="K3 -- SUBJECT" ;; *) tok="L -- ELICITATION" ;; esac
+  vcall "$v" --series "$ROOT/$wn/$stem" --transcript "$ROOT/silent.jsonl" --arms "$arm"
+  o="$VC_OUT
+$VC_ERR"
+  [ "$VC_RC" -eq 0 ] && grep -qF -- "PASS: the cycle converged" <<<"$o" && ! grep -qF -- "$tok" <<<"$o"
+}
+bl_names="k2-accept k2-refuse k3-accept k3-refuse l-accept l-refuse"
+bl_row() {  # $1 cells -> " bl923-<world>=PASS|FAIL ..."
+  local r="" i=0 nm
+  for nm in $bl_names; do i=$((i + 1)); if [ "$(printf '%s' "$1" | cut -c"$i")" = 1 ]; then r="$r bl923-$nm=PASS"; else r="$r bl923-$nm=FAIL"; fi; done
+  printf '%s' "$r"
+}
+BL_BAD=""
+N=$((N + 1))
+if [ ! -f "$ROOT/bl923-built" ]; then
+  FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD worlds"
+  printf '  FAIL %-38s FIXTURE BROKEN: seed.sh did not build the six BL-923 worlds under %s\n' "bl923-worlds" "$ROOT"
+  BL_BASE=000000
+else
+  printf '  ok   %-38s six stamped worlds built\n' "bl923-worlds"
+  bl_cells "$VALIDATOR"; BL_BASE="$BL_CELLS"
+fi
+i=0
+for bl_lb in bl923-k2-accept bl923-k2-refuse bl923-k3-accept bl923-k3-refuse bl923-l-accept bl923-l-refuse; do
+  nm="${bl_lb#bl923-}"; i=$((i + 1)); N=$((N + 1))
+  if [ "$(printf '%s' "$BL_BASE" | cut -c"$i")" = 1 ]; then printf '  ok   %-38s its arm'"'"'s own verdict\n' "bl923-$nm"
+  else FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $nm"; printf '  FAIL %-38s its arm did not print its own verdict (cells=%s)\n' "bl923-$nm" "$BL_BASE"
+    e="$(printf '%s\n' $BL_WORLDS | sed -n "${i}p")"; a="${e#*:}"
+    vcall "$VALIDATOR" --series "$ROOT/${e%%:*}/${a#*:}" --transcript "$ROOT/silent.jsonl" --arms "${a%%:*}"
+    printf '%s\n%s\n' "$VC_OUT" "$VC_ERR" | sed 's/^/       | /'
+  fi
+done
+
+# THE MUTANTS, each a copy of the validator's WHOLE directory (partition-document.sh, partition-subject.sh
+# and merge-adversarial-shards.sh beside it, or K2, K3 and L read PENDING "not installed beside this
+# validator"), each disabling exactly one arm's decision at that arm's own predicate, through fl_mk
+# (unique anchor, `cmp -s`, `bash -n`). An unmutated copy from the same directory scores all six first.
+# A mutant is KILLED when its own refuse cell, and only that cell, reads as a well-formed silent pass.
+BL_KILLS=0
+bl_score() {  # $1 label  $2 expected cells  $3 decides-index ("" = control)  then fl_mk's name [<target> <anchor> <replacement>]
+  local label="$1" want="$2" dix="$3"
+  shift 3
+  N=$((N + 1))
+  if ! fl_mk "$@"; then FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $label"; printf '  FAIL %-38s DID NOT APPLY: %s\n' "$label" "$FL_WHY"; return 1; fi
+  bl_cells "$FL_DIR/$FL_BASE"
+  [ "$MATRIX" != 1 ] || mx "  MATRIX $label:$(bl_row "$BL_CELLS")"
+  if [ "$BL_CELLS" != "$want" ]; then
+    FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $label"; printf '  FAIL %-38s scored %s, wanted %s\n' "$label" "$BL_CELLS" "$want"; return 1
+  fi
+  if [ -n "$dix" ]; then
+    if ! bl_silent "$FL_DIR/$FL_BASE" "$dix"; then
+      FAIL=$((FAIL + 1)); BL_BAD="$BL_BAD $label"
+      printf '  FAIL %-38s BROKEN, no kill scored: its refuse cell is not a well-formed silent pass (rc=%s)\n' "$label" "$VC_RC"; return 1
+    fi
+    BL_KILLS=$((BL_KILLS + 1))
+  fi
+  printf '  ok   %-38s %s -> %s\n' "$label" "$want" "$BL_CELLS"
+}
+if [ -f "$ROOT/bl923-built" ]; then
+  bl_score "BL923-control" 111111 "" blctl
+  bl_score "BL923-K2" 101111 2 blk2 "$FL_BASE" \
+    '  if [ -n "$K2_FILE" ] && ! k_has_ids "$k2s"; then' '  if false; then'
+  bl_score "BL923-K3" 111011 4 blk3 "$FL_BASE" \
+    '            if [ "$k3_have" != "$k3_want_s" ]; then' '            if false; then'
+  bl_score "BL923-L" 111110 6 bll "$FL_BASE" \
+    '      FAIL)' '      FAIL-DISABLED)'
+fi
+
+# THE RECEIPT. PASS only when all six cells hold on the real validator AND each of the three mutants was
+# killed by its own arm alone; otherwise it names what did not hold, and the fixture is red.
+N=$((N + 1))
+[ "$BL_BASE" = 111111 ] || BL_BAD="$BL_BAD base-cells=$BL_BASE"
+[ "$BL_KILLS" -eq 3 ] || BL_BAD="$BL_BAD kills=$BL_KILLS/3"
+if [ -z "$BL_BAD" ]; then
+  echo "receipt-bl923: PASS"
+else
+  FAIL=$((FAIL + 1))
+  echo "receipt-bl923: FAIL$BL_BAD"
+fi
 
 N=$((N + 1))
 if [ "$MATRIX" = 1 ]; then

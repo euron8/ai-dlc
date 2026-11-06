@@ -142,20 +142,54 @@ for d in check-h1-recursion check-17-bypass check-manifest-bypass lib; do
 done
 chmod +x "$WORK/tests/fixtures"/*/*.sh 2>/dev/null || true
 
+# ONE shared root resolution for EVERY drive of the subject below (D, A, B, C, v_run, vx, vxl,
+# the --sprint drive, the control copy and every battery mutant): exported once, here, after the
+# tree is built, so no drive can forget it. $SUT stays at $SRC. `cd "$WORK"` moves nothing on its
+# own, because the validator walks up from the directory of the SCRIPT it runs; without this the
+# walk-up finds the distribution root and the fixture search resolves core/fixtures, never
+# $WORK/tests/fixtures.
+export AI_DLC_PROJECT_ROOT="$WORK"
+
+# The two candidate fixture directories must DIGEST differently, or the resolution arm below
+# reads agreement between two directories that are the same bytes. check-17-bypass is driven by
+# --attest, so it is left alone; the extra file goes into check-h1-recursion.
+printf 'consumer-only seed: tests/fixtures differs from core/fixtures\n' \
+  > "$WORK/tests/fixtures/check-h1-recursion/consumer-extra.txt" || exit 2
+
 echo "h2-attest-scripts-dir"
 echo "  subject: ${SUT#"$ROOT/"}"
 echo "  consumer tree: scripts/ai-dlc/ ($n_installed core), scripts/ (1 consumer decoy),"
-echo "                 tests/fixtures/ (3), no core/, no tests/scripts/"
+echo "                 tests/fixtures/ (3 fixture dirs plus lib), no core/, no tests/scripts/"
 echo ""
 
 # --- D. the fixture set resolves at all, in a consumer --------------------------
 DIG_OUT="$( cd "$WORK" && bash "$SUT" --digest 2>&1 )"
 DIG_RC=$?
 if [ "$DIG_RC" -eq 0 ] && grep -qE '^[0-9a-f]{16}$' <<<"$DIG_OUT"; then
-  ok "--digest resolves tests/fixtures/ in a consumer ($DIG_OUT)"
+  ok "--digest resolves a fixture set in a consumer root ($DIG_OUT)"
 else
   bad "--digest failed in a consumer tree (rc=$DIG_RC)"
   printf '%s\n' "$DIG_OUT" | sed 's/^/        /'
+fi
+
+# --- D2. WHICH set: tests/fixtures of the consumer root, never core/fixtures ----
+# PRESENCE-shaped: the default digest must EQUAL the digest over $WORK/tests/fixtures and must
+# DIFFER from the digest over the distribution's fixtures. The two explicit digests are shown to
+# differ first, so equality with one side is evidence about the other.
+D_CONS="$( bash "$SUT" --digest --fixtures "$WORK/tests/fixtures" 2>&1 )"; D_CONS_RC=$?
+D_DIST="$( bash "$SUT" --digest --fixtures "$FIXSRC" 2>&1 )"; D_DIST_RC=$?
+if [ "$D_CONS_RC" -ne 0 ] || [ "$D_DIST_RC" -ne 0 ] \
+   || ! grep -qE '^[0-9a-f]{16}$' <<<"$D_CONS" || ! grep -qE '^[0-9a-f]{16}$' <<<"$D_DIST"; then
+  echo "FIXTURE ERROR: an explicit --fixtures digest was not well-formed (rc=$D_CONS_RC/$D_DIST_RC)" >&2; exit 2
+fi
+[ "$D_CONS" != "$D_DIST" ] || {
+  echo "FIXTURE ERROR: the consumer and distribution fixture digests are identical" >&2; exit 2; }
+H2_D2=0
+if [ "$DIG_OUT" = "$D_CONS" ] && [ "$DIG_OUT" != "$D_DIST" ]; then
+  ok "the default --digest resolves \$WORK/tests/fixtures, not core/fixtures"; H2_D2=1
+else
+  bad "the default --digest ($DIG_OUT) is not the consumer tests/fixtures digest ($D_CONS) --"
+  echo "        it resolved the distribution set ($D_DIST) or something else." >&2
 fi
 
 # --- A. THE ASSERTION. --attest must drive the fixture end to end ---------------
@@ -224,6 +258,43 @@ else
   else
     bad "MUTATION: the derivation failed, but not on validator location (rc=$MUT_RC)"
     printf '%s\n' "$MUT_OUT" | tail -5 | sed 's/^/        /' >&2
+  fi
+fi
+
+# --- C2. MUTATION: the candidate order swapped, core/fixtures first ---------------
+# A copy of the whole scripts/ai-dlc/ directory, so siblings resolve, driven against a SEPARATE
+# copy of the consumer root that also holds core/fixtures/ with all three H2 dirs, one carrying
+# a byte that tests/fixtures lacks. The shared $WORK has no core/, so the swap changes nothing
+# there. The unmutated copy is driven first against the same root and must print the consumer
+# digest; KILLED only on a well-formed digest that differs from it (a crash or malformed output
+# is BROKEN, never a kill).
+SW="$WORK/h2-swap"
+SWBIN="$SW/bin"
+mkdir -p "$SW/root/.git" "$SW/root/core/fixtures" "$SWBIN" || exit 2
+cp -R "$WORK/tests" "$SW/root/" || exit 2
+for d in check-h1-recursion check-17-bypass check-manifest-bypass; do
+  cp -R "$FIXSRC/$d" "$SW/root/core/fixtures/" || exit 2
+done
+printf 'x' >> "$SW/root/core/fixtures/check-manifest-bypass/swap-extra.txt" || exit 2
+cp -R "$WORK/scripts/ai-dlc/." "$SWBIN/" || exit 2
+SWCTL="$SWBIN/validate-h2-attestation.sh"
+SWMUT="$SWBIN/validate-h2-attestation.mutant.sh"
+sed 's@^  for cand in "$PROJECT_DIR/tests/fixtures" "$PROJECT_DIR/core/fixtures"; do$@  for cand in "$PROJECT_DIR/core/fixtures" "$PROJECT_DIR/tests/fixtures"; do@' "$SWCTL" > "$SWMUT"
+SW_CONS="$( AI_DLC_PROJECT_ROOT="$SW/root" bash "$SWCTL" --digest 2>&1 )"; SW_CONS_RC=$?
+if cmp -s "$SWCTL" "$SWMUT"; then
+  bad "MUTATION (swap) DID NOT APPLY -- the candidate loop was renamed or reshaped"
+elif ! bash -n "$SWMUT" 2>/dev/null; then
+  bad "MUTATION (swap) DID NOT APPLY -- the copy does not parse (bash -n)"
+elif [ "$SW_CONS_RC" -ne 0 ] || ! grep -qE '^[0-9a-f]{16}$' <<<"$SW_CONS" || [ "$SW_CONS" != "$D_CONS" ]; then
+  bad "MUTATION CONTROL (swap): the unmutated copy did not print the consumer digest (rc=$SW_CONS_RC)"
+else
+  SW_OUT="$( AI_DLC_PROJECT_ROOT="$SW/root" bash "$SWMUT" --digest 2>&1 )"; SW_RC=$?
+  if [ "$SW_RC" -ne 0 ] || ! grep -qE '^[0-9a-f]{16}$' <<<"$SW_OUT"; then
+    bad "MUTATION (swap) BROKEN: the mutant crashed or printed a malformed digest (rc=$SW_RC)"
+  elif [ "$SW_OUT" = "$SW_CONS" ]; then
+    bad "MUTATION (swap) SURVIVED: core/fixtures first still resolved the consumer digest"
+  else
+    mutant_killed "$H2_D2" swap-candidate-order "MUTATION (swap): core/fixtures tried first prints a different digest -- KILLED by C2's inline differential (mutant digest vs the unmutated copy's digest), gated on D2"
   fi
 fi
 
