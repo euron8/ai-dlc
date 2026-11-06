@@ -40084,3 +40084,29 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 verify: manual
 
 
+## BL-917 — the pre-suite step key does not key a metadata-only test of a present file that the step never reads
+
+**LANDED (v0.1027.0).** The one live site is fixed, the present key now carries mode, and arm S15 fails any metadata-only test with no classified allowlist row.
+
+Evidence:
+- Census: a read-only opus census at `316fdfe2f` found 0 live sites and 1 per-file site. That site is I119's `[ -s "$i119_f" ] || continue` in `scripts/validate-enforcement-map.sh` (line 13936 at `316fdfe2f`), which skipped an EMPTY prompt file so the step never opened it and never keyed it. At step level the `.md` corpus was also opened by I100 (`grep -rlF` at `scripts/validate-enforcement-map.sh:11361`) and I102 (`grep -rnE` at `scripts/validate-enforcement-map.sh:11460`), both at `715ad2db4`.
+- The census scorer was rejected. It acquitted the gating shape `[ -s "$f" ] || continue; grep x "$f"`, and a read row keys content only, so it was unsound for any mode or mtime test.
+- S15 (`scripts/validate-shell-portability.sh`) re-derived the closure from the hook: 23 steps, 21 seeds, 28 files, 65 sites, with 64 classified and I119 the one unclassified site before the fix.
+- The fix: I119 now opens every file, with an awk `BEGIN` pre-pass that counts empty files and reports unopenable ones (`scripts/validate-enforcement-map.sh:13869`). The pre-suite present key now carries each path's octal permission bits (the `present` row of `pk.py` in `.githooks/pre-push`, line 505), so a `chmod` moves the key.
+- The guard: S15 fails any metadata-only test in the derived pre-suite closure with no classified row in `scripts/presuite-metadata-allowlist.txt`. A new site fails unless it is fixed or given a classified row reviewed in its release, and a stale row fails. As committed the allowlist has 78 rows: scratch 28, mode-keyed-by-present-key 16, text-only 17, size-read-by-step 6, pipe 3, verdict-independent 5, python-api 2, system-path 1, git-index 0, live-pending-lead 0.
+- What remains unkeyed, quoting the hook (`.githooks/pre-push:175-177`): "Residual, unkeyed: an mtime test on any present file (a read row keys content, sha256, only), a size test on a present file the step never read, and an owner test (-O/-G); a mode test (-x/-w/-r) is keyed only through the permission BITS the present key carries -- a macOS ACL or file flag (chflags uchg) can change -r/-w without moving the mode and is not keyed." S15 found 0 such live sites in the closure. S15 matches per key by count (sites must equal rows), takes a classified row as the remedy for a correct new site (reviewed in its release), and its grammar reads tests inside `[[ ]]` and `-a`/`-o` operands; `perl -M` stays a gap.
+
+**NOTE (out of scope, no fix, no new id).** Some pre-suite steps depend on the environment, and none of these variables is in the step command hash or in the read rows. The census list, with the two line numbers re-cited at `715ad2db4`:
+- Backlog receipts, both runs: the `AI_DLC_BACKLOG_*` ceilings; `BR_PROBE_RECORD` (`-w` at `scripts/validate-backlog-receipts.sh:2180`); and `-ef "$BASH"` against `command -v bash` (`scripts/validate-backlog-receipts.sh:2165`), which depends on PATH.
+- Backlog depth: `AI_DLC_BACKLOG_MAX_ENTRIES`.
+- Claude-rules: `AI_DLC_DURABLE_BYTES`.
+- Plan shape: `AI_DLC_PLAN_BYTES`.
+- Re-attach budget: `AI_DLC_REATTACH_BUDGET`, `AI_DLC_REATTACH_MARGIN` and `AI_DLC_BYTES_PER_TOKEN`. The enforcement map also reads the budget and the bytes-per-token value.
+- Post-compact digest: `AI_DLC_REATTACH_CUT_BYTES`.
+- Audit rule files: `AI_DLC_AUDIT_MUTANT` and `AI_DLC_AUDIT_RESOLVER_TIMEOUT`.
+- Provenance: `AI_DLC_KNOWN_SKILLS_EXT`.
+- Root resolution through `CLAUDE_PROJECT_DIR`, `AI_DLC_PROJECT_ROOT` or `AI_DLC_ROOT`: taught schema, write-format steering, provenance, the enforcement map, and audit anchors (via the enforcement map).
+- `reconcile/lib.sh`: the `AI_DLC_MEMO_*` variables. Every step that uses `lib.sh` inherits them (backlog depth, both receipts runs, fixture hygiene); the first three source it in-process.
+
+verify: sh bash scripts/validate-shell-portability.sh
+

@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1027.0] - 2026-11-06
+
+### BL-917 closed
+
+The pre-suite step key keyed a file on its content when a step read it and on its presence otherwise, so a step whose verdict followed the size, mode or mtime of a present file it never read could be skipped on a stale pass. A read-only census at `316fdfe2f` found 0 live sites and one per-file site: I119's `[ -s "$i119_f" ] || continue` in `scripts/validate-enforcement-map.sh`, which never opened an empty prompt file. I119 now opens every file, with an awk `BEGIN` pre-pass that counts empty files and reports unopenable ones. The pre-suite present key now carries each path's octal permission bits (`.githooks/pre-push`, `pk.py` present row), so a `chmod` moves the key.
+
+Arm S15 of `scripts/validate-shell-portability.sh` holds the class. It derives the pre-suite closure from the hook (23 steps, 21 seeds, 28 files; 65 sites at the 0.1025.0 census, 64 classified plus I119; 78 sites as shipped) and fails any metadata-only test in it with no classified row in `scripts/presuite-metadata-allowlist.txt` (78 rows as committed, 0 live-pending-lead). A new site fails and a stale row fails. Correct new code has one remedy beside rewriting the site: add a row with a reason class that proves verdict invariance, reviewed in its release like any other code. Each key must appear exactly as many times as it is listed, so a duplicated listed line fails, and the grammar reads metadata tests inside `[[ ]]` and as `-a`/`-o` operands of `[` and `test` (`perl -M` is a stated gap). The census scorer that acquitted the gating shape was rejected, because a read row keys content only.
+
+Still unkeyed, as the hook states: an mtime test on any present file, a size test on a present file the step never read, an owner test, and a readability or writability change made by a macOS ACL or file flag (`chflags uchg`) that leaves the permission bits unchanged; the permission bits themselves are keyed. S15 found 0 such live sites. Environment-dependent pre-suite steps are recorded as a NOTE on the entry, with no fix and no new id.
+
+NET: filed 0, closed 1 (BL-917); closed minus filed = +1; live backlog −1.
+
 ## [0.1026.0] - 2026-11-06
 
 ### BL-927 — the efficiency extractor no longer charges a subagent's spawns to pre-step or keeps a closed gate open (closed)
