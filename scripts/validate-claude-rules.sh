@@ -867,7 +867,13 @@ fi
 # and resume are normal operation" (325 bytes, measured after drafting against 91 free). It cannot be
 # SCOPED, being prose-only, and it cannot be MECHANIZED, being a design principle and not an act an arm
 # can scan for.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-74240}"
+#
+# RAISED A TWENTY-FOURTH TIME, 74240 -> 74800, ON AN OPERATOR RULING, BATCH 251, 2026-11-06
+# ("Raise cap to 74800 (Recommended)"), TO CARRY TWO RULINGS in `operator-rulings.md`: "a tightly
+# scoped defect is fast-tracked" and, in the consumer-pull ruling, never restating it in a status
+# report (514 bytes drafted, against 2 free). Both are prose-only and cannot be SCOPED; neither is an
+# act an arm can scan for.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-74800}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

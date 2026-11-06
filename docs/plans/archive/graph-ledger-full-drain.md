@@ -19476,3 +19476,11 @@ This block replaces the batch-248 record. Lead was ai-dlc-e3; owners ai-dlc-d4, 
 - **Ledger.** 0 live over 11 qualifying refs plus graph's working tree (control 0); both batch candidates archived upstream. PENDING 0.
 - **Graph.** Installed `0.997.0` (`1d1f7c36`) on `ai-dlc/feature/per-chain-rebalancer-instances`, `main` 0.969.0; 0 writes by this batch. The pull is not preapproved.
 
+**BATCH 250 IS CLOSED: RELEASES `v0.1002.0` THROUGH `v0.1019.0`. THE NEXT SESSION STARTS BATCH 251.**
+Batch 249: `docs/plans/archive/`. `ai-dlc-be` was the lead. No `graph-*` session is ever messaged.
+- **Landed** (`git log origin/main`). `v0.1002.0` through `v0.1009.0` and `v0.1011.0` through `v0.1019.0`; `0.1010.0` was allocated, never shipped. **The next VERSION is `0.1020.0`.**
+- **Backlog.** Live 52 at the `v0.1019.0` tip (`grep -c '^## BL-' docs/backlog.md`), archive 844. **The next free id is BL-926.**
+- **Open follow-ups.** BL-915 (PARTIAL: Fix item 1's arm-by-arm audit outside the BL-918 set); BL-911; BL-912, awaiting an `Outcome measured:` line on the first graph sprint that runs its hooks (baseline: graph sprint 321); BL-914, closed only by two pushes of one sha from clean worktrees with identical present sets (the pre-suite record's paths); BL-921; BL-922; BL-923; and BL-868's receipt, the last row of `scripts/inert-receipt-allowlist.txt`, which BL-868's close wires or deletes.
+- **Graph.** Branch `ai-dlc/feature/per-chain-rebalancer-instances` reads `0.1001.0` (stamp `3a8895c57`), `main` `0.969.0`. Pull OWED: PENDING 3; main 50 behind, branch 18. Differential diverges: ledger-reverify adds 6 NAMED-UPSTREAM rows (PC-S320); predicate-differential's installed copy over-reports PREDICATE-RECLASSIFIES (14/14) where `0.1019.0` reads STABLE; derivation-differential refused. The pull is the operator's; none run.
+- **NOTE.** Derive fences write fixed `/tmp/live.txt`, `/tmp/arch.txt`, `/tmp/cand_arch.md`; sessions may collide (hypothesis).
+
