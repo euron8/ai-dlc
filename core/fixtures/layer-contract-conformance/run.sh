@@ -92,6 +92,9 @@
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-contract-conformance/run.sh --matrix
 # Re-measured whenever an arm or a mutant is added or changed. The block and the REMEASURE line live in this parent file for the whole shard family.
 set -u
+# Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # I10 — a fixture must not inherit an ambient tunable that changes what it measures.

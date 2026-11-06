@@ -5,6 +5,7 @@ bash
 cat
 chmod
 dirname
+env
 git
 grep
 head

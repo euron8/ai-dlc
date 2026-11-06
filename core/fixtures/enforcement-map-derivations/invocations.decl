@@ -1,3 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-444 *
-93 scripts/validate-enforcement-map.sh
+439 *
+92 scripts/validate-enforcement-map.sh
+# Re-measured from two agreeing counted runs at the tip after arm A04 and I10 were retired (one validator-enforcement-map run fewer per state).

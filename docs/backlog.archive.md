@@ -40016,3 +40016,37 @@ Rules: BL-868.
 Provenance: batch b251, fixture-seeds cluster; lead ai-dlc-e6, owner ai-dlc-8f.
 
 verify: sh o="$(bash core/fixtures/fixture-inprocess/run.sh 2>&1)"; grep -qF 'receipt-bl928: PASS' <<<"$o"
+## BL-929 — sixteen fixtures give a different verdict when run bare under a consumer's AI_DLC_* tunables, and neither the gate nor I87 can see it
+
+**LANDED (v0.1025.0).** **DEFECT.** A fixture whose `run.sh` does not clear `AI_DLC_*` inherits whatever tunables the caller's environment carries, and it reaches them through the subject it invokes, not through anything it names. Census by ai-dlc-8f at 19239ff87 (`git cat-file -t 19239ff87` reads `commit`): 264 `run.sh` (`ls core/fixtures/*/run.sh | wc -l` reads 264 at 316fdfe2f), 125 carry an `AI_DLC_*` unset and 139 do not. All 139 were run bare plain and bare with all 108 shipped-dereferenced tunables set hostile at once. Sixteen change verdict, every one exiting 0 plain: askuserquestion-citation, check-25-steering-conduct, claude-rules-joins, command-args-citation, gate-adjudication, layer-contract-conformance, ledger-status-vocabulary, plan-shape, retro-audit-scans, snapshot-evidence-cell, trunk-audit-classes, trunk-push-bound, validator-arm-selection, validator-fork-budget, verdict-pass-content (hostile exit 1) and enforcement-map-derivations (hostile exit 2). Re-measured at f56f28faa for twelve of the sixteen, attributed by bisection: STEERING_BUDGET (and GRACE) for askuserquestion-citation, command-args-citation and check-25; DURABLE_BYTES for claude-rules-joins; GATE_METRICS for gate-adjudication; DERIV_SUPERSEDE_FROM for layer-contract-conformance and ledger-status-vocabulary; PLAN_BYTES for plan-shape; AUDIT_RESOLVER_TIMEOUT for retro-audit-scans; SNAPSHOT_STRIKETHROUGH for snapshot-evidence-cell; TRUNK for trunk-audit-classes and trunk-push-bound. The other four are not attributed.
+
+Controls. adversarial-citation read EXPOSED at 806ac8e19 and reads unexposed at 19239ff87, so the census detects the class in both directions. h2-attest-scripts-dir reads unexposed because its `run.sh:54-55` carries the scrub: `for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done` then `unset CLAUDE_PROJECT_DIR`.
+
+Why the gate never saw it. `core/scripts/hermetic-run.sh:607-609` launches every fixture as `( cd "$HR_SB" && env -i PATH=... AI_DLC_PROJECT_ROOT="$HR_SB" PREPUSH_POOL_DEPTH=... "$HR_BASH" "$HR_FXROOT/$HR_FX/run.sh" )`, so the pushed fixture sees no tunable. The exposure is a BARE run: a `verify:` line that runs a fixture, a session debugging one the way `CLAUDE.md` instructs, or a consumer run.
+
+Why I87 never saw it. I87 (`scripts/validate-enforcement-map.sh:9479`, helper `i87_exposed_in` at :9610, both at this release's tip; they read :9591 and :9722 at 316fdfe2f) flags a fixture that NAMES a shipped-dereferenced `AI_DLC_*` key without assigning or clearing it. All sixteen are exposed indirectly: the subject they invoke dereferences the tunable and the fixture never names it, so I87's population excludes them by construction.
+
+Fix. Insert the reference inline scrub as the first statement after `set -u` in 18 `run.sh` files (`git diff 316fdfe2f HEAD` reads them): the sixteen exposed fixtures, plus hermetic-runner and census-hermetic-coverage, which I10 acquitted with a GIT_-only loop. snapshot-evidence-cell and verdict-pass-content use dist-clone's `AI_DLC_PROJECT_ROOT` exemption form. agent-definition-render already carried a scrub; it is moved above its `. "$MATRIX_SH"` rather than inserted. The 18 are askuserquestion-citation, census-hermetic-coverage, check-25-steering-conduct, claude-rules-joins, command-args-citation, enforcement-map-derivations, gate-adjudication, hermetic-runner, layer-contract-conformance, ledger-status-vocabulary, plan-shape, retro-audit-scans, snapshot-evidence-cell, trunk-audit-classes, trunk-push-bound, validator-arm-selection, validator-fork-budget and verdict-pass-content. Add arm H8 to `scripts/validate-fixture-hygiene.sh` with a down-only `scripts/env-scrub-allowlist.txt`, so a new fixture that is neither scrubbed nor listed fails the push at `.githooks/pre-push:849`. The allowlist is derived from H8's own `--derive` and can only shrink. Parent class: a fixture that inherits caller environment (I87). Motivating instance: BL-923, where adversarial-citation gained its scrub at 316fdfe2f.
+
+Baseline: s321
+Step: n/a
+Expected movement: none on a pipeline step; a bare run of each of the sixteen with all tunables hostile exits 0 as the plain run does.
+
+Decision rule: the step-value ruling does not apply; this entry changes no pipeline step. Related: I87, BL-923, BL-930.
+
+verify: sh o="$(bash core/fixtures/fixture-hygiene/run.sh 2>&1)"; grep -qF 'receipt-bl929: PASS' <<<"$o"
+
+## BL-930 — I10 accepts any `unset "$_v"` loop as an AI_DLC_* scrub, so a GIT_-only loop acquits two fixtures that clear nothing of AI_DLC_*
+
+**LANDED (v0.1025.0).** **DEFECT.** `i10_unscrubbed` (`scripts/validate-enforcement-map.sh:1518-1535` at 316fdfe2f; the function is deleted at this release's tip) decides that a hook-driver fixture is scrubbed by matching `unset "\$_v"|env -u AI_DLC` in the fixture's `run.sh` or `lib.sh`, with no check on which prefix the loop selects (`:1522` the lib.sh grep, `:1529` the awk test, `:1535` the final `grep -LE`). A loop over `GIT_*` therefore satisfies it. H8 deliberately does not accept a per-variable `env -u AI_DLC_X` as a scrub, because it clears one name and not the class. Two fixtures are acquitted that way. `core/fixtures/hermetic-runner/run.sh:118` (at 316fdfe2f) reads `for _v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done`, and `core/fixtures/census-hermetic-coverage/run.sh:131` carries the identical line. Neither clears an `AI_DLC_*` variable, and both are exposed to the class BL-929 describes. Found by the contract adversary for BL-929 (finding D4); it lies outside that release's files and was filed rather than fixed there.
+
+Resolution. I10 holds hook drivers and H8 (BL-929) will hold every fixture with a prefix-checked grammar, so I10 is a weaker second copy of H8's question. Retire I10 into H8: delete the `i10_unscrubbed` function, its call site and its probe block, and let H8 read hermetic-runner and census-hermetic-coverage, which then either gain the `AI_DLC_*` scrub or become rows of `scripts/env-scrub-allowlist.txt` with a reason. Bind the retirement with a probe that a `GIT_`-only loop FAILS H8, the shape of the two fixtures above, beside a control where the same fixture with an `AI_DLC_` loop passes.
+
+Baseline: s321
+Step: n/a
+Expected movement: none on a pipeline step; the two fixtures stop being acquitted by a loop that clears the wrong prefix.
+
+Decision rule: "Retire redundant enforcement rather than porting it forward" (`.claude/rules/mechanism-design.md`). Related: BL-929, I10, I87.
+
+verify: sh o="$(bash core/fixtures/fixture-hygiene/run.sh 2>&1)"; grep -qF 'receipt-bl930: PASS' <<<"$o"
+

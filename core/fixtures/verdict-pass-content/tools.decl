@@ -5,6 +5,7 @@ cat
 cmp
 cut
 dirname
+env
 find
 grep
 head

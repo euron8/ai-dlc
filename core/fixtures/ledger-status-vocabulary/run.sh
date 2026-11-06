@@ -51,6 +51,9 @@
 # MUTANT-MATRIX-CONTROL control why=an unmutated copy must pass every arm so a mutant fire is attributable; nothing is mutated and there is no deciding cell
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/ledger-status-vocabulary/run.sh --matrix
 set -u
+# Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 DIR="$(cd "$(dirname "$0")" && pwd)"
 SELF_FILE="$DIR/$(basename "$0")"
 

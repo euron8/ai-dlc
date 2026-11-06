@@ -307,6 +307,52 @@
 #     messages, of which H7 reads one word), self-update-gate 24, self-update-fixture-log 11, enforcement-map-sites
 #     10, gate-remediation-deny 9, requirements-step 8, retired-layer-passage 6, and 28 over 12 more fixtures.
 #     TRUE POSITIVES (a twin no code path emits): 0.
+# H8  an UNSCRUBBED fixture (BL-929). Population: every tracked core/fixtures/<f>/run.sh (core/fixtures/lib excluded),
+#     a shard stub mapped to its IMPL by the ONE resolver, `validate-fixture-invocations.sh --impl-of`, as in H5/H7:
+#     the stub takes its IMPL's verdict, and its row says `via its IMPL`. A fixture is SCRUBBED when run.sh, or an
+#     own-directory file run.sh sources in command position before anything else H8 counts, carries the env-derived
+#     loop `for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done` on a code line, AND
+#     that loop precedes, in run.sh, every command-position `.`/`source` other than lib/preamble.sh and every start of
+#     a word ending `.sh` (in command position or as `bash`'s operand). The loop is LOCATED on the masked line, so a
+#     comment, a string or a heredoc body never counts; its sed program is then READ off the unmasked line at the same
+#     columns (H7's column-aligned read) and must be that exact program, so a GIT_ loop of the identical shape is no
+#     scrub; and every quoted word of its body must be the loop variable. The body may span up to three more lines and
+#     may exempt one AI_DLC_ name by `[ "$_v" = AI_DLC_X ] || unset "$_v"` (dist-clone:37's one-line form,
+#     whole-read-pool:55-57's three-line form). A `\`-continued statement is joined and read once from its first line
+#     (H7's join), so a continued operand list is never command position.
+#     A not-SCRUBBED fixture FAILs (`H8 <f>: …`, naming the start that came first, or that no loop exists) unless it is
+#     a row of scripts/env-scrub-allowlist.txt, rows `<fixture>\t<reason>`, DOWN-ONLY by the shared m4 (arm H8-M4): a
+#     row whose fixture reads SCRUBBED, or names no tracked run.sh, is H8STALE; a duplicate is H8DUP; a reasonless row
+#     H8NOREASON; a row not on the list at origin/main FAILs H8-M4, with M4's two SKIPs. `--derive-h8` prints the
+#     not-SCRUBBED set as rows, keeping a committed row's reason (keyed on field 1). A listed fixture that DRIVES A
+#     HOOK FAILs anyway: I10's hook-driver grammar (a run.sh line naming `hooks/ai-dlc` or `$HOOK`; a lib.sh
+#     non-comment line naming one once the glob form `hooks/ai-dlc-*` is removed) is carried here, so the list never
+#     acquits a hook driver. Every SCRUBBED fixture prints one `H8 SCRUBBED <f>` row, so a receipt asserts presence.
+#     H8 AND I10. I10 (scripts/validate-enforcement-map.sh) held hook drivers and acquitted any `unset "$_v"` or
+#     `env -u AI_DLC`, so a loop over GIT_* alone passed it: hermetic-runner:118 and census-hermetic-coverage:131.
+#     H8 deliberately does not accept a per-variable `env -u AI_DLC_X` as a scrub, because it clears one name and
+#     not the class.
+#     Measured on 316fdfe2f with the env-scrub cluster's 19 run.sh edits applied in a scratch copy: I10's population
+#     is 62 fixtures, every one of them SCRUBBED under H8 (I10-population AND H8-unscrubbed: 0). Control, one seeded
+#     world judged by I10's own extracted function and by H8: an unscrubbed `$HOOK` driver that is a row of the H8
+#     list is flagged by I10 and by H8 (the hook clause), and a GIT_-only driver is acquitted by I10 and flagged by
+#     H8. H8 holds I10's whole population and more, so I10 is RETIRED (BL-930); receipt-bl930.sh holds the two shapes.
+#     FP SET, how it reached its value. Over the 125 fixtures ai-dlc-8f's census at 19239ff87 read as clearing (an
+#     AI_DLC_* unset anywhere in the directory), on 316fdfe2f: 123 read SCRUBBED; the two that do not are true
+#     positives -- agent-definition-render (`. "$MATRIX_SH"` at :96 precedes its scrub at :100; the cluster moves the
+#     scrub) and story-evidence-scaffold (its scrub is in receipt-bl815.sh:33, a file run.sh RUNS rather than
+#     sources, so run.sh is unscrubbed; allowlisted with that reason). Narrowings that got there: (a) the masked
+#     line: a first cut read the `.sh`-start grammar off raw text and fired on the comment `# Usage: run.sh` at the
+#     head of 62 fixtures and on MUTANT-MATRIX lines naming `x.sh` arms; a word whose first byte is masked is a
+#     comment or a string and is skipped. (b) a not-SCRUBBED fixture is judged NOSCRUB outright, never by the order
+#     rule, so its message names the real defect, not the first start. (c) continued lines: gate-adjudication-rotate
+#     :35-36 (`GUARD="$(pick "$HERE/…/x.sh" \` / `"$HERE/…/x.sh" \`) and provenance-flagless-default:102 (`for cand
+#     in "$ROOT/…/x.sh" \`) read as invocations to a per-line command-position test, because cmdpos() strips the
+#     `GUARD=…` word and calls `pick`'s operand command position; the statement is joined and keyed on the SEGMENT
+#     after the last delimiter, which must be empty or `bash` with flags. (d) the stub mapping: 19 shard stubs
+#     carry no loop of their own; judged by their IMPL they read SCRUBBED wherever the IMPL does. Measured false
+#     positives: 0. STATED LIMITS: a start spelled through a variable with no `.sh` (`"$SUBJECT"`), a script run
+#     by `exec`-less helper the line grammar cannot see, and a scrub reached only through a variable-named source.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -323,7 +369,8 @@ MODE=check
 case "${1:-}" in
   "") ;;
   --derive) MODE=derive ;;
-  *) echo "usage: validate-fixture-hygiene.sh [--derive]" >&2; exit 2 ;;
+  --derive-h8) MODE=derive8 ;;
+  *) echo "usage: validate-fixture-hygiene.sh [--derive | --derive-h8]" >&2; exit 2 ;;
 esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -337,6 +384,7 @@ RESOLVER="$HERE/validate-fixture-invocations.sh"
 ALLOW_REL="scripts/fixture-matrix-allowlist.txt"
 E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
 H7_ALLOW_REL="scripts/twin-built-allowlist.txt"
+H8_ALLOW_REL="scripts/env-scrub-allowlist.txt"
 MKA_REL="scripts/mutant-kills-allowlist.txt"
 
 WORK="$(mktemp -d)" || { echo "validate-fixture-hygiene: mktemp failed" >&2; exit 2; }
@@ -344,7 +392,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 # --- the scan ------------------------------------------------------------------------------------------------------
 read -r -d '' SCAN_AWK <<'AWK'
-BEGIN { XS = "XXXXXXXXXXXXXXXX"; SQ = sprintf("%c", 39); EXITRE = "(^|[^A-Za-z0-9_$.-])exit([[:space:]]+0)?[[:space:]]*($|[;})&|\n])" }
+BEGIN { XS = "XXXXXXXXXXXXXXXX"; SQ = sprintf("%c", 39); PROG8 = "s/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p"; EXITRE = "(^|[^A-Za-z0-9_$.-])exit([[:space:]]+0)?[[:space:]]*($|[;})&|\n])" }
 function relof(p) { return substr(p, 1, length(ROOTP)) == ROOTP ? substr(p, length(ROOTP) + 1) : p }
 function fxof(r,   a, n) { n = split(r, a, "/"); return (n >= 4 && a[1] == "core" && a[2] == "fixtures") ? a[3] : "" }
 function pop() { STK = substr(STK, 1, length(STK) - 1) }
@@ -780,6 +828,71 @@ function h7(i,   s, o, off, st, q, w, nm, cw, c, p, e, atc, fn, fs, dcl, rd, j) 
     lab7(w, 1)
   }
 }
+# --- H8: the env-derived AI_DLC_* unset loop, and what a run.sh starts before it ---------------------------------
+# scrub8 <line>: `S8 <fx> <rel> <line>` when the line opens the loop. LOCATED on the masked line, where a comment, a
+# string and a heredoc body are X, so none of them can match; the sed program and the body's quoted words are then
+# READ off the unmasked line at the same columns (H7's column-aligned read). The program must be exactly PROG8, so a
+# GIT_ loop of the identical shape is no scrub, and every quoted word of the body must be the loop variable. The
+# body may be one line (`do unset "$_v"; done`) or span up to three more (`do` / `[ "$_v" = AI_DLC_X ] || unset
+# "$_v"` / `done`), and may exempt one AI_DLC_ name by that `[ … ] ||` test.
+function scrub8(i,   s, o, j, v, q, e, cq, prog, rm, ro, re, rb) {
+  o = O[i]; s = M[i]
+  if (!match(s, /(^|[;&|({[:space:]])for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]+\$\([[:space:]]*env[[:space:]]*\|[[:space:]]*sed[[:space:]]+-n[[:space:]]+["\047][^"\047]*["\047][[:space:]]*\)[[:space:]]*;?[[:space:]]*do([[:space:]]|$)/)) return
+  e = RSTART + RLENGTH; q = RSTART
+  v = substr(s, RSTART, RLENGTH); sub(/^[;&|({[:space:]]*for[[:space:]]+/, "", v); sub(/[[:space:]].*$/, "", v)
+  match(substr(s, q), /sed[[:space:]]+-n[[:space:]]+["\047]/); q += RSTART + RLENGTH - 1
+  cq = substr(s, q - 1, 1); prog = substr(o, q, index(substr(s, q), cq) - 1)
+  if (prog != PROG8) return
+  rm = substr(s, e); ro = substr(o, e); j = i
+  while (rm !~ /(^|[;[:space:]])done([;&|)[:space:]]|$)/ && j < NL && j < i + 3) { j++; rm = rm " ; " M[j]; ro = ro " ; " O[j] }
+  re = "^[[:space:];]*(\\[[[:space:]]+\"[^\"]*\"[[:space:]]+=[[:space:]]+AI_DLC_[A-Za-z0-9_]+[[:space:]]+\\][[:space:]]*\\|\\|[[:space:]]*)?unset[[:space:]]+\"[^\"]*\"[[:space:]]*;[[:space:]]*done([;&|)[:space:]]|$)"
+  if (!match(rm, re)) return
+  rb = substr(ro, 1, RLENGTH); gsub("\"\\$\\{?" v "\\}?\"", "\"\"", rb)
+  if (rb !~ "^[[:space:];]*(\\[[[:space:]]+\"\"[[:space:]]+=[[:space:]]+AI_DLC_[A-Za-z0-9_]+[[:space:]]+\\][[:space:]]*\\|\\|[[:space:]]*)?unset[[:space:]]+\"\"[[:space:]]*;[[:space:]]*done") return
+  print "S8\t" FX "\t" REL "\t" i; if (ISRUN) SEEN8 = 1
+}
+# ev8 <line>, run.sh only: every command-position `.`/`source` other than lib/preamble.sh (`E8 <fx> <line> src
+# <basename when it names a file of this fixture's own directory>`), and every start of a word ending `.sh`, in
+# command position or as `bash`'s operand (`E8 <fx> <line> run`). A `\`-continued statement is read ONCE, joined from
+# its first line (H7's join), so a continued operand list (`pick a \` / `  b/x.sh`, `for c in a.sh \` / `b.sh`) is
+# never command position. The word is found by walking back from `.sh` over non-delimiters of the MASKED line (a
+# string is one run of X), so `echo "x.sh"` and `[ -f "$H/x.sh" ]` put it in argument position, never command.
+function ev8(i,   s, o, j, off, q, e, w, b, k, p, pre, pb) {
+  if (i > 1 && !HDL[i - 1] && M[i - 1] ~ /\\$/) return
+  s = M[i]; o = O[i]; j = i
+  while (s ~ /\\$/ && j < NL && !HDL[j + 1]) { j++; s = substr(s, 1, length(s) - 1) " " M[j]; o = substr(o, 1, length(o) - 1) " " O[j] }
+  off = 0
+  while (match(substr(s, off + 1), /(^[[:space:]]*|[;&|({!][[:space:]]*|(^|[[:space:]])(then|do|else)[[:space:]]+)(\.|source)[[:space:]]+/)) {
+    q = off + RSTART + RLENGTH; e = wend6(s, q); off = e - 1
+    w = substr(o, q, e - q); gsub(/["\047]/, "", w)
+    if (w ~ /preamble\.sh$/ && w ~ /lib/) continue
+    b = ""; if (w !~ /\.\./ && match(w, /\/[^\/]+$/)) b = substr(w, RSTART + 1)
+    print "E8\t" FX "\t" i "\tsrc\t" b "\t" trim(O[i])
+  }
+  k = 0
+  while ((p = index(substr(o, k + 1), ".sh")) > 0) {
+    k += p
+    if (substr(o, k + 3, 1) ~ /[A-Za-z0-9_]/) continue
+    p = k; while (p > 1 && substr(s, p - 1, 1) !~ /[[:space:];&|()<>`]/) p--
+    # a word whose first byte is masked is a comment, or the middle of a string: a quoted word keeps its quote
+    if (substr(s, p, 1) == "X") continue
+    e = wend6(s, p); if (e <= k + 2) continue
+    w = substr(o, p, e - p); gsub(/["\047]/, "", w)
+    if (w !~ /\.sh$/ || w ~ /^[A-Za-z_][A-Za-z0-9_]*=/) continue
+    pre = substr(s, 1, p - 1)
+    if (pre != "" && pre !~ /[[:space:]]$/ && pre !~ /[;&|(`{!]$/) continue
+    if (cmdseg8(pre)) print "E8\t" FX "\t" i "\trun\t\t" trim(O[i])
+  }
+}
+# cmdseg8 <masked prefix>: the word after it is started -- the text after the last command delimiter, with its
+# leading `VAR=val` words and keywords stripped, is empty (command position) or `bash` with only flags (its operand).
+# Keyed on the SEGMENT, not on cmdpos()'s trailing-word strip: `G="$(pick "a.sh" \` puts `a.sh` after `pick`, which
+# cmdpos() strips as part of the `G=…` word and would call command position.
+function cmdseg8(pre,   g) {
+  g = pre; sub(/^.*[;&|(`{!]/, "", g); sub(/^[[:space:]]+/, "", g); sub(/[[:space:]]+$/, "", g)
+  while (sub(/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|then|do|else|if|elif|while|until|exec|time|nohup|command)([[:space:]]+|$)/, "", g)) ;
+  return g == "" || g ~ /^bash([[:space:]]+-[A-Za-z-]+)*$/
+}
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   if (FX != "" && FX != "lib") prep6()
   for (i = 1; i <= NL; i++) {
@@ -830,6 +943,17 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       print "H3\t" REL ":" i "\t" trim(O[i])
     }
     if (FX == "" || FX == "lib") continue
+    scrub8(i)
+    if (ISRUN && !SEEN8 && !HDL[i]) ev8(i)
+    # I10's hook-driver grammar, carried so an ALLOWLISTED fixture that starts driving a hook still FAILs H8: any
+    # run.sh line naming `hooks/ai-dlc` or `$HOOK`, or a lib.sh non-comment line naming one once the glob form
+    # `hooks/ai-dlc-*` is removed (I10's own two clauses, verbatim in effect)
+    if (!(FX in HK8)) {
+      t8 = O[i]
+      if (REL ~ /\/lib\.sh$/) { if (t8 ~ /^[[:blank:]]*#/) t8 = ""; gsub(/hooks\/ai-dlc-\*/, "", t8) }
+      else if (!ISRUN) t8 = ""
+      if (t8 ~ /hooks\/ai-dlc|\$HOOK/) { HK8[FX] = 1; print "HK8\t" FX "\t" REL ":" i }
+    }
     if (!HDL[i]) { h6(i); h7(i) }
     # H5 facts
     if (s ~ /(^|[^A-Za-z0-9_])cmp[[:space:]]+-s([[:space:]]|$)/) CMP[FX] = 1
@@ -860,7 +984,7 @@ pass == 1 {
 }
 pass == 2 && FNR == 1 {
   if (CUR != "") analyze()
-  CUR = FILENAME; NL = 0; STK = "c"; HDN = 0; HDI = 0; split("", DP)
+  CUR = FILENAME; NL = 0; STK = "c"; HDN = 0; HDI = 0; SEEN8 = 0; split("", DP)
   REL = relof(FILENAME); FX = fxof(REL); ISRUN = (REL == "core/fixtures/" FX "/run.sh"); loadtools(FX)
   print "F\t" REL
 }
@@ -994,6 +1118,60 @@ END {
 }
 AWK
 
+# --- the H8 judge: SCRUBBED, ORDER, NOSCRUB per fixture directory; a shard stub takes its IMPL's verdict --------
+# Rows: H8SCRUB <fx> <where>; H8 <fx> <reason> (unlisted, not scrubbed); H8LISTED <fx>; H8STALE <fx> <why>;
+# H8DUP <fx>; H8NOREASON <fx>; H8DER <fx> <kind> (every not-scrubbed fixture, for --derive-h8).
+read -r -d '' H8_JUDGE_AWK <<'AWK'
+FILENAME == ARGV[1] { IMPL[$1] = $2; next }
+FILENAME == ARGV[2] { n = split($0, a, "/"); if (n == 4 && a[1] == "core" && a[2] == "fixtures" && a[4] == "run.sh" && a[3] != "lib") FXS[a[3]] = 1; next }
+FILENAME == ARGV[3] {
+  if ($1 == "S8") { if (!(($3) in S8)) S8[$3] = $4 + 0; next }
+  if ($1 == "HK8") { HK[$2] = $3; next }
+  if ($1 == "E8") { NE[$2]++; EL[$2, NE[$2]] = $3 + 0; EK[$2, NE[$2]] = $4; EB[$2, NE[$2]] = $5; ET[$2, NE[$2]] = $6; next }
+  next
+}
+FILENAME == ARGV[4] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  x = $1; gsub(/[[:space:]]/, "", x); r = (NF >= 2) ? $2 : ""; gsub(/[[:space:]]/, "", r)
+  if (x in LISTED) print "H8DUP\t" x
+  LISTED[x] = 1
+  if (r == "") print "H8NOREASON\t" x
+  next
+}
+# judge <fx>: "S<where>" scrubbed, "O<line>: <text>" a start before the scrub, "N" no scrub at all
+function judge(f,   rr, L, k, b) {
+  rr = "core/fixtures/" f "/run.sh"; L = (rr in S8) ? S8[rr] : 0
+  # no scrub on run.sh and none in an own-directory file run.sh sources: NOSCRUB, whatever it starts
+  if (!L) { b = 0; for (k = 1; k <= NE[f]; k++) if (EK[f, k] == "src" && EB[f, k] != "" && (("core/fixtures/" f "/" EB[f, k]) in S8)) b = 1; if (!b) return "N" }
+  for (k = 1; k <= NE[f]; k++) {
+    if (L && EL[f, k] >= L) break
+    b = EB[f, k]
+    if (EK[f, k] == "src" && b != "" && (("core/fixtures/" f "/" b) in S8)) return "S" "core/fixtures/" f "/" b ":" S8["core/fixtures/" f "/" b] " (sourced at run.sh:" EL[f, k] ")"
+    return "O" EL[f, k] ": " ET[f, k]
+  }
+  if (L) return "S" rr ":" L
+  return "N"
+}
+END {
+  for (f in FXS) {
+    t = (f in IMPL && IMPL[f] != "!") ? IMPL[f] : f
+    v = judge(t); via = (t == f) ? "" : " via its IMPL " t
+    if (substr(v, 1, 1) == "S") {
+      print "H8SCRUB\t" f "\t" substr(v, 2) via
+      if (f in LISTED) print "H8STALE\t" f "\tthe fixture is SCRUBBED (" substr(v, 2) via ")"
+      continue
+    }
+    kind = (substr(v, 1, 1) == "O") ? "order" : "none"
+    print "H8DER\t" f "\t" kind
+    if ((f in LISTED) && (f in HK)) { print "H8\t" f "\tallowlisted, but it drives a hook (" HK[f] "), and a hook-driving fixture is never acquitted by the list"; continue }
+    if (f in LISTED) { print "H8LISTED\t" f; continue }
+    if (kind == "order") print "H8\t" f "\trun.sh" via " starts a script or sources a file at :" substr(v, 2) " before its AI_DLC_* scrub"
+    else print "H8\t" f "\trun.sh" via " carries no env-derived AI_DLC_* unset loop on a code line"
+  }
+  for (x in LISTED) if (!(x in FXS)) print "H8STALE\t" x "\tno core/fixtures/" x "/run.sh is tracked"
+}
+AWK
+
 # run_all <root> <out-prefix>: list, resolve, scan, judge. Writes <out>.scan and <out>.verdict; returns 2 on a broken
 # corpus with the reason on stdout.
 run_all() {
@@ -1022,6 +1200,9 @@ run_all() {
   [ -f "$r/$H7_ALLOW_REL" ] && cp "$r/$H7_ALLOW_REL" "$o.tallow" || : > "$o.tallow"
   awk -F'\t' "$JUDGE_AWK" "$o.stubs" "$o.mka" "$o.scan" "$o.allow" "$o.tallow" | LC_ALL=C sort -u > "$o.verdict" \
     || { echo "BROKEN: the judge awk failed, so its verdict is empty rather than clean"; return 2; }
+  [ -f "$r/$H8_ALLOW_REL" ] && cp "$r/$H8_ALLOW_REL" "$o.h8allow" || : > "$o.h8allow"
+  awk -F'\t' "$H8_JUDGE_AWK" "$o.stubs" "$o.list" "$o.scan" "$o.h8allow" | LC_ALL=C sort -u > "$o.h8" \
+    || { echo "BROKEN: the H8 judge awk failed, so its verdict is empty rather than clean"; return 2; }
   return 0
 }
 
@@ -1510,6 +1691,61 @@ EOF
 # m7q:MQ:NOPE STALE (no such twin); m7q:GONE:TB STALE (TB is a twin of MQ and MQ2, never of a mutant GONE -- the
 # mutant part of the key is read); m7f:MF:Z8 NOREASON. No m7q:MQ2:TB row, so MQ2's TB fires.
 printf '# probe\nm7q:MQ:TB\tbuilt at runtime\nm7q:MQ:TB\tagain\nm7q:MQ:T1\tresolves now\nm7q:MQ:NOPE\tnot a twin\nm7q:GONE:TB\twrong mutant\nm7f:MF:Z8\n' > "$P/$H7_ALLOW_REL"
+# H8's seeds, every name `h8*` (the probe compares only those rows). FIRE (no scrub): h8none none at all; h8cmt the
+# loop only in a comment; h8hd only in a heredoc body; h8git a GIT_ loop of the identical shape; h8srcb the loop after
+# `. "$HERE/lib.sh"` (a lib.sh with no scrub); h8bash after `bash "$X/x.sh"`; h8stubbad a shard stub whose IMPL
+# (h8none) does not scrub. QUIET (SCRUBBED): h8loop the loop after the exempt lib/preamble.sh source; h8dc
+# dist-clone's one-line exemption; h8wrp whole-read-pool's three-line exemption; h8cont the loop below a continued
+# `pick "$A/a.sh" \` / `  "$B/x.sh"`, a continued `for cand in` list and a `[ -f …/x.sh ]` test, none an invocation;
+# h8lib the loop in its own lib.sh, sourced; h8stubok a stub whose IMPL (h8loop) scrubs. The list: h8lst
+# unscrubbed and listed (quiet, H8LISTED); h8stl scrubbed and listed (H8STALE).
+H8L='for _v in $(env | sed -n '"'"'s/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'"'"'); do unset "$_v"; done'
+seed core/fixtures/h8none/run.sh <<'EOF'
+#!/usr/bin/env bash
+set -u
+echo none
+EOF
+mkdir -p "$P/core/fixtures/h8cmt" && printf '#!/usr/bin/env bash\n# %s\necho x\n' "$H8L" > "$P/core/fixtures/h8cmt/run.sh"
+mkdir -p "$P/core/fixtures/h8hd" && printf '#!/usr/bin/env bash\ncat > "$W/x" <<'"'"'E'"'"'\n%s\nE\n' "$H8L" > "$P/core/fixtures/h8hd/run.sh"
+mkdir -p "$P/core/fixtures/h8git" && printf '%s\n' '#!/usr/bin/env bash' 'for _v in $(env | sed -n '"'"'s/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'"'"'); do unset "$_v"; done' > "$P/core/fixtures/h8git/run.sh"
+mkdir -p "$P/core/fixtures/h8srcb" && printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n%s\n' "$H8L" > "$P/core/fixtures/h8srcb/run.sh" && printf 'f() { :; }\n' > "$P/core/fixtures/h8srcb/lib.sh"
+mkdir -p "$P/core/fixtures/h8bash" && printf '#!/usr/bin/env bash\nset -u\nbash "$X/x.sh" >/dev/null\n%s\n' "$H8L" > "$P/core/fixtures/h8bash/run.sh"
+mkdir -p "$P/core/fixtures/h8loop" && printf '#!/usr/bin/env bash\n. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: preamble" >&2; exit 2; }\nset -u\n%s\nbash "$X/x.sh"\n' "$H8L" > "$P/core/fixtures/h8loop/run.sh"
+seed core/fixtures/h8dc/run.sh <<'EOF'
+#!/usr/bin/env bash
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"; done
+EOF
+seed core/fixtures/h8wrp/run.sh <<'EOF'
+#!/usr/bin/env bash
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  [ "$_v" = AI_DLC_PROJECT_ROOT ] || unset "$_v"
+done
+EOF
+seed core/fixtures/h8cont/run.sh <<'EOF'
+#!/usr/bin/env bash
+pick() { for c in "$@"; do [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
+G="$(pick "$A/a.sh" \
+          "$B/x.sh")"
+for cand in "$A/y.sh" \
+            "$B/y.sh"; do :; done
+[ -f "$H/z.sh" ] || exit 2
+echo "run x.sh by hand"
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+EOF
+mkdir -p "$P/core/fixtures/h8lib" && printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n' > "$P/core/fixtures/h8lib/run.sh" && printf '%s\n' "$H8L" > "$P/core/fixtures/h8lib/lib.sh"
+for x in h8stubok:h8loop h8stubbad:h8none; do
+  mkdir -p "$P/core/fixtures/${x%%:*}" && printf '%s\n' '#!/usr/bin/env bash' 'HERE="$(cd "$(dirname "$0")" && pwd)"' "IMPL=\"\$HERE/../${x#*:}/run.sh\"" 'exec bash "$IMPL" --group b' > "$P/core/fixtures/${x%%:*}/run.sh"
+done
+mkdir -p "$P/core/fixtures/h8lst" && printf '#!/usr/bin/env bash\necho listed\n' > "$P/core/fixtures/h8lst/run.sh"
+mkdir -p "$P/core/fixtures/h8stl" && printf '#!/usr/bin/env bash\n%s\n' "$H8L" > "$P/core/fixtures/h8stl/run.sh"
+# h8lhk: listed, but its lib.sh drives a hook (I10's population): FIRE. h8lgl: listed, its lib.sh names only the
+# `hooks/ai-dlc-*` glob and a hook in a comment: quiet, H8LISTED.
+mkdir -p "$P/core/fixtures/h8lhk" "$P/core/fixtures/h8lgl"
+printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n' > "$P/core/fixtures/h8lhk/run.sh"
+printf 'bash "$ROOT/core/hooks/ai-dlc-x.sh" </dev/null\n' > "$P/core/fixtures/h8lhk/lib.sh"
+printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n' > "$P/core/fixtures/h8lgl/run.sh"
+printf 'cp core/hooks/ai-dlc-*.sh "$T"\n  # runs hooks/ai-dlc-x.sh\n' > "$P/core/fixtures/h8lgl/lib.sh"
+printf '# probe\nh8lst\tunscrubbed and listed\nh8stl\tscrubbed, so stale\nh8lhk\tdrives a hook\nh8lgl\tnames a glob\n' > "$P/$H8_ALLOW_REL"
 printf '%s\n' '# probe' m5h > "$P/$MKA_REL"
 printf '# probe allowlist\nm5b\tS1\nm5f\tS1\nm5e\tS1\ngone\tS1\nm5b\tdup\nm5x\n' > "$P/$ALLOW_REL"
 { pgit init -q "$P" && pgit -C "$P" add -A && pgit -C "$P" commit -q -m probe; } >/dev/null 2>&1 \
@@ -1555,6 +1791,18 @@ for arm in H1 H2 H3 H5 H6 H7; do
     diff "$WORK/want.$arm" "$WORK/got.$arm" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
   fi
 done
+# H8: the rows of the h8* seeds, by kind and fixture. Every FIRE seed must be an H8 row and every QUIET one an
+# H8SCRUB row, so a scan that emits nothing fails the probe as surely as one that accepts everything.
+[ -f "$WORK/p.h8" ] || : > "$WORK/p.h8"
+awk -F'\t' '$2 ~ /^h8/ && $1 ~ /^H8(SCRUB|LISTED|STALE|DUP|NOREASON)?$/ { print $1 "\t" $2 }' "$WORK/p.h8" | LC_ALL=C sort > "$WORK/got.H8"
+{ printf 'H8\t%s\n' h8none h8cmt h8hd h8git h8srcb h8bash h8stubbad h8lhk
+  printf 'H8SCRUB\t%s\n' h8loop h8dc h8wrp h8cont h8lib h8stubok h8stl
+  printf 'H8LISTED\t%s\n' h8lst h8lgl; printf 'H8STALE\th8stl\n'; } | LC_ALL=C sort > "$WORK/want.H8"
+if cmp -s "$WORK/got.H8" "$WORK/want.H8"; then sp_line H8 "ok (8 seeds fire -- none, comment-only, heredoc-only, a GIT_ loop, after a lib source, after a bash start, a stub of an unscrubbed IMPL, a listed hook driver; 6 scrubbed shapes and a scrubbed-IMPL stub read SCRUBBED; a listed one and a listed glob-only one are quiet, a listed scrubbed one STALE)"
+else
+  SP_RED=1; sp_line H8 "FAIL -- verdict rows differ from the seeded set:"
+  diff "$WORK/want.H8" "$WORK/got.H8" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
+fi
 der="$(awk -F'\t' '$1 == "DERIVE" { print $2 }' "$WORK/p.verdict" | LC_ALL=C sort | tr '\n' ' ')"
 if [ "$der" = "m5a m5b m5f m5g m5h m5i m5l " ]; then sp_line DERIVE "ok (derived rows m5a m5b m5f m5g m5h m5i m5l; the stubs m5f-b and m5f-c mapped to their IMPL)"
 else SP_RED=1; sp_line DERIVE "FAIL -- derived '$der', want 'm5a m5b m5f m5g m5h m5i m5l '"; fi
@@ -1679,6 +1927,23 @@ if [ "$MODE" = derive ]; then
   awk -F'\t' '$1 == "DERIVE" { print $2 "\t" $3 }' "$WORK/c.verdict"
   exit 0
 fi
+if [ "$MODE" = derive8 ]; then
+  # Every not-SCRUBBED fixture, one `<fixture>\t<reason>` row. A fixture already a row of the committed list keeps
+  # its reason (keyed on field 1, so a re-derive on a later tip never rewrites a hand-written reason); a new row gets
+  # its kind's reason. The two fixtures whose mutant battery selects its subject through an AI_DLC_* variable get
+  # the reason that the channel must move first: a scrub would erase their mutant selection.
+  [ "$SP_RED" = 0 ] || { echo "validate-fixture-hygiene: REFUSED -- the self-probe is red, so the derived set is unattributable" >&2; exit 2; }
+  awk -F'\t' 'FILENAME == ARGV[1] { if ($0 !~ /^[[:space:]]*(#|$)/ && NF >= 2) { x = $1; gsub(/[[:space:]]/, "", x); R[x] = $2 } next }
+    $1 == "H8DER" { f = $2
+      if (f in R) r = R[f]
+      else if (f == "retired-fixture-orphan") r = "its mutant battery selects the subject through AI_DLC_RFO_DETECT; that channel must move to argv before run.sh can be scrubbed"
+      else if (f == "consumer-machinery-inventory") r = "its mutant battery selects the subject through AI_DLC_CMI_VALIDATOR; that channel must move to argv before run.sh can be scrubbed"
+      else if (f == "story-evidence-scaffold") r = "its AI_DLC_* scrub is inside receipt-bl815.sh, which run.sh RUNS rather than sources, so run.sh itself is unscrubbed"
+      else if ($3 == "order") r = "run.sh starts a script or sources a file before its AI_DLC_* scrub; unexposed at the env-scrub census"
+      else r = "run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment"
+      print f "\t" r }' "$WORK/c.h8allow" "$WORK/c.h8" | LC_ALL=C sort
+  exit 0
+fi
 
 rc=0
 echo "validate-fixture-hygiene: $(awk 'END { print NR }' "$WORK/c.list") fixture .sh scanned; judged $t1 H1 \`-d …/.git\` test(s) and $t2 H2 declared-tool \`command -v\` site(s); H5 $nblk block(s), $nmem unblocked member(s)"
@@ -1713,6 +1978,17 @@ h7m4_out="$(m4 "$ROOT" "$ROOT/$H7_ALLOW_REL" "$WORK/h7m4-root-base.txt" "$H7_ALL
 echo "$h7m4_out"
 m4_out="$(m4 "$ROOT" "$ROOT/$ALLOW_REL" "$WORK/m4-root-base.txt")" || rc=1
 echo "$m4_out"
+awk -F'\t' '$1 == "H8SCRUB" { print "H8 SCRUBBED " $2 }' "$WORK/c.h8"
+n8s="$(grep -c '^H8SCRUB	' "$WORK/c.h8")" || n8s=0; n8l="$(grep -c '^H8LISTED	' "$WORK/c.h8")" || n8l=0
+echo "validate-fixture-hygiene: H8 $n8s fixture(s) SCRUBBED, $n8l allowlisted unscrubbed"
+if grep -qE '^(H8|H8STALE|H8DUP|H8NOREASON)	' "$WORK/c.h8"; then
+  rc=1; echo "FAIL H8:"
+  awk -F'\t' '$1 ~ /^H8(STALE|DUP|NOREASON)?$/ { print "    " $1 " " $2 (NF >= 3 ? ": " $3 : "") }' "$WORK/c.h8"
+  echo "  H8: put the env-derived scrub, \`for _v in \$(env | sed -n 's/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p'); do unset \"\$_v\"; done\`, as the first statement after \`set -u\` in run.sh, above every script it starts and every file it sources (lib/preamble.sh excepted). A bare run inherits the operator's AI_DLC_* tunables, which hermetic-run.sh never passes, so an unscrubbed fixture can change verdict outside the gate. H8STALE/H8DUP/H8NOREASON: fix $H8_ALLOW_REL."
+fi
+h8m4_out="$(m4 "$ROOT" "$ROOT/$H8_ALLOW_REL" "$WORK/h8m4-root-base.txt" "$H8_ALLOW_REL" H8-M4 \
+  "do not list the fixture; give its run.sh the env-derived AI_DLC_* scrub above every start, and drop the row.")" || rc=1
+echo "$h8m4_out"
 e1_out="$(e1_run "$ROOT" "$WORK/e1c")"; e1rc=$?
 if [ "$e1rc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- E1: $e1_out" >&2; exit 2; fi
 ne1="$(awk 'END { print NR }' "$WORK/e1c.e1list")"; ni1="$(awk 'END { print NR }' "$WORK/e1c.inert")"

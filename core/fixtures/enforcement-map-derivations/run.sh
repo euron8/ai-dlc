@@ -65,6 +65,9 @@
 # a whole-file run, and the control below fails the shard if selection quietly stops
 # happening. See `arm_id_of`, `run_map` and the selection join at the foot of this file.
 set -uo pipefail
+# Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 D_ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -591,22 +594,6 @@ A03_i9_w2_site_resolution() {
   fi
 }
 
-# --- Assertion 4: I10 — the per-fixture hermeticity walk ----------------------
-# The token is ASSEMBLED, not written. I10's own subject set is core/fixtures/*/run.sh --
-# this file -- so spelling the hook path here in one piece makes I10 fire on the fixture
-# that tests it, on the real tree, every push.
-A04_i10_fixture_hermeticity() {
-  t="$(fresh)"
-  local hookish
-  hookish="hooks/""ai-dlc-core-guard.sh"
-  mkdir -p "$t/core/fixtures/zz-hookless"
-  { printf '#!/usr/bin/env bash\n'
-    printf '# drives %s and scrubs no ambient AI_DLC_* env\n' "$hookish"
-    printf 'exit 0\n'; } > "$t/core/fixtures/zz-hookless/run.sh"
-  assert_fires "I10 a hook-driving fixture that never scrubs AI_DLC_* is REPORTED" \
-               "fixture 'zz-hookless' invokes a hook but never scrubs"
-}
-
 # --- Assertion 5: I22 — the per-role config resolution ------------------------
 # I22 exists because the dispatch guard FAILS OPEN on an unresolvable model: the role runs
 # on whatever it inherits and nothing says so at runtime. Point the first role at a key
@@ -845,8 +832,8 @@ A45_i79_neighbour_rule_edit_is_silent() {
 A15_i84_restatement_is_reported() {
   t="$(fresh)"
   # THE PATH IS ASSEMBLED, NOT SPELLED, and spelling it is what this fixture's own control
-  # caught: I10 scores a fixture that NAMES a hook as one that DRIVES a hook, and this file
-  # deliberately sits outside that set (see A04's `hookish`) because the scrub loop I10 wants
+  # caught: the retired I10 scored a fixture that NAMES a hook as one that DRIVES a hook, and this file
+  # deliberately sat outside that set (H8 of validate-fixture-hygiene.sh now holds it) because the scrub loop wanted
   # has an ordering hazard against values the worker wrapper has already resolved. Mutating a
   # file that happens to live under core/hooks/ is not driving a hook.
   local protect
@@ -2247,11 +2234,10 @@ fi
 # a knob there. The fixture ran as two directories of four workers each; one directory of eight
 # is the same demand on the machine.
 #
-# The worker wrapper's two variables are NOT named AI_DLC_*. I10 requires a fixture that
-# drives a hook to scrub every ambient AI_DLC_* name, and a scrub is a `unset` loop that
-# would have to be ordered ahead of values this wrapper has already resolved. This fixture
-# assembles its one hook token rather than spelling it, so it is outside I10's set today;
-# naming these two outside the AI_DLC_ namespace means it stays correct if that ever changes.
+# The worker wrapper's two variables are NOT named AI_DLC_*. Arm H8 of validate-fixture-hygiene.sh
+# requires a fixture to scrub every ambient AI_DLC_* name, and a scrub is a `unset` loop that
+# would have to be ordered ahead of values this wrapper has already resolved; naming these two
+# outside the AI_DLC_ namespace means the scrub can never erase them.
 JOBS=8
 # Every non-control assertion, in source order, derived from the same list the control came off.
 printf '%s\n' "$NAMES" | tail -n +2 > "$OUT/list"

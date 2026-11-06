@@ -8,6 +8,7 @@ comm
 cp
 cut
 dirname
+env
 find
 grep
 head
