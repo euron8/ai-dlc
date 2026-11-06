@@ -13819,9 +13819,14 @@ for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md 
               "$REPO_ROOT"/core/skills/*/*/*/*.md "$REPO_ROOT"/core/team-roles/*.md \
               "$REPO_ROOT"/core/rules/*.md "$REPO_ROOT"/core/hooks/*.sh \
               "$REPO_ROOT"/templates/CLAUDE.md.template; do
-  # -s, not -f: awk opens an empty file without ever reaching FNR == 1, so an empty prompt
-  # would be counted as listed-but-unscanned. It holds nothing to scan either way.
-  [ -s "$i119_f" ] || continue
+  # No size test here (BL-917): a `-s` that gates the read leaves an empty file with no read
+  # row in the pre-suite step key, so the key does not move when that file later fills and a
+  # push skips the step on a stale pass. Every globbed file goes to awk, empty ones included.
+  # awk never reaches FNR == 1 on an empty file, so awk's BEGIN pre-pass counts the empties
+  # (E) and flags an unopenable operand (U); the scanned-count check below requires
+  # N == listed - E, which an empty file satisfies and an unreadable one still fails.
+  # An unmatched glob stays a literal holding `*`; a string match drops it, with no stat of the file.
+  case "$i119_f" in *'*'*) continue ;; esac
   i119_files[$i119_k]="$i119_f"; i119_k=$((i119_k + 1))
   case "$i119_f" in
     */core/hooks/*.sh) i119_nhook=$((i119_nhook + 1)) ;;
@@ -13861,6 +13866,15 @@ else
   i119_out="$(awk '
     function norm(s) { s = tolower(s); gsub(/[*_`]/, "", s); gsub(/[[:blank:]]+/, " ", s); return s }
     function hit(s) { return s ~ /(^|[^a-z])in (one|a single) message([^a-z]|$)/ }
+    BEGIN {
+      for (i = 1; i < ARGC; i++) {
+        if (ARGV[i] == "-") continue
+        r = (getline l < ARGV[i]); close(ARGV[i])
+        if (r == 0) nempty++
+        else if (r < 0) printf "U %s\n", ARGV[i]
+      }
+      printf "E %d\n", nempty + 0
+    }
     FNR == 1 { prev = ""; if (FILENAME != "-") nfiles++ }
     FILENAME == "-" && /^#I119CASE / { cur = $2; seen[cur] = 0; order = order " " cur; prev = ""; next }
     {
@@ -13877,12 +13891,15 @@ else
       for (i = 1; i <= n; i++) p = p o[i] "=" seen[o[i]] " "
       printf "P %s\nC %d\nN %d\n", p, ctl + 0, nfiles + 0
     }' - "${i119_files[@]}" <<<"$i119_probe" 2>&1)"
-  i119_p=""; i119_c=""; i119_n=""; i119_hits=""
+  i119_p=""; i119_c=""; i119_n=""; i119_hits=""; i119_e=0; i119_u=""
   while IFS= read -r i119_l; do
     case "$i119_l" in
       "P "*) i119_p="${i119_l#P }" ;;
       "C "*) i119_c="${i119_l#C }" ;;
       "N "*) i119_n="${i119_l#N }" ;;
+      "E "*) i119_e="${i119_l#E }" ;;
+      "U "*) i119_u="${i119_u}
+  unopenable: ${i119_l#U }" ;;
       "H "*) i119_hits="${i119_hits}
   ${i119_l#H }" ;;
       *) i119_hits="${i119_hits}
@@ -13891,9 +13908,9 @@ else
   done <<<"$i119_out"
   i119_want="fire-inline=1 fire-wrapped=1 fire-emphasis=1 fire-single=1 fire-hook=1 fire-template=1 quiet-citation=0 quiet-beat=0 quiet-same=0 quiet-response=0 quiet-each=0 quiet-within=0 "
   if [ "$i119_p" != "$i119_want" ]; then
-    err "I119 SELF-PROBE FAILED: the probe read '${i119_p}', expected exactly '${i119_want}'. Either a seeded whole-set imperative (inline, wrapped across a line break, emphasised, 'a single', a hook echo line, or a template bullet) was not reported, or a near-miss (a Rule 28 waves citation, 'in ONE beat', 'in the SAME message', 'IN THE SAME response', 'one message each', 'within one message') was. Every verdict below is unattributable."
-  elif [ "${i119_n:-0}" != "${#i119_files[@]}" ]; then
-    err "I119 scanned ${i119_n:-0} file(s) of the ${#i119_files[@]} listed. A listed prompt the scan never opened reads exactly like a clean one.${i119_hits}"
+    err "I119 SELF-PROBE FAILED: the probe read '${i119_p}', expected exactly '${i119_want}'. Either a seeded whole-set imperative (inline, wrapped across a line break, emphasised, 'a single', a hook echo line, or a template bullet) was not reported, or a near-miss (a Rule 28 waves citation, 'in ONE beat', 'in the SAME message', 'IN THE SAME response', 'one message each', 'within one message') was. Every verdict below is unattributable.${i119_u}"
+  elif [ "${i119_n:-0}" != "$((${#i119_files[@]} - i119_e))" ] || [ -n "$i119_u" ]; then
+    err "I119 scanned ${i119_n:-0} file(s) of the $((${#i119_files[@]} - i119_e)) listed non-empty (${#i119_files[@]} listed, ${i119_e} empty). A listed prompt the scan never opened reads exactly like a clean one.${i119_u}${i119_hits}"
   elif [ "${i119_c:-0}" -lt 1 ] 2>/dev/null || [ -z "$i119_c" ]; then
     err "I119 IN-CORPUS CONTROL FAILED: the scan did not see Rule 28's '**Split dispatch:' clause in core/skills/ai-dlc/rule-bodies/rule-28.md. Either the clause was renamed (move this control and every citation with it) or the scan no longer reaches the real tree, so zero findings here prove nothing."
   elif [ -n "$i119_hits" ]; then

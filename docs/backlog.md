@@ -1927,12 +1927,6 @@ Yield limit: pushes from the main checkout will rarely skip, because the raw wal
 
 verify: manual
 
-## BL-917 — the pre-suite step key does not key a metadata-only test of a present file that the step never reads
-
-**DEFECT.** Pre-existing, and not introduced by the BL-914 fix. The pre-suite step key skip (`pk_step` in `.githooks/pre-push`) records the files a step reads, and the removed `log stream` tracer also recorded the paths it probed for absence. A step that tests only the metadata of a file that is PRESENT (`[ -s x ]`, `-nt`, `-x`) and never reads it is keyed by neither: a stat of a present path moves no atime, and the removed `log stream` tracer reported only absent paths, so a later push can skip that step on a recorded pass after the file's size, mode or mtime changed. The BL-914 present-set key narrows this but does not close it: it covers creation, deletion and type change of such a file, and does not cover a size, mode or mtime change (a `chmod +x` leaves the present key unchanged too), because the key carries none of them. No fix and no test in this release.
-
-verify: manual
-
 ## BL-919 — a path created and removed during the pre-suite prefix, with its parent directory's mtime restored both times, can produce a false step skip
 
 **DEFECT.** Residual of BL-914. A path created and then removed during the pre-suite prefix by a writer that restores its parent directory's mtime both times (as `rsync -a` or `tar x` can) is seen by neither the start-mark `-newer` check after each step nor the `pk_finish` re-walk, because it is absent from both walks and moved no mtime. A step that ran while it existed is recorded keyed on a tree without it, and a later push can skip that step. Measured by the delta adversary: push 2 skipped a step that would have failed, while the control with the path left present was caught and its records deleted. ctime cannot close it, because the hook's own atime reset (`touch -a -h`, `pk_reset_all`) moves every path's ctime. No deterministic unprivileged channel is known: sandbox reports are not persisted and an SBPL trace writes nothing, per the evidence in BL-914. No fix and no test in this release.

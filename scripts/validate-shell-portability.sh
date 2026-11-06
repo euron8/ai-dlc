@@ -914,6 +914,251 @@ S7_SKIP="re\\.g?sub\\("
 
 ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14"
 
+# S15 -- A METADATA-ONLY TEST IN THE PRE-SUITE CLOSURE THAT NO ALLOWLIST ROW ACQUITS (BL-917).
+#
+# THE SUBJECT IS THE PRE-SUITE STEP KEY, NOT THIS MACHINE'S FLOOR. `.githooks/pre-push` keys every step
+# before `PRESUITE_DONE=1` on the files it READ (atime tracer), git replays and the present key. A READ
+# row keys CONTENT only. So a step whose verdict follows a size, mode or mtime test (`[ -s x ]`, `-x`,
+# `-nt`, `find -newer`, `stat`) on a work-tree file is unkeyed for that file, and a later push can skip
+# the step on a stale pass. A size test is keyed only when the same STEP reads the file; a mode test is
+# keyed only through the permission BITS the present key carries (a macOS ACL or a file flag such as
+# `chflags uchg` can change -r/-w with the mode unmoved, and is not keyed); an mtime test is never
+# keyed. `perl -M` (and any perl file test) stays a GAP: perl is not in this closure's grammar. It is HERE, not in
+# the enforcement map, because this file is not on the suite pole and already owns an awk-counted scan.
+#
+# SEEDS ARE DERIVED FROM THE HOOK, NEVER HAND-LISTED. Every top-level `step "<title>" ...` line, with
+# its `\` continuations, before `PRESUITE_DONE=1`. The command word is either a script invocation
+# (taken as a seed) or a function defined at top level, whose BODY is scanned for invocations instead.
+# A function no pre-suite step names is ignored, which is why `scripts/suite-content-key.sh` (called
+# only from the post-suite `fixture_suite_step`) is OUT; `agent_definitions_dist` is a wrapper, which
+# is why `core/scripts/render-agent-definitions.sh` is IN; `syntax_all` contributes only `bash -n`,
+# which reads every file and runs none. All three are asserted in the self-probe on every run and
+# against the real hook wherever it carries their subject. THE FLOOR IS DERIVED, NOT A LITERAL: the
+# parsed step count must EQUAL a second reader's count of `step "` lines (any indent) before the cut,
+# every step must resolve to a tracked script unless its function body runs only `bash -n`, and at
+# least one seed must exist. A hook rewrite this parser cannot read therefore fails the push rather
+# than shrinking the seed set. Measured at 0.1025.0: 23 steps, 21 seeds.
+#
+# THE CLOSURE IS A FLOOR. A file joins when a closure file INVOKES it: `bash`, `sh`, `.`, `source`,
+# `exec`, `python3`, `$BASH`, an absolute `/bin/bash`, `awk -f`, and through them `xargs ... bash` and
+# `env ... bash`, with the operand given literally or through a variable assigned a literal path.
+# The words after `err`/`echo`/`printf`/`die`/`say`/`note` are message text and invoke nothing.
+# An operand resolves by PATH -- relative to the invoking file, then to the root, after stripping a
+# leading `$VAR/` -- and only to a TRACKED file, never by basename: the census at 316fdfe2f reached 34
+# files by basename and this reaches 28, the difference being `lib/mutant.sh`-style collisions and
+# invocations that were only text inside an `err "..."`. Heredoc text is still read as code, so the
+# closure OVER-includes; over-inclusion only adds rows to the allowlist below, which is safe.
+#
+# THE GRAMMAR is the census's (scan.py) in POSIX awk: a unary `-r -w -x -s -u -g -k -O -G -N -S` test
+# after `[`, `[[` or `test`, or after `&&`, `||`, `(`, `!` or a binary `-a`/`-o` further along the same
+# bracket (`[[ -f a && -s a ]]`, `[ -f a -a -s a ]`, `test -d d -o -x f`); a binary `-a`/`-o` is told from a
+# unary test by what FOLLOWS it: the operator is only a unary file test when the next word is itself one of
+# the letters above, so `[ -f a -a -d b ]` (existence tests only) stays quiet; `-nt`/`-ot`/`-ef`; `stat`; `find` with `-newer*`, `-perm`, `-size`,
+# `-empty`, `-[mca]time`, `-[mca]min`, `-executable`, `-readable`, `-writable`, `-user`, `-group`;
+# `ls` with `-l`, `-t`, `-S`, `-c` or `-u`; `wc -c`; `du`; `touch -r`; `date -r`; and python
+# `os.stat`/`os.lstat`/`os.access`, `getsize(`, `getmtime(`, `st_mode`/`st_size`/`st_mtime`,
+# `os.X_OK` and `.stat()`. A `#` comment line is skipped.
+#
+# IT IS A CLASSIFIED ALLOWLIST, AND NO SCORER ACQUITS ANYTHING. Every site must match a row of the classified
+# `scripts/presuite-metadata-allowlist.txt`, keyed on `<file><TAB><line text, whitespace collapsed>`,
+# never a line number. For each key the number of sites must EQUAL the number of rows: a site above the
+# row count FAILS as NEW (every surplus file:line is named, so a duplicated listed line is not acquitted
+# by its twin), a row above the site count FAILS as stale, and a row whose class is outside the closed
+# set FAILS. The remedy for a correct new site is a classified row, reviewed in its release like any
+# other code: the class must prove the verdict cannot move under an unkeyed metadata change. The census proposed scorer (a), "the same file has a content reader
+# of the same path token", as an acquitter, and it was REJECTED: it acquits the gating shape
+# `[ -s "$f" ] || continue; grep x "$f"` -- the motivating case, I119's line, where an EMPTY file is
+# never opened and so never keyed -- and because a READ row keys content only, it is unsound for any
+# mode or mtime test whatever reads the file. A row's class must say why the verdict CANNOT move under
+# an unkeyed metadata change; a site whose honest answer is "the verdict follows an unkeyed mode, mtime
+# or size of a tree path" is LIVE and is not acquitted by any class but `live-pending-lead`, which
+# carries a site the lead has been told of and has not yet ruled on.
+#
+# THE NARROWING, MEASURED. The base census at 0.1025.0, before this arm existed: 65 sites, 64 rows (scratch
+# 28, mode-keyed-by-present-key 20, size-read-by-step 6, pipe 3, text-only 3, python-api 2, system-path 1,
+# verdict-independent 1) and ONE site unlisted -- I119's `[ -s "$i119_f" ] || continue` in
+# validate-enforcement-map.sh, which fired here and was fixed at its site. The allowlist as committed with
+# this arm adds this file's own sites (the self-probe's seed text, which the closure reaches because S15
+# runs on itself) and moves two mode rows reachable only under a mode the pre-suite call never selects:
+# 78 rows, scratch 28, mode-keyed-by-present-key 16, text-only 17, size-read-by-step 6, pipe 3,
+# verdict-independent 5, python-api 2, system-path 1, git-index 0, live-pending-lead 0. No mtime test is
+# in the closure. `undecidable-variable` is not a class: every row was resolved by reading its dataflow.
+# The two reconcile/lib.sh `-r` rows (`_lca_src`, `_elc_src`) are verdict-independent: no closure file calls
+# ledger_close_awk, ledger_archive_awk or ledger_entry_line_close_awk, only fixtures and scripts outside the
+# closure do. `mode-keyed-by-present-key` holds for what the permission BITS decide: the present key carries
+# the bits, so a chmod moves it. A `-r`/`-w` verdict that follows an ACL or a file flag (`chflags uchg`) with
+# the bits unmoved is not keyed, so those 16 rows are live against that change and acquitted only for chmod.
+#
+# THE IN-CORPUS CONTROL IS THE STALE CHECK. An empty allowlist fails, and every row must match a site,
+# so a clean run has matched at least one KNOWN site in the same invocation; a scan that found nothing
+# reports every row stale rather than passing.
+S15_HOOK=".githooks/pre-push"
+S15_MIN_SEEDS=1
+TAB="$(printf '\t')"
+S15_ALLOW="scripts/presuite-metadata-allowlist.txt"
+S15_CLASSES="size-read-by-step scratch system-path pipe git-index python-api text-only verdict-independent mode-keyed-by-present-key live-pending-lead"
+S15_WHY="a metadata-only test (size, mode or mtime) in a file the pre-suite steps of .githooks/pre-push run, with no row in scripts/presuite-metadata-allowlist.txt (BL-917). The pre-suite step key keys a file on its CONTENT when the step reads it and on its PRESENCE otherwise, so a step whose verdict follows the size, mode or mtime of a work-tree file can be skipped on a stale pass. Remedy, in order: test something the key carries (open the file, as I119 now does); move the operand under the step's own mktemp directory; make the verdict independent of the metadata; or, when the site is correct as written, add a row '<file>, TAB, <normalized line>, TAB, <reason class>: <why>' to scripts/presuite-metadata-allowlist.txt with a class that proves verdict invariance, reviewed in its release. A size test is keyed only when the same STEP reads the file; an mtime test is never keyed -- such a site is live, and goes to the lead as live-pending-lead."
+S15_PROG='
+function path_of(f) { return (ENVIRON["S15_ROOT"] == "") ? f : ENVIRON["S15_ROOT"] "/" f }
+function norm(p,   a, st, n, i, k, out) {
+  n = split(p, a, "/"); k = 0
+  for (i = 1; i <= n; i++) {
+    if (a[i] == "" || a[i] == ".") continue
+    if (a[i] == "..") { if (k > 0) { k--; continue } return "" }
+    st[++k] = a[i]
+  }
+  out = ""
+  for (i = 1; i <= k; i++) out = (i == 1) ? st[i] : out "/" st[i]
+  return out
+}
+function slurp(f,   r, l, n) {
+  delete L; n = 0
+  while ((r = (getline l < path_of(f))) > 0) L[++n] = l
+  close(path_of(f))
+  if (r < 0) { print "U\t" f; return -1 }
+  return n
+}
+function is_comment(l) { return l ~ /^[[:space:]]*#/ }
+function ntext(l) { gsub(/[[:space:]]+/, " ", l); sub(/^ /, "", l); sub(/ $/, "", l); return l }
+function clean_tok(t) { gsub(/["]/, "", t); gsub(SQ, "", t); return t }
+function asg_scan(l,   m, nm, v, re) {
+  re = "[A-Za-z_][A-Za-z0-9_]*=[\"" SQ "]?[^[:space:]\"" SQ ";|&)]*[.](sh|py|awk)"
+  while (match(l, re)) {
+    m = substr(l, RSTART, RLENGTH); l = substr(l, RSTART + RLENGTH)
+    nm = m; sub(/=.*$/, "", nm); v = m; sub(/^[^=]*=/, "", v); v = clean_tok(v)
+    ASG[nm] = v
+  }
+}
+function strip_text(l,   out, re, q) {
+  out = ""
+  re = "(^|[^A-Za-z0-9_])(err|echo|printf|die|say|note)[[:space:]]+"
+  q = "^(\"[^\"]*\"|" SQ "[^" SQ "]*" SQ "|-[A-Za-z]+)[[:space:]]*"
+  while (match(l, re)) {
+    out = out substr(l, 1, RSTART + RLENGTH - 1); l = substr(l, RSTART + RLENGTH)
+    while (match(l, q)) l = substr(l, RLENGTH + 1)
+  }
+  return out l
+}
+function resolve(op, f,   v, t, d, c) {
+  if (op == "") return ""
+  if (op ~ /^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?$/) {
+    v = op; gsub(/[${}]/, "", v)
+    if (!(v in ASG)) return ""
+    t = ASG[v]
+  } else t = op
+  while (match(t, /^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?\//)) t = substr(t, RLENGTH + 1)
+  if (t == "" || t ~ /[$]/ || t ~ /^\//) return ""
+  d = f; if (d ~ /\//) sub(/\/[^\/]*$/, "", d); else d = ""
+  c = norm(d == "" ? t : d "/" t); if (c != "" && (c in TR) && c != f) return c
+  c = norm(t); if (c != "" && (c in TR) && c != f) return c
+  return ""
+}
+function invs(l, f,   w, n, i, j, t, c, op, nflag) {
+  l = strip_text(l)
+  n = split(l, w, /[[:space:];&|()`<>]+/)
+  for (i = 1; i <= n; i++) {
+    t = clean_tok(w[i]); op = ""
+    if (t == "bash" || t == "sh" || t == "." || t == "source" || t == "exec" || t == "python3" || t == "$BASH" || t == "${BASH}" || t ~ /\/(bash|sh|python3)$/) {
+      j = i + 1
+      nflag = 0
+      while (j <= n && clean_tok(w[j]) ~ /^-/) { if (clean_tok(w[j]) == "-n") nflag = 1; j++ }
+      if (nflag) BASHN = 1
+      else if (j <= n) op = clean_tok(w[j])
+    } else if (t == "awk") {
+      for (j = i + 1; j < n; j++) if (clean_tok(w[j]) == "-f") { op = clean_tok(w[j + 1]); break }
+    }
+    if (op != "") { c = resolve(op, f); if (c != "") OUT[++NO] = c }
+  }
+}
+function meta(l) {
+  if (l ~ /(\[\[?|(^|[^A-Za-z0-9_])test)[[:space:]]+(![[:space:]]*)?-[rwxsugkOGNS][[:space:]]/) return 1
+  if (l ~ /(\[\[?|(^|[^A-Za-z0-9_])test)[[:space:]][^];]*(&&|\|\||[[:space:]]-[ao]|[(!])[[:space:]]*(![[:space:]]*)?-[rwxsugkOGNS][[:space:]]/) return 1
+  if (l ~ /[[:space:]]-(nt|ot|ef)[[:space:]]/) return 1
+  if (l ~ /(^|[^A-Za-z0-9_.])stat[[:space:]]/) return 1
+  if (l ~ /(^|[^A-Za-z0-9_])find[[:space:]].*[[:space:]]-(newer[A-Za-z]*|perm|size|empty|mtime|mmin|ctime|cmin|atime|amin|executable|readable|writable|user|group)([^A-Za-z0-9_]|$)/) return 1
+  if (l ~ /(^|[^A-Za-z0-9_])ls[[:space:]]+-[A-Za-z]*[ltScu]/) return 1
+  if (l ~ /(^|[^A-Za-z0-9_])wc[[:space:]]+-c([^A-Za-z0-9_]|$)/) return 1
+  if (l ~ /(^|[^A-Za-z0-9_])du[[:space:]]/) return 1
+  if (l ~ /os[.](stat|lstat|access)[(]|getsize[(]|getmtime[(]|st_(mode|size|mtime)|os[.]X_OK|[.]stat[(][)]/) return 1
+  if (l ~ /(^|[^A-Za-z0-9_])touch([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*r[[:space:]]/) return 1
+  if (l ~ /(^|[^A-Za-z0-9_])date([[:space:]]+-[A-Za-z]+)*[[:space:]]+-r[[:space:]]/) return 1
+  return 0
+}
+function site(f, i, l,   k) {
+  k = f "\t" ntext(l); NS++; SF[NS] = f ":" i; SK[NS] = k; SC[k]++
+}
+function add(c) { if (!(c in SEEN)) { SEEN[c] = 1; Q[++NQ] = c } }
+BEGIN {
+  SQ = sprintf("%c", 39); hook = ENVIRON["S15_HOOK"]
+  while ((r = (getline t < path_of(ENVIRON["S15_TRACKED"]))) > 0) TR[t] = 1
+  close(path_of(ENVIRON["S15_TRACKED"]))
+  if (r < 0) { print "U\t" ENVIRON["S15_TRACKED"]; exit }
+  nh = slurp(hook); if (nh < 0) exit
+  for (i = 1; i <= nh; i++) H[i] = L[i]
+  fn = ""
+  for (i = 1; i <= nh; i++) {
+    l = H[i]
+    if (fn == "" && l ~ /^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{/) {
+      fn = l; sub(/\(.*$/, "", fn); FA[fn] = i; FB[fn] = i
+      if (l ~ /\}[[:space:]]*$/) fn = ""
+      continue
+    }
+    if (fn != "") { FB[fn] = i; if (l ~ /^\}/) fn = ""; continue }
+    if (!is_comment(l)) asg_scan(l)
+  }
+  for (i = 1; i <= nh; i++) {
+    l = H[i]
+    if (l ~ /^PRESUITE_DONE=1/) { DONE = 1; break }
+    if (l !~ /^step[[:space:]]+"/) continue
+    while (l ~ /\\$/ && i < nh) { sub(/\\$/, " ", l); l = l H[++i] }
+    sub(/^step[[:space:]]+"[^"]*"[[:space:]]*/, "", l)
+    NSTEP++
+    w1 = l; sub(/^[[:space:]]*/, "", w1); sub(/[[:space:]].*$/, "", w1)
+    NO = 0; BASHN = 0
+    if (w1 in FA) {
+      STEPPED[w1] = 1
+      for (j = FA[w1]; j <= FB[w1]; j++) if (!is_comment(H[j])) invs(H[j], hook)
+      print "FN\t" w1 "\t" NO "\t" BASHN
+    } else invs(l, hook)
+    if (NO == 0 && !BASHN) print "NOSEED\t" ntext(l)
+    for (j = 1; j <= NO; j++) if (!(OUT[j] in SEED)) { SEED[OUT[j]] = 1; NSEED++; print "SEED\t" OUT[j]; add(OUT[j]) }
+  }
+  if (!DONE) print "NODONE"
+  for (s in FA) if (!(s in STEPPED)) {
+    NO = 0
+    for (j = FA[s]; j <= FB[s]; j++) if (!is_comment(H[j])) invs(H[j], hook)
+    for (j = 1; j <= NO; j++) print "OFFSTEP\t" OUT[j]
+  }
+  for (q = 1; q <= NQ; q++) {
+    f = Q[q]; n = slurp(f); if (n < 0) { NU++; continue }
+    delete ASG
+    for (i = 1; i <= n; i++) if (!is_comment(L[i])) asg_scan(L[i])
+    NO = 0
+    for (i = 1; i <= n; i++) if (!is_comment(L[i])) invs(L[i], f)
+    for (j = 1; j <= NO; j++) add(OUT[j])
+    for (i = 1; i <= n; i++) if (!is_comment(L[i]) && meta(L[i])) site(f, i, L[i])
+    print "CL\t" f
+  }
+  for (s in STEPPED) for (j = FA[s]; j <= FB[s]; j++) if (!is_comment(H[j]) && meta(H[j])) site(hook, j, H[j])
+  na = 0; ap = path_of(ENVIRON["S15_ALLOW"])
+  while ((r = (getline l < ap)) > 0) {
+    na++
+    if (l ~ /^#/ || l ~ /^[[:space:]]*$/) continue
+    nf = split(l, a, "\t")
+    c = a[3]; sub(/:.*$/, "", c)
+    if (nf != 3 || a[3] !~ /^[a-z-]+: [^[:space:]]/ || !((" " ENVIRON["S15_CLASSES"] " ") ~ (" " c " "))) { print "BADROW\t" na "\t" l; continue }
+    k = a[1] "\t" a[2]
+    if (!(k in AL)) AL[k] = na
+    RC[k]++; NR_ROWS++; CN[c]++
+  }
+  close(ap)
+  if (r < 0) { print "U\t" ENVIRON["S15_ALLOW"]; exit }
+  for (i = 1; i <= NS; i++) { SEENK[SK[i]]++; if (SEENK[SK[i]] > RC[SK[i]]) { k = SK[i]; sub(/^[^\t]*\t/, "", k); print "NEW\t" SF[i] "\t" k } }
+  for (k in AL) if (RC[k] > SC[k]) print "STALE\t" AL[k] "\t" k
+  for (c in CN) print "CLASS\t" c "\t" CN[c]
+  print "COUNTS\t" NSTEP + 0 "\t" NSEED + 0 "\t" NQ + 0 "\t" NS + 0 "\t" NR_ROWS + 0
+}'
+
 # Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
 # under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
 # findings than a clean one rather than more.
@@ -1256,6 +1501,135 @@ for a in $ARMS; do
   fi
 done
 
+# S15's runner: one awk over the hook, the derived closure and the allowlist, under <root> (empty
+# means the cwd). A `U` row is a file the program could not open: a refusal, never a clean scan.
+# Field and join helpers in awk: the fixture sandbox declares no cut, paste or sort.
+s15_col() { awk -F'\t' -v t="$1" -v n="$2" '$1 == t { print $n }' <<<"$3"; }   # s15_col <tag> <field> <rows>
+s15_join() { awk -v s="$1" 'NF { printf "%s%s", (k++ ? s : ""), $0 } END { print "" }'; }   # stdin -> one line
+s15_run() { # s15_run <root> <tracked-list> -> the program's rows on stdout; returns 2 on a refusal
+  local out
+  out="$(S15_ROOT="$1" S15_TRACKED="$2" S15_HOOK="$S15_HOOK" S15_ALLOW="$S15_ALLOW" S15_CLASSES="$S15_CLASSES" \
+    awk "$S15_PROG" </dev/null 2>"$probe/s15e")" || { printf 'REFUSED: S15: awk exited non-zero: %s\n' "$(head -1 "$probe/s15e")" >&2; printf 'S15\n' >> "$probe/refused"; return 2; }
+  if grep -q "^U${TAB}" <<<"$out"; then
+    printf 'REFUSED: S15: could not open %s. An arm that could not read its hook, its closure or its allowlist has not scanned them.\n' "$(s15_col U 2 "$out" | s15_join ' ')" >&2
+    printf 'S15\n' >> "$probe/refused"; return 2
+  fi
+  printf '%s\n' "$out"
+}
+# S15's self-probe, BEFORE the corpus, in its own tree under the probe dir. FLAG: the gating shape, a
+# tree-path `-x`, `-nt`, `find -newer`, `stat -f`, (through a wrapper and a nested invoke) `date -r`
+# and `touch -r`, and one site reached through each invoker the closure claims (`.` of a variable
+# assigned a literal path, `awk -f`, `"$BASH" x`, `env ... bash`, `xargs bash`, a path in a subdir).
+# QUIET: a listed site, a comment, an unstepped function's script, a post-suite step's script, a script
+# named only inside `err "..."` text, and a same-basename decoy in another directory. One row matches nothing (STALE) and one names
+# no class (BADROW). The NEW set is compared EXACTLY, so a scan that flags everything misfires here.
+s15p="$probe/s15"; mkdir -p "$s15p/.githooks" "$s15p/scripts"
+cat > "$s15p/.githooks/pre-push" <<'S15HOOK'
+w() {
+  bash scripts/w.sh
+}
+agent_definitions_dist() {
+  out="$(bash core/scripts/render-agent-definitions.sh --check --root . 2>&1)"
+}
+u() { bash scripts/u.sh; }
+syntax_all() {
+  for f in scripts/*.sh; do bash -n "$f" 2>/dev/null || rc=1; done
+}
+step "a" \
+  bash scripts/a.sh
+step "w" w
+step "agent definitions" \
+  agent_definitions_dist
+step "shell syntax" syntax_all
+PRESUITE_DONE=1
+step "post" bash scripts/post.sh
+fixture_suite_step() { key="$(bash scripts/late-key.sh 2>/dev/null)"; }
+step "suite" fixture_suite_step
+S15HOOK
+mkdir -p "$s15p/core/scripts"
+printf '%s\n' 'echo rendered' > "$s15p/core/scripts/render-agent-definitions.sh"
+printf '%s\n' '[ -x docs/k ] || exit 1' > "$s15p/scripts/late-key.sh"
+cat > "$s15p/scripts/a.sh" <<'S15A'
+bash scripts/b.sh
+err "run bash scripts/t.sh by hand"
+for f in g/*; do [ -s "$f" ] || continue; grep x "$f"; done
+[ -x docs/x.sh ] || exit 1
+[ docs/a -nt docs/b ] && echo y
+find docs -newer docs/a -print
+stat -f %z docs/a
+[ -s "$WORK/listed" ] || exit 2
+# [ -x docs/c.sh ] in a comment
+S15A
+# b.sh carries one line per invoker the closure claims; each target holds ONE flagged line, and a
+# same-basename decoy in another directory holds one that must NOT be reached (resolve by path).
+cat > "$s15p/scripts/b.sh" <<'S15B'
+touch -r docs/a docs/b
+LIB="$ROOT/scripts/lib/l.sh"
+. "$LIB"
+awk -f scripts/k.awk f
+"$BASH" scripts/e.sh
+env FOO=1 bash scripts/v.sh
+printf x | xargs bash scripts/x.sh
+bash scripts/real/n.sh
+S15B
+mkdir -p "$s15p/scripts/lib" "$s15p/scripts/real" "$s15p/scripts/decoy"
+for s15f in scripts/lib/l.sh scripts/k.awk scripts/e.sh scripts/v.sh scripts/x.sh scripts/real/n.sh scripts/decoy/n.sh; do
+  printf '%s\n' '[ -x docs/q ] || exit 1' > "$s15p/$s15f"
+done
+printf '%s\n' 'date -r docs/a' > "$s15p/scripts/w.sh"
+printf '%s\n' '[ -x docs/u ] || exit 1' > "$s15p/scripts/u.sh"
+printf '%s\n' '[ -x docs/p ] || exit 1' > "$s15p/scripts/post.sh"
+printf '%s\n' '[ -x docs/t ] || exit 1' > "$s15p/scripts/t.sh"
+# G1/D1 probe lines are composed with printf so that THIS file's text carries no metadata test for them
+# (a literal line would be a site of this file's own and need a row). 10-12: a compound `[[ ]]` test, an
+# `-a` and an `-o` operand, each ending in a metadata test (flag). 13-15: string or existence tests only,
+# including a binary `-a`/`-o` (quiet). 16: a second copy of the LISTED line 8 (flag, the surplus site).
+s15m=s; s15t=x; s15u=w
+{
+  printf '%s\n' "[[ -f a && -$s15m a ]]" "[ -f a -a -$s15t b ]" "test -d d -o -$s15u f"
+  printf '%s\n' '[[ -n "$x" && -z "$y" ]]' '[ -f a -a -d b ]' 'test -f a -o -d b'
+  printf '[ -%s "$WORK/listed" ] || exit 2\n' "$s15m"
+} >> "$s15p/scripts/a.sh"
+printf 'scripts/a.sh\t[ -s "$WORK/listed" ] || exit 2\tscratch: the probe mktemp dir\nscripts/a.sh\t[ -s gone ]\tscratch: matches no site\nscripts/a.sh\t[ -x docs/x.sh ] || exit 1\tnot-a-class: x\n' > "$s15p/$S15_ALLOW"
+printf '%s\n' .githooks/pre-push scripts/a.sh scripts/b.sh scripts/w.sh scripts/u.sh scripts/post.sh scripts/t.sh \
+  core/scripts/render-agent-definitions.sh scripts/late-key.sh \
+  scripts/lib/l.sh scripts/k.awk scripts/e.sh scripts/v.sh scripts/x.sh scripts/real/n.sh scripts/decoy/n.sh > "$s15p/tracked"
+s15_want='scripts/a.sh:3
+scripts/a.sh:4
+scripts/a.sh:5
+scripts/a.sh:6
+scripts/a.sh:7
+scripts/a.sh:10
+scripts/a.sh:11
+scripts/a.sh:12
+scripts/a.sh:16
+scripts/b.sh:1
+scripts/w.sh:1
+scripts/lib/l.sh:1
+scripts/k.awk:1
+scripts/e.sh:1
+scripts/v.sh:1
+scripts/x.sh:1
+scripts/real/n.sh:1'
+ARM_NOW=S15
+if s15p_out="$(s15_run "$s15p" tracked)"; then
+  # EXACT set equality without sort: the same count, and every wanted site present.
+  s15p_new="$(s15_col NEW 2 "$s15p_out")"
+  s15p_ok=1
+  [ "$(grep -c . <<<"$s15p_new")" = "$(grep -c . <<<"$s15_want")" ] || s15p_ok=0
+  while IFS= read -r s15w; do grep -qxF "$s15w" <<<"$s15p_new" || s15p_ok=0; done <<<"$s15_want"
+  if [ "$s15p_ok" -ne 1 ]; then
+    err "S15's own probe did not report exactly the seeded offenders. Want: $(s15_join ' ' <<<"$s15_want"). Got: $(s15_join ' ' <<<"$s15p_new"). A scan that misses one is blind to that grammar; one that reports a listed, commented, unstepped or text-only site flags everything."
+  fi
+  s15p_seeds="$(s15_col SEED 2 "$s15p_out")"
+  grep -qxF core/scripts/render-agent-definitions.sh <<<"$s15p_seeds" || err "S15 control: core/scripts/render-agent-definitions.sh is not a seed of the probe hook. It is reached through the agent_definitions_dist wrapper, as in the real hook, so wrapper-function resolution is broken."
+  grep -qxF scripts/late-key.sh <<<"$s15p_seeds" && err "S15 control: scripts/late-key.sh is a seed of the probe hook, but only a post-suite step calls it. The PRESUITE_DONE cut is broken."
+  grep -q "^FN${TAB}syntax_all${TAB}0${TAB}1\$" <<<"$s15p_out" || err "S15 control: syntax_all is not read as a step that runs only \`bash -n\` with no script seed."
+  [ "$(grep -c '^SEED' <<<"$s15p_out")" = 3 ] || err "S15's probe hook derived $(grep -c '^SEED' <<<"$s15p_out") seed(s), not the 3 its pre-suite steps name (a.sh, w.sh, render-agent-definitions.sh; b.sh is closure, not seed): $(s15_join ' ' <<<"$s15p_seeds")"
+  [ "$(grep -c '^STALE' <<<"$s15p_out")" = 1 ] || err "S15's own probe did not report its one STALE row: a row matching no site would pass."
+  [ "$(grep -c '^BADROW' <<<"$s15p_out")" = 1 ] || err "S15's own probe did not report its one BADROW (a reason outside the closed class set)."
+fi
+
 # --- the corpus ----------------------------------------------------------------------------
 FILES_shell="$(corpus shell)"
 FILES_instr="$(corpus instr)"
@@ -1324,6 +1698,43 @@ else
       printf '%s\n' "$hits" | sed 's/^/    /' >&2
     fi
   done
+  # S15 over the real hook. Its controls are the hook shapes the seed derivation must get right.
+  ARM_NOW=S15
+  git ls-files > "$probe/s15tracked"
+  if s15_out="$(s15_run "" "$probe/s15tracked")"; then
+    s15_seeds="$(s15_col SEED 2 "$s15_out")"
+    s15_nseed="$(grep -c . <<<"$s15_seeds")" || s15_nseed=0
+    grep -q '^NODONE' <<<"$s15_out" && err "S15 found no \`PRESUITE_DONE=1\` line in $S15_HOOK, so it cannot tell a pre-suite step from a post-suite one. Failing closed."
+    grep -q '^NOSEED' <<<"$s15_out" && err "S15 could not resolve these pre-suite steps to a tracked script, so their closure is unscanned: $(s15_col NOSEED 2 "$s15_out" | s15_join '|')"
+    # The floor is DERIVED: every line of the hook that opens with `step "`, at any indent, before the
+    # cut, counted by a second reader. A parser that stopped seeing a step spelling drops below it.
+    s15_nstep_want="$(awk '/^PRESUITE_DONE=1/ { exit } /^[[:space:]]*step[[:space:]]+"/ { n++ } END { print n + 0 }' "$S15_HOOK")"
+    s15_nstep="$(s15_col COUNTS 2 "$s15_out")"
+    [ "${s15_nstep:-0}" = "$s15_nstep_want" ] && [ "$s15_nstep_want" -ge 1 ] || err "S15 parsed ${s15_nstep:-0} pre-suite step(s) from $S15_HOOK where a plain count of \`step \"\` lines before PRESUITE_DONE=1 reads $s15_nstep_want. The step parser has lost the hook's grammar."
+    [ "$s15_nseed" -ge "$S15_MIN_SEEDS" ] || err "S15 derived $s15_nseed seed script(s) from $S15_HOOK, under the floor of $S15_MIN_SEEDS. The step parser has lost the hook's grammar."
+    # The three named controls bind the DISTRIBUTION's hook, so each is asserted where its subject is
+    # present in that hook; the self-probe above holds all three mechanisms on every run regardless.
+    if grep -q '^agent_definitions_dist()' "$S15_HOOK"; then
+      grep -qxF core/scripts/render-agent-definitions.sh <<<"$s15_seeds" || err "S15 control: core/scripts/render-agent-definitions.sh is not a seed. It is reached through the agent_definitions_dist wrapper, so the wrapper-function resolution is broken."
+    fi
+    if grep -q 'scripts/suite-content-key\.sh' "$S15_HOOK"; then
+      grep -qxF scripts/suite-content-key.sh <<<"$s15_seeds" && err "S15 control: scripts/suite-content-key.sh is a seed, but only the post-suite fixture_suite_step calls it. The PRESUITE_DONE cut or the unstepped-function rule is broken."
+    fi
+    if grep -q '^syntax_all()' "$S15_HOOK"; then
+      grep -q "^FN${TAB}syntax_all${TAB}0${TAB}1\$" <<<"$s15_out" || err "S15 control: syntax_all is not read as a step that runs only \`bash -n\` with no script seed."
+    fi
+    s15_rows="$(s15_col COUNTS 6 "$s15_out")"
+    [ "${s15_rows:-0}" -ge 1 ] || err "S15: $S15_ALLOW holds no rows. An empty allowlist has no stale check, which is this arm's in-corpus control. Failing closed."
+    grep -q '^BADROW' <<<"$s15_out" && err "S15: $S15_ALLOW rows that are not \`<file><TAB><line text><TAB><class>: <reason>\` with a class from (${S15_CLASSES}),: $(s15_col BADROW 2 "$s15_out" | s15_join ' ') (row numbers)."
+    if grep -q '^STALE' <<<"$s15_out"; then
+      err "S15: allowlist rows above the number of sites for their key in the pre-suite closure are STALE (delete the row in the change that removed the site):"
+      grep '^STALE' <<<"$s15_out" | awk -F'\t' '{ printf "    %s:%s: %s\t%s\n", "'"$S15_ALLOW"'", $2, $3, $4 }' >&2
+    fi
+    if grep -q '^NEW' <<<"$s15_out"; then
+      err "S15: $S15_WHY"
+      awk -F'\t' '$1 == "NEW" { print "    " $2 "\t" $3 }' <<<"$s15_out" >&2
+    fi
+  fi
 fi
 
 # THE ARM COUNT IS DERIVED FROM `ARMS`, NOT WRITTEN. It was a literal sitting beside the
@@ -1338,6 +1749,6 @@ if [ -s "$probe/refused" ]; then
   exit 2
 fi
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]], S13 command substitution bash 3.2 closes early or misreads, S14 a heredoc-in-\$( ) file /bin/bash 3.2 cannot parse), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]], S13 command substitution bash 3.2 closes early or misreads, S14 a heredoc-in-\$( ) file /bin/bash 3.2 cannot parse), plus S15 (an unlisted metadata-only test in the pre-suite closure: $s15_nseed seeds, $(s15_col COUNTS 4 "$s15_out") closure files, $(s15_col COUNTS 5 "$s15_out") sites, $s15_rows allowlist rows), every arm probed in both directions."
 fi
 exit "$fail"

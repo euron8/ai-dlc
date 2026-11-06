@@ -73,6 +73,12 @@
 #           FIXTURE script the gate's `bash -n` never parses       -> must FAIL
 #   x23 S14 dropped from ARMS                                     -> the report must VANISH
 #   x24 S13 form (d)'s heredoc-body scan disconnected             -> the report must VANISH
+#   m16 S15 an unlisted tree-path `-x` test in a pre-suite step's
+#           script (BL-917)                                       -> must FAIL
+#   x28 S15 the corpus NEW-site report disconnected (the self-probe
+#           shares the program, so only the corpus wiring is here) -> the report must VANISH
+#   x29 S15 per-key count match reverted to SET matching: a duplicated
+#           listed site is acquitted                              -> the report must VANISH
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   m7b S7  plain and escaped-quote replacement backrefs          -> must FAIL, 2 counted lines
@@ -114,7 +120,7 @@
 # copy already measures every arm: a cell is TRIPPED iff that arm's report differs from the same
 # world's unmutated report (a seeded offender is compared against the clean seed). Per push each
 # mutant asserts its DECIDING arm tripped and its TWIN stayed green, from the run it already made.
-# Columns: S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14 PROBE (any arm's own probe) EMPTY_SHELL
+# Columns: S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14 S15 PROBE (any arm's own probe) EMPTY_SHELL
 # EMPTY_CORE EMPTY_DOC EMPTY_FIXTURE (the four fail-closed corpus refusals) REFUSED (exit 2).
 # The decides=/twins= below are the recorded matrix; this file reads them back from its own header, so
 # there is one copy. The matrix is re-measured whenever an arm or a mutant changes. The exact-vector
@@ -171,6 +177,9 @@
 # MUTANT-MATRIX x24 decides=S13 twins=S12
 # MUTANT-MATRIX m15 decides=S14 twins=S13
 # MUTANT-MATRIX x23 decides=S14 twins=S13
+# MUTANT-MATRIX m16 decides=S15 twins=S14
+# MUTANT-MATRIX x28 decides=S15 twins=S14
+# MUTANT-MATRIX x29 decides=S15 twins=S14
 # MUTANT-MATRIX-CONTROL n1 why=the portable sed -i pair must stay unreported (survives by design)
 # MUTANT-MATRIX-CONTROL n2 why=python re.sub backreference must stay unreported (survives by design)
 # MUTANT-MATRIX-CONTROL n3 why=braced, HEAD-literal and "${SHA}: rev-paths must stay unreported (survives by design)
@@ -219,7 +228,7 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/matrix.sh"
 # `FAIL: <arm>:` block, the four fail-closed corpus refusals by their sentence, and REFUSED (exit 2).
 # A cell is TRIPPED iff that arm's signature differs between the UNMUTATED output (<pre>) and the
 # output under the mutant (<post>). A seeded offender is compared against the clean control.
-MX_ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14 EMPTY_SHELL EMPTY_CORE EMPTY_DOC EMPTY_FIXTURE REFUSED"
+MX_ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14 S15 EMPTY_SHELL EMPTY_CORE EMPTY_DOC EMPTY_FIXTURE REFUSED"
 MX_CALLS=0; MX_ROWS=0; MX_ERR=""; B_CTL=0; CONTROL_OUT=""
 RCV="$TMP/run-rc"
 PRE_DIR="$TMP/pre"; mkdir -p "$PRE_DIR"
@@ -304,6 +313,13 @@ seed() { # seed <dir> [extra-line...]
   printf '%s\n' '#!/usr/bin/env bash' 'cd "$WORK" || exit 2' 'echo clean' \
     > "$d/core/fixtures/probe-unit/seed.sh"
   if [ "$#" -gt 0 ]; then printf '%s\n' '#!/usr/bin/env bash' "$@" > "$d/scripts/subject.sh"; fi
+  # S15's world: a pre-suite hook whose one step runs scripts/s15-step, which carries ONE listed
+  # metadata site, and the allowlist row for it. Without the row S15 fails on an empty allowlist;
+  # without the site the row is stale. So every clean world is S15 matching a known site.
+  mkdir -p "$d/.githooks"
+  printf '%s\n' 'step "s15" \' '  bash scripts/s15-step' 'PRESUITE_DONE=1' > "$d/.githooks/pre-push"
+  printf '%s\n' '#!/usr/bin/env bash' '[ -s "$WORK/listed" ] || exit 2' > "$d/scripts/s15-step"
+  printf 'scripts/s15-step\t[ -s "$WORK/listed" ] || exit 2\tscratch: the seed mktemp dir\n' > "$d/scripts/presuite-metadata-allowlist.txt"
   ( cd "$d" && git init -q . && git add -A >/dev/null 2>&1 )
 }
 
@@ -1697,6 +1713,42 @@ blind_check "x23 S14 in ARMS" "$TMP/m15" 's/ S14"$/"/' S14 "S14's membership in 
 # `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
 # silently reads exactly like a fresh one, so the mutant count now counts its own call sites.
 #
+# m16/x28: S15 over a seeded pre-suite closure. The offender is appended to the script the seed's hook
+# STEPS (scripts/s15-step), so the seed derivation, the closure and the grammar must all hold to reach it.
+seed "$TMP/m16"
+printf '%s\n' '[ -x docs/x.sh ] || exit 1' >> "$TMP/m16/scripts/s15-step"
+( cd "$TMP/m16" && git add -A >/dev/null 2>&1 )
+kill_check "m16 S15 unlisted metadata test in a pre-suite script" "$TMP/m16" S15
+blind_check "x28 S15 corpus NEW report" "$TMP/m16" \
+  "s/    if grep -q '^NEW' <<<\"\$s15_out\"; then/    if false; then/" S15 "S15's corpus NEW-site report"
+
+# x29: S15's per-key COUNT match (D1). The seed is m16's world with the LISTED line duplicated as live
+# code: sites 2, rows 1. Unmutated, the surplus site is reported as NEW (S15 alone). Reverted to SET
+# matching (a site is acquitted when its key has any row), the corpus run goes quiet on the duplicate,
+# and the validator's own self-probe, which seeds the same duplicate, reports it missed. The mutant must
+# fail ONLY S15 and the report must differ from the unmutated one.
+seed "$TMP/x29"
+printf '%s\n' '[ -s "$WORK/listed" ] || exit 2' >> "$TMP/x29/scripts/s15-step"
+( cd "$TMP/x29" && git add -A >/dev/null 2>&1 )
+x29_pre="$(pre_out "$TMP/x29")"
+x29_nfail="$(grep -c '^FAIL:' <<<"$x29_pre")" || x29_nfail=0
+if grep -q "^FAIL: S15:" <<<"$x29_pre" && grep -q 'scripts/s15-step:' <<<"$x29_pre" && [ "$x29_nfail" -eq 1 ] \
+   && mutate "$TMP/x29" 's/SEENK\[SK\[i\]\] > RC\[SK\[i\]\]/!(SK[i] in RC)/' "x29 S15 set matching"; then
+  x29_post="$(run_v "$TMP/x29")"
+  x29_nfail2="$(grep -c '^FAIL:' <<<"$x29_post")" || x29_nfail2=0
+  if grep -q "S15's own probe did not report exactly the seeded offenders" <<<"$x29_post" && [ "$x29_nfail2" -eq 1 ] \
+     && ! grep -q 'scripts/s15-step:' <<<"$x29_post"; then
+    mx_score x29 S15 "$x29_pre" "$x29_post" "$(rcv)" || { note "FAIL  x29 -- $MX_ERR"; rc=1; }
+    mutant_killed "$B_CTL" x29 "x29 S15 per-key count match is load-bearing: shipped reports the duplicated listed site as NEW, set matching acquits it and the self-probe notices"
+  else
+    note "FAIL  x29 -- the set-matching mutant did not go quiet on the duplicate AND trip S15's probe"
+    printf '%s\n' "$x29_post" | sed 's/^/      /' | head -6; rc=1
+  fi
+else
+  note "FAIL  x29 -- the unmutated validator did not report the duplicated listed site as NEW (S15 alone), or the mutation did not apply"
+  printf '%s\n' "$x29_pre" | sed 's/^/      /' | head -6; rc=1
+fi
+
 # THE ARM-TABLE COUNT IS LEFT AS A LITERAL BECAUSE DERIVING IT WAS WRONG. `x1`-`x3` go through
 # `blind_check`; `x4`-`x8` assert inline, because each needs a different observable (a count
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
@@ -1718,6 +1770,6 @@ else
   else bad "MATRIX-RUN: $MX_ROWS MATRIX row(s) for $MX_CALLS scored mutants x $# arms"; fi
 fi
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants scored by their own arm, 27/27 arm-table cells proven load-bearing, 9/9 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants scored by their own arm, 28/28 arm-table cells proven load-bearing, 9/9 negatives silent"
 fi
 exit "$rc"

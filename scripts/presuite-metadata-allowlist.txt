@@ -1,0 +1,89 @@
+# scripts/presuite-metadata-allowlist.txt -- the classified allowlist of arm S15 of scripts/validate-shell-portability.sh
+# (BL-917): every metadata-only test (size, mode or mtime) in the files the pre-suite steps of .githooks/pre-push run.
+# One row per site: `<repo-relative file><TAB><the line, whitespace collapsed><TAB><class>: <one-clause reason>`.
+# Never a line number. An unlisted site fails the push; a row that matches no site fails as STALE; delete a row in the
+# change that removes its site; add a row only when the site is correct as written and its class proves the verdict cannot move under an unkeyed metadata change, reviewed in its release.
+# Classes (each says why the step's verdict CANNOT move under an unkeyed metadata change): size-read-by-step (the same
+# step reads the file), scratch (the step's own mktemp dir or a file it writes), system-path (outside the work tree),
+# pipe (not a file), git-index (a mode read from the index), python-api (a stat field that is not mode, size or mtime),
+# text-only (text the step writes or prints, never runs), verdict-independent (the result cannot reach the verdict),
+# mode-keyed-by-present-key (a mode test on a tree file, keyed for chmod because the present key carries the permission bits; an ACL or file flag is not keyed), and
+# live-pending-lead (a LIVE site the lead has been sent and has not yet ruled on).
+core/fixtures/lib/settled-net.sh	cur="$(st_members "$1")"; sz="$(wc -c < "$2" 2>/dev/null | tr -d ' ')"	text-only: the closure reaches this file only through heredoc seed text in validate-fixture-hygiene.sh, which no pre-suite step sources, and its operand is a caller's progress log
+core/scripts/validate-audit-anchors.sh	if [ ! -r "$FILE" ] || [ ! -w "$FILE" ]; then	verdict-independent: reachable only under --close-record, a mode the pre-suite call never selects
+core/scripts/validate-audit-anchors.sh	if [ ! -r "$FILE" ]; then	mode-keyed-by-present-key: a -r mode test on templates/audit-anchors.md.template, which the same run then reads
+core/scripts/validate-provenance-block.sh	[ -r "${PB_SCRIPT_DIR}/lib/meta-gate.sh" ] && . "${PB_SCRIPT_DIR}/lib/meta-gate.sh"	mode-keyed-by-present-key: a -r mode test on core/scripts/lib/meta-gate.sh, whose presence the present key carries
+core/scripts/validate-provenance-block.sh	if [ "$_pb_rc" -gt 2 ] || { [ "$_pb_rc" -eq 2 ] && [ ! -s "$PB_T/candidates" ]; }; then	scratch: $PB_T is the step's own mktemp directory
+core/scripts/validate-provenance-block.sh	if n.casefold() == fold and os.path.samestat(st, os.lstat(os.path.join(out, n))):	python-api: os.lstat feeds only os.path.samestat (device and inode) to pick a directory entry's case, never mode, size or mtime
+core/scripts/validate-provenance-block.sh	st = os.lstat(os.path.join(out, part))	python-api: os.lstat feeds only os.path.samestat (device and inode) to pick a directory entry's case, never mode, size or mtime
+core/scripts/validate-reattach-budget.sh	BYTES="$(head -n "$PROTO_END" "$SKILL_MD" | wc -c | tr -d ' ')"	pipe: wc -c counts a pipe from head, whose input SKILL.md the step reads
+core/scripts/validate-reattach-budget.sh	WHOLE_BYTES="$(wc -c < "$SKILL_MD" | tr -d ' ')"	size-read-by-step: the size of SKILL.md, which the same step reads with grep and awk
+core/skills/ai-dlc-update/reconcile/lib.sh	if [ ! -r "$_elc_src" ]; then	verdict-independent: no closure file calls ledger_close_awk, ledger_archive_awk or ledger_entry_line_close_awk; only fixtures and scripts outside the closure do
+core/skills/ai-dlc-update/reconcile/lib.sh	if [ ! -r "$_lca_src" ]; then	verdict-independent: no closure file calls ledger_close_awk, ledger_archive_awk or ledger_entry_line_close_awk; only fixtures and scripts outside the closure do
+scripts/backlog-reverify.sh	if [ ! -f "$LEDGER" ] || [ ! -r "$LEDGER" ]; then	mode-keyed-by-present-key: a -r mode test on the ledger, which the same run then reads
+scripts/backlog-reverify.sh	if [ ! -r "$ERRF" ]; then	scratch: $ERRF is a mktemp file the step writes
+scripts/render-vocabulary-index.sh	[ -r "$SRC" ] || { echo "render-vocabulary-index: cannot READ $SRC. It exists, so this is a permission or filesystem fault, not a missing file. Every marker reader below would return empty and the failure would be reported as a changed marker grammar." >&2; exit 2; }	mode-keyed-by-present-key: a -r mode test on validate-enforcement-map.sh, which the same step then reads
+scripts/validate-backlog-receipts.sh	[ -s "$1/$BR_SENTINEL" ] || return 1	scratch: $1 is a detached checkout the step itself builds with git worktree add
+scripts/validate-backlog-receipts.sh	[ -s "$WORK/r10.awk" ] || r10_awk_prog > "$WORK/r10.awk"	scratch: $WORK is the step's own mktemp directory
+scripts/validate-backlog-receipts.sh	[ -s "$WORK/r10.tracked" ] || return 2	scratch: $WORK is the step's own mktemp directory
+scripts/validate-backlog-receipts.sh	[ -s "$WORK/unrec" ] && R2_UNREC_IDS="; entries whose verify: value matched no receipt form: $(cut -f1 "$WORK/unrec" | tr '\n' ' ')"	scratch: $WORK is the step's own mktemp directory
+scripts/validate-backlog-receipts.sh	[ -s "$WORK/unrec" ] && awk -F'\t' '{ printf "FAIL: UNRECOGNISED\t%s\tverify: %s\n", $1, $2 }' "$WORK/unrec" >&2	scratch: $WORK is the step's own mktemp directory
+scripts/validate-backlog-receipts.sh	if ! [ -d "$BR_PROBE_RECORD" ] || ! [ -w "$BR_PROBE_RECORD" ]; then	verdict-independent: BR_PROBE_RECORD is unset by .githooks/pre-push before any step, so the gate never reaches this test
+scripts/validate-backlog-receipts.sh	if [ -n "$_pk_pb" ] && ! [ "$_pk_pb" -ef "$BASH" ]; then	system-path: both operands are the bash binary (command -v bash and $BASH), outside the work tree
+scripts/validate-backlog-receipts.sh	if [ -s "$WORK/unrec" ]; then	scratch: $WORK is the step's own mktemp directory
+scripts/validate-claude-rules.sh	b="$(wc -c < "$f" | tr -d ' ')"	size-read-by-step: the size of CLAUDE.md and each rule file, all of which the same step reads (pointers, fm_keys)
+scripts/validate-enforcement-map.sh	[ -r "$i120_tmp/counts" ] && read -r i120_memn i120_nearn i120_lenn < "$i120_tmp/counts"	scratch: $i120_tmp is the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	[ -s "$TMPDIR_I62/scope" ] || continue	scratch: $TMPDIR_I62 is the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	[ -s "$TMPDIR_I65/drv" ] || return 0	scratch: $TMPDIR_I65 is the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	_cn_a="$(printf "%s" "$1" | LC_ALL=C tr -cd "\360" | wc -c)"	pipe: wc -c counts a printf pipe, not a file
+scripts/validate-enforcement-map.sh	_cn_c="$(printf "%s" "$1" | LC_ALL=C tr -d "\200-\277" | wc -c)"	pipe: wc -c counts a printf pipe, not a file
+scripts/validate-enforcement-map.sh	elif [ ! -r "$I84_SCHEMA" ]; then	mode-keyed-by-present-key: a -r mode test on core/schemas/sprint-status.json, which the same arm then reads with sed
+scripts/validate-enforcement-map.sh	elif [ ! -s "$i118_map" ]; then	size-read-by-step: the size of .ai-dlc-fixture-readsets.tsv, which the same arm then reads with awk
+scripts/validate-enforcement-map.sh	elif [ -r "$i83_probe_dir/unread.sh" ]; then	scratch: $i83_probe_dir is the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	elif [ -r "$i84_probe_dir/unread.sh" ]; then	scratch: $i84_probe_dir is the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	for p in "$2" "$3" "$4" "$5" "$6"; do [ -r "$p" ] || { printf '\001U\t%s\t%s\n' "$1" "$p"; ok=0; break; }; done	mode-keyed-by-present-key: a -r mode test on each I129 input, all of which the same arm then reads with awk
+scripts/validate-enforcement-map.sh	if [ ! -f "$arms_renderer" ] || [ ! -r "$VEM_SELF" ]; then	verdict-independent: reachable only under --arms, which the pre-suite call never passes
+scripts/validate-enforcement-map.sh	if [ ! -r "$1" ] || [ ! -r "$2" ]; then printf 'UNREAD %s %s\n' "$1" "$2"; return; fi	mode-keyed-by-present-key: a -r mode test on each I125 input, which the same function then reads with grep
+scripts/validate-enforcement-map.sh	if [ ! -r "$I82_GRAMMAR" ]; then	mode-keyed-by-present-key: a -r mode test on artifact-path-grammar.md, which I82 then reads
+scripts/validate-enforcement-map.sh	if [ ! -r "$REPO_ROOT/$i104_rel" ]; then	mode-keyed-by-present-key: a -r mode test on each I104 input, which the same arm then reads
+scripts/validate-enforcement-map.sh	if [ ! -r "$REPO_ROOT/$i113_rel" ]; then	mode-keyed-by-present-key: a -r mode test on each I113 input, which the same arm then reads
+scripts/validate-enforcement-map.sh	if [ ! -r "$UPD_SKILL" ] || [ ! -d "$UPD_RECON" ]; then	mode-keyed-by-present-key: a -r mode test on the ai-dlc-update SKILL.md, which the same arm then reads with awk
+scripts/validate-enforcement-map.sh	if [ ! -r "$i102_owner" ]; then	mode-keyed-by-present-key: a -r mode test on artifact-path-grammar.md, which the same arm then reads with grep
+scripts/validate-enforcement-map.sh	if [ ! -r "$i86_decl" ] || [ ! -r "$i86_read" ]; then	mode-keyed-by-present-key: a -r mode test on layer-drift.sh and apply.sh, which I86 then reads with sed and grep
+scripts/validate-enforcement-map.sh	if [ ! -r "$i86_schema" ]; then	mode-keyed-by-present-key: a -r mode test on layer-adjudication-register.json, which I86 then reads
+scripts/validate-enforcement-map.sh	if [ ! -s "$TMPDIR_I65/triples" ]; then	scratch: $TMPDIR_I65 is the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	if [ ! -s "$_fd.dist-only" ]; then	size-read-by-step: the size of each .dist-only marker, every one of which I116's exists() opens with getline in the same step
+scripts/validate-enforcement-map.sh	if [ ! -s "$lc_i65_pairs" ]; then	scratch: $lc_i65_pairs lives under the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	if [ ! -s "$lc_pairs_all" ]; then	scratch: $lc_pairs_all lives under the arm's own mktemp directory
+scripts/validate-enforcement-map.sh	if [ -r "$TEMPLATE" ]; then	mode-keyed-by-present-key: a -r mode test on templates/settings.json.template, which I14 then reads
+scripts/validate-enforcement-map.sh	printf '%s\n' 'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"'	text-only: the ls -t is text printf writes into a probe file, never executed by the step
+scripts/validate-fixture-hygiene.sh	[ -s "$o.e1list" ] || { echo "BROKEN: E1 listed 0 tracked receipt*.sh under $repo; an empty population has no inert receipt by construction"; return 2; }	scratch: $o is an output prefix under the step's own mktemp directory
+scripts/validate-fixture-hygiene.sh	elif LC_ALL=C sort "$WORK/e1p-ledger" | cmp -s "$WORK/e1p-ledger.want" - && [ -s "$WORK/e1p-ledger.want" ] \	scratch: $WORK is the step's own mktemp directory
+scripts/validate-fixture-hygiene.sh	if [ -s "$WORK/e1c.verdict" ]; then	scratch: $WORK is the step's own mktemp directory
+scripts/validate-fixture-invocations.sh	elif [ -s "$log.mutants" ]; then	scratch: $log is the judge's run-log prefix under TMPDIR; the pre-suite call is --impl-of, which never judges
+scripts/validate-fixture-invocations.sh	if [ ! -s "$w/log" ]; then	scratch: $w is the judge's own mktemp directory
+scripts/validate-fixture-invocations.sh	if [ -s "$S/e3.log" ] && [ -s "$S/off.err" ] && cmp -s "$S/on.err" "$S/off.err"; then sp_ok "E2E xtrace stderr is byte-identical with the counter on and off, and the counter-on run logged"	scratch: $S is the self-probe's own mktemp directory
+scripts/validate-fixture-invocations.sh	if [ -s "$log.mutants" ] && fxc_allowlisted "$key"; then	scratch: $log is the judge's run-log prefix under TMPDIR; the pre-suite call is --impl-of, which never judges
+scripts/validate-fixture-invocations.sh	if [ -s "$log.mutants" ]; then	scratch: $log is the judge's run-log prefix under TMPDIR; the pre-suite call is --impl-of, which never judges
+scripts/validate-fixture-invocations.sh	{ trap '{ trap - DEBUG; trap "" XFSZ; __fxcp="${BASH_SOURCE[0]:-${BASH_EXECUTION_STRING:+-c}}"; case "$__fxcp" in /*|-c|"") ;; *) __fxcp="$PWD/$__fxcp" ;; esac; printf "%s\t%s\t%s\t%s\n" "$__fxcp" "$$" "${FXCELL:-}" "${FXCOUNT_PARENT:-}" >> "$FXCOUNT_LOG" || { echo > /dev/null; [ -w "$FXCOUNT_LOG" ] && /bin/ln -s "$__fxcp $$ ${FXCELL:-} ${FXCOUNT_PARENT:-}" "$(/usr/bin/mktemp -u "$FXCOUNT_LOG.lim.XXXXXXXX")"; }; unset __fxcp; trap - XFSZ; export FXCOUNT_PARENT=$$; unset FXCELL; } 2>/dev/null' DEBUG; } 2>/dev/null	text-only: the -w test is heredoc text fxc_gen_rc writes into a generated rc file, never run by a pre-suite step
+scripts/validate-mutant-kills.sh	if [ -s "$WORK/verdict.txt" ] || [ "$m4_rc" -ne 0 ] || [ "$m5_rc" -ne 0 ] || [ "$m5_stale" -ne 0 ] || [ "$m7_rc" -ne 0 ]; then	scratch: $WORK is the step's own mktemp directory
+scripts/validate-plan-shape.sh	p8_at="$(wc -c < "$p8probe/at.md" | tr -d ' ')"	scratch: $p8probe is the step's own mktemp directory
+scripts/validate-plan-shape.sh	p8_bytes="$(wc -c < "$f" | tr -d ' ')"	size-read-by-step: the size of each docs/plans/*.md, every one of which the same step reads
+scripts/validate-plan-shape.sh	p8_over="$(wc -c < "$p8probe/over.md" | tr -d ' ')"	scratch: $p8probe is the step's own mktemp directory
+scripts/validate-shell-portability.sh	[ -s "$WORK/listed" ] || exit 2	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	[ -x docs/x.sh ] || exit 1	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	[ docs/a -nt docs/b ] && echo y	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	find docs -newer docs/a -print	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	for f in "$@"; do { [ -f "$f" ] && [ ! -s "$f" ]; } || want=$((want + 1)); done	size-read-by-step: the size of each corpus file, every one of which the same awk is handed as an operand, an empty one included
+scripts/validate-shell-portability.sh	for f in "$@"; do { [ -f "$f" ] && [ -r "$f" ]; } || { bad="$f"; break; }; done	mode-keyed-by-present-key: a -f/-r mode test on each corpus file after awk refused, which awk was handed to read
+scripts/validate-shell-portability.sh	for f in g/*; do [ -s "$f" ] || continue; grep x "$f"; done	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	if [ -s "$probe/refused" ]; then	scratch: $probe is the step's own mktemp directory
+scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/k ] || exit 1' > "$s15p/scripts/late-key.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/p ] || exit 1' > "$s15p/scripts/post.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/q ] || exit 1' > "$s15p/$s15f"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/t ] || exit 1' > "$s15p/scripts/t.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	printf '%s\n' '[ -x docs/u ] || exit 1' > "$s15p/scripts/u.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	printf '%s\n' 'date -r docs/a' > "$s15p/scripts/w.sh"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	printf 'scripts/a.sh\t[ -s "$WORK/listed" ] || exit 2\tscratch: the probe mktemp dir\nscripts/a.sh\t[ -s gone ]\tscratch: matches no site\nscripts/a.sh\t[ -x docs/x.sh ] || exit 1\tnot-a-class: x\n' > "$s15p/$S15_ALLOW"	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	stat -f %z docs/a	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
+scripts/validate-shell-portability.sh	touch -r docs/a docs/b	text-only: S15 self-probe seed text written into the probe tree under $probe, never run
