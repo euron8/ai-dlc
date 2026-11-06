@@ -460,7 +460,9 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     got="$(DAR_WORLDS="$DARG_WORLDS" dar_vec "$HECTL")"
     if [ "$got" = "$DARGWANT" ]; then ok "DAR-GRAMMAR: a Dev Agent Record filled only inside a code fence passes with exit 0; one holding only subheadings, a {{...}} token, TBD, TODO, [TODO] or labels with no value is REFUSED empty, exit 1"; B_darg=1
     else bad "DAR-GRAMMAR: want [$DARGWANT] got [$got] for [$DARG_WORLDS]"; fi
-    if m="$(mkmut dar-fence-stripped he 'if (m == fence) { fence = ""; next } fl = 1 }' 'if (m == fence) fence = ""; next }')" && [ -n "$m" ]; then
+    # Re-anchored inside the BL-510 N3 buffer: the fence-close branch that now flushes fb is the one edited, and
+    # mkmut returning a path is the proof it applied (no match is the FIXTURE ERROR below, never a pass).
+    if m="$(mkmut dar-fence-stripped he 'if (m == fence) { fence = ""; darn += fb; fb = 0; next } fl = 1 }' 'if (m == fence) fence = ""; next }')" && [ -n "$m" ]; then
       got="$(DAR_WORLDS="$DARG_WORLDS" dar_vec "$m")"
       if [ "$got" = '1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty' ]; then mutant_killed "${B_darg:-0}" dar-fence-stripped "MUTATION 'dar-fence-stripped' killed: a validator that skips fenced lines again refuses darfill empty"
       elif [ "$got" = "$DARGWANT" ]; then bad "MUTATION 'dar-fence-stripped' SURVIVED -- darfill still passes with fenced lines skipped"
@@ -474,6 +476,80 @@ if [ "$WORLDS_OK" -eq 1 ]; then
     else bad "FIXTURE ERROR: dar mutation 'dar-skeleton-content' matched nothing"; fi
   else
     bad "FIXTURE BROKEN: could not seed the dar grammar worlds"
+  fi
+  # (p) BL-510 N1-N3. N1: darn1c / darn1d (a `###` line valued after a colon / a spaced dash) pass; darn1ph /
+  # darn1tbd (valued with a {{...}} token / TBD) stay REFUSED empty. N2: darn2b `- TBD`, darn2k `- {{...}}`,
+  # darn2n `1. TODO` and darn2s `* {{...}}` REFUSED empty; darn2r `- Model: <value>` passes. N3: daropen (```) and
+  # dartopen (~~~) over a token with the rest of the story inside the open fence, and daropenr (a real line in a
+  # fence open to EOF) REFUSED empty; darclosed (a real line in a closed fence) passes. N4, `###` values only:
+  # darn4dash `: -`, darn4em `: —`, darn4see `- see above`, darn4below `- see below`, darn4hnone `- none`,
+  # darn4en `– none`, darn4dot `: None.` and darn4pfx `: – N/A`, darn4enbare `: –`, darn4emnone `: — none` and darn4hynone `: - none` REFUSED empty, one per branch of the rule;
+  # darn4nm (`- none of ...`) and darn4seenm (`- wired X; see above`, the `^` anchor) pass, and so do the two
+  # base-behaviour regressions darn4pl (a plain `- none` line) and darn4fence (`none` in a closed fence).
+  # One mutant per fix; each runs only these worlds and must move only its
+  # own: dar-n1-bare (every `###` line skeleton again, the base rule) refuses darn1c and darn1d; dar-n2-no-strip
+  # (the list-marker strip deleted outright -- NOT base, which stripped `-`/`+`/`1.` from p only) passes darn2b,
+  # darn2k, darn2n and darn2s; dar-n2-no-star (`*` dropped from the strip class) passes darn2s alone;
+  # dar-n3-unbuffered (fenced lines counted as read) passes the three open fences; dar-n4-heading-value-content
+  # (the N4 test on a `###` value deleted) passes the eleven N4 skeleton worlds.
+  # DAR_FULL=1 also drives each mutant over DAR_WORLDS and DARG_WORLDS and requires the control vectors there,
+  # the authoring check that each is killed by this arm alone (run once, not per push). hermetic-run.sh runs the
+  # fixture under env -i, so the check is run directly: `DAR_FULL=1 bash core/fixtures/story-evidence-scaffold/run.sh`
+  # from the repo root.
+  DARN_WORLDS='darn1c darn1d darn1ph darn1tbd darn2b darn2k darn2n darn2r darn2s darn4dash darn4em darn4see darn4below darn4hnone darn4en darn4dot darn4pfx darn4enbare darn4emnone darn4hynone darn4nm darn4seenm darn4pl darn4fence daropen dartopen daropenr darclosed'
+  DARNWANT='0:- 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 0:- 0:- 0:- 1:R:empty 1:R:empty 1:R:empty 0:-'
+  darn_ok=1
+  for v in $DARN_WORLDS; do build_world "$WORK/world-$v" "$v" || darn_ok=0; done
+  if [ "$darn_ok" -eq 1 ]; then
+    got="$(DAR_WORLDS="$DARN_WORLDS" dar_vec "$HECTL")"
+    if [ "$got" = "$DARNWANT" ]; then ok "DAR-N: a ### line valued after a colon or a spaced dash, a ### value opening none or carrying see above later, a bulleted real value, a plain - none line, none in a closed fence and a real line in a closed fence pass; a ### value that is a {{...}} token, TBD, a bare dash, N/A, none or see above / below, a bulleted - TBD / - {{...}} / * {{...}} / 1. TODO, and a fence left open (backtick or tilde, mid-file or to EOF) are REFUSED empty"; B_darn=1
+    else bad "DAR-N: want [$DARNWANT] got [$got] for [$DARN_WORLDS]"; fi
+    darn_full() { # <mutant script> <name>: the authoring check, DAR_FULL=1 only
+      [ -n "${DAR_FULL:-}" ] || return 0
+      local a g
+      a="$(DAR_WORLDS="$DARG_WORLDS" dar_vec "$1")"; g="$(dar_vec "$1")"
+      if [ "$a" = "$DARGWANT" ] && [ "$g" = "$DARWANT" ]; then ok "DAR-N FULL: mutant '$2' moves no DAR or DAR-GRAMMAR world"
+      else bad "DAR-N FULL: mutant '$2' moved DAR [$g] DAR-GRAMMAR [$a]"; fi
+    }
+    if m="$(mkmut dar-n1-bare he 'if (t ~ /^###/) { h = t;' 'if (t ~ /^###/) return 1; if (0) { h = t;')" && [ -n "$m" ]; then
+      got="$(DAR_WORLDS="$DARN_WORLDS" dar_vec "$m")"
+      if [ "$got" = '1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 0:- 1:R:empty 1:R:empty 1:R:empty 0:-' ]; then mutant_killed "${B_darn:-0}" dar-n1-bare "MUTATION 'dar-n1-bare' killed: a validator reading every ### line as skeleton refuses darn1c, darn1d, darn4nm and darn4seenm empty"
+      elif [ "$got" = "$DARNWANT" ]; then bad "MUTATION 'dar-n1-bare' SURVIVED -- the valued ### worlds still pass with the N1 rule reverted"
+      else bad "MUTATION 'dar-n1-bare' moved [$got], want darn1c darn1d darn4nm darn4seenm at 1:R:empty and the rest as DARNWANT"; fi
+      darn_full "$m" dar-n1-bare
+    else bad "FIXTURE ERROR: dar mutation 'dar-n1-bare' matched nothing"; fi
+    if m="$(mkmut dar-n2-no-strip he 'sub(/^([-+*]|[0-9]+\.)[ \t]+/, "", t); sub(/^([-+*]|[0-9]+\.)[ \t]+/, "", p)' '')" && [ -n "$m" ]; then
+      got="$(DAR_WORLDS="$DARN_WORLDS" dar_vec "$m")"
+      if [ "$got" = '0:- 0:- 1:R:empty 1:R:empty 0:- 0:- 0:- 0:- 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 0:- 0:- 0:- 1:R:empty 1:R:empty 1:R:empty 0:-' ]; then mutant_killed "${B_darn:-0}" dar-n2-no-strip "MUTATION 'dar-n2-no-strip' killed: a validator that strips no list marker before the token tests passes darn2b, darn2k, darn2n and darn2s"
+      elif [ "$got" = "$DARNWANT" ]; then bad "MUTATION 'dar-n2-no-strip' SURVIVED -- the bulleted skeleton worlds still refuse with the strip removed"
+      else bad "MUTATION 'dar-n2-no-strip' moved [$got], want darn2b darn2k darn2n darn2s at 0:- and the rest as DARNWANT"; fi
+      darn_full "$m" dar-n2-no-strip
+    else bad "FIXTURE ERROR: dar mutation 'dar-n2-no-strip' matched nothing"; fi
+    if m="$(mkmut dar-n2-no-star he 'sub(/^([-+*]|[0-9]+\.)[ \t]+/, "", t); sub(/^([-+*]|[0-9]+\.)[ \t]+/, "", p)' 'sub(/^([-+]|[0-9]+\.)[ \t]+/, "", t); sub(/^([-+]|[0-9]+\.)[ \t]+/, "", p)')" && [ -n "$m" ]; then
+      got="$(DAR_WORLDS="$DARN_WORLDS" dar_vec "$m")"
+      if [ "$got" = '0:- 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 0:- 0:- 0:- 1:R:empty 1:R:empty 1:R:empty 0:-' ]; then mutant_killed "${B_darn:-0}" dar-n2-no-star "MUTATION 'dar-n2-no-star' killed: a validator whose list-marker strip omits the star passes darn2s"
+      elif [ "$got" = "$DARNWANT" ]; then bad "MUTATION 'dar-n2-no-star' SURVIVED -- the star-bulleted token world still refuses with the star dropped from the strip"
+      else bad "MUTATION 'dar-n2-no-star' moved [$got], want darn2s alone at 0:- and the rest as DARNWANT"; fi
+      darn_full "$m" dar-n2-no-star
+    else bad "FIXTURE ERROR: dar mutation 'dar-n2-no-star' matched nothing"; fi
+    if m="$(mkmut dar-n3-unbuffered he 'if (ind && !dar_ph(t)) fb++; next }' 'if (ind && !dar_ph(t)) darn++; next }')" && [ -n "$m" ]; then
+      got="$(DAR_WORLDS="$DARN_WORLDS" dar_vec "$m")"
+      # daropen and dartopen read 1:- (no dar-missing line; exit 1 from the arms that refuse the later sections the
+      # open fence swallows), daropenr 0:- (the DAR is the last section, so nothing else refuses).
+      if [ "$got" = '0:- 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 0:- 0:- 0:- 1:- 1:- 0:- 0:-' ]; then mutant_killed "${B_darn:-0}" dar-n3-unbuffered "MUTATION 'dar-n3-unbuffered' killed: a validator counting fenced lines as it reads them drops the dar-missing refusal on daropen, dartopen and daropenr"
+      elif [ "$got" = "$DARNWANT" ]; then bad "MUTATION 'dar-n3-unbuffered' SURVIVED -- the open-fence worlds still refuse with the buffer removed"
+      else bad "MUTATION 'dar-n3-unbuffered' moved [$got], want daropen dartopen at 1:-, daropenr at 0:- and the rest as DARNWANT"; fi
+      darn_full "$m" dar-n3-unbuffered
+    else bad "FIXTURE ERROR: dar mutation 'dar-n3-unbuffered' matched nothing"; fi
+    if m="$(mkmut dar-n4-heading-value-content he 'q = tolower(h); gsub(/^[ \t]+|[ \t]+$/, "", q); if (q ~ /^(—|–|-)$/) return 1; sub(/^(—|–|-)[ \t]*/, "", q); if (q ~ /^(n\/a|none|see (above|below))\.?$/) return 1' '')" && [ -n "$m" ]; then
+      got="$(DAR_WORLDS="$DARN_WORLDS" dar_vec "$m")"
+      if [ "$got" = '0:- 0:- 1:R:empty 1:R:empty 1:R:empty 1:R:empty 1:R:empty 0:- 1:R:empty 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 0:- 1:R:empty 1:R:empty 1:R:empty 0:-' ]; then mutant_killed "${B_darn:-0}" dar-n4-heading-value-content "MUTATION 'dar-n4-heading-value-content' killed: a validator reading a ### value of a bare dash, N/A, none or see above / below as content passes the eleven N4 worlds"
+      elif [ "$got" = "$DARNWANT" ]; then bad "MUTATION 'dar-n4-heading-value-content' SURVIVED -- the N4 worlds still refuse with the heading-value test removed"
+      else bad "MUTATION 'dar-n4-heading-value-content' moved [$got], want the eleven N4 ### worlds at 0:- and the rest as DARNWANT"; fi
+      darn_full "$m" dar-n4-heading-value-content
+    else bad "FIXTURE ERROR: dar mutation 'dar-n4-heading-value-content' matched nothing"; fi
+  else
+    bad "FIXTURE BROKEN: could not seed the BL-510 dar worlds"
   fi
   # The range warning: base == frozen and a base that is not an ancestor of frozen each WARN
   # (exit 0, never a refusal); the normal range carries neither. Each mutant silences one.

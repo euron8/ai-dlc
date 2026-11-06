@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1024.0] - 2026-11-06
+
+Batch b251, evidence-join cluster. It changes `core/scripts/validate-handoff-evidence.sh`, `core/fixtures/story-evidence-scaffold/run.sh` and `world.sh`, and `docs/backlog.md`. No entry closes. Closes no PC- id. NET: filed 0, closed 0; closed minus filed = 0; live backlog 0.
+
+### BL-510 PARTIAL — the dar-missing grammar gaps N1 to N4
+
+- **N1.** A `###` line inside the Dev Agent Record is content only when it carries a value. Its label ends at the first `:` or the first spaced dash (` — `, ` – `, ` - `), and the value after it must not itself be a placeholder. So `### Agent Model Used: claude-x` and `### Completion Notes — wired X` are content, while `### Model: {{x}}`, `### Model: TBD` and a bare `### Debug Log References` are skeleton.
+- **N2.** One list marker (`-`, `+`, `*` or `1.`) is stripped before the `{{...}}`, TBD, TODO and empty-label tests. So `- TBD`, `- {{x}}`, `* {{x}}` and `1. TODO` are skeleton lines.
+- **N3.** Lines inside a code fence are buffered and counted only when the fence closes. A fence still open at the end of the file counts nothing. Heading detection is unchanged.
+- **N4.** This restores the pre-N1 refusal of a `###` value that is only N/A, none, a bare dash, or see above/below, with case folded and an optional trailing dot. The plain-line form (`- none`, `— N/A`) is recorded in BL-510 as a candidate, not shipped. Base counted those lines as content, so refusing them would be a new gate rule, and `- none` under Debug Log References is a legitimate statement.
+- **False-positive set.** It was measured before the grammar shipped. There were 0 verdict changes over graph HEAD 1101dffb4 (1404 files carrying `## Dev Agent Record`) and over the s317-s321 historical DAR blobs on all refs. In the same runner, controls moved verdicts.
+- **Fixture.** `core/fixtures/story-evidence-scaffold` gains a DAR-N arm of 28 seeded worlds. It also gains the mutants `dar-n1-bare`, `dar-n2-no-strip`, `dar-n2-no-star`, `dar-n3-unbuffered` and `dar-n4-heading-value-content`, each killed by the DAR-N arm alone. The existing `dar-fence-stripped` mutant is re-anchored on the new fence-close line.
+- **Stated limits**, each numbering 0 in graph:
+  1. A labelled placeholder (`- Model: TBD`) still counts as content.
+  2. An open DAR fence that the next section's fence closes still counts its buffer, and heading-demoted's `!fl` gate hides headings inside an unclosed fence.
+  3. A wrapped `###` value (`**None**`, `(none)`) is content, though the pre-N1 engine refused it.
+  4. A list-marked `###` line (`- ### X: none`) is refused, though no earlier engine refused it.
+
+### BL-804 PARTIAL — the join verifier is not built
+
+- The join's checks-field verifier that the s321 NOTE suggested is not built, and the result is no change.
+- `--mark` on a remediator part already checks a claimed `replayed <n>`, as fixture arm EC42 shows, and `--mark-repair` checks the segment it closes.
+- An unmarked record reads as unfinished, and the join refuses a part whose bytes differ from its seal.
+- The one remaining path, a stale fence in a shard segment, is backstopped by the lead's `validate-artifact-derivations.sh` run on the joined record.
+- BL-804 stays PARTIAL on its refusal-accrual predicate.
+
 ## [0.1023.0] - 2026-11-06
 
 ### BL-922 — h2-attest-scripts-dir resolves the consumer fixture set

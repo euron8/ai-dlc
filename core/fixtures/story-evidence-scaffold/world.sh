@@ -321,6 +321,52 @@ EOS
              darlbl) sh='print "- Model:"; print "**Date:**"; print "Summary:";' ;;
            esac
            story_awk "$w" '/^## Dev Agent Record$/{print; print ""; '"$sh"' print ""; print "## Implementation Notes"; next} {print}' || return 2 ;;
+    # BL-510 N1-N3, driven by run.sh's DAR-N arm, the same darph move. N1, a `###` line carrying a value:
+    # darn1c (after a colon) and darn1d (after a spaced dash) pass; darn1ph and darn1tbd (the value is a
+    # {{...}} token or TBD) stay empty. N2, a list-marked skeleton line: darn2b `- TBD`, darn2k `- {{...}}`,
+    # darn2n `1. TODO` and darn2s `* {{...}}` (content at base, whose {{...}} test read t unstripped of `*`)
+    # are empty; darn2r `- Model: <value>` passes. N3, a fence left open: daropen (```) and
+    # dartopen (~~~) open over a {{...}} token and swallow the rest of the story, daropenr opens over a real
+    # line as the last section of the file -- all three empty, because an unclosed fence counts nothing;
+    # darclosed, a real line in a closed fence, passes. N4, a `###` value that is a bare dash, or N/A, none
+    # or a see above / see below pointer after one optional dash, one world per branch: darn4dash `: -`,
+    # darn4em `: —`, darn4see `- see above`, darn4below `- see below`, darn4hnone `- none`, darn4en `– none`
+    # (EN dash delimiter), darn4dot `: None.` and darn4pfx `: – N/A` (the prefix strip), darn4enbare `: –` (the bare-dash test's EN dash), darn4emnone `: — none` and darn4hynone `: - none` (the prefix strip's EM dash and hyphen) are empty. Near-misses
+    # that pass: darn4nm (`- none` opening a longer value), darn4seenm (`see above` not at the value's start).
+    # Regressions that pass, base behaviour N4 does not touch: darn4pl, a plain `- none` line, and darn4fence,
+    # `none` inside a closed fence.
+    darn1c|darn1d|darn1ph|darn1tbd|darn2b|darn2k|darn2n|darn2r|darn2s|darn4dash|darn4em|darn4see|darn4below|darn4hnone|darn4en|darn4dot|darn4pfx|darn4enbare|darn4emnone|darn4hynone|darn4nm|darn4seenm|darn4pl|darn4fence|daropen|dartopen|darclosed)
+           case "$v" in
+             darn1c) sh='print "### Agent Model Used: claude-x";' ;;
+             darn1d) sh='print "### Completion Notes — wired X";' ;;
+             darn1ph) sh='print "### Agent Model Used: {{agent_model_name_version}}";' ;;
+             darn1tbd) sh='print "### Agent Model Used: TBD";' ;;
+             darn2b) sh='print "- TBD";' ;;
+             darn2k) sh='print "- {{agent_model_name_version}}";' ;;
+             darn2n) sh='print "1. TODO";' ;;
+             darn2r) sh='print "- Model: claude-sonnet-5-5";' ;;
+             darn2s) sh='print "* {{agent_model_name_version}}";' ;;
+             darn4dash) sh='print "### Agent Model Used: -";' ;;
+             darn4em) sh='print "### Agent Model Used: —";' ;;
+             darn4see) sh='print "### Debug Log References - see above";' ;;
+             darn4below) sh='print "### File List - see below";' ;;
+             darn4hnone) sh='print "### Completion Notes - none";' ;;
+             darn4en) sh='print "### Completion Notes – none";' ;;
+             darn4dot) sh='print "### Agent Model Used: None.";' ;;
+             darn4pfx) sh='print "### Agent Model Used: – N/A";' ;;
+             darn4enbare) sh='print "### Agent Model Used: –";' ;;
+             darn4emnone) sh='print "### Agent Model Used: — none";' ;;
+             darn4hynone) sh='print "### Agent Model Used: - none";' ;;
+             darn4nm) sh='print "### Completion Notes - none of the ACs needed a fixture; see test_x.py";' ;;
+             darn4seenm) sh='print "### Completion Notes - wired X; see above";' ;;
+             darn4pl) sh='print "- none";' ;;
+             darn4fence) sh='print "```"; print "none"; print "```";' ;;
+             daropen) sh='print "```"; print "{{x}}";' ;;
+             dartopen) sh='print "~~~"; print "{{x}}";' ;;
+             darclosed) sh='print "```"; print "Agent: claude"; print "```";' ;;
+           esac
+           story_awk "$w" '/^## Dev Agent Record$/{print; print ""; '"$sh"' print ""; print "## Implementation Notes"; next} {print}' || return 2 ;;
+    daropenr) story_awk "$w" '/^## Dev Agent Record$/{print "## Implementation Notes"; next} {print} END {print ""; print "## Dev Agent Record"; print ""; print "```"; print "Agent: claude"}' || return 2 ;;
     # The LEGACY gate: dev.md installed at <frozen> without the label prescription, over a story with
     # neither line -- not checked. devnew: the same story under a dev.md that carries it -- refused.
     devold|devnew)

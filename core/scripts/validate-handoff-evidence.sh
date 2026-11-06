@@ -1357,12 +1357,34 @@ fi
 # `## `-keyed reader finds. Code fences are stripped first. Absent entirely is not this arm's.
 if tracked "$FROZEN" "$STORY"; then
   demoted="$(G show "$FROZEN:$STORY" | LC_ALL=C awk "$HEADING_AWK"'
-    # dar_ph(t): 1 when a DAR line is not content. dar_tmpl(t, p): the template-skeleton shapes -- a
-    # subheading, a line that is only a {{...}} token, TBD / TODO / [TODO], and a label with nothing
-    # after its colon (`- Model:`, `**Date:**`).
-    function dar_tmpl(t, p) {
-      if (t ~ /^###/ || t ~ /^\{\{[^}]*\}\}$/ || p ~ /^(tbd|\[todo\]|todo)\.?$/) return 1
-      sub(/^([-+]|[0-9]+\.)[ \t]+/, "", p)
+    # dar_ph(t): 1 when a DAR line is not content. dar_tmpl(t, p): the template-skeleton shapes, tested
+    # AFTER one list marker (`-`, `+`, `*`, `1.`) is stripped from both t and p -- a line that is only a
+    # {{...}} token, TBD / TODO / [TODO], a label with nothing after its colon (`- Model:`, `**Date:**`),
+    # and a BARE subheading. A `###` line is content only when it carries a value: its label ends at the
+    # first `:` or the first spaced dash (` — `, ` – `, ` - `), and the trimmed text after that is the
+    # value, content only when non-empty and itself not dar_ph (`### Model: {{x}}`, `### Model: TBD` are
+    # skeleton). A `###` line with no such delimiter is a bare template heading, never content.
+    # N4, `###` VALUES ONLY: a heading value (the text after the delimiter above) that is a bare dash, or
+    # that after one optional leading dash is only N/A, none or a see above / see below pointer, is
+    # skeleton (`### Model: -`, `### X - see above`, `### X - none`). That RESTORES what the shipped
+    # pre-N1 engine (32c4ae2c0) refused through its blanket bare-### rule; N1 removed that rule and N4 puts
+    # these shapes back. Two stated limits, both numbering 0 in graph. (a) A wrapped value (`**None**`,
+    # `_None_`, `(none)`, `- - none`) is content here but was refused pre-N1, because dar_ph strips `*_()`
+    # only from p while the N4 test reads h raw. (b) A list-marked `###` line (`- ### X: none`,
+    # `1. ### X: n/a`) is refused here though no earlier engine refused it, because dar_tmpl strips one list
+    # marker before the `^###` test; that path comes from N1. Graph HEAD has 0 list-marked `###` lines,
+    # against 7493 files carrying a `### ` line as the control. N4 is not applied to a plain line, fenced or not: base counted `- none`, `— N/A` and a fenced
+    # `none` as content, and `- none` under Debug Log References is a legitimate statement, so refusing
+    # them would be a new gate rule with no contract. Outside a fence, a plain `-`, `---` or `- --` never
+    # reaches dar_ph anyway: the table-separator test in the section loop skips it first; the fenced branch
+    # calls dar_ph before that test. A fenced `###` line still
+    # reaches N4 through dar_ph, as base refused it through the bare-### rule.
+    function dar_tmpl(t, p,   h, q) {
+      sub(/^([-+*]|[0-9]+\.)[ \t]+/, "", t); sub(/^([-+*]|[0-9]+\.)[ \t]+/, "", p)
+      if (t ~ /^###/) { h = t; sub(/^#+[ \t]*/, "", h); if (!match(h, /:|[ \t](—|–|-)[ \t]/)) return 1; h = substr(h, RSTART + RLENGTH)
+        q = tolower(h); gsub(/^[ \t]+|[ \t]+$/, "", q); if (q ~ /^(—|–|-)$/) return 1; sub(/^(—|–|-)[ \t]*/, "", q); if (q ~ /^(n\/a|none|see (above|below))\.?$/) return 1
+        return dar_ph(h) }
+      if (t ~ /^\{\{[^}]*\}\}$/ || p ~ /^(tbd|\[todo\]|todo)\.?$/) return 1
       return (p ~ /^[^:]+:$/)
     }
     function dar_ph(t,   p) {
@@ -1378,7 +1400,7 @@ if tracked "$FROZEN" "$STORY"; then
       if ($0 ~ /^[ \t]*```/) m = "```"
       else if ($0 ~ /^[ \t]*~~~/) m = "~~~"
       if (fence == "" && m != "") { fence = m; next }
-      if (fence != "") { if (m == fence) { fence = ""; next } fl = 1 }
+      if (fence != "") { if (m == fence) { fence = ""; darn += fb; fb = 0; next } fl = 1 }
     }
     !fl {
       for (i = 1; i <= 4; i++) {
@@ -1393,9 +1415,26 @@ if tracked "$FROZEN" "$STORY"; then
     # line left after HTML comments are cut, except a table separator, a table header (the row a
     # separator follows), a table row whose every cell after the first is blank, and a dar_ph line.
     # A line inside a code fence in the section is content unless dar_ph; comments are not cut there.
+    # Fenced lines are BUFFERED in fb and added to darn only when the fence closes; a fence still open
+    # at EOF drops its buffer, so an unclosed fence no longer turns the rest of the file into content.
+    # Heading detection is unchanged: a heading inside any fence, closed or not, is never a section
+    # heading (graph fences hold `#` lines, 21 at HEAD, so "a heading ends the fence" was rejected).
+    # FALSE-POSITIVE SET, measured before this grammar shipped: base and fixed over graph HEAD 1101dffb4
+    # (1404 files carrying `## Dev Agent Record`) and over every distinct historical blob of s317-s321
+    # story files across all refs (824 DAR blobs of 1040): 0 verdict changes in either population, for
+    # the three fixes together and each alone, beside controls that moved 5 and 129 files in the same
+    # runner. The narrowing that got it to zero: the `###` rule first counted any colon or dash as a
+    # value, which made `### Model: {{x}}` content; the value is now held to dar_ph. A bulleted `* TBD`
+    # did not move: base already read it as skeleton, because dar_ph strips `*` from p and the TBD test
+    # reads p. A bulleted `* {{x}}` DID move, content at base and skeleton here: the `{{...}}` test reads
+    # t, which base never stripped of `*`.
+    # STATED LIMITS: (1) a labelled placeholder (`- Model: TBD`) is still content -- only a bare token
+    # line is skeleton; (2) an open DAR fence that a fence of the NEXT section closes still counts its
+    # buffer, and the `!fl` gate of heading-demoted still hides headings inside a fence left unclosed. Both
+    # shapes are 0 in graph at HEAD.
     {
       t = $0; sub(/\r$/, "", t)
-      if (fl) { if (ind && !dar_ph(t)) darn++; next }
+      if (fl) { if (ind && !dar_ph(t)) fb++; next }
       if (ev_level(t, "Dev Agent Record") == 2) { dar = 1; ind = 1; com = 0; lastrow = 0; next }
       if (ind && t ~ /^##?[ \t]/) ind = 0
       if (!ind) next
