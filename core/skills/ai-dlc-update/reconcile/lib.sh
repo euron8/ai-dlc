@@ -422,7 +422,7 @@ unquote() { # unquote <value>
 # A `printf` literal, not a heredoc -- see the emitter note above `nrm_awk`.
 ledger_entry_awk() {
   printf '%s\n' 'function ledger_entry_id(label) {
-  if (match(label, /^`?(PC|BL)-[A-Za-z0-9_.-]+/))
+  if (match(label, /^`?(PC|BL)-[A-Za-z0-9_.-]*[A-Za-z0-9_-]/))
     return substr(label, RSTART, RLENGTH)
   return ""
 }

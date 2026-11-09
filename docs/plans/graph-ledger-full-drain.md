@@ -198,9 +198,9 @@ D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
 # Also measured: a backticked bullet id (`- **`PC-...`**`, which lib.sh's ledger_entry_id admits) hid the live
 # candidate and one archived id, and `[A-Z0-9.-]` truncated PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX.
 # The optional `-? ?` also admits the DASH-LESS `**<id>**` at column 0, which is the subject of
-# PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY.
-lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9_.-]*).*/\1/'
-           grep -hE '^-? ?\*\*`?PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*`?(PC-[A-Z0-9][A-Z0-9_.-]*).*/\1/'
+# PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY. An id ends non-dot.
+lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9]([A-Z0-9_.-]*[A-Z0-9_-])?).*/\1/'
+           grep -hE '^-? ?\*\*`?PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*`?(PC-[A-Z0-9]([A-Z0-9_.-]*[A-Z0-9_-])?).*/\1/'
          } | sort -u; }
 # SAME-INVOCATION CONTROL: lids must equal the shipping grammar (lib.sh ledger_entry_awk) on the same file.
 lids_ctl() { local rc; ( . /Users/n8/git/ai-dlc/core/skills/ai-dlc-update/reconcile/lib.sh \

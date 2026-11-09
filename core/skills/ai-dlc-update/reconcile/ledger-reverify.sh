@@ -633,8 +633,9 @@ named_cited_filter() {
   printf '%s\n' "$_out" | grep . || true
 }
 
-# A LABEL IS ASKED ABOUT ONLY WHEN IT *IS* AN ENTRY ID: it must be form (a) or (b) of `label_entry_id`
-# below (the bare id itself, or the id followed by one trailing parenthetical), built on `ledger_entry_id()`,
+# A LABEL IS ASKED ABOUT ONLY WHEN IT *IS* AN ENTRY ID: it must be form (a), (b) or (c) of `label_entry_id`
+# below (the bare id itself, the id followed by one trailing parenthetical, or the id closed by one
+# punctuation mark), built on `ledger_entry_id()`,
 # the shared rule from lib.sh, asked through awk exactly as the `manual` dispatch below asks it. No
 # local restatement of the character class. Both naming guards used to carry one -- `[A-Z0-9-]`,
 # the narrow spelling lib.sh widened for `_` and `.` -- and it went blind on the widened forms.
@@ -658,9 +659,21 @@ named_cited_filter() {
 # the rule takes ONE more form, and the id it PRINTS is what every later query uses:
 #   (a) the label IS `ledger_entry_id(label)` -- the equality, unchanged;
 #   (b) the id, then blanks, then ONE balanced parenthetical with no parenthesis inside it, and
-#       nothing after it.
-# Everything else is refused as before: prose after the id (`<ID> and BL-12 prose`, `<ID>: note`),
-# two parentheticals, an unclosed one, text after it. (b) is ALSO refused when the id is a bare
+#       nothing after it;
+#   (c) the id, then ONE closing mark -- a run of `.`, a single `:`, or an em dash after optional
+#       blanks -- optionally followed by the form-(b) parenthetical, and nothing after it
+#       (`<ID>.`, `<ID>:`, `<ID> —`, `<ID>. (filed <date>)`). The mark is MANDATORY: an optional one
+#       would make (c) a second copy of (b), and a mutant removing (b) would then change nothing.
+# A label filed with its bold closed by punctuation (`- **<ID>.** …`, `- **<ID> —** …`) used to get no
+# NAMED-UPSTREAM-family row while the same id unpunctuated got one. The trailing `.` is dropped by
+# `ledger_entry_id()` itself (lib.sh), which keeps the dot out of the id the queries use; (c) is what
+# lets the label through here, so `.` needs BOTH, and `:` and the em dash need (c) alone. The em dash
+# is a literal alternative, never a bracket class: it is multibyte and a C-locale class splits it.
+# A column-0 bare bold `**<ID>:**` never reaches (c): lib.sh's bare-bold shape rule requires the bold
+# span to hold the id and nothing else, so that line is not an entry boundary at all.
+# Everything else is refused as before: prose after the id (`<ID> and BL-12 prose`, `<ID>: note`,
+# `<ID>. prose`), two closing marks (`<ID>.:`), any other punctuation (`<ID>;`, `<ID>,`), two
+# parentheticals, an unclosed one, text after it. (b) and (c) are ALSO refused when the id is a bare
 # sprint prefix (`PC-S<n>`): `PC-S<n> (retro)` names no entry, and asking `git log` for the prefix
 # would hand it the attribution `named_ambiguous` exists to withhold. A bare `## PC-S<n>` heading is
 # form (a) and is asked exactly as before. The id is anchored at the label's start by
@@ -680,10 +693,12 @@ label_entry_id_awk() {
   if (id ~ /^PC-S[0-9]+$/) return ""
   r = substr(label, length(id) + 1)
   if (r ~ /^[ \t]+\([^()]*\)$/) return id
+  if (r ~ /^(\.+|:|[ \t]*—)([ \t]+\([^()]*\))?$/)
+    return id
   return ""
 }'
 }
-label_entry_id() { # <label> -> the bare id on stdout, rc 0 iff the label is form (a) or (b) above
+label_entry_id() { # <label> -> the bare id on stdout, rc 0 iff the label is form (a), (b) or (c) above
   printf '%s\n' "$1" | LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)$(label_entry_id_awk)"'
     NR == 1 { out = label_entry_id($0) }
     END { if (NR == 1 && out != "") { print out; exit 0 } exit 1 }'

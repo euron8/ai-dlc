@@ -2024,14 +2024,6 @@ Remainder, why the entry stays PARTIAL: Fix item 1 is not done on `origin/main`.
 verify: manual
 
 
-## BL-932 — the shared ledger id rule keeps a sentence full stop written inside the bold, so a shipped candidate joins no release message
-
-**DEFECT.** `ledger_entry_id()` (`core/skills/ai-dlc-update/reconcile/lib.sh:425`) takes `^`?(PC|BL)-[A-Za-z0-9_.-]+`, so a bold-bullet label written `**PC-<id>.**` yields `PC-<id>.` with the full stop. Graph's newest candidate is written that way: `push-candidate-ledger.md:460`, `- **PC-S321-GATE2-RULE-A-IGNORES-GATE1-REREVIEW-OF-THE-QA-REWORK.**`, the one entry of that form in the live ledger (its archive's 69 bold bullets close the bold right after the id, and 0 carry a stop inside it). 0.1028.0's release message names the bare id (1 match) and the dotted form 0 times. Differential, `ledger-reverify.sh /Users/n8/git/ai-dlc 316fdfe2 <root> origin/main` run from each root: graph as-is gives 8 rows and none for that candidate; a `cp -cR` copy with only that full stop moved outside the bold (`cmp` differs) gives 9 rows, the ninth `NAMED-UPSTREAM` for it naming ba3c6074f. Graph's porcelain was unchanged by both runs. The derive fence's `lids()` agrees with the shipping grammar, so it reads the same dotted id. The commit-message boundary in `ledger-reverify.sh` already treats a `.` followed by a non-id byte as sentence punctuation; the label rule does not. Fix: strip one trailing `.` from the matched id when the next byte is not an id byte, in `ledger_entry_id()` and its `lids()` mirror, keeping inner dots (`PC-S1.3-X`). The fixing release also cites the id in BL-926's and BL-931's archived entries, which name no PC id, so the derive fences' `closed_here` sees both closes. Carriers: every fixture whose `inputs.decl` declares `reconcile/lib.sh`.
-
-The builder wires a runner-invoked receipt in the fixing release (the probe above, seeded through a fixture that declares `reconcile/lib.sh`); no receipt ships with the filing.
-
-verify: manual
-
 ## BL-939 — graph runs no retro gate-validation gate, because retro.md §5c's numbered list never invokes its `[retro]` declaration
 
 **DEFECT.** `core/skills/ai-dlc/steps/retro.md` §5c (`### 5c. Pre-Commit Validation Gate`, `:1057`, unchanged from 0d150c8de to 59a4ea51b) declares the gate type at `:1066-1070` ("This is the `retro` gate. When running gate validation (`gate-validation.md`) at sprint close, declare it `run gate validation [retro]`"), but its numbered list, items 1 to 5 at `:1072-1109`, never tells the session to run gate validation. Items 1 to 5 are the rule-file audit commit, `validate-provenance-block.sh`, `validate-mandatory-rules.sh`, `validate-audit-anchors.sh` and `validate-artifact-budget.sh`. The retro slice (`gate-validation.md:67`: Checks 8, 9, 17, core-layer-immutability) therefore never runs, including Check 9's sprint-scoped body that BL-934 keeps for retro alone.

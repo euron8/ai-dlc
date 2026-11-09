@@ -181,6 +181,14 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # MUTANT-MATRIX-FULL mutation-bl890-bare-prefix worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (r6; twin s1)
 # MUTANT-MATRIX-FULL mutation-bl890-amb-equality worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (amb; twin s1)
 # MUTANT-MATRIX-FULL mutation-bl890-sib-full-label worlds=bl890-receipt why=each mutant must fail EXACTLY its declared receipt-bl890 cells, read off the receipt's one engine run, with its twin holding; the --matrix replay over the main seed holds all its arms for every bl890 mutant (sib; twin sibY)
+# MUTANT-MATRIX-FULL mutation-bl932-lib-keeps-dot worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (d1,d2,d3,d4,d5; twin i1)
+# MUTANT-MATRIX-FULL mutation-bl932-no-form-c worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (d1,d2,d3,d4,d5,k1,k2,m1; twin i1)
+# MUTANT-MATRIX-FULL mutation-bl932-c-single-dot worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (d2; twin d1)
+# MUTANT-MATRIX-FULL mutation-bl932-c-no-colon worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (k1,k2; twin m1)
+# MUTANT-MATRIX-FULL mutation-bl932-c-no-dash worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (m1; twin k1)
+# MUTANT-MATRIX-FULL mutation-bl932-c-no-end worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (n2,n4; twin d3)
+# MUTANT-MATRIX-FULL mutation-bl932-c-bare-prefix worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (n3; twin d1)
+# MUTANT-MATRIX-FULL mutation-bl932-c-strip-all worlds=bl932-receipt why=each mutant must fail EXACTLY its declared receipt-bl932 cells, read off the receipt's one engine run, with its twin holding (n1,n2,n3,n4; twin d1)
 # MUTANT-MATRIX mutation-claim-base-as-theirs decides=mutation-claim-base-as-theirs,Entry_B,Entry_M,PC-FIXTURE-BARE-BACKTICK,PC-FIXTURE-BARE-BOLD-RECORD twins=Entry_A
 # MUTANT-MATRIX mutation-claim-basename-first decides=mutation-claim-basename-first,Entry_H twins=Entry_B
 # MUTANT-MATRIX mutation-claim-joined-subs decides=mutation-claim-joined-subs,Entry_M twins=Entry_B
@@ -3826,7 +3834,9 @@ row_is "PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0" STILL-LIVE \
 MUTI="$(dirname "$DIST")/mut-idrule"
 rm -rf "$MUTI"; mkdir -p "$MUTI"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTI/" 2>/dev/null
-sed 's@if (match(label, /\^`?(PC|BL)-\[A-Za-z0-9_\.-\]+/))@if (match(label, /^[A-Z0-9-]+$/))@' \
+# Both anchors are kept because the installed lib.sh can predate this fixture and still carry the old regex.
+sed -e 's@if (match(label, /\^`?(PC|BL)-\[A-Za-z0-9_\.-\]\*\[A-Za-z0-9_-\]/))@if (match(label, /^[A-Z0-9-]+$/))@' \
+    -e 's@if (match(label, /\^`?(PC|BL)-\[A-Za-z0-9_\.-\]+/))@if (match(label, /^[A-Z0-9-]+$/))@' \
   "$(dirname "$CLOSER")/lib.sh" > "$MUTI/lib.sh"
 # SUB-LEDGERS, one per mutant below, each holding exactly the entries its kill half and its
 # control half read, in seeded order so every adjacency the conjunction keys on is the seeded one.
@@ -6399,6 +6409,31 @@ fi
 
 } # end lr_unit_id_class
 
+# bl_case <tag> <decides cells> <twin> <why> then ([@file=<file>] <old> <new> <count>)... -> scored on the exact vector
+# Shared by lr_unit_bl890 and lr_unit_bl932, so it is defined here at top level, never inside either unit:
+# a definition inside a unit exists only once that unit has run past its own SKIP. It reads the CALLING
+# unit's locals `_rec` (the receipt), `_wc` (its world cache) and `_bln` (the mutant-name family, bl890
+# when unset). A mutation triple edits ledger-reverify.sh in the copy; a `@file=<file>` word before a
+# triple switches the target file for that triple and every later one of the call (`@file=lib.sh` for a
+# lib.sh layer). The spelling is `@file=`, not a bare `@`: amb-equality's anchors are `@@GUARD701@@`.
+bl_case() {
+  local _tag="$1" _dec="$2" _tw="$3" _why="$4" _d _got _r _f=ledger-reverify.sh _n="mutation-${_bln:-bl890}-$1"
+  shift 4
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _d="$(rl_dir "${_bln:-bl890}-$_tag")" || _d=""
+  while [ -n "$_d" ] && [ "$#" -ge 3 ]; do
+    case "$1" in @file=*) _f="${1#@file=}"; shift; continue ;; esac
+    rl_mutant "$_d" "$_f" "$1" "$2" "$3" || _d=""
+    shift 3
+  done
+  if [ -z "$_d" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY (an anchor matched the wrong count, or the mutant does not parse)\n' "$_n"; return; fi
+  _o="$(bash "$_rec" "$_d" "" "$_wc" 2>&1)"; _r=$?
+  _got="$(printf '%s\n' "$_o" | sed -n 's/^FAIL \([a-zA-Z0-9]*\):.*/\1/p' | sort | tr '\n' ',' | sed 's/,$//')"
+  lr_mx "$_n" "$_d"
+  if [ "$_r" -eq 9 ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the receipt could not run: %s\n' "$_n" "$(printf '%s' "$_o" | head -2 | tr '\n' ' ')"
+  elif [ "$_r" -eq 1 ] && [ "$_got" = "$_dec" ] && grep -q "^ok $_tw:" <<< "$_o"; then printf '  ok    %-22s %s\n' "$_n" "$_why"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s failing cells {%s} rc=%s, want exactly {%s} with %s holding\n' "$_n" "$_got" "$_r" "$_dec" "$_tw"; fi
+}
 lr_unit_bl890() {
 # --- A LABEL WITH ONE TRAILING PARENTHETICAL IS ASKED ABOUT BY ITS ID (BL-890) ------------------------
 # receipt-bl890.sh beside this file owns the world and the cells (its header lists them). The shipped
@@ -6434,24 +6469,6 @@ lr_unit_bl890() {
     return 0
   fi
   printf '  ok    %-22s a suffixed label is asked by its bare id (s1, s2, s3; sibling join sib/sibY), its never-named twin is silent (s0), a suffixed label whose prefix is cited bare is ambiguous on the prefix (amb), and every refused shape stays silent (r1-r6); c0 is the bare-id control\n' "receipt-bl890"
-  # bl_case <tag> <decides cells> <twin> <why> then (<old> <new> <count>)... -> scored on the exact vector
-  bl_case() {
-    local _tag="$1" _dec="$2" _tw="$3" _why="$4" _d _got _r
-    shift 4
-    ASSERTIONS=$((ASSERTIONS + 1))
-    _d="$(rl_dir "bl890-$_tag")" || _d=""
-    while [ -n "$_d" ] && [ "$#" -ge 3 ]; do
-      rl_mutant "$_d" ledger-reverify.sh "$1" "$2" "$3" || _d=""
-      shift 3
-    done
-    if [ -z "$_d" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY (an anchor matched the wrong count, or the mutant does not parse)\n' "mutation-bl890-$_tag"; return; fi
-    _o="$(bash "$_rec" "$_d" "" "$_wc" 2>&1)"; _r=$?
-    _got="$(printf '%s\n' "$_o" | sed -n 's/^FAIL \([a-zA-Z0-9]*\):.*/\1/p' | sort | tr '\n' ',' | sed 's/,$//')"
-    lr_mx "mutation-bl890-$_tag" "$_d"
-    if [ "$_r" -eq 9 ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the receipt could not run: %s\n' "mutation-bl890-$_tag" "$(printf '%s' "$_o" | head -2 | tr '\n' ' ')"
-    elif [ "$_r" -eq 1 ] && [ "$_got" = "$_dec" ] && grep -q "^ok $_tw:" <<< "$_o"; then printf '  ok    %-22s %s\n' "mutation-bl890-$_tag" "$_why"
-    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s failing cells {%s} rc=%s, want exactly {%s} with %s holding\n' "mutation-bl890-$_tag" "$_got" "$_r" "$_dec" "$_tw"; fi
-  }
   local _paren='  if (r ~ /^[ \t]+\([^()]*\)$/) return id'
   bl_case noparen "amb,s1,s2,s3,sib,sibY" c0 \
     "the equality back as the only rule: every suffixed label is silent again, and s1 is the cell that sees it (s2, s3 and the sibling pair co-move by construction)" \
@@ -6483,6 +6500,73 @@ lr_unit_bl890() {
     '    k = label_entry_id($1); if (k == "") k = $1' '    k = $1' 1 \
     '  _label="$(label_entry_id "$_label")" || _label="$1"' '  :' 1
 } # end lr_unit_bl890
+lr_unit_bl932() {
+# --- A LABEL WHOSE ID IS CLOSED BY ONE PUNCTUATION MARK IS ASKED ABOUT BY ITS ID (BL-932) ---------------
+# receipt-bl932.sh beside this file owns the world and the cells (its header lists them), built the way
+# lr_unit_bl890 builds bl890's: the shipped reconcile directory must answer every cell, and each mutant
+# is a whole copy of that directory with ONE change, scored by bl_case over every cell from the
+# receipt's one engine run against the exact failing set its call declares. The fix has TWO layers in
+# two files -- lib.sh's ledger_entry_id ends an id on a non-dot byte, and label_entry_id's form (c)
+# accepts the residue -- so the lib.sh mutant uses bl_case's `@file=lib.sh` target. The dotted cells need
+# both layers; the colon and em-dash cells need form (c) alone; that is why the two reverts read
+# different sets. The header's FULL rows for world bl932-receipt record the same vectors.
+#
+# NOT A MUTANT HERE: form (c) with its closing mark made optional. On every label that reaches (c) the
+# optional mark adds only an empty residue (already accepted by the equality line) or a bare
+# parenthetical (already accepted by form (b)), so no cell can separate it from the shipped rule. What
+# the mandatory mark protects is mutation-bl890-noparen's set: with the mark optional, (c) would accept
+# every form-(b) label and that mutant would stop seeing them.
+#
+# SHIPS AHEAD OF ITS SUBJECT: a consumer whose installed engine lacks either layer SKIPs this unit; in
+# the distribution it always runs.
+  local _rec _wc _o _rc _bln=bl932 _rd
+  _rec="$DIR/receipt-bl932.sh"
+  _rd="$(dirname "$CLOSER")"
+  if [ ! -f "$_rec" ]; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s receipt-bl932.sh is not beside this fixture\n' "receipt-bl932"
+    return 0
+  fi
+  if [ "$B2_ISDIST" = 0 ] && { ! grep -qF '(\.+|:|' "$CLOSER" || ! grep -qF '[A-Za-z0-9_.-]*[A-Za-z0-9_-]/))' "$_rd/lib.sh"; }; then
+    LR_SKIPPED=1
+    printf '  SKIP  BL-932 arms -- the installed ledger-reverify.sh or lib.sh predates them; they land with the pull that carries this fixture\n'
+    return 0
+  fi
+  _wc="$(dirname "$DIST")/bl932-worlds"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _o="$(bash "$_rec" "$_rd" "" "$_wc" 2>&1)"; _rc=$?
+  if [ "$_rc" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl932" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"
+    return 0
+  fi
+  printf '  ok    %-22s an id closed by one mark is asked by its bare id (d1-d5 dot, k1-k2 colon, m1 em dash; i1 inner dot), and a second mark, another mark, prose after it or a bare prefix stays silent (n1-n4); c0 is the bare-id control\n' "receipt-bl932"
+  local _c='  if (r ~ /^(\.+|:|[ \t]*—)([ \t]+\([^()]*\))?$/)'
+  bl_case lib-keeps-dot "d1,d2,d3,d4,d5" i1 \
+    "lib.sh keeping the trailing dot in the id: every dotted label is asked by an id no commit carries, and d1 is the cell that sees it (d2-d5 co-move: the same match)" \
+    @file=lib.sh '[A-Za-z0-9_.-]*[A-Za-z0-9_-]/))' '[A-Za-z0-9_.-]+/))' 1
+  bl_case no-form-c "d1,d2,d3,d4,d5,k1,k2,m1" i1 \
+    "form (c) gone: every punctuation-closed label is refused again, the dotted ones included once lib.sh strips the dot, and k1 is the cell that sees the colon" \
+    "$_c" '  if (0)' 1
+  bl_case c-single-dot "d2" d1 \
+    "form (c) taking one dot rather than a run: two closing dots are refused, and d2 is the cell that sees it" \
+    '(\.+|:|' '([.:]|' 1
+  bl_case c-no-colon "k1,k2" m1 \
+    "form (c) without the colon: a colon-closed label is refused, and k1 is the cell that sees it (k2 co-moves)" \
+    '(\.+|:|' '(\.+|' 1
+  bl_case c-no-dash "m1" k1 \
+    "form (c) without the em dash: an em-dash-closed label is refused, and m1 is the cell that sees it" \
+    '|[ \t]*—)' ')' 1
+  bl_case c-no-end "n2,n4" d3 \
+    "form (c) without its end anchor accepts text after the mark, and n4 is the cell that sees it (n2 co-moves: its first mark is a valid prefix)" \
+    '([ \t]+\([^()]*\))?$/)' '([ \t]+\([^()]*\))?/)' 1
+  bl_case c-bare-prefix "n3" d1 \
+    "a bare sprint prefix closed by a period is asked by the prefix and attributed the commit that cites it, and n3 is the cell that sees the refusal sitting ahead of (c)" \
+    '  if (id ~ /^PC-S[0-9]+$/) return ""' '' 1
+  bl_case c-strip-all "n1,n2,n3,n4" d1 \
+    "the id accepted whatever follows it: another mark (n1), two marks (n2), a bare prefix (n3) and prose (n4) are all asked and named" \
+    '  if (label == id) return id' '  return id' 1
+} # end lr_unit_bl932
 lr_unit_label_prefix() {
 # --- A LABEL READS ONLY ITS OWN ROW, and the old regex helper is the mutant that proves it -----------
 # The seeded OUT puts the LONGER entry FIRST with a DIFFERENT status, so a helper that matches the
