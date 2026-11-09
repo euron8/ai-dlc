@@ -2031,3 +2031,19 @@ verify: manual
 The builder wires a runner-invoked receipt in the fixing release (the probe above, seeded through a fixture that declares `reconcile/lib.sh`); no receipt ships with the filing.
 
 verify: manual
+
+## BL-939 — graph runs no retro gate-validation gate, because retro.md §5c's numbered list never invokes its `[retro]` declaration
+
+**DEFECT.** `core/skills/ai-dlc/steps/retro.md` §5c (`### 5c. Pre-Commit Validation Gate`, `:1057`, unchanged from 0d150c8de to 59a4ea51b) declares the gate type at `:1066-1070` ("This is the `retro` gate. When running gate validation (`gate-validation.md`) at sprint close, declare it `run gate validation [retro]`"), but its numbered list, items 1 to 5 at `:1072-1109`, never tells the session to run gate validation. Items 1 to 5 are the rule-file audit commit, `validate-provenance-block.sh`, `validate-mandatory-rules.sh`, `validate-audit-anchors.sh` and `validate-artifact-budget.sh`. The retro slice (`gate-validation.md:67`: Checks 8, 9, 17, core-layer-immutability) therefore never runs, including Check 9's sprint-scoped body that BL-934 keeps for retro alone.
+
+Measured in graph, read only, on disk under `/usr/bin/find _bmad-output -path '*gate-adjudication/<prefix>*'`: 0 `retro*` files of any extension, against 40 `sprint-review-*.verdict.json` (85 `sprint-review-*` files in all, with parts, repairs and one authorization). A second derivation, every `"gate_type"` value over all 374 verdict JSONs: implementation 172, planning 116, story 46, sprint-review 40, and `retro` 0. The control is the impossible prefix `zzqq`, which also returns 0, beside the sprint-review count of 40 in the same run.
+
+The measured backstop is `validate-mandatory-rules.sh` Check 5 at §5c item 3 (`retro.md:1084`), which fires: graph `_bmad-output/implementation-artifacts/s315/gate-log-archive.md:430` is the heading "Gate Log: Sprint 315 — retro §5c validation, Check 5 FAILED under operator disposition", and `:432` records `scripts/ai-dlc/validate-mandatory-rules.sh 315` exit 1 with **Check 5 FAILED** (`Check5_VISUAL_UI`). Check 5 covers the visual-UI evidence; Checks 8, 17 and core-layer-immutability have no such backstop at retro.
+
+Fix, sized and not built: add a numbered item to §5c that runs gate validation declared `run gate validation [retro]` and blocks the Step 6 commit on its verdict, in the shape of items 2 to 5. Filed in batch b252 as a measured defect outside that release's files (retro.md is cluster retro3's), not fixed there.
+
+Receipt: it reads §5c's numbered list only (from the first `N. ` item to the next heading or the `**An unclearable check` paragraph) and closes when that list carries the literal `run gate validation [retro]`. Probed: at HEAD exit 1; a seeded item 6 carrying the phrase exit 0; the phrase added to the declaration paragraph only (outside the list) exit 1; the section heading renamed exit 9; every numbered item removed exit 9. A fix that invokes the gate in other words reads STILL-LIVE, which is the direction that keeps the entry open.
+
+Provenance: batch b252, found by the BL-934 contract adversary (DEFECT 2); lead ai-dlc-78.
+
+verify: sh P=core/skills/ai-dlc/steps/retro.md; grep -q 'Pre-Commit Validation Gate' "$P" || exit 9; s="$(awk '/^### 5c\. /{f=1;next} f&&/^#/{f=0} f&&/^\*\*An unclearable check/{f=0} f&&/^[0-9]+\. /{i=1} f&&i' "$P")"; [ -n "$s" ] || exit 9; grep -qF 'run gate validation [retro]' <<<"$s"

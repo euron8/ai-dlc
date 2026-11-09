@@ -22,12 +22,12 @@ declares exactly one type when it says "run gate validation
 
 `planning` · `story` · `implementation` · `sprint-review` · `retro`
 
-Deployment / schema / UI applicability is NOT a separate type: the
-schema (Check 10), visual (Check 9), and deployment-evidence (Checks 8,9)
+**Deployment / schema / UI applicability is NOT a separate type.** The
+schema (Check 10), visual (Check 9) and deployment-evidence (Check 8)
 checks are folded into the `implementation` and `retro` slices and
-self-skip via their own scope clauses (`is_ui_epic == false`, "no stories
-modify schema", "deployment not claimed"). This avoids a combined
-UI-and-schema sprint being unable to declare two types at once.
+self-skip only via the scope clauses their own bodies carry: Check 10 "no stories modify schema", Check 9 its `is_ui_epic` and UI-path rule, Check 8 "deployment not claimed".
+"deployment not claimed" is Check 8's scope clause alone, never Check 9's.
+This avoids a combined UI-and-schema sprint being unable to declare two types at once.
 
 **Universal core (always loaded, every gate, every type).** The
 `universal` row of the `GATE_MANIFEST` block below **is** the universal
@@ -749,9 +749,46 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 ### 9. Visual verification? (UI sprint gates only)
 <!-- CHECK_LOADED: 9 -->
 
-Skip if `is_ui_epic == false`. Required when the sprint introduced new
-visual surfaces.
+**Check 9 skips at every gate when `is_ui_epic == false`.** Skip if `is_ui_epic == false`, at an `implementation` gate and a `retro` gate alike.
+If `is_ui_epic` is absent from `_bmad-output/pipeline-snapshot.md`, Check 9 is decided by the UI-path rule below at an `implementation` gate, and the sprint body below runs at a `retro` gate.
+An absent flag is not a skip.
 
+**At every `implementation` gate, Check 9 is decided per story by the UI-path rule.**
+No `implementation` gate fetches a production URL.
+Gates 1, 2 and 3 run before the stories they gate are deployed, so the absence of a deployment is never a Check 9 FAIL at an `implementation` gate.
+A one-story gate (its adjudicator brief carries a `story:` line) decides on that story's own range, `<base>..<frozen-sha>`: `<base>` is the PASS-1 gate-1 partition manifest's `base`, the parent of the dev's first commit (`implementation.md` "Pre-gate commit-presence check."), and `<frozen-sha>` the sha this gate judges (`implementation.md`).
+At a one-story gate 3 that same value is the `base:` line of the g3 plan its brief's `gate-plan:` names.
+The `base` of a re-review pass's gate-1 manifest (`-p<M>`, M >= 2) is the prior reviewed sha and is never the range (`implementation.md` "A re-review, pass M >= 2").
+
+**A gate over several stories, or over none, decides on the UNION of the gate's changed files.** Such a gate carries no `story:` line.
+Its changed-file set is the union of the UI-path diff below over each gated story's own `<base>..<frozen-sha>`, or, for a gate dispatched over no story, over `<sprint-base>..HEAD`.
+Such a gate's brief names no plan, so each story's `<base>` is that story's PASS-1 gate-1 partition manifest's `base`.
+If that union touches no UI path, the whole gate self-skips (PASS). Otherwise the UI branch applies to the whole gate.
+Over-inclusion is the accepted failure mode and it binds: it is not optional.
+A story whose own diff touches no UI path, sharing a gate with a story whose diff does, takes the UI branch with it, and the adjudicator compares its surfaces too.
+
+**The UI path is defined here, inline, as `validate-mandatory-rules.sh` Check 5 defines it.** Over the range the gate decides on, the adjudicator runs
+`git diff --name-only --no-renames "<base>..<frozen-sha>" -- 'web/**' 'web/src/**' 'web/tests/**'`
+and cites that command with its output. Check 5 then drops every test file by basename, `awk -F/ 'NF && $NF !~ /\.(test|spec)\./ {print}'`, and so does this check.
+A diff touches a UI path when at least one changed web file does not match `*.test.*` or `*.spec.*` by its basename.
+The test-only exemption needs ALL changed web files to be tests: one source file beside any number of test files is a UI path.
+Beside the UI-path command the adjudicator cites a pathspec control: the same `git diff --name-only` over the same range with a pathspec that returned at least one path.
+The UI-path command and its pathspec control both run from the worktree top, or as `git -C <worktree top> diff ...`, because a pathspec is relative to the cwd: an empty UI diff from a subdirectory, beside a control run from that same subdirectory, is not a self-skip.
+
+**No UI path in the decided diff is a self-skip, which is a PASS.** It cites the UI-path command, its empty or test-only output, and the pathspec control that returned non-zero.
+An empty UI diff without a non-zero control beside it is not a self-skip.
+
+**A UI path in the decided diff makes the source-vs-mockup comparison MANDATORY at that gate.**
+Compare each changed surface's source against the documented mockup (from the ui-direction step or `_bmad-output/planning-artifacts/s<N>/ui-mockups.md`, composed from `sprint_id` — not globbed) on copy, element structure, attributes (including `role` and `aria-*`) and class names.
+Record every deviation found in this pass, not only the first. Read each mockup line whole with Read; a truncated read (`cut`, `head -c`, a pipe) is not a comparison.
+The gate FAILS if that comparison was not performed, or if drift was found and not fixed.
+Its evidence names the surfaces compared, each deviation found and what fixed it, and the OWED record below.
+
+**Only layout and production rendering are OWED to `deploy-validate.md` §4 ("Visual Verification").** The gate log records them as OWED there.
+An OWED record is never itself a PASS: it does not pass the source-vs-mockup comparison above, and it does not stand in for it.
+
+**At a `retro` gate, Check 9 keeps its sprint-scoped body, including the deployed-URL fetch.** Required when the sprint introduced new
+visual surfaces.
 - Agent must fetch the deployed production URL and verify rendering.
 - Compare each new surface against the documented mockup (from
   ui-direction step or `_bmad-output/planning-artifacts/s<N>/ui-mockups.md`,
