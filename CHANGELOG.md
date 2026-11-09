@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1031.0] - 2026-11-08
+
+### BL-932 closed
+
+Closes PC-S321-LEDGER-REVERIFY-DROPS-AN-ID-WHOSE-BOLD-LABEL-ENDS-IN-PUNCTUATION (graph s321). Cites PC-S321-GATE2-RULE-A-IGNORES-GATE1-REREVIEW-OF-THE-QA-REWORK in archived BL-931 and PC-S321-GATE-TRANSITION-REVIEWED-SHA-REFUSES-MERGED-SHARDED-REVIEW in archived BL-926.
+
+A bold-bullet ledger label whose id is followed by punctuation inside the bold lost its NAMED-UPSTREAM row, and two functions each owned part of it. `ledger_entry_id()` in `core/skills/ai-dlc-update/reconcile/lib.sh` now ends the id on an id byte, so `**PC-<id>.**` yields the bare id and inner dots (`PC-S1.3-X`) are kept. `label_entry_id` in `ledger-reverify.sh` gains a third accepted form: the id followed by a run of `.`, one `:` or an em dash, with an optional closing parenthetical. A bare sprint prefix (`PC-S321.`) and a residue carrying prose (`<id>: note`, `<id>. prose`) stay refused. Measured with the real engine on seeded ledgers, the `.`, `:`, `—` and `. (filed …)` forms go from 1 row with no NAMED-UPSTREAM to 2 rows with it, and the bare control is unchanged. The em dash is wider than the filing, and the one real case of it in graph's archive is already closed.
+
+The filing's second remedy, a report row for an id-shaped label that resolves to no id, is not built: the remedy is a disjunction and its first branch is delivered, its literal form would fire on 783 of 857 distribution-archive labels, and after the fix it has no real-corpus subject.
+
+The plan's `lids()` mirror ends an id on a non-dot byte in the same release, so `lids_ctl` agrees with the shipping grammar. `mutation-idrule` anchors on either `lib.sh` id regex, so a consumer whose installed engine predates this release does not read a false FAIL.
+
+Receipt: `core/fixtures/ledger-reverify/receipt-bl932.sh`, invoked by that fixture's `run.sh`, with eight mutants that each fail exactly their declared cells.
+
 ## [0.1030.0] - 2026-11-08
 
 ### BL-933 closed
