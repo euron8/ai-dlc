@@ -126,6 +126,20 @@ def run_series():
     # The waiving entries the shell prelude asked the sibling for: only when a verdict in scope
     # carries FAIL_WAIVED, never cite-verified here. Empty means no FAIL_WAIVED can resolve.
     series_waivers = load_waivers(os.environ.get("GA_SERIES_WAIVERS", ""))
+    # --sprint <N>: the shell prelude validated the form and exports it; empty means UNSCOPED, and
+    # an unscoped run is byte-identical to the mode before the flag existed. Scoping is by
+    # verdict_sprint() alone, the one definition of a verdict's sprint (the waiver join uses it).
+    # It narrows GROUPING only: which passes enter `series`. Three things it never narrows --
+    #   F1  the legacy stripped-id reference point is the first pass of EVERY well-formed series
+    #       of the gate_type, out-of-scope sprints included (ref_extra below), exactly as unscoped;
+    #   F2  a legacy verdict whose nonce cannot be placed is exempt only when its generated_at
+    #       sorts strictly before that same reference point; otherwise it stays a nonce defect;
+    #   F3  a series id carrying no -s<N>- cannot be placed in a sprint, so it is a DEFECT and is
+    #       never scoped out.
+    sprint = os.environ.get("GA_SERIES_SPRINT", "") or None
+    ref_extra = []          # (gate_type, nonce) of well-formed OUT-OF-SCOPE series passes (F1)
+    out_series = 0          # series-carrying verdicts of another sprint
+    unplaceable_legacy = []  # (path, gate_type, nonce, generated_at) awaiting the F2 decision
 
     # --- collect ---
     files = []
@@ -176,6 +190,19 @@ def run_series():
 
         sid = V.get("gate_series_id")
         is_legacy = sid is None or (isinstance(sid, str) and not sid.strip())
+        if sprint is not None and not is_legacy:
+            sp = verdict_sprint(V)
+            if sp is not None and sp != sprint:
+                # OUT OF SCOPE: another sprint's series. A series id carries exactly one sprint,
+                # so no in-scope series loses a pass here. Kept only as an F1 reference point,
+                # and only when it is well-formed enough to be one.
+                out_series += 1
+                o_gt, o_nonce = V.get("gate_type"), V.get("gate_nonce")
+                if (isinstance(o_gt, str) and isinstance(o_nonce, str)
+                        and re.match(PATTERNS["gate_nonce"], o_nonce)
+                        and o_nonce.rsplit("-", 1)[0] == o_gt):
+                    ref_extra.append((o_gt, o_nonce))
+                continue
         for f in ("gate_type", "gate_nonce"):
             val = V.get(f)
             if val is None or (isinstance(val, str) and not val.strip()):
@@ -200,6 +227,9 @@ def run_series():
             # the truth is a pass could not be placed.
             if not is_legacy:
                 incomplete_sids.add(str(sid))
+            elif sprint is not None:
+                unplaceable_legacy.append((path, gt, nonce, V.get("generated_at")))
+                continue
             defects.append(
                 f"{path}: gate_nonce {nonce!r} does not match the required "
                 f"<gate_type>-<UTC-timestamp> shape. The nonce ORDERS the passes of a series; "
@@ -226,6 +256,12 @@ def run_series():
         entry = {}
         v_catalog = str(V.get("catalog", ""))
         v_sprint = verdict_sprint(V)
+        if sprint is not None and v_sprint is None:
+            defects.append(
+                f"{path}: gate_series_id {sid!r} carries no -s<N>- sprint field, so --sprint "
+                f"{sprint} cannot place it in or out of scope. It is counted in scope AND blocks: "
+                f"a pass whose sprint cannot be read is never scoped out."
+            )
         for e in V.get("verdicts", []) or []:
             if isinstance(e, dict) and e.get("check_id") is not None:
                 vd = e.get("verdict")
@@ -255,7 +291,9 @@ def run_series():
     # at or after that point is not a retained series; it is a pass of the live one that lost
     # its id, and it is exactly the shape that shortens a run.
     live_first = {}
-    for _, gt, nonce, _, _ in passes:
+    # F1: under --sprint the reference point still spans every sprint's series (ref_extra), so a
+    # stripped pass is judged against the same first pass an unscoped run would judge it against.
+    for gt, nonce in [(t[1], t[2]) for t in passes] + ref_extra:
         if gt not in live_first or nonce < live_first[gt]:
             live_first[gt] = nonce
     benign_legacy = []
@@ -269,8 +307,42 @@ def run_series():
             )
         else:
             benign_legacy.append(path)
-    for p in benign_legacy:
-        print(f"  counted, not grouped (no gate_series_id, predates every live series): {p}")
+    # F2: an UNPLACEABLE legacy verdict (no series id, nonce outside the pattern) is exempt under
+    # --sprint only when its generated_at, in the nonce's own UTC timestamp form, sorts strictly
+    # before the first pass of every series of its gate_type. Anything else -- a recent write, a
+    # missing or unparseable generated_at, no series of that gate_type to order it against -- is
+    # the malformed-nonce defect it is in an unscoped run.
+    exempt_unplaceable = []
+    for path, gt, nonce, gen in sorted(unplaceable_legacy, key=lambda t: t[0]):
+        m = re.match(r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?Z$", str(gen or ""))
+        gen_ts = "%s%s%sT%s%s%sZ" % m.groups()[:6] if m else None
+        first = live_first.get(gt)
+        if gen_ts is not None and first is not None and gen_ts < first.rsplit("-", 1)[1]:
+            exempt_unplaceable.append((path, gen))
+            continue
+        defects.append(
+            f"{path}: gate_nonce {nonce!r} does not match the required "
+            f"<gate_type>-<UTC-timestamp> shape. The nonce ORDERS the passes of a series; "
+            f"one that cannot be ordered silently re-sequences the run, and a re-sequenced "
+            f"run is a shorter run. This blocks whether or not the file carries a series id. "
+            f"Under --sprint {sprint} it is exempt only when its generated_at ({gen!r}) is a "
+            f"UTC timestamp sorting strictly before the first {gt} series pass "
+            f"({first or 'none on disk'})."
+        )
+    if sprint is None:
+        for p in benign_legacy:
+            print(f"  counted, not grouped (no gate_series_id, predates every live series): {p}")
+    else:
+        for p in benign_legacy:
+            print(f"  not in scope (legacy, no gate_series_id, predates every series of its "
+                  f"gate_type): {p}")
+        for p, gen in exempt_unplaceable:
+            print(f"  not in scope (legacy, unplaceable nonce, generated_at {gen} predates every "
+                  f"series of its gate_type): {p}")
+    n_out = out_series + len(benign_legacy) + len(exempt_unplaceable)
+    n_out_text = (f"{n_out} file(s) out of scope ({out_series} of another sprint's series, "
+                  f"{len(benign_legacy) + len(exempt_unplaceable)} legacy)")
+    scope = "" if sprint is None else f" Sprint {sprint}: {n_out_text}."
 
     if not passes:
         if defects:
@@ -281,6 +353,14 @@ def run_series():
         # AFFIRMATIVE, never silent. Zero series is a legitimate state (a fresh gate, or a
         # corpus entirely predating gate_series_id) and it is also what a mis-aimed scan looks
         # like, so the counts that produced it are printed rather than implied.
+        if sprint is not None:
+            # A wrong sprint id reads as this line, so it names the sprint and what it left out.
+            print(
+                f"VALIDATE-GATE-ADJUDICATION: PASS — sprint {sprint}: 0 in-scope series across "
+                f"{len(files)} .json file(s); {n_out_text}. EXAMINED NOTHING — nothing to count; "
+                f"nothing counted."
+            )
+            sys.exit(0)
         print(
             f"VALIDATE-GATE-ADJUDICATION: PASS — 0 series carrying a gate_series_id across "
             f"{len(files)} .json file(s) in scope, all {len(benign_legacy)} of them legacy. "
@@ -594,6 +674,7 @@ def run_series():
         f"VALIDATE-GATE-ADJUDICATION: PASS (--series) — {len(series)} series / {len(passes)} "
         f"pass(es), no check_id held FAIL across {K} consecutive passes. Longest: {shape}. "
         f"{len(benign_legacy)} legacy verdict(s) named above, each predating every live series."
+        + scope
     )
     sys.exit(0)
 

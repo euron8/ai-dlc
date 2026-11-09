@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1030.0] - 2026-11-08
+
+### BL-933 closed
+
+Closes PC-S321-GATE-SERIES-RUNG-REREADS-CLOSED-SPRINT-STEMS.
+
+`validate-gate-adjudication.sh --series <dir>` grouped every `.json` under the directory, so a stall that retro rotation never moved out of a closed sprint failed every later sprint's Gate Failure step 4 and exit 0 was unreachable. `--series` now takes an optional `--sprint <N>` (`^[1-9][0-9]*$`, before or after the paths, at most once, else exit 2). Grouping takes only the passes whose `verdict_sprint()` equals N. Another sprint's series and the legacy verdicts that predate every series are counted and named `not in scope`, and the PASS and EXAMINED NOTHING lines carry the sprint and the out-of-scope count, so a wrong sprint id is visible. Unscoped output is unchanged: the flag is optional, because an old step 4 runs the new script between the engine pull and the rulebook reconcile.
+
+Three bounds do not narrow with the flag. The legacy stripped-id reference point is still the first pass of every well-formed series of the gate_type, all sprints. A legacy nonce that fails the pattern is exempt only when its `generated_at` sorts strictly before that point. A series id carrying no `-s<N>-` is a defect, never scoped out. A cross-sprint SPLIT is acquitted, as retro rotation already acquits it; a reset inside the sprint mints another `-sN-` id and still trips SPLIT. Unparseable and non-verdict `.json` stay exit 2.
+
+`core/skills/ai-dlc/steps/gate-validation.md` step 4 now runs `--series --sprint <N>`, N the leading integer of the `sprint_id` line of `_bmad-output/pipeline-snapshot.md`. The enforcement-map row and the `series_stall_run` schema text name the flag.
+
+Receipt: `core/fixtures/gate-series-rung/run.sh`, whose `--sprint` cells run over graph's 187 real verdict shapes (`graph-corpus.tsv`), with mutants SC-DROP, SC-PREFIX, SC-LEGEX, SC-F1, SC-F3, SC-F2, SC-ORDER, SC-SPLITOFF and SC-SPLITALL each killed by its named cells. `core/fixtures/gate-adjudication/run.sh` pins step 4's `--series --sprint <N>` line.
+
 ## [0.1029.0] - 2026-11-08
 
 ### BL-934 closed

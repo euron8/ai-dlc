@@ -35,9 +35,12 @@
 #        → THE ADJUDICATOR'S SELF-CHECK. The envelope and coverage arms of the mode above and
 #          nothing else, so it exits 0 whatever the per-check verdicts say. See "THE COVERAGE
 #          MODE".
-#   ./scripts/ai-dlc/validate-gate-adjudication.sh --series <dir|verdict>...
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh --series [--sprint <N>] <dir|verdict>...
 #        → THE STALL RUNG. Groups every verdict found by gate_series_id and errors when one
 #          check_id holds FAIL across K consecutive passes of one gate. See "THE STALL RUNG".
+#          `--sprint <N>` (a bare integer, no leading zero, before or after the paths, at most
+#          once) groups only the series whose id carries `-s<N>-`; without it the run is
+#          unscoped and unchanged. See "SPRINT SCOPING".
 #
 # FAIL_WAIVED (rules.waiver_id, rules.all_pass). A third verdict value: the check FAILED and the
 # operator waived it through the escalation entry `waiver_id` names. Every reader here treats it
@@ -204,7 +207,7 @@
 #   - A .json in scope that is not a verdict, or does not parse → FAIL-CLOSED, exit 2. Same
 #     class: a file the rung cannot read is a pass it cannot count. Measured FP set on the
 #     reference corpus: 0 of 94.
-#   - LEGACY (no gate_series_id) → SPLIT, and this is the only fail-open in the mode. A
+#   - LEGACY (no gate_series_id) → SPLIT, and this is the only fail-open in an unscoped run. A
 #     verdict that sorts strictly BEFORE the first pass of every live series of its gate_type
 #     is counted, named on stdout, and does not affect the exit: a gate reset retains the
 #     prior series on disk beside the new one, so the first scan after any reset sees these,
@@ -217,6 +220,21 @@
 # The remaining hole is closed on the other side: the per-pass adjudicate mode treats a
 # missing gate_series_id as a required-field failure, exit 1, so no NEW verdict reaches this
 # mode without one.
+#
+# SPRINT SCOPING (`--sprint <N>`). Unscoped, the rung reads every verdict under the dir, so a
+# closed sprint's stall that retro rotation never moved fails every later sprint's rung and
+# exit 0 is unreachable. `--sprint <N>` narrows GROUPING to the series whose id's sprint
+# (`verdict_sprint`, the one definition the waiver join also uses) equals N; another sprint's
+# series is counted out of scope and named in the PASS / EXAMINED NOTHING line with the
+# sprint. A cross-sprint SPLIT is acquitted by that, as retro rotation already acquits it; a
+# reset inside sprint N mints another `-sN-` id, so a same-sprint boundary is still seen. It
+# is a second fail-open, bounded three ways, and none of them narrows with the flag:
+#   - the legacy reference point is the first pass of EVERY well-formed series of the
+#     gate_type, all sprints, exactly as unscoped: a stripped id cannot dodge it by sprint.
+#   - a legacy verdict whose nonce fails the pattern is exempt only when its generated_at is a
+#     UTC timestamp strictly before that reference point; otherwise it stays the nonce defect.
+#   - a series id with no `-s<N>-` has no sprint to scope by: exit 1, never scoped out.
+# Unparseable and non-verdict .json stay exit 2 under the flag: no sprint can be read off them.
 #
 # FAIL-CLOSED (MALFORMED == ABSENT == BLOCK):
 #   - an enforcement-map check whose adjudication value is outside adjudication_classes (a typo
@@ -249,6 +267,7 @@ MODE=""
 GATE_TYPE=""
 VERDICT_PATH=""
 SERIES_PATHS=()
+GA_SERIES_SPRINT=""
 MERGE_PARTS=()
 GA_SHARD=""
 
@@ -309,11 +328,26 @@ case "${1:-}" in
     --series)
         MODE="series"
         shift
-        if [ "$#" -eq 0 ]; then
-            echo "usage: $0 --series <dir|verdict>..." >&2
+        # `--sprint <N>` is taken from ANY position and never enters SERIES_PATHS: the FAIL_WAIVED
+        # grep below walks SERIES_PATHS, and a flag left in it is a path that does not exist.
+        while [ "$#" -gt 0 ]; do
+            if [ "$1" = "--sprint" ]; then
+                case "${2:-}" in ''|0*|*[!0-9]*) _ga_sprint_ok=0 ;; *) _ga_sprint_ok=1 ;; esac
+                if [ -n "$GA_SERIES_SPRINT" ] || [ "$_ga_sprint_ok" -ne 1 ]; then
+                    echo "usage: $0 --series [--sprint <N>] <dir|verdict>...   (<N>: one bare integer, no leading zero, at most once)" >&2
+                    exit 2
+                fi
+                GA_SERIES_SPRINT="$2"
+                shift 2
+                continue
+            fi
+            SERIES_PATHS+=("$1")
+            shift
+        done
+        if [ "${#SERIES_PATHS[@]}" -eq 0 ]; then
+            echo "usage: $0 --series [--sprint <N>] <dir|verdict>..." >&2
             exit 2
         fi
-        SERIES_PATHS=("$@")
         ;;
     "" )
         echo "usage: $0 --expected <gate_type>   |   $0 <gate_type> <verdict_path>" >&2
@@ -321,7 +355,7 @@ case "${1:-}" in
         echo "       $0 --merge <gate_type> <verdict_path> <part>..." >&2
         echo "       $0 --check-part <part>" >&2
         echo "       $0 --coverage <gate_type> <verdict_path>" >&2
-        echo "       $0 --series <dir|verdict>..." >&2
+        echo "       $0 --series [--sprint <N>] <dir|verdict>..." >&2
         exit 2
         ;;
     -*)
@@ -804,6 +838,8 @@ if [ "$MODE" = "series" ] && grep -rqF '"FAIL_WAIVED"' -- "${SERIES_PATHS[@]}" 2
     [ -z "$S_STATUS" ] || echo "VALIDATE-GATE-ADJUDICATION: NOTE (--series) — no waiver could be resolved (${S_STATUS}), so every FAIL_WAIVED in scope counts as FAIL in its stall run." >&2
 fi
 export GA_SERIES_WAIVERS
+# Assigned "" at the top, so an ambient value never scopes a run the caller did not scope.
+export GA_SERIES_SPRINT
 # Split the verified rows back apart. A waiver row never reaches the in-force reader, whose
 # dict would otherwise absorb any six-field row as a suppression of its third field.
 GA_WAIVERS="$(printf '%s\n' "$GA_IN_FORCE" | sed -n 's/^waiver://p')"

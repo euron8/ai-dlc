@@ -3580,17 +3580,23 @@ If any check fails:
    rule), so there is no targeted or partial re-adjudication to reach for.
 3. If the check now passes, continue with remaining checks.
 4. If still failing after remediation, escalate as HARD_BLOCK per Rule 12. Run
-   this after every recorded pass:
+   this after every recorded pass, where `<N>` is the leading integer of the
+   `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (the same `<N>` the
+   series id carries):
 
-       scripts/ai-dlc/validate-gate-adjudication.sh --series ${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/
+       scripts/ai-dlc/validate-gate-adjudication.sh --series --sprint <N> ${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/
 
    exit 0 required. It errors when one `check_id` holds FAIL across three
    consecutive passes of one `gate_series_id`, and that non-zero exit is what
-   makes the escalation fire. **Read the line, not just the exit code.** A
-   directory holding no series exits 0 and prints
-   `VALIDATE-GATE-ADJUDICATION: PASS — … EXAMINED NOTHING`. Any output line
-   containing `EXAMINED NOTHING` means the rung verified nothing, and that exit 0
-   is not a pass.
+   makes the escalation fire. `--sprint <N>` counts only the current sprint's
+   series: another sprint's series and the legacy verdicts that predate every
+   series are named `not in scope` and counted on the result line, never
+   silently dropped. **Read the line, not just the exit code.** A run with no
+   in-scope series exits 0 and prints
+   `VALIDATE-GATE-ADJUDICATION: PASS — sprint <N>: … EXAMINED NOTHING`. Any
+   output line containing `EXAMINED NOTHING` means the rung verified nothing,
+   and that exit 0 is not a pass; a sprint number other than the snapshot's
+   reads exactly that way.
 5. Do NOT skip a failing check. Do NOT proceed with a known failure.
    "We'll fix it later" is not an acceptable remediation for gate checks.
 

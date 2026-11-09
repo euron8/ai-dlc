@@ -2047,3 +2047,4 @@ Receipt: it reads §5c's numbered list only (from the first `N. ` item to the ne
 Provenance: batch b252, found by the BL-934 contract adversary (DEFECT 2); lead ai-dlc-78.
 
 verify: sh P=core/skills/ai-dlc/steps/retro.md; grep -q 'Pre-Commit Validation Gate' "$P" || exit 9; s="$(awk '/^### 5c\. /{f=1;next} f&&/^#/{f=0} f&&/^\*\*An unclearable check/{f=0} f&&/^[0-9]+\. /{i=1} f&&i' "$P")"; [ -n "$s" ] || exit 9; grep -qF 'run gate validation [retro]' <<<"$s"
+
