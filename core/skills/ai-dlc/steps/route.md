@@ -584,6 +584,7 @@ pre-migration `sprint-status/sprint-<N>.yaml` a validator blocks on — and
 writes the new envelope in ONE step. A freeze already present under the
 old spelling is honoured where it lies and never duplicated, so a tree
 that has not run the migration keeps its archive.
+A BMAD-format `sprint-status.yaml` (no `sprint:`, a `development_status:` key) found in the slot is moved to `s<N>/bmad-sprint-status.yaml` before the freeze is written, or removed if an identical copy is already there; a differing copy there refuses (exit 3).
 On a greenfield project it creates the file.
 
 Rotation lives HERE, at pipeline start, and not at sprint close, for one
@@ -593,8 +594,12 @@ does not exist yet — so the number has nowhere to come from and the roll
 falls to whoever remembers to do it by hand.
 
 Exit **3** is a HARD_BLOCK: the prior sprint is not closed (`status:` is
-not `done`), or a frozen archive already exists and differs from the
-canonical it would freeze. Surface it and wait — never freeze live state.
+not `done`); a frozen archive already exists and differs from the
+canonical it would freeze; a BMAD copy whose relocation target differs; a
+view ahead of the target; the two views disagreeing on `sprint:`; or a slot, its `s<N>` directory, or a relocation target that is not of the expected kind. Exit **1** is a
+preamble-only view beside a view still to roll. Exit **1** is also a phase-2 I/O failure, which can leave earlier writes in place; fix the cause and re-run roll, which completes a half-rolled tree. Every phase-1 refusal writes
+nothing and prints its own `Remedy:` line. Surface it and wait — never
+freeze live state.
 
 **Confirm the resolved sprint scope (Rule 3 pause point (d) — MANDATORY).**
 Before initializing the snapshot, and before any planning step loads, ask the

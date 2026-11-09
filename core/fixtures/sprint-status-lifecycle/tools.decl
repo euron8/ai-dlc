@@ -14,3 +14,4 @@ mktemp
 env
 python3
 sort
+chmod
