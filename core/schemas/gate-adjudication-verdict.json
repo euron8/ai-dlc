@@ -165,7 +165,7 @@
       "why": "A series is ONE gate entry. Two gate_types under one series id means the id was copied across gates, and every series-level count computed from it is measuring a union of unrelated loops. Two passes sharing a nonce means one overwrote the other's path and a pass is missing from the count."
     },
     "series_stall_run": {
-      "assert": "--series only: no check_id holds FAIL across the stall threshold K consecutive passes of one gate_series_id (K is a hard constant in validate-gate-adjudication.sh, not a field here -- a consumer-editable threshold is a dial that turns the rung off), passes ordered by gate_nonce",
+      "assert": "--series only: no check_id holds FAIL across the stall threshold K consecutive passes of one gate_series_id (K is a hard constant in validate-gate-adjudication.sh, not a field here -- a consumer-editable threshold is a dial that turns the rung off), passes ordered by gate_nonce; under --sprint <N> only the series whose gate_series_id carries -s<N>- are grouped (the legacy reference point still spans every sprint)",
       "why": "The failure protocol already said 'if still failing after remediation, escalate as HARD_BLOCK per Rule 12' and nothing counted, so nothing escalated: one reference-consumer gate ran 11 passes with the same check failing the last 7 and hard_block_count stayed 0. Ordering is by gate_nonce (gate entry), NOT generated_at (when the adjudicator finished writing) — measured on that same 11-pass series, the two orders disagree, because a later-entered pass can be written first."
     }
   },

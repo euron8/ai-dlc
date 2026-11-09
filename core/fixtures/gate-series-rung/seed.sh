@@ -12,7 +12,7 @@ set -uo pipefail
 
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/gate-series-rung.XXXXXX")" || exit 2
 
-python3 - "$ROOT" <<'PY'
+GSR_DIR="$(cd "$(dirname "$0")" && pwd)" python3 - "$ROOT" <<'PY'
 import json, os, sys
 
 root = sys.argv[1]
@@ -167,6 +167,92 @@ for case in sorted(os.listdir(root)):
         with open(os.path.join(sdir, "gate-story-repair-p%d.md" % M), "w",
                   encoding="utf-8") as fh:
             fh.write(STRUCTURED)
+
+# --- THE SPRINT-SCOPED WORLDS (--series --sprint <N>). Written AFTER the repair trail above, so
+# none of them gets a record: the graph world's MISSING REPAIR RECORD findings are its own. ---------
+# graph   the reference consumer's live corpus, rebuilt from graph-corpus.tsv (real stems, nonces,
+#         series ids, generated_at and FAIL sets; s302-s307 and 94 legacy files, one of them the
+#         unplaceable `planning-20260719T0300-arch`). Every other world below is passed BESIDE it,
+#         as a second --series path, so the out-of-scope population is always the real one.
+here = os.environ["GSR_DIR"]
+gw = os.path.join(root, "graph", "_bmad-output", "gate-adjudication")
+os.makedirs(gw)
+for line in open(os.path.join(here, "graph-corpus.tsv"), encoding="utf-8"):
+    if line.startswith("#") or not line.strip():
+        continue
+    stem, gt, nonce, sid, gen, fails = line.rstrip("\n").split("\t")
+    doc = {"schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_type": gt}
+    if sid != "-":
+        doc["gate_series_id"] = sid
+    doc["gate_nonce"] = nonce
+    if gen != "-":
+        doc["generated_at"] = gen
+    doc["adjudicator_agent_id"] = "gate-adjudicator-fixture"
+    doc["catalog"] = "core"
+    doc["verdicts"] = [{"check_id": c, "verdict": "FAIL", "evidence": "fixture"}
+                       for c in fails.split(",") if fails != "-"]
+    with open(os.path.join(gw, stem + ".json"), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(doc, indent=2) + "\n")
+    # graph-legacy  the same corpus's placeable legacy verdicts alone: the unscoped EXAMINED NOTHING path.
+    if sid == "-" and stem != "planning-20260719T0300-arch.verdict":
+        lw = os.path.join(root, "graph-legacy", "_bmad-output", "gate-adjudication")
+        os.makedirs(lw, exist_ok=True)
+        with open(os.path.join(lw, stem + ".json"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(doc, indent=2) + "\n")
+
+
+def sv(case, ts, sid, check7="PASS", gen=None, drop_gen=False):
+    # One implementation verdict at nonce implementation-<ts>; sid None writes no gate_series_id.
+    d = os.path.join(root, case, "_bmad-output", "gate-adjudication")
+    os.makedirs(d, exist_ok=True)
+    nonce = "implementation-" + ts
+    doc = {"schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_type": "implementation"}
+    if sid:
+        doc["gate_series_id"] = sid
+    doc["gate_nonce"] = nonce
+    if not drop_gen:
+        doc["generated_at"] = gen or "%s-%s-%sT%s:%s:%sZ" % (ts[0:4], ts[4:6], ts[6:8], ts[9:11], ts[11:13], ts[13:15])
+    doc["adjudicator_agent_id"] = "gate-adjudicator-fixture"
+    doc["catalog"] = "core"
+    doc["verdicts"] = [{"check_id": "7", "verdict": check7, "evidence": "fixture"}]
+    with open(os.path.join(d, nonce + ".verdict.json"), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(doc, indent=2) + "\n")
+
+
+def unplaceable(case, nonce, gen):
+    # A legacy planning verdict whose nonce fails the pattern, in the shape of the real -arch file.
+    d = os.path.join(root, case, "_bmad-output", "gate-adjudication")
+    os.makedirs(d, exist_ok=True)
+    doc = {"schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_type": "planning", "gate_nonce": nonce}
+    if gen is not None:
+        doc["generated_at"] = gen
+    doc.update({"adjudicator_agent_id": "gate-adjudicator-fixture", "catalog": "core",
+                "verdicts": [{"check_id": "7", "verdict": "PASS", "evidence": "fixture"}]})
+    with open(os.path.join(d, nonce + ".verdict.json"), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(doc, indent=2) + "\n")
+
+
+S322 = "implementation-s322-20261109T010000Z"
+# s322-one          ONE conforming s322 pass.
+sv("s322-one", "20261109T010000Z", S322)
+# s322-legacy-after the same pass, plus a legacy verdict (no id) one hour LATER: a stripped live pass.
+sv("s322-legacy-after", "20261109T010000Z", S322)
+sv("s322-legacy-after", "20261109T020000Z", None)
+# s322-stripped     a 3-pass FAIL series of check 7 whose FIRST pass lost its id. Its nonce sorts before
+#                   the series' own remaining passes but after every earlier sprint's series.
+for i, ts in enumerate(("20261109T010000Z", "20261109T020000Z", "20261109T030000Z")):
+    sv("s322-stripped", ts, None if i == 0 else S322, "FAIL")
+# s322-nosprint     3 FAIL passes under an id carrying no -s<N>- at all.
+for ts in ("20261109T010000Z", "20261109T020000Z", "20261109T030000Z"):
+    sv("s322-nosprint", ts, "implementation-20261109T010000Z", "FAIL")
+# s322-reset        a reset INSIDE sprint 322: two -s322- ids, two FAILs each, neither reaching K.
+for i, ts in enumerate(("20261109T010000Z", "20261109T020000Z", "20261109T030000Z", "20261109T040000Z")):
+    sv("s322-reset", ts, S322 if i < 2 else "implementation-s322-reset-20261109T030000Z", "FAIL")
+# unplaceable-recent  an -arch-shaped legacy nonce written AFTER every series began.
+unplaceable("unplaceable-recent", "planning-20261109T0100-arch", "2026-11-09T01:00:00Z")
+# unplaceable-undated the same shape with generated_at missing, and with it unparseable.
+unplaceable("unplaceable-undated", "planning-20261109T0100-arch", None)
+unplaceable("unplaceable-undated", "planning-20261109T0200-arch", "yesterday")
 PY
 
 printf '%s\n' "$ROOT"

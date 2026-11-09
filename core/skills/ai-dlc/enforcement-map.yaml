@@ -964,8 +964,9 @@ checks:
       - core/scripts/validate-gate-adjudication.sh   # --series: the stall rung step 4 escalates on
     call_sites:
       - site: gate-validation.md Gate Failure step 4
-        posture: exit 0 required after every recorded pass; a non-zero --series exit
-          is a check_id holding FAIL across three consecutive passes of one
+        posture: exit 0 required after every recorded pass of `--series --sprint <N>`,
+          N the snapshot's sprint_id, which groups only that sprint's series; a non-zero
+          exit is a check_id holding FAIL across three consecutive passes of one
           gate_series_id, and obliges the HARD_BLOCK escalation
         why: >-
           the protocol already ended in "if still failing after remediation,

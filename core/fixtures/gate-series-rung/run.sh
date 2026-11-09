@@ -195,12 +195,63 @@ if ! w_p3 "$VALIDATOR"; then W_BASE=0
   FAIL_WAIVED whose waiver does not resolve continues the run as FAIL.
   validator said: $(head -3 <<<"$OUT")"; fi
 
+# --- the --sprint cells (section 5 below states them). Defined here, ahead of cell_green, because the
+# W-MK / W-MA matrix scoring drives every cell and runs before section 5 is reached.
+# H byte-locks every unscoped --series message. A DELIBERATE wording change turns it red: re-take both digests
+# with hsig from the changed validator, and say in the commit that the unscoped output changed on purpose.
+H_GRAPH=8b97a31758ceb96afbc157064b758927
+H_LEGACY=ca0413ff65393dfcf12ff1fdf35becec
+SG="$(gd graph)"
+sr() { local v="$1"; shift; OUT="$(bash "$v" --series "$@" 2>&1)"; RC=$?; }
+has() { grep -qF -- "$1" <<<"$OUT"; }
+# hsig <validator> <dir>: md5 of "<rc>\n<stdout>\0<stderr>" with the seeded root normalised.
+hsig() {
+  bash "$1" --series "$2" >"$ROOT/.h.out" 2>"$ROOT/.h.err"; RC=$?
+  python3 -c 'import hashlib,sys
+r,rc,o,e=sys.argv[1:]
+t=rc+"\n"+open(o).read().replace(r,"<ROOT>")+"\0"+open(e).read().replace(r,"<ROOT>")
+print(hashlib.md5(t.encode()).hexdigest())' "$ROOT" "$RC" "$ROOT/.h.out" "$ROOT/.h.err"
+}
+sc_A() { sr "$1" --sprint 302 "$SG"; [ "$RC" -eq 1 ] && has "STALLED: series 'implementation-s302-20260812T202738Z'"; }
+sc_B() { sr "$1" --sprint 322 "$SG" "$(gd s322-one)"; [ "$RC" -eq 0 ] && has "1 series / 1 pass(es)" \
+  && has "Sprint 322: 187 file(s) out of scope (93 of another sprint's series, 94 legacy)."; }
+sc_C() { sr "$1" --sprint 322 "$SG"; [ "$RC" -eq 0 ] && has "PASS — sprint 322: 0 in-scope series across 187" \
+  && has "EXAMINED NOTHING" && has "not in scope (legacy, unplaceable nonce, generated_at 2026-07-19T02:53:44Z"; }
+sc_D() { sr "$1" --sprint 32 "$SG" "$(gd s322-one)"; [ "$RC" -eq 0 ] && has "PASS — sprint 32: 0 in-scope series" \
+  && has "EXAMINED NOTHING"; }
+sc_E() {
+  local a bad=0
+  for a in 0322 3x ""; do
+    OUT="$(bash "$1" --series "$SG" --sprint $a 2>&1)"; RC=$?; [ "$RC" -eq 2 ] && has "usage:" || bad=1
+  done
+  OUT="$(bash "$1" --series --sprint 322 "$SG" --sprint 322 2>&1)"; RC=$?; [ "$RC" -eq 2 ] && has "usage:" || bad=1
+  sr "$1" --sprint 322 "$SG" "$(gd s322-one)"; local before="$OUT" brc=$RC
+  sr "$1" "$SG" "$(gd s322-one)" --sprint 322
+  # E's own runs end in exit 2 by design, so RC is the cell's verdict here, not the last exit: the
+  # matrix scorer reads an RC outside 0/1 as a broken harness.
+  if [ "$bad" -eq 0 ] && [ "$brc" -eq 0 ] && [ "$RC" -eq 0 ] && [ "$before" = "$OUT" ]; then RC=0; return 0; fi
+  RC=1; return 1
+}
+sc_F() { sr "$1" --sprint 322 "$SG" "$(gd s322-legacy-after)"; [ "$RC" -eq 1 ] \
+  && has "implementation-20261109T020000Z.verdict.json: carries no gate_series_id"; }
+sc_F1() { sr "$1" --sprint 322 "$SG" "$(gd s322-stripped)"; [ "$RC" -eq 1 ] \
+  && has "implementation-20261109T010000Z.verdict.json: carries no gate_series_id"; }
+sc_F3() { sr "$1" --sprint 322 "$SG" "$(gd s322-nosprint)"; [ "$RC" -eq 1 ] && has "carries no -s<N>- sprint field"; }
+sc_UR() { sr "$1" --sprint 322 "$SG" "$(gd unplaceable-recent)"; [ "$RC" -eq 1 ] \
+  && has "planning-20261109T0100-arch.verdict.json: gate_nonce"; }
+sc_UU() { sr "$1" --sprint 322 "$SG" "$(gd unplaceable-undated)"; [ "$RC" -eq 1 ] \
+  && has "planning-20261109T0100-arch.verdict.json: gate_nonce" && has "planning-20261109T0200-arch.verdict.json: gate_nonce"; }
+sc_G() { sr "$1" --sprint 322 "$SG" "$(gd s322-reset)"; [ "$RC" -eq 1 ] \
+  && has "SPLIT SERIES: check '7'" && has "and 'implementation-s322-reset-20261109T030000Z'"; }
+sc_H() { [ "$(hsig "$1" "$SG")" = "$H_GRAPH" ] && [ "$(hsig "$1" "$(gd graph-legacy)")" = "$H_LEGACY" ]; }
+
 # --- the matrix cells. cell_green <cell> <validator>: 0 when the validator gives the UNMUTATED verdict for the
 # waiver case (GREEN), 1 when it does not (RED), 2 for an UNKNOWN CELL (an unknown name must never read as GREEN).
 cell_green() {
-  case "$1" in W1) w_p1 "$2" ;; W2) w_p2 "$2" ;; W3) w_p3 "$2" ;; *) return 2 ;; esac
+  case "$1" in W1) w_p1 "$2" ;; W2) w_p2 "$2" ;; W3) w_p3 "$2" ;;
+    A|B|C|D|E|F|F1|F3|UR|UU|G|H) "sc_$1" "$2" ;; *) return 2 ;; esac
 }
-MX_CELLS='W1 W2 W3'
+MX_CELLS='W1 W2 W3 A B C D E F F1 F3 UR UU G H'
 # The header IS the decides/twins list: nothing else in this file restates it.
 mx_row() { # mx_row <mutant> <decides|twins>
   awk -v n="$1" -v f="$2" '
@@ -375,6 +426,159 @@ expect legacy-interleaved 1 'falls at or after' \
   If the fail-open covered this case, the mechanism would ship its own opt-out."
 
 # --------------------------------------------------------------------------
+# 5. --sprint <N> — the rung scoped to one sprint's series
+# --------------------------------------------------------------------------
+# THE DEFECT. Unscoped, the rung reads every verdict on disk, so the reference consumer's closed
+# sprints (s302-s307: 4 STALLED, 4 SPLIT SERIES, a malformed legacy nonce, a duplicated nonce)
+# failed every later sprint's step 4 and its exit 0 was unreachable. Every cell below runs over
+# the `graph` world -- that consumer's 187 real stems, nonces, series ids, generated_at values and
+# FAIL sets, from graph-corpus.tsv -- with the cell's own world beside it as a second path, so the
+# out-of-scope population is always the real one.
+#   A   --sprint 302 still STALLS on implementation-s302-20260812T202738Z: the filter keeps an in-scope stall
+#   B   --sprint 322 with ONE conforming s322 pass: exit 0, exactly 1 series / 1 pass, the out-of-scope count
+#   C   --sprint 322 with no s322 pass: EXAMINED NOTHING naming sprint 322; the real -arch file exempt (F2)
+#   D   --sprint 32 against an s322 pass selects nothing: the sprint is an exact field, never a prefix
+#   E   both flag orders byte-equal; a leading zero, a non-integer and a second --sprint each exit 2
+#   F   a legacy verdict sorting AFTER the first in-scope pass still blocks
+#   F1  an s322 FAIL series whose first pass lost its id still blocks, judged against every sprint's series
+#   F3  a series id with no -s<N>- is a defect under --sprint, never scoped out
+#   UR  an unplaceable legacy nonce written after every series began still blocks (F2)
+#   UU  the same with generated_at missing, and with it unparseable (F2)
+#   G   a reset INSIDE sprint 322 still trips SPLIT SERIES
+#   H   unscoped output is byte-identical to the BASE script's, on graph and on its legacy-only half
+#       (the digests below were taken from the pre-flag validator, never from this one)
+# The REMEASURE command prints, per mutant, how many non-decides non-twin cells stayed GREEN; which ones moved
+# was read off a copy of this file that drove every cell per mutant: SC-DROP also moves D and E, because every
+# closed-sprint series re-enters scope and its STALLED/SPLIT findings fail both; SC-F1 also moves B, D and E,
+# because the reference point shrinks to the in-scope passes and the real -arch file loses its F2 exemption;
+# SC-SPLITALL also moves E, whose two flag orders then exit 1 together. None moves its twin.
+# MUTANT-MATRIX SC-DROP decides=B,C twins=A
+# MUTANT-MATRIX SC-PREFIX decides=D twins=B
+# MUTANT-MATRIX SC-LEGEX decides=F,F1 twins=C
+# MUTANT-MATRIX SC-F1 decides=F1,C twins=F
+# MUTANT-MATRIX SC-F3 decides=F3 twins=B
+# MUTANT-MATRIX SC-F2 decides=UR,UU twins=C
+# MUTANT-MATRIX SC-ORDER decides=E twins=B
+# MUTANT-MATRIX SC-SPLITOFF decides=G twins=A
+# MUTANT-MATRIX SC-SPLITALL decides=B twins=G
+# MUTANT-MATRIX-DYNAMIC SC-loop why=the nine SC rows above are scored by one loop over SC_MUTS whose kill names each row by its loop variable
+SC_CELLS='A B C D E F F1 F3 UR UU G H'
+SC_BASE=0
+SC_RED=0
+for c in $SC_CELLS; do
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if "sc_$c" "$VALIDATOR"; then echo "ok: sprint-scope $c"
+  else SC_RED=$((SC_RED + 1)); note_fail "sprint-scope $c did not hold on the shipped validator (rc=$RC).
+  validator said: $(head -3 <<<"$OUT")"; fi
+done
+if [ "$SC_RED" -eq 0 ]; then
+  SC_BASE=1
+  ok "sprint-scope: all 12 cells hold unmutated in this run, so the mutants below are scored"
+fi
+
+# The mutants, each a copy of the validator's whole directory (all four siblings), schema and map
+# passed explicitly, an unmutated control from the same harness scored first on two cells with a
+# positive conjunct each.
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$SC_BASE" -ne 1 ]; then
+  note_fail "sprint-scope mutants not scored: a cell failed unmutated in this run"
+else
+  VD="$(dirname "$VALIDATOR")"; SC_SCHEMA=""; SC_MAP=""
+  for c in "$DIR/../../schemas" "$DIR/../../../.claude/schemas"; do
+    [ -f "$c/gate-adjudication-verdict.json" ] && { SC_SCHEMA="$c/gate-adjudication-verdict.json"; break; }; done
+  for c in "$DIR/../../skills/ai-dlc" "$DIR/../../../.claude/skills/ai-dlc"; do
+    [ -f "$c/enforcement-map.yaml" ] && { SC_MAP="$c/enforcement-map.yaml"; break; }; done
+  SCM="$ROOT/.sc"
+  SC_MUTS='SC-DROP SC-PREFIX SC-LEGEX SC-F1 SC-F3 SC-F2 SC-ORDER SC-SPLITOFF SC-SPLITALL'
+  for m in ctl $SC_MUTS; do
+    mkdir -p "$SCM/$m"
+    for s in validate-gate-adjudication.sh gate_adjudication.py validate-adversarial-convergence.sh validate-suppression-lifetime.sh; do
+      cp "$VD/$s" "$SCM/$m/"; done
+  done
+  # Each mutation names every anchor it edits; an anchor that is absent or not unique leaves the copy
+  # byte-identical, which the cmp -s below reports as DID NOT APPLY.
+  python3 - "$SCM" <<'PY'
+import os, sys
+root = sys.argv[1]
+PY_ = "gate_adjudication.py"
+SH_ = "validate-gate-adjudication.sh"
+FILTER = "            if sp is not None and sp != sprint:\n"
+M = {
+    "SC-DROP": [(PY_, FILTER, "            if False:\n")],
+    "SC-PREFIX": [(PY_, FILTER, "            if sp is not None and not sp.startswith(sprint):\n")],
+    "SC-F3": [(PY_, FILTER, "            if sp != sprint:\n")],
+    "SC-LEGEX": [(PY_, "        if gt in live_first and nonce >= live_first[gt]:\n",
+                  "        if sprint is None and gt in live_first and nonce >= live_first[gt]:\n")],
+    "SC-F1": [(PY_, "    for gt, nonce in [(t[1], t[2]) for t in passes] + ref_extra:\n",
+               "    for gt, nonce in [(t[1], t[2]) for t in passes]:\n")],
+    "SC-F2": [(PY_, "        if gen_ts is not None and first is not None and gen_ts < first.rsplit(\"-\", 1)[1]:\n",
+               "        if True:\n")],
+    "SC-ORDER": [(SH_, '            if [ "$1" = "--sprint" ]; then\n',
+                  '            if [ "$1" = "--sprint" ] && [ "${#SERIES_PATHS[@]}" -eq 0 ]; then\n')],
+    "SC-SPLITOFF": [(PY_, "    for gt, lst in sorted(by_type.items()):\n",
+                     "    for gt, lst in (sorted(by_type.items()) if sprint is None else []):\n")],
+    # the boundary arm alone fed every sprint's series, after the stall and repair arms ran scoped
+    "SC-SPLITALL": [
+        (PY_, "    ref_extra = []          # (gate_type, nonce)",
+              "    OUTP = []\n    ref_extra = []          # (gate_type, nonce)"),
+        (PY_, "                    ref_extra.append((o_gt, o_nonce))\n",
+              "                    ref_extra.append((o_gt, o_nonce))\n"
+              "                    OUTP.append((str(sid), o_gt, o_nonce, path, {str(e['check_id']): e.get('verdict') for e in V.get('verdicts', []) or [] if isinstance(e, dict) and e.get('check_id') is not None}))\n"),
+        (PY_, "    by_type = {}\n    for sid in series:\n",
+              "    for _s, _g, _n, _p, _e in OUTP:\n        series.setdefault(_s, []).append((_n, _g, _p, _e))\n"
+              "        series[_s].sort(key=lambda t: (t[0], t[2]))\n    by_type = {}\n    for sid in series:\n"),
+    ],
+}
+for name, edits in M.items():
+    texts = {}
+    ok = True
+    for f, old, new in edits:
+        p = os.path.join(root, name, f)
+        t = texts.get(p) or open(p, encoding="utf-8").read()
+        if t.count(old) != 1:
+            ok = False
+            break
+        texts[p] = t.replace(old, new)
+    if ok:
+        for p, t in texts.items():
+            open(p, "w", encoding="utf-8").write(t)
+PY
+  export AI_DLC_VERDICT_SCHEMA="$SC_SCHEMA" AI_DLC_ENFORCEMENT_MAP="$SC_MAP"
+  if [ -z "$SC_SCHEMA" ] || [ -z "$SC_MAP" ] || [ ! -f "$SCM/ctl/validate-adversarial-convergence.sh" ] \
+     || [ ! -f "$SCM/ctl/validate-suppression-lifetime.sh" ]; then
+    note_fail "sprint-scope mutant harness broken: schema '$SC_SCHEMA', map '$SC_MAP' or a sibling is missing from the copy"
+  elif ! sc_A "$SCM/ctl/validate-gate-adjudication.sh" || ! sc_B "$SCM/ctl/validate-gate-adjudication.sh"; then
+    note_fail "sprint-scope control: the UNMUTATED copy failed A or B, so the copy is not the program
+  validator said: $(head -3 <<<"$OUT")"
+  else
+    echo "ok: sprint-scope control: the unmutated copy STALLS on s302 and passes 1 series / 1 pass for s322"
+    for m in $SC_MUTS; do
+      MV="$SCM/$m/validate-gate-adjudication.sh"
+      if cmp -s "$SCM/ctl/gate_adjudication.py" "$SCM/$m/gate_adjudication.py" \
+         && cmp -s "$SCM/ctl/validate-gate-adjudication.sh" "$MV"; then
+        note_fail "$m DID NOT APPLY: an anchor is absent or not unique, so the mutant is byte-identical to the control"
+        continue
+      fi
+      dec="$(mx_row "$m" decides)"; tw="$(mx_row "$m" twins)"
+      [ -n "$dec" ] && [ -n "$tw" ] || { note_fail "$m: no single MUTANT-MATRIX row"; continue; }
+      red=""; green=""
+      for c in $(printf '%s' "$dec" | tr ',' ' '); do "sc_$c" "$MV" && green="$green $c" || red="$red $c"; done
+      # SC-SPLITALL dies on B for the boundary arm's reason, never a stall or a repair record.
+      if [ "$m" = SC-SPLITALL ]; then sc_B "$MV"; grep -q 'SPLIT SERIES' <<<"$OUT" && ! grep -q 'STALLED' <<<"$OUT" || green="$green B:wrong-reason"; fi
+      printf 'plain-twins %s\n' "$m" >> "$MXL"
+      twred=""
+      for t in $(printf '%s' "$tw" | tr ',' ' '); do "sc_$t" "$MV" || twred="$twred $t"; done
+      ASSERTIONS=$((ASSERTIONS + 1))
+      if [ -n "$green" ]; then note_fail "$m SURVIVED on$green: its deciding cell(s) still hold under the mutation"
+      elif [ -n "$twred" ]; then note_fail "$m: its twin(s)$twred also changed, so the kill is not confined to its own cells"
+      else mutant_killed "$SC_BASE" "$m" "$m KILLED by$red; twin(s) $tw unchanged"; fi
+      if [ "$MODE" = matrix ]; then mx_score "$m" "$MV"; fi
+    done
+  fi
+  unset AI_DLC_VERDICT_SCHEMA AI_DLC_ENFORCEMENT_MAP
+fi
+
+# --------------------------------------------------------------------------
 # RULE 9: a plain run executes NO matrix-only cell. Every matrix-only score appends `mx-score` to the ledger before
 # anything else; the per-push twin check appends `plain-twins` to the SAME ledger. That second line is the CONTROL:
 # it must be present, so a zero count of matrix-only cells cannot come from a ledger nothing writes.
@@ -387,7 +591,8 @@ if [ "$MODE" = plain ]; then
   else echo "ok: rule-9: a plain run executed no matrix-only cell, while its $mx_ctl per-push twin check(s) wrote to the same ledger"; fi
 else
   mx_hdr="$(awk '$1 == "#" && $2 == "MUTANT-MATRIX" { print $3 }' "$SELF_FILE" | LC_ALL=C sort | tr '\n' ' ')"
-  [ "$mx_hdr" = "W-MA W-MK " ] || { echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; exit 2; }
+  [ "$mx_hdr" = "SC-DROP SC-F1 SC-F2 SC-F3 SC-LEGEX SC-ORDER SC-PREFIX SC-SPLITALL SC-SPLITOFF W-MA W-MK " ] \
+    || { echo "MATRIX BROKEN: the header rows are [$mx_hdr]"; exit 2; }
   echo "MATRIX-SUMMARY $mx_only matrix-only cell(s) ran, $mx_ctl per-push twin check(s)"
   FAILURES=$((FAILURES + MX_FAILS))
 fi

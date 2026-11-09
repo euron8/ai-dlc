@@ -1953,6 +1953,38 @@ else
   ga_a_exemption "$GA_STEPS_GV" \
     && ok "corpus: the Gate Failure block names 'pipeline-snapshot-history.md' — the lead-repair exemption is stated where the re-run rule is" \
     || bad "corpus: the Gate Failure block does not name 'pipeline-snapshot-history.md' — the lead-repair exemption is missing from the step that decides the re-run set"
+
+  # --- STEP 4's STALL RUNG IS SPRINT-SCOPED ---------------------------------
+  # Unscoped, `--series` reads every verdict on disk, and the reference consumer's closed sprints
+  # (s302-s307) made step 4's exit 0 unreachable in every later sprint. The pin is keyed on the
+  # step-4 COMMAND LINE inside the Gate Failure block, never a file-wide grep: the series-id
+  # minting rule elsewhere in the file also names `sprint_id` and `pipeline-snapshot.md`.
+  # ga_step4 <file>: step 4's lines, from `4. If still failing` to the next numbered step.
+  ga_step4() { ga_block "$1" | awk '/^4\. If still failing/{f=1} f&&/^5\. /{exit} f'; }
+  ga_a_step4() {
+    local b n l
+    b="$(ga_step4 "$1")"
+    n="$(grep -c 'validate-gate-adjudication\.sh --series' <<<"$b")" || n=0
+    l="$(grep 'validate-gate-adjudication\.sh --series' <<<"$b")"
+    [ "$n" -eq 1 ] && ga_hast "$l" '--series --sprint <N> ' \
+      && ga_hast "$b" '`sprint_id` line of `_bmad-output/pipeline-snapshot.md`'
+  }
+  GA_GV_S4="$WORK/sa-gv-step4-unscoped.md"
+  # The decoy: the corpus with `--sprint <N> ` stripped from step 4's command line ONLY.
+  awk '/CHECK_LOADED: failure/{blk=1} blk&&/^## Gate Reset/{blk=0}
+       blk&&/^4\. If still failing/{s4=1} s4&&/^5\. /{s4=0}
+       s4&&/validate-gate-adjudication\.sh --series --sprint <N> /{sub(/--sprint <N> /, "")} {print}' \
+    "$GA_STEPS_GV" > "$GA_GV_S4"
+  if cmp -s "$GA_STEPS_GV" "$GA_GV_S4"; then
+    bad "FIXTURE STALE: stripping '--sprint <N>' from step 4's command line changed no byte, so the step-4 pin's probe discriminates nothing"
+  elif ga_a_step4 "$GA_GV_S4"; then
+    bad "SELF-PROBE FAILED: step 4 with '--sprint <N>' stripped from its --series line still PASSED the step-4 pin — it cannot fire"
+  else
+    ok "step-4 probe: gate-validation.md with '--sprint <N>' stripped from step 4's --series line FAILS the step-4 pin"
+  fi
+  ga_a_step4 "$GA_STEPS_GV" \
+    && ok "corpus: Gate Failure step 4 carries exactly one --series line, it passes '--sprint <N>', and the step names the sprint_id line of pipeline-snapshot.md as <N>" \
+    || bad "corpus: Gate Failure step 4's stall rung is not '--series --sprint <N>' on exactly one line with <N> named as the sprint_id line of _bmad-output/pipeline-snapshot.md — an unscoped rung fails on every closed sprint's stall and its exit 0 is unreachable"
 fi
 
 # ============================================================================
