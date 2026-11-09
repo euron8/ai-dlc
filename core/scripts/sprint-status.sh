@@ -15,7 +15,8 @@
 #   sprint-status.sh --check <file>            # fail if <file>'s envelope is missing/malformed
 #   sprint-status.sh sprint-id [--root <dir>]  # print the resolved sprint_id (route.md Step 6)
 #   sprint-status.sh roll --sprint <N> [--name <s>] [--variant <s>] [--intensity <s>] [--root <dir>]
-#                                              # atomic freeze-of-closed-sprint + roll-forward
+#                                              # freeze-of-closed-sprint + roll-forward; every
+#                                              # refusal is decided before any write (two phases)
 #   sprint-status.sh check-stories [--require-done] [--sprint <N>] [--root <dir>]
 #                                              # gate-validation.md Check 5: every story entry's
 #                                              # `status:` equals the status in the story file it
@@ -104,6 +105,25 @@
 # consumer did that until it retired its close-sweep. Rotating at start keeps the predecessor's
 # terminal state readable exactly until its successor exists, and sprint-id REFUSES a
 # preamble-only canonical (exit 1) rather than reconstruct the number from the frozen archives.
+#
+# ROLL IS TWO PHASES. Phase 1 reads every view and decides its outcome with NO write, collecting
+# EVERY refusal: a view not closed, a divergent freeze, a divergent BMAD relocation target, a freeze
+# slot or relocation target that exists and is not a regular file, a slot directory s<N> that exists
+# and is not a directory, a view AHEAD of the target, views
+# that disagree on `sprint:` (rule 5's text; a view already at the target is exempt only when every
+# view behind it is at exactly target-1, the half-rolled tree a re-run completes), and a
+# preamble-only view beside a view that would be written (sprint-id's degenerate-view text, exit 1).
+# Any refusal exits (3, or 1 when the only refusal is the degenerate view) before a byte is written,
+# naming every refusing view and path, each with a remedy. Phase 2 performs the writes. It is NOT
+# atomic: an I/O failure there exits 1 with the earlier writes in place.
+#
+# A BMAD COPY IN A FREEZE SLOT IS NOT A FREEZE. A slot file with no top-level `sprint:` and a
+# column-0 `development_status:` key is a BMAD sprint-status the BMAD planner wrote there; roll
+# moves it byte-for-byte (os.replace) to s<N>/bmad-sprint-status.yaml and writes the real freeze
+# into the slot, or removes the slot copy when that name already holds identical bytes. Beside an
+# identical legacy freeze it is relocated and nothing is written into the slot. DELIBERATE MISS: a
+# BMAD refresh over a slot that already holds a freeze leaves both keys, which is a freeze that
+# DIFFERS, and gets the atomic exit 3, not a relocation.
 #
 # Exit codes:
 #   0  — success
@@ -336,6 +356,11 @@ PRIMARY = "implementation"
 # still holds its history under the old spelling, so `roll`'s idempotency check honours a freeze in
 # EITHER form rather than mint a second archive beside it. No resolver reads these archives: the
 # current sprint comes from the canonical's own `sprint:` + `status:` (resolve_sprint_id).
+#
+# THE SLOT CAN HOLD SOMETHING THAT IS NOT A FREEZE. The BMAD planner, pointed at a sprint's slot,
+# writes its own sprint-status there (no `sprint:`, a `development_status:` map). is_bmad_copy()
+# recognises it per view, and roll relocates it to BMAD_RELOCATED_NAME beside the slot instead of
+# refusing — see the file header for the two-phase rule that decides it with no write first.
 def frozen_path(view, n):
     """The grammar form: the sprint slot is the DIRECTORY, never the basename."""
     return VIEWS[view].parent / ("s%d" % n) / "sprint-status.yaml"
@@ -343,6 +368,21 @@ def frozen_path(view, n):
 def legacy_frozen_path(view, n):
     """The pre-migration form. Read, never written."""
     return VIEWS[view].parent / "sprint-status" / ("sprint-%d.yaml" % n)
+
+# A BMAD sprint-status copy in a freeze slot: no top-level `sprint:` AND a column-0
+# `development_status:` key, block or inline (`{}`), bare, commented, or with a value.
+BMAD_DEV_STATUS_RE = re.compile(r"^development_status:(?:[ \t]*$|[ \t]*\{|[ \t]*#|[ \t]+\S)", re.M)
+BMAD_RELOCATED_NAME = "bmad-sprint-status.yaml"
+
+def is_bmad_copy(text):
+    """True iff `text` is a BMAD-written sprint-status, never a freeze. A file with a `sprint:` key
+    is a freeze whatever else it carries; a file with neither key is not recognisably BMAD."""
+    return parse(text)[0] is None and BMAD_DEV_STATUS_RE.search(text) is not None
+
+def not_a_file(p):
+    """True iff something is at `p` (a dangling symlink included) and it is not a regular file:
+    roll can neither freeze into it nor move a BMAD copy onto it, so phase 1 refuses it."""
+    return os.path.lexists(str(p)) and not p.is_file()
 
 def parse(text):
     """Return (sprint:int|None, status:str|None). None means the key is absent: a preamble-only
@@ -366,6 +406,22 @@ def read_view(view):
 def render_header():
     return "\n".join(schema["header_lines"])
 
+def rule5_msg(sprints):
+    """route.md Step 6 rule 5's refusal text. ONE home: sprint-id and roll print the same words."""
+    detail = ", ".join("%s=%s" % (v, n) for v, n in sorted(sprints.items()))
+    return ("the two sprint-status.yaml copies disagree on `sprint:` (%s). Never guess which is "
+            "authoritative — surface both and wait (route.md Step 6 rule 5, Rule 11 HARD_BLOCK)."
+            % detail)
+
+def degenerate_msg(degenerate):
+    """A degenerate (preamble-only) view's refusal and remedy. ONE home: sprint-id and roll."""
+    return ("the current-state record is gone: %s exist%s with no top-level `sprint:` key. The "
+            "current sprint is read ONLY from that record (`sprint: <N>` + `status:`), never "
+            "derived from the frozen archives. Restore `sprint: <N>` and `status:` (`done` if "
+            "sprint <N> closed) in %s before anything resolves."
+            % (", ".join(str(VIEWS[v]) for v in degenerate), "s" if len(degenerate) == 1 else "",
+               "that file" if len(degenerate) == 1 else "each"))
+
 def resolve_sprint_id():
     """The mechanical replacement for route.md Step 6's prose. Every branch below is a state that
     actually occurs in a real tree — including the preamble-only one the prose has no case for."""
@@ -378,10 +434,7 @@ def resolve_sprint_id():
     # Rule 5: the copies disagree on `sprint:` -> HARD_BLOCK. Never guess.
     sprints = {v: r[0] for v, r in seen.items() if r[0] is not None}
     if len(set(sprints.values())) > 1:
-        detail = ", ".join("%s=%s" % (v, n) for v, n in sorted(sprints.items()))
-        fail("the two sprint-status.yaml copies disagree on `sprint:` (%s). Never guess which is "
-             "authoritative — surface both and wait (route.md Step 6 rule 5, Rule 11 HARD_BLOCK)."
-             % detail, code=3)
+        fail(rule5_msg(sprints), code=3)
 
     order = [PRIMARY] + [v for v in VIEWS if v != PRIMARY]
     rec = next((seen[v] for v in order if v in seen), None)
@@ -405,12 +458,7 @@ def resolve_sprint_id():
     # picking the readable copy is a guess about which one the operator meant to keep.
     degenerate = sorted(v for v, r in seen.items() if r[0] is None)
     if degenerate:
-        fail("the current-state record is gone: %s exist%s with no top-level `sprint:` key. The "
-             "current sprint is read ONLY from that record (`sprint: <N>` + `status:`), never "
-             "derived from the frozen archives. Restore `sprint: <N>` and `status:` (`done` if "
-             "sprint <N> closed) in %s before anything resolves."
-             % (", ".join(str(VIEWS[v]) for v in degenerate), "s" if len(degenerate) == 1 else "",
-                "that file" if len(degenerate) == 1 else "each"), code=1)
+        fail(degenerate_msg(degenerate), code=1)
 
     sprint, status = rec
 
@@ -461,37 +509,139 @@ def roll():
         print("sprint-status: created %s at sprint %d" % (VIEWS[PRIMARY], target))
         return 0
 
+    # PHASE 1 — DECIDE. Every view is read and its outcome decided with NO write; every refusal is
+    # collected, so one run names every refusing view and path, and any refusal exits before a byte
+    # is written anywhere.
+    seen = {}
     for view, canonical in VIEWS.items():
-        if not canonical.is_file():
-            continue
-        text = canonical.read_text()
-        sprint, status = parse(text)
+        if canonical.is_file():
+            text = canonical.read_text()
+            seen[view] = (text,) + parse(text)
 
-        if sprint == target:
-            continue                      # idempotent: already rolled
-        if sprint is None:
-            continue                      # preamble-only: nothing to freeze
+    refusals = []   # (exit code, message)
+    plans = []      # (view, relocate, freeze_text_or_None)
+
+    # E: a view AHEAD of the target would be rolled backward.
+    for view, (text, sprint, status) in seen.items():
+        if sprint is not None and sprint > target:
+            refusals.append((3, "%s canonical %s holds sprint %d, AHEAD of the target %d — rolling "
+                             "would move it backward. Remedy: set `sprint:` in %s back to the "
+                             "sprint it should hold, or re-run `sprint-status.sh roll --sprint %d`."
+                             % (view, VIEWS[view], sprint, target, VIEWS[view], sprint)))
+
+    # F: the views must agree on `sprint:` (rule 5). A view already AT the target is exempt only
+    # when EVERY view behind it is at exactly target-1: that is the half of a half-rolled tree, and
+    # completing it is what a re-run is for. Any other behind view (target-2 or older) beside a view
+    # at the target is a disagreement no roll produced, so the target-level view joins the comparison.
+    behind = {v: r[1] for v, r in seen.items() if r[1] is not None and r[1] < target}
+    compared = dict(behind)
+    if any(s != target - 1 for s in behind.values()):
+        compared.update((v, r[1]) for v, r in seen.items() if r[1] == target)
+    if len(set(compared.values())) > 1:
+        refusals.append((3, rule5_msg(compared) + " Remedy: make %s carry the same `sprint:` and "
+                         "`status:`, then re-run roll."
+                         % " and ".join(str(VIEWS[v]) for v in sorted(compared))))
+
+    for view, (text, sprint, status) in seen.items():
+        if sprint is None or sprint >= target:
+            continue                      # preamble-only, already rolled, or refused by E
         if status != "done":
-            fail("%s canonical holds sprint %s with status '%s' — refusing to roll forward to %d "
-                 "over a sprint that is not closed. Close it first (retro), or fix the envelope."
-                 % (view, sprint, status, target), code=3)
+            refusals.append((3, "%s canonical holds sprint %s with status '%s' — refusing to roll "
+                             "forward to %d over a sprint that is not closed. Remedy: close it "
+                             "(`sprint-status.sh close --evidence <text>` after its retro), or set "
+                             "`status: done` in %s if it already closed, then re-run roll."
+                             % (view, sprint, status, target, VIEWS[view])))
+            continue
+
+        slot = frozen_path(view, sprint)
+        legacy = legacy_frozen_path(view, sprint)
+        relocate = None
+        if os.path.lexists(str(slot.parent)) and not slot.parent.is_dir():
+            refusals.append((3, "%s: %s exists and is not a directory, so roll cannot freeze "
+                             "sprint %d into it. Remedy: move %s aside, then re-run roll."
+                             % (view, slot.parent, sprint, slot.parent)))
+            continue
+        if not_a_file(slot):
+            refusals.append((3, "%s: the freeze slot %s exists and is not a regular file (a "
+                             "directory, a broken symlink or another non-file), so roll cannot "
+                             "freeze sprint %d into it. Remedy: move %s aside, then re-run roll."
+                             % (view, slot, sprint, slot)))
+            continue
+        slot_is_freeze = slot.is_file()
+        if slot_is_freeze:
+            sb = slot.read_bytes()
+            if is_bmad_copy(view_newlines(sb.decode("utf-8", errors="replace"))):
+                slot_is_freeze = False
+                bmad_target = slot.parent / BMAD_RELOCATED_NAME
+                if not_a_file(bmad_target):
+                    refusals.append((3, "%s: %s is a BMAD sprint-status copy and its relocation "
+                                     "target %s exists and is not a regular file (a directory, a "
+                                     "broken symlink or another non-file), so the copy cannot be "
+                                     "moved there. Remedy: move %s aside, then re-run roll."
+                                     % (view, slot, bmad_target, bmad_target)))
+                    continue
+                if bmad_target.is_file():
+                    if bmad_target.read_bytes() == sb:
+                        relocate = ("unlink", slot, bmad_target)
+                    else:
+                        refusals.append((3, "%s: %s is a BMAD sprint-status copy and its relocation "
+                                         "target %s already exists with DIFFERENT bytes. Remedy: "
+                                         "compare %s with %s; delete or rename the one that is not "
+                                         "the BMAD run you want to keep, then re-run roll."
+                                         % (view, slot, bmad_target, slot, bmad_target)))
+                        continue
+                else:
+                    relocate = ("replace", slot, bmad_target)
 
         # An existing freeze in EITHER spelling is a freeze. Writing the grammar form beside a
         # legacy copy of the same sprint would mint the second archive that idempotency exists to
         # prevent — and on an unmigrated consumer the legacy copy is the only one there is.
-        frozen = frozen_path(view, sprint)
-        existing = next((p for p in (frozen, legacy_frozen_path(view, sprint)) if p.is_file()), None)
+        existing = slot if slot_is_freeze else (legacy if legacy.is_file() else None)
         if existing is not None:
             if existing.read_text() != text:
-                fail("%s: %s already exists and DIFFERS from the canonical it would freeze. A "
-                     "partial close was completed by hand, or the archive was edited. Refusing to "
-                     "overwrite — reconcile by hand." % (view, existing), code=3)
+                refusals.append((3, "%s: %s already exists and DIFFERS from the canonical it would "
+                                 "freeze. A partial close was completed by hand, or the archive "
+                                 "was edited. Refusing to overwrite. Remedy: compare %s with %s; "
+                                 "if the canonical is the record of sprint %d, delete %s, "
+                                 "otherwise copy %s over %s; then re-run roll."
+                                 % (view, existing, existing, VIEWS[view], sprint, existing,
+                                    existing, VIEWS[view])))
+                continue
+            plans.append((view, relocate, None))
         else:
-            write_verified(frozen, text, "%s freeze" % view)
-            moved.append(str(frozen))
+            plans.append((view, relocate, (slot, text)))
 
-        write_verified(canonical, new_envelope(target), "%s roll-forward" % view)
-        moved.append(str(canonical))
+    # C: a preamble-only view beside a view that WOULD be written leaves a tree sprint-id refuses.
+    # A tree where every existing view is preamble-only (or the rest are already at the target)
+    # writes nothing and keeps the no-op below.
+    degenerate = sorted(v for v, r in seen.items() if r[1] is None)
+    if degenerate and behind:
+        refusals.append((1, degenerate_msg(degenerate)))
+
+    if refusals:
+        sys.stderr.write("sprint-status: FAIL — roll refused, NOTHING was written (%d refusal%s):\n"
+                         % (len(refusals), "" if len(refusals) == 1 else "s"))
+        for _, msg in refusals:
+            sys.stderr.write("  - %s\n" % msg)
+        sys.exit(3 if any(c == 3 for c, _ in refusals) else 1)
+
+    # PHASE 2 — WRITE. Not atomic: an I/O failure here exits 1 with the earlier writes in place.
+    for view, relocate, freeze in plans:
+        if relocate is not None:
+            kind, src, dst = relocate
+            try:
+                if kind == "replace":
+                    os.replace(str(src), str(dst))
+                else:
+                    src.unlink()
+            except OSError as e:
+                fail("%s BMAD relocation of %s -> %s failed: %s" % (view, src, dst, e))
+            moved.append("%s -> %s" % (src, dst) if kind == "replace" else "%s (removed; identical to %s)" % (src, dst))
+        if freeze is not None:
+            write_verified(freeze[0], freeze[1], "%s freeze" % view)
+            moved.append(str(freeze[0]))
+        write_verified(VIEWS[view], new_envelope(target), "%s roll-forward" % view)
+        moved.append(str(VIEWS[view]))
 
     if moved:
         print("sprint-status: rolled forward to sprint %d" % target)

@@ -40179,3 +40179,18 @@ Receipt: `core/fixtures/ledger-reverify/receipt-bl932.sh`, invoked by that fixtu
 
 verify: sh bash core/fixtures/ledger-reverify/receipt-bl932.sh
 
+## BL-938 — sprint-status.sh roll() exits 3 half-rolled when the BMAD planner has written its own sprint-status into the freeze slot
+
+**LANDED (v0.1032.0).** **DEFECT.** `roll()` in `core/scripts/sprint-status.sh` (`:451-502` at `0d150c8de`) wrote each view's freeze to `s<N>/sprint-status.yaml` and treated any file already there that differed from the canonical it would freeze as a divergent freeze, exit 3. It had no notion that the BMAD planner, pointed at a sprint's slot, writes its own sprint-status there (no top-level `sprint:`, a `development_status:` map). It also decided and wrote view by view, so the implementation view had been written before the planning view's refusal arrived: the exit-3 left the tree half rolled, with the two views split across sprints.
+
+Consumer evidence, read only, graph: `fb6f198e7` creates `planning-artifacts/s321/sprint-status.yaml`, which is absent at its parent. It is a BMAD-format file (no `sprint:`, a `development_status:` key), the only one among 144 slot files at graph main. With the shipped engine, `roll --sprint 322` gives rc=3 with the views split (implementation 322, planning 321), and `sprint-id` then gives rc=3. Control: `sprint-id` on the pre-roll copy gives rc=0 and prints 322.
+
+Fix: `roll()` is two phases, decide then write. Phase 1 reads every view and collects every refusal with no write; any refusal exits before a byte is written, names every refusing view and path, and carries a remedy line naming the hand action. Phase 2 performs the writes and is not atomic: an I/O failure there stays exit 1. A freeze-slot file with no top-level `sprint:` and a column-0 `development_status:` key is a BMAD copy, recognised per view. `roll` moves it by `os.replace` to `s<N>/bmad-sprint-status.yaml` and writes the real freeze into the slot; an identical file already at that name means the slot copy is unlinked, and a differing one is refused in phase 1. Beside an identical legacy freeze the copy is relocated and nothing is written into the slot. Three further refusals are decided in phase 1: E, a view whose `sprint:` is greater than the target (exit 3, it would be rolled backward); F, views that disagree on `sprint:` (exit 3, rule 5's text), where a view already at the target is exempt only when every view behind it is at exactly one sprint below the target, the half-rolled shape a re-run completes; a slot or relocation target that exists and is not a regular file, or the slot's `s<N>` directory existing as a non-directory (exit 3); C, a preamble-only canonical beside a view that would be written (exit 1, `sprint-id`'s degenerate-view text), each with its remedy. A tree where every existing view is preamble-only keeps the no-op. Deliberate miss: a BMAD refresh over a slot that already holds a freeze leaves both keys, a freeze that differs, and gets the exit 3, not a relocation.
+
+Close condition: `core/fixtures/sprint-status-lifecycle/run.sh` invokes `core/fixtures/sprint-status-lifecycle/receipt-bl938.sh` and prints `receipt-bl938: PASS`, and its BL-938 mutants are killed by their deciding arms.
+
+Rules: BL-868.
+
+Provenance: batch b252, consumer filing on graph s322; lead ai-dlc-78.
+
+verify: sh o="$(bash core/fixtures/sprint-status-lifecycle/run.sh 2>&1)"; grep -qF 'receipt-bl938: PASS' <<<"$o"

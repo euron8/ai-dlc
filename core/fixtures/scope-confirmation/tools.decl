@@ -12,6 +12,7 @@ env
 git
 grep
 head
+id
 jq
 locale
 mkdir

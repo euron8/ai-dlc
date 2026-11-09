@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1032.0] - 2026-11-09
+
+### BL-938 closed
+
+Closes PC-S322-ROLL-FREEZE-PATH-COLLIDES-WITH-BMAD-GENERATED-SPRINT-STATUS-AND-EXITS-3-HALF-ROLLED (graph s322).
+
+`sprint-status.sh roll` exited 3 with the tree half rolled when the BMAD planner had written its own sprint-status into a sprint's freeze slot `s<N>/sprint-status.yaml`. It treated that file as a divergent freeze, and it had already written the implementation view's roll-forward before the planning view's refusal arrived, so the two views ended split across sprints and `sprint-id` then refused with exit 3. BL-938 was filed and closed in this release.
+
+A file in a freeze slot with no top-level `sprint:` and a column-0 `development_status:` key (block, inline `{}`, bare, commented, or with a value) is now a BMAD copy, recognised per view. `roll` relocates it by `os.replace`, byte for byte, to `s<N>/bmad-sprint-status.yaml` and writes the real freeze into the slot. If `bmad-sprint-status.yaml` already holds identical bytes, the slot copy is removed instead; if it holds different bytes, `roll` refuses with exit 3. Beside an identical legacy freeze the copy is relocated and nothing is written into the slot.
+
+`roll` is now two phases, decide then write. Phase 1 reads every view and decides its outcome with no write, collecting every refusal, so one run names every refusing view and path, each with a `Remedy:` line. Phase 1 refuses, with exit 3 unless noted: a view whose status is not `done`; a freeze in the slot or the legacy path that differs from the canonical it would freeze; a differing BMAD relocation target; a view AHEAD of the target, which would roll backward; views that disagree on `sprint:` (route.md Step 6 rule 5's text, now one shared message), where a view already at the target is exempt only when every view behind it is at exactly target-1, the half-rolled tree a re-run completes; a freeze slot or BMAD relocation target that exists and is not a regular file; an `s<N>` that exists and is not a directory; and a preamble-only view beside a view that would be written, at exit 1 with `sprint-id`'s degenerate-view text, now one shared message. Phase 2 performs the writes and is not atomic: an I/O failure there stays exit 1 with the earlier writes in place, and a re-run completes the half-rolled tree.
+
+Deliberate miss: a BMAD refresh over a slot that already holds a freeze leaves both a `sprint:` and a `development_status:` key. That is a freeze that differs, and it gets exit 3, not a relocation.
+
+`core/skills/ai-dlc/steps/route.md` Step 6's exit list now matches the engine.
+
+Receipt: `core/fixtures/sprint-status-lifecycle/receipt-bl938.sh`, invoked by that fixture's `run.sh`, with sixteen mutants that each fail exactly their declared cells.
+
+Incidental: `core/fixtures/scope-confirmation/tools.decl` now declares `id`, which that fixture's root-skip guard calls; under `hermetic-run.sh` it printed `id: command not found` and fell through.
+
 ## [0.1031.0] - 2026-11-08
 
 ### BL-932 closed

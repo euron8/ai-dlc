@@ -107,6 +107,27 @@ had nothing to do with their mutation — while the A21 mutant itself came back 
 11. `roll` refuses an unclosed sprint (exit 3) — never freezes live state
 12. fail-closed on an unreadable schema — never guesses the grammar
 
+### Part 1b (BL-938: a BMAD copy in the freeze slot, and `roll` decides before it writes)
+
+Each world runs one `roll --sprint 322`; a "no write" arm compares a path+mode+md5 listing of the
+whole `_bmad-output` before and after. `receipt-bl938.sh` reads what R12, R14, R16 and R23 left.
+
+- R12 / R12i — a BMAD copy (the real producer's bytes, trimmed) in the planning / implementation slot is relocated to `s321/bmad-sprint-status.yaml` and the real freeze lands in the slot
+- R12e — the inline-empty `development_status: {}` form (a hand-written / foreign-tool shape) is a BMAD copy too
+- R12crlf — a CRLF copy at mode 0640 keeps its bytes and mode
+- R12leg — beside an identical legacy freeze the copy is relocated and nothing is written into the slot
+- R13 / R13b — a slot file with both keys, and a housekeeping-first file with neither, refuse exit 3 with nothing written
+- R14 / R15 — a divergent planning freeze, and planning `in_progress`, refuse exit 3 with nothing written
+- R16 — the half-rolled tree is completed by one re-run, and `sprint-id` answers 322
+- R17 / R20 — a differing relocation target refuses with nothing written; an identical one is kept
+- R18 — a BMAD implementation slot beside an unclosed planning view is not moved before the refusal
+- R19 — both slots divergent: one refusal names both paths
+- R21 / R22 / R23 — a view ahead of the target, views that disagree, and a preamble-only view beside one still to roll each refuse (3, 3, 1) with nothing written
+- R22b — a view at the target beside one two sprints behind is not a half-roll: rule 5 refuses exit 3 naming both, nothing written
+- R24 — a BMAD relocation target that is a directory refuses exit 3 in phase 1, nothing written
+- R24s — a freeze slot `s321/sprint-status.yaml` that is a directory refuses exit 3 in phase 1, nothing written
+- R24p — a slot parent `s321` that is a regular file refuses exit 3 in phase 1, nothing written
+
 ### Part 2 (`check-stories`)
 
 13. a consistent tree PASSES **and reports the comparison count**

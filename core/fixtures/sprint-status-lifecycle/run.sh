@@ -64,6 +64,26 @@
 # MUTANT-MATRIX l2-absent-printed-empty decides=L2 twins=L1
 # MUTANT-MATRIX l3-no-canonical-exits-0 decides=L3 twins=L1
 # MUTANT-MATRIX l1-sorted-not-yaml-order decides=L1 twins=L2
+# bmad-predicate-off also trips R12e, R12crlf, R12leg, R17, R20 and R24 in the measured matrix (every world holding a BMAD copy reads it as a freeze; R12, R12i and R16 are the ones it targets).
+# relocate-skipped also trips R12i, R12e, R12crlf and R12leg in the measured matrix (every relocating world; R12 is the one it targets).
+# two-phase-collapsed also trips R18, R22, R22b, R23, R24s and R24p in the measured matrix (each is a refusal beside a writable view, whose no-write conjunct IS the two-phase property; R14 and R15 are the ones it targets).
+# refuse-disagree-deleted also trips R22b in the measured matrix (the F refusal deleted refuses neither disagreement; R22 is the one it targets).
+# MUTANT-MATRIX bmad-predicate-off decides=R12,R12i,R16 twins=R13
+# MUTANT-MATRIX bmad-predicate-widened decides=R13b twins=R13
+# MUTANT-MATRIX bmad-sprint-conjunct-dropped decides=R13 twins=R13b
+# MUTANT-MATRIX bmad-inline-empty-missed decides=R12e twins=R12
+# MUTANT-MATRIX two-phase-collapsed decides=R14,R15 twins=R13
+# MUTANT-MATRIX relocate-in-decide-loop decides=R18 twins=R12
+# MUTANT-MATRIX stop-at-first-refusal decides=R19 twins=R14
+# MUTANT-MATRIX overwrite-differing-target decides=R17 twins=R20
+# MUTANT-MATRIX relocate-skipped decides=R12 twins=R20
+# MUTANT-MATRIX refuse-ahead-deleted decides=R21 twins=R22
+# MUTANT-MATRIX refuse-disagree-deleted decides=R22 twins=R21
+# MUTANT-MATRIX refuse-preamble-deleted decides=R23 twins=R22
+# MUTANT-MATRIX disagree-behind-only decides=R22b twins=R16
+# MUTANT-MATRIX nonfile-target-unchecked decides=R24 twins=R20
+# MUTANT-MATRIX nonfile-slot-unchecked decides=R24s twins=R24
+# MUTANT-MATRIX nonfile-parent-unchecked decides=R24p twins=R24s
 # MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/sprint-status-lifecycle/run.sh --matrix
 set -uo pipefail
@@ -316,6 +336,275 @@ status: in_progress'
   # that would prove nothing. Point it at a REAL but corrupt file — the state that actually fails.
   printf 'not json{' > "$WORK/corrupt.json"
   if AI_DLC_SPRINT_STATUS_SCHEMA="$WORK/corrupt.json" bash "$1" sprint-id --root "$P" >/dev/null 2>&1; then res R11 FAIL; else res R11 PASS; fi
+}
+
+# ===== PART 1b — BL-938: a BMAD copy in the freeze slot, and roll decides every view before a write ==
+# The reference consumer's BMAD planner wrote its own sprint-status into planning-artifacts/s321/, the
+# slot `roll` freezes into. roll read it as a divergent freeze, exited 3 AFTER rolling the
+# implementation view, and left a tree sprint-id HARD_BLOCKs. Each world below is built from the seed
+# files once, `roll --sprint 322` runs once over it (rr), and the arm reads that one run. rr leaves
+# rc/out/err and a path+mode+md5 listing of the whole _bmad-output before and after in
+# $RWD/<tool>/<tag>/, which receipt-bl938.sh reads for the shipping tool. A "no write" arm compares the
+# two listings whole; it never names the files it expects untouched.
+SD="$WORK/sd"; RWD="$WORK/rw"; mkdir -p "$SD" "$RWD"
+put "$SD/impl321" 'sprint: 321
+status: done
+gate1: pending
+stories:
+  story-321-1:
+    status: done'
+put "$SD/plan321" 'sprint: 321
+status: done
+stories:
+  story-321-1:
+    status: done'
+put "$SD/impl322" 'sprint: 322
+status: in_progress'
+put "$SD/impl323" 'sprint: 323
+status: in_progress'
+put "$SD/plan320" 'sprint: 320
+status: done'
+put "$SD/inprog321" 'sprint: 321
+status: in_progress'
+put "$SD/preamble" '# Sprint Status
+# (preamble-only)'
+put "$SD/div" 'sprint: 321
+status: done
+# edited by hand after the freeze'
+# R12's seed: the REAL producer's bytes (graph fb6f198e7:_bmad-output/planning-artifacts/s321/
+# sprint-status.yaml), trimmed to its header comment block, its top-level keys and the first two
+# development_status entries. Pasted, never read from the consumer at run time.
+cat > "$SD/bmad" <<'BMADEOF'
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 11-04-2026 06:31
+last_updated: 11-04-2026 06:31
+project: graph
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/planning-artifacts/s321/stories
+planned_close: 2026-11-11T00:00:00Z
+development_status:
+  epic-1: backlog
+  1-1-feasibility-gate-and-the-matic-unchanged-replay-fixture: done
+BMADEOF
+# R12crlf: the same bytes, CRLF. R17: a BMAD copy that differs from the slot's by its stamp.
+awk '{ printf "%s\r\n", $0 }' "$SD/bmad" > "$SD/bmadcrlf"
+sed 's/^generated: .*/generated: 11-05-2026 09:00/' "$SD/bmad" > "$SD/bmadother"
+# R12e: the inline-empty `development_status: {}` form. A HAND-WRITTEN or FOREIGN-TOOL shape, NOT
+# producer output: the BMAD planner refuses an empty entry list and writes one key per entry.
+put "$SD/bmadempty" '# hand-written sprint-status (foreign tool)
+generated: 11-04-2026 06:31
+project: graph
+development_status: {}'
+# R13: a slot file carrying BOTH keys — a freeze, whatever else it holds — that differs.
+put "$SD/r13" 'sprint: 321
+status: done
+development_status:
+  epic-1: backlog'
+# R13b: a real sprint-less slot shape, `sprint_<N>_housekeeping:` first. At graph 5596361ce, 75 of 144
+# slot files carry no top-level `sprint:`, 57 of those carry a housekeeping key and 22 open with one;
+# this is the smallest of them (implementation-artifacts/s188/sprint-status.yaml, renumbered to s321).
+cat > "$SD/hk" <<'HKEOF'
+sprint_321_housekeeping:
+  envelope_status: in-progress
+  variant: feature
+  branch: ai-dlc/feature/sweep-wallet-expansion
+# ============================================================
+# SPRINT 192: IL accuracy pipeline fix (bug → feature scope)
+# Branch: ai-dlc/bug/impermanent-loss-accuracy
+# ============================================================
+HKEOF
+for _s in impl321 plan321 bmad bmadcrlf bmadother bmadempty r13 hk; do
+  [ -s "$SD/$_s" ] || { echo "FIXTURE ERROR: seed $_s was not written" >&2; exit 2; }
+done
+cmp -s "$SD/bmad" "$SD/bmadcrlf" && { echo "FIXTURE ERROR: the CRLF seed equals the LF seed" >&2; exit 2; }
+cmp -s "$SD/bmad" "$SD/bmadother" && { echo "FIXTURE ERROR: the differing BMAD seed equals the slot seed" >&2; exit 2; }
+
+ls_tree() { # every file under _bmad-output as `<relpath> <mode> <md5>`, sorted
+  python3 -I -c 'import os, sys, hashlib
+r = sys.argv[1]; out = []
+for d, _, fs in os.walk(r):
+    for f in fs:
+        p = os.path.join(d, f)
+        out.append("%s %o %s" % (os.path.relpath(p, r), os.stat(p).st_mode & 0o777, hashlib.md5(open(p, "rb").read()).hexdigest()))
+print("\n".join(sorted(out)))' "$P/_bmad-output"
+}
+rr() { # <tool> <tag>: ONE `roll --sprint 322` over the world on disk -> RD, RRC
+  RD="$RWD/${1##*/}/$2"; mkdir -p "$RD"
+  ls_tree > "$RD/before.ls"
+  rt "$1" roll --sprint 322 --root "$P" > "$RD/out" 2> "$RD/err"; echo "$?" > "$RD/rc"
+  ls_tree > "$RD/after.ls"
+  read -r RRC < "$RD/rc"
+}
+unchanged() { [ -s "$RD/before.ls" ] && cmp -s "$RD/before.ls" "$RD/after.ls"; }
+remedy() { grep -q 'Remedy:' "$RD/err"; }
+w() { # <seed> <dest>: place one seed file into the world
+  mkdir -p "${2%/*}" && cp "$SD/$1" "$2"
+}
+rolled() { grep -q '^sprint: 322$' "$IMPL/sprint-status.yaml" && grep -q '^sprint: 322$' "$PLAN/sprint-status.yaml"; }
+
+a_R12() { # BMAD in the PLANNING slot: relocated byte-for-byte, the real freeze written into the slot
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w bmad "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R12
+  if [ "$RRC" = 0 ] && rolled && cmp -s "$PLAN/s321/sprint-status.yaml" "$SD/plan321" \
+     && cmp -s "$PLAN/s321/bmad-sprint-status.yaml" "$SD/bmad" && cmp -s "$IMPL/s321/sprint-status.yaml" "$SD/impl321"; then
+    res R12 PASS; else res R12 FAIL; fi
+}
+a_R12i() { # the same copy in the IMPLEMENTATION slot: the predicate is per view
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w bmad "$IMPL/s321/sprint-status.yaml"
+  rr "$1" R12i
+  if [ "$RRC" = 0 ] && rolled && cmp -s "$IMPL/s321/sprint-status.yaml" "$SD/impl321" \
+     && cmp -s "$IMPL/s321/bmad-sprint-status.yaml" "$SD/bmad"; then res R12i PASS; else res R12i FAIL; fi
+}
+a_R12e() { # the inline-empty `development_status: {}` form is a BMAD copy too
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w bmadempty "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R12e
+  if [ "$RRC" = 0 ] && cmp -s "$PLAN/s321/sprint-status.yaml" "$SD/plan321" \
+     && cmp -s "$PLAN/s321/bmad-sprint-status.yaml" "$SD/bmadempty"; then res R12e PASS; else res R12e FAIL; fi
+}
+a_R12crlf() { # a CRLF copy, mode 0640: moved, not rewritten — bytes AND mode survive
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w bmadcrlf "$PLAN/s321/sprint-status.yaml"
+  chmod 0640 "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R12crlf
+  if [ "$RRC" = 0 ] && cmp -s "$PLAN/s321/bmad-sprint-status.yaml" "$SD/bmadcrlf" \
+     && grep -q '^planning-artifacts/s321/sprint-status.yaml 640 ' "$RD/before.ls" \
+     && grep -q '^planning-artifacts/s321/bmad-sprint-status.yaml 640 ' "$RD/after.ls" \
+     && cmp -s "$PLAN/s321/sprint-status.yaml" "$SD/plan321"; then res R12crlf PASS; else res R12crlf FAIL; fi
+}
+a_R12leg() { # an identical LEGACY freeze beside a BMAD slot: relocate, write nothing into the slot
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"
+  w plan321 "$PLAN/sprint-status/sprint-321.yaml"; w bmad "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R12leg
+  if [ "$RRC" = 0 ] && [ ! -e "$PLAN/s321/sprint-status.yaml" ] && cmp -s "$PLAN/s321/bmad-sprint-status.yaml" "$SD/bmad" \
+     && cmp -s "$PLAN/sprint-status/sprint-321.yaml" "$SD/plan321" && rolled; then res R12leg PASS; else res R12leg FAIL; fi
+}
+# The refusal worlds below put the implementation view at 322 (the half-rolled shape) wherever the
+# arm's subject is a single view, so no OTHER view is writable and a mutant that collapses the two
+# phases cannot reach them; R14 and R15 are the atomicity arms, and own that mutant.
+a_R13() { # near-miss: `sprint:` AND `development_status:`, differing -> the divergent-freeze refusal
+  reset_tree; w impl322 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w r13 "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R13
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -q 'DIFFERS from the canonical' "$RD/err"; then res R13 PASS; else res R13 FAIL; fi
+}
+a_R13b() { # near-miss: housekeeping-first, neither key -> not recognisably BMAD, the divergent refusal
+  reset_tree; w impl322 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w hk "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R13b
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -q 'DIFFERS from the canonical' "$RD/err"; then res R13b PASS; else res R13b FAIL; fi
+}
+a_R14() { # atomicity: a divergent PLANNING freeze (the view iterated second) -> nothing written anywhere
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"; w div "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R14
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -q '^  - planning: ' "$RD/err" \
+     && grep -qF "planning-artifacts/s321/sprint-status.yaml" "$RD/err"; then res R14 PASS; else res R14 FAIL; fi
+}
+a_R15() { # atomicity: implementation done + planning in_progress -> nothing written anywhere
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w inprog321 "$PLAN/sprint-status.yaml"
+  rr "$1" R15
+  if [ "$RRC" = 3 ] && unchanged && remedy; then res R15 PASS; else res R15 FAIL; fi
+}
+a_R16() { # recovery: the tree the old engine half-rolled is completed by one re-run
+  reset_tree; w impl322 "$IMPL/sprint-status.yaml"; w impl321 "$IMPL/s321/sprint-status.yaml"
+  w plan321 "$PLAN/sprint-status.yaml"; w bmad "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R16
+  rt "$1" sprint-id --root "$P" > "$RD/sid.out" 2>/dev/null; echo "$?" > "$RD/sid.rc"
+  local sr so=""; read -r sr < "$RD/sid.rc"; read -r so < "$RD/sid.out"
+  if [ "$RRC" = 0 ] && [ "$sr" = 0 ] && [ "$so" = 322 ]; then res R16 PASS; else res R16 FAIL; fi
+}
+a_R17() { # the relocation target exists and DIFFERS -> refused, nothing written
+  reset_tree; w impl322 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"
+  w bmad "$PLAN/s321/sprint-status.yaml"; w bmadother "$PLAN/s321/bmad-sprint-status.yaml"
+  rr "$1" R17
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -q 'relocation target' "$RD/err"; then res R17 PASS; else res R17 FAIL; fi
+}
+a_R18() { # BMAD in the impl slot + planning in_progress -> no eager relocation: nothing moves
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w bmad "$IMPL/s321/sprint-status.yaml"; w inprog321 "$PLAN/sprint-status.yaml"
+  rr "$1" R18
+  if [ "$RRC" = 3 ] && unchanged && remedy; then res R18 PASS; else res R18 FAIL; fi
+}
+a_R19() { # both slots divergent -> one run names BOTH
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w div "$IMPL/s321/sprint-status.yaml"
+  w plan321 "$PLAN/sprint-status.yaml"; w div "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R19
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -qF "implementation-artifacts/s321/sprint-status.yaml" "$RD/err" \
+     && grep -qF "planning-artifacts/s321/sprint-status.yaml" "$RD/err"; then res R19 PASS; else res R19 FAIL; fi
+}
+a_R20() { # the identical relocation target already exists: the slot copy goes, the target is untouched
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"
+  w bmad "$PLAN/s321/sprint-status.yaml"; w bmad "$PLAN/s321/bmad-sprint-status.yaml"
+  rr "$1" R20
+  if [ "$RRC" = 0 ] && rolled && cmp -s "$PLAN/s321/sprint-status.yaml" "$SD/plan321" \
+     && cmp -s "$PLAN/s321/bmad-sprint-status.yaml" "$SD/bmad"; then res R20 PASS; else res R20 FAIL; fi
+}
+a_R21() { # E: a view AHEAD of the target -> refused, never rolled backward
+  reset_tree; w impl323 "$IMPL/sprint-status.yaml"
+  rr "$1" R21
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -q 'AHEAD of the target' "$RD/err"; then res R21 PASS; else res R21 FAIL; fi
+}
+a_R22() { # F: the views disagree, both behind the target -> refused with rule 5's words
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan320 "$PLAN/sprint-status.yaml"
+  rr "$1" R22
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -q 'copies disagree' "$RD/err"; then res R22 PASS; else res R22 FAIL; fi
+}
+a_R22b() { # F: a view AT the target beside a view TWO behind is no half-roll -> the target view joins rule 5
+  reset_tree; w impl322 "$IMPL/sprint-status.yaml"; w plan320 "$PLAN/sprint-status.yaml"
+  rr "$1" R22b
+  if [ "$RRC" = 3 ] && unchanged && remedy && grep -q 'copies disagree' "$RD/err" \
+     && grep -qF 'implementation=322' "$RD/err"; then res R22b PASS; else res R22b FAIL; fi
+}
+a_R23() { # C: a preamble-only view beside a view still to roll -> exit 1, sprint-id's restore text
+  reset_tree; w preamble "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"
+  rr "$1" R23
+  if [ "$RRC" = 1 ] && unchanged && grep -q 'Restore `sprint: <N>`' "$RD/err"; then res R23 PASS; else res R23 FAIL; fi
+}
+a_R24() { # the BMAD relocation target is a DIRECTORY -> refused in phase 1, exit 3, nothing written
+  reset_tree; w impl322 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"
+  w bmad "$PLAN/s321/sprint-status.yaml"; mkdir -p "$PLAN/s321/bmad-sprint-status.yaml"
+  rr "$1" R24
+  if [ "$RRC" = 3 ] && unchanged && remedy && [ -d "$PLAN/s321/bmad-sprint-status.yaml" ] \
+     && grep -q 'relocation target .* exists and is not a regular file' "$RD/err"; then res R24 PASS; else res R24 FAIL; fi
+}
+a_R24s() { # the planning FREEZE SLOT is a DIRECTORY -> refused in phase 1, exit 3, nothing written
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"
+  mkdir -p "$PLAN/s321/sprint-status.yaml"
+  rr "$1" R24s
+  if [ "$RRC" = 3 ] && unchanged && remedy && [ -d "$PLAN/s321/sprint-status.yaml" ] \
+     && grep -q 'the freeze slot .* exists and is not a regular file' "$RD/err"; then res R24s PASS; else res R24s FAIL; fi
+}
+a_R24p() { # the planning slot's PARENT s321 is a regular FILE -> refused in phase 1, exit 3, nothing written
+  reset_tree; w impl321 "$IMPL/sprint-status.yaml"; w plan321 "$PLAN/sprint-status.yaml"
+  : > "$PLAN/s321"
+  rr "$1" R24p
+  if [ "$RRC" = 3 ] && unchanged && remedy && [ -f "$PLAN/s321" ] \
+     && grep -q 's321 exists and is not a directory' "$RD/err"; then res R24p PASS; else res R24p FAIL; fi
 }
 
 # ===== PART 2 — Check 5, `check-stories` =========================================================
@@ -794,7 +1083,7 @@ story-291-2${TAB}in-progress${TAB}stories/story-2.md"
 }
 
 # ===== registry: keys (one function each) and the ids they print =================================
-ALL_KEYS="P0 P1 P2 P3 TB_preamble TB_empty TB_done6 TB_inprog7 TB_none TB_implpre P5 roll legacy divergent greenroll H8 H9 R10 R11 A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 J1 J1N J1X J1ABS J1CASE L1 L2 L3 L4"
+ALL_KEYS="P0 P1 P2 P3 TB_preamble TB_empty TB_done6 TB_inprog7 TB_none TB_implpre P5 roll legacy divergent greenroll H8 H9 R10 R11 R12 R12i R12e R12crlf R12leg R13 R13b R14 R15 R16 R17 R18 R19 R20 R21 R22 R22b R23 R24 R24s R24p A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 J1 J1N J1X J1ABS J1CASE L1 L2 L3 L4"
 ids_of() { case "$1" in roll) echo "R6a R6b R6c R6d R7" ;; legacy) echo "R7a1 R7a2 R7a3" ;; divergent) echo "R7ac" ;; greenroll) echo "R7b1 R7b2" ;; *) echo "$1" ;; esac; }
 ALL_IDS=""; ID_KEY=" "
 for _k in $ALL_KEYS; do for _i in $(ids_of "$_k"); do ALL_IDS="$ALL_IDS $_i"; ID_KEY="$ID_KEY$_i:$_k "; done; done
@@ -836,6 +1125,27 @@ okmsg() { case "$1" in
   H9) echo "MUTANT: canonical WITH housekeeping still derives N+1 correctly" ;;
   R10) echo "roll refuses an unclosed sprint (exit 3) — never freezes live state" ;;
   R11) echo "fail-closed on an unreadable schema (never guesses the grammar)" ;;
+  R12) echo "BL-938: a BMAD copy in the planning slot is relocated byte-for-byte and the real freeze lands in the slot" ;;
+  R12i) echo "BL-938: the same BMAD copy in the implementation slot is relocated (the predicate is per view)" ;;
+  R12e) echo "BL-938: the inline-empty development_status: {} form is a BMAD copy too" ;;
+  R12crlf) echo "BL-938: a CRLF BMAD copy at mode 0640 is moved with its bytes and mode intact" ;;
+  R12leg) echo "BL-938: beside an identical legacy freeze the BMAD copy is relocated and nothing is written into the slot" ;;
+  R13) echo "BL-938: a slot file with sprint: AND development_status: is a freeze that differs -> exit 3, nothing written" ;;
+  R13b) echo "BL-938: a housekeeping-first slot file with neither key is not BMAD -> exit 3" ;;
+  R14) echo "BL-938: a divergent PLANNING freeze -> exit 3 with the implementation view untouched (no half-roll)" ;;
+  R15) echo "BL-938: implementation done + planning in_progress -> exit 3, nothing written" ;;
+  R16) echo "BL-938: the half-rolled tree is completed by one re-run, and sprint-id then answers 322" ;;
+  R17) echo "BL-938: a relocation target with DIFFERENT bytes -> exit 3, nothing written" ;;
+  R18) echo "BL-938: a BMAD impl slot beside an unclosed planning view is not relocated before the refusal" ;;
+  R19) echo "BL-938: both slots divergent -> one refusal names BOTH paths" ;;
+  R20) echo "BL-938: an identical relocation target is kept and the slot copy removed" ;;
+  R21) echo "BL-938: a view AHEAD of the target -> exit 3, never rolled backward" ;;
+  R22) echo "BL-938: views behind the target that disagree -> exit 3 with rule 5 words" ;;
+  R22b) echo "BL-938: a view at the target beside one two behind is not a half-roll -> exit 3 with rule 5 words naming both" ;;
+  R23) echo "BL-938: a preamble-only view beside a view still to roll -> exit 1 with the restore text, nothing written" ;;
+  R24) echo "BL-938: a BMAD relocation target that is a directory -> exit 3 in phase 1, nothing written" ;;
+  R24s) echo "BL-938: a freeze slot that is a directory -> exit 3 in phase 1, nothing written" ;;
+  R24p) echo "BL-938: a slot parent s<N> that is a regular file -> exit 3 in phase 1, nothing written" ;;
   A*) echo "$1 consistent-status battery" ;;
   D*) echo "$1 deferred_acs battery" ;;
   J1*) echo "$1 defers_to join battery" ;;
@@ -862,6 +1172,7 @@ badmsg() { case "$1" in
   H9) echo "housekeeping block broke sprint_id derivation" ;;
   R10) echo "roll froze a sprint that was still in flight" ;;
   R11) echo "a corrupt schema did not fail closed" ;;
+  R1[2-9]*|R2[0-4]*) echo "$1 (BL-938 roll) failed on the SHIPPING tool: rc=$(cat "$RWD/sprint-status.sh/$1/rc" 2>/dev/null) $(sed -n '1,3p' "$RWD/sprint-status.sh/$1/err" 2>/dev/null | tr '\n' ' ')" ;;
   *) echo "$1 failed on the SHIPPING tool" ;;
 esac; }
 
@@ -893,6 +1204,13 @@ j1_bad=""; for i in J1 J1N J1X J1ABS J1CASE; do in_set "$i" "$SHIP_PASS" || j1_b
 if [ -z "$j1_bad" ]; then ok "defers_to join: all 5 assertions pass on the shipping tool"; else bad "defers_to join battery failed on the SHIPPING tool:$j1_bad"; fi
 ls_bad=""; for i in L1 L2 L3 L4; do in_set "$i" "$SHIP_PASS" || ls_bad="$ls_bad $i"; done
 if [ -z "$ls_bad" ]; then ok "list-stories: all 4 assertions pass on the shipping tool"; else bad "list-stories battery failed on the SHIPPING tool:$ls_bad"; fi
+# The BL-938 receipt reads what the R12-R23 worlds left for the shipping tool; it starts no subject.
+bash "$HERE/receipt-bl938.sh" "$RWD/sprint-status.sh" "$SD" > "$WORK/r938.out" 2>&1; r938=$?
+case "$r938" in
+  0) sed -n '1p' "$WORK/r938.out"; ok "BL-938 receipt: a BMAD slot copy is relocated and frozen over, a divergent planning freeze writes nothing, the half-rolled tree recovers, a preamble view refuses exit 1" ;;
+  9) echo "FIXTURE BROKEN: receipt-bl938.sh refused to measure: $(head -1 "$WORK/r938.out")" >&2; exit 2 ;;
+  *) bad "BL-938 receipt exited $r938: $(tr '\n' ' ' < "$WORK/r938.out")" ;;
+esac
 
 # ===== mutants ====================================================================================
 # Each is a COPY (never an in-place edit), guarded by `cmp -s` so a sed that matched nothing cannot
@@ -978,6 +1296,35 @@ defm l2-absent-printed-empty L2 L1 's/^        return "-" if v is None or v == "
 defm l3-no-canonical-exits-0 L3 L1 '/list-stories UNEVALUABLE — no %s canonical/,/^        return 2$/s/^        return 2$/        return 0/'
 # L1: the entries printed sorted by key instead of in yaml order.
 defm l1-sorted-not-yaml-order L1 L2 's/^    for key, fields, _ in entries:$/    for key, fields, _ in sorted(entries):/'
+# BL-938 (mk_py holds each edit). The BMAD predicate never true, so the copy reads as a divergent freeze.
+defm bmad-predicate-off R12,R12i,R16 R13 @py938
+# The predicate widened to any sprint-less slot file, so the housekeeping-first shape is relocated.
+defm bmad-predicate-widened R13b R13 @py938
+# The `sprint is None` conjunct dropped, so a freeze carrying development_status: is relocated.
+defm bmad-sprint-conjunct-dropped R13 R13b @py938
+# The key anchored to `[ \t]*$` only, so `development_status: {}` is not recognised.
+defm bmad-inline-empty-missed R12e R12 @py938
+# The old order: each view written inside the decide loop, before the next view is read.
+defm two-phase-collapsed R14,R15 R13 @py938
+# The BMAD move made in phase 1, ahead of a later view's refusal.
+defm relocate-in-decide-loop R18 R12 @py938
+# Only the first refusal printed.
+defm stop-at-first-refusal R19 R14 @py938
+# A differing relocation target never checked, so os.replace overwrites it.
+defm overwrite-differing-target R17 R20 @py938
+# The freeze written over the BMAD copy without relocating it.
+defm relocate-skipped R12 R20 @py938
+defm refuse-ahead-deleted R21 R22 @py938
+defm refuse-disagree-deleted R22 R21 @py938
+defm refuse-preamble-deleted R23 R22 @py938
+# F's target-level view never joins the comparison (the `< target`-only filter), so R22b's tree rolls.
+defm disagree-behind-only R22b R16 @py938
+# The non-file relocation target never checked, so phase 2's os.replace fails after phase 1 passed.
+defm nonfile-target-unchecked R24 R20 @py938
+# The non-file freeze slot never checked, so phase 2 tries to freeze into a directory.
+defm nonfile-slot-unchecked R24s R24 @py938
+# The slot parent never checked, so phase 2's mkdir hits a file after the implementation view rolled.
+defm nonfile-parent-unchecked R24p R24s @py938
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
 # J1 reads its ids through the sibling validator beside the tool; a mutant copy finds none and J1
@@ -1008,12 +1355,60 @@ if t.count(anchor) == 1:
     open(p, "w").write(t.replace(anchor, ins))
 PYEOF
 }
+mk_py() { # <mutant> <out>: the BL-938 mutants, each a set of exact anchor -> replacement edits. Every
+  # anchor must occur EXACTLY once or the copy is left unmutated, which the cmp -s guard below then
+  # reports as a mutation that never happened. Python, not sed: the anchors carry `$`, `\t`, `{` and
+  # `(?:`, which BSD sed mangles silently.
+  cp "$TOOL" "$2"
+  python3 -I - "$1" "$2" <<'PYEOF'
+import sys
+name, p = sys.argv[1], sys.argv[2]
+t = open(p).read()
+PRED = "    return parse(text)[0] is None and BMAD_DEV_STATUS_RE.search(text) is not None\n"
+RE_LINE = r'''BMAD_DEV_STATUS_RE = re.compile(r"^development_status:(?:[ \t]*$|[ \t]*\{|[ \t]*#|[ \t]+\S)", re.M)''' + "\n"
+RELOC = '                    relocate = ("replace", slot, bmad_target)\n'
+EXEC = ("            if relocate is not None:\n"
+        "                (os.replace(str(relocate[1]), str(relocate[2])) if relocate[0] == \"replace\" else relocate[1].unlink())\n")
+FWD = "            write_verified(VIEWS[view], new_envelope(target), \"%s roll-forward\" % view)\n"
+M = {
+  "bmad-predicate-off":           [(PRED, "    return False\n")],
+  "bmad-predicate-widened":       [(PRED, "    return parse(text)[0] is None\n")],
+  "bmad-sprint-conjunct-dropped": [(PRED, "    return BMAD_DEV_STATUS_RE.search(text) is not None\n")],
+  "bmad-inline-empty-missed":     [(RE_LINE, 'BMAD_DEV_STATUS_RE = re.compile(r"^development_status:[ \\t]*$", re.M)\n')],
+  # the OLD order: each view's writes made inside the decide loop, before a later view is read
+  "two-phase-collapsed": [
+      ("            plans.append((view, relocate, None))\n", EXEC + FWD),
+      ("            plans.append((view, relocate, (slot, text)))\n",
+       EXEC + "            write_verified(slot, text, \"%s freeze\" % view)\n" + FWD)],
+  # the move made in phase 1, so a refusal in a later view finds it already done
+  "relocate-in-decide-loop":      [(RELOC, "                    os.replace(str(slot), str(bmad_target)); relocate = None\n")],
+  "relocate-skipped":             [(RELOC, "                    relocate = None\n")],
+  "stop-at-first-refusal":        [("        for _, msg in refusals:\n", "        for _, msg in refusals[:1]:\n")],
+  "overwrite-differing-target":   [("                if bmad_target.is_file():\n", "                if False:\n")],
+  "refuse-ahead-deleted":         [("        if sprint is not None and sprint > target:\n", "        if False:\n")],
+  "refuse-disagree-deleted":      [("    if len(set(compared.values())) > 1:\n", "    if False:\n")],
+  "refuse-preamble-deleted":      [("    if degenerate and behind:\n", "    if False:\n")],
+  "disagree-behind-only":         [("    if any(s != target - 1 for s in behind.values()):\n", "    if False:\n")],
+  "nonfile-target-unchecked":     [("                if not_a_file(bmad_target):\n", "                if False:\n")],
+  "nonfile-slot-unchecked":       [("        if not_a_file(slot):\n", "        if False:\n")],
+  "nonfile-parent-unchecked":     [("        if os.path.lexists(str(slot.parent)) and not slot.parent.is_dir():\n", "        if False:\n")],
+}
+edits = M.get(name)
+if not edits or any(t.count(a) != 1 for a, _ in edits):
+    sys.exit(0)
+for a, b in edits:
+    t = t.replace(a, b)
+open(p, "w").write(t)
+PYEOF
+}
 # build every mutant copy once; a copy that did not apply is a FAIL, never a silent skip
 MUT_OK=" "
 mut_i=0
 while [ "$mut_i" -lt "$NM" ]; do
   _m="$MUT/${MN[$mut_i]}.sh"
-  if [ "${MP[$mut_i]}" = "@py4d" ]; then mk_4d "$_m"; else sed "${MP[$mut_i]}" "$TOOL" > "$_m" 2>/dev/null; fi
+  if [ "${MP[$mut_i]}" = "@py4d" ]; then mk_4d "$_m"
+  elif [ "${MP[$mut_i]}" = "@py938" ]; then mk_py "${MN[$mut_i]}" "$_m"
+  else sed "${MP[$mut_i]}" "$TOOL" > "$_m" 2>/dev/null; fi
   if cmp -s "$TOOL" "$_m"; then
     bad "FIXTURE BROKEN — MUTANT ${MN[$mut_i]} changed nothing; the mutation never happened"
   else
