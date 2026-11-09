@@ -74,6 +74,16 @@
 # MUTANT-MATRIX sk7 decides=s2 twins=s1
 # MUTANT-MATRIX sk8 decides=s11 twins=s1
 # MUTANT-MATRIX sk9 decides=parser_dead twins=pytest_stub_kill
+# MUTANT-MATRIX cap-skip-dist decides=cap_dist_pytest twins=cap_consumer
+# MUTANT-MATRIX lay-dist-as-consumer decides=lay_dist twins=lay_consumer
+# MUTANT-MATRIX cap-call-deleted decides=cap_called twins=cap_called_present
+# MUTANT-MATRIX cap-call-iffalse decides=cap_called twins=cap_called_present
+# MUTANT-MATRIX cap-call-heredoc decides=cap_called twins=cap_called_present
+# MUTANT-MATRIX cap-call-override decides=cap_called twins=cap_called_present
+# MUTANT-MATRIX cap-call-moved decides=cap_called twins=cap_called_present
+# (cap-skip-dist and lay-dist-as-consumer are mutants of the CAPGUARD span, the cap-call-* five are copies of run.sh
+# whose guard call is deleted, disabled, hidden, overridden or moved; all are scored by the guard cells, not by
+# score_mutant; they are outside MUTS and ARMS, so --matrix does not drive them.)
 # MUTANT-MATRIX-DYNAMIC score-mutant why=score_mutant passes its first argument "$m" to mutant_killed; the loop over MUTS names only literal mutants m1-m23 and sk1-sk9, each carrying its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/mutation-red-replay/run.sh --matrix
 # The matrix is re-measured whenever an arm or a mutant is added or changed.
@@ -105,6 +115,79 @@ MUT_LIB="$HERE/../lib/mutant.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # shellcheck source=/dev/null
 . "$MUT_LIB"
+# CAPGUARD-BEGIN
+# THE HOST CAPABILITIES, decided by LAYOUT (BL-940). pytest importable by python3 and a UTF-8 locale in
+# `locale -a` gate arms below. On a consumer the host is not ours to assume, so a missing one SKIPs the arms
+# that need it, naming them. In the distribution a SKIP would move the counted start total with the box
+# (447 with both, 414 without pytest, 422 without the locale), and the invocation judge would then fail a
+# fixture that printed PASS. So the distribution refuses: FIXTURE BROKEN, exit 2, before the first arm
+# (after seed.sh, so a refused run carries 2 counted rows, run.sh and seed.sh; hermetic-run.sh applies no J3 to an rc-2 run),
+# naming every absent capability in one refusal, with the remedy. The layout is the POSITION of this directory, never a walk-up for
+# core/ markers: the sandbox copies only the declared inputs, which name neither marker directory.
+# derive_layout <fixture dir> -> sets LAYOUT to dist, consumer or NEITHER
+derive_layout() {
+  local fname="${1##*/}" d
+  LAYOUT=NEITHER
+  d="$(dirname "$1")"
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    if [ "$d/core/fixtures/$fname" = "$1" ]; then LAYOUT=dist; return 0; fi
+    if [ "$d/tests/fixtures/$fname" = "$1" ]; then LAYOUT=consumer; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 0
+}
+# cap_probe -> sets HAVE_PY, HAVE_PYTEST and U8 from this host. U8 is a UTF-8 locale for s11: the fixture sets no
+# locale, so under a C-locale hook env the seed and the mutant that drops LC_ALL=C would agree; the seed pins one
+# itself. The first match is taken by awk (head is not a declared tool).
+cap_probe() {
+  local _locs
+  HAVE_PY=0; command -v python3 >/dev/null 2>&1 && HAVE_PY=1
+  HAVE_PYTEST=0
+  [ "$HAVE_PY" -eq 1 ] && python3 -c 'import pytest' >/dev/null 2>&1 && HAVE_PYTEST=1
+  U8=""
+  if command -v locale >/dev/null 2>&1; then
+    _locs="$(locale -a 2>/dev/null)" || _locs=""
+    if grep -qx 'en_US.UTF-8' <<<"$_locs"; then U8=en_US.UTF-8
+    else U8="$(grep -iE '\.utf-?8$' <<<"$_locs" | awk 'NR == 1')" || U8=""; fi
+  fi
+  return 0
+}
+# cap_py_where -> the interpreter the sandbox runs and its own site-packages directories
+cap_py_where() {
+  python3 -c 'import sys, site; print(sys.executable + "; its site-packages: " + ", ".join(site.getsitepackages()))' 2>/dev/null \
+    || printf 'python3 could not report its interpreter'
+}
+# cap_guard -> 0, or the refusal on stdout and 2. Reads LAYOUT, HAVE_PY, HAVE_PYTEST and U8. Every absent
+# capability is named in the one refusal, so a box missing both learns both in one push.
+cap_guard() {
+  local miss=""
+  [ "$LAYOUT" = dist ] || return 0
+  if [ "$HAVE_PYTEST" -ne 1 ]; then
+    if [ "$HAVE_PY" -eq 1 ]; then CAP_PY="$(cap_py_where)"; else CAP_PY="no python3 on the sandbox PATH"; fi
+    miss="pytest"
+    printf 'mutation-red-replay: FIXTURE BROKEN -- capability absent: pytest is not importable by python3 (%s). The pytest-exit arms, seeds s1-s11 and mutants m9 and sk1-sk9 would not run. Remedy: the sandbox runs the first python3 found on READSET_TOOL_DIRS in .githooks/pre-push, which already lists /opt/homebrew/bin first, so on macOS installing Homebrew python3 and making pytest importable by it is enough, and nothing tracked needs editing. Installing pytest into the site-packages named above also works, but those may be root-owned (needing sudo) or, for a Homebrew python, marked EXTERNALLY-MANAGED (PEP 668). A user-site install (pip --user) is invisible here: the sandbox HOME is private.\n' "$CAP_PY"
+  fi
+  if [ -z "$U8" ]; then
+    miss="$miss${miss:+ and }a UTF-8 locale"
+    printf 'mutation-red-replay: FIXTURE BROKEN -- capability absent: no UTF-8 locale is listed by `locale -a`. s11, case E of the capture round-trip and mutant m23 would not run. Remedy: install or enable a UTF-8 locale (for example en_US.UTF-8 or C.UTF-8) so `locale -a` lists it.\n'
+  fi
+  [ -n "$miss" ] || return 0
+  printf 'mutation-red-replay: FIXTURE BROKEN -- absent: %s. In the distribution a missing capability is a broken fixture, not a skip: its arms would not run, and the counted start total would move with the box.\n' "$miss"
+  return 2
+}
+# CAPGUARD-END
+# THE CALL REGION, from the line after CAPGUARD-END through CAPCALL-END. The cap_call cells below evaluate exactly
+# these lines, so a call that is deleted, disabled, hidden in a heredoc, preceded by an override or moved past the
+# marker is seen by its BEHAVIOUR, not its text. Keep anything that is not the layout, the probe and the guard out.
+derive_layout "$HERE"
+if [ "$LAYOUT" = NEITHER ]; then
+  echo "mutation-red-replay: FIXTURE BROKEN -- layout: $HERE is neither <root>/core/fixtures/mutation-red-replay (distribution) nor <root>/tests/fixtures/mutation-red-replay (consumer), so whether a missing capability refuses or skips is undecidable" >&2
+  exit 2
+fi
+echo "layout: $LAYOUT (position form)"
+cap_probe
+cap_guard >&2 || exit 2
+# CAPCALL-END
 
 MUTATED="value() { printf '99\n'; }"   # a real change to line 2's value
 SUT="$WORK/sut.sh"
@@ -248,9 +331,6 @@ pyworld() {
   printf 'from m import f\ndef test_f():\n    assert f() == 2\n' > "$d/test_m.py"
   printf '%s\n' "$d"
 }
-HAVE_PY=0; command -v python3 >/dev/null 2>&1 && HAVE_PY=1
-HAVE_PYTEST=0
-[ "$HAVE_PY" -eq 1 ] && python3 -c 'import pytest' >/dev/null 2>&1 && HAVE_PYTEST=1
 PYTEST=(python3 -m pytest -q -p no:cacheprovider)
 skip() { printf '  SKIP  %s\n' "$1"; }
 
@@ -391,14 +471,7 @@ arm_s10() { # strict xfail: baseline xfailed (rc 0), the mutation makes it XPASS
 arm_stub_note() {   # the stub pytest prints no summary: the check stands down and SAYS so
   arm_pytest_stub_kill "$1" && grep -q "$SKIP_NOTE_LINE" <<<"$out"
 }
-# A UTF-8 locale for s11. The fixture sets no locale, so under a C-locale hook env the seed
-# and the mutant that drops LC_ALL=C would agree; the seed pins one itself.
-U8=""
-if command -v locale >/dev/null 2>&1; then
-  _locs="$(locale -a 2>/dev/null)" || _locs=""
-  if grep -qx 'en_US.UTF-8' <<<"$_locs"; then U8=en_US.UTF-8
-  else U8="$(grep -iE '\.utf-?8$' <<<"$_locs" | head -n 1)" || U8=""; fi
-fi
+# U8 (a UTF-8 locale for s11 and case E) is set by cap_probe, in the call region above.
 arm_s11() { # an all-skipped run whose log carries a non-UTF-8 byte (\xff under -s) -> 2
   local d; d="$(skworld "s11-$2" "$M_F" 'import sys, pytest\nfrom m import f\nsys.stdout.buffer.write(b"\\xff\\n"); sys.stdout.flush()\n@pytest.mark.skip(reason="x")\ndef test_f():\n    assert f() == 2\n')"
   out="$(LC_ALL="$U8" bash "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" -s "$d/test_m.py" 2>&1)"; rc=$?
@@ -543,9 +616,6 @@ ARMS="$ARMS s1 s2 s3 s4 s5 s6 s7 s8 s9 s9b s10 s11 $RT_ARMS"
 for _a in $ARMS; do
   declare -F "arm_$_a" >/dev/null 2>&1 || { echo "FIXTURE BROKEN: arm $_a is registered but arm_$_a is not defined" >&2; exit 2; }
 done
-HAVE_PY=0; command -v python3 >/dev/null 2>&1 && HAVE_PY=1
-HAVE_PYTEST=0
-[ "$HAVE_PY" -eq 1 ] && python3 -c 'import pytest' >/dev/null 2>&1 && HAVE_PYTEST=1
 NEEDS_PY=" py_syntax py_return py_badbase py_marker "
 NEEDS_PYTEST=" pytest_collect pytest_green pytest_kill s1 s2 s3 s4 s5 s6 s7 s8 s9 s9b s10 s11 "
 NEEDS_U8=" s11 rt_E "
@@ -556,6 +626,121 @@ arm_avail() {
   case "$NEEDS_U8" in *" $1 "*) [ -n "$U8" ] || return 1 ;; esac
   return 0
 }
+
+# THE GUARD'S OWN CELLS. The CAPGUARD span above is extracted and evaluated in a subshell with the probes
+# overridden, so the refusal is seen to fire on a box that HAS both capabilities, and no cell starts a
+# process the invocation counter counts. capcell <span> <layout> <have_pytest> <u8> -> "<rc>|<output>"
+cap_span() { awk '/^# CAPGUARD-BEGIN$/ { f = 1; next } /^# CAPGUARD-END$/ { f = 0 } f' "$HERE/run.sh"; }
+capcell() {
+  ( eval "$1" || exit 9
+    cap_py_where() { printf 'PROBE-PY'; }
+    LAYOUT="$2"; HAVE_PY=1; HAVE_PYTEST="$3"; U8="$4"
+    o="$(cap_guard 2>&1)"; printf '%s|%s' "$?" "$o" )
+}
+# laycell <span> <fixture dir> -> the LAYOUT derive_layout sets for that path (string work only)
+laycell() { ( eval "$1" || exit 9; derive_layout "$2"; printf '%s' "$LAYOUT" ); }
+# cap_mut <span> <from> <to> -> the span with <from> replaced; exit 1 unless <from> occurs exactly once
+cap_mut() {
+  F="$2" T="$3" awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+    { s = $0; while ((i = index(s, f)) > 0) { n++; s = substr(s, i + length(f)) }
+      if (!done && (i = index($0, f)) > 0) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); done = 1 }
+      print }
+    END { exit (n == 1 ? 0 : 1) }' <<<"$1"
+}
+CAP_SPAN="$(cap_span)"
+case "$CAP_SPAN" in *"cap_guard()"*"derive_layout()"*|*"derive_layout()"*"cap_guard()"*) ;;
+  *) echo "mutation-red-replay: FIXTURE BROKEN -- the CAPGUARD span is empty or lost cap_guard/derive_layout" >&2; exit 2 ;; esac
+B_capd=0; B_capu=0; B_capc=0; B_layd=0; B_layc=0
+r="$(capcell "$CAP_SPAN" dist 0 en_US.UTF-8)"
+if [ "${r%%|*}" = 2 ] && grep -qF 'capability absent: pytest is not importable by python3 (PROBE-PY)' <<<"$r" \
+   && grep -qF 'READSET_TOOL_DIRS' <<<"$r"; then
+  ok "cap_dist_pytest -- in the distribution, pytest absent refuses (exit 2) naming the capability, the interpreter and the remedy"; B_capd=1
+else bad "cap_dist_pytest -- in the distribution, pytest absent did not refuse with the named remedy (got ${r%%|*}: ${r#*|})"; fi
+r="$(capcell "$CAP_SPAN" dist 1 "")"
+if [ "${r%%|*}" = 2 ] && grep -qF 'capability absent: no UTF-8 locale is listed by `locale -a`' <<<"$r"; then
+  ok "cap_dist_locale -- in the distribution, no UTF-8 locale refuses (exit 2) naming it and the remedy"; B_capu=1
+else bad "cap_dist_locale -- in the distribution, no UTF-8 locale did not refuse with the named remedy (got ${r%%|*}: ${r#*|})"; fi
+r="$(capcell "$CAP_SPAN" dist 0 "")"
+if [ "${r%%|*}" = 2 ] && grep -qF 'pytest is not importable' <<<"$r" && grep -qF 'no UTF-8 locale is listed' <<<"$r" \
+   && grep -qF 'absent: pytest and a UTF-8 locale.' <<<"$r"; then
+  ok "cap_dist_both -- in the distribution, both absent are named in ONE refusal (exit 2)"
+else bad "cap_dist_both -- both absent were not named in one refusal (got ${r%%|*}: ${r#*|})"; fi
+# THE CALL SITE, BY BEHAVIOUR. cap_region <file text> prints the lines after CAPGUARD-END through CAPCALL-END. callcell
+# evaluates the span and then that region in a subshell, with the probe and the interpreter report overridden
+# AFTER the span defines them and HERE set to a distribution path, so the region's own derive_layout derives dist.
+# No bash is started. callcell <file text> <have_pytest> <u8> -> "<rc>|<output>"
+cap_region() { awk '/^# CAPGUARD-END$/ { f = 1; next } f { print } f && /^# CAPCALL-END$/ { exit }' <<<"$1"; }
+callcell() {
+  ( local_span="$(awk '/^# CAPGUARD-BEGIN$/ { f = 1; next } /^# CAPGUARD-END$/ { f = 0 } f' <<<"$1")"
+    local_reg="$(cap_region "$1")"
+    case "$local_reg" in *"# CAPCALL-END") ;; *) printf '9|no CAPCALL-END after CAPGUARD-END'; exit 0 ;; esac
+    eval "$local_span" || { printf '9|span did not evaluate'; exit 0; }
+    _fpt="$2"; _fu8="$3"
+    cap_probe() { HAVE_PY=1; HAVE_PYTEST="$_fpt"; U8="$_fu8"; }
+    cap_py_where() { printf 'PROBE-PY'; }
+    HERE=/x/r/core/fixtures/mutation-red-replay
+    o="$(eval "$local_reg" 2>&1)"; printf '%s|%s' "$?" "$o" )
+}
+# callmut <file text> <kind> -> the file with its guard call mutated (del, iffalse, heredoc, override, moved); exit 1
+# unless the call line occurs exactly once
+callmut() {
+  K="$2" awk 'BEGIN { c = "cap_guard >&2 || exit 2"; k = ENVIRON["K"] }
+    $0 == c { n++
+      if (k == "del") next
+      if (k == "iffalse") { print "if false; then"; print; print "fi"; next }
+      if (k == "heredoc") { print ": <<'"'"'DEAD'"'"'"; print; print "DEAD"; next }
+      if (k == "override") { print "cap_guard() { return 0; }"; print; next }
+      if (k == "moved") { held = 1; next } }
+    k == "moved" && held == 1 && /^live a1_unproven / { print c; held = 2 }
+    { print }
+    END { exit (n == 1 && (k != "moved" || held == 2)) ? 0 : 1 }' <<<"$1"
+}
+CC_SELF="$(cat "$HERE/run.sh")"
+B_call=0; B_callp=0
+r="$(callcell "$CC_SELF" 0 en_US.UTF-8)"
+if [ "${r%%|*}" = 2 ] && grep -qF 'capability absent: pytest is not importable by python3 (PROBE-PY)' <<<"$r" && grep -qF 'layout: dist' <<<"$r"; then
+  ok "cap_called -- the shipped call region, evaluated with pytest forced absent in the distribution, refuses (exit 2) naming it"; B_call=1
+else bad "cap_called -- the shipped call region did not refuse a forced-absent pytest in the distribution (got ${r%%|*}: ${r#*|})"; fi
+r="$(callcell "$CC_SELF" 1 en_US.UTF-8)"
+if [ "$r" = "0|layout: dist (position form)" ]; then ok "cap_called_present -- the shipped call region with both capabilities forced present runs through (exit 0)"; B_callp=1
+else bad "cap_called_present -- the shipped call region refused a host with both capabilities (got ${r%%|*}: ${r#*|})"; fi
+for _k in del iffalse heredoc override moved; do
+  if ! _m="$(callmut "$CC_SELF" "$_k")" || [ "$_m" = "$CC_SELF" ]; then bad "FIXTURE BROKEN: mutant cap-call-$_k DID NOT APPLY"; continue; fi
+  r="$(callcell "$_m" 0 en_US.UTF-8)"; r2="$(callcell "$_m" 1 en_US.UTF-8)"
+  if [ "${r%%|*}" != 2 ] && [ "$r2" = "0|layout: dist (position form)" ]; then
+    case "$_k" in
+      del) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-deleted "MUTANT cap-call-deleted (the call removed) is killed by cap_called; twin cap_called_present still holds" ;;
+      iffalse) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-iffalse "MUTANT cap-call-iffalse (the call inside if false) is killed by cap_called; twin cap_called_present still holds" ;;
+      heredoc) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-heredoc "MUTANT cap-call-heredoc (the call inside a dead heredoc) is killed by cap_called; twin cap_called_present still holds" ;;
+      override) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-override "MUTANT cap-call-override (cap_guard redefined as return 0 before the call) is killed by cap_called; twin cap_called_present still holds" ;;
+      moved) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-moved "MUTANT cap-call-moved (the call moved below the first live arm) is killed by cap_called; twin cap_called_present still holds" ;;
+    esac
+  else bad "MUTANT cap-call-$_k: want cap_called not 2 and cap_called_present 0|layout, got [${r%%|*}] [$r2]"; fi
+done
+r="$(capcell "$CAP_SPAN" consumer 0 "")"
+if [ "$r" = "0|" ]; then ok "cap_consumer -- on a consumer, both capabilities absent pass the guard silently (the arms SKIP instead)"; B_capc=1
+else bad "cap_consumer -- on a consumer the guard did not stand down (got ${r%%|*}: ${r#*|})"; fi
+r="$(capcell "$CAP_SPAN" dist 1 en_US.UTF-8)"
+if [ "$r" = "0|" ]; then ok "cap_dist_present -- in the distribution, both capabilities present pass the guard"
+else bad "cap_dist_present -- the guard refused a host with both capabilities (got ${r%%|*}: ${r#*|})"; fi
+if [ "$(laycell "$CAP_SPAN" /x/r/core/fixtures/mutation-red-replay)" = dist ]; then ok "lay_dist -- <root>/core/fixtures/<name> derives dist"; B_layd=1
+else bad "lay_dist -- <root>/core/fixtures/<name> did not derive dist"; fi
+if [ "$(laycell "$CAP_SPAN" /x/r/tests/fixtures/mutation-red-replay)" = consumer ]; then ok "lay_consumer -- <root>/tests/fixtures/<name> derives consumer"; B_layc=1
+else bad "lay_consumer -- <root>/tests/fixtures/<name> did not derive consumer"; fi
+if [ "$(laycell "$CAP_SPAN" /x/r/fixtures/mutation-red-replay)" = NEITHER ]; then ok "lay_neither -- a path in neither layout derives NEITHER, never a default"
+else bad "lay_neither -- a path in neither layout did not derive NEITHER"; fi
+# capmut: the guard SKIPs in the distribution (it stands down in every layout).
+if m="$(cap_mut "$CAP_SPAN" '[ "$LAYOUT" = dist ] || return 0' 'return 0')"; then
+  r="$(capcell "$m" dist 0 en_US.UTF-8)"; r2="$(capcell "$m" consumer 0 "")"
+  if [ "${r%%|*}" = 0 ] && [ "$r2" = "0|" ]; then mutant_killed "$(( ${B_capd:-0} && ${B_capc:-0} ))" cap-skip-dist "MUTANT cap-skip-dist (the guard SKIPs in the distribution) is killed by cap_dist_pytest; twin cap_consumer still holds"
+  else bad "MUTANT cap-skip-dist: want cap_dist_pytest 0 and cap_consumer 0|, got [${r%%|*}] [$r2]"; fi
+else bad "FIXTURE BROKEN: mutant cap-skip-dist DID NOT APPLY (its anchor does not occur exactly once in the CAPGUARD span)"; fi
+# laymut: the distribution position derived as consumer.
+if m="$(cap_mut "$CAP_SPAN" 'LAYOUT=dist; return 0' 'LAYOUT=consumer; return 0')"; then
+  r="$(laycell "$m" /x/r/core/fixtures/mutation-red-replay)"; r2="$(laycell "$m" /x/r/tests/fixtures/mutation-red-replay)"
+  if [ "$r" = consumer ] && [ "$r2" = consumer ]; then mutant_killed "$(( ${B_layd:-0} && ${B_layc:-0} ))" lay-dist-as-consumer "MUTANT lay-dist-as-consumer (the distribution derived as consumer) is killed by lay_dist; twin lay_consumer still holds"
+  else bad "MUTANT lay-dist-as-consumer: want lay_dist consumer and lay_consumer consumer, got [$r] [$r2]"; fi
+else bad "FIXTURE BROKEN: mutant lay-dist-as-consumer DID NOT APPLY (its anchor does not occur exactly once in the CAPGUARD span)"; fi
 # armrun <arm> <validator> <world tag> -> the arm's own status, $why set
 armrun() { "arm_$1" "$2" "$3"; }
 BASE_OK=" "
