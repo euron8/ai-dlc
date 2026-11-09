@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1034.0] - 2026-11-09
+
+### BL-943 closed
+
+A PARTIAL live entry could carry an `sh` receipt over its shipped half, and `scripts/backlog-reverify.sh` scored it CLOSE-CANDIDATE. BL-538 was the measured instance: it is PARTIAL (its outcome line is owed), its verify line ran `process-rule-pins/run.sh --report`, the corpus arm for the shipped prose half, which exits 0, and the reverify run read `CLOSE-CANDIDATE  sh receipt exited 0 -- the fix is present` at b85de402a. The rule that a PARTIAL entry keeps `verify: manual` while an owed item is open was committed only as prose in `docs/plans/graph-ledger-full-drain.md`, with no enforcer.
+
+Arm R12 of `scripts/validate-backlog-receipts.sh` now enforces it. `r12_judge` reads the live ledger with reconcile/lib.sh's entry grammar and fence state. An entry with an unfenced body line opening `**PARTIAL` whose first `verify:` value is not the word `manual` is a finding, ceiling 0, so `manual` and `manual -- <reason>` pass and `manualXYZ` fires. The one exemption is a pending LANDED line: the entry's first unfenced `**LANDED (v<digit>` line must be in `backlog-rotate.sh` `pending()` form `**LANDED (v<n.n.n>).**` and name a version at or above the tree VERSION, compared with rotate's `vgt`, so the closing entry's receipt still runs under R8. Position against the PARTIAL lines does not matter, because the house writes the LANDED line at the top of the body. VERSION is read as rotate reads it, from the git top level of the ledger's directory; with no VERSION nothing is exempt and the arm fails closed.
+
+Measured with `r12_judge` itself: over the b85de402a ledger the finding set is exactly {BL-538}, and over this release's ledger it is {}. The self-probe runs before the corpus at VERSION 0.2.0 and fires both directions over 20 seeded entries (`R12_PROBED`): 19 in one probe ledger (16 PARTIAL, 4 exempt) and one fail-closed seed with no VERSION. The arm cannot see an entry that says stays PARTIAL in prose with no `**PARTIAL` line, nor a `**PARTIAL` mid-line after another bold token; it forbids one historically correct form, a PARTIAL whose `sh` receipt exited 1 while open and 0 at close.
+
+Receipt: BL-943's own `verify:` line asserts `r12_judge` exists (exit 9 if not), requires it to fire on the b85de402a ledger, and requires 0 findings on the live one. `core/fixtures/backlog-receipt-binding/run.sh` gains mutant `r12-m1`, killed by seed BL-1201.
+
+### BL-538
+
+Verify line returned to `manual`; the entry stays PARTIAL.
+
 ## [0.1033.0] - 2026-11-09
 
 ### BL-940 closed

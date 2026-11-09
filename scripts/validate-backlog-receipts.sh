@@ -217,6 +217,10 @@
 # rule, NOT DERIVED case, self-probe and the measured false-positive set: the R11 block above
 # r11_judge. `R11-POPULATION:` prints in every verbosity; ceiling 0.
 #
+# R12 -- A PARTIAL LIVE ENTRY KEEPS `verify: manual` WHILE ANY OWED ITEM IS OPEN (BL-943). Population,
+# grammar, exemption, self-probe, the measured false-positive set, its narrowing and its floors: the R12
+# block above r12_judge. `R12-POPULATION:` prints in every verbosity; ceiling 0.
+#
 # EMPTY IS NOT CLEAN. Both populations print a line in every verbosity -- `OPEN-POPULATION: EMPTY`
 # when the ledger has no live `sh` receipt (the state on every push when this shipped: 43 live
 # entries, 0 `sh` receipts; control, the same ledger's `^verify:` lines, 47, of which the one
@@ -2987,13 +2991,235 @@ o="$(r11_judge "$q" docs/backlog.md refs/heads/no-such-base-zz HEAD)" || r11_fai
 R11_PROBED="R11 fired both directions over 6 seeded LANDED lines"
 }
 
+# ---------------------------------------------------------------------------
+# R12 -- A PARTIAL LIVE ENTRY KEEPS `verify: manual` WHILE ANY OWED ITEM IS OPEN (BL-943). The rule
+# was committed as prose only (docs/plans/graph-ledger-full-drain.md, the per-entry commit rule), and
+# nothing enforced it. Measured at b85de402a: BL-538 is PARTIAL (its outcome line is owed) and its
+# verify line ran `bash core/fixtures/process-rule-pins/run.sh --report`, the corpus arm for the
+# SHIPPED prose half, so scripts/backlog-reverify.sh scored a PARTIAL entry CLOSE-CANDIDATE. BL-538
+# first went `sh` at 1809d8589 (0.1000.0, receipt-bl538.sh, which already scored only the prose half)
+# and 0119c6a58 (0.1019.0) repointed it at the fixture.
+#   POPULATION: every LIVE entry of the ledger this run reads (the entry boundary and the label are
+#     reconcile/lib.sh `ledger_entry_awk` + `backlog_entry_label_awk`). The archive is OUT of the
+#     population: its entries are closed and an old PARTIAL paragraph there is history (r12_judge over
+#     the archive at VERSION 0.1031.0: 857 entries, 25 PARTIAL, 0 exempt -- every LANDED there is
+#     released -- and 14 that would read as findings, correctly `sh` at their close). `--archive` exits
+#     before this arm.
+#   GRAMMAR: an entry is PARTIAL iff any UNFENCED body line OPENS `**PARTIAL` (`^\*\*PARTIAL`), the
+#     first body line or a later progress paragraph alike. Fenced is `ledger_entry_shape`s own fence
+#     state, so a quoted `**PARTIAL` inside a code fence is not a marker (live fenced instances: 0).
+#   RULE: a PARTIAL entry whose first `verify:` value is not the word `manual` (`^manual` followed by a
+#     non-word byte or the end: `manual`, `manual -- <reason>` pass, `manualXYZ` does not) is a
+#     FINDING, unless it is EXEMPT: its FIRST unfenced line opening `**LANDED (v<digit>` (optionally
+#     after `<br>`) is in scripts/backlog-rotate.sh `pending()` form `**LANDED (v<n.n.n>).**` and names
+#     a version v >= the tree VERSION. The comparison IS rotate's: `pending()` keyed on the first such
+#     line, `vgt` field by field (copied here as r12_vgt), and `>=` is `!vgt(VERSION, v)`. An entry
+#     rotate keeps live as PENDING is NOT exactly the entry R12 exempts, in two ways: at equality
+#     (LANDED version == VERSION) R12 exempts by the `>=` ruling while rotate moves the entry
+#     (harmless: the release commit's rotate archives it), and a FENCED LANDED line is read by
+#     rotate and not by R12. VERSION is rotate's too: the
+#     VERSION file at the git top level of the ledger's directory (`r12_judge --version V` names it for
+#     a ledger with no tree). No VERSION -> nothing is exempt (fail closed). POSITION AGAINST THE
+#     PARTIAL LINES DOES NOT MATTER: the house writes the LANDED line at the TOP of the body (641 of 856
+#     archived line-opening rotate-form LANDED lines are the first non-blank body line, at 230e3ccc4), above the old PARTIAL paragraph, and an
+#     order rule fired on every such close. An exempt entry is closing, and R8 judges its receipt (exit
+#     0 required). A RELEASED LANDED (v < VERSION) does not exempt, so an entry that landed a half
+#     earlier and went PARTIAL again still fires. One divergence from rotate, on purpose: rotate keys
+#     its first LANDED line fenced or not, R12 only an unfenced one (a quoted form exempts nothing).
+#   TIER: ERROR, ceiling 0. The false-positive path is closed: a PARTIAL whose owed work all landed
+#     carries a pending LANDED line and is exempt until its release, then rotates out of the live ledger.
+#   RE-ENTRY: a run re-entered from inside a receipt (BR_RECEIPTS_RUNNING) exits 1 on an R12 finding,
+#     by design: R12 is text-only and runs no receipt, so it judges the ledger there too.
+#   FALSE-POSITIVE SET, MEASURED: at b85de402a exactly {BL-538} (11 live PARTIAL entries, 14 line-
+#     opening `**PARTIAL` lines, 2 opening the body and 12 later); after BL-538 went back to
+#     `verify: manual`, {} (0). Both by r12_judge itself over the two ledger blobs, re-taken under the
+#     version rule at VERSION 0.1031.0: R12-COUNTS 49 11 0 at b85de402a and 50 11 0 at 230e3ccc4 (no
+#     live entry carries a line-opening LANDED line, so the rule change moves neither set).
+#   HOW IT GOT THERE (narrowing): live-only; line-opening, unfenced `**PARTIAL` (an unanchored
+#     `\*\*PARTIAL` admits prose that cites the word: 24 live entries mention PARTIAL mid-line); a
+#     `manual` WORD prefix so `verify: manual -- <reason>` passes and `manualXYZ` does not; the
+#     pending-LANDED exemption (version >= VERSION), keyed on the first LANDED line as rotate keys it.
+#   COST OF THE RULE: it forbids one historically correct form, BL-159 (a PARTIAL whose sh receipt
+#     exited 1 while open and 0 at close). The alternative not taken is "open, PARTIAL, sh, base exit
+#     0", which the scorer could compute; it is a receipt judgment, and this arm is a text rule.
+#   WHAT IT CANNOT SEE (its zero is a floor): 13 live entries saying stays/still/remains PARTIAL in
+#     prose with no `**PARTIAL` line (all `manual` today), a `**PARTIAL` mid-line after another
+#     bold token (0 live, 1 archived: BL-664), and the one-line form `**PARTIAL ...<br>**LANDED (v...`
+#     (PARTIAL and LANDED on one physical line, so the LANDED half opens no line and exempts nothing):
+#     UNSEEN, 0 live and 0 archived by `^\*\*PARTIAL.*<br>\*\*LANDED \(v[0-9]`, beside the control
+#     `.<br>\*\*LANDED \(v[0-9]` (a mid-line `<br>` LANDED on any line): 0 live, 1 archived, BL-673,
+#     inside its receipt text and not on a PARTIAL line. Measured at 230e3ccc4.
+#   COST: one awk pass over the ledger file the validator already reads; no fork per entry.
+# THE PROBE IS NEVER REPLAYED: vbr_main calls it after vbr_probe_r11, outside the probe record.
+# ---------------------------------------------------------------------------
+# r12_judge <ledger-file> [--counts] -> one `R12 <BL-id>` line per finding, then (with --counts) one
+# `R12-COUNTS <entries> <partial> <exempt>` line. Returns 0 with no finding, 1 with any, 2 when it
+# cannot read. Self-contained: no $WORK, no $AWKF; it loads reconcile/lib.sh itself when sourced alone.
+r12_judge() {
+  # An unreadable or absent ledger is refused by awk itself (it exits 2 on a file it cannot open), so
+  # no metadata test precedes the read (S15 of validate-shell-portability.sh). `--version <V>` names the
+  # tree VERSION outright (the self-probe's ledger sits in a mktemp dir with no git tree) and skips the
+  # git call; without it VERSION is read as backlog-rotate.sh reads it, from the git top level of the
+  # ledger's directory. An unreadable VERSION is empty, and an empty VERSION exempts nothing.
+  local _l="$1" _m="" _v="" _vs=0 _d _t _p _o _f
+  shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --counts)  _m="--counts" ;;
+      --version) _v="${2:-}"; _vs=1; [ "$#" -gt 1 ] && shift ;;
+    esac
+    shift
+  done
+  if [ "$_vs" = 0 ]; then
+    _d="${_l%/*}"; [ "$_d" = "$_l" ] && _d="."
+    _t="$(git -C "$_d" rev-parse --show-toplevel 2>/dev/null)" || _t=""
+    [ -n "$_t" ] && { read -r _v < "$_t/VERSION" || :; } 2>/dev/null
+  fi
+  if ! declare -F ledger_entry_awk >/dev/null || ! declare -F backlog_entry_label_awk >/dev/null; then
+    _d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || return 2
+    while [ "$_d" != "/" ] && [ ! -f "$_d/VERSION" ]; do _d="$(dirname "$_d")"; done
+    [ -f "$_d/core/skills/ai-dlc-update/reconcile/lib.sh" ] || return 2
+    # shellcheck source=../core/skills/ai-dlc-update/reconcile/lib.sh
+    . "$_d/core/skills/ai-dlc-update/reconcile/lib.sh" || return 2
+  fi
+  _p="$(ledger_entry_awk; backlog_entry_label_awk)" || return 2
+  _o="$(awk -v VER="$_v" "$_p"'
+# r12_vgt(a, b): a > b numerically, field by field -- backlog-rotate.sh vgt, copied (no shared one exists).
+function r12_vgt(a, b,   x, y, na, nb, n, i) {
+  na = split(a, x, "."); nb = split(b, y, "."); n = (na > nb) ? na : nb
+  for (i = 1; i <= n; i++) { if ((x[i] + 0) > (y[i] + 0)) return 1; if ((x[i] + 0) < (y[i] + 0)) return 0 }
+  return 0
+}
+# r12_pending(s): s, the entry s FIRST rotate-form LANDED line, is in backlog-rotate.sh pending() form
+# and names a version v >= VER. No VER -> 0 (fail closed: nothing is exempt).
+function r12_pending(s,   v) {
+  if (VER == "" || s !~ /^(<br>)?\*\*LANDED \(v[0-9][0-9.]*\)\.\*\*/) return 0
+  v = s; sub(/^(<br>)?\*\*LANDED \(v/, "", v); sub(/\).*$/, "", v)
+  return !r12_vgt(VER, v)
+}
+function r12_flush() {
+  if (lbl == "") return
+  ne++
+  if (part) {
+    np++
+    if (ex) nx++
+    else if (rec !~ /^manual([^A-Za-z0-9_]|$)/) printf "R12 %s\n", lbl
+  }
+  lbl = ""; part = 0; lsn = 0; ex = 0; rec = ""; seen = 0
+}
+{
+  l = backlog_entry_label($0)
+  if (l != "") { r12_flush(); lbl = l; next }
+  if (lbl == "") next
+  if (!__lef_in) {
+    if ($0 ~ /^\*\*PARTIAL/) part = 1
+    if (!lsn && $0 ~ /^(<br>)?\*\*LANDED \(v[0-9]/) { lsn = 1; ex = r12_pending($0) }
+  }
+  if (!seen && $0 ~ /^[ \t]*verify:/) { seen = 1; rec = $0; sub(/^[ \t]*verify:[ \t]*/, "", rec) }
+}
+END { r12_flush(); printf "R12-COUNTS %d %d %d\n", ne, np, nx }' "$_l")" || return 2
+  _f="$(printf '%s\n' "$_o" | sed -n '/^R12 /p')"
+  [ -n "$_f" ] && printf '%s\n' "$_f"
+  [ "$_m" = "--counts" ] && printf '%s\n' "$_o" | sed -n '/^R12-COUNTS /p'
+  [ -z "$_f" ]  || return 1
+  return 0
+}
+
+vbr_probe_r12() {
+# R12 SELF-PROBE, BOTH DIRECTIONS, BEFORE THE CORPUS, THROUGH r12_judge, on one seeded ledger. The
+# quiet seeds are written FIRST so a judge that reads only its first entry cannot pass. The probe names
+# VERSION 0.2.0 outright (`--version`), so a seeded world that is itself a git tree cannot move it.
+#   FIRES  BL-1201 first-body-line PARTIAL + sh      BL-1202 later-paragraph PARTIAL + sh
+#          BL-1203 a RELEASED `**LANDED (v0.1.0).**` on top, a later PARTIAL + sh (released: no exemption)
+#          BL-1204 PARTIAL + sh quoting `**LANDED (v` mid-line
+#          BL-1205 PARTIAL + sh with a line opening `**LANDED (vX.Y.Z` (no digit: not rotate form)
+#          BL-1212 PARTIAL + `verify: manualXYZ` (the manual prefix is a WORD)
+#          BL-1216 a released LANDED first, PARTIAL, a pending LANDED last + sh (keyed on the FIRST)
+#          BL-1217 PARTIAL + a FENCED `**LANDED (v0.3.0).**` + sh (a fenced LANDED exempts nothing)
+#          BL-1218 PARTIAL + `**LANDED (v0.3.0, verified abc).**` on top + sh (sha form is not pending form)
+#          BL-1219 PARTIAL + `**LANDED (v0.3.0)` with no closing `.**` on top + sh
+#          FAIL-CLOSED: a second r12_judge call, no `--version`, over a ledger in a mktemp dir that is in
+#          no git tree (refused if it is), one entry: pending LANDED on top + PARTIAL + sh. It must FIRE:
+#          no readable VERSION exempts nothing.
+#   QUIET  BL-1206 PARTIAL + manual                   BL-1207 PARTIAL + `manual -- reason`
+#          BL-1208 non-PARTIAL + sh                   BL-1209 non-PARTIAL citing PARTIAL mid-prose + sh
+#          BL-1210 PARTIAL then a pending `**LANDED (v0.3.0).**` below it + sh (position does not matter)
+#          BL-1211 a fenced `**PARTIAL` line + sh
+#          BL-1213 pending `**LANDED (v0.3.0).**` on top, PARTIAL below + sh (the house close; twin of BL-1203)
+#          BL-1214 `**LANDED (v0.2.0).**` EQUAL to VERSION on top, PARTIAL below + sh (`>=`, not `>`)
+#          BL-1215 the live BL-914 body shape with a pending LANDED line on top + sh
+r12_fail() { echo "$(me): SELF-PROBE FAILED -- R12: $1" >&2; exit 2; }
+local q="$WORK/r12probe.md" o rc id want got
+{ printf '# p\n\n'
+  printf '## BL-1206 — q\n\n**PARTIAL (v0.1.0).** open.\n\nverify: manual\n\n'
+  printf '## BL-1207 — q\n\n**PARTIAL (v0.1.0).** open.\n\nverify: manual — the outcome line is owed\n\n'
+  printf '## BL-1208 — q\n\n**DEFECT.** body.\n\nverify: sh true\n\n'
+  printf '## BL-1209 — q\n\n**DEFECT.** this entry is not **PARTIAL** and says PARTIAL mid-line.\n\nverify: sh true\n\n'
+  printf '## BL-1210 — q\n\n**PARTIAL (v0.0.9).** half.\n\n**LANDED (v0.3.0).** the rest.\n\nverify: sh true\n\n'
+  printf '## BL-1211 — q\n\nBody.\n\n```\n**PARTIAL (v0.1.0).** quoted\n```\n\nverify: sh true\n\n'
+  printf '## BL-1213 — q\n\n**LANDED (v0.3.0).** the rest.\n\n**DEFECT.** body.\n\n**PARTIAL (batch 2).** half.\n\nverify: sh true\n\n'
+  printf '## BL-1214 — q\n\n**LANDED (v0.2.0).** the rest.\n\n**DEFECT.** body.\n\n**PARTIAL (batch 2).** half.\n\nverify: sh true\n\n'
+  printf '## BL-1215 — one `log stream` drop notice disables the pre-suite step key record for every later step in the push\n\n'
+  printf '**LANDED (v0.3.0).** Closed on two pushes that share one git common dir.\n\n'
+  printf '**DEFECT.** `.githooks/pre-push:244` starts one `/usr/bin/log stream` per push, and the pre-suite step key skip depends on it.\n\n'
+  printf 'Design hazard for any fix: a per-step window is not obviously safe.\n\n'
+  printf '**PARTIAL.** The fix deletes the `log stream` tracer and its sentinel outright. Each step record is now `#format k2`.\n\n'
+  printf 'Close condition: BL-1215 stays open, with `verify: manual` and no LANDED line, and closes on two pushes.\n\n'
+  printf 'Yield limit: pushes from the main checkout will rarely skip.\n\nverify: sh true\n\n'
+  printf '## BL-1201 — f\n\n**PARTIAL (v0.1.0).** open.\n\nverify: sh true\n\n'
+  printf '## BL-1202 — f\n\n**DEFECT.** body.\n\n**PARTIAL (batch 1).** progress.\n\nverify: sh true\n\n'
+  printf '## BL-1203 — f\n\n**LANDED (v0.1.0).** half.\n\n**PARTIAL (batch 2).** reopened.\n\nverify: sh true\n\n'
+  printf '## BL-1204 — f\n\n**PARTIAL (v0.1.0).** cites **LANDED (v0.1.0).** mid-line.\n\nverify: sh true\n\n'
+  printf '## BL-1205 — f\n\n**PARTIAL (v0.1.0).** open.\n\n**LANDED (vX.Y.Z).** placeholder.\n\nverify: sh true\n\n'
+  printf '## BL-1212 — f\n\n**PARTIAL (v0.1.0).** open.\n\nverify: manualXYZ\n\n'
+  printf '## BL-1216 — f\n\n**LANDED (v0.1.0).** half.\n\n**PARTIAL (batch 2).** reopened.\n\n**LANDED (v0.3.0).** cited below.\n\nverify: sh true\n\n'
+  printf '## BL-1217 — f\n\n**PARTIAL (v0.1.0).** open.\n\n```\n**LANDED (v0.3.0).** quoted\n```\n\nverify: sh true\n\n'
+  printf '## BL-1218 — f\n\n**LANDED (v0.3.0, verified abc).** the rest.\n\n**PARTIAL (batch 2).** half.\n\nverify: sh true\n\n'
+  printf '## BL-1219 — f\n\n**LANDED (v0.3.0)** the rest.\n\n**PARTIAL (batch 2).** half.\n\nverify: sh true\n'
+} > "$q" || r12_fail "R12's probe ledger did not write."
+o="$(r12_judge "$q" --counts --version 0.2.0)"; rc=$?
+[ "$rc" -eq 2 ] && r12_fail "r12_judge could not read its probe ledger (exit 2)."
+R12P_READ=""
+# ORDER IS LOAD-BEARING: each mutant of this arm is killed by the FIRST seed it breaks, named `seed <id>:`.
+for id in BL-1201 BL-1202 BL-1203 BL-1204 BL-1205 BL-1212 BL-1216 BL-1217 BL-1218 BL-1219 BL-1206 BL-1207 BL-1208 BL-1209 BL-1210 BL-1211 BL-1213 BL-1214 BL-1215; do
+  case "$id" in BL-120[1-5]|BL-1212|BL-1216|BL-121[7-9]) want=FIRES ;; *) want=QUIET ;; esac
+  if grep -qxF "R12 $id" <<<"$o"; then got=FIRES; else got=QUIET; fi
+  R12P_READ="$R12P_READ $id=$got"
+  [ "$got" = "$want" ] || r12_fail "seed $id: read $got, want $want."
+done
+[ "$rc" -eq 1 ] || r12_fail "r12_judge returned $rc over a ledger with seven findings, want 1."
+[ "$(sed -n '/^R12-COUNTS /p' <<<"$o")" = "R12-COUNTS 19 16 4" ] || r12_fail "the population read '$(sed -n '/^R12-COUNTS /p' <<<"$o")', want 19 entries, 16 PARTIAL (the fenced seed is not one), 4 exempt."
+local fcd fcl
+fcd="$(mktemp -d "${TMPDIR:-/tmp}/r12fc.XXXXXX")" || r12_fail "the fail-closed probe dir did not create."
+fcl="$fcd/ledger.md"
+if git -C "$fcd" rev-parse --show-toplevel >/dev/null 2>&1; then r12_fail "the fail-closed probe dir $fcd is inside a git tree, so the seed would not be fail-closed."; fi
+printf '# p\n\n## BL-1220 — f\n\n**LANDED (v0.3.0).** the rest.\n\n**PARTIAL (batch 2).** half.\n\nverify: sh true\n' > "$fcl" || r12_fail "the fail-closed probe ledger did not write."
+o="$(r12_judge "$fcl")"; rc=$?
+rm -f "$fcl"; rmdir "$fcd"
+{ [ "$rc" -eq 1 ] && grep -qxF "R12 BL-1220" <<<"$o"; } || r12_fail "seed fail-closed: a ledger with no readable VERSION read rc $rc '$o', want rc 1 and R12 BL-1220."
+R12_PROBED="R12 fired both directions over 20 seeded entries"
+}
+
 vbr_sec_corpus() {
 # ---------------------------------------------------------------------------
 # THE CORPUS.
 # ---------------------------------------------------------------------------
 # A RE-ENTERED RUN executes no corpus receipt (see RE_ENTRY): both population lines say SKIPPED,
 # and the verdict is the efficiency arms' alone. The self-probes above have already run.
+# R12 is TEXT-ONLY and runs no receipt, so it judges the ledger on a re-entered run too, before that exit.
+R12_OUT="$(r12_judge "$LEDGER" --counts)"; _r12_rc=$?
+[ "$_r12_rc" -eq 2 ] && { echo "$(me): FAIL -- R12 could not read $LEDGER; this is a refusal, not a reading." >&2; exit 2; }
+N_R12="$(printf '%s\n' "$R12_OUT" | grep -c '^R12 ')" || N_R12=0
+read -r _ R12_ENT R12_PART R12_EXEMPT <<<"$(printf '%s\n' "$R12_OUT" | sed -n '/^R12-COUNTS /p')"
+echo "R12-POPULATION: ${R12_PART:-0} PARTIAL live entr(ies) of ${R12_ENT:-0}, ${R12_EXEMPT:-0} exempt by a pending LANDED line (version >= VERSION), ${N_R12} not verify: manual."
+r12_report() { # prints the R12 failure on stderr; returns 1 when there is one
+  [ "$N_R12" -gt 0 ] || return 0
+  printf '%s\n' "$R12_OUT" | awk '$1 == "R12" { printf "FAIL: R12\t%s\n", $2 }' >&2
+  echo "FAIL: R12: $N_R12 live PARTIAL entr(ies) in $LEDGER (named above) carry a verify: value that is not manual. A PARTIAL entry has owed work open, and an sh receipt over the half that shipped exits 0, which scripts/backlog-reverify.sh reads as CLOSE-CANDIDATE -- a false close. REMEDY: write \`verify: manual\` (a reason may follow) until the entry closes; a closing entry carries a pending \`**LANDED (v<version>).**\` line (its first LANDED line, naming a version >= VERSION, anywhere in the body) and R8 then runs its receipt." >&2
+  return 1
+}
 if [ -n "$RE_ENTRY" ]; then
+  r12_report || exit 1
   R8_SKIP=1
   score_closed "$LEDGER" "$SUBJECT_ROOT" "$BASE_REF" >/dev/null || exit 2
   open_skip_line
@@ -3002,7 +3228,7 @@ if [ -n "$RE_ENTRY" ]; then
   echo "R10-POPULATION: SKIPPED -- re-entered from inside a receipt, so the anchor convention judged no open receipt here; the outer run judges them once."
   eff_report || exit 1
   parent_cleanup_trees
-  echo "OK: validate-backlog-receipts -- EXAMINED NOTHING for R2-R8: re-entered from inside a receipt (BR_RECEIPTS_RUNNING set on entry), so no corpus receipt was executed here; ${R7_PROBED}; the efficiency arms ran over ${LEDGER}."
+  echo "OK: validate-backlog-receipts -- EXAMINED NOTHING for R2-R8: re-entered from inside a receipt (BR_RECEIPTS_RUNNING set on entry), so no corpus receipt was executed here; ${R7_PROBED}; R12 ${N_R12}/0 PARTIAL entries not manual, ${R12_PROBED}; the efficiency arms ran over ${LEDGER}."
   exit 0
 fi
 OUT="$(score_ledger "$LEDGER" "$SUBJECT_ROOT")" || exit 2
@@ -3167,6 +3393,7 @@ if [ "$N_R11" -gt 0 ]; then
   echo "FAIL: R11: $N_R11 verified sha(s) on LANDED lines this branch ADDED to $LEDGER or its archive (since the merge-base with $BASE_REF) are not commits on $BASE_REF (named above). A sha written before the squash names a commit the squash leaves unreachable, so the line attests to nothing on main. REMEDY: write the sha-less form \`**LANDED (v<version>).**\` (scripts/backlog-rotate.sh binds it to CHANGELOG.md or VERSION), or name a sha already on $BASE_REF." >&2
   RC=1
 fi
+r12_report || RC=1
 
 # THE POPULATION FLOOR. The three ceilings all bound a count WITHIN the `sh` population, so
 # the last escape is to leave it: rewrite `verify: sh` as `verify: manual`, or delete the
@@ -3199,7 +3426,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; R11 ${N_R11} added LANDED shas not on ${BASE_REF}, ${R11_PROBED}; R10 ${R10_N}/${MAX_R10} open receipts unanchored over ${R10_SCAN} read, ${R10_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing, ${N_DRIVER} driver; R0 bound the path-split class to ${CLASS_SOURCE}; ${R1_PROBED}; R7 ${N_CM}/${MAX_CM} open receipts cannot measure; R8 ${N_CFAIL} closed-on-branch receipts not exiting 0; ${R7_PROBED}; R11 ${N_R11} added LANDED shas not on ${BASE_REF}, ${R11_PROBED}; R10 ${R10_N}/${MAX_R10} open receipts unanchored over ${R10_SCAN} read, ${R10_PROBED}; R12 ${N_R12}/0 PARTIAL entries not manual over ${R12_PART} PARTIAL, ${R12_PROBED}; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}${R2_DECLEMPTY}${R2_ALLDRIVER}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -3227,6 +3454,7 @@ vbr_sec_eff
 vbr_probes
 vbr_probe_r10
 vbr_probe_r11
+vbr_probe_r12
 vbr_sec_corpus
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0

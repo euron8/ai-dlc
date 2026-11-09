@@ -115,6 +115,7 @@
 # MUTANT-MATRIX r11-m1 decides=r11_m1 twins=c5_m1
 # MUTANT-MATRIX r11-m2 decides=r11_m2 twins=r11_m3
 # MUTANT-MATRIX r11-m3 decides=r11_m3 twins=r11_m2
+# MUTANT-MATRIX r12-m1 decides=r12_m1 twins=r11_m2
 # MUTANT-MATRIX c1-whole decides=c1_whole twins=m6
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
@@ -2280,6 +2281,34 @@ r11_direct r11-m2 's|^    elif ! git -C "\$_r" merge-base --is-ancestor "\$_s" "
 r11_direct r11-m3 's|^      END { for (i = 1; i <= n; i++) if (!(ord\[i\] in was)) printf|      END { for (i = 1; i <= n; i++) printf|' \
   "with the move filter dropped, the moved seed BL-1102 fires as an add"
 
+# ===== BL-943, R12 (a PARTIAL live entry keeps verify: manual). =====================================
+# r12-m1 disables the predicate (a PARTIAL entry whose verify is not manual is never printed), killed by
+# the FIRST seed of vbr_probe_r12 it breaks, BL-1201, driven through R12's probe ALONE (r12_probe_only),
+# the same function a full run calls. The unmutated control must pass all 16 seeds.
+r12_probe_only() { # r12_probe_only <world> -> vbr_probe_r12's output and status
+  local d="$1"
+  ( cd "$d" || exit 2
+    # shellcheck source=/dev/null
+    . "$d/scripts/validate-backlog-receipts.sh" || exit 2
+    declare -F vbr_probe_r12 >/dev/null || { echo "FIXTURE BROKEN: $d defined no vbr_probe_r12 when sourced" >&2; exit 3; }
+    WORK="$d/.r12work"; mkdir -p "$WORK" || exit 2
+    vbr_probe_r12
+    echo "R12D: $R12_PROBED" ) 2>&1
+}
+R12D_BASE_OK=0
+seed "$TMP/r12d-ctl"
+r12d_ctl="$(r12_probe_only "$TMP/r12d-ctl")"; r12d_crc=$?
+if [ "$r12d_crc" = 0 ] && grep -qxF "R12D: R12 fired both directions over 20 seeded entries" <<<"$r12d_ctl"; then
+  ok "r12d-control -- R12's probe alone, over the unmutated copy, fired both directions over 20 seeds"; R12D_BASE_OK=1
+else bad "r12d-control -- rc=$r12d_crc: $(head -2 <<<"$r12d_ctl" | tr '\n' '|')"; fi
+arm_r12_m1() { [ "$(r_rc "$1")" = 2 ] && grep -F 'SELF-PROBE FAILED -- R12:' "$REC/$1.out" | grep -qF "seed BL-1201:"; }
+seed "$TMP/r12-m1"
+if mut "$TMP/r12-m1" 's#^    else if (rec !~ /^manual(\[^A-Za-z0-9_\]|\$)/) printf "R12 %s\\n", lbl$#    else if (0) printf "R12 %s\\n", lbl#'; then
+  o="$(r12_probe_only "$TMP/r12-m1")"; r=$?
+  record r12-m1 "$r" "$o"
+  score r12-m1 "$R12D_BASE_OK" "r12-m1 -- with the R12 predicate disabled, the PARTIAL + sh seed BL-1201 does not fire"
+fi
+
 # ===== PR. THE PROBE RECORD (BL-880), PART TWO: CELLS 2-7, P2, AND ITS EIGHT MUTANTS. ===========
 # Every mutant below edits the validator, so its key is its OWN and never the control's K0: each is
 # therefore driven TWICE in a fresh store of its own (pr_two), the first run writing the mutant's
@@ -2599,6 +2628,7 @@ twin_of() {
     r11-m1) echo c5_m1 ;;
     r11-m2) echo r11_m3 ;;
     r11-m3) echo r11_m2 ;;
+    r12-m1) echo r11_m2 ;;
     *) echo "" ;;
 # TWINS-END
   esac
