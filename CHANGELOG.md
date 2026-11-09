@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1033.0] - 2026-11-09
+
+### BL-940 closed
+
+`core/fixtures/mutation-red-replay/run.sh` skipped the arms that need a host capability when the farm's `python3` could not import pytest or `locale -a` listed no UTF-8 locale. In the distribution that moved the counted start total with the box: 447 with both capabilities, 414 without pytest, 422 without the locale. The invocation judge then failed a fixture that had printed PASS. The fixture now derives its layout from the position of its own directory (`<root>/core/fixtures/<name>` is `dist`, `<root>/tests/fixtures/<name>` is `consumer`, anything else is `NEITHER` and exits 2, never a default). A `CAPGUARD` span, called from the top of the fixture with `cap_guard >&2 || exit 2`, refuses when the layout is `dist` and pytest is not importable or no UTF-8 locale is listed. The refusal is `FIXTURE BROKEN -- capability absent`, exit 2, prints one line per absent capability (with both absent, a closing line names both), names the interpreter and its own site-packages, and the remedy: install pytest into that interpreter, or put a `python3` that imports pytest ahead of it in `READSET_TOOL_DIRS`. A refused run starts 2 counted processes. A consumer falls through to the existing SKIPs.
+
+Receipt: the guard cells evaluate the extracted `CAPGUARD` span with the probes overridden, so the refusal is seen to fire on a box that has both capabilities: `cap_dist_pytest`, `cap_dist_locale`, `cap_dist_both`, `cap_consumer`, `cap_dist_present`, `lay_dist`, `lay_consumer`, `lay_neither`. `cap_called` and `cap_called_present` run the fixture's own call region, so a guard that is defined but never called fails too. Mutants `cap-skip-dist`, `lay-dist-as-consumer`, `cap-call-deleted`, `cap-call-iffalse`, `cap-call-heredoc` and `cap-call-moved` are each killed by a named cell with a twin. The backlog receipt runs `cap_called` and fails on the `if false` mutant.
+
+### BL-941 closed
+
+`core/fixtures/procsub-staged-refusal/run.sh` printed SKIP for `arm_lw_utf8` and mutant `RT-TR-LOCALE` when `en_US.UTF-8` was absent from `locale -a`, which moved the counted start total with the box. `lw_locale_guard` now refuses, `FIXTURE BROKEN`, exit 2, in any shard that owns either (the `retired-tokens.sh` family, or unit `b3`, whose `322ef42c` differential runs `arm_lw_utf8`), and names the locale and the remedy. A shard that owns neither never starts those cells and is unaffected. A refused shard starts 1 or 2 counted processes. The fixture is `.dist-only`, so a missing locale is never a consumer's host. The `LW_UTF8` conditionals around `arm_lw_utf8`, the `322ef42c` differential list and `RT-TR-LOCALE` are removed, because the guard guarantees the locale.
+
+Receipt: `lw_guard_owns`, `lw_guard_other`, `lw_guard_b3` and `lw_guard_b3_none` decide the guard and the shard gate, and `lw_guard_called` and `lw_guard_called_present` run the fixture's own call region. Mutants `LW-GUARD-SKIP`, `LW-GATE-NO-SG`, `LW-CALL-DELETED`, `LW-CALL-IFFALSE`, `LW-CALL-HEREDOC` and `LW-CALL-MOVED` are each killed by a named cell with a twin. The backlog receipt runs the call region for an owning shard, for `b3` alone and for a shard owning none, and fails when `|| sg b3` is dropped from the gate.
+
+### BL-942 closed
+
+`core/fixtures/story-evidence-scaffold/run.sh` skipped mutant `rp-no-lcc` when the farm's awk did not abort on a non-UTF-8 byte under a UTF-8 locale (BSD awk does; gawk and mawk do not), which moved the counted start total with the box. It now carries the same layout derivation and `CAPGUARD` span as `mutation-red-replay`, in `run.sh` and not in `world.sh`. In the distribution a missing `UTF8_LOCALE` refuses, `FIXTURE BROKEN`, exit 2, naming the awk it resolved, both causes (an awk that does not abort, or no `en_US.UTF-8`/`C.UTF-8` locale) and the remedy. A refused run starts 1 counted process. A consumer keeps the SKIP naming the mutant.
+
+Receipt: `cap_dist_awk`, `cap_consumer`, `cap_dist_present`, `lay_dist`, `lay_consumer`, `lay_neither`, `cap_called` and `cap_called_present`, with mutants `cap-skip-dist`, `lay-dist-as-consumer`, `cap-call-deleted`, `cap-call-iffalse`, `cap-call-heredoc` and `cap-call-moved` each killed by a named cell with a twin.
+
+The distribution box now requires three things: the hermetic farm's `python3` imports pytest, a UTF-8 locale is listed by `locale -a` (`en_US.UTF-8` for `procsub-staged-refusal`), and the farm's awk aborts on a non-UTF-8 byte under a UTF-8 locale. A consumer is unaffected. Its hook never arms the invocation counter (`grep -c FXCOUNT_RC core/git-hooks/pre-push` is 0, against 3 in `.githooks/pre-push`), and in a consumer tree built by `install.sh` the guarded fixtures exit 0 with their SKIPs and report layout `consumer`. `procsub-staged-refusal` is `.dist-only` and not installed.
+
 ## [0.1032.0] - 2026-11-09
 
 ### BL-938 closed

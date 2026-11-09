@@ -108,6 +108,13 @@
 # MUTANT-MATRIX RT-NUL-GREPA decides=nw_cmt twins=rt_healthy
 # MUTANT-MATRIX RT-TR-STATUS decides=lw_trstatus twins=rt_healthy
 # MUTANT-MATRIX RT-TR-LOCALE decides=lw_utf8 twins=rt_healthy
+# MUTANT-MATRIX LW-GUARD-SKIP decides=lw_guard_owns twins=lw_guard_other
+# MUTANT-MATRIX LW-CALL-DELETED decides=lw_guard_called twins=lw_guard_called_present
+# MUTANT-MATRIX LW-CALL-IFFALSE decides=lw_guard_called twins=lw_guard_called_present
+# MUTANT-MATRIX LW-CALL-HEREDOC decides=lw_guard_called twins=lw_guard_called_present
+# MUTANT-MATRIX LW-CALL-OVERRIDE decides=lw_guard_called twins=lw_guard_called_present
+# MUTANT-MATRIX LW-CALL-MOVED decides=lw_guard_called twins=lw_guard_called_present
+# MUTANT-MATRIX LW-GATE-NO-SG decides=lw_guard_b3 twins=lw_guard_b3_none
 # MUTANT-MATRIX RLT-CODETOKS decides=rlt_cmt twins=rlt_healthy
 # MUTANT-MATRIX RLC-SHAPES decides=rlc_shapes twins=rlc_healthy
 # MUTANT-MATRIX RLC-TOKENS decides=rlc_tokens twins=rlc_healthy
@@ -375,6 +382,121 @@ wantw() {
 }
 # Top-level flags the seed worlds would set, defaulted so a shard that builds no such world still reads a defined value.
 LW_UTF8=0; QD_ROOT=0; LE_CV=""
+# THE en_US.UTF-8 REQUIREMENT (BL-941), decided before this shard's first arm. arm_lw_utf8 and mutant RT-TR-LOCALE
+# (the retired-tokens.sh family, shard a) and the 322ef42c differential (unit b3, shard b) need a UTF-8 `tr`. This
+# fixture is .dist-only, so a missing locale is never a consumer's host: a SKIP would move the counted start total
+# with the box, and the invocation judge would fail a fixture that printed PASS. So a shard that owns either refuses,
+# FIXTURE BROKEN, exit 2, before the shard's first arm (a refused run carries 1 counted row, the shard's run.sh, plus
+# the driver's for shards b and c; hermetic-run.sh
+# applies no J3 to an rc-2 run); a shard owning neither never starts those cells and is unaffected.
+# lw_locale_guard <locale -a output> <owns: 1|0> -> 0, or the refusal on stdout and 2; sets LW_UTF8.
+lw_locale_guard() {
+  local nl='
+'
+  LW_UTF8=0
+  case "$nl$1$nl" in *"${nl}en_US.UTF-8${nl}"*) LW_UTF8=1 ;; esac
+  [ "$2" = 1 ] || return 0
+  [ "$LW_UTF8" -eq 1 ] && return 0
+  printf 'procsub-staged-refusal: FIXTURE BROKEN -- capability absent: locale en_US.UTF-8 is not listed by `locale -a`, so arm_lw_utf8, mutant RT-TR-LOCALE and the 322ef42c differential cannot drive a UTF-8 tr. In the distribution a missing capability is a broken fixture, not a skip: the counted start total would move with the box. Remedy: install or enable the en_US.UTF-8 locale so `locale -a` lists it.\n'
+  return 2
+}
+# LWCALL-BEGIN  (the call region the lw_guard_called cells evaluate, through LWCALL-END)
+LW_OWNS=0
+if famrun retired-tokens.sh || sg b3; then LW_OWNS=1; fi
+LW_LOCALES=""
+[ "$LW_OWNS" = 1 ] && { LW_LOCALES="$(locale -a 2>/dev/null)" || LW_LOCALES=""; }
+lw_locale_guard "$LW_LOCALES" "$LW_OWNS" >&2 || exit 2
+# LWCALL-END
+# The guard's own cells: forced inputs, no process started. The mutant makes the guard stand down when it owns the cells.
+B_lwg=0; B_lwc=0
+_r="$(lw_locale_guard 'C
+POSIX' 1)"; _rc=$?
+if [ "$_rc" = 2 ] && grep -qF 'capability absent: locale en_US.UTF-8 is not listed by `locale -a`' <<<"$_r"; then
+  ok "lw_guard_owns -- a shard owning the UTF-8 cells refuses (exit 2) when en_US.UTF-8 is absent, naming it and the remedy"; B_lwg=1
+else bad "lw_guard_owns -- an owning shard did not refuse an absent en_US.UTF-8 (rc $_rc: $_r)"; fi
+_r="$(lw_locale_guard 'C
+POSIX' 0)"; _rc=$?
+if [ "$_rc" = 0 ] && [ -z "$_r" ]; then ok "lw_guard_other -- a shard owning none of them is unaffected by an absent en_US.UTF-8"; B_lwc=1
+else bad "lw_guard_other -- a shard owning none of the UTF-8 cells refused (rc $_rc: $_r)"; fi
+_lwm="$(declare -f lw_locale_guard)"
+_lwa='[ "$2" = 1 ] || return 0'
+_lwm2="$(F="$_lwa" awk 'BEGIN { f = ENVIRON["F"] } { i = index($0, f); if (i > 0) { n++; $0 = substr($0, 1, i - 1) "return 0" substr($0, i + length(f)) } print } END { exit (n == 1 ? 0 : 1) }' <<<"$_lwm")" || _lwm2="$_lwm"
+if [ "$_lwm2" != "$_lwm" ]; then
+  _r="$( eval "$_lwm2"; lw_locale_guard 'C' 1; printf '|%s' "$?" )"
+  _r2="$( eval "$_lwm2"; lw_locale_guard 'C' 0; printf '|%s' "$?" )"
+  if [ "$_r" = "|0" ] && [ "$_r2" = "|0" ]; then
+    mutant_killed "$(( ${B_lwg:-0} && ${B_lwc:-0} ))" LW-GUARD-SKIP "MUTANT LW-GUARD-SKIP (the guard stands down in an owning shard) is killed by lw_guard_owns; twin lw_guard_other still holds"
+  else bad "MUTANT LW-GUARD-SKIP: want lw_guard_owns |0 and lw_guard_other |0, got [$_r] [$_r2]"; fi
+else bad "FIXTURE BROKEN: mutant LW-GUARD-SKIP DID NOT APPLY (its anchor is not in lw_locale_guard)"; fi
+# THE CALL SITE, BY BEHAVIOUR. lw_region <file text> prints LWCALL-BEGIN through LWCALL-END. lwcallcell evaluates it in
+# a subshell with `locale` and `famrun` overridden as functions (a function shadows the command, so no process starts)
+# and `exit` reported as the region's status. No bash is started.
+# lwcallcell <file text> <locale -a text> [fam|sg|none] -> "<rc>|<out>". The third argument says who owns the UTF-8
+# cells: fam (default) the retired-tokens.sh family, sg the b3 unit alone (famrun owns nothing), none neither.
+lw_region() { awk '/^# LWCALL-BEGIN/ { f = 1 } f { print } f && /^# LWCALL-END$/ { exit }' <<<"$1"; }
+lwcallcell() {
+  ( local_reg="$(lw_region "$1")"
+    case "$local_reg" in *"# LWCALL-END") ;; *) printf '9|no LWCALL-END after LWCALL-BEGIN'; exit 0 ;; esac
+    _floc="$2"; _fown="${3:-fam}"
+    locale() { printf '%s\n' "$_floc"; }
+    famrun() { [ "$_fown" = fam ] && [ "$1" = retired-tokens.sh ]; }
+    sg() { [ "$_fown" = sg ] && [ "$1" = b3 ]; }
+    o="$(eval "$local_reg" 2>&1)"; printf '%s|%s' "$?" "$o" )
+}
+lwcallmut() { # <file text> <kind> -> the file with its guard call mutated; exit 1 unless the call occurs exactly once
+  K="$2" awk 'BEGIN { c = "lw_locale_guard \"$LW_LOCALES\" \"$LW_OWNS\" >&2 || exit 2"; k = ENVIRON["K"] }
+    $0 == c { n++
+      if (k == "del") next
+      if (k == "iffalse") { print "if false; then"; print; print "fi"; next }
+      if (k == "heredoc") { print ": <<'"'"'DEAD'"'"'"; print; print "DEAD"; next }
+      if (k == "override") { print "lw_locale_guard() { return 0; }"; print; next }
+      if (k == "moved") { held = 1; next } }
+    k == "moved" && held == 1 && /^run_arm arm_/ { print c; held = 2 }
+    { print }
+    END { exit (n == 1 && (k != "moved" || held == 2)) ? 0 : 1 }' <<<"$1"
+}
+LW_SELF="$(cat "$SELF")"
+B_lwk=0; B_lwkp=0
+_r="$(lwcallcell "$LW_SELF" 'C
+POSIX')"
+if [ "${_r%%|*}" = 2 ] && grep -qF 'capability absent: locale en_US.UTF-8 is not listed by `locale -a`' <<<"$_r"; then
+  ok "lw_guard_called -- the shipped call region, evaluated in an owning shard with en_US.UTF-8 forced absent, refuses (exit 2) naming it"; B_lwk=1
+else bad "lw_guard_called -- the shipped call region did not refuse a forced-absent en_US.UTF-8 in an owning shard (got ${_r%%|*}: ${_r#*|})"; fi
+_r="$(lwcallcell "$LW_SELF" 'C
+en_US.UTF-8')"
+if [ "$_r" = "0|" ]; then ok "lw_guard_called_present -- the shipped call region with en_US.UTF-8 forced present runs through (exit 0)"; B_lwkp=1
+else bad "lw_guard_called_present -- the shipped call region refused a present en_US.UTF-8 (got ${_r%%|*}: ${_r#*|})"; fi
+for _k in del iffalse heredoc override moved; do
+  if ! _m="$(lwcallmut "$LW_SELF" "$_k")" || [ "$_m" = "$LW_SELF" ]; then bad "FIXTURE BROKEN: mutant LW-CALL-$_k DID NOT APPLY"; continue; fi
+  _r="$(lwcallcell "$_m" 'C')"; _r2="$(lwcallcell "$_m" 'en_US.UTF-8')"
+  if [ "${_r%%|*}" != 2 ] && [ "$_r2" = "0|" ]; then
+    case "$_k" in
+      del) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-DELETED "MUTANT LW-CALL-DELETED (the call removed) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
+      iffalse) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-IFFALSE "MUTANT LW-CALL-IFFALSE (the call inside if false) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
+      heredoc) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-HEREDOC "MUTANT LW-CALL-HEREDOC (the call inside a dead heredoc) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
+      override) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-OVERRIDE "MUTANT LW-CALL-OVERRIDE (lw_locale_guard redefined as return 0 before the call) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
+      moved) mutant_killed "$(( ${B_lwk:-0} && ${B_lwkp:-0} ))" LW-CALL-MOVED "MUTANT LW-CALL-MOVED (the call moved below the first run_arm) is killed by lw_guard_called; twin lw_guard_called_present still holds" ;;
+    esac
+  else bad "MUTANT LW-CALL-$_k: want lw_guard_called not 2 and lw_guard_called_present 0|, got [${_r%%|*}] [$_r2]"; fi
+done
+# The b3 owner, ALONE: famrun owns nothing and sg b3 is true (shard b), so only the gate's `|| sg b3` arm can make it refuse.
+B_lwsg=0; B_lwno=0
+_r="$(lwcallcell "$LW_SELF" 'C' sg)"
+if [ "${_r%%|*}" = 2 ] && grep -qF 'capability absent: locale en_US.UTF-8 is not listed by `locale -a`' <<<"$_r"; then
+  ok "lw_guard_b3 -- the shipped call region in a shard owning only unit b3, en_US.UTF-8 forced absent, refuses (exit 2) naming it"; B_lwsg=1
+else bad "lw_guard_b3 -- a shard owning only unit b3 did not refuse a forced-absent en_US.UTF-8 (got ${_r%%|*}: ${_r#*|})"; fi
+_r="$(lwcallcell "$LW_SELF" 'C' none)"
+if [ "$_r" = "0|" ]; then ok "lw_guard_b3_none -- the shipped call region in a shard owning neither, en_US.UTF-8 forced absent, runs through (exit 0) with no refusal"; B_lwno=1
+else bad "lw_guard_b3_none -- a shard owning neither refused (got ${_r%%|*}: ${_r#*|})"; fi
+_lwg='if famrun retired-tokens.sh || sg b3; then LW_OWNS=1; fi'
+_m="$(G="$_lwg" awk 'BEGIN { g = ENVIRON["G"] } $0 == g { n++; print "if famrun retired-tokens.sh; then LW_OWNS=1; fi"; next } { print } END { exit n == 1 ? 0 : 1 }' <<<"$LW_SELF")" || _m="$LW_SELF"
+if [ "$_m" = "$LW_SELF" ]; then bad "FIXTURE BROKEN: mutant LW-GATE-NO-SG DID NOT APPLY (the ownership gate line does not occur exactly once)"
+else
+  _r="$(lwcallcell "$_m" 'C' sg)"; _r2="$(lwcallcell "$_m" 'C' none)"
+  if [ "${_r%%|*}" != 2 ] && [ "$_r2" = "0|" ]; then
+    mutant_killed "$(( ${B_lwsg:-0} && ${B_lwno:-0} ))" LW-GATE-NO-SG "MUTANT LW-GATE-NO-SG (the gate's || sg b3 dropped) is killed by lw_guard_b3; twin lw_guard_b3_none still holds"
+  else bad "MUTANT LW-GATE-NO-SG: want lw_guard_b3 not 2 and lw_guard_b3_none 0|, got [${_r%%|*}] [$_r2]"; fi
+fi
 # STUB_FNS names every stub function mkstub (and arm_ld_sup's mktemp) defined and exported. stub_clear unsets them all: a function
 # stub left defined after its arm ends leaks into every later arm, and `command -v <tool>` then prints the bare name instead of a path.
 STUB_FNS=""
@@ -534,12 +656,6 @@ LW_THEIRS="$(git -C "$LWD" rev-parse HEAD)"
 printf 'uses $ROOT/keep1 and $ROOT/keep2\n' > "$LWC/scripts/ai-dlc/alat.sh"
 printf 'uses $ROOT/old-c\n' > "$LWC/scripts/ai-dlc/ctl.sh"
 printf 'X\tcore/scripts/alat.sh\tscripts/ai-dlc/alat.sh\tCLASSIFY\nX\tcore/scripts/ctl.sh\tscripts/ai-dlc/ctl.sh\tCLASSIFY\n' > "$LW/rows"
-# The UTF-8 arm needs the locale. Absent, it and the mutant it kills print SKIP, never ok.
-LW_NL='
-'
-LW_LOCALES="$(locale -a 2>/dev/null)" || LW_LOCALES=""
-LW_UTF8=0
-case "$LW_NL$LW_LOCALES$LW_NL" in *"${LW_NL}en_US.UTF-8${LW_NL}"*) LW_UTF8=1 ;; esac
 fi
 
 # Clause constants shared by the OW world and the readopt-override fx worlds: plain strings, defined for every shard.
@@ -2168,11 +2284,8 @@ run_arm arm_nw_both     "$S_RT"  "retired-tokens: a blob with a NUL at BOTH refs
 run_arm arm_nw_theirs   "$S_RT"  "retired-tokens: a NUL gained at theirs alone retires nothing (no FALSE q.sh row), the ctl.sh row stands"
 run_arm arm_nw_cmt      "$S_RT"  "retired-tokens: a NUL before a comment '#' leaves the commented token a comment (no FALSE h.sh -> cmt-h row)"
 run_arm arm_lw_c        "$S_RT"  "retired-tokens: a Latin-1 byte in a theirs blob under LC_ALL=C retires nothing, the ctl.sh row alone at rc 0"
-if [ "$LW_UTF8" -eq 1 ]; then
-  run_arm arm_lw_utf8   "$S_RT"  "retired-tokens: NO STUB, a Latin-1 theirs blob under a UTF-8 caller reads whole: the ctl.sh row alone at rc 0, no refusal, no FALSE alat.sh row"
-elif famrun retired-tokens.sh; then
-  skip "arm_lw_utf8: locale en_US.UTF-8 is not installed (locale -a), so a UTF-8 tr cannot be driven here (this is not a pass)"
-fi
+# en_US.UTF-8 is guaranteed here by lw_locale_guard in every shard that owns this family.
+run_arm arm_lw_utf8   "$S_RT"  "retired-tokens: NO STUB, a Latin-1 theirs blob under a UTF-8 caller reads whole: the ctl.sh row alone at rc 0, no refusal, no FALSE alat.sh row"
 run_arm arm_lw_trstatus "$S_RT"  "retired-tokens: the NUL strip (tr) of alat.sh's theirs blob fails -> exit 2 naming it, not FALSE keep rows at rc 0"
 
 echo "== forced producer failures (each stub must FIRE, each script must REFUSE) =="
@@ -2547,8 +2660,8 @@ else
     # behaviour-preserving on them is a regression against this copy, not a fix.
     # The Latin-1 worlds join them: the base copy ran no `tr`, so a Latin-1 theirs blob read whole.
     # arm_lw_trstatus does not: the base has no `tr` for its stub to fail.
-    _lwa="arm_lw_c"; [ "$LW_UTF8" -eq 1 ] && _lwa="$_lwa arm_lw_utf8"
-    for _nwa in arm_nw_both arm_nw_theirs arm_nw_cmt $_lwa; do
+    # en_US.UTF-8 is guaranteed here by lw_locale_guard (unit b3 owns these cells).
+    for _nwa in arm_nw_both arm_nw_theirs arm_nw_cmt arm_lw_c arm_lw_utf8; do
       if "$_nwa" "$B3/retired-tokens.sh"; then ok "322ef42c differential: $_nwa PASSES against the base retired-tokens.sh, which read NUL-bearing blobs correctly -- $ARM_WHY"
       else bad "322ef42c differential: $_nwa FAILED against the base retired-tokens.sh, so the arm does not describe the base behaviour the fix must preserve -- $ARM_WHY"; fi
     done
@@ -2749,12 +2862,8 @@ mutant RT-TR-STATUS reconcile retired-tokens.sh \
   "$RT_TR_LINE" $'  _raw="$(LC_ALL=C tr -d \'\\000\')" || true\n'
 # retired-tokens: the NUL strip back in the caller's locale (b5e5b610's spelling). A UTF-8 caller's
 # `tr` refuses the Latin-1 theirs blob, so the detector refuses a file 322ef42c read correctly.
-if [ "$LW_UTF8" -eq 1 ]; then
-  mutant RT-TR-LOCALE reconcile retired-tokens.sh \
-    "$RT_TR_LINE" $'  _raw="$(tr -d \'\\000\')" || return 2\n'
-elif famrun retired-tokens.sh; then
-  skip "mutant RT-TR-LOCALE: its killing cell needs locale en_US.UTF-8, which is not installed (this is not a pass)"
-fi
+mutant RT-TR-LOCALE reconcile retired-tokens.sh \
+  "$RT_TR_LINE" $'  _raw="$(tr -d \'\\000\')" || return 2\n'
 # retired-layer-token: BOTH layers -- code_toks pipes into toks, and toks ends in a grep. Reverting
 # code_toks alone leaves toks returning 0 on empty input, and pipefail then reports the strip's 2.
 mutant RLT-CODETOKS reconcile retired-layer-token.sh \

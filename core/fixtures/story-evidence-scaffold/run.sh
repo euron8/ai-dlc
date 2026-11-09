@@ -71,6 +71,50 @@ done
 if [ -f "$(dirname "$HE")/record-only-diff.sh" ]; then echo "HERMETIC-CONSUMED core/scripts/record-only-diff.sh"
 else echo "story-evidence-scaffold: FIXTURE BROKEN -- record-only-diff.sh is not beside $HE" >&2; exit 2; fi
 
+# CAPGUARD-BEGIN
+# THE HOST CAPABILITY, decided by LAYOUT (BL-942). Mutant rp-no-lcc needs an awk that ABORTS on a non-UTF-8
+# byte under a UTF-8 locale (world.sh's UTF8_LOCALE probe; BSD awk does, gawk and mawk do not). On a consumer
+# the host is not ours to assume, so it SKIPs naming the mutant. In the distribution that SKIP would move the
+# counted start total with the box, so the distribution refuses, FIXTURE BROKEN, exit 2, before the first arm
+# (a refused run carries 1 counted row, run.sh itself; hermetic-run.sh applies no J3 to an rc-2 run).
+# The layout is this directory's POSITION, never a walk-up for marker directories.
+# derive_layout <fixture dir> -> sets LAYOUT to dist, consumer or NEITHER
+derive_layout() {
+  local fname="${1##*/}" d
+  LAYOUT=NEITHER
+  d="$(dirname "$1")"
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    if [ "$d/core/fixtures/$fname" = "$1" ]; then LAYOUT=dist; return 0; fi
+    if [ "$d/tests/fixtures/$fname" = "$1" ]; then LAYOUT=consumer; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 0
+}
+# cap_awk_where -> the awk this run resolves, with the file a farm symlink points at
+cap_awk_where() {
+  local a; a="$(command -v awk)" || { printf 'no awk on PATH'; return 0; }
+  if [ -L "$a" ]; then printf '%s -> %s' "$a" "$(readlink "$a")"; else printf '%s' "$a"; fi
+}
+# cap_guard -> 0, or the refusal on stdout and 2. Reads LAYOUT and UTF8_LOCALE.
+cap_guard() {
+  [ "$LAYOUT" = dist ] || return 0
+  [ -n "$UTF8_LOCALE" ] && return 0
+  printf 'story-evidence-scaffold: FIXTURE BROKEN -- capability absent: no UTF-8 locale makes this awk abort on a non-UTF-8 byte (%s). Either that awk does not abort on a Latin-1 byte under en_US.UTF-8 or C.UTF-8 (gawk and mawk do not; BSD awk does), or neither locale exists. In the distribution a missing capability is a broken fixture, not a skip: mutant rp-no-lcc would not run, and the counted start total would move with the box. Remedy: put an awk that aborts on an invalid byte under a UTF-8 locale (the macOS /usr/bin/awk) first on the tool path, and install or enable en_US.UTF-8 so `locale -a` lists it.\n' "$(cap_awk_where)"
+  return 2
+}
+# CAPGUARD-END
+# THE CALL REGION, from the line after CAPGUARD-END through CAPCALL-END. The cap_call cells below evaluate exactly
+# these lines, so a call that is deleted, disabled, hidden in a heredoc, preceded by an override or moved past the
+# marker is seen by its BEHAVIOUR, not its text. UTF8_LOCALE is world.sh's probe, set before this region.
+derive_layout "$DIR"
+if [ "$LAYOUT" = NEITHER ]; then
+  echo "story-evidence-scaffold: FIXTURE BROKEN -- layout: $DIR is neither <root>/core/fixtures/story-evidence-scaffold (distribution) nor <root>/tests/fixtures/story-evidence-scaffold (consumer), so whether a missing capability refuses or skips is undecidable" >&2
+  exit 2
+fi
+echo "layout: $LAYOUT (position form)"
+cap_guard >&2 || exit 2
+# CAPCALL-END
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/story-evidence.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 # he-inproc.sh appends every subject call it could NOT answer in process here; the INPROC arm reads it.
@@ -82,6 +126,104 @@ MUT_LIB="$(cd "$DIR/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# THE GUARD'S OWN CELLS. The CAPGUARD span is extracted and evaluated in a subshell with the probe overridden,
+# so the refusal is seen to fire on a box whose awk DOES abort; no cell starts a counted process.
+cap_span() { awk '/^# CAPGUARD-BEGIN$/ { f = 1; next } /^# CAPGUARD-END$/ { f = 0 } f' "$DIR/run.sh"; }
+capcell() { # <span> <layout> <utf8 locale> -> "<rc>|<output>"
+  ( eval "$1" || exit 9
+    cap_awk_where() { printf 'PROBE-AWK'; }
+    LAYOUT="$2"; UTF8_LOCALE="$3"
+    o="$(cap_guard 2>&1)"; printf '%s|%s' "$?" "$o" )
+}
+laycell() { ( eval "$1" || exit 9; derive_layout "$2"; printf '%s' "$LAYOUT" ); }
+cap_mut() { # <span> <from> <to> -> the span with <from> replaced; exit 1 unless <from> occurs exactly once
+  F="$2" T="$3" awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+    { s = $0; while ((i = index(s, f)) > 0) { n++; s = substr(s, i + length(f)) }
+      if (!done && (i = index($0, f)) > 0) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); done = 1 }
+      print }
+    END { exit (n == 1 ? 0 : 1) }' <<<"$1"
+}
+CAP_SPAN="$(cap_span)"
+case "$CAP_SPAN" in *"cap_guard()"*"derive_layout()"*|*"derive_layout()"*"cap_guard()"*) ;;
+  *) echo "story-evidence-scaffold: FIXTURE BROKEN -- the CAPGUARD span is empty or lost cap_guard/derive_layout" >&2; exit 2 ;; esac
+r="$(capcell "$CAP_SPAN" dist "")"
+if [ "${r%%|*}" = 2 ] && grep -qF 'capability absent: no UTF-8 locale makes this awk abort on a non-UTF-8 byte (PROBE-AWK)' <<<"$r" \
+   && grep -qF 'or neither locale exists' <<<"$r"; then
+  ok "cap_dist_awk -- in the distribution, an awk that never aborts refuses (exit 2) naming both causes, the awk and the remedy"; B_capd=1
+else bad "cap_dist_awk -- in the distribution, a non-aborting awk did not refuse with the named causes (got ${r%%|*}: ${r#*|})"; fi
+r="$(capcell "$CAP_SPAN" consumer "")"
+if [ "$r" = "0|" ]; then ok "cap_consumer -- on a consumer, a non-aborting awk passes the guard silently (rp-no-lcc SKIPs instead)"; B_capc=1
+else bad "cap_consumer -- on a consumer the guard did not stand down (got ${r%%|*}: ${r#*|})"; fi
+r="$(capcell "$CAP_SPAN" dist en_US.UTF-8)"
+if [ "$r" = "0|" ]; then ok "cap_dist_present -- in the distribution, an aborting awk passes the guard"
+else bad "cap_dist_present -- the guard refused an awk that aborts (got ${r%%|*}: ${r#*|})"; fi
+# THE CALL SITE, BY BEHAVIOUR. cap_region <file text> prints the lines after CAPGUARD-END through CAPCALL-END. callcell
+# evaluates the span and then that region in a subshell, with the awk report overridden, UTF8_LOCALE forced and DIR
+# set to a distribution path, so the region's own derive_layout derives dist. No bash is started.
+# callcell <file text> <utf8 locale> -> "<rc>|<output>"
+cap_region() { awk '/^# CAPGUARD-END$/ { f = 1; next } f { print } f && /^# CAPCALL-END$/ { exit }' <<<"$1"; }
+callcell() {
+  ( local_span="$(awk '/^# CAPGUARD-BEGIN$/ { f = 1; next } /^# CAPGUARD-END$/ { f = 0 } f' <<<"$1")"
+    local_reg="$(cap_region "$1")"
+    case "$local_reg" in *"# CAPCALL-END") ;; *) printf '9|no CAPCALL-END after CAPGUARD-END'; exit 0 ;; esac
+    eval "$local_span" || { printf '9|span did not evaluate'; exit 0; }
+    cap_awk_where() { printf 'PROBE-AWK'; }
+    UTF8_LOCALE="$2"; DIR=/x/r/core/fixtures/story-evidence-scaffold
+    o="$(eval "$local_reg" 2>&1)"; printf '%s|%s' "$?" "$o" )
+}
+# callmut <file text> <kind> -> the file with its guard call mutated (del, iffalse, heredoc, override, moved); exit 1
+# unless the call line occurs exactly once
+callmut() {
+  K="$2" awk 'BEGIN { c = "cap_guard >&2 || exit 2"; k = ENVIRON["K"] }
+    $0 == c { n++
+      if (k == "del") next
+      if (k == "iffalse") { print "if false; then"; print; print "fi"; next }
+      if (k == "heredoc") { print ": <<'"'"'DEAD'"'"'"; print; print "DEAD"; next }
+      if (k == "override") { print "cap_guard() { return 0; }"; print; next }
+      if (k == "moved") { held = 1; next } }
+    k == "moved" && held == 1 && /^h3\(\) \{/ { print c; held = 2 }
+    { print }
+    END { exit (n == 1 && (k != "moved" || held == 2)) ? 0 : 1 }' <<<"$1"
+}
+CC_SELF="$(cat "$DIR/run.sh")"
+B_call=0; B_callp=0
+r="$(callcell "$CC_SELF" "")"
+if [ "${r%%|*}" = 2 ] && grep -qF 'capability absent: no UTF-8 locale makes this awk abort on a non-UTF-8 byte (PROBE-AWK)' <<<"$r" && grep -qF 'layout: dist' <<<"$r"; then
+  ok "cap_called -- the shipped call region, evaluated with a non-aborting awk in the distribution, refuses (exit 2) naming it"; B_call=1
+else bad "cap_called -- the shipped call region did not refuse a non-aborting awk in the distribution (got ${r%%|*}: ${r#*|})"; fi
+r="$(callcell "$CC_SELF" en_US.UTF-8)"
+if [ "$r" = "0|layout: dist (position form)" ]; then ok "cap_called_present -- the shipped call region with an aborting awk runs through (exit 0)"; B_callp=1
+else bad "cap_called_present -- the shipped call region refused an aborting awk (got ${r%%|*}: ${r#*|})"; fi
+for _k in del iffalse heredoc override moved; do
+  if ! _m="$(callmut "$CC_SELF" "$_k")" || [ "$_m" = "$CC_SELF" ]; then bad "FIXTURE BROKEN: mutant cap-call-$_k DID NOT APPLY"; continue; fi
+  r="$(callcell "$_m" "")"; r2="$(callcell "$_m" en_US.UTF-8)"
+  if [ "${r%%|*}" != 2 ] && [ "$r2" = "0|layout: dist (position form)" ]; then
+    case "$_k" in
+      del) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-deleted "MUTANT cap-call-deleted (the call removed) is killed by cap_called; twin cap_called_present still holds" ;;
+      iffalse) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-iffalse "MUTANT cap-call-iffalse (the call inside if false) is killed by cap_called; twin cap_called_present still holds" ;;
+      heredoc) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-heredoc "MUTANT cap-call-heredoc (the call inside a dead heredoc) is killed by cap_called; twin cap_called_present still holds" ;;
+      override) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-override "MUTANT cap-call-override (cap_guard redefined as return 0 before the call) is killed by cap_called; twin cap_called_present still holds" ;;
+      moved) mutant_killed "$(( ${B_call:-0} && ${B_callp:-0} ))" cap-call-moved "MUTANT cap-call-moved (the call moved below the subject arms' first helper) is killed by cap_called; twin cap_called_present still holds" ;;
+    esac
+  else bad "MUTANT cap-call-$_k: want cap_called not 2 and cap_called_present 0|layout, got [${r%%|*}] [$r2]"; fi
+done
+if [ "$(laycell "$CAP_SPAN" /x/r/core/fixtures/story-evidence-scaffold)" = dist ]; then ok "lay_dist -- <root>/core/fixtures/<name> derives dist"; B_layd=1
+else bad "lay_dist -- <root>/core/fixtures/<name> did not derive dist"; fi
+if [ "$(laycell "$CAP_SPAN" /x/r/tests/fixtures/story-evidence-scaffold)" = consumer ]; then ok "lay_consumer -- <root>/tests/fixtures/<name> derives consumer"; B_layc=1
+else bad "lay_consumer -- <root>/tests/fixtures/<name> did not derive consumer"; fi
+if [ "$(laycell "$CAP_SPAN" /x/r/fixtures/story-evidence-scaffold)" = NEITHER ]; then ok "lay_neither -- a path in neither layout derives NEITHER, never a default"
+else bad "lay_neither -- a path in neither layout did not derive NEITHER"; fi
+if m="$(cap_mut "$CAP_SPAN" '[ "$LAYOUT" = dist ] || return 0' 'return 0')"; then
+  r="$(capcell "$m" dist "")"; r2="$(capcell "$m" consumer "")"
+  if [ "${r%%|*}" = 0 ] && [ "$r2" = "0|" ]; then mutant_killed "$(( ${B_capd:-0} && ${B_capc:-0} ))" cap-skip-dist "MUTANT cap-skip-dist (the guard SKIPs in the distribution) is killed by cap_dist_awk; twin cap_consumer still holds"
+  else bad "MUTANT cap-skip-dist: want cap_dist_awk 0 and cap_consumer 0|, got [${r%%|*}] [$r2]"; fi
+else bad "FIXTURE BROKEN: mutant cap-skip-dist DID NOT APPLY (its anchor does not occur exactly once in the CAPGUARD span)"; fi
+if m="$(cap_mut "$CAP_SPAN" 'LAYOUT=dist; return 0' 'LAYOUT=consumer; return 0')"; then
+  r="$(laycell "$m" /x/r/core/fixtures/story-evidence-scaffold)"; r2="$(laycell "$m" /x/r/tests/fixtures/story-evidence-scaffold)"
+  if [ "$r" = consumer ] && [ "$r2" = consumer ]; then mutant_killed "$(( ${B_layd:-0} && ${B_layc:-0} ))" lay-dist-as-consumer "MUTANT lay-dist-as-consumer (the distribution derived as consumer) is killed by lay_dist; twin lay_consumer still holds"
+  else bad "MUTANT lay-dist-as-consumer: want lay_dist consumer and lay_consumer consumer, got [$r] [$r2]"; fi
+else bad "FIXTURE BROKEN: mutant lay-dist-as-consumer DID NOT APPLY (its anchor does not occur exactly once in the CAPGUARD span)"; fi
 
 echo "story-evidence-scaffold: subjects $STS $GV $DEV $QA $CR $IMP $SR"
 
