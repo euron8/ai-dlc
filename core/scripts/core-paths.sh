@@ -54,8 +54,25 @@ set -uo pipefail
 #
 # exit (--audit-diff):
 #   0 = no core path touched in range, or every commit touching one is a recognized
-#       `chore(ai-dlc-update):` reconcile commit, or an operator-authorization
+#       `chore(ai-dlc-update):` reconcile commit (the SUBJECT arm), or carries a
+#       reconcile's exact content (the CONTENT arm, below), or an operator-authorization
 #       citation is present -- or the tree is DORMANT (see below)
+#
+# THE CONTENT ARM, and how its acquittal set was narrowed. A consumer that squash-merges its
+# update PR lands the reconcile's tree under the PR's own subject, so the subject arm FAILs
+# every pull it exists to pass (BL-939). The content arm acquits a touch of core path p by a
+# non-reconcile commit t iff (mode, blob) at t:p EQUALS r:p for some r in R(t), where R(t) is
+# the `chore(ai-dlc-update):` commits reachable from any branch or remote ref (a squashed
+# pull's own commit survives only on its update ref), MINUS every commit in
+# <base-ref>..<head-ref> (an in-range reconcile must not acquit the range it sits in), keyed
+# on `.claude/.ai-dlc-version`: only an r whose stamp blob equals t's is eligible. A deletion
+# is acquitted only when p is absent at t AND at that r. What it acquits: the installed
+# reconcile's exact bytes and modes, and its own deletions -- nothing else. The stamp key is
+# what makes an OLD reconcile's blob restored under the CURRENT stamp flag; the mode is
+# compared so a chmod-only touch flags; an unparseable tree listing acquits nothing for that
+# commit. Known acquittal: a downgrade that reverts the stamp along with the files carries an
+# older reconcile's exact content and passes. When R(t) is empty -- typically because the
+# update refs were pruned -- the FAIL says so rather than reading as an ordinary edit.
 #   1 = a core path is touched by a non-reconcile commit with no citation
 #   2 = the core set could not be resolved, so nothing was classified. Fail-closed,
 #       for the same reason --is-core exits 2: an empty result from a scan that did
@@ -356,6 +373,90 @@ EOF
     exit 0
   fi
 
+  # THE CONTENT ARM (header: "THE CONTENT ARM"). Batched: one log over the refs, one
+  # rev-list for the range, one cat-file --batch-check for every stamp, then one ls-tree per
+  # offending commit and one per eligible reconcile tried -- never a git call per path.
+  # tree_keys <commit> <newline-separated paths> -> `path<TAB>mode blob` per entry. Returns 1
+  # when the listing failed or any line did not parse: a path that cannot be read back must
+  # never look ABSENT, because absent-at-both is the deletion acquittal.
+  tree_keys() {
+    local raw IFS='
+'
+    set -f
+    raw="$(git -c core.quotePath=false ls-tree -r --full-tree "$1" -- $2 </dev/null 2>/dev/null)" || { set +f; return 1; }
+    set +f
+    [ -n "$raw" ] || return 0
+    printf '%s\n--\n%s\n' "$2" "$raw" | awk -F'\t' '
+      $0 == "--" && !s { s = 1; next }
+      !s { if ($0 != "") want[$0] = 1; next }
+      NF == 2 && substr($2, 1, 1) != "\"" { if ($2 in want) { split($1, a, " "); print $2 "\t" a[1] " " a[3] }; next }
+      { bad = 1 }
+      END { exit bad }'
+  }
+  CONTENT_ACQ=""
+  CONTENT_NOREF=""
+  content_arm() {
+    local cands inrange rset tlist tagged sout stamps t ts rt paths remaining tk rk r now acqpairs
+    cands="$(git log --branches --remotes --format='%H %s' 2>/dev/null | awk '{ s = $0; sub(/^[^ ]+ /, "", s); if (index(s, "chore(ai-dlc-update):") == 1) print $1 }')"
+    inrange="$(git rev-list "${BASE_REF}..${HEAD_REF}" 2>/dev/null)"
+    rset="$(printf '%s\n--\n%s\n' "$inrange" "$cands" | awk '$0 == "--" { s = 1; next } !s { x[$0] = 1; next } $0 != "" && !($0 in x)')"
+    tlist="$(printf '%s' "$OFFENDERS" | awk 'NF && !($1 in s) { s[$1] = 1; print $1 }')"
+    tagged="$(printf '%s\n--\n%s\n' "$rset" "$tlist" | awk '$0 == "--" { s = 1; next } NF { print (s ? "T" : "R"), $1 }')"
+    sout="$(printf '%s\n' "$tagged" | awk '{ print $2 ":.claude/.ai-dlc-version" }' \
+      | git cat-file --batch-check='%(objecttype) %(objectname)' 2>/dev/null)"
+    stamps="$(printf '%s\n--\n%s\n' "$tagged" "$sout" | awk '$0 == "--" { s = 1; next } !s { n++; k[n] = $0; next } { m++; if ($1 == "blob") print k[m], $2 }')"
+    acqpairs=""
+    while IFS= read -r t; do
+      [ -n "$t" ] || continue
+      ts="$(printf '%s\n' "$stamps" | awk -v k="$t" '$1 == "T" && $2 == k { print $3; exit }')"
+      [ -n "$ts" ] || continue
+      rt="$(printf '%s\n' "$stamps" | awk -v ts="$ts" '$1 == "R" && $3 == ts { print $2 }')"
+      if [ -z "$rt" ]; then
+        CONTENT_NOREF="${CONTENT_NOREF}    ${t} (installed stamp blob ${ts})
+"
+        continue
+      fi
+      paths="$(printf '%s' "$OFFENDERS" | awk -v k="$t" '$1 == k { s = $0; sub(/^ *[^ ]+ /, "", s); i = index(s, " :: "); if (i > 1) print substr(s, 1, i - 1) }')"
+      [ -n "$paths" ] || continue
+      tk="$(tree_keys "$t" "$paths")" || continue
+      remaining="$paths"
+      while IFS= read -r r; do
+        [ -n "$r" ] && [ -n "$remaining" ] || continue
+        rk="$(tree_keys "$r" "$remaining")" || continue
+        now="$(printf '%s\n--\n%s\n--\n%s\n' "$remaining" "$tk" "$rk" | awk -F'\t' '
+          $0 == "--" { s++; next }
+          s == 0 { if ($0 != "") want[$0] = 1; next }
+          s == 1 { tv[$1] = $2; next }
+          { rv[$1] = $2 }
+          END { for (p in want) { a = (p in tv) ? tv[p] : "ABSENT"; b = (p in rv) ? rv[p] : "ABSENT"; if (a == b) print p } }')"
+        [ -n "$now" ] || continue
+        acqpairs="${acqpairs}$(printf '%s\n' "$now" | awk -v t="$t" '{ print t " " $0 }')
+"
+        CONTENT_ACQ="${CONTENT_ACQ}$(printf '%s\n' "$now" | awk -v t="$t" -v r="$r" '{ print "    " t " " $0 " == reconcile " r }')
+"
+        remaining="$(printf '%s\n--\n%s\n' "$now" "$remaining" | awk '$0 == "--" { s = 1; next } !s { x[$0] = 1; next } $0 != "" && !($0 in x)')"
+      done <<EOR
+$rt
+EOR
+    done <<EOT
+$tlist
+EOT
+    [ -n "$acqpairs" ] || return 0
+    OFFENDERS="$(printf '%s\n--\n%s' "$acqpairs" "$OFFENDERS" | awk '$0 == "--" { s = 1; next } !s { if ($0 != "") a[$0] = 1; next } NF { s = $0; sub(/^ *[^ ]+ /, "", s); i = index(s, " :: "); if (i > 1 && (($1 " " substr(s, 1, i - 1)) in a)) next; print }')"
+    [ -z "$OFFENDERS" ] || OFFENDERS="${OFFENDERS}
+"
+  }
+  [ -z "$OFFENDERS" ] || content_arm
+
+  if [ -z "$OFFENDERS" ]; then
+    echo "PASS (content arm): core path(s) touched; each non-reconcile touch carries the exact (mode, blob) of a"
+    echo "  chore(ai-dlc-update): reconcile reachable from a ref outside the range, at the same installed stamp:"
+    printf '%s' "$TOUCHED" | sed 's/^/  /'
+    echo "  acquitted by the CONTENT arm (commit path == reconcile):"
+    printf '%s' "$CONTENT_ACQ"
+    exit 0
+  fi
+
   # The operator's escape hatch. PRESENCE only: this cannot tell whether the
   # citation covers THIS touch, and says so rather than letting a caller read the
   # exit code as adjudication.
@@ -398,6 +499,12 @@ EOF
 
   echo "FAIL: core path(s) edited in place by non-reconcile commit(s), no operator-authorization citation:"
   printf '%s' "$OFFENDERS"
+  if [ -n "$CONTENT_NOREF" ]; then
+    echo "  content arm: no chore(ai-dlc-update): reconcile ref carrying the installed stamp was found for:"
+    printf '%s' "$CONTENT_NOREF"
+    echo "  (for example because the update refs were pruned); a squash-merged pull is acquitted only"
+    echo "  while its reconcile commit is still reachable from a branch or remote ref."
+  fi
   printf '%s\n' "$AUTH_OUT" | sed 's/^/  /'
   exit 1
 fi

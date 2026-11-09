@@ -17,7 +17,10 @@
 #   - drop the reconcile exemption, and every pull FAILs, which is how a real check gets
 #     switched off;
 #   - return 0 from the FAIL arm, and the finding still prints while the caller reads success.
-# None of the four changes the output on a clean range.
+# None of the four changes the output on a clean range. The CONTENT arm (BL-939) adds four
+# more (mutations 7-10): the arm removed, its stamp key dropped, its mode dropped, and the
+# range left inside its eligible set -- the first FAILs every squash-merged pull, the other
+# three acquit a touch that is not the installed reconcile's content.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -38,7 +41,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "core-paths-audit-diff: FI
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # B_M<n>=1 only beside the unmutated arm's own ok: the mutant is scored only if its base arm passed.
-B_M1=0; B_M2=0; B_M3=0; B_M4=0; B_M5=0; B_M6=0
+B_M1=0; B_M2=0; B_M3=0; B_M4=0; B_M5=0; B_M6=0; B_M7=0; B_M8=0; B_M9=0; B_M10=0
 
 # audit <script> <base> <head> — never through a pipe: RC must be the script's own.
 audit() {
@@ -87,7 +90,9 @@ audit "$CONTROL_VALIDATOR" "$PRESPLIT" "$BASE"
 says "DORMANT" || broken "control: the pre-layer-split range did not report DORMANT"
 audit_at "$CONTROL_VALIDATOR" shrink "$BASE" "$SHRINK"
 says "scripts/ai-dlc/verdict.sh" || broken "control: the un-claiming range did not name the un-claimed path"
-ok "the unmutated control copy reproduces all five verdicts"
+audit "$CONTROL_VALIDATOR" "$BASE" "$SQUASH"
+[ "$RC" -eq 0 ] && says "PASS (content arm)" || broken "control: the squash of a reconcile's tree did not pass by the content arm (rc=$RC)"
+ok "the unmutated control copy reproduces all six verdicts"
 
 # --- Assertion 1: a consumer-only change is clean -----------------------------
 audit "$VALIDATOR" "$BASE" "$CLEAN"
@@ -176,6 +181,53 @@ audit_at "$VALIDATOR" shrink "$BASE" "$SHRINK"
 if says "scripts/ai-dlc/verdict.sh"; then ok "a diff that un-claims the file it edits is still classified against the base-ref manifest"; B_M1=1
 else bad "the un-claimed path was not named — the manifest is being read from the diff under audit"; fi
 
+# --- Assertions 7-14: the CONTENT arm (BL-939) -----------------------------------
+# A squash-merged pull lands a reconcile's tree under a non-reconcile subject. seed.sh asserts
+# each cell's discriminating input exists before any of these runs.
+NOREF="no chore(ai-dlc-update): reconcile ref carrying the installed stamp was found"
+# 7 (cell 1): the squash of X's tree passes, and BY THE CONTENT ARM, not the subject arm.
+audit "$VALIDATOR" "$BASE" "$SQUASH"
+if [ "$RC" -eq 0 ] && says "PASS (content arm)" && says "== reconcile $XREC" && ! says "every touching commit is an"; then
+  ok "a squash-merged pull carrying the reconcile's exact tree passes by the content arm"; B_M7=1
+else bad "a squash of the reconcile's own tree did not pass by the content arm (rc=$RC)"; fi
+# 8 (cell 2): one byte off the reconcile flags, and R was NOT empty, so no pruned note.
+audit "$VALIDATOR" "$BASE" "$BYTE"
+[ "$RC" -eq 1 ] && says "scripts/ai-dlc/verdict.sh :: feat: ai-dlc update 0.2.0 (#102)" && ! says "$NOREF" \
+  && ok "a squash whose core blob differs from the reconcile's by one byte flags, with no pruned-ref note" \
+  || bad "a one-byte blob difference was acquitted or mis-reported (rc=$RC)"
+# 9 (cell 4): the update ref deleted, so R is empty: flag, and SAY the refs are missing.
+git -C "$PROJ" update-ref -d refs/heads/ai-dlc-update/x || broken "could not delete the side ref"
+audit "$VALIDATOR" "$BASE" "$SQUASH"
+git -C "$PROJ" update-ref refs/heads/ai-dlc-update/x "$XREC" || broken "could not restore the side ref"
+[ "$RC" -eq 1 ] && says "$NOREF" \
+  && ok "with the reconcile's update ref pruned the squash flags, and the FAIL names the missing ref" \
+  || bad "a squash with its reconcile ref pruned did not flag with the pruned-ref note (rc=$RC)"
+# 10 (cell 5): a mode-only chmod of a core path, bytes identical to the reconcile: flag.
+audit "$VALIDATOR" "$BASE" "$CHMOD"
+if [ "$RC" -eq 1 ] && says "scripts/ai-dlc/verdict.sh :: feat: ai-dlc update 0.2.0 (#103)"; then
+  ok "a chmod-only change of a reconcile's blob flags: the mode is part of the content key"; B_M9=1
+else bad "a mode-only change was acquitted by the content arm (rc=$RC)"; fi
+# 11 (cell 6): an OLD reconcile's blob under the CURRENT stamp: flag.
+audit "$VALIDATOR" "$BASE" "$OLDBLOB"
+if [ "$RC" -eq 1 ] && says "scripts/ai-dlc/verdict.sh :: feat: ai-dlc update 0.2.0 (#104)"; then
+  ok "an older reconcile's blob restored under the current stamp flags: the stamp keys the eligible set"; B_M8=1
+else bad "an old reconcile blob under the current stamp was acquitted (rc=$RC)"; fi
+# 12 (cell 7): the squash deletes a path the reconcile KEPT: flag.
+audit "$VALIDATOR" "$BASE" "$DELKEEP"
+[ "$RC" -eq 1 ] && says "scripts/ai-dlc/verdict.sh :: feat: ai-dlc update 0.4.0 (#106)" \
+  && ok "a squash deleting a core path the reconcile kept flags" \
+  || bad "a deletion the reconcile did not make was acquitted (rc=$RC)"
+# 13 (cell 8): a deletion matching the reconcile's own deletion passes, with the edit beside it.
+audit "$VALIDATOR" "$BASE" "$DELMATCH"
+[ "$RC" -eq 0 ] && says "PASS (content arm)" && says "$DELMATCH $DELPATH == reconcile $YREC" \
+  && ok "a squash deleting exactly what the reconcile deleted passes by the content arm" \
+  || bad "a deletion matching the reconcile's own was not acquitted (rc=$RC)"
+# 14: a reconcile INSIDE the range carries the hand-copy's stamp and blob, and acquits nothing.
+audit "$VALIDATOR" "$BASE" "$INRANGE"
+if [ "$RC" -eq 1 ] && says "verdict.sh :: feat: hand-copy the 0.3.0 verdict helper"; then
+  ok "an in-range reconcile does not acquit the hand copy before it: R excludes <base>..<head>"; B_M10=1
+else bad "an in-range reconcile acquitted a commit of its own range (rc=$RC)"; fi
+
 # --- Mutation 1: resolve the manifest from the working tree --------------------
 M="$(mutate base-manifest 's@git show "${BASE_REF}:${c}"@git show "${BASE_REF}:no-such-prefix/${c}"@')" || exit 2
 audit_at "$M" shrink "$BASE" "$SHRINK"
@@ -240,6 +292,39 @@ else bad "MUTATION 6 SURVIVED: the mode still exited 2 with its missing-delegate
 audit "$M" "$BASE" "$DIRTY"
 [ "$RC" -eq 0 ] || bad "MUTATION 6 ENTANGLED: with the delegate present it also changed the verdict on a cited range (rc=$RC)"
 rm -f "$ESC"
+
+# --- Mutations 7-10: the CONTENT arm's four properties ---------------------------
+# Each anchor is unique in the control copy (mutate() refuses a no-op), and each is scored on
+# the one cell whose discriminating input that property alone decides, with an entanglement
+# twin on a cell the property does not decide.
+# 7: the content arm removed. The squash of the reconcile's own tree FAILs again.
+M="$(mutate content-arm 's@^  \[ -z "\$OFFENDERS" \] || content_arm$@  [ -z "$OFFENDERS" ] || :@')" || exit 2
+audit "$M" "$BASE" "$SQUASH"
+if [ "$RC" -eq 0 ]; then bad "MUTATION 7 SURVIVED: a squash still passed with the content arm removed"
+else mutant_killed "$B_M7" "mutation 7" "mutation 7 killed: without the content arm every squash-merged pull FAILs its own consumer"; fi
+audit "$M" "$BASE" "$RECONCILE"
+[ "$RC" -eq 0 ] || bad "MUTATION 7 ENTANGLED: it also changed the subject arm's verdict on a reconcile commit"
+# 8: the stamp key dropped. Every reconcile is eligible, so an old one's blob acquits.
+M="$(mutate stamp-key 's@\$1 == "R" \&\& \$3 == ts {@$1 == "R" {@')" || exit 2
+audit "$M" "$BASE" "$OLDBLOB"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 8 SURVIVED: an old reconcile blob under the current stamp still flagged with the stamp key dropped"
+else mutant_killed "$B_M8" "mutation 8" "mutation 8 killed: without the stamp key an older reconcile's blob acquits a revert under the current stamp"; fi
+audit "$M" "$BASE" "$BYTE"
+[ "$RC" -eq 1 ] || bad "MUTATION 8 ENTANGLED: it also acquitted a blob no reconcile carries"
+# 9: the mode dropped from the content key. A chmod-only change acquits.
+M="$(mutate content-mode 's@print \$2 "\\t" a\[1\] " " a\[3\]@print $2 "\\t" a[3]@')" || exit 2
+audit "$M" "$BASE" "$CHMOD"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 9 SURVIVED: a chmod-only change still flagged with the mode dropped"
+else mutant_killed "$B_M9" "mutation 9" "mutation 9 killed: without the mode in the key a chmod of a core file passes as the reconcile's content"; fi
+audit "$M" "$BASE" "$SQUASH"
+[ "$RC" -eq 0 ] || bad "MUTATION 9 ENTANGLED: it also changed the verdict on the squash of the reconcile's own tree"
+# 10: R includes the range. An in-range reconcile acquits the hand copy before it.
+M="$(mutate content-range 's@^    inrange="\$(git rev-list "\${BASE_REF}\.\.\${HEAD_REF}" 2>/dev/null)"$@    inrange=""@')" || exit 2
+audit "$M" "$BASE" "$INRANGE"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 10 SURVIVED: the hand copy still flagged with R including the range"
+else mutant_killed "$B_M10" "mutation 10" "mutation 10 killed: with the range left in R a reconcile acquits the commits of its own range"; fi
+audit "$M" "$BASE" "$BYTE"
+[ "$RC" -eq 1 ] || bad "MUTATION 10 ENTANGLED: it also acquitted a blob no reconcile carries"
 
 echo
 if [ "$fails" -eq 0 ]; then

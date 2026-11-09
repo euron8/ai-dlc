@@ -787,22 +787,42 @@ Its evidence names the surfaces compared, each deviation found and what fixed it
 **Only layout and production rendering are OWED to `deploy-validate.md` §4 ("Visual Verification").** The gate log records them as OWED there.
 An OWED record is never itself a PASS: it does not pass the source-vs-mockup comparison above, and it does not stand in for it.
 
-**At a `retro` gate, Check 9 keeps its sprint-scoped body, including the deployed-URL fetch.** Required when the sprint introduced new
-visual surfaces.
-- Agent must fetch the deployed production URL and verify rendering.
-- Compare each new surface against the documented mockup (from
-  ui-direction step or `_bmad-output/planning-artifacts/s<N>/ui-mockups.md`,
-  composed from `sprint_id` — not globbed).
-- Compare on every dimension the mockup specifies: copy, element structure,
-  attributes (including `role` and `aria-*`), class names, and layout. Record
-  every deviation found in this pass, not only the first. Read each mockup line
-  whole with Read; a truncated read (`cut`, `head -c`, a pipe) is not a comparison.
-- **Gate FAILS** if visual verification was not performed or drift was
-  found and not fixed.
-- **Evidence:** Include in gate log:
-  - Which surfaces were verified
-  - Whether drift was found and what was fixed
-  - Confirmation that production rendering matches mockups
+**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.** Required when the sprint introduced new visual surfaces.
+The adjudicator is read-only and never fetches a production URL: the production rendering it judges is the one §4 recorded.
+It reads this sprint's `## Gate Log: Sprint <N>` sections wherever the citation rule below reads them, live or archived, the live one being the section `validate-mandatory-rules.sh` Check 5 isolates, and cites the §4 line in them that affirmatively states the evidence kind: `USER-CONFIRMED` with the operator's words, or `playwright` on a line that also carries the run's `.zip` trace path. Check 5's tokens are a floor, not the verdict: a line that names a token to deny it, or a could-not-run row, is not evidence.
+It reads §4's per-surface record, where §4 wrote one: each surface verified, whether it matched the mockup, and any drift found and what fixed it.
+Compare each new surface against the mockup named below (as of the sprint's merge commit) on every dimension the mockup specifies: copy, element structure, attributes (including `role` and `aria-*`), class names, and layout.
+Record every deviation found in this pass, not only the first. Read each mockup line whole with Read; a truncated read (`cut`, `head -c`, a pipe) is not a comparison.
+The gate FAILS if §4 recorded no evidence, if the mockup comparison was not performed, or if drift was found and not fixed.
+A drift recorded as FYI is drift not fixed.
+A deviation is fixed when the code was changed to match the mockup, when the mockup was amended to the shipped code in a commit the amendment rule below accepts, or when the operator accepted that deviation in an escalation whose id the evidence cites: a `RESOLVED` entry, or a `SUPPRESSED` waiver that meets the waiver rule below.
+An escalation is cited only when its id appears in this sprint's `## Gate Log: Sprint <N>` sections, either in `_bmad-output/implementation-artifacts/gate-log.md` or in `_bmad-output/implementation-artifacts/s<N>/gate-log-archive.md` and its ordinal forms `s<N>/gate-log-archive-2.md`, `s<N>/gate-log-archive-3.md` and onward, as `artifact-path-grammar.md` names a rotation archive, both paths composed from N and not searched, because a sprint's sections are archived mid-sprint.
+An id that appears only under another sprint's header or in another sprint's `s<M>/` archive is not cited, and an id cited nowhere accepts nothing.
+The cited entry names that surface and that deviation; an entry naming another surface, or no deviation, accepts nothing for this one.
+The cited entry is read from `docs/escalations/pending.md` or `docs/escalations/pending-archive.md`, and its header names `S<N>`, this sprint, so a prior sprint's escalation accepts nothing for this sprint's drift.
+That entry alone is verified, `RESOLVED` and `SUPPRESSED` alike, by `validate-steering-budget.sh --dir <the directory holding this project's session transcripts, the one Check 2a passes as --transcript-dir> --cite "<the entry's **Operator authorization:** quote>" --authorized-at <that line's timestamp> --accept-captured`.
+The quote and the timestamp come from that entry's `**Operator authorization:**` line alone, never from its `**Resolution:**` or `**Context:**` text and never from `_bmad-output/operator-answers-history.md`.
+The quote is the double-quoted string immediately after that line's `|`; any other quoted text on the line, an option label or an answer cited in trailing prose, is not the quote and is never verified in its place, so a line whose slot quote is lead-written fails even when its trailing text carries a captured answer.
+A line with no slot quote does not verify, and where one line carries several timestamp-and-quote pairs every pair is verified, each by its own quote and its own timestamp.
+Every `**Operator authorization:**` line on the cited entry must verify, each by its own slot quote and its own timestamp, and the timestamp floor below is taken against the earliest of their timestamps.
+It verifies only on exit 0 with a `MATCH <ts>` line on stdout.
+Under `--accept-captured` a pruned transcript is accepted only when the quote, normalised, equals a whole answer captured in `_bmad-output/operator-answers-history.md` within the citation's window, and the script then writes `cite: accepted under --accept-captured: ...` on stderr.
+A quote that is only part of a captured answer does not verify on that route, while the transcript route still takes a verbatim substring.
+The adjudicator records which route verified the entry: `MATCH` from the transcript, or the captured-answer line on stderr.
+An `**Operator authorization:**` line without a time of day, hours and minutes, does not verify.
+`--accept-captured` is passed only here, for Check 9's retro acceptance, and `NOMATCH-TRANSCRIPT-PRUNED` acquits nothing anywhere else.
+Any cited entry, `RESOLVED` or `SUPPRESSED`, counts only if its `**Operator authorization:**` timestamp is at or after the `Timestamp:` of the `## Gate Log: Sprint <N>` section that first records that deviation.
+Where that section has no `Timestamp:` line, the floor is the latest ISO-8601 timestamp in that section's body, the one that bounds the section's write time from below, and where the body carries none the floor is unmet and the acceptance fails.
+Only a body timestamp with a time of day counts toward that floor, written `YYYY-MM-DDTHH:MM` with a `T` and optional seconds and zone; a date-only value or a space-separated date and time is not counted, so a body carrying only those leaves the floor unmet and the acceptance fails.
+This fallback over-reaches by any addendum appended to the section after the deviation, whose later timestamp raises the floor, so it fails closed; §4 writes a `Timestamp:` line on its own section to avoid that.
+A `SUPPRESSED` waiver counts only if it also carries `**Suppresses:** [core] 9 — `, and it still counts if it has since expired.
+The mockup compared is `_bmad-output/planning-artifacts/s<N>/ui-mockups.md` as of the sprint's merge commit to main, the squash or merge commit that landed the sprint, never the working tree or the retro branch.
+That merge commit is derived from the `PR_HEAD` `retro.md` Step 1 derives: the first commit on `origin/main`, oldest first, whose tree equals `PR_HEAD`'s tree (a squash), or the merge commit whose second parent is `PR_HEAD`.
+A mockup amendment made after that merge counts only in a commit whose message cites a `RESOLVED` escalation id that itself meets every acceptance rule here: cited, naming that surface and that deviation, and verified.
+Any other amendment, on the retro branch, in the working tree or in a commit citing nothing, is the lead's own note.
+A lead's or seat's own note is never acceptance, and an escalation the evidence does not cite accepts nothing.
+Layout is judged from §4's recorded render; a surface whose mockup section states it adds no markup and no CSS is compared on its source alone, and a markup or CSS line that surface's diff adds is a deviation from that statement.
+Its evidence names the surfaces compared, the §4 evidence kind and the gate-log line it was read from, each deviation found, and what fixed it.
 
 ### 10. Schema/API field verification? (Schema-modifying stories only)
 <!-- CHECK_LOADED: 10 -->
@@ -1498,8 +1518,9 @@ to a caller that has decided this artifact class carries none. A party seat file
 under `_bmad-output/party-mode/s<N>/` is never this check's artifact.
 
 - **Retro gate:** run `scripts/ai-dlc/validate-provenance-block.sh
-  docs/retro/s<N>/retro.md` AND `scripts/ai-dlc/validate-retro-evidence.sh
-  <N>`. Both must exit 0. validate-retro-evidence.sh additionally
+  docs/retro/s<N>/retro.md` AND
+  `scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.
+  Both must exit 0. validate-retro-evidence.sh additionally
   enforces transcript file presence, byte-match against the cited
   SHA, and non-triviality floors (MIN_CHARS, MIN_PERSONAS,
   MIN_PHASES).
@@ -2676,7 +2697,7 @@ scripts/ai-dlc/core-paths.sh --audit-diff <sprint-base> HEAD
 ```
 
 Exit 0 = no core path edited in place, or every touching commit is a recognized
-`chore(ai-dlc-update):` reconcile, or `docs/escalations/pending.md` carries an
+`chore(ai-dlc-update):` reconcile, or every touched core path's mode and blob equal those of an `/ai-dlc-update` reconcile commit on a branch or remote ref that carries the installed `.claude/.ai-dlc-version` stamp (`core-paths.sh`'s content arm, which a squash-merged sprint passes), or `docs/escalations/pending.md` carries an
 operator-authorization citation that `validate-escalation-resolution.sh` accepts.
 Exit 1 = a core path edited by a non-reconcile commit with no such citation.
 Exit 2 = the core set could not be resolved, which is **not** a pass. A `DORMANT`

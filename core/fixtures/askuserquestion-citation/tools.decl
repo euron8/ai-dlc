@@ -13,3 +13,7 @@ mktemp
 rm
 sed
 touch
+cut
+shasum
+awk
+cmp

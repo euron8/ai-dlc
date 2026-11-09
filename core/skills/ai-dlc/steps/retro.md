@@ -1057,7 +1057,7 @@ not a skipped step.
 
 ### 5c. Pre-Commit Validation Gate
 
-Before committing retro artifacts, run all five checks in order.
+Before committing retro artifacts, run all six checks in order.
 Failure on any check blocks the Step 6 commit. **This gate is the only
 completeness check retro performs** — the scripts below read the gate log,
 the housekeeping envelope, the transcript shape and the provenance block, so
@@ -1109,17 +1109,25 @@ core-layer-immutability).
    says, then re-run. This blocks the Step 6 commit, so the breach is recorded
    before the sprint closes rather than discovered at the next route.
 
+6. **Run gate validation [retro]** (`gate-validation.md`), declared as the paragraph above says, after checks 1-5 because they repair the artifacts the gate reads.
+   Before the gate, every Step 4 core edit is committed: check 1 commits the rule file audit, and any other Step 4 edit to a core file is committed now as its own commit.
+   The `<sprint-base>` the core-layer-immutability check diffs from is the prior sprint's audit-anchor SHA, as `scripts/ai-dlc/validate-audit-anchors.sh --prior-sprint-sha _bmad-output/audit-anchors.md <N>` resolves it, the same base `validate-mandatory-rules.sh` Check 5 uses.
+   Dispatch it as every gate is dispatched: READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch". The retro gate is storyless, so its brief carries no `story:` line.
+   The lead adopts the verdict only through `gate-validation.md` Check 26, which MUST exit 0. A gate FAIL blocks the Step 6 commit, as a failing check 2-5 does.
+
 **An unclearable check in this gate escalates; it never self-clears.** The
-four absolute `MUST exit 0` mandates above (checks 2, 3, 4 and 5) are
+five absolute `MUST exit 0` mandates above (checks 2, 3, 4, 5 and 6) are
 satisfied by fixing the issue, and that is the whole of the lead's
 authority over them. When a check stays red after the repair the check's
 own output names — a validator whose precondition no action in this sprint
 can reach, a refusal the lead has no standing to resolve — the check's
 verdict stays FAIL and the Step 6 commit stays blocked. File a Tier 1
 `HARD_BLOCK` in `docs/escalations/pending.md` naming the check, its
-command, and its output verbatim, and STOP. The operator records an
+command, and its output verbatim, and STOP. For checks 2-5 the operator records an
 explicit disposition on that entry — `approved-deferral` / `do-now` /
-`descope` — per Rule 13 + Rule 12 Tier 1. A recorded operator disposition
+`descope` — per Rule 13 + Rule 12 Tier 1.
+For check 6 the operator's disposition on a gate FAIL is recorded in the form `gate-validation.md` Check 26 reads: an in-force `SUPPRESSED` entry naming the failing check, or an `OVERRIDDEN` entry followed by a re-dispatch whose verdict records that check `FAIL_WAIVED` with the entry as its `waiver_id`.
+A recorded operator disposition
 is the only thing that unblocks the commit, it never converts the FAIL
 into a PASS, and the gate log entry records the check as FAILED with the
 disposition beside it. The verdict vocabulary is closed at PASS, FAIL and FAIL_WAIVED
@@ -1150,9 +1158,9 @@ SKILL.md Rule 32 touchpoint I applies before the push.
 
 **6a. Commit all remaining artifacts.**
 
-Completeness is already gated: Step 5c's four checks fail the commit on a
-missing gate-log entry, a missing or malformed audit-anchor entry, and a
-missing or malformed provenance block. Do not re-verify them by hand here.
+Completeness is already gated: Step 5c's six checks fail the commit on a
+missing gate-log entry, a missing or malformed audit-anchor entry, a
+missing or malformed provenance block, and a retro gate verdict that FAILs. Do not re-verify them by hand here.
 (The next-sprint prompt cannot be checked at this point at all — Step 7d
 emits it after this commit, after the merge gate.)
 

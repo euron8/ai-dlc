@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1036.0] - 2026-11-09
+
+### BL-939 closed
+
+`core/skills/ai-dlc/steps/retro.md` §5c gains item 6, `Run gate validation [retro]`, after checks 1-5. It dispatches storyless through the gate-adjudication dispatch, the lead adopts the verdict only through Check 26, and a gate FAIL blocks the Step 6 commit. Every Step 4 core edit is committed before the gate, and `<sprint-base>` is `validate-audit-anchors.sh --prior-sprint-sha`.
+
+`core/skills/ai-dlc/steps/gate-validation.md` Check 17's retro call takes the branch argument as a second argument; the one-argument form exits 2 at usage. Check 9 at retro adopts `deploy-validate.md` §4's recorded evidence, read from the sprint's archived gate log too, instead of a fresh production fetch, and compares `_bmad-output/planning-artifacts/s<N>/ui-mockups.md` as of the sprint's merge commit to main. A deviation is fixed only when the code was changed to match the mockup, a post-merge mockup amendment's commit cites a verifying `RESOLVED` acceptance, or a cited `RESOLVED` or `SUPPRESSED` escalation records the operator's acceptance. The escalation is cited in this sprint's `## Gate Log: Sprint <N>` sections, live or in `s<N>/gate-log-archive.md` and its ordinals, carries an `S<N>` header, names the surface and the deviation, is authorized no earlier than the section that first recorded the deviation, and verifies on every `**Operator authorization:**` line, each by the quote after its `|` and its own timestamp. A lead's or seat's own note is never acceptance, and a surface whose mockup section adds no markup and no CSS is compared on its source.
+
+`core/scripts/core-paths.sh` `--audit-diff` acquits a squash-merged reconcile by content: a touched core path whose mode and blob equal those of a `chore(ai-dlc-update):` reconcile commit on a branch or remote ref, outside the range and at the installed `.claude/.ai-dlc-version` stamp, is no longer an offender. The content arm adds 5 git calls per gate. The core-layer-immutability exit 0 text in `gate-validation.md` names it.
+
+`core/scripts/validate-steering-budget.sh` `--cite` gains `--accept-captured`: a pruned transcript is accepted only when the exact quote equals the whole captured answer in `_bmad-output/operator-answers-history.md`, inside the citation's window, with a minute-precision `--authorized-at`. It prints the plain `MATCH <ts>` on stdout and `cite: accepted under --accept-captured: ...` on stderr; unflagged output and exit codes are byte-identical. Only Check 9's retro acceptance passes it.
+
+Fixtures: `core/fixtures/process-rule-pins/run.sh` pins `retro-gate-invoked`, `retro-gate-blocks` and the `gv9-retro-*` rows; `core/fixtures/askuserquestion-citation` gains the `--accept-captured` cells and mutants, and G1 asserts none of the 4 declared `--cite` callers passes the flag; `core/fixtures/core-paths-audit-diff` gains the content-arm cells and a seed.
+
+Consumer cost: a retro pass costs about 4 adjudicator spawns (`validate-gate-adjudication.sh --expected retro --shard i/4`), and 1 retro stop per UI sprint with unreconciled mockup drift (3 of 3 recent graph UI sprints).
+
+### BL-945 filed
+
+`core/scripts/core-paths.sh` `--audit-diff`'s subject arm runs `git log "${BASE_REF}..${HEAD_REF}" -- "$p"` once per touched path with a cwd-relative pathspec, and the activation probe `git ls-tree -d --name-only` is cwd-relative too, so a run from a subdirectory can print the reconcile PASS on a core edit. The per-path walk is about 99% of the gate's git calls (864, 1410 and 1342 of 872, 1418 and 1350 at S319, S320 and S321). Filed, not built.
+
 ## [0.1035.0] - 2026-11-09
 
 ### BL-935 closed

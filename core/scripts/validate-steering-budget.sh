@@ -223,6 +223,10 @@ CITE=""
 CITE_SET=0
 SINCE=""
 AUTH_AT=""
+# --accept-captured: ARGV ONLY, initialised here and never read from the environment, and handed
+# to node as an explicit assignment on the invocation line so an inherited AI_DLC_ACC is
+# overwritten. See the NOMATCH-TRANSCRIPT-PRUNED note in the --cite block for what it accepts.
+ACC=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -233,6 +237,7 @@ while [ $# -gt 0 ]; do
     --cite)       CITE="${2:-}"; CITE_SET=1; shift 2 ;;
     --since)      SINCE="${2:-}"; shift 2 ;;
     --authorized-at) AUTH_AT="${2:-}"; shift 2 ;;
+    --accept-captured) ACC=1; shift ;;
     *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
@@ -326,6 +331,25 @@ if [ -n "$AUTH_AT" ] && [ "$CITE_SET" -ne 1 ]; then
   exit 1
 fi
 
+# --accept-captured ONLY WIDENS --cite's pruned-transcript branch, and it needs a time of day
+# to centre its window on. Without --cite it would be a flag nothing reads; with an empty or a
+# date-only --authorized-at the window it requires is either unbounded or a whole day wide.
+# Minutes are the floor, not seconds: escalations.md allows any ISO-8601 UTC timestamp, and a
+# minute-precision line is off by under 60s inside a +/-7200s window.
+if [ "$ACC" -eq 1 ]; then
+  if [ "$CITE_SET" -ne 1 ]; then
+    echo "FAIL: --accept-captured qualifies --cite and has no meaning without it" >&2
+    exit 1
+  fi
+  # Whole-string anchors: [[ =~ ]] compiles without REG_NEWLINE, so a value with an embedded
+  # newline cannot pass on one well-formed line the way a line-anchored grep would let it.
+  ACC_ISO_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?(Z|[+-][0-9]{2}:[0-9]{2})?$'
+  if ! [[ "$AUTH_AT" =~ $ACC_ISO_RE ]]; then
+    echo "FAIL: --accept-captured requires --authorized-at with a time of day, YYYY-MM-DDTHH:MM (optional :SS, fraction and zone); got \"$AUTH_AT\"" >&2
+    exit 1
+  fi
+fi
+
 if [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ]; then
   echo "FAIL: pass --transcript PATH or --dir PATH" >&2
   exit 1
@@ -371,7 +395,7 @@ SB_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 SB_ROOT="${SB_ROOT:-/nonexistent}"
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
-AI_DLC_LOGROOT="$SB_ROOT" AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_CITE_SET="$CITE_SET" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" node <<'NODE'
+AI_DLC_LOGROOT="$SB_ROOT" AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_CITE_SET="$CITE_SET" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" AI_DLC_ACC="$ACC" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
 const MAX_BEATS = +process.env.AI_DLC_MB;
@@ -384,6 +408,8 @@ const CITE = process.env.AI_DLC_CITE_SET === "1";
 const CITE_TEXT = process.env.AI_DLC_CITE || "";
 const SINCE = process.env.AI_DLC_SINCE || "";
 const AUTH_AT = process.env.AI_DLC_AUTH_AT || "";
+// Set only from argv: the bash side assigns AI_DLC_ACC on the node invocation line itself.
+const ACC = process.env.AI_DLC_ACC === "1";
 // A LITERAL, READ FROM NO ENVIRONMENT AND NO FLAG. Every other tunable in this file is a
 // BUDGET -- widen it and the check reports differently about the same facts. This one is a
 // PROVENANCE bound: widen it and the check stops asking the question, while its output, its
@@ -804,7 +830,10 @@ if (CITE) {
     // reference consumer's authorization rows carry `Z`, but Date.parse reads a zone-less
     // ISO string in the RUNNER's local time -- which would move the window by the machine's
     // offset and make the verdict a property of where the gate ran rather than of the citation.
-    const v = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(AUTH_AT) ? AUTH_AT + "Z" : AUTH_AT;
+    // Under --accept-captured a zone-less MINUTE value is UTC too; unflagged, the full-second
+    // form alone is, as before, so the unflagged verdict is unchanged.
+    const zl = ACC ? /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/ : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+    const v = zl.test(AUTH_AT) ? AUTH_AT + "Z" : AUTH_AT;
     authMs = Date.parse(v);
     if (Number.isNaN(authMs)) {
       console.error(`FAIL: --authorized-at "${AUTH_AT}" is not an ISO-8601 timestamp, so the citation window cannot be computed. Refusing rather than verifying unbounded.`);
@@ -909,10 +938,22 @@ if (CITE) {
   //       than the bound is present and REFUTES the quote -- that must stay plain NOMATCH. For
   //       --transcript the corpus directory is the named file's own directory.
   //
-  // IT ACQUITS NOTHING. Exit 2 is unchanged, three readers key on the status alone, and
-  // validate-adversarial-convergence.sh exact-compares `NOMATCH-NO-RECORDS`, so this token
-  // falls through to its deny. The answers log is a file the lead can write, so the token is a
-  // DIAGNOSIS for the operator, never evidence; `NOMATCH` stays the prefix.
+  // WITHOUT --accept-captured IT ACQUITS NOTHING. Exit 2 is unchanged, three readers key on the
+  // status alone, and validate-adversarial-convergence.sh exact-compares `NOMATCH-NO-RECORDS`, so
+  // this token falls through to its deny. The answers log is a file the lead can write, so the
+  // token is a DIAGNOSIS for the operator, never evidence; `NOMATCH` stays the prefix.
+  //
+  // THE ONE EXCEPTION is `--accept-captured`, which only gate-validation.md Check 9's retro
+  // acceptance passes, under operator ruling A4, which accepted the lead-writable-log risk named
+  // above. Under it a pruned citation answers `MATCH <entry ts>`, exit 0, with the acceptance
+  // named on stderr. The narrowing that keeps it from acquitting more than that one case: argv
+  // only, never the environment; an --authorized-at with a time of day (minutes at least) is required; and ONE entry must
+  // itself carry every guard -- a `## <ISO>Z -- AskUserQuestion` header and a `- Tool-use:
+  // toolu_` line, a body whose normalised text EQUALS the needle (not contains it), a session
+  // with no transcript on disk, a header ts inside +/-CITE_AUTH_TOLERANCE_S of --authorized-at
+  // and not earlier than the entry before it, and a `- SHA256:` equal to the hash of its fenced
+  // body. Any exact, in-window entry whose transcript IS on disk refuses outright: that
+  // transcript was scanned above and lacked the quote, so the log is contradicted.
   const LOGROOT = process.env.AI_DLC_LOGROOT || "/nonexistent";
   if (LOGROOT === "/nonexistent") {
     console.error("cite: pruned-transcript check skipped -- no project root resolved, so _bmad-output/operator-answers-history.md could not be located (set AI_DLC_PROJECT_ROOT)");
@@ -927,6 +968,37 @@ if (CITE) {
       const body = (e.match(/^```text\n([\s\S]*?)\n```$/m) || [])[1];
       if (!sid || body === undefined || !norm(body).includes(needle)) continue;
       if (!fs.existsSync(path.join(tdir, sid + ".jsonl"))) pruned.add(sid);
+    }
+    if (pruned.size && ACC) {
+      // --accept-captured: ONE entry must carry every guard itself; guards met by different
+      // entries accept nothing. The header ts is the hook's own `date -u` second, and the hash
+      // is the hook's `printf '%s' "$ANSWER" | shasum -a 256` over the bytes it then fenced.
+      const crypto = require("crypto");
+      const HDR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) -- AskUserQuestion$/;
+      let prevMs = -Infinity, accepted = null, contradicted = false;
+      for (const e of (log || "").split(/^## /m).slice(1)) {
+        const fenceAt = e.indexOf("\n```text\n");
+        const meta = fenceAt < 0 ? e : e.slice(0, fenceAt);
+        const hm = (e.split("\n", 1)[0] || "").match(HDR);
+        const hMs = hm ? Date.parse(hm[1]) : NaN;
+        const ordered = !Number.isNaN(hMs) && hMs >= prevMs;
+        if (!Number.isNaN(hMs)) prevMs = hMs;
+        const sid = (meta.match(/^- Session: ([A-Za-z0-9-]+)$/m) || [])[1];
+        const sha = (meta.match(/^- SHA256: ([0-9a-f]{64})$/m) || [])[1];
+        const tool = /^- Tool-use: toolu_[A-Za-z0-9_]+$/m.test(meta);
+        const body = (e.match(/^```text\n([\s\S]*?)\n```$/m) || [])[1];
+        if (body === undefined || norm(body) !== needle || Number.isNaN(hMs)) continue;
+        if (Math.abs(hMs - authMs) > authTolMs) continue;
+        const onDisk = !!sid && fs.existsSync(path.join(tdir, sid + ".jsonl"));
+        if (onDisk) { contradicted = true; continue; }
+        if (accepted || !sid || !tool || !ordered || !sha) continue;
+        if (crypto.createHash("sha256").update(body, "utf8").digest("hex") !== sha) continue;
+        accepted = { ts: hm[1], sid };
+      }
+      if (accepted && !contradicted) {
+        console.error(`cite: accepted under --accept-captured: captured in ${LOGROOT}/_bmad-output/operator-answers-history.md at ${accepted.ts} in session ${accepted.sid}, whose transcript is not on disk in ${tdir}`);
+        console.log(`MATCH ${accepted.ts}`); process.exit(0);
+      }
     }
     if (pruned.size) {
       console.error(`cite: ${LOGROOT}/_bmad-output/operator-answers-history.md captured it in session(s) ${[...pruned].join(", ")}, whose transcript is not on disk in ${tdir} -- pruned, so the words cannot be verified either way`);
