@@ -11,7 +11,11 @@
 # `### Locked-Requirement Coverage` block -- one line per LOCKED_REQUIREMENTS bullet, delivered /
 # deferred / descoped, with the HARD_BLOCK id and disposition token (approved-deferral / do-now /
 # descope) -- and §5's prose withholds the checkpoint while a locked requirement lacks a recorded
-# disposition. After that block the template carries `### Decisions for You` (each item badged
+# disposition. §5's prose also makes each coverage line name its bullet's kind, makes an `operation`
+# bullet's `delivered` cite this deploy's record row showing the action succeed on each target (health-only,
+# zero-activity, NOT_EVALUATED and test-double records excluded), and adds `partial` with its three clause
+# forms, the undelivered clause owing a HARD_BLOCK (arms LOCKED-KIND .. LOCKED-PARTIAL-CARRY, one delete
+# mutant per sentence). After that block the template carries `### Decisions for You` (each item badged
 # `(Recommended` and stating the consequence of each option) and then `### For Your Information`,
 # both before `### Next Steps`; §5's **Decisions for the operator.** paragraph puts every item,
 # whatever its source, under exactly one of the two blocks, presents no other list, gives each
@@ -110,11 +114,34 @@ locked_block() { # stdin: sec5 output -> the block body, tags stripped
               on{print $2}'
 }
 LOCKED_HEAD='### Locked-Requirement Coverage'
-LOCKED_TOKENS='LOCKED_REQUIREMENTS delivered deferred descoped HARD_BLOCK approved-deferral do-now descope'
+LOCKED_TOKENS='LOCKED_REQUIREMENTS delivered deferred descoped HARD_BLOCK approved-deferral do-now descope partial operator-owned'
+# THE KIND AND THE CAPTURED ROW. An `operation` bullet was once marked `delivered` on a health-only
+# smoke run and a function check whose rows named only the OTHER target, while the deployed system
+# had never performed the action on the target the bullet names. Each sentence below is one arm, so a
+# mutant dropping one clause fires that arm alone. Matched against §5 P prose FLATTENED.
+LOCKED_KIND='Every line names its bullet'"'"'s kind before its mark: `operation`'
+LOCKED_ROW='An `operation` bullet is `delivered` only on the gate-log `file:line` of a §3, §3b, §4 or §4b record from this deploy together with the id of the row in that record that shows the bullet'"'"'s action succeeding'
+LOCKED_TARGET='That row names the bullet'"'"'s target, and a bullet naming several targets cites one such row for each of them.'
+# WHICH DEPLOY: any roll of this sprint, and beside each cited row the deployed sha of the service that
+# WROTE it -- visibility only. Re-verification after a roll is §3's smoke re-run and §7's, not a §5 rule.
+# A RENDERED FIELD: LOCKED-SHA asserts the template slot beside the row id and the prose sentence, and
+# no arm anywhere treats the sha as a pass/fail condition on a row.
+LOCKED_SHA='"This deploy" is any deploy made under this sprint'"'"'s deploy-validate, each later roll included, never a prior sprint'"'"'s; the line names, beside each cited row, the deployed sha of the service that wrote the row, so the operator can see a stale row, and no rule reads that sha as a verdict.'
+LOCKED_SHA_SLOT='with <the writing service'"'"'s deployed sha> beside that row id'
+LOCKED_INADMISSIBLE='Not admissible for an `operation` bullet: a unit, integration or test-double result; a health-only or availability-only record; a record none of whose rows names the bullet'"'"'s target; a §3b zero-expected-activity PASS; a `NOT_EVALUATED` record.'
+# `partial`: a bullet only some of whose clauses shipped. Its three clause forms each own an arm, and
+# the owed-HARD_BLOCK sentence owns its own, so `partial` cannot become a disposition-free mark.
+LOCKED_PARTIAL='A bullet some of whose clauses are delivered and some not is `partial`, never `delivered`'
+LOCKED_PARTIAL_PHASED='each other clause as `phased — <story>`, `operator-owned — <LR id>` or undelivered.'
+LOCKED_PHASED_CLAUSE='A `phased —` clause is one a later phase of the same Rule 14 plan delivers: it owes nothing until the plan'"'"'s final checkpoint'
+LOCKED_OPOWNED='An `operator-owned —` clause is one that the operator'"'"'s own locked text, a bullet carrying no `(lead interpretation)` label, assigns to the operator or excludes; it owes no disposition.'
+LOCKED_PARTIAL_OWED='Every undelivered clause of a `partial` bullet owes the Tier 1 `HARD_BLOCK` with a recorded disposition that a deferred bullet owes, and the checkpoint is withheld for it as for a deferred bullet.'
+LOCKED_EVIDENCE='An `artifact` bullet'"'"'s evidence is the trunk merge sha and the `file:line`, or a verification command'"'"'s output, at the deployed sha; a `constraint` bullet'"'"'s evidence is `honoured —` and a read showing the forbidden event absent, beside its control; a `decision` bullet'"'"'s evidence is the captured operator answer'"'"'s `file:line`.'
+LOCKED_PARTIAL_CARRY='It carries every `phased —` clause of a line an earlier checkpoint of that plan marked `partial` the same way.'
 # Phrases the block body must carry beyond its single-word tokens: the deferred-then-delivered
 # clause (same-sprint delivery does not cleanse a slipped lock), the Rule 14 phased status, and
 # the value reported when the sprint ships no locked-requirements.md.
-LOCKED_PHRASES='each bullet deferred and then delivered|phased — <the story or stories that deliver it>|carried from an earlier checkpoint of this plan: one line per bullet it marked phased|none recorded'
+LOCKED_PHRASES='<kind>: delivered — <evidence>|<kind> is operation / artifact / constraint / decision|each undelivered clause of a partial bullet|each bullet deferred and then delivered|phased — <the story or stories that deliver it>|carried from an earlier checkpoint of this plan: one line per bullet it marked phased|none recorded|operator-owned — <LR id>, or undelivered>'
 # THE GATING SENTENCE: kept OUT of the template, so only §5 prose can satisfy it. "that needs one":
 # delivered and phased bullets legitimately carry no disposition.
 LOCKED_GATE='The checkpoint is not presented while any locked requirement that needs one lacks a recorded disposition.'
@@ -272,6 +299,22 @@ check() {
   case "$fl" in *"$LOCKED_SPLIT"*) : ;; *) echo "LOCKED-SPLIT: §5 prose does not make a split bullet cite every story carrying a part" ;; esac
   case "$fl" in *"$LOCKED_SLIP"*) : ;; *) echo "LOCKED-SLIP: §5 prose does not defer a bullet that slips its planned sprint" ;; esac
   case "$fl" in *"$LOCKED_STORY"*) : ;; *) echo "LOCKED-STORY: §5 prose does not require the cited story to carry the bullet and be not done" ;; esac
+  case "$fl" in *"$LOCKED_KIND"*) : ;; *) echo "LOCKED-KIND: §5 prose does not make every coverage line name its bullet's kind" ;; esac
+  case "$fl" in *"$LOCKED_ROW"*) : ;; *) echo "LOCKED-ROW: §5 prose does not make an operation bullet's delivered cite this deploy's record and the row showing the action succeed" ;; esac
+  case "$fl" in *"$LOCKED_TARGET"*) : ;; *) echo "LOCKED-TARGET: §5 prose does not make the cited row name the bullet's target, one row per target" ;; esac
+  case "$fl" in *"$LOCKED_SHA"*) : ;; *) echo "LOCKED-SHA: §5 prose does not define this deploy as any roll of this sprint with the writing service's deployed sha named beside each cited row" ;; esac
+  # The slot half stands down when the block heading is absent, which the LOCKED heading arm owns.
+  if grep -qxF -- "F"$'\t'"$LOCKED_HEAD" <<<"$s5"; then
+    case "$(locked_block <<<"$s5" | flat)" in *"$LOCKED_SHA_SLOT"*) : ;; *) echo "LOCKED-SHA: the Locked-Requirement Coverage block body carries no writing-service sha slot beside the row id" ;; esac
+  fi
+  case "$fl" in *"$LOCKED_INADMISSIBLE"*) : ;; *) echo "LOCKED-INADMISSIBLE: §5 prose does not exclude test-double, health-only, wrong-target, zero-activity and NOT_EVALUATED records" ;; esac
+  case "$fl" in *"$LOCKED_EVIDENCE"*) : ;; *) echo "LOCKED-EVIDENCE: §5 prose does not name the artifact, constraint and decision kinds' evidence" ;; esac
+  case "$fl" in *"$LOCKED_PARTIAL"*) : ;; *) echo "LOCKED-PARTIAL: §5 prose does not mark a part-delivered bullet partial, never delivered" ;; esac
+  case "$fl" in *"$LOCKED_PARTIAL_PHASED"*) : ;; *) echo "LOCKED-PARTIAL-FORMS: §5 prose does not name the phased, operator-owned and undelivered clause forms of a partial line" ;; esac
+  case "$fl" in *"$LOCKED_PHASED_CLAUSE"*) : ;; *) echo "LOCKED-PHASED-CLAUSE: §5 prose does not hold a partial line's phased clause to the plan's final checkpoint" ;; esac
+  case "$fl" in *"$LOCKED_OPOWNED"*) : ;; *) echo "LOCKED-OPOWNED: §5 prose does not limit operator-owned to the operator's own unlabelled locked text" ;; esac
+  case "$fl" in *"$LOCKED_PARTIAL_OWED"*) : ;; *) echo "LOCKED-PARTIAL-OWED: §5 prose does not make a partial bullet's undelivered clause owe its HARD_BLOCK" ;; esac
+  case "$fl" in *"$LOCKED_PARTIAL_CARRY"*) : ;; *) echo "LOCKED-PARTIAL-CARRY: §5 prose does not carry a partial line's phased clauses forward" ;; esac
   case "$(sec6 "$f" | flat)" in *"$LOCKED_WAIT"*) : ;; *) echo "LOCKED-WAIT: §6 does not cite §5's rule that a generic validation reply is no disposition" ;; esac
   case "$(sec7 "$f" | flat)" in *"$LOCKED_ROUTE"*) : ;; *) echo "LOCKED-ROUTE: §7 does not hold the route to retro on §5's recorded dispositions" ;; esac
   # §5 DECISIONS FOR YOU / FOR YOUR INFORMATION. Four arms, one prefix each, so a mutant fires one:
@@ -677,6 +720,100 @@ mutant "del-locked-phased" \
 mutant "del-locked-none" \
   '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /none recorded\]$/{next} {print}' \
   "LOCKED:" "dropping the none-recorded value from the block body is caught"
+
+# --- §5 coverage kinds, the captured row, and `partial` --------------------------------
+# Each sentence is one source line, so each mutant edits one line on text only that sentence carries.
+# KIND: the kind declaration deleted; the four kinds' evidence sentences stay.
+mutant "del-locked-kind" \
+  '/^Every line names its bullet.s kind before its mark: `operation`/{next} {print}' \
+  "LOCKED-KIND:" "deleting the kind declaration from §5 is caught"
+
+# ROW: `delivered` kept, the row-id clause dropped -- a record citation alone would deliver.
+mutant "drop-locked-row-id" \
+  '/^An `operation` bullet is `delivered` only on the gate-log/{ sub(/ together with the id of the row in that record that shows the bullet.s action succeeding/, "") } {print}' \
+  "LOCKED-ROW:" "keeping delivered but dropping the row-id clause is caught"
+
+# TARGET: the target clause deleted -- a row on another target would deliver.
+mutant "del-locked-target" \
+  '/^That row names the bullet.s target, and a bullet naming several targets/{next} {print}' \
+  "LOCKED-TARGET:" "deleting the row-names-the-target sentence is caught"
+
+# SHA: the writing service's sha clause dropped; "any roll of this sprint" kept.
+mutant "drop-locked-row-sha" \
+  '/^"This deploy" is any deploy made under this sprint/{ sub(/; the line names, beside each cited row, the deployed sha of the service that wrote the row, so the operator can see a stale row, and no rule reads that sha as a verdict\./, ".") } {print}' \
+  "LOCKED-SHA:" "dropping the writing service's deployed-sha-beside-each-row clause is caught"
+
+# SHA SLOT: the rendered sha slot dropped from the template; the row id stays.
+mutant "drop-locked-sha-slot" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /^    record and the id of its row showing the action succeed on each target,$/{print "    record and the id of its row showing the action succeed on each target]"; getline; next} {print}' \
+  "LOCKED-SHA:" "dropping the writing-service sha slot from the block body is caught"
+
+# INADMISSIBLE: the whole exclusion list deleted.
+mutant "del-locked-inadmissible" \
+  '/^Not admissible for an `operation` bullet:/{next} {print}' \
+  "LOCKED-INADMISSIBLE:" "deleting the inadmissible-evidence sentence is caught"
+
+# INADMISSIBLE, narrowed: the health-only, zero-activity and NOT_EVALUATED cells dropped, the
+# test-double and wrong-target cells kept -- the exact records the motivating checkpoint leaned on.
+mutant "narrow-locked-inadmissible" \
+  '/^Not admissible for an `operation` bullet:/{ sub(/ a health-only or availability-only record;/, ""); sub(/; a §3b zero-expected-activity PASS; a `NOT_EVALUATED` record\./, ".") } {print}' \
+  "LOCKED-INADMISSIBLE:" "dropping the health-only, zero-activity and NOT_EVALUATED exclusions is caught"
+
+# EVIDENCE: the artifact / constraint / decision evidence sentence deleted.
+mutant "del-locked-evidence" \
+  '/^An `artifact` bullet.s evidence is the trunk merge sha/{next} {print}' \
+  "LOCKED-EVIDENCE:" "deleting the artifact, constraint and decision evidence sentence is caught"
+
+# TEMPLATE KIND: the `<kind>:` prefix dropped from the block's status line and the kind list dropped from
+# its sub-bullet. The sub-bullet's operation-evidence text and sha slot stay, so LOCKED-SHA does not fire.
+mutant "del-locked-kind-template" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ sub(/<kind>: delivered — <evidence>/, "delivered"); sub(/^  - \[<kind> is operation \/ artifact \/ constraint \/ decision; an operation.s$/, "  - [an operation'"'"'s") } {print}' \
+  "LOCKED:" "dropping the kind from the block body's status line and sub-bullet is caught"
+
+# TEMPLATE OWED: the partial bullet's undelivered clause dropped from the HARD_BLOCK sub-bullet.
+mutant "del-locked-partial-owed-template" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ sub(/ each undelivered clause of a$/, "") ; sub(/^    partial bullet, and each bullet deferred and$/, "    and each bullet deferred and") } {print}' \
+  "LOCKED:" "dropping the partial bullet's undelivered clause from the block's HARD_BLOCK sub-bullet is caught"
+
+# TEMPLATE UNDELIVERED: the partial line's `, or undelivered` clause form dropped from the template, the prose untouched.
+mutant "del-locked-partial-undelivered-template" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s{ sub(/, or undelivered>/, ">") } {print}' \
+  "LOCKED:" "dropping the undelivered clause form from the partial line of the block template is caught"
+
+# PARTIAL: the partial-never-delivered sentence reworded so a part-delivered bullet may be delivered.
+mutant "drop-locked-partial" \
+  '/^A bullet some of whose clauses are delivered and some not is `partial`, never `delivered`/{ sub(/is `partial`, never `delivered`/, "is `delivered` or `partial`") } {print}' \
+  "LOCKED-PARTIAL:" "letting a part-delivered bullet read delivered is caught"
+
+# PARTIAL-FORMS: the phased form dropped from a partial line's clause forms.
+mutant "drop-locked-partial-phased" \
+  '/^A bullet some of whose clauses are delivered and some not is `partial`/{ sub(/`phased — <story>`, /, "") } {print}' \
+  "LOCKED-PARTIAL-FORMS:" "dropping phased from within partial is caught"
+
+# PHASED-CLAUSE: the sentence holding a phased clause to the final checkpoint deleted.
+mutant "del-locked-phased-clause" \
+  '/^A `phased —` clause is one a later phase of the same Rule 14 plan delivers/{next} {print}' \
+  "LOCKED-PHASED-CLAUSE:" "deleting the phased-clause-waits-for-the-final-checkpoint sentence is caught"
+
+# OPOWNED: the no-(lead interpretation)-label condition dropped, so any text could assign a clause away.
+mutant "drop-locked-opowned-label" \
+  '/^An `operator-owned —` clause is one that/{ sub(/, a bullet carrying no `\(lead interpretation\)` label,/, "") } {print}' \
+  "LOCKED-OPOWNED:" "dropping the operator-owned no-lead-interpretation-label condition is caught"
+
+# OWED: partial added without its owed-HARD_BLOCK sentence.
+mutant "del-locked-partial-owed" \
+  '/^Every undelivered clause of a `partial` bullet owes the Tier 1/{next} {print}' \
+  "LOCKED-PARTIAL-OWED:" "partial without the owed-HARD_BLOCK sentence is caught"
+
+# PARTIAL-CARRY: the partial-line carry-forward sentence deleted; the phased-bullet one stays.
+mutant "del-locked-partial-carry" \
+  '/^It carries every `phased —` clause of a line an earlier checkpoint/{next} {print}' \
+  "LOCKED-PARTIAL-CARRY:" "deleting the carry-forward of a partial line's phased clauses is caught"
+
+# TEMPLATE: the partial status and its clause forms removed from the block body.
+mutant "del-locked-partial-line" \
+  '/^### Locked-Requirement Coverage$/{s=1} s && /^### Next Steps$/{s=0} s && /^  \/ partial — </{getline; next} {print}' \
+  "LOCKED:" "dropping the partial status line and its clause forms from the block body is caught"
 
 # --- §5 Decisions for You / For Your Information, the any-source rule, §6's wait list ------
 # DELETE: the template's Decisions block goes (heading up to For Your Information). The prose

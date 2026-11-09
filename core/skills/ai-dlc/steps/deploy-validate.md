@@ -514,12 +514,19 @@ See: docs/escalations/pending.md
 ### Locked-Requirement Coverage
 See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
 - [one line per bullet of this sprint's LOCKED_REQUIREMENTS block,
-  verbatim]: delivered / deferred / descoped /
+  verbatim]: <kind>: delivered — <evidence> / deferred / descoped /
   phased — <the story or stories that deliver it>
-  - [for each deferred or descoped bullet, and each bullet deferred and
+  / partial — <each clause: delivered — <evidence>, phased — <story>,
+  operator-owned — <LR id>, or undelivered>
+  - [<kind> is operation / artifact / constraint / decision; an operation's
+    evidence is the gate-log file:line of this deploy's §3, §3b, §4 or §4b
+    record and the id of its row showing the action succeed on each target,
+    with <the writing service's deployed sha> beside that row id]
+  - [for each deferred or descoped bullet, each undelivered clause of a
+    partial bullet, and each bullet deferred and
     then delivered — the HARD_BLOCK id and its disposition token
     (approved-deferral / do-now / descope)]
-- [carried from an earlier checkpoint of this plan: one line per bullet it marked phased]
+- [carried from an earlier checkpoint of this plan: one line per bullet it marked phased, and each phased clause of a line it marked partial]
 - [no locked-requirements.md for this sprint: none recorded]
 
 ### Decisions for You
@@ -569,12 +576,22 @@ reads a computed count rather than an enumerated one.
 **Locked-requirement coverage.** The checkpoint's Locked-Requirement
 Coverage block carries one line per bullet of this sprint's
 LOCKED_REQUIREMENTS block (`_bmad-output/planning-artifacts/s<N>/locked-requirements.md`),
-each marked delivered, deferred, descoped or phased. The locked-requirement rule
+each marked delivered, deferred, descoped, phased or partial. The locked-requirement rule
 in `steps/retro.md` §4a binds here, at the checkpoint: every deferred or
 descoped bullet, and every bullet deferred and then delivered in this
 sprint, needs a Tier 1 `HARD_BLOCK` carrying the operator's recorded
 disposition, and the block quotes that entry's id and disposition token.
 An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
+Every line names its bullet's kind before its mark: `operation` (the bullet requires the deployed system to do, or be able to do, something while running; a bullet saying "able to", "support", "working", "creates" or "sends" is an `operation` bullet), `artifact` (a repository file, setting or document), `constraint` (something must not happen or must stay unchanged) or `decision` (the operator chose not to build, or to accept, something).
+An `operation` bullet is `delivered` only on the gate-log `file:line` of a §3, §3b, §4 or §4b record from this deploy together with the id of the row in that record that shows the bullet's action succeeding: a work-execution record id, a transaction id, or the id of a smoke or browser test that performs that action.
+That row names the bullet's target, and a bullet naming several targets cites one such row for each of them.
+"This deploy" is any deploy made under this sprint's deploy-validate, each later roll included, never a prior sprint's; the line names, beside each cited row, the deployed sha of the service that wrote the row, so the operator can see a stale row, and no rule reads that sha as a verdict.
+Not admissible for an `operation` bullet: a unit, integration or test-double result; a health-only or availability-only record; a record none of whose rows names the bullet's target; a §3b zero-expected-activity PASS; a `NOT_EVALUATED` record.
+An `artifact` bullet's evidence is the trunk merge sha and the `file:line`, or a verification command's output, at the deployed sha; a `constraint` bullet's evidence is `honoured —` and a read showing the forbidden event absent, beside its control; a `decision` bullet's evidence is the captured operator answer's `file:line`.
+A bullet some of whose clauses are delivered and some not is `partial`, never `delivered`, unless its one undelivered action is a degraded branch the operator accepted, which is `descoped` as above; a `partial` line names each delivered clause with its evidence and each other clause as `phased — <story>`, `operator-owned — <LR id>` or undelivered.
+A `phased —` clause is one a later phase of the same Rule 14 plan delivers: it owes nothing until the plan's final checkpoint, every `phased` rule below applies to it as to a `phased` bullet, and at that final checkpoint one not delivered is an undelivered clause.
+An `operator-owned —` clause is one that the operator's own locked text, a bullet carrying no `(lead interpretation)` label, assigns to the operator or excludes; it owes no disposition.
+Every undelivered clause of a `partial` bullet owes the Tier 1 `HARD_BLOCK` with a recorded disposition that a deferred bullet owes, and the checkpoint is withheld for it as for a deferred bullet.
 A bullet a later phase of the same Rule 14 plan delivers is marked
 `phased — <the story or stories that deliver it>`.
 Each cited story carries the requirement's LR id in its own
@@ -589,6 +606,7 @@ and owes its `HARD_BLOCK`.
 At a later checkpoint of a Rule 14 plan the block also carries every
 bullet an earlier checkpoint of that plan marked `phased`, read from that
 earlier sprint's `locked-requirements.md`.
+It carries every `phased —` clause of a line an earlier checkpoint of that plan marked `partial` the same way.
 A `phased` line citing no story counts as deferred at any checkpoint.
 A `phased` line citing a story that is `done`, or one that does not carry
 the LR id, is not `phased` and counts as deferred.
@@ -605,13 +623,20 @@ records the operator's disposition — `approved-deferral` / `do-now` /
 `descope` — on that entry with its `Operator authorization:` citation.
 An operator reply to the checkpoint does not stand in for a recorded
 disposition.
+A `(lead interpretation)` bullet the operator confirmed (`requirements.md` §3) is marked by its kind like any other, one struck or reworded is marked `descoped` quoting its `HARD_BLOCK` id and `descope` token, and one still unanswered at the checkpoint is a requirements-gate defect: report it and treat the bullet as deferred, owing its `HARD_BLOCK`.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a generic checkpoint
 reply accepted as the operator's word on a locked requirement left
 undelivered, so the sprint enters retro without the lock-slip ever being
-put to the operator as a decision. False-positive cost: one coverage line
-per locked requirement, plus the `HARD_BLOCK` each non-delivered one
-already owes under Rule 13. Removal condition: retire once the coverage
+put to the operator as a decision; and an `operation` bullet marked
+`delivered` on unit tests, a health-only smoke run or a function check
+whose rows never name the bullet's target, while the deployed system has
+never performed the action there, or a bullet only some of whose clauses
+shipped marked `delivered` whole. False-positive cost: one coverage line
+per locked requirement naming its kind, one cited record row per target
+of each delivered `operation` bullet, plus the `HARD_BLOCK` each
+non-delivered bullet or undelivered clause already owes under Rule 13.
+Removal condition: retire once the coverage
 block is derived from the locked-requirements file and the escalation
 log, and presentation is refused mechanically while a non-delivered
 bullet has no matching disposition.

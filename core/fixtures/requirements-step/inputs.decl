@@ -17,3 +17,12 @@ core/scripts/merge-adversarial-shards.sh
 core/scripts/validate-artifact-budget.sh
 core/scripts/validate-provenance-block.sh
 core/schemas/provenance-block.json
+# Arm (n) (BL-936) runs the three shipped LR parsers; request-coverage resolves the harness-origin schema.
+!core/scripts/validate-request-coverage.sh
+!core/scripts/validate-spec-join.sh
+!core/scripts/validate-locked-anchor.sh
+core/schemas/harness-origin.json
+# Arm (o) (BL-936) drives the shipped capture hook to write the history the §3 derivation reads; the hook resolves
+# its pause-routing declaration beside itself.
+!core/hooks/ai-dlc-answer-capture.sh
+core/schemas/pause-routing.json

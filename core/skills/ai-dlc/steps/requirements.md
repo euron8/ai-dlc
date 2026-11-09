@@ -104,6 +104,7 @@ sprint's block and nothing else:
 <!-- Source: [user input | carry-over item #N | escalation spec path] -->
 - [verbatim user-specified requirement 1]
 - [verbatim user-specified requirement 2]
+- LR-S<N>-<m> (lead interpretation, of LR-S<N>-<k>): [a clause the lead added that no source states]
 <!-- END LOCKED_REQUIREMENTS -->
 ```
 
@@ -126,6 +127,56 @@ project memory entries about user preferences that constrain this feature. Be ex
 Every concrete detail the user specified (placement, scope, behavior, approach) is a locked
 requirement. Do not paraphrase — quote verbatim or as close to verbatim as the source allows.
 Full rationale for this file's shape and the accumulation defect it fixes: `discovery.md` §4a.
+
+**A clause the lead adds is its own labelled bullet.** A clause no source above states — an
+inferred scope boundary, an owner split, a default the operator never gave — is its OWN bullet,
+with its own next unused whole-number id and the label right after the id:
+`- LR-S<N>-<m> (lead interpretation, of LR-S<N>-<k>): <clause>`, where `LR-S<N>-<k>` is the bullet it interprets.
+The id is a whole number, never a letter or dotted suffix: `validate-request-coverage.sh` reads `LR-S<N>-9a` and `LR-S<N>-9.1` both as `LR-S<N>-9`, so a suffixed child folds into its parent.
+NOT labelled: operator text; a gloss restating an operator answer that it cites by `file:line`; a cross-reference to an item, carry-over or disposition.
+The cited operator answer is the record's fenced answer body only: words that appear only on its `- Question` line are the lead's own, and a clause carrying them is labelled.
+
+**The position is fixed by the parsers.** `validate-request-coverage.sh` and `validate-spec-join.sh` count a bullet only when its id opens it,
+so a label before the id (`- (lead interpretation) LR-S<N>-<m> ...`) silently drops the bullet from both.
+Check 3b (`validate-locked-anchor.sh`) byte-matches each `full_text_source:` bullet against this slot, so the label reaches every story citing the bullet,
+and that is how dev and QA learn the clause is the lead's, not the operator's.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a clause the lead wrote into a locked bullet was built to and tested as the operator's, and the operator disowned it.
+False-positive cost: one extra bullet and id per lead-added clause; operator text is never labelled, so a block the lead added nothing to is unchanged.
+Removal condition: retire when each locked bullet's author is recorded by a mechanism rather than by its text.
+
+**Every lead-interpretation bullet is put to the operator before the gate.** Once the block is written, and before section 4,
+ask one `AskUserQuestion` question per `(lead interpretation)` bullet, its text opening `LR-S<N>-<m> (lead interpretation): ` and then the clause, with the options `Confirm LR-S<N>-<m>`, `Strike LR-S<N>-<m>` and `Reword LR-S<N>-<m>`.
+Per Rule 11(a) the lead badges `Confirm LR-S<N>-<m>` `(Recommended)` when it believes the clause is the operator's intent; otherwise it badges nothing and the question says why.
+`ai-dlc-answer-capture.sh` records each answer in `_bmad-output/operator-answers-history.md`, the question on its unhashed `- Question` line and the answer in the hashed body; the lead writes no history file.
+The question names no other LR id: a question naming two ids answers neither, and a question naming only the parent `LR-S<N>-<k>` answers nothing labelled.
+This derives each bullet's state from the newest record whose question opens with its exact id and names no other:
+
+```bash
+awk -v id='LR-S<N>-<m>' 'BEGIN { q = "- Question (lead-authored, NOT covered by the hash): " id " (lead interpretation): "; v = "UNANSWERED" } f == 2 && $0 == "```" { c = b; sub(/ [(]Recommended[)]$/, "", c); v = (c == "Confirm " id) ? "CONFIRMED" : (c == "Strike " id || c == "Reword " id) ? "DESCOPE" : "UNDECIDED"; f = 0; next } f == 2 { b = b s $0; s = "\n"; next } /^## / { f = 0 } index($0, q) == 1 { t = $0 " "; gsub(id "[^0-9]", " ", t); if (t !~ /LR-S[0-9]+-[0-9]+/) { f = 1; next } } f == 1 && $0 == "```text" { f = 2; b = ""; s = ""; next } END { print v }' _bmad-output/operator-answers-history.md
+```
+
+`UNANSWERED` is a Rule 12 `HARD_BLOCK` before the requirements gate, through section 4(b)'s open-question channel.
+Every lead-interpretation `HARD_BLOCK` entry, whether filed paused on `UNANSWERED` or `UNDECIDED`, filed `RESOLVED` at the first ask, or resolved later, writes on its `Decision/Question:` line the bullet's id and label in the exact form `LR-S<N>-<m> (lead interpretation)`, then ` -- ` and what the entry records.
+While the entry is paused on `UNANSWERED` or `UNDECIDED`, that is the decision asked: `**Decision/Question:** LR-S<N>-<m> (lead interpretation) -- awaiting operator: Confirm, Strike or Reword "<the clause>"`.
+Once it is resolved, that is the disposition, `confirm` or `descope`, and the captured answer's `file:line`: `**Decision/Question:** LR-S<N>-<m> (lead interpretation) -- confirm, <answer file:line>` or `**Decision/Question:** LR-S<N>-<m> (lead interpretation) -- descope, <answer file:line>`.
+On resolution the lead rewrites that line in place, in the same edit that flips `**Status:**` to `RESOLVED` and writes the `Operator authorization:` line (`escalations.md`, "The citation is written in the SAME edit that sets the status"); the file's "append, do not overwrite" rule governs entries, not a field of one.
+An absent `_bmad-output/operator-answers-history.md` makes the program print nothing and exit 2, and the lead reads that as `UNANSWERED`.
+Only `CONFIRMED`, which a whole answer body of exactly `Confirm LR-S<N>-<m>` prints, with or without its ` (Recommended)` badge, keeps the bullet in force; `DESCOPE`, which a whole body of exactly `Strike LR-S<N>-<m>` or `Reword LR-S<N>-<m>` prints, badged the same way, takes the `descope` path.
+`UNDECIDED`, which any other body prints (free text, or an option followed by more text), is treated as `UNANSWERED`: a paused Rule 12 `HARD_BLOCK`, the lead puts the question again, and the free text is never filed as a disposition.
+A reply typed outside `AskUserQuestion` is not captured, so the lead asks again by `AskUserQuestion` to obtain the decision.
+A bullet that read `UNANSWERED` and is answered later already has its `HARD_BLOCK` filed and the pipeline paused: on `CONFIRMED` the lead marks that entry `RESOLVED`, its `Operator authorization:` line quoting the captured answer body under that record's `## ` timestamp (`escalations.md`) and its `Decision/Question:` line in the form above, and the bullet stays in force; on `DESCOPE` the lead records it by the `descope` path below; either way the pause lifts per Rule 3.
+
+**The `descope` path.** The lead records the answer as the operator's `descope` disposition on that bullet's `HARD_BLOCK` entry, status `RESOLVED`, its `Operator authorization:` line quoting the captured answer body under that record's `## ` timestamp (`escalations.md`), and its `Decision/Question:` line in the form above.
+When the operator's captured answer at a bullet's first ask is an exact `Strike` or `Reword` option, the bullet never read `UNANSWERED` and has no `HARD_BLOCK` yet: the lead files its Tier 1 `HARD_BLOCK` in `docs/escalations/pending.md` already `RESOLVED` with that disposition, and sets no pause flag, because the operator has already decided.
+No requirement, story or acceptance criterion is authored from a bullet on that path, and at the checkpoint it is marked `descoped` (`deploy-validate.md` §5).
+In the next sprint's block a struck bullet takes `<!-- NOT-IN-SCOPE: <id> — struck by the operator, <answer file:line> -->`, the disposition `validate-request-coverage.sh` and Check 33 already read, and a reworded one becomes a new labelled bullet there, put to the operator the same way.
+No slot is edited, and no bullet is copied into a later slot.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: one question about one clause of a locked bullet was read as ratifying the whole bullet, so a lead-written clause in it was built and tested as the operator's, and the operator disowned it.
+The stop blocks by operator ruling: a question asked while the build proceeds is answered after the clause is already built.
+False-positive cost: one operator stop per sprint that has a lead clause, one question per labelled bullet, up to four in one `AskUserQuestion` call; a sprint with no labelled bullet asks nothing.
+Removal condition: retire when a mechanism records each bullet's author and the operator's confirmation and the gate reads it, so no question text has to carry the id.
 
 ### 4. Authoring Dispatch
 
@@ -156,6 +207,7 @@ mechanics, the returns handling, and why the spec is never a full-text anchor ta
   `LOCKED_REQUIREMENTS` bullet is a Rule 11 ambiguity and MUST be escalated as a Rule 12
   HARD_BLOCK before the gate, not carried as a note — unless it is resolved by the research
   sub-skills below, in which case it is not escalated.
+- A section 3 `(lead interpretation)` bullet that is unanswered is escalated the same way, as a Rule 12 `HARD_BLOCK` before the gate; no research sub-skill resolves it, only the operator's captured answer.
 
 **(c) Update the PRD.** Per Rule 25(a) — integrate the new scope's requirements into the
 current-state sections and **move** superseded requirement versions and prior per-sprint scope

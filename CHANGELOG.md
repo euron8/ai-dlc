@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1035.0] - 2026-11-09
+
+### BL-935 closed
+
+A locked-requirement coverage line in `deploy-validate.md` §5 now names its bullet's kind (`operation`, `artifact`, `constraint` or `decision`), and an `operation` bullet is `delivered` only on a cited live row: the gate-log `file:line` of a §3, §3b, §4 or §4b record of this deploy and the id of the row showing the action succeed on each named target, with the writing service's deployed sha beside it. Unit, integration or test-double results, health-only records, a zero-expected-activity §3b PASS and a `NOT_EVALUATED` record are inadmissible. A bullet only partly shipped is `partial`, each clause marked `delivered`, `phased`, `operator-owned` or undelivered, and an undelivered clause owes the Tier 1 `HARD_BLOCK` with a recorded disposition. The template line a lead copies lists all four clause forms, undelivered included (the D3 fold). Pinned by 18 new mutants in `deploy-validate-smoke-classification` (95 `mutant "` calls at the tip against 77 at base) and the `retro-lr-partial` row.
+
+### BL-936 closed
+
+`requirements.md` §3 gains a label for a clause the lead wrote: its own whole-number bullet `- LR-S<N>-<m> (lead interpretation, of LR-S<N>-<k>): <clause>`, label right after the id. The lead puts each labelled bullet to the operator before the build, and a derivation program reads the whole captured answer body of the newest matching record and prints one of four states: UNANSWERED, CONFIRMED, DESCOPE or UNDECIDED. CONFIRMED is only a body of exactly `Confirm <id>`, and DESCOPE only exactly `Strike <id>` or `Reword <id>`, each with or without the `(Recommended)` badge; any other body, free text included, is UNDECIDED and is treated as UNANSWERED, a paused Rule 12 `HARD_BLOCK` that is never filed as a disposition. An absent `operator-answers-history.md` reads as UNANSWERED. The program now removes the bullet's own id from its question line before it counts other LR ids, so a question restating its own id no longer stops forever. Every lead-interpretation `HARD_BLOCK` entry opens its `Decision/Question:` line with `LR-S<N>-<m> (lead interpretation) -- `: while paused it reads `awaiting operator: Confirm, Strike or Reword "<the clause>"`, and once resolved `confirm` or `descope` with the captured answer's `file:line`, rewritten in place in the same edit that sets the status. A cited operator answer is the fenced answer body only, a first-ask strike is filed `RESOLVED` with no pause, a later answer resolves a paused entry, and the `escalations.md` carve-out is narrowed to an exact Strike or Reword option. Pinned by 49 rows in `process-rule-pins` (45 `req-lr-`, 1 `req-oq-`, 2 `dv-lrcov-interp-`, 1 `esc-lead-interp-`), parser arm (n) and arm (o) in `requirements-step`: 15 cells and 11 mutants, with the fixture's invocations moving from 41 to 53.
+
+### BL-937 closed
+
+`stories-test-strategy.md` "Layered AC Verification Accounting" gains two rules. An AC verified against a double standing in for an external system names every request field the double rewrites, drops or defaults, and the story carries one read-only `live_ops` AC for those fields, listed in `deferred_acs` unless gate 3 recorded the real response. A story sending signed or state-changing requests to a chain or network no earlier sprint used carries one read-only simulation AC per request kind. The simulation runs and its response is recorded before the first real request of that kind reaches the target, including a request an operator action the lead enables would send (the D2 fold), and a kind whose precondition is unmet stays disabled on that target until its simulation is recorded. Pinned by 12 `sts-lac-` rows in `process-rule-pins`, including `sts-lac-net-order`.
+
+### BL-944 filed
+
+`validate-escalation-resolution.sh` accepts any verbatim operator quote as the `Operator authorization:` of a `RESOLVED` entry, so a free-text answer can be filed `RESOLVED` on a lead-interpretation `HARD_BLOCK`: graph's real S321 free-text reply, quoted on a `RESOLVED` descope entry, exits 0, while `requirements.md` §3 and `escalations.md` allow only an exact Strike or Reword option there. The only guard is the prose sentence. It is a measured defect in a validator outside this release's files, filed rather than fixed.
+
 ## [0.1034.0] - 2026-11-09
 
 ### BL-943 closed

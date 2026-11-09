@@ -75,7 +75,6 @@ reconcile-emit-report-c	run.sh carries no AI_DLC_* scrub; unexposed at the env-s
 relabel-theirs-collision	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 release-version-triple	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 relocation-preclassify	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
-requirements-step	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 resume-whole-read	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 retired-contract-token	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 retired-fixture-orphan	its mutant battery selects the subject through AI_DLC_RFO_DETECT; that channel must move to argv before run.sh can be scrubbed
