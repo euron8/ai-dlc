@@ -2,3 +2,4 @@
 15 *
 0 core/hooks/ai-dlc-advisor-gate.sh
 2 core/scripts/wait-for-deliverable.sh
+0 core/scripts/validate-mandatory-rules.sh

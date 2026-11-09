@@ -11,3 +11,6 @@ core/team-roles/
 core/fixtures/lib/mutant.sh
 # Section 4i reads partition-review-diff.sh as text: its THRESHOLD header, its AI_DLC_ key and its built-in default.
 core/scripts/partition-review-diff.sh
+# Section 4k reads validate-mandatory-rules.sh as text: Check 5's CHECK5_WEB_FILES pathspec and CHECK5_WEB_NONTEST
+# filter, bound to the UI path gate-validation.md Check 9 states inline.
+!core/scripts/validate-mandatory-rules.sh

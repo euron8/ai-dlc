@@ -163,6 +163,27 @@
 #     runs no arm on a seat file. The gp-party-*, r20-i-*, r20-v-*, gv17-seat-record,
 #     coe-party-per-seat, srev-party-per-seat and r28-rd-party-skill rows are para pins, also
 #     read by the corpus arm below (--report).
+#   - gate-validation.md Check 9 at an `implementation` gate (BL-934): the header says "deployment
+#     not claimed" is Check 8's scope clause alone (gv9-header-check8, a POSITIVE pin; `absent` mode
+#     ignores spans, so no absence row is built); inside `### 9.`..`### 10.` the per-story lead and
+#     "No `implementation` gate fetches a production URL." (gv9-perstory-*), a re-review pass's
+#     gate-1 manifest base "is the prior reviewed sha and is never the range" (gv9-perstory-rereview),
+#     every one-story gate's `<base>` is the PASS-1 gate-1 manifest's base (gv9-perstory-pass1base),
+#     the UI-path command and its control run from the worktree top (gv9-uipath-toplevel), the multi-story UNION
+#     rule in BOTH directions -- one no-UI story beside one UI story takes the UI branch
+#     (gv9-union-overinc, gv9-union-binds, gv9-union-whole) and an all-no-UI union self-skips
+#     (gv9-union-skip) -- the self-skip's non-zero pathspec control (gv9-skip-*, gv9-uipath-control),
+#     the all-not-any test exemption (gv9-uipath-all), the MANDATORY source-vs-mockup comparison and
+#     its FAIL bar (gv9-ui-*), "An OWED record is never itself a PASS" (gv9-owed-notpass), an absent
+#     `is_ui_epic` is not a skip (gv9-absent-flag), and the retro body keeps the deployed-URL fetch
+#     (gv9-retro-url). All para rows; each token sits on ONE line of its subject. Section 4k moves
+#     each paragraph to just ABOVE its span's start line, the boundary-adjacent near-miss the
+#     generic relocate (to the end of the file) does not exercise, and binds Check 9's inline UI
+#     pathspec and test-file filter to validate-mandatory-rules.sh Check 5's two lines, both sides
+#     derived, so a drift in EITHER file fails. BL-868: zero load-dependent tests -- every arm is a
+#     text pin over a file, nothing is timed or counted under load. KNOWN LIMIT (F3, as the
+#     elicitation rows above): a pin proves the clause is PRESENT in its span, not that no sentence
+#     contradicting it was appended; a reviewer reads for that.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -675,6 +696,25 @@ rr-recon-market|S|steps/research-requirements.md|### 1. Research|### 2. PRD Crea
 rr-recon-technical|S|steps/research-requirements.md|### 1. Research|### 2. PRD Creation|3. `/bmad-deep-recon type=technical intent=run|prefix
 req-recon-dommkt|S|steps/requirements.md|### 4. Authoring Dispatch|### 5.|**Research runs.** `/bmad-deep-recon type=domain`, `/bmad-deep-recon type=market` and|prefix
 req-recon-technical|S|steps/requirements.md|### 4. Authoring Dispatch|### 5.|`/bmad-deep-recon type=technical`, each with `intent=run|prefix
+gv9-header-check8|S|steps/gate-validation.md|## Gate-type manifest|**Universal core|**Deployment / schema / UI applicability is NOT a separate type.**|para|"deployment not claimed" is Check 8's scope clause alone, never Check 9's.
+gv9-absent-flag|S|steps/gate-validation.md|### 9.|### 10.|**Check 9 skips at every gate when `is_ui_epic == false`.**|para|An absent flag is not a skip.
+gv9-perstory-nourl|S|steps/gate-validation.md|### 9.|### 10.|**At every `implementation` gate, Check 9 is decided per story by the UI-path rule.**|para|No `implementation` gate fetches a production URL.
+gv9-perstory-nofail|S|steps/gate-validation.md|### 9.|### 10.|**At every `implementation` gate, Check 9 is decided per story by the UI-path rule.**|para|the absence of a deployment is never a Check 9 FAIL at an `implementation` gate.
+gv9-perstory-rereview|S|steps/gate-validation.md|### 9.|### 10.|**At every `implementation` gate, Check 9 is decided per story by the UI-path rule.**|para|is the prior reviewed sha and is never the range
+gv9-perstory-pass1base|S|steps/gate-validation.md|### 9.|### 10.|**At every `implementation` gate, Check 9 is decided per story by the UI-path rule.**|para|`<base>` is the PASS-1 gate-1 partition manifest's `base`, the parent of the dev's first commit
+gv9-union-skip|S|steps/gate-validation.md|### 9.|### 10.|**A gate over several stories, or over none, decides on the UNION of the gate|para|If that union touches no UI path, the whole gate self-skips (PASS).
+gv9-union-whole|S|steps/gate-validation.md|### 9.|### 10.|**A gate over several stories, or over none, decides on the UNION of the gate|para|Otherwise the UI branch applies to the whole gate.
+gv9-union-binds|S|steps/gate-validation.md|### 9.|### 10.|**A gate over several stories, or over none, decides on the UNION of the gate|para|Over-inclusion is the accepted failure mode and it binds
+gv9-union-overinc|S|steps/gate-validation.md|### 9.|### 10.|**A gate over several stories, or over none, decides on the UNION of the gate|para|takes the UI branch with it
+gv9-uipath-all|S|steps/gate-validation.md|### 9.|### 10.|**The UI path is defined here, inline, as `validate-mandatory-rules.sh` Check 5 defines it.**|para|The test-only exemption needs ALL changed web files to be tests
+gv9-uipath-control|S|steps/gate-validation.md|### 9.|### 10.|**The UI path is defined here, inline, as `validate-mandatory-rules.sh` Check 5 defines it.**|para|a pathspec that returned at least one path.
+gv9-uipath-toplevel|S|steps/gate-validation.md|### 9.|### 10.|**The UI path is defined here, inline, as `validate-mandatory-rules.sh` Check 5 defines it.**|para|The UI-path command and its pathspec control both run from the worktree top
+gv9-skip-control|S|steps/gate-validation.md|### 9.|### 10.|**No UI path in the decided diff is a self-skip, which is a PASS.**|para|the pathspec control that returned non-zero.
+gv9-skip-nocontrol|S|steps/gate-validation.md|### 9.|### 10.|**No UI path in the decided diff is a self-skip, which is a PASS.**|para|An empty UI diff without a non-zero control beside it is not a self-skip.
+gv9-ui-compare|S|steps/gate-validation.md|### 9.|### 10.|**A UI path in the decided diff makes the source-vs-mockup comparison MANDATORY at that gate.**|para|on copy, element structure, attributes (including `role` and `aria-*`) and class names.
+gv9-ui-failbar|S|steps/gate-validation.md|### 9.|### 10.|**A UI path in the decided diff makes the source-vs-mockup comparison MANDATORY at that gate.**|para|The gate FAILS if that comparison was not performed, or if drift was found and not fixed.
+gv9-owed-notpass|S|steps/gate-validation.md|### 9.|### 10.|**Only layout and production rendering are OWED to `deploy-validate.md` §4 ("Visual Verification").**|para|An OWED record is never itself a PASS
+gv9-retro-url|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 keeps its sprint-scoped body, including the deployed-URL fetch.**|para|- Agent must fetch the deployed production URL and verify rendering.
 PINS
 }
 
@@ -2665,6 +2705,149 @@ grep -q -- '0 drifted key(s)' "$DS_STEPS/gate-validation.md" 2>/dev/null \
 grep -q -- '0 value(s) written' "$DS_STEPS/gate-validation.md" 2>/dev/null \
   && bad "the remedy cites the WRITE mode's token as the confirmation — that mode overwrites a wrong transcription and exits 0" \
   || ok "the remedy does NOT cite the write mode's token as a confirmation"
+
+# --- 4k. Check 9 (BL-934): span-start near-misses, and the UI path bound to Check 5 -------------
+# THE START-BOUNDARY NEAR-MISS. The generic relocate in section 4 moves a paragraph to the END of
+# the file, past the span's end line; nothing there puts the clause just ABOVE the start line. For
+# every gv9-* row the pinned paragraph is moved, in a flattened copy, to sit immediately before the
+# first line opening with the row's span start, with the start line itself untouched. The row must
+# read in-span 0 while the paragraph is still in the file (whole >= 1); the flattened copy's own
+# in-span 1 is the same-run control.
+pmove_before() { # <flat-src> <dst> <lead> <token> <start-prefix>
+  MB_LEAD="$3" MB_TOK="$4" MB_S="$5" awk '
+  BEGIN { l = ENVIRON["MB_LEAD"]; k = ENVIRON["MB_TOK"]; s = ENVIRON["MB_S"]; n = 0 }
+  { q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
+    if (index(q, l) == 1 && index(q, k) > 0) { held[++n] = q; next }
+    line[++m] = $0 }
+  END { done = 0
+        for (i = 1; i <= m; i++) {
+          if (!done && index(line[i], s) == 1) { for (j = 1; j <= n; j++) { print held[j]; print "" }; done = 1 }
+          print line[i] } }' "$1" > "$2"
+}
+n_gv9=0
+while IFS='|' read -r id base rel s e lead mode tok; do
+  case "$id" in gv9-*) ;; *) continue ;; esac
+  n_gv9=$((n_gv9 + 1))
+  f="$(pin_path "$base" "$rel")"
+  [ -f "$f" ] || { bad "$id/before-start: subject absent"; continue; }
+  flat="$M/$id.flat.md"; [ -f "$flat" ] || flatten "$f" "$flat"
+  o0="$(pin_scan "$flat" "$s" "$e" "$lead" para "$tok")"
+  [ "${o0%% *}" = "1" ] || { bad "$id/before-start: CONTROL -- flattened copy in-span=${o0%% *}, wanted 1"; continue; }
+  dst="$M/$id.before-start.md"; pmove_before "$flat" "$dst" "$lead" "$tok" "$s"
+  if cmp -s "$flat" "$dst"; then bad "$id/before-start: move did not apply"; continue; fi
+  read -r ins whole sl el fl <<<"$(pin_scan "$dst" "$s" "$e" "$lead" para "$tok")"
+  if [ "$ins" -eq 0 ] && [ "$whole" -ge 1 ] && [ "$fl" -lt "$sl" ]; then
+    ok "$id/before-start: the paragraph just above '$s' (line $fl, span opens $sl) does not satisfy the row"
+  else bad "$id/before-start: in-span=$ins whole=$whole first-hit=$fl span-start=$sl -- the start bound does not discriminate"; fi
+done <<<"$(pins)"
+[ "$n_gv9" -eq 19 ] || bad "before-start: $n_gv9 gv9-* row(s) read, wanted 19"
+
+# THE UI PATH, BOUND ACROSS TWO FILES. Check 9 states the pathspec and the test-file filter inline
+# (contract NOTE 1) and says it defines them as validate-mandatory-rules.sh Check 5 does. Both sides
+# are DERIVED: the gate side from the one code-span line inside `### 9.`..`### 10.` that opens
+# `git diff --name-only --no-renames` (fenced and commented lines invisible, as pin_scan reads them)
+# and the one carrying `awk -F/ '`; the script side from its one `CHECK5_WEB_FILES=` line (file 457
+# at this writing) and its one `CHECK5_WEB_NONTEST=` line (480). The pathspec is the text after
+# ` -- ` up to the closing backtick or ` 2>/dev/null`; the filter is the `awk -F/ '...'` program.
+# ui_verdict prints MATCH, DRIFT or ABSENT; a side that yields nothing, or more than one line, is
+# ABSENT, never MATCH. FP set: the real pair reads MATCH. Mutants move each side once.
+c9_gate() { # <gate file> <ps|awk> -> the inline value, or nothing
+  awk -v want="$2" '
+  { t = $0; sub(/^[ \t]+/, "", t)
+    if (com) { if (index($0, "-->")) com = 0; next }
+    if (fence != "") { if (substr(t, 1, 3) == fence) fence = ""; next }
+    if (substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~") { fence = substr(t, 1, 3); next }
+    if (substr(t, 1, 4) == "<!--") { if (!index(substr(t, 5), "-->")) com = 1; next }
+    if (!on) { if (index($0, "### 9.") == 1) on = 1; next }
+    if (index($0, "### 10.") == 1) exit
+    if (want == "ps" && index($0, "`git diff --name-only --no-renames ") == 1) {
+      v = $0; sub(/^[^`]*`[^`]*" -- /, "", v); sub(/`.*$/, "", v); n++; out = v }
+    if (want == "awk" && (c = index($0, "`awk -F/ '\''")) > 0) {
+      v = substr($0, c + 1); sub(/`.*$/, "", v); n++; out = v } }
+  END { if (n == 1) print out }' "$1"
+}
+c9_script() { # <validate-mandatory-rules.sh> <ps|awk> -> Check 5's value, or nothing
+  awk -v want="$2" '
+  want == "ps" && index($0, "CHECK5_WEB_FILES=\"$(git diff --name-only --no-renames ") == 1 {
+    v = $0; sub(/^.*" -- /, "", v); sub(/ 2>\/dev\/null.*$/, "", v); n++; out = v }
+  want == "awk" && index($0, "CHECK5_WEB_NONTEST=") == 1 && (c = index($0, "awk -F/ '\''")) > 0 {
+    v = substr($0, c); sub(/\)"$/, "", v); n++; out = v }
+  END { if (n == 1) print out }' "$1"
+}
+ui_verdict() { # <gate file> <script file> -> MATCH | DRIFT <which> | ABSENT <which>
+  local gp sp ga sa
+  gp="$(c9_gate "$1" ps)"; sp="$(c9_script "$2" ps)"; ga="$(c9_gate "$1" awk)"; sa="$(c9_script "$2" awk)"
+  if [ -z "$gp" ] || [ -z "$sp" ]; then printf 'ABSENT pathspec gate=[%s] script=[%s]\n' "$gp" "$sp"
+  elif [ -z "$ga" ] || [ -z "$sa" ]; then printf 'ABSENT filter gate=[%s] script=[%s]\n' "$ga" "$sa"
+  elif [ "$gp" != "$sp" ]; then printf 'DRIFT pathspec gate=[%s] script=[%s]\n' "$gp" "$sp"
+  elif [ "$ga" != "$sa" ]; then printf 'DRIFT filter gate=[%s] script=[%s]\n' "$ga" "$sa"
+  else printf 'MATCH [%s] [%s]\n' "$gp" "$ga"; fi
+}
+UV="$WORK/c9ui"; mkdir -p "$UV" || exit 2
+# PROBES, both directions, on synthetic text. g1 carries the value inside Check 9; g2 carries it only
+# ABOVE `### 9.` (a near-miss the span must refuse); g3 inside a fence. s1/s2 differ by one pathspec.
+printf '%s\n' '### 9. v' "\`git diff --name-only --no-renames \"<b>..<f>\" -- 'web/**' 'web/src/**'\`" \
+  "\`awk -F/ 'NF && \$NF !~ /x/ {print}'\`" '### 10. w' > "$UV/g1.md"
+printf '%s\n' "\`git diff --name-only --no-renames \"<b>..<f>\" -- 'web/**' 'web/src/**'\`" \
+  "\`awk -F/ 'NF && \$NF !~ /x/ {print}'\`" '### 9. v' '### 10. w' > "$UV/g2.md"
+printf '%s\n' '### 9. v' '```' "\`git diff --name-only --no-renames \"<b>..<f>\" -- 'web/**' 'web/src/**'\`" '```' \
+  "\`awk -F/ 'NF && \$NF !~ /x/ {print}'\`" '### 10. w' > "$UV/g3.md"
+printf '%s\n' "CHECK5_WEB_FILES=\"\$(git diff --name-only --no-renames \"\${B}..HEAD\" -- 'web/**' 'web/src/**' 2>/dev/null)\"" \
+  "CHECK5_WEB_NONTEST=\"\$(printf '%s\\n' \"\$X\" | awk -F/ 'NF && \$NF !~ /x/ {print}')\"" > "$UV/s1.sh"
+printf '%s\n' "CHECK5_WEB_FILES=\"\$(git diff --name-only --no-renames \"\${B}..HEAD\" -- 'web/**' 2>/dev/null)\"" \
+  "CHECK5_WEB_NONTEST=\"\$(printf '%s\\n' \"\$X\" | awk -F/ 'NF && \$NF !~ /x/ {print}')\"" > "$UV/s2.sh"
+uv1="$(ui_verdict "$UV/g1.md" "$UV/s1.sh")"; uv2="$(ui_verdict "$UV/g1.md" "$UV/s2.sh")"
+uv3="$(ui_verdict "$UV/g2.md" "$UV/s1.sh")"; uv4="$(ui_verdict "$UV/g3.md" "$UV/s1.sh")"
+uv5="$(ui_verdict "$UV/g1.md" "$UV/absent.sh")"
+if [ "${uv1%% *}" = MATCH ] && [ "${uv2%% *}" = DRIFT ] && [ "${uv3%% *}" = ABSENT ] && [ "${uv4%% *}" = ABSENT ] && [ "${uv5%% *}" = ABSENT ]; then
+  ok "c9-ui-path: probe -- match, a one-pathspec drift, the value only above '### 9.', the value fenced and an absent script each read as built"
+  B_c9ui_probe=1
+else
+  bad "c9-ui-path: FIXTURE BROKEN -- probe '$uv1' / '$uv2' / '$uv3' / '$uv4' / '$uv5'"; B_c9ui_probe=0
+fi
+case "$LAYOUT" in
+  dist) VMR="$ROOT/core/scripts/validate-mandatory-rules.sh" ;;
+  *)    VMR="$ROOT/scripts/ai-dlc/validate-mandatory-rules.sh" ;;
+esac
+GV9="$SKILL_DIR/steps/gate-validation.md"
+[ -f "$VMR" ] || { echo "FIXTURE ERROR: 4k: $VMR is absent; the Check 9 UI-path binding was not asserted" >&2; exit 2; }
+[ -f "$GV9" ] || { echo "FIXTURE ERROR: 4k: $GV9 is absent" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
+uv_real="$(ui_verdict "$GV9" "$VMR")"
+B_c9ui=0
+case "$uv_real" in
+  MATCH*) if [ "$B_c9ui_probe" = 1 ]; then ok "c9-ui-path: Check 9's inline UI pathspec and test filter equal validate-mandatory-rules.sh Check 5's ($uv_real)"; B_c9ui=1
+          else bad "c9-ui-path: real pair reads MATCH but the probe was red, so the MATCH is unproven"; fi ;;
+  *)      bad "c9-ui-path: Check 9 against ${VMR#"$ROOT/"} reads $uv_real (want MATCH)" ;;
+esac
+# MUTANTS, one per side and value, each a copy guarded by cmp -s. The pathspec mutants drop
+# `'web/tests/**'` from ONE file; the filter mutants drop `spec` from the alternation in ONE file.
+c9_mut() { # <name> <src> <dst> <old> <new> <file: gate|script> <want: DRIFT pathspec|DRIFT filter>
+  local name="$1" src="$2" dst="$3" g="$GV9" s="$VMR" v
+  C9_OLD="$4" C9_NEW="$5" awk 'BEGIN { o = ENVIRON["C9_OLD"]; n = ENVIRON["C9_NEW"] }
+    { if ((c = index($0, o)) > 0) $0 = substr($0, 1, c - 1) n substr($0, c + length(o)); print }' "$src" > "$dst"
+  if cmp -s "$src" "$dst"; then bad "MUTANT $name: DID NOT APPLY"; return; fi
+  if [ "$6" = gate ]; then g="$dst"; else s="$dst"; fi
+  v="$(ui_verdict "$g" "$s")"
+  case "$v" in
+    "$7"*) mutant_killed "$B_c9ui" "$name" "MUTANT $name: reads $v" ;;
+    *)     bad "MUTANT $name: SURVIVED ($v)" ;;
+  esac
+}
+c9_mut c9-ui-gate-ps   "$GV9" "$UV/gate-ps.md"   " 'web/tests/**'\`" "\`" gate "DRIFT pathspec"
+c9_mut c9-ui-script-ps "$VMR" "$UV/script-ps.sh" " 'web/tests/**' 2>/dev/null" " 2>/dev/null" script "DRIFT pathspec"
+c9_mut c9-ui-gate-awk  "$GV9" "$UV/gate-awk.md"  "/\\.(test|spec)\\./ {print}'\`" "/\\.(test)\\./ {print}'\`" gate "DRIFT filter"
+c9_mut c9-ui-script-awk "$VMR" "$UV/script-awk.sh" "/\\.(test|spec)\\./ {print}')\"" "/\\.(test)\\./ {print}')\"" script "DRIFT filter"
+# NEAR-MISS on the real file: Check 9's UI-path line moved to just above `### 9.` must read ABSENT,
+# so a pathspec stated elsewhere in gate-validation.md cannot satisfy the binding.
+awk '{ l[++n] = $0 } END {
+       for (i = 1; i <= n; i++) if (index(l[i], "`git diff --name-only --no-renames ") == 1) { hold = l[i]; skip = i }
+       for (i = 1; i <= n; i++) { if (i == skip) continue; if (index(l[i], "### 9.") == 1 && hold != "") print hold; print l[i] } }' \
+  "$GV9" > "$UV/gate-above.md"
+uv_above="$(ui_verdict "$UV/gate-above.md" "$VMR")"
+if ! cmp -s "$GV9" "$UV/gate-above.md" && [ "${uv_above%% *}" = ABSENT ]; then
+  ok "c9-ui-path near-miss: the UI-path line moved just above '### 9.' reads ABSENT, not MATCH"
+else bad "c9-ui-path near-miss: the line above '### 9.' reads '$uv_above' -- the span does not bound the gate side"; fi
 
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""

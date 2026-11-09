@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1029.0] - 2026-11-08
+
+### BL-934 closed
+
+Closes PC-S321-CHECK-9-UNSATISFIABLE-AT-PRE-DEPLOY-PER-STORY-GATE-3-IN-A-UI-SPRINT (graph s321).
+
+Check 9 at a pre-deploy implementation gate in a UI sprint had no per-story skip and demanded a deployed production URL. The header of `gate-validation.md` implied a "deployment not claimed" skip the body never carried, so in one consumer sprint the same text gave story 5.1 PASS and story 1.3 FAIL twice. Over graph's 172 implementation verdicts on disk, 26 Check 9 rows match `/not claimed/`.
+
+At every implementation gate Check 9 is now decided per story, or on the union of the gate's changed files for a multi-story or storyless gate, against an inline UI pathspec copied from `validate-mandatory-rules.sh` Check 5 with its all-not-any test-only exemption. The range base is each story's PASS-1 gate-1 manifest base (at a one-story gate 3, the same value as its g3 plan's `base:`); a re-review manifest's base is never the range, and the UI-path diff runs from the worktree top. No UI path is a self-skip PASS citing the diff and a non-zero pathspec control. A UI path makes the source-vs-mockup comparison mandatory; only layout and production rendering are owed to `deploy-validate.md` section 4, and an OWED record is never a PASS. The retro gate keeps the sprint body with the deployed-URL fetch. The header gives "deployment not claimed" to Check 8 alone.
+
+Receipt: `core/fixtures/process-rule-pins` reports exactly 18 `gv9-*` rows pinned inside `### 9.` .. `### 10.` (each with a near-miss outside the span) plus the header row `gv9-header-check8`, pinned inside `## Gate-type manifest` .. `**Universal core`. Both the inline pathspec (bound to `validate-mandatory-rules.sh:457`) and the test filter (bound to `validate-mandatory-rules.sh:480`) are bound across files. Four cross-file mutants are killed (`c9-ui-gate-ps`, `c9-ui-script-ps`, `c9-ui-gate-awk`, `c9-ui-script-awk`), and the BL-934 `verify:` receipt requires the 18, the all-`gv9-` ids and the header row.
+
+### BL-939 filed
+
+`core/skills/ai-dlc/steps/retro.md` section 5c's numbered list never invokes its `run gate validation [retro]` declaration, and graph holds 0 retro gate-adjudication files against 40 sprint-review verdicts. The backstop is `validate-mandatory-rules.sh` Check 5 at section 5c item 3, which fired at S315. It is a measured defect outside this release's files, filed rather than fixed.
+
 ## [0.1028.0] - 2026-11-06
 
 ### BL-931 closed
