@@ -16,7 +16,7 @@
 #
 # The mutant matrix replaces an exact-vector assertion per mutant: per push each mutant runs its
 # deciding arm and its twin, and the matrix is re-measured whenever an arm or a mutant changes.
-# Arm names are A1-A5 (assertions 1-5) and P1-P6 (the pruned-world arms); they are the column
+# Arm names are A1-A5 (assertions 1-5), P1-P6 (the pruned-world arms) and F1-F17 (the --accept-captured worlds); they are the column
 # names `--matrix` prints.
 # MUTANT-MATRIX whole-string decides=A2 twins=A1
 # MUTANT-MATRIX no-token decides=P1 twins=P2
@@ -24,8 +24,22 @@
 # MUTANT-MATRIX scan-list decides=P3 twins=P4
 # MUTANT-MATRIX no-disk-check decides=P2 twins=P1
 # MUTANT-MATRIX cwd-root decides=P6 twins=P1
+# MUTANT-MATRIX no-window decides=F3 twins=F1
+# MUTANT-MATRIX acc-off decides=F1 twins=F4
+# MUTANT-MATRIX includes decides=F7 twins=F1
+# MUTANT-MATRIX disk-window decides=F13 twins=F4
+# MUTANT-MATRIX no-contradict decides=F8 twins=F1
+# MUTANT-MATRIX auth-guard decides=F5 twins=F1
+# MUTANT-MATRIX env-flag decides=F10 twins=F1
+# MUTANT-MATRIX auth-seconds decides=F14 twins=F1
+# MUTANT-MATRIX zl-seconds decides=F17 twins=F1
 # MUTANT-MATRIX-DYNAMIC mutant_score-name why=mutant_score() passes its first argument "$n" to mutant_killed; each mutant_score call (whole-string, no-token, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/askuserquestion-citation/run.sh --matrix
+#
+# G1 holds the four --cite callers to never passing --accept-captured. Its population is the
+# declared caller set (G1_CALLERS, mirrored in inputs.decl); RESIDUAL: a new caller outside that
+# set is not covered until it is declared. The completeness half runs only on a git-readable
+# distribution tree, never inside the hermetic sandbox.
 #
 # Usage: run.sh [--matrix]
 set -uo pipefail
@@ -158,6 +172,110 @@ case "$PA" in ????E) ok "P5: a quote no answer ever carried stays plain NOMATCH"
   && ok "P6: the installed copy, run from a subdirectory with no root in the environment, finds the log" \
   || bad "P6: the installed copy could not find the answers log from a subdirectory"
 
+# --- The --accept-captured worlds (BL-939) --------------------------------------
+# F1 is the ALLOW twin: a flagged, in-window, exact, hash-true entry whose session transcript is
+# gone. Every other cell differs from F1 by ONE property, so each denial is keyed on that property.
+# fr <validator> <world> <quote> <authorized-at> [extra args] -> "<rc> <stdout>" (stderr to $FERR).
+FERR="$WORK/fr.err"
+fr() { local v="$1" w="$2" q="$3" at="$4"; shift 4; local o r
+  o="$(cd "$FW/$w/proj" && env AI_DLC_PROJECT_ROOT="$FW/$w/proj" ${FENV:-} bash "$v" --dir "$CORPUS" --cite "$q" --authorized-at "$at" "$@" 2>"$FERR")"; r=$?
+  printf '%s %s' "$r" "$o"; }
+F_OK="0 MATCH $FAUTH"; F_PR="2 NOMATCH-TRANSCRIPT-PRUNED"
+R="$(fr "$VALIDATOR" w1 "$FQ" "$FAUTH" --accept-captured)"
+if [ "$R" = "$F_OK" ] && [ "$(grep -c '^cite: accepted under --accept-captured: captured in' "$FERR")" = 1 ] && [ "$(grep -c '^cite: scanned' "$FERR")" -ge 1 ]; then
+  ok "F1: a flagged, in-window, exact, hash-true entry of a pruned session reads MATCH <ts>, exit 0, with the acceptance named on stderr beside the scan line"
+else bad "F1: the allow twin did not accept ($R) -- every denial cell below is then keyed on nothing"; fi
+fcell() { # fcell <name> <expected> <what> <fr args...>
+  local n="$1" e="$2" w="$3" r; shift 3; r="$(fr "$@")"
+  if [ "$r" = "$e" ]; then ok "$n: $w"; else bad "$n: $w -- got ($r), wanted ($e)"; fi; }
+fcell F2 "2 NOMATCH" "a flagged quote the log never carried stays plain NOMATCH" "$VALIDATOR" w1 "a sentence nobody captured" "$FAUTH" --accept-captured
+fcell F3 "$F_PR" "a flagged entry outside the +/-7200s window stays PRUNED" "$VALIDATOR" w3 "$FQ" "$FAUTH" --accept-captured
+fcell F4 "$F_PR" "the F1 world WITHOUT the flag stays PRUNED (acquits nothing elsewhere)" "$VALIDATOR" w1 "$FQ" "$FAUTH"
+fcell F5 "1 " "an empty --authorized-at under the flag refuses with exit 1" "$VALIDATOR" w1 "$FQ" "" --accept-captured
+fcell F6 "1 " "a date-only --authorized-at under the flag refuses with exit 1" "$VALIDATOR" w1 "$FQ" "2026-07-21" --accept-captured
+fcell F7 "$F_PR" "a needle that is a strict substring of the in-window pruned body stays PRUNED (equality, not includes)" "$VALIDATOR" w7 "$FQ" "$FAUTH" --accept-captured
+fcell F8 "$F_PR" "the same exact in-window quote also captured in a session whose transcript IS on disk stays PRUNED (the contradiction)" "$VALIDATOR" w8 "$FQ" "$FAUTH" --accept-captured
+fcell F9 "$F_PR" "an accepting entry back-dated out of header order stays PRUNED" "$VALIDATOR" w9 "$FQ" "$FAUTH" --accept-captured
+R="$(FENV=AI_DLC_ACC=1 fr "$VALIDATOR" w1 "$FQ" "$FAUTH")"
+[ "$R" = "$F_PR" ] && ok "F10: AI_DLC_ACC=1 in the environment with no argv flag stays PRUNED (argv only)" || bad "F10: the environment turned the acceptance on ($R)"
+R="$(cd "$FW/w1/proj" && AI_DLC_PROJECT_ROOT="$FW/w1/proj" bash "$VALIDATOR" --dir "$CORPUS" --accept-captured 2>/dev/null)"; r=$?
+[ "$r" = 1 ] && [ -z "$R" ] && ok "F11: --accept-captured without --cite refuses with exit 1" || bad "F11: the flag without --cite gave rc $r ($R)"
+fcell F12 "$F_PR" "an entry whose SHA256 line was altered stays PRUNED" "$VALIDATOR" w12 "$FQ" "$FAUTH" --accept-captured
+fcell F13 "$F_OK" "an on-disk exact copy OUTSIDE the window contradicts nothing, so the in-window pruned entry is accepted" "$VALIDATOR" w13 "$FQ" "$FAUTH" --accept-captured
+# F14-F17: --authorized-at needs a time of day, not seconds (escalations.md allows any ISO-8601 UTC
+# timestamp). F14 is the minute form graph's two real minute lines carry; F15 is the transcript
+# route at minute precision, and its stderr must NOT name the captured acceptance, or the cell
+# cannot tell which route verified; F16 is a malformed time; F17 is a zone-less minute under a
+# non-UTC TZ, which reads as UTC only if the zone-less widening reached the parser too.
+R="$(fr "$VALIDATOR" w1 "$FQ" "$FAUTH_MIN" --accept-captured)"
+if [ "$R" = "$F_OK" ] && [ "$(grep -c '^cite: accepted under --accept-captured: captured in' "$FERR")" = 1 ]; then
+  ok "F14: a minute-precision --authorized-at ($FAUTH_MIN) under the flag is accepted on the captured route, exit 0"
+else bad "F14: a minute-precision authorization was refused on the captured route ($R)"; fi
+R="$(fr "$VALIDATOR" w1 "$Q_TURN" "$TURN_MIN" --accept-captured)"
+if [ "$R" = "0 MATCH $TURN_TS" ] && [ "$(grep -c 'accepted under --accept-captured' "$FERR")" = 0 ]; then
+  ok "F15: a minute-precision --authorized-at ($TURN_MIN) under the flag verifies on the TRANSCRIPT route (MATCH, no captured-acceptance line)"
+else bad "F15: the transcript route at minute precision gave ($R)"; fi
+fcell F16 "1 " "a malformed time of day under the flag refuses with exit 1" "$VALIDATOR" w1 "$FQ" "2026-07-21T~" --accept-captured
+R="$(FENV=TZ=America/New_York fr "$VALIDATOR" w1 "$FQ" "${FAUTH_MIN%Z}" --accept-captured)"
+[ "$R" = "$F_OK" ] && ok "F17: a zone-less minute value under TZ=America/New_York is read as UTC, so the in-window entry is accepted" \
+  || bad "F17: a zone-less minute value was read in the runner's local time ($R)"
+
+# --- G1: no caller of the citation query carries --accept-captured ---------------
+# The flag belongs to gate-validation.md Check 9's retro acceptance alone; a caller that passed it
+# would make that acceptance a property of automation. THE POPULATION IS DECLARED, not searched:
+# the four programs that call `bash "$STEER_SCRIPT" ... --cite` (derived with I109's grammar,
+# `bash .*--cite` over core/ minus fixtures, at BL-939), each declared REQUIRED in inputs.decl and
+# resolved in both layouts. A consumer's gate logs, which legitimately record the Check 9 command,
+# are outside it. RESIDUAL: a NEW caller added outside this set is not covered until it is added
+# to G1_CALLERS and inputs.decl; the owed validate-enforcement-map arm (BL-939) closes that.
+# gcall <file> prints the number of CALLS (backslash continuations folded, then a non-comment line
+# carrying `bash ` and `--cite`) that also carry --accept-captured; gsites prints the call count.
+gjoin() { awk '{ if (buf != "") { sub(/^[[:space:]]+/, "", $0); line = buf $0 } else line = $0
+                 if (line ~ /\\$/) { sub(/\\$/, " ", line); buf = line; next }
+                 buf = ""; print line }' "$1"; }
+gsites() { local n; n="$(gjoin "$1" | grep -v '^[[:space:]]*#' | grep -E 'bash .*--cite' | grep -c .)" || n=0; printf '%s' "$n"; }
+gcall() { local n; n="$(gjoin "$1" | grep -v '^[[:space:]]*#' | grep -E 'bash .*--cite' | grep -c -e '--accept-captured')" || n=0; printf '%s' "$n"; }
+G1_CALLERS="core/hooks/ai-dlc-gate-remediation-guard.sh core/scripts/validate-escalation-resolution.sh core/scripts/validate-gate-adjudication.sh core/scripts/validate-adversarial-convergence.sh"
+G1_ROOT="$(cd "$HERE/../../.." && pwd)"
+g1_path() { # <dist path> -> the path in this layout, or empty
+  if [ -f "$G1_ROOT/$1" ]; then printf '%s' "$G1_ROOT/$1"; return; fi
+  case "$1" in
+    core/scripts/*) [ -f "$G1_ROOT/scripts/ai-dlc/${1#core/scripts/}" ] && printf '%s' "$G1_ROOT/scripts/ai-dlc/${1#core/scripts/}" ;;
+    core/hooks/*)   [ -f "$G1_ROOT/.claude/hooks/${1#core/hooks/}" ] && printf '%s' "$G1_ROOT/.claude/hooks/${1#core/hooks/}" ;;
+  esac; }
+# Controls first: both seeded flag-carrying calls found (one-line and continued), the near-miss not.
+GC1="$(gcall "$WORK/guard/hit1.sh")"; GC2="$(gcall "$WORK/guard/hit2.sh")"; GCN="$(gcall "$WORK/guard/near.sh")"; GSN="$(gsites "$WORK/guard/near.sh")"
+# Mutant probe: a scratch copy of the escalation gate with the flag added at its --cite call.
+G1_ESC="$(g1_path core/scripts/validate-escalation-resolution.sh)"
+GMUT=x
+if [ -n "$G1_ESC" ]; then
+  awk '!d && /bash "\$STEER_SCRIPT".*--cite/ { sub(/--cite/, "--accept-captured --cite"); d = 1 } { print }' "$G1_ESC" > "$WORK/guard/esc-mut.sh"
+  cmp -s "$G1_ESC" "$WORK/guard/esc-mut.sh" || GMUT="$(gcall "$WORK/guard/esc-mut.sh")"
+fi
+if [ "$GC1" = 1 ] && [ "$GC2" = 1 ] && [ "$GCN" = 0 ] && [ "$GSN" = 1 ] && [ "$GMUT" = 1 ]; then
+  ghits=""; gsum=0; gn=0; gmiss=""
+  for c in $G1_CALLERS; do
+    p="$(g1_path "$c")"; [ -n "$p" ] || { gmiss="$gmiss $c"; continue; }
+    echo "HERMETIC-CONSUMED $c"
+    gn=$((gn + 1)); s="$(gsites "$p")"; gsum=$((gsum + s))
+    [ "$s" -ge 1 ] || gmiss="$gmiss $c(no-call)"
+    [ "$(gcall "$p")" = 0 ] || ghits="$ghits $c"
+  done
+  if [ -n "$gmiss" ]; then bad "G1: declared caller(s) absent or no longer calling --cite:$gmiss -- the population moved, re-derive it"
+  elif [ -n "$ghits" ]; then bad "G1: caller(s) of validate-steering-budget --cite carry --accept-captured:$ghits -- Check 9's flag leaked into automation"
+  else ok "G1: 0 of $gn declared callers ($gsum --cite calls) pass --accept-captured (controls: one-line and continued seeded calls found, near-miss not, escalation-gate mutant flagged)"; fi
+else bad "G1: the guard cannot fire (one-line $GC1/1, continued $GC2/1, near-miss $GCN/0 of $GSN/1 call, escalation-gate mutant $GMUT/1) -- its zero would mean nothing"; fi
+# COMPLETENESS, distribution only and only where the tree is git-readable: re-derive the caller set
+# and compare. Inside the hermetic sandbox the tree holds only declared inputs, so the half is
+# skipped with a printed note and no ok row.
+if [ -d "$G1_ROOT/core/scripts" ] && git -C "$G1_ROOT" rev-parse --show-toplevel >/dev/null 2>&1 \
+   && [ "$(git -C "$G1_ROOT" rev-parse --show-toplevel)" = "$G1_ROOT" ] && [ -n "$(git -C "$G1_ROOT" ls-files -- core/scripts/validate-steering-budget.sh)" ]; then
+  gder="$(cd "$G1_ROOT" && git ls-files -- core ':!core/fixtures' | while IFS= read -r f; do [ "$(gsites "$f")" -ge 1 ] && printf '%s\n' "$f"; done | sort | tr '\n' ' ')"
+  gdecl="$(printf '%s\n' $G1_CALLERS | sort | tr '\n' ' ')"
+  [ "$gder" = "$gdecl" ] && ok "G1-completeness: the tree's --cite callers are exactly the declared set ($gdecl)" \
+    || bad "G1-completeness: the tree's --cite callers ($gder) differ from the declared set ($gdecl)"
+else echo "  note  G1-completeness: not run -- no git-readable distribution tree here (hermetic sandbox or consumer); the declared caller set is the population"; fi
+
 # MUTANTS. Each is one plausible wrong build of the same feature and must flip exactly the arm
 # written against it. Built by literal string replacement; a mutant that does not apply is a
 # stale fixture, never a pass.
@@ -168,7 +286,7 @@ mut() { # mut <out> <from> <to>
 # ARMS, as one function of (arm, validator) -> "<rc> <stdout>". A1-A5 are assertions 1-5 above and
 # P1-P6 the pruned-world arms; every mutant is scored through the same function the shipped
 # validator is, so a verdict is comparable cell for cell. P6 installs the validator it is handed.
-ARMS="A1 A2 A3 A4 A5 P1 P2 P3 P4 P5 P6"
+ARMS="A1 A2 A3 A4 A5 P1 P2 P3 P4 P5 P6 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17"
 arm_out() { # arm_out <arm> <validator>
   local a="$1" v="$2" o r
   case "$a" in
@@ -184,6 +302,23 @@ arm_out() { # arm_out <arm> <validator>
     P5) pr "$v" "a phrase nobody logged or typed" ;;
     P6) cp "$v" "$PROJ/scripts/ai-dlc/mx-p6.sh" || { printf 'COPY-FAILED'; return 0; }
         env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR bash -c 'o="$(cd "$1" && bash "$2" --dir "$3" --cite "$4" 2>/dev/null)"; printf "%s %s" "$?" "$o"' _ "$PROJ/sub" "$PROJ/scripts/ai-dlc/mx-p6.sh" "$CORPUS" "$Q_PRUNED" ;;
+    F1)  fr "$v" w1 "$FQ" "$FAUTH" --accept-captured ;;
+    F2)  fr "$v" w1 "a sentence nobody captured" "$FAUTH" --accept-captured ;;
+    F3)  fr "$v" w3 "$FQ" "$FAUTH" --accept-captured ;;
+    F4)  fr "$v" w1 "$FQ" "$FAUTH" ;;
+    F5)  fr "$v" w1 "$FQ" "" --accept-captured ;;
+    F6)  fr "$v" w1 "$FQ" "2026-07-21" --accept-captured ;;
+    F7)  fr "$v" w7 "$FQ" "$FAUTH" --accept-captured ;;
+    F8)  fr "$v" w8 "$FQ" "$FAUTH" --accept-captured ;;
+    F9)  fr "$v" w9 "$FQ" "$FAUTH" --accept-captured ;;
+    F10) FENV=AI_DLC_ACC=1 fr "$v" w1 "$FQ" "$FAUTH" ;;
+    F11) o="$(cd "$FW/w1/proj" && AI_DLC_PROJECT_ROOT="$FW/w1/proj" bash "$v" --dir "$CORPUS" --accept-captured 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o" ;;
+    F12) fr "$v" w12 "$FQ" "$FAUTH" --accept-captured ;;
+    F13) fr "$v" w13 "$FQ" "$FAUTH" --accept-captured ;;
+    F14) fr "$v" w1 "$FQ" "$FAUTH_MIN" --accept-captured ;;
+    F15) fr "$v" w1 "$Q_TURN" "$TURN_MIN" --accept-captured ;;
+    F16) fr "$v" w1 "$FQ" "2026-07-21T~" --accept-captured ;;
+    F17) FENV=TZ=America/New_York fr "$v" w1 "$FQ" "${FAUTH_MIN%Z}" --accept-captured ;;
   esac
 }
 arm_holds() { # arm_holds <arm> <arm_out>: does the arm's own expectation hold on that output
@@ -192,6 +327,11 @@ arm_holds() { # arm_holds <arm> <arm_out>: does the arm's own expectation hold o
     A2:[0-9]" NOMATCH"*|A3:[0-9]" NOMATCH"*) return 0 ;;
     A5:[0-9]" 0") return 0 ;;
     P1:"2 NOMATCH-TRANSCRIPT-PRUNED"|P6:"2 NOMATCH-TRANSCRIPT-PRUNED") return 0 ;;
+    F1:"$F_OK"|F13:"$F_OK"|F14:"$F_OK"|F17:"$F_OK") return 0 ;;
+    F15:"0 MATCH $TURN_TS") return 0 ;;
+    F2:"2 NOMATCH") return 0 ;;
+    F3:"$F_PR"|F4:"$F_PR"|F7:"$F_PR"|F8:"$F_PR"|F9:"$F_PR"|F10:"$F_PR"|F12:"$F_PR") return 0 ;;
+    F5:"1 "|F6:"1 "|F11:"1 "|F16:"1 ") return 0 ;;
     P2:"2 NOMATCH"|P3:"2 NOMATCH"|P4:"2 NOMATCH"|P5:"2 NOMATCH") return 0 ;;
   esac
   return 1
@@ -252,13 +392,34 @@ mutant_score cwd-root P6 P1 "reading the log from CLAUDE_PROJECT_DIR or cwd fail
   'const LOGROOT = process.env.AI_DLC_LOGROOT || "/nonexistent";' \
   'const LOGROOT = process.env.CLAUDE_PROJECT_DIR || ".";'
 
+mutant_score no-window F3 F1 "dropping the +/-7200s window check accepts an out-of-window entry" \
+  '        if (Math.abs(hMs - authMs) > authTolMs) continue;
+' ''
+mutant_score acc-off F1 F4 "ignoring the flag (always off) refuses the in-window exact entry" \
+  'if (pruned.size && ACC) {' 'if (pruned.size && false) {'
+mutant_score includes F7 F1 "relaxing exact equality to includes accepts a substring needle" \
+  'norm(body) !== needle' '!norm(body).includes(needle)'
+mutant_score disk-window F13 F4 "judging the contradiction on any on-disk needle entry, in window or not, refuses a clean accept" \
+  'if (Math.abs(hMs - authMs) > authTolMs) continue;' \
+  'if (Math.abs(hMs - authMs) > authTolMs && !(sid && fs.existsSync(path.join(tdir, sid + ".jsonl")))) continue;'
+mutant_score no-contradict F8 F1 "dropping the on-disk contradiction accepts an entry the transcript refutes" \
+  'if (onDisk) { contradicted = true; continue; }' 'if (onDisk) continue;'
+mutant_score auth-guard F5 F1 "dropping the full-ISO --authorized-at guard lets an empty bound through" \
+  'if ! [[ "$AUTH_AT" =~ $ACC_ISO_RE ]]; then' 'if false; then'
+mutant_score env-flag F10 F1 "reading the flag from the environment accepts with no argv flag" \
+  'AI_DLC_ACC="$ACC" node' 'AI_DLC_ACC="${AI_DLC_ACC:-$ACC}" node'
+mutant_score auth-seconds F14 F1 "requiring seconds in --authorized-at refuses a minute-precision authorization" \
+  '[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?(Z|' '[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|'
+mutant_score zl-seconds F17 F1 "treating only a full-second zone-less value as UTC reads a zone-less minute in local time" \
+  'const zl = ACC ?' 'const zl = false ?'
 # A plain run executes no matrix-only cell; --matrix executes one row per mutant per arm.
+MX_WANT=$(( 15 * $(set -- $ARMS; echo $#) ))
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
   else bad "MX plain run executed $MROWS matrix-only rows"; fi
 else
-  if [ "$MROWS" -eq 66 ]; then ok "MX matrix run measured 66 mutant x arm cells (6 mutants x 11 arms)"
-  else bad "MX matrix run measured $MROWS cells, 66 expected"; fi
+  if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MX_WANT mutant x arm cells (15 mutants x every arm)"
+  else bad "MX matrix run measured $MROWS cells, $MX_WANT expected"; fi
 fi
 
 echo

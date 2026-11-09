@@ -97,7 +97,53 @@ entry() { # entry <session> <question> <answer>
   entry askd-0000-4000-8000-000000000004 "Should we rotate the signing keys today" "No"
 } > "$WORK/proj/_bmad-output/operator-answers-history.md" || exit 2
 
+# ---- the --accept-captured worlds (BL-939) -----------------------------------
+# One consumer root per world, each with its own answers log in ai-dlc-answer-capture.sh's entry
+# shape, SHA256 being the real `shasum -a 256` of the fenced body (the hook hashes the same bytes).
+# A cell differs from the w1 world by ONE property. SP sessions have no transcript in corpus/; SD
+# is live-...002, whose transcript IS on disk and does not carry the quote.
+FW="$WORK/fw"; FQ="Release the frozen build after the retro"; FAUTH="2026-07-21T02:05:00Z"
+SP="prun-0000-4000-8000-0000000000f1"; SD="live-0000-4000-8000-000000000002"
+hex() { printf '%s' "$1" | shasum -a 256 | cut -d' ' -f1; }
+fworld() { mkdir -p "$FW/$1/proj/.claude" "$FW/$1/proj/_bmad-output" || exit 2
+  : > "$FW/$1/proj/_bmad-output/operator-answers-history.md" || exit 2; }
+fent() { # fent <world> <ts> <sid> <body> [sha]
+  local sha="${5:-$(hex "$4")}"
+  printf '## %s -- AskUserQuestion\n- Session: %s\n- Tool-use: toolu_fw\n- Question (lead-authored, NOT covered by the hash): Release?\n- Bytes: %s\n- SHA256: %s\n\n```text\n%s\n```\n\n' \
+    "$2" "$3" "${#4}" "$sha" "$4" >> "$FW/$1/proj/_bmad-output/operator-answers-history.md" || exit 2; }
+fworld w1;  fent w1  "$FAUTH" "$SP" "$FQ"
+fworld w3;  fent w3  2026-07-21T10:00:00Z "$SP" "$FQ"
+fworld w7;  fent w7  "$FAUTH" "$SP" "$FQ and then close the sprint"
+fworld w8;  fent w8  "$FAUTH" "$SP" "$FQ"; fent w8 2026-07-21T02:06:00Z "$SD" "$FQ"
+fworld w9;  fent w9  2026-07-21T03:00:00Z "prun-0000-4000-8000-0000000000f2" "a filler answer"; fent w9 "$FAUTH" "$SP" "$FQ"
+fworld w12; fent w12 "$FAUTH" "$SP" "$FQ" "$(hex "${FQ}x")"
+# w13: the pruned entry is in window and the on-disk copy is OUT of window, so it contradicts nothing.
+fworld w13; fent w13 "$FAUTH" "$SP" "$FQ"; fent w13 2026-07-21T10:00:00Z "$SD" "$FQ"
+# G1's seeded controls, in the real callers' `bash "$STEER_SCRIPT" ... --cite` shape. hit1 carries
+# the flag on the call line, hit2 on a backslash continuation of it (the convergence gate's
+# two-line shape); both must be found. near carries --cite and --authorized-at only, and a comment
+# describing the flag, and must not be.
+mkdir -p "$WORK/guard" || exit 2
+cat > "$WORK/guard/hit1.sh" <<'CTL'
+  CITE_REPORT="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --authorized-at "$ts" --accept-captured --quiet 2>&1 >/dev/null)"
+CTL
+cat > "$WORK/guard/hit2.sh" <<'CTL'
+  cite_out="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$auth_quote" \
+    --authorized-at "$auth_ts" --accept-captured --quiet 2>/dev/null)"
+CTL
+cat > "$WORK/guard/near.sh" <<'CTL'
+# never pass --accept-captured here
+  CITE_REPORT="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --authorized-at "$ts" --quiet 2>&1 >/dev/null)"
+CTL
+
 cat > "$WORK/env.sh" <<ENV
+FW="$FW"
+FQ="$FQ"
+FAUTH="$FAUTH"
+FAUTH_MIN="2026-07-21T02:05Z"
+Q_TURN="an unrelated operator turn about lunch"
+TURN_MIN="2026-07-21T01:00Z"
+TURN_TS="2026-07-21T01:00:00Z"
 VALIDATOR="$VALIDATOR"
 WORK="$WORK"
 PROJ="$WORK/proj"

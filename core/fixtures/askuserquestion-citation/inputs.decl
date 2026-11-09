@@ -1,5 +1,12 @@
-# askuserquestion-citation reads ONE file outside its own directory: the validator under test.
+# askuserquestion-citation reads the validator under test, and G1 reads its four --cite callers (below).
 # seed.sh copies it into the seeded consumer tree (P6, the cwd-root mutant); every mutant is a
 # string rewrite of it by node. Its own directory is copied by the runner without being named.
 !core/scripts/validate-steering-budget.sh
 core/fixtures/lib/mutant.sh
+# G1's declared population: the four programs that call validate-steering-budget.sh --cite. Each is
+# read as text and must never carry --accept-captured; a new caller is covered only once added here
+# and to G1_CALLERS in run.sh.
+!core/hooks/ai-dlc-gate-remediation-guard.sh
+!core/scripts/validate-escalation-resolution.sh
+!core/scripts/validate-gate-adjudication.sh
+!core/scripts/validate-adversarial-convergence.sh

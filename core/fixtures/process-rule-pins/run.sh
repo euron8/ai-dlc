@@ -175,8 +175,9 @@
 #     (gv9-union-skip) -- the self-skip's non-zero pathspec control (gv9-skip-*, gv9-uipath-control),
 #     the all-not-any test exemption (gv9-uipath-all), the MANDATORY source-vs-mockup comparison and
 #     its FAIL bar (gv9-ui-*), "An OWED record is never itself a PASS" (gv9-owed-notpass), an absent
-#     `is_ui_epic` is not a skip (gv9-absent-flag), and the retro body keeps the deployed-URL fetch
-#     (gv9-retro-url). All para rows; each token sits on ONE line of its subject. Section 4k moves
+#     `is_ui_epic` is not a skip (gv9-absent-flag), and at a `retro` gate Check 9 adopts
+#     deploy-validate.md §4's recorded evidence and the read-only adjudicator never fetches a
+#     production URL (gv9-retro-adopt). All para rows; each token sits on ONE line of its subject. Section 4k moves
 #     each paragraph to just ABOVE its span's start line, the boundary-adjacent near-miss the
 #     generic relocate (to the end of the file) does not exercise, and binds Check 9's inline UI
 #     pathspec and test-file filter to validate-mandatory-rules.sh Check 5's two lines, both sides
@@ -184,6 +185,37 @@
 #     text pin over a file, nothing is timed or counted under load. KNOWN LIMIT (F3, as the
 #     elicitation rows above): a pin proves the clause is PRESENT in its span, not that no sentence
 #     contradicting it was appended; a reviewer reads for that.
+#   - the retro gate is RUN and blocks (BL-939). Inside `### 9.`..`### 10.` the drift-not-fixed
+#     sentence (gv9-retro-fyi) and the retro FAIL bar (gv9-retro-failbar) under the adoption lead;
+#     inside `### 17.`..`### 18.` the Retro gate bullet's TWO-argument call (gv17-retro-args, whose
+#     named mutant is the pre-fix one-argument form, byte-for-byte); inside retro.md
+#     `### 5c.`..`### 6. Commit, Push, and PR` item 6 runs gate validation [retro] and its FAIL
+#     blocks the commit (retro-gate-invoked), the escalation paragraph's widened check list
+#     (retro-gate-blocks), check 6's disposition in the form Check 26 reads (retro-gate-d2), and
+#     the six-check count (retro-gate-count). All para rows; each token sits on ONE line of its
+#     subject. Section 4k's start-boundary near-miss covers every row of this bullet too, and
+#     section 4l adds retro-gate-invoked's two named near-misses: the lowercase
+#     `run gate validation [retro]` prose of the Gate type paragraph alone, item 6 deleted, and an
+#     item negated to `6. **Do not run gate validation [retro]**`; neither may satisfy the row.
+#     The retro acceptance clauses (gv9-retro-thissprint, -citednowhere, -livearchive, -composed,
+#     -readarchive, -mockupmerged, -headersn,
+#     -othersprint, -names, -archive, -supcite, -captured, -matchrc, -pruned, -dateonly, -onlyhere,
+#     -nowhereelse, -supcheck, -supts, -mergecommit, -amendsha, -markupdev, -wholeanswer, -archivenames,
+#     -resolvedfloor, -mergederive, -authsource): an escalation is cited
+#     only from this sprint's gate-log sections, live or in its own s<N>/ archive, paths composed
+#     from N and named exactly (gate-log-archive.md and its -2, -3 ordinals); read from pending.md or pending-archive.md; the cited entry alone verified, RESOLVED
+#     and SUPPRESSED alike, by --cite ... --accept-captured, on rc 0 with MATCH on stdout; a pruned
+#     transcript accepted only on an in-window captured answer the quote equals whole; a line with no
+#     time of day never verifies; the flag passed only here; any cited entry post-dates the section
+#     Timestamp: and a waiver names `[core] 9 — `; the mockup read as of the sprint's merge commit,
+#     derived from retro.md Step 1's PR_HEAD; the quote and timestamp read from the entry's
+#     Operator authorization line alone (-authsource); a later amendment counts only citing a verifying
+#     RESOLVED id; a no-markup surface's added markup is a deviation; the §4 line is read from this
+#     sprint's sections live or archived (-readarchive); the mockup compared is the merged one
+#     (-mockupmerged); the cited entry's header names S<N> (-headersn). Section 4m deletes each and
+#     asserts it fails ONLY its row.
+#     BL-868: zero load-dependent tests -- these are text pins over files. KNOWN LIMIT (F3): a pin
+#     proves the clause PRESENT in its span, never the absence of an appended contradiction.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -730,7 +762,6 @@ gv9-skip-nocontrol|S|steps/gate-validation.md|### 9.|### 10.|**No UI path in the
 gv9-ui-compare|S|steps/gate-validation.md|### 9.|### 10.|**A UI path in the decided diff makes the source-vs-mockup comparison MANDATORY at that gate.**|para|on copy, element structure, attributes (including `role` and `aria-*`) and class names.
 gv9-ui-failbar|S|steps/gate-validation.md|### 9.|### 10.|**A UI path in the decided diff makes the source-vs-mockup comparison MANDATORY at that gate.**|para|The gate FAILS if that comparison was not performed, or if drift was found and not fixed.
 gv9-owed-notpass|S|steps/gate-validation.md|### 9.|### 10.|**Only layout and production rendering are OWED to `deploy-validate.md` §4 ("Visual Verification").**|para|An OWED record is never itself a PASS
-gv9-retro-url|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 keeps its sprint-scoped body, including the deployed-URL fetch.**|para|- Agent must fetch the deployed production URL and verify rendering.
 req-lr-own-bullet|S|steps/requirements.md|### 3. Locked Requirements|### 4.|**A clause the lead adds is its own labelled bullet.** A clause no source above states|prefix
 req-lr-after-id|S|steps/requirements.md|### 3. Locked Requirements|### 4.|with its own next unused whole-number id and the label right after the id:|prefix
 req-lr-form|S|steps/requirements.md|### 3. Locked Requirements|### 4.|`- LR-S<N>-<m> (lead interpretation, of LR-S<N>-<k>): <clause>`, where `LR-S<N>-<k>` is the bullet it interprets.|prefix
@@ -777,6 +808,53 @@ req-lr-ask-26c-ruling|S|steps/requirements.md|### 3. Locked Requirements|### 4.|
 req-lr-ask-26c-fp|S|steps/requirements.md|### 3. Locked Requirements|### 4.|False-positive cost: one operator stop per sprint that has a lead clause, one question per labelled bullet|prefix
 req-lr-ask-26c-removal|S|steps/requirements.md|### 3. Locked Requirements|### 4.|Removal condition: retire when a mechanism records each bullet's author and the operator's confirmation and the gate reads it|prefix
 req-oq-lead-interp|S|steps/requirements.md|### 4. Authoring Dispatch|### 5.|- A section 3 `(lead interpretation)` bullet that is unanswered is escalated the same way, as a Rule 12 `HARD_BLOCK` before the gate|prefix
+gv9-retro-adopt|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|The adjudicator is read-only and never fetches a production URL
+gv9-retro-fyi|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|A drift recorded as FYI is drift not fixed.
+gv9-retro-fixed|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|the operator accepted that deviation in an escalation whose id the evidence cites
+gv9-retro-suppressed|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|a `SUPPRESSED` waiver that meets the waiver rule below
+gv9-retro-nonote|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|A lead's or seat's own note is never acceptance, and an escalation the evidence does not cite accepts nothing.
+gv9-retro-nomarkup|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|a surface whose mockup section states it adds no markup and no CSS is compared on its source alone
+gv9-retro-floor|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|Check 5's tokens are a floor, not the verdict
+cli-content-arm|S|steps/gate-validation.md|### Core-layer immutability|### 26.|Exit 0 = no core path edited in place|para|every touched core path's mode and blob equal those of an `/ai-dlc-update` reconcile commit
+gv9-retro-failbar|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|The gate FAILS if §4 recorded no evidence, if the mockup comparison was not performed, or if drift was found and not fixed.
+gv9-retro-thissprint|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|An escalation is cited only when its id appears in this sprint's `## Gate Log: Sprint <N>` section
+gv9-retro-citednowhere|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|and an id cited nowhere accepts nothing.
+gv9-retro-livearchive|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|or in `_bmad-output/implementation-artifacts/s<N>/gate-log-archive.md`
+gv9-retro-composed|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|both paths composed from N and not searched
+gv9-retro-othersprint|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|An id that appears only under another sprint's header or in another sprint's `s<M>/` archive is not cited
+gv9-retro-archive|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|is read from `docs/escalations/pending.md` or `docs/escalations/pending-archive.md`
+gv9-retro-supcite|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|That entry alone is verified, `RESOLVED` and `SUPPRESSED` alike, by `validate-steering-budget.sh --dir
+gv9-retro-captured|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|--authorized-at <that line's timestamp> --accept-captured`
+gv9-retro-matchrc|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|It verifies only on exit 0 with a `MATCH <ts>` line on stdout.
+gv9-retro-pruned|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|captured in `_bmad-output/operator-answers-history.md` within the citation's window
+gv9-retro-dateonly|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|without a time of day, hours and minutes, does not verify.
+gv9-retro-onlyhere|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|`--accept-captured` is passed only here
+gv9-retro-nowhereelse|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|`NOMATCH-TRANSCRIPT-PRUNED` acquits nothing anywhere else.
+gv9-retro-names|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|The cited entry names that surface and that deviation
+gv9-retro-supcheck|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|counts only if it also carries `**Suppresses:** [core] 9 — `
+gv9-retro-supts|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|timestamp is at or after the `Timestamp:` of the `## Gate Log: Sprint <N>` section that first records that deviation
+gv9-retro-mergecommit|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|as of the sprint's merge commit to main
+gv9-retro-amendsha|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|A mockup amendment made after that merge counts only in a commit whose message cites a `RESOLVED` escalation id that itself meets every acceptance rule here
+gv9-retro-markupdev|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|a markup or CSS line that surface's diff adds is a deviation from that statement
+gv9-retro-readarchive|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|sections wherever the citation rule below reads them, live or archived
+gv9-retro-mockupmerged|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|against the mockup named below (as of the sprint's merge commit)
+gv9-retro-headersn|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|its header names `S<N>`, this sprint, so a prior sprint's escalation accepts nothing
+gv9-retro-wholeanswer|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|the quote, normalised, equals a whole answer
+gv9-retro-archivenames|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|and its ordinal forms `s<N>/gate-log-archive-2.md`, `s<N>/gate-log-archive-3.md` and onward
+gv9-retro-resolvedfloor|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|Any cited entry, `RESOLVED` or `SUPPRESSED`, counts only if its
+gv9-retro-mergederive|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|whose tree equals `PR_HEAD`'s tree (a squash), or the merge commit whose second parent is `PR_HEAD`
+gv9-retro-authsource|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|line alone, never from its `**Resolution:**` or `**Context:**` text and never from `_bmad-output/operator-answers-history.md`
+gv9-retro-slotquote|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|is not the quote and is never verified in its place, so a line whose slot quote is lead-written fails
+gv9-retro-everyline|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|line on the cited entry must verify, each by its own slot quote and its own timestamp, and the timestamp floor below is taken against the earliest of their timestamps
+gv9-retro-bodyfloor|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|the floor is the latest ISO-8601 timestamp in that section's body, the one that bounds the section's write time from below, and where the body carries none the floor is unmet and the acceptance fails
+gv9-retro-timeofday|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|with a time of day counts toward that floor, written `YYYY-MM-DDTHH:MM` with a `T` and optional seconds and zone; a date-only value or a space-separated date and time is not counted
+gv9-retro-addendum|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|This fallback over-reaches by any addendum appended to the section after the deviation, whose later timestamp raises the floor, so it fails closed; §4 writes a `Timestamp:` line on its own section
+gv9-retro-noslot|S|steps/gate-validation.md|### 9.|### 10.|**At a `retro` gate, Check 9 adopts `deploy-validate.md` §4's recorded evidence instead of a fresh fetch.**|para|A line with no slot quote does not verify, and where one line carries several timestamp-and-quote pairs every pair is verified, each by its own quote and its own timestamp.
+gv17-retro-args|S|steps/gate-validation.md|### 17. Skill-invocation provenance|### 18.|- **Retro gate:**|para|`scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.
+retro-gate-invoked|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Commit, Push, and PR|6. **Run gate validation [retro]**|para|A gate FAIL blocks the Step 6 commit, as a failing check 2-5 does.
+retro-gate-blocks|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Commit, Push, and PR|**An unclearable check in this gate escalates; it never self-clears.**|para|(checks 2, 3, 4, 5 and 6)
+retro-gate-d2|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Commit, Push, and PR|**An unclearable check in this gate escalates; it never self-clears.**|para|For check 6 the operator's disposition on a gate FAIL is recorded in the form `gate-validation.md` Check 26 reads
+retro-gate-count|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Commit, Push, and PR|Before committing retro artifacts,|para|run all six checks in order.
 PINS
 }
 
@@ -1310,6 +1388,7 @@ arch-ready-nostatus|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|and d
 arch-ready-intent|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|Invoke `/bmad-sprint-planning intent=readiness`|contains||`/bmad-sprint-planning intent=readiness`|`/bmad-sprint-planning`
 dev-dar-before-submit|R|dev.md|## Workflow Per Task|## QA Handoff Evidence|Populate the Dev Agent Record in the story file|contains||Populate the Dev Agent Record in the story file|Report the Dev Agent Record in the completion report
 impl-dar-copy|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|copy the Dev Agent Record the dev wrote on the story branch|contains||copy the Dev Agent Record the dev wrote on the story branch|fold the Dev Agent Record from the dev's completion report
+gv17-retro-args|S|steps/gate-validation.md|### 17. Skill-invocation provenance|### 18.|- **Retro gate:**|para|`scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh <N>`.
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1337,7 +1416,7 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   if [ "${out%% *}" = "0" ]; then mutant_killed "${B_named:-0}" "$id/named" "$id/named: rewritten to '$new'"
   else bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"; fi
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 12 ] || bad "named: $n_named named mutant(s) read, wanted 12"
+[ "$n_named" -eq 13 ] || bad "named: $n_named named mutant(s) read, wanted 13"
 # m3's TWINS. The two readiness rows share architecture.md §3's one line, so each named rewrite must
 # move ONLY its own row: the clause dropped leaves the intent pinned, the intent dropped leaves the
 # clause pinned. Otherwise the two rows are one row spelled twice and either kill is unearned.
@@ -2771,7 +2850,8 @@ grep -q -- '0 value(s) written' "$DS_STEPS/gate-validation.md" 2>/dev/null \
 # --- 4k. Check 9 (BL-934): span-start near-misses, and the UI path bound to Check 5 -------------
 # THE START-BOUNDARY NEAR-MISS. The generic relocate in section 4 moves a paragraph to the END of
 # the file, past the span's end line; nothing there puts the clause just ABOVE the start line. For
-# every gv9-* row the pinned paragraph is moved, in a flattened copy, to sit immediately before the
+# every gv9-* row, and every BL-939 row (gv17-retro-args, retro-gate-*), the pinned paragraph is
+# moved, in a flattened copy, to sit immediately before the
 # first line opening with the row's span start, with the start line itself untouched. The row must
 # read in-span 0 while the paragraph is still in the file (whole >= 1); the flattened copy's own
 # in-span 1 is the same-run control.
@@ -2786,10 +2866,9 @@ pmove_before() { # <flat-src> <dst> <lead> <token> <start-prefix>
           if (!done && index(line[i], s) == 1) { for (j = 1; j <= n; j++) { print held[j]; print "" }; done = 1 }
           print line[i] } }' "$1" > "$2"
 }
-n_gv9=0
+n_gv9=0; n_939=0
 while IFS='|' read -r id base rel s e lead mode tok; do
-  case "$id" in gv9-*) ;; *) continue ;; esac
-  n_gv9=$((n_gv9 + 1))
+  case "$id" in gv9-*) n_gv9=$((n_gv9 + 1)) ;; gv17-retro-args|retro-gate-*) n_939=$((n_939 + 1)) ;; *) continue ;; esac
   f="$(pin_path "$base" "$rel")"
   [ -f "$f" ] || { bad "$id/before-start: subject absent"; continue; }
   flat="$M/$id.flat.md"; [ -f "$flat" ] || flatten "$f" "$flat"
@@ -2802,7 +2881,43 @@ while IFS='|' read -r id base rel s e lead mode tok; do
     ok "$id/before-start: the paragraph just above '$s' (line $fl, span opens $sl) does not satisfy the row"
   else bad "$id/before-start: in-span=$ins whole=$whole first-hit=$fl span-start=$sl -- the start bound does not discriminate"; fi
 done <<<"$(pins)"
-[ "$n_gv9" -eq 19 ] || bad "before-start: $n_gv9 gv9-* row(s) read, wanted 19"
+[ "$n_gv9" -eq 59 ] || bad "before-start: $n_gv9 gv9-* row(s) read, wanted 59"
+[ "$n_939" -eq 5 ] || bad "before-start: $n_939 BL-939 row(s) (gv17-retro-args, retro-gate-*) read, wanted 5"
+
+# --- 4l. retro-gate-invoked (BL-939): two named near-misses on the real retro.md ----------------
+# The gate is turned on by item 6 of retro.md §5c, and the Gate type paragraph above the list has
+# long carried the lowercase prose `run gate validation [retro]`. (a) that prose alone, item 6
+# deleted, and (b) item 6 negated to `6. **Do not run gate validation [retro]**` with its token
+# kept, must each read in-span 0 and whole 0. Both are built on the flattened copy, whose own
+# in-span 1 is the same-run control; each asserts the property it keeps is still present.
+RGI_LEAD='6. **Run gate validation [retro]**'
+RGI_TOK='A gate FAIL blocks the Step 6 commit, as a failing check 2-5 does.'
+RGI_S='### 5c. Pre-Commit Validation Gate'; RGI_E='### 6. Commit, Push, and PR'
+RGI_F="$SKILL_DIR/steps/retro.md"; RGI_FLAT="$M/retro-gate-invoked.nm.flat.md"
+[ -f "$RGI_F" ] || { echo "FIXTURE ERROR: 4l: $RGI_F is absent" >&2; exit 2; }
+flatten "$RGI_F" "$RGI_FLAT"
+rgi0="$(pin_scan "$RGI_FLAT" "$RGI_S" "$RGI_E" "$RGI_LEAD" para "$RGI_TOK")"
+B_rgi=0
+if [ "${rgi0%% *}" = 1 ]; then ok "retro-gate-invoked/near-miss: control: the flattened copy pins item 6 in span (1)"; B_rgi=1
+else bad "retro-gate-invoked/near-miss: CONTROL -- flattened copy in-span=${rgi0%% *}, wanted 1"; fi
+if [ "$B_rgi" = 1 ]; then
+  RL_LEAD="$RGI_LEAD" awk '{ q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
+    if (index(q, ENVIRON["RL_LEAD"]) == 1) next; print }' "$RGI_FLAT" > "$M/rgi-lowercase-only.md"
+  low="$(grep -cF 'run gate validation [retro]' "$M/rgi-lowercase-only.md")" || low=0
+  read -r ins whole sl el fl <<<"$(pin_scan "$M/rgi-lowercase-only.md" "$RGI_S" "$RGI_E" "$RGI_LEAD" para "$RGI_TOK")"
+  if cmp -s "$RGI_FLAT" "$M/rgi-lowercase-only.md"; then bad "retro-gate-invoked/near-miss (a): item 6 deletion did not apply"
+  elif [ "$low" -ge 1 ] && [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then
+    ok "retro-gate-invoked/near-miss (a): the lowercase 'run gate validation [retro]' prose alone ($low line(s)), item 6 deleted, does not satisfy the row"
+  else bad "retro-gate-invoked/near-miss (a): lowercase=$low in-span=$ins whole=$whole -- the lowercase prose satisfies the row, or was not kept"; fi
+  lreplace "$RGI_FLAT" "$M/rgi-negated.md" "$RGI_LEAD" '6. **Do not run gate validation [retro]**'
+  kept="$(grep -cF -- "$RGI_TOK" "$M/rgi-negated.md")" || kept=0
+  neg="$(grep -cF '6. **Do not run gate validation [retro]**' "$M/rgi-negated.md")" || neg=0
+  read -r ins whole sl el fl <<<"$(pin_scan "$M/rgi-negated.md" "$RGI_S" "$RGI_E" "$RGI_LEAD" para "$RGI_TOK")"
+  if cmp -s "$RGI_FLAT" "$M/rgi-negated.md"; then bad "retro-gate-invoked/near-miss (b): the negation did not apply"
+  elif [ "$kept" -ge 1 ] && [ "$neg" -eq 1 ] && [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then
+    ok "retro-gate-invoked/near-miss (b): item 6 negated to 'Do not run gate validation [retro]', its token kept, does not satisfy the row"
+  else bad "retro-gate-invoked/near-miss (b): token=$kept negated=$neg in-span=$ins whole=$whole -- a negated item satisfies the row"; fi
+fi
 
 # THE UI PATH, BOUND ACROSS TWO FILES. Check 9 states the pathspec and the test-file filter inline
 # (contract NOTE 1) and says it defines them as validate-mandatory-rules.sh Check 5 does. Both sides
@@ -2910,6 +3025,92 @@ uv_above="$(ui_verdict "$UV/gate-above.md" "$VMR")"
 if ! cmp -s "$GV9" "$UV/gate-above.md" && [ "${uv_above%% *}" = ABSENT ]; then
   ok "c9-ui-path near-miss: the UI-path line moved just above '### 9.' reads ABSENT, not MATCH"
 else bad "c9-ui-path near-miss: the line above '### 9.' reads '$uv_above' -- the span does not bound the gate side"; fi
+
+# --- 4m. Check 9 retro acceptance (BL-939 fold): each clause deleted fails exactly its own row -----
+# The generic negate in section 4 kills each row alone and says nothing about its neighbours. Here
+# every gv9-retro-* row is scored on the flattened gate-validation.md first (all must read 1: the
+# same-run base), then each BL-939-fold clause is deleted from a copy, guarded by cmp -s, and the
+# copy must read in-span 0 on that row and 1 on every OTHER gv9-retro-* row. Two named near-misses
+# on the whose-citation row: (a1) "this sprint's" alone deleted fails gv9-retro-thissprint, and
+# (a2b) the cited-nowhere clause deleted fails gv9-retro-citednowhere. Three named near-misses:
+# (n1) the archive-glob clause deleted fails gv9-retro-livearchive; (n2) "composed from N and not
+# searched" deleted fails gv9-retro-composed, and the other sprint's archive deleted fails
+# gv9-retro-othersprint; (n3) `--accept-captured` deleted from the --cite command fails
+# gv9-retro-captured. Final fold: (s1) the lead-written-slot clause deleted, and (s2) "is not the
+# quote" rewritten "is also a quote", each fail gv9-retro-slotquote, so a line whose quotes are all
+# lead-written must FAIL; (e1) per-line verification deleted and (e2) "earliest" rewritten
+# "latest" fail gv9-retro-everyline; (b1) the fail-closed clause deleted and (b2) "latest" rewritten "earliest"
+# fail gv9-retro-bodyfloor; (t1) the date-only clause deleted and (t2) "with a time of day"
+# dropped fail gv9-retro-timeofday; (d1) the fails-closed reason deleted fails gv9-retro-addendum;
+# (q1) the no-slot clause and (q2) every-pair fail gv9-retro-noslot. The tokens are pairwise disjoint, which is what lets one deletion touch
+# one row. BL-868: text pins over a file, nothing timed.
+G9R_ROWS="$M/gv9r.rows"
+pins | awk -F'|' 'index($1, "gv9-retro-") == 1' > "$G9R_ROWS"
+G9R_F="$SKILL_DIR/steps/gate-validation.md"; G9R_FLAT="$M/gv9r.flat.md"
+[ -f "$G9R_F" ] || { echo "FIXTURE ERROR: 4m: $G9R_F is absent" >&2; exit 2; }
+flatten "$G9R_F" "$G9R_FLAT"
+g9r_score() { # <file> -> "<id> <in-span>" per gv9-retro-* row
+  while IFS='|' read -r id base rel s e lead mode tok; do
+    printf '%s %s\n' "$id" "$(pin_scan "$1" "$s" "$e" "$lead" para "$tok" | awk '{print $1}')"
+  done < "$G9R_ROWS"
+}
+g9r_n="$(grep -c . "$G9R_ROWS")" || g9r_n=0
+g9r_base="$(g9r_score "$G9R_FLAT")"
+g9r_ones="$(printf '%s\n' "$g9r_base" | awk '$2 == 1' | grep -c .)" || g9r_ones=0
+B_gv9r=0
+if [ "$g9r_n" -ge 1 ] && [ "$g9r_ones" -eq "$g9r_n" ]; then
+  ok "gv9-retro/exact: control: all $g9r_n gv9-retro-* rows read 1 on the flattened copy"; B_gv9r=1
+else bad "gv9-retro/exact: CONTROL -- $g9r_ones of $g9r_n gv9-retro-* rows read 1 on the flattened copy"; fi
+g9r_del() { # <name> <target id> <old text> [<new text>, default empty]
+  local dst="$M/gv9r.$1.md" sc z o
+  G9_OLD="$3" G9_NEW="${4:-}" awk 'BEGIN { o = ENVIRON["G9_OLD"]; n = ENVIRON["G9_NEW"] } { if ((c = index($0, o)) > 0) $0 = substr($0, 1, c - 1) n substr($0, c + length(o)); print }' "$G9R_FLAT" > "$dst"
+  if cmp -s "$G9R_FLAT" "$dst"; then bad "MUTANT $1: DID NOT APPLY"; return; fi
+  sc="$(g9r_score "$dst")"
+  z="$(printf '%s\n' "$sc" | awk -v t="$2" '$1 == t && $2 == 0' | grep -c .)" || z=0
+  o="$(printf '%s\n' "$sc" | awk -v t="$2" '$1 != t && $2 == 1' | grep -c .)" || o=0
+  if [ "$z" -eq 1 ] && [ "$o" -eq $((g9r_n - 1)) ]; then
+    mutant_killed "${B_gv9r:-0}" "$1" "MUTANT $1: '$3' rewritten fails $2 alone ($o other row(s) still 1)"
+  else bad "MUTANT $1: SURVIVED or spilled -- $2 at 0: $z, other rows at 1: $o of $((g9r_n - 1))"; fi
+}
+g9r_del gv9-retro-thissprint-a1 gv9-retro-thissprint "appears in this sprint's \`## Gate Log" "appears in \`## Gate Log"
+g9r_del gv9-retro-citednowhere-a2b gv9-retro-citednowhere ", and an id cited nowhere accepts nothing"
+g9r_del gv9-retro-names-del gv9-retro-names 'The cited entry names that surface and that deviation'
+g9r_del gv9-retro-archive-del gv9-retro-archive ' or `docs/escalations/pending-archive.md`'
+g9r_del gv9-retro-supcite-del gv9-retro-supcite '`RESOLVED` and `SUPPRESSED` alike, '
+g9r_del gv9-retro-supcheck-del gv9-retro-supcheck '[core] 9 — `' '[core] 9`'
+g9r_del gv9-retro-supts-del gv9-retro-supts 'the `Timestamp:` of the `## Gate Log: Sprint <N>` section that first records' 'the gate-log line that first recorded'
+g9r_del gv9-retro-amendsha-del gv9-retro-amendsha ' whose message cites a `RESOLVED` escalation id that itself meets every acceptance rule here'
+g9r_del gv9-retro-mergecommit-del gv9-retro-mergecommit ' as of the sprint'"'"'s merge commit to main, the squash or merge commit that landed the sprint,'
+g9r_del gv9-retro-livearchive-n1 gv9-retro-livearchive ' or in `_bmad-output/implementation-artifacts/s<N>/gate-log-archive.md`'
+g9r_del gv9-retro-composed-n2 gv9-retro-composed ' composed from N and not searched'
+g9r_del gv9-retro-othersprint-n2 gv9-retro-othersprint ' or in another sprint'"'"'s `s<M>/` archive'
+g9r_del gv9-retro-captured-n3 gv9-retro-captured ' --accept-captured`' '`'
+g9r_del gv9-retro-matchrc-del gv9-retro-matchrc ' with a `MATCH <ts>` line on stdout'
+g9r_del gv9-retro-pruned-del gv9-retro-pruned ' within the citation'"'"'s window'
+g9r_del gv9-retro-dateonly-del gv9-retro-dateonly 'without a time of day, hours and minutes, does not verify.' 'without seconds does not verify.'
+g9r_del gv9-retro-onlyhere-del gv9-retro-onlyhere '`--accept-captured` is passed only here' '`--accept-captured` is passed here'
+g9r_del gv9-retro-nowhereelse-del gv9-retro-nowhereelse ', and `NOMATCH-TRANSCRIPT-PRUNED` acquits nothing anywhere else'
+g9r_del gv9-retro-markupdev-del gv9-retro-markupdev ", and a markup or CSS line that surface's diff adds is a deviation from that statement"
+g9r_del gv9-retro-readarchive-del gv9-retro-readarchive 'sections wherever the citation rule below reads them, live or archived, the live one being' 'section of `_bmad-output/implementation-artifacts/gate-log.md`,'
+g9r_del gv9-retro-mockupmerged-del gv9-retro-mockupmerged ' named below (as of the sprint'"'"'s merge commit)'
+g9r_del gv9-retro-headersn-del gv9-retro-headersn ', and its header names `S<N>`, this sprint, so a prior sprint'"'"'s escalation accepts nothing for this sprint'"'"'s drift'
+g9r_del gv9-retro-suppressed-del gv9-retro-suppressed ', or a `SUPPRESSED` waiver that meets the waiver rule below'
+g9r_del gv9-retro-wholeanswer-del gv9-retro-wholeanswer 'the quote, normalised, equals a whole answer' 'the quote appears in an answer'
+g9r_del gv9-retro-archivenames-del gv9-retro-archivenames ' and its ordinal forms `s<N>/gate-log-archive-2.md`, `s<N>/gate-log-archive-3.md` and onward,' ' or any `s<N>/gate-log-archive*.md`,'
+g9r_del gv9-retro-resolvedfloor-del gv9-retro-resolvedfloor 'Any cited entry, `RESOLVED` or `SUPPRESSED`, counts only if its' 'A `SUPPRESSED` waiver counts only if its'
+g9r_del gv9-retro-mergederive-del gv9-retro-mergederive "whose tree equals \`PR_HEAD\`'s tree (a squash), or the merge commit whose second parent is \`PR_HEAD\`" 'whose subject names the sprint'
+g9r_del gv9-retro-authsource-del gv9-retro-authsource ' alone, never from its `**Resolution:**` or `**Context:**` text and never from `_bmad-output/operator-answers-history.md`'
+g9r_del gv9-retro-slotquote-del gv9-retro-slotquote ', so a line whose slot quote is lead-written fails even when its trailing text carries a captured answer'
+g9r_del gv9-retro-slotquote-also gv9-retro-slotquote 'is not the quote' 'is also a quote'
+g9r_del gv9-retro-everyline-del gv9-retro-everyline ', each by its own slot quote and its own timestamp, and the timestamp floor below is taken against the earliest of their timestamps'
+g9r_del gv9-retro-everyline-latest gv9-retro-everyline 'taken against the earliest of their timestamps' 'taken against the latest of their timestamps'
+g9r_del gv9-retro-bodyfloor-del gv9-retro-bodyfloor ', and where the body carries none the floor is unmet and the acceptance fails'
+g9r_del gv9-retro-bodyfloor-earliest gv9-retro-bodyfloor 'the floor is the latest ISO-8601' 'the floor is the earliest ISO-8601'
+g9r_del gv9-retro-timeofday-del gv9-retro-timeofday '; a date-only value or a space-separated date and time is not counted'
+g9r_del gv9-retro-timeofday-drop gv9-retro-timeofday 'with a time of day '
+g9r_del gv9-retro-addendum-del gv9-retro-addendum ', whose later timestamp raises the floor, so it fails closed'
+g9r_del gv9-retro-noslot-del gv9-retro-noslot 'A line with no slot quote does not verify, and where' 'Where'
+g9r_del gv9-retro-noslot-pairs gv9-retro-noslot ' every pair is verified, each by its own quote and its own timestamp.' ' the first pair is verified.'
 
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""

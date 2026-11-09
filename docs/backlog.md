@@ -2026,23 +2026,6 @@ Remainder, why the entry stays PARTIAL: Fix item 1 is not done on `origin/main`.
 verify: manual
 
 
-## BL-939 — graph runs no retro gate-validation gate, because retro.md §5c's numbered list never invokes its `[retro]` declaration
-
-**DEFECT.** `core/skills/ai-dlc/steps/retro.md` §5c (`### 5c. Pre-Commit Validation Gate`, `:1057`, unchanged from 0d150c8de to 59a4ea51b) declares the gate type at `:1066-1070` ("This is the `retro` gate. When running gate validation (`gate-validation.md`) at sprint close, declare it `run gate validation [retro]`"), but its numbered list, items 1 to 5 at `:1072-1109`, never tells the session to run gate validation. Items 1 to 5 are the rule-file audit commit, `validate-provenance-block.sh`, `validate-mandatory-rules.sh`, `validate-audit-anchors.sh` and `validate-artifact-budget.sh`. The retro slice (`gate-validation.md:67`: Checks 8, 9, 17, core-layer-immutability) therefore never runs, including Check 9's sprint-scoped body that BL-934 keeps for retro alone.
-
-Measured in graph, read only, on disk under `/usr/bin/find _bmad-output -path '*gate-adjudication/<prefix>*'`: 0 `retro*` files of any extension, against 40 `sprint-review-*.verdict.json` (85 `sprint-review-*` files in all, with parts, repairs and one authorization). A second derivation, every `"gate_type"` value over all 374 verdict JSONs: implementation 172, planning 116, story 46, sprint-review 40, and `retro` 0. The control is the impossible prefix `zzqq`, which also returns 0, beside the sprint-review count of 40 in the same run.
-
-The measured backstop is `validate-mandatory-rules.sh` Check 5 at §5c item 3 (`retro.md:1084`), which fires: graph `_bmad-output/implementation-artifacts/s315/gate-log-archive.md:430` is the heading "Gate Log: Sprint 315 — retro §5c validation, Check 5 FAILED under operator disposition", and `:432` records `scripts/ai-dlc/validate-mandatory-rules.sh 315` exit 1 with **Check 5 FAILED** (`Check5_VISUAL_UI`). Check 5 covers the visual-UI evidence; Checks 8, 17 and core-layer-immutability have no such backstop at retro.
-
-Fix, sized and not built: add a numbered item to §5c that runs gate validation declared `run gate validation [retro]` and blocks the Step 6 commit on its verdict, in the shape of items 2 to 5. Filed in batch b252 as a measured defect outside that release's files (retro.md is cluster retro3's), not fixed there.
-
-Receipt: it reads §5c's numbered list only (from the first `N. ` item to the next heading or the `**An unclearable check` paragraph) and closes when that list carries the literal `run gate validation [retro]`. Probed: at HEAD exit 1; a seeded item 6 carrying the phrase exit 0; the phrase added to the declaration paragraph only (outside the list) exit 1; the section heading renamed exit 9; every numbered item removed exit 9. A fix that invokes the gate in other words reads STILL-LIVE, which is the direction that keeps the entry open.
-
-Provenance: batch b252, found by the BL-934 contract adversary (DEFECT 2); lead ai-dlc-78.
-
-verify: sh P=core/skills/ai-dlc/steps/retro.md; grep -q 'Pre-Commit Validation Gate' "$P" || exit 9; s="$(awk '/^### 5c\. /{f=1;next} f&&/^#/{f=0} f&&/^\*\*An unclearable check/{f=0} f&&/^[0-9]+\. /{i=1} f&&i' "$P")"; [ -n "$s" ] || exit 9; grep -qF 'run gate validation [retro]' <<<"$s"
-
-
 ## BL-944 — validate-escalation-resolution accepts any verbatim operator quote, so a free-text answer can be filed RESOLVED on a lead-interpretation HARD_BLOCK
 
 **DEFECT.** `core/skills/ai-dlc/steps/requirements.md` §3 (lines at the release tip) derives each `(lead interpretation)` bullet's state from the captured answer body: the fenced program at `:156` prints UNANSWERED, CONFIRMED, DESCOPE or UNDECIDED. `:165` keeps a bullet in force only on an exact `Confirm <id>` body and descopes it only on an exact `Strike <id>` or `Reword <id>` body, badge allowed. `:166` treats UNDECIDED (free text, or an option followed by more text) as UNANSWERED and says "the free text is never filed as a disposition". The no-stop carve-out, `requirements.md:171` and `core/skills/ai-dlc/escalations.md:77`, files the entry `RESOLVED` only "when the operator's captured answer is an exact Strike or Reword option".
@@ -2064,3 +2047,26 @@ Provenance: batch b252, cluster retro3, found by the D-A delta pass; lead ai-dlc
 verify: sh grep -q 'cite_quote()' core/scripts/validate-escalation-resolution.sh || exit 9; grep -qF '(lead interpretation)' core/scripts/validate-escalation-resolution.sh || exit 1; V=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] || exit 9; T="$(mktemp -d)" || exit 9; mkdir "$T/t" || exit 9; Q='LR-S7-2 (lead interpretation): the index covers the primary pool only.'; F='How is there still no router derived? Absolutely unacceptable that you refuse to figure this out.'; a() { printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"%s","name":"AskUserQuestion","input":{"questions":[{"question":"%s"}]}}]}}\n{"type":"user","timestamp":"%s","message":{"content":[{"type":"tool_result","tool_use_id":"%s","content":"Your questions have been answered: \\"%s\\"=\\"%s\\". You can now continue with these answers in mind."}]}}\n' "$3" "$1" "$Q" "$3" "$1" "$Q" "$2" >> "$T/t/s.jsonl"; }; e() { printf '## S7-LR-2 Lead (requirements) - 2026-11-08\n**Status:** RESOLVED\n**Blocker type:** missing requirement\n**Decision/Question:** %s -- descope, _bmad-output/operator-answers-history.md:4\n**Operator authorization:** %s | "%s"\n' "$1" "$2" "$3" > "$T/$4.md"; }; r() { AI_DLC_PROJECT_ROOT="$T" bash "$V" --escalations "$T/$1.md" --sprint 7 --transcript-dir "$T/t" >/dev/null 2>&1; }; a toolu_f "$F" 2026-11-08T10:01:00Z; a toolu_s "Strike LR-S7-2" 2026-11-08T11:01:00Z; e 'LR-S7-2 (lead interpretation)' 2026-11-08T11:01:00Z 'Strike LR-S7-2' strike; e 'LR-S7-2 (lead interpretation)' 2026-11-08T10:01:00Z "$F" free; e 'an operator question' 2026-11-08T10:01:00Z "$F" plain; e 'LR-S7-2 (lead interpretation)' 2026-11-08T10:01:00Z 'QQZX no operator ever typed this' fake; r strike || exit 9; r fake && exit 9; r plain || exit 1; ! r free
 
 
+## BL-945 — core-paths.sh --audit-diff's subject arm resolves a cwd-relative pathspec, so a run from a subdirectory can print PASS on a core edit, and the per-path walk is 99% of the gate's git calls
+
+**DEFECT.** `core/scripts/core-paths.sh` `--audit-diff`'s subject arm runs `git log --format='%H' "${BASE_REF}..${HEAD_REF}" -- "$p"` once per touched path (`:364`). That pathspec is cwd-relative: run from a subdirectory, a top-level path matches no commit, OFFENDERS stays empty, and the script prints the reconcile PASS. That is a false-PASS risk. The activation probe has the same shape: `git ls-tree -d --name-only "${BASE_REF}" ".claude/skills/ai-dlc/${d}"` (`:226`) is cwd-relative too, and from a subdirectory the script reports DORMANT and exits 0.
+
+Measured with the `core-paths-audit-diff` seed (`seed.sh`) on the DIRTY range, which exits 1 from the project root: the same call from `docs/` prints "Nothing was classified" (DORMANT) and exits 0. The log-pathspec arm was not isolated from the activation probe in that run; the fix has to anchor both.
+
+Cost, measured on graph's real ranges with a git wrapper: 872, 1418 and 1350 git calls per gate at S319, S320 and S321, of which the per-path `git log` is 864, 1410 and 1342 (about 99%). The content arm added +5.
+
+Fix direction: anchor the pathspecs (`:(top)`, or `cd` to the toplevel already held in AUDIT_ROOT) and batch the per-path walk into one `git log --name-only --format='%H %s' BASE..HEAD`, joined to the touched set in awk.
+
+Two subjects, and the entry closes only when both do. (1) The cwd fix must anchor BOTH the activation probe (`:226`, `git ls-tree -d`) and the subject arm's pathspec (`:364`, `git log ... -- "$p"`). Measured on the seeded DIRTY range from `docs/`, on copies of the script: unchanged exits 0 (DORMANT); the probe alone anchored (`git -C <toplevel> ls-tree`) exits 0; the pathspec alone anchored (`:(top)$p`) exits 0 (DORMANT); both anchored exit 1, as the run from the project root does in all four. Either half alone still false-PASSes. (2) Batch the per-path walk, about 99% of the gate's git calls (cost above).
+
+Exit-code probe, run by hand from the distribution root: seed the `core-paths-audit-diff` repo, then `--audit-diff` from `docs/` on the DIRTY range must exit 1; today it exits 0 DORMANT. The project-root run is the control and must exit 1.
+
+    W="$(bash core/fixtures/core-paths-audit-diff/seed.sh)"; . "$W/env.sh"; mkdir -p "$PROJ/docs"
+    ( cd "$PROJ" && bash "$VALIDATOR" --audit-diff "$BASE" "$DIRTY" >/dev/null 2>&1 ); echo "root rc=$?  (control, want 1)"
+    ( cd "$PROJ/docs" && bash "$VALIDATOR" --audit-diff "$BASE" "$DIRTY" >/dev/null 2>&1 ); echo "docs/ rc=$?  (want 1; 0 today)"
+
+The batching half has no exit-code probe: its evidence is the git-call count on a real range, so the entry is verified by hand.
+
+Provenance: batch b252, retro-gate cluster (BL-939); filed by the retro-gate builder.
+
+verify: manual
