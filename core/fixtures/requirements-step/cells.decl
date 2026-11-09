@@ -8,3 +8,17 @@ e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-bmad-restore
 e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-bmad-restored-new-unk why=mutant ts-bmad-restored-new: its bind twin cell, verdict-less pass
 e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-precondition-deleted-met why=mutant ts-precondition-deleted: its bind twin cell, MET pass
 e2e core/scripts/validate-adversarial-convergence.sh ts-MUTATION_ts-precondition-deleted-unk why=mutant ts-precondition-deleted: its bind twin cell, verdict-less pass
+# Arm (n) (BL-936) drives the three shipped LR parsers end to end, one start per parser per outcome: the near-miss
+# (label after the id) and the offender (label before it, or stripped). The parsers' own --emit-blocks calls into
+# validate-locked-anchor.sh are nested starts of each parent.
+e2e core/scripts/validate-request-coverage.sh n-rc-good why=arm (n) request-coverage over the label-after-id slot (PASS, 3 bullets)
+e2e core/scripts/validate-request-coverage.sh n-rc-bad why=arm (n) request-coverage over the label-before-id slot (FAIL, LR-S42-11 dropped)
+e2e core/scripts/validate-spec-join.sh n-sj-good why=arm (n) spec-join declared population over the label-after-id slot (reads 3)
+e2e core/scripts/validate-spec-join.sh n-sj-bad why=arm (n) spec-join declared population over the label-before-id slot (reads 2)
+e2e core/scripts/validate-locked-anchor.sh n-la-labelled why=arm (n) Check 3b over a story quoting bullet 10 with its label (PASS)
+e2e core/scripts/validate-locked-anchor.sh n-la-stripped why=arm (n) Check 3b over the same story with the label stripped (FAIL)
+nested core/scripts/validate-request-coverage.sh core/scripts/validate-locked-anchor.sh why=request-coverage extracts the LOCKED blocks through the owner's --emit-blocks
+nested core/scripts/validate-spec-join.sh core/scripts/validate-locked-anchor.sh why=spec-join extracts the declared population through the owner's --emit-blocks
+# Arm (o) (BL-936) runs the shipped capture hook twice to write the operator-answers history the §3 derivation reads.
+e2e core/hooks/ai-dlc-answer-capture.sh o-hook-1 why=arm (o) the first AskUserQuestion payload, fifteen question/answer pairs
+e2e core/hooks/ai-dlc-answer-capture.sh o-hook-2 why=arm (o) the newer payload that strikes LR-S42-17

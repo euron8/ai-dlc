@@ -241,6 +241,21 @@ For every story, sum `layered_ac_count` values MUST equal
 "Smoke test coverage" reads layer tags to verify test type
 matches change type — layered AC tags feed Check 11 evidence.
 
+**A test double is named with what it changes.**
+An AC verified at `unit` or `integration` against a double standing in for an external system names the double and every request field it rewrites, drops or defaults relative to the request the code sends.
+Where it names at least one field, the story carries one `live_ops` AC that observes, read-only, the real system's handling of exactly those fields; the AC's own layer does not change.
+That `live_ops` AC is listed in the story's `deferred_acs` at gate 3 with a `deploy-pending` predicate unless gate 3 recorded the real system's response to it, so `deploy-validate.md` §4b owes its discharge.
+The closing writer copies the ids into `deferred_acs` (`qa.md` Deferred-AC discharge predicate), and `sprint-status.sh` reports each one still owed to §4b.
+
+**A new chain or external network gets one read-only simulation per request kind.**
+A story whose code sends signed or state-changing requests to a chain or external network that no earlier deployed sprint sent to carries one `live_ops` AC per request kind, enumerated from the code paths that send them.
+Each such AC is a read-only simulation of that exact request against the real target, one that changes nothing, recorded with its response, and it names its precondition on the target (a position that exists, an allowance, a router configured).
+A kind whose precondition is unmet at gate 3 is listed in `deferred_acs` with the simulation as its predicate and discharged at `deploy-validate.md` §4b once the precondition holds.
+A kind whose precondition cannot be met this sprint carries `defers_to: CO-S<N>-<descriptor>` on its own line inside that AC.
+The simulation of a request kind runs and its response is recorded before the first real request of that kind reaches the target, including a request an operator action the lead enables would send; a kind whose precondition is unmet stays disabled on that target until its simulation is recorded.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: an AC passed against a test double that dropped a request field the real external system rejects, and a signed request first sent to a new chain failed in production for a precondition no AC had observed. False-positive cost: one `live_ops` AC per named double and one per request kind, each a read-only observation the story would otherwise run by hand after deploy. Removal condition: retire once the gate-3 adjudicator diffs every double's request against the request the code sends and records the real target's response to it.
+
 **Intensity gate for carry-over-single.** When
 `validation_intensity == carry-over-single`, skip `/bmad-create-epics-and-stories`
 and create stories directly from carry-over items. The carry-over-evaluation

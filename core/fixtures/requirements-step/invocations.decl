@@ -1,6 +1,14 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # Re-measured at slot sha 1a408b46e plus the m1-ii tip, armed through hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR), two runs, identical counts (p1's rows confirmed).
 # Re-measured when arms (k)-(m) moved in from check-24-adversarial-convergence: arm (m) starts the validator 10 times, each an e2e cell of cells.decl.
-41 *
+# Re-measured when arm (n) (BL-936) added six end-to-end parser starts: 2 request-coverage, 2 spec-join, 2 locked-anchor
+# direct plus 4 locked-anchor --emit-blocks starts nested under the other two; two counted runs, identical counts.
+# Re-measured when arm (o) (BL-936) added two end-to-end starts of the capture hook, writing the history the §3
+# derivation reads; two counted runs, identical counts.
+53 *
 0 core/scripts/validate-draft-stamps.sh
 10 core/scripts/validate-adversarial-convergence.sh
+2 core/scripts/validate-request-coverage.sh
+2 core/scripts/validate-spec-join.sh
+6 core/scripts/validate-locked-anchor.sh
+2 core/hooks/ai-dlc-answer-capture.sh

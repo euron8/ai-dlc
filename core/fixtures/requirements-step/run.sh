@@ -47,6 +47,11 @@
 #       the shipping validator; §5 names no bmad-review (control: bug-investigation.md does) and
 #       names its dispatches and step 3's precondition. Four committed mutants plus an unmutated
 #       control, each row scored whole (moved from check-24 unit tstrat).
+#   (n) BL-936: requirements.md §3's lead-interpretation bullet form, driven through the three shipped LR
+#       parsers (request-coverage, spec-join's declared population, Check 3b); each parser scored on a
+#       near-miss (label after the id) and an offender (label before it, or stripped).
+#   (o) BL-936: requirements.md §3's derivation program (UNANSWERED / CONFIRMED / DESCOPE / UNDECIDED), read from its
+#       fence and run over a history the shipped capture hook wrote; eleven committed mutants of the program.
 #
 # THE MUTANT MATRIX. A CELL is one corpus predicate: h (the disposition vocabulary agrees across a steps dir),
 # i-axis and i-mandate (requirements.md section 5 and 4(c)), j-check and j-sweep (the two Check 24 sites of
@@ -70,6 +75,20 @@
 # MUTANT-MATRIX MUTATION-ts-bmad-restored-new decides=MUTATION-ts-bmad-restored-new.cell2 twins=MUTATION-ts-bmad-restored-new.cell1,MUTATION-ts-bmad-restored-new.cell3
 # MUTANT-MATRIX MUTATION-ts-gate-prefix-dropped decides=MUTATION-ts-gate-prefix-dropped.cell1 twins=MUTATION-ts-gate-prefix-dropped.cell2,MUTATION-ts-gate-prefix-dropped.cell3
 # MUTANT-MATRIX MUTATION-ts-precondition-deleted decides=MUTATION-ts-precondition-deleted.cell3 twins=MUTATION-ts-precondition-deleted.cell1,MUTATION-ts-precondition-deleted.cell2
+# Arm (o) (BL-936): each mutant of §3's derivation program decides on the ids it breaks and names the exact-id
+# confirm cell as its twin, which every mutant must leave reading CONFIRMED. All sixteen ids are read per mutant.
+# MUTANT-MATRIX o-any-answer decides=o-strike twins=o-confirm
+# MUTANT-MATRIX o-unbounded decides=o-unlabelled twins=o-confirm
+# MUTANT-MATRIX o-multi-id decides=o-two twins=o-confirm
+# MUTANT-MATRIX o-first-wins decides=o-newest twins=o-confirm
+# MUTANT-MATRIX o-exact-only decides=o-badged twins=o-confirm
+# MUTANT-MATRIX o-prefix decides=o-badge-digit twins=o-confirm
+# MUTANT-MATRIX o-any-nonconfirm-descope decides=o-freetext twins=o-confirm
+# MUTANT-MATRIX o-first-line-only decides=o-confirm-tail twins=o-confirm
+# MUTANT-MATRIX o-no-reword decides=o-reword-exact twins=o-confirm
+# MUTANT-MATRIX o-count-own decides=o-self-repeat twins=o-confirm
+# MUTANT-MATRIX o-strip-unbounded decides=o-self-prefix twins=o-confirm
+# MUTANT-MATRIX-DYNAMIC o_mut why=passes each arm (o) mutant name to mutant_killed as a variable; every name keeps its own row
 # MUTANT-MATRIX-CONTROL CONTROL-ts-unmutated why=the shipped documents must score ok on all three test-strategy cells
 # MUTANT-MATRIX-CONTROL MUTATION-ts-anchor why=the test-strategy step-2 anchor is unique against an impossible-anchor control
 # MUTANT-MATRIX-DYNAMIC rs_score why=reads every mutant name of the (h), (i) and (j) loops as a variable and every name keeps its own row
@@ -79,6 +98,8 @@
 # Exit:  0 = every assertion holds (or subject not installed), 1 = a regression,
 #        2 = fixture broken (a probe could not be proven in either direction).
 set -uo pipefail
+# Arm (o) drives the capture hook, so no inherited AI_DLC_* tunable may reach it (H8).
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 MODE=plain
 case "${1:-}" in
@@ -1116,6 +1137,201 @@ if ts_mut ts-precondition-deleted \
     bad "(m) MUTATION ts-precondition-deleted: the copy keeps $ts_m3 precondition stamp(s) (original $ts_m3o, want 1) -- an incomplete mutation"
   else
     ts_score "MUTATION ts-precondition-deleted" "$TS_GATE" "$TSM/stories-test-strategy.m3.md" "ok ok FAIL"
+  fi
+fi
+
+# --- (n) BL-936: a lead-interpretation bullet keeps its id at line start, through the SHIPPED parsers ---
+# requirements.md §3 fixes `- LR-S<N>-<m> (lead interpretation, of LR-S<N>-<k>): <clause>` because the readers
+# key on the id opening the bullet. This arm runs the three shipped scripts, never a copy of their regexes. One
+# slot pair differs ONLY in bullet 11: label after the id (counted) vs label before it (the forbidden form).
+# Expected, measured: request-coverage counts 3 bullets / PASS on the good slot and 2 bullets / FAIL naming
+# LR-S42-11 on the bad one; spec-join's declared population reads 3 vs 2; Check 3b PASSes a story quoting bullet
+# 10 with its label and FAILs the same story with the label stripped. Each pair is its own self-probe.
+N_RC=""; N_SJ=""; N_LA=""
+for cand in "$ROOT/core/scripts" "$ROOT/scripts/ai-dlc"; do
+  [ -f "$cand/validate-request-coverage.sh" ] && [ -f "$cand/validate-spec-join.sh" ] && [ -f "$cand/validate-locked-anchor.sh" ] && {
+    N_RC="$cand/validate-request-coverage.sh"; N_SJ="$cand/validate-spec-join.sh"; N_LA="$cand/validate-locked-anchor.sh"; break; }
+done
+if [ -z "$N_RC" ]; then
+  bad "(n) the three LR parsers (request-coverage, spec-join, locked-anchor) are not installed under $ROOT -- the arm has no subject"
+else
+  for _hc in validate-request-coverage.sh validate-spec-join.sh validate-locked-anchor.sh; do
+    echo "HERMETIC-CONSUMED core/scripts/$_hc"
+  done
+  NW="$PROBE/n"; mkdir -p "$NW" || { echo "FIXTURE ERROR: cannot create $NW" >&2; exit 2; }
+  n_slot() { # <file> <bullet-11 line>
+    printf '%s\n' '<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->' '<!-- Source: user input -->' \
+      '- LR-S42-9: "Index the widget pool."' \
+      '- LR-S42-10 (lead interpretation, of LR-S42-9): the index covers the primary pool only.' \
+      "$2" '<!-- END LOCKED_REQUIREMENTS -->' > "$1"
+  }
+  n_slot "$NW/good.md" '- LR-S42-11 (lead interpretation, of LR-S42-9): the backfill is out of scope.'
+  n_slot "$NW/bad.md"  '- (lead interpretation) LR-S42-11 the backfill is out of scope.'
+  N_ASK='Sprint 42: deliver LR-S42-9, LR-S42-10 and LR-S42-11.'
+  N_SHA="$(printf '%s' "$N_ASK" | shasum -a 256 | cut -d' ' -f1)"
+  printf '# Operator Requests\n\n---\n\n## 2026-08-02T18:00:34Z -- /ai-dlc\n- Session: sess-1\n- Bytes: %s\n- SHA256: %s\n\n```text\n%s\n```\n\n' \
+    "$(printf '%s' "$N_ASK" | wc -c | tr -d ' ')" "$N_SHA" "$N_ASK" > "$NW/req.md"
+  # request-coverage: the ask parser (:357) must read three DISTINCT ids, and the bullet parser (:392) must
+  # count 9 and 10 as two committed bullets and drop the forbidden 11.
+  n_out="$(FXCELL=n-rc-good bash "$N_RC" --requests "$NW/req.md" --brief "$NW/good.md" --sprint 42 2>&1)"; n_rc=$?
+  if [ "$n_rc" -eq 0 ] && grep -qxF 'identifiers_scanned: 3' <<<"$n_out" \
+     && grep -qF 'committed_bullets_for_sprint_42: 3' <<<"$n_out" && grep -qF 'PASS: every identifier' <<<"$n_out"; then
+    ok "(n) request-coverage near-miss: label after the id, 3 distinct ids scanned, 3 bullets counted, PASS"
+  else bad "(n) request-coverage near-miss: want rc 0, 3 scanned, 3 bullets, PASS; got rc $n_rc: $(head -3 <<<"$n_out" | tr '\n' ' ')"; fi
+  n_out="$(FXCELL=n-rc-bad bash "$N_RC" --requests "$NW/req.md" --brief "$NW/bad.md" --sprint 42 2>&1)"; n_rc=$?
+  if [ "$n_rc" -eq 1 ] && grep -qxF 'identifiers_covered: 2' <<<"$n_out" \
+     && grep -qF 'committed_bullets_for_sprint_42: 2' <<<"$n_out" && grep -qxF '        LR-S42-11' <<<"$n_out"; then
+    ok "(n) request-coverage offender: label before the id drops LR-S42-11; LR-S42-9 and LR-S42-10 stay two counted bullets"
+  else bad "(n) request-coverage offender: want rc 1, 2 covered, 2 bullets, LR-S42-11 uncovered; got rc $n_rc: $(head -3 <<<"$n_out" | tr '\n' ' ')"; fi
+  # spec-join: its declared-population reader (the `--locked-requirements` leg) counts distinct line-start ids.
+  mkdir -p "$NW/spec"
+  printf '# SPEC\n\n## Capabilities\n\n- **CAP-1** intent: index. success: WHEN a leg runs, THE router SHALL be the venue.\n' > "$NW/spec/SPEC.md"
+  printf -- '- (capability by bmad-spec) CAP-1 realises LR-S42-%s: index\n' 9 10 11 > "$NW/spec/.memlog.md"
+  printf '# PRD\n\n## Functional Requirements\n\n- **FR-S42-1 (CAP-1) (<- LR-S42-9) - index.** body\n\n### FR Coverage Map\n\nFR1: Epic 1 - index\n' > "$NW/prd.md"
+  n_out="$(FXCELL=n-sj-good bash "$N_SJ" --spec "$NW/spec" --prd "$NW/prd.md" --locked-requirements "$NW/good.md" 2>&1)"
+  if grep -qF 'join (1) reads 3 locked requirement(s) from' <<<"$n_out"; then
+    ok "(n) spec-join near-miss: the declared population reads 3 distinct ids"
+  else bad "(n) spec-join near-miss: want 'join (1) reads 3'; got: $(grep -m1 -e 'join (1)' -e DISARM <<<"$n_out")"; fi
+  n_out="$(FXCELL=n-sj-bad bash "$N_SJ" --spec "$NW/spec" --prd "$NW/prd.md" --locked-requirements "$NW/bad.md" 2>&1)"
+  if grep -qF 'join (1) reads 2 locked requirement(s) from' <<<"$n_out"; then
+    ok "(n) spec-join offender: label before the id drops LR-S42-11 from the declared population (reads 2)"
+  else bad "(n) spec-join offender: want 'join (1) reads 2'; got: $(grep -m1 -e 'join (1)' -e DISARM <<<"$n_out")"; fi
+  # Check 3b: the label is part of the bullet's bytes, so a story quoting it verbatim passes and one that
+  # strips it fails. The slot sits beside the story so the first resolution candidate is the right file.
+  mkdir -p "$NW/s42/stories"; cp "$NW/good.md" "$NW/s42/stories/locked-requirements.md"
+  printf '%s\n' '# Story' '<!-- LOCKED_REQUIREMENTS -->' 'full_text_source: locked-requirements.md#LR-S42-10' \
+    '- LR-S42-10 (lead interpretation, of LR-S42-9): the index covers the primary pool only.' \
+    '<!-- END LOCKED_REQUIREMENTS -->' > "$NW/s42/stories/labelled.md"
+  sed 's/ (lead interpretation, of LR-S42-9)//' "$NW/s42/stories/labelled.md" > "$NW/s42/stories/stripped.md"
+  if cmp -s "$NW/s42/stories/labelled.md" "$NW/s42/stories/stripped.md"; then
+    bad "(n) Check 3b: the label-strip did not apply, so the stripped story proves nothing"
+  else
+    n_out="$(FXCELL=n-la-labelled bash "$N_LA" "$NW/s42/stories/labelled.md" 2>&1)"; n_rc=$?
+    if [ "$n_rc" -eq 0 ] && grep -qF '1 full_text_source claim(s) verified' <<<"$n_out"; then
+      ok "(n) Check 3b near-miss: a story quoting bullet 10 with its label verbatim PASSes (1 claim verified)"
+    else bad "(n) Check 3b near-miss: want rc 0 and 1 claim verified; got rc $n_rc: $(head -2 <<<"$n_out" | tr '\n' ' ')"; fi
+    n_out="$(FXCELL=n-la-stripped bash "$N_LA" "$NW/s42/stories/stripped.md" 2>&1)"; n_rc=$?
+    if [ "$n_rc" -ne 0 ] && grep -qF 'not byte-present at the cited anchor' <<<"$n_out"; then
+      ok "(n) Check 3b offender: the same story with the label stripped FAILs as not byte-present"
+    else bad "(n) Check 3b offender: want a non-zero exit and 'not byte-present'; got rc $n_rc: $(head -2 <<<"$n_out" | tr '\n' ' ')"; fi
+  fi
+fi
+
+# --- (o) BL-936: §3's answered/confirmed derivation, run over a history the SHIPPED capture hook wrote ---
+# The awk program is read out of requirements.md §3's fence (never a copy), and the history is written by
+# core/hooks/ai-dlc-answer-capture.sh from two AskUserQuestion payloads, so the seed is what the producer emits.
+# Expected, measured: 10 CONFIRMED (exact-id confirm, the positive control); 11 DESCOPE (a captured strike is an
+# answer that keeps nothing in force); 12 UNANSWERED (only the parent LR-S42-9 is asked); 13 UNANSWERED (only the
+# digit-extended LR-S42-130 is asked); 14 and 15 UNANSWERED (one question names both); 16 UNANSWERED (its id is in
+# the answer body only); 17 DESCOPE (confirmed in the first call, struck in the newer one); 18 CONFIRMED (the
+# Confirm option the lead badged, captured with its ` (Recommended)` suffix, as Rule 11(a) asks); 19 UNDECIDED (a badged
+# confirm of the digit-extended LR-S42-190, which a prefix match would read as confirming 19); 20 UNDECIDED (graph
+# S321's real free-text reply, oah:7220, which the S321 lead read as no disposition); 21 UNDECIDED (an exact Confirm
+# followed by a second line, so a first-line reader confirms it); 22 DESCOPE (an exact Reword; 11 is the exact Strike);
+# 23 UNANSWERED (its question opens with LR-S42-23 and also names LR-S42-230, another id); 24 CONFIRMED (its question
+# restates its own id, once bare and once inside a HARD_BLOCK name, as 3 of 8 real S321 LR questions do); 25 UNANSWERED
+# (its question opens with the exact id but carries no `(lead interpretation)` label; 13 is held by the label AND by the
+# residual-id guard, so o-unbounded is scored here, where only the label guard can see it).
+O_HOOK=""
+for cand in "$ROOT/core/hooks" "$ROOT/.claude/hooks"; do
+  [ -f "$cand/ai-dlc-answer-capture.sh" ] && { O_HOOK="$cand/ai-dlc-answer-capture.sh"; break; }
+done
+O_PROG="$(awk '/^### 3\. Locked Requirements/{s=1} s && /^### 4\./{exit}
+  s && index($0, "awk -v id='"'"'LR-S<N>-<m>'"'"' '"'"'") == 1 {print}' "$REQMD")"
+O_PROG="${O_PROG#"awk -v id='LR-S<N>-<m>' '"}"; O_PROG="${O_PROG%"' _bmad-output/operator-answers-history.md"}"
+O_WANT='10=CONFIRMED 11=DESCOPE 12=UNANSWERED 13=UNANSWERED 14=UNANSWERED 15=UNANSWERED 16=UNANSWERED 17=DESCOPE 18=CONFIRMED 19=UNDECIDED 20=UNDECIDED 21=UNDECIDED 22=DESCOPE 23=UNANSWERED 24=CONFIRMED 25=UNANSWERED'
+if [ -z "$O_HOOK" ]; then
+  bad "(o) ai-dlc-answer-capture.sh is not installed under $ROOT -- the arm has no producer"
+elif [ -z "$O_PROG" ] || [ "${O_PROG#BEGIN}" = "$O_PROG" ]; then
+  bad "(o) requirements.md §3 carries no derivation program (awk -v id='LR-S<N>-<m>' ...) between ### 3. and ### 4."
+else
+  echo "HERMETIC-CONSUMED core/hooks/ai-dlc-answer-capture.sh"
+  OW="$PROBE/o"; mkdir -p "$OW/_bmad-output" || { echo "FIXTURE ERROR: cannot create $OW" >&2; exit 2; }
+  O_P1='{"tool_name":"AskUserQuestion","session_id":"s1","tool_use_id":"t1","tool_response":{"answers":{
+"LR-S42-10 (lead interpretation): the index covers the primary pool only.":"Confirm LR-S42-10",
+"LR-S42-11 (lead interpretation): the backfill is out of scope.":"Strike LR-S42-11",
+"LR-S42-9: index the widget pool, as you asked?":"Confirm LR-S42-12",
+"LR-S42-130 (lead interpretation): a different bullet.":"Confirm LR-S42-130",
+"LR-S42-14 (lead interpretation): one clause; and LR-S42-15 (lead interpretation): another.":"Confirm LR-S42-14",
+"Which halt behaviour should this sprint build?":"Confirm LR-S42-16",
+"LR-S42-17 (lead interpretation): the reserve is a cap.":"Confirm LR-S42-17",
+"LR-S42-18 (lead interpretation): the cache is per tenant.":"Confirm LR-S42-18 (Recommended)",
+"LR-S42-19 (lead interpretation): the export is nightly.":"Confirm LR-S42-190 (Recommended)",
+"LR-S42-20 (lead interpretation): a router is derived.":"How is there still no router derived? Absolutely unacceptable that you refuse to figure this out.",
+"LR-S42-21 (lead interpretation): both chains run.":"Confirm LR-S42-21\nbut only on Matic",
+"LR-S42-22 (lead interpretation): the pool is capped.":"Reword LR-S42-22",
+"LR-S42-23 (lead interpretation): the limit follows LR-S42-230.":"Confirm LR-S42-23",
+"LR-S42-24 (lead interpretation): LR-S42-24 caps the pool (HARD_BLOCK S42-LR-S42-24-POOL).":"Confirm LR-S42-24",
+"LR-S42-25: is the pool capped?":"Confirm LR-S42-25"}}}'
+  O_P2='{"tool_name":"AskUserQuestion","session_id":"s1","tool_use_id":"t2","tool_response":{"answers":{
+"LR-S42-17 (lead interpretation): the reserve is a cap.":"Strike LR-S42-17"}}}'
+  printf '%s' "$O_P1" | FXCELL=o-hook-1 CLAUDE_PROJECT_DIR="$OW" bash "$O_HOOK"
+  printf '%s' "$O_P2" | FXCELL=o-hook-2 CLAUDE_PROJECT_DIR="$OW" bash "$O_HOOK"
+  O_H="$OW/_bmad-output/operator-answers-history.md"
+  o_rec="$(grep -c '^## ' "$O_H" 2>/dev/null)" || o_rec=0
+  o_states() { # <awk program> -> "10=<state> 11=<state> ..." over the hook-written history
+    local p="$1" i s=""
+    for i in 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do s="$s $i=$(awk -v id="LR-S42-$i" "$p" "$O_H" 2>/dev/null)"; done
+    printf '%s' "${s# }"
+  }
+  o_cell() { # <states> <ids...> -> the states of those ids only
+    local st="$1" i w r=""; shift
+    for i in "$@"; do for w in $st; do case "$w" in "$i="*) r="$r $w" ;; esac; done; done
+    printf '%s' "${r# }"
+  }
+  o_want() { o_cell "$O_WANT" "$@"; }
+  B_o=0
+  if [ "$o_rec" -ne 16 ]; then
+    bad "(o) the capture hook wrote $o_rec record(s), want 16 (one per question/answer pair) -- the seed is not the producer's"
+  else
+    O_BASE="$(o_states "$O_PROG")"
+    if [ "$O_BASE" = "$O_WANT" ]; then ok "(o) control: the unmutated derivation reads every one of the sixteen ids as expected"; B_o=1
+    else bad "(o) CONTROL: the unmutated derivation reads '$O_BASE', want $O_WANT, so no mutant verdict below is attributable"; fi
+    o_check() { # <cell> <ids...>
+      local nm="$1"; shift
+      if [ "$(o_cell "$O_BASE" "$@")" = "$(o_want "$@")" ]; then ok "$nm: §3's derivation reads $(o_want "$@") over the hook-written history"
+      else bad "$nm: §3's derivation reads '$(o_cell "$O_BASE" "$@")', want $(o_want "$@")"; fi
+    }
+    o_check o-confirm 10
+    o_check o-strike 11
+    o_check o-parent 12
+    o_check o-digit 13
+    o_check o-two 14 15
+    o_check o-body 16
+    o_check o-newest 17
+    o_check o-badged 18
+    o_check o-badge-digit 19
+    o_check o-freetext 20
+    o_check o-confirm-tail 21
+    o_check o-reword-exact 22
+    o_check o-self-prefix 23
+    o_check o-self-repeat 24
+    o_check o-unlabelled 25
+    # Mutants of the program, each on a copy of the extracted text, each guarded so a substitution that matched
+    # nothing reads DID NOT APPLY.
+    o_mut() { # <name> <decides ids> <twin ids> <sed expr>
+      local m="$1" d="$2" t="$3" mp ms
+      mp="$(printf '%s' "$O_PROG" | sed "$4")"
+      if [ "$mp" = "$O_PROG" ]; then bad "(o) MUTANT $m DID NOT APPLY"; return; fi
+      ms="$(o_states "$mp")"
+      # shellcheck disable=SC2086 # the id lists are blank-separated on purpose
+      if [ "$(o_cell "$ms" $d)" != "$(o_want $d)" ]; then
+        mutant_killed "$B_o" "$m" "(o) MUTANT $m killed: ids $d read '$(o_cell "$ms" $d)'"
+      else bad "(o) MUTANT $m SURVIVED: ids $d still read $(o_want $d)"; fi
+      # shellcheck disable=SC2086
+      [ "$(o_cell "$ms" $t)" = "$(o_want $t)" ] || bad "(o) MUTANT $m is entangled: its twin ids $t also moved"
+    }
+    o_mut o-any-answer "11" "10" 's/(c == "Confirm " id) ? "CONFIRMED" : (c == "Strike " id || c == "Reword " id) ? "DESCOPE" : "UNDECIDED"/"CONFIRMED"/'
+    o_mut o-unbounded "25" "10" 's/id " (lead interpretation): "/id/'
+    o_mut o-multi-id "14 15" "10" 's/if (t !~ \/LR-S\[0-9\]+-\[0-9\]+\/) { f = 1; next }/f = 1; next/'
+    o_mut o-count-own "24" "10" 's/{ t = \$0 " "; gsub(id "\[^0-9\]", " ", t); if (t !~ \/LR-S\[0-9\]+-\[0-9\]+\/)/{ if (gsub(\/LR-S[0-9]+-[0-9]+\/, "\&") == 1)/'
+    o_mut o-strip-unbounded "23" "10" 's/gsub(id "\[^0-9\]", " ", t)/gsub(id, " ", t)/'
+    o_mut o-exact-only "18" "10" 's/sub(\/ \[(\]Recommended\[)\]\$\/, "", c); //'
+    o_mut o-prefix "19" "10" 's/(c == "Confirm " id)/(index(c, "Confirm " id) == 1)/'
+    o_mut o-any-nonconfirm-descope "20" "10" 's/(c == "Strike " id || c == "Reword " id) ? "DESCOPE" : "UNDECIDED"/"DESCOPE"/'
+    o_mut o-first-line-only "21" "10" 's/f == 2 { b = b s \$0;/f == 2 { if (s == "") b = $0;/'
+    o_mut o-no-reword "22" "10" 's/ || c == "Reword " id//'
+    o_mut o-first-wins "17" "10" 's/f == 1 \&\& \$0 == "```text" {/f == 1 \&\& v == "UNANSWERED" \&\& $0 == "```text" {/'
   fi
 fi
 

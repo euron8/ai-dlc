@@ -641,6 +641,7 @@ governance fact that a locked requirement slipped its lock is visible and
 signed off, not erased by the eventual delivery. A locked-requirement
 deferral reaching close-out with no recorded operator disposition is a
 retro finding, whether or not the requirement ultimately shipped.
+The undelivered clauses of a bullet the checkpoint marked `partial` are read here as deferred bullets are, each owing its own recorded disposition.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a locked requirement
 quietly deferred without operator sign-off, with the deferral later
