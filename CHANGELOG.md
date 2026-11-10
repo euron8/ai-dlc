@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1038.0] - 2026-11-09
+
+### BL-948 closed
+
+`core/scripts/validate-bmad-invocations.sh` (Check 32) no longer reads a filename extension as the end of a `/bmad-` call site. `core/skills/ai-dlc/steps/route.md:587` names the file `s<N>/bmad-sprint-status.yaml`; the extractor's trailing class admits `.` so that a sentence-final `/bmad-review.` still counts, and it also admitted the `.` of `.yaml`, extracting the name `bmad-sprint-status`. No such skill exists, so Check 32 FAILed with `hard_block: true` at every planning gate of every consumer carrying the rulebook. The token entered at 0.1032.0 (BL-938).
+
+The fix is a prefilter ahead of the unchanged extraction regex: `| LC_ALL=C sed -E 's#(/bmad-[a-z0-9-]+)\.([A-Za-z0-9_])#\1_\2#g'` over `grep -rh '' "$RULES"`. A dot followed by a word character after a name becomes `_`, which the trailing class rejects as a longer name. A sentence-final `.` still ends a call site. `LC_ALL=C` is there because BSD `sed` under a UTF-8 locale stops at the first invalid UTF-8 byte (`illegal byte sequence`), which would leave every later name in the concatenated stream unscanned; the pattern is ASCII-only, so the C locale is exact. Name sets: distribution 13 to 12, consumer installed rulebook 14 to 13, lost `{bmad-sprint-status}`, gained `{}`. Rejected: swapping the trailing class for one that admits `.` followed by a non-word character, because it consumes the character after the dot and hides `/bmad-b` in `/bmad-a. /bmad-b`.
+
+Fixtures: `core/fixtures/bmad-invocation-resolve` gains EXT-clean (three filename offenders, `.yaml`, `.json` and `.Yaml`), EXT-near-miss (three sentence-final-dot call sites that must still be named, the last directly before a second call site), EXT-M and its PAIRING, EXT-ilseq (a latin-1 byte on the line before a dangling name, run under `en_US.UTF-8`) and EXT-ilseq-M (`LC_ALL=C` removed, so the name is lost). G611 no longer derives its skill list from the validator's own output, which is why 0.1032.0 shipped green over this defect; a tokenizer over the rulebook copy derives it, and G611 independent asserts it. Under the shipped validator G611-clean goes rc 1 naming `/bmad-sprint-status`.
+
+Declarations: `tools.decl` gains `tr` (the tokenizer) and `awk`; `awk` was undeclared, so the consumer-scaffold strip at the G611 seed silently removed nothing in the sandbox. `invocations.decl` moves `*` 21 to 26 and the validator 15 to 17.
+
+Consumer reach: machinery, live from step 3 of the delivering pull. Consumer cost: one `sed` stage in a pipe; fork-profile TOTAL is 2906 at both 35201f04f and the release tip, and `FORK_BUDGET` is unchanged at 2926.
+
+### BL-949 filed
+
+`core/scripts/validate-bmad-invocations.sh`'s single consuming `grep -o` takes the boundary character two adjacent call sites share, so in `/bmad-a /bmad-b` the second name is never checked and a dangling one passes Check 32. Pre-existing, and BL-948's prefilter does not touch it. Filed, not built.
+
+
 ## [0.1037.0] - 2026-11-09
 
 ### BL-946 closed

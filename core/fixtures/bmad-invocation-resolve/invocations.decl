@@ -1,4 +1,8 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # The G611 arms add six subject runs (derive, clean, m1, near-miss, lens, gate): * 15->21.
-21 *
-15 core/scripts/validate-bmad-invocations.sh
+# BL-948: the G611 derive run no longer calls the validator (-1); EXT adds two (offender, near-miss) and EXT-M two
+# more on its mutant copy (+4): * 21-1+4=24; the validator path itself 15-1+2=16 (the EXT-M runs go to the copy).
+# EXT-ilseq adds one validator run under en_US.UTF-8 and EXT-ilseq-M one on its mutant copy (+2): * 24+2=26; the
+# validator path itself 16+1=17 (the EXT-ilseq-M run goes to the copy).
+26 *
+17 core/scripts/validate-bmad-invocations.sh

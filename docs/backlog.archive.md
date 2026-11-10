@@ -40410,3 +40410,24 @@ Provenance: batch b252, graph s322 coe adversarial pass 2 push candidate; lead a
 verify: manual
 
 
+## BL-948 — Check 32 (validate-bmad-invocations.sh) reads a filename's extension as a call-site boundary, so route.md's own `s<N>/bmad-sprint-status.yaml` hard-blocks every planning gate
+
+**LANDED (v0.1038.0).** **DEFECT.** `core/scripts/validate-bmad-invocations.sh:157 at 35201f04f` extracts call sites with `grep -rhoE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)'`. The trailing class `[^A-Za-z0-9_/-]` admits `.`, deliberately, so a sentence-final `/bmad-review.` still counts. It also admits the `.` of a file extension, so `…/bmad-sprint-status.yaml` extracts the name `bmad-sprint-status`. No such skill exists, so Check 32 FAILs with `hard_block: true` at every planning gate of every consumer carrying the rulebook.
+
+The token came from `core/skills/ai-dlc/steps/route.md:587`, which names the file `s<N>/bmad-sprint-status.yaml` that `core/scripts/sprint-status.sh` writes (`BMAD_RELOCATED_NAME`); it entered at 0.1032.0 (`762adcf43`, BL-938). The `>` before the slash passes the leading class and the `.` after the name passes the trailing one. The consumer filing is `PC-S322-CHECK-32-READS-ROUTES-OWN-FILENAME-TOKEN-AS-A-BMAD-INVOCATION-AND-HARD-BLOCKS-EVERY-PLANNING-GATE`; it reproduced the failure on its installed rulebook, where the same command exited 0 at the gate before the reconcile that brought the token.
+
+Measured at origin/main 35201f04f over `core/skills/ai-dlc` with the shipped extraction regex of `:157` (raw matches, then the name set after stripping the boundary characters): 67 raw matches and 13 unique names, `bmad-sprint-status` among them once. Controls in the same run: `bmad-sprint-planning` is present (1 name), and `bmad-zzqx-never`, a token `grep -rlF zzqx-never` finds in 0 rulebook files, gives 0. The consumer's installed rulebook gives 14 names. The only extension-shaped hit in the rulebook is that one line.
+
+Fix: a prefilter stage ahead of the unchanged extractor that neutralises a dot followed by a word character after a name, `LC_ALL=C sed -E 's#(/bmad-[a-z0-9-]+)\.([A-Za-z0-9_])#\1_\2#g'` over `grep -rh '' "$RULES"`, with line 157's regex text byte-identical. Name sets: distribution 13 to 12, consumer 14 to 13, lost `{bmad-sprint-status}`, gained `{}`. `run /bmad-a.`, `Run /bmad-a. Next` and `(/bmad-a.)` stay counted; `s<N>/bmad-a.yaml`, `/bmad-a.json` and `/bmad-a.Yaml` do not. It is LC_ALL=C because BSD sed under a UTF-8 locale stops at the first invalid UTF-8 byte (`illegal byte sequence`) and would drop every later name in the concatenated stream. It is machinery, so it reaches a consumer from step 3 of the delivering pull.
+
+Rejected: swapping the trailing class for `([^A-Za-z0-9_/.-]|\.([^A-Za-z0-9_]|$)|$)`. Its `\.([^A-Za-z0-9_]|$)` branch consumes the character after the dot, so `/bmad-a. /bmad-b` loses `/bmad-b`, which the shipped grammar keeps: a new hiding of a call site. Also rejected: rewording `route.md:587`. A rulebook edit waits for the reconcile merge while machinery arrives at step 3, the filename is a real produced path and correct prose, and a rewording would not close the class: any future `…/bmad-X.ext` in the rulebook hits the same trap.
+
+Second subject, the fixture. `core/fixtures/bmad-invocation-resolve/run.sh:204` derives the G611 skill list from the validator's own output (`invokes '/bmad-…'` lines of an empty-skills run), so the clean G611 run cannot fail on a name the reader invents; that is why 0.1032.0 shipped green over this defect. The fix re-sources the list from an independent tokenizer over the copied rulebook (split on whitespace, backticks, brackets, `(`, `)`, `*` and `"`; keep tokens of the exact shape `/bmad-<name>` with at most one trailing punctuation mark), with seed controls that `bmad-sprint-status` is absent from that list and the literal `bmad-sprint-status.yaml` is present in the rulebook copy, so the clean run is a live test. New arm `EXT` seeds the offenders and near-misses of the dot rule in the fixture's own rulebook, and mutant EXT-M deletes the prefilter. Arm `EXT-ilseq` seeds a latin-1 byte before a dangling name under en_US.UTF-8, and mutant `EXT-ilseq-M` drops `LC_ALL=C` from the sed.
+
+Receipt: the fixture's `bmad-invocation-resolve: PASS` line and the exact EXT-clean and G611-independent ok lines, each counted once. Before the fix the fixture emits neither ok line, so the receipt reads STILL-LIVE.
+
+Provenance: batch b253, cluster check-32; consumer filing above.
+
+verify: sh R=core/fixtures/bmad-invocation-resolve/run.sh; [ -f "$R" ] || exit 9; o="$(bash "$R" 2>&1)" || exit 1; grep -qF 'bmad-invocation-resolve: PASS' <<<"$o" || exit 1; a="$(grep -cF '  ok    EXT-clean:' <<<"$o")" || a=0; g="$(grep -cF '  ok    G611 independent:' <<<"$o")" || g=0; [ "$a" -eq 1 ] && [ "$g" -eq 1 ]
+
+
