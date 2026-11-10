@@ -178,8 +178,95 @@ printf 'print("app v3")\n' > "$PROJ/server/app.py"
 commit "chore(ai-dlc-update): reconcile distribution 0.1.0 -> 0.3.0" || exit 2
 INRANGE="$(g rev-parse HEAD)"
 
+# --- BL-945: the one batched walk, against the merge and rename shapes it must agree on -------
+# Each new reconcile carries its OWN stamp (0.5.0, 0.6.0), so no eligible set above moves, and
+# each new sprint commit's core blob differs from RECONCILE's, so the content arm acquits none.
+# EVIL: neither side touches verdict.sh; the MERGE rewrites it. Listed only with -c.
+branch_from_base evil-side
+printf 'print("evil side")\n' > "$PROJ/server/app.py"
+commit "feat(s1): side edits the app" || exit 2
+branch_from_base evil
+printf 'print("other")\n' > "$PROJ/server/other.py"
+commit "feat(s1): main adds a module" || exit 2
+g merge -q --no-ff --no-commit evil-side >/dev/null 2>&1 || exit 2
+printf '#!/usr/bin/env bash\necho evil\n' > "$PROJ/scripts/ai-dlc/verdict.sh"
+commit "Merge branch evil-side" || exit 2
+EVIL="$(g rev-parse HEAD)"
+# NOFF: a reconcile on its update branch, merged --no-ff under a PR subject. The merge equals
+# its second parent at verdict.sh, so -c does not list it; -m lists it against the first.
+branch_from_base ai-dlc-update/noff
+printf '0.5.0\n' > "$PROJ/.claude/.ai-dlc-version"
+printf '#!/usr/bin/env bash\necho v10\n' > "$PROJ/scripts/ai-dlc/verdict.sh"
+commit "chore(ai-dlc-update): reconcile distribution 0.1.0 -> 0.5.0" || exit 2
+NOFF_REC="$(g rev-parse HEAD)"
+branch_from_base noff
+printf 'print("app noff")\n' > "$PROJ/server/app.py"
+commit "feat(s1): main moves on" || exit 2
+g merge -q --no-ff --no-edit -m "Merge pull request #7 from ai-dlc-update/noff" ai-dlc-update/noff >/dev/null 2>&1 || exit 2
+NOFF="$(g rev-parse HEAD)"
+# RENREW: a core path renamed out of core, then the new file rewritten, so the range diff sees
+# a deletion of the core path. With renames on, the rename commit names only the new path.
+branch_from_base renrew
+mkdir -p "$PROJ/server"
+g mv .claude/hooks/ai-dlc-a.sh server/moved.sh >/dev/null 2>&1 || exit 2
+commit "fix(s1): move the hook out of core" || exit 2
+RENREW_T="$(g rev-parse HEAD)"
+printf 'print("rewritten %s")\n' one two three four five six > "$PROJ/server/moved.sh"
+commit "fix(s1): rewrite the moved module" || exit 2
+RENREW="$(g rev-parse HEAD)"
+# CASEB: the DECLARED DIVERGENCE. One identical edit of verdict.sh on both sides: a sprint
+# commit X on the side branch and a reconcile R on the first-parent line. The per-path walk's
+# history simplification follows R alone; the batched walk lists X too.
+branch_from_base caseb-side
+printf '#!/usr/bin/env bash\necho caseb\n' > "$PROJ/scripts/ai-dlc/verdict.sh"
+commit "feat(s1): hand-apply the caseb helper" || exit 2
+CASEB_X="$(g rev-parse HEAD)"
+branch_from_base caseb
+printf '0.6.0\n' > "$PROJ/.claude/.ai-dlc-version"
+printf '#!/usr/bin/env bash\necho caseb\n' > "$PROJ/scripts/ai-dlc/verdict.sh"
+commit "chore(ai-dlc-update): reconcile distribution 0.1.0 -> 0.6.0" || exit 2
+CASEB_R="$(g rev-parse HEAD)"
+g merge -q --no-edit -m "Merge branch caseb-side" caseb-side >/dev/null 2>&1 || exit 2
+CASEB="$(g rev-parse HEAD)"
+# NOMAN: a layered base with NO manifest at the ref, so the working-tree fallback answers.
+branch_from_base noman
+g rm -q .claude/skills/ai-dlc/core-manifest.md >/dev/null 2>&1 || exit 2
+commit "chore: drop the manifest" || exit 2
+NOMAN="$(g rev-parse HEAD)"
+printf '#!/usr/bin/env bash\necho noman\n' > "$PROJ/scripts/ai-dlc/verdict.sh"
+commit "fix(s1): edit the helper with no manifest at base" || exit 2
+NOMAN_DIRTY="$(g rev-parse HEAD)"
+# UNREL: an unrelated-history ROOT that adds a core path, merged --allow-unrelated-histories.
+# The merge equals its second parent at the path, so -c does not list it; only the root commit
+# names the path, and log.showRoot=false hides a root's file list unless the walk says --root.
+ub="$(printf 'orphan\n' | g hash-object -w --stdin)" || exit 2
+GIT_INDEX_FILE="$WORK/unrel.idx" g update-index --add --cacheinfo "100644,$ub,scripts/ai-dlc/new.sh" || exit 2
+ut="$(GIT_INDEX_FILE="$WORK/unrel.idx" g write-tree)" || exit 2
+UNREL_ROOT="$(g commit-tree "$ut" -m "feat: unrelated root")" || exit 2
+branch_from_base unrel || exit 2
+g merge -q --allow-unrelated-histories --no-edit -m "Merge unrelated" "$UNREL_ROOT" >/dev/null 2>&1 || exit 2
+UNREL="$(g rev-parse HEAD)"
+
 # SEED ASSERTIONS: every content cell's discriminating input exists, or the seed refuses.
 seedfail() { echo "seed: $1" >&2; exit 2; }
+# UNREL: the root has no parent, and the merge does not differ from it at new.sh.
+[ -z "$(g rev-list --parents -n1 "$UNREL_ROOT" | cut -s -d' ' -f2)" ] && [ "$(blob "$UNREL" scripts/ai-dlc/new.sh)" = "$ub" ] \
+  || seedfail "UNREL is not a merged parentless root adding scripts/ai-dlc/new.sh"
+# BL-945 cells: each shape the walk's flags decide is present.
+[ "$(g rev-list --parents -1 "$EVIL" | wc -w | tr -d ' ')" -eq 3 ] || seedfail "EVIL is not a merge"
+[ -z "$(g log --format=%H "${BASE}..${EVIL}^1" -- scripts/ai-dlc/verdict.sh)" ] && [ -z "$(g log --format=%H "${BASE}..${EVIL}^2" -- scripts/ai-dlc/verdict.sh)" ] \
+  || seedfail "a side of EVIL touches verdict.sh, so only the merge must"
+[ "$(blob "$NOFF" scripts/ai-dlc/verdict.sh)" = "$(blob "$NOFF_REC" scripts/ai-dlc/verdict.sh)" ] && [ "$(blob "${NOFF}^1" scripts/ai-dlc/verdict.sh)" != "$(blob "$NOFF" scripts/ai-dlc/verdict.sh)" ] \
+  || seedfail "NOFF's merge does not equal its reconcile parent at verdict.sh and differ from its first parent"
+rr_diff="$(g diff --name-only "${BASE}...${RENREW}")"; rr_log="$(g log -1 --format= --name-only "$RENREW_T")"
+grep -qxF .claude/hooks/ai-dlc-a.sh <<<"$rr_diff" || seedfail "RENREW's range diff does not name the core path"
+grep -qxF .claude/hooks/ai-dlc-a.sh <<<"$rr_log" && seedfail "with renames on, RENREW_T names the core path, so --no-renames decides nothing"
+grep -qxF server/moved.sh <<<"$rr_log" || seedfail "RENREW_T's rename-on listing lacks the new path (control)"
+cb="$(g log --format=%H "${BASE}..${CASEB}" -- scripts/ai-dlc/verdict.sh)"
+[ "$cb" = "$CASEB_R" ] || seedfail "the per-path walk over CASEB does not list R alone ($cb), so case B diverges nowhere"
+[ "$(g rev-parse "${CASEB}^1")" = "$CASEB_R" ] || seedfail "CASEB's first parent is not R"
+[ -z "$(blob "$NOMAN" .claude/skills/ai-dlc/core-manifest.md)" ] && [ -n "$(blob "$NOMAN" .claude/skills/ai-dlc/overrides/README.md)" ] \
+  || seedfail "NOMAN is not a layered base without a manifest"
 V=scripts/ai-dlc/verdict.sh; S=.claude/.ai-dlc-version
 [ "$(g rev-parse "${SQUASH}^{tree}")" = "$(g rev-parse "${XREC}^{tree}")" ] || seedfail "SQUASH is not X's tree"
 [ "$(g log -1 --format=%s "$SQUASH")" = "feat: ai-dlc update 0.2.0 (#101)" ] || seedfail "SQUASH subject"
@@ -256,6 +343,17 @@ OLDBLOB="$OLDBLOB"
 DELMATCH="$DELMATCH"
 DELKEEP="$DELKEEP"
 INRANGE="$INRANGE"
+EVIL="$EVIL"
+NOFF="$NOFF"
+RENREW="$RENREW"
+RENREW_T="$RENREW_T"
+CASEB="$CASEB"
+CASEB_X="$CASEB_X"
+CASEB_R="$CASEB_R"
+NOMAN="$NOMAN"
+NOMAN_DIRTY="$NOMAN_DIRTY"
+UNREL="$UNREL"
+UNREL_ROOT="$UNREL_ROOT"
 DELPATH=".claude/hooks/ai-dlc-a.sh"
 ENVEOF
 

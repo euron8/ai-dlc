@@ -20,7 +20,13 @@
 # None of the four changes the output on a clean range. The CONTENT arm (BL-939) adds four
 # more (mutations 7-10): the arm removed, its stamp key dropped, its mode dropped, and the
 # range left inside its eligible set -- the first FAILs every squash-merged pull, the other
-# three acquit a touch that is not the installed reconcile's content.
+# three acquit a touch that is not the installed reconcile's content. BL-945 adds seven
+# (mutations 11-17): either cwd anchor removed (the activation ls-tree, the batched walk), the
+# walk's -c dropped or swapped for -m, its --no-renames dropped, CHANGED's diff.relative=false
+# dropped, and the working-tree manifest fallback read from the cwd. Case B (Assertion 20) is the
+# walk's declared divergence from the per-path walk it replaced, and is stricter. Mutation 18
+# drops the walk's --root, so under log.showRoot=false an unrelated-history root that adds a core
+# path lists no file and the range PASSes (Assertion 23).
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -42,6 +48,7 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "core-paths-audit-diff: FI
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # B_M<n>=1 only beside the unmutated arm's own ok: the mutant is scored only if its base arm passed.
 B_M1=0; B_M2=0; B_M3=0; B_M4=0; B_M5=0; B_M6=0; B_M7=0; B_M8=0; B_M9=0; B_M10=0
+B_M11=0; B_M12=0; B_M13=0; B_M14=0; B_M15=0; B_M16=0; B_M17=0; B_M18=0
 
 # audit <script> <base> <head> — never through a pipe: RC must be the script's own.
 audit() {
@@ -61,6 +68,25 @@ audit_at() {
   git -C "$PROJ" checkout -q "$BASE" >/dev/null 2>&1 || broken "could not restore the working tree to base"
 }
 says() { grep -qF "$1" "$OUT"; }
+
+# audit_in <script> <dir under PROJ> <base> <head> — the same, run from a SUBDIRECTORY (BL-945).
+audit_in() {
+  local v="$1" d="$2" b="$3" h="$4"
+  ( cd "$PROJ/$d" && bash "$v" --audit-diff "$b" "$h" ) >"$OUT" 2>&1
+  RC=$?
+}
+# audit_rel <script> — DIRTY from docs/ with the repo's diff.relative=true, which makes a plain
+# --name-only answer cwd-relative. The config is proved ACTIVE (a plain diff from docs/ names
+# nothing) and proved REMOVED afterwards, so no later arm inherits it.
+audit_rel() {
+  git -C "$PROJ" config diff.relative true || broken "could not set diff.relative"
+  [ -z "$( cd "$PROJ/docs" && git diff --name-only "$BASE...$DIRTY" 2>/dev/null)" ] || broken "diff.relative=true is not in effect from docs/"
+  audit_in "$1" docs "$BASE" "$DIRTY"
+  git -C "$PROJ" config --unset diff.relative || broken "could not unset diff.relative"
+  git -C "$PROJ" config --get diff.relative >/dev/null 2>&1 && broken "diff.relative is still set after the arm"
+  return 0
+}
+mkdir -p "$PROJ/docs" || broken "could not make the docs/ subdirectory"
 
 # A mutant is a COPY with one sed, guarded by cmp -s so a pattern that matched nothing
 # cannot pass as a mutation.
@@ -228,6 +254,66 @@ if [ "$RC" -eq 1 ] && says "verdict.sh :: feat: hand-copy the 0.3.0 verdict help
   ok "an in-range reconcile does not acquit the hand copy before it: R excludes <base>..<head>"; B_M10=1
 else bad "an in-range reconcile acquitted a commit of its own range (rc=$RC)"; fi
 
+# --- Assertions 15-21: BL-945, the cwd and the one batched walk -------------------
+# 15: from docs/, the in-place edit still FAILs (Assertion 2 is the root control). Both the
+# activation ls-tree and the walk run from the toplevel; either half un-anchored answered 0.
+audit_in "$VALIDATOR" docs "$BASE" "$DIRTY"
+if [ "$RC" -eq 1 ] && says "$DIRTY scripts/ai-dlc/verdict.sh :: fix(s1): tweak the verdict helper in place" && ! says "DORMANT"; then
+  ok "from docs/ an in-place core edit exits 1, as it does from the project root"; B_M11=1
+else bad "from docs/ an in-place core edit exited $RC, want 1 (the root run exits 1)"; fi
+# 16: a clean range from docs/ gives its root verdict.
+audit_in "$VALIDATOR" docs "$BASE" "$CLEAN"
+[ "$RC" -eq 0 ] && says "PASS: no core path touched" \
+  && ok "from docs/ a consumer-only range passes, as it does from the root" \
+  || bad "from docs/ a consumer-only range did not pass cleanly (rc=$RC)"
+# 17: an EVIL merge (neither side touches the core path, the merge rewrites it) is an offender.
+audit "$VALIDATOR" "$BASE" "$EVIL"
+if [ "$RC" -eq 1 ] && says "$EVIL scripts/ai-dlc/verdict.sh :: Merge branch evil-side"; then
+  ok "an evil merge that rewrites a core path neither side touched flags the merge"; B_M13=1
+else bad "an evil merge's core rewrite was not flagged (rc=$RC)"; fi
+# 18: a reconcile merged --no-ff passes by the SUBJECT arm: the merge equals its reconcile parent.
+audit "$VALIDATOR" "$BASE" "$NOFF"
+if [ "$RC" -eq 0 ] && says "every touching commit is an /ai-dlc-update reconcile"; then
+  ok "a reconcile merged --no-ff under a PR subject passes by the reconcile arm"; B_M15=1
+else bad "a --no-ff merge of a reconcile was flagged (rc=$RC)"; fi
+# 19: a core path renamed out of core, then rewritten, flags the rename commit by the core name.
+audit "$VALIDATOR" "$BASE" "$RENREW"
+if [ "$RC" -eq 1 ] && says "$RENREW_T $DELPATH :: fix(s1): move the hook out of core"; then
+  ok "a rename out of a core path, then a rewrite, flags the rename under the core path's name"; B_M14=1
+else bad "a rename-then-rewrite out of core was not flagged by the core path (rc=$RC)"; fi
+# 20: CASE B, the declared divergence. An identical edit on both sides: the per-path walk listed R
+# only and PASSed; the batched walk lists the sprint commit X too, and FAILs naming it.
+audit "$VALIDATOR" "$BASE" "$CASEB"
+[ "$RC" -eq 1 ] && says "$CASEB_X scripts/ai-dlc/verdict.sh :: feat(s1): hand-apply the caseb helper" && ! says "$CASEB_R scripts/ai-dlc/verdict.sh" \
+  && ok "case B: a sprint commit identical to a reconcile on the other side flags (stricter than the per-path walk)" \
+  || bad "case B: the side-branch sprint commit was not flagged, or the reconcile was (rc=$RC)"
+# 21: diff.relative=true from docs/. CHANGED and the walk both answer root-relative names.
+audit_rel "$VALIDATOR"
+if [ "$RC" -eq 1 ] && says "$DIRTY scripts/ai-dlc/verdict.sh"; then
+  ok "with diff.relative=true, from docs/ an in-place core edit still exits 1"; B_M12=1; B_M16=1
+else bad "with diff.relative=true from docs/ an in-place core edit exited $RC, want 1"; fi
+# 22: no manifest at <base-ref>, so the WORKING-TREE fallback answers, read from the toplevel.
+audit "$VALIDATOR" "$NOMAN" "$NOMAN_DIRTY"
+noman_root="$RC"
+audit_in "$VALIDATOR" docs "$NOMAN" "$NOMAN_DIRTY"
+if [ "$noman_root" -eq 1 ] && [ "$RC" -eq 1 ] && says "classifying against the working-tree manifest"; then
+  ok "with no manifest at the base ref, from docs/ the working-tree fallback gives the root verdict"; B_M17=1
+else bad "the working-tree manifest fallback from docs/ exited $RC, root $noman_root (want 1 and 1)"; fi
+# 23: an unrelated-history root adding a core path, under log.showRoot=false. The config is
+# proved ACTIVE (a plain log of the root lists no file) and proved REMOVED afterwards.
+audit_noroot() {
+  git -C "$PROJ" config log.showRoot false || broken "could not set log.showRoot"
+  [ -z "$(git -C "$PROJ" log -1 --format= --name-only "$UNREL_ROOT" 2>/dev/null)" ] || broken "log.showRoot=false is not in effect"
+  audit "$1" "$BASE" "$UNREL"
+  git -C "$PROJ" config --unset log.showRoot || broken "could not unset log.showRoot"
+  git -C "$PROJ" config --get log.showRoot >/dev/null 2>&1 && broken "log.showRoot is still set after the arm"
+  return 0
+}
+audit_noroot "$VALIDATOR"
+if [ "$RC" -eq 1 ] && says "$UNREL_ROOT scripts/ai-dlc/new.sh :: feat: unrelated root"; then
+  ok "with log.showRoot=false an unrelated root adding a core path flags the root commit"; B_M18=1
+else bad "with log.showRoot=false the unrelated root was not flagged (rc=$RC)"; fi
+
 # --- Mutation 1: resolve the manifest from the working tree --------------------
 M="$(mutate base-manifest 's@git show "${BASE_REF}:${c}"@git show "${BASE_REF}:no-such-prefix/${c}"@')" || exit 2
 audit_at "$M" shrink "$BASE" "$SHRINK"
@@ -245,7 +331,7 @@ audit "$M" "$BASE" "$CLEAN"
 [ "$RC" -eq 0 ] || bad "MUTATION 2 ENTANGLED: it also changed the verdict on a clean layered range"
 
 # --- Mutation 3: drop the reconcile exemption ---------------------------------
-M="$(mutate reconcile "s@'chore(ai-dlc-update):'\*) ;;@'zzz-not-a-real-subject:'*) ;;@")" || exit 2
+M="$(mutate reconcile 's@rec = (index(subj, "chore(ai-dlc-update):") == 1)@rec = (index(subj, "zzz-not-a-real-subject:") == 1)@')" || exit 2
 audit "$M" "$BASE" "$RECONCILE"
 if [ "$RC" -eq 0 ]; then bad "MUTATION 3 SURVIVED: a pull still passes with the reconcile subject no longer recognized"
 else mutant_killed "$B_M3" "mutation 3" "mutation 3 killed: without the exemption every /ai-dlc-update pull FAILs its own consumer"; fi
@@ -325,6 +411,68 @@ if [ "$RC" -eq 1 ]; then bad "MUTATION 10 SURVIVED: the hand copy still flagged 
 else mutant_killed "$B_M10" "mutation 10" "mutation 10 killed: with the range left in R a reconcile acquits the commits of its own range"; fi
 audit "$M" "$BASE" "$BYTE"
 [ "$RC" -eq 1 ] || bad "MUTATION 10 ENTANGLED: it also acquitted a blob no reconcile carries"
+
+# --- Mutations 11-17: BL-945 ---------------------------------------------------------
+# 11: the activation ls-tree un-anchored. From docs/ the layer dir matches nothing: DORMANT.
+M="$(mutate anchor-lstree 's@git -C "\$AUDIT_ROOT" ls-tree -d@git ls-tree -d@')" || exit 2
+audit_in "$M" docs "$BASE" "$DIRTY"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 11 SURVIVED: from docs/ the in-place edit still exits 1 with the ls-tree un-anchored"
+else mutant_killed "$B_M11" "mutation 11" "mutation 11 killed: an un-anchored activation probe reads a layered consumer as DORMANT from a subdirectory"; fi
+audit "$M" "$BASE" "$DIRTY"
+[ "$RC" -eq 1 ] || bad "MUTATION 11 ENTANGLED: it also changed the root verdict on an in-place core edit"
+# 12: the walk un-anchored. It has no pathspec, so only diff.relative=true can move it: from
+# docs/ it names nothing outside docs/, and the range reads as reconcile-only.
+M="$(mutate anchor-walk 's@git -C "\$AUDIT_ROOT" log -c --no-renames@git log -c --no-renames@')" || exit 2
+audit_rel "$M"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 12 SURVIVED: with diff.relative=true from docs/ the edit still exits 1 with the walk un-anchored"
+elif says "every touching commit is an /ai-dlc-update reconcile"; then mutant_killed "$B_M12" "mutation 12" "mutation 12 killed: an un-anchored walk under diff.relative=true joins nothing and PASSes an in-place core edit"
+else bad "MUTATION 12 SURVIVED its own arm: wrong failure: no reconcile-arm PASS (rc=$RC)"; fi
+audit "$M" "$BASE" "$DIRTY"
+[ "$RC" -eq 1 ] || bad "MUTATION 12 ENTANGLED: it also changed the root verdict on an in-place core edit"
+# 13: -c dropped. A merge then lists no paths, so the evil merge's core rewrite goes unlisted.
+M="$(mutate walk-c 's@ log -c --no-renames @ log --no-renames @')" || exit 2
+audit "$M" "$BASE" "$EVIL"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 13 SURVIVED: the evil merge still flags with -c dropped"
+else mutant_killed "$B_M13" "mutation 13" "mutation 13 killed: without -c an evil merge's core rewrite is never listed"; fi
+audit "$M" "$BASE" "$DIRTY"
+[ "$RC" -eq 1 ] || bad "MUTATION 13 ENTANGLED: it also changed the verdict on an ordinary in-place core edit"
+# 14: --no-renames dropped. The rename commit is listed only under its new, non-core name.
+M="$(mutate walk-renames 's@ log -c --no-renames @ log -c @')" || exit 2
+audit "$M" "$BASE" "$RENREW"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 14 SURVIVED: the rename out of core still flags with renames on"
+else mutant_killed "$B_M14" "mutation 14" "mutation 14 killed: with renames on a rename out of a core path joins to nothing"; fi
+audit "$M" "$BASE" "$DIRTY"
+[ "$RC" -eq 1 ] || bad "MUTATION 14 ENTANGLED: it also changed the verdict on an ordinary in-place core edit"
+# 15: -m for -c. The --no-ff merge is listed against its first parent and FAILs the pull.
+M="$(mutate walk-m 's@ log -c --no-renames @ log -m --no-renames @')" || exit 2
+audit "$M" "$BASE" "$NOFF"
+if [ "$RC" -eq 0 ]; then bad "MUTATION 15 SURVIVED: the --no-ff reconcile merge still passes with -m"
+else mutant_killed "$B_M15" "mutation 15" "mutation 15 killed: with -m a --no-ff merge of a reconcile is a false FAIL"; fi
+audit "$M" "$BASE" "$RECONCILE"
+[ "$RC" -eq 0 ] || bad "MUTATION 15 ENTANGLED: it also changed the verdict on a linear reconcile"
+# 16: diff.relative=false dropped. From docs/ CHANGED is empty and the range reads N/A.
+M="$(mutate diff-relative 's@git -c diff.relative=false diff --name-only@git diff --name-only@')" || exit 2
+audit_rel "$M"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 16 SURVIVED: with diff.relative=true from docs/ the edit still exits 1 without diff.relative=false"
+elif says "N/A: no diff in range"; then mutant_killed "$B_M16" "mutation 16" "mutation 16 killed: without diff.relative=false a subdirectory sees no diff and reads N/A"
+else bad "MUTATION 16 SURVIVED its own arm: wrong failure: no N/A line (rc=$RC)"; fi
+audit_in "$M" docs "$BASE" "$DIRTY"
+[ "$RC" -eq 1 ] || bad "MUTATION 16 ENTANGLED: it also changed the docs/ verdict with diff.relative unset"
+# 17: the working-tree fallback read from the cwd. From docs/ no candidate exists: exit 2.
+M="$(mutate wt-fallback 's@^WT_PFX="\${AUDIT_ROOT:+\${AUDIT_ROOT}/}"$@WT_PFX=""@')" || exit 2
+audit_in "$M" docs "$NOMAN" "$NOMAN_DIRTY"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 17 SURVIVED: from docs/ the working-tree fallback still answers with the cwd prefix"
+else mutant_killed "$B_M17" "mutation 17" "mutation 17 killed: a cwd-relative working-tree fallback finds no manifest from a subdirectory"; fi
+audit "$M" "$NOMAN" "$NOMAN_DIRTY"
+[ "$RC" -eq 1 ] || bad "MUTATION 17 ENTANGLED: it also changed the root verdict with no base-ref manifest"
+# 18: --root dropped. Under log.showRoot=false the root lists no file and the range PASSes.
+M="$(mutate walk-root 's@ --no-renames --root @ --no-renames @')" || exit 2
+audit_noroot "$M"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 18 SURVIVED: the unrelated root still flags under log.showRoot=false with --root dropped"
+elif says "every touching commit is an /ai-dlc-update reconcile"; then mutant_killed "$B_M18" "mutation 18" "mutation 18 scored: without --root an unrelated root's core add lists no file under log.showRoot=false and PASSes"
+else bad "MUTATION 18 SURVIVED its own arm: wrong failure: no reconcile-arm PASS (rc=$RC)"; fi
+audit "$M" "$BASE" "$UNREL"
+[ "$RC" -eq 1 ] || bad "MUTATION 18 ENTANGLED: it also changed the verdict on the unrelated root with log.showRoot unset"
 
 echo
 if [ "$fails" -eq 0 ]; then

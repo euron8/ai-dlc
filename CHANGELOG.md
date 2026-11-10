@@ -19,6 +19,44 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1039.0] - 2026-11-10
+
+### BL-944 closed
+
+`core/scripts/validate-escalation-resolution.sh` now reads each entry's `Decision/Question:` line as a fourth record field (the sentinel `__NODQ__` when it is absent, because bash 3.2 merges a run of tabs under `IFS=tab`). An entry whose value opens with `LR-S<N>-<m> (lead interpretation)` must quote exactly `Strike <id>` or `Reword <id>` on a `-- descope` line, or `Confirm <id>` on a `-- confirm` line, each optionally followed by ` (Recommended)`. Any other quote, or a line recording neither disposition, fails and cites `requirements.md` §3. A quote that passes the label rule still goes through the `--cite` transcript check. Every other entry, and `--any-authorized`, keep today's behaviour.
+
+Header-tab hardening: the RECORDS awk prints header, status, Decision/Question and auth as four tab-separated fields, and a TAB inside a `## ` header shifted every later field one variable right, so `cite_quote` cited the Decision/Question text. `--any-authorized` then counted a 2-character quote as AUTHORIZED, and the gate verified a fabricated quote on the strength of a phrase the operator did send. `flush()` now writes the header with its tabs as spaces, as it already did for the Decision/Question field.
+
+Residual: this closes the free-text quote on a lead-interpretation entry. It does NOT close an exact option quote cited against an answer that is the option plus more text (`Strike LR-S7-2` against `Strike LR-S7-2 but keep the index`). It also does not close an id that is a prefix of the answered id (`Strike LR-S7-2` against the answer `Strike LR-S7-20`). Both are BL-950, because `--cite` is still a substring match.
+
+Fixtures: `core/fixtures/escalation-citation` gains 16 cells and 9 mutants, among them `lr/hdrtab` at the gate and `lr/hdrtabq-any` at `--any-authorized`. Each mutant is killed by its own cell with one twin unmoved. The fixture SKIPs on a consumer whose installed validator predates the rule. `KILL_FLOOR` was raised with the mutants, and `invocations.decl` moves `*` 415 → 469 and the validator 56 → 72, from two agreeing counted runs.
+
+Consumer reach: machinery. A lead that files by the rule sees no change; a lead that files free text on a lead-interpretation entry fails Check 2.
+
+### BL-945 closed
+
+`core/scripts/core-paths.sh --audit-diff` no longer reads cwd-relative pathspecs. From a subdirectory the activation `ls-tree` matched no layer directory (DORMANT, exit 0), and the per-path `git log -- "$p"` matched no commit (PASS). Both now run with `git -C "$AUDIT_ROOT"`. The working-tree manifest fallback is read from the toplevel in `--audit-diff` mode only (`--is-core` and `--list` are unchanged). CHANGED passes `-c diff.relative=false`, so a `diff.relative=true` config cannot empty it. CHANGED keeps its rename detection and its quoting; BL-951 owns those.
+
+The per-path walk and the per-sha subject lookup are replaced by ONE `git log -c --no-renames --root --no-show-signature --encoding=UTF-8 --format='%x01%H %s' --name-only BASE..HEAD`, joined to the touched set in awk, giving one OFFENDERS line per (sha, path) pair. `-c` keeps the per-path walk's merge rule: an evil merge is listed, and a `--no-ff` reconcile merge is not. `--no-renames` lists a rename out of core under the core name.
+
+Correction, stricter class and consumer cost, at one site. (i) The base's per-path `-- "$p"` was a glob pathspec, so a touched path carrying `*`, `?` or `[` over-matched other paths. The exact join removes such a pair, and that removal is a correction, not a false PASS. (ii) Declared stricter class: "any commit on a side branch whose merge is TREESAME at that path" is now listed (an identical edit on both sides of a reconcile, or an edit and its own revert, merged into a line whose only core touch is a reconcile). Lead ai-dlc-d3 ruled it accepted. (iii) Its measured consumer cost: 0 additions and 0 removals on graph's real S319/S320/S321 ranges, and git calls per gate fall 877/1423/1355 → 14 each. Across 24 seeded ranges × 19 configs the tip adversary found one removal, an unrelated-history root under `log.showRoot=false`. It was closed in this release by `--root`, and `--no-show-signature` and `--encoding=UTF-8` are pinned for the same reason (under `log.showSignature=true` and `i18n.logOutputEncoding=UTF-16` the walk's output moved). The configs measured inert on the walk are recorded in its header.
+
+Fixtures: `core/fixtures/core-paths-audit-diff` gains assertions 15-23 (a `docs/` cwd, an evil merge, a `--no-ff` reconcile, a rename then a rewrite, case B, `diff.relative=true`, the working-tree fallback from `docs/`, and an unrelated-history root under `log.showRoot=false`) and mutations 11-18. `invocations.decl` moves `*` 67 → 109 and core-paths.sh 16 → 26, from two agreeing counted runs.
+
+Consumer reach: machinery, live from step 3 of the delivering pull.
+
+### BL-950 filed
+
+`core/scripts/validate-steering-budget.sh --cite` matches a quote as a substring of the joined `AskUserQuestion` answers. An exact `Strike LR-S7-2` quote therefore verifies against the answer `Strike LR-S7-2 but keep the index`, which `requirements.md` calls UNDECIDED, and against the answer `Strike LR-S7-20`, whose id merely begins with `LR-S7-2`. This is the residual of BL-944. Its receipt fails on both cases. Filed, not built.
+
+### BL-951 filed
+
+`core/scripts/core-paths.sh --audit-diff`'s CHANGED set detects renames and C-quotes non-ASCII paths. A core path renamed out of core, or one carrying a non-ASCII byte, therefore prints PASS with exit 0. There are two subjects, and the entry closes only when both do. Filed, not built.
+
+### BL-952 filed
+
+`core/fixtures/escalation-citation` scores its mutant kills with its own helpers and never through `mutant_killed`. `validate-mutant-kills.sh` M1 and M5 therefore cannot see them, and the fixture sits on the H5 matrix allowlist. Filed, not built; it rides a later release than BL-944's.
+
 ## [0.1038.0] - 2026-11-09
 
 ### BL-948 closed
