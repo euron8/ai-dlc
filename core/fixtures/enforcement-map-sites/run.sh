@@ -2975,6 +2975,63 @@ cwd_cells() {
   CW_RC_ROOT="$rc_r"
 }
 
+# cwd_why <expected bits> [scored bits] [ERE] -- the EVIDENCE behind a non-green cwd verdict,
+# appended to that verdict's FAIL line: `bad "<message>$(cwd_why <expected>)"`. Every line it
+# prints begins with a newline and `      | `, so the message keeps its own line, the evidence
+# sits below it, and no evidence line can read as `^  FAIL` to the driver's count. It runs on no
+# passing verdict, so a green run's stdout is unchanged.
+# WHY IT EXISTS: a cell's outputs are deleted by cwd_finish and were printed nowhere, so a cell
+# that flipped once under load (BL-910: I81-M3 1100, rc 1/1/2/1) left no trace of its cause.
+# Per failing cell: its rc (from $CW_RCS), whether the ERE (default $want) matched its output,
+# and its first differing lines against C1's s.out, at most 12 lines cut to 200 chars; for C1
+# itself, the head of s.out instead. The scored bits come from $CW_BITS or the second argument;
+# no cell predicate is recomputed here.
+# GAP: evidence is printed only for a cell expected 1 that scored 0; a cell expected 0 that scored 1 (the usual survival shape) carries none.
+# A fifth bit is FULL (cwd_full's full.out), and its head is printed when it differs either way.
+# Under M1, r.out has already been overwritten by the empty-cwd run in cwd_mutant before any
+# message is built; harmless today, because M1 expects 0000 and C2 is then never reported.
+cwd_why() {
+  local exp="$1" got="${2:-${CW_BITS:-}}" ere="${3:-${want:-}}" i f cell rc m d l rcw
+  read -r -a rcw <<<"${CW_RCS:-}"
+  for i in 0 1 2 3 4; do
+    [ "$i" -lt "${#exp}" ] || break
+    case "$i" in
+      # No quoted blank in these assignments: validate-fixture-hygiene's H7 reads a quoted word
+      # list as a roster, and the cell names here would then resolve the C<n> twins it lists as built.
+      0) cell=C1-scratch; f=s.out ;;
+      1) cell=C2-live-root; f=r.out ;;
+      2) cell=C3-relative; f=rel.out ;;
+      3) cell=C4-inherited-VEM_SELF; f=env.out ;;
+      4) cell=FULL; f=full.out ;;
+    esac
+    if [ "$i" = 4 ]; then
+      [ "${exp:4:1}" != "${got:4:1}" ] || continue
+      printf '\n      | %s: expected %s, scored %s; head of %s:' "$cell" "${exp:4:1}" "${got:4:1}" "$f"
+      d="$(head -n 12 "$CW_DIR/$f" 2>&1 | cut -c1-200)" || true
+    else
+      [ "${exp:$i:1}" = 1 ] && [ "${got:$i:1}" = 0 ] || continue
+      rc="${rcw[$((i+1))]:-unrecorded}"; rc="${rc#*=}"
+      m=no; grep -qE -- "$ere" "$CW_DIR/$f" 2>/dev/null && m=yes
+      printf '\n      | %s (%s): expected 1, scored 0; rc %s; want /%s/ matched: %s' "$cell" "$f" "$rc" "$ere" "$m"
+      if [ "$i" = 0 ]; then
+        printf '\n      | head of s.out:'
+        d="$(head -n 12 "$CW_DIR/s.out" 2>&1 | cut -c1-200)" || true
+      else
+        # The cell's OWN lines (`>`) first: C1's side can run past the bound alone, and the
+        # cell's side is where a transient failure's text lands.
+        printf '\n      | diff s.out %s (C1 against this cell, the cell'"'"'s own > lines first):' "$f"
+        d="$(diff "$CW_DIR/s.out" "$CW_DIR/$f" 2>&1)" || true
+        if [ -n "$d" ]; then
+          d="$( { grep '^>' <<<"$d"; grep -v '^>' <<<"$d"; } | head -n 12 | cut -c1-200)" || true
+        else
+          d="(byte-equal to C1's s.out)"
+        fi
+      fi
+    fi
+    while IFS= read -r l; do printf '\n      | %s' "$l"; done <<<"$d"
+  done
+}
+
 # a1_holds <rc> <output file> <ERE> -- what M1 (the cwd-reading base) shows when its cwd is a
 # COMPLETE tree carrying no offender. For I91, I94 and I81 that is the false clean, rc 0. I95 is
 # different: its M1 C2 cell exits 1 from the live root too (measured at the base of this change),
@@ -3040,7 +3097,7 @@ cwd_mutant() {
     elif [ "$CW_BITS" = "$exp" ]; then
       mutant_killed "${B_cw:-0}" "$CW_ID-$tag" "$CW_ID-$tag: $CW_ID $tag scores $CW_BITS on C1 scratch / C2 live root / C3 relative / C4 inherited VEM_SELF, exactly the cells it must kill ($CW_RCS)"
     else
-      bad "$CW_ID-$tag SURVIVED: $CW_ID $tag scored $CW_BITS where $exp was expected ($CW_RCS) -- the cells do not discriminate this layer of the fix the way they claim to"
+      bad "$CW_ID-$tag SURVIVED: $CW_ID $tag scored $CW_BITS where $exp was expected ($CW_RCS) -- the cells do not discriminate this layer of the fix the way they claim to$(cwd_why "$exp")"
     fi
     cwd_mx "$CW_ID-$tag" "C1=${CW_BITS:0:1} C2=${CW_BITS:1:1} C3=${CW_BITS:2:1} C4=${CW_BITS:3:1}"
   fi
@@ -3142,7 +3199,7 @@ cwd_control() {
     ok "$CW_ID: the seeded offender is named from a scratch cwd, and byte-identically from the live distribution root, from \$ROOT/core by a relative path, and with an inherited VEM_SELF naming the live validator ($CW_RCS)"
     B_cw=1
   else
-    bad "$CW_ID: the unmutated validator scored $CW_BITS on the cwd cells ($CW_RCS) -- it does not read the seeded tree from every cwd, or the seeded offender went unreported"
+    bad "$CW_ID: the unmutated validator scored $CW_BITS on the cwd cells ($CW_RCS) -- it does not read the seeded tree from every cwd, or the seeded offender went unreported$(cwd_why 1111)"
   fi
 }
 
@@ -3179,7 +3236,7 @@ cwd_full() {
     if [ "$CW_BITS$fb" = 11110 ]; then
       mutant_killed "$(( ${B_cw:-0} && ${B_cwfull:-0} ))" "$CW_ID-M5" "$CW_ID-M5: $CW_ID M5 (cd only inside --arms) scores ${CW_BITS}+full=$fb: the four --arms cells cannot see it and the full-mode cell kills it"
     else
-      bad "$CW_ID-M5 SURVIVED: $CW_ID M5 (cd only inside --arms) scored ${CW_BITS}+full=$fb where 1111+full=0 was expected ($CW_RCS)"
+      bad "$CW_ID-M5 SURVIVED: $CW_ID M5 (cd only inside --arms) scored ${CW_BITS}+full=$fb where 1111+full=0 was expected ($CW_RCS)$(cwd_why 11110 "$CW_BITS$fb")"
     fi
     cwd_mx "$CW_ID-M5" "C1=${CW_BITS:0:1} C2=${CW_BITS:1:1} C3=${CW_BITS:2:1} C4=${CW_BITS:3:1} FULL=$fb"
   fi
@@ -3259,6 +3316,38 @@ rm -f "$i81_bak"
 if [ "$(grep -c 'i81-cwd-seed' "$i81_h")" != 1 ]; then
   bad "FIXTURE BROKEN: the I81 seed did not land exactly once inside acknowledge.sh's live-series block"
   return
+fi
+# cwd_why's SELF-PROBE, both directions, on synthetic cell outputs and no validator run: the
+# diagnostic exists for a failure seen once, so a helper that silently printed nothing would go
+# unnoticed until the next one. FIRES: the recorded BL-910 shape (1100 against 1101, rc 1/1/2/1),
+# env.out carrying a line s.out lacks, which must be printed under C4 and indented off `^  FAIL`
+# although the line itself starts with it. Near-miss: C3 expected 0 and scored 0 with a differing
+# rel.out, and must not be reported. QUIET: env.out byte-equal to s.out and the bits as expected.
+local wp_dir wp_sdir="${CW_DIR-}" wp_srcs="${CW_RCS-}" wp_sbits="${CW_BITS-}" wp_fire wp_quiet wp_err=""
+wp_dir="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp -d failed" >&2; exit 2; }
+CW_DIR="$wp_dir"
+CW_RCS="rc scratch=1 live-root=1 relative=2 inherited-VEM_SELF=1"
+# s.out carries 14 lines env.out lacks, more than the 12-line bound, so the C4-only line is printed
+# only if the cell's own side of the diff comes first, as it did in the recorded shape (27 vs 2).
+printf '%s\n' 'cwd-why-probe shared line' 'cwd-why-probe-want' c1-a c1-b c1-c c1-d c1-e c1-f c1-g c1-h c1-i c1-j c1-k c1-l c1-m > "$wp_dir/s.out"
+cp "$wp_dir/s.out" "$wp_dir/r.out"
+printf '%s\n' 'cwd-why-probe-c3-nearmiss' > "$wp_dir/rel.out"
+printf '%s\n' 'cwd-why-probe shared line' '  FAIL: cwd-why-probe-c4-only' > "$wp_dir/env.out"
+wp_fire="$(cwd_why 1101 1100 'cwd-why-probe-want')"
+grep -qF -- 'cwd-why-probe-c4-only' <<<"$wp_fire" || wp_err="$wp_err; FIRES did not print env.out's differing line"
+grep -qF -- 'C4-inherited-VEM_SELF (env.out): expected 1, scored 0; rc 1; want /cwd-why-probe-want/ matched: no' <<<"$wp_fire" || wp_err="$wp_err; FIRES did not name C4 with its rc and want result"
+grep -qF -- 'cwd-why-probe-c3-nearmiss' <<<"$wp_fire" && wp_err="$wp_err; the near-miss C3 (expected 0, scored 0) was reported"
+grep -q '^  FAIL' "$wp_dir/env.out" || wp_err="$wp_err; FIXTURE BROKEN: the synthetic env.out carries no ^  FAIL line, so the indentation check tests nothing"
+grep -q '^  FAIL' <<<"$wp_fire" && wp_err="$wp_err; an evidence line matches ^  FAIL and would be counted as a failure by the driver"
+cp "$wp_dir/s.out" "$wp_dir/env.out"
+wp_quiet="$(cwd_why 1101 1101 'cwd-why-probe-want')"
+[ -z "$wp_quiet" ] || wp_err="$wp_err; QUIET printed evidence for a verdict that scored as expected"
+rm -f "$wp_dir/s.out" "$wp_dir/r.out" "$wp_dir/rel.out" "$wp_dir/env.out"; rmdir "$wp_dir" 2>/dev/null
+CW_DIR="$wp_sdir"; CW_RCS="$wp_srcs"; CW_BITS="$wp_sbits"
+if [ -z "$wp_err" ]; then
+  ok "cwd_why self-probe: a C4 that scored 0 against expected 1 is reported with its rc, its want result and its diff against C1, every line indented off ^  FAIL, while a C3 expected 0 and a verdict scoring as expected print nothing"
+else
+  bad "cwd_why self-probe:${wp_err#;}"
 fi
 want='i81-cwd-seed'
 cwd_control "$want"
