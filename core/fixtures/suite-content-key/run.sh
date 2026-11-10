@@ -393,6 +393,108 @@ mx_score M-docs "${B_k3plans:-0}" "M-docs scored by k3: a key hashing all of doc
 rm -f "$T/scripts/.key-mdocs.sh"
 [ "$(key)" = "$KP" ] || broken "the tree did not return to its baseline key after the M-docs cells"
 
+# --- BL-954. THE FINAL BANNER NAMES THE ARM THAT DECIDED THE SKIP ---------------------------------
+# Two arms skip the suite and each is its own decision with its own log line: the whole-suite content key
+# (HIT) and the read-set skip inside run_fixtures (the key MISSED, then no fixture's inputs moved). The
+# banner once said "unchanged content key" for both. Driven through the REAL code, never a retyped copy:
+# the FIXTURE_POOL block is cut from the hook (run_fixtures and apply_readset_skip set READSET_NO_CHANGE
+# themselves; nothing here sets it), then SUITE_STEP (fixture_suite_step and its cause assignments) and
+# SUITE_BANNER (the final banner) are cut by the markers the hook carries, and all three are sourced in a
+# world. A mutant is a copy of the hook, so it reaches the receipt.
+#   W1 the key MISSED (no record) and every read-set is unchanged  -> banner names the read-set arm, never
+#      "unchanged content key", and the step and log say MISS / "content key changed"
+#   W2 the key matches its record                                  -> banner names the content-key arm, log HIT
+#   the two banners DIFFER, and each matches its own log line.
+# MUTANT-MATRIX bl954-m1 decides=w1 twins=w2
+# MUTANT-MATRIX bl954-m2 decides=w1 twins=w2
+# MUTANT-MATRIX bl954-m3 decides=w1 twins=- why=a swap moves both worlds, so there is no world it must leave green
+# MUTANT-MATRIX bl954-m4 decides=w2 twins=w1
+# MUTANT-MATRIX-DYNAMIC bl954_mut why=one helper scoring the four banner mutants bl954-m1 to bl954-m4 on their own worlds
+BW="$WORK/bl954"; mkdir -p "$BW/tpl/core/fixtures/alpha" "$BW/tpl/core/fixtures/beta" "$BW/tpl/src"
+for _f in alpha beta; do printf 'exit 0\n' > "$BW/tpl/core/fixtures/$_f/run.sh"; done
+printf 'alpha\tsrc/a.sh\nbeta\tsrc/b.sh\n' > "$BW/tpl/.ai-dlc-fixture-readsets.tsv"
+printf 'v1\n' > "$BW/tpl/src/a.sh"; printf 'v1\n' > "$BW/tpl/src/b.sh"
+cp -R "$DIST/scripts" "$BW/tpl/scripts"
+( cd "$BW/tpl" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1 \
+  || broken "the BL-954 world seed failed"
+# The driver: <hook> <w1|w2> <world dir> <template> -> the step's output, ---BANNER--- and the banner, ---LOG--- and the key log.
+cat > "$BW/drv.sh" <<'DRV'
+set -uo pipefail
+hook="$1"; w="$2"; t="$3"
+cp -Rp "$4" "$t" || exit 3
+cd "$t" || exit 3
+sp="$t.spans"; mkdir -p "$sp"
+export AI_DLC_READSET_LIVE_TRACE=0
+sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$hook" > "$sp/pool"
+sed -n '/^# SUITE_STEP_BEGIN$/,/^# SUITE_STEP_END$/p' "$hook" > "$sp/step"
+sed -n '/^# SUITE_BANNER_BEGIN$/,/^# SUITE_BANNER_END$/p' "$hook" > "$sp/banner"
+[ -s "$sp/pool" ] && [ -s "$sp/step" ] && [ -s "$sp/banner" ] || { echo "DRIVER: a span is empty"; exit 3; }
+fail=0; PENDING_N=0; SUITE_SKIPPED=0; SUITE_SKIP_CAUSE=""; pending_note=""
+. "$sp/pool" 2>/dev/null
+. "$sp/step"
+if [ "$w" = w1 ]; then
+  # no key record; the verified record is the tree's own manifest, so every read-set is unchanged
+  mkdir -p "$sp/m"; for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$sp/m/list"
+  readset_manifest "$sp/m"
+  cp "$sp/m/.now" "$GITDIR/ai-dlc-fixture-verified"; printf 'v2\n' > "$GITDIR/ai-dlc-fixture-verified.format"
+else
+  printf '%s %s %s\n' "$(bash scripts/suite-content-key.sh)" 2 2026-01-01T00:00:00Z > "$KEY_RECORD"
+fi
+fixture_suite_step; echo "STEP-RC $?"
+echo "---BANNER---"
+( . "$sp/banner" ) 2>&1
+echo "---LOG---"; cat "$KEY_LOG"
+DRV
+bl954_run() { # <hook> <world> <tag> -> output on stdout
+  bash "$BW/drv.sh" "$1" "$2" "$BW/w.$3.$2" "$BW/tpl" 2>&1
+}
+bl954_banner() { sed -n '/^---BANNER---$/,/^---LOG---$/p' <<< "$1" | grep 'all gates green'; }
+bl954_log() { sed -n '/^---LOG---$/,$p' <<< "$1"; }
+bl954_okw1() { # the read-set world's output holds the read-set banner, the MISS log and the key-not-matched step line
+  local b; b="$(bl954_banner "$1")"
+  grep -qF 'no prior green run recorded' <<< "$1" || return 1
+  grep -qF ' MISS ' <<< "$(bl954_log "$1")" || return 1
+  grep -qF 'read-set keys:' <<< "$1" || return 1
+  grep -qF 'FIXTURE SUITE SKIPPED -- the read-set skip' <<< "$b" && ! grep -qF 'unchanged content key' <<< "$b" && ! grep -qF 'cause not recorded' <<< "$b"
+}
+bl954_okw2() {
+  local b; b="$(bl954_banner "$1")"
+  grep -qF ' HIT ' <<< "$(bl954_log "$1")" || return 1
+  grep -qF 'FIXTURE SUITE SKIPPED -- the whole-suite content key matched' <<< "$b" && ! grep -qF 'cause not recorded' <<< "$b"
+}
+BHOOK="$T/.githooks/pre-push"
+grep -q '^# SUITE_BANNER_BEGIN$' "$BHOOK" || broken "BL-954: the hook carries no SUITE_BANNER span"
+BR1="$(bl954_run "$BHOOK" w1 base)"; BR2="$(bl954_run "$BHOOK" w2 base)"
+grep -q 'STEP-RC 0' <<< "$BR1" || broken "BL-954 W1 driver: the step did not return 0: $(printf '%s' "$BR1" | tail -5 | tr '\n' '|')"
+grep -q 'STEP-RC 0' <<< "$BR2" || broken "BL-954 W2 driver: the step did not return 0: [$BR2] key.sh: $(cd "$BW/w.base.w2" 2>&1 && bash scripts/suite-content-key.sh 2>&1 | head -3)"
+B_W1=0; B_W2=0
+if bl954_okw1 "$BR1"; then B_W1=1; ok "W1 key MISSED, every read-set unchanged: the banner names the read-set arm, not 'unchanged content key', and the log says MISS ($(bl954_banner "$BR1" | cut -c1-150))"
+else bad "W1 the read-set world's banner/log is wrong: $(printf '%s' "$BR1" | tail -6 | tr '\n' '|')"; fi
+if bl954_okw2 "$BR2"; then B_W2=1; ok "W2 key matched its record: the banner names the content-key arm and the log says HIT ($(bl954_banner "$BR2" | cut -c1-150))"
+else bad "W2 the content-key world's banner/log is wrong: $(printf '%s' "$BR2" | tail -6 | tr '\n' '|')"; fi
+if [ -n "$(bl954_banner "$BR1")" ] && [ "$(bl954_banner "$BR1")" != "$(bl954_banner "$BR2")" ]; then ok "W1 and W2 banners differ, each matching its own log line (MISS and HIT)"
+else bad "W1 and W2 banners are identical or empty: a banner that cannot tell the arms apart"; fi
+bl954_mut() { # <name> <flag> <sed expr> <worlds> : mutate a COPY of the hook, score the named worlds
+  local n="$1" fl="$2" sedx="$3" worlds="$4" w r hk="$BW/hook.$1"
+  sed "$sedx" "$BHOOK" > "$hk"
+  cmp -s "$BHOOK" "$hk" && broken "BL-954 MUTANT $n DID NOT APPLY"
+  for w in $worlds; do
+    r="$(bl954_run "$hk" "$w" "$n")"
+    grep -q 'STEP-RC 0' <<< "$r" || broken "BL-954 MUTANT $n: the mutated hook did not run in $w: $(printf '%s' "$r" | tail -3 | tr '\n' '|')"
+    if [ "$w" = w1 ]; then
+      if bl954_okw1 "$r"; then bad "MUTANT $n SURVIVED in w1"; else mutant_killed "$fl" "$n" "MUTANT $n killed by w1: $(bl954_banner "$r" | cut -c1-120)"; fi
+    else
+      if bl954_okw2 "$r"; then bad "MUTANT $n SURVIVED in w2"; else mutant_killed "$fl" "$n" "MUTANT $n killed by w2: $(bl954_banner "$r" | cut -c1-120)"; fi
+    fi
+  done
+}
+# m1 the old hard-coded banner restored; m2 the read-set cause assignment removed; m3 the two causes swapped
+# (both worlds); m4 the content-key cause assignment removed.
+bl954_mut bl954-m1 "$B_W1" "s|FIXTURE SUITE SKIPPED -- %s%s\.|FIXTURE SUITE SKIPPED on an unchanged content key%s.|; s|\"\$skip_why\" \"\$pending_note\"|\"\$pending_note\"|" w1
+bl954_mut bl954-m2 "$B_W1" 's|then SUITE_SKIP_CAUSE=read-set; fi|then :; fi|' w1
+bl954_mut bl954-m3 "$B_W1" 's|SUITE_SKIP_CAUSE=content-key|SUITE_SKIP_CAUSE=SWAPTMP|; s|SUITE_SKIP_CAUSE=read-set|SUITE_SKIP_CAUSE=content-key|; s|SUITE_SKIP_CAUSE=SWAPTMP|SUITE_SKIP_CAUSE=read-set|' "w1 w2"
+bl954_mut bl954-m4 "$B_W2" 's|^      SUITE_SKIP_CAUSE=content-key$|      :|' w2
+
 # RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
 # empty matrix count cannot come from a ledger nothing writes.
 mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
