@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1037.0] - 2026-11-09
+
+### BL-946 closed
+
+`core/scripts/merge-adversarial-shards.sh` refuses a shard with no admissible `--rerun` start as `REFUSED: DOUBLE-WRITE <P>:`, exit 2, nothing written. When a writer keeps writing after another writer's first row, an earlier start leaves the new writer's rows as a second credited dispatch and a later one makes the straddling writer's rows a SAME, so the old SAME and two-dispatch messages sent the lead to a start that does not exist.
+
+The predicate NOADM(P) is computed over the shard's write rows. WRITERS(P) are the agents with a row on exact P, `first(W)` is taken over W's P rows only, and `last(o)` over o's rows on P and `P.draft`, so a draft-only agent is not a writer. NOADM(P) holds when two or more writers exist and no writer W has `first(W)` strictly after `last(o)` for every other writer o; a tie does not clear it. It is decided at one site, the join's two-dispatch test, which now runs after every writer is resolved. OUT, a role violation, an unstopped writer, and the probe and meta refusals each keep their own message and are printed ahead of DOUBLE-WRITE. Under `--rerun`, a SAME on a NOADM shard leaves the shard un-narrowed and the join decides.
+
+The line names each writer's first..last span, the agent of the shard's last agent seal row (the bytes on disk), and the remedy: preserve the bytes, confirm every writer stopped, re-dispatch a NEW adversary, merge with `--rerun P@<its dispatched-at>`, and disclose that the shard is not independent if the new seat read the preserved bytes. Where some start is admissible, SAME and the two-dispatch message are byte-identical to before; the ts is read by one jq, only on the two-dispatch path.
+
+Residual, stated in the script's RE-DISPATCH header: NOADM ignores the BL-598 binding. When another writer's last row falls after W's spawn plus `BACKDATE_TOL_S` but before W's first write, a start passes the arithmetic and none passes the binding, so the lead still gets SAME or FAR, not DOUBLE-WRITE. NOADM never claims "no start" falsely and does not catch every no-start case.
+
+`core/skills/ai-dlc/steps/_gate-procedures.md`'s `--rerun` paragraph gains one sentence: a `REFUSED: DOUBLE-WRITE <shard>.md:` refusal means no start exists, and the lead follows its remedy. `core/fixtures/process-rule-pins/run.sh` pins it as `gp-shard-rerun-doublewrite`; the substrings pinned by `gp-shard-rerun` and `gp-shard-rerun-finding` are unchanged.
+
+Fixtures: `core/fixtures/adversarial-shard-merge` gains RR6a (the graph s322 interleave under `--rerun`), RR6n (the same world without `--rerun`), RR6b (the admissible twin, which merges), RR6c (a tie), RR6d (OUT ahead of DOUBLE-WRITE), RR6e (a role violation ahead of it) RR6f (graph s318's draft-only agent is not a writer) and RR6g (a straddle whose late row is on `P.draft`), and mutants DW-M1..M8, one per property, each killed by its deciding cell with RR6b green as the twin. `core/fixtures/content-seal` merge-arms gains CS-DW: the real recorder seals both writers in each order and the line names the last sealer. T6 seeds its two writers' rows with literal ts, because two wall-clock stamps in the same second would tie and the verdict would move with load (BL-868).
+
+Consumer cost: a passing merge pays nothing new, and fork-profile TOTAL is 2906 at both 3d7907b60 and the release tip. `invocations.decl` moves: `adversarial-shard-merge` 2227 to 2433, `content-seal` 474 to 510. Consumer incidence: 1 of 1548 non-repair shards over graph s315-s322 (s322 `coe-p2/cross.md`), no-admissible only before its third dispatch.
+
+### BL-947 filed
+
+`core/scripts/join-remediator-shards.sh` carries the same SAME arm as the merge did (`:2693` emits, `:2745` refuses at 3d7907b60), and no validator binds its message to `merge-adversarial-shards.sh`'s; the two copies have already drifted by the `${REC_PREFIX}` token. One remediator-part straddle is measured on graph's write ledger: s319 `carry-over-evaluation-party-repair-p1/sections/2.md` has three writers on the exact path. Whether the join's narrowing and one-writer-per-part rule leave no admissible start is unmeasured. Filed, not built; `verify: manual`.
+
 ## [0.1036.0] - 2026-11-09
 
 ### BL-939 closed

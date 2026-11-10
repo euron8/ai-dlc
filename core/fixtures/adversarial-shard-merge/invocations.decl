@@ -1,5 +1,5 @@
 # Measured by two agreeing armed runs through core/scripts/hermetic-run.sh (the judge's own J3 output), the counter armed
-# as .githooks/pre-push fxcount_arm arms it, on a clean detached worktree of the commit carrying the BL-918 cut, claim mutants and T2 reshape, the four further claim mutants, the DV1/DV6/DV7 assertions folded into DV10, and the other-root and worded-heading claim mutants (TR1, FG2, CM-other-root-not-refused).
-2227 *
+# as .githooks/pre-push fxcount_arm arms it, on a clean detached worktree of the commit carrying the BL-918 cut, claim mutants and T2 reshape, the four further claim mutants, the DV1/DV6/DV7 assertions folded into DV10, and the other-root and worded-heading claim mutants (TR1, FG2, CM-other-root-not-refused). Re-measured for BL-946: the RR6a-RR6g cells and the eight DW mutants' deciding and twin runs, each an in-process merge whose seal phase starts content-seal.sh twice.
+2433 *
 29 core/scripts/merge-adversarial-shards.sh
-418 core/scripts/content-seal.sh
+440 core/scripts/content-seal.sh

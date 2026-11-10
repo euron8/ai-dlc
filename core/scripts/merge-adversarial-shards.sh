@@ -123,10 +123,12 @@
 #   Write-ledger rows never expire, so when the lead re-dispatches a stalled adversary the shard
 #   carries rows from two dispatches and the join above refuses it as two adversaries. The grammar
 #   and messages parallel `join-remediator-shards.sh --rerun`. For each named shard P with start S:
-#   - rows on P (and on `P.draft`, the adversary's draft path) with ts < S are dropped; their
-#     writers are P's SUPERSEDED writers. Every refusal of the join then runs unchanged on the
-#     narrowed rows, so P needs exactly one adversary dispatch writing it at or after S, and that
-#     dispatch must have written no other shard.
+#   - rows on P with ts < S are dropped; their writers are P's SUPERSEDED writers. Rows on `P.draft`
+#     (the adversary's draft path) are never dropped and never credit a writer: the join keys rows on
+#     the exact file, so a draft row is read only by the superseded-writer checks below and by
+#     NOADM. Every refusal of the join then runs unchanged on the narrowed rows, so P needs exactly
+#     one adversary dispatch writing it at or after S, and that dispatch must have written no other
+#     shard.
 #   - Every superseded writer is resolved through the same chain as a shard writer (meta file or
 #     probe row, the spawn ledger), and refused unless it is an `adversary` dispatch: a non-adversary
 #     write on a shard is a role violation, not a stale dispatch. Its probe corroboration is
@@ -145,6 +147,26 @@
 #     validate-artifact-budget.sh, the BACKDATED arm's own tolerance) from any spawn-ledger `ts` of
 #     the dispatch the join credits for P, or a `ts` that does not parse. `--map` with `--rerun` is
 #     refused.
+#   - DOUBLE-WRITE (BL-946): NO START IS ADMISSIBLE. Over the write rows on P, WRITERS(P) are the agents
+#     with a row on exact P (a draft-only agent is not one); first(W) is over W's P rows, last(o) over
+#     o's P and `P.draft` rows. NOADM(P) holds iff P has two or more writers and none, W, has
+#     first(W) > last(o) for every other writer o (strict, as ISO strings). Then every start fails, on
+#     SAME or on the two-dispatch refusal, because a writer kept writing after another writer's first
+#     row: a stop directive not honored. The merge says so in one line, `REFUSED: DOUBLE-WRITE <P>:`,
+#     exit 2, nothing written, naming each writer's first..last, the agent of P's last agent seal row
+#     (the bytes on disk; "no agent seal row" when there is none, and a separate wording when
+#     content-seal.sh is absent), and the remedy: preserve P's bytes, confirm every writer stopped,
+#     re-dispatch a NEW adversary, merge with --rerun P@<its dispatched-at>, and disclose that the
+#     merged shard is not independent if the new seat read the preserved bytes. It is decided at ONE
+#     site, the join's two-dispatch test, in every mode, after every writer of P is resolved, so a
+#     role violation or an unstopped writer keeps its own message. Under --rerun, a SAME on a NOADM
+#     shard leaves P un-narrowed so that site decides; an OUT is still printed first. A shard where
+#     some start is admissible keeps SAME and the two-dispatch message byte-identical. Not collected
+#     under --dry-run. The ts it needs are read only once the join has found two dispatches.
+#     RESIDUAL: NOADM ignores the BL-598 binding. When another writer's last row falls after W's spawn
+#     plus BACKDATE_TOL_S but before W's first write, a start passes the arithmetic and none passes the
+#     binding, so the lead still gets SAME or FAR, not DOUBLE-WRITE. NOADM is a subset of "no start":
+#     it never claims no start falsely, and it does not catch every no-start case.
 #   - The merged block adds one `rerun: <shard> since <S>; superseded: <agent ids> (<n> rows,
 #     <first>..<last>)` line per re-run after `shard_tool_use_ids:`, and MERGED adds `superseded=<n>`.
 #   S is the re-dispatch's dispatched-at, and is checked against the time its dispatch recorded, so a
@@ -846,6 +868,42 @@ fi
 # script's top level, moved unchanged into one function; siblings are found from MERGE_SELF, which is $0
 # when the script is run and the sourced file's path when it is sourced.
 MERGE_SELF="${BASH_SOURCE[0]}"
+# NOADM(P), THE NO-ADMISSIBLE-START PREDICATE (BL-946; see RE-DISPATCH in the header). awk text spliced
+# into the two programs that ask it, both holding the shard dir's write rows as f[] (file under the
+# dir), a[] (agent_id) and t[] (ts), 1..n. WRITERS(P) are the agents with a row on exact P; a writer's
+# first row is taken over P alone and its last over P and `P.draft`. NOADM(P) holds iff P has two or
+# more writers and none of them, W, has first(W) > last(o) for every other writer o: no --rerun start
+# S can then sit after every other writer's last row and at or before one writer's first. noadm()
+# leaves each writer's first and last in nfst[]/nlst[] for dwspans(), which lists them by first row,
+# then agent id. An apostrophe never appears in this text: it is a single-quoted shell literal.
+NOADM_AWK='
+function noadm(p,    i, w, o, nw, ok) {
+  split("", nfst); split("", nlst); nw = 0
+  for (i = 1; i <= n; i++) {
+    if (f[i] != p) continue
+    if (!(a[i] in nfst)) { nw++; nfst[a[i]] = t[i] } else if (t[i] < nfst[a[i]]) nfst[a[i]] = t[i]
+  }
+  for (i = 1; i <= n; i++)
+    if ((f[i] == p || f[i] == p ".draft") && (a[i] in nfst) && (!(a[i] in nlst) || t[i] > nlst[a[i]])) nlst[a[i]] = t[i]
+  if (nw < 2) return 0
+  for (w in nfst) {
+    ok = 1
+    for (o in nfst) if (o != w && !(nfst[w] > nlst[o])) ok = 0
+    if (ok) return 0
+  }
+  return 1
+}
+function dwspans(    w, k, j, x, m, A, s) {
+  m = 0; for (w in nfst) A[++m] = w
+  for (k = 2; k <= m; k++) {
+    x = A[k]
+    for (j = k - 1; j >= 1 && (nfst[A[j]] > nfst[x] || (nfst[A[j]] == nfst[x] && A[j] > x)); j--) A[j + 1] = A[j]
+    A[j + 1] = x
+  }
+  s = ""; for (k = 1; k <= m; k++) s = s (k > 1 ? ", " : "") A[k] " (" nfst[A[k]] ".." nlst[A[k]] ")"
+  return s
+}
+'
 merge_main() {
 
 USAGE="usage: merge-adversarial-shards.sh [--dry-run] [--rerun <shard>.md@<ISO> ...] [--map | --document <path> | --subject <N> [--base <sha>] [--elicitation]] <planning>/s<N>/shards/<artifact>-p<M>"
@@ -1334,8 +1392,12 @@ if [ -n "$RERUN" ]; then
   fi
   # Pass 1: a row on a re-run shard before its start is superseded, and its writer is a superseded
   # writer of that shard. Pass 2: every row a superseded writer has in the shard dir must be on that
-  # shard or its `.draft` and before the start. The first violation is the one refusal printed.
-  awk -F'\t' -v fr="$T/rspec" '
+  # shard or its `.draft` (OUT) and before the start (SAME). The first violation is the one refusal
+  # printed, except that a SAME on a shard where NO start is admissible (NOADM, above) is not: the scan
+  # goes on, so an OUT anywhere after it is still printed as OUT; with none, that shard is left
+  # un-narrowed (DW), its rerun: line is dropped, and the join's two-dispatch test refuses it as
+  # DOUBLE-WRITE.
+  awk -F'\t' -v fr="$T/rspec" "$NOADM_AWK"'
     FILENAME == fr { S[$1] = $2; RP[++np] = $1; next }
     { n++; f[n] = $1; a[n] = $2; t[n] = $3; m[n] = $4 }
     END {
@@ -1352,10 +1414,15 @@ if [ -n "$RERUN" ]; then
           p = RP[q]
           if (!((p, a[i]) in sw)) continue
           if (f[i] != p && f[i] != p ".draft") { print "OUT\t" p "\t" a[i] "\t" f[i] "\t" t[i]; exit }
-          if (t[i] >= S[p]) { print "SAME\t" p "\t" a[i] "\t" f[i] "\t" t[i]; exit }
+          if (t[i] >= S[p]) {
+            if ((p in dw) || noadm(p)) { dw[p] = 1; continue }
+            print "SAME\t" p "\t" a[i] "\t" f[i] "\t" t[i]; exit
+          }
         }
+      for (i = 1; i <= n; i++) if ((i in drop) && (f[i] in dw)) delete drop[i]
       for (q = 1; q <= np; q++) {
-        p = RP[q]; ln = "rerun: " p " since " S[p]
+        p = RP[q]; if (p in dw) continue
+        ln = "rerun: " p " since " S[p]
         if (p in sn) { ln = ln "; superseded: " sids[p] " (" sn[p] " rows, " sf[p] ".." sl[p] ")"; ns += sn[p] }
         else ln = ln "; superseded: none"
         print "L\t" ln
@@ -1412,7 +1479,7 @@ awk -F'\t' -v fm="$T/metas" -v fp="$T/probes" -v fs="$T/spawns" -v fw="$T/wrows"
     if (!(b in wr) && nsup == 0) { print key "\t"; next }
     n = (b in wr) ? split(substr(wr[b], 2), A, " ") : 0
     for (i = 1; i <= nsup; i++) A[n + i] = SA[i]
-    did = ""
+    did = ""; two = ""
     for (i = 1; i <= n + nsup; i++) {
       a = A[i]; id = ""
       if (a in am) {
@@ -1443,9 +1510,13 @@ awk -F'\t' -v fm="$T/metas" -v fp="$T/probes" -v fs="$T/spawns" -v fw="$T/wrows"
         if (R[j] != "adversary") no(sf " was written by agent " a ", dispatch " id ", dispatched as role " (R[j] == "" ? "<none>" : R[j]) "; only an adversary writes an adversary shard")
       }
       if (i > n) continue
-      if (did != "") no(sf " was written by more than one adversary dispatch (" did ", " id "); one shard is one adversary -- after a re-dispatch, merge with --rerun <shard>.md@<the re-dispatch dispatched-at>")
+      # TWO DISPATCHES are decided after EVERY writer of the shard is resolved, so a role violation or
+      # an unstopped writer refuses with its own message first. The ids named are the first two
+      # credited, as when this refused at the second. The shell then asks NOADM, which needs the ts.
+      if (did != "" && two == "") two = did "\t" id
       did = id
     }
+    if (two != "") { print "TWO\t" sf "\t" b "\t" two; bad = 1; exit 3 }
     if (did == "") { print key "\t"; next }
     if (did in used) no(sf " derives dispatch " did ", which also wrote shard " used[did] "; one dispatch delivered two shards")
     used[did] = key; print key "\t" did
@@ -1454,6 +1525,32 @@ JOIN_RC=$?
 # A refusal is the LAST line written (the awk exits on it), after any rows already joined.
 JOIN_LAST="$(tail -1 "$T/ids")"
 case "$JOIN_LAST" in REFUSE*) refuse "${JOIN_LAST#REFUSE	}" ;; esac
+# TWO ADVERSARY DISPATCHES credited on one shard (BL-946). Read the ts of that shard's rows, and only
+# here, in one jq: the join's own read carries none. NOADM -> DOUBLE-WRITE, naming every writer's span,
+# the writer of the shard's last agent seal row ($T/ltr, the content-seal phase's read) and the remedy;
+# otherwise the two-dispatch refusal, whose --rerun remedy then has a start that can pass.
+case "$JOIN_LAST" in
+  TWO*)
+    IFS="$(printf '\t')" read -r _ _tf _tb _td1 _td2 <<< "$JOIN_LAST"
+    jq -rn --arg p "$REC_PREFIX" --arg b "$_tb" '[inputs | select(type == "object") | select(.kind == "artifact-write")
+        | select((.path // "") | type == "string" and startswith($p)) | select((.agent_id // "") != "")
+        | (.path | ltrimstr($p)) as $f | select($f == $b or $f == $b + ".draft")
+        | [$f, .agent_id, (.ts // "" | tostring)]] | .[] | @tsv' "$REC_WRITES" > "$T/two" 2>/dev/null \
+      || refuse "the write ledger $REC_WRITES does not parse as JSON lines"
+    _tw="$(awk -F'\t' -v b="$_tb" "$NOADM_AWK"'{ n++; f[n] = $1; a[n] = $2; t[n] = $3 }
+        END { if (noadm(b)) print "NOADM " dwspans(); else print "SOME" }' "$T/two")" \
+      || refuse "the no-admissible-start test over $REC_WRITES did not run"
+    if [ "${_tw%% *}" = NOADM ]; then
+      if [ ! -f "$SEAL" ]; then _tsl="$SEAL is absent, so no seal row says whose bytes are on disk"
+      else
+        _tsl="$(awk -F"$(printf '\037')" -v f="$_tf" '$1 == f && $2 == "agent" { print $3 }' "$T/ltr" 2>/dev/null | tail -1)"
+        if [ -n "$_tsl" ]; then _tsl="its bytes on disk were last sealed by agent $_tsl"
+        else _tsl="no agent seal row exists for $_tb, so no seal row says whose bytes are on disk"; fi
+      fi
+      refuse "DOUBLE-WRITE ${_tb}: ${_tf} was written by ${_tw#NOADM }; no --rerun ${_tb}@<ISO> start can pass, because a writer kept writing after another writer's first row (a stop directive not honored); ${_tsl} -- preserve ${_tb}'s current bytes, confirm every writer of ${_tb} has stopped, re-dispatch a NEW adversary for ${_tb}, and merge with --rerun ${_tb}@<that dispatch's dispatched-at>; if the new seat read the preserved bytes, the merged shard is not independent and that must be disclosed"
+    fi
+    refuse "${_tf} was written by more than one adversary dispatch (${_td1}, ${_td2}); one shard is one adversary -- after a re-dispatch, merge with --rerun <shard>.md@<the re-dispatch dispatched-at>" ;;
+esac
 [ "$JOIN_RC" -eq 0 ] || refuse "the dispatch-id join over $REC_WRITES did not run (awk exit $JOIN_RC)"
 # ONE DISPATCH, ONE SHARD DIR. Every row of every agent that wrote in this dir -- a superseded
 # writer included -- must sit under this dir: a row under ANOTHER `shards/<x>-p<M>/` (another pass,
