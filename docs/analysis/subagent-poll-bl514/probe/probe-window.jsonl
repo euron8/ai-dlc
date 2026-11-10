@@ -1,0 +1,10 @@
+{"type":"assistant","timestamp":"2026-02-01T00:00:09.999Z","message":{"content":[{"type":"tool_use","id":"toolu_w1","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-02-01T00:00:10.999Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_w1","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-02-01T00:00:10Z","message":{"content":[{"type":"tool_use","id":"toolu_w2","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-02-01T00:00:11Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_w2","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-02-01T00:00:10.500Z","message":{"content":[{"type":"tool_use","id":"toolu_w3","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-02-01T00:00:11.500Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_w3","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-02-01T00:00:20Z","message":{"content":[{"type":"tool_use","id":"toolu_w4","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-02-01T00:00:21Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_w4","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-02-01T00:00:20.500Z","message":{"content":[{"type":"tool_use","id":"toolu_w5","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-02-01T00:00:25.500Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_w5","content":"ok"}]}}

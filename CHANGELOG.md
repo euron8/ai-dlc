@@ -19,6 +19,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1041.0] - 2026-11-10
+
+### BL-514 PARTIAL: the subagent-poll classifier is committed and has been run against graph s322
+
+BL-514's classifier, previously a scratch `bl514.py` that now exists nowhere, is committed as `docs/analysis/subagent-poll-bl514/classify.sh`. It is bash 3.2 plus jq. It lifts the four jq defs `cmdpos`, `loopend`, `loopsleep` and `longsleep` from `core/hooks/ai-dlc-foreground-budget.sh` at run time, and the deny-reason substring from the hook's REASON line, each found exactly once or the script refuses. It then applies them to a transcript call's `.input.command`; the hook's own `is_poll` reads `.tool_input.command` and would score 0 on a transcript. `--hook` points it at another installed copy.
+
+Buckets for a poll, in precedence order: DENIED (the result carries the hook's reason), HARNESS-BLOCKED, RAN-bg, RAN-notimeout, RAN-le-budget and RAN-fg-over-budget. Membership in RAN-fg-over-budget is decided by the declared timeout; wall clock is the summed quantity. Non-poll sleeps split into NONPOLL-SLEEP-BLOCKED and NONPOLL-SLEEP-RAN. HARNESS-BLOCKED (`is_error` with text beginning `<tool_use_error>Blocked:`) exists because Claude Code's own sleep block returns an error result without running the command. The first live run, without that bucket, put two such polls into RAN buckets.
+
+The integrity lines are:
+- files listed against opened;
+- the bucket sum against the polls;
+- unjoined polls;
+- duplicate tool_use ids, which are deduplicated;
+- negative wall clock, which is excluded from the hours;
+- malformed records;
+- every carrier of the reason text, by kind.
+
+`--from` and `--to` compare epoch seconds with fractions kept and are inclusive at both edges. A self-probe runs before any corpus, over `probe/probe.jsonl` and `probe/probe-window.jsonl`. It pins both the bucketing and the lifted rule's shapes (the 30 s boundary, `(` and `else` command positions, `for`, end-of-line `sleep`, `loopend`, a second `sleep` match), plus the window edges, symlinked inputs, dedup and negative wall. Every probed mutant of the hook copy and the classifier fails it with exit 2. Controls: a known-present count of Bash calls, and an absent token.
+
+Live distribution, an OPEN-sprint partial (s322):
+- the run is at 2026-11-10T12:47:26Z, over graph's 352 subagent transcripts;
+- graph's installed hook is md5-equal to core's at 721d4ade5;
+- 10995 Bash calls; 4 polls: DENIED 2, HARNESS-BLOCKED 2, every RAN bucket 0;
+- plain-grep cross-checks agree at 2 and 2.
+
+The BL-514 entry stays PARTIAL with `verify: manual`. It records:
+- the corpus purge: the 5181 transcripts and the s321 window are gone, with 0 records predating s321's close and the cause unknown;
+- that the historical s321 and pre-mechanism figures predate the HARNESS-BLOCKED split, so a difference against them is not by itself a mechanism effect;
+- what is still owed: the change in subagent wait per story on a closed sprint.
+
+No file is added under core/, scripts/ or .githooks/.
+
 ## [0.1040.0] - 2026-11-10
 
 ### BL-947 closed
