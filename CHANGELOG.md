@@ -19,6 +19,37 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1043.0] - 2026-11-10
+
+### BL-910 PARTIAL: a non-green enforcement-map-sites cwd verdict now prints each failing cell's evidence
+
+The one recorded failure is `I81-M3` scoring `1100` where `1101` is expected, with rc `1/1/2/1`, in the 0.998.0 gated push at pool width 8. The program it runs is unchanged since. Under M3, cell C4 runs the same program as C1 on the same tree, so a 0 bit there means two runs of the same program disagreed.
+
+Forced input ruled out four causes:
+- static fork limits, which make `--arms` exit 2 and never give rc 1 with a 0 bit;
+- a mktemp or TMPDIR failure;
+- async work in `--arms I81`;
+- writes to the decoy tree.
+
+One transient failure of the subject's own extraction subprocess (`i81_expr_of`'s awk on the acknowledge hook), in C4 alone, reproduces `1100` with rc `1/1/2/1` exactly. The cause could not be confirmed, because `cwd_finish` deleted every cell's output and nothing printed it.
+
+`core/fixtures/enforcement-map-sites/run.sh` gains `cwd_why`. It appends evidence to the three non-green cwd verdicts: `cwd_control`, a `cwd_mutant` SURVIVED and the `cwd_full` M5 SURVIVED. For each cell expected 1 that scored 0, it prints:
+- the rc;
+- whether the finding matched;
+- the cell's diff against C1's `s.out`, its own lines first, at most 12 lines of 200 characters.
+
+Every evidence line is indented off `^  FAIL`. Green output is unchanged apart from one new ok line, and no cell predicate, bit or comparison changed. A self-probe in `A43_i81_cwd_invariance` runs `cwd_why` on synthetic outputs:
+- it must print the C4 line and name C4 for `1100` against `1101`;
+- it must stay quiet when the bits match;
+- it must skip a C3 expected 0 that scored 0;
+- it must keep every line off `^  FAIL`.
+
+A copy of `cwd_why` that prints nothing turns the probe red. A shim that failed the awk only during M3's C4 produced exactly one FAIL line, carrying `awk: fork: Resource temporarily unavailable` and the validator's empty-block line. The control was unchanged, and M2 and M4 were still killed.
+
+The fix itself is still owed under BL-868. The next occurrence names its cause in its FAIL line, and the fix goes in the test, never as a retry, a widened bound or fewer jobs.
+
+Ledger: BL-910 is stamped PARTIAL. Filed 0, closed 0, so NET (closed − filed) = 0.
+
 ## [0.1042.0] - 2026-11-10
 
 ### BL-806 (part b re-filed, stays open)
