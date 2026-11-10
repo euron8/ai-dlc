@@ -19484,3 +19484,42 @@ Batch 249: `docs/plans/archive/`. `ai-dlc-be` was the lead. No `graph-*` session
 - **Graph.** Branch `ai-dlc/feature/per-chain-rebalancer-instances` reads `0.1001.0` (stamp `3a8895c57`), `main` `0.969.0`. Pull OWED: PENDING 3; main 50 behind, branch 18. Differential diverges: ledger-reverify adds 6 NAMED-UPSTREAM rows (PC-S320); predicate-differential's installed copy over-reports PREDICATE-RECLASSIFIES (14/14) where `0.1019.0` reads STABLE; derivation-differential refused. The pull is the operator's; none run.
 - **NOTE.** Derive fences write fixed `/tmp/live.txt`, `/tmp/arch.txt`, `/tmp/cand_arch.md`; sessions may collide (hypothesis).
 
+   **BATCH 137.** Retrospective moved out of the action 1 body so the rotator can see it: the
+   batch-119 wall-clock ruling, its subject change, its shipping record, the batch-130 inversion
+   measurement that spent it, and the batch 132-137 scoping history.
+
+   **OPERATOR RULING AT BATCH 119, AND IT IS NOT SPENT: `docs/plans/pre-push-wall-clock.md` REMAINS
+   THE SUBJECT UNTIL THE SUITE'S WALL CLOCK ACTUALLY FALLS.** Given in as many words — *"420 as a
+   pole is not good enough. Neither is 346 on the next. Need to look deeper and refactor more
+   aggressively in a future batch."* — after the operator was shown that cutting BOTH co-poles
+   would buy roughly 85s of a 500s makespan. This supersedes the batch-118 ruling below, which
+   named the same plan for one batch only.
+
+   **The subject is REMOVING WORK, not scheduling it, and that is a change of kind.** The suite is
+   no longer pole-bound: at `v0.585.0` the pole was 620s against a work-conservation floor
+   (`sum of all unit costs / 12`) of 519.5s, so pole work of any size cannot return more than that
+   gap. **Do not open batch 120 by shaving a fixture.** Read that plan's action 1, which names the
+   lever the operator identified: every real input file is opened ~8.8 times per full run, and one
+   10500-line validator carries 384 `grep`, 158 `awk`, 136 `sed` and 67 `find` sites re-walking
+   corpora earlier arms already walked. Sharding and inner pools MOVE work between directories and
+   leave that floor untouched — measured, `validator-arm-selection` 370 plus its shard 158 is 528
+   pool-seconds for one subject.
+
+   Batch 119 shipped as `v0.585.0` (`389b6bdc`) and is recorded in that plan's discharged section;
+   it did not build the inner pool the batch-118 ruling anticipated, and the measurement for why is
+   there.
+
+   **THAT RULING IS SPENT AND ITS WORK IS DONE. DO NOT OPEN A BATCH ON THE WALL CLOCK.** Batches
+   120-129 executed it across `v0.586.0`-`v0.601.0`, and `docs/plans/pre-push-wall-clock.md` is the
+   record. **The premise it turned on has now inverted: the POLE IS BELOW THE FLOOR.** Re-derived
+   at batch 130 from `$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations`, 202 rows:
+   pole `ledger-reverify` **420s** against `sum/12` = **425.0s** over 5100 pool-seconds. Pole work
+   has nothing left to buy, and the suite is work-bound. Re-derive both before believing this
+   paragraph — these are LOADED numbers that swing ±27% on box load, so read the DIRECTION.
+
+   Batch 132 took `BL-277`, which carries no `PC-` id and was therefore NOT off that worklist —
+   an operator choice, made on a direct question, because the defect was blocking this program's
+   own gate. Batches 133 and 134 each scoped two PC-backed entries off the worklist, batch 135
+   scoped one, and batch 136 scoped `BL-029` — whose ROTATION batch 137 had to finish, so the
+   join only lost that row a batch later.
+
