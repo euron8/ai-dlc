@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -63,14 +63,8 @@ belongs in `### NEXT ACTIONS`, not in a batch record.
 - **THE PC-BACKED WORKLIST IS 0** — the step-4 join at the close, and every row of the step-5 delivery loop printed a shipped VERSION (0.1029.0-0.1038.0): the consumer's nine live candidates are all PENDING on the pull, none unworked. The join refills whenever a filing lands, so re-derive it anyway.
 - **OPERATOR RULING THAT BINDS BL-806(b) IF IT IS PICKED:** keep open, no arm ships. The entry carries the corrected census (273 writes / 252 rc-0 / 39 carrying a bare token, op-detection rule in the same sentence) and the exit condition: re-measure once ≥300 bare-token writes accumulate (about 1,939 rc-0 writes at the measured rate). BL-514 and BL-910 each carry their own exit in the entry.
 - **HELD REFS, each owner's to delete after the next batch's close:** `ai-dlc-e4` — `b253-bl947` (with `/Users/n8/git/ai-dlc-b253-bl947`), `b253-bl514` (with `rel514-wt`), `b253-bl954` (with `rel954-wt`); `ai-dlc-f4` — `b253-docs-dev`, `b253-esc-audit-dev`; `ai-dlc-9d` — `b253-bl910`, `b253-check-32-dev`.
-- **Graph.** Branch `0.1036.0`, `main` `0.1028.0`. Installed: `0.1036.0` on the checked-out branch, `0.1028.0` on `main`. PENDING on the branch: S322 MERGE-ADVERSARIAL-RERUN (shipped `0.1037.0`).
-- **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
-
-**BATCH 252 IS CLOSED: RELEASES `v0.1029.0` THROUGH `v0.1037.0`, none skipped. THE NEXT SESSION STARTED BATCH 253.**
-`ai-dlc-78` led; its rulings and NOTEs are in the batch-252 close commit message. No `graph-*` session is ever messaged.
-- **Next VERSION `0.1038.0`; next free id BL-948.** Live 51, archive 867. Open from this batch: BL-944 (lands before BL-939's acceptance is trusted), BL-945, BL-947; `adversarial-shard-merge` owes a `run.sh --matrix` re-measure (the push does not run it).
-- **All 8 PC ids shipped** (0.1029.0-0.1037.0). Six are cited only in release messages, so the `pc()` partition reads them untouched; the delivery-gap fence loops over `/tmp/live.txt` and prints each id's VERSION. Read that.
-- **Graph.** Branch `0.1036.0`, `main` `0.1028.0`. PENDING on the branch: S322 MERGE-ADVERSARIAL-RERUN (`0.1037.0`).
+- **Graph.** Branch `0.1036.0`, `main` `0.1028.0`. Installed: `0.1036.0` on the checked-out branch, `0.1028.0` on `main`. PENDING on the branch: S322 MERGE-ADVERSARIAL-RERUN (shipped `0.1037.0`) and S322 CHECK-32 (shipped `0.1038.0`); the other seven shipped ids predate the branch's install.
+- **PULL: OWED, differential NULL.** Behind: branch 8, main 16 (both over five — WIDE). The range changes only the reconcile engines `ledger-reverify.sh` and `reconcile/lib.sh` (0.1031.0, BL-932); `preclassify.sh`, `apply.sh` and the update `SKILL.md` are byte-identical across it. Installed-vs-distribution `ledger-reverify` over a `file://` clone of graph (branch `ai-dlc/carry-over/epic5-closeout`, base `ba3c6074`): byte-identical 26-row finding sets, `cmp -s` asserting the two engines DIFFER in the same invocation (blobs `c8cfc0696` vs `03a5db28d`). **THE NULL'S LIMIT:** the engine change is a silent-drop fix — an id whose bold label ends in a dot run, colon or em dash — and today's ledger carries no such entry, so it cannot show; the installed engine drops one silently the moment such an entry is filed. The pull is the operator's; none run.
 - **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
 
 ### Derive the state; do not trust the numbers below
