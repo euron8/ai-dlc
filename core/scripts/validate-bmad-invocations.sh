@@ -154,7 +154,28 @@ fi
 # (graph) 17 -> 16. The difference is exactly {bmad-invocation-resolve} in both and
 # the gained set is empty in both -- every real call site survives, including the
 # backticked, line-start and parenthesised forms.
-NAMES="$(grep -rhoE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)' "$RULES" 2>/dev/null \
+#
+#   TRAILING `.`  a dot after the name ends a call site only when what follows it is
+#             not a word character. A sentence-final `.` (then space, `)`, a backtick,
+#             another `.`, or line end) is punctuation; a `.` followed by a word
+#             character is a filename extension, so `s<N>/bmad-sprint-status.yaml`
+#             names a file, not a skill. The extractor's own class still admits the
+#             dot; a PREFILTER ahead of it rewrites `/bmad-NAME.<word char>` to
+#             `/bmad-NAME_<word char>`, which the trailing class then rejects as a
+#             truncated longer name. It consumes nothing past the word character, so
+#             `/bmad-a. /bmad-b` keeps both names. The prefilter reads the same files
+#             as the single recursive grep it replaced: `grep -rh ''` over `$RULES`.
+#             It runs under `LC_ALL=C`: under a UTF-8 locale BSD `sed` meets an invalid
+#             byte, prints `illegal byte sequence` and STOPS, so every later line and
+#             file of the concatenated stream goes unscanned; the pattern is ASCII-only,
+#             so the C locale is exact (the `grep -oE` after it drops only that line).
+#
+# MEASURED, both layouts, before shipping: distribution 13 names -> 12, consumer
+# (graph installed rulebook) 14 -> 13. The difference is exactly {bmad-sprint-status}
+# in both and the gained set is empty in both.
+NAMES="$(grep -rh '' "$RULES" 2>/dev/null \
+  | LC_ALL=C sed -E 's#(/bmad-[a-z0-9-]+)\.([A-Za-z0-9_])#\1_\2#g' \
+  | grep -oE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)' \
   | grep -oE '/bmad-[a-z0-9-]+' \
   | sed 's#^/##' | sed 's/-$//' | sort -u)"
 

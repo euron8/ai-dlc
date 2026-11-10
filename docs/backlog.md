@@ -2089,3 +2089,16 @@ Fix direction, stated and not built: if the count is non-zero, give the join the
 Provenance: batch b252, filed alongside BL-946 (graph s322 coe adversarial pass 2 candidate); lead ai-dlc-78.
 
 verify: manual
+
+
+## BL-949 — validate-bmad-invocations.sh's extraction consumes the boundary character two adjacent call sites share, so in `/bmad-a /bmad-b` the second name is never checked
+
+**DEFECT.** `core/scripts/validate-bmad-invocations.sh:157 at 35201f04f` extracts call sites with `grep -rhoE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)'`. The trailing context character of one match is the leading context the next needs, and `grep -o` matches never overlap. With exactly one space between two names, `/bmad-a /bmad-b`, the space is consumed by the first match and `/bmad-b` has no leading character left, so only `/bmad-a` is extracted. A dangling second name passes Check 32 silently.
+
+Measured on the shipped validator at origin/main 35201f04f in a mktemp world: a skills root holding only `bmad-a/SKILL.md` and a rulebook line `Invoke /bmad-a /bmad-b here.` gives rc 0 with `invokes '/bmad-b'` named 0 times. The control, the same file with `/bmad-a, /bmad-b`, gives rc 1 with `invokes '/bmad-b'` named once.
+
+Pre-existing: the shipped grammar and BL-948's prefilter both lose it, and BL-948 does not touch it. Fix direction, stated and not built: a non-consuming extractor, such as a perl lookbehind and lookahead, or a tokenizer, instead of a single consuming `grep -o`.
+
+Provenance: batch b253, cluster check-32; found by the contract adversary while measuring BL-948's grammar alternatives.
+
+verify: sh V=core/scripts/validate-bmad-invocations.sh; [ -f "$V" ] || exit 9; T="$(mktemp -d "${TMPDIR:-/tmp}/bl949.XXXXXX")" || exit 9; mkdir -p "$T/s/bmad-a" "$T/r" "$T/p/.git" || exit 9; printf -- '---\nname: bmad-a\ndescription: stub\n---\n\n# A\n' > "$T/s/bmad-a/SKILL.md"; printf 'Invoke /bmad-a, /bmad-b here.\n' > "$T/r/c.md"; c="$(AI_DLC_PROJECT_ROOT="$T/p" bash "$V" --skills-root "$T/s" --rules-root "$T/r" 2>&1)"; rc=$?; [ "$rc" -eq 1 ] && grep -qF "invokes '/bmad-b'" <<<"$c" || exit 9; printf 'Invoke /bmad-a /bmad-b here.\n' > "$T/r/c.md"; o="$(AI_DLC_PROJECT_ROOT="$T/p" bash "$V" --skills-root "$T/s" --rules-root "$T/r" 2>&1)"; rc=$?; [ "$rc" -eq 1 ] && grep -qF "invokes '/bmad-b'" <<<"$o"

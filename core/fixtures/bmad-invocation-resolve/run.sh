@@ -27,6 +27,18 @@
 #   - MUTATION: reverting the call-site grammar reds the clean run — and the
 #       dangling-name assertion stays GREEN under it, which is what proves the
 #       grammar narrowed the scan without neutering the check
+#   - EXT: a FILENAME token (`s<N>/bmad-x.yaml`, `/bmad-x.json`, `/bmad-x.Yaml`) is not a
+#       call site (rc 0, PASS, none named), while a sentence-final dot still ends one
+#       (line end; dot-space-word; a dot directly before a second call site) -- rc 1 naming
+#       all three near-misses and none of the offenders
+#   - MUTATION EXT-M: deleting the extension prefilter reds the offender run naming all
+#       three, and the near-misses are still named under it
+#   - EXT-ilseq: under en_US.UTF-8 a latin-1 byte on the line before a dangling name does
+#       not stop the scan (rc 1 naming it); MUTATION EXT-ilseq-M: without LC_ALL=C on the
+#       prefilter sed the same world loses the name
+#   - G611 independent: the 6.11 skill list is derived by a tokenizer over the rulebook
+#       copy, never from the validator's output; it excludes bmad-sprint-status while the
+#       copy still carries bmad-sprint-status.yaml, so G611-clean tests the extension rule
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -146,6 +158,98 @@ else
   rm -f "$R/steps/dangling2.md"
 fi
 
+# --- EXT: a filename extension after a /bmad- name is not a call site -----------
+# Offenders, none a call site: the route.md shape (`>`-led, lowercase extension), a backtick-led
+# extension outside any known list, and a capital after the dot. Near-misses, all call sites: a
+# sentence-final dot at line end, a dot then a space then a word, and a dot ending one call site
+# directly before a second one (the second must survive). Each run reads its verdict from a file.
+EXT_O='bmad-no-such-skill bmad-no-such-skill-e bmad-no-such-skill-g'
+EXT_N='bmad-no-such-skill-b bmad-no-such-skill-c bmad-no-such-skill-d'
+printf '%s\n' 'moved to `s<N>/bmad-no-such-skill.yaml` before' \
+  'see `/bmad-no-such-skill-e.json` file' 'see `/bmad-no-such-skill-g.Yaml` file' > "$R/steps/ext-o.md"
+printf '%s\n' 'Run /bmad-no-such-skill-b.' 'then /bmad-no-such-skill-c. Next' \
+  'Run /bmad-live-one. /bmad-no-such-skill-d next' > "$R/steps/ext-n.md"
+# extrun <validator> <tag>: runs with the offenders seeded, then with the near-misses added too.
+extrun() {
+  mv "$R/steps/ext-n.md" "$ROOT/ext-n.md"
+  bash "$1" --skills-root "$S" --rules-root "$R" > "$ROOT/$2-o.out" 2>&1; echo $? > "$ROOT/$2-o.rc"
+  mv "$ROOT/ext-n.md" "$R/steps/ext-n.md"
+  bash "$1" --skills-root "$S" --rules-root "$R" > "$ROOT/$2-n.out" 2>&1; echo $? > "$ROOT/$2-n.rc"
+}
+# names_in <out file> <names>: prints each name that appears in an exact FAIL line.
+names_in() {
+  local f="$1" n; shift
+  for n in "$@"; do
+    grep -qF "FAIL: the pipeline invokes '/$n' and no such skill exists" "$f" && printf '%s ' "$n"
+  done
+  return 0
+}
+extrun "$V" ext
+eo="$(cat "$ROOT/ext-o.rc")"; en="$(cat "$ROOT/ext-n.rc")"
+hit="$(names_in "$ROOT/ext-o.out" $EXT_O)"
+[ "$eo" -eq 0 ] && grep -qF 'PASS (2 invoked name(s)' "$ROOT/ext-o.out" && [ -z "$hit" ] \
+  && ok "EXT-clean: filename tokens s<N>/bmad-X.yaml, /bmad-X.json and /bmad-X.Yaml are not call sites (rc 0, PASS (2 invoked name(s), none named)" \
+  || bad "EXT-clean: rc=$eo, offender names counted: [$hit]: $(grep -m1 FAIL "$ROOT/ext-o.out")"
+hitn="$(names_in "$ROOT/ext-n.out" $EXT_N)"; hito="$(names_in "$ROOT/ext-n.out" $EXT_O)"
+[ "$en" -eq 1 ] && [ "$hitn" = "bmad-no-such-skill-b bmad-no-such-skill-c bmad-no-such-skill-d " ] && [ -z "$hito" ] \
+  && ok "EXT-near-miss: a sentence-final dot still ends a call site (rc 1 naming -b, -c and -d, the one after /bmad-live-one. included; no offender named)" \
+  || bad "EXT-near-miss: rc=$en, near-misses named: [$hitn], offenders named: [$hito]"
+
+# EXT-M: delete the prefilter stage. The validator sources no sibling, so a copy of the file alone
+# is the program; the unmutated control below runs from the same directory, and the near-miss run
+# naming b, c and d is the mutant's own positive output.
+MX="$ROOT/mutant-ext.sh"
+cp "$V" "$MX"
+MUT_OLD="  | LC_ALL=C sed -E 's#(/bmad-[a-z0-9-]+)\\.([A-Za-z0-9_])#\\1_\\2#g' \\
+" perl -0pi -e 's/\Q$ENV{MUT_OLD}\E//' "$MX"
+if cmp -s "$V" "$MX"; then
+  bad "EXT-M: DID NOT APPLY -- the prefilter stage was not found, the EXT arm above proves nothing"
+else
+  extrun "$MX" extm
+  mo="$(cat "$ROOT/extm-o.rc")"; mn="$(cat "$ROOT/extm-n.rc")"
+  mho="$(names_in "$ROOT/extm-o.out" $EXT_O)"; mhn="$(names_in "$ROOT/extm-n.out" $EXT_N)"
+  [ "$mo" -eq 1 ] && [ "$mho" = "bmad-no-such-skill bmad-no-such-skill-e bmad-no-such-skill-g " ] \
+    && ok "EXT-M: deleting the prefilter reds the offender run naming all three filename tokens (the prefilter is what excludes them)" \
+    || bad "EXT-M: with the prefilter deleted the offender run gave rc=$mo naming [$mho]"
+  [ "$mn" -eq 1 ] && [ "$mhn" = "bmad-no-such-skill-b bmad-no-such-skill-c bmad-no-such-skill-d " ] \
+    && ok "EXT-M PAIRING: the near-misses are still named under the mutant (the prefilter removes only extensions)" \
+    || bad "EXT-M PAIRING: with the prefilter deleted the near-miss run gave rc=$mn naming [$mhn]"
+fi
+rm -f "$R/steps/ext-o.md" "$R/steps/ext-n.md"
+
+# --- EXT-ilseq: an invalid UTF-8 byte must not end the scan --------------------
+# Under a UTF-8 locale BSD `sed -E` meets an invalid byte, prints `illegal byte sequence` and STOPS,
+# so every later line of the concatenated stream goes unscanned. One file holds the latin-1 byte on
+# its first line and a dangling name on its second, so the verdict cannot depend on the order the
+# files stream in. The locale is set on the invocation itself: the hermetic sandbox runs `env -i`,
+# i.e. the C locale, where the arm could not fire.
+printf 'caf\351 here\nInvoke /bmad-no-such-skill-h here.\n' > "$R/steps/ilseq.md"
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 bash "$V" --skills-root "$S" --rules-root "$R" > "$ROOT/ilseq.out" 2>&1
+il=$?
+grep -qF "FAIL: the pipeline invokes '/bmad-no-such-skill-h' and no such skill exists" "$ROOT/ilseq.out" && ilh=1 || ilh=0
+[ "$il" -eq 1 ] && [ "$ilh" = 1 ] \
+  && ok "EXT-ilseq: under en_US.UTF-8 a latin-1 byte on the line before /bmad-no-such-skill-h does not stop the scan (rc 1 naming it)" \
+  || bad "EXT-ilseq: under en_US.UTF-8 rc=$il, /bmad-no-such-skill-h named=$ilh: $(grep -m1 -E 'FAIL|error' "$ROOT/ilseq.out")"
+# EXT-ilseq-M: the prefilter's sed without `LC_ALL=C`. The same world must then lose the name, which
+# proves the arm above can fire.
+MI="$ROOT/mutant-ilseq.sh"
+cp "$V" "$MI"
+MUT_OLD="  | LC_ALL=C sed -E 's#" MUT_NEW="  | sed -E 's#" perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MI"
+if cmp -s "$V" "$MI"; then
+  bad "EXT-ilseq-M: DID NOT APPLY -- LC_ALL=C was not found on the prefilter sed, EXT-ilseq above proves nothing"
+else
+  LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 bash "$MI" --skills-root "$S" --rules-root "$R" > "$ROOT/ilseqm.out" 2>&1
+  ilm=$?
+  grep -qF "FAIL: the pipeline invokes '/bmad-no-such-skill-h' and no such skill exists" "$ROOT/ilseqm.out" && ilmh=1 || ilmh=0
+  # Positive conjunct: sed's own stderr is in the capture, so a mutant whose edit broke the pipe
+  # (rc 2, nothing extracted) cannot score as a kill by silence.
+  grep -qF "illegal byte sequence" "$ROOT/ilseqm.out" && ilms=1 || ilms=0
+  { [ "$ilm" -eq 0 ] || [ "$ilm" -eq 2 ]; } && [ "$ilmh" = 0 ] && [ "$ilms" = 1 ] \
+    && ok "EXT-ilseq-M: without LC_ALL=C the same world loses /bmad-no-such-skill-h (rc $ilm, not named, sed said illegal byte sequence; the C locale is what keeps it)" \
+    || bad "EXT-ilseq-M: without LC_ALL=C rc=$ilm, /bmad-no-such-skill-h named=$ilmh, illegal-byte-sequence seen=$ilms -- the arm cannot discriminate"
+fi
+rm -f "$R/steps/ilseq.md"
+
 # Unmutated control from the same directory. A mutant copy that dies for its own
 # reasons emits nothing, and "no output" would otherwise score as a kill.
 MC="$ROOT/control-unmutated.sh"
@@ -179,8 +283,8 @@ bash "$V" --skills-root "$S" --rules-root "$ROOT/empty-rules" >/dev/null 2>&1
 # The rulebook is the installed one beside this fixture, copied WITHOUT overrides/ and extensions/:
 # those hold consumer-owned prose this fixture has no standing over (a consumer override can still
 # name a pre-6.11 slash form, which is that consumer's edit to make, not a red on its self-update).
-# The skill set is DERIVED: the shipping validator, pointed at an empty skills root, names every skill
-# the rulebook invokes. Each is stubbed self-contained EXCEPT the five 6.11 removed, which are never
+# The skill set is DERIVED from the rulebook by a tokenizer independent of the validator (below), and
+# names every skill the rulebook invokes. Each is stubbed self-contained EXCEPT the five 6.11 removed, which are never
 # stubbed -- a rulebook that still invoked one must go red here, so the arm can fire on its own subject.
 # bmad-review carries the adversarial lens and bmad-sprint-planning the readiness gate, as 6.11 ships them.
 RB=""
@@ -191,7 +295,7 @@ done
 echo "HERMETIC-CONSUMED core/skills/ai-dlc/"
 OLD5="bmad-market-research bmad-domain-research bmad-technical-research bmad-review-adversarial-general bmad-check-implementation-readiness"
 G="$ROOT/g611"; GS="$G/.claude/skills"; GR="$G/rules"
-mkdir -p "$GS" "$G/empty/.claude/skills"
+mkdir -p "$GS"
 cp -R "$RB" "$GR" || { echo "run.sh: could not copy the rulebook" >&2; exit 2; }
 rm -rf "$GR/overrides" "$GR/extensions"
 # The consumer-owned scaffolds beside the core flat files, DERIVED from the layer contract's
@@ -201,7 +305,12 @@ if [ -f "$GR/layer-contract.yaml" ]; then
     rm -f "$GR/$sc"
   done
 fi
-gnames="$(bash "$V" --skills-root "$G/empty/.claude/skills" --rules-root "$GR" 2>&1 | grep -o "invokes '/bmad-[a-z0-9-]*'" | sed "s#^invokes '/##; s#'\$##" | sort -u)"
+# The list is derived INDEPENDENTLY of the reader under test: a list taken from the validator's own
+# output cannot fail G611-clean on a name the validator invents. Pinned tokenizer: split the copied
+# rulebook on whitespace, backticks, parens, brackets, asterisks and double quotes; keep a token that
+# is exactly /bmad-NAME with at most one trailing sentence mark; strip the mark and the slash.
+gnames="$(grep -rh "" "$GR" | tr -s ' \t\r`()\133\135*"' '\n' \
+  | grep -xE '/bmad-[a-z0-9-]*[a-z0-9][.,;:!?]?' | sed -E 's#[.,;:!?]$##; s#^/##' | sort -u)"
 ng=0; nold=0
 for n in $gnames; do
   ng=$((ng+1))
@@ -222,6 +331,14 @@ for n in bmad-deep-recon bmad-review bmad-sprint-planning; do grep -qx "$n" <<<"
 for n in $OLD5; do [ -e "$GS/$n" ] && gok=0; done
 [ "$gok" = 1 ] && [ "$ng" -ge 3 ] && ok "G611 seed: the rulebook invokes $ng skill(s), deep-recon, review and sprint-planning among them; the five removed names are absent from the tree" \
                                  || bad "G611 seed: derivation gave $ng name(s) [$(echo $gnames)] or a removed name is in the tree"
+# The independent list must not hold the filename token's name, AND the rulebook copy must still carry
+# that token -- so G611-clean below is a live test of the extension rule, not a run that never meets it.
+nfile="$(grep -rlF 'bmad-sprint-status.yaml' "$GR" | grep -c .)" || nfile=0
+if ! grep -qx 'bmad-sprint-status' <<<"$gnames" && [ "$nfile" -ge 1 ]; then
+  ok "G611 independent: the skill list comes from a tokenizer over the rulebook, not the validator; bmad-sprint-status is absent from it while the rulebook copy carries bmad-sprint-status.yaml"
+else
+  bad "G611 independent: bmad-sprint-status in the derived list, or bmad-sprint-status.yaml absent from the rulebook copy (files carrying it: $nfile)"
+fi
 rg() { bash "$V" --skills-root "$GS" --rules-root "$1" > "$G/out" 2>&1; echo $?; }
 g=$(rg "$GR")
 [ "$g" -eq 0 ] && [ "$nold" -eq 0 ] && grep -qF 'PASS (' "$G/out" \
