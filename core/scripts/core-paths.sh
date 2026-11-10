@@ -221,9 +221,12 @@ if [ "$MODE" = "--audit-diff" ]; then
   dormant_why=""
   git cat-file -e "${BASE_REF}:.claude/.ai-dlc-version" 2>/dev/null \
     || dormant_why="no .claude/.ai-dlc-version stamp"
+  # ANCHORED AT THE TOPLEVEL (BL-945). An ls-tree pathspec is cwd-relative: run from a subdirectory
+  # the layer dir matches nothing and a layered consumer reads as DORMANT, exit 0. `<rev>:<path>`
+  # above is already root-relative; this call is not, so it runs from AUDIT_ROOT.
   for d in overrides extensions; do
     [ -n "$dormant_why" ] && break
-    [ -n "$(git ls-tree -d --name-only "${BASE_REF}" ".claude/skills/ai-dlc/${d}" 2>/dev/null)" ] \
+    [ -n "$(git -C "$AUDIT_ROOT" ls-tree -d --name-only "${BASE_REF}" ".claude/skills/ai-dlc/${d}" 2>/dev/null)" ] \
       || dormant_why="no .claude/skills/ai-dlc/${d}/ layer directory"
   done
   if [ -n "$dormant_why" ]; then
@@ -257,15 +260,18 @@ fi
 # copy. Both layouts are searched because this script runs in both: installed as
 # `scripts/ai-dlc/core-paths.sh` in a consumer, and read straight out of
 # `core/scripts/` by the distribution's own fixtures and gates.
+# In --audit-diff mode the working-tree fallback is read from the toplevel (BL-945), not from the
+# caller's cwd; AUDIT_ROOT is empty in every other mode, so their candidates are unchanged.
 CANDIDATES=""
+WT_PFX="${AUDIT_ROOT:+${AUDIT_ROOT}/}"
 if [ -n "$EXPLICIT" ]; then
   CANDIDATES="$EXPLICIT"
 else
   CANDIDATES="$(printf '%s\n' \
-    ".claude/skills/ai-dlc/core-manifest.md" \
-    "core/skills/ai-dlc/core-manifest.md" \
-    ".claude/skills/ai-dlc-update/reconcile/setup-sites.md" \
-    "core/skills/ai-dlc-update/reconcile/setup-sites.md")"
+    "${WT_PFX}.claude/skills/ai-dlc/core-manifest.md" \
+    "${WT_PFX}core/skills/ai-dlc/core-manifest.md" \
+    "${WT_PFX}.claude/skills/ai-dlc-update/reconcile/setup-sites.md" \
+    "${WT_PFX}core/skills/ai-dlc-update/reconcile/setup-sites.md")"
 fi
 
 RAW_ENTRIES=""
@@ -315,7 +321,9 @@ if [ "$MODE" = "--audit-diff" ]; then
   # `..` for the commits (what this range CONTAINS). The two spellings answer
   # different questions and a single one for both mis-attributes either the paths
   # or the commit that touched them.
-  CHANGED="$(git diff --name-only "${BASE_REF}...${HEAD_REF}" 2>/dev/null || true)"
+  # `-c diff.relative=false`: a config of diff.relative=true makes --name-only answer relative to
+  # the cwd, so from a subdirectory CHANGED is empty and the range reads N/A, exit 0 (BL-945).
+  CHANGED="$(git -c diff.relative=false diff --name-only "${BASE_REF}...${HEAD_REF}" 2>/dev/null || true)"
   echo "core set: ${AUDIT_SRC:-working tree}"
   if [ -z "$CHANGED" ]; then
     echo "N/A: no diff in range ${BASE_REF}...${HEAD_REF}"
@@ -349,23 +357,50 @@ EOF
   # reconcile commit is the one legitimate author of a core edit. Recognized by
   # the subject convention `ai-dlc-update/SKILL.md` itself writes, and checked
   # BEFORE the citation fallback so a routine pull never needs an escalation.
-  OFFENDERS=""
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    while IFS= read -r sha; do
-      [ -n "$sha" ] || continue
-      subj="$(git log -1 --format='%s' "$sha" 2>/dev/null)"
-      case "$subj" in
-        'chore(ai-dlc-update):'*) ;;
-        *) OFFENDERS="${OFFENDERS}  ${sha} ${p} :: ${subj}
-" ;;
-      esac
-    done <<EOG
-$(git log --format='%H' "${BASE_REF}..${HEAD_REF}" -- "$p" 2>/dev/null)
-EOG
-  done <<EOF
-$TOUCHED
-EOF
+  #
+  # ONE WALK OF THE RANGE, joined to TOUCHED in awk (BL-945): a per-path `git log -- "$p"` was a
+  # cwd-relative pathspec (from a subdirectory it matched nothing and the range PASSed) and ~99% of
+  # the gate's git calls. Run from AUDIT_ROOT, so a diff.relative=true config still prints
+  # root-relative names; default core.quotePath, so its keys are spelled as CHANGED spells them.
+  # Each flag is measured against the per-path walk it replaces:
+  #   -c            a merge lists a path only when it differs from EVERY parent -- the per-path
+  #                 walk's own TREESAME rule -- so an evil merge is listed and a --no-ff merge of a
+  #                 reconcile is not (`-m` lists that merge against its first parent: a false FAIL);
+  #   --no-renames  a rename out of a core path is listed under the core path's name (with renames
+  #                 on it is listed only under the new name and joins to nothing: a false PASS);
+  #   --root        a root commit lists its files under log.showRoot=false too, so an unrelated
+  #                 history root merged with --allow-unrelated-histories keeps its offender pair
+  #                 (without it that config drops the pair: a false PASS);
+  #   --no-show-signature  log.showSignature=true prints verification lines above a signed
+  #                 commit's \001 line, read as paths of the commit before it;
+  #   --encoding=UTF-8     i18n.logOutputEncoding=UTF-16 re-encodes every line, so no \001
+  #                 marker or path matches and each offender loses its sha.
+  # Measured inert on this walk (output byte-identical over the fixture's ranges): format.pretty,
+  # log.decorate, log.abbrevCommit, log.graph, log.follow, log.diffMerges, color.*, diff.noprefix,
+  # diff.mnemonicPrefix, diff.relative, diff.external, diff.dirstat, core.pager. core.quotePath
+  # moves it, in step with CHANGED, which reads the same config.
+  # DECLARED DIVERGENCE, stricter: an identical edit of a path on both sides of a merge. The
+  # per-path walk's history simplification follows one side and drops the other's commit; this
+  # walk lists both. One OFFENDERS line per (sha, path) pair, in TOUCHED order then walk order.
+  # The commit line is marked by a leading \001, which no --name-only line can begin with: a path
+  # carrying a control byte is C-quoted by core.quotePath.
+  OFFENDERS="$(printf '%s\n--\n%s\n' "$TOUCHED" \
+    "$(git -C "$AUDIT_ROOT" log -c --no-renames --root --no-show-signature --encoding=UTF-8 --format='%x01%H %s' --name-only "${BASE_REF}..${HEAD_REF}" 2>/dev/null)" \
+    | awk '
+      $0 == "--" && !s { s = 1; next }
+      !s { if ($0 != "" && !($0 in want)) { want[$0] = 1; order[++n] = $0 }; next }
+      substr($0, 1, 1) == "\001" {
+        sha = substr($0, 2); sub(/ .*/, "", sha)
+        subj = substr($0, 2); sub(/^[^ ]* ?/, "", subj)
+        rec = (index(subj, "chore(ai-dlc-update):") == 1)
+        next
+      }
+      $0 != "" && ($0 in want) && !rec && !((sha, $0) in seen) {
+        seen[sha, $0] = 1; c[$0]++; line[$0, c[$0]] = "  " sha " " $0 " :: " subj
+      }
+      END { for (i = 1; i <= n; i++) { p = order[i]; for (j = 1; j <= c[p]; j++) print line[p, j] } }')"
+  [ -z "$OFFENDERS" ] || OFFENDERS="${OFFENDERS}
+"
 
   if [ -z "$OFFENDERS" ]; then
     echo "PASS: core path(s) touched, every touching commit is an /ai-dlc-update reconcile:"

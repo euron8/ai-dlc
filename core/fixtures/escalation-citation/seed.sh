@@ -216,4 +216,76 @@ CITE_NBSP_BLANK="2026-10-05T13:25:14Z | \"${NB}${NB}${NB}${NB}${NB}${NB}${NB}${N
 : > "$ROOT/pending-nbsp-padded.md";    entry "$ROOT/pending-nbsp-padded.md"    S50-ITEM-24 RESOLVED "$CITE_NBSP_PADDED"
 : > "$ROOT/pending-nbsp-blank.md";     entry "$ROOT/pending-nbsp-blank.md"     S50-ITEM-25 RESOLVED "$CITE_NBSP_BLANK"
 
+# --- a LEAD-INTERPRETATION entry resolves only on an exact disposition option (BL-944) ----------
+# requirements.md §3 is the producer: one AskUserQuestion per `(lead interpretation)` bullet, its
+# question opening `LR-S<N>-<m> (lead interpretation): `, and the entry written with a
+# Decision/Question line of `LR-S<N>-<m> (lead interpretation) -- descope, <file:line>`, `-- confirm,
+# <file:line>`, or, while paused, `-- awaiting operator: Confirm, Strike or Reword "<the clause>"`.
+# The transcript lines are the AskUserQuestion tool_use / tool_result pair the BL-944 receipt seeds,
+# which is the shape --cite reads as a genuine operator answer. One answer per hour, so every
+# citation's timestamp bound selects exactly its own answer.
+mkdir -p "$ROOT/lr/t"
+LR_Q='LR-S7-2 (lead interpretation): the index covers the primary pool only.'
+LR_FREE='How is there still no router derived? Absolutely unacceptable that you refuse to figure this out.'
+lr_ask() {  # $1 tool id  $2 answer body  $3 ts
+  printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"%s","name":"AskUserQuestion","input":{"questions":[{"question":"%s"}]}}]}}\n{"type":"user","timestamp":"%s","message":{"content":[{"type":"tool_result","tool_use_id":"%s","content":"Your questions have been answered: \\"%s\\"=\\"%s\\". You can now continue with these answers in mind."}]}}\n' "$3" "$1" "$LR_Q" "$3" "$1" "$LR_Q" "$2" >> "$ROOT/lr/t/s.jsonl"
+}
+lr_ask toolu_f "$LR_FREE"                      2026-11-08T10:01:00Z
+lr_ask toolu_s "Strike LR-S7-2"                2026-11-08T11:01:00Z
+lr_ask toolu_r "Reword LR-S7-2"                2026-11-08T12:01:00Z
+lr_ask toolu_c "Confirm LR-S7-2"               2026-11-08T13:01:00Z
+lr_ask toolu_e "Strike LR-S7-2 (Recommended)"  2026-11-08T14:01:00Z
+lr_ask toolu_w "Strike LR-S7-3"                2026-11-08T15:01:00Z
+# One entry per file. $1 name  $2 Decision/Question value, or "-" for an entry with NO such line
+# $3 the authorization timestamp  $4 the quote
+lr_entry() {
+  {
+    printf '## S7-LR-2 Lead (requirements) - 2026-11-08\n'
+    printf '**Status:** RESOLVED\n'
+    printf '**Blocker type:** missing requirement\n'
+    [ "$2" = "-" ] || printf '**Decision/Question:** %s\n' "$2"
+    printf '**Operator authorization:** %s | "%s"\n' "$3" "$4"
+    printf '\n'
+  } > "$ROOT/lr/$1.md"
+}
+LR_D='LR-S7-2 (lead interpretation) -- descope, _bmad-output/operator-answers-history.md:4'
+LR_C='LR-S7-2 (lead interpretation) -- confirm, _bmad-output/operator-answers-history.md:9'
+lr_entry free       "$LR_D" 2026-11-08T10:01:00Z "$LR_FREE"
+lr_entry strike     "$LR_D" 2026-11-08T11:01:00Z 'Strike LR-S7-2'
+lr_entry reword     "$LR_D" 2026-11-08T12:01:00Z 'Reword LR-S7-2'
+lr_entry confirm    "$LR_C" 2026-11-08T13:01:00Z 'Confirm LR-S7-2'
+lr_entry recommend  "$LR_D" 2026-11-08T14:01:00Z 'Strike LR-S7-2 (Recommended)'
+# The wrong id is IN the transcript, so only the label rule can refuse it.
+lr_entry wrongid    "$LR_D" 2026-11-08T15:01:00Z 'Strike LR-S7-3'
+# A confirm option on a descope line, also in the transcript.
+lr_entry mismatch   "$LR_D" 2026-11-08T13:01:00Z 'Confirm LR-S7-2'
+# The exact option for an id nobody was asked about: the label rule passes, the lookup must refuse.
+lr_entry nohit      'LR-S7-5 (lead interpretation) -- descope, _bmad-output/operator-answers-history.md:4' 2026-11-08T11:01:00Z 'Strike LR-S7-5'
+# The paused form, filed RESOLVED: its disposition word is neither, and it carries a quoted clause.
+lr_entry neither    'LR-S7-2 (lead interpretation) -- awaiting operator: Confirm, Strike or Reword "the index covers the primary pool only"' 2026-11-08T11:01:00Z 'Strike LR-S7-2'
+# The near-miss: no label, the same free text. Its Decision/Question line carries a quoted phrase
+# of more than twelve characters nobody answered, so a row that lets that field bleed into the
+# authorization text verifies the wrong segment.
+lr_entry plain      'an operator question about "QQZX a clause no record carries"' 2026-11-08T10:01:00Z "$LR_FREE"
+# No Decision/Question line at all -- the empty-field row shape.
+lr_entry nodq       - 2026-11-08T11:01:00Z 'Strike LR-S7-2'
+# --any-authorized: a too-short quote beside a Decision/Question line carrying a long quoted phrase.
+lr_entry shortq     'an operator question about "QQZX a clause no record carries"' 2026-11-08T11:01:00Z 'Strike'
+# A TAB inside the `## ` header. Unreplaced, it shifts every later record field one variable right,
+# so the authorization variable reads `<Decision/Question><TAB><auth>` and the quote cited is the
+# Decision/Question text. hdrtabq is shortq with a tab header: only the shift authorizes it.
+# hdrtab quotes words nobody said, beside a Decision/Question line carrying a phrase the operator
+# DID send at that hour: only the shift verifies it.
+lr_tab_entry() {  # $1 name  $2 Decision/Question value  $3 ts  $4 quote
+  {
+    printf '## S7-LR-2\tLead (requirements) - 2026-11-08\n'
+    printf '**Status:** RESOLVED\n'
+    printf '**Decision/Question:** %s\n' "$2"
+    printf '**Operator authorization:** %s | "%s"\n' "$3" "$4"
+    printf '\n'
+  } > "$ROOT/lr/$1.md"
+}
+lr_tab_entry hdrtabq    'an operator question about "QQZX a clause no record carries"' 2026-11-08T11:01:00Z 'Strike'
+lr_tab_entry hdrtab     "asked \"$LR_FREE\"" 2026-11-08T10:01:00Z 'the operator authorized this disposition'
+
 printf '%s\n' "$ROOT"

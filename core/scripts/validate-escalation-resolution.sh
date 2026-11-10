@@ -324,9 +324,21 @@ else
 fi
 
 # Split pending.md into entries and, for each CURRENT-SPRINT entry whose Status is RESOLVED or
-# OVERRIDDEN, emit one TAB-separated record: <header>\t<STATUS>\t<auth-line-or-__MISSING__>.
+# OVERRIDDEN, emit one TAB-separated record:
+#   <header>\t<STATUS>\t<decision-question-or-__NODQ__>\t<auth-line-or-__MISSING__>.
 # The auth line is whatever follows an "Operator authorization:" (or "operator_authorization:")
 # label, verbatim, so bash can parse the timestamp + quoted substring exactly as F6 does.
+#
+# THE DECISION/QUESTION FIELD IS NEVER EMPTY, AND THAT IS LOAD-BEARING. Tab is IFS whitespace, so
+# bash 3.2's `read` merges a run of tabs: `H<TAB>RESOLVED<TAB><TAB>AUTH` reads as three fields and
+# the auth text lands in the third variable, leaving the fourth empty -- every entry with no
+# Decision/Question line would then read as carrying no citation. An absent or empty value is
+# written as the sentinel `__NODQ__`, and a tab inside the text is written as a space. The value
+# is read only by the lead-interpretation rule below; the auth field is last so it keeps any tab
+# it carries, exactly as before. The HEADER is written with its tabs as spaces for the same
+# reason: a tab in a `## ` line otherwise shifts every later field one variable right, so the
+# auth variable reads `dq<TAB>auth` and the quote cited is the Decision/Question text. Status
+# cannot carry a tab (it is `[A-Z_]+`), so these two replacements are the whole set.
 RECORDS="$(awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" '
   function flush() {
     if (header == "") return
@@ -334,12 +346,14 @@ RECORDS="$(awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" '
     # --any-authorized asks about the FILE, so every terminal entry is in scope. The gate mode is
     # in scope only if the header names THIS sprint (S<N> not followed by another digit).
     if (anyauth == 1 || header ~ ("[Ss]" sprint "([^0-9]|$)")) {
-      printf "%s\t%s\t%s\n", header, status, (auth == "" ? "__MISSING__" : auth)
+      hh = header
+      gsub(/\t/, " ", hh)
+      printf "%s\t%s\t%s\t%s\n", hh, status, (dq == "" ? "__NODQ__" : dq), (auth == "" ? "__MISSING__" : auth)
     }
   }
   /^#{2,3} / {
     flush()
-    header = $0; status = ""; auth = ""
+    header = $0; status = ""; auth = ""; dq = ""; gotdq = 0
     next
   }
   # Status token: first ALL-CAPS word after the label.
@@ -368,6 +382,18 @@ RECORDS="$(awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" '
     if (auth == "") auth = a
     next
   }
+  # The Decision/Question field, line-leading like the auth label. The first one counts. The
+  # value loses the label and then any leading emphasis or space the label left behind.
+  tolower(lbl) ~ /^decision\/question:/ {
+    if (gotdq) next
+    gotdq = 1
+    d = lbl
+    sub(/^[^:]*:/, "", d)
+    sub(/^[*_[:space:]]+/, "", d)
+    gsub(/\t/, " ", d)
+    dq = d
+    next
+  }
   END { flush() }
 ' "$ESCALATIONS")"
 
@@ -376,7 +402,9 @@ RECORDS="$(awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" '
 # are different facts and a caller that cannot tell them apart will read the second as the first.
 if [ "$ANY_AUTHORIZED" -eq 1 ]; then
   TERMINAL=0; AUTHORIZED=0; FIRST=""
-  while IFS="$(printf '\t')" read -r header status authline; do
+  # The Decision/Question field is read and not used: this mode stays shape-only, with no
+  # lead-interpretation rule. It is read so that `authline` holds exactly the auth text.
+  while IFS="$(printf '\t')" read -r header status _dq authline; do
     [ -n "$header" ] || continue
     TERMINAL=$((TERMINAL + 1))
     [ "$authline" = "__MISSING__" ] && continue
@@ -415,7 +443,7 @@ UNBOUNDED=0
 # initialised here because the PASS line must be able to say "the verifier named no corpus"
 # rather than print a blank, and a blank is the state this whole section exists to end.
 CITE_REPORT=""
-while IFS="$(printf '\t')" read -r header status authline; do
+while IFS="$(printf '\t')" read -r header status dq authline; do
   [ -n "$header" ] || continue
   CHECKED=$((CHECKED + 1))
   short="$(printf '%s' "$header" | sed -E 's/^#+ //; s/ - [0-9].*$//' | cut -c1-60)"
@@ -436,6 +464,54 @@ while IFS="$(printf '\t')" read -r header status authline; do
   if [ "$nqlen" -lt 12 ]; then
     echo "FAIL: [$short] operator authorization quotes '${nquote}' (${nqlen} chars once whitespace is collapsed), too short (>=12 chars) to verify." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
+  fi
+
+  # A LEAD-INTERPRETATION ENTRY RESOLVES ONLY ON AN EXACT DISPOSITION OPTION. requirements.md §3
+  # derives a `(lead interpretation)` bullet's state from the captured answer body: a whole body
+  # of exactly `Confirm <id>` keeps it, `Strike <id>` or `Reword <id>` descopes it, each with or
+  # without ` (Recommended)`, and any other body -- free text, or an option followed by more
+  # text -- is UNDECIDED, which is never filed as a disposition. The entry's Decision/Question
+  # line is written `LR-S<N>-<m> (lead interpretation) -- confirm, ...` or `... -- descope, ...`,
+  # so it names the id and the disposition the quote must be. Without this a genuine free-text
+  # reply verified as the operator's disposition, because the citation check below asks only
+  # whether the operator SAID the words.
+  #
+  # THIS RULE ONLY ADDS A REFUSAL. On a pass the entry still goes through the transcript check
+  # below; an exact option nobody chose is still a fabrication. Every entry whose
+  # Decision/Question value does not OPEN with the id and label is untouched.
+  # The id is `LR-S<digits>-<digits>`, and it must OPEN the value, directly before the label.
+  lr_id=""
+  case "$dq" in
+    "LR-S"*" (lead interpretation)"*)
+      lr_cand="${dq%%" (lead interpretation)"*}"
+      lr_n="${lr_cand#LR-S}"; lr_s="${lr_n%%-*}"; lr_m="${lr_n#*-}"
+      case "$lr_s:$lr_m" in
+        :*|*:|*[!0-9:]*) ;;
+        *) [ "$lr_n" != "$lr_s" ] && lr_id="$lr_cand" ;;
+      esac ;;
+  esac
+  if [ -n "$lr_id" ]; then
+    lr_disp="${dq#"$lr_id (lead interpretation)"}"
+    case "$lr_disp" in *" -- "*) lr_disp="${lr_disp#* -- }" ;; *) lr_disp="" ;; esac
+    lr_body="${nquote% (Recommended)}"
+    lr_ok=0
+    case "$lr_disp" in
+      descope*) { [ "$lr_body" = "Strike $lr_id" ] || [ "$lr_body" = "Reword $lr_id" ]; } && lr_ok=1; lr_want="Strike $lr_id or Reword $lr_id" ;;
+      confirm*) [ "$lr_body" = "Confirm $lr_id" ] && lr_ok=1; lr_want="Confirm $lr_id" ;;
+      *) lr_want="" ;;
+    esac
+    if [ "$lr_ok" -ne 1 ]; then
+      if [ -z "$lr_want" ]; then
+        echo "FAIL: [$short] is a $lr_id (lead interpretation) entry marked $status, but its Decision/Question line records" >&2
+        echo "      neither disposition: after ' -- ' it must open with confirm or descope (requirements.md §3)." >&2
+      else
+        echo "FAIL: [$short] is a $lr_id (lead interpretation) entry marked $status, and its operator authorization" >&2
+        echo "      quotes '${nquote}', which is not the exact answer body $lr_want (optionally with ' (Recommended)')." >&2
+        echo "      requirements.md §3: any other body is UNDECIDED, which is never filed as a disposition --" >&2
+        echo "      the entry stays paused and the lead puts the question again." >&2
+      fi
+      FAIL=1; FAILN=$((FAILN + 1)); continue
+    fi
   fi
 
   # The corpus wins over the single file. A resolution OUTLIVES the session that recorded it,

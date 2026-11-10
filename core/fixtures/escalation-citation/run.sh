@@ -905,10 +905,134 @@ else
   fi
 fi
 
+# --- a LEAD-INTERPRETATION entry resolves only on an exact disposition option (BL-944) -----------
+# requirements.md §3 derives a `(lead interpretation)` bullet's state from the captured answer body
+# and never files free text as a disposition, and the entry's Decision/Question line names the id
+# and the disposition (`LR-S<N>-<m> (lead interpretation) -- descope, ...` / `-- confirm, ...`).
+# The validator used to check only that the operator SAID the quoted words, so a genuine free-text
+# reply verified as a descope. Seeds: seed.sh, the `lr/` tree, one AskUserQuestion answer per hour.
+# Every cell is PRESENCE-shaped (an exit AND a line that must appear), so a subject that prints
+# nothing fails all of them:
+#   free       labelled descope entry quoting the free text            -> FAIL, names the options
+#   strike reword confirm recommend   the exact options, badge allowed -> PASS
+#   wrongid    `Strike LR-S7-3` on LR-S7-2, that answer IN the corpus  -> FAIL (only the id refuses it)
+#   mismatch   `Confirm LR-S7-2` on a descope line, IN the corpus      -> FAIL
+#   nohit      exact `Strike LR-S7-5`, which nobody answered           -> FAIL at the lookup: the rule
+#              passes it and must not short-circuit the transcript check
+#   neither    the paused `awaiting operator:` form filed RESOLVED     -> FAIL
+#   plain      unlabelled, the same free text                          -> PASS (the near-miss)
+#   nodq       no Decision/Question line at all (an empty record field) -> PASS
+#   plain-any nodq-any    --any-authorized on the two above            -> AUTHORIZED
+#   shortq-any a 6-char quote beside a Decision/Question line carrying a long quoted phrase -> NONE
+#   hdrtab     a TAB in the `## ` header, a quote nobody said, the Decision/Question line holding a
+#              phrase the operator DID send at that hour                -> FAIL, names NO genuine
+#   hdrtabq-any shortq with a TAB in its header                         -> NONE
+# plain and shortq carry a >=12-char quoted phrase on their Decision/Question line, so a row that
+# lets that field bleed into the authorization text cites the wrong segment and moves them.
+LR_NAMES="free strike reword confirm recommend wrongid mismatch nohit neither plain nodq plain-any nodq-any shortq-any hdrtab hdrtabq-any"
+lr_cell() {  # $1 validator  $2 cell -> 0 when the cell holds
+  local v="$1" c="$2" f o rc
+  f="${c%-any}"
+  if [ "$f" != "$c" ]; then
+    o="$(bash "$v" --any-authorized "$ROOT/lr/$f.md" 2>&1)"; rc=$?
+  else
+    o="$(bash "$v" --escalations "$ROOT/lr/$f.md" --sprint 7 --transcript-dir "$ROOT/lr/t" 2>&1)"; rc=$?
+  fi
+  case "$c" in
+    free)     [ "$rc" -eq 1 ] && grep -qF "which is not the exact answer body Strike LR-S7-2 or Reword LR-S7-2" <<<"$o" ;;
+    wrongid)  [ "$rc" -eq 1 ] && grep -qF "quotes 'Strike LR-S7-3', which is not the exact answer body" <<<"$o" ;;
+    mismatch) [ "$rc" -eq 1 ] && grep -qF "quotes 'Confirm LR-S7-2', which is not the exact answer body Strike" <<<"$o" ;;
+    nohit|hdrtab) [ "$rc" -eq 1 ] && grep -qF "appears in NO genuine" <<<"$o" ;;
+    neither)  [ "$rc" -eq 1 ] && grep -qF "neither disposition" <<<"$o" ;;
+    plain-any|nodq-any) [ "$rc" -eq 0 ] && grep -qF "AUTHORIZED: 1 of 1" <<<"$o" ;;
+    shortq-any|hdrtabq-any) [ "$rc" -eq 1 ] && grep -qF "NONE: 1 RESOLVED/OVERRIDDEN" <<<"$o" ;;
+    *)        [ "$rc" -eq 0 ] && grep -qF "OK: all 1 S7 RESOLVED/OVERRIDDEN" <<<"$o" ;;
+  esac
+}
+echo
+echo "  -- a lead-interpretation entry resolves only on an exact Strike/Reword/Confirm quote --"
+LR_CELLS=""
+for c in $LR_NAMES; do if lr_cell "$VALIDATOR" "$c"; then LR_CELLS="${LR_CELLS}1"; else LR_CELLS="${LR_CELLS}0"; fi; done
+# A SUBJECT THAT PREDATES THE RULE. This fixture ships one pull ahead of its validator; the pre-fix
+# build passes free, wrongid, mismatch and neither and holds every other cell, both header-tab
+# cells included (measured against d87a5940f^: `NO genuine` at the gate, `NONE` at --any-authorized).
+# SKIP on a consumer,
+# FAIL in the distribution.
+KILL_FLOOR=25
+if [ "$LR_CELLS" = "0111100101111111" ] && [ "$EN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP %-30s the installed validator predates the lead-interpretation rule; this fixture ships one pull ahead of it\n' "lr/"
+else
+  i=0
+  for c in $LR_NAMES; do
+    i=$((i + 1)); N=$((N + 1))
+    if [ "$(printf '%s' "$LR_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s lead-interpretation cell holds\n' "lr/$c"
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s lead-interpretation cell does not hold (cells=%s)\n' "lr/$c" "$LR_CELLS"; fi
+  done
+
+  # The mutants. Each is a copy of the validator beside the steering sibling in $MWORK, built by
+  # an exactly-once literal anchor (awk ENVIRON, never sed: the anchors carry `$`, `[` and `"`).
+  # A mutant runs only the cell its arm decides and one twin that must NOT move.
+  LR_WHY=""; LR_V=""
+  lr_mk() {  # $1 name  $2 anchor  $3 replacement -> LR_V
+    local d="$MWORK/lr-$1" n
+    LR_V=""
+    mkdir -p "$d" && cp "$SRC_DIR/validate-steering-budget.sh" "$d/" || { LR_WHY="could not copy the steering sibling"; return 1; }
+    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+    [ "$n" -eq 1 ] || { LR_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm"; return 1; }
+    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$VALIDATOR" > "$d/validate-escalation-resolution.sh" || { LR_WHY="awk died"; return 1; }
+    cmp -s "$VALIDATOR" "$d/validate-escalation-resolution.sh" && { LR_WHY="changed no bytes -- it would score as a kill"; return 1; }
+    bash -n "$d/validate-escalation-resolution.sh" 2>/dev/null || { LR_WHY="does not parse"; return 1; }
+    LR_V="$d/validate-escalation-resolution.sh"
+  }
+  lr_score() {  # $1 label  $2 decisive cell  $3 twin cell  $4 anchor  $5 replacement
+    N=$((N + 1))
+    if [ "$LR_BASE" -ne 1 ]; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: not scored -- the unmutated copy did not hold its cells in this run\n' "L-$1"; return 2; fi
+    if ! lr_mk "$1" "$4" "$5"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "L-$1" "$LR_WHY"; return 1; fi
+    if lr_cell "$LR_V" "$2"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s SURVIVED: cell %s still holds\n' "L-$1" "$2"; return 1; fi
+    if ! lr_cell "$LR_V" "$3"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s moved its twin %s too -- the arms are entangled\n' "L-$1" "$3"; return 1; fi
+    KILLS=$((KILLS + 1)); printf '  ok   %-30s %s is red, %s unchanged\n' "L-$1" "$2" "$3"
+  }
+  # The unmutated control, in the same kind of directory, must PASS a cell that needs the sibling.
+  # No mutant below is scored unless this control held in this same run.
+  N=$((N + 1)); LR_BASE=0
+  mkdir -p "$MWORK/lr-ctl" && cp "$SRC_DIR/validate-steering-budget.sh" "$VALIDATOR" "$MWORK/lr-ctl/"
+  if lr_cell "$MWORK/lr-ctl/validate-escalation-resolution.sh" strike && lr_cell "$MWORK/lr-ctl/validate-escalation-resolution.sh" free; then
+    LR_BASE=1; printf '  ok   %-30s the unmutated copy holds strike and free\n' "L-control"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s the unmutated copy does not reproduce the baseline; no mutant verdict below means anything\n' "L-control"; fi
+  KILL_FLOOR=$((KILL_FLOOR + 9))
+  # L1: the label rule removed. The free text verifies as a descope again (the filed defect).
+  lr_score no-label-rule free strike '  if [ -n "$lr_id" ]; then' '  if false; then'
+  # L2: the id ignored -- any `Strike/Reword/Confirm LR-S<x>-<y>` passes. Only the wrong-id entry
+  # moves, because its answer IS in the corpus.
+  lr_score ignore-id wrongid free '    lr_body="${nquote% (Recommended)}"' '    lr_body="${nquote% (Recommended)}"; lr_body="${lr_body% LR-S*} $lr_id"'
+  # L3: the disposition not matched -- a descope line accepts a Confirm body.
+  lr_score no-disposition-match mismatch neither \
+    '      descope*) { [ "$lr_body" = "Strike $lr_id" ] ||' '      descope*) { [ "$lr_body" = "Confirm $lr_id" ] || [ "$lr_body" = "Strike $lr_id" ] ||'
+  # L4: the gate row reads three fields, so the Decision/Question text joins the authorization and
+  # its quoted phrase is cited instead of the operator's words. `dq` is still set (empty) so the
+  # mutant fails on the citation and not on an unbound variable under `set -u`.
+  lr_score gate-dq-into-auth plain nodq \
+    'while IFS="$(printf '"'"'\t'"'"')" read -r header status dq authline; do' 'while IFS="$(printf '"'"'\t'"'"')" read -r header status authline; do dq="";'
+  # L4b: the same in --any-authorized: the long quoted phrase on the Decision/Question line counts.
+  lr_score any-dq-into-auth shortq-any plain-any \
+    '  while IFS="$(printf '"'"'\t'"'"')" read -r header status _dq authline; do' '  while IFS="$(printf '"'"'\t'"'"')" read -r header status authline; do'
+  # L5: the sentinel dropped. An entry with no Decision/Question line writes an empty field, bash
+  # merges the tab run, and its citation is read as the Decision/Question value.
+  lr_score drop-sentinel nodq plain '(dq == "" ? "__NODQ__" : dq)' 'dq'
+  # L6: a label-rule PASS `continue`s past the transcript check. An exact option nobody chose passes.
+  lr_score rule-short-circuits nohit strike '    if [ "$lr_ok" -ne 1 ]; then' '    [ "$lr_ok" -eq 1 ] && continue; if [ "$lr_ok" -ne 1 ]; then'
+  # L7: the header written with its tab. Every later field shifts one variable right, the auth
+  # variable reads `<Decision/Question><TAB><auth>`, and the Decision/Question phrase is cited: the
+  # fabricated quote verifies at the gate (L7) and the 6-char quote authorizes (L7b).
+  lr_score header-tab-kept hdrtab plain '      gsub(/\t/, " ", hh)' '      hh = hh'
+  lr_score header-tab-kept-any hdrtabq-any shortq-any '      gsub(/\t/, " ", hh)' '      hh = hh'
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))
-if [ "$KILLS" -ge 25 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
+if [ "$KILLS" -ge "$KILL_FLOOR" ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
 
 echo
