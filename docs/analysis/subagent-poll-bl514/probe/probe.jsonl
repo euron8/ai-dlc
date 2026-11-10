@@ -1,0 +1,62 @@
+{"type":"assistant","timestamp":"2026-01-01T00:01:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p1","name":"Bash","input":{"command":"while true; do sleep 10; done","timeout":600000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:01:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p1","content":"Blocked: this subagent's FOREGROUND Bash call is a poll (synthetic)"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:02:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p2","name":"Bash","input":{"command":"until test -f /x/d; do sleep 5; done","timeout":600000,"run_in_background":true}}]}}
+{"type":"user","timestamp":"2026-01-01T00:02:02Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p2","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:03:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p3","name":"Bash","input":{"command":"sleep 100"}}]}}
+{"type":"user","timestamp":"2026-01-01T00:04:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p3","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:04:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p4","name":"Bash","input":{"command":"cd /x && sleep 200","timeout":120000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:04:20Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p4","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:05:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p5","name":"Bash","input":{"command":"S=/x; until test -f $S/d; do sleep 5; done","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:05:20Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p5","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:06:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p6","name":"Bash","input":{"command":"sleep 45","timeout":100000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:06:10Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p6","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:07:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p7","name":"Bash","input":{"command":"sleep 300","timeout":300000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:11:50Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p7","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:08:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p8","name":"Bash","input":{"command":"for i in 1 2 3; do sleep 60; done","timeout":900000}}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:09:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p9","name":"Bash","input":{"command":"sleep 5","timeout":10000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:09:05Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p9","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:10:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p10","name":"Bash","input":{"command":"sleep 29","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:10:29Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p10","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:11:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p11","name":"Bash","input":{"command":"echo sleep 300","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:11:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p11","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:12:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p12","name":"Bash","input":{"command":"while read l; do echo $l; done < /x/list","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:12:03Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p12","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:13:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p13","name":"Bash","input":{"command":"sleep 240; echo ok","timeout":300000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:13:02Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p13","content":"<tool_use_error>Blocked: sleep 240 followed by: echo ok. (synthetic)</tool_use_error>","is_error":true}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:14:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p14","name":"Bash","input":{"command":"sleep 90","timeout":300000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:14:03Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p14","content":"<tool_use_error>Error: command not found</tool_use_error>","is_error":true}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:15:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p15","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:15:04Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p15","content":"<tool_use_error>Blocked: sleep 100 (synthetic)</tool_use_error>","is_error":false}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:16:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p16","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:16:05Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p16","content":"<tool_use_error>Blocked: sleep 100 (synthetic)</tool_use_error>"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:17:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p17","name":"Bash","input":{"command":"sleep 120","timeout":300000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:17:02Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p17","content":"<tool_use_error>Blocked: this subagent's FOREGROUND Bash call is a poll (synthetic)</tool_use_error>","is_error":true}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:18:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p18","name":"Bash","input":{"command":"sleep 5","timeout":10000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:18:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p18","content":"<tool_use_error>Blocked: sleep 5 (synthetic)</tool_use_error>","is_error":true}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:19:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p19","name":"Bash","input":{"command":"sleep 150","timeout":300000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:19:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p19","content":"   \n<tool_use_error>Blocked: sleep 150 (synthetic)</tool_use_error>","is_error":true}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:20:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p20","name":"Bash","input":{"command":"sleep 30","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:20:04Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p20","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:21:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p21","name":"Bash","input":{"command":"for i in 1 2; do sleep 5; done","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:21:06Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p21","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:22:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p22","name":"Bash","input":{"command":"( sleep 45 )","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:22:07Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p22","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:23:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p23","name":"Bash","input":{"command":"if x; then :; else sleep 45; fi","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:23:08Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p23","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:24:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p24","name":"Bash","input":{"command":"until f; do sleep","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:24:09Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p24","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:25:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p25","name":"Bash","input":{"command":"until f;do sleep 5;done","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:25:10Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p25","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:26:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p26","name":"Bash","input":{"command":"until f; do echo a; done; sleep 5","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:26:11Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p26","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:27:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p27","name":"Bash","input":{"command":"sleep 5; sleep 40","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:27:12Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p27","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:28:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p28","name":"Bash","input":{"command":"sleep 100","run_in_background":true}}]}}
+{"type":"user","timestamp":"2026-01-01T00:28:13Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p28","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:29:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p29","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:29:14Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p29","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:31:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p31","name":"Bash","input":{"command":"until  do sleep 5; done","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:31:15Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p31","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:29:00Z","message":{"content":[{"type":"tool_use","id":"toolu_p29","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:40:10Z","message":{"content":[{"type":"tool_use","id":"toolu_p30","name":"Bash","input":{"command":"sleep 100","timeout":60000}}]}}
+{"type":"user","timestamp":"2026-01-01T00:40:05Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_p30","content":"ok"}]}}
