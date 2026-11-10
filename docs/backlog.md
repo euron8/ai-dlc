@@ -2026,25 +2026,6 @@ Remainder, why the entry stays PARTIAL: Fix item 1 is not done on `origin/main`.
 verify: manual
 
 
-## BL-947 — join-remediator-shards.sh --rerun's SAME arm may leave no admissible start when a superseded remediator keeps writing, and nothing binds its message to merge-adversarial-shards.sh's
-
-**DEFECT, one measured straddle on the join side; admissibility unmeasured.** `core/scripts/join-remediator-shards.sh` carries the same SAME refusal as `core/scripts/merge-adversarial-shards.sh:1370` at 3d7907b60 (BL-946, in this release, edits that file and moves the line). The join emits `SAME` at `:2693` (pass 2: a writer superseded by pass 1, `:2676-2685`, has a later row, at or after the re-run start, on a file in the part's own file set) and refuses at `:2745` with "wrote ${_c} both before the re-run start and at ${_d}, after it; the re-run is a NEW dispatch, and its writer must not be one of the writers it supersedes". A superseded writer that keeps writing the same part's files after the re-run start therefore refuses that start. A straddle of that shape is measured below (one instance). Moving the start earlier makes the later rows pre-start rows of the same writer, and moving it later leaves its first rows before it, so no `--rerun` start can pass. The sibling arm `LATE` (`:2694`, `:2744`) covers the same writer's later row on a file outside the part's set.
-
-No validator binds the two messages. `git grep -n 'both before the re-run start' 3d7907b60 -- scripts` returns 0 lines (rc 1), and the control over `core/scripts` returns both scripts (`join-remediator-shards.sh:2745`, `merge-adversarial-shards.sh:1370`; 2 files). The merge copy carries `${REC_PREFIX}` before the file and the join copy does not, so the two have already drifted by one token.
-
-Measured by the BL-946 owner, not re-measured here. On the merge side, graph's write ledger at ref `ai-dlc/carry-over/epic5-closeout` showed a superseded adversary's rows straddling a re-dispatch's first row on 3 of 2559 shards across s315-s322. In those cases no `--rerun` start can pass. BL-946, in this release, makes the merge say so with a `DOUBLE-WRITE` refusal. The join has no counterpart.
-
-Measured remediator instance, one straddle in that script's population (remediator parts under `*-repair-p*` dirs). It was found by the BL-946 owner's population scan and re-derived here from graph's write ledger at ref `ai-dlc/carry-over/epic5-closeout` (`_bmad-output/planning-artifacts/.artifact-writes.jsonl`, read only): for the part `s319/shards/carry-over-evaluation-party-repair-p1/sections/2.md`, rows of kind artifact-write with a non-empty agent_id give three writers on the exact path and none on `.draft`. `a51ac04becc00c152` has 10 rows spanning 2026-10-15 19:26:37Z..19:30:24Z, `ad67234a336bc2239` has 1 row at 19:27:46Z inside that span, and `a2f8df9804face91e` has 1 row at 19:48:08Z after it. The same derivation on `s322/shards/coe-p2/1.md` gives 1 writer (control).
-
-OPEN, not a finding: whether the join's own narrowing and its one-writer-per-part rule leave NO admissible start for that shape. That arithmetic has not been taken. It needs the join's narrowing and one-writer-per-part rule read from the script, including how the record-only path (`ro`, `:2666-2673`) and `rw` (`:2699-2705`) change which writer counts as the re-run writer. Until it is taken, the join's exposure is one measured straddle with admissibility unknown; the 3-of-2559 figure above is the merge side's.
-
-Fix direction, stated and not built: if the count is non-zero, give the join the same `DOUBLE-WRITE` refusal the merge gets from BL-946, and bind the refusal text of the two scripts in one validator so a third copy cannot appear.
-
-Provenance: batch b252, filed alongside BL-946 (graph s322 coe adversarial pass 2 candidate); lead ai-dlc-78.
-
-verify: manual
-
-
 ## BL-949 — validate-bmad-invocations.sh's extraction consumes the boundary character two adjacent call sites share, so in `/bmad-a /bmad-b` the second name is never checked
 
 **DEFECT.** `core/scripts/validate-bmad-invocations.sh:157 at 35201f04f` extracts call sites with `grep -rhoE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)'`. The trailing context character of one match is the leading context the next needs, and `grep -o` matches never overlap. With exactly one space between two names, `/bmad-a /bmad-b`, the space is consumed by the first match and `/bmad-b` has no leading character left, so only `/bmad-a` is extracted. A dangling second name passes Check 32 silently.

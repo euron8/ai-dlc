@@ -145,6 +145,30 @@
 #     unnarrowed rows, before any narrowing.
 #   - The record keeps the outer `window` line and adds one `rerun: <part> since <S_P>; superseded
 #     on <file>: <ids> (<n> rows, <first>..<last>)` line per re-run; JOINED counts the superseded.
+#   - DOUBLE-WRITE: NO START IS ADMISSIBLE. Over P's rows on F_P (the whole cited file set, after the
+#     nested fold), WRITERS(P) are the agents with a row there, first..last over those rows. NOADM(P)
+#     holds iff P has two or more writers and none, W, has first(W) > last(o) for every other writer o
+#     (strict, as ISO strings). A passing start must leave exactly ONE writer across F_P (the
+#     distinct-writer and SPAN arms), so it must cut after every other writer's last row and at or
+#     before W's first; NOADM says no such W exists. The record-only escape cannot pass either when
+#     F_P has two or more writers: it supersedes nothing, so those writers' rows stand and the
+#     distinct-writer and SPAN arms refuse. ALIAS GATE: NOADM is off when any writer has exactly ONE
+#     row on F_P carrying session, tool_use_id and transcript_path with agent_transcript false -- a
+#     conservative superset of the rows the alias rule below can fold, since an alias can collapse two
+#     raw ids into one writer and let a start pass that the raw-id arithmetic says cannot. Where NOADM
+#     holds and a SAME fires, the join prints `REFUSED: DOUBLE-WRITE <P>:` once per part in its place,
+#     naming each writer's first..last (ordered by first row, then id) and the remedy: preserve P's
+#     bytes, confirm every writer stopped, re-dispatch a NEW remediator, join with --rerun
+#     P@<its dispatched-at>, and disclose that the joined part is not independent if the new seat read
+#     the preserved bytes. OUT, LATE, the part-record lines and RWOUT still print beside it, and the
+#     distinct-writer and SPAN refusals still follow. A part where some start is admissible keeps SAME
+#     byte-identical. It is decided under --rerun ONLY, at the SAME site; the merge decides it in every
+#     mode, at its two-dispatch test, and the join's generic distinct-writer refusal is unchanged. The
+#     line differs from the merge's DOUBLE-WRITE line only where the join differs: a part for a shard, a
+#     NEW remediator for a NEW adversary, join for merge, join-side spans, and no seal-agent clause (the
+#     join reads no seal holder). NOADM is a subset of "no start": it never claims no start falsely,
+#     and it does not catch every no-start case (a start refused only by a part-record or RWOUT arm
+#     still reads SAME).
 #   Residual, stated: bytes a superseded writer wrote before S_P stay in the file, covered only by
 #   the re-run part's own account of the whole diff against the split slice. That account's AUTHOR
 #   is enforced (the part-record refusals above); its CONTENT is not checked by any program.
@@ -2683,14 +2707,43 @@ RREOF
             if (!(k in sl) || t > sl[k]) sl[k] = t
           }
         }
-        # Pass 2: every row of a superseded writer, over the whole file set.
+        # NOADM(P), DOUBLE-WRITE (see "DOUBLE-WRITE" in the header): over the rows on F_P (inF, which pass 0 leaves
+        # whole), each writer first..last. NOADM holds iff P has two or more writers and none, W, has a first row later
+        # than every other writer last row; a writer with ONE row on F_P carrying the alias keys turns it off.
+        for (ii = 1; ii <= nr; ii++)
+          for (q = 1; q <= npp; q++) { p = PP[q]
+            if (!((p, r[ii, 1]) in inF)) continue
+            x = r[ii, 2]
+            if (!((p, x) in dwn)) { dwA[p, ++dwnw[p]] = x; dwf[p, x] = r[ii, 3]; dwl[p, x] = r[ii, 3] }
+            dwn[p, x]++
+            if (r[ii, 3] < dwf[p, x]) dwf[p, x] = r[ii, 3]
+            if (r[ii, 3] > dwl[p, x]) dwl[p, x] = r[ii, 3]
+            dwk[p, x] = (r[ii, 4] != "-" && r[ii, 5] != "-" && r[ii, 6] != "-" && r[ii, 7] == "false")
+          }
+        for (q = 1; q <= npp; q++) { p = PP[q]
+          if (dwnw[p] < 2) continue
+          noadm[p] = 1
+          for (kk = 1; kk <= dwnw[p]; kk++) { ww = dwA[p, kk]
+            if (dwn[p, ww] == 1 && dwk[p, ww]) { delete noadm[p]; break }
+            ok = 1
+            for (jj = 1; jj <= dwnw[p]; jj++) { oo = dwA[p, jj]; if (oo != ww && !(dwf[p, ww] > dwl[p, oo])) ok = 0 }
+            if (ok) { delete noadm[p]; break }
+          }
+          if (!(p in noadm)) continue
+          for (kk = 2; kk <= dwnw[p]; kk++) { x = dwA[p, kk]
+            for (jj = kk - 1; jj >= 1 && (dwf[p, dwA[p, jj]] > dwf[p, x] || (dwf[p, dwA[p, jj]] == dwf[p, x] && dwA[p, jj] > x)); jj--) dwA[p, jj + 1] = dwA[p, jj]
+            dwA[p, jj + 1] = x }
+          dwsp[p] = ""; for (kk = 1; kk <= dwnw[p]; kk++) { x = dwA[p, kk]; dwsp[p] = dwsp[p] (kk > 1 ? ", " : "") x " (" dwf[p, x] ".." dwl[p, x] ")" }
+        }
+        # Pass 2: every row of a superseded writer, over the whole file set. A SAME on a NOADM part prints DW once instead.
         for (i = 1; i <= nr; i++) {
           f = r[i, 1]; a = r[i, 2]; t = r[i, 3]
           for (q = 1; q <= npp; q++) { p = PP[q]
             if (!((p, a) in sw)) continue
             if (!((p, f) in inF)) print "OUT\t" p "\t" a "\t" f "\t" t
             if (t >= S[p]) {
-              if ((p, f) in inF) { if (!((p, a) in same)) { same[p, a] = 1; print "SAME\t" p "\t" a "\t" f "\t" t } }
+              if (((p, f) in inF) && (p in noadm)) { if (!(p in dwo)) { dwo[p] = 1; print "DW\t" p "\t" dwsp[p] "\t" f } }
+              else if ((p, f) in inF) { if (!((p, a) in same)) { same[p, a] = 1; print "SAME\t" p "\t" a "\t" f "\t" t } }
               else print "LATE\t" p "\t" a "\t" f "\t" t
             }
           }
@@ -2743,6 +2796,7 @@ RREOF
         OUT)  refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and also wrote ${_c} at ${_d}, outside the files ${_a} cites; it was not only ${_a}'s writer, so its earlier writes cannot be set aside" ;;
         LATE) refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and wrote ${_c} at ${_d}, at or after the re-run start; the original is still writing" ;;
         SAME) refuse "--rerun ${_a}: ${_b} wrote ${_c} both before the re-run start and at ${_d}, after it; the re-run is a NEW dispatch, and its writer must not be one of the writers it supersedes" ;;
+        DW) refuse "DOUBLE-WRITE ${_a}: ${_c} was written by ${_b}; no --rerun ${_a}@<ISO> start can pass, because a writer kept writing after another writer's first row (a stop directive not honored) -- preserve ${_a}'s current bytes, confirm every writer of ${_a} has stopped, re-dispatch a NEW remediator for ${_a}, and join with --rerun ${_a}@<that dispatch's dispatched-at>; if the new seat read the preserved bytes, the joined part is not independent and that must be disclosed" ;;
         PRLATE) refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and wrote the part record ${_c} at ${_d}, at or after the re-run start; a superseded writer writes no account after it is superseded" ;;
         PROUT) refuse "--rerun ${_a}: ${_b} is a superseded writer of ${_a} and also wrote ${_c} at ${_d}, another part's record; it was not only ${_a}'s writer, so its earlier writes cannot be set aside" ;;
         PRFOREIGN) refuse "--rerun ${_a}: ${_b} wrote ${_a}'s own part record ${_c} at ${_d}, at or after the re-run start, and is not its re-run writer; the covering account is the re-run writer's alone" ;;
