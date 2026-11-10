@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -57,7 +57,16 @@ one in the section. It refuses with exit 2 when it cannot reach the ceiling. **A
 whole, including any standing rule written inside it**, so a rule that must outlive its batch
 belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 252 IS CLOSED: RELEASES `v0.1029.0` THROUGH `v0.1037.0`, none skipped. THE NEXT SESSION STARTS BATCH 253.**
+**BATCH 253 IS CLOSED: RELEASES `v0.1038.0` THROUGH `v0.1044.0`, none skipped. THE NEXT SESSION STARTS BATCH 254.**
+`ai-dlc-d3` led; its rulings and NOTEs are in the batch-253 close commit message. No `graph-*` session is ever messaged.
+- **Next VERSION `0.1045.0`; next free id BL-955.** Live 53, archive 872. The batch closed BL-948, BL-944, BL-945 and BL-947, and BL-954 (filed and closed in one release); it filed BL-949 through BL-953; BL-806(b), BL-910 and BL-514 are PARTIAL with defined exit conditions carried in the entries.
+- **THE PC-BACKED WORKLIST IS 0** — the step-4 join at the close, and every row of the step-5 delivery loop printed a shipped VERSION (0.1029.0-0.1038.0): the consumer's nine live candidates are all PENDING on the pull, none unworked. The join refills whenever a filing lands, so re-derive it anyway.
+- **OPERATOR RULING THAT BINDS BL-806(b) IF IT IS PICKED:** keep open, no arm ships. The entry carries the corrected census (273 writes / 252 rc-0 / 39 carrying a bare token, op-detection rule in the same sentence) and the exit condition: re-measure once ≥300 bare-token writes accumulate (about 1,939 rc-0 writes at the measured rate). BL-514 and BL-910 each carry their own exit in the entry.
+- **HELD REFS, each owner's to delete after the next batch's close:** `ai-dlc-e4` — `b253-bl947` (with `/Users/n8/git/ai-dlc-b253-bl947`), `b253-bl514` (with `rel514-wt`), `b253-bl954` (with `rel954-wt`); `ai-dlc-f4` — `b253-docs-dev`, `b253-esc-audit-dev`; `ai-dlc-9d` — `b253-bl910`, `b253-check-32-dev`.
+- **Graph.** Branch `0.1036.0`, `main` `0.1028.0`. Installed: `0.1036.0` on the checked-out branch, `0.1028.0` on `main`. PENDING on the branch: S322 MERGE-ADVERSARIAL-RERUN (shipped `0.1037.0`).
+- **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
+
+**BATCH 252 IS CLOSED: RELEASES `v0.1029.0` THROUGH `v0.1037.0`, none skipped. THE NEXT SESSION STARTED BATCH 253.**
 `ai-dlc-78` led; its rulings and NOTEs are in the batch-252 close commit message. No `graph-*` session is ever messaged.
 - **Next VERSION `0.1038.0`; next free id BL-948.** Live 51, archive 867. Open from this batch: BL-944 (lands before BL-939's acceptance is trusted), BL-945, BL-947; `adversarial-shard-merge` owes a `run.sh --matrix` re-measure (the push does not run it).
 - **All 8 PC ids shipped** (0.1029.0-0.1037.0). Six are cited only in release messages, so the `pc()` partition reads them untouched; the delivery-gap fence loops over `/tmp/live.txt` and prints each id's VERSION. Read that.
@@ -1013,7 +1022,13 @@ candidate's surviving half is upstream's to file and build, never a question for
       ref moved. Open the PR; `gh pr merge <n> --squash --subject "$(git log -1 --format=%s <sha>)"
       --body-file <file of %b>`, no `--delete-branch`. Verify by CONTENT (`git diff --quiet <sha>
       origin/main`, VERSION, parent). Send <lead> the squash sha; your push turn ends there.
-   9. Cleanup only after <lead> verifies, one action per turn. A blob-equality "did it land" check takes a synthetic
+   9. Cleanup only after <lead> verifies, one action per turn. **Record `git status --porcelain` for every
+      candidate worktree BEFORE removing it, remove only clean ones WITHOUT `--force`, and list any dirty one
+      to <lead> instead of removing it.** Batch 253 measured the alternative: a cleanup ran `git worktree
+      remove --force` over 44 worktrees with no porcelain record and could not say afterwards whether any
+      uncommitted work was lost — the loss was unrecoverable and the admission arrived only on the lead's
+      direct question. `--force` belongs only on a worktree whose dirtiness was recorded and dispositioned.
+      A blob-equality "did it land" check takes a synthetic
       control, `git commit-tree -p <old base> origin/main^{tree}` (must read EQUAL) beside an unlanded sha as the
       negative, never a landed branch, which reads DIFF once main edits a shared file. Action 1 is worktree removal plus a
       `git for-each-ref` list (save the full `git worktree list --porcelain` first, so a count
@@ -1158,44 +1173,17 @@ given at batch 90.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **OPERATOR RULING AT BATCH 119, AND IT IS NOT SPENT: `docs/plans/pre-push-wall-clock.md` REMAINS
-   THE SUBJECT UNTIL THE SUITE'S WALL CLOCK ACTUALLY FALLS.** Given in as many words — *"420 as a
-   pole is not good enough. Neither is 346 on the next. Need to look deeper and refactor more
-   aggressively in a future batch."* — after the operator was shown that cutting BOTH co-poles
-   would buy roughly 85s of a 500s makespan. This supersedes the batch-118 ruling below, which
-   named the same plan for one batch only.
-
-   **The subject is REMOVING WORK, not scheduling it, and that is a change of kind.** The suite is
-   no longer pole-bound: at `v0.585.0` the pole was 620s against a work-conservation floor
-   (`sum of all unit costs / 12`) of 519.5s, so pole work of any size cannot return more than that
-   gap. **Do not open batch 120 by shaving a fixture.** Read that plan's action 1, which names the
-   lever the operator identified: every real input file is opened ~8.8 times per full run, and one
-   10500-line validator carries 384 `grep`, 158 `awk`, 136 `sed` and 67 `find` sites re-walking
-   corpora earlier arms already walked. Sharding and inner pools MOVE work between directories and
-   leave that floor untouched — measured, `validator-arm-selection` 370 plus its shard 158 is 528
-   pool-seconds for one subject.
-
-   Batch 119 shipped as `v0.585.0` (`389b6bdc`) and is recorded in that plan's discharged section;
-   it did not build the inner pool the batch-118 ruling anticipated, and the measurement for why is
-   there.
-
-   **THAT RULING IS SPENT AND ITS WORK IS DONE. DO NOT OPEN A BATCH ON THE WALL CLOCK.** Batches
-   120-129 executed it across `v0.586.0`-`v0.601.0`, and `docs/plans/pre-push-wall-clock.md` is the
-   record. **The premise it turned on has now inverted: the POLE IS BELOW THE FLOOR.** Re-derived
-   at batch 130 from `$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations`, 202 rows:
-   pole `ledger-reverify` **420s** against `sum/12` = **425.0s** over 5100 pool-seconds. Pole work
-   has nothing left to buy, and the suite is work-bound. Re-derive both before believing this
-   paragraph — these are LOADED numbers that swing ±27% on box load, so read the DIRECTION.
+   **THE WALL-CLOCK RULING OF BATCH 119 IS SPENT AND ITS WORK IS DONE — DO NOT OPEN A BATCH ON
+   THE WALL CLOCK.** `docs/plans/pre-push-wall-clock.md` is the record: batches 119-130 ran it
+   across `v0.585.0`-`v0.601.0`, and its premise inverted at batch 130, when the pole fell below
+   the work-conservation floor and pole work had nothing left to buy. The full measurement trail
+   was archived in batch 137's record.
 
    **Batch 130 returned this plan to its own provenance-first ordering**, which is where it stays
    until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
-   distribution-internal one. Batch 132 took `BL-277`, which carries no `PC-` id and was therefore
-   NOT off that worklist — an operator choice, made on a direct question, because the defect was
-   blocking this program's own gate. Batches 133 and 134 each scoped two PC-backed entries off the
-   worklist, batch 135 scoped one, and batch 136 scoped `BL-029` — whose ROTATION batch 137 had to
-   finish, so the join only lost that row a batch later. **A worklist that rises across a
-   successful batch is the normal shape here**, because a discharged candidate stays live upstream
-   until the consumer PULLS. That is still where a batch scopes from by default.
+   distribution-internal one. **A worklist that rises across a successful batch is the normal
+   shape here**, because a discharged candidate stays live upstream until the consumer PULLS. That
+   is still where a batch scopes from by default.
 
    **THE LIST IS THIN AND EVERY ROW ON IT DISQUALIFIES ITSELF, SO THE JOIN IS NO LONGER WHERE A
    BATCH SCOPES FROM. THE ANSWER IS NOT TO FORCE ONE — IT IS TO WORK THE CLASS THE JOIN CANNOT
