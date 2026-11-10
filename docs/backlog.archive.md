@@ -40504,3 +40504,41 @@ Provenance: batch b252, filed alongside BL-946 (graph s322 coe adversarial pass 
 verify: manual
 
 
+## BL-954 — the pre-push final banner says the fixture suite was skipped "on an unchanged content key" when the read-set arm decided the skip and the key had changed
+
+**LANDED (v0.1044.0).** **DEFECT.** In `.githooks/pre-push`, `SUITE_SKIPPED=1` was set by two separate decisions, and each writes its own log line:
+- the whole-suite content-key HIT in `fixture_suite_step`, outside the I66 FIXTURE_POOL block, which prints `SKIPPED -- this exact tree already passed the whole suite.` and logs `HIT`;
+- the read-set no-change path (`READSET_NO_CHANGE=1`, set by `apply_readset_skip`) inside FIXTURE_POOL, where the content key had MISSed.
+
+The final banner printed `FIXTURE SUITE SKIPPED on an unchanged content key` for both. On the read-set path, that names a cause the same run's own log contradicts.
+
+Measured on the 0.1041.0 gate (b28a84c06, push log in the release owner's scratchpad):
+- line 427 reads `(content key changed -- running the suite)`;
+- line 429 reads `read-set keys: 0 of 264 fixture(s) run`;
+- `.git/ai-dlc-suite-key.log` has `2026-11-10T13:02:59Z MISS`;
+- the banner, at line 448, still blamed an unchanged content key.
+
+An operator reading only the banner would chase the wrong skip. The consumer hook `core/git-hooks/pre-push` prints a fixed `all gates green.` with no cause and is out of scope.
+
+Fix, entirely outside the I66 block (the FIXTURE_POOL span is md5-equal before and after):
+- a global `SUITE_SKIP_CAUSE`, reset beside `SUITE_SKIPPED=0`;
+- `content-key` is set at the HIT return;
+- `read-set` is set in `fixture_suite_step` after `run_fixtures` returns 0 with `READSET_NO_CHANGE=1` (a global: 0 `local` declarations of it in the hook);
+- the banner names the arm that decided, and an unrecorded cause prints `cause not recorded`, never a guess.
+
+Receipt: `core/fixtures/suite-content-key/run.sh`. It cuts the FIXTURE_POOL, SUITE_STEP and SUITE_BANNER spans from the hook under test and calls the real `fixture_suite_step`, in two worlds in one invocation:
+- **W1**: no key record and every read-set unchanged, so `READSET_NO_CHANGE` comes from the real `apply_readset_skip`. The log reads MISS, and the banner names the read-set arm and lacks `unchanged content key`.
+- **W2**: a key HIT. The log reads HIT, and the banner names the content-key arm.
+- The two banners must differ, each agreeing with its own log line.
+
+Mutants bl954-m1 to m4 (the old banner restored, the read-set cause removed, the causes swapped, the content-key cause removed) are each killed. With the old banner restored in the real hook, the fixture fails with rc 2.
+
+Cost: suite-content-key's `invocations.decl` goes from `*` 25 to 49 and `scripts/suite-content-key.sh` from 21 to 38, taken from two agreeing counted runs. `tools.decl` gains `date` and `wc`, which the sourced hook spans call; no assertion reads their values (BL-868).
+
+Notes, not built:
+- W2's key record hard-codes a fixture count of 2, which must equal the template's.
+- The read-set banner says "the content key had changed" even when the MISS came from a fixture-count move.
+- Run against a hook already carrying m1's edit, the m1 arm reports `DID NOT APPLY` and the fixture fails as BROKEN, which is still a failure.
+
+verify: sh V="$(mktemp -d "${TMPDIR:-/tmp}/bl954.XXXXXX")" || exit 9; AI_DLC_VERDICT_STORE="$V" bash core/scripts/hermetic-run.sh suite-content-key >/dev/null 2>&1
+

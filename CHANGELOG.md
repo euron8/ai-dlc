@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1044.0] - 2026-11-10
+
+### BL-954 filed and closed
+
+`.githooks/pre-push`'s final banner now names the skip arm that actually decided. Two separate decisions set `SUITE_SKIPPED=1`, each with its own log line:
+- the whole-suite content-key HIT;
+- the read-set no-change path inside the I66 FIXTURE_POOL block.
+
+The banner used to say `FIXTURE SUITE SKIPPED on an unchanged content key` for both. On the read-set path the content key had changed, and the same run's own log said so. That happened on the 0.1041.0 gate: line 427 read "content key changed", the read-set skip ran 0 of 264, and the suite-key log read `MISS`.
+
+The fix is outside the I66 block: the FIXTURE_POOL span is md5-equal before and after, and the consumer hook is unchanged. A global `SUITE_SKIP_CAUSE` is set to `content-key` at the HIT return. It is set to `read-set` in `fixture_suite_step` when `run_fixtures` returns 0 with `READSET_NO_CHANGE=1`. The banner prints the arm, and an unrecorded cause prints `cause not recorded` rather than a guess.
+
+The receipt is in `core/fixtures/suite-content-key`. It cuts the FIXTURE_POOL, SUITE_STEP and SUITE_BANNER spans from the hook under test and drives two worlds in one invocation:
+- a read-set world, whose `READSET_NO_CHANGE` comes from the real `apply_readset_skip`, with a MISS log and the read-set banner;
+- a content-key HIT world, with a HIT log and the content-key banner.
+
+The two banners must differ, and each must agree with its own log line. Mutants bl954-m1 to m4 are each killed: the old banner restored, the read-set cause removed, the causes swapped, and the content-key cause removed.
+
+Consumer cost: in suite-content-key's `invocations.decl`, `*` goes from 25 to 49 and `scripts/suite-content-key.sh` from 21 to 38, from two agreeing counted runs. `tools.decl` gains `date` and `wc`, which the sourced hook spans call. No file is added under `core/` outside the fixture, and `core/git-hooks/pre-push` is unchanged.
+
 ## [0.1043.0] - 2026-11-10
 
 ### BL-910 PARTIAL: a non-green enforcement-map-sites cwd verdict now prints each failing cell's evidence

@@ -3262,6 +3262,7 @@ run_fixtures() {
 # The record lives in .git/, NOT in the working tree, and that is load-bearing: a
 # record inside the tree would be hashed by the key it stores, so writing it would
 # invalidate it and no push could ever hit.
+# SUITE_STEP_BEGIN
 KEY_RECORD="$GITDIR/ai-dlc-suite-key"
 
 # THE HIT RATE IS THE ONE NUMBER THIS CHANGE COULD NOT MEASURE BEFORE SHIPPING.
@@ -3330,6 +3331,7 @@ fixture_suite_step() {
       printf '     force a run with AI_DLC_FIXTURE_NO_SKIP=1\n'
       readset_trace_report ""
       SUITE_SKIPPED=1
+      SUITE_SKIP_CAUSE=content-key
       key_log HIT "$key"
       return 0
     fi
@@ -3348,6 +3350,10 @@ fixture_suite_step() {
   rm -f "$DURATIONS_RECORD.prev" 2>/dev/null
   [ -s "$DURATIONS_RECORD" ] && cp "$DURATIONS_RECORD" "$DURATIONS_RECORD.prev" 2>/dev/null
   run_fixtures || return 1
+  # THE OTHER SKIP ARM: run_fixtures returned 0 having run nothing because the read-set skip found no
+  # fixture whose inputs changed (it sets READSET_NO_CHANGE and SUITE_SKIPPED inside the I66 block, which
+  # may not be edited here). The cause is recorded at this site, beside the content-key setter above.
+  if [ "${READSET_NO_CHANGE:-0}" = 1 ] && [ "${SUITE_SKIPPED:-0}" = 1 ]; then SUITE_SKIP_CAUSE=read-set; fi
 
   # Recorded only after a full green run. A partial or red suite leaves the prior
   # record in place rather than blessing the tree that just failed.
@@ -3383,6 +3389,7 @@ fixture_suite_step() {
   fi
   return 0
 }
+# SUITE_STEP_END
 
 # A push issued from a LINKED WORKTREE has git export GIT_DIR (pointed at that
 # worktree's private `.git/worktrees/<name>` dir) into this hook's process
@@ -3464,6 +3471,7 @@ step "fixture in-process cells, static half (scripts/validate-fixture-inprocess.
   bash scripts/validate-fixture-inprocess.sh
 
 SUITE_SKIPPED=0
+SUITE_SKIP_CAUSE=""
 SUITE_STOPPED_EARLY=0
 FAIL_BEFORE_SUITE="$fail"
 step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
@@ -3562,8 +3570,19 @@ if [ "$fail" -ne 0 ]; then
 fi
 pending_note=""
 [ "${PENDING_N:-0}" -gt 0 ] && pending_note=" -- $PENDING_N declared fixture(s) PENDING (no counted run under this judge; see step 3b)"
+# SUITE_BANNER_BEGIN
+# TWO SEPARATE ARMS SKIP THE SUITE, EACH A DECISION OF ITS OWN WITH ITS OWN LOG LINE, so the banner names the one
+# that decided and never a cause it did not observe. The whole-suite content key matched the last green
+# (fixture_suite_step logs HIT and sets content-key); or the key had changed (logs MISS) and the read-set skip
+# inside run_fixtures found no fixture whose inputs moved (fixture_suite_step sets read-set after it returns).
 if [ "$SUITE_SKIPPED" -ne 0 ]; then
-  printf '\npre-push: all gates green -- FIXTURE SUITE SKIPPED on an unchanged content key%s.\n\n' "$pending_note"
+  case "${SUITE_SKIP_CAUSE:-}" in
+    content-key) skip_why='the whole-suite content key matched the last green (this exact tree already passed)' ;;
+    read-set)    skip_why='the read-set skip found no fixture whose inputs changed (the content key had changed)' ;;
+    *)           skip_why='cause not recorded' ;;
+  esac
+  printf '\npre-push: all gates green -- FIXTURE SUITE SKIPPED -- %s%s.\n\n' "$skip_why" "$pending_note"
   exit 0
 fi
+# SUITE_BANNER_END
 printf '\npre-push: all gates green%s.\n\n' "$pending_note"
