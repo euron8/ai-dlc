@@ -19523,3 +19523,10 @@ Batch 249: `docs/plans/archive/`. `ai-dlc-be` was the lead. No `graph-*` session
    scoped one, and batch 136 scoped `BL-029` — whose ROTATION batch 137 had to finish, so the
    join only lost that row a batch later.
 
+**BATCH 252 IS CLOSED: RELEASES `v0.1029.0` THROUGH `v0.1037.0`, none skipped. THE NEXT SESSION STARTED BATCH 253.**
+`ai-dlc-78` led; its rulings and NOTEs are in the batch-252 close commit message. No `graph-*` session is ever messaged.
+- **Next VERSION `0.1038.0`; next free id BL-948.** Live 51, archive 867. Open from this batch: BL-944 (lands before BL-939's acceptance is trusted), BL-945, BL-947; `adversarial-shard-merge` owes a `run.sh --matrix` re-measure (the push does not run it).
+- **All 8 PC ids shipped** (0.1029.0-0.1037.0). Six are cited only in release messages, so the `pc()` partition reads them untouched; the delivery-gap fence loops over `/tmp/live.txt` and prints each id's VERSION. Read that.
+- **Graph.** Branch `0.1036.0`, `main` `0.1028.0`. PENDING on the branch: S322 MERGE-ADVERSARIAL-RERUN (`0.1037.0`).
+- **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
+
