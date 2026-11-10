@@ -1,8 +1,8 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run; the rows follow unit-arms.sh, which asks the library's answers in process.
-474 *
-132 core/scripts/content-seal.sh
-80 core/hooks/ai-dlc-content-seal.sh
-20 core/scripts/merge-adversarial-shards.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run; the rows follow unit-arms.sh, which asks the library's answers in process. BL-946's CS-DW adds two worlds (one per seal order): per world one merge and two --map runs, and two seal_hook calls.
+510 *
+136 core/scripts/content-seal.sh
+84 core/hooks/ai-dlc-content-seal.sh
+26 core/scripts/merge-adversarial-shards.sh
 8 core/scripts/join-remediator-shards.sh
 3 core/scripts/validate-gate-adjudication.sh
 4 core/scripts/wait-for-deliverable.sh

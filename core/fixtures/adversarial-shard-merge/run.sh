@@ -75,6 +75,14 @@
 # MUTANT-MATRIX BM-3 decides=B726F twins=B726B
 # MUTANT-MATRIX BM-4 decides=B726H twins=B726B
 # MUTANT-MATRIX PM1 decides=P1 twins=PBARE
+# MUTANT-MATRIX DW-M1-same-relaxed decides=RR6a,RR3,RR6c twins=RR6b
+# MUTANT-MATRIX DW-M2-every-same decides=RR3 twins=RR6b
+# MUTANT-MATRIX DW-M3-tie-admits decides=RR6c twins=RR6b
+# MUTANT-MATRIX DW-M4-no-site-b decides=RR6n,RR6a,RR6c twins=RR6b
+# MUTANT-MATRIX DW-M5-draft-writer decides=RR6f twins=RR6b
+# MUTANT-MATRIX DW-M6-dw-before-out decides=RR6d twins=RR6b
+# MUTANT-MATRIX DW-M7-draft-straddle-narrowed decides=RR6g twins=RR6b
+# MUTANT-MATRIX DW-M8-nlst-exact-only decides=RR6g twins=RR6b
 # MUTANT-MATRIX-DYNAMIC mut-name-argument why=mut() emits mutant_killed with the name it is called with; every name it is called with is a literal row of this block
 # MUTANT-MATRIX KMb-inst decides=KEps_inst twins=K2vac_inst
 # MUTANT-MATRIX KMc-core decides=KEsch_core twins=K2vac_core
@@ -339,6 +347,26 @@ p_rerun_other "$MERGE" && ok "RR2: cross-1's own adversary edited 2.md before S 
   || bad "RR2: (rc=$RC) $(cat "$MO")"
 p_rerun_same "$MERGE" && ok "RR3: the superseded writer writes 2.md again after S -> REFUSED, the re-run is a NEW dispatch" \
   || bad "RR3: (rc=$RC) $(cat "$MO")"
+
+# ---- BL-946: DOUBLE-WRITE. A shard where NO --rerun start is admissible (a writer kept writing after another
+# writer's first row) is refused as DOUBLE-WRITE, at the join's two-dispatch test, in both entry paths; a shard
+# where some start is admissible keeps SAME (RR3, one writer) and the two-dispatch message (RR6f) byte-identical.
+p_dw_rerun "$MERGE" && ok "RR6a: graph s322 coe-p2/cross.md -- O writes 2.md before S, the re-dispatch N after, O again after N -> --rerun 2.md@S REFUSED 'DOUBLE-WRITE 2.md:' naming both spans and 'no agent seal row', never SAME" \
+  || bad "RR6a: (rc=$RC) $(cat "$MO")"
+p_dw_plain "$MERGE" && ok "RR6n: the RR6a world with no --rerun -> REFUSED 'DOUBLE-WRITE 2.md:', never the two-dispatch --rerun remedy" \
+  || bad "RR6n: (rc=$RC) $(cat "$MO")"
+p_dw_twin "$MERGE" && ok "RR6b: RR6a's twin, O's last row before S -> MERGED with --rerun 2.md@S, superseded=2" \
+  || bad "RR6b: (rc=$RC) $(cat "$MO")"
+p_dw_tie "$MERGE" && ok "RR6c: O's last row ts equals N's first, --rerun at that tie -> REFUSED 'DOUBLE-WRITE 2.md:' (the comparison is strict)" \
+  || bad "RR6c: (rc=$RC) $(cat "$MO")"
+p_dw_out "$MERGE" && ok "RR6d: the RR6a world, O also writing 3.md.draft after its straddling row -> the OUT refusal, not DOUBLE-WRITE" \
+  || bad "RR6d: (rc=$RC) $(cat "$MO")"
+p_dw_role "$MERGE" && ok "RR6e: the RR6a world plus a remediator writing 2.md, no --rerun -> the role violation, not DOUBLE-WRITE" \
+  || bad "RR6e: (rc=$RC) $(cat "$MO")"
+p_dw_draft "$MERGE" && ok "RR6f: graph s318's shape, a draft-only agent inside N's span is no writer -> no --rerun: the two-dispatch refusal; --rerun 2.md@S: MERGED superseded=1" \
+  || bad "RR6f: (rc=$RC) $(cat "$MO")"
+p_dw_straddle_draft "$MERGE" && ok "RR6g: the straddle's late row is on 2.md.draft only (O 2.md at 20:00, N 2.md at 21:00, O 2.md.draft at 21:10) -> DOUBLE-WRITE with and without --rerun 2.md@S" \
+  || bad "RR6g: (rc=$RC) $(cat "$MO")"
 
 # ---- BL-536: a superseded writer is role-checked (D1), one dispatch writes one shard dir (D2), and
 # the meta file is corroborated by the probe ledger (D4). Each refusal beside its MERGED twin.
@@ -781,7 +809,7 @@ fi
 # the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
 # prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
 n_mut=0; n_kill=0
-ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2"
+ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g"
 [ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2vac_core KEnone_inst KEvac_inst KEps_inst KEnone_core KEvac_core KEsch_core"
 karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
   local w a
@@ -824,6 +852,15 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
     DVRSS) p_dvrss "$2" ;;
     TR1) p_tree "$2" ;;
     FG2) p_fence_unclosed "$2" ;;
+    RR3) p_rerun_same "$2" ;;
+    RR6a) p_dw_rerun "$2" ;;
+    RR6n) p_dw_plain "$2" ;;
+    RR6b) p_dw_twin "$2" ;;
+    RR6c) p_dw_tie "$2" ;;
+    RR6d) p_dw_out "$2" ;;
+    RR6e) p_dw_role "$2" ;;
+    RR6f) p_dw_draft "$2" ;;
+    RR6g) p_dw_straddle_draft "$2" ;;
     K1_*) karm "$2" none "${1#K1_}" "@" ;;
     K2vac_*) karm "$2" vac "${1#K2vac_}" "=" ;;
     KEnone_*) kearm "$2" none "${1#KEnone_}" "@" ;;
@@ -982,6 +1019,24 @@ mutm BM-1 B726B B726H '| if ($s.e - $ae) > $tol then' '| if false then'
 mutm BM-2 B726C B726H '| if ($ae - $w.e) > $tol then' '| if false then'
 mutm BM-3 B726F B726B 'def verdict($bound): if $bound then "REFUSE" else "WARN" end;' 'def verdict($bound): "REFUSE";'
 mutm BM-4 B726H B726B '| max_by(.e)) as $w' '| min_by(.e)) as $w'
+# THE DOUBLE-WRITE MUTANTS (BL-946). RR6b, an admissible start that merges, is every one's green twin.
+DW_ANCHOR='if ((p in dw) || noadm(p)) { dw[p] = 1; continue }'
+# M1: SAME relaxed, a superseded writer's rows at or after S dropped: RR6a merges crediting N with O's bytes.
+mutm DW-M1-same-relaxed RR6a RR6b "$DW_ANCHOR" 'drop[i] = 1; continue'
+# M2: every SAME taken as DOUBLE-WRITE. RR3's lone writer is left un-narrowed and refused FAR by the start binding.
+mutm DW-M2-every-same RR3 RR6b "$DW_ANCHOR" 'if (1) { dw[p] = 1; continue }'
+# M3: the admissibility comparison loosened to >=: the tie in RR6c reads as a start that can pass.
+mutm DW-M3-tie-admits RR6c RR6b '!(nfst[w] > nlst[o])' '!(nfst[w] >= nlst[o])'
+# M4: site (b)'s NOADM branch dropped: the no-rerun world gets the two-dispatch --rerun remedy.
+mutm DW-M4-no-site-b RR6n RR6b 'if [ "${_tw%% *}" = NOADM ]; then' 'if false; then'
+# M5: a draft-only agent counted as a writer: its draft row inside N's span disqualifies N.
+mutm DW-M5-draft-writer RR6f RR6b '    if (f[i] != p) continue' '    if (f[i] != p && f[i] != p ".draft") continue'
+# M6: DOUBLE-WRITE ahead of OUT: the scan stops at the NOADM shard and never reaches O's later 3.md.draft row.
+mutm DW-M6-dw-before-out RR6d RR6b "$DW_ANCHOR" 'if ((p in dw) || noadm(p)) { dw[p] = 1; i = n; break }'
+# M7: a superseded writer's late DRAFT row no longer keeps its shard un-narrowed: --rerun reads the straddle as an acquittal.
+mutm DW-M7-draft-straddle-narrowed RR6g RR6b 'for (i = 1; i <= n; i++) if ((i in drop) && (f[i] in dw)) delete drop[i]' 'for (i = 1; i <= n; i++) if (0) delete drop[i]'
+# M8: last(o) taken over exact P rows only: O's 21:10 draft row is not counted, a start is admissible, the two-dispatch message returns.
+mutm DW-M8-nlst-exact-only RR6g RR6b 'if ((f[i] == p || f[i] == p ".draft") && (a[i] in nfst)' 'if ((f[i] == p) && (a[i] in nfst)'
 # PM1: the schema reverted to the single-sha pattern, driven through AI_DLC_PROJECT_ROOT (whose core/schemas/ the
 # reader tries FIRST), so the validator is the shipped one and only the schema differs. PBARE is its twin.
 pm1_mt="$(mktemp -d "$WORK/pm1.XXXXXX")"; mkdir -p "$pm1_mt/core/schemas"

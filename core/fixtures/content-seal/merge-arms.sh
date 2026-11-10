@@ -113,6 +113,25 @@ if [ "$s1ok" = 1 ]; then
   ok "CS-S1: adversary Write then session Edit (bytes re-sealed) -> REFUSED naming the session and --rerun; the adversary's own Edit -> MERGED"
 else bad "CS-S1: case ($SS_CASE) did not hold (rc=$RC): $(head -3 "$MO")"; fi
 
+# CS-DW: BL-946, THE BYTES ON DISK. The DOUBLE-WRITE world (adversarial-shard-merge/lib.sh dw_world: the original seat
+# O writes 2.md, the re-dispatch N writes it, O writes it again) with both writers' Writes sealed by the REAL recorder.
+# --rerun 2.md@S is REFUSED DOUBLE-WRITE naming the agent of 2.md's LAST agent seal row. Both seal orders are run,
+# one property apart, so a line naming the FIRST sealer, or always O, fails one of them. No seal ts is read.
+dwok=0; dwcase=""
+for _last in O N; do
+  dwcase="$_last"; d="$(tw)"; WORLD_SHARD="$d/2.md"; dw_world "$d" || break
+  hr_ids "$d/2.md"; _n="$HR_AGENT"; _r="$(world_root "$d")"
+  if [ "$_last" = O ]; then seal_hook "$_r" Write "$d/2.md" "$_n"; seal_hook "$_r" Write "$d/2.md" "$DW_O"; _want="$DW_O"; _other="$_n"
+  else seal_hook "$_r" Write "$d/2.md" "$DW_O"; seal_hook "$_r" Write "$d/2.md" "$_n"; _want="$_n"; _other="$DW_O"; fi
+  [ "$(seal_count "$(ledger_of "$d")")" -ge 2 ] || break
+  bash "$MERGE" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  refused_clean "REFUSED: DOUBLE-WRITE 2.md: " "$d" && has "$MO" "its bytes on disk were last sealed by agent $_want --" \
+    && ! has "$MO" "last sealed by agent $_other" || break
+  dwok=$((dwok + 1))
+done
+if [ "$dwok" = 2 ]; then ok "CS-DW: DOUBLE-WRITE names the writer of the shard's last agent seal row: O when O sealed last, N when N did"
+else bad "CS-DW: case (last sealer $dwcase) did not hold (rc=$RC): $(head -2 "$MO")"; fi
+
 # CS-M6: a SUFFIX-LESS shard dir (`shards/requirements-elicitation/`), which the merge reads in
 # --subject --elicitation mode. Every elicitation shard sealed, one rewritten by `sed -i` -> REFUSED;
 # its untouched twin merges. The arm reads the declaration for the shard's path and reports what it saw.

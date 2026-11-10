@@ -969,9 +969,12 @@ p_tuid_role() { # R4: shard 2's only writer was dispatched as a remediator; R8: 
   run_merge "$1" "$d"
   refused_clean "dispatched as role remediator; only an adversary writes an adversary shard" "$d"
 }
-p_tuid_twowriters() { # R6: two adversary dispatches wrote shard 2 -> REFUSED, never the first taken
-  local d; d="$(tw)"; s2 "$d"
-  HR_AGENT_O=a00000000000000r6 HR_DID_O=toolu_01SecondAdversary0000006 harness_record "$d/2.md"
+p_tuid_twowriters() { # R6: two adversary dispatches wrote shard 2 -> REFUSED, never the first taken. Each row
+                      # carries a literal ts, the second strictly after the first, so a --rerun start exists and
+                      # the refusal is the two-dispatch one (BL-946); two wall-clock stamps in one second would tie
+                      # and make it DOUBLE-WRITE, a verdict that moved with load (BL-868)
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"; hr_at 2026-10-15T20:00:00Z s2 "$d" || return 1
+  HR_AGENT_O=a00000000000000r6 HR_DID_O=toolu_01SecondAdversary0000006 hr_at 2026-10-15T21:00:00Z harness_record "$d/2.md" || return 1
   run_merge "$1" "$d"
   refused_clean "was written by more than one adversary dispatch" "$d"
 }
@@ -1082,6 +1085,112 @@ p_rerun_same() { # the superseded writer writes 2.md again after S, and nobody e
   hr_ids "$d/2.md"
   $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
   refused_clean "--rerun 2.md: $HR_AGENT wrote" "$d" && has "$MO" "its writer must not be one of the writers it supersedes"
+}
+# ------------------------------------------- BL-946: DOUBLE-WRITE, no admissible --rerun start
+# graph s322 coe-p2/cross.md: the original seat O kept writing after its re-dispatch N wrote. O is a
+# STOPPED adversary (it carries its probe row), so once the shard is left un-narrowed the join credits
+# it and reaches the two-dispatch test rather than refusing O as unstopped. Every ts is a literal.
+DW_O=a0000000000oseat; DW_OD=toolu_01OriginalSeat0000000002
+DW_SPAN_O="$DW_O (2026-10-15T20:00:00Z..2026-10-15T21:10:00Z)"
+dw_o() { HR_AGENT_O="$DW_O" HR_DID_O="$DW_OD" hr_at "$@"; } # <ts> <command...> -- a write by the original seat
+dw_world() { # <shard dir> -- O at 20:00 < S, N (spawn S) at 21:00, O again at 21:10, its bytes on disk
+  dw_o 2026-10-15T20:00:00Z s2 "$1" || return 1
+  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$1" "$RR_S" || return 1
+  dw_o 2026-10-15T21:10:00Z s2 "$1" "$RR_S"
+}
+dw_refused() { # <shard dir> -- DOUBLE-WRITE naming both spans in first order, no seal row, the remedy
+  hr_ids "$1/2.md"
+  refused_clean "REFUSED: DOUBLE-WRITE 2.md: " "$1" \
+    && has "$MO" "was written by $DW_SPAN_O, $HR_AGENT (2026-10-15T21:00:00Z..2026-10-15T21:00:00Z); no --rerun 2.md@<ISO> start can pass" \
+    && has "$MO" "no agent seal row exists for 2.md" && has "$MO" "re-dispatch a NEW adversary for 2.md"
+}
+p_dw_rerun() { # RR6a: the s322 interleave under --rerun 2.md@S -> DOUBLE-WRITE, never SAME
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"; dw_world "$d" || return 1
+  $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  dw_refused "$d" && ! has "$MO" "its writer must not be one of the writers it supersedes"
+}
+p_dw_plain() { # RR6n: the same world with no --rerun -> DOUBLE-WRITE, never the two-dispatch remedy
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"; dw_world "$d" || return 1
+  run_merge "$1" "$d"
+  dw_refused "$d" && ! has "$MO" "was written by more than one adversary dispatch"
+}
+p_dw_twin() { # RR6b: one property apart -- O's last row is before S -> MERGED with --rerun, superseded=2
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  dw_o 2026-10-15T20:00:00Z s2 "$d" || return 1
+  dw_o 2026-10-15T20:10:00Z s2 "$d" || return 1
+  HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
+  hr_ids "$d/2.md"
+  $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=2" && grep -q " 2=$HR_DID " "$(out_of "$d")" \
+    && grep -qx "rerun: 2.md since $RR_S; superseded: $DW_O (2 rows, 2026-10-15T20:00:00Z..2026-10-15T20:10:00Z)" "$(out_of "$d")"
+}
+p_dw_tie() { # RR6c: O's last row ts EQUALS N's first, and S is that tie -> DOUBLE-WRITE (no S is both > and <=)
+  local d s=2026-10-15T21:00:00Z; d="$(tw)"; WORLD_SHARD="$d/2.md"
+  dw_o 2026-10-15T20:00:00Z s2 "$d" || return 1
+  HR_SPAWN_TS="$s" hr_at "$s" s2 "$d" "$s" || return 1
+  dw_o "$s" s2 "$d" "$s" || return 1
+  hr_ids "$d/2.md"
+  $ASM_RUN "$1" --rerun "2.md@$s" "$d" > "$MO" 2>&1; RC=$?
+  refused_clean "REFUSED: DOUBLE-WRITE 2.md: " "$d" \
+    && has "$MO" "was written by $DW_O (2026-10-15T20:00:00Z..$s), $HR_AGENT ($s..$s); no --rerun"
+}
+p_dw_out() { # RR6d: the s322 world, and O ALSO wrote 3.md.draft AFTER its straddling row -> the OUT refusal, not
+             # DOUBLE-WRITE. A draft is no shard, so the join never sees that row: only the OUT scan can.
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"; dw_world "$d" || return 1
+  dw_o 2026-10-15T21:20:00Z harness_record "$d/3.md.draft" || return 1
+  $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+  refused_clean "--rerun 2.md: $DW_O is a superseded writer of 2.md and also wrote" "$d" && has "$MO" "3.md.draft at 2026-10-15T21:20:00Z" \
+    && ! has "$MO" "DOUBLE-WRITE"
+}
+p_dw_role() { # RR6e: the s322 world plus a REMEDIATOR writing 2.md, sorting LAST among its writers, no --rerun
+              # -> the role violation, not DOUBLE-WRITE: the two-dispatch test waits for every writer
+  local d; d="$(tw)"; WORLD_SHARD="$d/2.md"; dw_world "$d" || return 1
+  HR_ROLE=remediator HR_AGENT_O=azzzzzzzzzzremed HR_DID_O=toolu_01RemediatorWrite00006e hr_at 2026-10-15T21:20:00Z harness_record "$d/2.md" || return 1
+  run_merge "$1" "$d"
+  refused_clean "was written by agent azzzzzzzzzzremed, dispatch toolu_01RemediatorWrite00006e, dispatched as role remediator" "$d" \
+    && ! has "$MO" "DOUBLE-WRITE"
+}
+p_dw_draft() { # RR6f: graph s318 architecture-p1/cross-2's shape -- an agent D that wrote ONLY 2.md.draft is not a
+               # writer. O at 20:00, N at 21:00 and 21:10, D's draft row at 21:05 inside N's span. No --rerun ->
+               # the two-dispatch refusal (N's first row is after O's last: a start exists); --rerun 2.md@S -> MERGED
+  local d o
+  for o in plain rerun; do
+    d="$(tw)"; WORLD_SHARD="$d/2.md"
+    dw_o 2026-10-15T20:00:00Z s2 "$d" || return 1
+    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
+    HR_AGENT_O=a00000000000draft HR_DID_O=toolu_01DraftOnlyAdversary0006f hr_at 2026-10-15T21:05:00Z harness_record "$d/2.md.draft" || return 1
+    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:10:00Z s2 "$d" "$RR_S" || return 1
+    hr_ids "$d/2.md"
+    if [ "$o" = plain ]; then
+      run_merge "$1" "$d"
+      refused_clean "2.md was written by more than one adversary dispatch (" "$d" && has "$MO" "$DW_OD" && has "$MO" "$HR_DID" \
+        && ! has "$MO" "DOUBLE-WRITE" || return 1
+    else
+      $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "superseded=1" && grep -q " 2=$HR_DID " "$(out_of "$d")" || return 1
+    fi
+  done
+}
+p_dw_straddle_draft() { # RR6g: the straddle's late row is on 2.md.draft, not exact 2.md. O writes 2.md at 20:00 (< S), N (spawn S)
+                        # writes 2.md at 21:00, O then writes ONLY 2.md.draft at 21:10. last(O) counts that draft row, so no start
+                        # is admissible: DOUBLE-WRITE under --rerun 2.md@S (never SAME, never MERGED) and with no --rerun (never
+                        # the two-dispatch remedy). Every ts is a literal.
+  local d o
+  for o in plain rerun; do
+    d="$(tw)"; WORLD_SHARD="$d/2.md"
+    dw_o 2026-10-15T20:00:00Z s2 "$d" || return 1
+    HR_SPAWN_TS="$RR_S" hr_at 2026-10-15T21:00:00Z s2 "$d" "$RR_S" || return 1
+    dw_o 2026-10-15T21:10:00Z harness_record "$d/2.md.draft" || return 1
+    hr_ids "$d/2.md"
+    if [ "$o" = plain ]; then
+      run_merge "$1" "$d"
+      refused_clean "REFUSED: DOUBLE-WRITE 2.md: " "$d" && ! has "$MO" "was written by more than one adversary dispatch" || return 1
+    else
+      $ASM_RUN "$1" --rerun "2.md@$RR_S" "$d" > "$MO" 2>&1; RC=$?
+      refused_clean "REFUSED: DOUBLE-WRITE 2.md: " "$d" && ! has "$MO" "MERGED:" \
+        && ! has "$MO" "its writer must not be one of the writers it supersedes" || return 1
+    fi
+  done
 }
 # ---------------------------------------------------------------- BL-536 D1, D2, D4
 # Each refusing cell sits beside its MERGED twin one property apart. The discriminating member is

@@ -83,8 +83,8 @@
 #     blank line, so its paragraph's lead is item 1). The derivation itself is owned by
 #     adversarial-shard-merge; these rows pin the prose that tells a shard not to self-report.
 #   - a shard refused as two adversary dispatches after a re-dispatch is merged with `--rerun
-#     <shard>.md@<dispatched-at>`, and a refusal naming another shard's writer is a finding
-#     (gp-shard-rerun*); the probe ledger is not rotated mid-round and a "predates transcript_path"
+#     <shard>.md@<dispatched-at>`, a refusal naming another shard's writer is a finding, and a
+#     DOUBLE-WRITE refusal means no start exists (gp-shard-rerun*); the probe ledger is not rotated mid-round and a "predates transcript_path"
 #     refusal is re-run, never hand-filled (gp-probe-ledger*). Same section, each its own paragraph.
 #   - the architecture step's section 2-3 architect chain joins on its chain record with
 #     `--complete`, never on the spine (architecture.md section 2; arch-chain-join). The spine is
@@ -622,6 +622,7 @@ gp-shard-sentinel|S|steps/_gate-procedures.md|## Adversarial review dispatch (re
 gp-shard-derived|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|It writes findings to|para|the merge derives each shard's dispatch id
 gp-shard-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**A re-dispatched shard is merged with `--rerun`.**|para|run the same merge with `--rerun <shard>.md@<the re-dispatch's dispatched-at>`
 gp-shard-rerun-finding|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**A re-dispatched shard is merged with `--rerun`.**|para|a refusal naming a writer of another shard is a finding, never a timestamp to move
+gp-shard-rerun-doublewrite|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**A re-dispatched shard is merged with `--rerun`.**|para|A `REFUSED: DOUBLE-WRITE <shard>.md:` refusal means no start exists, because a writer kept writing after another writer's first row: follow its remedy, and never search for a start.
 gp-probe-ledger|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.**|para|Do not rotate or truncate `subagent-context.jsonl` mid-round
 gp-probe-ledger-rerun|S|steps/_gate-procedures.md|## Adversarial review dispatch (referenced by step files)|## Divergence resolution dispatch|**The probe ledger is load-bearing until the consumer's hook writes `transcript_path`.**|para|is re-run after the next dispatch writes the new keys, never hand-filled
 adv-shard-sentinel|R|adversary.md|## Contract|## Severity|1. **Run the evaluation you were dispatched for, in your own context.**|para|**A shard writes `tool_use_id: NOT_ACCESSIBLE`, never an id it was told or guessed.**
