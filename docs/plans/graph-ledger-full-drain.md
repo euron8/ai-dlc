@@ -57,14 +57,12 @@ one in the section. It refuses with exit 2 when it cannot reach the ceiling. **A
 whole, including any standing rule written inside it**, so a rule that must outlive its batch
 belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 251 IS CLOSED: RELEASES `v0.1020.0` THROUGH `v0.1028.0`. THE NEXT SESSION STARTS BATCH 252.**
-Batch 250: `docs/plans/archive/`. `ai-dlc-e6` was the lead. No `graph-*` session is ever messaged.
-- **Landed** (`git log origin/main`). `v0.1020.0` through `v0.1028.0`, none skipped. **The next VERSION is `0.1029.0`.**
-- **Backlog.** Live 49 (`grep -c '^## BL-' docs/backlog.md`), archive 854. **The next free id is BL-933.** Closed: BL-917, 921-923, 926-931.
-- **Open follow-ups.** BL-932 (filed at close, fast-track); BL-819 (PARTIAL); BL-806(b), FP census first; BL-538 reads CLOSE-CANDIDATE but is PARTIAL; BL-868's receipt; BL-911; BL-912; BL-914; BL-915.
-- **Graph.** Branch `0.1027.0` (1 behind), `main` `0.969.0` (58 behind, WIDE). PENDING 1 by the release-message join: PC-S321-GATE2-RULE-A-IGNORES-GATE1-REREVIEW-OF-THE-QA-REWORK (`0.1028.0`), holding story 1.2 at gate 2; the fences read it as untouched because of BL-932's dotted label. Differential diverges: installed `gate-transition.sh` reads GATE1-RERUN on graph's case, `0.1028.0` GATE1-SKIP. Bootstrapping: none on the branch range; the main range changes `preclassify.sh`, `apply.sh`, `ledger-reverify.sh`, update `SKILL.md`.
-- **Rulings** are in `operator-rulings.md`; A6 ceiling 74800; `cleanupPeriodDays` 365.
-- **NOTEs** are in the batch-251 close commit message. Derive fences write fixed `/tmp/live.txt`, `/tmp/arch.txt`, `/tmp/cand_arch.md`; sessions may collide (hypothesis).
+**BATCH 252 IS CLOSED: RELEASES `v0.1029.0` THROUGH `v0.1037.0`, none skipped. THE NEXT SESSION STARTS BATCH 253.**
+`ai-dlc-78` led; its rulings and NOTEs are in the batch-252 close commit message. No `graph-*` session is ever messaged.
+- **Next VERSION `0.1038.0`; next free id BL-948.** Live 51, archive 867. Open from this batch: BL-944 (lands before BL-939's acceptance is trusted), BL-945, BL-947; `adversarial-shard-merge` owes a `run.sh --matrix` re-measure (the push does not run it).
+- **All 8 PC ids shipped** (0.1029.0-0.1037.0). Six are cited only in release messages, so the `pc()` partition reads them untouched; the delivery-gap fence loops over `/tmp/live.txt` and prints each id's VERSION. Read that.
+- **Graph.** Branch `0.1036.0`, `main` `0.1028.0`. PENDING on the branch: S322 MERGE-ADVERSARIAL-RERUN (`0.1037.0`).
+- **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
 
 ### Derive the state; do not trust the numbers below
 
@@ -580,9 +578,12 @@ cat VERSION                                                                     
 # Report both; a pull is measured against main, and the sprint branch is what graph's live session runs.
 # per discharged id, the oldest RELEASE naming it. `-- VERSION` keeps only commits that bump it:
 # a docs commit naming an id first read S336 as 0.433.0 where 0.673.0 shipped it.
-# Loop over the DISCHARGED set derived above; the id is a variable, never a literal placeholder
-# (a `<id>` typed verbatim matches the string "<id>" and returns a real, meaningless commit).
-for id in $(comm -12 /tmp/live.txt /tmp/closed_here) PC-ZZ-IMPOSSIBLE-CONTROL-Q7; do
+# Loop over EVERY live id, not the archive-cited subset: a release cites an id in its MESSAGE,
+# and the archive need not. Batch 252 shipped 6 ids the archive never named in full, so a loop
+# over `comm live closed_here` read PENDING 2 where 7 were. A live id printing a VERSION is
+# PENDING (shipped, consumer has not pulled); UNNAMED is unworked. The id is a variable, never
+# a literal placeholder (a `<id>` typed verbatim returns a real, meaningless commit).
+for id in $(cat /tmp/live.txt) PC-ZZ-IMPOSSIBLE-CONTROL-Q7; do
   sha="$(git log --format='%H' -F --grep="$id" origin/main -- VERSION | tail -1)"
   printf '%s\t%s\n' "$id" "$( [ -n "$sha" ] && git show "${sha}:VERSION" || echo UNNAMED )"
 done                                    # the last row IS the control, run in the same loop: it must print UNNAMED
