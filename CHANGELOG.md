@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1042.0] - 2026-11-10
+
+### BL-806 (part b re-filed, stays open)
+
+No check shipped. BL-806 stays PARTIAL with `verify: manual`; part (a) is unchanged and no arm ships for part (b). The operator ruled to keep (b) open. The blocker is the write clock and two grammar gaps. The clock: commit time is the only clock graph's history carries, and the transcript corpus that measurement 2 read is gone (356 jsonl files are reachable and `d22c7889*` is absent), so history cannot decide (b). The grammar: a range end whose start carries no `Z` is missed, and a date-only stamp is dated a day late.
+
+Census taken in batch 253 over graph's committed history (1,190 commits under `--all`, 11,859 distinct added lines). It supersedes measurement 1, which the entry keeps. Measurement 2 is kept word for word, because its text is now the only record of that evidence.
+- Upper bound: 113 fires on 75 lines in stamp-led Recent Activity, and 78 fires on 63 lines elsewhere.
+- Lower bound: 9 fires on 9 distinct lines in 4 categories.
+
+The evidence requirement is re-filed against `snapshot-update.sh` tool_use timestamps. An invocation counts as a write when any write-op flag appears anywhere in it, not only the first. At the cutoff 2026-11-10T12:41:59Z the measurement found 273 write invocations, 252 of them rc 0, and 39 carrying a bare token. Exit condition: at least 300 rc-0 `snapshot-update.sh` writes carrying a bare `HH:MM(:SS)?Z`, accumulated across transcript captures and deduped by tool_use id. At the measured rate that is 300 × 252 / 39, about 1,939 writes. Meeting it starts a re-measurement. An arm ships only with a derived false-positive set that is empty or enumerated.
+
+The Design line is corrected. It was the batch-243 builder's plan, not an operator ruling. Warn versus refuse is decided when an arm is built.
+
+Consumer reach: none (docs only).
+
+### BL-953 filed
+
+`snapshot-update.sh --line-replace 'In-Flight Teammates'` writes a free-text status cell with rc 0, while `--row-status`, `--row-set status` and `--row-replace` refuse the same text with rc 2. Filed from the BL-806(b) contract adversary (D5). Filed, not built.
+
+Consumer reach: none (docs only).
+
 ## [0.1041.0] - 2026-11-10
 
 ### BL-514 PARTIAL: the subagent-poll classifier is committed and has been run against graph s322
