@@ -103,6 +103,17 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX SRmF8 decides=SRC6 twins=SRC10
 # MUTANT-MATRIX SRm3 decides=SRT1 twins=- why=the token-on-one-line arm is read by SRT1 alone; the control is the unmutated real file
 # MUTANT-MATRIX SRm2 decides=SR3 twins=- why=the boundary is read by the SR3 world alone; SR1 and SR2 install the sentence
+# MUTANT-MATRIX BINDm-strip decides=BIND1 twins=BIND2,BIND3
+# MUTANT-MATRIX BINDm-prefix decides=BIND1 twins=BIND2,BIND3
+# MUTANT-MATRIX BINDm-same decides=BIND1 twins=BIND2,BIND3
+# MUTANT-MATRIX BINDm-dw decides=BIND2 twins=BIND1,BIND3
+# MUTANT-MATRIX BINDm-dwdel decides=BIND2 twins=BIND1,BIND3
+# MUTANT-MATRIX BINDm-third decides=BIND3 twins=BIND1,BIND2
+# MUTANT-MATRIX DWm-false decides=RR4,RR5 twins=RR16
+# MUTANT-MATRIX DWm-true decides=RR16 twins=RR4
+# MUTANT-MATRIX DWm-alias decides=RR18 twins=RR4
+# MUTANT-MATRIX DWm-onefile decides=RR19 twins=RR4
+# MUTANT-MATRIX DWm-once decides=RR20 twins=RR4
 # MUTANT-MATRIX-DYNAMIC pc-score why=pc_score passes PCm<site> to mutant_killed
 # MUTANT-MATRIX-DYNAMIC hx-loop why=the HX loop passes its list id _id to mutant_killed
 # MUTANT-MATRIX-DYNAMIC u34-loop why=the U3/U4 loop passes its list id _id to mutant_killed
@@ -161,6 +172,9 @@ case "$_ur" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-record.sh exited $_
 # ---- unit-reader.sh: SEAM-JOIN and SEAM-HOOK, the in-process (join_main, hook_pretool_head) answers pinned byte-identical to the CLI's.
 bash "$HERE/unit-reader.sh"; _urd=$?
 case "$_urd" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-reader.sh exited $_urd (FIXTURE BROKEN); nothing was asserted" ;; esac
+# ---- unit-bind.sh: BIND0-BIND3, the join's SAME and DOUBLE-WRITE refusal text bound to the merge's, self-probed first.
+bash "$HERE/unit-bind.sh" ${1:+"$1"}; _ubd=$?
+case "$_ubd" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-bind.sh exited $_ubd (FIXTURE BROKEN); nothing was asserted" ;; esac
 
 
 
@@ -405,7 +419,7 @@ else
   fi
 fi
 
-# ---- unit-reader-a.sh: SJ1-SJ9/SJ1o, EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38, RR1-RR15, AL1-AL9, NW1, LN1-LN9 with
+# ---- unit-reader-a.sh: SJ1-SJ9/SJ1o, EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38, RR1-RR20 with DWm-*, AL1-AL9, NW1, LN1-LN9 with
 # LN3m/LN6m, LP1-LP5 with LPm1/LPm4, NL1-NL8c with NLma-NLmh, asked in process through the same lib.sh predicates;
 # its SEAM-A and CLI-A cells keep one CLI pass and refusal per join mode it owns. One literal call line.
 bash "$HERE/unit-reader-a.sh" ${1:+"$1"}; _ura=$?

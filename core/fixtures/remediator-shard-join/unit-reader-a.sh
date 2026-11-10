@@ -4,7 +4,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # remediator-shard-join/unit-reader-a.sh -- the reader-level cells of half A, asked IN PROCESS. Driven by run.sh,
 # which passes its own arguments through (--matrix prints this file's MATRIX rows; the header block is run.sh's).
 #
-# Families: SJ1-SJ9 and SJ1o; EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR15; AL1-AL9; NW1; LN1-LN9 with LN3m and
+# Families: SJ1-SJ9 and SJ1o; EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR20 with DWm-*; AL1-AL9; NW1; LN1-LN9 with LN3m and
 # LN6m; LP1-LP5 with LPm1 and LPm4; NL1-NL8c with NLma-NLmh. Each cell asserts the decision its end-to-end cell in
 # run.sh asserted, through the SAME lib.sh predicate, unchanged. What changes is how a predicate's `bash <subject>`
 # runs: the `bash` function below catches the two subjects by path and runs each in a subshell of this process --
@@ -294,10 +294,64 @@ p_rrout "$JOIN" && ok "RR2: section 3's owner also wrote section 2 before S_P ->
   || bad "RR2: a superseded writer that owns another section was not refused (rc=$RC): $(cat "$JO")"
 p_rrlate "$JOIN" && ok "RR3: the original still writing after S_P outside F_P -> REFUSED in both spellings (still writing, and outside the part's files)" \
   || bad "RR3: a superseded writer writing after S_P outside F_P was not refused in both spellings (rc=$RC): $(cat "$JO")"
-p_rrlatein "$JOIN" && ok "RR4: the original still writing after S_P inside F_P, beside the new writer -> REFUSED with the new-id line" \
-  || bad "RR4: a superseded writer writing after S_P inside F_P was not refused by the new-id line (rc=$RC): $(cat "$JO")"
-p_rrsame "$JOIN" && ok "RR5: the same id both sides of S_P, the orphan before, no new writer -> REFUSED: the re-run is a NEW dispatch" \
-  || bad "RR5: a re-run by the superseded writer itself was not refused (rc=$RC): $(cat "$JO")"
+if p_rrlatein "$JOIN"; then ok "RR4: the original still writing after S_P inside F_P, beside the new writer -> no start can pass: DOUBLE-WRITE with every writer's span, the only --rerun refusal, no SAME; the distinct-writer and SPAN lines beside it, three in all"; B_RR4=1
+else bad "RR4: a no-admissible-start re-run inside F_P was not refused DOUBLE-WRITE alone (rc=$RC): $(cat "$JO")"; fi
+if p_rrsame "$JOIN"; then ok "RR5: the same id both sides of S_P, the orphan inside its span, no new writer -> DOUBLE-WRITE naming both spans, no SAME"; B_RR5=1
+else bad "RR5: a no-admissible-start re-run by the superseded writer itself was not refused DOUBLE-WRITE (rc=$RC): $(cat "$JO")"; fi
+if p_rrsamew "$JOIN"; then ok "RR16: graph's re-run with the start inside the original's span -> SAME, no DOUBLE-WRITE (a later start passes), and that later start JOINS"; B_RR16=1
+else bad "RR16: a too-early start where another start passes did not read SAME-then-JOIN (rc=$RC): $(cat "$JO")"; fi
+if p_rrdwrec "$JOIN"; then ok "RR17: RR5's world plus a NEW agent writing 2.md's record after every F_P row -> DOUBLE-WRITE at S_P; the record-only start and a start before every row both REFUSED on two writers"; B_RR17=1
+else bad "RR17: the record-only start was not shown unable to pass beside DOUBLE-WRITE (rc=$RC): $(cat "$JO")"; fi
+if p_rrdwal "$JOIN"; then ok "RR18: the alias world under --rerun -> a start inside the raw span keeps SAME, no DOUBLE-WRITE, and a start before every row JOINS with its alias row"; B_RR18=1
+else bad "RR18: the alias gate let DOUBLE-WRITE claim no start where an aliased start joins (rc=$RC): $(cat "$JO")"; fi
+if p_rrdwmf "$JOIN"; then ok "RR19: part 5 cites two files, its one writer of sections/5.md straddles S_P and another writer of sections/4.md sits inside its span -> DOUBLE-WRITE over the file set, no SAME"; B_RR19=1
+else bad "RR19: NOADM was not decided over the whole cited file set (rc=$RC): $(cat "$JO")"; fi
+if p_rrdwtwo "$JOIN"; then ok "RR20: RR4's world with the original writing sections/2.md twice after S_P -> exactly one DOUBLE-WRITE 2.md line, spans through the second row"; B_RR20=1
+else bad "RR20: two post-start superseded rows on one NOADM part did not print exactly one DOUBLE-WRITE line (rc=$RC): $(cat "$JO")"; fi
+# DWm-*: the NOADM predicate in the --rerun narrowing awk, each mutation one line, in a copy of the join's whole
+# directory, cmp -s guarded and held to exactly one changed line. The record-only escape has no clause to drop:
+# with two writers on F_P it cannot pass (RR17), so the predicate carries none.
+DWM="$(mktemp -d "$WORK/dwm.XXXXXX")" || exit 2
+dw_mut() { # <tag> <sed expr> -> the mutant's path, or empty when it did not apply to exactly one line
+  mkdir -p "$DWM/$1" && cp "$(dirname "$JOIN")"/*.sh "$DWM/$1/" || return 1
+  sed "$2" "$JOIN" > "$DWM/$1/join-remediator-shards.sh" || return 1
+  cmp -s "$JOIN" "$DWM/$1/join-remediator-shards.sh" && return 1
+  [ "$(diff "$JOIN" "$DWM/$1/join-remediator-shards.sh" | grep -c '^>')" = 1 ] || return 1
+  bash -n "$DWM/$1/join-remediator-shards.sh" 2>/dev/null || return 1
+  printf '%s' "$DWM/$1/join-remediator-shards.sh"
+}
+# DWm-false: NOADM never set -> RR4 and RR5 read SAME again; RR16 (a SAME world) unchanged.
+_m="$(dw_mut false 's/^          noadm\[p\] = 1$/          continue/')"
+if [ -z "$_m" ]; then bad "DWm-false: FIXTURE STALE -- the mutation did not apply to exactly one line of $JOIN; re-anchor it, never relax the assertion"
+elif ! ua_inmut "$_m" p_rrsamew "$_m"; then mrow DWm-false RR16=1; bad "DWm-false: the twin RR16 did not pass under the mutant copy (rc=$RC) -- the copy did not run or the arms are entangled"
+elif ua_inmut "$_m" p_rrlatein "$_m" || ua_inmut "$_m" p_rrsame "$_m"; then mrow DWm-false RR4=0 RR16=0; bad "DWm-false: SURVIVED -- RR4 or RR5 holds against a join that never decides NOADM"
+else mrow DWm-false RR4=1 RR5=1 RR16=0; mutant_killed "$(( ${B_RR4:-0} && ${B_RR5:-0} && ${B_RR16:-0} ))" DWm-false "DWm-false NOADM forced false: KILLED by [RR4 RR5], RR16 still SAME-then-JOIN"; fi
+# DWm-true: the admissible-writer test dropped (NOADM on every two-writer part) -> RR16 reads DOUBLE-WRITE; RR4 unchanged.
+_m="$(dw_mut true 's/if (ok) { delete noadm\[p\]; break }/if (ok) break/')"
+if [ -z "$_m" ]; then bad "DWm-true: FIXTURE STALE -- the mutation did not apply to exactly one line of $JOIN; re-anchor it, never relax the assertion"
+elif ! ua_inmut "$_m" p_rrlatein "$_m"; then mrow DWm-true RR4=1; bad "DWm-true: the twin RR4 did not pass under the mutant copy (rc=$RC) -- the copy did not run or the arms are entangled"
+elif ua_inmut "$_m" p_rrsamew "$_m"; then mrow DWm-true RR16=0 RR4=0; bad "DWm-true: SURVIVED -- RR16 holds against a join that claims no start wherever two writers share F_P"
+elif ! has "$JO" "DOUBLE-WRITE 2.md: "; then bad "DWm-true: RR16 failed under the mutant without printing DOUBLE-WRITE; it died rather than over-claimed"
+else mrow DWm-true RR16=1 RR4=0; mutant_killed "$(( ${B_RR16:-0} && ${B_RR4:-0} ))" DWm-true "DWm-true NOADM forced true: KILLED by [RR16] (DOUBLE-WRITE where a later start joins), RR4 unchanged"; fi
+# DWm-alias: the alias gate removed -> RR18 reads DOUBLE-WRITE at a start where an aliased start joins; RR4 unchanged.
+_m="$(dw_mut alias 's/if (dwn\[p, ww\] == 1 && dwk\[p, ww\]) { delete noadm\[p\]; break }/if (0) break/')"
+if [ -z "$_m" ]; then bad "DWm-alias: FIXTURE STALE -- the mutation did not apply to exactly one line of $JOIN; re-anchor it, never relax the assertion"
+elif ! ua_inmut "$_m" p_rrlatein "$_m"; then mrow DWm-alias RR4=1; bad "DWm-alias: the twin RR4 did not pass under the mutant copy (rc=$RC) -- the copy did not run or the arms are entangled"
+elif ua_inmut "$_m" p_rrdwal "$_m"; then mrow DWm-alias RR18=0 RR4=0; bad "DWm-alias: SURVIVED -- RR18 holds against a join with no alias gate on NOADM"
+elif ! has "$JO" "DOUBLE-WRITE 01.md: "; then bad "DWm-alias: RR18 failed under the mutant without printing DOUBLE-WRITE; it died rather than over-claimed"
+else mrow DWm-alias RR18=1 RR4=0; mutant_killed "$(( ${B_RR18:-0} && ${B_RR4:-0} ))" DWm-alias "DWm-alias the alias gate removed: KILLED by [RR18] (DOUBLE-WRITE over an aliased writer), RR4 unchanged"; fi
+# DWm-onefile: NOADM read over ONE cited file, not F_P -> RR19 reads SAME; RR4 (one cited file) unchanged.
+_m="$(dw_mut onefile 's/if (!((p, r\[ii, 1\]) in inF)) continue/if (r[ii, 1] != F[p, 1]) continue/')"
+if [ -z "$_m" ]; then bad "DWm-onefile: FIXTURE STALE -- the mutation did not apply to exactly one line of $JOIN; re-anchor it, never relax the assertion"
+elif ! ua_inmut "$_m" p_rrlatein "$_m"; then mrow DWm-onefile RR4=1; bad "DWm-onefile: the twin RR4 did not pass under the mutant copy (rc=$RC) -- the copy did not run or the arms are entangled"
+elif ua_inmut "$_m" p_rrdwmf "$_m"; then mrow DWm-onefile RR19=0 RR4=0; bad "DWm-onefile: SURVIVED -- RR19 holds against a join that reads NOADM over one cited file"
+else mrow DWm-onefile RR19=1 RR4=0; mutant_killed "$(( ${B_RR19:-0} && ${B_RR4:-0} ))" DWm-onefile "DWm-onefile NOADM over one cited file: KILLED by [RR19], RR4 unchanged"; fi
+# DWm-once: the dwo guard dropped (DW printed once per superseded ROW, not once per part) -> RR20 reads two DOUBLE-WRITE lines; RR4 unchanged.
+_m="$(dw_mut once 's/if (!(p in dwo)) { dwo\[p\] = 1; print "DW/if (1) { dwo[p] = 1; print "DW/')"
+if [ -z "$_m" ]; then bad "DWm-once: FIXTURE STALE -- the mutation did not apply to exactly one line of $JOIN; re-anchor it, never relax the assertion"
+elif ! ua_inmut "$_m" p_rrlatein "$_m"; then mrow DWm-once RR4=1; bad "DWm-once: the twin RR4 did not pass under the mutant copy (rc=$RC) -- the copy did not run or the arms are entangled"
+elif ua_inmut "$_m" p_rrdwtwo "$_m"; then mrow DWm-once RR20=0 RR4=0; bad "DWm-once: SURVIVED -- RR20 holds against a join that prints DW once per row"
+else mrow DWm-once RR20=1 RR4=0; mutant_killed "$(( ${B_RR20:-0} && ${B_RR4:-0} ))" DWm-once "DWm-once the dwo guard dropped: KILLED by [RR20] (a second DOUBLE-WRITE line), RR4 unchanged"; fi
 p_rrspan "$JOIN" && ok "RR6: the re-run writer also writes section 4 -> REFUSED, section 4 has two writers" \
   || bad "RR6: a re-run writer writing another section was not refused (rc=$RC): $(cat "$JO")"
 p_rrprlate "$JOIN" && ok "RR10: the original writes 2.md's own part record after S_P -> REFUSED, a superseded writer writing an account" \

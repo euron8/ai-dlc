@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1040.0] - 2026-11-10
+
+### BL-947 closed
+
+`core/scripts/join-remediator-shards.sh` refuses a part with no admissible `--rerun` start as `REFUSED: DOUBLE-WRITE <P>:`, in place of the SAME refusal whose remedy names a start that cannot exist. It is decided under `--rerun` only, at the SAME site (pass 2, printed by the `DW)` arm beside SAME), never at the generic distinct-writer refusal; the merge, by contrast, decides it in every mode.
+
+The predicate NOADM(P) is taken over P's rows on its whole cited file set F_P: WRITERS(P) are the agents with a row there, and NOADM holds iff P has two or more writers and no writer W has `first(W)` after `last(o)` for every other writer o. That is the merge's form over the F_P union, because after narrowing the distinct-writer and SPAN arms still require one writer across F_P. An alias gate turns NOADM off when any writer has exactly one F_P row carrying session, tool_use_id and transcript_path with agent_transcript false, since an alias can fold two raw ids into one writer and let a start pass that the raw-id arithmetic says cannot; its cost is that NOADM may miss a real no-start case, never that it claims one falsely. A record-only start cannot escape: it supersedes nothing, so two or more writers stay on F_P and the distinct-writer and SPAN arms refuse it. The line differs from the merge's DOUBLE-WRITE line only where the join differs: a part for a shard, a remediator for an adversary, writer spans of its own, and no seal-holder clause, since the join reads no seal holder.
+
+A bind arm, BIND1-BIND3 in `core/fixtures/remediator-shard-join/unit-bind.sh`, pins the join's SAME and DOUBLE-WRITE refusal text to `merge-adversarial-shards.sh`'s with a declared allowed-difference list (the merge's `${REC_PREFIX}${_c}` against the join's `${_c}`), and counts carriers of either refusal over the `core/scripts` and `core/hooks` shell files the fixture declares, with a floor so a short, empty or unopenable corpus fails rather than passes (an empty readable `.sh` counts as read); a third copy in a declared file fails it. Its limits are a third copy in a file the sandbox does not see and a paraphrased copy.
+
+Measured: the real remediator population holds 0 of 1 straddles with no admissible start (graph s319 `carry-over-evaluation-party-repair-p1/sections/2.md`, where a start in (19:30:55Z, 19:48:08Z] passes), taken by a re-implementation of the join's arms over a copy of graph's write ledger, not by the shipped script. What decided the build is the join's own fixture, which constructs the state: `p_rrlatein` and `p_rrsame` each have a writer's rows on both sides of another writer's row on `sections/2.md`, and at the base both pins asserted SAME as correct. They are re-keyed to DOUBLE-WRITE (RR4, RR5); RR16 is the SAME world (a start set too early reads SAME, and a later start joins), RR17 the record-only world, RR18 the alias world, RR19 the two-file world and RR20 a part with two post-start superseded rows that must print one DOUBLE-WRITE line, with mutants DWm-false, DWm-true, DWm-alias, DWm-onefile and DWm-once.
+
+Consumer cost: fork-profile TOTAL is 2906 at both 35201f04f and 9fa6b0f5a; the later folds are fixture-only, and FORK_BUDGET is unchanged. In remediator-shard-join's invocations.decl, `*` goes from 1116 to 1195 and serial-remediation-worklist.sh goes from 35 to 36, from two agreeing counted runs on the merged tip. The join row stays at 73. No file is added under scripts/, .githooks/ or non-fixture core.
 ## [0.1039.0] - 2026-11-10
 
 ### BL-944 closed

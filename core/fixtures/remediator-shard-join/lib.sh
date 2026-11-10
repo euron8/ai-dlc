@@ -1518,7 +1518,7 @@ p_advname() { # (a) --document into shards/x-adversarial-repair-p1/ -> rc 2, no 
 # Rows are driven in chronological order, because the record lists superseded ids in ledger order.
 G_SP=2026-10-15T19:47:25Z
 G_ORIG=a51ac04becc00c152; G_ORPH=ad67234a336bc2239; G_NEW=a2f8df9804face91e
-G_A5=a0f3b2c1d4e5f6a7b; G_A6=a9e8d7c6b5a4f3e2d
+G_A5=a0f3b2c1d4e5f6a7b; G_A6=a9e8d7c6b5a4f3e2d; G_A9=a7c1e3b5d7f9a1c3e
 gts() { printf '2026-10-15T%sZ' "$1"; }
 gsec() { # <world> <ordinal> <agent> <hh:mm:ss> -- that section copy edited, the row stamped at that time
   printf 'Repaired at %s by %s.\n' "$4" "$3" >> "$1/$RDREL/sections/$2.md"
@@ -1580,16 +1580,81 @@ p_rrlate() { # the original still writing after S_P OUTSIDE F_P (section 3) -> R
   rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG is a superseded writer of 2.md and wrote $RDREL/sections/3.md at $(gts 19:55:00), at or after the re-run start; the original is still writing" \
     && has "$JO" "--rerun 2.md: $G_ORIG is a superseded writer of 2.md and also wrote $RDREL/sections/3.md at $(gts 19:55:00), outside the files 2.md cites"
 }
-p_rrlatein() { # the original still writing after S_P INSIDE F_P, beside the new writer -> REFUSED with the new-id line
+# THE DOUBLE-WRITE LINE (BL-947): <part> <file> <spans>, the spans ordered by first row, then id.
+rr_dw() { printf 'REFUSED: DOUBLE-WRITE %s: %s was written by %s; no --rerun %s@<ISO> start can pass, because a writer kept writing after another writer'"'"'s first row (a stop directive not honored) -- preserve %s'"'"'s current bytes, confirm every writer of %s has stopped, re-dispatch a NEW remediator for %s, and join with --rerun %s@<that dispatch'"'"'s dispatched-at>; if the new seat read the preserved bytes, the joined part is not independent and that must be disclosed' \
+  "$1" "$2" "$3" "$1" "$1" "$1" "$1" "$1"; }
+RR_SAMEP="wrote $RDREL/sections/2.md both before the re-run start and at "
+# The --rerun family of refusals, every one of which opens `REFUSED: --rerun `; DOUBLE-WRITE opens otherwise.
+rr_nfam() { local n; n="$(grep -c '^REFUSED: --rerun ' "$JO")" || n=0; printf '%s' "$n"; }
+p_rrlatein() { # the original still writing after S_P INSIDE F_P, beside the new writer -> no start can pass (G_ORPH
+  # sits inside G_ORIG's span, G_NEW after G_ORIG's first) -> DOUBLE-WRITE, the ONLY --rerun refusal; never SAME.
+  # The distinct-writer and SPAN refusals still follow it (three REFUSED lines, each by its text).
   local w; w="$(g6_world)" || return 1
   gnew "$w"; gsec "$w" 2 "$G_ORIG" 19:55:00
-  rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG wrote $RDREL/sections/2.md both before the re-run start and at $(gts 19:55:00), after it; the re-run is a NEW dispatch"
+  rr_refused "$1" "$w" "$(rr_dw 2.md "$RDREL/sections/2.md" "$G_ORIG ($(gts 19:27:42)..$(gts 19:55:00)), $G_ORPH ($(gts 19:27:46)..$(gts 19:27:46)), $G_NEW ($(gts 19:50:00)..$(gts 19:50:00))")" \
+    && ! has "$JO" "$RR_SAMEP" && [ "$(rr_nfam)" -eq 0 ] \
+    && has "$JO" "REFUSED: $RDREL/sections/2.md was written by more than one agent in the window: $G_NEW, $G_ORIG; " \
+    && has "$JO" "REFUSED: 2.md cites files written by more than one agent ($G_NEW $G_ORIG); " \
+    && [ "$(grep -c '^REFUSED: ' "$JO")" -eq 3 ]
 }
-p_rrsame() { # the SAME id both sides of S_P, the orphan before, no new writer -> REFUSED. Narrowed, the
-  # section has one writer, so without the new-id rule this joins.
+p_rrdwtwo() { # RR4's world with the original writing sections/2.md a SECOND time after S_P: two post-start superseded
+  # rows on F_P for one NOADM part. The join prints DW once per part (the dwo guard), so exactly one DOUBLE-WRITE 2.md line.
+  local w n; w="$(g6_world)" || return 1
+  gnew "$w"; gsec "$w" 2 "$G_ORIG" 19:55:00; gsec "$w" 2 "$G_ORIG" 19:56:00
+  rr_refused "$1" "$w" "$(rr_dw 2.md "$RDREL/sections/2.md" "$G_ORIG ($(gts 19:27:42)..$(gts 19:56:00)), $G_ORPH ($(gts 19:27:46)..$(gts 19:27:46)), $G_NEW ($(gts 19:50:00)..$(gts 19:50:00))")" \
+    && ! has "$JO" "$RR_SAMEP" || return 1
+  n="$(grep -c '^REFUSED: DOUBLE-WRITE 2.md: ' "$JO")" || n=0
+  [ "$n" -eq 1 ]
+}
+p_rrsame() { # the SAME id both sides of S_P, the orphan before, no new writer -> no start can pass (the orphan's
+  # one row is inside the original's span) -> DOUBLE-WRITE, never SAME. Narrowed, the section has one writer.
   local w; w="$(g6_world)" || return 1
   gsec "$w" 2 "$G_ORIG" 19:50:00
-  rr_refused "$1" "$w" "--rerun 2.md: $G_ORIG wrote $RDREL/sections/2.md both before the re-run start and at $(gts 19:50:00), after it; the re-run is a NEW dispatch"
+  rr_refused "$1" "$w" "$(rr_dw 2.md "$RDREL/sections/2.md" "$G_ORIG ($(gts 19:27:42)..$(gts 19:50:00)), $G_ORPH ($(gts 19:27:46)..$(gts 19:27:46))")" \
+    && ! has "$JO" "$RR_SAMEP"
+}
+p_rrsamew() { # THE SAME WORLD: graph's shape with the NEW re-run, the start set too early (inside G_ORIG's span) ->
+  # SAME, never DOUBLE-WRITE, because a later start passes -- and that start, run, JOINS
+  local w; w="$(g6_world)" || return 1
+  gnew "$w"
+  run_docjoin "$1" "$w" --rerun "2.md@$(gts 19:27:44)"
+  doc_refused "$w" "--rerun 2.md: $G_ORIG $RR_SAMEP$(gts 19:27:48), after it; the re-run is a NEW dispatch" \
+    && ! has "$JO" "DOUBLE-WRITE" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md@$(gts 19:30:00)"
+  [ "$RC" -eq 0 ] && has "$JO" "JOINED: " && [ -f "$(doc_out "$w")" ]
+}
+p_rrdwrec() { # p_rrsame's world plus a NEW agent writing 2.md's part RECORD after every row on F_P -> still no start:
+  # the record-only start (19:50:01) supersedes nothing, so two writers stand on sections/2.md. DOUBLE-WRITE at S_P,
+  # and the record-only start and a start before every row both REFUSED.
+  local w; w="$(g6_world)" || return 1
+  gsec "$w" 2 "$G_ORIG" 19:50:00; grec "$w" 2 "$G_A9" 19:52:00
+  rr_refused "$1" "$w" "$(rr_dw 2.md "$RDREL/sections/2.md" "$G_ORIG ($(gts 19:27:42)..$(gts 19:50:00)), $G_ORPH ($(gts 19:27:46)..$(gts 19:27:46))")" \
+    && ! has "$JO" "$RR_SAMEP" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md@$(gts 19:50:01)"
+  doc_refused "$w" "REFUSED: $RDREL/sections/2.md was written by more than one agent in the window: $G_ORIG, $G_ORPH" || return 1
+  run_docjoin "$1" "$w" --rerun "2.md@$(gts 19:27:30)"
+  doc_refused "$w" "REFUSED: $RDREL/sections/2.md was written by more than one agent in the window: $G_ORIG, $G_ORPH"
+}
+p_rrdwal() { # THE ALIAS GATE's world: al_world good (the orphan's one row an alias of AG1's) plus AG1's part record.
+  # A start before every row JOINS (the alias makes one writer), so the raw-id arithmetic, which reads AG1 and the
+  # orphan interleaved, would over-claim no start: at 19:25:05 the join keeps SAME, never DOUBLE-WRITE.
+  local w; w="$(al_world good)" || return 1
+  drive "$w" Write "$w/$SLOT/shards/stories-repair-p1/01.md" "$AG1" toolu_B3 "$w/projects/sess-1.jsonl" "$(gts 19:25:10)"
+  run_join "$1" "$w" --rerun "01.md@$(gts 19:25:05)"
+  refused "$w" "--rerun 01.md: $AG1 wrote $REL/$S21 both before the re-run start and at $(gts 19:25:06), after it" \
+    && ! has "$JO" "DOUBLE-WRITE" || return 1
+  run_join "$1" "$w" --rerun "01.md@$(gts 19:24:00)"
+  [ "$RC" -eq 0 ] && has "$JO" "1 alias rows)" && [ -f "$(out_of "$w")" ]
+}
+p_rrdwmf() { # THE FILE SET, not one file: part 5 cites sections/5.md AND sections/4.md. On sections/5.md G_A5 is the only
+  # writer, before S_P and after it (a SAME); AG4 writes sections/4.md inside G_A5's span, so over F_P neither writer's
+  # first is later than the other's last -> DOUBLE-WRITE on sections/5.md naming both. One file alone reads SAME.
+  local w; w="$(r5_world)" || return 1
+  printf -- '- **edit:** `%s/sections/4.md:2`\n' "$RDREL" >> "$w/$RDREL/5.md"
+  gsec "$w" 4 "$AG4" 19:30:00; gsec "$w" 5 "$G_A5" 19:50:00; grec "$w" 5 "$G_NEW" 19:51:00
+  run_docjoin "$1" "$w" --rerun "5.md@$G_SP"
+  doc_refused "$w" "$(rr_dw 5.md "$RDREL/sections/5.md" "$AG4 ($(gts 19:28:10)..$(gts 19:30:00)), $G_A5 ($(gts 19:28:20)..$(gts 19:50:00))")" \
+    && ! has "$JO" "wrote $RDREL/sections/5.md both before the re-run start"
 }
 p_rrspan() { # the re-run writer also writes section 4 -> REFUSED: section 4 has two writers in the window
   local w; w="$(g6_world)" || return 1
