@@ -69,6 +69,8 @@
 # also trips: M29 canon.cr-path-super,canon.cr-conv-runner
 # also trips: M30 canon.cr-conv-runner-none,canon.cr-norun-other
 # also trips: m-no-index canon.cr-bind-trunc,canon.cr-glob-literal
+# also trips: m-wv-skip wv955.wv955-seat,wv955.wv955-merge,wv955.wv955-merge-unrec
+# also trips: m-wv-seat wv955.wv955-merge-unrec
 # also trips: m-single-file canon.cr-bind-repoint-k,canon.cr-bind-xdir-nostat,canon.cr-hist-replace
 # also trips: m-endpoint-only canon.cr-hist-merge,canon.cr-roll-mid,canon.cr-py-cwd
 # also trips: m-story-dir canon.cr-schema-env,canon.cr-root-env
@@ -79,6 +81,7 @@
 # also trips: m-worktree canon.cr-bind-repoint-k,canon.cr-bind-trunc-ok,canon.cr-bind-xdir,canon.cr-bind-xdir-nostat,canon.cr-launder-rowdel,canon.cr-launder-rowdel-ok,canon.cr-hist-merge,canon.cr-hist-shallow,canon.cr-hist-shallow-blob,canon.cr-hist-replace,canon.cr-hist-dir,canon.cr-hist-sprint,canon.cr-sprint-roll1,canon.cr-sprint-view,canon.cr-schema-env,canon.cr-roll-ok,canon.cr-root-env,canon.cr-sprint-relpath,canon.cr-roll-mid,canon.cr-hist-crlf,canon.cr-bind-letter,canon.cr-b1-right,canon.cr-py-cwd,canon.cr-sprint-link-ok
 # also trips: m-serial-only canon_merge.crm-bind-hist,canon_merge.crm-hist-merge,canon_merge.crm-hist-shallow,canon_merge.crm-hist-replace,canon_merge.crm-hist-dir,canon_merge.crm-hist-sprint,canon_merge.crm-sprint-roll,canon_merge.crm-sprint-view,canon_merge.crm-schema-env,canon_merge.crm-root-env,canon_merge.crm-py-cwd
 # also trips: m-one-sprint-merge canon_merge.crm-sprint-link
+# also trips: m956-1102 bind956.bind956-binds-run,bind956.bind956-receipt
 # also trips: M41 adv_qa.ad-q-unreadable-absent,adv_qa.ad-q-world-b,adv_qa.ad-q-untracked-new
 # also trips: M42 adv_qa.ad-q-legacy-prose,adv_qa.ad-q-world-a,adv_qa.ad-q-untracked-old
 # also trips: M43 xc_count.xc-count,xc_one.xc-one
@@ -151,7 +154,10 @@
 # MUTANT-MATRIX M59 decides=story_hist.story-hist twins=canon.cr-exempt-evil
 # MUTANT-MATRIX M66 decides=story_hist.story-hist twins=canon.cr-exempt-evil
 # MUTANT-MATRIX m-row-exit decides=canon.cr-bind-seed twins=canon.cr-bind-sibling
-# MUTANT-MATRIX m-no-index decides=canon.cr-bind-sibling twins=canon.cr-bind-repoint-k
+# MUTANT-MATRIX m-no-index decides=canon.cr-bind-sibling-pre twins=canon.cr-bind-repoint-k
+# MUTANT-MATRIX m-wv-skip decides=wv955.wv955-accepted twins=wv955.wv955-noentry
+# MUTANT-MATRIX m-wv-frozen decides=wv955.wv955-inrange twins=wv955.wv955-seat
+# MUTANT-MATRIX m-wv-seat decides=wv955.wv955-seat twins=wv955.wv955-bind
 # MUTANT-MATRIX m-single-file decides=canon.cr-bind-xdir twins=canon.cr-launder-rowdel
 # MUTANT-MATRIX m-status-skip decides=canon.cr-bind-xdir-nostat twins=canon.cr-launder-rowdel
 # MUTANT-MATRIX m-index-grammar decides=canon.cr-bind-longidx twins=canon.cr-bind-letter
@@ -182,6 +188,13 @@
 # MUTANT-MATRIX m-digit-slug decides=canon.cr-bind-trunc twins=canon.cr-bind-trunc-ok
 # MUTANT-MATRIX m-worktree decides=canon.cr-bind-ok twins=canon.cr-exempt-whole
 # MUTANT-MATRIX m-serial-only decides=canon_merge.crm-bind twins=canon_merge.crm-bind-ok
+# MUTANT-MATRIX m956-1102 decides=bind956.bind956-binds twins=bind956.bind956-other
+# MUTANT-MATRIX m956-1132 decides=bind956.bind956-onestory twins=bind956.bind956-hist
+# MUTANT-MATRIX m956-1145 decides=bind956.bind956-hist twins=bind956.bind956-onestory
+# MUTANT-MATRIX m956-rekey decides=bind956.bind956-rekey twins=bind956.bind956-binds
+# MUTANT-MATRIX m956-rekey-ko decides=bind956.bind956-rekey-ko twins=bind956.bind956-binds
+# MUTANT-MATRIX m956-window decides=bind956.bind956-prebase twins=bind956.bind956-rekey
+# MUTANT-MATRIX m956-stem decides=bind956.bind956-stem twins=bind956.bind956-binds
 # MUTANT-MATRIX M41 decides=adv_qa.ad-q-present-absent twins=adv_qa.ad-q-called
 # MUTANT-MATRIX M42 decides=adv_qa.ad-q-legacy-absent twins=adv_qa.ad-q-unreadable-absent
 # MUTANT-MATRIX M43 decides=xc_flip.xc-flip twins=xc_merge.xc-merge
@@ -325,9 +338,9 @@ rsm_merge_slices() {
 # THE COVERAGE JOIN (J0) runs in EVERY shard, and under --deal, before lib.sh builds anything: the declared units are
 # DERIVED from this file's `if sg <unit>; then` lines, the dealt lists must be disjoint and their union exact, every
 # arm line must sit inside a unit, every mutant (read off its mut_run call with a stub, the emission site) must map to
-# a dealt unit, the mutant total must be 150, and every declared shard must have a driver directory. It proves it can
+# a dealt unit, the mutant total must be 160, and every declared shard must have a driver directory. It proves it can
 # fire first, on a seeded duplicate and a seeded omission. --matrix runs every unit's arms and records every mutant;
-# alone it scores all 150 rows, with --group <x> only shard <x>'s dealt rows, printing every row's population as
+# alone it scores all 160 rows, with --group <x> only shard <x>'s dealt rows, printing every row's population as
 # MATRIX-ALLPOP so the two shards' MATRIX pairs join to the unsharded population. A plain run's KS1 asserts the shard
 # killed exactly the mutants it was dealt, and its KS1-CTL proves KS1 refuses that run's kill set less one id.
 # --deal prints each shard's dealt units, arms, mutants and its static unit-cell count (an arm's `cell` declarations in
@@ -420,8 +433,8 @@ MUT_ROWS="$(US="$_unitshard" awk -F'\t' 'BEGIN { n = split(ENVIRON["US"], l, "\n
 _mall="$(printf '%s\n' "$MUT_ROWS" | grep -c .)" || _mall=0
 _mnou="$(printf '%s\n' "$MUT_ROWS" | awk '$2 == "-"' | grep -c .)" || _mnou=0
 _mdup="$(printf '%s\n' "$MUT_ROWS" | awk '{ print $1 }' | sort | uniq -d | grep -c .)" || _mdup=0
-[ "$_mall" = 150 ] && [ "$_mnou" = 0 ] && [ "$_mdup" = 0 ] \
-  || { rm -rf "$RSM_JW"; rsm_broken "the mut_run calls name $_mall mutants (want 150), $_mdup id(s) twice, $_mnou whose predicate has no unit-guarded arm"; }
+[ "$_mall" = 160 ] && [ "$_mnou" = 0 ] && [ "$_mdup" = 0 ] \
+  || { rm -rf "$RSM_JW"; rsm_broken "the mut_run calls name $_mall mutants (want 160), $_mdup id(s) twice, $_mnou whose predicate has no unit-guarded arm"; }
 MUT_MINE=" "; MUT_MINE_N=0; MUT_MINE_SHARED=0
 while read -r _id _u _sh; do
   dg "$_u" || continue
@@ -760,6 +773,10 @@ fi # sg bl737
 if sg canon; then
 arm2 canon "CR1: --check-serial --gate qa, a PASS waits for its canonical run -- the run line plus a counted result, a bulleted pair and a '-p no:cacheprovider' near-miss answer SERIAL-OK; no run line, counts only on a RED replay line, -k, a path root and a marker the conventions do not declare, no result line, a NOT FINISHED result and a result with no count each REFUSED [owner: serial]; NEEDS_REWORK with no run SERIAL-OK; 'none, <reason>' over a record-only --range SERIAL-OK, over a range touching a test, a test module under test-results/, a seat-narrowed rework range, and a non-ancestor base, and with no range REFUSED; BL-895 STORY-BIND: a typo or a directory --story, a review-like file created in a record-only range, a listed story whose index is not the review's, a fresh story under the review's index listed under another key, and a review index that is a prefix of the story's (2 for story-2-1-y.md) REFUSED; the listed story whose row exists only at the frozen sha (not HEAD), under a -p2 review name, SERIAL-OK; N/A, TBD and skipped held to the same partition (refused over code); a bare none REFUSED; -m unit accepted with no conventions and declared, a declared path root accepted; a root whose qa.md lacks the sentinel prints LEGACY and accepts" \
            "CR1: --check-serial accepted a PASS with no canonical run, or refused a correct one"
+arm2 wv955 "WV955: the canonical-run waiver -- 'Canonical run: none, AC3 waives it' over a code range whose story carries the AC3 '## Canonical-run waivers' entry at a lead-written base SERIAL-OK (the lead's --lead-range over a recorded dispatch) and MERGED (the qa merge under the lead's partition record); no entry at either end, and the entry added only inside the range, REFUSED not record-only; the same world over the seat's --range and an unrecorded --lead-range REFUSED naming --record-dispatch, and the unrecorded merge REFUSED naming --record-partition; a waived claim whose --story is another (waived) story REFUSED by STORY-BIND [owner: serial]" \
+           "WV955: canon_gate did not honour a base-time waiver over a lead-written base only"
+arm2 bind956 "BIND956 (BL-956): STORY-BIND binds the bare review index through the implementation view's row -- 6-qa-validation.md binds story-1-6-a.md when row story-1-6 names it at the frozen sha, as a no-run and as a run claim (SERIAL-OK); a row naming another file, no row and a row keyed story-1-7 each REFUSED at the index on both claims; a second entry keyed story-6 in another directory REFUSED by the one-story loop, and a historic row story-1-6 naming story-q.md REFUSED by the view's history; --story story-1-1-x.md bound by a frozen row the range re-keyed to story-1-6 (story 6 absent or key-only at the base) REFUSED by the history's re-key check, which holds --story's pairs to the index from --base to frozen, so a story the lead re-keyed from story-1-7 before the base binds (SERIAL-OK); stem-names in sprint 3 reads story-3-3 as index 3 and story-3-1-3 as 1-3; receipt-bl956.sh (sprint 3, epic 1) holds its four cells" \
+             "BIND956: STORY-BIND did not bind the bare index through the view's row, or bound one it must refuse"
 fi # sg canon
 if sg canon_merge; then
 arm2 canon_merge "CR2: the qa merge -- four PASS shards carrying the run merge with no LEGACY line; the execution owner's run lines removed REFUSED [owner: cross-1]; the same with a NEEDS_REWORK part merges NEEDS_REWORK; frozen over an installed qa.md with no label, LEGACY and merges; qa.md untracked at the frozen sha and on disk without the label LEGACY, with it held; --range on the merge REFUSED; BL-895: a record-only sharded diff whose execution owner claims none, with a non-story --story, REFUSED naming that owner; with the listed story MERGED" \
@@ -1185,14 +1202,23 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     story_hist "FAIL sh-subdir:" "the story history walked a pathspec relative to the -C directory, not the repository top"
   # BL-895, canon_gate's STORY-BIND. m-row-exit keys the row binding on story-status's EXIT (it exits 0 on a path no
   # entry names), so the review-like seed passes. m-no-index drops the basename-index check, so a listed sibling story
-  # passes for the wrong review. m-worktree reads the row at the checked-out HEAD instead of the frozen sha, so a story
+  # listed by a key-only row (no history pair for the re-key check) passes for the wrong review. m-worktree reads the row at the checked-out HEAD instead of the frozen sha, so a story
   # whose row exists only at the frozen sha is refused. m-serial-only lets the merge's owner past every STORY-BIND
   # refusal, so the merge acquits a non-story --story.
   CS_ONLY=cr-bind-seed mut_run m-row-exit merge-review-shards.sh '    [ "$cg_rw_" = ok ] \' \
     '    mrs_sib "$cg_ss_" ss_main story-status --ref "$cg_z_" --root "$cg_r_" "$cg_sr_" > /dev/null 2>&1 < /dev/null \' \
     canon "cr-bind-seed{rc=0 SERIAL-OK:" "the row binding keyed on story-status's exit code"
-  CS_ONLY=cr-bind-sibling mut_run m-no-index merge-review-shards.sh '    story_idx_ok "${cg_sr_##*/}" "$cg_i_" \' '    true \' \
-    canon "cr-bind-sibling{rc=0 SERIAL-OK:" "the basename index check dropped"
+  CS_ONLY=cr-bind-sibling-pre mut_run m-no-index merge-review-shards.sh '    if ! story_idx_ok "${cg_sr_##*/}" "$cg_i_"; then' '    if false; then' \
+    canon "cr-bind-sibling-pre{rc=0 SERIAL-OK:" "the basename index check dropped"
+  # WV955, canon_gate's waiver. m-wv-skip never asks the waiver test (it reads NOT-WAIVED), so a base-time waiver over a
+  # code range is refused. m-wv-frozen reads the story at <frozen>, so an entry added inside the range waives the run.
+  # m-wv-seat honours the waiver whoever wrote the base, so the seat's own --range acquits its own story text.
+  CS_ONLY=wv955-accepted mut_run m-wv-skip merge-review-shards.sh '    cg_wv_="$(mrs_sib "$RO" ro_main waiver' '    cg_wv_="$(false' \
+    wv955 "wv955-accepted{rc=2" "the waiver test never asked"
+  CS_ONLY=wv955-inrange mut_run m-wv-frozen merge-review-shards.sh '"$STORY_F" "$cg_b_" "$cg_run_"' '"$STORY_F" "$cg_z_" "$cg_run_"' \
+    wv955 "wv955-inrange{rc=0" "the waiver read at the frozen sha"
+  CS_ONLY=wv955-seat mut_run m-wv-seat merge-review-shards.sh '        if [ "$cg_lw_" != lead ]; then' '        if false; then' \
+    wv955 "wv955-seat[range]{rc=0" "the waiver honoured over a seat-supplied base"
   # BL-895 B1 and D1. m-single-file drops the one-story-per-index refusal, so a fresh story the view lists under another
   # key passes beside the real one; since b1 the view's history refuses that world too, so the mutant is scored on
   # cr-bind-xdir, whose second index-1-5 entry declares a file: in another directory, which the history skips as another
@@ -1306,6 +1332,32 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   CS_ONLY=crm-bind mut_run m-serial-only merge-review-shards.sh '    # STORY-BIND (header: THE EXEMPTION): --story is the story file the implementation view lists at <frozen>.' \
     '    refuse_to() { case "$1:$2" in serial:*) ;; *:STORY-BIND*) return 0 ;; esac; OWNER="$1"; shift; refuse "$*${CG_NOTE:-}"; }' \
     canon_merge "crm-bind{rc=0" "the binding held only when the owner is serial"
+  # BL-956, THE ROW STEM RULE (merge-review-shards.sh stem_rows), one mutant per site, each keeping only the literal
+  # story_idx_ok rule there. m956-1102: the index binding by the frozen row's key dropped, so the bare index refuses
+  # the story its row names. m956-1132: the one-story loop's key disjunct dropped, so a second entry keyed under the
+  # index in another directory passes. m956-1145: the history's key disjunct dropped, so a historic row keyed under the
+  # index naming another file passes.
+  CS_ONLY=bind956-binds mut_run m956-1102 merge-review-shards.sh '      { [ -n "$cg_rk_" ] && cg_sk_="$(stem_rows "$cg_rk_")" && [ "$cg_sk_" = "$cg_rk_" ]; } \' '      false \' \
+    bind956 "bind956-binds{rc=2" "the bare index no longer binds through the frozen row's key"
+  CS_ONLY=bind956-onestory mut_run m956-1132 merge-review-shards.sh '          || { [ "$cg_p_" != "$STORY_F" ] && [ "${cg_d_##*/}" != "${STORY_F##*/}" ] && [ -n "$cg_k_" ] && case' '          || { false && case' \
+    bind956 "bind956-onestory{rc=0 SERIAL-OK:" "the one-story loop counts an entry by its literal basename only"
+  CS_ONLY=bind956-hist mut_run m956-1145 merge-review-shards.sh '        || { [ -n "$cg_hk_" ] && case' '        || { false && case' \
+    bind956 "bind956-hist{rc=0 SERIAL-OK:" "the view's history counts a value by its literal basename only"
+  # m956-rekey (the pair skipped), m956-rekey-ko (the pair read as an index-named one): the history's re-key refusal
+  # dropped, so --story bound by a frozen row the range re-keyed passes with story 6 absent (rekey) and key-only
+  # (rekey-ko) at the base; two distinct edits, so neither shares the other's copy. m956-stem:
+  # stem-names reads the key with story_key_stem, every sprint-equal component stripped, so in sprint 3 story-3-3 names
+  # no index and story-3-1-3 names 1.
+  CS_ONLY=bind956-rekey mut_run m956-rekey merge-review-shards.sh '        cg_rx_=rekey' '        continue' \
+    bind956 "bind956-rekey{rc=0 SERIAL-OK:" "the view's history no longer holds --story's own rows to the index"
+  CS_ONLY=bind956-rekey-ko mut_run m956-rekey-ko merge-review-shards.sh '        cg_rx_=rekey' '        cg_rx_=""' \
+    bind956 "bind956-rekey-ko{rc=0 SERIAL-OK:" "the view's history no longer holds --story's own rows to the index (key-only base)"
+  # m956-window: the re-key check reads --story's pairs from the creation (the `file` lines) instead of from --base to
+  # frozen (the `window` lines), so a re-key the lead made in planning, before the base, refuses.
+  CS_ONLY=bind956-prebase mut_run m956-window merge-review-shards.sh '        [ "$cg_k_" = window ] || continue' '        :' \
+    bind956 "bind956-prebase{rc=2" "the re-key check reads --story's pairs from before --base"
+  CS_ONLY=bind956-stem mut_run m956-stem sprint-status.sh '        if _k and story_key_index_stem(_k, _sp) == "story-" + _ix:' '        if _k and story_key_stem(_k, _sp) == "story-" + _ix:' \
+    bind956 "bind956-stem{3=[]" "stem-names strips every sprint-equal key component"
   # BL-790. M41 the advisor absence refusal deleted, so a sentinel-era shard with no line merges. M42 the
   # era check deleted, so the absence is refused in the legacy world too.
   CS_ONLY=ad-q-present-absent mut_run M41 merge-review-shards.sh "  else refuse \"\$1 carries no column-0 'advisor:' line" "  else : \"\$1 carries no column-0 'advisor:' line" \
@@ -1533,13 +1585,13 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "MX1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the matrix"
     reuse_proof
     if [ -n "$RSM_SLICE_N" ]; then
-      # A slice records all 150 rows, scores exactly the cells of the rows its k/n selects among the rows this run is
-      # dealt (all 150 with no --group; the shard's with one), their populations read off the full record, and runs no twin.
+      # A slice records all 160 rows, scores exactly the cells of the rows its k/n selects among the rows this run is
+      # dealt (all 160 with no --group; the shard's with one), their populations read off the full record, and runs no twin.
       _mx_want=0; [ "$RSM_SLICE_K" -ge "$MUT_MINE_N" ] || _mx_want=$(( (MUT_MINE_N - 1 - RSM_SLICE_K) / RSM_SLICE_N + 1 ))
-      if [ "$_mx_n" = 150 ] && [ "$MX_SROWS" = "$_mx_want" ] && [ "$MX_CELLS" = "$MX_SPOP" ] && [ "$TWIN_N" = 0 ]; then
+      if [ "$_mx_n" = 160 ] && [ "$MX_SROWS" = "$_mx_want" ] && [ "$MX_CELLS" = "$MX_SPOP" ] && [ "$TWIN_N" = 0 ]; then
         ok "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS mutant x cell pairs, the populations of its $MX_SROWS of $_mx_n recorded mutants ($MX_TPOP pairs in all), and ran no twin"
-      else bad "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS pairs over $MX_SROWS rows (want $_mx_want rows and $MX_SPOP pairs, of $MX_TPOP), $_mx_n recorded mutants (want 150), twins run $TWIN_N"; fi
-    elif [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 150 ]; then
+      else bad "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS pairs over $MX_SROWS rows (want $_mx_want rows and $MX_SPOP pairs, of $MX_TPOP), $_mx_n recorded mutants (want 160), twins run $TWIN_N"; fi
+    elif [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 160 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
   else
@@ -1549,14 +1601,14 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
   # The count is the shard's DEAL, derived by J0 from the mut_run calls before any mutant ran; under --matrix every unit
-  # records all 150, each control first (J0 refuses any other total).
-  if { [ "$RSM_MATRIX" = 0 ] && [ "$VB_CTL_N" = "$MUT_MINE_N" ]; } || { [ "$RSM_MATRIX" = 1 ] && [ "$VB_CTL_N" = 150 ]; }; then ok "VBCTL: CONTROL -- this shard's dealt mutants among each of M1-M72, M74-M80, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name and m-d1-abs's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of the $MUT_MINE_N dealt here, 150 in all): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+  # records all 160, each control first (J0 refuses any other total).
+  if { [ "$RSM_MATRIX" = 0 ] && [ "$VB_CTL_N" = "$MUT_MINE_N" ]; } || { [ "$RSM_MATRIX" = 1 ] && [ "$VB_CTL_N" = 160 ]; }; then ok "VBCTL: CONTROL -- this shard's dealt mutants among each of M1-M72, M74-M80, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name, m-d1-abs, m-wv-skip, m-wv-frozen, m-wv-seat, m956-1102, m956-1132, m956-1145, m956-rekey, m956-rekey-ko, m956-window and m956-stem's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of the $MUT_MINE_N dealt here, 160 in all): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
   else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of the $MUT_MINE_N mutants dealt to this shard had their cells pass over the unmutated copy, so the other verdicts are not evidence"; fi
   # MS1 (BL-906): the twelve byte-identical pairs share one copy each; every other mutant built its own.
   # The pairs dealt here: J0 counts, per shard, each mutant whose (file, old, new) an earlier mutant of the same shard made.
-  # Under --matrix every mutant is recorded, so the whole fixture's 12 pairs share and 138 copies are built.
+  # Under --matrix every mutant is recorded, so the whole fixture's 12 pairs share and 148 copies are built.
   if { [ "$RSM_MATRIX" = 0 ] && [ "$MUT_SHARED" = "$MUT_MINE_SHARED" ] && [ "$MUT_KN" = $((MUT_MINE_N - MUT_MINE_SHARED)) ] && [ "$MUT_SHARED" -ge 1 ]; } \
-     || { [ "$RSM_MATRIX" = 1 ] && [ "$MUT_SHARED" = 12 ] && [ "$MUT_KN" = 138 ]; }; then ok "MS1: the $MUT_SHARED byte-identical mutant pair(s) dealt here drove one shared copy each ($MUT_KN copies built for $([ "$RSM_MATRIX" = 1 ] && echo 150 || echo "$MUT_MINE_N") mutants)"
+     || { [ "$RSM_MATRIX" = 1 ] && [ "$MUT_SHARED" = 12 ] && [ "$MUT_KN" = 148 ]; }; then ok "MS1: the $MUT_SHARED byte-identical mutant pair(s) dealt here drove one shared copy each ($MUT_KN copies built for $([ "$RSM_MATRIX" = 1 ] && echo 160 || echo "$MUT_MINE_N") mutants)"
   else bad "MS1: $MUT_SHARED mutants drove a shared copy and $MUT_KN copies were built, want $MUT_MINE_SHARED and $((MUT_MINE_N - MUT_MINE_SHARED))"; fi
   # KS1 (BL-906): the KILL SET of a plain run is exactly the shard's deal -- every mutant J0 dealt here was killed
   # through mutant_killed in THIS run, once, and nothing else was. J0 proves the deal covers the fixture; KS1 proves the

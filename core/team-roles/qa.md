@@ -87,7 +87,11 @@ further when any of these is absent:
   counts), or
   `Full-collection run: none, <reason>` ONLY when the story's diff is
   record-only (every changed path is the story file, a sprint-status yaml, or
-  under `docs/reviews/`, `test-results/` or `docs/escalations/`);
+  under `docs/reviews/`, `test-results/` or `docs/escalations/`), or
+  `Full-collection run: none, <AC-id> waives it` ONLY when the story file at
+  the base carries that AC's `## Canonical-run waivers` entry, written at
+  planning; a `pytest --collect-only` or `pytest --co` invocation runs no
+  test and is a no-run claim, never the run;
 - the dev's dependency setup for that run, recorded beside it: the canonical
   dependency setup that makes it reproducible from a fresh detached worktree,
   as the exact invocation and its working directory, or `none` with the reason;
@@ -334,7 +338,20 @@ For each completed task, verify:
   a sprint-status yaml, or under `docs/reviews/`, `test-results/` or
   `docs/escalations/` and not a `*.py`, `*.sh`, `*.toml`, `*.cfg`,
   `conftest.py` or `pytest.ini`. A line with no backticked invocation, `$ `
-  line or count is that claim, however it is worded. A NEEDS_REWORK written before the run finishes is
+  line or count is that claim, however it is worded. An invocation that
+  collects and runs no test (`pytest --collect-only`, `pytest --co`,
+  backticked, bare or after `$ `) is that claim too, and its collected count is
+  never the run's counts. When a requirement makes the canonical run
+  unmakeable, the one other no-run claim accepted over a code diff is
+  `Canonical run: none, <AC-id> waives it`, and only when the story file at a
+  LEAD-WRITTEN base carries a `## Canonical-run waivers` section, written at
+  planning, holding the line
+  `- **<AC-id>** waives the canonical run: <reason>`. A lead-written base is the merge's base under the lead's partition
+  record, or the dispatch sha the lead recorded with `--record-dispatch` and
+  read back by its `--lead-range` re-run. An entry added inside the range does
+  not count. Over your own `--range`, or a story with no dispatch record, the
+  waiver is refused naming `--record-dispatch`: the lead records the dispatch
+  and re-runs the check. A NEEDS_REWORK written before the run finishes is
   allowed.
   **The canonical run goes through the recorder, and the result is the recorder's line.** Write a
   column-0 `Canonical result:` copied from `--record-run`, never typed: from the lead checkout run
@@ -353,7 +370,7 @@ For each completed task, verify:
   the recorded one, and a PASS with no recorded run.
   Every pass runs it at its own frozen sha: an earlier pass's run is accepted when it ran at this
   pass's frozen sha, or when the change since it is record-only by the same test the record-only
-  exemption uses; otherwise run `--record-run` again. `Canonical run: none, <reason>` needs no record.
+  exemption uses; otherwise run `--record-run` again. `Canonical run: none, <reason>` and a waiver claim need no record.
 - [ ] **Permitted pre-existing failures are enumerated by test ID (HARD GATE).**
   If the story allows the suite to be non-green on failures it did not cause,
   the allowance MUST list the failing test IDs, and the run MUST fail exactly
@@ -462,6 +479,16 @@ For each completed task, verify:
   sprint back into the basename one directory below where it was just removed:
   `s312/s312-1-qa-validation.md` is refused by the same rule and denied at the keystroke by
   the write-time guard. Write `s312/1-qa-validation.md`.
+- **The bare index binds through the implementation view's row.** A review names its story by the
+  story file's own index (`1-6-qa-validation.md` binds `story-1-6-<slug>.md`) OR by the index the
+  sprint-status row naming that story file carries at the frozen sha: `6-qa-validation.md` binds
+  `story-1-6-<slug>.md` when the row `story-<N>-6` (`<N>` the review's sprint) names that file
+  there, and in sprint 3 the row `story-3-3` names index 3. Only the sprint slot right after
+  `story-` is stripped. On the no-run exemption claim, a story bound by its row alone is held
+  to the index from `--base` to frozen: it is refused when any version of the view from the base
+  up to the frozen sha keyed that file under another index. A re-key made in planning, before
+  the base, binds. `merge-review-shards.sh` STORY-BIND refuses any other
+  story under that index.
 
 ## Class Sweep (HARD GATE)
 
@@ -652,7 +679,8 @@ from the lead checkout's `scripts/ai-dlc` path your brief carries, adding
 `--story <story file> --range <base> <go-signal sha>` (the base gate 1 used, on
 every pass; a later sha is refused) when your record claims the
 record-only exemption. `--story` must be the story file sprint-status lists at
-the go-signal sha, its basename must carry this review's `<story-index>`, and it must be
+the go-signal sha, its basename must carry this review's `<story-index>` or the view row naming it at the
+go-signal sha is keyed under it (and under no other index in the sprint-status history), and it must be
 the only story under that index that sprint-status lists at the base or the go-signal sha.
 No other story under that index may appear in the sprint-status history either, from the commit that created the
 story's directory up to the go-signal sha. The sprint is the one in your validation file's

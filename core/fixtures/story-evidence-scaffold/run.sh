@@ -1230,6 +1230,149 @@ if [ "$WORLDS_OK" -eq 1 ]; then
   b43_mutant b43-no-cmd-trim '      cmd="${cmd%"${cmd##*[![:space:]]}"}"' '      :' trim "the rendered command keeps its trailing blanks"
   b43_mutant b43-counts-nophrase '  case "$1" in *"counts: capture-heads block"*) ;; *) return 1 ;; esac' '  :' cntpl "a bare capture path is accepted as a run whenever a fresh block exists"
   # --- end BL-843 CAPTURE-HEADS BLOCK -----------------------------------------------------------------
+
+  # --- BL-957 NO-TEST RUNS AND THE CANONICAL-RUN WAIVER (wv957-*) -----------------------------------------
+  # Arm (k)'s two BL-957 rules, over world.sh's wv957* worlds (every range touches tests/test_x.py, so the
+  # record-only exemption refuses whatever reaches it). Its OWN positional list, WV_WORLDS; FC_WORLDS does not
+  # grow. Cells in order: wv957-co-bt, wv957-co-bare, wv957-co-dollar (a collect-only invocation, backticked,
+  # bare and after `$ `, refused full-collection-none); wv957-co-dar (collect-only citing the capture with
+  # `counts: capture-heads block` over a fresh block whose count is `1 passed`: refused, the count route is
+  # closed to it); wv957-cov, wv957-color (`--cov=`, `--color=`: runs, accepted); wv957-wv-base (`none, AC3
+  # waives it`, the entry at the base: accepted); wv957-wv-range (the entry only inside the range: refused);
+  # wv957-wv-tree (the story a tree at the base: waiver exit 2, refused); wv957-co-dir, wv957-co-dollar-dir,
+  # wv957-co-dollar-mid, wv957-co-span (collect-only where the first backticked span is a working directory, each
+  # caught by one of ro_no_test's three texts alone: refused full-collection-none); wv957-run-dir (a bare real run
+  # with a backticked directory and no count: accepted); wv957-co-comma, wv957-co-semi (the token followed by `,`
+  # and `;`: refused, the boundary is any character outside [A-Za-z0-9_-]); wv957-cov-comma (`--cov,`: a run,
+  # accepted); wv957-co-alias (`--collectonly`, pytest's third spelling: refused). wv_vec, as fc_vec, runs only the
+  # worlds a mutant's want vector moves; WV_FULL=1 runs all of them for a mutant (the authoring measurement).
+  WV_WORLDS='wv957cobt wv957cobare wv957codollar wv957codar wv957cov wv957color wv957wvbase wv957wvrange wv957wvtree wv957codir wv957codollardir wv957codollarmid wv957cospan wv957rundir wv957cocomma wv957cosemi wv957covcomma wv957coalias'
+  wv_ok=1
+  for v in $WV_WORLDS; do build_world "$WORK/world-$v" "$v" || { wv_ok=0; bad "FIXTURE BROKEN: could not seed git world '$v'"; }; done
+  # wv957codar's block: rendered at its frozen sha and pasted, as the dev pastes it (receipt-bl843's r1 shape).
+  if [ "$wv_ok" = 1 ]; then
+    wv_w="$WORK/world-wv957codar"
+    wv_b="$(he_run "$HECTL" -C "$wv_w" --render-dar "$STORY" "$(cat "$wv_w/.T")" 2>/dev/null)" && [ -n "$wv_b" ] \
+      && printf '\n%s\n' "$wv_b" >> "$wv_w/$STORY" && gitw "$wv_w" add -A && gitw "$wv_w" commit -qm block \
+      && gitw "$wv_w" rev-parse HEAD > "$wv_w/.T" \
+      || { wv_ok=0; bad "FIXTURE BROKEN: could not render and paste wv957codar's capture-heads block"; }
+    # Seed control: the pasted block carries the capture's count, so the count route WOULD accept this value.
+    grep -qF '1 passed' <<<"$wv_b" || { wv_ok=0; bad "FIXTURE BROKEN: wv957codar's block renders no count, so the count route could not acquit it either way"; }
+  fi
+  if [ "$wv_ok" = 1 ]; then
+    WVWANT='1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,'
+    wv_vec() { # <script> [<want>]
+      local s="$1" w="${2:-}" o="" v i=0 a b
+      for v in $WV_WORLDS; do
+        i=$((i + 1))
+        if [ -n "$w" ] && [ -z "${WV_FULL:-}" ]; then
+          a="$(awk -v n="$i" '{print $n}' <<<"$WVWANT")"; b="$(awk -v n="$i" '{print $n}' <<<"$w")"
+          if [ "$a" = "$b" ]; then o="$o $a"; continue; fi
+        fi
+        o="$o $(verdict "$s" "$WORK/world-$v" h)"
+      done
+      printf '%s' "${o# }"
+    }
+    got="$(wv_vec "$HECTL")"
+    if [ "$got" = "$WVWANT" ]; then ok "WAIVER (BL-957): a collect-only invocation, backticked, bare or after \$, is refused full-collection-none, also when its first backticked span is a working directory, and so is one citing a fresh capture-heads count; a bare real run with a backticked directory stays a run; --cov and --color stay runs; none, AC3 waives it is accepted with the entry at the base, refused with the entry only in the range, and refused when the story is a tree at the base"; B_wv=1
+    else bad "WAIVER (BL-957): want [$WVWANT] got [$got]"; fi
+    # The remedy names the waiver at the full-collection site ONLY: wv957-wv-range's refusal names it, and the
+    # Dependency setup refusal (dsna, ev_none's other caller) does not. wv_rmd <script> -> "<fc>:<ds>" counts.
+    wv_rmd() {
+      local a=0 d=0
+      verdict "$1" "$WORK/world-wv957wvrange" h > /dev/null
+      grep -q "^REFUSED full-collection-none .*Canonical-run waivers.*waives it" <<<"$VERDICT_OUT" && a=1
+      verdict "$1" "$WORK/world-dsna" h > /dev/null
+      grep -q '^REFUSED dependency-setup-none ' <<<"$VERDICT_OUT" && ! grep -q '^REFUSED dependency-setup-none .*waives it' <<<"$VERDICT_OUT" && d=1
+      printf '%s:%s' "$a" "$d"
+    }
+    if [ "$(wv_rmd "$HECTL")" = 1:1 ]; then ok "WAIVER (BL-957): the full-collection refusal names the canonical-run waiver as a further option, and the dependency-setup refusal does not"; B_wvr=1
+    else bad "WAIVER (BL-957): want the remedy on the full-collection refusal only [1:1], got [$(wv_rmd "$HECTL")]"; fi
+    # The waiver test itself, asked directly (fixture-mutants.md clause 6) over wv957wvbase's story at its base,
+    # which carries AC3 and AC1x2: AC3 waived, AC4 not (an id mismatch), AC1.2 not (a regex would match AC1x2),
+    # AC1x2 waived (the fixed-string twin), and a value that is not the spelling.
+    wv_dir() { # <script dir> -> "<rc>[<first stdout line>]" per cell, space-separated
+      local wb out="" val o rc w="$WORK/world-wv957wvbase"
+      wb="$(cat "$w/.B")"
+      for val in 'none, AC3 waives it' 'none, AC4 waives it' 'none, AC1.2 waives it' 'none, AC1x2 waives it; the signer' 'none, the diff is record-only'; do
+        o="$(ro_run "$1/record-only-diff.sh" waiver -C "$w" "$STORY" "$wb" "$val" 2>/dev/null)"; rc=$?
+        out="$out $rc[${o%%:*}]"
+      done
+      printf '%s' "${out# }"
+    }
+    WVDWANT='0[WAIVED] 1[NOT-WAIVED] 1[NOT-WAIVED] 0[WAIVED] 1[NOT-WAIVED]'
+    got="$(wv_dir "$(dirname "$HE")")"
+    if [ "$got" = "$WVDWANT" ]; then ok "WAIVER (BL-957): record-only-diff.sh waiver matches the entry's AC id as a fixed string (AC3 and AC1x2 waived; AC4 and AC1.2 not), and a value that is not the spelling is NOT-WAIVED"
+    else bad "WAIVER (BL-957): record-only-diff.sh waiver want [$WVDWANT] got [$got]"; fi
+    wv_mutant() { # <name> <he|ro> <from> <to> <want> <label>
+      local m got t
+      if [ "$2" = ro ]; then
+        t="$(mk_tree "$1")" || { bad "FIXTURE ERROR: waiver mutation '$1' could not build its tree"; return; }
+        FROM="$3" TO="$4" awk 'BEGIN{f=ENVIRON["FROM"]; t=ENVIRON["TO"]} !done && (p=index($0,f)) {$0=substr($0,1,p-1) t substr($0,p+length(f)); done=1} {print}' \
+          "$(dirname "$HE")/record-only-diff.sh" > "$(dirname "$t")/record-only-diff.sh.tmp"
+        if cmp -s "$(dirname "$HE")/record-only-diff.sh" "$(dirname "$t")/record-only-diff.sh.tmp"; then bad "FIXTURE ERROR: waiver mutation '$1' matched nothing"; return; fi
+        mv "$(dirname "$t")/record-only-diff.sh.tmp" "$(dirname "$t")/record-only-diff.sh"; m="$t"
+      elif ! m="$(mkmut "$1" he "$3" "$4")" || [ -z "$m" ]; then bad "FIXTURE ERROR: waiver mutation '$1' matched nothing"; return; fi
+      got="$(wv_vec "$m" "$5")"
+      if [ "$got" = "$5" ]; then mutant_killed "${B_wv:-0}" "$1" "MUTATION '$1' killed, moving its own cells only: $6"
+      elif [ "$got" = "$WVWANT" ]; then bad "MUTATION '$1' SURVIVED -- $6"
+      else bad "MUTATION '$1' moved [$got], want [$5] -- the cells are entangled"; fi
+    }
+    # The waiver read at <frozen>: the entry added inside the range waives (wv957-wv-range accepted).
+    wv_mutant wv957-at-frozen he '"$STORY" "$BASE" "$1" 2>&1)"; wv_rc=$?' '"$STORY" "$FROZEN" "$1" 2>&1)"; wv_rc=$?' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      "the waiver read at the frozen sha, written by the party being judged"
+    # The no-test token test dropped: every collect-only value is a run again (the count route included).
+    wv_mutant wv957-no-token ro '    case " $nt_s " in *" --collect-only "*|*" --collectonly "*|*" --co "*) return 0 ;; esac' '    :' \
+      '0: 0: 0: 0::W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 0: 0: 0: 0: 0: 0:' \
+      "a collect-only invocation read as a run"
+    # The token test on the backticked spans only: the bare and `$ ` forms are runs again, and so is every form
+    # whose only collect-only text is outside a span.
+    wv_mutant wv957-token-bt-only ro "    nt_s=\"\$(LC_ALL=C tr -c 'A-Za-z0-9_-' ' ' <<<\"\$nt_s\")\"" "    nt_s=\"\$(grep -oE '\`[^\`]*\`' <<<\"\$1\" | LC_ALL=C tr -c 'A-Za-z0-9_-' ' ')\"" \
+      '1:full-collection-none, 0: 0: 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      "the no-test token read in a backticked span only"
+    # The token test on rf_span's span only (the pre-fix reading): a collect-only invocation whose first backticked
+    # span is its working directory is a run again, bare, after a `$ ` opening it or after a `$ ` mid-value.
+    wv_mutant wv957-token-span-only ro "    nt_s=\"\$(LC_ALL=C tr -c 'A-Za-z0-9_-' ' ' <<<\"\$nt_s\")\"" "    nt_s=\"\$(rf_span \"\$1\" | LC_ALL=C tr -c 'A-Za-z0-9_-' ' ')\"" \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      "the no-test token read in rf_span's span only, so another run arm's text makes a collect-only value a run"
+    # Each of ro_no_test's three texts dropped alone moves only the world that text alone catches.
+    wv_mutant wv957-no-span-text ro '    nt_s="$(rf_span "$1")"' '    nt_s=""' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      "the no-test token not read in rf_span's span (a backticked invocation after a non-runner span is a run)"
+    wv_mutant wv957-no-dollar-text ro "    nt_s=\"\$nt_s\"\$'\\n'\"\$(grep -oE" '    : "$(grep -oE' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      "the no-test token not read in a \$ command (a \$ command after a non-runner span is a run)"
+    wv_mutant wv957-no-opening-text ro "    nt_s=\"\$nt_s\"\$'\\n'\"\$(awk" '    : "$(awk' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      "the no-test token not read in the value's opening (a bare invocation with a backticked directory is a run)"
+    # The token boundary restored to whitespace, a backtick or the end: `--collect-only,` and `--co;` are runs again.
+    wv_mutant wv957-old-boundary ro "    nt_s=\"\$(LC_ALL=C tr -c 'A-Za-z0-9_-' ' ' <<<\"\$nt_s\")\"" "    nt_s=\"\$(tr '\\t\\n\\r\`' '    ' <<<\"\$nt_s\")\"" \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 0: 0: 0: 1:full-collection-none,' \
+      "the no-test token bounded by whitespace, a backtick or the end only, so punctuation after it hides it"
+    # The `--collectonly` spelling dropped from the token: that spelling alone is a run again.
+    wv_mutant wv957-no-alias ro '|*" --collectonly "*' '' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 0:' \
+      "pytest's --collectonly spelling of the collect-only option read as a run"
+    # D4 placed after the count route: a collect-only value borrows the block's count (wv957-co-dar accepted).
+    wv_mutant wv957-d4-after-dar he '  bash "$RO" no-test-run "$1" && return 1' '  :' \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0::W 0: 0: 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      "the capture-heads count route asked before the no-test test"
+    # The waiver's exit 2 read as acceptance: a story that is a tree at the base is waived.
+    wv_mutant wv957-exit2-accept he "    *) refuse \"full-collection-none \$STORY: 'Full-collection run: \$1' names a canonical-run waiver" "    *) : \"full-collection-none \$STORY: 'Full-collection run: \$1' names a canonical-run waiver" \
+      '1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none,:W 0: 0: 0: 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none, 1:full-collection-none, 0: 1:full-collection-none,' \
+      "a waiver that cannot be read at the base accepted"
+    # The waiver wired into ev_none's SHARED text: Dependency setup's refusal names a waiver it has no site for.
+    # (The call alone moved into ev_none is behaviourally equivalent: every waiver spelling is a `none, <reason>`
+    # that Dependency setup accepts before ev_none is reached, measured at authoring; its remedy text is not.)
+    if m="$(mkmut wv957-ev-none-remedy he 'run it and record the invocation and counts${4:-}"' "run it and record the invocation and counts; or, when the story at the base carries a '## Canonical-run waivers' entry, write '\$1 none, <AC-id> waives it'\"")" && [ -n "$m" ]; then
+      got="$(wv_rmd "$m")"
+      if [ "$got" = 1:0 ]; then mutant_killed "${B_wvr:-0}" wv957-ev-none-remedy "MUTATION 'wv957-ev-none-remedy' killed by dsna: the waiver remedy in ev_none's shared text reaches the dependency-setup refusal"
+      elif [ "$got" = 1:1 ]; then bad "MUTATION 'wv957-ev-none-remedy' SURVIVED -- the waiver remedy in ev_none's shared text"
+      else bad "MUTATION 'wv957-ev-none-remedy' moved [$got], want [1:0]"; fi
+    else bad "FIXTURE ERROR: waiver mutation 'wv957-ev-none-remedy' matched nothing"; fi
+  fi
+  # --- end BL-957 ---------------------------------------------------------------------------------------
 fi
 
 # --- B3: the gate-2 handoff preflight is wired -----------------------------------------------------

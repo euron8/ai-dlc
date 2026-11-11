@@ -256,6 +256,12 @@ The simulation of a request kind runs and its response is recorded before the fi
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: an AC passed against a test double that dropped a request field the real external system rejects, and a signed request first sent to a new chain failed in production for a precondition no AC had observed. False-positive cost: one `live_ops` AC per named double and one per request kind, each a read-only observation the story would otherwise run by hand after deploy. Removal condition: retire once the gate-3 adjudicator diffs every double's request against the request the code sends and records the real target's response to it.
 
+**A canonical run the requirement makes unmakeable is waived at planning.**
+A story whose own requirement leaves no canonical full collection to run carries a `## Canonical-run waivers` section from planning, one line per waiving AC: `- **<AC-id>** waives the canonical run: <reason>`.
+Write it before §4 stamps story provenance: `stamp-story-provenance.sh` hashes the story body, and an entry written once implementation starts is not in the story at the base the gates read it at.
+The dev then writes `Full-collection run: none, <AC-id> waives it` and QA `Canonical run: none, <AC-id> waives it`; `record-only-diff.sh waiver` accepts either only when the story at that base carries the entry.
+The section is never `## Deferred ACs`, which belongs to the closer and to `deploy-validate.md` §4b.
+
 **Intensity gate for carry-over-single.** When
 `validation_intensity == carry-over-single`, skip `/bmad-create-epics-and-stories`
 and create stories directly from carry-over items. The carry-over-evaluation

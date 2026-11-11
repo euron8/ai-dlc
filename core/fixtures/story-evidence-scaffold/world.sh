@@ -287,6 +287,51 @@ EOS
     # -- accepted. Driven by run.sh's POINTER arm, not CASES.
     fcsee) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: see `pytest -q` from the root, 1 passed"); print }' || return 2 ;;
     fcseenm) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest -q` from the root, see the log, 1 passed"); print }' || return 2 ;;
+    # BL-957, driven by run.sh's WAIVER block (its own positional list WV_WORLDS), never by CASES or FC_WORLDS.
+    # Every one is over a range touching tests/test_x.py, so the record-only exemption refuses any no-run claim
+    # that reaches it. wv957cobt / cobare / codollar: a collect-only invocation backticked, bare and after `$ `
+    # (`--co` in the last) -- each a no-run claim. wv957codar: collect-only citing the full-collection capture with
+    # `counts: capture-heads block` (run.sh pastes the fresh block, whose count is the capture's `1 passed`) -- a
+    # no-run claim the count route must not acquit. wv957cov / wv957color: `--cov=` and `--color=` stay runs.
+    # wv957wvbase: `none, AC3 waives it`, the entry committed at .B (a commit of its own before the range) --
+    # accepted. wv957wvrange: the same entry added only inside the range (.B is the base before it) -- refused.
+    # wv957wvtree: the story path is a TREE at .B and the waived story at <frozen> -- the waiver is UNEVALUABLE
+    # (exit 2), refused. Each collect-only form below has a backticked span that is NOT the invocation, so
+    # rf_span reads `backend/` and only another run arm's text carries the token; each world is caught by ONE
+    # of record-only-diff.sh ro_no_test's three texts alone. wv957codir: a bare invocation with a backticked
+    # working directory (the opening text). wv957codollardir: `$ ` opening the value, directory backticked
+    # after it (the opening text, and the `$ ` text). wv957codollarmid: a `$ ` command after a non-runner span
+    # (the `$ ` text only). wv957cospan: the invocation backticked after a non-runner span (rf_span only).
+    # wv957rundir: a bare real run with a backticked directory and NO count, a run by the opening-command arm
+    # alone -- accepted. wv957cocomma / wv957cosemi: the token followed by `,` and by `;` (the boundary is any
+    # character outside [A-Za-z0-9_-]) -- refused. wv957covcomma: `--cov,` the same way, a run -- accepted.
+    # wv957coalias: `--collectonly`, pytest's third spelling of the one option, with its count -- refused.
+    wv957coalias) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --collectonly -q` 12 tests collected"); print }' || return 2 ;;
+    wv957cocomma) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --collect-only, working directory `backend/`"); print }' || return 2 ;;
+    wv957cosemi) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --co; in `backend/`"); print }' || return 2 ;;
+    wv957covcomma) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --cov, working directory `backend/`"); print }' || return 2 ;;
+    wv957codir) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --collect-only -q, working directory `backend/`"); print }' || return 2 ;;
+    wv957codollardir) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: $ pytest --co -q (in `backend/`)"); print }' || return 2 ;;
+    wv957codollarmid) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: in `backend/`: $ pytest --co -q"); print }' || return 2 ;;
+    wv957cospan) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: in `backend/`: `pytest --co -q`"); print }' || return 2 ;;
+    wv957rundir) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest -q, working directory `backend/`"); print }' || return 2 ;;
+    wv957cobt) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --collect-only -q` from the root, 12 tests collected"); print }' || return 2 ;;
+    wv957cobare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: pytest --collect-only -q from the worktree root, 12 tests collected"); print }' || return 2 ;;
+    wv957codollar) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: $ pytest --co -q"); print }' || return 2 ;;
+    wv957codar) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --collect-only -q`, capture `test-results/full.txt`, counts: capture-heads block"); print }' || return 2 ;;
+    wv957cov) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --cov=src -q` from the root, 1 passed"); print }' || return 2 ;;
+    wv957color) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: `pytest --color=yes -q` from the root, 1 passed"); print }' || return 2 ;;
+    wv957wvbase|wv957wvrange|wv957wvtree)
+           if [ "$v" = wv957wvtree ]; then
+             gitw "$w" rm -q "$STORY" && mkdir -p "$w/$STORY" && printf 'x\n' > "$w/$STORY/x.md" || return 2
+             gitw "$w" add -A && gitw "$w" commit -qm tree || return 2
+             wvb="$(gitw "$w" rev-parse HEAD)"
+             gitw "$w" rm -rq "$STORY" && mkdir -p "$w/${STORY%/*}" && gitw "$w" show "$wk:$STORY" > "$w/$STORY" || return 2
+           fi
+           [ "$v" = wv957wvtree ] || printf '\n## Canonical-run waivers\n\n- **AC3** waives the canonical run: the run needs the production signer\n- **AC1x2** waives the canonical run: the same signer\n' >> "$w/$STORY"
+           if [ "$v" = wv957wvbase ]; then gitw "$w" add -A && gitw "$w" commit -qm waiver || return 2; wvb="$(gitw "$w" rev-parse HEAD)"; fi
+           story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none, AC3 waives it"); print }' || return 2
+           printf 'class TestA:\n    def test_new(self):\n        assert 3 == 3\n' > "$w/tests/test_x.py" ;;
     fcbare) story_awk "$w" '{ sub(/^Full-collection run: .*$/, "Full-collection run: none"); print }' || return 2 ;;
     fcgone) story_awk "$w" '/^Full-collection run: /{next} {print}' || return 2 ;;
     dsgone) story_awk "$w" '/^Dependency setup: /{next} {print}' || return 2 ;;
@@ -385,6 +430,8 @@ EOS
   # fcbare too: over the story-only work..frozen diff the bare none is refused for its missing reason
   # alone, never for a code-touching range.
   case "$v" in fcrec|fccode|fcbare|fcevil) printf '%s\n' "$wk" > "$w/.B" ;; esac
+  # BL-957: the waiver worlds' base is the commit their builder named (the entry's, or the tree's).
+  case "$v" in wv957wvbase|wv957wvtree) printf '%s\n' "$wvb" > "$w/.B" ;; esac
   if [ "$v" = diskold ] || [ "$v" = disknew ]; then
     mkdir -p "$w/.claude/team-roles" || return 2
     if [ "$v" = disknew ]; then printf '# Dev\n\nOpen the record with a column-0 `Full-collection run:` line.\n' > "$w/.claude/team-roles/dev.md"

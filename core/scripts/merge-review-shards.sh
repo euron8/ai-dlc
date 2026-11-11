@@ -227,9 +227,25 @@
 #   seat passes <f> as story-base's third operand, so a story that is no file at <b> or at <f> (a typo,
 #   a directory, a path inside .git/) is UNEVALUABLE and REFUSED rather than read as absent. A
 #   claimed exemption with no --story or no range is REFUSED; a bare `none` is REFUSED.
+#   THE WAIVER. After every STORY-BIND check below and before `paths`, `record-only-diff.sh waiver <story> <base>
+#   <value>` decides `none, <AC-id> waives it`: exit 0 (the story AT <base>, never at <frozen>, carries
+#   `- **<AC-id>** waives the canonical run` under `## Canonical-run waivers`) accepts with no result line, 1 falls
+#   through to `paths`, any other exit REFUSES. It is honoured only over a LEAD-WRITTEN base: the merge's base when the
+#   lead's partition record named it, or --lead-range over a recorded dispatch. Under a seat's --range, an unrecorded
+#   --lead-range or an unrecorded merge, a value the test reads WAIVED is REFUSED naming --record-dispatch (serial) or
+#   --record-partition (merge).
 #   `--story` must be the story file sprint-status lists at the frozen sha, and its basename must
 #   carry the review's index (`story-<idx>.md`, or `story-<idx>-<slug>.md` whose slug does not open
-#   with a digit, so index `1` never names `story-1-2-y.md`), else STORY-BIND REFUSES. The review's
+#   with a digit, so index `1` never names `story-1-2-y.md`) OR the view's row naming it at the frozen
+#   sha must be keyed under that index (THE ROW STEM RULE, BL-956: the key with the REVIEW's sprint
+#   stripped from the slot after `story-` only, sprint-status.sh stem-names, is `story-<idx>`, so
+#   `6-qa-validation.md` binds `story-1-6-<slug>.md` under row `story-<N>-6`, and `story-3-3` in sprint 3
+#   names index 3), else STORY-BIND REFUSES. The one-story and history checks below count an entry under
+#   the index by the same two rules (stem_rows); and on the no-run exemption claim, when --story binds by
+#   the row alone, the history check holds --story's pairs to the index from --base to frozen (every row a
+#   version of the view in that window pairs with --story's basename must be keyed under the index), so a
+#   range that re-keys the view cannot bind another story's file, and read its waiver, under this index,
+#   while a re-key the lead made in planning, before --base, binds. The review's
 #   <idx> is `-`-joined components, each digits with at most one trailing lower-case letter (`1-1`,
 #   `2-3a`), so a review named for a slug (`1-1-z-qa-validation.md`) carries no index; or a letter-led index (`B1`,
 #   `B-1`, `DASH`), any text with no `/`, `.` or whitespace, bound the same way: the index is compared with --story's
@@ -842,6 +858,12 @@ sr_qa_at() {
 # is ignored for the same reason: in the consumer layout it is what locates .claude/schemas/, so a seat-set root would
 # choose the schema; without it sprint-status.sh walks up from its own install path.
 ss_bound() { ( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$cg_ss_" && ss_main "$@" ); }
+# stem_rows <entry keys, one per line>: THE ROW STEM RULE (BL-956), the one helper every STORY-BIND site that binds a
+# view row by its KEY calls, each after the literal story_idx_ok rule. Prints, one per line, each key whose
+# sprint-stripped stem is `story-<cg_i_>` under the REVIEW's sprint cg_n_ (never the view's), as sprint-status.sh
+# stem-names decides it, so no second key grammar exists here; non-zero when that gives no answer.
+# A caller tests a key's membership in the printed set as a literal string.
+stem_rows() { [ -n "$1" ] || return 0; ss_bound stem-names --sprint "$cg_n_" --keys "$1" "$cg_i_" < /dev/null; }
 
 # pr_record <qa shard-dir>: `--record-partition`, written through the lead-record helpers above (the one copy of the
 # record's path and format). Run by the lead right after the gate-2 partition writes the shard
@@ -1073,7 +1095,7 @@ run_bind() {
 }
 
 canon_gate() {
-  cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"; cg_i_="${7:-}"; cg_n_="${8:-}"
+  cg_f_="$1"; cg_o_="$2"; cg_r_="$3"; cg_b_="$4"; cg_z_="$5"; cg_c_="${6:-}"; cg_i_="${7:-}"; cg_n_="${8:-}"; cg_lw_="${9:-}"
   [ "$WORST" = PASS ] || return 0
   [ -f "$RO" ] || refuse_to lead "record-only-diff.sh is not beside this script at $AI_DLC_SELF_DIR; the canonical-run check reads its grammar there"
   cg_run_="$(mrs_sib "$RO" ro_main label 'Canonical run:' < "$cg_f_")" \
@@ -1084,7 +1106,7 @@ canon_gate() {
     cg_x_=1
     mrs_sib "$RO" ro_main none-reason "$cg_run_" 2>/dev/null; cg_nr_=$?
     [ "$cg_nr_" -ne 1 ] \
-      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' gives no reason; write 'none, <reason>' (accepted only on a record-only diff) or the run itself"
+      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' gives no reason; write 'none, <reason>' (accepted only on a record-only diff), 'none, <AC-id> waives it' (accepted only when the story at a lead-written base carries that AC's '## Canonical-run waivers' entry) or the run itself"
     [ -n "$STORY_F" ] && [ -n "$cg_b_" ] && [ -n "$cg_z_" ] \
       || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count), so it claims the record-only exemption, and no --story and --range were given to decide it; re-run with --story <story file> --range <base> <frozen>, or record the run"
   fi
@@ -1099,17 +1121,23 @@ canon_gate() {
       || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption and its path carries no sprint (docs/reviews/s<N>/, the slot qa.md names); write the review at the path qa.md names"
     cg_sr_="$(ME=record-only-diff mrs_sib "$RO" ro_story_rel "$cg_r_" "$STORY_F" 2>&1)" \
       || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption and --story $STORY_F is not a path inside the repository ($cg_sr_); pass the story file"
-    story_idx_ok "${cg_sr_##*/}" "$cg_i_" \
-      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and --story $STORY_F is not story-$cg_i_.md or story-$cg_i_-*.md, or its slug opens with a digit (a longer index); pass the story file the review is for"
     cg_ss_="$AI_DLC_SELF_DIR/sprint-status.sh"
     [ -f "$cg_ss_" ] \
       || refuse_to "$cg_o_" "STORY-BIND: sprint-status.sh is not beside this script at $AI_DLC_SELF_DIR; the record-only exemption binds --story to its sprint-status row there"
     cg_row_="$(ss_bound story-status --ref "$cg_z_" --root "$cg_r_" "$cg_sr_" 2>&1 < /dev/null)"
+    # THE INDEX (BL-956): --story carries the review's index literally, else the view's row naming --story at <frozen>
+    # (the row read below) is keyed under that index (stem_rows), so `6-qa-validation.md` binds story-1-6-<slug>.md
+    # when row story-<N>-6 names it. The row is not required at <base>.
+    if ! story_idx_ok "${cg_sr_##*/}" "$cg_i_"; then
+      cg_rk_="$(awk -F'\t' '$1 == "row" { n++; s = $2; k = $3 } END { if (n == 1 && s != "") { sub(/ \(.*$/, "", k); print k } }' <<<"$cg_row_")"
+      { [ -n "$cg_rk_" ] && cg_sk_="$(stem_rows "$cg_rk_")" && [ "$cg_sk_" = "$cg_rk_" ]; } \
+        || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and --story $STORY_F is not story-$cg_i_.md or story-$cg_i_-*.md, or its slug opens with a digit (a longer index); pass the story file the review is for"
+    fi
     # Keyed on the `row` line naming an entry with a status, never on the exit: story-status exits 0
     # on a path no entry names.
     cg_rw_="$(awk -F'\t' '$1 == "row" { n++; s = $2; w = $3 } END { if (n == 1 && s != "") print "ok"; else if (n == 1) print w; else print "story-status printed " n + 0 " row line(s)" }' <<<"$cg_row_")"
     [ "$cg_rw_" = ok ] \
-      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption, and --story $cg_sr_ is not a story the implementation view lists at $cg_z_ (${cg_rw_:-$cg_row_}); pass the story file sprint-status lists at the frozen sha"
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption, and --story $cg_sr_ is not a story the implementation view lists at $cg_z_ (${cg_rw_:-$cg_row_}); pass the lead's own story file for this review (implementation.md, the lead re-runs a serial QA's check), which the view must list at $cg_z_ under a row keyed for index $cg_i_; on the no-run exemption claim STORY-BIND also holds --story's pairs to the index from --base to frozen, because inside the range the view is a record the dev writes, so a row moved there is no authority"
     STORY_F="$cg_sr_"
   fi
   if [ "$cg_x_" = 1 ]; then
@@ -1128,29 +1156,86 @@ canon_gate() {
     for cg_ref_ in "$cg_b_" "$cg_z_"; do
       cg_ls_="$(ss_bound list-stories --ref "$cg_ref_" --root "$cg_r_" 2>&1 < /dev/null)" \
         || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view gives no answer at $cg_ref_ (${cg_ls_##*$'\n'}), so the stories under that index are unknown; the exemption is decided only over a range whose view lists the sprint's stories at both ends"
+      # THE ROW STEM RULE (BL-956): the keys of the entries naming a file that is not --story, asked of stem_rows once
+      # per ref; an entry under one of them counts for the index as a literal basename does. An entry naming NO file
+      # (no declared and no resolved file) is not a candidate: at a base before --story existed, --story's own key-only
+      # row resolves to nothing, and counting it would refuse a story that bound before BL-956 (receipt-bl956.sh
+      # lit-keyonly). Such a row names no other story, so the literal rule never counted it either.
+      cg_ok_=""
+      while IFS=$'\t' read -r cg_ck_ cg_cs_ cg_cd_ cg_cp_; do
+        [ -n "$cg_ck_" ] && [ "$cg_cp_" != "$STORY_F" ] && [ "${cg_cd_##*/}" != "${STORY_F##*/}" ] && { [ "$cg_cp_" != - ] || [ "$cg_cd_" != - ]; } \
+          && cg_ok_="$cg_ok_$cg_ck_"$'\n'
+      done <<<"$cg_ls_"
+      cg_sk_="$(stem_rows "$cg_ok_" 2>&1)" \
+        || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view's keys at $cg_ref_ cannot be read under that index (${cg_sk_##*$'\n'}); the exemption is decided only where every entry's index is known"
       while IFS=$'\t' read -r cg_k_ cg_s_ cg_d_ cg_p_; do
         { [ "${cg_d_##*/}" != "${STORY_F##*/}" ] && story_idx_ok "${cg_d_##*/}" "$cg_i_"; } \
-          || { [ "$cg_p_" != "$STORY_F" ] && story_idx_ok "${cg_p_##*/}" "$cg_i_"; } || continue
+          || { [ "$cg_p_" != "$STORY_F" ] && story_idx_ok "${cg_p_##*/}" "$cg_i_"; } \
+          || { [ "$cg_p_" != "$STORY_F" ] && [ "${cg_d_##*/}" != "${STORY_F##*/}" ] && [ -n "$cg_k_" ] && case $'\n'"$cg_sk_"$'\n' in *$'\n'"$cg_k_"$'\n'*) : ;; *) false ;; esac; } || continue
         refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and --story $STORY_F is not the only story under that index: the implementation view's entry $cg_k_ (status $cg_s_, file $cg_d_) names another story under it at $cg_ref_; pass the story the view listed for this index before the range, and decide the exemption over it"
       done <<<"$cg_ls_"
     done
     # STORY-BIND, THE VIEW'S HISTORY (header: THE EXEMPTION): every `file:` value a commit of the implementation view added
     # or removed, from the commit that created --story's directory to <frozen> (`sprint-status.sh view-history`, which
     # owns the view's path and grammar), under the index, in this sprint and not --story, refuses; no `since` line refuses.
-    cg_vh_="$(ss_bound view-history --ref "$cg_z_" --base "$cg_b_" --sprint "$cg_n_" --root "$cg_r_" "$STORY_F" 2>&1 < /dev/null)" \
+    # A value is under the index by its literal basename or, BL-956, by the key of the row that named it (stem_rows over
+    # the keys of `view-history --with-key`); --story's own pairs are held to the index from --base to frozen (THE RE-KEY, below).
+    cg_vh_="$(ss_bound view-history --with-key --ref "$cg_z_" --base "$cg_b_" --sprint "$cg_n_" --root "$cg_r_" "$STORY_F" 2>&1 < /dev/null)" \
       && [ "${cg_vh_%%$'\t'*}" = since ] \
       || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view's history up to $cg_z_ is unknown (${cg_vh_##*$'\n'}); the exemption is decided only where that history can be read"
     cg_bd_="${cg_vh_%%$'\n'*}"; cg_bd_="${cg_bd_#since$'\t'}"
-    while IFS=$'\t' read -r cg_k_ cg_d_; do
-      [ "$cg_k_" = file ] && [ "${cg_d_##*/}" != "${STORY_F##*/}" ] && story_idx_ok "${cg_d_##*/}" "$cg_i_" || continue
+    cg_ok_=""
+    while IFS=$'\t' read -r cg_k_ cg_hk_ cg_d_; do
+      { [ "$cg_k_" = file ] || [ "$cg_k_" = window ]; } && [ -n "$cg_hk_" ] && cg_ok_="$cg_ok_$cg_hk_"$'\n'
+    done <<<"${cg_vh_}"
+    cg_sk_="$(stem_rows "$cg_ok_" 2>&1)" \
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view's history keys up to $cg_z_ cannot be read under that index (${cg_sk_##*$'\n'}); the exemption is decided only where every entry's index is known"
+    while IFS=$'\t' read -r cg_k_ cg_hk_ cg_d_; do
+      [ "$cg_k_" = file ] || [ "$cg_k_" = window ] || continue
+      # THE RE-KEY (BL-956): --story's own file, when --story does not carry the index literally, binds only by its row,
+      # so every row a version of the view from --base to <frozen> pairs with its basename (the `window` lines) must be
+      # keyed under the index: a range that moves another story's file onto this index's key (the row it had at <base>
+      # keyed elsewhere, or absent) binds that story, whose waiver is then read. Neither the literal rule nor the key's
+      # stem naming <idx> is a key under ANOTHER index. A version BEFORE --base is the lead's planning, not the range's,
+      # so a story the lead re-keyed there binds; the other stories' values stay the `file` lines, from the creation.
+      cg_rx_=""
+      if [ "${cg_d_##*/}" = "${STORY_F##*/}" ]; then
+        [ "$cg_k_" = window ] || continue
+        story_idx_ok "${cg_d_##*/}" "$cg_i_" && continue
+        [ -n "$cg_hk_" ] && case $'\n'"$cg_sk_"$'\n' in *$'\n'"$cg_hk_"$'\n'*) continue ;; esac
+        cg_rx_=rekey
+      else
+        [ "$cg_k_" = file ] || continue
+      fi
+      [ -n "$cg_rx_" ] || story_idx_ok "${cg_d_##*/}" "$cg_i_" \
+        || { [ -n "$cg_hk_" ] && case $'\n'"$cg_sk_"$'\n' in *$'\n'"$cg_hk_"$'\n'*) : ;; *) false ;; esac; } || continue
       # This sprint only: the declared directory, its leading ../ and ./ stripped, is a component suffix of --story's.
       cg_dd_="${cg_d_%/*}"; [ "$cg_dd_" != "$cg_d_" ] || cg_dd_=""
       while :; do case "$cg_dd_" in ../*) cg_dd_="${cg_dd_#../}" ;; ./*) cg_dd_="${cg_dd_#./}" ;; *) break ;; esac; done
       case "/${STORY_F%/*}" in "/$cg_dd_" | *"/$cg_dd_") : ;; *) [ -z "$cg_dd_" ] || continue ;; esac
+      [ -z "$cg_rx_" ] \
+        || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view keyed --story's file $cg_d_ under row ${cg_hk_:-<none>}, not under that index, in a version of the view between --base $cg_b_ and $cg_z_: --story binds this index only by its row, and the no-run exemption claim holds --story's pairs to the index from --base to frozen; pass the lead's own story file for this review"
       refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view named $cg_d_ under that index between ${cg_bd_:0:12} (where ${STORY_F%/*} was created) and $cg_z_; pass the story the view listed for this index, and decide the exemption over it"
     done <<<"$cg_vh_"
+    # THE WAIVER (record-only-diff.sh WAIVER): `none, <AC-id> waives it`, read against the story AT THE BASE, never at
+    # <frozen>: the story is a record path inside the range, so an entry added there is the judged party's own. 0 accepts,
+    # 1 falls through to the record-only exemption below, any other exit refuses. Honoured only over a LEAD-WRITTEN base
+    # (cg_lw_ = lead: the merge's .manifest base cross-checked against the lead's partition record, or --lead-range
+    # over a recorded dispatch); a seat-supplied base cannot choose the story text that waives its own run.
+    cg_wv_="$(mrs_sib "$RO" ro_main waiver -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_run_" 2>&1)" && cg_wr_=0 || cg_wr_=$?
+    case "$cg_wr_" in
+      0)
+        if [ "$cg_lw_" != lead ]; then
+          if [ "$cg_o_" = serial ]; then cg_wm_="record the story's dispatch with 'merge-review-shards.sh --record-dispatch s<N>-<idx> <dispatch sha>' from the lead checkout and re-run with --lead-range, so the base is the lead's"
+          else cg_wm_="record the partition with 'merge-review-shards.sh --record-partition <shard-dir>' from the lead checkout at the gate-2 partition, so the base is the lead's"; fi
+          refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' claims a canonical-run waiver (${cg_wv_}), and the base $cg_b_ it is read at was not written by the lead; a waiver is honoured only over a lead-written base: $cg_wm_"
+        fi
+        return 0 ;;
+      1) : ;;
+      *) refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_': the canonical-run waiver test could not decide over $STORY_F at $cg_b_ (exit $cg_wr_: ${cg_wv_}); repair the story or the range and check again" ;;
+    esac
     cg_ro_="$(mrs_sib "$RO" ro_main paths -C "$cg_r_" "$STORY_F" "$cg_b_" "$cg_z_" 2>&1)" \
-      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' claims the record-only exemption, and $cg_b_..$cg_z_ is not record-only for $STORY_F (${cg_ro_}); run the canonical full collection and record it"
+      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' claims the record-only exemption, and $cg_b_..$cg_z_ is not record-only for $STORY_F (${cg_ro_}); run the canonical full collection and record it, or waive it from planning: a '- **<AC-id>** waives the canonical run: <reason>' entry under '## Canonical-run waivers' in the story at the base, claimed as 'Canonical run: none, <AC-id> waives it'"
     return 0
   fi
   cg_rf_="$(mrs_sib "$RO" ro_main run-filter "$cg_run_" ${cg_c_:+"$cg_c_"})" \
@@ -2037,7 +2122,9 @@ if [ -n "$SERIAL" ]; then
       RB_SHA="$sr_f_"; [ -n "$RB_SHA" ] || [ -z "$sr_repo_" ] || RB_SHA="$(git --no-replace-objects -C "$sr_repo_" rev-parse -q --verify HEAD 2> /dev/null < /dev/null)" || RB_SHA=""
       RB_REPO="$sr_repo_"; RB_NAME=""; [ -z "$sr_n_" ] || [ -z "$sr_idx_" ] || RB_NAME="s$sr_n_-$sr_idx_"
       RB_KEY="run.$(basename "$SERIAL")"; RB_WT="$sr_repo_"; RB_ARG="$SERIAL"; RB_FZ="${sr_f_:-<the full go-signal sha>}"
-      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_" "$sr_idx_" "$sr_n_"
+      # THE WAIVER's base (canon_gate): lead-written only under --lead-range over a recorded dispatch.
+      sr_lw_=seat; if [ "$LEAD" = 1 ] && [ "${sr_rec_:-0}" = 1 ]; then sr_lw_=lead; fi
+      canon_gate "$SERIAL" serial "$sr_repo_" "$R_BASE" "$R_FROZEN" "$sr_conv_" "$sr_idx_" "$sr_n_" "$sr_lw_"
     else
       printf 'LEGACY: canonical-run lines not checked: %s prescribes no %s label\n' "$sr_leg_" "$CANON_SENTINEL"
     fi
@@ -2340,7 +2427,9 @@ if [ "$GATE" = qa ]; then
       [ "$RB_ERA" != none ] || { RB_ERA=legacy; RB_AT="$M_WT (no qa.md at the base $M_BASE or on disk)"; }
     fi
     RB_REPO="$SDIR"; RB_NAME="s$pr_n_-$IDX"; RB_KEY="run.$SB"; RB_SHA="$M_SHA"; RB_WT="$M_WT"; RB_ARG="$SDIR_IN"; RB_FZ=""
-    canon_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$M_WT" "$M_BASE" "$M_SHA" "$cr_conv_" "$IDX" "$cr_n_"
+    # THE WAIVER's base (canon_gate): lead-written only when the lead's partition record named it (THE PARTITION RECORD).
+    cr_lw_=seat; [ -z "$PR_ERA" ] || cr_lw_=lead
+    canon_gate "$(awk -F'\t' -v k="$CROSS_FIRST" '$1 == k { print $2; exit }' "$T/shards")" "$CROSS_FIRST" "$M_WT" "$M_BASE" "$M_SHA" "$cr_conv_" "$IDX" "$cr_n_" "$cr_lw_"
   fi
   CG_NOTE=""
 fi
