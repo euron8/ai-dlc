@@ -19,6 +19,60 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1062.0] - 2026-11-11
+
+### BL-963 closed: `snapshot-update.sh --line-add 'In-Flight Teammates'` applies the status-cell vocabulary
+
+`--line-add 'In-Flight Teammates' <text>` wrote a free-text status cell with rc 0, while `--row-status`, `--row-set <agent> status`, `--row-replace`, `--row-add` and (since BL-953) `--line-replace` refused it with rc 2. The `--line-add` branch now runs BL-953's `ifstatus_chk(B, 0)` on the added line when its section is In-Flight Teammates: a row whose status cell is outside `in-flight`, `delivered-reachable`, `stopped` is exit 2 with the value named and the file unchanged. `tgt` 0 means no header line is being replaced, so a header line-added into a section with no header is still written (the hd=0 early return, the HDRREMEDY path). A second header line-added beside the one present reads as a row whose status cell is `status` and is refused. A `---` rule is not judged. The usage text and the `ifstatus_chk` comment say so.
+
+The receipt is `core/fixtures/snapshot-update-stamps`: cells IFADDREFUSE (free text and `done` refused, value named, file unchanged), IFADDWRITE (a member-status row and a `---` rule written) and IFADDDUPHDR (a duplicate header refused), and mutant m-noifadd, which replaces `ifstatus_chk(B, 0)` and is scored on IFADDREFUSE with twin IFADDWRITE; the fixture asserts its anchor occurs exactly once, beside the one `ifstatus_chk(C, h)` anchor m-noifguard uses. The backlog receipt gains two allow twins (a member-status row, and the header into a header-less section, both rc 0 with the file changed) plus the duplicate-header refusal, so a refuse-everything fix no longer passes it. `invocations.decl` is re-measured from two counted runs with identical counts: `*` 409 to 424, `core/scripts/snapshot-update.sh` 67 to 72, `core/scripts/validate-artifact-budget.sh` 36 to 38.
+
+Consumer cost: a writer that puts a free-text In-Flight status through `--line-add` now gets rc 2 and must write a member status. A `--line-add` outside In-Flight Teammates is unchanged. False-positive set, read only over the reference consumer's session transcripts (6176 `.jsonl` files): 2 distinct `--line-add "In-Flight Teammates"` calls, both writing status `in-flight`, so 0 would have been refused. The engine and the fixture both ship.
+
+### BL-964 closed: escalation-citation's kill floor counts the floor battery's 7 kills inside its non-SKIP branch, and a distribution run holds KILLS equal to KILL_FLOOR
+
+`core/fixtures/escalation-citation/run.sh` counted the citation-floor battery's 7 kills in the unconditional `KILL_FLOOR` constant, so a consumer run that took the floor SKIP could reach at most 18 or 36 kills against a floor of 25 or 43 and KILL-COUNT FAILed instead of skipping. `KF_EXTRA=$((KF_EXTRA + 7))` is now the first line inside the floor section's `else`, and the constant is `KILL_FLOOR=$((18 + KF_EXTRA))`. The 18 was re-derived at cb6e0ab80 as the `KILLS=$((KILLS + 1))` sites before `EN_SRC_DIR=`, against 22 in the whole file. The comment above the constant counts 18 always-run kills plus the 3, 6 and 7 of the sections that ran.
+
+New arm KILL-FLOOR-EQ runs when `EN_IS_DIST` is 1, where no section SKIPs, and requires KILLS to equal KILL_FLOOR (43 = 43) rather than reach it. It kills a floor increment that the constant overwrites, which the `>=` KILL-COUNT cannot: the silent spelling `KILL_FLOOR=$((${KILL_FLOOR:-0} + 7))` in the branch drops the floor to 36, passes KILL-COUNT, and is killed by KILL-FLOOR-EQ alone. The literal `KILL_FLOOR=$((KILL_FLOOR + 7))` never reaches either arm; it dies at once under `set -u` as an unbound variable. The backlog receipt now counts only `KF_EXTRA` increments, so it rejects the in-branch `KILL_FLOOR` forms.
+
+Measured through `hermetic-run.sh` with a mktemp verdict store: PASS 158 of 158, 473 starts on two agreeing runs, so `invocations.decl` is unchanged. The forced-SKIP arithmetic was driven on a scratch copy: citation-floor SKIP only, 36 = 36 on the fix and 36 < 43 on the old arithmetic; all four SKIPs, 18 = 18 against 18 < 25. That was not a consumer layout; no consumer run has been taken.
+
+Consumer cost: none beyond a fixture-only pull.
+
+### BL-965 closed: `env` is declared in the three fixtures that call it, and each asserts its scrub actually ran
+
+Under `hermetic-run.sh` an undeclared `env` was command-not-found, so the `env | sed` scrub of inherited `AI_DLC_*` variables in `adversarial-citation` unset nothing, and `fixture-git-env-seam`'s unarmed U twin cells never ran their inner fixture, yet each read INTACT.
+
+- `adversarial-citation`: `tools.decl` gains `env`. `run.sh:38` exports `AI_DLC_SCRUB_PROBE=1` on the scrub line, and arm SCRUB-RAN fails unless the probe is unset afterwards. It is deliberately not keyed on `AI_DLC_PROJECT_ROOT`, which a plain run leaves unset and so passes vacuously. With `env` undeclared the fixture is rc 1, `FAIL SCRUB-RAN`; declared, `PASS: all 57`. `invocations.decl` stays 250.
+- `fixture-git-env-seam` (`.dist-only`): `tools.decl` gains `env`. `drive`'s unarmed branch reports the inner fixture's rc, `cell()` fails any U cell not at rc 0, and arm URC requires exactly 6 U cells at rc 0. Mutant u127 routes the runner to a name that resolves nowhere (rc 127 over an INTACT victim), and only URC kills it. `invocations.decl` 194 to 296: the six U cells run `trunk-push-bound` for the first time under the sandbox, 17 starts each. `--matrix` re-measured: m1, m3, m4 trip [A B], m2 [A], b2 [B], u127 [URC].
+- Third instance, found by re-censusing every `*.sh` under `core/fixtures` (443 files, 187 using `env` as a command word): `ledger-reverify/receipt-bl890.sh` and `receipt-bl932.sh` ran the same scrub with no `env` in `ledger-reverify/tools.decl`. `tools.decl` gains `env`; each receipt exports `AI_DLC_SCRUB_PROBE=1`, refuses (exit 9) if it survives, and prints a `SCRUB-RAN` line; `lr_unit_bl890` and `lr_unit_bl932` assert that line (`bl890-SCRUB-RAN`, `bl932-SCRUB-RAN`). With `env` undeclared: `FAIL: 4 of 369`; declared: `PASS: all 385`, `invocations.decl` stays 1004. The base defect is invisible in that fixture's own output, because each receipt's stderr is shown only on a non-zero exit, which is why the probe is needed.
+
+The backlog receipt reads every `*.sh` under each sandboxed fixture (one with an `inputs.decl`), not only `run.sh`, and joins each fixture that calls `env` to its `tools.decl`; `n` counts fixtures, 154 at release against a floor of 100. It fails on the pre-fix tree, naming `ledger-reverify`, where the `run.sh`-only form passed. It also gains a clause naming the seam's `tools.decl` (anchored on `mktemp`, then requiring `env`). The receipt proves only the declarations; SCRUB-RAN, URC and u127 carry the proof that the calls run.
+
+Consumer cost: `adversarial-citation` and `ledger-reverify` ship, so a fixture-only pull (`tools.decl`, `run.sh`, the two receipts); `fixture-git-env-seam` is `.dist-only` and reaches no consumer.
+
+### BL-967 closed: the refusal-carrier count (BIND3) moves to `finding-grammar-binding`, which declares all of `core/scripts/` and `core/hooks/`
+
+BIND3 in `remediator-shard-join` scanned the join's scripts dir and hooks dir, but that fixture's `inputs.decl` named individual files, so in the sandbox the count saw only the declared ones and a third carrier in any other script passed. `bd_carriers` and its battery (BINDm-third, BINDQ3, BINDQ4, BINDF, BINDF2) move to `core/fixtures/finding-grammar-binding/run.sh` (`.dist-only`). Its `inputs.decl` gains `!core/hooks/` and `core/fixtures/lib/mutant.sh` beside `!core/scripts/`, and its `tools.decl` gains `chmod` and `id`. `remediator-shard-join/unit-bind.sh` keeps BIND0-BIND2, their five mutants and BINDQ1.
+
+Each directory has its own committed floor, counted separately so a sandbox that drops one cannot pass on the size of the other: `FC_FLOOR=40` for scripts (reused) and `HK_FLOOR=15` for hooks (29 today; the largest file-by-file hooks declaration in any fixture is 6). BINDF3, BINDF4 and BINDF5 probe the two floors one property apart. BIND0, the unmutated probe tree, gates the BINDm-third kill through `mutant_killed`, with a MUTANT-MATRIX row and a `--matrix` mode. The shape was chosen on cost: declaring `core/scripts/` in `remediator-shard-join` would re-run it (363 s loaded) on 23 of 50 releases instead of 11, while `finding-grammar-binding` costs 3 s.
+
+Measured on `git archive` copies through `hermetic-run.sh`: the unseeded tree passes; one non-comment carrier in an undeclared `core/scripts/` file and one in `core/hooks/` exits 1, BIND3 naming both; a variant declaring the two hooks file by file exits 1 on the hooks floor. Seven hand mutants of `bd_carriers` each fail exactly the cell that owns them, against 0 failures unmutated. `invocations.decl`: `finding-grammar-binding` stays 1 start (the battery runs in process), `remediator-shard-join` stays 1247. The backlog receipt is rewritten to read `finding-grammar-binding`'s `inputs.decl` for both directories, and carries exit-9 anchors so pre-push R10 reads it as anchored.
+
+Consumer cost: `remediator-shard-join` ships, so removing the battery reaches a consumer as a fixture-only pull; `finding-grammar-binding` is `.dist-only`.
+
+### BL-976 (PARTIAL), follow-up: `--check-shard-dir` passes `--` to `basename` and `dirname`
+
+A whole argument beginning with `-` reached BSD `basename` and `dirname` as an option. `--check-shard-dir -x/planning-artifacts/s1/shards/arch-p1` answered REFUSED for the wrong reason with 165 bytes of `illegal option` on stderr, and `-n` also wrote 165 bytes. Every `basename` and `dirname` in `merge_place` and `merge_rec_paths` (`core/scripts/merge-adversarial-shards.sh`, 10 call sites on 9 lines) now takes `--`; the `-x/` dir answers OK and `-n` answers REFUSED on its placement alone, both with empty stderr.
+
+New arm CS-CSD in `core/fixtures/content-seal/merge-arms.sh` drives the merge CLI directly, because the dispatch guard's selector never hands it such a string. One run takes the `-x/` dir, `-n` and a plain dir and asserts each stdout line and an empty stderr. Mutant CSD drops every `--`; it is killed at `dashx` and `stderr`, and the plain-dir twin stays OK. A `shards/-n` cell would be vacuous (it already answers SKIP at the base) and is not used. `invocations.decl` 571 to 573, `merge-adversarial-shards.sh` 26 to 27.
+
+A consumer receives this in a pull but can see no effect. The entry stays PARTIAL; the `Outcome measured:` line is still owed. The adjacent `merge_locate` `cd "$SHARD_DIR"` site is recorded in the entry and not changed.
+
+### BL-974 PARTIAL, records only: the `--check-part` party-branch belt is censused and held back
+
+A belt that would run `seat_complete_check` in the `--check-part` party branch was false-positive censused on a `file://` clone of the reference consumer over 272 party-repair parts. It adds 0 refusals in five of six sprints. In the sixth, 53 of 68 parts go from exit 0 to exit 2, all via `seat_row_check`'s "no role-bound row" over 160 seats. The cause is a dating defect the shipping `--sources` and join already hit: the consumer's install commit added every seat of that sprint in the same commit as `SEAT_ROW_TOKEN`. No code changes. Recorded as owed, in order: the dating fix (a seat added in the install commit counts as legacy, compared by commit sha), then the belt, whose `SEAT-ROWS: SKIP` lines must be `NOTE:`-prefixed for `wait-for-deliverable.sh` to relay them. The entry stays PARTIAL.
+
 ## [0.1061.0] - 2026-11-11
 
 ### BL-841 PARTIAL: claim 1 measured, the idle share of ask-wait minutes did not fall (s320 96.9%, s321 93.7%, against a 5.0-point rule)

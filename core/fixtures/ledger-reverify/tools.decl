@@ -9,6 +9,7 @@ cp
 cut
 diff
 dirname
+env
 find
 git
 grep

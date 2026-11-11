@@ -1,3 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-194 *
+# Re-measured for BL-965 (194 -> 296, +102), two agreeing counted runs, the rise tallied by path from the counted start
+# logs against a counted base run (194): `env` is now declared, so the six unarmed U cells run trunk-push-bound for the
+# first time under hermetic-run.sh, 17 starts each (its run.sh 1, validate-audit-anchors.sh 9, its mutant copies
+# control 1, m1 2, m2 2, m3 1, m4 1). Mutant u127 adds none: its runner resolves nowhere and starts no bash.
+296 *
 3 scripts/validate-fixture-git-env.sh

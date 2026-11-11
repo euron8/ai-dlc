@@ -34,7 +34,10 @@
 #                                continuation lines
 #   --line-add <section> <text> [--bottom]
 #                                insert <text> verbatim as the first line of the section, or after
-#                                its last non-blank line with --bottom
+#                                its last non-blank line with --bottom. In In-Flight Teammates a
+#                                table row <text> must carry a member status cell, as --line-replace
+#                                requires; a --- rule and a header into a section with no header are
+#                                not judged, and a second header beside one is refused
 #   --line-replace <section> <match> <text>   replace the ONE matching line, and its continuation
 #                                lines when it is a wrapped bullet, with the one line <text>. In
 #                                In-Flight Teammates a table row <text> must carry a member status
@@ -432,8 +435,10 @@ while IFS="$US" read -r op a b c; do
     function posbullet_target(i) { return (SECT[i] ~ /^Pipeline Position/ || SECT[i] ~ /^Sprint Context/) && (hasbullet(L[i]) || hassp(L[i])) }
     function secflags(i) { OKP = (SECT[i] ~ /^Pipeline Position/); OKS = (SECT[i] ~ /^Sprint Context/) }
     function statuscell_ok(v) { return (v == "in-flight" || v == "delivered-reachable" || v == "stopped") }
-    # A free-text writer into In-Flight Teammates (--line-replace; a later fix may call it from --line-add)
-    # applies the status-cell vocabulary to a table row it writes. The header is the first line of the
+    # A free-text writer into In-Flight Teammates (--line-replace, and --line-add with tgt 0, since an
+    # added line replaces none) applies the status-cell vocabulary to a table row it writes. A header
+    # added to a section with no header is not judged (no hd yet); a second header added beside one
+    # is a row whose status cell reads `status`, so it is refused. The header is the first line of the
     # section naming dispatched-at, as the row ops find it; the status column is the header cell named
     # status. A text that is no table row, a rule (every cell a run of three or more dashes, optionally
     # colon-flanked), or ANY text replacing the header line itself (tgt is the replaced line) is not
@@ -540,6 +545,7 @@ while IFS="$US" read -r op a b c; do
         e = itemend(h); for (i = h; i <= e; i++) D[i] = 1
       } else if (op == "line-add") {
         guard(B, 0, 0); nokey(SECT[HS], B)
+        if (SECT[HS] ~ /^In-Flight Teammates/) ifstatus_chk(B, 0)
         insafter((C == "1") ? bottom() : HS, B)
       } else if (op == "line-replace") {
         h = oneline(A, B, "line-replace"); guard(C, 0, 0); nokey(SECT[HS], C)

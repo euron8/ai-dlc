@@ -34,8 +34,9 @@
 # MUTANT-MATRIX-CONTROL F-m1 why=the predicate floor is removed but the caller's normalised-length refusal fires first, so all six floor cells hold and survival is the pass
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-citation/run.sh --matrix
 set -u
-# Inherited AI_DLC_* tunables (e.g. AI_DLC_TRUNK) change what the seeded worlds and the validator resolve; scrub them so the run is the same under any caller environment.
-for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# Inherited AI_DLC_* tunables (e.g. AI_DLC_TRUNK) change what the seeded worlds and the validator resolve; scrub them so the run is the same under any caller environment. AI_DLC_SCRUB_PROBE is exported on the scrub line and arm SCRUB-RAN asserts it is gone after (BL-965): under hermetic-run.sh an undeclared `env` is command-not-found, the loop iterates zero times, and no other arm sees it.
+export AI_DLC_SCRUB_PROBE=1; for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+SCRUB_RAN=0; [ -z "${AI_DLC_SCRUB_PROBE+x}" ] && SCRUB_RAN=1
 unset CLAUDE_PROJECT_DIR
 MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
 MX_RAN=0
@@ -55,6 +56,9 @@ ROOT="$(bash "$DIR/seed.sh" "$(cd "$(dirname "$VALIDATOR")" && pwd)" | tail -1)"
 MEMO="$(mktemp -d)"
 trap 'rm -rf "$ROOT" "$MEMO"' EXIT
 FAIL=0; N=0
+N=$((N + 1))
+if [ "$SCRUB_RAN" = 1 ]; then printf '  ok   %-38s the AI_DLC_* scrub unset its probe variable\n' "SCRUB-RAN"
+else FAIL=$((FAIL + 1)); printf '  FAIL %-38s AI_DLC_SCRUB_PROBE survived the scrub -- env is unreachable and the scrub is a no-op\n' "SCRUB-RAN"; fi
 
 # One validator invocation per distinct (validator, argv). Several assertions below ask
 # DIFFERENT questions of the SAME run (exit code, stdout state, a stderr marker, a message

@@ -5,3 +5,8 @@
 # BB2 counts the fence-rule copies in EVERY core script against its enumeration, so a new copy in a new file fails:
 # the whole directory, or the sandbox holds only the files named above and the census narrows (its floor refuses that).
 !core/scripts/
+# BIND3 counts the join refusal phrases in EVERY core script and hook, so a third carrier in any of them fails:
+# the whole hooks directory too, or the sandbox holds no hook and the hooks floor refuses.
+!core/hooks/
+# BIND3 scores its mutant through the shared kill helper.
+core/fixtures/lib/mutant.sh

@@ -1,5 +1,7 @@
 # Measured by two agreeing armed runs through core/scripts/hermetic-run.sh (the judge's own output), the counter armed as
 # .githooks/pre-push fxcount_arm arms it. The three bound scripts are read as text by BB1 and BB2, never run.
+# Re-measured for BL-967 (BIND3 and its battery moved in) by two agreeing counted runs, 1 start both times, J5 joining
+# the one mutant name BINDm-third: the battery runs in process (awk over mktemp trees), so the budget does not move.
 1 *
 0 core/scripts/merge-adversarial-shards.sh
 0 core/scripts/join-remediator-shards.sh

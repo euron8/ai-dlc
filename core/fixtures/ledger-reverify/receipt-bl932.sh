@@ -46,7 +46,13 @@
 # 9 = the receipt could not run (no reconcile dir, a world could not be built, the engine exited
 # non-zero or printed no c0 row).
 set -uo pipefail
-for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# SCRUB-RAN (BL-965): AI_DLC_SCRUB_PROBE is exported on the scrub line and must be gone after it. Under
+# hermetic-run.sh an undeclared `env` is command-not-found, the loop iterates zero times and nothing is
+# unset, so the scrub is proved by its probe, never assumed: a survivor refuses (9), and success prints the
+# SCRUB-RAN line lr_unit_bl932 requires.
+export AI_DLC_SCRUB_PROBE=1; for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+[ -z "${AI_DLC_SCRUB_PROBE+x}" ] || { echo "REFUSED: SCRUB-RAN: AI_DLC_SCRUB_PROBE survived the AI_DLC_* scrub -- env is unreachable and the scrub is a no-op" >&2; exit 9; }
+echo "SCRUB-RAN the AI_DLC_* scrub unset its probe variable"
 [ "$#" -le 3 ] || { echo "REFUSED: usage: bash receipt-bl932.sh [<reconcile dir> [<cells> [<world cache>]]]" >&2; exit 9; }
 REC="${1:-}"; CELLS="${2:-}"; WCACHE="${3:-}"
 if [ -z "$REC" ]; then

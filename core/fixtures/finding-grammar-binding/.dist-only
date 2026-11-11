@@ -5,3 +5,6 @@ and BB2's census of every fence-rule copy across that directory against an enume
 the installed subset under scripts/ai-dlc/, so the same census there scans a different, smaller set and its
 floor and enumeration describe nothing the consumer owns -- a narrower check reading identically to a full one.
 The binding is a property of how this distribution writes its sources, which a consumer cannot edit.
+BIND3, moved here from remediator-shard-join (BL-967), is the same shape: it counts carriers of the join refusal
+phrases across the whole of core/scripts/ and core/hooks/ against committed floors, and a consumer holds a different,
+smaller set of both, so the count there describes nothing the consumer owns.
