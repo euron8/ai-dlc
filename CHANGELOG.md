@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1047.0] - 2026-11-11
+
+### BL-951 closed: core-paths.sh --audit-diff lists a renamed-out core path by its old name and a non-ASCII core path as raw bytes, and fails closed on a path git still quotes
+
+`core/scripts/core-paths.sh --audit-diff` built its changed set with rename detection on and `core.quotePath` at its default. A commit that renamed a core path out of core listed only the new path, and a core path carrying a non-ASCII byte was printed C-quoted, so neither reached the core-glob match and the run printed `PASS: no core path touched` with exit 0. Both subjects are closed in this release (the entry closes only when both do):
+- `CHANGED` is now built with `-c core.quotePath=false` and `--no-renames`, so a rename lists both sides and a non-ASCII path is classified by its raw bytes;
+- the batched walk takes the same `core.quotePath=false`, so its keys join a non-ASCII touched path (without it the walk misses the path, OFFENDERS stays empty and the reconcile PASS prints);
+- the `tree_keys` ls-tree takes `-c core.precomposeunicode=false`: on macOS git converts an NFD command-line pathspec to NFC, so an NFD core path read ABSENT on both sides and the deletion acquittal passed it;
+- a changed line git still C-quotes under `core.quotePath=false` (a path carrying a quote, backslash or control byte) whose outer-quote-stripped form matches a core glob is refused with exit 2 and a `refused: git quoted a changed core path` line naming it, before any arm. The closed class is wider than the non-ASCII instance. No new `diff.relative` pin: it is already pinned at the `CHANGED` assignment and inert in the batched walk.
+
+`core/skills/ai-dlc/steps/gate-validation.md` and the `enforcement-map.yaml` posture text name the quoted-core-path exit 2.
+
+Measured: fixture `core-paths-audit-diff` gains assertions 24-32 (rename out, rename out to a non-ASCII name, non-ASCII add, its squash acquitted and one byte off, core-to-core rename, three quoted core paths refused, quoted consumer paths as the near-miss, and 32, NFDADD, an NFD core add that exits 1 on every platform) and mutations 19-24 (CHANGED `--no-renames` removed, CHANGED quotePath removed, walk quotePath removed, refusal removed, refusal widened to every quoted line, and 24, the precompose pin dropped, killed where `core.precomposeunicode` is in effect and a SKIP with no kill elsewhere); mutations 12 and 16 are re-written to the new spellings, git config is pinned to its defaults, and `invocations.decl` moves from 109 to 142 starts (`core-paths.sh` 26 to 37). The read-set map `.ai-dlc-fixture-readsets.tsv` re-digests `hook-registration-join` and `retro-compliance-workflow` (from a `--reconcile` run at the release tree). Consumer false-positive set over 1,479 first-parent ranges of the reference consumer (a proxy population; `file://` clone at 394fb794c): 0 verdict flips, 4 added touched rows in 3 ranges (3 true renames out of core acquitted by the reconcile arm, 1 redundant core-to-core old-name row), and 0 C-quoted lines.
+
+Consumer-visible movement: the gate is stricter. Every rename in a consumer's range now contributes its old path to the touched set, and a non-ASCII core path is classified at all; a changed core path that git still C-quotes exits 2.
+
 ## [0.1046.0] - 2026-11-11
 
 ### BL-959 filed and closed: an in-force re-suppression stands an expired suppression's re-fire down, in the expiry arm and in the terminal arm's OVERRIDDEN acquittal

@@ -71,5 +71,5 @@ retro-compliance-workflow	core/fixtures/retro-compliance-workflow/run.sh
 retro-compliance-workflow	core/fixtures/retro-compliance-workflow/seed.sh
 retro-compliance-workflow	core/schemas/provenance-block.json
 retro-compliance-workflow	core/scripts/validate-provenance-block.sh
-# digest hook-registration-join 40c9fd3160f08545efa79e4b57e1c5e09742ac93062c9e0ca671a4e65c33e4f8
-# digest retro-compliance-workflow 96bb6a7c7b56928fd395cadf7436b84cb8706cf9af77f8057c2ed7e8484ee674
+# digest hook-registration-join 9fd7e513aca76681c332afbdce8bb4b1f3d51a254c3005a7976dc79c9be6f134
+# digest retro-compliance-workflow 150606e968862d3f2998b934ad8955f156123e9b4f9570f19db947e1c0cb5a10

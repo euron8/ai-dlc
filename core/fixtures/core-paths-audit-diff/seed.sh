@@ -247,6 +247,87 @@ branch_from_base unrel || exit 2
 g merge -q --allow-unrelated-histories --no-edit -m "Merge unrelated" "$UNREL_ROOT" >/dev/null 2>&1 || exit 2
 UNREL="$(g rev-parse HEAD)"
 
+# --- BL-951: renames and quoted paths in CHANGED ----------------------------------------------
+# Non-ASCII names are spelled in octal so this file stays ASCII. Branch names avoid the ones the
+# BL-951 receipt creates on this seed (ro, dl, na, as).
+NA_P="$(printf 'scripts/ai-dlc/v\303\251rdict.sh')"
+RON_P="$(printf 'server/m\303\251.sh')"
+QQ_P='scripts/ai-dlc/q"x.sh'
+BS_P='scripts/ai-dlc/b\x.sh'
+TB_P="$(printf 'scripts/ai-dlc/t\tx.sh')"
+QN1_P='server/q"x.sh'
+QN2_P="$(printf 'server/t\tx.sh')"
+# RENOUT: a core path renamed out of core in one commit; with renames on the range lists only
+# the new, non-core name.
+branch_from_base renout
+g mv .claude/hooks/ai-dlc-a.sh server/moved.sh >/dev/null 2>&1 || exit 2
+commit "fix(s1): move the hook out of core" || exit 2
+RENOUT="$(g rev-parse HEAD)"
+# RENOUTNA: the same rename, to a non-ASCII non-core name.
+branch_from_base renout-na
+g mv .claude/hooks/ai-dlc-a.sh "$RON_P" >/dev/null 2>&1 || exit 2
+commit "fix(s1): move the hook out to a non-ascii name" || exit 2
+RENOUTNA="$(g rev-parse HEAD)"
+# NAADD: a non-ASCII core path added by an ordinary commit.
+branch_from_base na-add
+printf 'x\n' > "$PROJ/$NA_P" || exit 2
+commit "fix(s1): add a non-ascii core script" || exit 2
+NAADD="$(g rev-parse HEAD)"
+# RR: a core-to-core rename.
+branch_from_base core-rename
+g mv scripts/ai-dlc/verdict.sh scripts/ai-dlc/verdict2.sh >/dev/null 2>&1 || exit 2
+commit "fix(s1): rename the verdict helper within core" || exit 2
+RR="$(g rev-parse HEAD)"
+# QQ, BS, TB: a core path git C-quotes even under core.quotePath=false.
+branch_from_base quote-dq
+printf 'x\n' > "$PROJ/$QQ_P" || exit 2
+commit "fix(s1): add a core script with a double quote" || exit 2
+QQ="$(g rev-parse HEAD)"
+branch_from_base quote-bs
+printf 'x\n' > "$PROJ/$BS_P" || exit 2
+commit "fix(s1): add a core script with a backslash" || exit 2
+BS="$(g rev-parse HEAD)"
+branch_from_base quote-tab
+printf 'x\n' > "$PROJ/$TB_P" || exit 2
+commit "fix(s1): add a core script with a tab" || exit 2
+TB="$(g rev-parse HEAD)"
+# QNEAR: the near-miss, the same two quoting bytes on NON-core paths.
+branch_from_base quote-near
+printf 'x\n' > "$PROJ/$QN1_P" || exit 2
+printf 'x\n' > "$PROJ/$QN2_P" || exit 2
+commit "feat(s1): add two consumer files with quoting bytes" || exit 2
+QNEAR="$(g rev-parse HEAD)"
+# NAREC: a reconcile adding the non-ASCII core path, stamp 0.8.0; NASQ its tree squashed (passes
+# by the content arm); NASQB the same squash one byte off on that path (flags).
+branch_from_base ai-dlc-update/na8
+printf '0.8.0\n' > "$PROJ/.claude/.ai-dlc-version"
+printf 'y\n' > "$PROJ/$NA_P" || exit 2
+commit "chore(ai-dlc-update): reconcile distribution 0.1.0 -> 0.8.0" || exit 2
+NAREC="$(g rev-parse HEAD)"
+from_tree nasq "$NAREC" || exit 2
+commit "feat: ai-dlc update 0.8.0 (#202)" || exit 2
+NASQ="$(g rev-parse HEAD)"
+from_tree nasqb "$NAREC" || exit 2
+printf 'z\n' > "$PROJ/$NA_P" || exit 2
+commit "feat: ai-dlc update 0.8.0 (#203)" || exit 2
+NASQB="$(g rev-parse HEAD)"
+# NFDADD: NAREC's tree plus an NFD-spelled core path, by an ordinary commit on base. Built through
+# a scratch index with precomposition off, so the NFD bytes are what the tree stores. NAREC is
+# eligible (same stamp) and lacks the path, so a path read back as ABSENT is acquitted.
+NFD_P="$(printf 'scripts/ai-dlc/ve\314\201rdict9.sh')"
+nb="$(printf 'nfd\n' | g hash-object -w --stdin)" || exit 2
+GIT_INDEX_FILE="$WORK/nfd.idx" g read-tree "$NAREC" || exit 2
+GIT_INDEX_FILE="$WORK/nfd.idx" g -c core.precomposeunicode=false update-index --add --cacheinfo "100644,$nb,$NFD_P" || exit 2
+nt="$(GIT_INDEX_FILE="$WORK/nfd.idx" g write-tree)" || exit 2
+NFDADD="$(g commit-tree "$nt" -p "$BASE" -m "feat: add an nfd-named core script")" || exit 2
+g update-ref refs/heads/nfd-add "$NFDADD" || exit 2
+# PRECOMPOSE=1 when this git rewrites an NFD command-line pathspec under precomposeunicode=true
+# (macOS); elsewhere the setting is inert and mutation 24 has no observable to kill.
+n_on="$(g -c core.precomposeunicode=true ls-tree -r --full-tree "$NFDADD" -- "$NFD_P" | wc -l | tr -d ' ')"
+n_off="$(g -c core.precomposeunicode=false ls-tree -r --full-tree "$NFDADD" -- "$NFD_P" | wc -l | tr -d ' ')"
+[ "$n_off" -eq 1 ] || { echo "seed: the NFD path does not list under precomposeunicode=false ($n_off)" >&2; exit 2; }
+if [ "$n_on" -eq 0 ]; then PRECOMPOSE=1; else PRECOMPOSE=0; fi
+
 # SEED ASSERTIONS: every content cell's discriminating input exists, or the seed refuses.
 seedfail() { echo "seed: $1" >&2; exit 2; }
 # UNREL: the root has no parent, and the merge does not differ from it at new.sh.
@@ -267,6 +348,24 @@ cb="$(g log --format=%H "${BASE}..${CASEB}" -- scripts/ai-dlc/verdict.sh)"
 [ "$(g rev-parse "${CASEB}^1")" = "$CASEB_R" ] || seedfail "CASEB's first parent is not R"
 [ -z "$(blob "$NOMAN" .claude/skills/ai-dlc/core-manifest.md)" ] && [ -n "$(blob "$NOMAN" .claude/skills/ai-dlc/overrides/README.md)" ] \
   || seedfail "NOMAN is not a layered base without a manifest"
+# BL-951 cells: each defect's input is present at git's defaults, and each quoted cell is still
+# quoted with core.quotePath=false while the non-ASCII cells are not.
+dflt() { g -c core.quotePath=true -c diff.renames=true diff --name-only "${BASE}...${1}"; }
+fixd() { g -c core.quotePath=false diff --no-renames --name-only "${BASE}...${1}"; }
+[ "$(dflt "$RENOUT")" = server/moved.sh ] || seedfail "RENOUT's default diff does not list only the new name"
+grep -qxF .claude/hooks/ai-dlc-a.sh <<<"$(fixd "$RENOUT")" || seedfail "RENOUT's rename-free diff lacks the old core path (control)"
+grep -qxF .claude/hooks/ai-dlc-a.sh <<<"$(dflt "$RENOUTNA")" && seedfail "RENOUTNA's default diff names the old core path"
+case "$(dflt "$NAADD")" in '"'*) ;; *) seedfail "NAADD's default diff is not C-quoted" ;; esac
+[ "$(fixd "$NAADD")" = "$NA_P" ] || seedfail "NAADD's quotePath=false diff is not the raw-byte path"
+[ "$(dflt "$RR")" = scripts/ai-dlc/verdict2.sh ] || seedfail "RR's default diff does not list only the new name"
+for c in "$QQ" "$BS" "$TB"; do
+  case "$(fixd "$c")" in '"scripts/ai-dlc/'*) ;; *) seedfail "a quoted core cell is not C-quoted under quotePath=false" ;; esac
+done
+[ "$(fixd "$QNEAR" | grep -c '^"server/')" -eq 2 ] || seedfail "QNEAR does not carry two C-quoted non-core lines"
+[ "$(g rev-parse "${NASQ}^{tree}")" = "$(g rev-parse "${NAREC}^{tree}")" ] || seedfail "NASQ is not NAREC's tree"
+[ -n "$(blob "$NASQB" "$NA_P")" ] && [ "$(blob "$NASQB" "$NA_P")" != "$(blob "$NAREC" "$NA_P")" ] \
+  && [ "$(blob "$NASQB" .claude/.ai-dlc-version)" = "$(blob "$NAREC" .claude/.ai-dlc-version)" ] \
+  || seedfail "NASQB is not NAREC's tree with the non-ASCII path's blob changed"
 V=scripts/ai-dlc/verdict.sh; S=.claude/.ai-dlc-version
 [ "$(g rev-parse "${SQUASH}^{tree}")" = "$(g rev-parse "${XREC}^{tree}")" ] || seedfail "SQUASH is not X's tree"
 [ "$(g log -1 --format=%s "$SQUASH")" = "feat: ai-dlc update 0.2.0 (#101)" ] || seedfail "SQUASH subject"
@@ -355,6 +454,19 @@ NOMAN_DIRTY="$NOMAN_DIRTY"
 UNREL="$UNREL"
 UNREL_ROOT="$UNREL_ROOT"
 DELPATH=".claude/hooks/ai-dlc-a.sh"
+RENOUT="$RENOUT"
+RENOUTNA="$RENOUTNA"
+NAADD="$NAADD"
+RR="$RR"
+QQ="$QQ"
+BS="$BS"
+TB="$TB"
+QNEAR="$QNEAR"
+NAREC="$NAREC"
+NASQ="$NASQ"
+NASQB="$NASQB"
+NFDADD="$NFDADD"
+PRECOMPOSE="$PRECOMPOSE"
 ENVEOF
 
 echo "$WORK"
