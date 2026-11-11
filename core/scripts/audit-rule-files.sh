@@ -10,6 +10,9 @@ set -euo pipefail
 #   audit-rule-files.sh --list                   # print the scan corpus, exit 0
 #   audit-rule-files.sh --fail-on=deterministic  # only tier 1 sets the exit code
 #   audit-rule-files.sh --fail-on=local          # only LOCALLY-OWNED findings do
+#   audit-rule-files.sh --fail-on=local-deterministic
+#                                  # only tier-1 findings that are LOCALLY OWNED
+#                                  # or UNRESOLVED do (the consumer's pre-push)
 #
 # exit 0 = no finding at or above the selected fail threshold
 # exit 1 = at least one such finding
@@ -28,6 +31,9 @@ set -euo pipefail
 # work is destroyed by design. Each finding carries `[core]` or `[local]`, the
 # per-class verdict line carries the split, and `--fail-on=local` sets the exit
 # code from the LOCAL half alone -- the half the reader can actually act on.
+# `--fail-on=local-deterministic` is the intersection of the two axes: tier 1
+# AND (local OR unresolved). It is the consumer hook's threshold, because
+# `deterministic` is owner-blind and `local` counts the judgement tier too.
 #
 # Ownership is resolved by `core-paths.sh --is-core`, the SAME resolver the core
 # write guard and the gate check use, so this audit cannot disagree with them
@@ -80,7 +86,8 @@ for arg in "$@"; do
     --fail-on=any)            FAIL_ON="any" ;;
     --fail-on=deterministic)  FAIL_ON="deterministic" ;;
     --fail-on=local)          FAIL_ON="local" ;;
-    *) echo "usage: audit-rule-files.sh [--list] [--fail-on=any|deterministic|local]" >&2; exit 2 ;;
+    --fail-on=local-deterministic)  FAIL_ON="local-deterministic" ;;
+    *) echo "usage: audit-rule-files.sh [--list] [--fail-on=any|deterministic|local|local-deterministic]" >&2; exit 2 ;;
   esac
 done
 command -v python3 >/dev/null 2>&1 || { echo "audit-rule-files: FAIL — python3 required" >&2; exit 2; }
@@ -313,6 +320,7 @@ t1_findings = 0
 all_findings = 0
 local_findings = 0
 unresolved_findings = 0
+t1_local_findings = 0
 print("=== Rule File Audit ===")
 print(f"layout: {LAYOUT}    corpus: {len(corpus)} files")
 if MUTANT:
@@ -326,7 +334,7 @@ def emit(label, hits, tier, total_note=""):
     is sited here rather than in each class because every class already routes
     through this one function -- a per-class ownership call is the hand-listed
     form that goes stale the release somebody adds a class."""
-    global t1_findings, all_findings, local_findings, unresolved_findings
+    global t1_findings, all_findings, local_findings, unresolved_findings, t1_local_findings
     owners = {f: owner(f) for f, _, _ in hits}
     for f, ln, msg in hits:
         print(f"  [{owners[f]}] {f}:{ln}  {label}  {msg}")
@@ -344,6 +352,7 @@ def emit(label, hits, tier, total_note=""):
     unresolved_findings += n_unknown
     if tier == 1:
         t1_findings += len(hits)
+        t1_local_findings += n_local + n_unknown
     print()
 
 def lines(path):
@@ -892,14 +901,25 @@ else:
 
 print(f"threshold: --fail-on={FAIL_ON}   tier-1 findings: {t1_findings}   "
       f"all findings: {all_findings}   locally-owned: {local_findings}   "
-      f"unresolved: {unresolved_findings}")
+      f"unresolved: {unresolved_findings}   t1-local: {t1_local_findings}")
 # A core-owned finding is reported to EVERY reader and gates only the tree that
-# can fix it. On a consumer that is `--fail-on=local`: the core half still prints,
-# enumerated, so the reader can route it upstream, but it does not fail a gate
-# whose only compliant remedy is a write Rule 27 forbids.
+# can fix it. On a consumer that is `--fail-on=local` at retro and
+# `--fail-on=local-deterministic` at the consumer's pre-push (core/git-hooks/pre-push):
+# the core half still prints, enumerated, so the reader can route it upstream,
+# but it does not fail a gate whose only compliant remedy is a write Rule 27
+# forbids. The pre-push threshold is the tier-1 slice of `local`, so a
+# judgement-tier finding never blocks a push.
 #
-# AN UNRESOLVED FINDING IS COUNTED AS LOCAL UNDER THIS THRESHOLD, AND THAT IS THE
-# WHOLE SAFETY PROPERTY. Ownership decides whether a finding gates, so a resolver
+# THE DISTRIBUTION'S OWN HOOK (.githooks/pre-push) KEEPS `deterministic`. The
+# distribution can fix every file it scans, and in distribution layout the
+# resolver scores the authoring rulebooks core-owned: 10 of the 88 corpus files
+# answer `core` from `core-paths.sh --is-core` (all ten are `.claude/rules/*.md`,
+# matched by that core-manifest glob). `local-deterministic` there would stop
+# gating exactly those rulebooks.
+#
+# AN UNRESOLVED FINDING IS COUNTED AS LOCAL UNDER BOTH OWNERSHIP THRESHOLDS
+# (`local` and `local-deterministic`, whose `t1-local` counter is tier 1's local
+# plus unresolved findings), AND THAT IS THE WHOLE SAFETY PROPERTY. Ownership decides whether a finding gates, so a resolver
 # that cannot answer must not be able to ACQUIT: with `core-paths.sh` removed,
 # every finding lands in `unknown`, and treating that as "not local" turns a
 # 32-finding tree into a clean sheet. Measured while building this: exit 0 over
@@ -910,6 +930,8 @@ if FAIL_ON == "deterministic":
     _gated = t1_findings
 elif FAIL_ON == "local":
     _gated = local_findings + unresolved_findings
+elif FAIL_ON == "local-deterministic":
+    _gated = t1_local_findings
 else:
     _gated = all_findings
 sys.exit(1 if _gated else 0)

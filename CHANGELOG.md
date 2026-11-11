@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1059.0] - 2026-11-11
+
+### BL-977: the consumer's pre-push rule-file audit gates only on tier-1 findings it can fix, through the new `--fail-on=local-deterministic` threshold
+
+A consumer's pre-push ran `audit-rule-files.sh --fail-on=deterministic`, which is owner-blind: every tier-1 finding gated the push, including one in a core-owned file. On a consumer those files are write-denied by `ai-dlc-core-guard.sh`, so the only remedy was a write Rule 27 forbids. The consumer reported a handoff push blocked three times on two `ORIGIN_TAG` findings in core-owned `.claude/team-roles/` files. The script's own doctrine says a core-owned finding "gates only the tree that can fix it".
+
+- `core/scripts/audit-rule-files.sh`: new `--fail-on=local-deterministic`, which gates on tier 1 AND (locally owned OR unresolved). It prints every finding as before, a core-owned one tagged `[core]`. A `t1_local_findings` counter (tier 1's local plus unresolved) feeds the gate, and the `threshold:` summary line gains `t1-local: <n>` as its LAST field. The usage line lists the new value. An unresolved owner counts as local, so a missing `core-paths.sh` cannot acquit a push.
+- `core/git-hooks/pre-push`: the consumer's rule-file audit step now runs `--fail-on=local-deterministic`.
+- `.githooks/pre-push` (the distribution's own hook) keeps `--fail-on=deterministic`. The distribution can fix every file it scans, and in distribution layout the resolver scores the authoring rulebooks (`.claude/rules/*.md`, 10 of 88 corpus files) core-owned, so the new threshold there would stop gating exactly those files. The reason is recorded in the script's doctrine comment.
+- `core/skills/ai-dlc/rule-authoring.md` states both thresholds.
+
+Why the two fixes the consumer proposed were not taken: (1) `--fail-on=local` in the hook counts findings of BOTH tiers, so it would newly block a push on a locally-owned tier-2 judgement finding, which the hook's own comment says only prints. (2) Gating on the local count beside `deterministic` still exits 1 for a tree with one core-owned tier-1 finding and one local tier-2 finding, so the push still blocks partly on a core finding. Neither existing threshold is "tier 1 AND (local OR unresolved)", and that intersection is the predicate the doctrine requires.
+
+What a consumer sees: a core-owned tier-1 finding prints with `[core]`, enumerated for routing upstream, and no longer blocks the push. A locally-owned or unresolved tier-1 finding still blocks. Tier 2 still never blocks the push. A shipped pull writes the hook and `scripts/ai-dlc/*` together; the new argv reaches an old script only where the consumer carried a diverged script, and there it is a loud exit-2 usage refusal that the self-update gate DEFERs, never a silent fall back to owner-blind gating.
+
+Fixture `retro-audit-scans`, four new `--fail-on=local-deterministic` worlds, one seed each:
+- LDc, a core-owned tier-1 finding: rc 0, the finding printed `[core 1 / local 0]`.
+- LDl, a local tier-1 finding: rc 1.
+- LD2, a local tier-2-only finding: rc 0.
+- LDu, a tier-1 finding with the resolver removed: rc 1, `unresolved 1`; the same world with the resolver present is LDc.
+- Every rc-0 cell carries a presence conjunct, so a subject that scans nothing cannot pass.
+- A whole-hook arm drives the consumer hook in a scratch consumer repo through the new `receipt-bl977.sh`, cells `core-t1` (audit block PASS, `[core 1 / local 0` printed), `local-t1` (block FAIL) and `local-t2` (rc 0). In an installed layout whose hook carries no `local-deterministic` step the arm reports PENDING and still records its hook read; in distribution layout it asserts unconditionally.
+- Four new mutants, each killed by its own cell alone: `ld-ownerblind` (LDc), `ld-tierblind` (LD2), `ld-unresdrop` (LDu) and `hook-det`, the hook flag reverted to `deterministic` (`core-t1`).
+- `invocations.decl` re-declared: `*` 135 to 165, `core/scripts/audit-rule-files.sh` 30 to 33, `core/git-hooks/pre-push` 0. `inputs.decl` gains `!core/git-hooks/pre-push`, and `tools.decl` gains `git`.
+
+Consumer replay on a `file://` clone of the reporting consumer: a core-owned tier-1 finding blocks under the old hook (rc 1) and passes under the new one (rc 0, still printed); a local tier-1 finding still blocks; a local tier-2-only finding passes. Consumer cost: the hook and the script are machinery and are live from pull step 3; the rulebook sentence arrives with the reconcile merge. A consumer holding a local tier-1 finding at pull time DEFERs at the self-update gate, whose push is refused today anyway.
+
 ## [0.1058.0] - 2026-11-11
 
 ### BL-716 PARTIAL: the serial repair tail is adjudication, so a lane's or fan-in's items are dealt to parallel read-only adjudicators before its one writer; a files-mode escalation naming an unedited file is a lane, not a fan-in item
