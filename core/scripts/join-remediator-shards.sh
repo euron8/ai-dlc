@@ -950,8 +950,16 @@ src_probe() {
 #       on `LANE-EDGES: UNASSESSED`. A HIT never joins lanes: the fragment's hits all in one lane are
 #       that lane's item, and hits in two or more lanes (s319's sprint-title `architecture_refs` line
 #       HITs 18 stories) are ONE fan-in item. An escalation whose `edit:` files are one lane's is that
-#       lane's; one naming files in two or more lanes, or a file no lane edits, or no file, goes to the
-#       fan-in (s319 stories party repair: 10 of 46 escalations name two or more files). The fan-in
+#       lane's; one naming files in two or more lanes, or no file, goes to the fan-in (s319 stories
+#       party repair: 10 of 46 escalations name two or more files). One naming a file no lane edits
+#       goes there too, EXCEPT in files mode, where a file on disk under the slot's stories/ or epics/
+#       becomes a node: the escalation is the item of the one lane its other files are in, or a lane
+#       of its own (graph s322 stories party: 5 of 7 fan-in escalations named one unedited story).
+#       Lanes never merge on an escalation, so a file is never in two lanes. Then the ADJUDICATION
+#       PARTITION: a lane or fan-in with 4 or more items is dealt round-robin into k = min(4,
+#       floor(n/2)) read-only batches, `ADJUDICATE: <n | fanin> <b>/<k> <item>` and
+#       `ADJUDICATOR-COUNT:`; the lane round's join refuses an adjudicator that wrote anything but
+#       its batch file, over the whole ledger (the "AN ADJUDICATOR IS READ-ONLY" arm). The fan-in
 #       runs after every lane, so with two or more lanes it also owes one sweep over the assembled
 #       files -- a lane's edit can create a hit elsewhere. Lines: `LANE-ARTIFACT: <name> --pass <M>`
 #       (the lane round's `--artifact` and `--pass`, from lane_name), `LANE-EDGES:`, one `LANE: <n> files:
@@ -2493,7 +2501,7 @@ esc_cites() {
     END { emit() }' "$1"
 }
 lane_report() {
-  local _keys="" _wl="" _wrc=0 _p _k _t _e _ek _ec _la _lan _lap
+  local _keys="" _wl="" _wrc=0 _p _k _t _x _e _ek _ec _la _lan _lap _slotp=""
   # THE LANE ROUND'S NAME, derived from this round's record by lane_name, never from --artifact:
   # the subject's records are `requirements-party-repair.md` and the like, under ARTIFACT=requirements.
   if _la="$(lane_name "${OUT##*/}")"; then
@@ -2525,17 +2533,23 @@ lane_report() {
       _wl="serial-remediation-worklist.sh is not beside this script"; _wrc=2
     fi
   fi
+  # THE SLOT a files-mode lane round may edit (its LANE-ARTIFACT-PATH), so an escalation naming a file
+  # no part edited can be a lane of its own there. Document and subject mode keep it empty: their
+  # lane join's artifact path is the one assembled document or the state dir's own parts.
+  [ "$DOCMODE$SUBJMODE" = 00 ] && _slotp="${SHARD_REL%/shards}/"
   _e=""
   while IFS= read -r _p; do
     [ -n "$_p" ] || continue
     _ec="$(esc_cites "$_p")" || die "could not read the escalated entries of ${_p##*/} for the serial lanes"
     while IFS='	' read -r _ek _t; do
       [ -n "$_ek" ] || continue
+      _x=0
       if [ "$_t" != "-" ]; then
         _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
         [ "$SUBJMODE" = 1 ] && case "$_t" in "${SREL}"/*) _t="${STATE_NAME}/${_t#"${SREL}"/}" ;; esac
+        [ -f "${STATE_PARENT}${_t}" ] && _x=1
       fi
-      _e="${_e}T	${_ek}	${_t}
+      _e="${_e}T	${_ek}	${_t}	${_x}
 "
     done <<LNEOF
 ${_ec}
@@ -2550,7 +2564,7 @@ LPEOF
     if [ "$DOCMODE$SUBJMODE" = 00 ]; then printf 'F\t%s\n' "$_wl"
     elif [ "$_wrc" = 0 ]; then printf '%s\n' "$_wl" | sed 's/^/W\t/'
     else printf 'U\texit %s: %s\n' "$_wrc" "$(printf '%s\n' "$_wl" | grep -m1 -E '^(UNASSESSABLE|ERROR)' || printf '%s\n' "$_wl" | head -1)"; fi
-  } | awk -F'\t' '
+  } | awk -F'\t' -v slotp="$_slotp" '
     function fnd(x) { while (x in par) x = par[x]; return x }
     function uni(a, b) { a = fnd(a); b = fnd(b); if (a != b) { if (a < b) par[b] = a; else par[a] = b } }
     # A path names a node when it equals the node, or either ends in "/" + the other: the ledger and a
@@ -2574,7 +2588,7 @@ LPEOF
     $1 == "K" { node[$2] = $3; isk[$3] = 1; W[++nw] = $2; next }
     $1 == "C" { k = wkey($3); if (k == "") next; if (!(($2, k) in pk)) { pk[$2, k] = 1; pks[$2] = pks[$2] SUBSEP k }
                 if ($2 in first) uni(first[$2], k); else first[$2] = k; next }
-    $1 == "T" { et[$2] = et[$2] SUBSEP ($3 == "-" ? "" : $3); next }
+    $1 == "T" { et[$2] = et[$2] SUBSEP ($3 == "-" ? "" : $3); if ($4 == "1") onDisk[$3] = 1; next }
     $1 == "S" { es[++ne] = $2; next }
     $1 == "F" { edges = "files, by edit set (" $2 ")"; next }
     $1 == "U" { unassessed = $2; next }
@@ -2587,10 +2601,35 @@ LPEOF
         for (i = 1; i <= nwl; i++) if (i in mvf) { ma = keyof(mvf[i]); mb = keyof(mvt[i])
           if (ma != "" && mb != "" && !index(ma, SUBSEP)) { nb = split(mb, bb, SUBSEP); for (j = 1; j <= nb; j++) uni(ma, bb[j]); nmv++ } }
         edges = "files, by edit set and " nmv " MOVED-CITE edge(s) from serial-remediation-worklist.sh" }
-      # Lanes, numbered in sorted node order; only nodes some part cites are lanes.
+      # AN ESCALATION NAMING A FILE NO PART EDITED (BL-716), files mode only (slotp set). It was a
+      # FANIN item because no lane owned its file, so a decision on one unedited story waited for every
+      # lane (graph s322 stories party: 5 of 7 fan-in escalations named one such story). Now each file it
+      # names that is on disk under the slot`s stories/ or epics/ (the artifact`s own files, as the
+      # remediator role names them; a record, a seat file or a shard never) and in no lane becomes a node; the
+      # escalation joins its nodes to at most ONE existing lane and is that lane`s item, or forms a lane
+      # of its own. One naming no file, a file outside the slot, an ambiguous spelling, or the files of
+      # TWO OR MORE part lanes stays a FANIN item: lanes never merge, so no file is ever in two lanes.
+      if (slotp != "") {
+        for (p in pks) { n = split(pks[p], a, SUBSEP); for (i = 2; i <= n; i++) hp[fnd(a[i])] = 1 }
+        for (i = 1; i <= ne; i++) { if (!(es[i] in et)) continue
+          n = split(et[es[i]], a, SUBSEP); ok = (n >= 2); nr = 0; nlr = 0; delete rs; delete nw2
+          for (j = 2; j <= n && ok; j++) { q = a[j]
+            if (q == "") { ok = 0; break }
+            s = keyof(q)
+            if (s == "") { if ((index(q, slotp "stories/") != 1 && index(q, slotp "epics/") != 1) || !(q in onDisk)) { ok = 0; break }
+              nw2[q] = 1; continue }
+            if (index(s, SUBSEP)) { ok = 0; break }
+            rt = fnd(s); if (!(rt in rs)) { rs[rt] = 1; nr++; if (rt in hp) nlr++ } }
+          if (!ok || nlr > 1) continue
+          for (q in nw2) { isk[q] = 1; uo[q] = 1 }
+          first0 = ""; for (rt in rs) { first0 = rt; break }
+          for (q in nw2) { if (first0 == "") first0 = q; else { h = (fnd(first0) in hp) || (fnd(q) in hp); uni(first0, q); if (h) hp[fnd(first0)] = 1 } }
+          for (rt in rs) { h = (fnd(first0) in hp) || (fnd(rt) in hp); uni(first0, rt); if (h) hp[fnd(first0)] = 1 } } }
+      # Lanes, numbered in sorted node order; only nodes some part cites, or an escalation made, are lanes.
       nk = 0; for (k in isk) ks[++nk] = k
       for (i = 2; i <= nk; i++) { v = ks[i]; for (j = i - 1; j >= 1 && ks[j] > v; j--) ks[j + 1] = ks[j]; ks[j + 1] = v }
       for (p in pks) { n = split(pks[p], a, SUBSEP); for (i = 2; i <= n; i++) cited[fnd(a[i])] = 1 }
+      for (q in uo) cited[fnd(q)] = 1
       nl = 0; for (i = 1; i <= nk; i++) { rt = fnd(ks[i]); if (!(rt in cited)) continue
         if (!(rt in lane)) lane[rt] = ++nl; lf[lane[rt]] = lf[lane[rt]] " " ks[i] }
       for (p in pks) { n = split(pks[p], a, SUBSEP); l = lane[fnd(a[2])]; lp[l] = lp[l] " " p }
@@ -2613,6 +2652,26 @@ LPEOF
       printf "%s", fan
       print "LANE-COUNT: " nl
       nf = gsub(/FANIN: /, "&", fan); print "FANIN-COUNT: " nf
+      # THE ADJUDICATION PARTITION (BL-716). The serial tail is ADJUDICATION, not writing: measured on
+      # graph s320-s322, writer turns (an artifact or record Edit/Write, the mark, the join) were 29-35%
+      # of the solo remediator time, and a LANES=1 document round can never split by file. So a lane, or
+      # the fan-in, holding 4 or more items is dealt round-robin, in printed order, into k = min(4,
+      # floor(n/2)) READ-ONLY adjudication batches, one ADJUDICATE line per item; its one writer then
+      # applies their decisions. The sweep is the fan-in writer`s and is never dealt. The fan-in is dealt only
+      # when a lane exists: every adjudicator runs beside the lanes, and the lane round`s join is the one
+      # program that proves none of them wrote an artifact (its read-only arm).
+      na = 0
+      for (l = 1; l <= nl; l++) na += adj(l, item[l], "LANE-ITEM: " l " ")
+      if (nl >= 1) na += adj("fanin", fan, "FANIN: ")
+      print "ADJUDICATOR-COUNT: " na
+    }
+    function adj(who, block, pre,   n, a, i, m, k, x, it) { n = split(block, a, "\n"); m = 0
+      for (i = 1; i <= n; i++) { x = a[i]; if (x == "" || index(x, "FANIN: sweep") == 1) continue
+        if (index(x, pre) == 1) x = substr(x, length(pre) + 1); it[++m] = x }
+      if (m < 4) return 0
+      k = int(m / 2); if (k > 4) k = 4
+      for (i = 1; i <= m; i++) print "ADJUDICATE: " who " " ((i - 1) % k + 1) "/" k " " it[i]
+      return k
     }'
 }
 
@@ -3112,7 +3171,7 @@ if [ "$NOLANE" = 1 ]; then
     while IFS='	' read -r _k _a _b _c; do
       case "$_k" in
         NOROW) refuse "no lane wrote under ${APATH} in the window and no part cites a file, but ${_nlpx}${_a} has no ledger row, so its writer is unknown and cannot be shown to have written nothing; re-dispatch that lane writing its part record through Edit, Write or MultiEdit" ;;
-        WROTE) refuse "no lane wrote under ${APATH} in [${SINCE}, ${UNTIL}], but lane agent ${_b} wrote ${_a} at ${_c}, outside that window and cited by no part: take --since from the lane dispatch and --until from \`date -u\` after the last lane reports, and cite the edit in that lane's part" ;;
+        WROTE) refuse "no lane wrote under ${APATH} in [${SINCE}, ${UNTIL}], but lane agent ${_b} wrote ${_a} at ${_c}, outside that window and cited by no part: take --since from the first lane or adjudicator dispatch and --until from \`date -u\` after the last lane reports, and cite the edit in that lane's part" ;;
         LANES) _nll="$_a" ;;
       esac
     done <<NLEOF
@@ -3121,6 +3180,42 @@ NLEOF
     NOLANE_LINE="no lane wrote the subject: 0 ledger rows under ${APATH} in [${SINCE}, ${UNTIL}], and every part cites no edited file (${_nll} lane agent(s), none with a subject row at any time)"
   fi
 fi
+
+# --- AN ADJUDICATOR IS READ-ONLY (BL-716), the lane round only. The round-one join deals a lane's (and the
+# fan-in's) items into ADJUDICATE batches; each batch's adjudicator writes ONE file under
+# `<lane artifact>-adjudicate-p<M>/` and nothing else, and the lane or fan-in remediator is the single
+# writer of every artifact file. The window's two-writer and uncited arms see an adjudicator's artifact
+# write only when --since opens at the first adjudicator dispatch, as the procedure says; a window taken
+# from the lane dispatch misses it. So this arm reads the WHOLE ledger, time-free: an ADJUDICATOR is an
+# agent that wrote a batch file STILL ON DISK under this pass's adjudicate dir and wrote no lane part of
+# this round, and any other row of it is refused, by agent, path and ts. Keyed on the batch file on disk,
+# never on the append-only ledger alone, so the remedy can clear it: deleting that batch file voids its
+# decisions and the agent is no longer an adjudicator here (a ledger-only key refused the round forever).
+# A lane remediator that edits a batch file is a lane writer, not an adjudicator. False-positive set,
+# measured before shipping: graph's ledger (31211 rows, s315-s322) holds 0 rows under any `-adjudicate-`
+# dir, against 2091 under `-serial-repair-p` in the same file, so today no agent is in the population.
+case "$ARTIFACT" in *-serial)
+  _adpx="${SHARD_REL}/${ARTIFACT}-adjudicate-p${PASS}/"
+  _adlp="${SHARD_REL}/${ARTIFACT}-repair-p${PASS}/"
+  _adon="$(for _f in "${STATE_PARENT}${_adpx}"*; do [ -f "$_f" ] && printf '%s\n' "${_adpx}${_f##*/}"; done | jq -R . | jq -sc .)" \
+    || die "could not list the adjudicate dir ${_adpx}"
+  _adr="$(jq -rn --arg px "$_adpx" --arg lp "$_adlp" --argjson on "$_adon" '
+    [inputs | select(type == "object") | select(.kind == "artifact-write")
+      | select((.agent_id // "") != "") | select((.path | type) == "string")] as $rows
+    | ([$rows[] | select(.path | startswith($lp)) | (.agent_id | tostring)] | unique) as $lw
+    | ([$rows[] | select(.path as $p | any($on[]; . == $p)) | (.agent_id | tostring)]
+        | unique | map(select(. as $a | any($lw[]; . == $a) | not))) as $ad
+    | $rows[] | (.agent_id | tostring) as $a | select(any($ad[]; . == $a))
+    | select(.path | startswith($px) | not) | [$a, .path, (.ts // "-" | tostring)] | @tsv' "$LEDGER" 2>/dev/null)" \
+    || die "the write ledger ${LEDGER} does not parse as JSON lines"
+  while IFS='	' read -r _a _b _c; do
+    [ -n "$_a" ] || continue
+    refuse "adjudicator ${_a} wrote ${_b} at ${_c}, but an adjudicator is read-only and writes only its batch file under ${_adpx}: restore ${_b} to its bytes before that write, delete that adjudicator's batch file (its decisions are void), and give its ADJUDICATE items to the lane or fan-in remediator to decide itself"
+  done <<ADEOF
+${_adr}
+ADEOF
+  ;;
+esac
 
 # THE COVERAGE JOIN. Ledger side: file -> writers (harness ids). Part side: part -> cited files.
 # A cited token resolves to the ledger path it equals or is a `/`-suffix of, so a bare basename,

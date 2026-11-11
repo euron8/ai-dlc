@@ -854,6 +854,9 @@ $MK_OUT
           rm -f "$MK_SRC"
           case "$MK_PHYS" in
             */planning-artifacts/s[0-9]*/shards/*-repair-p*/*.md) MK_RESTORE="restore the file with Edit, then mark." ;;
+            # An adjudicator batch file (join-remediator-shards.sh, ADJUDICATE lines) is its adjudicator's alone, and the
+            # lane round's join keys its read-only arm on that file standing on disk: so before the generic shard arm.
+            */planning-artifacts/s[0-9]*/shards/*-adjudicate-p*/*.md) MK_RESTORE="delete that batch file (its decisions are void) and re-dispatch that batch's adjudicator, which writes it with Write and marks it again; never amend an adjudicator's batch file through Bash or a lead Write or Edit." ;;
             */planning-artifacts/s[0-9]*/shards/*/*.md) MK_RESTORE="re-dispatch the adversary for that shard, then merge with merge-adversarial-shards.sh --rerun <shard>.md@<ISO> (a lead Edit re-seals the bytes but leaves a shard last written by the top-level session, which the merge refuses)." ;;
             *) MK_RESTORE="restore the file with Edit, then mark." ;;
           esac

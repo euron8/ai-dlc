@@ -2327,6 +2327,102 @@ p_laneround() { # the lane round's own join (--artifact stories-serial): lane pa
   [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)" && has "$JO" "SERIAL-REQUIRED: 2" \
     && ! has "$JO" "LANE" && ! has "$JO" "FANIN"
 }
+# ---- AN ESCALATION'S OWN FILE, AND THE ADJUDICATION PARTITION (BL-716). graph s320-s322: a files-mode escalation naming one
+# story no part edited was a FANIN item (5 of s322's 7), and the solo tail was adjudication, not writing. escpart appends <n>
+# escalated entries whose edit: is <value> to a part, so a seeded round's fan-in holds exactly the item count an arm needs.
+escpart() { # <part file> <n> [edit value]
+  local i=1; while [ "$i" -le "$2" ]; do
+    printf '\n### E-%s — MINOR\n- disposition: escalated\n- edit: %s\n- derivation: n/a (no factual claim)\n- claim now asserted: n/a\n' \
+      "$i" "${3:-n/a (escalated to the lead)}" >> "$1"; i=$((i + 1)); done
+}
+# adj_ok <join out> <who> <k> -> 0 when the ADJUDICATE lines for <who> deal EXACTLY its items (the FANIN: lines bar the sweep,
+# or the LANE-ITEM: lines of lane <who>) into batches 1..<k>, each item once, no batch over ceil(n/k), and the count line agrees.
+adj_ok() {
+  local jo="$1" who="$2" k="$3" items dealt n
+  if [ "$who" = fanin ]; then items="$(sed -n 's/^FANIN: //p' "$jo" | grep -v '^sweep' | sort)"
+  else items="$(sed -n "s/^LANE-ITEM: $who //p" "$jo" | sort)"; fi
+  dealt="$(sed -n "s/^ADJUDICATE: $who [0-9]*\/$k //p" "$jo" | sort)"
+  n="$(printf '%s\n' "$items" | grep -c .)" || n=0
+  [ "$n" -ge 1 ] && [ "$items" = "$dealt" ] || return 1
+  [ "$(grep -c "^ADJUDICATE: $who " "$jo")" = "$n" ] || return 1
+  # ROUND-ROBIN in printed order: the i-th line is batch ((i-1) mod k)+1, so a block deal fails here
+  sed -n "s/^ADJUDICATE: $who \([0-9]*\)\/$k .*/\1/p" "$jo" | awk -v k="$k" '$1 != ((NR - 1) % k) + 1 { bad = 1 } END { exit bad }' || return 1
+  sed -n "s/^ADJUDICATE: $who \([0-9]*\)\/$k .*/\1/p" "$jo" | sort -n | uniq -c \
+    | awk -v k="$k" -v n="$n" '{ c++; if ($2 < 1 || $2 > k || $1 > int((n + k - 1) / k)) bad = 1 } END { exit (bad || c != k) }'
+}
+p_adjfour() { # files mode, 3 lanes, FOUR file-less escalations -> the fan-in dealt into k=2 batches of 2, the sweep never dealt
+  local w; w="$(new_world)"; three_writers "$w"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"; escpart "$w/$SLOT/shards/stories-repair-p1/01.md" 1
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 5" && adj_ok "$JO" fanin 2 && has "$JO" "ADJUDICATOR-COUNT: 2" \
+    && ! grep -q '^ADJUDICATE: fanin .*sweep' "$JO"
+}
+p_adjthree() { # p_adjfour one item short: THREE fan-in items -> no batch at all, the writer adjudicates as before
+  local w; w="$(new_world)"; three_writers "$w"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 4" && has "$JO" "ADJUDICATOR-COUNT: 0" && ! has "$JO" "ADJUDICATE: "
+}
+p_adjcap() { # ELEVEN fan-in items -> k=min(4, floor(11/2)) = 4 batches, none over 3 items (an uncapped deal gives 5)
+  local w; w="$(new_world)"; three_writers "$w"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"; escpart "$w/$SLOT/shards/stories-repair-p1/02.md" 8
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 12" && adj_ok "$JO" fanin 4 && has "$JO" "ADJUDICATOR-COUNT: 4"
+}
+p_escown() { # an escalation naming a story NO part edited, on disk in the slot -> a lane of its own, the escalation its item
+  local w; w="$(new_world)"; drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$REL/$S22" "$AG2"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; printf '# epics\n' > "$w/$REL/story-9.9-unowned.md"
+  escpart "$w/$SLOT/shards/stories-repair-p1/01.md" 1 "\`$REL/story-9.9-unowned.md:1\` (escalated: an open decision on that story)"
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && has "$JO" "LANE: 3 files: $REL/story-9.9-unowned.md parts:" \
+    && has "$JO" "LANE-ITEM: 3 ESCALATED: 01.md E-1 — MINOR" && ! has "$JO" "FANIN: ESCALATED: 01.md E-1"
+}
+p_escnear() { # p_escown three ways apart, each staying a FANIN item and adding no lane: the story is NOT on disk; the file is
+  # outside the slot; the escalation names the files of TWO part lanes (lanes never merge)
+  local w v ok=""
+  for v in "\`$REL/story-9.9-absent.md:1\` (escalated)" "\`docs/architecture.md:1\` (escalated)" \
+           "\`$SLOT/party-mode/seat-architect-1.md:1\` (escalated: a seat file, on disk in the slot)" \
+           "\`$REL/$S21:4\`; \`$REL/$S22:4\` (escalated: crosses two lanes)"; do
+    w="$(new_world)"; drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$REL/$S22" "$AG2"
+    sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; mkdir -p "$w/docs" "$w/$SLOT/party-mode"; printf 'x\n' > "$w/docs/architecture.md"
+    printf 'x\n' > "$w/$SLOT/party-mode/seat-architect-1.md"
+    escpart "$w/$SLOT/shards/stories-repair-p1/01.md" 1 "$v"
+    run_join "$1" "$w"
+    [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 2" && has "$JO" "FANIN: ESCALATED: 01.md E-1 — MINOR" && ok="${ok}x"
+  done
+  [ "$ok" = xxxx ]
+}
+# The lane round's READ-ONLY arm. adjround <join> <adjudicator also edits a story 0|1>: a lane round (two lanes) whose window opens
+# at 2026-01-01, beside an adjudicator AG3 that writes its batch file and, when $2=1, edits S31 at 2025-06-01 -- BEFORE the window,
+# so the two-writer and uncited arms cannot see it and only the whole-ledger adjudicator arm can.
+adjround() {
+  local w d a; w="$(new_world)"; d="$w/$SLOT/shards/stories-serial-repair-p1"; a="$w/$SLOT/shards/stories-serial-adjudicate-p1"
+  mkdir -p "$d" "$a" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$w/$REL/$S22" "$AG2"
+  printf '### 01.md E-1 — MINOR\n- decision: no change\n' > "$a/fanin-b1.md"
+  drive "$w" Write "$a/fanin-b1.md" "$AG3" "" "" 2025-06-01T00:00:00Z
+  [ "$2" = 1 ] && drive "$w" Edit "$w/$REL/$S31" "$AG3" "" "" 2025-06-01T00:01:00Z
+  # $2=2: the LANE remediator AG1 also edits the batch file -- a lane writer, never an adjudicator
+  [ "$2" = 2 ] && drive "$w" Edit "$a/fanin-b1.md" "$AG1" "" "" 2025-06-01T00:02:00Z
+  sed "s/@STORY@/$S21/g" "$HERE/seed.block-sib.md" > "$d/lane-1.md"
+  sed "s/@STORY@/$S22/g" "$HERE/seed.block-sib.md" > "$d/lane-2.md"
+  drive "$w" Write "$d/lane-1.md" "$AG1"; drive "$w" Write "$d/lane-2.md" "$AG2"   # the lanes write their parts, as live
+  run_join "$1" "$w" --artifact stories-serial --since 2026-01-01T00:00:00Z
+  AW="$w"
+}
+p_adjwrote() { # refused while the batch file stands; the printed remedy (delete that batch file) clears it -> JOINED, never wedged
+  adjround "$1" 1 || return 1
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: adjudicator $AG3 wrote $REL/$S31 at 2025-06-01T00:01:00Z" || return 1
+  rm "$AW/$SLOT/shards/stories-serial-adjudicate-p1/fanin-b1.md" || return 1
+  run_join "$1" "$AW" --artifact stories-serial --since 2026-01-01T00:00:00Z
+  [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)"
+}
+p_adjclean() { # the adjudicator wrote only its batch file; and, apart, a lane remediator that edits a batch file -> JOINED both
+  adjround "$1" 0 || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)" && ! has "$JO" "adjudicator" || return 1
+  adjround "$1" 2 || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)" && ! has "$JO" "adjudicator"
+}
 p_lanerec() { # a lane round's record is read AFTER round 1: its closes: closes a round-1 escalation; round 1 alone with the
   # lane record on disk -> REFUSED naming it; the lane record passed alone -> REFUSED
   local w r1 r2 ok=""
@@ -2454,7 +2550,8 @@ p_nl2lane() { # graph's second instance: the lane round (stories-serial), two la
 }
 p_nlesc() { # graph's first instance, a round-one record: one lane `edit: n/a`, one ESCALATED entry whose `edit:`
   # names a story (the serial remediator's file, never this shard's) -> JOINED, ESCALATED-COUNT 1; the lane report
-  # runs (not -serial) and, with no written file, reports 0 lanes and the escalation to the fan-in
+  # runs (not -serial) and, with no written file, makes that story (on disk, in the slot, edited by no part) ONE lane of
+  # its own whose item is the escalation (BL-716), never a fan-in waiting on lanes
   local w d o; w="$(nl_world stories-repair-p1)" || return 1; d="$w/$SLOT/shards/stories-repair-p1"
   nlpart "$d/lane-2.md" "F-2 — MAJOR" escalated "\`$REL/$S22:4\` (escalated: the fix crosses lanes)"
   drive "$w" Write "$d/lane-2.md" "$AG2" "" "" 2026-06-01T00:12:00Z
@@ -2462,7 +2559,8 @@ p_nlesc() { # graph's first instance, a round-one record: one lane `edit: n/a`, 
   o="$(out_of "$w")"
   [ "$RC" -eq 0 ] && [ -f "$o" ] && has "$JO" "(2 parts, 0 writers)" && has "$JO" "ESCALATED-COUNT: 1" \
     && grep -qxF -- "$NL_LINE (2 lane agent(s), none with a subject row at any time)." "$o" \
-    && ! has "$o" "was written by exactly one agent" && has "$JO" "LANE-COUNT: 0" && has "$JO" "FANIN: ESCALATED: lane-2.md"
+    && ! has "$o" "was written by exactly one agent" && has "$JO" "LANE-COUNT: 1" && has "$JO" "LANE: 1 files: $REL/$S22 parts:" \
+    && has "$JO" "LANE-ITEM: 1 ESCALATED: lane-2.md F-2 — MAJOR" && has "$JO" "FANIN-COUNT: 0"
 }
 p_nlcites() { # one lane cites an edit it never ledgered (BL-802's class), the window empty -> REFUSED, exit 2, the
   # existing refusal text verbatim AND the coverage join's UNWRITTEN line beside it, nothing written

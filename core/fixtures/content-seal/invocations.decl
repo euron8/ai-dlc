@@ -1,8 +1,9 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run; the rows follow unit-arms.sh, which asks the library's answers in process. BL-946's CS-DW adds two worlds (one per seal order): per world one merge and two --map runs, and two seal_hook calls.
 # Re-measured for BL-974 on 0.1056.0 by two agreeing counted runs (570 and 196 both times; base 510 and 136, read on a clean worktree of 70818fba5): the 60 added starts are all content-seal.sh, the merge and wait-for-deliverable.sh rows unmoved, which is the shape of --mark's term 7 (the merge's --check-shard asked in process, its sealed-sibling admissions by content-seal.sh --admit-marker); no per-start attribution was taken.
-570 *
+# Re-measured for BL-716 on 0.1057.0 by a counted run (571, budget ok): one start over 974's 570 and one hook start over 84, both CS-K2a (its seal_hook Write and its --mark of an amended adjudicator batch file).
+571 *
 196 core/scripts/content-seal.sh
-84 core/hooks/ai-dlc-content-seal.sh
+85 core/hooks/ai-dlc-content-seal.sh
 26 core/scripts/merge-adversarial-shards.sh
 8 core/scripts/join-remediator-shards.sh
 3 core/scripts/validate-gate-adjudication.sh

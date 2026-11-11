@@ -398,6 +398,10 @@ _seal_remedy() { # actor, path relative to the state dir (or, for a review shard
   esac
   case "$2" in
     planning-artifacts/s[0-9]*/shards/*-repair-p*/*.md) ;;
+    planning-artifacts/s[0-9]*/shards/*-adjudicate-p*/*.md)
+      # An adjudicator batch file is its adjudicator's alone (wait-for-deliverable.sh's --mark arm, same words).
+      printf "delete that batch file (its decisions are void) and re-dispatch that batch's adjudicator, which writes it with Write and marks it again; never amend an adjudicator's batch file through Bash or a lead Write or Edit"
+      return ;;
     planning-artifacts/s[0-9]*/shards/*/*.md)
       # A shard --mark sealed keeps the restore-then-mark remedy below.
       if [ "$1" != program:wait-for-deliverable ]; then

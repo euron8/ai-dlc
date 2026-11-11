@@ -320,6 +320,13 @@ case "$r_part" in *"$REMEDY"*) rp=1 ;; *) rp=0 ;; esac
 case "$r_other" in "restore the file with Write or Edit"*"$REMEDY") ro=1 ;; *) ro=0 ;; esac
 if [ "$rs" = 1 ] && [ "$rg" = 1 ] && [ "$rp" = 1 ] && [ "$ro" = 1 ]; then ok "CS-U-R1: an adversary-shard path gets the re-dispatch and --rerun remedy; a remediator part and a non-shard sealed path keep the generic text"
 else bad "CS-U-R1: remedy text wrong (shard=$rs generic-clean=$rg part=$rp other=$ro): $r_shard | $r_other"; fi
+# CS-U-R2: an adjudicator batch file (BL-716) is a shards/*/*.md path the generic adversary arm also matches, so the
+# ORDER is the property: it gets the delete-and-re-dispatch-that-batch remedy and never the adversary one.
+r_adj="$(_seal_remedy "" planning-artifacts/s1/shards/stories-serial-adjudicate-p1/fanin-b1.md)"
+case "$r_adj" in "delete that batch file (its decisions are void) and re-dispatch that batch's adjudicator"*) ra=1 ;; *) ra=0 ;; esac
+case "$r_adj" in *"$RD"*) ra=0 ;; esac
+if [ "$ra" = 1 ] && [ "$rs" = 1 ]; then ok "CS-U-R2: an adjudicator batch file gets the delete-and-re-dispatch-that-batch remedy, never the adversary's; the adversary shard keeps its own"
+else bad "CS-U-R2: adjudicator remedy wrong (adj=$ra shard=$rs): $r_adj"; fi
 
 echo "$NAME: $fails failure(s)"
 [ "$fails" -eq 0 ]

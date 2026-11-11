@@ -261,10 +261,22 @@ python3 -I $C/bash_by_sprint.py      # Bash wall clock by command family, per sp
 python3 -I $C/seats.py $OUT adversary # one seat by the binding it ran on, and passes per step
 python3 -I $C/resumes.py $OUT        # why finished subagents were resumed, and the idle before it
 python3 -I $C/ask_split.py $OUT      # BL-841/BL-972: each AskUserQuestion wait by what the lanes did during it
+python3 -I $C/serial_tail.py $OUT    # BL-716: which serial step the solo-remediator hours sit in (out/serial_tail.txt)
 ```
 
+**The solo-remediator hours, decomposed (BL-716).** `serial_tail.py` reproduces `poles.py`'s remediator
+solo-role total per sprint (its self-check line) and splits it. Of 9.37/9.62/9.15 h in s320/s321/s322,
+7.08/7.37/7.27 h had ONE remediator alive. Joined to the round-one join that the same lead session printed
+before each spawn, that width-1 time sits in rounds whose join printed `LANE-COUNT: 1` (4.03/3.74/5.48 h:
+document mode maps every section to one assembled document, so a file-keyed lane can never split it) and in
+the fan-in after a multi-lane round (2.19/2.46/1.51 h). A straggler lane is 0.51/0.15/0.12 h. Of those
+agents' time, writer turns (an Edit/Write, the mark, the join) are 35/29/33% and the rest is read-only
+adjudication. That puts the predicted width-1 tail with adjudication split from writing at
+4.78/4.74/4.84 h (k=2) and 3.63/3.43/3.63 h (k=4). This is an UPPER BOUND: it assumes even item splits and
+counts the time that decides an edit as writer time.
+
 Every script reads `~/.claude/projects/-Users-n8-git-graph`, except `seats.py`, which reads only its OUT
-argument. `extract.py`, `cap_rejections.py` and the other five scripts in the s317–s322 directory honour
+argument. `extract.py`, `cap_rejections.py` and the other six scripts in the s317–s322 directory honour
 `EXTRACT_ROOT`; `spawns.py`, `decompose.py`,
 `operator_asks.py`, `bash_cost.py` and `resident.py` have the path hard-coded.
 
