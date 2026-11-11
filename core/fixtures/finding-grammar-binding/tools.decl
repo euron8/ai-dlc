@@ -1,0 +1,13 @@
+bash
+env
+dirname
+basename
+mktemp
+mkdir
+rm
+cp
+awk
+sed
+grep
+cmp
+tr

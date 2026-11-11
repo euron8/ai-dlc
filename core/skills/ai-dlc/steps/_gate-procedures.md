@@ -331,7 +331,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    file and its id together. That `##` form is the SEAT grammar only: an adversary or
    elicitation shard writes each finding as a `### ` heading inside `## Findings` with an
    UPPERCASE severity word (FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), and the
-   merge refuses a shard whose finding opens with `## `.
+   merge refuses a shard whose finding opens with `## `. An adversary shard's CRITICAL and MAJOR
+   headings also carry their id, `### F-<n> — MAJOR — <title>` (THE FINDING ID, same header).
 
    **Every seat writes its file early and closes it with a completion line.** Its brief tells
    it to Write the file's header first, append each finding as soon as it is verified, and,
@@ -707,7 +708,7 @@ one sanctioned Bash write to a shard; every other write is Write or Edit, never 
 refuses a shard written or amended through Bash after its last Write or Edit, by its content
 seal; `content-seal.sh` owns the check, and `--mark` re-seals what it writes). `<shard>` is
 the brief's `shard:` value (`none` when it carries none) and
-`<n>` its `### ` findings, each a `### ` heading inside `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR in `merge-adversarial-shards.sh`'s header; item 1's `##` seat example does not apply to a shard). On every axis, once ANY shard in the directory carries a
+`<n>` its `### ` findings, each a `### ` heading inside `## Findings` with an UPPERCASE severity word (FINDING GRAMMAR in `merge-adversarial-shards.sh`'s header; item 1's `##` seat example does not apply to a shard), and on the convergence axis each CRITICAL or MAJOR one carrying its id (THE FINDING ID, same header). On every axis, once ANY shard in the directory carries a
 `seat-complete:` line anywhere, the merge refuses every shard in it that does not end in
 exactly one, or whose `findings=<n>` differs from the findings it parses there. Its limit: a directory where no shard carries the marker merges
 unchecked, exactly as before. That is a directory written before this instruction, and also a

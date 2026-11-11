@@ -1,0 +1,7 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is a corpus only this repo holds whole: the source copies of the finding grammar in core/scripts/,
+and BB2's census of every fence-rule copy across that directory against an enumeration. A consumer holds only
+the installed subset under scripts/ai-dlc/, so the same census there scans a different, smaller set and its
+floor and enumeration describe nothing the consumer owns -- a narrower check reading identically to a full one.
+The binding is a property of how this distribution writes its sources, which a consumer cannot edit.

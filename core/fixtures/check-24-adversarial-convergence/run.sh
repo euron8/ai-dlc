@@ -355,7 +355,7 @@ fi
 # MUTANT-MATRIX MUTATION-k2-first-pass-time decides=MUTATION-k2-first-pass-time.cell3 twins=MUTATION-k2-first-pass-time.cell2
 # MUTANT-MATRIX MUTATION-k2-added-commit-dropped decides=MUTATION-k2-added-commit-dropped.cell5,MUTATION-k2-added-commit-dropped.cell6 twins=MUTATION-k2-added-commit-dropped.cell4
 # MUTANT-MATRIX J3-1-keyed-on-blocking decides=J3-1-keyed-on-blocking.underonly twins=J3-1-keyed-on-blocking.undeferred
-# MUTANT-MATRIX J3-2-bare-finding-id decides=J3-2-bare-finding-id.undeferred,J3-2-bare-finding-id.stalepass,J3-2-bare-finding-id.twof1,J3-2-bare-finding-id.ident,J3-2-bare-finding-id.partlink,J3-2-bare-finding-id.seriallink,J3-2-bare-finding-id.dupid twins=J3-2-bare-finding-id.deferred
+# MUTANT-MATRIX J3-2-bare-finding-id decides=J3-2-bare-finding-id.undeferred,J3-2-bare-finding-id.stalepass,J3-2-bare-finding-id.twof1,J3-2-bare-finding-id.ident,J3-2-bare-finding-id.partlink,J3-2-bare-finding-id.seriallink,J3-2-bare-finding-id.dupid,J3-2-bare-finding-id.nestfence,J3-2-bare-finding-id.findp2,J3-2-bare-finding-id.unshrep,J3-2-bare-finding-id.keyless,J3-2-bare-finding-id.ordctl twins=J3-2-bare-finding-id.deferred
 # MUTANT-MATRIX J3-3-any-deferred-to decides=J3-3-any-deferred-to.wrongstep,J3-3-any-deferred-to.nosucc twins=J3-3-any-deferred-to.deferred
 # MUTANT-MATRIX J3-4-era-on-presence decides=J3-4-era-on-presence.legacy twins=J3-4-era-on-presence.undeferred
 # MUTANT-MATRIX J3-5-any-pass-s-record decides=J3-5-any-pass-s-record.stalepass twins=J3-5-any-pass-s-record.repaired
@@ -364,9 +364,13 @@ fi
 # MUTANT-MATRIX J3-8-successor-substring decides=J3-8-successor-substring.substr twins=J3-8-successor-substring.subok
 # MUTANT-MATRIX J3-9-identity-triple-links decides=J3-9-identity-triple-links.ident twins=J3-9-identity-triple-links.repaired
 # MUTANT-MATRIX J3-10-one-link-closes-all decides=J3-10-one-link-closes-all.partlink,J3-10-one-link-closes-all.seriallink twins=J3-10-one-link-closes-all.unlinked
-# MUTANT-MATRIX J3-11-heading-id-read-raw decides=J3-11-heading-id-read-raw.dupid,J3-11-heading-id-read-raw.idpunct twins=J3-11-heading-id-read-raw.deferbold
+# MUTANT-MATRIX J3-11-heading-id-read-raw decides=J3-11-heading-id-read-raw.dupid,J3-11-heading-id-read-raw.idpunct,J3-11-heading-id-read-raw.unshrep,J3-11-heading-id-read-raw.keyless twins=J3-11-heading-id-read-raw.deferbold
 # MUTANT-MATRIX J3-12-keys-counted-with-repeats decides=J3-12-keys-counted-with-repeats.dupid twins=J3-12-keys-counted-with-repeats.unkeyed
 # MUTANT-MATRIX J3-13-remedy-says-write decides=J3-13-remedy-says-write.undeferred twins=J3-13-remedy-says-write.wrongstep
+# MUTANT-MATRIX J3-14-fence-closes-on-any-run decides=J3-14-fence-closes-on-any-run.nestfence twins=J3-14-fence-closes-on-any-run.idpunct
+# MUTANT-MATRIX J3-15-findings-matched-as-prefix decides=J3-15-findings-matched-as-prefix.findp2 twins=J3-15-findings-matched-as-prefix.nestfence
+# MUTANT-MATRIX J3-16-ordinal-compared-as-text decides=J3-16-ordinal-compared-as-text.ordk10,J3-16-ordinal-compared-as-text.ordctl twins=J3-16-ordinal-compared-as-text.ordpad
+# MUTANT-MATRIX J3-17-unsharded-findings-exact decides=J3-17-unsharded-findings-exact.unshrep twins=J3-17-unsharded-findings-exact.findp2
 # MUTANT-MATRIX LX1-map-staged-on-nothing decides=LX1-map-staged-on-nothing.cell1,LX1-map-staged-on-nothing.cell2,LX1-map-staged-on-nothing.cell4,LX1-map-staged-on-nothing.cell5,LX1-map-staged-on-nothing.cell6,LX1-map-staged-on-nothing.cell7,LX1-map-staged-on-nothing.cell8,LX1-map-staged-on-nothing.cell9 twins=LX1-map-staged-on-nothing.cell3
 # MUTANT-MATRIX LX2-ordinals-not-de-padded decides=LX2-ordinals-not-de-padded.cell1 twins=LX2-ordinals-not-de-padded.cell2
 # MUTANT-MATRIX LX3-recorded-K-ignored decides=LX3-recorded-K-ignored.cell3,LX3-recorded-K-ignored.cell4 twins=LX3-recorded-K-ignored.cell2
@@ -2908,9 +2912,13 @@ echo
 # identity entry closes the terminal pass's colliding id); the successor's digest matched as a substring
 # (cross-1.md#F-1 names 1.md#F-1); an identity triple read as a link; one linked triple closing every
 # token of both records; the heading id read raw (`F-1:` is not F-1, and two headings of one key count
-# twice); the DEFER remedy telling the lead to write a record its guard denies. Each mutant names the
+# twice); the DEFER remedy telling the lead to write a record its guard denies; a fence closed by any run
+# of its character (a ```` fence holding a bare ``` hides the MAJOR after it); `## Findings` matched as a
+# prefix (`## Findings (pass 2)` keys where the merge counts nothing); the shard ordinal compared as text
+# (a K>=10 merge's `part 01` is never closed by the shard file's 1.md token); the unsharded pass's prefix
+# allowance dropped (graph s316's `## Findings introduced by the repair` MAJOR keys nothing). Each mutant names the
 # exact NOT FIXED line it must produce, so a mutant that crashes the validator (rc 2 everywhere) is no kill.
-echo "--- arm J3 (BL-814): receipt-bl814.sh against the validator, a control copy and thirteen mutants"
+echo "--- arm J3 (BL-814): receipt-bl814.sh against the validator, a control copy and seventeen mutants"
 R814="$DIR/receipt-bl814.sh"
 [ -f "$R814" ] || broken "receipt-bl814.sh is not beside run.sh"
 J3NF="receipt BL-814: NOT FIXED --"
@@ -2920,8 +2928,8 @@ RCPT_SEAM=1 rcpt_mut "SEAM-GUARD J3 receipt" "$R814" 0
 RM_TWIN=undeferred rcpt_mut  "J3-1 keyed on blocking"   "$R814" "1|$J3NF underonly(rc=0)" \
   '  && [ "${LAST_MAJOR:-0}" -gt 0 ] 2>/dev/null && J3_OPEN=1' \
   '  && [ "$(( ${LAST_MAJOR:-0} - $(block_field "$LAST_FILE" findings_major_underived | tr -cd 0-9) ))" -gt 0 ] 2>/dev/null && J3_OPEN=1'
-RM_TWIN=deferred rcpt_mut  "J3-2 bare finding id"     "$R814" "1|$J3NF undeferred(rc=1) stalepass(rc=1) twof1(rc=0) ident(rc=1) partlink(rc=0) seriallink(rc=0) dupid(rc=0)" \
-  '        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }'"' \"\$1\"" '        if (t ~ /[0-9]/) print t } }'"' \"\$1\"" \
+RM_TWIN=deferred rcpt_mut  "J3-2 bare finding id"     "$R814" "1|$J3NF undeferred(rc=1) stalepass(rc=1) twof1(rc=0) ident(rc=1) partlink(rc=0) seriallink(rc=0) dupid(rc=0) nestfence(rc=1) findp2(rc=1) unshrep(rc=1) keyless(rc=1) ordctl(rc=0)" \
+  '        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k }' '        if (t ~ /[0-9]/) print t' \
   '    FILENAME == ARGV[2] { r[norm($1)] = 1; next }' '    FILENAME == ARGV[2] { x = norm($1); sub(/^.*#/, "", x); r[x] = 1; next }' \
   '    FILENAME == ARGV[3] { d[norm($1)] = $2; next }' '    FILENAME == ARGV[3] { x = norm($1); sub(/^.*#/, "", x); d[x] = $2; next }' \
   '  if [ "$j3p1" != "1.md#F-1 cross-2.md#F-1 " ] || [ "$j3p2" != "j3u-adversarial-p1.md#M1 " ] \' '  if [ "$j3p1" != "F-1 F-1 " ] || [ "$j3p2" != "M1 " ] \'
@@ -2950,14 +2958,39 @@ RM_TWIN=unlinked rcpt_mut  "J3-10 one link closes all" "$R814" "1|$J3NF partlink
   j3_succ "$j3_stem"' '  done
   grep -qx '"'#LINKED'"' "$AC_T/j3-tok" || : > "$AC_T/j3-tok"
   j3_succ "$j3_stem"'
-RM_TWIN=deferbold rcpt_mut  "J3-11 heading id read raw" "$R814" "1|$J3NF dupid(rc=0) idpunct(rc=1)" \
-  '    /^### / && fnd && sev($0) == "MAJOR" { s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s)
-      sub(/^[ \t]+/, "", s); sub(/^[Ff]inding[ \t]+/, "", s)
-      if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) { t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
-        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }'"' \"\$1\"" \
-  '    /^### / && fnd && sev($0) == "MAJOR" { print (sh == "" ? base : sh) "#" $2 }'"' \"\$1\""
+RM_TWIN=deferbold rcpt_mut  "J3-11 heading id read raw" "$R814" "1|$J3NF dupid(rc=0) idpunct(rc=1) unshrep(rc=1) keyless(rc=1)" \
+  '    /^### / && fnd && sev($0) == "MAJOR" {' \
+  '    /^### / && fnd && sev($0) == "MAJOR" { print (sh == "" ? base : sh) "#" $2; next }
+    0 {'
 RM_TWIN=unkeyed rcpt_mut  "J3-12 keys counted with repeats" "$R814" "1|$J3NF dupid(rc=0)" \
-  'if (!seen[k]++) print k } } }'"' \"\$1\"" 'print k } } }'"' \"\$1\""
+  'if (!seen[k]++) print k }' 'print k }'
+# BL-958: J3 recognises a heading exactly as the merge does. J3-14 reverts the fence close to the rule J3
+# carried before (any run of the opener's character), so the bare ``` inside a ```` fence closes it and the
+# outer close re-opens one, hiding the MAJOR after it; J3-15 matches `## Findings` as a prefix again
+# (and so moves the self-probe's sharded `## Findings (pass 2)` near-miss into its key set, which the mutant
+# restates, so the receipt and not the self-probe scores it). J3-17 drops the UNSHARDED allowance (the prefix
+# match before any `## Shard:`), so graph s316's `## Findings introduced by the repair` keys nothing and its
+# MAJOR reads unkeyed; its self-probe expectation is restated to empty for the same reason. Its twin findp2 is
+# the sharded `## Findings (pass 2)`, which keys nothing either way.
+# Their labels are one hyphenated word, the MUTANT-MATRIX slug itself, so hygiene H7 reads the twin's label
+# off this line (it reads only a message label's first word; twin-built-allowlist.txt is down-only).
+RM_TWIN=idpunct rcpt_mut  "J3-14-fence-closes-on-any-run" "$R814" "1|$J3NF nestfence(rc=1)" \
+  '== fc && length(frr) >= fln) { fence = 0; next } }' '== fc) { fence = 0; next } }'
+RM_TWIN=nestfence rcpt_mut  "J3-15-findings-matched-as-prefix" "$R814" "1|$J3NF findp2(rc=1)" \
+  '/^## / { fnd = ($0 ~ /^## Findings[ \t]*$/); next }' '/^## / { fnd = ($0 ~ /^## Findings/); next }' \
+  '[ "$j3p1" != "1.md#F-1 cross-2.md#F-1 " ]' '[ "$j3p1" != "1.md#F-1 1.md#F-4 cross-2.md#F-1 " ]'
+RM_TWIN=findp2 rcpt_mut  "J3-17-unsharded-findings-exact" "$R814" "1|$J3NF unshrep(rc=1)" \
+  '    !shd && /^## Findings/ { fnd = 1; next }
+' '' \
+  '[ "$j3p2" != "j3u-adversarial-p1.md#M1 " ]' '[ "$j3p2" != "" ]'
+# BL-962: J3-16 drops the ordinal's numeric compare on BOTH sides (the key's `+ 0` and the token's), so a
+# K>=10 merge's `part 01` keys 01.md#F-1 and the shard-file token 1.md#F-1 closes nothing.
+RM_TWIN=ordpad rcpt_mut  "J3-16-ordinal-compared-as-text" "$R814" "1|$J3NF ordk10(rc=1) ordctl(rc=1)" \
+  'sh = "cross-" (a[3] + 0) ".md"' 'sh = "cross-" a[3] ".md"' \
+  'sh = (a[2] + 0) ".md"' 'sh = a[2] ".md"' \
+  '      if (match(t, /^[0-9]+\.md#/)) t = (substr(t, 1, RLENGTH - 4) + 0) substr(t, RLENGTH - 3)
+      else if (match(t, /^cross-[0-9]+\.md#/)) t = "cross-" (substr(t, 7, RLENGTH - 10) + 0) substr(t, RLENGTH - 3)
+' ''
 RM_TWIN=wrongstep rcpt_mut  "J3-13 remedy says write"  "$R814" "1|$J3NF undeferred(rc=1)" \
   'DEFER    dispatch a remediator to write $j3_dir' 'DEFER    write $j3_dir'
 # The deferral map's binding to the step files (J3-MAP) is requirements-step arm (l): it reads only step prose
