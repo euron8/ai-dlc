@@ -20,3 +20,4 @@ sleep
 sort
 cksum
 mkfifo
+git

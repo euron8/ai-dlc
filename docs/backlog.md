@@ -2305,3 +2305,4 @@ Receipt: `verify: manual`. It closes on an `Outcome measured:` line from a graph
 Provenance: batch 254, BL-841 R1 by ruling of lead ai-dlc-7f; id allocated by ai-dlc-7f.
 
 verify: manual
+

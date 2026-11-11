@@ -25,9 +25,14 @@
 # MUTANT-MATRIX m2 decides=D twins=P1
 # MUTANT-MATRIX tier1-strip decides=T twins=P1
 # MUTANT-MATRIX grant-strip decides=G twins=P1
+# MUTANT-MATRIX ld-ownerblind decides=LDc twins=- why=it edits only the exit predicate, so no class row moves in any world; LDl, LD2 and LDu read unchanged under it (measured)
+# MUTANT-MATRIX ld-tierblind decides=LD2 twins=- why=it edits only the exit predicate, so no class row moves in any world; LDc, LDl and LDu read unchanged under it (measured)
+# MUTANT-MATRIX ld-unresdrop decides=LDu twins=- why=it edits only the t1-local counter, so no class row moves in any world; LDc, LDl and LD2 read unchanged under it (measured)
+# MUTANT-MATRIX hook-det decides=HKc twins=- why=it edits only the consumer hook argv; the receipt's local-t1 and local-t2 cells read unchanged under it (measured)
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/retro-audit-scans/run.sh --matrix
 # Names above are WORLDS, the same tokens the MATRIX-ROW lines print: U the used-to corpus, P1 the tier-2
-# corpus, T the tier-1 origin corpus, G the identifier-grant corpus, D the distribution tree. A twin is a world
+# corpus, T the tier-1 origin corpus, G the identifier-grant corpus, D the distribution tree; LDc, LDl, LD2 and LDu
+# the four --fail-on=local-deterministic worlds, HKc the whole consumer hook's core-owned tier-1 cell. A twin is a world
 # where the mutant changes no class row (0 in its row), driven every push beside the deciding world.
 # Measured co-trips, stated plainly: tier1-strip and grant-strip are ONE env switch (AI_DLC_AUDIT_MUTANT=1)
 # that strips every tier-1 class, so each moves T, G and D; each is DECIDED by the world whose arm scores it
@@ -38,6 +43,10 @@ set -uo pipefail
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
+# The whole-hook arm (receipt-bl977.sh) git-inits a scratch consumer repo. A direct invocation from a linked
+# worktree inherits GIT_DIR, and `git init` under it creates no repository and redirects every later git call onto
+# the caller's index; the same five variables lib/preamble.sh unsets, scrubbed inline (scripts/validate-fixture-git-env.sh).
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MATRIX=0
@@ -1329,6 +1338,150 @@ else
     ok "a resolver exiting non-zero, or exiting 0 with no globs, names the cause and exits 2"
   else
     bad "a failing/empty resolver was not refused (non-zero: rc=$rc_f named=$f_named; empty: rc=$rc_e named=$e_named) — it was scored as ownership"
+  fi
+fi
+
+# ============== --fail-on=local-deterministic: TIER 1 AND (LOCAL OR UNRESOLVED) ==============
+# The consumer pre-push's threshold. `deterministic` is owner-blind (a core-owned tier-1 finding
+# blocks a push whose only remedy is a write Rule 27 forbids) and `local` counts the judgement tier
+# (a tier-2 finding would block a push the hook says only tier 1 gates). Four worlds, ONE seed each,
+# so each wrong predicate moves exactly one cell:
+#   LDc  core-owned tier-1      -> rc 0, ORIGIN_TAG printed `[core 1`     (kills owner-blind)
+#   LDl  local tier-1           -> rc 1, ORIGIN_TAG printed `[local]`
+#   LD2  local tier-2 only      -> rc 0, NARRATIVE_DRIFT printed `[core 0 / local 1` (kills tier-blind)
+#   LDu  tier-1, resolver gone  -> rc 1, `unresolved 1`                    (kills unresolved-dropped)
+# Every rc-0 cell carries a presence conjunct, so a subject that scans nothing cannot pass it.
+LD=--fail-on=local-deterministic
+LDTAG='The lead MUST re-run the gate; this replaced the v0.42.0 behaviour.'
+ldc_world() { fresh; echo "$LDTAG" >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"; }
+ldl_world() { fresh; echo "$LDTAG" >> "$WORK/t/docs/coding-conventions.md"; }
+ld2_world() { fresh; printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"; }
+LDU="$WORK/ldnores"; mkdir -p "$LDU"
+ld_c() { # <script> -> "rc|presence" in LDc
+  ldc_world; local o r
+  o="$(memo out 0 "$WORK/t" "$1" "$LD")"; r="$(memo rc 0 "$WORK/t" "$1" "$LD")"
+  if has 'ORIGIN_TAG: FLAGGED.*\[core 1 / local 0\]' "$o" && has 'locally-owned: 0   unresolved: 0' "$o"; then echo "$r|1"; else echo "$r|0"; fi
+}
+ld_l() { ldl_world; local o r
+  o="$(memo out 0 "$WORK/t" "$1" "$LD")"; r="$(memo rc 0 "$WORK/t" "$1" "$LD")"
+  if has '\[local\] docs/coding-conventions.md:[0-9]*  ORIGIN_TAG' "$o"; then echo "$r|1"; else echo "$r|0"; fi
+}
+ld_2() { ld2_world; local o r
+  o="$(memo out 0 "$WORK/t" "$1" "$LD")"; r="$(memo rc 0 "$WORK/t" "$1" "$LD")"
+  if has 'NARRATIVE_DRIFT: FLAGGED.*\[core 0 / local 1\]' "$o" && has 'tier-1 findings: 0 ' "$o"; then echo "$r|1"; else echo "$r|0"; fi
+}
+ld_u() { # <script> -> "rc|presence" in LDc's world, the script copied ALONE (no resolver beside it)
+  ldc_world; local o r s="$LDU/${1##*/}"
+  cp "$1" "$s"
+  if [ -f "$LDU/core-paths.sh" ]; then echo "broken|0"; return; fi
+  o="$(memo out 0 "$WORK/t" "$s" "$LD")"; r="$(memo rc 0 "$WORK/t" "$s" "$LD")"
+  if has 'ORIGIN_TAG: FLAGGED.*unresolved 1\]' "$o"; then echo "$r|1"; else echo "$r|0"; fi
+}
+
+c="$(ld_c "$AUDIT")"
+[ "$c" = "0|1" ] \
+  && { ok "LDc: a CORE-owned tier-1 finding prints [core 1 and does NOT fail $LD"; B_ldc=1; } \
+  || bad "LDc: a core-owned tier-1 finding under $LD gave rc|printed=$c, want 0|1 — the consumer push is gated on a file it may not edit, or the finding went silent"
+c="$(ld_l "$AUDIT")"
+[ "$c" = "1|1" ] \
+  && ok "LDl: a LOCAL tier-1 finding prints [local] and DOES fail $LD" \
+  || bad "LDl: a locally-owned tier-1 finding under $LD gave rc|printed=$c, want 1|1 — the gate cannot fire"
+c="$(ld_2 "$AUDIT")"
+[ "$c" = "0|1" ] \
+  && { ok "LD2: a LOCAL tier-2-only finding prints [local 1 and does NOT fail $LD (only tier 1 gates the push)"; B_ld2=1; } \
+  || bad "LD2: a local tier-2-only finding under $LD gave rc|printed=$c, want 0|1 — the judgement tier gates the push"
+c="$(ld_u "$AUDIT")"
+[ "$c" = "1|1" ] \
+  && { ok "LDu: a tier-1 finding with NO resolver counts as unresolved and FAILS $LD — a missing resolver cannot acquit"; B_ldu=1; } \
+  || bad "LDu: an unresolved tier-1 finding under $LD gave rc|printed=$c, want 1|1 — an unresolvable owner acquitted the push"
+# The control that makes LDu readable: the same world through the real script WITH its resolver is LDc,
+# which must be rc 0. LDu's rc 1 is therefore the resolver's absence, not a copy that cannot run.
+[ "${B_ldc:-0}" = 1 ] \
+  && ok "  control: the LDu world with the resolver present is LDc (rc 0) — LDu's rc 1 is the absence" \
+  || bad "  control FAILED: LDc did not pass, so LDu's rc 1 is unreadable"
+
+# MUTANTS of the new threshold, each a COPY beside $WORK/core-paths.sh, `cmp -s` guarded by mkmut.
+# Each is scored by its own cell ALONE; the other three cells read the same under it (measured).
+#   ld-ownerblind  the gate counts every tier-1 finding          -> LDc moves to rc 1
+#   ld-tierblind   the gate counts local + unresolved, any tier  -> LD2 moves to rc 1
+#   ld-unresdrop   the counter drops the unresolved half          -> LDu moves to rc 0
+if mkmut ld-ownerblind 's/^    _gated = t1_local_findings$/    _gated = t1_findings/'; then
+  c="$(ld_c "$WORK/ld-ownerblind.sh")"
+  if [ "$c" = "1|1" ]; then
+    mutant_killed "${B_ldc:-0}" ld-ownerblind "MUTANT ld-ownerblind (gate = every tier-1 finding) -> LDc's core-owned finding fails the push; killed"
+  else
+    bad "ld-ownerblind SURVIVED: LDc gave rc|printed=$c under the owner-blind gate — LDc cannot tell the threshold from deterministic"
+  fi
+else
+  bad "ld-ownerblind DID NOT APPLY — its anchor in audit-rule-files.sh is gone, so LDc is unproven"
+fi
+if mkmut ld-tierblind 's/^    _gated = t1_local_findings$/    _gated = local_findings + unresolved_findings/'; then
+  c="$(ld_2 "$WORK/ld-tierblind.sh")"
+  if [ "$c" = "1|1" ]; then
+    mutant_killed "${B_ld2:-0}" ld-tierblind "MUTANT ld-tierblind (gate = local + unresolved, both tiers) -> LD2's tier-2 finding fails the push; killed"
+  else
+    bad "ld-tierblind SURVIVED: LD2 gave rc|printed=$c under the tier-blind gate — LD2 cannot tell the threshold from local"
+  fi
+else
+  bad "ld-tierblind DID NOT APPLY — its anchor in audit-rule-files.sh is gone, so LD2 is unproven"
+fi
+if mkmut ld-unresdrop 's/^        t1_local_findings += n_local + n_unknown$/        t1_local_findings += n_local/'; then
+  c="$(ld_u "$WORK/ld-unresdrop.sh")"
+  if [ "$c" = "0|1" ]; then
+    mutant_killed "${B_ldu:-0}" ld-unresdrop "MUTANT ld-unresdrop (unresolved dropped from the gate) -> LDu's unresolved tier-1 finding acquits; killed"
+  else
+    bad "ld-unresdrop SURVIVED: LDu gave rc|printed=$c with the unresolved half dropped — the safety property is unguarded"
+  fi
+else
+  bad "ld-unresdrop DID NOT APPLY — its anchor in audit-rule-files.sh is gone, so LDu is unproven"
+fi
+
+# ============== THE CONSUMER HOOK, EXECUTED WHOLE (receipt-bl977.sh) ==============
+# A static gate cannot see the hook's audit argv: a misspelled flag VALUE passes every one and wedges
+# every consumer push with exit 2. So the WHOLE hook is driven in a scratch consumer git repo by the
+# BL-977 receipt, and the verdict is the PASS/FAIL closing the hook's `rule-file audit` block.
+# The hook is resolved as agent-definition-render resolves it: `core/git-hooks/pre-push` in the
+# distribution, `.githooks/pre-push` installed (in the distribution that path is the distribution's
+# OWN runner, not the subject). A consumer that carried a diverged hook holds no local-deterministic
+# step until the step-7 merge; there the arm reports PENDING rather than wedging live work. In the
+# distribution layout it asserts unconditionally.
+ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd)"
+HOOK=""; HLAYOUT=""
+if [ -f "$ROOT/core/git-hooks/pre-push" ]; then
+  HOOK="$ROOT/core/git-hooks/pre-push"; HLAYOUT=distribution
+elif [ "$AUDIT" = "$ROOT/scripts/ai-dlc/audit-rule-files.sh" ] && [ -f "$ROOT/.githooks/pre-push" ]; then
+  HOOK="$ROOT/.githooks/pre-push"; HLAYOUT=installed
+fi
+if [ -z "$HOOK" ]; then
+  bad "FIXTURE BROKEN — the consumer pre-push hook was found in neither layout (core/git-hooks/pre-push, or .githooks/pre-push installed)"
+elif [ "$HLAYOUT" = installed ] && ! grep -q -- '--fail-on=local-deterministic' "$HOOK"; then
+  echo "  hook:    ${HOOK#"$ROOT"/} ($HLAYOUT)"
+  # The grep above READ the hook and decided this branch, so the required input was consumed; without this
+  # line hermetic-run fails the PENDING state as an unconsumed input, which is the wedge PENDING exists to avoid.
+  echo "HERMETIC-CONSUMED ${HOOK#"$ROOT"/}"
+  echo "  PENDING: installed hook carries no local-deterministic audit step (carried hook awaits the step-7 merge)"
+else
+  echo "  hook:    ${HOOK#"$ROOT"/} ($HLAYOUT)"
+  echo "HERMETIC-CONSUMED ${HOOK#"$ROOT"/}"
+  ro="$(bash "$HERE/receipt-bl977.sh" --root "$ROOT" --hook "$HOOK" 2>&1)"; rrc=$?
+  if [ "$rrc" = 0 ] && has '^CELL core-t1 block=PASS core1=yes$' "$ro" && has '^CELL local-t1 block=FAIL local1=yes$' "$ro" \
+     && has '^CELL local-t2 rc=0 drift-local=yes$' "$ro"; then
+    ok "the WHOLE consumer hook: core-owned tier-1 -> audit block PASS with [core 1 printed; local tier-1 -> block FAIL (receipt-bl977 rc 0)"; B_hook=1
+  else
+    bad "the consumer hook's rule-file audit block did not gate on ownership (receipt rc=$rrc): $(grep -E '^CELL|BROKEN' <<<"$ro" | paste -sd';' -)"
+  fi
+  # MUTANT: a COPY of the RESOLVED hook with the flag reverted. Killed by the core-t1 cell alone.
+  HM="$WORK/hookmut"; mkdir -p "$HM"
+  sed 's/--fail-on=local-deterministic/--fail-on=deterministic/' "$HOOK" > "$HM/pre-push"
+  if cmp -s "$HOOK" "$HM/pre-push"; then
+    bad "hook-det DID NOT APPLY — the resolved hook carries no --fail-on=local-deterministic to revert"
+  else
+    mo="$(bash "$HERE/receipt-bl977.sh" --root "$ROOT" --hook "$HM/pre-push" 2>&1)"
+    if has '^CELL core-t1 block=FAIL core1=yes$' "$mo" && has '^CELL local-t1 block=FAIL local1=yes$' "$mo"; then
+      mutant_killed "${B_hook:-0}" hook-det "MUTANT hook-det (hook flag reverted to deterministic) -> the core-owned tier-1 finding blocks the push; killed"
+    else
+      bad "hook-det SURVIVED: $(grep -E '^CELL|BROKEN' <<<"$mo" | paste -sd';' -) — the hook arm cannot see the flag"
+    fi
   fi
 fi
 
