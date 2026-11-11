@@ -195,7 +195,7 @@ binding on 2026-10-27 (`7759588aa`), so s321 and s322 ran on it throughout.
 | $ per spawn | 1.91 | 1.70 | 2.24 | 2.90 |
 | Spawns over 45 minutes | 2 | 1 | 33 | 19 |
 
-Source: `spawns.jsonl`, adversary rows by `model_ran` and `effort_bound`. Summed hours include
+Source: `out/seats_adversary.txt` (`seats.py`), adversary rows by `model_ran` and `effort_bound`. Summed hours include
 resume idle, which is about 3 h of s321's 83.7.
 
 Inside the 33 long s321 runs, 14.2 of 35.2 hours are single API requests averaging 66 s each, with
@@ -218,8 +218,8 @@ agent-hours. Each row is sent to the batch lead for a backlog id.
 | 2 | **Operator questions hold the sprint.** The prose fix measured null. A mechanism is owed: the lead keeps every lane not named in the question moving, and questions raised in one round go out together. | up to 24.9 h | $0 | MEDIUM | 57 asks, 6 over an hour; s320 was 47.9 h |
 | 3 | **Lead bookkeeping calls.** `wait-for-deliverable.sh` (922), `snapshot-update.sh` (756) and `gate-transition.sh` (149) are 1,827 of the lead's 8,005 calls. Each lead call costs about 16 s and $0.064. Fold the snapshot write into the programs that already know the state change, and block on a round instead of polling it. | up to 8 h | up to $117 | MEDIUM | `out/lead_time.txt`, `out/bash_by_sprint.txt`. Upper bound: assumes one tool call per lead turn |
 | 4 | **Serial repair tails.** One remediator, or one fan-in writer, holds a round open after the parallel work ends. | up to 9.6 h | about $0 | MEDIUM | Solo-remediator 9.6 h (s321), 9.1 h (s322 partial); a 73-minute "Fan-in writer" in s322 |
-| 5 | **A record-format refusal is found at the join, not by the writer.** The agent finishes, the lead joins, the join refuses a provenance or `edit:` line, and the lead resumes the agent to fix one line. Run the join's own check inside the agent before it seals its part. | 29 loops; 15.7 agent-hours idle before the resume (4.5 h in s321, 11.2 h in s322) | about $30 | MEDIUM | Resume messages by kind over s321 and s322 subagent transcripts |
-| 6 | **A subagent killed by an API error is noticed an hour later.** Five remediators dispatched together at 11-09T17:54Z died on a connection error and were resumed at 19:00–19:08Z. Nothing reports an agent whose last record is an open request. | 1.2 h per event | $0 | HIGH for the event; frequency is one in two sprints | Four resume messages reading "terminated on an API connection error", mean 63 minutes idle |
+| 5 | **A record-format refusal is found at the join, not by the writer.** The agent finishes, the lead joins, the join refuses a provenance or `edit:` line, and the lead resumes the agent to fix one line. Run the join's own check inside the agent before it seals its part. | 29 loops; 15.7 agent-hours idle before the resume (4.5 h in s321, 11.2 h in s322) | about $30 | MEDIUM | `out/resumes.txt` |
+| 6 | **A subagent killed by an API error is noticed an hour later.** Five remediators dispatched together at 11-09T17:54Z died on a connection error and were resumed at 19:00–19:08Z. Nothing reports an agent whose last record is an open request. | 1.2 h per event | $0 | HIGH for the event; frequency is one in two sprints | `out/resumes.txt`: four resume messages reading "terminated on an API connection error", mean 63 minutes idle |
 | 7 | **A wrong shard directory in the dispatch brief.** In s321 architecture the lead sent "the merge requires shard dir …" corrections to ten adversaries that had finished and were waiting, up to 58 minutes. | about 1 h per event | $0 | HIGH for the event | Ten resume gaps, 3.0 agent-hours |
 
 ### NOTE
@@ -258,7 +258,14 @@ python3 -I $B/cap_rejections.py; python3 -I $B/operator_asks.py
 python3 -I $C/poles.py $OUT          # which role holds the lead's wall clock
 python3 -I $C/lead_time.py           # lead active time: model, tool, idle wait
 python3 -I $C/bash_by_sprint.py      # Bash wall clock by command family, per sprint
+python3 -I $C/seats.py $OUT adversary # one seat by the binding it ran on, and passes per step
+python3 -I $C/resumes.py $OUT        # why finished subagents were resumed, and the idle before it
 ```
 
-Every script reads `~/.claude/projects/-Users-n8-git-graph` unless `EXTRACT_ROOT` is set; the three
-new scripts and `extract.py` honour it.
+Every script reads `~/.claude/projects/-Users-n8-git-graph`. `extract.py`, `cap_rejections.py` and the
+five scripts in the s317–s322 directory honour `EXTRACT_ROOT`; `spawns.py`, `decompose.py`,
+`operator_asks.py`, `bash_cost.py` and `resident.py` have the path hard-coded.
+
+To measure a rebinding on a later sprint: add the sprint's edge to `EDGES` in `extract.py` and its story
+count to `STORIES` in `roll.py`, re-run the block above, and read `seats.py` for the rebound role beside
+`poles.py`'s solo-role hours.
