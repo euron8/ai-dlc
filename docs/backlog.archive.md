@@ -40771,3 +40771,87 @@ Provenance: batch b254, cluster B, found by the contract adversary; not a consum
 
 verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; grep -q 'j3_keys()' "$V" || exit 9; F="$(awk '/^j3_keys\(\) \{/,/^\}/' "$V")"; [ -n "$F" ] || exit 9; eval "$F"; T="$(mktemp -d)" || exit 9; p() { printf '# x\n\n## Shard: %s\n\n## Findings\n\n### F-1 — MAJOR — wiring check\n\nstories: 1\n' "$2" > "$T/$1-adversarial-p1.md"; }; p a 'part 1'; p b 'part 01'; [ "$(j3_keys "$T/a-adversarial-p1.md")" = '1.md#F-1' ] || exit 9; [ "$(j3_keys "$T/b-adversarial-p1.md")" = '1.md#F-1' ] || exit 1; N="$(awk '/function norm\(t, /,/return t \}/' "$V")"; [ -n "$N" ] || exit 9; p c 'cross-part group 1 (1,10)'; j() { j3_keys "$T/$1-adversarial-p1.md" > "$T/k"; printf '%s\n' "$2" > "$T/t"; awk -v pd=x-p1 "$N"' FILENAME == ARGV[1] { k[$0] = 1; next } { print ((norm($0) in k) ? "C" : "O") }' "$T/k" "$T/t"; }; [ "$(j a 1.md#F-1)" = C ] || exit 9; [ "$(j b 01.md#F-1)" = C ] || exit 1; [ "$(j c cross-01.md#F-1)" = C ] || exit 1; [ "$(j a 1.md#F-10)" = O ] || exit 1
 
+## BL-955 — merge-review-shards.sh canon_gate accepts a no-run `Canonical run:` only through the record-only exemption, so a story whose canonical run is unmakeable has no spelling QA's gate accepts
+
+**LANDED (v0.1050.0).** **DEFECT.** Filed by the consumer as PC-S322-MERGE-CANONICAL-RUN-NO-EXEMPTION-FOR-A-STORY-WAIVED-RUN. In canon_gate, a `Canonical run:` value RUN-SHAPE reads as no run is accepted only when `record-only-diff.sh paths <story> <base> <frozen>` exits 0. A story whose own requirement removes the only collectable suite has a code diff and no run to make, so every honest spelling (`none, AC3 waives it` included; `run-shape` returns 1 for it) was refused `is not record-only`, and no waiver state existed anywhere in core. This is the QA-side twin of BL-957: BL-957 gave the dev gate's `Full-collection run:` the waiver and made a collect-only invocation a no-run claim on both sides; this entry gives canon_gate the same waiver, through the same single `record-only-diff.sh waiver` test, so the dev and QA gates accept one spelling against one story section.
+
+Fix, as built:
+- **The waiver in canon_gate.** On the no-run branch, after every STORY-BIND rule and immediately before `paths`, canon_gate asks `record-only-diff.sh waiver -C <repo> <story> <base> <value>`, at the BASE, never the frozen sha (the story is a record path inside the range, so an entry added there is the judged party's own). Exit 0 accepts with no result line; 1 falls through to the unchanged record-only exemption; any other exit refuses naming the waiver error.
+- **Only over a lead-written base.** canon_gate takes a ninth argument, `lead` or `seat`. The merge passes `lead` only when the lead's partition record named the base (`PR_ERA` set, the `.manifest` base cross-checked against it); `--check-serial` passes `lead` only under `--lead-range` over a recorded dispatch (`sr_rec_=1`). Under the seat's own `--range` or an unrecorded `--lead-range`, a value the test reads WAIVED is REFUSED naming `--record-dispatch`; an unrecorded merge is REFUSED naming `--record-partition`. A seat-supplied base cannot choose the story text that waives its own run.
+- The two no-run refusal remedies (the `gives no reason` line and the `is not record-only for` line) name the waiver as the third option; CANON_SENTINEL and the lib.sh-asserted substrings are byte-identical.
+- `core/team-roles/qa.md` states the waiver spelling for both labels, its lead-written-base condition and the `--record-dispatch` remedy, and that a `--collect-only`/`--co` invocation is a no-run claim. `core/skills/ai-dlc/steps/stories-test-strategy.md` tells planning to write the `## Canonical-run waivers` entry before §4 stamps story provenance.
+
+Delivery: the consumer's live S322 story is NOT fixed by this entry alone. It passes only once a `## Canonical-run waivers` entry present at its BASE carries the waiver, which is the consumer's change at its next sprint; nobody edits the consumer tree.
+
+Receipt: `core/fixtures/review-shard-merge`'s arm WV955 (unit `canon`, shard b, run by `review-shard-merge-b`): the waiver at a recorded dispatch base over a code range SERIAL-OK and, under the lead's partition record, MERGED; no entry, and the entry added only inside the range, REFUSED not record-only; the seat's `--range` and an unrecorded `--lead-range` REFUSED naming `--record-dispatch`, the unrecorded merge naming `--record-partition`; a waived claim bound to another (waived) story REFUSED by STORY-BIND. Mutants m-wv-skip, m-wv-frozen and m-wv-seat are each killed.
+
+Provenance: batch b254, cluster A; consumer filing in graph `ai-dlc/carry-over/epic5-closeout:_bmad-output/ai-dlc-update/push-candidate-ledger.md`.
+
+verify: sh V="$(mktemp -d "${TMPDIR:-/tmp}/bl955.XXXXXX")" || exit 9; AI_DLC_VERDICT_STORE="$V" bash core/scripts/hermetic-run.sh review-shard-merge-b > "$V/out" 2>&1 && grep -q '  ok    WV955: ' "$V/out"
+
+## BL-956 — merge-review-shards.sh STORY-BIND refuses the bare review index qa.md prescribes, so `6-qa-validation.md` cannot bind `story-1-6-<slug>.md` even where the sprint-status row `story-<N>-6` names that file
+
+**LANDED (v0.1050.0).** **DEFECT.** Filed by the consumer as PC-S322-MERGE-STORY-BIND-INDEX-RULE-REJECTS-THE-EPIC-PREFIXED-STORY-FILE-THE-ENGINE-OWNS-CREATES.
+
+`merge-review-shards.sh` canon_gate binds a review's index to `--story` by the literal `story_idx_ok` rule alone: `story-<idx>.md` or `story-<idx>-<slug>.md`. `core/team-roles/qa.md` tells QA to write the BARE index (`s312/1-qa-validation.md`). The engine keys the view's rows `story-<N>-<M>` (`core/schemas/sprint-status.json`), while the story file it creates is epic-prefixed, `story-<epic>-<M>-<slug>.md`. So a review `6-qa-validation.md` for `story-1-6-<slug>.md` is refused with `is not story-6.md or story-6-*.md`, although row `story-<N>-6` names that file.
+
+**The premise was narrower than filed.** The index `1-6` already bound `story-1-6-<slug>.md` through `story_idx_ok`. Only the bare `6` that qa.md prescribes did not.
+
+**The effect is wider than filed.** STORY-BIND runs on both branches of canon_gate: on a no-run claim, and on a run claim whenever `--story` and a frozen sha are given. The merge always has the frozen sha, so real-run PASSes were refused too, not only waived or record-only claims.
+
+**Consumer-ref correction.** Row `story-322-6` is absent from the implementation view at both the filed base fc553c46e and the filed frozen 0023c404. Its count is 0 at each, and the control `story-322-1` counts 1 at each. The row first appears at 54be3aef0, after the filed frozen sha. At 0023c404 the row rule (`story-status --ref <frozen>`) therefore refuses with or without this fix.
+
+**Close criterion.** BL-956 closes on the retargeted-review scratch re-run, which is recorded here:
+- The re-run used a file:// clone of the consumer at tip 8a3b179b6. In it, the story-6 review's `reviewed-sha` was retargeted from 0023c404 to 54be3aef0, the commit that adds row `story-322-6`, and the frozen sha was 54be3aef0.
+- The BASE scripts (8297bb15d) gave rc 2 with the filed STORY-BIND index text.
+- The FIX scripts gave rc 0, `SERIAL-OK … verdict=PASS`.
+- The same split held under LEGACY-UNRECORDED.
+- The control ran the FIX scripts at the filed frozen 0023c404. It gave rc 2 with the identical index text: the row is absent there, and the fix falls back to the row only when exactly one row exists.
+
+**The live consumer gate needs a re-review of story 6 at a sha that carries `story-322-6`.** The real review reviewed 0023c404, which does not contain the row and is not an ancestor of 54be3aef0. So at every frozen sha that carries the row, the serial `reviewed-sha` rule refuses that review before STORY-BIND runs.
+
+**The live refusal is a precondition, not a fix failure.**
+
+Fix, built: the view row is the index authority.
+- A row names index `<idx>` when its key's sprint-stripped stem, under the REVIEW's sprint, is `story-<idx>`. The stem is computed by the existing `story_key_stem` through a new seam, `sprint-status.sh stem-names --sprint <N> --keys <keys> <idx>`, so no second key grammar exists.
+- `merge-review-shards.sh` has one helper, `stem_rows`, that every site calls. The literal `story_idx_ok` rule still runs first at each site, and the refusal text is byte-identical.
+- At the index binding, `--story` binds when the view's row naming it at the frozen sha has a key whose stem names the index. The row is not required at base.
+- The one-story-per-index loop counts an entry by its key from `list-stories` output already in hand. No per-entry call is added.
+- The view's history counts an entry by key through `sprint-status.sh view-history --with-key`, an opt-in flag that prints `file<TAB><key><TAB><value>`. The default output is byte-unchanged; `cmp -s` of default output before and after on one seeded view history is equal.
+- `qa.md` states that the bare index binds through the row.
+
+Tip-review folds: the history check refuses a view re-keyed inside the range: `--story`'s own pairs are held to the index from `--base` to frozen, on the no-run exemption claim. A re-key the lead made during planning, before the base, still binds. A key whose story number equals the sprint (`story-3-3` in sprint 3) binds, through `story_key_index_stem`, which `sprint-status.sh stem-names` alone uses; the shared `story_key_stem` is unchanged. `qa.md`'s bare-index text and the remedy text state that window. The cells added in `core/fixtures/review-shard-merge` are `bind956-binds`, `bind956-binds-run`, `bind956-hist`, `bind956-key7`, `bind956-key7-run`, `bind956-norow`, `bind956-norow-run`, `bind956-onestory`, `bind956-other`, `bind956-other-run`, `bind956-prebase`, `bind956-receipt`, `bind956-rekey`, `bind956-rekey-ko`, `bind956-stem` and `bind956-withkey`; the mutants are m956-1102, m956-1132, m956-1145, m956-rekey, m956-rekey-ko, m956-stem and m956-window.
+
+Consumer cost: none beyond the change itself. A review that bound before still binds, and the literal rule runs first. Each canon_gate pays one `sprint-status.sh stem-names` call at the index binding (only when the literal rule fails), one per ref in the one-story loop and one for the history. A call happens only when some entry names a file other than `--story`.
+
+Receipt: `core/fixtures/review-shard-merge/receipt-bl956.sh` drives the merge in process over a repository it seeds in the producer's own shape, sprint 3 and epic 1. It runs four cells:
+- the bare index `6-qa-validation.md` over row `story-3-6` must read SERIAL-OK;
+- the literal `1-6-qa-validation.md` must read SERIAL-OK, a control that passes before the fix too;
+- row `story-3-7` must be refused with `is not story-6.md`;
+- `lit-keyonly`: `story-6-x.md` created over a base whose key-only row `story-3-6` names no file yet must read SERIAL-OK. It bound before the fix, and it pins the one-story loop's skip of an entry naming no file.
+It exits 9 when it cannot run. Measured: 1 against 8297bb15d's `core/scripts/` (only `bare-6` fails), 0 against this fix, and 1 against a scratch copy of the fix with the no-file skip deleted (only `lit-keyonly` fails). The fixture runs it as arm `bind956` cell `bind956-receipt`.
+
+Provenance: batch b254, cluster A; consumer filing in graph `ai-dlc/carry-over/epic5-closeout:_bmad-output/ai-dlc-update/push-candidate-ledger.md`.
+
+verify: sh bash core/fixtures/review-shard-merge/receipt-bl956.sh core/scripts/merge-review-shards.sh
+
+## BL-957 — record-only-diff.sh RUN-SHAPE reads a `pytest --collect-only` invocation as a run, and a story whose canonical run is unmakeable has no spelling the dev gate accepts
+
+**LANDED (v0.1050.0).** **PREMISE CORRECTION.** The consumer filed this as a validator that accepts what its own convention excludes. No core file excludes `--collect-only`: at 8297bb15d, `git grep -il collect-only` over `templates`, `core/rules`, `core/skills` and `core/team-roles` lists 0 files, while the control `git grep -i collection` over the same paths lists 8 files (24 lines). The exclusion lives only in the consumer's own `docs/coding-conventions.md`. This entry ADDS the exclusion to `ro_shape`; it does not repair one that core had.
+
+**DEFECT.** Filed by the consumer as PC-S322-HANDOFF-RUN-SHAPE-COUNTS-A-COLLECT-ONLY-AS-THE-HONEST-GREEN-RUN. `record-only-diff.sh run-shape` is the one RUN-SHAPE definition (`ro_shape`), read by the dev gate's arm (k) in `validate-handoff-evidence.sh` and by QA's canon_gate in `merge-review-shards.sh`. It returned 0, a run, for each of `` `pytest --collect-only -q` ``, bare `pytest --collect-only -q` and `$ pytest --co`, so a `Full-collection run:` line naming a collection that executed no test passed the handoff. The consumer's control: the honest `n/a` at an earlier sha of the same story was refused `full-collection-none` on its non-record diff, so the only accepted spelling was the one that ran nothing.
+
+Fix, as built:
+- **NO-TEST-RUN.** `ro_no_test`, asked by `ro_shape` before its runner and count arms, returns no-run when a text one of `ro_shape`'s run arms reads carries the whole token `--collect-only`, `--collectonly` or `--co` (pytest registers the one option under all three spellings), bounded on each side by the end of the text or by any character NOT in `[A-Za-z0-9_-]` (so `--collect-only,`, `--co;`, `--collect-only|tail` and `PYTEST_ADDOPTS=--collect-only` are the token, and `--collect-onlyx`, `--co2` and `---co` are not). The texts are the span `rf_span` reads (backticked, bare or after `$ `), each `$ ` command up to its next backtick, and each line of the value (leading markup skipped on the first) up to its first backtick. Testing `rf_span` alone missed a bare or `$ ` invocation whose first backticked span is its working directory (`pytest --collect-only -q, working directory` followed by a backticked directory), which the opening-command arm still read as a run, so arm (k) accepted what canon_gate refused. `--cov`, `--color` and `--config` stay runs. Prose before the first backtick that names the flag grades as no-run, which fails closed; measured over the consumer's 144 distinct run lines on all branch tips, 0 flip, with a control: line L3 flips old=1 to new=0 through the same check. Both validators read it, so dev and QA grade one value one way. Arm (k)'s capture-heads count route (`dar_counts_ok`) asks it first through the new `record-only-diff.sh no-test-run <value>`, so a collect-only value cannot borrow another capture's count.
+- **The waiver.** `record-only-diff.sh waiver [-C <root>] <story> <ref> <value>` exits 0 (`WAIVED: <AC-id>`) when the value is exactly `none, <AC-id> waives it` and the story as committed at `<ref>` carries exactly one `## Canonical-run waivers` heading with a line beginning `- **<AC-id>** waives the canonical run` (fixed-string compare; CRs dropped; fenced code ignored). It exits 1 (`NOT-WAIVED: <why>`) otherwise, and 2 when the story is a tree or commit at `<ref>` or the ref does not resolve. Arm (k) asks it at the `Full-collection run:` site only, with the gate-1 `<base>`, never `<frozen>`: 0 accepts, 1 falls through to the unchanged record-only exemption, and any other exit refuses. Dependency setup shares `ev_none` and has no waiver site. The full-collection refusal's remedy names the waiver as the third option.
+- `core/team-roles/dev.md` states the collect-only rule, the waiver spelling, and BASE-only acceptance.
+
+Consumer cost: a `Full-collection run:` or `Canonical run:` that is a collect-only invocation is now a no-run claim, refused on a non-record diff. A consumer with such a line in a story at review re-runs the full collection or writes the waiver. No consumer story was measured here.
+
+Delivery: the consumer's live S322 story is NOT fixed by this entry alone. It passes only once a `## Canonical-run waivers` entry present at its BASE carries the waiver, which is the consumer's change at its next sprint; nobody edits the consumer tree. QA's canon_gate gets the waiver in BL-955.
+
+Receipt: `core/fixtures/story-evidence-scaffold/run.sh`'s BL-957 block (WV_WORLDS, eighteen worlds of their own) holds each collect-only form, the four forms whose first backticked span is a working directory (each caught by one of `ro_no_test`'s three texts alone), a bare real run with a backticked directory that stays a run, the token followed by `,` and by `;` (refused) beside `--cov,` (a run), the `--collectonly` spelling (refused), the count-route form, the `--cov`/`--color` runs, the base-only waiver, the in-range entry, and the tree-at-base exit 2. It asks the waiver directly for the fixed-string compare (`AC1.2` against the entry `AC1x2`). Mutants wv957-at-frozen, wv957-no-token, wv957-token-bt-only, wv957-token-span-only, wv957-no-span-text, wv957-no-dollar-text, wv957-no-opening-text, wv957-old-boundary, wv957-no-alias, wv957-d4-after-dar, wv957-exit2-accept and wv957-ev-none-remedy are each killed. `core/fixtures/review-shard-merge`'s canon cells wv957-canon-co and wv957-canon-cov hold the QA side.
+
+Provenance: batch b254, cluster A; consumer filing in graph `ai-dlc/carry-over/epic5-closeout:_bmad-output/ai-dlc-update/push-candidate-ledger.md`.
+
+verify: sh V="$(mktemp -d "${TMPDIR:-/tmp}/bl957.XXXXXX")" || exit 9; AI_DLC_VERDICT_STORE="$V" bash core/scripts/hermetic-run.sh story-evidence-scaffold >/dev/null 2>&1

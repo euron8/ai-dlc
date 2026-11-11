@@ -307,6 +307,12 @@
 #       claim is the record-only exemption: accepted only when `record-only-diff.sh paths <story>
 #       <base> <frozen>` exits 0, else refused `full-collection-none` printing the helper's
 #       changed-path count and first non-record path; a bare `none` is refused whatever the diff.
+#       Before that exemption, `record-only-diff.sh waiver -C <repo> <story> <base> <value>` is asked
+#       with the gate-1 <base> (never <frozen>): exit 0 (`none, <AC-id> waives it` and the story at
+#       <base> carries that `## Canonical-run waivers` entry) accepts, 1 falls through to the exemption,
+#       any other exit refuses `full-collection-none` naming the waiver error. That is this arm's only
+#       waiver site: (l) shares the exemption and has none. A no-test invocation (NO-TEST-RUN,
+#       `--collect-only`/`--co`) is a no-run claim, decided before the (o) capture-heads count route.
 #   (l) DEPENDENCY-SETUP. No `Dependency setup:` label: refused `dependency-setup-missing`. A bare
 #       `none`: refused `dependency-setup-none`. `none, <reason>` is accepted whatever the diff
 #       (dev.md allows it: "no setup needed" is a fact about the project); every other no-run claim
@@ -913,23 +919,38 @@ dar_legacy() {
   if G merge-base --is-ancestor "$vadd" "$sfirst" 2>/dev/null; then DL=bind
   else DL=legacy; DL_WHY="the story's first commit ${sfirst:0:12} predates ${vadd:0:12}, the commit that added --render-dar"; fi
 }
-# dar_counts_ok <value>: the (k) acceptance for a value citing the block's counts (header: (o)).
+# dar_counts_ok <value>: the (k) acceptance for a value citing the block's counts (header: (o)). A
+# no-test invocation (record-only-diff.sh NO-TEST-RUN) is refused this route first: its count is not its own.
 dar_counts_ok() {
+  bash "$RO" no-test-run "$1" && return 1
   case "$1" in *"counts: capture-heads block"*) ;; *) return 1 ;; esac
   [ "$DAR_STATE" = ok ] && [ "$DAR_NCOUNT" -gt 0 ]
 }
 ev_label() { # <label> -> the value of the first label line (record-only-diff.sh's label grammar); 1 when none
   bash "$RO" label "$1" <<<"$TEXT"
 }
-# ev_none <label> <value> <code>: a value that is not a run (record-only-diff.sh RUN-SHAPE) is a
-# no-run claim, however it is spelled, and is held to the record-only partition.
+# ev_none <label> <value> <code> [<remedy>]: a value that is not a run (record-only-diff.sh RUN-SHAPE) is a
+# no-run claim, however it is spelled, and is held to the record-only partition. <remedy> is the
+# calling site's own further option, appended to the not-record-only refusal (the full-collection
+# site names the canonical-run waiver there; the shared text names none).
 ev_none() {
   bash "$RO" none-reason "$2" 2>/dev/null
   if [ $? -eq 1 ]; then
     refuse "$3 $STORY: '$1 $2' gives no reason; write 'none, <reason>' (accepted only on a record-only diff) or the run itself"; return
   fi
   ro_out="$(bash "$RO" paths -C "$REPO" "$STORY" "$BASE" "$FROZEN" 2>&1)" \
-    || refuse "$3 $STORY: '$1 ${2:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count), so it claims the record-only exemption, and range ${BASE:0:12}..${FROZEN:0:12} is not record-only (${ro_out}); run it and record the invocation and counts"
+    || refuse "$3 $STORY: '$1 ${2:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count), so it claims the record-only exemption, and range ${BASE:0:12}..${FROZEN:0:12} is not record-only (${ro_out}); run it and record the invocation and counts${4:-}"
+}
+# ev_none_fc <value>: the full-collection site's no-run claim (header: (k)). The canonical-run waiver is asked
+# here, at THIS site only (Dependency setup shares ev_none and has no waiver), with the gate-1 base the lead
+# passed, never <frozen>: 0 accepts, 1 falls through to ev_none's record-only exemption, any other exit refuses.
+ev_none_fc() {
+  wv_out="$(bash "$RO" waiver -C "$REPO" "$STORY" "$BASE" "$1" 2>&1)"; wv_rc=$?
+  case "$wv_rc" in
+    0) ;;
+    1) ev_none 'Full-collection run:' "$1" full-collection-none "; or, when the story at the base ${BASE:0:12} carries a '## Canonical-run waivers' entry '- **<AC-id>** waives the canonical run: <reason>' (written at planning), write 'Full-collection run: none, <AC-id> waives it'" ;;
+    *) refuse "full-collection-none $STORY: 'Full-collection run: $1' names a canonical-run waiver that cannot be read at the base ${BASE:0:12} (record-only-diff.sh waiver exit $wv_rc: ${wv_out}); run the full collection and record the invocation and counts" ;;
+  esac
 }
 # ------------------------------------------------------------------------- bookkeeping
 # Every bookkeeping arm reads <frozen> through git, never the working tree and never the disk
@@ -1294,8 +1315,10 @@ else
     refuse "full-collection-missing $STORY: no 'Full-collection run:' line at ${FROZEN:0:12}; write one at column 0 with the canonical run's invocation, working directory and counts, or 'Full-collection run: none, <reason>' when the story's diff is record-only"
   elif ! bash "$RO" run-shape "$fc" ${ev_conv:+"$ev_conv"}; then
     # A value citing the full-collection capture plus `counts: capture-heads block` is a run when
-    # the block is fresh and rendered that capture's count (header: (o)).
-    dar_counts_ok "$fc" || ev_none 'Full-collection run:' "$fc" full-collection-none
+    # the block is fresh and rendered that capture's count (header: (o)). A no-test invocation
+    # (record-only-diff.sh NO-TEST-RUN, `--collect-only`) is decided BEFORE that route, inside
+    # dar_counts_ok, so it cannot borrow an unrelated capture's count.
+    dar_counts_ok "$fc" || ev_none_fc "$fc"
   fi
   ds="$(ev_label 'Dependency setup:')"; ds_rc=$?
   if [ "$ds_rc" -ne 0 ]; then

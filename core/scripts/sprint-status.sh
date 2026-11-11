@@ -230,13 +230,18 @@ case "${1:-}" in
   story-status) MODE="story-status"; shift ;;
   list-stories) MODE="list-stories"; shift ;;
   view-history) MODE="view-history"; shift ;;
-  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>] | list-stories | story-status --ref <sha> [--root <repo>] <story-file> | view-history --ref <sha> [--base <sha>] [--root <repo>] <story-file>" >&2; exit 2 ;;
+  stem-names) MODE="stem-names"; shift ;;
+  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>] | list-stories | story-status --ref <sha> [--root <repo>] <story-file> | view-history --ref <sha> [--base <sha>] [--root <repo>] <story-file> | stem-names --sprint <N> --keys <keys> <idx>" >&2; exit 2 ;;
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
-DRY=""; REQUIRE_DONE=""; REF=""; BASE=""
+DRY=""; REQUIRE_DONE=""; REF=""; BASE=""; WITH_KEY=""; KEYS=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --with-key)  [ "$MODE" = "view-history" ] || { echo "sprint-status: --with-key is a flag of view-history" >&2; exit 2; }
+                 WITH_KEY="1"; shift ;;
+    --keys)      [ "$MODE" = "stem-names" ] || { echo "sprint-status: --keys is a flag of stem-names" >&2; exit 2; }
+                 KEYS="${2:-}"; shift 2 2>/dev/null || shift ;;
     --ref)       [ "$MODE" = "story-status" ] || [ "$MODE" = "list-stories" ] || [ "$MODE" = "view-history" ] || { echo "sprint-status: --ref is a flag of story-status, list-stories and view-history" >&2; exit 2; }
                  REF="${2:-}"; shift 2 2>/dev/null || shift ;;
     --base)      [ "$MODE" = "view-history" ] || { echo "sprint-status: --base is a flag of view-history" >&2; exit 2; }
@@ -254,7 +259,7 @@ while [ $# -gt 0 ]; do
     --closed-at) CLOSED_AT="${2:-}"; shift 2 ;;
     --retro-doc) RETRO_DOC="${2:-}"; shift 2 ;;
     -*)          echo "sprint-status: unknown option '$1'" >&2; exit 2 ;;
-    *)           if { [ "$MODE" = "story-status" ] || [ "$MODE" = "view-history" ]; } && [ -z "$FILE" ]; then FILE="$1"; shift
+    *)           if { [ "$MODE" = "story-status" ] || [ "$MODE" = "view-history" ] || [ "$MODE" = "stem-names" ]; } && [ -z "$FILE" ]; then FILE="$1"; shift
                  else echo "sprint-status: unknown option '$1'" >&2; exit 2; fi ;;
   esac
 done
@@ -300,7 +305,7 @@ done
 MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" PROJECT_ROOT="$PROJECT_ROOT" \
 SPRINT="$SPRINT" NAME="$NAME" VARIANT="$VARIANT" INTENSITY="$INTENSITY" \
 EVIDENCE="$EVIDENCE" CLOSED_AT="$CLOSED_AT" RETRO_DOC="$RETRO_DOC" \
-DRY="$DRY" REQUIRE_DONE="$REQUIRE_DONE" REF="$REF" BASE="$BASE" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
+DRY="$DRY" REQUIRE_DONE="$REQUIRE_DONE" REF="$REF" BASE="$BASE" WITH_KEY="$WITH_KEY" KEYS="$KEYS" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
 STORY_FIELDS_REL="${STORY_FIELDS_REL:-}" SELF_DIR="$SCRIPT_DIR" \
 GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts python3 -I - <<'PY'
 import json, os, re, sys
@@ -1024,6 +1029,20 @@ def story_key_stem(key, sprint):
         return key
     out = [p for p in parts if not pat.fullmatch(p)]
     return "-".join(out) if out else key
+
+
+def story_key_index_stem(key, sprint):
+    """The stem STORY-BIND reads an entry key's index from (`stem-names`): ONLY the component right after
+    `story-` is the sprint slot, stripped when it is the declared sprint in a form story_key_stem accepts
+    (`3`, `S3`, `03`). Every later component is the index, so `story-3-3` in sprint 3 names index 3 and
+    `story-3-1-3` names `1-3`, where story_key_stem, which strips every component equal to the sprint, gives
+    `story` and `story-1`. story_key_stem stays the resolver's: resolve_story_file and its findings call it."""
+    parts = key.split("-")
+    if len(parts) < 2 or parts[0] != "story" or not str(sprint).isdigit():
+        return key
+    if re.fullmatch(r"[sS]?0*%d" % int(sprint), parts[1]):
+        return "-".join([parts[0]] + parts[2:])
+    return key
 
 
 def resolve_story_file(view_path, key, declared, sprint, exists=None, lister=None):
@@ -1824,7 +1843,11 @@ def view_history():
     version of the view carried unchanged was never added or removed.
 
     Output, stdout: `since<TAB><creation sha>` FIRST, then `file<TAB><value>`, one per distinct
-    value, sorted. The `since` line is the positive marker a caller keys on, so an exit 0 with an
+    value, sorted; with the opt-in `--with-key`, `file<TAB><entry key><TAB><value>`, one per distinct
+    (key, value) pair a commit added or removed (a key renamed over an unchanged value is a pair of its
+    own), sorted, under the same roll filter; and, when --base is given, `window<TAB><entry key><TAB><value>` after
+    them, one per distinct pair that SOME version of the view from --base through <sha> carries (the view at --base,
+    and at every commit reachable from <sha> and not from --base that touched it), sorted. The `since` line is the positive marker a caller keys on, so an exit 0 with an
     empty stdout can never read as "the view named nothing". Exit 2 with ONE stderr line on any
     git error, an unresolvable ref, or no commit that created the directory: the history is then
     unknown, never empty."""
@@ -1864,14 +1887,21 @@ def view_history():
             return None, None
         raise OSError("cat-file answered %r for %s" % (" ".join(hdr), spec))
 
-    def files_at(spec):
+    # --with-key: the history is the set of (entry key, `file:` value) pairs instead of values, so a caller can bind a
+    # row by its key (stem-names) as well as by its value's basename. The default output is unchanged.
+    keyed = os.environ.get("WITH_KEY", "") == "1"
+
+    def pairs_at(spec):
         t, body = obj(spec)
         if t == "blob":
             state, entries = parse_story_entries(body)
-            return {f.get("file") for _, f, _ in entries if f.get("file")}
+            return {(k, f.get("file")) for k, f, _ in entries if f.get("file")}
         if t is None:
             return set()
         raise OSError("%s is a %s, not a blob" % (spec, t))
+
+    def files_at(spec):
+        return {v for _, v in pairs_at(spec)}
 
     def stop(msg):
         p.kill()
@@ -1942,13 +1972,30 @@ def view_history():
 
         named = set()
         for c in walk.split():
-            cur, prev = files_at("%s:%s" % (c, view_rel)), files_at("%s^1:%s" % (c, view_rel))
+            curp, prevp = pairs_at("%s:%s" % (c, view_rel)), pairs_at("%s^1:%s" % (c, view_rel))
+            cur, prev = {v for _, v in curp}, {v for _, v in prevp}
             delta = cur ^ prev
             # THE ROLL: a value the creation commit removed, which its parent's view resolved into an earlier sprint's
             # stories directory, is that sprint's story, retired by the roll, never this sprint's.
             if c == born:
                 delta -= prior_sprint(c, prev - cur)
-            named |= delta
+            if keyed:
+                # The same roll filter, by value (what the drop removed from the delta); a pair whose key alone changed
+                # is a delta of its own.
+                dropped = (cur ^ prev) - delta
+                named |= {kv for kv in curp ^ prevp if kv[1] not in dropped}
+            else:
+                named |= delta
+        # THE WINDOW (--with-key and --base): the pairs every version of the view from --base through <sha> carries, so
+        # a caller can hold a pair to a rule only where the range's own commits could have written it.
+        window = set()
+        wbase = os.environ.get("BASE", "")
+        if keyed and wbase:
+            wwalk = git("rev-list", "--full-history", full, "--not", wbase, "--", view_rel)
+            if wwalk is None:
+                return stop("git rev-list over %s failed between %s and %s" % (view_rel, wbase[:12], full[:12]))
+            for c in [wbase] + wwalk.split():
+                window |= pairs_at("%s:%s" % (c, view_rel))
     except (OSError, ValueError) as e:
         p.kill()
         return unknown("reading %s up to %s: %s" % (view_rel, full[:12], e))
@@ -1957,7 +2004,12 @@ def view_history():
         return unknown("git cat-file over %s exited %d" % (view_rel, p.returncode))
     print("since\t%s" % born)
     for v in sorted(named):
-        print("file\t%s" % v.replace("\t", " "))
+        if keyed:
+            print("file\t%s\t%s" % (v[0].replace("\t", " "), v[1].replace("\t", " ")))
+        else:
+            print("file\t%s" % v.replace("\t", " "))
+    for v in sorted(window):
+        print("window\t%s\t%s" % (v[0].replace("\t", " "), v[1].replace("\t", " ")))
     return 0
 
 
@@ -2020,6 +2072,18 @@ elif mode == "list-stories":
     sys.exit(story_status_at_ref() if os.environ.get("REF") else list_stories())
 elif mode == "view-history":
     sys.exit(view_history())
+elif mode == "stem-names":
+    # `stem-names --sprint <N> --keys <newline-separated entry keys> <idx>`: each key whose story_key_index_stem under
+    # the REVIEW's sprint <N> is `story-<idx>`, one per line, in input order. A seam for merge-review-shards.sh
+    # STORY-BIND, so the key grammar stays this file's alone. Exit 0 printed (empty included), 2 on usage.
+    _sp = os.environ.get("SPRINT", "")
+    _ix = os.environ.get("FILE", "")
+    if not _sp.isdigit() or not _ix:
+        fail("stem-names takes --sprint <N> (digits) and an <idx>", code=2)
+    for _k in os.environ.get("KEYS", "").split("\n"):
+        if _k and story_key_index_stem(_k, _sp) == "story-" + _ix:
+            print(_k)
+    sys.exit(0)
 else:
     fail("unknown mode '%s'" % mode, code=2)
 PY

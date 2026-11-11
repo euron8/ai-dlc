@@ -320,6 +320,16 @@ project that replaces that section does not replace this one.
   handoff otherwise. It reads the line as a run only when it carries a
   backticked invocation, a `$ ` line or a count; any other value (`N/A`, `TBD`,
   `see dev report`, empty) is a no-run claim, held to the record-path rule.
+  An invocation that collects and runs no test (`pytest --collect-only`,
+  `pytest --co`, backticked, bare or after `$ `) is a no-run claim too, and its
+  collected count is never the run's counts. When a requirement makes the
+  canonical run unmakeable, the one other no-run claim accepted over a code
+  diff is `Full-collection run: none, <AC-id> waives it`, and only when the
+  story file as it stood at the BASE (the gate-1 base the lead passes, never
+  the frozen sha) carries a `## Canonical-run waivers` section, written at
+  planning, holding the line `- **<AC-id>** waives the canonical run: <reason>`.
+  An entry added during implementation does not count. Any other
+  `none, <reason>` stays held to the record-path rule.
   The counts may be the line the capture-heads block renders (below), cited as
   the capture's path plus `counts: capture-heads block`.
 - **The dependency setup that run needs, recorded beside it.** A fresh

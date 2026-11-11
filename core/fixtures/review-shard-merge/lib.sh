@@ -2782,7 +2782,8 @@ G -C "$CR_REPO" checkout -q -b bare "$CR_BASE" && printf -- '---\nstatus: review
 # only z and the view, so only the one-story-per-index check refuses z: x is listed under index 1-1 at CR_REC.
 # CR_TRUNC (BL-895 D1): over CR_BASE, story-2-1-y.md at review and its row, the ONLY file under index 2 or 2-1, so a review
 # named 2-qa-validation.md is refused by the digit rule alone; 2-1-qa-validation.md is its ALLOW twin. CR_STORY4 is also
-# cr-bind-sibling's story under the 1-2 review, an index under which nothing is listed.
+# cr-bind-sibling's story under the 1-2 review, an index under which nothing is listed. Its row story-2-1 names index
+# 2-1 under sprint 1 (BL-956 stem-names strips only the sprint slot after `story-`), so it binds index 2 by no row.
 CR_STORYZ="$CR_SDIR/story-1-1-z.md"; CR_STORY4="$CR_SDIR/story-2-1-y.md"
 cr_z() { printf -- '---\nstatus: review\n---\n# Story Z\n' > "$CR_REPO/$CR_STORYZ"; }
 G -C "$CR_REPO" checkout -q -b rk "$CR_REC" && cr_z && cr_view review \
@@ -2857,6 +2858,92 @@ _ldn="$(grep -c 'story-1-1-x.md' <<<"$_ldup")" || _ldn=0
   && [ "$(G -C "$CR_REPO" cat-file -t "${CR_CODE}:$CR_SDIR")" = tree ] && ! G -C "$CR_REPO" cat-file -e "${CR_CODE}:$CR_SDIR/typo.md" 2> /dev/null \
   && [ "$(G -C "$CR_REPO" cat-file -t "${CR_BASE}:$CR_VIEW")" = blob ] && ! grep -qF 'story-1-2' "$CR_REPO/$CR_VIEW" \
   || { echo "FIXTURE STALE: story-1-2 is not absent at CR_BASE and a blob at CR_NEWS, or the stories dir is no tree (or typo.md exists) at CR_CODE, or the view is untracked at CR_BASE or the checked-out view lists story-1-2" >&2; exit 2; }
+# ---- BIND956 (BL-956): THE VIEW ROW IS THE INDEX AUTHORITY. Each world is one commit over CR_BASE (story-1-1 alone
+# listed, no row stemming to story-6) adding story-1-6-a.md at review, and changes only the view and stories, so every
+# range is record-only and only STORY-BIND decides. Under sprint 1 a key story-1-6 strips to story-6 (stem-names).
+#   B6    row story-1-6 names story-1-6-a.md                          the bare index 6 binds (both claims)
+#   B6O   row story-1-6 names story-1-6-b.md, no row names a         refused at the index (both claims)
+#   B6N   no row names a                                             refused at the index (both claims)
+#   B6K7  row story-1-7 names a                                      refused at the index (both claims)
+#   B6ONE B6 plus a row keyed story-6 naming ../elsewhere/story-x.md: a second entry under index 6 in another directory,
+#         which the view's history skips as another sprint's, so only the one-story loop refuses it (no-run)
+#   B6H   B6, over B6Q: a commit whose row story-1-6 named stories/story-q.md, in no view at either end, so only the
+#         view's history refuses it (no-run)
+CR_S956="$CR_SDIR/story-1-6-a.md"
+b956_w() { # <branch> <row key> <row file> [<extra rows>] -> a commit over CR_BASE adding story-1-6-a.md and the rows
+  G -C "$CR_REPO" checkout -q -b "$1" "${B956_FROM:-$CR_BASE}" && printf -- '---\nstatus: review\n---\n# Story 1.6\n' > "$CR_REPO/$CR_S956" \
+    && cr_view ready-for-dev && { [ -z "$2" ] || printf '  %s:\n    status: review\n    file: %s\n' "$2" "$3" >> "$CR_REPO/$CR_VIEW"; } \
+    && { [ -z "${4:-}" ] || printf '%s\n' "$4" >> "$CR_REPO/$CR_VIEW"; } && cr_lc "$1"
+}
+CR_B6="$(b956_w b956 story-1-6 stories/story-1-6-a.md)" && CR_B6O="$(b956_w b956o story-1-6 stories/story-1-6-b.md)" \
+  && CR_B6N="$(b956_w b956n '' '')" && CR_B6K7="$(b956_w b956k7 story-1-7 stories/story-1-6-a.md)" \
+  && CR_B6ONE="$(b956_w b956one story-1-6 stories/story-1-6-a.md "$(printf '  story-6:\n    status: review\n    file: ../elsewhere/story-x.md\n')")" \
+  && G -C "$CR_REPO" checkout -q -b b956q "$CR_BASE" && cr_view ready-for-dev \
+  && printf '  story-1-6:\n    status: review\n    file: stories/story-q.md\n' >> "$CR_REPO/$CR_VIEW" && CR_B6Q="$(cr_lc b956q)" \
+  && CR_B6H="$(B956_FROM="$CR_B6Q" b956_w b956h story-1-6 stories/story-1-6-a.md)" \
+  && G -C "$CR_REPO" checkout -q "$cr_home" || { echo "FIXTURE ERROR: the BL-956 view-row branches were not seeded" >&2; exit 2; }
+# THE RE-KEY (BL-956 tip adversary D2): the range RE-KEYS x, so row story-1-6 names story-1-1-x.md at the frozen sha, and
+# at the base row story-1-1 named x. Each range changes only x and the view (record-only for x). --story x under the bare
+# review index 6 binds by the frozen row alone, and only the view's history (x keyed story-1-1, index 1) refuses it.
+# Story 6 ABSENT at the base: CR_BASE..CR_B6RA, where the creation commit itself adds the pair (story-1-1, x). KEY-ONLY at
+# the base (row story-1-6, no file:): CR_B6RKB..CR_B6RK, a history of its own built with plumbing (no checkout): its root
+# commits the view, x already keyed story-1-1, BEFORE the stories directory exists, and CR_B6RKB only adds x, so x's value
+# is in the view at every commit and only a PAIR-keyed history (view-history --with-key) still names (story-1-1, x).
+# CR_B6PB..CR_B6PF (THE PLANNING RE-KEY): over CR_BASE, the lead's planning commit adds story-1-6-a.md under row
+# story-1-7, and the base commit re-keys that row to story-1-6, BEFORE the range; the range moves only the story and
+# the view's status. The history names (story-1-7, a) from the creation, but the no-run exemption claim holds --story's
+# pairs to the index from --base to frozen only, so it binds.
+# CR_SIBP0..CR_SIBP (m-no-index's world): the same plumbing shape for story-2-1-y.md, listed by a KEY-ONLY row story-2-1
+# (no file:; resolve_story_file finds it by the key's resolver stem, story-2-*.md, the only such file), so no version of
+# the view pairs any value with it, neither history check sees it, and only the literal index check at the frozen bind
+# (then the row's key, story-2-1, naming index 2-1) refuses it under the 1-2 review.
+CR_RKVIEW='sprint: 1\nstatus: in_progress\nstories:\n  story-1-6:\n    status: review\n    file: stories/story-1-1-x.md\n'
+b956_rk() { # <branch> <from> -> the re-keyed view and x at review over <from>
+  G -C "$CR_REPO" checkout -q -b "$1" "$2" && printf -- '---\nstatus: review\n---\n# Story 1\n' > "$CR_REPO/$CR_STORY" \
+    && printf '%b' "$CR_RKVIEW" > "$CR_REPO/$CR_VIEW" && cr_lc "$1"
+}
+b956_pc() { # <parent commit or -> <message> <path> <content>_... -> a commit over <parent> writing each path (its content
+  # less one trailing `_`, which keeps the final newline through $( )), via a scratch index
+  local par="$1" msg="$2" ix="$WORK/b956-rk.idx" b t
+  shift 2; rm -f "$ix"
+  if [ "$par" = - ]; then GIT_INDEX_FILE="$ix" G -C "$CR_REPO" read-tree --empty || return 1
+  else GIT_INDEX_FILE="$ix" G -C "$CR_REPO" read-tree "$par" || return 1; fi
+  while [ "$#" -ge 2 ]; do
+    b="$(printf '%s' "${2%_}" | G -C "$CR_REPO" hash-object -w --stdin)" && GIT_INDEX_FILE="$ix" G -C "$CR_REPO" update-index --add --cacheinfo "100644,$b,$1" || return 1
+    shift 2
+  done
+  t="$(GIT_INDEX_FILE="$ix" G -C "$CR_REPO" write-tree)" || return 1
+  if [ "$par" = - ]; then G -C "$CR_REPO" commit-tree "$t" -m "$msg"; else G -C "$CR_REPO" commit-tree "$t" -p "$par" -m "$msg"; fi
+}
+CR_B6RA="$(b956_rk b956ra "$CR_BASE")" && G -C "$CR_REPO" checkout -q "$cr_home" \
+  && _rk0="$(b956_pc - rk-root "$CR_VIEW" "$(printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: ready-for-dev\n    file: stories/story-1-1-x.md\n  story-1-6:\n    status: ready-for-dev\n_')")" \
+  && CR_B6RKB="$(b956_pc "$_rk0" rk-base "$CR_STORY" "$(printf -- '---\nstatus: ready-for-dev\n---\n# Story 1\n_')")" \
+  && CR_B6RK="$(b956_pc "$CR_B6RKB" rk-swap "$CR_STORY" "$(printf -- '---\nstatus: review\n---\n# Story 1\n_')" "$CR_VIEW" "$(printf '%b_' "$CR_RKVIEW")")" \
+  && _sp0="$(b956_pc - sibp-root "$CR_VIEW" "$(printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-2-1:\n    status: ready-for-dev\n_')")" \
+  && CR_SIBP0="$(b956_pc "$_sp0" sibp-base "$CR_STORY4" "$(printf -- '---\nstatus: ready-for-dev\n---\n# Story 2.1\n_')")" \
+  && CR_SIBP="$(b956_pc "$CR_SIBP0" sibp "$CR_STORY4" "$(printf -- '---\nstatus: review\n---\n# Story 2.1\n_')" \
+       "$CR_VIEW" "$(printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-2-1:\n    status: review\n_')")" \
+  && ! G -C "$CR_REPO" cat-file -e "${_rk0}:$CR_SDIR" 2> /dev/null && ! G -C "$CR_REPO" cat-file -e "${_sp0}:$CR_SDIR" 2> /dev/null \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$_rk0" "$CR_B6RKB")" = "$CR_STORY" ] && [ "$(G -C "$CR_REPO" diff --name-only "$_sp0" "$CR_SIBP0")" = "$CR_STORY4" ] \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$CR_BASE" "$CR_B6RA" | tr '\n' ' ')" = "$CR_VIEW $CR_STORY " ] \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$CR_B6RKB" "$CR_B6RK" | tr '\n' ' ')" = "$CR_VIEW $CR_STORY " ] \
+  && _pb0="$(b956_pc "$CR_BASE" pb-plan "$CR_S956" "$(printf -- '---\nstatus: ready-for-dev\n---\n# Story 1.6\n_')" \
+       "$CR_VIEW" "$(printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: ready-for-dev\n    file: stories/story-1-1-x.md\n  story-1-7:\n    status: ready-for-dev\n    file: stories/story-1-6-a.md\n_')")" \
+  && CR_B6PB="$(b956_pc "$_pb0" pb-base "$CR_VIEW" "$(printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: ready-for-dev\n    file: stories/story-1-1-x.md\n  story-1-6:\n    status: ready-for-dev\n    file: stories/story-1-6-a.md\n_')")" \
+  && CR_B6PF="$(b956_pc "$CR_B6PB" pb-frozen "$CR_S956" "$(printf -- '---\nstatus: review\n---\n# Story 1.6\n_')" \
+       "$CR_VIEW" "$(printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: ready-for-dev\n    file: stories/story-1-1-x.md\n  story-1-6:\n    status: review\n    file: stories/story-1-6-a.md\n_')")" \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$CR_B6PB" "$CR_B6PF" | tr '\n' ' ')" = "$CR_VIEW $CR_S956 " ] \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$_pb0" "$CR_B6PB")" = "$CR_VIEW" ] \
+  || { echo "FIXTURE ERROR: the BL-956 re-key branches were not seeded" >&2; exit 2; }
+for _l in "$CR_B6" "$CR_B6O" "$CR_B6K7" "$CR_B6ONE" "$CR_B6H"; do
+  [ "$(G -C "$CR_REPO" diff --name-only "$CR_BASE" "$_l" | tr '\n' ' ')" = "$CR_VIEW $CR_S956 " ] \
+    || { echo "FIXTURE STALE: a BL-956 range CR_BASE..$_l does not change exactly the view and story-1-6-a.md" >&2; exit 2; }
+done
+[ "$(G -C "$CR_REPO" diff --name-only "$CR_BASE" "$CR_B6N")" = "$CR_S956" ] \
+  || { echo "FIXTURE STALE: CR_BASE..CR_B6N does not change exactly story-1-6-a.md (no row is the world)" >&2; exit 2; }
+_b6h="$(G -C "$CR_REPO" show "${CR_B6H}:$CR_VIEW")" || _b6h=""; _b6q="$(G -C "$CR_REPO" show "${CR_B6Q}:$CR_VIEW")" || _b6q=""
+grep -qF 'stories/story-q.md' <<<"$_b6q" && ! grep -qF 'story-q.md' <<<"$_b6h" && grep -qF 'stories/story-1-6-a.md' <<<"$_b6h" \
+  || { echo "FIXTURE STALE: B6Q's row does not name story-q.md, or B6H's still does or does not name story-1-6-a.md" >&2; exit 2; }
 # BL-895, THE HISTORY'S OWN TRUST. Each world sits over CR_LRD (x's row deleted by one record-only commit), so only the
 # view's history names x, and each defeats a history read a different way:
 #   CR_HM  (B1) HQ, over CR_LRD, adds z and repoints row story-1-1 to it, dated 2001; CR_HM merges it --no-ff into CR_LRD's
@@ -3295,6 +3382,10 @@ p_canon() {
   # one-story-per-index check cannot cover m-row-exit's or m-no-index's subject.
   if cell cr-bind-seed; then SR_CANON="$SR_NONE" sr_file "$f4" "$pv"; cr_no "$sd" "$f4" cr-bind-seed "$CR_BROW" --story "$CR_SEEDF" --range "$CR_REC" "$CR_SEED"; fi
   if cell cr-bind-sibling; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; cr_no "$sd" "$f2" cr-bind-sibling "$CR_BIDX" --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
+  # cr-bind-sibling-pre: the same story under the 1-2 review over CR_SIBP0..CR_SIBP, where no version of the view pairs a
+  # value with it (its row is key-only), so only the frozen bind's index check refuses it (m-no-index's subject; in
+  # cr-bind-sibling the history's re-key check refuses it too).
+  if cell cr-bind-sibling-pre; then SR_CANON="$SR_NONE" sr_file "$f2" "$pv"; cr_no "$sd" "$f2" cr-bind-sibling-pre "$CR_BIDX" --story "$CR_STORY4" --range "$CR_SIBP0" "$CR_SIBP"; fi
   # BL-895 B1. cr-bind-repoint-k / -a: a fresh story-1-1-z.md the view lists under another key, or by repointing row
   # story-1-1's file:, over CR_REC where story-1-1-x.md is already `review` -- refused because x is listed under index 1-1
   # at the base (m-single-file's subject). D1. cr-bind-trunc: story-2-1-y.md, the only file under index 2, under a review
@@ -3382,6 +3473,12 @@ p_canon() {
       cr_no "$sd" "$f" "cr-norun-other[$nv]" "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"
     done
   fi
+  # BL-957, the canon side of NO-TEST-RUN (record-only-diff.sh): a collect-only `Canonical run:` with a counted result
+  # is a no-run claim, held to the partition (cr-norun-na's world, the value changed); before BL-957 it read as a run
+  # and passed SERIAL-OK. The result carries a `passed` count, so only the run shape can refuse it (`12 tests collected`
+  # is refused by the count rule alone, which measured RED on the base for that other reason). wv957-canon-cov, its ALLOW twin one property apart: `--cov=` is a run.
+  if cell wv957-canon-co; then SR_CANON="$(printf 'Canonical run: `pytest --collect-only -q` from the root\nCanonical result: 12 passed')" sr_file "$f" "$pv"; cr_no "$sd" "$f" wv957-canon-co "$CR_NOTRO" --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"; fi
+  if cell wv957-canon-cov; then SR_CANON="$(printf 'Canonical run: `pytest --cov=src -q` from the root\nCanonical result: 12 passed')" sr_file "$f" "$pv"; cr_ok "$sd" "$f" wv957-canon-cov --story "$CR_STORY" --range "$CR_BASE" "$CR_CODE"; fi
   # cr-serial-legacy (ALLOW): a review inside PROJ_CRS, the root and the review's repository one tree, whose qa.md lacks
   # the sentinel: LEGACY, and it accepts. cr-serial-redirect (KILL, one property apart): the same root and the same
   # run-less PASS, the review in CR_REPO, whose own installed qa.md carries the sentinel. The seat's
@@ -3417,6 +3514,69 @@ p_canon() {
     has "$CO" "mode 120000" || WHY="$WHY cr-exempt-link{no mode 120000 in $(head -1 "$CO")}"; fi
   if cell cr-exempt-link-ok; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_ok "$sd" "$f" cr-exempt-link-ok --story "$CR_STORY" --range "$CR_BASE" "$CR_LINKF"; fi
   rm -f "$f" "$f2" "$f3" "$f2p" "$fs2" "$fs4" "$fs6" "$fnp"
+  [ -z "$WHY" ]
+}
+# ---- BIND956 (BL-956): STORY-BIND binds the bare review index through the view's row (merge-review-shards.sh stem_rows),
+# over the BIND956 worlds above, review docs/reviews/s1/6-qa-validation.md and --story story-1-6-a.md. The index cells
+# run on both branches, a no-run claim and a run claim (-run); the one-story and history cells are the no-run branch's
+# own. bind956-receipt runs receipt-bl956.sh (the backlog entry's verify, sprint 3 and epic 1) over <script-dir>'s merge.
+B956_NONE='Canonical run: none, the diff is record-only (story, view)'
+B956_IDX="is not story-6.md or story-6-*.md, or its slug opens with a digit"
+B956_RK="keyed --story's file stories/story-1-1-x.md under row story-1-1, not under that index"
+p_bind956() {
+  local sd="$1" f6="$CR_REPO/docs/reviews/s1/6-qa-validation.md" pv o rc n
+  pv="$(printf '## Verdict\nPASS')"; WHY=""
+  b956() { # <cell> <none|run> <ok|refusal token> <frozen> [<story> <base>]
+    if [ "$2" = none ]; then SR_CANON="$B956_NONE" sr_file "$f6" "$pv"; else SR_CANON="$CANON_BLK" sr_file "$f6" "$pv"; fi
+    if [ "$3" = ok ]; then cr_ok "$sd" "$f6" "$1" --story "${5:-$CR_S956}" --range "${6:-$CR_BASE}" "$4"
+    else cr_no "$sd" "$f6" "$1" "$3" --story "${5:-$CR_S956}" --range "${6:-$CR_BASE}" "$4"; fi
+  }
+  if cell bind956-binds; then b956 bind956-binds none ok "$CR_B6"; fi
+  if cell bind956-binds-run; then b956 bind956-binds-run run ok "$CR_B6"; fi
+  if cell bind956-other; then b956 bind956-other none "$B956_IDX" "$CR_B6O"; fi
+  if cell bind956-other-run; then b956 bind956-other-run run "$B956_IDX" "$CR_B6O"; fi
+  if cell bind956-norow; then b956 bind956-norow none "$B956_IDX" "$CR_B6N"; fi
+  if cell bind956-norow-run; then b956 bind956-norow-run run "$B956_IDX" "$CR_B6N"; fi
+  if cell bind956-key7; then b956 bind956-key7 none "$B956_IDX" "$CR_B6K7"; fi
+  if cell bind956-key7-run; then b956 bind956-key7-run run "$B956_IDX" "$CR_B6K7"; fi
+  if cell bind956-onestory; then b956 bind956-onestory none "$CR_BONE" "$CR_B6ONE"
+    has "$CO" "entry story-6 " || WHY="$WHY bind956-onestory{the refusal does not name entry story-6: $(head -1 "$CO")}"; fi
+  if cell bind956-hist; then b956 bind956-hist none "the implementation view named stories/story-q.md under that index between" "$CR_B6H"; fi
+  # THE RE-KEY: --story story-1-1-x.md, bound at the frozen sha by the swapped row story-1-6, was keyed story-1-1 at the
+  # base; story 6 absent there (rekey) or key-only (rekey-ko). Only the history's re-key refusal decides (m956-rekey).
+  if cell bind956-rekey; then b956 bind956-rekey none "$B956_RK" "$CR_B6RA" "$CR_STORY" "$CR_BASE"; fi
+  if cell bind956-rekey-ko; then b956 bind956-rekey-ko none "$B956_RK" "$CR_B6RK" "$CR_STORY" "$CR_B6RKB"; fi
+  # bind956-prebase: the lead re-keyed story-1-6-a.md from story-1-7 to story-1-6 in planning, before --base; it binds
+  # (SERIAL-OK), the re-key check reading --story's pairs from --base to frozen only (m956-window's subject).
+  if cell bind956-prebase; then b956 bind956-prebase none ok "$CR_B6PF" "$CR_S956" "$CR_B6PB"; fi
+  # bind956-withkey: sprint-status.sh view-history over CR_BASE..CR_B6H, asked directly. The default output is the
+  # value lines alone, byte for byte as before BL-956; --with-key prints `file<TAB><key><TAB><value>` per (key, value),
+  # then, --base given, `window<TAB><key><TAB><value>` per pair some version of the view from --base to frozen carries.
+  if cell bind956-withkey; then
+    local vd vk wd wk
+    vd="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main view-history --ref "$CR_B6H" --base "$CR_BASE" --sprint 1 --root "$CR_REPO" "$CR_S956" 2>&1 < /dev/null )" || vd="rc=$? $vd"
+    vk="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main view-history --with-key --ref "$CR_B6H" --base "$CR_BASE" --sprint 1 --root "$CR_REPO" "$CR_S956" 2>&1 < /dev/null )" || vk="rc=$? $vk"
+    wd="$(printf 'since\t%s\nfile\tstories/story-1-1-x.md\nfile\tstories/story-1-6-a.md\nfile\tstories/story-q.md' "$CR_BASE")"
+    wk="$(printf 'since\t%s\nfile\tstory-1-1\tstories/story-1-1-x.md\nfile\tstory-1-6\tstories/story-1-6-a.md\nfile\tstory-1-6\tstories/story-q.md\nwindow\tstory-1-1\tstories/story-1-1-x.md\nwindow\tstory-1-6\tstories/story-1-6-a.md\nwindow\tstory-1-6\tstories/story-q.md' "$CR_BASE")"
+    [ "$vd" = "$wd" ] || WHY="$WHY bind956-withkey{default: $(printf '%s' "$vd" | tr '\t\n' '> ')}"
+    [ "$vk" = "$wk" ] || WHY="$WHY bind956-withkey{--with-key: $(printf '%s' "$vk" | tr '\t\n' '> ')}"
+  fi
+  # bind956-stem: sprint-status.sh stem-names asked directly. Only the slot after `story-` is the sprint, so in sprint 3
+  # story-3-3 names index 3 and story-3-1-3 names 1-3 (not 1); story-322-6 under sprint 322 names 6 (control).
+  if cell bind956-stem; then
+    local s3 s13 s322
+    s3="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 3 --keys "$(printf 'story-3-3\nstory-3-1-3\nstory-3-4')" 3 2>&1 < /dev/null )" || s3="rc=$? $s3"
+    s13="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 3 --keys "$(printf 'story-3-3\nstory-3-1-3')" 1-3 2>&1 < /dev/null )" || s13="rc=$? $s13"
+    s322="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 322 --keys "$(printf 'story-322-6\nstory-322-7')" 6 2>&1 < /dev/null )" || s322="rc=$? $s322"
+    [ "$s3|$s13|$s322" = "story-3-3|story-3-1-3|story-322-6" ] \
+      || WHY="$WHY bind956-stem{3=[$s3] 1-3=[$s13] 322=[$s322]}"
+  fi
+  if cell bind956-receipt; then
+    o="$(bash "$LIB_DIR/receipt-bl956.sh" "$sd/merge-review-shards.sh" "$PROJ" 2>&1)"; rc=$?
+    n="$(grep -cxE 'ok (bare-6|lit-1-6|key-7|lit-keyonly)' <<<"$o")" || n=0
+    [ "$rc" = 0 ] && [ "$n" = 4 ] || WHY="$WHY bind956-receipt{rc=$rc ok=$n/4 $(grep -v '^ok ' <<<"$o" | tr '\n' ' ')}"
+  fi
+  rm -f "$f6"
   [ -z "$WHY" ]
 }
 # SP1 (BL-885): the story path record-only-diff.sh resolves, asked of its story-base and paths modes by
@@ -4525,6 +4685,95 @@ p_lead_rec() {
     SR_CANON="$CANON_BLK" sr_file "$f" "$pv"; cr_ok "$sd" "$f" lr-run-ok-serial --story "$CR_STORY" --range "$CR_BASE" "$CR_REC"
     rm -f "$f"
   fi
+  [ -z "$WHY" ]
+}
+
+# ---- WV955: THE CANONICAL-RUN WAIVER on canon_gate's no-run branch (merge-review-shards.sh header: THE WAIVER). The
+# worlds bind LITERALLY (review 1-1, story-1-1-x.md; the merge's index 1, story-1-x.md), so no cell leans on the view row.
+# Serial worlds, REPO_LR branches built once on first use, each range carrying code (app/), so `paths` refuses it:
+#   WV_D   over LR_D, x and zz (story-1-2-zz.md) at ready-for-dev, EACH carrying an AC3 waiver entry (the dispatch base);
+#   WV_F   over WV_D, x at review (entry kept), the view at review, app/ code;
+#   WV_NF  over LR_D (no waiver section anywhere), x at review, app/ code;
+#   WV_RF  over LR_D, x at review with the AC3 entry added INSIDE the range, app/ code.
+# The merge world REPO_WVM: lr_seed's base with the AC3 entry in story-1-x.md, then app/ code and six test-results files.
+WV_LINE='- **AC3** waives the canonical run: the requirement removes the only collectable suite'
+WV_VAL='Canonical run: none, AC3 waives it'
+wv_story() { # <path> <title> <status> <1: carry the waiver entry>
+  { printf -- '---\nstatus: %s\n---\n# %s\n' "$3" "$2"; [ "$4" != 1 ] || printf '\n## Canonical-run waivers\n\n%s\n' "$WV_LINE"; } > "$1"
+}
+wv_view() { printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: %s\n    file: stories/story-1-1-x.md\n  story-1-2:\n    status: ready-for-dev\n    file: stories/story-1-2-zz.md\n' "$1" > "$REPO_LR/$CR_VIEW"; }
+wv_build() {
+  [ -z "${WV_BUILT:-}" ] || return 0
+  local x="$REPO_LR/$LR_STORY" zz="$REPO_LR/$CR_SDIR/story-1-2-zz.md"
+  rm -f "$LR_RV"
+  G -C "$REPO_LR" checkout -q -B wv-d "$LR_D" && wv_story "$x" 'Story 1' ready-for-dev 1 && wv_story "$zz" 'Story 1.2' ready-for-dev 1 \
+    && wv_view ready-for-dev && WV_D="$(lr_c wv-d)" && wv_story "$x" 'Story 1' review 1 && wv_view review && lr_code "$REPO_LR" && WV_F="$(lr_c wv-f)" \
+    && G -C "$REPO_LR" checkout -q -B wv-n "$LR_D" && wv_story "$x" 'Story 1' review 0 && wv_view review && lr_code "$REPO_LR" && WV_NF="$(lr_c wv-n)" \
+    && G -C "$REPO_LR" checkout -q -B wv-r "$LR_D" && wv_story "$x" 'Story 1' review 1 && wv_view review && lr_code "$REPO_LR" && WV_RF="$(lr_c wv-r)" \
+    && G -C "$REPO_LR" checkout -q --detach "$LR_F" \
+    || { WHY="$WHY FIXTURE ERROR: the WV955 serial worlds were not seeded"; return 1; }
+  local wd wr wz wm
+  wd="$(G -C "$REPO_LR" show "${WV_D}:$LR_STORY" | grep -cxF -- "$WV_LINE")" || wd=0
+  wr="$(G -C "$REPO_LR" show "${LR_D}:$LR_STORY" | grep -cF -- 'Canonical-run waivers')" || wr=0
+  wz="$(G -C "$REPO_LR" show "${WV_D}:$CR_SDIR/story-1-2-zz.md")" || wz=""
+  [ "$wd" = 1 ] && [ "$wr" = 0 ] && grep -qxF -- "$WV_LINE" <<<"$wz" \
+    && [ "$(G -C "$REPO_LR" diff --name-only "$WV_D" "$WV_F" | grep -c '^app/.*\.py$')" = 2 ] \
+    && [ "$(G -C "$REPO_LR" show "${WV_RF}:$LR_STORY" | grep -cxF -- "$WV_LINE")" = 1 ] \
+    && [ "$(G -C "$REPO_LR" diff --name-only "$LR_D" "$WV_NF" | grep -c '^app/.*\.py$')" = 2 ] \
+    || { WHY="$WHY FIXTURE STALE: a WV955 serial world does not carry its property"; return 1; }
+  REPO_WVM="$WORK/repo-wvm"
+  lr_seed "$REPO_WVM" && printf '\n## Canonical-run waivers\n\n%s\n' "$WV_LINE" >> "$REPO_WVM/$CRB_STORY" && G -C "$REPO_WVM" add -A && G -C "$REPO_WVM" commit -q -m wbase \
+    && lr_code "$REPO_WVM" && cm_six "$REPO_WVM" && G -C "$REPO_WVM" add -A && G -C "$REPO_WVM" commit -q -m frozen \
+    && WVM_B="$(G -C "$REPO_WVM" rev-parse HEAD~1)" && WVM_F="$(G -C "$REPO_WVM" rev-parse HEAD)" \
+    && wm="$(G -C "$REPO_WVM" show "${WVM_B}:$CRB_STORY")" && grep -qxF -- "$WV_LINE" <<<"$wm" \
+    && [ "$(G -C "$REPO_WVM" diff --name-only "$WVM_B" "$WVM_F" -- app | grep -c .)" = 2 ] \
+    || { WHY="$WHY FIXTURE ERROR: the WV955 merge world was not seeded"; return 1; }
+  WV_BUILT=1
+}
+wv_seatline() { # <case>: the one REFUSED line is the waiver's seat-base refusal, naming --record-dispatch
+  local l; l="$(reline "$CO")"
+  case "$l" in *"claims a canonical-run waiver"*"--record-dispatch"*) ;; *) WHY="$WHY $1{REFUSED line is not the seat-base waiver refusal: $l}" ;; esac
+}
+wv_rec() { # <script-dir> <dispatch sha>: the subject's own --record-dispatch, never the LR0 share
+  LR_REC_FRESH=1 lr_rec "$1" "$2"; [ "$RRC" = 0 ] || WHY="$WHY $3{record not written: rc=$RRC $(head -1 "$CO")}"
+}
+p_wv955() {
+  local sd="$1" rd="--record-dispatch" d o SHARD_SHA
+  WHY=""; LR_PATH=""
+  # wv955-accepted (ALLOW): the waiver at the recorded dispatch base, a code range, the lead's re-run: SERIAL-OK, no LEGACY.
+  if cell wv955-accepted; then wv_build || return 1; wv_rec "$sd" "$WV_D" wv955-accepted
+    lr_file "$LR_RV" "$WV_VAL" "reviewed-sha: $WV_F"; lr_run "$sd" "$LR_RV" - "$WV_F"; lr_ok wv955-accepted
+    ! has "$CO" LEGACY || WHY="$WHY wv955-accepted{a LEGACY line}"; fi
+  # wv955-noentry: no waiver section at the base or the frozen sha: falls through to `paths`, REFUSED not record-only.
+  if cell wv955-noentry; then wv_build || return 1; wv_rec "$sd" "$LR_D" wv955-noentry
+    lr_file "$LR_RV" "$WV_VAL" "reviewed-sha: $WV_NF"; lr_run "$sd" "$LR_RV" - "$WV_NF"; lr_no wv955-noentry "$CR_NOTRO"; fi
+  # wv955-inrange: the entry added only inside base..frozen: the base decides, REFUSED not record-only.
+  if cell wv955-inrange; then wv_build || return 1; wv_rec "$sd" "$LR_D" wv955-inrange
+    lr_file "$LR_RV" "$WV_VAL" "reviewed-sha: $WV_RF"; lr_run "$sd" "$LR_RV" - "$WV_RF"; lr_no wv955-inrange "$CR_NOTRO"; fi
+  # wv955-seat: accepted's world over a seat-supplied base, the seat's --range and an unrecorded --lead-range: each
+  # REFUSED naming --record-dispatch.
+  if cell wv955-seat; then wv_build || return 1
+    lr_unrec; lr_file "$LR_RV" "$WV_VAL" "reviewed-sha: $WV_F"
+    # Keyed on the REFUSED line itself: the LEGACY-UNRECORDED line names --record-dispatch too.
+    LR_FLAG=--range lr_run "$sd" "$LR_RV" "$WV_D" "$WV_F"; lr_no "wv955-seat[range]" "$rd"; wv_seatline "wv955-seat[range]"
+    lr_run "$sd" "$LR_RV" "$WV_D" "$WV_F"; lr_no "wv955-seat[unrecorded]" "$rd"; wv_seatline "wv955-seat[unrecorded]"
+    has "$CO" "LEGACY-UNRECORDED: s1-1-1" || WHY="$WHY wv955-seat[unrecorded]{no LEGACY-UNRECORDED line}"; fi
+  # wv955-bind: a waived claim whose --story is another story's file (zz, itself waived at the base): STORY-BIND REFUSES.
+  if cell wv955-bind; then wv_build || return 1; wv_rec "$sd" "$WV_D" wv955-bind
+    lr_file "$LR_RV" "$WV_VAL" "reviewed-sha: $WV_F"; LR_STORY="$CR_SDIR/story-1-2-zz.md" lr_run "$sd" "$LR_RV" - "$WV_F"; lr_no wv955-bind "STORY-BIND:"; fi
+  # wv955-merge (ALLOW): the qa merge, the execution owner claiming the waiver, the lead's partition record: MERGED.
+  if cell wv955-merge; then wv_build || return 1
+    LR_BLK="$WV_VAL" lr_world "$sd" "$REPO_WVM" "$WVM_B" "$WVM_F" || return 1
+    if lr_prec "$sd" "$d"; then lr_merge "$sd" "$d" "$CRB_STORY"
+      [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && ! has "$MO" "LEGACY-UNRECORDED" && [ -f "$o" ] || WHY="$WHY wv955-merge{rc=$RC $(head -2 "$MO" | tr '\n' ' ')}"
+    else WHY="$WHY wv955-merge{record not written: $(head -1 "$MO")}"; fi
+    lr_done; fi
+  # wv955-merge-unrec: the same merge with no partition record: REFUSED naming --record-partition.
+  if cell wv955-merge-unrec; then wv_build || return 1
+    LR_BLK="$WV_VAL" lr_world "$sd" "$REPO_WVM" "$WVM_B" "$WVM_F" || return 1; lr_merge "$sd" "$d" "$CRB_STORY"
+    refused_at "--record-partition" "$o" && has "$MO" "$LR_PUNREC" && has "$MO" "claims a canonical-run waiver" || WHY="$WHY wv955-merge-unrec{rc=$RC $(reline "$MO")}"
+    lr_done; fi
+  rm -f "$LR_RV"; lr_unrec
   [ -z "$WHY" ]
 }
 

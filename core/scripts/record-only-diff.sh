@@ -11,6 +11,8 @@
 #   record-only-diff.sh run-filter <value> [<conventions file>]
 #   record-only-diff.sh run-span <value>       (the invocation span RUN-FILTER reads, on stdout)
 #   record-only-diff.sh story-base [-C <repo>] <story-file> <base> [<frozen>]
+#   record-only-diff.sh waiver [-C <root>] <story> <ref> <value>
+#   record-only-diff.sh no-test-run <value>
 #
 # RUN-FILTER. Exit 0 when the invocation in <value> is the unfiltered canonical collection, 1 with
 # the reason on stdout when it narrows it. The invocation is the first backticked span naming
@@ -70,7 +72,34 @@
 # `bun test`, a `bash <...test...>.sh` script, or the first word of a backticked command on a
 # <conventions file> line naming `canonical`), or a count `<n> passed|failed` (dev.md: "the
 # invocation and counts"). Exit 1 otherwise: a two-word span naming no runner (`make docs`) and a
-# `0 tests collected` are not runs.
+# `0 tests collected` are not runs. Before the runner and count arms, a NO-TEST invocation is exit 1
+# (NO-TEST-RUN below), whatever runner or count the value also carries.
+#
+# NO-TEST-RUN. Exit 0 when a text one of RUN-SHAPE's run arms reads carries a whole token
+# `--collect-only`, `--collectonly` or `--co` (pytest registers the one option under all three
+# spellings), bounded on each side by the end of the text or by any character NOT in
+# `[A-Za-z0-9_-]` (a blank, a backtick, `,`, `;`, `|`, `=`): pytest collects and runs no test.
+# `--collect-onlyx`, `--co2` and `---co` are not that token. The texts are the invocation span RUN-FILTER reads (`run-span`), each
+# `$ ` command up to its next backtick, and each line of the value (leading markup skipped on the
+# first) up to its first backtick, so a
+# bare collect-only invocation whose only backticked span is its working directory is no run either. `--cov`, `--color` and
+# `--config` are not that token. Exit 1 otherwise. RUN-SHAPE applies it, and the dev gate's
+# full-collection arm asks it before its capture-heads count route, so a collect-only value cannot
+# borrow another capture's count.
+#
+# WAIVER. Exit 0, printing `WAIVED: <AC-id>`, when <value>, read after NONE-REASON's leading-markup
+# skip (blanks, `*`, backticks), is exactly `none, <AC-id> waives it` (case-sensitive; <AC-id> is
+# `[A-Za-z][A-Za-z0-9._-]*`; an optional `; <free text>` may follow and carries no meaning), AND
+# <story> as committed at <ref> carries, outside ``` / ~~~ fences and with CRs dropped, exactly one
+# `## Canonical-run waivers` heading (`^##[ \t]+Canonical-run waivers[ \t]*$`) under which, before the
+# next `^## ` line, a line begins exactly `- **<AC-id>** waives the canonical run` (a fixed-string
+# compare, never a pattern). <ref> is the caller's BASE, never the frozen sha: the story is a record
+# path inside base..frozen, so an entry added in the range is written by the party being judged.
+# Exit 1 with `NOT-WAIVED: <why>` on stdout when the value is not a waiver spelling, the story is
+# absent at <ref>, or the section or entry is missing or the heading is not unique. Exit 2 UNEVALUABLE
+# (stderr) when <ref> does not resolve, <story> cannot be normalised (PATHS' rule), or the path at
+# <ref> is a tree or a commit. Usage errors exit 64. Each caller maps 0 to accept, 1 to the unchanged
+# PATHS exemption, and any other exit to a refusal naming the waiver error.
 #
 # SETUP-SHAPE. The same no-run reading first; then exit 0 when <value> is one backticked command
 # with an argument (`pip install -r requirements.txt`), a `$ ` command, or names an interpreter or
@@ -153,6 +182,19 @@ rf_span() {
     case "$t" in *'$ '*) s="${t#*\$ }" ;; *) s="$t" ;; esac
   fi
   s="${s#\`}"; printf '%s' "${s%\`}"
+}
+# ro_no_test <value>: 0 when a text a RUN-SHAPE run arm reads carries a whole no-test token (header: NO-TEST-RUN),
+# 1 otherwise. One line per text: rf_span's span (the span arm), each `$ ` command up to its next backtick (the
+# `$ ` arm), and each line of the value, leading markup skipped, up to its first backtick (the opening-command arm).
+ro_no_test() {
+    local nt_s nt_v="${1#"${1%%[![:space:]*\`]*}"}"
+    nt_s="$(rf_span "$1")"
+    nt_s="$nt_s"$'\n'"$(grep -oE '(^|[[:space:]])\$ [^`]*' <<<"$1")"
+    nt_s="$nt_s"$'\n'"$(awk '{ sub(/`.*/, ""); print }' <<<"$nt_v")"
+    # The token boundary: every byte outside [A-Za-z0-9_-] becomes a blank, so the token ends at punctuation too.
+    nt_s="$(LC_ALL=C tr -c 'A-Za-z0-9_-' ' ' <<<"$nt_s")"
+    case " $nt_s " in *" --collect-only "*|*" --collectonly "*|*" --co "*) return 0 ;; esac
+    return 1
 }
 ro_run_filter() {
     [ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $ME run-filter <value> [<conventions file>]" >&2; exit 64; }
@@ -319,6 +361,51 @@ ro_story_base() {
     case "$sb_s" in review|done) printf 'the story at %s is already status: %s\n' "$2" "$sb_s"; exit 1 ;; esac
     exit 0
 }
+# ro_waiver (header: WAIVER). The object type at <ref> is decided as story-base decides it at <base>.
+ro_waiver() {
+    local wv_rel wv_v wv_rest wv_id wv_tail wv_ty wv_t wv_r
+    shift
+    REPO=.
+    if [ "${1:-}" = "-C" ]; then
+      [ $# -ge 2 ] || { echo "usage: $ME waiver [-C <root>] <story> <ref> <value>" >&2; exit 64; }
+      REPO="$2"; shift 2
+    fi
+    [ $# -eq 3 ] || { echo "usage: $ME waiver [-C <root>] <story> <ref> <value>" >&2; exit 64; }
+    wv_rel="$(ro_story_rel "$REPO" "$1")" || exit 2
+    wv_v="$3"; wv_v="${wv_v#"${wv_v%%[!	 *\`]*}"}"
+    case "$wv_v" in "none, "*) ;; *) echo "NOT-WAIVED: not a waiver spelling"; exit 1 ;; esac
+    wv_rest="${wv_v#none, }"; wv_id="${wv_rest%% *}"; wv_tail="${wv_rest#"$wv_id"}"
+    case "$wv_id" in [A-Za-z]*) ;; *) echo "NOT-WAIVED: not a waiver spelling"; exit 1 ;; esac
+    case "$wv_id" in *[!A-Za-z0-9._-]*) echo "NOT-WAIVED: not a waiver spelling"; exit 1 ;; esac
+    case "$wv_tail" in " waives it"|" waives it; "*) ;; *) echo "NOT-WAIVED: not a waiver spelling"; exit 1 ;; esac
+    git -C "$REPO" rev-parse --verify --quiet "$2^{commit}" >/dev/null 2>&1 \
+      || { echo "$ME: UNEVALUABLE — ref does not resolve: $2" >&2; exit 2; }
+    wv_ty="$(git -C "$REPO" cat-file -t "$2:$wv_rel" 2>/dev/null)" || wv_ty=""
+    case "$wv_ty" in
+      blob) ;;
+      "") echo "NOT-WAIVED: story absent at $2"; exit 1 ;;
+      *) echo "$ME: UNEVALUABLE — story is not a file at $2: $1 ($wv_ty)" >&2; exit 2 ;;
+    esac
+    wv_t="$(git -C "$REPO" cat-file blob "$2:$wv_rel" 2>/dev/null)" \
+      || { echo "$ME: UNEVALUABLE — git cat-file of $wv_rel at $2 failed in $REPO" >&2; exit 2; }
+    # Prints h=<heading count> e=<1 when the entry sits under the one heading>.
+    wv_r="$(RO_P="- **$wv_id** waives the canonical run" awk '
+      BEGIN { P = ENVIRON["RO_P"] }
+      { sub(/\r$/, "") }
+      /^[ \t]*(```|~~~)/ { f = !f; next }
+      f { next }
+      /^##[ \t]+Canonical-run waivers[ \t]*$/ { h++; ins = 1; next }
+      /^## / { ins = 0; next }
+      ins && index($0, P) == 1 { e = 1 }
+      END { printf "h=%d e=%d", h, e }' <<<"$wv_t")" \
+      || { echo "$ME: UNEVALUABLE — the story at $2 could not be read" >&2; exit 2; }
+    case "$wv_r" in
+      h=0\ *) echo "NOT-WAIVED: no ## Canonical-run waivers section in $wv_rel at $2"; exit 1 ;;
+      h=1\ e=1) printf 'WAIVED: %s\n' "$wv_id"; exit 0 ;;
+      h=1\ *) echo "NOT-WAIVED: no '- **$wv_id** waives the canonical run' entry under ## Canonical-run waivers in $wv_rel at $2"; exit 1 ;;
+      *) wv_r="${wv_r#h=}"; echo "NOT-WAIVED: ${wv_r%% *} ## Canonical-run waivers headings in $wv_rel at $2, want exactly one"; exit 1 ;;
+    esac
+}
 ro_shape() {
     [ $# -eq 2 ] || { [ "$1" = run-shape ] && [ $# -eq 3 ]; } || { echo "usage: $ME run-shape <value> [<conventions file>] | $ME setup-shape <value>" >&2; exit 64; }
     # The no-run reading is decided FIRST: a value opening with a none form or a pointer word is
@@ -346,6 +433,8 @@ ro_shape() {
         rs_rn="$rs_rn|$(printf '%s' "$rs_c" | sed 's/\./\\./g')"
       done <<<"$rs_cv"
     fi
+    # NO-TEST-RUN (header): a collect-only invocation is no run, whatever runner or count the value carries.
+    ro_no_test "$2" && exit 1
     grep -qE "(^|[[:space:]/\`])($rs_rn)([[:space:]\`]|\$)" <<<"$rs_sp" && exit 0
     grep -qE "(^|[[:space:]])\\$ ([^[:space:]]*/)?($rs_rn|python[0-9.]* -m pytest)([[:space:]]|\$)" <<<"$2" && exit 0
     grep -qE "^([^[:space:]]*/)?($rs_rn|python[0-9.]* -m pytest)([[:space:]]|\$)" <<<"$rs_v" && exit 0
@@ -430,6 +519,13 @@ case "${1:-}" in
     ;;
   story-base)
     ro_story_base "$@"
+    ;;
+  waiver)
+    ro_waiver "$@"
+    ;;
+  no-test-run)
+    [ $# -eq 2 ] || { echo "usage: $ME no-test-run <value>" >&2; exit 64; }
+    ro_no_test "$2"
     ;;
   run-shape|setup-shape)
     ro_shape "$@"
