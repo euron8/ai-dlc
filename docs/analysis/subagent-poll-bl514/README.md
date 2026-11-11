@@ -91,3 +91,33 @@ had put two harness-blocked polls in the wrong buckets: a `sleep 240` with timeo
 RAN-le-budget. The pre-fix distribution was DENIED 2, RAN-le-budget 1, RAN-fg-over-budget 1; the
 fixed run reads DENIED 2, HARNESS-BLOCKED 2. That is why the bucket exists. The BL-514 entry's own history line, "57 refused
 by the harness", shows this shape was in the original corpus too.
+
+## Closed-sprint outcome (s321), b255
+
+Readings taken 2026-11-11 over graph's `~/.claude/projects/-Users-n8-git-graph`. Windows: s321
+2026-10-30T00:10:03Z..2026-11-08T20:27:32Z (closed at graph 5596361ce); pre-mechanism
+2026-10-05T14:00:00Z..2026-10-15T03:10:01Z (the corpus starts 2026-10-05). The classifier rows are
+`classify.sh` over the whole project directory (6176 files, 6023 subagent plus 153 lead-session files, so those rows are lead plus subagent); the pair and background rows are a
+one-off join over the 6023 `subagents/*.jsonl` files only, with a 120 s window after the denied
+call's result and the poll predicate lifted from the installed hook's own jq defs. The whole-pipeline
+rows are `roll.py --seats` over `extract.py` output (EXTRACT_WIN_END=2026-11-11T10:30:00Z), PER-STORY MEANS (s317+s318 pooled
+over 34 stories, s321 over 25), whose
+plain `roll.txt` is cmp-equal to `pipeline-efficiency-s317-s322/out/roll.txt`.
+Rows marked "s317 truncated" pool an s317 that this extract reads short, because graph's
+transcripts no longer reach back through s317: by `seat_sum` the fresh s317 reads 3.85 h and $75.6
+per story against 5.37 h and $112.2 in the committed b244 pin, while s318 agrees. BL-514 item 6
+in `docs/backlog.md` carries the reconciliation.
+
+| Quantity | Before | After s321 |
+|---|---|---|
+| Foreground poll wall clock, all foreground buckets, lead plus subagent (classify.sh) | 15.10 h (pre-mechanism) | 0.95 h |
+| Foreground poll wall clock, subagent files only (one-off scratch reader) | 14.03 h, of which 12.49 h in polls over 300 s | 0.47 h |
+| Polls that ran foreground over the 120 s budget (classify.sh) | 121 calls, 13.73 h | 0 calls |
+| Subagent Bash `sleep` wall clock (bash_by_sprint.txt) | 3.01 h s317, 3.88 h s318 | 0.28 h |
+| Denied polls followed by a backgrounded Bash or Monitor call within 120 s | control: 20 of 117 foreground-over-budget polls | 16 of 23 DENIED |
+| Denied polls followed by a poll-shaped backgrounded Bash or Monitor call within 120 s | control: 11 of 117 | 14 of 23 |
+| Subagent run_in_background Bash calls, then Monitor calls (6023 subagent files) | 230 and 134 of 60514 Bash calls | 264 and 66 of 45166 Bash calls |
+| Whole pipeline bucket, per story: subagent ACTIVE time, which excludes every wait over 300 s (extract.py:324), so it is not the wait | 7.09 h, $77.4 (s317 truncated, BL-514 item 6) | 6.94 h, $75.1 |
+| Whole pipeline bucket, per story: lead active time | 2.38 h, $19.9 (s317 truncated, BL-514 item 6) | 2.28 h, $20.4 |
+| Whole pipeline bucket, per story: gap-inclusive, both seats | 4.58 h (s317 truncated, BL-514 item 6) | 4.82 h |
+| Subagent gap (waits over 300 s) per story, all buckets, unattributed scratch reading of segs.jsonl | 1.42 h pooled s317+s318, s317 truncated, BL-514 item 6 (s319 2.16, s320 1.63, s322 2.53) | 0.94 h |

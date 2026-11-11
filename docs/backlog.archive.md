@@ -40995,3 +40995,66 @@ Provenance: batch 254 cluster B hand F, from the fixture's own KNOWN LIMITS line
 
 verify: sh I=core/fixtures/finding-grammar-binding/inputs.decl; R=core/fixtures/finding-grammar-binding/run.sh; [ -f "$I" ] && [ -f "$R" ] || exit 9; grep -qxF '!core/scripts/merge-adversarial-shards.sh' "$I" || exit 9; grep -q '^fence_census()' "$R" || exit 9; grep -qxF '!core/scripts/' "$I" || exit 1; grep -qxF '!core/hooks/' "$I" || exit 1; grep -q '^bd_carriers()' "$R" || exit 1; exit 0
 
+## BL-507 — a re-review after rework re-runs the full sharded fan-out instead of reviewing the fix delta
+
+**LANDED (v0.1063.0).** **DEFECT (efficiency).** Closed in 0.785.0 on a tree receipt, reopened by BL-817. Its decision rule is the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+**DEFECT. [efficiency rank 1] $282, 1,258 agent-minutes.** In graph s317 every code-review pass after a
+NEEDS_REWORK re-ran the full gate-1 fan-out (10-13 escalated Opus/high shards) at $20-43 a pass:
+story 2.6 took five passes (about $149) and 1.2 took four (about $115). In s318, from the third pass on,
+the lead reviewed only the fix delta at $1-3 a pass, with the same catch quality. Nothing in core
+asks for that: the s318 behaviour was the lead's own choice. Costed in the analysis as the excess of
+the 11 full-fan-out re-review passes over the median delta pass ($1.70), from
+`pipeline-efficiency-s317-s318/role-efficacy/impl/` (`rework-labels.tsv`).
+
+**The fix is a delta review that is still sharded, by operator ruling.** No partition change was
+needed: `partition-review-diff.sh`'s `<base>` argument already partitions the delta when it is given
+the prior pass's `reviewed-sha:`. That was measured by this batch's contract on 26 real graph pass
+pairs, and the probe below re-checks the mechanism on a seeded repository. Because the
+partition drops the scan roots, a delta review can miss defects in the story record. For example,
+s318 2.4 p2 found an Important on a DAR self-contradiction that no delta hunk touched. So the first
+cross shard is briefed with the whole story record and the full prior..frozen diff. Every prior
+Critical/Important is carried, and Check 1 checks the carry with `validate-carried-findings.sh`.
+
+**Stated residual.** A delta pass does not re-find a pre-existing defect that lies outside the
+delta (s317 2.6 p3, the AC9 Strategy row). Check 21(b) and BL-513's refusal catch it downstream.
+**Predicted cost.** At the default threshold, s318 1-1 p3, 2-3 p3, 2-4 p2 and 2-4 p3 would still
+shard, to about 10 seats each, because test-results captures count as reviewable files. The $282
+filed above will therefore not fully reproduce under the sharding ruling. The saving comes from the
+narrower range and the carried-finding brief, not from a single delta reviewer.
+
+**Pre-migration.** The validator reads the review's own repository and HEAD, never where its
+running copy sits, because a story is reviewed in its own worktree and checked by the main
+checkout's copy. A branch whose history never added the program reads PENDING, and so does a
+review committed before the earliest add. A program that sits in the checkout but was never
+committed there (gitignored or untracked) binds, with a NOTE. A shallow repository is refused.
+A prior is held to the `#### ` form only when it carries the template's column-0 `reviewed-sha:`
+line and was not committed before the add. graph's leads persist reviews late (one snapshot
+commit persisted s318 2.4 p1 and p2 together), so the commit alone cannot say a prior was written
+under the rule. Any other prior has its findings carried by heading or by an id-led bold label,
+and any other line in it prints a NOTE. In a held prior, lead-in prose before the first `#### `
+is a NOTE, and only a bullet or a bold finding-id line there fails. A label prior is also
+answered by its finding id alone, and trailing punctuation never decides a match.
+`validate-carried-findings.sh --list <prior>` prints the exact carry strings, and the Gate-1
+re-review brief carries them. The serial template in `code-reviewer.md` now writes `#### `
+findings and a column-0 `reviewed-sha:` line.
+
+The earlier prose receipt was closable by one sentence and is replaced by a probe. The probe runs
+the validator on seeded pass pairs, including an `open` carry under NEEDS_REWORK that must pass.
+It also runs a seeded worktree topology: a pre-pull story branch reads PENDING, a revert and
+re-add of the program still binds, and a story spanning the pull passes. After the pull, a marked
+bullet prior fails, a marked heading prior with lead-in prose passes, and a lazily persisted
+unmarked prior carried by id alone passes. `--list` must print the exact carry string. It runs `--map` on a
+seeded repository with the prior sha as the base (rc 0) and with the pair reversed (rc 2), and
+requires the step and Check 1 text.
+
+Closed in 0.785.0 (verified 0f7e0e0c) on a tree receipt, reopened by BL-817.
+
+Former receipt (retired): the s317-s318 probe `bl-507-carried-findings.sh` is retired because it exits 1 at its prose `case` on lines 124-125, which still requires the sentences `run the partition with `<prior-sha>` in place of `<base>`` and `run the full `<base>..<frozen-sha>` partition instead` that `core/skills/ai-dlc/steps/implementation.md` lines 488 and 493 no longer carry in that form after the gate-1 dispatch was reworded around `gate-transition.sh`; every mechanism arm before it passes. The carriers are `core/fixtures/carried-findings` (`arm_LIST` at `run.sh:586-591` asserts that `--list` prints exactly the carry strings in file order, with the NOTEs on stderr) and `core/fixtures/gate-transition` (`st_g2r` and `st_g2k` at `run.sh:278-288` and the RERUN cells at `:522-525` assert the pass-2 route from the prior QA pass's `reviewed-sha:`). The probe's `--map` with the prior sha as the base is not asserted by either carrier. The probe file stays in the tree.
+
+Re-audit (BL-817): graph s317+s318 against s319, `docs/analysis/pipeline-efficiency-s317-s320/scripts/` (extract.py, roll.py as committed at fc71a7b10 on main; the step rows of steps.csv per story); per story, implementation plus gate-validation[implementation]: before (s317+s318 pooled, 34 stories) 1.59 h gap-inclusive, token-equivalent $35.2 (API $31.8), 71.5M tokens [BL-927 extractor fix (b251): now 71.8M tokens; conclusion unchanged]; after s319 (20 stories) 2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3), 119.2M tokens. Lead-seat local-model share of calls in this step group: s317 66%, s318 0%, s319 0%; subagent seats ran hosted models only (opus, sonnet, haiku). The step did not fall.
+
+Outcome measured: graph s321 (25 stories, 24 done; roll.py divides by the 25 planned) against the s317+s318 pooled baseline (34 stories), implementation plus gate-validation[implementation] per story, measured with docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py --seats over a fresh extract.py run pinned at EXTRACT_WIN_END=2026-11-11T10:30:00Z, whose plain roll.py output is byte-identical to docs/analysis/pipeline-efficiency-s317-s322/out/roll.txt; the two steps are summed with roll.py's own seat_sum. Before 1.60 h gap-inclusive (gap 0.50 h), token-equivalent $35.3 (API $31.9), 71.8M tokens; after 1.13 h gap-inclusive (gap 0.28 h), token-equivalent $25.5 (API $25.5), 66.9M tokens. By seat, before: lead active 1.10 h, lead $8.2 (API $4.9), subagent active 2.17 h, subagent $27.0; after: lead active 0.85 h, lead $7.6, subagent active 1.48 h, subagent $17.9. API and token-equivalent differ only before, on s317's lead seat (65% of its 3284 lead calls in this group ran a local model; s318 and s321 0%), so s317's implementation row reads $599 API against $668 token-equivalent. Pooled, hours fell 29% and token-equivalent dollars 28%, but the pooled hours fall rests on s317 alone. Per sprint, by the same seat_sum: s317 2.02 h gap-inclusive, token-equivalent $37.0, 71.9M tokens; s318 0.91 h, $32.5, 71.7M tokens; s321 1.13 h, $25.5, 66.9M tokens. s317's local-model lead (the 65% above) confounds its hours, and against s318, the only before-sprint with a hosted lead, hours rose 25%. A price confound sits on the subagent dollars: opus fell from 44% of this group's subagent calls before to 2% in s321 while tokens per story fell only 7%. The opus calls were the review seats: in spawns.py's ledger of this group (519 spawns before, 280 in s321) the 5402 opus calls before were code-reviewer-escalated 4384 and code-reviewer 1018, and s321's 159 were ops. Seat moves in the window include graph's 0.789.0 reconcile moving its code-reviewer from opus to sonnet (BL-838's QA paragraph), and opus was already 26% (s319) and 9% (s320), so the decline is spread over several sprints. Three quantities fell against each before-sprint separately: tokens per story, 71.9M (s317) and 71.7M (s318) to 66.9M, which carry no price; token-equivalent dollars, $37.0 and $32.5 to $25.5, under the opus confound above; and this entry's subject, review spend on pass 2 and later. Re-review passes became cheaper, not rarer: gate-1 passes per reviewed story rose from 1.90 (s317+s318) to 2.12 (s321), while review spawns on pass 2 and later (code review, QA and closing together) cost $10.0 per story before (s317 $10.8, s318 $8.8) and $3.2 after (docs/analysis/pipeline-efficiency-s317-s322/out/impl_passes.txt). Per done story (24) the after side is 1.18 h and $26.6, and every direction stated here holds. Joint attribution: this movement is attributed jointly to BL-507 (delta re-review), BL-808 (capture files out of the gate-1 partition) and BL-809 (record-only route), shipped over 0.785.0-0.989.0 (docs/analysis/pipeline-efficiency-s317-s322.md:157); the recorded data does not separate their shares. Two sprints separate them in part: s319 ran with BL-507 alone (graph at 0.908.0 through its close, before BL-808's 0.948.0) and read 2.09 h and $16.5 of pass-2-and-later review spend per story, above both s317 and s318 on each; s320 ran after graph installed 0.952.0 (de74610e2, 2026-10-27 03:04Z, before its implementation began at 06:20Z), so it had BL-507, BL-808 and BL-809's 0.952.0 part, and read 1.94 h, token-equivalent $20.7 and $1.5 of pass-2-and-later review spend per story. The step fell on tokens per story, token-equivalent dollars and pass-2-and-later review spend against each before-sprint; its hours fell only against the pooled baseline.
+
+verify: manual
+
