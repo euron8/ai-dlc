@@ -169,6 +169,12 @@ not rare.
 | Cross groups collapsed to one agent in stories elicitation | BL-811 (0.948.0, 0.952.0) | Stories elicitation, adversary plus remediator: $162 for 20 stories in s319 ($8.1 each), $65 for 13 in s320 ($5.0), $149 for 25 in s321 ($6.0), $49 for 8 in s322 ($6.1). The adversary rebinding moved in the same window, so the collapse is not separable. |
 | Snapshot writes through one program | BL-819 L3, BL-912 (0.952.0, 0.1012.0) | Lead snapshot time per story: 0.25–0.26 h in s317–s319, 0.35 h (s320), 0.26 h (s321), 0.21 h (s322). The program ran 756 times in s321 and 802 times in s322, which is 100 calls per planned story. The hand edits stopped; the call count did not fall. |
 | Repairs carry a `siblings:` field and a serial lane | BL-508, BL-716 | Solo-remediator wall clock is 9.4–11.9 h in every sprint from s319 on. |
+| Idle share of ask-wait minutes (no lane active during an operator ask) | BL-841 (0.968.0) | Ask-wait minutes with no lane active, of ask-wait minutes: 96.9% (s320, 2956.8 of 3051.8) → 93.7% (s321, 1453.6 of 1552.0); the other sprints read 97.2% (s317), 96.4% (s318), 94.3% (s319), 96.3% (s322 partial). The share did not fall by the 5.0-point rule; the drop in raw idle minutes is the asks' own wait shrinking. |
+
+The ask-wait row is `ask_split.py`'s per-sprint `LANE-IDLE` line in `out/ask_split.txt` (BL-841 claim 1): each `AskUserQuestion`
+wait, `tool_use` to `tool_result`, less the time any subagent of the same lead session was active (its records
+merged at extract.py's 300 s gap, no tail), totals summed in seconds. One s321 ask present in two lead files is
+counted once, so s321 is 56 asks where `operator_asks.py` gives 57.
 
 ### Not yet measurable
 
@@ -260,7 +266,7 @@ python3 -I $C/lead_time.py           # lead active time: model, tool, idle wait
 python3 -I $C/bash_by_sprint.py      # Bash wall clock by command family, per sprint
 python3 -I $C/seats.py $OUT adversary # one seat by the binding it ran on, and passes per step
 python3 -I $C/resumes.py $OUT        # why finished subagents were resumed, and the idle before it
-python3 -I $C/ask_split.py $OUT      # BL-841/BL-972: each AskUserQuestion wait by what the lanes did during it
+python3 -I $C/ask_split.py $OUT      # BL-841/BL-972: each AskUserQuestion wait by what the lanes did during it, and its lane-idle minutes
 python3 -I $C/serial_tail.py $OUT    # BL-716: which serial step the solo-remediator hours sit in (out/serial_tail.txt)
 ```
 
