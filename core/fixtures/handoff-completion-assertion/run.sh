@@ -771,7 +771,11 @@ T_PB_MID="$ROOT/pb-mid.jsonl"; T_PB_WATCH="$ROOT/pb-watch.jsonl"; T_PB_AGENT="$R
 HCA_EPOCH="$(date +%s)"; HCA_REAL_DATE="$(command -v date)"; mkdir -p "$ROOT/clk"
 printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then echo %s; exit 0; fi\nexec %s "$@"\n' "$(command -v bash)" "$HCA_EPOCH" "$HCA_REAL_DATE" > "$ROOT/clk/date"
 chmod +x "$ROOT/clk/date"
-[ "$(PATH="$ROOT/clk:$PATH" date +%s)" = "$HCA_EPOCH" ] || broken "(pb) the injected clock shim does not answer date +%s"
+# RESOLUTION FIRST, THEN THE ANSWER (BL-868). A shim that is not executable is skipped by PATH lookup and the REAL date
+# answers instead, which equals HCA_EPOCH only while the clock has not ticked since HCA_EPOCH was taken -- a coin flip on
+# the second boundary. `chmod` must be in tools.decl for the chmod above to run in the sandbox; absent, this is BROKEN every run.
+[ "$(PATH="$ROOT/clk:$PATH" command -v date)" = "$ROOT/clk/date" ] && [ "$(PATH="$ROOT/clk:$PATH" date +%s)" = "$HCA_EPOCH" ] \
+  || broken "(pb) the injected clock shim at $ROOT/clk/date is not the date PATH resolves (is chmod declared in tools.decl?), or does not answer date +%s"
 _pb_now="$(jq -nr --argjson e "$HCA_EPOCH" '$e | strftime("%Y-%m-%dT%H:%M:%S.000Z")')"
 # 1800 s back: past the old one-sample 729 s ceiling, inside the derived 3004 s one.
 _pb_mid="$(jq -nr --argjson e "$HCA_EPOCH" '$e - 1800 | strftime("%Y-%m-%dT%H:%M:%S.000Z")')"

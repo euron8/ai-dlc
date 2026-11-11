@@ -4,6 +4,7 @@ awk
 basename
 bash
 cat
+chmod
 cmp
 comm
 cp

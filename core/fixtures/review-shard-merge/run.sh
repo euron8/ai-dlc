@@ -269,6 +269,9 @@
 # MUTANT-MATRIX K1 decides=KS1-CTL twins=KS1
 # MUTANT-MATRIX K2 decides=KS1-CTL twins=KS1
 # MUTANT-MATRIX K3 decides=KS1-CTL twins=KS1
+# GM1's mutant is built and scored IN p_gmaint on every run (G's `declare -f` body less -c maintenance.auto=false, cmp-guarded,
+# the flag counted 1 -> 0); it has no mut_run call, so it is never dealt and never reaches mutant_killed.
+# MUTANT-MATRIX gm-no-maint decides=gmaint twins=- why=the mutant is built inside the one arm it decides and is scored there on every run, so no other cell runs it
 # MUTANT-MATRIX M74 decides=run_rec.rr-mq twins=run_rec.rr-mu
 # MUTANT-MATRIX M75 decides=run_rec.rr-c-lrl twins=run_rec.rr-c-lru
 # MUTANT-MATRIX M76 decides=run_rec.rr-s-lru twins=run_rec.rr-c-lrl
@@ -330,7 +333,8 @@ rsm_merge_slices() {
 # guard holds the `arm`/`arm2` line of the predicate its mut_run names, so its base-pass flag is set in the same shard.
 # The seed (lib.sh, seed_controls), the mutant machinery (SIB, the control copy) and the closing tally run in every shard.
 #   a  seam arms bl737 bl885 bl808        the in-process seam (EQ0-EQ8, every subject start), the P/V/R/Q/H/X/G arms, CS1-
-#                                         SR1, the BL-885 story arms, both lead arms (LR0), AD1-AD3, SR2, QC1, VB3-XC5
+#      gmaint                             SR1, the BL-885 story arms, both lead arms (LR0), AD1-AD3, SR2, QC1, VB3-XC5,
+#                                         and GM1 (lib.sh's G wrapper spawns no auto-maintenance, BL-868)
 # The step and role prose pins (S0-S13, XC-STEP) run no subject and live in process-rule-pins section 4i.
 #   b  canon canon_merge files            CR1, CR2, FL1, BL-904's story history (receipt-bl904.sh, M58 M59 M66) and
 #      story_hist run_rec                 BL-905's RR1 (M60-M72, M74-M76), each with its mutants
@@ -346,7 +350,7 @@ rsm_merge_slices() {
 # --deal prints each shard's dealt units, arms, mutants and its static unit-cell count (an arm's `cell` declarations in
 # its lib.sh predicate, at least 1; a mutant's deciding cell plus its twins), then exits 0: the BL-906 receipt reads it.
 SHARDS="a b"
-UNITS_a="seam arms bl737 bl885 bl808"
+UNITS_a="seam arms bl737 bl885 bl808 gmaint"
 UNITS_b="canon canon_merge files story_hist run_rec"
 GROUP=a; RSM_MATRIX=0; RSM_DEAL=0; _grp=0
 while [ $# -gt 0 ]; do
@@ -854,6 +858,17 @@ arm2 xc_one "XC4: one code file and five captures under --min-files 1 partition 
 arm2 xc_missing "XC5: --exclude-captures naming a file that does not exist -> REFUSED exit 2, nothing on stdout, no manifest" \
                 "XC5: an unreadable capture list was not refused"
 fi # sg bl808
+if sg gmaint; then
+# A git with no `maintenance` subcommand (before 2.29) cannot spawn the child GM1 counts, so the arm stands down with a
+# DISTINCT ok line claiming no spawn count; gm_vacuous exits 2 (FIXTURE BROKEN) when the git is 2.29 or later.
+if ! gm_has_maint; then
+gm_vacuous
+ok "GM1 VACUOUS on git $GM_GITV: this git predates git maintenance (2.29), so no commit can spawn the child GM1 counts; no spawn was read and the arm asserts nothing here"
+else
+arm2 gmaint "GM1 (BL-868): a commit through lib.sh's G spawns 0 'git maintenance run' children (trace2 child_start), so no detached repack races a later cp -R of the repository; the same commit through raw git spawns 1 (the control), and G with -c maintenance.auto=false stripped spawns 1 (the mutant)" \
+            "GM1: G lets a commit spawn auto-maintenance, or the arm cannot tell"
+fi
+fi # sg gmaint
 
 # ------------------------------------------------- BL-737 mutants (distribution layout only, in-process)
 # Each is a copy of the WHOLE resolved script directory (the merge, --mark and the seal resolve their
