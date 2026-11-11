@@ -211,8 +211,71 @@ mkdir -p "$WORK/.claude/schemas" && cp "$SS_SCHEMA" "$WORK/.claude/schemas/sprin
   || { echo "FIXTURE ERROR: the install-root schema or the redirected project root was not built" >&2; exit 2; }
 
 # ------------------------------------------------------------------------- seeded repositories
+# maintenance.auto=false (BL-868): without it every commit through G spawns a DETACHED `git maintenance run --auto`
+# (Apple git 2.54, the sandbox's /usr/bin/git), which repacks loose objects while a later `cp -R` of the same
+# repository walks .git/objects, so a fan-out directory vanishes mid-copy and the copy fails at random, by load.
+# gc.auto=0 does not stop it. Arm GM1 (p_gmaint, below) counts the children a G commit spawns.
 G() { git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false \
-          -c core.hooksPath=/dev/null "$@"; }
+          -c core.hooksPath=/dev/null -c maintenance.auto=false "$@"; }
+# gm_children <wrapper> <repo> <n>: the number of `git maintenance run` children ONE commit through <wrapper> spawns,
+# read off its trace2 child_start events (a count of spawns, never of whether a repack happened, so no load moves it).
+# Prints nothing when git wrote no trace, which the caller reads as broken. Every drive (G, the control, the mutant)
+# reads no system and no global gitconfig, so an operator's inherited maintenance.auto=false cannot zero the control.
+gm_children() {
+  local t="$WORK/gm-trace.$3.json" n
+  : > "$t" || return 1   # trace2 APPENDS: a second drive into one WORK must not read the first drive's children
+  printf '%s\n' "$3" > "$2/gm" && GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null "$1" -C "$2" add -A || return 1
+  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TRACE2_EVENT="$t" "$1" -C "$2" commit -q -m "gm $3" || return 1
+  [ -s "$t" ] || return 1
+  n="$(grep -c '"event":"child_start".*"argv":\["git","maintenance","run"' "$t")" || n=0
+  printf '%s\n' "$n"
+}
+gm_raw() { git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+# gm_has_maint: 1 only when git answers `maintenance` with its own unknown-command text (git before 2.29, whose commit
+# spawns `gc --auto` instead, so the control could never read 1). Keyed on that text, never on the exit code: a present
+# subcommand's -h exits 129 under Apple git 2.54 and 0 under Homebrew 2.56, and an unknown one exits 1 under both.
+# Any other answer reads as present, so the control, not this probe, decides. LC_ALL=C: a gettext git translates both texts.
+gm_has_maint() {
+  local o
+  o="$(LC_ALL=C git maintenance -h 2>&1)"
+  case "$o" in *"usage: git maintenance"*) return 0 ;; *"'maintenance' is not a git command"*) return 1 ;; esac
+  return 0
+}
+# gm_vacuous: the ONLY way GM1 may stand down. It is reached when gm_has_maint reads absent, and it believes that answer
+# only from a git older than 2.29, the release that added `git maintenance`: on 2.29 or later an absent subcommand is
+# impossible, so the probe itself is broken and the fixture exits 2 (FIXTURE BROKEN), never a pass. A version it cannot
+# parse is broken too. On success it sets GM_GITV, which the caller's distinct VACUOUS ok line names; no spawn is claimed.
+gm_vacuous() {
+  local v mj mn
+  v="$(LC_ALL=C git --version 2>&1)" || v=""
+  v="${v#git version }"; v="${v%% *}"
+  case "$v" in [0-9]*.[0-9]*) ;; *) echo "FIXTURE BROKEN: GM1 found no git maintenance and could not read a version from git --version ('$v'), so it cannot tell a pre-2.29 git from a broken probe" >&2; exit 2 ;; esac
+  mj="${v%%.*}"; mn="${v#*.}"; mn="${mn%%.*}"
+  case "$mj$mn" in ''|*[!0-9]*) echo "FIXTURE BROKEN: GM1 could not parse git version '$v' as <major>.<minor>" >&2; exit 2 ;; esac
+  if [ "$mj" -gt 2 ] || { [ "$mj" -eq 2 ] && [ "$mn" -ge 29 ]; }; then
+    echo "FIXTURE BROKEN: GM1's probe read git maintenance as ABSENT on git $v, which has had it since 2.29: the probe is broken, and a vacuous pass here would assert nothing" >&2; exit 2
+  fi
+  GM_GITV="$v"
+}
+p_gmaint() { # GM1: a G commit spawns 0 maintenance children; raw git spawns 1 (control); G with the flag stripped spawns 1
+  local r="$WORK/gm-repo" fx ctl mu n0 n1
+  WHY=""
+  G init -q "$r" || { WHY=" the probe repository was not built"; return 1; }
+  fx="$(gm_children G "$r" 1)" || fx=""
+  ctl="$(gm_children gm_raw "$r" 2)" || ctl=""
+  [ "$ctl" = 1 ] || { echo "FIXTURE BROKEN: GM1's control, one commit through raw $(command -v git), spawned '${ctl}' maintenance children (want 1): this git cannot show the defect, so GM1 would pass whatever G sets" >&2; exit 2; }
+  # The mutant: G's own body with the flag stripped, built from `declare -f G` so it is the shipped wrapper less one word.
+  declare -f G > "$WORK/gm-g.orig" || { WHY=" declare -f G failed"; return 1; }
+  sed -e 's/ -c maintenance\.auto=false//' -e '1s/^G /gm_mut /' "$WORK/gm-g.orig" > "$WORK/gm-g.mut"
+  n0="$(grep -c 'maintenance\.auto' "$WORK/gm-g.orig")" || n0=0
+  n1="$(grep -c 'maintenance\.auto' "$WORK/gm-g.mut")" || n1=0
+  ! cmp -s "$WORK/gm-g.orig" "$WORK/gm-g.mut" && [ "$n0" = 1 ] && [ "$n1" = 0 ] && . "$WORK/gm-g.mut" \
+    && [ "$(type -t gm_mut)" = function ] \
+    || { echo "FIXTURE BROKEN: GM1's mutant did not apply (flag in G $n0 time(s), in the mutant $n1, want 1 and 0)" >&2; exit 2; }
+  mu="$(gm_children gm_mut "$r" 3)" || mu=""
+  [ "$fx" = 0 ] || { WHY=" a commit through G spawned '${fx}' git maintenance run child(ren), want 0"; return 1; }
+  [ "$mu" = 1 ] || { WHY=" the mutant (G less -c maintenance.auto=false) spawned '${mu}', want 1: the arm cannot fail"; return 1; }
+}
 lines() { # <file> <n> <tag> -> n distinct lines
   local i=0; mkdir -p "$(dirname "$1")"
   : > "$1"; while [ "$i" -lt "$2" ]; do i=$((i + 1)); printf '%s line %d\n' "$3" "$i" >> "$1"; done

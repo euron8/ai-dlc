@@ -1,0 +1,747 @@
+core/fixtures/adversarial-shard-merge/run.sh:1420:[ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] && ok "$n_kill of $n_mut mutants scored dead" || bad "$n_kill of $n_mut mutants scored dead"
+core/fixtures/adversarial-shard-merge/run.sh:1425:  [ "$MATRIX_ROWS" -eq $(( (n_mut + 1) * n_arm )) ] && ok "MATRIX: $MATRIX_ROWS rows printed ($n_arm arms x (every mutant plus MX0))" || bad "MATRIX printed $MATRIX_ROWS rows, expected $(( (n_mut + 1) * n_arm ))"
+core/fixtures/advisor-gate-deny/run.sh:67:[ -z "$CTL" ] && ok "unmutated copy from the mutant directory passes the 13 cells covering every arm whose verdict can depend on the hook's path or its provenance sibling" \
+core/fixtures/advisor-gate-deny/run.sh:96:    [ "$(cells_of "$W/failed.netcap10t")" = netdef ] && ok "T-netcap10 twin UNAV stays GREEN under mutant netcap10 (only the netdef read, REREAD, trips)" \
+core/fixtures/advisor-gate-deny/run.sh:119:  [ -z "$NTWIN" ] && ok "T-noid-wait twin UNAV stays GREEN under mutant noid-wait" \
+core/fixtures/advisor-gate-deny/run.sh:126:  [ "$MROWS" -eq $((_na * 2)) ] && ok "MX matrix run measured $MROWS mutant x arm cells (2 mutants x $_na arms)" || bad "MX matrix run measured $MROWS cells, $((_na * 2)) expected"
+core/fixtures/answer-handoff-routing/run.sh:217:  [ "$(flag)" = yes ] && ok "mutant: with the collapse gone, the middle line matches on its own and the pasted row PAUSES — assertion 6c depends on the collapse" \
+core/fixtures/answer-handoff-routing/run.sh:220:  [ "$(flag)" = yes ] && ok "mutant control: the last-line request still routes under the same copy — it loads and runs, so the kill above is real" \
+core/fixtures/answer-handoff-routing/run.sh:272:    ok "mutant: with the routing arm pinned shut, 'handoff' creates no flag — the arm is what produced assertions 1-4"
+core/fixtures/answer-handoff-routing/run.sh:279:  [ "$(captured)" = "1" ] && ok "mutant control: the same copy still captures the answer — it loads and runs, so the kill above is real" \
+core/fixtures/apply-drift-after-write/run.sh:631:  ok "mutant tree carries both siblings the scan resolves"
+core/fixtures/apply-machinery-stamp/run.sh:301:    ok "mutant m1 (flag defaults on) is caught by assertion 1's predicate"
+core/fixtures/apply-machinery-stamp/run.sh:320:    ok "mutant m2 (write removed) is caught by assertion 2's predicate"
+core/fixtures/apply-machinery-stamp/run.sh:339:  ok "control: an UNMUTATED copy in the same directory advances the pair — the mutants above died of their mutation, not of the copy"
+core/fixtures/apply-relabel-noop-row/run.sh:231:    ok "MUTANT relabel-guard-widened puts the row back on a clean tree — assertions 1 and 2 are falsifiable"
+core/fixtures/apply-relabel-noop-row/run.sh:244:  ok "CONTROL: an unmutated copy in the same directory still emits the row on a colliding tree — the mutant's copy mechanism is sound"
+core/fixtures/apply-restamp-worklist/run.sh:1357:    ok "CONTROL an unmutated copy in a fresh directory reproduces both verdicts, so a mutant's silence is the mutation and not the copy"; B_mctl=1
+core/fixtures/apply-restamp-worklist/run.sh:1541:    ok "CONTROL-id an unmutated copy refuses the offender and passes the docs-only near-miss, so m9/m10/m11's verdicts are the mutation and not the copy"; B_mid=1
+core/fixtures/apply-restamp-worklist/run.sh:1628:    ok "CONTROL-m12 the unmutated copy refuses a stale region in a fresh directory, so m12's silence below is the mutation and not the copy"; B_mu=1
+core/fixtures/apply-restamp-worklist/run.sh:1704:      ok "A2 and U1 stays green under it — a report that genuinely verifies still passes, so the mutation widened the branch by exactly one exit code and not to everything"
+core/fixtures/apply-restamp-worklist/run.sh:1746:      ok "CONTROL-MR the unmutated copy refuses RA1's world in a fresh directory, so MR1's proceed below is the mutation and not the copy"; B_mr=1
+core/fixtures/apply-restamp-worklist/run.sh:2191:      ok "T-CTL an unmutated copy of apply.sh holds every T cell ($T_CELLS) through the same seam, so a T mutant's red cell is the mutation and not the extraction"; B_tctl=1
+core/fixtures/apply-restamp-worklist/run.sh:2757:    ok "BL-CTL an unmutated copy of the reconcile directory reproduces BOTH directions (firing 1|1|0|0, near-miss 0|0|0|0), so a mutant's silence below is the mutation and not the copy"; B_BLCTL=1
+core/fixtures/apply-restamp-worklist/run.sh:2929:    ok "BL-m6 and only the branch split moved — the passage and unreadable fields stay at the unmutated 1 and 0, so the mutation reaches the WORKLIST/DECISION split and nothing upstream of it"
+core/fixtures/apply-restamp-worklist/run.sh:3375:  ok "HR-CTL the subject is a cmp -s identical copy of $REC, it ran every arm above, and it emits the UNREGISTERED settings-merge row naming ai-dlc-hra-alpha.sh — so a mutant's cells below are the mutation and not the copy"; B_hrctl=1
+core/fixtures/apply-restamp-worklist/run.sh:3715:  ok "HU-CTL the subject is a cmp -s identical copy of $REC and it scores every HU arm, so a mutant's cells above are the mutation and not the copy"; B_huctl=1
+core/fixtures/apply-restamp-worklist/run.sh:4010:    ok "VF-CTL the staged copy is byte-identical to $REC and holds VF-R1, so a mutant's verdict below is the mutation and not the copy"; B_vfctl=1
+core/fixtures/apply-restamp-worklist/run.sh:4699:      ok "CONTROL-AR the unmutated copy exits 0 and WRITES the record, so a mutant copy that never ran cannot score a kill"; B_arctl=1
+core/fixtures/apply-worklist-rows/run.sh:376:  ok "CONTROL: an unmutated copy in a fresh directory reproduces both outcomes (so a mutant's silence is the mutation, not the copy)"
+core/fixtures/architecture-index-cell-escaping/run.sh:278:  ok "CONTROL: an unmutated copy in the same directory emits 5 / 4 — the kill above is the mutation, not a battery that died"
+core/fixtures/architecture-index-cell-escaping/run.sh:335:  ok "NM a plain run executes no matrix-only cell, and the mutant's per-push drive ran"
+core/fixtures/artifact-derivations/run.sh:784:  elif [ -z "$ARMS_FAILED" ]; then ok "$3 the unmutated validator fails no $4 arm, so a mutant's failed set is its own"
+core/fixtures/artifact-derivations/run.sh:836:  ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the validator, a-true exits 0 and a-stale exits 1 STALE"; B_MX0=1
+core/fixtures/artifact-derivations/run.sh:1647:else ok "mc-noop REFUSED      DID NOT APPLY: a real expression plus a no-op expression is not a mutation"; fi
+core/fixtures/artifact-derivations/run.sh:2476:  && ok "$n_kill of $n_mut mutants scored dead" \
+core/fixtures/artifact-derivations/run.sh:2483:  [ "$MATRIX_ROWS" -eq "$n_mut" ] && ok "MATRIX: $MATRIX_ROWS rows printed (one per mutant)" || bad "MATRIX printed $MATRIX_ROWS rows, expected $n_mut"
+core/fixtures/artifact-path-conformance/run.sh:454:  if arm_holds "$tw" "$r"; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
+core/fixtures/artifact-path-conformance/run.sh:463:  ok "CONTROL: an unmutated pair in the mutant directory holds all $ctl_n arms and still judges the tree"
+core/fixtures/artifact-path-conformance/run.sh:485:  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (5 mutants)"
+core/fixtures/artifact-path-migration/run.sh:641:  if arm_hold "$tw" "$d"; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
+core/fixtures/artifact-path-migration/run.sh:653:  ok "CONTROL: an unmutated copy in the mutant directory holds all $ctl_n arms and passes its own self-check"
+core/fixtures/artifact-path-migration/run.sh:679:  if [ "$MROWS" -eq "$_nx" ]; then ok "MX matrix run measured $MROWS mutant x arm cells (7 mutants)"
+core/fixtures/artifact-section-heading-level/run.sh:283:  ok "mutant-applied" "heading demoted to a child in the copy"
+core/fixtures/askuserquestion-citation/run.sh:273:  else ok "G1: 0 of $gn declared callers ($gsum --cite calls) pass --accept-captured (controls: one-line and continued seeded calls found, near-miss not, escalation-gate mutant flagged)"; fi
+core/fixtures/askuserquestion-citation/run.sh:401:  if [ "$o" = "$SHIPV" ]; then ok "T-$n twin $tw stays GREEN under mutant $n (the change is confined to its deciding arm)"
+core/fixtures/askuserquestion-citation/run.sh:413:[ "$cn" -eq 3 ] && ok "CONTROL: an unmutated copy of the validator holds arms A2, P1 and P6 and answers as the shipped one does -- the mutant harness is not what fails" \
+core/fixtures/askuserquestion-citation/run.sh:474:  if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MX_WANT mutant x arm cells (22 mutants x every arm)"
+core/fixtures/audit-anchors-schema/run.sh:194:  ok "CONTROL: an unmutated copy beside the mutant answers identically (the harness is not what fails below)"
+core/fixtures/audit-anchors-schema/run.sh:252:  if arm_holds V "$r"; then ok "T-no-enum-check twin V stays GREEN under mutant no-enum-check (a member of the enum still passes)"
+core/fixtures/audit-anchors-schema/run.sh:340:  if [ "$MROWS" -eq 7 ]; then ok "MX matrix run measured 7 mutant x arm cells (1 mutant x 7 arms)"
+core/fixtures/backlog-ledger/run.sh:397:  ok "exit-9-control" "the unmutated copy in the mutant root routes seed C correctly (baseline BL-122 STILL-LIVE present)"; B_route_ctl=1
+core/fixtures/backlog-ledger/run.sh:494:  ok "stdin-control" "the unmutated copy in the mutant root keeps all four rows"; B_stdin_ctl=1
+core/fixtures/backlog-ledger/run.sh:587:if why="$(leak_both "$MUT")"; then ok "memo-control" "the unmutated copy in the mutant root passes seed E both ways"; B_memo_ctl=1
+core/fixtures/backlog-ledger/run.sh:690:if why="$(cm_ok "$MOUT")"; then ok "cant-measure-control" "the unmutated copy in the mutant root passes seed F — its own name differs, so the prefix is derived, not fixed"; B_cm_ctl=1
+core/fixtures/backlog-ledger/run.sh:1370:if [ -z "$ctl_bad" ]; then ok "mutant-control" "the UNMUTATED copy of every component is green on all 14 arms, so the roots below run the shipped behaviour"; B_matrix_ctl=1
+core/fixtures/backlog-ledger/run.sh:1376:  else ok "[$da] $m" "deciding arm trips on the mutant's component copy"; fi
+core/fixtures/backlog-ledger/run.sh:1388:  if [ "$n_km" -eq 21 ] && [ "$MROWS" -eq 294 ]; then ok "[MX]" "the matrix run measured $MROWS cells for $n_km mutants"; else bad "[MX]" "matrix rows=$MROWS for $n_km mutants, 294 for 21 expected"; fi
+core/fixtures/backlog-real-ledger/run.sh:407:    note "FAIL  r9 m-r9call -- the call-site mutation DID NOT APPLY"; rc=1
+core/fixtures/backlog-real-ledger/run.sh:433:elif [ "$MROWS" -eq 2 ]; then ok "[MX] the matrix run measured 2 cells for the 1 mutant"
+core/fixtures/backlog-receipt-binding/run.sh:586:  sed "$expr" "$f.orig" > "$f" || { note "FAIL  mutation sed DIED, so no mutant exists"; rc=1; rm -f "$f.orig"; return 1; }
+core/fixtures/backlog-receipt-binding/run.sh:588:    note "FAIL  the mutation was a NO-OP: the subject is byte-identical, so any verdict below means nothing"
+core/fixtures/backlog-receipt-binding/run.sh:618:  ok "control -- the unmutated subject passed, so a mutant verdict below is its mutation"; B_CTRL=1
+core/fixtures/backlog-receipt-binding/run.sh:819:  note "FAIL  m6 -- the drift mutation was a NO-OP, so any verdict below means nothing"; rc=1
+core/fixtures/backlog-receipt-binding/run.sh:1427:    note "FAIL  gitdir-mutant -- the scrub anchor matches $gd_anchor_n line(s), not 1, so the mutation below would edit the wrong site or none"
+core/fixtures/backlog-receipt-binding/run.sh:1488:else note "FAIL  m-loose -- the label mutation DID NOT APPLY"; rc=1; fi
+core/fixtures/backlog-receipt-binding/run.sh:1495:else note "FAIL  m-heading-only -- the label mutation DID NOT APPLY"; rc=1; fi
+core/fixtures/backlog-receipt-binding/run.sh:1597:B_MEMO=0; if [ "$rc" = "$memo_rc0" ]; then ok "memo base: every memo-leak cell above held, so the memo mutants below are scored against a passing base"; B_MEMO=1; fi
+core/fixtures/backlog-receipt-binding/run.sh:2165:  ok "r10d-control -- R10's probe alone, over the unmutated copy, passed 47 seeds and read each mutant target seed UNANCHORED/full"; R10D_BASE_OK=1
+core/fixtures/backlog-receipt-binding/run.sh:2663:  note "PASS  backlog-receipt-binding -- control green, every mutant caught by its own assertion"
+core/fixtures/backlog-rotate-fence-guard/run.sh:1212:  ok "mutant-control" "the unmutated copy in a sandbox root refuses exactly as the real one does"
+core/fixtures/backlog-rotate-fence-guard/run.sh:1282:    ok "mutant-twin-m2a" "guard widened with lib.sh intact stays QUIET on near-miss — lib.sh's fence-aware shape rule carries the property, so m2's kill needed both layers"
+core/fixtures/backlog-rotate-fence-guard/run.sh:1845:  ok "mutants" "18 mutants built (16 targets + m2's and m5's single-layer twins) and all 16 targets were scored by the arm they name"
+core/fixtures/backlog-size-ceiling/run.sh:535:  *) note "FAIL  d05 -- the heading-shape mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:540:  *) note "FAIL  d06 -- the bullet-shape mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:551:  *) note "FAIL  mc -- the clause-(c) mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:559:  *) note "FAIL  mb -- the B1b mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:566:  0) : ;; *) note "FAIL  ms -- the self-probe mutation DID NOT APPLY"; rc=1; ms_ok=0 ;;
+core/fixtures/backlog-size-ceiling/run.sh:569:  0) : ;; *) note "FAIL  ms -- the bullet-shape mutation DID NOT APPLY"; rc=1; ms_ok=0 ;;
+core/fixtures/backlog-size-ceiling/run.sh:584:  note "FAIL  mp -- the position rule's line appears $mp_n times in backlog-reverify.sh; the mutation needs exactly one"; rc=1
+core/fixtures/backlog-size-ceiling/run.sh:591:    *) note "FAIL  mp/d04 -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:598:    *) note "FAIL  mp/d03n -- the position-rule mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:619:  note "FAIL  p-anchor -- the strict bullet test appears $ph_n times in lib.sh (control $ph_z); the mutants below need exactly one"; rc=1
+core/fixtures/backlog-size-ceiling/run.sh:628:  *) note "FAIL  m-loose -- the label mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:635:  *) note "FAIL  m-heading-only -- the label mutation DID NOT APPLY"; rc=1 ;;
+core/fixtures/backlog-size-ceiling/run.sh:652:  if [ "$n_ids" -eq 10 ] && [ "$MROWS" -eq 100 ]; then ok "[MX] the matrix run measured $MROWS cells for $n_ids mutants"; else bad "[MX] matrix rows=$MROWS for $n_ids mutants, 100 for 10 expected"; fi
+core/fixtures/bmad-invocation-resolve/run.sh:126:    ok "MUTATION: neutering load-target resolution turns the dead shim green (that resolution is what fails it)"
+core/fixtures/bmad-invocation-resolve/run.sh:150:  [ $? -ne 0 ] && ok "MUTATION: the slash-only enumerator reds the clean rulebook (the grammar is what excludes the path segment)" \
+core/fixtures/bmad-invocation-resolve/run.sh:156:  [ $? -eq 1 ] && ok "MUTATION PAIRING: a dangling name still FAILS under the mutant (the two assertions are not entangled)" \
+core/fixtures/bmad-invocation-resolve/run.sh:215:    && ok "EXT-M PAIRING: the near-misses are still named under the mutant (the prefilter removes only extensions)" \
+core/fixtures/bmad-invocation-resolve/run.sh:302:    && ok "MUTATION ADJ-M1: the consuming grep loses /bmad-adj-b on the space-adjacent pair (rc 0, not named; the scanner is what keeps it)" \
+core/fixtures/bmad-invocation-resolve/run.sh:305:    && ok "MUTATION ADJ-M1 PAIRING: the consuming grep still names /bmad-adj-b after a comma (rc 1; the mutant ran and is not a dead copy)" \
+core/fixtures/bmad-invocation-resolve/run.sh:310:    && ok "MUTATION ADJ-M2: offsets measured from the cut remainder name /bmad-adj-b in the slash-joined near-miss (rc 1; line-start offsets are what reject it)" \
+core/fixtures/bmad-invocation-resolve/run.sh:313:    && ok "MUTATION ADJ-M2 PAIRING: the remainder-relative scanner still names the space-adjacent offender (rc 1; the mutant ran)" \
+core/fixtures/bmad-invocation-resolve/run.sh:317:    && ok "MUTATION ADJ-MG: with the context test removed the slash-joined near-miss names /bmad-adj-b (rc 1; the context test is what rejects it)" \
+core/fixtures/bmad-invocation-resolve/run.sh:326:[ $? -eq 0 ] && ok "CONTROL: an UNMUTATED copy in the same directory still passes (the mutants died of their edits, not of being copies)" \
+core/fixtures/budget-summary-verdict/run.sh:1284:  if [ "$n_mut" -eq 24 ] && [ "$MROWS" -eq $((n_mut * n_arm)) ]; then ok "[MX] the matrix run measured $MROWS cells for $n_mut mutants over $n_arm arms"
+core/fixtures/carried-findings/run.sh:769:  if [ "$MWIDE" -gt 0 ] && [ "$MROWS" -gt 0 ]; then ok "matrix run: $MWIDE mutants measured across every arm ($MROWS rows)"; else bad "matrix run: no rows were printed (wide=$MWIDE rows=$MROWS)"; fi
+core/fixtures/census-hermetic-coverage/run.sh:654:  if [ "$MWIDE" -gt 0 ] && [ "$MROWS" -gt 0 ]; then ok "matrix run: $MWIDE mutant censuses widened to every fixture ($MROWS rows)"; else bad "matrix run: no rows were printed (wide=$MWIDE rows=$MROWS)"; fi
+core/fixtures/changelog-sprint-slot/run.sh:177:  ok "MUTATION: a prescription pointed back at the durable artifact is reported"
+core/fixtures/changelog-sprint-slot/run.sh:206:    ok "MUTATION: requirements.md pointed back at the durable artifact is reported"
+core/fixtures/changelog-sprint-slot/run.sh:227:  ok "MUTATION: deleting the canonical declaration is detected"
+core/fixtures/check-15-bypass/run.sh:544:  note "ok" "mutant control" "an unmutated copy reports V14 and V15 and stays quiet on V13"
+core/fixtures/check-15-bypass/run.sh:546:  note "BAD" "mutant control" "an unmutated copy answered V13='$c_pros' V14='$c_defr' V15='$c_nie' — the mutants below would be scoring the harness"
+core/fixtures/check-15-bypass/run.sh:560:    note "BAD" "MUTANT $label" "the sed matched nothing — no mutation applied, so nothing was proven"
+core/fixtures/check-15-bypass/run.sh:584:    note "BAD" "MUTANT $label" "SURVIVED — $probe answered '$got', wanted '${MUT_WANT[$i]}'"
+core/fixtures/check-15-bypass/run.sh:589:    if [ "$tg" = "$(want_of "$tp")" ]; then ok "MUTANT $label: twin arm $(arm_name "$tp") stays green ($tg) -- the effect is confined to $(arm_name "$probe")"
+core/fixtures/check-15-bypass/run.sh:590:    else note "BAD" "MUTANT $label" "moved its twin arm $(arm_name "$tp") to '$tg' — the arms overlap, re-measure with --matrix"; fails=$((fails + 1)); fi
+core/fixtures/check-17-bypass/run.sh:357:    note "BAD" "sprint-999 (origin-only)" "MUTATION matched nothing — the resolution reassignment was renamed"
+core/fixtures/check-17-bypass/run.sh:362:      note "ok" "sprint-999 (origin-only)" "MUTATION — without resolution the origin-only branch is unresolved (ls-tree FAIL)"
+core/fixtures/check-17-bypass/run.sh:364:      note "BAD" "sprint-999 (origin-only)" "MUTATION — the branch resolved with resolution disabled; the assertion proves nothing"
+core/fixtures/check-22-spawn-ledger/run.sh:197:ok "MUTANT m scored"; B_m=1
+core/fixtures/check-22-spawn-ledger/run.sh:485:    ok "MUTANT norolebound: dropping that guard turns the same all-out-of-scope ledger into a silent exit 0 — the arm above is load-bearing"
+core/fixtures/check-22-spawn-ledger/run.sh:505:  ok "CONTROL: an unmutated copy in the mutant directory answers every arm (so a mutant's silence is the mutation, not the copy)"; B_ctl=1
+core/fixtures/check-22-spawn-ledger/run.sh:532:    ok "MUTANT $n: $desc — and it moves ONLY the $arm arm"
+core/fixtures/check-22-spawn-ledger/run.sh:633:    ok "MUTANT nameboundary: dropping the dash boundary flags devops-audit as the role dev — the boundary is what makes the NOTE a name match rather than a substring match"
+core/fixtures/check-22-spawn-ledger/run.sh:646:    ok "MUTANT suspectnote: without the name reading, a misrouted role dispatch is skipped in total silence — 18 of them on the reference consumer"
+core/fixtures/check-22-spawn-ledger/run.sh:671:    ok "MUTANT dedup: the space-separated accumulator against a newline-delimited test repeats every role after the first"
+core/fixtures/check-22-spawn-ledger/run.sh:717:    ok "MUTANT emptyrole: without the guard the same role-less row answers rc=$a with an empty roles block and rc=$b with a populated one — the collision the guard exists to stop"
+core/fixtures/check-22-spawn-ledger/run.sh:748:    ok "MUTANT foreignschema: treating every row as guard-written manufactures $n findings from the foreign row's ABSENT fields — 24 of 25 on the reference consumer"
+core/fixtures/check-22-spawn-ledger/run.sh:765:    ok "MUTANT declaredisjunct: without it an UNCITED dispatch of a declared role falls out of scope (3) instead of being judged (1) — the declaration is what carries the D arm, and it is now asserted rather than assumed"
+core/fixtures/check-22-spawn-ledger/run.sh:783:    ok "MUTANT citeddisjunct: without it a settings.json that lost its role block drops every contract-citing row as out of scope (3) instead of examining them (0) — the disjunct is what stops an aiDlcRoles deletion disarming the check"
+core/fixtures/check-22-spawn-ledger/run.sh:1059:    ok "MUTANT noeffortarm: dropping the arm turns a teammate that demonstrably ran at the wrong effort into a clean exit 0 -- E2 is load-bearing"
+core/fixtures/check-22-spawn-ledger/run.sh:1079:    ok "MUTANT unjoined: with the id match removed the same-role pair is scored against the wrong transcript and the verdict names the wrong spawn -- E5 is what catches it, and an exit-code-only arm could not"
+core/fixtures/check-22-spawn-ledger/run.sh:1095:    ok "MUTANT nofloor: without the 2.1.267 floor a pinned-effort record from a build where the field was wrong is scored as a finding -- E6 is what stops a false FAIL on correct data"
+core/fixtures/check-22-spawn-ledger/run.sh:1370:    ok "MUTANT $n: $desc -- and it moves ONLY the $cell cell"
+core/fixtures/check-22-spawn-ledger/run.sh:1383:  ok "CONTROL: the resolved validator at $VSL emits the clearing sentence $CPSRC times, so a mutant that removes one has a subject"
+core/fixtures/check-22-spawn-ledger/run.sh:1421:    ok "MUTANT m4: deleting the 19(b) route entirely passes an uncited row, and C1's cite cell reads [$M4CELL] -- caught by the rc=1-and-class-token half, which is why C1 asks about LIVENESS before it asks about NAMING; an arm scoring only 'every FAIL names the remedy' calls this build clean over a route that no longer exists"
+core/fixtures/check-22-spawn-ledger/run.sh:1438:    ok "MUTANT m5: reverting the section header to 'Dispositioning a Rule 19(a) violation' scores [$M5] -- C2 reads the header, so a section that lists four classes under a heading claiming one does not pass"
+core/fixtures/check-22-spawn-ledger/run.sh:2096:  && ok "T CONTROL: the unmutated copy in the mutant directory reproduces all five cells" \
+core/fixtures/check-22-spawn-ledger/run.sh:2175:[ "$KCTL" = "$K_EXPECTED" ] && ok "K CONTROL: the unmutated copy in the mutant directory reproduces all four cells" \
+core/fixtures/check-22-spawn-ledger/run.sh:2396:[ "$RCTL" = "$R_EXPECTED" ] && ok "R CONTROL: the unmutated copy in the mutant directory answers the rem-cite cell (a positive REMEDIATED row, so a copy that never ran cannot pass); the other sixteen cells are the main run, already scored" \
+core/fixtures/check-22-spawn-ledger/run.sh:2439:  [ "$RNPGOT" = "$R_EXPECTED" ] && ok "R NOPROBE CONTROL: the validator with only its shard self-probe call disabled reproduces the four cells the three probe-disabling mutants are scored on, so a mutant that also disables it is scored by its own edit" \
+core/fixtures/check-31-ac-falsifiability/run.sh:226:  ok "IDENTITY CONTROL: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
+core/fixtures/check-31-ac-falsifiability/run.sh:336:        if [ "$got" = "$(arm_want "$t")" ]; then ok "MUTANT $m: twin arm $t stays green ($got) -- the kill is confined to $d"
+core/fixtures/check5-anchor-base/run.sh:137:  ok "MUTATION: reverting the base to main..HEAD makes Check 5 SKIP (the anchor base is what fires it)"
+core/fixtures/check5-anchor-base/run.sh:269:  ok "CONTROL: an unmutated copy in the mutant directory answers identically (the harness itself is not what fails below)"
+core/fixtures/check5-anchor-base/run.sh:287:    ok "MUTANT $tag: $claim"
+core/fixtures/check5-anchor-base/run.sh:411:  if [ "$got" = "$want" ]; then ok "MUTANT $tag: $claim"; else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
+core/fixtures/check5-anchor-base/run.sh:592:  ok "CONTROL: an unmutated copy beside the mutants answers every world (a mutant's silence below is the mutation, not a copy that could not find its siblings)"
+core/fixtures/check5-anchor-base/run.sh:613:    ok "MUTANT $tag: $claim"
+core/fixtures/check5-anchor-base/run.sh:685:  ok "MUTANT stories: widening the acquittal to a THIRD suffix leaves every world unchanged, so no battery of worlds can catch it, and the set-lock arm is what reads [test|spec|stories] and refuses"
+core/fixtures/check5-anchor-base/run.sh:785:  ok "CONTROL: an unmutated copy beside the section mutants PASSes the long world and FAILs the cross-sprint world"
+core/fixtures/check5-anchor-base/run.sh:806:    ok "MUTANT $tag: $claim"
+core/fixtures/check5-anchor-base/run.sh:900:  ok "MUTANT bare: restoring grep -qi 'playwright' PASSes the could-not-run row and both near-misses, and moves nothing else"
+core/fixtures/ci-gates-resolution/run.sh:90:  ok "A MUTATION CONTROL — an unmutated copy in \$WORK exits 78 on the missing surface"; CG_A=1
+core/fixtures/ci-gates-resolution/run.sh:117:  ok "B MUTATION CONTROL — an unmutated copy in \$WORK reports the comment-only 'build' DORMANT"; CG_B=1
+core/fixtures/ci-gates-resolution/run.sh:162:  ok "E MUTATION CONTROL — an unmutated copy in \$WORK keeps the twice-anchored gate DORMANT"; CG_E=1
+core/fixtures/ci-gates-resolution/run.sh:189:  ok "F MUTATION CONTROL — an unmutated copy in \$WORK keeps the unwired gate DORMANT"; CG_F=1
+core/fixtures/ci-gates-resolution/run.sh:220:  ok "G MUTATION CONTROL — an unmutated copy in \$WORK skips the placeholder (2 declared, exit 0)"; CG_G=1
+core/fixtures/ci-gates-resolution/run.sh:427:  ok "H CONTROL — an unmutated copy reproduces all three identity blocks, so a mutant's silence below means mutation, not breakage"
+core/fixtures/ci-gates-resolution/run.sh:480:      ok "H MUTANT Z leaves the MAIN verdict intact — the mutation is site-specific, not a sed that edited both byte-identical blocks"
+core/fixtures/ci-gates-resolution/run.sh:495:      ok "H MUTANT M leaves the ZERO-GATE exit intact — the mutation is site-specific"
+core/fixtures/ci-gates-resolution/run.sh:515:      ok "H MUTANT A leaves the OTHER TWO emitters intact — the mutation is site-specific across all three"
+core/fixtures/ci-gates-resolution/run.sh:544:        ok "H MUTANT T leaves the two scanned roots named — H4b owns the alias table and H2 owns the roots"
+core/fixtures/claude-rules-joins/run.sh:117:  note "FIXTURE BROKEN: the unmutated control did NOT pass. Every mutant verdict below is meaningless."
+core/fixtures/claude-rules-joins/run.sh:128:    note "FAIL  $n -- mutant SURVIVED (validator exited 0)"; rc=1; return
+core/fixtures/claude-rules-joins/run.sh:135:    note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own assertion, so the arms are entangled"
+core/fixtures/claude-rules-joins/run.sh:159:else note "SKIP  m2 -- sed matched nothing; no mutation occurred"; rc=1; fi
+core/fixtures/claude-rules-joins/run.sh:166:else note "SKIP  m3 -- sed matched nothing; no mutation occurred"; rc=1; fi
+core/fixtures/claude-rules-joins/run.sh:173:else note "SKIP  m4 -- sed matched nothing; no mutation occurred"; rc=1; fi
+core/fixtures/claude-rules-joins/run.sh:203:else note "SKIP  m8 -- sed matched nothing; no mutation occurred"; rc=1; fi
+core/fixtures/claude-rules-joins/run.sh:217:else note "SKIP  m10 -- sed matched nothing; no mutation occurred"; rc=1; fi
+core/fixtures/claude-rules-joins/run.sh:224:  note "FAIL  m11 A6 over ceiling -- mutant SURVIVED or failed on another arm"
+core/fixtures/claude-rules-joins/run.sh:402:if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 13/13 mutants refused by their own arm"; fi
+core/fixtures/command-args-citation/run.sh:60:  ok "the cited command name '$CMDNAME' is $CMDNAME_NLEN characters, above the citation floor, so assertions 2 and 5 and mutant A reach the extraction"
+core/fixtures/command-args-citation/run.sh:134:    MATCH*) ok "mutant A: accepting the whole envelope makes <command-name> citable — assertion 2 has teeth" ;;
+core/fixtures/command-args-citation/run.sh:141:    NOMATCH*) ok "mutant A leaves assertion 3 intact — the two assertions are not entangled" ;;
+core/fixtures/command-args-citation/run.sh:155:    MATCH*) ok "mutant B: without the envelope guard a quoted args tag cites — assertion 3 has teeth" ;;
+core/fixtures/command-args-citation/run.sh:161:    NOMATCH) ok "mutant B leaves assertion 2 intact — the two assertions are not entangled" ;;
+core/fixtures/consolidation-residue/run.sh:133:  ok "MUTATION: un-slotting the manifest path is reported as an offender"
+core/fixtures/consolidation-residue/run.sh:151:  ok "MUTATION: deleting the disposition is detected"
+core/fixtures/consumer-machinery-inventory/run.sh:311:    ok "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
+core/fixtures/consumer-suite-pool/run.sh:581:  ok "mutant-battery control: an unmutated copy of the hook, driven on the green world, reproduces the base vector (rc 0, no record) and reports ok alpha"
+core/fixtures/context-mode-protect/run.sh:257:  ok "9d mutant control: an unmutated copy passes the command-2 and label-only arms"
+core/fixtures/context-provenance/run.sh:467:    ok "CONTROL: an unmutated library copy still marks, still states the contract once, and still reuses (the mutants below score the mutation, not the copy)"
+core/fixtures/context-provenance/run.sh:484:    ok "MUTANT 1: with the reuse branch unreachable a non-SessionStart event MINTS -- the reuse arm is load-bearing, and the contract arm is unmoved by it"
+core/fixtures/context-provenance/run.sh:504:    ok "MUTANT 2: with the contract branch always taken a Stop event restates it -- the SessionStart-only arm is load-bearing, and the reuse arm is unmoved by it"
+core/fixtures/context-provenance/run.sh:519:    ok "MUTANT 3: with the bound widened the store keeps all 101 lines and the oldest survives -- arm 6's bound and its drop-control are both load-bearing"
+core/fixtures/context-provenance/run.sh:530:  ok "control: every mutation landed (a sed matching nothing cannot skip its assertion in silence)"
+core/fixtures/context-sensor/run.sh:566:  case "$MOUT" in *"Auto-compact will fire"*) ok "  finding mutant still fires imminent (the copy ran)" ;;
+core/fixtures/context-sensor/run.sh:570:    *) ok "MUTANT: without the carve-out the finding arm fails" ;; esac
+core/fixtures/core-script-boundary/run.sh:175:[ "$got" = "allow" ] && ok "MUTATION: removing the scripts/ path arm makes assertion 1 go allow" \
+core/fixtures/crosswalk-home-declaration/run.sh:253:        ok "CONTROL: an unmutated mirror reports I69 zero times — the mutants below run against a tree the invariant accepts"
+core/fixtures/cycle-commits-enforce/run.sh:119:  ok "MUTATION: disabling the log-rows guard makes the 2-row input pass (FAIL was real)"
+core/fixtures/cycle-commits-enforce/run.sh:227:    ok "MUTATION: without the prior-sprint test, dead SHAs fail the run again (assertion 6 is real)"
+core/fixtures/cycle-commits-enforce/run.sh:349:    ok "MUTATION: without the arm, the all-exempted log prints the old bare PASS (the 4 was real)"
+core/fixtures/cycle-commits-enforce/run.sh:392:    ok "MUTATION: without the carve-out the Test Strategy section FAILs (assertion 13 is real)"
+core/fixtures/deploy-validate-smoke-classification/run.sh:360:  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing, the dev dispatch in the fix loop and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split; §5's template carries the Locked-Requirement Coverage block with its status and disposition tokens and §5 prose withholds the checkpoint without a recorded disposition; §5's template carries Decisions for You (badged, with consequences) then For Your Information before Next Steps, §5 prose carries the any-source decisions rule and §6 waits on each decision and offers each override"
+core/fixtures/deploy-validate-smoke-classification/run.sh:378:  ok "CONTROL: an unmutated copy passes and §3 is non-empty, so a mutant's finding below is the mutation"; B_CTL=1
+core/fixtures/derivation-capture-worktree-root/run.sh:299:  if silent_pass; then ok "M2 control: the same mutant still accepts the worktree fence (A1 green), so it fails only A4"
+core/fixtures/derivation-capture-worktree-root/run.sh:312:  if silent_pass; then ok "M3 control: the same mutant still accepts the A1 worktree fence, so it fails only A7"
+core/fixtures/derivation-capture-worktree-root/run.sh:324:  if silent_pass; then ok "M4 control: the same mutant still accepts the main-tree fence with a clean env (A6 green)"
+core/fixtures/derivation-capture-worktree-root/run.sh:342:    fails=$_f0; ok "BL-849: a mutant that does not apply reaches the exit counter"
+core/fixtures/derivation-capture/run.sh:994:    ok "mutant control: the unmutated copies give row 1 exit 0, row 5 FAIL (STALE) at :4, and the join line"
+core/fixtures/derived-fence-binding/run.sh:135:    0:*"$OKLINE"*) ok "T-$m twin $tw stays GREEN under mutant $m (the kill is confined to its deciding arm)" ;;
+core/fixtures/derived-fence-binding/run.sh:1282:  if [ "$MROWS" -eq 75 ]; then ok "MX matrix run measured 75 mutant x arm cells (15 mutants x 5 arms)"
+core/fixtures/dispatch-model-guard/run.sh:530:  ok "MUTANT CONTROL: an unmutated copy is silent on the idempotent dispatch AND still binds opus on the correcting one — it ran, and the kills below are against the mutation"
+core/fixtures/dispatch-model-guard/run.sh:548:  && ok "MUTANT effort-trigger anchor is UNIQUE in the guard (1 line) — the mutation below edits the trigger set and nothing else" \
+core/fixtures/dispatch-model-guard/run.sh:1860:  && ok "MUTANT CONTROL: an unmutated copy still rewrites the type (a mutant's silence is the mutation, not the copy)" \
+core/fixtures/dispatch-model-guard/run.sh:1981:  && ok "CAP MUTANT CONTROL: an unmutated copy denies 14a" \
+core/fixtures/dispatch-model-guard/run.sh:2154:[ "$(adj_mut "$ADJCTL" "$W1")" = deny ] && ok "ADJ MUTANT CONTROL: an unmutated copy denies 15a" \
+core/fixtures/dispatch-model-guard/run.sh:2413:  && ok "REM MUTANT CONTROL: an unmutated tree copy ALLOWS 15r and denies 15r' (its walk-up found the validator)" \
+core/fixtures/document-partition/run.sh:1076:  if [ "$MATRIX_ROWS" -eq 36 ]; then ok "MATRIX-RUN: 36 MATRIX rows printed (35 mutants + MX0)"
+core/fixtures/emit-report-refusal/run.sh:679:[ "$n_scored" -eq "$n_exp" ] && ok "all $n_exp mutants were built (anchor count, cmp -s, bash -n) and scored" \
+core/fixtures/emit-report-refusal/run.sh:685:  [ "$MATRIX_ROWS" -eq $(( (n_scored + 1) * _na )) ] && ok "MATRIX: $MATRIX_ROWS rows printed ($_na arms x (every mutant plus MX0))" || bad "MATRIX printed $MATRIX_ROWS rows, expected $(( (n_scored + 1) * _na ))"
+core/fixtures/enforcement-map-derivations/run.sh:155:  ok "${clabel:-$id mutant control: the unmutated copy passes $id and its twin $twin}"
+core/fixtures/enforcement-map-derivations/run.sh:2203:    ok "MATRIX: $MX_CELLS cells = ($mx_n mutants + the unmutated tree) x $MX_NARMS arms"
+core/fixtures/enforcement-map-sites/run.sh:2211:    ok "the I59 corpus mutant leaves I60, I83 and I84 green -- the arms sharing its find anchor are not collateral of this kill"
+core/fixtures/escalation-citation/run.sh:1310:  if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MROWS mutant x arm cells"
+core/fixtures/escalation-delivery/run.sh:291:  ok "mutation battery: $kills of $expected mutants scored on exactly their own arm"
+core/fixtures/escalation-status-vocabulary/run.sh:218:  ok "mutant control: an unmutated copy REPORTS the offender and stays quiet on the near-miss"
+core/fixtures/extension-check-adoption/run.sh:260:  [ "$c" = "GM2" ] && ok "MUTANT anchor-write: without the anchor the declaration claims loading for nothing — GM2" \
+core/fixtures/extension-check-adoption/run.sh:272:  [ "$c" = "ORPHAN" ] && ok "MUTANT gate_types-write: without the declaration the anchors become ORPHANs (a DIFFERENT code, so the two assertions are not entangled)" \
+core/fixtures/extension-check-adoption/run.sh:286:    ok "MUTANT entry-filter: ignoring \`kind:\` rewrites a \`step-domain\` entry (that filter is load-bearing)"
+core/fixtures/extension-check-adoption/run.sh:299:[ "$c" = "PASS" ] && ok "CONTROL: an UNMUTATED copy still clears GM1 (the mutants died of their edits, not of being copies)" \
+core/fixtures/extract-push-flag-decision/run.sh:336:  if [ "$rc" -eq 1 ]; then ok "mutant 7u: stripping the 7u token lines from $SUBJ is reported (rc 1)"
+core/fixtures/fanout-payload-channel/run.sh:522:  ok "mutant battery: $kills of 6 scored dead"
+core/fixtures/fanout-untracked-corpus/run.sh:285:  ok "MUTANT tracked-only turns assertion 1 red — the untracked artifact vanishes from the worklist, reproducing the filed defect"
+core/fixtures/fanout-untracked-corpus/run.sh:287:    && ok "MUTANT tracked-only leaves assertion 3 GREEN — the two arms are not entangled" \
+core/fixtures/fanout-untracked-corpus/run.sh:300:  ok "MUTANT no-exclude-standard turns assertion 2 red — the gitignored file reaches the worklist"
+core/fixtures/fanout-untracked-corpus/run.sh:302:    && ok "MUTANT no-exclude-standard leaves assertion 1 GREEN — the two arms are not entangled" \
+core/fixtures/fanout-untracked-corpus/run.sh:317:  ok "MUTANT untracked-only turns assertion 3 red — the tracked citing file vanishes from the worklist"
+core/fixtures/fanout-untracked-corpus/run.sh:319:    && ok "MUTANT untracked-only leaves assertion 1 GREEN — the two arms are not entangled" \
+core/fixtures/fanout-untracked-corpus/run.sh:335:  ok "CONTROL: an unaltered git through the same shim still yields BOTH baseline worklist rows — the kills above are the mutations, not the harness"
+core/fixtures/fixture-drivability/run.sh:142:  ok "an UNMUTATED copy still rejects the seeded tree (the mutants below are scoring the mutation, not the copy)"
+core/fixtures/fixture-drivability/run.sh:152:    ok "MUTANT 1: with the no-README branch removed, 'delta' goes silent and 'echo' still reports — the branch is load-bearing and unentangled"
+core/fixtures/fixture-drivability/run.sh:163:    ok "MUTANT 2: with the marker test always true, 'echo' goes silent and 'delta' still reports — the marker is what makes the exemption a declaration"
+core/fixtures/fixture-drivability/run.sh:175:  ok "control: both mutations landed (a sed matching nothing cannot skip its assertion in silence)"
+core/fixtures/fixture-git-env-seam/run.sh:292:ok "H2 driven fixture $SUBJECT runs in the copy tree — mutant verdicts are about the seam, not about a broken copy"
+core/fixtures/fixture-git-env-seam/run.sh:331:  ok "U  shipping tree, GIT_DIR unset: victim untouched on all four channels — the twin cell every mutant below is compared against"
+core/fixtures/fixture-hygiene/run.sh:341:if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MH5.out" ] && [ -e "$WORK/c.MH1.out" ] && [ -e "$WORK/c.MH7.out" ] && [ -e "$WORK/c.MH8R.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
+core/fixtures/fixture-inprocess/run.sh:269:if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MR.out" ] && [ -e "$WORK/c.MK.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
+core/fixtures/fixture-invocation-budget/run.sh:348:if [ ! -e "$WORK/mx.ran" ] && [ -e "$WORK/c.MPASS.A1.out" ] && [ -e "$WORK/c.MJ3.SP.out" ]; then ok "NM a plain run executes no matrix-only cell, and the per-push mutant drives ran"
+core/fixtures/fold-architect-ledger-join/run.sh:1008:if [ "$c_verdict" = 1 ]; then ok "[SEAM-verdict] twin of SEAM-INVERTED stays green: the mutant's verdict (banner dropped) equals the real end-to-end output"
+core/fixtures/fold-architect-ledger-join/run.sh:1013:  if [ "$MROWS" -eq 10 ]; then ok "[MX] the matrix run measured 10 cells for the 4 mutants"; else bad "[MX] matrix rows=$MROWS, 10 expected"; fi
+core/fixtures/foreground-budget-deny/run.sh:743:  if [ -z "$SC_DEAD" ]; then ok "CONTROL MX0 (unmutated copy from the mutant directory): every arm HOLDS on it, tripped=[] (matrix)"; B_MX0=1
+core/fixtures/foreground-budget-deny/run.sh:746:  ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the hook every arm above passed"; B_MX0=1
+core/fixtures/foreground-budget-deny/run.sh:863:  && ok "$n_kill of $n_mut mutants scored dead" \
+core/fixtures/foreground-budget-deny/run.sh:870:  [ "$MATRIX_ROWS" -eq "$((n_mut + 1))" ] && ok "MATRIX: $MATRIX_ROWS rows printed (every mutant plus MX0)" || bad "MATRIX printed $MATRIX_ROWS rows, expected $((n_mut + 1))"
+core/fixtures/gate-adjudication-rotate/run.sh:802:    ok "MUTATION 5: with the early exit restored, the unmatchable world exits 0 'nothing to move' -- arm (j) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:826:    ok "MUTATION 6: with the FAIL narrowing reverted, the PASS-only unmatchable world refuses (exit 1) -- arm (j.0) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:846:    ok "MUTATION 7: a prefix match moves '${UM_STEM}-retry' too -- arm (l.2) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:869:    ok "MUTATION 8: keyed on any member, the older-FAIL newest-PASS series refuses (exit 1) -- arm (j.9) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:888:    ok "MUTATION 9: with the promotion conjunct restored, the close exits 0 leaving the FAIL as live pass -- arm (j.10) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:910:    ok "MUTATION 10: keyed on an empty archive, the re-run after line 1 exits 0 with the newer FAIL live -- arm (j.11) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:932:    ok "MUTATION 13: refusing unconditionally in --legacy-through, its step refuses and prints --series back -- arm (j.13) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:954:    ok "MUTATION 14: exempting a FAIL-free archive, the re-run exits 0 with the FAIL live (control: its close still refuses) -- arm (j.12) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:974:    ok "MUTATION 15: with a strict comparison the tied PASS moves and the legacy FAIL is left live (exit 0) -- arm (j.14) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:994:    ok "MUTATION 16: with --legacy-through never refusing, the PASS moves and the unmatchable FAIL is left live (exit 0) -- arm (j.15) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:1012:    ok "MUTATION 12: without the --series exemption, line 1 of the walk refuses (exit 1) -- arm (j.11) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:1032:    ok "MUTATION 11: hinting the closing sprint between archives prints --sprint s313 -- arm (j.5c) is live"
+core/fixtures/gate-adjudication-rotate/run.sh:1064:    ok "MUTATION 4: with the stranding refusal stripped, the rotation proceeds and strands the FAILing legacy verdict (rc=$rc4) — arm (h.1) is live, not vacuous"
+core/fixtures/gate-adjudication-rotate/run.sh:1090:    ok "MUTATION 1: selection keyed on the wrong JSON field (gate_type instead of gate_series_id) finds nothing to move in the base world where the real field selects one -- arm (b)/(a) would FAIL against this subject"
+core/fixtures/gate-adjudication-rotate/run.sh:1108:    ok "MUTATION 2: with the parse-failure refusal stripped, an unparseable verdict no longer refuses (rc=$rc) -- arm (g) is live, not vacuous"
+core/fixtures/gate-adjudication-rotate/run.sh:1126:    ok "MUTATION 3: with the ignore-check disabled, apply writes into the ignored path instead of refusing -- arm (d) is live, not vacuous"
+core/fixtures/gate-adjudication-rotate/run.sh:1164:    if [ "$_wd" = " 1 2" ]; then ok "MUTATION W: with FAIL_WAIVED read as clean at both selects, (w.1) and (w.2) both go red"
+core/fixtures/gate-adjudication/run.sh:1373:      ok "$label: all three coverage predicates HOLD against an unmutated copy in the sandbox — the copy runs, so every kill below is attributable to its mutation and not to a broken harness"; B_CV=1
+core/fixtures/gate-remediation-deny/run.sh:1395:if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces S1's allow"; then ok "CONTROL bound: the S1 mutants below are scored against a copy that reproduced the shipped allow"; B_ctlS1=1; fi
+core/fixtures/gate-remediation-deny/run.sh:1674:if hold_arm c control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces 7a's allow on a BOUND clean pass"; then ok "CONTROL bound: B_ctl7a -- the mutants it gates are scored against a copy that reproduced the shipped verdict"; B_ctl7a=1; fi
+core/fixtures/gate-remediation-deny/run.sh:2049:  if [ "$_cr" -eq 2 ]; then ok "CONTROL m-crash-control: a mutant dying on an unbound variable (rc=$AD_RC) is reported BROKEN, not scored as a kill"
+core/fixtures/gate-remediation-deny/run.sh:2056:  if [ "$_cr" -eq 2 ] && [ "$AD_RC" -eq 0 ]; then ok "CONTROL m-silent-control: a mutant that exits 0 and logs no event is reported BROKEN, not scored as a kill"
+core/fixtures/gate-remediation-deny/run.sh:2121:  if [ "$fails" -gt "$_sab" ]; then fails="$_sab"; ok "CONTROL m-silent-allow-control: a mutant that allows by a silent exit 0 is reported BROKEN, not scored as an allow"
+core/fixtures/gate-series-rung/run.sh:476:  ok "sprint-scope: all 12 cells hold unmutated in this run, so the mutants below are scored"
+core/fixtures/gate-transition/run.sh:663:  [ "$rows" -eq $((_nm * _na)) ] && ok "MX matrix run measured $rows mutant x arm cells" || bad "MX matrix run measured $rows cells, $((_nm * _na)) expected"
+core/fixtures/gate-transition/run.sh:918:  [ "$V_CLOSE" = 1 ] && ok "T-m-close26 twin CLOSE stays GREEN under mutant m-close26" || bad "T-m-close26 twin CLOSE tripped under m-close26 (rc=$RC)"
+core/fixtures/gate-transition/run.sh:973:[ "$KILLS" = 22 ] && ok "MK all 22 mutants applied and scored" || bad "MK $KILLS of 22 mutants scored"
+core/fixtures/gate-verdict-grep-shape/run.sh:176:  ok "MUTANT stands down — assertion 6 already reports the clause absent, and it owns that case"
+core/fixtures/gate-verdict-grep-shape/run.sh:524:    "$gvwant"*) ok "MUTANT $gvm reads $gvwant — $gvwhy" ;;
+core/fixtures/gate-verdict-grep-shape/run.sh:552:    BLOWN*) ok "MUTANT $gvm reports MEASURED NOTHING — $gvwhy" ;;
+core/fixtures/h2-attest-scripts-dir/run.sh:966:    ok "MUTATION HARNESS: an anchor on zero lines or many is refused, one line is taken"
+core/fixtures/h2-attest-scripts-dir/run.sh:1035:    ok "MUTATION CONTROL: an unmutated copy in \$WORK passes every scored arm"; B_CTL=1
+core/fixtures/handoff-completion-assertion/run.sh:2879:  ok "  mutant [m25] built: the declaration copy differs from the shipped one and still parses"
+core/fixtures/handoff-record-carries-return/run.sh:377:    case "$out" in *"sk/crosswalk.md:1"*) ok "(d) probe: MUTANT contract not naming crosswalk.md flags it (the exclusion discriminates)" ;;
+core/fixtures/handoff-resume-guard/run.sh:257:    [ "$r" = allow ] && ok "mutant: with the teammate arm pinned open, the 'in-flight' case is ALLOWED — the arm is what produced the BLOCK above" \
+core/fixtures/handoff-resume-guard/run.sh:264:    [ "$r" = block ] && ok "mutant control: the same copy still BLOCKS a missing resume block — it loads and runs, so the kill above is a disarmed arm and not a dead script" \
+core/fixtures/handoff-resume-guard/run.sh:303:    ok "mutant (pre-fix gate) applied with its escape intact"
+core/fixtures/handoff-resume-guard/run.sh:308:  [ "$r" = allow ] && ok "mutant (pre-fix gate): the PIPELESS 'in-flight' row is ALLOWED — that BLOCK is the relaxation's, and this is the program that shipped" \
+core/fixtures/handoff-resume-guard/run.sh:313:  [ "$r" = block ] && ok "mutant control (pre-fix gate): the same copy still BLOCKS a PIPED 'in-flight' row — it reverts the gate, it does not disable the arm" \
+core/fixtures/handoff-resume-guard/run.sh:322:  [ "$r" = block ] && ok "mutant (bare-pipe): the PROSE line is read as a row and BLOCKS — the header-width narrowing is what holds that false positive at zero" \
+core/fixtures/handoff-resume-guard/run.sh:325:  [ "$r" = allow ] && ok "mutant control (bare-pipe): the same copy still ALLOWS a swept pipeless row — it loads and reads tokens" \
+core/fixtures/handoff-resume-guard/run.sh:334:  [ "$r" = allow ] && ok "mutant (uniform width): the stray-pipe row is ACQUITTED and the handoff proceeds — restricting the width test to pipeless lines is what keeps the relaxation a superset" \
+core/fixtures/handoff-resume-guard/run.sh:337:  [ "$r" = block ] && ok "mutant control (uniform width): the same copy still BLOCKS an ordinary piped 'in-flight' row — the acquittal above is the stray pipe, not a dead arm" \
+core/fixtures/handoff-resume-guard/run.sh:347:  [ "$r" = allow ] && ok "mutant (ncols from first row): with the header's width recording gone the pipeless 'in-flight' row escapes — the arm is bound to the DERIVED width, not to any width" \
+core/fixtures/handoff-resume-guard/run.sh:350:  [ "$r" = block ] && ok "mutant control (ncols from first row): the same copy still BLOCKS a PIPED 'in-flight' row — piped rows never consult ncols, so the escape above is the pipeless path alone" \
+core/fixtures/handoff-resume-guard/run.sh:806:  ok "deferral mutant control: an UNEDITED hooks-dir copy passes A1 and A2"
+core/fixtures/handoff-resume-guard/run.sh:822:  else ok "mutant ($1: $5) fails arm $3"; fi
+core/fixtures/handoff-resume-guard/run.sh:823:  if "la_$4" "$2"; then ok "...and the same copy still passes arm $4 (it runs; the kill is the mutation's)"
+core/fixtures/hermetic-runner/run.sh:664:  if [ -n "$hn" ] && [ "$hn" != "$rq" ]; then ok "$CUR: mutant hook (identity map) disagrees with the runner"; else bad "$CUR: mutant hook (identity map) was not caught"; fi
+core/fixtures/implementation-join-yield/run.sh:572:    else ok "mutant (no-first-field: the marker read whole) fails arm 2p ($YL_MSG)"; fi
+core/fixtures/implementation-join-yield/run.sh:573:    if yield_live live-marker "$_m2p"; then ok "...and the same copy still yields on the bare-epoch live-marker (it runs; the kill is the mutation's)"
+core/fixtures/implementation-join-yield/run.sh:592:  else ok "mutant ($1: $4) fails arm $2"; fi
+core/fixtures/implementation-join-yield/run.sh:594:  if "arm_$_ctl" "$_m"; then ok "...and the same copy still passes arm $_ctl (it runs; the kill is the mutation's)"
+core/fixtures/inflight-row-shape/run.sh:675:    ok "MUTANT 5d applied with its escape intact (not the match-everything alternation)"
+core/fixtures/invariant-index/run.sh:284:  note "SKIP  m6 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/invariant-index/run.sh:295:  note "PASS  invariant-index -- 1 control + 1 near-miss green, 7/7 mutants scored on their own arm"
+core/fixtures/layer-absorption-retire/run.sh:468:      ok "part 2 CONTROL: an unmutated copy in the mutant directory scores every arm ok, NM's rows present"; B_P2=1
+core/fixtures/layer-adjudication-tier/run.sh:740:  ok "Part 3c BASELINE: an unmutated copy in the same directory still prints the note — the mutant verdict below is its edit, not the copy"
+core/fixtures/layer-adjudication-tier/run.sh:1737:    ok "Part 11 BASELINE: an unmutated copy in the mutation directory prints the code set (H) — the verdicts below are their edits, not the copy"
+core/fixtures/layer-adjudication-tier/run.sh:2079:  ok "Part 13 BASELINE: an inert copy in a mutant directory blocks R1 as the shipped engine does (a copy that never ran cannot print the blocking row)"
+core/fixtures/layer-adjudication-tier/run.sh:2193:  if [ "$mx_extra" -eq 0 ]; then ok "a plain run executed no matrix-only drive (the full mutant x arm vectors are --matrix only)"
+core/fixtures/layer-artifact-path-prescriptions/run.sh:155:  ok "CONTROL: an unmutated copy in the same directory reports the same 3 — the mutant verdicts below are its edit, not the copy"
+core/fixtures/layer-artifact-path-prescriptions/run.sh:160:    ok "MUTATION M1 — with the digits-only expression the placeholder finding disappears: resolving --token-re-prescribed is load-bearing, not decorative"
+core/fixtures/layer-artifact-path-prescriptions/run.sh:165:    ok "MUTATION M1 PAIRING — the same mutant still reports the DIGITS form: it lost the placeholder case specifically, not the arm"
+core/fixtures/layer-artifact-path-prescriptions/run.sh:181:    ok "MUTATION M3 — with the exemption back to a hand-list, the CONCRETE slot IS reported: resolving --slot-re-prescribed is what stops the clause returning its own remedy as a defect"
+core/fixtures/layer-artifact-path-prescriptions/run.sh:188:    ok "MUTATION M3 PAIRING — the same mutant still reports a genuine violation: it gained the false positive specifically, rather than breaking the arm"
+core/fixtures/layer-artifact-path-prescriptions/run.sh:207:    ok "MUTATION M2 — with stories_dir moved, the previously-conforming slotted path IS reported: the location is read from the schema, not baked into the reader"
+core/fixtures/layer-catalog-collision/run.sh:391:  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"; B_CTRL=1
+core/fixtures/layer-conforms-to/run.sh:239:  ok "CONTROL: an unmutated copy reproduces the shipped error count, so a mutant's change is attributable"; B_ctl=1
+core/fixtures/layer-crosswalk-home/run.sh:470:  && ok "CONTROL: an unmutated copy holds all four linter arms (the mutants below run against a live linter)" \
+core/fixtures/layer-debt-due-and-discharge/run.sh:593:  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as the mutants are, still names the baseline rows — so a kill below is the mutation and not the harness"; B_CTL=1
+core/fixtures/layer-debt-ledger/run.sh:194:    && ok "MUTATION: without the coercion the string-form close stops working and the debt reappears (so assertion 9 is live)" \
+core/fixtures/layer-debt-ledger/run.sh:207:    && ok "MUTATION: a counter that flags well-formed lists is caught by the control (so assertion 11 discriminates)" \
+core/fixtures/layer-debt-ledger/run.sh:262:    && ok "MUTATION: scoped to the ROW, the later-declared entry is reported too — so the control is what proves the scope" \
+core/fixtures/layer-debt-ledger/run.sh:391:    ok "MUTATION M1: acquitting on ANY \`OWED-\` token silences the unresolvable citation (so assertion 16 is live), while the genuine row survives"
+core/fixtures/layer-debt-ledger/run.sh:415:    ok "MUTATION M2: joined against \`closes_owed\` the discharged-id row is acquitted and the declared-id row reported again — the acquittal inverts, so assertion 18 names WHICH set is joined"
+core/fixtures/layer-debt-ledger/run.sh:437:      || ok "MUTATION M4: acquitting only on ids still OPEN files the discharged citation as undeclared again (so assertion 18b is live), while the open citation stays acquitted"
+core/fixtures/layer-debt-ledger/run.sh:474:      || ok "MUTATION M3: with the citation key disabled the cited row is filed as undeclared again (so assertion 15 is live), while the \`no\`-denied row stays acquitted by the OLD discount"
+core/fixtures/layer-debt-ledger/run.sh:657:    ok "MUTATION MN1: reverted to a whole-reason search every denied citation is acquitted (so the section is live), while the cue-only row survives"
+core/fixtures/layer-debt-ledger/run.sh:673:    ok "MUTATION MN2: bounded at the comma the comma-spliced denial is acquitted (so the sentence bound is live), while the single-clause denial survives"
+core/fixtures/layer-debt-ledger/run.sh:691:      || ok "MUTATION MN3: with the bound dropped a negator in the PREVIOUS sentence denies the mention (so assertion 29 is live), while a negator after the mention still does not"
+core/fixtures/layer-debt-ledger/run.sh:707:    ok "MUTATION MN4: dropping \`not\` acquits the sentence-initial denial (so \`not\` is load-bearing), while the \`no\` form survives"
+core/fixtures/layer-debt-ledger/run.sh:732:    ok "MUTATION $1: dropping \`$5\` from the citation vocabulary acquits $3 (so \`$5\` is load-bearing), while $4 survives"
+core/fixtures/layer-debt-ledger/run.sh:781:    ok "MUTATION MN8: under \`all\` one denied mention condemns the row AND the citation-free row is vacuously acquitted — both halves of why the rule is \`any\`"
+core/fixtures/layer-debt-ledger/run.sh:798:    ok "MUTATION MN9: aliased to \`NEGATED\` the vocabulary loses \`not\` and the filed subject is acquitted, and assertion 32's grep goes to 0 — so the separation is asserted structurally as well as behaviourally"
+core/fixtures/layer-debt-ledger/run.sh:813:    ok "MUTATION MN10: \`not\` admitted to \`NEGATED\` silences a cue the citation vocabulary must not reach (so assertion 31 is live), while the citation arms are unmoved"
+core/fixtures/layer-debt-ledger/run.sh:829:    && ok "MUTATION M_CIT3 on the citation-negation register: with the key disabled every row is reported, including the four the fix acquits — so each acquittal above is this key's doing" \
+core/fixtures/layer-debt-ledger/run.sh:841:  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as MN1-MN10 are, reproduces the exact baseline set — so the kills above are the mutations and not the harness"
+core/fixtures/layer-debt-ledger/run.sh:854:  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as M1/M2/M3/M4 are, still names the baseline rows — so the kills above are the mutations and not the harness"
+core/fixtures/layer-qualifier-grain/run.sh:338:  ok "control: all 10 mutations landed (a sed matching nothing cannot skip its assertion in silence)"
+core/fixtures/layer-readopt-gate/run.sh:421:  ok "  mutation-control-plain: an unmutated copy in a fresh directory still renders both lines of the plain reason"
+core/fixtures/layer-readopt-gate/run.sh:449:    ok "  mutation plain-continue: with the arm back to \`print v; exit\` the continuation VANISHES while line 1 and the single-line form both still render — B4b is reading the continuation and not the run"
+core/fixtures/layer-readopt-gate/run.sh:470:    ok "  mutation clip-notice: with the announcement removed the SAME twenty lines are shown and the tail is SILENTLY dropped — the notice is the only observable, which is why no content arm could have caught this"
+core/fixtures/layer-readopt-gate/run.sh:574:  ok "  mutation-control-panel: an unmutated copy still prints the 'nothing drifted' sentence"
+core/fixtures/layer-readopt-gate/run.sh:587:    ok "  mutation panel-guard: without it an UNCHANGED anchor prints a bare heading again (the arm can fire)"
+core/fixtures/layer-readopt-gate/run.sh:1264:  [ "$e2_ctl" = 0 ] && ok "  mutation-control-e2: an unmutated copy in a fresh directory holds every E2 arm ($E2_ARMS), including REGISTERED through the keyed shim on the unkeyed seed and the unaddressable-heading allow twins"
+core/fixtures/layer-readopt-gate/run.sh:1291:          if [ "$a" = o ]; then ok "  mutation $1 KILLS $(e2_label "$a"): a registrable shape is FALSELY refused at its blank separator line -- $E2_WHY"
+core/fixtures/layer-readopt-gate/run.sh:1292:          else ok "  mutation $1 KILLS $(e2_label "$a"): the edit is lost exactly as before the fix -- $E2_WHY"; fi
+core/fixtures/layer-readopt-gate/run.sh:1304:      if [ -n "$moved" ]; then ok "  mutation $1: beyond its own it moves exactly{$moved } (M2's set, with the loss) and every other arm holds"
+core/fixtures/layer-readopt-gate/run.sh:1305:      else ok "  mutation $1: every arm it does not own still holds -- it fails only its own"; fi
+core/fixtures/layer-readopt-gate/run.sh:1318:          ok "  mutation $1 moves $(e2_label "$a") and is COVERED: layer 2 refuses at Beta's core line 9, the consumer file cmp-identical"
+core/fixtures/layer-readopt-gate/run.sh:1326:    if [ -z "$others" ]; then ok "  mutation $1: every arm it does not own still holds -- it fails only its own"
+core/fixtures/layer-readopt-gate/run.sh:1637:    ok "  mutation-control-layer-drift: an unmutated copy still reports both seeded claims"
+core/fixtures/layer-readopt-gate/run.sh:1649:    ok "  mutation-control-layer-drift: and the same copy reports 1 loose anchor and 2 double-shadow rows"
+core/fixtures/layer-readopt-gate/run.sh:1670:      ok "  mutation flatten: without it the WRAPPED claim vanishes and the single-line one does not"
+core/fixtures/layer-readopt-gate/run.sh:1687:      ok "  mutation noun-set: widening it to \`file\` re-fires the true claim — the restriction is load-bearing"
+core/fixtures/layer-readopt-gate/run.sh:1706:      ok "  mutation loose-arm: without the REVERSE arm the loose anchor goes silent, and only that"
+core/fixtures/layer-readopt-gate/run.sh:1725:      ok "  mutation dup-threshold: raising the duplicate threshold silences the pair, and only that"
+core/fixtures/layer-readopt-gate/run.sh:1746:      ok "  mutation unclaimed-silence: with no span resolved the unclaimed row vanishes, and only that"
+core/fixtures/layer-readopt-gate/run.sh:1768:      ok "  mutation unclaimed-widen: without the span and level narrowings the NESTED child is reported — both are load-bearing"
+core/fixtures/layer-readopt-gate/run.sh:2013:          *) ok "  MUTANT no-since: with the IFS read restored the no-since declaration loses its key, so the arm is load-bearing" ;;
+core/fixtures/layer-readopt-gate/run.sh:2174:      ok "MUTANT multi-anchor (entry side keeps one part): the multi-anchor entry goes silent — the accumulation is what makes every anchor joinable"
+core/fixtures/layer-readopt-gate/run.sh:2460:    ok "MUTANT wrap (body compared un-flattened): the re-wrapped superseded sentence goes UNFOUND -- flattening is what finds it"
+core/fixtures/layer-readopt-gate/run.sh:2467:    ok "  and it still refuses a path naming no file, so the mutant runs rather than dying early"
+core/fixtures/layer-readopt-gate/run.sh:2691:  ok "  JOK's base_sha reset to $JPRE for the mutant (theirs is $JTH, so the range is not degenerate)"
+core/fixtures/layer-readopt-gate/run.sh:2718:    ok "MUTANT reflow-M1 (whole-line set difference restored): the faithful re-flow adoption is REFUSED -- containment is what clears it"
+core/fixtures/layer-readopt-gate/run.sh:2733:    ok "MUTANT reflow-M2 (bare containment, no context test): the body teaching the INVERTED rule PASSES -- the context test is what refuses it"
+core/fixtures/layer-reference-resolution/run.sh:712:    ok "pool accounting: all $dispatched dispatched mutants produced a verdict"
+core/fixtures/layer-reference-resolution/run.sh:723:  ok "matrix mode: MATRIX cells emitted for every mutant"
+core/fixtures/layer-retired-id-crosswalk/run.sh:163:  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"; B_CTRL=1
+core/fixtures/layer-title-join/run.sh:838:  ok "  both Part 8 mutants were built, applied (cmp -s) and scored"
+core/fixtures/ledger-reverify-dist-only-reach/run.sh:601:    *) ok "E5 mutant $2 NOT SCORED: this platform's tools do not abort on invalid UTF-8 ($e5_cal), so the mutant cannot be told from the fix here"; return ;;
+core/fixtures/ledger-reverify-unfalsifiable/run.sh:264:  && ok "mutation: anchor removed from the consumer → PC-GOOD flips to NEEDS-REVIEW" \
+core/fixtures/ledger-reverify-unfalsifiable/run.sh:404:    ok "mutation: the old strip clears PC-GOOD through the default path and accuses it through an out-of-tree ledger (assertions 6-7 are real)"
+core/fixtures/ledger-reverify-unfalsifiable/run.sh:448:      ok "mutation: with the near-miss call site removed, PC-NEARMISS reverts to a DECIDED STILL-LIVE (the defect reproduces)"
+core/fixtures/ledger-rotate/run.sh:643:  ok "mutation harness applied (accounting guard disabled in a copy)"
+core/fixtures/ledger-rotate/run.sh:707:  ok "CONTROL: an UNMUTATED copy in the mutant directory holds the no-op guard (assertion 8 scores against a working copy)"
+core/fixtures/ledger-rotate/run.sh:952:    ok "  mutation control: an unmutated copy in its own sandbox archives PC-Q1 and leaves PC-Q2 alone"
+core/fixtures/ledger-rotate/run.sh:1423:  ok "  unmutated copy in the same directory still refuses (the mutant above ran a sound harness)"
+core/fixtures/ledger-rotate/run.sh:1879:  ok "  mutation control: an unmutated copy still archives the boundary-line close"
+core/fixtures/ledger-rotate/run.sh:2083:    ok "  BL-071 mutation helper refuses an anchor that exists nowhere (the replacement count is read)"
+core/fixtures/ledger-rotate/run.sh:2087:    ok "  unmutated control copy reads $C71_WANT (the mutant harness runs a working rotator)"
+core/fixtures/ledger-rotate/run.sh:2213:    ok "  unmutated control copy in a sibling dir reads PPPP (the mutant harness runs a working rotator)"
+core/fixtures/mandatory-rules-clean-tree/run.sh:57:  ok "MUTATION: a missing required sibling FAILs (the floor is real, not vacuous)"
+core/fixtures/mandatory-rules-skip-accounting/run.sh:256:  ok "CONTROL: an unmutated copy in its own toolchain dir answers every arm (so a mutant's silence below is the mutation, not the copy)"
+core/fixtures/mandatory-rules-skip-accounting/run.sh:274:    ok "MUTANT $tag: $claim"
+core/fixtures/mandatory-rules-snapshot-position/run.sh:397:  ok "CONTROL: an unmutated copy in its own toolchain dir reproduces all ten baseline rows (so a mutant's silence below is the mutation, not the copy)"
+core/fixtures/mandatory-rules-snapshot-position/run.sh:418:    ok "MUTANT $tag: $claim"
+core/fixtures/mutation-red-replay/run.sh:726:if [ "$(laycell "$CAP_SPAN" /x/r/core/fixtures/mutation-red-replay)" = dist ]; then ok "lay_dist -- <root>/core/fixtures/<name> derives dist"; B_layd=1
+core/fixtures/mutation-red-replay/run.sh:728:if [ "$(laycell "$CAP_SPAN" /x/r/tests/fixtures/mutation-red-replay)" = consumer ]; then ok "lay_consumer -- <root>/tests/fixtures/<name> derives consumer"; B_layc=1
+core/fixtures/mutation-red-replay/run.sh:730:if [ "$(laycell "$CAP_SPAN" /x/r/fixtures/mutation-red-replay)" = NEITHER ]; then ok "lay_neither -- a path in neither layout derives NEITHER, never a default"
+core/fixtures/mutation-red-replay/run.sh:762:  ok "a real mutation that kills the named test exits 0 (the negatives below mean something)"
+core/fixtures/mutation-red-replay/run.sh:794:[ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out" && ok "CONTROL: an unmutated copy still reports PROVEN (the mutants below fail for their own reasons)" \
+core/fixtures/operator-request-capture/run.sh:165:    ok "mutant A: gating capture on a live pipeline loses the kickoff — assertion 1 has teeth"
+core/fixtures/operator-request-capture/run.sh:172:    ok "mutant A leaves assertion 9 intact — the two assertions are not entangled"
+core/fixtures/operator-request-capture/run.sh:197:    /*) ok "mutant B: without the split the body keeps the command token — assertion 2 has teeth" ;;
+core/fixtures/operator-request-capture/run.sh:202:    ok "mutant B leaves assertion 1 intact — the split and the capture gate are not entangled"
+core/fixtures/operator-request-capture/run.sh:267:  ok "MUTATION — with no declaration the notification IS captured again: the schema is what the assertions above test"
+core/fixtures/operator-request-capture/run.sh:272:  ok "MUTATION — the unresolved declaration is REPORTED, so a tree that lost it does not read as a tree with nothing to skip"
+core/fixtures/path-mapping-render/run.sh:265:    note "FAIL  $n -- mutant SURVIVED (--check exited 0)"; rc=1; return
+core/fixtures/path-mapping-render/run.sh:286:no_mutation() { note "FAIL  $1 -- the mutation matched nothing; no mutant was built"; rc=1; }
+core/fixtures/path-mapping-render/run.sh:523:  note "PASS  path-mapping-render -- 5 controls green, 6/6 mutants scored on their own arm, near-miss quiet"
+core/fixtures/pause-hook-origin/run.sh:256:  ok "session-test mutant control: an unmutated copy under $BM reads [$B_CTRL]"; PH_BIND=1
+core/fixtures/pause-hook-origin/run.sh:428:    ok "mutant control: unmutated copies under $MUT read SAME — the battery's harness is alive"; B_LEG=1
+core/fixtures/pause-hook-origin/run.sh:523:    ok "legend battery: $kills of $EXPECT_KILLS mutants scored ($LEGEND_HOOKS one-byte, 1 anchor-loss, 1 empty-body)"
+core/fixtures/pause-hook-origin/run.sh:599:      ok "resume mutant control: unmutated copies under $RM10 read SAME"; PH_R10=1
+core/fixtures/plan-rotate/run.sh:1289:  ok "mutant-control" "the unmutated copy in a sandbox root rotates, reports arm 3 PASS, and writes the archive"; B_CTL=1
+core/fixtures/plan-rotate/run.sh:1356:    ok "mutant-twin:m1w" "the tautology ALONE rotates correctly — it flips no verdict today, which is why it shipped; m1t's kill needs both layers"
+core/fixtures/plan-rotate/run.sh:1600:  ok "mutants" "$MUT_BUILT of $MUT_TRIED mutant roots built ($MUT_TWINS twin) and $KILLS kills — $((MUT_BUILT - MUT_TWINS)) script mutants plus the re-seeded discharge pointer, which mutates the OUTPUT and so builds no root"
+core/fixtures/postcompact-rulebook-recovery/run.sh:507:    ok "mutant: bytes appended BELOW the protocol move the whole-file figure ${VB_WHOLE} -> ${MB_WHOLE} (= wc -c) while the protocol offset holds at ${VB_PROTO} and the exit stays 0"
+core/fixtures/postcompact-rulebook-recovery/run.sh:525:    ok "mutant: a protocol without the mandate FAILS, on the mandate arm specifically"
+core/fixtures/postcompact-rulebook-recovery/run.sh:563:    ok "mutant: a protocol that names no router FAILS, on the router arm specifically"
+core/fixtures/postcompact-rulebook-recovery/run.sh:583:    ok "mutant: a router path present only inside an HTML comment FAILS the router arm"
+core/fixtures/postcompact-rulebook-recovery/run.sh:606:    ok "mutant: a router path present only inside a MULTI-LINE HTML comment FAILS the router arm"
+core/fixtures/postcompact-rulebook-recovery/run.sh:641:    ok "mutant: the hook still emits a directive but no longer names the skill — assertions 1-3 can fail"
+core/fixtures/postcompact-rulebook-recovery/run.sh:670:    ok "mutant: the hook emits a directive naming no digest — assertion 1b can fail, and only it"
+core/fixtures/postcompact-rulebook-recovery/run.sh:691:    ok "mutant: demoting the step-file Read fails ONLY the grade arm — the assertions are not entangled"
+core/fixtures/postcompact-rulebook-recovery/run.sh:712:    ok "mutant: an oversize directive is ${OLEN} chars and trips the cliff arm — assertion 4 can fail"
+core/fixtures/postcompact-rulebook-recovery/run.sh:726:  ok "control: an unmutated copy reproduces the real directive — the mutants above failed on their mutation"
+core/fixtures/postcompact-rulebook-recovery/run.sh:1180:  ok "control: an unmutated copy of the gate reproduces all ${NPREDS} verdicts — the flips below are the mutations"; B_ctl_g=1
+core/fixtures/postcompact-rulebook-recovery/run.sh:1505:  ok "control: an unmutated copy of the producer reproduces both verdicts — the flips below are the mutations"; B_ctl_r=1
+core/fixtures/postcompact-rulebook-recovery/run.sh:2555:    if [ "$_rv" = first ] && race_ran "$_rp" && [ "$_r2" = first ]; then ok "mutant: re-test removed — the raced third Read is refused with the stage-one text, and only R1 flips"
+core/fixtures/postcompact-rulebook-recovery/run.sh:2565:      ok "mutant: re-test placed BEFORE the stage read — the removal between them is refused with the stage-one text, while the shipped gate allows at the same point"
+core/fixtures/postcompact-rulebook-recovery/run.sh:2573:    if [ "$_rv" = allow ] && [ "$_r1" = second ]; then ok "mutant: re-test keyed on the progress file — the genuine first call is waved through, and only R2 flips"
+core/fixtures/postcompact-rulebook-recovery/run.sh:2600:      if [ "$_mo" = "0|1" ] && [ "$_mo" != "$_ro" ]; then ok "mutant: removal operands swapped (progress file first) — the order arm reports exact 0 and swapped 1 against 1 and 0 unmutated"
+core/fixtures/postcompact-rulebook-recovery/run.sh:2792:    if [ -z "${_rg// /}" ]; then ok "control: $2 — an unmutated whole-directory copy passes every arm, so a flip below is its mutation"; RC_CTL=1
+core/fixtures/postcompact-rulebook-recovery/run.sh:3229:    ok "mutant: restoring the \${STEP_FILE} fallback fails ONLY the second-mandate arm — byte-identical output where the step file resolves"
+core/fixtures/postcompact-rulebook-recovery/run.sh:3451:  ok "control: an unmutated copy of the hook, driven from a scratch project, reproduces all ten seed tokens — a mutant's flip below is its mutation and not the copy"; B_ctl_pos=1
+core/fixtures/preclassify-mode-bucket/run.sh:611:    ok "C the control and seven mutants produce 8 DISTINCT signatures -- none can score another's kill"
+core/fixtures/preclassify-mode-bucket/run.sh:639:    ok "C the 5 M mutants move no A cell and the 2 A mutants move no C cell -- the branches are separately observable"
+core/fixtures/preclassify-rename-row/run.sh:773:  ok "unmutated control: a byte-identical copy of the reconcile dir scores clean on A-D, so the copy layout every mutant uses runs"
+core/fixtures/pregate-self-check/run.sh:203:if [ "$n_anchor" -eq 1 ]; then ok "m2 mutant: the anchor line occurs exactly once in the subject"; B_m2_anchor=1
+core/fixtures/process-rule-pins/run.sh:1223:[ "$n" = "2" ] && ok "MUTANT range scope: without the consumer_*_file key the crosswalk IS read (2) — the exclusion is the derivation" \
+core/fixtures/process-rule-pins/run.sh:1642:  ok "join/mutant-control: two seat joins in one paragraph -- a one-line strip is not flagged (0), the paragraph mutant is (sites/paras/kills $c_two); a bare non-seat call beside a seat --complete call is exempt (0 of $c_mxc calls) and its paragraph mutant is flagged ($c_mx); a non-seat --complete paragraph survives and is named ($c_ns, ${c_nss##*/})"
+core/fixtures/process-rule-pins/run.sh:1668:  ok "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_hit/$jb_paras)"
+core/fixtures/process-rule-pins/run.sh:1722:case "$ctl" in PASS*) ok "lead-mutant CONTROL: an unmutated copy runs --lead-verdict and passes an addressed corpus"; B_lead=1 ;;
+core/fixtures/process-rule-pins/run.sh:1766:  elif [ "$(slot_hits "$SD/gp-mut.md")" = 1 ]; then ok "MUTANT slot-target: the restored slot line is read (1) where the real file reads 0"
+core/fixtures/process-rule-pins/run.sh:1799:  elif [ "$bm_mut" -ge 1 ]; then ok "MUTANT bare-marker: the re-inserted fallback is read ($bm_mut) where the real files read 0"
+core/fixtures/process-rule-pins/run.sh:1850:  elif [ "$(le_scan "$LE/dev-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then ok "MUTANT lead-engine form 1: dev.md without its worktree sentence is flagged"
+core/fixtures/process-rule-pins/run.sh:1853:  elif [ "$(le_scan "$LE/qa-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then ok "MUTANT lead-engine form 2: qa.md without its in-place definition is flagged"
+core/fixtures/process-rule-pins/run.sh:1943:      HOOK-SPLIT*"fallback=$wfm") ok "MUTANT window-count fallback: a fallback of $wfm reads $wv_fb" ;;
+core/fixtures/process-rule-pins/run.sh:1955:      DRIFT*"hook=$wm") ok "MUTANT window-count: a hook default of $wm reads $wv_mut" ;;
+core/fixtures/process-rule-pins/run.sh:1971:      DRIFT*"skill=$wsm "*) ok "MUTANT window-count skill side: a stated count of $wsm reads $wv_smut" ;;
+core/fixtures/process-rule-pins/run.sh:2043:  if [ "$mv" = 0 ]; then ok "MUTANT mark/${ms%%:*}: the home without that clause is named by mark-scope ($1 $2)"
+core/fixtures/process-rule-pins/run.sh:2077:elif [ "$(site_epic "$MG/gp-noepic-ho-site.md" "$GP_A" "$GP_B")" = 0 ]; then ok "MUTANT mark/epic-gp: the auto-handoff list without epic part files is named by mark-epic-gp"
+core/fixtures/process-rule-pins/run.sh:2080:elif [ "$(site_epic "$MG/ho-noepic.md" "$HO_A" "$HO_B")" = 0 ]; then ok "MUTANT mark/epic-ho: the handoff.md list without epic part files is named by mark-epic-ho"
+core/fixtures/process-rule-pins/run.sh:2160:  elif [ "$(dv_sites "$DV/dv-mut.md" | awk -F'\t' '$2 == 0' | grep -c .)" = 1 ]; then ok "MUTANT mark-dv: the ops site without its citation is named by mark-dv"
+core/fixtures/process-rule-pins/run.sh:2190:elif mnc_o="$(join_findings "$MG/gp-nocomplete.md")"; grep -q . <<<"$mnc_o"; then ok "MUTANT mark/no-complete: the home without --complete is flagged by join (the \"mark\":\"rendered\" paragraph key)"
+core/fixtures/process-rule-pins/run.sh:2200:    *) ok "MUTANT mark/rows: the rendered rows=<n> line is refused by the engine (mark-runs: '${mrr%% *}'), not sealed" ;; esac
+core/fixtures/process-rule-pins/run.sh:2205:elif mnd_o="$(dl_scan "$MG/dev-nodeliv.md")"; grep -q 'deliverable=0' <<<"$mnd_o"; then ok "MUTANT mark/no-deliverable: dev.md without its <deliverable> clause is named by mark-deliverable"
+core/fixtures/process-rule-pins/run.sh:2627:  ok "S10: qa.md's As a Shard and implementation.md's Gate-2 paragraph make a part shard run the canonical dependency setup and reach a GREEN baseline before any mutation, hand an unreachable AC to the cross shard, and the cross shard owns it; a part shard delivers its shard path and shard-verdict, not per-AC rows"
+core/fixtures/process-rule-pins/run.sh:2734:  ok "S13: the Gate-1 paragraph and code-reviewer.md's As a Shard dispatch every reviewer in one wave, have each part reviewer replay its part's mutation-REDs in its own detached worktree and declare 'handovers: <n>', and have the first cross reviewer join the parts before running the hand-overs"
+core/fixtures/process-rule-pins/run.sh:3153:      *"root: $DECOY (consumer)"*) ok "MUTANT cwd: a resolver seeded from the cwd reads the decoy; the cwd arm kills it" ;;
+core/fixtures/provenance-flagless-default/run.sh:679:ok "M0 control: the UNMUTATED copy in the mutant tree reproduces the baseline (a=1 with the remedy text, f-ctl=0) — the mutants below run a subject that loaded its schema"
+core/fixtures/provenance-not-accessible/run.sh:101:  ok "MUTATION: without the sentinel bypass, NOT_ACCESSIBLE FAILs (acceptance was real)"
+core/fixtures/readset-sandbox-root-clause/run.sh:128:[ "$n" = 3 ] && ok "the markdir-ov-lm mutant keeps the text count at 3, so only a rendered run can kill it" \
+core/fixtures/readset-skip/run.sh:908:    ok "MUTANT $name moves its arm: '$want' became '$(sel_of "$out")'"
+core/fixtures/readset-skip/run.sh:941:    ok "FLAG MUTANT $name moves its arm: flag '$want' became '$(flag_of "$out")'"
+core/fixtures/readset-skip/run.sh:962:    *)           ok "MSG MUTANT $name moves arm 13: '$needle' is gone from the announce" ;;
+core/fixtures/readset-skip/run.sh:1107:    ok "IGN MUTANT $name moves its arm: '$5'${wantflag:+ flag $wantflag} became '$(sel_of "$out")' flag $(flag_of "$out")"
+core/fixtures/readset-skip/run.sh:2353:  [ "$PJ_PERL" = 1 ] && ok "anti-SKIP: perl is on PATH on Darwin, and the psfail and psfailpad worlds, BL-686 MUTANT nofallback, and the psfail cells of BL-463 MUTANTs readerself and nonorm run" \
+core/fixtures/readset-skip/run.sh:2999:    ok "MERGE MUTANT rewrite moves arm 1: dropping the old-map read loses every untraced fixture"
+core/fixtures/readset-skip/run.sh:3004:    ok "MERGE MUTANT keepstale moves arm 2: without the traced filter the re-traced fixture keeps its stale entry"
+core/fixtures/readset-skip/run.sh:3085:        ok "WRITE-PIPELINE MUTANT unanchored moves (g): the nested sub/.git/HEAD is dropped"
+core/fixtures/readset-skip/run.sh:3095:      if grep -qx '.git/HEAD' "$DG/out.mutB"; then ok "WRITE-PIPELINE MUTANT no-helper moves (g): .git/HEAD survives"
+core/fixtures/readset-skip/run.sh:3164:      ok "MERGE MUTANT old-map-only moves (h): a filter that reads only the old map lets the declared fixture's NEW rows through"
+core/fixtures/readset-skip/run.sh:3175:      ok "MERGE MUTANT keeps-digest moves (h): the rows go but the declared fixture's digest line stays"
+core/fixtures/readset-skip/run.sh:3291:        newline) ok "ALLLIST MUTANT newline-join (the base builder's shape) moves the no-newline arm: its value carries a newline" ;;
+core/fixtures/readset-skip/run.sh:3301:        ok "ALLLIST MUTANT tab-join moves the middle-member arm only: no newline, but ' mid ' no longer matches"
+core/fixtures/readset-skip/run.sh:3313:        wrong:member) ok "ALLLIST MUTANT no-run.sh-check moves the exact-list arm: '$_v' names the directory with no run.sh" ;;
+core/fixtures/readset-skip/run.sh:3325:        ok "UNTRACED MUTANT no-arg-normalisation moves m2 for the NEWLINE list only ('$_v'), the space list still answering '$_s' — the guard's own normalisation is load-bearing"
+core/fixtures/readset-skip/run.sh:3337:        ok "UNTRACED MUTANT substring-membership moves m3 only ('$_v'): 'fx' inside 'fx-b' reads as traced, while m2 still prints 'keep'"
+core/fixtures/readset-skip/run.sh:3348:        ok "UNTRACED MUTANT empty-guard (W1) moves m2: a guard that prints nothing writes a merge that lost 'keep'"
+core/fixtures/readset-skip/run.sh:3363:        *"alpha	src/NEW"*) ok "MERGE MUTANT no-normalisation moves the newline-list merge arm: the untraced fixture's entries are lost" ;;
+core/fixtures/readset-skip/run.sh:3493:    ok "MUTANT m1 moves arm (d): judged on the TRACED entries alone the same refresh is refused — which is the base behaviour, and the arm discriminates base from tip"
+core/fixtures/readset-skip/run.sh:3507:      ok "CONTROL MUTANT alwayspass moves arm (b): a control that cannot refuse accepts the map that covers everything"
+core/fixtures/readset-skip/run.sh:3526:      ok "CONTROL MUTANT splitsource moves arm (b): counting each fixture's own paths from a smaller map than the universe ACQUITS the map that covers everything"
+core/fixtures/readset-skip/run.sh:3746:      *" $_want "*) ok "CALL-SITE MUTANT $_n moves (f): the scan reads '$_cv'" ;;
+core/fixtures/readset-stage1-verdict/run.sh:1114:  if [ "$twin" != - ]; then wcell "$dst" "$twin" "$name" && ok "wrapper mutant $name leaves its twin $twin green" || bad "wrapper mutant $name is not confined: its twin $twin fails under it"; fi
+core/fixtures/reconcile-blocking-list/run.sh:255:  && ok "MUTANT CONTROL: the unmutated copy still resolves its detectors and qualifies the degenerate run" \
+core/fixtures/reconcile-blocking-list/run.sh:265:    && ok "MUTANT: with the row test removed the qualifier appears on a NON-degenerate range — so the control is what proves it discriminates" \
+core/fixtures/reconcile-blocking-list/run.sh:282:  ok "MUTANT CONTROL: the unmutated copy renders the stale-base row AND the affirmative line on the rebuilt world — a copy that never ran cannot print either"
+core/fixtures/reconcile-blocking-list/run.sh:298:    ok "MUTANT print-site: without it the stale-base row vanishes from the region while the affirmative line still renders — 3b is reading that site and the copy is alive"
+core/fixtures/reconcile-blocking-list/run.sh:317:    ok "MUTANT check-site: without it --check goes silent on a stale base at the SAME exit 0 — the warning is the only observable, so a vacuous-guard reading of it is refuted; and the print site still fires, so the two are separable"
+core/fixtures/reconcile-blocking-list/run.sh:348:    ok "MUTANT rows-gate: the shipped wrapper renders NOTHING when the caller supplied the rows and the mutant renders the row — so emit-report's region carries one row for one finding, and --verify's unseen count is not doubled"
+core/fixtures/reconcile-emit-report/run.sh:502:[ "$RC" -eq 1 ] && ok "mutant: deleting an orientation line FAILS --verify — the block is inside the verified region" \
+core/fixtures/reconcile-emit-report/run.sh:973:  ok "census: 0 unchecked world mutations remain (control, same grammar: $_wp_checked checked ones)"
+core/fixtures/reconcile-emit-report/run.sh:1360:    ok "M-TREE derivation control: the shipped approved region minus its tree line equals M-TREE's own render at the moved state, so the one mutant render stands for its approved state too"
+core/fixtures/reconcile-emit-report/run.sh:1983:  ok "all six step-3b mutants applied and were scored (M1 M2 M3 M4 M5 M6)"
+core/fixtures/reconcile-emit-report/run.sh:2917:    ok "CONTROL ctl-SB an unmutated copy of the reconcile directory reproduces the shipped OTHER cell and renders its row, so a mutant's moved cell is the mutation and not the copy"
+core/fixtures/reconcile-emit-report/run.sh:2940:    ok "SB all 9 stamp-comparison mutants (W1-W9) were built and applied (cmp -s) and scored"
+core/fixtures/reconcile-emit-report/run.sh:3010:  ok "CONTROL ctl-V an unmutated copy in a fresh directory reproduces every verdict INCLUDING the positive one (V-R exits 3 and names its row), so a mutant's changed cell is the mutation and not the copy — and the two were computed in different parallel slots, so it is also the arm that would catch the scoring racing with itself"
+core/fixtures/reconcile-emit-report/run.sh:3352:  ok "  all 6 world-guard mutants were built, applied (cmp -s) and scored"
+core/fixtures/relabel-theirs-collision/run.sh:90:  ok "mutant guard: kind: role left untouched (the filter widened to two kinds, not to all)"
+core/fixtures/release-version-triple/run.sh:341:  ok "MUTATION: disabling the subject comparison makes assertion 2's input go green"
+core/fixtures/release-version-triple/run.sh:401:  ok "MUTATION: an unanchored fallback reads the mid-subject mention as a claim (the ^ is load-bearing)"
+core/fixtures/release-version-triple/run.sh:519:  ok "MUTATION: raising the range arm's threshold makes assertion 10's input go green"
+core/fixtures/release-version-triple/run.sh:568:  ok "MUTATION: raising the branch-base arm's threshold makes assertion 13's input go green"
+core/fixtures/release-version-triple/run.sh:677:  ok "MUTATION: editing one side of the pair (the validator's closing anchor) breaks the binding"
+core/fixtures/release-version-triple/run.sh:693:    ok "MUTATION: a canonical test missing its \$ is refused by arm F's own probe (the trailing-text offender)"
+core/fixtures/release-version-triple/run.sh:840:  ok "MUTATION m-no-removal: without the removal check R1's input goes green"
+core/fixtures/release-version-triple/run.sh:849:  ok "MUTATION m-exempt-all: exempting every added heading makes R4's input go green"
+core/fixtures/release-version-triple/run.sh:858:  ok "MUTATION m-exempt-none: without the exemption R3's restore counts as a second release"
+core/fixtures/release-version-triple/run.sh:867:  ok "MUTATION m-search-tip: searching from the tip exempts R5's invented heading (the base is load-bearing)"
+core/fixtures/release-version-triple/run.sh:881:    ok "MATRIX (--matrix): every mutant replayed against every assertion ($MX_CELLS cells), every decides caught, every twin green"
+core/fixtures/release-version-triple/run.sh:902:    ok "PUSH: no matrix-only cell ran ($MX_CELLS), and each of the $n_hdr mutants was replayed on its one named twin ($TWIN_EVALS)"
+core/fixtures/relocation-preclassify/run.sh:233:      ok "MUTANT (PRE-RELOCATION-NOOP row removed) fails G ($gm) and leaves every other main-world row, which A-F read, byte-identical"
+core/fixtures/remediator-shard-join/run.sh:548:  if [ -z "$(pc_mut 0 ct 'IMPOSSIBLE-PREV-c877-pc0' '  contract_probe')" ]; then ok "PC0: an anchor whose line above matches nothing applies no mutant (the uniqueness control)"
+core/fixtures/request-coverage/run.sh:179:    ok "mutant A: reading whole blocks makes the dropped epic PASS — assertions 1-3 have teeth"
+core/fixtures/request-coverage/run.sh:186:    ok "mutant A leaves assertion 4 intact — the two assertions are not entangled"
+core/fixtures/request-coverage/run.sh:204:    ok "mutant B: without the fail-closed arm a missing capture stops exiting 2 — assertion 7 has teeth"
+core/fixtures/request-coverage/run.sh:211:    ok "mutant B leaves assertion 1 intact — the guard and the coverage verdict are not entangled"
+core/fixtures/request-coverage/run.sh:325:    ok "MUTANT nojoin: a build that never counts the session's own entries reports the PRESENT session as absent, so the allow twin above is what proves the join is read"
+core/fixtures/request-coverage/run.sh:376:      ok "MUTANT hop: counting hops passes the scripts/ai-dlc/ copy (exit 0) and fails the legacy copy (exit $MLG) — the legacy arm is what kills it"
+core/fixtures/requirements-step/run.sh:1102:  ok "(m) MUTATION ts-anchor: step 2 anchor is unique (impossible-anchor control: 0)"
+core/fixtures/retired-contract-token/run.sh:232:  ok "MUTATION: without the strip, THEIRS' own doc-comment masks a real severed contract"
+core/fixtures/retired-contract-token/run.sh:239:  ok "MUTATION control: the mutant's silence is a scan that opened 1 file and retired nothing, by its own stderr"
+core/fixtures/retired-contract-token/run.sh:411:  if [ "$got" = "$3" ]; then ok "MUTATION $1: flips exactly its own predicate ($3)"
+core/fixtures/retired-fixture-orphan/run.sh:325:    ok "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
+core/fixtures/retired-layer-contract/run.sh:719:if [ "$MM_SCORED" -eq "$MM_EXPECT" ]; then ok "  all $MM_EXPECT table mutants were built, applied (cmp -s) and scored"
+core/fixtures/retired-layer-passage/run.sh:503:      ./F1.) ok "norm_lines F0-F1 with fds 3-9 inherited: real lib.sh passes and the norm-fallthrough mutant still fails exactly [F1]" ;;
+core/fixtures/retired-layer-token/run.sh:445:    if [ "$got" = "$exp" ]; then ok "MUTATION $nm: flips exactly $exp"
+core/fixtures/retired-layer-token/run.sh:528:    ok "  MUTATION: with the rename map disabled the same world ROWS the word, so the arm above is what holds"
+core/fixtures/retro-audit-scans/run.sh:638:  ok "mutation guard: an impossible anchor reports DID NOT APPLY"
+core/fixtures/retro-audit-scans/run.sh:1488:    ok "TWIN world $1: mutant $2 changes no row in world $3 (stays green)"
+core/fixtures/retro-audit-scans/run.sh:1521:    && ok "matrix mode: 75 mutant x world cells measured (15 mutants x 5 worlds)" \
+core/fixtures/retro-branch-behind-main/run.sh:546:  ok "CONTROL: an unmutated copy in its own toolchain dir reproduces every arm — including the three PASS rows, the two FAIL rows and the SKIP row, so a mutant's silence below is the mutation and not the copy"
+core/fixtures/retro-branch-behind-main/run.sh:589:    if [ "$got" = "$want" ]; then ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+core/fixtures/retro-branch-behind-main/run.sh:597:    ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+core/fixtures/retro-branch-behind-main/run.sh:839:  ok "part 2 CONTROL: an unmutated copy reproduces all seven worlds, so a mutant's token below is the mutation"
+core/fixtures/retro-branch-behind-main/run.sh:863:    if [ "$got" = "$want" ]; then ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+core/fixtures/retro-branch-behind-main/run.sh:871:    ok "MUTANT $tag [decides arm $dec, twin $twn]: $claim"
+core/fixtures/retro-branch-behind-main/run.sh:936:  if [ "$MCELLS" -eq 0 ]; then ok "a plain run drove no matrix-only cell: every mutant ran its deciding arm and one twin"; else bad "a plain run drove $MCELLS matrix-only cell(s)"; fi
+core/fixtures/retro-compliance-workflow/run.sh:540:    ok "M1 mutant: an EMPTY workflow file trips all seven arms — no arm treats a subject that says nothing as a subject that is clean"
+core/fixtures/retro-compliance-workflow/run.sh:554:    ok "M2 mutant: a validator replaced by \`exit 0\` trips A3 A4 A5"
+core/fixtures/retro-compliance-workflow/run.sh:564:    ok "M3 mutant: a validator replaced by \`exit 1\` trips A6 — the accept direction is load-bearing"
+core/fixtures/review-reroute/run.sh:449:if [ "$MCELLS" -eq 0 ] && [ "$CELLS" -eq 41 ]; then ok "MODE PUSH: no matrix-only cell ran; $CELLS mutant cells driven (deciding arms plus twins)"
+core/fixtures/review-shard-merge/run.sh:912:    ok "SIB: the mutant copy is the derived sibling set, $sib_n of the $src_n files in $SRCDIR, holding the four mut_run siblings and every script they resolve"
+core/fixtures/review-shard-merge/run.sh:996:      if CS_ONLY="$tc" "p_$tp" "$md" && [ "$CS_RAN" = 1 ]; then TWIN_N=$((TWIN_N + 1)); ok "TWIN $id: $a passed over the mutant copy, one cell run"
+core/fixtures/review-shard-merge/run.sh:1592:        ok "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS mutant x cell pairs, the populations of its $MX_SROWS of $_mx_n recorded mutants ($MX_TPOP pairs in all), and ran no twin"
+core/fixtures/review-shard-merge/run.sh:1595:      ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
+core/fixtures/review-shard-merge/run.sh:1599:      ok "MX1: a plain run scored no matrix cell and ran $TWIN_N twin cells, at least one per mutant of the $MUT_MINE_N this shard is dealt, each passing over its mutant copy"
+core/fixtures/review-shard-merge/run.sh:1605:  if { [ "$RSM_MATRIX" = 0 ] && [ "$VB_CTL_N" = "$MUT_MINE_N" ]; } || { [ "$RSM_MATRIX" = 1 ] && [ "$VB_CTL_N" = 160 ]; }; then ok "VBCTL: CONTROL -- this shard's dealt mutants among each of M1-M72, M74-M80, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name, m-d1-abs, m-wv-skip, m-wv-frozen, m-wv-seat, m956-1102, m956-1132, m956-1145, m956-rekey, m956-rekey-ko, m956-window and m956-stem's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of the $MUT_MINE_N dealt here, 160 in all): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+core/fixtures/review-shard-merge/run.sh:1611:     || { [ "$RSM_MATRIX" = 1 ] && [ "$MUT_SHARED" = 12 ] && [ "$MUT_KN" = 148 ]; }; then ok "MS1: the $MUT_SHARED byte-identical mutant pair(s) dealt here drove one shared copy each ($MUT_KN copies built for $([ "$RSM_MATRIX" = 1 ] && echo 160 || echo "$MUT_MINE_N") mutants)"
+core/fixtures/schema-install-fallback/run.sh:541:[ "$n_decoy" -eq 0 ] && ok "mutants: all $n_modes mutation programs refuse a decoy carrying no anchor" \
+core/fixtures/schema-install-fallback/run.sh:646:    ok "PLAIN RUN: $n_checked mutant(s) drove only their deciding arm(s) and twin; no matrix-only cell was executed"
+core/fixtures/schema-install-fallback/run.sh:724:  [ "$n_dec" -eq 0 ] && ok "E2 mutants: both BL-332 mutation programs refuse a decoy carrying no anchor" \
+core/fixtures/schema-install-fallback/run.sh:833:  [ "$n_dec" -eq 0 ] && ok "Q mutants: both BL-331 mutation programs refuse a decoy carrying no anchor" \
+core/fixtures/scope-confirmation/run.sh:216:      ok "mutant A: excusing a missing field as legacy makes it PENDING — assertion 2 has teeth"
+core/fixtures/scope-confirmation/run.sh:223:      ok "mutant A leaves assertions 1 and 5 intact — the arms are not entangled"
+core/fixtures/scope-confirmation/run.sh:246:      ok "mutant B: without the guard 'none' passes against a populated capture file — assertion 5 has teeth"
+core/fixtures/scope-confirmation/run.sh:252:      ok "mutant B leaves assertion 6 intact — the guard and the honest-none path are not entangled"
+core/fixtures/scope-confirmation/run.sh:305:      ok "mutant C: anchoring the extractor to line starts blinds it to the consumer's real grammar — assertion 17 has teeth"
+core/fixtures/scope-confirmation/run.sh:311:      ok "mutant C leaves the line-anchored cases intact — the two grammars are separately asserted"
+core/fixtures/scope-confirmation/run.sh:497:    ok "mutant D: the pre-fix extractor fails all five producer grammars and reports the markup as the value — assertions 19-25 have teeth"
+core/fixtures/scope-confirmation/run.sh:505:    ok "mutant D leaves assertions 1, 17 and 24 intact — the pre-fix accepted its own two grammars and correctly refused a missing field, which is why this fixture shipped green over the defect"
+core/fixtures/scope-confirmation/run.sh:529:    ok "mutant D2: dropping the emphasis strip breaks all three bold spellings — that layer is separately load-bearing"
+core/fixtures/scope-confirmation/run.sh:536:    ok "mutant D2 leaves assertions 21 and 17 intact — the backtick layer is asserted separately from the emphasis layer"
+core/fixtures/scope-confirmation/run.sh:554:    ok "mutant D3: dropping only the __ strip breaks only the underscore spelling — assertion 22 owns a layer of its own"
+core/fixtures/scope-confirmation/run.sh:564:    ok "mutant D3 leaves assertions 19, 20, 21 and 23 intact — it fails only its own assertion"
+core/fixtures/scope-confirmation/run.sh:601:    ok "mutant D4: reverting the backtick handling alone breaks the backticked value and the producer's backticked cite — assertion 21 owns a layer of its own and assertion 19 stands with it"
+core/fixtures/scope-confirmation/run.sh:613:    ok "mutant D4 leaves assertions 20, 22, 23 and 17 intact — the emphasis layer is asserted by arms the backtick layer cannot reach"
+core/fixtures/scope-confirmation/run.sh:639:    ok "mutant E: a parser that answers 'confirmed' unconditionally is caught by assertion 20 (the value must read 'corrected') and by assertion 24 (a missing field must stay a missing field)"
+core/fixtures/scope-confirmation/run.sh:649:  ok "all 5 field_of mutants died against the resolved validator $VALIDATOR — the arms above are running against the code they name"
+core/fixtures/scope-confirmation/run.sh:750:  ok "control: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
+core/fixtures/scope-confirmation/run.sh:776:        ok "mutant F: deleting the identity lines makes two different trees indistinguishable ($SC_IDENT_WHY) — assertion 33 has teeth"
+core/fixtures/scope-confirmation/run.sh:784:        ok "mutant F leaves assertions 1, 2 and 5 intact — corpus identity is asserted by an arm no verdict arm covers"
+core/fixtures/scope-confirmation/run.sh:795:        ok "mutant F also kills assertion 34 — the defaulted run's resolved paths come from the identity lines and nowhere else"
+core/fixtures/scope-confirmation/run.sh:820:      ok "mutant G: a per-run nonce varies the output exactly as the real paths do and still fails assertion 33 ($SC_IDENT_WHY) — the arm demands the corpus be NAMED"
+core/fixtures/scope-confirmation/run.sh:1156:    ok "GNU date: the zone mutant is not built here — GNU parses the trailing Z itself, so the defect it seeds is unconstructible on this platform"
+core/fixtures/scope-confirmation/run.sh:1160:    ok "all $SD_MUT_WANT deferred-items mutants died against the resolved validator $VALIDATOR"
+core/fixtures/scope-confirmation/run.sh:1322:    ok "all 4 unreadable-corpus mutants died against the resolved validator $VALIDATOR"
+core/fixtures/scope-confirmation/run.sh:1505:    ok "all 4 labelled-cite mutants died against the resolved validator $VALIDATOR"
+core/fixtures/scope-confirmation/run.sh:1654:    ok "all 10 locked-scope mutants died against the resolved validator $VALIDATOR"
+core/fixtures/self-update-fixture-log/run.sh:1149:      ok "CONTROL — the reader names the specific verdicts it found unclaimed ($j_ctl_off) rather than emitting a fixed string, so every kill above is the mutation and not a reader that answers the same way on any input" ;;
+core/fixtures/self-update-fixture-log/run.sh:1835:elif [ "$MATRIX_CELLS" -gt 0 ]; then ok "the matrix run printed $MATRIX_CELLS mutant rows"
+core/fixtures/self-update-gate/run.sh:950:  "an UNMUTATED copy beside its siblings (LAYOUT: the gate plus every reconcile/*.sh and *.md in ONE directory, the layout every mutant copy in this fixture uses) reproduces the withheld row, so a mutant's shift is the mutation"; then B_ssp=1; ok "base-pass flag B_ssp set"; fi
+core/fixtures/self-update-gate/run.sh:4998:  ok "c3-mut-control   an unmutated apply.sh copy beside its siblings (LAYOUT: apply.sh plus reconcile/*.sh, *.md and *.tsv in one directory, which no other copy here uses; kept) reaches the same cycle, so the kill below is its mutation"
+core/fixtures/self-update-gate/run.sh:5265:  ASSERTIONS=$((ASSERTIONS + 1)); ok "hu2-signature    an unchanged script the new hook asks is judged by the copy the push runs, on every world the hu2 mutants are scored on"; B_hu2=1
+core/fixtures/serial-remediation-worklist/run.sh:407:  ok "PLAIN: a plain run evaluated no matrix-only cell ($N_CELLS mutant cells, every one a deciding arm or a twin)"
+core/fixtures/settings-merge-documented-form/run.sh:181:      ok "MUTANT (template wins) fails World 1 only — the consumer-wins arm discriminates"
+core/fixtures/settings-merge-unparseable-template/run.sh:249:    ok "unmutated control: a byte-identical copy in $WORK passes all three arms, so the battery's harness is not what a mutant verdict is measuring"
+core/fixtures/setup-config-drift/run.sh:228:    && ok "mutant A (classifier fix reverted) reproduces the defect: CORE-TEMPLATE-SUBSTITUTED" \
+core/fixtures/setup-config-drift/run.sh:250:    && ok "mutant B (ancestor fix reverted) reproduces the defect: HARD-CORE-BEHIND" \
+core/fixtures/setup-config-drift/run.sh:255:[ "${r%%	*}" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "mutant A leaves the ancestor arm green (the arms are not entangled)" \
+core/fixtures/setup-config-drift/run.sh:259:[ "${r%%	*}" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "mutant B leaves the classifier arm green (the arms are not entangled)" \
+core/fixtures/shadowed-local-validators/run.sh:173:  ok "CONTROL — an UNMUTATED copy in the mutant sandbox reproduces the baseline rows and exits 0 (the sandbox carries lib.sh + ledger-reverify.sh, so a mutant that emits nothing was tripped rather than broken)"; B_ctl=1
+core/fixtures/shell-portability/run.sh:424:  sed "$expr" "$v" > "$TMP/mutant.out" || { note "FIXTURE BROKEN: $n -- sed failed on $expr"; return 1; }
+core/fixtures/shell-portability/run.sh:426:    note "FIXTURE BROKEN: $n -- the mutation matched NOTHING, so the run below is the UNMUTATED"
+core/fixtures/shell-portability/run.sh:427:    note "               validator wearing a mutant's name. expr: $expr"
+core/fixtures/shell-portability/run.sh:445:    note "FAIL  $n -- the UNMUTATED validator gave $nfail FAIL line(s) and $nhits hit line(s), not exactly one ${arm} with a hit. The mutant below could not have discriminated anything."
+core/fixtures/shell-portability/run.sh:482:    note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own arm, so the arms are entangled"
+core/fixtures/shell-portability/run.sh:505:    note "FAIL  $n -- $nfail FAIL lines; a mutant must fail ONLY its own arm, so the arms are entangled"
+core/fixtures/shell-portability/run.sh:567:    note "FAIL  $n -- $cell: $nfail FAIL line(s) and $nhits hit line(s); the mutant must move exactly one arm"
+core/fixtures/shell-portability/run.sh:790:  note "FAIL  x7 LC_ALL=C -- no UTF-8 locale on this machine, so the mutant cannot be driven. This arm"
+core/fixtures/shell-portability/run.sh:795:  note "               removing the export changes nothing and the mutant below is vacuous."
+core/fixtures/shell-portability/run.sh:807:    note "               without it here the mutant's silence proves nothing."
+core/fixtures/shell-portability/run.sh:814:      note "FAIL  x7 LC_ALL=C -- the mutant PASSED under $UTF8_LOCALE. S10 could not parse its own pattern"
+core/fixtures/shell-portability/run.sh:818:      note "FAIL  x7 LC_ALL=C -- the mutant failed (rc=$post_rc) but did NOT name S10's probe. It has to"
+core/fixtures/shell-portability/run.sh:822:      note "FAIL  x7 LC_ALL=C -- the mutant reported an S10 CORPUS finding as well as the probe failure,"
+core/fixtures/shell-portability/run.sh:1199:    note "FAIL  $n -- $cell: the mutant did not report both the seeded line ($tag) and ${arm}'s probe, and nothing else"
+core/fixtures/shell-portability/run.sh:1570:    note "FAIL  x26 unopenable listed file -- the uncounted mutant did not PASS the deleted tree, so the count is not what refused it"
+core/fixtures/shell-portability/run.sh:1744:    note "FAIL  x29 -- the set-matching mutant did not go quiet on the duplicate AND trip S15's probe"
+core/fixtures/shell-portability/run.sh:1748:  note "FAIL  x29 -- the unmutated validator did not report the duplicated listed site as NEW (S15 alone), or the mutation did not apply"
+core/fixtures/shell-portability/run.sh:1765:  if [ "$MX_ROWS" -eq 0 ]; then ok "PLAIN-RUN: no MATRIX row printed -- the full mutant x arm matrix is measured only under --matrix"
+core/fixtures/shell-portability/run.sh:1769:  if [ "$MX_ROWS" -eq $((MX_CALLS * $#)) ] && [ "$MX_CALLS" -gt 0 ]; then ok "MATRIX-RUN: $MX_ROWS MATRIX rows printed ($MX_CALLS scored mutants x $# arms)"
+core/fixtures/shell-portability/run.sh:1773:  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants scored by their own arm, 28/28 arm-table cells proven load-bearing, 9/9 negatives silent"
+core/fixtures/shipped-rule-version-floor/run.sh:431:  note "FAIL  H mutant control: the unmutated uninstall run from the copied tree failed ($(echo $h_ctl)) -- the mutant verdict below would mean nothing"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:438:    note "FAIL  H mutant DID NOT APPLY: the hook-loop anchor matched nothing"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:443:      note "FAIL  H mutant did not run to completion, so its verdict says nothing about the hook loop"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:444:    elif [ "$h_mut" = "H1 " ]; then note "ok    H mutant without the hook loop fails H1 and only H1"
+core/fixtures/shipped-rule-version-floor/run.sh:445:    else note "FAIL  H mutant without the hook loop scored '$h_mut', expected exactly 'H1'"; rc=1; fi
+core/fixtures/shipped-rule-version-floor/run.sh:451:    note "FAIL  H mutant 2 DID NOT APPLY: the aiDlc* un-merge anchor matched nothing"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:456:      note "FAIL  H mutant 2 did not run to completion, so its verdict says nothing about the aiDlc* un-merge"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:457:    elif [ "$h_mut2" = "H7 " ]; then note "ok    H mutant removing aiDlcModels/aiDlcRoles unconditionally fails H7 and only H7"
+core/fixtures/shipped-rule-version-floor/run.sh:458:    else note "FAIL  H mutant removing aiDlcModels/aiDlcRoles unconditionally scored '$h_mut2', expected exactly 'H7'"; rc=1; fi
+core/fixtures/shipped-rule-version-floor/run.sh:465:    note "FAIL  H mutant 3 DID NOT APPLY: the byte-compare anchor matched nothing"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:467:    note "FAIL  H mutant 3 has no pre-uninstall copy of the seeded world"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:472:      note "FAIL  H mutant 3 did not run to completion, so its verdict says nothing about the byte compare"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:473:    elif [ "$h_mut3" = "H9 " ]; then note "ok    H mutant removing same-named files by name alone fails H9 and only H9"
+core/fixtures/shipped-rule-version-floor/run.sh:474:    else note "FAIL  H mutant removing same-named files by name alone scored '$h_mut3', expected exactly 'H9'"; rc=1; fi
+core/fixtures/shipped-rule-version-floor/run.sh:490:  note "FAIL  I mutant DID NOT APPLY: the mkdir/chmod brackets around the fixture copy matched nothing"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:494:  if [ -z "$r_mut" ]; then note "FAIL  I mutant restoring the flat cp <fixture>/* SURVIVED -- arm I cannot see a non-recursive copy"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:495:  else note "ok    I mutant restoring the flat cp <fixture>/* fails I ($(echo $r_mut))"; fi
+core/fixtures/shipped-rule-version-floor/run.sh:507:  note "FAIL  I mutant 2 DID NOT APPLY: the mkdir/chmod brackets around the fixture copy matched nothing"; rc=1
+core/fixtures/shipped-rule-version-floor/run.sh:512:    note "ok    I mutant 2 restoring the directory copy cp -pR <fixture>/* fails the not-landed sub-arms and only those"
+core/fixtures/shipped-rule-version-floor/run.sh:513:  else note "FAIL  I mutant 2 restoring cp -pR <fixture>/* scored '$r_mut2', expected exactly 'I-ignored-landed I-untracked-landed'"; rc=1; fi
+core/fixtures/shipped-rule-version-floor/run.sh:517:    note "ok    I mutant 2 restoring cp -pR <fixture>/* aborts the install on a dotfile-only fixture (I-dotonly-rc only)"
+core/fixtures/shipped-rule-version-floor/run.sh:518:  else note "FAIL  I mutant 2 on the dotfile-only world scored '$r_mut2d', expected exactly 'I-dotonly-rc'"; rc=1; fi
+core/fixtures/snapshot-archive-rotate/run.sh:1558:  ok "MUTANT CONTROL: the unmutated copies in the mutant tree pass every arm, the sweep by its counted run tracing the live sweep's points — the harness runs"
+core/fixtures/snapshot-archive-rotate/run.sh:1952:    ok "PLAIN RUN: ${SCORED} mutants scored on their deciding arm and twin (${UNSCORED} not expressible here), 0 MATRIX rows printed (the matrix-only path did not run), ${HDR_N} MUTANT-MATRIX header rows"
+core/fixtures/snapshot-archive-rotate/run.sh:1958:    ok "MATRIX RUN: ${MATRIX_ROWS} MATRIX rows, one per scored mutant"
+core/fixtures/snapshot-conservation/run.sh:270:      ok "mutant A: dropping the history file from the corpus makes a real move read as destruction — assertion 1 has teeth"
+core/fixtures/snapshot-conservation/run.sh:277:      ok "mutant A leaves the below-floor assertion intact — the arms are not entangled"
+core/fixtures/snapshot-conservation/run.sh:301:      ok "mutant B: ignoring the floor makes 10 destroyed lines block — the floor is what bounds the false-positive class"
+core/fixtures/snapshot-conservation/run.sh:308:      ok "mutant B leaves the conserved case intact — the arms are not entangled"
+core/fixtures/snapshot-conservation/run.sh:338:      ok "mutant C: letting an unparseable metrics file through stops it exiting 2 — assertion 7 has teeth"
+core/fixtures/snapshot-conservation/run.sh:345:      ok "mutant C leaves the deletion assertion intact — the arms are not entangled"
+core/fixtures/snapshot-edit-deny/run.sh:215:[ "$B_ctl" = 1 ] && ok "control: the unmutated copy from the mutant directory denies EDIT with a JSON reason naming the ops"
+core/fixtures/snapshot-edit-deny/run.sh:265:[ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] && ok "$n_kill of $n_mut mutants scored dead" || bad "$n_kill of $n_mut mutants scored dead"
+core/fixtures/snapshot-evidence-cell/run.sh:241:  ok "MUTATION: removing the arm makes assertion 3's input go green"
+core/fixtures/snapshot-evidence-cell/run.sh:648:      ok "CONTROL broken: refused by bash -n, so an unparseable mutant cannot score a kill"
+core/fixtures/snapshot-evidence-cell/run.sh:666:  ok "MUTANT $name: applied, parses, predicate $d_pre_canon/$d_pre_find -> $pc/$pf"
+core/fixtures/snapshot-evidence-cell/run.sh:683:  ok "all six scoreable mutants applied (ctl, base, sort, tail, hard, uncond)"
+core/fixtures/snapshot-evidence-cell/run.sh:1201:  ok "MUTANT $name: applied at $hits site(s), parses"
+core/fixtures/snapshot-evidence-cell/run.sh:1246:  ok "all thirteen selector mutants applied"
+core/fixtures/snapshot-evidence-cell/run.sh:1324:  if [ "$MX_ROWS" -eq 18 ]; then ok "--matrix printed one MATRIX row per mutant ($MX_ROWS of 18)"
+core/fixtures/snapshot-section-schema/run.sh:705:  ok "CONTROL: the UNMUTATED validator reports the offender and exits 0 (the mutants above ran against a working subject)"
+core/fixtures/snapshot-supersession-marker/run.sh:161:    ok "MUTATION — with the marker arm removed, the marked snapshot goes GREEN (the arm is what catches it)"
+core/fixtures/snapshot-supersession-marker/run.sh:179:    ok "MUTATION — case-insensitively, ordinary prose goes RED (the casing guard is the false-positive defence)"
+core/fixtures/snapshot-supersession-marker/run.sh:189:  ok "CONTROL: an UNMUTATED copy still accepts the clean snapshot (the mutants died of their edits)"
+core/fixtures/span-of-containment/run.sh:192:  ok "mutant-applied" "level rule <= weakened to < in the copy"
+core/fixtures/spec-join-integrity/run.sh:205:if [ "$CAPRC" -eq 0 ] && grep -qF ": PASS (" <<<"$CAPOUT"; then ok "BASE: the healthy set exits 0 and prints its PASS line, so every mutant kill below reads the mutation"; B_BASE=1
+core/fixtures/spec-join-integrity/run.sh:596:  [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (mutant exited $g, expected $exp — a layer is still doing the job)"
+core/fixtures/spec-join-integrity/run.sh:2012:  ok "SETUP: validate-locked-anchor.sh is beside the mutants in \$R — the mutation arms below can reach the block grammar"
+core/fixtures/spec-join-integrity/run.sh:2596:  ok "IDENTITY CONTROL: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
+core/fixtures/spec-join-integrity/run.sh:2644:        ok "MUTATION 'ident-drop' leaves the PASS, FAIL and DISARM verdicts intact — corpus identity is asserted by an arm no join arm covers"
+core/fixtures/spec-join-integrity/run.sh:2710:        if [ "$CAPRC" = "${CAP_RC[$ti]}" ] && [ "$CAPOUT" = "${CAP_OUT[$ti]}" ]; then ok "TWIN $id: arm $t stays GREEN under the mutant (the kill is confined to ${MX_DEC[$i]})"
+core/fixtures/spec-join-integrity/run.sh:2747:  if [ "$MX_ROWS" -eq 0 ]; then ok "PLAIN-RUN: no MATRIX row printed -- the full mutant x arm matrix is measured only under --matrix"
+core/fixtures/story-evidence-scaffold/run.sh:360:  ok "CONTROL: unmutated copies pass and the keyed sections are non-empty, so a mutant's finding below is the mutation"; B_ctl=1
+core/fixtures/story-evidence-scaffold/run.sh:653:      if [ "$a" = "$DARGWANT" ] && [ "$g" = "$DARWANT" ]; then ok "DAR-N FULL: mutant '$2' moves no DAR or DAR-GRAMMAR world"
+core/fixtures/story-evidence-scaffold/run.sh:1066:  if [ "$rc" -eq 1 ]; then rc=$_r849; ok "BL-849: a cn_mutant mutant that does not apply reaches the exit counter"
+core/fixtures/story-evidence-scaffold/run.sh:1101:  if [ "$rc" -eq 1 ]; then rc=$_r849; ok "BL-849: a b9_mutant mutant that does not apply reaches the exit counter"
+core/fixtures/story-evidence-scaffold/run.sh:1186:    ok "BL-845 SMOKE WORLDS: seeded once (the cnone, magic, edited/web, broken, nonedot, brk0, green/web/app and corrupt worlds among them) and byte-identical after every mutant call (diff -r against the post-seed copy)"
+core/fixtures/story-evidence-scaffold/run.sh:1219:  b43_mutant b43-never-ok '  DAR_STATE=ok' '  DAR_STATE=stale; DAR_MSG="dar-heads-stale $STORY: forced"' r1 "a byte-identical block refused stale"
+core/fixtures/story-provenance/run.sh:485:    ok "mutation control: the unmutated schema refuses an unconverged pass"; B_v=1
+core/fixtures/stray-party-mode-provenance/run.sh:210:  && ok "MUTANT (region marker drifts to a second spelling): the rendered taught example is reported as a forgery — the carve-out is what stops that" \
+core/fixtures/stray-party-mode-provenance/run.sh:218:  && ok "MUTANT (trailing-comment rule dropped): a block copied from the taught example goes unseen while a bare one is still caught — the strip is what reaches the copied form" \
+core/fixtures/stray-party-mode-provenance/run.sh:224:  && ok "MUTANT (docs/retro/** removed from homes): the retro document is reported — the homes list is read from the schema, not assumed" \
+core/fixtures/stray-party-mode-provenance/run.sh:230:  && ok "MUTANT (party_mode_skills emptied): the scan refuses to run rather than reporting PASS on a tree it cannot judge" \
+core/fixtures/stray-party-mode-provenance/run.sh:424:    && ok "MUTANT (on-disk respelling reverted to bare realpath): DOCS/retro/ is a false stray again while docs/retro/ still passes -- S10-F1 is what stops that" \
+core/fixtures/stray-party-mode-provenance/run.sh:476:    && ok "MUTANT (home match folds case -- the forbidden remedy): a distinct DOCS/retro/ is excused while server/ is still caught -- S10-C1 is what stops that" \
+core/fixtures/stray-party-mode-provenance/run.sh:522:    && ok "MUTANT (respelling by casefold without samestat): one spelling lands on the other directory (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed) -- S10-H is what stops that" \
+core/fixtures/stray-party-mode-provenance/run.sh:582:  && ok "MUTANT (home match widened to a substring): vendor/docs/retro/inner.md is swallowed while a stray carrying no home substring is still caught — S7b is what stops that fix" \
+core/fixtures/suite-dispatch-order/run.sh:343:if [ "$fails" -eq 0 ]; then ok "BASE: the shipped hook passed every arm of every world, so each mutant kill below reads the mutation"; B_ALL=1; fi
+core/fixtures/suite-dispatch-order/run.sh:353:  ok "CONTROL unmutated-copy: a copy of the shipped hook is green on a one-fixture tree and dispatched alpha — the mutant harness runs the shipped behaviour"
+core/fixtures/suite-dispatch-order/run.sh:426:    ok "TWIN $m: the twin arm $twin stays green under the mutant, as the measured matrix records — the kill is confined to $dec"
+core/fixtures/suite-dispatch-order/run.sh:445:  if [ "$MX_ROWS" -eq 8 ]; then ok "--matrix printed one MATRIX row per mutant ($MX_ROWS of 8)"
+core/fixtures/suppression-lifetime/run.sh:1090:  ok "UNMUTATED CONTROL: a lone copy of the validator resolves its root and reproduces the real expired-suppression verdict (s2) — mutant silence means mutation, not breakage"; CTRL_OK=1
+core/fixtures/suppression-lifetime/run.sh:1100:  ok "the regression mutant's resolution block offers $SL_REGRESS_CWD CWD-relative candidate(s) against the shipped file's 0 — c31 can fire"
+core/fixtures/taught-schema/run.sh:337:    ok "V4b MUTATION — removing the forbidden list lets the placeholder pass (the list is what fires)"
+core/fixtures/taught-schema/run.sh:368:    ok "V4c MUTATION — reverting forbidden_match to exact lets the DECORATED placeholder pass while the bare one stays refused (prefix matching is what fires)"
+core/fixtures/trunk-push-bound/run.sh:180:  ok "CONTROL: an unmutated copy in the mutant directory still passes assertion 1"
+core/fixtures/update-preflight-push/run.sh:666:  ok "control: the unmutated copy scores 000000000 through the mutant harness, and $kills of $_n mutants were scored"
+core/fixtures/upstream-routing/run.sh:622:  ok "MKMUT CONTROL: an anchor that matches nothing is refused, so a no-op cannot pass as a mutation"
+core/fixtures/upstream-routing/run.sh:720:  ok "CONTROL: mkmutcp refuses an anchor present 0 times and accepts one present exactly once — assertion 31 scores against a real mutation"
+core/fixtures/upstream-routing/run.sh:1466:    ok "TWIN $m: arm $twin stays green under the mutant, as the measured matrix records — the kill is confined to $dec"
+core/fixtures/upstream-routing/run.sh:1475:  if [ "$MX_ROWS" -eq 22 ]; then ok "--matrix printed one MATRIX row per mutant ($MX_ROWS of 22)"
+core/fixtures/validate-mandatory-rules-revive/run.sh:62:  && ok "MUTANT: an un-closed envelope FAILS Check 3 (enforcement is real, not vacuous)" \
+core/fixtures/validator-arm-selection/run.sh:628:  ok "CONTROL i66-control: the unmutated copy reads OK at rc 0 under --arms I66, so the mutant verdict below is attributable"
+core/fixtures/validator-arm-selection/run.sh:633:  ok "MUTANT i66-widen: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone makes --arms I66 exit $i66m_rc naming the forked runners"
+core/fixtures/validator-arm-selection/run.sh:656:  if mx_kill "i66-$1" "$out"$'\n'"__rc=$rc" strict; then ok "MUTANT i66-$1: $5 in .githooks/pre-push alone makes --arms I66 exit $rc with '$4'"
+core/fixtures/validator-arm-selection/run.sh:682:  if mx_kill i66-ld "$out"$'\n'"__rc=$rc" strict; then ok "MUTANT i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh makes --arms I66 exit $rc naming the sentinels"
+core/fixtures/validator-arm-selection/run.sh:894:  ok "MUTANT m1: un-hoisting TEMPLATE makes --arms I14 report 'TEMPLATE: unbound variable', so arm 4's predicate can fire"
+core/fixtures/validator-arm-selection/run.sh:943:  ok "MUTANT m2: a selector that keeps every unit collapses $M2_K group representative(s) into ${M2_GROUPS:-0} output group(s), so arm 6's partition predicate can fire"
+core/fixtures/validator-arm-selection/run.sh:963:  ok "MUTANT m3: an arm declared with no emitter makes --arms exit 2 naming the silent arm, so a fixture cannot select an arm that could never fire"
+core/fixtures/validator-arm-selection/run.sh:984:  ok "RULE 9: a plain run executed no matrix-only cell, while its ${mx_ctl} per-push mutant check(s) wrote to the same ledger"
+core/fixtures/validator-fork-budget/run.sh:772:  note "FAIL  validator-fork-budget -- only $N_SCORED of $EXPECTED_MUTANTS mutants were scored. A battery that lost a mutant reports the same green line as one that scored them all."
+core/fixtures/validator-fork-budget/run.sh:777:  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 8 arms green, $N_SCORED/$EXPECTED_MUTANTS mutants scored"
+core/fixtures/validator-path-resolution/run.sh:429:    *" $want "*) ok "MUTANT: $want changes behaviour when the root is wrong (its agreement is real)" ;;
+core/fixtures/validator-path-resolution/run.sh:569:        ok  "MUTANT: candidates back to cwd-relative -> validate-gate-manifest.sh reads the decoy; the arm kills it" ;;
+core/fixtures/validator-path-resolution/run.sh:601:      *DECOY-SCAN-ROOT*) ok  "MUTANT: default root back to \".\" -> artifact-path-config.sh reads the decoy grammar; the arm kills it" ;;
+core/fixtures/verdict-pass-content/run.sh:141:  ok "MUTATION: removing the PASS-content branch removes the measurement"
+core/fixtures/vocabulary-index/run.sh:576:    note "FAIL  $n -- mutant SURVIVED (renderer exited 0)"; rc=1; return
+core/fixtures/vocabulary-index/run.sh:662:  note "SKIP  m3 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:677:  note "SKIP  m4 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:690:  note "SKIP  m6 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:698:  note "SKIP  m7 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:706:  note "SKIP  m8 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:714:  note "SKIP  m9 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:722:  note "SKIP  m10 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:730:  note "SKIP  m11 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:742:  note "SKIP  m12 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:751:  note "SKIP  m13 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:761:  note "SKIP  m14 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:789:  note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:807:  note "SKIP  m15 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:823:  note "SKIP  m16 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:846:  note "SKIP  m17 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:862:  note "SKIP  m18 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:879:  note "SKIP  m19 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:898:  note "SKIP  m20 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:967:  note "SKIP  m22 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:998:  note "SKIP  m23 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:1007:  note "SKIP  n2 -- sed matched nothing; no mutation occurred"; rc=1
+core/fixtures/vocabulary-index/run.sh:1048:  if [ "$MROWS" -eq $((n_ids * n_ids)) ] && [ "$n_ids" -eq 24 ]; then ok "[MX] the matrix run measured $MROWS cells for $n_ids mutants"; else bad "[MX] matrix rows=$MROWS for $n_ids mutants, 576 for 24 expected"; fi
+core/fixtures/vocabulary-index/run.sh:1054:  note "PASS  vocabulary-index -- 1 control + 4 near-miss green, 24/24 mutants scored on their own arm with the twin green"
+core/fixtures/wait-beat-liveness/run.sh:1073:    ok "MUTANT CONTROL: an unmutated copy reports the banner AND the waiting line at rc=0, so the kills above are the mutations and not the harness"
+core/fixtures/wait-beat-liveness/run.sh:3570:    ok "MUTANT dispatch-ts-no-meta-lookup: CONTROL — the unmutated sibling copy prints $R28_D for agentId $R28_AG"; B_m56c=1
+core/fixtures/wait-beat-liveness/run.sh:4433:          if twin_cell "$t_" "$mp_"; then ok "twin: mutant $mn_ leaves arm $t_ green"
+core/fixtures/wait-stale-deliverable/run.sh:1271:  ok "CONTROL MX0 (unmutated copy from the mutant directory): byte-identical to the subject, and the exhausted and absent arm passes under it"; B_MX0=1
+core/fixtures/wait-stale-deliverable/run.sh:1308:      while IFS= read -r pl; do ok "MUTANT $m: ${pl#*: }"; done < "$OUT/x.$m.$d.pre"
+core/fixtures/wait-stale-deliverable/run.sh:1334:  if [ "$MROWS" -eq "$want_rows" ] && [ "$mx_bad" -eq 0 ]; then ok "MATRIX: $MROWS cells printed, one per mutant-or-MX0 and arm"
+core/fixtures/wait-stale-deliverable/run.sh:1344:  if [ "$MROWS" -eq 0 ] && ! grep -q '^  MATRIX ' "$OUT/b.C06_regression_guards"; then ok "PLAIN-RUN: no matrix row printed and no matrix-only cell scheduled (jobs: $(grep -c '^x\.' "$OUT/jobs") mutant cells)"
+core/fixtures/whole-read-pool/run.sh:408:  ok "MUTATION: pinning every validator fallback to 1M makes ALL THREE unknown cases report 330000"
+core/fixtures/whole-read-pool/run.sh:448:  ok "MUTATION: a [1m]-only resolver reads bare 'sonnet' at 66000 -- arm 2b catches it"
+core/fixtures/whole-read-pool/run.sh:462:  ok "MUTATION: substring defaulting reads both full ids at 330000 -- arm 2e catches it"
+core/fixtures/whole-read-pool/run.sh:472:  ok "MUTATION: with the range check gone a declared 99 gives a 32-token pool -- arm 2f catches it"
+core/fixtures/whole-read-pool/run.sh:482:  ok "MUTATION: with the settings .env ignored the .env arm reads 66000 -- arm 2d catches it"
+core/fixtures/whole-read-pool/run.sh:492:  ok "MUTATION: with process env ignored the env arm reads 66000 -- arm 2d catches it"
+core/fixtures/whole-read-pool/run.sh:567:  ok "MUTATION: a validator bypassing the library disagrees with the sensor on $mdiffs id(s) -- 8d catches it"
+core/fixtures/whole-read-pool/run.sh:761:  ok "MUTATION: emptying the sprint set drops the live slot from the pool"
+core/fixtures/whole-read-pool/run.sh:790:  ok "MUTATION: removing the exclusion brings the archived copy back into the pool"
+core/fixtures/write-format-steering-multiformat/run.sh:193:  ok "MUTANT 1 (anchor = another real function of the same file): the VALIDATOR passes — a verdict-keyed check is blind here"
+core/fixtures/write-format-steering-multiformat/run.sh:198:  ok "MUTANT 1: the receipt-shaped check REJECTS it (read [$M1_READ], wanted [$CODE_ANCHOR])"
+core/fixtures/write-format-steering-multiformat/run.sh:215:  ok "MUTANT 2 (anchor = the file's own header comment): the VALIDATOR passes — a whole-file grep is satisfied by a comment"
+core/fixtures/write-format-steering-multiformat/run.sh:220:  ok "MUTANT 2: the receipt-shaped check REJECTS it (read [$M2_READ], wanted [$CODE_ANCHOR])"
+core/fixtures/write-format-steering-multiformat/run.sh:236:  ok "MUTANT 3 (same name AND same declared_in twice): FAILS with 'same name and declared_in repeated'"
+core/fixtures/write-format-steering-multiformat/run.sh:253:  ok "MUTANT 4 (consumer, skills component absent): exit 0 with a SKIP row, not MISSING — an unpulled component does not wedge the push"
+core/fixtures/write-format-steering-multiformat/run.sh:258:  ok "MUTANT 4: the SKIP row SAYS which component is absent, in wording no passing run emits"
+core/fixtures/write-format-steering-multiformat/run.sh:275:  ok "MUTANT 5 (component PRESENT, declared file absent): FAILS as MISSING — the directory-present/file-absent case still discriminates"
+core/fixtures/write-format-steering-multiformat/run.sh:292:  ok "MUTANT 6 (consumer, component present WITH the declared file): exit 0 and the row resolves through the consumer spelling"
+core/fixtures/write-format-steering-multiformat/run.sh:350:    ok "MUTATION A (declared back to last-write-wins): drops to $N row for the shared name — arm 1 can fire"
+core/fixtures/write-format-steering-multiformat/run.sh:371:    ok "MUTATION B (duplicate keyed on name alone): the BASE world is rejected — the (name, declared_in) key is load-bearing"
+core/fixtures/write-format-steering-multiformat/run.sh:383:    ok "MUTATION C (SKIP made unconditional): MUTANT 5's broken pointer is acquitted — that arm can fire"
+core/fixtures/write-format-steering-multiformat/run.sh:397:    ok "MUTATION D (coverage summed over rows): the PASS line reads $MC (= rows), not $DERIVED_COVERED (= names) — arm 4 can fire"
+core/fixtures/write-format-steering-multiformat/run.sh:416:    ok "MUTATION E (anchor column removed): the rows are still there and the receipt reads nothing — arms 3/M1/M2 can fire"
+core/fixtures/write-format-steering-multiformat/run.sh:434:  ok "CONTROL (unmutated copy, same copy path): exit 0, 2 rows for the shared name, anchor [$CODE_ANCHOR] — the mutation harness runs a real subject"

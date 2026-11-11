@@ -19,6 +19,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1064.0] - 2026-11-11
+
+### BL-868 PARTIAL: two load-dependent fixture flakes fixed (review-shard-merge auto-maintenance, handoff-completion-assertion clock shim), and item 5 resolved by census
+
+`review-shard-merge` and `review-shard-merge-b` (they share `core/fixtures/review-shard-merge/lib.sh`) lost a fan-out directory mid-`cp -R` at a rate set by load. Under hermetic-run's git (Apple 2.54.0) every commit through the `G()` wrapper spawned a detached `git maintenance run --auto`, which can repack loose objects while a following `cp -R` of the same repository walks `.git/objects`; `gc.auto=0` does not stop it. `G()` (`lib.sh:218`) now passes `-c maintenance.auto=false`.
+
+Arm GM1 (`p_gmaint`, `lib.sh:260`, in the new unit `gmaint` dealt to shard a) counts trace2 `child_start` events whose argv opens `git maintenance run`. A commit through `G` must spawn 0. Raw git spawns 1 as the positive control, and on a git that has `git maintenance` a control reading anything else is FIXTURE BROKEN (exit 2). The mutant is `G`'s own `declare -f` body with the flag stripped, guarded by `cmp -s`; it spawns 1, so the arm fails on it. All three drives run under `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null` (`gm_children`, `lib.sh:224`), so an inherited `maintenance.auto=false` cannot zero the control. `gm_has_maint` (`lib.sh:238`) reads git's own unknown-command text rather than the exit code, and `gm_vacuous` (`lib.sh:248`) believes an absent subcommand only from a git older than 2.29, exiting 2 on 2.29 or later or on an unparseable version. Only on an older git does the unit print a distinct `ok GM1 VACUOUS on git <v>` line that claims no spawn count (`run.sh:861-871`). MUTANT-MATRIX row `gm-no-maint`. `invocations.decl` for both fixtures is unchanged (544 and 131), confirmed by two agreeing armed counted runs each on the rebased tip.
+
+`handoff-completion-assertion`: `run.sh:773` ran `chmod +x` on the pinned-clock `date` shim, but `tools.decl` declared no `chmod`. In hermetic-run's farm-only PATH the chmod was `command not found`, the shim stayed non-executable, PATH lookup skipped it, and the real `date` answered, so the `(pb)` guard passed only when `HCA_EPOCH` and the guard fell in the same epoch second. `tools.decl` now declares `chmod`, and the guard (`run.sh:777`) first asserts that PATH resolves `date` to the shim itself, so a reverted declaration is FIXTURE BROKEN on every run, whatever the clock. `invocations.decl` `*` 519 to 574, from two agreeing armed counted runs: the shim is a bash script and now runs.
+
+Item 5 ("the 428 sites whose writer is a function") is resolved by census. The figure cannot be reproduced: it entered in e311bf7e4 with no grammar beside it. `docs/analysis/bl868-item5-pipe-census.py` (stdlib only) re-censuses at cb6e0ab80 and finds 693 pipes into an early-exit reader, of which 27 have a DIRECT bash writer (14 fixtures) and 28 a function writer that starts bash (5 fixtures); the per-site reading of those 55 recorded in the entry found 0 offenders. A shape-ban arm is an optional follow-up and is not owed by this item.
+
+The entry stays PARTIAL on items 8, 9, 10, 12 and 14, with no LANDED line, no rotation, and `verify: manual` unchanged. Its record gains the no-graph-pipeline-step line, so `validate-backlog-receipts.sh` does not read its `docs/analysis/` citation as F-UNTAGGED.
+
+Consumer cost: `handoff-completion-assertion` and `review-shard-merge` ship, so a fixture-only pull (`tools.decl`, `invocations.decl`, `run.sh`, `lib.sh`); no engine change.
+
+### BL-909 PARTIAL, records and data only: the loose M1 grammar's population is 747 lines in 169 fixtures, and a line-level arm cannot ship
+
+`docs/analysis/bl909-loose-grammar.awk` (run line pinned in its header) and its output `docs/analysis/bl909-loose-pop-cb6e0ab80.txt` are committed. The population is non-comment lines of `core/fixtures/*/run.sh` that carry `ok` or `note` before a quote, name a mutant or mutation, and have neither `mutant_killed` nor KILLED/killed: 747 lines in 169 fixtures at cb6e0ab80, against the 669 / 154 recorded. A line classifier splits them N 108, C 227, T 111 and K 301; a 30-line hand sample of K read about 83% true kills. A line-level arm cannot ship, because its false-positive set cannot be enumerated. The buildable shape is a fixture-level down-only list derived by `validate-mutant-kills.sh --derive`, with an enumerated deny-mask; its six seeds are listed in the entry as owed.
+
+No code changed. The entry stays PARTIAL with no LANDED line, no rotation, and `verify: manual` unchanged. Its record gains the no-graph-pipeline-step line.
+
+Consumer cost: none; `docs/analysis/` and `docs/backlog.md` do not ship.
+
 ## [0.1063.0] - 2026-11-11
 
 ### BL-507 CLOSED: implementation plus its gate fell on graph s321 against s317+s318, attributed jointly with BL-808 and BL-809
