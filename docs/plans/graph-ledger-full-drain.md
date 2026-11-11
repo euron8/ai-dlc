@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76, 65..75. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -31,9 +31,7 @@ BEFORE ACTING:**
 write to the consumer.
 
 So: the five sections above are LIVE. Everything else is HISTORY: measured episodes, refuted
-hypotheses, and status records that were current when written and that THIS BLOCK REPLACES. Read
-those when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
-instruction from them.**
+hypotheses, and status records THIS BLOCK REPLACES. Read those for evidence, never for instruction.
 
 **MOST OF THAT HISTORY IS NO LONGER IN THIS FILE.** The per-batch records, the adjudication register, `## Status record`, `## Phases` and
 `## Verdict vocabulary` moved to `docs/plans/archive/graph-ledger-full-drain.md`, named by the
@@ -57,20 +55,20 @@ one in the section. It refuses with exit 2 when it cannot reach the ceiling. **A
 whole, including any standing rule written inside it**, so a rule that must outlive its batch
 belongs in `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 253 IS CLOSED: RELEASES `v0.1038.0` THROUGH `v0.1044.0`, none skipped. THE NEXT SESSION STARTS BATCH 254.**
-`ai-dlc-d3` led; its rulings and NOTEs are in the batch-253 close commit message. No `graph-*` session is ever messaged.
-- **Next VERSION `0.1045.0`; next free id BL-955.** Live 53, archive 872. The batch closed BL-948, BL-944, BL-945 and BL-947, and BL-954 (filed and closed in one release); it filed BL-949 through BL-953; BL-806(b), BL-910 and BL-514 are PARTIAL with defined exit conditions carried in the entries.
-- **THE PC-BACKED WORKLIST IS 0** — the step-4 join at the close, and every row of the step-5 delivery loop printed a shipped VERSION (0.1029.0-0.1038.0): the consumer's nine live candidates are all PENDING on the pull, none unworked. The join refills whenever a filing lands, so re-derive it anyway.
-- **OPERATOR RULING THAT BINDS BL-806(b) IF IT IS PICKED:** keep open, no arm ships. The entry carries the corrected census (273 writes / 252 rc-0 / 39 carrying a bare token, op-detection rule in the same sentence) and the exit condition: re-measure once ≥300 bare-token writes accumulate (about 1,939 rc-0 writes at the measured rate). BL-514 and BL-910 each carry their own exit in the entry.
-- **HELD REFS, each owner's to delete after the next batch's close:** `ai-dlc-e4` — `b253-bl947` (with `/Users/n8/git/ai-dlc-b253-bl947`), `b253-bl514` (with `rel514-wt`), `b253-bl954` (with `rel954-wt`); `ai-dlc-f4` — `b253-docs-dev`, `b253-esc-audit-dev`; `ai-dlc-9d` — `b253-bl910`, `b253-check-32-dev`.
-- **Graph.** Branch `0.1036.0`, `main` `0.1028.0`. Installed: `0.1036.0` on the checked-out branch, `0.1028.0` on `main`. PENDING on the branch: S322 MERGE-ADVERSARIAL-RERUN (shipped `0.1037.0`) and S322 CHECK-32 (shipped `0.1038.0`); the other seven shipped ids predate the branch's install.
-- **PULL: OWED, differential NULL.** Behind: branch 8, main 16 (both over five — WIDE). The range changes only the reconcile engines `ledger-reverify.sh` and `reconcile/lib.sh` (0.1031.0, BL-932); `preclassify.sh`, `apply.sh` and the update `SKILL.md` are byte-identical across it. Installed-vs-distribution `ledger-reverify` over a `file://` clone of graph (branch `ai-dlc/carry-over/epic5-closeout`, base `ba3c6074`): byte-identical 26-row finding sets, `cmp -s` asserting the two engines DIFFER in the same invocation (blobs `c8cfc0696` vs `03a5db28d`). **THE NULL'S LIMIT:** the engine change is a silent-drop fix — an id whose bold label ends in a dot run, colon or em dash — and today's ledger carries no such entry, so it cannot show; the installed engine drops one silently the moment such an entry is filed. The pull is the operator's; none run.
+**BATCH 254 IS CLOSED: RELEASES `v0.1045.0` THROUGH `v0.1058.0`, none skipped. THE NEXT SESSION STARTS BATCH 255.**
+`ai-dlc-7f` led; its rulings and NOTEs are in the batch-254 close commit message. No `graph-*` session is ever messaged.
+- **Next VERSION `0.1059.0`; next free id `BL-977` (970/973 remain free).** Live 60, archive 885. The batch closed 13 — `BL-949/950/951/952/953` (D efficiency), `BL-955/956/957` (A waiver-spelling), `BL-958/959/962/969` (filed-closed), `BL-971` (rebind) — and filed 20 (`BL-955`–`BL-976`); net **+7**. **The batch's LAST SIX RELEASES (819/841/976/975/974/716) are ALL PARTIAL** — the rotate gate's OUTCOME GUARD (`backlog-rotate.sh:357-374`) refuses any close without a consumer `Outcome measured:` line, and the six entries each carry their own exit condition in the entry. The `0.1054.0` number is DEAD (975's first push died before the squash; the validator never checks sequence continuity).
+- **The PC-BACKED WORKLIST is 0** (join re-run at close: no live entry cites a live candidate). All 5 UNNAMED `PC-S322-` candidates shipped as the 955–959 cluster closes AND the consumer has ARCHIVED all five on its 0.1056.0 reconcile. The consumer's ledger is now **1 live candidate, UNNAMED**: `PC-S322-PRE-PUSH-RULE-AUDIT-ARM-GATES-CONSUMER-ON-CORE-OWNED-TIER-1-FINDINGS` — no backlog entry cites it and no release names it: the next batch's unfiled work. Re-derive anyway.
+- **WHOLE-BACKLOG ADJUDICATION: 44 PARTIAL / 9 LIVE / 0 CLOSE / 0 DEAD-PREMISE** (4 opus hands; report bodies authoritative). BUILT BUT NOT CLOSED this batch: **BL-809 per-AC arm, BL-878, BL-868 items 5/14, BL-909** — the 14-release queue and the six PARTIAL turns consumed the batch; each needs its FP measurement first (809/909) or its own build (878/868). BL-514/910 exits not met (s322 open / no occurrence since cwd_why).
+- **OPEN FILINGS (unbuilt, from this batch):** 974 seat-complete belt gap (join `:537/:565/:2266/:3246`; `--check-part` needs `seat_complete_check` in the party branch); fanin placement NOTE (1 of 98); BL-819 row-add decision deferred; review-shard-merge flake DEFECT (`lib.sh:2893` cp race; gc.auto hypothesis unverified); handoff-completion-assertion coin-flip DEFECT (chmod absent in sandbox → shim never executable → passes only on the epoch-second fallback); 974 DEFECT B (block-deleted document-mode SKIP at seal); 976 `--check-shard-dir` extra-args-to-`basename` NOTE (stderr only, rc unaffected); 974 `--mark` term-7 can never refuse an adjudicator batch file (batch-name grammar always carries a non-digit); 716 no mutant covers `lanes never merge` (LN14 seed kills it) and no engine check covers an adjudicator that writes nothing before a mis-chosen window (the procedure's `--since` rule covers it).
+- **HELD REFS: none from 254** — all `b254-F*` and cluster branches deleted at close. The b253-held `b253-bl947` (owner `e4`, closed) is the lead's to sweep.
+- **Graph.** The consumer PULLED DURING the batch: `ai-dlc-update/0.1049.0-reconcile-…` and `0.1056.0-reconcile-…` branches exist (both dated today), checked-out branch installed `0.1056.0`, `main` `0.1028.0`, s322 open. Only `0.1057.0`/`0.1058.0` remain PENDING on the next pull — re-derive the delivery gap (action 7). **A pull is never dispatched by this program.**
 - **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
 
 ### Derive the state; do not trust the numbers below
 
-Every figure here is a HYPOTHESIS about a tree that has moved. The measured base rate of expired
-premises in this program is roughly one in two. Each command below carries its own control.
+Every figure here is a HYPOTHESIS about a tree that has moved (expired-premise base rate: about
+one in two). Each command below carries its own control.
 
 **SIX of this section's TEN fenced blocks are RUNNABLE and the rest are EXAMPLES, so "run the
 derive block" names a set and not a fence.** They group as the FIVE numbered steps below —
@@ -108,12 +106,6 @@ this file derived it:
 **READ THE ARCHIVE, AND KEY IT ON BOTH RECORD FORMS. A BARE TOKEN GREP IS NOT A CANDIDATE
 COUNT, AND NEITHER IS A HEADING GREP.**
 
-A bare `PC-`-shaped token grep over the live ledger counts **82** where the headings give **40**:
-the surplus is bare sprint prefixes (`PC-S296`, `PC-S333`), truncations (`PC-S3`, `PC-S295-`), and
-cross-references in prose to candidates that now live in the ARCHIVE. It also misses
-`push-candidate-ledger.archive.md` entirely, so every mention of an already-closed candidate
-scores as an unexamined one.
-
 **A `^## PC-` HEADING GREP CANNOT SPELL A THIRD OF THE LEDGER, AND A HEADING-PLUS-BULLET ARM
 STILL MISSES A THIRD FORM.** The consumer records a candidate in THREE forms:
 
@@ -134,18 +126,6 @@ id as controls:
 live                  47              60         13
 archive               92             122         30
 ```
-
-**THE ENTRY THAT PROVES IT IS ITSELF IN THE MISSED SET.** The consumer had already filed
-`PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`, in bare-bold form, describing this exact
-defect — and it was invisible to this grammar BECAUSE of the defect it describes.
-
-**DO NOT READ THAT ENTRY'S TITLE AS OVERSTATED.** `ledger-reverify` still emits a `HAND-REVIEW`
-row for the entry, which does not make "invisible to EVERY reverify" too strong — that
-**conflates the entry's own FORM with its SUBJECT**. The entry is written as a dashed bullet, so
-of course reverify sees it; its subject is
-the DASH-LESS `**<id>**` at column 0, and for that form the title is exact. Measured here: one such
-line exists in the archive today. **Ask what a finding's subject is before scoring its title against
-the artifact that carries it** — the carrier and the claim are different objects.
 
 **A FOURTH SHAPE, AND IT PRODUCES A WRONG ID RATHER THAN A MISSING ONE, WHICH IS WORSE.** An id may
 embed a version: `PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0`. A `[A-Z0-9-]`
@@ -173,14 +153,12 @@ claim about its own grammar first.**
 
 The arm is `^#{2,6}` for that reason, which is also the range `ledger_entry_shape()` in
 `core/skills/ai-dlc-update/reconcile/lib.sh:278` has always used. **The SHIPPING tooling was never
-blind to this form; only this file's hand-rolled copy of its grammar was.** If you touch this
-function again, check it against `ledger_entry_shape()` rather than against your own reading of
-the ledger.
+blind to this form; only this file's hand-rolled copy of its grammar was.** Check any change to it
+against `ledger_entry_shape()`, not your own reading of the ledger.
 
 **`sed -E '...;t;d'` IS NOT PORTABLE.** BSD sed answers `undefined label ';d'`, both files come
-back EMPTY, and the partition control — *"must be 0"* — comes back 0 and AGREES. Only the PRESENCE
-control, which must come back 1, catches it. That is why both controls are here and why one of
-them is positive.
+back EMPTY, and the *"must be 0"* partition control comes back 0 and AGREES. Only the PRESENCE
+control catches it — hence both controls, one positive.
 
 **KEY THE OTHER SIDE ON A BACKLOG ENTRY, NOT ON `docs/`.** A grep over all of `docs/` counts
 `docs/reviews/graph-ledger-*`, which is the ADJUDICATION corpus and mentions very nearly every
