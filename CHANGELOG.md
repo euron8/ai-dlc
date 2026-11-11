@@ -19,6 +19,31 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1048.0] - 2026-11-11
+
+### BL-971 filed and closed: the settings template rebinds six roles by operator ruling (adversary, dev-escalated, tea and code-reviewer-escalated to opus/medium; code-reviewer and cis to sonnet/medium)
+
+`templates/settings.json.template` changes six `aiDlcRoles` bindings. No other key in the file moves.
+
+| Role | Before | After | Basis |
+|---|---|---|---|
+| `adversary` | sonnet/high | opus/medium | measured |
+| `dev-escalated` | sonnet/high | opus/medium | operator ruling, not measured on opus |
+| `tea` | sonnet/high | opus/medium | operator ruling, not measured |
+| `code-reviewer-escalated` | opus/high | opus/medium | operator ruling, not measured at medium |
+| `code-reviewer` | opus/medium | sonnet/medium | operator ruling, to match the reference consumer's own binding |
+| `cis` | sonnet/high | sonnet/medium | operator ruling, to match the reference consumer's own binding |
+
+The adversary row is the measured one. `docs/analysis/pipeline-efficiency-s317-s322.md` ("Made it worse") reads the seat on graph's transcripts: on opus/medium (s319, s320; 294 spawns each) the median spawn ran 6.2 and 5.0 minutes, the p90 16.8 and 14.5 minutes, at $1.91 and $1.70 a spawn; on sonnet/high (s321, 272 spawns; s322 partial, 124) the median ran 8.9 and 11.7 minutes, the p90 51.3 and 61.5 minutes, at $2.24 and $2.90 a spawn, and the wall clock during which only adversaries were running rose from 6.5 to 6.7 h a sprint to 15.7 h. Finding yield under the two bindings was not measured. The other five rows have no measurement behind them and are the operator's instruction of 2026-11-11.
+
+All six values equal the reference consumer's own `.claude/settings.json` at its commit `303db00f2`. The template's bytes are the operator's own edit, applied unchanged (md5 `2714d523b85842f612cd954c257e01d4`).
+
+**A pull does not carry this to an existing consumer.** `core/skills/ai-dlc-update/reconcile/settings-merge.sh` merges `aiDlcRoles` at the role level with the consumer's entry winning, so a consumer that already declares one of these roles keeps its own binding. Only a fresh install, or a role the consumer does not declare, takes the new default.
+
+`core/fixtures/settings-merge-documented-form` arm 6 pinned the shipped template's `dev-escalated` at sonnet/high (BL-838's ruling of 2026-10-27). It now pins opus/medium, and its second mutant reverts the seat to sonnet/high where it used to lower the effort to medium, which is now the shipped value and would no longer apply. `dev` stays pinned at sonnet/medium. Run on this tree the arm passes; run against the 0.1047.0 template it fails all four of its assertions.
+
+No behaviour in `core/` changes. To read the effect on a later sprint, `docs/analysis/pipeline-efficiency-s317-s322/scripts/seats.py` prints any role by the binding it ran on.
+
 ## [0.1047.0] - 2026-11-11
 
 ### BL-951 closed: core-paths.sh --audit-diff lists a renamed-out core path by its old name and a non-ASCII core path as raw bytes, and fails closed on a path git still quotes

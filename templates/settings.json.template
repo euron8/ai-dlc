@@ -7,8 +7,8 @@
   },
   "aiDlcRoles": {
     "adversary": {
-      "model": "sonnet",
-      "effort": "high",
+      "model": "opus",
+      "effort": "medium",
       "omitClaudeMd": true
     },
     "analyst": {
@@ -21,20 +21,20 @@
       "effort": "medium"
     },
     "code-reviewer": {
-      "model": "opus",
+      "model": "sonnet",
       "effort": "medium"
     },
     "code-reviewer-escalated": {
       "model": "opus",
-      "effort": "high"
+      "effort": "medium"
     },
     "dev": {
       "model": "sonnet",
       "effort": "medium"
     },
     "dev-escalated": {
-      "model": "sonnet",
-      "effort": "high"
+      "model": "opus",
+      "effort": "medium"
     },
     "gate-adjudicator": {
       "model": "sonnet",
@@ -67,15 +67,15 @@
     },
     "cis": {
       "model": "sonnet",
-      "effort": "high"
+      "effort": "medium"
     },
     "sm": {
       "model": "sonnet",
       "effort": "medium"
     },
     "tea": {
-      "model": "sonnet",
-      "effort": "high"
+      "model": "opus",
+      "effort": "medium"
     },
     "ux": {
       "model": "sonnet",

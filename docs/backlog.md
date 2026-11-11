@@ -915,6 +915,8 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 
 **PARTIAL (v0.968.0).** The template half shipped: `templates/settings.json.template` `aiDlcRoles` now pins `dev` to sonnet/medium and `dev-escalated` to sonnet/high, and `settings-merge-documented-form`, a distribution-only fixture, pins those values. The value check lives there because consumers install no `templates/` tree, and a consumer fixture that declares an absent input is refused. The consumer half is already done: graph HEAD `.claude/settings.json` carries `dev` sonnet/medium, `dev-escalated` sonnet/high and `qa` sonnet/medium. Still owed: the `Outcome measured:` line, taken on a later graph sprint under the BL-817 close rule.
 
+**Superseded in part (v0.1048.0, BL-971).** By operator ruling of 2026-11-11 the template's `dev-escalated` moves from sonnet/high to opus/medium, and `settings-merge-documented-form` arm 6 pins the new value. `dev` stays sonnet/medium and stays pinned. The `Outcome measured:` line owed above is now read on `dev` at sonnet/medium and `dev-escalated` at opus/medium.
+
 verify: manual
 
 ## BL-839 — a story held on a lead precondition falls out of the lead's worklist, and nothing re-surfaces it
