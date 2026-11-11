@@ -185,17 +185,17 @@ if [ -n "$TMPL" ]; then
   fi
 fi
 
-# --- Assertion 6: the SHIPPED template's seat tiers (BL-838) -----------------
+# --- Assertion 6: the SHIPPED template's seat tiers (BL-838, BL-971) ---------
 # Every other fixture seeds its own aiDlcRoles values, so nothing read what the distribution
 # ships. This arm reads the template itself and asserts the four values the operator ruled:
-# dev sonnet/medium, dev-escalated sonnet/high. It lives here, not in dispatch-model-guard,
+# dev sonnet/medium, dev-escalated opus/medium. It lives here, not in dispatch-model-guard,
 # because that fixture ships to consumers and a consumer has no templates/ tree. An unreadable
 # template is a FAIL, never a skip.
 # tpl_tiers <file> -> "devmodel/deveffort devescmodel/devesceffort", or nothing if unreadable.
 tpl_tiers() {
   jq -r '.aiDlcRoles | "\(.dev.model)/\(.dev.effort) \(.["dev-escalated"].model)/\(.["dev-escalated"].effort)"' "$1" 2>/dev/null
 }
-TPL_WANT="sonnet/medium sonnet/high"
+TPL_WANT="sonnet/medium opus/medium"
 # Kills go through mutant_killed (scripts/validate-mutant-kills.sh): scored only when the unmutated
 # arm passed in THIS run, so a mutant cannot score a kill by the seed failing.
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
@@ -208,7 +208,7 @@ if [ -z "$TMPL" ] || [ ! -r "$TMPL" ]; then
 else
   TPL_GOT="$(tpl_tiers "$TMPL")"
   if [ "$TPL_GOT" = "$TPL_WANT" ]; then
-    B_TPL=1; ok "6 the shipped template pins dev sonnet/medium and dev-escalated sonnet/high"
+    B_TPL=1; ok "6 the shipped template pins dev sonnet/medium and dev-escalated opus/medium"
   else
     bad "6 the shipped template pins '$TPL_GOT', expected '$TPL_WANT' (dev, dev-escalated)"
   fi
@@ -231,10 +231,10 @@ else
     if [ "$got" = "$3" ] && [ "$got" != "$TPL_WANT" ]; then mutant_killed "$B_TPL" "$1" "6 MUTANT $1 killed: $4"
     else bad "6 MUTANT $1 read '$got', expected '$3' (and not '$TPL_WANT') — $4"; fi
   }
-  tpl_mut dev-haiku '.aiDlcRoles.dev.model = "haiku"' "haiku/medium sonnet/high" \
+  tpl_mut dev-haiku '.aiDlcRoles.dev.model = "haiku"' "haiku/medium opus/medium" \
     "dev reverted to haiku moves the reading off the ruled value"
-  tpl_mut esc-medium '.aiDlcRoles["dev-escalated"].effort = "medium"' "sonnet/medium sonnet/medium" \
-    "dev-escalated effort reverted to medium moves the reading off the ruled value"
+  tpl_mut esc-sonnet-high '.aiDlcRoles["dev-escalated"] |= (.model = "sonnet" | .effort = "high")' "sonnet/medium sonnet/high" \
+    "dev-escalated reverted to sonnet/high moves the reading off the ruled value"
 fi
 
 echo

@@ -40703,3 +40703,30 @@ Provenance: batch b253, cluster esc-audit, found by the contract adversary; ids 
 
 verify: sh grep -q 'CHANGED="$(git' core/scripts/core-paths.sh || exit 9; [ -f core/fixtures/core-paths-audit-diff/seed.sh ] || exit 9; V="$PWD/core/scripts/core-paths.sh"; export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=f GIT_AUTHOR_EMAIL=f@e.invalid GIT_COMMITTER_NAME=f GIT_COMMITTER_EMAIL=f@e.invalid; W="$(bash core/fixtures/core-paths-audit-diff/seed.sh 2>/dev/null)" || exit 9; [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh"; g() { git -C "$PROJ" "$@" >/dev/null 2>&1; }; h() { git -C "$PROJ" rev-parse HEAD; }; k() { g checkout -q -b "$1" "$BASE" || exit 9; }; r() { ( cd "$PROJ" && bash "$V" --audit-diff "$BASE" "$1" >/dev/null 2>&1 ); }; k ro; mkdir -p "$PROJ/server"; g mv .claude/hooks/ai-dlc-a.sh server/moved.sh || exit 9; g commit -qm 'fix(s1): move hook out' || exit 9; RO="$(h)"; k dl; g rm -q .claude/hooks/ai-dlc-a.sh || exit 9; g commit -qm 'fix(s1): delete hook' || exit 9; DL="$(h)"; N="$(printf 'scripts/ai-dlc/v\303\251rdict.sh')"; k na; printf 'x\n' > "$PROJ/$N" || exit 9; g add -A; g commit -qm 'fix(s1): add a core script' || exit 9; NA="$(h)"; k as; printf 'x\n' > "$PROJ/scripts/ai-dlc/v rdict.sh" || exit 9; g add -A; g commit -qm 'fix(s1): add a core script' || exit 9; AS="$(h)"; g checkout -q "$BASE" || exit 9; [ "$(git -C "$PROJ" diff --name-only "$BASE...$RO")" = server/moved.sh ] || exit 9; case "$(git -C "$PROJ" diff --name-only "$BASE...$NA")" in '"'*) ;; *) exit 9 ;; esac; r "$CLEAN" || exit 9; r "$DIRTY"; [ $? -eq 1 ] || exit 9; r "$DL"; [ $? -eq 1 ] || exit 9; r "$AS"; [ $? -eq 1 ] || exit 9; r "$RO"; [ $? -eq 1 ] || exit 1; r "$NA"; [ $? -eq 1 ]
 
+
+## BL-971 — the settings template rebinds six roles: four to opus/medium, two to sonnet/medium
+
+**LANDED (v0.1048.0).** **DEFECT.** Filed 2026-11-11 on an operator ruling and closed in the same release. It is a config change only: `templates/settings.json.template` changes six `aiDlcRoles` bindings, and no prose site names a model.
+
+| Role | Before | After | Basis |
+|---|---|---|---|
+| `adversary` | sonnet/high | opus/medium | measured |
+| `dev-escalated` | sonnet/high | opus/medium | operator ruling, not measured on opus |
+| `tea` | sonnet/high | opus/medium | operator ruling, not measured |
+| `code-reviewer-escalated` | opus/high | opus/medium | operator ruling, not measured at medium |
+| `code-reviewer` | opus/medium | sonnet/medium | operator ruling, to match the reference consumer's own binding |
+| `cis` | sonnet/high | sonnet/medium | operator ruling, to match the reference consumer's own binding |
+
+The adversary row is the measured one. `docs/analysis/pipeline-efficiency-s317-s322.md` ("Made it worse") reads the seat on graph's transcripts: on opus/medium (s319, s320; 294 spawns each) the median spawn ran 6.2 and 5.0 minutes, the p90 16.8 and 14.5 minutes, at $1.91 and $1.70 a spawn; on sonnet/high (s321, 272 spawns; s322 partial, 124) the median ran 8.9 and 11.7 minutes, the p90 51.3 and 61.5 minutes, at $2.24 and $2.90 a spawn, and the wall clock during which only adversaries were running rose from 6.5 to 6.7 h a sprint to 15.7 h. Finding yield under the two bindings was not measured. The other five rows have no measurement behind them and are the operator's instruction of 2026-11-11. This entry claims no outcome: it records the binding and its basis.
+
+All six values equal the reference consumer's own `.claude/settings.json` at its commit `303db00f2`; the operator stated that `code-reviewer` and `cis` were changed to match what that consumer already defined. The template's bytes are the operator's own working-tree edit, applied unchanged (md5 `2714d523b85842f612cd954c257e01d4`). It supersedes BL-832's adversary binding (sonnet/high, 0.954.0) and the `dev-escalated` half of BL-838's ruling (sonnet/high, 0.968.0); `dev` stays sonnet/medium.
+
+A pull does not carry this to an existing consumer: `core/skills/ai-dlc-update/reconcile/settings-merge.sh` merges `aiDlcRoles` at the role level with the consumer's entry winning. Only a fresh install, or a role a consumer does not declare, takes the new default.
+
+`core/fixtures/settings-merge-documented-form` arm 6 pinned the shipped `dev-escalated` at sonnet/high and failed on this template (4 assertions). The pin moves to opus/medium, and the mutant that lowered the effort to medium, now the shipped value, is replaced by one that reverts the seat to sonnet/high. No other fixture reads the template's role values.
+
+Receipt: the verify reads the six bindings out of the shipped template with `jq` and compares them to the ruled values. It exits 9 when the template is unreadable, lacks `aiDlcRoles`, or `jq` is absent. Scored: exit 0 on this release's template; exit 1 on the 0.1047.0 template, which reads `sonnet/high sonnet/high sonnet/high opus/high opus/medium sonnet/high`. What else satisfies it: any template carrying these six values, whatever its other roles say. What it does not establish: that any consumer runs these bindings, or that they are faster or cheaper in a sprint.
+
+Provenance: batch b254, fast track; the edit is the operator's, the build is the batch-255 analysis session's; id allocated by lead ai-dlc-7f.
+
+verify: sh T=templates/settings.json.template; [ -r "$T" ] || exit 9; grep -q 'aiDlcRoles' "$T" || exit 9; command -v jq >/dev/null || exit 9; [ "$(jq -r '.aiDlcRoles|[.adversary,.["dev-escalated"],.tea,.["code-reviewer-escalated"],.["code-reviewer"],.cis]|map(.model+"/"+.effort)|join(" ")' "$T")" = "opus/medium opus/medium opus/medium opus/medium sonnet/medium sonnet/medium" ]
