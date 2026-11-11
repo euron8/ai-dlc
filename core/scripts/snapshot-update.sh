@@ -291,7 +291,9 @@ while [ $# -gt 0 ]; do
                     [ "$nops" -eq 0 ] || refuse "--init must be the first op"
                     rec init "$2" "$3"; shift 3 ;;
     -h|--help)      sed -n '/^set -u$/q;2,$p' "${BASH_SOURCE[0]}"; exit 0 ;;
-    *)              refuse "unknown argument '$1'" ;;
+    # The op names come from this header's usage lines, so a lead that guessed a name (s322:
+    # `--activity-add`) is shown every real one and does not spend a further call on --help.
+    *)              refuse "unknown argument '$1'; the ops are: $(sed -n 's/^#   \(--[a-z-]*\).*/\1/p' "${BASH_SOURCE[0]}" | tr '\n' ' ')" ;;
   esac
 done
 [ "$nops" -gt 0 ] || refuse "no op given"

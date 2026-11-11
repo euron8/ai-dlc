@@ -121,6 +121,15 @@
 # MUTANT-MATRIX anyshard decides=noshard twins=nogp
 # MUTANT-MATRIX wholegroups decides=packed twins=part
 # MUTANT-MATRIX nostoryless decides=adjsl,adjslsh twins=adjnp
+# MUTANT-MATRIX dl-nodeny decides=nodl,indent,bold twins=dl,mark
+# MUTANT-MATRIX dl-nomark decides=mark twins=markbad
+# MUTANT-MATRIX dl-nobg decides=fg twins=bgabsent
+# MUTANT-MATRIX dl-noupd decides=updcmd,updskill twins=updlead,leadtr
+# MUTANT-MATRIX dl-noagent decides=agent twins=nodl
+# MUTANT-MATRIX dl-nosnap decides=nosnap twins=nodl
+# MUTANT-MATRIX dl-noera decides=noera twins=nodl
+# MUTANT-MATRIX dl-norole decides=role twins=nodl
+# MUTANT-MATRIX dl-rowfirst decides=nodl,seq twins=dl
 # MUTANT-MATRIX-DYNAMIC queue_run why=the cap and adjudicator mutants are registered by name and judged in one loop per family; every name it produces carries its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-DYNAMIC fam_mut why=the vector-family helpers pass the mutant name as a variable; every name they produce carries its own MUTANT-MATRIX row above
 set -uo pipefail
@@ -2970,6 +2979,197 @@ gp_mut wrongseat "$(grep -m1 -F '    code-reviewer:1|code-reviewer-escalated:1|q
   "a guard that accepts any reviewer or QA seat on a gate 1, 2 or rerun plan dispatches QA over a g1 plan, a reviewer over a g2 plan and a reviewer or QA over a rerun plan -- cells rerunqa, qag1, rvg2 and rerunrv move"
 gp_mut nostoryless '    [ "$DG_STORY" = true ] || DG_GP_SUBJECT=false ;;' '    ;;' adjsl,adjslsh adjnp 'adjsl=deny:-:a;adjslsh=deny:-:a;adjnp=deny:-:a' \
   "without the storyless exemption a multi-story or storyless implementation adjudicator, which gate-transition.sh can write no plan for, is refused for having none -- cells adjsl and adjslsh move, the story-bearing adjnp does not"
+
+# ===== THE DELIVERABLE-LINE DENY (BL-819) ==========================================================
+# NO SKIP ARM FOR AN ABSENT GUARD BLOCK, BY RULING: this section ships in the SAME release as the guard
+# block it drives, so no delivering pull carries one without the other, and a skip would be a check
+# that cannot fire on the only path that reaches it.
+# A LEAD dispatch of a role with a readable team-role file, whose prompt yields no path to deliverable_of
+# and whose brief gives no mark_file, is refused when the project has a pipeline snapshot, an installed
+# _gate-procedures.md carrying the era sentence, and the call is not foreground or from a nested agent
+# or an /ai-dlc-update session. The cells drive that subject through the shipping guard in a seeded
+# consumer; the step file is a COPY OF THE REAL ONE, so the era sentence is read from where it ships.
+#
+# deliverable_of IS SHARED BYTE-IDENTICALLY with ai-dlc-inflight-row.sh and this section binds the copies.
+# The comparison is probed in both directions BEFORE it reads the real files, and the definition count
+# is probed so that a missing or a doubled definition can fail.
+dl_fn() { # dl_fn <file> -> the text of its deliverable_of definition, from its opening line to the first closing brace
+  awk '/^deliverable_of\(\) \{$/ { f = 1 } f { print } f && /^\}$/ { exit }' "$1"
+}
+dl_ndef() { awk '/^deliverable_of\(\) \{/ { n++ } END { print n + 0 }'; }
+dl_same() { # dl_same <text a> <text b> -> SAME | DIFFER, compared byte for byte
+  if cmp -s <(printf '%s\n' "$1") <(printf '%s\n' "$2"); then echo SAME; else echo DIFFER; fi
+}
+DL_IFR="$(dirname "$HOOK")/ai-dlc-inflight-row.sh"
+DL_FN_G="$(dl_fn "$HOOK")"; DL_FN_I="$(dl_fn "$DL_IFR")"
+# the probe: two copies one byte apart (the sides are asserted to differ first), and a doubled/absent definition
+DL_FN_P="${DL_FN_I/LC_ALL=C awk/LC_ALL=C awx}"
+if [ "$DL_FN_P" != "$DL_FN_I" ] && [ "$(dl_same "$DL_FN_I" "$DL_FN_P")" = DIFFER ] && [ "$(dl_same "$DL_FN_I" "$DL_FN_I")" = SAME ] \
+   && [ "$(printf '%s\n%s\n' "$DL_FN_I" "$DL_FN_I" | dl_ndef)" = 2 ] && [ "$(printf '%s\n' "$DL_FN_I" | dl_ndef)" = 1 ] \
+   && [ "$(printf 'echo hi\n' | dl_ndef)" = 0 ]; then
+  ok "DELIVERABLE-LINE bind probe: two copies one byte apart compare DIFFER, a copy against itself SAME, and the definition count reads 2, 1 and 0 on seeded text"
+else bad "DELIVERABLE-LINE bind probe FAILED: the byte comparison or the definition count cannot tell its seeded cases apart, so the bind below is not believable"; fi
+[ "$(dl_ndef < "$HOOK")" = 1 ] && [ "$(dl_ndef < "$DL_IFR")" = 1 ] \
+  && ok "DELIVERABLE-LINE bind: exactly one deliverable_of definition in the guard and one in ai-dlc-inflight-row.sh" \
+  || bad "DELIVERABLE-LINE bind: the guard has $(dl_ndef < "$HOOK") deliverable_of definitions and ai-dlc-inflight-row.sh has $(dl_ndef < "$DL_IFR"), expected 1 and 1"
+[ -n "$DL_FN_G" ] && [ -n "$DL_FN_I" ] && [ "$(printf '%s\n' "$DL_FN_G" | tail -1)" = "}" ] && [ "$(printf '%s\n' "$DL_FN_I" | tail -1)" = "}" ] \
+  && ok "DELIVERABLE-LINE bind: both extractions are non-empty and end at the closing brace" \
+  || bad "DELIVERABLE-LINE bind: an extraction is empty or does not close (guard $(printf '%s' "$DL_FN_G" | wc -c | tr -d ' ') bytes, inflight-row $(printf '%s' "$DL_FN_I" | wc -c | tr -d ' ') bytes)"
+[ -n "$DL_FN_G" ] && [ "$(dl_same "$DL_FN_G" "$DL_FN_I")" = SAME ] \
+  && ok "DELIVERABLE-LINE bind: the guard's deliverable_of is byte-identical to ai-dlc-inflight-row.sh's" \
+  || bad "DELIVERABLE-LINE bind: the two deliverable_of copies DIFFER, so the guard judges a brief by a grammar the row writer does not use"
+
+DL_ERA="$(sed -n "s/^DG_DL_ERA='\(.*\)'\$/\1/p" "$HOOK")"
+# rooted at the fixture's own location, both layouts named (I33): core/fixtures/<fx> and tests/fixtures/<fx>
+DL_STEP="$HERE/../../skills/ai-dlc/steps/_gate-procedures.md"
+[ -f "$DL_STEP" ] || DL_STEP="$HERE/../../../.claude/skills/ai-dlc/steps/_gate-procedures.md"
+[ -n "$DL_ERA" ] && [ "$(grep -cF -- "$DL_ERA" "$DL_STEP" 2>/dev/null)" = 1 ] \
+  && ok "DELIVERABLE-LINE era: the guard's era sentence is read from the hook and the shipped _gate-procedures.md carries it exactly once" \
+  || bad "DELIVERABLE-LINE era: the era sentence '$DL_ERA' is empty or not carried exactly once by $DL_STEP"
+DL_NOERA="$WORK/dl-step-noera.md"
+grep -vF -- "$DL_ERA" "$DL_STEP" > "$DL_NOERA" || true
+cmp -s "$DL_STEP" "$DL_NOERA" && bad "DELIVERABLE-LINE era: the era-less step file equals the real one, so the noera cell would not differ"
+[ "$(grep -cF -- "$DL_ERA" "$DL_NOERA" 2>/dev/null)" = 0 ] || bad "DELIVERABLE-LINE era: the era-less step file still carries the sentence"
+
+dl_world() { # dl_world <name> <step file|-> <snapshot yes|no> -> the project dir
+  local p="$WORK/dl-$1"
+  mkdir -p "$p/.claude/skills/ai-dlc/steps" "$p/_bmad-output"
+  cp -R "$CONSUMER/.claude/team-roles" "$p/.claude/"
+  cp "$CONSUMER/.claude/.ai-dlc-version" "$CONSUMER/.claude/settings.json" "$p/.claude/"
+  [ "$2" = - ] || cp "$2" "$p/.claude/skills/ai-dlc/steps/_gate-procedures.md"
+  if [ "$3" = yes ]; then printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: steps/implementation.md\n' > "$p/_bmad-output/pipeline-snapshot.md"; fi
+  printf '%s\n' "$p"
+}
+DLA="$(dl_world armed "$DL_STEP" yes)"; DLB="$(dl_world nosnap "$DL_STEP" no)"; DLC="$(dl_world noera "$DL_NOERA" yes)"
+# transcripts in the shapes the harness writes: the slash-command record and the Skill tool_use
+DL_UPD_MSG="$(printf '<command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name>')"
+DL_LEAD_MSG="$(printf '<command-message>ai-dlc</command-message>\n<command-name>/ai-dlc</command-name>')"
+DL_REC_UPD="$(jq -nc --arg c "$DL_UPD_MSG" '{type:"user",message:{role:"user",content:$c}}')"
+DL_REC_LEAD="$(jq -nc --arg c "$DL_LEAD_MSG" '{type:"user",message:{role:"user",content:$c}}')"
+DL_REC_SKILL="$(jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_sk",name:"Skill",input:{skill:"ai-dlc-update"}}]}}')"
+printf '%s\n' "$DL_REC_UPD" > "$WORK/dl-tr-updcmd.jsonl"
+printf '%s\n' "$DL_REC_SKILL" > "$WORK/dl-tr-updskill.jsonl"
+printf '%s\n%s\n' "$DL_REC_UPD" "$DL_REC_LEAD" > "$WORK/dl-tr-updlead.jsonl"
+printf '%s\n' "$DL_REC_LEAD" > "$WORK/dl-tr-lead.jsonl"
+DL_MARK='Run `scripts/ai-dlc/wait-for-deliverable.sh --mark _bmad-output/party-mode/s320/dev-1.md implementation dev 1/1 findings=0` when done.'
+DL_MARKBAD='Run `scripts/ai-dlc/wait-for-deliverable.sh --mark _bmad-output/party-mode/s320/dev-1.md implementation dev 1/1` when done.'
+dl_base() { mkjson Agent dev sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true'; }
+dl_add() { jq -c --arg s "$2" '.tool_input.prompt += $s' <<<"$1"; } # dl_add <json> <text appended to the prompt>
+dl_rows() { local n=0; [ -f "$1/_bmad-output/spawn-ledger.jsonl" ] && n="$(wc -l < "$1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"; printf '%s' "${n:-0}"; }
+dl_run() { printf '%s' "$3" | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null; } # dl_run <guard> <world> <json> -> hook stdout
+dl_kind() { # dl_kind <hook stdout> -> dl (THIS deny) | other (a different deny) | pass
+  local d rs
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // empty' <<<"$1" 2>/dev/null)"
+  if [ "$d" = deny ]; then
+    rs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$1" 2>/dev/null)"
+    case "$rs" in *'carries no `Deliverable: <path>` line'*) echo dl ;; *) echo other ;; esac
+  else echo pass; fi
+}
+dl_cell() { # dl_cell <guard> <cell> -> "<kind>:<ledger rows after one call on a fresh ledger>"; seq -> the rows after allow, refuse, allow
+  local g="$1" c="$2" w="$DLA" j o n1 n2 n3
+  j="$(dl_base)"
+  case "$c" in
+    nodl|seq) ;;
+    dl)       j="$(dl_add "$j" $'\nDeliverable: x/y.md')" ;;
+    dlmid)    j="$(dl_add "$j" $'\nnotes first\nDeliverable: x/y.md\nand more')" ;;
+    indent)   j="$(dl_add "$j" $'\n  Deliverable: x/y.md')" ;;
+    bold)     j="$(dl_add "$j" $'\n**Deliverable:** x/y.md')" ;;
+    nopath)   j="$(dl_add "$j" $'\nDeliverable: to be decided')" ;;
+    bgabsent) j="$(jq -c 'del(.tool_input.run_in_background)' <<<"$j")" ;;
+    agent)    j="$(jq -c '.agent_id = "a1c69096c184098d6"' <<<"$j")" ;;
+    fg)       j="$(jq -c '.tool_input.run_in_background = false' <<<"$j")" ;;
+    nosnap)   w="$DLB" ;;
+    noera)    w="$DLC" ;;
+    updcmd)   j="$(jq -c --arg t "$WORK/dl-tr-updcmd.jsonl" '.transcript_path = $t' <<<"$j")" ;;
+    updskill) j="$(jq -c --arg t "$WORK/dl-tr-updskill.jsonl" '.transcript_path = $t' <<<"$j")" ;;
+    updlead)  j="$(jq -c --arg t "$WORK/dl-tr-updlead.jsonl" '.transcript_path = $t' <<<"$j")" ;;
+    leadtr)   j="$(jq -c --arg t "$WORK/dl-tr-lead.jsonl" '.transcript_path = $t' <<<"$j")" ;;
+    role)     j="$(mkjson Agent ghostrole sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true')" ;;
+    mark)     j="$(dl_add "$j" $'\n'"$DL_MARK")" ;;
+    markbad)  j="$(dl_add "$j" $'\n'"$DL_MARKBAD")" ;;
+  esac
+  rm -f "$w/_bmad-output/spawn-ledger.jsonl"
+  if [ "$c" = seq ]; then
+    dl_run "$g" "$w" "$(dl_add "$(dl_base)" $'\nDeliverable: x/y.md')" >/dev/null; n1="$(dl_rows "$w")"
+    dl_run "$g" "$w" "$j" >/dev/null; n2="$(dl_rows "$w")"
+    dl_run "$g" "$w" "$(dl_add "$(dl_base)" $'\nDeliverable: x/y.md')" >/dev/null; n3="$(dl_rows "$w")"
+    printf '%s-%s-%s' "$n1" "$n2" "$n3"; return
+  fi
+  o="$(dl_run "$g" "$w" "$j")"
+  printf '%s:%s' "$(dl_kind "$o")" "$(dl_rows "$w")"
+}
+ALL_DL=nodl,dl,dlmid,indent,bold,nopath,bgabsent,agent,fg,nosnap,noera,updcmd,updskill,updlead,leadtr,role,mark,markbad,seq
+DL_WANT='nodl=dl:0;dl=pass:1;dlmid=pass:1;indent=dl:0;bold=dl:0;nopath=dl:0;bgabsent=dl:0;agent=pass:1;fg=pass:1;nosnap=pass:1;noera=pass:1;updcmd=pass:1;updskill=pass:1;updlead=dl:0;leadtr=dl:0;role=pass:1;mark=pass:1;markbad=dl:0;seq=1-1-2'
+DL_LAB() { # DL_LAB <cell> -> what the cell establishes
+  case "$1" in
+    nodl) echo "a lead dispatch with no Deliverable line is refused by this deny and leaves no ledger row" ;;
+    dl) echo "the same prompt plus a column-0 'Deliverable: x/y.md' is not refused by this deny and is recorded" ;;
+    dlmid) echo "a column-0 Deliverable line after other prose is not refused (the grammar reads any line)" ;;
+    indent) echo "an indented '  Deliverable: x/y.md' is still refused (the row writer reads column 0 only)" ;;
+    bold) echo "'**Deliverable:** x/y.md' is still refused" ;;
+    nopath) echo "a Deliverable line with no path-shaped token is still refused" ;;
+    bgabsent) echo "a dispatch with no run_in_background key is refused (only an explicit false is foreground)" ;;
+    agent) echo "a nested spawn (payload agent_id) is not judged, and is recorded" ;;
+    fg) echo "run_in_background false is not judged" ;;
+    nosnap) echo "no pipeline snapshot file: not judged" ;;
+    noera) echo "the era sentence absent from the installed step file: not judged" ;;
+    updcmd) echo "a transcript whose last marker is the /ai-dlc-update command: not judged" ;;
+    updskill) echo "a transcript whose last marker is the ai-dlc-update Skill call: not judged" ;;
+    updlead) echo "an update marker followed by a later /ai-dlc marker is refused (the LAST marker decides)" ;;
+    leadtr) echo "a transcript whose last marker is /ai-dlc is refused" ;;
+    role) echo "a role with no readable team-role file: not judged" ;;
+    mark) echo "a brief whose one well-formed wait-for-deliverable.sh --mark line yields a mark_file: not this deny" ;;
+    markbad) echo "the same mark line without its findings=<n> field yields no mark_file and is refused" ;;
+    seq) echo "the ledger row count is 1 after an allowed call, still 1 after a refused one, and 2 after the next allowed one" ;;
+  esac
+}
+DL_TIP="$(for _c in ${ALL_DL//,/ }; do printf '%s=%s;' "$_c" "$(dl_cell "$HOOK" "$_c")"; done)"
+_old_ifs="$IFS"; IFS=';'
+for _c in $DL_WANT; do
+  case ";$DL_TIP" in
+    *";$_c;"*) ok "DELIVERABLE-LINE ${_c%%=*}: $(DL_LAB "${_c%%=*}") ('${_c#*=}')" ;;
+    *) bad "DELIVERABLE-LINE ${_c%%=*}: expected '${_c#*=}' ($(DL_LAB "${_c%%=*}")), got vector '$DL_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+SEP_DL=";"; CELLFN_DL=dl_cell; BASE_DL="$(want_lines ';' "$DL_WANT")"
+B_DL=$([ "$DL_TIP" = "$DL_WANT;" ] && echo 1 || echo 0)
+DL_CTL="$(mk_hooks_copy dl-control)"
+if [ -n "$DL_CTL" ]; then
+  fam_control DL "$DL_CTL" nodl "DELIVERABLE-LINE MUTANT CONTROL: an unmutated hooks copy scores the deny cell nodl as 'dl:0' (positive; every cell under --matrix)"
+else bad "DELIVERABLE-LINE MUTANT CONTROL is dead: no hooks copy"; fi
+dl_mut() { # dl_mut <tag> <exact-anchor-line> <replacement-line> <decides> <twins> <expected cell=value;...> <label>
+  fam_mut DL "$1" "$2" "$3" "$4" "$5" "$B_DL" "$6" "DELIVERABLE-LINE MUTANT $1 scores a kill: $7"
+}
+DL_IF='if [ -z "$DG_AGENT_ID" ] && [ "$ROLE_FILE_READABLE" = true ] && [ -z "$SPAWN_MARK_FILE" ] && [ -f "$DG_DL_SNAP" ] \'
+dl_mut dl-nodeny "$(grep -m1 -F '    *) dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its brief carries no' "$HOOK")" '    *) ;;' \
+  nodl,indent,bold dl,mark 'nodl=pass:1;indent=pass:1;bold=pass:1;dl=pass:1;mark=pass:1' \
+  "with the deny block's refusal removed a dispatch with no Deliverable line (and the indented and bolded near-misses) is allowed and recorded -- cells nodl, indent and bold move"
+dl_mut dl-nomark "$DL_IF" 'if [ -z "$DG_AGENT_ID" ] && [ "$ROLE_FILE_READABLE" = true ] && [ -f "$DG_DL_SNAP" ] \' \
+  mark markbad 'mark=dl:0;markbad=dl:0' \
+  "without the mark_file exemption a brief the hook can write a row for from its --mark line is refused -- cell mark alone moves"
+dl_mut dl-nobg "$(grep -m1 -F "run_in_background | tostring' 2>/dev/null)\" != false ] \\" "$HOOK")" '   && true \' \
+  fg bgabsent 'fg=dl:0;bgabsent=dl:0' \
+  "without the foreground exemption a run_in_background:false call, which the row writer writes no row for, is refused -- cell fg alone moves"
+dl_mut dl-noupd "$(grep -m1 -F "    *'/ai-dlc-update</command-name>'|" "$HOOK")" '    NO-SUCH-LAST-SKILL) ;;' \
+  updcmd,updskill updlead,leadtr 'updcmd=dl:0;updskill=dl:0;updlead=dl:0;leadtr=dl:0' \
+  "without the updater exemption (both marker forms) an /ai-dlc-update session is refused -- cells updcmd and updskill move, the later-/ai-dlc and lead-only transcripts do not"
+dl_mut dl-noagent "$DL_IF" 'if [ "$ROLE_FILE_READABLE" = true ] && [ -z "$SPAWN_MARK_FILE" ] && [ -f "$DG_DL_SNAP" ] \' \
+  agent nodl 'agent=dl:0;nodl=dl:0' \
+  "without the nested-spawn exemption a teammate's spawn is refused -- cell agent alone moves"
+dl_mut dl-nosnap "$DL_IF" 'if [ -z "$DG_AGENT_ID" ] && [ "$ROLE_FILE_READABLE" = true ] && [ -z "$SPAWN_MARK_FILE" ] \' \
+  nosnap nodl 'nosnap=dl:0;nodl=dl:0' \
+  "without the snapshot-file condition a project with no pipeline snapshot is refused -- cell nosnap alone moves"
+dl_mut dl-noera "$(grep -m1 -F '   && grep -qF -- "$DG_DL_ERA"' "$HOOK")" '   && true \' \
+  noera nodl 'noera=dl:0;nodl=dl:0' \
+  "without the era gate a project whose installed step file lacks the sentence is refused -- cell noera alone moves"
+dl_mut dl-norole "$DL_IF" 'if [ -z "$DG_AGENT_ID" ] && [ -z "$SPAWN_MARK_FILE" ] && [ -f "$DG_DL_SNAP" ] \' \
+  role nodl 'role=dl:0;nodl=dl:0' \
+  "without the readable-role condition a helper with no team-role file is refused -- cell role alone moves"
+dl_mut dl-rowfirst '  LAST_SKILL=""' '  mkdir -p "$SPAWN_STATE_DIR"; printf "{}\n" >> "$SPAWN_LEDGER"; LAST_SKILL=""' \
+  nodl,seq dl 'nodl=dl:1;seq=1-2-3;dl=pass:1' \
+  "a row written before the refusal survives a refused dispatch -- cells nodl and seq move, the dispatch that carries its line does not reach the block"
+[ "$B_DL" = 1 ] || bad "DELIVERABLE-LINE FIXTURE BROKEN: the unmutated vector '$DL_TIP' is not '$DL_WANT;', so every DL mutant above was scored against the wrong baseline"
 
 # ===== the matrix machinery itself, and the plain-run arm ===================================
 mx_probe && ok "matrix machinery probe: a seeded deciding trip is judged a kill, a seeded survivor is not, and a twin that trips is refused" \

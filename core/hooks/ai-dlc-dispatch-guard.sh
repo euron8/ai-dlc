@@ -1692,6 +1692,66 @@ case "$(printf '%s\n' "$DG_MARK_OUT" | sed -n 1p)" in
     case "$DG_MARK_OUT" in "rendered"$'\t'?*) SPAWN_MARK_FILE="${DG_MARK_OUT#*$'\t'}" ;; esac ;;
 esac
 
+# THE DELIVERABLE-LINE DENY (BL-819). ai-dlc-inflight-row.sh writes the lead's In-Flight row at
+# PostToolUse from the brief's `Deliverable: <path>` line, else from the ledger row's mark_file, and
+# with neither it writes NO row and exits 2 telling the lead to write the row by hand.
+# _gate-procedures.md already requires that line in every brief that owns a row. Measured on graph's
+# s322 lead transcripts (2026-11-09T00:00Z to 2026-11-11T10:30Z, all 442 lead Agent calls, every
+# prompt replayed through the hook's own deliverable_of): 348 lacked the line, the hook raised 260
+# "in-flight row NOT written" errors, and each error cost the lead hand-written --row-add calls (with
+# --dispatch-ts lookups, different-cells refusals and --row-replace repairs). A deny here costs one
+# re-sent Agent call, which carries the line; nothing launches, so nothing needs a row.
+#
+# SUBJECT: a LEAD dispatch (no payload agent_id) of a role with a readable team-role file (a
+# `general-purpose` helper has none and is no pipeline teammate), whose prompt yields no path to
+# deliverable_of and whose brief gives no mark_file (SPAWN_MARK_FILE, the hook's own fallback). So
+# the refused set is INSIDE the set the hook answers with "row NOT written", and a dispatch whose
+# row the hook can write passes. It is NARROWER than that set by one class: a lead dispatch whose
+# role has no readable team-role file still reaches the hook's error. Replayed over the s322 corpus:
+# all 260 hook-error dispatches refused, and the 5 other refusals never launched.
+# NOT JUDGED, each exactly where the hook writes no row and asks for none: a nested spawn; an
+# explicit `run_in_background: false` (a foreground call returns completed, and the hook writes no row
+# for a completed dispatch with no deliverable); no snapshot file; the era sentence absent from the
+# step file (the hook's ERA GATE); an /ai-dlc-update session (the hook's UPDATER GATE).
+# ORDER: placed BEFORE the spawn-ledger append, as every deny in this guard is, so a refused dispatch
+# leaves no ledger row for Check 22 or the waiter to read. The cheap tests run first; the transcript
+# scan runs only for a dispatch that would otherwise be refused.
+# deliverable_of IS SHARED BYTE-IDENTICALLY with ai-dlc-inflight-row.sh, and the dispatch-model-guard
+# fixture binds the two copies. A copy, not a sourced helper, for I25's reason.
+deliverable_of() {
+  LC_ALL=C awk '
+    /^Deliverable:/ {
+      sub(/^Deliverable:[[:blank:]]*/, "")
+      n = split($0, w, /[[:blank:]]+/)
+      for (i = 1; i <= n; i++) {
+        t = w[i]; gsub(/`/, "", t); sub(/^[(]+/, "", t); sub(/[.,;:)]+$/, "", t)
+        if (t == "" || index(t, "|")) continue
+        if (t ~ /\// || t ~ /\.[A-Za-z0-9]+$/) { print t; exit }
+      }
+      exit
+    }'
+}
+DG_DL_ERA='rows are written by the ai-dlc-inflight-row hook'
+case "${AI_DLC_STATE_DIR:-}" in
+  /*) DG_DL_SNAP="$AI_DLC_STATE_DIR/pipeline-snapshot.md" ;;
+  *)  DG_DL_SNAP="$PROJECT_DIR/${AI_DLC_STATE_DIR:-_bmad-output}/pipeline-snapshot.md" ;;
+esac
+if [ -z "$DG_AGENT_ID" ] && [ "$ROLE_FILE_READABLE" = true ] && [ -z "$SPAWN_MARK_FILE" ] && [ -f "$DG_DL_SNAP" ] \
+   && [ "$(printf '%s' "$INPUT" | jq -r '.tool_input.run_in_background | tostring' 2>/dev/null)" != false ] \
+   && grep -qF -- "$DG_DL_ERA" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/_gate-procedures.md" 2>/dev/null \
+   && [ -z "$(printf '%s\n' "$PROMPT" | deliverable_of 2>/dev/null)" ]; then
+  LAST_SKILL=""
+  TRANSCRIPT="$DG_TRANSCRIPT"
+  if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+    # >>> I126 SESSION-MARKER SCAN: the next line, byte-identical in every bound hook >>>
+    LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  fi
+  case "$LAST_SKILL" in
+    *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') ;;
+    *) dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its brief carries no \`Deliverable: <path>\` line, so ai-dlc-inflight-row.sh could write no In-Flight row for it and you would write that row by hand. Nothing was launched. Re-send the same dispatch with one line at the start of a line in the prompt: \`Deliverable: <the one path this teammate writes>\` (the path the brief already names, never an invented one; a sharded dispatch names its own shard path; several files: the primary one). The hook then writes the row with its dispatched-at stamp. A dispatch with no file to wait on (a commit, an edit set, a reply) is run in the foreground with \`run_in_background: false\`, which this check does not judge. Grammar: the FIRST line beginning \`Deliverable:\`, its first token carrying a \`/\` or a dotted extension (_gate-procedures.md, Sub-step snapshot update, item 3)." ;;
+  esac
+fi
+
 mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true
 jq -nc \
    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" \

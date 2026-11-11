@@ -60,6 +60,9 @@ When a step file says "run sub-step snapshot update", execute:
    requires the brief to name, never invented to fill the cell); each sharded
    dispatch's brief carries its own path. Add this line to the brief's ending
    described in the `--mark` paragraph of the bounded-join procedure below.
+   The dispatch guard refuses a background dispatch whose brief carries
+   neither this line nor a `--mark` line; nothing launches, so re-send it
+   with the line added.
    When a brief lacks the line the hook writes no row and you receive its
    message naming the call. Make that call, with `<ts>` the output of
    `scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts <agentId>`, never a
@@ -161,8 +164,8 @@ teammate delivers by file (Rule 20): **the deliverable file IS the handle.**
 beat is a dead beat: its exit trap clears the in-flight marker before your turn ends, so the join you believe is armed is not, and the turn-end hook reports no
 live wait over a teammate that has not delivered.
 
-**A teammate's markdown result file is closed by `--mark` and joined `--complete`.** Every brief naming one as its deliverable ends with ONE line, rendered here and copied, never retyped:
-`<lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>`. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path the brief carries for a worktree-isolated
+**A teammate's markdown result file is closed by `--mark` and joined `--complete`.** Every brief naming one as its deliverable ends with TWO lines, rendered here and copied, never retyped:
+`Deliverable: <file>` at line start, then `<lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>`. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path the brief carries for a worktree-isolated
 teammate, else `scripts/ai-dlc`. That brief also carries `<deliverable>`, the absolute path of the file inside the teammate's OWN worktree and never under its `_bmad-output/planning-artifacts/`;
 `<file>` is that path, and the beat watches it. `<shard>` is `none` for a non-shard dispatch. A non-review file passes `findings=0` with `<role>` its role (`dev`, `ops`, `qa`): only the shard merges
 check `findings=` against parsed findings, and `join-remediator-shards.sh` and `content-seal.sh` read term 3 as a role. Out of scope: JSON and JSONL (the adjudicator's `.verdict.json`,
