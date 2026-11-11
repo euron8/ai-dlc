@@ -11,3 +11,4 @@
 !core/scripts/wfd-start-of.sh
 # The shared mutant-kill helper: every kill is emitted through its mutant_killed.
 !core/fixtures/lib/mutant.sh
+# Section 29 stages the base script from the optional pin in git.decl (absent on a consumer, where its SKIP branch decides).

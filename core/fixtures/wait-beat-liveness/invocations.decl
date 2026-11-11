@@ -2,7 +2,14 @@
 # BL-868: 602 -> 363, the armed judge's count ("invocation budget ok: 363 start(s)"). The seed clock reads the real date
 # binary (not the clockbin/date shim, 541 -> 286 starts, -255), and the ps/perl stubs are #!/bin/bash, so the counter now
 # sees them (+15); those two sum to 362, and the remaining 1 start is measured but not attributed to either.
-363 *
+# BL-975: 363 -> 371, two agreeing counted runs. Section 29's eight mutants (M62-M69) each cost the one `bash -n` mutant()
+# runs on its copy (+8); its arms run the subject in process and format every stamp with the real date binary.
+# BL-975 fold: 371 -> 374, two agreeing counted runs. The three new section-29 mutants (M70 failed-clear-on-not-failed,
+# M71 open-request-bound-480, M72 dashed-id-skipped) each cost mutant()'s one `bash -n` (+3); the new seeds S15, S16
+# and the S9 dashed case run the subject in process.
+# BL-975 delta fold: 374 -> 375, two agreeing counted runs on a clean detached worktree. The new mutant
+# failed-per-agent-key (M73) costs mutant()'s one `bash -n` (+1); the new seed S17 (S29q) runs the subject in process.
+375 *
 0 core/fixtures/lib/mutant.sh
 33 core/scripts/merge-adversarial-shards.sh
 0 core/scripts/validate-adversarial-convergence.sh

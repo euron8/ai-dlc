@@ -148,6 +148,12 @@ harness re-invokes you with its result. Branch on the exit code THEN:
     exit 1 — NON-DELIVERY. Re-dispatch ONCE (--reset), then HARD_BLOCK — unless the
              beat prints `LIVE DISPATCH` or `STOPPED DISPATCH`, in which case read
              that agent's transcript first, as the block says.
+             `DISPATCH FAILED agent-<id>` — that dispatched agent died before delivering
+             (harness failed notice, or an api-request with no reply past the bound):
+             resume THAT agent by its id (a harness failed notice also allows
+             re-dispatching its deliverable). The In-Flight row's deliverable is your own
+             claim, so check it against the agent's description before resuming; never
+             map seats to agents from memory.
 
 **The one hard invariant: never end your turn on an outstanding join
 without a live backgrounded beat armed.** The armed beat IS your own

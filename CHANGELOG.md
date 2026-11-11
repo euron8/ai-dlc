@@ -19,6 +19,46 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1056.0] - 2026-11-11
+
+### BL-975 — wait-for-deliverable names a dispatched agent that died before delivering (DISPATCH FAILED)
+
+`core/scripts/wait-for-deliverable.sh`: a beat run with `--dispatch` now prints a `DISPATCH FAILED agent-<id>` block for each dispatched agent that died before delivering, while at least one of its joined targets is not delivered by `is_delivered`. The block prints at every beat end and in `--status`. An In-Flight row never acquits an agent: the rows are the lead's claim, and in the motivating event they named 0 of 9 real deliverables. Two arms decide:
+
+- Arm A, the harness's own failed notice. One awk pass over the lead transcript (`${TEAMMATE_DIR%/subagents}.jsonl`) reads every dispatched id at once. The agent is FAILED when the last `<task-id>` notice for it carries `<status>failed</status>` and no line of `agent-<id>.jsonl` has a newer timestamp, so a resume acquits it. It is the only arm that sees an agent whose transcript ends in an `"isApiErrorMessage":true` assistant line. With no lead transcript, arm A reads nothing.
+- Arm B, an open request past a bound. The newest `{"type":"api-request"` line (the closing quote excludes `api-request-blob` and `api-request-shape`) sits after the agent's last assistant or user line. The agent is FAILED when now minus that request's own timestamp is at least `AI_DLC_OPEN_REQUEST_SECS`, default 1200 s. Attachment, blob, shape and system lines do not close the request, and the arm is not keyed on mtime.
+
+The bound's evidence, over 6,023 graph subagent transcripts and 101,937 open intervals (each api-request send until the next send or the closing assistant line):
+
+- The longest open interval is 853 s.
+- 16 intervals are at or above 480 s, 10 at or above 600 s, and 0 at or above 900 s.
+- 1200 s is 1.41x the 853 s maximum.
+
+Correction: an earlier measurement keyed on send-to-reply only (newest send to the next assistant line, maximum 372 s) had set the bound at 480 s. The tip adversary refuted it. A live agent's send can sit unanswered until the harness re-sends, and live retry gaps run up to 853 s, so 16 live intervals crossed 480 s. The bound is keyed on the newest send, never the first of a retry run, because first-of-run gaps reach 1,662 s.
+
+Behaviour on a hit:
+
+- The first beat of a join to see the agent FAILED breaks its poll early, once per agent per join, and refunds that beat's charge on every pending counter. Grants are untouched. The block says: "This beat ended early on that report: its beat charge was refunded, and the time already waited is not charged."
+- The sidecar `${COUNTER_DIR}/failed-<id>-<key>` is keyed per target, because the join is. It is cleared on delivery of that target and by `--reset`. A later beat that finds every sidecar does not break early but still prints the block. An agent that flaps FAILED, live, FAILED inside one join is refunded once.
+- A FAILED agent gets no `--complete-repair` LIVE grant: `dispatch_live` returns 1 for it, because its last turn may be an API error line that reads as a fresh turn. The early break itself changes no exit code.
+- Dashed agent ids are accepted (`[A-Za-z0-9_-]`); any other id is skipped. An id is only ever compared as a literal.
+- The In-Flight table now has one reader, `inflight_rows`, shared by `row_on_delivery` and the report. The report quotes the rows as the first read in the process saw them, before any `row_on_delivery` write.
+- The report is echoed, never `say`, so `--quiet` does not hide a dead agent.
+
+Carriers: `core/skills/ai-dlc/rule-bodies/rule-29.md`, `core/skills/ai-dlc/steps/_dispatch-protocol.md` and `core/skills/ai-dlc/steps/_gate-procedures.md` tell the lead to resume THAT agent by its id (a harness failed notice also allows re-dispatching its deliverable). They also tell it to check the In-Flight row's deliverable against the agent's description first, and never to map seats to agents from memory. `core/hooks/ai-dlc-recover.sh` is NOT edited: an edit there moved gate-resume's BL-457 emission-length arms and was reverted.
+
+Receipt: `core/fixtures/wait-beat-liveness` section 29, with 17 seed arms (`s29a`–`s29q`) and 12 new mutants. They are open-request-on-mtime, attachment-closes-request, failed-gate-removed, failed-no-resume-acquittal, failed-no-early-break, failed-no-refund, failed-acquit-from-row, failed-precedence-removed, failed-clear-on-not-failed, open-request-bound-480, dashed-id-skipped and failed-per-agent-key. Each is killed by its named arm under `--matrix <name>`, with `s1` green. Section 29 runs on the world's virtual clock, and its S8 compares the no-`--dispatch` output against the base script, not against a golden taken from the script under test.
+
+Premise correction (graph s322, read only):
+
+- The event's 1.2 h could not be moved in-session. The lead took no turn from 17:57:54Z until the operator's 18:59:43Z, during a disk outage, where a gap in the records may be failed writes rather than inactivity.
+- There were 5 resumes, 4 of them to agents that had already delivered, because the In-Flight rows named 0 of 9 real deliverables. This replaces the earlier reading of 4 resumes, 3 of them to delivered agents. Dead parts 5, 6 and 7 were never resumed.
+- The entry's expected movement is now the reachable bound: about 21 minutes after the last send for arm B (1200 s plus one 60 s check), and the harness-failed-notice arm at its next check. This does NOT meet the entry's original "under 10 minutes" wording.
+
+Pull classification: Were a consumer pull of this release ever authorized, `self-update-gate.sh` classifies it RULEBOOK-COUPLED and DEFERRED (SELF-UPDATE-DEFER rulebook-coupled-fixtures on `_dispatch-protocol.md` and `_gate-procedures.md`), so it would apply at step 7; this release dispatches no pull. Controls, measured on an `install.sh`-built scratch consumer: a rulebook-only range classifies DEFER, and a script-only range classifies OK.
+
+BL-975 is PARTIAL: the entry stays open until an `Outcome measured:` line from the first graph sprint whose transcripts contain a dispatched agent dying with its request open; no LANDED line, no rotation.
+
 ## [0.1055.0] - 2026-11-11
 
 ### BL-976 (PARTIAL): an `adversary` brief naming a shard directory the merge will refuse is denied at dispatch, by the merge's own grammar
