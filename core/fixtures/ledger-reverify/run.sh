@@ -6463,6 +6463,11 @@ lr_unit_bl890() {
   _wc="$(dirname "$DIST")/bl890-worlds"
   ASSERTIONS=$((ASSERTIONS + 1))
   _o="$(bash "$_rec" "$(dirname "$CLOSER")" "" "$_wc" 2>&1)"; _rc=$?
+  # SCRUB-RAN (BL-965): the receipt's AI_DLC_* scrub must have unset its probe; presence-shaped, so a
+  # receipt that printed nothing fails it too.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if grep -q '^SCRUB-RAN ' <<< "$_o"; then printf '  ok    %-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl890-SCRUB-RAN"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s receipt-bl890.sh printed no SCRUB-RAN line -- env is unreachable and its AI_DLC_* scrub is a no-op\n' "bl890-SCRUB-RAN"; fi
   if [ "$_rc" -ne 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl890" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"
@@ -6535,6 +6540,10 @@ lr_unit_bl932() {
   _wc="$(dirname "$DIST")/bl932-worlds"
   ASSERTIONS=$((ASSERTIONS + 1))
   _o="$(bash "$_rec" "$_rd" "" "$_wc" 2>&1)"; _rc=$?
+  # SCRUB-RAN (BL-965), as in lr_unit_bl890.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if grep -q '^SCRUB-RAN ' <<< "$_o"; then printf '  ok    %-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl932-SCRUB-RAN"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s receipt-bl932.sh printed no SCRUB-RAN line -- env is unreachable and its AI_DLC_* scrub is a no-op\n' "bl932-SCRUB-RAN"; fi
   if [ "$_rc" -ne 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the shipped engine did not answer every cell (rc=%s): %s\n' "receipt-bl932" "$_rc" "$(printf '%s\n' "$_o" | grep -v '^ok ' | head -6 | tr '\n' ' ')"

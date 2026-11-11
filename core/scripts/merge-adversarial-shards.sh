@@ -1248,25 +1248,25 @@ merge_place
 # THE PLACEMENT GRAMMAR, on the path STRING alone: no existence test and no cd, so --check-shard-dir
 # asks it at dispatch time, before the directory exists, with the same lines the merge runs.
 merge_place() {
-SHARD_BASE="$(basename "$SHARD_DIR")"
-SHARDS_PARENT="$(dirname "$SHARD_DIR")"
-[ "$(basename "$SHARDS_PARENT")" = "shards" ] \
+SHARD_BASE="$(basename -- "$SHARD_DIR")"
+SHARDS_PARENT="$(dirname -- "$SHARD_DIR")"
+[ "$(basename -- "$SHARDS_PARENT")" = "shards" ] \
   || refuse "$SHARD_DIR is not under a shards/ directory (placement: s<N>/shards/<artifact>-p<M>/)"
-SPRINT_DIR="$(dirname "$SHARDS_PARENT")"
-case "$(basename "$SPRINT_DIR")" in
+SPRINT_DIR="$(dirname -- "$SHARDS_PARENT")"
+case "$(basename -- "$SPRINT_DIR")" in
   s[0-9]*) ;;
   *) refuse "$SPRINT_DIR is not a sprint directory s<N>" ;;
 esac
 }
 merge_rec_paths() {
-REC_PLAN="$(dirname "$SPRINT_DIR")"
-[ "$(basename "$REC_PLAN")" = "planning-artifacts" ] \
+REC_PLAN="$(dirname -- "$SPRINT_DIR")"
+[ "$(basename -- "$REC_PLAN")" = "planning-artifacts" ] \
   || refuse "$SPRINT_DIR is not under a planning-artifacts/ directory; each shard's writer is read from <state>/planning-artifacts/.artifact-writes.jsonl, so the shard dir is <state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/"
-REC_STATE="$(dirname "$REC_PLAN")"
+REC_STATE="$(dirname -- "$REC_PLAN")"
 REC_WRITES="$REC_PLAN/.artifact-writes.jsonl"
 REC_SPAWNS="$REC_STATE/spawn-ledger.jsonl"
 REC_PROBES="$REC_STATE/subagent-context.jsonl"
-REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR")/shards/$SHARD_BASE/"
+REC_PREFIX="$(basename -- "$REC_STATE")/planning-artifacts/$(basename -- "$SPRINT_DIR")/shards/$SHARD_BASE/"
 }
 # THE NAME GRAMMAR: <artifact>-p<M>, and THE SERIES STEM IS NOT THE ARTIFACT (header). Split in two so
 # --check-shard-dir can tell a name the convergence merge never reads (no -p<M>: an elicitation dir,

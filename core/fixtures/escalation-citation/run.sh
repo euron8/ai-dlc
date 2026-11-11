@@ -1036,6 +1036,7 @@ fl_cells "$FL_SRC_DIR"
 if [ "$FL_CELLS" = "001001000100000001" ] && [ "$EN_IS_DIST" -ne 1 ]; then
   printf '  SKIP %-30s the installed validators predate the normalised citation floor; this fixture ships one pull ahead of them\n' "pending-padded.md"
 else
+  KF_EXTRA=$((KF_EXTRA + 7))
   i=0
   for nm in $fl_names; do
     i=$((i + 1)); N=$((N + 1))
@@ -1192,10 +1193,10 @@ for c in $LR_NAMES; do if lr_cell "$VALIDATOR" "$c"; then LR_CELLS="${LR_CELLS}1
 # cells included (measured against d87a5940f^: `NO genuine` at the gate, `NONE` at --any-authorized).
 # SKIP on a consumer,
 # FAIL in the distribution.
-# 25, plus 3 empty-file and 6 refusal kills where those sections ran, less any refusal mutant a
-# masked cell made unscorable (KF_EXTRA, raised inside each
-# non-SKIP branch, so a consumer SKIP of either section does not demand kills it cannot score).
-KILL_FLOOR=$((25 + KF_EXTRA))
+# 18 always-run corpus kills, plus 3 empty-file, 6 refusal and 7 citation-floor kills where those
+# sections ran, less any refusal mutant a masked cell made unscorable (KF_EXTRA, raised inside each
+# non-SKIP branch, so a consumer SKIP of any section does not demand kills it cannot score).
+KILL_FLOOR=$((18 + KF_EXTRA))
 if [ "$LR_CELLS" = "0111100101111111" ] && [ "$EN_IS_DIST" -ne 1 ]; then
   printf '  SKIP %-30s the installed validator predates the lead-interpretation rule; this fixture ships one pull ahead of it\n' "lr/"
 else
@@ -1316,6 +1317,14 @@ fi
 N=$((N + 1))
 if [ "$KILLS" -ge "$KILL_FLOOR" ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
+# KILL-FLOOR EQUALITY. In the distribution no section SKIPs, so every kill site the run reaches is
+# one the floor must count: a floor below KILLS is a floor that stopped counting a section (an
+# increment the constant at KILL_FLOOR= then overwrites reads exactly like one that landed).
+if [ "$EN_IS_DIST" -eq 1 ]; then
+  N=$((N + 1))
+  if [ "$KILLS" -eq "$KILL_FLOOR" ]; then printf '  ok   %-30s %s kill(s) = floor %s -- every section that ran is counted\n' "KILL-FLOOR-EQ" "$KILLS" "$KILL_FLOOR"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s) != floor %s; a release adding kills to this fixture must raise KILL_FLOOR by exactly its additions (18 + KF_EXTRA, KF_EXTRA raised inside the section that scores them)\n' "KILL-FLOOR-EQ" "$KILLS" "$KILL_FLOOR"; fi
+fi
 
 echo
 if [ "$FAIL" -gt 0 ]; then echo "FAIL: $FAIL of $N assertions wrong."; exit 1; fi

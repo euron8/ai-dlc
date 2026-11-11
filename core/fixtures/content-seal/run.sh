@@ -35,6 +35,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX A4 decides=dL twins=dA
 # MUTANT-MATRIX A6miss decides=dE twins=dF
 # MUTANT-MATRIX A6 decides=dF twins=dE
+# CSD (merge-arms.sh CS-CSD) drops `--` from the merge's basename/dirname; its cells are --check-shard-dir dirs
+# asked of the CLI in one run per program, and the plain dir is the twin that answers OK under both.
+# MUTANT-MATRIX CSD decides=dashx,stderr twins=plain
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/content-seal/run.sh --matrix
 #
 # Exit: 0 every arm passed, 1 an arm failed, 2 the fixture could not run.

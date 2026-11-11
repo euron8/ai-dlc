@@ -87,6 +87,13 @@
 #              dated activity line with a colon is written (near-miss); after the --set create all
 #              three read route.md, the same activity line is then written (the counted state), and
 #              `* current_step_file: wrong.md` into Recent Activity is still exit 2
+#   IFADDREFUSE  --line-add into In-Flight Teammates of a row whose status is free text or `done`: exit 2,
+#              the value named, unchanged (BL-963)
+#   IFADDWRITE   the twin: a member-status row and a --- rule are written by --line-add there; a header
+#              into a header-less section is HDRREMEDY's applied half
+#   IFADDDUPHDR  a second header line-added beside the present one: exit 2, unchanged
+#   m-noifadd  --line-add into In-Flight Teammates without the status check -> IFADDREFUSE; its anchor
+#              `ifstatus_chk(B, 0)` is asserted to occur once
 # CLOCK AND BACKGROUND, per arm: only LOCKWAIT runs a background process, and it blocks on the
 # writer's own file and on `wait`, never on a sleep's length; its poll loop is bounded by the writer
 # being alive. LOCKSTALE's dead pid is a subshell reaped before the lock is seeded. No arm reads the
@@ -136,16 +143,20 @@
 # mutant is added or changed, by the REMEASURE command below, run from the repo root.
 # also trips: m-nocheck -> FUTUREROW,MALFORMED
 # also trips: m-nopay -> FUTUREROW,MALFORMED
-# also trips: m-early -> VALID,FUTUREROW,MALFORMED,NEARMISS,OLDLINE,LOCKSTALE,READERS,LIVE,SECADD,SECMOVE,SWALLOW,WRAPPED,KEYLINE,HDRREMEDY,SECDUP,POSLINE
+# also trips: m-early -> VALID,FUTUREROW,MALFORMED,NEARMISS,OLDLINE,LOCKSTALE,READERS,LIVE,SECADD,SECMOVE,SWALLOW,WRAPPED,KEYLINE,HDRREMEDY,SECDUP,POSLINE,IFLINEWRITE,IFADDWRITE
 # also trips: m-rc1 -> FUTUREROW,MALFORMED
 # also trips: m-setappend -> READERS
-# also trips: m-nomember -> ROWREPLACE
+# also trips: m-nomember -> ROWREPLACE,IFLINEREFUSE,IFADDREFUSE,IFADDDUPHDR
 # also trips: m-initheading -> SETCREATE,SECDUP,POSLINE
 # also trips: m-nokey -> POSLINE
 # also trips: m-noskelallow -> POSLINE
+# also trips: m-ifhdrany -> IFADDDUPHDR
+# also trips: m-ifrefuseall -> IFADDWRITE
+# also trips: m-noifadd -> IFADDDUPHDR
 # also trips: m-nolock, m-blockline, m-blockcontent -> none
 # also trips: m-secorder, m-secmovecanon, m-swallowtail, m-rowdiff, m-wrapend, m-allowall -> none
 # also trips: m-rowiddup, m-secprefix, m-hdrremedy, m-secdup, m-curbranch, m-posdash, m-keydash, m-nofallback, m-blockfb -> none
+# also trips: m-noifguard, m-ifsepwide -> none
 # MUTANT-MATRIX m-nocheck decides=FUTURE twins=VALID
 # MUTANT-MATRIX m-nopay decides=FUTURE twins=VALID
 # MUTANT-MATRIX m-early decides=FUTURE twins=NOVAL
@@ -177,6 +188,7 @@
 # MUTANT-MATRIX m-ifrefuseall decides=IFLINEWRITE twins=IFLINEREFUSE
 # MUTANT-MATRIX m-ifhdrany decides=IFLINEREFUSE twins=IFLINEWRITE
 # MUTANT-MATRIX m-ifsepwide decides=IFLINEREFUSE twins=IFLINEWRITE
+# MUTANT-MATRIX m-noifadd decides=IFADDREFUSE twins=IFADDWRITE
 # MUTANT-MATRIX-CONTROL control why=the unmutated copy must write VALID and refuse FUTURE through the mutant harness so a mutant verdict is attributable to the mutation
 # The four mutants are a loop over a spec list, so the name reaches mutant_killed as a variable:
 # MUTANT-MATRIX-DYNAMIC mutants why=one scoring function takes every mutant name as an argument and every name keeps its own row
@@ -730,10 +742,44 @@ cell() {
       { [ "$RC" = 0 ] && grep -qxF -- "agent  |  role | deliverable | dispatched-at | status" "$s"; } || miss="$miss header rc=$RC $OUT"
       [ -z "$miss" ] && return 0
       CELL_MSG="$miss"; return 1 ;;
+    IFADDREFUSE)
+      # BL-963. --line-add into In-Flight Teammates applies the status vocabulary to the row it adds:
+      # free text and `done` are exit 2 with the cell VALUE named in quotes, file unchanged.
+      local w="$WORK/$t-ifar" miss="" st
+      s="$(seed "$w" 0)"; cs="$(cksum < "$s")"
+      for st in "18/19 delivered (still out: x)" done; do
+        drive "$pr" "$s" --line-add "In-Flight Teammates" "a2222222222222222 | qa | /w/b.md | 2026-10-25T21:00:00Z | $st" --bottom
+        [ "$RC" = 2 ] || miss="$miss rc=$RC($st)"
+        grep -qF "the status cell '$st' is not in-flight" <<<"$OUT" || miss="$miss msg($st)=$OUT"
+        [ "$(cksum < "$s")" = "$cs" ] || miss="$miss changed($st)"
+      done
+      [ -z "$miss" ] && return 0
+      CELL_MSG="$miss"; return 1 ;;
+    IFADDWRITE)
+      # BL-963 twin. A member-status row added by --line-add into In-Flight Teammates is rc 0 and
+      # written (the guard is not refuse-all), and so is a --- rule.
+      local w="$WORK/$t-ifaw" miss="" row="a2222222222222222 | qa | /w/b.md | 2026-10-25T21:00:00Z | in-flight"
+      s="$(seed "$w" 0)"
+      drive "$pr" "$s" --line-add "In-Flight Teammates" "$row" --bottom
+      { [ "$RC" = 0 ] && grep -qxF -- "$row" "$s"; } || miss="$miss member rc=$RC $OUT"
+      drive "$pr" "$s" --line-add "In-Flight Teammates" "---- | ---- | ---- | ---- | ----" --bottom
+      { [ "$RC" = 0 ] && grep -qxF -- "---- | ---- | ---- | ---- | ----" "$s"; } || miss="$miss rule rc=$RC $OUT"
+      [ -z "$miss" ] && return 0
+      CELL_MSG="$miss"; return 1 ;;
+    IFADDDUPHDR)
+      # BL-963. A second header line-added beside the one present is a row whose status cell reads
+      # `status`: exit 2, file unchanged, one header. (A header into a header-less section is written:
+      # HDRREMEDY's applied half.)
+      local w="$WORK/$t-ifdh" miss=""
+      s="$(seed "$w" 0)"; cs="$(cksum < "$s")"
+      drive "$pr" "$s" --line-add "In-Flight Teammates" "agent | role | deliverable | dispatched-at | status" --bottom
+      { [ "$RC" = 2 ] && grep -qF "the status cell 'status' is not in-flight" <<<"$OUT" && [ "$(cksum < "$s")" = "$cs" ]; } || miss="$miss rc=$RC $OUT"
+      [ -z "$miss" ] && return 0
+      CELL_MSG="$miss"; return 1 ;;
     *) echo "MATRIX BROKEN unknown cell $c" >&2; exit 2 ;;
   esac
 }
-CELLS="VALID FUTURE PIPED FUTUREROW MALFORMED NEARMISS OLDLINE AMBIG-zero AMBIG-two AMBIG-cells NOVAL LOCKWAIT LOCKSTALE LOCKTIMEOUT BLOCKSET BLOCKCONTENT STATUSVOC READERS SETBOLD LIVE SECADD SECMOVE SWALLOW ROWREPLACE WRAPPED KEYLINE SETCREATE ROWIDDUP HDRREMEDY SECDUP POSLINE IFLINEREFUSE IFLINEWRITE"
+CELLS="VALID FUTURE PIPED FUTUREROW MALFORMED NEARMISS OLDLINE AMBIG-zero AMBIG-two AMBIG-cells NOVAL LOCKWAIT LOCKSTALE LOCKTIMEOUT BLOCKSET BLOCKCONTENT STATUSVOC READERS SETBOLD LIVE SECADD SECMOVE SWALLOW ROWREPLACE WRAPPED KEYLINE SETCREATE ROWIDDUP HDRREMEDY SECDUP POSLINE IFLINEREFUSE IFLINEWRITE IFADDREFUSE IFADDWRITE IFADDDUPHDR"
 
 echo "snapshot-update-stamps:"
 
@@ -772,6 +818,9 @@ if cell SECDUP "$PROG" ship; then ok "SECDUP: a duplicated Open Items heading lo
 if cell POSLINE "$PROG" ship; then ok "POSLINE: \`* current_step_file:\` and bare \`current_step_file:\` lines are refused, and the shipped continue, recover and Check 8 readers read no wrong position"; else bad "POSLINE: $CELL_MSG"; fi
 if cell IFLINEREFUSE "$PROG" ship; then ok "IFLINEREFUSE: --line-replace into In-Flight Teammates refuses a free-text and a done status cell, names the value, file unchanged"; else bad "IFLINEREFUSE: $CELL_MSG"; fi
 if cell IFLINEWRITE "$PROG" ship; then ok "IFLINEWRITE: --line-replace writes a member status row, a Recent Activity line and a rewritten --- rule"; else bad "IFLINEWRITE: $CELL_MSG"; fi
+if cell IFADDREFUSE "$PROG" ship; then ok "IFADDREFUSE: --line-add into In-Flight Teammates refuses a free-text and a done status cell, names the value, file unchanged"; else bad "IFADDREFUSE: $CELL_MSG"; fi
+if cell IFADDWRITE "$PROG" ship; then ok "IFADDWRITE: --line-add into In-Flight Teammates writes a member status row and a --- rule"; else bad "IFADDWRITE: $CELL_MSG"; fi
+if cell IFADDDUPHDR "$PROG" ship; then ok "IFADDDUPHDR: --line-add of a second header beside the present one is refused, file unchanged"; else bad "IFADDDUPHDR: $CELL_MSG"; fi
 
 left="$(ls -a "$WORK"/*/_bmad-output 2>/dev/null)"
 n_out="$(grep -c 'pipeline-snapshot\.md$' <<<"$left")" || n_out=0
@@ -942,6 +991,15 @@ mp="$(mkmutn m-ifsepwide 'if (cc[j2] !~ /^[ \t]*:?---+:?[ \t]*$/) rule = 0' 'if 
 # m-ifrefuseall: the guard refuses every In-Flight table row, member or not (killed by the member-status arm).
 mp="$(mkmutn m-ifrefuseall 'if (!statuscell_ok(v)) die(7, "refused: the status cell \047" v' 'if (1) die(7, "refused: the status cell \047" v')" \
   && score m-ifrefuseall "$mp" || bad "m-ifrefuseall: mutation did not apply"
+
+# The BL-963 mutant. m-noifadd: --line-add into In-Flight Teammates no longer applies the status
+# vocabulary. Its anchor is the --line-add call alone (m-noifguard's is the --line-replace one), so the
+# anchor must occur exactly once in the program, or the mutation could land on another site.
+n_ifadd="$(grep -cF 'ifstatus_chk(B, 0)' "$PROG")" || n_ifadd=0
+n_ifrep="$(grep -cF 'ifstatus_chk(C, h)' "$PROG")" || n_ifrep=0
+if [ "$n_ifadd" = 1 ] && [ "$n_ifrep" = 1 ]; then ok "m-noifadd anchor: ifstatus_chk(B, 0) occurs once, beside the one m-noifguard anchor"
+else bad "m-noifadd anchor: ifstatus_chk(B, 0) occurs $n_ifadd time(s) and ifstatus_chk(C, h) $n_ifrep, not once each"; fi
+mp="$(mkmutn m-noifadd 'ifstatus_chk(B, 0)' 'nop = 0')" && score m-noifadd "$mp" || bad "m-noifadd: mutation did not apply"
 
 # RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
 # an empty matrix count cannot come from a ledger nothing writes.

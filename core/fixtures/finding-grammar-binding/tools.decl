@@ -11,3 +11,5 @@ sed
 grep
 cmp
 tr
+chmod
+id

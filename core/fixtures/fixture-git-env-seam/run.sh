@@ -43,7 +43,8 @@
 # the UNMUTATED copy runs through the same harness in the same battery, so a
 # broken harness cannot let a mutant score a kill.
 #
-# THE MUTANT MATRIX. Five mutants (m1 m2 m3 m4 on arm A, b2 on arm B). Per push each runs on its DECIDING cell
+# THE MUTANT MATRIX. Six mutants (m1 m2 m3 m4 on arm A, b2 on arm B, u127 on arm URC; u127 is driven once,
+# outside the m-loop, and in --matrix prints its U and URC cells). Per push each runs on its DECIDING cell
 # and the TWIN cell U (the same driven fixture with GIT_DIR unset, which no seam mutation can reach, so it stays
 # green for every mutant). `--matrix` (an argv flag) runs every mutant over every cell A B U and prints one
 # MATRIX row per cell with killed=yes|no plus a MATRIX-ROW with tripped=[...], from matrix-lib.sh, then stops.
@@ -54,6 +55,10 @@
 # MUTANT-MATRIX m3 decides=A twins=U
 # MUTANT-MATRIX m4 decides=A twins=U
 # MUTANT-MATRIX b2 decides=B twins=U
+# MUTANT-MATRIX u127 decides=URC twins=U
+# Measured --matrix (BL-965 re-measure, plain run, where `env` always resolved): m1 m3 m4 trip [A B], m2 [A],
+# b2 [B], u127 [URC]; every U cell is INTACT at inner rc 0. Under hermetic-run.sh the U cells first ran at all
+# when `env` entered tools.decl -- before it, each was an instant 127 that read INTACT.
 # MUTANT-MATRIX-DYNAMIC m-loop why=the loop for _m in m1 m2 m3 m4 b2 passes "$_m" to mutant_killed; each of the five carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-git-env-seam/run.sh --matrix
 set -u
@@ -141,19 +146,27 @@ victim_username() { # victim_username <victim-root>
 
 # --- the harness ------------------------------------------------------------
 # Run the driven fixture from TREE, with GIT_DIR armed at the victim, and report
-# "<count-after> <victim-is-a-repo> <core.bare> <user.name>".
-drive() { # drive <tree> <victim-root> [fixture] [armed: yes|no] -> "<n> <yes|no> <bare> <name>"
-  local tree="$1" v="$2" who="${3:-$SUBJECT}" armed="${4:-yes}" admin
+# "<count-after> <victim-is-a-repo> <core.bare> <user.name> <unarmed rc>".
+#
+# THE UNARMED BRANCH RECORDS THE INNER FIXTURE'S EXIT (BL-965), and arm URC asserts it is 0. The call discards
+# the inner fixture's output, so before this field a runner that never started -- `env` undeclared in tools.decl,
+# command-not-found under hermetic-run.sh -- left the victim untouched and scored U INTACT: the twin every mutant
+# is compared against was a cell in which nothing ran. U_RUNNER is the command the branch runs through, a
+# variable so mutant u127 can route it to a name that resolves nowhere (instant 127). The armed branch reports `-`.
+U_RUNNER=env
+drive() { # drive <tree> <victim-root> [fixture] [armed: yes|no] -> "<n> <yes|no> <bare> <name> <rc|->"
+  local tree="$1" v="$2" who="${3:-$SUBJECT}" armed="${4:-yes}" admin urc=-
   admin="$(new_victim "$v")" || return 1
   if [ "$armed" = yes ]; then
     ( cd "$tree" && GIT_DIR="$admin" bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
   else
-    ( cd "$tree" && env -u GIT_DIR bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
+    ( cd "$tree" && "$U_RUNNER" -u GIT_DIR bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
+    urc=$?
   fi
   local n repo=no
   n="$(victim_count "$admin" "$v/wt")"
   [ -d "$v/repo/.git" ] && repo=yes
-  printf '%s %s %s %s\n' "$n" "$repo" "$(victim_bare "$v")" "$(victim_username "$v")"
+  printf '%s %s %s %s %s\n' "$n" "$repo" "$(victim_bare "$v")" "$(victim_username "$v")" "$urc"
 }
 
 # One predicate for "the victim came through untouched", so no arm can assert a
@@ -298,13 +311,21 @@ ok "H2 driven fixture $SUBJECT runs in the copy tree — mutant verdicts are abo
 #   U  $SUBJECT   with GIT_DIR UNSET: nothing is inherited, so no mutation of the seam can reach the victim.
 #      It is the measured-green twin of every mutant below: a mutant that wrecks A but also U would be
 #      wrecking by some route other than the inherited GIT_DIR.
-cell() { # <A|B|U> -> VERD (INTACT|WRECKED) and DET ("<n> <repo> <bare> <name>")
+cell() { # <A|B|U> -> VERD (INTACT|WRECKED) and DET ("<n> <repo> <bare> <name> <rc|->")
   local who="$SUBJECT" armed=yes
   case "$1" in B) who="$SUBJECT_C" ;; U) armed=no ;; esac
   DET="$(drive "$TREE" "$WORK/v_cell" "$who" "$armed")"
   # shellcheck disable=SC2086
   if victim_intact $DET; then VERD=INTACT; else VERD=WRECKED; fi
+  # URC, per U cell: the inner fixture RAN and passed. A U cell whose runner never started is INTACT for that reason alone.
+  if [ "$armed" = no ]; then
+    u_cells=$((u_cells + 1)); U_RC="$(printf '%s\n' "$DET" | awk '{ print $5 }')"
+    if urc_ran "$U_RC"; then u_rc0=$((u_rc0 + 1)); else fail "URC U cell $u_cells: the unarmed $who exited $U_RC ($DET) -- the twin did not run, so its INTACT is not a measurement"; fi
+  fi
 }
+u_cells=0; u_rc0=0
+# The ONE predicate URC and mutant u127 both read, so u127 scores URC's own test rather than a copy of it.
+urc_ran() { [ "$1" = 0 ]; }
 MX=0; [ "${1:-}" = --matrix ] && MX=1
 mx_pp=0; mx_only=0
 echo "HERMETIC-CONSUMED core/fixtures/fixture-git-env-seam/matrix-lib.sh"
@@ -403,6 +424,40 @@ for _m in m1 m2 m3 m4 b2; do
   fi
   restore_tree
 done
+# (u127) THE UNARMED RUNNER RESOLVES NOWHERE. drive's U branch is routed through a command name no PATH carries,
+#      so the inner fixture never starts and exits 127 at once. The victim is untouched, so the verdict channel
+#      reads U INTACT exactly as the shipped twin does; only the rc channel (arm URC) can see it. Its allow twin is
+#      the shipped run's U cells, each rc 0. Driven directly, not through cell(), so URC's own tally is not moved.
+# URC: every U cell (the shipped twin, and the twin of each of the five mutants; six in a plain run and in
+# --matrix alike) ran its inner fixture to rc 0, and there were exactly 6 of them. Each nonzero cell has already
+# failed in cell(), by name. Its passing branch sets B_URC, the unmutated side u127 is scored against.
+B_URC=0
+if [ "$u_cells" = 6 ] && [ "$u_rc0" = 6 ]; then
+  ok "URC this run drove $u_cells unarmed U cells and the inner $SUBJECT exited 0 in all $u_rc0 -- the twin is a run, not an absence"
+  B_URC=1
+else
+  fail "URC this run drove $u_cells U cell(s) (want 6), $u_rc0 of them at rc 0 (want 6)"
+fi
+U_RUNNER=ai_dlc_bl965_runner_resolves_nowhere
+command -v "$U_RUNNER" >/dev/null 2>&1 && broken "u127 did not apply -- $U_RUNNER resolves on this PATH"
+_xd="$(drive "$TREE" "$WORK/v_cell" "$SUBJECT" no)"; U_RUNNER=env
+_xrc="$(printf '%s\n' "$_xd" | awk '{ print $5 }')"
+# shellcheck disable=SC2086
+if victim_intact $_xd; then _xv=INTACT; else _xv=WRECKED; fi
+if [ "$MX" = 1 ]; then
+  mx_cell_row u127 U "$SV_U" "$_xv" "$_xd"
+  mx_cell_row u127 URC 0 "$_xrc" "$_xd"
+  _trip=""; [ "$(mx_diverge "$SV_U" "$_xv")" = yes ] && _trip="U"
+  [ "$(mx_diverge 0 "$_xrc")" = yes ] && _trip="${_trip:+$_trip }URC"
+  mx_row u127 "$_trip"
+else
+  # `= 127` proves the mutant applied for its own reason (the runner did not resolve); `! urc_ran` is URC's verdict on it.
+  if [ "$_xrc" = 127 ] && ! urc_ran "$_xrc" && [ "$_xv" = INTACT ]; then
+    mutant_killed "${B_URC:-0}" u127 "u127 unarmed runner resolves nowhere: rc 127 with the victim INTACT ($_xd) -- the verdict channel reads it as the green twin, and only URC fails it"
+  else
+    fail "u127 did not decide: rc $_xrc, victim $_xv ($_xd); want rc 127 over an INTACT victim"
+  fi
+fi
 [ "$MX" = 1 ] && exit 0
 # CS-MX: a PLAIN run executes no matrix-only cell and exactly the per-push cells (3 shipped + 5 mutants x 2).
 if [ "$mx_only" = 0 ] && [ "$mx_pp" = 13 ]; then

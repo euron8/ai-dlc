@@ -427,6 +427,61 @@ PATH="$a5bin:$PATH" run_merge "$MERGE" "$dE"; cp "$MO" "$WORK/cli.stub"; cli_5=$
 run_merge "$MERGE" "$dE"; cp "$MO" "$WORK/cli.dE"; cli_e=$RC; if [ "$RC" -eq 0 ] && has "$MO" "MERGED:"; then e_e=1; else e_e=0; fi
 rm -f "$(out_of "$dE")"
 
+# CS-CSD: --check-shard-dir's placement grammar is asked of a dir STRING that may begin with `-` (BL-976 follow-up).
+# Every basename/dirname in merge_place and merge_rec_paths takes `--`; without it BSD basename and dirname read a
+# leading `-x` or `-n` as an option, print `illegal option` on stderr, and the placement test refuses a well-placed
+# dir for the wrong reason. Asked of the merge CLI DIRECTLY: the dispatch guard's selector never hands it such a
+# string. One run per program, three dirs each, one stdout line per dir:
+#   dashx  -x/planning-artifacts/s1/shards/arch-p1  OK, the decider (REFUSED "not under a shards/" without `--`)
+#   dashn  -n                                       REFUSED for its real reason (no shards/ parent), nothing on stderr
+#   plain  planning-artifacts/s1/shards/arch-p1     OK under both programs: the twin, and the proof the mutant ran
+#   stderr the run's stderr is empty (it holds every dir, so -n's stderr is read here; its stdout line is the
+#          same REFUSED text with or without `--`)
+# The mutant CSD drops `--` from EVERY basename/dirname that carries it (keyed on the predicate, not a site list:
+# the copy must hold none). A planning-artifacts/s1/shards/-n cell is NOT here: it answers SKIP with or without `--`.
+CSD_X='-x/planning-artifacts/s1/shards/arch-p1'; CSD_N='-n'; CSD_P='planning-artifacts/s1/shards/arch-p1'
+csd_run() { # <merge> <tag> -> $WORK/csd.<tag>.out, .err, .rc
+  bash "$1" --check-shard-dir "$CSD_X" "$CSD_N" "$CSD_P" > "$WORK/csd.$2.out" 2> "$WORK/csd.$2.err"; echo $? > "$WORK/csd.$2.rc"
+}
+csd_cell() { # <tag> <cell> -> 0 when the cell's stdout line is the shipped answer; cell stderr: the run wrote nothing there
+  local o="$WORK/csd.$1.out" w
+  case "$2" in
+    stderr) [ ! -s "$WORK/csd.$1.err" ] ;;
+    dashx) w="$(printf 'OK\t%s' "$CSD_X")"; [ "$(sed -n 1p "$o")" = "$w" ] ;;
+    dashn) w="$(printf 'REFUSED\t%s\t%s is not under a shards/ directory' "$CSD_N" "$CSD_N")"; case "$(sed -n 2p "$o")" in "$w"*) return 0 ;; *) return 1 ;; esac ;;
+    plain) w="$(printf 'OK\t%s' "$CSD_P")"; [ "$(sed -n 3p "$o")" = "$w" ] ;;
+    *) return 1 ;;
+  esac
+}
+csd_md="$WORK/mut-CSD"; mCSD=""; csd_n0=0; csd_n1=1
+if [ ! -e "$csd_md" ] && cp -R "$SRCDIR" "$csd_md"; then
+  csd_n0="$(grep -c -e 'basename -- ' -e 'dirname -- ' "$SRCDIR/merge-adversarial-shards.sh")" || csd_n0=0
+  sed -e 's/basename -- /basename /g' -e 's/dirname -- /dirname /g' "$SRCDIR/merge-adversarial-shards.sh" > "$csd_md/merge-adversarial-shards.sh"
+  csd_n1="$(grep -c -e 'basename -- ' -e 'dirname -- ' "$csd_md/merge-adversarial-shards.sh")" || csd_n1=0
+  [ "$csd_n0" -gt 0 ] && [ "$csd_n1" = 0 ] && ! cmp -s "$SRCDIR/merge-adversarial-shards.sh" "$csd_md/merge-adversarial-shards.sh" \
+    && mCSD="$csd_md/merge-adversarial-shards.sh"
+fi
+csd_run "$MERGE" ship
+[ -n "$mCSD" ] && csd_run "$mCSD" mut
+if [ "$MX" = 1 ]; then
+  [ -n "$mCSD" ] || { echo "MATRIX CSD DID-NOT-APPLY"; exit 2; }
+  _trip=""
+  for _cw in dashx dashn plain stderr; do
+    if csd_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
+    if csd_cell mut "$_cw"; then _mv=ok; else _mv=FAIL; fi
+    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
+    echo "MATRIX CSD $_cw shipped=$_sh mutant=$_mv killed=$_k"
+  done
+  echo "MATRIX-ROW CSD tripped=[${_trip# }]"
+fi
+s_csd=0; [ "$(cat "$WORK/csd.ship.rc")" = 1 ] && csd_cell ship dashx && csd_cell ship dashn && csd_cell ship plain && csd_cell ship stderr && s_csd=1
+if [ "$s_csd" = 1 ]; then ok "CS-CSD: --check-shard-dir answers OK for a -x/ dir, REFUSED for -n on its placement alone, OK for the plain dir, and writes nothing to stderr"
+else bad "CS-CSD: --check-shard-dir over -x/, -n and a plain dir (rc=$(cat "$WORK/csd.ship.rc")): $(head -3 "$WORK/csd.ship.out" | tr '\t\n' '  ') stderr: $(head -2 "$WORK/csd.ship.err" | tr '\n' ' ')"; fi
+if [ -z "$mCSD" ]; then bad "CS-CSD-mut: DID NOT APPLY -- the copy still carries basename/dirname \`--\` ($csd_n1 of $csd_n0 lines) or did not change"
+elif ! csd_cell mut dashx && ! csd_cell mut stderr && csd_cell mut plain; then
+  mutant_killed "$s_csd" CSD "CS-CSD-mut: killed -- without \`--\` the -x/ dir is refused for the wrong reason with stderr; the plain dir (twin) still answers OK"
+else bad "CS-CSD-mut: the mutant without \`--\` was not killed at dashx with the plain twin OK: $(head -3 "$WORK/csd.mut.out" | tr '\t\n' '  ')"; fi
+
 # ---- THE MUTANT x CASE MATRIX. A cell is one mutant's merge over one world; it prints `killed=yes` when its
 # verdict diverges from the shipped one on the same world. `--matrix` (argv, never the environment) runs EVERY
 # cell and prints one MATRIX row each, then stops; a plain run executes only the deciding and twin cells below.
