@@ -76,7 +76,8 @@ set -uo pipefail
 #   1 = a core path is touched by a non-reconcile commit with no citation
 #   2 = the core set could not be resolved, so nothing was classified. Fail-closed,
 #       for the same reason --is-core exits 2: an empty result from a scan that did
-#       not run is not a clean tree.
+#       not run is not a clean tree. Also exit 2: a changed core path git still C-quotes
+#       (`refused: git quoted a changed core path`), which nothing downstream can read back.
 #
 # DORMANT IS NOT A PASS, AND IT SAYS SO. The gate check is "active only on a layered
 # consumer" -- a `.claude/.ai-dlc-version` stamp plus the `overrides/` and
@@ -323,23 +324,36 @@ if [ "$MODE" = "--audit-diff" ]; then
   # or the commit that touched them.
   # `-c diff.relative=false`: a config of diff.relative=true makes --name-only answer relative to
   # the cwd, so from a subdirectory CHANGED is empty and the range reads N/A, exit 0 (BL-945).
-  CHANGED="$(git -c diff.relative=false diff --name-only "${BASE_REF}...${HEAD_REF}" 2>/dev/null || true)"
+  # `-c core.quotePath=false`: by default a non-ASCII path is printed C-quoted, matches no glob,
+  # and the range PASSes (BL-951). `--no-renames`: with rename detection on, a core path renamed
+  # to a non-core path lists only the new name, and the range PASSes (BL-951).
+  CHANGED="$(git -c diff.relative=false -c core.quotePath=false diff --no-renames --name-only "${BASE_REF}...${HEAD_REF}" 2>/dev/null || true)"
   echo "core set: ${AUDIT_SRC:-working tree}"
   if [ -z "$CHANGED" ]; then
     echo "N/A: no diff in range ${BASE_REF}...${HEAD_REF}"
     exit 0
   fi
 
+  # A line git still C-quotes under core.quotePath=false (its name carries `"`, `\` or a control
+  # byte) is matched against the globs with its outer quotes stripped, and when that matches it
+  # goes to QUOTED, never TOUCHED: the quoted spelling joins to nothing in the walk and reads back
+  # as ABSENT through tree_keys, which is the deletion acquittal. So the range is refused (BL-951).
   TOUCHED=""
+  QUOTED=""
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     rel="${p#./}"
+    case "$rel" in
+      \"*) QREL="${rel#\"}"; QREL="${QREL%\"}" ;;
+      *) QREL="" ;;
+    esac
     while IFS= read -r g; do
       [ -n "$g" ] || continue
       # shellcheck disable=SC2254
-      case "$rel" in
-        $g) TOUCHED="${TOUCHED}${rel}
-"; break ;;
+      case "${QREL:-$rel}" in
+        $g) if [ -n "$QREL" ]; then QUOTED="${QUOTED}${rel}
+"; else TOUCHED="${TOUCHED}${rel}
+"; fi; break ;;
       esac
     done <<EOG
 $CORE_GLOBS
@@ -347,6 +361,12 @@ EOG
   done <<EOF
 $CHANGED
 EOF
+
+  if [ -n "$QUOTED" ]; then
+    echo "refused: git quoted a changed core path in ${BASE_REF}...${HEAD_REF}; its name carries a quote, backslash or control byte, so it cannot be joined or read back -- rename it or review by hand:"
+    printf '%s' "$QUOTED" | sed 's/^/  /'
+    exit 2
+  fi
 
   if [ -z "$TOUCHED" ]; then
     echo "PASS: no core path touched in ${BASE_REF}...${HEAD_REF}"
@@ -361,7 +381,8 @@ EOF
   # ONE WALK OF THE RANGE, joined to TOUCHED in awk (BL-945): a per-path `git log -- "$p"` was a
   # cwd-relative pathspec (from a subdirectory it matched nothing and the range PASSed) and ~99% of
   # the gate's git calls. Run from AUDIT_ROOT, so a diff.relative=true config still prints
-  # root-relative names; default core.quotePath, so its keys are spelled as CHANGED spells them.
+  # root-relative names; core.quotePath=false, so its keys are spelled as CHANGED spells them --
+  # a non-ASCII path as raw bytes -- and a non-ASCII core path joins to its offender (BL-951).
   # Each flag is measured against the per-path walk it replaces:
   #   -c            a merge lists a path only when it differs from EVERY parent -- the per-path
   #                 walk's own TREESAME rule -- so an evil merge is listed and a --no-ff merge of a
@@ -378,14 +399,15 @@ EOF
   # Measured inert on this walk (output byte-identical over the fixture's ranges): format.pretty,
   # log.decorate, log.abbrevCommit, log.graph, log.follow, log.diffMerges, color.*, diff.noprefix,
   # diff.mnemonicPrefix, diff.relative, diff.external, diff.dirstat, core.pager. core.quotePath
-  # moves it, in step with CHANGED, which reads the same config.
+  # moves it, so it is pinned false here and in CHANGED alike: with it on in this walk alone a
+  # non-ASCII TOUCHED path joins to nothing and the range reads as reconcile-only (BL-951).
   # DECLARED DIVERGENCE, stricter: an identical edit of a path on both sides of a merge. The
   # per-path walk's history simplification follows one side and drops the other's commit; this
   # walk lists both. One OFFENDERS line per (sha, path) pair, in TOUCHED order then walk order.
   # The commit line is marked by a leading \001, which no --name-only line can begin with: a path
-  # carrying a control byte is C-quoted by core.quotePath.
+  # carrying a control byte is still C-quoted under core.quotePath=false.
   OFFENDERS="$(printf '%s\n--\n%s\n' "$TOUCHED" \
-    "$(git -C "$AUDIT_ROOT" log -c --no-renames --root --no-show-signature --encoding=UTF-8 --format='%x01%H %s' --name-only "${BASE_REF}..${HEAD_REF}" 2>/dev/null)" \
+    "$(git -c core.quotePath=false -C "$AUDIT_ROOT" log -c --no-renames --root --no-show-signature --encoding=UTF-8 --format='%x01%H %s' --name-only "${BASE_REF}..${HEAD_REF}" 2>/dev/null)" \
     | awk '
       $0 == "--" && !s { s = 1; next }
       !s { if ($0 != "" && !($0 in want)) { want[$0] = 1; order[++n] = $0 }; next }
@@ -414,11 +436,15 @@ EOF
   # tree_keys <commit> <newline-separated paths> -> `path<TAB>mode blob` per entry. Returns 1
   # when the listing failed or any line did not parse: a path that cannot be read back must
   # never look ABSENT, because absent-at-both is the deletion acquittal.
+  # `-c core.precomposeunicode=false`: macOS `git init` sets it true, and git then rewrites an NFD
+  # pathspec on the command line to NFC, so an NFD core path lists nothing, reads ABSENT at both
+  # commits and is acquitted (BL-951). This is the only --audit-diff call taking a TOUCHED path
+  # as a pathspec; on a platform without precomposition the pin is inert.
   tree_keys() {
     local raw IFS='
 '
     set -f
-    raw="$(git -c core.quotePath=false ls-tree -r --full-tree "$1" -- $2 </dev/null 2>/dev/null)" || { set +f; return 1; }
+    raw="$(git -c core.precomposeunicode=false -c core.quotePath=false ls-tree -r --full-tree "$1" -- $2 </dev/null 2>/dev/null)" || { set +f; return 1; }
     set +f
     [ -n "$raw" ] || return 0
     printf '%s\n--\n%s\n' "$2" "$raw" | awk -F'\t' '

@@ -2714,7 +2714,9 @@ Exit 0 = no core path edited in place, or every touching commit is a recognized
 `chore(ai-dlc-update):` reconcile, or every touched core path's mode and blob equal those of an `/ai-dlc-update` reconcile commit on a branch or remote ref that carries the installed `.claude/.ai-dlc-version` stamp (`core-paths.sh`'s content arm, which a squash-merged sprint passes), or `docs/escalations/pending.md` carries an
 operator-authorization citation that `validate-escalation-resolution.sh` accepts.
 Exit 1 = a core path edited by a non-reconcile commit with no such citation.
-Exit 2 = the core set could not be resolved, which is **not** a pass. A `DORMANT`
+Exit 2 = the core set could not be resolved, or git quoted a changed core path
+(`refused: git quoted a changed core path …`: rename that path or review it by hand),
+which is **not** a pass. A `DORMANT`
 line means the activation rule below did not hold at `<sprint-base>`; it is not
 evidence that no core file was edited.
 

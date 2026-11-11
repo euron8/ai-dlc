@@ -26,8 +26,20 @@
 # dropped, and the working-tree manifest fallback read from the cwd. Case B (Assertion 20) is the
 # walk's declared divergence from the per-path walk it replaced, and is stricter. Mutation 18
 # drops the walk's --root, so under log.showRoot=false an unrelated-history root that adds a core
-# path lists no file and the range PASSes (Assertion 23).
+# path lists no file and the range PASSes (Assertion 23). BL-951 adds five (mutations 19-23):
+# CHANGED's --no-renames dropped (a rename out of core PASSes), CHANGED's core.quotePath=false
+# dropped (a non-ASCII core add is refused, not named), the walk's core.quotePath=false dropped
+# (a non-ASCII core add joins to nothing and reads as reconcile-only), the fail-closed refusal
+# of a still-quoted core path removed (it PASSes), and that refusal widened to every quoted line
+# (a quoted CONSUMER path is refused). Assertions 24-31 are their arms and near-misses. Mutation
+# 24 drops tree_keys' core.precomposeunicode=false, so an NFD core path reads ABSENT at both
+# commits and is acquitted (Assertion 32). It is scored only where precomposition is in effect
+# (seed.sh measures PRECOMPOSE: macOS, this box, the gate); elsewhere, e.g. Linux, the flag is
+# inert and it prints SKIP with no kill -- do not widen it into a mutant that cannot fail there.
 set -uo pipefail
+# Git config pinned to its defaults for the seed and every arm: a user's core.quotePath or
+# diff.renames would otherwise decide the BL-951 cells before the script under test does.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -49,6 +61,7 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 # B_M<n>=1 only beside the unmutated arm's own ok: the mutant is scored only if its base arm passed.
 B_M1=0; B_M2=0; B_M3=0; B_M4=0; B_M5=0; B_M6=0; B_M7=0; B_M8=0; B_M9=0; B_M10=0
 B_M11=0; B_M12=0; B_M13=0; B_M14=0; B_M15=0; B_M16=0; B_M17=0; B_M18=0
+B_M19=0; B_M20=0; B_M21=0; B_M22=0; B_M23=0; B_M24=0
 
 # audit <script> <base> <head> — never through a pipe: RC must be the script's own.
 audit() {
@@ -314,6 +327,68 @@ if [ "$RC" -eq 1 ] && says "$UNREL_ROOT scripts/ai-dlc/new.sh :: feat: unrelated
   ok "with log.showRoot=false an unrelated root adding a core path flags the root commit"; B_M18=1
 else bad "with log.showRoot=false the unrelated root was not flagged (rc=$RC)"; fi
 
+# --- Assertions 24-31: BL-951, renames and quoted paths in CHANGED --------------------
+# seed.sh asserts each cell's defect input is present at git's defaults. Non-ASCII names are
+# spelled in octal so this file stays ASCII.
+NA_P="$(printf 'scripts/ai-dlc/v\303\251rdict.sh')"
+# 24: a rename out of core in one commit flags the rename by the OLD core path's name.
+audit "$VALIDATOR" "$BASE" "$RENOUT"
+if [ "$RC" -eq 1 ] && says "$RENOUT $DELPATH :: fix(s1): move the hook out of core"; then
+  ok "a core path renamed out of core flags, named by its old core path"; B_M19=1
+else bad "a rename out of core was not flagged by the old core path (rc=$RC)"; fi
+# 25: the same rename to a non-ASCII non-core name.
+audit "$VALIDATOR" "$BASE" "$RENOUTNA"
+[ "$RC" -eq 1 ] && says "$RENOUTNA $DELPATH :: fix(s1): move the hook out to a non-ascii name" \
+  && ok "a core path renamed out to a non-ASCII name flags, named by its old core path" \
+  || bad "a rename out of core to a non-ASCII name was not flagged by the old core path (rc=$RC)"
+# 26: a non-ASCII core add flags, named as raw bytes on its offender line (the walk's join).
+audit "$VALIDATOR" "$BASE" "$NAADD"
+if [ "$RC" -eq 1 ] && says "$NAADD $NA_P :: fix(s1): add a non-ascii core script" && ! says '"scripts/ai-dlc/v'; then
+  ok "a non-ASCII core add flags, its offender line naming the raw-byte path"; B_M20=1; B_M21=1
+else bad "a non-ASCII core add was not flagged with its raw-byte path and sha (rc=$RC)"; fi
+# 27: the squash of a reconcile adding that path passes by the content arm.
+audit "$VALIDATOR" "$BASE" "$NASQ"
+[ "$RC" -eq 0 ] && says "PASS (content arm)" && says "$NASQ $NA_P == reconcile $NAREC" \
+  && ok "a squash of a reconcile adding a non-ASCII core path passes by the content arm" \
+  || bad "a squash of a non-ASCII reconcile was not acquitted by the content arm (rc=$RC)"
+# 28: the same squash one byte off on that path flags.
+audit "$VALIDATOR" "$BASE" "$NASQB"
+[ "$RC" -eq 1 ] && says "$NASQB $NA_P :: feat: ai-dlc update 0.8.0 (#203)" \
+  && ok "a squash one byte off a reconcile's non-ASCII core path flags" \
+  || bad "a one-byte-off non-ASCII squash was acquitted or mis-reported (rc=$RC)"
+# 29: a core-to-core rename flags under both names.
+audit "$VALIDATOR" "$BASE" "$RR"
+[ "$RC" -eq 1 ] && says "$RR scripts/ai-dlc/verdict.sh :: fix(s1): rename the verdict helper within core" \
+  && says "$RR scripts/ai-dlc/verdict2.sh :: fix(s1): rename the verdict helper within core" \
+  && ok "a core-to-core rename flags under both its old and its new name" \
+  || bad "a core-to-core rename did not flag under both names (rc=$RC)"
+# 30: a core path git still C-quotes is refused, exit 2, naming the quoted line, before any arm.
+QREF="refused: git quoted a changed core path"
+audit "$VALIDATOR" "$BASE" "$QQ"
+if [ "$RC" -eq 2 ] && says "$QREF" && says '  "scripts/ai-dlc/q\"x.sh"' && ! says "PASS"; then
+  ok "a changed core path carrying a double quote is refused with exit 2 and named"; B_M22=1
+else bad "a C-quoted core path (double quote) was not refused with exit 2 (rc=$RC)"; fi
+audit "$VALIDATOR" "$BASE" "$BS"
+[ "$RC" -eq 2 ] && says "$QREF" && says '  "scripts/ai-dlc/b\\x.sh"' && ! says "PASS" \
+  && ok "a changed core path carrying a backslash is refused with exit 2 and named" \
+  || bad "a C-quoted core path (backslash) was not refused with exit 2 (rc=$RC)"
+audit "$VALIDATOR" "$BASE" "$TB"
+[ "$RC" -eq 2 ] && says "$QREF" && says '  "scripts/ai-dlc/t\tx.sh"' && ! says "PASS" \
+  && ok "a changed core path carrying a tab is refused with exit 2 and named" \
+  || bad "a C-quoted core path (tab) was not refused with exit 2 (rc=$RC)"
+# 31: the near-miss. The same quoting bytes on consumer paths keep today's verdict.
+audit "$VALIDATOR" "$BASE" "$QNEAR"
+if [ "$RC" -eq 0 ] && says "PASS: no core path touched" && ! says "refused"; then
+  ok "C-quoted consumer paths are not refused: the range passes as it did"; B_M23=1
+else bad "C-quoted consumer paths changed the verdict (rc=$RC)"; fi
+# 32: an NFD-spelled core path added beside a reconcile's tree flags on every platform: tree_keys
+# reads it back, so it is not ABSENT at both commits and the deletion acquittal does not fire.
+NFD_P="$(printf 'scripts/ai-dlc/ve\314\201rdict9.sh')"
+audit "$VALIDATOR" "$BASE" "$NFDADD"
+if [ "$RC" -eq 1 ] && says "$NFDADD $NFD_P :: feat: add an nfd-named core script" && ! says "PASS (content arm)"; then
+  ok "an NFD-spelled core path beside a reconcile's tree flags (precomposition in effect: $PRECOMPOSE)"; B_M24=1
+else bad "an NFD-spelled core path was acquitted or mis-reported (rc=$RC, precomposition in effect: $PRECOMPOSE)"; fi
+
 # --- Mutation 1: resolve the manifest from the working tree --------------------
 M="$(mutate base-manifest 's@git show "${BASE_REF}:${c}"@git show "${BASE_REF}:no-such-prefix/${c}"@')" || exit 2
 audit_at "$M" shrink "$BASE" "$SHRINK"
@@ -422,7 +497,7 @@ audit "$M" "$BASE" "$DIRTY"
 [ "$RC" -eq 1 ] || bad "MUTATION 11 ENTANGLED: it also changed the root verdict on an in-place core edit"
 # 12: the walk un-anchored. It has no pathspec, so only diff.relative=true can move it: from
 # docs/ it names nothing outside docs/, and the range reads as reconcile-only.
-M="$(mutate anchor-walk 's@git -C "\$AUDIT_ROOT" log -c --no-renames@git log -c --no-renames@')" || exit 2
+M="$(mutate anchor-walk 's@ -C "\$AUDIT_ROOT" log -c --no-renames@ log -c --no-renames@')" || exit 2
 audit_rel "$M"
 if [ "$RC" -eq 1 ]; then bad "MUTATION 12 SURVIVED: with diff.relative=true from docs/ the edit still exits 1 with the walk un-anchored"
 elif says "every touching commit is an /ai-dlc-update reconcile"; then mutant_killed "$B_M12" "mutation 12" "mutation 12 killed: an un-anchored walk under diff.relative=true joins nothing and PASSes an in-place core edit"
@@ -451,7 +526,7 @@ else mutant_killed "$B_M15" "mutation 15" "mutation 15 killed: with -m a --no-ff
 audit "$M" "$BASE" "$RECONCILE"
 [ "$RC" -eq 0 ] || bad "MUTATION 15 ENTANGLED: it also changed the verdict on a linear reconcile"
 # 16: diff.relative=false dropped. From docs/ CHANGED is empty and the range reads N/A.
-M="$(mutate diff-relative 's@git -c diff.relative=false diff --name-only@git diff --name-only@')" || exit 2
+M="$(mutate diff-relative 's@git -c diff.relative=false -c core.quotePath=false diff@git -c core.quotePath=false diff@')" || exit 2
 audit_rel "$M"
 if [ "$RC" -eq 1 ]; then bad "MUTATION 16 SURVIVED: with diff.relative=true from docs/ the edit still exits 1 without diff.relative=false"
 elif says "N/A: no diff in range"; then mutant_killed "$B_M16" "mutation 16" "mutation 16 killed: without diff.relative=false a subdirectory sees no diff and reads N/A"
@@ -473,6 +548,64 @@ elif says "every touching commit is an /ai-dlc-update reconcile"; then mutant_ki
 else bad "MUTATION 18 SURVIVED its own arm: wrong failure: no reconcile-arm PASS (rc=$RC)"; fi
 audit "$M" "$BASE" "$UNREL"
 [ "$RC" -eq 1 ] || bad "MUTATION 18 ENTANGLED: it also changed the verdict on the unrelated root with log.showRoot unset"
+
+# --- Mutations 19-23: BL-951 ---------------------------------------------------------
+# 19: CHANGED's --no-renames dropped. A rename out of core lists only the new name: PASS.
+M="$(mutate changed-renames 's@ diff --no-renames --name-only@ diff --name-only@')" || exit 2
+audit "$M" "$BASE" "$RENOUT"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 19 SURVIVED: the rename out of core still flags with CHANGED's renames on"
+elif says "PASS: no core path touched"; then mutant_killed "$B_M19" "mutation 19" "mutation 19 killed: with renames on in CHANGED a core path renamed out of core is never classified"
+else bad "MUTATION 19 SURVIVED its own arm: wrong failure: no clean PASS line (rc=$RC)"; fi
+audit "$M" "$BASE" "$NAADD"
+[ "$RC" -eq 1 ] || bad "MUTATION 19 ENTANGLED: it also changed the verdict on a non-ASCII core add"
+# 20: CHANGED's core.quotePath=false dropped. The non-ASCII core add is C-quoted: refused, not named.
+M="$(mutate changed-quotepath 's@-c core.quotePath=false diff --no-renames@diff --no-renames@')" || exit 2
+audit "$M" "$BASE" "$NAADD"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 20 SURVIVED: the non-ASCII core add still flags with CHANGED quoting it"
+elif says "$QREF"; then mutant_killed "$B_M20" "mutation 20" "mutation 20 killed: with CHANGED quoting a non-ASCII core path it is refused instead of classified"
+else bad "MUTATION 20 SURVIVED its own arm: wrong failure: no refusal line (rc=$RC)"; fi
+audit "$M" "$BASE" "$RENOUT"
+[ "$RC" -eq 1 ] || bad "MUTATION 20 ENTANGLED: it also changed the verdict on an ASCII rename out of core"
+# 21: the walk's core.quotePath=false dropped. Its key is quoted, the join is empty: reconcile PASS.
+M="$(mutate walk-quotepath 's@git -c core.quotePath=false -C "\$AUDIT_ROOT" log@git -C "$AUDIT_ROOT" log@')" || exit 2
+audit "$M" "$BASE" "$NAADD"
+if [ "$RC" -eq 1 ]; then bad "MUTATION 21 SURVIVED: the non-ASCII core add still flags with the walk quoting it"
+elif says "every touching commit is an /ai-dlc-update reconcile"; then mutant_killed "$B_M21" "mutation 21" "mutation 21 killed: a walk quoting a non-ASCII path joins nothing and PASSes the core add as reconcile-only"
+else bad "MUTATION 21 SURVIVED its own arm: wrong failure: no reconcile-arm PASS (rc=$RC)"; fi
+audit "$M" "$BASE" "$RENOUT"
+[ "$RC" -eq 1 ] || bad "MUTATION 21 ENTANGLED: it also changed the verdict on an ASCII rename out of core"
+# 22: the fail-closed refusal removed. The still-quoted core path matches no glob: PASS.
+M="$(mutate quoted-refusal 's@^  if \[ -n "\$QUOTED" \]; then$@  if [ -n "" ]; then@')" || exit 2
+audit "$M" "$BASE" "$QQ"
+if [ "$RC" -eq 2 ]; then bad "MUTATION 22 SURVIVED: the double-quoted core path is still refused with the refusal removed"
+elif says "PASS: no core path touched"; then mutant_killed "$B_M22" "mutation 22" "mutation 22 killed: without the refusal a core path git still quotes PASSes as untouched"
+else bad "MUTATION 22 SURVIVED its own arm: wrong failure: no clean PASS line (rc=$RC)"; fi
+audit "$M" "$BASE" "$QNEAR"
+[ "$RC" -eq 0 ] || bad "MUTATION 22 ENTANGLED: it also changed the verdict on quoted consumer paths"
+# 23: the refusal widened to every quoted line, core or not. The consumer near-miss is refused.
+M="$(mutate quoted-any 's@^        \$g) if \[ -n "\$QREL" \]; then@        $g|${QREL:+*}) if [ -n "$QREL" ]; then@')" || exit 2
+audit "$M" "$BASE" "$QNEAR"
+if [ "$RC" -eq 0 ]; then bad "MUTATION 23 SURVIVED: quoted consumer paths still pass with the refusal widened to every quoted line"
+elif says "$QREF"; then mutant_killed "$B_M23" "mutation 23" "mutation 23 killed: a refusal ignoring the core globs refuses a consumer range git merely quotes"
+else bad "MUTATION 23 SURVIVED its own arm: wrong failure: no refusal line (rc=$RC)"; fi
+audit "$M" "$BASE" "$QQ"
+[ "$RC" -eq 2 ] || bad "MUTATION 23 ENTANGLED: it also changed the verdict on a quoted core path"
+# 24: tree_keys' core.precomposeunicode=false dropped. Where git precomposes a command-line
+# pathspec (seed.sh measured PRECOMPOSE), the NFD path lists nothing and is acquitted. Where it
+# does not, the setting is inert, the mutant has no observable, and it is not scored: the same
+# two runs are made (so invocations.decl holds on both platforms) and must give the tip's verdict.
+M="$(mutate tree-keys-precompose 's@git -c core.precomposeunicode=false -c core.quotePath=false ls-tree@git -c core.quotePath=false ls-tree@')" || exit 2
+audit "$M" "$BASE" "$NFDADD"
+if [ "$PRECOMPOSE" = 1 ]; then
+  if [ "$RC" -eq 1 ]; then bad "MUTATION 24 SURVIVED: the NFD core path still flags with precomposition left on"
+  elif says "PASS (content arm)"; then mutant_killed "$B_M24" "mutation 24" "mutation 24 killed: with precomposition on an NFD core path reads ABSENT at both commits and is acquitted"
+  else bad "MUTATION 24 SURVIVED its own arm: wrong failure: no content-arm PASS (rc=$RC)"; fi
+else
+  [ "$RC" -eq 1 ] || bad "mutation 24 is not inert on a git that does not precompose: the NFD path gave rc=$RC, want the tip's 1"
+  echo "  SKIP  mutation 24 not scored: this git does not precompose a command-line pathspec, so the pin is inert here"
+fi
+audit "$M" "$BASE" "$NASQB"
+[ "$RC" -eq 1 ] || bad "MUTATION 24 ENTANGLED: it also changed the verdict on a one-byte-off NFC squash"
 
 echo
 if [ "$fails" -eq 0 ]; then

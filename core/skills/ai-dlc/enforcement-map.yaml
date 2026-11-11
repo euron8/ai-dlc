@@ -943,7 +943,7 @@ checks:
     call_sites:
       - site: gate-validation.md core-layer-immutability
         posture: FAILS the gate on exit 1; exit 2 is "the core set could not be resolved"
-          and is not a pass either
+          or git quoted a changed core path, and is not a pass either
         why: >-
           v0.199.0 gave this check its executable and left this row reading
           `enforcer: []`, so the one check that calls itself the BACKSTOP for an
