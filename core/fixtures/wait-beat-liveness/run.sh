@@ -103,6 +103,21 @@
 #   dispatch-ts-no-meta-lookup also trips s10 s13h s19a s27a s27b s27c s27d own
 #   dispatch-ts-first-row also trips s10 s13h s20a own
 #   dispatch-ts-multi-id also trips s13h own
+#   open-request-on-mtime also trips s13h s29b s29c s29d s29g s29h s29i s29j s29k s29l s29m s29n s29o s29p s29q own
+#   attachment-closes-request also trips s13h s29h own
+#   failed-gate-removed also trips s13h own
+#   failed-no-resume-acquittal also trips s13h own
+#   failed-no-early-break also trips s13h s29a s29b s29c s29d s29e s29i s29p s29q own
+#   failed-no-refund also trips s13h s29p s29q own
+#   failed-acquit-from-row also trips s13h own
+#   failed-precedence-removed also trips s13h s29o own
+#   failed-clear-on-not-failed also trips s13h s29e own
+#   open-request-bound-480 also trips s13h s29a s29b s29c s29d s29i s29n own
+#   dashed-id-skipped also trips s13h own
+#   failed-per-agent-key also trips s13h s29e s29i s29m s29p own
+#   (the twelve rows above were measured with --matrix <name> for those twelve mutants only, after section 29's
+#   sidecar was keyed per target and S17 (s29q) added; every cell BROKEN-free and s1 read 0 in each. The 61 earlier
+#   mutants were not re-measured against the section 29 arms, so their rows are silent about s29a-s29q, not clean on them)
 # MUTANT-MATRIX collapse-unavailable decides=s1 twins=s2
 # MUTANT-MATRIX threshold-always decides=s2 twins=s1
 # MUTANT-MATRIX max-not-min decides=s4 twins=s1
@@ -166,6 +181,18 @@
 # MUTANT-MATRIX dispatch-ts-no-meta-lookup decides=s28 twins=s1
 # MUTANT-MATRIX dispatch-ts-first-row decides=s28 twins=s1
 # MUTANT-MATRIX dispatch-ts-multi-id decides=s28 twins=s1
+# MUTANT-MATRIX open-request-on-mtime decides=s29a twins=s1
+# MUTANT-MATRIX attachment-closes-request decides=s29b twins=s1
+# MUTANT-MATRIX failed-gate-removed decides=s29g twins=s1
+# MUTANT-MATRIX failed-no-resume-acquittal decides=s29e twins=s1
+# MUTANT-MATRIX failed-no-early-break decides=s29m twins=s1
+# MUTANT-MATRIX failed-no-refund decides=s29m twins=s1
+# MUTANT-MATRIX failed-acquit-from-row decides=s29j twins=s1
+# MUTANT-MATRIX failed-precedence-removed decides=s29f twins=s1
+# MUTANT-MATRIX failed-clear-on-not-failed decides=s29p twins=s1
+# MUTANT-MATRIX open-request-bound-480 decides=s29o twins=s1
+# MUTANT-MATRIX dashed-id-skipped decides=s29i twins=s1
+# MUTANT-MATRIX failed-per-agent-key decides=s29q twins=s1
 #
 set -uo pipefail
 
@@ -1808,8 +1835,8 @@ S16b_revised_survives_delivery() {
 }
 M35_revised_deleted_on_delivery() {
   mutant revised-deleted-on-delivery \
-    -e 's@^    rm -f "\$c" "\$s" "\$pg" "\$gr" "\${c}\.settle" 2>/dev/null || true$@    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" 2>/dev/null || true@' \
-    -e 's@^    rm -f "\$c" "\$s" "\${c}\.progress" "\${c}\.grants" "\${c}\.settle" 2>/dev/null || true$@    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" "${c}.revised" 2>/dev/null || true@' || return
+    -e 's@^    rm -f "\$c" "\$s" "\$pg" "\$gr" "\${c}\.settle" "\${COUNTER_DIR}/failed-"\*"-\${c##\*/}" 2>/dev/null || true$@    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" "${COUNTER_DIR}/failed-"*"-${c##*/}" 2>/dev/null || true@' \
+    -e 's@^    rm -f "\$c" "\$s" "\${c}\.progress" "\${c}\.grants" "\${c}\.settle" "\${COUNTER_DIR}/failed-"\*"-\${c##\*/}" 2>/dev/null || true$@    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" "${c}.revised" "${COUNTER_DIR}/failed-"*"-${c##*/}" 2>/dev/null || true@' || return
   revised_survives "$MUT"
   # The control S16b carries: a world in which the beat saw no revision has no count to delete,
   # and ABSENT would then acquit nothing.
@@ -3573,6 +3600,586 @@ M58_dispatch_ts_multi_id() {
   rm -rf "$W"
 }
 
+
+# ===========================================================================
+# 29. DISPATCH FAILED: A DISPATCHED AGENT THAT DIED BEFORE DELIVERING IS NAMED (BL-975).
+#     The motivating session dispatched nine remediators; four died mid-request, each transcript
+#     ending in one unanswered `{"type":"api-request"` (two followed only by harness attachment
+#     lines), and the only beat ended with the In-Flight rows naming the wrong deliverable for every
+#     agent, so the lead resumed the agents the rows named and three dead parts were never resumed.
+#     Every world below is a --dispatch beat over a session dir laid out as the harness writes it:
+#     `<sess>/subagents/agent-<id>.jsonl` with its meta.json (the description is the agent's real
+#     deliverable), and the lead transcript `<sess>.jsonl` beside the subagents dir. The seed lines
+#     carry the key order and timestamp form of real harness lines (millis and Z on every stamp, the
+#     agent side and the notice side alike, because arm A's resume acquittal compares them as text).
+#     The ledger holds an EPOCH row before every subject row.
+#     EVERY AGE IS ON THE WORLD'S VIRTUAL CLOCK (BL-868): stamps are fx_now-relative, the beat's own
+#     polls move the clock, and DF_EL is the virtual seconds a beat took -- never the real clock.
+#     The quantum is 300 s with a 30 s poll and no margin, so a beat that runs out its deadline
+#     takes exactly 270 virtual seconds, and one that breaks on its first poll takes 0.
+#     S8 compares the no---dispatch output against the BASE script (the commit before BL-975,
+#     pinned optionally in git.decl), never against a golden taken from the script under test.
+# ===========================================================================
+DF_PIN=edcfbe2422194860c4d0c72834d9d60df9823094
+DF_DEAD=a975dead00000d001; DF_LIVE=a975cafe00000c002; DF_LIVE2=a975beef00000b003
+DF_HDR='DISPATCH FAILED agent-'
+DF_EARLY='This beat ended early on that report: its beat charge was refunded, and the time already waited is not charged.'
+DF_DASH=a975-dead-0000d004
+# Every stamp here is formatted by the REAL date binary, never the `date` that PATH finds first (the
+# clockbin shim, a bash start per call): a section that writes one stamp per seed line would otherwise
+# charge the invocation budget once per line for a value the shim does not change.
+df_iso_ms() {  # $1 = age (s) on W's clock, $2 = millis -> ISO8601 with millis and Z
+  di_e_=$(( $(fx_now "$W") - $1 ))
+  di_t_="$("$WBL_REAL_DATE" -u -r "$di_e_" +%Y-%m-%dT%H:%M:%S 2>/dev/null || "$WBL_REAL_DATE" -u -d "@$di_e_" +%Y-%m-%dT%H:%M:%S 2>/dev/null)"
+  [ -n "$di_t_" ] || broken "neither BSD nor GNU date can format an epoch"
+  printf '%s.%sZ' "$di_t_" "$2"
+}
+df_ledger_row() {  # $1 = tool_use_id, $2 = age (s) -> one spawn-ledger row, in mk_ledger_row's shape
+  dl_t_="$(df_iso_ms "$2" 000)"
+  printf '{"v":1,"ts":"%sZ","name":"wbl","role":"dev","tool_use_id":"%s"}\n' "${dl_t_%.000Z}" "$1" \
+    >> "$W/_bmad-output/spawn-ledger.jsonl" || broken "cannot write the spawn ledger"
+}
+df_world() {  # -> W, TD (the session's subagents dir), the lead transcript beside it, and an epoch ledger row
+  W="$(mk_work)"; TD="$W/sess/subagents"
+  mkdir -p "$TD" "$W/_bmad-output/.wait-beats" || broken "cannot create the section 29 world"
+  df_ledger_row toolu_df975epoch 900
+}
+df_agent() {  # $1 = agent id, $2 = part number, $3 = tool_use_id (default toolu_df_<id>) -> its ledger row and meta.json
+  da_t_="${3:-toolu_df_$1}"
+  df_ledger_row "$da_t_" 800
+  printf '{"agentType":"remediator","isBuiltIn":false,"description":"Repair part %s brief","toolUseId":"%s","spawnDepth":1}\n' "$2" "$da_t_" \
+    > "$TD/agent-$1.meta.json" || broken "cannot write the section 29 meta.json"
+}
+df_tx() {  # $1 = agent id; rest = kind:age (user assistant req attach apierr) -> appended to its transcript
+  dt_a_="$1"; shift
+  for dt_s_ in "$@"; do
+    dt_t_="$(df_iso_ms "${dt_s_#*:}" 300)"
+    case "${dt_s_%%:*}" in
+      user) printf '{"parentUuid":null,"isSidechain":true,"agentId":"%s","type":"user","message":{"role":"user","content":[{"type":"text","text":"brief"}]},"uuid":"u1","timestamp":"%s"}\n' "$dt_a_" "$dt_t_" ;;
+      assistant) printf '{"parentUuid":"u1","isSidechain":true,"agentId":"%s","message":{"model":"m","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}]},"type":"assistant","uuid":"u2","timestamp":"%s"}\n' "$dt_a_" "$dt_t_" ;;
+      req) printf '{"type":"api-request","sessionId":"s","agentId":"%s","id":"r1","timestamp":"%s","querySource":"agent:custom:remediator","shapeHash":"c349"}\n' "$dt_a_" "$dt_t_" ;;
+      attach) printf '{"parentUuid":"u2","isSidechain":true,"agentId":"%s","attachment":{"type":"deferred_tools_delta","addedNames":["SendMessage"]},"type":"attachment","uuid":"u3","timestamp":"%s"}\n' "$dt_a_" "$dt_t_" ;;
+      apierr) printf '{"parentUuid":"u2","isSidechain":true,"agentId":"%s","type":"assistant","uuid":"u4","timestamp":"%s","message":{"model":"<synthetic>","role":"assistant","type":"message","content":[{"type":"text","text":"API Error: Connection refused"}]},"isApiErrorMessage":true}\n' "$dt_a_" "$dt_t_" ;;
+      *) broken "df_tx: no line kind ${dt_s_%%:*}" ;;
+    esac >> "$TD/agent-$dt_a_.jsonl" || broken "cannot write the section 29 transcript"
+  done
+}
+df_notice() {  # $1 = agent id, $2 = part, $3 = age -> one harness task-notification (status failed) in the lead transcript
+  printf '{"type":"queue-operation","operation":"enqueue","timestamp":"%s","sessionId":"s","content":"<task-notification>\\n<task-id>%s</task-id>\\n<tool-use-id>toolu_df_%s</tool-use-id>\\n<status>failed</status>\\n<summary>Agent \\"Repair part %s brief\\" failed: Agent terminated early due to an API error: API Error: Connection refused</summary>\\n</task-notification>"}\n' \
+    "$(df_iso_ms "$3" 500)" "$1" "$1" "$2" >> "$W/sess.jsonl" || broken "cannot write the lead transcript"
+}
+df_snapshot() {  # rest = agent:deliverable rows -> the In-Flight Teammates table, rows in the order given
+  { printf '# Pipeline snapshot\n\n## In-Flight Teammates\n\n| agent | role | dispatched-at | status | deliverable |\n|---|---|---|---|---|\n'
+    for ds_r_ in "$@"; do printf '| %s (remediator) | remediator | %s | in-flight | `%s` |\n' "${ds_r_%%:*}" "$(df_iso_ms 800 000)" "${ds_r_#*:}"; done
+    printf '\n## Next\n'
+  } > "$W/_bmad-output/pipeline-snapshot.md" || broken "cannot write the pipeline snapshot"
+}
+# THE POLL HOOK. Sourced by the in-process sleep in a subshell of the beat, where wck_n_ is the virtual
+# now the sleep just reached: `reply` answers the open request once, `retry` sends one more request.
+df_on_sleep() {  # $1 = transcript, $2 = agent id, $3 = reply|retry
+  dos_t_="$("$WBL_REAL_DATE" -u -r "$wck_n_" +%Y-%m-%dT%H:%M:%S 2>/dev/null || "$WBL_REAL_DATE" -u -d "@$wck_n_" +%Y-%m-%dT%H:%M:%S 2>/dev/null)"
+  case "$3" in
+    reply) [ -e "$1.replied" ] && return 0; : > "$1.replied"
+      printf '{"parentUuid":"u1","isSidechain":true,"agentId":"%s","message":{"model":"m","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}]},"type":"assistant","uuid":"u5","timestamp":"%s.300Z"}\n' "$2" "$dos_t_" >> "$1" ;;
+    retry) printf '{"type":"api-request","sessionId":"s","agentId":"%s","id":"r9","timestamp":"%s.300Z","shapeHash":"c349"}\n' "$2" "$dos_t_" >> "$1" ;;
+  esac
+}
+df_beat() {  # $1 = subject (in a sibling dir); rest = argv -> OUT, RC, DF_EL (virtual seconds the beat took)
+  db_s_="$1"; shift; db_o_="$(fx_offset "$W")"
+  ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS="${DF_BUDGET:-300}" AI_DLC_WAIT_POLL_SECS=30 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS="${DF_MAXB:-3}" AI_DLC_TEAMMATE_IDLE_SECS=3600 AI_DLC_WAIT_SETTLE_SECS=1 \
+      AI_DLC_TEAMMATE_DIR="$TD" AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$db_s_" "$@" ) > "$BEATOUT" 2>&1
+  RC=$?; OUT="$(cat "$BEATOUT")"; DF_EL=$(( $(fx_offset "$W") - db_o_ ))
+}
+df_cap() {  # $1 = target -> its counter at the bound, as the last charged beat leaves it
+  printf '%s' "${DF_MAXB:-3}" > "$W/_bmad-output/.wait-beats/.bound" && printf '%s' "${DF_MAXB:-3}" > "$W/_bmad-output/.wait-beats/$(fx_key "$1")" \
+    || broken "cannot seed the beat counter"
+}
+df_scf() {  # $1 = agent id, $2 = target -> the path of that agent's early-break sidecar for that target
+  printf '%s' "$W/_bmad-output/.wait-beats/failed-$1-$(fx_key "$2")"
+}
+df_nsc() {  # -> the number of early-break sidecars of any agent and target in W
+  dns_n_=0; for dns_f_ in "$W/_bmad-output/.wait-beats/"failed-*; do [ -e "$dns_f_" ] && dns_n_=$(( dns_n_ + 1 )); done
+  printf '%s' "$dns_n_"
+}
+df_count() {  # $1 = text -> the number of output lines that open with it
+  dc_n_="$(printf '%s\n' "$OUT" | grep -c "^$1")" || dc_n_=0; printf '%s' "$dc_n_"
+}
+# THE BASE SCRIPT, staged once: the pinned commit's wait-for-deliverable.sh beside the same siblings.
+# A consumer has no such commit, so git.decl pins it optionally; absent, DF_BASE stays empty and every
+# arm that needs it prints a SKIP that says it is not a pass. git runs with the GIT_* variables a hook
+# exports dropped, so it reads the tree the fixture sits in.
+DF_BASE=""; DF_BASE_STATE=""
+df_git() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES; git -C "$HERE" "$@" ); }
+df_base() {
+  [ -z "$DF_BASE_STATE" ] || return 0
+  DF_BASE_STATE=absent
+  df_git cat-file -e "${DF_PIN}^{commit}" 2>/dev/null || return 0
+  dbs_d_="$(sib_dir "$SUBJ")"
+  df_git show "${DF_PIN}:core/scripts/wait-for-deliverable.sh" > "$dbs_d_/wait-for-deliverable.sh" 2>/dev/null \
+    || broken "the pinned base script cannot be read at $DF_PIN"
+  grep -q 'BASH_SOURCE\[0\]' "$dbs_d_/wait-for-deliverable.sh" && grep -q '^wfd_beat_main "\$@"' "$dbs_d_/wait-for-deliverable.sh" \
+    || broken "the pinned base script has no BASH_SOURCE guard or wfd_beat_main, so wbl_ip cannot run it in process"
+  DF_BASE="$dbs_d_/wait-for-deliverable.sh"; DF_BASE_STATE=staged
+}
+df_skip_base() { printf '  SKIP  %s -- the base pin %s is not in this tree'"'"'s history (a consumer, or a shallow clone); this is not a pass\n' "$1" "$DF_PIN"; }
+
+# S1. Dead, its one open request 1500 s old, and the transcript's MTIME at the virtual now: the file looks
+# fresh, the request does not. FAILED by arm B, and the beat breaks on its first poll and is refunded.
+S29a_failed_open_request_breaks_early() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 1; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  fx_settime "$TD/agent-$DF_DEAD.jsonl" "$(fx_now "$W")"
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p1.md
+  if [ "$RC" -eq 0 ] && has "${DF_HDR}$DF_DEAD (Repair part 1 brief) -- its last request has had no reply past the bound" \
+     && has "  arm B: its last record is an api-request sent 1500s ago with no reply (bound 1200s)" \
+     && has "  Resume THIS agent by id (SendMessage to $DF_DEAD)." && has "$DF_EARLY" && ! has "  arm A:" \
+     && [ "$DF_EL" -le 120 ]; then
+    ok "dispatch-failed: an open request 1500s old under a transcript touched at the virtual now is FAILED by arm B, and the beat ended after ${DF_EL}s virtual (<= 120), refunded"
+  else bad "dispatch-failed: a dead request under a fresh mtime was not named FAILED, or the beat did not break early (rc=$RC, ${DF_EL}s virtual): $OUT"; fi
+}
+# S2. Dead, then only harness attachment lines, stamped fresh: an attachment does not answer a request.
+S29b_failed_attachment_does_not_answer() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 2; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500 attach:5 attach:0
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p2.md
+  if has "${DF_HDR}$DF_DEAD (Repair part 2 brief)" && has "  arm B: its last record is an api-request sent 1500s ago with no reply (bound 1200s)"; then
+    ok "dispatch-failed: an open request followed only by fresh attachment lines is still FAILED (arm B)"
+  else bad "dispatch-failed: attachment lines after a dead request hid it (rc=$RC): $OUT"; fi
+}
+# S3. A live long request: answered by the beat's first poll, before the bound. Not FAILED, and the beat
+# runs out its deadline. Its allow-twin, one property apart: the same world with no reply is FAILED at the
+# first rescan past the bound (1100 s + 120 s), so this arm cannot pass on an arm B that never fires.
+S29c_answered_request_is_not_failed() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 3; df_tx "$DF_DEAD" user:1100 assistant:1100 req:1100
+  fx_onsleep "$W" "df_on_sleep '$TD/agent-$DF_DEAD.jsonl' '$DF_DEAD' reply"
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p3.md
+  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && [ "$DF_EL" -eq 270 ] && has "WAITING   p3.md -- beat 1/3"; then
+    ok "dispatch-failed: a 1100s request answered on the first poll is not FAILED, and the beat runs its whole 270s virtual"
+  else bad "dispatch-failed: an answered request was named FAILED or the beat ended early (rc=$RC, ${DF_EL}s virtual): $OUT"; fi
+  df_world; df_agent "$DF_DEAD" 3; df_tx "$DF_DEAD" user:1100 assistant:1100 req:1100
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p3.md
+  if has "${DF_HDR}$DF_DEAD" && has "sent 1220s ago with no reply (bound 1200s)" && [ "$DF_EL" -eq 120 ]; then
+    ok "dispatch-failed: TWIN — the same 1100s request never answered is FAILED at the first rescan past the bound (1220s, beat ended at 120s virtual)"
+  else bad "dispatch-failed: TWIN FAILED — an unanswered request crossing the bound mid-beat was not named at 1220s (rc=$RC, ${DF_EL}s virtual): $OUT"; fi
+}
+# S4. A wedge: the run's FIRST request is 2400 s old and its newest 1100 s, and every poll sends another.
+# Keyed on the newest send it is STALLED and never FAILED; keyed on the first of the run it would be.
+# Twin: the same run with no fresh retries crosses the bound and is FAILED.
+S29d_wedge_is_stalled_not_failed() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 4; df_tx "$DF_DEAD" assistant:3600 req:2400 req:1700 req:1100
+  fx_onsleep "$W" "df_on_sleep '$TD/agent-$DF_DEAD.jsonl' '$DF_DEAD' retry"
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p4.md
+  if [ "$RC" -eq 0 ] && has "${STALL_LINE}agent-$DF_DEAD.jsonl" && ! has "$DF_HDR" && [ "$DF_EL" -eq 270 ]; then
+    ok "dispatch-failed: a wedge whose retries keep its newest send fresh is TEAMMATE STALLED, not FAILED (first of the run 2400s old)"
+  else bad "dispatch-failed: a retrying wedge was named FAILED, or not STALLED (rc=$RC, ${DF_EL}s virtual): $OUT"; fi
+  df_world; df_agent "$DF_DEAD" 4; df_tx "$DF_DEAD" assistant:3600 req:2400 req:1700 req:1100
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p4.md
+  if has "${DF_HDR}$DF_DEAD" && has "sent 1220s ago with no reply"; then
+    ok "dispatch-failed: TWIN — the same run with no fresh retry is FAILED once its newest send passes the bound"
+  else bad "dispatch-failed: TWIN FAILED — a run whose newest send went stale was not named (rc=$RC): $OUT"; fi
+}
+# S5. Arm A: the harness's failed notice, and nothing in the agent's transcript newer -> FAILED; the same
+# agent then resumed (a user line and a reply newer than the notice) -> not FAILED, and the sidecar STAYS:
+# it goes only with its target's join state (S16), never because one scan saw the agent not FAILED.
+S29e_failed_notice_and_resume() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 5; df_tx "$DF_DEAD" user:900 req:880 assistant:870; df_notice "$DF_DEAD" 5 600
+  dfe_ts_="$(df_iso_ms 600 500)"
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p5.md
+  if has "${DF_HDR}$DF_DEAD (Repair part 5 brief) -- the harness reported it failed, and it has written nothing since" \
+     && has "  arm A: the harness reported it failed at ${dfe_ts_}: Agent \"Repair part 5 brief\" failed: Agent terminated early" \
+     && has "  Resume THIS agent by id, or re-dispatch its deliverable." && ! has "  arm B:" \
+     && [ -f "$(df_scf "$DF_DEAD" p5.md)" ]; then
+    ok "dispatch-failed: the harness's failed notice with nothing newer in the transcript is FAILED by arm A, and the sidecar is written"
+  else bad "dispatch-failed: a failed notice with no later record was not named by arm A (rc=$RC): $OUT"; fi
+  df_tx "$DF_DEAD" user:300 req:295 assistant:290
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p5.md
+  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && has "WAITING   p5.md" && [ -f "$(df_scf "$DF_DEAD" p5.md)" ]; then
+    ok "dispatch-failed: the same agent resumed after the notice (a newer user line) is not FAILED, and its join-scoped sidecar stays"
+  else bad "dispatch-failed: a resumed agent was still named FAILED, or its sidecar was dropped inside the join (rc=$RC): $OUT"; fi
+}
+# S6. The third death shape: the transcript ENDS in an isApiErrorMessage assistant line, which closes the
+# request and reads as a fresh turn. Only arm A sees it, and a FAILED agent is never LIVE: at the cap under
+# --complete-repair it gets no grant and no LIVE DISPATCH. Twin: the same world with no notice is LIVE and
+# granted, so the arm cannot pass on a turn that was never fresh enough to grant.
+S29f_api_error_turn_is_failed_never_live() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 6; df_tx "$DF_DEAD" user:20 req:15 apierr:10; df_notice "$DF_DEAD" 6 5; df_cap rec.md
+  DF_BUDGET=30 df_beat "$DFS" --complete-repair --dispatch "toolu_df_$DF_DEAD" rec.md
+  if [ "$RC" -eq 1 ] && has "${DF_HDR}$DF_DEAD (Repair part 6 brief) -- the harness reported it failed, and it has written nothing since" \
+     && has "  arm A: the harness reported it failed at" && ! has "  arm B:" \
+     && has "  Resume THIS agent by id, or re-dispatch its deliverable." && ! has "LIVE DISPATCH" && ! has "PROGRESS"; then
+    ok "dispatch-failed: a transcript ending in an API-error turn after a failed notice is FAILED by arm A alone, with no grant and no LIVE DISPATCH (rc 1)"
+  else bad "dispatch-failed: an API-error death was granted, read LIVE, or not named by arm A (rc=$RC): $OUT"; fi
+  df_world; df_agent "$DF_DEAD" 6; df_tx "$DF_DEAD" user:20 req:15 apierr:10; df_cap rec.md
+  DF_BUDGET=30 df_beat "$DFS" --complete-repair --dispatch "toolu_df_$DF_DEAD" rec.md
+  if [ "$RC" -eq 0 ] && has "PROGRESS  rec.md -- work observed in agent-$DF_DEAD.jsonl" && ! has "$DF_HDR"; then
+    ok "dispatch-failed: TWIN — the same API-error turn with no failed notice reads as a fresh turn and is granted (rc 0)"
+  else bad "dispatch-failed: TWIN FAILED — without the notice the fresh turn was not granted, so the arm above proves nothing (rc=$RC): $OUT"; fi
+}
+# S7 (and S14's world). --status over a dead dispatch: every target delivered prints no block; the same
+# world with the second target absent prints it. The gate, not the world, silences it.
+df_status_world() {  # $1 = 1 to write p2.md -> W
+  df_world; df_agent "$DF_DEAD" 7; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  printf 'part 1\n' > "$W/p1.md" || broken "cannot write p1.md"
+  [ "$1" = 1 ] && { printf 'part 2\n' > "$W/p2.md" || broken "cannot write p2.md"; }
+  return 0
+}
+S29g_all_delivered_is_not_failed() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_status_world 1
+  df_beat "$DFS" --status --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if [ "$RC" -eq 0 ] && has "STATUS -- 2 delivered, 0 not." && ! has "$DF_HDR"; then
+    ok "dispatch-failed: --status with every target delivered prints no block over a stale open request"
+  else bad "dispatch-failed: --status named a dead agent whose targets are all delivered (rc=$RC): $OUT"; fi
+  df_beat "$DFS" --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if [ "$RC" -eq 0 ] && has "DELIVERED p1.md" && has "DELIVERED p2.md" && ! has "$DF_HDR"; then
+    ok "dispatch-failed: a beat whose targets are all delivered prints no block over a stale open request"
+  else bad "dispatch-failed: a beat named a dead agent whose targets are all delivered (rc=$RC): $OUT"; fi
+  df_status_world 0
+  df_beat "$DFS" --status --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if has "STATUS -- 1 delivered, 1 not." && has "${DF_HDR}$DF_DEAD"; then
+    ok "dispatch-failed: TWIN — the same world with p2.md absent prints the block, so the silence above is the gate's"
+  else bad "dispatch-failed: TWIN FAILED — with a target out the block did not print (rc=$RC): $OUT"; fi
+}
+# S8. No --dispatch: the output is the BASE script's on the same world, byte for byte, rc included.
+# Each pair restores the world and its clock between the two runs. Control: with --dispatch the same
+# world's two outputs DIFFER and the tip names the dead agent -- the differential can resolve the change.
+df_pair() {  # $1 = label; rest = argv -> 0 when base and tip answer alike; DFP_<label>_TIP holds the tip's output
+  dp_l_="$1"; shift
+  # A fresh snapshot dir per pair: a fixed name is reused by a matrix cell that re-runs this arm, and cp -Rp
+  # into an existing dir nests the copy, so the restore would hand the tip a different world.
+  dp_s_="$(mktemp -d "$TMPROOT/df8-snap.$dp_l_.XXXXXX")" || broken "mktemp failed"
+  cp -Rp "$W" "$dp_s_/w" || broken "S8: cannot snapshot $W"
+  dp_o_="$(fx_offset "$W")"
+  df_beat "$DF_BASE" "$@"; dp_b_="$RC|$OUT"
+  mv "$W" "$dp_s_/after-base" && cp -Rp "$dp_s_/w" "$W" || broken "S8: cannot restore $W"
+  printf '%s' "$dp_o_" > "$(fx_clock_file "$W")"
+  df_beat "$DFS" "$@"; dp_t_="$RC|$OUT"
+  [ -n "$OUT" ] || broken "S8: the tip printed nothing for $dp_l_"
+  [ "$dp_b_" = "$dp_t_" ]
+}
+df_nodispatch_world() {
+  df_world; df_agent "$DF_DEAD" 8; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500 attach:0; df_notice "$DF_DEAD" 8 500
+  df_snapshot "$DF_DEAD:p1.md"; printf 'part 2\n' > "$W/p2.md" || broken "cannot write p2.md"
+}
+S29h_no_dispatch_matches_base() {
+  df_base
+  if [ -z "$DF_BASE" ]; then df_skip_base "dispatch-failed: the no---dispatch differential against the base script"; return 0; fi
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  if ! cmp -s "$DF_BASE" "$DFS"; then ok "dispatch-failed: S8 CONTROL — the base copy (at ${DF_PIN%"${DF_PIN#????????????}"}) and the script under test differ"
+  else bad "dispatch-failed: S8 CONTROL FAILED — the base copy is the script under test, so the differential compares a file with itself"; fi
+  df8_bad_=""
+  df_nodispatch_world; df_pair wait p1.md p2.md || df8_bad_="$df8_bad_ wait"
+  has "WAITING   p1.md" || df8_bad_="$df8_bad_ wait-shape"
+  df_nodispatch_world; df_cap p1.md; df_pair cap p1.md || df8_bad_="$df8_bad_ cap"
+  has "NON-DELIVERY p1.md" || df8_bad_="$df8_bad_ cap-shape"
+  df_nodispatch_world; df_pair status --status --since "$(( $(fx_now "$W") - 800 ))" p1.md p2.md || df8_bad_="$df8_bad_ status"
+  has "STATUS -- 1 delivered, 1 not." || df8_bad_="$df8_bad_ status-shape"
+  if [ -z "$df8_bad_" ]; then
+    ok "dispatch-failed: with no --dispatch the waiting beat, the cap and --status answer byte-for-byte as the base script does over a dead agent's world"
+  else bad "dispatch-failed: with no --dispatch the output differs from the base script's [${df8_bad_# }]: $OUT"; fi
+  df_nodispatch_world
+  if ! df_pair dispatch --dispatch "toolu_df_$DF_DEAD" p1.md p2.md && has "${DF_HDR}$DF_DEAD"; then
+    ok "dispatch-failed: S8 CONTROL — the same world WITH --dispatch answers differently from the base, and the tip names the dead agent"
+  else bad "dispatch-failed: S8 CONTROL FAILED — with --dispatch the base and the tip agree, so the equality above cannot fail: $OUT"; fi
+}
+# S9. Three dispatched agents, the dead one in the middle of the dispatch order and of the ledger. Then a
+# dead agent whose id carries '-': its id is read as a literal, never skipped.
+df_dash_beat() {  # $1 = subject -> OUT, RC over a live agent and a dead one with a dashed id
+  df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DASH" 4 toolu_df_dash4
+  df_tx "$DF_LIVE" user:120 req:115 assistant:100; df_tx "$DF_DASH" user:1600 assistant:1600 req:1500
+  df_beat "$1" --dispatch "toolu_df_$DF_LIVE" --dispatch toolu_df_dash4 p1.md p4.md
+}
+S29i_one_dead_of_three() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DEAD" 2; df_agent "$DF_LIVE2" 3
+  df_tx "$DF_LIVE" user:120 req:115 assistant:100; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500; df_tx "$DF_LIVE2" user:60 req:55 assistant:50
+  df_beat "$DFS" --dispatch "toolu_df_$DF_LIVE" --dispatch "toolu_df_$DF_DEAD" --dispatch "toolu_df_$DF_LIVE2" p1.md p2.md p3.md
+  if [ "$(df_count "$DF_HDR")" -eq 1 ] && has "${DF_HDR}$DF_DEAD (Repair part 2 brief)" \
+     && ! has "${DF_HDR}$DF_LIVE" && ! has "${DF_HDR}$DF_LIVE2" && has "  Not delivered: p1.md p2.md p3.md"; then
+    ok "dispatch-failed: of three dispatched agents exactly one block prints, naming the dead one (the middle of the order)"
+  else bad "dispatch-failed: three agents with one dead did not print exactly one block naming it ($(df_count "$DF_HDR") blocks): $OUT"; fi
+  # A dashed agent id is read, never skipped: the dead agent second of two, its id carrying '-'.
+  df_dash_beat "$DFS"
+  if [ "$(df_count "$DF_HDR")" -eq 1 ] && has "${DF_HDR}$DF_DASH (Repair part 4 brief) -- its last request has had no reply past the bound" \
+     && has "  arm B: its last record is an api-request sent 1500s ago with no reply (bound 1200s)" \
+     && has "  Resume THIS agent by id (SendMessage to $DF_DASH)." && has "$DF_EARLY" \
+     && [ -f "$(df_scf "$DF_DASH" p1.md)" ] && [ -f "$(df_scf "$DF_DASH" p4.md)" ] && [ "$(df_nsc)" -eq 2 ]; then
+    ok "dispatch-failed: a dead agent whose id carries '-' is named FAILED by arm B, and its sidecar is written under that id for each pending target"
+  else bad "dispatch-failed: a dashed agent id was skipped or misread ($(df_count "$DF_HDR") blocks, rc=$RC): $OUT"; fi
+}
+# S10. The motivating mis-map: the dead agent's row claims a path that IS delivered (by another agent),
+# while another target is out. A row never acquits: FAILED, with the row's claim quoted as a claim.
+S29j_misplaced_row_does_not_acquit() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DEAD" 2
+  df_tx "$DF_LIVE" user:300 req:295 assistant:290; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  df_snapshot "$DF_LIVE:p2.md" "$DF_DEAD:p1.md"; printf 'part 1\n' > "$W/p1.md" || broken "cannot write p1.md"
+  df_beat "$DFS" --dispatch "toolu_df_$DF_LIVE" --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if has "${DF_HDR}$DF_DEAD (Repair part 2 brief)" \
+     && has "  In-Flight row claims deliverable: p1.md   (the row is the lead's claim; check it against the description)" \
+     && has "  Not delivered: p2.md" && ! has "${DF_HDR}$DF_LIVE"; then
+    ok "dispatch-failed: a dead agent whose row names a DELIVERED path is still FAILED, and the row's claim is printed as a claim"
+  else bad "dispatch-failed: a mis-mapped row acquitted the dead agent or was not quoted (rc=$RC): $OUT"; fi
+}
+# S11. No row for the dead agent at all.
+S29k_no_row_reads_none() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DEAD" 2
+  df_tx "$DF_LIVE" user:300 req:295 assistant:290; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  df_snapshot "$DF_LIVE:p1.md"
+  df_beat "$DFS" --dispatch "toolu_df_$DF_LIVE" --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if has "${DF_HDR}$DF_DEAD" && has "  In-Flight row claims deliverable: none   (the row is the lead's claim"; then
+    ok "dispatch-failed: a dead agent with no In-Flight row is FAILED and its row claim reads 'none'"
+  else bad "dispatch-failed: a dead agent with no row was not named, or its claim did not read none (rc=$RC): $OUT"; fi
+}
+# S12. Under --complete the dead agent's deliverable EXISTS but carries no seat-complete line: the gate is
+# the beat's own predicate, never file existence, so the target is listed as not delivered.
+S29l_present_unsealed_is_not_delivered() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 1; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  printf '%s\n' "$SKELETON" > "$W/p1.md" || broken "cannot write p1.md"
+  df_beat "$DFS" --complete --dispatch "toolu_df_$DF_DEAD" p1.md
+  if has "${DF_HDR}$DF_DEAD" && has "  Not delivered: p1.md" && ! has "DELIVERED p1.md"; then
+    ok "dispatch-failed: under --complete a present but unsealed deliverable is FAILED and listed as not delivered"
+  else bad "dispatch-failed: a present unsealed deliverable acquitted the dead agent under --complete (rc=$RC): $OUT"; fi
+}
+# S13. Repeated beats, the dead agent never resumed, a live sibling's target out too. Beat 1 breaks on its
+# first poll and is refunded (beat 0/3); beats 2-4 run out their deadline and are charged; the cap is beat
+# 5. The base script charges every beat, so it reaches the cap at beat 4: the sibling is never NON-DELIVERY
+# earlier than under the base.
+df_sequence() {  # $1 = subject -> DFQ_N (the beat that exited 1), DFQ_EL (virtual seconds per beat), DFQ_B1 (beat 1's output)
+  df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DEAD" 2
+  df_tx "$DF_LIVE" user:60 req:55 assistant:50; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  DFQ_N=0; DFQ_EL=""; DFQ_B1=""; dq_i_=0
+  while [ "$dq_i_" -lt 8 ]; do
+    dq_i_=$(( dq_i_ + 1 ))
+    df_beat "$1" --dispatch "toolu_df_$DF_LIVE" --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+    DFQ_EL="$DFQ_EL $DF_EL"; [ "$dq_i_" -eq 1 ] && DFQ_B1="$OUT"
+    [ "$RC" -eq 1 ] && { DFQ_N="$dq_i_"; break; }
+  done
+}
+S29m_dead_agent_breaks_once() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_sequence "$DFS"
+  case "$DFQ_B1" in *"$DF_EARLY"*"BEAT COMPLETE"*) dq_e_=1 ;; *) dq_e_=0 ;; esac
+  case "$DFQ_B1" in *"WAITING   p1.md -- beat 0/3"*) dq_r_=1 ;; *) dq_r_=0 ;; esac
+  if [ "$DFQ_N" -eq 5 ] && [ "$DFQ_EL" = " 0 270 270 270 0" ] && [ "$dq_e_" = 1 ] && [ "$dq_r_" = 1 ] \
+     && has "NON-DELIVERY p1.md" && has "${DF_HDR}$DF_DEAD" && ! has "$DF_EARLY"; then
+    ok "dispatch-failed: a never-resumed dead agent breaks beat 1 only (0s, refunded to beat 0/3); beats 2-4 run 270s each and the cap is beat 5, still naming it"
+  else bad "dispatch-failed: repeated beats over a dead agent broke more than once, charged the early beat, or capped at beat $DFQ_N (virtual seconds:$DFQ_EL): $DFQ_B1 ... $OUT"; fi
+  df_base
+  if [ -z "$DF_BASE" ]; then df_skip_base "dispatch-failed: the sibling's cap against the base script"; return 0; fi
+  dq_tip_="$DFQ_N"; df_sequence "$DF_BASE"
+  if [ "$DFQ_N" -eq 4 ] && [ "$dq_tip_" -gt "$DFQ_N" ]; then
+    ok "dispatch-failed: the base script caps the same sibling at beat $DFQ_N, the tip at beat $dq_tip_ -- never earlier"
+  else bad "dispatch-failed: the sibling's cap under the tip (beat $dq_tip_) is not later than under the base (beat $DFQ_N)"; fi
+}
+# S14. --status over a dead dispatch with a target out prints the whole block, and writes no sidecar.
+S29n_status_prints_block() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_status_world 0
+  df_beat "$DFS" --status --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if [ "$RC" -eq 0 ] && has "${DF_HDR}$DF_DEAD (Repair part 7 brief) -- its last request has had no reply past the bound" \
+     && has "  arm B: its last record is an api-request sent 1500s ago with no reply (bound 1200s)" \
+     && has "  In-Flight row claims deliverable: none" && has "  Not delivered: p2.md" \
+     && has "  Resume THIS agent by id (SendMessage to $DF_DEAD)." && ! has "$DF_EARLY" \
+     && [ "$(df_nsc)" -eq 0 ]; then
+    ok "dispatch-failed: --status over a dead dispatch prints the whole block and writes no sidecar"
+  else bad "dispatch-failed: --status did not print the block, or wrote a sidecar (rc=$RC): $OUT"; fi
+}
+# S15. The measured live shape at the cap: a --complete-repair single dispatch whose newest send of a
+# two-send run has stayed open 853 s -- the max open interval of a LIVE agent (send to next send or
+# reply) over 6,023 graph transcripts -- and is answered on the beat's first poll. Not FAILED, the grant
+# is kept (rc 0, PROGRESS) and the granted beat runs out its 1380 s. Budget 1400, so the turn before
+# the run (859 s) reads LIVE -- at a 600 s quantum the turn is outside the LIVE band and no grant is
+# possible on any bound, because the open send sits after the turn. Twin, one property apart: the same
+# run at 1300 s (the turn at 1306 s, still LIVE) is FAILED and arm B alone denies the grant, so this arm
+# cannot pass on an arm B that never fires.
+df_open_interval_world() {  # $1 = newest send age -> W, a live agent at the cap whose turn is 6 s older
+  df_world; df_agent "$DF_LIVE" 15
+  df_tx "$DF_LIVE" user:$(( $1 + 17 )) assistant:$(( $1 + 6 )) req:$(( $1 + 5 )) req:"$1"; df_cap rec.md
+}
+S29o_live_open_interval_is_not_failed() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_open_interval_world 853
+  fx_onsleep "$W" "df_on_sleep '$TD/agent-$DF_LIVE.jsonl' '$DF_LIVE' reply"
+  DF_BUDGET=1400 df_beat "$DFS" --complete-repair --dispatch "toolu_df_$DF_LIVE" rec.md
+  if [ "$RC" -eq 0 ] && has "PROGRESS  rec.md -- work observed in agent-$DF_LIVE.jsonl" && ! has "$DF_HDR" && [ "$DF_EL" -eq 1380 ]; then
+    ok "dispatch-failed: a live agent at the cap whose newest send has been open 853s (the measured max) is not FAILED, keeps its grant (rc 0) and runs 1380s virtual"
+  else bad "dispatch-failed: a live 853s open interval was named FAILED or lost its grant (rc=$RC, ${DF_EL}s virtual): $OUT"; fi
+  df_open_interval_world 1300
+  DF_BUDGET=1400 df_beat "$DFS" --complete-repair --dispatch "toolu_df_$DF_LIVE" rec.md
+  if [ "$RC" -eq 1 ] && has "${DF_HDR}$DF_LIVE (Repair part 15 brief)" && has "  arm B: its last record is an api-request sent 1300s ago with no reply (bound 1200s)" \
+     && ! has "PROGRESS"; then
+    ok "dispatch-failed: TWIN — the same run with its newest send open 1300s is FAILED and arm B alone denies the LIVE grant (rc 1)"
+  else bad "dispatch-failed: TWIN FAILED — a 1300s open send at the cap was not named FAILED (rc=$RC): $OUT"; fi
+}
+# S16. One join, the agent flapping FAILED -> answered -> FAILED: beat 1 breaks and is refunded (beat 0/3);
+# beat 2 sees it answered and runs (1/3); beat 3 sees a new open request past the bound, prints the block,
+# and does NOT break or refund again (2/3), because the sidecar is keyed per target, and so per join. Then
+# --reset drops the join state, the target's sidecar included, and the next beat breaks and is refunded once more.
+df_flap() {  # $1 = subject -> DFF_EL (virtual seconds per beat), DFF_O1..DFF_O4, DFF_SC (1: sidecar after beat 3)
+  df_world; df_agent "$DF_DEAD" 16; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  DFF_EL=""
+  df_beat "$1" --dispatch "toolu_df_$DF_DEAD" p1.md; DFF_EL="$DFF_EL $DF_EL"; DFF_O1="$OUT"
+  df_tx "$DF_DEAD" assistant:1490
+  df_beat "$1" --dispatch "toolu_df_$DF_DEAD" p1.md; DFF_EL="$DFF_EL $DF_EL"; DFF_O2="$OUT"
+  df_tx "$DF_DEAD" req:1250
+  df_beat "$1" --dispatch "toolu_df_$DF_DEAD" p1.md; DFF_EL="$DFF_EL $DF_EL"; DFF_O3="$OUT"
+  DFF_SC=0; [ -f "$(df_scf "$DF_DEAD" p1.md)" ] && DFF_SC=1
+  df_beat "$1" --reset --dispatch "toolu_df_$DF_DEAD" p1.md; DFF_EL="$DFF_EL $DF_EL"; DFF_O4="$OUT"
+}
+S29p_flap_within_join_refunds_once() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_flap "$DFS"
+  dff_bad_=""
+  [ "$DFF_EL" = " 0 270 270 0" ] || dff_bad_="$dff_bad_ seconds:$DFF_EL"
+  case "$DFF_O1" in *"$DF_EARLY"*"WAITING   p1.md -- beat 0/3"*|*"WAITING   p1.md -- beat 0/3"*"$DF_EARLY"*) ;; *) dff_bad_="$dff_bad_ beat1" ;; esac
+  case "$DFF_O2" in *"$DF_HDR"*) dff_bad_="$dff_bad_ beat2-named" ;; *"WAITING   p1.md -- beat 1/3"*) ;; *) dff_bad_="$dff_bad_ beat2" ;; esac
+  case "$DFF_O3" in *"$DF_EARLY"*) dff_bad_="$dff_bad_ beat3-refunded" ;; *"WAITING   p1.md -- beat 2/3"*"${DF_HDR}$DF_DEAD"*) ;; *) dff_bad_="$dff_bad_ beat3" ;; esac
+  [ "$DFF_SC" = 1 ] || dff_bad_="$dff_bad_ sidecar"
+  case "$DFF_O4" in *"$DF_EARLY"*) ;; *) dff_bad_="$dff_bad_ reset" ;; esac
+  if [ -z "$dff_bad_" ]; then
+    ok "dispatch-failed: an agent flapping FAILED, answered, FAILED inside one join is refunded once (beats 0/3, 1/3, 2/3; 0 270 270s), and --reset drops the sidecar so the next beat breaks again"
+  else bad "dispatch-failed: a flapping agent was refunded more than once in a join, or --reset kept its sidecar [${dff_bad_# }]: $DFF_O3 ... $DFF_O4"; fi
+}
+# S17. The sidecar is keyed per TARGET, so per join. Join 1 (q1.md) breaks early over the dead agent and
+# writes its sidecar, then closes on a beat with NO --dispatch once q1.md lands, which knows no agent ids;
+# join 2, on a fresh path, dispatches the SAME agent id and must break early and be refunded (beat 0/3).
+# A per-agent key outlives join 1 and join 2 then runs its whole 270 s, charged (beat 1/3).
+df_crossjoin() {  # $1 = subject -> DFX_O1 (join 1 beat 1), DFX_O2 (join 1 closing beat), DFX_EL, DFX_SC1, DFX_SC1G; OUT, RC: join 2
+  df_world; df_agent "$DF_DEAD" 17; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  df_beat "$1" --dispatch "toolu_df_$DF_DEAD" q1.md; DFX_O1="$OUT"; DFX_EL="$DF_EL"
+  DFX_SC1=0; [ -f "$(df_scf "$DF_DEAD" q1.md)" ] && DFX_SC1=1
+  printf 'part 17\n' > "$W/q1.md" || broken "cannot write q1.md"
+  fx_settime "$W/q1.md" "$(fx_now "$W")"
+  df_beat "$1" q1.md; DFX_O2="$OUT"; DFX_EL="$DFX_EL $DF_EL"
+  DFX_SC1G=0; [ -f "$(df_scf "$DF_DEAD" q1.md)" ] || DFX_SC1G=1
+  df_beat "$1" --dispatch "toolu_df_$DF_DEAD" q2.md; DFX_EL="$DFX_EL $DF_EL"
+}
+S29q_agent_reused_in_new_join_breaks_again() {
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_crossjoin "$DFS"
+  dfx_bad_=""
+  case "$DFX_O1" in *"$DF_EARLY"*) ;; *) dfx_bad_="$dfx_bad_ join1-no-break" ;; esac
+  [ "$DFX_SC1" = 1 ] || dfx_bad_="$dfx_bad_ join1-no-sidecar"
+  case "$DFX_O2" in *"DELIVERED q1.md"*) ;; *) dfx_bad_="$dfx_bad_ join1-not-closed" ;; esac
+  [ "$DFX_SC1G" = 1 ] || dfx_bad_="$dfx_bad_ join1-sidecar-kept"
+  has "$DF_EARLY" || dfx_bad_="$dfx_bad_ join2-no-break"
+  has "WAITING   q2.md -- beat 0/3" || dfx_bad_="$dfx_bad_ join2-charged"
+  has "${DF_HDR}$DF_DEAD (Repair part 17 brief)" || dfx_bad_="$dfx_bad_ join2-unnamed"
+  [ -f "$(df_scf "$DF_DEAD" q2.md)" ] || dfx_bad_="$dfx_bad_ join2-no-sidecar"
+  case "$DFX_EL" in " "*) dfx_bad_="$dfx_bad_ seconds" ;; "0 "*" 0") ;; *) dfx_bad_="$dfx_bad_ seconds" ;; esac
+  if [ "$RC" -eq 0 ] && [ -z "$dfx_bad_" ]; then
+    ok "dispatch-failed: an agent id reused in a later join on a fresh path breaks that join early and is refunded (beat 0/3), after join 1 closed on a beat with no --dispatch and took its sidecar with it (virtual seconds: $DFX_EL)"
+  else bad "dispatch-failed: an agent reused in a new join lost its early break or refund, or join 1 kept its sidecar [${dfx_bad_# }] (rc=$RC, virtual seconds: $DFX_EL): $OUT"; fi
+}
+# The mutants, one per layer of the mechanism. Each runs the world of the arm named for it, in a sibling dir.
+M62_open_request_on_mtime() {
+  mutant open-request-on-mtime -e 's@^      ds_e_="\$(to_epoch "\${ds_open_:0:19}Z")" || ds_e_=""$@      ds_e_="$(mtime_of "$ds_f_")" || ds_e_=""@' || return
+  df_world; df_agent "$DF_DEAD" 1; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  fx_settime "$TD/agent-$DF_DEAD.jsonl" "$(fx_now "$W")"
+  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --dispatch "toolu_df_$DF_DEAD" p1.md
+  if ! has "$DF_HDR" && [ "$DF_EL" -eq 270 ]; then
+    mutant_killed "${B_s29a:-0}" open-request-on-mtime "MUTANT open-request-on-mtime: aging the open request by the file's mtime misses a dead request under a fresh file and the beat runs 270s — section 29 S1 catches it"
+  else bad "MUTANT open-request-on-mtime: S1 survives arm B keyed on mtime (rc=$RC, ${DF_EL}s virtual): $OUT"; fi
+}
+M63_attachment_closes_request() {
+  mutant attachment-closes-request -e 's@^\(      index(\$0, "\\"type\\":\\"assistant\\"") || index(\$0, "\\"type\\":\\"user\\"")\) { open = "" }$@\1 || index($0, "\\"type\\":\\"attachment\\"") { open = "" }@' || return
+  df_world; df_agent "$DF_DEAD" 2; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500 attach:5 attach:0
+  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --dispatch "toolu_df_$DF_DEAD" p2.md
+  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && has "WAITING   p2.md"; then
+    mutant_killed "${B_s29b:-0}" attachment-closes-request "MUTANT attachment-closes-request: letting a harness attachment close the open request hides the dead agent — section 29 S2 catches it"
+  else bad "MUTANT attachment-closes-request: S2 survives an attachment closing the request (rc=$RC): $OUT"; fi
+}
+M64_failed_gate_removed() {
+  mutant failed-gate-removed -e 's@^  \[ -n "\$DP_ROW_AGENTS_" \] && \[ -n "\${1:-}" \] || return 0$@  [ -n "$DP_ROW_AGENTS_" ] || return 0@' || return
+  df_status_world 1
+  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --status --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if has "STATUS -- 2 delivered, 0 not." && has "${DF_HDR}$DF_DEAD"; then
+    mutant_killed "${B_s29g:-0}" failed-gate-removed "MUTANT failed-gate-removed: without the not-delivered gate --status names a dead agent whose every target is delivered — section 29 S7 catches it"
+  else bad "MUTANT failed-gate-removed: S7 survives the not-delivered gate being removed (rc=$RC): $OUT"; fi
+}
+M65_failed_no_resume_acquittal() {
+  mutant failed-no-resume-acquittal -e 's@^      if \[ "\$ds_max_" = "-" \] || ! \[\[ "\$ds_max_" > "\$dn_t_" \]\]; then$@      if :; then@' || return
+  DFM="$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  df_world; df_agent "$DF_DEAD" 5; df_tx "$DF_DEAD" user:900 req:880 assistant:870; df_notice "$DF_DEAD" 5 600
+  df_beat "$DFM" --dispatch "toolu_df_$DF_DEAD" p5.md
+  df_tx "$DF_DEAD" user:300 req:295 assistant:290
+  df_beat "$DFM" --dispatch "toolu_df_$DF_DEAD" p5.md
+  if has "${DF_HDR}$DF_DEAD (Repair part 5 brief) -- the harness reported it failed"; then
+    mutant_killed "${B_s29e:-0}" failed-no-resume-acquittal "MUTANT failed-no-resume-acquittal: without the newer-record acquittal a resumed agent is still named FAILED — section 29 S5 catches it"
+  else bad "MUTANT failed-no-resume-acquittal: S5 survives the resume acquittal being removed (rc=$RC): $OUT"; fi
+}
+M66_failed_no_early_break() {
+  mutant failed-no-early-break -e 's@^  df_early_break "\$lp_now_" && break$@  :@' || return
+  df_sequence "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  if [ "$DFQ_N" -eq 4 ] && [ "$DFQ_EL" = " 270 270 270 0" ]; then
+    mutant_killed "${B_s29m:-0}" failed-no-early-break "MUTANT failed-no-early-break: with no early break beat 1 runs its whole 270s over a dead agent — section 29 S13 catches it"
+  else bad "MUTANT failed-no-early-break: S13 survives the early break being removed (cap at beat $DFQ_N, virtual seconds:$DFQ_EL)"; fi
+}
+M67_failed_no_refund() {
+  mutant failed-no-refund -e 's@^    \[ "\$eb_b_" -gt 0 \] && eb_b_=\$(( eb_b_ - 1 ))$@    :@' || return
+  df_sequence "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  case "$DFQ_B1" in *"WAITING   p1.md -- beat 1/3"*) dq_m_=1 ;; *) dq_m_=0 ;; esac
+  if [ "$DFQ_N" -eq 4 ] && [ "$DFQ_EL" = " 0 270 270 0" ] && [ "$dq_m_" = 1 ]; then
+    mutant_killed "${B_s29m:-0}" failed-no-refund "MUTANT failed-no-refund: the early beat keeps its charge (beat 1/3) and the live sibling caps one beat sooner — section 29 S13 catches it"
+  else bad "MUTANT failed-no-refund: S13 survives the refund being removed (cap at beat $DFQ_N, virtual seconds:$DFQ_EL)"; fi
+}
+M68_failed_acquit_from_row() {
+  mutant failed-acquit-from-row -e 's@^    sf_d_=""$@    sf_c_=""; while IFS=\\| read -r ir_a_ ir_s_ ir_d_; do [ "$ir_a_" = "$sf_a_" ] \&\& { sf_c_="$ir_d_"; break; }; done <<< "$sf_rows_"; [ -n "$sf_c_" ] \&\& case " $sf_nd_ " in *" $sf_c_ "*) ;; *) continue ;; esac; sf_d_=""@' || return
+  df_world; df_agent "$DF_LIVE" 1; df_agent "$DF_DEAD" 2
+  df_tx "$DF_LIVE" user:300 req:295 assistant:290; df_tx "$DF_DEAD" user:1600 assistant:1600 req:1500
+  df_snapshot "$DF_LIVE:p2.md" "$DF_DEAD:p1.md"; printf 'part 1\n' > "$W/p1.md" || broken "cannot write p1.md"
+  df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --dispatch "toolu_df_$DF_LIVE" --dispatch "toolu_df_$DF_DEAD" p1.md p2.md
+  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && has "WAITING   p2.md"; then
+    mutant_killed "${B_s29j:-0}" failed-acquit-from-row "MUTANT failed-acquit-from-row: acquitting an agent whose row names a delivered path hides the mis-mapped dead agent — section 29 S10 catches it"
+  else bad "MUTANT failed-acquit-from-row: S10 survives a row acquitting its agent (rc=$RC): $OUT"; fi
+}
+M69_failed_precedence_removed() {
+  mutant failed-precedence-removed -e 's@^  df_is_failed "\$dl_a_" && return 1$@  :@' || return
+  df_world; df_agent "$DF_DEAD" 6; df_tx "$DF_DEAD" user:20 req:15 apierr:10; df_notice "$DF_DEAD" 6 5; df_cap rec.md
+  DF_BUDGET=30 df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --complete-repair --dispatch "toolu_df_$DF_DEAD" rec.md
+  if [ "$RC" -eq 0 ] && has "PROGRESS  rec.md -- work observed in agent-$DF_DEAD.jsonl" && has "${DF_HDR}$DF_DEAD"; then
+    mutant_killed "${B_s29f:-0}" failed-precedence-removed "MUTANT failed-precedence-removed: with a FAILED agent allowed to read LIVE, an API-error death is granted a beat (rc 0, PROGRESS) — section 29 S6 catches it"
+  else bad "MUTANT failed-precedence-removed: S6 survives the FAILED-before-LIVE precedence being removed (rc=$RC): $OUT"; fi
+}
+M70_failed_clear_on_not_failed() {
+  mutant failed-clear-on-not-failed -e 's@^\(    if \[ "\$ds_hit_" -eq 1 \]; then DF_FAILED="\${DF_FAILED}\${DF_FAILED:+ }\$ds_a_"\); fi$@\1; elif [ "$STATUS" -eq 0 ]; then rm -f "${COUNTER_DIR}/failed-${ds_a_}-"*; fi@' || return
+  df_flap "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  case "$DFF_O3" in *"$DF_EARLY"*) dfm_r_=1 ;; *) dfm_r_=0 ;; esac
+  if [ "$dfm_r_" = 1 ] && [ "$DFF_EL" = " 0 270 0 0" ]; then
+    mutant_killed "${B_s29p:-0}" failed-clear-on-not-failed "MUTANT failed-clear-on-not-failed: clearing the sidecar when one scan sees the agent answered refunds the same join twice — section 29 S16 catches it"
+  else bad "MUTANT failed-clear-on-not-failed: S16 survives the sidecar being cleared on a not-FAILED scan (virtual seconds:$DFF_EL): $DFF_O3"; fi
+}
+M71_open_request_bound_480() {
+  mutant open-request-bound-480 -e 's@^OPEN_REQUEST_SECS="\${AI_DLC_OPEN_REQUEST_SECS:-1200}"$@OPEN_REQUEST_SECS="${AI_DLC_OPEN_REQUEST_SECS:-480}"@' || return
+  df_open_interval_world 853
+  fx_onsleep "$W" "df_on_sleep '$TD/agent-$DF_LIVE.jsonl' '$DF_LIVE' reply"
+  DF_BUDGET=1400 df_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh" --complete-repair --dispatch "toolu_df_$DF_LIVE" rec.md
+  if [ "$RC" -eq 1 ] && has "${DF_HDR}$DF_LIVE" && has "sent 853s ago with no reply (bound 480s)" && ! has "PROGRESS"; then
+    mutant_killed "${B_s29o:-0}" open-request-bound-480 "MUTANT open-request-bound-480: the send-to-reply bound names a live 853s open interval FAILED and takes its grant (rc 1) — section 29 S15 catches it"
+  else bad "MUTANT open-request-bound-480: S15 survives the bound being 480 (rc=$RC): $OUT"; fi
+}
+M72_dashed_id_skipped() {
+  mutant dashed-id-skipped -e 's@^    case "\$ds_a_" in \*\[!A-Za-z0-9_-\]\*) continue ;; esac$@    case "$ds_a_" in *[!A-Za-z0-9_]*) continue ;; esac@' || return
+  df_dash_beat "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && ! has "$DF_HDR" && has "WAITING   p4.md"; then
+    mutant_killed "${B_s29i:-0}" dashed-id-skipped "MUTANT dashed-id-skipped: an id guard without '-' skips a dashed dead agent silently — section 29 S9 catches it"
+  else bad "MUTANT dashed-id-skipped: S9 survives a guard that skips dashed ids (rc=$RC): $OUT"; fi
+}
+M73_failed_per_agent_key() {
+  mutant failed-per-agent-key -e 's@^df_sc_() { DF_SC_="\${COUNTER_DIR}/failed-\$1-\$2"; }$@df_sc_() { DF_SC_="${COUNTER_DIR}/failed-$1"; }@' || return
+  df_crossjoin "$(sib_dir "$MUT")/wait-for-deliverable.sh"
+  if [ "$RC" -eq 0 ] && ! has "$DF_EARLY" && has "WAITING   q2.md -- beat 1/3" && has "${DF_HDR}$DF_DEAD"; then
+    mutant_killed "${B_s29q:-0}" failed-per-agent-key "MUTANT failed-per-agent-key: a sidecar keyed per agent outlives join 1, so join 2 on a fresh path runs its whole beat charged (beat 1/3) — section 29 S17 catches it"
+  else bad "MUTANT failed-per-agent-key: S17 survives the sidecar keyed per agent (rc=$RC, virtual seconds: $DFX_EL): $OUT"; fi
+}
 # ---------------------------------------------------------------------------
 # THE WIRING, END TO END: ONE CLI RUN PER DISTINCT OUTCOME, EACH HELD BYTE-IDENTICAL TO wbl_ip.
 # Every cell above calls the subject in process. This is where `bash wait-for-deliverable.sh` still
@@ -3695,6 +4302,7 @@ twin_cell() {  # $1 = arm token, $2 = mutant file -> 0 green, 1 tripped
   return "$tc_rc_"
 }
 mx_row() { grep -m1 "^# MUTANT-MATRIX $1 " "$0"; }
+MX_NARMS=0; for af_ in $NAMES; do case "$af_" in S*) MX_NARMS=$((MX_NARMS+1)) ;; esac; done   # the arm count MATRIX-WIDE halves
 for n in $NAMES; do
   f_before=$fails; MUT_LOG=""; fx_shims_on
   "$n"
@@ -3764,6 +4372,23 @@ for n in $NAMES; do
     S27c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S27c added a failure, so its mutants are not scored"; else B_s27c=1; fi ;;
     S27d_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S27d added a failure, so its mutants are not scored"; else B_s27d=1; fi ;;
     S28_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S28 added a failure, so its mutants are not scored"; else B_s28=1; fi ;;
+    S29a_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29a added a failure, so its mutants are not scored"; else B_s29a=1; fi ;;
+    S29b_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29b added a failure, so its mutants are not scored"; else B_s29b=1; fi ;;
+    S29c_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29c added a failure, so its mutants are not scored"; else B_s29c=1; fi ;;
+    S29d_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29d added a failure, so its mutants are not scored"; else B_s29d=1; fi ;;
+    S29e_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29e added a failure, so its mutants are not scored"; else B_s29e=1; fi ;;
+    S29f_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29f added a failure, so its mutants are not scored"; else B_s29f=1; fi ;;
+    S29g_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29g added a failure, so its mutants are not scored"; else B_s29g=1; fi ;;
+    S29h_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29h added a failure, so its mutants are not scored"; else B_s29h=1; fi ;;
+    S29i_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29i added a failure, so its mutants are not scored"; else B_s29i=1; fi ;;
+    S29j_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29j added a failure, so its mutants are not scored"; else B_s29j=1; fi ;;
+    S29k_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29k added a failure, so its mutants are not scored"; else B_s29k=1; fi ;;
+    S29l_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29l added a failure, so its mutants are not scored"; else B_s29l=1; fi ;;
+    S29m_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29m added a failure, so its mutants are not scored"; else B_s29m=1; fi ;;
+    S29n_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29n added a failure, so its mutants are not scored"; else B_s29n=1; fi ;;
+    S29o_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29o added a failure, so its mutants are not scored"; else B_s29o=1; fi ;;
+    S29p_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29p added a failure, so its mutants are not scored"; else B_s29p=1; fi ;;
+    S29q_*) if [ "$fails" -ne "$f_before" ]; then bad "base arm S29q added a failure, so its mutants are not scored"; else B_s29q=1; fi ;;
     S*) bad "base arm $n has no literal flag arm; add one" ;;
   esac
   case "$n" in M*)
@@ -3792,7 +4417,7 @@ for n in $NAMES; do
           case "$mx_c_" in *:1) mx_trip_="$mx_trip_ ${mx_c_%%:*}" ;; *:0) mx_green_="$mx_green_ ${mx_c_%%:*}" ;; esac
         done
         mx_nt_=0; for mx_c_ in $mx_trip_; do mx_nt_=$((mx_nt_+1)); done
-        [ "$mx_nt_" -le 29 ] || printf '  MATRIX-WIDE %s trips %d arms (more than half of 58): it may break the subject wholesale\n' "$mn_" "$mx_nt_"
+        [ "$mx_nt_" -le $(( MX_NARMS / 2 )) ] || printf '  MATRIX-WIDE %s trips %d arms (more than half of %d): it may break the subject wholesale\n' "$mn_" "$mx_nt_" "$MX_NARMS"
         for mx_d1_ in $(printf '%s' "$dec_" | tr ',' ' '); do
           case " $mx_trip_ " in *" $mx_d1_ "*) ;; *) bad "matrix: $mn_ decides arm $mx_d1_ does not read 1 in the full row" ;; esac
         done

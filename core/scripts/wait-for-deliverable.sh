@@ -266,7 +266,10 @@
 #                      Agent result returned, or its toolu_ id. Its spawn-ledger `ts` is the
 #                      join's --since, and a --since LATER than it is refused. At the cap a
 #                      beat printing LIVE DISPATCH or STOPPED DISPATCH means read that agent's
-#                      transcript before any re-dispatch.
+#                      transcript before any re-dispatch. A beat (or --status) printing
+#                      DISPATCH FAILED agent-<X> means that dispatched agent died before
+#                      delivering: resume THAT agent id; its In-Flight row is the lead's claim,
+#                      to check against the agent's description (header: "DISPATCH FAILED").
 #   (Each is documented in full below the `set -u` line.)
 #
 # EXIT CODES
@@ -282,10 +285,17 @@
 #                     still out: the likely cause is a DIVERGED delivery, not a slow
 #                     teammate. Check the path before beating again. It is a report,
 #                     not a verdict -- the exit code is unaffected.
+#                     `DISPATCH FAILED agent-<X>` means a --dispatch agent died before
+#                     delivering (the harness reported it failed, or its last request has
+#                     had no reply past AI_DLC_OPEN_REQUEST_SECS). Resume THAT agent by id.
+#                     The first beat of the join to see it ends early and its beat charge
+#                     is refunded (once per agent per join). A FAILED agent gets no
+#                     --complete-repair LIVE grant; the early break itself changes no exit code.
 #   1  NON-DELIVERY   a path exhausted max_wait_beats. Rule 20 non-delivery:
 #                     re-dispatch ONCE (with --reset), then HARD_BLOCK -- unless the beat
 #                     printed LIVE DISPATCH or STOPPED DISPATCH, in which case read that
-#                     agent's transcript first, as the block says.
+#                     agent's transcript first, as the block says; a DISPATCH FAILED
+#                     block names an agent to resume by id before any re-dispatch.
 #
 # WHY WAITING IS NOT NONZERO. A join that is still waiting is the ordinary case --
 # it is what nine of every ten beats report. The harness treats a nonzero exit from
@@ -309,6 +319,9 @@
 #   AI_DLC_PROJECT_ROOT      project root override (else walk up from this script, CLAUDE_PROJECT_DIR, cwd)
 #   AI_DLC_TEAMMATE_IDLE_SECS  quiet seconds before the beat reports TEAMMATE IDLE
 #                            (default 2 x the beat quantum; see the measurement above)
+#   AI_DLC_OPEN_REQUEST_SECS  seconds a dispatched agent's newest api-request may go
+#                            unanswered before DISPATCH FAILED names it (default 1200;
+#                            see "DISPATCH FAILED" for the measurement)
 #   AI_DLC_TEAMMATE_DIR      override the teammate-transcript directory. Exists so
 #                            the fixture can point the sensor at a tree it built --
 #                            a sensor that resolves its own location cannot be
@@ -1799,20 +1812,39 @@ rd_era_held() {
   fi
   [ "$RD_ERA_" = 1 ]
 }
+# THE ONE READER OF THE IN-FLIGHT ROWS, shared by row_on_delivery and the DISPATCH FAILED report.
+# Prints `<agent cell first word>|<status>|<deliverable>` for every row of the snapshot's In-Flight
+# Teammates table, in table order (backticks dropped from the deliverable). A reader that wants the
+# FIRST row of an agent with some status walks the lines in order and stops at it.
+inflight_rows() {  # $1 = snapshot path
+  LC_ALL=C awk -F'|' '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    /^## / { ins = (index($0, "## In-Flight Teammates") == 1); next }
+    !ins || index($0, "|") == 0 { next }
+    { line = $0; sub(/^[ \t]*\|/, "", line); sub(/\|[ \t]*$/, "", line); k = split(line, c, "|")
+      if (!hdr) { for (j = 1; j <= k; j++) { h = trim(c[j]); if (h == "status") sc = j; if (h == "deliverable") dc = j; if (h == "dispatched-at") hdr = 1 }; next }
+      if (!sc || !dc) next
+      split(trim(c[1]), aw, /[ \t]+/)
+      d = trim(c[dc]); gsub(/`/, "", d); print aw[1] "|" trim(c[sc]) "|" d }' "$1" 2>/dev/null
+}
+# DF_ROWS: the rows as the FIRST read in this process saw them, before any row_on_delivery write,
+# so the DISPATCH FAILED report quotes the lead's claim and never a row this beat just flipped.
+DF_ROWS=""; DF_ROWS_SET=0
 row_on_delivery() {  # $1 = the delivered target
   [ -n "$DP_ROW_AGENTS_" ] || return 0
   rd_snap_="${STATE_DIR}/pipeline-snapshot.md"; rd_su_="${WD_SCRIPT_DIR}/snapshot-update.sh"
   [ -f "$rd_snap_" ] && [ -f "$rd_su_" ] || return 0
   rd_era_held || return 0
+  rd_rows_="$(inflight_rows "$rd_snap_")"
+  [ "$DF_ROWS_SET" = 1 ] || { DF_ROWS="$rd_rows_"; DF_ROWS_SET=1; }
+  rd_done_=" "
   for rd_ag_ in $DP_ROW_AGENTS_; do
-    rd_dl_="$(RD_AG="$rd_ag_" LC_ALL=C awk -F'|' '
-      function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
-      /^## / { ins = (index($0, "## In-Flight Teammates") == 1); next }
-      !ins || index($0, "|") == 0 { next }
-      { line = $0; sub(/^[ \t]*\|/, "", line); sub(/\|[ \t]*$/, "", line); k = split(line, c, "|")
-        if (!hdr) { for (j = 1; j <= k; j++) { h = trim(c[j]); if (h == "status") sc = j; if (h == "deliverable") dc = j; if (h == "dispatched-at") hdr = 1 }; next }
-        split(trim(c[1]), aw, /[ \t]+/)
-        if (aw[1] == ENVIRON["RD_AG"] && sc && dc && trim(c[sc]) == "in-flight") { d = trim(c[dc]); gsub(/`/, "", d); print d; exit } }' "$rd_snap_")"
+    case "$rd_done_" in *" $rd_ag_ "*) continue ;; esac
+    rd_done_="${rd_done_}${rd_ag_} "
+    rd_dl_=""
+    while IFS='|' read -r ir_a_ ir_s_ ir_d_; do
+      [ "$ir_a_" = "$rd_ag_" ] && [ "$ir_s_" = "in-flight" ] && { rd_dl_="$ir_d_"; break; }
+    done <<< "$rd_rows_"
     [ -n "$rd_dl_" ] || continue
     [ "$rd_dl_" = "$1" ] || [ "${WD_ROOT}/$rd_dl_" = "$1" ] || continue
     rd_out_="$(bash "$rd_su_" --snapshot "$rd_snap_" --row-status "$rd_ag_" delivered-reachable 2>&1)" \
@@ -1919,6 +1951,9 @@ dispatch_live() {
   dl_t_="${dl_r_%% *}"; dl_k_="${dl_r_##* }"
   case "$dl_k_" in ''|*[!0-9]*) dl_k_=0 ;; esac
   [ "$dl_k_" -lt "$STALL_K" ] || return 1
+  # A FAILED agent (dispatch_failed, below) is never LIVE or RECENT: its last turn may be an API
+  # error line, which reads as a fresh turn, and a grant on it would wait on a dead writer.
+  df_is_failed "$dl_a_" && return 1
   dl_m_=""; [ "$dl_t_" = "-" ] || dl_m_="$(to_epoch "${dl_t_}Z")" || dl_m_=""
   [ -n "$dl_m_" ] || dl_m_="$(mtime_of "$dl_f_")"
   [ "$dl_m_" -gt 0 ] || return 1
@@ -1930,6 +1965,249 @@ dispatch_live() {
   if [ "$dl_g_" -lt "$BUDGET" ]; then return 0; fi
   [ "$dl_g_" -lt "$IDLE_SECS" ] || return 3
   return 2
+}
+
+# ---------------------------------------------------------------------------
+# DISPATCH FAILED: A DISPATCHED AGENT THAT DIED BEFORE DELIVERING (BL-975). Scope: the RESOLVED
+# dispatched agents (DP_ROW_AGENTS_); without --dispatch nothing is read and nothing printed. An
+# agent is FAILED only while AT LEAST ONE joined target is not delivered by is_delivered -- the
+# beat's own predicate, never file existence -- and the caller passes that not-delivered set. An
+# In-Flight row NEVER acquits: rows are the lead's claim about which agent writes which path, and
+# the motivating event had 0 of 9 rows naming the agent's real deliverable.
+#
+# ARM B -- AN OPEN REQUEST PAST A BOUND. The transcript's newest `{"type":"api-request"` line (the
+# closing quote excludes `api-request-blob` and `api-request-shape`) sits after its last assistant
+# or user line; attachment, blob, shape and system lines do not close it. FAILED when now minus
+# THAT api-request's own timestamp is >= OPEN_REQUEST_SECS.
+# OPEN_REQUEST_SECS (1200) BOUNDS ONE PROPERTY: HOW LONG THE NEWEST SENT REQUEST MAY STAY OPEN
+# BEFORE THE BEAT CALLS ITS AGENT DEAD. The quantity is every OPEN INTERVAL a live agent leaves: an
+# api-request send until the next send or the closing assistant line, whichever comes first (an
+# interval a user line closes is excluded). Measured over 6,023 graph subagent transcripts:
+# 101,937 open intervals, max 853 s; 16 at or above 480 s (4 of them in run position 1, up to
+# 624 s), 10 at or above 600 s, 0 at or above 900 s. 1200 is 1.41x that max, equal to the
+# IDLE_SECS default, and above the 600 s quantum. NARROWING: the first measurement keyed on
+# send-to-reply only -- the NEWEST send of a run to the next assistant line, max 372 s -- and set
+# 480; it missed send-to-next-send, where a live agent's send sits unanswered until the harness
+# re-sends, and 16 live intervals crossed 480. Keyed on the NEWEST send, never the FIRST of a retry
+# run: first-of-run gaps reach 1,662 s on live retry runs. Transcripts ending in an open request:
+# 6 (3 the dead seats of the motivating event, 3 agents whose lead session ended mid-request).
+# Not keyed on mtime: a harness attachment written after the dead request keeps the file fresh
+# while the request stays unanswered.
+# WHEN HIT: DISPATCH FAILED is printed for that agent; the first beat of the join to see it breaks
+# early and its charge is refunded; a FAILED agent gets no --complete-repair LIVE grant
+# (dispatch_live), and the early break itself changes no exit code. LOAD: a loaded box
+# stretches a live interval, and the outcome is a report, not a re-dispatch; 853 s measured
+# against 1200 s is the margin.
+#
+# ARM A -- THE HARNESS'S OWN FAILED NOTICE. One awk pass over the lead transcript
+# (`${TEAMMATE_DIR%/subagents}.jsonl`) for every dispatched id at once, skipping api-request and
+# api-request-blob lines: per id, the LAST queue-operation or user line carrying
+# `<task-id>ID</task-id>`, its <status> and its timestamp. FAILED when that status is `failed` and
+# no line of agent-ID.jsonl carries a timestamp newer than the notice -- a resume acquits. This is
+# the only arm that sees an agent whose transcript ENDS in an `"isApiErrorMessage":true` assistant
+# line, which closes the request and counts as a turn. No lead transcript: arm A reads nothing.
+#
+# THE 60 s CHECK CADENCE BOUNDS ONE PROPERTY: HOW OFTEN THE POLL LOOP PAYS FOR A CHECK -- one awk
+# over the lead transcript (34 MB in the motivating session) and one per dispatched transcript. A
+# check runs at most once per max(POLL, 60) s inside the loop (df_scan's memo) and once more at the
+# end of the beat. WHEN HIT: the memo expires and the next poll rescans. LOAD-FREE in its verdict:
+# a late check delays an early break by at most one cadence, and the end-of-beat check always runs. The report is echoed, never `say`: --quiet must not hide a dead agent.
+# EARLY BREAK, ONCE PER AGENT PER JOIN, REFUNDED: the first beat that sees X FAILED ends its poll
+# early, refunds this beat's charge on every pending counter (grants untouched; the time already
+# waited is not charged) and records `${COUNTER_DIR}/failed-X-K` for each pending target K (the
+# target's counter key) that had none. THE SIDECAR IS KEYED PER TARGET, because the join is: a
+# per-agent key outlives a join that closes on a beat with no --dispatch, and the same agent id
+# dispatched into a later join on another path then loses its early break and refund. It is not
+# keyed on the join epoch either, because a resumed agent's new join carries the same dispatch
+# epoch. A beat breaks for X only when some pending target lacks X's sidecar, and refunds only the
+# counters of the targets whose sidecar it wrote, so each target's counter is refunded at most once
+# per agent per join; a later beat that finds every sidecar does not break for X but still prints
+# its block, so a never-resumed dead agent cannot run live siblings into NON-DELIVERY faster than
+# before. A target's sidecars go with that target's join state -- on its delivery, or by --reset --
+# never because a scan sees X not FAILED: an agent that flaps FAILED, live, FAILED inside one join
+# is refunded once. A FAILED agent gets no --complete-repair LIVE grant; the early break itself
+# changes no exit code.
+# AGENT IDS: [A-Za-z0-9_-]; any other id is skipped. An id is only ever compared as a literal
+# (awk index(), `=`, quoted case patterns), never interpolated into a regex or a variable name.
+# ---------------------------------------------------------------------------
+OPEN_REQUEST_SECS="${AI_DLC_OPEN_REQUEST_SECS:-1200}"
+case "$OPEN_REQUEST_SECS" in ''|*[!0-9]*) OPEN_REQUEST_SECS=1200 ;; esac
+DF_AT=""; DF_FAILED=""; DF_BROKE_IDS=""
+# DF_REC: one `<id><TAB><arm B seconds|-><TAB><arm A value|->` line per FAILED agent of the last
+# scan. An empty value is stored as `-` (a tab IFS collapses empty fields); a real arm A value
+# always carries `|`, so it is never `-`.
+DF_REC=""; DF_NL=$'\n'; DF_TAB=$'\t'
+df_rec_get() {  # $1 = agent id -> sets dg_A_, dg_B_ from DF_REC
+  dg_A_=""; dg_B_=""
+  while IFS=$'\t' read -r dg_i_ dg_b_ dg_a_; do
+    [ "$dg_i_" = "$1" ] || continue
+    [ "$dg_b_" = "-" ] || dg_B_="$dg_b_"
+    [ "$dg_a_" = "-" ] || dg_A_="$dg_a_"
+    break
+  done <<< "$DF_REC"
+  return 0
+}
+# The early-break sidecar of agent $1 for the target whose counter key is $2 -> DF_SC_. A target's
+# sidecars are removed with its join state as `failed-*-<key>`: a key is digits only, so the last
+# dash-separated field of the name is always the key, whatever dashes the agent id carries.
+df_sc_() { DF_SC_="${COUNTER_DIR}/failed-$1-$2"; }
+DF_KEYS_=""
+df_scan() {  # $1 = 1 to rescan regardless of the memo; $2 = now (optional) -> sets DF_FAILED, DF_REC
+  [ -n "$DP_ROW_AGENTS_" ] && [ -n "$TEAMMATE_DIR" ] || { DF_FAILED=""; return 0; }
+  ds_now_="${2:-}"; [ -n "$ds_now_" ] || ds_now_="$(date +%s)"
+  if [ "${1:-0}" != 1 ] && [ -n "$DF_AT" ]; then
+    ds_q_=60; [ "$POLL" -gt 60 ] && ds_q_="$POLL"
+    [ $(( ds_now_ - DF_AT )) -lt "$ds_q_" ] && return 0
+  fi
+  DF_AT="$ds_now_"; DF_FAILED=""; DF_REC=""
+  ds_lead_="${TEAMMATE_DIR%/subagents}.jsonl"; ds_notes_=""
+  if [ -f "$ds_lead_" ]; then
+    ds_notes_="$(DF_IDS="$DP_ROW_AGENTS_" LC_ALL=C awk '
+      BEGIN { n = split(ENVIRON["DF_IDS"], ids, " ") }
+      index($0, "{\"type\":\"api-request") == 1 { next }
+      index($0, "<task-id>") == 0 { next }
+      !(index($0, "{\"type\":\"queue-operation\"") == 1 || index($0, "\"type\":\"user\",\"message\":{\"role\":\"user\"")) { next }
+      {
+        ts = ""; if (match($0, /"timestamp":"[^"]*"/)) ts = substr($0, RSTART + 13, RLENGTH - 14)
+        for (i = 1; i <= n; i++) {
+          p = index($0, "<task-id>" ids[i] "</task-id>"); if (!p) continue
+          seg = substr($0, p); e = index(seg, "</task-notification>"); if (e) seg = substr(seg, 1, e)
+          st = ""; if (match(seg, /<status>[a-z_]*<\/status>/)) st = substr(seg, RSTART + 8, RLENGTH - 17)
+          sm = ""; q = index(seg, "<summary>")
+          if (q) { sm = substr(seg, q + 9); e = index(sm, "</summary>"); if (e) sm = substr(sm, 1, e - 1) }
+          gsub(/\\"/, "\"", sm); gsub(/\\n|\t/, " ", sm)
+          S[i] = st; T[i] = ts; M[i] = substr(sm, 1, 120)
+        }
+      }
+      END { for (i = 1; i <= n; i++) if (S[i] == "failed") print ids[i] "\t" T[i] "\t" M[i] }' "$ds_lead_" 2>/dev/null)"
+  fi
+  for ds_a_ in $DP_ROW_AGENTS_; do
+    case "$ds_a_" in *[!A-Za-z0-9_-]*) continue ;; esac
+    case " $DF_FAILED " in *" $ds_a_ "*) continue ;; esac
+    ds_A_="-"; ds_B_="-"
+    ds_f_="$TEAMMATE_DIR/agent-${ds_a_}.jsonl"; ds_r_="- -"
+    [ -f "$ds_f_" ] && ds_r_="$(LC_ALL=C awk '
+      {
+        n = split($0, P, "\"timestamp\":\"")
+        for (i = 2; i <= n; i++) { q = index(P[i], "\""); t = substr(P[i], 1, q - 1); if (t > mx) mx = t }
+      }
+      index($0, "{\"type\":\"api-request") == 1 {
+        if (index($0, "{\"type\":\"api-request\"") == 1 && n >= 2) { q = index(P[2], "\""); open = substr(P[2], 1, q - 1) }
+        next
+      }
+      index($0, "\"type\":\"assistant\"") || index($0, "\"type\":\"user\"") { open = "" }
+      END { print (open == "" ? "-" : open), (mx == "" ? "-" : mx) }' "$ds_f_" 2>/dev/null)"
+    ds_open_="${ds_r_%% *}"; ds_max_="${ds_r_##* }"
+    ds_hit_=0
+    if [ "$ds_open_" != "-" ] && [ -n "$ds_open_" ]; then
+      ds_e_="$(to_epoch "${ds_open_:0:19}Z")" || ds_e_=""
+      if [ -n "$ds_e_" ]; then
+        ds_g_=$(( ds_now_ - ds_e_ )); [ "$ds_g_" -lt 0 ] && ds_g_=0
+        if [ "$ds_g_" -ge "$OPEN_REQUEST_SECS" ]; then ds_B_="$ds_g_"; ds_hit_=1; fi
+      fi
+    fi
+    while IFS=$'\t' read -r dn_a_ dn_t_ dn_s_; do
+      [ "$dn_a_" = "$ds_a_" ] || continue
+      if [ "$ds_max_" = "-" ] || ! [[ "$ds_max_" > "$dn_t_" ]]; then
+        ds_A_="${dn_t_}|${dn_s_}"; ds_hit_=1
+      fi
+      break
+    done <<< "$ds_notes_"
+    # A FAILED agent joins DF_FAILED and DF_REC. One that is not FAILED leaves its early-break
+    # sidecar alone: that goes only with its target's join state (delivery or --reset).
+    if [ "$ds_hit_" -eq 1 ]; then DF_FAILED="${DF_FAILED}${DF_FAILED:+ }$ds_a_"; fi
+    [ "$ds_hit_" -eq 1 ] && DF_REC="${DF_REC}${DF_REC:+$DF_NL}${ds_a_}${DF_TAB}${ds_B_}${DF_TAB}${ds_A_}"
+  done
+  return 0
+}
+df_is_failed() {  # $1 = agent id -> 0 when the current (memoised) check names it FAILED
+  df_scan 0
+  case " $DF_FAILED " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+# The poll loop's check: 0 (break) when an agent is FAILED that no earlier beat broke for.
+# $1 = now, from the loop's own clock read.
+df_early_break() {
+  [ -n "$DP_ROW_AGENTS_" ] || return 1
+  df_scan 0 "$1"
+  [ -n "$DF_FAILED" ] || return 1
+  # The pending targets' counter keys, taken once per beat (PENDING does not change inside the loop).
+  if [ -z "$DF_KEYS_" ]; then
+    IFS='|'
+    for eb_t_ in $PENDING; do DF_KEYS_="${DF_KEYS_} $(key_of "$eb_t_")"; done
+    IFS="$OLDIFS"
+  fi
+  eb_=0; eb_hit_=" "
+  for eb_a_ in $DF_FAILED; do
+    eb_new_=0
+    for eb_k_ in $DF_KEYS_; do
+      df_sc_ "$eb_a_" "$eb_k_"
+      [ -f "$DF_SC_" ] && continue
+      sidecar_put "$DF_SC_" "$1"
+      case "$eb_hit_" in *" $eb_k_ "*) ;; *) eb_hit_="${eb_hit_}${eb_k_} " ;; esac
+      eb_new_=1
+    done
+    [ "$eb_new_" -eq 1 ] || continue
+    DF_BROKE_IDS="${DF_BROKE_IDS}${DF_BROKE_IDS:+ }$eb_a_"
+    eb_=1
+  done
+  [ "$eb_" -eq 1 ] || return 1
+  # THE REFUND: the counter of every target whose sidecar this break wrote goes back to its pre-beat
+  # value, so the beat that broke early is not charged there; the time it already waited is not
+  # charged either. Grants are not touched.
+  for eb_k_ in $eb_hit_; do
+    eb_c_="${COUNTER_DIR}/$eb_k_"
+    eb_b_=0; [ -f "$eb_c_" ] && eb_b_="$(cat "$eb_c_" 2>/dev/null || echo 0)"
+    case "$eb_b_" in ''|*[!0-9]*) eb_b_=0 ;; esac
+    [ "$eb_b_" -gt 0 ] && eb_b_=$(( eb_b_ - 1 ))
+    sidecar_put "$eb_c_" "$eb_b_"
+  done
+  return 0
+}
+# The report, at every place a beat can end. $1 = the |-separated targets NOT delivered (the gate:
+# empty prints nothing); $2 = 1 to rescan, else the memo the caller just refreshed is used.
+say_dispatch_failed() {
+  [ -n "$DP_ROW_AGENTS_" ] && [ -n "${1:-}" ] || return 0
+  df_scan "${2:-0}"
+  [ -n "$DF_FAILED" ] || return 0
+  sf_rows_="$DF_ROWS"
+  if [ "$DF_ROWS_SET" != 1 ] && [ -f "${STATE_DIR}/pipeline-snapshot.md" ]; then
+    sf_rows_="$(inflight_rows "${STATE_DIR}/pipeline-snapshot.md")"
+  fi
+  sf_nd_="$(printf '%s' "$1" | tr '|' ' ')"
+  for sf_a_ in $DF_FAILED; do
+    df_rec_get "$sf_a_"; sf_A_="$dg_A_"; sf_B_="$dg_B_"
+    sf_d_=""
+    [ -f "$TEAMMATE_DIR/agent-${sf_a_}.meta.json" ] \
+      && sf_d_="$(sed -n 's/.*"description":"\([^"]*\)".*/\1/p' "$TEAMMATE_DIR/agent-${sf_a_}.meta.json" 2>/dev/null)"
+    [ -n "$sf_d_" ] || sf_d_="no meta.json"
+    if [ -n "$sf_A_" ] && [ -n "$sf_B_" ]; then
+      sf_w_="the harness reported it failed, and its last request has had no reply past the bound"
+    elif [ -n "$sf_A_" ]; then
+      sf_w_="the harness reported it failed, and it has written nothing since"
+    else
+      sf_w_="its last request has had no reply past the bound"
+    fi
+    echo "DISPATCH FAILED agent-${sf_a_} (${sf_d_}) -- ${sf_w_}"
+    [ -z "$sf_A_" ] || echo "  arm A: the harness reported it failed at ${sf_A_%%|*}: ${sf_A_#*|}"
+    [ -z "$sf_B_" ] || echo "  arm B: its last record is an api-request sent ${sf_B_}s ago with no reply (bound ${OPEN_REQUEST_SECS}s)"
+    sf_c_=""
+    while IFS='|' read -r ir_a_ ir_s_ ir_d_; do
+      [ "$ir_a_" = "$sf_a_" ] && { sf_c_="$ir_d_"; break; }
+    done <<< "$sf_rows_"
+    echo "  In-Flight row claims deliverable: ${sf_c_:-none}   (the row is the lead's claim; check it against the description)"
+    echo "  Not delivered: ${sf_nd_}"
+    if [ -n "$sf_A_" ]; then
+      echo "  Resume THIS agent by id, or re-dispatch its deliverable."
+    else
+      echo "  Resume THIS agent by id (SendMessage to ${sf_a_})."
+    fi
+  done
+  # The early line is printed only when an agent this beat broke for is still FAILED.
+  sf_held_=0
+  for sf_a_ in $DF_BROKE_IDS; do case " $DF_FAILED " in *" $sf_a_ "*) sf_held_=1 ;; esac; done
+  [ "$sf_held_" -eq 0 ] || echo "  This beat ended early on that report: its beat charge was refunded, and the time already waited is not charged."
+  return 0
 }
 
 # ONE function, called from all THREE places a beat can end -- the exhaustion path,
@@ -1985,7 +2263,7 @@ status_join() {  # $1 = target -> the stored join epoch (clamped as join_of does
   printf '%s' "$sj_s_"
 }
 if [ "$STATUS" -eq 1 ]; then
-  S_DONE=0; S_OUT=0
+  S_DONE=0; S_OUT=0; S_NOT=""
   OLDIFS="$IFS"; IFS='|'
   for t in $TARGETS; do
     IFS="$OLDIFS"
@@ -2038,10 +2316,11 @@ if [ "$STATUS" -eq 1 ]; then
     if ! { sr_e="$(status_join "$t")" && [ "$(mtime_of "${sd_c}.revised")" -lt "$sr_e" ]; }; then
       say_revised "$t" "$sd_c"
     fi
-    if [ "$S_V" = "DELIVERED" ]; then S_DONE=$(( S_DONE + 1 )); else S_OUT=$(( S_OUT + 1 )); fi
+    if [ "$S_V" = "DELIVERED" ]; then S_DONE=$(( S_DONE + 1 )); else S_OUT=$(( S_OUT + 1 )); S_NOT="${S_NOT}${S_NOT:+|}$t"; fi
     IFS='|'
   done
   IFS="$OLDIFS"
+  say_dispatch_failed "$S_NOT" 1
   echo "STATUS -- ${S_DONE} delivered, ${S_OUT} not. Nothing slept, nothing was written, no beat was charged."
   exit 0
 fi
@@ -2168,7 +2447,8 @@ for t in $TARGETS; do
   s="${c}.since"
   pg="${c}.progress"
   gr="${c}.grants"
-  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" "${c}.delivered" 2>/dev/null
+  # --reset drops the join state, and this target's early-break sidecars with it (DISPATCH FAILED, above).
+  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${c}.revised" "${c}.delivered" "${COUNTER_DIR}/failed-"*"-${c##*/}" 2>/dev/null
 
   # Whether THIS beat armed the join must be read before join_of, which creates
   # the sidecar as a side effect.
@@ -2195,7 +2475,7 @@ for t in $TARGETS; do
     say "DELIVERED $t"; row_on_delivery "$t"
     say_revised "$t" "$c"
     record_delivered "$t" "$c"
-    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null || true
+    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" "${COUNTER_DIR}/failed-"*"-${c##*/}" 2>/dev/null || true
     continue
   fi
 
@@ -2430,6 +2710,8 @@ if [ -n "$EXHAUSTED" ]; then
   # the deliverable diverged rather than the teammate being slow. Re-dispatching on a
   # path typo repeats the typo.
   say_liveness
+  # Every resolved agent, fan-out included: the not-delivered set is everything the sweep left out.
+  say_dispatch_failed "${PENDING}${PENDING:+${EXHAUSTED:+|}}${EXHAUSTED}"
   exit 1
 fi
 
@@ -2450,7 +2732,7 @@ if [ -n "$PREEXISTING" ]; then
   echo "    scripts/ai-dlc/wait-for-deliverable.sh --since <epoch|ISO8601> <path> ..."
 fi
 
-[ -z "$PENDING" ] && exit 0   # everything was already delivered
+[ -z "$PENDING" ] && exit 0
 
 if [ "$MAY_SLEEP" -eq 0 ]; then
   # This was the line that was BYTE-IDENTICAL on every invocation -- no beat number,
@@ -2469,6 +2751,7 @@ if [ "$MAY_SLEEP" -eq 0 ]; then
   done
   IFS="$OLDIFS"
   say_liveness
+  say_dispatch_failed "$PENDING"
   echo "  NOTE: a sibling beat already ran in this same Bash call, so this one did"
   echo "  NOT sleep and did NOT consume a beat -- two beats in one call serialize"
   echo "  into 2 x ${BUDGET}s for a wave that ONE call polls concurrently. Do not loop"
@@ -2547,7 +2830,10 @@ all_present() {
 
 while :; do
   if all_present; then break; fi
-  [ "$(date +%s)" -ge "$DEADLINE" ] && break
+  lp_now_="$(date +%s)"
+  [ "$lp_now_" -ge "$DEADLINE" ] && break
+  # A dispatched agent that died breaks the beat early, once per agent per join (DISPATCH FAILED, above).
+  df_early_break "$lp_now_" && break
   sleep "$POLL"
   beat_alive
 done
@@ -2555,16 +2841,25 @@ done
 RC=0
 N_DELIVERED=0
 N_WAITING=0
+# The verdicts are taken BEFORE any row_on_delivery write, and the DISPATCH FAILED check with them,
+# so a row flipped by this beat cannot move either. The report loop below reads these verdicts.
+PL_DONE="|"; PL_OUT=""
+IFS='|'
+for t in $PENDING; do
+  if is_delivered "$t" "$(join_of "$t")"; then PL_DONE="${PL_DONE}${t}|"; else PL_OUT="${PL_OUT}${PL_OUT:+|}$t"; fi
+done
+IFS="$OLDIFS"
+[ -z "$PL_OUT" ] || df_scan 1
 NOW_="$(date +%s)"
 IFS='|'
 for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
   s="${c}.since"
-  if is_delivered "$t" "$(join_of "$t")"; then
+  if case "$PL_DONE" in *"|${t}|"*) true ;; *) false ;; esac; then
     say "DELIVERED $t"; row_on_delivery "$t"
     say_revised "$t" "$c"
     record_delivered "$t" "$c"
-    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" 2>/dev/null || true
+    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" "${COUNTER_DIR}/failed-"*"-${c##*/}" 2>/dev/null || true
     N_DELIVERED=$(( N_DELIVERED + 1 ))
   else
     b="$(cat "$c" 2>/dev/null || echo '?')"
@@ -2588,6 +2883,7 @@ else
   # Only when something is STILL OUT. A join that closed needs no liveness report,
   # and printing one there would train the lead to skip the line.
   say_liveness
+  say_dispatch_failed "$PL_OUT"
   say "BEAT COMPLETE -- ${N_DELIVERED} delivered, ${N_WAITING} still out. Consume only the DELIVERED paths, then beat again."
 fi
 

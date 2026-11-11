@@ -183,6 +183,9 @@ only a non-shard teammate's result file: seat, shard, cross and repair-part file
   merely present: a path reused across sprints otherwise hands back the PREVIOUS sprint's file in under a second.
 - `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK — for a path the beat reports `absent`, unless the beat
   prints `LIVE DISPATCH` or `STOPPED DISPATCH`, in which case read that agent's transcript first, as the block says.
+  `DISPATCH FAILED agent-<id>` means that dispatched agent died before delivering (harness failed notice, or an api-request
+  with no reply past the bound): resume THAT agent by its id (a harness failed notice also allows re-dispatching its deliverable).
+  The In-Flight row's deliverable is your own claim: check it against the agent's description; never map seats to agents from memory.
   Under `--complete`, `UNFINISHED <path>` (present, last non-blank line is not `seat-complete:`, or its `sha=` no longer
   matches) and `UNSETTLED <path>` (marked with no `sha=`, still changing) are NOT absent, on a waiting beat or an
   exhausted one: read the file before deciding, never re-dispatch over it unread — that discards the teammate's findings.

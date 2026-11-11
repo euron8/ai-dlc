@@ -1,0 +1,4 @@
+# Section 29 (S8, S13) reads the pre-BL-975 wait-for-deliverable.sh with `git -C "$HERE" show "edcfbe24...:core/scripts/wait-for-deliverable.sh"`
+# and compares the no---dispatch output, and the live sibling's cap, against it. This fixture SHIPS, and a consumer has no such
+# commit, so the pin is optional: absent, it is not imported and those two arms print a SKIP that says it is not a pass.
+pin? edcfbe2422194860c4d0c72834d9d60df9823094

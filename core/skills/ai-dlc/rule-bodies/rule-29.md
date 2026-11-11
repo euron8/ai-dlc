@@ -113,6 +113,14 @@ brief closes with the `--mark` line; `steps/_gate-procedures.md`, "Bounded-join 
               unless the beat prints `LIVE DISPATCH` or `STOPPED DISPATCH`,
               in which case read that agent's transcript first, as the
               block says.
+              `DISPATCH FAILED agent-<id>` (printed at every beat end) means
+              that dispatched agent died before delivering (the harness
+              reported it failed, or its last record is an api-request with
+              no reply past the bound): resume THAT agent by its id (a harness failed
+              notice also allows re-dispatching its deliverable). The
+              In-Flight row's deliverable is your own claim, so check it
+              against the agent's description before resuming; never map
+              seats to agents from memory.
               Under --complete, a path reported `UNFINISHED` or `UNSETTLED`
               is NOT absent: the seat wrote a file. Read it before you decide;
               a re-dispatch over it discards its findings. Only `absent` is
