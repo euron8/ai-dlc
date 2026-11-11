@@ -6,6 +6,10 @@
 # Re-measured for BL-958's self-heading refusal (2590 -> 2616, content-seal 462 -> 464, the merge row unchanged): the
 # FIS and FISa arms (one B3 world, one end-to-end merge, eight --check-header runs) and the deciding and twin runs of
 # FI-m9 (FIS, FI1) and FI-m10 (FISa, FIS).
-2616 *
-29 core/scripts/merge-adversarial-shards.sh
-464 core/scripts/content-seal.sh
+# Re-measured for BL-974 (--check-shard, the CS1-CS11 cells, the CS7a/b CLI parity pair and the CSM/CSW mutants' deciding
+# and twin runs; the content-seal.sh starts are the sealed-sibling admissions and the --mark seals) by hands A-I on the
+# pre-BL-958 base, and re-measured on 0.1056.0 when BL-974 was carried onto it beside BL-958 and BL-976, with the CS12
+# flag-split cell and the CSM-flagswap/CSM-flagglob deciding and twin runs.
+2789 *
+31 core/scripts/merge-adversarial-shards.sh
+474 core/scripts/content-seal.sh

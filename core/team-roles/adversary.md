@@ -125,7 +125,9 @@ for your findings, and (d) a shared context block. You MUST:
    every line above it; an edit after it reads unfinished until you run the same call again;
    never type the line by hand). That call is the ONE sanctioned Bash write to a shard: it
    refuses a shard already amended through Bash and re-seals the bytes it writes (the content
-   seal, `content-seal.sh`). Every other write is Write or Edit, never `printf >>` or any other
+   seal, `content-seal.sh`). The mark runs the merge's own check on your shard first; if it
+   refuses, nothing is written, so fix the shard in place with Edit and run the same `--mark` again.
+   Every other write is Write or Edit, never `printf >>` or any other
    Bash; a Bash-amended shard is refused at merge. <n> is your `### ` findings (a
    `### ` under `## Findings` is a finding, so probes and notes go under their own `## `
    section; FINDING GRAMMAR, `merge-adversarial-shards.sh`'s header), never

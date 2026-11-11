@@ -949,6 +949,55 @@ p_checkpart() {
   AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" --sprint 305 > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$JO" "takes no other flag"
 }
+# CP3 / CP4: the two arms --check-part reads from the part's own tree (CHECK-PART-MARK v1). Each world is
+# built ONCE and joined ONCE by the live run (cp_party_build / cp_ledger_build), which records the join's
+# own refusal line; the predicate then asks --check-part only, so a mutant drive re-runs no join.
+# CP3, the party round: part 01 of stories-party-repair-p1 sourcing a round-one part file (`01.md#F-1`)
+# is the offender, the seat-file form (`architecture-dev-1.md#F-1`) the near-miss.
+cp_party_build() { # <join> -> CP3_W, CP3_JL (the join's NOFILE line), rc 1 when the join did not refuse it
+  local w; w="$(new_world)" || return 1
+  mkdir -p "$w/$PRD" && seat_seed "$w" 305 || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  ppart "$w" 01 2.1 "01.md#F-1"
+  run_pjoin "$1" "$w"; CP3_W="$w"
+  [ "$RC" -eq 2 ] || return 1
+  CP3_JL="$(grep -F "01.md: source 01.md#F-1 names no seat file" "$JO")" || return 1
+}
+p_cpparty() { # <join> -> the offender: rc 2 and the join's NOFILE line byte-for-byte; the near-miss: rc 0, CHECK-PART:
+  local j="$1" p="$CP3_W/$PRD/01.md"
+  [ -n "${CP3_JL:-}" ] || return 1
+  ppart "$CP3_W" 01 2.1 "01.md#F-1"; stamp "$CP3_W"
+  AI_DLC_PROJECT_ROOT="$CP3_W" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && [ "$(grep -F "01.md: source 01.md#F-1 names no seat file" "$JO")" = "$CP3_JL" ] || return 1
+  ppart "$CP3_W" 01 2.1 "architecture-dev-1.md#F-1"; stamp "$CP3_W"
+  AI_DLC_PROJECT_ROOT="$CP3_W" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "CHECK-PART: $p" && ! has "$JO" "REFUSED:"
+}
+# CP4, the ledger citation: the real s322 shape, an edit: line whose note carries the bare token
+# `CLAUDE.md`, which the join reads as a cited file nobody wrote (UNWRITTEN). The near-miss is the same
+# part with the note naming no file: its one token is a file the ledger holds, and it joins (CP1's world).
+CP4_NOTE=' (the rule is in CLAUDE.md)'
+cp_ledger_build() { # <join> -> CP4_W, rc 1 when the join did not refuse the offender as UNWRITTEN
+  local w; w="$(new_world)" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s%s\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n' \
+    "$SIBW_EDIT" "$CP4_NOTE" "$SIB_INS" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  run_join "$1" "$w"; CP4_W="$w"
+  [ "$RC" -eq 2 ] && has "$JO" "01.md cites CLAUDE.md, which no dispatched agent wrote"
+}
+CP4_TXT="01.md cites CLAUDE.md on an edit: line, and no row of the write ledger"
+p_cpledger() { # <join> -> the offender: rc 2 naming CLAUDE.md and the join's UNWRITTEN; the near-miss: rc 0, CHECK-PART:
+  local j="$1" p="$CP4_W/$SLOT/shards/stories-repair-p1/01.md"
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s%s\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n%s\n' \
+    "$SIBW_EDIT" "$CP4_NOTE" "$SIB_INS" "$CHK_LINES" > "$p"
+  AI_DLC_PROJECT_ROOT="$CP4_W" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$JO" "REFUSED: $CP4_TXT" && has "$JO" "the join refuses the same token as UNWRITTEN" \
+    && ! has "$JO" "cites $REL/$S21 on an edit: line" || return 1
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s (the rule is in the project rules)\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n%s\n' \
+    "$SIBW_EDIT" "$SIB_INS" "$CHK_LINES" > "$p"
+  AI_DLC_PROJECT_ROOT="$CP4_W" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "CHECK-PART: $p" && ! has "$JO" "REFUSED:"
+}
 SB_RN="\$ grep -rn -F 'loads eagerly' $REL/$S21"
 SB_CTL="\$ grep -c -F 'loads on demand' $REL/$S21"
 p_sibforms() { # five wrong spellings of the field -> each REFUSED as none of the four forms, nothing written
@@ -1298,8 +1347,10 @@ p_markderive() { # <wfd>
 # untouched; (f) a joined record under --mark-repair -> the `not replayed` inside its
 # `<!-- shard: 01 -->` body untouched, the serial block's own line `replayed 3` (the whole file's
 # count, over two triples), sealed. R804 names the case that failed. Takes the wfd to drive.
+# The entry's `siblings:` line follows its fence, so every fence line keeps the number the cases assert: --mark
+# runs the join's --check-part on a part (term 8), which refuses a repaired edit with no siblings: field (BADSIB).
 r804_part() { # <file> <derivations value> <tok count recorded> [disposition]
-  printf -- '- artifact: _bmad-output/planning-artifacts/s9/data.txt\n- artifact_sha_before: x\n- artifact_sha_after: y\n- advisor: called\n- **derivations:** %s\n\n### F-1 — MAJOR\n- disposition: %s\n- edit: _bmad-output/planning-artifacts/s9/data.txt:1\n\n```derived\n$ grep -c tok _bmad-output/planning-artifacts/s9/data.txt\n%s\n$ grep -c zed _bmad-output/planning-artifacts/s9/data.txt\n1\n```\n' "$2" "${4:-repaired}" "$3" > "$1"
+  printf -- '- artifact: _bmad-output/planning-artifacts/s9/data.txt\n- artifact_sha_before: x\n- artifact_sha_after: y\n- advisor: called\n- **derivations:** %s\n\n### F-1 — MAJOR\n- disposition: %s\n- edit: _bmad-output/planning-artifacts/s9/data.txt:1\n\n```derived\n$ grep -c tok _bmad-output/planning-artifacts/s9/data.txt\n%s\n$ grep -c zed _bmad-output/planning-artifacts/s9/data.txt\n1\n```\n%s\n' "$2" "${4:-repaired}" "$3" "$SIB_INS" > "$1"
 }
 r804_sealed() { # <file> -> 0 when the marker's sha= is the digest of the body above it
   local want have
@@ -1318,6 +1369,10 @@ p_replay() { # <wfd>
   mkdir -p "$sd/stories-repair-p1" "$sd/prd-repair-p1/sections" "$sd/plain" || return 1
   printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
   : > "$sd/prd-repair-p1/sections/.manifest"
+  # The parts cite data.txt on their edit: lines, so the world ledgers the agent's write of it (the real hook's
+  # row; the hook ledgers only under a pipeline snapshot): --mark runs the join's --check-part (term 8),
+  # which refuses an edit: token no ledger row names.
+  printf '# Pipeline Snapshot\n' > "$st/pipeline-snapshot.md"; drive "$w" Edit "$pa/s9/data.txt" "$AG1"
   if r_only a; then
   f="$sd/stories-repair-p1/01.md"; r804_part "$f" 'not replayed' 2
   cs_run --record "$st" program:fixture "$f" > /dev/null 2>&1 || return 1
@@ -1418,6 +1473,8 @@ p_claim() { # <wfd>
   R816_ST="$w/_bmad-output"; pa="$R816_ST/planning-artifacts"; sd="$pa/s9/shards"
   mkdir -p "$sd/stories-repair-p1" || return 1
   printf 'tok\ntok\nzed\n' > "$pa/s9/data.txt"
+  printf '# Pipeline Snapshot\n' > "$R816_ST/pipeline-snapshot.md"   # as p_replay: the agent's write of the file
+  drive "$w" Edit "$pa/s9/data.txt" "$AG1"                            # the parts cite, ledgered by the real hook
   if r_only a; then
   f="$pa/s9/a-repair-p1.md"; r816_rec "$f" 0 0 0; r816_mark a "$1" "$f" pass || return 1
   fi

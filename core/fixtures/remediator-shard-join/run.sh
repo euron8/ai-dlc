@@ -47,6 +47,11 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX U1 decides=A8 twins=A6
 # MUTANT-MATRIX U2 decides=A8 twins=A6
 # MUTANT-MATRIX CP2 decides=CP1 twins=- why=--check-part is its own mode and no other arm drives it
+# MUTANT-MATRIX CP3m decides=CP3 twins=CP4
+# MUTANT-MATRIX CP4m decides=CP4 twins=CP3
+# MUTANT-MATRIX MKPm-call decides=MKP twins=CP3
+# MUTANT-MATRIX MKPm-relay decides=MKP twins=CP3
+# MUTANT-MATRIX MK8m decides=MK8 twins=- why=the exit-4 drive is read by MK8 alone; its exit-2 control half is asserted in the same predicate
 # MUTANT-MATRIX DX1 decides=D5 twins=D6
 # MUTANT-MATRIX EC40m decides=EC40 twins=- why=the --mark derivation is read by EC40 alone
 # MUTANT-MATRIX EC40m2 decides=EC40 twins=- why=the --mark derivation is read by EC40 alone
@@ -121,6 +126,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX-DYNAMIC ec41-loop why=the EC41m loop passes EC41m-<mode> to mutant_killed
 # MUTANT-MATRIX-DYNAMIC ec42-loop why=the EC42m loop passes EC42m-<mode> to mutant_killed
 # MUTANT-MATRIX-DYNAMIC ec43-loop why=the EC43m loop passes EC43m-<mode> to mutant_killed
+# MUTANT-MATRIX-DYNAMIC mkp-loop why=the MKPm loop passes MKPm-<mode> to mutant_killed
 # MUTANT-MATRIX-DYNAMIC nl-score why=nl_score passes NLm<tag> to mutant_killed
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/remediator-shard-join/run.sh --matrix
 #
@@ -510,8 +516,10 @@ pc_site() { # <site> -> PB builder, PD drive, PK broken copy, PT die text, PV ve
     2779) PB=pcb_subj; PD=pcd_subj; PK=sr; PT="$PCT_SR"; PV="JOINED:"; PP='if [ "$SUBJMODE" = 1 ]; then'; PL='  spec_render_probe'; PS="1423" ;;
   esac
 }
-pc_cell() { # <site> <join> <world> -> 0 when the join refused rc 2 with THAT probe's die text and printed no verdict
-  pc_site "$1"; "$PD" "$2" "$3"; [ "$RC" -eq 2 ] && has "$JO" "$PT" && ! has "$JO" "$PV"
+pc_cell() { # <site> <join> <world> -> 0 when the join refused with THAT probe's die text and printed no verdict: rc 2,
+  # or rc 4 at site 1756, --check-part, where a failed self-probe is the harness-fault exit (the join's hdie)
+  local want=2; [ "$1" = 1756 ] && want=4
+  pc_site "$1"; "$PD" "$2" "$3"; [ "$RC" -eq "$want" ] && has "$JO" "$PT" && ! has "$JO" "$PV"
 }
 pc_score() { # <base flag> <site> <world> <what> -- the site's call line replaced with `:` in its broken copy
   local m s f row=""
@@ -542,7 +550,7 @@ else
   _w="$(pcb_none)"; if pc_cell 1423 "$PCB/sr/join-remediator-shards.sh" "$_w"; then ok "PC1423: --escalations, spec_render_scan broken in a whole-dir copy -> record_tail's spec_render_probe refuses rc 2 with its stale-render die text, no ESCALATED-COUNT"; B_PC1423=1
   else bad "PC1423: --escalations over the broken spec_render_scan did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
   pc_score "${B_PC1423:-0}" 1423 "$_w" spec_render_probe
-  _w="$(pcb_chk)"; if pc_cell 1756 "$PCB/ct/join-remediator-shards.sh" "$_w"; then ok "PC1756: --check-part, contract_check broken -> the check-part contract_probe refuses rc 2 with its vocabulary die text, no CHECK-PART"; B_PC1756=1
+  _w="$(pcb_chk)"; if pc_cell 1756 "$PCB/ct/join-remediator-shards.sh" "$_w"; then ok "PC1756: --check-part, contract_check broken -> the check-part contract_probe refuses rc 4 (a harness fault, no verdict) with its vocabulary die text, no CHECK-PART"; B_PC1756=1
   else bad "PC1756: --check-part over the broken contract_check did not refuse with the probe's text (rc=$RC): $(head -2 "$JO")"; fi
   pc_score "${B_PC1756:-0}" 1756 "$_w" contract_probe
   _w="$(pcb_src)"; if pc_cell 1773 "$PCB/src/join-remediator-shards.sh" "$_w"; then ok "PC1773: --sources, src_check broken -> the --sources src_probe refuses rc 2 with its resolving-source die text, no SOURCES"; B_PC1773=1
