@@ -36,7 +36,10 @@
 #                                insert <text> verbatim as the first line of the section, or after
 #                                its last non-blank line with --bottom
 #   --line-replace <section> <match> <text>   replace the ONE matching line, and its continuation
-#                                lines when it is a wrapped bullet, with the one line <text>
+#                                lines when it is a wrapped bullet, with the one line <text>. In
+#                                In-Flight Teammates a table row <text> must carry a member status
+#                                cell (in-flight, delivered-reachable, stopped), as --row-replace
+#                                requires; the header line and a --- rule are not judged
 #   --line-delete <section> <match>           delete the ONE matching line and its continuation lines
 #   --move-to-history <section> <match>       append the ONE matching line and its continuation
 #                                lines to pipeline-snapshot-history.md FIRST, then drop them
@@ -427,6 +430,31 @@ while IFS="$US" read -r op a b c; do
     function posbullet_target(i) { return (SECT[i] ~ /^Pipeline Position/ || SECT[i] ~ /^Sprint Context/) && (hasbullet(L[i]) || hassp(L[i])) }
     function secflags(i) { OKP = (SECT[i] ~ /^Pipeline Position/); OKS = (SECT[i] ~ /^Sprint Context/) }
     function statuscell_ok(v) { return (v == "in-flight" || v == "delivered-reachable" || v == "stopped") }
+    # A free-text writer into In-Flight Teammates (--line-replace; a later fix may call it from --line-add)
+    # applies the status-cell vocabulary to a table row it writes. The header is the first line of the
+    # section naming dispatched-at, as the row ops find it; the status column is the header cell named
+    # status. A text that is no table row, a rule (every cell a run of three or more dashes, optionally
+    # colon-flanked), or ANY text replacing the header line itself (tgt is the replaced line) is not
+    # checked; a row that merely names dispatched-at in a cell, replacing another line, is judged. A
+    # header with no status column (or no header) keeps today`s behaviour: the same if (sc) exemption
+    # --row-replace has below. The refusal prints the cell VALUE, with \047 for the quote.
+    function ifstatus_chk(txt, tgt,   i, k, j2, hc, cc, hd, sc2, v, rule) {
+      if (txt !~ /\|/) return
+      k = cells(txt, cc); rule = 1
+      for (j2 = 1; j2 <= k; j2++) if (cc[j2] !~ /^[ \t]*:?---+:?[ \t]*$/) rule = 0
+      if (rule) return
+      hd = 0; sc2 = 0
+      for (i = HS + 1; i < HE && !hd; i++) if (L[i] ~ /\|/) {
+        k = cells(L[i], hc); for (j2 = 1; j2 <= k; j2++) if (trim(hc[j2]) == "dispatched-at") hd = i
+      }
+      if (!hd) return
+      k = cells(L[hd], hc); for (j2 = 1; j2 <= k; j2++) if (trim(hc[j2]) == "status") sc2 = j2
+      if (!sc2) return
+      if (tgt == hd) return
+      k = cells(txt, cc)
+      v = trim(cc[sc2])
+      if (!statuscell_ok(v)) die(7, "refused: the status cell \047" v "\047 is not in-flight, delivered-reachable or stopped")
+    }
     function idtoks(cell, out,   s, w, k, j, m) {
       s = cell; gsub(/[^A-Za-z0-9_@.-]+/, " ", s); k = split(s, w, " "); m = 0
       for (j = 1; j <= k; j++) if (w[j] ~ /^toolu_/ || (length(w[j]) >= 8 && w[j] ~ /[0-9]/)) out[++m] = w[j]
@@ -512,7 +540,9 @@ while IFS="$US" read -r op a b c; do
         guard(B, 0, 0); nokey(SECT[HS], B)
         insafter((C == "1") ? bottom() : HS, B)
       } else if (op == "line-replace") {
-        h = oneline(A, B, "line-replace"); guard(C, 0, 0); nokey(SECT[HS], C); L[h] = C
+        h = oneline(A, B, "line-replace"); guard(C, 0, 0); nokey(SECT[HS], C)
+        if (SECT[HS] ~ /^In-Flight Teammates/) ifstatus_chk(C, h)
+        L[h] = C
         for (i = h + 1; i <= OE; i++) D[i] = 1
       } else if (op == "line-delete") {
         h = oneline(A, B, "line-delete"); for (i = h; i <= OE; i++) D[i] = 1
@@ -643,7 +673,7 @@ while IFS="$US" read -r op a b c; do
           r = ""; for (j = 1; j <= k; j++) r = r (j > 1 ? " | " : "") trim(c[j])
           rowtxt = piped ? "| " r " |" : r
           guard(rowtxt, 0, 0)
-          if (sc) { cells(nr, c); if (!statuscell_ok(trim(c[sc]))) die(7, "refused: the status cell '" trim(c[sc]) "' is not in-flight, delivered-reachable or stopped") }
+          if (sc) { cells(nr, c); if (!statuscell_ok(trim(c[sc]))) die(7, "refused: the status cell \047" trim(c[sc]) "\047 is not in-flight, delivered-reachable or stopped") }
         }
         if (op == "row-add") {
           dup = 0

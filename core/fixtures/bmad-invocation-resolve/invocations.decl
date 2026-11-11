@@ -4,5 +4,6 @@
 # more on its mutant copy (+4): * 21-1+4=24; the validator path itself 15-1+2=16 (the EXT-M runs go to the copy).
 # EXT-ilseq adds one validator run under en_US.UTF-8 and EXT-ilseq-M one on its mutant copy (+2): * 24+2=26; the
 # validator path itself 16+1=17 (the EXT-ilseq-M run goes to the copy).
-26 *
-17 core/scripts/validate-bmad-invocations.sh
+35 *
+21 core/scripts/validate-bmad-invocations.sh
+# BL-949: ADJ adds four validator runs (offender, comma control, two near-misses) and its three mutant copies five more (M1 two, M2 two, MG one): * 26+9=35; the validator path itself 17+4=21 (the mutant-copy runs go to the copies).

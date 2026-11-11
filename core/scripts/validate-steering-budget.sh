@@ -516,10 +516,13 @@ const genuineOperatorText = (r) => {
 // returned. The extraction stops at the first unescaped quote, so an answer containing a
 // literal `"` is truncated rather than over-read: a citation may fail to match, which is the
 // safe direction for a provenance check.
-const askUserQuestionAnswers = (r, askIds) => {
-  if (!r || r.type !== "user") return "";
+//
+// The answers stay a LIST here: --cite compares a disposition-shaped quote against each single
+// answer (see carriesQuote), and the joined string below serves every other use.
+const askUserQuestionAnswerList = (r, askIds) => {
+  if (!r || r.type !== "user") return [];
   const c = r.message?.content;
-  if (!Array.isArray(c)) return "";
+  if (!Array.isArray(c)) return [];
   const out = [];
   for (const b of c) {
     if (b.type !== "tool_result" || !askIds.has(b.tool_use_id)) continue;
@@ -528,8 +531,9 @@ const askUserQuestionAnswers = (r, askIds) => {
       : "";
     for (const m of raw.matchAll(/"\s*=\s*"([^"]*)"/g)) out.push(m[1]);
   }
-  return out.join(" ").trim();
+  return out;
 };
+const askUserQuestionAnswers = (r, askIds) => askUserQuestionAnswerList(r, askIds).join(" ").trim();
 
 // ---------------------------------------------------------------------------
 // Slash-command arguments: citable, but NOT steamroll-relevant.
@@ -903,12 +907,27 @@ if (CITE) {
     if (!Array.isArray(c)) continue;
     for (const b of c) if (b.type === "tool_use" && b.name === "AskUserQuestion") askIds.add(b.id);
   }
+  // A DISPOSITION-SHAPED QUOTE VERIFIES ONLY AS ONE WHOLE AskUserQuestion ANSWER. A quote like
+  // `Strike LR-S7-2` names an operator choice among options the LEAD wrote, so the substring test
+  // below let it verify against the answer `Strike LR-S7-2 but keep the index`, against
+  // `Strike LR-S7-20`, against the joined text of several answers, and against typed prose that
+  // merely mentions the option. For such a needle a record verifies only when SOME SINGLE answer
+  // of an AskUserQuestion result, normalised, equals it; typed prose and slash-command args never
+  // do. A trailing ` (recommended)` -- the badge the harness appends to a recommended option -- is
+  // stripped from the needle and from each answer first, so the badge is neither required nor
+  // refused. Every other needle keeps the substring test on the citable text.
+  const unbadge = (s) => s.replace(/ \(recommended\)$/, "");
+  const dispNeedle = unbadge(needle);
+  const DISPOSITION = /^(strike|reword|confirm) lr-s[0-9]+-[0-9]+$/.test(dispNeedle);
+  const carriesQuote = (r, txt) => DISPOSITION
+    ? askUserQuestionAnswerList(r, askIds).some(a => unbadge(norm(a)) === dispNeedle)
+    : norm(txt).includes(needle);
   for (const r of recs) {
     const txt = citableOperatorText(r, askIds);
     if (!txt) continue;
     const ts = Date.parse(r.timestamp);
     if (!(ts >= sinceMs)) continue;
-    const carries = norm(txt).includes(needle);
+    const carries = carriesQuote(r, txt);
     if (authMs !== null && Math.abs(ts - authMs) > authTolMs) {
       if (carries) outsideWindow++;
       continue;

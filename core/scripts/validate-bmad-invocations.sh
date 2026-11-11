@@ -147,8 +147,14 @@ fi
 #             (or line end) rejects it. `_` and `-` are excluded too: a longer name
 #             was truncated, not a call site that ended.
 #
-# The second grep re-extracts the name from the match, because the first consumes
-# a context character at each end.
+# The extractor is a non-consuming `awk` scanner under `LC_ALL=C`. The grep -oE pair it
+# replaced matched the name WITH one context character at each end and consumed the
+# trailing one, so two call sites sharing one separator (`/bmad-a /bmad-b`) lost the
+# second: the shared space was already spent. The scanner finds each `/bmad-NAME`,
+# reads the character before it and the character after it from the LINE (offsets
+# measured from the line start, never from a cut remainder, so `/bmad-a/bmad-b` keeps
+# `/bmad-b` rejected: its predecessor is the name character `a`), and advances
+# past the NAME only, never past the trailing context character.
 #
 # MEASURED, both layouts, before shipping: distribution 16 names -> 15, consumer
 # (graph) 17 -> 16. The difference is exactly {bmad-invocation-resolve} in both and
@@ -168,15 +174,29 @@ fi
 #             It runs under `LC_ALL=C`: under a UTF-8 locale BSD `sed` meets an invalid
 #             byte, prints `illegal byte sequence` and STOPS, so every later line and
 #             file of the concatenated stream goes unscanned; the pattern is ASCII-only,
-#             so the C locale is exact (the `grep -oE` after it drops only that line).
+#             so the C locale is exact (the extractor after it is also pinned to the C locale).
 #
 # MEASURED, both layouts, before shipping: distribution 13 names -> 12, consumer
 # (graph installed rulebook) 14 -> 13. The difference is exactly {bmad-sprint-status}
 # in both and the gained set is empty in both.
+#
+# MEASURED, both layouts, before shipping the scanner: the extracted name set of the
+# grep -oE pair against the awk scanner, the same sed prefilter ahead of both. Distribution
+# 12 names -> 12, consumer (graph installed rulebook) 13 -> 13. The two sets are identical
+# in both (diff empty), so the gained and lost sets are empty; the real corpora carry no
+# adjacent pair, and the scanner's gain is the pair the fixture seeds (`/bmad-a /bmad-b`).
 NAMES="$(grep -rh '' "$RULES" 2>/dev/null \
   | LC_ALL=C sed -E 's#(/bmad-[a-z0-9-]+)\.([A-Za-z0-9_])#\1_\2#g' \
-  | grep -oE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)' \
-  | grep -oE '/bmad-[a-z0-9-]+' \
+  | LC_ALL=C awk '{
+      s = $0; off = 0
+      while (match(substr(s, off + 1), /\/bmad-[a-z0-9-]+/)) {
+        st = off + RSTART; en = st + RLENGTH - 1
+        p = (st > 1) ? substr(s, st - 1, 1) : ""
+        n = (en < length(s)) ? substr(s, en + 1, 1) : ""
+        if ((p == "" || p !~ /[A-Za-z0-9_.-]/) && (n == "" || n !~ /[A-Za-z0-9_\/-]/)) print substr(s, st, RLENGTH)
+        off = en
+      }
+    }' \
   | sed 's#^/##' | sed 's/-$//' | sort -u)"
 
 # THE BMAD VERSION FLOOR, stated once and named by every FAIL below. 6.10.0 ships no bmad-review,

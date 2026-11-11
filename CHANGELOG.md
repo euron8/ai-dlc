@@ -19,6 +19,52 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1045.0] - 2026-11-11
+
+### BL-949 closed: validate-bmad-invocations names both call sites in `/bmad-a /bmad-b`
+
+`core/scripts/validate-bmad-invocations.sh` extracted call sites with a `grep -oE` pair whose pattern ends in a context character. With exactly one space between two names, the space was consumed by the first match and the second name had no leading character left, so `Invoke /bmad-a /bmad-b here.` checked only `/bmad-a` and a dangling `/bmad-b` passed Check 32 silently.
+
+The extractor is now a non-consuming `awk` scanner under `LC_ALL=C`. It reads the leading context from the line start and advances past the name only. The name set is identical on both real corpora.
+
+The receipt is `core/fixtures/bmad-invocation-resolve`. It gains ADJ arms (the offender, the comma control and two near-misses) and three mutants. `invocations.decl` is re-measured: `*` 26 to 35 and `core/scripts/validate-bmad-invocations.sh` 17 to 21. Consumer cost: a rulebook line with two names sharing one space now names the second; a dangling second name that used to pass Check 32 now fails it.
+
+### BL-950 closed: `--cite` verifies a disposition-shaped quote only as one whole AskUserQuestion answer
+
+`validate-steering-budget.sh --cite` matched a quote as a substring of every `AskUserQuestion` answer joined with spaces, so `Strike LR-S7-2` verified against the answer `Strike LR-S7-2 but keep the index`. The answers now stay a list (`askUserQuestionAnswerList`; the joined string stays for every other use). When the normalised quote, with a trailing ` (recommended)` stripped, matches `^(strike|reword|confirm) lr-s[0-9]+-[0-9]+$`, a record verifies only if some single answer, normalised and badge-stripped, equals it. Typed prose, slash-command args, a longer answer, a longer id and the joined text are refused. Every other quote keeps the substring test, and `--accept-captured` is untouched. `core/skills/ai-dlc/steps/gate-validation.md` and `core/skills/ai-dlc/escalations.md` state the exception.
+
+The receipt is `core/fixtures/askuserquestion-citation`: arms D1-D8 (the exact answer verifies; option plus more text, a prefix id and typed prose are refused; one answer of a multi-answer result verifies; a non-disposition quote still verifies; a bare quote against a badged answer and the reverse both verify) and seven mutants scored through `mutant_killed` with MUTANT-MATRIX rows. `invocations.decl` is re-measured from two agreeing counted runs: `*` 86 to 108, `core/scripts/validate-steering-budget.sh` 45 to 53.
+
+Consumer cost: every `--cite` caller sees a disposition quote verify only against a whole `AskUserQuestion` answer. A lead that files an option quote against a longer answer now fails Check 2, which is the intended outcome. The false-positive set over a consumer's real `pending.md` corpus was not measured.
+
+### BL-952 closed: every escalation-citation mutant kill goes through `mutant_killed`
+
+`core/fixtures/escalation-citation/run.sh` scored its mutants with its own helpers, so `validate-mutant-kills` M1 and M5 saw none of them and the fixture sat on the H5 matrix allowlist. Every kill now goes through `mutant_killed <flag> <name> "<message>"` with a base flag raised only by the unmutated arm of the same run. That routes 22 textual sites and 43 kill events per run: 13 corpus-arm, 5 inline, 3 empty-file (`en`), 6 refusal (`er`), 7 floor-battery and 9 lead-interpretation. The nine `en_score` and `er_score` mutants (M-revert, M-zero-records, M-hoist, R-revert-all, R-nonregular, R-no-symlink, R-rc, R-readable-never, R-readable-always) are the ones the entry's own site list missed; they are split from their controls (`EN_B`, `ER_B`) and routed by the second commit. `g`, `says` and `saysout` now return 1 on FAIL, so a `$?` capture after them can fail.
+
+`KILL_FLOOR` is `25 + KF_EXTRA + 9`: `KF_EXTRA` is raised by 3 in the non-SKIP empty-file branch and by 6 in the non-SKIP refusal branch, so in the distribution the floor is 43, equal to the measured kill count of 43. The fixture gains a MUTANT-MATRIX block and a real `--matrix` mode that measures 675 rows; every recorded `decides` and twin agrees with it. `inputs.decl` lists `core/fixtures/lib/mutant.sh` and `core/fixtures/lib/matrix.sh`; `invocations.decl` `*` goes 469 to 473 from two agreeing counted runs and stays 473 for the second commit. The `escalation-citation` row is removed from `scripts/fixture-matrix-allowlist.txt`.
+
+Consumer cost: none beyond a fixture-only pull. The subject, `validate-escalation-resolution.sh`, is untouched.
+
+### BL-953 closed: `snapshot-update.sh --line-replace` into In-Flight Teammates applies the status-cell vocabulary
+
+`--line-replace 'In-Flight Teammates' <match> <text>` wrote a free-text status cell with rc 0, while `--row-status`, `--row-set <agent> status` and `--row-replace` refused it with rc 2. A table row written there now has its status cell (the header's `status` column) checked with `statuscell_ok`, through the reusable awk function `ifstatus_chk`. A non-member is refused with exit 2 and the file unchanged. The header line, the `---` rule, non-row text and a header with no status column keep today's behaviour. The `--row-replace` refusal message used to print the words `trim(c[sc])` instead of the value, because the single quotes closed the shell literal holding the awk program; it is fixed in the same literal.
+
+The receipt is `core/fixtures/snapshot-update-stamps`: cells IFLINEREFUSE and IFLINEWRITE and mutants m-noifguard and m-ifrefuseall with MATRIX rows. `invocations.decl` is re-measured from two agreeing counted runs: `*` 344 to 369, `core/scripts/snapshot-update.sh` 59 to 64, `core/scripts/validate-artifact-budget.sh` 32 to 35.
+
+Consumer cost: a writer that puts a free-text In-Flight status through `--line-replace` now gets rc 2 and must write a member status. A `--line-replace` outside In-Flight Teammates is unchanged. `--line-add` is not covered; it is filed as BL-963.
+
+### BL-963 filed: `snapshot-update.sh --line-add 'In-Flight Teammates'` writes a free-text status cell with rc 0
+
+Open, not fixed. `--line-add` takes its text through an awk branch that applies only `guard` and `nokey`, so it appends a whole teammate row with no status membership test, the op beside BL-953's `--line-replace`. The entry records the measured cells (control `--row-status` free text rc 2 file unchanged; `--line-add` rc 0 file changed) and a receipt scored unchanged 1, the scratch-copy fix sketch 0, script absent 9.
+
+### BL-964 filed: escalation-citation's `KILL_FLOOR` counts the 7 floor-battery kills unconditionally
+
+Open, not fixed. On a consumer run that takes the floor SKIP branch, the fixture can reach at most 18 or 36 kills against a floor of 25 or 43, so KILL-COUNT FAILs instead of skipping. The entry carries the derived table by SKIP path and a structural receipt scored on mktemp trees: this tree 1, the fix sketch 0, anchor renamed 9, no fixture 9.
+
+### BL-965 filed: `adversarial-citation` scrubs `AI_DLC_*` with `env`, which its `tools.decl` does not declare
+
+Open, not fixed. Under `hermetic-run.sh` the scrub at `core/fixtures/adversarial-citation/run.sh:38` is a silent no-op in every run: one measured run printed `env: command not found` once and still passed. The entry's census finds two fixtures that use `env` and do not declare it, `adversarial-citation` and `fixture-git-env-seam`. Receipt scored unchanged 1, a scratch copy declaring `env` 0, `run.sh` absent 9.
+
 ## [0.1044.0] - 2026-11-10
 
 ### BL-954 filed and closed
