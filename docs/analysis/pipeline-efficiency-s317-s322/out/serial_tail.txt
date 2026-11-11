@@ -1,0 +1,24 @@
+s317 remediator-solo 2.99 h = width-1 2.37 + width-2+ 0.63
+s318 remediator-solo 7.79 h = width-1 6.79 + width-2+ 1.00
+s319 remediator-solo 11.94 h = width-1 10.62 + width-2+ 1.32
+s320 remediator-solo 9.37 h = width-1 7.08 + width-2+ 2.28
+     4.03 h  LANES=1 round (one document or one lane)
+     2.19 h  fan-in after a multi-lane round
+     0.51 h  straggler lane of a multi-lane round
+     0.34 h  other, after a multi-lane round
+    turns: writer 2.48 h (35%), adjudication 4.61 h | predicted width-1 tail (upper bound) k=2 4.78 h, k=4 3.63 h
+s321 remediator-solo 9.62 h = width-1 7.37 + width-2+ 2.26
+     3.74 h  LANES=1 round (one document or one lane)
+     2.46 h  fan-in after a multi-lane round
+     0.71 h  no round-one join in the session
+     0.31 h  other, after a multi-lane round
+     0.15 h  straggler lane of a multi-lane round
+    turns: writer 2.12 h (29%), adjudication 5.25 h | predicted width-1 tail (upper bound) k=2 4.74 h, k=4 3.43 h
+s322 remediator-solo 9.15 h = width-1 7.27 + width-2+ 1.88
+     5.48 h  LANES=1 round (one document or one lane)
+     1.51 h  fan-in after a multi-lane round
+     0.15 h  no round-one join in the session
+     0.12 h  straggler lane of a multi-lane round
+     0.00 h  other, after a multi-lane round
+    turns: writer 2.42 h (33%), adjudication 4.84 h | predicted width-1 tail (upper bound) k=2 4.84 h, k=4 3.63 h
+self-check: the remediator-solo figures above must equal poles.py's `solo-role h: remediator` per sprint

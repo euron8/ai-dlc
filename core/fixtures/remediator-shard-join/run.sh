@@ -66,6 +66,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX EC39m decides=EC39a twins=- why=the record-mode BADSIB classification is read by EC39a alone
 # MUTANT-MATRIX LN3m decides=LN3 twins=- why=the lane partition drive reads LN3 alone
 # MUTANT-MATRIX LN6m decides=LN6 twins=- why=the lane-record drive reads LN6 alone
+# MUTANT-MATRIX LN10m decides=LN10 twins=- why=the four-item fan-in drive reads LN10 alone
+# MUTANT-MATRIX LN13m decides=LN13 twins=- why=the unedited-story escalation drive reads LN13 alone
+# MUTANT-MATRIX LN15m decides=LN15 twins=- why=the adjudicator-wrote lane-round drive reads LN15 alone
 # MUTANT-MATRIX LPm1 decides=LP1 twins=LP3
 # MUTANT-MATRIX LPm4 decides=LP4 twins=LP3,LP1
 # MUTANT-MATRIX NLma decides=NL3 twins=NL1

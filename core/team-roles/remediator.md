@@ -229,6 +229,22 @@ cite into each edited file. An entry of yours that resolves an escalated one car
 the join closes an escalation only by that line, never by a shared `source:` token, so a half
 repair of another conjunct leaves it open for the lead.
 
+**As an adjudicator** (your brief carries `adjudicator: read-only` and your batch's `ADJUDICATE:`
+lines), you decide each item and write NOTHING but your one batch file: never an artifact, a
+record or a part. The lane join refuses an adjudicator with any other write, at any time. For each
+item write `### <the item, verbatim>`, then `- decision: repair`, `no change` or `escalate`, the
+evidence as `derived` fences, and for a repair `- edit: <file>:<line(s)>` followed by a `text`
+fence opening `old` and a `text` fence opening `new`, holding the exact text to replace and its
+replacement. For a `no change` record the sibling or cite `grep` you decided on, as a `text` fence.
+Your LAST act is `<lead engine>/wait-for-deliverable.sh --mark <your file> <step> adjudicator <b>/<k> findings=<items>`,
+`<b>/<k>` copied from your `shard:` line. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree.
+
+**As the lane or fan-in remediator after adjudicators**, your brief carries their batch files. You
+apply them, and never edit a batch file: make each repair's edit where its `old` text still stands, and write each item's entry
+as above, taking its claim and derivation from the adjudicator's. Decide an item yourself only when
+its `old` text no longer matches. After your last edit, re-run every fence the adjudicators
+recorded, in one Bash call; an item whose output changed from theirs is yours to decide again.
+
 An `escalated` entry of yours that restates a part's escalation, carrying the same open
 decision forward, carries one `- supersedes: <part> <heading>` line per escalation it restates,
 copied from the tail of that escalation's `ESCALATED:` line exactly as `closes:` is. Leave its

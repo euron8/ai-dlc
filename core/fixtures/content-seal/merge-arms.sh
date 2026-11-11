@@ -184,9 +184,20 @@ else bad "CS-K1: --mark over sealed shards: mark rc=$mk1, --check rc=$ck1, newes
 # the file untouched, and no row appended: --mark never launders amended bytes into a seal.
 kw_restore; dk2="$KW"; patch_shard "$dk2/2.md"; cp "$dk2/2.md" "$WORK/k2.before"
 nb2="$(seal_count "$(ledger_of "$dk2")")"; mark_one "$WFD" "$dk2/2.md"; na2="$(seal_count "$(ledger_of "$dk2")")"
-if [ "$MRC" = 64 ] && cmp -s "$dk2/2.md" "$WORK/k2.before" && [ "$na2" = "$nb2" ] && has "$WORK/mark.out" "changed through Bash after its last Write or Edit"; then
-  ok "CS-K2: a Bash-amended sealed shard: --mark refuses (64), writes nothing, appends no row"
+if [ "$MRC" = 64 ] && cmp -s "$dk2/2.md" "$WORK/k2.before" && [ "$na2" = "$nb2" ] && has "$WORK/mark.out" "changed through Bash after its last Write or Edit" \
+   && has "$WORK/mark.out" "re-dispatch the adversary for that shard"; then
+  ok "CS-K2: a Bash-amended sealed shard: --mark refuses (64), writes nothing, appends no row, and names the adversary re-dispatch"
 else bad "CS-K2: --mark over a Bash-amended sealed shard: rc=$MRC, rows $nb2 -> $na2: $(head -1 "$WORK/mark.out")"; fi
+# CS-K2a: CS-K2's twin one property apart -- the sealed, Bash-amended file is an ADJUDICATOR batch file (BL-716), a
+# shards/*/*.md path the generic adversary arm also matches. --mark refuses (64) with the adjudicator remedy, never the adversary's.
+ka="$(dirname "$dk2")/stories-serial-adjudicate-p1"; mkdir -p "$ka" || { echo "FIXTURE BROKEN: cannot make $ka" >&2; exit 2; }
+printf '### 01.md F-1 — MINOR\n- decision: no change\n' > "$ka/fanin-b1.md"; seal_hook "$KWR" Write "$ka/fanin-b1.md" a0adjudicator000001
+perl -0pi -e 's/no change/repair/' "$ka/fanin-b1.md"; cp "$ka/fanin-b1.md" "$WORK/ka.before"
+( set +o pipefail; . "$WFD"; wfd_mark_main --mark "$ka/fanin-b1.md" stories adjudicator 1/2 findings=1 ) > "$WORK/mark.out" 2>&1; MRC=$?
+if [ "$MRC" = 64 ] && cmp -s "$ka/fanin-b1.md" "$WORK/ka.before" && has "$WORK/mark.out" "changed through Bash after its last Write or Edit" \
+   && has "$WORK/mark.out" "re-dispatch that batch's adjudicator" && ! has "$WORK/mark.out" "re-dispatch the adversary"; then
+  ok "CS-K2a: a Bash-amended sealed ADJUDICATOR batch file: --mark refuses (64) with the delete-and-re-dispatch-that-batch remedy, never the adversary's"
+else bad "CS-K2a: --mark over a Bash-amended adjudicator batch file: rc=$MRC: $(head -1 "$WORK/mark.out")"; fi
 
 # CS-K3: a shard with NO seal row (written wholly through Bash) beside one that has one -> --mark
 # marks it and leaves it with no row: an unsealed file never becomes a sealed one.

@@ -1,5 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run; the rows follow unit-record.sh and unit-parts.sh, which ask the entry contract's answers in process. Re-measured for BL-974 hand E by two agreeing counted runs (1211 and 85 both times), armed as fxcount_arm arms it, on a clean detached worktree at the commit carrying MKP, its two MKPm mutants and the replay worlds' ledgered write: the ten new hook starts are p_replay's and p_claim's drive of data.txt, once per call (EC41, its copy control and two mutants: 4; EC42, its copy control and four mutants: 6); MKP's --mark calls run --check-part in process.
-1211 *
+# Re-measured for BL-716 on 0.1057.0 by a counted run (1247, budget ok): 36 starts over 974's 1211, from LN10-LN16 and the LN10m, LN13m and LN15m mutants.
+1247 *
 73 core/scripts/join-remediator-shards.sh
 85 core/hooks/ai-dlc-gate-remediation-guard.sh
 2 core/hooks/ai-dlc-derivation-capture.sh

@@ -431,6 +431,38 @@ else
   mrow LN3m LN3=1
   mutant_killed "${B_LN3:-0}" LN3m "LN3m one LANE per part, no edge computation: KILLED by [LN3]"
 fi
+# ---- BL-716 second build: the ADJUDICATION PARTITION (LN10-LN12), an escalation's own unedited file (LN13, LN14), and the lane
+# round's read-only adjudicator arm (LN15, LN16). Each mutant is built in a copy of the join's whole directory.
+if p_adjfour "$JOIN"; then ok "LN10: four fan-in items -> ADJUDICATE fanin 1/2 and 2/2, two items each, the sweep never dealt, ADJUDICATOR-COUNT: 2"; B_LN10=1
+else bad "LN10: the fan-in was not dealt into two batches (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"; fi
+p_adjthree "$JOIN" && ok "LN11: three fan-in items -> no ADJUDICATE line, ADJUDICATOR-COUNT: 0 (the writer adjudicates)" \
+  || bad "LN11: three items were dealt (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"
+p_adjcap "$JOIN" && ok "LN12: eleven fan-in items -> k capped at 4, no batch over 3, ADJUDICATOR-COUNT: 4" \
+  || bad "LN12: eleven items were not dealt into four batches (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"
+if p_escown "$JOIN"; then ok "LN13: an escalation naming an unedited story in the slot -> a lane of its own, the escalation its LANE-ITEM, not FANIN"; B_LN13=1
+else bad "LN13: the unedited-file escalation was not a lane (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"; fi
+p_escnear "$JOIN" && ok "LN14: the same escalation naming an absent story, a file outside the slot, or two part lanes' files -> FANIN, LANE-COUNT: 2 (no lane added, none merged)" \
+  || bad "LN14: a near-miss escalation was made a lane or merged lanes (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+if p_adjwrote "$JOIN"; then ok "LN15: an adjudicator that edited a story BEFORE the lane window -> the lane join REFUSES, naming agent, file and ts"; B_LN15=1
+else bad "LN15: an adjudicator's artifact write was not refused (rc=$RC): $(grep -m2 REFUSED "$JO")"; fi
+p_adjclean "$JOIN" && ok "LN16: LN15 one write apart, the adjudicator wrote only its batch file -> JOINED" \
+  || bad "LN16: a read-only adjudicator was refused (rc=$RC): $(grep -m2 REFUSED "$JO")"
+# lm716 <tag> <arm-function> <arm id> <B flag> <sed program> <what> -- one mutant, built in a copy of the join's directory.
+lm716() {
+  local em; em="$(mktemp -d "$WORK/lm716.XXXXXX")" || exit 2
+  cp "$(dirname "$JOIN")"/*.sh "$em/" || { echo "FIXTURE BROKEN: $1 could not copy the join's sibling scripts" >&2; exit 2; }
+  sed "$5" "$JOIN" > "$em/join-remediator-shards.sh" || { echo "FIXTURE BROKEN: $1 could not write the mutated join" >&2; exit 2; }
+  if cmp -s "$JOIN" "$em/join-remediator-shards.sh"; then
+    bad "$1: FIXTURE STALE -- the mutation matched nothing in $JOIN; re-anchor it, never relax the assertion"
+  elif ! bash -n "$em/join-remediator-shards.sh" 2>/dev/null; then bad "$1: the mutant is not valid shell"
+  elif ua_inmut "$em/join-remediator-shards.sh" "$2" "$em/join-remediator-shards.sh"; then
+    mrow "$1" "$3=0"; bad "$1: SURVIVED -- $3 holds against a join that $6"
+  elif ! grep -qE '^(LANE-COUNT|JOINED|REFUSED): ' "$JO"; then bad "$1: the mutant printed no LANE-COUNT, JOINED or REFUSED line; it died rather than answered"
+  else mrow "$1" "$3=1"; mutant_killed "${4:-0}" "$1" "$1 $6: KILLED by [$3]"; fi
+}
+lm716 LN10m p_adjfour LN10 "${B_LN10:-0}" 's/      if (m < 4) return 0$/      return 0/' "never deals an ADJUDICATE batch"
+lm716 LN13m p_escown LN13 "${B_LN13:-0}" 's/  \[ "\$DOCMODE\$SUBJMODE" = 00 \] && _slotp="\${SHARD_REL%\/shards}\/"$/  :/' "routes an unedited-file escalation to the fan-in as before"
+lm716 LN15m p_adjwrote LN15 "${B_LN15:-0}" 's/^case "\$ARTIFACT" in \*-serial)$/case "$ARTIFACT" in *-never-a-round)/' "has no read-only adjudicator arm"
 if p_lanerec "$JOIN"; then ok "LN6: --escalations reads the lane round's record after round 1 and closes by it; either record alone REFUSED; the subject party record owes requirements-party-serial-repair-p1.md; no LANE/FANIN line in a record mode"; B_LN6=1
 else bad "LN6: the lane round's record was not read with round 1 (rc=$RC): $(cat "$JO")"; fi
 p_lanename "$JOIN" && ok "LN8: the subject party join prints LANE-ARTIFACT: requirements-party-serial --pass 1, derived from its record" \
@@ -577,7 +609,7 @@ if ua_on NL; then
 # subject row outside the window, or a part record with no row still refuses. Predicates in lib.sh (p_nl*).
 if p_nl2lane "$JOIN"; then ok "NL1: the lane round's two lanes, both \`edit: n/a\`, an empty ledger window -> JOINED (2 parts, 0 writers), the header's no-lane line REPLACING the one-writer sentence, no lane report (-serial)"; B_NL1=1
 else bad "NL1: the two-lane no-edit round did not join with the no-lane header (rc=$RC): $(grep -m1 REFUSED "$JO")"; fi
-p_nlesc "$JOIN" && ok "NL2: a round-one record, one lane \`edit: n/a\` and one ESCALATED entry naming a story -> JOINED, ESCALATED-COUNT 1, LANE-COUNT 0, the escalation to the fan-in" \
+p_nlesc "$JOIN" && ok "NL2: a round-one record, one lane \`edit: n/a\` and one ESCALATED entry naming a story -> JOINED, ESCALATED-COUNT 1, that unedited story one lane, the escalation its item" \
   || bad "NL2: the n/a + escalated round did not join (rc=$RC): $(grep -m1 REFUSED "$JO")"
 if p_nlcites "$JOIN"; then ok "NL3: one lane cites a file it never ledgered, the window empty -> REFUSED with the 'records no dispatched write' line verbatim AND the coverage join's UNWRITTEN line"; B_NL3=1
 else bad "NL3: a lane citing an unledgered edit was not refused with both lines (rc=$RC): $(grep -m2 REFUSED "$JO" | tr '\n' ' ')"; fi

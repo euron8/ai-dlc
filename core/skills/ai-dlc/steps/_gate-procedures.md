@@ -1103,7 +1103,9 @@ parts. The join partitions that work into LANES of FILES and prints them after S
 `serial-remediation-worklist.sh --keep` run finds (sections and subject mode; files mode has no
 worklist) joins the two files it links. A `HIT` never joins lanes, and neither does an escalation:
 one standing in, or naming files of, two or more lanes, or naming no lane's file, is a `FANIN`
-item. `LANE-EDGES: UNASSESSED` means the worklist did not run clean and every file is one lane.
+item. In files mode only, an escalation whose every named file is either one lane's or a file no
+part edited (on disk under the slot's `stories/` or `epics/`) is that lane's item, or a lane of its own
+whose `LANE:` line lists no part. `LANE-EDGES: UNASSESSED` means the worklist did not run clean and every file is one lane.
 The join also prints `LANE-ARTIFACT: <lane artifact> --pass <M>`, the lane round's name derived
 from round one's record name; copy LANE-ARTIFACT, never infer it from `--artifact` or `--subject`
 (the subject party round's is `requirements-party-serial --pass 1`, not `requirements-serial`,
@@ -1145,6 +1147,25 @@ every escalation still open; each open one is the lead's to adjudicate. A party 
 fix aside as outside the shard or not required without naming a hand-off, and, in every parts
 mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
 forms, and a siblings fence whose control text is not in the file it names.
+
+**Adjudicators decide, one writer writes.** After `FANIN-COUNT:` the round-one join prints one
+`ADJUDICATE: <n | fanin> <b>/<k> <item>` line per item of every lane (`<n>`) and of the fan-in that
+holds four or more items, dealt into `<k>` batches, then `ADJUDICATOR-COUNT:`. For each such lane
+and for the fan-in, dispatch its `<k>` adjudicators in parallel, at the same time as every lane
+remediator of a lane that has none: each a `remediator` dispatch whose brief carries
+`shard: <b>/<k> <lane artifact> <n | fanin>`, the line `adjudicator: read-only`, and its batch's
+`ADJUDICATE:` lines verbatim. Each writes exactly one file,
+`s<N>/shards/<lane artifact>-adjudicate-p<M>/<lane-<n> | fanin>-b<b>.md`, closed with
+`<lead engine>/wait-for-deliverable.sh --mark <batch file> <step> adjudicator <b>/<k> findings=<items>`,
+`<lead engine>` being the lead checkout's `scripts/ai-dlc` path the brief carries for a worktree-isolated
+adjudicator, else `scripts/ai-dlc`;
+beat-join them with `--complete`. A lane with adjudicators then gets its lane remediator,
+briefed as above plus every adjudicator file of that lane; the fan-in remediator gets every
+`fanin-b<b>.md`. Each is the one writer of its files and applies those decisions as
+`remediator.md` says. Run the lane join only after every adjudicator has delivered, with `--since`
+taken from the FIRST adjudicator dispatch, so its window arms see an adjudicator's write; its
+read-only arm also refuses, over the whole write ledger, an adjudicator whose batch file is on disk
+and that wrote anything else. `ADJUDICATOR-COUNT: 0` is the round as before.
 
 After a join refusal naming a file `which no dispatched agent wrote`, or a file `written by more
 than one agent in the window`, or a part whose entry `sets part of the fix aside` and names no

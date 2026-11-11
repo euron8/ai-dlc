@@ -19,6 +19,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1058.0] - 2026-11-11
+
+### BL-716 PARTIAL: the serial repair tail is adjudication, so a lane's or fan-in's items are dealt to parallel read-only adjudicators before its one writer; a files-mode escalation naming an unedited file is a lane, not a fan-in item
+
+Measured first, from committed data (`docs/analysis/pipeline-efficiency-s317-s322/scripts/serial_tail.py`, output `out/serial_tail.txt`; its remediator totals equal `poles.py`'s per sprint). One remediator alone held 7.08/7.37/7.27 h of s320/s321/s322. That time sits in rounds whose join printed `LANE-COUNT: 1` (4.03/3.74/5.48 h) and in the fan-in after a multi-lane round (2.19/2.46/1.51 h). A document-mode round maps every section to one assembled document, so a file-keyed lane can never split it. Writer turns were 29–35% of those agents' time; the rest was read-only adjudication.
+
+- `core/scripts/join-remediator-shards.sh`, round-one join: a lane or the fan-in holding 4 or more items prints `ADJUDICATE: <n | fanin> <b>/<k> <item>` (round-robin, k = min(4, floor(n/2))), then `ADJUDICATOR-COUNT:`. The fan-in is dealt only when a lane exists.
+- Same join, files mode: an escalation whose files are one lane's, or files no part edited (in the slot, on disk, outside `shards/`), is that lane's item or a lane of its own. Lanes never merge.
+- Same join, lane round: refuses an adjudicator (an agent with a row under `shards/<lane artifact>-adjudicate-p<M>/`) that wrote anything else, read over the whole write ledger and independent of the window. False-positive set on graph's ledger: 0 adjudicate rows of 31211, against 2091 `-serial-repair-p` rows.
+- `_gate-procedures.md` and `remediator.md`: adjudicators are dispatched beside the lanes and write one batch file each. The lane or fan-in remediator is the one writer: it applies their decisions and re-runs every adjudicator fence after its last edit.
+- `wait-for-deliverable.sh` `--mark` and `content-seal.sh` `_seal_remedy`: a sealed adjudicator batch file changed through Bash gets its own remedy (delete that batch file, which voids its decisions, and re-dispatch that batch's adjudicator) instead of the adversary-shard one. Both arms sit before the generic `shards/*/*.md` arm. The `content-seal.sh` arm is the same defect, in the same words and the same position. Cells: content-seal CS-U-R2 and CS-K2a, with CS-K2 extended.
+- Receipt: `remediator-shard-join` LN10–LN16, with mutants LN10m, LN13m and LN15m; NL2 re-expected for the new routing.
+
+Expected, as an UPPER BOUND (even item splits; the time spent deciding an edit counted as writer time): a width-1 tail of 4.78/4.74/4.84 h at k=2 and 3.63/3.43/3.63 h at k=4. The entry stays live until a sprint run on this release is measured with `poles.py`. That needs the reconcile merge and the operator's pull.
+
 ## [0.1057.0] - 2026-11-11
 
 ### BL-974 PARTIAL: the seal runs the join's own per-part check, so a format refusal reaches the writer while it still holds the context
