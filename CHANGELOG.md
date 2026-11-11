@@ -19,6 +19,46 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1046.0] - 2026-11-11
+
+### BL-959 filed and closed: an in-force re-suppression stands an expired suppression's re-fire down, in the expiry arm and in the terminal arm's OVERRIDDEN acquittal
+
+`core/scripts/validate-suppression-lifetime.sh` judged an expired `SUPPRESSED` entry by the latest `gate-metrics.jsonl` row for its check. That row is the PREVIOUS gate's, because Check 12 writes after Check 2. For a check the current gate does not re-run, it named the expired entry forever, so a re-suppression (the cure the expired entry's own FAIL names) could never clear the re-fire. Two arms carried it:
+- the expiry arm, reported by the reference consumer at a sprint-322 gate-3 transition (`gate-transition.sh` gate-3 `arm 2`) on Check 32;
+- the terminal arm's OVERRIDDEN acquittal, found by the contract adversary (rc 1 on its world; the consumer's terminal count is 0, so it is not affected today).
+
+The expiry arm now stands down when `pending.md` holds a superseding entry S: it classifies `SUPPRESSED` under a different waiver key, targets the same check in the same catalog (an empty bracket reads as core), is in force by `sl_in_force` (the one predicate `--in-force` lists by), and has an authorization timestamp different from the expired entry's. Different, not later: an earlier entry still in force supersedes too. The terminal arm's stand-down is narrower: an `OVERRIDDEN` entry naming core check N is stood down by such an S only when N's latest row is `FAIL_WAIVED` under an expired `SUPPRESSED` waiver that targets `[core] N`; on a plain `FAIL` row for N the run still fails on that `OVERRIDDEN` entry. Each stand-down prints one `WARN: superseded:` line naming both entries (a WARN, because `verdict.sh` surfaces only WARN-class lines at exit 0), and the summary line gains `superseded=<n>` after `catalog=<n>`. `--in-force` and `--waivers` output is byte-identical. The stand-down is unconditional, because the lead's own Check 2 run is the same command.
+
+The limit is not widened: one operator turn buys one window of at most 3 gates, because `**Expires after:**` is capped at 1..3. Once the superseding entry expires, the expired entry re-fires for a check the current gates do not re-run. `gate-validation.md` Check 2 and `escalations.md` state the supersession, the terminal arm's narrower condition and the limit, and `escalations.md` states that no step archives a `SUPPRESSED` entry.
+
+Measured: a mktemp world (an expired entry plus an in-force re-suppression for check 32 under a different authorization timestamp) reads rc 1 at base and rc 0 at the fix, with the WARN. On the consumer's own `pending.md`, with the expired entry restored, it reads base rc 1 and fix rc 0, the WARN naming `[S322-REQUIREMENTS-GATE]` and `[S322-CHECK-32-SUPPRESSION-REFRESH-18GATES]`. Receipt: `core/fixtures/suppression-lifetime/receipt-bl959.sh`.
+
+Consumer-visible movement: the reconcile predicate site for `validate-suppression-lifetime.sh` (`core/skills/ai-dlc-update/reconcile/predicate-sites.md:183-190`) moves from `EXPIRED <check>` to `OK` on a tree where an expired entry is superseded. No verdict sed there maps the `WARN: superseded:` line, so the reconcile reads plain `OK`. A baselined `EXPIRED:<check>` key whose only cause is now superseded reports "baselined key no longer reproduces".
+
+### BL-960 filed
+
+For a script-adjudicated check, such as Check 32, no gate verifies a `SUPPRESSED` entry's `**Operator authorization:**` citation: `validate-escalation-resolution.sh` scopes itself to RESOLVED and OVERRIDDEN, Check 26 verifies only `adjudication: llm` checks, and remediation-guard arm 7b verifies only when lifting a lock. Check 2 therefore accepts a well-formed entry on an unverified quote. Pre-existing; BL-959 adds no trust root. Found by the contract adversary. Filed, not built.
+
+Consumer reach: none (docs only).
+
+### BL-961 filed
+
+Moving a `SUPPRESSED` entry into `pending-archive.md` is off-protocol, is enforced nowhere, and clears Check 2: `validate-suppression-lifetime.sh` judges expiry only for entries in `pending.md`, so a `FAIL_WAIVED` row whose waiver resolves only in the archive is acquitted with a NOTE (rc 1 with the entry in `pending.md`, rc 0 archived). Pre-existing; the reference consumer used the move as its workaround for BL-959. Found by the contract adversary. Filed, not built.
+
+Consumer reach: none (docs only).
+
+### BL-966 filed
+
+A `SUPPRESSED` entry authorized at a future timestamp never expires: no check refuses an authorization later than the gates being counted, so it counts 0 elapsed gates until that date. `--in-force` lists it at every gate, and since BL-959 it supersedes an expired entry indefinitely (base rc 1, this release rc 0 with `superseded=1`). The `--in-force` half predates BL-959. Filed, not built.
+
+Consumer reach: none (docs only).
+
+### BL-968 filed
+
+An archived `SUPPRESSED` waiver with `**Expires after:**` above 3 still buys the terminal arm's OVERRIDDEN acquittal within that count: the acquittal's lifetime test never asks whether the expiry is in 1..3, and only the `pending.md` entry loop caps it, so an archived waiver with `**Expires after:** 18` acquits an `OVERRIDDEN` entry for up to 18 gates (rc 0; the same waiver in `pending.md` gives rc 1, and an archived Expires-3 waiver is a legitimate rc 0). Same trust-root family as BL-960 and BL-966. Filed, not built.
+
+Consumer reach: none (docs only).
+
 ## [0.1045.0] - 2026-11-11
 
 ### BL-949 closed: validate-bmad-invocations names both call sites in `/bmad-a /bmad-b`

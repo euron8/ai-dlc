@@ -126,6 +126,51 @@
 # writing `—` for an em dash, or `\"` inside the id, yields an id that matches nothing and
 # fails closed as unresolvable.
 #
+# SUPERSESSION: A FRESH AUTHORIZATION STANDS AN EXPIRED ONE DOWN
+# The latest row is the PREVIOUS gate's, so for a check the current gate does not re-run it keeps
+# naming the expired entry E forever, and a re-suppression -- the cure E's own FAIL message names --
+# could never clear the re-fire. So when the expiry arm would fire on E it stands down if this
+# file holds an entry S with ALL of:
+#   a. S is in THIS file, not the archive: an archived entry is terminal and authorizes nothing new;
+#   b. S classifies SUPPRESSED and its waiver key is not E's (an entry sharing E's key IS E);
+#   c. S suppresses the same check id in the same catalog, an empty bracket reading as core on
+#      both sides, as latest_verdict and section 6c read it;
+#   d. S's lifetime is readable: **Expires after:** an integer in 1..3, a non-empty authorization
+#      timestamp. A malformed S supersedes nothing, and its own FAIL fires in its own iteration;
+#   e. S is in force by sl_in_force, the predicate --in-force lists by -- one spelling, not two;
+#   f. S's authorization timestamp differs from E's. The operator TURN is the timestamp, so an
+#      entry re-citing E's turn under a new header is a re-citation, not a fresh authorization.
+# A stand-down is never silent: one `WARN: superseded:` line on stderr per stand-down, naming the
+# check, the catalog, both entries' keys, E's elapsed and expiry and the row ts, and the summary
+# line counts `superseded=<n>` after `catalog=<n>`. It is a WARN, not a NOTE, because verdict.sh
+# surfaces only WARN-class lines at exit 0 and gate-transition.sh shows nothing at exit 0. The
+# terminal arm's OVERRIDDEN entry stands down by the same test (a, b, c, e and f, catalog core,
+# against the row's waiver W) only when W is a SUPPRESSED entry whose own target is (core, this
+# check) and W is expired. Expired is not tested again there: the OVERRIDDEN acquittal above has
+# already taken every such W within its lifetime, so a W that reaches the twin is past its lifetime
+# or has no readable lifetime, which counts as expired. A W suppressing another check or another
+# catalog stands nothing down, in force or not. It is counted in the same field; RESOLVED keeps
+# exact-match only. A stood-down E does not match its `EXPIRED:<check>` baseline key, so a
+# baseline holding that key reports it no longer reproduces. --in-force and --waivers are
+# unchanged: E was already absent from both.
+#
+# It is UNCONDITIONAL, with no transition-only flag: the lead's own Check 2 run is the same
+# command, so a flag scoped to gate-transition.sh would leave the manual path wrong. A refresh
+# buys ONE window of at most 3 gates per operator turn, because the grammar caps **Expires after:**
+# at 1..3; once it expires E re-fires, until another operator turn. No protocol step archives a
+# SUPPRESSED entry: escalations.md's terminal-entry archival and retro's archive step move only
+# RESOLVED and OVERRIDDEN.
+#
+# This adds no trust root, and the reason is the ARCHIVE MOVE, not a verifier. Moving E into
+# pending-archive.md by hand -- off-protocol at any time -- already clears Check 2 with no new
+# entry at all, and no hook guards that
+# write (remediators are denied edits to pending.md by ai-dlc-gate-remediation-guard.sh; the lead
+# is not). S's citation is trusted exactly as --in-force trusts it: UNVERIFIED by any gate for a
+# script-adjudicated check. validate-escalation-resolution.sh (gate-3 arm 2a) verifies only
+# RESOLVED and OVERRIDDEN citations, Check 26 verifies citations only for `adjudication: llm`
+# checks, and the remediation guard's arm 7b verifies a SUPPRESSED citation only when a
+# remediation lock is lifted. Those gaps predate this arm and are filed, not closed, here.
+#
 # USAGE
 #   validate-suppression-lifetime.sh --escalations <pending.md>
 #                                   [--gate-metrics <gate-metrics.jsonl>]
@@ -565,6 +610,43 @@ sl_past_lifetime() {
   [ "$SL_ELAPSED" -gt "$2" ]
 }
 
+# sl_in_force <expires> <authts> -> 0 when a SUPPRESSED entry carrying these two fields is IN FORCE,
+# with SL_ELAPSED set to the gates counted against it. THE ONE spelling of "in force": the
+# --in-force/--waivers listing asks it, and so does the supersession test below. The lifetime must
+# be READABLE -- an expiry that is an integer in 1..3 and a non-empty authorization timestamp -- or
+# the entry is not in force; a timeline recording no gate counts 0 elapsed (the fresh-consumer case);
+# otherwise it is the negation of sl_past_lifetime. It overwrites SL_ELAPSED, so a caller holding
+# another entry's count copies it out first.
+sl_in_force() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -ge 1 ] && [ "$1" -le 3 ] || return 1
+  [ -n "$2" ] || return 1
+  if [ "$GATES_N" -eq 0 ]; then SL_ELAPSED=0; return 0; fi
+  ! sl_past_lifetime "$2" "$1"
+}
+
+# sl_superseder <check> <catalog-or-empty> <expired wkey> <expired authts> -> 0, with SS_SHORT set
+# to the superseding entry's 92-character key, when THIS file holds a fresh authorization for the
+# same target (header, "SUPERSESSION"); 1, SS_SHORT empty, when none does. The row filter is the
+# five structural conditions; the lifetime is sl_in_force's, asked per candidate. Strings reach awk
+# through ENVIRON and every compare is forced to a string compare.
+SS_SHORT=""
+sl_superseder() {
+  local cands x a h g="$2"
+  SS_SHORT=""
+  [ -n "$g" ] || g=core
+  cands="$(C="$1" G="$g" W="$3" T="$4" awk -F "$US" '
+    $10 "" == "P" && $2 "" == "SUPPRESSED" && $9 "" != ENVIRON["W"] "" && $3 "" == ENVIRON["C"] "" \
+      && ($7 == "" ? "core" : $7 "") == ENVIRON["G"] "" && $5 "" != ENVIRON["T"] "" { print $4 FS $5 FS $1 }
+  ' <<<"$SL_TABLE")"
+  [ -n "$cands" ] || return 1
+  while IFS="$US" read -r x a h; do
+    [ -n "${h:-}" ] || continue
+    if sl_in_force "$x" "$a"; then SS_SHORT="$(printf '%s' "$h" | cut -c1-92)"; return 0; fi
+  done <<<"$cands"
+  return 1
+}
+
 # ---- 5. Baseline -----------------------------------------------------------
 # R5's rule, unchanged: a baseline must not outlive its cause. Every baselined key that
 # STOPS reproducing is itself a failure, so the file cannot quietly accumulate entries
@@ -582,6 +664,7 @@ baselined() { [ -n "$BASELINE_KEYS" ] && grep -qxF "$1" <<<"$BASELINE_KEYS"; }
 
 # ---- 6. Adjudicate ---------------------------------------------------------
 bad=0
+superseded_n=0
 suppressed_n=0
 terminal_naming_n=0
 malformed_attempt_n=0
@@ -677,9 +760,8 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
           echo "      consulted. A lifetime that cannot be counted is not a licence." >&2
           continue
         fi
-        elapsed=0
-        [ "$GATES_N" -eq 0 ] || elapsed="$(gates_since "$authts")"
-        if [ "$elapsed" -le "$expires" ]; then
+        if sl_in_force "$expires" "$authts"; then
+          elapsed="$SL_ELAPSED"
           in_force_n=$((in_force_n + 1))
           if [ "$WAIVERS" -eq 1 ]; then
             waivers_n=$((waivers_n + 1))
@@ -706,6 +788,13 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
         # names, so a SUPPRESSED waiver expires on this same lifetime. A row waived by another id
         # is that waiver's failure, judged in section 6c (header, "THE WAIVED VERDICT").
         if [ "$verdict" = "FAIL" ] || { [ "$verdict" = "FAIL_WAIVED" ] && [ "$vwid" = "$wkey" ]; }; then
+          # SUPERSESSION (header): a fresh in-force authorization for the same target stands this
+          # expiry down, loudly. `$elapsed` is THIS entry's count; the lookup overwrites SL_ELAPSED.
+          if sl_superseder "$supp" "$suppcat" "$wkey" "$authts"; then
+            superseded_n=$((superseded_n + 1))
+            echo "WARN: superseded: check '$supp' [${suppcat:-core}] -- expired entry '$short' ($elapsed gate(s) since authorization, **Expires after:** $expires; latest verdict $verdict at row ts $vts) is stood down by the in-force SUPPRESSED entry '$SS_SHORT'." >&2
+            continue
+          fi
           key="EXPIRED:$supp"
           if baselined "$key"; then
             matched_baseline="$matched_baseline$key
@@ -721,6 +810,10 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
             echo "      entry: $short" >&2
             echo "      The prior citation may not be re-cited. Obtain fresh operator" >&2
             echo "      authorization as a NEW entry, or fix the underlying failure." >&2
+            echo "      A NEW SUPPRESSED entry in this file for the same [catalog] check, in force," >&2
+            echo "      authorized at a different timestamp, stands this FAIL down at the next run" >&2
+            echo "      (a WARN: superseded: line names both entries); it buys one window of at" >&2
+            echo "      most 3 gates." >&2
           fi
         fi
         # expired but no longer failing: the cause was fixed. Nothing to report.
@@ -768,6 +861,21 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
               SUPPRESSED) if [ "$LK_SUPP" = "$id" ] && [ "${LK_SUPPCAT:-core}" = core ] \
                              && [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ] && ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;
             esac
+            # SUPERSESSION, terminal twin (header): the row's waiver is a SUPPRESSED entry whose own
+            # target is (core, this check), and a fresh in-force authorization for that target
+            # stands this entry down, loudly. A waiver suppressing another check or another catalog
+            # is not the authorization the fresh entry renews, and stands nothing down. No lifetime
+            # test is spelled here because the acquittal above already took every such waiver that
+            # is in force: one reaching this line is past its lifetime or has none readable, which
+            # reads as expired. Gate mode only: --in-force also walks this arm, and its stderr stays.
+            if [ "$id" = "$LK_SUPP" ] && [ core = "${LK_SUPPCAT:-core}" ]; then
+              if [ "$IN_FORCE" -ne 1 ] && [ "$LK_STATUS" = SUPPRESSED ] && sl_superseder "$id" core "$tw" "$LK_AUTHTS"; then
+                superseded_n=$((superseded_n + 1))
+                tts="${vrow#*$'\t'}"; tts="${tts%%$'\t'*}"
+                echo "WARN: superseded: check '$id' [core] -- OVERRIDDEN entry '$short' names it, recorded FAIL_WAIVED at row ts $tts under the expired waiver '$(printf '%s' "$tw" | cut -c1-92)'; stood down by the in-force SUPPRESSED entry '$SS_SHORT'." >&2
+                continue
+              fi
+            fi
           fi
         fi
         [ "$tverdict" = "FAIL" ] || [ "$tverdict" = "FAIL_WAIVED" ] || continue
@@ -882,7 +990,7 @@ $BASELINE_KEYS
 EOF
 fi
 
-SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n malformed_attempt=$malformed_attempt_n waived_rows=$waived_n gates_recorded=$GATES_N catalog=$CATALOG_N"
+SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n malformed_attempt=$malformed_attempt_n waived_rows=$waived_n gates_recorded=$GATES_N catalog=$CATALOG_N superseded=$superseded_n"
 if [ "$bad" -gt 0 ]; then
   echo "FAIL: $bad suppression-lifetime violation(s). $SUMMARY" >&2
   exit 1

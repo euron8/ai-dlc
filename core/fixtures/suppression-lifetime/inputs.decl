@@ -1,4 +1,6 @@
-# suppression-lifetime reads ONE file outside its own directory: the validator under test. The catalog,
-# metrics and escalations are all seeded under a mktemp dir and passed by flag.
+# suppression-lifetime reads TWO files outside its own directory: the validator under test, and verdict.sh beside
+# it, which arm slvd drives the T1 supersession world through. The catalog, metrics and escalations are all seeded
+# under a mktemp dir and passed by flag.
 !core/scripts/validate-suppression-lifetime.sh
+!core/scripts/verdict.sh
 core/fixtures/lib/mutant.sh

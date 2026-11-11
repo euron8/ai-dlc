@@ -176,6 +176,21 @@ check's own recorded verdict — the PREVIOUS gate's, since Check 12 writes that
 file after Check 2, and the FAIL names the row's `ts` — so a suppression whose cause has genuinely been
 fixed costs nothing, and only one that is still red is stopped.
 
+**Re-suppression supersedes the expired entry.** Another `SUPPRESSED` entry in
+`pending.md` naming the same `[<catalog>] <check-id>`, with its own operator
+turn (an authorization timestamp different from the expired entry's, earlier
+or later), well-formed and within its own lifetime, stands the expired entry's
+re-fire down at the gate it authorizes, and the script prints a
+`WARN: superseded:` line naming both entries. An `OVERRIDDEN` entry naming a
+core check N is stood down by the same superseding entry only when Check N's
+latest row is `FAIL_WAIVED` under an expired `SUPPRESSED` waiver that targets
+`[core] N`; on a plain `FAIL` row for N the gate still fails on that
+`OVERRIDDEN` entry. One operator turn buys one window of at most 3 gates; once
+the superseding entry expires, the expired one re-fires for a check the current
+gates do not re-run. The expired entry stays in `pending.md`: the terminal-entry
+archival rule below moves only `RESOLVED` and `OVERRIDDEN` entries, so no step
+moves a `SUPPRESSED` one, and moving it by hand is off-protocol.
+
 **An escalated check is covered the same way.** The `adjudication: llm` checks
 are adopted only through Check 26, whose validator asks the same script
 (`--in-force`) before it blocks on a per-check `FAIL`; a FAIL the adjudicator

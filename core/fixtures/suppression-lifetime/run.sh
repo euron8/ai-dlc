@@ -36,18 +36,25 @@
 # re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
 # decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments above, not driven per push.
 # a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
-# c_ifs_delimiter also trips 38 further arms in the measured matrix (wholesale delimiter break).
+# c_ifs_delimiter also trips 70 further arms in the measured matrix (wholesale delimiter break).
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
 # k_ts_dropped also trips t18b and t18d in the measured matrix (the dropped ts is seen through three timelines; t18a is the one it targets).
 # d_identity_lines_deleted and e_identity_nonce also trip cand in the measured matrix (the candidate-walk identity reads the same block).
-# f_attempt_demoted also trips att20 in the measured matrix (the RESOLVED branch world).
+# f_attempt_demoted also trips att20 and sl3b in the measured matrix (the RESOLVED branch world; T3b's OVERRIDDEN attempt).
 # i_join_guard_removed also trips s16, s17 and t18b in the measured matrix (a dropped catalog join moves every join world; s14 is the one it targets).
-# w_resolve also trips w7, c1u, c2a, c2x, c2xi, c2xu and c2xt in the measured matrix (each world reaches the skipped resolution).
+# w_resolve also trips w7, c1u, c2a, c2x, c2xi, c2xu, c2xt, sl11b, slq1, slq2, slq3 and slq4 in the measured matrix (each world reaches the skipped resolution).
 # w_overridden also trips c1, c2ab and c2ba in the measured matrix (each carries an OVERRIDDEN waiver 6c reads).
-# c2_noprepass also trips w7, c2a, c2s, c2x, c2xi, c2xu and c2xt in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass).
-# c2_any also trips c2x, c2xu and c2xt in the measured matrix (any FAIL_WAIVED stands down, so the expired or unreadable archived suppression does too).
-# c2_exact also trips c2xi in the measured matrix (the in-force archived suppression no longer stands the OVERRIDDEN entry down).
-# c2_nolife also trips c2xu and c2xt in the measured matrix (with the lifetime gone an unreadable lifetime acquits too).
+# w_lifetime also trips sl1, sl2, sl3, sl3b, sl4, sl5, sl5e, sl5s, sl6, sl6b, sl6c, sl7, sl8a, sl8b, slf3, sl9, sl11, sl11c, sl11d, sl12 and slvd in the measured matrix (every supersession world's latest row is OLD's own FAIL_WAIVED, which no longer reaches the expiry arm).
+# c1_revert trips no supersession arm in the measured matrix.
+# c2_noprepass also trips w7, c2a, c2s, c2x, c2xi, c2xu, c2xt, sl1, sl1b, sl5e, sl5s, sl8b, sl11, sl11b, sl11d, sl11e, slq1, slq2, slq3, slq4, sl12 and slvd in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass, and so does every superseder).
+# c2_any also trips c2x, c2xu, c2xt, sl11, sl11b, sl11c, slq1, slq2, slq3 and slq4 in the measured matrix (any FAIL_WAIVED stands down, so the expired or unreadable archived suppression does too, and the terminal twin is never reached).
+# c2_exact also trips c2xi, sl11, sl11b and slq4 in the measured matrix (the in-force archived suppression no longer stands the OVERRIDDEN entry down; nor does the terminal twin, which sits inside the same branch).
+# c2_resolved also trips sl11d in the measured matrix (with C2 extended to RESOLVED, the terminal twin stands the RESOLVED entry down too).
+# c2_nolife also trips c2xu, c2xt, sl11, sl11b, sl11c and slq4 in the measured matrix (with the lifetime gone an unreadable lifetime acquits too, before the terminal twin).
+# c2_noguard also trips slq4 in the measured matrix (its archived waiver has no **Expires after:**, so the dropped guard acquits it before the terminal twin).
+# sd_term_removed also trips slq4 in the measured matrix (the unreadable-lifetime waiver is stood down by the terminal twin alone).
+# c2_srclive also trips sl11 and sl11c in the measured matrix (the live expired OLD acquits by source, before the terminal twin).
+# sd_removed also trips sl5e, sl5s, sl8b, sl11, sl11d, sl11e, sl12 and slvd in the measured matrix (each is a world where the expiry arm must stand down).
 # MUTANT-MATRIX k_ts_dropped decides=t18a twins=t18c
 # MUTANT-MATRIX l_last_ts decides=t18d twins=t18a
 # MUTANT-MATRIX a_whitespace_tolerance_dropped decides=s2 twins=cwA_inf
@@ -81,6 +88,21 @@
 # MUTANT-MATRIX c2_nolife decides=c2x twins=c2s
 # MUTANT-MATRIX c2_srclive decides=c2xi twins=c2s
 # MUTANT-MATRIX c2_noguard decides=c2xu,c2xt twins=c2x
+# MUTANT-MATRIX sd_removed decides=sl1,sl1b twins=sl11b
+# MUTANT-MATRIX sd_term_removed decides=sl11,sl11b twins=sl1
+# MUTANT-MATRIX sd_archive decides=sl2 twins=sl1
+# MUTANT-MATRIX sd_any_status decides=sl3b twins=sl3
+# MUTANT-MATRIX sd_selfmatch decides=slf3 twins=sl9
+# MUTANT-MATRIX sd_any_check decides=sl4 twins=sl1
+# MUTANT-MATRIX sd_any_cat decides=sl5 twins=sl1
+# MUTANT-MATRIX sd_nocore_E decides=sl5e twins=sl5s
+# MUTANT-MATRIX sd_nocore_S decides=sl5s twins=sl5e
+# MUTANT-MATRIX sd_noshape decides=sl6,sl6b,sl6c twins=sl7
+# MUTANT-MATRIX sd_nolife decides=sl7 twins=sl6
+# MUTANT-MATRIX sd_recite decides=sl8a twins=sl8b
+# MUTANT-MATRIX sd_term_anytarget decides=slq1,slq3 twins=sl11b
+# MUTANT-MATRIX sd_term_anycat decides=slq2 twins=sl11b
+# MUTANT-MATRIX sd_term_strictlife decides=slq4 twins=sl11b
 # MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
 set -uo pipefail
@@ -96,6 +118,9 @@ trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 [ -f "$VALIDATOR" ] && echo "HERMETIC-CONSUMED $VALIDATOR"
+# verdict.sh sits beside the validator in both layouts; arm slvd drives the T1 world through it.
+VERDICT="$(dirname "$VALIDATOR")/verdict.sh"
+[ -f "$VERDICT" ] && echo "HERMETIC-CONSUMED $VERDICT"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -227,6 +252,10 @@ drive_run() { # <validator path> <drive> -> O E RC X
     c2r)     c=c2-resolved; gm="$GM_W_C2" ;;
     c2m)     c=c2-mistargeted; gm="$GM_W_C2" ;;
     wsd)     c=own-standdown; gm="$GM_W_SD" ;;
+    sl_t1b)  c=sl-t1; gm="$GM_SL_F" ;;
+    sl_t11e) c=sl-t11; gm="$GM_SL_F" ;;
+    sl_t12)  c=sl-t1; gm="$GM_SL_W"; ex="--baseline $BASELINE_EXP32" ;;
+    sl_*)    c="sl-${d#sl_}"; gm="$GM_SL_W" ;;
   esac
   case "$d" in
     nocat)
@@ -283,6 +312,18 @@ drive_run() { # <validator path> <drive> -> O E RC X
             --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>"$SR/err")"; RC=$?
       E="$(cat "$SR/err")"
       X=0; [ -s "$SR_STUB/LOG" ] && X=1 ;;
+    sli_*|slw_*)
+      # The two query modes on a supersession world: stdout (the rows) in O, stderr in E.
+      m="--in-force"; [ "${d%%_*}" = slw ] && m="--waivers"
+      E="$( bash "$v" $m --escalations "$CASES/sl-${d#*_}/pending.md" --gate-metrics "$GM_SL_W" \
+              --enforcement-map "$MAP" 2>&1 >"$WORK/sl-query.out" )"; RC=$?
+      O="$(cat "$WORK/sl-query.out")" ;;
+    sl_vd)
+      # The T1 world through verdict.sh, as gate-transition.sh arm 2 runs it: the shipping validator by
+      # name, a mutant (a lone copy, no verdict.sh beside it) by path.
+      f="validate-suppression-lifetime"; [ "$v" = "$VALIDATOR" ] || f="$v"
+      O="$(bash "$VERDICT" "$f" --escalations "$CASES/sl-t1/pending.md" --gate-metrics "$GM_SL_W" \
+            --enforcement-map "$MAP" 2>&1)"; RC=$? ;;
     *)
       O="$(bash "$v" --escalations "$CASES/$c/pending.md" --gate-metrics "$gm" \
             --enforcement-map "$MAP" $ex 2>&1)"; RC=$? ;;
@@ -454,8 +495,82 @@ ar_c2u()  { dv "$1" c2u;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_c2r()  { dv "$1" c2r;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_c2m()  { dv "$1" c2m;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
 ar_wsd()  { dv "$1" wsd;  ! hasF 'recorded FAILING' && has 'neither OVERRIDDEN nor SUPPRESSED'; }
+# ---- SUPERSESSION (BL-959): a fresh in-force SUPPRESSED entry stands an expired one down ---------
+# Every world is on the short timeline (seed.sh, "SUPERSESSION"): OLD past its 1-gate lifetime, NEW
+# inside its 3. Each arm reads the exit code AND its own line. The stand-down arms need the ONE
+# `WARN: superseded:` line naming both entries; the near-misses need the expiry FAIL on OLD, which a
+# silent copy cannot print, and superseded=0 on the summary line.
+SLO_S="## $SL_OLD"; SLN_S="## $SL_NEW"; SL_TAB="$(printf '\t')"
+sl_n() { grep -qE "[[:space:]]superseded=$1([[:space:]]|\$)" <<<"$DV_O"; }
+sl_sup() { # the expiry arm's stand-down line, naming OLD as the expired entry and NEW as the superseder
+  local l
+  l="$(grep -F "WARN: superseded: check '32' [core] -- expired entry '$SLO_S'" <<<"$DV_O")" || return 1
+  grep -qF "stood down by the in-force SUPPRESSED entry '$SLN_S'." <<<"$l"
+}
+sl_term() { # the terminal twin's stand-down line, naming the OVERRIDDEN entry, OLD as the waiver, NEW
+  local l
+  l="$(grep -F "WARN: superseded: check '32' [core] -- OVERRIDDEN entry '## $SL_OVR' names it" <<<"$DV_O")" || return 1
+  grep -qF "under the expired waiver '$SL_OLD'" <<<"$l" && grep -qF "stood down by the in-force SUPPRESSED entry '$SLN_S'." <<<"$l"
+}
+sl_expfail() { hasF "$C1_MSG" && hasF "entry: $SLO_S"; }
+# The expiry FAIL's own remedy text quotes "WARN: superseded:", so the absence keys on the line START.
+sl_near() { dv "$1" "$2"; [ "$DV_RC" = 1 ] && sl_expfail && sl_n 0 && ! has '^WARN: superseded:'; }
+sl_stood() { dv "$1" "$2"; [ "$DV_RC" = 0 ] && sl_sup && sl_n 1; }
+ar_sl1()   { sl_stood "$1" sl_t1 && hasF 'latest verdict FAIL_WAIVED at row ts'; }
+ar_sl1b()  { sl_stood "$1" sl_t1b && hasF 'latest verdict FAIL at row ts'; }
+ar_sl2()   { sl_near "$1" sl_t2; }
+ar_sl3()   { sl_near "$1" sl_t3; }
+ar_sl3b()  { sl_near "$1" sl_t3b && hasF 'suppression fields on an entry that does not classify as SUPPRESSED'; }
+ar_sl4()   { sl_near "$1" sl_t4; }
+ar_sl5()   { sl_near "$1" sl_t5; }
+ar_sl5e()  { sl_stood "$1" sl_t5e; }
+ar_sl5s()  { sl_stood "$1" sl_t5s; }
+ar_sl6()   { sl_near "$1" sl_t6 && hasF 'is outside the permitted 1..3'; }
+ar_sl6b()  { sl_near "$1" sl_t6b && hasF 'missing: **Operator authorization:**'; }
+ar_sl6c()  { sl_near "$1" sl_t6c && hasF 'missing: **Expires after:**'; }
+ar_sl7()   { sl_near "$1" sl_t7; }
+ar_sl8a()  { sl_near "$1" sl_t8a; }
+ar_sl8b()  { sl_stood "$1" sl_t8b; }
+ar_slf3()  { sl_near "$1" sl_f3; }
+ar_sl9()   { sl_near "$1" sl_t9; }
+ar_sl11()  { dv "$1" sl_t11;  [ "$DV_RC" = 0 ] && sl_sup && sl_term && sl_n 2; }
+ar_sl11b() { dv "$1" sl_t11b; [ "$DV_RC" = 0 ] && sl_term && sl_n 1 && has 'names an entry archived'; }
+ar_sl11c() { dv "$1" sl_t11c; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" && sl_expfail && sl_n 0; }
+ar_sl11d() { dv "$1" sl_t11d; [ "$DV_RC" = 1 ] && hasF 'a RESOLVED entry names check(s) 32,' && sl_sup && sl_n 1; }
+ar_sl11e() { dv "$1" sl_t11e; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" && sl_sup && sl_n 1; }
+# TQ: T11b's tree with the archived waiver retargeted. 'names an entry archived' proves the archive was
+# read, so the terminal FAIL is the twin declining and never an unresolved waiver.
+sl_tqfail() { dv "$1" "$2"; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" && sl_n 0 && ! has '^WARN: superseded:' && has 'names an entry archived'; }
+ar_slq1()  { sl_tqfail "$1" sl_tq1; }
+ar_slq2()  { sl_tqfail "$1" sl_tq2; }
+ar_slq3()  { sl_tqfail "$1" sl_tq3; }
+ar_slq4()  { dv "$1" sl_tq4; [ "$DV_RC" = 0 ] && sl_term && sl_n 1 && has 'names an entry archived'; }
+ar_sl12()  { dv "$1" sl_t12;  [ "$DV_RC" = 1 ] && hasF 'no longer reproduces: EXPIRED:32' && sl_sup && sl_n 1; }
+ar_slvd()  { # verdict.sh surfaces the WARN line at exit 0, so the gate's evidence names both entries
+  local l
+  dv "$1" sl_vd; [ "$DV_RC" = 0 ] && has '^PASS  ' || return 1
+  l="$(grep -F "'$SLO_S'" <<<"$DV_O")" || return 1
+  grep -qF "'$SLN_S'" <<<"$l"
+}
+# T10: the query modes, row for row (C3: E was already absent from both, so nothing changes).
+SL_IF_ROW="core${SL_TAB}32${SL_TAB}3${SL_TAB}2${SL_TAB}${A1} | ${SL_Q_NEW}${SL_TAB}${SLN_S}"
+SL_WV_ROW="SUPPRESSED${SL_TAB}core${SL_TAB}32${SL_TAB}3${SL_TAB}${A1} | ${SL_Q_NEW}${SL_TAB}${SL_NEW}"
+SL_WV_OVR="OVERRIDDEN${SL_TAB}${SL_TAB}${SL_TAB}${SL_TAB}${A1} | ${SL_Q_NEW}${SL_TAB}${SL_OVR}"
+sl_q() { dv "$1" "$2"; [ "$DV_RC" = 0 ] && [ "$DV_O" = "$3" ] && grep -qE "$4" <<<"$DV_E"; }
+ar_sl10i() { sl_q "$1" sli_t1 "$SL_IF_ROW" '^IN-FORCE: .* in_force=1 ' && sl_q "$1" sli_t11 "$SL_IF_ROW" '^IN-FORCE: .* in_force=1 '; }
+ar_sl10w() { sl_q "$1" slw_t1 "$SL_WV_ROW" '^WAIVERS: .* waivers=1 ' && sl_q "$1" slw_t11 "$SL_WV_ROW
+$SL_WV_OVR" '^WAIVERS: .* waivers=2 '; }
+# F2: NEW is excluded by the condition each near-miss names, NOT by its lifetime: --in-force lists it
+# where that condition is not the lifetime, and does not where it is (T6/T6b/T6c/T7).
+sl_lists_new() { dv "$1" "$2"; [ "$DV_RC" = 0 ] && grep -q '^IN-FORCE: ' <<<"$DV_E" && grep -qF "${SL_TAB}${SLN_S}" <<<"$DV_O"; }
+sl_omits_new() { dv "$1" "$2"; [ "$DV_RC" = 0 ] && grep -q '^IN-FORCE: .* in_force=0 ' <<<"$DV_E" && ! grep -qF "$SLN_S" <<<"$DV_O"; }
+ar_slinf()  { sl_lists_new "$1" sli_t1 && sl_lists_new "$1" sli_t4 && sl_lists_new "$1" sli_t5 && sl_lists_new "$1" sli_t8a; }
+ar_slinfx() { sl_omits_new "$1" sli_t6 && sl_omits_new "$1" sli_t6b && sl_omits_new "$1" sli_t6c && sl_omits_new "$1" sli_t7; }
+# T3's NEW is OVERRIDDEN, which --in-force never lists: --waivers lists it as an OVERRIDDEN row.
+ar_slw3()   { dv "$1" slw_t3; [ "$DV_RC" = 0 ] && grep -qxF "OVERRIDDEN${SL_TAB}${SL_TAB}${SL_TAB}${SL_TAB}${A1} | ${SL_Q_NEW}${SL_TAB}${SL_NEW}" <<<"$DV_O"; }
+SL_ARMS="sl1 sl1b sl2 sl3 sl3b sl4 sl5 sl5e sl5s sl6 sl6b sl6c sl7 sl8a sl8b slf3 sl9 sl11 sl11b sl11c sl11d sl11e slq1 slq2 slq3 slq4 sl12 slvd sl10i sl10w slinf slinfx slw3"
 
-ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2xi c2xu c2xt c2u c2r c2m wsd"
+ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2xi c2xu c2xt c2u c2r c2m wsd $SL_ARMS"
 
 reg() { printf -v "OK_$1" '%s' "$2"; printf -v "BAD_$1" '%s' "$3"; }
 reg s1 "a SUPPRESSED entry inside its lifetime does not fire (exit 0)" "in-force suppression FAILED — the arm has no green state and would wedge every gate"
@@ -542,6 +657,39 @@ reg c2u "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver resolves 
 reg c2r "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a RESOLVED entry" "C2: a RESOLVED waiver stood an OVERRIDDEN entry down"
 reg c2m "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is a SUPPRESSED entry of another check" "C2: a mis-targeted SUPPRESSED waiver stood an OVERRIDDEN entry down"
 reg wsd "own-entry stand-down: a RESOLVED entry naming 32 is quiet when the row's waiver_id is its own header plus a trailing blank" "own-entry stand-down: the entry that IS the waiver fired -- the own-entry compare does not strip the row id"
+reg sl1 "T1: an expired SUPPRESSED entry whose latest row is its own FAIL_WAIVED is stood down by a fresh in-force entry for [core] 32 -- exit 0, one WARN: superseded: line naming both, superseded=1" "T1: the fresh authorization did not stand the expired entry down (or did so silently) -- the cure the FAIL message names can never clear the re-fire"
+reg sl1b "T1b: the same with the latest row a plain FAIL -- exit 0, superseded=1" "T1b: a plain FAIL latest row was not stood down by the fresh authorization"
+reg sl2 "T2 (a): a fresh entry only in pending-archive.md supersedes nothing -- the expiry FAIL on OLD stands" "T2 (a): an ARCHIVED entry stood the expired entry down -- an archived entry is terminal and authorizes nothing new"
+reg sl3 "T3 (b): a fresh entry that is OVERRIDDEN, not SUPPRESSED, supersedes nothing" "T3 (b): a non-SUPPRESSED entry stood the expired entry down"
+reg sl3b "T3b (b): a fresh entry carrying every suppression field under OVERRIDDEN supersedes nothing (and is reported as an attempt)" "T3b (b): a non-SUPPRESSED entry carrying suppression fields stood the expired entry down -- the status test is gone"
+reg sl4 "T4 (c1): a fresh entry suppressing another check (16) supersedes nothing" "T4 (c1): a suppression of a DIFFERENT check stood the expired entry down"
+reg sl5 "T5 (c2): a fresh [extension:probe] 32 supersedes nothing for [core] 32" "T5 (c2): a suppression in another CATALOG stood the expired entry down"
+reg sl5e "T5 twin: OLD with NO bracket is stood down by NEW [core] 32 -- an empty bracket reads as core" "T5 twin: an unbracketed expired entry was not stood down by [core] -- the core default is missing on the expired side"
+reg sl5s "T5 twin: NEW with NO bracket stands OLD [core] 32 down -- an empty bracket reads as core" "T5 twin: an unbracketed fresh entry did not stand [core] down -- the core default is missing on the superseder side"
+reg sl6 "T6 (d): a fresh entry with **Expires after:** 5 supersedes nothing (and fails its own range check)" "T6 (d): an out-of-range lifetime stood the expired entry down"
+reg sl6b "T6b (d): a fresh entry with no authorization timestamp supersedes nothing" "T6b (d): an undated authorization stood the expired entry down -- an empty timestamp counts as in force"
+reg sl6c "T6c (d): a fresh entry with no **Expires after:** supersedes nothing" "T6c (d): an entry with no lifetime stood the expired entry down"
+reg sl7 "T7 (e): a fresh entry itself past its lifetime supersedes nothing" "T7 (e): an EXPIRED superseder stood the expired entry down -- the lifetime of the superseder was never asked"
+reg sl8a "T8a (f): an entry re-citing OLD's authorization timestamp under a new header and quote supersedes nothing" "T8a (f): a re-citation of the same operator turn stood the expired entry down"
+reg sl8b "T8b (f): a new timestamp with OLD's quote IS a fresh turn and stands OLD down" "T8b (f): a fresh timestamp with a copied quote did not stand down -- the turn is keyed on the quote, not the timestamp"
+reg slf3 "F3 (b): a second entry under OLD's own header (OLD's waiver key) supersedes nothing" "F3 (b): an entry sharing the expired entry's waiver key stood it down -- the entry superseded itself"
+reg sl9 "T9: OLD alone on the same timeline still FAILS past its lifetime, superseded=0 (the control)" "T9: OLD alone no longer fails -- every stand-down arm above agrees for free"
+reg sl11 "T11: the OVERRIDDEN entry naming 32 under OLD's expired waiver is stood down by NEW too -- exit 0, superseded=2 (the expiry arm and the terminal twin each count one)" "T11: the terminal twin did not stand down (or the count is not 2)"
+reg sl11b "T11b: with OLD archived the terminal twin alone stands down -- exit 0, superseded=1" "T11b: the terminal twin did not stand down through an archived expired waiver"
+reg sl11c "T11c: with no fresh entry the OVERRIDDEN entry and the expiry both still FAIL" "T11c: without a superseder the OVERRIDDEN entry or the expiry stopped firing"
+reg sl11d "T11d: a RESOLVED entry naming 32 still FAILS with NEW present -- RESOLVED keeps exact match only" "T11d: a fresh suppression acquitted a RESOLVED entry naming a still-failing check"
+reg sl11e "T11e: over a plain FAIL row the OVERRIDDEN entry naming 32 still FAILS; only the expiry stands down" "T11e: a plain FAIL row acquitted the OVERRIDDEN entry -- the terminal twin is not keyed on FAIL_WAIVED"
+reg slq1 "TQ1: a waiver suppressing [core] 16, expired, stands nothing down for 32 -- the OVERRIDDEN entry FAILS" "TQ1: the terminal twin stood down through a waiver whose target is another check"
+reg slq2 "TQ2: a waiver suppressing [extension:x] 32 stands nothing down for [core] 32 -- the OVERRIDDEN entry FAILS" "TQ2: the terminal twin stood down through a waiver in another catalog"
+reg slq3 "TQ3: a waiver suppressing [core] 16, in force, stands nothing down for 32 -- the OVERRIDDEN entry FAILS" "TQ3: the terminal twin stood down through an in-force waiver of another check"
+reg slq4 "TQ4: a [core] 32 waiver with no readable lifetime reads as expired -- the terminal twin stands down, superseded=1" "TQ4: an unreadable waiver lifetime was not read as expired, so the twin did not stand down"
+reg sl12 "T12: a baselined EXPIRED:32 whose only cause was superseded reports 'no longer reproduces'" "T12: a stood-down entry matched its EXPIRED baseline key, so the stale baseline line was tolerated"
+reg slvd "the T1 world through verdict.sh: PASS at exit 0, and one surfaced line names both entries" "verdict.sh did not surface the stand-down at exit 0 -- the gate's evidence is silent on the supersession"
+reg sl10i "T10: --in-force on the T1 and T11 trees prints exactly NEW's row" "T10: --in-force output moved -- E must stay absent and NEW's row unchanged"
+reg sl10w "T10: --waivers on the T1 and T11 trees prints exactly NEW's SUPPRESSED row (and the OVERRIDDEN row on T11)" "T10: --waivers output moved"
+reg slinf "F2: --in-force LISTS NEW in T1, T4, T5 and T8a -- each near-miss is excluded by its own condition, not by NEW's lifetime" "F2: --in-force does not list NEW in a near-miss world -- that arm is acquitted by the lifetime, not by the condition it names"
+reg slinfx "F2: --in-force does NOT list NEW in T6, T6b, T6c and T7 (in_force=0)" "F2: --in-force listed a malformed or expired NEW"
+reg slw3 "F2: T3's OVERRIDDEN NEW is listed by --waivers as an OVERRIDDEN row" "F2: --waivers does not list T3's OVERRIDDEN NEW"
 
 in_set() { case "$2" in *" $1 "*) return 0 ;; esac; return 1; }
 arm_eval() { # <key> <arm> -> 0 holds, 1 does not
@@ -597,6 +745,12 @@ if [ "$SR_PRE" = 1 ] && [ "$SEN_IS_DIST" -ne 1 ]; then
 elif [ -n "$SR_SKIP_A" ]; then
   SKIPPED="$SKIPPED sr_Ag sr_Ai "
 fi
+# The supersession arms likewise: an installed validator that predates BL-959 prints no superseded=
+# field, fails T1 and still fails the T9 control.
+if in_set sl1 "$SHIP_FAIL" && in_set sl9 "$SHIP_PASS" && ! grep -qF 'superseded=' "$VALIDATOR" && [ "$SEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the supersession arms -- the installed validator predates BL-959; this fixture ships one pull ahead of it\n'
+  SKIPPED="$SKIPPED $SL_ARMS "
+fi
 for a in $ARMS; do
   in_set "$a" "$SKIPPED" && continue
   if in_set "$a" "$SHIP_PASS"; then
@@ -605,6 +759,16 @@ for a in $ARMS; do
     _m="BAD_$a"; bad "${!_m}"
   fi
 done
+# BL-959's receipt, run as its own program: the T1 world and the T9 control in one invocation, against
+# the validator it resolves by walking up from its own directory.
+SL_RCPT_O="$(bash "$HERE/receipt-bl959.sh" 2>&1)"; SL_RCPT_RC=$?
+if in_set sl1 "$SKIPPED"; then
+  printf '  SKIP  receipt-bl959 -- the installed validator predates BL-959\n'
+elif [ "$SL_RCPT_RC" = 0 ] && grep -qxF 'receipt-bl959: PASS' <<<"$SL_RCPT_O"; then
+  ok "receipt-bl959: T1 stands down with the WARN line naming both entries, and the T9 control still fails"
+else
+  bad "receipt-bl959 exited $SL_RCPT_RC: $(printf '%s' "$SL_RCPT_O" | tr '\n' ' ')"
+fi
 # ===== mutant builders =============================================================================
 # Every builder writes ONE lone copy of the validator and returns 1 (with BUILD_WHY) when its anchor
 # does not match exactly one line, changed no bytes, or does not parse. Strings reach awk through
@@ -795,6 +959,35 @@ build_c2_srclive() { mk_sub "$1" "$SL_C2L" '&& [ "$LK_SRC" = P ]; then continue;
 # `[ N -gt "" ]` error, the negation acquits; an empty timestamp counts every gate and acquits.
 build_c2_noguard() { mk_sub "$1" "$SL_C2L" '&& ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;'; }
 build_w_overridden() { mk_sub "$1" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; }
+# SD-*: the supersession (BL-959). Each condition of the superseder filter dropped alone, on its own
+# grep-unique term of the awk filter; d and e at the CALL SITE in sl_superseder, never inside
+# sl_in_force, which --in-force shares (a mutant there dies by the query arms, not by its own). The
+# two stand-downs are anchored on their whole `if` lines, which differ; the shared counter increment
+# matches two lines and is never an anchor.
+SL_SS_E='if sl_superseder "$supp" "$suppcat" "$wkey" "$authts"; then'
+SL_SS_T='if [ "$IN_FORCE" -ne 1 ] && [ "$LK_STATUS" = SUPPRESSED ] && sl_superseder "$id" core "$tw" "$LK_AUTHTS"; then'
+SL_SS_IF='if sl_in_force "$x" "$a"; then'
+build_sd_removed()      { mk_sub "$1" "$SL_SS_E" 'if false; then'; }
+build_sd_term_removed() { mk_sub "$1" "$SL_SS_T" 'if false; then'; }
+build_sd_archive()      { mk_sub "$1" '$10 "" == "P"' '1'; }
+build_sd_any_status()   { mk_sub "$1" '$2 "" == "SUPPRESSED"' '1'; }
+build_sd_selfmatch()    { mk_sub "$1" '$9 "" != ENVIRON["W"] ""' '1'; }
+build_sd_any_check()    { mk_sub "$1" '$3 "" == ENVIRON["C"] ""' '1'; }
+build_sd_any_cat()      { mk_sub "$1" '($7 == "" ? "core" : $7 "") == ENVIRON["G"] ""' '1'; }
+build_sd_nocore_S()     { mk_sub "$1" '($7 == "" ? "core" : $7 "")' '($7 "")'; }
+build_sd_nocore_E()     { mk_sub "$1" '[ -n "$g" ] || g=core' ':'; }
+build_sd_recite()       { mk_sub "$1" '$5 "" != ENVIRON["T"] ""' '1'; }
+# The terminal twin's own-target guard, anchored on its whole line (the acquittal above spells the
+# same two tests in the other order and ends in a continuation, so neither anchor matches it).
+SL_TW_G='if [ "$id" = "$LK_SUPP" ] && [ core = "${LK_SUPPCAT:-core}" ]; then'
+build_sd_term_anytarget()  { mk_sub "$1" "$SL_TW_G" 'if [ core = "${LK_SUPPCAT:-core}" ]; then'; }
+build_sd_term_anycat()     { mk_sub "$1" "$SL_TW_G" 'if [ "$id" = "$LK_SUPP" ]; then'; }
+# The strict reading, a wrong fix: an unreadable waiver lifetime no longer counts as expired.
+build_sd_term_strictlife() { mk_sub "$1" "$SL_TW_G" 'if [ "$id" = "$LK_SUPP" ] && [ core = "${LK_SUPPCAT:-core}" ] && [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ]; then'; }
+# sd_noshape keeps the lifetime and drops the readable-lifetime guard; sd_nolife keeps the shape and
+# drops the lifetime. Each is the other's twin.
+build_sd_noshape()      { mk_sub "$1" "$SL_SS_IF" 'if ! sl_past_lifetime "$a" "$x"; then'; }
+build_sd_nolife()       { mk_sub "$1" "$SL_SS_IF" 'if [ -n "$a" ] && [ "$x" -ge 1 ] 2>/dev/null && [ "$x" -le 3 ]; then'; }
 
 # ===== mutants =====================================================================================
 # Name | decides arms | twin arm | builder. Copies, never in-place edits. `cmp -s` proves the mutation
@@ -852,6 +1045,22 @@ defm c2_noprepass c2ba c2ab
 defm c2_nolife c2x c2s
 defm c2_srclive c2xi c2s
 defm c2_noguard c2xu,c2xt c2x
+# SD: the supersession (BL-959), one per condition of the superseder test and one per stand-down.
+defm sd_removed sl1,sl1b sl11b
+defm sd_term_removed sl11,sl11b sl1
+defm sd_archive sl2 sl1
+defm sd_any_status sl3b sl3
+defm sd_selfmatch slf3 sl9
+defm sd_any_check sl4 sl1
+defm sd_any_cat sl5 sl1
+defm sd_nocore_E sl5e sl5s
+defm sd_nocore_S sl5s sl5e
+defm sd_noshape sl6,sl6b,sl6c sl7
+defm sd_nolife sl7 sl6
+defm sd_recite sl8a sl8b
+defm sd_term_anytarget slq1,slq3 sl11b
+defm sd_term_anycat slq2 sl11b
+defm sd_term_strictlife slq4 sl11b
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
 # The unmutated control: a lone copy. This validator resolves no sibling beside itself and its root by
@@ -904,6 +1113,8 @@ mut_witness() { # <mutant> <vk> -> 0 when the mutant's extra observable holds (c
     w_lifetime)      dv "$2" wsup1; [ "$DV_RC" = 0 ] ;;
     w_overridden)    dv "$2" wm_ovr; has "^FAIL: 1 suppression-lifetime violation(s)" && [ "$(grep -c '^FAIL: ' <<<"$DV_O")" = "1" ] ;;
     c_ifs_delimiter) dv "$2" mal; ! has 'Suppresses' ;;
+    sd_removed)      dv "$2" sl_t1; [ "$DV_RC" = 1 ] && sl_expfail ;;                          # dies by the expiry FAIL on OLD itself
+    sd_term_removed) dv "$2" sl_t11; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" && sl_n 1 ;;          # the terminal arm fires; the expiry still stands down
     *) return 0 ;;
   esac
 }

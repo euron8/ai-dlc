@@ -355,6 +355,18 @@ Two arms, either satisfies (dual-arm OR):
   **The verdict it reads is the PREVIOUS gate's.** `gate-metrics.jsonl` is
   written by Check 12, after this check, so this gate's own verdict is not yet
   in it. The expiry FAIL names the `ts` of the row it read.
+  **An in-force entry supersedes an expired one.** Another `SUPPRESSED` entry in
+  `pending.md` naming the same `[catalog] check`, with a different authorization
+  timestamp (earlier or later), well-formed and within its own lifetime, stands
+  the expired entry's re-fire down at the gate it authorizes; the run prints one
+  `WARN: superseded:` line naming both entries and counts `superseded=<n>` on its
+  summary line. An `OVERRIDDEN` entry naming a core check N is stood down by the
+  same superseding entry only when Check N's latest row is `FAIL_WAIVED` under an
+  expired `SUPPRESSED` waiver that targets `[core] N`; on a plain `FAIL` row for N
+  the gate still fails on that `OVERRIDDEN` entry. One operator turn buys one
+  window of at most 3 gates, the `**Expires after:**` cap: once the superseding
+  entry expires, the expired one re-fires for a check the current gates do not
+  re-run, and only another operator turn clears it.
 - **An absent or empty `pending.md` is a PASS.** Both scripts then exit 0 with a line
   containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
   escalation exists to be unresolved. An unreadable or non-regular `pending.md` is a
@@ -386,7 +398,8 @@ Two arms, either satisfies (dual-arm OR):
   expiry and an operator citation, and the script above adjudicates them. Past
   expiry with the named check still failing, the gate FAILS and the prior
   citation may not be re-cited — re-suppression is a new entry and a new
-  operator turn. This holds for an escalated `adjudication: llm` check too:
+  operator turn, and that entry, while in force, supersedes the expired one as
+  stated under the suppression lifetimes above. This holds for an escalated `adjudication: llm` check too:
   Check 26's validator consults the same script, verifies the citation against
   the corpus its `--transcript-dir` names, and a covered `FAIL` does not block
   there. The Rule 28 remediation guard subtracts the same in-force checks

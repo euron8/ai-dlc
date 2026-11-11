@@ -1,3 +1,11 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-200 *
-71 core/scripts/validate-suppression-lifetime.sh
+# BL-959 raised the validator from 71 to 109: 23 gate-mode supersession drives (sl1..sl12), 12 query drives
+# (sl10i, sl10w, slinf, slinfx, slw3), 1 through verdict.sh (slvd) and 2 by receipt-bl959.sh (T1 and the T9
+# control). The `*` total rose 200 -> 268 by those 38, the 1 verdict.sh start, the 1 receipt start and the 28
+# drives of the 12 sd_* mutants (each its deciding arm(s) plus one twin).
+# The terminal twin's own-target guard raised the validator from 109 to 113 by the 4 TQ drives (slq1..slq4),
+# and the `*` total 268 -> 279 by those 4 and the 7 drives of its 3 mutants (sd_term_anytarget slq1, slq3
+# and twin sl11b; sd_term_anycat slq2 and sl11b; sd_term_strictlife slq4 and sl11b).
+279 *
+113 core/scripts/validate-suppression-lifetime.sh
+1 core/scripts/verdict.sh
