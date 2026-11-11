@@ -19,6 +19,42 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1063.0] - 2026-11-11
+
+### BL-507 CLOSED: implementation plus its gate fell on graph s321 against s317+s318, attributed jointly with BL-808 and BL-809
+
+Per story, implementation plus gate-validation[implementation], by `docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py --seats` over a fresh extract pinned at `EXTRACT_WIN_END=2026-11-11T10:30:00Z` (its plain output byte-identical to `docs/analysis/pipeline-efficiency-s317-s322/out/roll.txt`), s317+s318 pooled (34 stories) against s321 (25): 1.60 h gap-inclusive, token-equivalent $35.3 and 71.8M tokens to 1.13 h, $25.5 and 66.9M. Against each before-sprint separately, three quantities fell: tokens per story (71.9M and 71.7M to 66.9M), token-equivalent dollars ($37.0 and $32.5 to $25.5) and review spend on pass 2 and later ($10.8 and $8.8 to $3.2, `out/impl_passes.txt`). Hours fell only against the pooled baseline: s317's lead ran a local model on 65% of its calls, and against s318 alone hours rose 25%. Two model moves confound the dollars, BL-838's dev move to sonnet/medium for s321 and the opus share of this group's subagent calls falling from 44% to 2%. Re-review passes became cheaper, not rarer: gate-1 passes per reviewed story rose from 1.90 to 2.12.
+
+The movement is attributed jointly to BL-507 (delta re-review), BL-808 and BL-809 (`docs/analysis/pipeline-efficiency-s317-s322.md:157`); s319 (BL-507 alone) and s320 separate their shares only in part. `docs/backlog.md`: the entry gains the `Outcome measured:` line and `**LANDED (v0.1063.0).**` at the start of its body.
+
+### BL-510 PARTIAL: the step group's s321 reading is recorded, and this entry's own rework-class count is owed
+
+The entry gains the same s321 `Outcome measured:` reading as BL-507, with the separation stated for its own subject: rework verdicts of the evidence and bookkeeping classes are not separated by that line, and gate-1 passes per reviewed story rose from 1.90 to 2.12. A **PARTIAL (2026-11-11)** paragraph records that the line measures the step group and attributes its fall to three other entries. Owed: a per-verdict class count of s321's implementation rework verdicts under graph's `docs/reviews/s321/`, labelled by the `CLS` scheme of `docs/analysis/pipeline-efficiency-s317-s318/role-efficacy/impl/exp.py:7-26`, against the 22-of-33 s317-s318 baseline; it is reachable in graph's committed review files and was not taken. `verify: manual` stays and there is no LANDED line.
+
+### BL-804 PARTIAL: 3 post-fix refusals, below the owed 5
+
+Post-fix starts at graph `3bd62256f` (2026-10-28T01:36:45Z), the first commit whose installed `remediator.md` carries both replay sentences. Over every graph transcript (6176 files), keyed on the installed `join-remediator-shards.sh` refusal text and the `wait-for-deliverable.sh` text: N = 3 post-fix refusals, the three already counted under batch b250, each fixed inside its own dispatch, with 0 re-dispatches; the s321 remainder and s322 add 0. At the before-rate of 1 re-dispatch in 5 refusals, 3 refusals predict 0.6, so the observed 0 cannot discriminate. Controls: the key matches the known pre-fix refusal, an impossible token matches 0, and the windows hold 508 join calls. No `Outcome measured:` line; owed is the same count once 5 post-fix refusals have accrued.
+
+### BL-397 PARTIAL: implementation plus its gate did not fall across the post-fix sprints, claim 1 measured, and no value evidence was found
+
+Per story, gap-inclusive h and token-equivalent $: before, s314+s315 pooled (9 stories, the b244 pin) 2.00 h and $29.0; after, s317 2.02 / $37.0, s318 0.91 / $32.5, s319 2.09 / $41.3, s320 1.94 / $20.7, s321 1.13 / $25.5. The before sits inside the post-fix range. `docs/analysis/pipeline-efficiency-s317-s322.md` gains the BL-397 row in its `### No measurable effect` table.
+
+Claim (1), a first-submission walk of graph's story files at da6cadadd: at s315, 2 of 5 stories carried Production Integrity Tests and Smoke Test Updates at first submission and 1 of 5 Rename Verification, where the filing said 0 of 5; from s317 to s321 all four headings were present in 91 of 91, and Production Integrity Tests was filled in 79 of 91. The headings come from the planning scaffold, so presence measures the scaffold. Value evidence: the QA precondition rejected 10 reports (s317 7, s320 2, s321 1), every one a reject of the evidence record with no code or AC defect, and where QA ran the suite itself the failures were independent of the diff (s317 `1-5-qa-validation.md:76` and `4-3b-qa-validation.md:20`). The did-not-fall reading is recorded as a dated **Progress** paragraph, not an `Outcome measured:` line; owed is value evidence that the step's cost buys a catch no other step makes. `verify: manual` stays.
+
+### BL-514 PARTIAL: closed-sprint s321 subagent poll readings, the outcome line withdrawn, the goal stays OPEN by operator ruling
+
+Over graph's 6176 transcripts, the closed s321 window against the pre-mechanism window: foreground poll wall clock, lead plus subagent, 15.10 h to 0.95 h (subagent files only, 14.03 h to 0.47 h); foreground polls over the 120 s budget, 121 calls to 0; 16 of 23 denied s321 polls were followed within 120 s by a backgrounded Bash or Monitor call, against a control of 20 of 117. An earlier cut carried an `Outcome measured:` line; it is withdrawn because subagent active time excludes every wait over 300 s by construction (`extract.py:324`), about 86% of the subject. Item 6 reconciles the two before-baselines: the fresh extract's s317 is truncated (3.85 h and $75.6 per story against the b244 pin's 5.37 h and $112.2), while s318 and s319 agree. `docs/analysis/subagent-poll-bl514/README.md` gains a "Closed-sprint outcome (s321), b255" table.
+
+Owed: the change in subagent wait per story, waits over 300 s included, on a closed sprint by a committed script; whether agents idled through the backgrounded waits; and the denied-to-backgrounded join as a committed script. Operator ruling (2026-11-11): the goal of BL-514 stays OPEN, the entry is PARTIAL and owes a better fix. `verify: manual` stays.
+
+### BL-695 PARTIAL: the party round fell but the stories-test-strategy step did not, and the close moves to BL-811's release
+
+Round wall clock, first seat spawned to last seat ended: 196.3 min over two lead sessions (s319, 100 seats, 4 roles one after another) to 27.7 min in one (s321, 104 seats); s321 had 4 cross seats against 24, so the cut is not wave sizing alone. The step alone, per story, by `roll.py --seats`: s319 0.78 h and $25.0, s321 0.79 h and $26.9, so the step did not fall. `docs/analysis/pipeline-efficiency-s317-s322.md` gains the BL-695 row in its `### Worked` table. The step-value evidence was measured on s317 and s318, before the fix, so under the standard in BL-811 and BL-812 it is not discharged until the s321 unique-survivor yield per shard is taken. That reading is delivered in BL-811's release, and BL-695's close follows it there. The entry now declares `Step: stories-test-strategy`; `verify: manual` stays.
+
+### BL-841: one citation re-pointed
+
+BL-841's outcome line cites the "Ask-wait minutes with no lane active" row at `docs/analysis/pipeline-efficiency-s317-s322.md:173`, where the BL-695 row inserted above it moved it from `:172`. Nothing else in the entry changes. BL-510's citation of BL-838's heading is re-pointed to `docs/backlog.md:981` and BL-397's of its own analysis row to `:174`.
+
 ## [0.1062.0] - 2026-11-11
 
 ### BL-963 closed: `snapshot-update.sh --line-add 'In-Flight Teammates'` applies the status-cell vocabulary
