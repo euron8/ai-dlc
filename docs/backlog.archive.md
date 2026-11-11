@@ -40855,3 +40855,25 @@ Receipt: `core/fixtures/story-evidence-scaffold/run.sh`'s BL-957 block (WV_WORLD
 Provenance: batch b254, cluster A; consumer filing in graph `ai-dlc/carry-over/epic5-closeout:_bmad-output/ai-dlc-update/push-candidate-ledger.md`.
 
 verify: sh V="$(mktemp -d "${TMPDIR:-/tmp}/bl957.XXXXXX")" || exit 9; AI_DLC_VERDICT_STORE="$V" bash core/scripts/hermetic-run.sh story-evidence-scaffold >/dev/null 2>&1
+## BL-969 — caveman is removed from the shipped core and from this repo; it is replaced by a global session instruction, "be terse and aspy", so no shipped code, script, template or skill may name or expect the plugin
+
+**LANDED (v0.1051.0).** **OPERATOR INSTRUCTION (2026-11-11).** caveman is the operator's own plugin — not shipped machinery — and its replacement is a global instruction that every Claude session "be terse and aspy", which lives in the operator's own settings, outside this repo. What THIS repo carries is the plugin's NAME, and it appears on exactly three shipped lines in core: `core/skills/ai-dlc-update/reconcile/settings-merge.sh:16` and `:201` ("consumer own SessionStart hooks (context-mode, caveman) alongside ours"), and `core/skills/ai-dlc-update/reconcile/template-sites.md:145` ("context-mode and caveman both register `SessionStart` hooks"). The merge behaviour they describe is generic — it preserves whatever consumer SessionStart hooks are registered — so the removal must be name-only: the generic preservation stays byte-identical in behaviour, the named example goes (template-sites.md:145 needs a replacement example or a name-free formulation — the builder decides). Any edit that changes what settings-merge.sh DOES is out of scope and must be refused. CHANGELOG.md and the analysis files are records and are exempt, including this release's own CHANGELOG section, which names the removed plugin.
+
+Outside core the token appears in five files that are records, not instructions: `docs/analysis/pipeline-efficiency-s317-s318.md:442` and its `hooks.csv` (4 rows), `docs/plans/sprint-302-303-push-candidates.md`, `CHANGELOG.md:35050`, `:58394` and `:58631` (release records), and `docs/v0.24.0-gate-validation-slicing-spec.md:69` ("This is why `caveman-compress` was rejected for..."). The corpus rule is that a measurement names what it measured: the entry's first job is the file-by-file split — rewrite only occurrences that read as LIVE instruction (a sentence telling a current reader the plugin is installed or its hooks are expected); a measurement or rejection rationale keeps the name as evidence. The split is derived per occurrence and reported, not assumed file-wide.
+
+Receipt: `git grep -in caveman -- core/` exits 1 (zero lines) at the fix, with the same-invocation control `git grep -ic caveman <pre-fix-sha> -- core/skills/ai-dlc-update/reconcile/settings-merge.sh` returning 2; plus, for each of the five docs files, a one-line disposition (rewritten-as-instruction / kept-as-record) beside the occurrence diff. `cmp -s` of settings-merge.sh excluding comment lines proves the code bytes are unchanged: extract non-`#` lines pre and post and compare — must be EQUAL.
+
+Consumer cost: none behaviourally — comment and prose edits only; a consumer's installed settings-merge.sh keeps preserving its own hooks, whatever they are named.
+
+Provenance: filed 2026-11-11 by operator instruction relayed to lead ai-dlc-7f; id allocated by the lead.
+
+Landed: the plugin name is replaced on three comment/prose lines with no line-count change: `core/skills/ai-dlc-update/reconcile/settings-merge.sh:16` (header comment, `caveman)` becomes `other tools)`), `settings-merge.sh:201` (jq comment inside the single-quoted literal, `caveman` becomes `for one`) and `core/skills/ai-dlc-update/reconcile/template-sites.md:145` (now "context-mode, for one, registers its own `SessionStart` hooks"). The non-comment bytes of settings-merge.sh are unchanged. This is no graph pipeline step; the cost lives in core/skills/ai-dlc-update/reconcile/settings-merge.sh. Per-occurrence disposition outside core, none edited, none reads as live instruction:
+- `docs/analysis/pipeline-efficiency-s317-s318.md:442`: kept-as-record (hook-cost measurement naming what it measured).
+- `docs/analysis/pipeline-efficiency-s317-s318/hooks.csv:23,40,56,71`: kept-as-record (measured data rows).
+- `docs/plans/sprint-302-303-push-candidates.md:212`: kept-as-record (a search control).
+- `docs/v0.24.0-gate-validation-slicing-spec.md:69`: kept-as-record (rejection rationale for `caveman-compress`).
+- `CHANGELOG.md:35050`: kept-as-record (release record).
+- `CHANGELOG.md:58394`: kept-as-record (release record).
+- `CHANGELOG.md:58631`: kept-as-record (release record).
+
+verify: sh F=core/skills/ai-dlc-update/reconcile/settings-merge.sh; [ -f "$F" ] || exit 9; grep -q 'is_ai_dlc_block' "$F" || exit 9; git grep -q -F 'is_ai_dlc_block' -- core/ || exit 9; if git grep -q -i caveman -- core/; then exit 1; fi; exit 0

@@ -13,7 +13,7 @@
 #   1. hooks         — strip every block whose inner command matches
 #                      /\.claude/hooks/ai-dlc-[^/]+\.sh (per-block, NEVER
 #                      per-event: SessionStart is shared with context-mode and
-#                      caveman), then append the template's blocks. Event-key
+#                      other tools), then append the template's blocks. Event-key
 #                      set is the union of consumer's and template's.
 #   2. enabledPlugins— additive only, user wins on conflict. Never removed.
 #   2b. aiDlcModels / aiDlcRoles
@@ -198,7 +198,7 @@ if ! printf '%s' "$BASE_JSON" | jq \
     ($tmpl[0]) as $t |
 
     # Per-block, never per-event. Stripping a whole event key would delete the
-    # consumer own SessionStart hooks (context-mode, caveman) alongside ours.
+    # consumer own SessionStart hooks (context-mode, for one) alongside ours.
     def is_ai_dlc_block:
       (.hooks // [])
       | any(

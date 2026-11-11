@@ -142,7 +142,7 @@ a consumer that reconciles and a consumer that reinstalls converge):
   the consumer's and the template's, so a new event key needs no migration.
   **`strip_ai_dlc` is per-block, never per-event, and this now matters.**
   `SessionStart` is the first event key ai-dlc shares with tools outside it
-  (context-mode and caveman both register `SessionStart` hooks). Stripping the
+  (context-mode, for one, registers its own `SessionStart` hooks). Stripping the
   whole event would silently delete a consumer's own hooks; stripping the
   matching blocks leaves them in place beside ai-dlc's.
 - **enabledPlugins:** additive-only, NEVER remove. install.sh's merge is

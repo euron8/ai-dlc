@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1051.0] - 2026-11-11
+
+### BL-969 filed and closed
+
+The plugin name `caveman` is gone from shipped core. It appeared on three lines, all comment or prose, and each is renamed with the name only:
+- `core/skills/ai-dlc-update/reconcile/settings-merge.sh` line 16, a header `#` comment: "shared with context-mode and caveman" becomes "shared with context-mode and other tools";
+- `settings-merge.sh` line 201, a jq `#` comment inside a single-quoted shell literal: "(context-mode, caveman)" becomes "(context-mode, for one)", with no apostrophe and no backslash added;
+- `core/skills/ai-dlc-update/reconcile/template-sites.md` line 145: "context-mode and caveman both register `SessionStart` hooks" becomes "context-mode, for one, registers its own `SessionStart` hooks".
+
+The merge behaviour those lines describe is generic: it preserves whatever SessionStart hooks a consumer registered. `settings-merge.sh` keeps its line count, so the `:100` and `:221-228` citations stay valid. Its non-comment lines are byte-identical to the base.
+
+The occurrences outside core are kept as records, because each is a measurement or a rejection rationale and none tells a current reader the plugin is installed:
+- `docs/analysis/pipeline-efficiency-s317-s318.md:442` is a hook-cost measurement that names the plugins it measured.
+- `docs/analysis/pipeline-efficiency-s317-s318/hooks.csv` has four measured data rows.
+- `docs/plans/sprint-302-303-push-candidates.md:212` is a search control.
+- `docs/v0.24.0-gate-validation-slicing-spec.md:69` is the rejection rationale for `caveman-compress`.
+- `CHANGELOG.md` lines 35050, 58394 and 58631 are release records.
+
+Consumer cost: none behaviourally. The edits are comment and prose only, and a consumer's installed `settings-merge.sh` keeps preserving its own hooks whatever they are named.
+
+
 ## [0.1050.0] - 2026-11-11
 
 ### BL-955 filed and closed: `merge-review-shards.sh` canon_gate accepts a story-waived `Canonical run:` (PC-S322-MERGE-CANONICAL-RUN-NO-EXEMPTION-FOR-A-STORY-WAIVED-RUN)
