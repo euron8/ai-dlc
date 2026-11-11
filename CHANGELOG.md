@@ -19,6 +19,48 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1049.0] - 2026-11-11
+
+### BL-958 filed and closed: the convergence-axis adversarial merge refuses a finding shape that J3 cannot close, and J3 reads finding headings with the merge's grammar
+
+Consumer filing `PC-S322-MERGE-FINDING-GRAMMAR-ACCEPTS-A-KEYLESS-MAJOR-THAT-J3-THEN-CANNOT-CLOSE`. A `test-strategy-adversarial-p2` shard headed `### MAJOR — S322-1.1-AC1 wiring check …` carried no finding id. `merge-adversarial-shards.sh` counted it. `validate-adversarial-convergence.sh` arm J3 keys a closing `source: <shard>#<id>` token on that id alone, so the repair record's `source: 2.md#F-1` matched nothing, and Check 24 failed. Closing it took an operator-authorized REOPEN_AFTER_MET plus one extra verification pass.
+
+On the convergence axis only, the merge's shared header check now refuses each of these. The merge loop, `--check-header` and `--dry-run` all refuse at the same phase as the reserved-heading check.
+
+- **A keyless CRITICAL or MAJOR heading:** one from which J3's id rule derives no key.
+- **A duplicate normalised finding id** inside one shard, at any severity.
+- **A fence still open at end of shard.** J3 reads shards concatenated, so one open fence hides every later shard.
+- **A `## Shard:` line inside a shard that J3 maps to a different shard file.** J3 would key everything after it under that file.
+
+Each refusal names the file and line, and the keyed form `### F-<n> — MAJOR — <title>`. `--axis elicitation` is unchanged. MINOR and NIT headings may stay keyless.
+
+`j3_keys` now recognises a finding heading the way the merge does:
+- a fence closes only on a bare run of its own character at least as long as the opener;
+- the severity word and the id rule are the merge's;
+- a sharded pass's findings section is the exact `## Findings`.
+
+An unsharded pass, before any `## Shard:`, keeps the old `^## Findings` prefix match, so a pass that no merge wrote is keyed as before. J3's unkeyed-MAJOR failure text now names the four ways a present heading can key nothing. The verdict is unchanged.
+
+The id, fence, `sev()` and `## Shard:` mapping texts are written in more than one script. The new `.dist-only` fixture `finding-grammar-binding` holds those copies byte-identical across `merge-adversarial-shards.sh`, `validate-adversarial-convergence.sh` and `join-remediator-shards.sh`. It also counts the other fence-text copies in `core/scripts/` against an enumeration, with a corpus floor, so a new copy fails.
+
+Consumer effect: a shard of any refused shape is now refused at the live beat, where before it merged and then failed Check 24. Committed passes are not re-checked. The reference consumer's committed shards carry 141 keyless CRITICAL or MAJOR headings on `main`, but no gate re-runs the merge or `--check-header` over committed shards. Old and new `parse_shard` agree, with the new line types dropped, over 1629 consumer shard files and 364 merged passes. J3's keys are unchanged on every committed pass: 0 of 364 on `main` and 0 of 379 on the epic5 branch differ.
+
+### BL-962 filed and closed: J3 compares the shard ordinal as a number, so a K of 10 or more merge's `part 01` is closed by `source: 1.md#F-1`
+
+A merge of 10 or more shards zero-pads each ordinal to the width of K, so it writes `## Shard: part 01`. The reference consumer's s318 and s319 requirements passes do this, while their shard files are `1.md` … `9.md` and their repair records write `source: 1.md#F-1`. J3 keyed such a finding `01.md#F-1`, so no repair token could close it.
+
+J3 now reads the ordinal as a number on both sides of the join: in `j3_keys`, for the `## Shard:` ordinal and the cross-group number, and in the token normaliser. `01.md#F-1` and `1.md#F-1` therefore name one finding, and so do `cross-01.md#F-1` and `cross-1.md#F-1`, while `1.md#F-10` stays distinct. The change is on the J3 side only; the merged bytes are unchanged.
+
+### BL-967 filed: remediator-shard-join's BIND3 carrier count passes blind in the hermetic sandbox
+
+`unit-bind.sh` BIND3 counts carriers over every `*.sh` in the join's own scripts dir. The fixture's `inputs.decl` declares 10 of 73, and inside `hermetic-run.sh` the sandbox holds only the declared files.
+
+This was measured in one invocation on one seeded tree, with a third carrier placed in an undeclared `core/scripts/` file:
+- the plain run exits 1, with BIND3 naming the seeded file;
+- the sandboxed run passes, rc 0, with 12 BIND3 lines and 0 mentions of the seeded file.
+
+The entry is left open with a receipt that exits non-zero.
+
 ## [0.1048.0] - 2026-11-11
 
 ### BL-971 filed and closed: the settings template rebinds six roles by operator ruling (adversary, dev-escalated, tea and code-reviewer-escalated to opus/medium; code-reviewer and cis to sonnet/medium)

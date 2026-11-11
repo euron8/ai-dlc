@@ -1707,6 +1707,123 @@ p_bl726f() {
   bl726_merged && has "$MO.err" "WARN: " && has "$MO.err" "1.md claims invoked_at 2026-08-24T13:00:00Z" && has "$MO.err" "recorded at 2026-08-24T15:00:00Z" && has "$MO.err" "LEGACY"
 }
 p_bl726h() { bl726_lastrow "$1"; bl726_merged && ! has "$MO.err" "WARN: "; }
+# ---- BL-958: THE FINDING ID (merge header). Every world is hdr_world's B3 world with shard 2's `## Findings` line
+# replaced and its declared counts set to the headings it carries, so the count check passes and only check_keys
+# can refuse. No marker is appended (a marker is checked only when present). Shards 1 and 3 hold 2 MAJOR each.
+set_crit() { sed "s/^findings_critical: .*/findings_critical: $2/" "$1" > "$1.tmp" && mv "$1.tmp" "$1"; } # <shard file> <n>
+kw() { # <findings body> <declared major> [declared critical] -> a B3 shard dir
+  local d; d="$(hdr_world "$1")" || return 1
+  set_major "$d/2.md" "$2" && set_crit "$d/2.md" "${3:-0}" || return 1
+  printf '%s' "$d"
+}
+KF_MAJ='write it in the keyed form `### F-<n> — MAJOR — <title>`'
+KF_J3='closes a MAJOR only by a `source: <shard>#<id>` token keyed on that id'
+KF_DUP='2.md:9 repeats finding id F-1 of the heading at line 5'
+KF_FENCE='2.md:9 opens a fence that is still open at end of file'
+T1_BODY='## Findings\n\n### MAJOR — wiring check\n\nstories: 2\n'
+# T1: a keyless MAJOR and a keyless CRITICAL heading are each REFUSED, naming file:line, the keyed form and J3's token.
+p_t1() {
+  local d
+  d="$(kw "$T1_BODY" 1)" || return 1; run_merge "$1" "$d"
+  refused_clean "2.md:5 is a MAJOR finding heading from which no finding id is derived" "$d" && has "$MO" "$KF_MAJ" && has "$MO" "$KF_J3" || return 1
+  d="$(kw '## Findings\n\n### CRITICAL: x\n\nstories: 2\n' 0 1)" || return 1; run_merge "$1" "$d"
+  refused_clean "2.md:5 is a CRITICAL finding heading from which no finding id is derived" "$d" \
+    && has "$MO" 'write it in the keyed form `### F-<n> — CRITICAL — <title>`'
+}
+# T2: every keyed form J3 reads merges, each counted -- and a keyless MINOR stays allowed. Shard 2 holds 5 MAJOR.
+p_t2() {
+  local d
+  d="$(kw '## Findings\n\n### F-1 — MAJOR — t\n\nstories: 2\n\n### **F-2** (MAJOR)\n\nstories: 2\n\n### Finding 3: MAJOR\n\nstories: 2\n\n### 1. MAJOR wiring\n\nstories: 2\n\n### [F-3] MAJOR\n\nstories: 2\n\n### MINOR — keyless\n\nstories: 2\n' 5)" || return 1
+  run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "major=9"
+}
+# T3a: two headings deriving the same id in one shard are REFUSED (MAJOR twice; a MINOR sharing a MAJOR's id); the
+# same id in two DIFFERENT shards (shard 2's M1 beside shard 1's M1) merges.
+p_t3a() {
+  local d
+  d="$(kw '## Findings\n\n### F-1 — MAJOR — a\n\nstories: 2\n\n### F-1 — MAJOR — b\n\nstories: 2\n' 2)" || return 1; run_merge "$1" "$d"
+  refused_clean "$KF_DUP" "$d" && has "$MO" "one token cannot close two findings" || return 1
+  d="$(kw '## Findings\n\n### F-1 — MAJOR — a\n\nstories: 2\n\n### F-1 — MINOR — b\n\nstories: 2\n' 1)" || return 1; run_merge "$1" "$d"
+  refused_clean "$KF_DUP" "$d" || return 1
+  d="$(kw '## Findings\n\n### M1 — MAJOR — a\n\nstories: 2\n' 1)" || return 1; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "major=5"
+}
+# T3b: a pair differing in raw bytes that NORMALISES to one id (emphasis; a trailing `.`) is REFUSED the same way.
+p_t3b() {
+  local d
+  d="$(kw '## Findings\n\n### **F-1** — MAJOR — a\n\nstories: 2\n\n### F-1. — MAJOR — b\n\nstories: 2\n' 2)" || return 1; run_merge "$1" "$d"
+  refused_clean "$KF_DUP" "$d"
+}
+# D1: a fence left open at end of file AFTER shard 2's counted finding is REFUSED; the same fence closed merges.
+p_d1() {
+  local d
+  d="$(kw '## Findings\n\n### F-1 — MAJOR — a\n\nstories: 2\n\n```text\nopen' 1)" || return 1; run_merge "$1" "$d"
+  refused_clean "$KF_FENCE" "$d" && has "$MO" "hides every later shard" || return 1
+  d="$(kw '## Findings\n\n### F-1 — MAJOR — a\n\nstories: 2\n\n```text\nclosed\n```' 1)" || return 1; run_merge "$1" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "major=5"
+}
+# ELIC: the requirement is the CONVERGENCE axis only -- a keyless MAJOR in an elicitation shard passes
+# --check-header --axis elicitation (rc 0, nothing printed).
+p_elic() {
+  local d c
+  d="$(kw "$T1_BODY" 1)" || return 1; c="$(mktemp -d "$WORK/elic.XXXXXX")" || return 1
+  sed -e '/^verdict:/d' -e 's/^skill: .*/skill: bmad-advanced-elicitation/' "$d/2.md" > "$c/2.md" || return 1
+  has "$c/2.md" "### MAJOR — wiring check" && has "$c/2.md" "skill: bmad-advanced-elicitation" || return 1
+  chm "$1" "$c/2.md" elicitation
+  [ "$RC" -eq 0 ] && [ ! -s "$MO" ]
+}
+# CHK / DRY: --check-header (convergence) and --dry-run each refuse T1's shard with the same refusal.
+p_t1_chk() {
+  local d; d="$(kw "$T1_BODY" 1)" || return 1
+  chm "$1" "$d/2.md" convergence
+  [ "$RC" -eq 1 ] && has "$MO" "REFUSED: " && has "$MO" "2.md:5 is a MAJOR finding heading from which no finding id is derived" && has "$MO" "$KF_MAJ"
+}
+p_t1_dry() {
+  local d; d="$(kw "$T1_BODY" 1)" || return 1
+  $ASM_RUN "$1" --dry-run "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: " && has "$MO" "2.md:5 is a MAJOR finding heading from which no finding id is derived" && [ ! -e "$(out_of "$d")" ]
+}
+# SH: a shard's OWN `## Shard: ` line. The merged pass carries it verbatim, and J3's j3_keys re-points every later
+# finding at the shard file that heading maps to, so a heading naming another shard (or none) leaves the shard's
+# MAJORs keyed where no `source: <own file>#<id>` token can close them. FIS refuses: one end-to-end merge (shard 2
+# saying `story 3`), then --check-header cells on copies of that shard renamed and re-headed -- `part 04` in 5.md,
+# `cross-story group 2 (1,3)` in cross-1.md, and `story 2` followed by a later `## Shard: notes` in 2.md (every
+# heading is checked, not only the first). FISa is each ALLOW twin one property apart: `story 2` in 2.md, `part 04`
+# in 04.md (the ordinal read as a number on both sides, BL-962), `cross-story` in cross.md, `cross-section group 01
+# (1,3)` in cross-1.md. SH_REF names the refusal text.
+SH_REF='is a `## Shard: ` heading, which J3 (validate-adversarial-convergence.sh j3_keys) reads as shard file'
+sh_world() { # -> SH_D, a B3 world whose shard 2 opens `## Shard: story 3` above one keyed MAJOR
+  SH_D="$(kw '## Shard: story 3\n\n## Findings\n\n### F-1 — MAJOR — a\n\nstories: 2\n' 1)"
+}
+sh_cell() { # <merge> <template shard> <dir> <file name> <heading replacing `## Shard: story 3`> [<line appended last>] -> RC, $MO
+  mkdir -p "$3" && awk -v H="$5" -v T="${6:-}" '$0 == "## Shard: story 3" { print H; next } { print } END { if (T != "") { print ""; print T } }' "$2" > "$3/$4" || return 1
+  has "$3/$4" "$5" || return 1
+  chm "$1" "$3/$4" convergence
+}
+p_sh_refuse() {
+  local d c
+  sh_world || return 1; d="$SH_D"; run_merge "$1" "$d"
+  refused_clean "2.md:3 $SH_REF 3.md, not this shard's own 2.md" "$d" && has "$MO" 'no `source: 2.md#<id>` token closes' || return 1
+  c="$(mktemp -d "$WORK/sh.XXXXXX")" || return 1
+  sh_cell "$1" "$d/2.md" "$c/a" 5.md '## Shard: part 04'
+  [ "$RC" -eq 1 ] && has "$MO" "5.md:3 $SH_REF 4.md, not this shard's own 5.md" || return 1
+  sh_cell "$1" "$d/2.md" "$c/b" cross-1.md '## Shard: cross-story group 2 (1,3)'
+  [ "$RC" -eq 1 ] && has "$MO" "cross-1.md:3 $SH_REF cross-2.md, not this shard's own cross-1.md" || return 1
+  sh_cell "$1" "$d/2.md" "$c/c" 2.md '## Shard: story 2' '## Shard: notes'
+  [ "$RC" -eq 1 ] && has "$MO" "$SH_REF ?, not this shard's own 2.md" && ! has "$MO" "2.md:3 "
+}
+p_sh_accept() {
+  local d c
+  # Only shard 2's bytes are read here (--check-header reads one file), so the last world FIS built is reused.
+  [ -n "${SH_D:-}" ] && [ -f "$SH_D/2.md" ] || sh_world || return 1
+  d="$SH_D"; c="$(mktemp -d "$WORK/sha.XXXXXX")" || return 1
+  sh_cell "$1" "$d/2.md" "$c/a" 2.md '## Shard: story 2'; [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
+  sh_cell "$1" "$d/2.md" "$c/b" 04.md '## Shard: part 04'; [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
+  sh_cell "$1" "$d/2.md" "$c/c" cross.md '## Shard: cross-story'; [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
+  sh_cell "$1" "$d/2.md" "$c/d" cross-1.md '## Shard: cross-section group 01 (1,3)'; [ "$RC" -eq 0 ] && [ ! -s "$MO" ] || return 1
+  # The positive conjunct: the cell above really carried the heading under test (a template that lost it would pass).
+  has "$c/d/cross-1.md" "## Shard: cross-section group 01 (1,3)" && has "$c/b/04.md" "## Shard: part 04"
+}
 # P1: the merged pass is a provenance block the READER accepts. Its artifact_sha is the files-mode
 # list `<stem>@<sha> ...`; a list of ONE and a short sha are refused, a bare sha still passes. PBROOT,
 # when set, is the AI_DLC_PROJECT_ROOT whose core/schemas/ the reader tries first (the schema mutant).

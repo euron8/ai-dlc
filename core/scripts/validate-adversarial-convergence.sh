@@ -4540,7 +4540,7 @@ fi
 #              still a filed finding (adversary.md), and keying on blocking acquits major == underived.
 #   key        `<shard-file>#<id>` -- the remediator's `source:` grammar (remediator.md, "a party repair
 #              names the seat finding"), byte for byte: the shard file from the merged pass's
-#              `## Shard:` heading (`story 01` -> 01.md, `section 1` -> 1.md, `cross-story group 2 (...)`
+#              `## Shard:` heading (`story 01` -> 1.md, `section 1` -> 1.md, `cross-story group 2 (...)`
 #              -> cross-2.md, a bare `cross-story` -> cross.md), the id the finding's `### ` heading read
 #              as join-remediator-shards.sh src_ids reads a seat heading (emphasis and brackets dropped,
 #              a `Finding ` prefix dropped, `[A-Za-z0-9][A-Za-z0-9.-]*`, trailing `[.-]` stripped, a digit
@@ -4549,6 +4549,32 @@ fi
 #              `### ` headings inside a `## Findings` section, outside fences, whose first severity word
 #              is MAJOR (merge-adversarial-shards.sh, FINDING GRAMMAR). A token qualified by THIS pass's
 #              shard dir (`<stem>-p<M>/1.md#F-1`) is the same key; one qualified by another pass is not.
+#              THE SHARD ORDINAL IS COMPARED AS A NUMBER, on the key and on every record token alike
+#              (`01.md` and `1.md` are one shard, as are `cross-01.md` and `cross-1.md`): a merge over K>=10
+#              shards writes `## Shard: part 01` (norm_ord pads to the width of K) while the shard file is
+#              `1.md` and its repair names `source: 1.md#F-1`. Measured on the reference consumer, read-only:
+#              s318 requirements-adversarial-p1.md:23 `## Shard: part 01`, shards/requirements-p1/1.md,
+#              requirements-repair-p1.md:20 `- source: 1.md#F-1`. The merged bytes are not changed.
+#              The successor-side MENTION check below stays verbatim: it compares a deferral record's
+#              token with the digest's text, two hand-written spellings with no derived key between them.
+#              HEADING RECOGNITION IS THE MERGE'S, NOT A RESTATEMENT OF IT: the fence lines are
+#              parse_shard's (== src_ids'), so a fence closes only on a bare run of its own character at
+#              least as long as its opener (a ```` fence holding a bare ``` stays open); the id lines are
+#              src_ids'; the `## Findings` match is the merge's exact `^## Findings[ \t]*$` (so
+#              `## Findings (pass 2)` is no findings section here either); sev() is parse_shard's. The
+#              copies are bound byte for byte (modulo indentation) by the finding-grammar-binding fixture.
+#              UNTIL THE FIRST `## Shard:` HEADING the match is the PREFIX `^## Findings`, because no merge
+#              wrote those lines: an unsharded pass is the adversary's own file, and the reference consumer
+#              writes `## Findings introduced by the repair` over its MAJORs (s316
+#              requirements-adversarial-p2.md, `### N1: MAJOR`), keyed `<pass file>#N1` as before BL-958.
+#              The test is "no `## Shard:` seen YET", not "none in the whole file": it is one streaming read,
+#              and the merge writes only its title, its verdict line and the fenced `## Shard ordinal map`
+#              above its first `## Shard:`, so a sharded pass's preamble holds no findings section the merge
+#              made -- a hand-written one there is under no shard, so `<pass file>#<id>` is its only key.
+#              The two readings differ only on a sharded pass with a `## Findings...` heading above its first
+#              `## Shard:`; graph `main`, read-only, has 0 of them among 75 sharded passes (364 in all), so
+#              the choice moves no consumer key and rests on what the merge writes. 1 of its 289 unsharded
+#              passes carries a non-exact `## Findings...` heading: s316's, above.
 #   CLOSED     (a) REPAIRED: a `source:` token of a `disposition: repaired` entry in
 #              `<stem>-repair-p<M>.md` or `<stem>-serial-repair-p<M>.md` -- pass M's own records, never
 #              an earlier pass's, whose ids collide -- structured for arm H, whose OWN triple is a link.
@@ -4625,27 +4651,34 @@ j3_keys() {
     function sev(h,   best, bp, i, w, p) {
       best = ""; bp = 0
       split("CRITICAL MAJOR MINOR NIT", w, " ")
-      for (i = 1; i <= 4; i++) { p = index(h, w[i]); if (p > 0 && (bp == 0 || p < bp)) { bp = p; best = w[i] } }
-      return best
+      for (i = 1; i <= 4; i++) {
+        p = index(h, w[i])
+        if (p > 0 && (bp == 0 || p < bp)) { bp = p; best = w[i] }
+      }
+      return best == "" ? "NONE" : best
     }
     /SKILL_INVOCATION_PROVENANCE v1/ { skip = 1; next }
     /SKILL_INVOCATION_PROVENANCE_END/ { skip = 0; next }
     skip { next }
-    { l = $0; sub(/^[ \t]+/, "", l) }
-    fch == "b" { if (l ~ /^```+[ \t]*$/) fch = ""; next }
-    fch == "t" { if (l ~ /^~~~+[ \t]*$/) fch = ""; next }
-    substr(l, 1, 3) == "```" { inf = l; sub(/^`+/, "", inf); if (index(inf, "`") == 0) { fch = "b"; next } }
-    substr(l, 1, 3) == "~~~" { fch = "t"; next }
+    fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+    !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
+    fence { next }
+    /^## Shard: / { shd = 1 }
     /^## Shard: / { h = substr($0, 11); sh = "?"; fnd = 0
-      if (match(h, /^cross-(story|section|part) group [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = "cross-" a[3] ".md" }
+      if (match(h, /^cross-(story|section|part) group [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = "cross-" (a[3] + 0) ".md" }
       else if (h ~ /^cross-(story|section|part)[ \t]*$/) sh = "cross.md"
-      else if (match(h, /^(story|section|part) [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = a[2] ".md" }
+      else if (match(h, /^(story|section|part) [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = (a[2] + 0) ".md" }
       next }
-    /^## / { fnd = ($0 ~ /^## Findings/); next }
-    /^### / && fnd && sev($0) == "MAJOR" { s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s)
-      sub(/^[ \t]+/, "", s); sub(/^[Ff]inding[ \t]+/, "", s)
-      if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) { t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
-        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k } } }' "$1"
+    !shd && /^## Findings/ { fnd = 1; next }
+    /^## / { fnd = ($0 ~ /^## Findings[ \t]*$/); next }
+    /^### / && fnd && sev($0) == "MAJOR" {
+      s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s)
+      sub(/^[Ff]inding[ \t]+/, "", s)
+      if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) {
+        t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
+        if (t ~ /[0-9]/) { k = (sh == "" ? base : sh) "#" t; if (!seen[k]++) print k }
+      }
+    }' "$1"
 }
 # The label reader both record readers share: the label opens the line, emphasis tolerated as arm H
 # reads it, colon immediately after; sets v to the value with emphasis and backticks removed.
@@ -4721,8 +4754,9 @@ if [ "$J3_OPEN" -eq 1 ] || [ "$J3_INBOUND" -eq 1 ]; then
   # deferral record makes the readers load-bearing. The pole invokes this validator hundreds of times.
   printf '%s\n' '# probe' '## Shard: section 1' '## Findings' '### F-1 — MAJOR — kept' '```text' \
     '### F-9 — MAJOR — fenced' '```' '### F-2 — MINOR — not major' '## Probes' '### F-3 — MAJOR — outside Findings' \
+    '## Findings (pass 2)' '### F-4 — MAJOR — sharded, not a findings section' \
     '## Shard: cross-section group 2 (1,2)' '## Findings' '### F-1 — MAJOR — cross' > "$AC_T/j3p-adversarial-p1.md" \
-    && printf '%s\n' '## Findings' '### M1 — MAJOR — unsharded' > "$AC_T/j3u-adversarial-p1.md" \
+    && printf '%s\n' '## Findings introduced by the repair' '### M1 — MAJOR — unsharded' > "$AC_T/j3u-adversarial-p1.md" \
     && printf '%s\n' '### F-0 — MAJOR' '- source: 0.md#F-0' '- disposition: repaired' '- artifact: a.md' \
     '- **artifact_sha_before:** AA' '- artifact_sha_after: bb' '### F-1 — MAJOR' '- **source:** `1.md#F-1` cross-2.md#F-1' '- **disposition:** repaired' \
     '### F-2 — MAJOR' '- source: 2.md#F-2' '- disposition: escalated' '- edit: x' > "$AC_T/j3p-rec.md" \
@@ -4776,8 +4810,11 @@ if [ "$J3_OPEN" -eq 1 ]; then
   : > "$AC_T/j3-def"
   [ -f "$j3_dir/${j3_stem}-deferral-p${j3_m}.md" ] && j3_deferrals "$j3_dir/${j3_stem}-deferral-p${j3_m}.md" > "$AC_T/j3-def"
   j3_bad="$(awk -F'\t' -v pd="$j3_pd" -v succ="$J3_SUCC" -v m="$j3_m" '
-    function norm(t,   p) { if (index(t, pd "/") == 1) return substr(t, length(pd) + 2)
-      p = index(t, "/" pd "/"); if (p) return substr(t, p + length(pd) + 2); return t }
+    function norm(t,   p) { if (index(t, pd "/") == 1) t = substr(t, length(pd) + 2)
+      else { p = index(t, "/" pd "/"); if (p) t = substr(t, p + length(pd) + 2) }
+      if (match(t, /^[0-9]+\.md#/)) t = (substr(t, 1, RLENGTH - 4) + 0) substr(t, RLENGTH - 3)
+      else if (match(t, /^cross-[0-9]+\.md#/)) t = "cross-" (substr(t, 7, RLENGTH - 10) + 0) substr(t, RLENGTH - 3)
+      return t }
     FILENAME == ARGV[1] { if ($0 != "") k[++nk] = $0; next }
     FILENAME == ARGV[2] { r[norm($1)] = 1; next }
     FILENAME == ARGV[3] { d[norm($1)] = $2; next }
@@ -4789,7 +4826,11 @@ if [ "$J3_OPEN" -eq 1 ]; then
     "$AC_T/j3-keys" "$AC_T/j3-tok" "$AC_T/j3-def")"
   if [ "$j3_unkeyed" -gt 0 ]; then
     j3_bad="${j3_bad:+$j3_bad
-}        ${j3_unkeyed} of findings_major ${LAST_MAJOR} carry no MAJOR \`### \` heading under \`## Findings\`, so no key names them"
+}        ${j3_unkeyed} of findings_major ${LAST_MAJOR} carry no MAJOR \`### \` heading under \`## Findings\`, so no key names them.
+        A MAJOR heading may be present and still key nothing: no digit-bearing leading token
+        (\`### MAJOR — ...\`), a duplicate of another heading's key in the same shard, hidden by an
+        unclosed fence, or, in a sharded pass, under a \`## \` section that is not exactly \`## Findings\`
+        (\`## Findings (pass 2)\` is none). The keyed form is \`### F-<n> — MAJOR — <title>\`, closed by \`source: <shard-file>#F-<n>\`."
   fi
   if [ -n "$j3_bad" ]; then
     j3_era "$j3_dir"

@@ -70,6 +70,15 @@
 # MUTANT-MATRIX CM-other-root-not-refused decides=TR1 twins=A1
 # MUTANT-MATRIX CM-serial-not-refused decides=D5 twins=D3
 # MUTANT-MATRIX CM-files-bytes-moved decides=D6 twins=A1
+# MUTANT-MATRIX FI-m1-keyless-accepted decides=FI1 twins=FI2
+# MUTANT-MATRIX FI-m2-no-digit decides=FI1 twins=FI2
+# MUTANT-MATRIX FI-m3-dup-accepted decides=FI3a twins=FI1
+# MUTANT-MATRIX FI-m4-both-axes decides=FIE twins=FI1
+# MUTANT-MATRIX FI-m5-no-bracket-strip decides=FI2 twins=FI1
+# MUTANT-MATRIX FI-m6-dup-raw decides=FI3b twins=FI3a
+# MUTANT-MATRIX FI-m8-open-fence-accepted decides=FIF twins=FI1
+# MUTANT-MATRIX FI-m9-shard-heading-accepted decides=FIS twins=FI1
+# MUTANT-MATRIX FI-m10-own-ordinal-raw decides=FISa twins=FIS
 # MUTANT-MATRIX BM-1 decides=B726B twins=B726H
 # MUTANT-MATRIX BM-2 decides=B726C twins=B726H
 # MUTANT-MATRIX BM-3 decides=B726F twins=B726B
@@ -411,16 +420,45 @@ d="$(hdr_world "## Findings\n\n## Probes\n\n$PROBES")"; mk_markers "$d"; run_mer
 [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && has "$MO" "major=4" \
   && ok "RS1c: the same probes under their own ## Probes section -> MERGED, shard 2 counting 0 (major=4 = shards 1 and 3)" \
   || bad "RS1c: the probes moved to ## Probes did not merge with shard 2 at 0 (rc=$RC): $(cat "$MO")"
-# RS2 / RS3: the F-form and the bare severity form each open ONE finding (s315-s317 write the second).
+# RS2 / RS3: the F-form opens ONE finding; the bare severity form (s315-s317 wrote it, and J3 can never close
+# it: no id) is REFUSED on the convergence axis since BL-958 (THE FINDING ID, merge header).
 for cell in 'RS2|### F-1 (MAJOR) the ordinal map omits story 2' 'RS3|### MAJOR: the ordinal map omits story 2'; do
   id="${cell%%|*}"; h="${cell#*|}"
   d="$(hdr_world "## Findings\n\n$h\n\nstories: 2\n")"; set_major "$d/2.md" 1; mk_markers "$d"
   printf '\n' >> "$d/2.md"; sed 's/^seat-complete: stories adversary 2 findings=0$/seat-complete: stories adversary 2 findings=1/' "$d/2.md" > "$d/2.tmp" && mv "$d/2.tmp" "$d/2.md"
   run_merge "$MERGE" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "major=5" \
-    && ok "$id: '$h' counts as 1 MAJOR finding (findings=1 marker agrees; merged major=5)" \
-    || bad "$id: '$h' was not counted as one MAJOR finding (rc=$RC): $(cat "$MO")"
+  if [ "$id" = RS2 ]; then
+    [ "$RC" -eq 0 ] && has "$MO" "major=5" \
+      && ok "$id: '$h' counts as 1 MAJOR finding (findings=1 marker agrees; merged major=5)" \
+      || bad "$id: '$h' was not counted as one MAJOR finding (rc=$RC): $(cat "$MO")"
+  else
+    refused_clean "2.md:5 is a MAJOR finding heading from which no finding id is derived" "$d" && has "$MO" "$KF_MAJ" \
+      && ok "$id: '$h' (no finding id) -> REFUSED naming 2.md:5 and the keyed form, nothing written" \
+      || bad "$id: '$h' was not refused as a keyless MAJOR (rc=$RC): $(cat "$MO")"
+  fi
 done
+# ---- BL-958: THE FINDING ID (merge header). Predicates in lib.sh (p_t1 .. p_t1_dry).
+p_t1 "$MERGE" && ok "FI1: '### MAJOR — wiring check' and '### CRITICAL: x', counts agreeing -> each REFUSED naming 2.md:5, the keyed form and J3's source token, nothing written" \
+  || bad "FI1: (rc=$RC) $(cat "$MO")"
+p_t2 "$MERGE" && ok "FI2: F-1, **F-2**, 'Finding 3:', '1.', [F-3] (all MAJOR) and a keyless MINOR -> MERGED major=9" \
+  || bad "FI2: (rc=$RC) $(cat "$MO")"
+p_t3a "$MERGE" && ok "FI3a: F-1 twice as MAJOR, and F-1 as MAJOR beside F-1 as MINOR -> each REFUSED naming 2.md:9 and line 5; shard 2's M1 beside shard 1's M1 -> MERGED major=5" \
+  || bad "FI3a: (rc=$RC) $(cat "$MO")"
+p_t3b "$MERGE" && ok "FI3b: '**F-1**' and 'F-1.' (raw-different, one normalised id) -> REFUSED naming 2.md:9 and line 5" \
+  || bad "FI3b: (rc=$RC) $(cat "$MO")"
+p_d1 "$MERGE" && ok "FIF: a fence left open at end of file after a counted finding -> REFUSED naming 2.md:9; the same fence closed -> MERGED major=5" \
+  || bad "FIF: (rc=$RC) $(cat "$MO")"
+p_elic "$MERGE" && ok "FIE: FI1's keyless MAJOR in an elicitation shard -> --check-header --axis elicitation passes (rc 0, silent): convergence axis only" \
+  || bad "FIE: (rc=$RC) $(cat "$MO")"
+p_t1_chk "$MERGE" && ok "FIC: --check-header --axis convergence refuses FI1's shard (rc 1) with the same refusal" \
+  || bad "FIC: (rc=$RC) $(cat "$MO")"
+p_t1_dry "$MERGE" && ok "FID: --dry-run refuses FI1's world (rc 2) with the same refusal and writes nothing" \
+  || bad "FID: (rc=$RC) $(cat "$MO")"
+p_sh_refuse "$MERGE" && ok "FIS: a shard's own '## Shard: story 3' in 2.md -> merge REFUSED naming 2.md:3 and the shard file J3 would key it under (3.md), nothing written; --check-header refuses 'part 04' in 5.md (J3: 4.md), 'cross-story group 2 (1,3)' in cross-1.md (cross-2.md), and 'story 2' followed by '## Shard: notes' in 2.md (?)" \
+  || bad "FIS: (rc=$RC) $(cat "$MO")"
+p_sh_accept "$MERGE" && ok "FISa: --check-header accepts a self-heading J3 maps to the shard's own file -- 'story 2' in 2.md, 'part 04' in 04.md, 'cross-story' in cross.md, 'cross-section group 01 (1,3)' in cross-1.md" \
+  || bad "FISa: (rc=$RC) $(cat "$MO")"
+# The finding-grammar binding of the merge, the join and J3 (BL-958, BB0-BB2) is core/fixtures/finding-grammar-binding.
 # RS4: a non-finding ### inside a fence under ## Findings is ignored.
 d="$(hdr_world "## Findings\n\n\`\`\`text\n$PROBES\n\`\`\`")"; mk_markers "$d"; run_merge "$MERGE" "$d"
 [ "$RC" -eq 0 ] && has "$MO" "major=4" \
@@ -809,7 +847,7 @@ fi
 # the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
 # prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
 n_mut=0; n_kill=0
-ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g"
+ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 FI1 FI2 FI3a FI3b FIF FIE FIS FISa B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g"
 [ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2vac_core KEnone_inst KEvac_inst KEps_inst KEnone_core KEvac_core KEsch_core"
 karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
   local w a
@@ -835,6 +873,14 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
     X1) p_xfiles "$2" ;;
     X4) p_xmix "$2" ;;
     RS1) p_rs1 "$2" ;;
+    FI1) p_t1 "$2" ;;
+    FI2) p_t2 "$2" ;;
+    FI3a) p_t3a "$2" ;;
+    FI3b) p_t3b "$2" ;;
+    FIF) p_d1 "$2" ;;
+    FIE) p_elic "$2" ;;
+    FIS) p_sh_refuse "$2" ;;
+    FISa) p_sh_accept "$2" ;;
     CH2) p_chv "$2" ;;
     B726B) p_bl726b "$2" ;;
     B726C) p_bl726c "$2" ;;
@@ -1006,7 +1052,9 @@ mutm CM-doc-sha-unchecked D3 D4 '[ "$sha" = "$DOC_SHA" ] ||' 'true ||'
 mutm CM-merged-unparseable A1 RS1 "  printf 'findings_major: %s\\n' \"\$S_MAJOR\"
 " ''
 # The worded-heading MAJOR count no longer compared: an unclosed fence hides a finding, the heading count falls short
-# of the stated major, and the pass merges (rc 0, major=7) where the shipped merge refuses (rc 2). FG2 decides because
+# of the stated major, and the shipped merge's count refusal ('Findings section heads 0') is gone. Since BL-958 the
+# mutant does not merge either: FG2's fence is still open at end of file, so check_keys refuses it on THAT -- FG2
+# still decides, on its missing count token. FG2 decides because
 # R6's seed is refused earlier by the reserved-heading guard, so R6 trips only on a missing output token, not on this count.
 mutm CM-major-count-unchecked FG2 A1 '[ "$nc" -eq "$crit" ] && [ "$nm" -eq "$major" ] \' '[ "$nc" -eq "$crit" ] \'
 # The other-root refusal gone: a write-ledger row naming a worktree's copy no longer refuses; TR1 asserts the refusal.
@@ -1015,6 +1063,27 @@ mutm CM-other-root-not-refused TR1 A1 '    refuse "${_op} carries a write-ledger
 mutm CM-serial-not-refused D5 D3 '  refuse "$DOCUMENT does not partition (' '  prc=0; : "$DOCUMENT does not partition ('
 # One byte of files-mode output moved in the pass header: every count, verdict and id still reads right.
 mutm CM-files-bytes-moved D6 A1 "shard verdicts are advisory.\\n'" "shard verdicts are advisory!\\n'"
+# THE FINDING ID's mutants (BL-958), each the regression its arm names.
+# m1: the keyless refusal gone -- '### MAJOR — wiring check' merges.
+mutm FI-m1-keyless-accepted FI1 FI2 '[ "${KEY_C1:-0}" = "0" ] ||' 'true ||'
+# m2: the id rule's digit requirement dropped -- `MAJOR` itself keys, so the keyless heading reads as keyed.
+mutm FI-m2-no-digit FI1 FI2 'if (t ~ /[0-9]/) print b "\t" t' 'print b "\t" t'
+# m3: the duplicate refusal gone -- two F-1 headings merge.
+mutm FI-m3-dup-accepted FI3a FI1 '[ "${KEY_C2:-0}" = "0" ] ||' 'true ||'
+# m4: the requirement applied on both axes -- an elicitation shard's keyless MAJOR is refused.
+mutm FI-m4-both-axes FIE FI1 '[ "$3" = convergence ] || return 0' 'true || return 0'
+# m5: the merge's id copy without the bracket strip -- '[F-3] MAJOR' derives no id and is refused.
+mutm FI-m5-no-bracket-strip FI2 FI1 'gsub(/[][]/, "", s)' 's = s'
+# m6: ids compared before normalisation (the trailing `.` kept) -- '**F-1**' and 'F-1.' read as two ids; the
+# raw-identical pair (FI3a) is still refused.
+mutm FI-m6-dup-raw FI3b FI3a 't = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)' 't = substr(s, 1, RLENGTH)'
+# m8: the open-fence refusal gone -- a fence left open at end of file merges.
+mutm FI-m8-open-fence-accepted FIF FI1 '[ "${KEY_Z:-0}" = "0" ] ||' 'true ||'
+# m9: the self-heading refusal gone -- a shard saying '## Shard: story 3' in 2.md merges, its F-1 keyed 3.md#F-1 by J3.
+mutm FI-m9-shard-heading-accepted FIS FI1 '[ "${KEY_SL:-0}" = "0" ] ||' 'true ||'
+# m10: the shard's own ordinal compared raw (BL-962's number read dropped) -- 'part 04' in 04.md is refused; every
+# FIS refusal still stands.
+mutm FI-m10-own-ordinal-raw FISa FIS 'if (own ~ /^[0-9]+\.md$/) own = (own + 0) ".md"; else if' 'if (0) own = own; else if'
 mutm BM-1 B726B B726H '| if ($s.e - $ae) > $tol then' '| if false then'
 mutm BM-2 B726C B726H '| if ($ae - $w.e) > $tol then' '| if false then'
 mutm BM-3 B726F B726B 'def verdict($bound): if $bound then "REFUSE" else "WARN" end;' 'def verdict($bound): "REFUSE";'

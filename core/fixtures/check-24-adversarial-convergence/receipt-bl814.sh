@@ -36,6 +36,18 @@
 #   seriallink   the repair record links, the serial record does not; only the first key closes    FAIL
 #   dupid        findings_major 2 over two MAJOR headings that are one key       FAIL (unkeyed), 1
 #   idpunct      ids written `F-1:` and `F-1.` close by the plain tokens (the join's normalisation)  0
+#   nestfence    a ```` fence holding a bare ```, a MAJOR after the outer close: open keys EXACTLY
+#                {1.md#F-1 1.md#F-2}, none unkeyed (the merge's fence rule, BL-958)        FAIL (J3), 1
+#   findp2       `## Findings (pass 2)` is no findings section: open keys EXACTLY {2.md#F-2}  FAIL, 1
+#   unshrep      UNSHARDED, `### N1: MAJOR` under `## Findings introduced by the repair` (graph s316):
+#                open keys EXACTLY {coe-adversarial-p1.md#N1}, none unkeyed (prefix before any Shard)  FAIL, 1
+#   keyless      `### MAJOR — S322-1.1-AC1 ...` keys nothing: open keys EXACTLY {1.md#F-1}, and the
+#                unkeyed line says a heading can be present and key nothing, naming the keyed form and
+#                the sharded non-`## Findings` section among the causes                    FAIL, 1
+#   ordk10       K>=10: merged `part 01`/`part 10`/cross-part group 1; the linked repair names
+#                1.md#F-1, 10.md#F-1, cross-01.md#F-1 -- the shard ordinal compares as a number (BL-962)  0
+#   ordpad       the same, closed by the padded 01.md#F-1                                  J3 silent, 0
+#   ordctl       the same, the repair names 1.md#F-10: open keys EXACTLY {1.md#F-1}        FAIL (J3), 1
 #   undeferred's DEFER remedy says to dispatch a remediator (the lead's write is denied after a FAIL)
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -102,6 +114,7 @@ world() { # name -> the repo, stamped 0.669.0 at 09:00 and REL at 10:00
 pass() {
   local w="$1" st="$2" n="$3" art="$4" s="$5" mj="$6" un="$7" v="$8" at="$9" h; shift 9
   { printf '# %s -- adversarial pass %s (merged from shards)\n' "$st" "$n"
+    [ -z "${PASS_BODY:-}" ] || printf '%s\n' "$PASS_BODY"
     for h in "$@"; do
       printf '\n## Shard: %s\n\n## Findings\n\n### %s — %s — a finding\n\nbody\n' "${h%%|*}" "$(printf '%s' "$h" | cut -d'|' -f2)" "${h##*|}"
     done
@@ -240,6 +253,35 @@ build() {
   # idpunct: the ids are written `F-1:` and `F-1.`; the join reads both as F-1, so the plain tokens close them.
   coe_world idpunct 2026-09-29T11:00:00Z 2 0 "section 1|F-1:|MAJOR" "cross-section group 1 (1,2)|F-1.|MAJOR" || return 1
   defer "$B/idpunct/$D/coe-deferral-p1.md" requirements 1.md#F-1 cross-1.md#F-1
+  # HEADING RECOGNITION (BL-958), each undeferred so the FAIL lists every key J3 derived, read as a SET:
+  # nestfence: a ```` fence holding a bare ``` (the merge keeps it open), then a MAJOR after the outer close.
+  PASS_BODY="$(printf '\n## Shard: section 1\n\n## Findings\n\n### F-1 — MAJOR — before\n\n````markdown\nquoted:\n```\n````\n\n### F-2 — MAJOR — after the outer close\n')" \
+    coe_world nestfence 2026-09-29T11:00:00Z 2 0 || return 1
+  # findp2: `## Findings (pass 2)` is no findings section to the merge, so its MAJOR is not counted or keyed.
+  PASS_BODY="$(printf '\n## Shard: section 1\n\n## Findings (pass 2)\n\n### F-1 — MAJOR — not a findings section\n\n## Shard: section 2\n\n## Findings\n\n### F-2 — MAJOR — kept\n')" \
+    coe_world findp2 2026-09-29T11:00:00Z 1 0 || return 1
+  # unshrep: an UNSHARDED pass (no merge wrote it, no `## Shard:`) -- graph s316 requirements-adversarial-p2.md's
+  # shape, `### N1: MAJOR` under `## Findings introduced by the repair`. Before any `## Shard:` the section
+  # is matched as a prefix, so it keys on the pass basename, as it did before BL-958.
+  PASS_BODY="$(printf '\n## Findings introduced by the repair\n\n### N1: MAJOR — a finding the repair introduced\n')" \
+    coe_world unshrep 2026-09-29T11:00:00Z 1 0 || return 1
+  # keyless: the filed S322 heading, a MAJOR with no digit-bearing leading token, beside a keyed one.
+  PASS_BODY="$(printf '\n## Shard: section 1\n\n## Findings\n\n### F-1 — MAJOR — keyed\n\n## Shard: section 2\n\n## Findings\n\n### MAJOR — S322-1.1-AC1 wiring check\n')" \
+    coe_world keyless 2026-09-29T11:00:00Z 2 0 || return 1
+  # THE SHARD ORDINAL (BL-962): a merge over K>=10 shards writes `## Shard: part 01` while the shard file
+  # is 1.md and its repair names `source: 1.md#F-1` (graph s318 requirements-p1). One repair record each,
+  # linked from the notarized sha; ordk10 closes by the shard-file spelling (and cross-01.md for group 1),
+  # ordpad by the padded spelling, ordctl names 1.md#F-10 instead, which closes nothing.
+  for w in ordk10 ordctl ordpad; do
+    world "$w" || return 1
+    doc arch 1 > "$B/$w/$D/architecture.md"
+    pass "$w" architecture 1 architecture.md "$(sha_of x 1)" 3 0 EXIT_CONDITION_MET 2026-09-29T11:00:00Z \
+      "part 01|F-1|MAJOR" "part 10|F-1|MAJOR" "cross-part group 1 (1,10)|F-1|MAJOR"
+    doc arch 2 > "$B/$w/$D/architecture.md"
+  done
+  repair "$B/ordk10/$D/architecture-repair-p1.md" architecture.md "$(sha_of x 1)" "$(sha_of x 2)" 1.md#F-1 10.md#F-1 cross-01.md#F-1
+  repair "$B/ordctl/$D/architecture-repair-p1.md" architecture.md "$(sha_of x 1)" "$(sha_of x 2)" 1.md#F-10 10.md#F-1 cross-1.md#F-1
+  repair "$B/ordpad/$D/architecture-repair-p1.md" architecture.md "$(sha_of x 1)" "$(sha_of x 2)" 01.md#F-1 10.md#F-1 cross-1.md#F-1
 }
 sha_of() { doc arch "$2" > "$B/.v"; sha "$B/.v"; }
 if [ ! -f "$B/.built" ]; then
@@ -290,6 +332,19 @@ run partlink architecture; [ "$RC" -eq 1 ] && [[ "$OUT" == *"cross-1.md#F-1: rep
 run seriallink architecture; [ "$RC" -eq 1 ] && [[ "$OUT" == *"cross-1.md#F-1: repaired on no"* ]] && [[ "$OUT" != *"  1.md#F-1: repaired on no"* ]] || bad="$bad seriallink(rc=$RC)"
 run dupid coe;             [ "$RC" -eq 1 ] && [[ "$OUT" == *"1 of findings_major 2 carry no MAJOR"* ]] || bad="$bad dupid(rc=$RC)"
 run idpunct coe;           [ "$RC" -eq 0 ] && nj || bad="$bad idpunct(rc=$RC)"
+# The open keys J3 listed, as one sorted set: the EXACT keys, so a key derived wrong (or one more, or one
+# fewer) is a different set, not a still-present substring. FAIL (not PENDING) is the owed branch.
+ks() { printf '%s\n' "$OUT" | sed -n 's/^ *\([^ ][^ ]*\): repaired on no linked record.*/\1/p' | LC_ALL=C sort | tr '\n' ' '; }
+oj() { [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (J3 -- OPEN MAJOR)"* ]] && [[ "$OUT" != *"PENDING (J3"* ]]; }
+run nestfence coe;  oj && [ "$(ks)" = "1.md#F-1 1.md#F-2 " ] && [[ "$OUT" != *"carry no MAJOR"* ]] || bad="$bad nestfence(rc=$RC)"
+run findp2 coe;     oj && [ "$(ks)" = "2.md#F-2 " ] && [[ "$OUT" != *"carry no MAJOR"* ]] || bad="$bad findp2(rc=$RC)"
+run unshrep coe;    oj && [ "$(ks)" = "coe-adversarial-p1.md#N1 " ] && [[ "$OUT" != *"carry no MAJOR"* ]] || bad="$bad unshrep(rc=$RC)"
+run keyless coe;    oj && [ "$(ks)" = "1.md#F-1 " ] && [[ "$OUT" == *"1 of findings_major 2 carry no MAJOR"* ]] \
+  && [[ "$OUT" == *"no digit-bearing leading token"* ]] && [[ "$OUT" == *'`### F-<n> — MAJOR — <title>`'* ]] \
+  && [[ "$OUT" == *'in a sharded pass, under a `## ` section that is not exactly `## Findings`'* ]] || bad="$bad keyless(rc=$RC)"
+run ordk10 architecture;   [ "$RC" -eq 0 ] && nj || bad="$bad ordk10(rc=$RC)"
+run ordpad architecture;   [ "$RC" -eq 0 ] && nj || bad="$bad ordpad(rc=$RC)"
+run ordctl architecture;   oj && [ "$(ks)" = "1.md#F-1 " ] || bad="$bad ordctl(rc=$RC)"
 rcpt_filter
 [ -z "${RCPT_REPORT:-}" ] || echo "receipt worlds judged:$(echo $RAN)" >&2
 if [ -n "$bad" ]; then echo "receipt BL-814: NOT FIXED --$bad"; exit 1; fi

@@ -1,5 +1,11 @@
 # Measured by two agreeing armed runs through core/scripts/hermetic-run.sh (the judge's own J3 output), the counter armed
 # as .githooks/pre-push fxcount_arm arms it, on a clean detached worktree of the commit carrying the BL-918 cut, claim mutants and T2 reshape, the four further claim mutants, the DV1/DV6/DV7 assertions folded into DV10, and the other-root and worded-heading claim mutants (TR1, FG2, CM-other-root-not-refused). Re-measured for BL-946: the RR6a-RR6g cells and the eight DW mutants' deciding and twin runs, each an in-process merge whose seal phase starts content-seal.sh twice.
-2433 *
+# Re-measured for BL-958 (2433 -> 2590, content-seal 440 -> 462): the FI1-FIF, FIE, FIC and FID worlds (each a B3 world whose
+# rewritten shard 2 drives the recording hook) and the seven FI mutants' deciding and twin runs.
+# Re-measured when the finding-grammar binding (BB0-BB2, which started no bash) moved to core/fixtures/finding-grammar-binding.
+# Re-measured for BL-958's self-heading refusal (2590 -> 2616, content-seal 462 -> 464, the merge row unchanged): the
+# FIS and FISa arms (one B3 world, one end-to-end merge, eight --check-header runs) and the deciding and twin runs of
+# FI-m9 (FIS, FI1) and FI-m10 (FISa, FIS).
+2616 *
 29 core/scripts/merge-adversarial-shards.sh
-440 core/scripts/content-seal.sh
+464 core/scripts/content-seal.sh

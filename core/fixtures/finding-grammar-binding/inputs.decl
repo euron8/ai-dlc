@@ -1,0 +1,7 @@
+# BB1 binds the ID RULE and FENCE RULE of the merge's parse_shard, the join's src_ids and the validator's j3_keys.
+!core/scripts/merge-adversarial-shards.sh
+!core/scripts/join-remediator-shards.sh
+!core/scripts/validate-adversarial-convergence.sh
+# BB2 counts the fence-rule copies in EVERY core script against its enumeration, so a new copy in a new file fails:
+# the whole directory, or the sandbox holds only the files named above and the census narrows (its floor refuses that).
+!core/scripts/

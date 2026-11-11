@@ -138,6 +138,9 @@ for your findings, and (d) a shared context block. You MUST:
    **A finding is a `### ` heading, never a `## ` one**, whatever the seat-file example you have
    seen: the severity word in it is UPPERCASE (`### F-1 — MAJOR — …`), and the merge refuses a
    shard with an unfenced `## F-1`-style heading anywhere in it (FINDING GRAMMAR, same header).
+   On a convergence shard every finding heading opens with its own id, as `### F-<n>` does: the
+   merge refuses a keyless CRITICAL or MAJOR heading, a repeated id and a fence left open
+   (THE FINDING ID, same header).
    Write your shard to its result path only; a `<shard>.draft` beside it is ignored by the merge,
    but a shard always ends in its `seat-complete:` line, so it chunks at the result path and
    needs no draft.

@@ -1,0 +1,6 @@
+# Measured by two agreeing armed runs through core/scripts/hermetic-run.sh (the judge's own output), the counter armed as
+# .githooks/pre-push fxcount_arm arms it. The three bound scripts are read as text by BB1 and BB2, never run.
+1 *
+0 core/scripts/merge-adversarial-shards.sh
+0 core/scripts/join-remediator-shards.sh
+0 core/scripts/validate-adversarial-convergence.sh

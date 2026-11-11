@@ -331,7 +331,7 @@
 #   `PENDING-LEAD`, absent, or the template's `<EXIT_CONDITION_MET|...>` placeholder fails), on the
 #   elicitation axis no verdict and `skill: bmad-advanced-elicitation`; invoked_at per RE_ISO;
 #   skill, mode and lead_role each present and not an unfilled `<...>` placeholder; the
-#   CRITICAL/MAJOR heading counts; the `### ` reservation (FINDING GRAMMAR); and, when the shard
+#   CRITICAL/MAJOR heading counts; the `### ` reservation (FINDING GRAMMAR); THE FINDING ID; and, when the shard
 #   ends in `seat-complete: ... findings=<n>`, that <n> equals the findings parsed.
 #   MERGE-ONLY, never in --check-header: the derived dispatch id and the self-reported tool_use_id
 #   (they need the harness records), the same skill/mode/lead_role across shards, a unique id per
@@ -360,8 +360,9 @@
 #   The severity word is UPPERCASE: `sev()` is case-sensitive, so `### F-1 (major)` carries no
 #   severity.
 #   `### ` UNDER `## Findings` IS RESERVED FOR A FINDING. A `### ` heading there opens a finding
-#   ONLY if it carries one of CRITICAL / MAJOR / MINOR / NIT (the `sev()` rule above); the `F-<n>`
-#   prefix is not required (`### F-1 (MAJOR)` and `### MAJOR: x` each count 1). Any other unfenced
+#   ONLY if it carries one of CRITICAL / MAJOR / MINOR / NIT (the `sev()` rule above); on the
+#   convergence axis a CRITICAL or MAJOR one must also carry a FINDING ID (THE FINDING ID, below), so
+#   `### F-1 (MAJOR)` counts 1 and `### MAJOR: x` is REFUSED. Any other unfenced
 #   `### ` heading there -- `### Probes run (no finding)`, `### F-7 — INFO`, `### F-1 (major)` -- is
 #   REFUSED, never skipped and never counted, with a message naming the reserved form and the fix:
 #   move it under its own `## ` section, or demote it to `#### `. Fenced lines stay ignored. The
@@ -387,6 +388,52 @@
 #   wherever it sits -- under `## Findings`, after it, or in a shard with no `## Findings` section at
 #   all. That is the seat-file style of "Validation cycle" item 1, which ends the section here and
 #   would otherwise merge the shard as zero findings.
+#
+# THE FINDING ID (convergence axis only; `--axis elicitation` and `--elicitation` are unchanged)
+#   A finding's id is what the ID RULE derives from its heading: parse_shard carries that rule as a
+#   byte copy (indentation aside) of join-remediator-shards.sh `src_ids`, which J3's `j3_keys` in
+#   validate-adversarial-convergence.sh copies too, and finding-grammar-binding binds the three copies
+#   (the id derivation and the fence lines; sev() and the `## Findings` match between this merge and
+#   j3_keys) byte for byte, and counts every fence copy in core/scripts against an enumeration
+#   so a new copy fails. Bound, not single-sourced: loading the text from a sibling would add forks on the
+#   --check-header beat path, and a failed load would fail every beat. J3 closes a MAJOR only by a remediator `source: <shard>#<id>`
+#   token keyed on that id, counting keys DISTINCT. So four shapes are REFUSED, by check_keys, at the
+#   phase of the reservation above (the merge loop, --check-header and --dry-run alike):
+#     - a CRITICAL or MAJOR heading the rule derives no id from (`### MAJOR — wiring check`): no token
+#       can ever close it. The remedy names the keyed form `### F-<n> — MAJOR — <title>`. CRITICAL is
+#       held too, though no arm keys CRITICALs today: its repair is a `source:` token like any other.
+#       MINOR / NIT headings stay keyless-allowed (no arm keys them).
+#     - two headings of ANY severity in one shard deriving the SAME id (`### **F-1** — MAJOR` and
+#       `### F-1. — MINOR` both derive `F-1`): one token cannot close both, and a MINOR's token would
+#       close the MAJOR. The same id in two DIFFERENT shards is fine -- the key carries the shard file.
+#     - a fence still open at end of file: J3 reads the merged shards as one text, so it hides every
+#       later shard's findings from J3 while this merge, parsing each shard alone, counts them.
+#     - an unfenced `## Shard: ` line of the shard's own, outside its provenance block, that J3 maps to a shard file
+#       other than this shard's (`## Shard: story 3` in 1.md -> 3.md; `## Shard: notes` -> `?`). The merged pass
+#       carries the line verbatim and j3_keys re-points every later finding at it, so `3.md#F-1` is the key and
+#       `source: 1.md#F-1` never closes it. parse_shard prints one `S` line per such heading through the SHARD MAP,
+#       a byte copy of j3_keys' (finding-grammar-binding binds the two), and EVERY heading is checked, not only the
+#       first: a matching `## Shard: story 1` followed by `## Shard: notes` still re-points what follows. The
+#       shard's own file is its basename (`.draft` dropped) with the ordinal read as a number, as the merge keys
+#       it, so `## Shard: part 04` in 4.md or 04.md matches (BL-962). A heading that maps to its own file is
+#       accepted: it keys exactly as the heading the merge writes above it.
+#   Narrowing, and how the false-positive set was measured: the real parse_shard and check_reserved
+#   run over the reference consumer's committed convergence shards (`<artifact>-p<M>/` dirs at `main`
+#   and at `ai-dlc/carry-over/epic5-closeout`, `-repair-`/`-resolution-` dirs excluded: 3104 files over
+#   the two snapshots, which share most of them).
+#   Keyless CRITICAL/MAJOR headings: 141 at main (77 files, s315-s317) and 158 on the branch (adds
+#   s322) -- every one historical, and none re-merged by any gate: the convergence validator calls this
+#   merge only with --derived-set and --map, which run no header check, and --check-header runs only
+#   in live beats. Duplicate ids (all severities): 0. Fences open at end of file: 0. Controls in the same
+#   run: seeded keyless, duplicate and open-fence files each fired, the filed S322 heading among the
+#   keyless, and an impossible token read 0. Duplicates are therefore checked at every severity.
+#   `## Shard: ` self-headings, measured the same way (parse_shard, check_reserved and check_keys extracted from
+#   this file, over every `<x>-p<M>/*.md` outside `-elicitation`/`-repair-`/`-resolution-` dirs: 1498 files at
+#   main, 1609 on the branch): 4 and 5 headings, every one mapping to its own file (s315 stories-p3/cross.md:1
+#   `cross-story`, s322 requirements-p4/4.md:18 `part 4`, and three docs/reviews shards' own `part <n>`), 0 refused;
+#   the excluded dirs (706 and 812 files) carry none. Controls in the same run: `story 3` in 1.md and a matching
+#   heading followed by `## Shard: notes` each fired, `part 04` in 4.md and `cross-story` in cross.md did not,
+#   and an impossible token read 0.
 #
 # THE MERGE
 #   Sums findings_critical, findings_major, findings_minor, findings_critical_prior_scope and
@@ -460,6 +507,9 @@ phase_barrier() { [ "$DRY_N" -eq 0 ] || exit 2; }
 # One awk pass per shard. Emits:  B <starts> <ends>  /  F <key> <value>  /  X <line> <sev> <n-stories-lines> <stories>
 # /  Y <line of a wrong-axis citation, 0 none>  /  H <line of the first unfenced `## <ID>` heading outside the block, 0 none>
 # /  R <line of the first unfenced `### ` heading under `## Findings` with no severity word, 0 none>
+# /  K <line> <severity><TAB><id>, one per finding heading the id rule keys (none for a keyless one)
+# /  Z <line of the fence still open at end of file, 0 none>
+# /  S <line> <shard file>, one per unfenced `## Shard: ` line outside the block: the shard file J3 keys what follows under
 # Reads $CITE and $OTHER, which every caller sets first.
 parse_shard() {
   awk '
@@ -487,17 +537,39 @@ parse_shard() {
       }
       next
     }
+    !fence { fo = NR }
     fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
     !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
     fence { next }
+    # THE SHARD HEADING MAP, a byte copy (indentation aside) of the 4 lines j3_keys opens its `## Shard:` rule with
+    # (finding-grammar-binding binds the two): the shard file J3 keys every later finding under. No `next`: the
+    # `## ` rule below still ends the findings section. fnd is J3s and unused here.
+    /^## Shard: / { h = substr($0, 11); sh = "?"; fnd = 0
+      if (match(h, /^cross-(story|section|part) group [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = "cross-" (a[3] + 0) ".md" }
+      else if (h ~ /^cross-(story|section|part)[ \t]*$/) sh = "cross.md"
+      else if (match(h, /^(story|section|part) [0-9]+/)) { split(substr(h, RSTART, RLENGTH), a, " "); sh = (a[2] + 0) ".md" }
+      printf "S %d %s\n", NR, sh }
     /^## [A-Z]+-?[0-9]+([^A-Za-z0-9]|$)/ { if (hline == 0) hline = NR }
     /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
-    infind && /^### / { flush(); if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } fl = NR; fs = sev($0); fn = 0; fst = ""; next }
+    infind && /^### / { flush(); if (sev($0) == "NONE") { if (rline == 0) rline = NR; next } fl = NR; fs = sev($0); fn = 0; fst = ""; b = "K " NR " " fs }
+    # THE ID RULE, a byte copy (indentation aside) of join-remediator-shards.sh src_ids, which
+    # J3 (validate-adversarial-convergence.sh j3_keys) copies too: finding-grammar-binding binds the three.
+    # Only the finding heading just opened reaches it; its K line is `K <line> <severity>\t<id>`.
+    fl != NR && /^#/ { next }
+    /^##+[ \t]/ {
+      s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s)
+      sub(/^[Ff]inding[ \t]+/, "", s)
+      if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) {
+        t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
+        if (t ~ /[0-9]/) print b "\t" t
+      }
+    }
+    fl == NR { next }
     infind && fl > 0 && index($0, cite ":") == 1 {
       fn++; v = substr($0, length(cite) + 2); sub(/^[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next
     }
     infind && fl > 0 && other != "" && index($0, other ":") == 1 { if (wrong == 0) wrong = NR; next }
-    END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0; printf "H %d\n", hline + 0; printf "R %d\n", rline + 0 }
+    END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0; printf "H %d\n", hline + 0; printf "R %d\n", rline + 0; printf "Z %d\n", (fence ? fo : 0) }
   ' cite="$CITE" other="$OTHER" "$1"
 }
 
@@ -564,9 +636,40 @@ hdr_role() {
 }
 # check_reserved <parse file> <shard file>: no `### ` heading under `## Findings` without a severity
 #   word (FINDING GRAMMAR, the reservation).
+#   The same awk reads the K, Z and S lines for check_keys, which runs next (no fork of its own). The shard's OWN file,
+#   as J3 keys it, is its basename with a `.draft` dropped and the ordinal read as a number (`04.md` and `4.md` are one
+#   shard, `cross-01.md` is `cross-1.md`), the way the merge keys the file and J3 maps the heading the merge writes.
 check_reserved() {
-  local rl; rl="$(awk '$1 == "R" { print $2 }' "$1")"
+  local rl kr
+  # Captured first, its status read: an awk that failed would otherwise feed the read an empty line, and every
+  # check below would pass on nothing.
+  kr="$(awk -v sf="$2" 'BEGIN { own = sf; sub(/.*\//, "", own); sub(/\.draft$/, "", own)
+    if (own ~ /^[0-9]+\.md$/) own = (own + 0) ".md"; else if (own ~ /^cross-[0-9]+\.md$/) own = "cross-" (substr(own, 7) + 0) ".md" }
+  $1 == "R" { r = $2 }
+  $1 == "Z" { z = $2 }
+  $1 == "S" && $3 != own && sl == 0 { sl = $2; sm = $3 }
+  $1 == "K" { if ($3 == "CRITICAL" || $3 == "MAJOR") hk[$2] = 1; if (($4 in kl) && d == 0) { d = $2; da = kl[$4]; dk = $4 } else if (!($4 in kl)) kl[$4] = $2 }
+  $1 == "X" && ($3 == "CRITICAL" || $3 == "MAJOR") && !($2 in hk) && c1 == 0 { c1 = $2; c1s = $3 }
+  END { print r + 0, c1 + 0, (c1s == "" ? "-" : c1s), d + 0, da + 0, (dk == "" ? "-" : dk), z + 0, sl + 0, (sm == "" ? "-" : sm), (own == "" ? "-" : own) }' "$1")" \
+    || { HDR_MSG="$2: reading its parse $1 for the reservation and the finding ids failed"; return 1; }
+  read -r rl KEY_C1 KEY_C1S KEY_C2 KEY_C2A KEY_C2K KEY_Z KEY_SL KEY_SM KEY_OWN <<KREOF
+$kr
+KREOF
+  KEY_P="$1"
   [ "${rl:-0}" = "0" ] || { HDR_MSG="$2:$rl is a \`### \` heading under \`## Findings\` with no severity word; there a \`### \` heading is reserved for a finding and carries one of CRITICAL / MAJOR / MINOR / NIT, UPPERCASE (FINDING GRAMMAR in merge-adversarial-shards.sh) -- move it under its own \`## \` section, or demote it to \`#### \`"; return 1; }
+  return 0
+}
+# check_keys <parse file> <shard file> <axis>: on the CONVERGENCE axis only (FINDING GRAMMAR, THE FINDING
+#   ID), every CRITICAL / MAJOR heading carries an id, no id repeats in the shard, no fence is still
+#   open at end of file, and no `## Shard: ` line names another shard file than its own. Reads what
+#   check_reserved's awk read from the same parse file.
+check_keys() {
+  [ "${KEY_P:-}" = "$1" ] || { HDR_MSG="$2: check_keys ran before check_reserved read its parse"; return 1; }
+  [ "$3" = convergence ] || return 0
+  [ "${KEY_C1:-0}" = "0" ] || { HDR_MSG="$2:$KEY_C1 is a $KEY_C1S finding heading from which no finding id is derived (FINDING GRAMMAR, THE FINDING ID, in merge-adversarial-shards.sh) -- write it in the keyed form \`### F-<n> — $KEY_C1S — <title>\`: J3 (validate-adversarial-convergence.sh) closes a MAJOR only by a \`source: <shard>#<id>\` token keyed on that id, so a keyless heading can never be closed"; return 1; }
+  [ "${KEY_C2:-0}" = "0" ] || { HDR_MSG="$2:$KEY_C2 repeats finding id $KEY_C2K of the heading at line $KEY_C2A (FINDING GRAMMAR, THE FINDING ID, in merge-adversarial-shards.sh) -- give each finding its own id in the keyed form \`### F-<n> — MAJOR — <title>\`: J3 (validate-adversarial-convergence.sh) closes a MAJOR only by a \`source: <shard>#<id>\` token keyed on that id, and one token cannot close two findings"; return 1; }
+  [ "${KEY_Z:-0}" = "0" ] || { HDR_MSG="$2:$KEY_Z opens a fence that is still open at end of file (FINDING GRAMMAR in merge-adversarial-shards.sh) -- close it with a bare run of its own character: J3 (validate-adversarial-convergence.sh) reads the merged shards as one text, so an open fence hides every later shard's findings from it"; return 1; }
+  [ "${KEY_SL:-0}" = "0" ] || { HDR_MSG="$2:$KEY_SL is a \`## Shard: \` heading, which J3 (validate-adversarial-convergence.sh j3_keys) reads as shard file $KEY_SM, not this shard's own $KEY_OWN (FINDING GRAMMAR, THE FINDING ID, in merge-adversarial-shards.sh) -- remove it, or retitle it so it does not open \`## Shard: \`: the merge writes each shard's own \`## Shard:\` heading, and in the merged pass every finding after this line keys as $KEY_SM#<id>, which no \`source: $KEY_OWN#<id>\` token closes"; return 1; }
   return 0
 }
 # check_counts <parse file> <shard file>: the CRITICAL-heading count equals findings_critical and the
@@ -604,6 +707,7 @@ check_header() {
   for k in skill mode lead_role; do hdr_role "$1" "$2" "$k" "$3" || return 1; done
   check_counts "$1" "$2" || return 1
   check_reserved "$1" "$2" || return 1
+  check_keys "$1" "$2" "$3" || return 1
   if ends_in_marker "$2"; then check_marker "$1" "$2" "$(marker_n "$2")" || return 1; fi
   return 0
 }
@@ -1816,6 +1920,7 @@ for key in $ORDINALS $CROSS_KEYS; do
   # The reservation, after the count check (a severity-less heading whose counts disagree is
   # refused on the count, as before) and before the marker count.
   check_reserved "$P" "$sf" || collect "$HDR_MSG"
+  check_keys "$P" "$sf" "$AXIS" || collect "$HDR_MSG"
   scn="$(awk -F'\t' -v k="$key" '$1 == "Y" && $2 == k { print $3; exit }' "$T/sc")"
   check_marker "$P" "$sf" "$scn" || collect "$HDR_MSG"
 

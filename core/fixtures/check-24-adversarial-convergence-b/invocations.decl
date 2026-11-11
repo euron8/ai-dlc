@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-889 *
-113 core/scripts/validate-adversarial-convergence.sh
+# Re-measured (two agreeing counted runs) when receipt-bl814 gained nestfence, findp2 and keyless and J3-14/J3-15 were added (BL-958),
+# and again when it gained ordk10, ordpad and ordctl and J3-16 was added (BL-962),
+# and again when it gained unshrep and J3-17 was added, and unshrep joined J3-2's and J3-11's deciding worlds (BL-958, unsharded pass).
+954 *
+120 core/scripts/validate-adversarial-convergence.sh
