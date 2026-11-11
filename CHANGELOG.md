@@ -19,6 +19,23 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1052.0] - 2026-11-11
+
+### BL-819 PARTIAL: the dispatch guard refuses a lead brief with no `Deliverable:` line, so the In-Flight row is written by the hook rather than by hand
+
+L3's target is one `snapshot-update.sh` call per run, and it did not hold because the In-Flight row half of it did not hold. Measured on graph's s322 lead transcripts, 823 `snapshot-update.sh` tool calls ran in 550 runs. 348 of the 442 lead Agent calls carried no column-0 `Deliverable: <path>` line. `ai-dlc-inflight-row.sh` answered 260 of them with "in-flight row NOT written" and handed the lead a hand-written `--row-add`. The step text required the line, but the brief ending the lead copies said "ONE line".
+
+- `core/hooks/ai-dlc-dispatch-guard.sh` gains THE DELIVERABLE-LINE DENY. It judges a lead dispatch of a role with a readable team-role file. The dispatch is refused when the brief yields no deliverable path and no `--mark` mark_file, and the deny runs before the spawn-ledger append. Five cases are not judged: a nested spawn, `run_in_background: false`, no snapshot, a pre-era step file, and an `/ai-dlc-update` session (the I126 marker scan, now bound for this hook in `scripts/validate-enforcement-map.sh`). `deliverable_of` is a byte-identical copy of the hook's own parser.
+- `core/skills/ai-dlc/steps/_gate-procedures.md`: the brief ending is now TWO lines, `Deliverable: <file>` and then the `--mark` line. Item 3 says that the guard refuses a brief carrying neither.
+- `core/scripts/snapshot-update.sh` lists every op name when it refuses an unknown argument.
+- `core/fixtures/dispatch-model-guard` covers the deny with 19 cells and 9 mutants, each mutant with a MUTANT-MATRIX row, plus a byte-identity bind of the two `deliverable_of` copies. `invocations.decl` was re-measured at 692.
+
+Receipt: the replay covered the 442 real s322 lead Agent payloads in a scratch consumer world. The shipping guard refuses 265: all 260 "row NOT written" dispatches, plus 5 that never launched in the real run. It refuses 0 launched dispatches. The origin/main guard refuses none, and `cmp` asserts the two outputs differ. The projection only, not measured, needs a graph sprint after a pull: net about −23 to −71 lead calls on s322. L3 stays judged on BL-912 (standing dependency).
+
+Consumer cost: the guard is live from pull step 3b. Its era gate reads an installed `_gate-procedures.md` sentence that graph has carried since 0.1019.0. The TWO-line brief ending arrives with the reconcile merge. Until then a lead pays one re-sent dispatch per brief template that lacks the line.
+
+Ledger: BL-819 gains a Progress paragraph and stays PARTIAL. Filed 0, closed 0, so NET (closed − filed) = 0.
+
 ## [0.1051.0] - 2026-11-11
 
 ### BL-969 filed and closed
