@@ -47,8 +47,31 @@
 #       mode) over ONE part, so a remediator checks its part before `--mark` with the classifier the
 #       join will apply. Each finding is the join's own REFUSED line (a BADSIB is byte-identical);
 #       the missing-field remedy names the field and this re-check, never a re-dispatch. Exit 0
-#       with one `CHECK-PART:` line when the contract holds, 2 otherwise. No ledger, seal or seat
-#       file is read: disjointness and citations are the join's alone.
+#       with one `CHECK-PART:` line when every arm holds, 2 with `REFUSED:` lines otherwise, 4 on a
+#       HARNESS fault that is no verdict on the part (a self-probe that failed, a mktemp that failed:
+#       hdie), which wait-for-deliverable.sh --mark reads as one WARN and marks. Two
+#       more arms read the part's own tree, located from the PART PATH the way the join locates
+#       it (`<state>/planning-artifacts/s<N>/shards/<dir>/<part>.md`):
+#       PARTY SOURCES -- when <dir> names a party round by the join's own PARTY derivation (an
+#         artifact ending `-party` or `-party-serial`, or the subject's `requirements-party-repair`),
+#         src_check runs over the part against `<state>/party-mode/s<N>/*.md` and prints the join's
+#         own NOSOURCE / BADFORM / FOREIGN / NOFILE / UNRESOLVED line.
+#       LEDGER CITATION -- each `edit:` token, by the join's own extractor (part_cites, escalated
+#         entries dropped), that matches NO `artifact-write` row of
+#         `<state>/planning-artifacts/.artifact-writes.jsonl` at all (any agent, any ts, the
+#         coverage join's equal-or-`/`-suffix rule, in either direction) is refused with this
+#         mode's own text, which says the join refuses the same token. A deliberate SUPERSET of the
+#         join's UNWRITTEN: the join also filters by --artifact-path, --since and --until, which a
+#         part cannot know, so this arm never refuses a token the join accepts.
+#       A part outside that layout, an absent seat dir, an absent or unparseable ledger, or no jq
+#       prints one `NOTE:` line on stdout per skipped arm; a NOTE is never a refusal. With
+#       AI_DLC_CHECK_BYTES naming a readable file, the part's BYTES are read from it (a seal's
+#       snapshot; give it the part's basename, which the REFUSED lines name) and the tree is
+#       still located from <part.md>. No seal is read. JOIN-ONLY, because no single part decides
+#       them: disjointness (distinct writers), the window, DOUBLE, SPAN, AMBIG, UNCITED, the
+#       escalation closure (which the join reports and never refuses) and source coverage. The
+#       seat-complete belt IS decidable over one part (it reads only the seat files the part cites)
+#       and is not run here: it is outside this mode's scope today, never undecidable.
 #
 # READS   <state>/planning-artifacts/.artifact-writes.jsonl
 #         <state>/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/*.md   (placement rule P1)
@@ -336,6 +359,10 @@ GAP_LINES=""; GAP_N=0
 CHAIN_LINES=""; ESC_SUP=""; ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0
 refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
+# hdie: a HARNESS fault -- a self-probe that failed, a mktemp that failed -- is no verdict on the input.
+#   The join exits 2 on it as on any refusal; --check-part exits 4, the code wait-for-deliverable.sh --mark
+#   reads as "no verdict" (one WARN line, the part is marked), so a seat is never held on the engine's fault.
+hdie() { echo "REFUSED: $*" >&2; [ "${PARTMODE:-0}" != 1 ] || exit 4; exit 2; }
 # lane_name <round-1 record basename> -> "<lane artifact>\t<pass>", the ONE derivation of a lane
 # round's name (BL-716): `<x>-repair-p<M>.md` -> `<x>-serial` and `<M>`; `<x>-repair.md` (the
 # subject's party and elicitation records) -> `<x>-serial` and `1`. The lane join run as
@@ -355,7 +382,7 @@ lane_name() {
 
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
 SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; SRC_MORE=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
-PARTMODE=0; CHKPART=""
+PARTMODE=0; CHKPART=""; CP_PATH=""; CP_STATE=""
 # --- THE DISPOSITION KEY (BL-823). ONE predicate, read by every site that recognises the key: src_check,
 # contract_check (whose `dfull` BADDISP reads), checks_field's no-edit-line and repaired counts, the
 # --escalations entry count, part_cites and esc_cites. Each awk takes it as `-v DK="$DISP_KEY_ERE"` and
@@ -691,7 +718,7 @@ seat_row_scan() {
 seat_row_probe() {
   local o
   o="$(printf 'R\ttea\t1\t2\t150\nR\ttea\tcross\t2\t150\nR\ttea\t1\t3\t150\nC\tp-tea-01.md\nF\tp-tea-01.md\nF\tp-tea-02.md\nF\tp-tea-cross-1.md\nF\tp-tea.md\n' | seat_row_scan | tr '\t\n' ' |')"
-  [ "$o" = "ROUND p 150|MISS p-tea-02.md tea 2 2 p|" ] || die "the seat spawn-row join's self-probe failed: a seeded round read '${o}'; no verdict"
+  [ "$o" = "ROUND p 150|MISS p-tea-02.md tea 2 2 p|" ] || hdie "the seat spawn-row join's self-probe failed: a seeded round read '${o}'; no verdict"
 }
 # seat_row_check <seat dir> <cited basenames, one per line> -> refuse once per sharded seat file of a
 # cited step with no role-bound spawn-ledger row; SKIP (one line) under a rulebook before the shape.
@@ -798,7 +825,7 @@ SROEOF
 # seat carries refuses. Both directions, or a resolver keyed on the id alone reads as working.
 src_probe() {
   local d o
-  d="$(mktemp -d "${TMPDIR:-/tmp}/join-srcprobe.XXXXXX")" || die "mktemp failed; the source resolver cannot be probed"
+  d="$(mktemp -d "${TMPDIR:-/tmp}/join-srcprobe.XXXXXX")" || hdie "mktemp failed; the source resolver cannot be probed"
   mkdir -p "$d/seats" || die "the source probe could not stage"
   printf '# seat a\n\n## F-1 (major) sections: 1\n' > "$d/seats/a-1.md"
   printf '# seat b\n\n## Finding A1-2 (MAJOR) sections: 1\n' > "$d/seats/b-1.md"
@@ -806,9 +833,9 @@ src_probe() {
   printf '### F-1\n- disposition: repaired\n- source: b-1.md#F-1\n' > "$d/bad.md"
   BT="$(src_check -b "$d/seats" "$d/good.md" "$d/bad.md")"
   bt_pop; o="$BT_O"
-  [ "$o" = "N	1	1" ] || { rm -rf "$d"; die "the source resolver's self-probe failed: a resolving source read '${o}'; no verdict"; }
+  [ "$o" = "N	1	1" ] || { rm -rf "$d"; hdie "the source resolver's self-probe failed: a resolving source read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
-  case "$o" in UNRESOLVED*"b-1.md#F-1"*) ;; *) rm -rf "$d"; die "the source resolver's self-probe failed: an id only another seat carries read '${o}'; no verdict" ;; esac
+  case "$o" in UNRESOLVED*"b-1.md#F-1"*) ;; *) rm -rf "$d"; hdie "the source resolver's self-probe failed: an id only another seat carries read '${o}'; no verdict" ;; esac
   rm -rf "$d"
 }
 
@@ -1402,7 +1429,7 @@ NSEOF
 # on every record: repaired entries with a real edit, and never one with `edit: n/a`.
 contract_probe() {
   local d o
-  d="$(mktemp -d "${TMPDIR:-/tmp}/join-ctprobe.XXXXXX")" || die "mktemp failed; the entry contract cannot be probed"
+  d="$(mktemp -d "${TMPDIR:-/tmp}/join-ctprobe.XXXXXX")" || hdie "mktemp failed; the entry contract cannot be probed"
   printf '### F-1 — MAJOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: n/a (insertion)\n- claim now asserted: X. Y is outside this shard and is not required.\n' > "$d/bad.md"
   printf '### F-1 — MAJOR\n- source: x/s-1.md#F-1\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: n/a (insertion)\n- claim now asserted: X. Y is outside this shard; escalated below.\n\n### F-1 (remainder) — MAJOR\n- source: s-1.md#F-1\n- disposition: escalated\n- edit: n/a\n' > "$d/good.md"
   printf '### F-7 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:3\n- siblings: checked\n\n### F-8 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:4\n- **siblings:**\n\n```text\n$ grep -rn -F \047old\047 s1/stories/a.md\n$ grep -c -F \047new words\047 s1/stories/a.md\n1\n```\n\n### F-9 — MINOR\n- disposition: repaired\n- edit: s1/stories/a.md:5\n- siblings:\n\n```derived\n$ grep -rn -F \047old\047 s1/stories/a.md\n$ grep -c -F \047new\047 s1/stories/a.md\n1\n```\n' > "$d/forms.md"
@@ -1429,39 +1456,39 @@ contract_probe() {
   [ "$o" = "BADSIB	forms.md	F-7 — MINOR
 CTL	forms.md	F-8 — MINOR	s1/stories/a.md	new words
 BADSIB	forms.md	F-9 — MINOR
-N	3	3	3	0	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings forms read '${o}'; no verdict"; }
+N	3	3	3	0	3" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: the siblings forms read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
-  case "$o" in SETASIDE*"F-1 — MAJOR"*) ;; *) rm -rf "$d"; die "the entry contract's self-probe failed: a set-aside read '${o}'; no verdict" ;; esac
+  case "$o" in SETASIDE*"F-1 — MAJOR"*) ;; *) rm -rf "$d"; hdie "the entry contract's self-probe failed: a set-aside read '${o}'; no verdict" ;; esac
   bt_pop; o="$BT_O"
   [ "$o" = "E	good.md	F-1 (remainder) — MAJOR
-N	2	1	1	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a handed-off split pair read '${o}'; no verdict"; }
+N	2	1	1	0	1" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: a handed-off split pair read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "NOSIB	sib.md	F-2 — MINOR
-N	2	1	0	0	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the siblings reader read '${o}' in parts mode; no verdict"; }
+N	2	1	0	0	1" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: the siblings reader read '${o}' in parts mode; no verdict"; }
   bt_pop; o="$BT_O"
-  [ "$o" = "N	2	1	0	1	1" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a pre-rule --sources record read '${o}'; no verdict"; }
+  [ "$o" = "N	2	1	0	1	1" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: a pre-rule --sources record read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "NOSIB	era.md	F-5 — MAJOR
-N	3	3	1	1	3" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the --sources positional era read '${o}'; no verdict"; }
+N	3	3	1	1	3" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: the --sources positional era read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "X	01.md	F-1 — MAJOR
 E	01.md	F-6 — MAJOR
 E	02.md	F-1 — MAJOR
-N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: escalated-entry closure read '${o}'; no verdict"; }
+N	6	0	0	0	0" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: escalated-entry closure read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "E	01.md	F-1 — MAJOR
 E	01.md	F-6 — MAJOR
 E	02.md	F-1 — MAJOR
-N	6	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: parts mode closed an escalated entry ('${o}'); no verdict"; }
+N	6	0	0	0	0" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: parts mode closed an escalated entry ('${o}'); no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "NODISP	vocab.md	F-1
 BADDISP	vocab.md	F-2	done
 RULING	vocab.md	F-4	2026-01-01T00:00:00Z
-N	3	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the disposition key and vocabulary read '${o}'; no verdict"; }
+N	3	0	0	0	0" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: the disposition key and vocabulary read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "GAPFILL	gap.md	F-4
 E	gap.md	F-5
-N	2	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the gap-fill tripwire read '${o}'; no verdict"; }
+N	2	0	0	0	0" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: the gap-fill tripwire read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "DANGLING	sup.md	S-2	01.md S-3
 CHAIN	01.md S-1	01.md F-1
@@ -1470,13 +1497,13 @@ E	01.md	F-1
 X	01.md	S-1
 E	01.md	S-2
 E	01.md	S-3
-N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: the supersedes chain read '${o}'; no verdict"; }
+N	5	0	0	0	0" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: the supersedes chain read '${o}'; no verdict"; }
   bt_pop; o="$BT_O"
   [ "$o" = "E	01.md	F-1
 X	01.md	S-1
 E	01.md	S-2
 E	01.md	S-3
-N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a record with no supersedes line read '${o}'; no verdict"; }
+N	5	0	0	0	0" ] || { rm -rf "$d"; hdie "the entry contract's self-probe failed: a record with no supersedes line read '${o}'; no verdict"; }
   # The gap-fill location (BL-556): an edit line under a section citing D-5 names the token; the same file
   # two lines on, in the ADJACENT section citing D-7 only in a fence and D-50x in prose, names none -- a
   # whole-file scan, an unfenced scan or an unbounded token would each read a decision there.
@@ -1484,7 +1511,7 @@ N	5	0	0	0	0" ] || { rm -rf "$d"; die "the entry contract's self-probe failed: a 
   BT="$(gap_section -b "$d/sec.md" 5 1 999 "$d/sec.md" 8 1 13 "$d/sec.md" 8 1 999)"; bt_cat 3; o="$BT_O"
   [ "$o" = "A	D-5
 B	
-B	D-9" ] || { rm -rf "$d"; die "the gap-fill location self-probe failed: read '${o}'; no verdict"; }
+B	D-9" ] || { rm -rf "$d"; hdie "the gap-fill location self-probe failed: read '${o}'; no verdict"; }
   # The two check fields (BL-557): a part with a repaired entry and neither field fires twice; a part
   # holding only an escalated entry is exempt; a record with neither field is outside the era; a
   # record that opened it and wrote `not replayed` fires once.
@@ -1530,10 +1557,10 @@ B	D-9" ] || { rm -rf "$d"; die "the gap-fill location self-probe failed: read '$
   bt_cat 4; o="$BT_O"
   [ "$o" = "CHK	nochk.md	no advisor: line
 CHK	nochk.md	no derivations: line
-CHK	notrep.md	derivations: not replayed" ] || { rm -rf "$d"; die "the check-fields self-probe failed: read '${o}'; no verdict"; }
+CHK	notrep.md	derivations: not replayed" ] || { rm -rf "$d"; hdie "the check-fields self-probe failed: read '${o}'; no verdict"; }
   bt_cat 3; o="$BT_O"
   [ "$o" = "CHK	mixed.md	no derivations: line
-CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok" ] || { rm -rf "$d"; die "the check-fields self-probe failed on prose and trailers: read '${o}'; no verdict"; }
+CHK	mixed.md	a value outside the grammar: derivations: the validator reports ok" ] || { rm -rf "$d"; hdie "the check-fields self-probe failed on prose and trailers: read '${o}'; no verdict"; }
   bt_cat 8; o="$BT_O"
   [ "$o" = "CHK	ser.md	no advisor: line (the block closed at line 27 by 'repair-complete: serial 2')
 CHK	ser.md	no derivations: line (the block closed at line 27 by 'repair-complete: serial 2')
@@ -1543,7 +1570,7 @@ CHK	lowp.md	no advisor: line (the block closed at line 14 by 'repair-complete: s
 CHK	lowp.md	no derivations: line (the block closed at line 14 by 'repair-complete: serial 1')
 CHK	ktitle.md	no advisor: line (the block closed at line 19 by 'repair-complete: serial 1')
 CHK	ktitle.md	no derivations: line (the block closed at line 19 by 'repair-complete: serial 1')" ] \
-    || { rm -rf "$d"; die "the check-fields self-probe failed on the serial blocks: read '${o}'; no verdict"; }
+    || { rm -rf "$d"; hdie "the check-fields self-probe failed on the serial blocks: read '${o}'; no verdict"; }
   rm -rf "$d"
 }
 # checks_field <0 parts | 1 record> <file> -> one "CHK\t<file>\t<what>" line per defect (BL-557).
@@ -1765,16 +1792,16 @@ spec_memlog_of_sprint() {
 # `(event) Render` line WITHOUT the phrase, then a decision, skips rather than reading as rendered.
 spec_render_probe() {
   local d o
-  d="$(mktemp -d "${TMPDIR:-/tmp}/join-specprobe.XXXXXX")" || die "mktemp failed; the SPEC render arm cannot be probed"
+  d="$(mktemp -d "${TMPDIR:-/tmp}/join-specprobe.XXXXXX")" || hdie "mktemp failed; the SPEC render arm cannot be probed"
   printf -- '- (decision) a\n- (event) Render p1: %s a\n- (decision by pm) b\n' "$SPEC_RENDER_PHRASE" > "$d/stale.md"
   printf -- '- (decision) a\n- (event) Render p1: %s a\n' "$SPEC_RENDER_PHRASE" > "$d/fresh.md"
   printf -- '- (decision) a\n- (decision) b\n' > "$d/none.md"
   printf -- '- (event) Render (fold): ran no renderer; applied to SPEC.md by hand\n- (decision) a\n' > "$d/hand.md"
   BT="$(spec_render_scan -b "$d/stale.md" "$d/fresh.md" "$d/none.md" "$d/hand.md")"
-  bt_pop; o="$BT_O"; [ "$o" = "2 1 3" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a decision after a render read '${o}'; no verdict"; }
-  bt_pop; o="$BT_O"; [ "$o" = "2 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a render after its decision read '${o}'; no verdict"; }
-  bt_pop; o="$BT_O"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: a memlog with no render read '${o}'; no verdict"; }
-  bt_pop; o="$BT_O"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; die "the SPEC render arm's self-probe failed: an unphrased Render line read '${o}', acquitting a hand edit; no verdict"; }
+  bt_pop; o="$BT_O"; [ "$o" = "2 1 3" ] || { rm -rf "$d"; hdie "the SPEC render arm's self-probe failed: a decision after a render read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"; [ "$o" = "2 0 0" ] || { rm -rf "$d"; hdie "the SPEC render arm's self-probe failed: a render after its decision read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; hdie "the SPEC render arm's self-probe failed: a memlog with no render read '${o}'; no verdict"; }
+  bt_pop; o="$BT_O"; [ "$o" = "0 0 0" ] || { rm -rf "$d"; hdie "the SPEC render arm's self-probe failed: an unphrased Render line read '${o}', acquitting a hand edit; no verdict"; }
   rm -rf "$d"
 }
 # record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
@@ -1868,6 +1895,29 @@ if [ "$PARTMODE" = 1 ]; then
     || die "--check-part checks one part file and takes no other flag"
   [ -n "$CHKPART" ] && [ -f "$CHKPART" ] || die "--check-part needs an existing part file (got '${CHKPART}')"
   SPRINT=0
+  # The part's tree, from its PATH: `<state>/planning-artifacts/s<N>/shards/<dir>/<part>.md`, the
+  # layout the join's SHARD_DIR spells. ARTIFACT is the join's own `<artifact>-repair-p<M>` stem, so
+  # the PARTY case below reads it unchanged; the subject's party dir is fixed by --pass party.
+  CP_PATH="$CHKPART"
+  _cpd="$(dirname "$CP_PATH")"; _cps="$(dirname "$_cpd")"; _cpn="$(dirname "$_cps")"; _cpp="$(dirname "$_cpn")"
+  _cpk="${_cpn##*/}"; _cpk="${_cpk#s}"
+  if [ "${_cps##*/}" = shards ] && [ "${_cpp##*/}" = planning-artifacts ] && [ "${_cpn##*/}" = "s${_cpk}" ]; then
+    case "$_cpk" in
+      ''|*[!0-9]*) ;;
+      *) CP_STATE="$(cd "$(dirname "$_cpp")" 2>/dev/null && pwd)" || CP_STATE=""
+         if [ -n "$CP_STATE" ]; then
+           SPRINT="$_cpk"
+           case "${_cpd##*/}" in
+             *-repair-p[0-9]*) ARTIFACT="${_cpd##*/}"; ARTIFACT="${ARTIFACT%-repair-p*}" ;;
+             requirements-party-repair) PARTY=1 ;;
+           esac
+         fi ;;
+    esac
+  fi
+  if [ -n "${AI_DLC_CHECK_BYTES:-}" ]; then
+    [ -f "$AI_DLC_CHECK_BYTES" ] && [ -r "$AI_DLC_CHECK_BYTES" ] || die "AI_DLC_CHECK_BYTES names no readable file (got '${AI_DLC_CHECK_BYTES}')"
+    CHKPART="$AI_DLC_CHECK_BYTES"
+  fi
 fi
 if [ "$SRCMODE" != 0 ] && [ "$AGENTMODE" = 0 ]; then
   [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
@@ -2007,6 +2057,8 @@ JR_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
 _STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
+# --check-part: the state dir is the one the part path sits in, so every path below derives from it.
+[ -n "$CP_STATE" ] && _STATE_DIR="$CP_STATE"
 case "$_STATE_DIR" in /*) STATE="$_STATE_DIR" ;; *) STATE="${JR_ROOT}/${_STATE_DIR}" ;; esac
 STATE="${STATE%/}"
 # The state dir's PARENT, logical and physical, slash-terminated: an absolute citation under it
@@ -2116,15 +2168,93 @@ src_kind() {  # <record> -> "PARTY", "PART" or "NONE" from its source: tokens, o
     }
     END { print (ns ? "PARTY" : (np ? "PART" : "NONE")) }' "$1"
 }
+# part_cites <part> -> the ledger-spelled tokens its `edit:` lines cite, one per line. Defined here,
+# above the --check-part exit, because that mode's ledger-citation arm calls it too.
+# A run of slashes in a cited token is squeezed to one before the strip below: a TMPDIR ending in
+# `/` spells every path under it `T//x`, while STATE_PARENT comes from `pwd`, which collapses it,
+# so the literal prefix strip never matched and an absolute citation under the root refused.
+# AN ESCALATED ENTRY CITES NOTHING. Its `edit:` names the file the fix lies in (remediator.md pins
+# that form), which is the serial remediator's to edit after the join, never this shard's: counted
+# as a citation it read as a second shard claiming a sibling's file (DOUBLE) or as a claimed edit
+# with no write (UNWRITTEN). So tokens are buffered per heading and dropped when the entry under it
+# is dispositioned escalated. Measured over graph's s317/s318 shard parts: 15 of 66 escalated
+# entries carry a path on `edit:`.
+part_cites() {
+  local _toks _t
+  _toks="$(awk -v DK="$DISP_KEY_ERE" '
+    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }
+    /^#+[ \t]/ { emit(); next }
+    $0 ~ DK {
+      disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
+    /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
+      line = $0; sub(/^[^:]*:/, "", line)
+      while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
+        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    END { emit() }' "$1" | sort -u)"
+  while IFS= read -r _t; do
+    [ -n "$_t" ] || continue
+    _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
+    # Subject mode: a part may cite the root-relative spelling `.subject` records; the ledger spells
+    # the state dir by its basename.
+    [ "$SUBJMODE" = 1 ] && case "$_t" in "${SREL}"/*) _t="${STATE_NAME}/${_t#"${SREL}"/}" ;; esac
+    printf '%s\n' "$_t"
+  done <<PCEOF
+$_toks
+PCEOF
+}
 # --check-part <part>: the join's own entry contract, parts mode, over ONE part before its remediator
 # returns -- the same probe, classifier and refusal text the join applies, so a BADSIB or NOSIB the join
-# would refuse is refused here first, while the remediator can still fix it. No ledger, seal or seat.
+# would refuse is refused here first, while the remediator can still fix it. Two more arms read the
+# part's own tree (the header's --check-part paragraph): its party sources, and its edit: tokens
+# against the write ledger. No seal. A skipped arm prints one NOTE: line and never refuses.
 if [ "$PARTMODE" = 1 ]; then
   contract_probe
   contract_refusals 0 "$(contract_check 0 "$CHKPART")"
+# CHECK-PART-MARK v1
+  _cpb="${CP_PATH##*/}"
+  if [ "$PARTY" = 1 ]; then
+    if [ -d "$SEAT_DIR" ]; then
+      src_probe
+      src_refusals "$(src_check "$SEAT_DIR" "$CHKPART")"
+    else
+      echo "NOTE: ${_cpb} is a party repair part but ${SEAT_DIR} does not exist; its sources were not resolved (the join refuses a party repair with no seat files)"
+    fi
+  fi
+  if [ -z "$CP_STATE" ]; then
+    echo "NOTE: ${CP_PATH} is not under <state>/planning-artifacts/s<N>/shards/<dir>/; the party-source and ledger-citation arms were not run"
+  elif [ ! -f "$LEDGER" ]; then
+    echo "NOTE: no write ledger at ${LEDGER}; the edit: citations of ${_cpb} were not resolved"
+  elif ! command -v jq >/dev/null 2>&1; then
+    echo "NOTE: jq is not on PATH; the edit: citations of ${_cpb} were not resolved against ${LEDGER}"
+  else
+    _cpt="$(part_cites "$CHKPART")"
+    if [ -n "$_cpt" ]; then
+      if _cpl="$(jq -rn '[inputs | select(type == "object") | select(.kind == "artifact-write") | select((.path | type) == "string") | .path] | unique | .[]' "$LEDGER" 2>/dev/null)"; then
+        # The coverage join's rule (equal, or the token a `/`-suffix of the path), and its mirror (the
+        # path a `/`-suffix of the token), so a spelling the join converts first is never refused here.
+        _cpu="$({ printf '%s\n' "$_cpl" | sed '/^$/d; s/^/W\t/'; printf '%s\n' "$_cpt" | sed '/^$/d; s/^/C\t/'; } | awk -F'\t' '
+          $1 == "W" { P[++np] = $2; next }
+          { t = $2; for (i = 1; i <= np; i++) { p = P[i]
+              if (p == t || (length(p) > length(t) && substr(p, length(p) - length(t)) == "/" t) \
+                 || (length(t) > length(p) && substr(t, length(t) - length(p)) == "/" p)) next }
+            print t }')"
+        while IFS= read -r _t; do
+          [ -n "$_t" ] || continue
+          refuse "${_cpb} cites ${_t} on an edit: line, and no row of the write ledger ${LEDGER} names that file, by any agent at any time; the join refuses the same token as UNWRITTEN. Every <name>.md/.json/.jsonl/.yaml/.yml/.txt/.csv token on an edit: line is read as a file this part edited, a note's prose included: cite only files written with Edit, Write or MultiEdit, and move any other file name off the edit: line"
+        done <<CPUEOF
+$_cpu
+CPUEOF
+      else
+        echo "NOTE: the write ledger ${LEDGER} does not parse as JSON lines; the edit: citations of ${_cpb} were not resolved (the join refuses that ledger)"
+      fi
+    fi
+  fi
   printf '%s' "$GAP_LINES"
   [ "$refuse_n" -eq 0 ] || exit 2
-  echo "CHECK-PART: ${CHKPART} -- the join's entry contract holds; the check fields (advisor:, derivations:, derivation:) and the disposition/edit repair fields were NOT checked"
+  echo "CHECK-PART: ${CP_PATH} -- the join's entry contract holds; the check fields (advisor:, derivations:, derivation:) and the disposition/edit repair fields were NOT checked"
   exit 0
 fi
 if [ "$SRCMODE" != 0 ]; then
@@ -2305,7 +2435,7 @@ ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg
 if [ "$SUBJMODE" = 1 ]; then
   # Keep the subject's file set; name every in-place write to a sectioned or part-less subject
   # file; drop everything else (the parts themselves, other agents' unrelated writes).
-  _subjf="$(mktemp "${TMPDIR:-/tmp}/join-subject.XXXXXX")" || die "mktemp failed"
+  _subjf="$(mktemp "${TMPDIR:-/tmp}/join-subject.XXXXXX")" || hdie "mktemp failed"
   { printf '%s\n' "$SUBJ_SET" | sed 's/^/K\t/'
     printf '%s\n' "$SUBJ_SECTIONED" | sed '/^$/d; s/^/S\t/'
     printf '%s\n' "$SUBJ_OUTSIDE" | sed '/^$/d; s/^/O\t/'; } > "$_subjf"
@@ -2329,42 +2459,6 @@ BADEOF
   fi
 fi
 
-# part_cites <part> -> the ledger-spelled tokens its `edit:` lines cite, one per line.
-# A run of slashes in a cited token is squeezed to one before the strip below: a TMPDIR ending in
-# `/` spells every path under it `T//x`, while STATE_PARENT comes from `pwd`, which collapses it,
-# so the literal prefix strip never matched and an absolute citation under the root refused.
-# AN ESCALATED ENTRY CITES NOTHING. Its `edit:` names the file the fix lies in (remediator.md pins
-# that form), which is the serial remediator's to edit after the join, never this shard's: counted
-# as a citation it read as a second shard claiming a sibling's file (DOUBLE) or as a claimed edit
-# with no write (UNWRITTEN). So tokens are buffered per heading and dropped when the entry under it
-# is dispositioned escalated. Measured over graph's s317/s318 shard parts: 15 of 66 escalated
-# entries carry a path on `edit:`.
-part_cites() {
-  local _toks _t
-  _toks="$(awk -v DK="$DISP_KEY_ERE" '
-    function emit(   i) { if (disp !~ /^escalat/) for (i = 1; i <= nt; i++) print tk[i]; nt = 0; disp = "" }
-    /^#+[ \t]/ { emit(); next }
-    $0 ~ DK {
-      disp = tolower($0); sub(/^[^:]*:/, "", disp); gsub(/[*_`]/, "", disp); sub(/^[ \t]+/, "", disp); next }
-    /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
-      line = $0; sub(/^[^:]*:/, "", line)
-      while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
-        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); tk[++nt] = tok
-        line = substr(line, RSTART + RLENGTH)
-      }
-    }
-    END { emit() }' "$1" | sort -u)"
-  while IFS= read -r _t; do
-    [ -n "$_t" ] || continue
-    _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
-    # Subject mode: a part may cite the root-relative spelling `.subject` records; the ledger spells
-    # the state dir by its basename.
-    [ "$SUBJMODE" = 1 ] && case "$_t" in "${SREL}"/*) _t="${STATE_NAME}/${_t#"${SREL}"/}" ;; esac
-    printf '%s\n' "$_t"
-  done <<PCEOF
-$_toks
-PCEOF
-}
 # resolve_cites <ledger paths> <tokens> -> the written file each token names (equal, or a `/`-suffix
 # of exactly one), the coverage join's own rule below; a token naming none or several prints nothing.
 resolve_cites() {

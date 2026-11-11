@@ -13,6 +13,8 @@ core/scripts/validate-adversarial-convergence.sh
 core/scripts/validate-provenance-block.sh
 core/scripts/validate-steering-budget.sh
 core/scripts/validate-artifact-budget.sh
+# The real producer of a sealed `sha=` marker: the CS1 arm seals the reference sibling with its --mark (BL-974).
+core/scripts/wait-for-deliverable.sh
 core/schemas/provenance-block.json
 # The shared fixture libs this fixture sources (run.sh:2 preamble.sh, run.sh:118-121 matrix.sh and mutant.sh; lib.sh
 # sources none), file by file: the whole directory keyed every push that touched an unrelated lib file.

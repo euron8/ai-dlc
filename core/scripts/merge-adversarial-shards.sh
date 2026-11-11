@@ -26,6 +26,13 @@
 #                                                   names: the merge's placement and name lines on
 #                                                   the path string, nothing read; one OK / SKIP /
 #                                                   REFUSED line per dir (check_shard_dirs, below)
+#   merge-adversarial-shards.sh --check-shard <shard-file> --findings <n>
+#                                                   ONE shard at its seal, by the merge's own per-shard
+#                                                   checks plus agreement with its SEALED siblings (THE
+#                                                   SHARD CHECK, below): exit 0 `SHARD-OK`; 2 one
+#                                                   `REFUSED: <reason>` line per refusal; 3 `SKIP: <reason>`;
+#                                                   4 a harness fault, no verdict (the shard was never
+#                                                   parsed; the mark WARNs and proceeds); 64 bad arguments.
 #   Every merge mode (not --map) also reads the three harness records named under THE DISPATCH ID,
 #   and refuses a shard set they do not cover: a caller seeding shards by hand seeds the records too.
 #
@@ -342,6 +349,54 @@
 #   (they need the harness records), the same skill/mode/lead_role across shards, a unique id per
 #   shard, the mode-dependent artifact/artifact_sha checks (they need the map, the stories or the
 #   document), citations against the ordinal set, and the seat-complete set rule.
+#
+# THE SHARD CHECK (--check-shard <shard-file> --findings <n>; BL-974). wait-for-deliverable.sh --mark runs it
+#   on the snapshot it is about to seal, so a shard the merge would refuse is fixed while its adversary lives,
+#   never by a resume after the merge. It reads the shard's bytes from $AI_DLC_CHECK_BYTES when that names a
+#   readable file (the mark's snapshot plus its provisional marker), else from <shard-file>; everything else
+#   is derived from <shard-file>'s PATH as a merge derives it from <shard-dir> (merge_locate, the
+#   `<artifact>-p<M>` parse), and every message names <shard-file>, never the bytes file.
+#     mode      `requirements-elicitation` -> subject mode, elicitation axis; `requirements-p<M>` -> subject
+#               mode (the manifest s<N>/requirements-subject.md, its four stems); files mode (its ordinal
+#               map) only when s<N>/ holds a directory entry spelled EXACTLY <artifact>, compared byte for
+#               byte against the listing (never `[ -d ]` alone, which on a case-insensitive filesystem reads
+#               s<N>/architecture-spine/ for ARCHITECTURE-SPINE), holding two or more story files; otherwise
+#               document mode, whose document is the shard's own `artifact:` and must partition
+#               (partition-document.sh --map exits 0). Citation axis as the merge: `stories:` in files
+#               mode, `sections:` otherwise.
+#     SKIP      exit 3, never a refusal, for what is dir-level or not this shard's to decide: a placement
+#               merge_locate refuses, a dir name that is not `<artifact>-p<M>`, the series stem
+#               (`<x>-adversarial-p<M>`), a repair or resolution series (the convergence validator's
+#               exclusions), no subject resolvable (no manifest; fewer than two stories; no partitioning
+#               document), a file that is not a shard name, a `.draft`, an ordinal outside 1..K; and a
+#               file carrying NO provenance block at all (0 openings, 0 closings) in a dir that resolves no
+#               mode, a repair-style part (stories-fences-p<M>, <artifact>-amend-p<M>). A half block in such
+#               a dir (one opening or one closing without the other) still refuses.
+#   THE SELF-ONLY CHECKS RUN BEFORE ANY SUBJECT IS DERIVED, so a SKIP for the subject never hides them
+#   (only what holds no adversary shard -- a draft, a non-shard name, a placement merge_locate refuses, a
+#   dir that is not `<artifact>-p<M>`, the series stem, a repair or resolution series -- SKIPs first): every one
+#   below except check_shard_artifact. A refusal among them is REFUSED (exit 2); only when they all pass
+#   does an unresolvable subject SKIP (exit 3), and the SKIP line names the checks that ran. The
+#   citation token is read off the path; where no merge mode names it, the cite-line check is not run.
+#   It runs, on SELF ONLY: check_header, unchanged (a provenance block-count failure prints that one line
+#   and stops, as it skips the rest of the shard in the merge loop); the marker count against --findings
+#   <n> when the bytes end in no marker (check_marker); check_cite_lines for every finding; and, in files
+#   and subject mode, check_shard_artifact. check_cite_lines and check_shard_artifact are the merge loop's
+#   own lines, moved into functions the loop calls at the sites they stood, so one source decides both.
+#   NEW CODE, not a moved merge line: skill, mode and lead_role agreement against the SEALED siblings in
+#   the dir, self and drafts excluded. A sibling is sealed when its last non-blank line is a
+#   `seat-complete: ` marker carrying `sha=` and content-seal.sh --admit-marker admits it (the merge's own
+#   marker admission). Self is compared with the merge loop's raw string test; whichever shard sealed first
+#   sets the spelling, in both directions (`requirements` against a sealed `requirements.md`, and the
+#   reverse). Sealed siblings disagreeing among themselves: `WARN:` on stderr, pass. None sealed: pass. The
+#   merge does not normalise lead_role; what it accepts is unchanged.
+#   MERGE-ONLY, never at --check-shard, each with the count of resumes it caused in the BL-974 population
+#   (graph s321-s322 subagent transcripts, 23 in scope): the INVOKED_AT BOUND 1 (it needs the credited
+#   dispatch's spawn rows); the derived dispatch id, the self-reported tool_use_id and the unique id 0 (the
+#   probe row lands at SubagentStop, after the mark); the content-seal, marker-admission and last-tool-row
+#   phases 0; the shard-set walk and missing shards 0; the cross OWNER RULE 0; the seat-complete set rule
+#   0; the summed verdict 0; an existing output that differs 0; and in document mode the artifact /
+#   artifact_sha checks 0 (the document is a merge's caller argument).
 #   COMMENTS ARE STRIPPED, per `provenance-block.json` `parser.comments`, spelled as
 #   validate-provenance-block.sh spells it (`\s+#.*$`): parse_shard cuts `[ \t]+#.*$` from the RAW
 #   value, before the leading trim, so `findings_major: 2 # x` reads 2, `verdict: EXIT_CONDITION_MET # x`
@@ -497,7 +552,7 @@ export LC_ALL=C
 # The separator class this merge's own pair parser READS (validate-adversarial-convergence.sh's).
 PAIR_SEP='[=@]'
 
-refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
+refuse() { [ "${CS_SKIP:-0}" != 1 ] || { printf 'SKIP: %s%s\n' "$*" "${CS_RAN:+ -- the self-only checks ran and passed ($CS_RAN); only the subject-dependent artifact/artifact_sha check did not run}"; exit 3; }; printf 'REFUSED: %s\n' "$*"; exit 2; }
 # collect: a refusal inside a phase that --dry-run walks to its end. Without --dry-run it IS refuse,
 # so every merge without the flag exits at its first refusal, as before.
 DRY=0; DRY_N=0
@@ -715,6 +770,302 @@ check_header() {
   check_keys "$1" "$2" "$3" || return 1
   if ends_in_marker "$2"; then check_marker "$1" "$2" "$(marker_n "$2")" || return 1; fi
   return 0
+}
+
+# ---- THE PER-SHARD BODY CHECKS the merge loop and --check-shard share --------------------------
+# Each is the merge loop's own lines, moved: the loop calls it at the site those lines stood, and
+# --check-shard calls the same function. They set HDR_MSG and return 1; none uses `continue`, so a
+# caller outside the loop is never affected (bash 3.2 lets a function's `continue` reach its caller).
+# Their scratch names (sha, nt, tok, st, sv, want, art, xa, sb, disk) stay globals, as in the loop.
+sha_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else sha256sum "$1" | cut -d' ' -f1; fi
+}
+RE_SHA='^[a-f0-9]{64}$'
+# A shard's `artifact:` token, resolved to the absolute path it names (sets ART_ABS, empty when it
+# names no file). An absolute token is taken as written; a relative one is tried against the
+# sprint directory and each directory above it, nearest first, because a shard writes it relative
+# to the project root and the merge resolves no root of its own. Both sides pass through
+# `pwd -P`, so a symlinked parent (macOS `/tmp` is `/private/tmp`) never refuses a correct path.
+resolve_artifact() {
+  local t="$1" d
+  ART_ABS=""
+  case "$t" in
+    /*) [ -f "$t" ] && ART_ABS="$(cd "$(dirname "$t")" && pwd -P)/$(basename "$t")"; return 0 ;;
+  esac
+  d="$SPRINT_DIR"
+  while [ -n "$d" ]; do
+    if [ -f "$d/$t" ]; then ART_ABS="$(cd "$(dirname "$d/$t")" && pwd -P)/$(basename "$t")"; return 0; fi
+    [ "$d" = "/" ] && return 0
+    d="$(dirname "$d")"
+  done
+  return 0
+}
+# check_cite_lines <shard file> <finding line> <its count of $CITE: lines>: exactly one.
+check_cite_lines() {
+  [ "$3" = "1" ] || { HDR_MSG="$1:$2 finding carries $3 $CITE: lines; each finding carries exactly one"; return 1; }
+  return 0
+}
+# check_shard_artifact <parse file> <shard file> <key> <is_x>: the mode-dependent artifact /
+#   artifact_sha check, SUBJECT and FILES mode (document mode stays at the loop's own site: its
+#   document is a caller argument). Subject: every shard notarizes ALL FOUR stems at their disk
+#   bytes ($T/stems) and names the subject manifest ($SUBJ_MF). Files: a cross shard names an
+#   artifact (xa; agreement across cross shards is the loop's), a per-ordinal shard notarizes its
+#   story's disk sha (sha, sb; the story is the key's row of $T/map).
+check_shard_artifact() {
+  local P="$1" sf="$2" key="$3" is_x="$4"
+  if [ -n "$SUBJECT" ]; then
+    # Every shard -- cross included -- notarizes ALL FOUR stems at their disk bytes, and names the
+    # subject manifest. Order-free: the list is compared stem by stem.
+    sha="$(field "$P" artifact_sha)"
+    [ -n "$sha" ] || { HDR_MSG="$sf declares no artifact_sha; a subject shard notarizes <stem>=<sha> for every subject file"; return 1; }
+    # A pair is `<stem>=<sha>` or `<stem>@<sha>` (PAIR_SEP: readers accept both; this merge emits
+    # the separator --pair-sep prints). PAIR_SEP is unquoted in each pattern, so it is a class.
+    nt=0
+    for tok in $sha; do
+      nt=$((nt + 1))
+      st="${tok%%$PAIR_SEP*}"; sv="$(printf '%s' "${tok#*$PAIR_SEP}" | tr 'A-F' 'a-f')"
+      case "$tok" in ?*$PAIR_SEP*) ;; *) HDR_MSG="$sf artifact_sha token '$tok' is not <stem>=<sha> or <stem>@<sha>"; return 1 ;; esac
+      want="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/stems")"
+      [ -n "$want" ] || { HDR_MSG="$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"; return 1; }
+      [ "$sv" = "$want" ] || { HDR_MSG="$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"; return 1; }
+    done
+    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed "s/$PAIR_SEP.*//" | sort -u | grep -c .)" -eq 4 ] \
+      || { HDR_MSG="$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"; return 1; }
+    art="$(field "$P" artifact)"
+    [ -n "$art" ] || { HDR_MSG="$sf declares no artifact; a subject shard names the subject manifest"; return 1; }
+    resolve_artifact "$art"
+    [ "$ART_ABS" = "$SUBJ_MF" ] \
+      || { HDR_MSG="$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not the subject manifest $SUBJ_MF"; return 1; }
+  elif [ "$is_x" -eq 1 ]; then
+    xa="$(field "$P" artifact)"
+    [ -n "$xa" ] || { HDR_MSG="$sf (cross-story) declares no artifact"; return 1; }
+  else
+    sha="$(field "$P" artifact_sha)"
+    [[ $sha =~ $RE_SHA ]] || { HDR_MSG="$sf artifact_sha '${sha:-<none>}' is not one sha256"; return 1; }
+    sb="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/map")"
+    disk="$(sha_of "$STORIES_DIR/$sb")" || { HDR_MSG="story file $STORIES_DIR/$sb is unreadable"; return 1; }
+    [ "$sha" = "$disk" ] || { HDR_MSG="$sf notarizes $sha but $sb is $disk on disk; the shard reviewed other bytes"; return 1; }
+  fi
+  return 0
+}
+# subj_stems_build: the four subject stems and their disk shas, in manifest order, `<stem>\t<sha>` in
+#   $T/stems, from $SUBJ_MF (the merge's subject branch and --check-shard).
+subj_stems_build() {
+SUBJ_ROOT=""
+SUBJ_FIRST="$(awk '/^file: / { print $3; exit }' "$SUBJ_MF")"
+_d="$(dirname "$SUBJ_MF")"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  if [ -f "$_d/$SUBJ_FIRST" ]; then SUBJ_ROOT="$_d"; break; fi
+  _d="$(dirname "$_d")"
+done
+[ -n "$SUBJ_ROOT" ] || refuse "no directory above $SUBJ_MF holds $SUBJ_FIRST"
+: > "$T/stems" || refuse "cannot stage the subject shas"
+awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && /^file: /' "$SUBJ_MF" > "$T/mfiles" \
+  || refuse "cannot read $SUBJ_MF"
+while read -r _k _st _rel; do
+  [ "$_k" = "file:" ] || continue
+  _s="$(sha_of "$SUBJ_ROOT/$_rel")" || refuse "cannot hash $_rel"
+  [[ $_s =~ ^[a-f0-9]{64}$ ]] || refuse "cannot hash $_rel"
+  printf '%s\t%s\n' "$_st" "$_s" >> "$T/stems" || refuse "cannot stage the subject shas"
+done < "$T/mfiles"
+[ "$(grep -c . "$T/stems")" = "4" ] || refuse "$SUBJ_MF does not list four subject files"
+}
+# files_map_build: the ordinal map, derived from the artifact directory $STORIES_DIR, into $T/map;
+#   sets K and W (the merge's files branch and --check-shard).
+files_map_build() {
+# ---- the ordinal map, derived from the artifact directory ---------------------------------
+# The glob expands in the C collation (LC_ALL=C above); it is re-sorted explicitly anyway so the
+# order never depends on the shell's glob implementation.
+: > "$T/listing" || refuse "cannot stage the story listing"
+for f in "$STORIES_DIR"/*.md; do
+  [ -e "$f" ] || continue
+  printf '%s\n' "$(basename "$f")" >> "$T/listing" || refuse "cannot stage the story listing"
+done
+sort "$T/listing" > "$T/listing.sorted" || refuse "cannot order the story listing"
+K="$(wc -l < "$T/listing.sorted" | tr -d ' ')"
+[ "$K" -ge 2 ] || refuse "$STORIES_DIR holds $K story file(s); sharding applies to two or more"
+W=${#K}
+: > "$T/map" || refuse "cannot stage the ordinal map"
+i=0
+while IFS= read -r b; do
+  i=$((i + 1))
+  [ -f "$STORIES_DIR/$b" ] && [ -r "$STORIES_DIR/$b" ] || refuse "story file $STORIES_DIR/$b is unreadable"
+  printf '%0*d\t%s\n' "$W" "$i" "$b" >> "$T/map" || refuse "cannot stage the ordinal map"
+done < "$T/listing.sorted"
+[ "$i" -eq "$K" ] || refuse "read $i of $K story files"
+}
+
+# ---- --check-shard: ONE adversary shard at its seal (header: THE SHARD CHECK) -----------------
+# The next line is the sentinel wait-for-deliverable.sh --mark reads to know this mode exists.
+# MARK-CHECK-SHARD v1
+CS_SKIP=0; CS_N=0
+cs_refuse() { printf 'REFUSED: %s\n' "$*"; CS_N=$((CS_N + 1)); }
+cs_skip() { printf 'SKIP: %s\n' "$*"; exit 3; }
+# cs_sealed <file>: a sibling the merge would admit as SEALED -- its last non-blank line is a
+#   `seat-complete: ` marker (ends_in_marker) carrying a `sha=` token, and the merge's own admission
+#   (`content-seal.sh --admit-marker`, which checks that sha against the body above it and the file
+#   against its seal row) admits it. No content-seal.sh beside this script: nothing reads as sealed.
+cs_sealed() {
+  ends_in_marker "$1" || return 1
+  awk 'NF { l = $0 } END { exit !(l ~ /[ \t]sha=[^ \t]/) }' "$1" || return 1
+  [ -f "$CS_SEAL" ] || return 1
+  bash "$CS_SEAL" --admit-marker "$1" >/dev/null 2>&1
+}
+check_shard_main() {
+  local sf n by bn key is_x pre mt k own ref reff nref sib sv_ v cs_e
+  [ $# -eq 4 ] && [ "$3" = "--findings" ] \
+    || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-shard <shard-file> --findings <n>"; exit 64; }
+  [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] \
+    || { printf '%s\n' "usage: --check-shard reads one shard; --rerun and --dry-run belong to a merge"; exit 64; }
+  sf="$2"; n="$4"
+  case "$n" in ""|*[!0-9]*) printf 'usage: --findings takes a count (got %s)\n' "$n"; exit 64 ;; esac
+  [ -f "$sf" ] && [ -r "$sf" ] || { printf 'usage: %s is not a readable file\n' "$sf"; exit 64; }
+  by="$sf"
+  if [ -n "${AI_DLC_CHECK_BYTES:-}" ]; then
+    [ -f "$AI_DLC_CHECK_BYTES" ] && [ -r "$AI_DLC_CHECK_BYTES" ] \
+      || { printf 'usage: AI_DLC_CHECK_BYTES=%s is not a readable file\n' "$AI_DLC_CHECK_BYTES"; exit 64; }
+    by="$AI_DLC_CHECK_BYTES"
+  fi
+  T="$(mktemp -d "${TMPDIR:-/tmp}/merge-adversarial-shards.cs.XXXXXX")" || { printf '%s\n' "SKIP: mktemp failed"; exit 3; }
+  trap 'rm -rf "$T"' EXIT
+  # THE PLACEMENT, the merge's own from the shard's path, and SKIP at once: a file that is not a shard
+  # name, or a dir that is no adversary shard dir (a placement merge_locate refuses, a name that is not
+  # `<artifact>-p<M>`, the series stem, a repair or resolution series), holds no adversary shard, so no
+  # adversary check applies to it.
+  CS_SKIP=1
+  bn="$(basename "$sf")"; is_x=0; key=""
+  case "$bn" in
+    *.draft) cs_skip "$bn is a draft; only a shard is checked" ;;
+    cross.md|cross-[0-9]*.md) is_x=1; key="${bn%.md}" ;;
+    *.md) key="${bn%.md}"; case "$key" in ""|*[!0-9]*) cs_skip "$bn is not a shard name; the shard-set walk is the merge's" ;; esac ;;
+    *) cs_skip "$bn is not a shard name; the shard-set walk is the merge's" ;;
+  esac
+  merge_locate "$(dirname "$sf")"
+  SUBJECT=""; DOCUMENT=""; ELICIT=0; AXIS=convergence; CITE=""; OTHER=""
+  if [ "$SHARD_BASE" = "requirements-elicitation" ]; then
+    ARTIFACT=requirements; ELICIT=1; AXIS=elicitation; SUBJECT="${SPRINT_DIR##*/s}"
+  else
+    ARTIFACT="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\1/p')"
+    PASS="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\2/p')"
+    [ -n "$ARTIFACT" ] && [ -n "$PASS" ] || refuse "shard directory name $SHARD_BASE is not <artifact>-p<M>"
+    case "$ARTIFACT" in *-adversarial) refuse "shard directory $SHARD_BASE names the series, not the artifact" ;; esac
+    # The convergence validator's series exclusions, restated as the summed-divergence walk restates them.
+    for v in "$SHARD_BASE" "$ARTIFACT-adversarial-p$PASS.md"; do
+      case "$v" in *-resolution-p*|*-repair-p*|*-repair-*) refuse "$SHARD_BASE is a repair or resolution series, not an adversary shard dir" ;; esac
+    done
+    [ "$ARTIFACT" != requirements ] || SUBJECT="${SPRINT_DIR##*/s}"
+  fi
+  STORIES_DIR="$SPRINT_DIR/$ARTIFACT"
+  CS_SKIP=0
+  # THE SELF-ONLY CHECKS RUN NEXT, whether or not a subject resolves: none of them reads the subject.
+  # The citation token is the merge's for the placement: `sections:` for the requirements subject,
+  # `stories:` in FILES mode, `sections:` for a document the shard's artifact resolves to and
+  # partition-document.sh splits. Where none holds no merge mode names it, so the cite-line check does
+  # not run, and the SKIP line lists the checks that did.
+  # FILES MODE is chosen only when s<N>/ holds an entry spelled EXACTLY $ARTIFACT, compared byte for
+  # byte against the directory's own listing, and that entry holds two or more story files (the files
+  # merge's own minimum). Never `[ -d ]` alone: on a case-insensitive filesystem (APFS) it answers yes
+  # for s<N>/architecture-spine/ when asked about ARCHITECTURE-SPINE, a dir holding the ONE document
+  # the pass was merged against with --document.
+  cs_dir="$SHARD_DIR"; CS_MODE=""
+  if [ -n "$SUBJECT" ]; then CITE=sections; OTHER=stories; CS_MODE=subject
+  else
+    cs_e=""
+    for v in "$SPRINT_DIR"/*; do [ "${v##*/}" = "$ARTIFACT" ] && [ -d "$v" ] && { cs_e="$v"; break; }; done
+    if [ -n "$cs_e" ]; then
+      k=0; for v in "$cs_e"/*.md; do [ -f "$v" ] && k=$((k + 1)); done
+      [ "$k" -ge 2 ] && { CITE=stories; CS_MODE=files; }
+    fi
+    if [ -z "$CS_MODE" ]; then
+      CITE=sections; OTHER=stories
+      parse_shard "$by" > "$T/cs.pre" || { printf 'REFUSED: parsing %s did not run; no verdict\n' "$sf"; exit 4; }
+      resolve_artifact "$(field "$T/cs.pre" artifact)"
+      if [ -n "$ART_ABS" ] && bash "$(cd "$(dirname "$MERGE_SELF")" && pwd)/partition-document.sh" --map "$ART_ABS" > /dev/null 2>&1; then
+        DOCUMENT="$ART_ABS"; CS_MODE=document
+      else
+        CITE=""; OTHER=""
+        # NO SUBJECT AND NO PROVENANCE BLOCK AT ALL (0 openings, 0 closings): a repair-style part
+        # (stories-fences-p<M>, <artifact>-amend-p<M>), never an adversary shard. A half block (one
+        # opening or one closing without the other) still refuses below.
+        set -- $(awk '$1 == "B" { print $2, $3 }' "$T/cs.pre")
+        [ "${1:-0}" != "0" ] || [ "${2:-0}" != "0" ] \
+          || cs_skip "$sf carries no provenance block and $SHARD_BASE resolves no subject (no files, subject or document mode); it is no adversary shard"
+      fi
+    fi
+  fi
+  CS_SEAL="$(cd "$(dirname "$MERGE_SELF")" && pwd)/content-seal.sh"
+  # A provenance block that does not parse stops here, as it skips the rest of that shard in the merge
+  # loop; past it every refusal is collected.
+  CS_CITE="$CITE"; [ -n "$CITE" ] || CITE=stories
+  parse_shard "$by" > "$T/cs.p" || { printf 'REFUSED: parsing %s did not run; no verdict\n' "$sf"; exit 4; }
+  ANY_DIVERGENT=0
+  set -- $(awk '$1 == "B" { print $2, $3 }' "$T/cs.p")
+  if ! check_header "$T/cs.p" "$by" "$AXIS"; then
+    cs_refuse "${HDR_MSG//"$by"/$sf}"
+    [ "${1:-0}" = "1" ] && [ "${2:-0}" = "1" ] || exit 2
+  fi
+  if ! ends_in_marker "$by"; then check_marker "$T/cs.p" "$sf" "$n" || cs_refuse "$HDR_MSG"; fi
+  [ -z "$CS_CITE" ] || while read -r tag line s nlines cited; do
+    [ "$tag" = "X" ] || continue
+    check_cite_lines "$sf" "$line" "$nlines" || cs_refuse "$HDR_MSG"
+  done < "$T/cs.p"
+  CITE="$CS_CITE"
+  # BATCH-INVARIANT AGREEMENT -- NEW CODE, not a moved merge line: skill, mode and lead_role against
+  # the SEALED siblings (cs_sealed), self and drafts excluded. The comparison is the merge loop's raw
+  # string test. Sealed siblings that disagree among themselves: WARN, pass. None sealed: pass.
+  : > "$T/cs.sibs"
+  for sib in "$cs_dir"/*.md; do
+    [ -f "$sib" ] || continue
+    case "${sib##*/}" in "$bn") continue ;; cross.md|cross-*.md|[0-9]*.md) ;; *) continue ;; esac
+    cs_sealed "$sib" || continue
+    parse_shard "$sib" > "$T/cs.sib.${sib##*/}" || continue
+    printf '%s\n' "$sib" >> "$T/cs.sibs"
+  done
+  for k in skill mode lead_role; do
+    own="$(field "$T/cs.p" "$k")"
+    [ -n "$own" ] || continue
+    ref=""; reff=""; nref=0
+    while IFS= read -r sib; do
+      v="$(field "$T/cs.sib.${sib##*/}" "$k")"
+      [ -n "$v" ] || continue
+      if [ "$nref" -eq 0 ]; then ref="$v"; reff="$(dirname "$sf")/${sib##*/}"; nref=1
+      elif [ "$v" != "$ref" ]; then nref=2; fi
+    done < "$T/cs.sibs"
+    if [ "$nref" -eq 2 ]; then
+      printf 'WARN: the sealed shards in %s disagree on %s among themselves; %s is not compared with them\n' "$(dirname "$sf")" "$k" "$sf" >&2
+    elif [ "$nref" -eq 1 ] && [ "$ref" != "$own" ]; then
+      cs_refuse "$sf declares $k '$own' where the sealed shard $reff declares '$ref'; every shard in a pass declares one $k, spelled as the first shard sealed spells it -- write '$ref'"
+    fi
+  done
+  # THE SELF-ONLY VERDICT, before any subject is derived: a refusal here is REFUSED, never a SKIP.
+  if [ "$CS_N" -gt 0 ]; then exit 2; fi
+  CS_RAN="check_header, the marker count, ${CS_CITE:+the $CS_CITE: cite-line check, }the skill/mode/lead_role agreement"
+  # THE SUBJECT, the merge's own derivation: a refusal here SKIPs the subject-dependent
+  # artifact/artifact_sha check only.
+  CS_SKIP=1
+  if [ -n "$SUBJECT" ]; then
+    SUBJ_MF="$SPRINT_DIR/requirements-subject.md"
+    [ -f "$SUBJ_MF" ] || refuse "no subject manifest at $SUBJ_MF"
+    SUBJ_MF="$(cd "$(dirname "$SUBJ_MF")" && pwd -P)/$(basename "$SUBJ_MF")"
+    subj_stems_build
+  elif [ "$CS_MODE" = files ]; then
+    files_map_build
+    if [ "$is_x" -eq 0 ]; then
+      [ "$((10#$key))" -ge 1 ] && [ "$((10#$key))" -le "$K" ] || refuse "$bn names ordinal $key, outside 1..$K"
+      key="$(printf '%0*d' "$W" "$((10#$key))")"
+    fi
+  elif [ -z "$DOCUMENT" ]; then
+    # DOCUMENT MODE: the document is a merge's caller argument; here it is the shard's own artifact, and
+    # it is a subject only if partition-document.sh splits it, as the merge requires (resolved above).
+    refuse "no subject resolvable: $SPRINT_DIR holds no entry spelled exactly $ARTIFACT with two or more story files, and the shard's artifact names no file partition-document.sh splits"
+  fi
+  CS_SKIP=0
+  if [ -z "$DOCUMENT" ]; then
+    check_shard_artifact "$T/cs.p" "$sf" "$key" "$is_x" || cs_refuse "$HDR_MSG"
+  fi
+  [ "$CS_N" -eq 0 ] || exit 2
+  printf 'SHARD-OK\n'; exit 0
 }
 
 # ---- THE DERIVED SET (BL-911; header: THE DERIVED SET) -------------------------------------------
@@ -1103,6 +1454,7 @@ case "${1:-}" in
     [ $# -ge 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] && [ "$DMAP" -eq 0 ] \
       || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-shard-dir <planning>/s<N>/shards/<dir>..."; exit 3; }
     shift; check_shard_dirs "$@"; exit $? ;;
+  --check-shard) check_shard_main "$@" ;;
   --map) MAP_ONLY=1; shift ;;
   --derived-set)
     [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --derived-set <planning>/s<N>/<artifact>-adversarial-p<M>.md"; exit 2; }
@@ -1188,11 +1540,6 @@ fi
 T="$(mktemp -d "${TMPDIR:-/tmp}/merge-adversarial-shards.XXXXXX")" || refuse "mktemp failed"
 trap 'rm -rf "$T"' EXIT
 
-sha_of() {
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
-  else sha256sum "$1" | cut -d' ' -f1; fi
-}
-
 if [ -n "$SUBJECT" ]; then
 # ---- the ordinal map, derived from the subject partition under the MANIFEST's base ----------
 # The manifest is found beside the series (s<N>/requirements-subject.md); partition-subject.sh
@@ -1222,25 +1569,7 @@ while IFS="$(printf '\t')" read -r o f a z h; do
   case "$o" in ""|*[!0-9]*) refuse "partition-subject.sh --map printed ordinal '$o' on row $i" ;; esac
   [ "$((10#$o))" -eq "$i" ] || refuse "partition-subject.sh --map printed ordinal $o on row $i; ordinals run 1..K in order"
 done < "$T/map"
-# The four stems and their disk shas, in manifest order: `<stem>\t<sha>`.
-SUBJ_ROOT=""
-SUBJ_FIRST="$(awk '/^file: / { print $3; exit }' "$SUBJ_MF")"
-_d="$(dirname "$SUBJ_MF")"
-while [ -n "$_d" ] && [ "$_d" != "/" ]; do
-  if [ -f "$_d/$SUBJ_FIRST" ]; then SUBJ_ROOT="$_d"; break; fi
-  _d="$(dirname "$_d")"
-done
-[ -n "$SUBJ_ROOT" ] || refuse "no directory above $SUBJ_MF holds $SUBJ_FIRST"
-: > "$T/stems" || refuse "cannot stage the subject shas"
-awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && /^file: /' "$SUBJ_MF" > "$T/mfiles" \
-  || refuse "cannot read $SUBJ_MF"
-while read -r _k _st _rel; do
-  [ "$_k" = "file:" ] || continue
-  _s="$(sha_of "$SUBJ_ROOT/$_rel")" || refuse "cannot hash $_rel"
-  [[ $_s =~ ^[a-f0-9]{64}$ ]] || refuse "cannot hash $_rel"
-  printf '%s\t%s\n' "$_st" "$_s" >> "$T/stems" || refuse "cannot stage the subject shas"
-done < "$T/mfiles"
-[ "$(grep -c . "$T/stems")" = "4" ] || refuse "$SUBJ_MF does not list four subject files"
+subj_stems_build
 SUBJ_SHA_LIST="$(awk -F'\t' -v sep="$PAIR_OUT" '{ printf " %s%s%s", $1, sep, $2 }' "$T/stems")"
 elif [ -n "$DOCUMENT" ]; then
 # ---- the ordinal map, derived from the partition of the document -------------------------
@@ -1266,26 +1595,7 @@ done < "$T/map"
 DOC_SHA="$(sha_of "$DOCUMENT")" || refuse "cannot hash $DOCUMENT"
 [[ $DOC_SHA =~ ^[a-f0-9]{64}$ ]] || refuse "cannot hash $DOCUMENT"
 else
-# ---- the ordinal map, derived from the artifact directory ---------------------------------
-# The glob expands in the C collation (LC_ALL=C above); it is re-sorted explicitly anyway so the
-# order never depends on the shell's glob implementation.
-: > "$T/listing" || refuse "cannot stage the story listing"
-for f in "$STORIES_DIR"/*.md; do
-  [ -e "$f" ] || continue
-  printf '%s\n' "$(basename "$f")" >> "$T/listing" || refuse "cannot stage the story listing"
-done
-sort "$T/listing" > "$T/listing.sorted" || refuse "cannot order the story listing"
-K="$(wc -l < "$T/listing.sorted" | tr -d ' ')"
-[ "$K" -ge 2 ] || refuse "$STORIES_DIR holds $K story file(s); sharding applies to two or more"
-W=${#K}
-: > "$T/map" || refuse "cannot stage the ordinal map"
-i=0
-while IFS= read -r b; do
-  i=$((i + 1))
-  [ -f "$STORIES_DIR/$b" ] && [ -r "$STORIES_DIR/$b" ] || refuse "story file $STORIES_DIR/$b is unreadable"
-  printf '%0*d\t%s\n' "$W" "$i" "$b" >> "$T/map" || refuse "cannot stage the ordinal map"
-done < "$T/listing.sorted"
-[ "$i" -eq "$K" ] || refuse "read $i of $K story files"
+files_map_build
 fi
 if [ "$MAP_ONLY" -eq 1 ]; then
   [ -z "$RERUN" ] || refuse "--rerun supersedes write-ledger rows at a merge; --map reads no ledger"
@@ -1783,28 +2093,8 @@ merge_admission_phase
 n_fn="$(grep -c '^at_key() {' "$VALIDATOR")" || n_fn=0
 [ "$n_fn" = "1" ] || refuse "found ${n_fn} 'at_key() {' definitions in $VALIDATOR (want exactly 1)"
 eval "$(grep -m1 '^at_key() {' "$VALIDATOR")"
-RE_SHA='^[a-f0-9]{64}$'
 RE_CITED='^[0-9]+(,[0-9]+)*$'
-
-# A shard's `artifact:` token, resolved to the absolute path it names (sets ART_ABS, empty when it
-# names no file). An absolute token is taken as written; a relative one is tried against the
-# sprint directory and each directory above it, nearest first, because a shard writes it relative
-# to the project root and the merge resolves no root of its own. Both sides pass through
-# `pwd -P`, so a symlinked parent (macOS `/tmp` is `/private/tmp`) never refuses a correct path.
-resolve_artifact() {
-  local t="$1" d
-  ART_ABS=""
-  case "$t" in
-    /*) [ -f "$t" ] && ART_ABS="$(cd "$(dirname "$t")" && pwd -P)/$(basename "$t")"; return 0 ;;
-  esac
-  d="$SPRINT_DIR"
-  while [ -n "$d" ]; do
-    if [ -f "$d/$t" ]; then ART_ABS="$(cd "$(dirname "$d/$t")" && pwd -P)/$(basename "$t")"; return 0; fi
-    [ "$d" = "/" ] && return 0
-    d="$(dirname "$d")"
-  done
-  return 0
-}
+# resolve_artifact, sha_of and RE_SHA are defined above the argument parse (--check-shard uses them).
 
 # same_set <file> <label> <ordinals, blank-separated> -> 0 when a column-0 `<label>:` line outside
 # a fence in <file> cites exactly that set of ordinals (order, padding and repeats free).
@@ -1880,28 +2170,8 @@ for key in $ORDINALS $CROSS_KEYS; do
   [ "${hl:-0}" = "0" ] || { collect "$sf:$hl opens a finding with \`## \`; findings are \`### \` headings inside \`## Findings\` (FINDING GRAMMAR in merge-adversarial-shards.sh), each severity word UPPERCASE"; continue; }
 
   if [ -n "$SUBJECT" ]; then
-    # Every shard -- cross included -- notarizes ALL FOUR stems at their disk bytes, and names the
-    # subject manifest. Order-free: the list is compared stem by stem.
-    sha="$(field "$P" artifact_sha)"
-    [ -n "$sha" ] || { collect "$sf declares no artifact_sha; a subject shard notarizes <stem>=<sha> for every subject file"; continue; }
-    # A pair is `<stem>=<sha>` or `<stem>@<sha>` (PAIR_SEP: readers accept both; this merge emits
-    # the separator --pair-sep prints). PAIR_SEP is unquoted in each pattern, so it is a class.
-    nt=0
-    for tok in $sha; do
-      nt=$((nt + 1))
-      st="${tok%%$PAIR_SEP*}"; sv="$(printf '%s' "${tok#*$PAIR_SEP}" | tr 'A-F' 'a-f')"
-      case "$tok" in ?*$PAIR_SEP*) ;; *) { collect "$sf artifact_sha token '$tok' is not <stem>=<sha> or <stem>@<sha>"; continue 2; } ;; esac
-      want="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/stems")"
-      [ -n "$want" ] || { collect "$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"; continue 2; }
-      [ "$sv" = "$want" ] || { collect "$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"; continue 2; }
-    done
-    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed "s/$PAIR_SEP.*//" | sort -u | grep -c .)" -eq 4 ] \
-      || { collect "$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"; continue; }
-    art="$(field "$P" artifact)"
-    [ -n "$art" ] || { collect "$sf declares no artifact; a subject shard names the subject manifest"; continue; }
-    resolve_artifact "$art"
-    [ "$ART_ABS" = "$SUBJ_MF" ] \
-      || { collect "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not the subject manifest $SUBJ_MF"; continue; }
+    # THE ARTIFACT CHECK (check_shard_artifact, above the argument parse; --check-shard runs it too).
+    check_shard_artifact "$P" "$sf" "$key" "$is_x" || { collect "$HDR_MSG"; continue; }
     if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
   elif [ -n "$DOCUMENT" ]; then
     # Every shard -- cross included -- reviewed the WHOLE document's bytes, so every shard
@@ -1918,23 +2188,19 @@ for key in $ORDINALS $CROSS_KEYS; do
     [[ $mt =~ $RE_ISO ]] || { collect "cannot read the modification time of $sf"; continue; }
     WALL_LIST="$WALL_LIST $key=$at/$mt"
   elif [ "$is_x" -eq 1 ]; then
-    xa="$(field "$P" artifact)"
-    [ -n "$xa" ] || { collect "$sf (cross-story) declares no artifact"; continue; }
+    check_shard_artifact "$P" "$sf" "$key" "$is_x" || { collect "$HDR_MSG"; continue; }
     if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$xa"
     else [ "$xa" = "$CROSS_ARTIFACT" ] || { collect "$sf (cross-story) names artifact '$xa' where $CROSS_FIRST names '$CROSS_ARTIFACT'"; continue; }; fi
   else
-    sha="$(field "$P" artifact_sha)"
-    [[ $sha =~ $RE_SHA ]] || { collect "$sf artifact_sha '${sha:-<none>}' is not one sha256"; continue; }
-    sb="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/map")"
-    disk="$(sha_of "$STORIES_DIR/$sb")" || { collect "story file $STORIES_DIR/$sb is unreadable"; continue; }
-    [ "$sha" = "$disk" ] || { collect "$sf notarizes $sha but $sb is $disk on disk; the shard reviewed other bytes"; continue; }
+    check_shard_artifact "$P" "$sf" "$key" "$is_x" || { collect "$HDR_MSG"; continue; }
     SHA_LIST="$SHA_LIST ${sb%.md}${PAIR_OUT}$sha"
   fi
 
   # --- the partition ---
   while read -r tag line s nlines cited; do
     [ "$tag" = "X" ] || continue
-    [ "$nlines" = "1" ] || { collect "$sf:$line finding carries $nlines $CITE: lines; each finding carries exactly one"; continue; }
+    # THE CITE-LINE CHECK (check_cite_lines, above the argument parse; --check-shard runs it too).
+    check_cite_lines "$sf" "$line" "$nlines" || { collect "$HDR_MSG"; continue; }
     [[ $cited =~ $RE_CITED ]] || { collect "$sf:$line $CITE: '$cited' is not <ordinal>[, <ordinal>...]"; continue; }
     distinct=""
     for c in $(printf '%s' "$cited" | tr ',' ' '); do

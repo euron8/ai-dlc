@@ -681,12 +681,41 @@ seal_of() {
 #      runs the same way, and exit 1 refuses (64) only on a `FAIL (<KIND>): <copy>:<line>` whose line
 #      lies inside that range; a FAIL in any other segment is left to the join, and n is not compared.
 #      A FAIL line that names no line of the copy refuses, and any exit but 0 or 1 refuses as no verdict.
+#   7. AN ADVERSARY SHARD -- a `--mark` on a file `planning-artifacts/s<N>/shards/<D>/<x>.md` (the
+#      state dir's first `/planning-artifacts/`, then `s` and a digit, then `shards`, one directory,
+#      and a name of at least one character before `.md`) that is neither a review shard (term 4) nor
+#      a remediator part (term 5) -- runs the sibling `merge-adversarial-shards.sh --check-shard
+#      <file> --findings <n>` (n is the caller's findings=), the merge's own per-shard check, before
+#      anything is written. Whether a `<D>` names a subject is the sibling's judgment: its exit 3
+#      (`SKIP: <reason>`) proceeds with one `NOTE:` line.
+#   8. A REMEDIATOR PART (term 5) runs the sibling `join-remediator-shards.sh --check-part <file>`,
+#      the join's own per-part check, AFTER the replay of term 6, so it reads the bytes this call
+#      seals (a `derivations: not replayed` line the replay rewrites is never judged as written).
+#      Both calls read the snapshot (term 1, after term 6's rewrite) plus a provisional marker of
+#      this call's words carrying the body's real sha, in a fresh `mktemp -d` under the file's own
+#      basename, passed as AI_DLC_CHECK_BYTES while the argument stays the real path (from which
+#      the sibling derives its dir, siblings, round and ledgers). The sibling runs in process
+#      (sourced in a subshell, entry `merge_main` / `join_main`) where mk_sibling_ finds that entry,
+#      as a process otherwise. Exit 2 is exit 64 relaying its `REFUSED:` lines verbatim with the
+#      remedy "fix it in your file with Edit, then run the same --mark again"; nothing is written.
+#      PULL SAFETY: support is read from the sibling's sentinel line at column 0 (`# MARK-CHECK-SHARD
+#      v1`, `# CHECK-PART-MARK v1`) with builtins, never from its entry function, which older engines
+#      already define. A sibling without its sentinel gives one `WARN:` line and today's behaviour; an
+#      absent sibling gives today's behaviour and no new refusal; any other exit, or an exit 0 without
+#      the verdict line (`SHARD-OK`, `CHECK-PART:`), is one `WARN:` and proceeds (an exit 0 relays the
+#      sibling's own `WARN:`/`NOTE:` lines; exit 4 from either sibling is its HARNESS fault -- a
+#      self-probe or mktemp that failed, a shard that was never parsed -- and is no verdict; a
+#      --check-part exit 2 whose text is its own harness or argument fault -- AI_DLC_CHECK_BYTES
+#      unreadable, a wrong argument list -- is no verdict) -- the join itself
+#      still refuses those bytes, and a seat is never held on a check that gave no verdict.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
 # mk_sibling_ <file> <entry function>: 0 when <file> defines the entry function at a line start, so it holds
 # its program behind a BASH_SOURCE guard and can be sourced and asked in process (read with builtins, no
 # process). A sibling that does not (a stand-in script) is run as a process, as it always was.
 mk_sibling_() { local _t; IFS= read -r -d '' _t < "$1" || true; [[ "$_t" == *$'\n'"$2() {"* ]]; }
+# mk_sentinel_ <file> <line>: 0 when <file> carries <line> as a whole line at column 0 (builtins, no process).
+mk_sentinel_() { local _t; IFS= read -r -d '' _t < "$1" || true; [[ "$_t" == *$'\n'"$2"$'\n'* || "$_t" == *$'\n'"$2" ]]; }
 # wfd_mark_main holds the --mark / --mark-repair dispatch below, unchanged. It is a function so a
 # fixture can source this file (the guard after it) and run the writer in a subshell; run as a
 # program it is called at once, from the same place, with the script's own arguments.
@@ -930,6 +959,62 @@ $MK_OUT
         fi
       else
         rm -f "$MK_PRB"
+      fi
+    fi
+    # THE JOIN'S OWN CHECK (header: "--mark", terms 7 and 8). After the replay, so it reads the bytes
+    # this call seals, plus a provisional marker carrying their real sha.
+    if [ "$MK_MODE" = "--mark" ] && [ -z "$MK_REVIEW" ]; then
+      mk_jpd_="${MK_PHYS%/*}"; mk_jgp_="${mk_jpd_%/*}"; mk_jb_="${MK_PHYS##*/}"; MK_JS=""
+      case "$mk_jgp_" in */planning-artifacts/s[0-9]*/shards) case "$mk_jb_" in ?*.md)
+        mk_jsd_="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [ -n "${mk_rs_:-}" ]; then
+          MK_JS="$mk_jsd_/join-remediator-shards.sh"; MK_JSENT="# CHECK-PART-MARK v1"; MK_JENTRY=join_main
+          set -- --check-part "$MK_FILE"
+        else
+          MK_JS="$mk_jsd_/merge-adversarial-shards.sh"; MK_JSENT="# MARK-CHECK-SHARD v1"; MK_JENTRY=merge_main
+          set -- --check-shard "$MK_FILE" --findings "${MK_N#findings=}"
+        fi
+        MK_JN="${MK_JS##*/} $1" ;; esac ;;
+      esac
+      if [ -z "$MK_JS" ] || [ ! -f "$MK_JS" ]; then :
+      elif ! mk_sentinel_ "$MK_JS" "$MK_JSENT"; then
+        echo "WARN: $MK_MODE: ${MK_JS##*/} carries no '$MK_JSENT' line, so it predates the mark's check and '$MK_FILE' is marked without $1; the join still checks it." >&2
+      else
+        mk_jdrop_() { rm -f "$MK_JP"; rmdir "$MK_JD" 2>/dev/null; [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"; }
+        MK_JD="$(mktemp -d "${TMPDIR:-/tmp}/wfd-mark.XXXXXX")" || { [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+        # The provisional copy keeps the file's own basename: the sibling's REFUSED lines name the file they read by it.
+        MK_JP="$MK_JD/$mk_jb_"
+        seal_body "$MK_SRC" "$MK_KEEP" > "$MK_JP" && mk_jh_="$(content_hash "$MK_JP")" && [ -n "$mk_jh_" ] \
+          && printf '%s%s sha=%s%s%s\n' "$MARK_TOKEN" "$MK_F" "$mk_jh_" "${MK_TAIL:+ }" "$MK_TAIL" >> "$MK_JP" \
+          || { mk_jdrop_; mark_refuse "cannot take a snapshot of $MK_FILE."; }
+        if mk_sibling_ "$MK_JS" "$MK_JENTRY"; then
+          MK_JO="$( ( mk_je_="$MK_JENTRY"; mk_jf_="$MK_JS"; mk_ja_=("$@"); set --; export AI_DLC_CHECK_BYTES="$MK_JP"; . "$mk_jf_" && "$mk_je_" "${mk_ja_[@]}" ) 2>&1 )"; mk_jrc_=$?
+        else
+          MK_JO="$(AI_DLC_CHECK_BYTES="$MK_JP" bash "$MK_JS" "$@" 2>&1)"; mk_jrc_=$?
+        fi
+        rm -f "$MK_JP"; rmdir "$MK_JD" 2>/dev/null
+        # 3 is a verdict only from --check-shard (SKIP: the dir names no subject); from --check-part it is no verdict.
+        mk_jx_="$mk_jrc_"; [ "$mk_jrc_" = 3 ] && [ -n "${mk_rs_:-}" ] && mk_jrc_=33
+        # --check-part's die() also exits 2 on a harness or argument fault; those texts are no verdict on the part.
+        if [ "$mk_jrc_" = 2 ] && [ -n "${mk_rs_:-}" ]; then
+          case "$MK_JO" in *"REFUSED: AI_DLC_CHECK_BYTES names no readable file"*|*"REFUSED: --check-part checks one part file and takes no other flag"*|*"REFUSED: --check-part needs an existing part file"*|*"REFUSED: --check-part needs <part.md>"*) mk_jrc_=22 ;; esac
+        fi
+        case "$mk_jrc_" in
+          0) mk_jr_="$(printf '%s\n' "$MK_JO" | grep -E '^(WARN|NOTE):')" && printf '%s\n' "$mk_jr_" >&2
+             case "$MK_JO" in *SHARD-OK*|*CHECK-PART:*) ;;
+               *) echo "WARN: $MK_MODE: $MK_JN exited 0 without its verdict line, so '$MK_FILE' is marked without it; the join still checks it." >&2 ;; esac ;;
+          2) mk_jr_="$(printf '%s\n' "$MK_JO" | grep '^REFUSED:')" || mk_jr_="$MK_JO"
+             [ "$MK_SRC" = "$MK_FILE" ] || rm -f "$MK_SRC"
+             mark_refuse "$MK_JN, the join's own check, refused '$MK_FILE'; fix it in your file with Edit, then run the same --mark again:
+$mk_jr_
+" ;;
+          3) mk_jr_="$(printf '%s\n' "$MK_JO" | grep '^SKIP:' | head -1)"; [ -n "$mk_jr_" ] || mk_jr_="SKIP"
+             echo "NOTE: $MK_MODE: $MK_JN did not check '$MK_FILE' ($mk_jr_); the merge checks it." >&2 ;;
+          4) mk_jr_="$(printf '%s\n' "$MK_JO" | grep '^REFUSED:' | head -1)"; [ -n "$mk_jr_" ] || mk_jr_="$(printf '%s\n' "$MK_JO" | head -1)"
+             echo "WARN: $MK_MODE: $MK_JN reported a harness fault, no verdict ($mk_jr_), so '$MK_FILE' is marked without it; the join still checks it." >&2 ;;
+          *) mk_jr_="$(printf '%s\n' "$MK_JO" | head -1)"
+             echo "WARN: $MK_MODE: $MK_JN gave no verdict (exit $mk_jx_: $mk_jr_), so '$MK_FILE' is marked without it; the join still checks it." >&2 ;;
+        esac
       fi
     fi
     MK_TMP="${MK_FILE}.mark-tmp.$$"

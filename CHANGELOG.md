@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1057.0] - 2026-11-11
+
+### BL-974 PARTIAL: the seal runs the join's own per-part check, so a format refusal reaches the writer while it still holds the context
+
+Graph's transcripts hold 29 resumes of a finished adversary or remediator after a join or merge refusal. 23 are format refusals; 6 are not this entry (5 BL-976 shard-dir corrections, 1 misclassified NEEDS_REWORK). Of the 23, 21 have a join refusal behind them: escalation closure is reported and never refused, and party-source coverage has no join arm. Of the 21, 20 are decidable at the seal and 1 is merge-only (the INVOKED_AT BOUND needs the dispatch id written at SubagentStop).
+
+`wait-for-deliverable.sh --mark` now runs the join's own per-part check before it seals:
+- On an adversary shard (`planning-artifacts/s<N>/shards/<artifact>-p<M>/<x>.md`) it calls `merge-adversarial-shards.sh --check-shard <file> --findings <n>`, a new mode. Its self-only checks run first, whether or not a subject resolves: `check_header`, the per-finding cite-line check, and skill/mode/`lead_role` agreement against SEALED siblings. The agreement is new code: whichever shard seals first sets the spelling, in both directions, and siblings that disagree among themselves WARN and pass. The files/subject-mode `artifact_sha` stem check follows when a subject resolves. The cite-line and stem checks are each one function that the merge loop also calls. What the merge accepts is unchanged, and `lead_role` is not normalised.
+- On a term-5 remediator part it calls `join-remediator-shards.sh --check-part`, widened with the join's own party-source resolver and a ledger-citation arm (an `edit:` token that no ledger row names, a superset of the join's UNWRITTEN).
+- A refusal exits 64, relays the REFUSED lines with a fix-in-place remedy, and writes nothing. A check's exit 3 (SKIP) prints a NOTE and marks; exit 4 (a harness fault, no verdict) prints one WARN and marks.
+- `--check-shard` picks files mode only when the sprint dir holds an entry spelled exactly `<artifact>` with two or more story files (a case-insensitive `-d` matched a document's dir on APFS); otherwise document mode when the shard's `artifact:` partitions; otherwise SKIP. A part with no provenance block at all, in a dir that resolves no mode, also SKIPs; a half block still refuses. `--check-shard` sits beside BL-976's `--check-shard-dir`.
+- Pull safety: each sibling's support is detected by a sentinel comment (`# MARK-CHECK-SHARD v1`, `# CHECK-PART-MARK v1`). A missing sentinel prints WARN and keeps today's behaviour; an absent sibling keeps today's behaviour.
+- Known gap: the seal SKIPs a document-mode shard whose whole provenance block is deleted, because the mode decision reads the shard's own `artifact:` line; the merge's join still refuses it. Closing it needs the mode resolved from a sealed sibling's `artifact:`, seeded in CS10/CS11's shape.
+- Join-only, named in the headers: the dispatch id, INVOKED_AT, the seal and admission phases, the set rules and the cross owner rule.
+
+`adversary.md` and `remediator.md` each gain one sentence at their `--mark` line.
+
+Measured:
+- On real pre-fix bytes recovered from graph's transcripts, the seal refuses 20 of the 21. The miss is INVOKED_AT, which is merge-only by design.
+- A false-positive census over graph HEAD found 0 false positives in 1115 merged adversary shards and 890 merged term-5 parts. For the parts the census refused, a real-join differential found identical refusal sets under the join and `--check-part` in 4 dirs at two engines.
+
+Consumer cost: an engine change live from pull step 3, plus two role-file sentences at the reconcile merge. No new hook, trust root or setting. The entry stays open until an `Outcome measured:` line counts refusal resumes on a graph sprint.
+
 ## [0.1056.0] - 2026-11-11
 
 ### BL-975 — wait-for-deliverable names a dispatched agent that died before delivering (DISPATCH FAILED)

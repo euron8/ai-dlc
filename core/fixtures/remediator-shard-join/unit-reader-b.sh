@@ -515,6 +515,94 @@ else
   bad "CP2: SURVIVED -- CP1 holds against a --check-part that never runs contract_check"
 fi
 
+# CP3 / CP4: --check-part's two tree arms (CHECK-PART-MARK v1). The live run joins each offender world once
+# (the join's own refusal is the reference); the predicates and the mutants ask --check-part only.
+if cp_party_build "$JOIN" && p_cpparty "$JOIN"; then ok "CP3: --check-part on a party part sourcing the round-one part file 01.md#F-1 -> rc 2 with the join's own NOFILE line byte-for-byte; the seat-file source architecture-dev-1.md#F-1 -> rc 0, CHECK-PART:"; B_CP3=1
+else bad "CP3: --check-part did not resolve a party part's sources as the join does (rc=$RC, join line '${CP3_JL:-}'): $(cat "$JO")"; fi
+if cp_ledger_build "$JOIN" && p_cpledger "$JOIN"; then ok "CP4: --check-part on an edit: line whose note carries the bare token CLAUDE.md (the join refuses it UNWRITTEN) -> rc 2 naming CLAUDE.md and no other token; the same note naming no file -> rc 0, CHECK-PART:"; B_CP4=1
+else bad "CP4: --check-part did not refuse an edit: token no ledger row names (rc=$RC): $(cat "$JO")"; fi
+# CP3m: the party-source call removed from --check-part; CP4m: the ledger-citation refusal made a no-op.
+# Each in a copy of the join's whole directory, cmp -s guarded; each must kill its own arm and leave the other's.
+cp_mut() { # <name> <sed program> -> CPMD, rc 1 when the copy could not be built or the sed matched nothing
+  CPMD="$(mktemp -d "$WORK/$1.XXXXXX")" || return 1
+  cp "$(dirname "$JOIN")"/*.sh "$CPMD/" || return 1
+  sed "$2" "$JOIN" > "$CPMD/join-remediator-shards.sh" || return 1
+  ! cmp -s "$JOIN" "$CPMD/join-remediator-shards.sh"
+}
+if cp_mut cp3m 's/^      src_refusals "\$(src_check "\$SEAT_DIR" "\$CHKPART")"$/      :/'; then
+  c3=0; p_cpparty "$CPMD/join-remediator-shards.sh" || c3=1
+  c4=0; p_cpledger "$CPMD/join-remediator-shards.sh" || c4=1
+  mrow CP3m "CP3=$c3" "CP4=$c4"
+  if [ "$c3$c4" = 10 ]; then mutant_killed "$(( ${B_CP3:-0} && ${B_CP4:-0} ))" CP3m "CP3m --check-part's party-source call removed: KILLED by [CP3] and not CP4"
+  else bad "CP3m --check-part's party-source call removed: CP3 dead=$c3, CP4 dead=$c4 (expected 1 and 0)"; fi
+else bad "CP3m: FIXTURE STALE -- the party-source anchor did not apply to a copy of $JOIN; re-anchor it, never relax the assertion"; fi
+if cp_mut cp4m '/^          refuse "\${_cpb} cites \${_t} on an edit: line/s/^          refuse /          : /'; then
+  c3=0; p_cpparty "$CPMD/join-remediator-shards.sh" || c3=1
+  c4=0; p_cpledger "$CPMD/join-remediator-shards.sh" || c4=1
+  mrow CP4m "CP3=$c3" "CP4=$c4"
+  if [ "$c3$c4" = 01 ]; then mutant_killed "$(( ${B_CP3:-0} && ${B_CP4:-0} ))" CP4m "CP4m --check-part's ledger-citation refusal made a no-op: KILLED by [CP4] and not CP3"
+  else bad "CP4m --check-part's ledger-citation refusal made a no-op: CP3 dead=$c3, CP4 dead=$c4 (expected 0 and 1)"; fi
+else bad "CP4m: FIXTURE STALE -- the ledger-citation anchor did not apply to a copy of $JOIN; re-anchor it, never relax the assertion"; fi
+# MKP: END TO END. CP3's and CP4's offenders, marked through the REAL wait-for-deliverable.sh --mark, whose sibling
+# is the REAL join (header terms 5 and 8), never a stand-in: exit 64, the part byte-unchanged (cmp), the join's own
+# refusal line relayed with the mark's remedy; each corrected near-miss MARKED. <wfd> is the mark to drive, so a
+# mutant is a copy of the whole script dir with only wait-for-deliverable.sh changed.
+mkp_go() { # <wfd> <part> -> RC, $JO, $WORK/mkp.before
+  cp "$2" "$WORK/mkp.before" || return 1
+  wfd_run "$1" --mark "$2" stories remediator 01 findings=1 > "$JO" 2>&1; RC=$?
+}
+mkp_refused() { # <part> <the join's refusal line>
+  [ "$RC" -eq 64 ] && cmp -s "$WORK/mkp.before" "$1" && has "$JO" "$2" \
+    && has "$JO" "the join's own check, refused '$1'; fix it in your file with Edit, then run the same --mark again"
+}
+mkp_marked() { # <part>
+  [ "$RC" -eq 0 ] && has "$JO" "MARKED " && ! has "$JO" "REFUSED" && ! cmp -s "$WORK/mkp.before" "$1" \
+    && tail -1 "$1" | grep -q '^seat-complete: .* remediator 01 sha=[0-9a-f]\{64\} findings=1$'
+}
+p_mkpart() { # <wfd> -> 0 iff both offenders refuse and both near-misses mark
+  local wf="$1" p ok=1
+  [ -n "${CP3_JL:-}" ] && [ -n "${CP4_W:-}" ] || return 1
+  p="$CP3_W/$PRD/01.md"                                   # the party part sourcing a round-one part file
+  ppart "$CP3_W" 01 2.1 "01.md#F-1"; stamp "$CP3_W"; mkp_go "$wf" "$p"; mkp_refused "$p" "$CP3_JL" || ok=0
+  ppart "$CP3_W" 01 2.1 "architecture-dev-1.md#F-1"; stamp "$CP3_W"; mkp_go "$wf" "$p"; mkp_marked "$p" || ok=0
+  p="$CP4_W/$SLOT/shards/stories-repair-p1/01.md"         # the bare CLAUDE.md token on an edit: line
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s%s\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n%s\n' \
+    "$SIBW_EDIT" "$CP4_NOTE" "$SIB_INS" "$CHK_LINES" > "$p"
+  mkp_go "$wf" "$p"; mkp_refused "$p" "REFUSED: $CP4_TXT" || ok=0
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s (the rule is in the project rules)\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n%s\n' \
+    "$SIBW_EDIT" "$SIB_INS" "$CHK_LINES" > "$p"
+  mkp_go "$wf" "$p"; mkp_marked "$p" || ok=0
+  [ "$ok" = 1 ]
+}
+MKP_WFD="$SRCDIR/wait-for-deliverable.sh"
+if p_mkpart "$MKP_WFD"; then ok "MKP: END TO END through the real wait-for-deliverable.sh --mark and the real join --check-part: a party part sourcing 01.md#F-1 and an edit: line carrying the bare token CLAUDE.md -> exit 64, the part byte-unchanged, the join's own refusal line relayed with the mark's remedy; the seat-file source and the note naming no file -> MARKED"; B_MKP=1
+else bad "MKP: a real --check-part refusal did not flow through --mark (rc=$RC): $(head -5 "$JO")"; fi
+# MKPm-call: the mark never runs the sibling's check; MKPm-relay: it refuses but relays none of the join's lines.
+# Each a copy of the whole script dir with wait-for-deliverable.sh alone mutated (cmp -s guarded); CP3 (the join
+# asked directly) is the twin that must hold.
+mkp_mut() { # <name> <old line> <new line> -> MKPD, rc 1 when the copy could not be built or the anchor is not there once
+  MKPD="$(mktemp -d "$WORK/$1.XXXXXX")" || return 1
+  cp "$SRCDIR"/*.sh "$MKPD/" || return 1
+  M_OLD="$2" M_NEW="$3" python3 - "$MKP_WFD" "$MKPD/wait-for-deliverable.sh" <<'PY' || return 1
+import os, sys
+t = open(sys.argv[1], encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  ! cmp -s "$MKP_WFD" "$MKPD/wait-for-deliverable.sh" && bash -n "$MKPD/wait-for-deliverable.sh" && [ -f "$MKPD/join-remediator-shards.sh" ]
+}
+for _mk in call relay; do
+  if [ "$_mk" = call ]; then _mo='      if [ -z "$MK_JS" ] || [ ! -f "$MK_JS" ]; then :'; _mn='      if :; then :'
+  else _mo="          2) mk_jr_=\"\$(printf '%s\\n' \"\$MK_JO\" | grep '^REFUSED:')\" || mk_jr_=\"\$MK_JO\""; _mn='          2) mk_jr_=""'; fi
+  if mkp_mut "mkpm-$_mk" "$_mo" "$_mn"; then
+    cm=0; p_mkpart "$MKPD/wait-for-deliverable.sh" || cm=1
+    c3=0; p_cpparty "$JOIN" || c3=1
+    mrow "MKPm-$_mk" "MKP=$cm" "CP3=$c3"
+    if [ "$cm$c3" = 10 ]; then mutant_killed "$(( ${B_MKP:-0} && ${B_CP3:-0} ))" "MKPm-$_mk" "MKPm-$_mk the mark's check $_mk removed: KILLED by [MKP] and not CP3"
+    else bad "MKPm-$_mk the mark's check $_mk removed: MKP dead=$cm, CP3 dead=$c3 (expected 1 and 0)"; fi
+  else bad "MKPm-$_mk: FIXTURE STALE -- the anchor did not apply to a copy of $MKP_WFD; re-anchor it, never relax the assertion"; fi
+done
+
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-derivation-capture.sh"
 if p_derivdoc "$DHOOK"; then ok "D5: a part whose derivation names the DOCUMENT -> the capture hook accepts it (a stale control in the same world refused), the join assembles, the sprint-dir re-run skips the 2 frozen records -> rc 0, and the joined record named as a file reproduces"; B_D5=1
 else bad "D5: a document-naming part derivation did not survive capture, join and the gate re-run (hook rc=${CAP_RC:-?}, join rc=$RC, derivations rc=${DV_RC:-?}): $(cat "$CAP_ERR" "$JO" "$DV_OUT" 2>/dev/null)"; fi

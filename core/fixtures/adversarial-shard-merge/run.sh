@@ -109,6 +109,21 @@
 # MUTANT-MATRIX DV-gate-supersets-only decides=DVRS twins=DV2
 # MUTANT-MATRIX DV-notarize-dispatched-only decides=DV10 twins=DV2
 # MUTANT-MATRIX DV-literal-m-minus-1 decides=DV10 twins=DV2
+# MUTANT-MATRIX CSM-agree decides=CS1 twins=A1
+# MUTANT-MATRIX CSM-self decides=CS1 twins=A1
+# MUTANT-MATRIX CSM-cite decides=CS2 twins=A1
+# MUTANT-MATRIX CSM-artifact decides=CS3 twins=A1
+# MUTANT-MATRIX CSM-header decides=CS4 twins=A1
+# MUTANT-MATRIX CSM-skip decides=CS5 twins=A1
+# MUTANT-MATRIX CSM-bytes decides=CS6 twins=A1
+# MUTANT-MATRIX CSW-call decides=CS8 twins=CS1
+# MUTANT-MATRIX CSW-relay decides=CS8 twins=CS1
+# MUTANT-MATRIX CSM-early decides=CS9 twins=A1
+# MUTANT-MATRIX CSM-order decides=CS9 twins=A1
+# MUTANT-MATRIX CSM-docsel decides=CS10 twins=A1
+# MUTANT-MATRIX CSM-noblock decides=CS11 twins=A1
+# MUTANT-MATRIX CSM-flagswap decides=CS12 twins=A1
+# MUTANT-MATRIX CSM-flagglob decides=CS12 twins=A1
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-shard-merge/run.sh --matrix
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="adversarial-shard-merge"
@@ -529,6 +544,211 @@ chv "$d/1.md" "s/^## Findings$/## Findings\\
 [ "$RC" -eq 1 ] && has "$MO" "$RESERVED" && ok "CH10: --check-header refuses the reserved-form heading the merge refuses" \
   || bad "CH10: (rc=$RC) $(cat "$MO")"
 
+# CS1-CS7: --check-shard, ONE adversary shard at its seal (BL-974; header: THE SHARD CHECK). Each cell is a
+# real seeded world; the sealed sibling is sealed by the REAL producer, wait-for-deliverable.sh --mark.
+# Every predicate takes the merge file first, so a mutant is scored by the arm's own body.
+WFD="$SRCDIR/wait-for-deliverable.sh"
+cs() { $ASM_RUN "$1" --check-shard "$2" --findings "$3" > "$MO" 2>&1; RC=$?; } # <merge> <shard file> <n>
+cs_lr() { sed "s|^lead_role: .*|lead_role: $2|" "$1" > "$1.t" && mv "$1.t" "$1"; } # <shard file> <value>
+cs_seal() { bash "$WFD" --mark "$1" requirements adversary "$2" "findings=$3" >/dev/null 2>&1; } # <file> <shard> <n>
+# The shipped mark now runs --check-shard (wait-for-deliverable.sh header term 7), so a SECOND sealed sibling that
+# disagrees with the first is refused at its seal. That world is still reachable: a shard sealed by an engine half
+# whose mark has no merge beside it (term 7's absent-sibling case, today's behaviour). cs_seal_presib is that mark,
+# the shipped wait-for-deliverable.sh and content-seal.sh in a dir that holds no merge.
+CS_PRESIB="$WORK/cs-presib"; mkdir -p "$CS_PRESIB" && cp "$WFD" "$SRCDIR/content-seal.sh" "$CS_PRESIB/" \
+  || { echo "FIXTURE BROKEN: cannot build the pre-sibling mark dir" >&2; exit 2; }
+cs_seal_presib() { bash "$CS_PRESIB/wait-for-deliverable.sh" --mark "$1" requirements adversary "$2" "findings=$3" >/dev/null 2>&1; }
+p_cs_lead() { # lead_role against a SEALED sibling, both directions; an unsealed one and self are never the reference
+  local m="$1" d w ok=1
+  for w in "requirements|requirements.md" "requirements.md|requirements"; do
+    d="$(subj_b3_world)" || return 1
+    cs_lr "$d/1.md" "${w%|*}"; cs_seal "$d/1.md" 1 1 || return 1
+    cs_lr "$d/2.md" "${w#*|}"; cs "$m" "$d/2.md" 1
+    [ "$RC" -eq 2 ] && has "$MO" "REFUSED: $d/2.md declares lead_role '${w#*|}' where the sealed shard $d/1.md declares '${w%|*}'" || ok=0
+    cs_lr "$d/2.md" "${w%|*}"; cs "$m" "$d/2.md" 1                     # near-miss: the reference spelling
+    [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || ok=0
+  done
+  d="$(subj_b3_world)" || return 1                                      # control: the sibling is NOT sealed
+  cs_lr "$d/1.md" requirements; cs_lr "$d/2.md" requirements.md; cs "$m" "$d/2.md" 1
+  [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || ok=0
+  d="$(subj_b3_world)" || return 1                                      # re-mark: self is sealed with the old spelling
+  cs_lr "$d/2.md" requirements.md; cs_seal "$d/2.md" 2 1 || return 1
+  sed 's|^lead_role: .*|lead_role: requirements|' "$d/2.md" > "$WORK/cs-remark.md" || return 1
+  export AI_DLC_CHECK_BYTES="$WORK/cs-remark.md"; cs "$m" "$d/2.md" 1; unset AI_DLC_CHECK_BYTES
+  [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || ok=0
+  d="$(subj_b3_world)" || return 1                                      # sealed siblings disagreeing: WARN, pass
+  cs_lr "$d/1.md" requirements; cs_seal "$d/1.md" 1 1 || return 1
+  cs_lr "$d/3.md" requirements.md; cs_seal_presib "$d/3.md" 3 1 || return 1
+  cs "$m" "$d/2.md" 1
+  [ "$RC" -eq 0 ] && has "$MO" "WARN: the sealed shards in" && has "$MO" "SHARD-OK" || ok=0
+  [ "$ok" = 1 ]
+}
+p_cs_cite() { # a finding with no sections: line is refused at the seal; the same shard with it passes
+  local m="$1" d; d="$(subj_b3_world)" || return 1
+  cs "$m" "$d/1.md" 1; [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || return 1
+  awk 'k == 0 && /^sections: / { k = 1; next } { print }' "$d/1.md" > "$d/1.t" && mv "$d/1.t" "$d/1.md"
+  cs "$m" "$d/1.md" 1
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: $d/1.md:5 finding carries 0 sections: lines; each finding carries exactly one"
+}
+p_cs_stem() { # artifact_sha stem SPec@ against SPEC@ (the subject's own stem): refused; SPEC@ passes
+  local m="$1" d; d="$(subj_b3_world)" || return 1
+  has "$d/1.md" "SPEC@" || has "$d/1.md" "SPEC=" || return 1
+  cs "$m" "$d/1.md" 1; [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || return 1
+  sed -E 's/^(artifact_sha:.* )SPEC([=@])/\1SPec\2/' "$d/1.md" > "$d/1.t" && mv "$d/1.t" "$d/1.md"
+  cs "$m" "$d/1.md" 1
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: $d/1.md artifact_sha names stem 'SPec', not a subject stem"
+}
+p_cs_opener() { # the provenance opener misspelt SKILL_INVOCATION_PROVENANCE_BEGIN: one REFUSED line, exit 2
+  local m="$1" d n; d="$(b3_world)" || return 1
+  cs "$m" "$d/1.md" 2; [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || return 1
+  sed 's/SKILL_INVOCATION_PROVENANCE v1/SKILL_INVOCATION_PROVENANCE_BEGIN/' "$d/1.md" > "$d/1.t" && mv "$d/1.t" "$d/1.md"
+  cs "$m" "$d/1.md" 2; n="$(grep -c '^REFUSED: ' "$MO")" || n=0
+  [ "$RC" -eq 2 ] && [ "$n" = 1 ] && has "$MO" "carries 0 provenance block opening(s) and 1 closing(s)"
+}
+p_cs_skip() { # dir-level non-subjects SKIP (exit 3); a real files-mode shard dir beside them is checked (exit 0)
+  local m="$1" d s x ok=1; d="$(b3_world)" || return 1; s="$(dirname "$d")"
+  cs "$m" "$d/1.md" 2; [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || ok=0
+  for x in stories-fences-p1 architecture-adversarial-p1; do
+    mkdir -p "$s/$x"; sed 's|^artifact_sha: .*|artifact_sha: 0|' "$d/1.md" > "$s/$x/1.md"
+    cs "$m" "$s/$x/1.md" 2
+    [ "$RC" -eq 3 ] && has "$MO" "SKIP: " && ! has "$MO" "REFUSED" || ok=0
+  done
+  [ "$ok" = 1 ]
+}
+p_cs_bytes() { # AI_DLC_CHECK_BYTES: the bytes checked are that file's, the path named is the real shard's
+  local m="$1" d; d="$(b3_world)" || return 1
+  sed '/^verdict:/d' "$d/1.md" > "$WORK/cs-bytes.md"
+  export AI_DLC_CHECK_BYTES="$WORK/cs-bytes.md"; cs "$m" "$d/1.md" 2; unset AI_DLC_CHECK_BYTES
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: $d/1.md declares verdict '<none>'" && ! has "$MO" "$WORK/cs-bytes.md" || return 1
+  cs "$m" "$d/1.md" 2; [ "$RC" -eq 0 ] || return 1                       # the real bytes: clean
+  cs "$m" "$d/1.md" 3                                                    # --findings 3 over 2 findings, no marker
+  [ "$RC" -eq 2 ] && has "$MO" "findings=3' but its ## Findings section heads 2 finding(s)" || return 1
+  $ASM_RUN "$m" --check-shard "$d/1.md" > "$MO" 2>&1; [ "$?" -eq 64 ]
+}
+p_cs_lead "$MERGE" && ok "CS1: lead_role 'requirements.md' against a SEALED 'requirements' sibling, and the reverse -> REFUSED naming the sibling and its value; the reference spelling, an UNSEALED disagreeing sibling, and a re-mark of a shard sealed with the old spelling -> SHARD-OK; sealed siblings disagreeing among themselves -> WARN, SHARD-OK" \
+  || bad "CS1: (rc=$RC) $(head -3 "$MO")"
+p_cs_cite "$MERGE" && ok "CS2: a finding with no sections: line -> --check-shard exit 2 with the merge's own cite-line refusal; the shard with it -> SHARD-OK" \
+  || bad "CS2: (rc=$RC) $(head -3 "$MO")"
+p_cs_stem "$MERGE" && ok "CS3: artifact_sha stem SPec@ (the subject's is SPEC@) -> exit 2 with the merge's own stem refusal; SPEC@ -> SHARD-OK" \
+  || bad "CS3: (rc=$RC) $(head -3 "$MO")"
+p_cs_opener "$MERGE" && ok "CS4: a provenance opener misspelt SKILL_INVOCATION_PROVENANCE_BEGIN -> exactly one REFUSED line (0 openings, 1 closing), exit 2; the real opener -> SHARD-OK" \
+  || bad "CS4: (rc=$RC) $(head -3 "$MO")"
+p_cs_skip "$MERGE" && ok "CS5: a shard in stories-fences-p1 (no subject resolvable) and in architecture-adversarial-p1 (the series stem) -> SKIP, exit 3, no REFUSED; stories-p1 beside them -> SHARD-OK" \
+  || bad "CS5: (rc=$RC) $(head -3 "$MO")"
+p_cs_bytes "$MERGE" && ok "CS6: AI_DLC_CHECK_BYTES names the bytes checked and the refusal names the real shard path; --findings 3 over 2 markerless findings -> the truncation refusal; no --findings -> exit 64" \
+  || bad "CS6: (rc=$RC) $(head -3 "$MO")"
+p_cs_selffirst() { # the self-only checks run BEFORE a subject is resolved: in a dir with none, a misspelt opener is
+  # REFUSED (exit 2, the block count), and the correct opener in the same dir is SKIP (exit 3) naming the checks run
+  local m="$1" d s; d="$(b3_world)" || return 1; s="$(dirname "$d")/stories-fences-p1"
+  mkdir -p "$s" && cp "$d/1.md" "$s/1.md" || return 1
+  cs "$m" "$s/1.md" 2
+  [ "$RC" -eq 3 ] && has "$MO" "SKIP: no subject resolvable" && has "$MO" "the self-only checks ran and passed (check_header" && ! has "$MO" "REFUSED" || return 1
+  sed 's/SKILL_INVOCATION_PROVENANCE v1/SKILL_INVOCATION_PROVENANCE_BEGIN/' "$d/1.md" > "$s/1.md" || return 1
+  cs "$m" "$s/1.md" 2
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: $s/1.md carries 0 provenance block opening(s) and 1 closing(s)" && ! has "$MO" "SKIP" || return 1
+  # A COLLECTED refusal (the block parses, the verdict is absent) in the same dir: the self-only verdict, not the block-count stop, decides it.
+  sed '/^verdict:/d' "$d/1.md" > "$s/1.md" || return 1
+  cs "$m" "$s/1.md" 2
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: $s/1.md declares verdict '<none>'" && ! has "$MO" "SKIP"
+}
+p_cs_selffirst "$MERGE" && ok "CS9: in stories-fences-p1 (no subject resolvable) a SKILL_INVOCATION_PROVENANCE_BEGIN opener -> exit 2 naming the block count, and a verdict-less shard -> exit 2, never SKIP; the real opener in the same dir -> exit 3 SKIP naming the self-only checks that ran" \
+  || bad "CS9: (rc=$RC) $(head -3 "$MO")"
+p_cs_docsel() { # FILES MODE ONLY on an entry spelled EXACTLY <artifact> holding two or more story files, never on
+  # `[ -d ]` alone: a same-name dir holding ONE document, and a case-variant dir (which a case-insensitive
+  # filesystem reads as the same name), beside sections: shards whose artifact partitions -> SHARD-OK, document mode.
+  # Document mode is proven, not inferred: the same shard with a sections: line removed -> the sections: cite refusal.
+  local m="$1" d s ok=1
+  d="$(doc_b3_world)" || return 1; s="$(dirname "$(dirname "$d")")"
+  cs "$m" "$d/1.md" 2; [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" || ok=0          # control: no colliding entry
+  mkdir -p "$s/test-strategy" && cp "$s/test-strategy.md" "$s/test-strategy/test-strategy.md" || return 1
+  cs "$m" "$d/1.md" 2; [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" && ! has "$MO" "stories:" || ok=0
+  awk 'k == 0 && /^sections: / { k = 1; next } { print }' "$d/1.md" > "$d/1.t" && mv "$d/1.t" "$d/1.md"
+  cs "$m" "$d/1.md" 2
+  [ "$RC" -eq 2 ] && has "$MO" "finding carries 0 sections: lines; each finding carries exactly one" || ok=0
+  d="$(doc_b3_world)" || return 1; s="$(dirname "$(dirname "$d")")"
+  mkdir -p "$s/TEST-STRATEGY" && cp "$s/test-strategy.md" "$s/TEST-STRATEGY/test-strategy.md" || return 1
+  cs "$m" "$d/1.md" 2; [ "$RC" -eq 0 ] && has "$MO" "SHARD-OK" && ! has "$MO" "stories:" || ok=0
+  [ "$ok" = 1 ]
+}
+p_cs_docsel "$MERGE" && ok "CS10: a same-name dir s1/test-strategy/ holding ONE document, and a case-variant dir s1/TEST-STRATEGY/, beside sections: shards -> SHARD-OK in document mode (a sections:-less finding there -> the sections: cite refusal), never files mode" \
+  || bad "CS10: (rc=$RC) $(head -3 "$MO")"
+p_cs_noblock() { # a file with NO provenance block (0 openings, 0 closings) in a dir resolving no subject -> SKIP, both a
+  # stories-fences-p1 and a stories-amend-p1 repair-style part; one opening and no closing in that dir -> REFUSED
+  local m="$1" d s x ok=1; d="$(b3_world)" || return 1
+  for x in stories-fences-p1 stories-amend-p1; do
+    s="$(dirname "$d")/$x"; mkdir -p "$s" || return 1
+    printf '# repair part\n\n- **disposition:** repaired\n- **edit:** `stories/story-1.md:3`\n' > "$s/1.md"
+    cs "$m" "$s/1.md" 0
+    [ "$RC" -eq 3 ] && has "$MO" "SKIP: $s/1.md carries no provenance block" && ! has "$MO" "REFUSED" || ok=0
+  done
+  sed '/SKILL_INVOCATION_PROVENANCE_END/d' "$d/1.md" > "$s/1.md" || return 1
+  cs "$m" "$s/1.md" 2
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED: $s/1.md carries 1 provenance block opening(s) and 0 closing(s)" && ! has "$MO" "SKIP" || ok=0
+  [ "$ok" = 1 ]
+}
+p_cs_noblock "$MERGE" && ok "CS11: a file carrying no provenance block (0 openings, 0 closings) in stories-fences-p1 and stories-amend-p1 -> SKIP, exit 3; one opening and no closing in the same dir -> REFUSED naming the block count (CS9 holds 0 openings, 1 closing)" \
+  || bad "CS11: (rc=$RC) $(head -3 "$MO")"
+p_cs_flags() { # --check-shard-dir and --check-shard are two modes, told apart in both directions in one world.
+  # (a) --check-shard-dir on a dir holding a shard --check-shard refuses (2.md, no verdict:): exactly the one
+  #     `OK<TAB><dir>` line, rc 0, and none of --check-shard's lines (REFUSED:, SHARD-OK, SKIP:, its usage).
+  # (b) --check-shard on 1.md, a path --check-shard-dir refuses (its parent is no shards/ dir): rc 0 SHARD-OK
+  #     and none of --check-shard-dir's tab lines (OK, SKIP, REFUSED) or its usage.
+  local m="$1" d ok=1; d="$(b3_world)" || return 1
+  sed '/^verdict:/d' "$d/2.md" > "$d/2.t" && mv "$d/2.t" "$d/2.md" || return 1
+  $ASM_RUN "$m" --check-shard-dir "$d" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && [ "$(cat "$MO")" = "$(printf 'OK\t%s' "$d")" ] \
+    && ! has "$MO" "REFUSED: " && ! has "$MO" "SHARD-OK" && ! has "$MO" "SKIP: " && ! has "$MO" "--check-shard <shard-file>" || ok=0
+  $ASM_RUN "$m" --check-shard "$d/1.md" --findings 2 > "$MO.b" 2>&1; RC_B=$?
+  [ "$RC_B" -eq 0 ] && has "$MO.b" "SHARD-OK" && ! grep -q "$(printf '^\\(OK\\|SKIP\\|REFUSED\\)\t')" "$MO.b" \
+    && ! has "$MO.b" "--check-shard-dir <planning>" || ok=0
+  [ "$ok" = 1 ] || { cat "$MO.b" >> "$MO"; RC="$RC/$RC_B"; return 1; }
+}
+p_cs_flags "$MERGE" && ok "CS12: --check-shard-dir on a shard dir holding a shard --check-shard refuses -> exactly OK<TAB><dir>, rc 0, no --check-shard line; --check-shard on a file path --check-shard-dir refuses -> SHARD-OK, rc 0, no --check-shard-dir line" \
+  || bad "CS12: (rc=$RC) $(head -4 "$MO")"
+csd="$(b3_world)"; sed '/^verdict:/d' "$csd/2.md" > "$csd/2.t" && mv "$csd/2.t" "$csd/2.md"
+eq_arm CS7a 2 "REFUSED: " "--check-shard refusing" - --check-shard "$csd/2.md" --findings 2
+eq_arm CS7b 0 "SHARD-OK" "--check-shard passing" - --check-shard "$csd/1.md" --findings 2
+# CS8: END TO END. The REAL --check-shard refusal flows through the REAL wait-for-deliverable.sh --mark, the merge
+# file's own sibling (header terms 7: the mark resolves the merge beside itself), never a stand-in. A copied sibling
+# set gets the shipped wait-for-deliverable.sh beside it, so a merge mutant is the merge the mark runs; a
+# wait-for-deliverable.sh mutant (mutw) is built beside an unmutated merge. Each offender: exit 64, the shard's bytes
+# unchanged (cmp), the merge's REFUSED line relayed and the mark's remedy; each corrected near-miss: MARKED.
+cs_mk() { # <dir holding wait-for-deliverable.sh> <shard file> <shard> <n> -> RC, $MO, $WORK/cs-e2e.before
+  cp "$2" "$WORK/cs-e2e.before" || return 1
+  bash "$1/wait-for-deliverable.sh" --mark "$2" requirements adversary "$3" "findings=$4" > "$MO" 2>&1; RC=$?
+}
+cs_mk_refused() { # <shard file> <the merge's REFUSED line>
+  [ "$RC" -eq 64 ] && cmp -s "$WORK/cs-e2e.before" "$1" && has "$MO" "$2" \
+    && has "$MO" "the join's own check, refused '$1'; fix it in your file with Edit, then run the same --mark again"
+}
+cs_mk_marked() { # <shard file>
+  [ "$RC" -eq 0 ] && has "$MO" "MARKED " && ! has "$MO" "REFUSED" && ! cmp -s "$WORK/cs-e2e.before" "$1" \
+    && tail -1 "$1" | grep -q '^seat-complete: requirements adversary [0-9]* sha=[0-9a-f]\{64\} findings=1$'
+}
+p_cs_e2e() { # <merge>
+  local m="$1" wd d w ok=1
+  wd="$(dirname "$m")"; [ -f "$wd/wait-for-deliverable.sh" ] || cp "$WFD" "$wd/" || return 1
+  for w in "requirements|requirements.md" "requirements.md|requirements"; do
+    d="$(subj_b3_world)" || return 1
+    cs_lr "$d/1.md" "${w%|*}"; cs_seal "$d/1.md" 1 1 || return 1
+    cs_lr "$d/2.md" "${w#*|}"; cs_mk "$wd" "$d/2.md" 2 1
+    cs_mk_refused "$d/2.md" "REFUSED: $d/2.md declares lead_role '${w#*|}' where the sealed shard $d/1.md declares '${w%|*}'" || ok=0
+    cs_lr "$d/2.md" "${w%|*}"; cs_mk "$wd" "$d/2.md" 2 1                  # near-miss: the sealed sibling's spelling
+    cs_mk_marked "$d/2.md" || ok=0
+  done
+  d="$(subj_b3_world)" || return 1
+  has "$d/1.md" "SPEC@" || has "$d/1.md" "SPEC=" || return 1
+  sed -E 's/^(artifact_sha:.* )SPEC([=@])/\1SPec\2/' "$d/1.md" > "$d/1.t" && mv "$d/1.t" "$d/1.md"
+  cs_mk "$wd" "$d/1.md" 1 1
+  cs_mk_refused "$d/1.md" "REFUSED: $d/1.md artifact_sha names stem 'SPec', not a subject stem" || ok=0
+  sed -E 's/^(artifact_sha:.* )SPec([=@])/\1SPEC\2/' "$d/1.md" > "$d/1.t" && mv "$d/1.t" "$d/1.md"
+  cs_mk "$wd" "$d/1.md" 1 1                                              # near-miss: the subject's own stem
+  cs_mk_marked "$d/1.md" || ok=0
+  [ "$ok" = 1 ]
+}
+p_cs_e2e "$MERGE" && ok "CS8: END TO END through the real wait-for-deliverable.sh --mark and the real merge --check-shard: lead_role 'requirements.md' against a SEALED 'requirements' sibling, the reverse, and artifact_sha stem SPec@ against SPEC@ -> exit 64, the shard byte-unchanged, the merge's REFUSED line relayed with the mark's remedy; each corrected spelling -> MARKED" \
+  || bad "CS8: (rc=$RC) $(head -5 "$MO")"
+
 # RM-A / RM-B: mutants of the merge, each in a copy of its whole sibling set, the anchor applied exactly once.
 mut_merge() { # <old> <new> -> prints the mutated merge's path; empty when the anchor is not there once
   local md s
@@ -847,7 +1067,7 @@ fi
 # the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
 # prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
 n_mut=0; n_kill=0
-ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 FI1 FI2 FI3a FI3b FIF FIE FIS FISa B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g"
+ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 FI1 FI2 FI3a FI3b FIF FIE FIS FISa B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g CS1 CS2 CS3 CS4 CS5 CS6 CS8 CS9 CS10 CS11 CS12"
 [ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2vac_core KEnone_inst KEvac_inst KEps_inst KEnone_core KEvac_core KEsch_core"
 karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
   local w a
@@ -907,6 +1127,17 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
     RR6e) p_dw_role "$2" ;;
     RR6f) p_dw_draft "$2" ;;
     RR6g) p_dw_straddle_draft "$2" ;;
+    CS1) p_cs_lead "$2" ;;
+    CS2) p_cs_cite "$2" ;;
+    CS3) p_cs_stem "$2" ;;
+    CS4) p_cs_opener "$2" ;;
+    CS5) p_cs_skip "$2" ;;
+    CS6) p_cs_bytes "$2" ;;
+    CS8) p_cs_e2e "$2" ;;
+    CS9) p_cs_selffirst "$2" ;;
+    CS10) p_cs_docsel "$2" ;;
+    CS11) p_cs_noblock "$2" ;;
+    CS12) p_cs_flags "$2" ;;
     K1_*) karm "$2" none "${1#K1_}" "@" ;;
     K2vac_*) karm "$2" vac "${1#K2vac_}" "=" ;;
     KEnone_*) kearm "$2" none "${1#KEnone_}" "@" ;;
@@ -1106,6 +1337,60 @@ mutm DW-M6-dw-before-out RR6d RR6b "$DW_ANCHOR" 'if ((p in dw) || noadm(p)) { dw
 mutm DW-M7-draft-straddle-narrowed RR6g RR6b 'for (i = 1; i <= n; i++) if ((i in drop) && (f[i] in dw)) delete drop[i]' 'for (i = 1; i <= n; i++) if (0) delete drop[i]'
 # M8: last(o) taken over exact P rows only: O's 21:10 draft row is not counted, a start is admissible, the two-dispatch message returns.
 mutm DW-M8-nlst-exact-only RR6g RR6b 'if ((f[i] == p || f[i] == p ".draft") && (a[i] in nfst)' 'if ((f[i] == p) && (a[i] in nfst)'
+# THE SHARD-CHECK MUTANTS (BL-974). Each anchor is a line only --check-shard executes, so A1 (a merge) is every
+# one's green twin and no kill can spread into the merge's own arms.
+mutm CSM-agree CS1 A1 'elif [ "$nref" -eq 1 ] && [ "$ref" != "$own" ]; then' 'elif false; then'
+mutm CSM-self CS1 A1 '"$bn") continue ;; cross.md|' 'cross.md|'
+mutm CSM-cite CS2 A1 '    check_cite_lines "$sf" "$line" "$nlines" || cs_refuse "$HDR_MSG"' '    :'
+mutm CSM-artifact CS3 A1 '    check_shard_artifact "$T/cs.p" "$sf" "$key" "$is_x" || cs_refuse "$HDR_MSG"' '    :'
+mutm CSM-header CS4 A1 '  if ! check_header "$T/cs.p" "$by" "$AXIS"; then' '  if false; then'
+mutm CSM-skip CS5 A1 '[ "${CS_SKIP:-0}" != 1 ] || { printf '"'"'SKIP: %s%s\n'"'"' ' '[ "${CS_SKIP:-0}" != 1 ] || true || { printf '"'"'SKIP: %s%s\n'"'"' '
+# The self-only verdict deferred past the derivation: a dir with no subject SKIPs a header refusal.
+mutm CSM-early CS9 A1 '  if [ "$CS_N" -gt 0 ]; then exit 2; fi' '  if false; then exit 2; fi'
+# The unresolvable subject SKIPped before any self-only check runs (the shipped defect of the first cut).
+mutm CSM-order CS9 A1 '        CITE=""; OTHER=""
+' '        printf '"'"'SKIP: no subject resolvable\n'"'"'; exit 3
+'
+# Files mode chosen by `[ -d ]` alone again (the exact-name listing and the two-story minimum gone): a same-name dir
+# holding one document is read as files mode and every sections: finding is refused for its missing stories: line.
+mutm CSM-docsel CS10 A1 '    for v in "$SPRINT_DIR"/*; do [ "${v##*/}" = "$ARTIFACT" ] && [ -d "$v" ] && { cs_e="$v"; break; }; done
+    if [ -n "$cs_e" ]; then
+      k=0; for v in "$cs_e"/*.md; do [ -f "$v" ] && k=$((k + 1)); done
+      [ "$k" -ge 2 ] && { CITE=stories; CS_MODE=files; }
+    fi
+' '    [ -d "$STORIES_DIR" ] && { CITE=stories; CS_MODE=files; }
+'
+# The no-block SKIP gone: a repair-style part with no provenance block is refused by check_header's block count.
+mutm CSM-noblock CS11 A1 '|| cs_skip "$sf carries no provenance block' '|| : "$sf carries no provenance block'
+mutm CSM-bytes CS6 A1 '    by="$AI_DLC_CHECK_BYTES"' '    :'
+# CS12's two: the two case labels SWAPPED, and the dir label widened to a glob that takes --check-shard too.
+mutm CSM-flagswap CS12 A1 '    shift; check_shard_dirs "$@"; exit $? ;;
+  --check-shard) check_shard_main "$@" ;;' '    shift; check_shard_main "$@" ;;
+  --check-shard) check_shard_dirs "$@"; exit $? ;;'
+mutm CSM-flagglob CS12 A1 '  --check-shard-dir)
+    [ $# -ge 2 ] && [ -z "$RERUN" ]' '  --check-shard*)
+    [ $# -ge 2 ] && [ -z "$RERUN" ]'
+# THE MARK'S RELAY MUTANTS (BL-974 E): wait-for-deliverable.sh mutated beside an UNMUTATED merge, so CS8 is the
+# only arm that runs the mutated file (CS1 seals with the shipped one and asks the merge directly: the twin).
+mutw() { # <name> <deciding arm> <twin arm> <old> <new>
+  local md s
+  md="$(mktemp -d "$WORK/rw.XXXXXX")" || return 1
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh validate-artifact-budget.sh validate-provenance-block.sh content-seal.sh; do
+    [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$md/"
+  done
+  if ! M_OLD="$4" M_NEW="$5" python3 - "$WFD" "$md/wait-for-deliverable.sh" <<'PY' || cmp -s "$WFD" "$md/wait-for-deliverable.sh" || ! bash -n "$md/wait-for-deliverable.sh"
+import os, sys
+t = open(sys.argv[1], encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+  then bad "$1: FIXTURE STALE -- its anchor is not in wait-for-deliverable.sh exactly once; re-anchor it, never relax the arm"; n_mut=$((n_mut + 1)); return; fi
+  mut "$1" "$2" "$3" "$md/merge-adversarial-shards.sh"
+}
+# CSW-call: the mark never runs the sibling's check (the shard is MARKED); CSW-relay: it refuses, but relays none
+# of the merge's REFUSED lines (rc 64, bytes unchanged, the remedy present: only the relay conjunct can kill it).
+mutw CSW-call CS8 CS1 '      if [ -z "$MK_JS" ] || [ ! -f "$MK_JS" ]; then :' '      if :; then :'
+mutw CSW-relay CS8 CS1 "          2) mk_jr_=\"\$(printf '%s\\n' \"\$MK_JO\" | grep '^REFUSED:')\" || mk_jr_=\"\$MK_JO\"" '          2) mk_jr_=""'
 # PM1: the schema reverted to the single-sha pattern, driven through AI_DLC_PROJECT_ROOT (whose core/schemas/ the
 # reader tries FIRST), so the validator is the shipped one and only the schema differs. PBARE is its twin.
 pm1_mt="$(mktemp -d "$WORK/pm1.XXXXXX")"; mkdir -p "$pm1_mt/core/schemas"
