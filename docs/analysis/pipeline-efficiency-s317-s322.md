@@ -260,10 +260,12 @@ python3 -I $C/lead_time.py           # lead active time: model, tool, idle wait
 python3 -I $C/bash_by_sprint.py      # Bash wall clock by command family, per sprint
 python3 -I $C/seats.py $OUT adversary # one seat by the binding it ran on, and passes per step
 python3 -I $C/resumes.py $OUT        # why finished subagents were resumed, and the idle before it
+python3 -I $C/ask_split.py $OUT      # BL-841/BL-972: each AskUserQuestion wait by what the lanes did during it
 ```
 
-Every script reads `~/.claude/projects/-Users-n8-git-graph`. `extract.py`, `cap_rejections.py` and the
-five scripts in the s317–s322 directory honour `EXTRACT_ROOT`; `spawns.py`, `decompose.py`,
+Every script reads `~/.claude/projects/-Users-n8-git-graph`, except `seats.py`, which reads only its OUT
+argument. `extract.py`, `cap_rejections.py` and the other five scripts in the s317–s322 directory honour
+`EXTRACT_ROOT`; `spawns.py`, `decompose.py`,
 `operator_asks.py`, `bash_cost.py` and `resident.py` have the path hard-coded.
 
 To measure a rebinding on a later sprint: add the sprint's edge to `EDGES` in `extract.py` and its story

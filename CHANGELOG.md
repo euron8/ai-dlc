@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1053.0] - 2026-11-11
+
+### BL-841 (PARTIAL): the entry's fix direction measured against its own data; no hook ships
+
+`docs/analysis/pipeline-efficiency-s317-s322/scripts/ask_split.py` (new; output `docs/analysis/pipeline-efficiency-s317-s322/out/ask_split.txt`, run with `EXTRACT_WIN_END=2026-11-11T10:30:00Z` per the analysis Reproduce block) takes each lead `AskUserQuestion` wait in graph's lead transcripts, read only, and buckets it by what the same lead session's subagents did during it: FINISHED-INSIDE, NONE-RUNNING or RUNNING-NO-FINISH. Population: 247 asks over s317–s322, sprints from `extract.py`'s `EDGES`. Its s317–s321 per-sprint counts and hours equal `operator_asks.py`'s. On s321 (1576 min over 57 asks): NONE-RUNNING 1086 min (69%), 940 of them deploy-validate asks with nothing running; RUNNING-NO-FINISH 325; FINISHED-INSIDE 164 (10%). On s320: 372, 1889 and 791 of 3052. 290 task notifications were enqueued inside 77 asks (133 from agents). No notification-carrying attachment or user record, and no lead assistant record, falls between any question and its answer (`DLV-INSIDE` 0, `ACT-INSIDE` 0). The 67 queue `remove` records that do fall inside are bookkeeping: no record shows the lead's model receiving those notifications before the answer.
+
+- Seven controls, each exiting 1 when it does not hold: a self-probe on a seeded temp root that runs before the corpus and fires in both directions, three known rows (BL-841's 10-27 06:57Z ask is FINISHED-INSIDE, the 645-minute "Router PUT" ask is NONE-RUNNING, a one-finisher ask is FINISHED-INSIDE), the 300 s tail rows, an agent notification inside every FINISHED-INSIDE ask, and at least one enqueue seen. Nine mutants of the bucket rules and counters were run against the real corpus at build; each exits 1.
+- `docs/analysis/pipeline-efficiency-s317-s322.md`: the Reproduce block gains the `ask_split.py` line, and the sentence naming which scripts honour `EXTRACT_ROOT` counts it.
+- A hook adding a held-lanes line to the question through `updatedInput` was ruled out by lead ai-dlc-7f because it moves zero minutes. The mechanism that could move FINISHED-INSIDE minutes, a lead that keeps receiving notifications and dispatching lanes while a question is open, is filed as BL-972 and not built. The question still goes out at once, and no variant may suppress, batch away or defer it.
+
+Receipt: re-run the script per the Reproduce block. It must exit 0 with every `CONTROL` line OK and its s317–s321 totals equal to `operator_asks.py`'s; re-run on the release tree it is byte-identical to the committed output. What it does not establish: whether a ready action sat undispatched at any ask, which no transcript records. Claim 1, lane-idle minutes during a pending ask, is not computed and stays owed.
+
+### BL-972 (filed)
+
+A pending `AskUserQuestion` holds the lead, so a lane that finishes during the question waits for the answer. DEFECT (efficiency), Baseline s321, Step `gate-validation[implementation]`. It closes on `ACT-INSIDE` above 0 on asks with a notification enqueued inside, and a fall in the ask count blocks the close as a contact regression. It needs an operator ruling on contact shape first.
+
+Consumer cost: none. The change is docs and an analysis script under `docs/analysis/`. Nothing ships to a consumer, and a consumer pull carries no delta from this release.
+
+Ledger: BL-841 gains a PARTIAL paragraph and stays open, with no LANDED line and no rotation. BL-972 is filed. Filed 1, closed 0, so NET (closed − filed) = −1.
+
 ## [0.1052.0] - 2026-11-11
 
 ### BL-819 PARTIAL: the dispatch guard refuses a lead brief with no `Deliverable:` line, so the In-Flight row is written by the hook rather than by hand
