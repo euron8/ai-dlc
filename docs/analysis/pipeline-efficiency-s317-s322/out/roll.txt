@@ -1,0 +1,53 @@
+extractor gap == op_wait + agent_wait on 6989 of 6989 segments
+hours are gap-inclusive (active + gaps over 300 s); $ = API list price, local calls $0; $e = token-equivalent
+step                            | s317 el/act h  $API/$e          | s318 el/act h  $API/$e          | s319 el/act h  $API/$e          | s320 el/act h  $API/$e          | s321 el/act h  $API/$e          | s322 el/act h  $API/$e          
+pre-step                        |   2.4/ 0.4  $     7/$     7     |   0.2/ 0.0  $     1/$     1     |   2.0/ 0.4  $     7/$     7     |   0.1/ 0.1  $     3/$     3     |   0.4/ 0.1  $     4/$     4     |   0.1/ 0.1  $     0/$     1     
+carry-over-evaluation           | -                               |   2.6/ 1.8  $   129/$   129     |   3.0/ 1.7  $   106/$   106     |  24.6/ 3.7  $   186/$   186     | -                               |  19.1/ 3.7  $   184/$   218     
+requirements                    | -                               |   6.1/ 4.3  $   330/$   330     |   8.8/ 5.7  $   282/$   282     |   7.0/ 3.3  $   205/$   205     |  10.4/ 5.8  $   301/$   301     |   3.8/ 2.6  $    73/$    96     
+gate[requirements]              | -                               |   0.2/ 0.2  $     5/$     5     |   0.3/ 0.3  $     4/$     4     |   0.3/ 0.3  $     5/$     5     |   2.1/ 0.7  $    13/$    13     |   0.6/ 0.5  $    10/$    16     
+architecture                    | -                               |   4.4/ 2.3  $   173/$   173     |  14.5/ 4.0  $   219/$   219     |  28.5/ 1.7  $   127/$   127     |  10.1/ 4.2  $   298/$   298     |   4.7/ 2.1  $    70/$    90     
+gate[architecture]              | -                               |   0.5/ 0.5  $    18/$    18     |   0.4/ 0.4  $     2/$     2     |   0.2/ 0.2  $     5/$     5     |   0.3/ 0.3  $     7/$     7     |   1.3/ 1.0  $    40/$    50     
+stories-test-strategy           |  11.8/ 5.2  $   394/$   396     |  24.9/ 6.5  $   405/$   405     |  15.5/ 6.7  $   500/$   500     |  14.7/ 9.2  $   619/$   619     |  19.9/ 9.4  $   654/$   672     |   7.4/ 4.1  $   166/$   211     
+gate[stories-test-strategy]     |   0.3/ 0.3  $     5/$     5     |   0.7/ 0.4  $    10/$    10     |   1.4/ 1.0  $    86/$    86     |   0.4/ 0.4  $     8/$     8     |   0.3/ 0.3  $     6/$     6     |   0.4/ 0.4  $     3/$    10     
+implementation                  |  27.3/18.0  $   599/$   668     |   8.2/ 6.9  $   370/$   370     |  24.9/18.1  $   666/$   666     |  17.6/10.2  $   192/$   192     |  17.0/12.9  $   394/$   394     |   7.1/ 4.9  $    60/$    99     
+gate[implementation]            |  15.2/ 9.7  $    63/$   109     |   3.6/ 2.6  $    53/$    53     |  16.9/ 8.2  $   159/$   159     |   7.6/ 5.4  $    78/$    78     |  11.2/ 8.4  $   244/$   244     |   1.7/ 1.2  $     9/$    24     
+sprint-review                   |   5.6/ 5.1  $   265/$   297     |   1.4/ 1.2  $   130/$   130     |   1.8/ 1.1  $    52/$    52     |   2.1/ 0.9  $    20/$    20     |   2.9/ 2.9  $   228/$   228     | -                               
+gate[sprint-review]             |   1.5/ 0.9  $     6/$    14     |   5.3/ 1.1  $    18/$    18     |   0.9/ 0.5  $    65/$    65     | -                               |   0.6/ 0.6  $     8/$     8     | -                               
+deploy-validate                 |  10.8/ 4.6  $    20/$    42     |   5.5/ 1.5  $    25/$    25     |   4.9/ 2.1  $    33/$    33     |   5.7/ 3.4  $   115/$   115     |  29.9/ 8.7  $   177/$   177     | -                               
+retro                           |   1.1/ 0.8  $    20/$    20     |   3.8/ 1.0  $    19/$    19     |   8.9/ 1.7  $    25/$    25     |   3.4/ 1.6  $    29/$    29     |   3.1/ 1.0  $    18/$    18     | -                               
+artifact-consolidation          | -                               |   4.8/ 0.8  $    18/$    18     | -                               | -                               | -                               | -                               
+bug-investigation               | -                               | -                               | -                               | -                               | -                               |   1.5/ 1.2  $    25/$    36     
+discovery                       | -                               | -                               |   0.0/ 0.0  $     0/$     0     | -                               | -                               | -                               
+gate[bug-investigation]         | -                               | -                               | -                               | -                               | -                               |   0.1/ 0.1  $     3/$     3     
+gate[carry-over-evaluation]     | -                               |   0.2/ 0.2  $     3/$     3     |   0.2/ 0.2  $     4/$     4     |   0.2/ 0.2  $     5/$     5     | -                               |   7.4/ 3.0  $   174/$   200     
+gate[deploy-validate]           | -                               | -                               | -                               |   1.6/ 0.7  $    13/$    13     | -                               | -                               
+handoff                         |   4.7/ 3.4  $    20/$    26     |   2.2/ 0.7  $    11/$    11     |   5.3/ 2.3  $    17/$    17     |   3.3/ 0.9  $    10/$    10     |  12.0/ 1.4  $    11/$    13     |   0.8/ 0.8  $     0/$     6     
+route                           |   0.2/ 0.2  $     2/$     3     |   0.0/ 0.0  $     2/$     3     |   0.2/ 0.2  $     4/$     4     |   0.5/ 0.5  $     3/$     3     |   0.4/ 0.2  $     3/$     3     |   0.6/ 0.5  $     0/$     4     
+ui-direction                    | -                               |   0.0/ 0.0  $     1/$     1     |   0.1/ 0.1  $     1/$     1     |   0.1/ 0.1  $     1/$     1     |   0.1/ 0.1  $     1/$     1     | -                               
+
+lead-seat HOSTED calls per sprint (the price basis for that sprint's local calls):
+  s317: opus 60, sonnet 2553, haiku 0, fable 0
+  s318: opus 0, sonnet 4398, haiku 0, fable 0
+  s319: opus 214, sonnet 6151, haiku 0, fable 0
+  s320: opus 0, sonnet 4925, haiku 0, fable 0
+  s321: opus 0, sonnet 6676, haiku 0, fable 0
+  s322: opus 0, sonnet 0, haiku 0, fable 0
+
+s317 TOTAL elapsed 80.8h gap-inclusive (active 48.7h + gap 32.1h = agentwait 21.8h + opwait 10.4h) | API $1401 (lead 186 sub 1215) | token-eq $1587 (lead 372 sub 1215) bracket sonnet $1585 .. opus $1669 | subagent-h 111 tokens 3.10B compactions 35 | per story (21): 3.8h, API $66.7, token-eq $75.6 (bracket 75.5..79.5)
+     lead model mix (calls): qwen38flash-mlx 3539 (57%), sonnet 2553 (41%), opus 60 (1%), synthetic 4 (0%)
+     sub model mix (calls): sonnet 8506 (49%), opus 6688 (39%), haiku 2011 (12%), fable 21 (0%), synthetic 6 (0%)
+s318 TOTAL elapsed 74.8h gap-inclusive (active 32.2h + gap 42.6h = agentwait 28.3h + opwait 14.3h) | API $1720 (lead 303 sub 1417) | token-eq $1721 (lead 303 sub 1417) bracket sonnet $1721 .. opus $1721 | subagent-h 129 tokens 3.41B compactions 24 | per story (13): 5.8h, API $132.3, token-eq $132.4 (bracket 132.4..132.4)
+     lead model mix (calls): sonnet 4398 (100%), synthetic 7 (0%), qwen38flash-mlx 7 (0%)
+     sub model mix (calls): opus 10105 (46%), sonnet 8817 (40%), haiku 2801 (13%), fable 250 (1%), synthetic 15 (0%)
+s319 TOTAL elapsed 110.0h gap-inclusive (active 54.8h + gap 55.2h = agentwait 38.2h + opwait 17.0h) | API $2234 (lead 472 sub 1761) | token-eq $2234 (lead 472 sub 1761) bracket sonnet $2234 .. opus $2234 | subagent-h 174 tokens 5.11B compactions 44 | per story (20): 5.5h, API $111.7, token-eq $111.7 (bracket 111.7..111.7)
+     lead model mix (calls): sonnet 6151 (97%), opus 214 (3%), synthetic 9 (0%)
+     sub model mix (calls): opus 13326 (40%), sonnet 11716 (35%), haiku 8470 (25%), synthetic 7 (0%)
+s320 TOTAL elapsed 117.8h gap-inclusive (active 42.9h + gap 74.9h = agentwait 27.0h + opwait 47.9h) | API $1623 (lead 367 sub 1256) | token-eq $1623 (lead 367 sub 1256) bracket sonnet $1623 .. opus $1623 | subagent-h 116 tokens 3.53B compactions 36 | per story (13): 9.1h, API $124.9, token-eq $124.9 (bracket 124.9..124.9)
+     lead model mix (calls): sonnet 4925 (100%), synthetic 1 (0%)
+     sub model mix (calls): sonnet 9526 (44%), opus 8324 (38%), haiku 4030 (18%), synthetic 2 (0%)
+s321 TOTAL elapsed 120.5h gap-inclusive (active 57.0h + gap 63.5h = agentwait 38.6h + opwait 24.9h) | API $2367 (lead 490 sub 1878) | token-eq $2388 (lead 510 sub 1878) bracket sonnet $2388 .. opus $2396 | subagent-h 174 tokens 5.05B compactions 57 | per story (25): 4.8h, API $94.7, token-eq $95.5 (bracket 95.5..95.8)
+     lead model mix (calls): sonnet 6676 (94%), qwen38flash-mlx 441 (6%), synthetic 10 (0%)
+     sub model mix (calls): sonnet 26675 (88%), opus 3464 (11%), synthetic 13 (0%)
+s322 TOTAL elapsed 56.6h gap-inclusive (active 26.2h + gap 30.4h = agentwait 21.6h + opwait 8.8h) | API $817 (lead 0 sub 817) | token-eq $1063 (lead 246 sub 817) [FALLBACK: s321 hosted lead mix] bracket sonnet $1063 .. opus $1130 | subagent-h 78 tokens 2.37B compactions 50 | per story (8): 7.1h, API $102.1, token-eq $132.9 (bracket 132.9..141.2)
+     lead model mix (calls): qwen38flash 6255 (98%), deepseek41 96 (2%), synthetic 2 (0%)
+     sub model mix (calls): sonnet 14139 (90%), opus 1598 (10%), synthetic 4 (0%)

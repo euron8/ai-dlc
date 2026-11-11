@@ -1,0 +1,56 @@
+adversary by binding; LONG = 45 min
+sprint | binding | spawns | median min | p90 min | min/call | sum h | $ | $/spawn | over LONG
+s318 | opus/medium | 194 | 6.4 | 20.0 | 0.39 | 32.1 | 423 | 2.18 | 5
+s319 | opus/medium | 294 | 6.2 | 16.8 | 0.37 | 40.3 | 561 | 1.91 | 2
+s320 | opus/medium | 294 | 5.0 | 14.5 | 0.37 | 33.9 | 501 | 1.71 | 0
+s320 | sonnet/high | 1 | 64.3 | 64.3 | 0.72 | 1.1 | 8 | 8.47 | 1
+s321 | sonnet/high | 272 | 8.9 | 51.3 | 0.67 | 83.7 | 609 | 2.24 | 33
+s322 | sonnet/high | 124 | 11.7 | 61.5 | 0.48 | 45.3 | 359 | 2.89 | 19
+
+adversary and remediator by pass kind (spawns, hours, $)
+s318 architecture: adversary:elicit n1 0.6h $7; adversary:p1 n11 1.7h $26; adversary:p2 n10 1.2h $20; remediator:elicit n2 0.1h $1; remediator:other n7 2.7h $14; remediator:p1 n6 0.2h $3; remediator:p2 n4 0.1h $2
+s318 artifact-consolidation: adversary:other n4 0.5h $6
+s318 carry-over-evaluation: adversary:elicit n1 0.2h $3; adversary:p1 n11 1.6h $19; adversary:p2 n11 0.8h $16; remediator:elicit n1 0.1h $1; remediator:other n5 0.9h $7; remediator:p1 n6 0.3h $4
+s318 gate-validation[architecture]: adversary:p3 n10 0.5h $11
+s318 gate-validation[carry-over-evaluation]: remediator:other n1 0.0h $0
+s318 gate-validation[implementation]: remediator:other n1 0.0h $0
+s318 gate-validation[requirements]: remediator:other n1 0.0h $0
+s318 gate-validation[sprint-review]: remediator:other n3 0.2h $1
+s318 gate-validation[stories-test-strategy]: remediator:other n4 0.2h $2
+s318 requirements: adversary:elicit n19 4.8h $57; adversary:other n19 8.2h $78; adversary:p2 n19 1.8h $30; adversary:p3 n19 0.9h $22; remediator:elicit n14 0.8h $11; remediator:other n30 2.4h $24; remediator:p1 n1 0.2h $1; remediator:p2 n7 0.4h $4
+s318 sprint-review: remediator:other n2 0.2h $3
+s318 stories-test-strategy: adversary:elicit n1 0.7h $9; adversary:other n1 0.1h $2; adversary:p1 n19 3.4h $45; adversary:p2 n19 3.5h $44; adversary:p3 n19 1.5h $28; remediator:elicit n4 0.2h $3; remediator:other n18 2.9h $28; remediator:p1 n14 0.5h $8; remediator:p2 n12 0.3h $6; remediator:p3 n6 0.2h $2
+s319 architecture: adversary:elicit n11 2.1h $24; adversary:p1 n11 1.9h $23; adversary:p2 n11 1.7h $24; adversary:p3 n11 1.1h $17; adversary:p4 n11 1.2h $18; remediator:elicit n8 0.7h $8; remediator:other n13 1.2h $13; remediator:p1 n1 0.2h $2; remediator:p3 n6 0.4h $4
+s319 carry-over-evaluation: adversary:elicit n12 1.5h $19; adversary:p1 n12 0.7h $12; remediator:elicit n7 0.8h $5; remediator:other n8 1.2h $13
+s319 gate-validation[implementation]: remediator:other n3 0.1h $1; remediator:p4 n4 0.2h $2; remediator:p5 n2 0.1h $1; remediator:p6 n1 0.1h $1
+s319 gate-validation[sprint-review]: adversary:other n1 0.4h $5
+s319 gate-validation[stories-test-strategy]: adversary:elicit n26 3.3h $54; remediator:elicit n21 0.7h $13; remediator:other n9 0.2h $4
+s319 requirements: adversary:elicit n19 4.6h $50; adversary:other n14 0.2h $5; adversary:p1 n19 3.3h $42; adversary:p2 n19 1.8h $29; remediator:elicit n14 1.1h $13; remediator:other n26 2.1h $23; remediator:p1 n2 1.1h $7
+s319 stories-test-strategy: adversary:elicit n25 5.7h $73; adversary:other n1 0.3h $3; adversary:p1 n39 7.7h $103; adversary:p2 n39 2.4h $44; adversary:p3 n13 0.5h $15; remediator:elicit n20 1.8h $22; remediator:other n36 3.6h $42; remediator:p1 n26 1.0h $15; remediator:p2 n3 0.2h $2; remediator:p5 n1 0.3h $5
+s320 architecture: adversary:elicit n12 1.9h $26; adversary:p1 n12 0.6h $13; remediator:elicit n6 0.4h $5; remediator:other n8 1.1h $13
+s320 carry-over-evaluation: adversary:elicit n6 1.8h $18; adversary:p1 n13 2.2h $26; adversary:p2 n13 1.5h $25; adversary:p3 n13 0.9h $18; remediator:elicit n4 2.2h $7; remediator:other n12 1.9h $16; remediator:p1 n8 0.6h $7; remediator:p2 n6 0.3h $4
+s320 deploy-validate: remediator:other n14 0.4h $7
+s320 gate-validation[deploy-validate]: remediator:other n4 0.1h $2
+s320 gate-validation[implementation]: remediator:other n1 0.1h $1
+s320 gate-validation[stories-test-strategy]: remediator:other n2 0.1h $2
+s320 implementation: remediator:other n3 0.2h $3
+s320 requirements: adversary:elicit n18 3.1h $39; adversary:p1 n19 1.1h $24; adversary:p2 n19 0.6h $16; remediator:elicit n18 0.9h $13; remediator:other n21 2.3h $26; remediator:p1 n5 0.2h $3
+s320 sprint-review: adversary:other n1 1.1h $8
+s320 stories-test-strategy: adversary:elicit n19 3.6h $47; adversary:p1 n28 4.6h $63; adversary:p2 n28 4.7h $59; adversary:p3 n28 2.6h $44; adversary:p4 n19 2.0h $30; adversary:p5 n19 1.4h $24; adversary:p6 n14 0.8h $17; adversary:p7 n14 0.6h $13; remediator:elicit n25 1.0h $18; remediator:other n45 3.0h $42; remediator:p1 n28 1.1h $18; remediator:p2 n12 0.6h $8; remediator:p3 n9 0.3h $5; remediator:p5 n7 0.6h $6; remediator:p6 n5 0.4h $4
+s321 architecture: adversary:elicit n7 6.3h $42; adversary:p1 n8 8.2h $43; adversary:p2 n7 2.8h $23; adversary:p3 n7 5.1h $39; adversary:p4 n7 1.7h $16; adversary:p5 n7 0.4h $6; remediator:elicit n7 0.8h $11; remediator:other n7 0.9h $12; remediator:p2 n7 0.4h $6; remediator:p3 n8 0.5h $7; remediator:p4 n8 0.4h $6; remediator:p5 n1 0.1h $1
+s321 gate-validation[architecture]: remediator:p5 n1 0.1h $1
+s321 gate-validation[requirements]: adversary:other n1 0.0h $0
+s321 gate-validation[stories-test-strategy]: remediator:other n2 0.1h $2
+s321 requirements: adversary:elicit n14 10.4h $72; adversary:other n3 0.5h $3; adversary:p1 n13 6.7h $47; adversary:p2 n13 1.1h $11; adversary:p3 n13 1.4h $9; remediator:elicit n18 1.4h $20; remediator:other n46 2.8h $41; remediator:p2 n11 0.6h $8
+s321 sprint-review: adversary:other n1 0.1h $2
+s321 stories-test-strategy: adversary:elicit n38 18.0h $123; adversary:p1 n36 8.7h $66; adversary:p2 n35 3.7h $34; adversary:p3 n35 4.0h $31; adversary:p4 n9 2.7h $22; adversary:p5 n9 1.1h $11; adversary:p6 n9 0.8h $9; remediator:elicit n32 1.8h $26; remediator:other n49 6.0h $66; remediator:p1 n28 1.2h $19; remediator:p2 n16 0.7h $11; remediator:p3 n11 2.4h $22; remediator:p6 n1 0.1h $1
+s322 architecture: adversary:p1 n5 2.9h $21; adversary:p2 n5 2.8h $21; adversary:p3 n5 0.7h $8; remediator:other n4 0.6h $7; remediator:p1 n4 0.3h $3; remediator:p2 n9 0.3h $5; remediator:p3 n3 0.1h $2
+s322 bug-investigation: adversary:other n1 0.1h $2; remediator:other n2 0.1h $2; remediator:p2 n1 0.1h $1
+s322 carry-over-evaluation: adversary:p1 n8 5.6h $42; adversary:p2 n9 4.8h $43; adversary:p3 n7 1.3h $13; remediator:other n17 2.1h $24; remediator:p1 n8 0.5h $7; remediator:p2 n7 5.9h $5
+s322 gate-validation[architecture]: remediator:other n5 1.1h $10
+s322 gate-validation[bug-investigation]: adversary:other n1 0.1h $1
+s322 gate-validation[carry-over-evaluation]: adversary:p1 n10 11.8h $65; remediator:other n28 9.4h $37
+s322 gate-validation[requirements]: remediator:other n1 0.1h $1
+s322 implementation: adversary:other n3 0.4h $4; remediator:other n1 0.1h $1; remediator:p1 n1 0.1h $2; remediator:p2 n1 0.0h $1
+s322 requirements: adversary:p2 n10 2.5h $22; adversary:p3 n10 2.0h $19; adversary:p4 n10 1.5h $15; remediator:other n9 0.5h $7; remediator:p1 n1 0.4h $5; remediator:p2 n5 0.3h $5
+s322 stories-test-strategy: adversary:elicit n7 5.8h $44; adversary:other n6 0.9h $13; adversary:p1 n7 0.6h $6; adversary:p2 n13 1.3h $16; adversary:p3 n7 0.2h $4; remediator:elicit n6 0.3h $5; remediator:other n33 3.8h $40; remediator:p2 n12 0.4h $6

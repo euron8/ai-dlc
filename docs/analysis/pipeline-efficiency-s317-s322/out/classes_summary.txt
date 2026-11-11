@@ -1,0 +1,109 @@
+     other share: active 69%, calls 60%, $ 58%
+     other share: active 34%, calls 26%, $ 26%
+     other share: active 26%, calls 21%, $ 23%
+     other share: active 48%, calls 17%, $ 13%
+     other share: active 74%, calls 65%, $ 63%
+     other share: active 56%, calls 34%, $ 33%
+     other share: active 85%, calls 98%, $ 85%
+     other share: active 42%, calls 40%, $ 35%
+     other share: active 78%, calls 58%, $ 56%
+     other share: active 39%, calls 35%, $ 34%
+     other share: active 72%, calls 64%, $ 60%
+  s317 all steps: dispatch 0.06 h token-eq $0.6 API $0.2, merge 0.45 h token-eq $5.2 API $1.9, repair 0.01 h token-eq $0.1 API $0.0, gate-run 0.13 h token-eq $1.1 API $0.5, step-reread 0.02 h token-eq $0.2 API $0.1, compaction-recovery 0.03 h token-eq $0.3 API $0.2, snapshot 0.25 h token-eq $3.0 API $1.6, other 1.14 h token-eq $7.2 API $4.3
+  s317 other share: active 54%, calls 42%, $ 41%
+     other share: active 73%, calls 48%, $ 43%
+     other share: active 68%, calls 39%, $ 35%
+     other share: active 66%, calls 50%, $ 43%
+     other share: active 76%, calls 68%, $ 68%
+     other share: active 34%, calls 36%, $ 28%
+     other share: active 34%, calls 14%, $ 13%
+     other share: active 41%, calls 25%, $ 18%
+     other share: active 51%, calls 40%, $ 34%
+     other share: active 22%, calls 40%, $ 38%
+     other share: active 50%, calls 28%, $ 31%
+     other share: active 70%, calls 55%, $ 35%
+     other share: active 62%, calls 35%, $ 29%
+     other share: active 100%, calls 100%, $ 100%
+     other share: active 77%, calls 54%, $ 50%
+     other share: active 57%, calls 49%, $ 46%
+     other share: active 67%, calls 65%, $ 71%
+     other share: active 70%, calls 56%, $ 47%
+     other share: active 76%, calls 56%, $ 47%
+     other share: active 56%, calls 30%, $ 27%
+  s318 all steps: dispatch 0.07 h token-eq $1.3 API $1.3, merge 0.29 h token-eq $5.7 API $5.7, repair 0.01 h token-eq $0.3 API $0.3, gate-run 0.13 h token-eq $1.5 API $1.5, step-reread 0.03 h token-eq $0.3 API $0.3, compaction-recovery 0.01 h token-eq $0.5 API $0.5, snapshot 0.25 h token-eq $4.5 API $4.5, other 1.48 h token-eq $9.3 API $9.3
+  s318 other share: active 65%, calls 46%, $ 40%
+     other share: active 73%, calls 47%, $ 39%
+     other share: active 65%, calls 58%, $ 46%
+     other share: active 62%, calls 38%, $ 33%
+     other share: active 37%, calls 26%, $ 21%
+     other share: active 26%, calls 19%, $ 16%
+     other share: active 46%, calls 25%, $ 20%
+     other share: active 62%, calls 27%, $ 31%
+     other share: active 24%, calls 27%, $ 21%
+     other share: active 52%, calls 41%, $ 33%
+     other share: active 80%, calls 69%, $ 65%
+     other share: active 67%, calls 44%, $ 36%
+     other share: active 100%, calls 100%, $ 100%
+     other share: active 76%, calls 59%, $ 55%
+     other share: active 47%, calls 47%, $ 45%
+     other share: active 67%, calls 45%, $ 46%
+     other share: active 61%, calls 58%, $ 52%
+     other share: active 71%, calls 53%, $ 41%
+     other share: active 87%, calls 20%, $ 18%
+  s319 all steps: dispatch 0.14 h token-eq $1.8 API $1.8, merge 0.27 h token-eq $5.4 API $5.4, repair 0.02 h token-eq $0.3 API $0.3, gate-run 0.15 h token-eq $1.6 API $1.6, step-reread 0.03 h token-eq $0.5 API $0.5, compaction-recovery 0.01 h token-eq $0.6 API $0.6, snapshot 0.26 h token-eq $4.1 API $4.1, other 1.57 h token-eq $9.3 API $9.3
+  s319 other share: active 64%, calls 46%, $ 39%
+     other share: active 68%, calls 52%, $ 40%
+     other share: active 71%, calls 46%, $ 38%
+     other share: active 55%, calls 27%, $ 23%
+     other share: active 48%, calls 32%, $ 28%
+     other share: active 68%, calls 51%, $ 55%
+     other share: active 14%, calls 14%, $ 12%
+     other share: active 41%, calls 22%, $ 18%
+     other share: active 55%, calls 21%, $ 19%
+     other share: active 42%, calls 12%, $ 11%
+     other share: active 78%, calls 67%, $ 61%
+     other share: active 60%, calls 31%, $ 27%
+     other share: active 100%, calls 100%, $ 100%
+     other share: active 72%, calls 51%, $ 45%
+     other share: active 18%, calls 26%, $ 20%
+     other share: active 34%, calls 45%, $ 30%
+     other share: active 37%, calls 31%, $ 26%
+     other share: active 69%, calls 48%, $ 40%
+     other share: active 85%, calls 9%, $ 8%
+  s320 all steps: dispatch 0.17 h token-eq $2.3 API $2.3, merge 0.42 h token-eq $7.4 API $7.4, repair 0.03 h token-eq $0.4 API $0.4, gate-run 0.18 h token-eq $2.1 API $2.1, step-reread 0.03 h token-eq $0.6 API $0.6, compaction-recovery 0.03 h token-eq $0.8 API $0.8, snapshot 0.35 h token-eq $5.6 API $5.6, other 1.73 h token-eq $9.0 API $9.0
+  s320 other share: active 59%, calls 38%, $ 32%
+     other share: active 59%, calls 35%, $ 29%
+     other share: active 62%, calls 30%, $ 25%
+     other share: active 33%, calls 11%, $ 11%
+     other share: active 27%, calls 20%, $ 17%
+     other share: active 40%, calls 29%, $ 33%
+     other share: active 42%, calls 9%, $ 9%
+     other share: active 48%, calls 19%, $ 23%
+     other share: active 67%, calls 59%, $ 49%
+     other share: active 59%, calls 27%, $ 23%
+     other share: active 100%, calls 100%, $ 100%
+     other share: active 72%, calls 47%, $ 42%
+     other share: active 34%, calls 38%, $ 34%
+     other share: active 58%, calls 50%, $ 38%
+     other share: active 56%, calls 24%, $ 18%
+     other share: active 72%, calls 52%, $ 47%
+     other share: active 86%, calls 20%, $ 19%
+  s321 all steps: dispatch 0.09 h token-eq $1.2 API $1.2, merge 0.34 h token-eq $6.0 API $5.8, repair 0.02 h token-eq $0.2 API $0.2, gate-run 0.13 h token-eq $1.6 API $1.6, step-reread 0.02 h token-eq $0.3 API $0.3, compaction-recovery 0.01 h token-eq $0.6 API $0.6, snapshot 0.26 h token-eq $4.4 API $4.3, other 1.19 h token-eq $6.1 API $5.6
+  s321 other share: active 58%, calls 35%, $ 30%
+     other share: active 64%, calls 39%, $ 41%
+     other share: active 63%, calls 41%, $ 39%
+     other share: active 68%, calls 48%, $ 46%
+     other share: active 59%, calls 27%, $ 31%
+     other share: active 69%, calls 43%, $ 40%
+     other share: active 72%, calls 42%, $ 41%
+     other share: active 51%, calls 41%, $ 39%
+     other share: active 54%, calls 46%, $ 43%
+     other share: active 48%, calls 43%, $ 46%
+     other share: active 76%, calls 64%, $ 63%
+     other share: active 71%, calls 49%, $ 47%
+     other share: active 99%, calls 92%, $ 98%
+     other share: active 77%, calls 58%, $ 54%
+     other share: active 70%, calls 68%, $ 68%
+     other share: active 76%, calls 52%, $ 51%
+  s322 all steps: dispatch 0.15 h token-eq $2.0 API $0.0, merge 0.35 h token-eq $6.7 API $0.0, repair 0.04 h token-eq $0.4 API $0.0, gate-run 0.06 h token-eq $0.9 API $0.0, step-reread 0.08 h token-eq $1.2 API $0.0, compaction-recovery 0.06 h token-eq $0.9 API $0.0, snapshot 0.21 h token-eq $4.4 API $0.0, other 2.14 h token-eq $14.3 API $0.0
+  s322 other share: active 69%, calls 48%, $ 47%

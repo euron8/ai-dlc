@@ -1,0 +1,20 @@
+root /Users/n8/.claude/projects/-Users-n8-git-graph; subagent transcripts read 5345; window end 2026-11-11T10:30:00Z
+s318 gate-rework     23 resumes    8.0 agent-h idle    21 min each | dev 14, dev-escalated 6, qa 2
+s318 other           23 resumes    5.3 agent-h idle    14 min each | dev 6, dev-escalated 5, remediator 5
+s318 join-refusal     5 resumes    0.8 agent-h idle     9 min each | qa 2, code-reviewer 1, adversary 1
+s318 escalation       2 resumes    0.2 agent-h idle     7 min each | dev 1, remediator 1
+s319 gate-rework     37 resumes   18.1 agent-h idle    29 min each | dev 23, dev-escalated 13, gate-adjudicator 1
+s319 other           53 resumes   13.6 agent-h idle    15 min each | qa 16, code-reviewer-escalated 11, dev 11
+s319 escalation       6 resumes    2.4 agent-h idle    24 min each | dev 3, code-reviewer-escalated 2, dev-escalated 1
+s319 join-refusal     7 resumes    1.3 agent-h idle    12 min each | code-reviewer-escalated 3, code-reviewer 2, adversary 2
+s320 other           27 resumes   10.7 agent-h idle    24 min each | qa 8, dev 6, ops 5
+s320 gate-rework     24 resumes    9.7 agent-h idle    24 min each | dev 18, ops 4, protected-path-editor 2
+s320 join-refusal     1 resumes    0.2 agent-h idle    11 min each | remediator 1
+s321 gate-rework     37 resumes   13.1 agent-h idle    21 min each | dev 19, dev-escalated 16, qa 1
+s321 join-refusal    13 resumes    4.5 agent-h idle    21 min each | adversary 11, remediator 1, dev 1
+s321 other           27 resumes    4.4 agent-h idle    10 min each | dev 10, ops 5, code-reviewer-escalated 5
+s321 escalation       1 resumes    0.3 agent-h idle    17 min each | remediator 1
+s322 join-refusal    16 resumes   11.2 agent-h idle    42 min each | adversary 11, remediator 5
+s322 api-error        4 resumes    4.2 agent-h idle    63 min each | remediator 4
+s322 gate-rework     10 resumes    3.4 agent-h idle    21 min each | dev 7, protected-path-editor 2, code-reviewer 1
+s322 other            6 resumes    1.3 agent-h idle    13 min each | dev 3, code-reviewer 1, adversary 1

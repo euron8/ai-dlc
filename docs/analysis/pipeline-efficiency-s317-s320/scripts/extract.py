@@ -44,7 +44,11 @@ WIN_END_TS = ts(WIN_END) if WIN_END else None
 # transcript carries a record stamped 00:10:03, so the string compare in sprint_of() is exact here.
 EDGES = [("2026-09-28T19:10:00Z",314),("2026-09-30T20:58:00Z",315),("2026-10-05T14:00:00Z",316),
          ("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),
-         ("2026-10-30T00:10:03Z",320),("2099-01-01T00:00:00Z",321)]
+         ("2026-10-30T00:10:03Z",320),("2026-11-09T00:00:00Z",321),("2099-01-01T00:00:00Z",322)]
+# s321 ends at the lead-session handover: s321's last lead df56108b (retro merge ec443477d at
+# 2026-11-08T20:23Z, then the close sweep) has its last record at 2026-11-08T21:47:01.989Z; the s322 lead
+# 6c14d949 (/ai-dlc "Finish Epic 5") opens at 2026-11-09T00:00:37.657Z. The spawn ledger agrees: last s321
+# row 2026-11-08T20:30:46Z, first s322 row 2026-11-09T00:20:57Z.
 def sprint_of(t):
     if t < WIN_START: return None
     for e, n in EDGES:

@@ -20,16 +20,19 @@ Dollars come in two bases, always printed together:
 """
 import csv, collections, json, os, sys
 P = {'opus': (4, 20, 0.2, 8), 'sonnet': (2, 10, 0.2, 4), 'haiku': (.1, .5, .01, .2), 'fable': (10, 50, .25, 20)}
-LOCAL = 'qwen38flash-mlx'
+LOCAL = ('qwen38flash-mlx', 'qwen38flash', 'deepseek41')   # every local model family analyze.py has emitted
+
+def lsum(r, pre, k):
+    return sum(float(r.get(f"{pre}_{m}_{k}", 0) or 0) for m in LOCAL)
 HOSTED = ('opus', 'sonnet', 'haiku', 'fable')
 # A sprint with local calls and no hosted calls on that seat has nothing to derive a price from. graph's own
 # configuration at s314's start (git show 6a4469196:.claude/settings.json) names no lead model: it has no
 # top-level "model" key, and aiDlcModels only maps role names to ids. So s314 is priced at the NEAREST sprint's
 # hosted lead mix (s315) and labelled a fallback wherever printed.
-FALLBACK = {314: 315}
+FALLBACK = {314: 315, 322: 321}   # s322's lead seat ran only local models (qwen38flash, deepseek41)
 # graph sprint-status.yaml at each close; s321 is still open, so its 25 is the planned count from
 # _bmad-output/planning-artifacts/s321/sprint-status.yaml@e32f9ce2f (written once, a6afc3eba "6 epics, 25 stories").
-STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25}
+STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8}   # s322 open: 8 planned (3 done at 2026-11-11T10:30Z)
 
 def hosted_mix(rows, pre):
     """{sprint: {family: calls}} over the pipeline bucket: the HOSTED calls on one seat, per sprint."""
@@ -50,9 +53,9 @@ def usd(r, pre, tokeq=False, mix=None):
         # No hosted calls on the seat in that sprint: nothing to derive from, the figure is PENDING (returns None).
         n = sum((mix or {}).values())
         if n <= 0:
-            return None if float(r.get(f"{pre}_{LOCAL}_calls", 0) or 0) else t
+            return None if lsum(r, pre, "calls") else t
         i, o, cr, cw = (sum(mix.get(f, 0) * P[f][k] for f in HOSTED) / n for k in range(4))
-        g = lambda k: float(r.get(f"{pre}_{LOCAL}_{k}", 0) or 0)
+        g = lambda k: lsum(r, pre, k)
         t += (g('in') * i + g('out') * o + g('cr') * cr + g('cw') * cw) / 1e6
     return t
 
@@ -77,7 +80,7 @@ GROUPS = [
     ('sprint-review plus gate-validation[sprint-review]', 'pipeline', {'sprint-review', 'gate[sprint-review]'}),
     ('the ai-dlc-update bucket', 'ai-dlc-update', None),
 ]
-POPS = [('before s317+s318 pooled', (317, 318)), ('s317', (317,)), ('s318', (318,)), ('s319', (319,)), ('s320', (320,)), ('s321', (321,))]
+POPS = [('before s317+s318 pooled', (317, 318)), ('s317', (317,)), ('s318', (318,)), ('s319', (319,)), ('s320', (320,)), ('s321', (321,)), ('s322', (322,))]
 
 def seat_sum(rows, HM, bucket, steps, sprints):
     """Sums one population's steps.csv rows per seat. Hours are gap-inclusive lead-segment elapsed; lead active
@@ -101,7 +104,7 @@ def seat_sum(rows, HM, bucket, steps, sprints):
             for c, v in r.items():
                 if c.startswith(seat + '_') and c.endswith('_calls'):
                     T[seat + 'calls'] += float(v or 0)
-                    if c == f"{seat}_{LOCAL}_calls": T[seat + 'local'] += float(v or 0)
+                    if c in {f"{seat}_{m}_calls" for m in LOCAL}: T[seat + 'local'] += float(v or 0)
     return T
 
 def money(te, api):
@@ -240,7 +243,7 @@ if __name__ == '__main__':
             mix = HM[seat][n]
             if sum(mix.values()) <= 0 and n in FALLBACK:
                 mix = HM[seat][FALLBACK[n]]
-                if float(r.get(f"{seat}_{LOCAL}_calls", 0) or 0): FB.add(n)
+                if lsum(r, seat, "calls"): FB.add(n)
             v = usd(r, seat, True, mix)
             if v is None: PENDING.add(n); v = usd(r, seat)
             for pin in ('sonnet', 'opus'):   # bracket: every local call at one model's price
