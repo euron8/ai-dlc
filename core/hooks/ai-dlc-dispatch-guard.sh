@@ -1316,6 +1316,55 @@ if [ "${SPAWN_SHARD:-}" = invalid-exception ]; then
   esac
 fi
 
+# THE SHARD-DIR DENY (BL-976). An `adversary` brief naming a planning shard directory the merge will
+# refuse is denied HERE, before the adversary writes a shard there: found at the merge instead, every
+# finished adversary of the pass waits for a lead correction and rewrites its shard (graph s321
+# architecture: 8 dispatches named `shards/architecture-adversarial-p1/`, 7 corrected, waits up to
+# 58 min). THE GRAMMAR IS THE MERGE'S. This arm selects candidate dirs and asks
+# `merge-adversarial-shards.sh --check-shard-dir`, which runs the merge's own placement and name
+# lines; it judges no directory itself. SCOPE: role `adversary`, because the merge admits a shard
+# only from that role ("only an adversary writes an adversary shard", the role join in the merge).
+# THE SELECTOR is any `planning-artifacts/s<digits>/shards/<dir>` text in the brief, not only the
+# write target: 363 of 1295 graph adversary briefs carry a `--mark` deliverable, so a write-target
+# selector would miss most briefs. FALSE-POSITIVE SET, measured over those 1295 briefs (graph
+# transcripts, read only, window end 2026-11-11T10:30Z) through the shipped check mode: 32 distinct
+# dirs named; REFUSED only `architecture-adversarial-p1`, the motivating set; every `*-elicitation`
+# dir answers SKIP (another merger reads it) and every other `-p<M>` dir OK. LIMITS: a refusal that
+# depends on the merge MODE or on shard bytes is the merge's alone; a brief naming the dir without
+# the `planning-artifacts/s<N>/` prefix is not selected. FAIL OPEN: no merge found, any exit outside
+# 0/1, or a REFUSED line with no text allows the dispatch, because a deny on a read failure blocks
+# real spawns. A candidate that is only dots (`shards/...`, an ellipsis) is dropped after the strip,
+# so the merge is never asked about the `shards/` parent itself. A dir glued to a character the
+# class admits (a unicode ellipsis, `-P1`, `-p1.md`) reads SKIP and is allowed; a brief QUOTING a
+# refused dir as a counter-example is denied, which is the any-mention selector's stated cost.
+case "$ROLE:$PROMPT" in
+  adversary:*planning-artifacts/s[0-9]*/shards/*)
+    _dg_sd="$(printf '%s\n' "$PROMPT" | LC_ALL=C grep -oE "planning-artifacts/s[0-9]+/shards/[^][/[:space:]\`\"'()<>{},;:*?|]+" 2>/dev/null \
+      | sed 's/\.*$//' | LC_ALL=C grep -v '/shards/$' | LC_ALL=C sort -u)" || _dg_sd=""
+    if [ -n "$_dg_sd" ]; then
+      _dg_mrg=""
+      _dg_d="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+      while [ -n "$_dg_d" ] && [ "$_dg_d" != "/" ]; do
+        for _dg_c in "$_dg_d/scripts/ai-dlc/merge-adversarial-shards.sh" "$_dg_d/core/scripts/merge-adversarial-shards.sh"; do
+          [ -f "$_dg_c" ] && { _dg_mrg="$_dg_c"; break 2; }
+        done
+        _dg_d="$(dirname "$_dg_d")"
+      done
+      if [ -n "$_dg_mrg" ]; then
+        # Word-split on newlines only: a selected dir carries no blank and no glob character
+        # (`*`, `?`, `[`, `]` are outside the selector's class), so the unquoted expansion is exact.
+        _dg_ifs="$IFS"; IFS=$'\n'
+        # shellcheck disable=SC2086
+        _dg_sdo="$(bash "$_dg_mrg" --check-shard-dir $_dg_sd 2>/dev/null)"; _dg_sdrc=$?
+        IFS="$_dg_ifs"
+        _dg_sdr="$(printf '%s\n' "$_dg_sdo" | LC_ALL=C awk -F '\t' '$1 == "REFUSED" && NF >= 3 && $3 != "" { print "`" $2 "`: " $3 }')"
+        if [ "$_dg_sdrc" -eq 1 ] && [ -n "$_dg_sdr" ]; then
+          dg_deny "AI/DLC dispatch guard: refused an \`adversary\` dispatch, because its brief names a shard directory the merge will refuse, so every shard written there is rewritten after the pass finishes. merge-adversarial-shards.sh --check-shard-dir answered: $(printf '%s' "$_dg_sdr" | tr '\n' ' ')Re-send the brief naming <state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/ (the artifact under review, never its -adversarial series stem), and check a directory with \`merge-adversarial-shards.sh --check-shard-dir <dir>\` before dispatching."
+        fi
+      fi
+    fi ;;
+esac
+
 # THE COVER DENY (see THE COVER DENY in the CONTRACT header). The predicate below is the ONE
 # definition shared with validate-spawn-ledger.sh arm S4: byte-identical in both files and bound by
 # the enforcement map. It takes the canonical shard value and prints the missing ordinals of 1..K

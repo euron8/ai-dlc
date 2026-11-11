@@ -7,6 +7,9 @@ core/hooks/
 !core/scripts/validate-gate-adjudication.sh
 # every decision the validator makes is in the module beside it; it exits 2 without it.
 !core/scripts/gate_adjudication.py
+# THE SHARD-DIR DENY (BL-976): the guard walks up to the merge's --check-shard-dir, and the fixture
+# mutates a copy of it.
+!core/scripts/merge-adversarial-shards.sh
 core/scripts/validate-adversarial-convergence.sh
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml

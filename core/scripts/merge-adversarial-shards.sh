@@ -21,6 +21,11 @@
 #                                                   exit 2 on bad arguments. Reads no sibling, no
 #                                                   harness record and no shard dir, so a delivery
 #                                                   join can call it on one file while its agent lives.
+#   merge-adversarial-shards.sh --check-shard-dir <dir>...
+#                                                   the DISPATCH-TIME answer for a shard dir a brief
+#                                                   names: the merge's placement and name lines on
+#                                                   the path string, nothing read; one OK / SKIP /
+#                                                   REFUSED line per dir (check_shard_dirs, below)
 #   Every merge mode (not --map) also reads the three harness records named under THE DISPATCH ID,
 #   and refuses a shard set they do not cover: a caller seeding shards by hand seeds the records too.
 #
@@ -887,7 +892,11 @@ merge_locate() {
 SHARD_DIR="${1%/}"
 [ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
 SHARD_DIR="$(cd "$SHARD_DIR" && pwd)" || refuse "shard directory $1 is not enterable"
-
+merge_place
+}
+# THE PLACEMENT GRAMMAR, on the path STRING alone: no existence test and no cd, so --check-shard-dir
+# asks it at dispatch time, before the directory exists, with the same lines the merge runs.
+merge_place() {
 SHARD_BASE="$(basename "$SHARD_DIR")"
 SHARDS_PARENT="$(dirname "$SHARD_DIR")"
 [ "$(basename "$SHARDS_PARENT")" = "shards" ] \
@@ -907,6 +916,42 @@ REC_WRITES="$REC_PLAN/.artifact-writes.jsonl"
 REC_SPAWNS="$REC_STATE/spawn-ledger.jsonl"
 REC_PROBES="$REC_STATE/subagent-context.jsonl"
 REC_PREFIX="$(basename "$REC_STATE")/planning-artifacts/$(basename "$SPRINT_DIR")/shards/$SHARD_BASE/"
+}
+# THE NAME GRAMMAR: <artifact>-p<M>, and THE SERIES STEM IS NOT THE ARTIFACT (header). Split in two so
+# --check-shard-dir can tell a name the convergence merge never reads (no -p<M>: an elicitation dir,
+# which other mergers read) from a -p<M> name the merge refuses.
+merge_name_derive() {
+ARTIFACT="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\1/p')"
+PASS="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\2/p')"
+}
+merge_name() {
+[ -n "$ARTIFACT" ] && [ -n "$PASS" ] || refuse "shard directory name $SHARD_BASE is not <artifact>-p<M>"
+PASS=$((10#$PASS))
+case "$ARTIFACT" in *-adversarial) refuse "shard directory $SHARD_BASE names the series, not the artifact: the dir is s<N>/shards/<artifact>-p<M>/ and this would write ${ARTIFACT}-adversarial-p$PASS.md (carry-over-evaluation.md: s<N>/shards/coe-p<M>/)" ;; esac
+}
+# --check-shard-dir <dir>... (BL-976): the DISPATCH-TIME answer, asked by ai-dlc-dispatch-guard.sh for
+# every planning shard dir an adversary brief names. Each dir runs merge_place, merge_rec_paths'
+# planning-artifacts test, merge_name_derive and merge_name -- the lines a merge of that dir runs first
+# -- in a subshell, since refuse exits. One line per dir, tab-separated:
+#   OK<TAB><dir>                   the merge's placement and name grammar accept it
+#   SKIP<TAB><dir>                 no -p<M> suffix: not a convergence pass dir (an elicitation dir)
+#   REFUSED<TAB><dir><TAB><text>   the merge's own refusal text, verbatim
+# Exit 0 when no line is REFUSED, 1 when one is, 3 on a usage error; never 2, which is refuse's.
+# NOT JUDGED HERE: what depends on the merge MODE (files mode's s<N>/<artifact>/ directory, the
+# requirements series' --subject) or on the bytes (every later phase); a brief names neither.
+check_shard_dirs() {
+  local d o rc=0
+  for d in "$@"; do
+    o="$( SHARD_DIR="${d%/}"; merge_place; merge_rec_paths; merge_name_derive
+          if [ -z "$ARTIFACT" ] || [ -z "$PASS" ]; then printf 'SKIP\n'; exit 0; fi
+          merge_name; printf 'OK\n' )"
+    case "$o" in
+      OK) printf 'OK\t%s\n' "$d" ;;
+      SKIP) printf 'SKIP\t%s\n' "$d" ;;
+      *) printf 'REFUSED\t%s\t%s\n' "$d" "$(printf '%s' "${o#REFUSED: }" | tr '\t\n' '  ')"; rc=1 ;;
+    esac
+  done
+  return "$rc"
 }
 merge_seal_path() { SEAL="$(cd "$(dirname "$1")" && pwd)/content-seal.sh"; }
 merge_seal_phase() {
@@ -1054,6 +1099,10 @@ case "${1:-}" in
     parse_shard "$2" > "$CH_P" || { rm -f "$CH_P"; printf 'REFUSED: parsing %s did not run\n' "$2"; exit 2; }
     if check_header "$CH_P" "$2" "$4"; then rm -f "$CH_P"; exit 0; fi
     rm -f "$CH_P"; printf 'REFUSED: %s\n' "$HDR_MSG"; exit 1 ;;
+  --check-shard-dir)
+    [ $# -ge 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] && [ "$DMAP" -eq 0 ] \
+      || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-shard-dir <planning>/s<N>/shards/<dir>..."; exit 3; }
+    shift; check_shard_dirs "$@"; exit $? ;;
   --map) MAP_ONLY=1; shift ;;
   --derived-set)
     [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --derived-set <planning>/s<N>/<artifact>-adversarial-p<M>.md"; exit 2; }
@@ -1098,11 +1147,8 @@ if [ -n "$SUBJECT" ] && [ "$ELICIT" -eq 1 ]; then
   ARTIFACT="requirements"; PASS=""
   OUT="$SPRINT_DIR/requirements-elicitation.md"
 else
-ARTIFACT="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\1/p')"
-PASS="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\2/p')"
-[ -n "$ARTIFACT" ] && [ -n "$PASS" ] || refuse "shard directory name $SHARD_BASE is not <artifact>-p<M>"
-PASS=$((10#$PASS))
-case "$ARTIFACT" in *-adversarial) refuse "shard directory $SHARD_BASE names the series, not the artifact: the dir is s<N>/shards/<artifact>-p<M>/ and this would write ${ARTIFACT}-adversarial-p$PASS.md (carry-over-evaluation.md: s<N>/shards/coe-p<M>/)" ;; esac
+merge_name_derive
+merge_name
 OUT="$SPRINT_DIR/$ARTIFACT-adversarial-p$PASS.md"
 fi
 STORIES_DIR="$SPRINT_DIR/$ARTIFACT"

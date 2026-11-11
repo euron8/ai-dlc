@@ -131,6 +131,13 @@
 # MUTANT-MATRIX dl-norole decides=role twins=nodl
 # MUTANT-MATRIX dl-rowfirst decides=nodl,seq twins=dl
 # MUTANT-MATRIX-DYNAMIC queue_run why=the cap and adjudicator mutants are registered by name and judged in one loop per family; every name it produces carries its own MUTANT-MATRIX row above
+# MUTANT-MATRIX sdnodeny decides=sdbad,sdmixed,sdtrail twins=sdgood
+# MUTANT-MATRIX sdanyrole decides=sdrem twins=sdbad
+# MUTANT-MATRIX sdfirstonly decides=sdmixed twins=sdbad
+# MUTANT-MATRIX sdnostrip decides=sdtrail twins=sdbad
+# MUTANT-MATRIX sdkeepempty decides=sdellip twins=sdgood
+# MUTANT-MATRIX sdmergeok decides=sdbad,sdmixed,sdtrail twins=sdgood
+# MUTANT-MATRIX-DYNAMIC sd_mut why=the shard-dir helper passes the mutant name as a variable; every name it produces carries its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-DYNAMIC fam_mut why=the vector-family helpers pass the mutant name as a variable; every name they produce carries its own MUTANT-MATRIX row above
 set -uo pipefail
 
@@ -3170,6 +3177,106 @@ dl_mut dl-rowfirst '  LAST_SKILL=""' '  mkdir -p "$SPAWN_STATE_DIR"; printf "{}\
   nodl,seq dl 'nodl=dl:1;seq=1-2-3;dl=pass:1' \
   "a row written before the refusal survives a refused dispatch -- cells nodl and seq move, the dispatch that carries its line does not reach the block"
 [ "$B_DL" = 1 ] || bad "DELIVERABLE-LINE FIXTURE BROKEN: the unmutated vector '$DL_TIP' is not '$DL_WANT;', so every DL mutant above was scored against the wrong baseline"
+
+# ===== THE SHARD-DIR DENY (BL-976): an adversary brief naming a dir the merge refuses ========
+# The guard selects every `planning-artifacts/s<N>/shards/<dir>` in an adversary brief and asks the
+# MERGE (`merge-adversarial-shards.sh --check-shard-dir`), located by walking up from the guard. The
+# real guard is driven in whichever layout this fixture runs in; its mutants run in SD_TREE, a copy
+# holding the hooks AND the merge, so a mutated guard still reaches a merge. A cell is
+# "<decision>:<ledger rows added>:<reason>", reason `s` for the merge's series-stem refusal.
+SD_MRG=""; for _c in "$REM_ROOT/core/scripts/merge-adversarial-shards.sh" "$REM_ROOT/scripts/ai-dlc/merge-adversarial-shards.sh"; do
+  [ -f "$_c" ] && { SD_MRG="$_c"; break; }; done
+[ -n "$SD_MRG" ] && echo "HERMETIC-CONSUMED $SD_MRG" || bad "SHARD-DIR FIXTURE BROKEN: merge-adversarial-shards.sh not found beside $HOOK"
+SD_W="$(mkworld sdir 321)"
+render_sd_role() { printf '# Role: %s\n\nDo the thing the role does.\n' "$1" > "$SD_W/.claude/team-roles/$1.md"; }
+render_sd_role adversary
+jq '.aiDlcRoles.adversary = {model: "opus", effort: "high"}' "$SD_W/.claude/settings.json" > "$SD_W/.claude/settings.json.n" \
+  && mv "$SD_W/.claude/settings.json.n" "$SD_W/.claude/settings.json"
+SD_TREE="$WORK/sdtree"; mkdir -p "$SD_TREE/core/hooks" "$SD_TREE/core/scripts"
+cp -R "$HOOKS_SRC/." "$SD_TREE/core/hooks/" && [ -n "$SD_MRG" ] && cp "$SD_MRG" "$SD_TREE/core/scripts/merge-adversarial-shards.sh" \
+  || bad "SHARD-DIR FIXTURE BROKEN: could not build the mutant tree"
+SD_PA=_bmad-output/planning-artifacts/s321/shards
+sd_pay() { # sd_pay <role> <brief lines...>
+  local r="$1" p; shift
+  p="Your operating contract is \`.claude/team-roles/$r.md\`. Read it first."
+  for _l in "$@"; do p="$p"$'\n'"$_l"; done
+  jq -nc --arg p "$p"$'\n'"Do the work." '{tool_name:"Agent",tool_input:{name:"sdir",prompt:$p}}'
+}
+sd_run() { # sd_run <guard> <role> <brief lines...> -> "<decision>:<rows added>:<reason>"
+  local g="$1" o d r rs n0 n1; shift
+  n0="$(grep -c . "$SD_W/_bmad-output/spawn-ledger.jsonl")" || n0=0
+  o="$(sd_pay "$@" | CLAUDE_PROJECT_DIR="$SD_W" bash "$g" 2>/dev/null)"
+  n1="$(grep -c . "$SD_W/_bmad-output/spawn-ledger.jsonl")" || n1=0
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
+  r=-
+  if [ "$d" = deny ]; then
+    rs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$o" 2>/dev/null)"
+    case "$rs" in *"--check-shard-dir answered:"*"names the series, not the artifact"*) r=s ;; *) r=o ;; esac
+  fi
+  printf '%s:%s:%s' "$d" "$((n1 - n0))" "$r"
+}
+sd_cell() { # sd_cell <guard> <cell>
+  case "$2" in
+    sdbad)    sd_run "$1" adversary "Output (your shard): \`$SD_PA/architecture-adversarial-p1/6.md\`." ;;
+    sdgood)   sd_run "$1" adversary "Output (your shard): \`$SD_PA/architecture-p1/6.md\`." ;;
+    sdelic)   sd_run "$1" adversary "Output (your shard): \`$SD_PA/stories-elicitation/01.md\`." ;;
+    sdreview) sd_run "$1" adversary "Output (your shard): \`docs/reviews/s321/shards/code-review-p1/1.md\`." ;;
+    sdrem)    sd_run "$1" remediator "Read \`$SD_PA/architecture-adversarial-p1/6.md\` and repair." ;;
+    sdmixed)  sd_run "$1" adversary "Read \`$SD_PA/coe-p1/1.md\`." "Output (your shard): \`$SD_PA/test-adversarial-p2/3.md\`." ;;
+    sdtrail)  sd_run "$1" adversary "Write your shard under $SD_PA/architecture-adversarial-p1." ;;
+    sdellip)  sd_run "$1" adversary "Shards live under $SD_PA/... as one file per seat; yours is \`$SD_PA/architecture-p1/6.md\`." ;;
+  esac
+}
+ALL_SD=sdbad,sdgood,sdelic,sdreview,sdrem,sdmixed,sdtrail,sdellip
+SD_WANT='sdbad=deny:0:s;sdgood=allow:1:-;sdelic=allow:1:-;sdreview=allow:1:-;sdrem=allow:1:-;sdmixed=deny:0:s;sdtrail=deny:0:s;sdellip=allow:1:-'
+SD_TIP="$(for _c in ${ALL_SD//,/ }; do printf '%s=%s;' "$_c" "$(sd_cell "$HOOK" "$_c")"; done)"
+_old_ifs="$IFS"; IFS=';'
+for _c in $SD_WANT; do
+  case ";$SD_TIP" in
+    *";$_c;"*) ok "SHARD-DIR ${_c%%=*}: '${_c#*=}' (decision:rows added:reason)" ;;
+    *) bad "SHARD-DIR ${_c%%=*}: expected '${_c#*=}', got vector '$SD_TIP'" ;;
+  esac
+done
+IFS="$_old_ifs"
+# FAIL OPEN: the unmutated guard copy in HOOKS_SHARED has no merge above it, so the refused brief
+# is allowed and recorded -- a missing merge never blocks a spawn. Paired with sdbad above (deny).
+SD_OPEN="$(sd_cell "$(mk_hooks_copy sd-open)" sdbad)"
+[ "$SD_OPEN" = "allow:1:-" ] && ok "SHARD-DIR sdopen: no merge reachable -> '$SD_OPEN' (fail open; sdbad denies with one)" \
+  || bad "SHARD-DIR sdopen: no merge reachable -> '$SD_OPEN', expected 'allow:1:-'"
+SEP_SD=";"; CELLFN_SD=sd_cell; BASE_SD="$(want_lines ';' "$SD_WANT")"
+B_SD=$([ "$SD_TIP" = "$SD_WANT;" ] && echo 1 || echo 0)
+# sd_mut copies the WHOLE tree per mutant, so a mutated guard still finds the merge above it.
+sd_mut() { # sd_mut <tag> <file: hook|merge> <exact-anchor-line> <replacement-line> <decides> <twins|-> <expected> <message>
+  local src dst n
+  case "$2" in hook) src="$SD_TREE/core/hooks/$(basename "$HOOK")" ;; merge) src="$SD_TREE/core/scripts/merge-adversarial-shards.sh" ;; esac
+  n="$(grep -cxF -- "$3" "$src")" || n=0
+  if [ "$n" != 1 ]; then bad "MUTANT $1 anchor matched $n lines in $(basename "$src"), expected exactly 1"; return; fi
+  dst="$WORK/sdmut-$1"; [ ! -e "$dst" ] || { bad "MUTANT $1: $dst already exists"; return; }; cp -R "$SD_TREE" "$dst" || { bad "MUTANT $1: could not copy the tree"; return; }
+  A="$3" R="$4" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$src" > "$dst/${src#"$SD_TREE"/}"
+  if cmp -s "$src" "$dst/${src#"$SD_TREE"/}"; then bad "MUTANT $1 DID NOT APPLY (cmp -s)"; return; fi
+  if ! bash -n "$dst/${src#"$SD_TREE"/}" 2>/dev/null; then bad "MUTANT $1 DID NOT APPLY as valid shell"; return; fi
+  fam_score SD "$1" "$dst/core/hooks/$(basename "$HOOK")" "$5" "$6" "$B_SD" "$7" "SHARD-DIR MUTANT $1 scores a kill: $8"
+}
+fam_control SD "$SD_TREE/core/hooks/$(basename "$HOOK")" sdbad "SHARD-DIR MUTANT CONTROL: the unmutated tree copy scores the deny cell sdbad (positive; every cell under --matrix)"
+sd_mut sdnodeny hook "$(grep -m1 -F '          dg_deny "AI/DLC dispatch guard: refused an \`adversary\` dispatch, because its brief names a shard directory' "$HOOK")" '          :' \
+  sdbad,sdmixed,sdtrail sdgood 'sdbad=allow:1:-;sdmixed=allow:1:-;sdtrail=allow:1:-;sdgood=allow:1:-' \
+  "without the deny a refused dir is recorded and allowed -- the three refused cells move"
+sd_mut sdanyrole hook '  adversary:*planning-artifacts/s[0-9]*/shards/*)' '  *:*planning-artifacts/s[0-9]*/shards/*)' \
+  sdrem sdbad 'sdrem=deny:0:s;sdbad=deny:0:s' \
+  "an arm not scoped to the adversary refuses a remediator that only READS the refused dir -- cell sdrem alone moves"
+SD_SELLINE="$(grep -m1 -F "      | sed 's/\.*\$//' | LC_ALL=C grep -v '/shards/\$' | LC_ALL=C sort -u)\" || _dg_sd=\"\"" "$HOOK")"
+sd_mut sdfirstonly hook "$SD_SELLINE" "${SD_SELLINE%%)\" || _dg_sd=\"\"} | head -1)\" || _dg_sd=\"\"" \
+  sdmixed sdbad 'sdmixed=allow:1:-;sdbad=deny:0:s' \
+  "a guard asking about only the first dir a brief names lets the refused second one through -- cell sdmixed alone moves"
+sd_mut sdnostrip hook "$SD_SELLINE" '      | LC_ALL=C grep -v '"'"'/shards/$'"'"' | LC_ALL=C sort -u)" || _dg_sd=""' \
+  sdtrail sdbad 'sdtrail=allow:1:-;sdbad=deny:0:s' \
+  "a selector keeping a sentence's full stop asks about a name with no -p<M> suffix, which reads SKIP -- cell sdtrail alone moves"
+sd_mut sdkeepempty hook "$SD_SELLINE" "      | sed 's/\.*\$//' | LC_ALL=C sort -u)\" || _dg_sd=\"\"" \
+  sdellip sdgood 'sdellip=deny:0:o;sdgood=allow:1:-' \
+  "a selector keeping a dots-only candidate asks the merge about the shards/ parent, which it refuses for placement -- cell sdellip alone moves"
+sd_mut sdmergeok merge "          merge_name; printf 'OK\\n' )\"" "          printf 'OK\\n' )\"" \
+  sdbad,sdmixed,sdtrail sdgood 'sdbad=allow:1:-;sdmixed=allow:1:-;sdtrail=allow:1:-;sdgood=allow:1:-' \
+  "a check mode that skips the merge's name grammar answers OK for the series stem -- the three refused cells move"
 
 # ===== the matrix machinery itself, and the plain-run arm ===================================
 mx_probe && ok "matrix machinery probe: a seeded deciding trip is judged a kill, a seeded survivor is not, and a twin that trips is refused" \
