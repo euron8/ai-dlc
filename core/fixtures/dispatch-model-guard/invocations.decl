@@ -1,4 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-692 *
+741 *
 2 core/scripts/validate-gate-adjudication.sh
 21 core/scripts/validate-spawn-ledger.sh
+23 core/scripts/merge-adversarial-shards.sh

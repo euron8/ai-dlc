@@ -19,6 +19,23 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1055.0] - 2026-11-11
+
+### BL-976 (PARTIAL): an `adversary` brief naming a shard directory the merge will refuse is denied at dispatch, by the merge's own grammar
+
+In graph s321 the lead sent "the merge requires shard dir `…/shards/architecture-p…`" to adversaries that had already written their shards under `architecture-adversarial-p1`, which the merge refuses as the series stem. The pass could not merge until they were resumed and rewrote.
+
+`core/scripts/merge-adversarial-shards.sh` gains `--check-shard-dir <dir>...`. It runs the merge's own placement and name lines on each path string and reads nothing. It prints one line per dir: `OK`, `SKIP` (no `-p<M>` suffix, an elicitation dir), or `REFUSED` with the merge's text. It exits 0, 1, or 3 on bad usage. To share those lines, `merge_locate` splits into the existence check and `merge_place` (path string only). The `<artifact>-p<M>` derivation and the series-stem refusal move into `merge_name_derive` and `merge_name` at the same call site. The merge's own behaviour is unchanged.
+
+`core/hooks/ai-dlc-dispatch-guard.sh` gains THE SHARD-DIR DENY, between THE SHARD DENY and THE COVER DENY. For role `adversary` only, it selects every `planning-artifacts/s<N>/shards/<dir>` the brief names, finds the merge by walking up to `scripts/ai-dlc/` or `core/scripts/`, and denies on a `REFUSED` line, quoting the merge's text. No merge reachable, an exit outside 0 and 1, or a refusal with no text fails open.
+
+- Fixture `dispatch-model-guard`: 9 SHARD-DIR cells, an unmutated control and 6 mutants, all killed (5 on the guard, 1 on the merge's check mode). `inputs.decl` requires the merge. `invocations.decl` is re-measured by two counted runs on the rebased tree: 741 total, 23 merge calls.
+- False-positive set, measured by the shipped hook over graph's 1295 deduplicated `adversary` dispatch briefs (read only, window end 2026-11-11T10:30:00Z): exactly 8 decisions change, all allow to deny, all of them s321 briefs naming `architecture-adversarial-p1`. They went to 7 agents.
+
+Consumer effect: a lead whose brief names a refused shard directory is told so at dispatch, with the merge's own text, before any adversary writes there.
+
+The entry stays open as PARTIAL. It is tagged efficiency and its step is a graph pipeline step, so it closes only on an `Outcome measured:` line counting shard-directory corrections on a graph sprint run on an engine carrying this release.
+
 ## [0.1053.0] - 2026-11-11
 
 ### BL-841 (PARTIAL): the entry's fix direction measured against its own data; no hook ships
