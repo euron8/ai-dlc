@@ -451,6 +451,88 @@ f="$(mkcase c2-mistargeted)";   { c2_name; c2_sup 16; } > "$f"
 f="$(mkcase own-standdown)"
 printf '## %s\n**Status:** RESOLVED\n**Operator authorization:** %s | "Override, proceed, file backlog item"\n\nThe gate failed Check 32 and this entry waived it.\n' "$W_SD" "$A0" > "$f"
 
+# ---- SUPERSESSION (BL-959): a fresh in-force authorization stands an expired one down ----------
+# THE SHORT TIMELINE. Two gates (G1, G2) after both authorizations: OLD (`**Expires after:** 1`,
+# authorized A0) is past its lifetime at 2 elapsed, NEW (`**Expires after:** 3`, authorized A1) is in
+# force at 2. So every near-miss below is excluded by the condition it names, never by NEW's own
+# lifetime, and --in-force LISTS NEW in each world where that condition is not the lifetime (arm
+# inf). NEW's authorization timestamp is A1, never the shared A0: condition f (the timestamps
+# differ) would otherwise silently exclude NEW from every world.
+A1="2026-04-30T12:00:00Z"
+SL_OLD="[S401 gate — an expired bmad suppression] [lead] - ${A0}"
+SL_NEW="[S401 gate — a fresh bmad suppression] [lead] - ${A1}"
+SL_OVR="[S401 gate — spawn rows overridden] [lead] - ${A1}"
+SL_Q_OLD='"Override, proceed, file backlog item"'
+SL_Q_NEW='"Re-suppress 32 for three gates"'
+# The latest row is the PREVIOUS gate's and is waived by OLD (the consumer's shape), or plain FAIL.
+GM_SL_W="$WORK/gm-sl-waived-old.jsonl"
+{
+  emit_unspaced "$G1" "16" "PASS"; emit_spaced "$G1" "32" "FAIL"
+  emit_spaced   "$G2" "16" "PASS"; emit_w_unspaced "$G2" "32" "$SL_OLD"
+} > "$GM_SL_W"
+GM_SL_F="$WORK/gm-sl-fail.jsonl"
+{
+  emit_unspaced "$G1" "16" "PASS"; emit_w_spaced "$G1" "32" "$SL_OLD"
+  emit_spaced   "$G2" "16" "PASS"; emit_unspaced "$G2" "32" "FAIL"
+} > "$GM_SL_F"
+sl_old() { # [<suppresses> [<expires>]]
+  printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** %s — bmad-invocation-resolves\n**Expires after:** %s gates\n**Operator authorization:** %s | %s\n\n' \
+    "$SL_OLD" "${1:-[core] 32}" "${2:-1}" "$A0" "$SL_Q_OLD"
+}
+sl_new() { # [<suppresses> [<expires> [<auth ts> [<quote> [<header>]]]]]
+  printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** %s — bmad-invocation-resolves\n**Expires after:** %s gates\n**Operator authorization:** %s | %s\n\n' \
+    "${5:-$SL_NEW}" "${1:-[core] 32}" "${2:-3}" "${3:-$A1}" "${4:-$SL_Q_NEW}"
+}
+sl_ovr() { printf '## %s\n**Status:** OVERRIDDEN\n**Operator authorization:** %s | %s\n\nCheck 32 failed on a spawn row; output verified.\n\n' "$SL_OVR" "$A1" "$SL_Q_NEW"; }
+sl_res() { printf '## %s\n**Status:** RESOLVED\n**Operator authorization:** %s | %s\n\nCheck 32 failed on a spawn row; closed as answered.\n\n' "$SL_OVR" "$A1" "$SL_Q_NEW"; }
+f="$(mkcase sl-t1)";   { sl_old; sl_new; } > "$f"
+f="$(mkcase sl-t9)";   sl_old > "$f"
+# T2 (a): NEW only in the archive beside pending.md.
+f="$(mkcase sl-t2)";   sl_old > "$f"
+{ printf '# Escalation archive\n\n'; sl_new; } > "$WORK/cases/sl-t2/pending-archive.md"
+# T3 (b): NEW is OVERRIDDEN and carries no suppression fields, under NEW's own header.
+f="$(mkcase sl-t3)";   { sl_old; printf '## %s\n**Status:** OVERRIDDEN\n**Operator authorization:** %s | %s\n\nRe-authorized.\n\n' "$SL_NEW" "$A1" "$SL_Q_NEW"; } > "$f"
+# T3b (b): NEW carries every suppression field, in force by them, under OVERRIDDEN. T3's NEW has no
+# lifetime, so (d) alone already excludes it; only this world separates the status test.
+f="$(mkcase sl-t3b)";  { sl_old; sl_new | sed 's/^\*\*Status:\*\* SUPPRESSED$/**Status:** OVERRIDDEN/'; } > "$f"
+# T4 (c1): NEW suppresses a different check. T5 (c2): NEW names the extension catalog.
+f="$(mkcase sl-t4)";   { sl_old; sl_new '[core] 16'; } > "$f"
+f="$(mkcase sl-t5)";   { sl_old; sl_new '[extension:probe] 32'; } > "$f"
+# T5's converse twins: an EMPTY bracket reads as core on either side, so both MUST stand down.
+f="$(mkcase sl-t5e)";  { sl_old '32'; sl_new; } > "$f"
+f="$(mkcase sl-t5s)";  { sl_old; sl_new '32'; } > "$f"
+# T6 (d): NEW's lifetime is unreadable -- out of range, no ISO timestamp, no **Expires after:**.
+f="$(mkcase sl-t6)";   { sl_old; sl_new '[core] 32' 5; } > "$f"
+f="$(mkcase sl-t6b)";  { sl_old; sl_new '[core] 32' 3 'at the gate'; } > "$f"
+f="$(mkcase sl-t6c)";  { sl_old; sl_new | grep -v '^\*\*Expires after:\*\*'; } > "$f"
+# T7 (e): NEW itself past its lifetime (1 gate, 2 elapsed).
+f="$(mkcase sl-t7)";   { sl_old; sl_new '[core] 32' 1; } > "$f"
+# T8 (f): the TIMESTAMP is the operator turn. T8a: OLD's timestamp, a new quote. T8b: a new
+# timestamp, OLD's quote.
+f="$(mkcase sl-t8a)";  { sl_old; sl_new '[core] 32' 3 "$A0"; } > "$f"
+f="$(mkcase sl-t8b)";  { sl_old; sl_new '[core] 32' 3 "$A1" "$SL_Q_OLD"; } > "$f"
+# F3: a second entry under OLD's OWN header (OLD's waiver key), fresh timestamp, 3 gates. An entry
+# sharing E's key IS E, so it supersedes nothing.
+f="$(mkcase sl-f3)";   { sl_old; sl_new '[core] 32' 3 "$A1" "$SL_Q_NEW" "$SL_OLD"; } > "$f"
+# T11 (the terminal twin): an OVERRIDDEN entry naming Check 32 while 32's latest row is waived by the
+# expired OLD. b: OLD archived. c: no NEW. d: RESOLVED, not OVERRIDDEN (exact match only).
+f="$(mkcase sl-t11)";  { sl_old; sl_new; sl_ovr; } > "$f"
+f="$(mkcase sl-t11b)"; { sl_new; sl_ovr; } > "$f"
+{ printf '# Escalation archive\n\n'; sl_old; } > "$WORK/cases/sl-t11b/pending-archive.md"
+f="$(mkcase sl-t11c)"; { sl_old; sl_ovr; } > "$f"
+f="$(mkcase sl-t11d)"; { sl_old; sl_new; sl_res; } > "$f"
+# TQ (the terminal twin's waiver must be the expired suppression of (core, 32)): T11b's tree with the
+# archived waiver OLD retargeted. q1: [core] 16, expired. q2: [extension:x] 32, in force. q3: [core] 16,
+# in force. q4: [core] 32 with no **Expires after:** -- an unreadable lifetime, which reads as expired,
+# so the twin stands down exactly as in T11b.
+for q in 'q1|[core] 16|1' 'q2|[extension:x] 32|3' 'q3|[core] 16|3' 'q4|[core] 32|1'; do
+  n="${q%%|*}"; r="${q#*|}"
+  f="$(mkcase "sl-t$n")"; { sl_new; sl_ovr; } > "$f"
+  { printf '# Escalation archive\n\n'
+    if [ "$n" = q4 ]; then sl_old | grep -v '^\*\*Expires after:\*\*'; else sl_old "${r%|*}" "${r##*|}"; fi
+  } > "$WORK/cases/sl-t$n/pending-archive.md"
+done
+
 # ---- THE CWD WORLDS --------------------------------------------------------
 # The metrics file is the ONE input this script locates for itself, and it is located while
 # the process cwd is whatever the caller happened to be in. `ai-dlc-gate-remediation-guard.sh`
@@ -532,6 +614,15 @@ GM_W_EMPTY="$GM_W_EMPTY"
 GM_W_C2="$GM_W_C2"
 GM_W_SD="$GM_W_SD"
 BASELINE_EXP32="$WORK/baseline-expired32.txt"
+GM_SL_W="$GM_SL_W"
+GM_SL_F="$GM_SL_F"
+A0="$A0"
+A1="$A1"
+SL_OLD="$SL_OLD"
+SL_NEW="$SL_NEW"
+SL_OVR="$SL_OVR"
+SL_Q_OLD='$SL_Q_OLD'
+SL_Q_NEW='$SL_Q_NEW'
 G1="$G1"
 G2="$G2"
 G3="$G3"

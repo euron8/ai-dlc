@@ -40636,3 +40636,40 @@ Provenance: batch b253, BL-806(b) contract adversary (D5); id allocated by lead 
 
 verify: sh S=core/scripts/snapshot-update.sh; [ -f "$S" ] || exit 9; grep -q 'statuscell_ok' "$S" || exit 9; grep -q 'line-replace' "$S" || exit 9; S="$PWD/$S"; T="$(mktemp -d)" || exit 9; export AI_DLC_SNAPSHOT_NOW_EPOCH=1793000340; M='18/19 delivered at 07:50Z (still out: cross-1 only)'; k() { mkdir -p "$T/$1/.claude" "$T/$1/_bmad-output" || exit 9; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: stories-test-strategy.md\n\n## Recent Activity\n- 2026-10-26T07:20Z adversarial pass 2 dispatched\n\n## Open Items\n- none\n\n## In-Flight Teammates\nagent | role | deliverable | dispatched-at | status\n--- | --- | --- | --- | ---\nstories-adv-p2 | adversary | shards/x.md | 2026-10-26T07:20:00Z | in-flight\n' > "$T/$1/_bmad-output/pipeline-snapshot.md" || exit 9; cp "$T/$1/_bmad-output/pipeline-snapshot.md" "$T/$1/before" || exit 9; }; u() { t="$1"; shift; AI_DLC_PROJECT_ROOT="$T/$t" bash "$S" --snapshot "$T/$t/_bmad-output/pipeline-snapshot.md" "$@" >/dev/null 2>&1; }; same() { cmp -s "$T/$1/_bmad-output/pipeline-snapshot.md" "$T/$1/before"; }; k rs; u rs --row-status stories-adv-p2 "$M" && exit 9; same rs || exit 9; k rd; u rd --row-status stories-adv-p2 done && exit 9; same rd || exit 9; k ra; u ra --line-replace 'Recent Activity' 'pass 2 dispatched' '- 2026-10-26T07:20Z adversarial pass 2 dispatched, replaced' || exit 9; same ra && exit 9; k lr; u lr --line-replace 'In-Flight Teammates' 'stories-adv-p2' "stories-adv-p2 | adversary | shards/x.md | 2026-10-26T07:20:00Z | $M" && exit 1; same lr || exit 1; k ld; u ld --line-replace 'In-Flight Teammates' 'stories-adv-p2' 'stories-adv-p2 | adversary | shards/x.md | 2026-10-26T07:20:00Z | done' && exit 1; same ld
 
+## BL-959 — validate-suppression-lifetime.sh judges an expired suppression against the PREVIOUS gate's row and ignores another in-force SUPPRESSED entry for the same check, in two arms: the expiry arm, and the terminal arm's OVERRIDDEN acquittal
+
+**LANDED (v0.1046.0).** **DEFECT, TWO ARMS.** Both arms of `core/scripts/validate-suppression-lifetime.sh` judge an expired `SUPPRESSED` entry E by the latest `gate-metrics.jsonl` row for its `[catalog] check`. Neither consults whether another, in-force `SUPPRESSED` entry for the same check exists. That row is the PREVIOUS gate's, because Check 12 writes the metrics after Check 2 runs. For a check the current gate does not re-run, the row keeps naming E as its waiver at every later gate. Another `SUPPRESSED` entry S for the same check can never become that row's waiver, so S never clears anything.
+
+(1) The expiry arm, reported by the consumer. At 8297bb15d, `:703-708` fires on E when `sl_past_lifetime` holds and the latest row is `FAIL`, or `FAIL_WAIVED` whose `waiver_id` is E's own key. Nothing in that arm reads any other entry. `core/scripts/gate-transition.sh:452`, gate-3 `arm 2`, runs `verdict.sh validate-suppression-lifetime --escalations docs/escalations/pending.md` unconditionally and refuses `check-2` on any nonzero exit, and the lead's own Check 2 run (`gate-validation.md` Check 2) is the same command. So once E expires on a check the current gates do not re-run, the re-suppression E's own FAIL message asks for, an entry under a different operator authorization timestamp, clears nothing. The only exits are halting, or moving E into `pending-archive.md` by hand, which no protocol step does (BL-961). The reference consumer met it at an implementation gate on Check 32, a planning-gate check. It took the archive move as its workaround.
+
+(2) The terminal arm's OVERRIDDEN acquittal, found by the contract adversary. At 8297bb15d, `:765-768` acquits an `OVERRIDDEN` entry that names a check recorded `FAIL_WAIVED` under an expired `SUPPRESSED` waiver only while that waiver is within its own lifetime. Another in-force `SUPPRESSED` entry for the same check is not consulted there either, so the same refresh leaves the terminal FAIL standing. The adversary measured rc 1 on that world. The consumer is not affected today: its terminal-arm count is 0.
+
+Measured in a mktemp world by the docs hand, driving base 8297bb15d's validator (a copy of `core/scripts/` with the base blob swapped in) and the fix as this entry closes it. The catalog holds {31, 32}. The metrics carry one check-32 `FAIL_WAIVED` row naming E at 11-02, then three later gates of check 31 `PASS`. E is `SUPPRESSED [core] 32`, `**Expires after:** 1`, authorized 11-01. S is `SUPPRESSED [core] 32`, `**Expires after:** 3`, authorized 11-10.
+
+- Control, pending.md holding E alone: rc 1 on base and on the fix, `FAIL: suppression of check '32' is past its lifetime`.
+- Subject, E plus S: base rc 1 with the same FAIL on E. The fix gives rc 0, one `WARN: superseded: check '32' [core]` naming both entries, and `superseded=1` on the summary line.
+- In the same tree, `--in-force` lists S (`core 32 3 1`). The in-force predicate already said an in-force re-suppression existed, and the expiry arm ignored it.
+
+On the consumer's own `pending.md`, with E restored from `pending-archive.md`, the fix hand measured base rc 1 and fix rc 0. The `WARN` names `[S322-REQUIREMENTS-GATE]` as the expired entry and `[S322-CHECK-32-SUPPRESSION-REFRESH-18GATES]` as the superseding one. The contract adversary had measured the same base rc 1 on copies of the consumer's `pending.md`, `pending-archive.md` and `gate-metrics.jsonl`.
+
+The limit, stated and not widened. A refresh buys ONE window of at most 3 gates per operator turn, because the grammar caps `**Expires after:**` at 1..3. Once S expires, E re-fires for a check the current gates do not re-run, and only another operator turn clears it. The cap is an operator-set bound.
+
+Fix: S stands E's re-fire down in both arms when all of these hold:
+
+- S is in `pending.md`, not the archive.
+- S classifies `SUPPRESSED` and its waiver key is not E's.
+- S targets the same check id in the same catalog, an empty bracket reading as core on both sides.
+- S's lifetime is readable and in force by `sl_in_force`, the one predicate `--in-force` also lists by.
+- S's authorization timestamp differs from E's. Different, not later: an S authorized before E that is still in force supersedes too.
+
+In the terminal arm the stand-down is narrower. An `OVERRIDDEN` entry naming check N is stood down only when N's latest row is `FAIL_WAIVED` under an expired `SUPPRESSED` waiver that targets `[core] N`, and `pending.md` holds such an S for `[core] N`. On a plain `FAIL` row for N, the run still fails on that `OVERRIDDEN` entry with `FAIL: a OVERRIDDEN entry names check(s) 32, which are recorded FAILING.` (fixture arm sl11e).
+
+Each stand-down prints a `WARN: superseded:` line rather than a `NOTE`, because `verdict.sh` surfaces only WARN-class lines at exit 0. `--in-force` and `--waivers` output is unchanged. The stand-down is unconditional, with no transition-only flag, because the lead's manual Check 2 run is the same command.
+
+Consumer cost: the reconcile predicate site for `validate-suppression-lifetime.sh` (`core/skills/ai-dlc-update/reconcile/predicate-sites.md:183-190`) moves from `EXPIRED <check>` to `OK` on a tree where an expired entry is superseded. A baselined `EXPIRED:<check>` key whose only cause was superseded reports "baselined key no longer reproduces".
+
+Provenance: batch b254, cluster C; the expiry arm is the reference consumer's sprint-322 gate-3 report, the OVERRIDDEN arm the contract adversary's; id allocated by lead ai-dlc-7f.
+
+verify: sh bash core/fixtures/suppression-lifetime/receipt-bl959.sh
+
+

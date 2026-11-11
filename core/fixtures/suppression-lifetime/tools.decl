@@ -10,6 +10,7 @@ dirname
 env
 find
 grep
+head
 id
 ln
 mkdir
@@ -20,3 +21,4 @@ sed
 sort
 tail
 tr
+wc
