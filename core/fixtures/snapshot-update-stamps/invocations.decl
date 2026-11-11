@@ -10,9 +10,14 @@
 # counted runs, identical counts: * 175->344, snapshot-update.sh 38->59, validate-artifact-budget.sh 21->32,
 # ai-dlc-continue.sh 5->18, ai-dlc-recover.sh 2->15, validate-mandatory-rules.sh new at 10 (POSLINE and SECDUP run
 # Check 8, the third shipped position reader).
-344 *
-59 core/scripts/snapshot-update.sh
-32 core/scripts/validate-artifact-budget.sh
+# Re-measured for BL-953 (IFLINEREFUSE, IFLINEWRITE and their two mutants m-noifguard, m-ifrefuseall), armed the same
+# way, two counted runs, identical counts: * 344->369, snapshot-update.sh 59->64, validate-artifact-budget.sh 32->35.
+# Re-measured for the BL-953 header-only exemption (the decoy, dash and header-rewrite arms and the mutants m-ifhdrany
+# and m-ifsepwide), armed the same way, two counted runs, identical counts: * 369->409, snapshot-update.sh 64->67,
+# validate-artifact-budget.sh 35->36.
+409 *
+67 core/scripts/snapshot-update.sh
+36 core/scripts/validate-artifact-budget.sh
 18 core/hooks/ai-dlc-continue.sh
 15 core/hooks/ai-dlc-recover.sh
 0 core/hooks/ai-dlc-dispatch-guard.sh

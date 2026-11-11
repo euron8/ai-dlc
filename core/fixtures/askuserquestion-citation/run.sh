@@ -16,9 +16,16 @@
 #
 # The mutant matrix replaces an exact-vector assertion per mutant: per push each mutant runs its
 # deciding arm and its twin, and the matrix is re-measured whenever an arm or a mutant changes.
-# Arm names are A1-A5 (assertions 1-5), P1-P6 (the pruned-world arms) and F1-F17 (the --accept-captured worlds); they are the column
-# names `--matrix` prints.
+# Arm names are A1-A5 (assertions 1-5), P1-P6 (the pruned-world arms), F1-F17 (the --accept-captured worlds) and D1-D8 (the
+# disposition-shaped quotes, BL-950); they are the column names `--matrix` prints.
 # MUTANT-MATRIX whole-string decides=A2 twins=A1
+# MUTANT-MATRIX substring-on-joined decides=D2 twins=D1
+# MUTANT-MATRIX exact-vs-joined decides=D4 twins=D1
+# MUTANT-MATRIX exact-for-all decides=D5 twins=D1
+# MUTANT-MATRIX option-followed-by-space-prefix decides=D3 twins=D2
+# MUTANT-MATRIX substring-kept-for-prose decides=D6 twins=D2
+# MUTANT-MATRIX no-badge-strip decides=D7 twins=D1
+# MUTANT-MATRIX no-needle-strip decides=D8 twins=D7
 # MUTANT-MATRIX no-token decides=P1 twins=P2
 # MUTANT-MATRIX quote-anywhere decides=P4 twins=P1
 # MUTANT-MATRIX scan-list decides=P3 twins=P4
@@ -286,7 +293,9 @@ mut() { # mut <out> <from> <to>
 # ARMS, as one function of (arm, validator) -> "<rc> <stdout>". A1-A5 are assertions 1-5 above and
 # P1-P6 the pruned-world arms; every mutant is scored through the same function the shipped
 # validator is, so a verdict is comparable cell for cell. P6 installs the validator it is handed.
-ARMS="A1 A2 A3 A4 A5 P1 P2 P3 P4 P5 P6 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17"
+ARMS="A1 A2 A3 A4 A5 P1 P2 P3 P4 P5 P6 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 D1 D2 D3 D4 D5 D6 D7 D8"
+# dc <validator> <transcript> <quote> -> "<rc> <stdout>" for the disposition-shaped cells.
+dc() { local o r; o="$(bash "$1" --transcript "$WORK/$2" --cite "$3" 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o"; }
 arm_out() { # arm_out <arm> <validator>
   local a="$1" v="$2" o r
   case "$a" in
@@ -319,6 +328,14 @@ arm_out() { # arm_out <arm> <validator>
     F15) fr "$v" w1 "$Q_TURN" "$TURN_MIN" --accept-captured ;;
     F16) fr "$v" w1 "$FQ" "2026-07-21T~" --accept-captured ;;
     F17) FENV=TZ=America/New_York fr "$v" w1 "$FQ" "${FAUTH_MIN%Z}" --accept-captured ;;
+    D1) dc "$v" disp-exact.jsonl "Strike LR-S7-2" ;;
+    D2) dc "$v" disp-more.jsonl "Strike LR-S7-2" ;;
+    D3) dc "$v" disp-prefix.jsonl "Strike LR-S7-2" ;;
+    D4) dc "$v" disp-multi.jsonl "Strike LR-S7-4" ;;
+    D5) dc "$v" ask.jsonl "$SUBQ" ;;
+    D6) dc "$v" disp-typed.jsonl "Strike LR-S7-2" ;;
+    D7) dc "$v" disp-badge.jsonl "Confirm LR-S7-2" ;;
+    D8) dc "$v" disp-exact.jsonl "Strike LR-S7-2 (Recommended)" ;;
   esac
 }
 arm_holds() { # arm_holds <arm> <arm_out>: does the arm's own expectation hold on that output
@@ -333,6 +350,8 @@ arm_holds() { # arm_holds <arm> <arm_out>: does the arm's own expectation hold o
     F3:"$F_PR"|F4:"$F_PR"|F7:"$F_PR"|F8:"$F_PR"|F9:"$F_PR"|F10:"$F_PR"|F12:"$F_PR") return 0 ;;
     F5:"1 "|F6:"1 "|F11:"1 "|F16:"1 ") return 0 ;;
     P2:"2 NOMATCH"|P3:"2 NOMATCH"|P4:"2 NOMATCH"|P5:"2 NOMATCH") return 0 ;;
+    D1:"$D_OK"|D4:"$D_OK"|D5:"$D_OK"|D7:"$D_OK"|D8:"$D_OK") return 0 ;;
+    D2:"2 NOMATCH"|D3:"2 NOMATCH"|D6:"2 NOMATCH") return 0 ;;
   esac
   return 1
 }
@@ -340,6 +359,23 @@ arm_holds() { # arm_holds <arm> <arm_out>: does the arm's own expectation hold o
 ship_get() { local a="$1" v; eval "v=\${SHIP_$a-__unset__}"
   if [ "$v" = __unset__ ]; then v="$(arm_out "$a" "$VALIDATOR")"; printf -v "SHIP_$a" '%s' "$v"; fi
   SHIPV="$v"; }
+
+# --- D1-D7: a disposition-shaped quote verifies only as ONE WHOLE AskUserQuestion answer (BL-950) ---
+# `Strike|Reword|Confirm LR-S<n>-<m>` names an option the LEAD wrote, so the substring test let it
+# verify against a longer answer, a longer id, the joined text of several answers, or typed prose.
+# Each refusal cell has an allow cell one property apart; each cell is one transcript, read once.
+D_OK="0 MATCH 2026-07-21T02:05:00Z"
+dcell() { # dcell <arm> <what>
+  ship_get "$1"
+  if arm_holds "$1" "$SHIPV"; then ok "$1: $2"; else bad "$1: $2 -- got ($SHIPV)"; fi; }
+dcell D1 "a disposition quote equal to one whole AskUserQuestion answer verifies"
+dcell D2 "the same quote against the answer 'Strike LR-S7-2 but keep the index' is refused (option plus more text)"
+dcell D3 "'Strike LR-S7-2' against only 'Strike LR-S7-20' is refused (prefix of a longer id)"
+dcell D4 "'Strike LR-S7-4' verifies against a result answering 'Strike LR-S7-4' and 'Confirm LR-S7-5' (each answer is whole)"
+dcell D5 "a non-disposition quote that is a substring of an answer still verifies (substring kept)"
+dcell D6 "'Strike LR-S7-2' typed as prose, with no AskUserQuestion answer, is refused"
+dcell D7 "bare 'Confirm LR-S7-2' verifies against the answer 'Confirm LR-S7-2 (Recommended)' (badge stripped)"
+dcell D8 "badged 'Strike LR-S7-2 (Recommended)' verifies against the bare answer 'Strike LR-S7-2' (badge stripped from the quote too)"
 
 # mutant_score <name> <deciding arm> <twin arm> <what the mutant does> <from> <to>
 # Per push: the deciding arm must diverge from the shipped verdict and no longer hold, and the twin
@@ -412,13 +448,30 @@ mutant_score auth-seconds F14 F1 "requiring seconds in --authorized-at refuses a
   '[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?(Z|' '[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|'
 mutant_score zl-seconds F17 F1 "treating only a full-second zone-less value as UTC reads a zone-less minute in local time" \
   'const zl = ACC ?' 'const zl = false ?'
+
+# BL-950: the disposition-shaped exact compare, one wrong build per mutant.
+DISP_ANY='askUserQuestionAnswerList(r, askIds).some(a => unbadge(norm(a)) === dispNeedle)'
+mutant_score substring-on-joined D2 D1 "keeping the substring test on the joined answers accepts an option followed by more text" \
+  'const carriesQuote = (r, txt) => DISPOSITION' 'const carriesQuote = (r, txt) => false'
+mutant_score exact-vs-joined D4 D1 "comparing exactly against the JOINED answers refuses one answer of a multi-answer result" \
+  "$DISP_ANY" 'unbadge(norm(txt)) === dispNeedle'
+mutant_score exact-for-all D5 D1 "an exact compare for every needle refuses a plain quote that is a substring of an answer" \
+  ': norm(txt).includes(needle);' ': norm(txt) === needle;'
+mutant_score option-followed-by-space-prefix D3 D2 "refusing only an answer that starts with the quote plus a space accepts a longer id through the joined substring" \
+  "$DISP_ANY" '(!askUserQuestionAnswerList(r, askIds).some(a => norm(a).startsWith(needle + " ")) && norm(txt).includes(needle))'
+mutant_score substring-kept-for-prose D6 D2 "keeping the substring test for typed prose accepts a disposition the operator only typed" \
+  "$DISP_ANY" "($DISP_ANY || (!askUserQuestionAnswerList(r, askIds).length && norm(txt).includes(needle)))"
+mutant_score no-badge-strip D7 D1 "not stripping the (Recommended) badge refuses a bare quote of a badged answer" \
+  'const unbadge = (s) => s.replace(/ \(recommended\)$/, "");' 'const unbadge = (s) => s;'
+mutant_score no-needle-strip D8 D7 "stripping the badge from the answers only sends a badged quote down the substring path, which a bare answer cannot carry" \
+  'const dispNeedle = unbadge(needle);' 'const dispNeedle = needle;'
 # A plain run executes no matrix-only cell; --matrix executes one row per mutant per arm.
-MX_WANT=$(( 15 * $(set -- $ARMS; echo $#) ))
+MX_WANT=$(( 22 * $(set -- $ARMS; echo $#) ))
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "MX plain run executed no matrix-only cell (matrix rows=0)"
   else bad "MX plain run executed $MROWS matrix-only rows"; fi
 else
-  if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MX_WANT mutant x arm cells (15 mutants x every arm)"
+  if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MX_WANT mutant x arm cells (22 mutants x every arm)"
   else bad "MX matrix run measured $MROWS cells, $MX_WANT expected"; fi
 fi
 

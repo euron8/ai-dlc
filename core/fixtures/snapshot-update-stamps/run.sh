@@ -173,6 +173,10 @@
 # MUTANT-MATRIX m-keydash decides=POSLINE twins=KEYLINE
 # MUTANT-MATRIX m-nofallback decides=POSLINE twins=READERS
 # MUTANT-MATRIX m-blockfb decides=BLOCKCONTENT twins=READERS
+# MUTANT-MATRIX m-noifguard decides=IFLINEREFUSE twins=IFLINEWRITE
+# MUTANT-MATRIX m-ifrefuseall decides=IFLINEWRITE twins=IFLINEREFUSE
+# MUTANT-MATRIX m-ifhdrany decides=IFLINEREFUSE twins=IFLINEWRITE
+# MUTANT-MATRIX m-ifsepwide decides=IFLINEREFUSE twins=IFLINEWRITE
 # MUTANT-MATRIX-CONTROL control why=the unmutated copy must write VALID and refuse FUTURE through the mutant harness so a mutant verdict is attributable to the mutation
 # The four mutants are a loop over a spec list, so the name reaches mutant_killed as a variable:
 # MUTANT-MATRIX-DYNAMIC mutants why=one scoring function takes every mutant name as an argument and every name keeps its own row
@@ -686,10 +690,50 @@ cell() {
       { grep -qF 'Current step: route.md.' <<<"$cont" && [ "$rec" = step_file=route.md ] && grep -qF 'at route.md' <<<"$c8"; } || miss="$miss readers-after-set=[$cont][$rec][$c8]"
       [ -z "$miss" ] && return 0
       CELL_MSG="$miss"; return 1 ;;
+    IFLINEREFUSE)
+      # BL-953. --line-replace into In-Flight Teammates applies the status vocabulary to a table row it
+      # writes: free text and `done` are exit 2 with the cell VALUE named in quotes, file unchanged.
+      local w="$WORK/$t-iflr" miss="" st row
+      s="$(seed "$w" 0)"; cs="$(cksum < "$s")"
+      for st in "in-flight (join: x)" done; do
+        row="a1111111111111111 | dev | /w/a.md | 2026-10-25T19:00:00Z | $st"
+        AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW" drive "$pr" "$s" --line-replace "In-Flight Teammates" a1111111111111111 "$row"
+        [ "$RC" = 2 ] || miss="$miss rc=$RC($st)"
+        grep -qF "the status cell '$st' is not in-flight" <<<"$OUT" || miss="$miss msg($st)=$OUT"
+        [ "$(cksum < "$s")" = "$cs" ] || miss="$miss changed($st)"
+      done
+      # A `dispatched-at` decoy cell is not the header, and a row of bare `-` cells is not a table rule.
+      for st in "WIP" "-"; do
+        if [ "$st" = WIP ]; then row="a1111111111111111 | dev | dispatched-at | 2026-10-25T19:00:00Z | WIP"
+        else row="- | - | - | - | -"; fi
+        AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW" drive "$pr" "$s" --line-replace "In-Flight Teammates" a1111111111111111 "$row"
+        [ "$RC" = 2 ] || miss="$miss rc=$RC($st)"
+        grep -qF "the status cell '$st' is not in-flight" <<<"$OUT" || miss="$miss msg($st)=$OUT"
+        [ "$(cksum < "$s")" = "$cs" ] || miss="$miss changed($st)"
+      done
+      [ -z "$miss" ] && return 0
+      CELL_MSG="$miss"; return 1 ;;
+    IFLINEWRITE)
+      # BL-953 twin. A member status written by --line-replace into In-Flight Teammates is rc 0 and
+      # written (the guard is not refuse-all); a Recent Activity --line-replace is written; the
+      # header text and the --- rule are no row, so they are not judged (here: the rule is rewritten).
+      local w="$WORK/$t-iflw" miss="" row="a1111111111111111 | dev | /w/a.md | 2026-10-25T19:00:00Z | delivered-reachable"
+      s="$(seed "$w" 0)"
+      AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW" drive "$pr" "$s" --line-replace "In-Flight Teammates" a1111111111111111 "$row"
+      { [ "$RC" = 0 ] && grep -qxF -- "$row" "$s"; } || miss="$miss member rc=$RC $OUT"
+      AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW" drive "$pr" "$s" --line-replace "Recent Activity" "older entry" "- 2026-10-25T20:00Z rewritten by line-replace"
+      { [ "$RC" = 0 ] && grep -qxF -- "- 2026-10-25T20:00Z rewritten by line-replace" "$s"; } || miss="$miss activity rc=$RC $OUT"
+      AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW" drive "$pr" "$s" --line-replace "In-Flight Teammates" "--- | ---" "---- | ---- | ---- | ---- | ----"
+      { [ "$RC" = 0 ] && grep -qxF -- "---- | ---- | ---- | ---- | ----" "$s"; } || miss="$miss rule rc=$RC $OUT"
+      # A rewrite of the header LINE itself, which names dispatched-at, is written.
+      AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW" drive "$pr" "$s" --line-replace "In-Flight Teammates" "agent | role" "agent  |  role | deliverable | dispatched-at | status"
+      { [ "$RC" = 0 ] && grep -qxF -- "agent  |  role | deliverable | dispatched-at | status" "$s"; } || miss="$miss header rc=$RC $OUT"
+      [ -z "$miss" ] && return 0
+      CELL_MSG="$miss"; return 1 ;;
     *) echo "MATRIX BROKEN unknown cell $c" >&2; exit 2 ;;
   esac
 }
-CELLS="VALID FUTURE PIPED FUTUREROW MALFORMED NEARMISS OLDLINE AMBIG-zero AMBIG-two AMBIG-cells NOVAL LOCKWAIT LOCKSTALE LOCKTIMEOUT BLOCKSET BLOCKCONTENT STATUSVOC READERS SETBOLD LIVE SECADD SECMOVE SWALLOW ROWREPLACE WRAPPED KEYLINE SETCREATE ROWIDDUP HDRREMEDY SECDUP POSLINE"
+CELLS="VALID FUTURE PIPED FUTUREROW MALFORMED NEARMISS OLDLINE AMBIG-zero AMBIG-two AMBIG-cells NOVAL LOCKWAIT LOCKSTALE LOCKTIMEOUT BLOCKSET BLOCKCONTENT STATUSVOC READERS SETBOLD LIVE SECADD SECMOVE SWALLOW ROWREPLACE WRAPPED KEYLINE SETCREATE ROWIDDUP HDRREMEDY SECDUP POSLINE IFLINEREFUSE IFLINEWRITE"
 
 echo "snapshot-update-stamps:"
 
@@ -726,6 +770,8 @@ if cell ROWIDDUP "$PROG" ship; then ok "ROWIDDUP: --row-replace refuses an agent
 if cell HDRREMEDY "$PROG" ship; then ok "HDRREMEDY: a row op on a header-less In-Flight section names the --line-add that writes the header, and that op writes it"; else bad "HDRREMEDY: $CELL_MSG"; fi
 if cell SECDUP "$PROG" ship; then ok "SECDUP: a duplicated Open Items heading loses its last copy to history; the ops, the validator and the continue hook read the result clean"; else bad "SECDUP: $CELL_MSG"; fi
 if cell POSLINE "$PROG" ship; then ok "POSLINE: \`* current_step_file:\` and bare \`current_step_file:\` lines are refused, and the shipped continue, recover and Check 8 readers read no wrong position"; else bad "POSLINE: $CELL_MSG"; fi
+if cell IFLINEREFUSE "$PROG" ship; then ok "IFLINEREFUSE: --line-replace into In-Flight Teammates refuses a free-text and a done status cell, names the value, file unchanged"; else bad "IFLINEREFUSE: $CELL_MSG"; fi
+if cell IFLINEWRITE "$PROG" ship; then ok "IFLINEWRITE: --line-replace writes a member status row, a Recent Activity line and a rewritten --- rule"; else bad "IFLINEWRITE: $CELL_MSG"; fi
 
 left="$(ls -a "$WORK"/*/_bmad-output 2>/dev/null)"
 n_out="$(grep -c 'pipeline-snapshot\.md$' <<<"$left")" || n_out=0
@@ -883,6 +929,19 @@ mp="$(mkmutn m-keydash 'if (!match(s, /^[ \t]*[-*+][ \t]+/)) return 0' 'if (!mat
 mp="$(mkmutn m-nofallback 'if (FB && haskey(line) && !okpos) die(7' 'if (0) die(7')" && score m-nofallback "$mp" || bad "m-nofallback: mutation did not apply"
 # m-blockfb: --set-block content naming the key is written in the fallback state.
 mp="$(mkmutn m-blockfb 'if (FB && haskey(ln)) die(7' 'if (0) die(7')" && score m-blockfb "$mp" || bad "m-blockfb: mutation did not apply"
+
+# The BL-953 mutants.
+# m-noifguard: --line-replace into In-Flight Teammates no longer applies the status vocabulary.
+mp="$(mkmutn m-noifguard 'if (SECT[HS] ~ /^In-Flight Teammates/) ifstatus_chk(C, h)' 'if (0) ifstatus_chk(C, h)')" && score m-noifguard "$mp" || bad "m-noifguard: mutation did not apply"
+# m-ifhdrany: the header exemption widened back to any text with a dispatched-at cell (a decoy row is written).
+mp="$(mkmutn m-ifhdrany 'if (tgt == hd) return' 'k = cells(txt, cc); for (j2 = 1; j2 <= k; j2++) if (trim(cc[j2]) == "dispatched-at") return')" \
+  && score m-ifhdrany "$mp" || bad "m-ifhdrany: mutation did not apply"
+# m-ifsepwide: the rule exemption widened back to any text of dashes, colons, spaces and bars (a `- | -` row is written).
+mp="$(mkmutn m-ifsepwide 'if (cc[j2] !~ /^[ \t]*:?---+:?[ \t]*$/) rule = 0' 'if (cc[j2] !~ /^[ \t:-]*$/) rule = 0')" \
+  && score m-ifsepwide "$mp" || bad "m-ifsepwide: mutation did not apply"
+# m-ifrefuseall: the guard refuses every In-Flight table row, member or not (killed by the member-status arm).
+mp="$(mkmutn m-ifrefuseall 'if (!statuscell_ok(v)) die(7, "refused: the status cell \047" v' 'if (1) die(7, "refused: the status cell \047" v')" \
+  && score m-ifrefuseall "$mp" || bad "m-ifrefuseall: mutation did not apply"
 
 # RULE 9: a plain run executes NO matrix-only cell. The deciding and twin cells write the same ledger, so
 # an empty matrix count cannot come from a ledger nothing writes.

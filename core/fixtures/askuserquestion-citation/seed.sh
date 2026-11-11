@@ -66,6 +66,28 @@ cat > "$WORK/other-tool.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-21T02:05:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_bash1","content":"Your questions have been answered: \"Ship it?\"=\"Accept the deferral and reopen at v2\". You can now continue with these answers in mind."}]}}
 JSONL
 
+# ---- the disposition-shaped worlds (BL-950) ----------------------------------
+# One transcript per cell, so a cell can only verify against the record it names. auq writes an
+# AskUserQuestion call and its result in the same flat answer-block shape as ask.jsonl, one
+# "<question>"="<answer>" pair per answer, joined the way the harness joins them.
+auq() { # auq <file> <answer> [answer...]
+  local f="$WORK/$1" body="" i=0 a; shift
+  for a in "$@"; do i=$((i + 1)); [ -z "$body" ] || body="$body, "
+    body="$body\\\"How should LR-S7 item $i be dispositioned?\\\"=\\\"$a\\\""; done
+  printf '%s\n' '{"type":"user","timestamp":"2026-07-21T01:00:00Z","message":{"content":"/ai-dlc Sprint 7. Kick off."}}' > "$f" || exit 2
+  printf '%s\n' '{"type":"assistant","timestamp":"2026-07-21T02:00:00Z","message":{"content":[{"type":"tool_use","id":"toolu_disp1","name":"AskUserQuestion","input":{"questions":[{"question":"How should LR-S7 be dispositioned?","header":"LR"}]}}]}}' >> "$f" || exit 2
+  printf '{"type":"user","timestamp":"2026-07-21T02:05:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_disp1","content":"Your questions have been answered: %s. You can now continue with these answers in mind."}]}}\n' "$body" >> "$f" || exit 2
+}
+auq disp-exact.jsonl "Strike LR-S7-2"
+auq disp-more.jsonl "Strike LR-S7-2 but keep the index"
+auq disp-prefix.jsonl "Strike LR-S7-20"
+auq disp-multi.jsonl "Strike LR-S7-4" "Confirm LR-S7-5"
+auq disp-badge.jsonl "Confirm LR-S7-2 (Recommended)"
+# The operator TYPES the disposition as prose; no AskUserQuestion was asked in this window.
+cat > "$WORK/disp-typed.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-21T02:05:00Z","message":{"content":"Strike LR-S7-2"}}
+JSONL
+
 # ---- the pruned-session world ------------------------------------------------
 # An answer the capture hook logged, whose session transcript Claude Code has since deleted
 # (cleanupPeriodDays). proj/ is the project root (.claude/ is its walk-up marker) carrying the
@@ -157,6 +179,7 @@ TYPED="$WORK/typed.jsonl"
 OTHER="$WORK/other-tool.jsonl"
 ANSWER="Accept the deferral and reopen at v2"
 QUESTION="How should the S295 steamroll block be dispositioned"
+SUBQ="the deferral and reopen"
 ENV
 
 printf '%s\n' "$WORK"

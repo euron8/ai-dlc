@@ -1,6 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run.
-86 *
-45 core/scripts/validate-steering-budget.sh
+108 *
+53 core/scripts/validate-steering-budget.sh
 0 core/hooks/ai-dlc-gate-remediation-guard.sh
 0 core/scripts/validate-escalation-resolution.sh
 0 core/scripts/validate-gate-adjudication.sh

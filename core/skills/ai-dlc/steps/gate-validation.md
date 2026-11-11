@@ -808,6 +808,7 @@ Every `**Operator authorization:**` line on the cited entry must verify, each by
 It verifies only on exit 0 with a `MATCH <ts>` line on stdout.
 Under `--accept-captured` a pruned transcript is accepted only when the quote, normalised, equals a whole answer captured in `_bmad-output/operator-answers-history.md` within the citation's window, and the script then writes `cite: accepted under --accept-captured: ...` on stderr.
 A quote that is only part of a captured answer does not verify on that route, while the transcript route still takes a verbatim substring.
+The one exception on the transcript route is a disposition-shaped quote, `Strike`, `Reword` or `Confirm` followed by one `LR-S<n>-<m>` id and nothing else: it verifies only when it equals one whole AskUserQuestion answer, with a trailing ` (Recommended)` ignored on either side, never as part of a longer answer, of several answers together, of typed text or of slash-command arguments.
 The adjudicator records which route verified the entry: `MATCH` from the transcript, or the captured-answer line on stderr.
 An `**Operator authorization:**` line without a time of day, hours and minutes, does not verify.
 `--accept-captured` is passed only here, for Check 9's retro acceptance, and `NOMATCH-TRANSCRIPT-PRUNED` acquits nothing anywhere else.

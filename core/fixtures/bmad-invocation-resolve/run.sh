@@ -140,8 +140,8 @@ MG="$ROOT/mutant-grammar.sh"
 cp "$V" "$MG"
 # Both sides passed through the environment and quoted with \Q..\E, so neither the
 # bracket classes nor the `$` anchor is re-read as a regex by the mutator itself.
-MUT_OLD='(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)' \
-MUT_NEW='/bmad-[a-z0-9-]+' \
+MUT_OLD='if ((p == "" || p !~ /[A-Za-z0-9_.-]/) && (n == "" || n !~ /[A-Za-z0-9_\/-]/))' \
+MUT_NEW='if (1)' \
   perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MG"
 if cmp -s "$V" "$MG"; then
   bad "FIXTURE ERROR: the grammar mutation matched nothing — the path-segment assertions above prove nothing"
@@ -249,6 +249,74 @@ else
     || bad "EXT-ilseq-M: without LC_ALL=C rc=$ilm, /bmad-no-such-skill-h named=$ilmh, illegal-byte-sequence seen=$ilms -- the arm cannot discriminate"
 fi
 rm -f "$R/steps/ilseq.md"
+
+# --- ADJ: two call sites sharing ONE separator are both call sites -------------
+# The consuming grep -oE spent the shared character on the first name, so the second was lost
+# (`/bmad-live-one /bmad-adj-b` named nothing: bmad-live-one resolves, bmad-adj-b does not). The
+# scanner reads context from the line. Offender: space-adjacent pair (rc 1 naming adj-b). Control:
+# comma-space pair, same verdict. Near-misses, each rc 0 with adj-b NOT named: a name directly
+# followed by `/` and a second name (`/a/b`), and a name ending in `-` then `/` then a second name,
+# which carries a leading `x ` so the first name is not at line start (`x /a-/b`).
+adjrun() {  # <validator> <line> -> sets ADJ_RC and ADJ_NAMED (1 when adj-b is named in an exact FAIL line)
+  printf '%s\n' "$2" > "$R/steps/adj.md"
+  bash "$1" --skills-root "$S" --rules-root "$R" > "$ROOT/adj.out" 2>&1
+  ADJ_RC=$?
+  grep -qF "FAIL: the pipeline invokes '/bmad-adj-b' and no such skill exists" "$ROOT/adj.out" && ADJ_NAMED=1 || ADJ_NAMED=0
+  rm -f "$R/steps/adj.md"
+}
+adjrun "$V" 'Run /bmad-live-one /bmad-adj-b next'
+[ "$ADJ_RC" -eq 1 ] && [ "$ADJ_NAMED" = 1 ] \
+  && ok "ADJ: '/bmad-live-one /bmad-adj-b' FAILS (rc 1) naming /bmad-adj-b (the shared space is not consumed)" \
+  || bad "ADJ: space-adjacent pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 1 naming it"
+adjrun "$V" 'Run /bmad-live-one, /bmad-adj-b next'
+[ "$ADJ_RC" -eq 1 ] && [ "$ADJ_NAMED" = 1 ] \
+  && ok "ADJ control: '/bmad-live-one, /bmad-adj-b' gives the same verdict (rc 1 naming /bmad-adj-b)" \
+  || bad "ADJ control: comma-space pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 1 naming it"
+adjrun "$V" 'Run /bmad-live-one/bmad-adj-b next'
+[ "$ADJ_RC" -eq 0 ] && [ "$ADJ_NAMED" = 0 ] \
+  && ok "ADJ near-miss: '/bmad-live-one/bmad-adj-b' does not name /bmad-adj-b (a path, rc 0)" \
+  || bad "ADJ near-miss: slash-joined pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 0 and not named"
+adjrun "$V" 'Run x /bmad-live-one-/bmad-adj-b next'
+[ "$ADJ_RC" -eq 0 ] && [ "$ADJ_NAMED" = 0 ] \
+  && ok "ADJ near-miss: 'x /bmad-live-one-/bmad-adj-b' does not name /bmad-adj-b (rc 0)" \
+  || bad "ADJ near-miss: dash-slash pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 0 and not named"
+
+# ADJ-M1: the consuming grep pair restored in place of the scanner. Offender must then lose /bmad-adj-b
+# (rc 0, not named); the comma control still names it, so the mutant is the consuming shape and not a
+# dead copy. ADJ-M2: offsets measured from a cut remainder; the slash-joined near-miss must then
+# name /bmad-adj-b while the offender still does. ADJ-MG: the context test removed.
+MA1="$ROOT/mutant-adj-grep.sh"; MA2="$ROOT/mutant-adj-rem.sh"; MA3="$ROOT/mutant-adj-ctx.sh"
+cp "$V" "$MA1"; cp "$V" "$MA2"; cp "$V" "$MA3"
+GREP_NEW=$'  | grep -oE \'(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)\' \\\n  | grep -oE \'/bmad-[a-z0-9-]+\' \\\n'
+GREP_NEW="$GREP_NEW" perl -0pi -e 's/  \| LC_ALL=C awk \x27\{.*?\n    \}\x27 \\\n/$ENV{GREP_NEW}/s' "$MA1"
+MUT_OLD='        off = en' MUT_NEW='        s = substr(s, en + 1); off = 0' \
+  perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MA2"
+MUT_OLD='if ((p == "" || p !~ /[A-Za-z0-9_.-]/) && (n == "" || n !~ /[A-Za-z0-9_\/-]/))' MUT_NEW='if (1)' \
+  perl -0pi -e 's/\Q$ENV{MUT_OLD}\E/$ENV{MUT_NEW}/' "$MA3"
+if cmp -s "$V" "$MA1" || cmp -s "$V" "$MA2" || cmp -s "$V" "$MA3"; then
+  bad "ADJ-M: DID NOT APPLY -- a scanner mutation matched nothing (grep=$(cmp -s "$V" "$MA1" && echo no || echo yes) rem=$(cmp -s "$V" "$MA2" && echo no || echo yes) ctx=$(cmp -s "$V" "$MA3" && echo no || echo yes)), the ADJ arms above prove nothing"
+else
+  adjrun "$MA1" 'Run /bmad-live-one /bmad-adj-b next'; m1o=$ADJ_RC; m1on=$ADJ_NAMED
+  adjrun "$MA1" 'Run /bmad-live-one, /bmad-adj-b next'; m1c=$ADJ_RC; m1cn=$ADJ_NAMED
+  [ "$m1o" -eq 0 ] && [ "$m1on" = 0 ] \
+    && ok "MUTATION ADJ-M1: the consuming grep loses /bmad-adj-b on the space-adjacent pair (rc 0, not named; the scanner is what keeps it)" \
+    || bad "MUTATION ADJ-M1: the consuming grep gave rc=$m1o named=$m1on on the space-adjacent pair, expected rc 0 not named"
+  [ "$m1c" -eq 1 ] && [ "$m1cn" = 1 ] \
+    && ok "MUTATION ADJ-M1 PAIRING: the consuming grep still names /bmad-adj-b after a comma (rc 1; the mutant ran and is not a dead copy)" \
+    || bad "MUTATION ADJ-M1 PAIRING: the consuming grep gave rc=$m1c named=$m1cn on the comma pair, expected rc 1 naming it"
+  adjrun "$MA2" 'Run /bmad-live-one/bmad-adj-b next'; m2n=$ADJ_RC; m2nn=$ADJ_NAMED
+  adjrun "$MA2" 'Run /bmad-live-one /bmad-adj-b next'; m2o=$ADJ_RC; m2on=$ADJ_NAMED
+  [ "$m2n" -eq 1 ] && [ "$m2nn" = 1 ] \
+    && ok "MUTATION ADJ-M2: offsets measured from the cut remainder name /bmad-adj-b in the slash-joined near-miss (rc 1; line-start offsets are what reject it)" \
+    || bad "MUTATION ADJ-M2: the remainder-relative scanner gave rc=$m2n named=$m2nn on the slash-joined pair, expected rc 1 naming it"
+  [ "$m2o" -eq 1 ] && [ "$m2on" = 1 ] \
+    && ok "MUTATION ADJ-M2 PAIRING: the remainder-relative scanner still names the space-adjacent offender (rc 1; the mutant ran)" \
+    || bad "MUTATION ADJ-M2 PAIRING: the remainder-relative scanner gave rc=$m2o named=$m2on on the offender, expected rc 1 naming it"
+  adjrun "$MA3" 'Run /bmad-live-one/bmad-adj-b next'; m3n=$ADJ_RC; m3nn=$ADJ_NAMED
+  [ "$m3n" -eq 1 ] && [ "$m3nn" = 1 ] \
+    && ok "MUTATION ADJ-MG: with the context test removed the slash-joined near-miss names /bmad-adj-b (rc 1; the context test is what rejects it)" \
+    || bad "MUTATION ADJ-MG: the context-free scanner gave rc=$m3n named=$m3nn on the slash-joined pair, expected rc 1 naming it"
+fi
 
 # Unmutated control from the same directory. A mutant copy that dies for its own
 # reasons emits nothing, and "no output" would otherwise score as a kill.

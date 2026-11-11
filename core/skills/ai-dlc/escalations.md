@@ -90,7 +90,10 @@ not a paraphrase, not the lead's summary:
 At the gate, `scripts/ai-dlc/validate-escalation-resolution.sh` verifies that
 substring against the session transcript (this sprint's entries only;
 legacy sprints are out of scope), using the same genuine-operator
-predicate Rule 29 uses. A `RESOLVED` you authored yourself, with no
+predicate Rule 29 uses. A disposition-shaped quote (`Strike`, `Reword` or
+`Confirm` plus one `LR-S<n>-<m>` id and nothing else) is the exception: it
+verifies only as one whole AskUserQuestion answer, a trailing
+` (Recommended)` ignored on either side, never as part of longer text. A `RESOLVED` you authored yourself, with no
 operator message behind it, is not a resolution — it is a fabricated
 disposition, and the gate FAILS on it. If you genuinely made the call,
 its status is `DECIDED_AUTONOMOUSLY` (informational, non-blocking, no
