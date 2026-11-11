@@ -1,0 +1,98 @@
+spawns with no transcript under /Users/n8/.claude/projects/-Users-n8-git-graph: 0
+s317 deploy-validate                        intervals    3 busy    2.4 h serial    2.4 h width  1.0 one-agent   2.4 h | solo-role h: dev 2.4
+s317 gate-validation[implementation]        intervals   71 busy    3.0 h serial    4.9 h width  1.7 one-agent   1.7 h | solo-role h: gate-adjudicator 1.6, qa 1.0, code-reviewer 0.1
+s317 gate-validation[sprint-review]         intervals   11 busy    0.3 h serial    0.5 h width  2.1 one-agent   0.1 h | solo-role h: gate-adjudicator 0.2, remediator 0.1
+s317 gate-validation[stories-test-strategy] intervals    2 busy    0.1 h serial    0.1 h width  1.0 one-agent   0.1 h | solo-role h: gate-adjudicator 0.1, remediator 0.1
+s317 implementation                         intervals  264 busy   20.5 h serial   43.2 h width  2.1 one-agent  13.3 h | solo-role h: dev 7.8, code-reviewer-escalated 3.5, qa 2.7
+s317 retro                                  intervals    9 busy    0.5 h serial    0.7 h width  1.6 one-agent   0.2 h | solo-role h: analyst 0.3, dev 0.0, pm 0.0
+s317 sprint-review                          intervals  156 busy    3.5 h serial   31.1 h width  8.8 one-agent   0.8 h | solo-role h: tea 0.5, adversary 0.4, dev 0.3
+s317 stories-test-strategy                  intervals  199 busy   10.6 h serial   39.7 h width  3.8 one-agent   4.8 h | solo-role h: adversary 3.4, tea 2.9, remediator 2.8
+s318 architecture                           intervals   96 busy    4.0 h serial   16.2 h width  4.1 one-agent   2.8 h | solo-role h: remediator 1.4, adversary 1.3, architect 0.3
+s318 artifact-consolidation                 intervals   15 busy    0.4 h serial    0.9 h width  2.0 one-agent   0.2 h | solo-role h: analyst 0.2, adversary 0.2
+s318 carry-over-evaluation                  intervals   76 busy    2.1 h serial    6.9 h width  3.3 one-agent   1.2 h | solo-role h: remediator 1.0, adversary 0.7, architect 0.2
+s318 deploy-validate                        intervals    5 busy    0.8 h serial    0.8 h width  1.0 one-agent   0.8 h | solo-role h: ops 0.8
+s318 gate-validation[architecture]          intervals   13 busy    0.2 h serial    0.6 h width  3.9 one-agent   0.1 h | solo-role h: adversary 0.1, gate-adjudicator 0.1
+s318 gate-validation[carry-over-evaluation] intervals    3 busy    0.1 h serial    0.1 h width  1.5 one-agent   0.0 h | solo-role h: gate-adjudicator 0.1, remediator 0.0
+s318 gate-validation[implementation]        intervals   43 busy    1.9 h serial    3.2 h width  1.7 one-agent   1.3 h | solo-role h: code-reviewer-escalated 0.6, gate-adjudicator 0.5, dev-escalated 0.4
+s318 gate-validation[requirements]          intervals    4 busy    0.1 h serial    0.2 h width  1.7 one-agent   0.1 h | solo-role h: gate-adjudicator 0.1, remediator 0.0
+s318 gate-validation[sprint-review]         intervals   13 busy    0.4 h serial    1.4 h width  3.4 one-agent   0.1 h | solo-role h: gate-adjudicator 0.2, remediator 0.1
+s318 gate-validation[stories-test-strategy] intervals   10 busy    0.2 h serial    0.3 h width  1.5 one-agent   0.2 h | solo-role h: remediator 0.1, gate-adjudicator 0.0
+s318 implementation                         intervals  222 busy    8.1 h serial   30.4 h width  3.7 one-agent   4.3 h | solo-role h: dev 2.3, qa 1.2, code-reviewer 0.5
+s318 requirements                           intervals  174 busy    5.7 h serial   25.0 h width  4.4 one-agent   3.2 h | solo-role h: remediator 2.4, adversary 2.2, architect 0.3
+s318 retro                                  intervals   10 busy    0.6 h serial    0.6 h width  1.1 one-agent   0.5 h | solo-role h: ops 0.5, analyst 0.0, pm 0.0
+s318 sprint-review                          intervals  101 busy    1.1 h serial    9.9 h width  8.9 one-agent   0.4 h | solo-role h: qa 0.2, general-purpose 0.1, code-reviewer-escalated 0.1
+s318 stories-test-strategy                  intervals  196 busy   11.0 h serial   40.4 h width  3.7 one-agent   5.4 h | solo-role h: remediator 2.7, tea 2.2, adversary 1.9
+s318 ui-direction                           intervals    1 busy    0.0 h serial    0.0 h width  1.0 one-agent   0.0 h | solo-role h: ux 0.0
+s319 architecture                           intervals  136 busy    5.4 h serial   18.8 h width  3.5 one-agent   3.2 h | solo-role h: remediator 1.7, adversary 1.6, architect 0.9
+s319 carry-over-evaluation                  intervals   88 busy    2.2 h serial    6.8 h width  3.1 one-agent   1.5 h | solo-role h: remediator 1.5, adversary 0.3, analyst 0.2
+s319 deploy-validate                        intervals    9 busy    1.6 h serial    2.0 h width  1.3 one-agent   1.2 h | solo-role h: qa 0.6, ops 0.5, dev 0.2
+s319 discovery                              intervals    1 busy    0.0 h serial    0.0 h width  1.0 one-agent   0.0 h | solo-role h: general-purpose 0.0
+s319 gate-validation[architecture]          intervals    1 busy    0.2 h serial    0.2 h width  1.0 one-agent   0.2 h | solo-role h: gate-adjudicator 0.2
+s319 gate-validation[carry-over-evaluation] intervals    2 busy    0.1 h serial    0.1 h width  1.8 one-agent   0.0 h | solo-role h: gate-adjudicator 0.1
+s319 gate-validation[implementation]        intervals  140 busy    4.6 h serial   10.9 h width  2.4 one-agent   2.1 h | solo-role h: gate-adjudicator 1.7, qa 1.0, remediator 0.3
+s319 gate-validation[requirements]          intervals    2 busy    0.1 h serial    0.2 h width  1.4 one-agent   0.1 h | solo-role h: gate-adjudicator 0.1
+s319 gate-validation[sprint-review]         intervals   75 busy    0.8 h serial    6.0 h width  7.2 one-agent   0.5 h | solo-role h: adversary 0.4, architect 0.1, gate-adjudicator 0.1
+s319 gate-validation[stories-test-strategy] intervals   61 busy    1.0 h serial    4.4 h width  4.4 one-agent   0.6 h | solo-role h: remediator 0.5, adversary 0.4, gate-adjudicator 0.1
+s319 implementation                         intervals  585 busy   15.9 h serial   61.9 h width  3.9 one-agent   5.7 h | solo-role h: code-reviewer-escalated 3.2, qa 2.7, dev 2.2
+s319 pre-step                               intervals    4 busy    0.4 h serial    0.4 h width  1.0 one-agent   0.4 h | solo-role h: dev 0.2, code-reviewer 0.2, general-purpose 0.0
+s319 requirements                           intervals  159 busy    6.2 h serial   22.8 h width  3.7 one-agent   4.5 h | solo-role h: remediator 3.2, adversary 1.2, pm-escalated 1.1
+s319 retro                                  intervals   12 busy    0.4 h serial    0.6 h width  1.5 one-agent   0.3 h | solo-role h: ops 0.2, analyst 0.1, qa 0.0
+s319 sprint-review                          intervals   77 busy    1.2 h serial    5.7 h width  4.9 one-agent   0.2 h | solo-role h: architect 0.1, analyst 0.1, qa 0.0
+s319 stories-test-strategy                  intervals  311 busy   10.1 h serial   38.2 h width  3.8 one-agent   6.0 h | solo-role h: remediator 4.7, adversary 2.7, dev 0.8
+s319 ui-direction                           intervals    1 busy    0.1 h serial    0.1 h width  1.0 one-agent   0.1 h | solo-role h: ux 0.1
+s320 architecture                           intervals   83 busy    2.2 h serial    8.7 h width  4.0 one-agent   1.3 h | solo-role h: remediator 1.1, adversary 0.5, architect 0.3
+s320 carry-over-evaluation                  intervals  136 busy    4.1 h serial   14.1 h width  3.5 one-agent   2.2 h | solo-role h: remediator 2.1, adversary 1.3, dev 0.4
+s320 deploy-validate                        intervals  101 busy    1.8 h serial    4.1 h width  2.2 one-agent   1.4 h | solo-role h: ops 0.5, dev-escalated 0.4, remediator 0.4
+s320 gate-validation[architecture]          intervals    3 busy    0.1 h serial    0.2 h width  2.1 one-agent   0.0 h | solo-role h: gate-adjudicator 0.1
+s320 gate-validation[carry-over-evaluation] intervals    3 busy    0.1 h serial    0.2 h width  2.6 one-agent   0.0 h | solo-role h: gate-adjudicator 0.1
+s320 gate-validation[deploy-validate]       intervals   10 busy    0.3 h serial    0.4 h width  1.5 one-agent   0.2 h | solo-role h: remediator 0.1, gate-adjudicator 0.1, ops 0.1
+s320 gate-validation[implementation]        intervals   68 busy    2.9 h serial    6.3 h width  2.2 one-agent   1.3 h | solo-role h: gate-adjudicator 1.3, qa 1.0, code-reviewer 0.3
+s320 gate-validation[requirements]          intervals    4 busy    0.1 h serial    0.2 h width  2.3 one-agent   0.0 h | solo-role h: gate-adjudicator 0.1, pm 0.0
+s320 gate-validation[stories-test-strategy] intervals    3 busy    0.2 h serial    0.3 h width  1.1 one-agent   0.2 h | solo-role h: gate-adjudicator 0.1, remediator 0.1
+s320 implementation                         intervals  190 busy    8.4 h serial   15.7 h width  1.9 one-agent   5.2 h | solo-role h: qa 2.3, dev 2.0, ops 1.3
+s320 pre-step                               intervals    5 busy    0.1 h serial    0.2 h width  1.9 one-agent   0.1 h | solo-role h: pm 0.1, general-purpose 0.0
+s320 requirements                           intervals  139 busy    3.9 h serial   15.2 h width  3.9 one-agent   2.0 h | solo-role h: remediator 1.9, adversary 0.6, analyst 0.4
+s320 retro                                  intervals   18 busy    0.7 h serial    0.8 h width  1.2 one-agent   0.6 h | solo-role h: ops 0.5, analyst 0.2, architect 0.0
+s320 sprint-review                          intervals    7 busy    1.3 h serial    1.4 h width  1.1 one-agent   1.2 h | solo-role h: adversary 1.1, ops 0.0, dev 0.0
+s320 stories-test-strategy                  intervals  383 busy    9.3 h serial   48.8 h width  5.2 one-agent   4.2 h | solo-role h: remediator 3.7, adversary 3.2, pm 1.0
+s320 ui-direction                           intervals    1 busy    0.1 h serial    0.1 h width  1.0 one-agent   0.1 h | solo-role h: ux 0.1
+s321 architecture                           intervals  123 busy    9.1 h serial   27.6 h width  3.0 one-agent   3.6 h | solo-role h: adversary 5.8, remediator 1.9, architect 1.2
+s321 deploy-validate                        intervals   52 busy    5.6 h serial    6.8 h width  1.2 one-agent   4.7 h | solo-role h: ops 3.8, dev 0.8, code-reviewer-escalated 0.3
+s321 gate-validation[architecture]          intervals    4 busy    0.1 h serial    0.2 h width  1.5 one-agent   0.1 h | solo-role h: gate-adjudicator 0.1, remediator 0.1, protected-path-editor 0.0
+s321 gate-validation[implementation]        intervals  142 busy    6.5 h serial   13.7 h width  2.1 one-agent   2.7 h | solo-role h: dev-escalated 2.6, gate-adjudicator 1.5, code-reviewer-escalated 0.6
+s321 gate-validation[requirements]          intervals    4 busy    0.2 h serial    0.3 h width  1.2 one-agent   0.2 h | solo-role h: pm-escalated 0.1, gate-adjudicator 0.1, adversary 0.0
+s321 gate-validation[sprint-review]         intervals    4 busy    0.1 h serial    0.2 h width  2.3 one-agent   0.0 h | solo-role h: gate-adjudicator 0.1
+s321 gate-validation[stories-test-strategy] intervals    3 busy    0.1 h serial    0.1 h width  1.3 one-agent   0.1 h | solo-role h: remediator 0.1, gate-adjudicator 0.0
+s321 implementation                         intervals  189 busy   10.4 h serial   22.4 h width  2.2 one-agent   6.1 h | solo-role h: code-reviewer-escalated 3.7, qa 2.1, dev-escalated 1.3
+s321 pre-step                               intervals    4 busy    0.0 h serial    0.1 h width  2.1 one-agent   0.0 h | solo-role h: general-purpose 0.0
+s321 requirements                           intervals  170 busy    7.0 h serial   27.5 h width  3.9 one-agent   2.9 h | solo-role h: adversary 3.2, remediator 2.3, pm-escalated 1.0
+s321 retro                                  intervals   14 busy    0.1 h serial    0.2 h width  1.8 one-agent   0.1 h | solo-role h: analyst 0.1, architect 0.0, pm 0.0
+s321 sprint-review                          intervals  172 busy    2.2 h serial   12.6 h width  5.8 one-agent   0.8 h | solo-role h: qa 0.4, code-reviewer 0.2, dev 0.1
+s321 stories-test-strategy                  intervals  430 busy   14.3 h serial   61.4 h width  4.3 one-agent   7.6 h | solo-role h: adversary 6.6, remediator 5.4, pm 1.3
+s321 ui-direction                           intervals    1 busy    0.1 h serial    0.1 h width  1.0 one-agent   0.1 h | solo-role h: ux 0.1
+s322 architecture                           intervals   36 busy    3.5 h serial    7.9 h width  2.3 one-agent   1.9 h | solo-role h: adversary 2.3, remediator 1.0, architect 0.2
+s322 bug-investigation                      intervals   22 busy    1.6 h serial    1.7 h width  1.1 one-agent   1.4 h | solo-role h: dev 0.5, analyst 0.5, architect 0.2
+s322 carry-over-evaluation                  intervals   95 busy    6.7 h serial   18.4 h width  2.7 one-agent   3.9 h | solo-role h: adversary 3.3, remediator 1.6, analyst 1.4
+s322 gate-validation[architecture]          intervals   32 busy    1.3 h serial    3.5 h width  2.7 one-agent   0.8 h | solo-role h: remediator 0.9, gate-adjudicator 0.0, general-purpose 0.0
+s322 gate-validation[bug-investigation]     intervals    2 busy    0.1 h serial    0.2 h width  1.5 one-agent   0.1 h | solo-role h: adversary 0.1, gate-adjudicator 0.0
+s322 gate-validation[carry-over-evaluation] intervals   98 busy    3.9 h serial   17.1 h width  4.4 one-agent   1.8 h | solo-role h: remediator 1.6, adversary 1.2, pm-escalated 0.4
+s322 gate-validation[implementation]        intervals   10 busy    0.7 h serial    0.7 h width  1.0 one-agent   0.7 h | solo-role h: gate-adjudicator 0.4, protected-path-editor 0.2, code-reviewer 0.1
+s322 gate-validation[requirements]          intervals   22 busy    0.3 h serial    0.7 h width  2.4 one-agent   0.2 h | solo-role h: gate-adjudicator 0.1, pm-escalated 0.1, remediator 0.1
+s322 gate-validation[stories-test-strategy] intervals    8 busy    0.0 h serial    0.1 h width  3.5 one-agent   0.0 h | solo-role h: gate-adjudicator 0.0
+s322 implementation                         intervals   64 busy    2.8 h serial    4.4 h width  1.6 one-agent   2.0 h | solo-role h: dev 0.6, qa 0.5, adversary 0.4
+s322 pre-step                               intervals    2 busy    0.0 h serial    0.0 h width  1.0 one-agent   0.0 h | solo-role h: general-purpose 0.0
+s322 requirements                           intervals   46 busy    2.2 h serial    7.1 h width  3.2 one-agent   0.9 h | solo-role h: adversary 1.3, remediator 1.0
+s322 stories-test-strategy                  intervals  118 busy    5.9 h serial   15.8 h width  2.7 one-agent   2.8 h | solo-role h: adversary 2.7, remediator 2.7, general-purpose 0.0
+
+s317 resume-idle dropped 11.6 h
+s317 TOTAL busy 40.8 h serial 122.7 h one-agent 23.6 h | solo-role h: dev 10.7, code-reviewer-escalated 4.6, adversary 3.8, qa 3.6, tea 3.5, remediator 3.0
+s318 resume-idle dropped 14.4 h
+s318 TOTAL busy 36.6 h serial 136.9 h one-agent 20.5 h | solo-role h: remediator 7.8, adversary 6.3, dev 3.8, tea 2.2, qa 1.6, pm 1.5
+s319 resume-idle dropped 35.4 h
+s319 TOTAL busy 50.3 h serial 179.1 h one-agent 26.5 h | solo-role h: remediator 11.9, adversary 6.5, dev 4.4, qa 4.3, code-reviewer-escalated 3.3, gate-adjudicator 2.3
+s320 resume-idle dropped 20.6 h
+s320 TOTAL busy 35.5 h serial 116.6 h one-agent 20.1 h | solo-role h: remediator 9.4, adversary 6.7, qa 3.4, dev 2.6, ops 2.4, gate-adjudicator 1.8
+s321 resume-idle dropped 22.3 h
+s321 TOTAL busy 55.9 h serial 173.2 h one-agent 28.8 h | solo-role h: adversary 15.7, remediator 9.6, code-reviewer-escalated 4.5, dev-escalated 4.0, ops 3.8, qa 2.9
+s322 resume-idle dropped 20.2 h
+s322 TOTAL busy 29.0 h serial 77.7 h one-agent 16.4 h | solo-role h: adversary 11.4, remediator 9.1, analyst 2.2, dev 1.1, gate-adjudicator 0.7, architect 0.6

@@ -4,6 +4,11 @@ Measured 2026-10-14 against the graph consumer's own Claude Code transcripts. Pu
 where the AI/DLC pipeline spends wall clock and tokens, step by step, with each step's stated
 reason for existing, so optimisation targets can be chosen from data.
 
+**Follow-up.** [`pipeline-efficiency-s317-s322.md`](pipeline-efficiency-s317-s322.md) measures
+sprints 319–322, reports which of the ranked defects' fixes had their intended effect, and corrects
+two readings in this file: 25–41% of the "Lead active" column is idle waiting on subagents, and
+summed agent hours include idle time before a resume.
+
 Data and the scripts that produced every figure are in
 [`pipeline-efficiency-s317-s318/`](pipeline-efficiency-s317-s318/). Every table below is
 rendered by `scripts/render.py` from those CSVs. The one exception is the "Role efficacy" section,

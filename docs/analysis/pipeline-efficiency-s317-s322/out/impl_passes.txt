@@ -1,0 +1,24 @@
+s317: 201 spawns, unparsed 61; gate-1 CR story count 18; passes per story(gate1 CR): [(1, 11), (2, 5), (4, 1), (5, 1)]
+   $ by pass#: {1: 170, 2: 100, 3: 57, 4: 50, 5: 20}  kinds: {'cr': 116, 'qa': 64, 'closing': 21}
+   by gate/kind: {('1', 'cr'): 96, ('2', 'qa'): 64, ('?', 'closing'): 21, ('?', 'cr'): 20}
+   gate1 CR shards/pass: mean 3.3 max 10
+s318: 173 spawns, unparsed 23; gate-1 CR story count 13; passes per story(gate1 CR): [(1, 5), (2, 3), (3, 2), (4, 3)]
+   $ by pass#: {1: 185, 2: 97, 3: 12, 4: 5}  kinds: {'qa': 62, 'cr': 87, 'delta': 11, 'closing': 13}
+   by gate/kind: {('1', 'cr'): 87, ('1', 'delta'): 10, ('2', 'delta'): 1, ('2', 'qa'): 52, ('?', 'closing'): 13, ('?', 'qa'): 10}
+   gate1 CR shards/pass: mean 3.3 max 15
+s319: 530 spawns, unparsed 32; gate-1 CR story count 19; passes per story(gate1 CR): [(1, 6), (2, 3), (3, 3), (4, 2), (5, 2), (6, 2), (9, 1)]
+   $ by pass#: {1: 184, 2: 139, 3: 83, 4: 60, 5: 19, 6: 19, 7: 7, 8: 1, 9: 1}  kinds: {'cr': 329, 'qa': 173, 'delta': 8, 'closing': 20}
+   by gate/kind: {('1', 'cr'): 319, ('1', 'delta'): 4, ('2', 'delta'): 4, ('2', 'qa'): 171, ('?', 'closing'): 20, ('?', 'cr'): 10, ('?', 'qa'): 2}
+   gate1 CR shards/pass: mean 5.5 max 11
+s320: 150 spawns, unparsed 48; gate-1 CR story count 13; passes per story(gate1 CR): [(1, 7), (2, 4), (3, 1), (5, 1)]
+   $ by pass#: {1: 40, 2: 11, 3: 6, 4: 1, 5: 1, 6: 0, 7: 0}  kinds: {'cr': 44, 'closing': 13, 'qa': 93}
+   by gate/kind: {('1', 'cr'): 44, ('2', 'qa'): 88, ('?', 'closing'): 13, ('?', 'qa'): 5}
+   gate1 CR shards/pass: mean 1.9 max 6
+s321: 154 spawns, unparsed 34; gate-1 CR story count 24; passes per story(gate1 CR): [(1, 8), (2, 10), (3, 4), (4, 1), (7, 1)]
+   $ by pass#: {1: 141, 2: 57, 3: 14, 4: 3, 5: 4, 6: 1, 7: 1}  kinds: {'qa': 60, 'cr': 71, 'closing': 23}
+   by gate/kind: {('1', 'cr'): 71, ('2', 'qa'): 60, ('?', 'closing'): 23}
+   gate1 CR shards/pass: mean 1.4 max 5
+s322: 30 spawns, unparsed 22; gate-1 CR story count 4; passes per story(gate1 CR): [(1, 1), (2, 2), (3, 1)]
+   $ by pass#: {1: 12, 2: 7, 3: 0}  kinds: {'qa': 15, 'cr': 13, 'closing': 2}
+   by gate/kind: {('1', 'cr'): 13, ('2', 'qa'): 10, ('?', 'closing'): 2, ('?', 'qa'): 5}
+   gate1 CR shards/pass: mean 2.2 max 6

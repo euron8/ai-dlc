@@ -1,0 +1,6 @@
+s317: AskUserQuestion calls 13, questions 17, total answer wait 6.6h, median 7 min, >1h: 3
+s318: AskUserQuestion calls 26, questions 34, total answer wait 13.5h, median 10 min, >1h: 4
+s319: AskUserQuestion calls 71, questions 103, total answer wait 18.5h, median 2 min, >1h: 6
+s320: AskUserQuestion calls 63, questions 109, total answer wait 50.9h, median 3 min, >1h: 9
+s321: AskUserQuestion calls 57, questions 100, total answer wait 26.3h, median 4 min, >1h: 6
+s322: AskUserQuestion calls 17, questions 23, total answer wait 8.9h, median 8 min, >1h: 2

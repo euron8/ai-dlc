@@ -1,0 +1,7 @@
+root /Users/n8/.claude/projects/-Users-n8-git-graph; lead transcripts 151; WIN_START 2026-09-26T00:35:00Z; WIN_END 2026-11-11T10:30:00Z
+s317 agent_calls 701 cap_rejected 10
+s318 agent_calls 984 cap_rejected 53
+s319 agent_calls 1604 cap_rejected 7
+s320 agent_calls 1155 cap_rejected 0
+s321 agent_calls 1012 cap_rejected 0
+s322 agent_calls 442 cap_rejected 0
