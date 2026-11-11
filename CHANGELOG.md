@@ -19,6 +19,44 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1060.0] - 2026-11-11
+
+### BL-538 PARTIAL: s322 provisional reading of idle lead wakes, 129 of 477 against s321's 150 of 270
+
+`docs/analysis/pipeline-efficiency-s317-s322/scripts/idle_wakes.py` (stdlib, read only) counts a wake as a non-sidechain `<task-notification>` user line with no `tool_use` before the next user line. Control: graph s319 `c61a91eb`, `--upto 2838`, reads 37 idle of 54, as recorded. Six s322 lead transcripts read 129 idle of 477 wakes (27%) against s321's 150 of 270 (56%); agent-exit wakes alone 115 of 274 (42%) against 153 of 197 (78%). It does not close: s322 is incomplete (about 3 of 8 stories), the two dispatcher transcripts read 98 of 299 (33%) against 31 of 178 (17%) for the four without, and no seat figures are taken. Re-take on s322 complete; `verify: manual` unchanged.
+
+### BL-808 PARTIAL: s319-to-s321 outcome reading, hours and dollars fell, attributed jointly with BL-507 and BL-809
+
+Per story, implementation plus gate-validation[implementation]: 2.09 h gap-inclusive and token-equivalent $41.3 (s319) to 1.13 h and $25.5 (s321). Gate-1 shards per pass fell from 5.5 to 1.4; implementation spawns per story from 31.5 to 11.2 against about 20.2 projected, while dollars sit $2.1 above the $23.4 projected. s319 ran with BL-507 alone, so shares separate only in part. `shard_unique.py` finds 8 of 23 Critical and Important s321 gate-1 findings raised by one shard alone, all from part shards. The cross-shard width clause is not discriminable: neither 0.42 nor 36 is an expected count for the s321 shape. Owed: a shape-matched re-take, and the partitioner before and after, available and not taken. The entry now declares `Step: implementation`.
+
+### BL-811 PARTIAL: s321 cross spawns fell from 18.00 to 0.88 per story; the shard yield reading is raw counts
+
+Graph ref da6cadadd, ledger md5 249bf9b2ccc233549e60c6c1fa123e8d, 25 stories. `cross_spawns.py` (the entry's regex; `--broad` for the widened count) reads s321 22 cross spawns of 1234 against s319's 360, re-derived exactly as the control; $94.2 against $512.1. The s317 baseline does not re-derive, its transcripts having aged out. `elicitation_yield.py` reads s321 84 CRITICAL and MAJOR findings from 25 per-story shards at $111.55 and 3 from the cross shard at $11.33; its four s319 cells match the study. These are finding counts, not survivors. Owed: the s321 unique-survivor yield, then an `Outcome measured:` line or the step-value cut. The entry now declares `Step: stories-test-strategy`. `verify: manual` unchanged.
+
+### BL-812 PARTIAL: item 1 measured on s321, stories-test-strategy rose and its step-value evidence is still owed
+
+Graph s321 (25 stories, ref da6cadadd); the s319 control re-derives (78.05 spawns per story, subagent $88.27). Per story, s321 against s319: subagent $75.18 against $88.27, spawns 49.36 against 78.05, machine hours 3.82 against 4.65. Implementation plus gate: 11.20 spawns against 20.2 projected, $25.5 against $23.4. Stories-test-strategy rose from $25.0 to $26.9 against a $24.0 projection; sprint-review and deploy-validate also rose. Their step-value evidence is not discharged (raw yield only, no survivor classification). Items 2 and 3 stay blocked on BL-809 item 3. The s317 baseline does not re-derive. No `Outcome measured:` line.
+
+### BL-817 PARTIAL: the close arm accepted BL-811's outcome line at fe5bcb578, but a line's own prose can satisfy it
+
+Reading taken at fe5bcb578: on a scratch copy stamping BL-811 only, `validate-backlog-receipts.sh --efficiency-only` exited 0 (1 entry in the efficiency close population, 0 on the no-step branch); with `gap-inclusive` deleted from the line it printed `FAIL: E BL-811 SHAPE`, exit 1. On this tip BL-811 carries no outcome line. Three predicates are owed, in a later code release (cluster F2b-bl817-grammar): (a) the direction token must be the line's own verdict clause, (b) the line must bind to the entry's own step, (c) a sprint-branch line must carry a token figure. Each one's false-positive set over the archive's outcome lines is measured before it ships.
+
+### BL-819 PARTIAL: item 2 decided for the four implementation lead classes, item 3 owes an idle-wait class split
+
+Item 2 is decided by the step-value ruling on the s317-s322 corpus (control: class tokens equal `segs` on 432 of 432 lead unit-step pairs). dispatch, gate-run and compaction-recovery are KEEP; other is MERGE, into the subagent-wait figures and the lead turn count (91% of implementation `other` active time follows a message with no `tool_use`). No decision removes hours or dollars by itself. Owed: (a) gate-run value evidence, a committed reader of refusals and hand-run validator calls, controlled to `bash_by_sprint.txt` (149 in s321, 41 in s322); (b) value evidence on the closing sprint. Item 3 owes `roll.py --classes` charging the interval after an end-of-turn record to its own class.
+
+### BL-838 PARTIAL: provisional s321 reading with dev at sonnet/medium, 2.12 gate-1 and 1.50 gate-2 passes per story
+
+Method: highest `-p<N>` per story and gate under graph `docs/reviews/s31N/` at HEAD da6cadadd. Controls: s317, s318 and s319 reproduce the table; the s321 gate-1 distribution equals `impl_passes.txt`; s320 does not (1.77 / 2.23 over 13 stories against the table's 1.80 / 2.30 over 10). s321 reads 2.12 / 1.50 over 24 stories, below s319 (3.00 / 1.78) and above s317 (1.71 / 1.18). `dev-escalated` ran sonnet/high in s321 (19 rows) and s322 (6 rows), so the opus/medium half has run in no graph sprint. The template tree check now expects BL-971's opus/medium. Owed: an `Outcome measured:` line on a sprint that runs it; re-take then.
+
+### BL-842 PARTIAL: provisional s322 reading, 0 of 24 operator questions cite Check 22 or the spawn ledger
+
+Definition: a lead `AskUserQuestion` whose input matches `Check 22|spawn[- ]ledger`, case-insensitive, by UTC record timestamp. Control over 2026-10-27: 18 questions, 2 citing, the entry's two recorded incidents. The s322 window from 2026-11-09T00:00:00Z to 2026-11-12T00:00Z read 24 questions, 0 citing; a looser grammar returns 2, neither a Check 22 question. s322 is incomplete (3 of 8 stories), so 0 of 24 is a floor, and a zero rate is not yet the fix holding. E1 of `validate-backlog-receipts.sh` does not judge this entry (no tag, unstamped). `verify: manual` unchanged; re-take on s322 complete.
+
+### BL-911 PARTIAL: item (a) read on graph s322, the derived shard set stamps 10 of 58 pass files
+
+Read from graph HEAD da6cadadd by `git grep -l shard_set_derived_from`: 10 of 58 s322 pass files carry it, exactly the adversarial passes after the first of their series; none of the five p1 files does. Controls over earlier sprints: s321 0 of 52, s320 0 of 70, s319 0 of 40. The cap fired once, on `requirements-adversarial-p3.md`, resolved at p4 with `resolves_divergence:`; no s322 series has a p5. The stamp shows the derived-map path ran, not that dispatched width fell: spawns per pass, machine hours against the 33 to 38 h band and item (b) are not measured. No `Outcome measured:` line; `verify: manual` unchanged.
+
 ## [0.1059.0] - 2026-11-11
 
 ### BL-977: the consumer's pre-push rule-file audit gates only on tier-1 findings it can fix, through the new `--fail-on=local-deterministic` threshold
