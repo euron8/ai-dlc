@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1061.0] - 2026-11-11
+
+### BL-841 PARTIAL: claim 1 measured, the idle share of ask-wait minutes did not fall (s320 96.9%, s321 93.7%, against a 5.0-point rule)
+
+`docs/analysis/pipeline-efficiency-s317-s322/scripts/ask_split.py` now computes lane-idle minutes per `AskUserQuestion` wait: the `tool_use` to `tool_result` interval, less the part covered by the union of the same lead session's subagent active intervals (records merged at `extract.py`'s 300 s gap, no tail). Its committed output `out/ask_split.txt` gains a `lane_idle_min` column, a per-sprint `LANE-IDLE` line (idle minutes of ask-wait minutes, with three non-claim-1 definitions printed for comparison), and a `CONTROL (i)` line on the 10-27 06:57Z ask (89.25 of 95.40 min against the recorded 89 of 95). The self-probe control now asserts the lane-idle minutes on its seeded ask and near-miss.
+
+The script deduplicates asks by `tool_use` id and prints a `DEDUP:` line. One s321 ask (`toolu_011BG6yiWiriWBnJRhiK2p48`, 23.9 min) is in two lead files and is counted once, so s321 is 56 asks where `operator_asks.py` gives 57, the population is 246 asks over s317-s322 where the earlier output gave 247, and s321 reads 1552 min with NONE-RUNNING 1063 and deploy-validate 916 (was 1576, 1086, 940). FINISHED-INSIDE stays 164 min.
+
+Outcome, s320 before and s321 after: idle share 96.9% (2956.8 of 3051.8 min) to 93.7% (1453.6 of 1552.0 min), 3.2 points against the 5.0-point rule declared before the run. Raw idle minutes fell 2957 to 1454 only because the asks' own wait shrank (3052 to 1552 min). `docs/analysis/pipeline-efficiency-s317-s322.md` gains the "Ask-wait minutes with no lane active" row as the last row of its `### No measurable effect` table, with a source note after that table; its Reproduce line for `ask_split.py` now names the lane-idle minutes.
+
+`docs/backlog.md`: the BL-841 entry gains a correction note (the deduplicated percentages and ask-count baseline), the outcome-measured paragraph, and a "Still PARTIAL" paragraph. The entry stays open with `verify: manual` and no LANDED line, because claim 2's mechanism, the open-question hold, is BL-972 and unbuilt. Operator ruling (2026-11-11): the goal of BL-841 stays OPEN, the entry owes a better fix, and claim 2 rides on BL-972.
+
+### BL-972: correction note for the deduplicated ask count
+
+The BL-972 entry gains a correction note and nothing else: its population reads 246 asks, s321 reads 1552 min with NONE-RUNNING 1063 of 1552 (68%) and FINISHED-INSIDE 164 of 1552 (11%), and the receipt's s321 ask-count baseline is `ask_split.py`'s deduplicated 56, never `operator_asks.py`'s 57, so a closer compares the ask count only within `ask_split.py`'s output and a count of 56 against 57 is not a fall in asks. The entry's fix direction, receipt, expected movement and verify line are untouched, and it stays filed with no LANDED line.
+
 ## [0.1060.0] - 2026-11-11
 
 ### BL-538 PARTIAL: s322 provisional reading of idle lead wakes, 129 of 477 against s321's 150 of 270
