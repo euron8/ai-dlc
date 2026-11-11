@@ -1,0 +1,9 @@
+# Measured by counted runs through core/scripts/hermetic-run.sh (the judge's own J2 output). Every subject and every
+# mutant is asked in process (he-inproc.sh's he_run sources it), so the one bash start is run.sh itself.
+1 *
+0 core/scripts/validate-handoff-evidence.sh
+0 core/scripts/record-only-diff.sh
+0 core/scripts/sprint-status.sh
+0 core/fixtures/story-evidence-scaffold/he-inproc.sh
+0 core/fixtures/lib/mutant.sh
+0 core/fixtures/smoke-surface-ignored/run.sh

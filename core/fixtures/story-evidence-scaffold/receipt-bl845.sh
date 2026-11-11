@@ -84,7 +84,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
   || { echo "REFUSED: usage: bash receipt-bl845.sh <path to validate-handoff-evidence.sh> [<worlds dir> [<cells>]]" >&2; exit 9; }
 HE="$1"; CELLS="${3:-}"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
-want() { [ -z "$CELLS" ] || case " clean $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+# No <cells>: every cell runs (the `[ -z ] ||` form returned 1 there, so the full call asserted no cell at all).
+want() { [ -z "$CELLS" ] && return 0; case " clean $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 if [ -n "${2:-}" ]; then
   R="$2"; mkdir -p "$R" || exit 9

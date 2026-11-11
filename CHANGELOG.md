@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1065.0] - 2026-11-11
+
+### BL-845 PARTIAL: a smoke surface that git ignores at the story's base prints `WARN smoke-surface-ignored`, so the silent `SKIP SMOKE-SURFACE` no longer hides it
+
+`core/scripts/validate-handoff-evidence.sh` prints `WARN smoke-surface-ignored <story>: ...` before the existing `SKIP SMOKE-SURFACE` line when two things hold. The smoke surface path is not tracked at the story's `<base>`, and the `.gitignore` blobs committed at `<base>` in its ancestor directories ignore it. The decision uses `git check-ignore -q`, so a negation un-ignores the path. The message carries the matching `<source>:<line>:<pattern>` from `-v`. The remedy it offers is `git add -f <surface>` committed outside a story's range. The negation remedy is offered only when no ancestor directory of the path is excluded, asked one directory at a time.
+
+It is a WARN and never a REFUSE, because the surface is read at `<base>`. A story whose base predates the commit has no in-range remedy, since committing the file in range refuses `smoke-surface-edited`. The `SKIP SMOKE-SURFACE` line is kept byte-identical and the exit code is unchanged. `gate-transition.sh` already forwards WARN lines to the gate log. Scope is committed state only: `.git/info/exclude`, `core.excludesFile` and an untracked-but-not-ignored file are out of scope. If the committed `.gitignore` cannot be read, it prints `WARN gitignore-unreadable <base12>` once and no `smoke-surface-ignored` line. A new shipped fixture, `smoke-surface-ignored`, holds its arms in both handoff and `--smoke` mode. Its mutation battery is the distribution-only `smoke-surface-ignored-mutants`. The `story-evidence-scaffold` receipt for BL-845 had a `want()` that asserted no cell on its control call, and it now asserts all of them.
+
+Measured on a `file://` clone of graph at da6cadadd468, over s317-s322 (341 handoffs: 220 gate-1 and 121 gate-2 `--smoke` passes; 63 of 404 merged review files excluded, unmeasured and not clean). Base script: `SKIP SMOKE-SURFACE` 341, `WARN smoke-surface-ignored` 0. Patched script: SKIP 341, WARN 341. With the WARN line filtered out, 0 of 341 outputs differ under `cmp` (unfiltered, 341 of 341 differ, which is the control). stderr is identical and exit codes differ in 0 of 341. All 341 WARNs are true: the surface is untracked and ignored by `.gitignore:29:*.txt`. The real corpus cannot hold the quiet direction (tracked, negated, not ignored), so the fixture's synthetic arms carry it. The entry stays PARTIAL. It still owes the `Outcome measured:` line from a later graph sprint, which needs graph to commit the surface file.
+
+### BL-847 PARTIAL: measured, nothing blocking ships
+
+The HARD GATE item set the QA checklist applies at gate 2 was measured read only on a `file://` clone of graph at da6cadadd468. It comes to 41 lines and 23 distinct titles, 15 of which appear in more than one file. The title set is byte-identical by per-file md5 at 7 commits spanning s321 and s322. About 7 item triggers are mechanically derivable and 12 are judgment. Inferring triggers from a story's file list (mechanism A) gives non-zero false positives. For example, canonical-profile gives 10 refusals, 6 false and 4 unresolved. A declared all-items section (strict mechanism B) is met by 0 of the 7 s322 stories that already carry a mapping, adds about 14 rows per story, and can be closed by prose. Ruling: nothing blocking ships. The choice of strict B is with the operator. No code changed for this entry. The entry stays PARTIAL, because the gate-2 consumer outcome is still owed.
+
+### BL-978 filed: the reconcile scaffold never checks whether the smoke-surface path it creates is ignored
+
+Filed, unbuilt. `core/skills/ai-dlc-update/reconcile/apply.sh` scaffolds `docs/smoke-surface.txt` and tells the consumer to commit it. It never runs `git check-ignore` on that path. In a consumer whose `.gitignore` covers the path, a plain `git add` refuses silently and `smoke-not-updated` never runs. Graph is in this state: the file is on disk and has never been committed on any ref. Owed: print the `git add -f <path>` remedy beside the scaffold's RESOLVED text. `apply.sh` is a bootstrapping file, so the fix ships alone per plan action 2.
+
 ## [0.1064.0] - 2026-11-11
 
 ### BL-868 PARTIAL: two load-dependent fixture flakes fixed (review-shard-merge auto-maintenance, handoff-completion-assertion clock shim), and item 5 resolved by census
