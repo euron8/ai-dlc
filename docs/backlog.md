@@ -2773,3 +2773,24 @@ There is no graph pipeline step behind this entry: it is a correctness defect in
 Provenance: batch 256, cluster b256-M5, from the BL-397 value measurement; id allocated by lead ai-dlc-a7.
 
 verify: manual
+
+## BL-999 — a verdict or pass record written outside a git hook (SIGPIPE at its default) is read by a push gate running inside one (SIGPIPE ignored), so a recorded pass can disagree with the hook's verdict
+
+**DEFECT.** OPEN. Filed 2026-11-12. A push gate runs inside git's pre-push hook, where SIGPIPE is ignored, so a writer whose reader exits early gets EPIPE: it prints a `Broken pipe` diagnostic and exits non-zero instead of dying silently. Records the push skips on are also written by runs outside any hook, where SIGPIPE is at its default. A unit whose verdict depends on that difference can therefore be recorded as a pass outside the hook and be skipped by a push whose own run of it would fail.
+
+Executed probe (a scratch repo with a bare `file://` remote, under mktemp; git 2.56.0, bash 3.2.57). The repo's pre-push hook runs a snippet and records the writer's `PIPESTATUS[0]` and its stderr; the same snippet runs again outside any hook, from the same script:
+- `yes | head -1`: inside the hook `yes` exits 1, outside it exits 141 (killed by SIGPIPE). Neither printed anything on stderr: BSD `yes` exits on the write error without a message.
+- `grep -h . <300000-line file> | head -1`: inside the hook grep exits 2 and prints `grep: stdout: Broken pipe`, outside it exits 141 with empty stderr.
+- The push exited 0 and the remote ref was created, so the hook ran.
+
+Instance 1, the verdict seeder. `scripts/seed-verdict-store.sh` runs each named fixture through `core/scripts/hermetic-run.sh` (its header: "Each named fixture runs serially through core/scripts/hermetic-run.sh with the invocation counter armed") from an ordinary shell, and its passes land in the counted store a push reads. Neither file installs a PIPE disposition: `seed-verdict-store.sh` carries no `trap` token at all, and `hermetic-run.sh`'s one trap line is `trap '[ "${AI_DLC_HERMETIC_KEEP:-0}" = 1 ] || rm -rf "$HR_WORK"' EXIT` (`:149`), with 0 lines naming PIPE in either file. Control: the same count finds 6 `trap` lines in `.githooks/pre-push`, also 0 naming PIPE, so the hook's ignored SIGPIPE comes from git, as the probe shows, and not from the hook. The seeder was not run for this entry. The case it bit: 0.1081.0's fix of `i75_failsclosed` in `scripts/validate-enforcement-map.sh` (now `:6548`, `i75_norm "$1" | awk '/exit [0-9]|:-\/nonexistent/ { f = 1 } END { exit (f ? 0 : 1) }'`). At base the reader was `i75_norm | grep -qE`, and its writers printed `Broken pipe` only under the hook's ignored SIGPIPE, which turned `validator-arm-selection`'s stderr compare red on a push (BL-868). The comment above `i75_failsclosed` on origin/main records the base measurement with SIGPIPE ignored: "two batches of 40 runs: the sed line 40 and 40 times, the grep line 34 and 23 times". The 0.1081.0 CHANGELOG entry gives the figure as sed 40 / grep 24 Broken pipe at base, and 0 at the fix. With SIGPIPE at its default, 0.
+
+Instance 2, hand-run pre-suite prefixes. Owners run the hook's pre-suite prefix by hand before a push, outside any hook, and that run writes pass records into `<git common dir>/ai-dlc-presuite-keys` (`.githooks/pre-push:202`, `PK_DIR="$gcd/ai-dlc-presuite-keys"`, with `gcd` from `git rev-parse --git-common-dir`), which every worktree's push reads. A record's name ends in the first 16 hex of the present key, which `pk_present` (`:244`) hashes from the walk `/usr/bin/find . -path ./.git -prune -o -print0` (`:248`): every path with its kind and symlink target, with file content excluded (`:231`, "every path under the work tree when the push began, hashed with its kind and symlink target"). Evidence, from the BL-914 population (104 distinct on-disk logs): in 11 sessions a push's `N of 23 step(s) skipped on a recorded pass` with N>=1 followed a hand prefix in the same session minutes earlier, and in session 83ed1313 the push from `wt-F14` skipped 4 steps that a hand prefix in another worktree, `f14pre.Wnu6WP`, had recorded. The hook prints no present key, so which run wrote a given record is not attributable from the logs.
+
+Fix shape: the seeder, the hand prefix and the hook run their units under one signal disposition. No fix in this release.
+
+Receipt: `verify: manual`. The fix decides what test exists (a disposition set in the seeder and the prefix, or a check that refuses a record written under the other one), and a receipt written only to file this entry is what BL-915 forbids.
+
+Provenance: batch 256, M6; id allocated by the lead.
+
+verify: manual
