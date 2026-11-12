@@ -1940,10 +1940,12 @@ EOF
   # absent from some repository that this arm is pointed at, and every checkout then fails the
   # completeness test for a reason that has nothing to do with the checkout. The first tracked
   # file at HEAD is present by construction in any tree `git worktree add` produced.
-  # R1 runs this function TWICE over the same probe ledger (token seed, then generic), and
-  # BL-910's counter must see each run as a first run or the second one reads it already
-  # advanced and the receipt is stable-at-1. Resetting here rather than at the probe's
-  # creation keeps the two runs independent, which is what the pair is for.
+  # R1 calls this function once per probe ledger: the token pass over $P's and $PH's, then the
+  # generic pass over the six seed-reaching receipts filtered from $P's, which holds no BL-910. In R1
+  # only the first call ($P's token pass) scores BL-910, whose receipt raises the counter on its base
+  # reading and its re-read, so later calls reach this reset with the counter at 2. The $PH and generic
+  # ledgers hold no BL-910, so the reset there changes no outcome. It is kept so that every call starts
+  # BL-910 at a first reading whatever ran before it.
   # `printf 0`, never `: >`. An EMPTY file makes the receipt's `$(cat)` yield the empty
   # string, which is not `0`, so its first-reading branch never fires and the probe is stable
   # at 1 -- a seeded non-determinism that is not non-deterministic, and the arm it exists to
@@ -2131,7 +2133,8 @@ vbr_probe_r1() {
 # cannot be switched per receipt -- only per repository. Both repositories carry the SAME files,
 # so the two ledgers differ only in which seeds they hold, and a seed placed in the wrong one
 # fails on its own assertion below, never on a missing subject. Both are scored by the same
-# score_ledger the corpus uses, and every assertion reads the UNION of their rows.
+# score_ledger the corpus uses, and every token-pass assertion reads the UNION of their rows. The
+# generic pass scores a THIRD ledger, outside both repositories, filtered from $P's: see below.
 P="$WORK/probe"
 PH="$WORK/probeh"
 r1_files() { # r1_files <dir> -- the probe subject files, written identically into each repository
@@ -2248,8 +2251,8 @@ probe_status() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $1
 probe_detail() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $3 }'; }
 probe_count()  { printf '%s\n' "$1" | awk -F'\t' '$1 == "PROSE-CLOSABLE"' | grep -c . ; }
 
-# Each repository is scored as its own ledger, then the rows are joined: every assertion below
-# reads the UNION, so a seed is judged the same whichever repository holds it -- and a seed moved
+# Each repository is scored as its own ledger, then the rows are joined: every token-pass assertion
+# below reads the UNION, so a seed is judged the same whichever repository holds it -- and a seed moved
 # out of $PH loses the hook's subject and fails its own row (BL-906 stops reading UNSEEDED;
 # BL-912's row stops seeing its untracked driver).
 BR_GENERIC_SEED=0
@@ -2327,14 +2330,26 @@ if r2_alldriver "$R1_DRV_MIX" 2; then
 fi
 
 # THE SECOND DIRECTION. The generic seed carries no token, and the arm must go quiet on the
-# SAME ledger. Without it, an arm that flags everything and an arm that discriminates print
+# SAME receipts. Without it, an arm that flags everything and an arm that discriminates print
 # the identical finding above.
+# ONLY THE RECEIPTS THE GENERIC SEED CAN REACH ARE SCORED HERE, and they are the same receipts BY
+# FILTER: one awk keeps $P's `## BL-<id>` sections for the six ids that reach the
+# seed line, so the bytes are $P's own and no line of the ledger built above is restated. The other
+# six classify before or regardless of the seed line (BL-903 and BL-910 on their base exit, BL-904
+# and BL-912 on no literal or an untracked driver, BL-906 on a refused append, BL-911 as a DRIVER),
+# so the generic flag cannot move them and scoring them again re-reads the token pass. The ledger
+# lives outside both repositories, the out-of-repo form R7's uses, and is scored with root $P.
+mkdir -p "$WORK/r1gprobe"
+awk -v ids=" BL-901 BL-902 BL-905 BL-907 BL-908 BL-909 " '/^## / { keep = index(ids, " " $2 " ") > 0 } keep' "$P/docs/backlog.md" > "$WORK/r1gprobe/backlog.md"
 BR_GENERIC_SEED=1
-R1G_OUT="$(score_ledger "$P/docs/backlog.md" "$P")" || exit 2
-R1GH_OUT="$(score_ledger "$PH/docs/backlog.md" "$PH")" || exit 2
+R1G_OUT="$(score_ledger "$WORK/r1gprobe/backlog.md" "$P")" || exit 2
 BR_GENERIC_SEED=0
-R1G_OUT="$R1G_OUT
-$R1GH_OUT"
+# THE QUIET DIRECTION HAS A POPULATION. A filter that lost one of the six reads as quiet below --
+# the count over the remainder counts nothing for it, and BL-901's `case` passes on an EMPTY status --
+# so each of the six must have a status row. The ids are written HERE as literals, independent of the
+# filter's set above, so an edit to one cannot satisfy the other.
+_r1g_miss="$(printf '%s\n' "$R1G_OUT" | awk -F'\t' 'BEGIN { n = split("BL-901 BL-902 BL-905 BL-907 BL-908 BL-909", w, " ") } $1 != "" { s[$2] = 1 } END { for (i = 1; i <= n; i++) if (!(w[i] in s)) printf "%s ", w[i] }')"
+[ -z "$_r1g_miss" ] || { echo "$(me): SELF-PROBE FAILED -- the generic-seed pass returned no status row for ${_r1g_miss% }, so its quiet direction below is quiet about a receipt it never scored and cannot discriminate." >&2; printf '%s\n' "$R1G_OUT" | sed 's/^/    /' >&2; exit 2; }
 # BL-907 is EXPECTED to flip here and is excluded by name: it is the probe whose subject is
 # a structured document, so it flips on ANY appended line -- which is the very property the
 # format control exists to detect, and asserting it does not flip would assert the opposite

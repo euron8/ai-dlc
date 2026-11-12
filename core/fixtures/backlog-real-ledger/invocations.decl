@@ -10,7 +10,10 @@
 # scoring its seeds, so each FIRED run's R7 checkouts start no hook (two agreeing counted runs, 86 hook starts left).
 # BL-880 (receipts R1): 214 -> 140 *, validator row unchanged. R1's hook now lives only in the probe repository holding
 # BL-906 and BL-912, so each FIRED run starts 6 hooks, not 43 (two agreeing counted runs, 12 hook starts left).
-140 *
-95 scripts/validate-backlog-receipts.sh
+# BL-880 (receipts R1 generic pass): 140 -> 118 *, 95 -> 83 validator, four agreeing counted runs of the change (two
+# on e3d2dfc35, one rebased on f11a8e566, one on its comment-only fold; each read 118 * / 83 validator). R1's generic pass now scores six receipts filtered from $P's ledger, not all twelve across $P and
+# $PH, so each FIRED run (j1p's first run and the m-r9call copy) scores six fewer receipts and makes no $PH generic call.
+118 *
+83 scripts/validate-backlog-receipts.sh
 4 scripts/validate-backlog-size.sh
 8 scripts/backlog-reverify.sh

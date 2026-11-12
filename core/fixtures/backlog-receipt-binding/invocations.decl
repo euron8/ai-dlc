@@ -23,6 +23,11 @@
 # pr_two 22 and c5_run 19, and the probe-only drives r10 14, r11 3 and r12 2. A scratch copy of the push base
 # 7ad8e93e5 (before the split; 808918467 likewise) with fx_inproc at the same four sites logged 174: these 117 plus the 57 the
 # efficiency-close block drove, which moved to backlog-receipt-efficiency.
-3303 *
-2350 scripts/validate-backlog-receipts.sh
-117 inproc:scripts/validate-backlog-receipts.sh
+# BL-880 (receipts R1 generic pass): 3303 -> 2851 *, 2350 -> 2110 validator, 117 -> 119 inproc, two agreeing counted runs
+# of the tip over f11a8e566 against two agreeing base runs there (3303 / 2350 / 117, budget ok). R1's generic pass scores
+# six receipts filtered from $P's ledger, not all twelve across $P and $PH, so every FIRED run scores six fewer receipts and
+# makes no $PH generic call. The +2 inproc are the two new in-process drives, r1g-a and r1g-b; their starts are inside
+# the net fall.
+2851 *
+2110 scripts/validate-backlog-receipts.sh
+119 inproc:scripts/validate-backlog-receipts.sh
