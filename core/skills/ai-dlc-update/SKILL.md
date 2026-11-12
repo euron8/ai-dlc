@@ -512,12 +512,12 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    The machinery slice includes `core/scripts/*`, and the consumer's own `.githooks/pre-push`
    INVOKES several of those scripts — so this cycle can install a check that then fails the very
    push it is making, on layer state that predates the pull and whose remedy is rulebook-side work
-   this step deliberately does not do. Before this gate it did not deadlock — a failed push used to
-   commit locally and not block the run — which was worse in one respect: it stranded an orphaned
-   local branch whose push was permanently blocked and a `skill_version` advanced on a commit that
-   would never merge. A failed push now discards the cycle; see the push-failure paragraph below.
-   Filed by the reference consumer as `PC-S308` after its operator hit it and derived the remedy by
-   hand.
+   this step deliberately does not do. A failed push discards the
+   cycle rather than committing locally: a local commit would strand an orphaned
+   local branch whose push is permanently blocked, with a
+   `skill_version` advanced on a commit that would never merge;
+   see the push-failure paragraph
+   below.
 
    - On `SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED`: **do NOT cut the branch and do NOT push.**
      Report the rows, and carry the machinery slice into the step-7 gated apply so machinery and

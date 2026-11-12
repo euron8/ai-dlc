@@ -346,8 +346,8 @@ none of them can be left to the skill's own resolution:
 - **The PRD path, named.** Its discovery globs are `{planning_artifacts}/*prd*.md`
   and `{planning_artifacts}/*prd*/index.md` — non-recursive, with no
   disambiguation rule when more than one matches. The per-sprint working files
-  that used to collide with it now sit under `s<N>/`, out of a non-recursive
-  glob's reach, but the durable area root still holds several PRD-named files
+  sit under `s<N>/`, out of a non-recursive glob's reach, so they cannot collide
+  with it; the durable area root still holds several PRD-named files
   (`prd.md`, `prd-history.md`, `review-consolidation-prd.md`, …) and the skill
   would still pick among them arbitrarily. Name the file.
 - **A sprint-scoped output path.** Its default is a single fixed
@@ -486,12 +486,12 @@ already contains cross-sprint `LR-S<n>-` references — **260 of 4019 on the ref
 consumer**, against **0 of 62** in anchored citations — so the first one anchored
 would otherwise have been rejected for the wrong reason.
 
-**`product-brief.md` is still ACCEPTED and is on its way out.** §4a used to append
-each sprint's block to the durable brief, so stories written before that changed
-cite it — 31 of 62 anchored citations on the reference consumer, all resolvable and
-none defective. `validate-locked-anchor.sh` accepts it and reports how many claims
-are still at the legacy name, so the migration is something a run measures rather
-than something an operator estimates. **Write new citations against
+**`product-brief.md` is still ACCEPTED and is on its way out.** It is the legacy anchor:
+§4a writes each sprint's block to its own slot rather than appending it to the durable
+brief, and stories written before §4a wrote to the slot cite `product-brief.md` — 31 of 62
+anchored citations on the reference consumer, all resolvable and none defective.
+`validate-locked-anchor.sh` accepts it and reports how many claims are still at the legacy name, so the migration is something
+a run measures rather than something an operator estimates. **Write new citations against
 `locked-requirements.md`.**
 
 `SPEC.md` is the worst possible anchor: `bmad-spec` is its sole writer and

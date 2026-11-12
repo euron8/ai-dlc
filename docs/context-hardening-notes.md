@@ -1945,3 +1945,37 @@ verdict is therefore advisory, and the merge reads its exit ceilings from the co
 validator rather than restating them. Shards are keyed on a story's ordinal in the sorted
 listing, never its slug. A slug-derived key refused most of the consumer's real story names,
 and a slug can carry a sprint token the consumer's push guard blocks.
+
+## R39 — rule prose carried the history of the change that made it true (BL-991)
+
+**What was removed.** `core/skills/ai-dlc/steps/stories-test-strategy.md` told its reader that
+§4a "used to append each sprint's block to the durable brief". The history is that
+`discovery.md` §4a once appended each sprint's LOCKED block to the durable brief; it now writes
+`s<N>/locked-requirements.md`, so stories written before that change cite `product-brief.md`.
+The step now states the present rule: `product-brief.md` is the legacy anchor, and the 31-of-62
+figure, the validator sentence and the imperative to write new citations against
+`locked-requirements.md` stay.
+
+**The four `used to` sites.** `discovery.md` ("Where the blocks used to sit, write:"),
+`stories-test-strategy.md` twice (the per-sprint working files "that used to collide with it
+now sit under `s<N>/`", and the §4a sentence above) and the ORPHANED-RELOCATED row of
+`ai-dlc-update/SKILL.md` ("**used to** write and no longer targets"). The first three are
+rewritten as present-tense statements, with every token, path and figure kept, except that
+the `discovery.md` row (and its `requirements.md` sibling below) also adds one rule: leave
+existing per-sprint blocks in place and write the pointer above them, because
+`validate-locked-anchor.sh` still resolves legacy citations against them. The fourth is rewritten by 0.1084.0.
+
+**Two more history clauses, both indefinite-subject.** `requirements.md` ("Where a per-sprint
+block used to sit, write:") now reads "In the brief's locked-requirements section, above any such block, write:",
+identical to `discovery.md`, with the same added rule. The self-update gate paragraph in `ai-dlc-update/SKILL.md` carried
+the history that, before the gate existed, a failed push did not deadlock the run but committed
+locally, which stranded an orphaned local branch whose push stayed blocked, with a
+`skill_version` advanced on a commit that would never merge; the reference consumer's operator
+hit it and derived the remedy by hand (the consumer filing that recorded it is
+`PC-S308-SELF-UPDATE-INSTALLS-THE-VALIDATOR-THAT-BLOCKS-ITS-OWN-PUSH`). The paragraph now states the rule: a failed push
+discards the cycle rather than committing locally, with the reason kept.
+
+**BL-888's KEEP is reversed for these six lines**, the four audit rows plus the two unflagged ones. BL-888 kept all eleven narrative-drift
+sites, on the reading that a clause the rule needs should not be cut. These six fail the
+clause test: the rule reads the same without the history, so the history belongs here. The
+seven `Measured:` calibrations stay, because the rule reads as arbitrary without them.

@@ -2290,3 +2290,17 @@ Receipt: `verify: manual`. The receipt is owed together with the fixture arm, wh
 Provenance: batch 256, lead filing; id allocated by the lead.
 
 verify: manual
+
+## BL-1001 — `audit-rule-files.sh`'s habitual `used to` detector acquits a history clause whose subject carries an indefinite article
+
+**DEFECT.** OPEN. Filed 2026-11-12. Two history clauses in resident rule prose read as habitual past and were not flagged by the audit's NARRATIVE_DRIFT class: `core/skills/ai-dlc/steps/requirements.md` "Where a per-sprint block used to sit, write:" and `core/skills/ai-dlc-update/SKILL.md` "a failed push used to commit locally". Both are rewritten by BL-991 in this release.
+
+The grammar that missed them is clause 2 of `PURPOSE_BEFORE` in `core/scripts/audit-rule-files.sh`, `\b(a|an)\b(\s+[^\s.;:!?]+){0,3}\s*$`. It reads any indefinite article within four words before `used to` as a reduced-relative purpose clause ("a health signal used to clear the operation") and clears the line. The script's own header comment names this as a stated limit ("a habitual clause with an indefinite subject ... clears"); these are two measured real instances.
+
+One count, over the audit's `--list` corpus (88 files, `bash core/scripts/audit-rule-files.sh --list`): the lines where `used to` follows `a` or `an` within four words, regex `\b(a|an)\b(\s+[^\s.;:!?]+){0,3}\s+used to\b` case-insensitive, same-line. At `e3d2dfc35` (the file list taken from this release's tip, the text read at that revision) the count is 3, and it includes the two cited lines (the positive control: `requirements.md:114` and `SKILL.md:455` both appear; `git show e3d2dfc35:<file> | grep -c` reads 1 for `used to sit` in `requirements.md` and 1 for `push used to` in `SKILL.md`, against 0 for an impossible token); at this release's tip it is 1; the impossible-token control (the same regex with `zzqx9never` before `used to`) reads 0. The count covers purpose clauses and habitual clauses alike, so it is an upper bound on the habitual ones.
+
+Not fixed here, and no other instance was hunted.
+
+Provenance: batch 256, cluster N13; id allocated by the lead.
+
+verify: manual
