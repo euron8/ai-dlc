@@ -41344,3 +41344,85 @@ Outcome measured: no graph pipeline step; the cost lives in scripts/validate-bac
 
 verify: manual
 
+## BL-980 — the review-shard-merge pole read +666s on 0.1064.0's push; the rise was load, and the census behind it found receipt-bl904.sh copying a repo its un-flagged G had just committed into
+
+**LANDED (v0.1072.0).** **DEFECT.** Filed 2026-11-11. Two claims, kept apart.
+
+**1. The pole rise is load, not code.** 0.1064.0's push printed `review-shard-merge 1415s loaded (was 749s, +666s)`. Both figures are LOADED costs taken at different loads, so the pair compares two loads and is not a measurement of the change. The measurement is a paired run: base `09bec4bc3` and tip `f1d2f04ae` launched together through `core/scripts/hermetic-run.sh`, each with its own `mktemp` verdict store. F7's push ran 21 fixtures (its push log, `done 21/21`); the load at that push was not recorded. A later, unidentified green push recorded `review-shard-merge` 674 and `review-shard-merge-b` 582 in the merged durations record; the fixture dirs are unchanged across `f1d2f04ae..c7a3afc2f`, and one declared input of both shards (`core/skills/ai-dlc/steps/gate-validation.md`, prose) changed (+29/-2). Which push wrote those rows cannot be identified, and `.git/ai-dlc-fixture-durations.last` (44 units) times neither shard, the same caveat as 749.
+
+Paired run, launched together, load1 8.07 (`timing.tsv` rows `P1`; user+sys is the sum of the file's `user` and `sys` columns):
+
+| side | shard | real s | user+sys s | load1 before |
+|---|---|---|---|---|
+| base | review-shard-merge | 353.53 | 335.6 | 8.07 |
+| tip | review-shard-merge | 352.22 | 334.5 | 8.07 |
+| base | review-shard-merge-b | 279.45 | 265.2 | 8.07 |
+| tip | review-shard-merge-b | 277.54 | 264.1 | 8.07 |
+
+Second pair, NOT a clean measurement and listed only so it is not mistaken for one: these are the instrumented runs (PATH `cp` shim plus trace2, which the absolute figures carry on both sides alike), launched together at load averages 25.05 / 32.61 / 40.18 (1, 5, 15 min); shard `review-shard-merge` exited rc=1 on BOTH sides (EV1, the `cp` shim), shard b rc=0 on both. The clean measurement is pair P1 above, plus the base-only contrast (413s at load1 7.9 against 734s at 61.3) in the sentence after the interleaved-reps table below:
+
+| side | shard | real s | user+sys s |
+|---|---|---|---|
+| base | review-shard-merge | 885.13 | 634.3 |
+| tip | review-shard-merge | 882.33 | 631.6 |
+| base | review-shard-merge-b | 679.47 | 496.4 |
+| tip | review-shard-merge-b | 677.98 | 495.8 |
+
+Interleaved reps, same two commits run alternately (`timing.tsv`, reps 1-3; the load differs per rep and the sign of the base-to-tip difference follows it, which is the finding):
+
+| rep | side | shard | real s | user+sys s | load1 before |
+|---|---|---|---|---|---|
+| 1 | base | review-shard-merge-b | 612.25 | 487.6 | 61.28 |
+| 1 | base | review-shard-merge | 733.86 | 607.3 | 61.28 |
+| 1 | tip | review-shard-merge-b | 357.48 | 344.4 | 21.62 |
+| 1 | tip | review-shard-merge | 446.12 | 429.5 | 21.62 |
+| 2 | base | review-shard-merge-b | 311.09 | 296.2 | 7.86 |
+| 2 | base | review-shard-merge | 412.99 | 394.4 | 7.86 |
+| 2 | tip | review-shard-merge-b | 342.84 | 328.3 | 16.63 |
+| 2 | tip | review-shard-merge | 430.32 | 411.8 | 16.63 |
+| 3 | base | review-shard-merge-b | 304.59 | 289.9 | 8.48 |
+| 3 | base | review-shard-merge | 484.07 | 427.5 | 8.48 |
+| 3 | tip | review-shard-merge-b | 486.35 | 425.5 | 43.95 |
+| 3 | tip | review-shard-merge | 572.38 | 505.4 | 43.95 |
+
+The same base code on shard `review-shard-merge` ran 412.99s at load1 7.86 (rep 2) and 733.86s at load1 61.28 (rep 1), +78%.
+
+**The 749s figure is UNVERIFIED.** Searched for the line or record that wrote it: the committed tree, the `.git/ai-dlc-*` records (`ai-dlc-fixture-durations` among them), the verdict store (`$AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`), and the session scratchpads and transcripts. The only occurrence anywhere is the pole line of F7's own push. The pole's "was" figure is read from `.git/ai-dlc-fixture-durations.prev`, a MERGED record updated only for the units a green run timed (the hook's comment at `.githooks/pre-push:1078-1081` calls its rows "of mixed vintage"). That row has since been overwritten, so the run that wrote 749 cannot be recovered.
+
+**2. The census behind it found a real defect in the receipts.** F7 added `-c maintenance.auto=false` to `lib.sh`'s `G` (`lib.sh:218`) because git's detached `maintenance run` child repacks loose objects while a later `cp -R` of the same repository walks `.git/objects`, so a fan-out directory vanishes mid-copy and the copy fails at random, by load: a verdict that depends on scheduling (BL-868). The flag-as-cause reading of the pole is refuted on magnitude. Object-file counts in the copied repositories, from the instrumented runs' `log.ibase` and `log.itip` (`m.Xaj5/`). The first table is the WHOLE-RUN total over both shards and every copy site; the second is the one site that carries the difference, `CR_REPO`'s `cp -R` (`lib.sh:3043` at `f1d2f04ae`, `:3057` at the shipped commit, two copies, shard b):
+
+| side | files in copied `.git/objects`, whole run | shard a | shard b | packs |
+|---|---|---|---|---|
+| base (G un-flagged) | 890 | 720 | 170 | 4 |
+| tip (flagged) | 1418 | 720 | 698 | 0 |
+
+| side, `CR_REPO` in shard b | files per copy | packs per copy | files over the two copies |
+|---|---|---|---|
+| base | 46 | 2 | 92 |
+| tip | 310 | 0 | 620 |
+
+That is +528 loose files per run, copied twice, against 341 detached maintenance spawns per run removed. The two effects are small and opposite; neither is +666s.
+
+The census asked the other question: which un-flagged git wrappers in the fixture directory commit into a repository that is then copied. The wrapper set is derived: every function definition in `core/fixtures/review-shard-merge/*.sh` whose body opens with `git` (6 hits: `lib.sh` `G` and `gm_raw`, and the four receipt `G`s). One instrumented run per shard (PATH `cp` shim, trace2). The static join's must-hit control, `CR_REPO` at `lib.sh:3043` (at `f1d2f04ae`), JOINED.
+
+| un-flagged commit site | repo | copied? | maintenance daemon possibly alive at the copy |
+|---|---|---|---|
+| `receipt-bl904.sh:26` `G()` (7 commits and 1 merge, 8 spawns, then `:42` `cp -R "$T" "$S"`) | `receipt-bl904.*/repo` | COPIED, 4 copies at runtime | no daemon alive at any of the 4; the last daemon exited 8.6-11.4 ms before the end of the last `rev-parse` preceding the copy, and 23.7-32.8 ms before the copy itself (that second gap is inflated by the shim's startup); the daemons ran no maintenance task; reachable by structure, no barrier exists (the child is detached, so no `wait` can see it) |
+| `receipt-bl885.sh:30` `G()` | its own repo | not copied | not applicable |
+| `receipt-bl885-frozen.sh:25` `G()` | its own repo | not copied | not applicable |
+| `receipt-bl956.sh:34` `G()` | its own repo | not copied | not applicable |
+| `lib.sh:233` `gm_raw()` | GM1's raw-git control | not copied | un-flagged ON PURPOSE: GM1 counts that raw git spawns 1 |
+
+So the F7 race class is reachable in `receipt-bl904.sh` by structure and depends on scheduling. It is a BL-868 defect, and it is not the cause of the pole reading.
+
+**Fix (shipped with this entry):** `-c maintenance.auto=false` on all four receipt `G` wrappers (`receipt-bl885-frozen.sh:25`, `receipt-bl885.sh:30`, `receipt-bl904.sh:26`, `receipt-bl956.sh:34`), all four because "copied" is not derivable without a hand-kept join: a receipt that later gains a copy would be invisible. GM1 (`core/fixtures/review-shard-merge/run.sh:872`, `p_gmaint` at `lib.sh:260`) no longer judges by spelling. `core/fixtures/review-shard-merge/receipt-bl980.sh` derives every `receipt-*.sh` in the fixture directory by glob (a count floor of at least one, and `receipt-bl904.sh`, the receipt that `cp -R`s the repository its commits wrote, as the must-hit) and RUNS each one the way its `lib.sh` call site does, with the arguments taken from that call site (a receipt with no call site, or a call site naming any argument other than `"$sd/<file>"` or `"$PROJ"`, is FIXTURE BROKEN), under `GIT_TRACE2_EVENT` and no system or global gitconfig. It counts the `git maintenance run` `child_start` events across each receipt's whole run, and requires 0. It also requires at least one `commit` in each run's trace, so a receipt that refuses early cannot pass vacuously (BROKEN, not a pass). The must-fire is a copy of `receipt-bl904.sh` with every ` -c maintenance.auto=false` stripped (the copy must carry 0 flags, and a strip that changed nothing is caught because the must-fire must spawn at least 1), driven the same way (8 spawns measured), else the receipt cannot fail. The verdict is one line, `BL980 OK receipts=<n> files=<...> commits=<...> mustfire=<n>`, exit 0, or `BL980 FAIL …` exit 1, or `BL980 FIXTURE BROKEN: …` exit 2. `lib.sh`'s own `G` stays checked by `p_gmaint`'s existing control (`gm_raw`, one commit through raw git spawns 1) and its mutant (`G` less the flag spawns 1); those two and `G` itself now each drive a fresh repository, so one drive's detached child cannot race another's counted commit. `p_gmaint` reads the receipt's last stdout line as the verdict. Because the check counts spawns and not spellings, a receipt that reaches git through `env git`, `"$GIT"` or a `VAR=val git` prefix and leaves auto-maintenance on fails the same way. No environment default (`GIT_CONFIG_COUNT`) was used: `hermetic-run.sh` starts the fixture under `env -i`, `validate-backlog-receipts.sh:321` unsets `GIT_CONFIG_COUNT` and `GIT_CONFIG_PARAMETERS` before every verify line, and above all an export from `lib.sh` would be inherited by every receipt the driver runs and blind the drive to an unprotected one. Each receipt keeps its own flag. `review-shard-merge` ships, so the receipts and `lib.sh` reach a consumer together.
+
+The change touches no pole printout, no durations record, and not `lib.sh`'s `G`.
+
+NOTE: the receipts' `trap 'rm -rf "$R"' EXIT` can delete objects under a live daemon; the exit code is already decided by then.
+
+Receipt: `verify:` runs `core/fixtures/review-shard-merge/receipt-bl980.sh core/scripts .` (the two arguments `lib.sh`'s call site passes as `$sd` and `$PROJ`), captures its output, and requires a line beginning `BL980 OK receipts=4 ` (1 is a spawn, 2 is a broken fixture, and either leaves the line absent). The output is captured first and matched second, never piped into `grep -q`. The `grep` gives `validate-backlog-receipts.sh` a token to seed, so the entry is SCORED and not merely classified; a bare `bash <script>` or a `case` on the captured line would read as DRIVER or UNSCORABLE instead. `invocations.decl` moves `544 *` to `550 *` (the `*` row of `review-shard-merge`), from two agreeing counted runs by the builder at the shipped code; the builder attributes the +6 to the four driven receipts, the must-fire and the earlier +1, which I did not re-derive.
+
+Provenance: batch 255, cluster F13-bl980-pole-regression; id allocated by the lead.
+
+verify: sh o="$(bash core/fixtures/review-shard-merge/receipt-bl980.sh core/scripts .)" && grep -q '^BL980 OK receipts=4 ' <<<"$o"

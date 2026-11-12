@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1072.0] - 2026-11-11
+
+### BL-980 CLOSED: the review-shard-merge pole rise on 0.1064.0's push was load; the four receipt G wrappers gain -c maintenance.auto=false, and GM1 now runs every receipt and counts the maintenance children its commits spawn
+
+0.1064.0's push printed `review-shard-merge 1415s loaded (was 749s, +666s)`, and both figures are loaded costs taken at different loads. Base `09bec4bc3` and tip `f1d2f04ae` were launched together through `hermetic-run.sh` at load1 8.07. They read 353.53s against 352.22s on `review-shard-merge` and 279.45s against 277.54s on `review-shard-merge-b`. The same base code read 412.99s at load1 7.86 and 733.86s at load1 61.28. The run that recorded the 749s figure cannot be identified: the pole reads it from the merged `.prev` durations record, whose row has since been overwritten. No code changes for this half.
+
+The census behind it found a real BL-868 defect. `receipt-bl904.sh`'s un-flagged `G` committed into a repository and then copied it with `cp -R`, so a detached `git maintenance run` could repack `.git/objects` mid-copy. That is the race F7 closed in `lib.sh`'s `G`. All four receipt `G` wrappers (`receipt-bl885.sh`, `receipt-bl885-frozen.sh`, `receipt-bl904.sh`, `receipt-bl956.sh`) now carry the flag. Whether a receipt copies its repository cannot be derived without a hand-kept join, so all four get it.
+
+GM1 runs the new `core/fixtures/review-shard-merge/receipt-bl980.sh` with the script dir and project root its call site passes. The receipt globs every other `receipt-*.sh` in the directory and runs each one with the arguments its own `lib.sh` call site gives it, under `GIT_TRACE2_EVENT` with no system or global gitconfig. Across each whole run it requires 0 `git maintenance run` `child_start` events and at least one `commit`, so a receipt that refuses early cannot pass vacuously.
+
+The must-fire is `receipt-bl904.sh` with every ` -c maintenance.auto=false` stripped, driven the same way; it must spawn at least 1 (8 measured). The receipt is FIXTURE BROKEN (exit 2) if `receipt-bl904.sh` is absent, if a receipt has no call site or passes an argument other than `"$sd/<file>"` or `"$PROJ"`, or if the must-fire spawns nothing. It counts spawns, not spellings, so a receipt reaching git through `env git` or `"$GIT"` is judged the same way.
+
+GM1 prints the receipt's `BL980 OK receipts=4 files=… commits=… mustfire=8` line above its own ok line. `p_gmaint` now gives `G`, the raw-git control and the mutant a fresh repository each, so one drive's detached child cannot race another's counted commit. `run.sh` gains the MUTANT-MATRIX row `gm-mustfire-bl904`, and `invocations.decl` goes 544 -> 550.
+
 ## [0.1071.0] - 2026-11-11
 
 ### BL-811 CLOSED: stories-test-strategy did not fall on graph s321, and its per-story elicitation shards buy 36 unique survivors at $3.10 each; the cross shard is KEPT on consequence
