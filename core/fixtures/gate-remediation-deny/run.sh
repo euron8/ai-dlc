@@ -42,7 +42,8 @@
 # and AD-IW-DASH; m-stems-wordsplit moves AD-NEWLINE, AD-A-SPACE, AD-B-SPACE and AD-W4-SPACE; m-multidoc-drops moves
 # AD-A-MULTIDOC and AD-B-MULTIDOC; m-stream-bleed moves AD-TRAIL-LIVE; m1b-role-nothing moves 1b-E2, 1b-E3 and 1b-E4;
 # m1b-path-widened moves 1b-A10, 1b-A11 and 1b-A12; m1b-inner-widened moves 1b-A11 and 1b-A12; m1b-absent-denies moves
-# 1b-A7; m1b-key-order moves 1b-A8; md-basename moves MD5 and MD9; md-suffix moves MD9. A cell id is the seed case the
+# 1b-A7; m1b-key-order moves 1b-A8; md-basename moves MD5 and MD9; md-suffix moves MD9; rr-old moves RR-D6-allow and RR-E-deny (a column-0
+# reader skips the bullet rows both are built from). A cell id is the seed case the
 # cell drives, or the named arm. Every cell of a mutant that a plain run does not drive is matrix-only.
 # MUTANT-MATRIX m-existence-only decides=arm9 twins=arm7
 # MUTANT-MATRIX m-no-probe-root decides=probe-ledger twins=spawn-ledger
@@ -106,6 +107,15 @@
 # MUTANT-MATRIX m3b-no-claude-md decides=3b-CLAUDE.md twins=3b-.gitignore
 # MUTANT-MATRIX m3b-no-lex decides=3b-nx-app.py twins=3b-app.py
 # MUTANT-MATRIX m3b-no-giveup decides=3b-hang twins=3b-app.py
+# MUTANT-MATRIX rr-old decides=RR-A,RR-A2,RR-C twins=RR-E-lift
+# MUTANT-MATRIX rr-wide decides=RR-D1,RR-D2 twins=RR-A
+# MUTANT-MATRIX rr-noemph decides=RR-A2 twins=RR-A
+# MUTANT-MATRIX rr-allrows decides=RR-E-deny twins=RR-E-lift
+# MUTANT-MATRIX rr-nofloor decides=RR-D6 twins=RR-D6-allow
+# MUTANT-MATRIX rr-nocorrob decides=RR-arm4,RR-D4 twins=RR-A
+# MUTANT-MATRIX rr-docdrift decides=RR-C twins=RR-C-extract
+# MUTANT-MATRIX rr-bdrift decides=RR-B-value twins=RR-A
+# MUTANT-MATRIX rr-list-drift decides=RR-B-list twins=- why=a static binding probe with one cell, which its mutation always trips
 # MUTANT-MATRIX-CONTROL m-crash-control why=a mutant that dies under set -u must be reported BROKEN (rc 2), never decided, so survival of the harness guard is the pass
 # MUTANT-MATRIX-CONTROL m-silent-control why=a mutant that exits 0 and logs no event must be reported BROKEN (rc 2), so the event half of the harness guard is what is asserted
 # MUTANT-MATRIX-CONTROL m-silent-allow-control why=a silent exit 0 where an allow was expected must be reported BROKEN, so the allow-event guard is what is asserted
@@ -375,15 +385,18 @@ if denied "$OUT"; then ok "LIFT: a record claiming only a PASSING check does not
 else bad "LIFT: any repair record at all lifts, whatever it claims to have repaired"; fi
 
 # 4. FORGED DISPATCH. The lead writes the record itself and invents an agent_id.
-#    Fail CLOSED: the transcript is readable and the id is not in it.
+#    Fail CLOSED: the transcript is readable and the id is not in it. The id carries a digit and is
+#    long enough, so the rid shape floor passes it and corroboration is what refuses (the floor's own
+#    deny is RR-D6); the reason is read from the log, so a floor refusal cannot pass for this arm.
 cat > "$REC" <<'EOF'
 gate_nonce: story-20260811T193044Z
-remediator_agent_id: remediator@session-never-dispatched
+remediator_agent_id: remediator@session-never-dispatched-9
 repaired_checks: 7
 EOF
 OUT="$(drive "$W" Edit "$W/$ART" "" "$TR")"
-if denied "$OUT"; then ok "LIFT: an agent_id that appears in NO dispatch in the transcript does not lift"
-else bad "LIFT: the lead can lift its own deny by inventing an agent_id"; fi
+if denied "$OUT" && grep -qF "remediator_agent_id 'remediator@session-never-dispatched-9' appears in NO dispatch" "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "LIFT: an agent_id that appears in NO dispatch in the transcript does not lift (refused by corroboration, not the floor)"
+else bad "LIFT: the lead can lift its own deny by inventing an agent_id, or the deny came from a guard other than corroboration"; fi
 
 # 5. NO agent_id AT ALL — the structural floor must still hold.
 printf 'gate_nonce: story-20260811T193044Z\nrepaired_checks: 7\n' > "$REC"
@@ -2796,6 +2809,288 @@ if mut m3b-no-lex 's@^LPE_ABS="\$(lpe_lex "\$LPE_ABS")"$@:@'; then
 fi
 git -C "$W" worktree remove --force "$SIB" >/dev/null 2>&1
 rm -rf "$W" "$SIB" "$W.hang" "$W.hang.hd"
+
+# =============================================================================
+# ARM RR -- THE REPAIR RECORD'S FIELD GRAMMAR IS THE PROJECT'S ONE REPAIR-RECORD GRAMMAR (BL-989).
+# =============================================================================
+# Lift arm 8 reads `remediator_agent_id` and `repaired_checks` through `repair_value` / `repair_list`,
+# arm H's reader in `validate-adversarial-convergence.sh`. A remediator following its own role file
+# writes bullets, and the column-0-only reader this replaced read a `- repaired_checks: 3` row as no
+# row at all, so a genuine repair left the lead locked out. Cells, each presence-shaped (a deny must
+# log its named reason; a lift must log GATE_REMEDIATION_LIFTED), each driven in a FRESH copy of one
+# never-driven base workspace:
+#   RR-A  bullet rows lift            RR-A2 emphasised labels lift      RR-C  remediator.md's own example lifts
+#   RR-D1 a `> ` blockquote with genuine values does not lift (`>` is not in the prefix class)
+#   RR-D2 a prose row `- the remediator_agent_id:` does not lift (the label must lead the row)
+#   RR-D3 a renamed label `- repaired_check:` does not lift
+#   RR-D4 a bullet record whose agent id is in no dispatch does not lift (corroboration binds)
+#   RR-D5 a bullet record for another nonce does not lift (the nonce binds)
+#   RR-D6 `none available (...)` fails the shape floor; RR-D6-allow, a real id plus a parenthetical, lifts
+#   RR-E-deny / RR-E-lift  the FIRST row bearing a label is the one read, in both orders
+#   RR-arm4 arm 4's own column-0 forgery, re-driven here so its corroboration mutant has a cell
+# The transcript names `none` on purpose: first-token extraction turns the s322 prose into `none`,
+# so the floor, not corroboration, is the only guard RR-D6 has -- and RR-D4/RR-arm4's id passes the
+# floor, so corroboration is the only guard they have. Each guard has a subject the other cannot see.
+# RR-B binds the two readers to the validator's bytes; RR-C-window holds the consumer window, where an
+# installed remediator.md older than this release carries no example and RR-C prints PENDING.
+# M-allrows: with the first-match `exit` gone a record with two rid rows makes the rid a
+# newline-separated value, which `grep -qF` then reads as a PATTERN LIST -- any one line corroborates.
+RR_N_REC="_bmad-output/gate-adjudication/story-20260811T193044Z.repair.md"
+RR_NONCE="story-20260811T193044Z"
+RR_VAL="$(pick "$HERE/../../scripts/validate-adversarial-convergence.sh" \
+               "$HERE/../../../scripts/ai-dlc/validate-adversarial-convergence.sh")"
+[ -n "$RR_VAL" ] || { echo "FIXTURE BROKEN: cannot locate validate-adversarial-convergence.sh in either layout (core/scripts/, scripts/ai-dlc/); RR-B would bind nothing" >&2; exit 2; }
+RR_DOC=""; RR_LAYOUT=""
+if [ -f "$HERE/../../team-roles/remediator.md" ]; then RR_DOC="$HERE/../../team-roles/remediator.md"; RR_LAYOUT=core
+elif [ -f "$HERE/../../../.claude/team-roles/remediator.md" ]; then RR_DOC="$HERE/../../../.claude/team-roles/remediator.md"; RR_LAYOUT=claude; fi
+[ -n "$RR_DOC" ] || { echo "FIXTURE BROKEN: cannot locate remediator.md in either layout (core/team-roles/, .claude/team-roles/); RR-C would read nothing" >&2; exit 2; }
+echo "gate-remediation-deny: RR validator = $RR_VAL; RR role file = $RR_DOC ($RR_LAYOUT layout)"
+RR="$(mktemp -d)"
+
+# rr_lit <src> <dst> <expected replacements> <old literal> <new literal> [<function: limit to its body>]
+# A LITERAL rewrite (index/substr, no regex), so a pattern needing escapes cannot match nothing silently.
+# Refuses -- DID NOT APPLY -- when the rewrite fails, changes no bytes, or replaces any other number of sites.
+rr_lit() {
+  local n
+  if ! RR_OLD="$4" RR_NEW="$5" RR_FN="${6:-}" awk '
+    BEGIN { o = ENVIRON["RR_OLD"]; r = ENVIRON["RR_NEW"]; fn = ENVIRON["RR_FN"]; on = (fn == ""); c = 0 }
+    { if (fn != "" && index($0, fn "() {") == 1) on = 1
+      if (on) { s = $0; t = ""
+        while ((i = index(s, o)) > 0) { t = t substr(s, 1, i - 1) r; s = substr(s, i + length(o)); c++ }
+        $0 = t s }
+      print
+      if (fn != "" && on && $0 == "}") on = 0 }
+    END { print c > "/dev/stderr" }' "$1" > "$2" 2> "$2.n"; then
+    bad "MUTANT $(basename "$2"): DID NOT APPLY -- the rewrite itself failed"; return 1
+  fi
+  n="$(cat "$2.n")"
+  if cmp -s "$1" "$2"; then bad "MUTANT $(basename "$2"): DID NOT APPLY -- no bytes changed"; return 1; fi
+  if [ "$n" != "$3" ]; then bad "MUTANT $(basename "$2"): DID NOT APPLY -- $n site(s) rewritten, $3 expected"; return 1; fi
+  case "$2" in *.sh) bash -n "$2" 2>/dev/null || { bad "MUTANT $(basename "$2"): DID NOT APPLY -- the copy does not parse"; return 1; } ;; esac
+  return 0
+}
+
+# --- RR-B: one grammar, by bytes. ------------------------------------------------------------
+rr_fn()    { awk '/^repair_value\(\) \{/,/^\}/' "$1"; }
+rr_valm()  { rr_fn "$1" | grep -F 'match($0, '; }
+rr_listm() { awk '/^repair_list\(\) \{/,/^\}/' "$1" | grep -F 'match($0, '; }
+rr_bind() { # <hook copy> -> RR_BV (1: repair_value byte-identical), RR_BL (1: repair_list's match line is repair_value's)
+  local a b
+  RR_BV=0; RR_BL=0
+  a="$(rr_fn "$1")"; b="$(rr_fn "$RR_VAL")"
+  [ -n "$a" ] && [ "$a" = "$b" ] && RR_BV=1
+  a="$(rr_listm "$1")"; b="$(rr_valm "$RR_VAL")"
+  [ -n "$a" ] && [ "$(printf '%s\n' "$a" | wc -l | tr -d ' ')" = 1 ] && [ "$a" = "$b" ] && RR_BL=1
+  return 0
+}
+n_hv="$(grep -c '^repair_value() {' "$HOOK")" || n_hv=0
+n_vv="$(grep -c '^repair_value() {' "$RR_VAL")" || n_vv=0
+n_hl="$(grep -c '^repair_list() {' "$HOOK")" || n_hl=0
+n_vm="$(rr_valm "$RR_VAL" | wc -l | tr -d ' ')"
+n_fl="$(rr_fn "$RR_VAL" | wc -l | tr -d ' ')"
+if [ "$n_hv" = 1 ] && [ "$n_vv" = 1 ] && [ "$n_hl" = 1 ] && [ "$n_vm" = 1 ] && [ "$n_fl" -ge 5 ]; then
+  ok "RR-B-pre: exactly one repair_value definition in the hook and in the validator, one repair_list, one match line ($n_fl-line body)"
+  rr_bind "$HOOK"
+  if [ "$RR_BV" = 1 ]; then ok "RR-B-value: the hook's repair_value is byte-identical to validate-adversarial-convergence.sh's"; B_RRBV=1
+  else bad "RR-B-value: the hook's repair_value has FORKED from validate-adversarial-convergence.sh's"; fi
+  if [ "$RR_BL" = 1 ]; then ok "RR-B-list: repair_list's match line is repair_value's, byte for byte"; B_RRBL=1
+  else bad "RR-B-list: repair_list reads rows by a different match line than repair_value"; fi
+  # rr-bdrift is BEHAVIOUR-NEUTRAL: the bracket `[`*]` reordered to `[*`]` is the same character set, so
+  # extraction is identical and only the bytes move. RR-B is scored here alone, on the unmutated hook and
+  # this copy; RR-A is its behavioural twin below (the copy still lifts). No behavioural mutant reaches rr_bind.
+  if rr_lit "$HOOK" "$MW/rr-bdrift.sh" 1 'gsub(/[`*]/, "", v)' 'gsub(/[*`]/, "", v)' repair_value; then
+    RR_BD_OK=1
+    rr_bind "$MW/rr-bdrift.sh"
+    mx_kill "${B_RRBV:-0}" rr-bdrift RR-B-value "$([ "$RR_BV" = 0 ] && echo 1 || echo 0)" "RR-B-value: a behaviour-neutral one-byte drift in the hook copy's repair_value is reported (the binding can fire)"
+  fi
+  if rr_lit "$HOOK" "$MW/rr-list-drift.sh" 1 'match($0, "^[[:space:]-]*' 'match($0, "^[[:blank:]-]*' repair_list; then
+    rr_bind "$MW/rr-list-drift.sh"
+    mx_kill "${B_RRBL:-0}" rr-list-drift RR-B-list "$([ "$RR_BL" = 0 ] && echo 1 || echo 0)" "RR-B-list: a drift in repair_list's match line alone is reported (the binding can fire)"
+  fi
+else
+  bad "RR-B-pre: FIXTURE BROKEN: want one repair_value in each file, one repair_list and one match line (hook $n_hv, validator $n_vv, repair_list $n_hl, match lines $n_vm, body $n_fl lines)"
+fi
+
+# --- RR-C's source: remediator.md's own example block, as the producer is told to write it. -----
+rr_block() { # <role file> -> the fenced block after the gate repair record paragraph
+  awk '/^\*\*A gate repair record carries/ { p = 1; next }
+       p == 1 && /^```/ { p = 2; next }
+       p == 2 && /^```/ { exit }
+       p == 2 { print }' "$1"
+}
+rr_cstate() { # <role file> <layout core|claude> -> RR_CSTATE ok|PENDING|FAIL, RR_CBLOCK
+  RR_CBLOCK="$(rr_block "$1")"
+  if [ "$(printf '%s\n' "$RR_CBLOCK" | grep -c .)" = 3 ] \
+     && case "$RR_CBLOCK" in *'<live gate nonce>'*) true ;; *) false ;; esac \
+     && case "$RR_CBLOCK" in *'<your agent id>'*) true ;; *) false ;; esac \
+     && case "$RR_CBLOCK" in *'<check id>'*) true ;; *) false ;; esac; then RR_CSTATE=ok
+  elif [ "$2" = claude ] && ! grep -q 'remediator_agent_id' "$1" 2>/dev/null; then RR_CSTATE=PENDING
+  else RR_CSTATE=FAIL; fi
+}
+rr_csub() { printf '%s\n' "$1" | sed -e "s/<live gate nonce>/$RR_NONCE/" -e 's/<your agent id>/remediator@session-abc123/' -e 's/<check id>/7/'; }
+# RR-C-window: a role file older than the example (no remediator_agent_id token) is PENDING only in the
+# installed layout; in core/ it is FAIL; and the real file is ok. Seeded, both directions, before the real read.
+printf '# Remediator\n\n## Contract\nRepair what the gate names.\n' > "$RR/legacy-remediator.md"
+rr_cstate "$RR/legacy-remediator.md" claude; _w1="$RR_CSTATE"
+rr_cstate "$RR/legacy-remediator.md" core;   _w2="$RR_CSTATE"
+if [ "$_w1" = PENDING ] && [ "$_w2" = FAIL ]; then ok "RR-C-window: a legacy installed remediator.md reads PENDING in .claude/, the same text reads FAIL in core/"
+else bad "RR-C-window: legacy role file read [$_w1] in .claude/ and [$_w2] in core/ (want PENDING, FAIL)"; fi
+rr_cstate "$RR_DOC" "$RR_LAYOUT"
+RR_CREC=""
+case "$RR_CSTATE" in
+  ok) RR_CREC="$(rr_csub "$RR_CBLOCK")"; ok "RR-C-extract: remediator.md's gate repair record example is three lines carrying the three placeholders" ;;
+  PENDING) printf '  PENDING: RR-C -- the installed %s carries no remediator_agent_id example yet (role text older than the engine); RR-C waits for the reconcile merge\n' "$RR_DOC" ;;
+  *) bad "RR-C-extract: no three-line gate repair record example after remediator.md's 'A gate repair record carries' paragraph -- the documented form is unpinned" ;;
+esac
+
+rr_rec() { # <cell> -> the record text
+  local h="# Gate repair record" n="$RR_NONCE"
+  case "$1" in
+    RR-A)        printf '%s\n- gate_nonce: %s\n- remediator_agent_id: remediator@session-abc123\n- repaired_checks: 7, 3a\n' "$h" "$n" ;;
+    RR-A2)       printf '%s\n- **gate_nonce:** %s\n**remediator_agent_id**: remediator@session-abc123\n- **repaired_checks:** 7\n' "$h" "$n" ;;
+    RR-C)        printf '%s\n' "$RR_CREC" ;;
+    RR-C-drift)  printf '%s\n' "$RR_CDRIFT" ;;
+    RR-D1)       printf '%s\n> gate_nonce: %s\n> remediator_agent_id: remediator@session-abc123\n> repaired_checks: 7, 3a\n' "$h" "$n" ;;
+    RR-D2)       printf '%s\n- gate_nonce: %s\n- the remediator_agent_id: remediator@session-abc123\n- repaired_checks: 7, 3a\n' "$h" "$n" ;;
+    RR-D3)       printf '%s\n- gate_nonce: %s\n- remediator_agent_id: remediator@session-abc123\n- repaired_check: 7\n' "$h" "$n" ;;
+    RR-D4)       printf '%s\n- gate_nonce: %s\n- remediator_agent_id: remediator@session-never-dispatched-9\n- repaired_checks: 7\n' "$h" "$n" ;;
+    RR-D5)       printf '%s\n- gate_nonce: story-20260810T101010Z\n- remediator_agent_id: remediator@session-abc123\n- repaired_checks: 7, 3a\n' "$h" ;;
+    RR-D6)       printf '%s\n- gate_nonce: %s\n- remediator_agent_id: none available (no spawn-ledger.jsonl was written for this dispatch)\n- repaired_checks: 7\n' "$h" "$n" ;;
+    RR-D6-allow) printf '%s\n- gate_nonce: %s\n- remediator_agent_id: a02970b6937a11032 (supplied by the lead after the fact; the dispatch transcript shows it)\n- repaired_checks: 7\n' "$h" "$n" ;;
+    RR-E-deny)   printf '%s\ngate_nonce: %s\nremediator_agent_id: remediator@session-abc123\n- repaired_checks: 2\nrepaired_checks: 7\n' "$h" "$n" ;;
+    RR-E-lift)   printf '%s\ngate_nonce: %s\nremediator_agent_id: remediator@session-abc123\nrepaired_checks: 7\n- repaired_checks: 2\n' "$h" "$n" ;;
+    RR-arm4)     printf 'gate_nonce: %s\nremediator_agent_id: remediator@session-never-dispatched-9\nrepaired_checks: 7\n' "$n" ;;
+    *) return 1 ;;
+  esac
+}
+rr_want() { # <cell> -> "<lift|deny>|<reason the log must carry>"
+  case "$1" in
+    RR-A|RR-A2|RR-C|RR-D6-allow|RR-E-lift) echo "lift|Lifted by repair record" ;;
+    RR-D1|RR-D2)        echo "deny|: no remediator_agent_id" ;;
+    RR-D3|RR-E-deny)    echo "deny|repaired_checks names none of the live FAILs" ;;
+    RR-D4|RR-arm4)      echo "deny|remediator_agent_id 'remediator@session-never-dispatched-9' appears in NO dispatch" ;;
+    RR-D5)              echo "deny|No bound remediator repair record and no verified operator authorization" ;;
+    RR-D6)              echo "deny|remediator_agent_id 'none' is not an agent id" ;;
+  esac
+}
+
+# The base: open-fail (live FAILs 7 and 3a, check 2 PASS), a transcript that dispatched
+# remediator@session-abc123 and a02970b6937a11032 and mentions `none`, never driven.
+seed open-fail
+RR_BASE="$W"
+printf '%s\n' '{"type":"assistant","content":"dispatching"}' '{"agent_id":"remediator@session-abc123"}' \
+  '{"type":"user","content":"spawn ledger: none"}' '{"agent_id":"a02970b6937a11032"}' > "$RR_BASE/transcript.jsonl"
+RR_N=0
+rr_drive() { # <cell> <hook> -> RR_V lift|deny, RR_LOG; rc 2 when BROKEN (a crash, or an allow with no lift logged)
+  local w o rc
+  RR_N=$((RR_N + 1)); w="$RR/d$RR_N"
+  cp -R "$RR_BASE" "$w" && rr_rec "$1" > "$w/$RR_N_REC" || { bad "$1 -- FIXTURE BROKEN: the cell's workspace could not be built"; return 2; }
+  o="$(drive "$w" Edit "$w/$ART" "" "$w/transcript.jsonl" "$2")"; rc=$?
+  RR_LOG="$(cat "$w/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)"
+  [ "$rc" -eq 0 ] || { bad "$1 -- FIXTURE BROKEN: $(basename "$2") exited rc=$rc (a crash, not a verdict)"; return 2; }
+  if denied "$o"; then
+    case "$RR_LOG" in *GATE_REMEDIATION_DENIED*) RR_V=deny ;; *) bad "$1 -- FIXTURE BROKEN: denied with no GATE_REMEDIATION_DENIED logged"; return 2 ;; esac
+  else
+    case "$RR_LOG" in *GATE_REMEDIATION_LIFTED*) RR_V=lift ;; *) bad "$1 -- FIXTURE BROKEN: allowed with no GATE_REMEDIATION_LIFTED logged; a silent exit 0 is not a lift"; return 2 ;; esac
+  fi
+  return 0
+}
+
+# --- the unmutated cells. Each must give its verdict AND log its own reason. --------------------
+for rr_c in RR-A RR-A2 RR-C RR-D1 RR-D2 RR-D3 RR-D4 RR-D5 RR-D6 RR-D6-allow RR-E-deny RR-E-lift RR-arm4; do
+  [ "$rr_c" = RR-C ] && [ "$RR_CSTATE" != ok ] && continue
+  _w="$(rr_want "$rr_c")"
+  rr_drive "$rr_c" "$HOOK" || continue
+  case "$RR_LOG" in *"${_w#*|}"*) _r=1 ;; *) _r=0 ;; esac
+  if [ "$RR_V" = "${_w%%|*}" ] && [ "$_r" = 1 ]; then
+    ok "$rr_c: $( [ "$RR_V" = lift ] && echo LIFTS || echo 'does NOT lift') -- logged [${_w#*|}]"
+    case "$rr_c" in
+      RR-A) B_RRA=1 ;; RR-A2) B_RRA2=1 ;; RR-C) B_RRC=1 ;; RR-D1) B_RRD1=1 ;; RR-D2) B_RRD2=1 ;;
+      RR-D4) B_RRD4=1 ;; RR-D6) B_RRD6=1 ;; RR-E-deny) B_RREdeny=1 ;; RR-arm4) B_RRarm4=1 ;;
+    esac
+  else bad "$rr_c: verdict $RR_V, reason logged=$_r (want ${_w%%|*} with [${_w#*|}])"; fi
+done
+
+# --- the unmutated control: a COPY of the hook from the mutant directory lifts RR-A and names the record.
+B_RRctl=0
+if rr_drive RR-A "$MW/control.sh" && [ "$RR_V" = lift ]; then
+  case "$RR_LOG" in *"Lifted by repair record:"*"$RR_NONCE.repair.md"*)
+    ok "RR-control: the unmutated copy lifts RR-A and the lift names $RR_NONCE.repair.md"; B_RRctl=1 ;;
+    *) bad "RR-control: the unmutated copy lifted RR-A without naming the record" ;; esac
+else bad "RR-control: the unmutated copy did not lift RR-A, so no RR mutant verdict below means anything"; fi
+
+# --- BL-989's receipt, against the hook and validator this unit resolved.
+_rb="$(bash "$HERE/receipt-bl989.sh" "$HOOK" "$RR_VAL" 2>&1)"; _rbrc=$?
+[ "$_rbrc" = 0 ] && ok "receipt-bl989.sh passes: a bound bullet record lifts and repair_value is the validator's, byte for byte" \
+  || bad "receipt-bl989.sh exited $_rbrc: $(printf '%s\n' "$_rb" | grep FAIL | tr '\n' ' ')"
+
+# --- the mutants. Each is a copy of the resolved hook, rewritten by literal, site count asserted.
+RR_P='"^[[:space:]-]*[*_`]?[*_`]?" l "[*_`]?[*_`]?:"'
+RR_MOK=" "
+[ "${RR_BD_OK:-0}" = 1 ] && RR_MOK="${RR_MOK}rr-bdrift "
+rr_lit "$HOOK" "$MW/rr-old.sh"      2 "$RR_P" '"^[[:space:]]*" l ":"' && RR_MOK="${RR_MOK}rr-old "
+rr_lit "$HOOK" "$MW/rr-wide.sh"     2 '"^[[:space:]-]*[*_`]?[*_`]?" l' '"^.*" l' && RR_MOK="${RR_MOK}rr-wide "
+rr_lit "$HOOK" "$MW/rr-noemph.sh"   2 "$RR_P" '"^[[:space:]-]*" l ":"' && RR_MOK="${RR_MOK}rr-noemph "
+rr_lit "$HOOK" "$MW/rr-allrows.sh"  2 'print v; exit }' 'print v }' && RR_MOK="${RR_MOK}rr-allrows "
+rr_lit "$HOOK" "$MW/rr-nofloor.sh"  1 'if [ "${#rid}" -lt 8 ] || [ "$c" -eq 0 ] || \' 'if false && \' && RR_MOK="${RR_MOK}rr-nofloor "
+rr_lit "$HOOK" "$MW/rr-nocorrob.sh" 1 'if ! grep -qF "$rid" "$TRANSCRIPT" 2>/dev/null; then' 'if false; then' && RR_MOK="${RR_MOK}rr-nocorrob "
+
+# rr_dk <mutant> <cell> <base-pass flag> -- a DECIDING cell, through mx_kill (moved off the unmutated verdict = scored).
+# rr_score <mutant> <role t|x> <cell> -- a twin or a matrix-only cell, through mx_hold.
+rr_dk() {
+  local m="$1" c="$2" _w
+  case "$RR_MOK" in *" $m "*) ;; *) return 0 ;; esac
+  [ "$c" = RR-C ] && [ "$RR_CSTATE" != ok ] && return 0
+  _w="$(rr_want "$c")"
+  rr_drive "$c" "$MW/$m.sh" || return 0
+  mx_kill "$3" "$m" "$c" "$([ "$RR_V" != "${_w%%|*}" ] && echo 1 || echo 0)" "$c: $m moves it off ${_w%%|*} (the cell can fire on this wrong reader)"
+}
+rr_score() {
+  local m="$1" role="$2" c="$3" _w
+  case "$RR_MOK" in *" $m "*) ;; *) return 0 ;; esac
+  [ "$c" = RR-C ] && [ "$RR_CSTATE" != ok ] && return 0
+  mx_run "$role" || return 0; mx_count "$role"
+  _w="$(rr_want "$c")"
+  rr_drive "$c" "$MW/$m.sh" || return 0
+  mx_hold "$role" "$m" "$c" "$([ "$RR_V" = "${_w%%|*}" ] && echo 1 || echo 0)" "$c: unchanged under $m (${_w%%|*})"
+}
+RR_CELLS="RR-A RR-A2 RR-C RR-D1 RR-D2 RR-D3 RR-D4 RR-D5 RR-D6 RR-D6-allow RR-E-deny RR-E-lift RR-arm4"
+rr_panel() { # <mutant> <decides, space-joined> <twins, space-joined> -- the twins and the matrix-only cells;
+  local c          # each deciding cell is scored at its own call below, with its own base-pass flag
+  for c in $RR_CELLS; do
+    case " $2 " in *" $c "*) continue ;; esac
+    case " $3 " in *" $c "*) rr_score "$1" t "$c"; continue ;; esac
+    rr_score "$1" x "$c"
+  done
+}
+rr_dk rr-old RR-A "$(( ${B_RRA:-0} && ${B_RRctl:-0} ))"
+rr_dk rr-old RR-A2 "$(( ${B_RRA2:-0} && ${B_RRctl:-0} ))"
+rr_dk rr-old RR-C "$(( ${B_RRC:-0} && ${B_RRctl:-0} ))"
+rr_panel rr-old      "RR-A RR-A2 RR-C" "RR-E-lift"
+rr_dk rr-wide RR-D1 "$(( ${B_RRD1:-0} && ${B_RRctl:-0} ))"
+rr_dk rr-wide RR-D2 "$(( ${B_RRD2:-0} && ${B_RRctl:-0} ))"
+rr_panel rr-wide     "RR-D1 RR-D2"     "RR-A"
+rr_dk rr-noemph RR-A2 "$(( ${B_RRA2:-0} && ${B_RRctl:-0} ))"
+rr_panel rr-noemph   "RR-A2"           "RR-A"
+rr_dk rr-allrows RR-E-deny "$(( ${B_RREdeny:-0} && ${B_RRctl:-0} ))"
+rr_panel rr-allrows  "RR-E-deny"       "RR-E-lift"
+rr_dk rr-nofloor RR-D6 "$(( ${B_RRD6:-0} && ${B_RRctl:-0} ))"
+rr_panel rr-nofloor  "RR-D6"           "RR-D6-allow"
+rr_dk rr-nocorrob RR-arm4 "$(( ${B_RRarm4:-0} && ${B_RRctl:-0} ))"
+rr_dk rr-nocorrob RR-D4 "$(( ${B_RRD4:-0} && ${B_RRctl:-0} ))"
+rr_panel rr-nocorrob "RR-arm4 RR-D4"   "RR-A"
+rr_panel rr-bdrift   ""                "RR-A"
+
+# rr-docdrift: the DOCUMENT drifts, not the reader. A copy of remediator.md whose example renames the label
+# still extracts (RR-C-extract holds: the drift reaches the hook) and its record no longer lifts.
+if [ "$RR_CSTATE" = ok ] && rr_lit "$RR_DOC" "$RR/remediator-drift.md" 1 '- remediator_agent_id:' '- remediator_id:'; then
+  rr_cstate "$RR/remediator-drift.md" "$RR_LAYOUT"; RR_CDRIFT="$(rr_csub "$RR_CBLOCK")"
+  mx_hold t rr-docdrift RR-C-extract "$([ "$RR_CSTATE" = ok ] && echo 1 || echo 0)" "RR-C-extract: the drifted copy still extracts its three-line example (rr-docdrift)"
+  if rr_drive RR-C-drift "$HOOK"; then
+    mx_kill "$(( ${B_RRC:-0} && ${B_RRctl:-0} ))" rr-docdrift RR-C "$([ "$RR_V" = deny ] && echo 1 || echo 0)" "RR-C: a remediator.md example whose label drifted no longer lifts (the cell reads the document)"
+  fi
+fi
+rm -rf "$RR" "$RR_BASE"
 
 rm -rf "$MW"
 [ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"

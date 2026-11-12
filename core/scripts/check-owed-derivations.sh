@@ -262,7 +262,7 @@ is_history() { # <root-relative path> -> 0 when HISTORY
 }
 
 # THE LIVE GATE-ADJUDICATION STEM, computed ONCE per call by the guard's own rule. This is a COPY of
-# core/hooks/ai-dlc-gate-remediation-guard.sh:790-804 (step 4, "Which pass is live? ... order by nonce, never
+# core/hooks/ai-dlc-gate-remediation-guard.sh:1025-1039(step 4, "Which pass is live? ... order by nonce, never
 # mtime"): over `<gate dir>/*.verdict.json`, stem = basename minus `.verdict.json`, ts = the part after the
 # last `-`, keep only ts matching [0-9]{8}T[0-9]{6}Z, and the live stem is the one with the greatest ts.
 # I33 forbids sourcing the hook, so the loop is copied and the dist-only battery binds the two. A file in the

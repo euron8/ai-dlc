@@ -233,7 +233,7 @@ One s310 verdict is still in the consumer's live `gate-adjudication/` directory 
 retro's rotation: `planning-20260910T102842Z`, whose `gate_series_id` reads `s310-planning`, a
 sprint-first spelling that matches neither the rotator's `-s<N>-` selector
 (`core/scripts/rotate-gate-adjudication.sh:220-221`) nor `--legacy-through`. It records no FAIL,
-so it is inert for the guard today (`core/hooks/ai-dlc-gate-remediation-guard.sh:428-442` picks
+so it is inert for the guard today (`core/hooks/ai-dlc-gate-remediation-guard.sh:1025-1039` picks
 by nonce and reads nothing about series), and `BL-228` already names this exact verdict and
 prescribes an operator re-stamp. Nothing here to build.
 
@@ -247,11 +247,11 @@ sprint 308's sprint-review gate. Its Check 2 FAIL was SUPPRESSED under operator 
 and the gate PASSED (`s308/gate-log-archive.md` line 785 onward). The suppression entry was
 archived by the retro close-out sweep (consumer commit `01a1b19d0`), and
 `validate-suppression-lifetime.sh --in-force` now returns `in_force=0`. The guard picks the live
-pass by nonce timestamp alone (`core/hooks/ai-dlc-gate-remediation-guard.sh:431-443`), so the
+pass by nonce timestamp alone (`core/hooks/ai-dlc-gate-remediation-guard.sh:1028-1038`), so the
 closed sprint's verdict stayed live from 00:40 until sprint 309's first verdict at 16:07. Every
 lead edit under `_bmad-output/planning-artifacts/` in that window was denied.
 
-The guard's own header (`core/hooks/ai-dlc-gate-remediation-guard.sh:116-118`) says the deny
+The guard's own header (`core/hooks/ai-dlc-gate-remediation-guard.sh:140-141`) says the deny
 names "what a remediator is still owed". Nothing was owed.
 
 ### DEFECT 2: prose promises a targeted re-adjudication that the mechanism refuses
@@ -277,7 +277,7 @@ keystroke.
 Shipped in release 2 as `BL-205` (`886bd76d`).
 
 `pipeline-snapshot-history.md` is in the guard's permitted set
-(`core/hooks/ai-dlc-gate-remediation-guard.sh:467-468`), yet the Gate Failure protocol routed
+(`core/hooks/ai-dlc-gate-remediation-guard.sh:1106`), yet the Gate Failure protocol routed
 every FAIL to a remediator. The s309 Check 35 repair cost 22 min plus a second adjudication.
 
 ### NOTE: party-mode yield at the brief and PRD is concentrated in the architect seat
