@@ -19541,3 +19541,34 @@ Batch 249: `docs/plans/archive/`. `ai-dlc-be` was the lead. No `graph-*` session
 - **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
 - **BATCH 253 (retrospective tail, moved from the derive section at batch 254 under the rotator's editorial remedy).** THE ENTRY THAT PROVED THE BULLET-FORM BLINDNESS WAS ITSELF IN THE MISSED SET: the consumer had filed `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`, in bare-bold form, describing this exact defect — and it was invisible to the grammar BECAUSE of the defect it describes. And its title is NOT overstated: `ledger-reverify` still emits a `HAND-REVIEW` row for the entry, which does not make "invisible to EVERY reverify" too strong, because that reading conflates the entry's own FORM with its SUBJECT. The entry is a dashed bullet, so of course reverify sees it; its subject is the DASH-LESS `**<id>**` at column 0, and for that form the title is exact (one such line existed in the archive at measurement). **Ask what a finding's subject is before scoring its title against the artifact that carries it** — the carrier and the claim are different objects. Also measured then: a bare `PC-`-shaped token grep over the live ledger counted 82 where the headings gave 40 — the surplus was bare sprint prefixes, truncations, and prose cross-refs to now-archived candidates — and it missed `push-candidate-ledger.archive.md` entirely, scoring every closed candidate as unexamined.
 
+**BATCH 254 IS CLOSED: RELEASES `v0.1045.0` THROUGH `v0.1058.0`, none skipped. THE NEXT SESSION STARTS BATCH 255.**
+`ai-dlc-7f` led; its rulings and NOTEs are in the batch-254 close commit message. No `graph-*` session is ever messaged.
+- **Next VERSION `0.1059.0`; next free id `BL-977` (970/973 remain free).** Live 60, archive 885. The batch closed 13 — `BL-949/950/951/952/953` (D efficiency), `BL-955/956/957` (A waiver-spelling), `BL-958/959/962/969` (filed-closed), `BL-971` (rebind) — and filed 20 (`BL-955`–`BL-976`); net **+7**. **The batch's LAST SIX RELEASES (819/841/976/975/974/716) are ALL PARTIAL** — the rotate gate's OUTCOME GUARD (`backlog-rotate.sh:357-374`) refuses any close without a consumer `Outcome measured:` line, and the six entries each carry their own exit condition in the entry. The `0.1054.0` number is DEAD (975's first push died before the squash; the validator never checks sequence continuity).
+- **The PC-BACKED WORKLIST is 0** (join re-run at close: no live entry cites a live candidate). All 5 UNNAMED `PC-S322-` candidates shipped as the 955–959 cluster closes AND the consumer has ARCHIVED all five on its 0.1056.0 reconcile. The consumer's ledger is now **1 live candidate, UNNAMED**: `PC-S322-PRE-PUSH-RULE-AUDIT-ARM-GATES-CONSUMER-ON-CORE-OWNED-TIER-1-FINDINGS` — no backlog entry cites it and no release names it: the next batch's unfiled work. Re-derive anyway.
+- **WHOLE-BACKLOG ADJUDICATION: 44 PARTIAL / 9 LIVE / 0 CLOSE / 0 DEAD-PREMISE** (4 opus hands; report bodies authoritative). BUILT BUT NOT CLOSED this batch: **BL-809 per-AC arm, BL-878, BL-868 items 5/14, BL-909** — the 14-release queue and the six PARTIAL turns consumed the batch; each needs its FP measurement first (809/909) or its own build (878/868). BL-514/910 exits not met (s322 open / no occurrence since cwd_why).
+- **OPEN FILINGS (unbuilt, from this batch):** 974 seat-complete belt gap (join `:537/:565/:2266/:3246`; `--check-part` needs `seat_complete_check` in the party branch); fanin placement NOTE (1 of 98); BL-819 row-add decision deferred; review-shard-merge flake DEFECT (`lib.sh:2893` cp race; gc.auto hypothesis unverified); handoff-completion-assertion coin-flip DEFECT (chmod absent in sandbox → shim never executable → passes only on the epoch-second fallback); 974 DEFECT B (block-deleted document-mode SKIP at seal); 976 `--check-shard-dir` extra-args-to-`basename` NOTE (stderr only, rc unaffected); 974 `--mark` term-7 can never refuse an adjudicator batch file (batch-name grammar always carries a non-digit); 716 no mutant covers `lanes never merge` (LN14 seed kills it) and no engine check covers an adjudicator that writes nothing before a mis-chosen window (the procedure's `--since` rule covers it).
+- **HELD REFS: none from 254** — all `b254-F*` and cluster branches deleted at close. The b253-held `b253-bl947` (owner `e4`, closed) is the lead's to sweep.
+- **Graph.** The consumer PULLED DURING the batch: `ai-dlc-update/0.1049.0-reconcile-…` and `0.1056.0-reconcile-…` branches exist (both dated today), checked-out branch installed `0.1056.0`, `main` `0.1028.0`, s322 open. Only `0.1057.0`/`0.1058.0` remain PENDING on the next pull — re-derive the delivery gap (action 7). **A pull is never dispatched by this program.**
+- **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
+
+## Context
+
+`/Users/n8/git/graph` is the reference consumer. Its
+`_bmad-output/ai-dlc-update/push-candidate-ledger.md` is the queue of consumer innovations
+upstream lacks and consumer-filed upstream defects. Every prior cycle drained **four entries**
+and stopped; the ledger has grown faster than it has been drained. The operator has asked for
+the whole thing: adjudicate every open entry against ground truth, remediate what is real, and
+give graph a legitimate way to close what is not.
+
+**The instrument that would normally answer "what is still open" cannot answer it right now,
+and it says so itself.** graph's own reconcile report for the 0.370.0 → 0.372.0 pull carries
+this line, and the same run reproduces from this session:
+
+> `RECEIPTS-UNDECIDED  (theirs_has receipts)  28 of 28 'theirs_has' receipt(s) reported
+> STILL-LIVE on a substring present at BASE as well as at theirs (0.372.0) … Do not treat a
+> zero CLOSE-CANDIDATE count from this run as evidence that nothing was absorbed.`
+
+So the zero-close reading is not a floor, and the 59 `STILL-LIVE` rows are not findings. Every
+entry has to be taken to the working tree by hand. The measured base rate of expired premises
+in this corpus is roughly **one in two** — expect about half the ledger to be dead.
+
