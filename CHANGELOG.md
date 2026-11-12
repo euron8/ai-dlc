@@ -19,6 +19,45 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1094.0] - 2026-11-12
+
+### BL-868 PARTIAL: the receipt's bounded-wait scan is arm H9 of the fixture-hygiene validator, item 9 closed, item 8 down to one site
+
+`core/fixtures/fixture-hygiene/receipt-bl868.sh` was inert: nothing ran it, so no bounded real-time wait it could see failed anything. Its class W scan (W-SLEEP, W-CLOCK, W-BOUND, W-TIMEOUT, W-ALLOW-STALE), its masker, its marker-keyed allowlist join and its self-probe are now arm H9 of `scripts/validate-fixture-hygiene.sh`, which already runs as a pre-suite step of the push, so a new bounded wait of a shape H9 reads, in a file under `core/fixtures`, now fails it. The scan is carried over but for one subtraction (the receipt's inert skip, vacuous on a green tree) and one widening (the loop stack, below). H9's header names the shapes it does not read under `STATED LIMITS:`.
+
+- **Allowlist.** The 8 allow rows move, reasons verbatim, to `scripts/bl868-wait-allowlist.txt`, read from the validator's resolved root. They are a file because, kept inline, every probe root fixture-hygiene builds read all 8 as W-ALLOW-STALE (13 FAILs). An absent list allows nothing. One change to the join: a `# bl868-allow:` marker whose id no row names, or whose row names another file, is now W-ALLOW-STALE, so a stale allow fires in both directions. No `inputs.decl` names the list, because no fixture's sandbox reads it.
+- **False-positive set.** At base ee9376900 (458 files) the scan reads 8 rows, byte-identical to the receipt's own, each on one of the 8 marked lines. With the receipt deleted (457 files) it reads the same 8, all allowlisted: 0 false positives. On 0.1090.0 it found 2 new W-SLEEP rows, a `( sleep 600 & s=$!` kill-on-timeout watchdog in each of `core/fixtures/review-shard-merge/lib.sh` and `receipt-bl988.sh`. ai-dlc-84 repaired both by removal in its review-shard-merge commit carried in this release, so at the tip H9 scans 459 files and reads the same 8 allowlisted rows and nothing else.
+- **Removed.** The receipt and its row in `scripts/inert-receipt-allowlist.txt` (now header-only). `inert()` loses its ledger mode, which only the receipt called, with E1's ledger-mode probe cell and that cell's row in `scripts/presuite-metadata-allowlist.txt`. Not carried: its H3 delegation (H3 is this validator's) and its `±` class (`scripts/check-no-provisional-invocations.sh` and J4 hold it).
+- **Fixture.** `core/fixtures/fixture-hygiene` gains arm DW and mutant MH9, killed by the self-probe refusal naming H9. `invocations.decl` 85 to 88 from two agreeing counted runs. The fixture worlds no longer seed a `docs/backlog.md`, which no arm reads.
+- **Loop stack.** H9's own widening, in two steps over the 457 files of the ee9376900 tree with the receipt deleted. As carried, a `done)` closed no loop frame and a `for`/`while`/`until` in prose opened one, so 15 files ended with a frame open and every later top-level sleep was silent; a glued `done` now closes a frame and a loop keyword opens one only in command position (0 files open, the same 8 rows). A `done` in any position had also popped an enclosing bounded loop early; `done` now closes only in command position, a glued backtick opens a frame, and `time -x` is an opener position. Against the first step: frame opens 3414 and 3414, closes 3357 and 3357, the same 8 rows, two closes moved to the real `done`. The residuals are in H9's `STATED LIMITS:`.
+- **Cost.** `scripts/fork-profile.sh --target scripts/validate-fixture-hygiene.sh`: 362 to 386 execs. Fork TOTAL of `validate-enforcement-map.sh`: 2790 to 2790.
+
+Item 9 closes: no non-comment line of `prepush-pool-depth/run.sh` carries any of its seven old ceiling tokens. Item 8's last cited site, `now_at_least`, is in 0 files under `core/fixtures` (188 for `mutant_killed`). One real sleep remains in scope as item 8 was filed: wait-stale-deliverable's C14 control call `guard wt`. It decides no verdict, and ai-dlc-31's BL-878 release moves it onto the injected clock, so item 8 stays open on that site. The entry also records the SIGPIPE stderr-compare instance in `scripts/validate-enforcement-map.sh` that 0.1081.0 fixed, which sits outside item 5's `core/fixtures` census. Items 8, 10, 12 and 14 are owed; `verify: manual`.
+
+### BL-914 CLOSED: a pre-suite step record written by one push is skipped on by a later push of the same tree
+
+Outcome measured on two pushes of one sha from a clean linked worktree sharing the main checkout's git common dir. Push 1 printed `8 of 23 step(s) skipped on a recorded pass` and recorded the other 15; push 2 printed `23 of 23` and `pre-push: all gates green.`, pushed tree equal to f11a8e566 (0.1079.0). A second worktree read `20 of 23` then `23 of 23`. Across every distinct push log on disk, 39 real pushes read N>=1 and 9 read N=0. Not shown: a same-sha pair across two different worktrees, and which run wrote a reused record, because the hook prints no present key. The operator's call on pruning nested worktrees from the walk stays open.
+
+### BL-806 PARTIAL: the exit-condition count is below 300, so the wait is confirmed
+
+Over 6315 graph transcripts captured 2026-11-12T18:12:16Z, the post-install population holds 209 rc-0 `snapshot-update.sh` writes carrying a strict bare `HH:MM(:SS)?Z` token, below the 300 that starts a re-measurement (projected about 2026-11-15 at 32.1 a day; `99:99Z` 0). The exit-condition grammar is restated to the strict form: whole-token write flags from the parser's case arms, the invocation to the end of its segment, the lookbehind that excludes an ISO stamp's time, and graph's 0.1012.0 install as the lower bound. The recorded 273 / 252 / 39 reproduces exactly under the batch-253 counter re-run verbatim, and the entry names that counter's three grammar flaws. No code.
+
+### BL-583: per-gate wall clock and dollars from recorded pushes, and the non-mutant poles judged
+
+`docs/analysis/push-gate-cost-and-pole-value-b256.md`, from records only, no timing run. 67 release pushes, 2026-11-09 to 2026-11-12, wall median 732 s (49 suite-ran 752 s, 8 red 1398 s). Pushes of 0.1028.0 and earlier left no transcript. The pushing session's spend inside its window, deduped by `message.id`: median $0.167, max $2.37; that is session spend, not a gate cost. Of 13 non-mutant pole families, 4 have a real subject catch on record and 9 have none. Of the 10 FAIL lines in the 8 red pushes, 2 were real catches. The entry stays open: retiring a pole is a separate release with its own contract.
+
+### BL-999 FILED (OPEN): a pass recorded outside a git hook is read by a push gate running inside one
+
+git runs the pre-push hook with SIGPIPE ignored, while the verdict seeder and hand-run pre-suite prefixes run with it at its default, so a unit whose verdict depends on the disposition can be recorded as a pass that the hook's own run would fail. An executed probe on a scratch repo: a `grep | head -1` writer exits 2 with `grep: stdout: Broken pipe` inside the hook and 141 with empty stderr outside it. `scripts/seed-verdict-store.sh` carries no `trap`, and `core/scripts/hermetic-run.sh`'s one trap is on EXIT. OPEN, `verify: manual`; no fix.
+
+### BL-1010 FILED (OPEN): a branch-delete push runs the full pre-push hook
+
+Seven branch-delete pushes made without `--no-verify` ran the hook through its pre-suite steps to the whole-suite key, 144 to 258 s from start to the suite-key HIT for the six whose start is on record. Neither pre-push hook reads the ref lines git hands it on stdin, so an all-zero local sha is judged on the working tree like a release push. OPEN, `verify: manual`; no fix.
+
+### BL-1013 FILED (OPEN): fixture-hygiene `--matrix` runs every mutant's drives at once
+
+The matrix block of `core/fixtures/fixture-hygiene/run.sh` starts six background drives for each of its 20 mutants and waits once after the loop, so a `--matrix` run holds about 120 concurrent validator runs, past the 150-member process-group line. The plain run starts 26 the same way. Each drive writes its own per-tag output files, which the matrix reads only after the wait, so a bounded width should give the same verdicts. Measured once at width 6, through a scratch copy that adds a `wait` after each mutant's six drives: rc 0, empty stderr, peak process group 36, and all 20 `MATRIX` lines equal to their committed rows with `twins=` normalised. The unbounded width was not run. OPEN, `verify: manual`; no fix.
+
 ## [0.1093.0] - 2026-11-12
 
 ### BL-397 stays PARTIAL: the implementation step group DID NOT FALL on graph s322 ($27.9, 80.0M tokens), and the dev-side full-collection run caught one regression in 8 stories
