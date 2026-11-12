@@ -14,8 +14,8 @@
 # sandbox) or scripts/ai-dlc/record-only-diff.sh (an installed tree), never by counting `..`; a scratch tree holding
 # another revision's file there is the must-fail probe. Each ask SOURCES the subject in a subshell and calls its
 # ro_main (no bash start), bounded by CPU time, `ulimit -t 5` (a loop that never ends burns CPU and dies of SIGXCPU,
-# whatever the load), and `ulimit -f 2048`; a far-out backstop kills the pid it started after 600 seconds and decides
-# no verdict a working subject can reach. Exit: 0 every row holds, 1 a row failed, 2 no subject was found.
+# whatever the load), and `ulimit -f 2048`, its stdin /dev/null; no wall clock bounds it (BL-868).
+# Exit: 0 every row holds, 1 a row failed, 2 no subject was found.
 set -u
 D="${1:-$(cd "$(dirname "$0")" && pwd)}"
 LIB_DIR=""; [ -f "$D" ] || LIB_DIR="$(cd "$D" 2> /dev/null && pwd)" || LIB_DIR=""
@@ -38,28 +38,15 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl988.XXXXXX")" || { echo "  FAIL  recei
 CV="$W/coding-conventions.md"
 printf -- '%s\n' '- canonical: `pytest suite/tests`' \
   '- the mandated wrapper: `python3 -u scripts/w.py --cwd <repo-root> --python <venv>/bin/python -- <pytest args>`' > "$CV"
-WDN=0
-# ask <mode> <value> -> AR (exit), AO (stdout and stderr)
+# ask <mode> <value> -> AR (exit), AO (stdout and stderr).
+# NO WALL-CLOCK WATCHDOG (BL-868: no verdict may be decided by real time; a `sleep 600` backstop stood here and is
+# removed). The CPU limit (`ulimit -t`) ends the only hang an ask can reach, the declaration reader's awk spinning.
+# Nothing else in an ask can block: its stdin is /dev/null, it reads only regular files to EOF, and it reads no fifo,
+# starts no background child and opens no network. So a hang that remains would be a new defect, and it now shows as
+# a hang -- the push's own watchdog reports a stalled fixture -- rather than as a silent pass or fail real time decided.
 ask() {
-  local p w k sp=""
-  WDN=$((WDN + 1)); k="$W/wd.$WDN"
   ( ulimit -t 5; ulimit -f 2048; set +u; . "$RO" && ro_main "$1" "$2" "$CV" ) > "$W/out" 2>&1 < /dev/null &
-  p=$!
-  # THE BACKSTOP'S SLEEPER IS KILLED BY ITS RECORDED PID AND REAPED ON EVERY PATH, by a file handshake, never by a signal
-  # to the watchdog: a TERM sent to a just-forked subshell was measured LOST (the watchdog kept waiting on a live
-  # `sleep 600`). The watchdog starts the sleeper, writes its pid to <k>.pid, then kills it itself if <k>.done exists;
-  # this function writes <k>.done once the ask is over, then kills the pid in <k>.pid if it is there. Whichever runs
-  # second sees the other's file, so the sleeper dies either way, and the watchdog, which waits on it, reaps it and
-  # kills the ask only when the sleep ran to its end. RCPT_WD_PIDF (a probe's file, never set in use) gets each pid.
-  ( sleep 600 & s=$!
-    printf '%s\n' "$s" > "$k.pid"; [ -z "${RCPT_WD_PIDF:-}" ] || printf '%s\n' "$s" >> "$RCPT_WD_PIDF"
-    [ ! -e "$k.done" ] || kill "$s" 2> /dev/null
-    wait "$s" && kill -KILL "$p" 2> /dev/null; exit 0 ) > /dev/null 2>&1 < /dev/null &
-  w=$!
-  wait "$p"; AR=$?
-  : > "$k.done"
-  [ ! -s "$k.pid" ] || { IFS= read -r sp < "$k.pid"; case "$sp" in [1-9]*) kill "$sp" 2> /dev/null ;; esac; }
-  wait "$w" 2> /dev/null; rm -f "$k.pid" "$k.done"
+  wait "$!"; AR=$?
   AO=""; IFS= read -r -d '' AO < "$W/out"; AO="${AO%$'\n'}"
 }
 row() { # <id> <value> <want run-shape exit> <want run-filter exit> <run-filter output must contain, or empty for none>
