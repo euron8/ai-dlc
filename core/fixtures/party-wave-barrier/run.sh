@@ -27,6 +27,19 @@
 #   (r) a sidechain Agent call naming a round path after a delivery -> rc 1, one FINDING
 #   (s) two rejection caps, 5 then 3                               -> rc 1, the lower 3 wins, idle 1
 #   (t) a delivery answered only by non-seat calls citing round paths -> rc 1, one FINDING, 7 agents
+#   (u) a lead delegating the round to coordinator ac01 (all records sidechain, no cap of its own); Dev
+#       01's delivery answered by the next foreground wait only -> rc 1, the FINDING names the followed
+#       file, running 2 (its own slot), cap 4 inherited from the lead (lead-env)
+#   (v) (u) with each delivery answered by a dispatch before the next wait -> rc 0, rounds=1, 3 batches
+#   (w) (u)'s lead with no coordinator file                        -> rc 0, delegated-missing=1
+#   (x) both deliveries written while the coordinator is blocked in its one wait -> rc 1, unrefilled 2
+#   (y) an `ls` between the delivery and the refill (no wait)      -> rc 0, rounds=1
+#   (binsleep/bashc/stat2) u with its second wait spelled `/bin/sleep 2100`, `bash -c "sleep 2100"`, or a
+#       --complete wait followed by `; ... --status`                -> rc 1, u's FINDING
+#   (mark/vmark) a --mark call in that wait's place; v with a --dispatch-ts call between delivery and
+#       refill                                                     -> rc 0
+#   (vgin) v with Dev 01's delivery written before the first wait's result (the wait returned on it),
+#       refilled after the return; x's twin                       -> rc 0
 #   (BL-732) graph a367e62c's shape: 2 remediator calls citing party-mode/s900/stories-sm-0N.md as INPUT
 #       -> STAT rounds=0; its twin, one property apart (subagent_type sm), -> rounds=1; an adversary or
 #       general-purpose agent citing the same files -> rounds=0; graph's real seat prompt (`Deliverable:`,
@@ -39,7 +52,7 @@
 #   --cap on (d) -> fires: the option is a cap source
 #
 #
-# COST. The detector replays a 20-case self-probe (wave_selfprobe, ~1.6s) on every call that names a
+# COST. The detector replays a 25-case self-probe (wave_selfprobe, ~1.6s) on every call that names a
 # transcript. The arms below ask about the DETECTOR'S REPLAY, not about its self-probe, so they run a
 # BASE copy of the shipped detector with exactly that one call line replaced (BASE_DET). The copy is
 # bound to the shipped file three ways: it differs from it by exactly one line, the shipped detector's
@@ -67,6 +80,22 @@
 #       former MK-arm was this same mutation scored on the rem/adv/gp cells, which are now MK's
 #       decides arms, so it has no row of its own
 #   MX  the member key is the FIRST cited path's seat only (MC is taken, so this one is MX)
+#   MG  the delegated file is not followed          MH  the sidechain filter kept on the followed file
+#   MI  the lead's cap not inherited                MW  a followed file's WAIT ignored (turn bound only)
+#   MY  the WAIT bound applied to lead files too    MN  any foreground Bash call is a WAIT
+#   MS  the coordinator's own slot not counted
+#   MSEG a command is one segment (no split on ; && || | newline)
+#   MMODE the non-blocking wait-for-deliverable modes no longer excluded
+#   MSLP sleep only by its bare name (no path)     MLAST every delivery written during a wait closed at its return
+#   Extra FAIL cells that are the SAME property the mutant removes, not entanglement; every row's
+#   decides and twins hold. M2 also FAILs v, y, vmark and vgin: each is quiet only because a dispatch
+#   answers the delivery. M6 also FAILs u, v, x, y and the six WAIT-shape arms: a coordinator's
+#   deliveries arrive only by the attachment carrier M6 drops. M9 also FAILs mark and vmark: each puts a
+#   message of its own between the delivery and the refill. MG and MH FAIL every delegated arm, which
+#   need the follow and the filter off. MI and MS also FAIL binsleep, bashc and stat2, which are u's
+#   finding world with one command changed, judged on the inherited cap and the own slot; MW also FAILs
+#   them because they fire only through the WAIT. MSEG, MMODE and MSLP's probe cells read ok because
+#   their subjects are fixture arms, not self-probe cases.
 #
 # MATRIX. Measured by `bash core/fixtures/party-wave-barrier/run.sh --matrix`: every mutant against
 # every base arm (plus the `probe` cell, the mutant with its self-probe left in). A cell is FAIL when
@@ -94,6 +123,17 @@
 # MUTANT-MATRIX MC decides=q twins=qmeta
 # MUTANT-MATRIX MK decides=t twins=remseat
 # MUTANT-MATRIX MX decides=cross twins=remseat
+# MUTANT-MATRIX MG decides=u twins=r
+# MUTANT-MATRIX MH decides=u twins=w
+# MUTANT-MATRIX MI decides=u twins=v
+# MUTANT-MATRIX MW decides=x twins=y
+# MUTANT-MATRIX MY decides=k twins=l
+# MUTANT-MATRIX MN decides=y twins=x
+# MUTANT-MATRIX MS decides=u twins=v
+# MUTANT-MATRIX MSEG decides=stat2 twins=binsleep
+# MUTANT-MATRIX MMODE decides=vmark twins=stat2
+# MUTANT-MATRIX MSLP decides=binsleep twins=bashc
+# MUTANT-MATRIX MLAST decides=vgin twins=v
 # MUTANT-MATRIX-DYNAMIC score why=every mutant is passed to mutant_killed by name from the one score() driver
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/party-wave-barrier/run.sh --matrix
 #
@@ -132,7 +172,7 @@ MUT_LIB="$ROOT/core/fixtures/lib/mutant.sh"
 echo "party-wave-barrier:"
 
 # --- seeds ---------------------------------------------------------------------------------------
-CASES="a b c d e f g h i j k l m n o p q r s t"
+CASES="a b c d e f g h i j k l m n o p q r s t u v w x y"
 T="$WORK/t"; mkdir -p "$T" || exit 2
 for c in $CASES; do
   bash "$DET" --seed "$c" "$T/$c.jsonl" || { echo "FIXTURE ERROR: the detector could not write seed $c" >&2; exit 2; }
@@ -176,6 +216,47 @@ grep -qF 'stories-dev-01.md first.' "$T/cross.jsonl" && grep -qF 'stories-archit
 # start a turn and the refill after it is a new response. The exemption is compaction-only.
 sed 's|"isCompactSummary":true|"isMeta":true|' "$T/q.jsonl" > "$T/qmeta.jsonl"
 cmp -s "$T/q.jsonl" "$T/qmeta.jsonl" && { echo "FIXTURE ERROR: seed (q') did not apply" >&2; exit 2; }
+# (u)/(v)/(x)/(y) write the lead AND its coordinator at <lead>/subagents/agent-ac01.jsonl; (w) writes the lead only.
+UC="$T/u/subagents/agent-ac01.jsonl"
+[ -s "$UC" ] && [ -s "$T/v/subagents/agent-ac01.jsonl" ] && [ -s "$T/x/subagents/agent-ac01.jsonl" ] && [ -s "$T/y/subagents/agent-ac01.jsonl" ] || { echo "FIXTURE ERROR: a delegated seed wrote no coordinator file" >&2; exit 2; }
+[ -e "$T/w/subagents/agent-ac01.jsonl" ] && { echo "FIXTURE ERROR: seed (w) wrote a coordinator file" >&2; exit 2; }
+# MH's subject: every record of the followed file is a sidechain record, so a kept filter drops all of it.
+n1="$(grep -c . "$UC")" || n1=0; n2="$(grep -c '^{"isSidechain":true,' "$UC")" || n2=0
+[ "$n1" -gt 0 ] && [ "$n1" = "$n2" ] && ok "seeds: every one of (u)'s $n1 coordinator records is isSidechain:true" || bad "seeds: (u)'s coordinator records are not all isSidechain:true ($n2 of $n1)"
+# MI's subject: the coordinator carries no cap of its own and the lead carries the env line, so the
+# inherited cap is the only one (u judged against UNKNOWN-CAP differs).
+n1="$(grep -c -e MAX_CONCURRENT -e 'subagents at once' "$UC")" || n1=0
+n2="$(grep -c 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=4"' "$T/u.jsonl")" || n2=0
+eq "seeds: (u)'s coordinator carries no cap line, its lead carries the env line (coordinator/lead)" "$n1/$n2" "0/1"
+# WAIT-shape worlds (the tip adversary's): u with the command of its second wait, tw2, replaced.
+# dlg_var <name> <new command>: a copy of u's lead and coordinator. A segment that blocks keeps u firing.
+U_WAIT='AI_DLC_WAIT_BEAT_SECS=540 scripts/ai-dlc/wait-for-deliverable.sh --complete _bmad-output/party-mode/s900/stories-dev-0{1,2}.md'
+dlg_var() {
+  mkdir -p "$T/$1/subagents" && cp "$T/u.jsonl" "$T/$1.jsonl" || return 1
+  awk -v old="$U_WAIT" -v new="$2" 'index($0, "\"id\":\"tw2\"") && index($0, old) { i = index($0, old); $0 = substr($0, 1, i - 1) new substr($0, i + length(old)) } { print }' \
+    "$UC" > "$T/$1/subagents/agent-ac01.jsonl" || return 1
+  ! cmp -s "$UC" "$T/$1/subagents/agent-ac01.jsonl"
+}
+dlg_var binsleep '/bin/sleep 2100' || { echo "FIXTURE ERROR: seed binsleep did not apply" >&2; exit 2; }
+dlg_var bashc 'bash -c \\"sleep 2100\\"' || { echo "FIXTURE ERROR: seed bashc did not apply" >&2; exit 2; }
+dlg_var stat2 "$U_WAIT; scripts/ai-dlc/wait-for-deliverable.sh --status _bmad-output/party-mode/s900/stories-dev-02.md" || { echo "FIXTURE ERROR: seed stat2 did not apply" >&2; exit 2; }
+dlg_var mark 'scripts/ai-dlc/wait-for-deliverable.sh --mark x.md stories dev 01 findings=0' || { echo "FIXTURE ERROR: seed mark did not apply" >&2; exit 2; }
+grep -qF 'bash -c \"sleep 2100\"' "$T/bashc/subagents/agent-ac01.jsonl" || { echo "FIXTURE ERROR: seed bashc lost its quoting" >&2; exit 2; }
+VC="$T/v/subagents/agent-ac01.jsonl"
+# vmark: v with a --dispatch-ts call in a message of its own between Dev 01's delivery and the refill.
+mkdir -p "$T/vmark/subagents" && cp "$T/v.jsonl" "$T/vmark.jsonl" || exit 2
+awk '{ print } /"type":"attachment"/ && /aa01/ && !done {
+  print "{\"isSidechain\":true,\"type\":\"assistant\",\"timestamp\":\"2026-01-01T10:05:02.000Z\",\"message\":{\"id\":\"msg_m\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"tm1\",\"name\":\"Bash\",\"input\":{\"command\":\"scripts/ai-dlc/wait-for-deliverable.sh --dispatch-ts aa01\"}}]}}"
+  print "{\"isSidechain\":true,\"type\":\"user\",\"timestamp\":\"2026-01-01T10:05:02.500Z\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"tm1\",\"type\":\"tool_result\",\"content\":\"2026-01-01T10:00:01Z\"}]}}"; done = 1 }' \
+  "$VC" > "$T/vmark/subagents/agent-ac01.jsonl" || exit 2
+n="$(grep -c '"id":"tm1"' "$T/vmark/subagents/agent-ac01.jsonl")" || n=0
+[ "$n" = 1 ] || { echo "FIXTURE ERROR: seed vmark carries $n --dispatch-ts calls, want 1" >&2; exit 2; }
+# vgin (x's twin): v with Dev 01's delivery written BEFORE the first wait's result, the delivery that wait
+# returned on; the refill follows the return.
+mkdir -p "$T/vgin/subagents" && cp "$T/v.jsonl" "$T/vgin.jsonl" || exit 2
+awk '/"tool_use_id":"tw1"/ { held = $0; next } { print } held != "" && /"type":"attachment"/ && /aa01/ { print held; held = "" }' "$VC" > "$T/vgin/subagents/agent-ac01.jsonl" || exit 2
+n1="$(grep -n '"type":"attachment"' "$T/vgin/subagents/agent-ac01.jsonl" | grep aa01 | cut -d: -f1)"; n2="$(grep -n '"tool_use_id":"tw1"' "$T/vgin/subagents/agent-ac01.jsonl" | cut -d: -f1)"
+[ -n "$n1" ] && [ -n "$n2" ] && [ "$n1" -lt "$n2" ] || { echo "FIXTURE ERROR: seed vgin does not write the delivery before the wait's result ($n1/$n2)" >&2; exit 2; }
 
 # ADET is the detector the arms below drive: BASE_DET live, a mutant's copy when scored.
 # R_OUT, R_ERR, R_RC: run <detector> <args...>
@@ -201,7 +282,7 @@ eq "base copy differs from the shipped detector by exactly one line (copy side, 
 
 # Control: the SHIPPED detector's self-probe, end to end. Run once; it is the only per-push self-probe
 # replay besides the two below.
-PROBE_OK='self-probe: ok (20 cases)'
+PROBE_OK='self-probe: ok (25 cases)'
 run "$DET" "$T/a.jsonl"
 if ! grep -qF "$PROBE_OK" <<<"$R_ERR"; then
   echo "FIXTURE BROKEN: the unmutated detector's self-probe did not pass; no verdict below would mean anything" >&2
@@ -354,6 +435,59 @@ arm_t() {
   has "t: they are RUNNING, so the straggler's delivery reads 4 of 4" "$R_OUT" "DELIVERED exit=2026-01-01T10:40:00.000Z running=4 cap=4 REFILLED"
   has "t: all seven calls are parsed" "$R_ERR" "agents=7 cap=4"
 }
+# Delegated rounds (BL-695 item a): the lead's one general-purpose call delegates the round to a
+# coordinator whose records are all sidechain; the coordinator file is FOLLOWED and judged on its own.
+arm_u() {
+  run "$ADET" --trace "$T/u.jsonl"
+  eq  "u: a barrier inside the followed coordinator fires" "$(rfu)" "1/1/0"
+  has "u: the finding names the followed file, the coordinator's own slot counted, the lead's cap" "$R_OUT" "FINDING u/subagents/agent-ac01.jsonl round=s900/stories batch=2 exit=2026-01-01T10:05:00.000Z dispatch=2026-01-01T10:40:05.000Z running=2 cap=4 idle=2 gap=2105s unrefilled=1"
+  has "u: the followed file inherits the lead's cap" "$R_ERR" "u/subagents/agent-ac01.jsonl STAT rounds=1 batches=2 findings=1 unknown=0 agents=4 cap=4 capsrc=lead-env"
+  has "u: one file followed, none missing" "$R_ERR" "given=1 scanned=1 rounds=1 batches=2 findings=1 unknown-cap=0 followed=1 delegated-missing=0"
+}
+arm_v() {
+  run "$ADET" "$T/v.jsonl"
+  eq  "v: each delivery answered by a dispatch before the next wait is quiet" "$(rfu)" "0/0/0"
+  has "v: the followed round was judged (rounds=1, three batches)" "$R_ERR" "given=1 scanned=1 rounds=1 batches=3 findings=0 unknown-cap=0 followed=1 delegated-missing=0"
+}
+arm_w() {
+  run "$ADET" "$T/w.jsonl"
+  eq  "w: a delegated agentId with no file is quiet" "$(rfu)" "0/0/0"
+  has "w: it is counted as delegated-missing, not followed" "$R_ERR" "given=1 scanned=1 rounds=0 batches=0 findings=0 unknown-cap=0 followed=0 delegated-missing=1"
+}
+arm_x() {
+  run "$ADET" "$T/x.jsonl"
+  eq  "x: both deliveries written while the coordinator is blocked in its one wait fire" "$(rfu)" "1/1/0"
+  has "x: the finding is at Dev 01's delivery; Dev 02's, the one the wait returned on, is refilled" "$R_OUT" "FINDING x/subagents/agent-ac01.jsonl round=s900/stories batch=2 exit=2026-01-01T10:05:00.000Z dispatch=2026-01-01T10:40:05.000Z running=2 cap=4 idle=2 gap=2105s unrefilled=1"
+}
+# A WAIT is keyed per command segment, positively: a blocking wait-for-deliverable or sleep by any path.
+dlg_fires() { # <world> <what>: u's barrier still fires with tw2's command replaced
+  run "$ADET" "$T/$1.jsonl"
+  eq  "$1: $2 is a WAIT, so u's barrier fires" "$(rfu)" "1/1/0"
+  has "$1: the finding is u's" "$R_OUT" "FINDING $1/subagents/agent-ac01.jsonl round=s900/stories batch=2 exit=2026-01-01T10:05:00.000Z dispatch=2026-01-01T10:40:05.000Z running=2 cap=4 idle=2 gap=2105s unrefilled=1"
+}
+arm_binsleep() { dlg_fires binsleep "/bin/sleep 2100"; }
+arm_bashc()    { dlg_fires bashc 'bash -c "sleep 2100"'; }
+arm_stat2()    { dlg_fires stat2 "a --complete wait followed by \`; ... --status\`"; }
+arm_mark() {
+  run "$ADET" "$T/mark.jsonl"
+  eq  "mark: a --mark call is no WAIT, so the refill after it answers (quiet)" "$(rfu)" "0/0/0"
+  has "mark: the followed round was judged" "$R_ERR" "given=1 scanned=1 rounds=1 batches=2 findings=0 unknown-cap=0 followed=1 delegated-missing=0"
+}
+arm_vmark() {
+  run "$ADET" "$T/vmark.jsonl"
+  eq  "vmark: a --dispatch-ts call between delivery and refill is no WAIT (quiet)" "$(rfu)" "0/0/0"
+  has "vmark: three batches judged" "$R_ERR" "given=1 scanned=1 rounds=1 batches=3 findings=0 unknown-cap=0 followed=1 delegated-missing=0"
+}
+arm_vgin() {
+  run "$ADET" "$T/vgin.jsonl"
+  eq  "vgin: the delivery a wait returned on, refilled after the return, is quiet" "$(rfu)" "0/0/0"
+  has "vgin: three batches judged" "$R_ERR" "given=1 scanned=1 rounds=1 batches=3 findings=0 unknown-cap=0 followed=1 delegated-missing=0"
+}
+arm_y() {
+  run "$ADET" "$T/y.jsonl"
+  eq  "y: an ls between the delivery and the refill is no wait (quiet)" "$(rfu)" "0/0/0"
+  has "y: the followed round was judged (rounds=1, three batches)" "$R_ERR" "given=1 scanned=1 rounds=1 batches=3 findings=0 unknown-cap=0 followed=1 delegated-missing=0"
+}
 # BL-732: a member is a call whose subagent_type is the seat of its cited party-mode path. Every cell
 # below is presence-shaped (a STAT line with a stated count must APPEAR), and each rounds=0 cell has
 # its rounds=1 twin in the same run.
@@ -389,7 +523,7 @@ arm_refuse_emptyfile() {
   has "refuse: scanned is counted short of given" "$R_ERR" "given=2 scanned=1"
 }
 # Arm ids as the header spells them; an id's function is arm_<id with - as _>.
-ARMS="a b c cenv d dcap e f g h i j k l m n o p q qmeta r s t rem remseat adv deliv gp cross bprose set refuse-empty refuse-unread refuse-emptyfile"
+ARMS="a b c cenv d dcap e f g h i j k l m n o p q qmeta r s t u v w x y binsleep bashc stat2 mark vmark vgin rem remseat adv deliv gp cross bprose set refuse-empty refuse-unread refuse-emptyfile"
 armfn() { printf 'arm_%s' "${1//-/_}"; }
 # armrc <arm> <detector>: 0 when the arm passes against that detector. A subshell, so FAILS is untouched.
 armrc() { ( ADET="$2"; FAILS=0; "$(armfn "$1")" >/dev/null 2>&1; [ "$FAILS" -eq 0 ] ); }
@@ -409,6 +543,23 @@ for a in $ARMS; do
   if [ "$FAILS" -eq "$f0" ]; then BASE_PASS="$(printf '%s %s' "$BASE_PASS" "$a")"; fi
 done
 ADET="$BASE_DET"
+
+# --- the BL-695 receipt ---------------------------------------------------------------------------
+# receipt-bl695.sh drives the SHIPPED detector (passed, so the one this fixture resolved is the one
+# measured) over seeds u, v, r and w and the sidechain shape of u's coordinator file. BL-695 item (a)
+# closes with this subject, so the arm requires exit 0 and all five CELL lines PASS; exit 9 is a
+# refusal to build its worlds: FIXTURE BROKEN.
+RCPT695="$HERE/receipt-bl695.sh"
+[ -f "$RCPT695" ] || { echo "FIXTURE ERROR: missing $RCPT695" >&2; exit 2; }
+bash "$RCPT695" "$DET" > "$WORK/r695.out" 2>"$WORK/r695.err"; r695_rc=$?
+r695_pass="$(grep -cE '^CELL (u|v|r|w|side) PASS ' "$WORK/r695.out")" || r695_pass=0
+if [ "$r695_rc" = 9 ]; then
+  bad "FIXTURE BROKEN: receipt-bl695.sh refused to build its worlds: $(head -1 "$WORK/r695.err")"
+elif [ "$r695_rc" = 0 ] && [ "$r695_pass" = 5 ]; then
+  ok "BL-695 receipt: exit 0, all five cells PASS: $(grep '^CELL ' "$WORK/r695.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
+else
+  bad "BL-695 receipt: exit $r695_rc with $r695_pass of 5 CELL PASS lines: $(cat "$WORK/r695.out" "$WORK/r695.err" | head -c 600 | tr '\n' ' ')"
+fi
 
 # --- mutants -------------------------------------------------------------------------------------
 mkdir -p "$WORK/mut"
@@ -479,7 +630,7 @@ score M7 a n \
 score M8 g l \
   1 'if ($4 == "d" && !(id in adel)) adel[id] = FNR' 'if (!(id in adel)) adel[id] = FNR'
 score M9 k l \
-  1 '$1 == "M" { for (i = 1; i <= gn; i++) gseen[i] = 1; next }' '$1 == "M" { close_seen(); for (i = 1; i <= gn; i++) gseen[i] = 1; next }'
+  1 '$1 == "M" { if (follow) close_seen($4); for (i = 1; i <= gn; i++) gseen[i] = 1; next }' '$1 == "M" { if (follow) close_seen($4); close_seen(""); for (i = 1; i <= gn; i++) gseen[i] = 1; next }'
 score M10 c b \
   1 '  for (i = 1; i <= gn; i++) if (gr[i] == r) gans[i] = 1' '  if (ast[id] != "rej" && ast[id] != "err") for (i = 1; i <= gn; i++) if (gr[i] == r) gans[i] = 1'
 score M11 n m \
@@ -487,18 +638,18 @@ score M11 n m \
 score M12 f g \
   1 'v = $8; if (v == "" && ($5 in envcmd)) v = $11' 'v = $8'
 score M13 e g \
-  1 '  close_seen(); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen()' \
-    '  close_seen(); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen(); for (r in sunref) if (sunref[r] > 0) { nfind++; printf "FINDING %s round=%s batch=end\n", name, r }'
+  1 '  close_seen(""); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen("")' \
+    '  close_seen(""); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen(""); for (r in sunref) if (sunref[r] > 0) { nfind++; printf "FINDING %s round=%s batch=end\n", name, r }'
 score M14 cenv c \
   1 '  else if (rejmin != "") {' '  else if (rejmin != "" && envmin == "") {'
 score M15 d dcap \
-  1 '    [ -n "${ur:-}" ] && echo' '    [ -n "${ur:-}" ] && : echo'
+  1 'read -r _ ur un <<<"$line"; echo' 'read -r _ ur un <<<"$line"; : echo'
 score MB p o \
   1 'if (ast[id] == "rej" || ast[id] == "err") continue' 'if (ast[id] == "err") continue'
 score ME s p \
   1 '$7 + 0 < rejmin + 0' '$7 + 0 > rejmin + 0'
 score MF r a \
-  1 '| select(type == "object" and .isSidechain != true)' '| select(type == "object")'
+  1 '| select(type == "object" and ($side == 1 or .isSidechain != true))' '| select(type == "object")'
 score MD o p \
   1 '"is_error": ?true' 'Concurrent subagent limit'
 score MC q qmeta \
@@ -507,6 +658,30 @@ score MK t remseat \
   1 '      mp = memberpath($7, $6)' '      mp = $7; sub(/ .*/, "", mp)'
 score MX cross remseat \
   1 '      mp = memberpath($7, $6)' '      mp = $7; sub(/ .*/, "", mp); if (!seatmember(mp, $6)) mp = ""'
+score MG u r \
+  1 '  for id in $(sed -n '"'"'s/^DELEG //p'"'"' <<<"$out"); do' '  for id in ; do'
+score MH u w \
+  1 'jq -R -r --argjson side "$fo"' 'jq -R -r --argjson side 0'
+score MI u v \
+  1 '  else if (leadcap != "") {' '  else if (0) {'
+score MW x y \
+  1 '$1 == "W" { if (follow) {' '$1 == "W" { if (0) {'
+score MY k l \
+  1 '$1 == "M" { if (follow) close_seen($4);' '$1 == "M" { close_seen($4);' \
+  1 '$1 == "W" { if (follow) {' '$1 == "W" { if (1) {' \
+  1 '$1 == "R" && follow && wopen' '$1 == "R" && wopen'
+score MN y x \
+  1 '              and ((.input.command // "") | tostring | iswait) then' '              then'
+score MS u v \
+  1 '  return n + selfslot' '  return n'
+score MSEG stat2 binsleep \
+  1 'def wsegs: [splits("\n|;|&&|\\|\\||\\|")];' 'def wsegs: [.];'
+score MMODE vmark stat2 \
+  1 'and (bmode | not)' 'and true'
+score MSLP binsleep bashc \
+  1 '(cmdw | test("(^|/)sleep$"))' '(cmdw | test("^sleep$"))'
+score MLAST vgin v \
+  1 '{ for (i = gn; i >= 1; i--) if (gin[i]) { gin[i] = 0; gseen[i] = 0; gwait[i] = ""; break }; close_seen("", 1);' '{ close_seen("", 1);'
 
 # M1's self-probe refusal, end to end, once per push: the probe is the shipped detector's own defence and
 # one representative proves it still fires. The other mutants' probe cells are in the matrix.
