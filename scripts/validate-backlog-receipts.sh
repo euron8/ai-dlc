@@ -1183,12 +1183,55 @@ fi
 # ===========================================================================
 EFFAWK="$WORK/eff.awk"
 { ledger_entry_awk; backlog_entry_label_awk; backlog_efficiency_tag_awk; cat <<'AWK'
-function eflush() {
+function eflush(   sok, vd, von, ntok, vcf) {
   if (label == "") return
   gsub(/[ \t]+/, " ", text); gsub(/[ \t]+/, " ", oc)
   if (stp == "") stp = "-"
-  printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%s\n", label, tagged, (index(text, "docs/analysis/") > 0), (index(text, "A step with no measured value goes") > 0 && index(text, ".claude/rules/operator-rulings.md") > 0), (index(text, "no graph pipeline step") > 0), landed, ocn, bas, stp, mv, oc
-  label = ""; tagged = 0; landed = 0; ocn = 0; oc = ""; inoc = 0; text = ""; bas = 0; stp = ""; mv = 0
+  sok = estep(stp)
+  vd = everdict(hv ? vf : "@NONE@"); von = (vd != "-" && egroup_on(stp))
+  ntok = (oc ~ /(^|[^A-Za-z0-9_.])[0-9][0-9.,]*( ?[MKB])? tokens([^A-Za-z]|$)/)
+  # VERDICT-CONFLICT's column (b255 F2b D1): the outcome prose says `did not fall` (a letter on
+  # neither side) while the Verdict field reads `fell`.
+  vcf = (vd == "fell" && oc ~ /(^|[^A-Za-z])[Dd]id not fall([^A-Za-z]|$)/)
+  printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t%s\t%d\t%d\t%d\t%s\n", label, tagged, (index(text, "docs/analysis/") > 0), (index(text, "A step with no measured value goes") > 0 && index(text, ".claude/rules/operator-rulings.md") > 0), (index(text, "no graph pipeline step") > 0), landed, ocn, bas, stp, mv, sok, vd, von, ntok, vcf, oc
+  label = ""; tagged = 0; landed = 0; ocn = 0; oc = ""; inoc = 0; text = ""; bas = 0; stp = ""; mv = 0; vf = ""; hv = 0; ng = 0
+}
+# THE STEP SET, ONE SOURCE (BL-817 item 2, and b255 F2b). V (the extractor's steps) and B (roll.py's
+# bucket tokens) are filled by the BEGIN block appended to this program once the vocabulary is read
+# below; F-STEP, NO-STEP-BOUND and the Verdict group all ask this function and nothing else.
+# `pre-step` is the extractor's pre-step bucket; `gate-validation[<main>]` takes any <main> in V
+# other than gate-validation itself; bare `gate-validation` is never a step.
+function estep(t,   m) {
+  if (t == "pre-step") return 1
+  if (t == "gate-validation") return 0
+  if (t ~ /^gate-validation\[.*\]$/) { m = substr(t, 17, length(t) - 17); return (m != "gate-validation" && (m in V)) }
+  return ((t in V) || (t in B))
+}
+# THE VERDICT FIELD (b255 F2b, BL-817 owed item (a)). `Verdict: <group> fell` or `Verdict: <group>
+# did not fall`, the WHOLE field, an optional final period, backticks and bold stripped. <group> is
+# `<tok>( plus <tok>)*`, each tok a step estep() accepts. Returns `fell`, `dnf`, or `-` (absent or
+# malformed: no direction can be read). The group's tokens go to G for egroup_on(). No separate
+# blank test: estep() already refuses a token carrying a blank, since no V or B member carries one.
+function everdict(f,   d, n, i, t) {
+  ng = 0
+  if (f == "@NONE@") return "-"
+  gsub(/[`*]/, "", f); sub(/[ \t]+$/, "", f); sub(/\.$/, "", f)
+  if (f ~ / did not fall$/) { d = "dnf"; sub(/ did not fall$/, "", f) }
+  else if (f ~ / fell$/) { d = "fell"; sub(/ fell$/, "", f) }
+  else return "-"
+  n = split(f, t, / plus /)
+  if (n < 1) return "-"
+  for (i = 1; i <= n; i++) { if (!estep(t[i])) return "-"; G[i] = t[i] }
+  ng = n
+  return d
+}
+# THE STEP BINDING (BL-817 owed item (b)). 1 iff the group names the entry's own step AND carries no
+# bucket token other than that step: `stories-test-strategy plus pipeline fell` is the BL-811 escape
+# (the step rose, the bucket fell), so a bucket is admitted only when the bucket IS the step.
+function egroup_on(s,   i, on) {
+  on = 0
+  for (i = 1; i <= ng; i++) { if (G[i] == s) on = 1; else if (G[i] in B) return 0 }
+  return on
 }
 # THE FILING FIELDS (BL-817 item 2), each a LABEL opening its own line, optionally bold or after
 # `<br>` / `- `. The step token is the first non-blank run after `Step:`, backticks and bold
@@ -1212,6 +1255,7 @@ function efield(l, name,   s) {
   f = efield($0, "Expected movement"); if (f != "@NONE@" && f ~ /[A-Za-z0-9]/) mv = 1
   f = efield($0, "Step")
   if (f != "@NONE@" && stp == "") { gsub(/[`*]/, "", f); sub(/[ \t].*$/, "", f); sub(/[.,;:]+$/, "", f); stp = f }
+  f = efield($0, "Verdict"); if (f != "@NONE@" && !hv) { vf = f; hv = 1 }
 }
 END { eflush() }
 AWK
@@ -1354,32 +1398,165 @@ EFF_SUBPROC="$(sed -n 's/^SUBPROC = {\(.*\)}$/\1/p' "$EFF_EXTRACT" | tr -d '" ' 
 [ -n "$EFF_STEP_RE" ] && [ -n "$EFF_SUBPROC" ] || { echo "$(me): FAIL -- no STEP_RE or SUBPROC line in $EFF_EXTRACT; the F-STEP vocabulary has drifted from the extractor." >&2; exit 2; }
 EFF_VOCAB="$(find "$SELF_ROOT/core" -name '*.md' -path '*/steps/*' 2>/dev/null | grep -E -- "$EFF_STEP_RE" | sed -e 's#.*/##' -e 's/\.md$//' | grep -vxF -- "$EFF_SUBPROC" | LC_ALL=C sort -u)"
 [ -n "$EFF_VOCAB" ] || { echo "$(me): FAIL -- no step file under $SELF_ROOT/core matches extract.py's STEP_RE ($EFF_STEP_RE); the F-STEP vocabulary is empty." >&2; exit 2; }
+# THE BUCKET TOKENS (b255 F2b), READ AT RUN TIME FROM roll.py, never copied: the second column of
+# every row of its `GROUPS = [` ... `]` list whose step set is `None` -- today `pipeline` and
+# `ai-dlc-update`, the buckets roll.py totals over every step. `Step: pipeline` declares the whole
+# pipeline. A missing roll.py, a missing GROUPS list or no None row is a refusal (exit 2).
+EFF_ROLL="$SELF_ROOT/docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py"
+[ -f "$EFF_ROLL" ] || { echo "$(me): FAIL -- $EFF_ROLL is missing, so the bucket tokens of the Verdict/Step grammar (BL-817) cannot be read; refusing rather than judging a verdict group against nothing." >&2; exit 2; }
+EFF_BUCKETS="$(awk '/^GROUPS = \[/ { g = 1; next } g && /^\]/ { exit } g' "$EFF_ROLL" | sed -n "s/^[[:space:]]*('[^']*', *'\([A-Za-z0-9_.-]*\)', *None),*[[:space:]]*\$/\1/p" | LC_ALL=C sort -u)"
+[ -n "$EFF_BUCKETS" ] || { echo "$(me): FAIL -- no GROUPS row with a None step set in $EFF_ROLL; the bucket tokens of the Verdict/Step grammar have drifted from roll.py." >&2; exit 2; }
+# The step set reaches the entry awk as an appended BEGIN block (awk runs every BEGIN), so estep()
+# needs no fork per entry. Every token is a file basename or a roll.py identifier, checked to the
+# safe class here so none can break the awk string it is written into.
+{ printf 'BEGIN {\n'
+  printf '%s\n' "$EFF_VOCAB" | LC_ALL=C grep -E '^[A-Za-z0-9_.-]+$' | sed 's/.*/  V["&"] = 1/'
+  printf '%s\n' "$EFF_BUCKETS" | sed 's/.*/  B["&"] = 1/'
+  printf '}\n'; } >> "$EFFAWK"
+# F-STEP's answer is the entry awk's `sok` column (estep() above, the one definition); this wrapper
+# keeps the call site and the mutant anchor.
 eff_step_ok() {
-  case "$1" in
-    pre-step) return 0 ;;
-    gate-validation\[*\]) local _m="${1#gate-validation[}"; _m="${_m%]}"; [ "$_m" != gate-validation ] && grep -qxF -- "$_m" <<<"$EFF_VOCAB" ;;
-    gate-validation) return 1 ;;
-    *) grep -qxF -- "$1" <<<"$EFF_VOCAB" ;;
-  esac
+  [ "$1" = 1 ]
 }
-# eff_cite_ok <outcome-text> <root> -- 0 iff some `path:line "phrase"` resolves BY THE PHRASE to a
-# `Failure caught:` line or a table row of that file under <root>. grep, never awk getline: an
-# unopenable file must not read as an empty one.
+# eff_cite_ok <outcome-text> <root> [live|archive] -- 0 iff some `path:line "phrase"` citation's
+# phrase QUALIFIES; else 2 if some phrase resolved (hit a line of a file under <root>), else 1.
+# THE VALUE CITATION (b255 F2b item (d); BL-817). LIVE: a phrase qualifies iff it is non-empty, hits
+# EXACTLY ONE line of <root>/<path>, that line does not carry `did not fall` (a letter on neither
+# side), and the line is either
+#   (a) a `Failure caught:` line in a file under core/skills/ai-dlc/steps/ whose tail is non-null; or
+#   (b) a table row that is not its table's header (the first `|` line of a contiguous block), where
+#       the header has a column matching `Failure caught|[Uu]nique|[Cc]atch` and the row's cell in
+#       at least one such column is non-null.
+# Null: empty, none, n/a, -, an em dash, 0, no, nothing, or a cell starting `no ` or `0 `. A phrase
+# that resolves with no qualifying line is VALUE-NULL; none resolving is NO-VALUE-CITATION. ARCHIVE
+# judges as before: any hit line that is a `Failure caught:` line or a table row.
+# THE LIMIT, stated because the arm header says a figure's VALUE is never judged: this checks the
+# SHAPE of the cited line, not the truth of its value. A made-up non-null cell under a catch header
+# still passes.
+# COST: ONE awk per citation ($EFFCITE), which replaced a sed, a grep and a second grep. The citation
+# goes in by ENVIRON, never -v (which strips one level of escaping), and the cited file is awk's MAIN
+# input, never `getline <`, so an unopenable file is an awk error exit, which reads as unresolved
+# beside the shell `[ -f ]`. Exit 0 qualifies; 4 resolved, null; 5 resolved, null live but an
+# old-rule hit (a row or a Failure caught: line), which --archive accepts; anything else unresolved.
+# FALSE-POSITIVE STORY: measured with this validator over the archive (32 in the close population,
+# 6 value citations) and the live ledger. The live ledger has no close population at this base, so
+# its FP set is 0. Over the archive the new predicate flips exactly ONE entry, BL-594: its phrase
+# "Keep as the convergence exit" hits TWO rows of docs/analysis/step-value-s317-s319.md, and the p1
+# row's catch cell, "no unique high-consequence catch", is null. It was filed and closed before
+# this arm existed, so it is the enumerated exception: an archive entry present at the merge-base
+# with origin/main keeps the old any-hit rule rather than being re-judged (see eff_close for the
+# scope; an archive entry ADDED since the merge-base takes the live rule).
 eff_cite_ok() {
-  local _c _p _ph _hits
+  local _c _p _r _res=1
   while IFS= read -r _c; do
     [ -n "$_c" ] || continue
     _p="${_c%%:*}"
-    _ph="$(sed -n 's/^[^"]*"\([^"]*\)".*/\1/p' <<<"$_c")"
-    [ -n "$_ph" ] && [ -f "$2/$_p" ] || continue
-    _hits="$(grep -F -- "$_ph" "$2/$_p" 2>/dev/null)" || continue
-    grep -qE 'Failure caught:|^[[:space:]]*\|' <<<"$_hits" && return 0
+    [ -f "$2/$_p" ] || continue
+    _r=0; EFF_CITE="$_c" awk -f "$EFFCITE" "$2/$_p" 2>/dev/null || _r=$?
+    case "$_r" in
+      0) return 0 ;;
+      5) [ "${3:-live}" = archive ] && return 0; _res=2 ;;
+      4) _res=2 ;;
+    esac
   done <<EOF
 $(grep -oE '[A-Za-z0-9_./-]+\.(md|sh|py):[0-9]+[^"]{0,16}"[^"]+"' <<<"$1")
 EOF
-  return 1
+  return "$_res"
 }
-# eff_close <outcome-present> <outcome-text> <root> -> a finding code, or nothing
+EFFCITE="$WORK/effcite.awk"
+cat > "$EFFCITE" <<'AWK'
+function trim(s) { gsub(/^[ \t*`]+|[ \t*`.]+$/, "", s); return s }
+function isnull(s) { s = tolower(trim(s)); return (s == "" || s ~ /^(none|n\/a|-|—|0|no|nothing)$/ || s ~ /^(no|0) /) }
+BEGIN {
+  c = ENVIRON["EFF_CITE"]; ph = ""; i = index(c, "\"")
+  if (i) { r = substr(c, i + 1); j = index(r, "\""); if (j > 1) ph = substr(r, 1, j - 1) }
+  if (ph == "") { bad = 1; exit 1 }
+  insteps = (substr(c, 1, index(c, ":") - 1) ~ /^core\/skills\/ai-dlc\/steps\//)
+}
+{ isrow = ($0 ~ /^[ \t]*\|/) }
+isrow && !intab { intab = 1; hdr = $0; hnr = NR }
+!isrow { intab = 0 }
+index($0, ph) {
+  hits++
+  fc = (index($0, "Failure caught:") > 0)
+  if (isrow || fc) old = 1
+  q = 0
+  if (fc && insteps) { t = $0; sub(/.*Failure caught:/, "", t); if (!isnull(t)) q = 1 }
+  if (isrow && NR != hnr) {
+    nh = split(hdr, H, "|"); nr = split($0, R, "|")
+    for (k = 1; k <= nh; k++) if (H[k] ~ /Failure caught|[Uu]nique|[Cc]atch/ && k <= nr && !isnull(R[k])) q = 1
+  }
+  if ($0 ~ /(^|[^A-Za-z])[Dd]id not fall([^A-Za-z]|$)/) q = 0
+}
+END { if (bad || !hits) exit 1; if (hits == 1 && q) exit 0; exit (old ? 5 : 4) }
+AWK
+# eff_close <outcome-present> <outcome-text> <root> <live|archive> <sok> <vd> <von> <ntok> <step-at-close> <vcf>
+#   -> a finding code, or nothing. Arguments 5-8 and 10 are the entry awk's columns; 9 is 1 when the
+#   entry's step differs from, or is absent at, the merge-base (STEP-AT-CLOSE), 0 otherwise or when
+#   no merge-base was evaluated. <live|archive> is the RULE, not the file: eff_corpus passes `live`
+#   for every live-ledger entry and for every archive entry added since the merge-base.
+# THE VERDICT GRAMMAR, LIVE LEDGER ONLY (b255 F2b, BL-817 owed items (a), (b), (c)). A sprint-branch
+# close on the live ledger, after SHAPE / NO-SCRIPT / NO-FIGURES, also needs, in this order:
+#   NO-TOKENS      a token figure in the outcome line, `<n> tokens` / `<n>M tokens` / `<n> K tokens`
+#                  (the `ntok` column; roll.py seat_line prints `<x.1f>M tokens`);
+#   NO-STEP-BOUND  a `Step:` line naming a step estep() accepts (`sok`) -- no Basis fallback.
+#                  THE BASIS LINES, re-measured at origin/main 5a6a6c657 and at this tip, both files
+#                  alike, <f> docs/backlog.md and docs/backlog.archive.md:
+#                    git show <ref>:<f> | grep -cE '^(<br>|- )?(\*\*)?Basis:'     -> 0 live, 0 archive
+#                    git show <ref>:<f> | grep -cE '^(<br>|- )?(\*\*)?Basis[ :(]' -> 5 live, 0 archive
+#                    control, git show <ref>:<f> | grep -cE '^(<br>|- )?(\*\*)?Step:' -> 10 live, 3 archive
+#                  The first pattern's 0 was BLIND, not a finding: the ledger's form is `Basis
+#                  (operator ruling, BL-817):`, a parenthesis before the colon, which `Basis:` cannot
+#                  spell. Seeded check, four lines (`Basis (operator ruling, BL-817): x`, `- **Basis: y`,
+#                  `Basisless: z`, `not Basis (x)`): the second pattern matches 2, the first 1, missing
+#                  exactly the parenthesised form. The 5 lines, one each in BL-808, 809, 810, 811 and
+#                  812, all open `Basis (operator ruling, BL-817): dollars are token-equivalent ...`
+#                  and each declares the STEP SCOPE ITS PRICING COVERS: BL-808 and BL-809
+#                  implementation plus gate-validation[implementation]; BL-810 the four planning steps
+#                  (no single token); BL-811 stories-test-strategy; BL-812 the whole `pipeline` bucket.
+#                  A pricing-scope line is not a step declaration, so the fallback is dropped by
+#                  design and a close binds only through a `Step:` field: no close binds through a
+#                  Basis line, and an entry whose only step naming is its Basis line fails closed
+#                  (NO-STEP-BOUND). All 5 declare a step scope, and BL-808, 809, 811 and 812 carry
+#                  a matching `Step:` line (implementation, implementation, stories-test-strategy,
+#                  pipeline). BL-810 does not: its scope is four steps and the `Step:` field takes
+#                  one token (cut at the first blank, line 1257 above), so its step is owed before
+#                  the release that closes it, which otherwise fails closed (NO-STEP-BOUND).
+#   NO-DIRECTION   a `Verdict: <group> fell|did not fall` field (`vd`); direction is read from
+#                  that field ONLY, never from `fell` anywhere in the prose;
+#   OFF-STEP       a group naming the entry's own step and no bucket token other than it (`von`);
+#   STEP-AT-CLOSE  a step already declared, identically, at the merge-base (argument 9);
+#   VERDICT-CONFLICT a `fell` field while the outcome prose says `did not fall`, letter-bounded
+#                  (argument 10): the field cannot cancel the value-citation rule the prose owes;
+# and then `did not fall` keeps its value citation: none resolving is NO-VALUE-CITATION, one
+# resolving to no qualifying line is VALUE-NULL (eff_cite_ok, live rule).
+# THE ARCHIVE SCOPE IS BY MERGE-BASE, NOT BY MODE (b255 F2b D2). Under --archive, every archive
+# entry ADDED since the merge-base with origin/main (absent from docs/backlog.archive.md there;
+# eff_added_labels, the live ledger's derivation applied to the archive) is judged by the LIVE rules
+# above, so a close cannot go from unstamped-live to archived in one squash and never meet them; its
+# STEP-AT-CLOSE base is the merge-base's live ledger plus archive, where a rotated entry's Step line
+# sat. Entries PRESENT in the archive at the merge-base keep the archive rule: direction from the
+# Verdict field when the entry carries one, else from `fell` / `did not fall` anywhere in the line,
+# and the old any-hit value citation. With no origin/main, no merge-base, or the archive untracked
+# there, nothing is added and every archive entry takes the archive rule; the OK line says why.
+# The filing arms (F-*) stay live-ledger-only in both modes.
+# FALSE-POSITIVE STORY: measured with this validator over the live ledger at 0.1060.0 (fc292b591;
+# `git show fc292b591:docs/backlog.md > <scratch>/backlog.md`, then the --efficiency-only command
+# below: 60 entries, 0 in the close population, since nothing is stamped), over a stamped scratch
+# copy, and over the archive with --archive (32 in the population, 24 no-step, verdicts unchanged).
+# The full measurement is in the release that introduced this arm. THE SCOPE IS THE NARROWING, AND THE PRE-EXISTING SET IS MEASURED,
+# not hand-listed: the live close rules over EVERY archive entry at origin/main 09bec4bc3, by
+#   git show 09bec4bc3:docs/backlog.archive.md > <scratch>/backlog.archive.md
+#   bash scripts/validate-backlog-receipts.sh <scratch>/backlog.archive.md --efficiency-only --root .
+# (a ledger outside the tree, so the live branch runs with no merge-base set: STEP-AT-CLOSE and the
+# added-entry filing arms not evaluated), close codes only, first failing rule per entry:
+#   BL-507, 509, 511, 513, 515, 568, 569, 694 NO-STEP-BOUND; BL-594 NO-TOKENS
+# -- 9 of 33 in the close population, the 24 others on the no-step branch. These are the archive's 9
+# sprint-branch closes, filed and closed before the arm existed (BL-507 archived at 0.1063.0 with no
+# Step: or Verdict line); BL-594 is also the value-citation exception (see eff_cite_ok). They are
+# exempt BY BEING PRESENT IN THE ARCHIVE AT THE MERGE-BASE (the E3/E3b precedent: an entry closed
+# before an arm is not re-judged by it), never by a blanket exemption of the archive: a merge-base
+# before an entry's archiving judges it live, and BL-507 then fires NO-STEP-BOUND. The live set is empty.
 eff_close() {
   [ "$1" = "1" ] || { echo NO-OUTCOME; return; }
   if ! eff_names_sprint "$2"; then
@@ -1389,8 +1566,25 @@ eff_close() {
   eff_shape_ok "$2" || { echo SHAPE; return; }
   eff_script_ok "$2" "$3" || { echo NO-SCRIPT; return; }
   eff_figs_ok "$2" || { echo NO-FIGURES; return; }
+  if [ "$4" = live ]; then
+    [ "$8" = 1 ] || { echo NO-TOKENS; return; }
+    [ "$5" = 1 ] || { echo NO-STEP-BOUND; return; }
+    [ "$6" != - ] || { echo NO-DIRECTION; return; }
+    [ "$7" = 1 ] || { echo OFF-STEP; return; }
+    [ "$9" != 1 ] || { echo STEP-AT-CLOSE; return; }
+    [ "${10}" != 1 ] || { echo VERDICT-CONFLICT; return; }
+    if [ "$6" = dnf ]; then
+      eff_cite_ok "$2" "$3" live
+      case $? in 0) ;; 2) echo VALUE-NULL ;; *) echo NO-VALUE-CITATION ;; esac
+    fi
+    return
+  fi
+  case "$6" in
+    dnf) eff_cite_ok "$2" "$3" archive || echo NO-VALUE-CITATION; return ;;
+    fell) return ;;
+  esac
   case "$2" in
-    *"did not fall"*) eff_cite_ok "$2" "$3" || echo NO-VALUE-CITATION ;;
+    *"did not fall"*) eff_cite_ok "$2" "$3" archive || echo NO-VALUE-CITATION ;;
     *fell*) ;;
     *) echo NO-DIRECTION ;;
   esac
@@ -1400,9 +1594,16 @@ eff_close() {
 # (the population F-RULING reads; an untagged docs/analysis/ citer is F-UNTAGGED's) that is not on
 # the no-step branch and whose label is in <added-labels-file> -- the entries ADDED on this branch.
 # No file, or `--archive`, and they judge nothing: an entry filed before the arm is not re-filed.
+# Under `archive`, <added-labels-file> names the archive entries ADDED since the merge-base, and
+# each of those is closed by the LIVE rules (eff_close's `live`); the rest keep the archive rule.
 eff_corpus() {
-  local _l _t _a _r _n _ld _on _bs _st _mv _oc _code _pop=0 _ns=0 _ent=0 _fadd=0
-  while IFS="$(printf '\t')" read -r _l _t _a _r _n _ld _on _bs _st _mv _oc; do
+  local _l _t _a _r _n _ld _on _bs _st _mv _sok _vd _von _ntok _vcf _oc _code _sac _rule _chg="" _add="" _pop=0 _ns=0 _ent=0 _fadd=0 _alive=0
+  # STEP-AT-CLOSE's set, read ONCE (no fork per entry): the labels eff_added_labels found whose
+  # step differs from, or is absent at, the merge-base. No added-labels file, no set: not evaluated.
+  [ -n "${4:-}" ] && [ -f "$4.stepchg" ] && _chg="$(cat "$4.stepchg")"
+  # The archive's added set, read ONCE for the same reason.
+  [ "$3" = archive ] && [ -n "${4:-}" ] && [ -f "$4" ] && _add="$(cat "$4")"
+  while IFS="$(printf '\t')" read -r _l _t _a _r _n _ld _on _bs _st _mv _sok _vd _von _ntok _vcf _oc; do
     [ -n "$_l" ] || continue
     _ent=$((_ent + 1))
     if [ "$3" = "live" ]; then
@@ -1411,26 +1612,41 @@ eff_corpus() {
       if [ "$_t" = "1" ] && [ "$_n" != "1" ] && [ -n "${4:-}" ] && grep -qxF -- "$_l" "$4"; then
         _fadd=$((_fadd + 1))
         [ "$_bs" = "1" ] || printf 'F-BASELINE\t%s\n' "$_l"
-        eff_step_ok "$_st" || printf 'F-STEP\t%s\n' "$_l"
+        eff_step_ok "$_sok" || printf 'F-STEP\t%s\n' "$_l"
         [ "$_mv" = "1" ] || printf 'F-MOVEMENT\t%s\n' "$_l"
       fi
     fi
     if [ "$_ld" = "1" ] && { [ "$_t" = "1" ] || [ "$_on" = "1" ]; }; then
       _pop=$((_pop + 1))
-      _code="$(eff_close "$_on" "$_oc" "$2")"
+      _sac=0
+      case "
+$_chg
+" in *"
+$_l
+"*) _sac=1 ;; esac
+      _rule="$3"
+      case "
+$_add
+" in *"
+$_l
+"*) _rule=live; _alive=$((_alive + 1)) ;; esac
+      _code="$(eff_close "$_on" "$_oc" "$2" "$_rule" "$_sok" "$_vd" "$_von" "$_ntok" "$_sac" "$_vcf")"
       if [ -n "$_code" ]; then printf '%s\t%s\n' "$_code" "$_l"
       elif ! eff_names_sprint "$_oc"; then _ns=$((_ns + 1)); fi
     fi
   done <<EOF
 $(awk -f "$EFFAWK" "$1")
 EOF
-  printf '%s %s %s %s\n' "$_ent" "$_pop" "$_ns" "$_fadd" > "$WORK/eff.counts"
+  printf '%s %s %s %s %s\n' "$_ent" "$_pop" "$_ns" "$_fadd" "$_alive" > "$WORK/eff.counts"
 }
 # eff_added_labels <ledger> <root> <out-file> -- the entry labels in <ledger> that its version at
 # the merge-base of HEAD with origin/main does not carry. Prints the base sha, or a SKIP reason
 # (origin/main absent, or the ledger not tracked at the base) and leaves <out-file> absent.
-eff_added_labels() {
-  local _abs _rel _base
+# <step-base-name>, given under --archive as the live ledger's basename, adds that file beside the
+# ledger AT THE MERGE-BASE to the step map STEP-AT-CLOSE compares against (never to the added set):
+# an entry stamped and rotated in one commit had its Step line in the live ledger at the base.
+eff_added_labels() { # eff_added_labels <ledger> <root> <out-file> [<step-base-name>]
+  local _abs _rel _base _sb _x=""
   _abs="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
   case "$_abs" in "$2"/*) _rel="${_abs#"$2"/}" ;; *) echo "not evaluated -- $1 is outside $2"; return ;; esac
   git -C "$2" rev-parse -q --verify origin/main >/dev/null 2>&1 || { echo "not evaluated -- origin/main is absent"; return; }
@@ -1438,10 +1654,15 @@ eff_added_labels() {
   git -C "$2" cat-file -e "${_base}:${_rel}" 2>/dev/null || { echo "not evaluated -- $_rel is not tracked at the merge-base ${_base}"; return; }
   # Each step is checked: a failing read here would leave an EMPTY added set, which reads exactly
   # like "nothing was added" and lets every new filing through. Refuse instead.
+  _sb="$3.bent"
+  if [ -n "${4:-}" ]; then case "$_rel" in */*) _x="${_rel%/*}/$4" ;; *) _x="$4" ;; esac; fi
   git -C "$2" show "${_base}:${_rel}" > "$3.blob" 2>/dev/null \
     && awk -f "$EFFAWK" "$3.blob" > "$3.bent" && awk -f "$EFFAWK" "$1" > "$3.tent" \
     && awk -F'\t' 'NR == FNR { b[$1] = 1; next } !($1 in b) { print $1 }' "$3.bent" "$3.tent" > "$3" \
-    || { echo "$(me): FAIL -- could not derive the entries added since merge-base ${_base}; refusing rather than judging the filing shape against an empty set." >&2; rm -f "$3"; return 2; }
+    && { [ -z "$_x" ] || ! git -C "$2" cat-file -e "${_base}:${_x}" 2>/dev/null \
+         || { _sb="$3.sbent"; git -C "$2" show "${_base}:${_x}" | awk -f "$EFFAWK" | cat - "$3.bent" > "$_sb"; }; } \
+    && awk -F'\t' 'NR == FNR { s[$1] = $9; next } !($1 in s) || s[$1] == "-" || s[$1] != $9 { print $1 }' "$_sb" "$3.tent" > "$3.stepchg" \
+    || { echo "$(me): FAIL -- could not derive the entries added since merge-base ${_base}; refusing rather than judging the filing shape against an empty set." >&2; rm -f "$3" "$3.stepchg"; return 2; }
   echo "against merge-base ${_base}"
 }
 }
@@ -1463,25 +1684,66 @@ vbr_probe_e0() {
 # baseline `s31` (F-BASELINE); BL-993 the sub-procedure `_gate-procedures` (F-STEP); BL-994 an empty
 # `Expected movement:` (F-MOVEMENT); BL-995 no fields and NOT added (quiet: the scope); BL-996 added
 # with the no-step line and no fields (quiet: the exemption).
+# The verdict grammar (b255 F2b): every quiet sprint-branch seed above carries a token figure (EPL),
+# a Step: line and a Verdict field (EPF / EPD; BL-959 the bold, backticked spelling). BL-1000 has
+# only `s321 tokens` (NO-TOKENS) and BL-1001 `1,234,567 tokens` (quiet); BL-1002 no Step: line and
+# BL-1004 a step outside the set (NO-STEP-BOUND), BL-1003 `gate-validation[implementation]` (quiet);
+# BL-1005 no Verdict field but `the shards fell` in prose and BL-1006 `fell sharply` (NO-DIRECTION),
+# BL-1007 a `did not fall` field beside a prose `fell` (NO-VALUE-CITATION: the field decides);
+# BL-1008 the bucket ($EPB) on an implementation step and BL-1009 the step plus the bucket
+# (OFF-STEP), BL-1010 `Step: <bucket>` with `<bucket> fell` and BL-1011 a plus-group naming the step
+# (quiet); BL-1012 is in $EP/added.stepchg (STEP-AT-CLOSE), BL-1013 is not though BL-10133 is
+# (quiet); BL-1014 a no-step line with a stray `fell` and no token figure (quiet, no-step branch);
+# BL-1015 an added filing with `Step: <bucket>` (quiet: F-STEP takes a bucket token). E0's ledger is
+# isolated, and BL-1000..1015 and BL-10133 were checked unused in docs/backlog.md and
+# docs/backlog.archive.md (control BL-976 present) when seeded. BL-1057..1060 (VERDICT-CONFLICT and
+# the archive's merge-base scope, described where they are printed) were checked the same way:
+# 0 and 0 in each file, control BL-976 3 and 1.
 EP="$WORK/effprobe"; mkdir -p "$EP/docs/m"
-printf '| E-9 | ROWPHRASE alpha |\n**Mechanism.** Failure caught: FCPHRASE beta\nPLAINPHRASE gamma\n' > "$EP/docs/v.md"
+printf '| Fix | Failure caught |\n|---|---|\n| E-9 | ROWPHRASE alpha |\n\nPLAINPHRASE gamma\n' > "$EP/docs/v.md"
+mkdir -p "$EP/core/skills/ai-dlc/steps"
+printf '**Mechanism.** Failure caught: FCPHRASE beta\n**Mechanism.** Failure caught: a capital-path or address defect in QUIETFC delta\nNULLFCPHRASE four. Failure caught: none\n' > "$EP/core/skills/ai-dlc/steps/s.md"
+# item (d) seeds (BL-1046..1056): one file, each phrase on the line its seed needs. Every cell of
+# BL-1051's row is null (em dashes, and `0 of ...` in the catch column), so dropping the catch-column
+# test cannot acquit it through another cell; BL-1050's row has no catch column and no `did not fall`.
+{ printf '### Catches\n\n| Fix | Failure caught | Measured |\n|---|---|---|\n'
+  printf '| d1 | DUPPHRASE one | x |\n| d1b | E-1 MAJOR | DUPPHRASE one again |\n'
+  printf '| d2 | DNFPHRASE caught MAJOR | the step did not fall |\n'
+  printf '| \342\200\224 | 0 of NULLPHRASE six | \342\200\224 |\n'
+  printf '| q3 | did not fail | DNFAILPHRASE quiet |\n'
+  printf '| p2 | E-2 MAJOR | ARCHPHRASE seven again |\n| p1 | no unique high-consequence catch | ARCHPHRASE seven |\n\n'
+  printf '| Fix | Unique survived | Cost |\n|---|---|---|\n| SURVPHRASE s321 per-story shards | 36 | $3.10 |\n\n'
+  printf '### No measurable effect\n\n| Fix | Entry | Measured |\n|---|---|---|\n| x | BL-1050 | NOCATCHPHRASE step group held across the post-fix sprints |\n\n'
+  printf '| Fix HDRPHRASE | Failure caught | Measured |\n|---|---|---|\n| a | E-1 | b |\n\n'
+  printf 'Failure caught: FCOUTPHRASE a real defect\n'
+} > "$EP/docs/d.md"
 : > "$EP/docs/m/roll.py"; : > "$EP/docs/m/run.sh"
-printf 'BL-988\nBL-989\nBL-990\nBL-991\nBL-992\nBL-993\nBL-994\nBL-996\n' > "$EP/added"
+printf 'BL-988\nBL-989\nBL-990\nBL-991\nBL-992\nBL-993\nBL-994\nBL-996\nBL-1015\n' > "$EP/added"
+printf 'BL-1012\nBL-10133\n' > "$EP/added.stepchg"
 EPR='Cites "A step with no measured value goes" in `.claude/rules/operator-rulings.md`.'
-EPL='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
+EPL0='token-equivalent $9 with API $8 beside it, 1.0 h gap-inclusive'
+EPL="$EPL0, 2.1M tokens"
 EPM='measured by docs/m/roll.py, before 2.0 h and after 1.0 h'
 EPS="$EPL, lead active 0.4 h, subagent \$5, $EPM"
+EPS0="$EPL0, lead active 0.4 h, subagent \$5, $EPM"
+EPF=$'\n\nStep: implementation\n\nVerdict: implementation fell.'
+EPD=$'\n\nStep: implementation\n\nVerdict: implementation did not fall.'
+EPH='**DEFECT (efficiency).** x.'
+# E0 judges against the vocabulary of whatever tree runs it (a fixture world seeds one step file,
+# `implementation`), so every seed names only `implementation` and the FIRST bucket token roll.py gives.
+EPB="${EFF_BUCKETS%%$'\n'*}"
+EPC='**LANDED (v0.1.0, verified abc1234).**'
 {
   printf '# probe\n\n'
   printf '## BL-951\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n' "$EPR"
-  printf '## BL-952\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall.\n\n' "$EPR" "$EPS"
-  printf '## BL-953\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; fell from 2.0 h.\n\n' "$EPR" "$EPS"
-  printf '## BL-954\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall;\nvalue: docs/v.md:1 "ROWPHRASE alpha".\n\n' "$EPR" "$EPS"
+  printf '## BL-952\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall.%s\n\n' "$EPR" "$EPS" "$EPD"
+  printf '## BL-953\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; fell from 2.0 h.%s\n\n' "$EPR" "$EPS" "$EPF"
+  printf '## BL-954\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall;\nvalue: docs/v.md:1 "ROWPHRASE alpha".%s\n\n' "$EPR" "$EPS" "$EPD"
   printf '## BL-955\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: no graph pipeline step; the cost lives in scripts/x.sh.\n\n' "$EPR"
   printf '## BL-956\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: the cost fell.\n\n' "$EPR"
   printf '## BL-957\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, API $8, 1.0 h gap-inclusive; fell.\n\n' "$EPR"
-  printf '## BL-958\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall; docs/v.md:3 "PLAINPHRASE gamma".\n\n' "$EPR" "$EPS"
-  printf '## BL-959\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n<br>**Outcome measured:** graph sprint 321, %s; did not fall; `docs/v.md:2` "FCPHRASE beta".\n\n' "$EPR" "$EPS"
+  printf '## BL-958\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; did not fall; docs/v.md:3 "PLAINPHRASE gamma".%s\n\n' "$EPR" "$EPS" "$EPD"
+  printf '## BL-959\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n<br>**Outcome measured:** graph sprint 321, %s; did not fall; `core/skills/ai-dlc/steps/s.md:1` "FCPHRASE beta".\n\n**Step:** `implementation`\n\n**Verdict:** `implementation` did not fall.\n\n' "$EPR" "$EPS"
   printf '## BL-960\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: no graph pipeline step.\n\n' "$EPR"
   printf '## BL-961\n\n**DEFECT (efficiency).** filed without the ruling.\n\n'
   printf '## BL-962\n\n**DEFECT (efficiency).** Cites "A step with no measured value\ngoes" in `.claude/rules/operator-rulings.md`.\n\n'
@@ -1490,7 +1752,7 @@ EPS="$EPL, lead active 0.4 h, subagent \$5, $EPM"
   printf '## A section heading\n\nSection prose citing docs/analysis/x.md.\n\n'
   printf '## BL-965\n\nAn ordinary entry.\n\n'
   printf '## BL-966\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: no graph pipeline step; the cost lives in docs/analysis/pipeline-efficiency-s317-s320/scripts/x.py, analysis tooling.\n\n' "$EPR"
-  printf '## BL-967\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: measured on s319 and s320, %s; fell from 2.0 h.\n\n' "$EPR" "$EPS"
+  printf '## BL-967\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: measured on s319 and s320, %s; fell from 2.0 h.%s\n\n' "$EPR" "$EPS" "$EPF"
   printf '## BL-968\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: the `s319` run, see docs/analysis/pipeline-efficiency-s317-s320/x.md, %s; fell.\n\n' "$EPR" "$EPS"
   printf '## BL-969\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; fell.\n\n' "$EPR" "$EPL"
   printf '## BL-970\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s. Lead-seat local-model share of calls in this step group: s321 2%%; subagent seats ran hosted models only (opus, sonnet, haiku); lead `Agent` calls (s321 51). The step fell.\n\n' "$EPR" "$EPL"
@@ -1498,8 +1760,8 @@ EPS="$EPL, lead active 0.4 h, subagent \$5, $EPM"
   printf '## BL-972\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; lead and subagent 1.2 h; fell.\n\n' "$EPR" "$EPL"
   printf '## BL-973\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; lead active 1.2 h; fell.\n\n' "$EPR" "$EPL"
   printf '## BL-974\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; leading 1.2 h, mislead $3; subagent $5.6; fell.\n\n' "$EPR" "$EPL"
-  printf '## BL-975\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; lead active 1.2 h, lead $3.4; subagents 0.8 h / $5.6; %s; fell.\n\n' "$EPR" "$EPL" "$EPM"
-  printf '## BL-976\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; Lead (BL-819) s321 1.2 h; Subagent sprint 321 $5.6; %s; fell.\n\n' "$EPR" "$EPL" "$EPM"
+  printf '## BL-975\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; lead active 1.2 h, lead $3.4; subagents 0.8 h / $5.6; %s; fell.%s\n\n' "$EPR" "$EPL" "$EPM" "$EPF"
+  printf '## BL-976\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s; Lead (BL-819) s321 1.2 h; Subagent sprint 321 $5.6; %s; fell.%s\n\n' "$EPR" "$EPL" "$EPM" "$EPF"
   printf '## BL-977\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, lead active 0.4 h; subagent seats ran hosted models only. token-equivalent $9 (API $8), 1.0 h gap-inclusive; fell.\n\n' "$EPR"
   printf '## BL-978\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, lead active 0.4 h; subagents were not used; 1.0 h gap-inclusive, token-equivalent $9 (API $8); fell.\n' "$EPR"
   # THE OTHER THREE TAG SPELLINGS (BL-835), each closed with no outcome line, each must fire
@@ -1510,10 +1772,10 @@ EPS="$EPL, lead active 0.4 h, subagent \$5, $EPM"
   printf '## BL-981\n\nPreamble. **DEFECT. [efficiency rank 3] $12, 40 agent-minutes.** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\n' "$EPR"
   printf '## BL-982\n\n**Lead hours and lead tokens join every efficiency outcome.** x.\n\n**LANDED (v0.1.0, verified abc1234).**\n\n'
   printf '## BL-983\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s, lead active 0.4 h, subagent $5, measured by docs/m/gone.py from docs/m/run.sh:12, before 2.0 h and after 1.0 h; fell.\n\n' "$EPR" "$EPL"
-  printf '## BL-984\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s, lead active 0.4 h, subagent $5, `docs/m/` (roll.py), before 2.0 h and after 1.0 h; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-984\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s, lead active 0.4 h, subagent $5, `docs/m/` (roll.py), before 2.0 h and after 1.0 h; fell.%s\n\n' "$EPR" "$EPL" "$EPF"
   printf '## BL-985\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s, lead active 0.4 h, subagent $5, `docs/m/` (gone.py), before 2.0 h and after 1.0 h; fell.\n\n' "$EPR" "$EPL"
   printf '## BL-986\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s319 to s320, %s, lead active 0.4 h, subagent $5, measured by docs/m/roll.py, 2.0 h before; fell.\n\n' "$EPR" "$EPL"
-  printf '## BL-987\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s, lead active 0.4 h, subagent $5, measured by docs/m/roll.py, $/shard $2.23 to 1.24; fell.\n\n' "$EPR" "$EPL"
+  printf '## BL-987\n\n**DEFECT (efficiency).** x. %s\n\n**LANDED (v0.1.0, verified abc1234).**\n\nOutcome measured: graph s321, %s, lead active 0.4 h, subagent $5, measured by docs/m/roll.py, $/shard $2.23 to 1.24; fell.%s\n\n' "$EPR" "$EPL" "$EPF"
   printf '## BL-988\n\n**DEFECT (efficiency).** x. %s\n\n' "$EPR"
   printf '## BL-989\n\n**DEFECT (efficiency).** x. %s\n\nBaseline: s320\nStep: `implementation`\nExpected movement: lead dollars per story fall.\n\n' "$EPR"
   printf '## BL-990\n\n**DEFECT (efficiency).** x. %s\n\nBaseline: s320\nStep: gate-validation\nExpected movement: falls.\n\n' "$EPR"
@@ -1523,38 +1785,109 @@ EPS="$EPL, lead active 0.4 h, subagent \$5, $EPM"
   printf '## BL-994\n\n**DEFECT (efficiency).** x. %s\n\nBaseline: s320\nStep: implementation\nExpected movement:\n\n' "$EPR"
   printf '## BL-995\n\n**DEFECT (efficiency).** x. %s\n\n' "$EPR"
   printf '## BL-996\n\n**DEFECT (efficiency).** x. %s There is no graph pipeline step.\n\n' "$EPR"
+  # THE VERDICT GRAMMAR (b255 F2b): one fire seed and one quiet near-miss per rule, each line
+  # otherwise valid so it reaches exactly its own rule.
+  printf '## BL-1000\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; s321 tokens were not counted.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS0" "$EPF"
+  printf '## BL-1001\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s (1,234,567 tokens).%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS0" "$EPF"
+  printf '## BL-1002\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\nVerdict: implementation fell.\n\n' "$EPH" "$EPR" "$EPC" "$EPS"
+  printf '## BL-1003\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\n**Step:** `gate-validation[implementation]`\n\nVerdict: gate-validation[implementation] fell\n\n' "$EPH" "$EPR" "$EPC" "$EPS"
+  printf '## BL-1004\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\nStep: bogus-step\n\nVerdict: bogus-step fell.\n\n' "$EPH" "$EPR" "$EPC" "$EPS"
+  printf '## BL-1005\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; the shards fell.\n\nStep: implementation\n\n' "$EPH" "$EPR" "$EPC" "$EPS"
+  printf '## BL-1006\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\nStep: implementation\n\nVerdict: implementation fell sharply.\n\n' "$EPH" "$EPR" "$EPC" "$EPS"
+  printf '## BL-1007\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; the shards fell.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPD"
+  printf '## BL-1008\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\nStep: implementation\n\nVerdict: %s fell.\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPB"
+  printf '## BL-1009\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\nStep: implementation\n\nVerdict: implementation plus %s fell.\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPB"
+  printf '## BL-1010\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\nStep: %s\n\nVerdict: %s fell.\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPB" "$EPB"
+  printf '## BL-1011\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.\n\nStep: implementation\n\nVerdict: implementation plus gate-validation[implementation] fell.\n\n' "$EPH" "$EPR" "$EPC" "$EPS"
+  printf '## BL-1012\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPF"
+  printf '## BL-1013\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPF"
+  printf '## BL-1014\n\n%s %s\n\n%s\n\nOutcome measured: no graph pipeline step; the cost lives in scripts/x.sh, and the hours fell.\n\n' "$EPH" "$EPR" "$EPC"
+  printf '## BL-1015\n\n%s %s\n\nBaseline: s320\nStep: %s\nExpected movement: falls.\n\n' "$EPH" "$EPR" "$EPB"
+  # ITEM (d), THE VALUE CITATION: fire seeds BL-1046..1052, each passing every earlier live code
+  # and failing exactly one qualifying rule; quiet seeds BL-1053..1055; BL-1056 the BL-594 shape.
+  for _d in 'BL-1046|docs/d.md:5 "DUPPHRASE one"' 'BL-1047|docs/d.md:7 "DNFPHRASE caught MAJOR"' \
+    'BL-1048|docs/d.md:24 "FCOUTPHRASE a real defect"' 'BL-1049|core/skills/ai-dlc/steps/s.md:3 "NULLFCPHRASE four"' \
+    'BL-1050|docs/d.md:17 "NOCATCHPHRASE step group held"' 'BL-1051|docs/d.md:8 "NULLPHRASE six"' \
+    'BL-1052|docs/d.md:20 "HDRPHRASE"' 'BL-1053|docs/d.md:14 "SURVPHRASE s321 per-story shards"' \
+    'BL-1054|core/skills/ai-dlc/steps/s.md:2 "QUIETFC delta"' 'BL-1055|docs/d.md:9 "DNFAILPHRASE quiet"' \
+    'BL-1056|docs/d.md:10 "ARCHPHRASE seven"'; do
+    printf '## %s\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; value: %s.%s\n\n' "${_d%%|*}" "$EPH" "$EPR" "$EPC" "$EPS" "${_d#*|}" "$EPD"
+  done
+  # D1 (VERDICT-CONFLICT): BL-1057 a `fell` field beside prose `did not fall` and no citation
+  # (fires); BL-1058 the same field beside prose that says `fell`, plus `did not fallback`, the
+  # letter boundary's near-miss (quiet).
+  printf '## BL-1057\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; the step did not fall.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPF"
+  printf '## BL-1058\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; the step fell; the queue did not fallback.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS" "$EPF"
+  # D2 (the archive scope): BL-1059 and BL-1060 are the same tokenless close, NO-TOKENS here on the
+  # live run; under `archive` BL-1059 is in $EP/archadded (added since the merge-base: live rules,
+  # fires) and BL-1060 is not (present at the base: archive rule, quiet).
+  printf '## BL-1059\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; fell.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS0" "$EPF"
+  printf '## BL-1060\n\n%s %s\n\n%s\n\nOutcome measured: graph s321, %s; fell.%s\n\n' "$EPH" "$EPR" "$EPC" "$EPS0" "$EPF"
 } > "$EP/backlog.md"
-EP_WANT="F-BASELINE BL-988|F-BASELINE BL-992|F-MOVEMENT BL-988|F-MOVEMENT BL-994|F-RULING BL-961|F-STEP BL-988|F-STEP BL-990|F-STEP BL-993|F-UNTAGGED BL-963|NO-FIGURES BL-986|NO-OUTCOME BL-951|NO-OUTCOME BL-979|NO-OUTCOME BL-980|NO-OUTCOME BL-981|NO-SCRIPT BL-983|NO-SCRIPT BL-985|NO-SPRINT BL-956|NO-SPRINT BL-960|NO-SPRINT BL-968|NO-VALUE-CITATION BL-952|NO-VALUE-CITATION BL-958|SHAPE BL-957|SHAPE BL-969|SHAPE BL-970|SHAPE BL-971|SHAPE BL-972|SHAPE BL-973|SHAPE BL-974|SHAPE BL-977|SHAPE BL-978|"
+printf 'BL-1059\n' > "$EP/archadded"
+EP_WANT="F-BASELINE BL-988|F-BASELINE BL-992|F-MOVEMENT BL-988|F-MOVEMENT BL-994|F-RULING BL-961|F-STEP BL-988|F-STEP BL-990|F-STEP BL-993|F-UNTAGGED BL-963|NO-DIRECTION BL-1005|NO-DIRECTION BL-1006|NO-FIGURES BL-986|NO-OUTCOME BL-951|NO-OUTCOME BL-979|NO-OUTCOME BL-980|NO-OUTCOME BL-981|NO-SCRIPT BL-983|NO-SCRIPT BL-985|NO-SPRINT BL-956|NO-SPRINT BL-960|NO-SPRINT BL-968|NO-STEP-BOUND BL-1002|NO-STEP-BOUND BL-1004|NO-TOKENS BL-1000|NO-TOKENS BL-1059|NO-TOKENS BL-1060|NO-VALUE-CITATION BL-1007|NO-VALUE-CITATION BL-952|OFF-STEP BL-1008|OFF-STEP BL-1009|SHAPE BL-957|SHAPE BL-969|SHAPE BL-970|SHAPE BL-971|SHAPE BL-972|SHAPE BL-973|SHAPE BL-974|SHAPE BL-977|SHAPE BL-978|STEP-AT-CLOSE BL-1012|VALUE-NULL BL-1046|VALUE-NULL BL-1047|VALUE-NULL BL-1048|VALUE-NULL BL-1049|VALUE-NULL BL-1050|VALUE-NULL BL-1051|VALUE-NULL BL-1052|VALUE-NULL BL-1056|VALUE-NULL BL-958|VERDICT-CONFLICT BL-1057|"
 EP_GOT="$(eff_corpus "$EP/backlog.md" "$EP" live "$EP/added" | LC_ALL=C sort | tr '\t' ' ' | tr '\n' '|')"
 if [ "$EP_GOT" != "$EP_WANT" ]; then
   echo "$(me): SELF-PROBE FAILED -- E0: the efficiency arms over the seeded ledger reported [$EP_GOT], expected [$EP_WANT]. Each seeded case is one branch of E1/E2/E3 (an absent row is a branch that cannot fire; an extra row is one that fires on a quiet case), so no corpus verdict from these arms would mean anything." >&2
   exit 2
 fi
-read -r EP_ENT EP_POP EP_NS EP_FADD < "$WORK/eff.counts"
-[ "$EP_ENT" = 46 ] && [ "$EP_POP" = 31 ] && [ "$EP_NS" = 2 ] && [ "$EP_FADD" = 7 ] || {
-  echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch / $EP_FADD judged by the filing-shape arms, expected 46 / 31 / 2 / 7. BL-995 (not added) and BL-996 (no-step) must stay out of the filing-shape population. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint; BL-982's prose bold must stay out of the close population." >&2; exit 2; }
-EP_ARCH="$(eff_corpus "$EP/backlog.md" "$EP" archive "$EP/added" | cut -f1 | grep -c '^F-')" || EP_ARCH=0
+read -r EP_ENT EP_POP EP_NS EP_FADD EP_ALIVE < "$WORK/eff.counts"
+[ "$EP_ENT" = 77 ] && [ "$EP_POP" = 61 ] && [ "$EP_NS" = 3 ] && [ "$EP_FADD" = 8 ] || {
+  echo "$(me): SELF-PROBE FAILED -- E0: the seeded ledger parsed to $EP_ENT entries / $EP_POP in the close population / $EP_NS accepted on the no-step branch / $EP_FADD judged by the filing-shape arms, expected 77 / 61 / 3 / 8. BL-995 (not added) and BL-996 (no-step) must stay out of the filing-shape population; BL-1014 (no-step, with a stray fell and no token figure) must stay on the no-step branch. The section heading must close BL-964 and open nothing; BL-966's path-embedded s317 must not read as a sprint; BL-982's prose bold must stay out of the close population." >&2; exit 2; }
+EP_AOUT="$(eff_corpus "$EP/backlog.md" "$EP" archive "$EP/archadded" | tr '\t' ' ')"
+EP_ARCH="$(printf '%s\n' "$EP_AOUT" | grep -c '^F-')" || EP_ARCH=0
+read -r _ _ _ _ EP_ALIVE < "$WORK/eff.counts"
+# D2: the archive entry ADDED since the merge-base (BL-1059, in $EP/archadded) is closed by the live
+# rules and fires NO-TOKENS; its twin present at the base (BL-1060) keeps the archive rule, quiet.
+case "
+$EP_AOUT
+" in *"
+NO-TOKENS BL-1059
+"*) ;; *) echo "$(me): SELF-PROBE FAILED -- E0: --archive did not judge BL-1059, an archive entry added since the merge-base, by the live rules (no NO-TOKENS BL-1059 row), so an archived close escapes them." >&2; exit 2 ;; esac
+case "$EP_AOUT" in *" BL-1060"*) echo "$(me): SELF-PROBE FAILED -- E0: --archive judged BL-1060, an archive entry present at the merge-base, by the live rules; it keeps the archive rule." >&2; exit 2 ;; esac
+[ "$EP_ALIVE" = 1 ] || { echo "$(me): SELF-PROBE FAILED -- E0: --archive judged $EP_ALIVE archive close(s) by the live rules, expected 1 (BL-1059)." >&2; exit 2; }
+# --archive keeps the old any-hit rule: BL-1056 (the BL-594 shape) must stay quiet there and no
+# VALUE-NULL may appear, while BL-958 (a phrase on a plain line) still fires, in the same run.
+case "
+$EP_AOUT
+" in *"
+NO-VALUE-CITATION BL-958
+"*) ;; *) echo "$(me): SELF-PROBE FAILED -- E0: --archive did not fire NO-VALUE-CITATION on BL-958, so its quiet verdicts below mean nothing." >&2; exit 2 ;; esac
+case "$EP_AOUT" in *VALUE-NULL*|*" BL-1056"*) echo "$(me): SELF-PROBE FAILED -- E0: --archive applied the live value-citation rule (VALUE-NULL or a BL-1056 row); the archive keeps the old any-hit rule." >&2; exit 2 ;; esac
 [ "$EP_ARCH" -eq 0 ] || { echo "$(me): SELF-PROBE FAILED -- E0: --archive applied a FILING arm ($EP_ARCH row(s)); filing is judged on the live ledger only." >&2; exit 2; }
 }
 
 vbr_sec_eff() {
-EFF_ADDED=""; EFF_SCOPE="not evaluated under --archive"
+EFF_ADDED=""
 if [ "${EFF_MODE:-live}" = live ]; then
   EFF_SCOPE="$(eff_added_labels "$LEDGER" "$SUBJECT_ROOT" "$WORK/eff.added")" || exit 2
-  [ -f "$WORK/eff.added" ] && EFF_ADDED="$WORK/eff.added"
+else
+  # D2: the archive's entries added since the merge-base, with the live ledger beside it (at the
+  # base) feeding STEP-AT-CLOSE's step map. A ledger not named *.archive.md has no live sibling.
+  EFF_XNAME=""; case "${LEDGER##*/}" in *.archive.md) EFF_XNAME="${LEDGER##*/}"; EFF_XNAME="${EFF_XNAME%.archive.md}.md" ;; esac
+  EFF_SCOPE="$(eff_added_labels "$LEDGER" "$SUBJECT_ROOT" "$WORK/eff.added" "$EFF_XNAME")" || exit 2
 fi
+[ -f "$WORK/eff.added" ] && EFF_ADDED="$WORK/eff.added"
 EFF_OUT="$(eff_corpus "$LEDGER" "$SUBJECT_ROOT" "${EFF_MODE:-live}" "$EFF_ADDED")"
-read -r EFF_ENT EFF_POP EFF_NS EFF_FADD < "$WORK/eff.counts"
+read -r EFF_ENT EFF_POP EFF_NS EFF_FADD EFF_ALIVE < "$WORK/eff.counts"
+# NOTE (b): STEP-AT-CLOSE is evaluated only where the merge-base step set was derived; say so on the
+# efficiency line too, not only under the filing scope.
+if [ -n "$EFF_ADDED" ]; then EFF_SAC="STEP-AT-CLOSE evaluated ${EFF_SCOPE}"; else EFF_SAC="STEP-AT-CLOSE ${EFF_SCOPE}"; fi
+if [ "${EFF_MODE:-live}" = archive ]; then
+  if [ -n "$EFF_ADDED" ]; then EFF_ASCOPE="; archive scope: ${EFF_ALIVE} close(s) added since the merge-base judged by the live rules, the rest by the archive rule, ${EFF_SCOPE}"
+  else EFF_ASCOPE="; archive scope: every entry judged by the archive rule, live rules ${EFF_SCOPE}"; fi
+  EFF_FSCOPE="not evaluated under --archive"
+else EFF_ASCOPE=""; EFF_FSCOPE="$EFF_SCOPE"; fi
 EFF_N="$(printf '%s' "$EFF_OUT" | grep -c .)" || EFF_N=0
 eff_report() {
   [ "$EFF_N" -eq 0 ] && return 0
   printf '%s\n' "$EFF_OUT" | awk -F'\t' '{ printf "FAIL: E\t%s\t%s\n", $2, $1 }' >&2
-  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, a lead figure and a subagent figure reported separately (each seat word -- lead, subagent(s) -- followed first by '<n> h' or '\$<n>', not a percentage or a count, and not one figure shared by both seats), and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation resolving to a Failure caught: line or step-value table row; or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. NO-SCRIPT/NO-FIGURES: a sprint-naming outcome line also names the script that measured it (a resolving path ending .py or .sh, or a resolving directory token plus a bare basename under it; a path:line value citation does not count) and gives a before and an after figure (both words 'before' and 'after', or a '<num> to <num>' pair). F-BASELINE/F-STEP/F-MOVEMENT: a tagged efficiency entry ADDED on this branch carries a 'Baseline: s3NN' line, a 'Step: <token>' line whose token is a step of extract.py's STEP_RE (less SUBPROC), 'pre-step' or 'gate-validation[<step>]', and a non-empty 'Expected movement:' line, unless it says there is no graph pipeline step. F-UNTAGGED: an entry citing docs/analysis/ carries a bold efficiency tag (**DEFECT (efficiency).**, **DEFECT, efficiency.**, **NOTE (efficiency).** or **DEFECT. [efficiency rank N]**) or the 'no graph pipeline step' line." >&2
+  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, a lead figure and a subagent figure reported separately (each seat word -- lead, subagent(s) -- followed first by '<n> h' or '\$<n>', not a percentage or a count, and not one figure shared by both seats), and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation whose phrase hits exactly one line, that line not saying 'did not fall' and being either a 'Failure caught:' line under core/skills/ai-dlc/steps/ with a non-null tail or a non-header table row with a non-null cell under a 'Failure caught' / 'Unique' / 'Catch' column (VALUE-NULL when the phrase resolves but its line does not qualify; null is empty, none, n/a, -, an em dash, 0, no, nothing, or a cell starting 'no ' or '0 '; --archive keeps the old any-hit rule); or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. NO-SCRIPT/NO-FIGURES: a sprint-naming outcome line also names the script that measured it (a resolving path ending .py or .sh, or a resolving directory token plus a bare basename under it; a path:line value citation does not count) and gives a before and an after figure (both words 'before' and 'after', or a '<num> to <num>' pair). NO-TOKENS/NO-STEP-BOUND/NO-DIRECTION/OFF-STEP/STEP-AT-CLOSE/VERDICT-CONFLICT (sprint-naming line, on the live ledger and, under --archive, on every archive entry added since the merge-base with origin/main; an archive entry present at the merge-base keeps the archive rule): the outcome line carries a token figure ('<n> tokens', '<n>M tokens', '<n> K tokens'; roll.py prints '<x>M tokens'; an 'sNNN tokens' sprint token does not count); the entry carries a 'Step: <token>' line whose token is a step (as F-STEP below; no Basis: fallback); the direction is read ONLY from a 'Verdict: <group> fell' or 'Verdict: <group> did not fall' line, the whole field, where <group> is '<step>( plus <step>)*', never from 'fell' elsewhere in the prose; the group names the entry's own Step token and no bucket token (roll.py GROUPS rows with no step set: $(printf '%s' "$EFF_BUCKETS" | tr '\n' ' ')) other than it, so 'Step: pipeline' is the only way to close on the whole-pipeline bucket; and the Step line was already present, unchanged, at the merge-base with origin/main, so the step is declared before the close, never at it; and a 'fell' Verdict field may not stand beside outcome prose saying 'did not fall' (VERDICT-CONFLICT: the field cannot cancel the value citation that prose owes). F-BASELINE/F-STEP/F-MOVEMENT: a tagged efficiency entry ADDED on this branch carries a 'Baseline: s3NN' line, a 'Step: <token>' line whose token is a step of extract.py's STEP_RE (less SUBPROC), 'pre-step', 'gate-validation[<step>]' or a roll.py bucket token, and a non-empty 'Expected movement:' line, unless it says there is no graph pipeline step. F-UNTAGGED: an entry citing docs/analysis/ carries a bold efficiency tag (**DEFECT (efficiency).**, **DEFECT, efficiency.**, **NOTE (efficiency).** or **DEFECT. [efficiency rank N]**) or the 'no graph pipeline step' line." >&2
   return 1
 }
 if [ -n "$EFF_MODE" ]; then
   eff_report || exit 1
-  echo "OK: validate-backlog-receipts --$([ "$EFF_MODE" = archive ] && echo archive || echo efficiency-only) -- E0 fired both directions over ${EP_ENT} seeded entries; ${EFF_ENT} entries in ${LEDGER}, ${EFF_POP} in the efficiency close population, every one carrying a valid outcome line (${EFF_NS} on the no-graph-pipeline-step branch); filing shape: ${EFF_FADD} added entr(y/ies) judged, ${EFF_SCOPE}."
+  echo "OK: validate-backlog-receipts --$([ "$EFF_MODE" = archive ] && echo archive || echo efficiency-only) -- E0 fired both directions over ${EP_ENT} seeded entries; ${EFF_ENT} entries in ${LEDGER}, ${EFF_POP} in the efficiency close population, every one carrying a valid outcome line (${EFF_NS} on the no-graph-pipeline-step branch; ${EFF_SAC})${EFF_ASCOPE}; filing shape: ${EFF_FADD} added entr(y/ies) judged, ${EFF_FSCOPE}."
   exit 0
 fi
 }
