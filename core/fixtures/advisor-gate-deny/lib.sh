@@ -257,7 +257,7 @@ mk "$P1/apok.jsonl"     "$GRANT" "$ADV" "$PUSHL" "$OK1"
 MERGE9="$(tu t9 mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":1056}')"
 mk "$P1/f404.jsonl"     "$GRANT" "$ADV" "$OKRES" "$MERGE9" "$(tr_ t9 true 'failed to merge pull request: PUT https://api.github.com/repos/euron8/ai-dlc/pulls/1056/merge: 404 Not Found []')"
 mk "$P1/fmergeok.jsonl" "$GRANT" "$ADV" "$OKRES" "$MERGE9" "$(tr_ t9 false 'Pull request successfully merged')"
-# gh merged, then the local branch delete failed (retro.md:1252 instructs --delete-branch): the
+# gh merged, then the local branch delete failed (retro.md:1375 instructs --delete-branch): the
 # result is is_error:true and the merge HAPPENED. Twin: an errored gh merge that did not (404).
 GHMERGE9="$(tu t9 Bash '{"command":"gh pr merge 1056 --squash --delete-branch"}')"
 mk "$P1/fmergedel.jsonl" "$GRANT" "$ADV" "$OKRES" "$GHMERGE9" "$(tr_ t9 true 'Exit code 1

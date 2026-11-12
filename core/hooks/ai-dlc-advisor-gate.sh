@@ -52,17 +52,17 @@
 #     stacking of them is one spelling.
 #       steps/_gate-procedures.md:990 auto-handoff push      -- touchpoint I, :992
 #       steps/handoff.md:56 handoff push                     -- touchpoint I, :58
-#       steps/retro.md:1177 6b push                          -- touchpoint I, :1109
+#       steps/retro.md:1285 6b push                          -- touchpoint I, :1215
 #   - `gh [-R|--repo <r>] pr merge`, and any MCP tool named `mcp__<server>__merge_pull_request`
 #     (the settings template matches the same regex, `mcp__.*__merge_pull_request`):
-#       steps/retro.md:1250 7a merge                         -- touchpoint I, :1239
+#       steps/retro.md:1375 7a merge                         -- touchpoint I, :1352
 #   - `gate-checkpoint.sh ... close` (NOT `record`: G1, N records, G2, close is the sequence):
 #       steps/gate-validation.md:206                         -- touchpoint G2, :207
 #   - the Check 12 append to `gate-log.md`, keyed on the ENTRY, not the path: an Edit/MultiEdit
 #     that adds a `## Gate Log:` heading, a Write whose content holds more such headings than the
 #     file on disk, or a Bash `>`/`>>`/`tee` onto `gate-log.md` whose command carries one:
 #       steps/gate-validation.md:820 (heading grammar :838) -- touchpoint G1, :167
-#     The retro 7a-post rotation (`git mv`, then a header-only `# Gate Log`, retro.md:1288-1300)
+#     The retro 7a-post rotation (`git mv`, then a header-only `# Gate Log`, retro.md:1449-1461)
 #     and the in-sprint rotation (gate-validation.md:933, which REMOVES entries) are not gated.
 #   THE UPDATE SKILL, measured against core/skills/ai-dlc-update/SKILL.md (a bootstrapping file:
 #   the delivering pull runs its steps 1-2 on the old text and steps 3-8 on the new, after the
@@ -205,7 +205,7 @@
 #     result is `is_error: true` with none of them (measured on this repo's own transcript), so it
 #     is removed. A push whose transport dropped after the remote moved (exit 141 with
 #     `* [new branch]` in its output) SHIPPED, and stays a gated action; so does a `gh pr merge
-#     --delete-branch` (retro.md:1252) that merged and then failed to delete the local branch.
+#     --delete-branch` (retro.md:1375) that merged and then failed to delete the local branch.
 #     Every other kind is removed on `is_error` alone. The text is read from a string or from a
 #     `text`-block array. Every PreToolUse deny is one shape of this: the
 #     harness persists the denied `tool_use` and an `is_error` result opening

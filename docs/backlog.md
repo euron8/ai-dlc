@@ -2213,3 +2213,41 @@ Receipt: `verify: manual`. The closing receipt is a fixture arm or a vem self-pr
 Provenance: batch 256, b256-C6 delta adversary NOTE; id allocated by lead ai-dlc-a7.
 
 verify: manual
+
+## BL-993 — deploy-validate does not record the sprint PR number and squash sha, so retro Step 1 must re-derive them through a `gh` fallback
+
+**DEFECT.** OPEN. Filed 2026-11-12. Retro Step 1's carry block has to find the sprint PR head after the fact: by tree-match, and (BL-990's fix) by a `gh pr list --head '<sprint-branch>' --state merged` fallback when deploy-validate left the sprint branch reset onto the squash. Both are re-derivations of two facts deploy-validate already knows when it merges: the sprint PR number and the squash commit sha. Owed: deploy-validate records both in a file the retro reads (for example a line in the sprint's pipeline snapshot), and retro Step 1 reads the record instead of calling `gh`. That removes the gh fallback BL-990 adds, which is the removal condition its minimum-mechanism paragraph names.
+
+Not built, and nothing here can be run: the recording mechanism does not exist yet, so there is no behaviour a receipt could execute, and a `has` on `deploy-validate.md` for a sha or PR-number line is closable by a comment. The receipt shape when it lands is a fixture world in `core/fixtures/retro-branch-behind-main` in which the `gh` stub is absent and the carry still derives from the record.
+
+Provenance: batch 256, cluster N9; id allocated by the lead.
+
+verify: manual
+
+## BL-997 — retro's `git checkout main && git merge --ff-only origin/main` chain silently overwrites an operator's IGNORED file at a path origin/main tracks, and exits 0
+
+**DEFECT.** OPEN. Filed 2026-11-12. The chain `git checkout main && git merge --ff-only origin/main` runs in `core/skills/ai-dlc/steps/retro.md` Step 1 (`:27` at base e3d2dfc35 and at the release tip) and in the 7a-post step 1 LAND block (base `:1340`; at the tip the fenced block at `:1434-1435`). When an operator holds an IGNORED file at a path that origin/main force-adds, the fast-forward replaces the file with the upstream bytes and exits 0. At the tip the LAND block then prints its success line `LAND: main at origin/main` over the loss; BL-990's release adds no behaviour change here. An untracked, non-ignored file at such a path is protected, because the fast-forward aborts with exit 1.
+
+Measured worlds: ignored `e.log`, `é.log` and `sub/x.log`, each force-added upstream, all clobbered from the operator's data to the upstream bytes by base `:1340`, by the tip LAND block, and by `:27` at base and at the tip. Controls in the same runs: a no-op subject keeps the operator's data; `git check-ignore e.log` reports the file ignored while `e.log` is tracked at origin/main; `grep ff-only` hits 2 in both files. git 2.56.0. That `gh pr merge --delete-branch`'s own local step is the same chain is an inference from the gh v2.103.3 source, not run.
+
+Owed: a pre-merge check that refuses, before the fast-forward, when a path the incoming range adds is ignored and present in the working tree. BL-986 (C2's sibling, the update skill's return, where C2 is adding a pre-merge check) is the mechanism to reuse rather than growing a second. No fix in this release; the fix owner is assigned later.
+
+Not built, and nothing runnable exists to point a receipt at: no check mechanism exists yet, and a `has` on `retro.md` for a check name is closable by a comment. The receipt shape when it lands is a fixture world in `core/fixtures/retro-branch-behind-main` holding an ignored file at a path origin/main force-adds, in which the Step 1 block and the LAND block both refuse and the file's bytes survive.
+
+Provenance: batch 256, cluster N9; id allocated by the lead.
+
+verify: manual
+
+## BL-998 — both pre-push hooks print only `ok <name>` for a green fixture, so a PENDING row never reaches a consumer's operator
+
+**DEFECT.** OPEN. Filed 2026-11-12. A shipped fixture whose subject is absent prints a `PENDING` row and exits 0 (BL-990's `retro-branch-behind-main` is the worked case). The hook that runs it prints, for any fixture whose verdict is `ok`, only `   ok    <name>`: `core/git-hooks/pre-push:2429` and `.githooks/pre-push:3063` (both `if [ "$verdict" = ok ]; then printf '   ok    %s\n' "$b"`, at this release's tip). The fixture's own output is shown only for a non-ok verdict: `core/git-hooks/pre-push:2523-2527` skips an ok unit (`[ -f "$out/$b" ] && [ "$(cat "$out/$b")" = ok ] && continue`) and prints the `===== <name> =====` log block for the rest. So a fixture that checked nothing because its subject is absent reads the same as one that passed.
+
+Population, at this release's tip: `/usr/bin/grep -lE "PENDING  " core/fixtures/*/run.sh` lists 5 fixtures, all shipping (none carries `.dist-only`); the present-token control `grep -c "PENDING  "` on `retro-branch-behind-main/run.sh` reads 3 and an impossible token reads 0. Three of the five emit the row with an `echo` or `printf` (`pause-hook-origin`, `push-drain-refusals`, `retro-branch-behind-main`); `check-22-spawn-ledger` and `check-24-adversarial-convergence` match on lines that are not an `echo` or `printf`, and were not inspected further. `retro-branch-behind-main` prints one PENDING row per absent retro.md block on a consumer and self-clears: its `inputs.decl` declares `core/skills/ai-dlc/steps/retro.md`, so its key moves when retro.md lands.
+
+Owed: the hook surfaces a PENDING count (the number of green fixtures that printed a `PENDING` row), in both hooks.
+
+Not built, and no runner-wired receipt is honestly constructible now: the surfacing mechanism does not exist, and a `has` on either hook for `PENDING` is closable by a comment.
+
+Provenance: batch 256, cluster N9; id allocated by the lead.
+
+verify: manual

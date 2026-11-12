@@ -20,3 +20,4 @@ tail
 tr
 cut
 basename
+wc

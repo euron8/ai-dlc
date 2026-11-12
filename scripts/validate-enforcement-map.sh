@@ -3904,7 +3904,7 @@ i9_entry() { # i9_entry <id> <adjudication> ; reads $sites and $enfs
   # whose file has never heard of the script.
   #
   # What W2 deliberately does NOT do, stated so nobody reads it as covered: it
-  # cannot distinguish an INVOCATION from a PROSE MENTION. `retro.md:639` is a real
+  # cannot distinguish an INVOCATION from a PROSE MENTION. `retro.md:882` is a real
   # indented command; `implementation.md:152` ("validate-steering-budget.sh fails
   # the gate") is a sentence that was false for every gate that ever ran -- and a
   # basename grep passes both. Telling them apart means parsing English, and a

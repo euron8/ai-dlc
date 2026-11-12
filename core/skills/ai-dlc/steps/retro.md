@@ -40,14 +40,46 @@ else
     PR_HEAD="$(git log --first-parent --format='%T %H' "$SPRINT_TIP" --not "$FORK" \
       | while read -r t h; do grep -qxF "$t" <<<"$TRUNK_TREES" && { echo "$h"; break; }; done)"
   fi
+  PR_SRC=""; GH_WHY=""
+  if [ -z "$PR_HEAD" ] && [ -n "$FORK" ]; then
+    if ! command -v gh >/dev/null 2>&1; then
+      GH_WHY="gh unavailable"
+    elif ! GH_ROWS="$(gh pr list --head '<sprint-branch>' --state merged --json number,headRefOid,mergeCommit \
+        --jq '.[] | "\(.number) \(.headRefOid) \(.mergeCommit.oid)"')"; then
+      GH_WHY="gh pr list exited non-zero"
+    elif [ -z "$GH_ROWS" ]; then
+      GH_WHY="gh lists no merged PR from <sprint-branch>"
+    elif grep -vqE '^[0-9]+ [0-9a-f]{40} [0-9a-f]{40}$' <<<"$GH_ROWS"; then
+      GH_WHY="gh printed a row that is not: PR number, head sha, merge sha"
+    elif [ "$(awk -v f="$FORK" '$3 == f {n++} END {print n+0}' <<<"$GH_ROWS")" != 1 ]; then
+      GH_WHY="not exactly one merged PR from <sprint-branch> has merge commit $FORK"
+    else
+      read -r GH_N GH_H GH_M <<<"$(awk -v f="$FORK" '$3 == f' <<<"$GH_ROWS")"
+      GH_NEWER="$(while read -r n h m; do
+          [ "$m" = "$GH_M" ] && continue
+          git merge-base --is-ancestor "$GH_M" "$m" 2>/dev/null; r=$?
+          [ "$r" = 1 ] || printf ' #%s' "$n"
+        done <<<"$GH_ROWS")"
+      if [ -n "$GH_NEWER" ]; then
+        GH_WHY="merged PR(s)$GH_NEWER from <sprint-branch> descend from #$GH_N or cannot be compared with it"
+      elif ! git cat-file -e "${GH_H}^{commit}" 2>/dev/null \
+          && ! { git fetch -q origin "pull/$GH_N/head" 2>/dev/null && git cat-file -e "${GH_H}^{commit}" 2>/dev/null; }; then
+        GH_WHY="PR head $GH_H of #$GH_N not local and not fetchable"
+      elif [ "$(git rev-parse "${GH_H}^{tree}")" != "$(git rev-parse "${GH_M}^{tree}")" ]; then
+        GH_WHY="the tree of PR head $GH_H differs from the tree of merge commit $GH_M of #$GH_N"
+      else
+        PR_HEAD="$GH_H"; PR_SRC=" (merged PR #$GH_N, from gh)"
+      fi
+    fi
+  fi
   if [ -z "$PR_HEAD" ]; then
-    echo "CARRY: HARD_BLOCK underivable — no sprint commit's tree equals a trunk commit's tree, so the squash's PR head is unknown"
+    echo "CARRY: HARD_BLOCK underivable — no sprint commit's tree equals a trunk commit's tree, so the squash's PR head is unknown${GH_WHY:+; gh fallback: $GH_WHY}"
   else
     CARRY_N="$(git rev-list --count --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main)"
     if [ "$CARRY_N" = 0 ]; then
-      echo "CARRY: none — no sprint commit follows PR head $PR_HEAD"
+      echo "CARRY: none — no sprint commit follows PR head $PR_HEAD$PR_SRC"
     elif git cherry-pick --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main; then
-      echo "CARRY: $CARRY_N commit(s) past PR head $PR_HEAD carried onto the retro branch"
+      echo "CARRY: $CARRY_N commit(s) past PR head $PR_HEAD$PR_SRC carried onto the retro branch"
     else
       git cherry-pick --abort
       echo "CARRY: HARD_BLOCK conflict — a carried commit did not apply; the pick was aborted and the retro branch is back at origin/main"
@@ -79,13 +111,36 @@ commits that are in neither the PR head nor `origin/main` — a `<pr-head>..<tip
 range is NOT used, because on that same branch it would re-pick trunk commits
 and stop on them.
 
+**When the tree match finds nothing, one `gh` lookup covers the re-pointed state
+and nothing else.** Deploy-validate can reset the sprint branch onto the squash
+commit itself and keep committing there; the fork point is then the squash, no
+commit on the chain above it carries a trunk tree, and the derivation above
+finds no PR head. Only on that miss, the block lists the merged PRs whose head
+branch is `<sprint-branch>` and accepts one only when its merge commit EQUALS the
+fork point. Ancestry never accepts: an older PR's merge commit sits under every
+later tip. It also refuses when another listed PR's merge commit descends from
+the selected one (or cannot be compared with it, which covers a branch name
+reused by a later sprint), when the PR head is neither local nor fetchable as
+`pull/<number>/head`, and when the PR head's tree differs from the merge commit's
+tree, which is the squash-source check. A missing `gh`, a non-zero exit, empty
+output or a row that is not `<number> <head sha> <merge sha>` is likewise
+`underivable`, and the line names the reason after `gh fallback:`. An accepted
+head becomes `PR_HEAD` and the count line names the PR and `from gh`. It is a
+fallback rather than the primary derivation because the tree match needs no
+network and no authentication, and it is keyed on the fork point so that it
+cannot accept a PR whose squash is not the sprint branch's own base. A miss
+whose fork point is not a merged PR's merge commit stays `underivable`.
+
 **Every `CARRY:` line is one of four outcomes, and three of them STOP.** A
 count or `none` continues to the next paragraph. `HARD_BLOCK unresolved`,
 `HARD_BLOCK underivable` and `HARD_BLOCK conflict` each file a Tier 1
 `HARD_BLOCK` in `docs/escalations/pending.md` carrying the line verbatim, and
-the retro STOPS. On `underivable` the operator supplies the PR head
-(`gh pr view <sprint-PR> --json headRefOid`); the lead confirms it is an
-ancestor of the sprint tip and runs
+the retro STOPS. On `underivable` the operator supplies the sprint PR's head and
+merge commit (`gh pr view <sprint-PR> --json headRefOid,mergeCommit`); the lead
+accepts it when the PR head is an ancestor of the sprint tip, OR when the merge
+commit equals the newest first-parent ancestor of the sprint tip that is on
+`origin/main` (the re-pointed state, where the old PR head is off the tip's
+ancestry), and then runs
 `git cherry-pick --no-merges <sprint-tip> --not <pr-head> origin/main` on the
 retro branch. Never continue past a HARD_BLOCK line on a branch that holds only
 the trunk: that is the incomplete-retro state the carry exists to prevent.
@@ -104,7 +159,8 @@ the sprint's diff a second time and cannot merge; and a retro branch that lacks
 every sprint commit made after the sprint PR squash-merged, so the retro reads
 incomplete files and Step 7a-post rotates a gate log missing its deploy-validate
 block. False-positive cost: one `git fetch` per retro, the count 0 in the steady
-state, and one tree comparison over the sprint-only commits. Removal condition:
+state, one tree comparison over the sprint-only commits, and one `gh pr list`
+call made only when that comparison finds no PR head. Removal condition:
 the `checkout -b` above now names `origin/main` as its base, so a session
 running that line alone cuts from the trunk rather than from wherever it is —
 but `origin/main` is a local ref and the `fetch` is what makes it current, so
@@ -113,7 +169,9 @@ base ref is guaranteed fresh without a fetch. Retire the carry only when
 deploy-validate can no longer commit to the sprint branch after the sprint PR
 merges. Do not retire it by cutting the retro branch from the sprint tip
 instead: that branch lacks the squash commit as an ancestor, which is the
-defect the paragraph above describes.
+defect the paragraph above describes. Retire the `gh` fallback only when a step
+records the sprint PR's number or its squash commit, so the re-pointed state no
+longer needs a lookup.
 
 The branch name MUST contain `sprint-<N>` (literal word "sprint"
 followed by the sprint number). Abbreviated forms (`s<N>`,
@@ -1301,14 +1359,42 @@ epic scope, and residual risks are still in the lead's working context.
 **7a. Merge gate.**
 
 - **If a PR was created in 6d:** Merge it. Do NOT ask for approval.
-
-  Run `gh pr merge <N> --squash --delete-branch` (use the merge strategy the
-  repo's PRs normally use; check recent merges with
+  Substitute `<pr-number>` with the PR's number and run the block as written
+  (use the merge strategy the repo's PRs normally use in place of `--squash`;
+  check recent merges with
   `gh pr list --state merged --limit 3 --json number,title,mergedAt` if unsure).
+  The exit of `gh pr merge` does not decide whether the PR merged: it exits
+  non-zero AFTER a successful remote merge whenever its local cleanup (checking
+  out the base branch, deleting the local branch) fails, and it exits 0 with
+  the PR still open when a merge queue or auto-merge takes it. The block
+  therefore always reads the PR's state from GitHub after the attempt, and only
+  an exact `MERGED` counts as merged.
 
-  On failure — branch protection, required review, failing checks, conflicts —
-  surface the error verbatim and STOP: do not rotate (7a-post), do not emit the
-  next-sprint prompt. Do NOT retry with `--admin`.
+```bash
+# retro 7a: merge the retro PR, then read its state from GitHub
+gh pr merge <pr-number> --squash --delete-branch; MERGE_RC=$?
+PR_STATE="$(gh pr view <pr-number> --json state --jq .state)" || PR_STATE=""
+if [ "$PR_STATE" = MERGED ] && [ "$MERGE_RC" = 0 ]; then
+  echo "MERGE: merged"
+elif [ "$PR_STATE" = MERGED ]; then
+  echo "MERGE: merged — gh's local cleanup failed; 7a-post lands explicitly"
+else
+  echo "MERGE: HARD_BLOCK failed — ${PR_STATE:-state unreadable}"
+  false
+fi
+```
+
+  On `MERGE: HARD_BLOCK` — branch protection, required review, failing
+  checks, conflicts, a PR left open by a queue — surface the error verbatim and
+  STOP: do not rotate (7a-post), do not emit the next-sprint prompt. Do NOT
+  retry with `--admin`. On either `MERGE: merged` line, proceed to
+  **7a-post**, whose step 1 block lands on the trunk or STOPs. On the
+  cleanup-failed line gh has also skipped deleting the remote branch, so the
+  remote `ai-dlc/retro/sprint-<N>` branch survives; it is harmless unless a
+  retro is re-run for the same sprint, and then delete it by hand first. This
+  block and the 7a-post step 1 block both exit non-zero on their `HARD_BLOCK`
+  line and zero otherwise, so a refused merge or landing is an errored tool
+  result rather than a shipped action.
 - **If no PR was created (direct-to-main in 6c):** Skip the merge and
   proceed to **7a-post** — not straight to 7b. The artifacts are already on
   `main`, so the rotation's precondition is met and it still has to run.
@@ -1336,8 +1422,28 @@ The other two `rotate` artifacts — `pipeline-continuation-log.md` and
 audit that reads them. Two sites, because the two constraints differ: those must
 follow their audit, these must follow the merge.
 
-1. Land on the merged state:
-   `git fetch origin main && git checkout main && git merge --ff-only origin/main`
+1. Land on the merged state, and run the block as written. A
+   `LAND: HARD_BLOCK` line STOPs: no rotation and no 7b; surface the line
+   verbatim. 7a never relies on `gh pr merge` switching the checkout to `main`;
+   this block is the only return to the trunk. The chain's exit refuses a
+   failed fetch, a `main` held by another worktree and a `main` that cannot
+   fast-forward; the branch check refuses a `main` that resolved to a tag and
+   detached `HEAD`, where the fast-forward itself succeeds.
+
+```bash
+# retro 7a-post step 1: land on the merged trunk
+if git fetch origin main && git checkout main && git merge --ff-only origin/main \
+    && [ "$(git symbolic-ref -q --short HEAD)" = main ]; then
+  echo "LAND: main at origin/main"
+else
+  MAIN_WT="$(git worktree list --porcelain | awk '/^worktree /{w=substr($0,10)} $0=="branch refs/heads/main"{print w}')"
+  SELF_WT="$(cd "$(git rev-parse --show-toplevel)" && pwd -P)"
+  [ -n "$MAIN_WT" ] && [ "$(cd "$MAIN_WT" 2>/dev/null && pwd -P)" = "$SELF_WT" ] && MAIN_WT=""
+  echo "LAND: HARD_BLOCK — not on main at origin/main; main is checked out in worktree: ${MAIN_WT:-none}"
+  false
+fi
+```
+
 2. Confirm no further gate-log writes remain this sprint. Retro appends no gate
    entry; deploy-validate's was the last write.
 3. Archive the WHOLE live log verbatim:

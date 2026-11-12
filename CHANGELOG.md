@@ -19,6 +19,31 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1082.0] - 2026-11-12
+
+### BL-990 filed and closed
+
+- **Step 1 carry after a reset onto the squash.** When the tree-match leaves PR_HEAD empty and a fork point exists, a `gh pr list --head '<sprint-branch>' --state merged` fallback accepts the row whose merge commit equals the fork point exactly. It fails closed with a named reason after `; gh fallback:`, sets PR_HEAD to the PR head, and names the PR and `from gh` in the CARRY line. The `underivable` remedy now accepts the merge commit equalling the newest first-parent ancestor of the tip that is on origin/main. Measured on a file:// scratch clone of the consumer at its sprint state: the shipped block printed `CARRY: 13 commit(s) past PR head 0be40b00d… (merged PR #1317, from gh) carried onto the retro branch`; the base block printed HARD_BLOCK underivable.
+- **7a merge decided from PR state.** 7a is a fenced block that always reads `gh pr view <pr-number> --json state`; only an exact MERGED counts. A merge queue's exit 0 with the PR OPEN is a HARD_BLOCK. The failure mode is derived from gh v2.103.3 source (`deleteLocalBranch` returns its error after `ctx.merge()`), not observed in a retro.
+- **7a-post LAND with a STOP.** The bare fetch/checkout/ff-only chain is a fenced block printing `LAND: main at origin/main` or `LAND: HARD_BLOCK`; a HARD_BLOCK stops rotation and 7b. LAND names a holder only when it is another worktree.
+- **Folded hardenings.** Both HARD_BLOCK branches exit non-zero, so the advisor-gate hook (which drops a gated call only on an is_error result) does not count a failed merge as shipped. The remote retro branch survives on the cleanup-failed path.
+- **Fixture and receipt.** `retro-branch-behind-main`: 35 worlds plus arm `pending-layout`, 33 mutants, 50 assertions; `invocations.decl` 81 at base e3d2dfc35 to 215 at the tip. `receipt-bl990.sh` has three cells (carry, land, merge): exit 0 at the tip, 1 against base retro.md, 9 when no retro.md is found.
+- **Consumer cost.** While a consumer's installed retro.md lacks a new block, each affected part prints one PENDING row and the fixture exits 0, including the old part-2 "subject absent" exit 1. A present-but-broken block is red (arm `pending-gate`). PENDING is a consumer-layout verdict only: in the distribution an absent subject is RED (`<part>: subject absent in the DISTRIBUTION`, exit 1; arm `pending-layout`, mutant `pending-in-dist`). The receipt and `pending-gate` run only when all three subjects are present (named limit). The reference consumer's installed retro.md is byte-identical to e3d2dfc35's (stamp 0.1061.0), so the consumer-window proof applies to it.
+- **Named limits.** The `pull/<n>/head` fetch is exercised against a local origin, not real GitHub. The ignored-file overwrite by `git checkout main && git merge --ff-only origin/main` is base-present and unchanged (BL-997).
+- **Citations.** 11 live `retro.md:N` citations re-pinned (10 already stale at base) across the advisor-gate hook, `audit-rule-files.sh`, `check-owed-derivations.sh`, `validate-enforcement-map.sh`, the `advisor-gate-deny` lib and the `check-25-steering-conduct` fixture, plus the later shifts. The `check-25-steering-conduct` comment now says the live call site is `--since` with no path. Closes PC-S322-RETRO-CARRY-DERIVATION-REPOINT-BLINDS-TREE-MATCH.
+
+### BL-993 filed
+
+- deploy-validate does not record the sprint PR number and squash sha, so Step 1 re-derives them through the `gh` fallback. OPEN, `verify: manual`; removing the fallback is the removal condition in the minimum-mechanism paragraph.
+
+### BL-997 filed
+
+- Retro's `git checkout main && git merge --ff-only origin/main` chain (Step 1 `:27`, and the 7a-post LAND block) overwrites an operator's IGNORED file at a path origin/main force-adds, with exit 0, and the LAND block then prints its success line. Base-present, unchanged by this release. OPEN, `verify: manual`; BL-986's pre-merge check is the mechanism to reuse.
+
+### BL-998 filed
+
+- Both pre-push hooks print only `ok <name>` for a green fixture (`core/git-hooks/pre-push:2429`, `.githooks/pre-push:3063`), so a PENDING row from a shipped fixture whose subject is absent never reaches a consumer's operator, and a fixture that checked nothing reads the same as one that passed. Of the 5 shipping fixtures whose `run.sh` carries the PENDING token, 3 emit it with an `echo` or `printf`. OPEN, `verify: manual`; the fix shape is that the hook surfaces a PENDING count.
+
 ## [0.1081.0] - 2026-11-12
 
 ### BL-981 CLOSED: release-version's arm_ab and enforcement-map's I14 read with one git call per run
