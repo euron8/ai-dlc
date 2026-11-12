@@ -2269,3 +2269,24 @@ Receipt: `verify: manual`. No runner-wired receipt exists for an unchosen fix. A
 Provenance: batch 256, release cluster b256-C5, from the tip adversary's review of BL-989 (D1); id allocated by the lead.
 
 verify: manual
+
+## BL-995 — `check-owed-derivations.sh --scope` leaves one scratch directory under TMPDIR per successful (rc 0) call under bash 3.2, so a reconcile run under bash 3.2 leaks one per NEWLY-FAILING row
+
+**DEFECT.** OPEN. Filed 2026-11-12. The subject is `core/scripts/check-owed-derivations.sh:349`: `printf '%s\n' "$2" | scope_batch tokens; exit $?`. Piping into `scope_batch` runs it in the pipeline's subshell, so its `mktemp -d` and its `trap sb_cleanup EXIT` (`:327-329`) belong to that subshell. Under /bin/bash 3.2.57 a subshell that ends by returning does not fire its EXIT trap, so a `--scope` call that exits 0 leaves one `check-owed-scope-XXXXXX` directory under TMPDIR. A reconcile run under bash 3.2 (macOS /bin/bash) therefore leaks one directory per NEWLY-FAILING row whose `--scope` call succeeds, per `derivation-differential.sh --record-owed` run. A REFUSED exit does not leak, because an explicit `exit` inside the pipeline's subshell does fire the trap.
+
+Measured by the lead under /bin/bash 3.2.57 with the base's `check-owed-derivations.sh`, each call with its own `mktemp -d` TMPDIR and counting leftover `check-owed-scope-*` directories:
+- `bash core/scripts/check-owed-derivations.sh --scope docs/backlog.md`: rc 0, 1 leftover.
+- `--scope` with the script copied alone, which REFUSES at `resolve_sprint` ("no sprint-status.sh beside …"), a step reached after the `mktemp` and trap at `:327-332`: rc 2, 0 leftover.
+- `--scope-batch` on the same path: rc 0, 0 leftover.
+
+Bash 5.x is NOT on this box (no /opt/homebrew/bin/bash or /usr/local/bin/bash). Measured under 5.2.37 in a container by ai-dlc-53; not measured on a host bash 5. Conditions: /bin/bash 5.2.37(1)-release inside a local docker container (image postgres:18) with the repo `.git` mounted read-only, the script at f11a8e566, `--scope docs/backlog.md`, a fresh TMPDIR per call, two runs each. Container 5.2.37, piped form, rc 0: 0 and 0 leftover. Host 3.2.57, piped form, rc 0: 1 and 1 leftover (the positive control in the same script). A fixed reader (here-string) left 0 on both.
+
+Owed: run `scope_batch` in the current shell from a here-string, plus a fixture arm keyed on `check-owed-derivations.sh` that asserts `--scope` leaves nothing under its TMPDIR, proven to fire on the piped form.
+
+Interim: BL-987's `derivation-differential` fixture routes world ii's record-mode run to its own TMPDIR until this lands; world i relabels, leaves the owed record empty and never calls `--scope`, so it stays on the shared TMPDIR, where A10c reads its cleanup, and the fixing release drops that routing.
+
+Receipt: `verify: manual`. The receipt is owed together with the fixture arm, which is the runner-wired form; a `has` on the script for a here-string is closable by a comment.
+
+Provenance: batch 256, lead filing; id allocated by the lead.
+
+verify: manual

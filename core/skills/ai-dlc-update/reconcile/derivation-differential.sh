@@ -69,7 +69,10 @@
 #                  validator's `/`-joined text cut at 160 characters, so two outputs that differ only
 #                  past that column print identically.
 #   NEWLY-PASSING  failed at base, reproduces now. Listed.
-#   STALE-BOTH     stale on both sides -- pre-existing debt, out of this row's scope. Listed.
+#   STALE-BOTH     stale on both sides -- pre-existing debt, out of this row's scope. Listed. A row
+#                  the IGNORED-FILE OVERLAY below relabelled also reads STALE-BOTH, prints base=STALE,
+#                  and carries a NOTE row keyed on the same file:line giving the COUNT of copied
+#                  files and at most the first 5 paths in byte order, then `… and N more`.
 #   UNASSESSABLE   the validator REFUSED it (ALLOWLIST, READS-STDIN, GRAMMAR) on either side, so
 #                  no status exists to compare. Listed, never counted as cleared.
 #
@@ -155,6 +158,83 @@
 # classifier calls CURRENT or LIVING, so the NEWLY-FAILING set and the exit are the same with every
 # past sprint's artifacts deleted, and a classifier that cannot run refuses here (`scope`).
 #
+# THE IGNORED-FILE OVERLAY. The base worktree is `git worktree add` of a commit, so it holds no ignored
+# file, and a directory-walking derivation (`grep -rn <token> <dir>`) whose directory holds a consumer
+# IGNORED file that predates the pull -- a `__pycache__/*.pyc`, where BSD grep prints `Binary file P
+# matches` on stdout -- passes at base and fails at the consumer, reading NEWLY-FAILING for tree state
+# the pull never wrote. So when the first pass finds one or more NEWLY-FAILING rows, a second pass runs
+# for those keys only (a clean pull pays nothing):
+#   - each key's operands are re-read from ITS OWN command: every word naming an existing path relative
+#     to the consumer root. A word naming the root (`.`) or reaching above it gives the key no overlay.
+#   - the overlay is the `!!` entries of `git status --porcelain -z --ignored -uall -- <operands>`,
+#     one per file. IGNORED ONLY: an untracked-not-ignored `??` file is never copied, because at
+#     hand-back the apply is uncommitted and every file the range ADDS is `??`, so a `??` file cannot
+#     be told from the pull's own work. ACCEPTED RESIDUAL: a PRE-EXISTING untracked-not-ignored file
+#     still fires NEWLY-FAILING, which is today's behaviour.
+#   - a path under the pull's INSTALL ROOTS is never copied, so an ignored file the apply could have
+#     written stays the pull's work. The roots are map_consumer()'s image of every core/ top-level
+#     entry at <base> and <theirs> plus its `core/*` catch-all (`.claude/`), derived here by mapping a
+#     probe path rather than listed, plus the artifact corpus `_bmad-output/` ($ART), which is not in
+#     map_consumer()'s image because install.sh does not write it but the apply edits it, plus the
+#     TEMPLATE SITES, which the apply rewrites outside those roots (CLAUDE.md,
+#     docs/coding-conventions.md, QUICKSTART.md, .claude/settings.json): every `consumer:` path of the
+#     `template_manifest:` block in reconcile/template-sites.md, read with the grammar
+#     preclassify.sh's `--templates` parse uses for that block, never listed here. A root set without
+#     `.claude/`, or a manifest that is unreadable or names no site, means the set this pull writes
+#     is unknown: the pass does not run and every NEWLY-FAILING key gets a NOTE saying so.
+#   - over DD_OVERLAY_CAP (4096) files for one key, the key gets no overlay. The population the overlay
+#     exists for is a bytecode cache under the fence's own operands, and one test directory alone can
+#     hold hundreds: the reference consumer's `rebalancer/tests/__pycache__` holds 381 ignored files
+#     beside 381 tracked test modules. 4096 admits a cache ten times that size. A dependency or build
+#     tree (a venv, node_modules) under an operand is sized by its installed packages, not by the
+#     project's modules. WHAT THE CAP BOUNDS IS COST, NOT CORRECTNESS: every copied file is still a
+#     pre-existing ignored file outside the paths this pull writes, so relabelling over a venv would be as
+#     honest as over a cache. What grows with the overlay is the copy into the mktemp base worktree
+#     (one `cp` per file, one `mkdir` per new directory, the disk those copies take) and their
+#     removal (one `rm` per file) -- each linear in the file count and unbounded without a cap. The
+#     second validator pass is NOT bounded by it: that pass runs once per side over the affected
+#     artifact files whatever the overlay size, and a derivation walking a large ignored tree costs
+#     on the base side what it already cost on the consumer side. The listing is scanned to its end
+#     so the skip names the real count. Above the cap the row keeps today's NEWLY-FAILING, and a
+#     `NOTE <file:line>` row says so with the count N and the cap C. `AI_DLC_DD_OVERLAY_CAP` overrides
+#     the cap when it is a positive integer with no leading zero; any other value leaves 4096.
+#   - EVERY KEY THE PASS SKIPS GETS ONE NAMED `NOTE <file:line>` ROW (`overlay skipped: <reason>; the
+#     row keeps NEWLY-FAILING.`), so a skip is never silent: the
+#     paths this pull writes unknown, a root operand, no operand, `git status` failing, a directory
+#     or out-of-tree entry, over the cap, an ignored SYMLINK (never copied,
+#     since `cp` would follow it out of the tree), a path the base root already holds, a symlinked or
+#     non-directory parent, a failed mkdir or copy, a re-run exiting other than 0 or 1, a missing full
+#     output on either side, outputs that still differ, and --base-root. A key under whose operands
+#     no ignored file lies OUTSIDE this pull's install roots, template sites and artifact corpus is
+#     not a skip -- the overlay has nothing to do and the row is an ordinary finding -- and prints no
+#     NOTE.
+#     KNOWN RESIDUALS: a CRLF template-sites.md parses as non-empty with `\r`-suffixed paths and so
+#     excludes no template site (unreachable without a .gitattributes, since a CRLF checkout breaks
+#     every .sh first); and a key whose path contains a backslash fails closed (no relabel) under a
+#     wrong-named missing-output NOTE, because `awk -v` unescapes the key before the index lookup.
+#   - a copy never lands on a path the base root already holds, never through a symlinked directory,
+#     and is removed from the base worktree after the pass (the operands NOTE reads that tree later).
+#   - both roots then re-run, one binary, over the affected artifact files only, each with
+#     AI_DLC_VD_FULL_OUT_DIR naming its own directory, where the validator writes every compared
+#     derivation's WHOLE normalised actual output -- not the 160-column REC/ACT text, which cannot see
+#     a difference past that column -- to an ordinal file `<n>.out`, named for its key by that
+#     directory's `index` (`<n><TAB><file>:<line>`), so no file name grows with the artifact path.
+#     A key is RELABELLED STALE-BOTH only when both full-output files
+#     exist and are BYTE-EQUAL (`cmp -s`): the pull's own change and the pre-existing file in one
+#     fence leave the outputs different and the row NEWLY-FAILING. A missing file (a validator that
+#     predates the opt-in, a refusal, an exit other than 0 or 1) is no relabel. Keys sharing one base
+#     worktree share its overlay, but only a key that itself passed every rule above is relabelled,
+#     and every copied file is ignored and outside the paths this pull writes whichever key named it.
+#   - the relabel is applied by re-running the classifier BEFORE the owed record is written and before
+#     the NEWLY-FAILING count and the exit are read, so the rows, the record and the exit move
+#     together; the base-side pass counts and the broken-root refusal read the first pass only.
+#   - it never runs under --base-root: that tree is the operator's, and this script writes into its
+#     own mktemp worktree only. There the first pass stands, with one named NOTE row per
+#     NEWLY-FAILING key.
+# The exit codes are unchanged. A consumer whose grep prints the binary notice on STDERR (GNU grep
+# >= 3.5, `grep: P: binary file matches`) never hit this, because the validator discards a
+# derivation's stderr. GNU grep was not on the box this was measured on.
+#
 # OUT OF SCOPE, stated so a clear is not over-read: a derivation whose operand exists only as an
 # untracked or ignored file in the consumer fails at base and shows as NEWLY-PASSING (counted in a
 # NOTE); a checkout-dependent derivation (branch name, mtimes, `.git/*`) can differ as noise; a
@@ -234,7 +314,18 @@ cleanup() {
   [ -n "$WT_PARENT" ] && { rm -f "$WT_PARENT/pid" 2>/dev/null; rmdir "$WT_PARENT" 2>/dev/null; }
   rm -f "$TMP/files" "$TMP/chain" "$TMP/blobs" "$TMP/pairs" "$TMP/list.out" "$TMP/list.err" \
         "$TMP/b.out" "$TMP/b.err" "$TMP/t.out" "$TMP/t.err" "$TMP/rows" "$TMP/counts" \
-        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/owed.new" "$TMP/scope.err" "$TMP/dropped" 2>/dev/null
+        "$TMP/operands" "$TMP/moved" "$TMP/owed" "$TMP/owed.keep" "$TMP/owed.new" "$TMP/scope.err" "$TMP/dropped" \
+        "$TMP/relabel" "$TMP/nf" "$TMP/ov.keys" "$TMP/ov.files" "$TMP/ov.copied" "$TMP/ov.dirs" "$TMP/ov.dirs.r" \
+        "$TMP/ov.st" "$TMP/ov.paths" "$TMP/ov.notes" 2>/dev/null
+  # The two full-output directories hold only the validator's ordinal files `<n>.out` and its `index`,
+  # so none is a dotfile and the glob reaches every one; each directory is then removed only if empty.
+  local _fo
+  set +f
+  for _fo in "$TMP/fo.b" "$TMP/fo.t"; do
+    [ -d "$_fo" ] || continue
+    rm -f "$_fo"/* 2>/dev/null
+    rmdir "$_fo" 2>/dev/null
+  done
   rmdir "$TMP" 2>/dev/null
 }
 trap cleanup EXIT
@@ -366,7 +457,9 @@ else
   # marker and the record are the run's own files and are not a movement; any git error reads as MOVED, the safe direction.
   # IGNORED FILES COUNT AS MOVEMENT, AND THAT IS MEASURED, NOT TIDY: the base worktree is `git worktree add` of a commit, so
   # it holds no ignored file. A derivation that walks a directory (`grep -rl <token> <dir>`) PASSES there and FAILS at the
-  # consumer once the apply has written an ignored file into that directory, which the full run scores NEWLY-FAILING. A test
+  # consumer once an ignored file sits in that directory, which the full run scores NEWLY-FAILING -- and still does after the
+  # IGNORED-FILE OVERLAY in the header when the apply wrote that file under a path it writes; only a pre-existing ignored file
+  # outside them is overlaid and relabelled. A test
   # that skipped ignored paths (`--exclude-standard`) read that tree as unmoved and recorded 0, weaker than the full run.
   # With ignored entries counted the short-circuit fires only on a tree with no untracked or ignored entry outside the two
   # run-owned files, and on every other tree it runs the full differential. The other ignored-file shape, a derivation naming
@@ -447,11 +540,19 @@ case "$TRC" in 0|1) ;; *) refuse validator "the consumer-side run exited ${TRC} 
 # THE STREAM IS NAMED BY FILENAME, NOT COUNTED BY `FNR == 1`: an exit-0 side leaves an EMPTY
 # stderr file, which has no first record, so a counter would shift the consumer side's lines into
 # the base side's slot and score every consumer failure as a base failure.
+# THE CLASSIFIER RUNS ONCE, AND A SECOND TIME ONLY WHEN THE OVERLAY PASS BELOW RELABELLED A KEY. Its fifth
+# input `$TMP/relabel` (empty on the first run) names the keys that pass relabelled; each prints as
+# STALE-BOTH with base=STALE, is counted there and not as NEWLY-FAILING, and renders no OWED row. The
+# base-side pass counts (bp, tp) and the operands list are read from the first-pass statuses on both runs.
+: > "$TMP/relabel"
+dd_classify() {
+: > "$TMP/owed"; : > "$TMP/nf"
 awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TMP/operands" \
-    -v ow="$OWED_SET" -v of2="$TMP/owed" -v rng="${BASE}..${THEIRS}" -v lg="$LOG_NAME" \
-    -v fF="$TMP/files" -v fL="$TMP/list.out" -v fB="$TMP/b.err" -v fT="$TMP/t.err" '
-  { src = (FILENAME == fF) ? 1 : (FILENAME == fL) ? 2 : (FILENAME == fB) ? 3 : (FILENAME == fT) ? 4 : 0 }
+    -v ow="$OWED_SET" -v of2="$TMP/owed" -v rng="${BASE}..${THEIRS}" -v lg="$LOG_NAME" -v nff="$TMP/nf" \
+    -v fF="$TMP/files" -v fL="$TMP/list.out" -v fB="$TMP/b.err" -v fT="$TMP/t.err" -v fR="$TMP/relabel" '
+  { src = (FILENAME == fF) ? 1 : (FILENAME == fL) ? 2 : (FILENAME == fB) ? 3 : (FILENAME == fT) ? 4 : (FILENAME == fR) ? 5 : 0 }
   src == 1 { F[$0] = 1; next }
+  src == 5 { RL[$0] = 1; next }
   function keyof(s,    f, r) {
     for (f in F) if (index(s, f ":") == 1) {
       r = substr(s, length(f) + 2)
@@ -496,7 +597,7 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
   function refusal(v) { return v == "ALLOWLIST" || v == "READS-STDIN" || v == "GRAMMAR" }
   function rel(k) { return index(k, C) == 1 ? substr(k, length(C) + 1) : k }
   function row(status, k) {
-    printf "%s\t%s\tbase=%s consumer=%s", status, rel(k), st(B[k]), st(T[k])
+    printf "%s\t%s\tbase=%s consumer=%s", status, rel(k), ((k in RL) ? "STALE" : st(B[k])), st(T[k])
     if (k in CMD) printf "  $ %s", CMD[k]
     if (status == "NEWLY-FAILING" && (k in REC)) printf "  recorded: %s  actual: %s", REC[k], ACT[k]
     printf "\n"
@@ -517,7 +618,8 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
       if (B[k] == "") bp++
       if (T[k] == "") tp++
       if (refusal(B[k]) || refusal(T[k]))       { un++; row("UNASSESSABLE", k) }
-      else if (B[k] == "" && T[k] == "STALE")   { nf++; row("NEWLY-FAILING", k) }
+      else if (B[k] == "" && T[k] == "STALE" && (k in RL)) { sb++; row("STALE-BOTH", k) }
+      else if (B[k] == "" && T[k] == "STALE")   { nf++; row("NEWLY-FAILING", k); print k "\t" CMD[k] > nff }
       else if (B[k] == "STALE" && T[k] == "")   { np++; row("NEWLY-PASSING", k) }
       else if (B[k] == "STALE" && T[k] == "STALE") { sb++; row("STALE-BOTH", k) }
       else pb++
@@ -526,11 +628,13 @@ awk -v C="$CONSUMER/" -v brc="$BRC" -v trc="$TRC" -v cf="$TMP/counts" -v of="$TM
     for (i = 1; i <= nx; i++) { k = xord[i]; un++; row("UNASSESSABLE", k) }
     printf "%d %d %d %d %d %d %d %d %d %d %d\n", nu, nf, np, sb, un, pb, bp, tp, heads_b + 0, heads_t + 0, nsup > cf
   }
-' "$TMP/files" "$TMP/list.out" "$TMP/b.err" "$TMP/t.err" > "$TMP/rows"
+' "$TMP/files" "$TMP/list.out" "$TMP/b.err" "$TMP/t.err" "$TMP/relabel" > "$TMP/rows"
 : >> "$TMP/operands"
 read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T N_SUP < "$TMP/counts" 2>/dev/null \
   || refuse classify "the classifier produced no counts."
 [ -n "${N_SUP:-}" ] || refuse classify "the classifier produced no superseded count."
+}
+dd_classify
 
 [ "$N_U" -gt 0 ] || refuse validator "--list named ZERO derivations in the row's $# file(s), which the join says carry at least one. A universe the validator cannot spell compares nothing."
 # A side that exited 1 must have NAMED a failure; one that did not is a grammar this reader
@@ -540,6 +644,239 @@ read -r N_U N_NF N_NP N_SB N_UN N_PB N_BP N_TP H_B H_T N_SUP < "$TMP/counts" 2>/
 [ "$N_BP" -gt 0 ] || [ "$N_TP" -eq 0 ] \
   || refuse base-root "ZERO derivations reproduce at the base root while ${N_TP} reproduce at the consumer. The validator exits 1 all-STALE over a missing or broken root rather than refusing, so this is the signature of a root that is not the pre-apply tree, not of a pull that repaired everything."
 say_row INFO superseded "${N_SUP} of ${N_U} derivation(s) are superseded by a later byte-identical copy in the same record; the validator runs only the later copy, so they are in no count or row below."
+
+# ---- the overlay pass: a NEWLY-FAILING row the consumer's PRE-EXISTING ignored files explain ------------
+# The header's IGNORED-FILE OVERLAY section is the rule; this is its one implementation. It runs only when
+# the first pass found a NEWLY-FAILING row and only in this script's own base worktree, never under
+# --base-root. It never refuses: anything it cannot establish leaves the first pass standing.
+DD_OVERLAY_CAP=4096
+case "${AI_DLC_DD_OVERLAY_CAP:-}" in
+  ''|*[!0-9]*|0*) ;;
+  *) DD_OVERLAY_CAP="$AI_DLC_DD_OVERLAY_CAP" ;;
+esac
+# One NOTE row per key, keyed on the consumer-relative file:line, staged here and printed in the NOTEs block.
+# EVERY KEY THE PASS SKIPS GETS ONE, naming why; a key with no ignored file to overlay is not a skip and gets none.
+dd_ov_note() { printf '%s\t%s\n' "${1#"$CONSUMER"/}" "$2" >> "$TMP/ov.notes"; }
+dd_ov_skip() { dd_ov_note "$1" "overlay skipped: $2; the row keeps NEWLY-FAILING."; }
+dd_ov_skip_all() { # <reason> -> one skip row for every NEWLY-FAILING key
+  local _k _c
+  while IFS="$(printf '\t')" read -r _k _c; do
+    [ -n "$_k" ] || continue
+    dd_ov_skip "$_k" "$1"
+  done < "$TMP/nf"
+}
+dd_overlay_pass() {
+  local _k _cmd _t _e _p _r _q _d _sk _bad _why _n _top _rf _vb _vt _brc _trc _nb _nt _paths _roots _nl _oifs2 _over _ts _cnt
+  _nl='
+'
+  # The paths this pull can write outside its artifact corpus, never overlaid:
+  #   - the install roots: map_consumer()'s image of every core/ top-level entry at <base> and <theirs>, plus
+  #     its catch-all (core/<x> -> .claude/<x>). A set without `.claude/` means the mapper could not be read.
+  #   - the template sites: every `consumer:` path of the `template_manifest:` block in reconcile/template-sites.md,
+  #     read with preclassify.sh's own grammar for that block (its `--templates` parse). The apply rewrites these
+  #     files (CLAUDE.md, docs/coding-conventions.md, QUICKSTART.md, .claude/settings.json) wherever they sit.
+  #     An unreadable manifest, or one that parses to no entry, means that set is unknown.
+  #   - the artifact corpus the apply edits ($ART).
+  # Either set unknown: the pass does not run, and every NEWLY-FAILING key says why.
+  _roots=""
+  set -f
+  for _top in $(git -C "$DIST" ls-tree --name-only "${BASE_OBJ}" -- core/ 2>/dev/null; \
+                git -C "$DIST" ls-tree --name-only "${THEIRS}^{commit}" -- core/ 2>/dev/null) core; do
+    case "$_top" in core) _q="core/__dd_probe__" ;; core/*) _q="$_top/__dd_probe__" ;; *) continue ;; esac
+    _r="$(map_consumer "$_q")"; _r="${_r%__dd_probe__}"
+    case "$_r" in ''|/*|*..*) continue ;; esac
+    case "$_nl$_roots" in *"$_nl$_r$_nl"*) ;; *) _roots="$_roots$_r$_nl" ;; esac
+  done
+  set +f
+  case "$_nl$_roots" in
+    *"${_nl}.claude/${_nl}"*) ;;
+    *) dd_ov_skip_all "the pull's install roots could not be derived from map_consumer() (no \`.claude/\` in its image), so no ignored file can be shown to lie outside what this pull writes"; return 0 ;;
+  esac
+  _ts=""
+  if [ -r "$SELF/template-sites.md" ]; then
+    _ts="$(awk '
+      /^template_manifest:/{f=1; next}
+      f && /^    consumer: /{print $2; next}
+      f && /^[^ ]/{exit}
+    ' "$SELF/template-sites.md" 2>/dev/null)" || _ts=""
+  fi
+  if [ -z "$_ts" ]; then
+    dd_ov_skip_all "reconcile/template-sites.md beside this script could not be read or names no template site, so the files this pull rewrites outside its install roots are unknown"
+    return 0
+  fi
+  _roots="$_roots$_ts$_nl${ART#"$CONSUMER"/}/$_nl"
+  _rf="${OWED_FILE#"$CONSUMER"/}"
+  : > "$TMP/ov.keys"; : > "$TMP/ov.files"; : > "$TMP/ov.copied"; : > "$TMP/ov.dirs"
+  while IFS="$(printf '\t')" read -r _k _cmd; do
+    [ -n "$_k" ] || continue
+    # (a) a FRESH operand list from this fence's own command: every word naming an existing path relative to
+    # the consumer root. A word naming the root itself, or reaching above it, gives the key no overlay.
+    set -f; set --; _bad=0; _why=""
+    for _t in $_cmd; do
+      _t="${_t#[\"\']}"; _t="${_t%[\"\']}"
+      case "$_t" in -*|/*|*'$'*|*'*'*|*'?'*|*'['*|*'|'*|*';'*|*'&'*|*'<'*|*'>'*|*'`'*) continue ;; esac
+      while :; do case "$_t" in ./*) _t="${_t#./}" ;; *) break ;; esac; done
+      while :; do case "$_t" in ?*/) _t="${_t%/}" ;; *) break ;; esac; done
+      [ -e "$CONSUMER/$_t" ] || [ -L "$CONSUMER/$_t" ] || continue
+      case "$_t" in
+        ''|.|./|..|../*|*/../*|*/..)
+          _bad=1
+          _why="this fence names the project root or a path above it ('${_t:-.}') as an operand, so its ignored files cannot be bounded to a directory"
+          break ;;
+      esac
+      set -- "$@" "$_t"
+    done
+    set +f
+    if [ "$_bad" -eq 0 ] && [ "$#" -eq 0 ]; then
+      _bad=1; _why="no word of this fence's command names an existing path under the consumer root, so there is no operand to look for ignored files under"
+    fi
+    [ "$_bad" -eq 0 ] || { dd_ov_skip "$_k" "$_why"; continue; }
+    # (b) the overlay: IGNORED entries under those operands, one per file, outside the install roots.
+    if ! git -C "$CONSUMER" --literal-pathspecs status --porcelain -z --ignored -uall -- "$@" > "$TMP/ov.st" 2>/dev/null; then
+      dd_ov_skip "$_k" "\`git status --ignored\` over this fence's operands failed, so its ignored files are unknown"
+      continue
+    fi
+    _paths=""; _n=0; _sk=0; _over=0
+    while IFS= read -r -d '' _e; do
+      if [ "$_sk" -eq 1 ]; then _sk=0; continue; fi
+      case "$_e" in R*|C*|?R*|?C*) _sk=1; continue ;; '!! '*) ;; *) continue ;; esac
+      _p="${_e#!! }"
+      case "$_p" in
+        ''|*/|/*|../*|*/../*)
+          _bad=1; _why="\`git status --ignored\` listed '${_p}', a directory or a path outside the tree rather than one file, so the overlay cannot be expanded to files"
+          break ;;
+      esac
+      [ -n "$_rf" ] && [ "$_p" = "$_rf" ] && continue
+      _q=0
+      _oifs2="$IFS"; IFS="$_nl"; set -f
+      for _r in $_roots; do
+        case "$_p" in "$_r"*) _q=1; break ;; esac
+      done
+      set +f; IFS="$_oifs2"
+      [ "$_q" -eq 0 ] || continue
+      _n=$((_n + 1))
+      # Past the cap the list stops growing and the scan keeps COUNTING, so the skip row names the real N.
+      if [ "$_n" -gt "$DD_OVERLAY_CAP" ]; then _over=1; continue; fi
+      if [ "$_bad" -eq 0 ] && [ -L "$CONSUMER/$_p" ]; then
+        _bad=1; _why="the ignored path '${_p}' is a symbolic link, and copying it would copy whatever it points at, possibly from outside the tree"
+      fi
+      _paths="$_paths$_p$_nl"
+    done < "$TMP/ov.st"
+    if [ "$_bad" -eq 0 ] && [ "$_over" -eq 1 ]; then
+      dd_ov_note "$_k" "overlay skipped: ${_n} ignored file(s) under this fence's operands exceed the overlay cap ${DD_OVERLAY_CAP} (AI_DLC_DD_OVERLAY_CAP); the row keeps NEWLY-FAILING."
+      continue
+    fi
+    [ "$_bad" -eq 0 ] || { dd_ov_skip "$_k" "$_why"; continue; }
+    # Nothing to overlay is not a skip: the row is an ordinary finding, and no NOTE is printed for it.
+    [ "$_n" -gt 0 ] || continue
+    if ! printf '%s' "$_paths" > "$TMP/ov.paths"; then
+      dd_ov_skip "$_k" "the overlay list could not be staged"
+      continue
+    fi
+    # (c) copy into the base worktree: never over a path the base root already holds, never through a
+    # symlinked directory. A copy that fails gives this key no relabel.
+    while IFS= read -r _p; do
+      [ -n "$_p" ] || continue
+      if [ -e "$BR/$_p" ] || [ -L "$BR/$_p" ]; then
+        if ! grep -qxF -- "$_p" "$TMP/ov.copied" 2>/dev/null; then
+          _bad=1; _why="the base root already holds '${_p}', so the consumer's ignored copy cannot be laid over it without changing the pre-apply tree"
+          break
+        fi
+        continue
+      fi
+      _d=""; _r="${_p%/*}"; [ "$_r" = "$_p" ] && _r=""
+      _oifs2="$IFS"; IFS=/
+      set -f
+      for _q in $_r; do
+        _d="${_d:+$_d/}$_q"
+        if [ -L "$BR/$_d" ]; then _bad=1; _why="'${_d}' is a symbolic link in the base root, so copying '${_p}' through it could write outside the base worktree"; break; fi
+        if [ ! -e "$BR/$_d" ]; then
+          mkdir "$BR/$_d" 2>/dev/null || { _bad=1; _why="could not create '${_d}' in the base worktree for '${_p}'"; break; }
+          printf '%s\n' "$_d" >> "$TMP/ov.dirs"
+        elif [ ! -d "$BR/$_d" ]; then _bad=1; _why="'${_d}' is a file in the base root, so '${_p}' cannot be placed under it"; break; fi
+      done
+      set +f
+      IFS="$_oifs2"
+      [ "$_bad" -eq 0 ] || break
+      cp -p "$CONSUMER/$_p" "$BR/$_p" 2>/dev/null || { _bad=1; _why="copying '${_p}' into the base worktree failed"; break; }
+      printf '%s\n' "$_p" >> "$TMP/ov.copied"
+    done < "$TMP/ov.paths"
+    [ "$_bad" -eq 0 ] || { dd_ov_skip "$_k" "$_why"; continue; }
+    # The row carries the COUNT and at most the first 5 paths in byte order, then `… and N more`: a NOTE is printed
+    # into the session that runs this check, and a full list of a few hundred cache files is tens of kilobytes.
+    printf '%s\t%s\n' "$_k" "$(printf '%s' "$_paths" | LC_ALL=C sort | awk '
+      NR <= 5 { l = l (NR > 1 ? " " : "") $0 }
+      END { printf "%d\t%s", NR, l; if (NR > 5) printf " … and %d more", NR - 5 }')" >> "$TMP/ov.keys"
+    grep -qxF -- "${_k%:*}" "$TMP/ov.files" 2>/dev/null || printf '%s\n' "${_k%:*}" >> "$TMP/ov.files"
+  done < "$TMP/nf"
+  if [ -s "$TMP/ov.keys" ]; then
+    # (d) both roots, the same binary, only the affected artifact files, each side's full outputs to its own dir.
+    mkdir "$TMP/fo.b" "$TMP/fo.t" 2>/dev/null
+    if [ -d "$TMP/fo.b" ] && [ -d "$TMP/fo.t" ]; then
+      _oifs2="$IFS"; IFS="$_nl"; set -f
+      set -- $(cat "$TMP/ov.files")
+      set +f; IFS="$_oifs2"
+      ( cd "$BR" && AI_DLC_PROJECT_ROOT="$BR" AI_DLC_VD_FULL_OUT_DIR="$TMP/fo.b" bash "$VALIDATOR" "$@" >/dev/null 2>&1 ) &
+      _nb=$!
+      ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" AI_DLC_VD_FULL_OUT_DIR="$TMP/fo.t" bash "$VALIDATOR" "$@" >/dev/null 2>&1 ) &
+      _nt=$!
+      wait "$_nb"; _brc=$?
+      wait "$_nt"; _trc=$?
+      case "$_brc:$_trc" in
+        [01]:[01])
+          # (e) RELABEL only on two full outputs that both exist and are byte-equal. Each side's `index` names
+          # the ordinal file holding a key's output (the validator's opt-in header); no index line is no output.
+          while IFS="$(printf '\t')" read -r _k _cnt _paths; do
+            [ -n "$_k" ] || continue
+            _vb="$(awk -F'\t' -v k="$_k" '$2 == k { print $1; exit }' "$TMP/fo.b/index" 2>/dev/null)"
+            _vt="$(awk -F'\t' -v k="$_k" '$2 == k { print $1; exit }' "$TMP/fo.t/index" 2>/dev/null)"
+            _q=""
+            { [ -n "$_vb" ] && [ -f "$TMP/fo.b/$_vb.out" ]; } || _q="the base side"
+            { [ -n "$_vt" ] && [ -f "$TMP/fo.t/$_vt.out" ]; } || _q="${_q:+$_q and }the consumer side"
+            if [ -n "$_q" ]; then
+              dd_ov_skip "$_k" "the re-run with ${_cnt} ignored file(s) copied in (${_paths}) left no full output for this derivation on ${_q} (a validator without the AI_DLC_VD_FULL_OUT_DIR opt-in, or one that did not reach the comparison), so the two outputs cannot be compared"
+              continue
+            fi
+            if ! cmp -s "$TMP/fo.b/$_vb.out" "$TMP/fo.t/$_vt.out"; then
+              dd_ov_skip "$_k" "with ${_cnt} ignored file(s) copied into the base root (${_paths}) the base and consumer full outputs still differ, so something besides those ignored files moved this derivation"
+              continue
+            fi
+            printf '%s\n' "$_k" >> "$TMP/relabel"
+            dd_ov_note "$_k" "STALE-BOTH, not NEWLY-FAILING: base=STALE was measured with the consumer's ${_cnt} pre-existing IGNORED file(s) copied into the base root (${_paths}), and the base and consumer full outputs were then byte-equal, so the only difference this derivation saw was those files, none of which lies under this pull's install roots, template sites or artifact corpus. It is not recorded owed and does not move the exit; it stays stale against this tree until those files or the record change."
+          done < "$TMP/ov.keys"
+          ;;
+        *)
+          while IFS="$(printf '\t')" read -r _k _cnt _paths; do
+            [ -n "$_k" ] || continue
+            dd_ov_skip "$_k" "the re-run with ${_cnt} ignored file(s) copied in (${_paths}) exited ${_brc} (base) and ${_trc} (consumer), and only 0 and 1 are verdicts"
+          done < "$TMP/ov.keys"
+          ;;
+      esac
+    else
+      while IFS="$(printf '\t')" read -r _k _cnt _paths; do
+        [ -n "$_k" ] || continue
+        dd_ov_skip "$_k" "the full-output directories for the re-run could not be created"
+      done < "$TMP/ov.keys"
+    fi
+  fi
+  # The copies leave the base worktree before any later reader of it (the operands NOTE below tests it).
+  while IFS= read -r _p; do [ -n "$_p" ] && rm -f "$BR/$_p" 2>/dev/null; done < "$TMP/ov.copied"
+  if [ -s "$TMP/ov.dirs" ]; then
+    sed '1!G;h;$!d' "$TMP/ov.dirs" > "$TMP/ov.dirs.r" 2>/dev/null
+    while IFS= read -r _d; do [ -n "$_d" ] && rmdir "$BR/$_d" 2>/dev/null; done < "$TMP/ov.dirs.r"
+  fi
+  return 0
+}
+: > "$TMP/ov.notes"
+if [ "$N_NF" -gt 0 ] && [ "$BASE_ROOT_SET" -eq 0 ] && [ -n "$WT" ]; then
+  dd_overlay_pass < /dev/null
+  [ -s "$TMP/relabel" ] && dd_classify
+elif [ "$N_NF" -gt 0 ] && [ "$BASE_ROOT_SET" -eq 1 ]; then
+  while IFS="$(printf '\t')" read -r _ok _oc; do
+    [ -n "$_ok" ] || continue
+    dd_ov_note "$_ok" "overlay skipped: --base-root names the operator's tree, which this script never writes, so no consumer ignored file was copied into it; the row keeps NEWLY-FAILING."
+  done < "$TMP/nf"
+fi
 
 # The record is appended only after every refusal above has passed, so a refused run records nothing.
 # SCOPE IS CURRENT SPRINT ONLY (operator ruling), AND THE CLASSIFIER IS THE READER'S, NOT A COPY. The
@@ -587,6 +924,12 @@ cat "$TMP/rows"
 print_dropped
 
 # ---- NOTEs: what the differential cannot attribute -----------------------------------------
+# The overlay pass's rows: one per key it relabelled (naming every path it copied for that key), and one per
+# key it skipped for a named reason (over the cap, a root operand, --base-root).
+while IFS="$(printf '\t')" read -r _ok _op; do
+  [ -n "$_ok" ] || continue
+  say_row NOTE "$_ok" "$_op"
+done < "$TMP/ov.notes"
 # Operands are read as whitespace-split words of the recorded command with globbing OFF, so a
 # `*` in a derivation is a word and never an expansion against this shell's cwd. A word counts
 # as an operand path when it carries a `/`; one derivation is counted at most once.

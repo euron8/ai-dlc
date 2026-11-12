@@ -2388,6 +2388,32 @@ printf '%s\n' "$STDIN_SENTINEL" > "$TMP_SENT"
 # author and is never the defect being hunted. Everything else compares byte-for-byte.
 norm() { sed 's/[[:space:]]*$//' | sed '/^$/d'; }
 
+# AI_DLC_VD_FULL_OUT_DIR, WHEN IT NAMES A DIRECTORY, RECEIVES EACH COMPARED DERIVATION'S WHOLE
+# NORMALISED ACTUAL OUTPUT -- the bytes `diff` compares, never the 160-column cut a STALE block
+# prints -- one file per derivation, named by this run's ORDINAL, `<n>.out` (1, 2, ...), and
+# one `index` file whose line `<n><TAB><file>:<fence line>` names it once that file is written.
+# The ordinal keeps every name short whatever the artifact path is (a name built from the
+# absolute path ran past the 255-byte file-name limit), and it is collision-free because this
+# validator runs its derivations one at a time in one shell. The reader is
+# `reconcile/derivation-differential.sh`'s overlay pass, which looks a key up in each side's
+# index and byte-compares the two files.
+# A derivation that was refused, superseded or UNRUN, or whose comparison could not run, writes
+# none, and a failed write is silent and leaves no index line: a key with no index line is read
+# as "no full output", never as a match. With the variable unset run_pair spends one `[ -n ]`
+# test per derivation and nothing else: no fork, no file, no printed line, the same exit.
+vd_full_out() { # $1 artifact path  $2 fence line  $3 `empty` when the actual output was empty
+  local d="$AI_DLC_VD_FULL_OUT_DIR" n
+  [ -d "$d" ] || return 0
+  VD_FULL_OUT_N=$(( ${VD_FULL_OUT_N:-0} + 1 )); n="$VD_FULL_OUT_N"
+  if [ "${3:-}" = empty ]; then
+    : > "$d/$n.out" 2>/dev/null || return 0
+  else
+    cp "$TMP_NOUT" "$d/$n.out" 2>/dev/null || return 0
+  fi
+  printf '%s\t%s:%s\n' "$n" "$1" "$2" >> "$d/index" 2>/dev/null
+  return 0
+}
+
 # A FENCE MAY BE INDENTED, AND UNTIL v0.500.0 THIS READER COULD NOT SEE ONE THAT WAS. The
 # opener was matched against the line as read, so a ```derived block written inside a list
 # item -- `- item` then `  ```derived` -- never opened a block, its pairs were never run, and
@@ -2661,6 +2687,7 @@ run_pair() { # $1 file  $2 line  $3 command  $4 the later line that supersedes i
   # A non-zero rc is only a failure when the block recorded output. `grep` exiting 1 on
   # NO HITS is a legitimate derivation of a negative, and the artifact records it as such.
   if [ "$rc" -ne 0 ] && [ ! -s "$TMP_OUT" ] && [ ! -s "$TMP_EXP" ]; then
+    if [ -n "${AI_DLC_VD_FULL_OUT_DIR:-}" ]; then vd_full_out "$f" "$ln" empty; fi
     return
   fi
   # THE COMPARISON HAS THREE OUTCOMES, AND ONLY ONE OF THEM IS STALE. `diff` exits 0 on equal
@@ -2692,6 +2719,7 @@ run_pair() { # $1 file  $2 line  $3 command  $4 the later line that supersedes i
   elif ! norm < "$TMP_OUT" > "$TMP_NOUT"; then
     cmp_why="normalising the actual output failed"
   else
+    if [ -n "${AI_DLC_VD_FULL_OUT_DIR:-}" ]; then vd_full_out "$f" "$ln"; fi
     diff -q "$TMP_NEXP" "$TMP_NOUT" >/dev/null 2>&1 || drc=$?
     case "$drc" in
       0|1) ;;
