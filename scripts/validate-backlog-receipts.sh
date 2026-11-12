@@ -1500,11 +1500,11 @@ AWK
 #   NO-TOKENS      a token figure in the outcome line, `<n> tokens` / `<n>M tokens` / `<n> K tokens`
 #                  (the `ntok` column; roll.py seat_line prints `<x.1f>M tokens`);
 #   NO-STEP-BOUND  a `Step:` line naming a step estep() accepts (`sok`) -- no Basis fallback.
-#                  THE BASIS LINES, re-measured at origin/main 5a6a6c657 and at this tip, both files
-#                  alike, <f> docs/backlog.md and docs/backlog.archive.md:
+#                  THE BASIS LINES, re-measured at origin/main 5a6a6c657, at ca6a6f941 (0.1070.0) and at this tip,
+#                  both files alike, <f> docs/backlog.md and docs/backlog.archive.md (Basis rows alike at all three):
 #                    git show <ref>:<f> | grep -cE '^(<br>|- )?(\*\*)?Basis:'     -> 0 live, 0 archive
 #                    git show <ref>:<f> | grep -cE '^(<br>|- )?(\*\*)?Basis[ :(]' -> 5 live, 0 archive
-#                    control, git show <ref>:<f> | grep -cE '^(<br>|- )?(\*\*)?Step:' -> 10 live, 3 archive
+#                    control, grep -cE '^(<br>|- )?(\*\*)?Step:' -> 10 live, 3 archive at 5a6a6c657; 12 live, 3 archive at ca6a6f941 (0.1070.0) and this tip (BL-809, BL-812 gained Step lines); negative control BasisZZQ -> 0
 #                  The first pattern's 0 was BLIND, not a finding: the ledger's form is `Basis
 #                  (operator ruling, BL-817):`, a parenthesis before the colon, which `Basis:` cannot
 #                  spell. Seeded check, four lines (`Basis (operator ruling, BL-817): x`, `- **Basis: y`,
