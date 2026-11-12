@@ -17,15 +17,17 @@
 # RUN-FILTER. Exit 0 when the invocation in <value> is the unfiltered canonical collection, 1 with
 # the reason on stdout when it narrows it. The invocation is the first backticked span naming
 # `pytest` (else the first backticked span, else the text after a `$ ` prompt, else the value),
-# read up to the first shell operator after the runner; the arguments are the tokens after the
-# `pytest` token (`python -m pytest` included), or every token when no `pytest` token is present.
+# read up to the first shell operator after the runner (a token opening with a quote is never an operator, and one
+# wholly quoted token is read as its unquoted text: rr_quote writes `'--junitxml=x>y'`); the arguments are the tokens
+# after the `pytest` token (`python -m pytest` included), the PAYLOAD of a declared wrapper run (DECLARED WRAPPER
+# below), or every token when neither is present.
 # Refused in every spelling: `-k` (`-k x`, `-kx`, `-k"x"`, `--keyword`, `--keyword=x`), `--deselect`,
 # `-t`, `--testNamePattern`, `-run`, `--ignore`/`--ignore-glob`, `--lf`/`--last-failed`, and `-x`
 # (`--exitfirst`) with `--ff` (`--failed-first`); `--ff` alone reorders and still runs every test,
 # and is accepted, as is `-x` alone. An explicit file
 # (`*.py`) or node id (`::`) argument; and, for ANY runner, a path argument ending in a test-file
 # suffix (`*.test.*`, `*.spec.*`, `*_test.go`, `test_*.py`, `*_test.py`) or any argument after a
-# bare `--` (`npm test -- <path>`). A `-m <marker>` (or `-m<marker>`)
+# bare `--` (`npm test -- <path>`), unless the run is a declared wrapper's (DECLARED WRAPPER). A `-m <marker>` (or `-m<marker>`)
 # and a path argument are accepted only when the consumer's own conventions declare them canonical:
 # <conventions file> (the project's `docs/coding-conventions.md`, read by the caller) names a
 # backticked `pytest` invocation carrying the same marker expression, or the same path (compared
@@ -34,6 +36,44 @@
 # `rebalancer/tests` collects a superset, which is not narrowing). With <conventions file> absent or unreadable, `-m <marker>` is accepted and every
 # path argument other than `.` is refused. Reference consumer: its conventions declare
 # `pytest rebalancer/tests` and `<venv>/bin/python -m pytest -m unit`, and its QA records run both.
+#
+# DECLARED WRAPPER. Read only with a readable <conventions file>; without one, or with no declaration in it, every
+# wrapper is read as above (refused in both RUN-FILTER and RUN-SHAPE, the reason unchanged). A DECLARATION is a
+# backticked span of the conventions file that holds a bare `--`, names no `pytest`/`py.test` token by RUN-FILTER's
+# token rule, names a PROGRAM, and carries after its `--` only placeholders (`<...>`, blanks inside one kept), at least
+# one naming `pytest` (`<pytest args>`); a span such as `git checkout -- <file>` or `npm test -- --watch` declares
+# nothing. The PROGRAM is the first token that is not an interpreter word (basename `python*`, `bash`, `sh`, `env`,
+# `node`), an option (`-*`) or a placeholder-led token (`<...`), `./` dropped. Its OPTION SET is every `-*` token
+# between the program and `--`; an option followed there by a value or placeholder (or spelled `--opt=value`) takes one
+# value, an option followed by another option or by `--` takes none. The declarations are parsed apart from RUN-FILTER's
+# argument reader, which would read the `>` of a placeholder as a shell operator. Reference consumer: its line
+# `python3 scripts/pytest-footprint-watchdog.py --cwd <repo-root> --python <venv>/bin/python --artifact
+# test-results/<name>.txt -- <pytest args>` declares that program with `--cwd`, `--python` and `--artifact`, one value each.
+# A RUN of the span RUN-FILTER reads (rf_span) is a WRAPPER RUN when its program, by the same rule (interpreter options
+# such as `-u` skipped; a shell operator before the program restarts the reading, and a `pytest` token anywhere before
+# the payload leaves the span to the reading above, so `pytest -k x ; <wrapper> ...` stays refused), equals a declared one: a relative
+# token by equality after `./` is dropped, an absolute token also by its trailing components (`/w/s/scripts/x.py`
+# matches `scripts/x.py`, `evil/scripts/x.py` does not). Every token between the program and the run's first bare `--`
+# must be a declared option matched exactly (never by prefix: `--adm` is not `--admit-only`; `--opt=value` only for an
+# option taking a value) or the one value after a declared option that takes one; any other token (an undeclared
+# option such as `--admit-only`, or a positional, which would narrow what the wrapper runs) is refused naming it, and
+# so is a run carrying no bare `--`. The PAYLOAD is the tokens after that `--` up to the first shell operator (the
+# quote rule above), every bare `--` dropped as the wrapper drops it, read EXACTLY as the arguments after a `pytest`
+# token: a wrapper run passes RUN-FILTER iff `python -m pytest <payload>` does. RUN-SHAPE only WIDENS: a wrapper run
+# within a declaration is a run, after NO-TEST-RUN (`-- --co ...` is no run); any other value, a declared wrapper run
+# outside its declaration included (`--prelude`, `--admit-only`), gets exactly the reading it had without this arm, so
+# RUN-SHAPE's answer can move from 1 to 0 and never from 0 to 1. The refusal of an undeclared option or a positional
+# is RUN-FILTER's. Callers widened: validate-handoff-evidence.sh's full-collection arm (the dev's line, RUN-SHAPE
+# only, so dev gets only the widening, as dev has no RUN-FILTER today); merge-review-shards.sh's canon_gate (RUN-SHAPE on `Canonical run:`, and
+# RUN-FILTER on it), run_bind (RUN-FILTER on the recorded invocation) and rr_record (RUN-FILTER only, before the run executes, the rule run_bind applies);
+# run_bind's run-span is unchanged. Interpreter options that take a value
+# (`python -W ignore x.py`, `env VAR=x x.py`) are read as the program and refused; that over-refusal is accepted.
+# THE RELOCATION RESIDUAL. The wrapper's `--cwd` and `--python` can point the run at another checkout or interpreter;
+# that is the wrapper analogue of a plain run naming an absolute path into another checkout
+# (`python -m pytest /other/checkout/rebalancer/tests`, accepted today by its trailing components), not a new opening.
+# The same residual covers SUBDIRECTORY narrowing: `--cwd <repo>/rebalancer/tests/unit` with a payload naming no path
+# collects only that subdirectory, as does merge-review-shards.sh `--record-run --dir <subdir>` (pre-existing), whose
+# recorded `.dir` run_bind never checks. Neither is read here.
 #
 # STORY-BASE. The serial seat supplies its own --range, so the exemption's base is held to the
 # shape a gate-1 base has. With the optional third operand <frozen> (the exemption caller passes it),
@@ -70,7 +110,9 @@
 # backticked span, a `$ ` command, or the value's own opening command naming a RUNNER (`pytest`,
 # `python -m pytest`, `vitest`, `jest`, `npx`, `npm test`, `go test`, `cargo test`, `make test`,
 # `bun test`, a `bash <...test...>.sh` script, or the first word of a backticked command on a
-# <conventions file> line naming `canonical`), or a count `<n> passed|failed` (dev.md: "the
+# <conventions file> line naming `canonical`), a DECLARED WRAPPER run within its declaration (below; this arm only
+# widens: any other value, a declared wrapper outside its declaration included, is read by the other arms exactly as
+# without it), or a count `<n> passed|failed` (dev.md: "the
 # invocation and counts"). Exit 1 otherwise: a two-word span naming no runner (`make docs`) and a
 # `0 tests collected` are not runs. Before the runner and count arms, a NO-TEST invocation is exit 1
 # (NO-TEST-RUN below), whatever runner or count the value also carries.
@@ -172,7 +214,9 @@ ro_label() {
 }
 # rf_span <text> -> the invocation span RUN-FILTER reads (header: RUN-FILTER), the one definition: run-filter reads
 # it, and `run-span` prints it for merge-review-shards.sh's run binding, which compares it with the recorded invocation.
+# A repeat of the value ro_shape last spanned (RF_SPAN_V) is answered from RF_SPAN_S, its captured span, with no process.
 rf_span() {
+  if [ "${RF_SPAN_V+set}" = set ] && [ "$1" = "$RF_SPAN_V" ]; then printf '%s' "$RF_SPAN_S"; return 0; fi
   local t="$1" s
   local sp=""
   sp="$(grep -oE '`[^`]*`' <<<"$t")" || sp=""
@@ -182,6 +226,103 @@ rf_span() {
     case "$t" in *'$ '*) s="${t#*\$ }" ;; *) s="$t" ;; esac
   fi
   s="${s#\`}"; printf '%s' "${s%\`}"
+}
+# rw_wrap <span> <conventions file> -> RW (header: DECLARED WRAPPER): `none` when <span> runs no wrapper the file
+# declares; `ok`, then the payload one argument per line, when it runs one within a declaration; `x<TAB><reason>`
+# when it runs one outside every declaration of that program. The declarations are parsed here and never through
+# rf_args, which would read the `>` of a `<placeholder>` as a shell operator. One awk; the caller checks -r.
+# rw_any <conventions file>: 0 when the file holds a bare `--` token, which every declaration holds, else 1. Read by
+# the builtin (no process), so a conventions file declaring nothing costs no awk and no rf_span. Not keyed on the
+# RUN span: a declared wrapper run with no `--` must still reach the awk, which refuses it (`--admit-only` with no
+# `--` would otherwise read as base did, and pass).
+rw_any() {
+  local rw_c=""
+  IFS= read -r -d '' rw_c < "$1" || :
+  case "$rw_c" in *[[:space:]\`]--[[:space:]\`]*) return 0 ;; esac
+  return 1
+}
+rw_wrap() {
+  rw_any "$2" || { RW=none; return 0; }
+  RW="$(RW_SPAN="$1" awk '
+    function base(t) { sub(/.*\//, "", t); return t }
+    function interp(t,  b) { b = base(t); return b ~ /^python/ || b == "bash" || b == "sh" || b == "env" || b == "node" }
+    function quoted(t,  c) { c = substr(t, 1, 1); return c == "\"" || c == q }
+    function oper(t) { if (quoted(t)) return 0; return t == "|" || t == "||" || t == "&&" || t == ";" || t == "<" || index(t, ">") > 0 }
+    # TERMINATION: every loop below consumes at least one character or token per pass, as each one states. No call
+    # inside a match() loop may run before that loop has advanced its subject: RSTART and RLENGTH are global, and a
+    # nested match() resets them (to 0 and -1 on a miss, which re-reads the whole subject).
+    # Loop: each pass drops two characters ("./").
+    function nprog(t) { while (substr(t, 1, 2) == "./") t = substr(t, 3); return t }
+    function ph(t) { return t ~ /^<[^<>]*>$/ }
+    function pm(r, d) { return r == d || (substr(r, 1, 1) == "/" && length(r) > length(d) + 1 && substr(r, length(r) - length(d)) == "/" d) }
+    # One backticked span: a declaration when it holds a bare --, names no pytest token, names a program, and every
+    # token after its -- is a placeholder, one of them naming pytest.
+    function decl(sp,   s, r, h, T, n, i, k, t, p, o, ar, os, dd, nt, py) {
+      if ((" " sp " ") ~ /[[:space:]\/](pytest|py\.test)[[:space:]]/) return
+      s = sp; r = ""
+      # Loop: each pass drops the matched placeholder, at least two characters, from s.
+      while (match(s, /<[^<>]*>/)) { h = substr(s, RSTART, RLENGTH); gsub(/[[:space:]]/, sep, h); r = r substr(s, 1, RSTART - 1) h; s = substr(s, RSTART + RLENGTH) }
+      n = split(r s, T, /[[:space:]]+/); p = ""
+      # Loops over T (here and below): each pass advances i by at least one token, bounded by n.
+      for (i = 1; i <= n; i++) { t = T[i]; if (t == "") continue; if (t == "--") return
+        if (interp(t) || t ~ /^-/ || t ~ /^</) continue
+        p = nprog(t); break }
+      if (p == "") return
+      os = "|"; dd = 0
+      for (i++; i <= n; i++) { t = T[i]; if (t == "") continue
+        if (t == "--") { dd = i; break }
+        if (t !~ /^-/) continue
+        o = t; ar = 0
+        if (index(o, "=")) { o = substr(o, 1, index(o, "=") - 1); ar = 1 }
+        else { for (k = i + 1; k <= n && T[k] == ""; k++) ; if (k <= n && T[k] != "--" && T[k] !~ /^-/) { ar = 1; i = k } }
+        os = os o "=" ar "|" }
+      if (!dd) return
+      nt = 0; py = 0
+      for (i = dd + 1; i <= n; i++) { t = T[i]; if (t == "") continue; nt++; if (!ph(t)) return; if (index(t, "pytest")) py = 1 }
+      if (!nt || !py) return
+      nd++; DP[nd] = p; DO[nd] = os
+    }
+    # The run against one declaration: every token before the first bare -- is a declared option, its value when the
+    # declaration gives it one, or a refusal naming it.
+    function w3(os, dp,   i, t, o) {
+      # Loop: each pass advances i by one or two tokens, bounded by nw.
+      for (i = 1; i <= nw; i++) { t = W[i]
+        if (t !~ /^-/) return "hands the declared wrapper " dp " an argument before its bare -- (" t "), which narrows what it runs"
+        o = t
+        if (index(o, "=")) { o = substr(o, 1, index(o, "=") - 1)
+          if (index(os, "|" o "=1|")) continue
+          if (index(os, "|" o "=0|")) return "hands the declared wrapper " dp " a value for an option its conventions declaration gives none (" t ")"
+          return "hands the declared wrapper " dp " an option its conventions declaration does not carry (" t ")" }
+        if (index(os, "|" o "=1|")) { if (i < nw && W[i + 1] !~ /^-/) i++; continue }
+        if (index(os, "|" o "=0|")) continue
+        return "hands the declared wrapper " dp " an option its conventions declaration does not carry (" t ")" }
+      if (st != 2) return "runs the declared wrapper " dp " with no bare -- before its pytest arguments"
+      return ""
+    }
+    BEGIN { q = sprintf("%c", 39); sep = sprintf("%c", 1); nd = 0 }
+    # Loop: each pass drops the matched span, at least two characters, from line BEFORE decl() runs its own match().
+    { line = $0; while (match(line, /`[^`]*`/)) { sp = substr(line, RSTART + 1, RLENGTH - 2); line = substr(line, RSTART + RLENGTH); decl(sp) } }
+    END {
+      if (!nd) { print "none"; exit 0 }
+      n = split(ENVIRON["RW_SPAN"], T, /[[:space:]]+/); p = ""; st = 0; nw = 0; pay = ""
+      # Loop: each pass advances i by one token, bounded by n; the declaration loop after it advances d, bounded by nd.
+      for (i = 1; i <= n; i++) { t = T[i]; if (t == "") continue
+        # A pytest token before the payload: rf_args reads that run (and stops at its operator), as without a wrapper.
+        # Read only where a program is sought (st 0): a declared option VALUE (`--python /v/bin/pytest`) is not a run.
+        if (st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }
+        if (oper(t)) { if (st == 2) break; p = ""; st = 0; nw = 0; continue }
+        if (st == 0) { if (interp(t) || t ~ /^-/) continue; p = nprog(t); st = 1; continue }
+        if (st == 1) { if (t == "--") st = 2; else W[++nw] = t; continue }
+        if (t != "--") pay = pay t "\n" }
+      if (p == "") { print "none"; exit 0 }
+      m = 0; y1 = ""
+      for (d = 1; d <= nd; d++) { if (!pm(p, DP[d])) continue
+        m = 1; y = w3(DO[d], DP[d])
+        if (y == "") { printf "ok\n%s", pay; exit 0 }
+        if (y1 == "") y1 = y }
+      if (!m) { print "none"; exit 0 }
+      printf "x\t%s\n", y1
+    }' "$2")" || RW=none
 }
 # ro_no_test <value>: 0 when a text a RUN-SHAPE run arm reads carries a whole no-test token (header: NO-TEST-RUN),
 # 1 otherwise. One line per text: rf_span's span (the span arm), each `$ ` command up to its next backtick (the
@@ -205,7 +346,8 @@ ro_run_filter() {
       set -- $1
       set +f
       for w in "$@"; do
-        case "$w" in '|'|'||'|'&&'|';'|'>'|'>>'|'2>&1'|'<'|*'>'*) [ "$seen" = 1 ] && break; aft=""; all=""; dd=0; continue ;; esac
+        # A quoted token (rr_quote writes `'--junitxml=x>y'`) is an argument, never a shell operator.
+        case "$w" in \'*|\"*) ;; '|'|'||'|'&&'|';'|'>'|'>>'|'2>&1'|'<'|*'>'*) [ "$seen" = 1 ] && break; aft=""; all=""; dd=0; continue ;; esac
         if [ "$seen" = 0 ]; then
           case "$w" in pytest|*/pytest|py.test|*/py.test) seen=1; aft=""; continue ;; esac
           # After a bare `--` (`npm test -- <args>`) every non-flag token is an argument handed to the runner.
@@ -235,6 +377,8 @@ ro_run_filter() {
           fi
           pend=""; continue
         fi
+        # One quoted token is read as its unquoted text (`'--junitxml=x>y'` is that option, `'t/x.py'` that file).
+        case "$a" in \'?*\'|\"?*\") a="${a:1:${#a}-2}" ;; esac
         case "$a" in
           -k|-k*|--keyword|--keyword=*) printf 'x\t%s\n' "selects tests by name ($a)" ;;
           --deselect|--deselect=*) printf 'x\t%s\n' "deselects tests ($a)" ;;
@@ -253,7 +397,18 @@ ro_run_filter() {
         esac
       done <<<"$1"
     }
-    RF_RUN="$(rf_scan "$(rf_args "$(rf_span "$2")")")"
+    rf_sp="$(rf_span "$2")"
+    if [ $# -eq 3 ] && [ -r "$3" ]; then
+      # DECLARED WRAPPER (header): a declared wrapper's payload is read as the arguments after a `pytest` token.
+      rw_wrap "$rf_sp" "$3"
+      case "$RW" in
+        x*) printf '%s\n' "${RW#x$'\t'}"; exit 1 ;;
+        ok) rf_a="" ;;
+        ok$'\n'*) rf_a="${RW#ok$'\n'}" ;;
+        *) rf_a="$(rf_args "$rf_sp")" ;;
+      esac
+    else rf_a="$(rf_args "$rf_sp")"; fi
+    RF_RUN="$(rf_scan "$rf_a")"
     # `--ff` alone runs every test (failures first); with `-x` it stops at the first failure.
     RF_RUN="$(printf '%s\n' "$RF_RUN" | awk -F'\t' '$1 == "f" { g[$2] = 1; next } { print } END { if (g["x"] && g["ff"]) print "x\tstops at the first of the previous failures (-x with --ff)" }')"
     RF_X="$(printf '%s\n' "$RF_RUN" | awk -F'\t' '$1 == "x" { print $2; exit }')"
@@ -434,7 +589,16 @@ ro_shape() {
       done <<<"$rs_cv"
     fi
     # NO-TEST-RUN (header): a collect-only invocation is no run, whatever runner or count the value carries.
+    # The span is read once, for NO-TEST-RUN and the wrapper arm alike: rf_span answers a repeat of this value from
+    # RF_SPAN_S without starting a process.
+    unset RF_SPAN_V; RF_SPAN_S="$(rf_span "$2")"; RF_SPAN_V="$2"
     ro_no_test "$2" && exit 1
+    # DECLARED WRAPPER (header): widen only. A declared wrapper run within its declaration is a run; any other value,
+    # a declared wrapper outside its declaration included, falls through to the arms below unchanged.
+    if [ $# -eq 3 ] && [ -r "$3" ] && rw_any "$3"; then
+      rw_wrap "$RF_SPAN_S" "$3"
+      case "$RW" in ok|ok$'\n'*) exit 0 ;; esac
+    fi
     grep -qE "(^|[[:space:]/\`])($rs_rn)([[:space:]\`]|\$)" <<<"$rs_sp" && exit 0
     grep -qE "(^|[[:space:]])\\$ ([^[:space:]]*/)?($rs_rn|python[0-9.]* -m pytest)([[:space:]]|\$)" <<<"$2" && exit 0
     grep -qE "^([^[:space:]]*/)?($rs_rn|python[0-9.]* -m pytest)([[:space:]]|\$)" <<<"$rs_v" && exit 0
@@ -501,6 +665,8 @@ ro_paths() {
 }
 ro_main() {
 set -u
+# The span memo is this process's own (ro_shape writes it), never an inherited value.
+unset RF_SPAN_V RF_SPAN_S
 export LC_ALL=C
 # Every git call below reads the history as committed: a replace ref or a graft rewrites what a base holds.
 local -x GIT_NO_REPLACE_OBJECTS=1 GIT_GRAFT_FILE=/dev/null/ai-dlc-no-grafts

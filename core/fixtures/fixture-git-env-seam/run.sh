@@ -552,6 +552,25 @@ mk_seedcall_fixture() { # mk_seedcall_fixture <root> <name> <seam:above|below>
   } > "$d/seed.sh" || return 1
   chmod +x "$d/run.sh" "$d/seed.sh"
 }
+# THE TWO-HOP SHAPE (BL-988, review-shard-merge): run.sh SOURCES lib.sh, and lib.sh runs a sibling that inits. No
+# arm above can seed it -- each puts the init in run.sh or in a sibling run.sh itself invokes.
+mk_twohop_fixture() { # mk_twohop_fixture <root> <name> <seam:above|below>
+  local r="$1"
+  local n="$2"
+  local where="$3"
+  local d="$r/core/fixtures/$n"
+  mkdir -p "$d" || return 1
+  {
+    printf '#!/usr/bin/env bash\n'
+    [ "$where" = above ] && printf '. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\n'
+    printf '. "$(dirname "$0")/lib.sh"\n'
+    [ "$where" = below ] && printf '. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\n'
+    printf 'exit 0\n'
+  } > "$d/run.sh" || return 1
+  printf '#!/usr/bin/env bash\nbash "$(dirname "$0")/receipt-x.sh" "$(mktemp -d)"\n' > "$d/lib.sh" || return 1
+  printf '#!/usr/bin/env bash\ngit -C "$1" init -q\n' > "$d/receipt-x.sh" || return 1
+  chmod +x "$d/run.sh" "$d/lib.sh" "$d/receipt-x.sh"
+}
 build_probe() { # build_probe <root>
   local r="$1"
   rm -rf "$r"; mkdir -p "$r/core/fixtures/lib" "$r/scripts" || return 1
@@ -565,6 +584,8 @@ build_probe() { # build_probe <root>
   mk_probe_fixture "$r" "acquitted-scrub-above" no above || return 1 # scrub before init -> acquitted
   mk_seedcall_fixture "$r" "offender-seam-below-seedcall" below || return 1  # seam after the call -> REPORTED
   mk_seedcall_fixture "$r" "acquitted-seam-above-seedcall" above || return 1 # seam before it    -> acquitted
+  mk_twohop_fixture "$r" "offender-seam-below-twohop" below || return 1   # seam after the sourcing line -> REPORTED
+  mk_twohop_fixture "$r" "acquitted-seam-above-twohop" above || return 1  # seam before it                -> acquitted
   cp "$V_SRC" "$r/scripts/validate-fixture-git-env.sh" || return 1
   chmod +x "$r/scripts/validate-fixture-git-env.sh"
   # THE PROBE MUST BE A GIT REPOSITORY WITH ITS FILES TRACKED. The validator
@@ -670,35 +691,76 @@ else
   chmod +x "$smut"
   smut_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$smut" --max-unscrubbed 0 2>&1)"
   smut_rc=$?
-  # It must still SEE the run.sh-init offender -- otherwise it is failing for some
-  # reason other than the site derivation and W6's attribution is unproven.
-  #
-  # AND THE KILL IS READ OFF THE REASON, NOT OFF THE OFFENDER'S PRESENCE. With the
-  # sibling half dead, the seed-call member's site resolves by NEITHER route, so
-  # the refusal branch reports it as `(init-site-unresolved)` -- it is still named,
-  # for a completely different reason, and an arm keyed on the NAME scores that as
-  # survival. Measured: this arm's first cut read exactly that and failed. The
-  # discriminating observable is which suffix the row carries.
-  smut_row="$(printf '%s\n' "$smut_out" | grep -F 'offender-seam-below-seedcall')" || smut_row=""
   ship_row="$(printf '%s\n' "$w_out" | grep -F 'offender-seam-below-seedcall')" || ship_row=""
   case "$ship_row" in
     *"(seam-sourced-below-first-init)"*) : ;;
     *) fail "W8 precondition: the SHIPPING run does not report the seed-call offender as (seam-sourced-below-first-init); its row is '${ship_row:-<none>}', so there is no position verdict for the mutant to lose." ;;
   esac
-  case "$smut_out" in
-    *"offender-c-form"*)
-      case "$smut_row" in
-        *"(seam-sourced-below-first-init)"*)
-          fail "W8 the run.sh-only derivation ALSO reached a POSITION verdict on the seed-call offender (exit $smut_rc). W6 is then not a measurement of the site resolution — something else is doing the work." ;;
-        *"(init-site-unresolved)"*)
-          ok "W8 with the sibling half dead the seed-call offender loses its POSITION verdict and falls to (init-site-unresolved) — the directory-wide resolution is what makes W6 fire, and the refusal branch is what stops the loss becoming an acquittal" ;;
-        "")
-          fail "W8 the run.sh-only mutant does not name the seed-call offender at all (exit $smut_rc) — it was ACQUITTED, which is the pre-repair behaviour and means the refusal branch did not fire." ;;
-        *)
-          fail "W8 the seed-call offender is reported by the mutant with an unexpected reason: '$smut_row'." ;;
-      esac ;;
+  # SINCE THE VALIDATOR SELF-PROBES ITS SITE READER (BL-988), THIS MUTANT DIES BEFORE THE CORPUS: its sp-1hop seed --
+  # a run.sh that runs the initing sibling itself -- reads init-site-unresolved, and the copy REFUSES (exit 2). That
+  # refusal names the one-hop seed losing its site, which is the same claim the row suffix used to carry: the
+  # directory-wide resolution is what places a sibling's init. A copy that still answered about the corpus would mean
+  # the self-probe cannot see the first hop.
+  case "$smut_rc:$smut_out" in
+    2:*"SELF-PROBE"*"1hop=init-site-unresolved"*)
+      ok "W8 with the sibling half dead the validator REFUSES at its own self-probe (exit 2): the one-hop seed loses its site and reads init-site-unresolved -- the directory-wide resolution is what places it, and W6 fires because of it" ;;
     *)
-      fail "W8 the run.sh-only mutant does not report the run.sh-init offender either (exit $smut_rc); it is broken rather than narrowed, so W6's attribution is unproven. Output: $(printf '%s' "$smut_out" | head -2)" ;;
+      fail "W8 the run.sh-only mutant was not refused by the self-probe naming its one-hop seed (exit $smut_rc). Output: $(printf '%s' "$smut_out" | head -2)" ;;
+  esac
+
+  # W10/W11. THE TWO-HOP PAIR (BL-988). run.sh sources lib.sh, and lib.sh runs the sibling that inits: the site is the
+  # sourcing line, so a seam BELOW it is REPORTED for its position, and a seam ABOVE it is acquitted.
+  th_row="$(printf '%s\n' "$w_out" | grep -F 'offender-seam-below-twohop')" || th_row=""
+  case "$th_row" in
+    *"(seam-sourced-below-first-init)"*) ok "W10 a run.sh sourcing lib.sh, which runs the sibling that inits, with the seam BELOW the sourcing line is REPORTED for its position -- the second hop places the site" ;;
+    *) fail "W10 the two-hop offender's row is '${th_row:-<none>}', not (seam-sourced-below-first-init): the second hop did not place the init site at run.sh's sourcing line." ;;
+  esac
+  # W11 is asserted POSITIVELY, on the count line: the validator prints no per-member verdict, so the acquittal is
+  # read as the unscrubbed count equalling the number of offender-* trees this probe built (each one reported, W1-W10),
+  # beside the twin's name being absent. An absence alone passes for a run that never judged the twin at all.
+  n_off=0; for _o in "$Wp"/core/fixtures/offender-*/run.sh; do [ -f "$_o" ] && n_off=$((n_off + 1)); done
+  case "$w_out" in
+    *"acquitted-seam-above-twohop"*) fail "W11 the two-hop shape with the seam ABOVE its sourcing line was REPORTED -- the hop moved the site earlier than the program does, or left it unresolved." ;;
+    *"validate-fixture-git-env: ${n_off} of "*)
+      ok "W11 the same two-hop shape with the seam ABOVE the sourcing line stays acquitted: the unscrubbed count is exactly the ${n_off} offender trees, and it is not among them -- W10 discriminates on position, not on the shape" ;;
+    *) fail "W11 the unscrubbed count is not the ${n_off} offender trees this probe built: $(printf '%s\n' "$w_out" | grep -F 'fixture run.sh build' | head -1)" ;;
+  esac
+  # W12. THE SECOND HOP DROPPED, AS A MUTANT: run.sh's reaching lines read as none, so the two-hop site can only be
+  # unresolved. The validator's own self-probe runs before its corpus and must REFUSE that copy (exit 2), naming the
+  # two-hop seed it now misplaces; a copy that still answered about the corpus would mean the probe cannot see the hop.
+  HOP_ANCHOR='  srcl="$(noncomment_hits "$run" "$INVOKE_RE")"'
+  hop_n="$(grep -cF "$HOP_ANCHOR" "$V_SRC")" || hop_n=0
+  [ "$hop_n" -eq 1 ] || broken "W12 anchor matches $hop_n lines in the validator, expected exactly 1 -- the mutation would edit the wrong thing or nothing"
+  hmut="$Wp/scripts/mutant-no-second-hop.sh"
+  while IFS= read -r line; do
+    if [ "$line" = "$HOP_ANCHOR" ]; then printf '  srcl=""\n'; else printf '%s\n' "$line"; fi
+  done < "$V_SRC" > "$hmut"
+  cmp -s "$hmut" "$V_SRC" && broken "W12 mutant did not apply -- the no-second-hop copy is byte-identical to the shipping validator"
+  bash -n "$hmut" || broken "W12 mutant does not parse"
+  hmut_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$hmut" --max-unscrubbed 0 2>&1)"
+  hmut_rc=$?
+  case "$hmut_rc:$hmut_out" in
+    2:*"SELF-PROBE"*"below=init-site-unresolved"*"above=init-site-unresolved"*)
+      ok "W12 with the second hop dropped the validator REFUSES at its own self-probe (exit 2): both two-hop seeds read init-site-unresolved, so the hop is what places them" ;;
+    *) fail "W12 the no-second-hop mutant was not refused by the self-probe (exit $hmut_rc): $(printf '%s' "$hmut_out" | head -2)" ;;
+  esac
+  # W13. THE SOURCED-ONLY HOP RESTORED, AS A MUTANT: the second hop reads only the lines that SOURCE a sibling, the
+  # first cut. A sibling run.sh RUNS then reaches its init unseen, and a later sourced route masks it -- the self-probe's
+  # sp-ran seed (run.sh line 2 runs mid.sh, which runs x.sh; the seam at 3; lib.sh sourced at 4 runs x.sh too) reads
+  # ok at site 4 where the init runs at line 2, above the seam. That copy must be REFUSED, naming ran=ok.
+  smod="$Wp/scripts/mutant-sourced-only-hop.sh"
+  while IFS= read -r line; do
+    if [ "$line" = "$HOP_ANCHOR" ]; then printf '%s\n' "  srcl=\"\$(noncomment_hits \"\$run\" '(^|[[:space:]]|[;&|(])(source|\\.)[[:space:]]')\""; else printf '%s\n' "$line"; fi
+  done < "$V_SRC" > "$smod"
+  cmp -s "$smod" "$V_SRC" && broken "W13 mutant did not apply -- the sourced-only copy is byte-identical to the shipping validator"
+  grep -qF "(source|\\.)[[:space:]]')\"" "$smod" || broken "W13 mutant does not carry the sourced-only grammar; the mutation matched nothing"
+  bash -n "$smod" || broken "W13 mutant does not parse"
+  smod_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$smod" --max-unscrubbed 0 2>&1)"
+  smod_rc=$?
+  case "$smod_rc:$smod_out" in
+    2:*"SELF-PROBE"*"below=seam-sourced-below-first-init"*"ran=ok"*)
+      ok "W13 with the hop restricted to SOURCED siblings the validator REFUSES at its own self-probe (exit 2): the masked-route seed reads ran=ok while its two-hop sourced seed still places -- following every reached sibling is what reports it" ;;
+    *) fail "W13 the sourced-only mutant was not refused naming ran=ok (exit $smod_rc): $(printf '%s' "$smod_out" | head -2)" ;;
   esac
 
   # W5. THE OLD GRAMMAR MUST ACQUIT THE PROBE. This is what makes W1 a statement

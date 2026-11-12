@@ -332,6 +332,7 @@ project that replaces that section does not replace this one.
   `none, <reason>` stays held to the record-path rule.
   The counts may be the line the capture-heads block renders (below), cited as
   the capture's path plus `counts: capture-heads block`.
+  A wrapper the project's coding conventions declare as a run form, passing only its declared options then `--` and the pytest arguments, is a run for this line.
 - **The dependency setup that run needs, recorded beside it.** A fresh
   detached worktree carries none of the project's gitignored dependencies, so
   record in the Dev Agent Record, beside the full-collection run, the canonical

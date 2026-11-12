@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1090.0] - 2026-11-12
+
+### BL-988: a conventions-declared wrapper is one canonical-run language for record and check
+
+PC-S322-QA-CANONICAL-RECORD-ACCEPTS-WATCHDOG-FORM-CHECK-SERIAL-REFUSES-IT. `merge-review-shards.sh --record-run` executed and recorded a wrapper invocation such as `python3 -u scripts/pytest-footprint-watchdog.py --cwd <root> --python <venv>/bin/python --artifact <f> -- <pytest args>`, and `record-only-diff.sh` refused the same invocation in RUN-SHAPE (no run) and RUN-FILTER (`hands the runner a path after --`), so a consumer ran its suite twice per gate-2 QA.
+
+A wrapper the conventions file declares (a backticked span with a bare `--`, only placeholders after it, one naming pytest) is now a run for RUN-SHAPE when its program matches and every token before its first bare `--` is a declared option or that option's single value. RUN-SHAPE only widens, so no value that was accepted is refused there. Its payload after `--` is read by RUN-FILTER as the arguments after a pytest token. An undeclared wrapper, `--admit-only`, an unknown option and a positional before `--` are refused naming the token, by RUN-FILTER and, for `--record-run`, the RUN-FILTER pre-check. Over graph main's 302 values, RUN-SHAPE moved 1 to 0 on 2 values and 0 to 1 on none. `--record-run` holds the invocation to RUN-FILTER only, the rule `run_bind` applies at check time, under the frozen worktree's conventions before it executes, refusing with nothing run; it does not apply RUN-SHAPE, so graph's 4 `check-26-deployed-ranges` lead-record invocations (run-shape 1) are not newly refused, and 0 of 56 lead-record invocations are refused. `rf_args` no longer reads a quoted token as a shell operator. The qa and dev role prose name the wrapper form. With no conventions file, wrapper forms behave as at base, except that `rf_args` and `rf_scan` now read a wholly quoted token as its text: `'.'` is accepted, while `'-k'` and `"x::y"` are refused for the right reason. A pytest-named wrapper option value no longer switches the option check off, and `--record-run` resolves `record-only-diff.sh` by absolute path.
+
+Consumer cost: under conventions that declare a wrapper, each run-filter call starts 1 extra process and each run-shape call 1 extra (run-filter 7 to 8 starts, run-shape 14 to 15, measured by a PATH shim), about 93 to 220 extra starts per graph sprint. Conventions with no `--` token cost exactly base's starts. Residual: a path into another checkout, the wrapper `--cwd` into a subdirectory and the existing `--record-run --dir` relocate or narrow the collection, and neither half checks it.
+
+`receipt-bl980.sh` now sources the `lib/preamble.sh` git-env seam so it is safe standalone under a hook that exports `GIT_DIR`, and `validate-fixture-git-env.sh` follows one more hop (a sibling invoked from a sibling that `run.sh` invokes or sources, since a child process inherits `GIT_DIR` as a sourced file does), with a seed for the masked route, which keeps the pre-push `--max-unscrubbed 0` step at 0 of 105; `fixture-git-env-seam` gains W10-W13 and its budget goes to 298.
+
+`core/fixtures/review-shard-merge/receipt-bl980.sh` now lists a receipt as `:nogit` only when its trace holds no git command and its non-comment text carries no `git` word; git reached only through a child script the receipt runs would not be seen.
+
 ## [0.1089.0] - 2026-11-12
 
 ### BL-912 stays PARTIAL: the 9-call gap is traced (444 = 435 + 9), the hooks ran start to close in s322

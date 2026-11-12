@@ -1,5 +1,10 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run.
-550 *
+# BL-988 (* 550->565, two agreeing counted runs, per-path diffs of the start logs): +1 the bash start of
+# receipt-bl988.sh, which GM1's receipt-bl980.sh drives as it drives every receipt-*.sh in this directory (listed
+# receipt-bl988.sh:nogit); +14 receipt-bl980.sh's nogit self-probe: 4 starts (its three probe receipts and sp2's
+# helper) in each of its 3 self-probe runs (its own, and its text and trace conjunct mutants run --self-probe-only),
+# plus the 2 mutant copies' own starts. No other shard-a arm moved.
+565 *
 4 core/scripts/partition-review-diff.sh
 7 core/scripts/merge-review-shards.sh
 21 core/scripts/content-seal.sh

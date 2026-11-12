@@ -173,6 +173,43 @@ first_line_re() {
 # exactly that comment. A command starts the line or follows whitespace or a
 # `;`/`&`/`|`/`(` separator; it never follows a dot.
 INVOKE_RE='(^|[[:space:]]|[;&|(])(bash|sh|source|\.)[[:space:]]'
+# THE SECOND HOP: A SIBLING INVOKED FROM A SIBLING THAT run.sh REACHES, SOURCED OR RUN. Measured case:
+# review-shard-merge, whose receipt-bl980.sh carries a `git init` (its nogit self-probe's sp1) and is reached in two
+# hops -- run.sh sources lib.sh (`. "$HERE/lib.sh"`), and lib.sh's p_gmaint runs `bash "$LIB_DIR/receipt-bl980.sh"`.
+# The one-hop reading found no site, and the refusal branch reported the directory as (init-site-unresolved) over a
+# correct fixture. Whatever a sibling invokes is reached FROM the run.sh line that reaches the sibling, so its site is
+# that line -- for a SOURCED sibling (it runs in run.sh's own shell) and for a RUN one alike (a child process inherits
+# GIT_DIR exactly as a sourced file does).
+# THE FIRST CUT FOLLOWED ONLY SOURCED SIBLINGS, AND THAT MASKED AN EARLIER ROUTE. Measured on a probe tree: run.sh
+# line 2 runs `bash helper.sh`, helper.sh runs `bash x.sh`, which inits; the seam at line 3; line 4 sources lib.sh,
+# which also invokes x.sh. Before the hop it was (init-site-unresolved), failing closed; with a sourced-only hop it
+# read site 4, ok, while the init really runs at line 2, above the seam -- an acquitted clobber. Following every
+# sibling run.sh reaches places it at line 2, seam below: reported. The control (that tree less its lib.sh line)
+# reads unresolved either way. The self-probe's sp-ran seed holds it, and fixture-git-env-seam W13's mutant, which
+# restores the sourced-only reading, dies on that seed.
+# EXACTLY ONE MORE HOP, NEVER A CLOSURE. The live population needed one (review-shard-merge, the only directory
+# whose init sits two hops away); a closure would follow chains nobody has written, through a reader that keys on a
+# basename and a separator, and each extra hop widens what a comment-shaped or string-shaped mention can move. A
+# third hop stays (init-site-unresolved), which fails closed. One hop needs no cycle guard: no chain is followed past
+# the reached sibling, so `a.sh` reaching `b.sh` reaching `a.sh` is read once each and cannot loop.
+# WHAT THE READER CANNOT TELL APART, AND WHY IT IS STRICTER FOR IT. Comment LINES are never a source or a call, in
+# run.sh or in the reached sibling (`# bash receipt-x.sh` matches the invocation grammar). But a STRING carrying
+# `source`, `bash`, `sh` or ` . ` before a sibling's name reads as an invocation, a trailing `# ...` comment on a code
+# line is not dropped, and a basename matches as a substring of a longer one. Each of those can only add a site, and
+# a site moves the verdict only by being EARLIER, so on its own each one makes the reader stricter, never more
+# lenient. It could acquit only together with a route that masks an earlier real one -- the sourced-only cut above
+# was that route, and following every reached sibling closes it.
+# FALSE-POSITIVE SET over the live population, measured before this shipped, from clean detached worktrees, per
+# member (verdict and site), the pre-hop validator against this one: the ONLY change is review-shard-merge, its site
+# NONE -> 504 (run.sh's `. "$HERE/lib.sh"`) and its verdict (init-site-unresolved) -> ok. That is a measurement, not
+# a construction: a hop site CAN move a member from acquitted to reported, when it lands above the member's seam
+# (sp-below, sp-ran), and that is a true positive; no live member carries one.
+# The self-probe below holds the hop both ways, both near-misses and the masked route, before the corpus is read.
+noncomment_hits() { # noncomment_hits <file> <ere> -> "<n>:<line>" rows of the ERE, comment lines dropped
+  # One awk, the ERE handed over through the ENVIRONMENT: an `awk -v` value loses one level of escaping (the note at
+  # first_line_re above), ENVIRON keeps it byte for byte.
+  NCH_RE="$2" awk '!/^[[:space:]]*#/ && $0 ~ ENVIRON["NCH_RE"] { print NR ":" $0 }' "$1" 2> /dev/null || return 0
+}
 init_site_line() { # init_site_line <dir> <run.sh-path> -> earliest reaching line, or empty
   local dir="$1"
   local run="$2"
@@ -181,6 +218,11 @@ init_site_line() { # init_site_line <dir> <run.sh-path> -> earliest reaching lin
   local b
   local hits
   local ln
+  local t
+  local tb
+  local sinv
+  local src
+  local srcl
   best="$(first_line_re "$run" "$INIT_RE")"
   for s in "$dir"/*.sh; do
     [ -f "$s" ] || continue
@@ -196,12 +238,42 @@ init_site_line() { # init_site_line <dir> <run.sh-path> -> earliest reaching lin
     [ -n "$ln" ] || continue
     if [ -z "$best" ] || [ "$ln" -lt "$best" ]; then best="$ln"; fi
   done
+  # The second hop (header above): a sibling run.sh reaches, sourced or run, and a further sibling carrying an init
+  # that the reached sibling invokes; the site is the run.sh line that reaches it. run.sh's invoking lines are read
+  # ONCE per member (one awk), and a sibling is asked about only when its basename is on one of them, matched by the
+  # shell.
+  srcl="$(noncomment_hits "$run" "$INVOKE_RE")"
+  [ -n "$srcl" ] || { printf '%s\n' "$best"; return 0; }
+  for src in "$dir"/*.sh; do
+    [ -f "$src" ] || continue
+    b="${src##*/}"
+    [ "$b" = "run.sh" ] && continue
+    case "$srcl" in *"$b"*) ;; *) continue ;; esac
+    ln="$(printf '%s\n' "$srcl" | grep -F "$b" | sed -n '1s/:.*//p')" || ln=""
+    [ -n "$ln" ] || continue
+    if [ -n "$best" ] && [ "$ln" -ge "$best" ]; then continue; fi
+    sinv="$(noncomment_hits "$src" "$INVOKE_RE")"
+    [ -n "$sinv" ] || continue
+    for t in "$dir"/*.sh; do
+      [ -f "$t" ] || continue
+      tb="${t##*/}"
+      [ "$tb" = "run.sh" ] || [ "$tb" = "$b" ] && continue
+      case "$sinv" in *"$tb"*) ;; *) continue ;; esac
+      grep -qE "$INIT_RE" "$t" || continue
+      best="$ln"; break
+    done
+  done
   printf '%s\n' "$best"
 }
 
-UNSCRUBBED=""
-N_UNSCRUBBED=0
-for f in $POP; do
+# judge_one <dir> <run.sh> -> JR: ok, plain, or the reason tag a row carries. The corpus loop and the self-probe below
+# ask this ONE function, so the probe holds the program the corpus runs, never a copy of it.
+judge_one() {
+  local jd="$1"
+  local jr="$2"
+  local init_ln
+  local seam_ln
+  local scrub_ln
   # A SCRUB BELOW THE FIRST `git ... init` IN THE SAME FILE IS NOT A SCRUB, and
   # both halves of this loop were POSITION-BLIND until they were measured. The
   # re-arm note below already stated the general form for the seam branch; the
@@ -218,7 +290,7 @@ for f in $POP; do
   #
   # The site is resolved through the whole DIRECTORY, per init_site_line above: a
   # run.sh that never inits itself still reaches one through the seed it invokes.
-  init_ln="$(init_site_line "$ROOT/$(dirname "$f")" "$ROOT/$f")"
+  init_ln="$(init_site_line "$jd" "$jr")"
 
   # AN UNRESOLVABLE SITE IS A FINDING, NOT AN ACQUITTAL. Every member of this
   # population runs an init somewhere in its directory -- that is how it joined --
@@ -230,24 +302,20 @@ for f in $POP; do
   # sibling, 5 by both. It ships as a finding because there is no correct input it
   # can fire on today.
   if [ -z "$init_ln" ]; then
-    UNSCRUBBED="${UNSCRUBBED} ${f}(init-site-unresolved)"
-    N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
-    continue
+    JR=init-site-unresolved; return 0
   fi
 
   # Key on the SOURCING SITE, not on a whole-file grep: a comment naming the
   # preamble satisfies `grep -qF` over the file and changes no behaviour.
-  if grep -qE "$SEAM_RE" "$ROOT/$f"; then
+  if grep -qE "$SEAM_RE" "$jr"; then
     # THE SEAM LINE MUST PRECEDE THE FIRST INIT TOO. By convention it is line 2,
     # immediately after the shebang, so this arm has no live subject today and is a
     # trap for the next author -- the same status, and the same treatment, as the
     # re-arm check below. Asserted rather than assumed: a convention is not a
     # mechanism, and a seam sourced after the init scrubs nothing.
-    seam_ln="$(first_line_re "$ROOT/$f" "$SEAM_RE")"
+    seam_ln="$(first_line_re "$jr" "$SEAM_RE")"
     if [ -n "$seam_ln" ] && [ "$seam_ln" -gt "$init_ln" ]; then
-      UNSCRUBBED="${UNSCRUBBED} ${f}(seam-sourced-below-first-init)"
-      N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
-      continue
+      JR=seam-sourced-below-first-init; return 0
     fi
     # SOURCING IT IS NOT ENOUGH IF SOMETHING RE-ARMS AFTERWARDS. The scrub is a
     # statement, not a property: a later `GIT_DIR=` assignment or `export GIT_DIR`
@@ -265,12 +333,11 @@ for f in $POP; do
     # true match on a false subject, which is the false-positive path CLAUDE.md
     # requires measured before an arm ships. The assignment must END the command:
     # nothing after it but whitespace, a comment, or a `;`/`&&`/`||` separator.
-    if grep -qE '^[[:space:]]*(export[[:space:]]+)?GIT_DIR=[^[:space:]]*[[:space:]]*(#.*)?$' "$ROOT/$f" \
-       || grep -qE '^[[:space:]]*(export[[:space:]]+)?GIT_DIR=[^[:space:]]*[[:space:]]*(;|&&|\|\|)' "$ROOT/$f"; then
-      UNSCRUBBED="${UNSCRUBBED} ${f}(re-arms)"
-      N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
+    if grep -qE '^[[:space:]]*(export[[:space:]]+)?GIT_DIR=[^[:space:]]*[[:space:]]*(#.*)?$' "$jr" \
+       || grep -qE '^[[:space:]]*(export[[:space:]]+)?GIT_DIR=[^[:space:]]*[[:space:]]*(;|&&|\|\|)' "$jr"; then
+      JR=re-arms; return 0
     fi
-    continue
+    JR=ok; return 0
   fi
   # A fixture may scrub inline instead. That is a different shape from the seam
   # and it is still a fix -- the property is the scrub, not which file carries it.
@@ -288,18 +355,72 @@ for f in $POP; do
   #
   # AND IT IS KEYED ON POSITION, per the note at the top of this loop: the
   # exemption holds only where the scrub precedes the file's first init.
-  scrub_ln="$(first_line_re "$ROOT/$f" "$SCRUB_RE")"
-  [ -n "$scrub_ln" ] || scrub_ln="$(first_line_re "$ROOT/$f" "$ENVSCRUB_RE")"
+  scrub_ln="$(first_line_re "$jr" "$SCRUB_RE")"
+  [ -n "$scrub_ln" ] || scrub_ln="$(first_line_re "$jr" "$ENVSCRUB_RE")"
   if [ -n "$scrub_ln" ]; then
     if [ "$scrub_ln" -lt "$init_ln" ]; then
-      continue
+      JR=ok; return 0
     fi
-    UNSCRUBBED="${UNSCRUBBED} ${f}(scrub-below-first-init)"
-    N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
-    continue
+    JR=scrub-below-first-init; return 0
   fi
-  UNSCRUBBED="${UNSCRUBBED} ${f}"
-  N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
+  JR=plain
+}
+
+# THE SELF-PROBE, BEFORE THE CORPUS: the second hop held both ways, its two near-misses and the masked route (a run
+# sibling reaching the init above the seam, ahead of a sourced one), plus the one-hop case it must leave unchanged, each a mktemp tree judged by judge_one with absolute paths (no root is read, so no answer can
+# come from the real tree). A probe whose answer differs is a REFUSAL: a reader that cannot place its own seeds has no
+# verdict to give about anyone else's.
+#   sp-below    run.sh sources lib.sh at line 2 and the seam at line 3; lib.sh runs `bash ./x.sh`, which inits
+#                                                                          -> seam-sourced-below-first-init
+#   sp-above    the same, the seam at line 2 and the sourcing line at 3   -> ok
+#   sp-mention  lib.sh names x.sh only in a comment and a string          -> init-site-unresolved (fails closed)
+#   sp-3hop     lib.sh sources mid.sh, which runs x.sh                    -> init-site-unresolved (fails closed)
+#   sp-1hop     run.sh, the seam at line 2, runs `bash ./x.sh` itself, which inits  -> ok (unchanged)
+#   sp-ran      run.sh line 2 RUNS mid.sh, which runs x.sh; the seam at 3; line 4 sources lib.sh, which runs x.sh too
+#                                                                          -> seam-sourced-below-first-init (masked route)
+sp_tree() { # sp_tree <name> <run.sh body> <lib.sh body> [<mid.sh body>] -> the tree's directory
+  local d="$SP_W/$1"
+  mkdir -p "$d" || return 1
+  printf '#!/usr/bin/env bash\n%s\n' "$2" > "$d/run.sh" || return 1
+  [ -z "$3" ] || printf '#!/usr/bin/env bash\n%s\n' "$3" > "$d/lib.sh" || return 1
+  [ -z "${4:-}" ] || printf '#!/usr/bin/env bash\n%s\n' "$4" > "$d/mid.sh" || return 1
+  # A literal `git init`: it joins under the current grammar and under the literal one, so the probe stays readable
+  # to a copy of this file carrying an older INIT_RE (fixture-git-env-seam W5's mutant).
+  printf '#!/usr/bin/env bash\ngit init -q "$1"\n' > "$d/x.sh" || return 1
+  printf '%s' "$d"
+}
+SP_W="$(mktemp -d "${TMPDIR:-/tmp}/validate-fixture-git-env.XXXXXX")" || { echo "validate-fixture-git-env: REFUSED — mktemp failed for the self-probe." >&2; exit 2; }
+SP_SEAM='. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"'
+SP_GOT=""
+for _sp in below above mention 3hop 1hop ran; do
+  case "$_sp" in
+    below) _d="$(sp_tree sp-below "$(printf '. "$(dirname "$0")/lib.sh"\n%s' "$SP_SEAM")" 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
+    above) _d="$(sp_tree sp-above "$(printf '%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
+    mention) _d="$(sp_tree sp-mention "$(printf '%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" "$(printf '# bash x.sh, never called\necho "see x.sh"')")" ;;
+    3hop) _d="$(sp_tree sp-3hop "$(printf '%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" '. "$(dirname "$0")/mid.sh"' 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
+    1hop) _d="$(sp_tree sp-1hop "$(printf '%s\nbash "$(dirname "$0")/x.sh" "$1"' "$SP_SEAM")" '')" ;;
+    ran) _d="$(sp_tree sp-ran "$(printf 'bash "$(dirname "$0")/mid.sh" "$1"\n%s\n. "$(dirname "$0")/lib.sh"' "$SP_SEAM")" 'bash "$(dirname "$0")/x.sh" "$1"' 'bash "$(dirname "$0")/x.sh" "$1"')" ;;
+  esac
+  [ -n "$_d" ] || { echo "validate-fixture-git-env: REFUSED — the self-probe tree $_sp was not built." >&2; exit 2; }
+  judge_one "$_d" "$_d/run.sh"; SP_GOT="$SP_GOT $_sp=$JR"
+done
+for _sp in sp-below sp-above sp-mention sp-3hop sp-1hop sp-ran; do rm -f "$SP_W/$_sp"/*.sh; rmdir "$SP_W/$_sp"; done; rmdir "$SP_W"
+SP_WANT=" below=seam-sourced-below-first-init above=ok mention=init-site-unresolved 3hop=init-site-unresolved 1hop=ok ran=seam-sourced-below-first-init"
+if [ "$SP_GOT" != "$SP_WANT" ]; then
+  echo "validate-fixture-git-env: REFUSED — SELF-PROBE: the init-site reader read [${SP_GOT# }]," >&2
+  echo "  want [${SP_WANT# }]. A reader that misplaces its own seeds has no verdict about the corpus." >&2
+  exit 2
+fi
+
+UNSCRUBBED=""
+N_UNSCRUBBED=0
+for f in $POP; do
+  judge_one "$ROOT/$(dirname "$f")" "$ROOT/$f"
+  case "$JR" in
+    ok) ;;
+    plain) UNSCRUBBED="${UNSCRUBBED} ${f}"; N_UNSCRUBBED=$((N_UNSCRUBBED + 1)) ;;
+    *) UNSCRUBBED="${UNSCRUBBED} ${f}(${JR})"; N_UNSCRUBBED=$((N_UNSCRUBBED + 1)) ;;
+  esac
 done
 
 if [ "$N_UNSCRUBBED" -gt 0 ]; then

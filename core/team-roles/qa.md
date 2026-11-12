@@ -371,6 +371,9 @@ For each completed task, verify:
   Every pass runs it at its own frozen sha: an earlier pass's run is accepted when it ran at this
   pass's frozen sha, or when the change since it is record-only by the same test the record-only
   exemption uses; otherwise run `--record-run` again. `Canonical run: none, <reason>` and a waiver claim need no record.
+  A wrapper the project's coding conventions declare as a run form (a backticked `<program> <declared options> -- <pytest args>` span)
+  is a canonical run when it passes only the declared options, each with its declared value, then `--` and the canonical pytest arguments; `--record-run` holds the
+  invocation to RUN-FILTER only before it executes, the rule the merge holds the recorded invocation to at check time, and refuses with nothing run.
 - [ ] **Permitted pre-existing failures are enumerated by test ID (HARD GATE).**
   If the story allows the suite to be non-green on failures it did not cause,
   the allowance MUST list the failing test IDs, and the run MUST fail exactly

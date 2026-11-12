@@ -3,5 +3,8 @@
 # logs against a counted base run (194): `env` is now declared, so the six unarmed U cells run trunk-push-bound for the
 # first time under hermetic-run.sh, 17 starts each (its run.sh 1, validate-audit-anchors.sh 9, its mutant copies
 # control 1, m1 2, m2 2, m3 1, m4 1). Mutant u127 adds none: its runner resolves nowhere and starts no bash.
-296 *
+# BL-988 (* 296->298, two agreeing counted runs): +1 the bash start of W12's no-second-hop mutant copy of
+# validate-fixture-git-env.sh and +1 that of W13's sourced-only-hop copy, each refused at its own self-probe. The
+# validator's self-probe judges its seeds in process and starts no bash, and W10/W11 ride the one shipped run.
+298 *
 3 scripts/validate-fixture-git-env.sh

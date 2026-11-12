@@ -1,5 +1,11 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run.
-131 *
+# BL-988 (* 131->132, two agreeing counted runs, per-path diffs of the start logs against a counted run at e3d2dfc35):
+# +2 bash starts of receipt-bl988.sh, one by p_wrap's wr-receipt cell and one by m988-w6s's twin (wr-receipt over the
+# mutant copy); -1 M74, whose `$*` record --record-run's RUN-FILTER pre-check now refuses, so its rr-mq cell no longer
+# merges (one artifact-path-config.sh start fewer). M68's twin is now rr-mq, which merges as rr-rfilter did at base
+# (2 either way); the new rr-rbind cell's merge replaces rr-rfilter's in the plain run (65 artifact-path-config.sh
+# starts either way); every other BL-988 cell asks in process or runs python3/awk, which are no bash starts.
+132 *
 0 core/scripts/partition-review-diff.sh
 0 core/scripts/merge-review-shards.sh
 0 core/scripts/content-seal.sh
