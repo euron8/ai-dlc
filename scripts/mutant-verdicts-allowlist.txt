@@ -1,0 +1,130 @@
+# scripts/mutant-verdicts-allowlist.txt -- the fixtures whose run.sh still emits keyword-free mutant
+# verdicts outside mutant_killed, one row per fixture: <fixture><TAB><count of such lines>.
+#
+# DERIVED, never typed: the rows are exactly `bash scripts/validate-mutant-kills.sh --derive-m8`
+# (LC_ALL=C sorted). The grammar of a counted line (an ok message, an `echo "ok:` string or a printf
+# whose format opens with ok, naming a mutant or mutation, carrying no KILLED/killed and routed
+# through no mutant_killed, with no deny word in the first 40 characters of its message) is M8_FN in
+# that validator, and its header carries the measurements.
+#
+# DOWN-ONLY. M8 refuses a fixture whose count rises above its row (an unlisted fixture is 0); M9
+# refuses a row above the fixture's current count, a row for a fixture with no such line or no
+# run.sh, a duplicate and a malformed row; M10 refuses a row added or raised against origin/main.
+#
+# REMEDY for a refused line. A kill: route it through mutant_killed <flag> <name> "<message>"
+# (core/fixtures/lib/mutant.sh). Not a kill: name its sense in the first 40 characters of its message
+# (unmutated, control, baseline, twin, stays green, intact, matrix, did not apply, applied, pairing,
+# cmp -s). Then lower this row to the new count, or delete it at 0.
+adversarial-citation	1
+adversarial-shard-merge	1
+answer-handoff-routing	2
+apply-drift-after-write	1
+apply-machinery-stamp	2
+apply-relabel-noop-row	1
+apply-restamp-worklist	2
+artifact-derivations	1
+askuserquestion-citation	1
+backlog-receipt-binding	1
+backlog-rotate-fence-guard	1
+bmad-invocation-resolve	5
+changelog-sprint-slot	3
+check-22-spawn-ledger	16
+check-24-adversarial-convergence	10
+check-3b-locked-anchor	14
+check5-anchor-base	7
+ci-gates-resolution	2
+command-args-citation	3
+consolidation-residue	2
+consumer-machinery-inventory	1
+context-provenance	3
+context-sensor	2
+core-script-boundary	1
+cycle-commits-enforce	4
+deploy-validate-smoke-classification	1
+derivation-capture-worktree-root	1
+dispatch-model-guard	1
+emit-report-refusal	1
+enforcement-map-sites	1
+escalation-citation	2
+escalation-delivery	1
+extension-check-adoption	3
+extract-push-flag-decision	1
+fanout-payload-channel	1
+fanout-untracked-corpus	6
+fixture-drivability	2
+fixture-git-env-seam	2
+foreground-budget-deny	1
+gate-adjudication	1
+gate-adjudication-rotate	17
+gate-verdict-grep-shape	3
+h2-attest-scripts-dir	1
+handoff-completion-assertion	1
+handoff-record-carries-return	1
+handoff-resume-guard	7
+hermetic-runner	1
+implementation-join-yield	4
+layer-anchor-declaration	4
+layer-artifact-path-prescriptions	3
+layer-contract-conformance	1
+layer-debt-ledger	16
+layer-readopt-gate	22
+layer-reference-resolution	1
+ledger-reverify	40
+ledger-reverify-dist-only-reach	1
+ledger-reverify-unfalsifiable	3
+ledger-rotate	1
+ledger-status-vocabulary	1
+mandatory-rules-clean-tree	1
+mandatory-rules-skip-accounting	1
+mandatory-rules-snapshot-position	1
+mutation-red-replay	1
+operator-request-capture	4
+pause-hook-origin	1
+plan-rotate	1
+postcompact-rulebook-recovery	14
+preclassify-mode-bucket	1
+pregate-self-check	1
+process-rule-pins	19
+provenance-not-accessible	1
+readset-sandbox-root-clause	1
+readset-skip	20
+reconcile-blocking-list	4
+reconcile-emit-report	4
+release-version-triple	10
+relocation-preclassify	1
+remediator-shard-join	1
+request-coverage	4
+requirements-step	1
+retired-contract-token	2
+retired-fixture-orphan	1
+retired-layer-contract	1
+retired-layer-passage	1
+retired-layer-token	2
+retro-audit-scans	1
+retro-compliance-workflow	3
+review-shard-merge	3
+schema-install-fallback	4
+scope-confirmation	21
+self-update-gate	2
+settings-merge-documented-form	1
+setup-config-drift	4
+setup-site-drift	2
+snapshot-archive-rotate	1
+snapshot-conservation	4
+snapshot-edit-deny	1
+snapshot-evidence-cell	1
+snapshot-supersession-marker	2
+spec-join-integrity	3
+story-evidence-scaffold	4
+story-provenance	4
+stray-party-mode-provenance	8
+suite-dispatch-order	1
+suppression-lifetime	1
+taught-schema	2
+validate-mandatory-rules-revive	1
+validator-arm-selection	6
+validator-path-resolution	3
+verdict-pass-content	1
+wait-stale-deliverable	1
+whole-read-pool	9
+write-format-steering-multiformat	14

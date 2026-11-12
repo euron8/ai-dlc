@@ -4,6 +4,7 @@
 #
 # Usage: run.sh            full run: every arm's self-probe, then the seeded wfd arm, then the corpus
 #        run.sh --probes   self-probes and the seeded wfd arm (a) only; no corpus file is read
+#        run.sh --matrix   as --probes, plus one MATRIX row per (d) self-probe mutant
 # Exit:  0 = every assertion holds, 1 = an assertion failed, 2 = fixture broken.
 #
 # THE SUBJECT. Three beat-joined roles now write into their deliverable what they previously
@@ -40,6 +41,14 @@
 # and never from the cwd. The subject program is core/scripts/ or scripts/ai-dlc/ accordingly.
 #
 # Not in validate-enforcement-map.sh: that validator is invoked by the suite pole.
+#
+# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
+# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Both mutants live in arm (d)'s self-probe:
+# a layer contract that no longer names crosswalk.md consumer-owned (probe arm d-exclusion), and
+# a d_file blind to b.md while a.md carries two sites (probe arm d-per-file).
+# MUTANT-MATRIX contract-not-naming-crosswalk decides=d-exclusion twins=- why=one d_verdict run on the pd-ok probe tree, read only by the exclusion probe arm
+# MUTANT-MATRIX d_file-blind-to-b.md decides=d-per-file twins=- why=one d_verdict run on the pd-miss probe tree, read only by the per-file probe arm
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/handoff-record-carries-return/run.sh --matrix
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -72,8 +81,17 @@ MODE="full"
 case "${1:-}" in
   "") : ;;
   --probes) MODE="probes" ;;
+  --matrix) MODE="matrix" ;;
   *) broken "unknown argument: $1" ;;
 esac
+# --matrix: the --probes run plus one MATRIX row per (d) self-probe mutant, read off the d_verdict output its
+# arm already scored: fires=yes when that output is a FAIL naming the arm's site. No corpus file is read.
+mx_d() {  # mx_d <name> <deciding arm> <site the arm requires> ; reads $out
+  [ "$MODE" = "matrix" ] || return 0
+  local f=no
+  case "$out" in FAIL*"$3"*) f=yes ;; esac
+  printf 'MATRIX %s decides=%s fires=%s twins=-\n' "$1" "$2" "$f"
+}
 
 WORK="$(mktemp -d 2>/dev/null)" || broken "mktemp failed"
 WORK="$(cd "$WORK" && pwd)"
@@ -377,6 +395,7 @@ probe_d() {
     case "$out" in *"sk/crosswalk.md:1"*) ok "(d) probe: MUTANT contract not naming crosswalk.md flags it (the exclusion discriminates)" ;;
       *) bad "(d) probe: crosswalk.md mutant failed for the wrong reason: $out" ;; esac
   fi
+  mx_d contract-not-naming-crosswalk d-exclusion "sk/crosswalk.md:1"
   rm -f "$T/sk/crosswalk.md"
   printf 'consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md\n' > "$T/sk/layer-contract.yaml"
   # The scan misses a file grep finds: a mutant d_file blind to b.md, while a.md carries two sites. A total
@@ -393,6 +412,7 @@ probe_d() {
     case "$out" in *"b.md carries the shape by grep and yields no scanned site"*) ok "(d) probe: a scan-missed file fails per file although total sites meet the floor" ;;
       *) bad "(d) probe: the scan-missed file failed for the wrong reason: $out" ;; esac
   fi
+  mx_d d_file-blind-to-b.md d-per-file "b.md carries the shape by grep and yields no scanned site"
   unset -f d_file; eval "$(declare -f d_file_real | sed '1s/^d_file_real/d_file/')"; unset -f d_file_real
   T="$WORK/pd-empty"; mkdir -p "$T/sk" "$T/ro" || broken "mkdir failed"
   printf 'consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md\n' > "$T/sk/layer-contract.yaml"

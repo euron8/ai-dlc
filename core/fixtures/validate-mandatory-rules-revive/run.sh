@@ -13,6 +13,13 @@
 # (no validation-cycle-log.md -> SKIP), not on the validator's presence; Check 4's sibling stays
 # consumer-provided (SKIP when absent). Regression lock below: the SKIPs must hold, Check 3 must
 # PASS on a closed envelope, and the MUTANT (un-closed) must FAIL Check 3 — else the check is vacuous.
+#
+# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
+# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Arms on the compliant run: check2-skip,
+# check4-skip, check5-skip, check3-pass; on the mutant run: check3-fail. The one mutant rewrites
+# the envelope's `status: done` to `status: in_progress`.
+# MUTANT-MATRIX unclosed-envelope decides=check3-fail twins=- why=the mutant is one validator run read only by the Check 3 FAIL arm, and the four compliant-tree arms read the earlier unmutated run
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/validate-mandatory-rules-revive/run.sh --matrix
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -61,6 +68,11 @@ MUT="$(cd "$P" && bash "$VMR" 900 2>/dev/null)"
 grep -q 'CHECK 3: FAIL' <<<"$MUT" \
   && ok "MUTANT: an un-closed envelope FAILS Check 3 (enforcement is real, not vacuous)" \
   || bad "MUTANT: Check 3 did not FAIL on an un-closed envelope"
+# --matrix: one MATRIX row, read off the $MUT run its arm already scored.
+if [ "${1:-}" = "--matrix" ]; then
+  mx=no; grep -q 'CHECK 3: FAIL' <<<"$MUT" && mx=yes
+  printf 'MATRIX %s decides=%s fires=%s twins=-\n' unclosed-envelope check3-fail "$mx"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then

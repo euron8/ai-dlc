@@ -87,7 +87,7 @@ fi
 # --- Assertion 6 (MUTANT GUARD): widening the filter must not mean "everything" -------
 # If this trips, `case "$kind" in check|step-domain)` was loosened to accept any kind.
 if grep -qE '^### 25\. Ext role-shaped entry that must never be relabelled\.$' "$EXT_ROLE"; then
-  ok "mutant guard: kind: role left untouched (the filter widened to two kinds, not to all)"
+  ok "control (mutant guard): kind: role left untouched (the filter widened to two kinds, not to all)"
 else
   bad "mutant guard: a kind: role entry was relabelled — the kind filter is now accepting everything"
 fi

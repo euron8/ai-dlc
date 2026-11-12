@@ -31,8 +31,18 @@
 #
 # So V1 below is the assertion that matters, and it is not "the parser works." It is:
 # THE EXAMPLE THE DOC TEACHES, PARSED BY THE PARSER THE GATE RUNS.
+#
+# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
+# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). The two schema mutants are V4b's and V4c's
+# MUTATION controls. V4c's runs the validator twice, on the decorated block (its own arm) and on
+# the bare placeholder, which must stay refused (V4b's property), so V4b is its twin. V6's schema
+# edit is that arm's own seeded offender, not a mutant of a guard, and carries no row.
+# MUTANT-MATRIX V4b-strip-forbidden decides=V4b twins=- why=the mutated schema is driven once, on the bare placeholder block, and only the V4b MUTATION arm reads that run
+# MUTANT-MATRIX V4c-exact-match decides=V4c twins=V4b
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/taught-schema/run.sh --matrix
 
 set -uo pipefail
+MATRIX_MODE=0; [ "${1:-}" = "--matrix" ] && MATRIX_MODE=1
 
 # HERMETIC -- scrub the operator's tuning before invoking anything (I10). The validator takes
 # AI_DLC_PROJECT_ROOT ahead of its script-relative walk when choosing the schema, so an inherited
@@ -313,6 +323,18 @@ fi
 # schema's own `forbidden_match_reason` began naming `toolu_PLACEHOLDER_LEAD_TO_FILL` to
 # explain why the match is by prefix, because the token survived a strip that had in fact
 # removed the whole list. Ask the parsed schema whether the FIELD still carries the key.
+# --matrix: under the mutated schema, run the validator on each V4 block and print one MATRIX row:
+# V4b's cell is the bare placeholder (red = it passes), V4c's the decorated one (red = it passes).
+# A plain run returns at once and drives nothing.
+mx_row() {  # mx_row <name> <deciding arm>
+    [ "$MATRIX_MODE" = 1 ] || return 0
+    local b=GREEN c=GREEN f
+    bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1 && b=TRIPPED
+    bash "$VALIDATOR" "$TMP/decorated.md" >/dev/null 2>&1 && c=TRIPPED
+    if [ "$2" = V4b ]; then f=$b; else f=$c; fi
+    [ "$f" = TRIPPED ] && f=yes || f=no
+    printf 'MATRIX %s decides=%s fires=%s cells=V4b:%s,V4c:%s\n' "$1" "$2" "$f" "$b" "$c"
+}
 field_has() {  # field_has <schema> <field> <key> -> 0 if that field carries that key
     python3 -c 'import json,sys
 S=json.load(open(sys.argv[1]))
@@ -338,6 +360,7 @@ elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
 else
     bad "V4b MUTATION — placeholder still refused without the forbidden list; V4b proves nothing"
 fi
+mx_row V4b-strip-forbidden V4b
 cp "$TMP/schema.v4b.bak" "$SCHEMA"
 
 # MUTATION control for V4c, and it is a DIFFERENT mutation from V4b's on purpose. Stripping
@@ -367,6 +390,7 @@ elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
 else
     ok "V4c MUTATION — reverting forbidden_match to exact lets the DECORATED placeholder pass while the bare one stays refused (prefix matching is what fires)"
 fi
+mx_row V4c-exact-match V4c
 cp "$TMP/schema.v4c.bak" "$SCHEMA"
 
 # ---------------------------------------------------------------------------------------

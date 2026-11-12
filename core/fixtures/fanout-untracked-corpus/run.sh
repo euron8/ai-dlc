@@ -48,6 +48,16 @@
 # behaviour actually lives at and is the same location under both spellings. Each shim
 # records that it really did alter an invocation; an arm whose shim changed nothing
 # reports itself unproven rather than passing.
+#
+# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
+# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Arms: a1-untracked (assertion 1), a2-ignored
+# (assertion 2), a3-tracked (assertion 3). Each mutant runs the subject once, on the one seeded tree;
+# the not-entangled arm it must leave green (M1: a3, M2 and M3: a1) reads that same run.
+# MUTANT-MATRIX tracked-only decides=a1-untracked twins=- why=one subject run on the single seeded tree, and the a3-tracked entanglement check reads that run rather than a second world
+# MUTANT-MATRIX no-exclude-standard decides=a2-ignored twins=- why=one subject run on the single seeded tree, and the a1-untracked entanglement check reads that run rather than a second world
+# MUTANT-MATRIX untracked-only decides=a3-tracked twins=- why=one subject run on the single seeded tree, and the a1-untracked entanglement check reads that run rather than a second world
+# MUTANT-MATRIX-CONTROL pass-through why=the shim alters no ls-files invocation and must still yield both baseline worklist rows and rc=0, so the kills above are the mutations and not the harness
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/fanout-untracked-corpus/run.sh --matrix
 set -uo pipefail
 
 # HERMETIC — scrub the operator's tuning before invoking anything (I10). AI_DLC_PROJECT_ROOT
@@ -335,6 +345,24 @@ elif has "$COUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15" \
   ok "CONTROL: an unaltered git through the same shim still yields BOTH baseline worklist rows — the kills above are the mutations, not the harness"
 else
   bad "CONTROL: a pass-through shim loses the baseline rows, so every mutant above scored a kill against a broken harness rather than against its mutation"
+fi
+
+# --matrix: one MATRIX row per shim, read off the runs the arms above already scored. fires= is the
+# deciding arm turning red on that run; same-run= is the not-entangled arm, read from that same run.
+if [ "${1:-}" = "--matrix" ]; then
+  mxg() { if has "$1" "$2"; then printf GREEN; else printf TRIPPED; fi; }
+  f=no; fired "$M1" && ! has "$M1OUT" "_bmad-output/planning-artifacts/s306/story-1.md" && f=yes
+  printf 'MATRIX %s decides=%s fires=%s twins=- same-run=a3-tracked:%s\n' tracked-only a1-untracked "$f" \
+    "$(mxg "$M1OUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15")"
+  f=no; fired "$M2" && has "$M2OUT" "docs/junk/ignored-cite.md" && f=yes
+  printf 'MATRIX %s decides=%s fires=%s twins=- same-run=a1-untracked:%s\n' no-exclude-standard a2-ignored "$f" \
+    "$(mxg "$M2OUT" "_bmad-output/planning-artifacts/s306/story-1.md")"
+  f=no; fired "$M3" && ! has "$M3OUT" "docs/tracked-cite.md" && f=yes
+  printf 'MATRIX %s decides=%s fires=%s twins=- same-run=a1-untracked:%s\n' untracked-only a3-tracked "$f" \
+    "$(mxg "$M3OUT" "_bmad-output/planning-artifacts/s306/story-1.md")"
+  f=no; ! fired "$CTL" && has "$COUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15" \
+    && has "$COUT" "_bmad-output/planning-artifacts/s306/story-1.md:1  ->  docs/architecture.md:16" && has "$COUT" "rc=0" && f=yes
+  printf 'MATRIX-CONTROL %s baseline-rows=%s\n' pass-through "$f"
 fi
 
 echo

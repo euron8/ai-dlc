@@ -8,6 +8,12 @@
 # consumer-provided sibling core does not ship) would FAIL on every stock install — a gate
 # that can never pass. And a floor that never fails (does not check the required siblings)
 # would pass a broken install; the mutation control below pins it.
+#
+# The mutant by arm matrix, measured from one hermetic run (core/scripts/hermetic-run.sh with
+# AI_DLC_VERDICT_STORE set to a fresh mktemp dir). Arms: floor-present (section 1), sibling-missing
+# (section 2). The one mutant deletes the required validate-retro-evidence.sh sibling.
+# MUTANT-MATRIX required-sibling-missing decides=sibling-missing twins=- why=the mutation is one drive of the copied validator read by its one arm, so no other arm runs against it
+# MUTANT-MATRIX-REMEASURE bash core/fixtures/mandatory-rules-clean-tree/run.sh --matrix
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -57,6 +63,11 @@ if [ "$rc" = "1" ] && grep -q 'toolchain incomplete' "$WORK/out.txt"; then
   ok "MUTATION: a missing required sibling FAILs (the floor is real, not vacuous)"
 else
   bad "a missing required sibling did not FAIL (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
+fi
+# --matrix: one MATRIX row, read off the section 2 run its arm already scored.
+if [ "${1:-}" = "--matrix" ]; then
+  mx=no; [ "$rc" = "1" ] && grep -q 'toolchain incomplete' "$WORK/out.txt" && mx=yes
+  printf 'MATRIX %s decides=%s fires=%s twins=-\n' required-sibling-missing sibling-missing "$mx"
 fi
 
 echo

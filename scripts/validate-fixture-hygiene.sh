@@ -103,8 +103,15 @@
 #       S2   a fixture file carries `cmp -s` in code and the word `mutant` (any case) anywhere;
 #       MKA  a row of scripts/mutant-kills-allowlist.txt, which validate-mutant-kills.sh's M1/M2 hold equal to its
 #            --derive set on every green push (read as data, so the probe can seed it);
-#       MKC  any tracked fixture .sh, not only run.sh, calling `mutant_killed` in code (core/fixtures/lib excluded).
-#     A FLOOR OF UNKNOWN DEPTH: being a mutant is semantic, not lexical; a battery that matches none of the four is
+#       MKC  any tracked fixture .sh, not only run.sh, calling `mutant_killed` in code (core/fixtures/lib excluded);
+#       MVA  a row of scripts/mutant-verdicts-allowlist.txt, the fixtures validate-mutant-kills.sh's M8/M9 hold to their
+#            count of keyword-free mutant verdicts (an `ok`, `echo "ok:` or printf-ok message naming a mutant, with
+#            no KILLED/killed and no mutant_killed); read as data, appended to the MKA input as `MVA<TAB>fx` rows.
+#            Added in BL-909: at aa4aea836 it brought 6 fixtures no other source saw into the union. Five are
+#            batteries and carry MUTANT-MATRIX blocks (fanout-untracked-corpus, handoff-record-carries-return,
+#            mandatory-rules-clean-tree, taught-schema, validate-mandatory-rules-revive); the sixth,
+#            relabel-theirs-collision, was a false positive of M8 and left the list when its message was reworded.
+#     A FLOOR OF UNKNOWN DEPTH: being a mutant is semantic, not lexical; a battery that matches none of the five is
 #     not seen. A member with no block FAILs unless it is a row of scripts/fixture-matrix-allowlist.txt.
 #     THE BLOCK lives in the fixture's run.sh (the IMPL's, for a shard family; a block in a stub FAILs), as comment
 #     lines, one of:
@@ -386,6 +393,7 @@ E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
 H7_ALLOW_REL="scripts/twin-built-allowlist.txt"
 H8_ALLOW_REL="scripts/env-scrub-allowlist.txt"
 MKA_REL="scripts/mutant-kills-allowlist.txt"
+MVA_REL="scripts/mutant-verdicts-allowlist.txt"
 
 WORK="$(mktemp -d)" || { echo "validate-fixture-hygiene: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -1018,7 +1026,7 @@ function claim(f, name, form, where) {
   FORM[f, name] = form
 }
 FILENAME == ARGV[1] { IMPL[$1] = $2; next }
-FILENAME == ARGV[2] { if ($0 !~ /^[[:space:]]*(#|$)/) { x = $1; gsub(/[[:space:]]/, "", x); MKA[x] = 1 } next }
+FILENAME == ARGV[2] { if ($1 == "MVA") { MVA[$2] = 1; next } if ($0 !~ /^[[:space:]]*(#|$)/) { x = $1; gsub(/[[:space:]]/, "", x); MKA[x] = 1 } next }
 FILENAME == ARGV[3] {
   if ($1 == "H1" || $1 == "H2" || $1 == "H3" || $1 == "H6") { print; next }
   if ($1 == "P") { addtag(map($2), $3); next }
@@ -1048,6 +1056,7 @@ FILENAME == ARGV[4] {
 }
 END {
   for (x in MKA) addtag(map(x), "MKA mutant-kills allowlist row")
+  for (x in MVA) addtag(map(x), "MVA mutant-verdicts allowlist row")
   TOK = "^[A-Za-z0-9_+-]+(\\.[A-Za-z0-9_+-]+)*$"; NAMERE = "^[A-Za-z0-9_:+-]+(\\.[A-Za-z0-9_:+-]+)*$"; WORLDRE = "^[A-Za-z0-9_.-]+$"
   for (f in NB) {
     nrem = 0; nmut = 0; dyn = 0
@@ -1196,6 +1205,8 @@ run_all() {
     awk -F'\t' '$1 == "Q" { print "    " $2 ": " $3 }' "$o.scan"; return 2
   fi
   [ -f "$r/$MKA_REL" ] && cp "$r/$MKA_REL" "$o.mka" || : > "$o.mka"
+  # MVA rows ride the MKA input, tagged; a tree without the list appends nothing (no metadata test: awk reads it)
+  awk -F'\t' '$0 !~ /^[[:space:]]*(#|$)/ { print "MVA\t" $1 }' "$r/$MVA_REL" >> "$o.mka" 2>/dev/null || :
   [ -f "$r/$ALLOW_REL" ] && cp "$r/$ALLOW_REL" "$o.allow" || : > "$o.allow"
   [ -f "$r/$H7_ALLOW_REL" ] && cp "$r/$H7_ALLOW_REL" "$o.tallow" || : > "$o.tallow"
   awk -F'\t' "$JUDGE_AWK" "$o.stubs" "$o.mka" "$o.scan" "$o.allow" "$o.tallow" | LC_ALL=C sort -u > "$o.verdict" \
@@ -1560,6 +1571,9 @@ EOF
 seed core/fixtures/m5h/run.sh <<'EOF'
 echo h
 EOF
+seed core/fixtures/m5n/run.sh <<'EOF'
+echo n
+EOF
 seed core/fixtures/m5i/run.sh <<'EOF'
 cmp -s "$a" "$b" && bad "the mutant did not apply"
 EOF
@@ -1747,6 +1761,8 @@ printf '#!/usr/bin/env bash\n. "$HERE/lib.sh"\n' > "$P/core/fixtures/h8lgl/run.s
 printf 'cp core/hooks/ai-dlc-*.sh "$T"\n  # runs hooks/ai-dlc-x.sh\n' > "$P/core/fixtures/h8lgl/lib.sh"
 printf '# probe\nh8lst\tunscrubbed and listed\nh8stl\tscrubbed, so stale\nh8lhk\tdrives a hook\nh8lgl\tnames a glob\n' > "$P/$H8_ALLOW_REL"
 printf '%s\n' '# probe' m5h > "$P/$MKA_REL"
+# m5n is a member through the M8 verdict list alone (MVA); the commented row names nothing
+printf '# probe\nm5n\t2\n# m5o\t1\n' > "$P/$MVA_REL"
 printf '# probe allowlist\nm5b\tS1\nm5f\tS1\nm5e\tS1\ngone\tS1\nm5b\tdup\nm5x\n' > "$P/$ALLOW_REL"
 { pgit init -q "$P" && pgit -C "$P" add -A && pgit -C "$P" commit -q -m probe; } >/dev/null 2>&1 \
   || { echo "validate-fixture-hygiene: REFUSED -- could not build the probe repository under $WORK" >&2; exit 2; }
@@ -1767,7 +1783,7 @@ want_rows() { case "$1" in
   H3) printf 'H3\tcore/fixtures/s3/run.sh:%s\n' 2 3 4 5 6 7 8 9 10
       printf 'H3\tcore/fixtures/s3s/run.sh:%s\n' 2 4 10 12 ;;
   H6) printf 'H6\tcore/fixtures/s6/run.sh:%s\n' 2 3 5 7 9 10 11 12 13 ;;
-  H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l
+  H5) printf 'FLOOR\t%s\n' m5a m5g m5h m5i m5l m5n
       printf 'ROW\tm5d:%s\n' 1 2 3 4 5 6 7 8 9 10 11 13 14 15 20 21 22 23 24 25 26
       printf 'ROW\tm5j:%s\n' 0 0 3 4 5 6
       printf 'ROW\tm5k:0\nROW\tm5f-c:4\nSTUB\tm5l\n'
@@ -1804,8 +1820,8 @@ else
   diff "$WORK/want.H8" "$WORK/got.H8" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
 fi
 der="$(awk -F'\t' '$1 == "DERIVE" { print $2 }' "$WORK/p.verdict" | LC_ALL=C sort | tr '\n' ' ')"
-if [ "$der" = "m5a m5b m5f m5g m5h m5i m5l " ]; then sp_line DERIVE "ok (derived rows m5a m5b m5f m5g m5h m5i m5l; the stubs m5f-b and m5f-c mapped to their IMPL)"
-else SP_RED=1; sp_line DERIVE "FAIL -- derived '$der', want 'm5a m5b m5f m5g m5h m5i m5l '"; fi
+if [ "$der" = "m5a m5b m5f m5g m5h m5i m5l m5n " ]; then sp_line DERIVE "ok (derived rows m5a m5b m5f m5g m5h m5i m5l m5n; the stubs m5f-b and m5f-c mapped to their IMPL)"
+else SP_RED=1; sp_line DERIVE "FAIL -- derived '$der', want 'm5a m5b m5f m5g m5h m5i m5l m5n '"; fi
 
 m4_case() {  # <label> <repo> <want-rc> <want-first-line> <rows...>
   local lab="$1" repo="$2" wrc="$3" want="$4" got rc

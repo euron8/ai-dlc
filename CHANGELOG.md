@@ -19,6 +19,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1066.0] - 2026-11-11
+
+### BL-909 PARTIAL: validate-mutant-kills M8-M10 hold the keyword-free mutant verdicts on a derived, count-bearing, down-only list (447 K lines in 113 fixtures)
+
+`scripts/validate-mutant-kills.sh` gains three arms over `scripts/mutant-verdicts-allowlist.txt`, one row per fixture, `<fixture><TAB><count>`, rows exactly `--derive-m8` (LC_ALL=C sorted). A K line is a non-comment run.sh line whose `ok` message, `echo "ok` string or `printf` ok-format names a mutant or mutation, carries no KILLED/killed (M1 owns those) and no `mutant_killed` call outside a string, and opens with none of `unmutated control baseline twin stays green intact matrix did not apply applied pairing cmp -s` in its first 40 characters. M8 refuses a fixture whose K count exceeds its row (unlisted is 0), printing every K line, both counts and the remedy: route a kill through `mutant_killed`, or name the non-kill sense. M9 refuses a stale row, a row for a fixture with no K line or no run.sh, a duplicate and a malformed row. M10 refuses a row absent from origin/main's list or above its count there, so the list only goes down; it skips, with its reason, when origin/main does not resolve or carries no list.
+
+The list holds a count and not membership because a membership list would acquit every new keyword-free kill in each listed fixture, about a third of the corpus, forever. Residual: a K line reworded or moved at constant count is not seen. M8_FN runs inside the one corpus read M1 and M5 share, so it adds no per-line fork; the validator goes from 105 to 119 forks (3 on the corpus path, 11 in the self-probe). `validate-fixture-hygiene.sh` H5 reads the list as an added source (MVA), and five fixtures gain measured MUTANT-MATRIX blocks to join it. `relabel-theirs-collision:90` is reworded to a control, its message opening `control (mutant guard):`, and leaves the list.
+
+Measured at aa4aea836: 448 K lines in 114 fixtures before that rewording, 447 in 113 after, which is the committed list. Joined to the reader's classification (`docs/analysis/bl909-ok-mutant-lines-classified-cb6e0ab80.tsv`, 429 by line and 17 by text): 346 KILL, 100 NONKILL, 1 unclassified; 69 rows carry a KILL line and 44 carry NONKILL lines only. The deny mask acquits 286 pre-mask lines, 8 of them KILL (check-24-adversarial-convergence:887, ledger-reverify:1480, readset-skip:3507 and :3526, retro-branch-behind-main:589, :597, :863 and :871). The self-probe fires both ways before the corpus; 38 mutants of the validator, each in a copy of `scripts/`, exit 2 with a self-probe failure.
+
+The entry stays PARTIAL, `verify: manual`, no LANDED line. Owed: routing the listed true kills through `mutant_killed` (69 rows, 346 lines), the residual emitter classes (`live` 15, `vr_score` 7, `check` 7, `rp_score` 4, `eq` 3, `ok_` 3, `yes` 1, a mutant word only in a second `ok` argument 6), mutant-id-only messages, and kills emitted from a sourced helper.
+
+Consumer cost: no behaviour change. `scripts/` and `docs/analysis/` do not ship. The six edited fixtures do ship (none carries `.dist-only`): five gain comment-only MUTANT-MATRIX blocks and `relabel-theirs-collision` changes one `ok` message's text.
+
+
 ## [0.1065.0] - 2026-11-11
 
 ### BL-845 PARTIAL: a smoke surface that git ignores at the story's base prints `WARN smoke-surface-ignored`, so the silent `SKIP SMOKE-SURFACE` no longer hides it

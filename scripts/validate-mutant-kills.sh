@@ -4,6 +4,8 @@
 #
 # usage:  validate-mutant-kills.sh            check the tree against the allowlist (exit 0/1/2)
 #         validate-mutant-kills.sh --derive   print the derived offender set, one fixture per line
+#         validate-mutant-kills.sh --derive-m5   print the derived refused-site rows (M5)
+#         validate-mutant-kills.sh --derive-m8   print the derived <fixture><TAB><K count> rows (M8)
 #
 # THE DEFECT. A mutant arm's kill condition is usually a value the UNMUTATED arm would also
 # print if it were failing, so a mutant that breaks the arm's SETUP rather than its subject
@@ -36,6 +38,17 @@
 #   M5  a need_base/mutant_killed call site in any core/fixtures/<fx>/run.sh, allowlisted or
 #       not, whose flag argument is not BOUND -> FAIL. M1 proves a kill goes through the
 #       helper; M5 proves the flag the helper gates on is not a constant.
+#   M8  a fixture whose run.sh carries MORE keyword-free mutant verdict lines (K lines, THE M8
+#       GRAMMAR below) than its row of scripts/mutant-verdicts-allowlist.txt says (an unlisted
+#       fixture is 0) -> FAIL, printing every K line of the fixture and both counts.
+#   M9  a row of that list above the fixture's current K count (STALE: lower it in the same
+#       change), a row for a fixture with no K line or no run.sh, a duplicate row, a row that is
+#       not <fixture><TAB><positive integer>, or no list at all -> FAIL.
+#   M10 a row whose fixture is not on the list at origin/main, or whose count exceeds the count
+#       there -> FAIL; a lowered or deleted row passes. Keyed on the fixture with a NUMERIC
+#       compare, so m4's whole-row compare is not reused (a lowered count is a changed row and
+#       would read as added). M4's two SKIP states; once origin/main carries the list, a tree
+#       without it FAILs. A fixture rename is a new row by design.
 #
 # M5 GRAMMAR. One awk over the corpus. Heredoc bodies are data and are skipped (the marking is
 # lifted from check-22-spawn-ledger/run.sh, its NB BINDING awk). Comments and string text are
@@ -266,7 +279,148 @@
 # SKIP with their reason (rc 0). Each assertion is the exact verdict text plus rc, so a mutant
 # that makes M4 always SKIP fails the probe rather than passing the tree.
 #
-# COST. A constant number of forks: ONE awk reads the corpus for M1 and M5 together (m5scan
+# THE M8 GRAMMAR (BL-909). M1 asks a kill to go through mutant_killed only when its line carries
+# KILLED|killed. A verdict worded without the keyword (`ok "mutant: a protocol without the mandate
+# FAILS, ..."`, postcompact-rulebook-recovery:525; `ok "MUTANT slot-target: ..."`,
+# process-rule-pins:1766) was never asked. A LINE-level refusal cannot ship: F7's census of the
+# loose population (docs/analysis/bl909-loose-grammar.awk over cb6e0ab80, 747 lines in 169
+# fixtures, docs/analysis/bl909-loose-pop-cb6e0ab80.txt) held about 500 acceptable lines that no
+# grammar separates from the kills. So M8 is FIXTURE-level and COUNT-bearing, over a derived
+# down-only list: its false-positive set IS the list, enumerated by construction.
+# WHY A COUNT AND NOT MEMBERSHIP. A membership list would acquit every NEW keyword-free kill in
+# every listed fixture -- 113 fixtures, about a third of the corpus -- forever. With a count, a
+# listed fixture may not GROW its K lines. RESIDUAL: a K line reworded or moved within a fixture
+# at constant count is not seen.
+# A line is K when ALL hold. M8_FN is called from m1line, so it runs inside the one corpus read:
+#   1. it is not a comment line;
+#   2. it carries an OPENER, and the MESSAGE is read from it, never the rest of the line:
+#      `ok "`/`ok '` (ok after start or a char not in [A-Za-z0-9_], blanks, a quote; the message
+#      runs to the next unescaped quote of that kind, a backslash escaping only inside double
+#      quotes, or to the end of the line); `echo "ok:`/`echo "ok ` (the rest of the echoed
+#      string after ok); a printf whose format opens, after blanks, with the word ok (the rest of
+#      the format after ok, then the arguments up to the first ; & | or blank-#, so
+#      `"mutation-<x>"` in an argument counts). A line DEFINING a function (`ok() { echo "ok
+#      [mutant]: $1"; }`) is a reporter definition and the echo and printf openers skip it.
+#      Every ok call on the line is tried in turn; note, bad and fail messages are out of scope;
+#   3. the message names a mutant: case-insensitive mutant(s)|mutation(s), at a WORD boundary on
+#      the right (so `mutant_killed` is not one), not followed by `/` or `.`+letter (a path or a
+#      file: `mutant/`, `mutant.out`), not preceded by a letter, digit, `_`, `$` or `{`
+#      (`permutation`, `X_MUTANT`, `$MUTANT`, `${MUTANT}`), and not preceded by `/` unless it reads
+#      `<lowercase-identifier>/mutant` followed by `:` or a blank (process-rule-pins:1668
+#      `join/mutant:` is a kill; `$W/mutant out` is a path). A hyphen opens a reference
+#      (`join-mutant:`). Mutant-id-only messages (`ok "m3: arm A2 fires"`) are OUT, as in F7;
+#   4. M1's masked pk is 0 -- M1 OWNS a line carrying KILLED|killed, one owner per line;
+#   5. M1's pm is 0 -- no mutant_killed call outside a string routes the line;
+#   6. the DENY MASK: no word of `unmutated control baseline twin stays green intact matrix did
+#      not apply applied pairing cmp -s` (case-insensitive, word-bounded on both sides, blanks
+#      inside a phrase) OPENS within the first 40 characters of the message. Each is a NON-kill
+#      sense: the unmutated arm, a knock-out or positive control, a twin that must stay green, a
+#      matrix-shape row, a mutation-applied check, a PAIRING control. It is never a list of kill
+#      markers. BOUNDARY DECISIONS: a deny word inside a longer word masks nothing (`controller`,
+#      `subcontrol`), and no plural is admitted (`twins`, `controls`) -- a plural s measured to add
+#      0 lines to the mask. HEAD-ANCHORED so gaming needs a visible edit to the message head; the
+#      anchor makes 31 lines in 24 fixtures K that a whole-message mask acquits (286 masked against
+#      317 unanchored). RESIDUAL, the gaming risk: a real kill relabelled with a deny word in its
+#      head is acquitted. The mask's measured reach into kills, joined to the F12 reader's
+#      KILL/NONKILL classification (docs/analysis/bl909-ok-mutant-lines-classified-cb6e0ab80.tsv):
+#      286 masked lines at cb6e0ab80, 278 NONKILL and 8 KILL, the 8 being check-24-adversarial-
+#      convergence:887, ledger-reverify:1480, readset-skip:3507 and :3526 (`CONTROL MUTANT ...`),
+#      and retro-branch-behind-main:589, :597, :863, :871 (`MUTANT $tag [decides arm $dec, twin
+#      $twn]: ...`, whose `twin` sits in the head).
+#      ENUMERATED FALSE POSITIVE, read by hand: relabel-theirs-collision:90 at aa4aea836,
+#      `ok "mutant guard: kind: role left untouched (the filter widened to two kinds, not to all)"`,
+#      a guard against a hypothetical mutant asserted on the real subject, not a kill. It took the
+#      non-kill remedy (its message now opens `control (mutant guard): ...`) and left the list.
+# TWO DIFFERENCES FROM F7's GRAMMAR, by which K is not a subset of F7's population: F7 drops a
+# line on a RAW KILLED|killed, M8 on M1's MASKED pk (a `killed run` deny sense could be K); F7
+# drops a line on a raw /mutant_killed/, M8 on pm (a mutant_killed spelled inside a string routes
+# nothing). Plus the lead's widening to the echo-ok and printf-ok openers (F7 reads ok and note
+# only). Measured at cb6e0ab80 with the shipped M8_FN over every run.sh: 448 K lines in 114
+# fixtures, 367 inside F7's file and 81 outside, each attributed: 80 to the echo/printf openers,
+# 1 to pm (review-shard-merge:1623, `... through mutant_killed, once ...`), 0 to masked pk, 0
+# unattributed; a seeded key outside the file was reported by the same comparison. M1's deny mask
+# fires on 0 corpus lines at cb6e0ab80 and at aa4aea836 (control: a seeded `killed run` line, 1).
+# THE MEASUREMENTS, at aa4aea836 with M8_FN extracted from this file and run over every run.sh
+# (a variant per row built by literal substitution, each refused if it did not apply):
+#   K: 448 lines in 114 fixtures (447 in 113 once relabel-theirs-collision:90 is reworded, the
+#   committed list: 113 rows summing to 447). By opener: ok 368 lines in 104
+#   fixtures; echo-ok adds 14 (check-3b-locked-anchor, all KILL); printf-ok adds 66 in 10 fixtures
+#   (ledger-reverify 40, check-24-adversarial-convergence 10, layer-anchor-declaration 4,
+#   story-provenance 4, escalation-citation 2, setup-site-drift 2, adversarial-citation,
+#   layer-contract-conformance, ledger-status-vocabulary, self-update-gate 1 each), 52 KILL and 14
+#   NONKILL by the reader (KILL-COUNT aggregates at adversarial-citation:589 and
+#   escalation-citation:1318; applied/anchor checks at check-24:821, :3534 and ledger-reverify:3571,
+#   :4088, :5080, :5426; controls at escalation-citation:874, ledger-status-vocabulary:452 and
+#   story-provenance:456, :464, :473, :984). Admitted before the mask: echo-ok 27, printf-ok 80;
+#   the reader's 3 further echo/printf lines are the function definitions the opener skips.
+#   Pre-mask set 734 lines in 171 fixtures; each deny word alone removes (lines/fixtures):
+#   unmutated 121/76, control 149/88, baseline 3/1, twin 26/21, stays green 15/14, intact 15/7,
+#   matrix 47/42, did not apply 1/1, applied 12/9, pairing 18/3, cmp -s 2/1; all together 286.
+#   The D4 identifier/mutant exception makes 1 line K (process-rule-pins:1668).
+#   FIRST-DERIVE CHECK, the K set joined to the reader's file at cb6e0ab80: 346 KILL, 101 NONKILL
+#   (applied 24, aggregate 21, pairing 12, other 12, control 10, twin 9, baseline 5, prose 5,
+#   matrix 3), 1 unclassified (review-shard-merge:1623, an aggregate); 69 rows carry a KILL line,
+#   45 rows carry NONKILL lines only.
+# RESIDUAL EMITTER CLASSES, outside every opener, measured at aa4aea836 as non-comment run.sh lines
+# naming a mutant word, with no KILLED|killed, not K, the reporter at command position: wrapper
+# reporters vr_score 7 (escalation-status-vocabulary:610), live 15 (mutation-red-replay:775),
+# check 7 (context-sensor:207), rp_score 4 (escalation-status-vocabulary:719), eq 3 in 2 fixtures
+# (census-hermetic-coverage:460), ok_ 3 (check-25-steering-conduct:1046), yes 1
+# (hermetic-runner:649); a mutant word only in a SECOND ok argument, 6 lines in 1 fixture
+# (backlog-ledger:397; 8 in 3 counting lines already K by their first argument). Also out:
+# mutant-id-only messages, and kills emitted from a sourced helper (run.sh only, as M1).
+# GRAMMAR RESIDUALS, each a line M8 does not read as K, counted over every run.sh at cab94f5f2
+# (each detector scored 1 on a seeded control line, in the same invocation):
+#   an ok message whose mutant word sits after an inner double quote of a `$( "..." )`, e.g.
+#   `ok "$(echo "mutant m3 fires")"`, because the message stops at the inner quote: 1 line
+#   (wait-stale-deliverable:1344, `... no matrix row printed ... $(grep -c ... "$OUT/jobs")
+#   mutant cells)`, whose head carries `matrix`, so a whole-line reading would mask it too);
+#   a backslash-continued ok message whose mutant word is on the continuation line: 0;
+#   variable indirection, `msg="mutant ..."; ok "$msg"` (an ok message that is one variable
+#   assigned a string naming a mutant in the same run.sh): 0;
+#   `echo "  ok: ..."`, blanks between the quote and ok (the printf opener admits them, the echo
+#   opener does not): 0;
+#   a deny word followed by a hyphen (`control-flow`, `twin-run`) masks the line, the hyphen
+#   being a word boundary: 13 lines that a hyphen-excluding boundary would make K
+#   (architecture-index-cell-escaping:335, backlog-rotate-fence-guard:1282,
+#   enforcement-map-derivations:2330, fixture-hygiene:341, fixture-inprocess:269,
+#   fixture-invocation-budget:348, layer-adjudication-tier:2193, layer-readopt-gate:1649,
+#   release-version-triple:902, retro-branch-behind-main:936, review-reroute:449,
+#   serial-remediation-worklist:407, validator-arm-selection:984).
+# M8 SELF-PROBE, before the corpus, on the M1 probe tree (one mkdir, one scan, which also proves
+# scan() and m5scan agree on every K row), exact verdict rows after sort. FIRE: an unlisted kill;
+# the same kill below a mutant_killed call; the three motivating lines byte for byte; a listed
+# fixture at 1 carrying 2; `controller`, `twins`, `subcontrol`; `join-mutant:`; an apostrophe
+# inside double quotes; an escaped quote; a masked `killed run`; `join/mutant:`; a deny word after
+# char 40; mutant_killed spelled inside the message; an echo-ok; a printf-ok whose mutant word is
+# only in an argument. QUIET: a routed call; an ok beside a real call; one seed per deny word; the
+# bmad-invocation-resolve:156 PAIRING line; paths and variables (`$W/mutant.out`, `lib/mutant.sh`,
+# `${MUTANT_DIR}`, `mutant.out`, `mutant/`, `$MUTANT`, `${MUTANT}`, `X_MUTANT`, `mutant_killed`,
+# `$W/mutant out`, `permutation`), each rejected by one rule; note lines; a mutant word only in the
+# bad half; a comment; `ok "mutant m3 killed by A2"` (M1 refuses it, M8 does not); a deny word
+# in a kill sense (`stays intact? no -- arm A4 fires`, the mask's reach); echo and printf lines not
+# opened by ok, or masked; a printf whose mutant word is in a trailing comment; the reporter
+# definition. LIST: a row at its count, above it, at 0 K lines, with no run.sh, twice, and three
+# malformed rows. T8, the K-line count, is the positive control here and over the corpus (zero K
+# lines is exit 2). M10 on the M4 scratch repos: added, raised, swap FAIL rc 1; lowered, deleted,
+# identical OK; no origin/main and no base list SKIP; a tree without the list FAILs -- text and rc.
+# MUTANTS, each in a copy of the whole scripts/ dir, measured on this file before commit, every one
+# exit 2 with "M8/M9 self-probe failed" (or "M10 self-probe case" for the M10 four), the unmutated
+# copy reaching the corpus floor instead: deny mask removed; mask acquitting every message; ok scope
+# widened to note/bad; every path rule removed; count ignored (membership only); any fixture
+# calling mutant_killed acquitted; M1-owner exclusion removed; pm removed; F7's raw-killed drop;
+# F7's raw-mutant_killed drop; close at either quote; escapes ignored; each path sub-rule removed
+# alone (trailing /, trailing .letter, leading $, {, _, letter, /, the identifier/mutant exception,
+# the right word boundary); mask un-anchored; each deny boundary removed; echo opener dropped;
+# printf opener dropped; printf arguments dropped; printf comment cut removed; reporter-definition
+# skip removed; M9 STALE, NORUN, DUP, BADROW each removed; T8 forced to 0; M10 raise removed, add
+# removed, whole-row compare, missing list read as present. 38 mutants, 38 killed.
+# COST, by fork-profile.sh --target this file: 105 at aa4aea836, 119 at this change. The corpus
+# read adds none (M8_FN rides m1line); the corpus path adds 3 (judge8, origin/main rev-parse, show
+# -- m10base skips m4's cat-file, at the price that an unreadable base object SKIPs); the other 11
+# are the probe (judge8 and two sorts, and the M10 cases' git and judge8 calls).
+#
+# COST. A constant number of forks: ONE awk reads the corpus for M1, M5 and M8 together (m5scan
 # with an M1 output file), two sorts, one comm-style awk join; the probe trees add one awk each.
 # Inside that awk the quote pass copies runs of plain characters whole and the token pass skips
 # a line carrying none of its tokens, both proven byte-neutral on the corpus by cmp. Nothing forks per fixture or per line. It is a
@@ -279,7 +433,8 @@ case "${1:-}" in
   "") ;;
   --derive) MODE=derive ;;
   --derive-m5) MODE=derive5 ;;
-  *) echo "usage: validate-mutant-kills.sh [--derive|--derive-m5]" >&2; exit 2 ;;
+  --derive-m8) MODE=derive8 ;;
+  *) echo "usage: validate-mutant-kills.sh [--derive|--derive-m5|--derive-m8]" >&2; exit 2 ;;
 esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -290,6 +445,8 @@ if [ ! -f "$ROOT/VERSION" ]; then
 fi
 ALLOW_REL="scripts/mutant-kills-allowlist.txt"
 M5_ALLOW_REL="scripts/mutant-sites-allowlist.txt"
+M8_ALLOW_REL="scripts/mutant-verdicts-allowlist.txt"
+TAB=$'\t'
 
 # scan <root> -> per scanned file "F<TAB>fx", per unrouted line "U<TAB>fx<TAB>line<TAB>text",
 # and "T<TAB>n" = lines carrying the word or a mutant_killed call (the positive control).
@@ -322,15 +479,95 @@ M1_FN='
       if (match(m, /KILLED|killed/)) pk = RSTART
       if (pm > 0 || pk > 0) t1++
       if (pk > 0 && (pm == 0 || pk < pm)) m1p("U\t" fx "\t" FNR "\t" substr(s, 1, 160))
+      # M8 reads the same masked pk and the same pm, so the M1-owner and routed exclusions
+      # cannot drift from M1 (one owner per line)
+      if (pk == 0 && pm == 0) m8line(s)
     }
     # m1p(x) -> an M1 row, to stdout or, inside m5scan, to the file M1O names
     function m1p(x) { if (M1O == "") print x; else print x > M1O }
+'
+# M8_FN is the M8 K-line grammar (see THE M8 GRAMMAR above), one awk function over a code line
+# that M1 does not own and that no mutant_killed call routes; m1line calls it, so it runs inside
+# the same single corpus read and prints "K<TAB>fx<TAB>line<TAB>text" through m1p.
+M8_FN='
+    function m8line(s,   q) {
+      if (!index(tolower(s), "muta")) return
+      if (M8OK == "") {
+        q = sprintf("%c", 39)
+        M8OK = "(^|[^A-Za-z0-9_])ok[[:blank:]]+[\"" q "]"
+        M8EC = "(^|[^A-Za-z0-9_])echo([[:blank:]]+-[neE]+)*[[:blank:]]+[\"" q "]ok[:[:blank:]]"
+        M8PF = "(^|[^A-Za-z0-9_])printf[[:blank:]]+[\"" q "][[:blank:]]*ok([^A-Za-z0-9_]|$)"
+      }
+      if (m8scan(s, M8OK, 0)) { m1p("K\t" fx "\t" FNR "\t" substr(s, 1, 160)); return }
+      # a line DEFINING a function is a reporter definition (ok() { echo "ok [mutant]: $1"; }),
+      # never a verdict, so the echo and printf openers do not read it
+      if (s ~ /(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*[[:blank:]]*\(\)[[:blank:]]*\{/) return
+      if (m8scan(s, M8EC, 1) || m8scan(s, M8PF, 2)) m1p("K\t" fx "\t" FNR "\t" substr(s, 1, 160))
+    }
+    # m8scan(s, re, kind) -> 1 when an opener of that kind on s carries a K message. kind 0 an
+    # ok call (the message is its first argument), 1 `echo "ok:`/`echo "ok ` (the rest of the
+    # echoed string after ok), 2 a printf whose format opens with the word ok (the rest of the
+    # format after ok, then the arguments up to the first ; & | or blank-#).
+    function m8scan(s, re, kind,   rest, st, qc, i, n, ch, msg, args, sq, dq) {
+      rest = s
+      while (match(rest, re)) {
+        if (kind == 0) { st = RSTART + RLENGTH - 1; i = st + 1 }
+        else if (kind == 1) { st = RSTART + RLENGTH - 4; i = st + 3 }
+        else {
+          args = substr(rest, RSTART, RLENGTH); sq = index(args, sprintf("%c", 39)); dq = index(args, "\"")
+          st = RSTART - 1 + ((sq && (!dq || sq < dq)) ? sq : dq)
+          i = (substr(rest, RSTART + RLENGTH - 1, 1) == "k") ? RSTART + RLENGTH : RSTART + RLENGTH - 1
+        }
+        qc = substr(rest, st, 1)
+        # the message: to the next unescaped quote of the same kind (a backslash escapes only
+        # inside double quotes, as in the shell), or the end of the line
+        n = length(rest); msg = ""
+        for (; i <= n; i++) {
+          ch = substr(rest, i, 1)
+          if (ch == "\\" && qc == "\"") { msg = msg substr(rest, i, 2); i++; continue }
+          if (ch == qc) break
+          msg = msg ch
+        }
+        if (kind == 2) { args = substr(rest, i + 1); sub(/[;&|].*$/, "", args); sub(/[[:blank:]]#.*$/, "", args); msg = msg " " args }
+        if (m8msg(msg)) return 1
+        rest = substr(rest, i + 1)
+      }
+      return 0
+    }
+    # m8msg(msg) -> 1 when the ok message names a mutant and no deny word opens in its first 40 chars
+    function m8msg(msg,   low, off, a, b, pc, nc, nn, h, found) {
+      low = tolower(msg); off = 0; found = 0
+      while (match(substr(low, off + 1), /mutations?|mutants?/)) {
+        a = off + RSTART; b = a + RLENGTH; off = a
+        pc = (a > 1) ? substr(msg, a - 1, 1) : ""
+        nc = substr(msg, b, 1); nn = substr(msg, b + 1, 1)
+        if (nc ~ /[A-Za-z0-9_]/) continue
+        if (nc == "/" || (nc == "." && nn ~ /[A-Za-z]/)) continue
+        if (pc ~ /[A-Za-z0-9_${]/) continue
+        if (pc == "/") {
+          if (nc != ":" && nc !~ /[[:blank:]]/) continue
+          h = substr(msg, 1, a - 2)
+          if (h !~ /(^|[^-A-Za-z0-9_${.\/])[a-z][a-z0-9_]*$/) continue
+        }
+        found = 1; break
+      }
+      if (!found) return 0
+      off = 0
+      while (match(substr(low, off + 1), /unmutated|control|baseline|twin|stays[[:blank:]]+green|intact|matrix|did[[:blank:]]+not[[:blank:]]+apply|applied|pairing|cmp[[:blank:]]+-s/)) {
+        a = off + RSTART; b = a + RLENGTH; off = a
+        if (a > 40) break
+        if (a > 1 && substr(low, a - 1, 1) ~ /[a-z0-9_]/) continue
+        if (substr(low, b, 1) ~ /[a-z0-9_]/) continue
+        return 0
+      }
+      return 1
+    }
 '
 scan() {
   local r="$1" f n=0
   set -- "$r"/core/fixtures/*/run.sh
   [ -f "$1" ] || { printf 'T\t0\n'; return 0; }
-  awk "$M1_FN"'
+  awk "$M1_FN$M8_FN"'
     FNR == 1 { fx = FILENAME; sub(/\/run\.sh$/, "", fx); sub(/.*\//, "", fx); print "F\t" fx }
     { m1line() }
     END { print "T\t" (t1 + 0) }
@@ -356,6 +593,108 @@ judge() {
       for (x in listed) if (!(x in u)) print "STALE\t" x
     }
   ' "$1" "$2" | LC_ALL=C sort
+}
+
+# judge8 <scan-output-file> <list-file> [<base-list-file>] -> M8/M9/M10 verdict rows, in scan order:
+#   "GROW<TAB>fx<TAB>cur<TAB>listed" then one "KLINE<TAB>fx<TAB>line: text" per K line of it (M8),
+#   "STALE<TAB>fx<TAB>cur<TAB>listed", "NORUN<TAB>fx<TAB>listed", "DUP<TAB>fx", "BADROW<TAB>row",
+#   "MISSING" when the list cannot be opened (M9), and with a base list "ADD<TAB>fx<TAB>n" and
+#   "RAISE<TAB>fx<TAB>n<TAB>base-n" (M10), then "T8<TAB>K lines<TAB>K fixtures" (the positive control).
+# The lists are read by getline, never by a metadata test, so a missing file is a row, not a fork.
+judge8() {
+  awk -F '\t' -v LF="$2" -v BF="${3:-}" '
+    BEGIN {
+      while ((r = (getline l < LF)) > 0) {
+        if (l ~ /^[[:space:]]*(#|$)/) continue
+        if (l !~ /^[A-Za-z0-9._-]+\t[1-9][0-9]*$/) { bad[++nb] = l; continue }
+        split(l, a, "\t")
+        if (a[1] in n) { dup[++nd] = a[1]; continue }
+        n[a[1]] = a[2] + 0; ord[++no] = a[1]
+      }
+      if (r < 0) miss = 1
+      close(LF)
+      if (BF != "") {
+        while ((getline l < BF) > 0) {
+          if (l ~ /^[[:space:]]*(#|$)/ || l !~ /^[A-Za-z0-9._-]+\t[1-9][0-9]*$/) continue
+          split(l, a, "\t"); b[a[1]] = a[2] + 0
+        }
+        close(BF)
+      }
+    }
+    $1 == "F" { sc[$2] = 1; fo[++nf] = $2; next }
+    $1 == "K" { t = $0; sub(/^K\t[^\t]*\t[^\t]*\t/, "", t); k[$2]++; kl[$2] = kl[$2] "KLINE\t" $2 "\t" $3 ": " t "\n"; tk++ }
+    END {
+      if (miss) print "MISSING"
+      for (i = 1; i <= nf; i++) {
+        x = fo[i]; c = k[x] + 0; m = (x in n) ? n[x] : 0
+        if (c) kf++
+        if (miss) continue
+        if (c > m) { print "GROW\t" x "\t" c "\t" m; printf "%s", kl[x] }
+        else if (c < m) print "STALE\t" x "\t" c "\t" m
+      }
+      for (i = 1; i <= no; i++) if (!(ord[i] in sc)) print "NORUN\t" ord[i] "\t" n[ord[i]]
+      for (i = 1; i <= nd; i++) print "DUP\t" dup[i]
+      for (i = 1; i <= nb; i++) print "BADROW\t" bad[i]
+      if (BF != "") for (i = 1; i <= no; i++) {
+        x = ord[i]
+        if (!(x in b)) print "ADD\t" x "\t" n[x]
+        else if (n[x] > b[x]) print "RAISE\t" x "\t" n[x] "\t" b[x]
+      }
+      print "T8\t" (tk + 0) "\t" (kf + 0)
+    }
+  ' "$1"
+}
+
+# m10base <repo-dir> <scratch-file> -> sets M10_SKIP to the SKIP text and returns 0 when there is
+# no base (origin/main does not resolve, or origin/main carries no $M8_ALLOW_REL), else writes the
+# base list to <scratch-file> and returns 3. A `git show` failure reads as "carries no list": one
+# fork fewer than m4's cat-file-then-show, at the price that an unreadable base object SKIPs.
+# THREE STATES READ AS THAT ONE SKIP, the same shape as M4's "carries no allowlist" SKIP: a failing
+# `git show` for any reason, an unreadable base object (a shallow clone missing the blob), and a
+# list RENAMED at origin/main (the old path is absent there). The SKIP text names the exact
+# origin/main:<path> it looked for, so a rename or a shallow clone is visible in the output.
+# A third argument runs git through m4_probe_git (the self-probe's scratch repos, GIT_DIR dropped).
+m10base() {
+  local sha g=git
+  [ -n "${3:-}" ] && g=m4_probe_git
+  M10_SKIP=""
+  sha="$($g -C "$1" rev-parse -q --verify 'origin/main^{commit}' 2>/dev/null)" || sha=""
+  if [ -z "$sha" ]; then
+    M10_SKIP="SKIP M10: origin/main does not resolve here, so there is no base list to compare against"
+    return 0
+  fi
+  if ! $g -C "$1" show "${sha}:${M8_ALLOW_REL}" > "$2" 2>/dev/null; then
+    M10_SKIP="SKIP M10: git show origin/main:$M8_ALLOW_REL read nothing -- origin/main carries no list at that path (the release that first ships it), or the object is unreadable"
+    return 0
+  fi
+  return 3
+}
+
+# m10_verdict <judge8-output-file> -> sets M10_OUT to the M10 verdict text; rc 1 on an added or
+# raised row, or on a tree without the list while origin/main carries one. No fork: read builtins.
+m10_verdict() {
+  local tag a b c rows="" miss=0
+  while IFS="$TAB" read -r tag a b c; do
+    case "$tag" in
+      MISSING) miss=1 ;;
+      ADD) rows="$rows
+    $a: $b (no row at origin/main)" ;;
+      RAISE) rows="$rows
+    $a: $b (origin/main lists $c)" ;;
+    esac
+  done < "$1"
+  if [ "$miss" = 1 ]; then
+    M10_OUT="FAIL M10: origin/main carries $M8_ALLOW_REL and this tree does not -- regenerate its rows with --derive-m8."
+    return 1
+  fi
+  if [ -n "$rows" ]; then
+    M10_OUT="FAIL M10: $M8_ALLOW_REL row(s) added or raised against origin/main -- the list is DOWN-ONLY:$rows
+  Remedy: do not add or raise the row. Route each new kill through mutant_killed <flag> <name> \"<message>\"
+  (core/fixtures/lib/mutant.sh). A renamed fixture is a new row by design: its kills are routed, not re-listed."
+    return 1
+  fi
+  M10_OUT="OK M10: no $M8_ALLOW_REL row added or raised against origin/main"
+  return 0
 }
 
 # m4 <repo-dir> <current-allowlist-file> <scratch-file> -> prints the M4 verdict text; rc 0 on
@@ -430,7 +769,7 @@ m5scan() {
     [ -n "$m1o" ] && printf 'T\t0\n' > "$m1o"
     printf 'T\t0\t0\n'; return 0
   fi
-  awk -v pf="$pf" -v M1O="$m1o" "$M1_FN"'
+  awk -v pf="$pf" -v M1O="$m1o" "$M1_FN$M8_FN"'
     BEGIN {
       # the token pass: TOKRE is every token it reads; TOKP the operator, group and assignment
       # tokens, KW the only bare words it reacts to. The prefilter is built from these three.
@@ -907,13 +1246,19 @@ trap 'rm -rf "$WORK"' EXIT
 
 # --- self-probe, before the corpus --------------------------------------------------------
 P="$WORK/probe"
+# the M8 seeds ride the same tree and the same mkdir (M8D), so the M1 probe also proves scan()
+# and m5scan agree on every K row, and M1 refuses m8q08 (one owner per line)
+M8D=()
+for d in m8k01 m8k02 m8k03 m8k04 m8k05 m8k06 m8k07 m8k08 m8k09 m8k10 m8k11 m8k12 m8k13 m8k14 m8k15 m8k16 \
+         m8q01 m8q02 m8q03 m8q04 m8q05 m8q06 m8q07 m8q08 m8q09 m8q10 m8q11 m8q12 m8q13 m8q14 m8q15 \
+         m8q16 m8q17 m8q18 m8q19 m8q20 m8q21 m8q22 m8l1 m8s3 m8s0; do M8D+=("$P/core/fixtures/$d"); done
 mkdir -p "$P/core/fixtures/unl" "$P/core/fixtures/bef" "$P/core/fixtures/rou" \
          "$P/core/fixtures/lst" "$P/core/fixtures/stl" "$P/core/fixtures/str" \
          "$P/core/fixtures/prs" "$P/core/fixtures/nm" "$P/core/fixtures/o1" "$P/core/fixtures/o2" \
          "$P/core/fixtures/o3" "$P/core/fixtures/o4" "$P/core/fixtures/o5" "$P/core/fixtures/o6" \
          "$P/core/fixtures/o7" "$P/core/fixtures/d1" "$P/core/fixtures/d2" "$P/core/fixtures/d3" \
          "$P/core/fixtures/d4" "$P/core/fixtures/d5" "$P/core/fixtures/d6" "$P/core/fixtures/d7" \
-         "$P/core/fixtures/d8" "$P/core/fixtures/d9"
+         "$P/core/fixtures/d8" "$P/core/fixtures/d9" "${M8D[@]}"
 # BL-903: the instance text, byte for byte (readset-skip/run.sh:5339 at 1a973b957), must be quiet.
 BL903_TXT='      ok "INTERRUPTED GROUP: each killed run'\''s recorded process group was alive before the kill and empty after the reap ('\''1|0 1|0'\'', before|after for the run and the endonly run), so no orphan reaches IU'\''s trace root"'
 printf '%s\n' "$BL903_TXT" > "$P/core/fixtures/prs/run.sh"
@@ -957,6 +1302,73 @@ printf '%s\n' '# a comment naming KILLED and killed' \
 printf '%s\n' 'ok "MUTANT l KILLED"' > "$P/core/fixtures/lst/run.sh"
 printf '%s\n' 'mutant_killed "$B_s" s "MUTANT s killed"' > "$P/core/fixtures/stl/run.sh"
 printf '%s\n' '# probe allowlist' lst stl gone lst > "$WORK/probe-allow.txt"
+# --- M8 seeds. FIRE (m8k*): each a keyword-free kill emitted through an ok message, an echo "ok:
+# or a printf whose format opens with ok, and no mutant_killed routing it.
+m8f() { local d="$P/core/fixtures/$1"; shift; printf '%s\n' "$@" > "$d/run.sh"; }
+m8f m8k01 'ok "mutant m3: arm A2 fires on the seeded offender"'
+# helper use elsewhere in the fixture acquits nothing (the call sits FIRST, so neither a file-level
+# nor a line-order acquittal can pass)
+m8f m8k02 'mutant_killed "${B_x:-0}" m1 "MUTANT m1: arm A1 fires"' 'ok "mutant m3: arm A2 fires on the seeded offender"'
+# the three motivating lines, byte for byte (postcompact-rulebook-recovery:525, process-rule-pins:1766, :1799)
+m8f m8k03 '    ok "mutant: a protocol without the mandate FAILS, on the mandate arm specifically"' \
+  '  elif [ "$(slot_hits "$SD/gp-mut.md")" = 1 ]; then ok "MUTANT slot-target: the restored slot line is read (1) where the real file reads 0"' \
+  '  elif [ "$bm_mut" -ge 1 ]; then ok "MUTANT bare-marker: the re-inserted fallback is read ($bm_mut) where the real files read 0"'
+# count growth: listed at 1, carries 2
+m8f m8k04 'ok "mutant m3: arm A2 fires"' 'ok "mutant m4: arm A3 fires"'
+# boundary decisions: a deny word inside a longer word, and its plural, mask nothing
+m8f m8k05 'ok "mutant m4: the controller arm fires"'
+m8f m8k06 'ok "mutant m4: the twins arm fires"'
+# a hyphen opens a mutant reference
+m8f m8k07 'ok "join-mutant: arm J fires"'
+# an apostrophe inside double quotes does not close the message; nor does an escaped quote
+m8f m8k08 "ok \"arm's guard: mutant m3 fires\""
+m8f m8k09 'ok "the \"x\" mutant m3 fires"'
+# a killed only in a deny sense is masked by M1, so the line is M8's (F7 dropped it raw)
+m8f m8k10 'ok "after the killed run, mutant m3 still fires"'
+# <lowercase-identifier>/mutant followed by a colon is a reference (process-rule-pins:1668)
+m8f m8k11 'ok "join/mutant: every arm is flagged"'
+# a deny word opening after char 40 of the message acquits nothing
+m8f m8k12 'ok "mutant m3: arm A2 fires on the seeded offender, not the control"'
+# mutant_killed spelled inside the message routes nothing
+m8f m8k13 'ok "mutant m3 fires, not routed through mutant_killed"'
+m8f m8k14 'echo "ok: MUTATION m3 -- neutering the guard lets the story pass"'
+m8f m8k15 "printf '  ok    %-22s the arm fires\\n' \"mutation-m3\""
+# a deny word inside a longer word, on its leading side
+m8f m8k16 'ok "mutant m4: the subcontrol arm fires"'
+# QUIET (m8q*): each rejected by one rule.
+m8f m8q01 'mutant_killed "${B_x:-0}" m3 "mutant m3: arm A2 fires on the seeded offender"'
+m8f m8q02 'ok "mutant m3: arm A2 fires"; mutant_killed "${B_x:-0}" m3 "m3"'
+m8f m8q03 'ok "unmutated copy passes"' 'ok "mutant m3: the unmutated arm passes"' 'ok "mutant m3: control arm passes"' \
+  'ok "mutant m3: baseline arm passes"' 'ok "mutant m3: twin arm passes"' 'ok "mutant m3: arm A1 stays green"' \
+  'ok "mutant m3: the row is intact"' 'ok "mutant m3: matrix row printed"' 'ok "mutant m3: did not apply"' \
+  'ok "mutant m3: applied to the copy"' 'ok "mutant m3: pairing arm holds"' 'ok "mutant m3: cmp -s differs"'
+m8f m8q04 '  [ $? -eq 1 ] && ok "MUTATION PAIRING: a dangling name still FAILS under the mutant (the two assertions are not entangled)" \'
+m8f m8q05 'ok "wrote $W/mutant.out and sourced lib/mutant.sh"' 'ok "${MUTANT_DIR} built"'
+m8f m8q06 'ok "wrote mutant.out"'
+m8f m8q07 'ok "made mutant/ dir"'
+m8f m8q08 'ok "mutant m3 killed by A2"'
+m8f m8q09 'ok "$MUTANT set"'
+m8f m8q10 'ok "${MUTANT} built"'
+m8f m8q11 'ok "X_MUTANT set"'
+m8f m8q12 'ok "see mutant_killed for routing"'
+m8f m8q13 'ok "wrote $W/mutant out"'
+m8f m8q14 'ok "a permutation of rows"'
+m8f m8q15 'note "FAIL  mutant m3 -- the mutation DID NOT APPLY"' 'note "mutant m3 fires"'
+m8f m8q16 '[ c ] && ok "arm A2 fires" || bad "mutant m3 survived"'
+m8f m8q17 '# ok "mutant m3: fires"'
+m8f m8q18 'ok "mutant m5: the seeded row stays intact? no -- arm A4 fires"'
+m8f m8q19 'echo "MUTATION m3 fires"' 'echo "okay: mutation m3 fires"' 'echo "ok: MUTATION PAIRING -- the same mutant still accepts it"'
+m8f m8q20 "printf '  FAIL  %-22s survived\\n' \"mutation-m3\"" "printf '  ok    %-22s unmutated copy passes\\n' \"mutation-m3\"" \
+  "printf '  ok    %s\\n' \"\$1\"  # a mutant is gated here"
+m8f m8q21 'ok()  { echo "ok   [mutant]: $1"; }'
+m8f m8q22 'ok "the arm passes"'
+# LIST seeds: m8l1 listed at its count (quiet), m8s3 listed above its count, m8s0 listed with no K
+# line, m8gone listed with no run.sh, m8l1 twice, three malformed rows
+m8f m8l1 'ok "mutant m3: arm A2 fires"'
+m8f m8s3 'ok "mutant m3: arm A2 fires"'
+m8f m8s0 'ok "the arm passes"'
+printf '%s\n' '# probe list' "m8k04${TAB}1" "m8l1${TAB}1" "m8s3${TAB}3" "m8s0${TAB}2" "m8gone${TAB}1" "m8l1${TAB}1" \
+  'm8bad 1' "m8zero${TAB}0" "m8word${TAB}x" > "$WORK/probe-allow8.txt"
 scan "$P" > "$WORK/probe-scan.txt"
 # the corpus reads M1 through m5scan; over the probe tree that path must equal scan() byte for byte
 m5scan "$P" 0 "$WORK/probe-scan-m5.txt" > /dev/null
@@ -965,13 +1377,70 @@ if ! cmp -s "$WORK/probe-scan.txt" "$WORK/probe-scan-m5.txt"; then
   exit 2
 fi
 judge "$WORK/probe-scan.txt" "$WORK/probe-allow.txt" | cut -f1,2 > "$WORK/probe-got.txt"
-printf 'DUP\tlst\nREFUSE\tbef\nREFUSE\td1\nREFUSE\td2\nREFUSE\td3\nREFUSE\td4\nREFUSE\td5\nREFUSE\td6\nREFUSE\td7\nREFUSE\td8\nREFUSE\td9\nREFUSE\to1\nREFUSE\to2\nREFUSE\to3\nREFUSE\to4\nREFUSE\to5\nREFUSE\to6\nREFUSE\to7\nREFUSE\tstr\nREFUSE\tunl\nSTALE\tgone\nSTALE\tstl\n' > "$WORK/probe-want.txt"
+printf 'DUP\tlst\nREFUSE\tbef\nREFUSE\td1\nREFUSE\td2\nREFUSE\td3\nREFUSE\td4\nREFUSE\td5\nREFUSE\td6\nREFUSE\td7\nREFUSE\td8\nREFUSE\td9\nREFUSE\tm8q08\nREFUSE\to1\nREFUSE\to2\nREFUSE\to3\nREFUSE\to4\nREFUSE\to5\nREFUSE\to6\nREFUSE\to7\nREFUSE\tstr\nREFUSE\tunl\nSTALE\tgone\nSTALE\tstl\n' > "$WORK/probe-want.txt"
 probe_f="$(grep -c '^F' "$WORK/probe-scan.txt")" || probe_f=0
-if ! cmp -s "$WORK/probe-got.txt" "$WORK/probe-want.txt" || [ "$probe_f" -ne 24 ]; then
-  echo "validate-mutant-kills: REFUSED -- self-probe failed (scanned $probe_f of 24 probe files). Verdict rows:" >&2
+if ! cmp -s "$WORK/probe-got.txt" "$WORK/probe-want.txt" || [ "$probe_f" -ne 65 ]; then
+  echo "validate-mutant-kills: REFUSED -- self-probe failed (scanned $probe_f of 65 probe files). Verdict rows:" >&2
   sed 's/^/    got  /' "$WORK/probe-got.txt" >&2
   sed 's/^/    want /' "$WORK/probe-want.txt" >&2
   echo "  The arm cannot be shown to fire, so its verdict over the tree would be unattributable." >&2
+  exit 2
+fi
+
+# --- M8/M9 self-probe: the K grammar and the count list over the seeds above, exact rows ------
+judge8 "$WORK/probe-scan.txt" "$WORK/probe-allow8.txt" | LC_ALL=C sort > "$WORK/probe8-got.txt"
+LC_ALL=C sort > "$WORK/probe8-want.txt" <<'WANT8'
+BADROW	m8bad 1
+BADROW	m8word	x
+BADROW	m8zero	0
+DUP	m8l1
+GROW	m8k01	1	0
+GROW	m8k02	1	0
+GROW	m8k03	3	0
+GROW	m8k04	2	1
+GROW	m8k05	1	0
+GROW	m8k06	1	0
+GROW	m8k07	1	0
+GROW	m8k08	1	0
+GROW	m8k09	1	0
+GROW	m8k10	1	0
+GROW	m8k11	1	0
+GROW	m8k12	1	0
+GROW	m8k13	1	0
+GROW	m8k14	1	0
+GROW	m8k15	1	0
+GROW	m8k16	1	0
+GROW	nm	1	0
+KLINE	m8k01	1: ok "mutant m3: arm A2 fires on the seeded offender"
+KLINE	m8k02	2: ok "mutant m3: arm A2 fires on the seeded offender"
+KLINE	m8k03	1:     ok "mutant: a protocol without the mandate FAILS, on the mandate arm specifically"
+KLINE	m8k03	2:   elif [ "$(slot_hits "$SD/gp-mut.md")" = 1 ]; then ok "MUTANT slot-target: the restored slot line is read (1) where the real file reads 0"
+KLINE	m8k03	3:   elif [ "$bm_mut" -ge 1 ]; then ok "MUTANT bare-marker: the re-inserted fallback is read ($bm_mut) where the real files read 0"
+KLINE	m8k04	1: ok "mutant m3: arm A2 fires"
+KLINE	m8k04	2: ok "mutant m4: arm A3 fires"
+KLINE	m8k05	1: ok "mutant m4: the controller arm fires"
+KLINE	m8k06	1: ok "mutant m4: the twins arm fires"
+KLINE	m8k07	1: ok "join-mutant: arm J fires"
+KLINE	m8k08	1: ok "arm's guard: mutant m3 fires"
+KLINE	m8k09	1: ok "the \"x\" mutant m3 fires"
+KLINE	m8k10	1: ok "after the killed run, mutant m3 still fires"
+KLINE	m8k11	1: ok "join/mutant: every arm is flagged"
+KLINE	m8k12	1: ok "mutant m3: arm A2 fires on the seeded offender, not the control"
+KLINE	m8k13	1: ok "mutant m3 fires, not routed through mutant_killed"
+KLINE	m8k14	1: echo "ok: MUTATION m3 -- neutering the guard lets the story pass"
+KLINE	m8k15	1: printf '  ok    %-22s the arm fires\n' "mutation-m3"
+KLINE	m8k16	1: ok "mutant m4: the subcontrol arm fires"
+KLINE	nm	9: ok "each killed run is reaped before mutant m2 starts"
+NORUN	m8gone	1
+STALE	m8s0	0	2
+STALE	m8s3	1	3
+T8	22	19
+WANT8
+if ! cmp -s "$WORK/probe8-got.txt" "$WORK/probe8-want.txt"; then
+  echo "validate-mutant-kills: REFUSED -- M8/M9 self-probe failed. Verdict rows:" >&2
+  sed 's/^/    got  /' "$WORK/probe8-got.txt" >&2
+  sed 's/^/    want /' "$WORK/probe8-want.txt" >&2
+  echo "  M8 cannot be shown to fire on a keyword-free kill and stay quiet on a non-kill, so its verdict over the tree would be unattributable." >&2
   exit 2
 fi
 
@@ -999,7 +1468,8 @@ m4_case() {  # <label> <repo> <want-rc> <want-text> <cur rows...>
 R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"
 mkdir -p "$R/scripts" "$RN" "$RX"
 { m4_probe_git init -q "$R" && printf '%s\n' '# base' a b > "$R/$ALLOW_REL" \
-  && m4_probe_git -C "$R" add "$ALLOW_REL" && m4_probe_git -C "$R" commit -q -m base \
+  && printf '%s\n' '# base' "a${TAB}2" "b${TAB}1" > "$R/$M8_ALLOW_REL" \
+  && m4_probe_git -C "$R" add "$ALLOW_REL" "$M8_ALLOW_REL" && m4_probe_git -C "$R" commit -q -m base \
   && m4_probe_git -C "$R" update-ref refs/remotes/origin/main HEAD \
   && m4_probe_git init -q "$RN" && printf 'x\n' > "$RN/other" \
   && m4_probe_git -C "$RN" add other && m4_probe_git -C "$RN" commit -q -m nofile \
@@ -1019,6 +1489,48 @@ m4_case shrink   "$R"  0 "OK M4: no allowlist row added against origin/main" a
 m4_case same     "$R"  0 "OK M4: no allowlist row added against origin/main" a b
 m4_case nofile   "$RN" 0 "SKIP M4: origin/main carries no $ALLOW_REL -- this is the release that first ships it" a b c
 m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" a b c
+
+# --- M10 self-probe: the same scratch repos; base list a=2, b=1 at origin/main of $R ----------
+# keyed on the fixture with a numeric compare: an added row, a raised count and a count-keeping
+# swap FAIL; a lowered count, a deleted row and an identical list pass; no origin/main and no base
+# list SKIP; a tree without the list while origin/main carries one FAILs. Exact text plus rc.
+m10_case() {  # <label> <repo> <want-rc> <want-text> <cur rows... | -MISSING>
+  local lab="$1" repo="$2" wrc="$3" want="$4" rc cur="$WORK/m10-cur.txt"
+  shift 4
+  if [ "$1" = -MISSING ]; then cur="$WORK/m10-absent.txt"; else printf '%s\n' '# probe list' "$@" > "$cur"; fi
+  M10_OUT=""
+  m10base "$repo" "$WORK/m10-base.txt" probe; rc=$?
+  if [ "$rc" = 3 ]; then
+    judge8 /dev/null "$cur" "$WORK/m10-base.txt" > "$WORK/m10-v.txt"
+    m10_verdict "$WORK/m10-v.txt"; rc=$?
+  else M10_OUT="$M10_SKIP"; fi
+  if [ "$rc" != "$wrc" ] || [ "$M10_OUT" != "$want" ]; then
+    echo "validate-mutant-kills: REFUSED -- M10 self-probe case '$lab' got rc $rc, want rc $wrc." >&2
+    printf '%s\n' "$M10_OUT" | sed 's/^/    got  /' >&2
+    printf '%s\n' "$want" | sed 's/^/    want /' >&2
+    echo "  M10 cannot be shown to both SKIP and fire, so its verdict over the tree would be unattributable." >&2
+    exit 2
+  fi
+}
+M10_FAILHEAD="FAIL M10: $M8_ALLOW_REL row(s) added or raised against origin/main -- the list is DOWN-ONLY:"
+M10_REMEDY="  Remedy: do not add or raise the row. Route each new kill through mutant_killed <flag> <name> \"<message>\"
+  (core/fixtures/lib/mutant.sh). A renamed fixture is a new row by design: its kills are routed, not re-listed."
+M10_OK="OK M10: no $M8_ALLOW_REL row added or raised against origin/main"
+m10_case added    "$R"  1 "$M10_FAILHEAD
+    c: 1 (no row at origin/main)
+$M10_REMEDY" "a${TAB}2" "b${TAB}1" "c${TAB}1"
+m10_case raised   "$R"  1 "$M10_FAILHEAD
+    a: 3 (origin/main lists 2)
+$M10_REMEDY" "a${TAB}3" "b${TAB}1"
+m10_case swap     "$R"  1 "$M10_FAILHEAD
+    c: 1 (no row at origin/main)
+$M10_REMEDY" "a${TAB}2" "c${TAB}1"
+m10_case lowered  "$R"  0 "$M10_OK" "a${TAB}1" "b${TAB}1"
+m10_case deleted  "$R"  0 "$M10_OK" "a${TAB}2"
+m10_case same     "$R"  0 "$M10_OK" "a${TAB}2" "b${TAB}1"
+m10_case absent   "$R"  1 "FAIL M10: origin/main carries $M8_ALLOW_REL and this tree does not -- regenerate its rows with --derive-m8." -MISSING
+m10_case nofile   "$RN" 0 "SKIP M10: git show origin/main:$M8_ALLOW_REL read nothing -- origin/main carries no list at that path (the release that first ships it), or the object is unreadable" "a${TAB}2"
+m10_case noorigin "$RX" 0 "SKIP M10: origin/main does not resolve here, so there is no base list to compare against" "a${TAB}2"
 
 # --- M5 prefilter self-probe: every token the token pass reacts to survives the prefilter ----
 # The word set is derived from this file: every `tk == "<word>"` branch test of the token pass.
@@ -1217,6 +1729,59 @@ if [ "$MODE" = derive5 ]; then
   exit 0
 fi
 
+# M8/M9/M10: one judge over the K rows the corpus read already wrote, with the base list when
+# origin/main carries one. T8 is the positive control: zero K lines is a grammar that stopped
+# matching, never a clean tree.
+m10_bf=""
+if [ "$MODE" = check ]; then
+  m10base "$ROOT" "$WORK/m10-root-base.txt"; [ $? -eq 3 ] && m10_bf="$WORK/m10-root-base.txt"
+fi
+judge8 "$WORK/scan.txt" "$ROOT/$M8_ALLOW_REL" "$m10_bf" > "$WORK/m8-verdict.txt"; m8j_rc=$?
+m8_t=0; m8_fx=0; m8_rc=0
+while IFS="$TAB" read -r tag a b c; do
+  case "$tag" in
+    T8) m8_t="$a"; m8_fx="$b" ;;
+    MISSING|GROW|STALE|NORUN|DUP|BADROW) m8_rc=1 ;;
+  esac
+done < "$WORK/m8-verdict.txt"
+if [ "$m8j_rc" -ne 0 ] || [ "${m8_t:-0}" -lt 1 ]; then
+  echo "validate-mutant-kills: REFUSED -- M8 read zero keyword-free mutant verdict lines across $scanned_n run.sh (judge rc $m8j_rc). The K grammar stopped matching; this is not a clean tree." >&2
+  exit 2
+fi
+if [ "$MODE" = derive8 ]; then
+  awk -F '\t' '$1 == "K" { if (!($2 in n)) o[++no] = $2; n[$2]++ } END { for (i = 1; i <= no; i++) print o[i] "\t" n[o[i]] }' "$WORK/scan.txt" | LC_ALL=C sort
+  exit 0
+fi
+if [ -n "$m10_bf" ]; then m10_verdict "$WORK/m8-verdict.txt"; m10_rc=$?; else M10_OUT="$M10_SKIP"; m10_rc=0; fi
+m8_listed=0
+while IFS="$TAB" read -r a b; do
+  case "$a" in ''|'#'*) ;; *) m8_listed=$((m8_listed + 1)) ;; esac
+done 2>/dev/null < "$ROOT/$M8_ALLOW_REL"
+if [ "$m8_rc" -ne 0 ] || [ "$m10_rc" -ne 0 ]; then
+  [ "$m10_rc" -ne 0 ] && printf '%s\n' "$M10_OUT" >&2
+  awk -F '\t' -v REL="$M8_ALLOW_REL" '
+    $1 == "MISSING" { print "FAIL M9: " REL " is missing. Regenerate its rows with --derive-m8."; miss = 1 }
+    $1 == "GROW" { print "FAIL M8: " $2 "/run.sh carries " $3 " keyword-free mutant verdict line(s), " REL " lists " $4 ":"; g = 1 }
+    $1 == "KLINE" { t = $0; sub(/^KLINE\t[^\t]*\t/, "", t); print "    " $2 "/run.sh:" t }
+    $1 == "STALE" { s = s "    " $2 ": listed " $4 ", carries " $3 "\n" }
+    $1 == "NORUN" { s = s "    " $2 ": listed " $3 ", no core/fixtures/" $2 "/run.sh\n" }
+    $1 == "DUP" { s = s "    " $2 ": listed twice\n" }
+    $1 == "BADROW" { t = $0; sub(/^BADROW\t/, "", t); s = s "    malformed row (want <fixture><TAB><positive count>): " t "\n" }
+    END {
+      if (g) {
+        print "  Remedy, by what the line IS. A kill: route it through mutant_killed <flag> <name> \"<message>\""
+        print "  (core/fixtures/lib/mutant.sh), with a flag M5 accepts. NOT a kill (a control, a twin, an applied"
+        print "  check): say so in the first 40 characters of the message, with the word naming its sense (unmutated, control, baseline,"
+        print "  twin, stays green, intact, matrix, did not apply, applied, pairing, cmp -s). Never raise the row: the"
+        print "  list only shrinks (M10)."
+      }
+      if (s != "") {
+        printf "FAIL M9: %s row(s) that no longer match the tree -- run --derive-m8 and replace the row:\n%s", REL, s
+        print "  A row may only fall: lower it to the current count of the fixture in the same change, or delete it at 0."
+      }
+    }' "$WORK/m8-verdict.txt" >&2
+fi
+
 if [ ! -f "$ROOT/$ALLOW_REL" ]; then
   echo "validate-mutant-kills: FAIL -- $ALLOW_REL is missing. Regenerate its rows with --derive." >&2
   exit 1
@@ -1273,8 +1838,11 @@ if [ -s "$WORK/verdict.txt" ] || [ "$m4_rc" -ne 0 ] || [ "$m5_rc" -ne 0 ] || [ "
   fi
   exit 1
 fi
+if [ "$m8_rc" -ne 0 ] || [ "$m10_rc" -ne 0 ]; then exit 1; fi
 echo "$m4_out"
 echo "$m7_out"
+echo "$M10_OUT"
+echo "OK M8: $m8_t keyword-free mutant verdict line(s) in $m8_fx fixture(s), none above its count on $M8_ALLOW_REL ($m8_listed row(s)), no stale, duplicate or malformed row"
 echo "$m5_out ($m5_sites scored, $m5_capt captured and not scored; $m5_listed refused site(s), every one a row of $M5_ALLOW_REL, no stale or duplicate row)"
 echo "OK: validate-mutant-kills -- self-probe fired both ways; $scanned_n run.sh scanned, $tot kill line(s), $unrouted_n unrouted, all in the $allow_n allowlisted fixture(s); no stale or duplicate row."
 exit 0
