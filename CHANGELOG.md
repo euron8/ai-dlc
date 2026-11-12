@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1079.0] - 2026-11-12
+
+### PRE-SEED BEHIND THE GATE, paused sessions in the roll call, batch-256 record
+
+- **The sixth train rule.** The operator instruction at batch 256 makes it a standard operating rule that owners queued behind a gate pre-seed the verdict store at their final sha. `docs/plans/graph-ledger-full-drain.md` action 0 now carries it as PRE-SEED BEHIND THE GATE, and owner-rules Flow step 6 points at it. P14 of `scripts/validate-plan-shape.sh` now requires the label in every live plan's designation action. The `plan-shape` fixture's label cell covers it: against the old validator it went red on exactly that cell. Its `invocations.decl` rows moved from 78/77 to 80/79, measured by two counted runs.
+- **Paused sessions in the roll call.** A session the lead has paused stays in the 45-minute roll call and answers with its one line. It is not told to call `advisor` while paused. The lead asks active sessions for advisor calls a few at a time.
+- **The batch-256 open record.** It is written in `## RESUME HERE`. `scripts/plan-rotate.sh --apply` moved the batch-255 record and the 80 B `## Context` stub to `docs/plans/archive/graph-ledger-full-drain.md`, taking the plan from 149999 bytes at origin/main (e3d2dfc35) to 149974 at this release tip (the batch-255 record and the stub moved out, the batch-256 record and the PRE-SEED rule added).
+- **The other live plans.** `consumer-context-footprint`, `hermetic-fixtures-poc` and `pre-push-wall-clock` each gain a PRE-SEED BEHIND THE GATE bullet that points to the drain plan's action 0.
+
+No backlog entry closes or files: the net is 0.
+
 ## [0.1078.0] - 2026-11-12
 
 ### Rotation command made runnable
