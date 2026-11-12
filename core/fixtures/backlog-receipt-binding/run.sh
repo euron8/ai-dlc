@@ -106,6 +106,8 @@
 # MUTANT-MATRIX r11-m3 decides=r11_m3 twins=r11_m2
 # MUTANT-MATRIX r12-m1 decides=r12_m1 twins=r11_m2
 # MUTANT-MATRIX c1-whole decides=c1_whole twins=m6
+# MUTANT-MATRIX r1g-a decides=r1g_a twins=r1g_b
+# MUTANT-MATRIX r1g-b decides=r1g_b twins=r1g_a
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/backlog-receipt-binding/run.sh --matrix
 # IN PROCESS. Validator runs go through vin: the world's own copy of the validator (mutated or not)
@@ -274,6 +276,10 @@ score() {
 # m12 decides both BL-807 mutants (m12, m13). Without the key, m1 read any self-probe refusal as its kill, and m4 and m12 read a MISSING row
 # as a wrong one, so every refusing capture in the matrix tripped all four.
 arm_m1() { r_has "$1" "did NOT flip under a seed carrying its own grep literal (got: BOUND)" && [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && ! r_has "$1" "OK: validate-backlog-receipts"; }
+# r1g-a and r1g-b read only R1's GENERIC-pass refusals, each its own sentence, and exactly one refusal:
+# the token pass ran first and passed, so neither can be a token-pass message read as a kill.
+arm_r1g_a() { r_has "$1" "a seed carrying NO token flipped 3 receipt(s)" && [ "$(r_rc "$1")" = 2 ] && [ "$(grep -c 'SELF-PROBE FAILED' "$REC/$1.out")" = 1 ] && ! r_has "$1" "OK: validate-backlog-receipts"; }
+arm_r1g_b() { r_has "$1" "the generic-seed pass returned no status row for BL-901," && [ "$(r_rc "$1")" = 2 ] && [ "$(grep -c 'SELF-PROBE FAILED' "$REC/$1.out")" = 1 ] && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m2c() { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "are satisfied by a COMMENT"; }
 arm_m3() { [ "$(r_rc "$1")" != 0 ] && ! r_has "$1" "OK: validate-backlog-receipts" && grep -qE 'base-exit-9 receipt|exits 9 on' "$REC/$1.out"; }
 arm_m4() { r_has "$1" "the base-0 receipt was reported" &&[ "$(r_cls "$1" BL-805)" != "ALREADY-PASSING" ] && [ "$(r_rc "$1")" != 0 ]; }
@@ -635,6 +641,23 @@ seed "$TMP/m1"
 if mut "$TMP/m1" 's|^  GENERIC_LINE="# probe"|  GENERIC_LINE="# probe"; SEED_LINE="# probe"|'; then
   drive m1 "$TMP/m1" "" $DEF
   score m1 "$B_CTRL" "m1 -- a token-free seed is refused by the self-probe, before the corpus"
+fi
+
+# ===== R1G. R1'S GENERIC PASS, BOTH OF ITS ASSERTIONS PROVEN ABLE TO FIRE (BL-880). ===============
+# m1 makes the TOKEN seed token-free and is killed in the token pass; nothing above makes the generic
+# pass's quiet direction speak. r1g-a deletes the line that switches the seed to the generic line, so
+# the generic pass seeds tokens and its three literal receipts (BL-901, BL-908, BL-909) flip. r1g-b
+# swaps BL-901 for BL-903 in the generic ledger's filter: six entries still, the quiet count, BL-907's
+# flip and BL-901's `case` all still pass, and only the per-id population guard can refuse it.
+seed "$TMP/r1g-a"
+if mut "$TMP/r1g-a" '/^  \[ "\${BR_GENERIC_SEED:-0}" = "1" \] && SEED_LINE="\$GENERIC_LINE"$/d'; then
+  drive r1g-a "$TMP/r1g-a" "" $DEF
+  score r1g-a "$B_CTRL" "r1g-a -- a generic pass that seeds tokens is refused by its own quiet direction, on the three literal receipts"
+fi
+seed "$TMP/r1g-b"
+if mut "$TMP/r1g-b" 's|^awk -v ids=" BL-901 BL-902 |awk -v ids=" BL-903 BL-902 |'; then
+  drive r1g-b "$TMP/r1g-b" "" $DEF
+  score r1g-b "$B_CTRL" "r1g-b -- a generic ledger that lost BL-901 is refused by the per-id population guard, not read as quiet"
 fi
 
 # ===== VEQ. THE IN-PROCESS DRIVE IS THE CLI, BYTE FOR BYTE. ===================================
@@ -2337,6 +2360,8 @@ twin_of() {
     r11-m2) echo r11_m3 ;;
     r11-m3) echo r11_m2 ;;
     r12-m1) echo r11_m2 ;;
+    r1g-a) echo r1g_b ;;
+    r1g-b) echo r1g_a ;;
     *) echo "" ;;
 # TWINS-END
   esac

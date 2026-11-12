@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1080.0] - 2026-11-12
+
+### BL-880 — the receipts validator's R1 generic pass scores only the receipts the generic seed reaches
+
+- **R1's generic pass is narrowed.** `scripts/validate-backlog-receipts.sh` now scores an out-of-repo ledger built by one awk filter of the probe ledger, keeping BL-901, 902, 905, 907, 908 and 909, the six ids that reach the seed line. The `$PH` generic call and the union are dropped. `score_ledger` is unchanged, no probe is removed and no switch is added. A per-id guard refuses when any of the six has no status row.
+- **Two new mutants.** r1g-a (the generic-seed assignment deleted) is killed at "a seed carrying NO token flipped 3 receipt(s)". r1g-b (BL-901 swapped for BL-903 in the filter) is killed only by the guard. Before them no mutant proved the generic pass could refuse.
+- **Measured, two agreeing counted runs each.** The pre-push "backlog receipts" step goes S 83 to 72 and G 444 to 402 per invocation (the entry projected -11 S / -36 G). backlog-receipt-binding goes 3303 to 2851 `*`, 2350 to 2110 validator, 117 to 119 `inproc:`. backlog-real-ledger goes 140 to 118 `*`, 95 to 83 validator. The fork total is unchanged at 2843.
+- **Two comments corrected.** The `BR_PROBE_COUNTER` reset comment now says which R1 call reaches the reset with the counter at 2. The filter comment now says "reach the seed line".
+- **BL-880 closes.** The Owed paragraph was its last owed item.
+
 ## [0.1079.0] - 2026-11-12
 
 ### PRE-SEED BEHIND THE GATE, paused sessions in the roll call, batch-256 record
