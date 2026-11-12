@@ -34,6 +34,8 @@ ARMS="PUSH REASON MCPCONSULT NOGRANT WITHDRAWN ORDER ERRCLEAR UNAV REARM MERGE C
 printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 . "$HERE/matrix.sh" || { echo "FIXTURE ERROR: matrix.sh not found" >&2; exit 2; }
 printf 'HERMETIC-CONSUMED core/fixtures/advisor-gate-deny/matrix.sh\n'
+. "$HERE/applied.sh" || { echo "FIXTURE ERROR: applied.sh not found" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED core/fixtures/advisor-gate-deny/applied.sh\n'
 
 echo "advisor-gate-deny:"
 printf '  hook  %s\n' "$HOOK"
@@ -69,8 +71,37 @@ CTL="$(SCORE_ARMS="UNAV PUSH REASON ORDER NOGRANT FAILOPEN MATEABSENT" score "$M
 
 # BL-752 mutant: a second `_netcap=10` line after the default. rr-never runs at ADVISOR_GATE_NET=2 and
 # cannot see it; the NETDEF read of the unset-knob cap must, and must name only REREAD.
-awk '{ print } /^_netcap=300$/ { print "_netcap=10" }' "$HOOK" > "$MUT/hook-netcap10.sh"
-if cmp -s "$HOOK" "$MUT/hook-netcap10.sh"; then bad "mutant netcap10: DID NOT APPLY -- no _netcap=300 line to follow"
+awk '{ print } /^_netcap=300$/ { print "_netcap=10" }' "$HOOK" > "$MUT/hook-netcap10.sh"; NC_BRC=$?
+
+# BL-983 must-fire: drive mutant_applied (applied.sh), the guard both sites below call, on five pairs whose
+# verdicts are known. Each runs in $( ), so a probe never moves `fails`; its printed verdict is read here.
+# P3 and P4 are the two a bare `if cmp -s` fold reads as APPLIED; stderr is dropped so neither puts a
+# cmp error line in the log. P4's PATH is a directory that does not exist: the hermetic tool farm without cmp.
+cp "$HOOK" "$MUT/hook-identical.sh"
+: > "$MUT/hook-empty.sh"
+_ap="$(mutant_applied 0 "$HOOK" "$MUT/hook-identical.sh" 2>/dev/null)"; _aprc=$?
+[ "${_ap%% *}" = NOT-APPLIED ] && [ "$_aprc" = 1 ] && ok "applied check P1: an identical copy of the hook reads NOT-APPLIED, rc 1" \
+  || bad "applied check P1: identical pair read [$_ap] rc=$_aprc, expected NOT-APPLIED rc 1"
+_ap="$(mutant_applied 0 "$HOOK" "$MUT/hook-netcap10.sh" 2>/dev/null)"; _aprc=$?
+[ "$_ap" = APPLIED ] && [ "$_aprc" = 0 ] && ok "applied check P2: the netcap10 hook reads APPLIED, rc 0 (the near-miss)" \
+  || bad "applied check P2: netcap10 pair read [$_ap] rc=$_aprc, expected APPLIED rc 0"
+_ap="$(mutant_applied 0 "$MUT/no-such-hook.sh" "$MUT/hook-identical.sh" 2>/dev/null)"; _aprc=$?
+[ "$_ap" = "BROKEN cmp rc=2" ] && [ "$_aprc" = 2 ] && ok "applied check P3: an unreadable original reads BROKEN cmp rc=2, rc 2" \
+  || bad "applied check P3: missing-original pair read [$_ap] rc=$_aprc, expected [BROKEN cmp rc=2] rc 2"
+_ap="$(PATH="$MUT/.no-such-bin"; mutant_applied 0 "$HOOK" "$MUT/hook-netcap10.sh" 2>/dev/null)"; _aprc=$?
+[ "$_ap" = "BROKEN cmp rc=127" ] && [ "$_aprc" = 2 ] && ok "applied check P4: no cmp on PATH reads BROKEN cmp rc=127, rc 2 (BL-983 itself)" \
+  || bad "applied check P4: cmp-less PATH read [$_ap] rc=$_aprc, expected [BROKEN cmp rc=127] rc 2"
+_ap="$(mutant_applied 1 "$HOOK" "$MUT/hook-empty.sh" 2>/dev/null)"; _aprc=$?
+[ "$_ap" = "NOT-APPLIED builder rc=1" ] && [ "$_aprc" = 1 ] && ok "applied check P5: a failed builder with an empty output reads NOT-APPLIED builder rc=1" \
+  || bad "applied check P5: builder rc 1 read [$_ap] rc=$_aprc, expected [NOT-APPLIED builder rc=1] rc 1"
+# The receipt holds the decl half (tools.decl declares cmp) and the fail-closed half against this directory.
+_rb="$(bash "$HERE/receipt-bl983.sh" "$HERE" 2>&1)"; _rbrc=$?
+[ "$_rbrc" = 0 ] && ok "receipt-bl983.sh passes: tools.decl declares cmp and mutant_applied fails closed without it" \
+  || bad "receipt-bl983.sh exited $_rbrc: $(printf '%s\n' "$_rb" | grep FAIL | tr '\n' ' ')"
+
+NC_AP="$(mutant_applied "$NC_BRC" "$HOOK" "$MUT/hook-netcap10.sh")"; NC_APRC=$?
+if [ "$NC_APRC" = 2 ]; then bad "mutant netcap10: FIXTURE BROKEN: ${NC_AP#BROKEN } -- the applied check could not compare it to the hook"
+elif [ "$NC_APRC" != 0 ]; then bad "mutant netcap10: DID NOT APPLY ($NC_AP) -- no _netcap=300 line to follow"
 else
   # The mutant changes only the unset-knob default cap, which no cell reads (rr-late appends at 3s,
   # well inside 10s; the rest set a knob): only the netdef read in score() sees it. SCORE_ARMS names
@@ -100,8 +131,10 @@ fi
 # BL-868 mutant noid-wait: one `sleep 0` before the no-tool_use_id stand-down. Its verdict and its stderr
 # are unchanged, so only the FAST cell's sleep count can see it: that is the cell's own subject, which
 # the `$SECONDS -gt 5` bound it replaced could never see (a 0s sleep costs no wall clock).
-awk '/carries no tool_use_id, so the incoming call/ && !d { print "  sleep 0"; d = 1 } { print }' "$HOOK" > "$MUT/hook-noidwait.sh"
-if cmp -s "$HOOK" "$MUT/hook-noidwait.sh"; then bad "mutant noid-wait: DID NOT APPLY -- no no-tool_use_id stand-down line to precede"
+awk '/carries no tool_use_id, so the incoming call/ && !d { print "  sleep 0"; d = 1 } { print }' "$HOOK" > "$MUT/hook-noidwait.sh"; NW_BRC=$?
+NW_AP="$(mutant_applied "$NW_BRC" "$HOOK" "$MUT/hook-noidwait.sh")"; NW_APRC=$?
+if [ "$NW_APRC" = 2 ]; then bad "mutant noid-wait: FIXTURE BROKEN: ${NW_AP#BROKEN } -- the applied check could not compare it to the hook"
+elif [ "$NW_APRC" != 0 ]; then bad "mutant noid-wait: DID NOT APPLY ($NW_AP) -- no no-tool_use_id stand-down line to precede"
 elif [ "$MATRIX" = 1 ]; then
   MXF="$(NET_CELLS=1 score "$MUT/hook-noidwait.sh" "$W/failed.matrix.noid")"
   for _a in $ARMS; do

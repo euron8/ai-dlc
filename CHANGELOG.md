@@ -19,6 +19,55 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1076.0] - 2026-11-12
+
+### BL-983 CLOSED: an undeclared `cmp` left advisor-gate-deny's two DID-NOT-APPLY guards dead, and they now fail closed on cmp's exit
+
+`core/scripts/hermetic-run.sh:608` runs each fixture under `env -i PATH="$HR_BIN"`, and `$HR_BIN` (`:556-565`) holds only the tools that fixture's `tools.decl` declares, in the distribution and in a consumer install alike. `core/fixtures/advisor-gate-deny/tools.decl` did not declare `cmp`. The guards `if cmp -s "$HOOK" "$MUT/<mutant>"; then bad "...DID NOT APPLY..."; else <score>` at `run.sh:73` and `:104` therefore got rc 127. The `if` folds rc 127 (and rc 2) into its "files differ" branch, so neither guard compared anything and an unapplied mutant would have been scored as applied. Under hermetic-run, the distribution-layout run read 2 `command not found` lines at base f76449762 and 0 at the tip, with the invocation counter armed and two agreeing tip runs at 270 starts. The consumer-install run through the installed scripts/ai-dlc/hermetic-run.sh (plain) read 2 at base 48d9e2204 and 0 at the tip. The fixture printed PASS at base.
+
+- `tools.decl` declares `cmp`.
+- `applied.sh` (new, sourced by `run.sh`) defines `mutant_applied <builder_rc> <orig> <mut>`. A non-zero builder rc, an empty or absent mutant file, or cmp rc 0 reads NOT-APPLIED (rc 1). cmp rc 1 reads APPLIED (rc 0). Any other cmp rc reads `BROKEN cmp rc=N` (rc 2). Both guard sites capture the awk builder's rc and call it. NOT-APPLIED is `bad` DID NOT APPLY, and BROKEN is `bad` FIXTURE BROKEN.
+- The must-fire arm drives the same function in `$( )` and reads each printed verdict.
+  - P1, an identical copy of the hook, reads NOT-APPLIED.
+  - P2, the real netcap10 hook (the near-miss), reads APPLIED.
+  - P3, a missing original, reads `BROKEN cmp rc=2`.
+  - P4, PATH a nonexistent directory (the BL-983 case), reads `BROKEN cmp rc=127`.
+  - P5, builder rc 1 with an empty output, reads `NOT-APPLIED builder rc=1`.
+- `receipt-bl983.sh` (new, run by `run.sh` on every push) checks R1 (`cmp` declared), R2 (no `cmp` on PATH gives `BROKEN cmp rc=127`, rc 2) and R3 (an identical pair gives NOT-APPLIED, rc 1). Against origin/main's files in a mktemp scratch it exits 1, failing R1 and R2. Base `tools.decl` with the new `applied.sh` fails R1 alone. The new `tools.decl` with the bare-fold `applied.sh` fails R2 alone.
+- `invocations.decl` `*` 269 to 270, the receipt's own bash start. `cmp` starts no bash.
+- Fork profile TOTAL 2843 at base 48d9e2204 and 2843 at tip a8891dafc against FORK_BUDGET 2926.
+
+Only advisor-gate-deny is fixed. No other fixture's `tools.decl` changes in this release; the other undeclared tools are BL-984.
+
+### BL-984 FILED (OPEN): nothing owns `tools.decl` completeness, so an undeclared tool silently kills a check
+
+`hermetic-run.sh` resolves DECLARED tools only and exits 2 on one that is declared and absent. A tool a fixture calls and does not declare is rc 127. In a branch condition (`if cmp -s`, `||`, `!`, `$( )`) or under `2>/dev/null` the 127 reads as an ordinary answer, the check it feeds stops checking, and the fixture still prints PASS. `validate-fixture-hygiene.sh` H2 covers only `command -v <declared tool>` skips. `census-hermetic-coverage.sh` is a census, not a gate, and compares ok-line sets, so it would read advisor-gate-deny EQUAL.
+
+Proposed and not built (lead ruling, F15): a `hermetic-run.sh` arm that fails a fixture whose run log carries `command not found`. The entry records its limits. It is shipped engine code, so it runs on every consumer push. Its false-positive set is unmeasured. It is blind to redirected stderr, which is exactly the swallowed shape, and to code that runs only on a failing branch or under `--matrix`. A clean log is a floor, not a proof.
+
+The F15 census was taken at f76449762 and re-checked at the tip. 179 of 270 fixtures had a static candidate and were run through `hermetic-run.sh` with a fresh mktemp verdict store. The result is a census population confirmed by execution, every instance undeclared; none is fixed here. The entry groups it as follows:
+
+- LOUD, still rc 0: prepush-ssh-keepalive `tr` and readset-stage1-verdict `basename` and `cksum`.
+- FAILING-BRANCH-ONLY: apply-legacy-script-path `diff` and wait-beat-liveness `uniq`.
+- MATRIX-ONLY: retro-branch-behind-main `wc` and fold-architect-ledger-join `cut`.
+- SWALLOWED: the rest, including the `md5`, `shasum`, `od`, `uniq`, `sort` and `jq` sites. escalation-citation and transient-ignore-block compared two empty hashes as equal.
+
+Operator ruling (b255): the declarations ship as a follow-up release, b256's opener by default.
+
+Two findings sit outside a plain declaration:
+
+- **prepush-ssh-keepalive `tr` (OPEN):** with `tr` declared the fixture prints `ok (19 assertions)`, but the invocation judge fails it: `FAIL (J3): row "19 *": measured 22, declared 19`. The 3 extra starts are attributed, unverified, to the `$( )` sites at `run.sh:258`, `:279` and `:282`, which run once `tr` resolves. All other census fixtures re-ran rc 0 with an unchanged budget once their tools were declared.
+- **readset-stage1-verdict `rs_sleep` (non-gating side finding):** it is a function (`derive-fixture-readsets.sh:1778`), not a tool. A generated deriver calls it and never defines it, so a plain run prints 6 `rs_sleep: command not found` lines. It is not a close condition of this entry.
+
+The entry also lists what was left open or not audited:
+
+- Fixtures with no `tools.decl` and no `inputs.decl`, which `hermetic-run.sh` refuses with rc 2 and which were never executed.
+- Fixtures scanned statically only, which is not an executing proof.
+- Fixtures that set their own PATH, which are unaudited.
+- The executing population is a floor.
+
+Receipt: `verify: manual`. A `has` on `hermetic-run.sh` for `command not found` is closable by a comment. The real receipt is a fixture arm that seeds a fixture calling an undeclared tool and asserts `hermetic-run.sh` refuses it, and it lands with the arm.
+
 ## [0.1075.0] - 2026-11-12
 
 ### BL-982 — an in-process validator pass is counted, and the efficiency-close block runs in its own fixture (PARTIAL)
