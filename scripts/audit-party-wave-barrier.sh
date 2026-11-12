@@ -11,19 +11,23 @@
 # USAGE
 #   audit-party-wave-barrier.sh [--cap N] [--trace] <transcript.jsonl>...
 #   audit-party-wave-barrier.sh --seed <case> <out.jsonl> [--seed <case> <out.jsonl>]...
-# --seed writes one of the self-probe's seeded transcripts (cases a-s below) and exits 0, so a receipt
-# can drive the detector over the same shapes the probe uses.
+# --seed writes one of the self-probe's seeded transcripts (cases a-y below) and exits 0, so a receipt
+# can drive the detector over the same shapes the probe uses. For u, v, x and y it writes the lead at
+# <out.jsonl> AND its coordinator at <out without .jsonl>/subagents/agent-ac01.jsonl, the harness's layout.
 #
 # EXIT: 0 no findings; 1 one or more findings; 2 usage, a refused self-probe, an empty transcript
-# list, or any transcript that could not be scanned (unreadable, empty, or not JSONL). Scanned is
-# counted against given, and any shortfall is exit 2, never 0.
+# list, or any transcript that could not be scanned (unreadable, empty, or not JSONL), a followed file
+# included. Scanned is counted against given, and any shortfall is exit 2, never 0.
 #
 # OUTPUT (stdout), one line per judged batch boundary:
 #   FINDING <transcript> round=<dir/step> batch=<k> exit=<ts> dispatch=<ts> running=<n> cap=<c> idle=<c-n> gap=<s>s unrefilled=<u>
 #   UNKNOWN-CAP <transcript> round=<dir/step> batch=<k> exit=<ts> dispatch=<ts> running=<n> unrefilled=<u>
 #   TRACE <transcript> round=<dir/step> DELIVERED ... REFILLED|UNREFILLED|SLOTS-FULL|NO-CAP   (--trace only)
-# <exit> is the first unanswered delivery of the stretch, and running/idle are read at it.
-# A summary goes to stderr: given, scanned, rounds, batches, findings, unknown-cap. UNKNOWN-CAP is
+# <exit> is the first unanswered delivery of the stretch, and running/idle are read at it. In a FOLLOWED
+# file <transcript> is `<lead basename without .jsonl>/subagents/agent-<agentId>.jsonl`.
+# A summary goes to stderr: given, scanned, rounds, batches, findings, unknown-cap (followed files'
+# counts included), followed (delegated files replayed) and delegated-missing (a delegated agentId whose
+# file does not exist: reported, never exit 2, because older transcripts predate `subagents/`). UNKNOWN-CAP is
 # NEVER a finding and does not move the exit code, but it is LOUD: each transcript and round that held
 # a batch it could not judge also prints one stderr line
 #   audit-party-wave-barrier: UNKNOWN-CAP session=<transcript basename> round=<dir/step> unjudged=<n>
@@ -67,15 +71,51 @@
 #             corpus follow a tool_use) and is neither a prompt nor a delivery (case q). An isMeta
 #             record (Stop-hook feedback, "no visible output") DOES start one: it follows an end_turn
 #             in every corpus instance but a handful, so the lead's response had already ended, and
-#             exempting it acquitted the TRUE 3dbc11fb b2. isSidechain records are dropped (case r).
-#   RESPONSE  the records after a delivery up to the next TURN start that follows at least one
-#             assistant record. Consecutive deliveries with no assistant record between them share one
-#             response. The response ANSWERS the delivery when it carries any Agent/Task call of the
-#             same round, new, re-sent or rejected. Keyed on the turn and not on the next assistant
-#             message: a lead that arms a beat and dispatches the refill in the next message of the
-#             same turn has answered (case k).
+#             exempting it acquitted the TRUE 3dbc11fb b2. isSidechain records are dropped from a
+#             LEAD file (case r); a FOLLOWED file is read whole, every record of it being sidechain.
+#   DELEGATION a lead's Agent/Task call whose non-error tool_result carries `agentId: <id>` delegates
+#             to that agent. If `<lead dir>/<lead basename without .jsonl>/subagents/agent-<id>.jsonl`
+#             exists and carries an Agent/Task tool_use (a grep keyed on the tool_use's own
+#             `"type":"tool_use","id":…,"name":` shape: the loose `"name":"Agent"` is in every
+#             subagent file's tool listing, 157 of 157 in 189712ad's dir, the shaped key 1 of 157), it is
+#             FOLLOWED: replayed as its own unit -- its own rounds, running set, turns and cap -- with
+#             the sidechain filter off for that file only (cases u, v). An id whose file does not exist is
+#             delegated-missing (case w); a file that exists and dispatches nothing is not replayed.
+#             Depth 1 only: a followed file's own agents are never followed. A file is followed once
+#             per lead.
+#   RESPONSE  in a LEAD file: the records after a delivery up to the next TURN start that follows at
+#             least one assistant record. Consecutive deliveries with no assistant record between them
+#             share one response. The response ANSWERS the delivery when it carries any Agent/Task call
+#             of the same round, new, re-sent or rejected. Keyed on the turn and not on the next
+#             assistant message: a lead that arms a beat and dispatches the refill in the next message
+#             of the same turn has answered (case k).
+#             In a FOLLOWED file the response is bounded at the coordinator's next WAIT, the call it
+#             blocks in: a FOREGROUND Bash (no run_in_background) with a command SEGMENT (split on
+#             ; && || | and newline) that BLOCKS. A segment's command word is read after leading
+#             assignments, shell keywords, launchers (env, exec, timeout N, bash -c) and quotes are
+#             stripped; the segment blocks when that word is wait-for-deliverable (by any path) and
+#             its args carry none of the non-blocking modes --status --mark --mark-repair
+#             --dispatch-ts --reset (the blocking forms are bare, --complete and --complete-repair,
+#             wait-for-deliverable.sh's usage), or when that word is sleep (by any path: /bin/sleep,
+#             bash -c "sleep N"). So a --complete wait followed by `; ... --status` is a wait, and a
+#             --dispatch-ts or --mark call is not. The response is the assistant
+#             records after the delivery up to and including the first MESSAGE (one message.id)
+#             carrying a WAIT, or the next TURN start if that comes first (the fallback: a0701ce0's
+#             records replayed as a followed file carry no wait and fire on it). Of the deliveries
+#             written while ONE wait is open -- after its tool_use, before its tool_result -- the LAST
+#             is the one the wait returned on: its response opens at the return and runs to the next
+#             wait or the turn end. The earlier ones are unanswered when the wait returns (case x).
+#             No time threshold. A coordinator waits inside foreground Bash calls and its
+#             deliveries are mid-turn queued_command attachments, so its whole dispatch phase is one
+#             turn (189712ad's 06:34:27-06:55:03) and a turn bound would let any later dispatch answer
+#             every earlier delivery: case u reads quiet under it. Any other call -- an `ls`, a Read,
+#             a --status check -- does not end the response (case y). A short `sleep 1; cat ...`
+#             probe IS a wait by this rule; such a call can only end a response early (a possible
+#             false finding), never acquit one.
 #   RUNNING   at a moment s: every Agent/Task launched before s, of ANY round or none, minus those
-#             whose exit is at or before s.
+#             whose exit is at or before s. In a followed file, plus 1: the coordinator's own slot
+#             (at 189712ad's three cap-42 rejections that reads 42, the coordinator the only other agent
+#             in flight).
 #   CAP       in order: --cap N; else the harness rejection text `You can run N subagents at once` in
 #             a tool_result of an Agent/Task call; else the environment, read from a tool_result line
 #             that is EXACTLY `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=N`, or a tool_result that is
@@ -83,7 +123,9 @@
 #             `printenv CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` rule 28 prescribes). The rejection ranks
 #             above the environment because it is the LIVE value the harness enforced; an env read can
 #             predate a relaunch. Two values within one source take the LOWER and both are named in the
-#             STAT line. Otherwise the cap is UNKNOWN and is never assumed.
+#             STAT line. A followed file with none of its own takes the cap its LEAD resolved (same
+#             session, same harness), named `capsrc=lead-<source>` (e444bf13: the lead's env 42, its
+#             coordinator none). Otherwise the cap is UNKNOWN and is never assumed.
 #   VERDICT   each delivery of a round member is REFILLED (its response answered it), SLOTS-FULL
 #             (RUNNING >= CAP at the delivery), NO-CAP (unanswered, cap unknown) or UNREFILLED. At each
 #             NEW member of a round after its first, the deliveries of round members since the round's
@@ -94,7 +136,7 @@
 #             JSON object. Lines that do not parse are skipped. The parse reads only lines carrying
 #             one of the prefilter tokens below; a dropped Agent result reads as "running forever".
 #
-# SELF-PROBE. Before any corpus is read the script replays twenty transcripts it seeds under
+# SELF-PROBE. Before any corpus is read the script replays twenty-five transcripts it seeds under
 # mktemp, with both exit carriers the harness writes (the enqueue, then the delivery) and no envelope
 # tag on any body. Each answers as stated or the run refuses with exit 2, naming the case:
 #   (a) cap 4 env line; Dev 01-02; Dev 01's delivery answered by a --status beat only; Dev 02's by
@@ -132,6 +174,17 @@
 #       not seats: a remediator, a code-reviewer and a general-purpose agent reading seat files, and an
 #       adversary writing stories-adversary-01.md (a seat segment outside the role-manifest map).
 #                                                           -> 1 FINDING, agents=7
+#   (u) a lead (cap 4 env) with ONE general-purpose call delegating to coordinator ac01, whose file --
+#       every record isSidechain:true, a string prompt, each spawn's result after its call, FOREGROUND
+#       Bash waits, queued_command deliveries with no enqueue, no cap of its own -- holds an (a)-shaped
+#       barrier: Dev 01 delivered at +5 min, answered by the next wait only, Architects after Dev 02 at
+#       +40.                                                -> 1 FINDING in the followed file, running 2
+#                                                              (1 + its own slot) cap 4 (lead-env) idle 2
+#   (v) (u) with each delivery answered by a dispatch before the next wait. -> quiet, rounds=1, 3 batches
+#   (w) (u)'s lead, the agentId's file absent.              -> quiet, delegated-missing=1, rounds=0
+#   (x) (u) with both deliveries written while the coordinator is blocked in its one wait, the refill
+#       after it returns.        -> 1 FINDING at Dev 01, unrefilled 1 (Dev 02's is the wait's return), gap 2105s
+#   (y) (u) with an `ls` between Dev 01's delivery and the refill in the next message. -> quiet, rounds=1
 #
 # FALSE-POSITIVE SET AND HOW IT REACHED ITS FINAL STATE (measured on the graph transcript corpus,
 # ~/.claude/projects/-Users-n8-git-graph/*.jsonl, read only):
@@ -205,10 +258,86 @@
 #   The motivating transcript a0701ce0 carries no readable cap (its only mentions of the variable are
 #   rule prose with a `<N>` placeholder), so it reads UNKNOWN-CAP without --cap and fires under an
 #   operator-supplied --cap 42, twice: s319/stories batches 2 and 3, 24 running, idle 18 each.
+#   The FINAL STATE line above is the PRE-FOLLOW reading: no delegated round was visible to it.
+#   FINAL STATE WITH DELEGATION FOLLOWED (BL-695 item a), no --cap, over the 157 lead transcripts in the
+#   directory at this re-measure (the corpus is smaller than the 185 above; the two are not comparable),
+#   the shipped detector before against this one after (the per-segment WAIT and the last-delivery
+#   rule included), one invocation each:
+#     before: given=157 scanned=157 rounds=24 batches=86 findings=6 unknown-cap=4
+#     after:  given=157 scanned=157 rounds=31 batches=109 findings=6 unknown-cap=4 followed=10 delegated-missing=1
+#   Every lead-file row is byte-identical on both sides (10 rows); the follow added 7 rounds and 23
+#   batches and NO finding and NO UNKNOWN-CAP. The 10 followed files are the corpus's 10 coordinators;
+#   the 7 rounds are the seven party-round coordinators' (189712ad, 4f12d1d9, 6c14d949 x2, 9a646a3b x2,
+#   e444bf13). The other three are NON-PARTY coordinators and read 0 rounds for that reason: none of
+#   their Agent/Task calls cites a party-mode path by the detector's own scan (62eadbbe a1c69096: 1
+#   general-purpose call, prompt "First action: Read and follow `.claude/team-roles/pm-escalated.md`";
+#   74de15ba aca7c14d: 2, "Your operating contract is `.claude/team-roles/architect.md`"; d22c7889
+#   a3ff8413: 1, "Your operating contract is `.claude/team-roles/pm-escalated.md`"), against 109 of
+#   109 in 189712ad's a6d9f2b5. delegated-missing=1 is one agentId whose subagents/ file is absent
+#   (named in the residuals; the summary does not name it).
+#   On those seven, per coordinator: s321 189712ad's coordinator a6d9f2b5 reads rounds=1, 10
+#   batches, cap 42 by rejection; 4f12d1d9's 1 batch, cap 42 by rejection; s322 9a646a3b's two and
+#   6c14d949's two read rounds=1 each, cap unknown, nothing left unanswered; e444bf13's reads cap 42 lead-env, 6 batches, quiet. a0701ce0 --cap 42 is
+#   byte-identical before and after (2 FINDINGs, gaps 3348s and 1364s), and the same records replayed
+#   as a stub lead's followed coordinator fire the same two at running 25 (its own slot) on the TURN
+#   fallback: their deliveries are string records, and the 3 wait-class calls in them come after.
+#   How the WAIT bound reached this state. The first bound -- ANY non-Agent call ends a followed file's
+#   response -- read 1 FINDING and 1 UNKNOWN-CAP here. The FINDING was FALSE: 189712ad a6d9f2b5
+#   s321/stories b6, exit 06:44:00.476Z (dev 10; dev 20 06:44:18, dev 13 06:44:31), running 34 of 42,
+#   dispatch 06:45:09.447Z, gap 69s; the deliveries were written after message cwg1Sx (a
+#   brief-inspection Bash) and the response swVL1f was an `ls` of the party-mode dir (06:44:52) before
+#   message h3D9vs refilled. No wait occurred. The UNKNOWN-CAP was 6c14d949 ab8db147
+#   s322/carry-over-evaluation b2. Narrowed to the call the coordinator blocks in, both are gone; the
+#   old bound, restored on this tip as one edit (fixture mutant MN), still prints b6, and the
+#   self-probe refuses it on case y. The narrowing first read the WHOLE command for wait-for-deliverable
+#   and the absence of --status; keyed per segment and positively it classes 38 calls on the seven
+#   coordinators as waits, 3 fewer than before (a `pgrep -fl wait-for-deliverable.sh`, a `ps | grep
+#   '[w]ait-for-deliverable'` and a `grep -rn "Rule 28"` line, all 0 s, are no longer waits) and none
+#   more. 25 of the 38 last 5 s or more (up to 181 s), the same 25 as before; 13 last under 5 s --
+#   `sleep 1; cat` and `sleep 1; echo waiting` probes, a `sleep 1; pgrep` check, and sleeps (240 s,
+#   100 s, 30 s) whose result came back at once. Those 13 can end a response early, never acquit one;
+#   no finding here is closed by one. The non-wait class holds no foreground call of 30 s or more (the
+#   longest is 1 s; 0 without a result), so the rule acquits no real block on these seven.
+#   RESIDUALS OF THE FOLLOW:
+#   - Four shapes of a real wait are NOT read as one, so the barrier they hold can be ACQUITTED (the
+#     wait is missed, the response runs on to a later dispatch): `if <wait> ...; then`, `until <wait>
+#     ...; do`, `r=$(<wait> ...)` and `x=$(sleep 600)`. wlead strips do/then/else/elif but not
+#     if/while/until, and `NAME=$(cmd` reads as one assignment token. No rule, team role or core
+#     script prescribes these forms (core/skills, core/rules, core/team-roles and core/scripts
+#     searched), and the seven coordinators carry no such call: List 2 above is empty.
+#   - A single delivery written inside one long open wait and refilled after the return reads as
+#     answered (the last-delivery rule, no time threshold), so a barrier of that shape is missed; the
+#     adversary could not seed it and it is not measured.
+#   - A short `sleep N` probe is a WAIT. Measured on case y with `sleep 1` in place of its `ls`: 1
+#     FINDING, gap 10 s. The direction is one way: an early end of a response can only make a false
+#     finding, never hide one.
+#   - delegated-missing=1 in that corpus is df56108b's agentId ae13453b08e72489d (launched
+#     2026-11-08T15:27:03Z): its lead's subagents/ dir exists with 24 agent files, none of them its own.
+#     Of the 5784 delegated agentIds in the 157 leads, 5783 have their file (189712ad's a6d9f2b5 among
+#     them). A missing file is counted, never followed, and never exit 2.
+#   - A delivery written while a WAIT is open is closed when it returns (case x), but on the seven
+#     coordinators 0 deliveries take that path: the harness writes a coordinator's queued_command
+#     attachments after the tool_result of the call they interrupted. A delivery timestamped inside a
+#     wait but written after its return is judged by the next message, so the time spent blocked is
+#     not charged to it.
+#   - RUNNING in a followed file counts that file's own agents and its own slot only. Agents the lead
+#     or a sibling coordinator holds at the same time are not counted, so RUNNING can undercount and a
+#     finding be false where they filled the slots. Measured over all 10 coordinators in the corpus
+#     below: the lead dispatched 0 Agent/Task calls inside any coordinator's launch-to-delivery window.
+#   - RUNNING can OVER-count in a followed file: its deliveries are written after the dispatch message
+#     they interrupted, so an exit is read at a file position after later spawns. At 189712ad's five
+#     rejections running() read 42, 42, 42, 49 and 45 against cap 42; 4f12d1d9's three read 42, 43,
+#     43. An over-count reads SLOTS-FULL where a slot was free, so it hides findings, never makes one.
+#   - Depth 1 only. Measured over the 6158 subagent files beside the 157 lead transcripts in the graph
+#     corpus: 10 dispatch, all at spawnDepth 1 (the coordinators; the shaped grep and a record parse
+#     agree, 10 and 10); 0 of the 375 at spawnDepth 2 dispatch, so no nested coordinator exists.
+#   - A FOREGROUND delegated call (no `Async agent launched`) is followed the same way but is untested:
+#     of the 5784 Agent/Task calls in those 157 leads with a non-error result, 0 lack `agentId:` and 0
+#     lack `Async agent launched`, so no case seeds one.
 set -uo pipefail
 
 ME="audit-party-wave-barrier"
-SEED_CASES="a b c d e f g h i j k l m n o p q r s t"
+SEED_CASES="a b c d e f g h i j k l m n o p q r s t u v w x y"
 usage() { echo "$ME: $1" >&2; echo "usage: $ME.sh [--cap N] [--trace] <transcript.jsonl>... | --seed <$(echo $SEED_CASES | tr ' ' '|')> <out.jsonl>..." >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "$ME: jq is required" >&2; exit 2; }
 
@@ -216,6 +345,8 @@ command -v jq >/dev/null 2>&1 || { echo "$ME: jq is required" >&2; exit 2; }
 #   M <e> <ts> <msgid>                                  an assistant record (any content)
 #   A <e> <ts> <msgid> <tool_use id> <subagent_type> <every party path, space-joined, prompt order>   an Agent/Task call
 #   V <e> <ts> <msgid> <tool_use id>                     a Bash call whose command names the cap variable
+#   W <e> <ts> <msgid> <tool_use id>                     a foreground Bash WAIT: wait-for-deliverable without --status, or sleep
+# A followed file's prefilter adds `"type":"tool_result"`, so its WAIT's return is read whatever it carries.
 #   R <e> <ts> - <tool_use id> err|ok <rejcap> <envline> <agentId> async|fg <bare integer>
 #   T <e> <ts>                                          a user record with string content: a turn starts
 #   N <e> <ts> x|d <tool-use-id> <task-id> <status>      an exit record: x the enqueue, d a delivery
@@ -227,8 +358,17 @@ def kid($k): ((capture("<" + $k + ">(?<x>[^<]*)</" + $k + ">") | .x) // "");
 def exitrec($kind; $e; $ts): if type == "string" then ["N", $e, $ts, $kind, kid("tool-use-id"), kid("task-id"), kid("status")] else empty end;
 def nkind: (try .origin.kind catch null);
 def akind: (try .attachment.origin.kind catch null);
+# A WAIT is keyed per command SEGMENT, positively. wsegs splits on ; && || | and newline; cmdw is a
+# segment's command word once leading assignments, keywords and launchers (do, exec, env, timeout N,
+# bash -c, ...) and quotes are stripped; bmode is a non-blocking wait-for-deliverable mode.
+def wsegs: [splits("\n|;|&&|\\|\\||\\|")];
+def wstrip: sub("^[\\s(){}!\"'`]+"; "");
+def wlead: test("^([A-Za-z_][A-Za-z0-9_]*=[^\\s]*|do|then|else|elif|exec|nohup|time|env|command|timeout|bash|sh|-[A-Za-z-]+|[0-9]+[smhd]?)(\\s|$)");
+def cmdw: wstrip | until((wlead | not) or . == ""; sub("^[^\\s]+\\s*"; "") | wstrip) | (split(" ")[0] // "") | gsub("[\"'`)]"; "");
+def bmode: test("(^|\\s)--(status|mark|mark-repair|dispatch-ts|reset)(\\s|=|$)");
+def iswait: wsegs | any(.[]; ((cmdw | test("(^|/)wait-for-deliverable(\\.sh)?$")) and (bmode | not)) or (cmdw | test("(^|/)sleep$")));
 fromjson? // empty
-| select(type == "object" and .isSidechain != true)
+| select(type == "object" and ($side == 1 or .isSidechain != true))
 | (.timestamp // "" | tostring) as $ts | ($ts | ep) as $e
 | if .type == "assistant" then
     (.message.id // "") as $mid
@@ -241,6 +381,9 @@ fromjson? // empty
             ([(.input.prompt // "" | tostring) | scan("party-mode/[A-Za-z0-9_.-]+/[A-Za-z0-9_-]+\\.md")] | join(" "))]
          elif .name == "Bash" and ((.input.command // "") | tostring | test("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS")) then
            ["V", $e, $ts, $mid, (.id // "")]
+         elif .name == "Bash" and .input.run_in_background != true
+              and ((.input.command // "") | tostring | iswait) then
+           ["W", $e, $ts, $mid, (.id // "")]
          else empty end)
   elif .type == "user" then
     (.message.content) as $c
@@ -299,18 +442,22 @@ function running(s,   i, id, n) {
     if ((id in aexit) && aexit[id] <= s) continue
     n++
   }
-  return n
+  # A followed file is a coordinator, and the coordinator holds a slot of its own (F3).
+  return n + selfslot
 }
 function agent_of(   id) {
   id = ""
   if ($5 in isag) id = $5; else if ($6 != "" && ($6 in byaid)) id = byaid[$6]
   return id
 }
-# close_seen: finalize every open delivery that has seen an assistant record; keep the rest open.
-function close_seen(   i, k, r, v) {
+# close_seen(mid, blocked): with mid empty, finalize every open delivery that has seen an assistant
+# record (a turn ended); with mid set, every one whose WAIT message is a message other than mid (a
+# followed file's next message began); with blocked set, every one written while the open wait was
+# blocking (the wait returned). Keep the rest open.
+function close_seen(mid, blocked,   i, k, r, v) {
   k = 0
   for (i = 1; i <= gn; i++) {
-    if (!gseen[i]) { k++; gid[k] = gid[i]; gr[k] = gr[i]; gts[k] = gts[i]; gep[k] = gep[i]; grun[k] = grun[i]; gans[k] = gans[i]; gseen[k] = 0; continue }
+    if (blocked ? !gin[i] : ((mid == "" && !gseen[i]) || (mid != "" && (gwait[i] == "" || gwait[i] == mid)))) { k++; gid[k] = gid[i]; gr[k] = gr[i]; gts[k] = gts[i]; gep[k] = gep[i]; grun[k] = grun[i]; gans[k] = gans[i]; gseen[k] = gseen[i]; gwait[k] = gwait[i]; gin[k] = gin[i]; continue }
     r = gr[i]
     if (gans[i]) v = "REFILLED"
     else if (cap == "") { v = "NO-CAP"; if (!snocap[r]) { snts[r] = gts[i]; snrun[r] = grun[i] } snocap[r]++ }
@@ -320,7 +467,7 @@ function close_seen(   i, k, r, v) {
   }
   gn = k
 }
-BEGIN { FS = "\t"; capsrc = "unknown"; nag = 0; gn = 0; nfind = 0; nunk = 0; nrounds = 0; nbatches = 0
+BEGIN { FS = "\t"; capsrc = "unknown"; nag = 0; follow += 0; selfslot = (follow ? 1 : 0); gn = 0; nfind = 0; nunk = 0; nrounds = 0; nbatches = 0
   nseat = split("pm architect dev qa tea ux sm cis", seatl, " "); for (i = 1; i <= nseat; i++) seats[seatl[i]] = 1 }
 NR == FNR {
   if ($1 == "A") { id = $5; if (!(id in isag)) { isag[id] = 1; nag++; agl[nag] = id; aseq[id] = FNR
@@ -332,6 +479,7 @@ NR == FNR {
     if ($6 == "err") { ast[id] = "err"; if ($7 != "") { ast[id] = "rej"; rejcap[$7] = 1; if (rejmin == "" || $7 + 0 < rejmin + 0) rejmin = $7 } }
     else if ($10 == "async") { ast[id] = "bg"; if ($9 != "") byaid[$9] = id }
     else { ast[id] = "fg"; if (!(id in aexit)) aexit[id] = FNR }
+    if ($6 != "err" && $9 != "" && !(id in aaid)) aaid[id] = $9
   }
   else if ($1 == "R") {
     v = $8; if (v == "" && ($5 in envcmd)) v = $11
@@ -348,13 +496,19 @@ FNR == 1 {
   if (capopt != "") { cap = capopt + 0; capsrc = "option" }
   else if (rejmin != "") { cap = rejmin + 0; capsrc = "rejection"; for (v in rejcap) capvals = capvals " " v }
   else if (envmin != "") { cap = envmin + 0; capsrc = "env"; for (v in envcap) capvals = capvals " " v }
+  else if (leadcap != "") { cap = leadcap + 0; capsrc = "lead-" leadsrc; capvals = " " leadcap }
 }
-$1 == "T" { close_seen(); next }
-$1 == "M" { for (i = 1; i <= gn; i++) gseen[i] = 1; next }
+$1 == "T" { close_seen(""); next }
+$1 == "M" { if (follow) close_seen($4); for (i = 1; i <= gn; i++) gseen[i] = 1; next }
+# A followed file's RESPONSE ends with the first message carrying a non-Agent/Task call: the wait.
+$1 == "W" { if (follow) { wopen = $5; for (i = 1; i <= gn; i++) if (gwait[i] == "") gwait[i] = $4 }; next }
+# A delivery written while the coordinator is blocked in that wait is closed when the wait returns.
+# The LAST of them is the delivery the wait returned on: its response opens at the return.
+$1 == "R" && follow && wopen != "" && $5 == wopen { for (i = gn; i >= 1; i--) if (gin[i]) { gin[i] = 0; gseen[i] = 0; gwait[i] = ""; break }; close_seen("", 1); wopen = ""; next }
 $1 == "N" {
   id = agent_of()
   if (id == "" || adel[id] != FNR || !(id in amr)) next
-  gn++; gid[gn] = id; gr[gn] = amr[id]; gts[gn] = $3; gep[gn] = $2; grun[gn] = running(FNR); gans[gn] = 0; gseen[gn] = 0
+  gn++; gid[gn] = id; gr[gn] = amr[id]; gts[gn] = $3; gep[gn] = $2; grun[gn] = running(FNR); gans[gn] = 0; gseen[gn] = 0; gwait[gn] = ""; gin[gn] = (wopen != "")
   sdel[amr[id]]++
   next
 }
@@ -379,8 +533,9 @@ $1 == "A" {
   sdel[r] = 0; sunref[r] = 0; snocap[r] = 0
 }
 END {
-  close_seen(); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen()
+  close_seen(""); for (i = 1; i <= gn; i++) gseen[i] = 1; close_seen("")
   for (r in unkr) printf "UNKCAP-ROUND %s %d\n", r, unkr[r]
+  if (!follow) for (i = 1; i <= nag; i++) if (agl[i] in aaid) printf "DELEG %s\n", aaid[agl[i]]
   printf "STAT rounds=%d batches=%d findings=%d unknown=%d agents=%d cap=%s capsrc=%s capvals=%s\n", nrounds, nbatches, nfind, nunk, nag, (cap == "" ? "unknown" : cap), capsrc, (capvals == "" ? "-" : substr(capvals, 2))
 }
 AWKEOF
@@ -408,14 +563,49 @@ MAX_CONCURRENT_SUBAGENTS
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/apwb.XXXXXX")" || { echo "$ME: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$TMP"' EXIT
 printf '%s\n' "$PREFILTER" > "$TMP/tokens" || exit 2
+# A followed file also needs its WAIT's tool_result, whatever it carries, to see the wait return.
+printf '%s\n' "$PREFILTER" '"type":"tool_result"' > "$TMP/tokens.f" || exit 2
 
-# wave_replay <cap or empty> <trace 0|1> <file>: prints FINDING/UNKNOWN-CAP/TRACE/UNKCAP-ROUND lines and one STAT line.
+# wave_replay <cap or empty> <trace 0|1> <file> [<follow 0|1> <lead cap> <lead capsrc> <name>]: prints
+# FINDING/UNKNOWN-CAP/TRACE/UNKCAP-ROUND lines, one STAT line and, for a lead, one DELEG line per agentId.
 wave_replay() {
-  local rc
-  LC_ALL=C grep -E -f "$TMP/tokens" -- "$3" > "$TMP/ev.raw"; rc=$?
+  local rc fo="${4:-0}"
+  local tk="$TMP/tokens"; [ "$fo" = 1 ] && tk="$TMP/tokens.f"
+  LC_ALL=C grep -E -f "$tk" -- "$3" > "$TMP/ev.raw"; rc=$?
   [ "$rc" -le 1 ] || return 2
-  jq -R -r "$JQ_PROG" < "$TMP/ev.raw" > "$TMP/ev" || return 2
-  awk -v capopt="$1" -v trace="$2" -v name="$(basename "$3")" "$AWK_PROG" "$TMP/ev" "$TMP/ev"
+  jq -R -r --argjson side "$fo" "$JQ_PROG" < "$TMP/ev.raw" > "$TMP/ev" || return 2
+  awk -v capopt="$1" -v trace="$2" -v follow="$fo" -v leadcap="${5:-}" -v leadsrc="${6:-}" -v name="${7:-${3##*/}}" "$AWK_PROG" "$TMP/ev" "$TMP/ev"
+}
+
+# scannable <file>: readable, non-empty, and its first line parses as a JSON object.
+scannable() { [ -r "$1" ] && [ -s "$1" ] && head -n 1 "$1" | jq -e 'type == "object"' >/dev/null 2>&1; }
+
+# scan_one <cap or empty> <trace 0|1> <lead>: the lead's replay, then every delegated file it FOLLOWS.
+# Each file's lines are preceded by `FILE <tab> <name> <tab> lead|followed`; an agentId whose file does
+# not exist prints `MISSING <tab> <id>`, a followed file that cannot be scanned `FBAD <tab> <path>`.
+# Depth 1 only: a followed file's own agents are never followed (F6). Returns 2 when the LEAD fails.
+FOLLOW_TOK='"type":"tool_use","id":"[^"]*","name":"(Agent|Task)"'
+scan_one() {
+  local out o2 st lc ls id p nm sub rc vis=" "
+  out="$(wave_replay "$1" "$2" "$3")" || return 2
+  printf 'FILE\t%s\tlead\n' "${3##*/}"
+  grep -v '^DELEG ' <<<"$out"
+  st="$(grep '^STAT ' <<<"$out")"
+  lc="${st#* cap=}"; lc="${lc%% *}"; [ "$lc" = unknown ] && lc=""
+  ls="${st#* capsrc=}"; ls="${ls%% *}"
+  nm="${3##*/}"; nm="${nm%.jsonl}"; sub="${3%/*}"; [ "$sub" = "$3" ] && sub="."
+  for id in $(sed -n 's/^DELEG //p' <<<"$out"); do
+    p="$sub/$nm/subagents/agent-$id.jsonl"
+    [ -e "$p" ] || { printf 'MISSING\t%s\n' "$id"; continue; }
+    case "$vis" in *" $p "*) continue ;; esac
+    vis="$vis$p "
+    LC_ALL=C grep -qE -- "$FOLLOW_TOK" "$p"; rc=$?
+    [ "$rc" = 1 ] && continue
+    if [ "$rc" != 0 ] || ! scannable "$p"; then printf 'FBAD\t%s\n' "$p"; continue; fi
+    o2="$(wave_replay "$1" "$2" "$p" 1 "$lc" "$ls" "$nm/subagents/agent-$id.jsonl")" || { printf 'FBAD\t%s\n' "$p"; continue; }
+    printf 'FILE\t%s\tfollowed\n' "$nm/subagents/agent-$id.jsonl"
+    printf '%s\n' "$o2"
+  done
 }
 
 # --- seeds: records shaped on what the harness writes ---------------------------------------------------
@@ -450,6 +640,14 @@ _attnote() { # ts agentid tuid desc: the mid-turn carrier, a queued_command atta
   _enq "$@"
   _sj '{"type":"attachment","timestamp":"'"$1"'","attachment":{"type":"queued_command","prompt":"'"$(_body "$2" "$3" 'Agent \"'"$4"'\" finished')"'","origin":{"kind":"task-notification","producer":"session-task"}}}'
 }
+_att() { # ts agentid tuid desc: a coordinator's delivery, the queued_command attachment with NO enqueue
+  _sj '{"type":"attachment","timestamp":"'"$1"'","attachment":{"type":"queued_command","prompt":"'"$(_body "$2" "$3" 'Agent \"'"$4"'\" finished')"'","origin":{"kind":"task-notification","producer":"session-task"}}}'
+}
+_fgcall() { # ts msg tuid: a FOREGROUND wait's call
+  _sj '{"type":"assistant","timestamp":"'"$1"'","message":{"id":"'"$2"'","role":"assistant","content":[{"type":"tool_use","id":"'"$3"'","name":"Bash","input":{"command":"AI_DLC_WAIT_BEAT_SECS=540 scripts/ai-dlc/wait-for-deliverable.sh --complete _bmad-output/party-mode/s900/stories-dev-0{1,2}.md","timeout":600000}}]}}'
+}
+_fgret() { _sj '{"type":"user","timestamp":"'"$1"'","message":{"role":"user","content":[{"tool_use_id":"'"$2"'","type":"tool_result","content":"PENDING"}]}}'; } # ts tuid
+_fgwait() { _fgcall "$1" "$2" "$3"; _fgret "$4" "$3"; } # ts msg tuid result-ts: the wait, its result written when it returns
 _bgdone() { # ts taskid tuid: a backgrounded beat finishing -- a delivery naming no agent, which starts a turn
   _sj '{"type":"queue-operation","operation":"enqueue","timestamp":"'"$1"'","content":"'"$(_body "$2" "$3" 'Background command \"join beat\" completed (exit code 0)')"'"}'
   _sj '{"type":"user","timestamp":"'"$1"'","message":{"role":"user","content":"'"$(_body "$2" "$3" 'Background command \"join beat\" completed (exit code 0)')"'"},"origin":{"kind":"task-notification","producer":"session-task"}}'
@@ -693,6 +891,49 @@ wave_seed() { # <case> <out>
       _note 2026-01-01T10:40:00.000Z ad2 td2 "Dev seat story 02"
       _archs 2026-01-01T10:40:01.000Z msg_3 1 1
       ;;
+    u|v|w|x|y)
+      # The LEAD: a cap of 4 by env, and ONE general-purpose call that delegates the round (agentId ac01).
+      _envcap 2026-01-01T09:59:00.000Z 4
+      _cite 2026-01-01T09:59:30.000Z msg_l1 toolu_c1 general-purpose 'You are a round-dispatcher. Spawn every member below.'
+      _launched 2026-01-01T09:59:31.000Z toolu_c1 ac01
+      _note 2026-01-01T10:41:00.000Z ac01 toolu_c1 "Run stories party round"
+      [ "$1" = w ] && return 0
+      # The COORDINATOR, on the carrier a real one writes: a string prompt, each spawn's result right
+      # after its call, FOREGROUND Bash waits, deliveries as queued_command attachments with no enqueue,
+      # and no cap of its own. Every record is isSidechain:true.
+      local lead="$SEED_OUT" co="${2%.jsonl}/subagents/agent-ac01.jsonl"
+      mkdir -p "${co%/*}" || return 2
+      SEED_OUT="$co.t"; : > "$SEED_OUT" || return 2
+      _sj '{"type":"user","timestamp":"2026-01-01T10:00:00.000Z","message":{"role":"user","content":"You are a round-dispatcher. Spawn every member below. Join them with FOREGROUND Bash calls."}}'
+      _ag 2026-01-01T10:00:01.000Z msg_1 toolu_d1 stories-dev-01.md "Dev seat story 01"; _launched 2026-01-01T10:00:01.500Z toolu_d1 aa01
+      _ag 2026-01-01T10:00:02.000Z msg_1 toolu_d2 stories-dev-02.md "Dev seat story 02"; _launched 2026-01-01T10:00:02.500Z toolu_d2 aa02
+      if [ "$1" = x ]; then
+        # Both deliveries are written while the coordinator is still blocked in its one wait.
+        _fgcall 2026-01-01T10:00:10.000Z msg_2 tw1
+        _att 2026-01-01T10:05:00.000Z aa01 toolu_d1 "Dev seat story 01"
+        _att 2026-01-01T10:40:00.000Z aa02 toolu_d2 "Dev seat story 02"
+        _fgret 2026-01-01T10:40:01.000Z tw1
+      else
+        _fgwait 2026-01-01T10:00:10.000Z msg_2 tw1 2026-01-01T10:05:00.000Z
+        _att 2026-01-01T10:05:00.000Z aa01 toolu_d1 "Dev seat story 01"
+        case "$1" in
+          u) _fgwait 2026-01-01T10:05:05.000Z msg_3 tw2 2026-01-01T10:40:00.000Z ;;
+          v) _ag 2026-01-01T10:05:05.000Z msg_3 toolu_r1 stories-architect-01.md "Architect seat story 01"; _launched 2026-01-01T10:05:05.500Z toolu_r1 ab01
+             _fgwait 2026-01-01T10:05:06.000Z msg_3 tw2 2026-01-01T10:40:00.000Z ;;
+          y) _bash 2026-01-01T10:05:05.000Z msg_3 tl1 'ls _bmad-output/party-mode/s900' 'stories-dev-01.md'
+             _ag 2026-01-01T10:05:10.000Z msg_4 toolu_r1 stories-architect-01.md "Architect seat story 01"; _launched 2026-01-01T10:05:10.500Z toolu_r1 ab01
+             _fgwait 2026-01-01T10:05:11.000Z msg_4 tw2 2026-01-01T10:40:00.000Z ;;
+        esac
+        _att 2026-01-01T10:40:00.000Z aa02 toolu_d2 "Dev seat story 02"
+      fi
+      if [ "$1" = v ] || [ "$1" = y ]; then
+        _ag 2026-01-01T10:40:05.000Z msg_5 toolu_r2 stories-architect-02.md "Architect seat story 02"; _launched 2026-01-01T10:40:05.500Z toolu_r2 ab02
+      else
+        _archs 2026-01-01T10:40:05.000Z msg_5 1 2
+      fi
+      sed 's/^{/{"isSidechain":true,/' "$SEED_OUT" > "$co" || return 2
+      rm -f "$SEED_OUT"; SEED_OUT="$lead"
+      ;;
     *) return 2 ;;
   esac
 }
@@ -703,7 +944,10 @@ wave_selfprobe() {
   mkdir -p "$TMP/probe" || return 2
   for c in $SEED_CASES; do
     wave_seed "$c" "$TMP/probe/$c.jsonl" || { echo "$ME: self-probe FAILED: case $c could not be seeded" >&2; return 2; }
-    out="$(wave_replay "" 0 "$TMP/probe/$c.jsonl")" || { echo "$ME: self-probe FAILED: case $c did not replay" >&2; return 2; }
+    case "$c" in
+      u|v|w|x|y) out="$(scan_one "" 0 "$TMP/probe/$c.jsonl")" ;;
+      *) out="$(wave_replay "" 0 "$TMP/probe/$c.jsonl")" ;;
+    esac || { echo "$ME: self-probe FAILED: case $c did not replay" >&2; return 2; }
     f="$(grep -c '^FINDING ' <<<"$out")" || f=0
     u="$(grep -c '^UNKNOWN-CAP ' <<<"$out")" || u=0
     s="$(grep '^STAT ' <<<"$out")"
@@ -726,6 +970,15 @@ wave_selfprobe() {
       r) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q ' running=1 cap=4 idle=3 ' <<<"$out" && grep -q ' agents=3 ' <<<"$s" ;;
       s) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q ' running=2 cap=3 idle=1 ' <<<"$out" && grep -q ' capsrc=rejection ' <<<"$s" ;;
       t) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q ' running=1 cap=4 idle=3 ' <<<"$out" && grep -q ' agents=7 ' <<<"$s" ;;
+      u) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q '^FILE.u/subagents/agent-ac01.jsonl.followed$' <<<"$out" \
+           && grep -q '^FINDING u/subagents/agent-ac01.jsonl round=s900/stories batch=2 exit=2026-01-01T10:05:00.000Z dispatch=2026-01-01T10:40:05.000Z running=2 cap=4 idle=2 gap=2105s ' <<<"$out" \
+           && grep -q '^STAT rounds=1 .* capsrc=lead-env ' <<<"$s" && ! grep -q '^MISSING' <<<"$out" ;;
+      v) [ "$f" = 0 ] && [ "$u" = 0 ] && grep -q '^FILE.v/subagents/agent-ac01.jsonl.followed$' <<<"$out" \
+           && grep -q '^STAT rounds=1 batches=3 findings=0 .* capsrc=lead-env ' <<<"$s" ;;
+      w) [ "$f" = 0 ] && [ "$u" = 0 ] && [ "$(grep -c '^MISSING.ac01$' <<<"$out")" = 1 ] && ! grep -q '^FILE.*followed$' <<<"$out" \
+           && grep -q '^STAT rounds=0 ' <<<"$s" ;;
+      x) [ "$f" = 1 ] && [ "$u" = 0 ] && grep -q '^FINDING x/subagents/agent-ac01.jsonl round=s900/stories batch=2 exit=2026-01-01T10:05:00.000Z dispatch=2026-01-01T10:40:05.000Z running=2 cap=4 idle=2 gap=2105s unrefilled=1$' <<<"$out" ;;
+      y) [ "$f" = 0 ] && [ "$u" = 0 ] && grep -q '^STAT rounds=1 batches=3 findings=0 .* capsrc=lead-env ' <<<"$s" ;;
     esac || { echo "$ME: self-probe FAILED: case $c (findings=$f unknown-cap=$u; $s)" >&2; failed=1; }
   done
   [ "$failed" = 0 ] || return 2
@@ -756,25 +1009,31 @@ if [ "$SEEDS" -gt 0 ]; then [ "${#FILES[@]}" -eq 0 ] || usage "--seed takes no t
 
 wave_selfprobe || exit 2
 
-GIVEN=${#FILES[@]}; SCANNED=0; ROUNDS=0; BATCHES=0; FINDINGS=0; UNKNOWN=0; BAD=0
+GIVEN=${#FILES[@]}; SCANNED=0; ROUNDS=0; BATCHES=0; FINDINGS=0; UNKNOWN=0; BAD=0; FOLLOWED=0; MISSING=0
+# statn <key> <STAT line>: SN = the integer after ` <key>=`, or 0. No subshell.
+statn() { SN="${2#* $1=}"; SN="${SN%% *}"; case "$SN" in ''|*[!0-9]*) SN=0 ;; esac; }
 for f in "${FILES[@]}"; do
-  if [ ! -r "$f" ] || [ ! -s "$f" ] || ! head -n 1 "$f" | jq -e 'type == "object"' >/dev/null 2>&1; then
+  if ! scannable "$f"; then
     echo "$ME: not scanned (unreadable, empty, or not JSONL): $f" >&2; BAD=$((BAD + 1)); continue
   fi
-  out="$(wave_replay "$CAP" "$TRACE" "$f")" || { echo "$ME: not scanned (replay failed): $f" >&2; BAD=$((BAD + 1)); continue; }
-  SCANNED=$((SCANNED + 1))
-  grep -v -e '^STAT ' -e '^UNKCAP-ROUND ' <<<"$out"
-  while read -r _ ur un; do
-    [ -n "${ur:-}" ] && echo "$ME: UNKNOWN-CAP session=$(basename "$f") round=$ur unjudged=$un" >&2
-  done <<<"$(grep '^UNKCAP-ROUND ' <<<"$out")"
-  st="$(grep '^STAT ' <<<"$out")"
-  n="$(sed -n 's/.* rounds=\([0-9]*\) .*/\1/p' <<<"$st")"; ROUNDS=$((ROUNDS + ${n:-0}))
-  n="$(sed -n 's/.* batches=\([0-9]*\) .*/\1/p' <<<"$st")"; BATCHES=$((BATCHES + ${n:-0}))
-  n="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' <<<"$st")"; FINDINGS=$((FINDINGS + ${n:-0}))
-  n="$(sed -n 's/.* unknown=\([0-9]*\) .*/\1/p' <<<"$st")"; UNKNOWN=$((UNKNOWN + ${n:-0}))
-  [ "$TRACE" = 1 ] && echo "$ME: $(basename "$f") $st" >&2
+  out="$(scan_one "$CAP" "$TRACE" "$f")" || { echo "$ME: not scanned (replay failed): $f" >&2; BAD=$((BAD + 1)); continue; }
+  SCANNED=$((SCANNED + 1)); cur="${f##*/}"
+  while IFS= read -r line; do
+    case "$line" in
+      FILE$'\t'*) cur="${line#FILE?}"; cur="${cur%$'\t'*}"; case "$line" in *$'\t'followed) FOLLOWED=$((FOLLOWED + 1)) ;; esac ;;
+      MISSING$'\t'*) MISSING=$((MISSING + 1)) ;;
+      FBAD$'\t'*) echo "$ME: not scanned (followed file unreadable, empty, not JSONL or replay failed): ${line#FBAD?}" >&2; BAD=$((BAD + 1)) ;;
+      'STAT '*)
+        statn rounds "$line"; ROUNDS=$((ROUNDS + SN)); statn batches "$line"; BATCHES=$((BATCHES + SN))
+        statn findings "$line"; FINDINGS=$((FINDINGS + SN)); statn unknown "$line"; UNKNOWN=$((UNKNOWN + SN))
+        [ "$TRACE" = 1 ] && echo "$ME: $cur $line" >&2 ;;
+      'UNKCAP-ROUND '*) read -r _ ur un <<<"$line"; echo "$ME: UNKNOWN-CAP session=$cur round=$ur unjudged=$un" >&2 ;;
+      '') ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done <<<"$out"
 done
-echo "$ME: given=$GIVEN scanned=$SCANNED rounds=$ROUNDS batches=$BATCHES findings=$FINDINGS unknown-cap=$UNKNOWN" >&2
+echo "$ME: given=$GIVEN scanned=$SCANNED rounds=$ROUNDS batches=$BATCHES findings=$FINDINGS unknown-cap=$UNKNOWN followed=$FOLLOWED delegated-missing=$MISSING" >&2
 [ "$SCANNED" -eq "$GIVEN" ] && [ "$BAD" -eq 0 ] || exit 2
 [ "$FINDINGS" -eq 0 ] || exit 1
 exit 0

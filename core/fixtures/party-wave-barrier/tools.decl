@@ -5,6 +5,7 @@ bash
 cat
 cmp
 cp
+cut
 dirname
 grep
 head
