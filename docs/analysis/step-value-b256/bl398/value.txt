@@ -1,0 +1,102 @@
+graph ed61de745; passes in invoked_at order: stories p1 (2026-11-10T16:13:01Z), stories p2 (2026-11-10T16:49:32Z), test-strategy p1 (2026-11-10T17:30:14Z), test-strategy p2 (2026-11-10T17:48:24Z), test-strategy p3 (2026-11-10T18:30:43Z)
+controls:
+   stories-adversarial-p1.md: MAJOR+ headings 11, footer findings_major+critical 11, equal True; all headings 30, keyless 0, explicit-id/ordinal mismatches 0
+   stories-adversarial-p2.md: MAJOR+ headings 3, footer findings_major+critical 3, equal True; all headings 14, keyless 0, explicit-id/ordinal mismatches 0
+   test-strategy-adversarial-p1.md: MAJOR+ headings 18, footer findings_major+critical 18, equal True; all headings 24, keyless 10, explicit-id/ordinal mismatches 0
+   test-strategy-adversarial-p2.md: MAJOR+ headings 1, footer findings_major+critical 1, equal True; all headings 2, keyless 1, explicit-id/ordinal mismatches 0
+   test-strategy-adversarial-p3.md: MAJOR+ headings 0, footer findings_major+critical 0, equal True; all headings 0, keyless 0, explicit-id/ordinal mismatches 0
+   repair records keyed to a parsed finding: 134; keyed to no parsed finding: 0
+   severity join (record heading vs finding heading): agree 122 of 134; on keyless findings agree 13 of 13; probe (keyless re-keyed one ordinal up) mismatches 2
+   disagreeing records (cannot supply PRESENT): stories-serial-repair-p1.md 1#F-1 MAJOR vs record MINOR; stories-serial-repair-p1.md 1#F-1 MAJOR vs record MINOR; stories-serial-repair-p1.md 1#F-2 MAJOR vs record MINOR; stories-serial-repair-p1.md 1#F-3 MAJOR vs record MINOR; stories-serial-repair-p1.md 2#F-1 MAJOR vs record MINOR; stories-serial-repair-p1.md 3#F-1 MAJOR vs record MINOR; stories-serial-repair-p1.md 4#F-1 MAJOR vs record MINOR; stories-serial-repair-p1.md 4#F-1 MAJOR vs record MINOR; stories-serial-repair-p1.md 4#F-2 MAJOR vs record MINOR; stories-serial-repair-p1.md 4#F-3 MAJOR vs record MINOR; stories-serial-repair-p1.md 4#F-4 MAJOR vs record MINOR; stories-serial-repair-p2.md 1#F-1 MAJOR vs record MINOR
+   later findings naming the other series' pass files: 0
+   presence self-probe: an absent literal as a hit-check holds False, as a miss-check holds True; 'Strategy Test IDs' as a hit-check over the stories dir holds True
+   edit-target probe, test-strategy p2 3#F-1 (edit at test-strategy.md, its only check greps a story): unbound PRESENT, bound UNVERIFIABLE
+   repair-file coverage (repaired records: with an edit target that is a shipped story or test-strategy.md / with a recognised check on any shipped artifact / with a check bound to its own edit target):
+     stories-repair-p1.md: 27 repaired, 27 / 21 / 21
+     stories-serial-repair-p1.md: 11 repaired, 4 / 8 / 4
+     stories-repair-p2.md: 17 repaired, 16 / 15 / 15
+     stories-serial-repair-p2.md: 11 repaired, 1 / 8 / 1
+     test-strategy-repair-p1.md: 21 repaired, 0 / 8 / 0
+     test-strategy-serial-repair-p1.md: 7 repaired, 3 / 6 / 3
+     test-strategy-repair-p2.md: 2 repaired, 2 / 2 / 1
+   later-finding F-<n> mentions the grammar did not resolve (settled by hand in the entry):
+     stories p1 4#F-4: ...(`stories-elicitation-repair-p1.md`, finding F-3) only dropped the clause...
+     stories p1 cross#F-1: ...by: the elicitation repair of shard 5, entry F-7 (`stories-elicitation-re...
+     stories p1 cross#F-1: ...`*.txt` glob. The same round's shard 1 entry F-2 (line 36) derived `*.txt...
+     stories p2 1#F-1: ...the gate-log row. Not a re-litigation of the F-4 disposition: this is the...
+     stories p2 1#F-1: ...position: this is the comparand's key, which F-4 did not examine. - Repai...
+per pass (MAJOR+ only):
+ stories p1: MAJOR+ 11, caught by a later round 3, repair PRESENT 8, COUNTED 6
+   COUNT 1#F-1      F-1 — MAJOR — The status of the uncorrected locked Story 5.6 text is never decla
+            records: stories r1:repaired:MAJOR:PRESENT(4 bound checks); stories r1:escalated:MAJOR:-(1 bound checks); stories-serial r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); stories-serial r1:skipped:MINOR:-(0 bound checks); stories-serial r1:repaired:MINOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+   COUNT 1#F-2      F-2 — MAJOR — AC3's old-name fence names "its four sibling literals" without lis
+            records: stories r1:repaired:MAJOR:PRESENT(2 bound checks); stories-serial r1:skipped:MINOR:-(0 bound checks) | caught later by: -
+   COUNT 1#F-3      F-3 — MAJOR — The operator's D-5 answers are attributed by locator only, with no
+            records: stories r1:repaired:MAJOR:PRESENT(2 bound checks); stories-serial r1:skipped:MINOR:-(0 bound checks) | caught later by: -
+         2#F-1      F-1 — MAJOR — AC4's wrapped-site list and its "five other wrapped sites" count a
+            records: stories r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); stories-serial r1:repaired:MINOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         3#F-1      F-1 — MAJOR — AC4 and AC5 can end OPEN or "not counted as discharged" with no di
+            records: stories r1:repaired:MAJOR:ABSENT(1 bound checks); stories r1:escalated:MAJOR:-(0 bound checks); stories-serial r1:skipped:MAJOR:-(0 bound checks); stories-serial r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); stories-serial r1:repaired:MINOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+   COUNT 4#F-1      F-1 — MAJOR — The range literal AC6(b) needs has no decision that asks for it; t
+            records: stories r1:repaired:MAJOR:PRESENT(2 bound checks); stories r1:escalated:MAJOR:-(0 bound checks); stories-serial r1:skipped:MINOR:-(0 bound checks); stories-serial r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); stories-serial r1:repaired:MINOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         4#F-2      F-2 — MAJOR — No AC binds the Check 926 rule text to call the new oracle (the lo
+            records: stories r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); stories-serial r1:skipped:MINOR:-(0 bound checks) | caught later by: stories p2 4#F-1, stories p2 4#F-5
+         4#F-3      F-3 — MAJOR — "REQUIRED" is equated with "path list non-empty", contradicted by 
+            records: stories r1:repaired:MAJOR:PRESENT(2 bound checks); stories-serial r1:skipped:MINOR:-(0 bound checks) | caught later by: stories p2 4#F-5
+   COUNT 4#F-4      F-4 — MAJOR — AC4 demands a `tests/fixtures/MANIFEST` edit the story itself says
+            records: stories r1:repaired:MAJOR:PRESENT(2 bound checks); stories-serial r1:skipped:MINOR:-(0 bound checks) | caught later by: -
+   COUNT cross#F-1  F-1 — MAJOR — Story 1.5 AC5's capture-location rationale is false for its own `.
+            records: stories-serial r1:repaired:MAJOR:PRESENT(2 bound checks) | caught later by: -
+         cross#F-2  F-2 — MAJOR — Story 1.2 says story 1.5 edits `execution.py` "near 14448"; story 
+            records: stories-serial r1:repaired:MAJOR:PRESENT(1 bound checks) | caught later by: stories p2 2#F-1
+ stories p2: MAJOR+ 3, caught by a later round 0, repair PRESENT 2, COUNTED 2
+   COUNT 1#F-1      F-1 — MAJOR — AC7's time(1) dates when the capture file was first added, not whe
+            records: stories r2:repaired:MAJOR:PRESENT(2 bound checks); stories-serial r2:repaired:MINOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         2#F-1      F-1 — MAJOR — The fan-in repair wrote story 1.5's two edit-site lines (24357, 24
+            records: stories r2:repaired:MAJOR:UNVERIFIABLE(0 bound checks); stories-serial r2:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+   COUNT 4#F-1      F-1 — MAJOR — The pass-1 F-2 repair landed in AC6(b) but the trace lines still s
+            records: stories r2:repaired:MAJOR:PRESENT(4 bound checks); stories-serial r2:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+ test-strategy p1: MAJOR+ 18, caught by a later round 0, repair PRESENT 3, COUNTED 3
+         2#F-1      MAJOR: 1.1-AC6 case omits the uncorrected locked-AC clauses that AC6 itself obli
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         3#F-1      F-1 — MAJOR — 1.2-AC4 attaches the wrong mutation to the Base arm, and 1.2-AC5's
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         3#F-2      F-2 — MAJOR — 1.3-AC4 is mapped to a passing assert, but the story AC is a per-n
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         3#F-3      F-3 — MAJOR — 1.3-AC5's row accepts a skipped run and drops the skew check
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         3#F-4      F-4 — MAJOR — 1.3-AC3's five mutation-RED captures have no case in the strategy
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         4#F-1      F-1 — MAJOR — S322-1.4-AC6 row asserts only `ok`; the RED-on-base-text and no-`|
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         4#F-2      F-2 — MAJOR — S322-1.4-AC1 row omits two harness arms the story names, so the fa
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         4#F-3      F-3 — MAJOR — S322-1.4-AC8 row is scheduled before deploy-validate though half o
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); test-strategy r1:escalated:MAJOR:-(0 bound checks); test-strategy-serial r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         5#F-1      MAJOR — S322-1.5-AC4 maps to the grep-only form the story says is not a pass, an
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         5#F-2      MAJOR — S322-1.5-AC5 case is a subset run; the AC's close signal is the full bef
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         5#F-3      MAJOR — S322-1.5-AC6 misstates what the strict xfail does and omits the xfailed-
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+   COUNT 5#F-4      MAJOR — S322-1.5-AC8 names the wrong gate evidence and omits the idle-probe, loc
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); test-strategy r1:escalated:MAJOR:-(0 bound checks); test-strategy-serial r1:repaired:MAJOR:PRESENT(3 bound checks) | caught later by: -
+         5#F-5      MAJOR — S322-1.5-AC2/AC3 omit the mutation-RED captures and name no command
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         6#F-1      F-1 — MAJOR — Step 3 attributes the 1.3-AC4 one-fewer-button RED capture to the 
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); test-strategy r1:escalated:MAJOR:-(0 bound checks); test-strategy-serial r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         6#F-2      F-2 — MAJOR — 1.4-AC8's second obligation (the record of which Check 926 text gr
+            records: test-strategy r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks); test-strategy r1:escalated:MAJOR:-(0 bound checks); test-strategy-serial r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+         cross#F-1  F-1 — MAJOR — 1.3-AC4's one-fewer-button RED capture has no command; the order d
+            records: test-strategy-serial r1:repaired:MAJOR:UNVERIFIABLE(0 bound checks) | caught later by: -
+   COUNT cross#F-2  F-2 — MAJOR — 1.5-AC8's deploy gate (both-instance idle probe, durable lock-row 
+            records: test-strategy-serial r1:repaired:MAJOR:PRESENT(2 bound checks) | caught later by: -
+   COUNT cross#F-3  F-3 — MAJOR — 1.4-AC8 is placed wholly before merge, yet its row requires a reco
+            records: test-strategy-serial r1:repaired:MAJOR:PRESENT(3 bound checks) | caught later by: -
+ test-strategy p2: MAJOR+ 1, caught by a later round 0, repair PRESENT 1, COUNTED 1
+   COUNT 2#F-1      MAJOR — S322-1.1-AC1 wiring check does not discriminate wiring of the pytest tar
+            records: test-strategy r2:repaired:MAJOR:PRESENT(1 bound checks) | caught later by: -
+ test-strategy p3: MAJOR+ 0, caught by a later round 0, repair PRESENT 0, COUNTED 0
+VALUE: 12 MAJOR+ finding(s) uncaught by any later round with the repair present at ed61de745 -> FOUND (a count of findings, not of distinct defects: shards of one pass can file one defect twice)
+positive control stories p1 1#F-2 (hand-traced, hand-trace.sh: AC3 now spells the five-literal fence) counted: True
+near-miss control stories p1 cross#F-2 (repair PRESENT, re-found by stories p2 2#F-1) counted: False; caught by: [('stories', 2, '2', 1)]; would count without the later-round rule: True

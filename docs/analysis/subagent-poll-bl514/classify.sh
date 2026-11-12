@@ -7,7 +7,7 @@
 # actually denied.
 #
 # Usage: classify.sh [--hook PATH] [--budget S] [--from ISO] [--to ISO]
-#                    [--absent TOKEN] [FILE.jsonl | DIR ...]
+#                    [--absent TOKEN] [--denied-ids PATH] [FILE.jsonl | DIR ...]
 # No FILE/DIR argument means probe-only. Exit 0 clean, 1 integrity finding,
 # 2 refusal (could not run, or a control or the self-probe failed).
 #
@@ -34,6 +34,10 @@ FROM=""
 TO=""
 # Built from two literals so the full token is in no file of this repo.
 ABSENT="ZQX-BL514-NEVER-""7c1e5a"
+# --denied-ids PATH writes one "tool_use_id<TAB>file" line per DENIED poll (sorted) and changes nothing printed.
+DENIED_OUT=""
+# --events-out PATH copies the corpus pass's extracted row stream (for the batched-vs-per-file cmp); changes nothing printed.
+EVENTS_OUT=""
 
 die2() { echo "classify: $*" >&2; exit 2; }
 
@@ -45,6 +49,8 @@ while [ $# -gt 0 ]; do
     --from)   [ $# -ge 2 ] || die2 "--from needs a value"; FROM="$2"; shift 2 ;;
     --to)     [ $# -ge 2 ] || die2 "--to needs a value"; TO="$2"; shift 2 ;;
     --absent) [ $# -ge 2 ] || die2 "--absent needs a value"; ABSENT="$2"; shift 2 ;;
+    --denied-ids) [ $# -ge 2 ] || die2 "--denied-ids needs a value"; DENIED_OUT="$2"; shift 2 ;;
+    --events-out) [ $# -ge 2 ] || die2 "--events-out needs a value"; EVENTS_OUT="$2"; shift 2 ;;
     -*)       die2 "unknown option $1" ;;
     *)        printf '%s\n' "$1" >> "$TARGETS"; shift ;;
   esac
@@ -73,23 +79,10 @@ fi
 WORK="$(mktemp -d)" || die2 "mktemp failed"
 trap 'rm -f "$WORK"/* "$TARGETS"; rmdir "$WORK" 2>/dev/null' EXIT
 
-# ---- lift the four defs, each exactly once -------------------------------
-: > "$WORK/prelude.jq"
-for name in cmdpos loopend loopsleep longsleep; do
-  c="$(awk -v p="  def ${name}:" 'index($0, p) == 1 { c++ } END { print c + 0 }' "$HOOK")" || die2 "awk failed on $HOOK"
-  [ "$c" = "1" ] || die2 "def ${name} matched ${c} time(s) in $HOOK, need exactly 1"
-  awk -v p="  def ${name}:" 'index($0, p) == 1 { print }' "$HOOK" >> "$WORK/prelude.jq"
-done
-
-# ---- lift the deny reason substring, from the one REASON line ------------
-c="$(awk 'index($0, "FOREGROUND Bash call is a poll") > 0 { c++ } END { print c + 0 }' "$HOOK")" || die2 "awk failed on $HOOK"
-[ "$c" = "1" ] || die2 "deny reason line matched ${c} time(s) in $HOOK, need exactly 1"
-REASON="$(awk 'index($0, "FOREGROUND Bash call is a poll") > 0 {
-  s = index($0, "this subagent"); e = index($0, "is a poll")
-  if (s > 0 && e > s) print substr($0, s, e + 9 - s)
-}' "$HOOK")" || die2 "awk failed lifting the reason"
-[ -n "$REASON" ] || die2 "could not lift the reason substring from $HOOK"
-case "$REASON" in *'${'*) die2 "lifted reason carries a shell expansion" ;; esac
+# ---- lift the four defs and the deny reason: one copy, shared with join.sh --
+# shellcheck source=lift.sh
+. "$HERE/lift.sh" || die2 "cannot source $HERE/lift.sh"
+bl514_lift "$HOOK" "$WORK"
 
 # ---- the two jq programs --------------------------------------------------
 {
@@ -107,7 +100,7 @@ def txt: if type == "string" then .
         $els[] | select(.type == "tool_use" and .name == "Bash")
         | (if (.input | type) == "object" then .input else {} end) as $in
         | ($in.command // "") as $cmd
-        | {k: "use", id: (.id | tostring), ts: $r.timestamp,
+        | {k: "use", id: (.id | tostring), ts: $r.timestamp, file: input_filename,
            nocmd: (($in.command // null) == null),
            nonobj: ((.input | type) != "object"),
            cmd_str: (($cmd | type) == "string"),
@@ -145,7 +138,7 @@ def tmo: if . == null then null else (try tonumber catch "bad") end;
     . as $u
     | ($R[$u.id]) as $r
     | ($u.timeout | tmo) as $t
-    | { poll: $u.poll, sleep: $u.sleep, joined: ($r != null), hb: ($r != null and $r.hb),
+    | { id: $u.id, file: $u.file, poll: $u.poll, sleep: $u.sleep, joined: ($r != null), hb: ($r != null and $r.hb),
         b: (if ($u.poll | not) then null
             elif ($r != null and $r.den) then "DENIED"
             elif ($r != null and $r.hb) then "HARNESS-BLOCKED"
@@ -176,6 +169,7 @@ def tmo: if . == null then null else (try tonumber catch "bad") end;
     carriers: {poll: ($dr | map(select($P[.id] == true)) | length),
                nonpoll: ($dr | map(select($P[.id] == false)) | length),
                other: (($dr | map(select($P[.id] == null)) | length) + ([ .[] | select(.k == "car-other") ] | length))},
+    denied: ($rows | map(select(.b == "DENIED") | {id, file})),
     nonpoll_ids: ($dr | map(select($P[.id] == false) | .id)),
     other_kinds: ([ .[] | select(.k == "car-other") | .rtype ] + ($dr | map(select($P[.id] == null) | "unjoined-result")))
   }
@@ -188,15 +182,8 @@ list_dir() { /usr/bin/find "$1" \( -type f -o -type l \) -name '*.jsonl'; }
 # ---- run the two stages over a newline list of files ----------------------
 # Sets: OPENED, SUMMARY (path of a json summary file). Exit 2 on any read error.
 run_files() {
-  local list="$1" ev="$WORK/events.jsonl" f
-  OPENED=0
-  : > "$ev"
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    [ -f "$f" ] && [ -r "$f" ] || die2 "listed file not readable: $f"
-    jq -c --arg reason "$REASON" -f "$WORK/extract.jq" "$f" >> "$ev" || die2 "jq failed reading $f"
-    OPENED=$((OPENED + 1))
-  done < "$list"
+  local list="$1" ev="$WORK/events.jsonl"
+  bl514_extract "$list" "$ev"
   SUMMARY="$WORK/summary.json"
   jq -s --argjson budget "$BUDGET" --arg from "$FROM" --arg to "$TO" -f "$WORK/summarize.jq" "$ev" > "$SUMMARY" || die2 "summary stage failed"
 }
@@ -276,6 +263,7 @@ fi
 
 run_files "$WORK/corpus.list"
 [ "$OPENED" = "$LISTED" ] || die2 "listed $LISTED files, opened $OPENED"
+if [ -n "$EVENTS_OUT" ]; then cp "$WORK/events.jsonl" "$EVENTS_OUT" || die2 "could not write $EVENTS_OUT"; fi
 
 # controls, same run
 CALLS="$(jq -r '.calls' "$SUMMARY")"
@@ -302,6 +290,10 @@ jq -r '
   "reason carriers: poll-result \(.carriers.poll), non-poll-result \(.carriers.nonpoll), other \(.carriers.other)"
 ' "$SUMMARY"
 echo "controls: Bash calls > 0 (${CALLS}); absent token '${ABSENT}' count ${ABS_N}"
+
+if [ -n "$DENIED_OUT" ]; then
+  jq -r '.denied[] | "\(.id)\t\(.file)"' "$SUMMARY" | LC_ALL=C sort > "$DENIED_OUT" || die2 "could not write $DENIED_OUT"
+fi
 
 RC=0
 PSUM="$(jq -r '.polls' "$SUMMARY")"; BSUM="$(jq -r '.bucket_sum' "$SUMMARY")"

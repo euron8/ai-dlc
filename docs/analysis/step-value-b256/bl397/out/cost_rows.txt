@@ -1,0 +1,34 @@
+# python3 docs/analysis/step-value-b256/bl397/cost_rows.py <ext-10> <ext-09>
+# graph clone: file:///Users/n8/git/graph cloned, then fetch '+refs/*'; refs read: ed61de745 (ai-dlc/retro/sprint-322), cross-check 1449b5c72 (main) and 6ee289617
+# transcripts: 157 top-level jsonl, run 2026-11-12T20:27:18Z; extracts: <ext-10>/ and <ext-09>/ = extract.py + s317-s318 analyze.py at EXTRACT_WIN_END 2026-11-12T10:00:00Z and T09:00:00Z
+group: implementation plus gate-validation[implementation], pipeline bucket, per story
+-- before, b244 pin (EXTRACT_WIN_END=2026-10-27T13:08:00Z, pre-BL-927 extractor)
+before s314+s315 (9 stories): 2.00 h gap-inclusive (gap 0.86 h), token-equivalent $29.0 (API $23.1), 71.4M tokens; lead active 1.14 h, lead $8.0 (API $2.0), subagent active 1.76 h, subagent $21.1; lead-seat local share 77% of 1165 calls; bracket sonnet $29.0 .. opus $32.2
+   before control: REPRODUCED
+s317 at the b244 pin (21 stories): 2.01 h gap-inclusive (gap 0.71 h), token-equivalent $36.8 (API $31.4), 71.3M tokens; lead active 1.31 h, lead $9.2 (API $3.7), subagent active 2.15 h, subagent $27.7; lead-seat local share 66% of 3251 calls; bracket sonnet $36.8 .. opus $39.4
+-- after, fresh extract in ext-10/ (window: the caller's EXTRACT_WIN_END)
+s317 (21 stories): 2.02 h gap-inclusive (gap 0.71 h), token-equivalent $37.0 (API $31.5), 71.9M tokens; lead active 1.32 h, lead $9.3 (API $3.8), subagent active 2.15 h, subagent $27.7; lead-seat local share 65% of 3284 calls; bracket sonnet $36.9 .. opus $39.5
+s318 (13 stories): 0.91 h gap-inclusive (gap 0.17 h), token-equivalent $32.5 (API $32.5), 71.7M tokens; lead active 0.74 h, lead $6.5, subagent active 2.20 h, subagent $26.0; lead-seat local share 0% of 1228 calls; bracket sonnet $32.5 .. opus $32.5
+s319 (20 stories): 2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3), 119.2M tokens; lead active 1.31 h, lead $10.6, subagent active 3.51 h, subagent $30.7; lead-seat local share 0% of 2900 calls; bracket sonnet $41.3 .. opus $41.3
+s320 (13 stories): 1.94 h gap-inclusive (gap 0.74 h), token-equivalent $20.7 (API $20.7), 80.0M tokens; lead active 1.20 h, lead $9.9, subagent active 1.69 h, subagent $10.8; lead-seat local share 0% of 1710 calls; bracket sonnet $20.7 .. opus $20.7
+s321 (25 stories): 1.13 h gap-inclusive (gap 0.28 h), token-equivalent $25.5 (API $25.5), 66.9M tokens; lead active 0.85 h, lead $7.6, subagent active 1.48 h, subagent $17.9; lead-seat local share 0% of 2508 calls; bracket sonnet $25.5 .. opus $25.5
+s321 per DONE story (24 stories): 1.18 h gap-inclusive (gap 0.29 h), token-equivalent $26.6 (API $26.6), 69.7M tokens; lead active 0.89 h, lead $7.9, subagent active 1.54 h, subagent $18.6; lead-seat local share 0% of 2508 calls; bracket sonnet $26.6 .. opus $26.6
+s322 (8 stories): 2.02 h gap-inclusive (gap 0.71 h), token-equivalent $27.9 (API $17.1), 80.0M tokens; lead active 1.31 h, lead $10.8 (API $0.0), subagent active 1.21 h, subagent $17.1; lead-seat local share 100% of 2261 calls; bracket sonnet $27.9 .. opus $30.7
+   after control s317: b255 $37.0 2.02 h, now $37.0 2.02 h -> REPRODUCED
+   after control s318: b255 $32.5 0.91 h, now $32.5 0.91 h -> REPRODUCED
+   after control s319: b255 $41.3 2.09 h, now $41.3 2.09 h -> REPRODUCED
+   after control s320: b255 $20.7 1.94 h, now $20.7 1.94 h -> REPRODUCED
+   after control s321: b255 $25.5 1.13 h, now $25.5 1.13 h -> REPRODUCED
+   s317 fresh $37.0 against pin $36.8: fresh used
+-- rule (FOLD D4): before $29.0 71.4M; min(s317..s321) $20.7 66.9M (te from s320, tokens from s321)
+   s322 FALLBACK: $27.9, 80.0M tokens -> DID NOT FALL
+   s322 bracket sonnet: $27.9, 80.0M tokens -> DID NOT FALL
+   s322 bracket opus: $30.7, 80.0M tokens -> DID NOT FALL
+   unrounded s317: elapsed 42.4990 h, gap 14.8070 h, lead active 27.6910 h, tokens 1510297594 over 21 stories
+   unrounded s320: elapsed 25.1730 h, gap 9.5780 h, lead active 15.5950 h, tokens 1039559057 over 13 stories
+   unrounded s322: elapsed 16.1260 h, gap 5.6580 h, lead active 10.4680 h, tokens 640247649 over 8 stories
+   RULE: DID NOT FALL
+   s322 group's last lead record in this window 2026-11-12T03:35:48.990Z, last spawn charged to it 2026-11-12T03:27:05.898Z
+s322 at the second window (8 stories): 2.02 h gap-inclusive (gap 0.71 h), token-equivalent $27.9 (API $17.1), 80.0M tokens; lead active 1.31 h, lead $10.8 (API $0.0), subagent active 1.21 h, subagent $17.1; lead-seat local share 100% of 2261 calls; bracket sonnet $27.9 .. opus $30.7
+   s322 identity across windows: IDENTICAL
+exit 0

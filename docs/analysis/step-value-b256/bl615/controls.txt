@@ -1,0 +1,13 @@
+# Window stability: the same pipeline at EXTRACT_WIN_END=2026-11-12T09:00:00Z (OUT09) against 10:00:00Z (OUT10).
+#   python3 -I docs/analysis/step-value-b256/bl615/step_value.py --diff $OUT10 $OUT09
+s319 four-step rows: 4 vs 4, 0 differ []
+s321 four-step rows: 3 vs 3, 0 differ []
+s322 four-step rows: 4 vs 4, 0 differ []
+control: s322 rows of any step that differ: 2 of 21
+# exit 0
+# Positive control for step_value.py itself: the b244 snapshot reproduces BL-817's re-audit s319 row (2.12 h, $56.4, 100.9M tokens).
+#   python3 -I docs/analysis/step-value-b256/bl615/step_value.py docs/analysis/pipeline-efficiency-s317-s320/b244-snapshot --stories 319=20
+extract: docs/analysis/pipeline-efficiency-s317-s320/b244-snapshot (rows 136); roll.py FALLBACK {314: 315, 322: 321}
+
+== four-step group
+   s319 (20 stories, planned): 2.12 h gap-inclusive (gap 1.20 h), token-equivalent $56.4 (API $56.4), 100.9M tokens; lead active 0.92 h, lead $8.0 (API $8.0); subagent active 4.34 h, subagent $48.4 (API $48.4); lead-seat local 0 of 2228 calls

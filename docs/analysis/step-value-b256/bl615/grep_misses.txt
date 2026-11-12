@@ -1,0 +1,24 @@
+# BL-615 mechanism metric (reported beside, never deciding). Taken 2026-11-12.
+#   EXTRACT_WIN_END=2026-11-12T10:00:00Z python3 -I docs/analysis/step-value-b256/bl615/grep_misses.py
+corpus: /Users/n8/.claude/projects/-Users-n8-git-graph, 157 top-level transcripts, earliest record 2026-10-07T08:00:53.615Z, 6158 subagent meta files
+adversary transcripts with a first record at or before 2026-11-12T10:00:00Z: 1280
+
+s321-b250  [2026-10-29T23:37:29Z, 2026-11-05T06:07:47Z): 244 transcripts, 10563 greps, 90 misses: 0.37 per transcript, 0.85% per grep; near-miss control (other programs' No such file lines) 69; impossible-token control 0
+           with context-mode shell greps added: 10622 greps, 90 misses: 0.37 per transcript, 0.85% per grep
+s321       [2026-10-29T23:37:29Z, 2026-11-09T00:00:00Z): 272 transcripts, 11361 greps, 99 misses: 0.36 per transcript, 0.87% per grep; near-miss control (other programs' No such file lines) 71; impossible-token control 0
+           with context-mode shell greps added: 11428 greps, 99 misses: 0.36 per transcript, 0.87% per grep
+s322       [2026-11-09T00:00:00Z, 2026-11-12T10:00:00Z): 125 transcripts, 4637 greps, 28 misses: 0.22 per transcript, 0.60% per grep; near-miss control (other programs' No such file lines) 42; impossible-token control 0
+           with context-mode shell greps added: 5104 greps, 30 misses: 0.24 per transcript, 0.59% per grep
+
+like-for-like s319: 19 parts, 579 greps, 12 misses in 7 of 19 parts; part-count control OK (expected 19); with context-mode shell greps: 12 misses in 7 parts
+like-for-like s321: 16 parts, 1080 greps, 18 misses in 10 of 16 parts; part-count control OK (expected 16); with context-mode shell greps: 18 misses in 10 parts
+like-for-like s322: 10 parts, 768 greps, 3 misses in 2 of 10 parts; part-count control OK (expected 10); with context-mode shell greps: 3 misses in 2 parts
+# Same at EXTRACT_WIN_END=2026-11-12T09:00:00Z (records after the window end dropped in every transcript); diff 10:00 -> 09:00:
+#   2c2
+#   < adversary transcripts with a first record at or before 2026-11-12T10:00:00Z: 1280
+#   ---
+#   > adversary transcripts with a first record at or before 2026-11-12T09:00:00Z: 1280
+#   8c8
+#   < s322       [2026-11-09T00:00:00Z, 2026-11-12T10:00:00Z): 125 transcripts, 4637 greps, 28 misses: 0.22 per transcript, 0.60% per grep; near-miss control (other programs' No such file lines) 42; impossible-token control 0
+#   ---
+#   > s322       [2026-11-09T00:00:00Z, 2026-11-12T09:00:00Z): 125 transcripts, 4637 greps, 28 misses: 0.22 per transcript, 0.60% per grep; near-miss control (other programs' No such file lines) 42; impossible-token control 0

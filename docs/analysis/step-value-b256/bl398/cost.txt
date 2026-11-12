@@ -1,0 +1,128 @@
+corpus: 157 top-level transcripts under the graph transcript root
+== 1. story counts, graph ed61de745 (keys `story-<N>-<M>:`, done = `status: done` under the key; naive = lines naming `story-`)
+   s314: keys 4, done 4, naive 11  (_bmad-output/implementation-artifacts/s314/sprint-status.yaml)
+   s315: keys 5, done 5, naive 10  (_bmad-output/implementation-artifacts/s315/sprint-status.yaml)
+   s321: keys 25, done 24, naive 51  (_bmad-output/implementation-artifacts/s321/sprint-status.yaml)
+   s322: keys 8, done 8, naive 17  (_bmad-output/implementation-artifacts/sprint-status.yaml)
+
+== 2. per story, stories-test-strategy (roll.py seat_sum; token-equivalent bracket = every local call at sonnet .. at opus)
+   before s314+s315 pooled (b244 snapshot) (9 stories): 1.28 h gap-inclusive (gap 0.57 h), token-equivalent $20.3 (API $17.5), 34.8M tokens; lead active 0.71 h, lead $5.0 (API $2.2), subagent active 1.35 h, subagent $15.2; lead-seat local share 55% of 740 calls
+      bracket $20.25 .. $21.67; token-equivalent $20.25, API $17.48, 34.8M tokens FALLBACK s314->s315
+   s321 (re-extracted) (25 stories): 0.79 h gap-inclusive (gap 0.42 h), token-equivalent $26.9 (API $26.1), 47.5M tokens; lead active 0.38 h, lead $3.3 (API $2.6), subagent active 2.43 h, subagent $23.6; lead-seat local share 30% of 1309 calls
+      bracket $26.88 .. $27.15; token-equivalent $26.88, API $26.14, 47.5M tokens
+      per DONE story (24): token-equivalent $28.00, 49.5M tokens
+   s322 (8 stories): 0.93 h gap-inclusive (gap 0.41 h), token-equivalent $26.4 (API $20.8), 58.9M tokens; lead active 0.52 h, lead $5.6 (API $0.0), subagent active 2.01 h, subagent $20.8; lead-seat local share 100% of 1176 calls
+      bracket $26.36 .. $27.76; token-equivalent $26.36, API $20.76, 58.9M tokens FALLBACK s322->s321
+   b244 s314 pre-step subagent spend (an upper bound on what the pre-BL-927 extractor could have left out of the before): $6.20
+   b244 s315 pre-step subagent spend (an upper bound on what the pre-BL-927 extractor could have left out of the before): $0.00
+   neighbour gate-validation[stories-test-strategy], s321 (re-extracted): 0.01 h gap-inclusive (gap 0.00 h), token-equivalent $0.2 (API $0.2), 0.7M tokens; lead active 0.01 h, lead $0.2, subagent active 0.01 h, subagent $0.1; lead-seat local share 0% of 47 calls
+   neighbour gate-validation[stories-test-strategy], s322: 0.05 h gap-inclusive (gap 0.00 h), token-equivalent $1.2 (API $0.4), 3.8M tokens; lead active 0.05 h, lead $0.8 (API $0.0), subagent active 0.02 h, subagent $0.4; lead-seat local share 100% of 168 calls
+   control: s321 line found verbatim in roll.py --seats output: True
+   control: s322 line found verbatim in roll.py --seats output: True
+   control: 4 s321/s322 rows of the step and its gate at OUT, 4 at OUT_ALT, identical: True
+   control: an absent step reads 0.0M tokens
+   s321 lead segment with records after 2026-11-06T03:23:00Z (the b251 window end): 0ec8b044 2026-11-06T00:25:30Z .. 2026-11-06T13:10:02Z
+   s322 lead segment 9a646a3b stories-test-strategy: 2026-11-10T08:30:24Z .. 2026-11-10T12:52:15Z
+   s322 lead segment fdc4249a stories-test-strategy: 2026-11-10T15:37:34Z .. 2026-11-10T18:47:12Z
+   s322 lead segment fdc4249a gate-validation[stories-test-strategy]: 2026-11-10T18:05:55Z .. 2026-11-10T18:45:42Z
+   s321 at EXTRACT_WIN_END=2026-11-06T03:23:00Z (this extractor): 0.70 h gap-inclusive (gap 0.33 h), token-equivalent $26.8 (API $26.0), 47.2M tokens; lead active 0.37 h, lead $3.2 (API $2.5), subagent active 2.43 h, subagent $23.6; lead-seat local share 30% of 1284 calls
+   s321 drift = records after 2026-11-06T03:23:00Z in 1 lead segment(s): token-equivalent $+0.11, tokens +0.34M, gap-inclusive +0.091 h, subagent $+0.02 per story
+   s322 sensitivity, divided by the 5 stories the rounds reviewed (shard ordinal map) instead of 8 keys: token-equivalent $42.18, 94.2M tokens
+
+== 3. rule (fixed before reading): FELL iff s322 per story < before AND < s321 on token-equivalent AND tokens
+   token-equivalent: s322 $26.36 vs before $20.25, s321 $26.88 -> below both: False
+   bracket check: s322 $26.36..$27.76 vs before $20.25..$21.67, s321 $26.88..$27.15
+   tokens: s322 58.9M vs before 34.8M, s321 47.5M -> below both: False
+   READING: DID NOT FALL
+
+== 4. s322 stories-test-strategy subagent spend by round (117 spawns; phase = the round whose first spawn most recently preceded it, by owner timestamp)
+   other (before the first round): 1 spawns, token-equivalent $0.26 (0%), API $0.26, 0.3M tokens, 0.01 subagent-h
+   party: 35 spawns, token-equivalent $58.49 (35%), API $58.49, 95.4M tokens, 5.91 subagent-h
+   elicitation: 18 spawns, token-equivalent $51.32 (31%), API $51.32, 81.0M tokens, 6.29 subagent-h
+   stories adversarial passes and repairs: 35 spawns, token-equivalent $35.88 (22%), API $35.88, 84.8M tokens, 2.43 subagent-h
+   test-strategy ladder (TS passes and repairs): 28 spawns, token-equivalent $20.10 (12%), API $20.10, 38.5M tokens, 1.44 subagent-h
+   control: split total API $166.0409 vs steps.csv row $166.0409; token-eq $166.0409 vs $166.0409; tokens 299846842 vs 299846842; equal: True
+   control: description/round disagreements 0 (self-probe: a seeded 'Elicitation shard 9' in the TS round flags 1, an elicitation repair in its own round flags 0)
+
+== 5. BL-1003 exposure, s321 and s322 (lead re-scan of 22 sessions, EXTRACT_WIN_END=2026-11-12T10:00:00Z)
+   control: re-scan label == owner.json label on 1563 of 1563 lead-recorded spawns
+   gate-labelled spawns by (sprint, label, lead's current step at the spawn, depth-2): spawns, API $ (whole unit), first..last
+   s321 gate-validation[architecture] | main=architecture | depth2=False: 4 spawns, $2.40, 2026-11-04T04:34:51..2026-11-04T04:41:52
+   s321 gate-validation[implementation] | main=implementation | depth2=False: 126 spawns, $160.70, 2026-11-06T03:58:06..2026-11-07T10:22:42
+   s321 gate-validation[requirements] | main=requirements | depth2=False: 4 spawns, $3.24, 2026-10-30T16:25:16..2026-11-03T03:55:06
+   s321 gate-validation[sprint-review] | main=sprint-review | depth2=False: 4 spawns, $2.78, 2026-11-07T14:20:41..2026-11-07T14:20:52
+   s321 gate-validation[stories-test-strategy] | main=stories-test-strategy | depth2=False: 3 spawns, $2.23, 2026-11-06T03:12:35..2026-11-06T03:17:02
+   s322 gate-validation[architecture] | main=architecture | depth2=False: 16 spawns, $15.33, 2026-11-10T03:14:00..2026-11-10T08:22:44
+   s322 gate-validation[architecture] | main=architecture | depth2=True: 16 spawns, $25.01, 2026-11-10T03:14:25..2026-11-10T03:15:54
+   s322 gate-validation[bug-investigation] | main=bug-investigation | depth2=False: 2 spawns, $2.68, 2026-11-11T07:54:26..2026-11-11T07:55:15
+   s322 gate-validation[carry-over-evaluation] | main=carry-over-evaluation | depth2=False: 20 spawns, $7.06, 2026-11-09T13:46:01..2026-11-09T13:52:42
+   s322 gate-validation[carry-over-evaluation] | main=requirements | depth2=False: 41 spawns, $110.52, 2026-11-09T14:00:32..2026-11-09T19:08:14   <-- CROSSES (label is not the lead's step)
+   s322 gate-validation[carry-over-evaluation] | main=requirements | depth2=True: 20 spawns, $56.89, 2026-11-09T14:36:12..2026-11-09T14:38:17   <-- CROSSES (label is not the lead's step)
+   s322 gate-validation[implementation] | main=implementation | depth2=False: 39 spawns, $71.20, 2026-11-10T23:53:04..2026-11-12T03:10:11
+   s322 gate-validation[requirements] | main=requirements | depth2=False: 22 spawns, $9.55, 2026-11-10T02:22:38..2026-11-10T02:37:06
+   s322 gate-validation[sprint-review] | main=sprint-review | depth2=False: 8 spawns, $5.13, 2026-11-12T05:18:13..2026-11-12T05:32:09
+   s322 gate-validation[stories-test-strategy] | main=stories-test-strategy | depth2=False: 8 spawns, $3.19, 2026-11-10T18:37:06..2026-11-10T18:37:06
+   positive control (BL-1003: 61 spawns, $167.41): gate-validation[carry-over-evaluation] with main=requirements: 61 spawns, $167.40
+   s321: stories-test-strategy work filed under another gate label: 0 spawns; gate-validation[stories-test-strategy] holding another step's work: 0 spawns
+   s322: stories-test-strategy work filed under another gate label: 0 spawns; gate-validation[stories-test-strategy] holding another step's work: 0 spawns
+   lead seat, s321 and s322: usage-bearing messages whose gate label is not the lead's step (label | main: calls, tokens, first..last)
+     s321 gate-validation[architecture] | main=stories-test-strategy: 4 calls, 0.7M tokens, 2026-11-04T04:48:23..2026-11-04T04:49:55
+     s321 gate-validation[implementation] | main=stories-test-strategy: 54 calls, 13.8M tokens, 2026-11-06T10:30:40..2026-11-06T10:54:03
+     s322 gate-validation[architecture] | main=stories-test-strategy: 4 calls, 0.3M tokens, 2026-11-10T08:30:12..2026-11-10T08:30:22
+     s322 gate-validation[carry-over-evaluation] | main=handoff: 54 calls, 4.6M tokens, 2026-11-09T19:37:20..2026-11-09T20:20:03
+     s322 gate-validation[carry-over-evaluation] | main=requirements: 465 calls, 69.5M tokens, 2026-11-09T14:00:08..2026-11-09T19:37:17
+     s322 gate-validation[sprint-review] | main=deploy-validate: 106 calls, 12.9M tokens, 2026-11-12T05:41:34..2026-11-12T05:52:26
+   (6 crossing lead rows; same-invocation control: lead rows whose label equals the step, 23)
+   s322 gate events in the lead scan (utc, session, event, label after):
+     2026-11-11T07:17:56 6249c621 open gate-validation[implementation]
+     2026-11-11T07:23:41 6249c621 open gate-validation[implementation]
+     2026-11-11T07:33:08 6249c621 close implementation
+     2026-11-11T07:53:17 6249c621 open gate-validation[bug-investigation]
+     2026-11-11T07:59:23 6249c621 close bug-investigation
+     2026-11-11T10:24:19 6249c621 open gate-validation[implementation]
+     2026-11-11T10:28:37 6249c621 open gate-validation[implementation]
+     2026-11-11T10:51:17 6249c621 open gate-validation[implementation]
+     2026-11-11T11:00:59 6249c621 close implementation
+     2026-11-09T13:40:29 6c14d949 open gate-validation[carry-over-evaluation]
+     2026-11-09T13:49:03 6c14d949 open gate-validation[carry-over-evaluation]
+     2026-11-11T01:40:47 70fd1d6d open gate-validation[implementation]
+     2026-11-11T01:41:35 70fd1d6d open gate-validation[implementation]
+     2026-11-11T01:50:49 70fd1d6d close implementation
+     2026-11-11T01:51:00 70fd1d6d open gate-validation[implementation]
+     2026-11-11T02:04:44 70fd1d6d close implementation
+     2026-11-11T03:38:33 70fd1d6d open gate-validation[implementation]
+     2026-11-11T03:39:08 70fd1d6d open gate-validation[implementation]
+     2026-11-11T03:51:36 70fd1d6d open gate-validation[implementation]
+     2026-11-11T03:58:43 70fd1d6d open gate-validation[implementation]
+     2026-11-11T04:08:10 70fd1d6d close implementation
+     2026-11-10T02:28:08 9a646a3b open gate-validation[requirements]
+     2026-11-10T02:32:19 9a646a3b close requirements
+     2026-11-10T02:35:30 9a646a3b open gate-validation[requirements]
+     2026-11-10T02:43:52 9a646a3b close requirements
+     2026-11-10T08:18:04 9a646a3b open gate-validation[architecture]
+     2026-11-10T08:30:23 9a646a3b close stories-test-strategy
+     2026-11-12T00:17:30 e444bf13 open gate-validation[implementation]
+     2026-11-12T00:18:10 e444bf13 open gate-validation[implementation]
+     2026-11-12T01:54:36 e444bf13 open gate-validation[implementation]
+     2026-11-12T01:56:06 e444bf13 open gate-validation[implementation]
+     2026-11-12T01:57:19 e444bf13 open gate-validation[implementation]
+     2026-11-12T02:07:48 e444bf13 close implementation
+     2026-11-12T02:13:16 e444bf13 open gate-validation[implementation]
+     2026-11-12T02:25:20 e444bf13 close implementation
+     2026-11-12T02:26:04 e444bf13 open gate-validation[implementation]
+     2026-11-12T02:36:32 e444bf13 close implementation
+     2026-11-12T02:37:50 e444bf13 open gate-validation[implementation]
+     2026-11-12T02:46:31 e444bf13 close implementation
+     2026-11-12T02:47:05 e444bf13 open gate-validation[implementation]
+     2026-11-12T02:57:04 e444bf13 close implementation
+     2026-11-12T02:58:18 e444bf13 open gate-validation[implementation]
+     2026-11-12T03:07:04 e444bf13 close implementation
+     2026-11-12T03:08:21 e444bf13 open gate-validation[implementation]
+     2026-11-12T03:23:09 e444bf13 close implementation
+     2026-11-12T05:16:49 e444bf13 open gate-validation[sprint-review]
+     2026-11-12T05:23:54 e444bf13 close sprint-review
+     2026-11-12T05:31:27 e444bf13 open gate-validation[sprint-review]
+     2026-11-12T05:52:26 e444bf13 close deploy-validate
+     2026-11-10T18:36:19 fdc4249a open gate-validation[stories-test-strategy]
+     2026-11-10T18:45:42 fdc4249a close stories-test-strategy
+   s321 gate events: {'open': 40, 'close': 29}

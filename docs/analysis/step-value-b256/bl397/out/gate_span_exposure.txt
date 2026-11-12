@@ -1,0 +1,29 @@
+# EXTRACT_WIN_END=2026-11-12T10:00:00Z python3 docs/analysis/step-value-b256/bl397/gate_span_exposure.py <transcripts> <ext-10>
+# graph clone: file:///Users/n8/git/graph cloned, then fetch '+refs/*'; refs read: ed61de745 (ai-dlc/retro/sprint-322), cross-check 1449b5c72 (main) and 6ee289617
+# transcripts: 157 top-level jsonl, run 2026-11-12T20:27:23Z; extracts: <ext-10>/ and <ext-09>/ = extract.py + s317-s318 analyze.py at EXTRACT_WIN_END 2026-11-12T10:00:00Z and T09:00:00Z
+lead transcripts 157 under ~/.claude/projects/-Users-n8-git-graph; earliest record 2026-10-07T08:00:53.615Z; WIN_END 2026-11-12T10:00:00Z
+s317: lead spawns labelled implementation 230, gate-validation[implementation] 70
+   OUT leak 0 spawns, 33 lead records; IN leak 0 spawns, 0 lead records
+   leak: label gate-validation[implementation], main handoff: 33 lead records, 12.1M lead tokens
+s318: lead spawns labelled implementation 182, gate-validation[implementation] 41
+   OUT leak 0 spawns, 0 lead records; IN leak 0 spawns, 0 lead records
+   leak: label gate-validation[architecture], main stories-test-strategy: 1 lead records, 0.2M lead tokens
+   leak: label gate-validation[sprint-review], main handoff: 42 lead records, 14.6M lead tokens
+s319: lead spawns labelled implementation 512, gate-validation[implementation] 137
+   OUT leak 0 spawns, 0 lead records; IN leak 0 spawns, 0 lead records
+s320: lead spawns labelled implementation 145, gate-validation[implementation] 74
+   OUT leak 0 spawns, 0 lead records; IN leak 0 spawns, 0 lead records
+s321: lead spawns labelled implementation 160, gate-validation[implementation] 126
+   OUT leak 0 spawns, 55 lead records; IN leak 0 spawns, 0 lead records
+   leak: label gate-validation[architecture], main stories-test-strategy: 4 lead records, 0.7M lead tokens
+   leak: label gate-validation[implementation], main stories-test-strategy: 55 lead records, 14.0M lead tokens
+s322: lead spawns labelled implementation 76, gate-validation[implementation] 50
+   OUT leak 0 spawns, 0 lead records; IN leak 0 spawns, 0 lead records
+   leak: label gate-validation[carry-over-evaluation], main requirements: 41 lead spawns, 2026-11-09T14:00:32..2026-11-09T19:08:14
+   leak: label gate-validation[architecture], main stories-test-strategy: 4 lead records, 0.3M lead tokens
+   leak: label gate-validation[carry-over-evaluation], main handoff: 54 lead records, 4.6M lead tokens
+   leak: label gate-validation[carry-over-evaluation], main requirements: 465 lead records, 69.5M lead tokens
+   leak: label gate-validation[sprint-review], main deploy-validate: 106 lead records, 12.9M lead tokens
+positive control s322 label gate-validation[carry-over-evaluation] main requirements: 41 lead spawns
+   same window in ext-10/owner.json (lead AND subagent-made spawns): 61
+exit 0

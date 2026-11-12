@@ -1,0 +1,25 @@
+# python3 docs/analysis/step-value-b256/bl397/handoff_runs.py <graph-clone> ed61de745
+# graph clone: file:///Users/n8/git/graph cloned, then fetch '+refs/*'; ref ed61de745 (ai-dlc/retro/sprint-322); run 2026-11-12T20:32:38Z
+synthetic control `.venv/bin/python -m pytest -m "not integration" server/tests -q`: PARTIAL (ok)
+synthetic control `.venv-ci/bin/python -m pytest rebalancer/tests -q -n 8`: FULL (ok)
+  s317 4-3a @5f795d793 (sha): NONE-CLAIM ::  none — a docs-only diff has no test collection; the five greps are the AC1 evidence.
+  s317 4-3b @033239a3f (sha): PARTIAL :: python3 -m pytest server/test_live_smoke.py -q
+  s319 5-2 @4b7bcb871 (sha): NONE-CLAIM ::  pytest or vitest invocation applies. The evidence is the block-scoped greps below.
+  s319 5-3 @4134523b3 (sha): NONE-CLAIM ::  pytest run to cite. This is a lead call and is flagged in the report.
+  s319 5-4 @0d26b560a (sha): NONE-CLAIM ::  pytest run to cite. This is a lead call and is flagged in the report.
+  s320 2-2 @61a8a5d3b (sha): NONE-CLAIM :: docs/escalations/pending.md
+  s320 3-3 @0d5939d06 (sha): PARTIAL :: cd /Users/n8/git/graph-s320-story-3-3/server && /Users/n8/git/graph/.venv-ci/bin/python3 -m pytest -m "not int
+  s321 5-4 @f9ee7df3f (sha): PARTIAL :: cd /Users/n8/git/graph-s321-story-5.4 && /Users/n8/git/graph/.venv-ci/bin/python3 -m pytest -m "not integratio
+  s322 1-3 @c6ebe5c96 (sha): PARTIAL :: .venv/bin/python -m pytest --tb=short -m "not integration" server/tests/test_s317_4_3b_fixture_predicate_twin.
+  s322 1-6 @0023c4042 (sha): COLLECT-ONLY :: /Users/n8/git/graph-s322-story-6/.venv-ci/bin/python -m pytest rebalancer/tests --collect-only -q
+  s322 1-8 @613d4aa8d (sha): FULL :: python3 -u scripts/pytest-footprint-watchdog.py --cwd <worktree> --python <worktree>/.venv-ci/bin/python --art
+s317: FULL 7, NO-LINE 11, NON-PYTEST 1, NONE-CLAIM 1, PARTIAL 1
+s318: FULL 4, NO-LINE 6, NON-PYTEST 3, NOT-A-STORY-REPORT 1
+s319: FULL 6, NO-LINE 9, NON-PYTEST 2, NONE-CLAIM 3, NOT-A-STORY-REPORT 3
+s320: FULL 9, NON-PYTEST 2, NONE-CLAIM 1, NOT-A-STORY-REPORT 1, PARTIAL 1
+s321: FULL 19, NON-PYTEST 4, NOT-A-STORY-REPORT 10, PARTIAL 1
+s322: COLLECT-ONLY 1, FULL 5, NON-PYTEST 1, PARTIAL 1
+TOTAL s317..s322: primary QA reports 114; with a Full-collection run line 73; not a repo-root full collection (PARTIAL + COLLECT-ONLY) 5; FULL 50; NON-PYTEST 13; NONE-CLAIM 5; NO-LINE 26; NO-STORY-FILE 0; NOT-A-STORY-REPORT 15
+control s322 story 1-8: FULL (ok)
+control s322 story 1-3: PARTIAL (ok)
+exit 0

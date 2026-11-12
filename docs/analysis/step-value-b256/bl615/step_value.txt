@@ -1,0 +1,81 @@
+# BL-615 outcome, four planning steps per story. step_value.py run at 2026-11-12T21:23:22Z, over the extract whose run started 2026-11-12T20:04:14Z.
+# Corpus: ~/.claude/projects/-Users-n8-git-graph, 157 top-level transcripts, 6158 subagent transcripts, earliest record 2026-10-07T08:00:53.615Z.
+# Graph reads: one clone, <clone> (a scratch directory), made by
+#   GIT_OPTIONAL_LOCKS=0 git clone -q file:///Users/n8/git/graph <clone>, then git -C <clone> fetch -q origin 'refs/*:refs/fetched/*' (no leading +; the clone had no refs/fetched/ before it).
+#   ed61de745 (the ai-dlc/retro/sprint-322 tip at pin time) was NOT in the plain clone and is not an ancestor of graph main (1449b5c72
+#   at the read): no branch of graph resolved ai-dlc/retro/sprint-322 any more, and the commit arrived only through the refs/* fetch.
+#   It survives in graph only until graph prunes it. Every story count below is read at ed61de745 in that clone.
+# Reproduce (OUT a scratch dir, A=docs/analysis/pipeline-efficiency-s317-s318/scripts, B=docs/analysis/pipeline-efficiency-s317-s320/scripts):
+#   EXTRACT_WIN_END=2026-11-12T10:00:00Z python3 -I $B/extract.py $OUT && python3 -I $A/spawns.py $OUT && python3 -I $A/analyze.py $OUT
+#   python3 -I docs/analysis/step-value-b256/bl615/step_value.py $OUT --graph <graph clone> --ref ed61de745
+# analyze.py token control on this extract: token control units==segs: 24589999171 24589999171
+stories s319: 20 keys, 20 done (_bmad-output/implementation-artifacts/s319/sprint-status.yaml, sprint: 319; lines naming a story id, the naive count: 40)
+stories s321: 25 keys, 24 done (_bmad-output/implementation-artifacts/s321/sprint-status.yaml, sprint: 321; lines naming a story id, the naive count: 50)
+stories s322: 8 keys, 8 done (_bmad-output/implementation-artifacts/sprint-status.yaml, sprint: 322; lines naming a story id, the naive count: 16)
+controls: s319 20 and s321 25 reproduced
+extract: <OUT> (rows 114); roll.py FALLBACK {314: 315, 322: 321}
+
+== four-step group
+   s319 (20 stories, planned): 2.09 h gap-inclusive (gap 1.19 h), token-equivalent $55.4 (API $55.4), 98.9M tokens; lead active 0.91 h, lead $7.8 (API $7.8); subagent active 4.30 h, subagent $47.6 (API $47.6); lead-seat local 0 of 2164 calls
+   s321 (25 stories, planned): 1.61 h gap-inclusive (gap 0.84 h), token-equivalent $50.9 (API $50.1), 90.5M tokens; lead active 0.78 h, lead $6.6 (API $5.8); subagent active 4.63 h, subagent $44.3 (API $44.3); lead-seat local 389 of 2530 calls; bracket sonnet $50.9 .. opus $51.1
+   s321 (24 stories, done): 1.68 h gap-inclusive (gap 0.87 h), token-equivalent $53.0 (API $52.2), 94.2M tokens; lead active 0.81 h, lead $6.9 (API $6.1); subagent active 4.82 h, subagent $46.1 (API $46.1); lead-seat local 389 of 2530 calls; bracket sonnet $53.0 .. opus $53.3
+   s322 (8 stories, planned): 4.38 h gap-inclusive (gap 2.81 h), token-equivalent $76.9 (API $61.5), 165.3M tokens; lead active 1.57 h, lead $15.3 (API $0.0); subagent active 6.18 h, subagent $61.5 (API $61.5); lead-seat local 3149 of 3151 calls; bracket sonnet $76.9 .. opus $81.0
+
+== three-step group, without carry-over-evaluation
+   s319 (20 stories, planned): 1.94 h gap-inclusive (gap 1.12 h), token-equivalent $50.1 (API $50.1), 89.1M tokens; lead active 0.82 h, lead $6.8 (API $6.8); subagent active 3.98 h, subagent $43.2 (API $43.2); lead-seat local 0 of 1899 calls
+   s321 (25 stories, planned): 1.61 h gap-inclusive (gap 0.84 h), token-equivalent $50.9 (API $50.1), 90.5M tokens; lead active 0.78 h, lead $6.6 (API $5.8); subagent active 4.63 h, subagent $44.3 (API $44.3); lead-seat local 389 of 2530 calls; bracket sonnet $50.9 .. opus $51.1
+   s321 (24 stories, done): 1.68 h gap-inclusive (gap 0.87 h), token-equivalent $53.0 (API $52.2), 94.2M tokens; lead active 0.81 h, lead $6.9 (API $6.1); subagent active 4.82 h, subagent $46.1 (API $46.1); lead-seat local 389 of 2530 calls; bracket sonnet $53.0 .. opus $53.3
+   s322 (8 stories, planned): 1.99 h gap-inclusive (gap 0.88 h), token-equivalent $49.6 (API $38.5), 109.2M tokens; lead active 1.10 h, lead $11.1 (API $0.0); subagent active 3.88 h, subagent $38.5 (API $38.5); lead-seat local 2244 of 2246 calls; bracket sonnet $49.6 .. opus $52.8
+
+== carry-over-evaluation
+   s319 (20 stories, planned): 0.15 h gap-inclusive (gap 0.06 h), token-equivalent $5.3 (API $5.3), 9.8M tokens; lead active 0.09 h, lead $1.0 (API $1.0); subagent active 0.33 h, subagent $4.3 (API $4.3); lead-seat local 0 of 265 calls
+   s321 (25 stories, planned): 0.00 h gap-inclusive (gap 0.00 h), token-equivalent $0.0 (API $0.0), 0.0M tokens; lead active 0.00 h, lead $0.0 (API $0.0); subagent active 0.00 h, subagent $0.0 (API $0.0); lead-seat local 0 of 0 calls
+   s321 (24 stories, done): 0.00 h gap-inclusive (gap 0.00 h), token-equivalent $0.0 (API $0.0), 0.0M tokens; lead active 0.00 h, lead $0.0 (API $0.0); subagent active 0.00 h, subagent $0.0 (API $0.0); lead-seat local 0 of 0 calls
+   s322 (8 stories, planned): 2.39 h gap-inclusive (gap 1.93 h), token-equivalent $27.2 (API $23.0), 56.1M tokens; lead active 0.46 h, lead $4.2 (API $0.0); subagent active 2.30 h, subagent $23.0 (API $23.0); lead-seat local 905 of 905 calls; bracket sonnet $27.2 .. opus $28.2
+
+== requirements
+   s319 (20 stories, planned): 0.44 h gap-inclusive (gap 0.16 h), token-equivalent $14.1 (API $14.1), 26.3M tokens; lead active 0.28 h, lead $2.4 (API $2.4); subagent active 1.13 h, subagent $11.7 (API $11.7); lead-seat local 0 of 714 calls
+   s321 (25 stories, planned): 0.42 h gap-inclusive (gap 0.19 h), token-equivalent $12.1 (API $12.1), 21.6M tokens; lead active 0.23 h, lead $1.8 (API $1.8); subagent active 1.10 h, subagent $10.3 (API $10.3); lead-seat local 0 of 708 calls
+   s321 (24 stories, done): 0.44 h gap-inclusive (gap 0.19 h), token-equivalent $12.6 (API $12.6), 22.5M tokens; lead active 0.24 h, lead $1.8 (API $1.8); subagent active 1.15 h, subagent $10.7 (API $10.7); lead-seat local 0 of 708 calls
+   s322 (8 stories, planned): 0.48 h gap-inclusive (gap 0.16 h), token-equivalent $12.0 (API $9.1), 27.3M tokens; lead active 0.32 h, lead $2.9 (API $0.0); subagent active 0.88 h, subagent $9.1 (API $9.1); lead-seat local 586 of 588 calls; bracket sonnet $12.0 .. opus $13.0
+
+== architecture
+   s319 (20 stories, planned): 0.73 h gap-inclusive (gap 0.53 h), token-equivalent $11.0 (API $11.0), 20.1M tokens; lead active 0.20 h, lead $1.5 (API $1.5); subagent active 0.94 h, subagent $9.5 (API $9.5); lead-seat local 0 of 423 calls
+   s321 (25 stories, planned): 0.40 h gap-inclusive (gap 0.23 h), token-equivalent $11.9 (API $11.9), 21.4M tokens; lead active 0.17 h, lead $1.5 (API $1.5); subagent active 1.10 h, subagent $10.4 (API $10.4); lead-seat local 0 of 513 calls
+   s321 (24 stories, done): 0.42 h gap-inclusive (gap 0.24 h), token-equivalent $12.4 (API $12.4), 22.3M tokens; lead active 0.18 h, lead $1.6 (API $1.6); subagent active 1.14 h, subagent $10.8 (API $10.8); lead-seat local 0 of 513 calls
+   s322 (8 stories, planned): 0.58 h gap-inclusive (gap 0.32 h), token-equivalent $11.3 (API $8.7), 23.0M tokens; lead active 0.27 h, lead $2.6 (API $0.0); subagent active 0.99 h, subagent $8.7 (API $8.7); lead-seat local 482 of 482 calls; bracket sonnet $11.3 .. opus $12.1
+
+== stories-test-strategy
+   s319 (20 stories, planned): 0.78 h gap-inclusive (gap 0.44 h), token-equivalent $25.0 (API $25.0), 42.7M tokens; lead active 0.34 h, lead $2.9 (API $2.9); subagent active 1.90 h, subagent $22.1 (API $22.1); lead-seat local 0 of 762 calls
+   s321 (25 stories, planned): 0.79 h gap-inclusive (gap 0.42 h), token-equivalent $26.9 (API $26.1), 47.5M tokens; lead active 0.38 h, lead $3.3 (API $2.6); subagent active 2.43 h, subagent $23.6 (API $23.6); lead-seat local 389 of 1309 calls; bracket sonnet $26.9 .. opus $27.2
+   s321 (24 stories, done): 0.83 h gap-inclusive (gap 0.44 h), token-equivalent $28.0 (API $27.2), 49.5M tokens; lead active 0.39 h, lead $3.4 (API $2.7); subagent active 2.53 h, subagent $24.6 (API $24.6); lead-seat local 389 of 1309 calls; bracket sonnet $28.0 .. opus $28.3
+   s322 (8 stories, planned): 0.93 h gap-inclusive (gap 0.41 h), token-equivalent $26.4 (API $20.8), 58.9M tokens; lead active 0.52 h, lead $5.6 (API $0.0); subagent active 2.01 h, subagent $20.8 (API $20.8); lead-seat local 1176 of 1176 calls; bracket sonnet $26.4 .. opus $27.8
+
+== the four steps' gate rows, OUTSIDE the group (per planned story)
+   s319 gate[carry-over-evaluation]: 0.01 h gap-inclusive (gap 0.00 h), token-equivalent $0.2 (API $0.2), 0.5M tokens; lead active 0.01 h, lead $0.1 (API $0.1); subagent active 0.01 h, subagent $0.1 (API $0.1); lead-seat local 0 of 36 calls
+   s322 gate[carry-over-evaluation]: 0.92 h gap-inclusive (gap 0.54 h), token-equivalent $25.0 (API $21.8), 47.4M tokens; lead active 0.38 h, lead $3.2 (API $0.0); subagent active 2.16 h, subagent $21.8 (API $21.8); lead-seat local 664 of 664 calls; bracket sonnet $25.0 .. opus $25.8
+   s319 gate[requirements]: 0.01 h gap-inclusive (gap 0.00 h), token-equivalent $0.2 (API $0.2), 0.6M tokens; lead active 0.01 h, lead $0.1 (API $0.1); subagent active 0.01 h, subagent $0.1 (API $0.1); lead-seat local 0 of 30 calls
+   s321 gate[requirements]: 0.08 h gap-inclusive (gap 0.06 h), token-equivalent $0.5 (API $0.5), 1.5M tokens; lead active 0.03 h, lead $0.4 (API $0.4); subagent active 0.01 h, subagent $0.1 (API $0.1); lead-seat local 0 of 105 calls
+   s322 gate[requirements]: 0.08 h gap-inclusive (gap 0.02 h), token-equivalent $1.9 (API $1.2), 5.0M tokens; lead active 0.06 h, lead $0.7 (API $0.0); subagent active 0.08 h, subagent $1.2 (API $1.2); lead-seat local 149 of 149 calls; bracket sonnet $1.9 .. opus $2.1
+   s319 gate[architecture]: 0.02 h gap-inclusive (gap 0.00 h), token-equivalent $0.1 (API $0.1), 0.3M tokens; lead active 0.02 h, lead $0.1 (API $0.1); subagent active 0.01 h, subagent $0.0 (API $0.0); lead-seat local 0 of 23 calls
+   s321 gate[architecture]: 0.01 h gap-inclusive (gap 0.00 h), token-equivalent $0.3 (API $0.3), 0.8M tokens; lead active 0.01 h, lead $0.2 (API $0.2); subagent active 0.01 h, subagent $0.1 (API $0.1); lead-seat local 0 of 47 calls
+   s322 gate[architecture]: 0.17 h gap-inclusive (gap 0.04 h), token-equivalent $6.2 (API $5.0), 12.6M tokens; lead active 0.13 h, lead $1.2 (API $0.0); subagent active 0.45 h, subagent $5.0 (API $5.0); lead-seat local 209 of 209 calls; bracket sonnet $6.2 .. opus $6.6
+   s319 gate[stories-test-strategy]: 0.07 h gap-inclusive (gap 0.02 h), token-equivalent $4.3 (API $4.3), 7.0M tokens; lead active 0.05 h, lead $0.6 (API $0.6); subagent active 0.22 h, subagent $3.7 (API $3.7); lead-seat local 0 of 160 calls
+   s321 gate[stories-test-strategy]: 0.01 h gap-inclusive (gap 0.00 h), token-equivalent $0.2 (API $0.2), 0.7M tokens; lead active 0.01 h, lead $0.2 (API $0.2); subagent active 0.01 h, subagent $0.1 (API $0.1); lead-seat local 0 of 47 calls
+   s322 gate[stories-test-strategy]: 0.05 h gap-inclusive (gap 0.00 h), token-equivalent $1.2 (API $0.4), 3.8M tokens; lead active 0.05 h, lead $0.8 (API $0.0); subagent active 0.02 h, subagent $0.4 (API $0.4); lead-seat local 168 of 168 calls; bracket sonnet $1.2 .. opus $1.4
+
+s322 planning complete: last lead record of the four steps and their gates at 2026-11-10T18:47:12.258Z (stories-test-strategy, lead fdc4249a)
+   latest subagent record labelled with one of them: 2026-11-12T05:21:29.940Z (stories-test-strategy, agent-a416571127ebc75ea)
+
+rule s321 vs s319: token-equivalent below (50.9 vs 55.4), tokens below (90.5M vs 98.9M), subagent seat below ($44.3 vs $47.6)
+   bracket check s321: sonnet $50.9, opus $51.1, both below s319 $55.4
+rule s322 vs s319: token-equivalent NOT below (76.9 vs 55.4), tokens NOT below (165.3M vs 98.9M), subagent seat NOT below ($61.5 vs $47.6)
+   bracket check s322: sonnet $76.9, opus $81.0, both above s319 $55.4
+DECISION: four-step group DID NOT FALL
+BL-1003 split, s322 spawns labelled gate-validation[carry-over-evaluation]: all 81, $174.47, 283.8M tokens, 27.19 agent-h; gate (start before 14:00Z) 20, $7.06, 0.37 agent-h; requirements (from 14:00Z) 61, $167.41, 270.5M tokens, 26.82 agent-h
+   reconcile: the gate row in steps.csv is subagent $174.46 (spawns basis) + lead seat token-equivalent $25.36 (FALLBACK, API $0.00) = $199.82, 379.5M tokens (lead 95.7M, subagent 283.8M)
+   s322 four-step group with the 61 requirements spawns added back (spawns only; the gate row's lead seat is not split): token-equivalent $97.8 (API $82.5; bracket opus $102.0), 199.1M tokens, subagent $82.5
+   s322 three-step group, without carry-over-evaluation with the 61 requirements spawns added back (spawns only; the gate row's lead seat is not split): token-equivalent $70.6 (API $59.5; bracket opus $73.7), 143.0M tokens, subagent $59.5
+   s322 requirements with the 61 requirements spawns added back (spawns only; the gate row's lead seat is not split): token-equivalent $32.9 (API $30.0; bracket opus $33.9), 61.1M tokens, subagent $30.0
+declared member requirements s321 vs s319: token-equivalent $12.1 vs $14.1 (fell), tokens 21.6M vs 26.3M (fell), subagent $10.3 vs $11.7 (fell)
+declared member requirements s322 vs s319: token-equivalent $12.0 vs $14.1 (fell), tokens 27.3M vs 26.3M (rose), subagent $9.1 vs $11.7 (fell)
