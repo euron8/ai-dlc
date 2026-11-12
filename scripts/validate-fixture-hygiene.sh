@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # validate-fixture-hygiene.sh -- static hygiene of the fixture corpus: no false SKIP on a condition true in normal use,
-# no `sh` start the invocation counter cannot see, and a mutant battery declares its mutant x arm matrix.
+# no `sh` start the invocation counter cannot see, a mutant battery declares its mutant x arm matrix, and no bounded
+# real-time wait (H9, BL-868).
 #
 # usage:  validate-fixture-hygiene.sh            check the tree (exit 0 clean, 1 FAIL, 2 self-probe red or broken)
 #         validate-fixture-hygiene.sh --derive   print the derived H5 allowlist rows, `<fixture>\t<reason>`
@@ -155,9 +156,7 @@
 #     row). Two states have no base and SKIP with the reason printed: origin/main does not resolve, and origin/main
 #     carries no list (the release that first ships it).
 # E1  an INERT receipt: a tracked `core/fixtures/*/receipt*.sh` or `scripts/receipt*.sh` that nothing reads, so no gate
-#     ever runs it. THE PREDICATE is `inert()` between the `# INERT_BEGIN` / `# INERT_END` markers below, the ONE copy:
-#     core/fixtures/fixture-hygiene/receipt-bl868.sh extracts and sources it for its class W skip, in its `ledger`
-#     mode; E1 calls its `runners` mode. For E1 a READER is a RUNNER only: a non-comment line of a tracked
+#     ever runs it. THE PREDICATE is `inert()` below; E1 reports its set. A READER is a RUNNER only: a non-comment line of a tracked
 #     core/fixtures/*/{run,seed,lib}.sh or .githooks/* naming `<fixture>/<file>`, or the bare basename from a file in
 #     the receipt's own directory; for a scripts/ receipt, also any tracked scripts/*.sh other than itself. That is
 #     BL-915's rule: a receipt file no `run.sh` invokes fails the push.
@@ -170,8 +169,7 @@
 #     change: a receipt named only by its verify: line is inert from the day it lands. After the first release that
 #     ships scripts/inert-receipt-allowlist.txt, the down-only check refuses an added row, so a new receipt that only
 #     a verify: line names cannot ship until a runner invokes it; the one exception is the release that first ships
-#     the allowlist. receipt-bl868 keeps the ledger clause on purpose: a receipt reached through a
-#     live verify: line IS executed, by the backlog-receipts pre-push step, so its class W scan must still read it.
+#     the allowlist.
 #     KNOWN ACQUITTALS, asserted by the self-probe: a name inside a message string (zz9, `echo "receipt-x.sh …"`)
 #     counts as a reader, and so does a name in a TRAILING comment after code (zz13, `cmd # bash "$HERE/receipt-x.sh"`),
 #     because only lines whose first non-blank character is `#` are skipped. A line grammar cannot acquit
@@ -187,13 +185,14 @@
 #     THE ALLOWLIST scripts/inert-receipt-allowlist.txt, rows `<path>\t<reason>`, DOWN-ONLY by the shared m4 (arm
 #     E1-M4): an unlisted inert receipt FAILs; a row whose file is gone or is now read is STALE and FAILs; a duplicate
 #     row and a row with no reason FAIL; a row not on the list at origin/main FAILs.
-#     FP SET, how it reached its value. The predicate was lifted unchanged from receipt-bl868.sh, where it decided
-#     which receipts that receipt skips; on bb9284bcc its old and its lifted copy give byte-identical output over
-#     receipt-bl868's own list (86 inert, 367 reader files). Widening the population to scripts/receipt*.sh added
+#     FP SET, how it reached its value. The predicate was lifted unchanged from the BL-868 receipt (since deleted; its
+#     class W scan is H9), where it decided which receipts that receipt skips; on the BL-915 filing tree 0.1004.0 was
+#     built on, its old and its lifted copy give byte-identical output over that receipt's own list (86 inert, 367
+#     reader files). Widening the population to scripts/receipt*.sh added
 #     scripts/*.sh as readers for those receipts only, with self-reference excluded (a receipt naming itself, e.g. in a
 #     usage line, is not a reader). The corpus does not exercise that exclusion today (0 of the 4 names itself on a
 #     non-comment line; measured both ways, 4 inert either way); the self-probe's zz12 is its subject. On
-#     bb9284bcc E1 flags 90: the 72 the BL-915 census classed uninvoked (68 fixture receipts plus the 4 scripts/
+#     the BL-915 filing tree 0.1004.0 was built on, E1 flags 90: the 72 the BL-915 census classed uninvoked (68 fixture receipts plus the 4 scripts/
 #     receipts, every one flagged, none missed) and 18 more, each read by hand -- 6 non-BL receipt.sh / receipt-*.sh
 #     run by no gate (apply-restamp-worklist x2, check-24, layer-adjudication-tier, serial-remediation-worklist,
 #     wait-stale-deliverable; the seventh non-BL receipt, subject-partition's, is invoked and stays quiet), 3
@@ -360,6 +359,109 @@
 #     carry no loop of their own; judged by their IMPL they read SCRUBBED wherever the IMPL does. Measured false
 #     positives: 0. STATED LIMITS: a start spelled through a variable with no `.sh` (`"$SUBJECT"`), a script run
 #     by `exec`-less helper the line grammar cannot see, and a scrub reached only through a variable-named source.
+# H9  a BOUNDED real-time wait (BL-868: no fixture verdict or invocation count may depend on load): elapsed time or an
+#     iteration bound can decide a verdict. An UNBOUNDED condition wait (`until cond; do sleep 0.1; done`, `while ! [
+#     -e f ]; do sleep 0.05; done`) is allowed and reads 0. The scan is the BL-868 receipt's class W, carried over
+#     (H9_AWK) but for one subtraction and one widening named below (the inert skip, the loop stack); that receipt's H3 delegation is not carried (H3 is this file's), nor its `±` decl class
+#     (scripts/check-no-provisional-invocations.sh and J4 hold it).
+#     Corpus: run_all's list, every tracked core/fixtures/**/*.sh (core/fixtures/lib is in), receipts included; H9
+#     skips nothing (see THE POPULATION below).
+#     Each line is masked by H9_AWK's own masker, not by THE MASKER above: single- and double-quoted bytes become X,
+#     with the quote state carried across lines, and a comment is dropped. So sed mutant text, a JSON transcript seed
+#     and a message are data. Two kinds of string are EXECUTED and are scanned as code: the body of a `-c '...'` (bash
+#     -c, sh -c) and a printf string that writes a stub (`printf '#!...\n...'`, split on `\n`). A heredoc body is
+#     scanned as code, line by line with its own quote state, when the heredoc WRITES A FILE (`cat > f <<'EOF'`, `tee
+#     f`) or feeds a shell, because the fixtures write their executed stubs that way; a heredoc read into a variable
+#     (`read -r -d '' X <<'E'`) or fed to another program is data.
+#     The rows:
+#       W-SLEEP   `sleep N` (or /bin/sleep, /usr/bin/sleep; N a literal above zero or a `$` value) OUTSIDE every loop:
+#                 a fixed pause, a race delay or a hang target. `sleep "$@"` / `sleep "$*"` (a pass-through shim) is not.
+#       W-CLOCK   `$SECONDS`, `${SECONDS}` or `SECONDS` inside `(( ))` on a line that COMPARES (-lt -le -gt -ge, or
+#                 `<`/`>` in the arithmetic); or `date +%s` on a line that compares or opens a while/until loop. A start
+#                 record (`s=$SECONDS`), a bare `SECONDS|` in a variable-name list, and `$(( $(date +%s) - 30 ))`
+#                 assigned as a seeded timestamp compare nothing.
+#       W-BOUND   a while/until loop that both increments a counter (`v=$((v + 1))`, `((v++))`, `((v+=1))`, `let v++`)
+#                 and compares it (`$v -lt|-le|-gt|-ge|-eq`), in its header OR its body -- a header cap and an in-body
+#                 watchdog (`[ "$idle" -ge 50 ] && break`) alike -- when a sleep runs directly inside it; and a `for`
+#                 over a COUNTED list (`$(seq ...)`, `{1..N}`, literal numbers) with a sleep directly inside it. A `for`
+#                 over a data list (`for s in $SCEN`) is iteration, not a bound. One row, at the loop header.
+#       W-TIMEOUT `timeout N` (a literal or `$` value) in code, and `read -t` outside every loop, or inside one when its
+#                 status or variable can decide anything: conditioned (if/while/until/elif, `!`, && or ||, `$( )`),
+#                 its `$?` read on the next line, or its variable read anywhere in the file.
+#       W-ALLOW-STALE  a row of the allowlist whose `# bl868-allow: <id>` marker is on no line of its path, or on
+#                 several; and a `# bl868-allow: <id>` marker whose id no row names, or whose row names another file.
+#     A sleep INSIDE a loop is that loop's poll quantum and is judged only through the loop header (W-BOUND, W-CLOCK);
+#     so is an unchecked `read -t` whose variable nothing reads (a pause on a held fifo). A counter reset to an integer
+#     at the START of the loop body (`ul=0; ...`) is a per-pass count, never an iteration bound.
+#     THE ALLOWLIST scripts/bl868-wait-allowlist.txt, rows `<path>\t<id>\t<reason>`, one row per site, each keyed on a
+#     trailing `# bl868-allow: <id>` comment on the allowed line, read from the resolved root (absent: empty, so a
+#     probe root carries none of the tree's rows). A row suppresses the W rows of the ONE line carrying its id, never a
+#     second copy; a marker whose id has no row, or whose row names another file, suppresses nothing and is itself
+#     W-ALLOW-STALE, so stale fires in both directions (a row whose marker is gone, a marker whose row is gone or
+#     misplaced); a marked line the scan no longer flags is a NOTE on stderr.
+#     A malformed or duplicate row REFUSES (exit 2). WHY A FILE, NOT ROWS COMPILED IN: the receipt carried these rows
+#     inline, and inline every probe root the fixture-hygiene fixture builds (its dirty and clean worlds, and the worlds
+#     of receipt-bl921/929/930) read all 8 as W-ALLOW-STALE -- measured, 13 FAILs, `want exactly one FAIL section ...
+#     got 2: FAIL H7: FAIL H9:`. Read from the resolved root, a probe root carries none of the tree's rows. An ABSENT
+#     file allows nothing: every marked site then FIRES as its W row and its marker as W-ALLOW-STALE, never acquitted;
+#     the fixture's dirty world holds that (DW). The list has NO down-only M4 arm, as the receipt's inline list had
+#     none: an added row needs a marker on the one line it names, which the stale join already demands.
+#     STATED LIMITS: a sleep paced inside an unbounded while-loop body (`while read l; do x; sleep 1; done`) is not
+#     seen; nor a counter compared only through arithmetic (`(( n > 50 ))`, `"$((n % 10))" -eq 0`); nor a bound held
+#     in a helper function the loop calls; nor a stub written by a printf whose string does not start with `#!`, by
+#     `echo`, or assembled in a variable; nor a wait in a file outside core/fixtures; nor a timeout reached through a
+#     variable command name (`TO=timeout; $TO 30 cmd`), `gtimeout`, or an alarm in another language (`perl -e 'alarm
+#     5'`). A file that ends inside a string is scanned as it stands (H9_AWK reports no lost quote state; THE MASKER's
+#     BROKEN check covers the same corpus). A `sleep` whose argument is neither a literal nor a plain `$` reference
+#     (`sleep $((RANDOM % 3 + 1))`) is not read as a sleep at all, and a C-style `for ((i = 0; i < 5; i++))` is never a
+#     counted bound (W-BOUND reads `for v in <counted list>` and the counter forms above). ONE MARKER CLEARS ITS WHOLE
+#     LINE: every W row on the marked line is dropped, whatever wait the reason was written for; and a marked line
+#     that stops waiting only prints a NOTE, it never fails. A loop keyword or `done` that opens a LINE is always read
+#     as code, so prose in a code-scanned heredoc that starts a line with `for`/`while`/`until`/`done` still opens or
+#     closes a frame (a heredoc body keeps its own loop stack, so it never reaches a loop around the heredoc); a
+#     `done` after a `)` is read as code; a `time` flag is read only in the `-x` form (`time --format=...` is not);
+#     and a loop opened inside an executed `-c '...'` string lives on that string's own stack. `find -newer` and `-nt` are NOT rows: they compare mtimes and wait for
+#     nothing, and the elapsed wait that once ordered those mtimes is a sleep, which W-SLEEP sees.
+#     FP SET, how it reached its value. The receipt's narrowing, each step measured on its own tree and carried here
+#     unchanged: masking (jq/JSON transcript seeds in foreground-budget-deny and check-25, sed mutant text in
+#     readset-skip and advisor-gate-deny, the SECONDS variable-name lists in five shims: 0 rows); a sleep inside a loop
+#     counted only through its header (the poll quanta of unbounded condition waits: 0 rows); the heredoc start read
+#     off the masked line (a `<<` inside a quoted sed program had swallowed 2000 lines of gate-remediation-deny); a
+#     `for` counted only over a numeric list; the per-pass reset and the unchecked-`read -t` pause (consumer-suite-pool).
+#     ONE WIDENING, H9's own: the loop stack. As carried, a `done)` (`x="$(for a in b; do ...; done)"`) closed no
+#     frame, and an unquoted `for`/`while`/`until` in prose (`echo waiting for the server`) opened one; either left a
+#     frame open for the rest of the file, so every later top-level sleep and `read -t` read as a loop's poll and
+#     raised no row. Measured over the 457 files: 15 ended with a frame open (dispatch-model-guard run.sh from :3232,
+#     readset-skip from :7756, and 13 more). Now a `done` glued to `)`, `|`, `<`, `>` or `&` closes a frame (what
+#     follows `done` on a masked code line in the corpus: end of line 2797, a blank 344, `;` 228, `)` 22, and after the
+#     blank `<` 253, `|` 24, `>` 21; no glued `|<>&` today, admitted anyway), and a loop keyword opens one only in
+#     command position: line start, or after `;`, `&`, `&&`, `|`, `||`, `(`, `$(`, `{`, a case arm's `)`, `!`, `do`,
+#     `then`, `else` or `time`. After it: 0 files end with a frame open, and the rows are the same 8. ITS OWN FP SET:
+#     3497 frame opens before, 3392 after, 0 new; the 105 lines that no longer open a frame were read, and every one is
+#     prose in a code-scanned heredoc (seed ledgers, rule text), Python inside a `python3 -c '...'` body (a `for` in a
+#     comprehension), sed program text, or a `grep -c` pattern -- none is a shell loop. The self-probe seeds a bounded
+#     loop in every admitted opener position and behind every glued `done`, then a top-level sleep that fires only if
+#     every one of those frames closed. SECOND STEP, the same rule for `done`: a `done` in any position closed the
+#     innermost frame, so once a skipped opener left its `done` behind (a backtick loop, `time -p for`) or prose said
+#     `done` (`echo not done; true`, `echo $(echo done)`, `echo all done|cat`), the ENCLOSING bounded loop was popped
+#     early and lost its W-BOUND. Now `done` closes only at line start or after `;`, `&`, `&&`, `|`, `||`, `{`, `)`,
+#     `then` or `else`, a backtick glued to a loop keyword opens a frame, and `time` may carry `-x` flags. Measured
+#     against the previous step's awk over the same 457 files: frame opens 3414 and 3414, closes 3357 and 3357, the
+#     same 8 rows, 0 files ending open. Two closes MOVED, both correct: snapshot-update-stamps :710 and :750 read as
+#     `for st in "..." done; do`, whose list word `done` had closed the frame it just opened; they now close at the real
+#     `done` (:716, :755). A backtick admitted with blanks after it opened 3 prose lines of markdown in code-scanned
+#     heredocs ("`x` for"), so only a GLUED backtick opens. Six seeds hold the step: bounded loops whose body carries a
+#     backtick loop, a `time -p` loop, or a prose `done`, each of which must still raise W-BOUND.
+#     The receipt's own measurement: 53 raw rows, 6 allowlisted, the rest open sites since fixed; two rows added later
+#     (csp-barrier-cap, ppk-l1-control-child), 8 in all. THE POPULATION: the receipt skipped the receipts inert() read
+#     as inert. H9 skips nothing, because that skip has no subject on a green tree: E1 fails every inert receipt not on
+#     scripts/inert-receipt-allowlist.txt, and that list is header-only and down-only, so a passing tree holds no inert
+#     receipt to skip (fixed by subtraction). At ee9376900 the one inert file was the BL-868 receipt itself, and it
+#     carried 0 W rows when scanned (its 32 sleep lines are all data), so the skip never changed a row. Measured by
+#     H9 on that tree: 458 listed and opened, 8 raw rows, every one on one of the 8 marked lines, 0 NOTEs, 0 stale
+#     rows; the raw rows are byte-identical to the receipt's own. With the receipt deleted: 457 scanned, the same 8
+#     rows. FALSE POSITIVES: 0; the 8 allowlisted sites are enumerated in scripts/bl868-wait-allowlist.txt, each with
+#     its reason.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -368,8 +470,11 @@
 # COST: a constant number of forks -- one git ls-files, one resolver call, one awk scan (two passes over the corpus),
 # one judge awk, sorts -- the same again for the probe tree, and the M4 probe repos. E1 adds one probe repository
 # (index only, no commit), two e1_run passes (one over the probe, one over the tree), each a git ls-files, the inert() awk and
-# the judge awk, and one ledger-mode inert() over the probe: measured with PATH shims in clean worktrees inside the
-# repo, 213 execs on bb9284bcc and 322 with E1; with the archive clause removed, 306 against 325 on the same tree.
+# the judge awk: measured with PATH shims in clean worktrees inside the repo, 213 execs on the BL-915 filing tree 0.1004.0 was built on and 322 with E1;
+# with the archive clause removed, 306 against 325 on the same tree. H9 adds no repository: one H9_AWK pass over the
+# probe files and one over the corpus, its join awk and sorts each time, and reuses run_all's list.
+# Measured by scripts/fork-profile.sh --target on ee9376900's tree, in the worktree: 362 execs (bash 2, git 24)
+# before H9, 386 (bash 2, git 23) with H9 and without the ledger-mode inert() call that the E1 probe once made.
 # The M4 probe repos are `git init` plus one fast-import each (m4_probe_repo), and the probe runs the whole of m4 once
 # per origin/main state plus once for the hand-off, m4cmp alone for the rest: step argv
 # `bash scripts/validate-fixture-hygiene.sh`, same-tree swap at 3f3b99ae1 with GIT_DIR exported, two agreeing runs per
@@ -397,6 +502,7 @@ ALLOW_REL="scripts/fixture-matrix-allowlist.txt"
 E1_ALLOW_REL="scripts/inert-receipt-allowlist.txt"
 H7_ALLOW_REL="scripts/twin-built-allowlist.txt"
 H8_ALLOW_REL="scripts/env-scrub-allowlist.txt"
+H9_ALLOW_REL="scripts/bl868-wait-allowlist.txt"
 MKA_REL="scripts/mutant-kills-allowlist.txt"
 MVA_REL="scripts/mutant-verdicts-allowlist.txt"
 
@@ -1281,33 +1387,25 @@ m4_probe_repo() {
 }
 # M4_END
 
-# inert <root> <list> <out> <ledger|runners>: E1's predicate, THE ONE SHARED COPY. The INERT receipts, one
-# repo-relative path per line. core/fixtures/fixture-hygiene/receipt-bl868.sh extracts this function (awk, every line
-# strictly between the `# INERT_BEGIN` and `# INERT_END` marker lines, refusing with exit 9 unless exactly one
-# `inert() {` sits between them) and calls it in `ledger` mode; this file's E1 calls it in `runners` mode. Only a file
-# named `receipt*.sh` in <list> can be inert (a sourced helper never is). It is inert when nothing reads it: no
-# non-comment line of a tracked core/fixtures/*/run.sh, seed.sh, lib.sh or .githooks/* file names it -- nor, for a
-# scripts/ receipt, of a tracked scripts/*.sh other than itself -- and, in `ledger` mode only, no `verify:` line of
-# docs/backlog.md names it. The 4th argument is REQUIRED, and any other value returns 1. The two modes answer
-# different questions: E1 asks whether a RUNNER executes the receipt; receipt-bl868 asks whether ANY pre-push step
-# executes it, and the backlog-receipts step runs a live `verify:` line, so bl868 must still scan such a receipt.
+# inert <root> <list> <out>: E1's predicate. The INERT receipts, one repo-relative path per line; E1 reports them (no
+# gate runs one). Only a file named `receipt*.sh` in <list> can be inert (a sourced helper never
+# is). It is inert when nothing reads it: no non-comment line of a tracked core/fixtures/*/run.sh, seed.sh, lib.sh or
+# .githooks/* file names it -- nor, for a scripts/ receipt, of a tracked scripts/*.sh other than itself. A `verify:`
+# line is not a reader: E1 asks whether a RUNNER executes the receipt.
 # "Names it" is `<dir>/<basename>` anywhere on the line (`scripts/<basename>` for a scripts/ receipt), or the bare
 # basename from a file in the receipt's OWN directory (`bash "$HERE/receipt.sh"`), so one fixture's call never makes
 # another fixture's same-named receipt live. A scripts/*.sh reader is consulted only for scripts/ receipts, and is
 # listed only when <list> carries one, so a caller listing no scripts/ receipt reads exactly the files it always read.
-# Returns 1 when the ledger (ledger mode) or a referencing file cannot be read (awk reads an unopenable file as empty,
-# so reads are counted).
-# INERT_BEGIN
+# Returns 1 when a referencing file cannot be read (awk reads an unopenable file as empty, so reads are counted).
 inert() {
-  local r="$1" n v="${4:-}"
-  case "$v" in ledger) [ -f "$r/docs/backlog.md" ] || return 1 ;; runners) ;; *) return 1 ;; esac
+  local r="$1" n
   if grep -q '^scripts/receipt[^/]*\.sh$' "$2"; then
     git -C "$r" ls-files -- 'core/fixtures/*/run.sh' 'core/fixtures/*/seed.sh' 'core/fixtures/*/lib.sh' '.githooks/*' 'scripts/*.sh' > "$3.refs" 2>/dev/null || return 1
   else
     git -C "$r" ls-files -- 'core/fixtures/*/run.sh' 'core/fixtures/*/seed.sh' 'core/fixtures/*/lib.sh' '.githooks/*' > "$3.refs" 2>/dev/null || return 1
   fi
   n="$(awk 'END { print NR }' "$3.refs")"
-  awk -v R="$r" -v RL="$3.refs" -v NREF="$n" -v LEDGER="$v" '
+  awk -v R="$r" -v RL="$3.refs" -v NREF="$n" '
     function named(l, s,   i, t) {  # s in l, with no name character before it (so `dir/receipt.sh` is not `r/receipt.sh`)
       t = l
       while ((i = index(t, s)) > 0) { if (i == 1 || substr(t, i - 1, 1) !~ /[A-Za-z0-9_.-]/) return 1; t = substr(t, i + 1) }
@@ -1315,10 +1413,6 @@ inert() {
     { b = $0; sub(/^.*\//, "", b); if (b !~ /^receipt[^\/]*\.sh$/) next
       d = $0; sub(/\/[^\/]*$/, "", d); C[$0] = 1; BASE[$0] = b; DIR[$0] = d; t = d; sub(/^.*\//, "", t); SUF[$0] = t "/" b }
     END {
-      if (LEDGER == "ledger") {
-        if ((getline l < (R "/docs/backlog.md")) < 0) exit 3
-        do { if (l ~ /^verify:/) for (c in C) if (named(l, SUF[c])) LIVE[c] = 1 } while ((getline l < (R "/docs/backlog.md")) > 0)
-      }
       got = 0
       while ((getline f < RL) > 0) {
         fd = f; sub(/\/[^\/]*$/, "", fd); p = R "/" f
@@ -1336,7 +1430,6 @@ inert() {
     }' "$2" > "$3" || return 1
   return 0
 }
-# INERT_END
 
 # e1_run <repo> <out-prefix>: E1 over <repo>. Writes <out>.verdict (`INERT|STALE|DUP|NOREASON\t<path>`, sorted) and
 # <out>.e1list (the population, counted: zero is BROKEN); prints the BROKEN reason and returns 2 when it could not
@@ -1347,7 +1440,7 @@ e1_run() {
     git -C "$repo" ls-files -- 'core/fixtures/*/receipt*.sh' 'scripts/receipt*.sh' ) > "$o.e1list" 2>/dev/null \
     || { echo "BROKEN: git ls-files failed under $repo"; return 2; }
   [ -s "$o.e1list" ] || { echo "BROKEN: E1 listed 0 tracked receipt*.sh under $repo; an empty population has no inert receipt by construction"; return 2; }
-  inert "$repo" "$o.e1list" "$o.inert" runners || { echo "BROKEN: a reader file could not be read under $repo"; return 2; }
+  inert "$repo" "$o.e1list" "$o.inert" ||{ echo "BROKEN: a reader file could not be read under $repo"; return 2; }
   [ -f "$repo/$E1_ALLOW_REL" ] && cp "$repo/$E1_ALLOW_REL" "$o.allow" || : > "$o.allow"
   awk -F'\t' 'FILENAME == ARGV[1] { if ($0 != "") I[$0] = 1; next }
     /^[[:space:]]*(#|$)/ { next }
@@ -1355,6 +1448,245 @@ e1_run() {
       if (x in L) print "DUP\t" x; L[x] = 1; if (r == "") print "NOREASON\t" x }
     END { for (x in I) if (!(x in L)) print "INERT\t" x; for (x in L) if (!(x in I)) print "STALE\t" x }' "$o.inert" "$o.allow" \
     | LC_ALL=C sort -u > "$o.verdict" || { echo "BROKEN: the E1 judge awk failed"; return 2; }
+}
+
+# --- H9: a bounded real-time wait (BL-868 class W) ------------------------------------------------------------------
+# H9_AWK is the class W scan, lifted from the BL-868 receipt it replaces, unchanged but for its inert skip (removed) and
+# its loop stack (`done)` closes a frame; a loop keyword opens one only in command position). It carries its OWN masker, not
+# SCAN_AWK's: it scans a `-c '...'` body, a printf stub and a file-writing heredoc body as CODE, where SCAN_AWK reads
+# every string and heredoc as data. It prints `F\t<rel>` per file opened, `M\t<rel>\t<line>\t<id>` per allow marker,
+# and one `W-<class>\t<rel>:<line>\t<text>` row per site.
+read -r -d '' H9_AWK <<'AWK'
+BEGIN { SQ = sprintf("%c", 39) }
+function pop() { STK = substr(STK, 1, length(STK) - 1) }
+function mask(s,   out, i, n, c, top) {
+  # STK, carried across lines: c code, p a $( ) inside double quotes (code, with a paren depth DP), s single, a $'...',
+  # d double. Quoted bytes become X, except a parameter reference inside double quotes, which stays code so a quoted
+  # loop counter (`"$i" -lt 50`) is still read. A comment is dropped. Executed strings are recorded in EX[].
+  out = ""; n = length(s); i = 1
+  while (i <= n) {
+    c = substr(s, i, 1); top = substr(STK, length(STK), 1)
+    if (top == "s") { if (c == SQ) { pop(); out = out c; if (CAP) { EX[++NEX] = CBUF; CAP = 0 } } else { out = out "X"; if (CAP) CBUF = CBUF c } i++; continue }
+    if (top == "a") { if (c == "\\") { out = out "XX"; i += 2; continue } if (c == SQ) { pop(); out = out c } else out = out "X"; i++; continue }
+    if (top == "d") {
+      if (c == "\\") { out = out "XX"; i += 2; continue }
+      if (c == "\"") { pop(); out = out c; i++; continue }
+      if (c == "$" && substr(s, i + 1, 1) == "(") { STK = STK "p"; DP[length(STK)] = 0; out = out "$("; i += 2; continue }
+      if (c == "$" && match(substr(s, i), /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/)) { out = out substr(s, i, RLENGTH); i += RLENGTH; continue }
+      out = out "X"; i++; continue
+    }
+    # code: c or p
+    if (c == "\\") { out = out substr(s, i, 2); i += 2; continue }
+    if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:];&|(]/)) break
+    if (c == SQ) {
+      if (i > 1 && substr(s, i - 1, 1) == "$") { STK = STK "a"; out = out c; i++; continue }
+      STK = STK "s"; out = out c
+      # an executed string: the body of `-c '...'`, or a printf that writes a stub
+      if (out ~ /(^|[[:space:]])-c[[:space:]]+'$/ || (out ~ /printf[[:space:]]+'$/ && substr(s, i + 1, 2) == "#!")) { CAP = 1; CBUF = "" }
+      i++; continue
+    }
+    if (c == "\"") { STK = STK "d"; out = out c; i++; continue }
+    if (top == "p") {
+      if (c == "(") DP[length(STK)]++
+      else if (c == ")") { if (DP[length(STK)] == 0) { pop(); out = out c; i++; continue } DP[length(STK)]-- }
+    }
+    out = out c; i++
+  }
+  if (substr(STK, length(STK), 1) == "s" && CAP) CBUF = CBUF "\n"
+  return out
+}
+function incs(m,   r, o, a, b) {  # " v " for each `v=$((v + 1))` / `v=$(($v+1))` / `((v++))` / `((v+=1))`
+  o = " "; r = m
+  while (match(r, /[A-Za-z_][A-Za-z0-9_]*=\$\(\([[:space:]]*\$?[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\+[[:space:]]*1[[:space:]]*\)\)/)) {
+    a = substr(r, RSTART, RLENGTH); b = a; sub(/=.*$/, "", a); sub(/^[^(]*\(\([[:space:]]*\$?/, "", b); sub(/[^A-Za-z0-9_].*$/, "", b)
+    if (a == b) o = o a " "
+    r = substr(r, RSTART + RLENGTH)
+  }
+  r = m
+  while (match(r, /(\(\(|(^|[;&|[:space:]])let[[:space:]]+"?)[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*(\+\+|\+=[[:space:]]*1)/)) {
+    a = substr(r, RSTART, RLENGTH); sub(/^(\(\(|[;&|[:space:]]*let[[:space:]]+"?)[[:space:]]*/, "", a); sub(/[^A-Za-z0-9_].*$/, "", a); o = o a " "
+    r = substr(r, RSTART + RLENGTH)
+  }
+  return o
+}
+function cmps(m,   r, o, a) {  # " v " for each `$v -lt|-le|-gt|-ge|-eq X` (the counter on the left, quoted or not)
+  o = " "; r = m
+  while (match(r, /\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?[[:space:]]+-(lt|le|gt|ge|eq)[[:space:]]/)) {
+    a = substr(r, RSTART, RLENGTH); sub(/^\$\{?/, "", a); sub(/[^A-Za-z0-9_].*$/, "", a); o = o a " "
+    r = substr(r, RSTART + RLENGTH)
+  }
+  return o
+}
+function both(i, c, z,   n, a, k) { n = split(i, a, " "); for (k = 1; k <= n; k++) if (index(c, " " a[k] " ") && !index(z, " " a[k] " ")) return 1; return 0 }
+function resets(s,   o, a) {  # " v " for each `v=<integer>` LEADING the loop body: a per-pass count, not an iteration bound
+  o = " "
+  while (match(s, /^[[:space:];]*[A-Za-z_][A-Za-z0-9_]*=[0-9]+([[:space:]]*;|[[:space:]]+|$)/)) {
+    a = substr(s, RSTART, RLENGTH); sub(/^[[:space:];]*/, "", a); sub(/=.*$/, "", a); o = o a " "; s = substr(s, RSTART + RLENGTH)
+  }
+  return o
+}
+function used(m,   r, a) {  # record every `$v` / `${v` read on this masked line
+  r = m
+  while (match(r, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { a = substr(r, RSTART, RLENGTH); sub(/^\$\{?/, "", a); USED[a] = 1; r = substr(r, RSTART + RLENGTH) }
+}
+function flush(   k) {  # an unchecked `read -t` whose variable the file never reads is a pause; one it reads is a row
+  for (k = 1; k <= NPR; k++) if (PRV[k] in USED) print "W-TIMEOUT\t" PRF[k] ":" PRL[k] "\t" PRT[k]
+  NPR = 0; split("", USED)
+}
+function row(cls, ln, txt) { print cls "\t" REL ":" ln "\t" substr(txt, 1, 160) }
+function scan(m, ln, orig,   r, t, a, v, nm, k) {
+  # left-to-right over loop keywords, done, and sleep; plus the per-line clock/timeout rules
+  # an elapsed-time read is a row where it is COMPARED (`s=$SECONDS` alone only records a start)
+  if (m ~ /\$SECONDS|\$\{SECONDS|\(\([^)]*SECONDS/ && m ~ /(-lt|-le|-gt|-ge)[[:space:]]|\(\([^)]*SECONDS[^)]*[<>]/) row("W-CLOCK", ln, orig)
+  else if (m ~ /date[[:space:]]+(-u[[:space:]]+)?\+%s/ && m ~ /(-lt|-le|-gt|-ge)[[:space:]]|(^|[;&|[:space:]])(while|until)[[:space:]]/) row("W-CLOCK", ln, orig)
+  if (m ~ /(^|[;&|({!`[:space:]])timeout[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*"?(\$|[0-9])/) row("W-TIMEOUT", ln, orig)
+  used(m)
+  if (PQ) { if (m ~ /\$\?/) row("W-TIMEOUT", PQL, PQT); PQ = 0 }
+  if (SP > 0 && RSP[SP]) { Z[SP] = resets(m); RSP[SP] = 0 }
+  # the counters this line INCREMENTS and the names it COMPARES; a loop is bounded when one name is both, anywhere in
+  # its header or body (a header cap `[ "$n" -lt 300 ]`, or an in-body watchdog `[ "$idle" -ge 50 ] && break`)
+  linc = incs(m); lcmp = cmps(m)
+  for (k = 1; k <= SP; k++) { INC[k] = INC[k] linc; CMP[k] = CMP[k] lcmp }
+  r = m
+  while (match(r, /(^|[;&|({!`[:space:]])(while|until|for|done|read|(\/usr)?(\/bin\/)?sleep)([[:space:];)|<>&`]|$)/)) {
+    t = substr(r, RSTART, RLENGTH); gsub(/^[;&|({!`[:space:]]+|[[:space:];)|<>&`]+$/, "", t)
+    pre = substr(m, 1, length(m) - length(r) + RSTART); rest = substr(r, RSTART + RLENGTH)
+    # the keyword's own column, and the code before it. A `)`, `|`, `<`, `>`, `&` or backtick glued to the keyword
+    # closes only a `done` (`$(... done)`, `done|`, `done>f`, `done<f`, `done&`); after any other keyword it is skipped
+    tc = substr(r, RSTART + RLENGTH - 1, 1)
+    kc = length(m) - length(r) + RSTART + RLENGTH - length(t) - (tc ~ /[[:space:];)|<>&`]/ ? 1 : 0)
+    bk = substr(m, 1, kc - 1)
+    if (t != "done" && tc ~ /[)|<>&`]/) { r = rest; continue }
+    # a loop keyword opens a frame only in COMMAND position: line start after indentation, or after `;`, `&`, `&&`,
+    # `|`, `||`, `(`, `$(`, `{`, `)` (a case arm), `!`, `do`, `then`, `else` or `time` (with its flags, `time -p`), or
+    # glued to an opening backtick (`y=`for ...`) -- never a word of prose (`echo waiting for the server`, nor the
+    # markdown "`x` for" a code-scanned heredoc carries)
+    if ((t == "while" || t == "until" || t == "for") && bk !~ /((^|[;&|({)!]|(^|[;&|({)!`[:space:]])(do|then|else|time([[:space:]]+-[A-Za-z]+)*))[[:space:]]*|`)$/) { r = rest; continue }
+    # and `done` closes one only in the same kind of position: line start, or after `;`, `&`, `&&`, `|`, `||`, `{`,
+    # `)`, `then` or `else` -- so a prose `done` (`echo not done; true`, `echo $(echo done)`) never pops the loop
+    # around it, which would end a bounded loop early and lose its W-BOUND row
+    if (t == "done" && bk !~ /(^|[;&|{)]|(^|[;&|({)!`[:space:]])(then|else))[[:space:]]*$/) { r = rest; continue }
+    if (t == "read") {
+      # a `read -t` is a timeout row when its status or its variable can decide anything: it is conditioned (if,
+      # while, until, elif, `!`, && or ||, or inside `$( )`), its `$?` is read on the next line, or its variable is
+      # read anywhere in the file. Otherwise, INSIDE a loop, it is that loop's pause, judged like a sleep through the
+      # loop header (W-BOUND, W-CLOCK); outside every loop it stays a row.
+      if (rest ~ /^(-[a-zA-Z]+[[:space:]]+[0-9]*[[:space:]]*)*-[a-zA-Z]*t/) {
+        v = rest; sub(/[;&|)].*$/, "", v); gsub(/-[a-zA-Z]+[[:space:]]+[0-9$][^[:space:]]*|-[a-zA-Z]+|<[^[:space:]]*/, "", v)
+        n_ = split(v, vv, /[[:space:]]+/); rv = "REPLY"; for (k = n_; k >= 1; k--) if (vv[k] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) { rv = vv[k]; break }
+        if (SP == 0 || pre ~ /(^|[;&|({`[:space:]])(if|while|until|elif)[[:space:]]+$/ || pre ~ /(!|&&|\|\||\$\(|`)[[:space:]]*$/ || rest ~ /^[^;]*(&&|\|\|)/) row("W-TIMEOUT", ln, orig)
+        else { LS[SP] = 1; PQ = 1; PQL = ln; PQT = orig; NPR++; PRV[NPR] = rv; PRF[NPR] = REL; PRL[NPR] = ln; PRT[NPR] = substr(orig, 1, 160) }
+      }
+    } else if (t == "while" || t == "until" || t == "for") {
+      # a `for` is a bound only over a COUNTED list: `$(seq ...)`, `{1..N}`, or literal numbers
+      SP++; LH[SP] = ln; LT[SP] = orig; LS[SP] = 0; INC[SP] = linc; CMP[SP] = lcmp; Z[SP] = " "; RSP[SP] = 1
+      # the body's leading `v=<integer>` resets, read after `do` on this line or from the body's first line
+      if (match(rest, /(^|[;[:space:]])do([[:space:]]+|$)/)) { bd = substr(rest, RSTART + RLENGTH); if (bd ~ /[^[:space:]]/) { Z[SP] = resets(bd); RSP[SP] = 0 } }
+      LF[SP] = (t == "for" && rest ~ /^[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]+(\$\(seq[[:space:]]|\{[0-9]+\.\.|[0-9]+([[:space:]]+[0-9]+)*[[:space:]]*(;|$|[[:space:]]do))/)
+    } else if (t == "done") {
+      if (SP > 0) {
+        if (LS[SP] && (LF[SP] || both(INC[SP], CMP[SP], Z[SP]))) row("W-BOUND", LH[SP], LT[SP])
+        SP--
+      }
+    } else {
+      # a sleep: its argument
+      if (match(rest, /^[[:space:]]*"?(\$\{?[A-Za-z0-9_@*][A-Za-z0-9_:-]*\}?|[0-9]*\.?[0-9]+)/)) {
+        a = substr(rest, RSTART, RLENGTH); gsub(/[[:space:]"]/, "", a)
+        if (a ~ /^\$\{?[@*]/) { }
+        else if (a ~ /^[0-9.]+$/ && a + 0 == 0) { }
+        else if (SP > 0) LS[SP] = 1
+        else row("W-SLEEP", ln, orig)
+      }
+    }
+    r = rest
+  }
+}
+function code(s, ln, orig,   m, k, j, nl, L) {
+  NEX = 0; m = mask(s); LASTM = m; scan(m, ln, orig)
+  for (k = 1; k <= NEX; k++) {
+    # an executed string: scanned with its own quote state and loop stack
+    sQ = STK; sSP = SP; STK = "c"; SP = 0
+    gsub(/\\n/, "\n", EX[k]); nl = split(EX[k], L, "\n")
+    for (j = 1; j <= nl; j++) scan(mask(L[j]), ln, orig)
+    STK = sQ; SP = sSP
+  }
+}
+END { flush() }
+FNR == 1 {
+  flush(); PQ = 0
+  REL = substr(FILENAME, length(ROOTP) + 1); STK = "c"; split("", DP); SP = 0; HD = ""; CAP = 0
+  print "F\t" REL
+}
+# an allowlist anchor: a TRAILING comment `# bl868-allow: <id>` closing the line
+match($0, /#[[:space:]]*bl868-allow:[[:space:]]*[A-Za-z0-9_.-]+[[:space:]]*$/) {
+  mk = substr($0, RSTART); sub(/^#[[:space:]]*bl868-allow:[[:space:]]*/, "", mk); sub(/[[:space:]]+$/, "", mk)
+  print "M\t" REL "\t" FNR "\t" mk
+}
+HD != "" {
+  t = $0; if (HDT) sub(/^\t+/, "", t)
+  if (t == HD) { HD = ""; STK = OQ; SP = OSP; next }
+  if (HDX) code($0, FNR, $0)
+  next
+}
+{
+  code($0, FNR, $0)
+  # a heredoc opened in CODE (read off the masked line, so `<<` inside a string is data); its word from the raw line
+  if (match(LASTM, /<<-?[[:space:]]*['"]?[A-Za-z_\\][A-Za-z0-9_]*/) && substr(LASTM, RSTART, 3) != "<<<" && substr(LASTM, RSTART - 1, 1) != "<") {
+    h = substr($0, RSTART); match(h, /^<<-?[[:space:]]*['"]?\\?[A-Za-z_][A-Za-z0-9_]*['"]?/); h = substr(h, 1, RLENGTH); sub(/\\/, "", h); HDT = (h ~ /^<<-/); sub(/^<<-?[[:space:]]*['"]?/, "", h); sub(/['"]$/, "", h); HD = h
+    # the body has its own quote state and loop stack, stacked above the enclosing code's
+    OQ = STK; OSP = SP; STK = "c"; SP = 0
+    # the body is EXECUTED only when the heredoc writes a file (`cat > f`, `tee f`) or feeds a shell; a heredoc
+    # read into a variable (`read -r -d '' X <<'E'`) or fed to any other program is data
+    HDX = (LASTM ~ /(^|[;&|({[:space:]])(cat|tee)[[:space:]][^|]*>|(^|[;&|({[:space:]])tee[[:space:]]|(^|[;&|({[:space:]])(bash|sh)([[:space:]]+-s)?[[:space:]]*(<<|$)/)
+  }
+}
+AWK
+
+# h9_scan <root> <abs-list> <out>: H9's rows over every file of <abs-list> (absolute paths under <root>). Writes <out>.raw, <out>.rows (W rows, sorted) and <out>.marks; prints the BROKEN
+# reason and returns 2 when it could not measure (an empty list, an unreadable inert list, a file listed and not opened).
+h9_scan() {
+  local r="$1" o="$3" n s
+  n="$(awk 'END { print NR }' "$2")"
+  [ "$n" -gt 0 ] || { echo "BROKEN: H9 listed 0 files under $r"; return 2; }
+  set -f; IFS='
+'
+  # shellcheck disable=SC2046
+  set -- $(cat "$2"); unset IFS; set +f
+  awk -v ROOTP="$r/" "$H9_AWK" "$@" > "$o.raw" || { echo "BROKEN: the H9 wait scan failed"; return 2; }
+  s="$(grep -c '^F	' "$o.raw")" || s=0
+  [ "$s" -eq "$n" ] || { echo "BROKEN: H9 listed $n files, scanned $s"; return 2; }
+  grep '^W-' "$o.raw" | LC_ALL=C sort -u > "$o.rows" || :
+  grep '^M	' "$o.raw" > "$o.marks" || :
+  return 0
+}
+
+# h9_join <allow> <rows> <marks> <keep> <notes>: the W rows NOT suppressed go to <keep>; a W-ALLOW-STALE row per
+# allowlist row whose id is on no marked line or on more than one goes to stdout; a NOTE per marked line the scan
+# did not flag goes to <notes>. A row suppresses every W row on the ONE line carrying its id in its path, and
+# nothing when the id is on zero or several lines, so a copied marker never absorbs a second site. A marker whose
+# id has no row suppresses nothing and is itself a W-ALLOW-STALE row (stale in both directions). Returns 2 on a malformed or duplicate row (this file's own text is wrong).
+h9_join() {
+  awk -F'\t' -v KEEP="$4" -v NOTES="$5" '
+    FILENAME == ARGV[1] { if ($0 ~ /^#/ || $0 == "") next
+      if (NF != 3 || $1 == "" || $2 == "" || $3 == "" || $2 !~ /^[A-Za-z0-9_.-]+$/) { print "validate-fixture-hygiene: H9 malformed allowlist row: " $0 > "/dev/stderr"; bad = 1; next }
+      if ($2 in AP) { print "validate-fixture-hygiene: H9 duplicate allowlist id " $2 > "/dev/stderr"; bad = 1; next }
+      AP[$2] = $1; ids[++n] = $2; next }
+    FILENAME == ARGV[3] { if (!($4 in AP)) ORPH[++no] = $2 "\t" $4 "\t" $3 "\tno allowlist row names that id"
+      else if (AP[$4] == $2) { C[$4]++; L[$4] = $2 ":" $3 }
+      else ORPH[++no] = $2 "\t" $4 "\t" $3 "\tits allowlist row names " AP[$4] ", not this file"
+      next }
+    { R[++nr] = $0; p = $2; key[nr] = p }
+    END {
+      if (bad) exit 2
+      for (k = 1; k <= n; k++) { id = ids[k]
+        if (C[id] + 0 == 1) { SUP[L[id]] = id; continue }
+        print "W-ALLOW-STALE\t" AP[id] "\t" id "\t" (C[id] + 0 == 0 ? "no line carries # bl868-allow: " id : "the marker is on " C[id] " lines, want exactly 1") }
+      for (k = 1; k <= no; k++) { split(ORPH[k], o, "\t"); print "W-ALLOW-STALE\t" o[1] "\t" o[2] "\tline " o[3] " carries # bl868-allow: " o[2] " and " o[4] }
+      for (j = 1; j <= nr; j++) if (key[j] in SUP) HIT[key[j]] = 1; else print R[j] > KEEP
+      for (s in SUP) if (!(s in HIT)) print "validate-fixture-hygiene: H9 NOTE -- " s " carries # bl868-allow: " SUP[s] " and the scan flags nothing there (the wait was fixed; drop the row and the marker)" > NOTES
+      close(KEEP); close(NOTES) }' "$1" "$2" "$3" || return 2
+  [ -f "$4" ] || : > "$4"; [ -f "$5" ] || : > "$5"
+  return 0
 }
 
 # --- self-probe, before the corpus ---------------------------------------------------------------------------------
@@ -1900,9 +2232,7 @@ m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there i
 # `bash "$R"`), zz4 (called from another fixture's lib.sh), zz9 (inside an echo message) and zz13 (in a trailing
 # comment after code) -- THE TWO KNOWN ACQUITTALS, asserted -- and scripts/receipt-zz11 (called from
 # scripts/zz-other.sh). The allowlist: zz8 listed (quiet) and listed twice (DUP), zz2 listed while read and `gone`
-# listed while absent (STALE), zz12 listed with no reason (NOREASON). Then inert() runs once more in receipt-bl868's
-# `ledger` mode over the same list: its set must be E1's INERT set minus exactly zz5, so the verify:-only seed fires
-# in one mode and stays quiet in the other, and every other unread receipt still fires in both.
+# listed while absent (STALE), zz12 listed with no reason (NOREASON).
 E="$WORK/e1probe"; ef() { mkdir -p "$(dirname "$E/$1")" && cat > "$E/$1"; }
 mkdir -p "$E/scripts" "$E/docs" && : > "$E/VERSION"
 for x in za/receipt-zz1 za/receipt-zz2 za/receipt-zz3 za/receipt-zz13 zb/receipt-zz4 zb/receipt-zz5 \
@@ -1956,20 +2286,156 @@ printf '%s\n' 'DUP	core/fixtures/zb/receipt-zz8.sh' 'INERT	core/fixtures/za/rece
 e1ok=0
 eo="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; e1_run "$E" "$WORK/e1p")" || { sp_line E1 "FAIL -- $eo"; e1ok=1; }
 if [ "$e1ok" = 0 ] && ! cmp -s "$WORK/e1p.want" "$WORK/e1p.verdict"; then
-  e1ok=1; sp_line E1 "FAIL -- runners mode: verdict rows differ from the seeded set:"
+  e1ok=1; sp_line E1 "FAIL -- verdict rows differ from the seeded set:"
   diff "$WORK/e1p.want" "$WORK/e1p.verdict" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
 fi
-if [ "$e1ok" = 0 ]; then
-  grep -vxF 'core/fixtures/zb/receipt-zz5.sh' "$WORK/e1p.inert" | LC_ALL=C sort > "$WORK/e1p-ledger.want"
-  if ! ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; inert "$E" "$WORK/e1p.e1list" "$WORK/e1p-ledger" ledger ); then
-    e1ok=1; sp_line E1 "FAIL -- ledger mode: inert() returned non-zero over the probe"
-  elif LC_ALL=C sort "$WORK/e1p-ledger" | cmp -s "$WORK/e1p-ledger.want" - && [ -s "$WORK/e1p-ledger.want" ] \
-    && grep -qxF 'core/fixtures/zb/receipt-zz5.sh' "$WORK/e1p.inert"; then :
-  else
-    e1ok=1; sp_line E1 "FAIL -- ledger mode: inert() is not E1's INERT set minus exactly the verify:-only receipt zz5"
+if [ "$e1ok" = 0 ]; then sp_line E1 "ok (6 unread receipts fire, among them a verify:-only one, a comment-only one, another fixture's same-named one and a self-named scripts/ one; invocation by path, by variable, from a lib.sh, from scripts/, a message string and a trailing comment after code stay quiet; DUP, NOREASON and both STALE shapes fire)"
+else SP_RED=1; fi
+
+# H9's probe, no repository (H9 reads the file list it is handed): p/run.sh carries one
+# offender per W row beside the unbounded near-misses (until/while condition waits, `sleep "$@"`, a seeded timestamp,
+# a SECONDS name list, sed mutant text, a JSON seed, a comment, a heredoc read into a variable, a `for` over a data
+# list, the per-pass reset, the unchecked `read -t` pause), and the two frame-blindness shapes: a top-level sleep
+# after a `$(for ...; done)` line (:55) and after an `echo ... for ...` prose line (:57) must fire, while a poll
+# inside a `$(until ...; done)` and a real while-loop poll after them stay quiet. :60-:73 put a bounded loop in every
+# admitted opener position (`;`, `&`, `&&`, `||`, `|`, `(`, `$(`, `{`, `do`, `then`, `else`, `!`, `time`, a case
+# arm), :74-:77 close one by a glued `done|`, `done>`, `done<` and `done&`, and the sleep at :78 fires only if every
+# frame closed. :79-:108 are six bounded loops whose body holds a backtick loop, a `time -p` loop, or a prose `done`
+# (`echo $(echo done)`, `echo all done|cat`, `echo not done; true`, `echo all done | cat`): none may close the
+# bounded loop early, so each must still raise its W-BOUND. q/receipt-h9a.sh, a receipt, is scanned like any fixture file and REPORTED. m/run.sh drives the allowlist join: m:2
+# marked and suppressed (the live row); m:3 the identical line UNmarked, still a row; m:4 a marker with no allowlist
+# row, still a row AND a W-ALLOW-STALE row (the marker side of stale); m:5 a marked line the scan does not flag (a NOTE); m:6 and m:7 one id on two
+# lines (W-ALLOW-STALE, neither suppressed); m:8 marked with an id whose row names ANOTHER path (two W-ALLOW-STALE
+# rows, the row's and the marker's, and not suppressed); pm-gone is on no line. The rows the scan returns must equal the seeded set exactly.
+H9P="$WORK/h9probe"; mkdir -p "$H9P/core/fixtures/p" "$H9P/core/fixtures/q" "$H9P/core/fixtures/m" || exit 2
+printf '%s\n' '#!/usr/bin/env bash' \
+  '( sleep 2; act ) &' \
+  'while [ ! -e "$f" ] && [ $((SECONDS - s)) -lt 60 ]; do sleep 0.1; done' \
+  'i=0; while [ "$i" -lt 50 ]; do probe && break; sleep 0.2; i=$((i + 1)); done' \
+  'for k in 1 2 3; do' '  probe && break' '  /bin/sleep 1' 'done' \
+  'timeout 30 cmd' \
+  'read -r -t 5 l < "$fifo"' \
+  'until [ -e "$f" ]; do sleep 0.1; done' \
+  'while ! [ -e "$f" ]; do sleep 0.05; done' \
+  'n=0; while [ "$(grep -c . "$p")" -lt 3 ]; do sleep 0.01; n=$((n + 1)); done' \
+  'exec /bin/sleep "$@"' \
+  'since=$(( $(date +%s) - 30 ))' \
+  'case "$v" in IFS|SECONDS|RANDOM) continue ;; esac' \
+  "sed 's/^      sleep 0\\.2\$/      sleep 600/' a > b" \
+  "printf '{\"command\":\"until x; do sleep 15; done\"}' > t.jsonl" \
+  '# sleep 30 is a comment' \
+  'sleep 0' \
+  "bash -c 'sleep 300 & wait'" \
+  "printf '#!/bin/bash\\nexec sleep 600\\n' > \"\$w/stub\"" \
+  'cat > "$w/stub2" <<'"'"'EOF'"'" \
+  'sleep 5' \
+  'EOF' \
+  'sleep 0.3' \
+  's=$SECONDS' \
+  'for s in $SCEN; do run "$s"; sleep 0.1; done' \
+  'read -r -d '"''"' DATA <<'"'"'EOD'"'" \
+  'sleep 4' \
+  'EOD' \
+  'cat > "$w/fx/run.sh" <<FX' \
+  'sleep $3' \
+  'FX' \
+  'idle=0; while [ ! -e "$s" ]; do sleep 0.1; idle=$((idle + 1)); [ "$idle" -ge 50 ] && break; done' \
+  'n=0; while [ ! -e "$s" ]; do sleep 0.1; n=$((n + 1)); [ "$((n % 10))" -eq 0 ] || continue; done' \
+  'while :; do' '  ul=0; set_=1' '  while read -r p; do ul=$((ul + 1)); done < "$f"' '  [ "$ul" -eq 0 ] && break' '  sleep 0.1' 'done' \
+  'n=0; while :; do n=$((n + 1)); [ "$n" -lt 30 ] || break; sleep 0.1; done' \
+  'while :; do' '  [ -e "$f" ] && break' '  read -t 1 -u 8 _px' 'done' \
+  'while :; do if read -t 5 l1 < "$q"; then break; fi; done' \
+  'while :; do read -t 5 l2 < "$q" || bad x; sleep 0.1; [ -e "$f" ] && break; done' \
+  'while :; do read -t 2 l3 < "$q"; [ "$l3" = go ] && break; done' \
+  'while :; do read -t 3 l4 < "$q"' '  [ $? -eq 0 ] && break; done' \
+  'k=0; until [ "$k" -ge 40 ]; do sleep 0.1; let k++; done' \
+  'x="$(for a in b c; do echo "$a"; done)"' 'sleep 5' \
+  'echo waiting for the server' 'sleep 6' \
+  'y="$(until [ -e "$f" ]; do sleep 0.1; done)"' 'while ! [ -e "$f" ]; do sleep 0.1; done' \
+  'true; while [ "$a1" -lt 5 ]; do sleep 0.1; a1=$((a1 + 1)); done' \
+  'true & while [ "$a2" -lt 5 ]; do sleep 0.1; a2=$((a2 + 1)); done' \
+  'true && while [ "$a3" -lt 5 ]; do sleep 0.1; a3=$((a3 + 1)); done' \
+  'false || while [ "$a4" -lt 5 ]; do sleep 0.1; a4=$((a4 + 1)); done' \
+  'printf x | while [ "$a5" -lt 5 ]; do sleep 0.1; a5=$((a5 + 1)); done' \
+  '( while [ "$a6" -lt 5 ]; do sleep 0.1; a6=$((a6 + 1)); done )' \
+  'z="$(while [ "$a7" -lt 5 ]; do sleep 0.1; a7=$((a7 + 1)); done)"' \
+  '{ while [ "$a8" -lt 5 ]; do sleep 0.1; a8=$((a8 + 1)); done; }' \
+  'for q in a; do while [ "$a9" -lt 5 ]; do sleep 0.1; a9=$((a9 + 1)); done; done' \
+  'if true; then while [ "$b1" -lt 5 ]; do sleep 0.1; b1=$((b1 + 1)); done; fi' \
+  'if false; then :; else while [ "$b2" -lt 5 ]; do sleep 0.1; b2=$((b2 + 1)); done; fi' \
+  '! while [ "$b3" -lt 5 ]; do sleep 0.1; b3=$((b3 + 1)); done' \
+  'time for k in 1 2 3; do sleep 0.1; done' \
+  'case x in x) while [ "$b4" -lt 5 ]; do sleep 0.1; b4=$((b4 + 1)); done ;; esac' \
+  'for k in 1 2; do sleep 0.1; done|cat' 'for k in 1 2; do sleep 0.1; done>/dev/null' \
+  'for k in 1 2; do sleep 0.1; done<"$f"' 'for k in 1 2; do sleep 0.1; done&' \
+  'sleep 7' \
+  'n1=0; while [ "$n1" -lt 50 ]; do' '  sleep 0.1' '  y=`for k in a; do :; done;`' '  n1=$((n1 + 1))' 'done' \
+  'n2=0; while [ "$n2" -lt 50 ]; do' '  sleep 0.1' '  time -p for k in 1; do :; done' '  n2=$((n2 + 1))' 'done' \
+  'n3=0; while [ "$n3" -lt 50 ]; do' '  sleep 0.1' '  echo $(echo done)' '  n3=$((n3 + 1))' 'done' \
+  'n4=0; while [ "$n4" -lt 50 ]; do' '  sleep 0.1' '  echo all done|cat' '  n4=$((n4 + 1))' 'done' \
+  'n5=0; while [ "$n5" -lt 50 ]; do' '  sleep 0.1' '  echo not done; true' '  n5=$((n5 + 1))' 'done' \
+  'n6=0; while [ "$n6" -lt 50 ]; do' '  sleep 0.1' '  echo all done | cat' '  n6=$((n6 + 1))' 'done' > "$H9P/core/fixtures/p/run.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'sleep 7' > "$H9P/core/fixtures/q/receipt-h9a.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'sleep 3  # bl868-allow: pm-one' 'sleep 3' 'sleep 4 # bl868-allow: pm-norow' \
+  'true # bl868-allow: pm-fixed' 'sleep 5 # bl868-allow: pm-two' 'sleep 5 # bl868-allow: pm-two' \
+  'sleep 6 # bl868-allow: pm-elsewhere' > "$H9P/core/fixtures/m/run.sh"
+printf '%s\n' 'core/fixtures/m/run.sh	pm-one	probe' 'core/fixtures/m/run.sh	pm-fixed	probe' \
+  'core/fixtures/m/run.sh	pm-two	probe' 'core/fixtures/m/run.sh	pm-gone	probe' 'core/fixtures/p/run.sh	pm-elsewhere	probe' > "$WORK/h9p.allow"
+printf "$H9P/core/fixtures/%s\n" p/run.sh q/receipt-h9a.sh m/run.sh > "$WORK/h9p.abs"
+printf '%s\n' 'W-SLEEP	core/fixtures/p/run.sh:2' 'W-CLOCK	core/fixtures/p/run.sh:3' 'W-BOUND	core/fixtures/p/run.sh:4' \
+  'W-BOUND	core/fixtures/p/run.sh:5' 'W-TIMEOUT	core/fixtures/p/run.sh:9' 'W-TIMEOUT	core/fixtures/p/run.sh:10' \
+  'W-SLEEP	core/fixtures/p/run.sh:21' 'W-SLEEP	core/fixtures/p/run.sh:22' 'W-SLEEP	core/fixtures/p/run.sh:24' \
+  'W-SLEEP	core/fixtures/p/run.sh:26' 'W-SLEEP	core/fixtures/p/run.sh:33' 'W-BOUND	core/fixtures/p/run.sh:35' \
+  'W-BOUND	core/fixtures/p/run.sh:43' 'W-TIMEOUT	core/fixtures/p/run.sh:48' 'W-TIMEOUT	core/fixtures/p/run.sh:49' \
+  'W-TIMEOUT	core/fixtures/p/run.sh:50' 'W-TIMEOUT	core/fixtures/p/run.sh:51' 'W-BOUND	core/fixtures/p/run.sh:53' \
+  'W-SLEEP	core/fixtures/p/run.sh:55' 'W-SLEEP	core/fixtures/p/run.sh:57' \
+  'W-BOUND	core/fixtures/p/run.sh:60' 'W-BOUND	core/fixtures/p/run.sh:61' 'W-BOUND	core/fixtures/p/run.sh:62' \
+  'W-BOUND	core/fixtures/p/run.sh:63' 'W-BOUND	core/fixtures/p/run.sh:64' 'W-BOUND	core/fixtures/p/run.sh:65' \
+  'W-BOUND	core/fixtures/p/run.sh:66' 'W-BOUND	core/fixtures/p/run.sh:67' 'W-BOUND	core/fixtures/p/run.sh:68' \
+  'W-BOUND	core/fixtures/p/run.sh:69' 'W-BOUND	core/fixtures/p/run.sh:70' 'W-BOUND	core/fixtures/p/run.sh:71' \
+  'W-BOUND	core/fixtures/p/run.sh:72' 'W-BOUND	core/fixtures/p/run.sh:73' 'W-BOUND	core/fixtures/p/run.sh:74' \
+  'W-BOUND	core/fixtures/p/run.sh:75' 'W-BOUND	core/fixtures/p/run.sh:76' 'W-BOUND	core/fixtures/p/run.sh:77' \
+  'W-SLEEP	core/fixtures/p/run.sh:78' \
+  'W-BOUND	core/fixtures/p/run.sh:79' 'W-BOUND	core/fixtures/p/run.sh:84' 'W-BOUND	core/fixtures/p/run.sh:89' \
+  'W-BOUND	core/fixtures/p/run.sh:94' 'W-BOUND	core/fixtures/p/run.sh:99' 'W-BOUND	core/fixtures/p/run.sh:104' \
+  'W-SLEEP	core/fixtures/q/receipt-h9a.sh:2' \
+  'W-SLEEP	core/fixtures/m/run.sh:2' 'W-SLEEP	core/fixtures/m/run.sh:3' 'W-SLEEP	core/fixtures/m/run.sh:4' \
+  'W-SLEEP	core/fixtures/m/run.sh:6' 'W-SLEEP	core/fixtures/m/run.sh:7' 'W-SLEEP	core/fixtures/m/run.sh:8' \
+  | LC_ALL=C sort > "$WORK/h9p.want"
+h9ok=0
+ho="$(h9_scan "$H9P" "$WORK/h9p.abs" "$WORK/h9p")" || { sp_line H9 "FAIL -- $ho"; h9ok=1; }
+if [ "$h9ok" = 0 ]; then
+  cut -f1,2 "$WORK/h9p.rows" | LC_ALL=C sort > "$WORK/h9p.got"
+  if ! cmp -s "$WORK/h9p.got" "$WORK/h9p.want"; then
+    h9ok=1; sp_line H9 "FAIL -- the scan's rows differ from the seeded set:"
+    diff "$WORK/h9p.want" "$WORK/h9p.got" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
   fi
 fi
-if [ "$e1ok" = 0 ]; then sp_line E1 "ok (6 unread receipts fire, among them a verify:-only one, a comment-only one, another fixture's same-named one and a self-named scripts/ one; invocation by path, by variable, from a lib.sh, from scripts/, a message string and a trailing comment after code stay quiet; DUP, NOREASON and both STALE shapes fire; receipt-bl868's ledger mode reads the verify:-only one as read and every other unread one as inert)"
+# the allowlist join over the same probe: the marker, not the line text, suppresses; every stale shape is a row
+if [ "$h9ok" = 0 ]; then
+  if ! h9_join "$WORK/h9p.allow" "$WORK/h9p.rows" "$WORK/h9p.marks" "$WORK/h9p.keep" "$WORK/h9p.notes" > "$WORK/h9p.stale"; then
+    h9ok=1; sp_line H9 "FAIL -- the allowlist join failed over the probe"
+  else
+    grep -v '	core/fixtures/m/run.sh:2$' "$WORK/h9p.want" > "$WORK/h9p.kwant"
+    cut -f1,2 "$WORK/h9p.keep" | LC_ALL=C sort > "$WORK/h9p.kgot"
+    sa="$(cut -f1,3 "$WORK/h9p.stale" | LC_ALL=C sort | tr '\t\n' ' |')"
+    sw='W-ALLOW-STALE pm-elsewhere|W-ALLOW-STALE pm-elsewhere|W-ALLOW-STALE pm-gone|W-ALLOW-STALE pm-norow|W-ALLOW-STALE pm-two|'
+    nn="$(grep -c 'core/fixtures/m/run.sh:5 carries # bl868-allow: pm-fixed' "$WORK/h9p.notes")" || nn=0
+    na="$(awk 'END { print NR }' "$WORK/h9p.notes")"
+    if ! cmp -s "$WORK/h9p.kgot" "$WORK/h9p.kwant" || [ "$sa" != "$sw" ] || [ "$nn" != 1 ] || [ "$na" != 1 ]; then
+      h9ok=1; sp_line H9 "FAIL -- the allowlist join is wrong: stale [$sa] want [$sw], notes $na (pm-fixed $nn) want 1 (1):"
+      diff "$WORK/h9p.kwant" "$WORK/h9p.kgot" | sed -n 's/^</    want-only/p; s/^>/    got-only /p' >&2
+    fi
+  fi
+fi
+# a malformed or duplicate row is this file's own text gone wrong: a refusal, never a finding
+if [ "$h9ok" = 0 ]; then
+  printf '%s\n' 'core/fixtures/m/run.sh	pm-one	a' 'core/fixtures/m/run.sh	pm-one	b' > "$WORK/h9p.dup"
+  if h9_join "$WORK/h9p.dup" "$WORK/h9p.rows" "$WORK/h9p.marks" "$WORK/h9p.k2" "$WORK/h9p.n2" > /dev/null 2>&1; then
+    h9ok=1; sp_line H9 "FAIL -- a duplicate allowlist id was accepted"
+  fi
+fi
+if [ "$h9ok" = 0 ]; then sp_line H9 "ok ($(awk 'END { print NR }' "$WORK/h9p.want") seeded offender row(s) exact; the unbounded waits, the pauses, the per-pass counts, and the data stayed quiet, a receipt was scanned; the allowlist suppressed only its marked line, 5 stale rows (both directions, and a marker whose row names another file) and 1 NOTE printed, a duplicate id refused)"
 else SP_RED=1; fi
 
 # --- the corpus ----------------------------------------------------------------------------------------------------
@@ -2061,12 +2527,30 @@ fi
 e1m4_out="$(m4 "$ROOT" "$ROOT/$E1_ALLOW_REL" "$WORK/e1m4-root-base.txt" "$E1_ALLOW_REL" E1-M4 \
   "do not list the receipt; wire it into its fixture's run.sh, or delete it, and drop the row.")" || rc=1
 echo "$e1m4_out"
+# H9 over the tree: every file of the run_all corpus
+h9_out="$(h9_scan "$ROOT" "$WORK/c.abs" "$WORK/h9c")"; h9rc=$?
+if [ "$h9rc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- H9: $h9_out" >&2; exit 2; fi
+h9a="$ROOT/$H9_ALLOW_REL"; [ -f "$h9a" ] || { h9a="$WORK/h9c.allow"; : > "$h9a"; }
+h9_join "$h9a" "$WORK/h9c.rows" "$WORK/h9c.marks" "$WORK/h9c.keep" "$WORK/h9c.notes" > "$WORK/h9c.stale" \
+  || { echo "validate-fixture-hygiene: REFUSED -- H9's allowlist join failed (a malformed or duplicate row of $H9_ALLOW_REL)" >&2; exit 2; }
+cat "$WORK/h9c.notes" >&2
+# the three counts in one read: every W row, the rows the allowlist kept, the stale allowlist rows
+h9n="$(awk -v A="$WORK/h9c.rows" -v B="$WORK/h9c.keep" '{ n[FILENAME == A ? 1 : FILENAME == B ? 2 : 3]++ }
+  END { print (n[1] + 0) " " (n[2] + 0) " " (n[3] + 0) }' "$WORK/h9c.rows" "$WORK/h9c.keep" "$WORK/h9c.stale")"
+nh9r="${h9n%% *}"; nh9s="${h9n##* }"; nh9k="${h9n#* }"; nh9k="${nh9k%% *}"
+echo "validate-fixture-hygiene: H9 $nh9r bounded-wait row(s), $((nh9r - nh9k)) on an allowlisted bl868-allow line"
+if [ "$nh9k" -gt 0 ] || [ "$nh9s" -gt 0 ]; then
+  rc=1; echo "FAIL H9:"
+  awk -F'\t' '{ print "    " $1 " " $2 ": " substr($3, 1, 160) }' "$WORK/h9c.keep"
+  awk -F'\t' '{ print "    " $1 " " $2 " " $3 ": " $4 }' "$WORK/h9c.stale"
+  echo "  H9 (BL-868): a fixture verdict that elapsed time or an iteration bound can decide moves with load. Wait on the CONDITION, unbounded (\`until [ -e \"\$f\" ]; do sleep 0.1; done\`), or on a pid; never a fixed sleep, a SECONDS/date deadline, a counted poll or a timeout. A site where no elapsed time can decide a verdict ends in \`# bl868-allow: <id>\` and gets a row of $H9_ALLOW_REL with its reason. W-ALLOW-STALE: fix that row or its marker."
+fi
 if [ "$SP_RED" != 0 ]; then
   echo "validate-fixture-hygiene: REFUSED -- the self-probe is red (above), so the verdict over the tree is unattributable." >&2
   exit 2
 fi
 nlist="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ "$rc" = 0 ]; then
-  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row; H7 ${n7:-0} twin(s), $r7 emitted, $b7 listed built; E1 $ne1 receipt(s), $ni1 inert and allowlisted."
+  echo "OK: validate-fixture-hygiene -- self-probe fired both ways; $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H5 $nblk block(s), $nmem allowlisted member(s), no stale or added row; H7 ${n7:-0} twin(s), $r7 emitted, $b7 listed built; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted."
 fi
 exit "$rc"
