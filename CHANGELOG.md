@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1068.0] - 2026-11-11
+
+### BL-974 partial: a seat added by the install commit counts as legacy, and `--check-part` runs the seat checks in WARN form
+
+`seat_row_check` in `core/scripts/join-remediator-shards.sh` judged a seat added in the same commit that installed `SEAT_ROW_TOKEN` as post-install and refused it as "no role-bound row". Graph's sprint squash fb6f198e7 did both, adding 160 s321 seats, so the join and `--sources` refused them. A seat added by the install commit itself now counts as legacy, compared by full sha. The rulebook had entered the sprint branch earlier, at 3a8895c, and not on main, so the false positive is reachable on main-line history only; such a round is never re-judged there.
+
+`join-remediator-shards.sh --check-part` now runs the seat checks on a party part, so the writer sees a seat defect at `--mark`. It is WARN form and not a refusal on purpose. The seat judgement covers whole rounds and other agents' seat files, and the only edit that clears a seal-time refusal is deleting the part's `source:` citation, which also silences the join, because `cited` is built from `source:` lines only. The join and `--sources` still refuse. With `jq` absent the check SKIPs, and `--sources` on a host with no `jq` prints `SEAT-ROWS: SKIP jq-absent` and passes where it used to refuse every seat with a false "no role-bound row". Fixture arms CPS4 (`--check-part` on a token-carrying world WARNs a row-less seat) and SR19 (a seat added in the install commit, deleted and re-added later, is judged) are the fixture coverage.
+
+Measured on a `file://` clone of graph at da6cadadd over 272 party parts, s317-s322, with `AI_DLC_PROJECT_ROOT` set to the clone: the base and fixed `--check-part` give identical per-sprint rc tables (s321 53 rc 0 and 15 rc 2), 0 new REFUSED lines and 0 "no role-bound row" lines on any part; an item-2-only engine refused s321 68 of 68, naming 160 seats. `--sources` over 33 records changes only `s321/architecture-party-repair-p1.md`, from 28 "no role-bound row" refusals to 0, and the other 32 are byte-identical. Controls: a part citing a sprint-review seat added after the install WARNs 130 seats at `--check-part` and `--sources` refuses them; a seat with `seat-complete:` stripped WARNs at `--check-part` and refuses at `--sources`. Consumer cost, not measured: `--mark` on a party part runs one `jq` pass over the spawn ledger plus the seat-row git calls. The script ships. BL-974 stays PARTIAL; the `Outcome measured:` line is owed.
+
 ## [0.1067.0] - 2026-11-11
 
 ### BL-960 CLOSED: Check 2a verifies a SUPPRESSED citation for every entry in scope, current-sprint by header or held in force by the lifetime script, and a trailing value-flag no longer hangs the validator
@@ -90,7 +100,6 @@ Measured at aa4aea836: 448 K lines in 114 fixtures before that rewording, 447 in
 The entry stays PARTIAL, `verify: manual`, no LANDED line. Owed: routing the listed true kills through `mutant_killed` (69 rows, 346 lines), the residual emitter classes (`live` 15, `vr_score` 7, `check` 7, `rp_score` 4, `eq` 3, `ok_` 3, `yes` 1, a mutant word only in a second `ok` argument 6), mutant-id-only messages, and kills emitted from a sourced helper.
 
 Consumer cost: no behaviour change. `scripts/` and `docs/analysis/` do not ship. The six edited fixtures do ship (none carries `.dist-only`): five gain comment-only MUTANT-MATRIX blocks and `relabel-theirs-collision` changes one `ok` message's text.
-
 
 ## [0.1065.0] - 2026-11-11
 

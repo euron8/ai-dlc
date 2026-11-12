@@ -55,7 +55,13 @@
 #       PARTY SOURCES -- when <dir> names a party round by the join's own PARTY derivation (an
 #         artifact ending `-party` or `-party-serial`, or the subject's `requirements-party-repair`),
 #         src_check runs over the part against `<state>/party-mode/s<N>/*.md` and prints the join's
-#         own NOSOURCE / BADFORM / FOREIGN / NOFILE / UNRESOLVED line.
+#         own NOSOURCE / BADFORM / FOREIGN / NOFILE / UNRESOLVED line. Then the join's seat checks
+#         (seat_complete_check: an unfinished cited seat in the marker era, and seat_row_check's
+#         spawn-row join) run over the same part in WARN FORM: each finding prints
+#         `WARN: the join will refuse: <the join's text>` and never refuses the part, and each
+#         `SEAT-ROWS: SKIP` line is printed `NOTE: SEAT-ROWS: SKIP`. They judge whole rounds and other
+#         agents' seat files, and the part's only clearing edit is deleting its source: citation,
+#         which silences the join too; the join and --sources still refuse (seat_refuse).
 #       LEDGER CITATION -- each `edit:` token, by the join's own extractor (part_cites, escalated
 #         entries dropped), that matches NO `artifact-write` row of
 #         `<state>/planning-artifacts/.artifact-writes.jsonl` at all (any agent, any ts, the
@@ -69,9 +75,7 @@
 #       snapshot; give it the part's basename, which the REFUSED lines name) and the tree is
 #       still located from <part.md>. No seal is read. JOIN-ONLY, because no single part decides
 #       them: disjointness (distinct writers), the window, DOUBLE, SPAN, AMBIG, UNCITED, the
-#       escalation closure (which the join reports and never refuses) and source coverage. The
-#       seat-complete belt IS decidable over one part (it reads only the seat files the part cites)
-#       and is not run here: it is outside this mode's scope today, never undecidable.
+#       escalation closure (which the join reports and never refuses) and source coverage.
 #
 # READS   <state>/planning-artifacts/.artifact-writes.jsonl
 #         <state>/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/*.md   (placement rule P1)
@@ -539,6 +543,14 @@ seat_marked() {
     NF { l = $0 }
     END { if (fc == "" && l !~ /\r/ && index(l, "seat-complete: ") == 1) { split(l, w, " "); print w[2]; exit 0 }; exit 1 }' "$1" 2>/dev/null
 }
+# seat_refuse <text>: every refusal seat_complete_check and seat_row_check make. The join and --sources refuse
+# (SEAT_IN_PART unset or 0). --check-part (SEAT_IN_PART=1) prints `WARN: the join will refuse: <the same text>`
+# instead and counts nothing, ON PURPOSE -- do not upgrade it to a refusal. Both checks judge whole rounds and other
+# agents' seat files, never the part's own bytes, and the part's only clearing edit is to delete its source:
+# citation (`cited` is built from source: lines alone, and seat_row_check returns early with nothing cited), which
+# would also silence the join: a seal-time refusal would teach a writer to silence the join. The join and --sources
+# still refuse the same text.
+seat_refuse() { if [ "${SEAT_IN_PART:-0}" = 1 ]; then echo "WARN: the join will refuse: $*"; else refuse "$*"; fi; }
 # seat_complete_check <seat dir> <record>... -> refuse once per cited seat file that is unfinished.
 seat_complete_check() {
   local sd="$1" cited b steps="" f st m
@@ -568,7 +580,7 @@ seat_complete_check() {
     for st in $steps; do
       case "$b" in "$st"-*)
         m="$(cd "$sd" && for f in "$st"-*.md; do seat_marked "$f" >/dev/null && printf '%s ' "$f"; done)"
-        refuse "seat file ${b} does not end in its 'seat-complete:' line while its step '${st}' is in the marker era (${m% }); that seat had not finished, and a repair applying it applies unfinished findings"
+        seat_refuse "seat file ${b} does not end in its 'seat-complete:' line while its step '${st}' is in the marker era (${m% }); that seat had not finished, and a repair applying it applies unfinished findings"
         break ;;
       esac
     done
@@ -582,7 +594,8 @@ SCEOF
 # provenance block and Check 17 runs no arm on a seat file, so without this join a seat spawned
 # outside the guard, or a seat file written by hand, carries no record at all and nothing refuses it.
 # This is the reader that runs after every sharded party round: the round's repair is joined (parts
-# mode) or checked (--sources), and both call seat_complete_check, which calls this.
+# mode) or checked (--sources), and a party part is checked at its seal (--check-part); all three call
+# seat_complete_check, which calls this. --check-part WARNs where the other two refuse (seat_refuse).
 # THE JOIN KEY: a seat file `<step>-<seat>-<ordinal>.md` or `<step>-<seat>-cross[-<n>].md` (the
 # name is the population, never its marker: a hand-written seat may carry none) needs EITHER a row
 # whose `mark_file` (the dispatch guard copies it from the brief's `--mark` line; one pair of
@@ -723,15 +736,25 @@ seat_row_probe() {
 # seat_row_check <seat dir> <cited basenames, one per line> -> refuse once per sharded seat file of a
 # cited step with no role-bound spawn-ledger row; SKIP (one line) under a rulebook before the shape.
 seat_row_check() {
-  local sd="$1" sl="${1%/party-mode/*}/spawn-ledger.jsonl" gp="${JR_ROOT}/.claude/skills/ai-dlc/steps/_gate-procedures.md" f out l s o k t inst why rts sl4 st dirty files nseat era skipped="" judged=""
+  local sd="$1" sl="${1%/party-mode/*}/spawn-ledger.jsonl" gp="${JR_ROOT}/.claude/skills/ai-dlc/steps/_gate-procedures.md" f out l s o k t inst isha why rts sl4 st dirty files nseat era skipped="" judged="" np=""
   [ -n "$2" ] || return 0
+  # --check-part prefixes every SKIP line `NOTE: `, the form wait-for-deliverable.sh --mark relays on a clean seal;
+  # the join's and --sources' lines are unprefixed.
+  if [ "${SEAT_IN_PART:-0}" = 1 ]; then np="NOTE: "; fi
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "${np}SEAT-ROWS: SKIP jq-absent -- jq is not on PATH, so the spawn ledger cannot be read and no sharded party seat is joined to its row"
+    return 0
+  fi
   if ! grep -qF -e "$SEAT_ROW_TOKEN" "$gp" 2>/dev/null; then
-    echo "SEAT-ROWS: SKIP -- the installed ${gp} does not carry the sharded seat-record sentence, so sharded party seats are not joined to spawn-ledger rows under this rulebook"
+    echo "${np}SEAT-ROWS: SKIP -- the installed ${gp} does not carry the sharded seat-record sentence, so sharded party seats are not joined to spawn-ledger rows under this rulebook"
     return 0
   fi
   seat_row_probe
-  inst="$(git -C "$JR_ROOT" log -S"$SEAT_ROW_TOKEN" --format=%ct -- .claude/skills/ai-dlc/steps/_gate-procedures.md 2>/dev/null | tail -n 1)"
+  # The install commit's sha and epoch come from ONE line of the one -S call (the oldest), never a second git call.
+  inst="$(git -C "$JR_ROOT" log -S"$SEAT_ROW_TOKEN" --format='%H %ct' -- .claude/skills/ai-dlc/steps/_gate-procedures.md 2>/dev/null | tail -n 1)"
   why="no commit of ${JR_ROOT} introduces the seat-record sentence into the tracked installed rulebook"
+  isha="${inst%% *}"; inst="${inst#* }"
+  case "$isha" in ''|*[!0-9a-f]*) inst="" ;; esac
   case "$inst" in *[!0-9]*) inst="" ;; esac
   # A row carrying `mark_file` (the seat file its brief named, written by the dispatch guard), one pair of surrounding
   # `"` or `'` stripped, is one `M<TAB>basename<TAB>role<TAB>covers 0|1<TAB>ts` when that path ends in
@@ -771,14 +794,22 @@ seat_row_check() {
   # refused by name. A round with NO post-install row is dated by its seat files (the scan's parsed seat list, never a
   # `<step>-*` glob), each by the NEWEST commit that added it (`git log` is newest-first, so its first `A` entry; a
   # seat deleted and re-added after the install is judged): every seat added before the install is a legacy round
-  # (SKIP legacy-round); any seat added at or after it is judged, and every seat with no post-install row is refused;
+  # (SKIP legacy-round); any seat added at or after it is judged, and every seat with no post-install row is refused.
+  # A seat whose adding commit IS the install commit (compared by full %H, never by its epoch) counts as added BEFORE
+  # it. Where the install is a sprint squash onto main that also adds the sprint's seats, every such seat shares the
+  # install's ct exactly and read judged, so a round whose rows all predate that squash had every seat refused. Such a
+  # round was judged (or legacy) on the branch that produced it, against that branch's own earlier install commit;
+  # main-line history does not carry that commit, so the squash's own adds are read as legacy here. GAP, stated: a
+  # round whose every seat the install commit added, with no post-install row, is never re-judged on main-line history
+  # (censuses, replays and carry-over re-checks read it legacy-round). A seat added by any other commit dated at or
+  # after the install is still judged;
   # any seat never committed, or not clean in ONE `git status --porcelain` over the round's seats (modified, staged,
   # untracked, or a failed status), makes the round undatable (SKIP round-undatable, never folded into legacy and
   # never refused), since a re-run that overwrote committed seats carries no record of when it ran. A modification
   # that IS committed is not seen: first-add dating reads adds only. A missing spawn ledger refuses only when a cited
   # round is judged.
   case "$inst" in '')
-    echo "SEAT-ROWS: SKIP install-date-unreadable -- ${why}, so no round can be told from a legacy one"
+    echo "${np}SEAT-ROWS: SKIP install-date-unreadable -- ${why}, so no round can be told from a legacy one"
     return 0 ;; esac
   while IFS='	' read -r l t rts sl4; do
     [ "$l" = ROUND ] || continue
@@ -793,30 +824,30 @@ seat_row_check() {
       st="$(git -C "$JR_ROOT" status --porcelain -- $files 2>/dev/null)" || st=FAIL
       [ -n "$st" ] && dirty=1
       # shellcheck disable=SC2086
-      era="$(git -C "$JR_ROOT" log --diff-filter=A --format=@%ct --name-only -- $files 2>/dev/null | awk -v n="$nseat" -v inst="$inst" -v dirty="$dirty" '
-        /^@/ { ts = substr($0, 2) + 0; next }
-        NF { b = $0; sub(/.*\//, "", b); if (!(b in A)) A[b] = ts }
-        END { c = 0; late = 0; for (b in A) { c++; if (A[b] >= inst) late = 1 }; print (dirty != "" || c < n ? "U" : (late ? "J" : "L")) }')"
+      era="$(git -C "$JR_ROOT" log --diff-filter=A --format='@%ct %H' --name-only -- $files 2>/dev/null | awk -v n="$nseat" -v inst="$inst" -v isha="$isha" -v dirty="$dirty" '
+        /^@/ { split(substr($0, 2), h, " "); ts = h[1] + 0; sh = h[2]; next }
+        NF { b = $0; sub(/.*\//, "", b); if (!(b in A)) { A[b] = ts; S[b] = sh } }
+        END { c = 0; late = 0; for (b in A) { c++; if (S[b] != isha && A[b] >= inst) late = 1 }; print (dirty != "" || c < n ? "U" : (late ? "J" : "L")) }')"
     fi
     case "$era" in
       J) judged=1 ;;
-      L) echo "SEAT-ROWS: SKIP legacy-round ${t}"; skipped="$skipped $t " ;;
-      *) echo "SEAT-ROWS: SKIP round-undatable ${t} ${nseat} seats -- no spawn-ledger row at or after the install and a seat file never committed or not clean in the working tree, so the round cannot be dated"
+      L) echo "${np}SEAT-ROWS: SKIP legacy-round ${t}"; skipped="$skipped $t " ;;
+      *) echo "${np}SEAT-ROWS: SKIP round-undatable ${t} ${nseat} seats -- no spawn-ledger row at or after the install and a seat file never committed or not clean in the working tree, so the round cannot be dated"
          skipped="$skipped $t " ;;
     esac
   done <<SRLEOF
 $out
 SRLEOF
-  [ -f "$sl" ] || { [ -z "$judged" ] || refuse "the cited steps' sharded seat files have no spawn ledger to be joined to (${sl} is absent); a sharded party seat's record is its role-bound spawn-ledger row"; return 0; }
+  [ -f "$sl" ] || { [ -z "$judged" ] || seat_refuse "the cited steps' sharded seat files have no spawn ledger to be joined to (${sl} is absent); a sharded party seat's record is its role-bound spawn-ledger row"; return 0; }
   while IFS='	' read -r l f s o k t; do
     if [ "$l" = DIS ]; then
       case "$skipped" in *" $f "*) continue ;; esac
-      refuse "the sharded party round ${f}'s spawn-ledger rows disagree on K: its seat files match role-bound rows (sprint ${SPRINT}) at shard counts ${s} with no single K every row-bearing seat shares, so no seat of the round can be joined to its row. Re-dispatch the round as role-bound Agent spawns under one K"
+      seat_refuse "the sharded party round ${f}'s spawn-ledger rows disagree on K: its seat files match role-bound rows (sprint ${SPRINT}) at shard counts ${s} with no single K every row-bearing seat shares, so no seat of the round can be joined to its row. Re-dispatch the round as role-bound Agent spawns under one K"
       continue
     fi
     [ "$l" = MISS ] || continue
     case "$skipped" in *" $t "*) continue ;; esac
-    refuse "seat file ${f} is a sharded party seat (${s}, shard ${o}/${k}) with no role-bound row in ${sl} (sprint ${SPRINT}, role ${s}, role_contract_cited true, shard ${o}/${k}); a seat spawned outside the dispatch guard or written by hand has no record, and Check 17 runs no arm on a seat file. Re-dispatch that seat as a role-bound Agent spawn"
+    seat_refuse "seat file ${f} is a sharded party seat (${s}, shard ${o}/${k}) with no role-bound row in ${sl} (sprint ${SPRINT}, role ${s}, role_contract_cited true, shard ${o}/${k}); a seat spawned outside the dispatch guard or written by hand has no record, and Check 17 runs no arm on a seat file. Re-dispatch that seat as a role-bound Agent spawn"
   done <<SROEOF
 $out
 SROEOF
@@ -1890,7 +1921,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 # A party repair: its entries must each name the seat finding they apply.
-PARTY=0
+PARTY=0; SEAT_IN_PART=0
 if [ "$AGENTMODE" = 1 ]; then
   [ "$DOCMODE$SUBJMODE$PARTMODE" = 000 ] && [ -z "$SPRINT$ARTIFACT$PASS$APATH$UNTIL$REPDIR$SRC_REC$SUBJ_BASE$RERUN$DOCUMENT" ] \
     || die "--agent-writes prints one agent's ledger writes and takes only --since <ISO>"
@@ -2215,9 +2246,9 @@ PCEOF
 }
 # --check-part <part>: the join's own entry contract, parts mode, over ONE part before its remediator
 # returns -- the same probe, classifier and refusal text the join applies, so a BADSIB or NOSIB the join
-# would refuse is refused here first, while the remediator can still fix it. Two more arms read the
-# part's own tree (the header's --check-part paragraph): its party sources, and its edit: tokens
-# against the write ledger. No seal. A skipped arm prints one NOTE: line and never refuses.
+# would refuse is refused here first, while the remediator can still fix it. Three more arms read the
+# part's own tree (the header's --check-part paragraph): its party sources, its edit: tokens against
+# the write ledger, and last the seat checks over the seats it cites (WARN form, clean parts only). No seal. A skipped arm prints one NOTE: line and never refuses.
 if [ "$PARTMODE" = 1 ]; then
   contract_probe
   contract_refusals 0 "$(contract_check 0 "$CHKPART")"
@@ -2258,6 +2289,19 @@ CPUEOF
       else
         echo "NOTE: the write ledger ${LEDGER} does not parse as JSON lines; the edit: citations of ${_cpb} were not resolved (the join refuses that ledger)"
       fi
+    fi
+  fi
+  # THE SEAT BELT: the seat checks the join and --sources run, in WARN form (seat_refuse): a finding here is
+  # printed `WARN: the join will refuse: ...` and never refuses the part. Deliberate, not an oversight to upgrade:
+  # they judge whole rounds and other agents' seat files, and the part's only clearing edit is deleting its
+  # source: citation (cited is built from source: lines alone; seat_row_check returns early with nothing cited),
+  # which also silences the join. The join and --sources still refuse the same text. The belt only WARNs and its
+  # probe can hdie (exit 4, no verdict), so it runs LAST and only on an otherwise clean part: every real refusal
+  # arm above reports first, in one call. Called directly, never inside $( ).
+  if [ "$PARTY" = 1 ] && [ -d "$SEAT_DIR" ]; then
+    if [ "$refuse_n" -eq 0 ]; then
+      SEAT_IN_PART=1
+      seat_complete_check "$SEAT_DIR" "$CHKPART"
     fi
   fi
   printf '%s' "$GAP_LINES"

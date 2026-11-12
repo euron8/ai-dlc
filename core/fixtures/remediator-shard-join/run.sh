@@ -101,6 +101,15 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX SRm13 decides=SR13 twins=SR4
 # MUTANT-MATRIX SRm14 decides=SR14 twins=SR4
 # MUTANT-MATRIX SRm15 decides=SR16 twins=SR4
+# MUTANT-MATRIX SRm16 decides=SR17 twins=SR18
+# MUTANT-MATRIX SRm17 decides=SR18 twins=SR17
+# MUTANT-MATRIX SRm18 decides=SR3 twins=SR1
+# MUTANT-MATRIX CPSm-call decides=CPS1 twins=SR3
+# MUTANT-MATRIX CPSm-warn decides=CPS1 twins=CPS2
+# MUTANT-MATRIX CPSm-note decides=CPS2 twins=CPS1
+# MUTANT-MATRIX CPSm-jq decides=CPS3 twins=CPS2
+# MUTANT-MATRIX CPSm-miss decides=CPS4 twins=SR1
+# MUTANT-MATRIX SRm19 decides=SR19 twins=SR17
 # MUTANT-MATRIX SRmF1 decides=SRC1 twins=SRC3
 # MUTANT-MATRIX SRmF2 decides=SRC5b twins=SRC5
 # MUTANT-MATRIX SRmF3 decides=SRC6 twins=SRC3
@@ -625,7 +634,10 @@ sr_drive() { pcd_src "$1" "$2"; }
 SR_REF="seat file architecture-tea-1.md is a sharded party seat (tea, shard 1/4) with no role-bound row"
 sr1() { [ "$RC" -eq 2 ] && has "$JO" "$SR_REF" && ! has "$JO" "architecture-dev-1.md is a sharded" && ! has "$JO" "SOURCES:"; }
 sr2() { [ "$RC" -eq 0 ] && has "$JO" "SOURCES:" && ! has "$JO" "is a sharded party seat" && ! has "$JO" "SEAT-ROWS: SKIP"; }
-sr3() { [ "$RC" -eq 0 ] && has "$JO" "SEAT-ROWS: SKIP -- the installed" && has "$JO" "SOURCES:" && ! has "$JO" "is a sharded party seat"; }
+# hasl <file> <text>: some line OPENS with <text> (a literal prefix, never a regex). SR3 reads its SKIP line anchored,
+# so a NOTE: prefix leaking into --sources (SRm18) fails it.
+hasl() { awk -v p="$2" 'index($0, p) == 1 { f = 1 } END { exit !f }' "$1"; }
+sr3() { [ "$RC" -eq 0 ] && hasl "$JO" "SEAT-ROWS: SKIP -- the installed" && has "$JO" "SOURCES:" && ! has "$JO" "is a sharded party seat"; }
 SR1W="$(sr_world 0 1)"; SR2W="$(sr_world 1 1)"; SR3W="$(sr_world 0 0)"
 SR_SPRE=$((SR_INST - 1000)); SR_SPOST=$((SR_INST + 1000))
 SR4W="$(sr_world 0 1 "$SR_PRE" 1 0 2/4 "$SR_SPRE")"; SR5W="$(sr_world 0 1 "$SR_POST" 0)"; SR6W="$(sr_world 1 1 "$SR_POST" 1 1)"
@@ -690,13 +702,35 @@ sr_hidden() { local w; w="$(sr_world 0 1 "$SR_PRE")" || return 1
   printf '_bmad-output/party-mode/\n' >> "$w/.git/info/exclude" || return 1
   [ -z "$(git -C "$w" status --porcelain -- _bmad-output/party-mode)" ] || return 1; printf '%s' "$w"; }
 SR13W="$(sr_rerun)"; SR14W="$(sr_readd)"; SR15W="$(sr_decoy)"; SR16W="$(sr_hidden)"
+# SR17, the sprint squash: ONE commit, dated SR_INST, both introduces the sentence into the tracked rulebook AND adds the
+# round's seat files; every row pre-install -> the install commit's own adds are legacy: SKIP legacy-round, rc 0, never
+# undatable, no seat refused. SR18, its discriminating control: the rulebook commit alone, then the seats in a LATER
+# commit pinned to the SAME committer date (GIT_COMMITTER_DATE) -> judged by sha, all 4 seats refused. The pair separates
+# the sha compare from a ts-only `>=` (SR17 judged) and from a strict ts `>` (SR18 legacy).
+sr_squash() { # <seats in the install commit 1|0> -> a --sources world
+  local w; w="$(sr_world 0 1 "$SR_PRE" 0)" || return 1
+  git -C "$w" init -q . || return 1
+  if [ "$1" = 1 ]; then git -C "$w" add _bmad-output/party-mode || return 1; sr_commit "$w" "$SR_INST" .claude/skills/ai-dlc/steps/_gate-procedures.md || return 1
+  else sr_commit "$w" "$SR_INST" .claude/skills/ai-dlc/steps/_gate-procedures.md && sr_commit "$w" "$SR_INST" _bmad-output/party-mode || return 1; fi
+  [ "$(git -C "$w" rev-list --count HEAD)" = "$((2 - $1))" ] || return 1
+  printf '%s' "$w"; }
+# SR19: SR17's squash (the install commit adds the seats), then the seats deleted and re-added by LATER commits, every
+# row pre-install -> each seat's newest add is a post-install commit whose sha is not the install's: judged, all 4
+# refused. A seat's date and sha come from ONE add; a sha kept from another add (SRm19: the sha taken from the oldest
+# add, the install commit) reads the round legacy.
+sr_squash_readd() { local w; w="$(sr_squash 1)" || return 1
+  git -C "$w" rm -q -r _bmad-output/party-mode || return 1
+  GIT_AUTHOR_DATE="$SR_SPOST +0000" GIT_COMMITTER_DATE="$SR_SPOST +0000" git -C "$w" -c user.name=fx -c user.email=fx@fx -c commit.gpgsign=false commit -q -m del || return 1
+  seat_seed "$w" 305 && sr_commit "$w" "$((SR_SPOST + 10))" _bmad-output/party-mode || return 1; printf '%s' "$w"; }
+SR17W="$(sr_squash 1)"; SR18W="$(sr_squash 0)"; SR19W="$(sr_squash_readd)"
+sr17() { sr4 && ! has "$JO" "round-undatable" && ! has "$JO" "no role-bound row"; }
 sr13() { [ "$RC" -eq 0 ] && has "$JO" "SEAT-ROWS: SKIP round-undatable architecture 4 seats" && ! has "$JO" "legacy-round" && has "$JO" "SOURCES:" && ! has "$JO" "is a sharded party seat"; }
 sr9() { [ "$RC" -eq 2 ] && [ "$(grep -c 'is a sharded party seat' "$JO")" = 4 ] && has "$JO" "seat file architecture-tea-1.md is a sharded party seat (tea, shard 1/K)" && ! has "$JO" "SEAT-ROWS: SKIP" && ! has "$JO" "SOURCES:"; }
 sr10() { [ "$RC" -eq 0 ] && has "$JO" "SEAT-ROWS: SKIP round-undatable architecture 4 seats" && ! has "$JO" "legacy-round" && has "$JO" "SOURCES:" && ! has "$JO" "is a sharded party seat"; }
 sr11() { [ "$RC" -eq 0 ] && has "$JO" "SEAT-ROWS: SKIP legacy-round architecture" && has "$JO" "SOURCES:" && ! has "$JO" "have no spawn ledger"; }
 sr12() { [ "$RC" -eq 0 ] && has "$JO" "SEAT-ROWS: SKIP install-date-unreadable" && has "$JO" "is a shallow clone" && has "$JO" "SOURCES:" && ! has "$JO" "is a sharded party seat"; }
 if [ -z "$SR1W" ] || [ -z "$SR2W" ] || [ -z "$SR3W" ] || [ -z "$SR4W" ] || [ -z "$SR5W" ] || [ -z "$SR6W" ] || [ -z "$SR7W" ] || [ -z "$SR8W" ] || [ -z "$SR8BW" ] \
-  || [ -z "$SR9W" ] || [ -z "$SR10W" ] || [ -z "$SR11W" ] || [ -z "$SR12W" ] || [ -z "$SR13W" ] || [ -z "$SR14W" ] || [ -z "$SR15W" ] || [ -z "$SR16W" ]; then bad "SR: FIXTURE BROKEN -- a seat-row world could not be built"
+  || [ -z "$SR9W" ] || [ -z "$SR10W" ] || [ -z "$SR11W" ] || [ -z "$SR12W" ] || [ -z "$SR13W" ] || [ -z "$SR14W" ] || [ -z "$SR15W" ] || [ -z "$SR16W" ] || [ -z "$SR17W" ] || [ -z "$SR18W" ] || [ -z "$SR19W" ]; then bad "SR: FIXTURE BROKEN -- a seat-row world could not be built"
 else
   sr_drive "$JOIN" "$SR1W"
   if sr1; then ok "SR1: a sharded seat (tea-1) whose rows are role_contract_cited false and ordinal 2 -> REFUSED rc 2 naming it, its covered siblings not named"; B_SR1=1
@@ -749,6 +783,41 @@ else
   sr_drive "$JOIN" "$SR16W"
   if sr10; then ok "SR16: the SR10 round's never-committed seats hidden from git status by .git/info/exclude -> still SEAT-ROWS: SKIP round-undatable architecture 4 seats, not legacy"; B_SR16=1
   else bad "SR16: a never-committed round invisible to git status read legacy or was judged (rc=$RC): $(head -3 "$JO")"; fi
+  sr_drive "$JOIN" "$SR17W"
+  if sr17; then ok "SR17: one commit installs the seat-record sentence AND adds the round's seats, every row pre-install -> SEAT-ROWS: SKIP legacy-round architecture, rc 0, no round-undatable, no seat refused"; B_SR17=1
+  else bad "SR17: the install commit's own seat adds were read as judged or undatable (rc=$RC): $(head -3 "$JO")"; fi
+  sr_drive "$JOIN" "$SR18W"
+  if sr9; then ok "SR18: the seats added by a LATER commit at the install's own committer date -> judged by sha, all 4 seats REFUSED, no SKIP"; B_SR18=1
+  else bad "SR18: a seat added after the install at the same ct read legacy (rc=$RC): $(head -3 "$JO")"; fi
+  # SRm16: the install commit's sha dropped from the seat dating (ts-only `>=`, the shape before this arm) -> SR17 is
+  # judged and refused. SRm17: the sha dropped AND the bound made strict (`>`) -> SR18's same-ct later seats read legacy.
+  # Each is the other's twin: SR18 holds under SRm16, SR17 under SRm17.
+  if pc_break srm16 'if (S[b] != isha && A[b] >= inst) late = 1' 'if (A[b] >= inst) late = 1'; then
+    sr_drive "$PCB/srm16/join-remediator-shards.sh" "$SR17W"; _a=1; sr17 && _a=0; has "$JO" "self-probe failed" && _a=0
+    sr_drive "$PCB/srm16/join-remediator-shards.sh" "$SR18W"; _b=1; sr9 && _b=0
+    mrow SRm16 "SR17=$_a" "SR18=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_SR17:-0} && ${B_SR18:-0} ))" SRm16 "SRm16 seats dated by ts alone (>=): KILLED by [SR17] -- the install commit's own seats were judged and refused; SR18 still judged"
+    else bad "SRm16: SURVIVED or entangled -- SR17=$_a SR18=$_b (want 1 0)"; fi
+  else bad "SRm16: FIXTURE STALE -- the seat-date sha compare matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+  if pc_break srm17 'if (S[b] != isha && A[b] >= inst) late = 1' 'if (A[b] > inst) late = 1'; then
+    sr_drive "$PCB/srm17/join-remediator-shards.sh" "$SR18W"; _a=0; ! sr9 && has "$JO" "SEAT-ROWS: SKIP legacy-round architecture" && _a=1
+    sr_drive "$PCB/srm17/join-remediator-shards.sh" "$SR17W"; _b=1; sr17 && _b=0
+    mrow SRm17 "SR18=$_a" "SR17=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_SR18:-0} && ${B_SR17:-0} ))" SRm17 "SRm17 seats dated by a strict ts bound (>): KILLED by [SR18] -- the same-ct later seats read legacy-round; SR17 still skips"
+    else bad "SRm17: SURVIVED or entangled -- SR18=$_a SR17=$_b (want 1 0)"; fi
+  else bad "SRm17: FIXTURE STALE -- the seat-date sha compare matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+  sr_drive "$JOIN" "$SR19W"
+  if sr9; then ok "SR19: seats added by the install commit, deleted and re-added by later commits, every row pre-install -> dated by the newest add's own sha, judged, all 4 seats REFUSED"; B_SR19=1
+  else bad "SR19: a seat re-added after the install read legacy off the install commit's sha (rc=$RC): $(head -3 "$JO")"; fi
+  # SRm19: the sha guarded apart from the date, so it is overwritten by every older add and ends as the install commit's
+  # -> SR19 reads legacy-round. SR17 (one add per seat) still skips.
+  if pc_break srm19 'if (!(b in A)) { A[b] = ts; S[b] = sh }' 'if (!(b in A)) A[b] = ts; S[b] = sh'; then
+    sr_drive "$PCB/srm19/join-remediator-shards.sh" "$SR19W"; _a=0; ! sr9 && has "$JO" "SEAT-ROWS: SKIP legacy-round architecture" && _a=1
+    sr_drive "$PCB/srm19/join-remediator-shards.sh" "$SR17W"; _b=1; sr17 && _b=0
+    mrow SRm19 "SR19=$_a" "SR17=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_SR19:-0} && ${B_SR17:-0} ))" SRm19 "SRm19 the seat's sha taken from another add: KILLED by [SR19] -- the re-added round read legacy-round; SR17 still skips"
+    else bad "SRm19: SURVIVED or entangled -- SR19=$_a SR17=$_b (want 1 0)"; fi
+  else bad "SRm19: FIXTURE STALE -- the seat date-and-sha line matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
   # SRm7: the round dated by its EARLIEST matched row again -> SR8 is not judged (its date falls to its seats, committed
   # before the install, and the round SKIPs as legacy, which the arm requires). SR4 (every row old) still SKIPs.
   if pc_break srm7 'function later(a, b) { return a + 0 > b + 0 }' 'function later(a, b) { return a + 0 < b + 0 }'; then
@@ -785,7 +854,7 @@ else
     if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_SR13:-0} && ${B_SR4:-0} ))" SRm13 "SRm13 the working-tree status ignored: KILLED by [SR13] -- the overwritten round read legacy-round; SR4 still skips"
     else bad "SRm13: SURVIVED or entangled -- SR13=$_a SR4=$_b (want 1 0)"; fi
   else bad "SRm13: FIXTURE STALE -- the dirty-status line matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
-  if pc_break srm14 'if (!(b in A)) A[b] = ts' 'if (!(b in A) || ts < A[b]) A[b] = ts'; then
+  if pc_break srm14 'if (!(b in A)) { A[b] = ts; S[b] = sh }' 'if (!(b in A) || ts < A[b]) { A[b] = ts; S[b] = sh }'; then
     sr_drive "$PCB/srm14/join-remediator-shards.sh" "$SR14W"; _a=0; ! sr9 && has "$JO" "SEAT-ROWS: SKIP legacy-round architecture" && _a=1
     sr_drive "$PCB/srm14/join-remediator-shards.sh" "$SR4W"; _b=1; sr4 && _b=0
     mrow SRm14 "SR14=$_a" "SR4=$_b"
@@ -808,7 +877,7 @@ else
     if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_SR9:-0} && ${B_SR4:-0} ))" SRm10 "SRm10 the seat-commit check skipped: KILLED by [SR9] -- the post-install-committed round read legacy; SR4 still skips"
     else bad "SRm10: SURVIVED or entangled -- SR9=$_a SR4=$_b (want 1 0)"; fi
   else bad "SRm10: FIXTURE STALE -- the post-install row line matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
-  if pc_break srm11 '[ -f "$sl" ] || { [ -z "$judged" ] || refuse' '[ -f "$sl" ] || { refuse'; then
+  if pc_break srm11 '[ -f "$sl" ] || { [ -z "$judged" ] || seat_refuse' '[ -f "$sl" ] || { seat_refuse'; then
     sr_drive "$PCB/srm11/join-remediator-shards.sh" "$SR11W"; _a=1; sr11 && _a=0
     sr_drive "$PCB/srm11/join-remediator-shards.sh" "$SR4W"; _b=1; sr4 && _b=0
     mrow SRm11 "SR11=$_a" "SR4=$_b"
@@ -823,7 +892,7 @@ else
     else bad "SRm12: SURVIVED or entangled -- SR12=$_a SR1=$_b (want 1 0)"; fi
   else bad "SRm12: FIXTURE STALE -- the shallow-clone line matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
   # SRm4: the per-round legacy test removed -> SR4 refuses the pre-install round. SRm5: K taken from the files' top ordinal -> SR6 refuses.
-  if pc_break srm4 '      L) echo "SEAT-ROWS: SKIP legacy-round' '      L) judged=1 ;; L-off) echo "SEAT-ROWS: SKIP legacy-round'; then
+  if pc_break srm4 '      L) echo "${np}SEAT-ROWS: SKIP legacy-round' '      L) judged=1 ;; L-off) echo "${np}SEAT-ROWS: SKIP legacy-round'; then
     sr_drive "$PCB/srm4/join-remediator-shards.sh" "$SR4W"; _a=1; sr4 && _a=0
     sr_drive "$PCB/srm4/join-remediator-shards.sh" "$SR1W"; _b=1; sr1 && _b=0
     mrow SRm4 "SR4=$_a" "SR1=$_b"
@@ -870,6 +939,131 @@ else
     if [ "$_a" = 1 ]; then mutant_killed "${B_SR3:-0}" SRm2 "SRm2 the installed-rulebook boundary removed: KILLED by [SR3] -- a rulebook before the shape was judged (rc=$RC)"
     else bad "SRm2: SURVIVED -- with the boundary removed SR3 still skipped"; fi
   else bad "SRm2: FIXTURE STALE -- the boundary line matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+  # SRm18: the --check-part NOTE: prefix applied in every mode -> SR3's --sources SKIP line no longer opens the line.
+  # SR1 (a refusal, no SKIP line) still refuses.
+  if pc_break srm18 'if [ "${SEAT_IN_PART:-0}" = 1 ]; then np="NOTE: "; fi' 'np="NOTE: "'; then
+    sr_drive "$PCB/srm18/join-remediator-shards.sh" "$SR3W"; _a=0; ! sr3 && has "$JO" "NOTE: SEAT-ROWS: SKIP -- the installed" && _a=1
+    sr_drive "$PCB/srm18/join-remediator-shards.sh" "$SR1W"; _b=1; sr1 && _b=0
+    mrow SRm18 "SR3=$_a" "SR1=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_SR3:-0} && ${B_SR1:-0} ))" SRm18 "SRm18 the NOTE: prefix in every mode: KILLED by [SR3] -- the --sources SKIP line opened with NOTE:; SR1 still refuses"
+    else bad "SRm18: SURVIVED or entangled -- SR3=$_a SR1=$_b (want 1 0)"; fi
+  else bad "SRm18: FIXTURE STALE -- the part-mode prefix line matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+fi
+
+# ---- THE SEAT CHECKS AT THE SEAL: --check-part on a party part runs seat_complete_check in WARN FORM. A finding prints
+# `WARN: the join will refuse: <the join's text>` and never refuses the part, ON PURPOSE (do not upgrade it to a refusal):
+# the checks judge whole rounds and other agents' seat files, and the part's only clearing edit is deleting its source:
+# citation (cited is built from source: lines alone; seat_row_check returns early with nothing cited), which silences the
+# join too. The join and --sources still refuse the same text. Every seat-row SKIP line is prefixed `NOTE: ` in this mode
+# only, the form wait-for-deliverable.sh --mark relays on a clean seal. The worlds are pcb_party's (part 01 cites
+# architecture-dev-1.md#F-1 and architecture-tea-1.md#F-1; no rulebook carries the seat-record sentence).
+# CPS1: dev-1 ends in its seat-complete: line, so step architecture is in the marker era and the cited tea-1 is
+# unfinished -> the parts join over the tree REFUSES tea-1 (live run only); --check-part on part 01 -> rc 0, CHECK-PART:,
+# a line opening `WARN: the join will refuse: seat file architecture-tea-1.md does not end in its 'seat-complete:'`.
+# CPS2: no seat marked -> rc 0, CHECK-PART:, a line opening `NOTE: SEAT-ROWS: SKIP -- the installed`, no WARN.
+# CPS4: a party world whose TRACKED rulebook carries the seat-record sentence (committed, the install), the seats committed
+# after it, post-install rows for every seat but tea-1 -> judged; --check-part -> rc 0, CHECK-PART:, ONE line opening
+# `WARN: the join will refuse: seat file architecture-tea-1.md is a sharded party seat` (seat_row_check's MISS site).
+# CPS3: CPS4's world with jq off PATH -> rc 0, a line opening `NOTE: SEAT-ROWS: SKIP jq-absent`, no WARN. Without the
+# jq test (CPSm-jq) the ledger read fails, no row joins, and all 4 seats WARN as row-less.
+# MKPW: CPS1's part sealed through the REAL wait-for-deliverable.sh --mark -> MARKED rc 0, the WARN and the NOTE relayed.
+CPS_WARN="WARN: the join will refuse: seat file architecture-tea-1.md does not end in its 'seat-complete:'"
+cps_world() { # <mark dev-1 0|1> -> a party world
+  local w; w="$(pcb_party)" || return 1
+  if [ "$1" = 1 ]; then printf '\nseat-complete: architecture dev 1 sha=%064d findings=3\n' 0 >> "$w/_bmad-output/party-mode/s305/architecture-dev-1.md" || return 1; fi
+  printf '%s' "$w"
+}
+cps_tokworld() { # -> CPS4's world
+  local w; w="$(pcb_party)" || return 1
+  mkdir -p "$w/.claude/skills/ai-dlc/steps" && printf '# Gate procedures\n\n%s\n' "$SR_LINE" > "$w/.claude/skills/ai-dlc/steps/_gate-procedures.md" || return 1
+  { SR_TS="$SR_POST"; sr_row architect true 1 "1/4 ## A"; sr_row dev true 2 "1/4 ## A"; sr_row dev true 3 "4/4 ## D"; } > "$w/_bmad-output/spawn-ledger.jsonl" || return 1
+  git -C "$w" init -q . && sr_commit "$w" "$SR_INST" .claude/skills/ai-dlc/steps/_gate-procedures.md && sr_commit "$w" "$SR_SPOST" _bmad-output/party-mode || return 1
+  printf '%s' "$w"
+}
+cps_part() { ppart "$1" 01 2.1 "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"; stamp "$1"; }
+cps_chk() { # <join> <world> [PATH] -> RC, $JO: --check-part on part 01
+  cps_part "$2"
+  if [ -n "${3:-}" ]; then PATH="$3" AI_DLC_PROJECT_ROOT="$2" bash "$1" --check-part "$2/$PRD/01.md" > "$JO" 2>&1; RC=$?
+  else AI_DLC_PROJECT_ROOT="$2" bash "$1" --check-part "$2/$PRD/01.md" > "$JO" 2>&1; RC=$?; fi
+}
+cps_nojq() { # -> a PATH on which `command -v jq` finds nothing: each dir carrying jq replaced by a link farm of it minus jq
+  local d o="" i=0 s IFS=:
+  for d in $PATH; do
+    if [ -n "$d" ] && [ -x "$d/jq" ]; then i=$((i + 1)); s="$WORK/nojq$i"; mkdir -p "$s" && ln -s "$d"/* "$s/" 2>/dev/null; rm -f "$s/jq"; d="$s"; fi
+    o="${o:+$o:}$d"
+  done
+  printf '%s' "$o"
+}
+cps1() { [ "$RC" -eq 0 ] && hasl "$JO" "$CPS_WARN" && has "$JO" "CHECK-PART:" && ! has "$JO" "REFUSED:"; }
+cps2() { [ "$RC" -eq 0 ] && hasl "$JO" "NOTE: SEAT-ROWS: SKIP -- the installed" && has "$JO" "CHECK-PART:" && ! has "$JO" "WARN: the join will refuse" && ! has "$JO" "REFUSED:"; }
+cps3() { [ "$RC" -eq 0 ] && hasl "$JO" "NOTE: SEAT-ROWS: SKIP jq-absent" && has "$JO" "CHECK-PART:" && ! has "$JO" "WARN: the join will refuse" && ! has "$JO" "REFUSED:"; }
+CPS_MISS="WARN: the join will refuse: seat file architecture-tea-1.md is a sharded party seat"
+cps_nmiss() { local n; n="$(grep -c '^WARN: the join will refuse: seat file .* is a sharded party seat' "$JO")" || n=0; printf '%s' "$n"; }
+cps4() { [ "$RC" -eq 0 ] && hasl "$JO" "$CPS_MISS" && [ "$(cps_nmiss)" = 1 ] && has "$JO" "CHECK-PART:" && ! has "$JO" "REFUSED:"; }
+CPS1W="$(cps_world 1)"; CPS2W="$(cps_world 0)"; CPS4W="$(cps_tokworld)"; CPS_NOJQ="$(cps_nojq)"
+# The PATH is checked in a subshell after `hash -r`: this shell has already run jq, and `PATH=x command -v jq`
+# answers the hashed farm path (measured), which would read a working jq-less PATH as broken.
+if [ -z "$CPS1W" ] || [ -z "$CPS2W" ] || [ -z "$CPS4W" ] || [ -z "$CPS_NOJQ" ] || ( PATH="$CPS_NOJQ"; hash -r; command -v jq >/dev/null 2>&1 ) || ! ( PATH="$CPS_NOJQ"; hash -r; command -v git >/dev/null 2>&1 ); then
+  bad "CPS: FIXTURE BROKEN -- a seal-time seat world, or a PATH with git and without jq, could not be built (w1=${CPS1W:-none} w2=${CPS2W:-none} w4=${CPS4W:-none} path=${CPS_NOJQ:-none} jq=$(PATH="$CPS_NOJQ"; hash -r; command -v jq) git=$(PATH="$CPS_NOJQ"; hash -r; command -v git))"
+else
+  run_pjoin "$JOIN" "$CPS1W"; _jr=0; [ "$RC" -eq 2 ] && has "$JO" "REFUSED: seat file architecture-tea-1.md does not end in its 'seat-complete:'" && _jr=1
+  cps_chk "$JOIN" "$CPS1W"
+  if [ "$_jr" = 1 ] && cps1; then ok "CPS1: a party part citing a marker-era unfinished seat -> the parts join REFUSES tea-1; --check-part on the part -> rc 0, CHECK-PART:, the same text as a line opening 'WARN: the join will refuse:'"; B_CPS1=1
+  else bad "CPS1: --check-part did not WARN the join's unfinished-seat refusal, or the join did not refuse it (join=$_jr rc=$RC): $(head -4 "$JO")"; fi
+  cps_chk "$JOIN" "$CPS2W"
+  if cps2; then ok "CPS2: a party part under a rulebook without the seat-record sentence -> --check-part rc 0 with a line opening 'NOTE: SEAT-ROWS: SKIP', no WARN"; B_CPS2=1
+  else bad "CPS2: --check-part did not print the seat-row SKIP as a NOTE: line (rc=$RC): $(head -4 "$JO")"; fi
+  cps_chk "$JOIN" "$CPS4W"
+  if cps4; then ok "CPS4: a tracked rulebook carrying the sentence, a judged round, tea-1 row-less -> --check-part rc 0, CHECK-PART:, one line opening 'WARN: the join will refuse: seat file architecture-tea-1.md is a sharded party seat'"; B_CPS4=1
+  else bad "CPS4: --check-part did not WARN seat_row_check's row-less seat (rc=$RC): $(head -4 "$JO")"; fi
+  cps_chk "$JOIN" "$CPS4W" "$CPS_NOJQ"
+  if cps3; then ok "CPS3: CPS4's world with jq off PATH -> --check-part rc 0 with a line opening 'NOTE: SEAT-ROWS: SKIP jq-absent', no WARN"; B_CPS3=1
+  else bad "CPS3: with jq absent the seat-row join did not SKIP by name (rc=$RC): $(head -4 "$JO")"; fi
+  cps_part "$CPS1W"; cp "$CPS1W/$PRD/01.md" "$WORK/cps.before"
+  wfd_run "$SRCDIR/wait-for-deliverable.sh" --mark "$CPS1W/$PRD/01.md" stories remediator 01 findings=1 > "$JO" 2>&1; RC=$?
+  if [ "$RC" -eq 0 ] && has "$JO" "MARKED " && hasl "$JO" "$CPS_WARN" && hasl "$JO" "NOTE: SEAT-ROWS: SKIP -- the installed" && ! has "$JO" "REFUSED" \
+     && ! cmp -s "$WORK/cps.before" "$CPS1W/$PRD/01.md"; then ok "MKPW: CPS1's part sealed through the real wait-for-deliverable.sh --mark -> MARKED rc 0, the join's WARN and NOTE lines relayed"
+  else bad "MKPW: the real --mark did not mark CPS1's part relaying the seat WARN and NOTE (rc=$RC): $(head -5 "$JO")"; fi
+  # CPSm-call: the --check-part call dropped -> CPS1 prints no WARN. SR3 (--sources, its own call) still skips.
+  if pc_break cpsmcall '      seat_complete_check "$SEAT_DIR" "$CHKPART"' '      :'; then
+    cps_chk "$PCB/cpsmcall/join-remediator-shards.sh" "$CPS1W"; _a=1; cps1 && _a=0
+    sr_drive "$PCB/cpsmcall/join-remediator-shards.sh" "$SR3W"; _b=1; sr3 && _b=0
+    mrow CPSm-call "CPS1=$_a" "SR3=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_CPS1:-0} && ${B_SR3:-0} ))" CPSm-call "CPSm-call --check-part's seat_complete_check call dropped: KILLED by [CPS1] -- no WARN; SR3 still skips"
+    else bad "CPSm-call: SURVIVED or entangled -- CPS1=$_a SR3=$_b (want 1 0)"; fi
+  else bad "CPSm-call: FIXTURE STALE -- the --check-part seat call matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+  # CPSm-warn: the part-mode WARN made a refusal -> CPS1 exits 2. CPS2 (no seat finding) still passes.
+  if pc_break cpsmwarn 'seat_refuse() { if [ "${SEAT_IN_PART:-0}" = 1 ]; then' 'seat_refuse() { if false; then'; then
+    cps_chk "$PCB/cpsmwarn/join-remediator-shards.sh" "$CPS1W"; _a=1; cps1 && _a=0
+    cps_chk "$PCB/cpsmwarn/join-remediator-shards.sh" "$CPS2W"; _b=1; cps2 && _b=0
+    mrow CPSm-warn "CPS1=$_a" "CPS2=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_CPS1:-0} && ${B_CPS2:-0} ))" CPSm-warn "CPSm-warn the part-mode WARN refuses: KILLED by [CPS1] -- the part was refused; CPS2 still passes"
+    else bad "CPSm-warn: SURVIVED or entangled -- CPS1=$_a CPS2=$_b (want 1 0)"; fi
+  else bad "CPSm-warn: FIXTURE STALE -- the seat_refuse mode test matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+  # CPSm-note: the part-mode NOTE: prefix dropped -> CPS2's SKIP line opens with SEAT-ROWS:. CPS1 (its WARN) still passes.
+  if pc_break cpsmnote 'if [ "${SEAT_IN_PART:-0}" = 1 ]; then np="NOTE: "; fi' ':'; then
+    cps_chk "$PCB/cpsmnote/join-remediator-shards.sh" "$CPS2W"; _a=0; ! cps2 && hasl "$JO" "SEAT-ROWS: SKIP -- the installed" && _a=1
+    cps_chk "$PCB/cpsmnote/join-remediator-shards.sh" "$CPS1W"; _b=1; cps1 && _b=0
+    mrow CPSm-note "CPS2=$_a" "CPS1=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_CPS2:-0} && ${B_CPS1:-0} ))" CPSm-note "CPSm-note the part-mode NOTE: prefix dropped: KILLED by [CPS2] -- the SKIP line opened with SEAT-ROWS:; CPS1 still WARNs"
+    else bad "CPSm-note: SURVIVED or entangled -- CPS2=$_a CPS1=$_b (want 1 0)"; fi
+  else bad "CPSm-note: FIXTURE STALE -- the part-mode prefix line matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+  # CPSm-jq: the jq-absent SKIP dropped -> CPS3 reads another SKIP. CPS2 (jq present) still passes.
+  if pc_break cpsmjq '  if ! command -v jq >/dev/null 2>&1; then' '  if false; then'; then
+    cps_chk "$PCB/cpsmjq/join-remediator-shards.sh" "$CPS4W" "$CPS_NOJQ"; _a=0; ! cps3 && [ "$(cps_nmiss)" = 4 ] && _a=1
+    cps_chk "$PCB/cpsmjq/join-remediator-shards.sh" "$CPS2W"; _b=1; cps2 && _b=0
+    mrow CPSm-jq "CPS3=$_a" "CPS2=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_CPS3:-0} && ${B_CPS2:-0} ))" CPSm-jq "CPSm-jq the jq-absent SKIP dropped: KILLED by [CPS3] -- the ledger read failed and all 4 seats WARNed row-less; CPS2 still passes"
+    else bad "CPSm-jq: SURVIVED or entangled -- CPS3=$_a CPS2=$_b (want 1 0)"; fi
+  else bad "CPSm-jq: FIXTURE STALE -- the jq-absent test matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
+  # CPSm-miss: seat_row_check's row-less-seat site refuses in part mode -> CPS4 exits 2. SR1 (--sources) still refuses.
+  if pc_break cpsmmiss '    seat_refuse "seat file ${f} is a sharded' '    refuse "seat file ${f} is a sharded'; then
+    cps_chk "$PCB/cpsmmiss/join-remediator-shards.sh" "$CPS4W"; _a=0; ! cps4 && [ "$RC" -eq 2 ] && _a=1
+    sr_drive "$PCB/cpsmmiss/join-remediator-shards.sh" "$SR1W"; _b=1; sr1 && _b=0
+    mrow CPSm-miss "CPS4=$_a" "SR1=$_b"
+    if [ "$_a" = 1 ] && [ "$_b" = 0 ]; then mutant_killed "$(( ${B_CPS4:-0} && ${B_SR1:-0} ))" CPSm-miss "CPSm-miss the row-less-seat site refuses in part mode: KILLED by [CPS4] -- the part was refused; SR1 still refuses"
+    else bad "CPSm-miss: SURVIVED or entangled -- CPS4=$_a SR1=$_b (want 1 0)"; fi
+  else bad "CPSm-miss: FIXTURE STALE -- the row-less-seat refusal site matched nothing or more than one line in $JOIN; re-anchor it, never relax the assertion"; fi
 fi
 
 # ---- SEAT FILE ROWS: a row carrying `mark_file` (the dispatch guard copies it from the brief) matches ONLY the cited seat
