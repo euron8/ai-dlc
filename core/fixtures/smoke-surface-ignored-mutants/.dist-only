@@ -1,0 +1,7 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a MUTATION BATTERY behind a shipped fixture: every mutant edits a copy of core's own
+validate-handoff-evidence.sh (written beside its siblings in a copy of core/scripts/) to restore a
+defect the SMOKE-SURFACE-IGNORED arm was built against, and scores it against the arms of
+smoke-surface-ignored, which ships and which this fixture sources. A consumer runs those arms; the
+mutants prove they can fail, which is the distribution's property to establish, not the consumer's.

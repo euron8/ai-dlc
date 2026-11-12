@@ -83,6 +83,28 @@
 #         no pathspecs and no `none`    -> `SKIP SMOKE-SURFACE (empty: write globs or none)`
 #         pathspecs                     -> (m2) runs: `SMOKE OK (...)` or a REFUSED line
 #       (m1) and SMOKE-SURFACE-EDITED run in every state. A SKIP is never an OK.
+#   SMOKE-SURFACE-IGNORED. In the "absent at <base>" state only: the surface path is not a blob at <base>
+#       AND the `.gitignore` blobs committed at <base> ignore it -> `WARN smoke-surface-ignored <story>:
+#       ... (<source>:<line>:<pattern>) ...` naming the remedy, then the SKIP line above, byte-identical,
+#       and the same exit. Such a file never reaches a story's base by a plain `git add`, and the SKIP
+#       alone cannot be told from a surface nobody wrote. The remedy is `git add -f <surface>`; un-ignoring
+#       it (`!<surface>`, relative to the `.gitignore` that matched) is offered only when no ancestor
+#       directory of the surface is itself excluded, since git cannot re-include a file below an excluded
+#       directory. Each ancestor is asked alone, as a directory, by `check-ignore -q`: `docs/` or `docs`
+#       excludes the directory (no negation), while `docs/*` or `docs/**` ignores only its contents (the
+#       negation is offered, and re-includes the file). TIER: WARN, never REFUSE. The surface is read at <base>, so a story whose base
+#       predates the commit has no in-range remedy (committing it in range refuses smoke-surface-edited),
+#       and a refusal would wedge every in-flight story on the pull that delivers this arm.
+#       NARROWING (what holds its false positives at zero): the decision is `git check-ignore -q`, never
+#       `-v` (which also answers 0 on a negation match, so `*.txt` + `!docs/smoke-surface.txt` is no
+#       WARN); `-v` is asked only after `-q` said ignored, for the provenance text. Only the ancestor-chain
+#       `.gitignore` blobs at <base> are read (the only ones that can ignore the path), in a scratch
+#       repository keyed by <base>, never the <frozen> set ignored_at_frozen holds (THE IGNORE SCRATCH).
+#       COMMITTED STATE ONLY, so the verdict is the same in every checkout: the gate-2 run is in the
+#       frozen dev worktree, where an ignored file is never on disk. OUT OF SCOPE: `.git/info/exclude`,
+#       `core.excludesFile`, and an untracked file that is NOT ignored (a plain `git add` commits it; no
+#       committed state shows it). A `.gitignore` blob that exists at <base> and cannot be read prints
+#       `WARN gitignore-unreadable <base12>` once and no smoke-surface-ignored line (never "ignored").
 #   SMOKE-SURFACE-UNEVALUABLE. Before (m2), the surface lines are listed as one pathspec set against
 #       <base> (`git diff --name-only <empty tree> <base> -- <lines>`, the (m2) diff's own grammar). A
 #       line git rejects (`:(bogus)x`, an unclosed `:(top`, `../x`: exit 128, no output) and a set that
@@ -780,6 +802,8 @@ smoke_arms() { # <base> <frozen> <story> -> SMOKE/SKIP verdict lines and REFUSED
   # The surface is read at <base> (srev), never at <frozen>.
   local srev="$sb"
   if ! G cat-file -e "$srev:$SMOKE_SURFACE" 2>/dev/null; then
+    # SMOKE-SURFACE-IGNORED (header: SMOKE-SURFACE-IGNORED): a WARN before the SKIP, never instead of it.
+    if ignored_at_rev "$srev" "$SMOKE_SURFACE"; then smoke_ignored_warn "$st" "$srev"; fi
     printf 'SKIP SMOKE-SURFACE (undeclared: no %s at %s)\n' "$SMOKE_SURFACE" "${srev:0:12}"; return 0
   fi
   globs="$(G show "$srev:$SMOKE_SURFACE" 2>/dev/null | LC_ALL=C awk '{ sub(/\r$/, ""); sub(/^[ \t]+/, ""); sub(/[ \t]+$/, "") } $0 == "" || /^#/ { next } { print }')"
@@ -857,23 +881,92 @@ smoke_arms() { # <base> <frozen> <story> -> SMOKE/SKIP verdict lines and REFUSED
   fi
   return 0
 }
+# THE IGNORE SCRATCH (shared by ignored_at_frozen and ignored_at_rev). One `mktemp` root per run, ONE EXIT
+# trap, and one scratch repository per question below it: `full` holds every `.gitignore` tracked at
+# <frozen>, `chain-<rev>` the ancestor-chain `.gitignore` blobs of a path at <rev>. A rev's own
+# subdirectory is the cache key, so the frozen set can never answer for <base> (or the reverse), in
+# either call order, even when <base> = <frozen>. Each repository is asked with no global or system
+# config, `core.excludesFile=/dev/null`, a fresh `.git/info/exclude` and `--no-index`: the committed
+# blobs decide, never this worktree's `.gitignore`, its info/exclude or the operator's global excludes.
+# All of this state (IGN_ROOT, IGN_FULL, IGN_CHAIN) is initialised beside SMOKE_SURFACE in he_main,
+# ABOVE the --smoke block, because `set -u` makes an unset read exit 127 there.
+ign_repo() { # <subdir> -> 0 with $IGN_ROOT/<subdir> an initialised scratch repository; 1 when it cannot be made
+  if [ -z "$IGN_ROOT" ]; then
+    IGN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/he-ignore.XXXXXX")" || { IGN_ROOT=""; return 1; }
+    trap 'rm -rf "$IGN_ROOT"' EXIT
+  fi
+  [ -d "$IGN_ROOT/$1/.git" ] && return 0
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git init -q "$IGN_ROOT/$1" 2>/dev/null
+}
+ign_ask() { # <subdir> <check-ignore args...> -> check-ignore's own stdout and exit, in that scratch repository
+  local sub="$1"; shift
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$IGN_ROOT/$sub" -c core.excludesFile=/dev/null \
+    check-ignore --no-index "$@" 2>/dev/null
+}
 ignored_at_frozen() {
   local gi gis
-  if [ -z "$IGN_DIR" ]; then
-    IGN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/he-ignore.XXXXXX")" || return 1
-    trap 'rm -rf "$IGN_DIR"' EXIT
-    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$IGN_DIR" init -q 2>/dev/null || return 1
+  if [ "$IGN_FULL" -eq 0 ]; then
+    ign_repo full || return 1
+    IGN_FULL=1
     # ls-tree failed: the exemption set is UNKNOWN, so name the cause once and treat it as EMPTY (every untracked citation WARNs; never "all ignored").
     if ! gis="$(G ls-tree -r --name-only --full-tree "$FROZEN" 2>/dev/null)"; then
       warn "gitignore-unreadable ${FROZEN:0:12}: exemption set unknown"; gis=""
     fi
     while IFS= read -r gi; do
       case "$gi" in .gitignore|*/.gitignore) ;; *) continue ;; esac
-      mkdir -p "$IGN_DIR/$(dirname "$gi")" && G show "$FROZEN:$gi" > "$IGN_DIR/$gi" 2>/dev/null
+      mkdir -p "$IGN_ROOT/full/$(dirname "$gi")" && G show "$FROZEN:$gi" > "$IGN_ROOT/full/$gi" 2>/dev/null
     done <<<"$gis"
   fi
-  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$IGN_DIR" -c core.excludesFile=/dev/null \
-    check-ignore --no-index -q -- "$1" 2>/dev/null
+  ign_ask full -q -- "$1"
+}
+ignored_at_rev() { # <rev> <path> -> 0 when a `.gitignore` committed at <rev> in <path>'s ancestor chain ignores <path>
+  local rev="$1" p="$2" d chain gi gd have="" sub="chain-$1"
+  # Only the ancestor chain can ignore a path, so only it is read: `.gitignore`, then `<dir>/.gitignore` for
+  # every directory above <path>, each by `rev-parse --verify` then `show`; never an `ls-tree -r` over <rev>.
+  # IGN_CHAIN caches per rev: ` n:<rev>:<gi> ` absent, ` y:<rev>:<gi> ` written, ` u:<rev> ` unreadable.
+  chain=".gitignore"; d="$p"
+  while :; do case "$d" in */*) d="${d%/*}"; chain="$chain
+$d/.gitignore" ;; *) break ;; esac; done
+  case "$IGN_CHAIN" in *" u:$rev "*) return 1 ;; esac
+  while IFS= read -r gi; do
+    case "$IGN_CHAIN" in *" n:$rev:$gi "*) continue ;; *" y:$rev:$gi "*) have=1; continue ;; esac
+    # rev-parse resolves the entry through the TREES only, so a blob that is named and missing reaches the
+    # `show` below and is UNREADABLE, never "absent" (cat-file -e would read it as absent).
+    if ! G rev-parse -q --verify "$rev:$gi" >/dev/null 2>&1; then IGN_CHAIN="$IGN_CHAIN n:$rev:$gi "; continue; fi
+    case "$gi" in */*) gd="${gi%/*}" ;; *) gd=. ;; esac
+    # A blob that exists and cannot be written: the set is UNKNOWN, named once, and read as "not ignored".
+    if ! ign_repo "$sub" || ! mkdir -p "$IGN_ROOT/$sub/$gd" || ! G show "$rev:$gi" > "$IGN_ROOT/$sub/$gi" 2>/dev/null; then
+      IGN_CHAIN="$IGN_CHAIN u:$rev "
+      warn "gitignore-unreadable ${rev:0:12}: smoke-surface ignore set unknown"; return 1
+    fi
+    IGN_CHAIN="$IGN_CHAIN y:$rev:$gi "; have=1
+  done <<<"$chain"
+  # No `.gitignore` anywhere on the chain: nothing can ignore <path>, and no scratch repository is made.
+  [ -n "$have" ] || return 1
+  # -q decides, never -v: -v also answers 0 on a NEGATION match (`!docs/smoke-surface.txt`).
+  ign_ask "$sub" -q -- "$p"
+}
+smoke_ignored_warn() { # <story> <rev>; only after ignored_at_rev <rev> $SMOKE_SURFACE said ignored
+  local st="$1" rev="$2" sub="chain-$2" prov src rel d dirs="" fix
+  # Provenance only: `<source>:<line>:<pattern>` TAB `<path>`, split on the TAB.
+  prov="$(ign_ask "$sub" -v -- "$SMOKE_SURFACE")"; prov="${prov%%"$TAB"*}"
+  [ -n "$prov" ] || prov="source unknown"
+  # A negation cannot re-include a file below an EXCLUDED directory, so it is offered only when no
+  # ancestor directory of the surface is itself excluded. Each ancestor is asked ALONE, as a directory
+  # made in the scratch and named with no trailing slash: -q takes one pathname (two or more exit 128,
+  # which would read as "not excluded"), and `docs/` would also match `docs/*` and `docs/**`, which
+  # ignore the directory's CONTENTS and leave a negation free to re-include the surface.
+  d="$SMOKE_SURFACE"
+  while :; do case "$d" in */*) d="${d%/*}"; mkdir -p "$IGN_ROOT/$sub/$d" 2>/dev/null; if ign_ask "$sub" -q -- "$d"; then dirs=1; break; fi ;; *) break ;; esac; done
+  fix="\`git add -f $SMOKE_SURFACE\`"
+  if [ -n "$dirs" ]; then
+    fix="$fix (a directory above it is excluded, so no negation can re-include it)"
+  else
+    src="${prov%%:*}"; rel="$SMOKE_SURFACE"
+    case "$src" in */.gitignore) rel="${SMOKE_SURFACE#"${src%/.gitignore}"/}" ;; esac
+    fix="$fix or un-ignore it (\`!$rel\` in $src)"
+  fi
+  warn "smoke-surface-ignored $st: $SMOKE_SURFACE is not tracked at ${rev:0:12} and the .gitignore committed there ignores it ($prov); smoke-not-updated cannot run until it is committed: $fix and commit it outside a story's range"
 }
 inrange() { # <path>
   local l
@@ -1113,6 +1206,11 @@ fi
 SMOKE_SURFACE_DEFAULT=docs/smoke-surface.txt
 SMOKE_SURFACE=""
 SMOKE_SURFACE_LC=""
+# The ignore scratch's state (header: THE IGNORE SCRATCH), here and not beside the handoff arms: --smoke
+# exits below, and under `set -u` an ignore helper reading an unset name would exit 127 in that mode.
+IGN_ROOT=""
+IGN_FULL=0
+IGN_CHAIN=" "
 smoke_surface_path() { # <rev> -> sets SMOKE_SURFACE (empty: key declared empty) and SMOKE_SURFACE_LC; 2 when unreadable
   local rev="$1" lc decl
   SMOKE_SURFACE="$SMOKE_SURFACE_DEFAULT"; SMOKE_SURFACE_LC=""
@@ -1164,8 +1262,8 @@ fi
 CAPS="$(cap_tokens 0 <<<"$TEXT" | cap_resolve | sort -u)"
 # ignored_at_frozen <path>: 0 when a `.gitignore` tracked at <frozen> ignores <path>. The blobs are
 # written once into a scratch repository (the reviewer's commit decides, never this worktree's
-# `.gitignore`, its info/exclude or the operator's global excludes) and asked by check-ignore.
-IGN_DIR=""
+# `.gitignore`, its info/exclude or the operator's global excludes) and asked by check-ignore. Its
+# scratch state is initialised above the --smoke block (THE IGNORE SCRATCH).
 CHANGED="$(G diff --name-only --no-renames "$BASE" "$FROZEN" 2>/dev/null)"
 
 CAPDIRS=""

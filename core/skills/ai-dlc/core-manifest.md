@@ -300,6 +300,7 @@ core_manifest:
   - fixtures/owed-derivations/**
   - fixtures/deploy-validate-smoke-classification/**
   - fixtures/story-evidence-scaffold/**
+  - fixtures/smoke-surface-ignored/**
   - fixtures/review-carry-over-clauses/**
   - fixtures/provenance-flagless-default/**
   - fixtures/provenance-not-accessible/**
