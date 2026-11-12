@@ -72,6 +72,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_rfoCtl=0
 
 git_q() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}" >/dev/null 2>&1; }
 
@@ -322,7 +324,7 @@ expect_set() {  # $1 = label, $2 = expected red count, $3 = ERE all reds must ma
   unmatched="$(printf '%s\n' "$reds" | grep -c . || true)"
   unmatched="$(printf '%s\n' "$reds" | grep -vE "$3" | grep -c . || true)"
   if [ "$n" -eq "$2" ] && [ "$unmatched" -eq 0 ]; then
-    ok "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
+    mutant_killed "$B_rfoCtl" "$1" "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
   else
     bad "MUTANT $1: expected $2 red(s) all matching '$3', got ${n} (${unmatched} unexpected): $(printf '%s' "$reds" | tr '\n' ';')"
     battery_fails=$((battery_fails+1))
@@ -333,7 +335,7 @@ expect_set() {  # $1 = label, $2 = expected red count, $3 = ERE all reds must ma
 # every kill below is unearned and the battery is measuring its own harness.
 ctl="$(mut_reds control "")"
 if [ -z "$ctl" ]; then
-  ok "CONTROL: an unmutated copy of the detector passes every assertion"
+  ok "CONTROL: an unmutated copy of the detector passes every assertion"; B_rfoCtl=1
 else
   bad "CONTROL: an unmutated copy FAILED ($(printf '%s' "$ctl" | tr '\n' ';')) — every kill below is unearned"
   battery_fails=$((battery_fails+1))

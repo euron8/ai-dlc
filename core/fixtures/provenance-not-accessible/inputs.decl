@@ -4,3 +4,4 @@
 # core/scripts/lib/meta-gate.sh names a file the validator sources only when readable (absent here).
 !core/scripts/validate-provenance-block.sh
 core/schemas/provenance-block.json
+core/fixtures/lib/mutant.sh

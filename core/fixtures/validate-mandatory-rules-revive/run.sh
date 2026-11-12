@@ -40,6 +40,8 @@ IMPL_YAML="$P/_bmad-output/implementation-artifacts/sprint-status.yaml"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_check3_fail=0
 
 echo "validate-mandatory-rules-revive:"
 
@@ -59,14 +61,14 @@ grep -q 'CHECK 5: SKIP' <<<"$OUT" \
   && ok "Check 5 SKIPs (no audit-anchors.md — diff base unresolvable on this clean tree)" \
   || bad "Check 5 did not SKIP"
 grep -q 'CHECK 3: PASS' <<<"$OUT" \
-  && ok "Check 3 PASSes on a closed envelope (close wrote the housekeeping block)" \
+  && { ok "Check 3 PASSes on a closed envelope (close wrote the housekeeping block)"; B_check3_fail=1; } \
   || bad "Check 3 did not PASS on a closed envelope"
 
 # MUTANT: un-close the envelope -> Check 3 must FAIL (proves it is not vacuous).
 sed 's/^status: done/status: in_progress/' "$IMPL_YAML" > "$IMPL_YAML.tmp" && mv "$IMPL_YAML.tmp" "$IMPL_YAML"
 MUT="$(cd "$P" && bash "$VMR" 900 2>/dev/null)"
 grep -q 'CHECK 3: FAIL' <<<"$MUT" \
-  && ok "MUTANT: an un-closed envelope FAILS Check 3 (enforcement is real, not vacuous)" \
+  && mutant_killed "$B_check3_fail" unclosed-envelope "MUTANT: an un-closed envelope FAILS Check 3 (enforcement is real, not vacuous)" \
   || bad "MUTANT: Check 3 did not FAIL on an un-closed envelope"
 # --matrix: one MATRIX row, read off the $MUT run its arm already scored.
 if [ "${1:-}" = "--matrix" ]; then

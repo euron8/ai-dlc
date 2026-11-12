@@ -54,6 +54,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a1=0; B_a3=0
 
 # Every _bmad-output path a file prescribes, one per line.
 paths_of() { grep -ohE '_bmad-output/[A-Za-z0-9_./<>-]+\.md' "$1" | sort -u; }
@@ -72,7 +74,7 @@ echo "consolidation-residue"
 # --- 1. NO WORKING FILE IS PRESCRIBED AT THE DURABLE AREA ROOT -----------------
 n_off="$(offenders_of "$STEP" | grep -c . || true)"
 if [ "$n_off" -eq 0 ]; then
-  ok "every working-file path the step prescribes carries the s<N>/ sprint slot"
+  ok "every working-file path the step prescribes carries the s<N>/ sprint slot"; B_a1=1
 else
   bad "$n_off path(s) prescribed outside the sprint slot and outside the durable set"
   offenders_of "$STEP" | sed 's/^/        /'
@@ -95,7 +97,7 @@ fi
 # `delete|remove|rm|clean ?up|discard|retire|unlink` returned rc=1 over this step while
 # matching three sibling steps, so the grep could fire and the zero was real.
 if grep -qE '^ *rm -f ' "$STEP"; then
-  ok "the step names a disposition for its drafts rather than falling silent"
+  ok "the step names a disposition for its drafts rather than falling silent"; B_a3=1
 else
   bad "no draft disposition in the step -- this is the silence that accumulated eleven drafts"
 fi
@@ -130,7 +132,7 @@ if cmp -s "$STEP" "$MUT1"; then
   exit 2
 fi
 if [ "$(offenders_of "$MUT1" | grep -c . || true)" -ge 1 ]; then
-  ok "MUTATION: un-slotting the manifest path is reported as an offender"
+  mutant_killed "$B_a1" unslot-manifest "MUTATION: un-slotting the manifest path is reported as an offender"
 else
   bad "MUTATION: an area-root manifest path was NOT reported -- assertion 1 proves nothing"
 fi
@@ -148,7 +150,7 @@ fi
 if grep -qE '^ *rm -f ' "$MUT2"; then
   bad "MUTATION: the disposition survived its own deletion -- assertion 3 proves nothing"
 else
-  ok "MUTATION: deleting the disposition is detected"
+  mutant_killed "$B_a3" delete-disposition "MUTATION: deleting the disposition is detected"
 fi
 # And it must NOT also trip assertion 1 -- the paths are untouched by this mutation.
 if [ "$(offenders_of "$MUT2" | grep -c . || true)" -eq 0 ]; then

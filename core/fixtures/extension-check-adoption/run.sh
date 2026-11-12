@@ -41,6 +41,8 @@ done
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_anchor=0; B_gts=0; B_scope=0
 
 fresh() { bash "$DIR/seed.sh"; }
 # The operator's answer to the NEEDS DECISION row: the entry really is a check and its
@@ -162,17 +164,17 @@ a=$?
 grep -q 'CHECK_LOADED: 915'  "$S/extensions/checks/numeric.md" && \
 grep -q 'CHECK_LOADED: 919b' "$S/extensions/checks/numeric.md" && \
 grep -q 'CHECK_LOADED: XVH'  "$S/extensions/checks/alpha.md" \
-  && ok "APPLY wrote the anchors, alphabetic id included" \
+  && { ok "APPLY wrote the anchors, alphabetic id included"; B_anchor=1; } \
   || bad "APPLY did not write every anchor"
 
 grep -q '^gate_types: \[planning\]' "$S/extensions/checks/numeric.md" && \
 grep -q '^gate_types: \[planning\]' "$S/extensions/checks/alpha.md" \
-  && ok "APPLY wrote gate_types: into the entry frontmatter" \
+  && { ok "APPLY wrote gate_types: into the entry frontmatter"; B_gts=1; } \
   || bad "APPLY did not write gate_types:"
 
 grep -q 'CHECK_LOADED: 940' "$S/extensions/checks/out-of-scope.md" \
   && bad "APPLY rewrote the out-of-scope entry" \
-  || ok "APPLY left the out-of-scope entry untouched"
+  || { ok "APPLY left the out-of-scope entry untouched"; B_scope=1; }
 
 # GM1 cannot be clear yet: the kind-mismatch entry's heading is still UNLOADABLE and
 # the tool REFUSED to write it. That refusal is correct, and asserting it here is what
@@ -257,7 +259,7 @@ if [ -z "$M1" ]; then
 else
   R1="$(fresh)"; decide "$R1"; bash "$M1" "$R1" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
   c="$(code_of "$R1")"
-  [ "$c" = "GM2" ] && ok "MUTANT anchor-write: without the anchor the declaration claims loading for nothing — GM2" \
+  [ "$c" = "GM2" ] && mutant_killed "$B_anchor" anchor-write "MUTANT anchor-write: without the anchor the declaration claims loading for nothing — GM2" \
                    || bad "MUTANT anchor-write: expected GM2, got $c"
   rm -rf "$R1" "$M1"
 fi
@@ -269,7 +271,7 @@ if [ -z "$M2" ]; then
 else
   R2="$(fresh)"; decide "$R2"; bash "$M2" "$R2" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
   c="$(code_of "$R2")"
-  [ "$c" = "ORPHAN" ] && ok "MUTANT gate_types-write: without the declaration the anchors become ORPHANs (a DIFFERENT code, so the two assertions are not entangled)" \
+  [ "$c" = "ORPHAN" ] && mutant_killed "$B_gts" gate_types-write "MUTANT gate_types-write: without the declaration the anchors become ORPHANs (a DIFFERENT code, so the two assertions are not entangled)" \
                       || bad "MUTANT gate_types-write: expected ORPHAN, got $c"
   rm -rf "$R2" "$M2"
 fi
@@ -283,7 +285,7 @@ if [ -z "$M3" ]; then
 else
   R3="$(fresh)"; bash "$M3" "$R3" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
   if grep -q 'CHECK_LOADED: 940' "$R3/.claude/skills/ai-dlc/extensions/checks/out-of-scope.md" 2>/dev/null; then
-    ok "MUTANT entry-filter: ignoring \`kind:\` rewrites a \`step-domain\` entry (that filter is load-bearing)"
+    mutant_killed "$B_scope" entry-filter "MUTANT entry-filter: ignoring \`kind:\` rewrites a \`step-domain\` entry (that filter is load-bearing)"
   else
     bad "MUTANT entry-filter: the out-of-scope entry survived — the scope assertion proves nothing"
   fi

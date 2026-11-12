@@ -62,6 +62,8 @@ fails=0
 asserted=0
 ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
+B_contig=0; B_fires=0; B_ppsha=0; B_pw=0; B_sec=0; B_sline=0; B_sset=0; B_tonly=0
 
 # Isolated toolchain dir: the real validators + no-op sibling stubs so Checks 1/2 do not
 # interfere with the Check 5 line we read. Check 5 reads audit-anchors/gate-log/git from CWD.
@@ -107,7 +109,7 @@ echo "check5-anchor-base"
 write_gatelog "deploy completed"
 L="$(check5_line "$WORK/bin/validate-mandatory-rules.sh")"
 if grep -qi 'CHECK 5: FAIL' <<<"$L"; then
-  ok "fires and FAILs on a web/** change with no visual evidence (main..HEAD would have SKIPped)"
+  ok "fires and FAILs on a web/** change with no visual evidence (main..HEAD would have SKIPped)"; B_fires=1
 else
   bad "Check 5 did not fire+FAIL — got: ${L:-<no CHECK 5 line>}"
 fi
@@ -134,7 +136,7 @@ fi
 write_gatelog "deploy completed"   # no evidence: under the anchor base this FAILs
 L="$(check5_line "$MUTANT")"
 if grep -qi 'CHECK 5: SKIP' <<<"$L"; then
-  ok "MUTATION: reverting the base to main..HEAD makes Check 5 SKIP (the anchor base is what fires it)"
+  mutant_killed "$B_fires" revert-base "MUTATION: reverting the base to main..HEAD makes Check 5 SKIP (the anchor base is what fires it)"
 else
   bad "MUTATION: Check 5 did not SKIP on main..HEAD — got: ${L:-<no CHECK 5 line>}"
 fi
@@ -243,7 +245,7 @@ EXPECTED="R:sha N:named P:named U:named A:usage C:noted X:closed PC:closed"
 # --- 4. the shipping resolver answers all five arms --------------------------
 GOT="$(battery "$WORK/bin/validate-audit-anchors.sh")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "--prior-sprint-sha: resolves sprint N-1 (through a close record too, naming its reason), names each of no-entry / placeholder / unresolvable separately, keeps a wrong argument at exit 2, and stays CLOSED with no sha on stdout when the prior sprint has no entry or only a PENDING one"
+  ok "--prior-sprint-sha: resolves sprint N-1 (through a close record too, naming its reason), names each of no-entry / placeholder / unresolvable separately, keeps a wrong argument at exit 2, and stays CLOSED with no sha on stdout when the prior sprint has no entry or only a PENDING one"; B_ppsha=1
 else
   bad "--prior-sprint-sha battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -284,7 +286,7 @@ mutate() {
   fi
   got="$(battery "$M")"
   if [ "$got" = "$want" ]; then
-    ok "MUTANT $tag: $claim"
+    mutant_killed "$B_ppsha" "$tag" "MUTANT $tag: $claim"
   else
     bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"
   fi
@@ -386,7 +388,7 @@ CONTIG_EXPECTED="G:yyy"
 
 CG="$(contig_battery "$WORK/bin/validate-audit-anchors.sh")"
 if [ "$CG" = "$CONTIG_EXPECTED" ]; then
-  ok "--prior-sprint-sha names a hole older than the prior sprint as PENDING on stderr, keeps exit 0 and the sha on stdout, stays quiet on an out-of-order chain with no hole, and sees a hole at the live/archive seam without indicting the archive's own history"
+  ok "--prior-sprint-sha names a hole older than the prior sprint as PENDING on stderr, keeps exit 0 and the sha on stdout, stays quiet on an out-of-order chain with no hole, and sees a hole at the live/archive seam without indicting the archive's own history"; B_contig=1
 else
   bad "--prior-sprint-sha contiguity battery: expected [$CONTIG_EXPECTED], got [$CG]"
 fi
@@ -408,7 +410,7 @@ contig_mutate() {
     exit 2
   fi
   got="$(contig_battery "$M")"
-  if [ "$got" = "$want" ]; then ok "MUTANT $tag: $claim"; else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
+  if [ "$got" = "$want" ]; then mutant_killed "$B_contig" "$tag" "MUTANT $tag: $claim"; else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
 }
 contig_mutate nocontig 's/^    if missing:$/    if False:/' "G:nyn" \
   "without the report a hole older than the prior sprint is invisible again, and the near-miss stays quiet"
@@ -547,7 +549,7 @@ EXPECTED5="T:skip-named M:fires E:skip N:noweb H:fires P:fires R:fires B:fires"
 # --- 6. the shipping validator answers every world -----------------------------
 GOT5="$(battery5 "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOT5" = "$EXPECTED5" ]; then
-  ok "test-only carve-out: an all-test web/** diff SKIPs and SAYS test-only, a test file BESIDE a source file still FIREs, a no-suffix helper under a tests dir still FIREs, the pre-existing no-web/** skip keeps its own wording, and a 22-file diff whose only source sits past position 20 still FIREs"
+  ok "test-only carve-out: an all-test web/** diff SKIPs and SAYS test-only, a test file BESIDE a source file still FIREs, a no-suffix helper under a tests dir still FIREs, the pre-existing no-web/** skip keeps its own wording, and a 22-file diff whose only source sits past position 20 still FIREs"; B_tonly=1
 else
   bad "test-only battery: expected [$EXPECTED5], got [$GOT5]"
 fi
@@ -577,7 +579,7 @@ fi
 # must yield nothing, or the extractor is matching on something other than what it claims.
 SUFFIX_CTL="$(printf '%s\n' 'CHECK5_WEB_N="$(printf ... )"' | sed -n 's/^CHECK5_WEB_NONTEST=.*\$NF !~ \/\\\.(\([^)]*\))\\\.\/.*/\1/p')"
 if [ "$SUFFIX_SET" = "test|spec" ] && [ -z "$SUFFIX_CTL" ]; then
-  ok "the acquitted suffix SET is exactly [test|spec] at the emission site (control: the same extraction against a non-emitting line yields nothing) — a THIRD suffix cannot be added without failing here, which no battery of worlds can see"
+  ok "the acquitted suffix SET is exactly [test|spec] at the emission site (control: the same extraction against a non-emitting line yields nothing) — a THIRD suffix cannot be added without failing here, which no battery of worlds can see"; B_sset=1
 else
   bad "acquitted suffix set is [$SUFFIX_SET], expected [test|spec] — a member was added or removed. If this widening is intended, the change belongs in a release that argues for it, and this arm is where it is argued. (extraction control returned [$SUFFIX_CTL], expected empty)"
 fi
@@ -610,7 +612,7 @@ mutate5() {
   fi
   got="$(battery5 "$D/validate-mandatory-rules.sh")"
   if [ "$got" = "$want" ]; then
-    ok "MUTANT $tag: $claim"
+    mutant_killed "$B_tonly" "$tag" "MUTANT $tag: $claim"
   elif [ "$got" = "$EXPECTED5" ]; then
     bad "MUTANT $tag SURVIVED: $claim — every world unchanged, so nothing here can catch it"
   else
@@ -682,7 +684,7 @@ if [ "$C5SSET" != "test|spec|stories" ]; then
 elif [ "$C5SGOT" != "$EXPECTED5" ]; then
   bad "MUTANT stories: expected the world battery to be UNCHANGED at [$EXPECTED5] — that blindness is the finding — but got [$C5SGOT]"
 else
-  ok "MUTANT stories: widening the acquittal to a THIRD suffix leaves every world unchanged, so no battery of worlds can catch it, and the set-lock arm is what reads [test|spec|stories] and refuses"
+  mutant_killed "$(( $B_tonly && $B_sset ))" stories "MUTANT stories: widening the acquittal to a THIRD suffix leaves every world unchanged, so no battery of worlds can catch it, and the set-lock arm is what reads [test|spec|stories] and refuses"
 fi
 
 # ============================================================================
@@ -762,7 +764,7 @@ fi
 # --- 9. the shipping validator reads the whole section, and only this sprint's ---
 GOTSEC="$(battery_sec "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOTSEC" = "$EXPECTED_SEC" ]; then
-  ok "long-section: evidence at line ~350 of a ~700-line sprint section PASSes (outside both the first and the last 200), and a later sprint's evidence does not acquit this one"
+  ok "long-section: evidence at line ~350 of a ~700-line sprint section PASSes (outside both the first and the last 200), and a later sprint's evidence does not acquit this one"; B_sec=1
 else
   bad "long-section battery: expected [$EXPECTED_SEC], got [$GOTSEC]"
 fi
@@ -770,7 +772,7 @@ fi
 # --- 10. the isolation line carries no head -------------------------------------
 GOTS="$(sec_line_token "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOTS" = "S:clean" ]; then
-  ok "the SPRINT_SECTION isolation line carries no head (extractor self-probed both ways) — a bounded prefix of the section cannot come back without failing here"
+  ok "the SPRINT_SECTION isolation line carries no head (extractor self-probed both ways) — a bounded prefix of the section cannot come back without failing here"; B_sline=1
 else
   bad "the SPRINT_SECTION isolation line reads [$GOTS], expected [S:clean] — a head truncates the sprint's own later lines, and the deploy-validate entry is among the last written"
 fi
@@ -803,7 +805,7 @@ mutsec() {
   fi
   got="$(battery_sec "$D/validate-mandatory-rules.sh") $(sec_line_token "$D/validate-mandatory-rules.sh")"
   if [ "$got" = "$want" ]; then
-    ok "MUTANT $tag: $claim"
+    mutant_killed "$(( $B_sec && $B_sline ))" "$tag" "MUTANT $tag: $claim"
   elif [ "$got" = "$EXPECTED_SEC S:clean" ]; then
     bad "MUTANT $tag SURVIVED: $claim — every cell unchanged"
   else
@@ -867,7 +869,7 @@ EXPECTED_PW="i:FAIL ii:PASS iii:PASS iv:FAIL v:FAIL vi:FAIL"
 # --- 12. the shipping validator reads a run, not a mention -----------------------
 GOTPW="$(battery_pw "$WORK/bin/validate-mandatory-rules.sh")"
 if [ "$GOTPW" = "$EXPECTED_PW" ]; then
-  ok "playwright evidence: a could-not-run row FAILs alone and PASSes beside USER-CONFIRMED, a run row with its .zip trace PASSes, no playwright FAILs, and both near-misses (a 'no trace captured' row, an xzip with no .zip) FAIL"
+  ok "playwright evidence: a could-not-run row FAILs alone and PASSes beside USER-CONFIRMED, a run row with its .zip trace PASSes, no playwright FAILs, and both near-misses (a 'no trace captured' row, an xzip with no .zip) FAIL"; B_pw=1
 else
   bad "playwright battery: expected [$EXPECTED_PW], got [$GOTPW]"
 fi
@@ -897,7 +899,7 @@ bash -n "$PWM/validate-mandatory-rules.sh" \
   || { echo "FIXTURE ERROR: mutant 'bare' is not valid bash" >&2; exit 2; }
 PWMGOT="$(battery_pw "$PWM/validate-mandatory-rules.sh")"
 if [ "$PWMGOT" = "i:PASS ii:PASS iii:PASS iv:FAIL v:PASS vi:PASS" ]; then
-  ok "MUTANT bare: restoring grep -qi 'playwright' PASSes the could-not-run row and both near-misses, and moves nothing else"
+  mutant_killed "$B_pw" bare "MUTANT bare: restoring grep -qi 'playwright' PASSes the could-not-run row and both near-misses, and moves nothing else"
 elif [ "$PWMGOT" = "$EXPECTED_PW" ]; then
   bad "MUTANT bare SURVIVED: the bare match restored moves no case"
 else

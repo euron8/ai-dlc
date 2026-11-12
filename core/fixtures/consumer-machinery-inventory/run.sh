@@ -65,6 +65,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_ctl=0
 
 # Build a minimal consumer: the skill dir with the contract and the manifest, a home, and an
 # inventory whose contents each case supplies.
@@ -308,7 +310,7 @@ expect_set() { # $1 label, $2 expected count, $3 ERE every red must match, $4 se
   n="$(grep -c . <<<"$reds" || true)"
   unmatched="$(grep -vE "$3" <<<"$reds" | grep -c . || true)"
   if [ "$n" -eq "$2" ] && [ "$unmatched" -eq 0 ]; then
-    ok "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
+    mutant_killed "$B_ctl" "$1" "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
   else
     bad "MUTANT $1: expected $2 red(s) matching '$3', got ${n} (${unmatched} unexpected): $(tr '\n' ';' <<<"$reds")"
     battery_fails=$((battery_fails+1))
@@ -316,7 +318,7 @@ expect_set() { # $1 label, $2 expected count, $3 ERE every red must match, $4 se
 }
 
 ctl="$(mut_reds control "")"
-[ -z "$ctl" ] && ok "CONTROL: an unmutated copy of the validator passes every assertion" \
+[ -z "$ctl" ] && { ok "CONTROL: an unmutated copy of the validator passes every assertion"; B_ctl=1; } \
               || { bad "CONTROL: an unmutated copy FAILED ($(tr '\n' ';' <<<"$ctl")) — every kill below is unearned"; battery_fails=$((battery_fails+1)); }
 
 # M1 — the home comparison always matches, so nothing is ever "outside" it. The segregation

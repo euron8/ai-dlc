@@ -1136,15 +1136,8 @@ pw() {
   fi
   set --
   case "$w" in
-    # Record mode classifies each RECORDED row with `check-owed-derivations.sh --scope`, which leaves a
-    # check-owed-scope-* directory in TMPDIR (check-owed-derivations.sh:349 pipes into scope_batch, whose mktemp
-    # and EXIT trap at :327-329 then live in the pipeline's subshell and never clean up). Only world ii records an
-    # OWED row; world i relabels, records nothing and never reaches --scope, so it stays on the shared TMPDIR and
-    # A10c still reads its record-mode cleanup. World ii is routed to its own TMPDIR until BL-995
-    # (check-owed-derivations.sh:349 --scope leaks a dir) lands; drop this routing in that release.
     i) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; set -- --record-owed "$rec" ;;
-    ii) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; set -- --record-owed "$rec"
-        td="$td-rec"; mkdir -p "$td" ;;
+    ii) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; set -- --record-owed "$rec" ;;
     viii) brd="$WORK/run-$tag-viii-root"; g "$WORK" clone -q "$d" "$brd" 2>/dev/null; ptree "$brd" > "$o.t0"; set -- --base-root "$brd" ;;
     vii|viic) cap="$P_CAP" ;;
     capabc) cap=abc ;;

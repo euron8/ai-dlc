@@ -37,7 +37,15 @@
 #     KNOWN LIMIT (the "LEADS ARE NOT ENOUGH" note below, one step further): these para rows pin
 #     that each clause is PRESENT in the lead's paragraph. A separate sentence appended after it
 #     that contradicts it ("...; elicitation may instead run one voice") leaves every pinned
-#     clause intact and passes. No row here can fail on an addition; a reviewer reads for that.
+#     clause intact and passes. No para row can fail on an addition; a reviewer reads for that.
+#     An `exact` row (below) fails an addition only inside its own span: a sentence appended to its
+#     paragraph, or a second paragraph in the span. Text added outside the span is not its subject.
+#     Inside its span an `exact` row does NOT catch three shapes:
+#       - a drain instruction written as a `#####` sub-heading (headings are skipped);
+#       - a drain instruction inside a fenced block;
+#       - a drain instruction inside an HTML comment (fences and comments are invisible to every test).
+#     The lead model reads raw markdown, so these are real survivors; closing them changes the
+#     fixture's grammar for every pin, which is a separate change.
 #   - a change that makes an existing name, role or unit resolve to a different value, party or
 #     unit while its text stays the same prices every literal and threshold the re-bound value
 #     flows into under both bindings, in the unit it is compared against, and records old -> new,
@@ -106,7 +114,13 @@
 #     consequence (r11a-one-shape), a question carrying no badge says so in its own text with the
 #     reason (r11a-say-why), and no later step puts an attested act back to the operator
 #     (r11a-attested-act), and a record read afterwards showing the act did not occur is an
-#     authorization-premise invalidation rather than a re-ask (r11a-premise). Those subsection headings are their own paragraphs to para mode, so each
+#     authorization-premise invalidation rather than a re-ask (r11a-premise), and immediately before
+#     every `AskUserQuestion` the lead joins finished lanes, dispatches every lane the question does
+#     not hold, and then asks at once, the question unchanged (r11a-dispatch-ask, an `exact` row: the
+#     subsection holds ONE paragraph and it must EQUAL the pinned text, so a drain sentence appended
+#     to it (named D2) or a drain paragraph added beside it (D-new) fails; named D1 rewrites it; a
+#     paragraph added to the sibling attested-act subsection stays green, D-near). Rule 11(a) item (4) cites that
+#     subsection (r11a-lanes-dispatch) and the pointer counts four subsections (r11a-pointer). Those subsection headings are their own paragraphs to para mode, so each
 #     lead is the bold opening of the paragraph under them. route.md Step 6's **Option labels carry
 #     no recommendation.** paragraph says in the question why its options carry none
 #     (route-say-why). All five are para rows; each token sits on ONE line of its subject.
@@ -237,6 +251,14 @@
 # pins that a definition lives in one file only. `absent` catches a verbatim copy, not a
 # paraphrase. It is a tripwire, not a guarantee. Both are keyed on the row's mode field alone.
 #
+# `exact` IS PARA MODE WITH AN END ANCHOR. It reads paragraphs exactly as `para` does (same span,
+# fence and comment rules, whitespace collapsed, trailing blank dropped), and a hit is a paragraph
+# that begins with the lead and EQUALS the token, the whole pinned paragraph. The span must also
+# hold exactly ONE non-heading paragraph, or the row reads in-span 0. A `para` row passes a
+# sentence appended after its clause or a paragraph added beside it; an `exact` row fails both.
+# Its generic mutants are the para set plus `append` (a sentence added to the paragraph must
+# fail). Section 2 probes it both ways.
+#
 # LAYOUTS. The subject exists on a consumer too, so this fixture ships. The root is found by
 # walking up from this script for the skill directory — core/skills/ai-dlc in the
 # distribution, .claude/skills/ai-dlc in an installed consumer — never by counting hops, and
@@ -277,7 +299,7 @@ dirs_for() { # dirs_for "<layout> <root>" -> sets SKILL_DIR ROLES_DIR ROOT LAYOU
   esac
 }
 
-# pin_scan <file> <span-start-prefix|""> <span-end-prefix> <lead> <prefix|contains|para> [<token>]
+# pin_scan <file> <span-start-prefix|""> <span-end-prefix> <lead> <prefix|contains|para|exact> [<token>]
 #   prints "<in-span hits> <whole-file hits> <span start line> <span end line> <first hit line>"
 #   Fenced lines and <!-- --> comments are invisible to every test, the span markers
 #   included. A comment opened MID-LINE hides everything after it until its close, exactly
@@ -293,11 +315,16 @@ pin_scan() {
   function flush(   q) {
     if (p == "") return
     q = p; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
-    if (index(q, l) == 1 && index(q, k) > 0) { whole++; if (fl == 0) fl = pl; if (pst == 1) ins++ }
+    if (x) { sub(/ $/, "", q); h = (index(q, l) == 1 && q == k); if (pst == 1 && substr(q, 1, 1) != "#") np++ }
+    else h = (index(q, l) == 1 && index(q, k) > 0)
+    if (h) { whole++; if (fl == 0) fl = pl; if (pst == 1) ins++ }
     p = ""
   }
   BEGIN { s = ENVIRON["PS_START"]; e = ENVIRON["PS_END"]; l = ENVIRON["PS_LEAD"]; m = ENVIRON["PS_MODE"]
           k = ENVIRON["PS_TOK"]
+          # exact is para with an end anchor: every para rule below applies, flush() alone differs.
+          # np counts the non-heading paragraphs in span; an exact span holding any but one reads 0.
+          x = 0; np = 0; if (m == "exact") { x = 1; m = "para" }
           fence = ""; com = 0; ins = 0; whole = 0; el = 0; fl = 0; p = ""
           if (s == "") { state = 1; sl = 1 } else { state = 0; sl = 0 } }
   {
@@ -333,6 +360,7 @@ pin_scan() {
   }
   END { if (m == "absent") { print whole, whole, 1, 1, fl; exit 0 }
         if (m == "para") flush()
+        if (x && np != 1) ins = 0
         if (fence != "" || com) { print "UNBALANCED"; exit 2 }
         print ins, whole, sl, el, fl }' "$1"
 }
@@ -577,9 +605,10 @@ dv-lrcov-interp-unanswered|S|steps/deploy-validate.md|### 5. Production Validati
 dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
 r11a-effects|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|INCLUDING the value it leaves in force
 r11a-unbadged|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|none marked `(Recommended)` and none placed first as the pick
-r11a-pointer|S|SKILL.md|### Rule 11 |### Rule 12 |**One shape for every operator decision|para|apply all three to every question you put to the operator
+r11a-pointer|S|SKILL.md|### Rule 11 |### Rule 12 |**One shape for every operator decision|para|stated in full under Rule 12's four `#### Operator decisions` subsections; apply all four to every question you put to the operator
 r11a-four-things|S|SKILL.md|### Rule 11 |### Rule 12 |**Before any question reaches the operator, do|para|four things to it
-r11a-lanes-dispatch|S|SKILL.md|### Rule 11 |### Rule 12 |**Before any question reaches the operator, do|para|Dispatch ready actions on free lanes, arm their joins, and name the lanes held
+r11a-lanes-dispatch|S|SKILL.md|### Rule 11 |### Rule 12 |**Before any question reaches the operator, do|para|(4) Dispatch, then ask, as Rule 12's `#### Operator decisions: dispatch, then ask`.
+r11a-dispatch-ask|S|SKILL.md|#### Operator decisions: dispatch, then ask|### Rule 13 |**Immediately before every `AskUserQuestion`, dispatch, then ask.**|exact|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.
 r11a-one-shape|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|gives every option with its effect and the consequence of choosing it
 r11a-say-why|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the operator has one shape|para|says so in its own text, with the reason,
 r11a-attested-act|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|no later step puts it back to the operator:
@@ -1083,6 +1112,8 @@ if [ "${1:-}" = "--report" ]; then
   [ "$fails" -eq 0 ] && exit 0 || exit 1
 fi
 
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
+B_rscope=0; B_join=0; B_slot=0; B_bm=0; B_le=0; B_win=0; B_mscope=0; B_epgp=0; B_epho=0; B_dv=0; B_mruns=0; B_mdl=0; B_cwd=0
 echo "process-rule-pins"
 [ -n "$RESOLVED" ] && echo "HERMETIC-CONSUMED core/skills/ai-dlc/"
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -1187,6 +1218,21 @@ printf '## A\n\n**LEAD.** the rule\n<!-- MUST carry it -->\n\n## B\n' > "$P/para
 probe "para: the token inside a comment is not found" 0 "$P/paracom.md" "## A" "## B" "**LEAD.**" para "MUST carry it"
 printf '## A\n**LEAD.** the rule\n## B\nMUST carry it\n' > "$P/parahead.md"
 probe "para: a heading ends a paragraph, so a token beyond the span end does not join" 0 "$P/parahead.md" "## A" "## B" "**LEAD.**" para "MUST carry it"
+# Exact mode, both directions: the whole paragraph wrapped across lines equals the pin; the same
+# paragraph with one sentence appended does not (para mode, the control, still passes it); a second
+# paragraph in the span fails it; a paragraph added outside the span leaves it found; the pinned
+# paragraph outside the span is not found.
+printf '## A\n\n**LEAD.** the rule MUST\ncarry it here.\n\n## B\n' > "$P/ex.md"
+probe "exact: the whole paragraph wrapped across lines equals the pin" 1 "$P/ex.md" "## A" "## B" "**LEAD.**" exact "**LEAD.** the rule MUST carry it here."
+printf '## A\n\n**LEAD.** the rule MUST\ncarry it here. But not always.\n\n## B\n' > "$P/exapp.md"
+probe "exact: the paragraph with a sentence appended is not found" 0 "$P/exapp.md" "## A" "## B" "**LEAD.**" exact "**LEAD.** the rule MUST carry it here."
+probe "exact: CONTROL, para mode still finds that appended paragraph" 1 "$P/exapp.md" "## A" "## B" "**LEAD.**" para "the rule MUST carry it here."
+printf '## A\n\n**LEAD.** the rule MUST\ncarry it here.\n\nAnother paragraph.\n\n## B\n' > "$P/exnear.md"
+probe "exact: two paragraphs in the span fail the pin" 0 "$P/exnear.md" "## A" "## B" "**LEAD.**" exact "**LEAD.** the rule MUST carry it here."
+printf '## A\n\n**LEAD.** the rule MUST\ncarry it here.\n\n## B\n\nAnother paragraph.\n' > "$P/exside.md"
+probe "exact: a paragraph added outside the span leaves the pinned one found" 1 "$P/exside.md" "## A" "## B" "**LEAD.**" exact "**LEAD.** the rule MUST carry it here."
+printf '## A\n\nprose\n\n## B\n\n**LEAD.** the rule MUST carry it here.\n' > "$P/exout.md"
+probe "exact: the paragraph outside the span is not found" 0 "$P/exout.md" "## A" "## B" "**LEAD.**" exact "**LEAD.** the rule MUST carry it here."
 
 # Range scan probe, both directions.
 mkdir -p "$P/r1" "$P/r2" || exit 2
@@ -1216,11 +1262,11 @@ n="$( SKILL_DIR="$CS" ROLES_DIR="$P/cs/.claude/team-roles"; range_count "$RANGE_
                || bad "range scope (consumer): consumer-owned crosswalk.md scanned ($n)"
 printf 'sections 0–2b in a core flat file\n' > "$CS/escalations.md"
 n="$( SKILL_DIR="$CS" ROLES_DIR="$P/cs/.claude/team-roles"; range_count "$RANGE_OLD" $(range_scope) )"
-[ "$n" = "1" ] && ok "range scope (consumer): a core flat file beside it is scanned (1)" \
+[ "$n" = "1" ] && { ok "range scope (consumer): a core flat file beside it is scanned (1)"; B_rscope=1; } \
                || bad "range scope (consumer): core flat file not scanned ($n)"
 printf 'unrelated: 1\n' > "$CS/layer-contract.yaml"
 n="$( SKILL_DIR="$CS" ROLES_DIR="$P/cs/.claude/team-roles"; range_count "$RANGE_OLD" $(range_scope) )"
-[ "$n" = "2" ] && ok "MUTANT range scope: without the consumer_*_file key the crosswalk IS read (2) — the exclusion is the derivation" \
+[ "$n" = "2" ] && mutant_killed "$B_rscope" rscope-nokey "MUTANT range scope: without the consumer_*_file key the crosswalk IS read (2) — the exclusion is the derivation" \
                || bad "MUTANT range scope: removing the key left the count at $n — the exclusion is not what the probe credited"
 
 # --- 3. resolve the real tree --------------------------------------------------
@@ -1274,6 +1320,7 @@ pmutate() {
     q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
     if (!(index(q, l) == 1 && index(q, k) > 0)) { print; next }
     if (m == "negate")   { i = index(q, k); print substr(q, 1, i - 1) "NEGATED-CLAUSE" substr(q, i + length(k)); next }
+    if (m == "append")   { print q " APPENDED-SENTENCE."; next }
     if (m == "relocate") { held[++n] = q; next }
     if (m == "fence")    { print "```"; print q; print "```"; next }
     if (m == "comment")  { print "<!--"; print q; print "-->"; next }
@@ -1282,7 +1329,6 @@ pmutate() {
   END { for (i = 1; i <= n; i++) { print ""; print held[i] } }' "$2" > "$3"
 }
 
-. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
 M="$WORK/mut"; mkdir -p "$M" || exit 2
 while IFS='|' read -r id base rel s e lead mode tok; do
   f="$(pin_path "$base" "$rel")"
@@ -1313,25 +1359,29 @@ while IFS='|' read -r id base rel s e lead mode tok; do
   fi
   raw="$(grep -cF -- "$lead" "$f")" || raw=0
   [ "$raw" -ge 1 ] || { bad "$id: lead absent from ${f#"$ROOT/"} — mutants have no subject"; continue; }
-  if [ "$mode" = "para" ]; then
+  if [ "$mode" = "para" ] || [ "$mode" = "exact" ]; then
     flat="$M/$id.flat.md"; flatten "$f" "$flat"
-    o1="$(pin_scan "$f" "$s" "$e" "$lead" para "$tok")"; o2="$(pin_scan "$flat" "$s" "$e" "$lead" para "$tok")"
+    o1="$(pin_scan "$f" "$s" "$e" "$lead" "$mode" "$tok")"; o2="$(pin_scan "$flat" "$s" "$e" "$lead" "$mode" "$tok")"
     B_para=0
     if [ "${o1%% *}" = "1" ] && [ "${o2%% *}" = "1" ]; then
       ok "$id: control: original and flattened copy both pin the paragraph in span (1)"; B_para=1
     else
       bad "$id: CONTROL — original in-span=${o1%% *}, flattened in-span=${o2%% *}; both must be 1 before a mutant is read"; continue
     fi
-    for mm in negate relocate fence comment; do
+    pmodes="negate relocate fence comment"
+    [ "$mode" = "exact" ] && pmodes="$pmodes append"
+    for mm in $pmodes; do
       dst="$M/$id.$mm.md"
       pmutate "$mm" "$flat" "$dst" "$lead" "$tok"
       if cmp -s "$flat" "$dst"; then bad "$id/$mm: mutation did not apply"; continue; fi
-      out="$(pin_scan "$dst" "$s" "$e" "$lead" para "$tok")"; rc=$?
+      out="$(pin_scan "$dst" "$s" "$e" "$lead" "$mode" "$tok")"; rc=$?
       [ "$rc" -eq 0 ] || { bad "$id/$mm: mutated copy unbalanced (rc=$rc)"; continue; }
       read -r ins whole sl el fl <<<"$out"
       case "$mm" in
         negate)   if [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then mutant_killed "${B_para:-0}" "$id/negate" "$id/negate: binding clause rewritten under an intact lead"
                     else bad "$id/negate: SURVIVED (in-span=$ins whole=$whole)"; fi ;;
+        append)   if [ "$ins" -eq 0 ] && [ "$whole" -eq 0 ]; then mutant_killed "${B_para:-0}" "$id/append" "$id/append: a sentence appended to the exact paragraph fails it"
+                    else bad "$id/append: SURVIVED (in-span=$ins whole=$whole)"; fi ;;
         relocate) [ "$ins" -eq 0 ] && [ "$whole" -ge 1 ] && ok "$id/relocate: paragraph outside the span fails though it is still in the file" \
                     || bad "$id/relocate: in-span=$ins whole=$whole — span does not discriminate" ;;
         fence|comment)
@@ -1390,6 +1440,8 @@ arch-ready-intent|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|Invoke 
 dev-dar-before-submit|R|dev.md|## Workflow Per Task|## QA Handoff Evidence|Populate the Dev Agent Record in the story file|contains||Populate the Dev Agent Record in the story file|Report the Dev Agent Record in the completion report
 impl-dar-copy|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|copy the Dev Agent Record the dev wrote on the story branch|contains||copy the Dev Agent Record the dev wrote on the story branch|fold the Dev Agent Record from the dev's completion report
 gv17-retro-args|S|steps/gate-validation.md|### 17. Skill-invocation provenance|### 18.|- **Retro gate:**|para|`scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh ai-dlc/retro/sprint-<N> <N>`.|validate-retro-evidence.sh <N>`.
+r11a-dispatch-ask-D1|S|SKILL.md|#### Operator decisions: dispatch, then ask|### Rule 13 |**Immediately before every `AskUserQuestion`, dispatch, then ask.**|exact|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|Before every `AskUserQuestion`, wait until every running lane has finished, join them, then ask.
+r11a-dispatch-ask-D2|S|SKILL.md|#### Operator decisions: dispatch, then ask|### Rule 13 |**Immediately before every `AskUserQuestion`, dispatch, then ask.**|exact|**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join every lane whose completion has arrived: read the completion and record it. Acting on its output is itself a ready action, dispatched below, not work to finish before asking. Dispatch every ready action the question does not hold, in the background (Rule 29), and arm its join. An action is ready when its inputs exist now, and the question holds it only when it reads the answer. Name the lanes held in your output beside the question, not inside it. Then send the question at once, in `AskUserQuestion`, unchanged by the lane state. Never wait for a running lane before asking, and never hold back, defer or drop a question, or fold it into a later one, to suit the lanes.|or fold it into a later one, to suit the lanes.|or fold it into a later one, to suit the lanes. Ask once every running lane has finished.
 NAMED
 }
 # lreplace <src> <dst> <old> <new> — the first literal occurrence on each line, no regex. A line
@@ -1406,7 +1458,7 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   f="$(pin_path "$base" "$rel")"
   [ -f "$f" ] || { bad "$id/named: subject absent"; continue; }
   src="$f"
-  if [ "$mode" = "para" ]; then src="$M/$id.named.flat.md"; flatten "$f" "$src"; fi
+  if [ "$mode" = "para" ] || [ "$mode" = "exact" ]; then src="$M/$id.named.flat.md"; flatten "$f" "$src"; fi
   c="$(pin_scan "$src" "$s" "$e" "$lead" "$mode" "$tok")"
   B_named=0
   if [ "${c%% *}" = "1" ]; then ok "$id/named: control: the unmutated text pins in span (1)"; B_named=1
@@ -1417,7 +1469,31 @@ while IFS='|' read -r id base rel s e lead mode tok old new; do
   if [ "${out%% *}" = "0" ]; then mutant_killed "${B_named:-0}" "$id/named" "$id/named: rewritten to '$new'"
   else bad "$id/named: rewritten to '$new' SURVIVED (in-span=${out%% *})"; fi
 done <<<"$(named_mutants)"
-[ "$n_named" -eq 13 ] || bad "named: $n_named named mutant(s) read, wanted 13"
+[ "$n_named" -eq 15 ] || bad "named: $n_named named mutant(s) read, wanted 15"
+# D-new and D-near: a paragraph added after the line opening with <after>, on the D2 flattened copy.
+# D-new adds a drain paragraph INSIDE the dispatch-then-ask subsection and must KILL the exact row;
+# D-near adds one to the sibling attested-act subsection, outside the span, and must stay green.
+dn_src="$M/r11a-dispatch-ask-D2.named.flat.md"
+dn_lead='**Immediately before every `AskUserQuestion`, dispatch, then ask.**'
+dn_tok="$(pins | awk -F'|' '$1 == "r11a-dispatch-ask" { print $8 }')"
+dn_scan() { local o; o="$(pin_scan "$1" '#### Operator decisions: dispatch, then ask' '### Rule 13 ' "$dn_lead" exact "$dn_tok")"; printf '%s' "${o%% *}"; }
+dn_add() { # <after-lead> <paragraph> <dst>
+  DN_AFTER="$1" DN_TEXT="$2" awk 'BEGIN { a = ENVIRON["DN_AFTER"]; t = ENVIRON["DN_TEXT"] }
+    { print } index($0, a) == 1 { print ""; print t }' "$dn_src" > "$3"
+}
+B_dn=0
+if [ -f "$dn_src" ] && [ -n "$dn_tok" ] && [ "$(dn_scan "$dn_src")" = "1" ]; then
+  ok "r11a-dispatch-ask/added: control: the unmutated flattened copy pins in span (1)"; B_dn=1
+  dn_add "$dn_lead" 'When a lane is about to finish, wait for it and join it, then ask.' "$M/r11a-dispatch-ask.new.md"
+  if cmp -s "$dn_src" "$M/r11a-dispatch-ask.new.md"; then bad "r11a-dispatch-ask/D-new: the added paragraph did not apply"
+  elif [ "$(dn_scan "$M/r11a-dispatch-ask.new.md")" = "0" ]; then
+    mutant_killed "${B_dn:-0}" "r11a-dispatch-ask/D-new" "r11a-dispatch-ask/D-new: a drain paragraph added inside the subsection fails the exact pin"
+  else bad "r11a-dispatch-ask/D-new: a paragraph added inside the subsection SURVIVED (in-span=$(dn_scan "$M/r11a-dispatch-ask.new.md"))"; fi
+  dn_add '**An act the operator has attested is not raised again.**' 'A different paragraph in the attested-act subsection.' "$M/r11a-dispatch-ask.near.md"
+  if cmp -s "$dn_src" "$M/r11a-dispatch-ask.near.md"; then bad "r11a-dispatch-ask/D-near: the added paragraph did not apply"
+  elif [ "$(dn_scan "$M/r11a-dispatch-ask.near.md")" = "1" ]; then ok "r11a-dispatch-ask/D-near: a paragraph added to the sibling attested-act subsection leaves the exact pin green (in-span=1)"
+  else bad "r11a-dispatch-ask/D-near: a paragraph outside the span failed the exact pin (in-span=$(dn_scan "$M/r11a-dispatch-ask.near.md"))"; fi
+else bad "r11a-dispatch-ask/added: CONTROL -- no D2 flattened copy, no pinned text, or the unmutated copy does not read 1"; fi
 # m3's TWINS. The two readiness rows share architecture.md §3's one line, so each named rewrite must
 # move ONLY its own row: the clause dropped leaves the intent pinned, the intent dropped leaves the
 # clause pinned. Otherwise the two rows are one row spelled twice and either kill is unearned.
@@ -1577,7 +1653,7 @@ if [ "$n_seat" -lt 3 ]; then
 elif [ -n "$jf" ]; then
   bad "join: a seat or cross join paragraph carries no --complete call: $(printf '%s' "$jf" | sed "s|$ROOT/||g" | tr '\n' ' ')"
 else
-  ok "join: every seat or cross join paragraph carries --complete ($n_seat seat or cross join call(s) scanned)"
+  ok "join: every seat or cross join paragraph carries --complete ($n_seat seat or cross join call(s) scanned)"; B_join=1
 fi
 # MUTANTS: --complete stripped from EVERY seat or cross join in the PARAGRAPH holding each real
 # site, one mutant per paragraph; every such mutant must flag THAT paragraph.
@@ -1665,7 +1741,7 @@ if [ "$jb_paras" -lt 3 ]; then
 elif [ -n "$jb_surv" ]; then
   bad "join/mutant: SURVIVED -- every --complete stripped from the paragraph at [${jb_surv# }] was not flagged ($jb_hit/$jb_paras paragraphs flagged, $jb_sites sites)"
 else
-  ok "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_hit/$jb_paras)"
+  mutant_killed "$B_join" join-mutant "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_hit/$jb_paras)"
 fi
 
 # --- 4c. the lead-address arm: probes both directions, then mutants ---------------
@@ -1756,14 +1832,14 @@ sd_off="$(slot_hits "$SD/off.md")"; sd_off2="$(slot_hits "$SD/off2.md")"; sd_nea
 if [ "$sd_off" = 1 ] && [ "$sd_off2" = 1 ] && [ "$sd_near" = 0 ] && [ "$sd_nf" = 2 ]; then
   sd_real_slot="$(slot_hits "$GPF")"; sd_real_file="$(file_hits "$GPF")"
   if [ "$sd_real_slot" = 0 ] && [ "$sd_real_file" -ge 2 ]; then
-    ok "slot-target: the derivation re-run names $sd_real_file file target(s) and no slot directory (probe: s<N>/ and s319/ read 1 each, file targets and prose read 0)"
+    ok "slot-target: the derivation re-run names $sd_real_file file target(s) and no slot directory (probe: s<N>/ and s319/ read 1 each, file targets and prose read 0)"; B_slot=1
   else
     bad "slot-target: _gate-procedures.md carries $sd_real_slot slot target(s) (want 0) and $sd_real_file file target(s) (want >= 2)"
   fi
   # MUTANT: restore the slot line in a copy; the arm must read it. cmp -s guards a sed that matched nothing.
   sed 's|^scripts/ai-dlc/validate-artifact-derivations.sh <the joined repair record>$|scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/|' "$GPF" > "$SD/gp-mut.md"
   if cmp -s "$GPF" "$SD/gp-mut.md"; then bad "MUTANT slot-target: DID NOT APPLY"
-  elif [ "$(slot_hits "$SD/gp-mut.md")" = 1 ]; then ok "MUTANT slot-target: the restored slot line is read (1) where the real file reads 0"
+  elif [ "$(slot_hits "$SD/gp-mut.md")" = 1 ]; then mutant_killed "$B_slot" slot-target "MUTANT slot-target: the restored slot line is read (1) where the real file reads 0"
   else bad "MUTANT slot-target: SURVIVED (read $(slot_hits "$SD/gp-mut.md"))"; fi
 else
   bad "slot-target: FIXTURE BROKEN -- offenders $sd_off/$sd_off2 (want 1/1), near-miss $sd_near (want 0), near-miss file targets $sd_nf (want 2)"
@@ -1787,7 +1863,7 @@ if [ "$bm1" = 1 ] && [ "$bm2" = 1 ] && [ "$bm3" = 1 ] && [ "$bmn" = 0 ]; then
   bm_real="$(carriers "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md)"
   bm_ctl="$(cat "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md | grep -c 'sha=<hex>')" || bm_ctl=0
   if [ "$bm_real" = 0 ] && [ "$bm_ctl" -ge 1 ]; then
-    ok "bare-marker: 0 hand-written-marker carriers across the role and step files (control: $bm_ctl sha=<hex> descriptions; probe: fallback and bare spellings read 1 each, sha= description reads 0)"
+    ok "bare-marker: 0 hand-written-marker carriers across the role and step files (control: $bm_ctl sha=<hex> descriptions; probe: fallback and bare spellings read 1 each, sha= description reads 0)"; B_bm=1
   else
     bad "bare-marker: $bm_real carrier(s) (want 0), $bm_ctl sha=<hex> control line(s) (want >= 1)"
   fi
@@ -1796,7 +1872,7 @@ if [ "$bm1" = 1 ] && [ "$bm2" = 1 ] && [ "$bm3" = 1 ] && [ "$bmn" = 0 ]; then
   printf 'If that call fails with `unknown arg: --mark`, append the bare line `seat-complete: <step> <seat> <shard> findings=<n>` instead.\n' >> "$BM/dev-mut.md"
   bm_mut="$(carriers "$BM/dev-mut.md")"
   if cmp -s "$ROLES_DIR/dev.md" "$BM/dev-mut.md"; then bad "MUTANT bare-marker: DID NOT APPLY"
-  elif [ "$bm_mut" -ge 1 ]; then ok "MUTANT bare-marker: the re-inserted fallback is read ($bm_mut) where the real files read 0"
+  elif [ "$bm_mut" -ge 1 ]; then mutant_killed "$B_bm" bare-marker "MUTANT bare-marker: the re-inserted fallback is read ($bm_mut) where the real files read 0"
   else bad "MUTANT bare-marker: SURVIVED"; fi
 else
   bad "bare-marker: FIXTURE BROKEN -- offenders $bm1/$bm2/$bm3 (want 1/1/1), near-miss $bmn (want 0)"
@@ -1839,7 +1915,7 @@ if [ "$le1" = 2 ] && [ "$le2" = 1 ] && [ "$leb" = 1 ]; then
   le_occ="$(grep -c 'form=' <<<"$le_out")" || le_occ=0
   le_none="$(grep -c 'form=NONE' <<<"$le_out")" || le_none=0
   if [ "${#LE_FILES[@]}" -gt 0 ] && [ "$le_occ" -ge 1 ] && [ "$le_none" = 0 ]; then
-    ok "lead-engine: all $le_occ occurrence(s) over ${#LE_FILES[@]} file(s) are scoped in their own block (probe: form 1 and form 2 read quiet, an unscoped occurrence flagged)"
+    ok "lead-engine: all $le_occ occurrence(s) over ${#LE_FILES[@]} file(s) are scoped in their own block (probe: form 1 and form 2 read quiet, an unscoped occurrence flagged)"; B_le=1
   else
     bad "lead-engine: $le_none unscoped of $le_occ occurrence(s) over ${#LE_FILES[@]} file(s): $(grep 'form=NONE' <<<"$le_out" | tr '\n' ' ')"
   fi
@@ -1847,10 +1923,10 @@ if [ "$le1" = 2 ] && [ "$le2" = 1 ] && [ "$leb" = 1 ]; then
   awk '!/when you run in a worktree/' "$ROLES_DIR/dev.md" > "$LE/dev-mut.md"
   awk '{ gsub(/the lead checkout.s `scripts\/ai-dlc` path your brief carries/, "the engine path"); print }' "$ROLES_DIR/qa.md" > "$LE/qa-mut.md"
   if cmp -s "$ROLES_DIR/dev.md" "$LE/dev-mut.md"; then bad "MUTANT lead-engine form 1: DID NOT APPLY"
-  elif [ "$(le_scan "$LE/dev-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then ok "MUTANT lead-engine form 1: dev.md without its worktree sentence is flagged"
+  elif [ "$(le_scan "$LE/dev-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then mutant_killed "$B_le" lead-engine-form1 "MUTANT lead-engine form 1: dev.md without its worktree sentence is flagged"
   else bad "MUTANT lead-engine form 1: SURVIVED"; fi
   if cmp -s "$ROLES_DIR/qa.md" "$LE/qa-mut.md"; then bad "MUTANT lead-engine form 2: DID NOT APPLY"
-  elif [ "$(le_scan "$LE/qa-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then ok "MUTANT lead-engine form 2: qa.md without its in-place definition is flagged"
+  elif [ "$(le_scan "$LE/qa-mut.md" | grep -c 'form=NONE')" -ge 1 ]; then mutant_killed "$B_le" lead-engine-form2 "MUTANT lead-engine form 2: qa.md without its in-place definition is flagged"
   else bad "MUTANT lead-engine form 2: SURVIVED"; fi
 else
   bad "lead-engine: FIXTURE BROKEN -- probe form1=$le1 form2=$le2 unscoped=$leb (want 2/1/1)"
@@ -1930,7 +2006,7 @@ if [ "$wv1" = "MATCH 7" ] && [ "$wv2" = "DRIFT skill=7 hook=8" ] && [ "$wv3" = "
   fi
   wv_real="$(win_verdict "$SKILL_DIR/SKILL.md" "$WGATE")"
   case "$wv_real" in
-    MATCH*) ok "window-count: touchpoint I states the hook's ADVISOR_GATE_WINDOW default ($wv_real; probe: match, drift, an out-of-item count, an absent hook, a wrapped count, two counts and a split hook each read as built)" ;;
+    MATCH*) ok "window-count: touchpoint I states the hook's ADVISOR_GATE_WINDOW default ($wv_real; probe: match, drift, an out-of-item count, an absent hook, a wrapped count, two counts and a split hook each read as built)"; B_win=1 ;;
     *)      bad "window-count: touchpoint I against ${WGATE#"$ROOT/"} reads $wv_real (want MATCH)" ;;
   esac
   # MUTANT, fallback only: the hook's non-numeric fallback moved one up in a copy, the default untouched.
@@ -1940,7 +2016,7 @@ if [ "$wv1" = "MATCH 7" ] && [ "$wv2" = "DRIFT skill=7 hook=8" ] && [ "$wv3" = "
   if [ ! -f "$WGATE" ] || [ -z "$wf" ] || cmp -s "$WGATE" "$WD/gate-fb-mut.sh"; then bad "MUTANT window-count fallback: DID NOT APPLY"
   else
     case "$wv_fb" in
-      HOOK-SPLIT*"fallback=$wfm") ok "MUTANT window-count fallback: a fallback of $wfm reads $wv_fb" ;;
+      HOOK-SPLIT*"fallback=$wfm") mutant_killed "$B_win" window-count-fallback "MUTANT window-count fallback: a fallback of $wfm reads $wv_fb" ;;
       *)                          bad "MUTANT window-count fallback: SURVIVED ($wv_fb)" ;;
     esac
   fi
@@ -1952,7 +2028,7 @@ if [ "$wv1" = "MATCH 7" ] && [ "$wv2" = "DRIFT skill=7 hook=8" ] && [ "$wv3" = "
   if [ ! -f "$WGATE" ] || [ -z "$wh" ] || cmp -s "$WGATE" "$WD/gate-mut.sh"; then bad "MUTANT window-count: DID NOT APPLY"
   else
     case "$wv_mut" in
-      DRIFT*"hook=$wm") ok "MUTANT window-count: a hook default of $wm reads $wv_mut" ;;
+      DRIFT*"hook=$wm") mutant_killed "$B_win" window-count-hook "MUTANT window-count: a hook default of $wm reads $wv_mut" ;;
       *)             bad "MUTANT window-count: SURVIVED ($wv_mut)" ;;
     esac
   fi
@@ -1968,7 +2044,7 @@ if [ "$wv1" = "MATCH 7" ] && [ "$wv2" = "DRIFT skill=7 hook=8" ] && [ "$wv3" = "
   if [ -z "$ws" ] || cmp -s "$SKILL_DIR/SKILL.md" "$WD/skill-mut.md"; then bad "MUTANT window-count skill side: DID NOT APPLY"
   else
     case "$wv_smut" in
-      DRIFT*"skill=$wsm "*) ok "MUTANT window-count skill side: a stated count of $wsm reads $wv_smut" ;;
+      DRIFT*"skill=$wsm "*) mutant_killed "$B_win" window-count-skill "MUTANT window-count skill side: a stated count of $wsm reads $wv_smut" ;;
       *)                    bad "MUTANT window-count skill side: SURVIVED ($wv_smut)" ;;
     esac
   fi
@@ -2027,7 +2103,7 @@ mark_scope() { # mark_scope <gp file> -> "<carve-out> <not-rendered-is-bare> <ep
 }
 set -- $(mark_scope "$GP4G")
 if [ "$1" = 1 ] && [ "$2" = 1 ] && [ "$3" = 1 ]; then
-  ok "mark-scope: \"Bounded-join beat\" keeps --complete for seat, shard, cross, repair-part and epic part files whatever the row, and reads any output but rendered as bare"
+  ok "mark-scope: \"Bounded-join beat\" keeps --complete for seat, shard, cross, repair-part and epic part files whatever the row, and reads any output but rendered as bare"; B_mscope=1
 else
   bad "mark-scope: \"Bounded-join beat\" carve-out=$1 (want 1), not-rendered-is-bare=$2 (want 1), epic-parts-named=$3 (want 1)"
 fi
@@ -2040,7 +2116,7 @@ for ms in nocarve:1 nobare:2 noepic:3; do
   if cmp -s "$GP4G" "$mf"; then bad "MUTANT mark/${ms%%:*}: DID NOT APPLY"; continue; fi
   set -- $(mark_scope "$mf")
   case "${ms##*:}" in 1) mv="$1" ;; 2) mv="$2" ;; *) mv="$3" ;; esac
-  if [ "$mv" = 0 ]; then ok "MUTANT mark/${ms%%:*}: the home without that clause is named by mark-scope ($1 $2)"
+  if [ "$mv" = 0 ]; then mutant_killed "$B_mscope" "mark-${ms%%:*}" "MUTANT mark/${ms%%:*}: the home without that clause is named by mark-scope ($1 $2)"
   else bad "MUTANT mark/${ms%%:*}: SURVIVED mark-scope ($1 $2)"; fi
 done
 
@@ -2060,12 +2136,12 @@ HO4G="$SKILL_DIR/steps/handoff.md"
 GP_A='## Auto-handoff evaluation (referenced by step files)'; GP_B='## Context reminder threshold check'
 HO_A='Execute this 5-step procedure in order:'; HO_B='**Resume is snapshot-driven.**'
 if [ "$(site_epic "$GP4G" "$GP_A" "$GP_B")" = 1 ]; then
-  ok "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md names epic part files in the --complete list sentence"
+  ok "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md names epic part files in the --complete list sentence"; B_epgp=1
 else
   bad "mark-epic-gp: the auto-handoff procedure in _gate-procedures.md does not carry 'epic part files' in the --complete list sentence"
 fi
 if [ "$(site_epic "$HO4G" "$HO_A" "$HO_B")" = 1 ]; then
-  ok "mark-epic-ho: handoff.md step 1 names epic part files in the --complete list sentence"
+  ok "mark-epic-ho: handoff.md step 1 names epic part files in the --complete list sentence"; B_epho=1
 else
   bad "mark-epic-ho: handoff.md step 1 does not carry 'epic part files' in the --complete list sentence"
 fi
@@ -2074,10 +2150,10 @@ fi
 awk -v a="$GP_A" -v b="$GP_B" 'index($0, a) == 1 { f = 1 } f && index($0, b) == 1 { f = 0 } { if (f && (i = index($0, "epic part files "))) $0 = substr($0, 1, i - 1) substr($0, i + 16); print }' "$GP4G" > "$MG/gp-noepic-ho-site.md"
 awk -v a="$HO_A" -v b="$HO_B" 'index($0, a) == 1 { f = 1 } f && index($0, b) == 1 { f = 0 } { if (f && (i = index($0, "epic part files "))) $0 = substr($0, 1, i - 1) substr($0, i + 16); print }' "$HO4G" > "$MG/ho-noepic.md"
 if cmp -s "$GP4G" "$MG/gp-noepic-ho-site.md"; then bad "MUTANT mark/epic-gp: DID NOT APPLY"
-elif [ "$(site_epic "$MG/gp-noepic-ho-site.md" "$GP_A" "$GP_B")" = 0 ]; then ok "MUTANT mark/epic-gp: the auto-handoff list without epic part files is named by mark-epic-gp"
+elif [ "$(site_epic "$MG/gp-noepic-ho-site.md" "$GP_A" "$GP_B")" = 0 ]; then mutant_killed "$B_epgp" mark-epic-gp "MUTANT mark/epic-gp: the auto-handoff list without epic part files is named by mark-epic-gp"
 else bad "MUTANT mark/epic-gp: SURVIVED mark-epic-gp"; fi
 if cmp -s "$HO4G" "$MG/ho-noepic.md"; then bad "MUTANT mark/epic-ho: DID NOT APPLY"
-elif [ "$(site_epic "$MG/ho-noepic.md" "$HO_A" "$HO_B")" = 0 ]; then ok "MUTANT mark/epic-ho: the handoff.md list without epic part files is named by mark-epic-ho"
+elif [ "$(site_epic "$MG/ho-noepic.md" "$HO_A" "$HO_B")" = 0 ]; then mutant_killed "$B_epho" mark-epic-ho "MUTANT mark/epic-ho: the handoff.md list without epic part files is named by mark-epic-ho"
 else bad "MUTANT mark/epic-ho: SURVIVED mark-epic-ho"; fi
 
 # (d) The engine is the one this layout ships: core/scripts in the distribution, scripts/ai-dlc installed.
@@ -2106,7 +2182,7 @@ else
   mkdir -p "$MG/real" || exit 2
   mr="$(run_rendered "$GP4G" "$MG/real")"
   if [[ "$mr" =~ ^0\ seat-complete:\ deploy-validate\ dev\ none\ sha=[0-9a-f]+\ findings=0$ ]]; then
-    ok "mark-runs: the --mark line extracted from \"Bounded-join beat\", filled in, exits 0 and seals (${mr#0 })"
+    ok "mark-runs: the --mark line extracted from \"Bounded-join beat\", filled in, exits 0 and seals (${mr#0 })"; B_mruns=1
   else
     bad "mark-runs: the rendered --mark line from \"Bounded-join beat\" did not seal a scratch file: '$mr' (want '0 seat-complete: deploy-validate dev none sha=<hex> findings=0')"
   fi
@@ -2150,14 +2226,14 @@ if [ "$dv_probe" = "3 7 9 11 " ]; then
   dv_n="$(grep -c . <<<"$dv_out")" || dv_n=0
   dv_unc="$(awk -F'\t' '$2 == 0 { printf "%s ", $1 }' <<<"$dv_out")"
   if [ "$dv_n" = 5 ] && [ -z "$dv_unc" ]; then
-    ok "mark-dv: deploy-validate.md has 5 dispatch sites by the stated grammar, each reading and following \"Bounded-join beat\" (probe: 4 shapes read, 6 near-misses and a fenced line not)"
+    ok "mark-dv: deploy-validate.md has 5 dispatch sites by the stated grammar, each reading and following \"Bounded-join beat\" (probe: 4 shapes read, 6 near-misses and a fenced line not)"; B_dv=1
   else
     bad "mark-dv: deploy-validate.md has $dv_n dispatch site(s) by the stated grammar (want 5); uncited at line(s): ${dv_unc:-none}"
   fi
   # MUTANT: the ops site loses its citation; the arm must name that site.
   awk '{ if (index($0, "dispatch the `ops` teammate")) ops = 1; if (ops && index($0, "(READ AND FOLLOW")) { sub(/ \(READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"$/, ""); ops = 2 } if (ops == 2 && index($0, "for its brief and join), re-deploy")) { sub(/for its brief and join\), re-deploy/, "re-deploy"); ops = 0 } print }' "$DVF" > "$DV/dv-mut.md"
   if cmp -s "$DVF" "$DV/dv-mut.md"; then bad "MUTANT mark-dv: DID NOT APPLY"
-  elif [ "$(dv_sites "$DV/dv-mut.md" | awk -F'\t' '$2 == 0' | grep -c .)" = 1 ]; then ok "MUTANT mark-dv: the ops site without its citation is named by mark-dv"
+  elif [ "$(dv_sites "$DV/dv-mut.md" | awk -F'\t' '$2 == 0' | grep -c .)" = 1 ]; then mutant_killed "$B_dv" mark-dv "MUTANT mark-dv: the ops site without its citation is named by mark-dv"
   else bad "MUTANT mark-dv: SURVIVED ($(dv_sites "$DV/dv-mut.md" | tr '\t\n' ': '))"; fi
 else
   bad "mark-dv: FIXTURE BROKEN -- the grammar read probe lines [$dv_probe], want [3 7 9 11 ]"
@@ -2178,7 +2254,7 @@ dl_bad="$(grep 'deliverable=0' <<<"$dl_out" | sed "s|$ROOT/||" | tr '\n' ' ')"
 dl_dev="$(grep -c "/dev.md:.* deliverable=1" <<<"$dl_out")" || dl_dev=0
 dl_home="$(grep -c "_gate-procedures.md:.* deliverable=1" <<<"$dl_out")" || dl_home=0
 if [ "$dl_n" -ge 5 ] && [ -z "$dl_bad" ] && [ "$dl_dev" -ge 1 ] && [ "$dl_home" -ge 2 ]; then
-  ok "mark-deliverable: all $dl_n block(s) carrying the <lead engine> --mark <file> close name <deliverable> (dev.md and both _gate-procedures.md blocks among them)"
+  ok "mark-deliverable: all $dl_n block(s) carrying the <lead engine> --mark <file> close name <deliverable> (dev.md and both _gate-procedures.md blocks among them)"; B_mdl=1
 else
   bad "mark-deliverable: $dl_n block(s), unnamed: [${dl_bad:-none}], dev.md=$dl_dev (want >=1), _gate-procedures.md=$dl_home (want >=2)"
 fi
@@ -2187,7 +2263,7 @@ fi
 #   M-a drop --complete from the home's rendered call: the widened join scan (4b) flags the home paragraph.
 awk '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f) gsub(/wait-for-deliverable\.sh --complete --dispatch/, "wait-for-deliverable.sh --dispatch"); print }' "$GP4G" > "$MG/gp-nocomplete.md"
 if cmp -s "$GP4G" "$MG/gp-nocomplete.md"; then bad "MUTANT mark/no-complete: DID NOT APPLY"
-elif mnc_o="$(join_findings "$MG/gp-nocomplete.md")"; grep -q . <<<"$mnc_o"; then ok "MUTANT mark/no-complete: the home without --complete is flagged by join (the \"mark\":\"rendered\" paragraph key)"
+elif mnc_o="$(join_findings "$MG/gp-nocomplete.md")"; grep -q . <<<"$mnc_o"; then mutant_killed "$B_join" mark-no-complete "MUTANT mark/no-complete: the home without --complete is flagged by join (the \"mark\":\"rendered\" paragraph key)"
 else bad "MUTANT mark/no-complete: SURVIVED -- the home lost --complete and the join scan stayed quiet"; fi
 #   M-b render rows=<n>: mark-runs (d) refuses it; mark-home (a) reads findings= no longer last.
 awk '/^#+ Bounded-join beat/{f=1} f&&/^## Gate-adjudication dispatch/{f=0} { if (f) gsub(/<shard> findings=<n>`/, "<shard> rows=<n>`"); print }' "$GP4G" > "$MG/gp-rows.md"
@@ -2197,12 +2273,12 @@ else
   mkdir -p "$MG/rows" || exit 2
   mrr="$(run_rendered "$MG/gp-rows.md" "$MG/rows")"
   case "$mrr" in 0\ seat-complete:*) bad "MUTANT mark/rows: SURVIVED mark-runs ('$mrr')" ;;
-    *) ok "MUTANT mark/rows: the rendered rows=<n> line is refused by the engine (mark-runs: '${mrr%% *}'), not sealed" ;; esac
+    *) mutant_killed "$B_mruns" mark-rows "MUTANT mark/rows: the rendered rows=<n> line is refused by the engine (mark-runs: '${mrr%% *}'), not sealed" ;; esac
 fi
 #   M-c drop the <deliverable> clause from dev.md: mark-deliverable (c) names the block.
 awk '{ sub(/ A worktree brief also carries `<deliverable>`.*$/, ""); print }' "$ROLES_DIR/dev.md" > "$MG/dev-nodeliv.md"
 if cmp -s "$ROLES_DIR/dev.md" "$MG/dev-nodeliv.md"; then bad "MUTANT mark/no-deliverable: DID NOT APPLY"
-elif mnd_o="$(dl_scan "$MG/dev-nodeliv.md")"; grep -q 'deliverable=0' <<<"$mnd_o"; then ok "MUTANT mark/no-deliverable: dev.md without its <deliverable> clause is named by mark-deliverable"
+elif mnd_o="$(dl_scan "$MG/dev-nodeliv.md")"; grep -q 'deliverable=0' <<<"$mnd_o"; then mutant_killed "$B_mdl" mark-no-deliverable "MUTANT mark/no-deliverable: dev.md without its <deliverable> clause is named by mark-deliverable"
 else bad "MUTANT mark/no-deliverable: SURVIVED"; fi
 
 # --- 4i. the review-shard step and role pins (moved from review-shard-merge, BL-918) ---------------
@@ -3131,7 +3207,7 @@ mkdir -p "$DECOY/.claude/skills/ai-dlc/steps" "$DECOY/.claude/team-roles" || exi
 printf '### 12. decoy\n### 13. decoy\n' > "$DECOY/.claude/skills/ai-dlc/steps/gate-validation.md"
 REP_DECOY="$( cd "$DECOY" && bash "$SELF" --report 2>&1 )"; rc_decoy=$?
 if [ "$REP_DECOY" = "$REP_HERE" ] && [ "$rc_decoy" -eq "$rc_here" ]; then
-  ok "cwd: a decoy ai-dlc tree as cwd yields the byte-identical verdict (root: $ROOT)"
+  ok "cwd: a decoy ai-dlc tree as cwd yields the byte-identical verdict (root: $ROOT)"; B_cwd=1
 else
   bad "cwd: verdict changed with the cwd (rc $rc_here -> $rc_decoy)"
 fi
@@ -3150,7 +3226,7 @@ else
   else
     mout="$( cd "$DECOY" && bash "$MC/run.sh" --report 2>&1 )"
     case "$mout" in
-      *"root: $DECOY (consumer)"*) ok "MUTANT cwd: a resolver seeded from the cwd reads the decoy; the cwd arm kills it" ;;
+      *"root: $DECOY (consumer)"*) mutant_killed "$B_cwd" cwd "MUTANT cwd: a resolver seeded from the cwd reads the decoy; the cwd arm kills it" ;;
       *) bad "MUTANT cwd: cwd-seeded resolver did not read the decoy — the cwd arm cannot fire" ;;
     esac
   fi

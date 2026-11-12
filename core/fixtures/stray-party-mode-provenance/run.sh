@@ -92,6 +92,8 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "stray-party-mode-provenance: FIXTURE BROKEN" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
+B_homes=0; B_region=0; B_s10c1=0; B_s10f1=0; B_s10h=0; B_s7b=0
 
 # scan <validator> <schema> <ext-or-empty> [<explicit path>...]
 # The schema is swapped into the seeded project because the resolver has no schema override, and
@@ -161,7 +163,7 @@ h_bad=""
 for h in docs/retro/sprint-1.md _bmad-output/party-mode-transcripts/s1-retro.md docs/reviews/adversarial-1.md; do
   reported "$h" && h_bad="$h_bad $h"
 done
-[ -z "$h_bad" ] && ok "a party-mode block in a declared home (retro, party-mode-transcripts, reviews) is not a finding" \
+[ -z "$h_bad" ] && { ok "a party-mode block in a declared home (retro, party-mode-transcripts, reviews) is not a finding"; B_homes=1; } \
   || bad "declared homes reported as strays:$h_bad"
 
 # --- Assertion 2: an INFORMATIONAL block outside every home is NOT a finding ---
@@ -172,7 +174,7 @@ reported "server/informational.py" \
 # --- Assertion 3: a party-mode block inside a GENERATED REGION is not a finding -
 reported "docs/taught.md" \
   && bad "the rendered taught example was reported as a stray" \
-  || ok "a party-mode block inside a generated region is not a finding (the region IS the schema)"
+  || { ok "a party-mode block inside a generated region is not a finding (the region IS the schema)"; B_region=1; }
 
 # --- Assertion 4: a fixture home is a home under a default whole-tree scan -----
 reported "tests/fixtures/forgery-corpus/forged.md" \
@@ -207,7 +209,7 @@ scan "$VALIDATOR" "$CONTROL_SCHEMA" "$EXT_BAD_GLOB"
 # be satisfied by a mutant that merely breaks the scan.
 scan "$MUT_REGION" "$CONTROL_SCHEMA" ""
 reported "docs/taught.md" \
-  && ok "MUTANT (region marker drifts to a second spelling): the rendered taught example is reported as a forgery — the carve-out is what stops that" \
+  && mutant_killed "$B_region" region-marker "MUTANT (region marker drifts to a second spelling): the rendered taught example is reported as a forgery — the carve-out is what stops that" \
   || bad "MUTANT SURVIVED: the region marker drifted and the taught example was still exempt; the carve-out is not doing the work"
 
 # --- MUTATION 2: the trailing-comment rule is dropped -------------------------
@@ -221,7 +223,7 @@ scan "$MUT_COMMENT" "$CONTROL_SCHEMA" ""
 # --- MUTATION 3: a declared home is removed from the schema ------------------
 scan "$VALIDATOR" "$SCHEMA_NO_RETRO" ""
 reported "docs/retro/sprint-1.md" \
-  && ok "MUTANT (docs/retro/** removed from homes): the retro document is reported — the homes list is read from the schema, not assumed" \
+  && mutant_killed "$B_homes" retro-home-removed "MUTANT (docs/retro/** removed from homes): the retro document is reported — the homes list is read from the schema, not assumed" \
   || bad "MUTANT SURVIVED: removing docs/retro/** from homes did not make the retro document a finding"
 
 # --- MUTATION 4: the subject vocabulary is emptied ---------------------------
@@ -369,7 +371,7 @@ scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/server/x.
 # subject MUT-E needs in order to keep guarding a FIXED validator rather than a broken one.
 scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/vendor/docs/retro/inner.md"
 { [ "$RC" -eq 1 ] && reported_any "vendor/docs/retro/inner.md"; } \
-  && ok "S7b a stray under vendor/docs/retro/ is reported; a home is a place the path STARTS, not one it contains" \
+  && { ok "S7b a stray under vendor/docs/retro/ is reported; a home is a place the path STARTS, not one it contains"; B_s7b=1; } \
   || bad "S7b FALSE PASS: vendor/docs/retro/inner.md was accepted as a home (rc=$RC) — the home pattern was found mid-path"
 
 # --- S10: case-variant spellings, on BOTH kinds of filesystem (BL-082) -------
@@ -402,7 +404,7 @@ if [ ! -e "$WORK/case-fold/PROJ/DOCS/retro/sprint-1.md" ]; then
 else
   scan_at "$CI" "$CI" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
   { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } \
-    && ok "S10-F1 a declared home spelled DOCS/retro/ on a case-folding filesystem is not a stray (and was scanned)" \
+    && { ok "S10-F1 a declared home spelled DOCS/retro/ on a case-folding filesystem is not a stray (and was scanned)"; B_s10f1=1; } \
     || bad "S10-F1 DOCS/retro/sprint-1.md -- the same file as the home here -- was reported as a stray (rc=$RC, scanned='$(scanned_count)')"
   # The near-miss: a stray whose name is one letter from the home, case-varied. Respelling must
   # land on ITS OWN entry and report it under its on-disk name, never collapse onto the home.
@@ -421,7 +423,7 @@ else
   scan_at "$CI" "$CI" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "docs/retro/sprint-1.md"
   mut_f_alive=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && mut_f_alive=1
   { [ "$mut_f_stray" -eq 1 ] && [ "$mut_f_alive" -eq 1 ]; } \
-    && ok "MUTANT (on-disk respelling reverted to bare realpath): DOCS/retro/ is a false stray again while docs/retro/ still passes -- S10-F1 is what stops that" \
+    && mutant_killed "$B_s10f1" ondisk-revert "MUTANT (on-disk respelling reverted to bare realpath): DOCS/retro/ is a false stray again while docs/retro/ still passes -- S10-F1 is what stops that" \
     || bad "MUTANT SURVIVED: reverting the respelling did not bring back the false stray (stray=$mut_f_stray, alive=$mut_f_alive)"
   # S10-F5 is a RECORD, not a kill: here the forbidden fold is indistinguishable from the fix.
   scan_at "$CI" "$CI" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
@@ -456,7 +458,7 @@ else
   [ "$(ls "$CS" | grep -c -x -e docs -e DOCS)" = "2" ] || broken "S10-C premise ($CS_WHY): docs/ and DOCS/ are not two entries"
   scan_at "$CS" "$CS" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
   { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md"; } \
-    && ok "S10-C1 ($CS_WHY) a DISTINCT DOCS/retro/ is a stray, not the declared home" \
+    && { ok "S10-C1 ($CS_WHY) a DISTINCT DOCS/retro/ is a stray, not the declared home"; B_s10c1=1; } \
     || bad "S10-C1 FALSE PASS ($CS_WHY): DOCS/retro/sprint-1.md is a different file from the home and came back rc=$RC"
   scan_at "$CS" "$CS" "$VALIDATOR" "$CONTROL_SCHEMA" "" "docs/retro/sprint-1.md"
   { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } \
@@ -473,7 +475,7 @@ else
   scan_at "$CS" "$CS" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "server/handler.py"
   mut_g_alive=0; { [ "$RC" -eq 1 ] && reported "server/handler.py"; } && mut_g_alive=1
   { [ "$mut_g_pass" -eq 1 ] && [ "$mut_g_alive" -eq 1 ]; } \
-    && ok "MUTANT (home match folds case -- the forbidden remedy): a distinct DOCS/retro/ is excused while server/ is still caught -- S10-C1 is what stops that" \
+    && mutant_killed "$B_s10c1" casefold-home "MUTANT (home match folds case -- the forbidden remedy): a distinct DOCS/retro/ is excused while server/ is still caught -- S10-C1 is what stops that" \
     || bad "MUTANT SURVIVED: folding the home match did not excuse the distinct DOCS/retro/ (false-pass=$mut_g_pass, alive=$mut_g_alive)"
   # And the fix is inert here: reverting it changes no verdict in the world with no subject.
   scan_at "$CS" "$CS" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
@@ -506,7 +508,7 @@ else
   scan_at "$HP" "$HP" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$H_UP/retro/sprint-1.md"
   h_stray=0; { [ "$RC" -eq 1 ] && reported "$LS/retro/sprint-1.md"; } && h_stray=1
   { [ "$h_home" -eq 1 ] && [ "$h_stray" -eq 1 ]; } \
-    && ok "S10-H (HFS+ image) DOCS/ respells to the home and DOC<long-s>/ to its own distinct directory, which is reported" \
+    && { ok "S10-H (HFS+ image) DOCS/ respells to the home and DOC<long-s>/ to its own distinct directory, which is reported"; B_s10h=1; } \
     || bad "S10-H (HFS+ image) two casefold-equal entries were not told apart (home-passes=$h_home, long-s-reported=$h_stray)"
   # The kill is PRESENCE-shaped: a mutant that crashed (rc=2) satisfies neither cell. Whichever
   # entry the volume lists first, one spelling lands on the OTHER directory, and that shows as a
@@ -519,7 +521,7 @@ else
   scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "server/handler.py"
   m_alive=0; { [ "$RC" -eq 1 ] && reported "server/handler.py"; } && m_alive=1
   { [ "$m_alive" -eq 1 ] && [ $((m_stray_excused + m_home_misnamed)) -eq 1 ]; } \
-    && ok "MUTANT (respelling by casefold without samestat): one spelling lands on the other directory (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed) -- S10-H is what stops that" \
+    && mutant_killed "$B_s10h" no-samestat "MUTANT (respelling by casefold without samestat): one spelling lands on the other directory (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed) -- S10-H is what stops that" \
     || bad "MUTANT SURVIVED: dropping the samestat check produced no wrong-directory answer (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed, alive=$m_alive)"
 fi
 
@@ -579,7 +581,7 @@ mut_e_accepted=1; { [ "$RC" -eq 0 ] && ! reported_any "vendor/docs/retro/inner.m
 scan_at "$PROJ" "$PROJ" "$MUT_SUBSTR" "$CONTROL_SCHEMA" "" "server/handler.py"
 mut_e_alive=0; { [ "$RC" -eq 1 ] && reported_any "server/handler.py"; } && mut_e_alive=1
 { [ "$mut_e_accepted" -eq 1 ] && [ "$mut_e_alive" -eq 1 ]; } \
-  && ok "MUTANT (home match widened to a substring): vendor/docs/retro/inner.md is swallowed while a stray carrying no home substring is still caught — S7b is what stops that fix" \
+  && mutant_killed "$B_s7b" substring-home "MUTANT (home match widened to a substring): vendor/docs/retro/inner.md is swallowed while a stray carrying no home substring is still caught — S7b is what stops that fix" \
   || bad "MUTANT SURVIVED: widening the home match to a substring did not change the nested checkout's verdict (accepted=$mut_e_accepted, still-alive=$mut_e_alive)"
 
 # --- S8: the arms that must not depend on a cwd, do not ----------------------

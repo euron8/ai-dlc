@@ -67,6 +67,8 @@ _HD="$(cd "$(dirname "$STOP_HOOK")" && pwd)"; echo "HERMETIC-CONSUMED $_HD/ai-dl
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_2p=0
 
 drive_stop() { # <work> [hook] -> stdout (block JSON, or empty on allow)
   printf '{"session_id":"t","transcript_path":""}' \
@@ -109,7 +111,7 @@ yield_live() { # yield_live <seed-case> [hook] -> 0 when the Stop is ALLOWED by 
   if blocked "$_yo"; then YL_MSG=blocked; elif fired_live "$_yw"; then YL_MSG=live; else YL_MSG=allow-not-live; fi
   rm -rf "$_yw"; [ "$YL_MSG" = live ]
 }
-if yield_live live-marker-pid; then ok "live beat, producer form '<epoch> <pid>': the yield is ALLOWED via Check 2b (ALLOWED_BY_LIVE_BEAT logged)"
+if yield_live live-marker-pid; then ok "live beat, producer form '<epoch> <pid>': the yield is ALLOWED via Check 2b (ALLOWED_BY_LIVE_BEAT logged)"; B_2p=1
 else bad "live beat, producer form '<epoch> <pid>': $YL_MSG — the hook does not read the marker wait-for-deliverable.sh writes"; fi
 
 # =============================================================================
@@ -569,7 +571,7 @@ else
   elif ! bash -n "$_m2p" 2>/dev/null; then bad "FIXTURE STALE: mutant no-first-field does not parse"
   else
     if yield_live live-marker-pid "$_m2p"; then bad "MUTANT SURVIVED (no-first-field: the marker read whole) -- arm 2p still yields ($YL_MSG)"
-    else ok "mutant (no-first-field: the marker read whole) fails arm 2p ($YL_MSG)"; fi
+    else mutant_killed "$B_2p" no-first-field "mutant (no-first-field: the marker read whole) fails arm 2p ($YL_MSG)"; fi
     if yield_live live-marker "$_m2p"; then ok "...and the same copy still yields on the bare-epoch live-marker (it runs; the kill is the mutation's)"
     else bad "MUTANT HARNESS BROKEN (no-first-field): the copy also fails the bare-epoch live-marker ($YL_MSG)"; fi
   fi

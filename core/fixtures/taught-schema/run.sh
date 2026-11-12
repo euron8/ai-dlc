@@ -146,6 +146,8 @@ PASS=0
 FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1" >&2; }
+. "$FIXTURE_DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_V4b=0; B_V4c=0
 
 # ---------------------------------------------------------------------------------------
 # V1. THE ROUND TRIP. Lift the example adversary.md TEACHES, feed it to the parser the gate
@@ -286,7 +288,7 @@ sed 's/^tool_use_id: .*/tool_use_id: toolu_PLACEHOLDER/' "$TMP/taught.md" >"$TMP
 if bash "$VALIDATOR" "$TMP/placeholder.md" >"$TMP/v4b" 2>&1; then
     bad "V4b a placeholder tool_use_id (toolu_PLACEHOLDER) PASSED — a forged evidence cell is unpoliced"
 elif grep -q "is forbidden" "$TMP/v4b"; then
-    ok "V4b a placeholder tool_use_id is refused as forbidden (clears the charset, not from the run)"
+    ok "V4b a placeholder tool_use_id is refused as forbidden (clears the charset, not from the run)"; B_V4b=1
 else
     bad "V4b failed, but not as forbidden — the diagnosis is wrong: $(head -1 "$TMP/v4b")"
 fi
@@ -311,7 +313,7 @@ elif ! grep -q "is forbidden" "$TMP/v4c"; then
 elif ! bash "$VALIDATOR" "$TMP/nearmiss.md" >"$TMP/v4c.near" 2>&1; then
     bad "V4c NEAR-MISS a real-shaped tool_use_id was REJECTED — the match is too wide: $(head -2 "$TMP/v4c.near" | tail -1)"
 else
-    ok "V4c a decorated placeholder is refused and a real-shaped id is not (the match is by prefix, and it discriminates)"
+    ok "V4c a decorated placeholder is refused and a real-shaped id is not (the match is by prefix, and it discriminates)"; B_V4c=1
 fi
 
 # MUTATION control for V4b: strip the tool_use_id `forbidden` list from the schema and
@@ -356,7 +358,7 @@ if ! field_has "$TMP/schema.v4b.bak" tool_use_id forbidden; then
 elif field_has "$SCHEMA" tool_use_id forbidden; then
     bad "V4b MUTATION matched nothing — the tool_use_id forbidden list survived the strip"
 elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
-    ok "V4b MUTATION — removing the forbidden list lets the placeholder pass (the list is what fires)"
+    mutant_killed "$B_V4b" V4b-strip-forbidden "V4b MUTATION — removing the forbidden list lets the placeholder pass (the list is what fires)"
 else
     bad "V4b MUTATION — placeholder still refused without the forbidden list; V4b proves nothing"
 fi
@@ -388,7 +390,7 @@ elif ! bash "$VALIDATOR" "$TMP/decorated.md" >/dev/null 2>&1; then
 elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
     bad "V4c MUTATION — the BARE literal also passed, so the mutation removed the list rather than the match mode"
 else
-    ok "V4c MUTATION — reverting forbidden_match to exact lets the DECORATED placeholder pass while the bare one stays refused (prefix matching is what fires)"
+    mutant_killed "$B_V4c" V4c-exact-match "V4c MUTATION — reverting forbidden_match to exact lets the DECORATED placeholder pass while the bare one stays refused (prefix matching is what fires)"
 fi
 mx_row V4c-exact-match V4c
 cp "$TMP/schema.v4c.bak" "$SCHEMA"

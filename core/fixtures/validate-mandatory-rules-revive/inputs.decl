@@ -7,3 +7,4 @@ core/scripts/sprint-status.sh
 core/schemas/sprint-status.json
 !core/scripts/validate-retro-evidence.sh
 !core/scripts/validate-audit-anchors.sh
+core/fixtures/lib/mutant.sh

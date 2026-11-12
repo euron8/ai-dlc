@@ -105,6 +105,8 @@ THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 fails=0
 ok()   { printf '  ok    %s\n' "$1"; }
 bad()  { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_B4b_continuation=0 B_B4c_notice=0 B_B5_bare_heading=0 B_H_wrapped=0 B_J_containment=0 B_J_negation=0 B_double_shadow_rows=0 B_flatten_wrapped=0 B_loose_row=0 B_multi_anchor_entry=0 B_nosince_key_lost=0 B_noun_set_file_claim=0 B_unclaimed_nested=0 B_unclaimed_row=0
 
 echo "== A. the stale-core-text gate fires on the real shape =="
 
@@ -307,7 +309,7 @@ else
   bad "the dossier rendered nothing for a plain scalar reason at all — the common path is broken, and every verdict below is about an empty panel"
 fi
 if grep -q 'PLAIN-CONT-SENTINEL' <<<"$pm_out" && grep -q 'PLAIN-TAIL-SENTINEL' <<<"$pm_out"; then
-  ok "  ...and BOTH continuation lines beneath it — a reason that runs past line 1 is not silently truncated to a fragment that reads whole"
+  ok "  ...and BOTH continuation lines beneath it — a reason that runs past line 1 is not silently truncated to a fragment that reads whole"; B_B4b_continuation=1
 else
   bad "the dossier rendered only line 1 of a PLAIN multi-line reason (cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$pm_out") tail=$(grep -c 'PLAIN-TAIL-SENTINEL' <<<"$pm_out"), want 1 and 1) — step 7's decision is taken against a fragment ending in a complete sentence, which is worse than the blank field B4 fixed"
 fi
@@ -372,7 +374,7 @@ else
 fi
 clip_n="$(grep -oE '\[\.\.\. [0-9]+ further line' <<<"$clip_out" | grep -oE '[0-9]+' | head -1)"
 if [ -n "$clip_n" ] && [ "$clip_n" -gt 0 ]; then
-  ok "  ...and the clip ANNOUNCES itself with a COUNT ($clip_n further line(s)) — the operator is told the field is partial instead of reading a fragment as whole"
+  ok "  ...and the clip ANNOUNCES itself with a COUNT ($clip_n further line(s)) — the operator is told the field is partial instead of reading a fragment as whole"; B_B4c_notice=1
 else
   bad "the reason panel clipped with NO notice and no count — this is the shipped defect: a truncated rationale is indistinguishable from a complete one, and the retire/readopt/reaffirm decision is taken on it"
 fi
@@ -446,7 +448,7 @@ EOF
   grep -q 'ONELINE-SENTINEL' <<<"$m_one"; mcell plain-continue B4b-single-line $?
   if grep -q 'PLAIN-FIRST-SENTINEL' <<<"$m_multi" && ! grep -q 'PLAIN-CONT-SENTINEL' <<<"$m_multi" \
      && grep -q 'ONELINE-SENTINEL' <<<"$m_one"; then
-    ok "  mutation plain-continue: with the arm back to \`print v; exit\` the continuation VANISHES while line 1 and the single-line form both still render — B4b is reading the continuation and not the run"
+    mutant_killed "$B_B4b_continuation" plain-continue "  mutation plain-continue: with the arm back to \`print v; exit\` the continuation VANISHES while line 1 and the single-line form both still render — B4b is reading the continuation and not the run"
   else
     bad "  mutation plain-continue: multi first=$(grep -c 'PLAIN-FIRST-SENTINEL' <<<"$m_multi") (want 1) cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$m_multi") (want 0) single=$(grep -c 'ONELINE-SENTINEL' <<<"$m_one") (want 1) — the arm is vacuous, or the mutant broke the reader and silence scored as a kill"
   fi
@@ -467,7 +469,7 @@ else
   ! grep -q 'CLIP-TAIL-SENTINEL' <<<"$mc_long"; mcell clip-notice B4c-tail-clipped $?
   if ! grep -q 'NOT SHOWN' <<<"$mc_long" && grep -q 'CLIP-HEAD-SENTINEL' <<<"$mc_long" \
      && ! grep -q 'CLIP-TAIL-SENTINEL' <<<"$mc_long"; then
-    ok "  mutation clip-notice: with the announcement removed the SAME twenty lines are shown and the tail is SILENTLY dropped — the notice is the only observable, which is why no content arm could have caught this"
+    mutant_killed "$B_B4c_notice" clip-notice "  mutation clip-notice: with the announcement removed the SAME twenty lines are shown and the tail is SILENTLY dropped — the notice is the only observable, which is why no content arm could have caught this"
   else
     bad "  mutation clip-notice: notice=$(grep -c 'NOT SHOWN' <<<"$mc_long") (want 0) head=$(grep -c 'CLIP-HEAD-SENTINEL' <<<"$mc_long") (want 1) tail=$(grep -c 'CLIP-TAIL-SENTINEL' <<<"$mc_long") (want 0) — either the notice is not load-bearing, or the mutant changed the bound too and the two properties are entangled"
   fi
@@ -521,7 +523,7 @@ if grep -qE '^[[:space:]]*## ' <<<"$qp"; then
   bad "an unchanged anchor still rendered a bare '## <id>' heading under a title asserting it CHANGED"
   printf '%s\n' "$qp" | sed 's/^/        /'
 else
-  ok "no bare anchor heading is printed for a section that did not drift"
+  ok "no bare anchor heading is printed for a section that did not drift"; B_B5_bare_heading=1
 fi
 
 # -- LOUD DIRECTION, the non-vacuity control. Same panel, an anchor that DID drift.
@@ -584,7 +586,7 @@ else
             | awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p')"
   ! grep -qE '^[[:space:]]*## Rule 7' <<<"$mpanel"; mcell panel-guard B5-bare-heading $?
   if grep -qE '^[[:space:]]*## Rule 7' <<<"$mpanel"; then
-    ok "  mutation panel-guard: without it an UNCHANGED anchor prints a bare heading again (the arm can fire)"
+    mutant_killed "$B_B5_bare_heading" panel-guard "  mutation panel-guard: without it an UNCHANGED anchor prints a bare heading again (the arm can fire)"
   else
     bad "  mutation panel-guard: the mutant did NOT reproduce the bare heading, so the arm above proves nothing"
     printf '%s\n' "$mpanel" | sed 's/^/        /'
@@ -1488,7 +1490,7 @@ else
   # real instance splits. A line-based predicate returns zero here, which reads identically
   # to compliance. Nothing else in this file would notice the flattening being removed.
   if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-16-wrapped\.md$')"; then
-    ok "  and a claim WRAPPING across a newline is still found (the body is flattened)"
+    ok "  and a claim WRAPPING across a newline is still found (the body is flattened)"; B_flatten_wrapped=1
   else
     bad "  the wrapped claim was missed — a line-based scan reports a false zero on the real shape"
   fi
@@ -1499,7 +1501,7 @@ else
   # The state is what an LC-O15 narrowing LEAVES BEHIND when it removes an anchor and keeps
   # the text, so the two clauses have to be read together.
   if grep -qx OVERRIDE-BODY-UNCLAIMED <<<"$(st_of 'SKILL__Rule-18-unclaimed\.md$')"; then
-    ok "a body section no shadows: anchor claims is REPORTED"
+    ok "a body section no shadows: anchor claims is REPORTED"; B_unclaimed_row=1
   else
     bad "the unclaimed body section went undetected — it is applied by nothing while every mechanical check reports green"
   fi
@@ -1510,7 +1512,7 @@ else
   if grep -qx OVERRIDE-BODY-UNCLAIMED <<<"$(st_of 'SKILL__Rule-19-nested\.md$')"; then
     bad "a sub-heading NESTED inside the claimed section was reported — the claim is being read as a heading set, not a span, and every override with a child heading is a false positive"
   else
-    ok "  and a sub-heading nested inside a claimed section stays silent"
+    ok "  and a sub-heading nested inside a claimed section stays silent"; B_unclaimed_nested=1
   fi
 
   # The single-anchor shape: a body restating NO shadowed heading is the WHOLE span of its
@@ -1543,7 +1545,7 @@ else
   if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-14-file-claim\.md$')"; then
     bad "an override correctly saying the rest of the FILE is unchanged was reported — the noun restriction is gone and every honest scoping sentence now fires"
   else
-    ok "  and a true claim about the rest of the FILE stays silent"
+    ok "  and a true claim about the rest of the FILE stays silent"; B_noun_set_file_claim=1
   fi
 
   # CONTROL 2 — the measured false-positive class: survival vocabulary whose subject is a
@@ -1571,7 +1573,7 @@ else
   # E7 resolves against the consumer's on-disk core and this resolves against THEIRS — the
   # incoming distribution — so they answer the same question about two different trees.
   if grep -qx OVERRIDE-LOOSE-ANCHOR <<<"$(st_of 'SKILL__Rule-11-loose\.md$')"; then
-    ok "an anchor that CONTAINS its heading is REPORTED at pull time"
+    ok "an anchor that CONTAINS its heading is REPORTED at pull time"; B_loose_row=1
   else
     bad "the loose anchor went undetected — the entry shadows the whole section while the operator believes it shadowed a paragraph"
   fi
@@ -1599,7 +1601,7 @@ else
   ds_a="$(printf '%s\n' "$(st_of 'SKILL__Rule-7-dup-a\.md$')" | grep -cx OVERRIDE-DOUBLE-SHADOW || true)"
   ds_b="$(printf '%s\n' "$(st_of 'SKILL__Rule-7-dup-b\.md$')" | grep -cx OVERRIDE-DOUBLE-SHADOW || true)"
   if [ "$ds_a" -eq 1 ] && [ "$ds_b" -eq 1 ]; then
-    ok "two entries claiming one (file, anchor) are BOTH reported"
+    ok "two entries claiming one (file, anchor) are BOTH reported"; B_double_shadow_rows=1
   else
     bad "double shadow filed under a=$ds_a b=$ds_b (want 1 and 1) — a row under only one of them leaves the other reading clean on the finding it is half of"
   fi
@@ -1667,7 +1669,7 @@ else
     [ "$m1w" -ge 1 ]; mcell flatten flatten-wrapped $?
     [ "$m1s" -eq 1 ]; mcell flatten flatten-single-line $?
     if [ "$m1w" -eq 0 ] && [ "$m1s" -eq 1 ]; then
-      ok "  mutation flatten: without it the WRAPPED claim vanishes and the single-line one does not"
+      mutant_killed "$B_flatten_wrapped" flatten "  mutation flatten: without it the WRAPPED claim vanishes and the single-line one does not"
     else
       bad "  mutation flatten: wrapped=$m1w (want 0) single-line=$m1s (want 1) — the flattening assertion is vacuous or the two entries are entangled"
     fi
@@ -1684,7 +1686,7 @@ else
           | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES"{print $2}')"
     ! grep -q 'Rule-14-file-claim' <<<"$m2"; mcell noun-set noun-set-file-claim $?
     if grep -q 'Rule-14-file-claim' <<<"$m2"; then
-      ok "  mutation noun-set: widening it to \`file\` re-fires the true claim — the restriction is load-bearing"
+      mutant_killed "$B_noun_set_file_claim" noun-set "  mutation noun-set: widening it to \`file\` re-fires the true claim — the restriction is load-bearing"
     else
       bad "  mutation noun-set: the honest rest-of-the-FILE claim stayed silent even with \`file\` in the noun set, so the control above is vacuous"
     fi
@@ -1703,7 +1705,7 @@ else
     [ "$m3l" -eq 1 ]; mcell loose-arm loose-row $?
     [ "$m3d" -eq 2 ]; mcell loose-arm double-shadow-rows $?
     if [ "$m3l" -eq 0 ] && [ "$m3d" -eq 2 ]; then
-      ok "  mutation loose-arm: without the REVERSE arm the loose anchor goes silent, and only that"
+      mutant_killed "$B_loose_row" loose-arm "  mutation loose-arm: without the REVERSE arm the loose anchor goes silent, and only that"
     else
       bad "  mutation loose-arm: loose=$m3l (want 0) double=$m3d (want 2) — the assertion is vacuous or the two statuses are entangled"
     fi
@@ -1722,7 +1724,7 @@ else
     [ "$m4d" -eq 2 ]; mcell dup-threshold double-shadow-rows $?
     [ "$m4l" -eq 1 ]; mcell dup-threshold loose-row $?
     if [ "$m4d" -eq 0 ] && [ "$m4l" -eq 1 ]; then
-      ok "  mutation dup-threshold: raising the duplicate threshold silences the pair, and only that"
+      mutant_killed "$B_double_shadow_rows" dup-threshold "  mutation dup-threshold: raising the duplicate threshold silences the pair, and only that"
     else
       bad "  mutation dup-threshold: double=$m4d (want 0) loose=$m4l (want 1) — the assertion is vacuous or the two statuses are entangled"
     fi
@@ -1743,7 +1745,7 @@ else
     [ "$m5u" -ge 1 ]; mcell unclaimed-silence unclaimed-row $?
     [ "$m5d" -eq 2 ]; mcell unclaimed-silence double-shadow-rows $?
     if [ "$m5u" -eq 0 ] && [ "$m5d" -eq 2 ]; then
-      ok "  mutation unclaimed-silence: with no span resolved the unclaimed row vanishes, and only that"
+      mutant_killed "$B_unclaimed_row" unclaimed-silence "  mutation unclaimed-silence: with no span resolved the unclaimed row vanishes, and only that"
     else
       bad "  mutation unclaimed-silence: unclaimed=$m5u (want 0) double=$m5d (want 2) — the presence assertion is vacuous, or the script died and silence scored as a kill"
     fi
@@ -1765,7 +1767,7 @@ else
     [ "$m6n" -eq 0 ]; mcell unclaimed-widen unclaimed-nested $?
     [ "$m6s" -eq 0 ]; mcell unclaimed-widen unclaimed-single-anchor $?
     if [ "$m6n" -eq 1 ] && [ "$m6s" -eq 0 ]; then
-      ok "  mutation unclaimed-widen: without the span and level narrowings the NESTED child is reported — both are load-bearing"
+      mutant_killed "$B_unclaimed_nested" unclaimed-widen "  mutation unclaimed-widen: without the span and level narrowings the NESTED child is reported — both are load-bearing"
     else
       bad "  mutation unclaimed-widen: nested=$m6n (want 1) single-anchor=$m6s (want 0) — the near-miss assertion is vacuous, or the widening reached an entry it should not"
     fi
@@ -1981,7 +1983,7 @@ EOF
   sup_nosince="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosince\.md$/ {print $4}')"
   case "$sup_nosince" in
     "replaces_with=AI_DLC_WIDGET_NOSINCE ::"*)
-      ok "  a declaration with a settings_env_key and NO since_core_version keeps the key in its own field" ;;
+      ok "  a declaration with a settings_env_key and NO since_core_version keeps the key in its own field"; B_nosince_key_lost=1 ;;
     "") bad "the no-since supersession produced no detail at all" ;;
     *"nothing to configure"*) bad "the no-since declaration read as an adoption needing no configuration -- its env key moved into the since field: ${sup_nosince:0:100}" ;;
     *)  bad "the no-since declaration did not carry replaces_with=AI_DLC_WIDGET_NOSINCE: ${sup_nosince:0:100}" ;;
@@ -2010,7 +2012,7 @@ EOF
         case "$nsm" in
           "replaces_with=AI_DLC_WIDGET_NOSINCE ::"*) bad "  MUTANT no-since: the IFS read still carried the env key -- the arm cannot see the collapse" ;;
           "") bad "  MUTANT no-since: the mutant emitted no row for the declaration, so it broke the arm rather than the read" ;;
-          *) ok "  MUTANT no-since: with the IFS read restored the no-since declaration loses its key, so the arm is load-bearing" ;;
+          *) mutant_killed "$B_nosince_key_lost" no-since "  MUTANT no-since: with the IFS read restored the no-since declaration loses its key, so the arm is load-bearing" ;;
         esac ;;
       *) bad "  MUTANT no-since: the with-since control did not survive the mutant, so its verdict is unreadable" ;;
     esac
@@ -2101,7 +2103,7 @@ EOF
   # retro anchors, one of which core declared superseded at 0.281.0. Whole-string join on the
   # real tree over the real pull range: 0 rows. Same tree, that anchor alone in `shadows:`: 1.
   if grep -qx OVERRIDE-SUPERSEDED <<<"$(sup_st 'SUP__multi\.md$')"; then
-    ok "a MULTI-anchor override is reported when core supersedes ONE of its anchors"
+    ok "a MULTI-anchor override is reported when core supersedes ONE of its anchors"; B_multi_anchor_entry=1
   else
     bad "a multi-anchor override naming a declared supersession went unreported — the join reads the whole shadows: string, so the entries that freeze the most core text are the ones it cannot see"
   fi
@@ -2171,7 +2173,7 @@ EOF
     if grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__multi\.md$')"; then
       bad "MUTANT SURVIVED: SUP__multi is still reported with only its last anchor harvested, so the multi-anchor assertion is not testing the per-part join"
     else
-      ok "MUTANT multi-anchor (entry side keeps one part): the multi-anchor entry goes silent — the accumulation is what makes every anchor joinable"
+      mutant_killed "$B_multi_anchor_entry" multi-anchor "MUTANT multi-anchor (entry side keeps one part): the multi-anchor entry goes silent — the accumulation is what makes every anchor joinable"
     fi
     if grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__match\.md$')"; then
       ok "  and the single-anchor entry still fires under it — the two arms are not entangled"
@@ -2417,7 +2419,7 @@ rm -f "$GFM" "$GHC"
 echo "== H. the body test is WRAP-INSENSITIVE in the superseded direction too =="
 out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOVR" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out"; then
-  ok "--check RED: a superseded core sentence carried at a DIFFERENT wrap is still found"
+  ok "--check RED: a superseded core sentence carried at a DIFFERENT wrap is still found"; B_H_wrapped=1
 else
   bad "--check missed a superseded sentence the body demonstrably carries, re-wrapped (rc=$rc) -- and an override of a consumer-rewritten section is a re-wrap by definition"
   printf '%s\n' "$out" | sed 's/^/    /'
@@ -2457,7 +2459,7 @@ else
   ! bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$HOVR" --check >/dev/null 2>&1; mcell wrap H-wrapped $?
   ! bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$GOVR.absent" --check >/dev/null 2>&1; mcell wrap H-absent-path-refused $?
   if bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$HOVR" --check >/dev/null 2>&1; then
-    ok "MUTANT wrap (body compared un-flattened): the re-wrapped superseded sentence goes UNFOUND -- flattening is what finds it"
+    mutant_killed "$B_H_wrapped" wrap "MUTANT wrap (body compared un-flattened): the re-wrapped superseded sentence goes UNFOUND -- flattening is what finds it"
   else
     bad "MUTANT SURVIVED: the H arm still fires with the flattening removed, so it is not testing wrap-insensitivity"
   fi
@@ -2637,7 +2639,7 @@ fi
 echo "== J. a RE-FLOWED core paragraph, faithfully adopted, is not superseded text =="
 out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JOK" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
-  ok "--check OK: a body carrying theirs' re-flowed paragraph verbatim is not refused"
+  ok "--check OK: a body carrying theirs' re-flowed paragraph verbatim is not refused"; B_J_containment=1
 else
   bad "--check refused a faithful adoption of a RE-FLOWED paragraph (rc=$rc) -- the suffix false positive: the only stamp left is reaffirm, which records a readopt under the wrong name"
   printf '%s\n' "$out" | sed 's/^/    /'
@@ -2665,7 +2667,7 @@ else
 fi
 out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JNEG" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -q 'survival vocabulary names a DIFFERENT unit' <<<"$out"; then
-  ok "NEGATED IN PLACE: a body carrying only the line core prefixed with Never is REFUSED, naming it"
+  ok "NEGATED IN PLACE: a body carrying only the line core prefixed with Never is REFUSED, naming it"; B_J_negation=1
 else
   bad "NEGATED IN PLACE: a body teaching the rule core INVERTED was not refused (rc=$rc) -- bare containment acquitted it because the old words survive inside the new line"
   printf '%s\n' "$out" | sed 's/^/    /'
@@ -2715,7 +2717,7 @@ else
   if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; then
     bad "MUTANT M1 SURVIVED: with the containment acquittal removed, the faithful re-flow adoption still passes -- arm J is not testing containment"
   else
-    ok "MUTANT reflow-M1 (whole-line set difference restored): the faithful re-flow adoption is REFUSED -- containment is what clears it"
+    mutant_killed "$B_J_containment" reflow-M1 "MUTANT reflow-M1 (whole-line set difference restored): the faithful re-flow adoption is REFUSED -- containment is what clears it"
   fi
   if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JBAD" --check >/dev/null 2>&1; then
     bad "  M1 passed JBAD, so it is not the whole-line form -- its JOK verdict says nothing"
@@ -2730,7 +2732,7 @@ else
   ! bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JNEG" --check >/dev/null 2>&1; mcell reflow-M2 J-negation $?
   bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; mcell reflow-M2 J-ok-passes $?
   if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JNEG" --check >/dev/null 2>&1; then
-    ok "MUTANT reflow-M2 (bare containment, no context test): the body teaching the INVERTED rule PASSES -- the context test is what refuses it"
+    mutant_killed "$B_J_negation" reflow-M2 "MUTANT reflow-M2 (bare containment, no context test): the body teaching the INVERTED rule PASSES -- the context test is what refuses it"
   else
     bad "MUTANT M2 SURVIVED: bare containment still refuses the negated-in-place body, so the context test is not what is doing the work"
   fi

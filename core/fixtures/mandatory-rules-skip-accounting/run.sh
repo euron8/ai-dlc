@@ -76,6 +76,8 @@ fails=0
 asserted=0
 ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_mrsBattery=0
 
 echo "mandatory-rules-skip-accounting:"
 
@@ -214,7 +216,7 @@ EXPECTED="A:6 B:5-2 C:5-4 D:5-5 E:3-245 F:fail"
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all six arms: zero skips says 'all 8 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 7, three at once reports a floor of 5, and a real failure still FAILs at rc=1"
+  ok "all six arms: zero skips says 'all 8 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 7, three at once reports a floor of 5, and a real failure still FAILs at rc=1"; B_mrsBattery=1
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -271,7 +273,7 @@ mutate() {  # <tag> <sed-program> <expected-battery> <what-it-proves>
   toolchain "$D" "$M"
   got="$(battery "$D")"
   if [ "$got" = "$want" ]; then
-    ok "MUTANT $tag: $claim"
+    mutant_killed "$B_mrsBattery" "$tag" "MUTANT $tag: $claim"
   elif [ "$got" = "$EXPECTED" ]; then
     bad "MUTANT $tag survived: $claim — every arm unchanged, so nothing here can catch it"
   else

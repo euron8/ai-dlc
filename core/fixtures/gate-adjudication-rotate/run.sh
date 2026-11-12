@@ -51,6 +51,8 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$GUARD")" && pwd)/$(basename "$GUARD")"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: core/fixtures/lib/mutant.sh is absent" >&2; exit 2; }
+B_a=0; B_d=0; B_g=0; B_h1=0; B_j=0; B_j0=0; B_j5c=0; B_j9=0; B_j10=0; B_j11=0; B_j12=0; B_j13=0; B_j14=0; B_j15=0; B_l2=0; B_wv1=0; B_wv2=0
 
 seed() { # <case> -> sets W/PROJ/GA/DEST_S308, or aborts the whole run
   W="$(bash "$HERE/seed.sh" "$1")" || { echo "FIXTURE ERROR: seed.sh '$1' exited non-zero" >&2; exit 2; }
@@ -111,7 +113,7 @@ out="$(rotate --sprint s308 2>&1)"; rc=$?
 AFTER_A="$(treehash "$PROJ")"
 if [ "$rc" -eq 0 ] && [ "$BEFORE_A" = "$AFTER_A" ] && [ ! -d "$DEST_S308" ] \
    && grep -q '3 file(s) total\|1 verdict(s) and 2 sidecar(s)' <<<"$out"; then
-  ok "(a) report mode (--sprint s308, no --apply): tree byte-identical, no destination created"
+  ok "(a) report mode (--sprint s308, no --apply): tree byte-identical, no destination created"; B_a=1
 else
   bad "(a) report mode changed the tree or misreported (rc=$rc): $(head -1 <<<"$out")"
 fi
@@ -160,7 +162,7 @@ BEFORE_D="$(treehash "$GA")"
 out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
 AFTER_D="$(treehash "$GA")"
 if [ "$rc" -eq 1 ] && [ "$BEFORE_D" = "$AFTER_D" ] && [ ! -d "$DEST_S308" ] && grep -q 'git-ignored' <<<"$out"; then
-  ok "(d) REFUSAL: a git-ignored destination is refused (exit 1), source tree byte-identical, nothing written"
+  ok "(d) REFUSAL: a git-ignored destination is refused (exit 1), source tree byte-identical, nothing written"; B_d=1
 else
   bad "(d) an ignored destination was not refused cleanly (rc=$rc, tree changed: $([ "$BEFORE_D" = "$AFTER_D" ] && echo no || echo yes))"
 fi
@@ -242,7 +244,7 @@ BEFORE_G="$(treehash "$PROJ")"
 out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
 AFTER_G="$(treehash "$PROJ")"
 if [ "$rc" -eq 1 ] && [ "$BEFORE_G" = "$AFTER_G" ] && grep -q 'do not parse as JSON' <<<"$out"; then
-  ok "(g) REFUSAL: an unparseable *.verdict.json refuses the whole run (exit 1), tree byte-identical"
+  ok "(g) REFUSAL: an unparseable *.verdict.json refuses the whole run (exit 1), tree byte-identical"; B_g=1
 else
   bad "(g) an unparseable verdict was not refused cleanly (rc=$rc): $out"
 fi
@@ -263,7 +265,7 @@ if [ "$rc" -eq 1 ] && [ "$BEFORE_H" = "$AFTER_H" ] \
    && grep -q 'no mode can move' <<<"$out" \
    && grep -q 'carries no gate_series_id' <<<"$out" \
    && grep -q 'legacy-20260701T000000Z' <<<"$out"; then
-  ok "(h.1) REFUSAL: rotating s308 PROMOTES a FAILing legacy verdict to newest — refused (exit 1), tree byte-identical, offender named"
+  ok "(h.1) REFUSAL: rotating s308 PROMOTES a FAILing legacy verdict to newest — refused (exit 1), tree byte-identical, offender named"; B_h1=1
 else
   bad "(h.1) a rotation that strands a FAILing legacy verdict was not refused (rc=$rc): $out"
 fi
@@ -420,7 +422,7 @@ if [ "$rc" -eq 1 ] && [ "$BEFORE_J" = "$AFTER_J" ] \
    && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$warn_j" \
    && ! grep -q 'implementation-20260720T011606Z' <<<"$out_j" \
    && ! grep -q 'nothing to move' <<<"$out_j"; then
-  ok "(j) REFUSAL: empty s308 selection plus an older FAIL-carrying unmatchable verdict exits 1, names it in the refusal, WARNs the newer PASS-only one, not the legacy one, tree byte-identical"
+  ok "(j) REFUSAL: empty s308 selection plus an older FAIL-carrying unmatchable verdict exits 1, names it in the refusal, WARNs the newer PASS-only one, not the legacy one, tree byte-identical"; B_j=1
 else
   bad "(j) an empty selection beside a FAIL-carrying unmatchable series id was not refused as specified (rc=$rc): $out_j"
 fi
@@ -436,7 +438,7 @@ if [ "$rc" -eq 0 ] && [ "$BEFORE_J0" = "$AFTER_J0" ] && grep -q 'nothing to move
    && grep -q "^    .*/${UM_STEM}\.verdict\.json$" <<<"$(warn_block "$out_j0")" \
    && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_STEM}'$" <<<"$out_j0" \
    && grep -qF 'NO HINT (..s308)' <<<"$out_j0"; then
-  ok "(j.0) NEAR-MISS: an empty selection beside a PASS-only unmatchable verdict WARNs with its escape and exits 0 'nothing to move'; with no archive the sprint is NO HINT (..s308)"
+  ok "(j.0) NEAR-MISS: an empty selection beside a PASS-only unmatchable verdict WARNs with its escape and exits 0 'nothing to move'; with no archive the sprint is NO HINT (..s308)"; B_j0=1
 else
   bad "(j.0) a PASS-only unmatchable verdict was refused or not WARNed (rc=$rc): $out_j0"
 fi
@@ -540,7 +542,7 @@ seed hint-wide-gap
 out_w="$(rotate --sprint s313 2>&1)"; rc_w=$?
 if [ "$rc_w" -eq 1 ] && grep -qE "^ +bash [^ ]*rotate-gate-adjudication\.sh --sprint s<N> --series '${UM_FAIL}'$" <<<"$out_w" \
    && grep -qF 'NO HINT (s310..s311)' <<<"$out_w" && ! grep -q -- '--sprint s313 --series' <<<"$out_w"; then
-  ok "(j.5c) between archives s309 and s312, closing s313: NO HINT (s310..s311), never the closing sprint"
+  ok "(j.5c) between archives s309 and s312, closing s313: NO HINT (s310..s311), never the closing sprint"; B_j5c=1
 else
   bad "(j.5c) the wide gap was hinted (rc=$rc_w): $out_w"
 fi
@@ -568,7 +570,7 @@ if [ "$rc_np" -eq 0 ] && ! grep -q 'REFUSED' <<<"$out_np" && grep -q 'nothing to
    && grep -q '^    .*/planning-20260909T120000Z\.verdict\.json$' <<<"$(warn_block "$out_np")" \
    && [ "$rc_nf" -eq 1 ] && grep -q '^    .*/planning-20260909T120000Z\.verdict\.json$' <<<"$(refusal_block "$out_nf")" \
    && grep -q '^    .*/planning-20260912T000000Z\.verdict\.json$' <<<"$(refusal_block "$out_nf")"; then
-  ok "(j.9) a series whose older member FAILs and newest PASSes is WARNed (exit 0); its twin with the newest FAILing refuses and names both files"
+  ok "(j.9) a series whose older member FAILs and newest PASSes is WARNed (exit 0); its twin with the newest FAILing refuses and names both files"; B_j9=1
 else
   bad "(j.9) the series was not keyed on its newest member (pass-newest rc=$rc_np, fail-newest rc=$rc_nf): $out_np / $out_nf"
 fi
@@ -583,7 +585,7 @@ out_r1="$(rotate --sprint s308 --apply 2>&1)"; rc_r1=$?
 AFTER_R="$(treehash "$PROJ")"
 if [ "$rc_r1" -eq 1 ] && grep -q 'would strand' <<<"$out_r1" && grep -q "${UM_FAIL} -- " <<<"$out_r1" \
    && [ "$BEFORE_R" = "$AFTER_R" ] && [ -f "$GA/sprint-review-20260907T002257Z.verdict.json" ]; then
-  ok "(j.10) a --sprint close leaving an unpromoted unmatchable FAIL as the live pass refuses (exit 1), names it, tree byte-identical"
+  ok "(j.10) a --sprint close leaving an unpromoted unmatchable FAIL as the live pass refuses (exit 1), names it, tree byte-identical"; B_j10=1
 else
   bad "(j.10) a close leaving a FAILing unmatchable live pass was not refused (rc=$rc_r1): $out_r1"
 fi
@@ -605,7 +607,7 @@ if [ "$rc_p0" -eq 1 ] && [ "$p_lines" = "${UM_FAIL} ${UM_FAIL_B} " ] \
    && [ "$rc_p2" -eq 1 ] && grep -q "^    .*/${UM_FAIL_B}\.verdict\.json$" <<<"$(refusal_block "$out_p2")" \
    && [ "$rc_p3" -eq 0 ] && [ -f "$DEST_S308/${UM_FAIL_B}.verdict.json" ] && [ "$rc_p4" -eq 0 ] && grep -q 'nothing to move' <<<"$out_p4" \
    && ! grep -q 'REFUSED' <<<"$out_p4"; then
-  ok "(j.11) partial walk: line 1 alone fills s308's archive and the re-run still refuses on the live newer FAIL; after line 2 the re-run exits 0"
+  ok "(j.11) partial walk: line 1 alone fills s308's archive and the re-run still refuses on the live newer FAIL; after line 2 the re-run exits 0"; B_j11=1
 else
   bad "(j.11) the partial walk was not re-evaluated (rc: initial=$rc_p0 lines='$p_lines' line1=$rc_p1 rerun=$rc_p2 line2=$rc_p3 final=$rc_p4): $out_p1 / $out_p2 / $out_p4"
 fi
@@ -620,7 +622,7 @@ out_q1="$(rotate --sprint s308 --series "$UM_PASS_OLD" --apply 2>&1)"; rc_q1=$?
 out_q2="$(rotate --sprint s308 --apply 2>&1)"; rc_q2=$?
 if [ "$rc_q0" -eq 1 ] && [ "$rc_q1" -eq 0 ] && [ -f "$DEST_S308/${UM_PASS_OLD}.verdict.json" ] \
    && [ "$rc_q2" -eq 1 ] && grep -q "^    .*/${UM_FAIL}\.verdict\.json$" <<<"$(refusal_block "$out_q2")"; then
-  ok "(j.12) moving only an older PASS-only series fills s308's archive with no FAIL, and the re-run still refuses on the live FAIL"
+  ok "(j.12) moving only an older PASS-only series fills s308's archive with no FAIL, and the re-run still refuses on the live FAIL"; B_j12=1
 else
   bad "(j.12) the re-run after a PASS-only first line did not refuse (close=$rc_q0 line=$rc_q1 rerun=$rc_q2): $out_q2"
 fi
@@ -642,7 +644,7 @@ if [ "$rc_d0" -eq 1 ] && [ "$d_ser" = "$UM_FAIL" ] && [ "$rc_d1" -eq 1 ] && [ "$
    && [ "$rc_d2" -eq 0 ] && [ ! -e "$GA/legacy-20260701T000000Z.verdict.json" ] \
    && [ "$rc_d3" -eq 0 ] && [ -f "$DEST_S308/${UM_FAIL}.verdict.json" ] \
    && [ "$rc_d4" -eq 0 ] && grep -q 'nothing to move' <<<"$out_d4"; then
-  ok "(j.13) legacy FAIL below an unmatchable FAIL: close, --series, the printed --legacy-through, --series, close converge (1 1 0 0 0)"
+  ok "(j.13) legacy FAIL below an unmatchable FAIL: close, --series, the printed --legacy-through, --series, close converge (1 1 0 0 0)"; B_j13=1
 else
   bad "(j.13) the printed remedies did not converge (close=$rc_d0 series='$d_ser' $rc_d1 bound='$d_bound' legacy=$rc_d2 series=$rc_d3 close=$rc_d4): $out_d1 / $out_d2"
 fi
@@ -656,7 +658,7 @@ out_t="$(rotate --sprint s308 --series aplanning-20260909T120000Z --apply 2>&1)"
 AFTER_T="$(treehash "$PROJ")"
 if [ "$rc_t" -eq 1 ] && grep -q 'would strand' <<<"$out_t" && grep -q 'legacy-20260909T120000Z -- ' <<<"$out_t" \
    && [ "$BEFORE_T" = "$AFTER_T" ]; then
-  ok "(j.14) a --series move of a verdict tying a legacy FAIL's nonce counts as promotion and refuses (exit 1), tree byte-identical"
+  ok "(j.14) a --series move of a verdict tying a legacy FAIL's nonce counts as promotion and refuses (exit 1), tree byte-identical"; B_j14=1
 else
   bad "(j.14) a same-nonce tie was not treated as promotion (rc=$rc_t): $out_t"
 fi
@@ -669,7 +671,7 @@ out_lp="$(rotate --legacy-through 20260920T000000Z --apply 2>&1)"; rc_lp=$?
 AFTER_LP="$(treehash "$PROJ")"
 if [ "$rc_lp" -eq 1 ] && grep -q 'would strand' <<<"$out_lp" && grep -q "${UM_FAIL} -- " <<<"$out_lp" \
    && [ "$BEFORE_LP" = "$AFTER_LP" ] && [ -f "$GA/legacy-20260920T000000Z.verdict.json" ]; then
-  ok "(j.15) --legacy-through that would promote an unmatchable FAIL to live refuses (exit 1), tree byte-identical"
+  ok "(j.15) --legacy-through that would promote an unmatchable FAIL to live refuses (exit 1), tree byte-identical"; B_j15=1
 else
   bad "(j.15) a promoting --legacy-through was not refused (rc=$rc_lp): $out_lp"
 fi
@@ -746,7 +748,7 @@ out="$(rotate --sprint s309 --series "$UM_STEM" --apply 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$DEST_S309/${UM_STEM}.verdict.json" ] && [ -f "$DEST_S309/${UM_STEM}.repair.md" ] \
    && [ -f "$GA/planning-20260911T000000Z.verdict.json" ] && [ ! -e "$DEST_S309/planning-20260911T000000Z.verdict.json" ] \
    && [ -f "$GA/implementation-20260720T011606Z.verdict.json" ]; then
-  ok "(l.2) --series --apply moves the exact id with its sidecar and leaves '${UM_STEM}-retry' and the legacy verdict live"
+  ok "(l.2) --series --apply moves the exact id with its sidecar and leaves '${UM_STEM}-retry' and the legacy verdict live"; B_l2=1
 else
   bad "(l.2) --series --apply did not move exactly one id (rc=$rc): $out"
 fi
@@ -799,7 +801,7 @@ else
   seed unmatchable
   out="$( ( cd "$PROJ" && bash "$MUT5" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
-    ok "MUTATION 5: with the early exit restored, the unmatchable world exits 0 'nothing to move' -- arm (j) is live"
+    mutant_killed "$B_j" earlyexit "MUTATION 5: with the early exit restored, the unmatchable world exits 0 'nothing to move' -- arm (j) is live"
   else
     bad "MUTATION 5: restoring the early exit did not change the outcome (rc=$rc): $out"
   fi
@@ -823,7 +825,7 @@ else
   seed unmatchable-pass
   out="$( ( cd "$PROJ" && bash "$MUT6" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q 'REFUSED' <<<"$out" && grep -q "/${UM_STEM}\.verdict\.json$" <<<"$out"; then
-    ok "MUTATION 6: with the FAIL narrowing reverted, the PASS-only unmatchable world refuses (exit 1) -- arm (j.0) is live"
+    mutant_killed "$B_j0" failrevert "MUTATION 6: with the FAIL narrowing reverted, the PASS-only unmatchable world refuses (exit 1) -- arm (j.0) is live"
   else
     bad "MUTATION 6: reverting the FAIL narrowing did not change the outcome (rc=$rc): $out"
   fi
@@ -843,7 +845,7 @@ else
   seed series-move
   out="$( ( cd "$PROJ" && bash "$MUT7" --sprint s309 --series "$UM_STEM" --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 0 ] && [ -f "$DEST_S309/planning-20260911T000000Z.verdict.json" ]; then
-    ok "MUTATION 7: a prefix match moves '${UM_STEM}-retry' too -- arm (l.2) is live"
+    mutant_killed "$B_l2" seriesprefix "MUTATION 7: a prefix match moves '${UM_STEM}-retry' too -- arm (l.2) is live"
   else
     bad "MUTATION 7: a prefix match did not move the retry id (rc=$rc): $out"
   fi
@@ -866,7 +868,7 @@ else
   seed series-newest-pass
   out="$( ( cd "$PROJ" && bash "$MUT8.2" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q 'REFUSED' <<<"$out"; then
-    ok "MUTATION 8: keyed on any member, the older-FAIL newest-PASS series refuses (exit 1) -- arm (j.9) is live"
+    mutant_killed "$B_j9" anymember "MUTATION 8: keyed on any member, the older-FAIL newest-PASS series refuses (exit 1) -- arm (j.9) is live"
   else
     bad "MUTATION 8: keying on any member did not change the outcome (rc=$rc): $out"
   fi
@@ -885,7 +887,7 @@ else
   seed reapply
   out="$( ( cd "$PROJ" && bash "$MUT9" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 0 ] && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ] && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
-    ok "MUTATION 9: with the promotion conjunct restored, the close exits 0 leaving the FAIL as live pass -- arm (j.10) is live"
+    mutant_killed "$B_j10" promoteonly "MUTATION 9: with the promotion conjunct restored, the close exits 0 leaving the FAIL as live pass -- arm (j.10) is live"
   else
     bad "MUTATION 9: restoring the promotion conjunct did not change the outcome (rc=$rc): $out"
   fi
@@ -907,7 +909,7 @@ else
   rotate --sprint s308 --series "$UM_FAIL" --apply >/dev/null 2>&1; rc_first=$?
   out="$( ( cd "$PROJ" && bash "$MUT10" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc_first" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out" && [ -f "$GA/${UM_FAIL_B}.verdict.json" ]; then
-    ok "MUTATION 10: keyed on an empty archive, the re-run after line 1 exits 0 with the newer FAIL live -- arm (j.11) is live"
+    mutant_killed "$B_j11" archivekey "MUTATION 10: keyed on an empty archive, the re-run after line 1 exits 0 with the newer FAIL live -- arm (j.11) is live"
   else
     bad "MUTATION 10: archive keying did not change the outcome (first rc=$rc_first, rc=$rc): $out"
   fi
@@ -929,7 +931,7 @@ else
   rotate --sprint s308 --series "$UM_FAIL" --apply >/dev/null 2>&1; rc_first=$?
   out="$( ( cd "$PROJ" && bash "$MUT13" --legacy-through 20260701T000000Z --apply ) 2>&1 )"; rc=$?
   if [ "$rc_first" -eq 1 ] && [ "$rc" -eq 1 ] && grep -q 'would strand' <<<"$out" && grep -q -- "--series '${UM_FAIL}'" <<<"$out"; then
-    ok "MUTATION 13: refusing unconditionally in --legacy-through, its step refuses and prints --series back -- arm (j.13) is live"
+    mutant_killed "$B_j13" legacyalways "MUTATION 13: refusing unconditionally in --legacy-through, its step refuses and prints --series back -- arm (j.13) is live"
   else
     bad "MUTATION 13: the legacy-always mutant did not change the outcome (first rc=$rc_first, rc=$rc): $out"
   fi
@@ -951,7 +953,7 @@ else
   rotate --sprint s308 --series "$UM_PASS_OLD" --apply >/dev/null 2>&1; rc_first=$?
   out="$( ( cd "$PROJ" && bash "$MUT14" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc0" -eq 1 ] && [ "$rc_first" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q 'nothing to move' <<<"$out" && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
-    ok "MUTATION 14: exempting a FAIL-free archive, the re-run exits 0 with the FAIL live (control: its close still refuses) -- arm (j.12) is live"
+    mutant_killed "$B_j12" failfreearchive "MUTATION 14: exempting a FAIL-free archive, the re-run exits 0 with the FAIL live (control: its close still refuses) -- arm (j.12) is live"
   else
     bad "MUTATION 14: the fail-free-archive mutant did not change the outcome (close=$rc0 first=$rc_first rerun=$rc): $out"
   fi
@@ -971,7 +973,7 @@ else
   seed tie
   out="$( ( cd "$PROJ" && bash "$MUT15" --sprint s308 --series aplanning-20260909T120000Z --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 0 ] && [ -f "$GA/legacy-20260909T120000Z.verdict.json" ] && [ ! -e "$GA/aplanning-20260909T120000Z.verdict.json" ]; then
-    ok "MUTATION 15: with a strict comparison the tied PASS moves and the legacy FAIL is left live (exit 0) -- arm (j.14) is live"
+    mutant_killed "$B_j14" strictpromote "MUTATION 15: with a strict comparison the tied PASS moves and the legacy FAIL is left live (exit 0) -- arm (j.14) is live"
   else
     bad "MUTATION 15: the strict comparison did not change the outcome (rc=$rc): $out"
   fi
@@ -991,7 +993,7 @@ else
   seed legacy-promote
   out="$( ( cd "$PROJ" && bash "$MUT16" --legacy-through 20260920T000000Z --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 0 ] && [ ! -e "$GA/legacy-20260920T000000Z.verdict.json" ] && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
-    ok "MUTATION 16: with --legacy-through never refusing, the PASS moves and the unmatchable FAIL is left live (exit 0) -- arm (j.15) is live"
+    mutant_killed "$B_j15" legacynever "MUTATION 16: with --legacy-through never refusing, the PASS moves and the unmatchable FAIL is left live (exit 0) -- arm (j.15) is live"
   else
     bad "MUTATION 16: the legacy-never mutant did not change the outcome (rc=$rc): $out"
   fi
@@ -1009,7 +1011,7 @@ else
   seed partial-walk
   out="$( ( cd "$PROJ" && bash "$MUT12" --sprint s308 --series "$UM_FAIL" --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q 'would strand' <<<"$out" && [ -f "$GA/${UM_FAIL}.verdict.json" ]; then
-    ok "MUTATION 12: without the --series exemption, line 1 of the walk refuses (exit 1) -- arm (j.11) is live"
+    mutant_killed "$B_j11" seriesrefuse "MUTATION 12: without the --series exemption, line 1 of the walk refuses (exit 1) -- arm (j.11) is live"
   else
     bad "MUTATION 12: dropping the --series exemption did not change the outcome (rc=$rc): $out"
   fi
@@ -1029,7 +1031,7 @@ else
   seed hint-wide-gap
   out="$( ( cd "$PROJ" && bash "$MUT11" --sprint s313 ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q -- '--sprint s313 --series' <<<"$out" && ! grep -qF 'NO HINT (s310..s311)' <<<"$out"; then
-    ok "MUTATION 11: hinting the closing sprint between archives prints --sprint s313 -- arm (j.5c) is live"
+    mutant_killed "$B_j5c" gaphint "MUTATION 11: hinting the closing sprint between archives prints --sprint s313 -- arm (j.5c) is live"
   else
     bad "MUTATION 11: the gap-hint mutant did not change the outcome (rc=$rc): $out"
   fi
@@ -1061,7 +1063,7 @@ else
   out4="$( ( cd "$PROJ" && bash "$MUT4" --sprint s308 --apply ) 2>&1 )"; rc4=$?
   AFTER_M4="$(treehash "$PROJ")"
   if [ "$rc4" -eq 0 ] && [ "$BEFORE_M4" != "$AFTER_M4" ]; then
-    ok "MUTATION 4: with the stranding refusal stripped, the rotation proceeds and strands the FAILing legacy verdict (rc=$rc4) — arm (h.1) is live, not vacuous"
+    mutant_killed "$B_h1" strand "MUTATION 4: with the stranding refusal stripped, the rotation proceeds and strands the FAILing legacy verdict (rc=$rc4) — arm (h.1) is live, not vacuous"
   else
     bad "MUTATION 4: stripping the refusal did not change the outcome (rc=$rc4); arm (h.1) may be passing for another reason"
   fi
@@ -1087,7 +1089,7 @@ else
   # the empty selection now refuses rather than printing "nothing to move".
   if ! grep -q 'would move' <<<"$out2" \
      && grep -q "no verdict .*names series 's308'" <<<"$out2"; then
-    ok "MUTATION 1: selection keyed on the wrong JSON field (gate_type instead of gate_series_id) finds nothing to move in the base world where the real field selects one -- arm (b)/(a) would FAIL against this subject"
+    mutant_killed "$B_a" selection "MUTATION 1: selection keyed on the wrong JSON field (gate_type instead of gate_series_id) finds nothing to move in the base world where the real field selects one -- arm (b)/(a) would FAIL against this subject"
   else
     bad "MUTATION 1: selection keyed on the wrong field still found the s308 set; the field-selection is UNPROVEN by this mutant"
   fi
@@ -1105,7 +1107,7 @@ else
   seed badjson
   out="$( ( cd "$PROJ" && bash "$MUT2" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -ne 1 ] || ! grep -q 'do not parse as JSON' <<<"$out"; then
-    ok "MUTATION 2: with the parse-failure refusal stripped, an unparseable verdict no longer refuses (rc=$rc) -- arm (g) is live, not vacuous"
+    mutant_killed "$B_g" parsecheck "MUTATION 2: with the parse-failure refusal stripped, an unparseable verdict no longer refuses (rc=$rc) -- arm (g) is live, not vacuous"
   else
     bad "MUTATION 2: stripping the refusal did not change the outcome; arm (g) may be passing for another reason"
   fi
@@ -1123,7 +1125,7 @@ else
   seed ignored
   out="$( ( cd "$PROJ" && bash "$MUT3" --sprint s308 --apply ) 2>&1 )"; rc=$?
   if [ "$rc" -eq 0 ] && [ -d "$DEST_S308" ]; then
-    ok "MUTATION 3: with the ignore-check disabled, apply writes into the ignored path instead of refusing -- arm (d) is live, not vacuous"
+    mutant_killed "$B_d" ignorecheck "MUTATION 3: with the ignore-check disabled, apply writes into the ignored path instead of refusing -- arm (d) is live, not vacuous"
   else
     bad "MUTATION 3: disabling the ignore check did not change the outcome (rc=$rc, dest exists: $([ -d "$DEST_S308" ] && echo yes || echo no))"
   fi
@@ -1145,9 +1147,9 @@ wv_p2() { # <rotator> -- the unmatchable-series select
   local o r; o="$( ( cd "$PROJ" && bash "$1" --sprint s308 --apply ) 2>&1 )"; r=$?
   [ "$r" -eq 1 ] && grep -q "^    .*/${UM_FAIL}\.verdict\.json$" <<<"$(refusal_block "$o")"; }
 WV_BASE=1
-if wv_p1 "$ROT"; then ok "(w.1) a FAIL_WAIVED unselectable survivor is refused like its FAIL twin, tree byte-identical"
+if wv_p1 "$ROT"; then ok "(w.1) a FAIL_WAIVED unselectable survivor is refused like its FAIL twin, tree byte-identical"; B_wv1=1
 else bad "(w.1) a FAIL_WAIVED survivor was rotated past as if clean — an unverifiable waiver left live as the guard's pass"; WV_BASE=0; fi
-if wv_p2 "$ROT"; then ok "(w.2) a FAIL_WAIVED unmatchable series refuses the empty selection like its FAIL twin"
+if wv_p2 "$ROT"; then ok "(w.2) a FAIL_WAIVED unmatchable series refuses the empty selection like its FAIL twin"; B_wv2=1
 else bad "(w.2) a FAIL_WAIVED unmatchable series read as PASS-only and the close exited past it"; WV_BASE=0; fi
 # MUTATION W — both selects narrowed back to FAIL only. (w.1) and (w.2) must both die; gated on
 # both having passed unmutated in this run.
@@ -1161,7 +1163,7 @@ else
     bad "MUTATION W: the narrowing did not apply to every select ($_mw_n left); (w.1)/(w.2) are UNPROVEN"
   else
     _wd=""; wv_p1 "$MUTW" || _wd="$_wd 1"; wv_p2 "$MUTW" || _wd="$_wd 2"
-    if [ "$_wd" = " 1 2" ]; then ok "MUTATION W: with FAIL_WAIVED read as clean at both selects, (w.1) and (w.2) both go red"
+    if [ "$_wd" = " 1 2" ]; then mutant_killed "$(( $B_wv1 && $B_wv2 ))" waived-as-pass "MUTATION W: with FAIL_WAIVED read as clean at both selects, (w.1) and (w.2) both go red"
     else bad "MUTATION W: narrowing both selects failed (w.[${_wd# }]), expected exactly (w.[1 2])"; fi
   fi
 fi

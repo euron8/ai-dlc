@@ -3,3 +3,4 @@
 # skills tree. Map rows under core/ and core/scripts, and the walk-up markers, are probes and not reads.
 !core/scripts/validate-bmad-invocations.sh
 !core/skills/ai-dlc/
+core/fixtures/lib/mutant.sh

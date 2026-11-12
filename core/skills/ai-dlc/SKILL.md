@@ -365,10 +365,10 @@ value, that veto question goes out UNBADGED, as above. (3) Gloss every project-i
 term in the question text itself: a check number, a band, a gap or
 evaluation id, a `D-<n>`, `LR-` or `FR-` id gets a plain-language clause
 saying what it is, because the operator reads the question, not the
-artifact behind it. (4) Dispatch ready actions on free lanes, arm their joins, and
-name the lanes held.
+artifact behind it. (4) Dispatch, then ask, as Rule 12's
+`#### Operator decisions: dispatch, then ask`.
 
-**One shape for every operator decision, the sort before asking, and no re-ask of an attested act** -- stated in full under Rule 12's three `#### Operator decisions` subsections; apply all three to every question you put to the operator.
+**One shape for every operator decision, the sort before asking, and no re-ask of an attested act** -- stated in full under Rule 12's four `#### Operator decisions` subsections; apply all four to every question you put to the operator.
 
 **(b) In-flight interpretation preamble.** The first line of the
 agent's response to ANY user message that arrives during or after an
@@ -493,6 +493,20 @@ question, and carry the act as attested. An escalation entry the act
 resolves still cites the operator's own message (`escalations.md`); the
 record replaces the re-ask, not the citation.
 A record read afterwards that shows the act did not occur is an authorization-premise invalidation (`escalations.md`), not a re-ask.
+
+#### Operator decisions: dispatch, then ask (Rule 11(a))
+
+**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join
+every lane whose completion has arrived: read the completion and record
+it. Acting on its output is itself a ready action, dispatched below, not
+work to finish before asking. Dispatch every ready action the question
+does not hold, in the background (Rule 29), and arm its join. An action
+is ready when its inputs exist now, and the question holds it only when
+it reads the answer. Name the lanes held in your output beside the
+question, not inside it. Then send the question at once, in
+`AskUserQuestion`, unchanged by the lane state. Never wait for a running
+lane before asking, and never hold back, defer or drop a question, or
+fold it into a later one, to suit the lanes.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 

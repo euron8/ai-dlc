@@ -32,6 +32,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_pnaSentinel=0
 
 ART="$WORK/docs/eval.md"   # non-retro path: no retro-specific requirements
 mkdir -p "$WORK/docs"
@@ -61,7 +63,7 @@ write_block "NOT_ACCESSIBLE"
 bash "$VALIDATOR" "$ART" >"$WORK/out.txt" 2>&1
 rc=$?
 if [ "$rc" = "0" ]; then
-  ok "tool_use_id: NOT_ACCESSIBLE is accepted (sanctioned sentinel)"
+  ok "tool_use_id: NOT_ACCESSIBLE is accepted (sanctioned sentinel)"; B_pnaSentinel=1
 else
   bad "NOT_ACCESSIBLE was rejected (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -98,7 +100,7 @@ write_block "NOT_ACCESSIBLE"
 bash "$MUTANT" "$ART" >"$WORK/mut.txt" 2>&1
 rc=$?
 if [ "$rc" = "1" ]; then
-  ok "MUTATION: without the sentinel bypass, NOT_ACCESSIBLE FAILs (acceptance was real)"
+  mutant_killed "$B_pnaSentinel" sentinel-bypass-removed "MUTATION: without the sentinel bypass, NOT_ACCESSIBLE FAILs (acceptance was real)"
 else
   bad "MUTATION: NOT_ACCESSIBLE still passed without the bypass (exit $rc)"; sed 's/^/        /' "$WORK/mut.txt"
 fi

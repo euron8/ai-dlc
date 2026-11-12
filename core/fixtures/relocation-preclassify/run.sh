@@ -45,6 +45,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_rpG=0
 
 # --- a synthetic distribution, two commits ------------------------------------
 # Three validators upstream ships under core/scripts/. One is MODIFIED between base and
@@ -192,7 +194,7 @@ if [ "$G_RUN" = 1 ]; then
   }
   g="$(g_score "$RECON" tip)"
   if [ -z "$g" ]; then
-    ok "G a pre-relocation consumer pulling a lone core/scripts/ deletion gets a PRE-RELOCATION-NOOP row, and the render carries 0 preclassify refusals"
+    ok "G a pre-relocation consumer pulling a lone core/scripts/ deletion gets a PRE-RELOCATION-NOOP row, and the render carries 0 preclassify refusals"; B_rpG=1
   else
     bad "G the zero-work pre-relocation pull was not classified as zero work: $g"
   fi
@@ -230,7 +232,7 @@ if [ "$G_RUN" = 1 ]; then
     elif [ -z "$gm" ]; then
       bad "MUTANT SURVIVED [G]: with the row removed, G still passed -- it cannot see the silent skip"
     else
-      ok "MUTANT (PRE-RELOCATION-NOOP row removed) fails G ($gm) and leaves every other main-world row, which A-F read, byte-identical"
+      mutant_killed "$B_rpG" G-noop-row-removed "MUTANT (PRE-RELOCATION-NOOP row removed) fails G ($gm) and leaves every other main-world row, which A-F read, byte-identical"
     fi
   fi
 fi

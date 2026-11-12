@@ -46,6 +46,8 @@ FX="$ROOT/tests/fixtures"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a1=0; B_a2=0
 
 echo "fixture-drivability:"
 
@@ -64,7 +66,7 @@ fi
 # --- Assertion 1: THE BARE HOLE FAILS AND IS NAMED ----------------------------
 # `delta` has no run.sh and no README. This is the state the push hook skips silently.
 if [ "$rc" -ne 0 ] && grep -q "fixture 'delta' has neither a run.sh nor a README.md" <<<"$out"; then
-  ok "a directory with no driver and no README FAILS and is named"
+  ok "a directory with no driver and no README FAILS and is named"; B_a1=1
 else
   bad "a directory with no driver and no README did not fail by name — the push hook would skip it and say nothing"
 fi
@@ -74,7 +76,7 @@ fi
 # the word "FAIL", so assertion 1's mutation cannot satisfy this one: the two arms report
 # different authoring mistakes and a check that collapsed them would still pass one.
 if grep -q "fixture 'echo' has no run.sh and its README.md does not declare the exemption" <<<"$out"; then
-  ok "a README that does not declare the exemption FAILS in its own words"
+  ok "a README that does not declare the exemption FAILS in its own words"; B_a2=1
 else
   bad "a README with no exemption declaration was accepted, or reported in the bare-hole arm's words"
 fi
@@ -149,7 +151,7 @@ fi
 if mp="$(mutate m1 's@^    undeclared+=("$name")@    :@')"; then
   out_m="$(bash "$mp" --dir "$FX" 2>&1)"
   if ! grep -q "fixture 'delta'" <<<"$out_m" && grep -q "fixture 'echo'" <<<"$out_m"; then
-    ok "MUTANT 1: with the no-README branch removed, 'delta' goes silent and 'echo' still reports — the branch is load-bearing and unentangled"
+    mutant_killed "$B_a1" m1-no-readme-branch "MUTANT 1: with the no-README branch removed, 'delta' goes silent and 'echo' still reports — the branch is load-bearing and unentangled"
   else
     bad "MUTANT 1 did not isolate the no-README branch (either 'delta' still reported, or 'echo' fell silent with it)"
   fi
@@ -160,7 +162,7 @@ fi
 if mp="$(mutate m2 's@if grep -qF -- "$EXEMPT_MARKER" "${d}README.md"; then@if true; then@')"; then
   out_m="$(bash "$mp" --dir "$FX" 2>&1)"
   if ! grep -q "fixture 'echo'" <<<"$out_m" && grep -q "fixture 'delta'" <<<"$out_m"; then
-    ok "MUTANT 2: with the marker test always true, 'echo' goes silent and 'delta' still reports — the marker is what makes the exemption a declaration"
+    mutant_killed "$B_a2" m2-marker-always-true "MUTANT 2: with the marker test always true, 'echo' goes silent and 'delta' still reports — the marker is what makes the exemption a declaration"
   else
     bad "MUTANT 2 did not isolate the marker test (either 'echo' still reported, or 'delta' fell silent with it)"
   fi

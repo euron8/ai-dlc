@@ -389,7 +389,7 @@ EXPECTED="C:ok R:named B:named M:named T:ok P:preledger N:noted F:aligned S:refu
 # --- 1. the shipping validator answers every arm ------------------------------
 GOT="$(battery "$VSL")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all fifteen arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, a fumbled invocation, a readable settings.json that pins no role at all, an out-of-scope built-in agent type beside an in-scope row, that same type when it CITED a contract, and a declared role outside the five gate-trigger roles"
+  ok "all fifteen arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, a fumbled invocation, a readable settings.json that pins no role at all, an out-of-scope built-in agent type beside an in-scope row, that same type when it CITED a contract, and a declared role outside the five gate-trigger roles"; B_battery=1
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -482,7 +482,7 @@ elif ! need_base "${B_allout:-0}" norolebound; then :
 else
   bash "$WORK/nzs.sh" --ledger "$WORK/allout.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 0 ]; then
-    ok "MUTANT norolebound: dropping that guard turns the same all-out-of-scope ledger into a silent exit 0 — the arm above is load-bearing"
+    mutant_killed "${B_allout:-0}" norolebound "MUTANT norolebound: dropping that guard turns the same all-out-of-scope ledger into a silent exit 0 — the arm above is load-bearing"
   else
     bad "MUTANT norolebound survived: rc=$rc without the guard, so the arm above cannot be what produced the 3"
   fi
@@ -529,7 +529,7 @@ mutant() { # name sed-expression expected-arm description
   got="$(battery "$M")"
   mv="$(moved "$got")"
   if [ "$mv" = "$arm" ]; then
-    ok "MUTANT $n: $desc — and it moves ONLY the $arm arm"
+    mutant_killed "${B_ctl:-0}" "$n" "MUTANT $n: $desc — and it moves ONLY the $arm arm"
   elif [ -z "$mv" ]; then
     bad "MUTANT $n survived: $desc left every arm unchanged, so that arm cannot fire"
   else
@@ -630,7 +630,7 @@ elif ! need_base "${B_suspect:-0}" nameboundary; then :
 else
   out="$(bash "$WORK/widen.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
   if grep -q '^NOTE: \[devops-audit\]' <<<"$out"; then
-    ok "MUTANT nameboundary: dropping the dash boundary flags devops-audit as the role dev — the boundary is what makes the NOTE a name match rather than a substring match"
+    mutant_killed "${B_suspect:-0}" nameboundary "MUTANT nameboundary: dropping the dash boundary flags devops-audit as the role dev — the boundary is what makes the NOTE a name match rather than a substring match"
   else
     bad "MUTANT nameboundary survived: devops-audit stayed quiet without the boundary"
   fi
@@ -643,7 +643,7 @@ elif ! need_base "${B_suspect:-0}" suspectnote; then :
 else
   out="$(bash "$WORK/nosus.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
   if ! grep -q '^NOTE: \[dev-story-1\]' <<<"$out"; then
-    ok "MUTANT suspectnote: without the name reading, a misrouted role dispatch is skipped in total silence — 18 of them on the reference consumer"
+    mutant_killed "${B_suspect:-0}" suspectnote "MUTANT suspectnote: without the name reading, a misrouted role dispatch is skipped in total silence — 18 of them on the reference consumer"
   else
     bad "MUTANT suspectnote survived: the NOTE still printed without name_role"
   fi
@@ -668,7 +668,7 @@ elif ! need_base "${B_dedup:-0}" dedup; then :
 else
   out="$(bash "$WORK/nodedup.sh" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
   if grep -q 'general-purpose fork general-purpose' <<<"$out"; then
-    ok "MUTANT dedup: the space-separated accumulator against a newline-delimited test repeats every role after the first"
+    mutant_killed "${B_dedup:-0}" dedup "MUTANT dedup: the space-separated accumulator against a newline-delimited test repeats every role after the first"
   else
     bad "MUTANT dedup survived: the list still de-duplicated with the delimiters mismatched"
   fi
@@ -714,7 +714,7 @@ else
   bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >/dev/null 2>&1; a=$?
   bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >/dev/null 2>&1; b=$?
   if [ "$a" -ne "$b" ]; then
-    ok "MUTANT emptyrole: without the guard the same role-less row answers rc=$a with an empty roles block and rc=$b with a populated one — the collision the guard exists to stop"
+    mutant_killed "${B_norole:-0}" emptyrole "MUTANT emptyrole: without the guard the same role-less row answers rc=$a with an empty roles block and rc=$b with a populated one — the collision the guard exists to stop"
   else
     bad "MUTANT emptyrole survived: both configs answered rc=$a without the guard"
   fi
@@ -745,7 +745,7 @@ else
   out="$(bash "$WORK/noschema.sh" --ledger "$WORK/foreign.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
   n=$(grep -c '^FAIL: \[' <<<"$out") || n=0
   if [ "$rc" -eq 1 ] && [ "$n" -ge 2 ]; then
-    ok "MUTANT foreignschema: treating every row as guard-written manufactures $n findings from the foreign row's ABSENT fields — 24 of 25 on the reference consumer"
+    mutant_killed "${B_foreign:-0}" foreignschema "MUTANT foreignschema: treating every row as guard-written manufactures $n findings from the foreign row's ABSENT fields — 24 of 25 on the reference consumer"
   else
     bad "MUTANT foreignschema survived: rc=$rc with $n FAIL arm(s)"
   fi
@@ -762,7 +762,7 @@ else
   bash "$VSL"           --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; a=$?
   bash "$WORK/nodecl.sh" --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; b=$?
   if [ "$a" -eq 1 ] && [ "$b" -eq 3 ]; then
-    ok "MUTANT declaredisjunct: without it an UNCITED dispatch of a declared role falls out of scope (3) instead of being judged (1) — the declaration is what carries the D arm, and it is now asserted rather than assumed"
+    mutant_killed "${B_battery:-0}" declaredisjunct "MUTANT declaredisjunct: without it an UNCITED dispatch of a declared role falls out of scope (3) instead of being judged (1) — the declaration is what carries the D arm, and it is now asserted rather than assumed"
   else
     bad "MUTANT declaredisjunct: shipping gave rc=$a and the mutant rc=$b; expected 1 then 3"
   fi
@@ -780,7 +780,7 @@ else
   bash "$VSL"          --ledger "$WORK/mismatch.jsonl" --sprint 900 --settings "$WORK/norolepins.json" >/dev/null 2>&1; a=$?
   bash "$WORK/nodisj.sh" --ledger "$WORK/mismatch.jsonl" --sprint 900 --settings "$WORK/norolepins.json" >/dev/null 2>&1; b=$?
   if [ "$a" -eq 0 ] && [ "$b" -eq 3 ]; then
-    ok "MUTANT citeddisjunct: without it a settings.json that lost its role block drops every contract-citing row as out of scope (3) instead of examining them (0) — the disjunct is what stops an aiDlcRoles deletion disarming the check"
+    mutant_killed "${B_battery:-0}" citeddisjunct "MUTANT citeddisjunct: without it a settings.json that lost its role block drops every contract-citing row as out of scope (3) instead of examining them (0) — the disjunct is what stops an aiDlcRoles deletion disarming the check"
   else
     bad "MUTANT citeddisjunct: shipping gave rc=$a and the mutant rc=$b; expected 0 then 3"
   fi
@@ -1056,7 +1056,7 @@ else
   bash "$WORK/noeffortarm.sh" --ledger "$WORK/e-disagree.jsonl" --sprint 900 \
        --settings "$WORK/settings.json" --probe "$WORK/e-disagree.probe" >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 0 ]; then
-    ok "MUTANT noeffortarm: dropping the arm turns a teammate that demonstrably ran at the wrong effort into a clean exit 0 -- E2 is load-bearing"
+    mutant_killed "${B_e2:-0}" noeffortarm "MUTANT noeffortarm: dropping the arm turns a teammate that demonstrably ran at the wrong effort into a clean exit 0 -- E2 is load-bearing"
   else
     bad "MUTANT noeffortarm survived: rc=$rc without the arm, so E2 cannot be what produced the 1"
   fi
@@ -1076,7 +1076,7 @@ else
   out="$(bash "$WORK/rolejoin.sh" --ledger "$WORK/e-sameRole.jsonl" --sprint 900 \
          --settings "$WORK/settings.json" --probe "$WORK/e-sameRole.probe" 2>&1)"
   if grep -q 'FAIL: \[dev-second\]' <<<"$out" || ! grep -q 'FAIL: \[dev-first\]' <<<"$out"; then
-    ok "MUTANT unjoined: with the id match removed the same-role pair is scored against the wrong transcript and the verdict names the wrong spawn -- E5 is what catches it, and an exit-code-only arm could not"
+    mutant_killed "${B_e5:-0}" unjoined "MUTANT unjoined: with the id match removed the same-role pair is scored against the wrong transcript and the verdict names the wrong spawn -- E5 is what catches it, and an exit-code-only arm could not"
   else
     bad "MUTANT unjoined survived: the offender was still named correctly without the id match, so E5's join assertion is not load-bearing: $out"
   fi
@@ -1092,7 +1092,7 @@ else
   bash "$WORK/nofloor.sh" --ledger "$WORK/e-pinned.jsonl" --sprint 900 \
        --settings "$WORK/settings.json" --probe "$WORK/e-old.probe" >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 1 ]; then
-    ok "MUTANT nofloor: without the 2.1.267 floor a pinned-effort record from a build where the field was wrong is scored as a finding -- E6 is what stops a false FAIL on correct data"
+    mutant_killed "${B_e6:-0}" nofloor "MUTANT nofloor: without the 2.1.267 floor a pinned-effort record from a build where the field was wrong is scored as a finding -- E6 is what stops a false FAIL on correct data"
   else
     bad "MUTANT nofloor survived: rc=$rc, so the floor is not what produced E6's refusal"
   fi
@@ -1367,7 +1367,7 @@ cpscore() {
   got="$(cpvec "$M")"
   mv="$(cpmoved "$got")"
   if [ "$mv" = "$cell" ]; then
-    ok "MUTANT $n: $desc -- and it moves ONLY the $cell cell"
+    mutant_killed "${B_c1:-0}" "$n" "MUTANT $n: $desc -- and it moves ONLY the $cell cell"
   elif [ -z "$mv" ]; then
     bad "MUTANT $n survived: $desc left all six cells unchanged, so the $cell arm cannot fire"
   else
@@ -1418,7 +1418,7 @@ else
   M4CELL="$(printf '%s' "$M4" | cut -d' ' -f3)"
   M4MV="$(cpmoved "$M4")"
   if [ "$M4MV" = "cite" ] && [ "$M4CELL" != "${M4CELL#DEAD}" ]; then
-    ok "MUTANT m4: deleting the 19(b) route entirely passes an uncited row, and C1's cite cell reads [$M4CELL] -- caught by the rc=1-and-class-token half, which is why C1 asks about LIVENESS before it asks about NAMING; an arm scoring only 'every FAIL names the remedy' calls this build clean over a route that no longer exists"
+    mutant_killed "${B_c1:-0}" m4 "MUTANT m4: deleting the 19(b) route entirely passes an uncited row, and C1's cite cell reads [$M4CELL] -- caught by the rc=1-and-class-token half, which is why C1 asks about LIVENESS before it asks about NAMING; an arm scoring only 'every FAIL names the remedy' calls this build clean over a route that no longer exists"
   else
     bad "MUTANT m4: expected the cite cell to go DEAD and nothing else to move; cell=[$M4CELL], moved=[$M4MV]"
   fi
@@ -1435,7 +1435,7 @@ elif ! need_base "${B_c2:-0}" m5; then :
 else
   M5="$(stepverdict "$WORK/cp-m5.md")"
   if [ "$M5" = "HEADER-SCOPED-TO-TIER" ]; then
-    ok "MUTANT m5: reverting the section header to 'Dispositioning a Rule 19(a) violation' scores [$M5] -- C2 reads the header, so a section that lists four classes under a heading claiming one does not pass"
+    mutant_killed "${B_c2:-0}" m5 "MUTANT m5: reverting the section header to 'Dispositioning a Rule 19(a) violation' scores [$M5] -- C2 reads the header, so a section that lists four classes under a heading claiming one does not pass"
   else
     bad "MUTANT m5 survived: the tier-only header scored [$M5], so C2 is not reading the header"
   fi

@@ -6,3 +6,4 @@ core/schemas/pause-routing.json
 # Both hooks source this wrapper only `if [ -r ... ]` and otherwise define a pass-through, so
 # the verdict survives its absence; it is REQUIRED so the declaration cannot drop it unseen.
 !core/hooks/ai-dlc-context-provenance.sh
+core/fixtures/lib/mutant.sh

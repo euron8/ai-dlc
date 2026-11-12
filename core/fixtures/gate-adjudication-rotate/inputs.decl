@@ -2,3 +2,4 @@
 !core/scripts/rotate-gate-adjudication.sh
 !core/hooks/ai-dlc-gate-remediation-guard.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

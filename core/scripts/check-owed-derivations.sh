@@ -346,7 +346,7 @@ if [ "${1:-}" = "--scope-batch" ]; then
 fi
 if [ "${1:-}" = "--scope" ]; then
   [ "$#" -eq 2 ] && [ -n "$2" ] || { echo "usage: check-owed-derivations.sh --scope <rel-path>" >&2; exit 2; }
-  printf '%s\n' "$2" | scope_batch tokens; exit $?
+  scope_batch tokens <<<"$2"; exit $?
 fi
 
 REC="${1:-$ROOT/_bmad-output/ai-dlc-update/owed-derivations.tsv}"

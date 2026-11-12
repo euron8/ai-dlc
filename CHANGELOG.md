@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1092.0] - 2026-11-12
+
+### BL-995
+
+- `core/scripts/check-owed-derivations.sh --scope` no longer leaves a `check-owed-scope-XXXXXX` directory under TMPDIR on every successful call under bash 3.2. `:349` piped into `scope_batch`, so its `trap sb_cleanup EXIT` was set in the pipeline's subshell and never fired when the function returned rc 0 under bash 3.2.57; it is now `scope_batch tokens <<<"$2"; exit $?`. The REFUSED exits never leaked, and bash 5.2.37 (measured in a container) runs the trap and does not leak. `core/fixtures/owed-derivations` world `sc1` asserts it (SC1, twin SC1t, counter controls SC1c/SC1m); mutant M23 restores the pipe and fails SC1 alone, scored only where the behavioural probe SC1p reads the returning trap as unrun and SKIPped loudly elsewhere; in the consumer layout a pre-fix installed reader SKIPS the arms. Under bash 5.2.37 the whole fixture reads rc 0 with `all assertions hold` (ok 303, FAIL 0) and M23 SKIPped by name. `core/fixtures/derivation-differential` drops world ii's interim TMPDIR routing, with A10c green on the fixed reader and red on the piped one. Filed in 0.1085.0 and closed here (NET +1).
+
+### BL-909 — keyword-free mutant kills route through `mutant_killed`
+
+- **240 kill lines routed in 55 fixtures.** Each `ok "<msg>"` that reports a mutant kill without a KILLED/killed token is now `mutant_killed "$B_x" <name> "<msg>"`, message unchanged. The flag is set on the same line as the passing `ok` of the unmutated arm the mutant guards, in the same run, so a kill is refused (`FIXTURE BROKEN: MUTANT`) when that arm did not pass. Fixtures that did not source `core/fixtures/lib/mutant.sh` now source it guarded and declare it in `inputs.decl`, including the validator-arm-selection-b shard stub. In MUTANT-MATRIX fixtures a line was routed only under an existing literal row name.
+- **`scripts/mutant-verdicts-allowlist.txt` goes from 113 rows / 444 lines to 75 / 204**, re-derived with `--derive-m8`; no row rises (M10). `scripts/fixture-matrix-allowlist.txt` reasons change only for the routed fixtures; its row set is unchanged.
+- **readset-skip's noskip-pool mutant could not fail.** It ran without `AI_DLC_FIXTURE_NO_SKIP=1`, so its arm never depended on the mutated line. It now runs under that variable; with the subject broken the kill reads FAIL.
+- **Measured.** Every edited fixture and stub was run at base and tip through `core/scripts/hermetic-run.sh`, the tip counted: verdict lines equal as a multiset (beside per-run paths, the judge's own lines, and check-22-spawn-ledger's NB BINDING count of 40 to 55 sites), every routed name in the counted mutant set, `invocations.decl` unchanged. `fork-profile.sh --section total` 2790 at base and tip.
+- **BL-909 stays PARTIAL.** 98 kill lines are owed (63 printf/echo openers, 25 MUTANT-MATRIX lines with no literal row, a computed name or a bound arm the --matrix mode does not run, 5 with no unmutated arm in the run, 3 in retro-compliance-workflow, 2 in setup-config-drift, which fixture-git-env-seam runs inside its own counted run), and 8 listed lines read as non-kills; the entry's progress paragraph names them.
+
+### BL-972 (PARTIAL): dispatch, then ask
+
+- **The rule.** By operator ruling at batch 256 (option 1, "dispatch, then ask"), the lead joins every finished lane and dispatches every action the question does not hold, in the background, immediately before each `AskUserQuestion`. It then asks at once, unchanged and never deferred. It lands as `core/skills/ai-dlc/SKILL.md`'s new `#### Operator decisions: dispatch, then ask (Rule 11(a))` subsection, past the re-attach cut so the post-compact digest carries it (`core/skills/ai-dlc/postcompact-digest.md`). Rule 11(a) item (4) now cites it.
+- **The pin.** `core/fixtures/process-rule-pins` gains an `exact` mode in which the whole collapsed paragraph must equal the pin, because para mode cannot fail on an appended sentence. Row `r11a-dispatch-ask` is added, and the deferral mutants D1 and D2 are killed. An `exact` row also requires its subsection to hold exactly one paragraph, so a drain paragraph added beside the rule fails the pin too.
+- **The measurement.** `docs/analysis/pipeline-efficiency-s317-s322/scripts/ask_split.py` (blob f9e83d26dfb6) gains HELD-AT-ASK, DISPATCHED-AT-ASK and ADJ-DISPATCH, each measured at the ask's own position, with self-probe arms and real-ask controls. It also gains DRAINED-AT-ASK, a reported column that is never a close guard: it marks an ask where the lead had received a lane's completion and no earlier lane was still running, which is the column a reader checks for a lead that drains its lanes and then dispatches (probe (q) records that shape as the KNOWN LIMIT `defer_plus_bg`, ADJ 1 and HELD 0). All figures are from `docs/analysis/pipeline-efficiency-s317-s322/out/ask_split.txt` (blob cf6978c4ad1c). ADJ, HELD and DISPATCHED read the same as from the an earlier version of `ask_split.py` in this release, before the `defer_plus_bg` arm and the DRAINED-AT-ASK column were added, whose re-run was byte-identical to its committed output. Over s317-s322 (246 asks), ACT-INSIDE is 0 on every session, which a blocking ask holds at 0 by construction. ADJ-DISPATCH is 4 of 56 asks (7.1%) in s321, 6 of 63 (9.5%) in s320, 4 of 71 (5.6%) in s319 and 0 in each of s317, s318 and s322. HELD-AT-ASK is 0 asks in s317, s320, s321 and s322 and 1 in each of s318 and s319. DRAINED-AT-ASK is 2 of 13 in s317, 2 of 26 in s318, 4 of 71 in s319, 4 of 63 in s320, 4 of 56 in s321 and 0 of 17 in s322. Exactly one ask is both ADJ and DRAINED, in s321 (2026-11-08T16:24:12Z).
+- **The receipt.** By operator ruling the receipt is re-keyed from ACT-INSIDE to ADJ-DISPATCH rising above 9.5%, which is s320's 6 of 63, the highest pre-rule sprint. A second operator ruling replaced the first bar, s321's 7.1%, because it sat inside the pre-rule spread. HELD-AT-ASK 0 on the closing sprint is a guard, and the ask count must not fall against s321's 56.
+- **Status.** The entry stays OPEN with `verify: manual`: the mechanism landed and the rate has not yet been measured on a session run under the rule.
+
+### BL-994 (filed OPEN): non-blocking ask probe
+
+Filed as a probe of whether the harness offers a non-blocking ask, BL-972's unchosen option 2. Nothing is built.
+
+NET -1 (closed 0, filed 1)
+
 ## [0.1091.0] - 2026-11-12
 
 ### BL-809 (PARTIAL) — arm (q) AC-CITATION-UNRESOLVED, a WARN

@@ -18,3 +18,4 @@ patterns/
 .ai-dlc-fixture-readsets.tsv
 # The shard driver execs this run.sh; the coverage join reads every declared driver.
 core/fixtures/validator-arm-selection-b/run.sh
+core/fixtures/lib/mutant.sh

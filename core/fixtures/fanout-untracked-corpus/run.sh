@@ -99,6 +99,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a1_untracked=0; B_a2_ignored=0; B_a3_tracked=0
 
 # ============================================================================
 # THE TREES
@@ -224,7 +226,7 @@ OUT="$(run "$SUBJ" "$TREE" "$BASE")"
 if has "$OUT" "rc=0" \
    && ! has "$OUT" "SCOPING FAILURE" \
    && has "$OUT" "_bmad-output/planning-artifacts/s306/story-1.md:1  ->  docs/architecture.md:16"; then
-  ok "an UNTRACKED file under the current sprint's artifact root is scanned, and its stale citation reaches the worklist"
+  ok "an UNTRACKED file under the current sprint's artifact root is scanned, and its stale citation reaches the worklist"; B_a1_untracked=1
 else
   bad "an untracked sprint artifact is invisible to the corpus — the filed sprint-306 defect: $(grep -c 'SCOPING FAILURE' <<<"$OUT") scoping failure(s), $(grep -o 'rc=[0-9]*' <<<"$OUT")"
 fi
@@ -245,7 +247,7 @@ fi
 # conjunct — the worklist must be non-empty — is what stops this arm scoring a kill
 # against a subject that produced no worklist at all.
 if [ "$(rows "$OUT")" -ge 1 ] && ! has "$OUT" "docs/junk/ignored-cite.md"; then
-  ok "a gitignored file under a corpus root stays OUT of the corpus — the union is --exclude-standard, not bare --others"
+  ok "a gitignored file under a corpus root stays OUT of the corpus — the union is --exclude-standard, not bare --others"; B_a2_ignored=1
 else
   bad "a gitignored file reached the worklist (or the worklist was empty and this arm proved nothing): rows=$(rows "$OUT")"
 fi
@@ -257,7 +259,7 @@ fi
 # silently stops scanning every artifact the consumer HAS committed — which on the
 # reference consumer is 10666 files against a handful of uncommitted ones.
 if has "$OUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15"; then
-  ok "TRACKED files are still scanned — the untracked set was added to the corpus, not substituted for it"
+  ok "TRACKED files are still scanned — the untracked set was added to the corpus, not substituted for it"; B_a3_tracked=1
 else
   bad "a tracked citing file no longer reaches the worklist: the untracked half replaced the tracked half instead of joining it"
 fi
@@ -292,7 +294,7 @@ if ! fired "$M1"; then
 elif has "$M1OUT" "_bmad-output/planning-artifacts/s306/story-1.md"; then
   bad "MUTANT tracked-only: the untracked artifact reached the worklist anyway, so assertion 1 passes over a corpus rule it is not measuring"
 else
-  ok "MUTANT tracked-only turns assertion 1 red — the untracked artifact vanishes from the worklist, reproducing the filed defect"
+  mutant_killed "$B_a1_untracked" tracked-only "MUTANT tracked-only turns assertion 1 red — the untracked artifact vanishes from the worklist, reproducing the filed defect"
   has "$M1OUT" "docs/tracked-cite.md:1  ->  docs/architecture.md:15" \
     && ok "MUTANT tracked-only leaves assertion 3 GREEN — the two arms are not entangled" \
     || bad "MUTANT tracked-only also took assertion 3 down; one of the two arms is vacuous"
@@ -307,7 +309,7 @@ if ! fired "$M2"; then
 elif ! has "$M2OUT" "docs/junk/ignored-cite.md"; then
   bad "MUTANT no-exclude-standard: the gitignored file stayed out of the worklist even with the flag gone, so assertion 2 passes over a filter it is not measuring"
 else
-  ok "MUTANT no-exclude-standard turns assertion 2 red — the gitignored file reaches the worklist"
+  mutant_killed "$B_a2_ignored" no-exclude-standard "MUTANT no-exclude-standard turns assertion 2 red — the gitignored file reaches the worklist"
   has "$M2OUT" "_bmad-output/planning-artifacts/s306/story-1.md" \
     && ok "MUTANT no-exclude-standard leaves assertion 1 GREEN — the two arms are not entangled" \
     || bad "MUTANT no-exclude-standard also took assertion 1 down; one of the two arms is vacuous"
@@ -324,7 +326,7 @@ if ! fired "$M3"; then
 elif has "$M3OUT" "docs/tracked-cite.md"; then
   bad "MUTANT untracked-only: the tracked citing file reached the worklist anyway, so assertion 3 passes over a corpus rule it is not measuring"
 else
-  ok "MUTANT untracked-only turns assertion 3 red — the tracked citing file vanishes from the worklist"
+  mutant_killed "$B_a3_tracked" untracked-only "MUTANT untracked-only turns assertion 3 red — the tracked citing file vanishes from the worklist"
   has "$M3OUT" "_bmad-output/planning-artifacts/s306/story-1.md" \
     && ok "MUTANT untracked-only leaves assertion 1 GREEN — the two arms are not entangled" \
     || bad "MUTANT untracked-only also took assertion 1 down; one of the two arms is vacuous"

@@ -53,6 +53,7 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+B_inflight=0; B_la1=0; B_la1p=0; B_la2=0; B_la3=0; B_la5=0; B_la6=0; B_plrun=0; B_prose=0; B_straypipe=0
 
 # Drive the hook exactly as the harness does: JSON on stdin, decision on stdout.
 # A fresh state dir per case, so the rapid-fire backoff cannot leak between them.
@@ -172,7 +173,7 @@ r="$(drive "$(cat "$ROOT/.p_noun")")"
 SWEEP="$(cat "$ROOT/.p_sweep")"
 
 r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")")"
-[ "$r" = block ] && ok "compliant resume block but a row still reads 'in-flight' -> BLOCK" \
+[ "$r" = block ] && { ok "compliant resume block but a row still reads 'in-flight' -> BLOCK"; B_inflight=1; } \
                  || bad "a handoff whose teammate sweep was never recorded was ALLOWED ($r) — this is the s305 shape, and the successor inherits a snapshot that lies about what is running"
 
 r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running_note")")"
@@ -199,7 +200,7 @@ r="$(drive "$SWEEP" "$(cat "$ROOT/.s_nosection")")"
 # its own passes identically whether the guard reads the token or simply refuses every
 # bare row it can now see; its ALLOW twin, one property away, is what separates those.
 r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_running")")"
-[ "$r" = block ] && ok "PIPELESS row reading 'in-flight' -> BLOCK (the cell that was dead)" \
+[ "$r" = block ] && { ok "PIPELESS row reading 'in-flight' -> BLOCK (the cell that was dead)"; B_plrun=1; } \
                  || bad "a PIPELESS 'in-flight' row was ALLOWED ($r) — this is the shape the reference consumer writes, and the handoff proceeds with teammates still running"
 
 r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_stopped")")"
@@ -215,7 +216,7 @@ r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_header")")"
 # THE MEASURED FALSE POSITIVE. A bare `/\|/` gate reads this prose line's last
 # pipe-delimited field as a status cell, and that field is `in-flight`.
 r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_prose")")"
-[ "$r" = allow ] && ok "prose ending '| in-flight' beside a swept row -> ALLOW (the header-width narrowing holds)" \
+[ "$r" = allow ] && { ok "prose ending '| in-flight' beside a swept row -> ALLOW (the header-width narrowing holds)"; B_prose=1; } \
                  || bad "BLOCKED on a PROSE line carrying a pipe ($r) — that is the measured false positive of the bare-pipe form, and it wedges every handoff in the sprint with no row to fix"
 
 # A STRAY `|` INSIDE A CELL OF A PIPED ROW MUST STILL BLOCK.
@@ -224,7 +225,7 @@ r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_prose")")"
 # splits it one field wide. That is a BLOCK the pre-fix arm already produced, so the
 # uniform form is a regression rather than a simplification.
 r="$(drive "$SWEEP" "$(cat "$ROOT/.s_straypipe")")"
-[ "$r" = block ] && ok "PIPED 'in-flight' row with a stray pipe inside a cell -> BLOCK (the width test did not leak onto piped rows)" \
+[ "$r" = block ] && { ok "PIPED 'in-flight' row with a stray pipe inside a cell -> BLOCK (the width test did not leak onto piped rows)"; B_straypipe=1; } \
                  || bad "a piped 'in-flight' row carrying a stray '|' was ALLOWED ($r) — the width test was applied uniformly and the relaxation LOST a block the pre-fix arm had"
 
 # --- MUTANT: delete the teammate arm and the BLOCK above must become an ALLOW -----------
@@ -254,7 +255,7 @@ else
     bad "FIXTURE STALE: the teammate-arm mutant does not parse — the mutation is not a valid disable, so a kill would be a syntax error rather than a disarmed guard"
   else
     r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")" "$MUT")"
-    [ "$r" = allow ] && ok "mutant: with the teammate arm pinned open, the 'in-flight' case is ALLOWED — the arm is what produced the BLOCK above" \
+    [ "$r" = allow ] && mutant_killed "$B_inflight" teammate-pinned "mutant: with the teammate arm pinned open, the 'in-flight' case is ALLOWED — the arm is what produced the BLOCK above" \
                      || bad "MUTANT DID NOT FAIL — the 'in-flight' case still returned $r with the teammate arm disabled, so that BLOCK is coming from somewhere else and this arm proves nothing"
     # CONTROL from the same directory: the mutant is otherwise a working hook. A copy that
     # died on load emits nothing, and "no output" scores as ALLOW — indistinguishable from
@@ -305,7 +306,7 @@ if hook_mut "$M_GATE" 's%^        inb && /\\|/ {%        inb \&\& /^[[:space:]]*
     bad "MUTANT (pre-fix gate) LOST ITS BACKSLASH — the gate became an empty alternation matching every line, so the kill below is a dead program rather than the pre-fix guard"
   fi
   r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_running")" "$M_GATE")"
-  [ "$r" = allow ] && ok "mutant (pre-fix gate): the PIPELESS 'in-flight' row is ALLOWED — that BLOCK is the relaxation's, and this is the program that shipped" \
+  [ "$r" = allow ] && mutant_killed "$B_plrun" prefix-gate "mutant (pre-fix gate): the PIPELESS 'in-flight' row is ALLOWED — that BLOCK is the relaxation's, and this is the program that shipped" \
                    || bad "MUTANT DID NOT FAIL — the leading-pipe gate still returned $r on a pipeless row; either the seed is not pipeless or that BLOCK comes from elsewhere"
   # CONTROL, and it is the same conjunct that makes this a REVERT rather than a
   # disabled arm: the pre-fix guard blocked PIPED in-flight rows and must still do so.
@@ -319,7 +320,7 @@ fi
 M_NOWIDTH="$ROOT/continue-nowidth.sh"
 if hook_mut "$M_NOWIDTH" '/if (!piped \&\& n != ncols) next/d' "bare-pipe"; then
   r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_prose")" "$M_NOWIDTH")"
-  [ "$r" = block ] && ok "mutant (bare-pipe): the PROSE line is read as a row and BLOCKS — the header-width narrowing is what holds that false positive at zero" \
+  [ "$r" = block ] && mutant_killed "$B_prose" bare-pipe "mutant (bare-pipe): the PROSE line is read as a row and BLOCKS — the header-width narrowing is what holds that false positive at zero" \
                    || bad "MUTANT DID NOT FAIL — without the width test the prose case still returned $r, so that ALLOW is not the narrowing's and the prose arm proves nothing"
   r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_stopped")" "$M_NOWIDTH")"
   [ "$r" = allow ] && ok "mutant control (bare-pipe): the same copy still ALLOWS a swept pipeless row — it loads and reads tokens" \
@@ -331,7 +332,7 @@ fi
 M_UNIFORM="$ROOT/continue-uniform.sh"
 if hook_mut "$M_UNIFORM" 's|if (!piped \&\& n != ncols) next|if (n != ncols) next|' "uniform width"; then
   r="$(drive "$SWEEP" "$(cat "$ROOT/.s_straypipe")" "$M_UNIFORM")"
-  [ "$r" = allow ] && ok "mutant (uniform width): the stray-pipe row is ACQUITTED and the handoff proceeds — restricting the width test to pipeless lines is what keeps the relaxation a superset" \
+  [ "$r" = allow ] && mutant_killed "$B_straypipe" uniform-width "mutant (uniform width): the stray-pipe row is ACQUITTED and the handoff proceeds — restricting the width test to pipeless lines is what keeps the relaxation a superset" \
                    || bad "MUTANT DID NOT FAIL — the uniform width test still returned $r on the stray-pipe row, so that arm cannot distinguish the two forms"
   r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")" "$M_UNIFORM")"
   [ "$r" = block ] && ok "mutant control (uniform width): the same copy still BLOCKS an ordinary piped 'in-flight' row — the acquittal above is the stray pipe, not a dead arm" \
@@ -344,7 +345,7 @@ fi
 M_FIRSTROW="$ROOT/continue-firstrow.sh"
 if hook_mut "$M_FIRSTROW" 's|if (tolower(last) == "status") { ncols = n; next }|if (tolower(last) == "status") { next }|' "ncols from first row"; then
   r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_running")" "$M_FIRSTROW")"
-  [ "$r" = allow ] && ok "mutant (ncols from first row): with the header's width recording gone the pipeless 'in-flight' row escapes — the arm is bound to the DERIVED width, not to any width" \
+  [ "$r" = allow ] && mutant_killed "$B_plrun" ncols-first-row "mutant (ncols from first row): with the header's width recording gone the pipeless 'in-flight' row escapes — the arm is bound to the DERIVED width, not to any width" \
                    || bad "MUTANT DID NOT FAIL — the pipeless row still returned $r with the header's ncols removed, so that BLOCK passes under a width from somewhere else"
   r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")" "$M_FIRSTROW")"
   [ "$r" = block ] && ok "mutant control (ncols from first row): the same copy still BLOCKS a PIPED 'in-flight' row — piped rows never consult ncols, so the escape above is the pipeless path alone" \
@@ -771,15 +772,15 @@ la_a6() {
     && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 0 ]
 }
 
-la_a1 && ok "A1: handoff with an 'in-flight' row and a LIVE beat lease -> ALLOW, HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT logged, stall state byte-identical, arming record kept" \
+la_a1 && { ok "A1: handoff with an 'in-flight' row and a LIVE beat lease -> ALLOW, HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT logged, stall state byte-identical, arming record kept"; B_la1=1; } \
       || bad "A1: the step-1 beat's Stop was not deferred cleanly $LA_MSG — the lead is told to TaskStop the teammates the beat is waiting on"
-la_a2 && ok "A2: the same world with an EXPIRED lease -> BLOCK with the HANDOFF GUARD reason and a HANDOFF_GUARD_BLOCK row (keyed on the lease, not the file)" \
+la_a2 && { ok "A2: the same world with an EXPIRED lease -> BLOCK with the HANDOFF GUARD reason and a HANDOFF_GUARD_BLOCK row (keyed on the lease, not the file)"; B_la2=1; } \
       || bad "A2: an expired lease did not block $LA_MSG — a dead beat's marker defers the guard forever"
-la_a1p && ok "A1p: the producer's '<epoch> <pid>' lease, live -> deferred like A1, and the logged row names the epoch alone" \
+la_a1p && { ok "A1p: the producer's '<epoch> <pid>' lease, live -> deferred like A1, and the logged row names the epoch alone"; B_la1p=1; } \
        || bad "A1p: a live '<epoch> <pid>' lease was not deferred cleanly, or its row carries more than the epoch $LA_MSG — the hook does not read the marker wait-for-deliverable.sh writes"
 la_a2p && ok "A2p: the producer's '<epoch> <pid>' lease, expired -> BLOCK like A2" \
        || bad "A2p: an expired '<epoch> <pid>' lease did not block $LA_MSG — a dead beat's marker defers the guard"
-la_a3 && ok "A3: the same world with a NON-INTEGER lease -> BLOCK with the HANDOFF GUARD reason" \
+la_a3 && { ok "A3: the same world with a NON-INTEGER lease -> BLOCK with the HANDOFF GUARD reason"; B_la3=1; } \
       || bad "A3: a garbage lease did not block $LA_MSG — the deferral reads the file's existence, not its epoch"
 la_a4 && ok "A4: NO handoff requested, flag down, live lease -> ALLOWED_BY_LIVE_BEAT and no deferral row (the change is confined to the handoff path)" \
       || bad "A4: a non-handoff Stop with a live lease is not Check 2b's allow $LA_MSG"
@@ -787,9 +788,9 @@ la_a4_ctl && ok "A4 control: the same world with NO lease -> Rule 3's ordinary b
           || bad "A4 CONTROL BROKEN: the no-lease world did not take Rule 3's block — A4's allow proves nothing about the lease"
 la_a5_premise && ok "A5 premise: the task-notification turn alone, no arming record, ALLOWS — it is not a request, so A5's second block can only be the sticky record" \
               || bad "A5 PREMISE BROKEN: the task-notification turn is read as a handoff request on its own, so A5 cannot see the arming record"
-la_a5 && ok "A5: deferred Stop, then the beat's notice and an expired lease -> the next Stop BLOCKS with the guard (sticky arming survived the deferral)" \
+la_a5 && { ok "A5: deferred Stop, then the beat's notice and an expired lease -> the next Stop BLOCKS with the guard (sticky arming survived the deferral)"; B_la5=1; } \
       || bad "A5: the guard did not re-fire after the deferral $LA_MSG — the deferral disarmed it and the handoff escapes"
-la_a6 && ok "A6: every arm satisfied with a live lease -> stamped complete, arming record cleared, no deferral row (the deferral sits inside the unsatisfied branch)" \
+la_a6 && { ok "A6: every arm satisfied with a live lease -> stamped complete, arming record cleared, no deferral row (the deferral sits inside the unsatisfied branch)"; B_la6=1; } \
       || bad "A6: a satisfied handoff with a live lease was not stamped complete $LA_MSG — the deferral sits before the arm test"
 
 # --- MUTANTS FOR THE DEFERRAL. Each is a copy of the WHOLE hooks directory, because the hook
@@ -819,7 +820,7 @@ lmut() { # lmut <name> <sed-expr> -> 0 and M=<mutated continue hook>, or 1 after
 }
 lscore() { # lscore <name> <mutant> <owning-arm> <control-arm> <what>
   if "la_$3" "$2"; then bad "MUTANT SURVIVED ($1: $5) — arm $3 still passes $LA_MSG"
-  else ok "mutant ($1: $5) fails arm $3"; fi
+  else mutant_killed "$(( $B_la1 && $B_la2 && $B_la3 && $B_la5 && $B_la6 && $B_la1p ))" "$1" "mutant ($1: $5) fails arm $3"; fi
   if "la_$4" "$2"; then ok "...and the same copy still passes arm $4 (it runs; the kill is the mutation's)"
   else bad "MUTANT HARNESS BROKEN ($1): the copy also fails arm $4 $LA_MSG"; fi
 }

@@ -46,6 +46,13 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# Kills go through mutant_killed (scripts/validate-mutant-kills.sh): scored only when the unmutated
+# arm passed in THIS run, so a mutant cannot score a kill by the seed failing.
+MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
+[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$MUT_LIB"
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+B_smW1=0
 
 echo "settings-merge-documented-form:"
 
@@ -147,7 +154,7 @@ if [ -n "$TMPL" ]; then
   printf '{"bashOutputMaxChars":12000,"permissions":{"allow":[]}}\n' > "$WORK/w1.json"
   bash "$MERGE" --consumer "$WORK/w1.json" --template "$T_CAP" >/dev/null 2>&1
   v="$(jq -r '.bashOutputMaxChars' "$WORK/w1.json")"
-  if [ "$v" = "12000" ]; then ok "bashOutputMaxChars: consumer's 12000 survives a template declaring 8000"
+  if [ "$v" = "12000" ]; then ok "bashOutputMaxChars: consumer's 12000 survives a template declaring 8000"; B_smW1=1
   else bad "bashOutputMaxChars: consumer's 12000 was replaced (read $v) — the merge must never overwrite a consumer scalar"; fi
 
   # World 2: consumer silent, template declares 8000 -> 8000 lands.
@@ -178,7 +185,7 @@ if [ -n "$TMPL" ]; then
     bash "$MUT" --consumer "$WORK/m3.json" --template "$T_NOCAP" >/dev/null 2>&1
     m3="$(jq -r 'has("bashOutputMaxChars")' "$WORK/m3.json")"
     if [ "$m1" = "8000" ] && [ "$m3" = "false" ]; then
-      ok "MUTANT (template wins) fails World 1 only — the consumer-wins arm discriminates"
+      mutant_killed "$B_smW1" template-wins "MUTANT (template wins) fails World 1 only — the consumer-wins arm discriminates"
     else
       bad "MUTANT (template wins) scored w1=$m1 w3=$m3 — expected 8000/false; the arm is not keyed on precedence"
     fi
@@ -196,12 +203,6 @@ tpl_tiers() {
   jq -r '.aiDlcRoles | "\(.dev.model)/\(.dev.effort) \(.["dev-escalated"].model)/\(.["dev-escalated"].effort)"' "$1" 2>/dev/null
 }
 TPL_WANT="sonnet/medium opus/medium"
-# Kills go through mutant_killed (scripts/validate-mutant-kills.sh): scored only when the unmutated
-# arm passed in THIS run, so a mutant cannot score a kill by the seed failing.
-MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
-[ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
-. "$MUT_LIB"
-echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 B_TPL=0
 if [ -z "$TMPL" ] || [ ! -r "$TMPL" ]; then
   bad "6 FIXTURE BROKEN: the shipped template is not readable — the seat-tier arm asserts nothing"

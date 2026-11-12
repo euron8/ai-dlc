@@ -17,3 +17,4 @@ patterns/
 .ai-dlc-fixture-readsets.tsv
 # This shard execs the parent run.sh, where every phase lives; the parent's coverage join reads it.
 core/fixtures/validator-arm-selection/run.sh
+core/fixtures/lib/mutant.sh

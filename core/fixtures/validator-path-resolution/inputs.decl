@@ -6,3 +6,4 @@
 core/schemas/
 # copied into the seeded tree so validate-gate-adjudication.sh reaches its schema parse.
 core/skills/ai-dlc/enforcement-map.yaml
+core/fixtures/lib/mutant.sh

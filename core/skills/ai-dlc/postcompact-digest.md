@@ -168,6 +168,19 @@ resolves still cites the operator's own message (`escalations.md`); the
 record replaces the re-ask, not the citation.
 A record read afterwards that shows the act did not occur is an authorization-premise invalidation (`escalations.md`), not a re-ask.
 
+#### Operator decisions: dispatch, then ask (Rule 11(a))
+**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join
+every lane whose completion has arrived: read the completion and record
+it. Acting on its output is itself a ready action, dispatched below, not
+work to finish before asking. Dispatch every ready action the question
+does not hold, in the background (Rule 29), and arm its join. An action
+is ready when its inputs exist now, and the question holds it only when
+it reads the answer. Name the lanes held in your output beside the
+question, not inside it. Then send the question at once, in
+`AskUserQuestion`, unchanged by the lane state. Never wait for a running
+lane before asking, and never hold back, defer or drop a question, or
+fold it into a later one, to suit the lanes.
+
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` before acting under this rule; that file carries the full, binding text of this rule.
 

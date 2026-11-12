@@ -44,6 +44,13 @@
 # CDD1-CDD3 `web/../scripts/ai-dlc/x.sh` collapsed (a rev:path, a plain word, a second -C) block, CDD4
 # `../server/y.txt` stays silent, CDD5 a symlinked segment before `..` over-asks and blocks; S15n exactly
 # eleven OPEN.
+# SC1 `--scope` leaves no scratch directory: two rc-0 `--scope` calls with TMPDIR set to a fresh fixture-owned dir, which
+# must then exist, be readable by find and hold 0 entries; SC1t its twin, the same calls' exit 0 and exact tokens. Its
+# counter is proven in the same run: SC1c a seeded entry reads 1, SC1m a missing dir is refused (find's exit is also read).
+# In the CONSUMER layout an installed reader without the here-string dispatch SKIPS SC1/SC1t loudly (it predates the fix
+# and lands with the pull that carries this fixture); in the distribution they always run. M23 is scored only where
+# SC1p, a behavioural probe on the same `bash` (with its exit-ending control), reads the returning pipeline-side EXIT
+# trap as unrun (bash 3.2); where it runs (bash 5) the piped form leaks nothing and M23 SKIPs loudly.
 # Mutants M1-M11, mA and mB each copy the reader, are guarded by cmp -s (no-apply is FIXTURE BROKEN), and
 # must fail a named arm: M1 filter dropped, M2 filter inverted, M3 sweep removed, M4 sweep over PAST, M5
 # refusal made silent, M6 absent-record early exit restored, M7 a core-paths.sh lookup ahead of the
@@ -52,7 +59,8 @@
 # trailing-slash variant removed, M12 the raw-scan locator restored in the ledger supersession, M12b the
 # same in pass 2, M13 a `git -C` segment's WORD lines asked again, M14 a failing `--list` in pass 2 read
 # UNASSESSED over a file whose own run gave no verdict, M20 a reproducing LIVING fence opened, M21 LIVING
-# verdicts leaking into --scope-batch, M22 every validator exit refused.
+# verdicts leaking into --scope-batch, M22 every validator exit refused, M23 the piped `--scope` dispatch restored (its
+# scope_batch runs in a pipeline subshell whose EXIT trap never fires on rc 0, so the scratch dir is left).
 # THE MUTANT x ARM MATRIX, re-measured whenever an arm or a mutant is added or changed. `--matrix` runs every
 # mutant over every LIVING world and prints a `MATRIX<TAB><mutant><TAB><arm><TAB><FAIL|ok>` row per arm.
 # Per push each mutant runs only its DECIDING arm (which must FAIL) and its TWINS (arms the matrix shows
@@ -82,6 +90,7 @@
 # MUTANT-MATRIX M20 decides=S3 twins=S4b
 # MUTANT-MATRIX M21 decides=S9 twins=S10
 # MUTANT-MATRIX M22 decides=S13c twins=S13
+# MUTANT-MATRIX M23 decides=SC1 twins=SC1t
 # MUTANT-MATRIX mA decides=S13 twins=S13c
 # MUTANT-MATRIX mB decides=S14 twins=S1
 # MUTANT-MATRIX MV1 decides=CH1 twins=CH1n
@@ -90,7 +99,8 @@
 # every blocking arm (39); M4 S2; M5 S5; M7 S10; M8 S6b; M9 RP1 CD2 RP3 RP5 CDD1-3 CDD5 S15n S11a S11b; M10
 # S11c; M11 S12a-e; M12 S6e S6f S6g; M12b PU; M13 G1 G2 S15n; M14 B8c; M15 RP3 RP4 S15n; M16 RP3 RP5 S15n;
 # M17 PP S15n; M18 CDD1-3 CDD5 S15n; M19 CDD5 S15n; M20 S1 S3 S4a S6 S8 S6b-g S15n CH1-6 S14; M21 S9; M22
-# S13c plus every blocking arm (40); mA S13; mB S14; MV1 CH1-CH6.
+# S13c plus every blocking arm (40); M23 SC1 (alone of 61 arms; no other mutant fails SC1 or SC1t); mA S13; mB S14;
+# MV1 CH1-CH6.
 # `lw_world` RESETS every shared world-level global (LW_RESET_VARS) on entry, in both modes, so a filtered mutant
 # run starts each selected world from the same state the live pass does. RSET holds that list EQUAL to the set of
 # variables the drivers and world bodies assign, derived from this file's own text; RSETf and RSETp seed a copy both
@@ -864,6 +874,42 @@ rc_is "PUc control: the validator lists NO command in the PU file (its only copy
 v13="$( ( cd "$LS13" && AI_DLC_PROJECT_ROOT="$LS13" bash scripts/ai-dlc/validate-artifact-derivations.sh "$LS13/$LPRD" "$LS13/_bmad-output/planning-artifacts/notes.md" > /dev/null 2> "$WORK/v13.err" ); echo $?)"
 rc_is "S13c0 control: the wrapper's run exits 2 with NO UNRUN line, and the removed file is back afterwards" 0 "$([ "$v13" = 2 ] && ! grep -q '^UNRUN: ' "$WORK/v13.err" && [ -f "$LS13/_bmad-output/planning-artifacts/notes.md" ] && echo 0 || echo 1)"
 
+# SC1's subject is the here-string `--scope` dispatch. A consumer's installed reader may predate it, because this
+# fixture ships ahead of it, and a consumer with a locally modified reader keeps its own: there SC1/SC1t (and M23,
+# whose anchor is that line) SKIP loudly. In the distribution they always run, so a pre-fix reader goes red.
+SC1_FIXED='  scope_batch tokens <<<"$2"; exit $?'
+case "$READER" in */core/scripts/check-owed-derivations.sh) SC1_ISDIST=1 ;; *) SC1_ISDIST=0 ;; esac
+SC1_RUN=1
+if ! grep -qxF -- "$SC1_FIXED" "$READER"; then
+  if [ "$SC1_ISDIST" = 0 ]; then
+    printf '  SKIP  SC1/SC1t and M23 -- the installed check-owed-derivations.sh predates the here-string --scope dispatch; it lands with the pull that carries this fixture\n'
+    SC1_RUN=0
+  else
+    printf '  --    (SC1: this reader carries no here-string --scope dispatch; in the distribution SC1 runs anyway and must go red)\n'
+  fi
+fi
+# SC1p: M23's leak exists only on a bash whose pipeline subshell skips the EXIT trap of a function that RETURNS (bash
+# 3.2 does; bash 5 runs it, so the piped form leaks nothing there and M23 cannot be killed). Decided by BEHAVIOUR, on
+# the same `bash` the reader is started with: scope_batch's shape (a function on the right of a pipe that makes a
+# file, sets an EXIT trap removing it, and returns), and its control, the same function ending in `exit`, which must
+# fire on every bash. A `ran` marker the trap never removes proves the function ran. An unreadable probe is a FAIL.
+sc1_probe() { # <return|exit> -> SC1P_FIRED (1 the trap removed the file, 0 it did not, x the function never ran), SC1P_BASH
+  local d="$WORK/sc1p.$1"
+  mkdir -p "$d"
+  SC1P_BASH="$(bash -c 'f() { : > "$1/ran"; : > "$1/made"; trap "rm -f \"$1/made\"" EXIT; cat > /dev/null; [ "$2" = exit ] && exit 0; return 0; }; printf "a\n" | f "$1" "$2"; printf "%s" "$BASH_VERSION"' _ "$d" "$1")"
+  if [ ! -e "$d/ran" ]; then SC1P_FIRED=x; elif [ -e "$d/made" ]; then SC1P_FIRED=0; else SC1P_FIRED=1; fi
+}
+sc1_probe exit; SC1P_CTL="$SC1P_FIRED"
+sc1_probe return; SC1P_RET="$SC1P_FIRED"
+rc_is "SC1p0 probe control: on bash ${SC1P_BASH:-?} a pipeline-side function's EXIT trap fires when it ends in exit (control 1 = fired), and the return probe ran" "1 ran" "$SC1P_CTL $([ "$SC1P_RET" != x ] && echo ran || echo not-ran)"
+SC1_M23=0
+if [ "$SC1P_CTL" = 1 ] && [ "$SC1P_RET" = 0 ]; then
+  SC1_M23=1
+  printf '  --    (SC1p: on bash %s a returning pipeline-side function leaves its EXIT trap unrun (probe read 0), so the piped form leaks here and M23 is scored wherever SC1 runs)\n' "${SC1P_BASH:-?}"
+elif [ "$SC1P_CTL" = 1 ] && [ "$SC1P_RET" = 1 ]; then
+  printf '  SKIP  M23 -- on bash %s a returning pipeline-side function runs its EXIT trap (probe read 1), so the piped --scope form leaks nothing here and M23 has no leak to detect; SC1, SC1t, SC1c and SC1m are still asserted\n' "${SC1P_BASH:-?}"
+fi
+
 # ---- lw-harness: begin (the lines between these two markers are extracted into a harness file below) ----------------
 # THE WORLD FILTER. Every LIVING-sweep world is one gated block, `if lw_world <name>; then <its reader
 # invocations> <its lw_arm lines>; lw_end; fi`. The REAL pass runs every world and records each arm's
@@ -918,8 +964,17 @@ lw_arm() { # <id> <description> <0 holds | 1 does not>
     if [ "$3" != 0 ]; then LW_FAILED="$LW_FAILED $1"; fi
   fi
 }
+# sc_entries <dir>: prints <dir>'s entry count and returns 0; returns 2 and prints nothing when <dir> is not a directory
+# or find exits non-zero, so a missing or unreadable directory never reads as 0. find and awk, both in tools.decl.
+sc_entries() {
+  local l r
+  [ -d "$1" ] || return 2
+  l="$(find "$1" -mindepth 1 -maxdepth 1)"; r=$?
+  [ "$r" = 0 ] || return 2
+  if [ -z "$l" ]; then echo 0; else awk 'END { print NR + 0 }' <<<"$l"; fi
+}
 lw_all() { # <reader> <tag>
-  local b="$WORK/lw.$2/bin" b5="$WORK/lw.$2/bin5" lone="$WORK/lw.$2/lone" none="$WORK/lw.$2/no-record.tsv"
+  local b="$WORK/lw.$2/bin" b5="$WORK/lw.$2/bin5" lone="$WORK/lw.$2/lone" none="$WORK/lw.$2/no-record.tsv" st="$WORK/lw.$2/scope-tmp"
   mkdir -p "$b" "$b5" "$lone/scripts" "$lone/schemas"
   cp "$1" "$b/check-owed-derivations.sh"; cp "$COREPATHS" "$b/"; write_stub "$b"
   cp "$1" "$b5/check-owed-derivations.sh"; write_stub "$b5"
@@ -1064,6 +1119,21 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
   lw_rd "$b" "$LS14" "$none"
   lw_arm S14 "a ROOT-ABSOLUTE core operand (\$ROOT/scripts/ai-dlc/x.sh) blocks" "$({ [ "$RC" = 1 ] && [ "$(open_lines)" = "$(lopen "$K_LS14" STALE "$C14")" ]; } && echo 0 || echo 1)"
   lw_end; fi
+  # SC1: two rc-0 --scope calls (the only path that leaked) with TMPDIR, set per call and never exported, at a fresh
+  # dir of this pass's own; afterwards that dir must exist, be readable and hold nothing.
+  if lw_world sc1; then
+  if [ "$SC1_RUN" = 1 ]; then
+  mkdir -p "$st"
+  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
+  OUT="$( cd / && TMPDIR="$st" AI_DLC_PROJECT_ROOT="$LS3" bash "$b/check-owed-derivations.sh" --scope "$LPRD" 2>"$st.err1" )"; RC=$?
+  local sc1o="$OUT" sc1r="$RC"
+  [ "$LW_MODE" = real ] || LW_NINV=$((LW_NINV + 1))
+  OUT="$( cd / && TMPDIR="$st" AI_DLC_PROJECT_ROOT="$LS3" bash "$b/check-owed-derivations.sh" --scope "$LPAST" 2>"$st.err2" )"; RC=$?
+  local sc1n="$(sc_entries "$st" || echo REFUSED)"
+  lw_arm SC1 "--scope leaves no scratch directory: after 2 rc-0 --scope calls the fixture-owned TMPDIR exists, find reads it and it holds 0 entries (read: $sc1n)" "$([ "$sc1n" = 0 ] && echo 0 || echo 1)"
+  lw_arm SC1t "twin, the same 2 --scope calls: $LPRD -> exit 0 LIVING, $LPAST -> exit 0 PAST" "$({ [ "$sc1r" = 0 ] && [ "$sc1o" = LIVING ] && [ "$RC" = 0 ] && [ "$OUT" = PAST ]; } && echo 0 || echo 1)"
+  fi
+  lw_end; fi
   if lw_world batch; then
   lw_batch "$b" "$LS1"; local s9a="$BOUT" s9r="$BRC"
   lw_batch "$b" "$LS3"
@@ -1078,6 +1148,11 @@ $(lopen "$K_LS6C2" STALE "$LCMD")" ]; } && echo 0 || echo 1)"
 }
 # ---- lw-harness: end ---------------------------------------------------------------------------------
 lw_all "$BIN/check-owed-derivations.sh" real
+# SC1c/SC1m: the counter SC1 reads, proven in this run. A seeded entry reads 1, so SC1's 0 is a reading; a missing
+# directory is refused, so it cannot read as 0.
+mkdir -p "$WORK/sc1c"; : > "$WORK/sc1c/seed"
+rc_is "SC1c counter control: sc_entries reads 1 on a directory seeded with one entry" 1 "$(sc_entries "$WORK/sc1c")"
+sc_entries "$WORK/sc1-absent" > /dev/null; rc_is "SC1m counter control: sc_entries refuses (exit 2) a directory that does not exist" 2 "$?"
 
 # ---- M1-M7: each mutant is a COPY of the reader, guarded by cmp -s; one that does not apply is BROKEN --
 # mut_line <src> <dst> <occurrence> <exact old line> <new text>: replaces that occurrence of the whole line.
@@ -1283,6 +1358,11 @@ EOF
 mut_case M21 S9 "S10" 1 '  exit 0' "$BATCH_LEAK"
 # M22: the sweep refuses on EVERY validator exit, a verdict included (the always-refuse mirror of mA).
 mut_case M22 S13c "S13" 1 '    0|1) return 0 ;;' '    0|1) ;;'
+# M23: the piped --scope dispatch restored, so scope_batch runs in a pipeline subshell and its scratch dir is left on rc 0.
+# Scored only where SC1p measured the leak (see SC1p above); elsewhere its SKIP line was printed.
+if [ "$SC1_RUN" = 1 ] && [ "$SC1_M23" = 1 ]; then
+  mut_case M23 SC1 "SC1t" 1 "$SC1_FIXED" '  printf '"'"'%s\n'"'"' "$2" | scope_batch tokens; exit $?'
+fi
 # CPY: the copy lw_all makes for every mutant starts as a `cp` of the reader, so the copies the real pass ran
 # must be byte-identical to $BIN/check-owed-derivations.sh, and M1's mutated copy must differ (the control).
 rc_is "CPY the copies lw_all ran in the real pass are byte-identical to the reader, and M1's mutated copy is not" "same differs" "$({ cmp -s "$BIN/check-owed-derivations.sh" "$WORK/lw.real/bin/check-owed-derivations.sh" && cmp -s "$BIN/check-owed-derivations.sh" "$WORK/lw.real/bin5/check-owed-derivations.sh" && printf same; } || printf DIFFERENT) $(cmp -s "$BIN/check-owed-derivations.sh" "$WORK/mut.M1.sh" && printf same || printf differs)"

@@ -18,6 +18,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
+B_3b=0; B_3c=0; B_degctl=0
 
 # Two stderr sinks for the check-mode arms, inside the seed's own WORK so the EXIT trap
 # reaps them. Named rather than inlined because a `2>` target computed at the call site is
@@ -64,7 +66,7 @@ grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$out" \
 out_adv="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
 grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$out_adv" \
   && bad "CONTROL: the qualifier was printed on a range whose two refs DIFFER — it fires unconditionally and says nothing" \
-  || ok "CONTROL: a real base..theirs range carries no degenerate qualifier"
+  || { ok "CONTROL: a real base..theirs range carries no degenerate qualifier"; B_degctl=1; }
 
 # --- Assertion 2c: --post-apply moves ONLY the unregistered-drift base ----------
 # Post-apply, core on disk is at THEIRS. Asking unregistered-drift.sh against the PULL's base
@@ -180,7 +182,7 @@ else
 fi
 a3b_out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
 if grep -q '^CORE-AT-THEIRS' <<<"$a3b_out"; then
-  ok "a stale base is qualified in the rendered list: the CORE-AT-THEIRS row reaches the region the operator approves apply from"
+  ok "a stale base is qualified in the rendered list: the CORE-AT-THEIRS row reaches the region the operator approves apply from"; B_3b=1
 else
   bad "print mode rendered no CORE-AT-THEIRS row on a run whose scan emitted $a3b_at of them — the one finding is 'the list you are reading was computed against the wrong base', and it was filtered out"
 fi
@@ -216,7 +218,7 @@ git -C "$DIST" show "$THEIRS_ADV:core/$MOVED_REL" > "$CONSUMER/.claude/$MOVED_RE
 a3c_err="$MW_ERR_A"
 bash "$HB" --check "$REPORT_BAD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" >/dev/null 2>"$a3c_err"; a3c_rc=$?
 if grep -q 'CORE-AT-THEIRS' "$a3c_err"; then
-  ok "--check WARNS on a stale base — it no longer certifies a report complete against a comparison the detector says was computed wrong"
+  ok "--check WARNS on a stale base — it no longer certifies a report complete against a comparison the detector says was computed wrong"; B_3c=1
 else
   bad "--check said NOTHING about a stale base (rc=$a3c_rc) — it certifies the report complete against a HARD set the detector itself reports as computed against the wrong base"
 fi
@@ -262,7 +264,7 @@ if cmp -s "$MW/hard-blockers.sh" "$MW/hb-mut.sh"; then
 else
   mut_out="$(bash "$MW/hb-mut.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
   grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$mut_out" \
-    && ok "MUTANT: with the row test removed the qualifier appears on a NON-degenerate range — so the control is what proves it discriminates" \
+    && mutant_killed "$B_degctl" degenerate-unconditional "MUTANT: with the row test removed the qualifier appears on a NON-degenerate range — so the control is what proves it discriminates" \
     || bad "MUTANT: the qualifier stayed absent even with the row test removed — assertion 2b's control is vacuous"
 fi
 
@@ -295,7 +297,7 @@ if cmp -s "$MW/hard-blockers.sh" "$MW/hb-at-print.sh"; then
 else
   mo="$(bash "$MW/hb-at-print.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
   if ! grep -q '^CORE-AT-THEIRS' <<<"$mo" && grep -q '0 HARD blockers' <<<"$mo"; then
-    ok "MUTANT print-site: without it the stale-base row vanishes from the region while the affirmative line still renders — 3b is reading that site and the copy is alive"
+    mutant_killed "$B_3b" print-site "MUTANT print-site: without it the stale-base row vanishes from the region while the affirmative line still renders — 3b is reading that site and the copy is alive"
   else
     bad "MUTANT print-site: row=$(grep -c '^CORE-AT-THEIRS' <<<"$mo") (want 0) clean-line=$(grep -c '0 HARD blockers' <<<"$mo") (want 1) — either 3b does not read the print site, or the mutant broke the whole script and silence scored as a kill"
   fi
@@ -314,7 +316,7 @@ else
   mprint="$(bash "$MW/hb-at-check.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
   mwarn="$(grep -c 'CORE-AT-THEIRS' "$MW/at-check-mut.err")" || mwarn=0
   if [ "$mwarn" -eq 0 ] && [ "$mrc" -eq 0 ] && grep -q '^CORE-AT-THEIRS' <<<"$mprint"; then
-    ok "MUTANT check-site: without it --check goes silent on a stale base at the SAME exit 0 — the warning is the only observable, so a vacuous-guard reading of it is refuted; and the print site still fires, so the two are separable"
+    mutant_killed "$(( $B_3b && $B_3c ))" check-site "MUTANT check-site: without it --check goes silent on a stale base at the SAME exit 0 — the warning is the only observable, so a vacuous-guard reading of it is refuted; and the print site still fires, so the two are separable"
   else
     bad "MUTANT check-site: warn=$mwarn (want 0) rc=$mrc (want 0) print-row=$(grep -c '^CORE-AT-THEIRS' <<<"$mprint") (want 1) — either 3c is not reading this site, or deleting it took the print site with it and the two arms are entangled"
   fi

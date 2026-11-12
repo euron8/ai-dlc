@@ -291,6 +291,8 @@ RAN=""
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broke() { printf '  FIXTURE BROKEN  %s\n' "$1"; exit 2; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_i66_fork=0; B_i66_deriver=0
 
 # cli_twin <cell id> <in-process prefix> <in-process rc> <validator> [args...] -- the command-line
 # start of <validator>, tagged with its cells.decl id and run from this cwd, must equal the
@@ -691,12 +693,12 @@ i66m_out="$(cat "$TMP/i66m.i.out" "$TMP/i66m.i.err")"
 # byte-compared with the in-process run above.
 cli_twin cli-i66-refuse "$TMP/i66m.i" "$i66m_rc" "$TMP/i66m/scripts/validate-enforcement-map.sh" --arms I66
 if [ "$i66c_rc" -eq 0 ] && grep -q '^OK: enforcement-map.yaml in sync' <<< "$i66c_out"; then
-  ok "CONTROL i66-control: the unmutated copy reads OK at rc 0 under --arms I66, so the mutant verdict below is attributable"
+  ok "CONTROL i66-control: the unmutated copy reads OK at rc 0 under --arms I66, so the mutant verdict below is attributable"; B_i66_fork=1; B_i66_deriver=1
 else
   bad "CONTROL i66-control: the unmutated copy did not read OK at rc 0 under --arms I66 (rc $i66c_rc): $(printf '%s' "$i66c_out" | head -3 | tr '\n' ' ' | cut -c1-200)"
 fi
 if mx_kill i66-widen "$i66m_out"$'\n'"__rc=$i66m_rc" strict; then
-  ok "MUTANT i66-widen: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone makes --arms I66 exit $i66m_rc naming the forked runners"
+  mutant_killed "$B_i66_fork" i66-widen "MUTANT i66-widen: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone makes --arms I66 exit $i66m_rc naming the forked runners"
 else
   bad "MUTANT SURVIVED i66-widen: widening READSET_UNKEYED_TOOLS in .githooks/pre-push alone left --arms I66 at rc $i66m_rc without the fork message. A widening in one hook copy reaches only half the population and nothing would say so: $(printf '%s' "$i66m_out" | head -2 | tr '\n' ' ' | cut -c1-200)"
 fi
@@ -745,7 +747,7 @@ i66_dv() { # the deriver's extraction literal renamed in a fresh copy of the con
     broke "the READSET_LOCK deriver mutant ld DID NOT APPLY: the anchor matched ${n:-?} line(s) of $f, not 1"
   fi
   out="$(inproc_source "$d/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 2>&1)"; rc=$?
-  if mx_kill i66-ld "$out"$'\n'"__rc=$rc" strict; then ok "MUTANT i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh makes --arms I66 exit $rc naming the sentinels"
+  if mx_kill i66-ld "$out"$'\n'"__rc=$rc" strict; then mutant_killed "$B_i66_deriver" i66-ld "MUTANT i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh makes --arms I66 exit $rc naming the sentinels"
   else bad "MUTANT SURVIVED i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh left --arms I66 at rc $rc without the sentinel message: $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
 }
 i66_dv

@@ -47,6 +47,8 @@ CONS="$ROOT/consumer"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_lappPlace=0; B_lappSlot=0; B_lappStory=0
 
 run()  { bash "$LINTER" "$CONS" 2>/dev/null; }
 w11()  { run | grep '^WARN   W11' || true; }
@@ -70,7 +72,7 @@ fi
 
 # --- Part 1: the three firing cases, one per reason ------------------------------------------
 if says 's<N>-carry-over-evaluation.md'; then
-  ok "PLACEHOLDER sprint token in a basename is reported — the form prose is written in, and the one a digits-only expression cannot see"
+  ok "PLACEHOLDER sprint token in a basename is reported — the form prose is written in, and the one a digits-only expression cannot see"; B_lappPlace=1
 else
   bad "\`_bmad-output/planning-artifacts/s<N>-carry-over-evaluation.md\` was not reported. This is the form every prescription uses; an arm blind to it is blind to almost the whole clause"
 fi
@@ -102,13 +104,13 @@ fi
 if says 'docs/retro/s294'; then
   bad "the CONCRETE slot \`docs/retro/s294/retro.md\` was reported. That is the spelling this clause's own remedy prescribes, so an entry that took the advice is told to change it back — a check that cannot be silenced by following it teaches the operator to stop reading it"
 else
-  ok "SILENT: a CONCRETE slot \`docs/retro/s294/retro.md\` is not reported — the exemption is the slot RULE, not a hand-list of the two placeholder spellings"
+  ok "SILENT: a CONCRETE slot \`docs/retro/s294/retro.md\` is not reported — the exemption is the slot RULE, not a hand-list of the two placeholder spellings"; B_lappSlot=1
 fi
 
 if says 's<N>/stories/'; then
   bad "the CORRECTLY SLOTTED story corpus was reported. The story arm fires on the declared location itself, so a consumer that has done exactly what the schema says is told to change it"
 else
-  ok "SILENT: the correctly slotted \`s<N>/stories/\` is not reported — the arm discriminates rather than firing on every path containing 'stories'"
+  ok "SILENT: the correctly slotted \`s<N>/stories/\` is not reported — the arm discriminates rather than firing on every path containing 'stories'"; B_lappStory=1
 fi
 
 if says 'planning-artifacts/prd.md'; then
@@ -157,7 +159,7 @@ else
   if grep -qF 's<N>-carry-over-evaluation.md' <<<"$mut_out"; then
     bad "MUTATION M1 — the digits-only expression still reported the PLACEHOLDER form. The two expressions are not distinguishable here, so this fixture cannot tell a clause built on the right one from a clause built on the wrong one"
   else
-    ok "MUTATION M1 — with the digits-only expression the placeholder finding disappears: resolving --token-re-prescribed is load-bearing, not decorative"
+    mutant_killed "$B_lappPlace" M1-digits-only "MUTATION M1 — with the digits-only expression the placeholder finding disappears: resolving --token-re-prescribed is load-bearing, not decorative"
   fi
   # PAIRING. A mutant that lost EVERYTHING would satisfy the assertion above while testing
   # nothing about which expression was resolved.
@@ -178,7 +180,7 @@ if [ ! -s "$MUT3" ] || cmp -s "$LINTER" "$MUT3"; then
 else
   m3="$(bash "$MUT3" "$CONS" 2>/dev/null | grep '^WARN   W11' || true)"
   if grep -qF 'docs/retro/s294' <<<"$m3"; then
-    ok "MUTATION M3 — with the exemption back to a hand-list, the CONCRETE slot IS reported: resolving --slot-re-prescribed is what stops the clause returning its own remedy as a defect"
+    mutant_killed "$B_lappSlot" M3-slot-handlist "MUTATION M3 — with the exemption back to a hand-list, the CONCRETE slot IS reported: resolving --slot-re-prescribed is what stops the clause returning its own remedy as a defect"
   else
     bad "MUTATION M3 — the hand-list mutant stayed silent on \`docs/retro/s294/retro.md\`, so the concrete-slot arm above passes for some other reason and the resolver call is not what carries it"
   fi
@@ -204,7 +206,7 @@ if cmp -s "$ROOT/schema.bak" "$SCHEMA"; then
 else
   m2="$(w11)"
   if grep -qF 's<N>/stories/' <<<"$m2"; then
-    ok "MUTATION M2 — with stories_dir moved, the previously-conforming slotted path IS reported: the location is read from the schema, not baked into the reader"
+    mutant_killed "$B_lappStory" M2-stories-dir-moved "MUTATION M2 — with stories_dir moved, the previously-conforming slotted path IS reported: the location is read from the schema, not baked into the reader"
   else
     bad "MUTATION M2 — the slotted path stayed silent after stories_dir moved, so this arm carries its own copy of the story corpus location and schemas/sprint-status.json is decoration"
   fi

@@ -45,6 +45,8 @@
 # MUTANT-MATRIX-DYNAMIC pt_kill why=one helper scoring the two in-pool prep mutants ptknob and ptlinked2
 # MUTANT-MATRIX-DYNAMIC hr_mut why=one helper scoring the two readset_hash_rows mutants lastpath and nocount
 # MUTANT-MATRIX-DYNAMIC cs-mutants why=one loop over the three deriver call-site mutants cs-inline, cs-nocall and cs-warn
+# MUTANT-MATRIX-DYNAMIC flag_mutant why=one helper scoring the two whole-suite flag mutants nochange_off and untracked_blind, each on its own arm flag
+# MUTANT-MATRIX-DYNAMIC ign_mutant why=one helper scoring the three ignored-path mutants gitignore_grep, fail_open and no_gitlink_guard, each on its own world
 # MUTANT-MATRIX noskip-pool decides=arms-no-skip twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
 # MUTANT-MATRIX unnamed decides=arms-unnamed-announce twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
 # MUTANT-MATRIX nochange_off decides=arms-nochange-flag twins=- why=one observable: the drive scores a single cell of the mutated run, and the unmutated twin it named is never re-evaluated under the mutant
@@ -715,6 +717,7 @@ inproc() {
 rs_drive() { inproc "$@"; }
 
 if sg arms; then
+B_arms_no_skip=0; B_arms_nochange_flag=0; B_arms_untracked=0; B_arms_unnamed_announce=0
 # ------------------------------------------------------------------------- arm 1-6 ----
 T="$WORK/t1"; f2b_world seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v2 > src/a.sh')"; R1="$R"
@@ -749,7 +752,7 @@ fi
 T="$WORK/t4"; f2b_world seed "$T" || broken "seed failed"
 R="$(AI_DLC_FIXTURE_NO_SKIP=1 select_in "$T" 'printf v2 > src/a.sh')"
 if [ "$(sel_of "$R")" = "alpha beta gamma" ]; then
-  ok "AI_DLC_FIXTURE_NO_SKIP=1 runs everything — the drift sweep the map cannot check itself with"
+  ok "AI_DLC_FIXTURE_NO_SKIP=1 runs everything — the drift sweep the map cannot check itself with"; B_arms_no_skip=1
 else
   bad "AI_DLC_FIXTURE_NO_SKIP=1 still skipped: '$(sel_of "$R")'"
 fi
@@ -829,7 +832,7 @@ fi
 T="$WORK/t10"; f2b_world seed "$T" || broken "seed failed"
 R="$(select_in "$T" ':')"
 if [ "$(flag_of "$R")" = "1" ] && printf '%s' "$(msg_of "$R")" | grep -qF '0 of 3 fixture(s) run'; then
-  ok "NOTHING changed since the last green run — the suite is SKIPPED WHOLE, not run whole"
+  ok "NOTHING changed since the last green run — the suite is SKIPPED WHOLE, not run whole"; B_arms_nochange_flag=1
 else
   bad "an unchanged tree did not skip the suite (flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
 fi
@@ -837,7 +840,7 @@ fi
 T="$WORK/t11"; f2b_world seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v1 > src/untracked-newcomer.sh')"
 if [ "$(flag_of "$R")" = "0" ] && [ "$(sel_of "$R")" = "beta gamma" ]; then
-  ok "  an UNTRACKED, unignored new file is NOT nothing — it moves src/'s listing (beta) and the unmapped closure (gamma)"
+  ok "  an UNTRACKED, unignored new file is NOT nothing — it moves src/'s listing (beta) and the unmapped closure (gamma)"; B_arms_untracked=1
 else
   bad "  an untracked file was invisible to the manifest (flag $(flag_of "$R"), sel '$(sel_of "$R")') — the skip would run over a tree nobody hashed"
 fi
@@ -867,7 +870,7 @@ fi
 R="$R1"   # t1's drive: the same seed and the same edit, read for the staleness announce
 case "$(msg_of "$R")" in
   *"1 of 3 fixture dir(s) UNMAPPED (keyed on the whole tree): gamma"*)
-    ok "the run ANNOUNCES the map's coverage gap by count and by name — an unmapped fixture is not a silent always-run" ;;
+    ok "the run ANNOUNCES the map's coverage gap by count and by name — an unmapped fixture is not a silent always-run"; B_arms_unnamed_announce=1 ;;
   *)
     bad "the coverage gap was not announced (expected '1 of 3 ... UNMAPPED ... gamma'): $(msg_of "$R" | tr -d '\n')" ;;
 esac
@@ -900,12 +903,14 @@ mutant() {
   fi
   t="$WORK/m.$name"; f2b_world seed "$t" || { bad "MUTANT $name: seed failed"; return; }
   local saved="$POOL"; POOL="$m"
-  out="$(select_in "$t" "$4")"
+  # DRIVEN UNDER THE CONDITION ITS ARM TESTS. The arm (t4) sets AI_DLC_FIXTURE_NO_SKIP=1 and wants the full
+  # set; driven without it, the unmutated pool also skips, so the kill below could not fail on any subject.
+  out="$(AI_DLC_FIXTURE_NO_SKIP=1 select_in "$t" "$4")"
   POOL="$saved"
   if [ "$(sel_of "$out")" = "$want" ]; then
     bad "MUTANT $name: still produced '$want' — the arm it should break does not depend on the mutated line"
   else
-    ok "MUTANT $name moves its arm: '$want' became '$(sel_of "$out")'"
+    mutant_killed "$B_arms_no_skip" noskip-pool "MUTANT $name moves its arm: '$want' became '$(sel_of "$out")'"
   fi
 }
 
@@ -923,7 +928,8 @@ mutant noskip-pool 's|if \[ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" \]; then|if fals
 
 # THESE TWO ARE SCORED ON THE FLAG, NOT THE SELECTED SET, because both failure modes leave the
 # set at the full list -- which is exactly why `mutant()` above cannot express them.
-flag_mutant() {
+flag_mutant() { # <base flag> <name> <sed expr> <want flag> <mutation>
+  local bf="$1"; shift
   local name="$1" expr="$2" want="$3" mut="$4" t m out
   m="$WORK/pool.$name.sh"
   sed "$expr" "$POOL" > "$m"
@@ -938,7 +944,7 @@ flag_mutant() {
   if [ "$(flag_of "$out")" = "$want" ]; then
     bad "FLAG MUTANT $name: flag is still '$want' — the arm it should break does not depend on the mutated line"
   else
-    ok "FLAG MUTANT $name moves its arm: flag '$want' became '$(flag_of "$out")'"
+    mutant_killed "$bf" "$name" "FLAG MUTANT $name moves its arm: flag '$want' became '$(flag_of "$out")'"
   fi
 }
 # SCORED ON THE MESSAGE, because the staleness announce changes no decision -- it is the only
@@ -959,18 +965,18 @@ msg_mutant() {
   POOL="$saved"
   case "$(msg_of "$out")" in
     *"$needle"*) bad "MSG MUTANT $name: the announce still carries '$needle' — arm 13 does not depend on the mutated line" ;;
-    *)           ok "MSG MUTANT $name moves arm 13: '$needle' is gone from the announce" ;;
+    *)           mutant_killed "$B_arms_unnamed_announce" unnamed "MSG MUTANT $name moves arm 13: '$needle' is gone from the announce" ;;
   esac
 }
 msg_mutant unnamed "s|printf ': %s' \"\$unmapped_names\"|:|" "UNMAPPED (keyed on the whole tree): gamma" 'printf v2 > src/a.sh'
 
 # Keyed on the EMITTING line, not on a spelling of the announce: the flag is the decision.
-flag_mutant nochange_off 's|READSET_NO_CHANGE=1|READSET_NO_CHANGE=0|' "1" ':'
+flag_mutant "$B_arms_nochange_flag" nochange_off 's|READSET_NO_CHANGE=1|READSET_NO_CHANGE=0|' "1" ':'
 # Drop untracked files from the universe: arm 11's newcomer goes invisible and the suite skips
 # over a tree nobody hashed. This is the soundness half of the change.
 # The optional `-c core.quotePath=false` keeps the anchor matching whether or not the listing
 # disables git's path quoting; without it the mutant matched nothing on the hook that does.
-flag_mutant untracked_blind 's|git \(-c core\.quotePath=false \)\{0,1\}ls-files --others --exclude-standard 2>/dev/null||' \
+flag_mutant "$B_arms_untracked" untracked_blind 's|git \(-c core\.quotePath=false \)\{0,1\}ls-files --others --exclude-standard 2>/dev/null||' \
   "0" 'printf v1 > src/untracked-newcomer.sh'
 
 # UNMUTATED CONTROL, from the same directory and driven the same way. Without it a mutant that
@@ -1053,12 +1059,13 @@ IGN_B='printf v2 > src/x.bin && printf v2 > src/a.sh'
 IGN_C='rm -f src/a.sh'
 IGN_D='printf v2 > src/x.bin'
 IGN_E='PATH="$SHIM:$PATH"; printf v2 > src/a.sh'
+B_ign_d=0; B_ign_e=0; B_ign_f=0
 ign_arm() { # <label> <seed mode> <mutation> <want sel> <want flag> <message needle> <ok text>
   local t; t="$(mktemp -d "$WORK/ig.XXXXXX")" || broken "mktemp failed"
   f2b_world seed_ign "$t/w" "$2" || broken "ignored-path seed ($2) failed"
   R="$(select_in "$t/w" "$3")"
   if [ "$(sel_of "$R")" = "$4" ] && [ "$(flag_of "$R")" = "$5" ] && msg_of "$R" | grep -qF "$6"; then
-    ok "$7"
+    ok "$7"; case "$1" in "(d)") B_ign_d=1 ;; "(e)") B_ign_e=1 ;; "(f)") B_ign_f=1 ;; esac
   else
     bad "$1: expected '$4' flag $5 with '$6', got '$(sel_of "$R")' flag $(flag_of "$R"): $(msg_of "$R" | tr -d '\n')"
   fi
@@ -1086,7 +1093,8 @@ ign_arm "(g)" forced "$IGN_G" "beta gamma" 0 "read-set keys:" \
 # An optional sixth argument is the arm's correct FLAG, and then the mutant survives only if
 # both the set and the flag still match: a whole-suite skip leaves the set untouched, so a
 # mutant that turns "ran everything" into "skipped everything" moves the flag and nothing else.
-ign_mutant() { # <name> <sed expr> <seed mode> <mutation> <arm's correct sel> [arm's correct flag]
+ign_mutant() { # <base flag> <name> <sed expr> <seed mode> <mutation> <arm's correct sel> [arm's correct flag]
+  local bf="$1"; shift
   local name="$1" m t out wantflag="${6:-}"
   m="$WORK/pool.ign.$name.sh"
   if ! sed "$2" "$POOL" > "$m"; then bad "IGN MUTANT $name: DID NOT APPLY (sed failed)"; IGN_ARMS=$((IGN_ARMS+1)); return; fi
@@ -1104,17 +1112,17 @@ ign_mutant() { # <name> <sed expr> <seed mode> <mutation> <arm's correct sel> [a
   elif [ "$(sel_of "$out")" = "$5" ] && { [ -z "$wantflag" ] || [ "$(flag_of "$out")" = "$wantflag" ]; }; then
     bad "IGN MUTANT $name: still produced '$5'${wantflag:+ flag $wantflag} — the arm it should break does not depend on the mutated line"
   else
-    ok "IGN MUTANT $name moves its arm: '$5'${wantflag:+ flag $wantflag} became '$(sel_of "$out")' flag $(flag_of "$out")"
+    mutant_killed "$bf" "$name" "IGN MUTANT $name moves its arm: '$5'${wantflag:+ flag $wantflag} became '$(sel_of "$out")' flag $(flag_of "$out")"
   fi
   IGN_ARMS=$((IGN_ARMS+1))
 }
-ign_mutant gitignore_grep \
+ign_mutant "$B_ign_d" gitignore_grep \
   's|git -c core.quotePath=false check-ignore --stdin < "$res.q"|grep -xF -f .gitignore < "$res.q"|' \
   forced "$IGN_D" "alpha gamma"
-ign_mutant fail_open \
+ign_mutant "$B_ign_e" fail_open \
   's|if \[ "$ci_rc" -ne 0 \] && \[ "$ci_rc" -ne 1 \]; then : > "$res"; return 1; fi|:|' \
   none "$IGN_E" "alpha beta gamma"
-ign_mutant no_gitlink_guard \
+ign_mutant "$B_ign_f" no_gitlink_guard \
   's|^  cut -f1 "$in" \| awk -v gl="$res.gl" |  cut -f1 "$in" \| awk -v gl=/dev/null |' \
   sub 'printf v2 > src/a.sh' "alpha gamma"
 
@@ -2929,6 +2937,8 @@ if [ -z "$DERIVER" ]; then
   printf '  SKIP  map-merge arms: derive-fixture-readsets.sh is in neither layout yet (core fixtures ship ahead of their subject)\n'
 else
   if sg merge; then
+  B_merge_arm1=0; B_merge_arm2=0; B_merge_newline_list=0; B_merge_g=0; B_merge_h=0; B_allist_no_newline=0; B_allist_middle=0; B_allist_exact=0
+  B_untraced_m2=0; B_untraced_m3=0; B_control_d=0; B_callsite_f=0
   M="$WORK/merge.sh"
   sed -n '/# READSET_MERGE_BEGIN/,/# READSET_MERGE_END/p' "$DERIVER" > "$M"
   grep -q 'readset_merge_map()' "$M" || broken "extracted no readset_merge_map from $DERIVER"
@@ -2941,13 +2951,13 @@ else
   G="$(readset_merge_map "$WORK/old.map" "$WORK/new.map" "alpha" | LC_ALL=C sort | tr '\n' ' ')"
   MERGE_ARMS=$((MERGE_ARMS+1))
   case "$G" in
-    *"beta	src/b"*) ok "a --list run leaves an UNTRACED fixture's entries alone — refreshing one fixture does not cost the rest of the map" ;;
+    *"beta	src/b"*) ok "a --list run leaves an UNTRACED fixture's entries alone — refreshing one fixture does not cost the rest of the map"; B_merge_arm1=1 ;;
     *) bad "merging dropped an untraced fixture's entries: $G" ;;
   esac
   MERGE_ARMS=$((MERGE_ARMS+1))
   case "$G" in
     *"alpha	src/x"*) bad "merging kept a STALE entry for the fixture it just re-traced: $G" ;;
-    *"alpha	src/NEW"*) ok "  and it REPLACES the traced fixture's entries rather than adding to them" ;;
+    *"alpha	src/NEW"*) ok "  and it REPLACES the traced fixture's entries rather than adding to them"; B_merge_arm2=1 ;;
     *) bad "the traced fixture's new entry is missing after the merge: $G" ;;
   esac
   # The case that matters most: a fixture that WAS mapped and is now omitted must lose its
@@ -2978,7 +2988,7 @@ else
       *"beta	src/b"*)
         case "$G3" in
           *"alpha	src/x"*) bad "newline-separated list: the re-traced fixture kept a stale entry: $G3" ;;
-          *) ok "a NEWLINE-separated traced list behaves as a space-separated one — untraced entries kept, traced ones replaced" ;;
+          *) ok "a NEWLINE-separated traced list behaves as a space-separated one — untraced entries kept, traced ones replaced"; B_merge_newline_list=1 ;;
         esac ;;
       *) bad "a NEWLINE-separated traced list dropped an untraced fixture's entries — the whole rest of the map: $G3" ;;
     esac
@@ -2996,12 +3006,12 @@ else
   if grep -q 'beta' "$WORK/mm.out"; then
     bad "MERGE MUTANT rewrite: untraced entries survived a merge that no longer reads the old map — arm 1 does not depend on that read"
   else
-    ok "MERGE MUTANT rewrite moves arm 1: dropping the old-map read loses every untraced fixture"
+    mutant_killed "$B_merge_arm1" rewrite "MERGE MUTANT rewrite moves arm 1: dropping the old-map read loses every untraced fixture"
   fi
   MERGE_ARMS=$((MERGE_ARMS+1))
   merge_mutant keepstale 's|if (index(traced, " " fx " ") == 0 \&\& (decl == "" |if ((decl == "" |'
   if grep -q 'src/x' "$WORK/mm.out"; then
-    ok "MERGE MUTANT keepstale moves arm 2: without the traced filter the re-traced fixture keeps its stale entry"
+    mutant_killed "$B_merge_arm2" keepstale "MERGE MUTANT keepstale moves arm 2: without the traced filter the re-traced fixture keeps its stale entry"
   else
     bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
   fi
@@ -3046,7 +3056,7 @@ else
     dg_pipe "$DG/wline" "$DG/univ.span" > "$DG/out.hook"
     dg_pipe "$DG/wline" - > "$DG/out.fallback"
     if [ "$(dg_verdict "$DG/out.hook")" = exact ]; then
-      ok "(g) the shipped write pipeline over .git/objects/ab/cd, .git/HEAD, a bare .git, sub/.git/HEAD, .gitignore and core/x.sh leaves exactly sub/.git/HEAD, .gitignore and core/x.sh, with the hook's predicate sourced"
+      ok "(g) the shipped write pipeline over .git/objects/ab/cd, .git/HEAD, a bare .git, sub/.git/HEAD, .gitignore and core/x.sh leaves exactly sub/.git/HEAD, .gitignore and core/x.sh, with the hook's predicate sourced"; B_merge_g=1
     else
       bad "(g) the write pipeline left [$(tr '\n' ' ' < "$DG/out.hook")], wanted exactly [$(tr '\n' ' ' < "$DG/want")]"
     fi
@@ -3082,7 +3092,7 @@ else
     else
       dg_pipe "$DG/wline" "$DG/univ.mutA" > "$DG/out.mutA"
       if [ "$(dg_verdict "$DG/out.mutA")" = wrong ] && ! grep -qx 'sub/.git/HEAD' "$DG/out.mutA"; then
-        ok "WRITE-PIPELINE MUTANT unanchored moves (g): the nested sub/.git/HEAD is dropped"
+        mutant_killed "$B_merge_g" unanchored "WRITE-PIPELINE MUTANT unanchored moves (g): the nested sub/.git/HEAD is dropped"
       else bad "WRITE-PIPELINE MUTANT unanchored: the pipeline still left [$(tr '\n' ' ' < "$DG/out.mutA")]"
       fi
     fi
@@ -3092,7 +3102,7 @@ else
     if cmp -s "$DG/wline" "$DG/wline.mutB"; then bad "WRITE-PIPELINE MUTANT no-helper: the edit matched nothing"
     else
       dg_pipe "$DG/wline.mutB" "$DG/univ.span" > "$DG/out.mutB"
-      if grep -qx '.git/HEAD' "$DG/out.mutB"; then ok "WRITE-PIPELINE MUTANT no-helper moves (g): .git/HEAD survives"
+      if grep -qx '.git/HEAD' "$DG/out.mutB"; then mutant_killed "$B_merge_g" no-helper "WRITE-PIPELINE MUTANT no-helper moves (g): .git/HEAD survives"
       else bad "WRITE-PIPELINE MUTANT no-helper: .git/HEAD did not survive, so (g) does not depend on the helper in the write line"
       fi
     fi
@@ -3116,7 +3126,7 @@ else
   grep -v '^alpha' "$DM/out.4" | grep -v '^# digest alpha' > /dev/null
   MERGE_ARMS=$((MERGE_ARMS+1))
   if ! grep -q 'alpha' "$DM/out.4" && grep -q 'beta' "$DM/out.4"; then
-    ok "(h) readset_merge_map with the fixture root: the declared alpha has no row and no digest line, from the old map or the new rows"
+    ok "(h) readset_merge_map with the fixture root: the declared alpha has no row and no digest line, from the old map or the new rows"; B_merge_h=1
   else bad "(h) the 4-argument merge left alpha or lost beta: $(tr '\n' ' ' < "$DM/out.4")"
   fi
   MERGE_ARMS=$((MERGE_ARMS+1))
@@ -3161,7 +3171,7 @@ else
   else
     dm_merge "$DM/merge.mutA.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutA"
     if grep -q 'alpha	src/NEW' "$DM/out.mutA" && ! cmp -s "$DM/out.mutA" "$DM/beta.want"; then
-      ok "MERGE MUTANT old-map-only moves (h): a filter that reads only the old map lets the declared fixture's NEW rows through"
+      mutant_killed "$B_merge_h" old-map-only "MERGE MUTANT old-map-only moves (h): a filter that reads only the old map lets the declared fixture's NEW rows through"
     else bad "MERGE MUTANT old-map-only: alpha's new row did not survive ($(tr '\n' ' ' < "$DM/out.mutA"))"
     fi
   fi
@@ -3172,7 +3182,7 @@ else
   else
     dm_merge "$DM/merge.mutB.sh" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.mutB"
     if grep -q '# digest alpha aaaa' "$DM/out.mutB" && ! grep -q 'alpha	src' "$DM/out.mutB"; then
-      ok "MERGE MUTANT keeps-digest moves (h): the rows go but the declared fixture's digest line stays"
+      mutant_killed "$B_merge_h" keeps-digest "MERGE MUTANT keeps-digest moves (h): the rows go but the declared fixture's digest line stays"
     else bad "MERGE MUTANT keeps-digest: expected rows gone and the digest kept, got $(tr '\n' ' ' < "$DM/out.mutB")"
     fi
   fi
@@ -3213,19 +3223,19 @@ else
     AV="$(cat "$WORK/al.raw")"
     MERGE_ARMS=$((MERGE_ARMS+1))
     if [ "$(al_newline "$AV")" = clean ] && [ "$(wc -c < "$WORK/al.raw" | tr -d ' ')" -eq "${#AV}" ]; then
-      ok "readset_all_list on a tests/fixtures root: the command-substitution value carries no newline, and the raw output has no trailing one either"
+      ok "readset_all_list on a tests/fixtures root: the command-substitution value carries no newline, and the raw output has no trailing one either"; B_allist_no_newline=1
     else
       bad "readset_all_list output is not one newline-free line ('$AV', $(wc -c < "$WORK/al.raw" | tr -d ' ') raw bytes for ${#AV} chars) — every case \" \$LIST \" membership test in the deriver misses"
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
     if [ "$(al_middle "$AV")" = member ]; then
-      ok "  and its MIDDLE member is space-delimited on both sides — case \" \$LIST \" in *\" mid \"*) matches"
+      ok "  and its MIDDLE member is space-delimited on both sides — case \" \$LIST \" in *\" mid \"*) matches"; B_allist_middle=1
     else
       bad "  the middle member 'mid' is not space-delimited in '$AV' — a list joined by another separator passes the first and last names only"
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
     if [ "$(al_exact "$AV")" = exact ]; then
-      ok "  and it is EXACTLY 'aa mid zz': the directory with no run.sh is excluded"
+      ok "  and it is EXACTLY 'aa mid zz': the directory with no run.sh is excluded"; B_allist_exact=1
     else
       bad "  expected exactly 'aa mid zz' (norun/ has no run.sh), got '$AV'"
     fi
@@ -3252,14 +3262,14 @@ else
     MERGE_ARMS=$((MERGE_ARMS+1))
     U2="$(ul_with "$UL" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
     if [ "$U2" = "0|keep" ]; then
-      ok "m2: an UNTOUCHED fixture missing from the merged map is printed ('keep') — the guard still fires"
+      ok "m2: an UNTOUCHED fixture missing from the merged map is printed ('keep') — the guard still fires"; B_untraced_m2=1
     else
       bad "m2: expected rc 0 printing exactly 'keep', got '$U2' — a merge losing an untraced fixture would be written"
     fi
     MERGE_ARMS=$((MERGE_ARMS+1))
     U3="$(ul_with "$UL" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
     if [ "$U3" = "0|fx" ]; then
-      ok "m3: traced 'fx-b' does not count 'fx' as traced — membership is by exact name, so the lost 'fx' is printed"
+      ok "m3: traced 'fx-b' does not count 'fx' as traced — membership is by exact name, so the lost 'fx' is printed"; B_untraced_m3=1
     else
       bad "m3: expected 'fx' printed with only 'fx-b' traced, got '$U3' — a substring membership test reports 'fx' kept while it is gone"
     fi
@@ -3288,7 +3298,7 @@ else
     else
       _v="$(allist_with "$WORK/al.newline.sh")"
       case "$(al_newline "$_v")" in
-        newline) ok "ALLLIST MUTANT newline-join (the base builder's shape) moves the no-newline arm: its value carries a newline" ;;
+        newline) mutant_killed "$B_allist_no_newline" newline-join "ALLLIST MUTANT newline-join (the base builder's shape) moves the no-newline arm: its value carries a newline" ;;
         *) bad "ALLLIST MUTANT newline-join: the value '$_v' carries no newline, so the no-newline arm is not what it moves" ;;
       esac
     fi
@@ -3298,7 +3308,7 @@ else
     else
       _v="$(allist_with "$WORK/al.tab.sh")"
       if [ "$(al_newline "$_v")" = clean ] && [ "$(al_middle "$_v")" = absent ]; then
-        ok "ALLLIST MUTANT tab-join moves the middle-member arm only: no newline, but ' mid ' no longer matches"
+        mutant_killed "$B_allist_middle" tab-join "ALLLIST MUTANT tab-join moves the middle-member arm only: no newline, but ' mid ' no longer matches"
       else
         bad "ALLLIST MUTANT tab-join: expected a newline-free value whose middle member does not match, got '$_v'"
       fi
@@ -3310,7 +3320,7 @@ else
     else
       _v="$(allist_with "$WORK/al.norun.sh")"
       case "$(al_exact "$_v"):$(al_middle "$_v")" in
-        wrong:member) ok "ALLLIST MUTANT no-run.sh-check moves the exact-list arm: '$_v' names the directory with no run.sh" ;;
+        wrong:member) mutant_killed "$B_allist_exact" no-run.sh-check "ALLLIST MUTANT no-run.sh-check moves the exact-list arm: '$_v' names the directory with no run.sh" ;;
         *) bad "ALLLIST MUTANT no-run.sh-check: expected a list naming norun with mid still a member, got '$_v'" ;;
       esac
     fi
@@ -3322,7 +3332,7 @@ else
       _v="$(ul_with "$WORK/ul.nonorm.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
       _s="$(ul_with "$WORK/ul.nonorm.sh" "$WORK/ul.old" "$WORK/ul.m2" "traced-a fx-om traced-c")"
       if [ "$_v" != "0|keep" ] && [ "$_s" = "0|keep" ]; then
-        ok "UNTRACED MUTANT no-arg-normalisation moves m2 for the NEWLINE list only ('$_v'), the space list still answering '$_s' — the guard's own normalisation is load-bearing"
+        mutant_killed "$B_untraced_m2" no-arg-normalisation "UNTRACED MUTANT no-arg-normalisation moves m2 for the NEWLINE list only ('$_v'), the space list still answering '$_s' — the guard's own normalisation is load-bearing"
       else
         bad "UNTRACED MUTANT no-arg-normalisation: newline list '$_v', space list '$_s' — expected the newline list alone to lose 'keep'"
       fi
@@ -3334,7 +3344,7 @@ else
     else
       _v="$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
       if [ "$_v" != "0|fx" ] && [ "$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")" = "0|keep" ]; then
-        ok "UNTRACED MUTANT substring-membership moves m3 only ('$_v'): 'fx' inside 'fx-b' reads as traced, while m2 still prints 'keep'"
+        mutant_killed "$B_untraced_m3" substring-membership "UNTRACED MUTANT substring-membership moves m3 only ('$_v'): 'fx' inside 'fx-b' reads as traced, while m2 still prints 'keep'"
       else
         bad "UNTRACED MUTANT substring-membership: m3 answered '$_v' — expected it to lose 'fx' with m2 unmoved"
       fi
@@ -3345,7 +3355,7 @@ else
     else
       _v="$(ul_with "$WORK/ul.empty.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
       if [ "$_v" = "0|" ]; then
-        ok "UNTRACED MUTANT empty-guard (W1) moves m2: a guard that prints nothing writes a merge that lost 'keep'"
+        mutant_killed "$B_untraced_m2" empty-guard "UNTRACED MUTANT empty-guard (W1) moves m2: a guard that prints nothing writes a merge that lost 'keep'"
       else
         bad "UNTRACED MUTANT empty-guard (W1): expected rc 0 and nothing printed, got '$_v'"
       fi
@@ -3360,7 +3370,7 @@ else
       _v="$( . "$WORK/merge.nonorm.sh"; readset_merge_map "$WORK/old.map" "$WORK/new.map" "$(printf 'alpha\ndelta')" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' )"
       case "$_v" in
         *"beta	src/b"*) bad "MERGE MUTANT no-normalisation: the newline-list merge still kept beta ('$_v'), so the newline arm does not depend on the merge's normalisation" ;;
-        *"alpha	src/NEW"*) ok "MERGE MUTANT no-normalisation moves the newline-list merge arm: the untraced fixture's entries are lost" ;;
+        *"alpha	src/NEW"*) mutant_killed "$B_merge_newline_list" no-normalisation "MERGE MUTANT no-normalisation moves the newline-list merge arm: the untraced fixture's entries are lost" ;;
         *) bad "MERGE MUTANT no-normalisation: the merge emitted neither beta nor the traced entry ('$_v'), so the mutant scored nothing" ;;
       esac
     fi
@@ -3476,7 +3486,7 @@ else
   else
     CD="$(readset_discrimination_control "$WORK/ctl.merged.map" 2>&1)"; CD_RC=$?
     case "$CD_RC:$CD" in
-      0:*"PASS  CONTROL"*) ok "a --list refresh of ONE fixture is judged on the MERGED map and passes — the mode the deriver advertises is reachable" ;;
+      0:*"PASS  CONTROL"*) ok "a --list refresh of ONE fixture is judged on the MERGED map and passes — the mode the deriver advertises is reachable"; B_control_d=1 ;;
       *) bad "a --list refresh of one fixture was refused on its merged map (rc $CD_RC): $(printf '%s' "$CD" | tr -d '\n')" ;;
     esac
   fi
@@ -3490,7 +3500,7 @@ else
   if [ "$CM1_RC" -eq 0 ]; then
     bad "MUTANT m1: the traced map ALONE was accepted, so arm (d) cannot tell the merged judgement from the base one and would have been green at base"
   else
-    ok "MUTANT m1 moves arm (d): judged on the TRACED entries alone the same refresh is refused — which is the base behaviour, and the arm discriminates base from tip"
+    mutant_killed "$B_control_d" m1 "MUTANT m1 moves arm (d): judged on the TRACED entries alone the same refresh is refused — which is the base behaviour, and the arm discriminates base from tip"
   fi
 
   # MUTANT m2 -- AN ALWAYS-ACCEPTING CONTROL. Keyed on the verdict the function RETURNS, not on
@@ -3725,7 +3735,7 @@ EOF
   CSN="$(rs_callscan "$DERIVER")"
   CSV="$(rs_callverdict "$CSN")"
   case "$CSV" in
-    "AL:bound UL:bound") ok "(f) the deriver's only readset_all_list call (line $(cs_get "$CSN" ALLINE)) builds LIST under --all from \$TREE/\$FIXTURE_ROOT, and its only readset_untraced_lost call (line $(cs_get "$CSN" ULLINE)) compares the merged map after the merge (line $(cs_get "$CSN" RLINE)), refuses on a failed compare (line $(cs_get "$CSN" CLINE)) and dies 'merge dropped' (line $(cs_get "$CSN" DLINE)) before the write (line $(cs_get "$CSN" WLINE))" ;;
+    "AL:bound UL:bound") ok "(f) the deriver's only readset_all_list call (line $(cs_get "$CSN" ALLINE)) builds LIST under --all from \$TREE/\$FIXTURE_ROOT, and its only readset_untraced_lost call (line $(cs_get "$CSN" ULLINE)) compares the merged map after the merge (line $(cs_get "$CSN" RLINE)), refuses on a failed compare (line $(cs_get "$CSN" CLINE)) and dies 'merge dropped' (line $(cs_get "$CSN" DLINE)) before the write (line $(cs_get "$CSN" WLINE))"; B_callsite_f=1 ;;
     *) bad "(f) the call sites of the two new spans are not bound: $CSV — scan: $(printf '%s' "$CSN" | tr '\n\t' ' =')" ;;
   esac
   # Three deriver-copy mutants, each scored by the scan: --all back on the base inline loop (W2/W4
@@ -3743,7 +3753,7 @@ EOF
     if cmp -s "$DERIVER" "$WORK/cs.$_n.sh"; then bad "CALL-SITE MUTANT $_n did not apply"; continue; fi
     _cv="$(rs_callverdict "$(rs_callscan "$WORK/cs.$_n.sh")")"
     case " $_cv " in
-      *" $_want "*) ok "CALL-SITE MUTANT $_n moves (f): the scan reads '$_cv'" ;;
+      *" $_want "*) mutant_killed "$B_callsite_f" "$_n" "CALL-SITE MUTANT $_n moves (f): the scan reads '$_cv'" ;;
       *) bad "CALL-SITE MUTANT $_n: expected '$_want' in the scan verdict, got '$_cv'" ;;
     esac
   done

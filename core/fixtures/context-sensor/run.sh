@@ -129,6 +129,8 @@ raw()    { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJ
 
 ok()   { PASS=$((PASS+1)); printf '  PASS  %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s -- %s\n' "$1" "$2"; }
+. "$FIXTURES/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_carve=0
 check(){ [ "$2" = "$3" ] && ok "$1" || bad "$1" "expected '$3', got '$2'"; }
 
 echo "context-sensor fixtures"
@@ -545,7 +547,7 @@ case "$OUT" in *"SURFACE that trade-off"*|*"let THEM call it"*)
 # lead answered "refreshing the snapshot now" and the finding never reached the operator.
 # The advice binds BOTH halves in ONE response -- record it under Open Items AND put it to
 # the operator -- because "report first" would lose the refresh to the compaction.
-case "$OUT" in *"not held back by this refresh"*) ok "imminent does not let the refresh hold back an operator finding" ;;
+case "$OUT" in *"not held back by this refresh"*) ok "imminent does not let the refresh hold back an operator finding"; B_carve=1 ;;
   *) bad "imminent does not let the refresh hold back an operator finding" "got: ${OUT:-<silent>}" ;; esac
 case "$OUT" in *"under Open Items AND put it to the operator in the SAME response"*)
     ok "  and binds the snapshot record and the operator report into one response" ;;
@@ -567,7 +569,7 @@ else
     *) bad "  finding mutant still fires imminent (the copy ran)" "got: ${MOUT:-<silent>}" ;; esac
   case "$MOUT" in *"not held back by this refresh"*)
       bad "MUTANT: without the carve-out the finding arm fails" "carve-out still present" ;;
-    *) ok "MUTANT: without the carve-out the finding arm fails" ;; esac
+    *) mutant_killed "$B_carve" finding-carveout "MUTANT: without the carve-out the finding arm fails" ;; esac
 fi
 
 # The band must still be reachable at the values real compactions were observed at.

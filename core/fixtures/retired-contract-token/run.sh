@@ -44,6 +44,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_rctCaught=0; B_rctVec=0
 
 CORE_PATH="core/scripts/validate-artifact-budget.sh"
 DIST="$WORK/dist"
@@ -110,7 +112,7 @@ pool_report() { printf 'OVER\n' >> "$ROOT/.chan"; }
 OURS
 out="$(run_detect)"
 if grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$out"; then
-  ok "a retired contract the consumer still references is caught"
+  ok "a retired contract the consumer still references is caught"; B_rctCaught=1
 else
   bad "the severed contract was NOT caught -- detector is inert"
 fi
@@ -229,7 +231,7 @@ out="$(bash "$MUTANT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
 if grep -q 'RETIRED-CONTRACT-TOKEN' <<<"$out"; then
   bad "MUTATION: the comment strip is inert -- assertions 1-3 prove nothing"
 else
-  ok "MUTATION: without the strip, THEIRS' own doc-comment masks a real severed contract"
+  mutant_killed "$B_rctCaught" comment-strip-removed "MUTATION: without the strip, THEIRS' own doc-comment masks a real severed contract"
 fi
 # The silence above must be the RIGHT silence: the mutant opened the file and derived an
 # empty retired set, and its own stderr says so. A mutant that never ran says something
@@ -408,11 +410,11 @@ score() {  # name path expected-vector
   # (`bash ""` fails every predicate and prints 0000). Measured by the adversarial hand.
   [ -n "$2" ] || { echo "FIXTURE ERROR: mutant $1 was not built -- see the FIXTURE ERROR above; a lost anchor is a lost subject, not a regression" >&2; exit 2; }
   got="$(vec "$2")"
-  if [ "$got" = "$3" ]; then ok "MUTATION $1: flips exactly its own predicate ($3)"
+  if [ "$got" = "$3" ]; then mutant_killed "$B_rctVec" "$1" "MUTATION $1: flips exactly its own predicate ($3)"
   else bad "MUTATION $1: expected $3 got $got (p5 p6 p7 p8)"; fi
 }
 
-if [ "$(vec "$DETECT")" = "1111" ]; then ok "unmutated control: every predicate holds"
+if [ "$(vec "$DETECT")" = "1111" ]; then ok "unmutated control: every predicate holds"; B_rctVec=1
 else bad "unmutated control: $(vec "$DETECT") -- a mutant score below is meaningless"; fi
 
 # NOTE deleted outright: the pre-fix script. p5 alone falls.

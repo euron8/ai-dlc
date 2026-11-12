@@ -63,6 +63,8 @@ mkdir -p "$WORK/_bmad-output" || exit 2
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_vpcTok=0
 
 # A snapshot small enough to pass the byte budget with room to spare. The PASS
 # path is what this fixture measures, so every run below must actually pass.
@@ -98,7 +100,7 @@ fi
 # The assertion that matters. A token count cannot be transcribed out of the
 # instruction; it exists only because the validator ran and measured a file.
 if grep -qE '[0-9]+[[:space:]]+tok' "$WORK/out.txt"; then
-  ok "  and it carries a token measurement (a number the instruction cannot supply)"
+  ok "  and it carries a token measurement (a number the instruction cannot supply)"; B_vpcTok=1
 else
   bad "  PASS output carries no measurement -- the cell is forgeable again"
   sed 's/^/        /' "$WORK/out.txt"
@@ -138,7 +140,7 @@ if [ "$mutant_status" != "0" ]; then
 elif grep -qE '[0-9]+[[:space:]]+tok' "$WORK/out.txt"; then
   bad "MUTATION: the measurement survives without the PASS branch -- assertion 2 proves nothing"
 else
-  ok "MUTATION: removing the PASS-content branch removes the measurement"
+  mutant_killed "$B_vpcTok" pass-content-branch-removed "MUTATION: removing the PASS-content branch removes the measurement"
 fi
 
 # --- 5. FAIL still surfaces the failing lines ----------------------------------

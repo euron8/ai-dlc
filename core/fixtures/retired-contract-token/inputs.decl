@@ -2,3 +2,4 @@
 !core/skills/ai-dlc-update/reconcile/retired-tokens.sh
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

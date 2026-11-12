@@ -4,3 +4,4 @@
 # the step files arm (d) derives) and the roles (architect.md, analyst.md, ux.md and every role arm (d) derives).
 !core/skills/ai-dlc/
 core/team-roles/
+core/fixtures/lib/mutant.sh

@@ -90,6 +90,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+agreed_rows=""; B_vprGm=0; B_vprApc=0
 
 # --- a minimal installed consumer ----------------------------------------------
 # .git is the walk-up marker. .claude/ carries the schemas and agent-read docs a
@@ -405,7 +407,7 @@ for f in "$SRC"/*.sh; do
 
   # THE ASSERTION. Same tree, same argv, same cwd — only the install path differs.
   if [ "$legacy" = "$current" ]; then
-    ok "$name agrees from scripts/ and scripts/ai-dlc/"
+    ok "$name agrees from scripts/ and scripts/ai-dlc/"; agreed_rows="$(printf '%s\n%s' "$agreed_rows" "$name")"
   else
     bad "$name DIVERGES between layouts"
     printf '        scripts/       : %s\n' "$(printf '%s' "$legacy"  | tr '\n' '|' | cut -c1-160)"
@@ -426,7 +428,7 @@ echo ""
 # --- non-vacuity ---------------------------------------------------------------
 for want in $SENSITIVE_REQUIRED; do
   case " $sensitive_list " in
-    *" $want "*) ok "MUTANT: $want changes behaviour when the root is wrong (its agreement is real)" ;;
+    *" $want "*) w_agreed="$(grep -cxF -- "$want" <<<"$agreed_rows" || :)"; mutant_killed "$([ "$w_agreed" = 1 ] && echo 1)" "$want" "MUTANT: $want changes behaviour when the root is wrong (its agreement is real)" ;;
     *) bad "MUTANT: $want ignored a wrong project root — its agreement assertion proves nothing" ;;
   esac
 done
@@ -548,7 +550,7 @@ else
     *".claude/skills/ai-dlc/steps/gate-validation.md"*)
       bad "DECOY CWD: validate-gate-manifest.sh with no argument read ANOTHER tree's gate-validation.md — it resolved its candidates against the cwd, not the root" ;;
     *"under $WORK"*)
-      ok  "DECOY CWD: validate-gate-manifest.sh with no argument ignores another tree's gate-validation.md at the cwd, and names the root it did search" ;;
+      ok  "DECOY CWD: validate-gate-manifest.sh with no argument ignores another tree's gate-validation.md at the cwd, and names the root it did search"; B_vprGm=1 ;;
     *)
       bad "DECOY CWD: validate-gate-manifest.sh named neither the decoy nor its own root — it cannot be told from a run that died" ;;
   esac
@@ -566,7 +568,7 @@ else
     gm_mout="$( cd "$WORK2" && bash "$gm_mut" 2>&1 )"
     case "$gm_mout" in
       *".claude/skills/ai-dlc/steps/gate-validation.md"*)
-        ok  "MUTANT: candidates back to cwd-relative -> validate-gate-manifest.sh reads the decoy; the arm kills it" ;;
+        mutant_killed "$B_vprGm" gate-manifest-cwd-relative "MUTANT: candidates back to cwd-relative -> validate-gate-manifest.sh reads the decoy; the arm kills it" ;;
       *)
         bad "MUTANT: candidates back to cwd-relative and validate-gate-manifest.sh STILL did not read the decoy — the arm cannot fire" ;;
     esac
@@ -580,7 +582,7 @@ else
   apc_dec="$( cd "$WORK2" && bash "$APC_S" --scan-roots 2>&1 )"
   case "$apc_dec" in
     *DECOY-SCAN-ROOT*) bad "DECOY CWD: artifact-path-config.sh --scan-roots read ANOTHER tree's artifact-path-grammar.md — its root defaulted to the cwd" ;;
-    *)                 ok  "DECOY CWD: artifact-path-config.sh --scan-roots ignores another tree's grammar at the cwd" ;;
+    *)                 ok  "DECOY CWD: artifact-path-config.sh --scan-roots ignores another tree's grammar at the cwd"; B_vprApc=1 ;;
   esac
   apc_cf="$( cd "$WORK2" && bash "$APC_S" --consumer-file 2>&1 )"
   case "$apc_cf" in
@@ -598,7 +600,7 @@ else
   else
     apc_mout="$( cd "$WORK2" && bash "$apc_mut" --scan-roots 2>&1 )"
     case "$apc_mout" in
-      *DECOY-SCAN-ROOT*) ok  "MUTANT: default root back to \".\" -> artifact-path-config.sh reads the decoy grammar; the arm kills it" ;;
+      *DECOY-SCAN-ROOT*) mutant_killed "$B_vprApc" apc-root-dot "MUTANT: default root back to \".\" -> artifact-path-config.sh reads the decoy grammar; the arm kills it" ;;
       *)                 bad "MUTANT: default root back to \".\" and artifact-path-config.sh STILL did not read the decoy — the arm cannot fire" ;;
     esac
   fi

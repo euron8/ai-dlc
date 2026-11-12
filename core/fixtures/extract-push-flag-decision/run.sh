@@ -58,6 +58,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_7u=0
 
 echo "extract-push-flag-decision:"
 
@@ -314,7 +316,7 @@ else bad "probe 7u-5: a file with no 7u section returned rc $rc"; fi
 # The corpus.
 step7u_ok "$SUBJ"; rc=$?
 case "$rc" in
-  0) ok "step 7u names UPSTREAM-ONLY-ADD and sets the exec bit in both directions" ;;
+  0) ok "step 7u names UPSTREAM-ONLY-ADD and sets the exec bit in both directions"; B_7u=1 ;;
   3) bad "FIXTURE STALE: no **7u. section found in $SUBJ" ;;
   *) bad "step 7u lacks UPSTREAM-ONLY-ADD, \`chmod +x\` or \`chmod -x\`: an untangle UPSTREAM-ONLY-ADD row is written at the umask's mode, and a wrong-bit row's whole action goes unstated" ;;
 esac
@@ -333,7 +335,7 @@ if cmp -s "$SUBJ" "$M7U" || [ "$n_pre" -eq 0 ] || [ "$n_post" -ne 0 ]; then
   bad "FIXTURE BROKEN — the 7u mutant did not apply to $SUBJ (token lines in 7u: $n_pre before, $n_post after)"
 else
   step7u_ok "$M7U"; rc=$?
-  if [ "$rc" -eq 1 ]; then ok "mutant 7u: stripping the 7u token lines from $SUBJ is reported (rc 1)"
+  if [ "$rc" -eq 1 ]; then mutant_killed "$B_7u" 7u-token-strip "mutant 7u: stripping the 7u token lines from $SUBJ is reported (rc 1)"
   else bad "mutant 7u: the stripped copy returned rc $rc, not 1 — the arm survives deleting its own subject"; fi
 fi
 
