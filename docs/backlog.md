@@ -2794,3 +2794,19 @@ Receipt: `verify: manual`. The fix decides what test exists (a disposition set i
 Provenance: batch 256, M6; id allocated by the lead.
 
 verify: manual
+
+## BL-1010 — a branch-delete push runs the full pre-push hook, about 2.5 minutes, when made without `--no-verify`
+
+**DEFECT.** OPEN. Filed 2026-11-12. A `git push origin --delete <branch>` delivers no tree, yet git runs the pre-push hook for it, and the hook runs its pre-suite steps and reaches the fixture suite's whole-suite key before it exits. Neither hook looks at what is being pushed: `.githooks/pre-push:31` begins `cd "$(git rev-parse --show-toplevel)" || exit 1` and the hook never reads the ref lines git hands it on stdin, so a delete (local sha all zeros) is judged on the working tree like any release push. Searched for any all-zero-sha test: `0{40}`, the literal 40-zero string and `zero=` read 0 in `.githooks/pre-push` and 0 in `core/git-hooks/pre-push`; control, the same search reads 1 in git's own `pre-push.sample` in the main checkout's `.git/hooks/`.
+
+Evidence, batch 256 M6, from the recorded population in `docs/analysis/push-gate-cost-and-pole-value-b256.md` (section "Branch-delete pushes run the whole hook"): 7 delete pushes made without `--no-verify`, each with a `.git/ai-dlc-suite-key.log` HIT line inside its window. Start to HIT, a lower bound on the hook's wall, for the 6 whose start is on record (starts from m6-583a's transcript census): e1d32849 2026-11-10T14:35:00Z 144 s; 94d65a60 2026-11-11T15:24:18Z 157 s; b655f7b8 15:33:12Z 155 s; a9cff818 16:23:33Z 148 s; 490b0ab0 18:53:56Z 200 s; 949b78fd 19:28:31Z 258 s. The seventh, bf3ed410, is in m6-914v's table, and its log (perishable, in that session's scratchpad at `rdel.lVnW/push.out`) ends `- [deleted] b254-F975` at mtime 2026-11-11T18:29:36Z, 3 s after its HIT at 18:29:33Z; its start is not in that session's transcript, so its wall is not measured. m6-914v's table reads all 7 as green, `FIXTURE SUITE SKIPPED`, pre-suite `17 of 23` skipped, so the other 6 pre-suite steps ran on every delete.
+
+Owed: a delete costs no hook time. Either the hook exits 0 when every ref line it is handed has an all-zero local sha, or the step that deletes a branch passes `--no-verify`. The first keeps every caller covered; the hook's own stdin is the only input that distinguishes a delete. No fix in this release.
+
+There is no graph pipeline step; the cost lives in this repo's pre-push hook. It is not filed as an efficiency entry, because the tag would bring E3b's Baseline/Step/Movement filing arms, and the lead ruled it untagged. Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`).
+
+Receipt: `verify: manual`. The fix decides the test: a delete fed to the real hook exiting before its first step, with a release push as the control. A receipt written only to file this entry is what BL-915 forbids.
+
+Provenance: batch 256, M6, from m6-583a's push census; id allocated by the lead.
+
+verify: manual
