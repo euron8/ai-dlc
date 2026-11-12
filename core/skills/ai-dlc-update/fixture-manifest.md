@@ -175,6 +175,7 @@ core_manifest:
   - core/fixtures/deploy-validate-smoke-classification/**
   - core/fixtures/story-evidence-scaffold/**
   - core/fixtures/smoke-surface-ignored/**
+  - core/fixtures/story-evidence-receipts/**
   - core/fixtures/review-carry-over-clauses/**
   - core/fixtures/provenance-flagless-default/**
   - core/fixtures/provenance-not-accessible/**

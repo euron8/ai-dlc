@@ -93,7 +93,6 @@ span-of-containment	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub
 spec-adoption-floor	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 spec-join-integrity	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 sprint-status-lifecycle	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
-story-evidence-scaffold	its AI_DLC_* scrub is inside receipt-bl815.sh, which run.sh RUNS rather than sources, so run.sh itself is unscrubbed
 story-fields-derive	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 story-provenance	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment
 stray-party-mode-provenance	run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment

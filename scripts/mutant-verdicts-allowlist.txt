@@ -115,7 +115,7 @@ snapshot-edit-deny	1
 snapshot-evidence-cell	1
 snapshot-supersession-marker	2
 spec-join-integrity	3
-story-evidence-scaffold	4
+story-evidence-scaffold	1
 story-provenance	4
 stray-party-mode-provenance	8
 suite-dispatch-order	1

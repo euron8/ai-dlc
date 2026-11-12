@@ -1,0 +1,18 @@
+# story-evidence-smoke-mutants: sources story-evidence-receipts/run.sh for its control tree, receipts and run
+# functions, so it declares that fixture's inputs plus that file; each validator mutant is a copy of the validator inside
+# the copy of the whole scripts directory, and the sourced file names all four receipts.
+core/fixtures/story-evidence-smoke-mutants/
+!core/fixtures/story-evidence-receipts/run.sh
+core/scripts/
+!core/scripts/validate-handoff-evidence.sh
+!core/scripts/record-only-diff.sh
+!core/scripts/sprint-status.sh
+!core/schemas/sprint-status.json
+!core/fixtures/story-evidence-scaffold/world.sh
+!core/fixtures/story-evidence-scaffold/he-inproc.sh
+!core/fixtures/story-evidence-scaffold/receipt-bl809.sh
+!core/fixtures/story-evidence-scaffold/receipt-bl815.sh
+!core/fixtures/story-evidence-scaffold/receipt-bl843.sh
+!core/fixtures/story-evidence-scaffold/receipt-bl845.sh
+core/fixtures/lib/preamble.sh
+!core/fixtures/lib/mutant.sh

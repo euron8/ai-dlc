@@ -36,7 +36,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 HE="$1"; CELLS="${2:-}"
 # With <cells> (space-separated cell names) only the validator calls those cells read run, plus story-1's, which
 # carries the ctl cell: a mutant run names the one cell that decides it. Without it every cell runs.
-want() { [ -z "$CELLS" ] || case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+want() { [ -z "$CELLS" ] && return 0; case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+# ran <cell>: printed inside each want-gated block, once per cell whose assertion that block evaluates.
+ran() { echo "RAN $1"; }
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 # With RCPT_WORLD set (run.sh's rcpt_run), the world is seeded ONCE into that directory and every later call
@@ -75,8 +77,8 @@ for n in cn-in cn-dd cn-abs cn-al cn-dd-mutation-red cn-ctl cn-x; do printf 'no 
   printf -- '- ow: `%s/test-results/cn-ow.txt`\n- climb: `../../cn-climb.txt`\n' "$R/other-wt"
   printf -- '- owred: `%s/cn-ow-mutation-red.txt`\n' "$R/other-wt"
 } > "$W/stories/story-1.md"
-printf -- '---\nstatus: review\n---\n# Story 2\n\n%s\n\nLocal: `evidence/cn-never.txt`, `test-results/cn-ignored.txt`.\n' "$LABELS" > "$W/stories/story-2.md"
-printf -- '---\nstatus: review\n---\n# Story 3\n\n%s\n\nEvidence: `./test-results/cn-x.txt`.\n' "$LABELS" > "$W/stories/story-3.md"
+printf -- '---\nstatus: review\n---\n# Story 2\n\n%s\n\n## Dev Agent Record\n\nLocal: `evidence/cn-never.txt`, `test-results/cn-ignored.txt`.\n' "$LABELS" > "$W/stories/story-2.md"
+printf -- '---\nstatus: review\n---\n# Story 3\n\n%s\n\n## Dev Agent Record\n\nEvidence: `./test-results/cn-x.txt`.\n' "$LABELS" > "$W/stories/story-3.md"
 printf 'local\n' > "$W/test-results/cn-ignored.txt"
 g add -A && g commit -qm frozen || exit 9
 T="$(g rev-parse HEAD)"
@@ -121,17 +123,20 @@ grep -qxF "WARN capture-unresolved $R/other-wt/test-results/cn-ow.txt: resolves 
 grep -qF "REFUSED red-untracked $R/other-wt/cn-ow-mutation-red.txt: cited as a mutation-RED capture by a spelling that resolves outside the repository" <<<"$o" \
   || { echo "FAIL owred-reason: the refusal does not name the outside spelling"; fails=$((fails + 1)); }
 if want rc || want gu; then
+ran rc
 o2="$(he_run "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc=$?
 { [ "$rc" -eq 0 ] && grep -qxF "WARN capture-unresolved evidence/cn-never.txt: not tracked at ${T:0:12}" <<<"$o2"; } \
   || { echo "FAIL rc: want exit 0 with the un WARN, got exit $rc"; fails=$((fails + 1)); }
 fi
 if want lc; then
+ran lc
 lc="$(he_run "$HE" -C "$W" --list-captures stories/story-1.md "$T" 2>/dev/null | tr '\n' ' ')"
 lcw='test-results/cn-abs.txt test-results/cn-al.txt test-results/cn-ctl.txt test-results/cn-in.txt '
 [ "$lc" = "$lcw" ] || { echo "FAIL lc: want [$lcw] got [$lc]"; fails=$((fails + 1)); }
 fi
 # xr: both readers over ONE story and ONE `./` token, each asserted as an exact value.
 if want xr; then
+ran xr
 xl="$(he_run "$HE" -C "$W" --list-captures stories/story-3.md "$T" 2>/dev/null | tr '\n' ' ')"
 xh="$(he_run "$HE" -C "$W" stories/story-3.md "$B" "$T" 2>/dev/null | awk '($1 == "REFUSED" || $1 == "WARN") && $2 !~ /^dar-heads-/' | cut -d: -f1 | tr '\n' ' ')"
 [ "$xl|$xh" = "test-results/cn-x.txt |REFUSED no-command test-results/cn-x.txt " ] \
@@ -139,6 +144,7 @@ xh="$(he_run "$HE" -C "$W" stories/story-3.md "$B" "$T" 2>/dev/null | awk '($1 =
 fi
 # gu: a git shim refusing only the exemption reader's ls-tree spelling; every other git call passes through.
 if want gu; then
+ran gu
 RG="$(command -v git)" || exit 9
 mkdir -p "$R/shim" || exit 9
 printf '#!/bin/bash\ncase " $* " in *" ls-tree -r --name-only --full-tree "*) echo "shim: ls-tree refused" >&2; exit 128 ;; esac\nexec "%s" "$@"\n' "$RG" > "$R/shim/git" \

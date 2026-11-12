@@ -22,7 +22,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 HE="$1"; CELLS="${2:-}"
 # With <cells> only story-1's run (every cell but rc, and the ctl cell) and, for rc, story-2's run: a mutant run
 # names the one cell that decides it. Without it every cell runs.
-want() { [ -z "$CELLS" ] || case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+want() { [ -z "$CELLS" ] && return 0; case " $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+# ran <cell>: printed inside each want-gated block, once per cell whose assertion that block evaluates.
+ran() { echo "RAN $1"; }
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 # With RCPT_WORLD set (run.sh's rcpt_run), the world is seeded ONCE into that directory and every later call
@@ -59,7 +61,7 @@ printf 'no command line here\n1 passed\n' > "$W/test-results/bm-ctl.txt"
 { printf -- '---\nstatus: review\n---\n# Story 1\n\n%s\n\n## Dev Agent Record\n\n' "$LABELS"
   for n in kunq kq kq1 k1 ph red bw ctl; do printf -- '- %s: `test-results/bm-%s.txt`\n' "$n" "$n"; done
 } > "$W/stories/story-1.md"
-printf -- '---\nstatus: review\n---\n# Story 2\n\n%s\n\nLint: `test-results/bm-ph.txt`.\n' "$LABELS" > "$W/stories/story-2.md"
+printf -- '---\nstatus: review\n---\n# Story 2\n\n%s\n\n## Dev Agent Record\n\nLint: `test-results/bm-ph.txt`.\n' "$LABELS" > "$W/stories/story-2.md"
 g add -A && g commit -qm frozen || exit 9
 T="$(g rev-parse HEAD)"
 printf '%s\n' "$B" > "$R/.B" && printf '%s\n' "$T" > "$R/.T" && : > "$R/.seeded" || exit 9
@@ -85,6 +87,7 @@ cell ctl  no-command
   && grep -q '^WARN placeholder test-results/bm-ph.txt: line 1 carries <tree>' <<<"$o"; } \
   || { echo "FAIL lvl: want k-unquoted REFUSED and placeholder WARN naming <tree>"; fails=$((fails + 1)); }
 if want rc; then
+ran rc
 o2="$(he_run "$HE" -C "$W" stories/story-2.md "$B" "$T" 2>/dev/null)"; rc=$?
 { [ "$rc" -eq 0 ] && grep -q '^WARN placeholder test-results/bm-ph.txt: ' <<<"$o2"; } \
   || { echo "FAIL rc: want exit 0 with the placeholder WARN, got exit $rc"; fails=$((fails + 1)); }
