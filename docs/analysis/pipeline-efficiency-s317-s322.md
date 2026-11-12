@@ -239,7 +239,7 @@ agent-hours. Each row is sent to the batch lead for a backlog id.
 | 10 | `validate-spawn-ledger.sh` takes 42 s a call in subagents and reads a 9,447-row ledger that only grows. | 1.0 agent-hours | not measured | same |
 | 11 | graph's `git push` takes 37–91 s in the lead (39 calls in s321). | 0.4 h | $0 | same; consumer-side gate |
 | 12 | deploy-validate ran 29.9 h elapsed in s321 with 8.7 h active and 3.8 h of solo `ops`. Not decomposed. | not measured | $177 | `out/roll.txt` |
-| 13 | The local-model lead compacts about once an hour: 50 compactions in 56.6 h of s322 against 57 in 120.5 h of s321. Recovery is 0.06 h per story. It also made 831 lead calls per planned story against 320 in s321, at 9.4 s a call against 15.9 s. | 0.5 h | $0 | `out/roll.txt`, `out/classes_summary.txt` |
+| 13 | The local-model lead compacts about once an hour: 50 compactions in 56.6 h of s322 against 57 in 120.5 h of s321. Recovery is 0.06 h per story [batch 256: `out/classes_summary.txt` was re-rendered with the idle-wait class. idle-wait never takes compaction-recovery time, so the 0.06 h is unchanged at this window. At the complete-s322 window (2026-11-12T14:41:00Z) it reads 0.09 h per story]. It also made 831 lead calls per planned story against 320 in s321, at 9.4 s a call against 15.9 s. | 0.5 h | $0 | `out/roll.txt`, `out/classes_summary.txt` |
 
 Rows 1 and 4 overlap: a faster adversary shortens the rounds the remediator then repairs. Rows 3
 and 13 overlap: fewer lead calls means fewer compactions.
@@ -291,3 +291,19 @@ argument. `extract.py`, `cap_rejections.py` and the other six scripts in the s31
 To measure a rebinding on a later sprint: add the sprint's edge to `EDGES` in `extract.py` and its story
 count to `STORIES` in `roll.py`, re-run the block above, and read `seats.py` for the rebound role beside
 `poles.py`'s solo-role hours.
+
+**Gate-run value evidence (BL-819 item 2(a), batch 256).** `EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I
+scripts/gate_run_evidence.py` (`out/gate_run_evidence.s322-complete.txt`; verdict resolvability in
+`out/gate_run_readings.s322-complete.txt`). The window ends after
+the last s322 lead record, so s322 is complete. Only s321 and s322 are shown, because `gate-transition.sh` reached
+graph in s321. The repeat columns cannot separate MERGE from KEEP (see BL-819), so the decision stays KEEP until
+measured.
+
+The `refused` column is a COUNT of `gate-transition: REFUSED` outcomes. What was refused has not been read,
+retries are not de-duplicated, and procedural refusals are not split from validator findings, so the column is
+not evidence that a refusal caught a defect.
+
+| sprint | gate-transition.sh calls | refused | unresolved (background) | in-step hand-run rows | story key derivable | story-ignored ceiling N=5 / N=20 |
+|---|---|---|---|---|---|---|
+| s321 | 160 | 34 | 10 | 236 | 1 | 13 (5.5%) / 48 (20.3%) |
+| s322 (complete) | 82 | 19 | 18 | 16 | 3 | 3 (18.8%) / 7 (43.8%) |

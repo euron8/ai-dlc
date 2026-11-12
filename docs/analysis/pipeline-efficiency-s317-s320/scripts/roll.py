@@ -3,7 +3,8 @@
 --classes prints, per sprint, per step and per lead tool-call class (extract.py's classes.jsonl), per story: active h,
 gap h, calls, tokens and lead $ (token-equivalent, API beside it), with the `other` share; it asserts the class-sum of
 tokens equals segs.jsonl tok per (lead unit, step) and prints segs active minus class-sum active as the
-"out-of-order overcount".
+"out-of-order overcount". `idle-wait` (time only, 0 calls, 0 tokens: the interval after a turn_duration record, with
+compaction-recovery taking precedence) is printed after `other`; it is asserted to carry no call and no token.
 
 --seats prints, per story, the lead and subagent figures separately for the cited step groups (pooled s317+s318,
 then each sprint) and for every step per sprint: lead active h, lead $, subagent active h, subagent $.
@@ -32,7 +33,7 @@ HOSTED = ('opus', 'sonnet', 'haiku', 'fable')
 FALLBACK = {314: 315, 322: 321}   # s322's lead seat ran only local models (qwen38flash, deepseek41)
 # graph sprint-status.yaml at each close; s321 is still open, so its 25 is the planned count from
 # _bmad-output/planning-artifacts/s321/sprint-status.yaml@e32f9ce2f (written once, a6afc3eba "6 epics, 25 stories").
-STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8}   # s322 open: 8 planned (3 done at 2026-11-11T10:30Z)
+STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8}   # s322: 8 stories, all done at the s322 close (sprint-status.yaml of graph commit f7e60625b)
 
 def hosted_mix(rows, pre):
     """{sprint: {family: calls}} over the pipeline bucket: the HOSTED calls on one seat, per sprint."""
@@ -146,7 +147,7 @@ def analyze_defs():
             exec(compile(ast.Module([n], []), p, 'exec'), ns)
     return ns['RELABEL'], ns['fam']
 
-CLASS_ORDER = ('dispatch', 'merge', 'repair', 'gate-run', 'step-reread', 'compaction-recovery', 'snapshot', 'other')
+CLASS_ORDER = ('dispatch', 'merge', 'repair', 'gate-run', 'step-reread', 'compaction-recovery', 'snapshot', 'other', 'idle-wait')
 
 def classes(out):
     """Per sprint, step and class (lead seat, pipeline bucket): active h, gap h, calls, lead $ per story. Asserts the
@@ -177,6 +178,11 @@ def classes(out):
         if got != want: bad += 1
     print(f"class tokens == segs tok (in, cw, cr, out, calls per model) on {len(set(segs) | set(cls)) - bad} of {len(set(segs) | set(cls))} (lead unit, step) pairs")
     if bad: print("INVARIANT FAILED: class token sum differs from segs"); sys.exit(1)
+    # idle-wait is time only: a row of it carrying a call or a token would mean extract.py charged a usage-bearing
+    # message to it, and the class-sum above would still balance.
+    iw = [c for l in cls.values() for c in l if c['cls'] == 'idle-wait' and (c['calls'] or c['tok'])]
+    print(f"idle-wait rows carrying calls or tokens: {len(iw)}")
+    if iw: print("INVARIANT FAILED: idle-wait carries calls or tokens"); sys.exit(1)
     # (sprint, step_base) -> class -> sums; segs active per (sprint, step_base) for the overcount line.
     A = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(float)))
     SA = collections.defaultdict(float)

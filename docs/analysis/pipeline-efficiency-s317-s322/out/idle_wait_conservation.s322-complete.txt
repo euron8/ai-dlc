@@ -1,0 +1,10 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z (s322 complete). Each side is one foreground run of extract.py $OUT on the same corpus: OLD = extract.py as committed at ee9376900 (no idle-wait class), NEW = this tree. Command: python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/idle_wait_conservation.py $OLD/classes.jsonl $NEW/classes.jsonl
+OLD $OLD/classes.jsonl
+NEW $NEW/classes.jsonl
+pairs (unit, step): old 446  new 446  union 446  only on one side 0
+total active moved on 0 of 446 pairs; gap moved on 0 of 446 pairs
+class rows on both sides 1710: calls moved on 0, tokens moved on 0
+idle-wait rows: old 0 (the sides differ iff > 0 on new: new 275); new rows carrying a call or a token 0
+idle-wait equals the per-class decreases on 446 of 446 pairs; pairs where a class rose 0
+idle-wait total 107.20 h; hours lost by class: other 107.20
+idle-wait active h, all lead rows, by sprint: s317 14.22, s318 14.51, s319 26.36, s320 19.74, s321 21.74, s322 10.63

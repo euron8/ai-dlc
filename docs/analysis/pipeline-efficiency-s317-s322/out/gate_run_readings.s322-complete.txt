@@ -1,0 +1,91 @@
+# window: EXTRACT_WIN_END=2026-11-12T14:41:00Z (s322 complete). Command: EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s322/scripts/gate_run_readings.py
+window 2026-10-05T14:00:00Z .. 2026-11-12T14:41:00Z   root /Users/n8/.claude/projects/-Users-n8-git-graph   (rows = gate_run_evidence.py's in-step hand-run rows)
+== s317
+(A) in-step hand-run rows by verdict resolvability: UNRESOLVED-persisted 1, echo-resolved 59, masked-pipe 198, masked-sequence 26, rows 284
+    resolvable + echo-resolved 59 of 284; their verdicts: found 15, clean 42, recorded 2
+    found row: validate-spawn-ledger.sh (default) step implementation via echo-resolved exit 1
+    found row: validate-escalation-resolution.sh (default) step implementation via echo-resolved exit 2
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: sprint-status.sh check-stories step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step implementation via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+(B) calls, any :136 sibling script in command position: 456
+(B) calls, any parsed-tuple script as a substring: 534
+(B) calls, hand-run (gate_run_evidence), all steps: 189
+(B) calls, hand-run (gate_run_evidence), in-step: 168
+(C) gate-transition.sh 
+== s318
+(A) in-step hand-run rows by verdict resolvability: UNRESOLVED-persisted 1, echo-resolved 10, masked-pipe 81, masked-sequence 5, rows 97
+    resolvable + echo-resolved 10 of 97; their verdicts: found 6, clean 4, recorded 0
+    found row: sprint-status.sh check-stories step gate-validation[implementation] via echo-resolved exit 1
+    found row: sprint-status.sh derive-stories --check step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step implementation via echo-resolved exit 1
+    found row: verdict.sh validate-suppression-lifetime step gate-validation[implementation] via echo-resolved exit 2
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+(B) calls, any :136 sibling script in command position: 343
+(B) calls, any parsed-tuple script as a substring: 377
+(B) calls, hand-run (gate_run_evidence), all steps: 120
+(B) calls, hand-run (gate_run_evidence), in-step: 49
+(C) gate-transition.sh 
+== s319
+(A) in-step hand-run rows by verdict resolvability: UNRESOLVED-bg 14, UNRESOLVED-persisted 1, echo-resolved 26, masked-pipe 305, masked-sequence 24, resolvable 3, rows 373
+    resolvable + echo-resolved 29 of 373; their verdicts: found 4, clean 25, recorded 0
+    found row: sprint-status.sh check-stories step gate-validation[implementation] via echo-resolved exit 1
+    found row: sprint-status.sh derive-stories --check step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-handoff-evidence.sh (default) step implementation via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+(B) calls, any :136 sibling script in command position: 720
+(B) calls, any parsed-tuple script as a substring: 760
+(B) calls, hand-run (gate_run_evidence), all steps: 237
+(B) calls, hand-run (gate_run_evidence), in-step: 203
+(C) gate-transition.sh 
+== s320
+(A) in-step hand-run rows by verdict resolvability: echo-resolved 117, masked-pipe 195, masked-sequence 30, resolvable 2, rows 344
+    resolvable + echo-resolved 119 of 344; their verdicts: found 12, clean 103, recorded 4
+    found row: validate-handoff-evidence.sh (default) step implementation via echo-resolved exit 1
+    found row: validate-handoff-evidence.sh (default) step implementation via echo-resolved exit 1
+    found row: validate-handoff-evidence.sh --strategy step implementation via echo-resolved exit 1
+    found row: validate-handoff-evidence.sh (default) step implementation via echo-resolved exit 1
+    found row: validate-handoff-evidence.sh (default) step implementation via echo-resolved exit 1
+    found row: validate-handoff-evidence.sh --strategy step implementation via echo-resolved exit 1
+    found row: validate-handoff-evidence.sh (default) step implementation via echo-resolved exit 1
+    found row: sprint-status.sh check-stories step gate-validation[implementation] via echo-resolved exit 1
+    found row: sprint-status.sh derive-stories --check step gate-validation[implementation] via echo-resolved exit 1
+    found row: validate-spawn-ledger.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+    found row: sprint-status.sh check-stories step implementation via echo-resolved exit 1
+    found row: verdict.sh validate-suppression-lifetime step gate-validation[implementation] via echo-resolved exit 1
+(B) calls, any :136 sibling script in command position: 490
+(B) calls, any parsed-tuple script as a substring: 533
+(B) calls, hand-run (gate_run_evidence), all steps: 223
+(B) calls, hand-run (gate_run_evidence), in-step: 180
+(C) gate-transition.sh 
+== s321
+(A) in-step hand-run rows by verdict resolvability: UNRESOLVED-persisted 1, echo-resolved 58, masked-pipe 171, masked-sequence 4, resolvable 2, rows 236
+    resolvable + echo-resolved 60 of 236; their verdicts: found 3, clean 56, recorded 1
+    found row: sprint-status.sh check-stories step implementation via echo-resolved exit 1
+    found row: sprint-status.sh derive-stories --check step implementation via echo-resolved exit 1
+    found row: sprint-status.sh check-stories step gate-validation[implementation] via echo-resolved exit 1
+(B) calls, any :136 sibling script in command position: 471
+(B) calls, any parsed-tuple script as a substring: 585
+(B) calls, hand-run (gate_run_evidence), all steps: 174
+(B) calls, hand-run (gate_run_evidence), in-step: 122
+(C) gate-transition.sh invocations 162, index and gate present 162, index and gate both literal 161
+== s322
+(A) in-step hand-run rows by verdict resolvability: echo-resolved 7, masked-and 1, masked-pipe 7, resolvable 1, rows 16
+    resolvable + echo-resolved 8 of 16; their verdicts: found 1, clean 7, recorded 0
+    found row: validate-handoff-evidence.sh (default) step gate-validation[implementation] via echo-resolved exit 1
+(B) calls, any :136 sibling script in command position: 147
+(B) calls, any parsed-tuple script as a substring: 232
+(B) calls, hand-run (gate_run_evidence), all steps: 45
+(B) calls, hand-run (gate_run_evidence), in-step: 9
+(C) gate-transition.sh invocations 83, index and gate present 82, index and gate both literal 82
