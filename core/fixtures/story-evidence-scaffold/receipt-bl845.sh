@@ -86,6 +86,9 @@ HE="$1"; CELLS="${3:-}"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
 # No <cells>: every cell runs (the `[ -z ] ||` form returned 1 there, so the full call asserted no cell at all).
 want() { [ -z "$CELLS" ] && return 0; case " clean $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
+# Every gated block and gating helper prints RAN <cell> after its want check; run.sh holds the full call's RAN
+# set to the cells the receipt's code gates.
+ran() { echo "RAN $1"; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 if [ -n "${2:-}" ]; then
   R="$2"; mkdir -p "$R" || exit 9
@@ -243,6 +246,7 @@ run() { # <cell> [<subdirectory of the world to pass as -C>] -> "<rc>:<kinds>:<f
 fails=0
 cell() { # <cell> <want> [<world> <subdirectory>]
   local got; want "$1" || return 0
+  ran "$1"
   if [ -n "${3:-}" ]; then got="$(run "$3" "$4")"; else got="$(run "$1")"; fi
   [ "$got" = "$2" ] || { echo "FAIL $1: want [$2] got [$got]"; fails=$((fails + 1)); }
 }
@@ -287,6 +291,7 @@ cell nokey    0::O
 cell emptykey 1:smoke-surface-unevaluable:P
 W="$R/s320"
 if want hand; then
+ran hand
 o="$(he_run "$HE" -C "$W" stories/s.md "$(cat "$W/.B")" "$(cat "$W/.T")" 2>/dev/null)"
 grep -q '^REFUSED smoke-not-updated stories/s.md: ' <<<"$o" \
   || { echo "FAIL hand: handoff mode did not print the smoke-not-updated refusal"; fails=$((fails + 1)); }
@@ -294,6 +299,7 @@ fi
 hand_rc() { # <cell> <world> <REFUSED kind that must print> -> FAIL unless handoff mode exits 1 with it
   local w="$R/$2" o rc
   want "$1" || return 0
+  ran "$1"
   o="$(he_run "$HE" -C "$w" stories/s.md "$(cat "$w/.B")" "$(cat "$w/.T")" 2>/dev/null)"; rc=$?
   { [ "$rc" -eq 1 ] && grep -q "^REFUSED $3 stories/s.md: " <<<"$o"; } \
     || { echo "FAIL $1: handoff mode on the $2 world exited $rc, want 1 with REFUSED $3"; fails=$((fails + 1)); }

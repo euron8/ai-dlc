@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1069.0] - 2026-11-11
+
+### BL-979 CLOSED: want() is live in all four story-evidence receipts, each prints RAN for the cells it evaluates, so three vacuous mutant kills are re-scored; the receipt control calls and mutants move off story-evidence-scaffold into three new fixtures
+
+`want()` in `receipt-bl809.sh`, `receipt-bl815.sh` and `receipt-bl843.sh` (`core/fixtures/story-evidence-scaffold/`) was `[ -z "$CELLS" ] || case ...; return 1`. That is false for every cell on the full call, so the control call skipped bl809 `rc`, bl815 `gu lc rc xr` and bl843's 19 cells, and `mutant_killed` credited kills from cells that never ran. All four receipts now use the live form. bl845 gates 42 cells through `want` and its helpers `cell()` and `hand_rc()`. Each receipt prints `RAN <cell>` inside every gated block, and the control asserts that the RAN set equals the set extracted from the receipt's own code. The extractor's grammar is widened to `(^[[:space:]]*|if |! |\|\| |&& |then |; |\{ )want [a-z0-9]+`, and it resolves helpers whose body calls `want "$1"`. Its self-probe runs in both directions. Mutant credit requires the line `RAN <deciding cell>` in the full control call. The seed repair inserts only the `## Dev Agent Record` heading that BL-510's `REFUSED dar-missing` made mandatory, in bl809 story-2 and bl815 story-2 and story-3. No expected value changed.
+
+Re-scored kills. `b9-m4-refusal` (rc), `cn-n5-split-readers` (xr) and `cn-n6-silent-unreadable` (gu) were vacuous at base. Each is now killed by a cell that passes on the shipped validator. Every receipt gains a total-death `want()`-revert mutant, and bl815, bl843 and bl845 each gain a partial-death mutant, all killed by the RAN-set assertion's own message.
+
+The move:
+
+| Fixture | Ships | Holds |
+|---|---|---|
+| `core/fixtures/story-evidence-receipts` | yes (core-manifest, fixture-manifest, uninstall.sh) | the four control calls, the RAN-set arms and the extractor probe |
+| `core/fixtures/story-evidence-receipts-mutants` | no (`.dist-only`) | the cn, b9 and b43 validator mutants, the BL-849 probes, kill credit and the rr receipt mutants |
+| `core/fixtures/story-evidence-smoke-mutants` | no (`.dist-only`) | the 33 sm mutants and the smoke-worlds diff arm |
+
+Each battery runs its own control calls, because validate-mutant-kills M5 credits `mutant_killed "${X:-0}"` only when X=1 is set in the same run.sh. The receipts stay in `story-evidence-scaffold/`.
+
+Counted starts, from two agreeing counted runs each:
+
+| Fixture | Base 0.1065.0 | After the fix | After the move |
+|---|---|---|---|
+| `story-evidence-scaffold` | 77 | 147 | 42 |
+| `story-evidence-receipts` | — | — | 36 |
+| `story-evidence-receipts-mutants` | — | — | 106 |
+| `story-evidence-smoke-mutants` | — | — | 1 |
+| suite total | — | 147 | 185 |
+
+- The fix adds 70 to `story-evidence-scaffold`: 35 for bl815's control call now running the PATH-shimmed `gu` git, and 35 for the bl815 twin.
+- The move adds 38 to the suite total, from the duplicated bl815 control call and one `run.sh` start per new fixture.
+- `fork-profile` TOTAL is 2906 at base and at tip.
+
+Filed 1, closed 1, net 0. Consumer cost: a fixture-only pull. `core/scripts/` is untouched, and one new fixture ships.
+
 ## [0.1068.0] - 2026-11-11
 
 ### BL-974 partial: a seat added by the install commit counts as legacy, and `--check-part` runs the seat checks in WARN form

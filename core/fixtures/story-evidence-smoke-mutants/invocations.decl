@@ -1,0 +1,14 @@
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J2 output). Every
+# subject is asked in process (he-inproc.sh: he_run, rcpt_run), so the one bash start is run.sh itself.
+1 *
+0 core/scripts/validate-handoff-evidence.sh
+0 core/scripts/record-only-diff.sh
+0 core/scripts/sprint-status.sh
+0 core/fixtures/story-evidence-scaffold/world.sh
+0 core/fixtures/story-evidence-scaffold/he-inproc.sh
+0 core/fixtures/story-evidence-scaffold/receipt-bl809.sh
+0 core/fixtures/story-evidence-scaffold/receipt-bl815.sh
+0 core/fixtures/story-evidence-scaffold/receipt-bl843.sh
+0 core/fixtures/story-evidence-scaffold/receipt-bl845.sh
+0 core/fixtures/lib/mutant.sh
+0 core/fixtures/story-evidence-receipts/run.sh

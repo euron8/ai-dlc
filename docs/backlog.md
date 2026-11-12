@@ -2255,3 +2255,4 @@ Receipt: `verify: manual`. The receipt shape is a reconcile fixture arm that see
 Provenance: batch 255, cluster F3-smoke-surface; id allocated by the lead.
 
 verify: manual
+

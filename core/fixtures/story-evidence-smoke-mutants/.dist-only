@@ -1,0 +1,8 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a MUTATION BATTERY behind a shipped fixture: every mutant edits a copy of core's own
+validate-handoff-evidence.sh (written beside its siblings in a copy of core/scripts/) to restore a defect
+story-evidence-scaffold's receipt-bl845.sh (BL-845's smoke arms) was built against, and is scored against
+that receipt's cells, whose full control call and RAN SET story-evidence-receipts runs; that fixture ships,
+and this one sources it. A consumer runs those arms; the mutants prove they can fail, which is the
+distribution's property to establish, not the consumer's.

@@ -1954,7 +1954,6 @@ if [ "$MODE" = derive8 ]; then
       if (f in R) r = R[f]
       else if (f == "retired-fixture-orphan") r = "its mutant battery selects the subject through AI_DLC_RFO_DETECT; that channel must move to argv before run.sh can be scrubbed"
       else if (f == "consumer-machinery-inventory") r = "its mutant battery selects the subject through AI_DLC_CMI_VALIDATOR; that channel must move to argv before run.sh can be scrubbed"
-      else if (f == "story-evidence-scaffold") r = "its AI_DLC_* scrub is inside receipt-bl815.sh, which run.sh RUNS rather than sources, so run.sh itself is unscrubbed"
       else if ($3 == "order") r = "run.sh starts a script or sources a file before its AI_DLC_* scrub; unexposed at the env-scrub census"
       else r = "run.sh carries no AI_DLC_* scrub; unexposed at the env-scrub census, so it changed no verdict under a hostile environment"
       print f "\t" r }' "$WORK/c.h8allow" "$WORK/c.h8" | LC_ALL=C sort
