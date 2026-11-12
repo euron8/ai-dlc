@@ -272,6 +272,10 @@
 # GM1's mutant is built and scored IN p_gmaint on every run (G's `declare -f` body less -c maintenance.auto=false, cmp-guarded,
 # the flag counted 1 -> 0); it has no mut_run call, so it is never dealt and never reaches mutant_killed.
 # MUTANT-MATRIX gm-no-maint decides=gmaint twins=- why=the mutant is built inside the one arm it decides and is scored there on every run, so no other cell runs it
+# GM1's must-fire (BL-980) is a mutant of the same kind: receipt-bl980.sh (which p_gmaint runs) copies receipt-bl904.sh
+# less every -c maintenance.auto=false, drives it as lib.sh does and requires at least one spawn, on every run; one that
+# does not spawn makes the receipt, and so the fixture, BROKEN.
+# MUTANT-MATRIX gm-mustfire-bl904 decides=gmaint twins=- why=the mutant is built inside the receipt the one arm it decides runs, and is scored there on every run, so no other cell runs it
 # MUTANT-MATRIX M74 decides=run_rec.rr-mq twins=run_rec.rr-mu
 # MUTANT-MATRIX M75 decides=run_rec.rr-c-lrl twins=run_rec.rr-c-lru
 # MUTANT-MATRIX M76 decides=run_rec.rr-s-lru twins=run_rec.rr-c-lrl
@@ -865,8 +869,8 @@ if ! gm_has_maint; then
 gm_vacuous
 ok "GM1 VACUOUS on git $GM_GITV: this git predates git maintenance (2.29), so no commit can spawn the child GM1 counts; no spawn was read and the arm asserts nothing here"
 else
-arm2 gmaint "GM1 (BL-868): a commit through lib.sh's G spawns 0 'git maintenance run' children (trace2 child_start), so no detached repack races a later cp -R of the repository; the same commit through raw git spawns 1 (the control), and G with -c maintenance.auto=false stripped spawns 1 (the mutant)" \
-            "GM1: G lets a commit spawn auto-maintenance, or the arm cannot tell"
+arm2 gmaint "GM1 (BL-868, BL-980): a commit through lib.sh's G spawns 0 'git maintenance run' children (trace2 child_start), so no detached repack races a later cp -R of the repository; the same commit through raw git spawns 1 (the control), and G with -c maintenance.auto=false stripped spawns 1 (the mutant); and receipt-bl980.sh answers BL980 OK: every receipt-*.sh in this directory (the line above names them), run as lib.sh runs it, commits and spawns 0 across its whole run, and receipt-bl904.sh less its flag (the must-fire) spawns at least 1" \
+            "GM1: a commit through G or a receipt spawns auto-maintenance, or the arm cannot tell"
 fi
 fi # sg gmaint
 

@@ -31,7 +31,7 @@ ROOT="${2:-$PWD}"
   || { echo "REFUSED: no qa.md under the project root $ROOT" >&2; exit 9; }
 ( set +u +o pipefail; . "$MRS" && declare -F mrs_main > /dev/null ) > /dev/null 2>&1 \
   || { echo "REFUSED: $MRS defines no mrs_main when sourced" >&2; exit 9; }
-G() { git -c user.name=receipt -c user.email=receipt@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+G() { git -c user.name=receipt -c user.email=receipt@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null -c maintenance.auto=false "$@"; }
 R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl956.XXXXXX")" || exit 9
 trap 'rm -rf "$R"' EXIT
 T="$(cd -P "$R" && pwd -P)/repo"

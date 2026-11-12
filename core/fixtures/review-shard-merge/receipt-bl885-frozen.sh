@@ -22,7 +22,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 RO="$(cd "$(dirname "$1")" && pwd)/record-only-diff.sh"
 ( set +u +o pipefail; . "$RO" && declare -F ro_main > /dev/null ) > /dev/null 2>&1 \
   || { echo "REFUSED: $RO defines no ro_main when sourced" >&2; exit 9; }
-G() { git -c user.name=receipt -c user.email=receipt@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+G() { git -c user.name=receipt -c user.email=receipt@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null -c maintenance.auto=false "$@"; }
 R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl885-frozen.XXXXXX")" || exit 9
 trap 'rm -rf "$R"' EXIT
 T="$(cd -P "$R" && pwd -P)/repo"

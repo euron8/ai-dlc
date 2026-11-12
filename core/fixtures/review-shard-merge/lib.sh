@@ -258,11 +258,13 @@ gm_vacuous() {
   GM_GITV="$v"
 }
 p_gmaint() { # GM1: a G commit spawns 0 maintenance children; raw git spawns 1 (control); G with the flag stripped spawns 1
-  local r="$WORK/gm-repo" fx ctl mu n0 n1
+  local r="$WORK/gm-repo" fx ctl mu n0 n1 last
   WHY=""
-  G init -q "$r" || { WHY=" the probe repository was not built"; return 1; }
+  # Each drive commits into a FRESH repository of its own, so the control's detached maintenance child cannot race the
+  # mutant's counted commit (or G's).
+  G init -q "$r" && G init -q "$WORK/gm-repo-ctl" && G init -q "$WORK/gm-repo-mut" || { WHY=" the probe repositories were not built"; return 1; }
   fx="$(gm_children G "$r" 1)" || fx=""
-  ctl="$(gm_children gm_raw "$r" 2)" || ctl=""
+  ctl="$(gm_children gm_raw "$WORK/gm-repo-ctl" 2)" || ctl=""
   [ "$ctl" = 1 ] || { echo "FIXTURE BROKEN: GM1's control, one commit through raw $(command -v git), spawned '${ctl}' maintenance children (want 1): this git cannot show the defect, so GM1 would pass whatever G sets" >&2; exit 2; }
   # The mutant: G's own body with the flag stripped, built from `declare -f G` so it is the shipped wrapper less one word.
   declare -f G > "$WORK/gm-g.orig" || { WHY=" declare -f G failed"; return 1; }
@@ -272,9 +274,21 @@ p_gmaint() { # GM1: a G commit spawns 0 maintenance children; raw git spawns 1 (
   ! cmp -s "$WORK/gm-g.orig" "$WORK/gm-g.mut" && [ "$n0" = 1 ] && [ "$n1" = 0 ] && . "$WORK/gm-g.mut" \
     && [ "$(type -t gm_mut)" = function ] \
     || { echo "FIXTURE BROKEN: GM1's mutant did not apply (flag in G $n0 time(s), in the mutant $n1, want 1 and 0)" >&2; exit 2; }
-  mu="$(gm_children gm_mut "$r" 3)" || mu=""
+  mu="$(gm_children gm_mut "$WORK/gm-repo-mut" 3)" || mu=""
   [ "$fx" = 0 ] || { WHY=" a commit through G spawned '${fx}' git maintenance run child(ren), want 0"; return 1; }
   [ "$mu" = 1 ] || { WHY=" the mutant (G less -c maintenance.auto=false) spawned '${mu}', want 1: the arm cannot fail"; return 1; }
+  # BL-980: every receipt-*.sh in this directory (receipt-bl904.sh copies the repository its commits just wrote) is
+  # DRIVEN by receipt-bl980.sh, run with the arguments its call site below gives it and judged by the maintenance
+  # children its whole run spawns; that receipt owns its must-fire. Its LAST stdout line is the verdict (stderr kept
+  # apart, so a git warning cannot turn a pass into BROKEN). A BROKEN receipt is a broken fixture, never a FAIL.
+  GM_RO="$(bash "$LIB_DIR/receipt-bl980.sh" "$1" "$PROJ" 2> "$WORK/gm-receipt.err")"; GM_RRC=$?
+  last="${GM_RO##*$'\n'}"
+  case "$GM_RRC:$last" in
+    "0:BL980 OK receipts="*) ;;
+    "1:BL980 FAIL "*) WHY=" ${last#BL980 FAIL }"; return 1 ;;
+    *) echo "FIXTURE BROKEN: GM1's receipt-bl980.sh exited $GM_RRC: $last $(head -c 400 "$WORK/gm-receipt.err" | tr '\n' ' ')" >&2; exit 2 ;;
+  esac
+  printf '        %s\n' "$last"
 }
 lines() { # <file> <n> <tag> -> n distinct lines
   local i=0; mkdir -p "$(dirname "$1")"
