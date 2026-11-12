@@ -4,3 +4,4 @@
 !core/hooks/ai-dlc-handoff-pending.sh
 # arm 8 hands the pause-routing vocabulary to the hook through AI_DLC_PAUSE_ROUTING_SCHEMA.
 core/schemas/pause-routing.json
+core/fixtures/lib/mutant.sh

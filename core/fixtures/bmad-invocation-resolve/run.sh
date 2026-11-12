@@ -61,13 +61,15 @@ R="$ROOT/rules"
 rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $DIR" >&2; exit 2; }
+B_adj=0; B_adjnm=0; B_clean=0; B_deadshim=0
 # Run, then read $?. Never `out=$(...)` for a verdict.
 rcof() { bash "$V" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1; echo $?; }
 
 echo "bmad-invocation-resolve:"
 
 g=$(rcof)
-[ "$g" -eq 0 ] && ok "OVER-FIRE CONTROL: healthy names pass (a self-contained skill and a loader whose target exists)" \
+[ "$g" -eq 0 ] && { ok "OVER-FIRE CONTROL: healthy names pass (a self-contained skill and a loader whose target exists)"; B_clean=1; } \
                || bad "the clean rulebook exited $g, expected 0"
 
 # --- the path segment is not a call site --------------------------------------
@@ -101,7 +103,7 @@ rm -f "$R/steps/dangling.md"
 
 printf 'Invoke `/bmad-dead-shim` here.\n' > "$R/steps/shim.md"
 g=$(rcof)
-[ "$g" -eq 1 ] && ok "a DEAD SHIM FAILS — directory and SKILL.md exist, LOAD target absent" \
+[ "$g" -eq 1 ] && { ok "a DEAD SHIM FAILS — directory and SKILL.md exist, LOAD target absent"; B_deadshim=1; } \
                || bad "a dead shim exited $g, expected 1 — a directory-existence check would have passed it"
 if bash "$V" --skills-root "$S" --rules-root "$R" 2>&1 | grep -q 'is a loader for'; then
   ok "the failure names the missing load target, not just the skill"
@@ -123,7 +125,7 @@ if cmp -s "$V" "$M"; then
 else
   bash "$M" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1
   if [ $? -eq 0 ]; then
-    ok "MUTATION: neutering load-target resolution turns the dead shim green (that resolution is what fails it)"
+    mutant_killed "$B_deadshim" load-target "MUTATION: neutering load-target resolution turns the dead shim green (that resolution is what fails it)"
   else
     bad "MUTATION: the mutant still rejected the dead shim — something other than load-target resolution produced the FAIL"
   fi
@@ -147,7 +149,7 @@ if cmp -s "$V" "$MG"; then
   bad "FIXTURE ERROR: the grammar mutation matched nothing — the path-segment assertions above prove nothing"
 else
   bash "$MG" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1
-  [ $? -ne 0 ] && ok "MUTATION: the slash-only enumerator reds the clean rulebook (the grammar is what excludes the path segment)" \
+  [ $? -ne 0 ] && mutant_killed "$B_clean" slash-only-grammar "MUTATION: the slash-only enumerator reds the clean rulebook (the grammar is what excludes the path segment)" \
                || bad "MUTATION: the slash-only enumerator still passed — something other than the grammar is excluding the path segment"
 
   # The anti-neutering pairing. Same mutant, a genuinely dangling name.
@@ -266,7 +268,7 @@ adjrun() {  # <validator> <line> -> sets ADJ_RC and ADJ_NAMED (1 when adj-b is n
 }
 adjrun "$V" 'Run /bmad-live-one /bmad-adj-b next'
 [ "$ADJ_RC" -eq 1 ] && [ "$ADJ_NAMED" = 1 ] \
-  && ok "ADJ: '/bmad-live-one /bmad-adj-b' FAILS (rc 1) naming /bmad-adj-b (the shared space is not consumed)" \
+  && { ok "ADJ: '/bmad-live-one /bmad-adj-b' FAILS (rc 1) naming /bmad-adj-b (the shared space is not consumed)"; B_adj=1; } \
   || bad "ADJ: space-adjacent pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 1 naming it"
 adjrun "$V" 'Run /bmad-live-one, /bmad-adj-b next'
 [ "$ADJ_RC" -eq 1 ] && [ "$ADJ_NAMED" = 1 ] \
@@ -274,7 +276,7 @@ adjrun "$V" 'Run /bmad-live-one, /bmad-adj-b next'
   || bad "ADJ control: comma-space pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 1 naming it"
 adjrun "$V" 'Run /bmad-live-one/bmad-adj-b next'
 [ "$ADJ_RC" -eq 0 ] && [ "$ADJ_NAMED" = 0 ] \
-  && ok "ADJ near-miss: '/bmad-live-one/bmad-adj-b' does not name /bmad-adj-b (a path, rc 0)" \
+  && { ok "ADJ near-miss: '/bmad-live-one/bmad-adj-b' does not name /bmad-adj-b (a path, rc 0)"; B_adjnm=1; } \
   || bad "ADJ near-miss: slash-joined pair rc=$ADJ_RC, /bmad-adj-b named=$ADJ_NAMED, expected rc 0 and not named"
 adjrun "$V" 'Run x /bmad-live-one-/bmad-adj-b next'
 [ "$ADJ_RC" -eq 0 ] && [ "$ADJ_NAMED" = 0 ] \
@@ -299,7 +301,7 @@ else
   adjrun "$MA1" 'Run /bmad-live-one /bmad-adj-b next'; m1o=$ADJ_RC; m1on=$ADJ_NAMED
   adjrun "$MA1" 'Run /bmad-live-one, /bmad-adj-b next'; m1c=$ADJ_RC; m1cn=$ADJ_NAMED
   [ "$m1o" -eq 0 ] && [ "$m1on" = 0 ] \
-    && ok "MUTATION ADJ-M1: the consuming grep loses /bmad-adj-b on the space-adjacent pair (rc 0, not named; the scanner is what keeps it)" \
+    && mutant_killed "$B_adj" ADJ-M1 "MUTATION ADJ-M1: the consuming grep loses /bmad-adj-b on the space-adjacent pair (rc 0, not named; the scanner is what keeps it)" \
     || bad "MUTATION ADJ-M1: the consuming grep gave rc=$m1o named=$m1on on the space-adjacent pair, expected rc 0 not named"
   [ "$m1c" -eq 1 ] && [ "$m1cn" = 1 ] \
     && ok "MUTATION ADJ-M1 PAIRING: the consuming grep still names /bmad-adj-b after a comma (rc 1; the mutant ran and is not a dead copy)" \
@@ -307,14 +309,14 @@ else
   adjrun "$MA2" 'Run /bmad-live-one/bmad-adj-b next'; m2n=$ADJ_RC; m2nn=$ADJ_NAMED
   adjrun "$MA2" 'Run /bmad-live-one /bmad-adj-b next'; m2o=$ADJ_RC; m2on=$ADJ_NAMED
   [ "$m2n" -eq 1 ] && [ "$m2nn" = 1 ] \
-    && ok "MUTATION ADJ-M2: offsets measured from the cut remainder name /bmad-adj-b in the slash-joined near-miss (rc 1; line-start offsets are what reject it)" \
+    && mutant_killed "$B_adjnm" ADJ-M2 "MUTATION ADJ-M2: offsets measured from the cut remainder name /bmad-adj-b in the slash-joined near-miss (rc 1; line-start offsets are what reject it)" \
     || bad "MUTATION ADJ-M2: the remainder-relative scanner gave rc=$m2n named=$m2nn on the slash-joined pair, expected rc 1 naming it"
   [ "$m2o" -eq 1 ] && [ "$m2on" = 1 ] \
     && ok "MUTATION ADJ-M2 PAIRING: the remainder-relative scanner still names the space-adjacent offender (rc 1; the mutant ran)" \
     || bad "MUTATION ADJ-M2 PAIRING: the remainder-relative scanner gave rc=$m2o named=$m2on on the offender, expected rc 1 naming it"
   adjrun "$MA3" 'Run /bmad-live-one/bmad-adj-b next'; m3n=$ADJ_RC; m3nn=$ADJ_NAMED
   [ "$m3n" -eq 1 ] && [ "$m3nn" = 1 ] \
-    && ok "MUTATION ADJ-MG: with the context test removed the slash-joined near-miss names /bmad-adj-b (rc 1; the context test is what rejects it)" \
+    && mutant_killed "$B_adjnm" ADJ-MG "MUTATION ADJ-MG: with the context test removed the slash-joined near-miss names /bmad-adj-b (rc 1; the context test is what rejects it)" \
     || bad "MUTATION ADJ-MG: the context-free scanner gave rc=$m3n named=$m3nn on the slash-joined pair, expected rc 1 naming it"
 fi
 

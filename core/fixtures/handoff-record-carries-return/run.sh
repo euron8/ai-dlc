@@ -57,6 +57,8 @@ NAME="handoff-record-carries-return"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_d_exclusion=0
 broken() { printf '%s: FIXTURE BROKEN — %s\n' "$NAME" "$1" >&2; exit 2; }
 
 resolve_root() {  # <start-dir> -> "<layout> <root>", or rc 1
@@ -365,7 +367,7 @@ probe_d() {
   printf 'report it under `gaps`; the lead routes that to a dev.\n' > "$T/ro/protected-path-editor.md"
   printf 'Put the blocker in your return and finish.\n' > "$T/sk/crosswalk.md"
   if out="$(d_verdict "$T/sk" "$T/ro")"; then
-    case "$out" in "PASS R3: 1 of 1 "*) ok "(d) probe: near-miss (shape wrapped onto a \`## Gaps\` line) passes; protected-path-editor.md excluded" ;;
+    case "$out" in "PASS R3: 1 of 1 "*) ok "(d) probe: near-miss (shape wrapped onto a \`## Gaps\` line) passes; protected-path-editor.md excluded"; B_d_exclusion=1 ;;
       *) bad "(d) probe: near-miss passed with the wrong site count: $out" ;; esac
   else bad "(d) probe: the near-miss carrying S5 failed: $out"; fi
   printf 'returning only `{artifact_path, summary, gaps}`. Then resume.\n' > "$T/sk/steps/offender.md"
@@ -392,7 +394,7 @@ probe_d() {
   printf 'consumer_other_file: .claude/skills/ai-dlc/other.md\n' > "$T/sk/layer-contract.yaml"
   if out="$(d_verdict "$T/sk" "$T/ro")"; then bad "(d) probe: crosswalk.md passed although the contract no longer names it consumer-owned"
   else
-    case "$out" in *"sk/crosswalk.md:1"*) ok "(d) probe: MUTANT contract not naming crosswalk.md flags it (the exclusion discriminates)" ;;
+    case "$out" in *"sk/crosswalk.md:1"*) mutant_killed "$B_d_exclusion" contract-not-naming-crosswalk "(d) probe: MUTANT contract not naming crosswalk.md flags it (the exclusion discriminates)" ;;
       *) bad "(d) probe: crosswalk.md mutant failed for the wrong reason: $out" ;; esac
   fi
   mx_d contract-not-naming-crosswalk d-exclusion "sk/crosswalk.md:1"

@@ -3,3 +3,4 @@
 core/schemas/
 core/skills/
 core/team-roles/
+core/fixtures/lib/mutant.sh

@@ -4,3 +4,4 @@
 core/schemas/
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

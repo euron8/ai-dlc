@@ -37,6 +37,8 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
+B_a1=0; B_a2=0; B_harn=0
 
 # Drive a hook with a prompt. $1 hook, $2 project dir, $3 prompt.
 fire() {
@@ -54,7 +56,7 @@ echo "operator-request-capture:"
 # --- Assertion 1: THE FIX — the kickoff is captured with NO snapshot ----------
 fire "$HOOK" "$FRESH" "/ai-dlc $ASK"
 if [ "$(entries "$FRESH_REQ")" = "1" ]; then
-  ok "the first /ai-dlc of a project is captured, with no snapshot present"
+  ok "the first /ai-dlc of a project is captured, with no snapshot present"; B_a1=1
 else
   bad "the sprint kickoff was NOT captured — capture is gated on a pipeline that does not exist yet at kickoff, so the one request no later artifact can reconstruct is the one that is lost"
 fi
@@ -67,7 +69,7 @@ B="$(body "$FRESH_REQ")"
 case "$B" in
   /*) bad "the stored body still carries the leading command token — the record cannot be cited against the transcript, which is the one property that makes it evidence" ;;
   *)  case "$B" in
-        *"$ASK"*) ok "the stored body is the operator's ask, with the command token split off" ;;
+        *"$ASK"*) ok "the stored body is the operator's ask, with the command token split off"; B_a2=1 ;;
         *)        bad "the stored body does not contain the ask at all: $(printf '%s' "$B" | head -c 60)" ;;
       esac ;;
 esac
@@ -162,7 +164,7 @@ else
   mkdir -p "$A_FRESH" "$A_LIVE/_bmad-output"; cp "$LIVE/_bmad-output/pipeline-snapshot.md" "$A_LIVE/_bmad-output/"
   fire "$MUT_A" "$A_FRESH" "/ai-dlc $ASK"
   if [ "$(entries "$A_FRESH/_bmad-output/operator-requests-history.md")" = "0" ]; then
-    ok "mutant A: gating capture on a live pipeline loses the kickoff — assertion 1 has teeth"
+    mutant_killed "$B_a1" mutant-A "mutant A: gating capture on a live pipeline loses the kickoff — assertion 1 has teeth"
   else
     bad "MUTANT A DID NOT FAIL — the kickoff is captured even when capture requires a snapshot, so assertion 1 is not testing the gate"
   fi
@@ -194,7 +196,7 @@ else
   fire "$MUT_B" "$B_P" "/ai-dlc $ASK"
   BB="$(body "$B_P/_bmad-output/operator-requests-history.md")"
   case "$BB" in
-    /*) ok "mutant B: without the split the body keeps the command token — assertion 2 has teeth" ;;
+    /*) mutant_killed "$B_a2" mutant-B "mutant B: without the split the body keeps the command token — assertion 2 has teeth" ;;
     *)  bad "MUTANT B DID NOT FAIL — the body has no command token even without the split, so assertion 2 is not testing it" ;;
   esac
   # Must fail ONLY its own assertion: capture itself still happens.
@@ -228,7 +230,7 @@ before_req="$(entries "$LIVE_REQ")"
 rm -f "$LIVE_FLAG"
 fire "$HOOK" "$LIVE" "$NOTIF"
 if [ "$(entries "$LIVE_REQ")" = "$before_req" ]; then
-  ok "a harness-raised prompt is NOT captured as an operator request"
+  ok "a harness-raised prompt is NOT captured as an operator request"; B_harn=1
 else
   bad "a harness-raised prompt was recorded as an operator request — Check 33 takes the newest entry, so a background task finishing before the gate disarms it"
 fi
@@ -264,7 +266,7 @@ C_MUT="$WORK/mut-noschema"; rm -rf "$C_MUT"; mkdir -p "$C_MUT/_bmad-output"
 cp "$LIVE/_bmad-output/pipeline-snapshot.md" "$C_MUT/_bmad-output/pipeline-snapshot.md"
 fire "$HOOK" "$C_MUT" "$NOTIF"
 if [ "$(entries "$C_MUT/_bmad-output/operator-requests-history.md")" -ge 1 ]; then
-  ok "MUTATION — with no declaration the notification IS captured again: the schema is what the assertions above test"
+  mutant_killed "$B_harn" no-declaration "MUTATION — with no declaration the notification IS captured again: the schema is what the assertions above test"
 else
   bad "MUTATION — the notification was skipped with no declaration present, so the assertions above are not testing the schema"
 fi

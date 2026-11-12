@@ -470,6 +470,7 @@ f_score() { # f_score <reconcile-dir> -> failing cells then `.`
   case "$o" in 'rc=125|'|'M-CM-)lan x|rc=0|') ;; *) r="${r}F1" ;; esac
   printf '%s.' "$r"
 }
+B_f=0
 if ! grep -qx 'en_US.UTF-8' <<<"$N_LOCALES"; then
   bad "FIXTURE BROKEN -- en_US.UTF-8 is not installed here, so the fd-limit fold cell cannot be expressed"
 else
@@ -500,7 +501,7 @@ PY
     held="$( exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null
              printf '%s/%s' "$(f_score "$RLP_SRC")" "$(f_score "$FM")" )"
     case "$held" in
-      ./F1.) ok "norm_lines F0-F1 with fds 3-9 inherited: real lib.sh passes and the norm-fallthrough mutant still fails exactly [F1]" ;;
+      ./F1.) mutant_killed "$B_f" norm-fallthrough "norm_lines F0-F1 with fds 3-9 inherited: real lib.sh passes and the norm-fallthrough mutant still fails exactly [F1]" ;;
       *)     bad "norm_lines cells depend on inherited fds: with 3-9 held, real/mutant scored [$held], expected [./F1.]" ;;
     esac
   fi

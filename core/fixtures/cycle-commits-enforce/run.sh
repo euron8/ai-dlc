@@ -48,6 +48,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh beside $HERE" >&2; exit 2; }
+B_carve=0; B_prior=0; B_rows=0; B_vac=0
 
 LOG="_bmad-output/validation-cycle-log.md"
 
@@ -101,7 +103,7 @@ if ! grep -q '| 2 |' "$WORK/$LOG" || grep -q '| 3 |' "$WORK/$LOG"; then
 fi
 bash "$VALIDATOR" ai-dlc/retro/sprint-900 >"$WORK/out.txt" 2>&1
 if [ "$?" = "1" ] && grep -q 'FAIL' "$WORK/out.txt"; then
-  ok "2 log rows (< 3) fails"
+  ok "2 log rows (< 3) fails"; B_rows=1
 else
   bad "an under-cycled artifact did not fail"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -116,7 +118,7 @@ if cmp -s "$VALIDATOR" "$MUTANT"; then
 fi
 bash "$MUTANT" ai-dlc/retro/sprint-900 >"$WORK/mut.txt" 2>&1
 if [ "$?" = "0" ]; then
-  ok "MUTATION: disabling the log-rows guard makes the 2-row input pass (FAIL was real)"
+  mutant_killed "$B_rows" log-rows-guard "MUTATION: disabling the log-rows guard makes the 2-row input pass (FAIL was real)"
 else
   bad "MUTATION: the 2-row input still failed without the guard"; sed 's/^/        /' "$WORK/mut.txt"
 fi
@@ -166,7 +168,7 @@ bash "$VALIDATOR" ai-dlc/retro/sprint-900 >"$WORK/out.txt" 2>&1
 rc=$?
 if [ "$rc" = "0" ] && grep -q 'UNVERIFIABLE (history rewritten)' "$WORK/out.txt" \
    && grep -q 'RESULT: PASS' "$WORK/out.txt"; then
-  ok "a prior sprint's unreachable SHAs report UNVERIFIABLE and do not fail the current sprint"
+  ok "a prior sprint's unreachable SHAs report UNVERIFIABLE and do not fail the current sprint"; B_prior=1
 else
   bad "a prior sprint's dead SHAs still fail the run (rc=$rc)"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -224,7 +226,7 @@ if cmp -s "$VALIDATOR" "$MUT2"; then
 else
   bash "$MUT2" ai-dlc/retro/sprint-900 >"$WORK/mut2.txt" 2>&1
   if [ "$?" = "1" ] && ! grep -q 'UNVERIFIABLE' "$WORK/mut2.txt"; then
-    ok "MUTATION: without the prior-sprint test, dead SHAs fail the run again (assertion 6 is real)"
+    mutant_killed "$B_prior" prior-sprint-test "MUTATION: without the prior-sprint test, dead SHAs fail the run again (assertion 6 is real)"
   else
     bad "MUTATION: the run still passed without the prior-sprint test — assertion 6 is vacuous"
     sed 's/^/        /' "$WORK/mut2.txt"
@@ -259,7 +261,7 @@ if [ "$rc" = "4" ] && grep -q 'NOTHING MEASURED' "$WORK/vac.txt" \
    && ! grep -q 'RESULT: PASS' "$WORK/vac.txt" \
    && grep -q 'MERGED (prior sprint)' "$WORK/vac.txt" \
    && grep -q 'the log parsed 1 section(s)' "$WORK/vac.txt"; then
-  ok "a log with only PRIOR-sprint sections exits 4 (NOTHING MEASURED), never a bare PASS"
+  ok "a log with only PRIOR-sprint sections exits 4 (NOTHING MEASURED), never a bare PASS"; B_vac=1
 else
   bad "an all-exempted run still reported a pass (rc=$rc)"; sed 's/^/        /' "$WORK/vac.txt"
 fi
@@ -346,7 +348,7 @@ if cmp -s "$VALIDATOR" "$MUT3"; then
 else
   bash "$MUT3" ai-dlc/retro/sprint-900 >"$WORK/mut3.txt" 2>&1
   if [ "$?" = "0" ] && grep -q 'RESULT: PASS' "$WORK/mut3.txt"; then
-    ok "MUTATION: without the arm, the all-exempted log prints the old bare PASS (the 4 was real)"
+    mutant_killed "$B_vac" non-vacuity "MUTATION: without the arm, the all-exempted log prints the old bare PASS (the 4 was real)"
   else
     bad "MUTATION: the all-exempted log did not pass without the arm — assertion 9 is vacuous"
     sed 's/^/        /' "$WORK/mut3.txt"
@@ -376,7 +378,7 @@ bash "$VALIDATOR" feature/ts-carveout >"$WORK/ts.txt" 2>&1
 rc=$?
 if [ "$rc" = "0" ] && grep -q 'EXEMPT (Rule 8 carve-out: convergence series, Check 24)' "$WORK/ts.txt" \
    && grep -q 'Sprint 900 retro .*PASS' "$WORK/ts.txt" && ! grep -q 'FAIL (' "$WORK/ts.txt"; then
-  ok "a Test Strategy section with AR-only commits reads EXEMPT, not FAIL (Rule 8 carve-out)"
+  ok "a Test Strategy section with AR-only commits reads EXEMPT, not FAIL (Rule 8 carve-out)"; B_carve=1
 else
   bad "the Test Strategy section was not exempted (rc=$rc)"; sed 's/^/        /' "$WORK/ts.txt"
 fi
@@ -389,7 +391,7 @@ if cmp -s "$VALIDATOR" "$MUT4"; then
 else
   bash "$MUT4" feature/ts-carveout >"$WORK/mut4.txt" 2>&1
   if [ "$?" = "1" ] && grep -q 'test-strategy .*FAIL (missing cycle type: party-mode)' "$WORK/mut4.txt"; then
-    ok "MUTATION: without the carve-out the Test Strategy section FAILs (assertion 13 is real)"
+    mutant_killed "$B_carve" carve-out "MUTATION: without the carve-out the Test Strategy section FAILs (assertion 13 is real)"
   else
     bad "MUTATION: the Test Strategy section did not FAIL without the carve-out — assertion 13 is vacuous"
     sed 's/^/        /' "$WORK/mut4.txt"

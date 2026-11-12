@@ -58,6 +58,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_clean=0
 
 DIST="$WORK/dist"
 GV="skills/ai-dlc/steps/gate-validation.md"
@@ -163,7 +165,7 @@ fi
 # 1. A CLEAN CATALOG PRODUCES NO ROW.
 # =============================================================================
 if [ -z "$(relabel_row "$OUT_CLEAN")" ]; then
-  ok "a consumer whose catalog has NO unlabelled collisions gets no \`RESOLVED relabel\` row"
+  ok "a consumer whose catalog has NO unlabelled collisions gets no \`RESOLVED relabel\` row"; B_clean=1
 else
   bad "the clean tree still claims a relabel: $(relabel_row "$OUT_CLEAN" | tr '\t' '|') — this is PC-S332, the row asserting work that did not occur"
 fi
@@ -228,7 +230,7 @@ else
   C_MUT="$WORK/c-mut"; mkconsumer "$C_MUT" clean || { echo "FIXTURE ERROR: mkconsumer failed" >&2; exit 2; }
   OUT_MUT="$(bash "$MUT/apply.sh" "$DIST" "$BASE" "$C_MUT" "$THEIRS" 2>&1)"
   if [ -n "$(relabel_row "$OUT_MUT")" ]; then
-    ok "MUTANT relabel-guard-widened puts the row back on a clean tree — assertions 1 and 2 are falsifiable"
+    mutant_killed "$B_clean" relabel-guard-widened "MUTANT relabel-guard-widened puts the row back on a clean tree — assertions 1 and 2 are falsifiable"
   else
     bad "MUTANT relabel-guard-widened produced no row either: assertions 1 and 2 pass over a program that never emits this row at all, and would keep passing if the arm were deleted"
   fi

@@ -3,3 +3,4 @@
 # its mutants. The preamble is non-discriminating by ruling, so it is declared and never required.
 !core/skills/ai-dlc-update/reconcile/
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

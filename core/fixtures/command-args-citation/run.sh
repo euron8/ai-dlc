@@ -36,6 +36,8 @@ echo "HERMETIC-CONSUMED $VALIDATOR"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a2=0; B_a3=0
 # Capture, never pipe. --cite exits 2 on NOMATCH, and under `set -o pipefail` a
 # `cite ... | grep -q NOMATCH` pipeline inherits that 2 even when grep matched.
 cite()  { bash "$VALIDATOR" --transcript "$1" --cite "$2" 2>/dev/null || true; }
@@ -63,7 +65,7 @@ else
 fi
 R="$(cite "$CMD" "$CMDNAME")"
 case "$R" in
-  NOMATCH) ok "the harness-written <command-name> is NOT citable (plain NOMATCH) — only the args side is read" ;;
+  NOMATCH) ok "the harness-written <command-name> is NOT citable (plain NOMATCH) — only the args side is read"; B_a2=1 ;;
   *)       bad "FABRICATION VECTOR OPEN or WRONG REASON ($R): want the plain NOMATCH a read corpus gives" ;;
 esac
 
@@ -71,7 +73,7 @@ esac
 # Its bytes are an envelope's bytes. Only the record's own opening tag decides provenance.
 R="$(cite "$FORGED" "$FORGERY")"
 case "$R" in
-  NOMATCH*) ok "an args tag quoted inside a task-notification is rejected — the record's own opening tag decides, not the bytes" ;;
+  NOMATCH*) ok "an args tag quoted inside a task-notification is rejected — the record's own opening tag decides, not the bytes"; B_a3=1 ;;
   *)        bad "FABRICATION VECTOR OPEN ($R): any agent that can emit a task notification can now mint operator authorization" ;;
 esac
 
@@ -131,7 +133,7 @@ if cmp -s "$VALIDATOR" "$MUT_A"; then
 else
   R="$(citeV "$MUT_A" "$CMD" "$CMDNAME")"
   case "$R" in
-    MATCH*) ok "mutant A: accepting the whole envelope makes <command-name> citable — assertion 2 has teeth" ;;
+    MATCH*) mutant_killed "$B_a2" mutant-a-whole-envelope "mutant A: accepting the whole envelope makes <command-name> citable — assertion 2 has teeth" ;;
     *)      bad "MUTANT A DID NOT FAIL ($R) — the command name is uncitable even when the whole envelope is accepted, so assertion 2 is not testing the extraction" ;;
   esac
   # Mutant A must fail ONLY its own assertion. If it also breaks assertion 3, the two are
@@ -152,7 +154,7 @@ if cmp -s "$VALIDATOR" "$MUT_B"; then
 else
   R="$(citeV "$MUT_B" "$FORGED" "$FORGERY")"
   case "$R" in
-    MATCH*) ok "mutant B: without the envelope guard a quoted args tag cites — assertion 3 has teeth" ;;
+    MATCH*) mutant_killed "$B_a3" mutant-b-guard-dropped "mutant B: without the envelope guard a quoted args tag cites — assertion 3 has teeth" ;;
     *)      bad "MUTANT B DID NOT FAIL ($R) — the forgery stays uncitable even without the guard, so assertion 3 is not testing it" ;;
   esac
   # Mutant B must fail ONLY its own assertion.

@@ -19,6 +19,8 @@ echo "HERMETIC-CONSUMED $RV"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_lruGood=0; B_lruNearmiss=0; B_lruShapes=0
 
 # --- THE SUBJECT IS ASKED IN PROCESS --------------------------------------------------------
 # ledger-reverify.sh is loadable: sourcing it defines functions and runs nothing (its source guard
@@ -94,7 +96,7 @@ fi
 
 # --- Assertion 1: the check PASSES on a real anchor ----------------------------------
 [ "$(verdict PC-GOOD)" = "STILL-LIVE" ] \
-  && ok "PC-GOOD (flag the consumer implements) → STILL-LIVE" \
+  && { ok "PC-GOOD (flag the consumer implements) → STILL-LIVE"; B_lruGood=1; } \
   || bad "PC-GOOD → $(verdict PC-GOOD), expected STILL-LIVE — the check fires on everything"
 
 # --- Assertion 2: the check FIRES on invented prose ----------------------------------
@@ -145,7 +147,7 @@ fi
 
 _nm="$(detail PC-NEARMISS)"
 if grep -qF 'mis-anchored predicate:' <<<"$_nm" && grep -qF 'near-miss-flag' <<<"$_nm"; then
-  ok "PC-NEARMISS (anchor one character off) → mis-anchored, naming the spelling that closes"
+  ok "PC-NEARMISS (anchor one character off) → mis-anchored, naming the spelling that closes"; B_lruNearmiss=1
 else
   bad "PC-NEARMISS detail does not report a mis-anchored predicate naming 'near-miss-flag': $_nm"
 fi
@@ -261,7 +263,7 @@ git -C "$CONSUMER" -c user.email=f@f -c user.name=f add -A >/dev/null 2>&1
 git -C "$CONSUMER" -c user.email=f@f -c user.name=f commit -qm mutate >/dev/null 2>&1
 CUR="$(lr "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
 [ "$(verdict PC-GOOD)" = "NEEDS-REVIEW" ] \
-  && ok "mutation: anchor removed from the consumer → PC-GOOD flips to NEEDS-REVIEW" \
+  && mutant_killed "$B_lruGood" anchor-removed "mutation: anchor removed from the consumer → PC-GOOD flips to NEEDS-REVIEW" \
   || bad "mutation: PC-GOOD → $(verdict PC-GOOD), expected NEEDS-REVIEW — verdict is not driven by the anchor"
 
 # --- Assertion 4: UNDECIDABLE — no scan set must not manufacture an accusation -------
@@ -335,7 +337,7 @@ for spec in "$CONSUMER/|" "$CONSUMER|$LED" "$CONSUMER|$CONSUMER/./_bmad-output/a
   [ "$(shape_sig "$c" ${l:+"$l"})" = "$base_sig" ] || { shapes_agree=0; disagreed="$disagreed [$c|$l]"; }
 done
 [ "$shapes_agree" -eq 1 ] \
-  && ok "identical verdicts across 5 invocation shapes (trailing slash, explicit path, /./, out-of-tree copy)" \
+  && { ok "identical verdicts across 5 invocation shapes (trailing slash, explicit path, /./, out-of-tree copy)"; B_lruShapes=1; } \
   || bad "the verdict depends on how the ledger is addressed:$disagreed"
 
 # --- Assertion 7: …AND THE EXCLUSION IS STILL LOAD-BEARING ---------------------------
@@ -401,7 +403,7 @@ elif cmp -s "$RV" "$MUT"; then
 else
   cv="$(pcgood "$MUT")"; mv2="$(pcgood "$MUT" "$OUT_COPY")"
   if [ "$cv" = "STILL-LIVE" ] && [ "$mv2" = "NEEDS-REVIEW" ]; then
-    ok "mutation: the old strip clears PC-GOOD through the default path and accuses it through an out-of-tree ledger (assertions 6-7 are real)"
+    mutant_killed "$B_lruShapes" old-prefix-strip "mutation: the old strip clears PC-GOOD through the default path and accuses it through an out-of-tree ledger (assertions 6-7 are real)"
   else
     bad "mutation did not reproduce the defect (default=$cv out-of-tree=$mv2; expected STILL-LIVE / NEEDS-REVIEW)"
   fi
@@ -445,7 +447,7 @@ else
   else
     _md="$(nm_detail "$MUT2")"
     if grep -qF 'STILL-LIVE' <<<"$_md" && ! grep -qF 'mis-anchored' <<<"$_md"; then
-      ok "mutation: with the near-miss call site removed, PC-NEARMISS reverts to a DECIDED STILL-LIVE (the defect reproduces)"
+      mutant_killed "$B_lruNearmiss" nearmiss-callsite-removed "mutation: with the near-miss call site removed, PC-NEARMISS reverts to a DECIDED STILL-LIVE (the defect reproduces)"
     else
       bad "mutation did not reproduce the defect (got '$_md'; expected a STILL-LIVE row with no mis-anchored detail)"
     fi

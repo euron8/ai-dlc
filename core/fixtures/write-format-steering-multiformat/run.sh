@@ -61,6 +61,8 @@ fails=0
 asserted=0
 ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+B_sane=0; B_arm1=0; B_arm3=0; B_arm4=0; B_m4=0
 
 echo "write-format-steering-multiformat:"
 
@@ -112,7 +114,7 @@ has_in() {   # <capture-file> <fixed-needle>  -> 0 if present
 drive base "$W_BASE"
 BASE_F="$(txt_of base)"; BASE_RC="$(rc_of base)"
 if [ "$BASE_RC" -eq 0 ] && [ -s "$BASE_F" ] && ! has_in "$BASE_F" 'FIXTURE BROKEN'; then
-  ok "SANITY: the unmutated world runs and exits 0"
+  ok "SANITY: the unmutated world runs and exits 0"; B_sane=1
 else
   bad "SANITY: the unmutated world did not run cleanly (rc=$BASE_RC) — every verdict below is about a broken harness, not about the subject"
 fi
@@ -124,7 +126,7 @@ fi
 # ==============================================================================================
 N_NAME="$(count_in "$BASE_F" "declared   $CODE_NAME ")"
 if [ "$N_NAME" -eq 2 ]; then
-  ok "one artifact name carries TWO declared-format rows (declared is a LIST, not last-write-wins)"
+  ok "one artifact name carries TWO declared-format rows (declared is a LIST, not last-write-wins)"; B_arm1=1
 else
   bad "expected exactly 2 'declared   $CODE_NAME' rows, got $N_NAME — a second format under an existing name was dropped"
 fi
@@ -147,7 +149,7 @@ fi
 # ==============================================================================================
 BASE_ANCHOR="$(receipt_anchor "$BASE_F")"
 if [ "$BASE_ANCHOR" = "$CODE_ANCHOR" ]; then
-  ok "--report prints the anchor column, and it is the declared literal [$CODE_ANCHOR]"
+  ok "--report prints the anchor column, and it is the declared literal [$CODE_ANCHOR]"; B_arm3=1
 else
   bad "the anchor column read [${BASE_ANCHOR:-<absent>}], wanted [$CODE_ANCHOR] — a receipt cannot bind on a column that is not there"
 fi
@@ -172,7 +174,7 @@ if [ -z "$CLAIMED_COVERED" ] || [ -z "$CLAIMED_POP" ]; then
 elif [ "$DERIVED_ROWS" -le "$DERIVED_COVERED" ]; then
   bad "FIXTURE STALE: $DERIVED_ROWS row(s) over $DERIVED_COVERED name(s) — with rows == names a row-summing reader prints the same number and this arm proves nothing"
 elif [ "$CLAIMED_COVERED" -eq "$DERIVED_COVERED" ]; then
-  ok "the PASS line counts DISTINCT names ($CLAIMED_COVERED of $CLAIMED_POP) over $DERIVED_ROWS rows, not rows"
+  ok "the PASS line counts DISTINCT names ($CLAIMED_COVERED of $CLAIMED_POP) over $DERIVED_ROWS rows, not rows"; B_arm4=1
 else
   bad "the PASS line claims $CLAIMED_COVERED covered; distinct names = $DERIVED_COVERED, rows = $DERIVED_ROWS — coverage is being summed over rows"
 fi
@@ -195,7 +197,7 @@ else
   bad "MUTANT 1: the validator exited $M1_RC; this world is a legal declaration by its own rules and must not fail"
 fi
 if [ -n "$M1_READ" ] && [ "$M1_READ" != "$CODE_ANCHOR" ]; then
-  ok "MUTANT 1: the receipt-shaped check REJECTS it (read [$M1_READ], wanted [$CODE_ANCHOR])"
+  mutant_killed "$B_arm3" M1 "MUTANT 1: the receipt-shaped check REJECTS it (read [$M1_READ], wanted [$CODE_ANCHOR])"
 else
   bad "MUTANT 1: the receipt-shaped check read [${M1_READ:-<absent>}] and did not reject — a wrong-substring anchor is indistinguishable from the right one"
 fi
@@ -217,7 +219,7 @@ else
   bad "MUTANT 2: the validator exited $M2_RC; a present substring is a legal declaration by its own rules"
 fi
 if [ -n "$M2_READ" ] && [ "$M2_READ" != "$CODE_ANCHOR" ]; then
-  ok "MUTANT 2: the receipt-shaped check REJECTS it (read [$M2_READ], wanted [$CODE_ANCHOR])"
+  mutant_killed "$B_arm3" M2 "MUTANT 2: the receipt-shaped check REJECTS it (read [$M2_READ], wanted [$CODE_ANCHOR])"
 else
   bad "MUTANT 2: the receipt-shaped check read [${M2_READ:-<absent>}] and did not reject — a comment-anchored declaration reads as covered"
 fi
@@ -233,7 +235,7 @@ fi
 drive m3 "$W_M3"
 M3_F="$(txt_of m3)"; M3_RC="$(rc_of m3)"
 if [ "$M3_RC" -ne 0 ] && has_in "$M3_F" 'same name and declared_in repeated'; then
-  ok "MUTANT 3 (same name AND same declared_in twice): FAILS with 'same name and declared_in repeated'"
+  mutant_killed "$B_arm1" M3 "MUTANT 3 (same name AND same declared_in twice): FAILS with 'same name and declared_in repeated'"
 else
   bad "MUTANT 3: rc=$M3_RC and no 'same name and declared_in repeated' — a copy-paste duplicate is accepted"
 fi
@@ -250,7 +252,7 @@ M4_F="$(txt_of m4)"; M4_RC="$(rc_of m4)"
 M4_SKIP=0; grep -qE '^  SKIP ' "$M4_F" && M4_SKIP=1
 M4_MISSING=0; has_in "$M4_F" 'and no file is there in any layout' && M4_MISSING=1
 if [ "$M4_RC" -eq 0 ] && [ "$M4_SKIP" -eq 1 ] && [ "$M4_MISSING" -eq 0 ]; then
-  ok "MUTANT 4 (consumer, skills component absent): exit 0 with a SKIP row, not MISSING — an unpulled component does not wedge the push"
+  ok "MUTANT 4 (consumer, skills component absent): exit 0 with a SKIP row, not MISSING — an unpulled component does not wedge the push"; B_m4=1
 else
   bad "MUTANT 4: rc=$M4_RC skip=$M4_SKIP missing=$M4_MISSING — a consumer between two pulls is being failed for a component it has not pulled"
 fi
@@ -272,7 +274,7 @@ drive m5 "$W_M5"
 M5_F="$(txt_of m5)"; M5_RC="$(rc_of m5)"
 M5_SKIP=0; grep -qE '^  SKIP ' "$M5_F" && M5_SKIP=1
 if [ "$M5_RC" -ne 0 ] && [ "$M5_SKIP" -eq 0 ] && has_in "$M5_F" 'and no file is there in any layout'; then
-  ok "MUTANT 5 (component PRESENT, declared file absent): FAILS as MISSING — the directory-present/file-absent case still discriminates"
+  mutant_killed "$B_m4" M5 "MUTANT 5 (component PRESENT, declared file absent): FAILS as MISSING — the directory-present/file-absent case still discriminates"
 else
   bad "MUTANT 5: rc=$M5_RC skip=$M5_SKIP — a real broken pointer was acquitted as an unpulled component, so the SKIP narrowing acquits everything"
 fi
@@ -347,7 +349,7 @@ mutate() {   # <tag> <sed-expr> <source-world>   -> capture in $OUTDIR/<tag>.txt
 if mutate mutA 's/declared\.setdefault(nm, \[\])\.append(e)/declared[nm] = [e]/' "$W_BASE"; then
   N="$(count_in "$OUTDIR/mutA.txt" "declared   $CODE_NAME ")"
   if [ "$N" -eq 1 ]; then
-    ok "MUTATION A (declared back to last-write-wins): drops to $N row for the shared name — arm 1 can fire"
+    mutant_killed "$B_arm1" mutA "MUTATION A (declared back to last-write-wins): drops to $N row for the shared name — arm 1 can fire"
   else
     bad "MUTATION A: still $N rows — arm 1 would pass against a reader that keeps only one format per name"
   fi
@@ -368,7 +370,7 @@ fi
 # dead. `(nm, '')` removes the declared_in from the KEY and leaves the tuple's shape intact.
 if mutate mutB "s/pair = (nm, (e.get('declared_in') or '').strip())/pair = (nm, '')/" "$W_BASE"; then
   if [ "$(rc_of mutB)" -ne 0 ] && has_in "$OUTDIR/mutB.txt" 'same name and declared_in repeated'; then
-    ok "MUTATION B (duplicate keyed on name alone): the BASE world is rejected — the (name, declared_in) key is load-bearing"
+    mutant_killed "$B_sane" mutB "MUTATION B (duplicate keyed on name alone): the BASE world is rejected — the (name, declared_in) key is load-bearing"
   else
     bad "MUTATION B: rc=$(rc_of mutB) and no duplicate report — the pair key changes no outcome, so MUTANT 3's near-miss proves nothing"
   fi
@@ -380,7 +382,7 @@ fi
 # acquitted, which is the acquittal that arm exists to catch.
 if mutate mutC 's/if not any(os\.path\.isdir(d) for d in owner_tops):/if True:/' "$W_M5"; then
   if [ "$(rc_of mutC)" -eq 0 ] && grep -qE '^  SKIP ' "$OUTDIR/mutC.txt"; then
-    ok "MUTATION C (SKIP made unconditional): MUTANT 5's broken pointer is acquitted — that arm can fire"
+    mutant_killed "$([ "$M5_RC" -ne 0 ] && echo 1)" mutC "MUTATION C (SKIP made unconditional): MUTANT 5's broken pointer is acquitted — that arm can fire"
   else
     bad "MUTATION C: rc=$(rc_of mutC) — the SKIP condition changes no outcome on a broken pointer, so the near-miss is vacuous"
   fi
@@ -394,7 +396,7 @@ if mutate mutD 's/DECLARED_OK="\$(sort -u "\$OK_NAMES_FILE" | grep -c \.)" || DE
   grep -F 'PASS —' "$OUTDIR/mutD.txt" > "$MD_LINE" 2>/dev/null
   MC="$(sed -n 's/.*PASS — \([0-9][0-9]*\) of .*/\1/p' "$MD_LINE")"
   if [ -n "$MC" ] && [ "$MC" -ne "$DERIVED_COVERED" ] && [ "$MC" -eq "$DERIVED_ROWS" ]; then
-    ok "MUTATION D (coverage summed over rows): the PASS line reads $MC (= rows), not $DERIVED_COVERED (= names) — arm 4 can fire"
+    mutant_killed "$B_arm4" mutD "MUTATION D (coverage summed over rows): the PASS line reads $MC (= rows), not $DERIVED_COVERED (= names) — arm 4 can fire"
   else
     bad "MUTATION D: the PASS line reads [${MC:-<absent>}] against $DERIVED_COVERED names / $DERIVED_ROWS rows — arm 4 cannot tell rows from names"
   fi
@@ -413,7 +415,7 @@ if mutate mutE "s/ :: %s :: anchor=%s' % (tag, nm, where, e.get('kind', '?'), an
   A="$(receipt_anchor "$OUTDIR/mutE.txt")"
   E_ROWS="$(count_in "$OUTDIR/mutE.txt" "declared   $CODE_NAME ")"
   if [ -z "$A" ] && [ "$E_ROWS" -eq 2 ]; then
-    ok "MUTATION E (anchor column removed): the rows are still there and the receipt reads nothing — arms 3/M1/M2 can fire"
+    mutant_killed "$B_arm3" mutE "MUTATION E (anchor column removed): the rows are still there and the receipt reads nothing — arms 3/M1/M2 can fire"
   else
     bad "MUTATION E: receipt read [${A:-<empty>}] over $E_ROWS row(s) — the anchor column is not what those arms bind on"
   fi

@@ -95,6 +95,8 @@ mkdir -p "$WORK/_bmad-output/planning-artifacts" "$WORK/docs" "$WORK/.claude/tea
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+B_a2b=0; B_a2e=0; B_a2f=0; B_a2d_penv=0; B_a2d_env=0; B_a4=0; B_a4b=0; B_a8d=0; B_a10=0; B_a10b=0
 
 # The consumer's config block, in the layout install.sh writes. `aiDlcRoles.<role>.model`
 # is a KEY into `aiDlcModels`, never a model string -- the same two-hop resolution
@@ -165,7 +167,7 @@ fi
 settings 'sonnet' 'sonnet'
 run >/dev/null
 if [ "$(pool_of)" = "330000" ]; then
-  ok "a bare 'sonnet' analyst resolves to a 330000-tok pool (bare-alias default)"
+  ok "a bare 'sonnet' analyst resolves to a 330000-tok pool (bare-alias default)"; B_a2b=1
 else
   bad "a bare 'sonnet' analyst resolved to '$(pool_of)', expected 330000"
 fi
@@ -191,7 +193,7 @@ for full in 'claude-sonnet-4-5' 'global.anthropic.claude-sonnet-4-6' \
   settings 'a' "$full"
   run >/dev/null
   if [ "$(pool_of)" = "66000" ]; then
-    ok "a full id '$full' without [1m] resolves to 66000"
+    ok "a full id '$full' without [1m] resolves to 66000"; B_a2e=1
   else
     bad "a full id '$full' resolved to '$(pool_of)', expected 66000 -- substring defaulting is back"
   fi
@@ -212,7 +214,7 @@ fi
 settings 'haiku' 'claude-haiku-4-5'
 AI_DLC_MODEL_HAIKU_WINDOW=1m bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "330000" ]; then
-  ok "process env AI_DLC_MODEL_HAIKU_WINDOW=1m overrides the family default"
+  ok "process env AI_DLC_MODEL_HAIKU_WINDOW=1m overrides the family default"; B_a2d_penv=1
 else
   bad "process env override gave pool '$(pool_of)', expected 330000"
 fi
@@ -223,7 +225,7 @@ settings_env() { # settings_env <key> <model> <declared HAIKU window>
 settings_env 'haiku' 'claude-haiku-4-5' '1000000'
 run >/dev/null
 if [ "$(pool_of)" = "330000" ]; then
-  ok "settings.json .env AI_DLC_MODEL_HAIKU_WINDOW overrides the default with no process env"
+  ok "settings.json .env AI_DLC_MODEL_HAIKU_WINDOW overrides the default with no process env"; B_a2d_env=1
 else
   bad "settings .env override gave pool '$(pool_of)', expected 330000"
 fi
@@ -241,7 +243,7 @@ settings 'haiku' 'claude-haiku-4-5'
 for v in 99 99999999999999999999; do
   AI_DLC_MODEL_HAIKU_WINDOW="$v" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
   if [ "$(pool_of)" = "66000" ] && grep -q "rejected env AI_DLC_MODEL_HAIKU_WINDOW=$v" "$WORK/out.txt"; then
-    ok "a declared window of $v is rejected, named in the source, and falls to 66000"
+    ok "a declared window of $v is rejected, named in the source, and falls to 66000"; B_a2f=1
   else
     bad "a declared window of $v gave pool '$(pool_of)' and/or was not named as rejected"
   fi
@@ -283,7 +285,7 @@ fi
 rm -f "$WORK/.claude/settings.json"
 run >/dev/null
 if [ "$(pool_of)" = "66000" ]; then
-  ok "a missing settings.json falls back to 66000 -- unknown tightens, never opens"
+  ok "a missing settings.json falls back to 66000 -- unknown tightens, never opens"; B_a4=1
 else
   bad "a missing settings.json resolved to '$(pool_of)' -- unknown opened the gate"
 fi
@@ -295,7 +297,7 @@ fi
 printf '{\n  "aiDlcModels": { "sonnet": "claude-sonnet-5[1m]" }\n}\n' > "$WORK/.claude/settings.json"
 run >/dev/null
 if [ "$(pool_of)" = "66000" ]; then
-  ok "a settings.json with no aiDlcRoles.analyst falls back to 66000"
+  ok "a settings.json with no aiDlcRoles.analyst falls back to 66000"; B_a4b=1
 else
   bad "a missing analyst entry resolved to '$(pool_of)' -- unknown opened the gate"
 fi
@@ -405,7 +407,7 @@ settings 'haiku' 'claude-haiku-4-5'
 env -u AI_DLC_WINDOW_LIB bash "$MUTANT" --root "$WORK" >"$WORK/out.txt" 2>&1
 [ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        library-absent non-1m model still reports %s\n' "$(pool_of)"; }
 if [ "$mut_fails" -eq 0 ]; then
-  ok "MUTATION: pinning every validator fallback to 1M makes ALL THREE unknown cases report 330000"
+  mutant_killed "$(( $B_a4 && $B_a4b ))" fallback-1m "MUTATION: pinning every validator fallback to 1M makes ALL THREE unknown cases report 330000"
 else
   bad "MUTATION: an unknown case is not produced by the fallback -- assertions 3-4b prove nothing there"
 fi
@@ -445,7 +447,7 @@ M_SUB="$(libmut lib-substr 's/^    fable|opus|sonnet) printf .1000000|/    NONE)
 settings 'sonnet' 'sonnet'
 AI_DLC_WINDOW_LIB="$M_SUB" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "66000" ]; then
-  ok "MUTATION: a [1m]-only resolver reads bare 'sonnet' at 66000 -- arm 2b catches it"
+  mutant_killed "$B_a2b" lib-substr "MUTATION: a [1m]-only resolver reads bare 'sonnet' at 66000 -- arm 2b catches it"
 else
   bad "MUTATION: a [1m]-only library still read '$(pool_of)' -- 2b proves nothing"
 fi
@@ -459,7 +461,7 @@ for full in 'claude-sonnet-4-5' 'global.anthropic.claude-sonnet-4-6'; do
   [ "$(pool_of)" = "330000" ] && sd_kills=$((sd_kills+1))
 done
 if [ "$sd_kills" = "2" ]; then
-  ok "MUTATION: substring defaulting reads both full ids at 330000 -- arm 2e catches it"
+  mutant_killed "$B_a2e" lib-subdefault "MUTATION: substring defaulting reads both full ids at 330000 -- arm 2e catches it"
 else
   bad "MUTATION: substring defaulting moved only $sd_kills of 2 full ids -- 2e proves nothing"
 fi
@@ -469,7 +471,7 @@ M_RNG="$(libmut lib-norange 's/^  \[ "\$1" -ge "\$AI_DLC_WINDOW_MIN" \] 2>\/dev\
 settings 'haiku' 'claude-haiku-4-5'
 AI_DLC_WINDOW_LIB="$M_RNG" AI_DLC_MODEL_HAIKU_WINDOW=99 bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "32" ]; then
-  ok "MUTATION: with the range check gone a declared 99 gives a 32-token pool -- arm 2f catches it"
+  mutant_killed "$B_a2f" lib-norange "MUTATION: with the range check gone a declared 99 gives a 32-token pool -- arm 2f catches it"
 else
   bad "MUTATION: the range-less library read '$(pool_of)' -- 2f proves nothing"
 fi
@@ -479,7 +481,7 @@ M_ENV="$(libmut lib-noenv 's/^\( *\)val="\$(jq -r --arg k "\$var" .*/\1val=""/')
 settings_env 'haiku' 'claude-haiku-4-5' '1000000'
 AI_DLC_WINDOW_LIB="$M_ENV" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "66000" ]; then
-  ok "MUTATION: with the settings .env ignored the .env arm reads 66000 -- arm 2d catches it"
+  mutant_killed "$B_a2d_env" lib-noenv "MUTATION: with the settings .env ignored the .env arm reads 66000 -- arm 2d catches it"
 else
   bad "MUTATION: the .env-ignoring library still read '$(pool_of)' -- 2d proves nothing"
 fi
@@ -489,7 +491,7 @@ M_PENV="$(libmut lib-nopenv 's/^    HAIKU)  val="\${AI_DLC_MODEL_HAIKU_WINDOW:-}
 settings 'haiku' 'claude-haiku-4-5'
 AI_DLC_WINDOW_LIB="$M_PENV" AI_DLC_MODEL_HAIKU_WINDOW=1m bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "66000" ]; then
-  ok "MUTATION: with process env ignored the env arm reads 66000 -- arm 2d catches it"
+  mutant_killed "$B_a2d_penv" lib-nopenv "MUTATION: with process env ignored the env arm reads 66000 -- arm 2d catches it"
 else
   bad "MUTATION: the env-ignoring library still read '$(pool_of)' -- 2d proves nothing"
 fi
@@ -550,7 +552,7 @@ else
 fi
 diffs="$(agree "$VALIDATOR" 2>"$WORK/agree.err")"
 if [ "$diffs" = "0" ]; then
-  ok "the context sensor and this validator return the same window for every id in the set"
+  ok "the context sensor and this validator return the same window for every id in the set"; B_a8d=1
 else
   bad "the two readers disagree on $diffs id(s)"; sed 's/^/  /' "$WORK/agree.err"
 fi
@@ -564,7 +566,7 @@ if cmp -s "$VALIDATOR" "$MUTB"; then
 fi
 mdiffs="$(agree "$MUTB" 2>/dev/null)"
 if [ "${mdiffs:-0}" -gt 0 ]; then
-  ok "MUTATION: a validator bypassing the library disagrees with the sensor on $mdiffs id(s) -- 8d catches it"
+  mutant_killed "$B_a8d" bypass "MUTATION: a validator bypassing the library disagrees with the sensor on $mdiffs id(s) -- 8d catches it"
 else
   bad "MUTATION: a library-bypassing validator still agreed with the sensor -- 8d proves nothing"
 fi
@@ -624,7 +626,7 @@ run >/dev/null
 pool_rows() { awk '/^whole-read pool/{i=1;next} i&&/^$/{exit} i' "$WORK/out.txt"; }
 
 if ! grep -qE 's251/architecture\.md|s271/party-mode-transcripts/prd\.md' <<<"$(pool_rows)"; then
-  ok "an archived s<N>/ copy is excluded from the pool"
+  ok "an archived s<N>/ copy is excluded from the pool"; B_a10=1
 else
   bad "an archived s<N>/ copy was summed into the pool -- the migration's basenames are being counted"
   sed 's/^/        /' <<<"$(pool_rows)"
@@ -677,7 +679,7 @@ head -c 120000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/
 head -c 120000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/s288/locked-requirements.md"
 run >/dev/null
 if grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
-  ok "the LIVE sprint's locked-requirements.md is pooled"
+  ok "the LIVE sprint's locked-requirements.md is pooled"; B_a10b=1
 else
   bad "the live sprint's locked-requirements.md was NOT pooled -- the move would grade itself"
   sed 's/^/        /' <<<"$(pool_rows)"
@@ -758,7 +760,7 @@ if cmp -s "$VALIDATOR" "$MUTANT3"; then
 fi
 bash "$MUTANT3" --root "$WORK" >"$WORK/out.txt" 2>&1
 if ! grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
-  ok "MUTATION: emptying the sprint set drops the live slot from the pool"
+  mutant_killed "$B_a10b" sprint-set-empty "MUTATION: emptying the sprint set drops the live slot from the pool"
 else
   bad "MUTATION: the live slot was pooled with the sprint set empty -- 10b proves nothing"
 fi
@@ -787,7 +789,7 @@ if cmp -s "$VALIDATOR" "$MUTANT2"; then
 fi
 bash "$MUTANT2" --root "$WORK" >"$WORK/out.txt" 2>&1
 if grep -q 's251/architecture\.md' <<<"$(pool_rows)"; then
-  ok "MUTATION: removing the exclusion brings the archived copy back into the pool"
+  mutant_killed "$B_a10" exclusion-removed "MUTATION: removing the exclusion brings the archived copy back into the pool"
 else
   bad "MUTATION: the archived copy stayed out with the exclusion removed -- assertion 10 proves nothing"
   sed 's/^/        /' <<<"$(pool_rows)"

@@ -71,6 +71,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_trim=0; B_ctl=0
 chk() { [ "$2" = "$3" ] && ok "$1" || bad "$1 -- expected '$3', got '$2'"; }
 
 echo "context-provenance:"
@@ -410,7 +412,7 @@ chk "a mint TRIMS the store to its bound" "$(nlines "$STORE_D")" "40"
 member "$STORE_D" "$N_D"     && ok "  and the nonce just minted survived its own trim" \
                              || bad "  THE TRIM DROPPED THE NONCE IT JUST MINTED -- every block marked this session fails verification"
 member "$STORE_D" "$OLDEST"  && bad "  the oldest seeded nonce survived a trim of a 101-line store; the bound is not being applied" \
-                             || ok "  the oldest seeded nonce was dropped (the bound is real, not a no-op)"
+                             || { ok "  the oldest seeded nonce was dropped (the bound is real, not a no-op)"; B_trim=1; }
 member "$STORE_D" "$KEPT"    && ok "  the newest 40 are retained exactly (boundary line kept)" \
                              || bad "  the retained window is not the newest 40"
 member "$STORE_D" "$DROPPED" && bad "  one line beyond the window was retained; the window is off by one or wider than 40" \
@@ -464,7 +466,7 @@ if MD="$(mutlib control -)"; then
   && [ "$(countF "$WORK/mc1.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "1" ] \
   && [ "$(countF "$WORK/mc2.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "0" ] \
   && [ "$(nonce_of "$WORK/mc2.ctx")" = "$(nonce_of "$WORK/mc1.ctx")" ]; then
-    ok "CONTROL: an unmutated library copy still marks, still states the contract once, and still reuses (the mutants below score the mutation, not the copy)"
+    ok "CONTROL: an unmutated library copy still marks, still states the contract once, and still reuses (the mutants below score the mutation, not the copy)"; B_ctl=1
   else
     bad "FIXTURE BROKEN -- an unmutated library copy did not reproduce the shipped behaviour; every mutant below is a false kill"
   fi
@@ -481,7 +483,7 @@ if MD="$(mutlib m1 's@if \[ "$event" != "SessionStart" \] && \[ -r "$file" \]; t
   && [ "$(nonce_of "$WORK/m1b.ctx")" != "$(nonce_of "$WORK/m1a.ctx")" ] \
   && [ "$(nlines "$M1P/$STORE_REL")" = "2" ] \
   && [ "$(countF "$WORK/m1b.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "0" ]; then
-    ok "MUTANT 1: with the reuse branch unreachable a non-SessionStart event MINTS -- the reuse arm is load-bearing, and the contract arm is unmoved by it"
+    mutant_killed "$B_ctl" reuse-unreachable "MUTANT 1: with the reuse branch unreachable a non-SessionStart event MINTS -- the reuse arm is load-bearing, and the contract arm is unmoved by it"
   else
     bad "MUTANT 1 did not isolate the reuse branch (either the nonce was still reused, or the contract arm moved with it)"
   fi
@@ -501,7 +503,7 @@ if MD="$(mutlib m2 's@if \[ -n "${4:-}" \]; then@if true; then@')"; then
   mfire_sensor "$MD" "$M2P" "$WORK/m2b.json"; ctx_of "$WORK/m2b.json" "$WORK/m2b.ctx"
   if [ "$(countF "$WORK/m2b.ctx" 'AI/DLC PROVENANCE CONTRACT')" = "1" ] \
   && [ "$(nonce_of "$WORK/m2b.ctx")" = "$(nonce_of "$WORK/m2a.ctx")" ]; then
-    ok "MUTANT 2: with the contract branch always taken a Stop event restates it -- the SessionStart-only arm is load-bearing, and the reuse arm is unmoved by it"
+    mutant_killed "$B_ctl" contract-always "MUTANT 2: with the contract branch always taken a Stop event restates it -- the SessionStart-only arm is load-bearing, and the reuse arm is unmoved by it"
   else
     bad "MUTANT 2 did not isolate the contract branch (either the paragraph stayed absent, or the nonce stopped being reused with it)"
   fi
@@ -516,7 +518,7 @@ if MD="$(mutlib m3 's@tail -n 40 "$file"@tail -n 100000 "$file"@')"; then
   if [ "$(nlines "$M3P/$STORE_REL")" = "101" ] \
   && member "$M3P/$STORE_REL" "$OLDEST" \
   && member "$M3P/$STORE_REL" "$(nonce_of "$WORK/m3.ctx")"; then
-    ok "MUTANT 3: with the bound widened the store keeps all 101 lines and the oldest survives -- arm 6's bound and its drop-control are both load-bearing"
+    mutant_killed "$B_trim" trim-unbounded "MUTANT 3: with the bound widened the store keeps all 101 lines and the oldest survives -- arm 6's bound and its drop-control are both load-bearing"
   else
     bad "MUTANT 3 did not isolate the trim (the store was still bounded, or the fresh nonce stopped being recorded with it)"
   fi

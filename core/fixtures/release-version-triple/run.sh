@@ -73,6 +73,8 @@ printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 # B_A1 is set only beside assertion 1's ok: the unmutated program executed with arms E and F both
 # reporting their probes fired both ways. The arm E and arm F probe mutants score through it.
 B_A1=0
+B_assertion_2=0; B_assertion_7c=0; B_assertion_10=0; B_assertion_13=0; B_assertion_20=0
+B_R1=0; B_R3=0; B_R4=0; B_R5=0
 
 # EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant
 # when a helper call was mis-spaced: `set -u` killed the `$( )` subshell, the `if`
@@ -247,7 +249,7 @@ reg assertion-1 exec 0 'no misspelled not-discharged citation (probe fired both 
 commit 0.1.0 0.1.0 'fix(v0.1.1): the resident path carried the incident'
 status="$(run --commit HEAD)"
 if [ "$status" = "1" ] && grep -q 'subject says v0.1.1, VERSION says 0.1.0' "$WORK/out.txt"; then
-  ok "a subject naming a version VERSION does not carry fails, and both values are named"
+  ok "a subject naming a version VERSION does not carry fails, and both values are named"; B_assertion_2=1
 else
   bad "the real defect was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -346,7 +348,7 @@ commit 0.7.0 0.7.0 'fix(v0.7.1): subject ahead again'
 drive_src "$MUTANT" "$WORK/mut.txt" --commit HEAD
 mutant_status=$?
 if [ "$mutant_status" = "0" ]; then
-  ok "MUTATION: disabling the subject comparison makes assertion 2's input go green"
+  mutant_killed "$B_assertion_2" subject-compare "MUTATION: disabling the subject comparison makes assertion 2's input go green"
 else
   bad "MUTATION: assertion 2's input still fails (exit $mutant_status) without predicate A"
   sed 's/^/        /' "$WORK/mut.txt"
@@ -381,7 +383,7 @@ commit 0.9.0 0.9.0 'chore: 0.9.1 mentioned mid-subject'
 mid_sha="$(git rev-parse HEAD)"
 status="$(run --commit "$mid_sha")"
 if [ "$status" = "0" ]; then
-  ok "a bare version MID-subject is a mention, not a claim, and passes"
+  ok "a bare version MID-subject is a mention, not a claim, and passes"; B_assertion_7c=1
 else
   bad "a mid-subject bare version was read as a claim -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -406,7 +408,7 @@ fi
 drive_src "$MUT_A" "$WORK/mut-a.txt" --commit "$mid_sha"
 mut_a_status=$?
 if [ "$mut_a_status" = "1" ] && grep -q 'subject says v0.9.1, VERSION says 0.9.0' "$WORK/mut-a.txt"; then
-  ok "MUTATION: an unanchored fallback reads the mid-subject mention as a claim (the ^ is load-bearing)"
+  mutant_killed "$B_assertion_7c" unanchored-fallback "MUTATION: an unanchored fallback reads the mid-subject mention as a claim (the ^ is load-bearing)"
 else
   bad "MUTATION: the near-miss still passes (exit $mut_a_status) with the fallback unanchored"
   sed 's/^/        /' "$WORK/mut-a.txt"
@@ -492,7 +494,7 @@ git commit -q -m 'feat(v0.5.0): two releases squashed into one commit (#1)'
 squash_sha="$(git rev-parse HEAD)"
 status="$(run --commit "$squash_sha")"
 if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt"; then
-  ok "a SQUASH carrying two releases fails, though its subject, VERSION and top heading all agree"
+  ok "a SQUASH carrying two releases fails, though its subject, VERSION and top heading all agree"; B_assertion_10=1
 else
   bad "the squash shape was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -524,7 +526,7 @@ fi
 drive_src "$MUT_C" "$WORK/mut2.txt" --commit "$squash_sha"
 mut_c_status=$?
 if [ "$mut_c_status" = "0" ]; then
-  ok "MUTATION: raising the range arm's threshold makes assertion 10's input go green"
+  mutant_killed "$B_assertion_10" range-threshold "MUTATION: raising the range arm's threshold makes assertion 10's input go green"
 else
   bad "MUTATION: assertion 10's input still fails (exit $mut_c_status) without the range arm"
   sed 's/^/        /' "$WORK/mut2.txt"
@@ -556,7 +558,7 @@ run0() { drive_src "$VALIDATOR" "$WORK/out.txt"; echo "$?"; }
 # red is the branch-base arm's alone.
 status="$(run0)"
 if [ "$status" = "1" ] && grep -q 'carries 1 commit(s) that are on local main and not on origin/main' "$WORK/out.txt"; then
-  ok "a branch carrying an unpushed main commit fails, and the count is named"
+  ok "a branch carrying an unpushed main commit fails, and the count is named"; B_assertion_13=1
 else
   bad "the ahead-main precondition was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -573,7 +575,7 @@ fi
 drive_src "$MUT_D" "$WORK/mut3.txt"
 mut_d_status=$?
 if [ "$mut_d_status" = "0" ]; then
-  ok "MUTATION: raising the branch-base arm's threshold makes assertion 13's input go green"
+  mutant_killed "$B_assertion_13" branch-base-threshold "MUTATION: raising the branch-base arm's threshold makes assertion 13's input go green"
 else
   bad "MUTATION: assertion 13's input still fails (exit $mut_d_status) without the branch-base arm"
   sed 's/^/        /' "$WORK/mut3.txt"
@@ -670,7 +672,7 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
 if [ ! -f "$ENGINE" ]; then
   bad "the engine is absent at $ENGINE, so the grammar pair cannot be compared"
 elif pair_ok "$ENGINE" "$VALIDATOR"; then
-  ok "arm F's canonical citation regex is byte-identical to the engine's: $(canon_of "$VALIDATOR")"
+  ok "arm F's canonical citation regex is byte-identical to the engine's: $(canon_of "$VALIDATOR")"; B_assertion_20=1
 else
   bad "the citation grammar has forked: engine {$(canon_of "$ENGINE" | tr '\n' ' ')} validator {$(canon_of "$VALIDATOR" | tr '\n' ' ')}"
 fi
@@ -682,7 +684,7 @@ if cmp -s "$VALIDATOR" "$MUT_P"; then
 elif pair_ok "$ENGINE" "$MUT_P"; then
   bad "a validator whose canonical regex lost its closing anchor still reads as paired -- the binding cannot fire"
 else
-  ok "MUTATION: editing one side of the pair (the validator's closing anchor) breaks the binding"
+  mutant_killed "$B_assertion_20" pair-anchor "MUTATION: editing one side of the pair (the validator's closing anchor) breaks the binding"
 fi
 regmut pair-anchor "$MUT_P"
 
@@ -698,7 +700,7 @@ else
   git checkout -q main
   bash "$MUT_D" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
   if [ "$status" = 1 ] && grep -q "arm F's own probe did not discriminate" "$WORK/out.txt"; then
-    ok "MUTATION: a canonical test missing its \$ is refused by arm F's own probe (the trailing-text offender)"
+    mutant_killed "$B_A1" drop-dollar "MUTATION: a canonical test missing its \$ is refused by arm F's own probe (the trailing-text offender)"
   else
     bad "the drop-\$ mutant was not refused by arm F's probe -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
   fi
@@ -767,7 +769,7 @@ drive() { # drive <validator> <sha> <outfile> -> exit status
 status="$(drive "$VALIDATOR" "$r1_sha" "$WORK/out.txt")"
 if [ "$status" = "1" ] && grep -q 'removes release heading(s) present at its base: 0.2.0' "$WORK/out.txt" \
    && ! grep -q 'adds 2 release headings' "$WORK/out.txt"; then
-  ok "R1: a release that replaces the previous heading in place fails, naming the removed heading"
+  ok "R1: a release that replaces the previous heading in place fails, naming the removed heading"; B_R1=1
 else
   bad "R1: an in-place heading replacement was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -783,7 +785,7 @@ reg R2 src 0 'no heading removed' --commit "$r2_sha"
 
 status="$(drive "$VALIDATOR" "$r3_sha" "$WORK/out.txt")"
 if [ "$status" = "0" ] && grep -q 'NOTE  restored historical heading(s), not counted: 0.2.0' "$WORK/out.txt"; then
-  ok "R3: restoring a historical heading plus one new release passes, and the restore is NOTEd"
+  ok "R3: restoring a historical heading plus one new release passes, and the restore is NOTEd"; B_R3=1
 else
   bad "R3: a restored heading was counted as a release -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -791,7 +793,7 @@ reg R3 src 0 'NOTE  restored historical heading(s), not counted: 0.2.0' --commit
 
 status="$(drive "$VALIDATOR" "$r4_sha" "$WORK/out.txt")"
 if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt"; then
-  ok "R4: two genuinely new headings above the base top still fail"
+  ok "R4: two genuinely new headings above the base top still fail"; B_R4=1
 else
   bad "R4: two new releases passed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -799,7 +801,7 @@ reg R4 src 1 'adds 2 release headings' --commit "$r4_sha"
 
 status="$(drive "$VALIDATOR" "$r5_sha" "$WORK/out.txt")"
 if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt" && grep -qF '0.2.5' "$WORK/out.txt"; then
-  ok "R5: a below-top heading the base's history never carried counts as new"
+  ok "R5: a below-top heading the base's history never carried counts as new"; B_R5=1
 else
   bad "R5: an invented below-top heading was exempted -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -845,7 +847,7 @@ EXEMPT_IF='if [ -n "$base_top" ] && semver_le "$hv" "$base_top" && [ -n "$(resto
 mkmut "$WORK/m-no-removal.sh" 'if [ -n "$removed" ]; then' 'if false; then'
 status="$(drive "$WORK/m-no-removal.sh" "$r1_sha" "$WORK/mut-r.txt")"
 if [ "$status" = "0" ]; then
-  ok "MUTATION m-no-removal: without the removal check R1's input goes green"
+  mutant_killed "$B_R1" m-no-removal "MUTATION m-no-removal: without the removal check R1's input goes green"
 else
   bad "MUTATION m-no-removal: R1's input still fails (exit $status) without the removal check"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
@@ -854,7 +856,7 @@ regmut m-no-removal "$WORK/m-no-removal.sh"
 mkmut "$WORK/m-exempt-all.sh" "$EXEMPT_IF" 'if true; then'
 status="$(drive "$WORK/m-exempt-all.sh" "$r4_sha" "$WORK/mut-r.txt")"
 if [ "$status" = "0" ]; then
-  ok "MUTATION m-exempt-all: exempting every added heading makes R4's input go green"
+  mutant_killed "$B_R4" m-exempt-all "MUTATION m-exempt-all: exempting every added heading makes R4's input go green"
 else
   bad "MUTATION m-exempt-all: R4's input still fails (exit $status) with every heading exempt"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
@@ -863,7 +865,7 @@ regmut m-exempt-all "$WORK/m-exempt-all.sh"
 mkmut "$WORK/m-exempt-none.sh" "$EXEMPT_IF" 'if false; then'
 status="$(drive "$WORK/m-exempt-none.sh" "$r3_sha" "$WORK/mut-r.txt")"
 if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/mut-r.txt"; then
-  ok "MUTATION m-exempt-none: without the exemption R3's restore counts as a second release"
+  mutant_killed "$B_R3" m-exempt-none "MUTATION m-exempt-none: without the exemption R3's restore counts as a second release"
 else
   bad "MUTATION m-exempt-none: R3's input still passes (exit $status) with no exemption"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
@@ -872,7 +874,7 @@ regmut m-exempt-none "$WORK/m-exempt-none.sh"
 mkmut "$WORK/m-search-tip.sh" '"$range_base" -- CHANGELOG.md' '"$range_tip" -- CHANGELOG.md'
 status="$(drive "$WORK/m-search-tip.sh" "$r5_sha" "$WORK/mut-r.txt")"
 if [ "$status" = "0" ] && grep -q 'not counted: 0.2.5' "$WORK/mut-r.txt"; then
-  ok "MUTATION m-search-tip: searching from the tip exempts R5's invented heading (the base is load-bearing)"
+  mutant_killed "$B_R5" m-search-tip "MUTATION m-search-tip: searching from the tip exempts R5's invented heading (the base is load-bearing)"
 else
   bad "MUTATION m-search-tip: R5's input still fails (exit $status) with the search from the tip"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi

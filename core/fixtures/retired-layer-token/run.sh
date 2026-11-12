@@ -36,6 +36,8 @@ L=".claude/skills/ai-dlc"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_rltVec=0; B_rltRename=0
 
 echo "retired-layer-token:"
 ok "resolved detector: $SCRIPT"
@@ -442,14 +444,14 @@ run_plan() {  # snapshot every queued mutant, three scripts at a time, then scor
   while IFS="$TAB" read -r nm path exp; do
     [ -n "$nm" ] || continue
     got="$(vec "$WORK/snap-$nm")"
-    if [ "$got" = "$exp" ]; then ok "MUTATION $nm: flips exactly $exp"
+    if [ "$got" = "$exp" ]; then mutant_killed "$B_rltVec" "$nm" "MUTATION $nm: flips exactly $exp"
     else bad "MUTATION $nm: expected $exp got $got (q1..q17)"; fi
   done < "$PLAN"
 }
 
 CTLVEC="$(vec "$CTL")"
 if [ "$CTLVEC" = "11111111111111111" ]; then
-  ok "unmutated control: every predicate holds (11111111111111111)"
+  ok "unmutated control: every predicate holds (11111111111111111)"; B_rltVec=1
 else
   bad "unmutated control: $CTLVEC -- every mutant score below is meaningless"
 fi
@@ -509,7 +511,7 @@ mkdir -p "$RENC/.claude/skills/ai-dlc/overrides"
 printf '# Override\n\nstock exits RENAMEDWORD when nothing was read\n' > "$RENC/.claude/skills/ai-dlc/overrides/o.md"
 r_out="$(bash "$SCRIPT" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>"$WORK/rename.err")"
 if [ -z "$r_out" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/rename.err"; then
-  ok "a witness file RENAMED at theirs that still prints the word does not retire it, and the NOTE names the word as acquitted"
+  ok "a witness file RENAMED at theirs that still prints the word does not retire it, and the NOTE names the word as acquitted"; B_rltRename=1
 else
   bad "a renamed witness file was read as a deletion: rows='$(printf '%s' "$r_out" | tr '\n' ' ' | head -c 100)' err='$(head -c 160 "$WORK/rename.err")'"
 fi
@@ -525,7 +527,7 @@ else
   m_out="$(bash "$WORK/retired-layer-token.sh" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>/dev/null)"
   m_rows="$(printf '%s\n' "$m_out" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]].*o\.md:3[[:space:]]RENAMEDWORD$')" || m_rows=0
   if [ "$m_rows" -ge 1 ]; then
-    ok "  MUTATION: with the rename map disabled the same world ROWS the word, so the arm above is what holds"
+    mutant_killed "$B_rltRename" rename-map-disabled "  MUTATION: with the rename map disabled the same world ROWS the word, so the arm above is what holds"
   else
     bad "  the rename-map mutant produced no row — the arm above cannot fail and proves nothing"
   fi

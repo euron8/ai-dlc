@@ -38,6 +38,7 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # Base-pass flags for mutant_killed: each is set to 1 beside the ok of the control whose copy the mutants below are built from.
 B_sd=0; B_ur=0; B_pc=0; B_ls=0; B_lb=0
+B_a2=0; B_a5=0; B_a17=0; B_a19=0; B_a20=0; B_a21=0; B_a22=0; B_a23=0; B_a24=0; B_a25=0; B_a33=0; B_a34=0
 
 MUT_LIB="$HERE/../lib/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -77,7 +78,7 @@ fi
 # --- Assertion 2: a MISSING field fails, it does not excuse itself as legacy ---
 r=$(rc_of "$VALIDATOR" "$WORK/snap-nofield.md" "$ANSWERS")
 if [ "$r" = "1" ]; then
-  ok "a missing scope_confirmed FAILS when the capture hook is installed — it is a skipped pause point, not a legacy consumer"
+  ok "a missing scope_confirmed FAILS when the capture hook is installed — it is a skipped pause point, not a legacy consumer"; B_a2=1
 else
   bad "a missing scope_confirmed returned rc=$r instead of 1 — the check reads a skipped pause point as a consumer that predates the release, which is the fail-open direction and excuses the exact conduct it exists to catch"
 fi
@@ -101,7 +102,7 @@ fi
 # --- Assertion 5: `none` cannot paper over a capture file that has entries -----
 r=$(rc_of "$VALIDATOR" "$WORK/snap-citenone.md" "$ANSWERS")
 if [ "$r" = "1" ]; then
-  ok "cite 'none' FAILS while the capture file holds entries — 'none' is not a way past the check"
+  ok "cite 'none' FAILS while the capture file holds entries — 'none' is not a way past the check"; B_a5=1
 else
   bad "cite 'none' returned rc=$r against a NON-empty capture file — the cheapest route past this check is now to write 'none', and every fabrication takes it"
 fi
@@ -213,7 +214,7 @@ else
   else
     r=$(rc_of "$MUT_A" "$WORK/snap-nofield.md" "$ANSWERS")
     if [ "$r" = "3" ]; then
-      ok "mutant A: excusing a missing field as legacy makes it PENDING — assertion 2 has teeth"
+      mutant_killed "$B_a2" A "mutant A: excusing a missing field as legacy makes it PENDING — assertion 2 has teeth"
     else
       bad "MUTANT A DID NOT FAIL — a missing field still returns rc=$r, so assertion 2 is not testing the migration discriminator"
     fi
@@ -243,7 +244,7 @@ else
   else
     r=$(rc_of "$MUT_B" "$WORK/snap-citenone.md" "$ANSWERS")
     if [ "$r" = "0" ]; then
-      ok "mutant B: without the guard 'none' passes against a populated capture file — assertion 5 has teeth"
+      mutant_killed "$B_a5" B "mutant B: without the guard 'none' passes against a populated capture file — assertion 5 has teeth"
     else
       bad "MUTANT B DID NOT FAIL — 'none' still returns rc=$r against entries, so assertion 5 is not testing the guard"
     fi
@@ -264,7 +265,7 @@ fi
 # assertion written against this fixture's own synthetic grammar could have caught it.
 r=$(rc_of "$VALIDATOR" "$WORK/snap-inline.md" "$ANSWERS")
 if [ "$r" = "0" ]; then
-  ok "the inline backticked grammar the reference consumer actually writes is parsed, cite and value both"
+  ok "the inline backticked grammar the reference consumer actually writes is parsed, cite and value both"; B_a17=1
 else
   bad "the consumer's real inline grammar returned rc=$r instead of 0 — the check is anchored to a grammar only this fixture uses, and reads every real snapshot as having no routing record: $LAST_OUT"
 fi
@@ -302,7 +303,7 @@ else
   else
     r=$(rc_of "$MUT_C" "$WORK/snap-inline.md" "$ANSWERS")
     if [ "$r" = "1" ]; then
-      ok "mutant C: anchoring the extractor to line starts blinds it to the consumer's real grammar — assertion 17 has teeth"
+      mutant_killed "$B_a17" C "mutant C: anchoring the extractor to line starts blinds it to the consumer's real grammar — assertion 17 has teeth"
     else
       bad "MUTANT C DID NOT FAIL — the inline grammar still returns rc=$r when the extractor is anchored, so assertion 17 is not testing the extractor"
     fi
@@ -356,7 +357,7 @@ out_has() { grep -qF "$1" <<<"$LAST_OUT"; }
 # --- Assertion 19: the producer's dominant form -------------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-bold.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "the producer's own grammar passes — bold name, colon inside the span, prose after the value, and a bold+backticked cite that resolves"
+  ok "the producer's own grammar passes — bold name, colon inside the span, prose after the value, and a bold+backticked cite that resolves"; B_a19=1
 else
   bad "the producer's dominant grammar returned rc=$r — this is the form the reference consumer writes on every routing-record field, so the check now reports a malformed value on a well-formed snapshot: $LAST_OUT"
 fi
@@ -367,7 +368,7 @@ fi
 # receipt, and mutant E below is that stub.
 run_v "$VALIDATOR" "$WORK/snap-prod-boldout.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: corrected"; then
-  ok "colon-outside bold passes and reports 'corrected' — the value is read, not assumed, and the cite written before it is not mistaken for it"
+  ok "colon-outside bold passes and reports 'corrected' — the value is read, not assumed, and the cite written before it is not mistaken for it"; B_a20=1
 else
   bad "colon-outside bold returned rc=$r without reporting 'corrected' — the pre-fix returned EMPTY here and accused the lead of a Rule 3(d) pause point that did not happen: $LAST_OUT"
 fi
@@ -375,7 +376,7 @@ fi
 # --- Assertion 21: a BACKTICKED value -----------------------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-btval.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "a backticked value parses — the value class no longer excludes the character the producer wraps hashes and enums in"
+  ok "a backticked value parses — the value class no longer excludes the character the producer wraps hashes and enums in"; B_a21=1
 else
   bad "a backticked value returned rc=$r — the pre-fix value class excluded a backtick, so this returned empty and became the same accusation: $LAST_OUT"
 fi
@@ -383,7 +384,7 @@ fi
 # --- Assertion 22: `__underscore bold__` --------------------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-uscore.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "doubled-underscore emphasis parses — the doubled form CAN be normalized even though the single one cannot, and the validator names that boundary"
+  ok "doubled-underscore emphasis parses — the doubled form CAN be normalized even though the single one cannot, and the validator names that boundary"; B_a22=1
 else
   bad "__scope_confirmed__ returned rc=$r — a second established bold spelling reads as a skipped pause point: $LAST_OUT"
 fi
@@ -391,7 +392,7 @@ fi
 # --- Assertion 23: a bold span wrapping the whole pair ------------------------
 run_v "$VALIDATOR" "$WORK/snap-prod-boldpair.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "0" ] && out_has "scope_confirmed: confirmed"; then
-  ok "a bold span wrapping name and value together parses — the pre-fix read the value as 'confirmed**' and called it malformed"
+  ok "a bold span wrapping name and value together parses — the pre-fix read the value as 'confirmed**' and called it malformed"; B_a23=1
 else
   bad "a whole-pair bold span returned rc=$r: $LAST_OUT"
 fi
@@ -404,7 +405,7 @@ fi
 # parser, so the message is what this reads.
 run_v "$VALIDATOR" "$WORK/snap-prod-nofield.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "1" ] && out_has "carries no 'scope_confirmed' field"; then
-  ok "a bold routing record with no scope_confirmed FAILS with the missing-field accusation — normalizing wrappers does not manufacture a field that is not there"
+  ok "a bold routing record with no scope_confirmed FAILS with the missing-field accusation — normalizing wrappers does not manufacture a field that is not there"; B_a24=1
 else
   bad "a bold record missing scope_confirmed returned rc=$r without the missing-field accusation — either the normalizer invented a value or the FAIL is arriving for the wrong reason, and both read identically from the exit code: $LAST_OUT"
 fi
@@ -415,7 +416,7 @@ fi
 # field from one that read the markdown around it.
 run_v "$VALIDATOR" "$WORK/snap-prod-badvalue.md" "$ANSWERS"; r=$LAST_RC
 if [ "$r" = "1" ] && out_has "scope_confirmed is 'n-a'" && ! out_has "scope_confirmed is '**'"; then
-  ok "a bold field carrying a value outside the closed set is reported as 'n-a', not as '**' — the operator is told what the record actually says"
+  ok "a bold field carrying a value outside the closed set is reported as 'n-a', not as '**' — the operator is told what the record actually says"; B_a25=1
 else
   bad "a bold out-of-set value returned rc=$r and did not name 'n-a' — reporting the markup as the value sends an operator to look for a field that reads correctly: $LAST_OUT"
 fi
@@ -494,7 +495,7 @@ if build_field_of_mutant d "$WORK/body-d.sh"; then
   out_has "scope_confirmed is '**'" && red=$((red+1))
   if [ "$red" -eq 6 ]; then
     kills=$((kills+1))
-    ok "mutant D: the pre-fix extractor fails all five producer grammars and reports the markup as the value — assertions 19-25 have teeth"
+    mutant_killed "$(( $B_a19 && $B_a20 && $B_a21 && $B_a22 && $B_a23 && $B_a25 ))" D "mutant D: the pre-fix extractor fails all five producer grammars and reports the markup as the value — assertions 19-25 have teeth"
   else
     bad "MUTANT D CAUGHT ONLY $red OF 6 — the pre-fix extractor still satisfies assertions 19-25, so they are not testing the extractor"
   fi
@@ -526,7 +527,7 @@ if build_field_of_mutant d2 "$WORK/body-d2.sh"; then
   done
   if [ "$red" -eq 3 ]; then
     kills=$((kills+1))
-    ok "mutant D2: dropping the emphasis strip breaks all three bold spellings — that layer is separately load-bearing"
+    mutant_killed "$(( $B_a19 && $B_a20 && $B_a22 ))" D2 "mutant D2: dropping the emphasis strip breaks all three bold spellings — that layer is separately load-bearing"
   else
     bad "MUTANT D2 CAUGHT ONLY $red OF 3 — the emphasis-strip layer is not what assertions 19, 20 and 22 are testing"
   fi
@@ -551,7 +552,7 @@ if build_field_of_mutant d3 "$WORK/body-d3.sh"; then
   run_v "$MUT_PATH" "$WORK/snap-prod-uscore.md" "$ANSWERS"; r=$LAST_RC
   if [ "$r" = "1" ]; then
     kills=$((kills+1))
-    ok "mutant D3: dropping only the __ strip breaks only the underscore spelling — assertion 22 owns a layer of its own"
+    mutant_killed "$B_a22" D3 "mutant D3: dropping only the __ strip breaks only the underscore spelling — assertion 22 owns a layer of its own"
   else
     bad "MUTANT D3 DID NOT FAIL — __scope_confirmed__ still returns rc=$r without the __ strip, so assertion 22 is proved by the ** strip and is vacuous"
   fi
@@ -598,7 +599,7 @@ if build_field_of_mutant d4 "$WORK/body-d4.sh"; then
   run_v "$MUT_PATH" "$WORK/snap-prod-bold.md" "$ANSWERS"; r2=$LAST_RC
   if [ "$r" = "1" ] && [ "$r2" = "1" ]; then
     kills=$((kills+1))
-    ok "mutant D4: reverting the backtick handling alone breaks the backticked value and the producer's backticked cite — assertion 21 owns a layer of its own and assertion 19 stands with it"
+    mutant_killed "$(( $B_a21 && $B_a19 ))" D4 "mutant D4: reverting the backtick handling alone breaks the backticked value and the producer's backticked cite — assertion 21 owns a layer of its own and assertion 19 stands with it"
   else
     bad "MUTANT D4 DID NOT FAIL (rc=$r/$r2) — a backticked value or cite still parses with the pre-fix backtick handling, so assertion 21 is proved by the emphasis strip and is vacuous"
   fi
@@ -636,7 +637,7 @@ if build_field_of_mutant e "$WORK/body-e.sh"; then
   out24=0; { [ "$r" = "1" ] && out_has "carries no 'scope_confirmed' field"; } || out24=1
   if [ "$out20" -eq 1 ] && [ "$out24" -eq 1 ]; then
     kills=$((kills+1))
-    ok "mutant E: a parser that answers 'confirmed' unconditionally is caught by assertion 20 (the value must read 'corrected') and by assertion 24 (a missing field must stay a missing field)"
+    mutant_killed "$(( $B_a20 && $B_a24 ))" E "mutant E: a parser that answers 'confirmed' unconditionally is caught by assertion 20 (the value must read 'corrected') and by assertion 24 (a missing field must stay a missing field)"
   else
     bad "MUTANT E SURVIVED assertion 20 and/or 24 ($out20/$out24) — this fixture accepts a fix that closes the check by breaking the parser, which is the hole in BL-065's own receipt"
   fi
@@ -716,7 +717,7 @@ sc_ident_holds() {
 
 # --- Assertion 33: the passing run names both corpora --------------------------
 if sc_ident_holds "$VALIDATOR"; then
-  ok "a passing run names the snapshot it read and the capture file it counted, and two identical corpora in different trees are distinguishable"
+  ok "a passing run names the snapshot it read and the capture file it counted, and two identical corpora in different trees are distinguishable"; B_a33=1
 else
   bad "a passing run carries no corpus identity — $SC_IDENT_WHY. Two sprints' worth of identical content produce one verdict, and the operator cannot tell which tree it is about"
 fi
@@ -736,7 +737,7 @@ SC_DOUT="$(AI_DLC_PROJECT_ROOT="$SC_D" bash "$VALIDATOR" 2>&1)"; SC_DRC=$?
 if [ "$SC_DRC" = "0" ] \
    && grep -qF "$SC_D/_bmad-output/pipeline-snapshot.md" <<<"$SC_DOUT" \
    && grep -qF "$SC_D/_bmad-output/operator-answers-history.md" <<<"$SC_DOUT"; then
-  ok "a run with NO path arguments names the two files it resolved for itself — the identity is the resolved value, not an echo of argv"
+  ok "a run with NO path arguments names the two files it resolved for itself — the identity is the resolved value, not an echo of argv"; B_a34=1
 else
   bad "a defaulted run (rc=$SC_DRC) did not name the snapshot and capture file it resolved — the identity lines could be satisfied by echoing the argument vector, which says nothing about a run that was given no arguments: $SC_DOUT"
 fi
@@ -773,7 +774,7 @@ if [ "$SC_CTL_OK" = "1" ]; then
       if sc_ident_holds "$MUT_F"; then
         bad "MUTANT F SURVIVED — a validator that names neither corpus still satisfies assertion 33, so that assertion is not testing the identity lines"
       else
-        ok "mutant F: deleting the identity lines makes two different trees indistinguishable ($SC_IDENT_WHY) — assertion 33 has teeth"
+        mutant_killed "$B_a33" F "mutant F: deleting the identity lines makes two different trees indistinguishable ($SC_IDENT_WHY) — assertion 33 has teeth"
       fi
       # And nothing else moves. The identity lines are additive; every verdict arm above
       # must survive their removal, or assertion 33 is entangled with the ones that matter.
@@ -792,7 +793,7 @@ if [ "$SC_CTL_OK" = "1" ]; then
       if grep -qF "$SC_D/_bmad-output/pipeline-snapshot.md" <<<"$SC_FOUT"; then
         bad "MUTANT F SURVIVED assertion 34 — the defaulted run still names its resolved snapshot with the identity lines deleted, so assertion 34 is reading a path emitted somewhere else"
       else
-        ok "mutant F also kills assertion 34 — the defaulted run's resolved paths come from the identity lines and nowhere else"
+        mutant_killed "$B_a34" F.a34 "mutant F also kills assertion 34 — the defaulted run's resolved paths come from the identity lines and nowhere else"
       fi
     fi
   fi
@@ -817,7 +818,7 @@ if [ "$SC_CTL_OK" = "1" ]; then
     if sc_ident_holds "$MUT_G"; then
       bad "MUTANT G SURVIVED — a per-run nonce that names no corpus satisfies assertion 33, so that assertion is a differ-check and not a naming check"
     else
-      ok "mutant G: a per-run nonce varies the output exactly as the real paths do and still fails assertion 33 ($SC_IDENT_WHY) — the arm demands the corpus be NAMED"
+      mutant_killed "$B_a33" G "mutant G: a per-run nonce varies the output exactly as the real paths do and still fails assertion 33 ($SC_IDENT_WHY) — the arm demands the corpus be NAMED"
     fi
   fi
 fi

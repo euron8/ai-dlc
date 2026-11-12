@@ -42,6 +42,8 @@ ROLE="$(find_one team-roles/code-reviewer.md)"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_bounds=0; B_live=0
 
 # --- Derive, never hardcode -------------------------------------------------
 # The pattern is read out of the rule file's own `grep -inE '<pattern>'` directive. A
@@ -495,12 +497,12 @@ gv_join() { python3 "$GV_WORK/join.py" "$1" join; }
 # the real file, every RED beside it is a broken program rather than a finding.
 GV_BOUNDS="$(python3 "$GV_WORK/join.py" "$GATE" bounds)"
 case "$GV_BOUNDS" in
-  OK*) ok "the Check 5 and Check 12 spans are both delimited and within bounds (${GV_BOUNDS#OK })" ;;
+  OK*) ok "the Check 5 and Check 12 spans are both delimited and within bounds (${GV_BOUNDS#OK })"; B_bounds=1 ;;
   *)   bad "the spans are not measurable, so nothing below is measuring anything: $GV_BOUNDS" ;;
 esac
 GV_LIVE="$(gv_join "$GATE")"
 case "$GV_LIVE" in
-  GREEN*) ok "Check 5's comparand is a field Check 12's schema writes — ${GV_LIVE#GREEN }" ;;
+  GREEN*) ok "Check 5's comparand is a field Check 12's schema writes — ${GV_LIVE#GREEN }"; B_live=1 ;;
   *) bad "Check 5 states no comparand that Check 12 writes: ${GV_LIVE}. Its two remaining comparands are a record and a derivation of that record — the repair for a disagreement regenerates the second FROM the first — so a status wrong at the source agrees with itself and the check passes" ;;
 esac
 
@@ -521,7 +523,7 @@ while IFS='|' read -r gvm gvwant gvwhy; do
   fi
   gvgot="$(gv_join "$GV_WORK/$gvm.md")"
   case "$gvgot" in
-    "$gvwant"*) ok "MUTANT $gvm reads $gvwant — $gvwhy" ;;
+    "$gvwant"*) mutant_killed "$B_live" "$gvm" "MUTANT $gvm reads $gvwant — $gvwhy" ;;
     *) bad "MUTANT $gvm reads '${gvgot%% *}', expected $gvwant — $gvwhy. The arm cannot tell this from the shipped file, so a green run over it means nothing: $gvgot" ;;
   esac
 done <<'GVMUTANTS'
@@ -549,7 +551,7 @@ while IFS='|' read -r gvm gvwhy; do
   fi
   gvgot="$(gv_join "$GV_WORK/$gvm.md")"
   case "$gvgot" in
-    BLOWN*) ok "MUTANT $gvm reports MEASURED NOTHING — $gvwhy" ;;
+    BLOWN*) mutant_killed "$B_bounds" "$gvm" "MUTANT $gvm reports MEASURED NOTHING — $gvwhy" ;;
     GREEN*) bad "MUTANT $gvm reads GREEN — $gvwhy. An undelimited span answers from the whole file, and that reads exactly like a check that passed: $gvgot" ;;
     *) bad "MUTANT $gvm reads '${gvgot%% *}', expected BLOWN — $gvwhy: $gvgot" ;;
   esac

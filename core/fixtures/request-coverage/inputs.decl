@@ -4,3 +4,4 @@
 !core/scripts/validate-request-coverage.sh
 core/scripts/validate-locked-anchor.sh
 core/schemas/harness-origin.json
+core/fixtures/lib/mutant.sh

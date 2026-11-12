@@ -54,6 +54,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a5=0
 
 # A minimal layered consumer: the guard's activation gate needs all three.
 mkdir -p "$WORK/.claude/skills/ai-dlc/overrides" \
@@ -147,7 +149,7 @@ expect allow "scripts/ai-dlc/not-in-manifest.sh" \
 reason="$(guard_out Edit scripts/ai-dlc/verdict.sh | jq -r '.hookSpecificOutput.permissionDecisionReason')"
 if grep -q 'CORE validator' <<<"$reason" \
    && grep -q 'ai-dlc-local' <<<"$reason"; then
-  ok "the deny names it a validator and points consumer scripts at scripts/ai-dlc-local/"
+  ok "the deny names it a validator and points consumer scripts at scripts/ai-dlc-local/"; B_a5=1
 else
   bad "the deny fell through to the generic overrides/extensions text -- wrong advice for machinery"
 fi
@@ -172,7 +174,7 @@ fi
 mout="$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s/scripts/ai-dlc/verdict.sh"}}' "$WORK" \
   | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTANT" 2>/dev/null)"
 if [ -z "$mout" ]; then got=allow; else got="$(printf '%s' "$mout" | jq -r '.hookSpecificOutput.permissionDecision // "allow"')"; fi
-[ "$got" = "allow" ] && ok "MUTATION: removing the scripts/ path arm makes assertion 1 go allow" \
+[ "$got" = "allow" ] && mutant_killed "$B_a5" scripts-arm-removed "MUTATION: removing the scripts/ path arm makes assertion 1 go allow" \
                      || bad "MUTATION: still $got without the scripts/ arm -- assertion 1 proves nothing"
 
 # --- 8. THE SHIPPED GLOB FORM CLAIMS THE WHOLE DIRECTORY ------------------------

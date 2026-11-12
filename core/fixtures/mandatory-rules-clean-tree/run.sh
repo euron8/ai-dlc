@@ -34,6 +34,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_sibling_missing=0
 
 # Isolated SCRIPT_DIR: the real validator + sibling stubs (--check-clean-tree tests
 # existence only, never executes them). retro-prereq is deliberately absent.
@@ -50,7 +52,7 @@ echo "mandatory-rules-clean-tree"
 bash "$WORK/bin/validate-mandatory-rules.sh" --check-clean-tree >"$WORK/out.txt" 2>&1
 rc=$?
 if [ "$rc" = "0" ] && grep -q 'toolchain present' "$WORK/out.txt"; then
-  ok "PASSes with retro-evidence + cycle-commits present, retro-prereq absent (not part of the floor)"
+  ok "PASSes with retro-evidence + cycle-commits present, retro-prereq absent (not part of the floor)"; B_sibling_missing=1
 else
   bad "clean-tree did not PASS with the toolchain floor present (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -60,7 +62,7 @@ rm -f "$WORK/bin/validate-retro-evidence.sh"
 bash "$WORK/bin/validate-mandatory-rules.sh" --check-clean-tree >"$WORK/out.txt" 2>&1
 rc=$?
 if [ "$rc" = "1" ] && grep -q 'toolchain incomplete' "$WORK/out.txt"; then
-  ok "MUTATION: a missing required sibling FAILs (the floor is real, not vacuous)"
+  mutant_killed "$B_sibling_missing" required-sibling-missing "MUTATION: a missing required sibling FAILs (the floor is real, not vacuous)"
 else
   bad "a missing required sibling did not FAIL (exit $rc)"; sed 's/^/        /' "$WORK/out.txt"
 fi

@@ -45,6 +45,8 @@ echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
 rc=0
 ok()  { echo "ok: $1"; }
 bad() { echo "FAIL: $1" >&2; rc=1; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_ssmBlock=0; B_ssmNeg=0
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "run.sh: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -112,7 +114,7 @@ fi
 # would offer two remedies for one line.
 snap '- 13/14 WONTFIX/SUPERSEDED items closed; the section was superseded by an experiment.'
 if run --warn-only --fail-on pipeline-snapshot.md; then
-  ok "NEGATIVE CONTROL: lowercase prose and WONTFIX/SUPERSEDED do not fire"
+  ok "NEGATIVE CONTROL: lowercase prose and WONTFIX/SUPERSEDED do not fire"; B_ssmNeg=1
 else
   bad "NEGATIVE CONTROL fired — the detector reds ordinary prose, which reds every clean retro run"
 fi
@@ -136,7 +138,7 @@ fi
 if run --warn-only --fail-on pipeline-snapshot.md; then
   bad "--fail-on did not harden the verdict; the flag is decoration"
 else
-  ok "--fail-on pipeline-snapshot.md turns the same marker into a BLOCK (exit 1)"
+  ok "--fail-on pipeline-snapshot.md turns the same marker into a BLOCK (exit 1)"; B_ssmBlock=1
 fi
 
 # The basename match must not be a substring match. Hardening an artifact the operator
@@ -158,7 +160,7 @@ if cmp -s "$V" "$MUT"; then
 else
   snap '- prior estimate is SUPERSEDED.'
   if bash "$MUT" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md >/dev/null 2>&1; then
-    ok "MUTATION — with the marker arm removed, the marked snapshot goes GREEN (the arm is what catches it)"
+    mutant_killed "$B_ssmBlock" marker-arm-removed "MUTATION — with the marker arm removed, the marked snapshot goes GREEN (the arm is what catches it)"
   else
     bad "MUTATION — the marked snapshot is still red without the marker arm; some OTHER check is doing the work"
   fi
@@ -176,7 +178,7 @@ else
   if bash "$MUT2" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md >/dev/null 2>&1; then
     bad "MUTATION — the case-insensitive mutant still spares ordinary prose; the casing guard is not what does it"
   else
-    ok "MUTATION — case-insensitively, ordinary prose goes RED (the casing guard is the false-positive defence)"
+    mutant_killed "$B_ssmNeg" case-insensitive "MUTATION — case-insensitively, ordinary prose goes RED (the casing guard is the false-positive defence)"
   fi
 fi
 

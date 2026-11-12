@@ -5,3 +5,4 @@ core/schemas/sprint-status.json
 core/scripts/validate-retro-evidence.sh
 core/scripts/validate-cycle-commits.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

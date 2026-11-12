@@ -1,251 +1,251 @@
 CONTROL (p) OK: self-probe fired (1, 1, 1, 1, 'FINISHED-INSIDE') on the seeded ask and (1, 0, 0, 0) on the near-miss; lane-idle (claim, bucket, first-to-last, tail) minutes (5.0, 0.0, 4.0, 0.0)
-sprint	ask_start	wait_min	lane_idle_min	bucket	active_at_ask	finished_inside	enq_inside	enq_agent_inside	rmv_inside	dlv_inside	act_inside	step	header
-s317	2026-10-08T01:33:00.427Z	9	9.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	4.2/4.3 split
-s317	2026-10-08T01:57:28.703Z	10	10.3	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	AC8 subscriber
-s317	2026-10-08T02:48:57.420Z	4	3.5	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	AD-8 docstring
-s317	2026-10-09T07:27:54.722Z	166	161.9	FINISHED-INSIDE	2	1	5	1	3	0	0	gate-validation[implementation]	Check 22 S3
-s317	2026-10-09T13:45:04.697Z	7	5.6	FINISHED-INSIDE	4	1	3	1	0	0	0	implementation	Quoter guard
-s317	2026-10-09T14:15:58.936Z	1	1.0	NONE-RUNNING	0	0	1	0	0	0	0	handoff	Push blocked
-s317	2026-10-09T17:28:46.188Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	route	Intent
-s317	2026-10-10T21:06:40.222Z	0	0.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	implementation	Check 22
-s317	2026-10-11T14:12:12.111Z	24	18.2	FINISHED-INSIDE	2	1	3	1	0	0	0	gate-validation[sprint-review]	S309 HARD_BLOCK
-s317	2026-10-11T15:19:09.190Z	93	92.9	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Sprint PR
-s317	2026-10-11T18:30:13.767Z	80	80.2	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	FAIL path
-s317	2026-10-11T23:36:55.109Z	0	0.5	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge PR 1207
-s317	2026-10-12T01:33:12.756Z	1	0.9	NONE-RUNNING	0	0	0	0	0	0	0	retro	Item 4
-s318	2026-10-12T02:48:13.522Z	1	0.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s318	2026-10-12T03:09:46.431Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	route	Step 1a block
-s318	2026-10-12T03:13:16.765Z	0	0.0	RUNNING-NO-FINISH	8	0	0	0	0	0	0	artifact-consolidation	Backlog size
-s318	2026-10-12T03:25:46.835Z	15	15.1	RUNNING-NO-FINISH	2	0	4	0	0	0	0	artifact-consolidation	S313 locks
-s318	2026-10-12T03:59:59.963Z	114	114.0	NONE-RUNNING	0	0	1	0	0	0	0	artifact-consolidation	Sprint scope
-s318	2026-10-12T16:25:18.110Z	10	8.3	FINISHED-INSIDE	13	1	5	2	0	0	0	requirements	HODL enabled
-s318	2026-10-12T17:11:11.671Z	2	1.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s318	2026-10-13T06:36:36.468Z	250	244.1	FINISHED-INSIDE	13	2	3	2	0	0	0	stories-test-strategy	Story 2.4
-s318	2026-10-13T12:32:05.849Z	7	6.7	RUNNING-NO-FINISH	1	0	1	0	0	0	0	stories-test-strategy	AC retags
-s318	2026-10-13T13:00:09.164Z	4	4.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Authorize
-s318	2026-10-13T13:29:21.693Z	2	2.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Merge #1218
-s318	2026-10-13T17:24:19.613Z	87	86.8	RUNNING-NO-FINISH	1	0	1	0	0	0	0	stories-test-strategy	Story 2.7 AC3
-s318	2026-10-13T18:55:15.222Z	47	47.4	RUNNING-NO-FINISH	1	0	1	0	0	0	0	stories-test-strategy	Repair join
-s318	2026-10-13T21:18:50.403Z	11	10.5	RUNNING-NO-FINISH	2	0	1	0	0	0	0	gate-validation[stories-test-strategy]	Check 30 fix
-s318	2026-10-13T22:10:24.746Z	11	0.0	FINISHED-INSIDE	29	10	20	12	2	0	0	implementation	Storage pin
-s318	2026-10-14T00:38:20.029Z	22	12.6	RUNNING-NO-FINISH	1	0	4	0	0	0	0	gate-validation[implementation]	Check 22
-s318	2026-10-14T09:06:22.732Z	103	102.7	NONE-RUNNING	0	0	1	0	0	0	0	gate-validation[sprint-review]	D-2 mTLS
-s318	2026-10-14T13:07:08.584Z	0	0.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Pull auth
-s318	2026-10-14T13:15:11.823Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	9 LC-E4
-s318	2026-10-14T13:19:24.038Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Overrides
-s318	2026-10-14T13:26:35.152Z	3	3.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s318	2026-10-14T13:33:29.974Z	0	0.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s318	2026-10-14T13:46:49.478Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Merge #1219
-s318	2026-10-14T14:39:49.529Z	57	56.9	NONE-RUNNING	0	0	1	0	0	0	0	deploy-validate	Push + PR
-s318	2026-10-14T15:44:37.247Z	14	14.3	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge PR
-s318	2026-10-14T16:35:06.600Z	42	42.2	NONE-RUNNING	0	0	1	0	0	0	0	retro	LR-S318-7
-s319	2026-10-15T02:29:07.327Z	7	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	pre-step	dev override
-s319	2026-10-15T02:42:05.674Z	0	0.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	pre-step	Re-approve
-s319	2026-10-15T10:44:03.537Z	1	0.0	NONE-RUNNING	0	0	1	0	0	0	0	retro	QA override
-s319	2026-10-15T10:50:55.425Z	2	2.0	NONE-RUNNING	0	0	0	0	0	0	0	retro	Re-approve
-s319	2026-10-15T15:56:58.864Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Readopt
-s319	2026-10-15T15:59:50.473Z	6	5.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s319	2026-10-15T17:21:54.110Z	1	0.8	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Run pull
-s319	2026-10-15T17:25:08.214Z	3	2.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	dev.md merge
-s319	2026-10-15T17:31:53.910Z	11	11.1	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	Role models
-s319	2026-10-15T18:22:54.281Z	1	1.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Run plan
-s319	2026-10-15T18:50:56.876Z	5	4.5	NONE-RUNNING	0	0	0	0	0	0	0	route	Scope
-s319	2026-10-15T19:34:54.218Z	12	11.6	RUNNING-NO-FINISH	3	0	0	0	0	0	0	carry-over-evaluation	Repair join
-s319	2026-10-15T19:52:16.555Z	1	0.6	RUNNING-NO-FINISH	1	0	0	0	0	0	0	carry-over-evaluation	Repair join
-s319	2026-10-15T21:50:29.723Z	3	0.0	FINISHED-INSIDE	2	1	1	1	0	0	0	gate-validation[carry-over-evaluation]	Monitor cap
-s319	2026-10-15T22:24:30.017Z	6	6.4	RUNNING-NO-FINISH	1	0	1	0	0	0	0	requirements	D-1..D-15
-s319	2026-10-15T23:45:43.928Z	0	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	D-2 floor
-s319	2026-10-16T02:15:14.996Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Pin premise
-s319	2026-10-16T04:24:55.995Z	1	1.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	coe-domain
-s319	2026-10-16T04:29:47.422Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s319	2026-10-16T04:49:17.731Z	2	2.5	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Shard verdict
-s319	2026-10-16T07:19:33.395Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s319	2026-10-16T10:53:49.314Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Verdicts
-s319	2026-10-16T12:02:28.703Z	4	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	requirements	SPEC Q18
-s319	2026-10-16T16:27:47.123Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Check 925
-s319	2026-10-16T16:33:24.577Z	3	2.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s319	2026-10-16T16:44:00.253Z	2	2.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s319	2026-10-16T18:20:45.800Z	1	1.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E4 verdict
-s319	2026-10-17T06:52:38.200Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	9 verdicts
-s319	2026-10-17T13:10:18.966Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Relay ext
-s319	2026-10-17T13:28:20.731Z	2	2.2	NONE-RUNNING	0	0	1	0	0	0	0	requirements	STS-domain
-s319	2026-10-17T13:30:54.977Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	requirements	s312 fence
-s319	2026-10-17T15:30:12.496Z	53	52.8	RUNNING-NO-FINISH	1	0	1	0	0	0	0	architecture	Stale age
-s319	2026-10-17T20:23:48.026Z	149	149.0	RUNNING-NO-FINISH	3	0	1	0	0	0	0	architecture	Resolution
-s319	2026-10-17T23:48:33.582Z	0	0.0	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Verdicts
-s319	2026-10-17T23:50:51.130Z	2	1.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s319	2026-10-18T00:25:20.148Z	32	32.3	NONE-RUNNING	0	0	0	0	0	0	0	architecture	Unblock p3
-s319	2026-10-18T00:58:20.537Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	architecture	Stamp p2
-s319	2026-10-18T19:59:01.618Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Pull target
-s319	2026-10-19T20:28:45.642Z	1	1.2	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	Override
-s319	2026-10-19T20:30:31.471Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Conflict
-s319	2026-10-19T20:32:55.650Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Verdicts
-s319	2026-10-19T20:36:22.589Z	3	2.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s319	2026-10-20T01:34:08.071Z	2	2.0	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	mTLS set
-s319	2026-10-20T06:09:56.435Z	179	178.7	RUNNING-NO-FINISH	4	0	0	0	0	0	0	stories-test-strategy	AC5 arm
-s319	2026-10-20T09:24:59.819Z	10	10.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	Pair set
-s319	2026-10-20T19:02:10.291Z	38	38.0	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Rule 8
-s319	2026-10-20T21:56:44.454Z	30	30.1	NONE-RUNNING	0	0	1	0	0	0	0	stories-test-strategy	Stale amount
-s319	2026-10-21T00:31:09.653Z	77	63.4	FINISHED-INSIDE	15	8	26	14	9	0	0	implementation	Rewards chains
-s319	2026-10-21T02:28:07.317Z	23	13.8	FINISHED-INSIDE	6	2	9	4	4	0	0	gate-validation[implementation]	Check 22 waiver
-s319	2026-10-21T02:51:58.881Z	0	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	gate-validation[implementation]	AC2 egress
-s319	2026-10-21T12:03:50.868Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Readopt
-s319	2026-10-21T12:20:56.940Z	1	0.8	RUNNING-NO-FINISH	1	0	0	0	0	0	0	pre-step	Verdicts
-s319	2026-10-21T12:25:42.677Z	2	1.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve
-s319	2026-10-21T12:31:13.976Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s319	2026-10-21T14:12:59.783Z	1	0.0	FINISHED-INSIDE	13	2	3	2	0	0	0	implementation	Prod integrity
-s319	2026-10-21T14:51:16.377Z	84	83.5	RUNNING-NO-FINISH	3	0	1	0	0	0	0	gate-validation[implementation]	Check 11 2.3a
-s319	2026-10-21T16:49:39.562Z	5	5.4	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[implementation]	Check 930 3.1
-s319	2026-10-21T18:16:07.284Z	11	0.6	FINISHED-INSIDE	13	4	19	7	7	0	0	implementation	HODL price key
-s319	2026-10-21T21:27:25.929Z	0	0.0	RUNNING-NO-FINISH	4	0	0	0	0	0	0	implementation	4.2 claim data
-s319	2026-10-21T23:33:52.489Z	43	36.0	FINISHED-INSIDE	12	2	6	3	1	0	0	implementation	Merkl ABI
-s319	2026-10-22T00:22:54.663Z	8	0.0	FINISHED-INSIDE	13	7	10	8	1	0	0	implementation	5.3 ceiling
-s319	2026-10-22T05:22:33.734Z	136	135.6	RUNNING-NO-FINISH	4	0	1	0	0	0	0	gate-validation[implementation]	Check 11
-s319	2026-10-22T15:35:08.270Z	2	2.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	implementation	Pause flag
-s319	2026-10-22T16:41:22.083Z	8	8.2	NONE-RUNNING	0	0	1	0	0	0	0	gate-validation[implementation]	Check 22 row
-s319	2026-10-22T17:13:18.775Z	11	11.2	RUNNING-NO-FINISH	3	0	0	0	0	0	0	gate-validation[implementation]	Check 9 stall
-s319	2026-10-22T20:05:53.287Z	4	3.9	RUNNING-NO-FINISH	2	0	0	0	0	0	0	sprint-review	2.3b live
-s319	2026-10-22T21:03:38.692Z	2	1.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Push / PR
-s319	2026-10-22T22:11:27.765Z	1	1.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Red smoke
-s319	2026-10-23T00:20:46.143Z	70	69.8	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Land fix
-s319	2026-10-23T02:15:09.139Z	39	38.5	NONE-RUNNING	0	0	0	0	0	0	0	retro	LR-S319-6
-s319	2026-10-23T03:09:03.351Z	1	0.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	retro	LR-S319-6
-s320	2026-10-23T10:25:12.551Z	2	2.2	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	QA override
-s320	2026-10-23T12:06:30.621Z	4	4.0	NONE-RUNNING	0	0	0	0	0	0	0	route	Sprint scope
-s320	2026-10-23T12:48:41.292Z	48	42.3	FINISHED-INSIDE	1	1	2	1	0	0	0	carry-over-evaluation	S3 breaker
-s320	2026-10-23T14:30:37.734Z	2	2.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	carry-over-evaluation	IL sign
-s320	2026-10-23T15:39:34.025Z	20	19.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	carry-over-evaluation	S-14 target
-s320	2026-10-23T17:51:25.944Z	0	0.0	RUNNING-NO-FINISH	8	0	0	0	0	0	0	carry-over-evaluation	WIDE exit
-s320	2026-10-23T18:54:52.979Z	1012	1011.8	RUNNING-NO-FINISH	4	0	0	0	0	0	0	carry-over-evaluation	Claim hold
-s320	2026-10-24T12:39:31.391Z	36	36.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override
-s320	2026-10-24T13:16:15.526Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Conflict
-s320	2026-10-24T13:17:22.559Z	63	60.2	FINISHED-INSIDE	1	1	1	1	0	0	0	pre-step	Del hook
-s320	2026-10-24T14:24:33.054Z	34	33.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s320	2026-10-25T00:06:42.981Z	76	76.2	RUNNING-NO-FINISH	1	0	1	0	0	0	0	requirements	LR-S320-5
-s320	2026-10-25T04:31:16.249Z	343	331.4	FINISHED-INSIDE	1	1	2	1	0	0	0	architecture	S319 rows
-s320	2026-10-25T10:15:20.806Z	243	242.7	NONE-RUNNING	0	0	0	0	0	0	0	architecture	Lane join
-s320	2026-10-25T14:30:38.093Z	509	509.2	RUNNING-NO-FINISH	1	0	0	0	0	0	0	architecture	LR-S320-8
-s320	2026-10-25T23:42:48.756Z	125	125.3	RUNNING-NO-FINISH	1	0	0	0	0	0	0	architecture	Lane join
-s320	2026-10-26T09:39:45.199Z	91	74.8	FINISHED-INSIDE	20	19	22	20	1	0	0	stories-test-strategy	LR-S320-8 read
-s320	2026-10-26T13:11:20.300Z	6	5.7	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	Closed reads
-s320	2026-10-26T20:47:06.136Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivation
-s320	2026-10-26T22:15:32.108Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E4 x7
-s320	2026-10-26T22:21:44.696Z	4	3.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s320	2026-10-27T01:46:16.667Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	domain
-s320	2026-10-27T01:51:40.108Z	2	1.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	derivations
-s320	2026-10-27T02:41:25.138Z	0	0.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override
-s320	2026-10-27T02:47:22.116Z	2	2.1	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	STS verdicts
-s320	2026-10-27T02:49:46.723Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s320	2026-10-27T03:23:23.395Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	Pause flag
-s320	2026-10-27T06:57:53.254Z	95	89.3	FINISHED-INSIDE	6	2	6	3	0	0	0	implementation	Check 22 S4
-s320	2026-10-27T09:22:00.113Z	55	32.9	RUNNING-NO-FINISH	5	0	22	5	16	0	0	implementation	4.1 AC13
-s320	2026-10-27T10:22:51.209Z	39	23.8	FINISHED-INSIDE	7	2	7	3	3	0	0	gate-validation[implementation]	4.1 lane
-s320	2026-10-27T11:06:28.643Z	18	14.1	FINISHED-INSIDE	3	2	6	3	3	0	0	gate-validation[implementation]	4.1 lane
-s320	2026-10-27T13:38:10.230Z	2	1.2	RUNNING-NO-FINISH	2	0	1	1	0	0	0	gate-validation[implementation]	Check 22 S4
-s320	2026-10-27T14:34:51.252Z	3	1.3	FINISHED-INSIDE	3	1	1	1	0	0	0	gate-validation[implementation]	Check 9
-s320	2026-10-27T17:13:03.177Z	12	12.1	RUNNING-NO-FINISH	1	0	1	0	0	0	0	implementation	Idle check
-s320	2026-10-27T18:11:44.734Z	17	17.2	RUNNING-NO-FINISH	4	0	1	0	0	0	0	gate-validation[implementation]	Check 11
-s320	2026-10-27T22:17:26.546Z	8	8.3	RUNNING-NO-FINISH	1	0	0	0	0	0	0	handoff	Deletions
-s320	2026-10-27T23:44:36.909Z	1	1.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Gate checks
-s320	2026-10-27T23:50:04.709Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Title match
-s320	2026-10-27T23:51:24.486Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s320	2026-10-28T02:44:39.710Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[implementation]	Check 22 S4
-s320	2026-10-28T03:30:33.759Z	1	0.8	NONE-RUNNING	0	0	0	0	0	0	0	implementation	2.1 tolerance
-s320	2026-10-28T05:41:51.057Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	implementation	Check 2
-s320	2026-10-28T23:20:12.448Z	0	0.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	New release
-s320	2026-10-29T00:00:00.075Z	14	13.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E14
-s320	2026-10-29T00:29:28.021Z	3	2.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 1/20
-s320	2026-10-29T00:32:20.132Z	1	0.8	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	Delete 5/20
-s320	2026-10-29T00:33:19.849Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 9/20
-s320	2026-10-29T00:33:45.283Z	0	0.0	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 13/20
-s320	2026-10-29T00:34:19.758Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 17/20
-s320	2026-10-29T10:56:42.680Z	3	3.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override
-s320	2026-10-29T11:04:56.510Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s320	2026-10-29T12:58:06.360Z	1	1.4	RUNNING-NO-FINISH	2	0	0	0	0	0	0	implementation	Sign test
-s320	2026-10-29T13:07:14.013Z	2	1.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[implementation]	Check 2
-s320	2026-10-29T14:31:52.283Z	11	11.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	sprint-review	HODL modal
-s320	2026-10-29T15:35:30.764Z	22	19.6	FINISHED-INSIDE	2	1	1	1	0	0	0	gate-validation[deploy-validate]	Check 2
-s320	2026-10-29T16:32:28.949Z	25	25.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	PR #1277
-s320	2026-10-29T17:37:18.146Z	2	0.1	FINISHED-INSIDE	2	1	2	1	0	0	0	deploy-validate	Pool-pnl reds
-s320	2026-10-29T18:49:44.633Z	10	10.2	RUNNING-NO-FINISH	2	0	0	0	0	0	0	gate-validation[deploy-validate]	LR-1 AC4
-s320	2026-10-29T19:04:42.603Z	13	11.8	FINISHED-INSIDE	2	1	2	1	0	0	0	deploy-validate	iOS AC14
-s320	2026-10-29T19:18:31.232Z	3	3.2	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Visual check
-s320	2026-10-29T21:16:09.335Z	0	0.1	RUNNING-NO-FINISH	2	0	0	0	0	0	0	deploy-validate	iOS AC14
-s320	2026-10-29T22:06:33.428Z	51	47.7	FINISHED-INSIDE	1	1	1	1	0	0	0	retro	Lapsed ACs
-s320	2026-10-29T23:19:27.174Z	7	7.4	NONE-RUNNING	0	0	1	0	0	0	0	retro	Verdict sprint
-s321	2026-10-30T00:25:38.093Z	9	9.0	NONE-RUNNING	0	0	0	0	0	0	0	route	Sprint scope
-s321	2026-10-30T02:18:09.536Z	19	13.1	FINISHED-INSIDE	4	1	2	1	0	0	0	requirements	Zero reserve
-s321	2026-10-30T02:38:16.251Z	33	32.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Halt scope
-s321	2026-10-30T03:12:11.828Z	2	2.5	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Report timing
-s321	2026-10-30T03:20:41.139Z	4	3.8	RUNNING-NO-FINISH	2	0	0	0	0	0	0	requirements	Native HODL
-s321	2026-10-30T05:17:29.724Z	9	0.0	RUNNING-NO-FINISH	4	0	0	0	0	0	0	requirements	Base service
-s321	2026-10-30T05:28:06.585Z	4	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Gas ceiling
-s321	2026-10-30T05:32:56.000Z	3	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	CLAUDE.md line
-s321	2026-10-30T05:45:30.189Z	6	5.6	RUNNING-NO-FINISH	1	0	1	0	0	0	0	requirements	HODL build
-s321	2026-10-30T10:59:07.056Z	2	2.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E4 x6
-s321	2026-10-30T11:10:21.029Z	3	2.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Merge #1283
-s321	2026-10-30T16:30:39.121Z	9	9.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[requirements]	Check 32
-s321	2026-10-30T16:40:44.621Z	1	1.3	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[requirements]	Check 32
-s321	2026-10-30T18:14:58.305Z	12	12.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Land L2 fix
-s321	2026-10-31T22:03:39.695Z	101	100.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Target
-s321	2026-10-31T23:45:26.554Z	5	5.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Conflict
-s321	2026-10-31T23:58:39.858Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations
-s321	2026-11-01T02:09:51.960Z	4	3.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Push
-s321	2026-11-01T11:45:53.890Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	code-review
-s321	2026-11-02T15:55:50.487Z	10	9.8	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Deletion
-s321	2026-11-03T03:34:07.848Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	route	Gate hold
-s321	2026-11-03T03:40:54.689Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Check 2
-s321	2026-11-04T00:03:14.651Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override
-s321	2026-11-04T13:20:36.492Z	4	0.0	FINISHED-INSIDE	5	1	1	1	0	0	0	stories-test-strategy	Elicitation
-s321	2026-11-05T23:45:07.837Z	2	1.8	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Readopt
-s321	2026-11-06T01:24:28.432Z	1	1.2	RUNNING-NO-FINISH	2	0	0	0	0	0	0	stories-test-strategy	Resolution
-s321	2026-11-06T01:51:18.240Z	53	52.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	Resolution
-s321	2026-11-06T04:23:35.950Z	84	45.2	FINISHED-INSIDE	15	8	13	8	3	0	0	gate-validation[implementation]	Matic stall
-s321	2026-11-06T06:00:29.996Z	3	0.0	FINISHED-INSIDE	7	2	5	3	2	0	0	gate-validation[implementation]	Manual sweeps
-s321	2026-11-06T08:00:48.847Z	13	0.0	FINISHED-INSIDE	13	3	14	5	7	0	0	implementation	1.2 fixture
-s321	2026-11-06T08:17:50.043Z	3	0.0	RUNNING-NO-FINISH	6	0	1	1	1	0	0	implementation	Permit2 pin
-s321	2026-11-06T09:01:20.207Z	3	0.0	RUNNING-NO-FINISH	4	0	8	0	2	0	0	implementation	Gate refusal
-s321	2026-11-06T15:41:37.011Z	1	1.2	NONE-RUNNING	0	0	0	0	0	0	0	implementation	Release hold
-s321	2026-11-06T18:48:56.088Z	3	3.2	NONE-RUNNING	0	0	0	0	0	0	0	implementation	1.2 gate 2
-s321	2026-11-06T21:47:56.406Z	1	0.8	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	impl-domain
-s321	2026-11-07T00:00:08.641Z	8	5.6	FINISHED-INSIDE	6	2	5	2	2	0	0	implementation	Check 9
-s321	2026-11-07T10:37:48.360Z	65	64.9	RUNNING-NO-FINISH	1	0	1	0	0	0	0	implementation	Story 5.6
-s321	2026-11-07T14:21:58.529Z	9	5.0	FINISHED-INSIDE	4	4	4	4	0	0	0	gate-validation[sprint-review]	Check 915
-s321	2026-11-07T14:42:12.881Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Push + PR
-s321	2026-11-07T14:48:59.714Z	4	4.2	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge PR 1303
-s321	2026-11-07T15:41:25.918Z	7	6.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Fix PR
-s321	2026-11-07T15:52:10.919Z	0	0.2	NONE-RUNNING	0	0	1	0	0	0	0	deploy-validate	Base DB first
-s321	2026-11-07T16:06:16.077Z	3	1.5	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Base config
-s321	2026-11-07T16:22:49.933Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Monitoring
-s321	2026-11-07T17:24:57.710Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Save symptom
-s321	2026-11-07T18:07:52.630Z	4	4.3	RUNNING-NO-FINISH	2	0	0	0	0	0	0	deploy-validate	V4 Quoter
-s321	2026-11-07T18:48:19.270Z	2	1.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Push + merge
-s321	2026-11-07T18:54:12.523Z	264	263.7	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge #1305
-s321	2026-11-08T00:35:42.937Z	2	1.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Base PUT
-s321	2026-11-08T01:09:09.034Z	83	83.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Base save
-s321	2026-11-08T03:06:37.548Z	17	15.4	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Push+merge
-s321	2026-11-08T04:02:44.823Z	4	2.1	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Router PUT
-s321	2026-11-08T04:10:08.253Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Deploy key
-s321	2026-11-08T04:34:54.469Z	645	644.8	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Router PUT
-s321	2026-11-08T15:39:38.615Z	24	23.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Base first row
-s321	2026-11-08T16:24:12.837Z	0	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	deploy-validate	TEL transfer
-s322	2026-11-09T00:06:56.605Z	8	8.3	NONE-RUNNING	0	0	0	0	0	0	0	route	Roll fix
-s322	2026-11-09T06:25:18.876Z	340	333.0	RUNNING-NO-FINISH	3	0	1	1	0	0	0	carry-over-evaluation	Scope re-conf
-s322	2026-11-09T19:13:39.000Z	22	21.6	RUNNING-NO-FINISH	1	0	2	0	0	0	0	gate-validation[carry-over-evaluation]	Join cure
-s322	2026-11-09T20:18:03.004Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[carry-over-evaluation]	Push blocked
-s322	2026-11-09T21:51:37.580Z	3	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	AC5 predicate
-s322	2026-11-09T22:21:07.317Z	10	10.2	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	SQL form
-s322	2026-11-09T23:51:31.501Z	16	16.0	RUNNING-NO-FINISH	4	0	0	0	0	0	0	requirements	AC5 predicate
-s322	2026-11-10T01:14:42.526Z	19	19.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Resolution
-s322	2026-11-10T02:13:15.641Z	7	7.3	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[requirements]	Check 32
-s322	2026-11-10T18:24:12.396Z	2	2.2	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	J3 REOPEN
-s322	2026-11-10T22:49:29.829Z	13	10.9	FINISHED-INSIDE	1	1	1	1	0	0	0	implementation	Stopgap
-s322	2026-11-11T00:24:33.157Z	75	74.9	RUNNING-NO-FINISH	2	0	0	0	0	0	0	implementation	Gate 2
-s322	2026-11-11T03:41:25.901Z	10	9.8	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[implementation]	Check 32
-s322	2026-11-11T06:45:14.618Z	1	1.2	NONE-RUNNING	0	0	0	0	0	0	0	handoff	Push block
-s322	2026-11-11T07:15:36.419Z	2	1.5	RUNNING-NO-FINISH	3	0	0	0	0	0	0	implementation	Host relief
-s322	2026-11-11T07:25:05.678Z	7	0.8	FINISHED-INSIDE	2	1	1	1	0	0	0	gate-validation[implementation]	AWS login
-s322	2026-11-11T07:41:47.654Z	2	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	bug-investigation	D-4 value
+sprint	ask_start	wait_min	lane_idle_min	bucket	active_at_ask	finished_inside	enq_inside	enq_agent_inside	rmv_inside	dlv_inside	act_inside	step	header	held_at_ask	lanes_running_at_ask	dispatched_at_ask	adj_dispatch	adj_dispatch_input_flag	held_anchor	drained_at_ask
+s317	2026-10-08T01:33:00.427Z	9	9.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	4.2/4.3 split	0	0	0	0	0	fallback	0
+s317	2026-10-08T01:57:28.703Z	10	10.3	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	AC8 subscriber	0	0	0	0	0	fallback	1
+s317	2026-10-08T02:48:57.420Z	4	3.5	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	AD-8 docstring	0	0	0	0	0	fallback	0
+s317	2026-10-09T07:27:54.722Z	166	161.9	FINISHED-INSIDE	2	1	5	1	3	0	0	gate-validation[implementation]	Check 22 S3	0	0	0	0	0	fallback	0
+s317	2026-10-09T13:45:04.697Z	7	5.6	FINISHED-INSIDE	4	1	3	1	0	0	0	implementation	Quoter guard	0	0	0	0	0	fallback	1
+s317	2026-10-09T14:15:58.936Z	1	1.0	NONE-RUNNING	0	0	1	0	0	0	0	handoff	Push blocked	0	0	0	0	0	fallback	0
+s317	2026-10-09T17:28:46.188Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	route	Intent	0	0	0	0	0	fallback	0
+s317	2026-10-10T21:06:40.222Z	0	0.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	implementation	Check 22	0	0	0	0	0	fallback	0
+s317	2026-10-11T14:12:12.111Z	24	18.2	FINISHED-INSIDE	2	1	3	1	0	0	0	gate-validation[sprint-review]	S309 HARD_BLOCK	0	1	1	0	0	fallback	0
+s317	2026-10-11T15:19:09.190Z	93	92.9	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Sprint PR	0	0	0	0	0	fallback	0
+s317	2026-10-11T18:30:13.767Z	80	80.2	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	FAIL path	0	0	0	0	0	fallback	0
+s317	2026-10-11T23:36:55.109Z	0	0.5	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge PR 1207	0	0	0	0	0	fallback	0
+s317	2026-10-12T01:33:12.756Z	1	0.9	NONE-RUNNING	0	0	0	0	0	0	0	retro	Item 4	0	0	0	0	0	fallback	0
+s318	2026-10-12T02:48:13.522Z	1	0.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	fallback	0
+s318	2026-10-12T03:09:46.431Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	route	Step 1a block	0	0	0	0	0	fallback	0
+s318	2026-10-12T03:13:16.765Z	0	0.0	RUNNING-NO-FINISH	8	0	0	0	0	0	0	artifact-consolidation	Backlog size	1	2	0	0	0	fallback	0
+s318	2026-10-12T03:25:46.835Z	15	15.1	RUNNING-NO-FINISH	2	0	4	0	0	0	0	artifact-consolidation	S313 locks	0	0	0	0	0	fallback	0
+s318	2026-10-12T03:59:59.963Z	114	114.0	NONE-RUNNING	0	0	1	0	0	0	0	artifact-consolidation	Sprint scope	0	0	0	0	0	fallback	0
+s318	2026-10-12T16:25:18.110Z	10	8.3	FINISHED-INSIDE	13	1	5	2	0	0	0	requirements	HODL enabled	0	2	1	0	0	fallback	0
+s318	2026-10-12T17:11:11.671Z	2	1.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	fallback	0
+s318	2026-10-13T06:36:36.468Z	250	244.1	FINISHED-INSIDE	13	2	3	2	0	0	0	stories-test-strategy	Story 2.4	0	2	1	0	0	fallback	0
+s318	2026-10-13T12:32:05.849Z	7	6.7	RUNNING-NO-FINISH	1	0	1	0	0	0	0	stories-test-strategy	AC retags	0	0	0	0	0	fallback	0
+s318	2026-10-13T13:00:09.164Z	4	4.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Authorize	0	0	0	0	0	fallback	0
+s318	2026-10-13T13:29:21.693Z	2	2.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Merge #1218	0	0	0	0	0	fallback	0
+s318	2026-10-13T17:24:19.613Z	87	86.8	RUNNING-NO-FINISH	1	0	1	0	0	0	0	stories-test-strategy	Story 2.7 AC3	0	0	0	0	0	fallback	1
+s318	2026-10-13T18:55:15.222Z	47	47.4	RUNNING-NO-FINISH	1	0	1	0	0	0	0	stories-test-strategy	Repair join	0	0	0	0	0	fallback	0
+s318	2026-10-13T21:18:50.403Z	11	10.5	RUNNING-NO-FINISH	2	0	1	0	0	0	0	gate-validation[stories-test-strategy]	Check 30 fix	0	0	0	0	0	fallback	1
+s318	2026-10-13T22:10:24.746Z	11	0.0	FINISHED-INSIDE	29	10	20	12	2	0	0	implementation	Storage pin	0	15	1	0	0	fallback	0
+s318	2026-10-14T00:38:20.029Z	22	12.6	RUNNING-NO-FINISH	1	0	4	0	0	0	0	gate-validation[implementation]	Check 22	0	1	1	0	0	fallback	0
+s318	2026-10-14T09:06:22.732Z	103	102.7	NONE-RUNNING	0	0	1	0	0	0	0	gate-validation[sprint-review]	D-2 mTLS	0	0	0	0	0	fallback	0
+s318	2026-10-14T13:07:08.584Z	0	0.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Pull auth	0	0	0	0	0	fallback	0
+s318	2026-10-14T13:15:11.823Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	9 LC-E4	0	0	0	0	0	fallback	0
+s318	2026-10-14T13:19:24.038Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Overrides	0	0	0	0	0	fallback	0
+s318	2026-10-14T13:26:35.152Z	3	3.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	fallback	0
+s318	2026-10-14T13:33:29.974Z	0	0.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	fallback	0
+s318	2026-10-14T13:46:49.478Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Merge #1219	0	0	0	0	0	fallback	0
+s318	2026-10-14T14:39:49.529Z	57	56.9	NONE-RUNNING	0	0	1	0	0	0	0	deploy-validate	Push + PR	0	0	0	0	0	fallback	0
+s318	2026-10-14T15:44:37.247Z	14	14.3	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge PR	0	0	0	0	0	fallback	0
+s318	2026-10-14T16:35:06.600Z	42	42.2	NONE-RUNNING	0	0	1	0	0	0	0	retro	LR-S318-7	0	0	0	0	0	fallback	0
+s319	2026-10-15T02:29:07.327Z	7	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	pre-step	dev override	0	1	1	1	1	api	0
+s319	2026-10-15T02:42:05.674Z	0	0.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-15T10:44:03.537Z	1	0.0	NONE-RUNNING	0	0	1	0	0	0	0	retro	QA override	0	2	1	1	1	api	0
+s319	2026-10-15T10:50:55.425Z	2	2.0	NONE-RUNNING	0	0	0	0	0	0	0	retro	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-15T15:56:58.864Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Readopt	0	0	0	0	0	api	0
+s319	2026-10-15T15:59:50.473Z	6	5.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-15T17:21:54.110Z	1	0.8	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Run pull	0	0	0	0	0	api	0
+s319	2026-10-15T17:25:08.214Z	3	2.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	dev.md merge	0	0	0	0	0	api	0
+s319	2026-10-15T17:31:53.910Z	11	11.1	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	Role models	0	0	0	0	0	api	0
+s319	2026-10-15T18:22:54.281Z	1	1.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Run plan	0	0	0	0	0	api	0
+s319	2026-10-15T18:50:56.876Z	5	4.5	NONE-RUNNING	0	0	0	0	0	0	0	route	Scope	0	0	0	0	0	api	0
+s319	2026-10-15T19:34:54.218Z	12	11.6	RUNNING-NO-FINISH	3	0	0	0	0	0	0	carry-over-evaluation	Repair join	0	0	0	0	0	api	0
+s319	2026-10-15T19:52:16.555Z	1	0.6	RUNNING-NO-FINISH	1	0	0	0	0	0	0	carry-over-evaluation	Repair join	0	0	0	0	0	api	0
+s319	2026-10-15T21:50:29.723Z	3	0.0	FINISHED-INSIDE	2	1	1	1	0	0	0	gate-validation[carry-over-evaluation]	Monitor cap	0	2	1	0	0	api	0
+s319	2026-10-15T22:24:30.017Z	6	6.4	RUNNING-NO-FINISH	1	0	1	0	0	0	0	requirements	D-1..D-15	0	0	0	0	0	api	0
+s319	2026-10-15T23:45:43.928Z	0	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	D-2 floor	0	1	1	0	0	api	0
+s319	2026-10-16T02:15:14.996Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Pin premise	0	0	0	0	0	api	0
+s319	2026-10-16T04:24:55.995Z	1	1.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	coe-domain	0	0	0	0	0	api	0
+s319	2026-10-16T04:29:47.422Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-16T04:49:17.731Z	2	2.5	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Shard verdict	0	0	0	0	0	api	0
+s319	2026-10-16T07:19:33.395Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s319	2026-10-16T10:53:49.314Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Verdicts	0	0	0	0	0	api	0
+s319	2026-10-16T12:02:28.703Z	4	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	requirements	SPEC Q18	0	1	1	1	0	api	0
+s319	2026-10-16T16:27:47.123Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Check 925	0	0	0	0	0	api	0
+s319	2026-10-16T16:33:24.577Z	3	2.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-16T16:44:00.253Z	2	2.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s319	2026-10-16T18:20:45.800Z	1	1.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E4 verdict	0	0	0	0	0	api	0
+s319	2026-10-17T06:52:38.200Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	9 verdicts	0	0	0	0	0	api	0
+s319	2026-10-17T13:10:18.966Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Relay ext	0	0	0	0	0	api	0
+s319	2026-10-17T13:28:20.731Z	2	2.2	NONE-RUNNING	0	0	1	0	0	0	0	requirements	STS-domain	0	0	0	0	0	api	0
+s319	2026-10-17T13:30:54.977Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	requirements	s312 fence	0	0	0	0	0	api	0
+s319	2026-10-17T15:30:12.496Z	53	52.8	RUNNING-NO-FINISH	1	0	1	0	0	0	0	architecture	Stale age	0	0	0	0	0	api	1
+s319	2026-10-17T20:23:48.026Z	149	149.0	RUNNING-NO-FINISH	3	0	1	0	0	0	0	architecture	Resolution	0	0	0	0	0	api	0
+s319	2026-10-17T23:48:33.582Z	0	0.0	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Verdicts	0	0	0	0	0	api	0
+s319	2026-10-17T23:50:51.130Z	2	1.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-18T00:25:20.148Z	32	32.3	NONE-RUNNING	0	0	0	0	0	0	0	architecture	Unblock p3	0	0	0	0	0	api	0
+s319	2026-10-18T00:58:20.537Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	architecture	Stamp p2	0	0	0	0	0	api	0
+s319	2026-10-18T19:59:01.618Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Pull target	0	0	0	0	0	api	0
+s319	2026-10-19T20:28:45.642Z	1	1.2	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	Override	0	0	0	0	0	api	0
+s319	2026-10-19T20:30:31.471Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Conflict	0	0	0	0	0	api	0
+s319	2026-10-19T20:32:55.650Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Verdicts	0	0	0	0	0	api	0
+s319	2026-10-19T20:36:22.589Z	3	2.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-20T01:34:08.071Z	2	2.0	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	mTLS set	0	0	0	0	0	api	0
+s319	2026-10-20T06:09:56.435Z	179	178.7	RUNNING-NO-FINISH	4	0	0	0	0	0	0	stories-test-strategy	AC5 arm	0	0	0	0	0	api	0
+s319	2026-10-20T09:24:59.819Z	10	10.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	Pair set	0	0	0	0	0	api	0
+s319	2026-10-20T19:02:10.291Z	38	38.0	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Rule 8	0	0	0	0	0	api	0
+s319	2026-10-20T21:56:44.454Z	30	30.1	NONE-RUNNING	0	0	1	0	0	0	0	stories-test-strategy	Stale amount	0	0	0	0	0	api	0
+s319	2026-10-21T00:31:09.653Z	77	63.4	FINISHED-INSIDE	15	8	26	14	9	0	0	implementation	Rewards chains	0	11	1	0	0	api	0
+s319	2026-10-21T02:28:07.317Z	23	13.8	FINISHED-INSIDE	6	2	9	4	4	0	0	gate-validation[implementation]	Check 22 waiver	0	2	1	0	0	api	0
+s319	2026-10-21T02:51:58.881Z	0	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	gate-validation[implementation]	AC2 egress	0	1	1	1	1	api	0
+s319	2026-10-21T12:03:50.868Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Readopt	0	0	0	0	0	api	0
+s319	2026-10-21T12:20:56.940Z	1	0.8	RUNNING-NO-FINISH	1	0	0	0	0	0	0	pre-step	Verdicts	0	0	0	0	0	api	0
+s319	2026-10-21T12:25:42.677Z	2	1.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Re-approve	0	0	0	0	0	api	0
+s319	2026-10-21T12:31:13.976Z	1	0.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s319	2026-10-21T14:12:59.783Z	1	0.0	FINISHED-INSIDE	13	2	3	2	0	0	0	implementation	Prod integrity	0	10	1	0	0	api	0
+s319	2026-10-21T14:51:16.377Z	84	83.5	RUNNING-NO-FINISH	3	0	1	0	0	0	0	gate-validation[implementation]	Check 11 2.3a	0	0	0	0	0	api	1
+s319	2026-10-21T16:49:39.562Z	5	5.4	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[implementation]	Check 930 3.1	0	0	0	0	0	api	0
+s319	2026-10-21T18:16:07.284Z	11	0.6	FINISHED-INSIDE	13	4	19	7	7	0	0	implementation	HODL price key	0	4	1	0	0	api	0
+s319	2026-10-21T21:27:25.929Z	0	0.0	RUNNING-NO-FINISH	4	0	0	0	0	0	0	implementation	4.2 claim data	0	3	1	0	0	api	0
+s319	2026-10-21T23:33:52.489Z	43	36.0	FINISHED-INSIDE	12	2	6	3	1	0	0	implementation	Merkl ABI	0	2	1	0	0	api	0
+s319	2026-10-22T00:22:54.663Z	8	0.0	FINISHED-INSIDE	13	7	10	8	1	0	0	implementation	5.3 ceiling	0	11	1	0	0	api	0
+s319	2026-10-22T05:22:33.734Z	136	135.6	RUNNING-NO-FINISH	4	0	1	0	0	0	0	gate-validation[implementation]	Check 11	0	0	0	0	0	api	1
+s319	2026-10-22T15:35:08.270Z	2	2.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	implementation	Pause flag	0	0	0	0	0	api	0
+s319	2026-10-22T16:41:22.083Z	8	8.2	NONE-RUNNING	0	0	1	0	0	0	0	gate-validation[implementation]	Check 22 row	0	0	0	0	0	api	0
+s319	2026-10-22T17:13:18.775Z	11	11.2	RUNNING-NO-FINISH	3	0	0	0	0	0	0	gate-validation[implementation]	Check 9 stall	0	0	0	0	0	api	0
+s319	2026-10-22T20:05:53.287Z	4	3.9	RUNNING-NO-FINISH	2	0	0	0	0	0	0	sprint-review	2.3b live	0	0	0	0	0	api	0
+s319	2026-10-22T21:03:38.692Z	2	1.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Push / PR	0	0	0	0	0	api	0
+s319	2026-10-22T22:11:27.765Z	1	1.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Red smoke	0	0	0	0	0	api	0
+s319	2026-10-23T00:20:46.143Z	70	69.8	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Land fix	1	0	0	0	0	api	1
+s319	2026-10-23T02:15:09.139Z	39	38.5	NONE-RUNNING	0	0	0	0	0	0	0	retro	LR-S319-6	0	0	0	0	0	api	0
+s319	2026-10-23T03:09:03.351Z	1	0.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	retro	LR-S319-6	0	0	0	0	0	api	0
+s320	2026-10-23T10:25:12.551Z	2	2.2	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	QA override	0	0	0	0	0	api	0
+s320	2026-10-23T12:06:30.621Z	4	4.0	NONE-RUNNING	0	0	0	0	0	0	0	route	Sprint scope	0	0	0	0	0	api	0
+s320	2026-10-23T12:48:41.292Z	48	42.3	FINISHED-INSIDE	1	1	2	1	0	0	0	carry-over-evaluation	S3 breaker	0	1	1	0	0	api	0
+s320	2026-10-23T14:30:37.734Z	2	2.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	carry-over-evaluation	IL sign	0	0	0	0	0	api	1
+s320	2026-10-23T15:39:34.025Z	20	19.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	carry-over-evaluation	S-14 target	0	0	0	0	0	api	0
+s320	2026-10-23T17:51:25.944Z	0	0.0	RUNNING-NO-FINISH	8	0	0	0	0	0	0	carry-over-evaluation	WIDE exit	0	1	1	0	0	api	0
+s320	2026-10-23T18:54:52.979Z	1012	1011.8	RUNNING-NO-FINISH	4	0	0	0	0	0	0	carry-over-evaluation	Claim hold	0	0	0	0	0	api	0
+s320	2026-10-24T12:39:31.391Z	36	36.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override	0	0	0	0	0	api	0
+s320	2026-10-24T13:16:15.526Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Conflict	0	0	0	0	0	api	0
+s320	2026-10-24T13:17:22.559Z	63	60.2	FINISHED-INSIDE	1	1	1	1	0	0	0	pre-step	Del hook	0	1	1	1	0	api	0
+s320	2026-10-24T14:24:33.054Z	34	33.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s320	2026-10-25T00:06:42.981Z	76	76.2	RUNNING-NO-FINISH	1	0	1	0	0	0	0	requirements	LR-S320-5	0	0	0	0	0	api	0
+s320	2026-10-25T04:31:16.249Z	343	331.4	FINISHED-INSIDE	1	1	2	1	0	0	0	architecture	S319 rows	0	1	1	0	0	api	0
+s320	2026-10-25T10:15:20.806Z	243	242.7	NONE-RUNNING	0	0	0	0	0	0	0	architecture	Lane join	0	0	0	0	0	api	0
+s320	2026-10-25T14:30:38.093Z	509	509.2	RUNNING-NO-FINISH	1	0	0	0	0	0	0	architecture	LR-S320-8	0	0	0	0	0	api	0
+s320	2026-10-25T23:42:48.756Z	125	125.3	RUNNING-NO-FINISH	1	0	0	0	0	0	0	architecture	Lane join	0	0	0	0	0	api	0
+s320	2026-10-26T09:39:45.199Z	91	74.8	FINISHED-INSIDE	20	19	22	20	1	0	0	stories-test-strategy	LR-S320-8 read	0	19	1	1	1	api	0
+s320	2026-10-26T13:11:20.300Z	6	5.7	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	Closed reads	0	0	0	0	0	api	0
+s320	2026-10-26T20:47:06.136Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivation	0	0	0	0	0	api	0
+s320	2026-10-26T22:15:32.108Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E4 x7	0	0	0	0	0	api	0
+s320	2026-10-26T22:21:44.696Z	4	3.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s320	2026-10-27T01:46:16.667Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	domain	0	0	0	0	0	api	0
+s320	2026-10-27T01:51:40.108Z	2	1.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	derivations	0	0	0	0	0	api	0
+s320	2026-10-27T02:41:25.138Z	0	0.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override	0	0	0	0	0	api	0
+s320	2026-10-27T02:47:22.116Z	2	2.1	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	STS verdicts	0	0	0	0	0	api	0
+s320	2026-10-27T02:49:46.723Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s320	2026-10-27T03:23:23.395Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	Pause flag	0	0	0	0	0	api	0
+s320	2026-10-27T06:57:53.254Z	95	89.3	FINISHED-INSIDE	6	2	6	3	0	0	0	implementation	Check 22 S4	0	2	1	0	0	api	0
+s320	2026-10-27T09:22:00.113Z	55	32.9	RUNNING-NO-FINISH	5	0	22	5	16	0	0	implementation	4.1 AC13	0	1	1	1	1	api	0
+s320	2026-10-27T10:22:51.209Z	39	23.8	FINISHED-INSIDE	7	2	7	3	3	0	0	gate-validation[implementation]	4.1 lane	0	2	1	1	1	api	0
+s320	2026-10-27T11:06:28.643Z	18	14.1	FINISHED-INSIDE	3	2	6	3	3	0	0	gate-validation[implementation]	4.1 lane	0	2	1	1	1	api	0
+s320	2026-10-27T13:38:10.230Z	2	1.2	RUNNING-NO-FINISH	2	0	1	1	0	0	0	gate-validation[implementation]	Check 22 S4	0	1	1	0	0	api	0
+s320	2026-10-27T14:34:51.252Z	3	1.3	FINISHED-INSIDE	3	1	1	1	0	0	0	gate-validation[implementation]	Check 9	0	1	1	0	0	api	0
+s320	2026-10-27T17:13:03.177Z	12	12.1	RUNNING-NO-FINISH	1	0	1	0	0	0	0	implementation	Idle check	0	0	0	0	0	api	0
+s320	2026-10-27T18:11:44.734Z	17	17.2	RUNNING-NO-FINISH	4	0	1	0	0	0	0	gate-validation[implementation]	Check 11	0	0	0	0	0	api	1
+s320	2026-10-27T22:17:26.546Z	8	8.3	RUNNING-NO-FINISH	1	0	0	0	0	0	0	handoff	Deletions	0	0	0	0	0	api	0
+s320	2026-10-27T23:44:36.909Z	1	1.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Gate checks	0	0	0	0	0	api	0
+s320	2026-10-27T23:50:04.709Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Title match	0	0	0	0	0	api	0
+s320	2026-10-27T23:51:24.486Z	4	3.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s320	2026-10-28T02:44:39.710Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[implementation]	Check 22 S4	0	0	0	0	0	api	0
+s320	2026-10-28T03:30:33.759Z	1	0.8	NONE-RUNNING	0	0	0	0	0	0	0	implementation	2.1 tolerance	0	0	0	0	0	api	0
+s320	2026-10-28T05:41:51.057Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	implementation	Check 2	0	0	0	0	0	api	0
+s320	2026-10-28T23:20:12.448Z	0	0.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	New release	0	0	0	0	0	api	0
+s320	2026-10-29T00:00:00.075Z	14	13.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E14	0	0	0	0	0	api	0
+s320	2026-10-29T00:29:28.021Z	3	2.5	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 1/20	0	0	0	0	0	api	0
+s320	2026-10-29T00:32:20.132Z	1	0.8	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	Delete 5/20	0	0	0	0	0	api	0
+s320	2026-10-29T00:33:19.849Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 9/20	0	0	0	0	0	api	0
+s320	2026-10-29T00:33:45.283Z	0	0.0	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 13/20	0	0	0	0	0	api	0
+s320	2026-10-29T00:34:19.758Z	1	1.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Delete 17/20	0	0	0	0	0	api	0
+s320	2026-10-29T10:56:42.680Z	3	3.4	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override	0	0	0	0	0	api	0
+s320	2026-10-29T11:04:56.510Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s320	2026-10-29T12:58:06.360Z	1	1.4	RUNNING-NO-FINISH	2	0	0	0	0	0	0	implementation	Sign test	0	0	0	0	0	api	1
+s320	2026-10-29T13:07:14.013Z	2	1.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[implementation]	Check 2	0	0	0	0	0	api	0
+s320	2026-10-29T14:31:52.283Z	11	11.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	sprint-review	HODL modal	0	0	0	0	0	api	0
+s320	2026-10-29T15:35:30.764Z	22	19.6	FINISHED-INSIDE	2	1	1	1	0	0	0	gate-validation[deploy-validate]	Check 2	0	1	1	1	1	api	0
+s320	2026-10-29T16:32:28.949Z	25	25.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	PR #1277	0	0	0	0	0	api	0
+s320	2026-10-29T17:37:18.146Z	2	0.1	FINISHED-INSIDE	2	1	2	1	0	0	0	deploy-validate	Pool-pnl reds	0	1	1	0	0	api	0
+s320	2026-10-29T18:49:44.633Z	10	10.2	RUNNING-NO-FINISH	2	0	0	0	0	0	0	gate-validation[deploy-validate]	LR-1 AC4	0	0	0	0	0	api	1
+s320	2026-10-29T19:04:42.603Z	13	11.8	FINISHED-INSIDE	2	1	2	1	0	0	0	deploy-validate	iOS AC14	0	1	1	0	0	api	0
+s320	2026-10-29T19:18:31.232Z	3	3.2	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Visual check	0	1	1	0	0	api	0
+s320	2026-10-29T21:16:09.335Z	0	0.1	RUNNING-NO-FINISH	2	0	0	0	0	0	0	deploy-validate	iOS AC14	0	0	0	0	0	api	0
+s320	2026-10-29T22:06:33.428Z	51	47.7	FINISHED-INSIDE	1	1	1	1	0	0	0	retro	Lapsed ACs	0	1	1	0	0	api	0
+s320	2026-10-29T23:19:27.174Z	7	7.4	NONE-RUNNING	0	0	1	0	0	0	0	retro	Verdict sprint	0	0	0	0	0	api	0
+s321	2026-10-30T00:25:38.093Z	9	9.0	NONE-RUNNING	0	0	0	0	0	0	0	route	Sprint scope	0	0	0	0	0	api	0
+s321	2026-10-30T02:18:09.536Z	19	13.1	FINISHED-INSIDE	4	1	2	1	0	0	0	requirements	Zero reserve	0	1	1	1	0	api	0
+s321	2026-10-30T02:38:16.251Z	33	32.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Halt scope	0	0	0	0	0	api	0
+s321	2026-10-30T03:12:11.828Z	2	2.5	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Report timing	0	0	0	0	0	api	0
+s321	2026-10-30T03:20:41.139Z	4	3.8	RUNNING-NO-FINISH	2	0	0	0	0	0	0	requirements	Native HODL	0	0	0	0	0	api	0
+s321	2026-10-30T05:17:29.724Z	9	0.0	RUNNING-NO-FINISH	4	0	0	0	0	0	0	requirements	Base service	0	1	1	0	0	api	0
+s321	2026-10-30T05:28:06.585Z	4	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Gas ceiling	0	1	1	0	0	api	0
+s321	2026-10-30T05:32:56.000Z	3	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	CLAUDE.md line	0	1	1	0	0	api	0
+s321	2026-10-30T05:45:30.189Z	6	5.6	RUNNING-NO-FINISH	1	0	1	0	0	0	0	requirements	HODL build	0	0	0	0	0	api	1
+s321	2026-10-30T10:59:07.056Z	2	2.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	LC-E4 x6	0	0	0	0	0	api	0
+s321	2026-10-30T11:10:21.029Z	3	2.9	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Merge #1283	0	0	0	0	0	api	0
+s321	2026-10-30T16:30:39.121Z	9	9.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[requirements]	Check 32	0	0	0	0	0	api	0
+s321	2026-10-30T16:40:44.621Z	1	1.3	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[requirements]	Check 32	0	0	0	0	0	api	0
+s321	2026-10-30T18:14:58.305Z	12	12.1	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Land L2 fix	0	0	0	0	0	api	0
+s321	2026-10-31T22:03:39.695Z	101	100.6	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Target	0	0	0	0	0	api	0
+s321	2026-10-31T23:45:26.554Z	5	5.1	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Conflict	0	0	0	0	0	api	0
+s321	2026-10-31T23:58:39.858Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Derivations	0	0	0	0	0	api	0
+s321	2026-11-01T02:09:51.960Z	4	3.7	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Push	0	0	0	0	0	api	0
+s321	2026-11-01T11:45:53.890Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	code-review	0	0	0	0	0	api	0
+s321	2026-11-02T15:55:50.487Z	10	9.8	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Deletion	0	0	0	0	0	api	0
+s321	2026-11-03T03:34:07.848Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	route	Gate hold	0	0	0	0	0	api	0
+s321	2026-11-03T03:40:54.689Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	requirements	Check 2	0	0	0	0	0	api	0
+s321	2026-11-04T00:03:14.651Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	QA override	0	0	0	0	0	api	0
+s321	2026-11-04T13:20:36.492Z	4	0.0	FINISHED-INSIDE	5	1	1	1	0	0	0	stories-test-strategy	Elicitation	0	5	1	0	0	api	0
+s321	2026-11-05T23:45:07.837Z	2	1.8	NONE-RUNNING	0	0	0	0	0	0	0	pre-step	Readopt	0	0	0	0	0	api	0
+s321	2026-11-06T01:24:28.432Z	1	1.2	RUNNING-NO-FINISH	2	0	0	0	0	0	0	stories-test-strategy	Resolution	0	0	0	0	0	api	0
+s321	2026-11-06T01:51:18.240Z	53	52.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	stories-test-strategy	Resolution	0	0	0	0	0	api	0
+s321	2026-11-06T04:23:35.950Z	84	45.2	FINISHED-INSIDE	15	8	13	8	3	0	0	gate-validation[implementation]	Matic stall	0	7	1	1	1	api	0
+s321	2026-11-06T06:00:29.996Z	3	0.0	FINISHED-INSIDE	7	2	5	3	2	0	0	gate-validation[implementation]	Manual sweeps	0	5	1	0	0	api	0
+s321	2026-11-06T08:00:48.847Z	13	0.0	FINISHED-INSIDE	13	3	14	5	7	0	0	implementation	1.2 fixture	0	5	1	0	0	api	0
+s321	2026-11-06T08:17:50.043Z	3	0.0	RUNNING-NO-FINISH	6	0	1	1	1	0	0	implementation	Permit2 pin	0	4	1	0	0	api	0
+s321	2026-11-06T09:01:20.207Z	3	0.0	RUNNING-NO-FINISH	4	0	8	0	2	0	0	implementation	Gate refusal	0	1	1	0	0	api	0
+s321	2026-11-06T15:41:37.011Z	1	1.2	NONE-RUNNING	0	0	0	0	0	0	0	implementation	Release hold	0	0	0	0	0	api	0
+s321	2026-11-06T18:48:56.088Z	3	3.2	NONE-RUNNING	0	0	0	0	0	0	0	implementation	1.2 gate 2	0	0	0	0	0	api	0
+s321	2026-11-06T21:47:56.406Z	1	0.8	NONE-RUNNING	0	0	1	0	0	0	0	pre-step	impl-domain	0	0	0	0	0	api	0
+s321	2026-11-07T00:00:08.641Z	8	5.6	FINISHED-INSIDE	6	2	5	2	2	0	0	implementation	Check 9	0	1	1	1	1	api	0
+s321	2026-11-07T10:37:48.360Z	65	64.9	RUNNING-NO-FINISH	1	0	1	0	0	0	0	implementation	Story 5.6	0	0	0	0	0	api	0
+s321	2026-11-07T14:21:58.529Z	9	5.0	FINISHED-INSIDE	4	4	4	4	0	0	0	gate-validation[sprint-review]	Check 915	0	4	1	0	0	api	0
+s321	2026-11-07T14:42:12.881Z	1	0.7	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Push + PR	0	0	0	0	0	api	0
+s321	2026-11-07T14:48:59.714Z	4	4.2	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge PR 1303	0	0	0	0	0	api	0
+s321	2026-11-07T15:41:25.918Z	7	6.7	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Fix PR	0	0	0	0	0	api	0
+s321	2026-11-07T15:52:10.919Z	0	0.2	NONE-RUNNING	0	0	1	0	0	0	0	deploy-validate	Base DB first	0	0	0	0	0	api	0
+s321	2026-11-07T16:06:16.077Z	3	1.5	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Base config	0	1	1	0	0	api	0
+s321	2026-11-07T16:22:49.933Z	2	1.9	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Monitoring	0	0	0	0	0	api	0
+s321	2026-11-07T17:24:57.710Z	0	0.3	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Save symptom	0	0	0	0	0	api	0
+s321	2026-11-07T18:07:52.630Z	4	4.3	RUNNING-NO-FINISH	2	0	0	0	0	0	0	deploy-validate	V4 Quoter	0	0	0	0	0	api	0
+s321	2026-11-07T18:48:19.270Z	2	1.5	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Push + merge	0	0	0	0	0	api	1
+s321	2026-11-07T18:54:12.523Z	264	263.7	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Merge #1305	0	0	0	0	0	api	0
+s321	2026-11-08T00:35:42.937Z	2	1.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Base PUT	0	0	0	0	0	api	1
+s321	2026-11-08T01:09:09.034Z	83	83.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Base save	0	0	0	0	0	api	0
+s321	2026-11-08T03:06:37.548Z	17	15.4	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Push+merge	0	1	1	0	0	api	0
+s321	2026-11-08T04:02:44.823Z	4	2.1	FINISHED-INSIDE	1	1	1	1	0	0	0	deploy-validate	Router PUT	0	1	1	0	0	api	0
+s321	2026-11-08T04:10:08.253Z	0	0.1	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Deploy key	0	0	0	0	0	api	0
+s321	2026-11-08T04:34:54.469Z	645	644.8	NONE-RUNNING	0	0	0	0	0	0	0	deploy-validate	Router PUT	0	0	0	0	0	api	0
+s321	2026-11-08T15:39:38.615Z	24	23.9	RUNNING-NO-FINISH	1	0	0	0	0	0	0	deploy-validate	Base first row	0	0	0	0	0	api	0
+s321	2026-11-08T16:24:12.837Z	0	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	deploy-validate	TEL transfer	0	1	1	1	1	api	1
+s322	2026-11-09T00:06:56.605Z	8	8.3	NONE-RUNNING	0	0	0	0	0	0	0	route	Roll fix	0	0	0	0	0	api	0
+s322	2026-11-09T06:25:18.876Z	340	333.0	RUNNING-NO-FINISH	3	0	1	1	0	0	0	carry-over-evaluation	Scope re-conf	0	1	1	0	0	api	0
+s322	2026-11-09T19:13:39.000Z	22	21.6	RUNNING-NO-FINISH	1	0	2	0	0	0	0	gate-validation[carry-over-evaluation]	Join cure	0	2	1	0	0	api	0
+s322	2026-11-09T20:18:03.004Z	0	0.2	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[carry-over-evaluation]	Push blocked	0	2	1	0	0	api	0
+s322	2026-11-09T21:51:37.580Z	3	0.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	AC5 predicate	0	1	1	0	0	api	0
+s322	2026-11-09T22:21:07.317Z	10	10.2	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	SQL form	0	0	0	0	0	api	0
+s322	2026-11-09T23:51:31.501Z	16	16.0	RUNNING-NO-FINISH	4	0	0	0	0	0	0	requirements	AC5 predicate	0	0	0	0	0	api	0
+s322	2026-11-10T01:14:42.526Z	19	19.0	RUNNING-NO-FINISH	1	0	0	0	0	0	0	requirements	Resolution	0	0	0	0	0	api	0
+s322	2026-11-10T02:13:15.641Z	7	7.3	NONE-RUNNING	0	0	0	0	0	0	0	gate-validation[requirements]	Check 32	0	0	0	0	0	api	0
+s322	2026-11-10T18:24:12.396Z	2	2.2	NONE-RUNNING	0	0	0	0	0	0	0	stories-test-strategy	J3 REOPEN	0	0	0	0	0	api	0
+s322	2026-11-10T22:49:29.829Z	13	10.9	FINISHED-INSIDE	1	1	1	1	0	0	0	implementation	Stopgap	0	1	1	0	0	api	0
+s322	2026-11-11T00:24:33.157Z	75	74.9	RUNNING-NO-FINISH	2	0	0	0	0	0	0	implementation	Gate 2	0	0	0	0	0	api	0
+s322	2026-11-11T03:41:25.901Z	10	9.8	RUNNING-NO-FINISH	1	0	0	0	0	0	0	gate-validation[implementation]	Check 32	0	0	0	0	0	api	0
+s322	2026-11-11T06:45:14.618Z	1	1.2	NONE-RUNNING	0	0	0	0	0	0	0	handoff	Push block	0	0	0	0	0	api	0
+s322	2026-11-11T07:15:36.419Z	2	1.5	RUNNING-NO-FINISH	3	0	0	0	0	0	0	implementation	Host relief	0	0	0	0	0	api	0
+s322	2026-11-11T07:25:05.678Z	7	0.8	FINISHED-INSIDE	2	1	1	1	0	0	0	gate-validation[implementation]	AWS login	0	1	1	0	0	api	0
+s322	2026-11-11T07:41:47.654Z	2	0.0	RUNNING-NO-FINISH	2	0	0	0	0	0	0	bug-investigation	D-4 value	0	1	1	0	0	api	0
 
 DEDUP: s321 ask toolu_011BG6yiWiriWBnJRhiK2p48 at 2026-11-08T15:39:38.615Z (23.9 min) is in 2 lead files (4f12d1d9, df56108b); counted once, so s321's call count is operator_asks.py's minus 1
 s317: 13 asks, total answer wait 6.6h (398 min); FINISHED-INSIDE 3 asks 197 min (49%); NONE-RUNNING 7 asks 181 min (45%); RUNNING-NO-FINISH 3 asks 20 min (5%); ENQ-INSIDE 12 (3 agent) over 4 asks; ACT-INSIDE on those asks 0; RMV-INSIDE 3; DLV-INSIDE 0; ACT-INSIDE 0
@@ -280,3 +280,31 @@ CONTROL (b) OK: 2026-11-08T04:34:54.469Z is NONE-RUNNING (645 min, 0 finished in
 CONTROL (e) OK: 2026-11-08T04:02:44.823Z is FINISHED-INSIDE (4 min, 1 finished inside, 1 agent notifications enqueued inside)
 CONTROL (i) OK: 2026-10-27T06:57:53.254Z lane-idle 89.25 of 95.40 min (BL-841 records 89 of 95); (b) bucket 0.00, (c) first-to-last 0.00, tail 79.25
 CONTROL (f) OK: 55 tail rows, none NONE-RUNNING; CONTROL (c) OK: every FINISHED-INSIDE ask has an agent notification enqueued inside; CONTROL (d) OK
+CONTROL (q) OK: BL-972 self-probe held_visible 1; held_race (0, 1); held_killed_not_bash 1; held_fb_agrees True; dispatched (1, 1, 0); deferral (0, 0, 1); resumed ['aR1']; adj_fg_bg ((0, 0), (1, 1)) (dispatched/deferral = (DISPATCHED, ADJ, old active_at_ask); adj = (isAsync, input flag) for foreground, background)
+CONTROL (q) KNOWN LIMIT: defer_plus_bg (ADJ, HELD, running) (1, 0, ['aTriv']): a lead that drains its lanes and then dispatches a background Agent in the ask's own message reads ADJ 1 and HELD 0; ADJ does not exclude a lead that drains its lanes and then dispatches
+CONTROL (q) OK: DRAINED-AT-ASK self-probe defer_plus_bg 1; compliant dispatch-then-ask (DRAINED, ADJ, running) (0, 1, ['aL1', 'aNew']); no lanes 0; pure deferral (reported, not asserted) 1
+BL-972 anchors: 207 asks on the api-request anchor, 39 on the fallback, 0 on none; FB-DISAGREE 0 api-anchored asks where the fallback anchor gives a different HELD
+BL-972 DEDUP: kept copy 4f12d1d9 of toolu_011BG6yiWiriWBnJRhiK2p48 is on anchor api
+BL-972 NOTICE-NO-ENQUEUE: 6 agent terminal-notice attachment/user carriers whose task-id has no enqueue in the same file (HELD reads enqueues only; lanes close on any carrier)
+s317: BL-972 13 asks; HELD-AT-ASK 0 asks > 0 (sum 0, races 0, 0 unmeasured); DISPATCHED-AT-ASK 1 of 13 (7.7%); ADJ-DISPATCH 0 of 13 (0.0%), input-flag 0
+s318: BL-972 26 asks; HELD-AT-ASK 1 asks > 0 (sum 1, races 0, 0 unmeasured); DISPATCHED-AT-ASK 4 of 26 (15.4%); ADJ-DISPATCH 0 of 26 (0.0%), input-flag 0
+s319: BL-972 71 asks; HELD-AT-ASK 1 asks > 0 (sum 1, races 4, 0 unmeasured); DISPATCHED-AT-ASK 13 of 71 (18.3%); ADJ-DISPATCH 4 of 71 (5.6%), input-flag 3
+s320: BL-972 63 asks; HELD-AT-ASK 0 asks > 0 (sum 0, races 2, 0 unmeasured); DISPATCHED-AT-ASK 16 of 63 (25.4%); ADJ-DISPATCH 6 of 63 (9.5%), input-flag 5
+s321: BL-972 56 asks; HELD-AT-ASK 0 asks > 0 (sum 0, races 4, 0 unmeasured); DISPATCHED-AT-ASK 16 of 56 (28.6%); ADJ-DISPATCH 4 of 56 (7.1%), input-flag 3
+s322: BL-972 17 asks; HELD-AT-ASK 0 asks > 0 (sum 0, races 1, 0 unmeasured); DISPATCHED-AT-ASK 7 of 17 (41.2%); ADJ-DISPATCH 0 of 17 (0.0%), input-flag 0
+s317: BL-972 DRAINED-AT-ASK 2 of 13 (15.4%), 2 of them received by an attachment/user carrier; ADJ-DISPATCH AND DRAINED-AT-ASK 0 of 13
+s318: BL-972 DRAINED-AT-ASK 2 of 26 (7.7%), 2 of them received by an attachment/user carrier; ADJ-DISPATCH AND DRAINED-AT-ASK 0 of 26
+s319: BL-972 DRAINED-AT-ASK 4 of 71 (5.6%), 4 of them received by an attachment/user carrier; ADJ-DISPATCH AND DRAINED-AT-ASK 0 of 71
+s320: BL-972 DRAINED-AT-ASK 4 of 63 (6.3%), 4 of them received by an attachment/user carrier; ADJ-DISPATCH AND DRAINED-AT-ASK 0 of 63
+s321: BL-972 DRAINED-AT-ASK 4 of 56 (7.1%), 4 of them received by an attachment/user carrier; ADJ-DISPATCH AND DRAINED-AT-ASK 1 of 56
+s322: BL-972 DRAINED-AT-ASK 0 of 17 (0.0%), 0 of them received by an attachment/user carrier; ADJ-DISPATCH AND DRAINED-AT-ASK 0 of 17
+CONTROL (r) OK: s319 2026-10-15T10:44:03.537Z disp 1 (held 0, races 0, lanes 2, adj 1, old active_at_ask 0)
+CONTROL (r) OK: s319 2026-10-15T10:44:03.537Z adj 1 (held 0, races 0, lanes 2, adj 1, old active_at_ask 0)
+CONTROL (r) OK: s321 2026-10-30T03:20:41.139Z disp 0 (held 0, races 0, lanes 0, adj 0, old active_at_ask 2)
+CONTROL (r) OK: s321 2026-10-30T02:38:16.251Z held 0 (held 0, races 1, lanes 0, adj 0, old active_at_ask 1)
+CONTROL (r) OK: s321 2026-11-07T15:41:25.918Z held 0 (held 0, races 1, lanes 0, adj 0, old active_at_ask 1)
+CONTROL (r) OK: s321 2026-11-07T18:07:52.630Z held 0 (held 0, races 1, lanes 0, adj 0, old active_at_ask 2)
+CONTROL (r) OK: s321 2026-11-07T00:00:08.641Z held 0 (held 0, races 1, lanes 1, adj 1, old active_at_ask 6)
+CONTROL (s) OK: the one api-anchored ask with HELD > 0 is s319 2026-10-23T00:20:46.143Z (888e1365, HELD 1, Land fix)
+BL-972 FALLBACK-HELD: 1 fallback-anchored asks read HELD > 0: s318 2026-10-12T03:13:16.765Z 1
+CONTROL (t) OK: s321 reads 56 deduplicated asks

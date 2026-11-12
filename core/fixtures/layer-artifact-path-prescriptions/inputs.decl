@@ -9,3 +9,4 @@ core/skills/ai-dlc/layer-contract.yaml
 core/skills/ai-dlc/artifact-path-grammar.md
 core/schemas/sprint-status.json
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

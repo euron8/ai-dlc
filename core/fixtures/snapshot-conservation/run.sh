@@ -38,6 +38,8 @@ printf 'HERMETIC-CONSUMED %s\n' "$VALIDATOR"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_scMoved=0; B_scFloor=0; B_scUnparse=0
 
 LAST_OUT=""
 # Each case gets its own copy of the seeded repository, so a working-tree edit in one
@@ -98,7 +100,7 @@ cat "$WORK/cut.txt" >> "$d/_bmad-output/pipeline-snapshot-history.md"
 run_on "$d"
 r="$RC"
 if [ "$r" = "0" ]; then
-  ok "50 lines moved to pipeline-snapshot-history.md passes"
+  ok "50 lines moved to pipeline-snapshot-history.md passes"; B_scMoved=1
 else
   bad "the conserved case did not pass (rc=$r) — a check that cannot go green wedges every legitimate trim: $LAST_OUT"
 fi
@@ -131,7 +133,7 @@ cut_lines "$d" 10
 run_on "$d"
 r="$RC"
 if [ "$r" = "0" ]; then
-  ok "10 destroyed lines stay below the floor of 40 and do not block"
+  ok "10 destroyed lines stay below the floor of 40 and do not block"; B_scFloor=1
 else
   bad "the below-floor case blocked (rc=$r) — the floor is not bounding the false-positive class: $LAST_OUT"
 fi
@@ -167,7 +169,7 @@ cut_lines "$d" 50
 run_on "$d"
 r="$RC"
 if [ "$r" = "2" ]; then
-  ok "gate-metrics.jsonl present but unparseable exits 2"
+  ok "gate-metrics.jsonl present but unparseable exits 2"; B_scUnparse=1
 else
   bad "an unreadable metrics file returned rc=$r — a broken input must not produce a verdict: $LAST_OUT"
 fi
@@ -267,7 +269,7 @@ else
     d="$(case_dir mutA_moved)"; cut_lines "$d" 50; cat "$WORK/cut.txt" >> "$d/_bmad-output/pipeline-snapshot-history.md"
     ra="$(bash "$MUT_A" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
     if [ "$ra" = "1" ]; then
-      ok "mutant A: dropping the history file from the corpus makes a real move read as destruction — assertion 1 has teeth"
+      mutant_killed "$B_scMoved" mutant-A-history-dropped "mutant A: dropping the history file from the corpus makes a real move read as destruction — assertion 1 has teeth"
     else
       bad "MUTANT A DID NOT FAIL (rc=$ra) — assertion 1 is not testing whether the history file is searched"
     fi
@@ -298,7 +300,7 @@ else
     d="$(case_dir mutB_below)"; cut_lines "$d" 10
     rb="$(bash "$MUT_B" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
     if [ "$rb" = "1" ]; then
-      ok "mutant B: ignoring the floor makes 10 destroyed lines block — the floor is what bounds the false-positive class"
+      mutant_killed "$B_scFloor" mutant-B-floor-ignored "mutant B: ignoring the floor makes 10 destroyed lines block — the floor is what bounds the false-positive class"
     else
       bad "MUTANT B DID NOT FAIL (rc=$rb) — the floor comparison is not what decides the below-floor case"
     fi
@@ -335,7 +337,7 @@ else
     cut_lines "$d" 50
     rc3="$(bash "$MUT_C" --root "$d" >/dev/null 2>&1; printf '%s' "$?")"
     if [ "$rc3" != "2" ]; then
-      ok "mutant C: letting an unparseable metrics file through stops it exiting 2 — assertion 7 has teeth"
+      mutant_killed "$B_scUnparse" mutant-C-unparseable-through "mutant C: letting an unparseable metrics file through stops it exiting 2 — assertion 7 has teeth"
     else
       bad "MUTANT C DID NOT CHANGE THE VERDICT (rc=$rc3) — assertion 7 is not testing the unparseable arm"
     fi

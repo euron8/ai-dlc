@@ -57,6 +57,8 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a1=0; B_a3=0
 
 # The instruction, as a line pattern. Deliberately loose on what sits between the verb and
 # the noun -- "append a changelog", "append a brief changelog", "Append the step's
@@ -112,7 +114,7 @@ set -- $(cat "$mapfile_files")
 # --- 1. NO PRESCRIPTION NAMES A DURABLE TARGET --------------------------------
 n_off="$(offenders "$@" | grep -c . || true)"
 if [ "$n_off" -eq 0 ]; then
-  ok "every changelog prescription names the sprint slot or a story file"
+  ok "every changelog prescription names the sprint slot or a story file"; B_a1=1
 else
   bad "$n_off prescription(s) name neither the sprint slot nor a story"
   offenders "$@" | cut -c1-160 | sed 's/^/        /'
@@ -138,7 +140,7 @@ fi
 # phrase-keyed test would be satisfied by the pointers alone -- green with the section they
 # point at deleted, which is the exact shape of a check that cannot fail.
 if grep -qE '^#{2,3} Where a changelog is written' "$GATEPROC"; then
-  ok "the canonical declaration section is in _gate-procedures.md"
+  ok "the canonical declaration section is in _gate-procedures.md"; B_a3=1
 else
   bad "no 'Where a changelog is written' SECTION in _gate-procedures.md -- the pointers dangle"
 fi
@@ -174,7 +176,7 @@ if grep -q 's<N>/changelog-prd.md' "$MUT1" || grep -q 'Where a changelog is writ
   exit 2
 fi
 if [ "$(offenders "$MUT1" | grep -c . || true)" -ge 1 ]; then
-  ok "MUTATION: a prescription pointed back at the durable artifact is reported"
+  mutant_killed "$B_a1" prd-durable-target "MUTATION: a prescription pointed back at the durable artifact is reported"
 else
   bad "MUTATION: a durable target was NOT reported -- assertion 1 proves nothing"
 fi
@@ -203,7 +205,7 @@ if [ -f "$REQSRC" ]; then
     exit 2
   fi
   if [ "$(offenders "$MUT1B" | grep -c . || true)" -ge 1 ]; then
-    ok "MUTATION: requirements.md pointed back at the durable artifact is reported"
+    mutant_killed "$B_a1" requirements-durable-target "MUTATION: requirements.md pointed back at the durable artifact is reported"
   else
     bad "MUTATION: requirements.md durable target was NOT reported -- assertion 1 proves nothing for it"
   fi
@@ -224,7 +226,7 @@ fi
 if grep -qE '^#{2,3} Where a changelog is written' "$MUT2"; then
   bad "MUTATION: the declaration survived its own deletion -- assertion 3 proves nothing"
 else
-  ok "MUTATION: deleting the canonical declaration is detected"
+  mutant_killed "$B_a3" declaration-deleted "MUTATION: deleting the canonical declaration is detected"
 fi
 if [ "$(offenders "$MUT2" | grep -c . || true)" -eq 0 ]; then
   ok "  and it leaves assertion 1 green -- the two assertions are not entangled"

@@ -57,6 +57,8 @@ IS_DIST=0; [ -d "$ROOT/core/skills/ai-dlc" ] && IS_DIST=1
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a1pres=0; B_a2adv=0
 skip() { # skip <what> <why>
   if [ "$IS_DIST" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -137,7 +139,7 @@ else
   bad "no flag: the rulebook pair did NOT advance (version=$(field "$C1" version) commit=$(field "$C1" commit)) — the ordinary path regressed and every arm below reads a stamp nothing wrote"
 fi
 if [ "$(field "$C1" skill_version)" = "1.0.0" ] && [ "$(field "$C1" skill_commit)" = "$BASE_SHORT" ]; then
-  ok "  and the machinery pair is PRESERVED at base — no claim to machinery this run did not install"
+  ok "  and the machinery pair is PRESERVED at base — no claim to machinery this run did not install"; B_a1pres=1
 else
   bad "  the machinery pair advanced without the flag (skill_version=$(field "$C1" skill_version) skill_commit=$(field "$C1" skill_commit)) — a rulebook-only apply now claims a tool version it never wrote, which is what SKILL.md step 7 forbids"
 fi
@@ -151,7 +153,7 @@ fi
 C2="$WORK/c2"; mkconsumer "$C2" || exit 2
 OUT2="$(bash "$APPLY" --carried-machinery-slice "$DIST" "$BASE" "$C2" "$THEIRS" 2>&1)"
 if [ "$(field "$C2" skill_version)" = "$THEIRS_VER" ] && [ "$(field "$C2" skill_commit)" = "$THEIRS_SHORT" ]; then
-  ok "--carried-machinery-slice: the machinery pair advances to theirs ($THEIRS_VER @ $THEIRS_SHORT)"
+  ok "--carried-machinery-slice: the machinery pair advances to theirs ($THEIRS_VER @ $THEIRS_SHORT)"; B_a2adv=1
 else
   bad "--carried-machinery-slice: the machinery pair stayed at $(field "$C2" skill_version) @ $(field "$C2" skill_commit) — this is the reported defect: the next pull reads every machinery file this run wrote as consumer drift, with a remedy that reverts upstream's own text"
 fi
@@ -298,7 +300,7 @@ else
   if [ "$(field "$CM1" skill_commit)" = "$BASE_SHORT" ]; then
     bad "mutant m1 (flag defaults on) was NOT caught — assertion 1 cannot see a machinery pair advancing on a run that never asked for it"
   else
-    ok "mutant m1 (flag defaults on) is caught by assertion 1's predicate"
+    mutant_killed "$B_a1pres" m1-flag-defaults-on "mutant m1 (flag defaults on) is caught by assertion 1's predicate"
   fi
 fi
 
@@ -317,7 +319,7 @@ else
   if [ "$(field "$CM2" skill_commit)" = "$THEIRS_SHORT" ]; then
     bad "mutant m2 (write removed) was NOT caught — assertion 2 is passing on something other than the write it names"
   else
-    ok "mutant m2 (write removed) is caught by assertion 2's predicate"
+    mutant_killed "$B_a2adv" m2-write-removed "mutant m2 (write removed) is caught by assertion 2's predicate"
   fi
   # AND IT MUST NOT ALSO KILL ASSERTION 1. Two arms failing on one mutant means they are
   # entangled and one of them is vacuous.

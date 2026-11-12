@@ -52,6 +52,8 @@ trap 'rm -rf "$ROOT"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_a1=0; B_a6c=0
 
 echo "answer-handoff-routing:"
 
@@ -106,7 +108,7 @@ Q_REAL="How should I dispose of gate-3 Check 16?"
 
 # --- Assertion 1: a handoff answer creates the pause flag ------------------------------
 newcase yes; OUT="$(fire "$Q_REAL" "handoff")"
-[ "$(flag)" = yes ] && ok "answer 'handoff' -> pause flag created" \
+[ "$(flag)" = yes ] && { ok "answer 'handoff' -> pause flag created"; B_a1=1; } \
   || bad "an answer of 'handoff' left NO pause flag — the pipeline runs on through the operator's request, which is the s305 defect verbatim"
 
 # --- Assertion 2: it is RECORDED, and the record names the channel ---------------------
@@ -201,7 +203,7 @@ newcase yes; OUT="$(fire "$Q_REAL" "continue. Note for retro that you weren't su
 A_PASTED="$(printf 'Look at this row:\nI am solving this issue. handoff.\nIs the fix right?')"
 A_LASTLINE="$(printf 'Everything is committed.\nI am solving this issue. handoff.')"
 newcase yes; OUT="$(fire "$Q_REAL" "$A_PASTED")"
-[ "$(flag)" = no ] && ok "a three-line answer whose MIDDLE line ends in the terse form routes nothing (one field, not a set of lines)" \
+[ "$(flag)" = no ] && { ok "a three-line answer whose MIDDLE line ends in the terse form routes nothing (one field, not a set of lines)"; B_a6c=1; } \
   || bad "a pasted row on a middle line PAUSED the pipeline (flag=$(flag)) — the answer is matched per line, so quoting a request on its own line routes"
 newcase yes; OUT="$(fire "$Q_REAL" "$A_LASTLINE")"
 [ "$(flag)" = yes ] && ok "control: the same shape with the terse form on the LAST line -> pause flag created (collapsing did not disarm the alternative)" \
@@ -214,7 +216,7 @@ elif ! bash -n "$MUT_PERLINE" 2>/dev/null; then
   bad "FIXTURE STALE: the per-line mutant does not parse — a kill would be a syntax error rather than a disarmed collapse"
 else
   newcase yes; OUT="$(fire "$Q_REAL" "$A_PASTED" "$MUT_PERLINE")"
-  [ "$(flag)" = yes ] && ok "mutant: with the collapse gone, the middle line matches on its own and the pasted row PAUSES — assertion 6c depends on the collapse" \
+  [ "$(flag)" = yes ] && mutant_killed "$B_a6c" perline-collapse "mutant: with the collapse gone, the middle line matches on its own and the pasted row PAUSES — assertion 6c depends on the collapse" \
     || bad "MUTANT SURVIVED: the pasted row still routes nothing (flag=$(flag)) under a per-line copy — 6c does not depend on the collapse, so it proves nothing"
   newcase yes; OUT="$(fire "$Q_REAL" "$A_LASTLINE" "$MUT_PERLINE")"
   [ "$(flag)" = yes ] && ok "mutant control: the last-line request still routes under the same copy — it loads and runs, so the kill above is real" \
@@ -269,7 +271,7 @@ else
   printf '        mutant edits: %s (from %s)\n' "$MUT" "$HOOK"
   newcase yes; OUT="$(fire "$Q_REAL" "handoff" "$MUT")"
   if [ "$(flag)" = no ] && [ -z "$OUT" ]; then
-    ok "mutant: with the routing arm pinned shut, 'handoff' creates no flag — the arm is what produced assertions 1-4"
+    mutant_killed "$B_a1" routing-arm-shut "mutant: with the routing arm pinned shut, 'handoff' creates no flag — the arm is what produced assertions 1-4"
   else
     bad "MUTANT DID NOT FAIL — 'handoff' still routed (flag=$(flag) stdout=${#OUT}B) with the arm disabled, so assertions 1-4 are measuring something else"
   fi

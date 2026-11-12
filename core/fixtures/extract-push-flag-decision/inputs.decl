@@ -2,3 +2,4 @@
 # the preamble is sourced. The fixture's own directory (run.sh, seed.sh) is copied by the runner, never declared.
 !core/skills/ai-dlc-update/SKILL.md
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

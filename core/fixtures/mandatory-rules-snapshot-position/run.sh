@@ -104,6 +104,8 @@ fails=0
 asserted=0
 ok()  { printf '  ok    %s\n' "$1"; asserted=$((asserted+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); asserted=$((asserted+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+B_mrpBattery=0
 
 echo "mandatory-rules-snapshot-position:"
 
@@ -290,7 +292,7 @@ echo "HERMETIC-CONSUMED $VMR"
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all ten arms: a position at retro.md PASSes (bare and with trailing prose), a position at deploy-validate.md FAILs at rc=1 naming the value it found, a missing field and a missing snapshot each SKIP and are counted in the summary, \`retro.md\` sitting in another section does not acquit the defect, two live bullets naming DIFFERENT step files SKIP in BOTH orders, and the SAME basename twice is still decided — PASS at retro.md and FAIL at deploy-validate.md"
+  ok "all ten arms: a position at retro.md PASSes (bare and with trailing prose), a position at deploy-validate.md FAILs at rc=1 naming the value it found, a missing field and a missing snapshot each SKIP and are counted in the summary, \`retro.md\` sitting in another section does not acquit the defect, two live bullets naming DIFFERENT step files SKIP in BOTH orders, and the SAME basename twice is still decided — PASS at retro.md and FAIL at deploy-validate.md"; B_mrpBattery=1
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -415,7 +417,7 @@ mutate() {  # <tag> <sed-program> <expected-battery> <what-it-proves>
   toolchain "$D" "$M"
   got="$(battery "$D")"
   if [ "$got" = "$want" ]; then
-    ok "MUTANT $tag: $claim"
+    mutant_killed "$B_mrpBattery" "$tag" "MUTANT $tag: $claim"
   elif [ "$got" = "$EXPECTED" ]; then
     bad "MUTANT $tag SURVIVED: $claim — every arm unchanged, so nothing here can catch it"
   else

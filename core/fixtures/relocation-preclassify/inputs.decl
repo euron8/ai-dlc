@@ -4,3 +4,4 @@
 !core/skills/ai-dlc-update/reconcile/
 # run.sh sources the shared preamble before any git call.
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

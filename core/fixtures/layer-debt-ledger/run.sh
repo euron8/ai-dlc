@@ -35,6 +35,8 @@ EXPECTED_ASSERTIONS=48
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+B_a9=0; B_a11=0; B_cc=0; B_a15=0; B_a16=0; B_a18=0; B_a18b=0; B_a26=0; B_a29=0; B_a31=0; B_a32=0; B_any=0
 
 row() { # row <entry> <verdict> <reason> [owed-json] [closes-json]
   python3 - "$1" "$2" "$3" "${4:-}" "${5:-}" >>"$REG" <<'PY'
@@ -138,7 +140,7 @@ if grep -q 'OWED-STR-1' <<<"$str_out"; then
   bad "a string-valued \`closes_owed\` did not close its debt — the id is iterated character by character and the debt is reported OPEN forever"
   sed 's/^/        /' <<<"$str_out"
 else
-  ok "a \`closes_owed\` written as a bare string still discharges its debt"
+  ok "a \`closes_owed\` written as a bare string still discharges its debt"; B_a9=1
 fi
 
 # ...and it is COUNTED, not silently repaired. A quiet coercion makes the schema unenforceable by
@@ -151,7 +153,7 @@ grep -q 'MISTYPED_CLOSES_OWED=1' <<<"$str_out" \
 # passes against a reader that counts every row, and the count discriminates nothing.
 grep -q 'MISTYPED_CLOSES_OWED' <<<"$out" \
   && bad "CONTROL: the well-formed register was reported as carrying a mistyped row — the counter fires on correct data" \
-  || ok "CONTROL: a register whose closes_owed are all arrays reports no mistyped rows"
+  || { ok "CONTROL: a register whose closes_owed are all arrays reports no mistyped rows"; B_a11=1; }
 
 # --- 10/11. MUTATIONS: the two absence-shaped arms above -----------------------------------
 # Assertion 9 is an ABSENCE (`OWED-STR-1` must NOT appear) and so is assertion 11's control.
@@ -191,7 +193,7 @@ if [ -z "$M10" ]; then
 else
   m10_out="$(bash "$M10" --register "$STR_REG" 2>&1)"
   grep -q 'OWED-STR-1' <<<"$m10_out" \
-    && ok "MUTATION: without the coercion the string-form close stops working and the debt reappears (so assertion 9 is live)" \
+    && mutant_killed "$B_a9" M10 "MUTATION: without the coercion the string-form close stops working and the debt reappears (so assertion 9 is live)" \
     || bad "MUTATION: the debt stayed closed with the coercion removed — assertion 9 passes whatever the reader does"
 fi
 
@@ -204,7 +206,7 @@ if [ -z "$M11" ]; then
 else
   m11_out="$(bash "$M11" --register "$REG" 2>&1)"
   grep -q 'MISTYPED_CLOSES_OWED' <<<"$m11_out" \
-    && ok "MUTATION: a counter that flags well-formed lists is caught by the control (so assertion 11 discriminates)" \
+    && mutant_killed "$B_a11" M11 "MUTATION: a counter that flags well-formed lists is caught by the control (so assertion 11 discriminates)" \
     || bad "MUTATION: the well-formed register still reported no mistyped rows — assertion 11's control is vacuous"
 fi
 
@@ -249,7 +251,7 @@ fi
 cc_block="$(awk '/^CONTRADICTS-CORE/,0' <<<"$cc_out")"
 grep -q 'y\.md' <<<"$cc_block" \
   && bad "CONTROL: an entry whose \`owed\` sits on a later row was reported — the arm is row-scoped, and an append-only register can never satisfy it" \
-  || ok "CONTROL: a contradicts-core entry whose debt is declared by a LATER row is not reported"
+  || { ok "CONTROL: a contradicts-core entry whose debt is declared by a LATER row is not reported"; B_cc=1; }
 
 # MUTATION: entry scoping reduced to row scoping. The control must go red, and `y` must appear.
 M14="$(mkmut cc 'owed_entries = {(r.get("clause"), r.get("entry")) for r in rows
@@ -259,7 +261,7 @@ if [ -z "$M14" ]; then
 else
   m14_out="$(bash "$M14" --register "$CC_REG" 2>&1)"
   grep -q 'y\.md' <<<"$(awk '/^CONTRADICTS-CORE/,0' <<<"$m14_out")" \
-    && ok "MUTATION: scoped to the ROW, the later-declared entry is reported too — so the control is what proves the scope" \
+    && mutant_killed "$B_cc" M14 "MUTATION: scoped to the ROW, the later-declared entry is reported too — so the control is what proves the scope" \
     || bad "MUTATION: row scoping still did not report the later-declared entry — the control is vacuous"
 fi
 
@@ -329,12 +331,12 @@ cit_und="$(awk '/^UNDECLARED/,/^$/' <<<"$cit_out")"
 # 15 — the SUBJECT is acquitted. Absence-shaped, which is why M1/M3 below exist.
 grep -q 'c1\.md' <<<"$cit_und" \
   && { bad "a row CITING a resolvable \`OWED-\` id is still filed as undeclared — obeying the printed remedy declares a duplicate obligation for work another row already tracks"; sed 's/^/        /' <<<"$cit_out"; } \
-  || ok "a row citing a resolvable \`OWED-\` id is not filed as an undeclared obligation"
+  || { ok "a row citing a resolvable \`OWED-\` id is not filed as an undeclared obligation"; B_a15=1; }
 
 # 16 — PRESENCE: a citation of an id NOTHING declares is not a handle and stays reported. This
 # is the arm that separates the join from a token grammar, and it is M1's killer.
 grep -q 'c3\.md' <<<"$cit_und" \
-  && ok "a citation of an id no row declares is still reported — the acquittal joins the DECLARED set, not an \`OWED-\` spelling" \
+  && { ok "a citation of an id no row declares is still reported — the acquittal joins the DECLARED set, not an \`OWED-\` spelling"; B_a16=1; } \
   || { bad "a row citing an UNRESOLVABLE id was acquitted — the key is a token grammar and a row can silence itself by inventing an id"; sed 's/^/        /' <<<"$cit_out"; }
 
 # 17 — PRESENCE: a genuine undeclared obligation with no citation is untouched. M3's killer, and
@@ -347,14 +349,14 @@ grep -q 'c4\.md' <<<"$cit_und" \
 # reachable by the wrong rows; the names are not.
 cit_names="$(grep -oE 'c[0-9]+\.md' <<<"$cit_und" | sort -u | tr '\n' ' ')"
 [ "$cit_names" = "c3.md c4.md c9.md " ] \
-  && ok "the reported set is exactly {c3,c4,c9} — the rows with no resolvable handle" \
+  && { ok "the reported set is exactly {c3,c4,c9} — the rows with no resolvable handle"; B_a18=1; } \
   || { bad "the reported set was '$cit_names', expected 'c3.md c4.md c9.md '"; sed 's/^/        /' <<<"$cit_out"; }
 
 # 18b — THE DISCHARGED CITATION IS ACQUITTED. This is the shape the live register actually
 # holds; a key of `declared - closed` acquits NOTHING there, because every declared id is paid.
 grep -q 'c10\.md' <<<"$cit_und" \
   && { bad "a row citing a DISCHARGED obligation was filed as undeclared — obeying the remedy re-opens finished work under a new id"; sed 's/^/        /' <<<"$cit_out"; } \
-  || ok "a row citing an obligation that was declared and later DISCHARGED is acquitted — the handle is the declaring row, not this run's OPEN list"
+  || { ok "a row citing an obligation that was declared and later DISCHARGED is acquitted — the handle is the declaring row, not this run's OPEN list"; B_a18b=1; }
 
 # 18c — CONTROL, one property apart from 18b: `c9` cites an id that is closed and NEVER
 # declared, so it was never on the record as an obligation. It must stay reported. Without this
@@ -388,7 +390,7 @@ else
   if grep -q 'c3\.md' <<<"$m1_und"; then
     bad "MUTATION M1: an any-token acquittal still reported the unresolvable citation — assertion 16 cannot see the difference between a join and a spelling"
   elif grep -q 'c4\.md' <<<"$m1_und"; then
-    ok "MUTATION M1: acquitting on ANY \`OWED-\` token silences the unresolvable citation (so assertion 16 is live), while the genuine row survives"
+    mutant_killed "$B_a16" M1 "MUTATION M1: acquitting on ANY \`OWED-\` token silences the unresolvable citation (so assertion 16 is live), while the genuine row survives"
   else
     bad "MUTATION M1: the genuine obligation vanished too — M1 moves two cells and assertion 16 is entangled with assertion 17"
   fi
@@ -412,7 +414,7 @@ else
   if grep -q 'c9\.md' <<<"$m2_und"; then
     bad "MUTATION M2: a join against \`closes_owed\` still reported the discharged-id citation — assertion 18 cannot tell the DECLARED set from the CLOSED one"
   elif grep -q 'c1\.md' <<<"$m2_und"; then
-    ok "MUTATION M2: joined against \`closes_owed\` the discharged-id row is acquitted and the declared-id row reported again — the acquittal inverts, so assertion 18 names WHICH set is joined"
+    mutant_killed "$B_a18" M2 "MUTATION M2: joined against \`closes_owed\` the discharged-id row is acquitted and the declared-id row reported again — the acquittal inverts, so assertion 18 names WHICH set is joined"
   else
     bad "MUTATION M2: neither row moved — the two id sets are identical on this register and M2 has no subject"
   fi
@@ -434,7 +436,7 @@ else
   if grep -q 'c10\.md' <<<"$m4_und"; then
     grep -q 'c1\.md' <<<"$m4_und" \
       && bad "MUTATION M4: acquitting only on OPEN ids moved the live citation too — assertion 18b is entangled with assertion 15" \
-      || ok "MUTATION M4: acquitting only on ids still OPEN files the discharged citation as undeclared again (so assertion 18b is live), while the open citation stays acquitted"
+      || mutant_killed "$B_a18b" M4 "MUTATION M4: acquitting only on ids still OPEN files the discharged citation as undeclared again (so assertion 18b is live), while the open citation stays acquitted"
   else
     bad "MUTATION M4: the discharged citation stayed acquitted under an OPEN-only key — assertion 18b passes whichever half of the declared set is joined"
   fi
@@ -471,7 +473,7 @@ else
   if grep -q 'c1\.md' <<<"$m3_und"; then
     grep -q 'c7\.md' <<<"$m3_und" \
       && bad "MUTATION M3: with the citation key disabled the ALREADY-DENIED row appeared too — the new key had taken over \`cue_denied\`'s subject" \
-      || ok "MUTATION M3: with the citation key disabled the cited row is filed as undeclared again (so assertion 15 is live), while the \`no\`-denied row stays acquitted by the OLD discount"
+      || mutant_killed "$B_a15" M3 "MUTATION M3: with the citation key disabled the cited row is filed as undeclared again (so assertion 15 is live), while the \`no\`-denied row stays acquitted by the OLD discount"
   else
     bad "MUTATION M3: the cited row stayed acquitted with the key disabled — assertion 15 passes against a reader that never consults it"
   fi
@@ -554,7 +556,7 @@ CN_EXPECT='n1.md n10.md n12.md n13.md n2.md n4.md n5.md n6.md n8.md '
 # either way is caught here whether or not its own arm below fires.
 cn_got="$(cn_names "$cn_und")"
 [ "$cn_got" = "$CN_EXPECT" ] \
-  && ok "the citation-negation reported set is exactly {n1,n2,n4,n5,n6,n8,n10,n12,n13} — every denied mention reported, every un-denied one acquitted" \
+  && { ok "the citation-negation reported set is exactly {n1,n2,n4,n5,n6,n8,n10,n12,n13} — every denied mention reported, every un-denied one acquitted"; B_a26=1; } \
   || { bad "the citation-negation set was '$cn_got', expected '$CN_EXPECT'"; sed 's/^/        /' <<<"$cn_out"; }
 
 # 27 — the filed SUBJECT, asserted on its own so a failure names the defect rather than a set.
@@ -572,7 +574,7 @@ grep -q 'n0\.md' <<<"$cn_und" \
 # 29 — the SENTENCE bound, from the acquitting side: a negator one sentence back does not reach.
 grep -q 'n3\.md' <<<"$cn_und" \
   && { bad "CONTROL: a negator in the PREVIOUS sentence denied the mention — the search is unbounded and a `no` anywhere upstream silences a citation"; sed 's/^/        /' <<<"$cn_out"; } \
-  || ok "CONTROL: a negator in the previous sentence does not deny the mention — the search is bounded to the mention's own sentence"
+  || { ok "CONTROL: a negator in the previous sentence does not deny the mention — the search is bounded to the mention's own sentence"; B_a29=1; }
 
 # 30 — and from the other side: a negator AFTER the mention does not reach it either. The bound
 # is directional, and 29 alone passes against a search that reads the whole reason backwards.
@@ -583,7 +585,7 @@ grep -q 'n9\.md' <<<"$cn_und" \
 # 31 — THE CUE SIDE DID NOT MOVE. `not` denies a MENTION and must not deny a CUE; this row has
 # no citation at all, so only a widened `NEGATED` can acquit it. MN10 is its mutant.
 grep -q 'n8\.md' <<<"$cn_und" \
-  && ok "CONTROL: a \`not\`-denied CUE with no citation is still reported — \`not\` did not leak into \`NEGATED\`" \
+  && { ok "CONTROL: a \`not\`-denied CUE with no citation is still reported — \`not\` did not leak into \`NEGATED\`"; B_a31=1; } \
   || { bad "CONTROL: the cue-side row was acquitted — \`not\` reached the cue filter, and the two vocabularies have collapsed into one"; sed 's/^/        /' <<<"$cn_out"; }
 
 # 32 — STRUCTURAL: the citation vocabulary is its OWN compiled pattern. An alias
@@ -592,7 +594,7 @@ grep -q 'n8\.md' <<<"$cn_und" \
 # arm is the byte-level statement beside it.
 n="$(grep -c '^CITATION_NEGATED = re\.compile(' "$AUDIT")" || n=0
 [ "$n" -eq 1 ] \
-  && ok "\`CITATION_NEGATED\` is its own \`re.compile(\` — the citation vocabulary is a separate set, not an alias of the cue one" \
+  && { ok "\`CITATION_NEGATED\` is its own \`re.compile(\` — the citation vocabulary is a separate set, not an alias of the cue one"; B_a32=1; } \
   || bad "\`CITATION_NEGATED = re.compile(\` occurred $n times, expected 1 — the citation vocabulary is aliased, aliased away, or declared twice"
 
 # 33 — STRUCTURAL: `NEGATED` is BYTE-IDENTICAL to the literal this change left it at. The
@@ -654,7 +656,7 @@ else
   if grep -q 'n4\.md' <<<"$mn1_und"; then
     bad "MUTATION MN1: a whole-reason citation search still reported the \`no\`-denied row — the arms above cannot tell a per-occurrence rule from a search"
   elif grep -q 'n8\.md' <<<"$mn1_und"; then
-    ok "MUTATION MN1: reverted to a whole-reason search every denied citation is acquitted (so the section is live), while the cue-only row survives"
+    mutant_killed "$B_a26" MN1 "MUTATION MN1: reverted to a whole-reason search every denied citation is acquitted (so the section is live), while the cue-only row survives"
   else
     bad "MUTATION MN1: the cue-only row vanished too — MN1 reaches \`NEGATED\`'s subject and the two vocabularies are entangled"
   fi
@@ -670,7 +672,7 @@ else
   if grep -q 'n2\.md' <<<"$mn2_und"; then
     bad "MUTATION MN2: a comma-bounded search still reported the comma-spliced denial — the bound is not what makes that row work"
   elif grep -q 'n1\.md' <<<"$mn2_und"; then
-    ok "MUTATION MN2: bounded at the comma the comma-spliced denial is acquitted (so the sentence bound is live), while the single-clause denial survives"
+    mutant_killed "$B_a26" MN2 "MUTATION MN2: bounded at the comma the comma-spliced denial is acquitted (so the sentence bound is live), while the single-clause denial survives"
   else
     bad "MUTATION MN2: the single-clause denial vanished too — MN2 moves two cells and the bound arm is entangled with assertion 27"
   fi
@@ -688,7 +690,7 @@ else
   if grep -q 'n3\.md' <<<"$mn3_und"; then
     grep -q 'n9\.md' <<<"$mn3_und" \
       && bad "MUTATION MN3: the after-the-mention row moved too — MN3 reaches assertion 30's cell and the two bound arms are entangled" \
-      || ok "MUTATION MN3: with the bound dropped a negator in the PREVIOUS sentence denies the mention (so assertion 29 is live), while a negator after the mention still does not"
+      || mutant_killed "$B_a29" MN3 "MUTATION MN3: with the bound dropped a negator in the PREVIOUS sentence denies the mention (so assertion 29 is live), while a negator after the mention still does not"
   else
     bad "MUTATION MN3: the previous-sentence row stayed acquitted with the bound removed — assertion 29 passes whatever the search window is"
   fi
@@ -704,7 +706,7 @@ else
   if grep -q 'n10\.md' <<<"$mn4_und"; then
     bad "MUTATION MN4: without \`not\` the sentence-initial denial was still reported — no arm here turns on \`not\` being in the citation vocabulary"
   elif grep -q 'n4\.md' <<<"$mn4_und"; then
-    ok "MUTATION MN4: dropping \`not\` acquits the sentence-initial denial (so \`not\` is load-bearing), while the \`no\` form survives"
+    mutant_killed "$B_a26" MN4 "MUTATION MN4: dropping \`not\` acquits the sentence-initial denial (so \`not\` is load-bearing), while the \`no\` form survives"
   else
     bad "MUTATION MN4: the \`no\` form vanished too — MN4 removed more than \`not\` and its cell is shared with MN5"
   fi
@@ -729,7 +731,7 @@ mn_member() { # mn_member <label> <regex-without-the-member> <own-cell> <survivo
   if grep -q "$3\.md" <<<"$u"; then
     bad "MUTATION $1: dropping \`$5\` still reported $3 — that seed does not isolate \`$5\` and the member has no subject"
   elif grep -q "$4\.md" <<<"$u"; then
-    ok "MUTATION $1: dropping \`$5\` from the citation vocabulary acquits $3 (so \`$5\` is load-bearing), while $4 survives"
+    mutant_killed "$B_a26" "$1" "MUTATION $1: dropping \`$5\` from the citation vocabulary acquits $3 (so \`$5\` is load-bearing), while $4 survives"
   else
     bad "MUTATION $1: $4 vanished too — dropping \`$5\` moved a cell another member owns"
   fi
@@ -765,7 +767,7 @@ PY
 any_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$AUDIT" --register "$MN8_REG" 2>&1)")"
 any_got="$(cn_names "$any_und")"
 [ "$any_got" = "n11.md " ] \
-  && ok "one clean mention beside a denied one is a handle — the rule is per OCCURRENCE, and the row citing nothing is still reported" \
+  && { ok "one clean mention beside a denied one is a handle — the rule is per OCCURRENCE, and the row citing nothing is still reported"; B_any=1; } \
   || { bad "the per-occurrence register reported '$any_got', expected 'n11.md '"; sed 's/^/        /' <<<"$any_und"; }
 
 MN8="$(mkmut mn8 'any(not citation_denied(reason, m)' 'all(not citation_denied(reason, m)')"
@@ -778,7 +780,7 @@ else
   elif grep -q 'n11\.md' <<<"$mn8_und"; then
     bad "MUTATION MN8: the row citing nothing was reported too — \`all\` did not vacuously acquit it and this register cannot show the cost"
   else
-    ok "MUTATION MN8: under \`all\` one denied mention condemns the row AND the citation-free row is vacuously acquitted — both halves of why the rule is \`any\`"
+    mutant_killed "$B_any" MN8 "MUTATION MN8: under \`all\` one denied mention condemns the row AND the citation-free row is vacuously acquitted — both halves of why the rule is \`any\`"
   fi
 fi
 
@@ -795,7 +797,7 @@ else
   elif grep -q 'n1\.md' <<<"$mn9_und"; then
     bad "MUTATION MN9: aliased to \`NEGATED\` the filed subject was still reported — the separate vocabulary is not what reports it"
   else
-    ok "MUTATION MN9: aliased to \`NEGATED\` the vocabulary loses \`not\` and the filed subject is acquitted, and assertion 32's grep goes to 0 — so the separation is asserted structurally as well as behaviourally"
+    mutant_killed "$B_a32" MN9 "MUTATION MN9: aliased to \`NEGATED\` the vocabulary loses \`not\` and the filed subject is acquitted, and assertion 32's grep goes to 0 — so the separation is asserted structurally as well as behaviourally"
   fi
 fi
 
@@ -810,7 +812,7 @@ else
   if grep -q 'n8\.md' <<<"$mn10_und"; then
     bad "MUTATION MN10: widening \`NEGATED\` with \`not\` still reported the cue-only row — assertion 31 cannot see \`not\` leaking into the cue filter"
   elif grep -q 'n2\.md' <<<"$mn10_und"; then
-    ok "MUTATION MN10: \`not\` admitted to \`NEGATED\` silences a cue the citation vocabulary must not reach (so assertion 31 is live), while the citation arms are unmoved"
+    mutant_killed "$B_a31" MN10 "MUTATION MN10: \`not\` admitted to \`NEGATED\` silences a cue the citation vocabulary must not reach (so assertion 31 is live), while the citation arms are unmoved"
   else
     bad "MUTATION MN10: the comma-spliced citation moved too — MN10 reaches the citation side and the two vocabularies are not independent here"
   fi
@@ -826,7 +828,7 @@ else
   m3n_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$M_CIT3" --register "$CIT_NEG_REG" 2>&1)")"
   m3n_got="$(cn_names "$m3n_und")"
   [ "$m3n_got" = "n0.md n1.md n10.md n12.md n13.md n2.md n3.md n4.md n5.md n6.md n7.md n8.md n9.md " ] \
-    && ok "MUTATION M_CIT3 on the citation-negation register: with the key disabled every row is reported, including the four the fix acquits — so each acquittal above is this key's doing" \
+    && mutant_killed "$B_a26" M3.citneg "MUTATION M_CIT3 on the citation-negation register: with the key disabled every row is reported, including the four the fix acquits — so each acquittal above is this key's doing" \
     || { bad "MUTATION M_CIT3 reported '$m3n_got' on the citation-negation register — the disabled key did not report every row, so some acquittal above is somebody else's"; sed 's/^/        /' <<<"$m3n_und"; }
 fi
 
