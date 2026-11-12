@@ -38,23 +38,16 @@ check-24-adversarial-convergence-d	core/scripts/validate-adversarial-convergence
 check-25-steering-conduct	core/scripts/validate-steering-budget.sh runs outside a declared cell
 claude-rules-joins	scripts/validate-claude-rules.sh runs outside a declared cell
 command-args-citation	core/scripts/validate-steering-budget.sh runs outside a declared cell
-consumer-machinery-home	scripts/validate-enforcement-map.sh runs outside a declared cell
 consumer-machinery-inventory	core/scripts/validate-layer-entries.sh runs outside a declared cell
 content-seal	core/scripts/join-remediator-shards.sh runs outside a declared cell; core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/hooks/ai-dlc-content-seal.sh runs outside a declared cell; core/scripts/validate-gate-adjudication.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
 core-paths-audit-diff	core/scripts/core-paths.sh runs outside a declared cell
 core-write-guard	core/hooks/ai-dlc-core-guard.sh runs outside a declared cell
-crosswalk-home-declaration	scripts/validate-enforcement-map.sh runs outside a declared cell
 cycle-commits-enforce	core/scripts/validate-mandatory-rules.sh runs outside a declared cell
 derivation-capture	core/scripts/partition-document.sh runs outside a declared cell
 derivation-differential	core/skills/ai-dlc-update/reconcile/derivation-differential.sh runs outside a declared cell
-derived-fence-binding	scripts/validate-enforcement-map.sh runs outside a declared cell
 dispatch-model-guard	core/scripts/validate-spawn-ledger.sh runs outside a declared cell; core/scripts/validate-gate-adjudication.sh runs outside a declared cell
 dist-clone	core/skills/ai-dlc-update/reconcile/dist-clone.sh runs outside a declared cell
 emit-report-refusal	core/skills/ai-dlc-update/reconcile/emit-report.sh runs outside a declared cell
-enforcement-map-derivations	scripts/validate-enforcement-map.sh runs outside a declared cell
-enforcement-map-sites	scripts/validate-enforcement-map.sh runs outside a declared cell
-enforcement-map-sites-b	scripts/validate-enforcement-map.sh runs outside a declared cell
-enforcement-map-sites-c	scripts/validate-enforcement-map.sh runs outside a declared cell
 escalation-citation	core/scripts/validate-escalation-resolution.sh runs outside a declared cell
 escalation-delivery	core/hooks/ai-dlc-escalation-delivery.sh runs outside a declared cell
 escalation-status-vocabulary	core/scripts/validate-escalation-status-vocabulary.sh runs outside a declared cell
@@ -89,8 +82,6 @@ layer-anchor-declaration	core/scripts/artifact-path-config.sh runs outside a dec
 layer-artifact-path-prescriptions	core/scripts/artifact-path-config.sh runs outside a declared cell; core/scripts/validate-layer-entries.sh runs outside a declared cell
 layer-catalog-collision	core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh runs outside a declared cell; core/scripts/artifact-path-config.sh runs outside a declared cell; core/scripts/validate-layer-entries.sh runs outside a declared cell
 layer-conforms-to	core/scripts/artifact-path-config.sh runs outside a declared cell; core/scripts/validate-layer-entries.sh runs outside a declared cell
-layer-contract-conformance	scripts/validate-enforcement-map.sh runs outside a declared cell
-layer-contract-conformance-b	scripts/validate-enforcement-map.sh runs outside a declared cell
 layer-crosswalk-home	core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell; core/scripts/validate-layer-entries.sh runs outside a declared cell
 layer-debt-due-and-discharge	core/scripts/audit-layer-debt.sh runs outside a declared cell
 layer-debt-ledger	core/scripts/audit-layer-debt.sh runs outside a declared cell
@@ -103,7 +94,6 @@ layer-retired-id-crosswalk	core/scripts/artifact-path-config.sh runs outside a d
 layer-title-join	core/skills/ai-dlc-update/reconcile/layer-drift.sh runs outside a declared cell
 ledger-reverify	core/skills/ai-dlc-update/reconcile/ledger-reverify.sh runs outside a declared cell
 ledger-rotate	core/skills/ai-dlc-update/reconcile/ledger-rotate.sh runs outside a declared cell
-ledger-status-vocabulary	scripts/validate-enforcement-map.sh runs outside a declared cell
 mutation-red-replay	core/scripts/validate-mutation-red.sh runs outside a declared cell
 operator-request-capture	core/hooks/ai-dlc-pause.sh runs outside a declared cell
 owed-derivations	core/skills/ai-dlc-update/reconcile/derivation-differential.sh runs outside a declared cell; core/scripts/validate-artifact-derivations.sh runs outside a declared cell
@@ -171,8 +161,6 @@ trunk-push-bound	core/scripts/validate-audit-anchors.sh runs outside a declared 
 updater-session-signals	core/hooks/ai-dlc-acknowledge.sh runs outside a declared cell
 upstream-routing	core/scripts/audit-upstream-routing.sh runs outside a declared cell; core/hooks/ai-dlc-core-guard.sh runs outside a declared cell
 validate-mandatory-rules-revive	core/scripts/validate-retro-evidence.sh runs outside a declared cell; core/scripts/validate-mandatory-rules.sh runs outside a declared cell
-validator-arm-selection	scripts/validate-enforcement-map.sh runs outside a declared cell
-validator-arm-selection-b	scripts/validate-enforcement-map.sh runs outside a declared cell
 validator-fork-budget	scripts/validate-enforcement-map.sh runs outside a declared cell
 verdict-pass-content	core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/verdict.sh runs outside a declared cell
 vocabulary-index	scripts/render-vocabulary-index.sh runs outside a declared cell

@@ -221,6 +221,19 @@ seed_tree() {
   V="$ROOT/scripts/validate-enforcement-map.sh"
   PRECLASS="$ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"
   INSTALL="$ROOT/scripts/install.sh"
+  # THE TREE'S VALIDATOR IS SOURCED ONCE, BY ITS ABSOLUTE PATH, IN THE PROCESS THAT RUNS THIS CELL
+  # (BL-878). Sourcing defines vem_entry and returns at the column-0 source guard; every run below
+  # is `vem_entry [--arms I<n>]`, a subshell of this process, never a separate program. ONE SOURCE
+  # STILL SERVES EVERY MUTANT OF THIS TREE, and the reason is the entry's own shape: vem_entry reads
+  # the CURRENT text of "$V" on every call and evals it minus the guard line, so a mutation written
+  # into "$V" in place is what the next call runs. That holds because no mutant in this file edits
+  # the guard or any line above it (the entry itself): a mutation there would run the entry sourced
+  # here, unmutated. The cwd battery's mutants edit the prologue BELOW the guard, and its
+  # post-mutation counts are taken over that region alone (cwd_region).
+  case "$V" in /*) : ;; *) echo "FIXTURE ERROR: the seeded validator path '$V' is not absolute; vem_entry refuses a relative source" >&2; exit 2 ;; esac
+  # shellcheck disable=SC1090
+  . "$V" || { echo "FIXTURE ERROR: sourcing the seeded validator $V failed" >&2; exit 2; }
+  declare -F vem_entry >/dev/null || { echo "FIXTURE ERROR: sourcing $V defined no vem_entry" >&2; exit 2; }
 }
 
 fails=0
@@ -506,8 +519,9 @@ VRUN_BROKEN=""
 # The validator's exit status, for a caller that asserts it. `vrun` runs inside `$( )`, so the
 # status cannot come back as a variable; when this names a file, vrun writes the status there.
 VRUN_RCF=""
-# `vrun [validator-path]` -- the path defaults to "$V". The cwd-invariance cells pass a
-# RELATIVE one, run from a subdirectory of the seeded tree.
+# `vrun` -- one in-process `vem_entry --arms <id>` of the tree's validator, sourced once by
+# seed_tree. The cwd-invariance cells call it from other directories; their two command-line
+# cells (a relative self path, an inherited VEM_SELF) start the program themselves (cwd_cli).
 vrun() {
   local frame seg id vout rc
   id=""
@@ -525,7 +539,7 @@ vrun() {
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: vrun found no A<nn>_i<id>_ frame to derive an --arms selector from (frames: %s). The naming grammar the selector is derived from has moved, and there is no full-run fallback on purpose.\n' "${FUNCNAME[*]}" >> "$VRUN_BROKEN"
     return 2
   fi
-  vout="$(bash "${1:-$V}" --arms "$id" 2>&1)"; rc=$?
+  vout="$(vem_entry --arms "$id" 2>&1)"; rc=$?
   [ -n "$VRUN_RCF" ] && printf '%s\n' "$rc" > "$VRUN_RCF"
   if [ "$rc" = "2" ]; then
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: validate-enforcement-map.sh --arms %s exited 2. That is a SELECTION failure -- an unknown id, a malformed flag, or a generated subprogram that never reached the verdict -- not an invariant finding, so it is not scored as a mutant surviving or dying: %s\n' "$id" "$vout" >> "$VRUN_BROKEN"
@@ -536,7 +550,7 @@ vrun() {
   # arms outside the selected unit. A plain run never reaches it, and the driver asserts that.
   if [ "$MX_MODE" = matrix ] && [ -z "$VRUN_NOMX" ] && [ -n "$MX_DIR" ]; then
     printf 'mx-full %s\n' "$id" >> "$MX_LEDGER"
-    bash "${1:-$V}" > "$MX_DIR/full.out" 2>&1; printf '%s\n' "$?" > "$MX_DIR/full.rc"
+    vem_entry > "$MX_DIR/full.out" 2>&1; printf '%s\n' "$?" > "$MX_DIR/full.rc"
   fi
   printf '%s\n' "$vout"
 }
@@ -550,7 +564,7 @@ vrun() {
 # selected and the licence the assertions below rely on would be narrower than the set of
 # arms they use. A selected run says nothing whatever about the arms it did not run.
 A00_sanity() {
-if bash "$V" >/dev/null 2>&1; then
+if vem_entry >/dev/null 2>&1; then
   ok "pristine distribution tree passes (the negatives below mean something)"
 else
   bad "FIXTURE BROKEN — the pristine tree does not pass validate-enforcement-map.sh. Every assertion below would be a false pass."
@@ -2204,7 +2218,7 @@ else
   # mutant. Exit 2 is a selection failure and is routed to FIXTURE BROKEN, never scored; the
   # positive conjunct is the verdict block's `OK:` line, which a run that never reached it
   # cannot print.
-  a33_sib="$(bash "$V" --arms I60,I83,I84 2>&1)"; a33_src=$?
+  a33_sib="$(vem_entry --arms I60,I83,I84 2>&1)"; a33_src=$?
   if [ "$a33_src" = "2" ]; then
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: validate-enforcement-map.sh --arms I60,I83,I84 exited 2 under the I59 corpus mutant, a selection failure rather than a finding: %s\n' "$a33_sib" >> "$VRUN_BROKEN"
   elif [ "$a33_src" = "0" ] && grep -q '^OK: ' <<<"$a33_sib"; then
@@ -2929,28 +2943,67 @@ rm -f "$esv_bak"
 # THE MUTANTS edit the seeded validator in place, so its siblings stay beside it, each from a
 # backup held OUTSIDE the tree for A39's reason, each `cmp -s` guarded and each asserting its own
 # post-mutation count, so a `sed` that matched only part of the fix is not scored as the mutant:
-#   M1  the full base: the guard, the VEM_SELF lines, the cd line, and every $VEM_SELF read
-#       back to $0. Expected 0000.
+#   M1  the guard, the VEM_SELF lines, the cd line, and every VEM_SELF read (`$VEM_SELF` and the
+#       `${VEM_SELF##*/}` excludes) mapped to `${BASH_SOURCE[0]}`. That is NOT the base defect
+#       ("`$0` relative"): `${BASH_SOURCE[0]}` is always absolute inside vem_entry, so M1 kills
+#       only through the deleted cd line. The relative-path property is held by the M3 e2e cell
+#       (cwd-rel-I81-M3), never by M1. Expected 0000.
 #   M2  only the cd line deleted. Expected 0000 -- without the cd, no cwd outside the seed reads it.
-#   M3  the cd kept, VEM_SELF taken from $0 WITHOUT absolutisation. Expected 1101: the
-#       absolute-path cells still pass and only the relative one dies.
-#   M4  only the inherited-VEM_SELF guard deleted. Expected 1110: only C4 dies.
+#   M3  the cd kept, VEM_SELF taken from `${BASH_SOURCE[0]}` WITHOUT absolutisation. Expected
+#       1101: the absolute-path cells still pass and only the relative one dies -- the
+#       command-line half of C3, because only a program started by a relative path has one.
+# Each post-mutation count reads the region below the source guard (cwd_region), the text
+# vem_entry evaluates, and is refused unless the UNMUTATED region reads differently.
+#   M4  only the inherited-VEM_SELF guard deleted. Expected 1110: only C4 dies, by its
+#       command-line half (vem_entry discards an inherited VEM_SELF before the guard is reached).
 #
 # A MUTANT RUN DOES NOT WRITE THE BROKEN MARKER. M3's relative cell exits 2 BY DESIGN -- that is
 # the failure it must produce -- and vrun would otherwise record it as FIXTURE BROKEN. Control
 # runs keep the marker, so an rc 2 from the UNMUTATED validator is still a broken fixture.
 CWD_SELF_REL="../scripts/validate-enforcement-map.sh"
 
-# cwd_cells <control|mutant> <ERE naming the seeded finding>
+# IN PROCESS, WITH TWO COMMAND-LINE HALVES (BL-878). C1-C4 each run the tree's validator through
+# vem_entry from their own cwd: C3 from "$ROOT/core", C4 with VEM_SELF exported naming the decoy's
+# validator (which vem_entry discards, as the CLI's own guard does). Two properties exist only when
+# the validator is STARTED as a program, and vem_entry cannot express either: it refuses a relative
+# source path, so a relative self path resolved across the prologue's cd is a CLI-only mechanism;
+# and it unsets an inherited VEM_SELF/VEM_SELF_PID before the eval, so the prologue's own
+# `[ "${VEM_SELF_PID:-}" = "$$" ] || unset VEM_SELF` guard is reached with nothing to discard. So
+# C3 additionally carries a command-line cell started BY THE RELATIVE PATH from "$ROOT/core" on
+# every unmutated control and on M3 (the mutant only it can kill), and C4 a command-line cell
+# started with VEM_SELF exported on I81's control and on M4 (likewise). A cell that carries a
+# command-line half scores 1 only when BOTH halves score 1, each byte-equal to C1's in-process
+# s.out, and its rc in CW_RCS is the command-line one. Each start is tagged with its cells.decl id.
+# cwd_cli <rel|env> <cell id> <out file> <rc file> -- one command-line start of the tree's validator.
+cwd_cli() {
+  local how="$1" cell="$2" o="$3" rcf="$4" s rc
+  s="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp -d failed" >&2; exit 2; }
+  if [ "$how" = rel ]; then
+    (cd "$ROOT/core" && FXCELL="$cell" bash "$CWD_SELF_REL" --arms "$CW_ID") > "$o" 2>&1; rc=$?
+  else
+    (export VEM_SELF="$EMS_DECOY/scripts/validate-enforcement-map.sh"; cd "$s" && FXCELL="$cell" bash "$V" --arms "$CW_ID") > "$o" 2>&1; rc=$?
+  fi
+  rmdir "$s" 2>/dev/null
+  printf '%s\n' "$rc" > "$rcf"
+}
+
+# cwd_cells <control|mutant> <ERE naming the seeded finding> [<mutant tag>]
 # Sets CW_BITS (e.g. 1111) and CW_RCS, and leaves C1's output in "$CW_DIR/s.out".
 cwd_cells() {
-  local mode="$1" want="$2" s rcf rc_s rc_r rc_rel rc_env b1=0 b2=0 b3=0 b4=0 keep_broken
+  local mode="$1" want="$2" tag="${3:-}" s rcf rc_s rc_r rc_rel rc_env b1=0 b2=0 b3=0 b4=0 keep_broken cli_rel="" cli_env="" rc_crel="" rc_cenv=""
   # The cells ARE the matrix for a cwd mutant: every cell runs on every push, so vrun's
   # matrix-only full run is not taken here. A cwd mutant edits only the prologue, which every
   # arm outside the unit reads identically, and cwd_full already holds the one full-mode cell.
   local VRUN_NOMX=1
   keep_broken="$VRUN_BROKEN"
   [ "$mode" = control ] || keep_broken=""
+  # Which command-line halves this call starts: the relative path on every control and on M3, the
+  # inherited VEM_SELF on I81's control and on M4. Cell ids are the cells.decl rows.
+  case "$mode:$tag" in
+    control:) cli_rel="cwd-rel-$CW_ID"; [ "$CW_ID" = I81 ] && cli_env="cwd-env-$CW_ID" ;;
+    mutant:M3) cli_rel="cwd-rel-$CW_ID-M3" ;;
+    mutant:M4) cli_env="cwd-env-$CW_ID-M4" ;;
+  esac
   s="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp -d failed" >&2; exit 2; }
   rcf="$CW_DIR/rc"
   printf 'none\n' > "$rcf"
@@ -2960,16 +3013,42 @@ cwd_cells() {
   (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$EMS_DECOY" && vrun) > "$CW_DIR/r.out"
   rc_r="$(cat "$rcf")"
   printf 'none\n' > "$rcf"
-  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$ROOT/core" && vrun "$CWD_SELF_REL") > "$CW_DIR/rel.out"
+  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$ROOT/core" && vrun) > "$CW_DIR/rel.out"
   rc_rel="$(cat "$rcf")"
   printf 'none\n' > "$rcf"
   (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; export VEM_SELF="$EMS_DECOY/scripts/validate-enforcement-map.sh"; cd "$s" && vrun) > "$CW_DIR/env.out"
   rc_env="$(cat "$rcf")"
   rmdir "$s" 2>/dev/null
+  if [ -n "$cli_rel" ]; then
+    cwd_cli rel "$cli_rel" "$CW_DIR/rel.cli" "$CW_DIR/rc.cli"; rc_crel="$(cat "$CW_DIR/rc.cli")"
+    # A control's exit 2 is a broken run, never a finding; M3's exit 2 is the failure it must produce.
+    if [ "$mode" = control ] && [ "$rc_crel" = 2 ] && [ -n "$keep_broken" ]; then
+      printf 'FIXTURE BROKEN: the command-line cell %s exited 2 on the unmutated validator: %s\n' "$cli_rel" "$(head -3 "$CW_DIR/rel.cli" | tr '\n' ' ')" >> "$keep_broken"
+    fi
+  fi
+  if [ -n "$cli_env" ]; then
+    cwd_cli env "$cli_env" "$CW_DIR/env.cli" "$CW_DIR/rc.cli"; rc_cenv="$(cat "$CW_DIR/rc.cli")"
+    if [ "$mode" = control ] && [ "$rc_cenv" = 2 ] && [ -n "$keep_broken" ]; then
+      printf 'FIXTURE BROKEN: the command-line cell %s exited 2 on the unmutated validator: %s\n' "$cli_env" "$(head -3 "$CW_DIR/env.cli" | tr '\n' ' ')" >> "$keep_broken"
+    fi
+  fi
   if [ "$rc_s" = 1 ] && grep -qE -- "$want" "$CW_DIR/s.out"; then b1=1; fi
   if [ "$rc_r" = 1 ] && grep -qE -- "$want" "$CW_DIR/r.out" && cmp -s "$CW_DIR/s.out" "$CW_DIR/r.out"; then b2=1; fi
   if [ "$rc_rel" = 1 ] && grep -qE -- "$want" "$CW_DIR/rel.out" && cmp -s "$CW_DIR/s.out" "$CW_DIR/rel.out"; then b3=1; fi
   if [ "$rc_env" = 1 ] && grep -qE -- "$want" "$CW_DIR/env.out" && cmp -s "$CW_DIR/s.out" "$CW_DIR/env.out"; then b4=1; fi
+  # The command-line halves, each held to the same predicate and to C1's in-process bytes. Its
+  # output replaces the cell's file, so cwd_why shows the half that decided.
+  if [ -n "$cli_rel" ]; then
+    rc_rel="$rc_crel"
+    if [ "$b3" = 1 ] && ! { [ "$rc_crel" = 1 ] && grep -qE -- "$want" "$CW_DIR/rel.cli" && cmp -s "$CW_DIR/s.out" "$CW_DIR/rel.cli"; }; then b3=0; mv "$CW_DIR/rel.cli" "$CW_DIR/rel.out"; fi
+    rm -f "$CW_DIR/rel.cli"
+  fi
+  if [ -n "$cli_env" ]; then
+    rc_env="$rc_cenv"
+    if [ "$b4" = 1 ] && ! { [ "$rc_cenv" = 1 ] && grep -qE -- "$want" "$CW_DIR/env.cli" && cmp -s "$CW_DIR/s.out" "$CW_DIR/env.cli"; }; then b4=0; mv "$CW_DIR/env.cli" "$CW_DIR/env.out"; fi
+    rm -f "$CW_DIR/env.cli"
+  fi
+  rm -f "$CW_DIR/rc.cli"
   CW_BITS="$b1$b2$b3$b4"
   CW_RCS="rc scratch=$rc_s live-root=$rc_r relative=$rc_rel inherited-VEM_SELF=$rc_env"
   CW_RC_ROOT="$rc_r"
@@ -3046,20 +3125,32 @@ a1_says() {
 }
 
 # cwd_mutant <tag> <expected bits> <ERE> <sed program> <post-check ERE> <post-check count>
+# cwd_region <file> -- the text vem_entry evaluates: every line BELOW the column-0 source guard.
+# The post-mutation counts read this region and never the whole file, because the entry above the
+# guard names VEM_SELF in its own discard (`unset ... VEM_SELF VEM_SELF_PID`), and that line is no
+# part of the prologue a cwd mutant reverts.
+CWD_GUARD='[ "${BASH_SOURCE[0]}" = "$0" ] || return 0'
+cwd_region() { awk -v g="$CWD_GUARD" 'on; $0 == g { on = 1 }' "$1"; }
+
 cwd_mutant() {
-  local tag="$1" exp="$2" want="$3" prog="$4" pce="$5" pcn="$6" bak n
+  local tag="$1" exp="$2" want="$3" prog="$4" pce="$5" pcn="$6" bak n n0
   bak="$(mkbak "$V")"
   if ! sed -e "$prog" "$bak" > "$V"; then
     bad "$CW_ID $tag DID NOT APPLY: its sed program failed, so no mutant existed to score"
     cp "$bak" "$V"; rm -f "$bak"; return
   fi
-  n="$(grep -cE -- "$pce" "$V")" || n=0
+  n="$(cwd_region "$V" | grep -cE -- "$pce")" || n=0
+  n0="$(cwd_region "$bak" | grep -cE -- "$pce")" || n0=0
   if cmp -s "$bak" "$V"; then
     bad "$CW_ID $tag DID NOT APPLY: the mutation matched nothing in the validator, so its verdict would be about the unmutated fix"
+  elif [ "$(grep -cxF -- "$CWD_GUARD" "$V")" != 1 ] || [ "$(grep -cxF -- "$CWD_GUARD" "$bak")" != 1 ]; then
+    bad "FIXTURE BROKEN: $CW_ID $tag: the validator does not carry exactly one source guard line, so the region its post-mutation count reads is not the text vem_entry evaluates"
+  elif [ "$n0" = "$pcn" ]; then
+    bad "FIXTURE BROKEN: $CW_ID $tag: the UNMUTATED region already counts $n0 of /$pce/, the post-mutation value, so the count below cannot tell the mutant from the fix"
   elif [ "$n" != "$pcn" ]; then
     bad "$CW_ID $tag applied but is INSUFFICIENT: the post-mutation count of /$pce/ is $n where $pcn was expected, so it is not the mutant its verdict would be read as"
   else
-    cwd_cells mutant "$want"
+    cwd_cells mutant "$want" "$tag"
     # THE DECOY'S PRESENCE PROOF, WITH ITS OWN SELF-PROBE IN THE SAME CALL. M1 is the base code,
     # which reads its cwd's tree; run from a complete decoy carrying no offender, C2 must show what
     # the base code shows from a complete tree (a1_holds). An empty or partial decoy fails it on
@@ -3177,11 +3268,12 @@ cwd_battery() {
     case "$t" in
       M1) cwd_mutant M1 0000 "$want" '/^\[ "\${VEM_SELF_PID:-}" = "\$\$" \] || unset VEM_SELF$/d
 /^VEM_SELF_PID=\$\$$/d
-/^case "\${VEM_SELF:-\$0}" in /d
+/^case "\${VEM_SELF:-\${BASH_SOURCE\[0\]}}" in /d
 /^\[ -n "\$REPO_ROOT" \] \&\& cd "\$REPO_ROOT" || {/d
-s/\$VEM_SELF/$0/g' '^[^#]*VEM_SELF|cd "\$REPO_ROOT" \|\|' 0 ;;
+s/\$VEM_SELF/${BASH_SOURCE[0]}/g
+s|\${VEM_SELF##\*/}|${BASH_SOURCE[0]##*/}|g' '^[^#]*VEM_SELF|cd "\$REPO_ROOT" \|\|' 0 ;;
       M2) cwd_mutant M2 0000 "$want" '/^\[ -n "\$REPO_ROOT" \] \&\& cd "\$REPO_ROOT" || {/d' 'cd "\$REPO_ROOT" \|\|' 0 ;;
-      M3) cwd_mutant M3 1101 "$want" 's/^case "\${VEM_SELF:-\$0}" in .*/VEM_SELF="$0"/' '^VEM_SELF="\$0"$' 1 ;;
+      M3) cwd_mutant M3 1101 "$want" 's/^case "\${VEM_SELF:-\${BASH_SOURCE\[0\]}}" in .*/VEM_SELF="${BASH_SOURCE[0]}"/' '^VEM_SELF="\$\{BASH_SOURCE\[0\]\}"$' 1 ;;
       M4) cwd_mutant M4 1110 "$want" '/^\[ "\${VEM_SELF_PID:-}" = "\$\$" \] || unset VEM_SELF$/d' '^\[ "\$\{VEM_SELF_PID:-\}" = "\$\$" \] \|\| unset VEM_SELF$' 0 ;;
       *) bad "FIXTURE BROKEN: cwd_battery for $CW_ID was asked for unknown mutant '$t'" ;;
     esac
@@ -3211,7 +3303,7 @@ cwd_control() {
 # M5 moves the cd into the `--arms` block and must leave the four cells at 1111 and kill this.
 cwd_full_bit() { # cwd_full_bit <ERE> -> prints 1 or 0, and leaves the run in "$CW_DIR/full.out"
   local rc
-  (cd "$EMS_DECOY" && bash "$V") > "$CW_DIR/full.out" 2>&1; rc=$?
+  (cd "$EMS_DECOY" && vem_entry) > "$CW_DIR/full.out" 2>&1; rc=$?
   if [ "$rc" = 1 ] && grep -qE -- "$1" "$CW_DIR/full.out"; then echo 1; else echo 0; fi
 }
 cwd_full() {
@@ -3546,9 +3638,13 @@ elif [ "${1:-}" = "--matrix" ]; then
   # mutant, and a shard-a-only matrix would miss two thirds of them. It runs as shard a.
   RUN_MODE=matrix
 fi
-case " $SHARDS " in
+# THE `eq` GROUP IS NOT A DEALT SHARD, so it is deliberately NOT in SHARDS: that list drives the
+# round-robin deal below, and naming `eq` there would hand it assertions. It runs the full-run
+# equivalence twins (eq-pass, eq-refuse, eq-usage) and nothing else, from its own driver directory
+# enforcement-map-sites-d, so those four full runs and three command-line starts sit off the pole.
+case " $SHARDS eq " in
   *" $GROUP "*) ;;
-  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS eq)" >&2; exit 2 ;;
 esac
 
 # THE COVERAGE JOIN. Sharding moves assertions out of this directory, so the failure mode it
@@ -3563,6 +3659,9 @@ if [ "$GROUP" = a ]; then
     [ "$_s" = a ] && continue
     [ -f "$HERE/../enforcement-map-sites-$_s/run.sh" ] || missing="$missing $_s"
   done
+  # The `eq` group's driver is enforcement-map-sites-d. Without it the full-run equivalence twins
+  # run nowhere and this shard stays green, so its absence refuses the same way.
+  [ -f "$HERE/../enforcement-map-sites-d/run.sh" ] || missing="$missing eq(enforcement-map-sites-d)"
   if [ -n "$missing" ]; then
     echo "FIXTURE ERROR: shard(s)$missing declared in SHARDS have no driver directory beside this one." >&2
     echo "  Their assertions would run NOWHERE, and this suite would report a shorter green run." >&2
@@ -3572,6 +3671,7 @@ fi
 
 NAME="enforcement-map-sites"
 [ "$GROUP" = a ] || NAME="enforcement-map-sites-$GROUP"
+[ "$GROUP" = eq ] && NAME="enforcement-map-sites-d"
 
 # THE INNER POOL WIDTH, resolved BEFORE the control so a bad value refuses in milliseconds.
 # Default 8 (the reasoning is beside the pool below). The read-set deriver runs every shard with
@@ -3659,7 +3759,112 @@ SELF="$HERE/$(basename "$0")"
 #                nobody seeded. tree_state RECORDS the directory it actually hashed, and that is
 #                compared against the very paths handed to the cells, so a digest taken over some
 #                other directory refuses instead of comparing two equal readings of the wrong tree.
+# --- THE EQUIVALENCE CELLS (BL-878 item 1): full runs in the `eq` group (enforcement-map-sites-d),
+# --- `--arms I12` in shards a, b and c ---------------------------------------------------------------
+# Every run in the cells is `vem_entry`, the validator evaluated inside this process. These cells
+# prove that answer IS the program's: for each distinct command-line outcome, the in-process call and
+# a command-line start of the same file, from the same cwd, under this file's own `set -uo pipefail`,
+# must agree byte for byte on stdout, on stderr and on the exit code.
+#   eq-pass    a FULL run of a pristine copy of the template: exit 0, every arm, I49, I53, I60 and
+#              I107 (the four `--exclude` reads of the self path) included.
+#   eq-refuse  a FULL run of a copy carrying an offender (a core subtree with no destination row,
+#              A01's shape): exit 1.
+#   eq-usage   `--bogus` on the pristine copy: exit 2.
+# Those three are the `cli` rows of enforcement-map-sites-d's cells.decl and run in the `eq` group
+# alone, which builds the seed and nothing else (below the seed): no decoy, no control, no pool. It
+# carries no A00 because it reports no kills; eq-pass's own predicate (exit 0 and the verdict block's
+# OK line) is the full run over the pristine tree that A00 would have been.
+# Shards a, b and c exercise exit 0 (their A00 control) and exit 1 (their mutants) in process too, so
+# each carries its own pair, eq-arms-pass and eq-arms-refuse, on the same two trees through the
+# selected form every one of its cells uses: `--arms I12`, an arm the refusing tree's offender trips
+# (I17 does too, but its unit starts about twenty programs per run where I12's starts the renderer
+# alone). Each shard directory's own cells.decl carries those two rows.
+# The two inputs DIFFER and are asserted to: the refusing run must exit 1 and name the offender, the
+# passing one exit 0 and print the verdict block's OK line, so two empty or two crashed runs cannot
+# read as agreement. Each copy's validator is sourced once, in the subshell that runs its in-process
+# half.
+EQ_DIR=""
+eq_pair() { # eq_pair <tree> <tag> <cli cell id> [args...] -> $EQ_DIR/<tag>.{i,c}.{out,err,rc}
+  local t="$1" tag="$2" cell="$3"; shift 3
+  ( cd "$t" || exit 2
+    ( . "$t/scripts/validate-enforcement-map.sh" || exit 2; vem_entry "$@" ) > "$EQ_DIR/$tag.i.out" 2> "$EQ_DIR/$tag.i.err"
+    printf '%s\n' "$?" > "$EQ_DIR/$tag.i.rc"
+    FXCELL="$cell" bash "$t/scripts/validate-enforcement-map.sh" "$@" > "$EQ_DIR/$tag.c.out" 2> "$EQ_DIR/$tag.c.err"
+    printf '%s\n' "$?" > "$EQ_DIR/$tag.c.rc" )
+}
+eq_start() {
+  EQ_DIR="$OUT/eq"
+  mkdir -p "$EQ_DIR/pass" "$EQ_DIR/refuse" || { echo "$NAME: FIXTURE ERROR — could not create the equivalence trees" >&2; exit 2; }
+  cp -RX "$CELL_TPL/." "$EQ_DIR/pass/" && cp -RX "$CELL_TPL/." "$EQ_DIR/refuse/" \
+    && mkdir -p "$EQ_DIR/refuse/core/brand-new-subtree" && printf 'x\n' > "$EQ_DIR/refuse/core/brand-new-subtree/thing.sh" \
+    || { echo "$NAME: FIXTURE ERROR — could not build the equivalence trees from the template" >&2; exit 2; }
+  # The two full-run pairs are the `eq` group's whole cost, so they run side by side, each waited on
+  # by its own pid in eq_finish.
+  if [ "$GROUP" = eq ]; then
+    eq_pair "$EQ_DIR/pass" pass eq-pass &
+    EQ_PID_PASS=$!
+    eq_pair "$EQ_DIR/refuse" refuse eq-refuse &
+    EQ_PID_REFUSE=$!
+  fi
+}
+EQ_TAGS="arms-pass arms-refuse"
+[ "$GROUP" = eq ] && EQ_TAGS="pass refuse usage"
+eq_finish() {
+  local t ok_t want_rc want_say
+  if [ "$GROUP" = eq ]; then
+    wait "$EQ_PID_PASS"; wait "$EQ_PID_REFUSE"
+    eq_pair "$EQ_DIR/pass" usage eq-usage --bogus
+  else
+    eq_pair "$EQ_DIR/pass" arms-pass eq-arms-pass --arms I12
+    eq_pair "$EQ_DIR/refuse" arms-refuse eq-arms-refuse --arms I12
+  fi
+  for t in $EQ_TAGS; do
+    case "$t" in
+      pass|arms-pass)     want_rc=0; want_say='^OK: enforcement-map.yaml in sync' ;;
+      refuse)             want_rc=1; want_say='core/brand-new-subtree/ has no destination row' ;;
+      arms-refuse)        want_rc=1; want_say='core/brand-new-subtree/ has no drift-scan policy row' ;;
+      usage)              want_rc=2; want_say='^usage: validate-enforcement-map\.sh ' ;;
+    esac
+    ok_t=1
+    for f in "$EQ_DIR/$t.i.rc" "$EQ_DIR/$t.c.rc"; do [ -s "$f" ] || ok_t=0; done
+    if [ "$ok_t" = 0 ]; then
+      bad "EQUIVALENCE eq-$t: a half recorded no exit status, so the pair never ran to a verdict"
+    elif [ "$(cat "$EQ_DIR/$t.i.rc")" != "$want_rc" ] || ! grep -qE -- "$want_say" "$EQ_DIR/$t.i.out" "$EQ_DIR/$t.i.err"; then
+      bad "EQUIVALENCE eq-$t: the in-process run exited $(cat "$EQ_DIR/$t.i.rc") (expected $want_rc) or did not print /$want_say/, so this pair does not hold the outcome it is the twin for: $(head -2 "$EQ_DIR/$t.i.err" | tr '\n' ' ' | cut -c1-200)"
+    elif [ "$(cat "$EQ_DIR/$t.i.rc")" = "$(cat "$EQ_DIR/$t.c.rc")" ] && cmp -s "$EQ_DIR/$t.i.out" "$EQ_DIR/$t.c.out" && cmp -s "$EQ_DIR/$t.i.err" "$EQ_DIR/$t.c.err"; then
+      ok "EQUIVALENCE eq-$t: the in-process vem_entry run and the command-line run agree byte for byte on stdout ($(grep -c '' < "$EQ_DIR/$t.i.out") line(s)), stderr ($(grep -c '' < "$EQ_DIR/$t.i.err") line(s)) and exit $want_rc"
+    else
+      bad "EQUIVALENCE eq-$t: the in-process run and the command-line run DIFFER (exit $(cat "$EQ_DIR/$t.i.rc") vs $(cat "$EQ_DIR/$t.c.rc")): $(diff "$EQ_DIR/$t.i.out" "$EQ_DIR/$t.c.out" | head -3 | tr '\n' ' ' | cut -c1-160) $(diff "$EQ_DIR/$t.i.err" "$EQ_DIR/$t.c.err" | head -3 | tr '\n' ' ' | cut -c1-160)"
+    fi
+  done
+  local p=arms-pass r=arms-refuse
+  [ "$GROUP" = eq ] && { p=pass; r=refuse; }
+  if cmp -s "$EQ_DIR/$p.i.err" "$EQ_DIR/$r.i.err" && cmp -s "$EQ_DIR/$p.i.out" "$EQ_DIR/$r.i.out"; then
+    bad "EQUIVALENCE: the passing and the refusing trees produced IDENTICAL output, so the two inputs do not differ and the pairs prove one outcome twice"
+  fi
+}
+
 TPL="$(bash "$HERE/seed.sh")" || { echo "$NAME: FIXTURE ERROR — seed.sh failed to build the shard template" >&2; exit 2; }
+# THE `eq` GROUP STOPS HERE: the seed is its only shared tree, and the equivalence cells above are its
+# whole assertion set. Every tag must have printed exactly one EQUIVALENCE verdict line, counted from
+# this run's own output, so a tag list that ran nothing cannot report PASS.
+if [ "$GROUP" = eq ]; then
+  [ -f "$TPL/scripts/validate-enforcement-map.sh" ] || { echo "$NAME: FIXTURE ERROR — the seed template $TPL carries no scripts/validate-enforcement-map.sh" >&2; exit 2; }
+  CELL_TPL="$TPL"
+  eq_start
+  EQ_LOG="$OUT/eq.log"
+  eq_finish > "$EQ_LOG"
+  cat "$EQ_LOG"
+  eq_want="$(printf '%s\n' $EQ_TAGS | grep -c .)" || eq_want=0
+  eq_got="$(grep -cE '^  (ok    |FAIL  )EQUIVALENCE eq-' "$EQ_LOG")" || eq_got=0
+  if [ "$eq_want" -ne 3 ] || [ "$eq_got" -ne "$eq_want" ]; then
+    bad "EQUIVALENCE: the eq group printed $eq_got per-tag verdict line(s) for $eq_want tag(s) (expected 3 and 3), so a pair never reached a verdict"
+  fi
+  echo
+  if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi
+  echo "$NAME: $fails assertion(s) FAILED" >&2
+  exit 1
+fi
 DCY="$(mktemp -d "${TMPDIR:-/tmp}/enforcement-map-sites-decoy.XXXXXX")" || { echo "$NAME: FIXTURE ERROR — mktemp failed for the decoy" >&2; exit 2; }
 cp -RX "$TPL/." "$DCY/" && printf 'seeded\n' > "$DCY/VERSION" \
   && ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; git init -q "$DCY" ) >/dev/null 2>&1 \
@@ -3707,6 +3912,10 @@ if [ "$ctl_rc" -ne 0 ]; then
   exit 2
 fi
 
+# The `--arms I12` equivalence trees (shards a, b and c), built from the template the cells use; the pair
+# runs after the pool, in eq_finish. The functions and the reasoning are above the seed.
+eq_start
+
 # EIGHT BY DEFAULT, and the pre-push suite never sets EMS_POOL_WIDTH: this pool nests inside
 # the suite's own pool, so the product is what lands on the machine. Eight against 18 cores
 # leaves headroom for the seven sibling fixtures the suite runs beside this one. The knob
@@ -3734,6 +3943,9 @@ AI_DLC_EMS_SELF="$SELF" AI_DLC_EMS_OUT="$OUT" \
       > "$AI_DLC_EMS_OUT/$n" 2> "$AI_DLC_EMS_OUT/$n.err"
     printf %s $? > "$AI_DLC_EMS_OUT/$n.rc"
   ' _ {} "$CELL_TPL" "$CELL_DCY" "$OUT/ctl.rc" "$RUN_MODE" "$MXL" < "$OUT/list"
+
+# THE `--arms I12` EQUIVALENCE PAIR runs and is read here, after the pool (see eq_start, above the seed).
+eq_finish
 
 TPL_S1="$(tree_state "$CELL_TPL")"
 DCY_S1="$(tree_state "$CELL_DCY")"

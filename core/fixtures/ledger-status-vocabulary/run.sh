@@ -146,6 +146,13 @@ ASSERTIONS=$((ASSERTIONS + 1))
 : > "$MUTD/control.sed"
 printf 'control\t%s\t\t\t\n' "control" >> "$RUNS"
 
+# THE PASSING CLI TWIN: a clean copy judged by I39 alone, answered in-process and by the program
+# (cells.decl cli-pass). It is not a mutant, so it has no matrix row; the refusing twin rides on
+# emit-undocumented's own run.
+ASSERTIONS=$((ASSERTIONS + 1))
+: > "$MUTD/cli-pass.sed"
+printf 'twinpass\t%s\t\t\t\n' "cli-pass" >> "$RUNS"
+
 # $1 label  $2 file-to-mutate  $3 sed-expr  $4 substring that MUST appear  $5 expected FAIL count  $6 why
 #
 # The sed program goes to a FILE rather than into the registry: these programs carry
@@ -322,11 +329,27 @@ LSV_BASE="$BASE" LSV_MUTD="$MUTD" LSV_OUT="$OUTD" LSV_WORK="$TMP" LSV_RUNS="$RUN
         rm -rf "$work"; exit 0
       fi
     fi
-    bash "$work/scripts/validate-enforcement-map.sh" $sel > "$LSV_OUT/$l.out" 2>&1
+    # IN-PROCESS: the copy`s own validator is sourced ONCE by absolute path (defines vem_entry, runs
+    # nothing) and every run below is a vem_entry subshell. Only the two cli cells start it as a program.
+    . "$work/scripts/validate-enforcement-map.sh"
+    ( vem_entry $sel ) > "$LSV_OUT/$l.so" 2> "$LSV_OUT/$l.se"
     printf %s $? > "$LSV_OUT/$l.rc"
-    if [ "$LSV_MODE" = matrix ] && [ "$l" != control ]; then
+    cat "$LSV_OUT/$l.so" "$LSV_OUT/$l.se" > "$LSV_OUT/$l.out"
+    # THE CLI TWINS (cells.decl cli-pass / cli-refuse): the same answer from the program, byte for byte on
+    # stdout, stderr and exit, on a passing input (the clean copy) and a refusing one (emit-undocumented).
+    case "$l" in cli-pass) tag=cli-pass ;; emit-undocumented) tag=cli-refuse ;; *) tag="" ;; esac
+    if [ -n "$tag" ]; then
+      FXCELL="$tag" bash "$work/scripts/validate-enforcement-map.sh" $sel > "$LSV_OUT/$l.cso" 2> "$LSV_OUT/$l.cse"
+      crc=$?
+      if cmp -s "$LSV_OUT/$l.so" "$LSV_OUT/$l.cso" && cmp -s "$LSV_OUT/$l.se" "$LSV_OUT/$l.cse" && [ "$crc" = "$(cat "$LSV_OUT/$l.rc")" ]; then
+        printf same > "$LSV_OUT/$l.twin"
+      else
+        printf "DIFF rc=%s/%s" "$(cat "$LSV_OUT/$l.rc")" "$crc" > "$LSV_OUT/$l.twin"
+      fi
+    fi
+    if [ "$LSV_MODE" = matrix ] && [ "$l" != control ] && [ "$l" != cli-pass ]; then
       printf "mx-full %s\n" "$l" >> "$LSV_LEDGER"
-      bash "$work/scripts/validate-enforcement-map.sh" > "$LSV_OUT/$l.full.out" 2>&1
+      ( vem_entry ) > "$LSV_OUT/$l.full.out" 2>&1
       printf %s $? > "$LSV_OUT/$l.full.rc"
     fi
     printf done  > "$LSV_OUT/$l.done"
@@ -353,7 +376,7 @@ cell_red() {
       grep -qF -- "$w" <<<"$o" ;;
   esac
 }
-CELLS="$(awk -F'\t' '$1!="control"{print $2}' "$RUNS")"
+CELLS="$(awk -F'\t' '$1!="control" && $1!="twinpass"{print $2}' "$RUNS")"
 
 # The header IS the twin list: nothing else in this file restates it.
 mx_row() {
@@ -456,7 +479,23 @@ while IFS=$'\t' read -r kind label file want want_n why; do
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -5
       fi ;;
 
+    twinpass)
+      if [ "$rc" = "0" ] && [ "$n" -eq 0 ] && [ "$(cat "$OUTD/$label.twin" 2>/dev/null)" = same ] && grep -q '^OK: ' "$OUTD/$label.cso"; then
+        printf '  ok    %-20s the program answers a clean copy exactly as the in-process entry does  (stdout, stderr, exit)\n' "$label"
+      else
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-20s the passing CLI twin differs from the in-process answer (%s) or is not a pass\n' "$label" "$(cat "$OUTD/$label.twin" 2>/dev/null)"
+      fi ;;
     fires)
+      if [ "$label" = emit-undocumented ]; then
+        ASSERTIONS=$((ASSERTIONS + 1))
+        if [ "$(cat "$OUTD/$label.twin" 2>/dev/null)" = same ] && [ "$rc" = 1 ] && grep -qF "$want" <<<"$(cat "$OUTD/$label.cso" "$OUTD/$label.cse")"; then
+          printf '  ok    %-20s twin: the program refuses a mutant exactly as the in-process entry does  (stdout, stderr, exit 1)\n' "cli-refuse"
+        else
+          FAILURES=$((FAILURES + 1))
+          printf '  FAIL  %-20s the refusing CLI twin differs from the in-process answer (%s)\n' "cli-refuse" "$(cat "$OUTD/$label.twin" 2>/dev/null)"
+        fi
+      fi
       if ! grep -qF "$want" <<<"$out"; then
         FAILURES=$((FAILURES + 1))
         printf '  FAIL  %-20s I39 did NOT fire  (%s)\n' "$label" "$why"
@@ -511,7 +550,7 @@ while IFS=$'\t' read -r kind label file want want_n why; do
       fi ;;
   esac
 
-  [ "$kind" = control ] || mx_twins "$label" "$out" "$OUTD/$label.full.out"
+  [ "$kind" = control ] || [ "$kind" = twinpass ] || mx_twins "$label" "$out" "$OUTD/$label.full.out"
 done < "$RUNS"
 
 # RULE 9: A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. The worker's full validator run and the

@@ -1,0 +1,6 @@
+# enforcement-map-sites-d (the `eq` group): every in-process run is `vem_entry` (the sibling's run.sh). These
+# are its only command-line starts, each tagged FXCELL=<id> at its call site in the sibling's eq_pair.
+# The full-run equivalence twins (eq_pair): exit 0 on a pristine copy, exit 1 on a copy with an offender, exit 2.
+cli scripts/validate-enforcement-map.sh eq-pass
+cli scripts/validate-enforcement-map.sh eq-refuse
+cli scripts/validate-enforcement-map.sh eq-usage

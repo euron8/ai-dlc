@@ -1,0 +1,6 @@
+# Every other validator run in this shard is in process, `( vem_entry … )` from one source of the validator (run.sh,
+# lcc_run_one). These are the twin cells, one per distinct CLI outcome, each compared byte for byte with the in-process
+# answer on the same input: the unmutated contract under the selector of this shard's first dealt mutant (exit 0), and
+# that mutant (exit 1).
+cli scripts/validate-enforcement-map.sh cli-pass
+cli scripts/validate-enforcement-map.sh cli-refuse

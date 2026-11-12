@@ -1,0 +1,5 @@
+# Shard 'b' runs only the cells its group runs (layer-contract-conformance/run.sh --group b). Every other validator run
+# is in process. These are the twin cells, compared byte for byte with the in-process answer on the same input: the
+# unmutated contract under the selector of this shard's first dealt mutant (exit 0), and that mutant (exit 1).
+cli scripts/validate-enforcement-map.sh cli-pass
+cli scripts/validate-enforcement-map.sh cli-refuse

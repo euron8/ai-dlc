@@ -231,8 +231,24 @@ CMH_MATRIX="$MATRIX" CMH_HERE="$HERE" CMH_SEDS="$SEDS" CMH_OUT="$OUTD" CMH_RUNS=
     fi
     if [ -n "$CMH_MATRIX" ]; then _arms=""; else _arms="--arms I43,I44"; fi
     printf %s "$_arms" > "$CMH_OUT/$l.arms"
-    bash "$root/scripts/validate-enforcement-map.sh" $_arms > "$CMH_OUT/$l.out" 2>&1
-    printf %s $? > "$CMH_OUT/$l.rc"
+    # IN-PROCESS: the seeded validator is sourced ONCE by absolute path and run as a vem_entry subshell.
+    # The two cli cells (cells.decl) start it as a program on the pristine tree (a pass) and on
+    # a1-reader-rename (a refusal) and must answer byte for byte as the in-process run did.
+    . "$root/scripts/validate-enforcement-map.sh"
+    ( vem_entry $_arms ) > "$CMH_OUT/$l.so" 2> "$CMH_OUT/$l.se"
+    irc=$?
+    printf %s $irc > "$CMH_OUT/$l.rc"
+    cat "$CMH_OUT/$l.so" "$CMH_OUT/$l.se" > "$CMH_OUT/$l.out"
+    case "$l" in a0-sanity) tag=cli-pass ;; a1-reader-rename) tag=cli-refuse ;; *) tag="" ;; esac
+    if [ -n "$tag" ]; then
+      FXCELL="$tag" bash "$root/scripts/validate-enforcement-map.sh" $_arms > "$CMH_OUT/$l.cso" 2> "$CMH_OUT/$l.cse"
+      crc=$?
+      if cmp -s "$CMH_OUT/$l.so" "$CMH_OUT/$l.cso" && cmp -s "$CMH_OUT/$l.se" "$CMH_OUT/$l.cse" && [ "$irc" = "$crc" ]; then
+        printf same > "$CMH_OUT/$l.twin"
+      else
+        printf "DIFF rc=%s/%s" "$irc" "$crc" > "$CMH_OUT/$l.twin"
+      fi
+    fi
     printf done  > "$CMH_OUT/$l.done"
     rm -rf "$root"
   ' _ {} < <(cut -f2 "$RUNS")
@@ -308,6 +324,22 @@ done < "$RUNS"
 # A PLAIN RUN EXECUTES NO MATRIX-ONLY CELL. Matrix mode runs the whole validator; a plain run
 # must have run every world on the two-arm selection only. Each worker records the selector it
 # actually used, so a plain run that fell through to the whole validator is a failure here.
+# THE CLI TWINS (cells.decl): the program answers the pristine tree (a pass, exit 0) and a1-reader-rename
+# (a refusal, exit 1 with I43 text) exactly as the in-process entry did, on stdout, stderr and exit. An
+# absent twin file reads as a failure, never as agreement.
+_cp_rc="$(cat "$OUTD/a0-sanity.rc" 2>/dev/null)"
+_cr_rc="$(cat "$OUTD/a1-reader-rename.rc" 2>/dev/null)"
+if [ "$(cat "$OUTD/a0-sanity.twin" 2>/dev/null)" = same ] && [ "$_cp_rc" = 0 ] && grep -q '^OK: ' "$OUTD/a0-sanity.cso" 2>/dev/null; then
+  ok "cli-pass: the program answers the pristine tree exactly as the in-process entry does (stdout, stderr, exit 0)"
+else
+  bad "cli-pass: the program differs from the in-process entry on the pristine tree ($(cat "$OUTD/a0-sanity.twin" 2>/dev/null))"
+fi
+if [ "$(cat "$OUTD/a1-reader-rename.twin" 2>/dev/null)" = same ] && [ "$_cr_rc" = 1 ] && grep -qF "is neither core" <<<"$(cat "$OUTD/a1-reader-rename.cso" "$OUTD/a1-reader-rename.cse" 2>/dev/null)"; then
+  ok "cli-refuse: the program refuses a1-reader-rename exactly as the in-process entry does (stdout, stderr, exit 1)"
+else
+  bad "cli-refuse: the program differs from the in-process entry on a1-reader-rename ($(cat "$OUTD/a1-reader-rename.twin" 2>/dev/null))"
+fi
+
 if [ -z "$MATRIX" ]; then
   _full=0
   while IFS=$'\t' read -r _k _l _f _w; do

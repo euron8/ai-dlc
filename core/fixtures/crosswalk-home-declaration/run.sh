@@ -79,9 +79,9 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
-# 1 premise + 1 control + 4 mutants, plus (plain run only) 1 arm asserting no matrix-only cell ran.
-EXPECTED_ASSERTIONS=7
-[ -n "$MATRIX" ] && EXPECTED_ASSERTIONS=6
+# 1 premise + 1 control + 4 mutants + 2 cli twins, plus (plain run only) 1 arm asserting no matrix-only cell ran.
+EXPECTED_ASSERTIONS=9
+[ -n "$MATRIX" ] && EXPECTED_ASSERTIONS=8
 MIRROR_RUNS=5   # control + m1..m4
 
 echo "crosswalk-home-declaration:"
@@ -200,8 +200,24 @@ CHD_MATRIX="$MATRIX" CHD_ROOT="$ROOT" CHD_WORK="$WORK" CHD_MUTS="$MUTS" CHD_OUT=
     if [ ! -f "$CHD_OUT/$l.state" ]; then
       if [ -n "$CHD_MATRIX" ]; then _arms=""; else _arms="--arms I69,I68"; fi
       printf %s "$_arms" > "$CHD_OUT/$l.arms"
-      bash "$m/scripts/validate-enforcement-map.sh" $_arms > "$CHD_OUT/$l.full" 2>&1
+      # IN-PROCESS: the mirror validator, mutated or not, is sourced ONCE by absolute path and run as a
+      # vem_entry subshell. The two cli cells (cells.decl) start it as a program on the control (a pass)
+      # and on m1 (a refusal) and must answer byte for byte as the in-process run did.
+      . "$m/scripts/validate-enforcement-map.sh"
+      ( vem_entry $_arms ) > "$CHD_OUT/$l.so" 2> "$CHD_OUT/$l.se"
+      irc=$?
+      cat "$CHD_OUT/$l.so" "$CHD_OUT/$l.se" > "$CHD_OUT/$l.full"
       grep -c "I69" "$CHD_OUT/$l.full" > "$CHD_OUT/$l.n" || true
+      case "$l" in control) tag=cli-pass ;; m1) tag=cli-refuse ;; *) tag="" ;; esac
+      if [ -n "$tag" ]; then
+        FXCELL="$tag" bash "$m/scripts/validate-enforcement-map.sh" $_arms > "$CHD_OUT/$l.cso" 2> "$CHD_OUT/$l.cse"
+        crc=$?
+        if cmp -s "$CHD_OUT/$l.so" "$CHD_OUT/$l.cso" && cmp -s "$CHD_OUT/$l.se" "$CHD_OUT/$l.cse" && [ "$irc" = "$crc" ]; then
+          printf same > "$CHD_OUT/$l.twin"
+        else
+          printf "DIFF rc=%s/%s" "$irc" "$crc" > "$CHD_OUT/$l.twin"
+        fi
+      fi
     fi
     printf done > "$CHD_OUT/$l.done"
     rm -rf "$m"
@@ -300,6 +316,19 @@ if [ -z "$MATRIX" ]; then
     bad "a plain run executed $_full mirror(s) outside --arms I69,I68 — the matrix-only whole-validator path leaked into the per-push run"
   fi
 fi
+
+# THE CLI TWINS (cells.decl): the program answers the control (a pass) and m1 (a refusal) exactly as the
+# in-process entry did, on stdout, stderr and exit. The twin file is written by the worker only when both
+# sides were run, so an absent one reads as a failure and never as agreement.
+for _t in control:cli-pass m1:cli-refuse; do
+  _l="${_t%%:*}"; _c="${_t##*:}"
+  _ci="$(grep -c I69 <<<"$(cat "$OUTD/$_l.cso" "$OUTD/$_l.cse" 2>/dev/null)")" || _ci=0
+  if [ "$(cat "$OUTD/$_l.twin" 2>/dev/null)" = same ] && { { [ "$_l" = control ] && [ "$_ci" -eq 0 ]; } || { [ "$_l" = m1 ] && [ "$_ci" -ge 1 ]; }; }; then
+    ok "$_c: the program answers the $_l mirror exactly as the in-process entry does (stdout, stderr, exit)"
+  else
+    bad "$_c: the program differs from the in-process entry on the $_l mirror ($(cat "$OUTD/$_l.twin" 2>/dev/null))"
+  fi
+done
 
 # ---------------------------------------------------------------------------
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

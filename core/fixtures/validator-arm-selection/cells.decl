@@ -1,0 +1,7 @@
+# validator-arm-selection (shard a): every other run of the validator is in process, `vem_entry` from a copy
+# sourced once (this process for the real tree, a chunk worker or a subshell for every other tree). These are its
+# only command-line starts, each the byte-for-byte twin (stdout, stderr, exit) of an in-process run (cli_twin),
+# one per exit code this shard exercises.
+cli scripts/validate-enforcement-map.sh cli-first-id
+cli scripts/validate-enforcement-map.sh cli-i66-refuse
+cli scripts/validate-enforcement-map.sh cli-unknown-id

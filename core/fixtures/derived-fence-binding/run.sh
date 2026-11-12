@@ -8,6 +8,10 @@
 # And A48-A50: the three-way drop matrix over I121, I122 and I123's chunked-write paragraph below
 # them, where the advisor drop must leave I123 reporting MISPLACED rather than green.
 #
+# The validator runs IN PROCESS: every cell is `( vem_entry --arms <id> )` from the tree's copy, sourced
+# once (see THE VALIDATOR RUNS IN PROCESS below); EQ holds that answer to the CLI's byte for byte, and
+# its two CLI starts are the only ones left, declared in cells.decl.
+#
 # Usage: run.sh [--matrix]
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
 #
@@ -154,6 +158,17 @@ TREE="$WORK/t"
 cp -R "$PRISTINE" "$TREE" || { echo "FIXTURE ERROR: cannot copy the seed" >&2; exit 2; }
 TOUCHED="$WORK/touched"; : > "$TOUCHED"
 
+# THE VALIDATOR RUNS IN PROCESS (BL-878). The tree's copy of validate-enforcement-map.sh is sourced ONCE,
+# by absolute path, here in the shell that runs every cell: a source defines vem_entry and returns before
+# any arm. Each cell is `( vem_entry --arms <id> )`. ONE SOURCE COVERS EVERY MUTANT because this fixture
+# has one tree and mutates its validator IN PLACE (`edit`, the matrix's `cp -p`), and vem_entry reads the
+# file text by path at CALL time, so each call evaluates the mutant on disk at that moment; no mutation
+# program touches the entry or its guard, and one that did would make the entry refuse with exit 2, which
+# guard_sel reports as FIXTURE BROKEN. The two remaining separate-program starts are the cli-pass and
+# cli-refuse twins in EQ below, declared in this fixture's cells.decl.
+. "$TREE/$ARM" || { echo "FIXTURE ERROR: sourcing $TREE/$ARM failed" >&2; exit 2; }
+declare -F vem_entry >/dev/null || { echo "FIXTURE ERROR: $TREE/$ARM defined no vem_entry when sourced" >&2; exit 2; }
+
 # track <relative path> — record a path about to be created, rewritten or removed. File-backed,
 # because fresh runs in command substitutions where a shell variable would not survive.
 track() { printf '%s\n' "$1" >> "$TOUCHED"; }
@@ -198,10 +213,13 @@ edit() {
 # selected run costs the validator's prologue plus one arm instead of every invariant scanning a
 # tree this fixture does not care about. THE ARM IS REQUIRED, with no default: this fixture
 # hosts I108 and I121, and a default would let a caller written for one silently test the
-# other. A missing arm exits 2, which guard_sel reports as FIXTURE BROKEN.
+# other. A missing arm exits 2, which guard_sel reports as FIXTURE BROKEN. The run is the in-process
+# entry sourced from $TREE above, so a tree other than $TREE is REFUSED with 2 rather than silently
+# answered about $TREE.
 run_arm() {
   [ -n "${2:-}" ] || { echo "run_arm called with no arm"; return 2; }
-  bash "$1/$ARM" --arms "$2" 2>&1
+  [ "$1" = "$TREE" ] || { echo "run_arm called on $1, but the entry was sourced from $TREE"; return 2; }
+  ( vem_entry --arms "$2" ) 2>&1
 }
 
 # guard_sel <rc> <output> — a validator exit of 2 is a SELECTION or generated-subprogram
@@ -350,6 +368,45 @@ else
   bad "FIXTURE BROKEN — the unmutated seed does not pass I108 (rc=$rc). Every assertion below would be a false pass. The validator said: $out"
   printf '\nderived-fence-binding: FIXTURE BROKEN\n'
   exit 2
+fi
+
+# --- EQ: the in-process entry IS the CLI, byte for byte -----------------------
+# Every cell below runs `( vem_entry --arms <id> )`; this proves that answer equals what
+# `bash <validator> --arms <id>` prints, on stdout, on stderr and in the exit code, for each CLI
+# outcome this fixture exercises: a pass (rc 0, the OK line) on the pristine tree and a refusal (rc 1,
+# the fork finding) on A01's tree. The two inputs DIFFER, and that is asserted, so the comparison
+# cannot pass by reading one tree twice. Run under this fixture's own `set -uo pipefail`. The two CLI
+# starts are the cli-pass and cli-refuse rows of cells.decl; exit 2 is never exercised on purpose here
+# (guard_sel treats it as FIXTURE BROKEN), so it has no twin.
+eq_cmp() { # eq_cmp <cell> <arm> — on $TREE as it stands; leaves eq.<cell>.{io,ie,co,ce,ir,cr}
+  local c="$1" a="$2" ir=0 cr=0
+  ( vem_entry --arms "$a" ) > "$WORK/eq.$c.io" 2> "$WORK/eq.$c.ie" || ir=$?
+  FXCELL="$c" bash "$TREE/$ARM" --arms "$a" > "$WORK/eq.$c.co" 2> "$WORK/eq.$c.ce" || cr=$?
+  echo "$ir" > "$WORK/eq.$c.ir"; echo "$cr" > "$WORK/eq.$c.cr"
+}
+eq_why=""
+t="$(fresh)"
+eq_cmp cli-pass I108
+t="$(fresh)"
+if edit "$t" "core/team-roles/sm.md" "$MUT_DRIFT"; then
+  eq_cmp cli-refuse I108
+  for c in cli-pass cli-refuse; do
+    cmp -s "$WORK/eq.$c.io" "$WORK/eq.$c.co" || eq_why="$eq_why $c:stdout-differs"
+    cmp -s "$WORK/eq.$c.ie" "$WORK/eq.$c.ce" || eq_why="$eq_why $c:stderr-differs"
+    [ "$(cat "$WORK/eq.$c.ir")" = "$(cat "$WORK/eq.$c.cr")" ] \
+      || eq_why="$eq_why $c:rc(in=$(cat "$WORK/eq.$c.ir"),cli=$(cat "$WORK/eq.$c.cr"))"
+  done
+  [ "$(cat "$WORK/eq.cli-pass.cr")" = 0 ] && grep -qF -- "$OKLINE" "$WORK/eq.cli-pass.co" || eq_why="$eq_why pass-not-rc0-with-OK-line"
+  [ "$(cat "$WORK/eq.cli-refuse.cr")" = 1 ] && grep -qF -- "the taught derivation-fence passage has forked" "$WORK/eq.cli-refuse.co" "$WORK/eq.cli-refuse.ce" \
+    || eq_why="$eq_why refuse-not-rc1-with-fork-finding"
+  if cmp -s "$WORK/eq.cli-pass.co" "$WORK/eq.cli-refuse.co" && cmp -s "$WORK/eq.cli-pass.ce" "$WORK/eq.cli-refuse.ce"; then
+    eq_why="$eq_why the-two-inputs-gave-identical-output"
+  fi
+  if [ -z "$eq_why" ]; then
+    ok "EQ the in-process entry equals bash <validator> --arms I108 byte for byte (stdout, stderr, rc) on a pass (rc 0) and a refusal (rc 1) whose outputs differ"
+  else
+    bad "EQ the in-process entry differs from the CLI:$eq_why"
+  fi
 fi
 
 # --- Assertion 1: half A — a drift inside the passage body --------------------
@@ -1185,7 +1242,7 @@ matrix_cell "A50 matrix: chunked-write dropped everywhere — I123 names the fil
 # `exit 2` terminal guard on its own line, so each mutation below is a one-line edit INSIDE the
 # block, and `edit` refuses it if the anchor moved.
 I75_SUBJ="core/scripts/audit-upstream-routing.sh"
-run_i75() { bash "$1/$ARM" --arms I75 2>&1; }
+run_i75() { run_arm "$1" I75; }
 i75_case() { # <label> <tree> <want-substring|OK> — presence-shaped both ways
   local label="$1" t="$2" want="$3" out rc
   out="$(run_i75 "$t")"; rc=$?
@@ -1247,7 +1304,7 @@ fi
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=84
+EXPECTED=85
 # --- no shipped caller passes validate-spawn-ledger.sh's --probe-from-caller seam ----------------
 # Hosted HERE because this fixture is .dist-only and seeds core/ and scripts/ whole, so the scan
 # reads a real tree; the shipping fold-architect-ledger-join cannot declare them. Non-comment lines

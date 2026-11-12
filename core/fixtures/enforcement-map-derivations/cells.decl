@@ -1,0 +1,3 @@
+cli scripts/validate-enforcement-map.sh cli-full-pass
+cli scripts/validate-enforcement-map.sh cli-arms-pass
+cli scripts/validate-enforcement-map.sh cli-arms-refuse

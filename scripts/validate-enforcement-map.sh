@@ -154,6 +154,86 @@
 #   1 — one or more invariants violated (drift / dormant binding)
 #   2 — tool-availability, missing-input, or arm-selection failure
 
+# THE IN-PROCESS ENTRY. Sourcing this file defines vem_entry and returns at the guard below it,
+# before any global, the cd, the missing-input exit and the argument case: a source runs nothing.
+# `( vem_entry [--arms I<n>[,I<n>...]] )` then runs what the CLI runs, in a subshell of its own,
+# so `exit` is the verdict channel and the cd stays inside it: it evals this file text minus the
+# guard line, with its OWN arguments flowing into the argument case, never the caller positional
+# ones. It refuses a relative source path, because VEM_SELF is read from BASH_SOURCE[0] and the
+# evaluated text changes directory. Shell state is reset to what a fresh `bash <this file>` has
+# first, so a caller errexit, pipefail, xtrace, noglob or IFS cannot move a verdict, and a
+# VEM_SELF or VEM_SELF_PID the caller holds is dropped: the VEM_SELF_PID test below honours only a pair
+# this process set, and a function caller is never that. ARMS_SELECT_AWK skips the same guard line,
+# so no `--arms` subprogram carries it.
+#
+# The caller NAMESPACE is reset too, because a started program never sees it: every function not
+# exported (`declare -F` reads `-f`, not `-fx`) is unset except vem_entry, and every variable not
+# exported (`compgen -e`) and not one a fresh bash defines itself is unset. Without this a slice
+# that reads a global it never assigned ran green in-process while the CLI died `unbound
+# variable` -- measured on TEMPLATE un-hoisted under `--arms I14`: CLI rc 1, in-process rc 0
+# whenever the caller held its own unexported TEMPLATE. The fresh-bash set is the measured
+# `env -i /bin/bash -c 'compgen -v'` of bash 3.2, plus BASH_* and the two it defines only in a
+# function or after a pipeline (FUNCNAME, PIPESTATUS), held as a list rather than asked of a
+# fresh bash: asking means an exec per call, which the counter's BASH_ENV rc logs as one more
+# start of every in-process fixture, and is the cost this entry exists to remove. A name missing
+# from the list is unset, which fails loud (`unbound variable`) rather than masking. A name is
+# unset until it is gone, because a caller `local` hides a global of the same name and one unset
+# removes only the local (measured: global plus local TEMPLATE still masked after one pass).
+# Readonly names cannot be unset and their refusal is discarded. One `$( )` reads all three listings.
+# KNOWN LIMIT: a caller `readonly` variable therefore still reaches the eval and can mask an
+# un-hoisted read of that name in process; no in-process caller declares one.
+vem_entry() (
+  set +e +o pipefail +x +v +a +f +C +E +T
+  trap - ERR DEBUG RETURN
+  shopt -u nullglob failglob nocaseglob nocasematch dotglob extglob expand_aliases
+  IFS=$' \t\n'
+  set -u
+  vem_ls="$(compgen -e; echo :v:; compgen -v; echo :f:; declare -F)"
+  vem_x=' ' vem_m=e vem_p=
+  for vem_n in $vem_ls; do
+    case "$vem_m:$vem_n" in
+      ?:\:v:) vem_m=v ;;
+      ?:\:f:) vem_m=f ;;
+      e:*) vem_x="$vem_x$vem_n " ;;
+      v:vem_ls|v:vem_x|v:vem_m|v:vem_n|v:vem_p) : ;;
+      v:BASH|v:BASH_*|v:COMP_WORDBREAKS|v:DIRSTACK|v:EUID|v:FUNCNAME|v:GROUPS|v:HISTCMD|v:HOSTNAME) : ;;
+      v:HOSTTYPE|v:IFS|v:LINENO|v:MACHTYPE|v:OPTERR|v:OPTIND|v:OSTYPE|v:PATH|v:PIPESTATUS|v:PPID) : ;;
+      v:PS4|v:PWD|v:RANDOM|v:SECONDS|v:SHELL|v:SHELLOPTS|v:SHLVL|v:TERM|v:UID|v:_) : ;;
+      v:*) case "$vem_x" in *" $vem_n "*) : ;; *) while declare -p "$vem_n" > /dev/null 2>&1 && unset -v "$vem_n" 2>/dev/null; do :; done ;; esac ;;
+      f:vem_entry) : ;;
+      f:*) [ "$vem_p" != -f ] || unset -f "$vem_n" ;;
+    esac
+    vem_p="$vem_n"
+  done
+  unset vem_ls vem_x vem_m vem_n vem_p
+  case "${BASH_SOURCE[0]}" in
+    /*) : ;;
+    *) echo "validate-enforcement-map: vem_entry needs this file sourced by an absolute path, not '${BASH_SOURCE[0]}'." >&2; exit 2 ;;
+  esac
+  vem_nl=$'\n'
+  vem_cut="$vem_nl"'[ "${BASH_SOURCE[0]}" = "$0" ] || return 0'"$vem_nl"
+  vem_text="$(<"${BASH_SOURCE[0]}")"
+  # The SHORTEST-prefix strip, never `%%"$vem_cut"*`: that longest-suffix form is quadratic in
+  # bash 3.2 and cost ~5s per call on this 1.1 MB text. `#*` is quadratic too when the cut is
+  # ABSENT (it tries every prefix), so absence is decided first by a `case` match, which is not,
+  # and an absent cut leaves vem_post equal to the text, which the check below refuses.
+  vem_post="$vem_text" vem_pre=
+  case "$vem_text" in
+    *"$vem_cut"*) vem_post="${vem_text#*"$vem_cut"}"
+      vem_pre="${vem_text:0:$((${#vem_text} - ${#vem_post} - ${#vem_cut}))}" ;;
+  esac
+  if [ "$vem_post" = "$vem_text" ] || [ "$vem_pre$vem_cut$vem_post" != "$vem_text" ]; then
+    echo "validate-enforcement-map: vem_entry found no source guard line in '${BASH_SOURCE[0]}'." >&2; exit 2
+  fi
+  case "$vem_post" in
+    *"$vem_cut"*) echo "validate-enforcement-map: vem_entry found a second source guard line in '${BASH_SOURCE[0]}'." >&2; exit 2 ;;
+  esac
+  vem_text="$vem_pre$vem_nl$vem_post"
+  unset vem_pre vem_post vem_cut VEM_SELF VEM_SELF_PID
+  eval "$vem_text"
+)
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+
 set -u
 
 # Every arm reads the tree it validates, never the process cwd. I81, I91, I94 and I95 spelled
@@ -177,7 +257,7 @@ set -u
 # which only a caller that exported both and then `exec`ed this file can arrange -- a deliberate
 # override, not an accident, and not guarded against.
 [ "${VEM_SELF_PID:-}" = "$$" ] || unset VEM_SELF
-case "${VEM_SELF:-$0}" in /*) VEM_SELF="${VEM_SELF:-$0}" ;; *) VEM_SELF="$PWD/$0" ;; esac
+case "${VEM_SELF:-${BASH_SOURCE[0]}}" in /*) VEM_SELF="${VEM_SELF:-${BASH_SOURCE[0]}}" ;; *) VEM_SELF="$PWD/${BASH_SOURCE[0]}" ;; esac
 VEM_SELF_PID=$$
 REPO_ROOT="$(cd "$(dirname "$VEM_SELF")/.." && pwd)"
 # `cd ""` returns 0 on bash 3.2, so an empty root is refused by name rather than by the cd.
@@ -982,9 +1062,9 @@ case "${1:-}" in
   "")     : ;;
   --arms) ARMS_SEL="${2-}"
           if [ "$#" -ne 2 ] || [ -z "$ARMS_SEL" ]; then
-            echo "usage: ${0##*/} [--arms I<n>[,I<n>...]]" >&2; exit 2
+            echo "usage: ${VEM_SELF##*/} [--arms I<n>[,I<n>...]]" >&2; exit 2
           fi ;;
-  *)      echo "usage: ${0##*/} [--arms I<n>[,I<n>...]]" >&2; exit 2 ;;
+  *)      echo "usage: ${VEM_SELF##*/} [--arms I<n>[,I<n>...]]" >&2; exit 2 ;;
 esac
 
 # The selector, as one awk program over (the served arm map, this file). It emits the
@@ -1099,9 +1179,12 @@ END {
     printf "validate-enforcement-map: --arms NOTE: %s selected unit(s) %s; this run also runs%s, so a timing of it is a timing of every arm listed\n", want, units, extra > "/dev/stderr"
 
   for (i = 1; i <= nu; i++) if (sel[i]) for (x = ustart[i]; x <= uend[i]; x++) keep[x] = 1
+  # The source guard line is never emitted: evaluated inside vem_entry it would return early.
+  guard = "[ \"${BASH_SOURCE[0]}\" = \"$0\" ] || return 0"
   ln = 0
   while ((getline l < src) > 0) {
     ln++
+    if (l == guard) continue
     if (ln < ustart[1] || ln >= verdict || (ln in keep)) print l
   }
   close(src)
@@ -2662,7 +2745,7 @@ fi
 i60_citations() {   # <root> -> "<basename.sh> <--mode>" per line
   grep -rhoE '[A-Za-z0-9_.-]+\.sh"?[[:space:]]+--[a-z][a-z0-9-]*' \
     "$1/core" "$1/scripts" "$1/templates" 2>/dev/null \
-    --exclude-dir=fixtures --exclude="$(basename "$0")" \
+    --exclude-dir=fixtures --exclude="${VEM_SELF##*/}" \
     | tr -d '"' | sed -E 's/[[:space:]]+/ /g' | sort -u
 }
 # ONE AWK PASS OVER THE CITATION LIST, replacing a fork-per-CITATION shape three deep.
@@ -4310,7 +4393,7 @@ else
   #                         would make the forward arm vacuous by construction.
   cpm_skip="--exclude-dir=fixtures"
   cpm_cited="$(grep -rhoE 'core-paths\.sh --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" 2>/dev/null \
-    $cpm_skip --exclude=core-paths.sh --exclude="$(basename "$0")" \
+    $cpm_skip --exclude=core-paths.sh --exclude="${VEM_SELF##*/}" \
     | sed -E 's@^core-paths\.sh @@' | sort -u)"
   cpm_usage="$(sed -nE 's@^[[:space:]]*echo "(usage: )?[[:space:]]*core-paths\.sh (--[a-z-]+).*@\2@p' "$cpm_f" | sort -u)"
   if [ -z "$cpm_modes" ] || [ -z "$cpm_cited" ] || [ -z "$cpm_usage" ]; then
@@ -4350,7 +4433,7 @@ else
   # the code that calls it (`"$ESC_DIR/validate-escalation-resolution.sh" --mode`) and the prose
   # that describes the call. The optional closing quote is what lets one pattern see both.
   i53_cited="$(grep -rhoE 'validate-escalation-resolution\.sh"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" 2>/dev/null \
-    --exclude-dir=fixtures --exclude=validate-escalation-resolution.sh --exclude="$(basename "$0")" \
+    --exclude-dir=fixtures --exclude=validate-escalation-resolution.sh --exclude="${VEM_SELF##*/}" \
     | sed -E 's@^validate-escalation-resolution\.sh"? @@' | sort -u)"
   # USAGE is a comment block here rather than an echo, and the EXIT block below it discusses
   # the same mode names in prose. Read the usage LINES — the ones spelling out an invocation —
@@ -4417,7 +4500,7 @@ validate-suppression-lifetime.sh --probe-now-hit \
   --escalations x \
   --now 2026-01-01T00:00:00Z'
   i107_raw="$(grep -rhE -A3 'validate-suppression-lifetime(\.sh)?"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" - <<<"$i107_probe" 2>/dev/null \
-    --exclude-dir=fixtures --exclude=validate-suppression-lifetime.sh --exclude="$(basename "$0")" \
+    --exclude-dir=fixtures --exclude=validate-suppression-lifetime.sh --exclude="${VEM_SELF##*/}" \
     | awk '
       $0 == "--" { cont = 0; next }
       /validate-suppression-lifetime(\.sh)?"? --[a-z-]+/ {
