@@ -442,6 +442,10 @@ f="$(mkcase c2-archived-inforce)"; c2_name > "$f"
 # The archived SUPPRESSED waiver of 32 whose lifetime CANNOT BE READ: no **Expires after:** line in
 # one, no authorization timestamp in the other. Unreadable is expired, so both fire; without the
 # fail-closed guard the lifetime test errors and the waiver acquits.
+# BL-968: the archived SUPPRESSED waiver of 32 with `**Expires after:** 18`, inside that count (three
+# gates recorded) but outside the 1..3 cap. Not in force, so it acquits nothing.
+f="$(mkcase c2-archived-overcap)"; c2_name > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 18; } > "$WORK/cases/c2-archived-overcap/pending-archive.md"
 f="$(mkcase c2-archived-noexpiry)"; c2_name > "$f"
 { printf '# Escalation archive\n\n'; c2_sup 32 3 | grep -v '^\*\*Expires after:\*\*'; } > "$WORK/cases/c2-archived-noexpiry/pending-archive.md"
 f="$(mkcase c2-archived-nots)"; c2_name > "$f"
@@ -533,6 +537,55 @@ for q in 'q1|[core] 16|1' 'q2|[extension:x] 32|3' 'q3|[core] 16|3' 'q4|[core] 32
   } > "$WORK/cases/sl-t$n/pending-archive.md"
 done
 
+# ---- THE ARCHIVED SUPPRESSED WAIVER (BL-961): judged, not acquitted ------------------------------
+# No OVERRIDDEN entry names the check in any of these, so the terminal arm cannot mask section 6c.
+# arch-sup: OLD (expired) archived, NEW (in force) live, the row waived by OLD: stood down, counted.
+f="$(mkcase arch-sup)"; sl_new > "$f"
+{ printf '# Escalation archive\n\n'; sl_old; } > "$WORK/cases/arch-sup/pending-archive.md"
+# arch-over: the archived waiver of 32 carries **Expires after:** 18 and is inside that count (three
+# gates recorded): not in force by the 1..3 cap, though sl_past_lifetime alone would acquit it.
+f="$(mkcase arch-over)"; printf '# Escalations\n' > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 18; } > "$WORK/cases/arch-over/pending-archive.md"
+# arch-mis: the archived waiver is in force but suppresses [core] 16, while the row is check 32's.
+f="$(mkcase arch-mis)"; printf '# Escalations\n' > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 16 3; } > "$WORK/cases/arch-mis/pending-archive.md"
+# The LAST entry moved out: pending.md ABSENT (arch-gone-*) or ZERO BYTES (arch-blank-exp) beside an
+# archive. Section 6c must still run. exp: the archived waiver of 32 is past its one-gate lifetime (three
+# gates recorded). inf: the same waiver inside its three-gate lifetime. dir: the archive path is a
+# directory. Each mkcase makes the directory only; no world but arch-blank-exp writes pending.md.
+mkcase arch-gone-exp >/dev/null
+{ printf '# Escalation archive\n\n'; c2_sup 32 1; } > "$WORK/cases/arch-gone-exp/pending-archive.md"
+mkcase arch-gone-inf >/dev/null
+{ printf '# Escalation archive\n\n'; c2_sup 32 3; } > "$WORK/cases/arch-gone-inf/pending-archive.md"
+f="$(mkcase arch-blank-exp)"; : > "$f"
+{ printf '# Escalation archive\n\n'; c2_sup 32 1; } > "$WORK/cases/arch-blank-exp/pending-archive.md"
+mkcase arch-gone-dir >/dev/null; mkdir -p "$WORK/cases/arch-gone-dir/pending-archive.md"
+
+# ---- THE CLOCK (BL-966): an authorization dated in the future is not in force ------------------
+# Every drive of these worlds passes `--now $CLK_NOW`, a fixed literal, so no verdict here depends on
+# the date the fixture runs (BL-868). Every gate above (G1..G3) is before CLK_NOW.
+CLK_NOW="2026-05-10T00:00:00Z"
+CLK_F="2099-01-01T00:00:00Z"
+# clk-self: the ONLY entry is a future-dated SUPPRESSED entry, and it is itself the waiver on check
+# 32's latest FAIL_WAIVED row. The expiry arm counts 0 gates since 2099 and section 6c resolves the
+# waiver, so only the gate-mode shape arm can fail it.
+W_CLK="[S402 gate — a self-waiver dated in the future] [lead] - ${CLK_F}"
+GM_CLK="$WORK/gm-clk.jsonl"; gm_waived "$GM_CLK" "$W_CLK" spaced
+f="$(mkcase clk-self)"
+printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — bmad-invocation-resolves\n**Expires after:** 1 gates\n**Operator authorization:** %s | "Suppress check 32"\n\n' "$W_CLK" "$CLK_F" > "$f"
+# clk-sup: T1's tree with NEW authorized in 2099. A future-dated entry supersedes nothing, so OLD's
+# expiry FAIL stands and superseded=0.
+f="$(mkcase clk-sup)"; { sl_old; sl_new '[core] 32' 3 "$CLK_F"; } > "$f"
+# clk-inf: three in-force candidates on the short timeline, one per side of the clock. PAST is
+# authorized before G2 (1 gate elapsed, inside 3), AHEAD one hour after CLK_NOW (inside the 7200 s
+# tolerance), FAR in 2099.
+CLK_HP="[S403 clock — authorized in the past] [lead] - 2026-05-02T00:00:00Z"
+CLK_HT="[S403 clock — authorized one hour ahead] [lead] - 2026-05-10T01:00:00Z"
+CLK_HF="[S403 clock — authorized in 2099] [lead] - ${CLK_F}"
+clk_e() { printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — bmad-invocation-resolves\n**Expires after:** 3 gates\n**Operator authorization:** %s | "Suppress check 32"\n\n' "$1" "$2"; }
+f="$(mkcase clk-inf)"
+{ clk_e "$CLK_HF" "$CLK_F"; clk_e "$CLK_HT" "2026-05-10T01:00:00Z"; clk_e "$CLK_HP" "2026-05-02T00:00:00Z"; } > "$f"
+
 # ---- THE CWD WORLDS --------------------------------------------------------
 # The metrics file is the ONE input this script locates for itself, and it is located while
 # the process cwd is whatever the caller happened to be in. `ai-dlc-gate-remediation-guard.sh`
@@ -623,6 +676,12 @@ SL_NEW="$SL_NEW"
 SL_OVR="$SL_OVR"
 SL_Q_OLD='$SL_Q_OLD'
 SL_Q_NEW='$SL_Q_NEW'
+CLK_NOW="$CLK_NOW"
+CLK_F="$CLK_F"
+GM_CLK="$GM_CLK"
+CLK_HP="$CLK_HP"
+CLK_HT="$CLK_HT"
+CLK_HF="$CLK_HF"
 G1="$G1"
 G2="$G2"
 G3="$G3"

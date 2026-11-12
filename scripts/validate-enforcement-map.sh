@@ -4321,9 +4321,62 @@ else
   # purpose, this file quotes them in prose and in its own grep flags, and a script documenting
   # itself is not a caller. The optional closing quote is what lets one pattern see both the
   # code form (`"$DIR/validate-suppression-lifetime.sh" --in-force`) and the prose form.
-  i107_cited="$(grep -rhoE 'validate-suppression-lifetime\.sh"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" 2>/dev/null \
+  # THIRD ARM, BL-966: NO SHIPPED CALLER PASSES `--now`. That flag sets the clock the validator
+  # judges a future-dated authorization against; it exists for fixtures (BL-868), and a caller
+  # passing it pins every gate to one instant. Read in the SAME grep as the forward arm, so it
+  # costs no fork: `-A3` carries each invocation's continuation lines, and the awk emits each mode
+  # as before plus `NOW:<mode>` for an invocation whose own line after the basename, or a line it
+  # continues onto with a trailing backslash, carries a bare `--now` token. Prose writing `--now`
+  # in backticks is not an invocation and does not match, which is the narrowing that keeps
+  # escalations.md and gate-validation.md out of the false-positive set (measured 0 on the tree
+  # that shipped this). SELF-PROBE, fed as stdin to the same grep before the corpus is trusted:
+  # a continued invocation passing `--now` must be reported, and an uncontinued one followed by a
+  # `--now` line, and a prose mention, must not -- both directions, or the arm cannot fire.
+  # THE `.sh` IS OPTIONAL, BL-966: the gate's own caller is `gate-transition.sh`'s
+  # `arm 2 verdict.sh validate-suppression-lifetime --escalations ...`, and gate-validation.md
+  # documents the same verdict.sh form. verdict.sh takes the BARE name and forwards "$@", so a
+  # `--now` there pins the gate exactly as a direct call would; a `\.sh`-only grammar scored that
+  # seed rc 0. The probe carries the verdict.sh form both ways: with `--now` it must be reported,
+  # and the same line without it must not.
+  i107_probe='validate-suppression-lifetime.sh --probe-now-miss --escalations x
+  --now 2026-01-01T00:00:00Z
+`validate-suppression-lifetime.sh --probe-now-prose` is never given `--now`.
+  arm 2 verdict.sh validate-suppression-lifetime --probe-now-vmiss --escalations x
+  arm 2 verdict.sh validate-suppression-lifetime --probe-now-vhit --escalations x --now 2026-01-01T00:00:00Z
+validate-suppression-lifetime.sh --probe-now-hit \
+  --escalations x \
+  --now 2026-01-01T00:00:00Z'
+  i107_raw="$(grep -rhE -A3 'validate-suppression-lifetime(\.sh)?"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" - <<<"$i107_probe" 2>/dev/null \
     --exclude-dir=fixtures --exclude=validate-suppression-lifetime.sh --exclude="$(basename "$0")" \
-    | sed -E 's@^validate-suppression-lifetime\.sh"? @@' | sort -u)"
+    | awk '
+      $0 == "--" { cont = 0; next }
+      /validate-suppression-lifetime(\.sh)?"? --[a-z-]+/ {
+        s = $0
+        while (match(s, /validate-suppression-lifetime(\.sh)?"? --[a-z-]+/)) {
+          m = substr(s, RSTART, RLENGTH); sub(/^.* /, "", m); print m; last = m; s = substr(s, RSTART + RLENGTH)
+        }
+        r = $0; sub(/^.*validate-suppression-lifetime(\.sh)?"?/, "", r)
+        if (r ~ /(^|[[:space:]])--now([[:space:]=]|$)/) print "NOW:" last
+        cont = ($0 ~ /\\[[:space:]]*$/); next
+      }
+      cont { if ($0 ~ /(^|[[:space:]])--now([[:space:]=]|$)/) print "NOW:" last; cont = ($0 ~ /\\[[:space:]]*$/); next }
+    ' | sort -u)"
+  i107_cited=""; i107_now=""; i107_phit=0; i107_pmiss=0
+  while IFS= read -r i107_l; do
+    case "$i107_l" in
+      NOW:--probe-now-hit|NOW:--probe-now-vhit) i107_phit=$((i107_phit + 1)) ;;
+      NOW:--probe-now-miss|NOW:--probe-now-prose|NOW:--probe-now-vmiss) i107_pmiss=1 ;;
+      NOW:*) i107_now="$i107_now ${i107_l#NOW:}" ;;
+      --probe-now-hit|--probe-now-miss|--probe-now-prose|--probe-now-vhit|--probe-now-vmiss|'') ;;
+      *) i107_cited="$i107_cited$i107_l"$'\n' ;;
+    esac
+  done <<<"$i107_raw"
+  i107_cited="${i107_cited%$'\n'}"
+  if [ "$i107_phit" -ne 2 ] || [ "$i107_pmiss" -ne 0 ]; then
+    err "I107 the --now arm's self-probe scored hit=$i107_phit (want 2) and miss=$i107_pmiss (want 0): its grammar cannot tell a continued or verdict.sh-form invocation passing --now from an uncontinued one, from the same verdict.sh line without it, or from prose, so its silence over the shipped callers means nothing."
+  elif [ -n "$i107_now" ]; then
+    err "I107 a shipped caller passes --now to validate-suppression-lifetime.sh (mode(s):${i107_now}). --now pins the clock that refuses a future-dated SUPPRESSED authorization; it is for fixtures only (BL-868), and a caller passing it freezes every gate at one instant. Drop the flag; the validator reads the system clock."
+  fi
   i107_usage="$(sed -nE 's@^#[[:space:]]+(validate-suppression-lifetime\.sh |\[)(.*)$@\2@p' "$i107_f" \
     | grep -oE '\-\-[a-z-]+' | sort -u)"
   if [ -z "$i107_modes" ] || [ -z "$i107_cited" ] || [ -z "$i107_usage" ]; then

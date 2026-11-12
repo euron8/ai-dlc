@@ -19,6 +19,64 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1067.0] - 2026-11-11
+
+### BL-960 CLOSED: Check 2a verifies a SUPPRESSED citation for every entry in scope, current-sprint by header or held in force by the lifetime script, and a trailing value-flag no longer hangs the validator
+
+`core/scripts/validate-escalation-resolution.sh`, the gate mode (gate-3 `arm 2a`, `core/scripts/gate-transition.sh:453`), now verifies the operator citation of a SUPPRESSED entry with the same `--cite` predicate it applies to RESOLVED and OVERRIDDEN ones. The parser's status filter (`:466`) admits SUPPRESSED when `anyauth != 1`, so `--any-authorized` stays RESOLVED/OVERRIDDEN only. The scope is the union of every entry whose header names the current sprint and every SUPPRESSED entry that `validate-suppression-lifetime.sh --waivers` holds in force, in `pending.md` and in `pending-archive.md`, whatever sprint its header names or none. That closes the two gaps the first cut left: a header with no `S<N>` token, and a previous sprint's still-in-force entry. The in-force predicate is the sibling's own `sl_in_force`, asked with Check 2's own inputs, so there is no new trust root and no call cycle.
+
+The sibling is asked when a probe pass finds an entry carrying `**Suppresses:**`. The probe covers header-scope entries too (`:458`). It first skipped them, so a current-sprint entry whose status line is the list item `- **Status:** SUPPRESSED`, which this parser does not read as a status, was never cite-checked; the delta tip adversary found that. A missing or failing sibling is `REFUSED`, exit 2 (`:543`). This now includes a gate whose only `**Suppresses:**` entries are current-sprint: it calls the sibling, so a missing or failing sibling is rc 2 there. The archive is read for SUPPRESSED entries only, resolved above the absent- and empty-`pending.md` exits so an archive-only fabrication cannot leave through `EXAMINED NOTHING`. `escalations.md` ("Where that citation is VERIFIED", `:149-163`) says Check 26 reads only `adjudication: llm` checks and states this scope.
+
+A second defect is fixed in the same file. `--escalations <f> --sprint N --any-authorized` ran at full CPU for 12+ minutes on base, because a value-taking flag given last left `shift 2` shifting nothing and the loop re-dispatched the flag forever. The argument loop now compares `$#` before and after the dispatch and refuses with `REFUSED: <flag> needs a value` (`:282`), exit 2. Measured as a `bash -x` trace capped by `ulimit -f 64`: base repeats the dispatch 849 to 1232 times until SIGXFSZ (rc 153) for each of the five flags; the fix makes 3 passes. The independent verifier recorded rc 142 at base and rc 2 at tip.
+
+Narrowing, measured on a file:// clone of graph at 19b4b327f against its 156 transcripts, the oldest 2026-10-07T08:00:53Z. At HEAD 1 entry is in force and it names the current sprint (the positive control): off-sprint 0, no-sprint 0. A history replay over 246 blob states found 20 entries ever in force, 18 of them outside the header scope: 15 a previous sprint's entry in `pending.md`, 1 in the archive, 2 with no sprint token. 17 of those 18 were authorized 2026-08-10..2026-09-06, before the corpus, and fail today; they are NON-DISCRIMINATING, because the cause is corpus retention and not the predicate. The one authorized inside the window (S320, 2026-10-29) verifies: 0 of 1 discriminating. Graph HEAD gate mode at `--sprint 322` checks 6, old and new, rc 0. The narrowing sits beside the arm in the validator header (`:392-441`).
+
+Retention: an entry's in-force life is bounded by gate count, at most 3 gates (`sl_in_force` lists an entry only when its `**Expires after:**` is in 1..3, `core/scripts/validate-suppression-lifetime.sh:755`), not by time. 15.9 days is only the longest observed. The lead's ruling is that this adds no new consumer cost in practice, with transcript retention `cleanupPeriodDays` 365. Two residual cases remain: 3 gates that outlast the retention window, and an operator turn given in another project's session, whose words are not in this project's corpus.
+
+Fixture `core/fixtures/escalation-citation` gains 19 cells and 13 mutants in all. The first cut added 11 cells (sbad, sgood, sany, sanyres, apop, aabs, aemp, agood, ares, bound, argv) and 8 mutants. The in-force ruling adds the cells ioff, ioffg, inone, iarch, iexp and inosib, and the mutants I-header-only, I-every-suppressed, I-no-archive-inforce and I-no-sibling-refusal. The B1 fold adds the cells icur and icurg and the mutant I-probe-header-scope. Each mutant is killed by its own cells with a named twin unchanged. `KF_EXTRA` is raised inside each non-SKIP section and `KILL_FLOOR` is computed below them (`run.sh:1592`), so KILL-COUNT 57 = KILL_FLOOR 57. Receipt scored under `set -uo pipefail`: base 1, fix 0; it drives the current-sprint scope only, and the in-force scope is proven by the eight in-force cells and the five I- mutants.
+
+Consumer effect (graph): the gate now verifies the citation of any in-force SUPPRESSED entry, current-sprint or not, and graph stays green at HEAD (6 checked, rc 0). A gate whose only `**Suppresses:**` entries are current-sprint now needs the sibling beside the validator, or it exits 2.
+
+### BL-961 CLOSED: an archived SUPPRESSED waiver is judged as a live one, and moving the last entry out of `pending.md` acquits nothing
+
+Moving a SUPPRESSED entry into `pending-archive.md` cleared Check 2: a `FAIL_WAIVED` row whose waiver resolved only in the archive was acquitted with a NOTE. Section 6c of `core/scripts/validate-suppression-lifetime.sh` now prints the NOTE and then judges the archived SUPPRESSED waiver as a live one (`:1093`):
+- the target test first (`:1103`), so a waiver of another check fails and stands nothing down;
+- supersession (`:1111`), which prints the existing `WARN: superseded:` and counts `superseded=`;
+- otherwise a FAIL when `! sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"` (`:1116`), which holds the 1..3 cap, the clock (BL-966) and the lifetime.
+
+An archived OVERRIDDEN waiver keeps its NOTE. In the gate mode the archive path is resolved above the absent- and empty-file exits. A `pending.md` left absent or zero bytes beside an existing archive is read as holding no entry (a stderr NOTE says so) and section 6c still runs. With no archive beside it, that file exits 0 with `OK: EXAMINED NOTHING`, byte-identical to before. An archive that exists and is not a readable regular file is `REFUSED: escalation archive ...`, exit 2 (`:382`). `--in-force` and `--waivers` are unchanged.
+
+Measured on mktemp worlds against pre-fix tip 08824ea6e:
+- absent `pending.md` plus an archived waiver past its lifetime: rc 0 `EXAMINED NOTHING` before, rc 1 now;
+- zero-byte `pending.md`: the same;
+- absent `pending.md` plus an in-force archived waiver: rc 0 both, `waived_rows=1` now;
+- absent `pending.md` plus a directory archive: rc 0 before, rc 2 now;
+- absent `pending.md` with no archive: byte-identical.
+
+Fixtures: `suppression-lifetime` gains worlds arch-sup, arch-over, arch-mis, arch-gone-exp, arch-blank-exp, arch-gone-inf and arch-gone-dir; arms arch_sup, arch_over, arch_mis, arch_ovr, arch_gx, arch_bx, arch_gi and arch_gd; and mutants arch_nosup, arch_overbroad, arch_pastlife, arch_notarget, arch_superfirst, arch_earlyexit and arch_norefuse. `sl11b` and `slq4` now read `superseded=2`. `escalation-citation` gains cell `adir` and mutant S-no-archive-refusal, which only `adir` moves. Claim 2 (the move is off-protocol and enforced nowhere) is discharged as a defect; the prose rule still has no enforcer of its own, and no hook guards the lead's write to the archive. Receipt: base cb6e0ab80 exit 1, fix exit 0, subject absent exit 9. The receipt cannot see four wrong fixes the mutants model; the arms are their proof.
+
+Consumer effect (graph): replay on byte copies of da6cadadd gives rc 0, `superseded=1`, with the `WARN: superseded:` naming the archived `[S322-REQUIREMENTS-GATE]` waiver stood down by `[S322-CHECK-32-SUPPRESSION-REFRESH-18GATES]`. That superseder has `**Expires after:** 3` and 1 gate recorded after it (04:07:33Z). Graph is green at HEAD and goes red after exactly 3 more gates without a fresh check-32 row or operator turn, while check 32's latest row is still `FAIL_WAIVED` under the archived waiver. The operator ruled "Ship it" on 2026-11-11, so archived SUPPRESSED waivers count toward the 3-gate cap.
+
+### BL-966 CLOSED: an authorization dated in the future is not in force, judged against a `--now` flag or the system clock
+
+A lifetime counts gates recorded after the authorization timestamp, so an entry authorized at 2099-01-01 counted 0 gates, was listed by `--in-force`, and superseded any expired entry (BL-959). One helper, `sl_auth_future` (`:739`), compares the authorization to `now + 7200 s`. `SL_CLOCK_TOL_S=7200` is a hard constant (`:285`) with no override, matching `CITE_AUTH_TOLERANCE_S`. `sl_in_force` (`:753`) asks it, so `--in-force`, `--waivers`, supersession and the terminal acquittal all refuse a future-dated entry. A gate-mode shape arm after the 1..3 cap (`:871-884`) fails such an entry by name. That arm catches a future-dated SUPPRESSED entry that is itself a `FAIL_WAIVED` row's waiver, which the expiry arm and section 6c would keep green.
+
+The clock is read once in section 0 (`:279-331`) from `--now <YYYY-MM-DDTHH:MM:SS[Z]>` (`:259`), a flag and never an environment variable, or from awk's `srand()`. A malformed `--now` or an unreadable clock is exit 2. Summary lines print `now=<ts> clock=--now`, or `clock=system` with no value, because the clean OK line is byte-compared across runs and layouts. `--now` is in the USAGE block, and I107 (`scripts/validate-enforcement-map.sh`, third arm from `:4324`) fails the push when a shipped caller passes `--now`. It also reads `core/scripts/gate-transition.sh:452`'s verdict.sh caller form, with a both-directions self-probe at no added fork.
+
+Fixture `suppression-lifetime`: worlds clk-self, clk-sup and clk-inf, every drive passing a fixed `--now`; arms clkself, clksup, clk_past, clk_tol and clk_far; mutants clk_shape_removed, clk_inforce_removed, clk_tol0, clk_unbounded and clk_reversed. A 2099 self-waiver gives rc 1. Receipt scored on mktemp copies: pre-fix exit 1, fix exit 0, listing-only and gate-only wrong fixes exit 1, subject absent exit 9. The clock-only-in-`sl_in_force` wrong fix exits 0, so `clkself` is its proof.
+
+False-positive set on byte copies at graph da6cadadd: 0 of 217 dated authorization lines (28 in `pending.md`, 189 in `pending-archive.md`) later than the clock plus 7200 s, against a control of 8 later than 2026-11-01. 0 of 25 SUPPRESSED entries are future-dated. No authorization line carries a timezone offset.
+
+Consumer effect (graph): none on a correct state. The remediation guard's cache key has no clock term, so an entry authorized more than 2 h ahead stays refused there until a key input changes. That staleness is fail-closed, and the gate fails such an entry by name.
+
+### BL-968 CLOSED: the terminal arm's SUPPRESSED acquittal asks `sl_in_force`, so an archived waiver is held to the 1..3 cap
+
+The terminal arm acquitted an OVERRIDDEN entry through a SUPPRESSED waiver on `! sl_past_lifetime` alone, so an archived waiver with `**Expires after:** 18` acquitted it for up to 18 gates. The acquittal (`core/scripts/validate-suppression-lifetime.sh:1010-1011`, the call at `:1011`) now asks `sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"` (`:753`), the predicate `--in-force` lists by. `sl_past_lifetime` is now asked only by the live expiry arm (`:933`) and by `sl_in_force` itself (`:759`).
+
+Measured on a mktemp world: archived Expires-18 gives rc 0 at base and rc 1 at tip (verifier-confirmed). Fixture world `c2-archived-overcap`, arm `c2x18` (which needs the terminal arm's own `a OVERRIDDEN entry names check(s) 32,` line, not rc alone), twin `c2xi`, and mutant `c2_pastlife` killed by `c2x18` alone. Receipt re-scored under `bash -uo pipefail`: base 40ea3957b exit 1, tip exit 0, pre-fix acquittal restored exit 1 (the rc-only receipt gave 0 there), subject absent exit 9.
+
+Consumer effect (graph): none. 0 of 25 SUPPRESSED entries (23 in `pending.md`, 2 in the archive) sit outside 1..3, so no terminal acquittal moves.
+
 ## [0.1066.0] - 2026-11-11
 
 ### BL-909 PARTIAL: validate-mutant-kills M8-M10 hold the keyword-free mutant verdicts on a derived, count-bearing, down-only list (447 K lines in 113 fixtures)

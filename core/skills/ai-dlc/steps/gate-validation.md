@@ -367,10 +367,27 @@ Two arms, either satisfies (dual-arm OR):
   window of at most 3 gates, the `**Expires after:**` cap: once the superseding
   entry expires, the expired one re-fires for a check the current gates do not
   re-run, and only another operator turn clears it.
+  **An archived suppression is judged, not acquitted.** A `FAIL_WAIVED` row whose
+  waiver is a `SUPPRESSED` entry found only in `pending-archive.md` is judged as a
+  live waiver is: a waiver of another target fails, an in-force re-suppression in
+  `pending.md` stands it down with the same `WARN: superseded:` line, and any
+  other that is not in force fails. Moving a suppression into the archive does not
+  renew it, including when it was the last entry and `pending.md` is left absent or
+  blank. An archived `OVERRIDDEN` waiver keeps its `NOTE`.
+  **An authorization dated in the future is refused.** An entry whose
+  authorization timestamp is more than 7200 s ahead of the clock counts no gates
+  and would never expire, so it is not in force, supersedes nothing, and fails
+  this check by name. The summary line names the clock it judged against
+  (`clock=system`).
 - **An absent or empty `pending.md` is a PASS.** Both scripts then exit 0 with a line
   containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
   escalation exists to be unresolved. An unreadable or non-regular `pending.md` is a
   REFUSAL: both scripts exit 2 with `REFUSED:` on stderr, and that is never a pass.
+- **For the suppression-lifetime script, that PASS holds only when no sibling
+  `pending-archive.md` exists.** Beside an absent or empty `pending.md` it still
+  reads the archive, judges every `FAIL_WAIVED` row's archived waiver as above, and
+  exits 1 on one that fails. An archive that exists and is not a readable regular
+  file is a REFUSAL (exit 2, `REFUSED: escalation archive ...`), never a pass.
 - **The blocking clause is SCOPED BY SPRINT, and the entry header carries the scope.**
   If an entry has status `HARD_BLOCK`, is not RESOLVED, and its header names THIS
   sprint, do NOT proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
@@ -436,8 +453,12 @@ operator adjudicated it — so the entry MUST carry
 docs/escalations/pending.md --sprint <N> --transcript <this session's
 transcript_path> --transcript-dir <the directory that transcript sits
 in>`; exit 0 required. It reads **this sprint's**
-RESOLVED/OVERRIDDEN entries (entries carry the sprint in their header;
-legacy sprints are out of scope, so the gate does not wedge on old data)
+RESOLVED/OVERRIDDEN entries, and its SUPPRESSED entries too, in `pending.md`
+and in the sibling `pending-archive.md` (entries carry the sprint in their
+header; legacy sprints are out of scope, so the gate does not wedge on old
+data), plus every SUPPRESSED entry `validate-suppression-lifetime.sh` lists
+in force at this gate, whatever sprint its header names (the script's header
+owns the full scope)
 and verifies each citation against the session transcript with the same
 genuine-operator predicate Rule 29 uses (`validate-steering-budget.sh
 --cite`). A lead-authored "operator disposition" whose quote appears in no
@@ -450,6 +471,12 @@ disarm the check.
 containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
 escalation exists to be unresolved. An unreadable or non-regular `pending.md` is a
 REFUSAL: the script exits 2 with `REFUSED:` on stderr, and that is never a pass.
+
+**The PASS above holds only when no sibling `pending-archive.md` exists.** Beside
+an absent or empty `pending.md`, the script still reads the archive's current-sprint
+and in-force SUPPRESSED entries and exits 1 on one whose citation it cannot verify. An archive
+that exists and is not a readable regular file is also a REFUSAL (exit 2,
+`REFUSED: escalation archive ...`), never a pass.
 
 **Pass `--transcript-dir` too. It is MANDATORY: `--transcript` alone is not an
 acceptable invocation of this check.** A sprint spans sessions: an

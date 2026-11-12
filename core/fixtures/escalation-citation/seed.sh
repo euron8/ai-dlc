@@ -288,4 +288,83 @@ lr_tab_entry() {  # $1 name  $2 Decision/Question value  $3 ts  $4 quote
 lr_tab_entry hdrtabq    'an operator question about "QQZX a clause no record carries"' 2026-11-08T11:01:00Z 'Strike'
 lr_tab_entry hdrtab     "asked \"$LR_FREE\"" 2026-11-08T10:01:00Z 'the operator authorized this disposition'
 
+# --- SUPPRESSED citations, and the sibling archive ----------------------------------------------
+# Each layout is its own directory, because the validator reads `pending-archive.md` beside the
+# file it is given: one at $ROOT would be read by every gate-mode arm above.
+#   bad    S50 SUPPRESSED, invented words          -> gate FAIL
+#   good   S50 SUPPRESSED, the genuine turn        -> gate OK, 1 checked
+#   anyonly the good entry, asked --any-authorized -> NONE: a suppression is not an operator decision
+#   anyres  the same entry RESOLVED                -> AUTHORIZED (anyonly's allow twin)
+#   apop   pending.md holds only a legacy entry; the archive a fabricated S50 SUPPRESSED -> FAIL
+#   aabs   the same archive with NO pending.md (the early-exit layout)                 -> FAIL
+#   aemp   the same archive beside an EMPTY pending.md (the other early exit)          -> FAIL
+#   agood  no pending.md; the archive holds the genuine S50 SUPPRESSED                 -> OK
+#   ares   the archive holds an uncited S50 RESOLVED (gated when archived)             -> out of scope
+#   bound  pending.md's last entry is an uncited S50 SUPPRESSED, and the archive's preamble
+#          carries an authorization line before its first header                        -> FAIL
+#   adir   pending.md holds the genuine S50 SUPPRESSED; pending-archive.md is a DIRECTORY
+#          -> REFUSED (rc 2); without the refusal the archive reads as absent and the run is OK
+sup() { mkdir -p "$ROOT/sup/$1"; : > "$ROOT/sup/$1/$2"; }
+sup bad pending.md;     entry "$ROOT/sup/bad/pending.md"     S50-WAIVE-1 SUPPRESSED "$CITE_FAKE"
+sup good pending.md;    entry "$ROOT/sup/good/pending.md"    S50-WAIVE-2 SUPPRESSED "$CITE_REAL"
+sup anyonly pending.md; entry "$ROOT/sup/anyonly/pending.md" S50-WAIVE-3 SUPPRESSED "$CITE_REAL"
+sup anyres pending.md;  entry "$ROOT/sup/anyres/pending.md"  S50-WAIVE-3 RESOLVED   "$CITE_REAL"
+sup apop pending.md;    entry "$ROOT/sup/apop/pending.md"    S49-OLD-3 RESOLVED
+sup apop pending-archive.md; entry "$ROOT/sup/apop/pending-archive.md" S50-WAIVE-4 SUPPRESSED "$CITE_FAKE"
+sup aabs pending-archive.md; entry "$ROOT/sup/aabs/pending-archive.md" S50-WAIVE-4 SUPPRESSED "$CITE_FAKE"
+sup aemp pending.md; sup aemp pending-archive.md; entry "$ROOT/sup/aemp/pending-archive.md" S50-WAIVE-4 SUPPRESSED "$CITE_FAKE"
+sup agood pending-archive.md; entry "$ROOT/sup/agood/pending-archive.md" S50-WAIVE-5 SUPPRESSED "$CITE_REAL"
+sup ares pending.md;    entry "$ROOT/sup/ares/pending.md"    S49-OLD-4 RESOLVED
+sup ares pending-archive.md; entry "$ROOT/sup/ares/pending-archive.md" S50-ITEM-9 RESOLVED
+sup bound pending.md;   entry "$ROOT/sup/bound/pending.md"   S50-WAIVE-6 SUPPRESSED
+printf '# Escalation archive\n**Operator authorization:** %s\n\n' "$CITE_REAL" > "$ROOT/sup/bound/pending-archive.md"
+entry "$ROOT/sup/bound/pending-archive.md" S49-OLD-5 RESOLVED
+sup adir pending.md;    entry "$ROOT/sup/adir/pending.md"    S50-WAIVE-7 SUPPRESSED "$CITE_REAL"
+mkdir -p "$ROOT/sup/adir/pending-archive.md"
+
+# --- SUPPRESSED entries IN FORCE whatever sprint their header names (BL-960 ruling (c)) -------------
+# Each layout is a project ROOT of its own, because validate-suppression-lifetime.sh (the in-force
+# predicate) resolves the timeline and the catalog from AI_DLC_PROJECT_ROOT, which every inf/ cell
+# sets. Every root carries the same two-id catalog and the same two gates, both recorded after the
+# 2026-07-12T03:00:00Z authorization the citations name, so an **Expires after:** 3 entry is in
+# force (2 gates elapsed) and an **Expires after:** 1 entry has expired. The gate runs at --sprint 50.
+#   ioff   pending.md: an S49 SUPPRESSED, in force, invented words        -> gate FAIL (now checked)
+#   ioffg  pending.md: the same with the genuine turn                     -> gate OK, 1 checked
+#   inone  pending.md: a header with no sprint token, in force, invented   -> gate FAIL
+#   iarch  pending-archive.md: an S49 SUPPRESSED, in force, invented       -> gate FAIL
+#   iexp   pending.md: an S49 SUPPRESSED, EXPIRED, invented                -> out of scope, gate OK
+#   icur   pending.md: an S50 SUPPRESSED in force whose status line is a list item
+#          (`- **Status:**`, read here as no status, by the sibling as SUPPRESSED), invented -> gate FAIL
+#   icurg  the same with the genuine turn                                  -> gate OK, 1 checked
+# sentry <file> <header-id> <expires> <auth> [<status-line prefix>]
+sentry() {
+  {
+    printf '## %s Lead (gate [planning]) - 2026-07-12\n' "$2"
+    printf '%s**Status:** SUPPRESSED\n' "${5:-}"
+    printf '**Suppresses:** [core] 16 — the check this waiver covers\n'
+    printf '**Expires after:** %s\n' "$3"
+    printf '**Context:** a failing check was waived by the operator.\n'
+    printf '**Decision/Question:** suppress or fix.\n'
+    printf '**Operator authorization:** %s\n' "$4"
+    printf '\n'
+  } >> "$1"
+}
+inf() {
+  mkdir -p "$ROOT/inf/$1/docs/escalations" "$ROOT/inf/$1/.claude/skills/ai-dlc" "$ROOT/inf/$1/_bmad-output/implementation-artifacts"
+  printf 'checks:\n  - id: "16"\n  - id: "22"\n' > "$ROOT/inf/$1/.claude/skills/ai-dlc/enforcement-map.yaml"
+  {
+    printf '{"v": 1, "sprint": 49, "gate": "implementation", "ts": "2026-07-13T00:00:00Z", "catalog": "core", "check": "16", "verdict": "PASS"}\n'
+    printf '{"v": 1, "sprint": 50, "gate": "implementation", "ts": "2026-07-14T00:00:00Z", "catalog": "core", "check": "22", "verdict": "PASS"}\n'
+  } > "$ROOT/inf/$1/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+  : > "$ROOT/inf/$1/docs/escalations/pending.md"
+}
+inf ioff;  sentry "$ROOT/inf/ioff/docs/escalations/pending.md"  S49-WAIVE-8 3 "$CITE_FAKE"
+inf ioffg; sentry "$ROOT/inf/ioffg/docs/escalations/pending.md" S49-WAIVE-8 3 "$CITE_REAL"
+inf inone; sentry "$ROOT/inf/inone/docs/escalations/pending.md" story-2.2 3 "$CITE_FAKE"
+inf iarch; entry "$ROOT/inf/iarch/docs/escalations/pending.md" S49-OLD-6 RESOLVED
+sentry "$ROOT/inf/iarch/docs/escalations/pending-archive.md" S49-WAIVE-9 3 "$CITE_FAKE"
+inf iexp;  sentry "$ROOT/inf/iexp/docs/escalations/pending.md"  S49-WAIVE-10 1 "$CITE_FAKE"
+inf icur;  sentry "$ROOT/inf/icur/docs/escalations/pending.md"  S50-WAIVE-11 3 "$CITE_FAKE" '- '
+inf icurg; sentry "$ROOT/inf/icurg/docs/escalations/pending.md" S50-WAIVE-11 3 "$CITE_REAL" '- '
+
 printf '%s\n' "$ROOT"

@@ -71,6 +71,22 @@
 # MUTANT-MATRIX-DYNAMIC er-score why=er_score passes its 2nd argument to the kill helper; each call names a literal mutant carrying its own FULL row above
 # MUTANT-MATRIX-DYNAMIC fl-score why=fl_score passes F-<name> from its 4th argument to the kill helper; each call names a literal mutant carrying its own FULL row above
 # MUTANT-MATRIX-DYNAMIC lr-score why=lr_score passes L-<name> from its 1st argument to the kill helper; each call names a literal mutant carrying its own row above
+# MUTANT-MATRIX S-revert decides=sbad twins=sanyres
+# MUTANT-MATRIX S-any-widened decides=sany twins=sanyres
+# MUTANT-MATRIX S-no-archive decides=apop twins=sbad
+# MUTANT-MATRIX S-absent-exits-early decides=aabs twins=apop
+# MUTANT-MATRIX S-empty-exits-early decides=aemp twins=apop
+# MUTANT-MATRIX S-archive-all-statuses decides=ares twins=apop
+# MUTANT-MATRIX S-no-file-boundary decides=bound twins=sbad
+# MUTANT-MATRIX S-no-progress-guard decides=argv twins=sanyres
+# MUTANT-MATRIX S-no-archive-refusal decides=adir twins=apop
+# MUTANT-MATRIX-DYNAMIC sv-score why=sv_score passes S-<name> from its 1st argument to the kill helper; each call names a literal mutant carrying its own row above
+# MUTANT-MATRIX I-header-only decides=ioff,ioffg,inone,iarch,icur,icurg twins=iexp
+# MUTANT-MATRIX I-every-suppressed decides=iexp twins=ioff
+# MUTANT-MATRIX I-no-archive-inforce decides=iarch twins=ioff
+# MUTANT-MATRIX I-no-sibling-refusal decides=inosib twins=iexp
+# MUTANT-MATRIX I-probe-header-scope decides=icur,icurg twins=ioff
+# MUTANT-MATRIX-DYNAMIC if-score why=if_score passes I-<name> from its 1st argument to the kill helper; each call names a literal mutant carrying its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/escalation-citation/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -1193,10 +1209,7 @@ for c in $LR_NAMES; do if lr_cell "$VALIDATOR" "$c"; then LR_CELLS="${LR_CELLS}1
 # cells included (measured against d87a5940f^: `NO genuine` at the gate, `NONE` at --any-authorized).
 # SKIP on a consumer,
 # FAIL in the distribution.
-# 18 always-run corpus kills, plus 3 empty-file, 6 refusal and 7 citation-floor kills where those
-# sections ran, less any refusal mutant a masked cell made unscorable (KF_EXTRA, raised inside each
-# non-SKIP branch, so a consumer SKIP of any section does not demand kills it cannot score).
-KILL_FLOOR=$((18 + KF_EXTRA))
+# The kill floor is computed at KILL COUNT below, after every section that raises KF_EXTRA.
 if [ "$LR_CELLS" = "0111100101111111" ] && [ "$EN_IS_DIST" -ne 1 ]; then
   printf '  SKIP %-30s the installed validator predates the lead-interpretation rule; this fixture ships one pull ahead of it\n' "lr/"
 else
@@ -1267,7 +1280,7 @@ else
   if lr_cell "$MWORK/lr-ctl/validate-escalation-resolution.sh" strike && lr_cell "$MWORK/lr-ctl/validate-escalation-resolution.sh" free; then
     LR_BASE=1; ok "L-control the unmutated copy holds strike and free"
   else bad "L-control the unmutated copy does not reproduce the baseline; no mutant verdict below means anything"; fi
-  KILL_FLOOR=$((KILL_FLOOR + 9))
+  KF_EXTRA=$((KF_EXTRA + 9))
   # L1: the label rule removed. The free text verifies as a descope again (the filed defect).
   lr_score no-label-rule free strike '  if [ -n "$lr_id" ]; then' '  if false; then'
   # L2: the id ignored -- any `Strike/Reword/Confirm LR-S<x>-<y>` passes. Only the wrong-id entry
@@ -1296,9 +1309,266 @@ else
   lr_score header-tab-kept-any hdrtabq-any shortq-any '      gsub(/\t/, " ", hh)' '      hh = hh'
 fi
 
+# --- a SUPPRESSED entry's citation is verified at the gate, archive included (BL-960) ----------
+# Twelve cells over the sup/ layouts seed.sh writes, scored as one string so each mutant is held
+# to its own cell and a named twin. Every cell is PRESENCE-shaped: an rc AND a line that must
+# appear, so a subject that prints nothing fails all of them.
+#   sbad    gate, S50 SUPPRESSED citing invented words      rc 1, `appears in NO genuine`
+#   sgood   gate, S50 SUPPRESSED citing the genuine turn    rc 0, `OK: all 1 S50` (base says `no S50`)
+#   sany    --any-authorized, the same entry                rc 1, `NONE: 0 RESOLVED/OVERRIDDEN`
+#   sanyres --any-authorized, the entry RESOLVED            rc 0, `AUTHORIZED: 1 of 1` (sany's twin)
+#   apop    a fabricated S50 SUPPRESSED in the ARCHIVE      rc 1, `appears in NO genuine`
+#   aabs    the same with no pending.md                     rc 1, `appears in NO genuine`
+#   aemp    the same beside an empty pending.md             rc 1, `appears in NO genuine`
+#   agood   the genuine one in the archive, no pending.md   rc 0, `OK: all 1 S50`
+#   ares    an uncited S50 RESOLVED in the archive          rc 0, `no S50 RESOLVED/OVERRIDDEN`
+#   bound   an archive preamble's authorization line must not complete pending.md's last entry
+#                                                           rc 1, `carries no 'Operator authorization:'`
+#   argv    a value-taking flag LAST on the command line    rc 2, `REFUSED: --any-authorized needs a value`
+#   adir    pending-archive.md is a DIRECTORY beside a      rc 2, `REFUSED: escalation archive`
+#           genuine pending.md (unrefused, it reads as absent and the run is OK)
+# THE argv CELL IS BOUNDED BY STRUCTURE, NOT BY A CLOCK. Before its fix the parser re-dispatched
+# the trailing flag forever (bash's `shift 2` with one positional left shifts nothing). The run
+# is traced with `bash -x` into a file the subshell caps with `ulimit -f`: a fixed build writes
+# under 1 KiB and refuses, a looping one fills the cap in a few hundred passes and dies on
+# SIGXFSZ (rc 153). Neither verdict depends on load or on elapsed time.
+SV_NAMES="sbad sgood sany sanyres apop aabs aemp agood ares bound argv adir"
+sv_cell() {  # $1 validator  $2 cell -> 0 when the cell holds
+  local v="$1" o rc d="$ROOT/sup"
+  case "$2" in
+    sany|sanyres) local f=anyonly; [ "$2" = sanyres ] && f=anyres
+      o="$(bash "$v" --any-authorized "$d/$f/pending.md" 2>&1)"; rc=$? ;;
+    argv) ( ulimit -f 64; bash -x "$v" --escalations "$d/good/pending.md" --sprint 50 --any-authorized ) \
+            </dev/null >"$MWORK/sv-argv.out" 2>"$MWORK/sv-argv.trace"; rc=$?
+      o="$(cat "$MWORK/sv-argv.trace")" ;;
+    *) local f="$2"; case "$2" in sbad) f=bad ;; sgood) f=good ;; esac
+      o="$(bash "$v" --escalations "$d/$f/pending.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1)"; rc=$? ;;
+  esac
+  case "$2" in
+    sbad|apop|aabs|aemp) [ "$rc" -eq 1 ] && grep -qF "appears in NO genuine" <<<"$o" ;;
+    sgood|agood) [ "$rc" -eq 0 ] && grep -qF "OK: all 1 S50" <<<"$o" ;;
+    sany)    [ "$rc" -eq 1 ] && grep -qF "NONE: 0 RESOLVED/OVERRIDDEN" <<<"$o" ;;
+    sanyres) [ "$rc" -eq 0 ] && grep -qF "AUTHORIZED: 1 of 1" <<<"$o" ;;
+    ares)    [ "$rc" -eq 0 ] && grep -qF "no S50 RESOLVED/OVERRIDDEN escalation requires" <<<"$o" ;;
+    bound)   [ "$rc" -eq 1 ] && grep -qF "carries no 'Operator authorization:'" <<<"$o" ;;
+    argv)    [ "$rc" -eq 2 ] && grep -qF "REFUSED: --any-authorized needs a value" <<<"$o" ;;
+    adir)    [ "$rc" -eq 2 ] && grep -qF "REFUSED: escalation archive" <<<"$o" ;;
+    *) return 3 ;;
+  esac
+}
+sv_cells() {  # $1 validator -> prints one 0/1 per SV_NAMES member
+  local c s=""
+  for c in $SV_NAMES; do if sv_cell "$1" "$c"; then s="${s}1"; else s="${s}0"; fi; done
+  printf '%s' "$s"
+}
+echo
+echo "  -- a SUPPRESSED citation is verified at the gate, the archive included (BL-960) --"
+SV_CELLS="$(sv_cells "$VALIDATOR")"
+# A SUBJECT THAT PREDATES THE RULE (measured against cb6e0ab80): sbad, sgood, apop, aabs, aemp,
+# agood and bound read 0, sany, sanyres and ares hold, argv is SIGXFSZ, and adir reads 0 (that
+# build has no archive refusal). SKIP on a consumer, FAIL in the distribution.
+if [ "$SV_CELLS" = "001100001000" ] && [ "$EN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP %-30s the installed validator predates the SUPPRESSED citation check; this fixture ships one pull ahead of it\n' "sup/"
+else
+  i=0
+  for c in $SV_NAMES; do
+    i=$((i + 1)); N=$((N + 1))
+    if [ "$(printf '%s' "$SV_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s SUPPRESSED-citation cell holds\n' "sup/$c"
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s SUPPRESSED-citation cell does not hold (cells=%s)\n' "sup/$c" "$SV_CELLS"; fi
+  done
+  # The mutants: a copy of the validator beside the steering sibling, built by an exactly-once
+  # literal anchor (awk ENVIRON, never sed: the anchors carry `$`, `[`, `!` and `"`).
+  SV_WHY=""; SV_V=""
+  sv_mk() {  # $1 name  $2 anchor  $3 replacement -> SV_V
+    local d="$MWORK/sv-$1" n
+    SV_V=""
+    mkdir -p "$d" && cp "$SRC_DIR/validate-steering-budget.sh" "$d/" || { SV_WHY="could not copy the steering sibling"; return 1; }
+    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+    [ "$n" -eq 1 ] || { SV_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm"; return 1; }
+    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$VALIDATOR" > "$d/validate-escalation-resolution.sh" || { SV_WHY="awk died"; return 1; }
+    cmp -s "$VALIDATOR" "$d/validate-escalation-resolution.sh" && { SV_WHY="changed no bytes -- it would score as a kill"; return 1; }
+    bash -n "$d/validate-escalation-resolution.sh" 2>/dev/null || { SV_WHY="does not parse"; return 1; }
+    SV_V="$d/validate-escalation-resolution.sh"
+  }
+  sv_held() {  # sv_held <cell>... -> 1 when SV_BASE is 1 and every named cell held in SV_CELLS
+    local want nm i c held=1
+    [ "$SV_BASE" = 1 ] || held=0
+    for want in "$@"; do
+      i=0; c=0
+      for nm in $SV_NAMES; do i=$((i + 1)); [ "$nm" = "$want" ] && c="$(printf '%s' "$SV_CELLS" | cut -c"$i")"; done
+      [ "$c" = 1 ] || held=0
+    done
+    printf '%s' "$held"
+  }
+  sv_score() {  # $1 label  $2 decisive cell  $3 twin cell  $4 anchor  $5 replacement
+    N=$((N + 1))
+    if [ "$SV_BASE" -ne 1 ]; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: not scored -- the unmutated copy did not hold its cells in this run\n' "S-$1"; return 2; fi
+    if ! sv_mk "$1" "$4" "$5"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "S-$1" "$SV_WHY"; return 1; fi
+    if [ "$MATRIX" = 1 ]; then
+      local mc
+      for mc in $SV_NAMES; do
+        if sv_cell "$SV_V" "$mc"; then matrix_row "S-$1" "$mc" 0 GREEN no; else matrix_row "S-$1" "$mc" 1 TRIPPED yes; fi
+        MROWS=$((MROWS + 1))
+      done
+    fi
+    if sv_cell "$SV_V" "$2"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s SURVIVED: cell %s still holds\n' "S-$1" "$2"; return 1; fi
+    if ! sv_cell "$SV_V" "$3"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s moved its twin %s too -- the arms are entangled\n' "S-$1" "$3"; return 1; fi
+    local sv_b
+    sv_b="$(sv_held "$2" "$3")"
+    mutant_killed "$([ "$sv_b" = 1 ] && echo 1 || echo 0)" "S-$1" "S-$1 $2 is red, $3 unchanged" && KILLS=$((KILLS + 1))
+  }
+  # The unmutated control, in the same kind of directory, must hold a cell that needs the sibling
+  # (sgood verifies a citation) and the bounded argv cell.
+  N=$((N + 1)); SV_BASE=0
+  mkdir -p "$MWORK/sv-ctl" && cp "$SRC_DIR/validate-steering-budget.sh" "$VALIDATOR" "$MWORK/sv-ctl/"
+  if sv_cell "$MWORK/sv-ctl/validate-escalation-resolution.sh" sgood && sv_cell "$MWORK/sv-ctl/validate-escalation-resolution.sh" argv; then
+    SV_BASE=1; ok "S-control the unmutated copy holds sgood and argv"
+  else bad "S-control the unmutated copy does not reproduce the baseline; no mutant verdict below means anything"; fi
+  # S1: SUPPRESSED dropped from the parser's status filter (the filed defect).
+  sv_score revert sbad sanyres ' && !(status == "SUPPRESSED" && anyauth != 1))' ')'
+  # S2: --any-authorized widened to count a suppression as an operator decision.
+  sv_score any-widened sany sanyres ' && anyauth != 1))' '))'
+  # S3: the archive never read.
+  sv_score no-archive apop sbad 'inarch=1 "$ESC_ARCH"' 'inarch=1 /dev/null'
+  # S4: an absent pending.md exits EXAMINED NOTHING before the archive is read.
+  sv_score absent-exits-early aabs apop '[ -f "$ESCALATIONS" ] || [ "$ESC_ARCH" != /dev/null ] ||' '[ -f "$ESCALATIONS" ] ||'
+  # S5: an empty pending.md exits EXAMINED NOTHING before the archive is read.
+  sv_score empty-exits-early aemp apop '    [ "$ESC_ARCH" != /dev/null ] || { echo "OK: EXAMINED NOTHING' '    { echo "OK: EXAMINED NOTHING'
+  # S6: the archive admits every status, so a RESOLVED entry gated when it was archived is re-gated.
+  sv_score archive-all-statuses ares apop '    if (harch == 1 && status != "SUPPRESSED") return' '    harch = harch'
+  # S7: no flush at the file boundary: the archive preamble's authorization line completes the
+  # uncited last entry of pending.md.
+  sv_score no-file-boundary bound sbad '  FNR == 1 { flush(); header = "" }' '  FNR == 0 { }'
+  # S8: the progress guard removed -- the trailing flag loops until the trace cap kills it.
+  sv_score no-progress-guard argv sanyres '[ $# -lt "$_argc" ] ||' 'true ||'
+  # S9: the archive refusal removed -- a pending-archive.md that is a directory fails `-f`, is
+  # read as absent, and the run reports OK over an archive nobody read.
+  sv_score no-archive-refusal adir apop \
+    'if { [ -e "$ESC_ARCH" ] || [ -L "$ESC_ARCH" ]; } && { [ ! -f "$ESC_ARCH" ] || [ ! -r "$ESC_ARCH" ]; }; then' 'if false; then'
+  KF_EXTRA=$((KF_EXTRA + 9))
+fi
+
+# --- a SUPPRESSED entry IN FORCE is checked whatever sprint its header names (BL-960, ruling (c)) ---
+# Eight cells over the inf/ roots seed.sh writes (its note carries the layouts). Each runs at --sprint 50
+# with AI_DLC_PROJECT_ROOT at its own root, so the in-force predicate the validator asks
+# (validate-suppression-lifetime.sh, beside it) reads that root's two gates and two-id catalog.
+#   ioff    S49 SUPPRESSED in force, invented words         rc 1, `appears in NO genuine`
+#   ioffg   the same, the genuine turn                      rc 0, `OK: all 1 S50` and the split `SUPPRESSED 1)` (ioff's allow twin)
+#   inone   no sprint token in force, invented words        rc 1, `appears in NO genuine`
+#   iarch   S49 SUPPRESSED in force in the ARCHIVE, invented rc 1, `appears in NO genuine`
+#   iexp    S49 SUPPRESSED EXPIRED, invented words          rc 0, `no S50 RESOLVED/OVERRIDDEN` (out of scope)
+#   inosib  ioff's root, the validator with NO in-force sibling beside it
+#                                                           rc 2, `REFUSED: an entry in`
+#   icur    S50 SUPPRESSED in force, `- **Status:**` list-item status (this parser reads no status,
+#           the sibling reads SUPPRESSED), invented words   rc 1, `appears in NO genuine`
+#   icurg   the same, the genuine turn                      rc 0, `OK: all 1 S50` and `SUPPRESSED 1)` (icur's allow twin)
+IF_NAMES="ioff ioffg inone iarch iexp inosib icur icurg"
+if_cell() {  # $1 validator  $2 cell -> 0 when the cell holds
+  local v="$1" f="$2" o rc
+  if [ "$2" = inosib ]; then
+    f=ioff
+    mkdir -p "$MWORK/if-nosib" && cp "$SRC_DIR/validate-steering-budget.sh" "$MWORK/if-nosib/" && cp "$v" "$MWORK/if-nosib/validate-escalation-resolution.sh"
+    v="$MWORK/if-nosib/validate-escalation-resolution.sh"
+  fi
+  o="$(env AI_DLC_PROJECT_ROOT="$ROOT/inf/$f" bash "$v" --escalations "$ROOT/inf/$f/docs/escalations/pending.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1)"; rc=$?
+  case "$2" in
+    ioff|inone|iarch|icur) [ "$rc" -eq 1 ] && grep -qF "appears in NO genuine" <<<"$o" ;;
+    ioffg|icurg) [ "$rc" -eq 0 ] && grep -qF "OK: all 1 S50" <<<"$o" && grep -qF "SUPPRESSED 1)" <<<"$o" ;;
+    iexp)   [ "$rc" -eq 0 ] && grep -qF "no S50 RESOLVED/OVERRIDDEN escalation requires" <<<"$o" ;;
+    inosib) [ "$rc" -eq 2 ] && grep -qF "REFUSED: an entry in" <<<"$o" ;;
+    *) return 3 ;;
+  esac
+}
+if_cells() {  # $1 validator -> one 0/1 per IF_NAMES member
+  local c s=""
+  for c in $IF_NAMES; do if if_cell "$1" "$c"; then s="${s}1"; else s="${s}0"; fi; done
+  printf '%s' "$s"
+}
+echo
+echo "  -- an in-force SUPPRESSED entry is checked whatever sprint its header names (BL-960 (c)) --"
+IF_CELLS="$(if_cells "$VALIDATOR")"
+# A SUBJECT THAT PREDATES THE RULE (measured against 43c27ddd0 and origin/main at 0.1064.0, each
+# beside its own siblings): only iexp holds -- nothing outside the header scope is read, so ioff,
+# inone and iarch pass, ioffg says `no S50`, inosib needs no sibling, and icur/icurg read no status
+# so nothing is in scope. SKIP on a consumer, FAIL in the distribution.
+if [ "$IF_CELLS" = "00001000" ] && [ "$EN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP %-30s the installed validator predates the in-force SUPPRESSED scope; this fixture ships one pull ahead of it\n' "inf/"
+else
+  i=0
+  for c in $IF_NAMES; do
+    i=$((i + 1)); N=$((N + 1))
+    if [ "$(printf '%s' "$IF_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s in-force SUPPRESSED cell holds\n' "inf/$c"
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s in-force SUPPRESSED cell does not hold (cells=%s)\n' "inf/$c" "$IF_CELLS"; fi
+  done
+  # The mutants: a copy of the validator beside BOTH siblings, built by an exactly-once literal
+  # anchor (awk ENVIRON, as sv_mk). A mutant runs only its decisive cells and its one twin.
+  IF_WHY=""; IF_V=""
+  if_mk() {  # $1 name  $2 anchor  $3 replacement -> IF_V
+    local d="$MWORK/if-$1" n
+    IF_V=""
+    mkdir -p "$d" && cp "$SRC_DIR/validate-steering-budget.sh" "$SRC_DIR/validate-suppression-lifetime.sh" "$d/" || { IF_WHY="could not copy the siblings"; return 1; }
+    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+    [ "$n" -eq 1 ] || { IF_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm"; return 1; }
+    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$VALIDATOR" > "$d/validate-escalation-resolution.sh" || { IF_WHY="awk died"; return 1; }
+    cmp -s "$VALIDATOR" "$d/validate-escalation-resolution.sh" && { IF_WHY="changed no bytes -- it would score as a kill"; return 1; }
+    bash -n "$d/validate-escalation-resolution.sh" 2>/dev/null || { IF_WHY="does not parse"; return 1; }
+    IF_V="$d/validate-escalation-resolution.sh"
+  }
+  if_held() {  # if_held <cell>... -> 1 when IF_BASE is 1 and every named cell held in IF_CELLS
+    local want nm i c held=1
+    [ "$IF_BASE" = 1 ] || held=0
+    for want in "$@"; do
+      i=0; c=0
+      for nm in $IF_NAMES; do i=$((i + 1)); [ "$nm" = "$want" ] && c="$(printf '%s' "$IF_CELLS" | cut -c"$i")"; done
+      [ "$c" = 1 ] || held=0
+    done
+    printf '%s' "$held"
+  }
+  if_score() {  # $1 label  $2 decisive cells (comma-separated)  $3 twin cell  $4 anchor  $5 replacement
+    local dc mc if_b
+    N=$((N + 1))
+    if [ "$IF_BASE" -ne 1 ]; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: not scored -- the unmutated copy did not hold its cells in this run\n' "I-$1"; return 2; fi
+    if ! if_mk "$1" "$4" "$5"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "I-$1" "$IF_WHY"; return 1; fi
+    if [ "$MATRIX" = 1 ]; then
+      for mc in $IF_NAMES; do
+        if if_cell "$IF_V" "$mc"; then matrix_row "I-$1" "$mc" 0 GREEN no; else matrix_row "I-$1" "$mc" 1 TRIPPED yes; fi
+        MROWS=$((MROWS + 1))
+      done
+    fi
+    for dc in $(printf '%s' "$2" | tr ',' ' '); do
+      if if_cell "$IF_V" "$dc"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s SURVIVED: cell %s still holds\n' "I-$1" "$dc"; return 1; fi
+    done
+    if ! if_cell "$IF_V" "$3"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s moved its twin %s too -- the arms are entangled\n' "I-$1" "$3"; return 1; fi
+    if_b="$(if_held $(printf '%s' "$2" | tr ',' ' ') "$3")"
+    mutant_killed "$([ "$if_b" = 1 ] && echo 1 || echo 0)" "I-$1" "I-$1 $2 red, $3 unchanged" && KILLS=$((KILLS + 1))
+  }
+  # The unmutated control, in the same kind of directory, must hold a cell that needs the in-force
+  # sibling AND the citation predicate (ioffg), and its twin (ioff).
+  N=$((N + 1)); IF_BASE=0
+  mkdir -p "$MWORK/if-ctl" && cp "$SRC_DIR/validate-steering-budget.sh" "$SRC_DIR/validate-suppression-lifetime.sh" "$VALIDATOR" "$MWORK/if-ctl/"
+  if if_cell "$MWORK/if-ctl/validate-escalation-resolution.sh" ioffg && if_cell "$MWORK/if-ctl/validate-escalation-resolution.sh" ioff; then
+    IF_BASE=1; ok "I-control the unmutated copy holds ioffg and ioff"
+  else bad "I-control the unmutated copy does not reproduce the baseline; no mutant verdict below means anything"; fi
+  # I1 (m1): narrowed back to the header-only scope -- the in-force set is never consulted.
+  if_score header-only ioff,inone,iarch iexp 'inf = (anyauth != 1 && (' 'inf = (0 && ('
+  # I2 (m2): widened to every SUPPRESSED entry, in force or not -- the expired entry is checked.
+  if_score every-suppressed iexp ioff 'inf = (anyauth != 1 && (' 'inf = (anyauth != 1 && (status == "SUPPRESSED" || '
+  # I3: the archive side of the in-force set dropped -- only pending.md is widened.
+  if_score no-archive-inforce iarch ioff '(harch == 1 && (ekey(header) in infa))' '(0)'
+  # I4: the refusal removed -- an owed in-force set read from a missing sibling reads as empty.
+  if_score no-sibling-refusal inosib iexp '      if [ "$ER_RC" -ne 0 ]; then' '      if false; then'
+  # I5: the probe owed only outside the header scope again -- a current-sprint in-force entry whose
+  # status this parser cannot read is never asked about, so the sibling waives it and this gate passes.
+  if_score probe-header-scope icur,icurg ioff 'if (anyauth != 1 && hassupp && !(harch in owed))' 'if (anyauth != 1 && !hs && hassupp && !(harch in owed))'
+  KF_EXTRA=$((KF_EXTRA + 5))
+fi
+
 # MATRIX ROW COUNT. A plain run prints no matrix row; a --matrix run prints one per mutant x arm:
 # 13 corpus-arm mutants x the arms (a)..(z), 7 floor mutants x the floor cells, 9 lead-interpretation
-# mutants x their cells, the last two only where their sections ran (not a consumer SKIP).
+# mutants x their cells, 9 SUPPRESSED-citation mutants x their 12 cells, 5 in-force-scope mutants x
+# their 8 cells, the last four only where their sections ran (not a consumer SKIP).
 N=$((N + 1))
 if [ "$MATRIX" = 0 ]; then
   if [ "$MROWS" -eq 0 ]; then ok "MX plain run printed no matrix row"; else bad "MX plain run printed $MROWS matrix row(s)"; fi
@@ -1308,10 +1578,18 @@ else
   [ -n "${ER_MD:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $er_names | grep -c .) * (6 - ER_SKIPPED) ))
   [ -n "${FL_MW:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $fl_names | grep -c .) * 7 ))
   [ -n "${LR_BASE:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $LR_NAMES | grep -c .) * 9 ))
+  [ -n "${SV_BASE:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $SV_NAMES | grep -c .) * 9 ))
+  [ -n "${IF_BASE:-}" ] && MX_WANT=$(( MX_WANT + $(printf '%s\n' $IF_NAMES | grep -c .) * 5 ))
   if [ "$MROWS" -eq "$MX_WANT" ]; then ok "MX matrix run measured $MROWS mutant x arm cells"
   else bad "MX matrix run measured $MROWS cells, $MX_WANT expected"; fi
 fi
 
+# 18 always-run corpus kills, plus 3 empty-file, 6 refusal, 7 citation-floor, 9 lead-interpretation,
+# 9 SUPPRESSED-citation and 5 in-force-scope kills where those sections ran, less any refusal mutant a
+# masked cell made unscorable (KF_EXTRA, raised inside each non-SKIP branch, so a consumer SKIP of any
+# section does not demand kills it cannot score). Computed HERE, below every section that raises
+# KF_EXTRA: a floor taken above a section never counts that section's kills.
+KILL_FLOOR=$((18 + KF_EXTRA))
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))

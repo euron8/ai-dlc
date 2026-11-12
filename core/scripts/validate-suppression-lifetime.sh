@@ -90,9 +90,13 @@
 #     message, and so does one naming an entry that is neither OVERRIDDEN nor SUPPRESSED, and
 #     a FAIL_WAIVED row carrying no id at all. The population is the LATEST row per (catalog,
 #     check), the same row every other arm reads. An id found only in `pending-archive.md`
-#     beside this file is acquitted with a NOTE: escalations.md moves terminal entries there at
-#     retro close, the latest row is always the PREVIOUS gate's, and without the acquittal the
-#     first gate of every sprint after a waived one would fail on an entry correctly archived.
+#     beside this file names its archive in a NOTE. An archived OVERRIDDEN waiver is acquitted
+#     there: escalations.md moves terminal entries there at retro close, the latest row is always
+#     the PREVIOUS gate's, and without the acquittal the first gate of every sprint after a
+#     waived one would fail on an entry correctly archived. An archived SUPPRESSED waiver is
+#     JUDGED, because no protocol step archives one and a hand move must buy nothing: its target
+#     test as below, then supersession (a `WARN: superseded:` line, counted), then a FAIL when it
+#     is not in force by sl_in_force.
 #   - A SUPPRESSED waiver keeps the existing lifetime: the expiry arm treats a FAIL_WAIVED row as
 #     still failing for THIS entry only when the row's waiver_id, stripped, equals this entry's
 #     key, so a waiver outlives its `**Expires after:**` exactly as a suppression does. A row
@@ -108,10 +112,10 @@
 #       RESOLVED   -- the row's `waiver_id`, stripped, equals THIS entry's key. Nothing else.
 #       OVERRIDDEN -- that, OR the id resolves to an OVERRIDDEN entry, OR to a SUPPRESSED entry
 #                     whose target is (catalog, N) by section 6c's target test AND which is
-#                     within its own lifetime by the expiry arm's predicate, sl_past_lifetime --
-#                     whether it sits in this file or in the archive. An expired suppression
-#                     acquits nothing, and section 6c only NOTEs an archived id, so without
-#                     this an archived expired suppression would acquit forever. An OVERRIDDEN
+#                     IN FORCE by sl_in_force, the one spelling --in-force lists by (an expiry in
+#                     1..3, a readable authorization, within its lifetime) -- whether it sits in
+#                     this file or in the archive. A suppression not in force acquits nothing,
+#                     so an archived waiver is held to the same 1..3 cap as a live one. An OVERRIDDEN
 #                     entry naming a check another operator waiver already owns is not closing
 #                     a red check behind the operator's back (operator ruling, reversing the
 #                     exact-match-only rule for OVERRIDDEN).
@@ -147,8 +151,8 @@
 # terminal arm's OVERRIDDEN entry stands down by the same test (a, b, c, e and f, catalog core,
 # against the row's waiver W) only when W is a SUPPRESSED entry whose own target is (core, this
 # check) and W is expired. Expired is not tested again there: the OVERRIDDEN acquittal above has
-# already taken every such W within its lifetime, so a W that reaches the twin is past its lifetime
-# or has no readable lifetime, which counts as expired. A W suppressing another check or another
+# already taken every such W in force by sl_in_force, so a W that reaches the twin is past its
+# lifetime, outside 1..3, or has no readable lifetime, and each counts as expired. A W suppressing another check or another
 # catalog stands nothing down, in force or not. It is counted in the same field; RESOLVED keeps
 # exact-match only. A stood-down E does not match its `EXPIRED:<check>` baseline key, so a
 # baseline holding that key reports it no longer reproduces. --in-force and --waivers are
@@ -161,27 +165,59 @@
 # SUPPRESSED entry: escalations.md's terminal-entry archival and retro's archive step move only
 # RESOLVED and OVERRIDDEN.
 #
-# This adds no trust root, and the reason is the ARCHIVE MOVE, not a verifier. Moving E into
-# pending-archive.md by hand -- off-protocol at any time -- already clears Check 2 with no new
-# entry at all, and no hook guards that
-# write (remediators are denied edits to pending.md by ai-dlc-gate-remediation-guard.sh; the lead
-# is not). S's citation is trusted exactly as --in-force trusts it: UNVERIFIED by any gate for a
-# script-adjudicated check. validate-escalation-resolution.sh (gate-3 arm 2a) verifies only
-# RESOLVED and OVERRIDDEN citations, Check 26 verifies citations only for `adjudication: llm`
-# checks, and the remediation guard's arm 7b verifies a SUPPRESSED citation only when a
-# remediation lock is lifted. Those gaps predate this arm and are filed, not closed, here.
+# Moving E into pending-archive.md by hand -- off-protocol at any time -- does not clear Check 2:
+# section 6c judges an archived SUPPRESSED waiver exactly as the expiry arm judges a live one (its
+# target, then supersession, then in force). That holds when E was the LAST entry too: in the gate
+# mode a pending.md left ABSENT or BLANK beside an existing pending-archive.md is read as holding no
+# entry and section 6c still runs; only with no archive beside it does such a file exit 0 with
+# EXAMINED NOTHING. An archive path that exists and is not a readable regular file is REFUSED (exit
+# 2) in the gate mode, as validate-escalation-resolution.sh refuses it. No hook guards that write
+# (remediators are denied edits to pending.md by ai-dlc-gate-remediation-guard.sh; the lead is not),
+# and the off-protocol rule itself still has no enforcer of its own; what it no longer has is a
+# payoff. S's citation is trusted here exactly as --in-force trusts it: this arm verifies none.
+# validate-escalation-resolution.sh (gate-3 arm 2a) verifies the citation of a SUPPRESSED entry
+# whose header names the current sprint AND of every SUPPRESSED entry this script's --waivers
+# lists in force, whatever sprint its header names, in pending.md and in pending-archive.md; its
+# header carries that scope. It asks --waivers for the in-force set, so a change to that mode's
+# rows or its in-force predicate moves 2a's scope too. Check 26 verifies citations only for
+# `adjudication: llm` checks, and the remediation guard's arm 7b verifies a SUPPRESSED citation
+# only when a remediation lock is lifted.
+#
+# THE CLOCK: AN AUTHORIZATION MAY NOT BE DATED IN THE FUTURE
+# A lifetime is counted as gates recorded AFTER the authorization timestamp, so an entry authorized
+# at 2099-01-01 counts 0 gates at every gate until then: listed in force, a superseder of any expired
+# entry, and -- as the waiver on its own check's FAIL_WAIVED row -- green at the expiry arm and at
+# section 6c forever. One helper, sl_auth_future, compares the timestamp to the clock. sl_in_force
+# asks it, so --in-force, --waivers, the supersession test and the terminal acquittal all refuse
+# such an entry, and the gate-mode shape arm fails it by name.
+#   - The clock is `--now <YYYY-MM-DDTHH:MM:SS[Z]>`, UTC, else the system clock. It is a FLAG and
+#     never an environment variable, for validate-steering-budget.sh's reason (its ENV OVERRIDES
+#     block): a reader inherits the environment it runs in, so an exported clock would move every
+#     gate at once and silently. `--now` exists for fixtures, which must not depend on the date
+#     (BL-868); no shipped caller passes it, and I107 in scripts/validate-enforcement-map.sh fails
+#     the push on one that does. Every summary line names the clock and its source
+#     (`now=<ts> clock=--now`, or `clock=system` with no value, so the clean line stays
+#     byte-stable across runs; a FAIL the clock decided names the value).
+#   - The tolerance is a HARD CONSTANT, SL_CLOCK_TOL_S at 7200 s, with no override, matching
+#     CITE_AUTH_TOLERANCE_S in validate-steering-budget.sh, whose header records the corpus that
+#     set it: hand-typed authorization stamps drift from the operator turn they cite, so a stamp
+#     somewhat ahead of the clock is a typing error and not a future date. A bound a knob can widen
+#     is no bound.
 #
 # USAGE
 #   validate-suppression-lifetime.sh --escalations <pending.md>
 #                                   [--gate-metrics <gate-metrics.jsonl>]
 #                                   [--enforcement-map <enforcement-map.yaml>]
 #                                   [--baseline <file>]
+#                                   [--now <YYYY-MM-DDTHH:MM:SSZ>]
 #   validate-suppression-lifetime.sh --in-force --escalations <pending.md>
 #                                   [--gate-metrics <gate-metrics.jsonl>]
 #                                   [--enforcement-map <enforcement-map.yaml>]
+#                                   [--now <YYYY-MM-DDTHH:MM:SSZ>]
 #   validate-suppression-lifetime.sh --waivers --escalations <pending.md>
 #                                   [--gate-metrics <gate-metrics.jsonl>]
 #                                   [--enforcement-map <enforcement-map.yaml>]
+#                                   [--now <YYYY-MM-DDTHH:MM:SSZ>]
 #
 # `--waivers` answers exactly as `--in-force` does (same refusals, same exit, counts on stderr)
 # and lists every entry that may stand behind a FAIL_WAIVED verdict: each OVERRIDDEN entry, and
@@ -196,7 +232,8 @@
 #      escalations file was read and the in-force rows, possibly none, were printed
 #   1  a violation above, a malformed SUPPRESSED entry, or suppression fields on an
 #      entry that does not classify as SUPPRESSED (never under --in-force)
-#   2  bad arguments, or a required input could not be read — a refusal, not a pass. An
+#   2  bad arguments (a malformed --now among them), a system clock that cannot be read, or a
+#      required input could not be read — a refusal, not a pass. An
 #      escalations path that exists but is not a regular file, or could not be read, refuses
 #      in both modes with `REFUSED:` on stderr and nothing on stdout
 set -u
@@ -207,6 +244,7 @@ ENFORCEMENT_MAP=""
 BASELINE=""
 IN_FORCE=0
 WAIVERS=0
+SL_NOW_ARG=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -216,6 +254,10 @@ while [ $# -gt 0 ]; do
     --enforcement-map) ENFORCEMENT_MAP="${2:-}"; shift 2 ;;
     --baseline)        BASELINE="${2:-}"; shift 2 ;;
     --in-force)        IN_FORCE=1; shift ;;
+    # The clock (header, "THE CLOCK"). A flag, never an environment variable; guarded so a missing
+    # value refuses instead of looping on a `shift 2` that cannot shift.
+    --now)             [ $# -ge 2 ] || { echo "FAIL: --now needs a value, YYYY-MM-DDTHH:MM:SS[Z] in UTC." >&2; exit 2; }
+                       SL_NOW_ARG="$2"; shift 2 ;;
     # A query mode beside --in-force, and it takes every --in-force path: IN_FORCE is set too.
     --waivers)         IN_FORCE=1; WAIVERS=1; shift ;;
     -h|--help)
@@ -233,6 +275,58 @@ if [ -z "$ESCALATIONS" ]; then
   echo "FAIL: --escalations <pending.md> is required." >&2
   exit 2
 fi
+
+# ---- 0. The clock (header, "THE CLOCK") ---------------------------------------
+# One awk: the clock as an epoch -- from --now, or from awk's own srand(), which returns the time of
+# day it seeded with -- printed back as UTC `now` and `now + SL_CLOCK_TOL_S`. No `date`: the fixture
+# sandbox puts only declared tools on PATH, and awk is already one. The arithmetic is the proleptic
+# Gregorian day count, and a --now that does not round-trip through it (a 13th month, a 31 April) is
+# refused. Exit 3 is a malformed --now, 4 a system clock that reads before 2001: both refuse.
+SL_CLOCK_TOL_S=7200
+if [ -n "$SL_NOW_ARG" ]; then SL_CLOCK_SRC="--now"; else SL_CLOCK_SRC="system"; fi
+SL_CLOCK="$(N="$SL_NOW_ARG" TOL="$SL_CLOCK_TOL_S" awk '
+  function dfc(y, m, d,   era, yoe, doy, doe) {
+    y -= (m <= 2); era = int(y / 400); yoe = y - era * 400
+    doy = int((153 * (m > 2 ? m - 3 : m + 9) + 2) / 5) + d - 1
+    doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+    return era * 146097 + doe - 719468
+  }
+  function iso(e,   z, s, era, doe, yoe, y, doy, mp, d, m) {
+    z = int(e / 86400); s = e - z * 86400; z += 719468
+    era = int(z / 146097); doe = z - era * 146097
+    yoe = int((doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365)
+    y = yoe + era * 400; doy = doe - (365 * yoe + int(yoe / 4) - int(yoe / 100))
+    mp = int((5 * doy + 2) / 153); d = doy - int((153 * mp + 2) / 5) + 1
+    m = (mp < 10) ? mp + 3 : mp - 9; y += (m <= 2)
+    return sprintf("%04d-%02d-%02dT%02d:%02d:%02d", y, m, d, int(s / 3600), int((s % 3600) / 60), s % 60)
+  }
+  BEGIN {
+    n = ENVIRON["N"]
+    if (n != "") {
+      if (n !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z?$/) exit 3
+      e = dfc(substr(n, 1, 4) + 0, substr(n, 6, 2) + 0, substr(n, 9, 2) + 0) * 86400 \
+          + substr(n, 12, 2) * 3600 + substr(n, 15, 2) * 60 + substr(n, 18, 2)
+      if (iso(e) != substr(n, 1, 19)) exit 3
+    } else {
+      srand(); e = srand()
+      if (e < 1000000000) exit 4
+    }
+    print iso(e) " " iso(e + ENVIRON["TOL"])
+  }')"
+case $? in
+  0) ;;
+  3) echo "FAIL: --now '$SL_NOW_ARG' is not a UTC timestamp YYYY-MM-DDTHH:MM:SS[Z] naming a real instant." >&2; exit 2 ;;
+  *) echo "REFUSED: the system clock could not be read; pass --now <YYYY-MM-DDTHH:MM:SSZ>. Nothing was examined." >&2; exit 2 ;;
+esac
+SL_NOW="${SL_CLOCK%% *}Z"
+SL_CLOCK_LIMIT="${SL_CLOCK##* }"
+SL_CLOCK_LIMIT_N="${SL_CLOCK_LIMIT//[!0-9]/}"
+# The summary token. A --now clock is printed with its value; the system clock is named and its value
+# is NOT printed, because the clean OK line is compared byte-for-byte across runs and layouts
+# (validator-path-resolution, the identity arm) and a wall-clock reading would make it differ every
+# second. A FAIL that the clock decided names the value it judged against.
+SL_CLOCK_SHOW="clock=system"
+[ "$SL_CLOCK_SRC" = "--now" ] && SL_CLOCK_SHOW="now=$SL_NOW clock=--now"
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of
@@ -274,14 +368,36 @@ if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" 
   echo "REFUSED: escalations path $ESCALATIONS exists but is not a regular file; nothing was examined." >&2
   exit 2
 fi
-# No escalations file is a legitimate clean state — nothing to adjudicate.
+# THE SIBLING ARCHIVE IS RESOLVED HERE, ABOVE THE ABSENT- AND EMPTY-FILE EXITS, in the gate mode only.
+# Section 6c judges an archived SUPPRESSED waiver (header, "THE WAIVED VERDICT"), so an expired entry
+# moved out of pending.md as its LAST entry, leaving the file absent or blank, must not exit through
+# `EXAMINED NOTHING` before the archive is read. validate-escalation-resolution.sh resolves its archive
+# at the same point for the same reason, and refuses one that exists and is not a readable regular file
+# exactly as here: a skipped read reads as clean. The query modes never judge the archive (they exit at
+# 6b), so they keep both early exits and never refuse on it.
+ARCHIVE="$(dirname "$ESCALATIONS")/pending-archive.md"
+SL_ARCH_GATE=0
+if [ "$IN_FORCE" -ne 1 ]; then
+  if { [ -e "$ARCHIVE" ] || [ -L "$ARCHIVE" ]; } && { [ ! -f "$ARCHIVE" ] || [ ! -r "$ARCHIVE" ]; }; then
+    echo "REFUSED: escalation archive $ARCHIVE exists but is not a readable regular file; nothing was examined." >&2
+    exit 2
+  fi
+  [ -f "$ARCHIVE" ] && SL_ARCH_GATE=1
+fi
+# No escalations file is a legitimate clean state — nothing to adjudicate — unless the gate mode found
+# an archive beside it, in which case pending.md is read as /dev/null and section 6c still runs.
+SL_MAIN="$ESCALATIONS"
 if [ ! -f "$ESCALATIONS" ]; then
   if [ "$IN_FORCE" -eq 1 ]; then
     echo "IN-FORCE: entries_scanned=0 suppressed=0 in_force=0 -- no escalations file ($ESCALATIONS)." >&2
     exit 0
   fi
-  echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- no escalations file ($ESCALATIONS)."
-  exit 0
+  if [ "$SL_ARCH_GATE" -ne 1 ]; then
+    echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- no escalations file ($ESCALATIONS)."
+    exit 0
+  fi
+  echo "NOTE: no escalations file ($ESCALATIONS), but the archive $ARCHIVE exists; its FAIL_WAIVED waivers are still judged." >&2
+  SL_MAIN=/dev/null
 fi
 # A file holding no non-whitespace byte is the absent state and says so -- in the gate mode
 # only. `--in-force` keeps answering exactly as it does for an empty list: rows on stdout
@@ -293,11 +409,17 @@ fi
 # an empty corpus at the gate and not an empty in-force list to a caller, and every later
 # read of it would fail and be swallowed. Unreadable is the mode bit AND the status
 # together, so a caller that CAN read a mode-000 file is not refused on the bit alone.
-grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null
+#
+# BESIDE AN ARCHIVE the gate mode does not exit here: a blank pending.md is read as holding no entry
+# and section 6c judges the archive's waivers, as it does for an absent one above.
+grep -q '[^[:space:]]' "$SL_MAIN" 2>/dev/null
 SL_BLANK_RC=$?
 if [ "$IN_FORCE" -ne 1 ] && [ "$SL_BLANK_RC" -eq 1 ]; then
-  echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- escalations file present but empty ($ESCALATIONS)."
-  exit 0
+  if [ "$SL_ARCH_GATE" -ne 1 ]; then
+    echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- escalations file present but empty ($ESCALATIONS)."
+    exit 0
+  fi
+  [ "$SL_MAIN" = /dev/null ] || echo "NOTE: escalations file present but empty ($ESCALATIONS), but the archive $ARCHIVE exists; its FAIL_WAIVED waivers are still judged." >&2
 fi
 if [ "$SL_BLANK_RC" -gt 1 ]; then
   if [ ! -r "$ESCALATIONS" ]; then
@@ -448,7 +570,7 @@ SL_REC_AWK='
   }
   END { flush() }
 '
-RECORDS="$(awk -v src=P "$SL_REC_AWK" "$ESCALATIONS")"
+RECORDS="$(awk -v src=P "$SL_REC_AWK" "$SL_MAIN")"
 
 ENTRIES_N="$(grep -c . <<<"$RECORDS")"
 [ -n "$RECORDS" ] || ENTRIES_N=0
@@ -457,8 +579,8 @@ ENTRIES_N="$(grep -c . <<<"$RECORDS")"
 # the record layout above. Built BEFORE the entry loop, so a waiver is resolved against the whole
 # corpus and never against the entries read so far. Section 6c and the terminal arm read it; a
 # lookup takes the FIRST row whose key matches, so this file wins over the archive. Its rows
-# feed no counter and no stdout row; they are only ever looked up.
-ARCHIVE="$(dirname "$ESCALATIONS")/pending-archive.md"
+# feed no counter and no stdout row; they are only ever looked up. $ARCHIVE is resolved above the
+# absent- and empty-file exits.
 SL_TABLE="$RECORDS"
 if [ -f "$ARCHIVE" ]; then
   SL_TABLE="${SL_TABLE}
@@ -580,7 +702,7 @@ waived_latest() {
 # The id must already be stripped. An empty id resolves to nothing, never to a blank table line.
 # Through ENVIRON, never `-v`, which strips a level of backslash escaping from a free-text header.
 # LK_EXPIRES and LK_AUTHTS carry the lifetime, so a SUPPRESSED waiver the terminal arm resolves
-# through is judged by sl_past_lifetime exactly as the expiry arm judges a live one.
+# through is judged by sl_in_force exactly as --in-force judges a live one.
 LK_STATUS=""; LK_SUPPCAT=""; LK_SUPP=""; LK_SRC=""; LK_EXPIRES=""; LK_AUTHTS=""
 sl_lookup() {
   local r
@@ -601,26 +723,38 @@ gates_since() {
 
 # sl_past_lifetime <authts> <expires> -> 0 when the suppression authorized at <authts> has had
 # more than <expires> gates recorded since, with SL_ELAPSED set to that count. THE ONE expiry
-# predicate: the expiry arm asks it of a live SUPPRESSED entry, and the terminal arm asks it of a
-# SUPPRESSED waiver it resolves through, live or archived. A waiver whose lifetime cannot be read
-# (no expiry or no authorization timestamp) is never asked: the caller treats it as expired.
+# count: the expiry arm asks it of a live SUPPRESSED entry whose shape it has already checked, and
+# sl_in_force negates it. Every other reader asks sl_in_force, which also holds the 1..3 cap.
 SL_ELAPSED=0
 sl_past_lifetime() {
   SL_ELAPSED="$(gates_since "$1")"
   [ "$SL_ELAPSED" -gt "$2" ]
 }
 
+# sl_auth_future <authts> -> 0 when the authorization timestamp is later than the clock by more than
+# SL_CLOCK_TOL_S (header, "THE CLOCK"). THE ONE clock comparison: sl_in_force asks it, and so does the
+# gate-mode shape arm that names a future-dated entry. Both sides are the 19-character UTC form the
+# record extractor and section 0 produce, compared as 14-digit integers, so no locale collation and
+# no fork. The caller guarantees a non-empty timestamp.
+sl_auth_future() {
+  [ "${1//[!0-9]/}" -gt "$SL_CLOCK_LIMIT_N" ]
+}
+
 # sl_in_force <expires> <authts> -> 0 when a SUPPRESSED entry carrying these two fields is IN FORCE,
 # with SL_ELAPSED set to the gates counted against it. THE ONE spelling of "in force": the
-# --in-force/--waivers listing asks it, and so does the supersession test below. The lifetime must
+# --in-force/--waivers listing asks it, so do the supersession test below and the terminal arm's
+# acquittal through a SUPPRESSED waiver, live or archived. The lifetime must
 # be READABLE -- an expiry that is an integer in 1..3 and a non-empty authorization timestamp -- or
-# the entry is not in force; a timeline recording no gate counts 0 elapsed (the fresh-consumer case);
+# the entry is not in force; an authorization later than the clock (sl_auth_future) is not in force,
+# because it counts 0 gates until that date and would never expire; a timeline recording no gate
+# counts 0 elapsed (the fresh-consumer case);
 # otherwise it is the negation of sl_past_lifetime. It overwrites SL_ELAPSED, so a caller holding
 # another entry's count copies it out first.
 sl_in_force() {
   case "$1" in ''|*[!0-9]*) return 1 ;; esac
   [ "$1" -ge 1 ] && [ "$1" -le 3 ] || return 1
   [ -n "$2" ] || return 1
+  ! sl_auth_future "$2" || return 1
   if [ "$GATES_N" -eq 0 ]; then SL_ELAPSED=0; return 0; fi
   ! sl_past_lifetime "$2" "$1"
 }
@@ -732,6 +866,20 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
         bad=$((bad + 1))
         echo "FAIL: **Expires after:** $expires gates is outside the permitted 1..3." >&2
         echo "      entry: $short" >&2
+        continue
+      fi
+      # A future-dated authorization (header, "THE CLOCK"). Gate mode only: --in-force and --waivers
+      # simply do not list it, because sl_in_force refuses it. This arm is what fails an entry that is
+      # itself the waiver on its check's FAIL_WAIVED row, which the expiry arm and section 6c, each
+      # counting 0 gates since a date that has not come, would keep green until that date.
+      if [ "$IN_FORCE" -ne 1 ] && sl_auth_future "$authts"; then
+        bad=$((bad + 1))
+        echo "FAIL: **Operator authorization:** $authts is later than the clock, $SL_NOW ($SL_CLOCK_SRC)," >&2
+        echo "      by more than the ${SL_CLOCK_TOL_S} s a hand-typed stamp may run ahead." >&2
+        echo "      entry: $short" >&2
+        echo "      A suppression authorized in the future counts 0 gates at every gate until that date," >&2
+        echo "      so its **Expires after:** never binds. It is not in force, waives nothing and" >&2
+        echo "      supersedes nothing. Write the timestamp of the operator turn that authorized it." >&2
         continue
       fi
       if ! grep -qxF "$supp" <<<"$CATALOG"; then
@@ -853,21 +1001,23 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
           if [ -n "$tw" ] && [ "$tw" = "$wkey" ]; then continue; fi
           # OVERRIDDEN only: the id resolves, in the pre-pass table, to another OVERRIDDEN entry
           # or to a SUPPRESSED entry whose target is (core, this check) by section 6c's test AND
-          # which is within its own lifetime by the expiry arm's predicate. An expired suppression,
-          # live or archived, acquits nothing; one whose lifetime cannot be read is expired.
+          # which is IN FORCE by sl_in_force, the predicate --in-force lists by: an expiry in 1..3,
+          # a readable authorization, within its lifetime. A suppression not in force, live or
+          # archived, acquits nothing, so an archived `**Expires after:** 18` buys no 18 gates.
           if [ "$status" = OVERRIDDEN ] && sl_lookup "$tw"; then
             case "$LK_STATUS" in
               OVERRIDDEN) continue ;;
               SUPPRESSED) if [ "$LK_SUPP" = "$id" ] && [ "${LK_SUPPCAT:-core}" = core ] \
-                             && [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ] && ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;
+                             && sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"; then continue; fi ;;
             esac
             # SUPERSESSION, terminal twin (header): the row's waiver is a SUPPRESSED entry whose own
             # target is (core, this check), and a fresh in-force authorization for that target
             # stands this entry down, loudly. A waiver suppressing another check or another catalog
             # is not the authorization the fresh entry renews, and stands nothing down. No lifetime
             # test is spelled here because the acquittal above already took every such waiver that
-            # is in force: one reaching this line is past its lifetime or has none readable, which
-            # reads as expired. Gate mode only: --in-force also walks this arm, and its stderr stays.
+            # is in force by sl_in_force: one reaching this line is past its lifetime, outside 1..3,
+            # or has none readable, and each reads as expired. Gate mode only: --in-force also walks
+            # this arm, and its stderr stays.
             if [ "$id" = "$LK_SUPP" ] && [ core = "${LK_SUPPCAT:-core}" ]; then
               if [ "$IN_FORCE" -ne 1 ] && [ "$LK_STATUS" = SUPPRESSED ] && sl_superseder "$id" core "$tw" "$LK_AUTHTS"; then
                 superseded_n=$((superseded_n + 1))
@@ -904,14 +1054,14 @@ EOF
 
 # ---- 6b. The in-force query answers here, with its counts, and never with exit 1 ------
 if [ "$WAIVERS" -eq 1 ]; then
-  echo "WAIVERS: entries_scanned=$ENTRIES_N suppressed=$suppressed_n waivers=$waivers_n lifetime_unresolved=$unresolved_n gates_recorded=$GATES_N catalog=$CATALOG_N metrics=${GATE_METRICS:-(none found)}" >&2
+  echo "WAIVERS: entries_scanned=$ENTRIES_N suppressed=$suppressed_n waivers=$waivers_n lifetime_unresolved=$unresolved_n gates_recorded=$GATES_N catalog=$CATALOG_N $SL_CLOCK_SHOW metrics=${GATE_METRICS:-(none found)}" >&2
   exit 0
 fi
 if [ "$IN_FORCE" -eq 1 ]; then
   if [ -n "$GATE_METRICS" ] && [ -f "$GATE_METRICS" ]; then
-    echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n gates_recorded=$GATES_N catalog=$CATALOG_N metrics=$GATE_METRICS" >&2
+    echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n gates_recorded=$GATES_N catalog=$CATALOG_N $SL_CLOCK_SHOW metrics=$GATE_METRICS" >&2
   else
-    echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n lifetime_unresolved=$unresolved_n gates_recorded=NONE catalog=$CATALOG_N metrics=(none found)" >&2
+    echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n lifetime_unresolved=$unresolved_n gates_recorded=NONE catalog=$CATALOG_N $SL_CLOCK_SHOW metrics=(none found)" >&2
   fi
   exit 0
 fi
@@ -919,8 +1069,8 @@ fi
 # ---- 6c. Every FAIL_WAIVED latest row names a waiver that resolves ----------
 # Header, "THE WAIVED VERDICT". The population is the latest row per (catalog, check); the
 # join is rules.waiver_id's exact equality against every entry's `wkey`, read from the pre-pass
-# table. An id resolving only in the sibling `pending-archive.md` is acquitted with a NOTE,
-# never silently.
+# table. An id resolving only in the sibling `pending-archive.md` is named in a NOTE, never
+# silently; an archived OVERRIDDEN waiver is acquitted there, an archived SUPPRESSED one judged.
 waived_n=0
 WAIVED_ROWS="$(waived_latest)"
 while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
@@ -940,7 +1090,40 @@ while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
   if [ -z "$wrec" ]; then
     if [ "$wsrc" = A ]; then
       echo "NOTE: check '$wcheck' [$wcat] FAIL_WAIVED at ts $wts names an entry archived to $ARCHIVE;" >&2
-      echo "      the row is the previous gate's, recorded before the entry was moved. Not adjudicated." >&2
+      if [ "$LK_STATUS" != SUPPRESSED ]; then
+        echo "      the row is the previous gate's, recorded before the entry was moved. Not adjudicated." >&2
+        continue
+      fi
+      # AN ARCHIVED SUPPRESSED WAIVER IS JUDGED, NOT ACQUITTED (header, "THE WAIVED VERDICT"). No
+      # protocol step archives one, so moving it must buy nothing a live entry would not have: the
+      # target test, then supersession, then in force by sl_in_force. The target test runs FIRST: a
+      # waiver suppressing another check is not the authorization a fresh entry renews, so it stands
+      # nothing down, exactly as the terminal twin's own-target guard reads it.
+      echo "      It is SUPPRESSED, so its target and its lifetime are judged as a live waiver's are." >&2
+      if [ "$LK_SUPP" != "$wcheck" ] || [ "${LK_SUPPCAT:-core}" != "$wcat" ]; then
+        bad=$((bad + 1))
+        echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED under the SUPPRESSED entry" >&2
+        echo "      '$wid', which suppresses [${LK_SUPPCAT:-core}] '$LK_SUPP' and nothing else. A suppression" >&2
+        echo "      waives the check it names. The entry is archived to $ARCHIVE." >&2
+        continue
+      fi
+      wshort="$(printf '%s' "$wid" | cut -c1-92)"
+      if sl_superseder "$wcheck" "$wcat" "$wid" "$LK_AUTHTS"; then
+        superseded_n=$((superseded_n + 1))
+        echo "WARN: superseded: check '$wcheck' [$wcat] -- archived waiver '$wshort' (FAIL_WAIVED at row ts $wts) is stood down by the in-force SUPPRESSED entry '$SS_SHORT'." >&2
+        continue
+      fi
+      if ! sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"; then
+        bad=$((bad + 1))
+        wel="an uncountable number of"; [ -n "$LK_AUTHTS" ] && wel="$(gates_since "$LK_AUTHTS")"
+        echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED at ts $wts under the ARCHIVED SUPPRESSED" >&2
+        echo "      entry '$wshort', which is not in force: **Expires after:** ${LK_EXPIRES:-(none)}," >&2
+        echo "      authorized ${LK_AUTHTS:-(no timestamp)}, $wel gate(s) recorded since, clock $SL_NOW ($SL_CLOCK_SRC)." >&2
+        echo "      In force means an expiry in 1..3, an authorization not later than the clock, and no" >&2
+        echo "      more gates than the expiry. Moving a suppression into the archive does not renew it." >&2
+        echo "      Obtain fresh operator authorization as a NEW SUPPRESSED entry in $ESCALATIONS," >&2
+        echo "      or fix the underlying failure." >&2
+      fi
       continue
     fi
     bad=$((bad + 1))
@@ -990,7 +1173,7 @@ $BASELINE_KEYS
 EOF
 fi
 
-SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n malformed_attempt=$malformed_attempt_n waived_rows=$waived_n gates_recorded=$GATES_N catalog=$CATALOG_N superseded=$superseded_n"
+SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n malformed_attempt=$malformed_attempt_n waived_rows=$waived_n gates_recorded=$GATES_N catalog=$CATALOG_N superseded=$superseded_n $SL_CLOCK_SHOW"
 if [ "$bad" -gt 0 ]; then
   echo "FAIL: $bad suppression-lifetime violation(s). $SUMMARY" >&2
   exit 1
