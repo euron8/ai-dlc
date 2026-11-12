@@ -1,0 +1,9 @@
+# python3 docs/analysis/step-value-b256/bl397/story_count.py <graph-clone> <ref> 322=... 321=...
+# graph clone: file:///Users/n8/git/graph cloned, then fetch '+refs/*'; refs read: ed61de745 (ai-dlc/retro/sprint-322), cross-check 1449b5c72 (main) and 6ee289617
+# transcripts: 157 top-level jsonl, run 2026-11-12T20:27:23Z; extracts: <ext-10>/ and <ext-09>/ = extract.py + s317-s318 analyze.py at EXTRACT_WIN_END 2026-11-12T10:00:00Z and T09:00:00Z
+s322 ed61de745:_bmad-output/implementation-artifacts/sprint-status.yaml: keys 8, done 8, naive 16; not done: []
+s321 ed61de745:_bmad-output/implementation-artifacts/s321/sprint-status.yaml: keys 25, done 24, naive 50; not done: [['story-321-23:', 'ready-for-dev']]
+exit 0
+s322 1449b5c72:_bmad-output/implementation-artifacts/sprint-status.yaml: keys 8, done 8, naive 16; not done: []
+s321 1449b5c72:_bmad-output/implementation-artifacts/s321/sprint-status.yaml: keys 25, done 24, naive 50; not done: [['story-321-23:', 'ready-for-dev']]
+exit 0

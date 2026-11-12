@@ -1,0 +1,24 @@
+# python3 docs/analysis/step-value-b256/bl397/precondition_rejects.py <graph-clone> ed61de745
+# graph clone: file:///Users/n8/git/graph cloned, then fetch '+refs/*'; refs read: ed61de745 (ai-dlc/retro/sprint-322), cross-check 1449b5c72 (main) and 6ee289617
+# transcripts: 157 top-level jsonl, run 2026-11-12T20:27:18Z; extracts: <ext-10>/ and <ext-09>/ = extract.py + s317-s318 analyze.py at EXTRACT_WIN_END 2026-11-12T10:00:00Z and T09:00:00Z
+graph ref ed61de745; population docs/reviews/s<N>/**/*qa*.md outside shards/
+s315: reports 11, citing 0/11, rejects 0
+s317: reports 27, citing 23/27, rejects 7 (1-4-qa-validation.md:8,63; 1-5-qa-validation.md:68; 2-3-qa-validation.md:14,34,76; 2-6-qa-validation.md:191; 4-2a-qa-validation-p2.md:14,83; 4-2a-qa-validation.md:11,61; 4-3b-qa-validation.md:8)
+s318: reports 19, citing 13/19, rejects 0
+  near-miss control s319 2-2-qa-validation.md: precondition lines carrying a near-miss phrase [330]; counted as reject: False
+s319: reports 43, citing 33/43, rejects 0
+s320: reports 30, citing 23/30, rejects 2 (2-1-qa-validation.md:260; 3-5-qa-validation.md:15,56)
+s321: reports 46, citing 26/46, rejects 1 (4-3-qa-validation-p2.md:276)
+s322: reports 16, citing 13/16, rejects 1 (4-qa-validation.md:70)
+exit 0
+# cross-check: python3 docs/analysis/step-value-b256/bl397/precondition_rejects.py <graph-clone> 1449b5c72
+graph ref 1449b5c72; population docs/reviews/s<N>/**/*qa*.md outside shards/
+s315: reports 11, citing 0/11, rejects 0
+s317: reports 27, citing 23/27, rejects 7 (1-4-qa-validation.md:8,63; 1-5-qa-validation.md:68; 2-3-qa-validation.md:14,34,76; 2-6-qa-validation.md:191; 4-2a-qa-validation-p2.md:14,83; 4-2a-qa-validation.md:11,61; 4-3b-qa-validation.md:8)
+s318: reports 19, citing 13/19, rejects 0
+  near-miss control s319 2-2-qa-validation.md: precondition lines carrying a near-miss phrase [330]; counted as reject: False
+s319: reports 43, citing 33/43, rejects 0
+s320: reports 30, citing 23/30, rejects 2 (2-1-qa-validation.md:260; 3-5-qa-validation.md:15,56)
+s321: reports 46, citing 26/46, rejects 1 (4-3-qa-validation-p2.md:276)
+s322: reports 16, citing 13/16, rejects 1 (4-qa-validation.md:70)
+exit 0

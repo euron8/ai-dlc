@@ -1,0 +1,54 @@
+# GRAPH_REF=ed61de745 python3 docs/analysis/step-value-b256/bl397/value_observable.py <graph-clone> <ext-10>
+# graph clone: file:///Users/n8/git/graph cloned, then fetch '+refs/*'; refs read: ed61de745 (ai-dlc/retro/sprint-322), cross-check 1449b5c72 (main) and 6ee289617
+# transcripts: 157 top-level jsonl, run 2026-11-12T20:27:28Z; extracts: <ext-10>/ and <ext-09>/ = extract.py + s317-s318 analyze.py at EXTRACT_WIN_END 2026-11-12T10:00:00Z and T09:00:00Z
+probes (synthetic transcripts under mktemp, same scan/judge as the corpus):
+  probe fire: fires ['tests/test_b.py'] -> ok
+  probe near-miss targeted-set: fires [] -> ok
+  probe near-miss persisted: fires [] -> ok
+  probe fire fixed-by-editing-it: fires ['tests/test_b.py'] -> ok
+  probe fire ids-without-summary: fires ['tests/test_b.py'] -> ok
+  probe near-miss mutation-run: fires [] -> ok
+  probe near-miss targeted-runs-only: fires [] -> ok
+  probe A2 fire: True -> ok
+  probe A2 near-miss pre-existing: False -> ok
+  probe A2 near-miss carried: False -> ok
+  probe A2 near-miss no test file: False -> ok
+  probe classify a pytest path that is not an invocation: NON-PYTEST
+  probe classify s315 shape: TARGETED
+  probe classify watchdog repo-wide: REPO-WIDE
+== channel A: s322 handoff record at each story's first gate-2 handoff sha
+  story 1.1 @ 11bb6e800: REPO-WIDE, failed 0; 1 Full-collection line(s); A2 catch lines at handoff []
+  story 1.2 @ 1f72de258: REPO-WIDE, failed 0; 1 Full-collection line(s); A2 catch lines at handoff []
+  story 1.3 @ c6ebe5c96: TARGETED, failed 0; 1 Full-collection line(s); A2 catch lines at handoff []
+  story 1.4 @ 7a9c48c20: NON-PYTEST, failed 0; 1 Full-collection line(s); A2 catch lines at handoff []
+  story 1.5 @ 8998f533f: REPO-WIDE, failed 0; 1 Full-collection line(s); A2 catch lines at handoff []
+  story 1.6 @ 0023c4042: COLLECT-ONLY, failed None; 1 Full-collection line(s); A2 catch lines at handoff []
+  story 1.7 @ 19e6c3807: REPO-WIDE, failed 1; 1 Full-collection line(s); A2 catch lines at handoff []
+  story 1.8 @ 613d4aa8d: REPO-WIDE, failed 2; 1 Full-collection line(s); A2 catch lines at handoff [320]
+== channel A2: story files at ed61de745, lines recording a regression in a named test file, fixed
+  s317: story files 21, catch lines 0
+  s318: story files 13, catch lines 0
+  s319: story files 20, catch lines 0
+  s320: story files 13, catch lines 0
+  s321: story files 25, catch lines 0
+  s322: story files 8, catch lines 1
+     story-1-8-xdist-crash-admission-controls:339: - `rebalancer/tests/test_s317_2_3_sweep_callers_subscribe.py::test_ac4_moved_subscribe_goes_red_on_the_raise_before_append_count`: STORY-REGRESSION, FIXED in `5
+== channel B: dev-seat transcripts, spawns charged to implementation or gate-validation[implementation]
+  s317: dev seats 32, REPO-WIDE runs with a parsed count 13, of them failed>0 7; FIRES 1, seats with failed>0 and no fire 2, UNNAMED-DROP seats 0
+     FIRE  Dev story 2.6 gating predicate rename: ['rebalancer/tests/test_s316_ff1_nongated_rebalance_pct.py', 'rebalancer/tests/test_s317_2_5_sub100_cap.py', 'repo-wide failed counts 3 -> 1 -> 7 -> 2 -> 1']
+     NO-FIRE  Story 2.3 dev: ['rebalancer/tests/test_s317_2_3_sweep_callers_subscribe.py', 'persisted out-of-target 1; repo-wide failed counts 1']
+     NO-FIRE  Dev for story 3.1 scratch config: ['server/tests/test_live_shape_fixture_guard.py', 'persisted out-of-target 1; repo-wide failed counts 0 -> 1']
+  s318: dev seats 14, REPO-WIDE runs with a parsed count 15, of them failed>0 14; FIRES 1, seats with failed>0 and no fire 2, UNNAMED-DROP seats 0
+     FIRE  Dev story 1.1 config section: ['rebalancer/tests/test_s316_b6_staged_base_entry.py', 'repo-wide failed counts 11 -> 2 -> 2 -> 2 -> 2 -> 2 -> 2 -> 2']
+     NO-FIRE  Dev story 2.6 subscribe retry terminal: ['persisted out-of-target 0; repo-wide failed counts 51 -> 52 -> 51 -> 51 -> 51']
+     NO-FIRE  Dev story 2.4 tick_math precision: ['persisted out-of-target 0; repo-wide failed counts 0 -> 3']
+  s319: dev seats 33, REPO-WIDE runs with a parsed count 33, of them failed>0 7; FIRES 1, seats with failed>0 and no fire 3, UNNAMED-DROP seats 0
+     FIRE  Resume story 4.1 dev in same worktree: ['rebalancer/tests/test_s316_b1_chain_id_nonces.py', 'repo-wide failed counts 1 -> 0 -> 0 -> 0']
+     NO-FIRE  Dev story 3.1 rewards endpoint: ['persisted out-of-target 0; repo-wide failed counts 1 -> 1 -> 0 -> 0 -> 0 -> 0 -> 0 -> 0 -> 0 -> 0 -> 0']
+     NO-FIRE  2.3b dev dispatch: ['server/test_aggregator_254_1_anchor_fix.py', 'persisted out-of-target 1; repo-wide failed counts 12 -> 12']
+     NO-FIRE  4.2 dev completion (escalated): ['persisted out-of-target 0; repo-wide failed counts 3 -> 1 -> 0 -> 0 -> 0']
+  s320: dev seats 12, REPO-WIDE runs with a parsed count 4, of them failed>0 0; FIRES 0, seats with failed>0 and no fire 0, UNNAMED-DROP seats 0
+  s321: dev seats 29, REPO-WIDE runs with a parsed count 15, of them failed>0 1; FIRES 0, seats with failed>0 and no fire 1, UNNAMED-DROP seats 0
+     NO-FIRE  Dev-escalated story 3.3 deploy scripts: ['persisted out-of-target 0; repo-wide failed counts 8']
+  s322: dev seats 28, REPO-WIDE runs with a parsed count 4, of them failed>0 0; FIRES 0, seats with failed>0 and no fire 0, UNNAMED-DROP seats 0
+exit 0
