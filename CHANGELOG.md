@@ -19,6 +19,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1074.0] - 2026-11-12
+
+### BL-878 PARTIAL: `validate-enforcement-map.sh` can be sourced and called in process through `vem_entry`, and 12 fixture rows in 8 families are converted (176 -> 164 allowlist rows remain)
+
+The subject change. Sourcing `scripts/validate-enforcement-map.sh` now defines `vem_entry` and returns at a column-0 source guard placed above `set -u`, every global, the `cd`, the missing-input exit and the argument case. `( vem_entry [--arms I<n>,...] )` evals the file text minus the guard line in its own subshell, with its own arguments flowing into the existing argument case, after resetting the shell state a caller can carry (errexit, pipefail, xtrace, noglob, IFS, glob shopts, ERR/DEBUG/RETURN traps, an inherited `VEM_SELF` pair). It also clears the caller's unexported functions and variables, and keeps exported ones and bash's own variables, because a started program never sees the others. It refuses a relative source path. `ARMS_SELECT_AWK` skips the exact guard line, so no `--arms` subprogram carries it. Every `$0` read that changes when sourced now reads the self path: `VEM_SELF` from `BASH_SOURCE[0]`, the usage text, and the four `--exclude` basenames at I60, I49, I53 and I107 (each also drops a basename fork). The command-line behaviour is byte-identical: the flagless run, a seeded offender, usage and `--arms` give the same stdout, stderr and exit at base and tip, and only the NOTE line numbers move, by the count of lines this release inserts above that point: `--arms I1` reads `line 1214` at base 8089184676 and `line 1297` at the tip 7ad8e93e5, 83 lines.
+
+A defect found and fixed in this release. An earlier draft of `vem_entry` located the source guard with a longest-suffix strip over the 1.1 MB file. That is quadratic on bash 3.2, about 5 CPU-s per call. It was present on the branch from its first integration. It now finds the guard with a `case` presence test, a shortest-prefix strip and a length slice. No wall-clock claim is made about the suite.
+
+The 12 rows converted, by family. Every `scripts/validate-enforcement-map.sh` start is now `vem_entry` from a copy sourced once by absolute path, in the subshell that runs its cells. The only command-line starts left are `cli` twin cells declared in the fixture's own `cells.decl`, compared byte for byte (stdout, stderr, exit) with the in-process answer on the same input, plus two `e2e` cells in `enforcement-map-sites` for mutants only a started program can show (`cwd-rel-I81-M3`, a relative self path that `vem_entry` refuses; `cwd-env-I81-M4`, a `VEM_SELF` inherited across exec that `vem_entry` discards). The 12 allowlist rows are deleted from `scripts/fixture-inprocess-allowlist.txt`. The new shard `enforcement-map-sites-d` is dist-only and is not an allowlist row.
+
+| Family | Fixtures | Counted starts, `*` / validator, base -> tip |
+|---|---|---|
+| enforcement-map-sites | `enforcement-map-sites`, `-b`, `-c`, `-d` | a 208 / 61 -> 163 / 7; b 115 / 34 -> 89 / 3; c 135 / 44 -> 99 / 3; d new -> 62 / 3; family 458 / 139 -> 413 / 16 |
+| validator-arm-selection | `validator-arm-selection`, `-b` | a 486 / 147 -> 220 / 3; b 499 / 139 -> 243 / 3; family 985 / 286 -> 463 / 6 |
+| layer-contract-conformance | `layer-contract-conformance`, `-b` | a 68 / 16 -> 41 / 2; b 44 / 14 -> 21 / 2; family 112 / 30 -> 62 / 4 |
+| enforcement-map-derivations | `enforcement-map-derivations` | 459 / 101 -> 164 / 3 |
+| derived-fence-binding | `derived-fence-binding` | 206 / 90 -> 126 / 2 |
+| ledger-status-vocabulary | `ledger-status-vocabulary` | 47 / 11 -> 42 / 2 |
+| crosswalk-home-declaration | `crosswalk-home-declaration` | 16 / 5 -> 15 / 2 |
+| consumer-machinery-home | `consumer-machinery-home` | 25 / 6 -> 23 / 2 |
+
+Each base is the fixture's `invocations.decl` at 8089184676 and each tip is the same file at 7ad8e93e5. Over the 12 converted rows (the table without `enforcement-map-sites-d`) the validator starts fall from 668 to 34 and the `*` starts from 2308 to 1246. Counting the new shard `-d` at tip, the totals are 37 validator starts and 1308 `*` starts.
+
+Where a cost moved. No converted row's `*` rose. The full-run equivalence twins sat on the pole shard `enforcement-map-sites` a and now run in the new dist-only shard `enforcement-map-sites-d`; shard a carries the `--arms I12` pair instead. Shard a reads `*` 163 at tip and shard d reads 62. In `layer-contract-conformance`, shard a's `cli-pass` is a selected run under `cli-refuse`'s own `--arms` selector, since the full-run equivalence is owned by `enforcement-map-sites`.
+
+Fixes made on the way. `enforcement-map-sites`'s cwd battery M1 and M3 were red at 126a5bb9c (M1 read INSUFFICIENT, M3 DID NOT APPLY); both are re-anchored on the tip prologue, and M1 also maps the `${VEM_SELF##*/}` reads to `${BASH_SOURCE[0]##*/}`. `validator-arm-selection` loses its per-id `xargs` re-entry for a constant `CHUNK_K=8` chunk partition, so worker starts are `min(CHUNK_K, ids)`, not a function of `JOBS`, and the `*` total is equal at `VAS_INNER_POOL_WIDTH=1` and `=6`. `layer-contract-conformance` replaces its generated `run-one.sh` and `xargs` pool with a static four-worker partition. `derived-fence-binding`'s EXPECTED goes from 84 to 85, and its MUTANT-MATRIX remeasured at tip is 75 rows, byte-identical to base, each of the 15 mutants killed on its deciding arm only. F11's (0.1073.0) assertions A70-A73 in `enforcement-map-derivations` now build their trees with the in-process tree builder `fresh_t`. A71's control needs no reload after its validator edit, because `vem_entry` re-reads its own file on every call, and a future cache would fail that control loudly, not silently.
+
+The fork profile `bash scripts/fork-profile.sh --section total` reads `TOTAL 2850` at base and `TOTAL 2843` at tip, each in a clean detached worktree, against `FORK_BUDGET=2926`, unchanged.
+
+`bash scripts/validate-fixture-inprocess.sh --complete` scans 271 fixtures at base (93 predicted to pass, 176 refused) and 272 at tip (106 predicted to pass, 164 refused), and reads `INCOMPLETE  176 allowlist row(s) remain` at base and `INCOMPLETE  164 allowlist row(s) remain` at tip.
+
+Deferred: `validator-fork-budget` is not converted. Its 19 validator starts (at 0.1073.0) come from `scripts/fork-profile.sh:240`'s untagged `bash -x` child (the counter clears `FXCELL` per start) and the renamed profiler copies `fp-*.sh`, so converting it means editing `fork-profile.sh`, outside this component. It stays a row of the allowlist.
+
+The entry stays PARTIAL, `verify: sh` unchanged, no LANDED line.
+
+Consumer cost: no behaviour change. `scripts/validate-enforcement-map.sh` is dist-only (no `core/scripts/` copy, and `scripts/install.sh` names it only in comments), and every changed fixture, including the new `enforcement-map-sites-d`, carries `.dist-only`; nothing here ships.
+
 ## [0.1073.0] - 2026-11-11
 
 ### BL-880 PARTIAL: every pre-suite step is dispositioned, the M4 probe and the R1 hook are built, and one item stays owed

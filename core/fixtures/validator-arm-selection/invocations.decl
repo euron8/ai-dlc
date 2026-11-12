@@ -1,6 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-486 *
-147 scripts/validate-enforcement-map.sh
-# Re-measured from two agreeing counted runs at the tip after arm A04 and I10 were retired (one validator-enforcement-map run fewer per state).
-# Re-measured from two agreeing counted tip runs after each validate-enforcement-map run selecting I17 or I108 made one fewer bash start (I17 reuses its probe answer for the team-roles row; I108 reads probe and corpus in one reader start).
-# Re-measured from two agreeing counted runs at 9076646da after I17 evaluates every site row in one bash start (the batch replaces one start per row).
+220 *
+3 scripts/validate-enforcement-map.sh
+# Re-measured on the combined tree (b255 F9 rebased onto 0.1073.0, c6bea60f4) from two agreeing counted hermetic-run.sh runs: 283 -> 220; the validate-enforcement-map.sh row unchanged.

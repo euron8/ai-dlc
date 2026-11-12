@@ -1,0 +1,7 @@
+# validator-arm-selection-b: every other run of the validator in this shard is in process (`vem_entry`, the
+# sibling's run.sh). These are its only command-line starts, each the byte-for-byte twin (stdout, stderr, exit)
+# of an in-process run (cli_twin), one per exit code this shard exercises: on the seeded tree a passing id
+# (exit 0) and a refusing id (exit 1), and on the m3 mutant tree the silent-arm refusal (exit 2).
+cli scripts/validate-enforcement-map.sh cli-seeded-pass
+cli scripts/validate-enforcement-map.sh cli-seeded-refuse
+cli scripts/validate-enforcement-map.sh cli-m3-silent-arm

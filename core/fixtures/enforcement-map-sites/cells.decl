@@ -1,0 +1,13 @@
+# enforcement-map-sites (shard a): every other run of the validator is in process, `vem_entry` from a copy
+# sourced once. These are its only command-line starts, each tagged FXCELL=<id> at its call site in run.sh.
+# The equivalence twins (eq_pair): `--arms I12` on a pristine template copy (exit 0) and on a copy with an
+# offender (exit 1), each compared byte for byte with its in-process run. The full-run twins (eq-pass,
+# eq-refuse, eq-usage) run in enforcement-map-sites-d, the `eq` group, and are that directory's rows.
+cli scripts/validate-enforcement-map.sh eq-arms-pass
+cli scripts/validate-enforcement-map.sh eq-arms-refuse
+# The cwd battery's command-line halves (cwd_cli), each byte-compared with that id's in-process C1 output.
+cli scripts/validate-enforcement-map.sh cwd-rel-I91
+cli scripts/validate-enforcement-map.sh cwd-rel-I81
+cli scripts/validate-enforcement-map.sh cwd-env-I81
+e2e scripts/validate-enforcement-map.sh cwd-rel-I81-M3 why=M3 un-absolutises the self path, which only a program started by a RELATIVE path has: vem_entry refuses a relative source path, so no in-process call can reach the defect
+e2e scripts/validate-enforcement-map.sh cwd-env-I81-M4 why=M4 deletes the prologue guard that discards a VEM_SELF inherited across exec: vem_entry unsets VEM_SELF before the guard runs, so no in-process call can reach the defect

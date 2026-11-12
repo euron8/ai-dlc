@@ -1,7 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-459 *
-101 scripts/validate-enforcement-map.sh
-# Re-measured from two agreeing counted runs at the tip after arm A04 and I10 were retired (one validator-enforcement-map run fewer per state).
-# Re-measured from two agreeing counted runs after A70 (i58-reader-ignores-ref, in a git world, 2 validator runs) and A71 (i17-teamroles-misplaced plus its hard-coded control, 3 validator runs) were added.
-# Re-measured from two agreeing counted runs after A70's twin moved from I17 (20 bash -c starts per run) to I86 (0).
-# Re-measured from two agreeing counted runs after I17 evaluates every site row in one bash start (19 fewer per validate-enforcement-map run that reaches I17: the probe and 19 per-row bash -c starts become one) and A72 (i17-batch-dies-midway) and A73 (i17-probe-unevaluable) were added, 2 validator runs each.
+164 *
+3 scripts/validate-enforcement-map.sh
+# Re-measured from two agreeing counted runs after the in-process conversion (BL-878): every assertion runs the validator as
+# `( vem_entry ... )` in a subshell, so the only validator starts left are the three `cli` twin cells in cells.decl.
+# Re-measured on the combined tree (b255 F9 rebased onto 0.1073.0) after A70-A73 load their tree in process: 207 -> 164 from two agreeing counted hermetic-run.sh runs; the validate-enforcement-map.sh row unchanged.

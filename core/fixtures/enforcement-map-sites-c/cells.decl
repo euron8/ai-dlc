@@ -1,0 +1,8 @@
+# enforcement-map-sites-c: every other run of the validator in this shard is in process (`vem_entry`, the
+# sibling's run.sh). These are its only command-line starts, each tagged FXCELL=<id> at its call site.
+# The equivalence twins (eq_pair): `--arms I12` on a pristine template copy (exit 0) and on a copy with an
+# offender (exit 1), each compared byte for byte on stdout, stderr and exit with its in-process run.
+cli scripts/validate-enforcement-map.sh eq-arms-pass
+cli scripts/validate-enforcement-map.sh eq-arms-refuse
+# The cwd battery's command-line half this shard's I95 control carries (cwd_cli), byte-compared with C1.
+cli scripts/validate-enforcement-map.sh cwd-rel-I95

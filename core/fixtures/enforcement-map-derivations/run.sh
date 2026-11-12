@@ -46,7 +46,14 @@
 # control: without it a validator erroring for reasons of its own scores every negative
 # below as a kill.
 #
-# ONE TREE PER ASSERTION, IN ONE PROCESS PER ASSERTION, AND THE REASON IS WALL CLOCK.
+# IN PROCESS. Every validator run is `( vem_entry … )` out of the scratch tree's own copy, sourced
+# once per tree (and once more per mutant copy) by `vem_load`; the CLI is started only by the three
+# declared `cli` twin cells in cells.decl, which `emd_twins` compares byte for byte with the
+# in-process answer. Each assertion runs in a subshell of this process, dealt into eight background
+# lanes, and copies ONE seed built per run, so neither the pool nor the seed starts a bash per
+# assertion.
+#
+# ONE TREE PER ASSERTION, IN ONE WORKER PER ASSERTION, AND THE REASON IS WALL CLOCK.
 # Same shape and the same argument as the sibling `enforcement-map-sites`, arrived at from
 # the other end: that fixture was the suite's critical path until it grew an inner pool,
 # and this one then became it. Every assertion below runs
@@ -200,6 +207,7 @@ mutant_case() {
   need_base "$([ "$bv" -eq 0 ] && [ "$bn" -eq 0 ] && echo 1 || echo 0)" "$name" || return 0
   ok "${clabel:-$id mutant control: the unmutated copy passes $id and its twin $twin}"
   mutant_apply "$name" "$t" || return 0
+  vem_load "$t"
   out="$(run_map "$id,$twin")"
   rc=$?
   sel_guard "$rc" "$id,$twin" "$out"
@@ -235,19 +243,54 @@ seed_tree() {
   WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 }
 
-# fresh [dir] — a newly seeded tree, MOVED into place, never an edit of a shared one. A mutation
-# applied in place leaks into every later assertion, and the one that leaks reads as the one that
-# fired, so every call builds its own world. Each used to copy the seed twice, once into a
-# per-process pristine root and once more here, and no assertion ever read the pristine root
-# again; the seed is now the only copy, renamed into place within one TMPDIR (same volume, so the
-# rename moves nothing). An assertion that calls `fresh` twice pays one seed per call, which is
-# what it always needed. The default path is $WORK/t; the matrix names its own.
+# fresh [dir] — a newly copied tree, never an edit of a shared one. A mutation applied in place
+# leaks into every later assertion, and the one that leaks reads as the one that fired, so every
+# call gets its own world. The default path is $WORK/t; the matrix names its own.
+#
+# THE SEED IS BUILT ONCE PER RUN AND COPIED (fixture-mutants.md, "One run per distinct state",
+# clause 4). `seed_once` runs seed.sh a single time into $EMD_SEED; every `fresh` is a `cp -R` of
+# that pristine root, which no assertion ever writes to. The push driver seeds before the control
+# and every in-process worker inherits the path; `--run-one` and `--matrix` seed their own.
+# seed_once <dir> — the seed lands inside <dir>, a scratch dir its caller already removes on exit.
+seed_once() {
+  [ -n "${EMD_SEED:-}" ] && return 0
+  EMD_SEED="$(TMPDIR="$1" bash "$HERE/seed.sh")" && [ -d "$EMD_SEED" ] \
+    || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+}
 fresh() {
-  local dest="${1:-$WORK/t}" p
+  local dest="${1:-$WORK/t}"
+  [ -n "${EMD_SEED:-}" ] && [ -d "$EMD_SEED" ] || { echo "FIXTURE ERROR: no seed built before fresh" >&2; return 1; }
   rm -rf "$dest"
-  p="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; return 1; }
-  mv "$p" "$dest" || { echo "FIXTURE ERROR: could not move the seeded tree into place" >&2; return 1; }
+  cp -R "$EMD_SEED" "$dest" || { echo "FIXTURE ERROR: could not copy the seeded tree into place" >&2; return 1; }
   printf '%s' "$dest"
+}
+
+# vem_load <tree> — source <tree>'s OWN copy of the validator into this shell, by absolute path,
+# so `( vem_entry … )` runs the text in that copy and resolves REPO_ROOT from it (the validator
+# reads its root from BASH_SOURCE, which a sourced function keeps). Called in the assertion's own
+# frame, never inside `$( )`, where a definition would be lost with the subshell: once per scratch
+# tree by `fresh_t`, and once more per mutant copy by `mutant_case` after the mutation lands.
+# VEM_TREE records which tree is loaded; run_map refuses a tree that is not the loaded one, so a
+# call site that forgot to load cannot quietly run a different tree's validator.
+vem_load() {
+  case "$1" in
+    /*) : ;;
+    *) bad "FIXTURE BROKEN — vem_load needs an absolute tree path, got '$1'"; exit 2 ;;
+  esac
+  unset -f vem_entry
+  VEM_TREE=""
+  . "$1/scripts/validate-enforcement-map.sh" \
+    || { bad "FIXTURE BROKEN — sourcing $1/scripts/validate-enforcement-map.sh failed"; exit 2; }
+  declare -F vem_entry >/dev/null \
+    || { bad "FIXTURE BROKEN — $1/scripts/validate-enforcement-map.sh defined no vem_entry when sourced"; exit 2; }
+  VEM_TREE="$1"
+}
+
+# fresh_t — `fresh` into $t and load that tree's validator. A seed that failed is FIXTURE BROKEN
+# here: an empty $t would otherwise send every run below at a tree that does not exist.
+fresh_t() {
+  t="$(fresh)" && [ -n "$t" ] || { bad "FIXTURE BROKEN — no scratch tree was built, so nothing below was tested"; exit 2; }
+  vem_load "$t"
 }
 
 # edit <file> <awk program> — rewrite a file through awk, then REQUIRE the bytes changed.
@@ -306,7 +349,8 @@ arm_id_of() {
   }'
 }
 
-# run_map <id> — THE ONE PLACE this fixture invokes the validator, and the ledger every
+# run_map <id> — THE ONE PLACE an assertion invokes the validator (the matrix's mx_grid and the
+# CLI twin cells in emd_twins are the only others), and the ledger every
 # invocation is written into. A non-empty <id> runs only that arm's unit (`--arms`); an empty
 # one runs the whole file.
 #
@@ -315,15 +359,25 @@ arm_id_of() {
 # lost with the subshell -- a counter incremented there would read zero at the control below,
 # which is precisely the reading that means selection never happened. A file survives the
 # subshell.
+#
+# IN PROCESS. The validator runs as `( vem_entry … )` out of the copy `vem_load` sourced from $t,
+# never as `bash <validator>`: the subshell is its own exit channel and keeps its cd, and the CLI
+# itself is driven only by the declared `cli` twin cells (emd_twins), which compare the two
+# byte-for-byte. A tree that is not the loaded one is refused with rc 2, which every caller's
+# sel_guard (or A00's else branch) reports as FIXTURE BROKEN.
 run_map() {
   local id="$1"
+  if [ -z "${VEM_TREE:-}" ] || [ "$VEM_TREE" != "$t" ]; then
+    echo "FIXTURE BROKEN — run_map on '$t' but the loaded validator copy is '${VEM_TREE:-none}'; load the tree with vem_load first"
+    return 2
+  fi
   if [ -z "$id" ]; then
     printf 'f\n' >> "$WORK/calls"
-    bash "$t/scripts/validate-enforcement-map.sh" 2>&1
+    ( vem_entry ) 2>&1
     return $?
   fi
   printf 's %s\n' "$id" >> "$WORK/calls"
-  bash "$t/scripts/validate-enforcement-map.sh" --arms "$id" 2>&1
+  ( vem_entry --arms "$id" ) 2>&1
 }
 
 # sel_guard <rc> <id> <output> — a validator exit of 2 is a SELECTION failure and never an
@@ -590,7 +644,7 @@ cr_enum_unseen() {
 # assertions below against a validator that could still be failing anywhere else. It carries
 # no `_i<id>_` segment, which is how the selection control below knows it is exempt.
 A00_control() {
-  t="$(fresh)"
+  fresh_t
   if run_map "" >/dev/null 2>&1; then
     ok "unmutated seed passes (the assertions below mean something)"
   else
@@ -604,7 +658,7 @@ A00_control() {
 # the map has no entry for must be reported; if the per-id walk stops reaching the ids, a
 # manifest requiring a check that does not exist gates nothing and says PASS.
 A01_i3_manifest_row_loop() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/skills/ai-dlc/steps/gate-validation.md" \
        '!done && /^\| universal +\| / { sub(/^\| universal +\| /, "&zz9, "); done=1 } { print }'; then
     assert_fires "I3  a GATE_MANIFEST row naming a check the map does not define is REPORTED" \
@@ -617,7 +671,7 @@ A01_i3_manifest_row_loop() {
 # violations from zero gates. Strip every call_sites block and each script-adjudicated
 # entry must be named.
 A02_i9_w1_call_sites_walk() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/skills/ai-dlc/enforcement-map.yaml" \
        '/^    call_sites:/ { skip=1; next }
         skip && (/^    [a-z_]+:/ || /^  - id:/ || /^[a-z]/) { skip=0 }
@@ -632,7 +686,7 @@ A02_i9_w1_call_sites_walk() {
 # W2 resolves each declared site to a file and requires that file to name the enforcer.
 # Repoint every site at a step file that has never heard of them.
 A03_i9_w2_site_resolution() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/skills/ai-dlc/enforcement-map.yaml" \
        '/^      - site: / { sub(/gate-validation\.md/, "retro.md") } { print }'; then
     assert_fires "I9  a call site whose file never names the enforcer is REPORTED (W2)" \
@@ -645,7 +699,7 @@ A03_i9_w2_site_resolution() {
 # on whatever it inherits and nothing says so at runtime. Point the first role at a key
 # aiDlcModels does not define.
 A05_i22_role_config_resolution() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/templates/settings.json.template" \
        '/"aiDlcRoles"/ { inr=1 }
         inr && !done && /"model"[[:space:]]*:/ { sub(/:[[:space:]]*"[^"]*"/, ": \"no-such-model-key\""); done=1 }
@@ -661,7 +715,7 @@ A05_i22_role_config_resolution() {
 # the BUILDER is untouched, so those files stay shipped and stop being scanned, which is
 # precisely I23's subject.
 A06_i23_rule_prose_corpus_join() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/scripts/audit-rule-files.sh" \
        '/^if MODE == "--list":/ && !done { print "corpus = [p for p in corpus if not p.startswith(\"core/team-roles/\")]"; done=1 }
         { print }'; then
@@ -680,7 +734,7 @@ A06_i23_rule_prose_corpus_join() {
 # `render-invariant-index.sh --arm-lines` attributes to I16, and on a tree mutated exactly as
 # below, `--arms I16` reports it while `--arms I3` over the same mutated tree does not.
 A07_i16_seed_root_resolution_depth() {
-  t="$(fresh)"
+  fresh_t
   local victim
   victim="$(grep -lE '[DC]_ROOT="\$\(cd "\$HERE/\.\./\.\./\.\.' "$t"/core/fixtures/*/seed.sh 2>/dev/null | head -1)"
   if [ -z "$victim" ]; then
@@ -709,7 +763,7 @@ A07_i16_seed_root_resolution_depth() {
 # band line must appear, and must MOVE), so an I79-only run carries everything it reads and
 # nothing it reads comes from another arm.
 A08_i79_band_is_derived() {
-  t="$(fresh)"
+  fresh_t
   local base_n moved_n base_out moved_out rc
   base_out="$(run_map I79)"; rc=$?
   sel_guard "$rc" I79 "$base_out"
@@ -729,7 +783,7 @@ A08_i79_band_is_derived() {
 
 # A band rule that declares no carrier at all.
 A09_i79_rule_with_no_carrier() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$SKILL_REL" \
         '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { next } { print }'; then
     assert_fires "I79: a band rule with NO **Carrier:** declaration is REPORTED" \
@@ -740,7 +794,7 @@ A09_i79_rule_with_no_carrier() {
 # A carrier that names a path which does not exist. An unresolvable carrier carries
 # nothing, and the declaration would otherwise keep reading like coverage.
 A10_i79_carrier_path_absent() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$SKILL_REL" \
         '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { print "**Carrier:** `scripts/ai-dlc/validate-nothing-at-all.sh`"; next } { print }'; then
     assert_fires "I79: a carrier naming a path that does not exist is REPORTED" \
@@ -751,7 +805,7 @@ A10_i79_carrier_path_absent() {
 # `none` with no reason. A declared exemption with no argument is the defect this repo
 # keeps finding, so "none" may not be the cheap way out.
 A11_i79_carrier_none_with_no_reason() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$SKILL_REL" \
         '/^\*\*Carrier:\*\* none -- write shape is invisible/ { print "**Carrier:** none"; next } { print }'; then
     assert_fires "I79: 'carrier: none' with no reason is REPORTED" \
@@ -764,7 +818,7 @@ A11_i79_carrier_none_with_no_reason() {
 # (Rule 24)". A carrier naming a check must be one the MAP lists, and this proves the
 # invariant looks it up rather than assuming Rule N is carried by Check N.
 A12_i79_carrier_names_absent_check() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$SKILL_REL" \
         '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { print "**Carrier:** `Check 9999`"; next } { print }'; then
     assert_fires "I79: a carrier naming a check id absent from the map is REPORTED" \
@@ -775,7 +829,7 @@ A12_i79_carrier_names_absent_check() {
 # A carrier that is neither a mappable consumer path nor a check id. SKILL.md is a RUNTIME
 # file, so a `core/...` path is a dead link for every consumer reading it.
 A13_i79_carrier_maps_to_no_layout() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$SKILL_REL" \
         '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { print "**Carrier:** `somewhere in the codebase`"; next } { print }'; then
     assert_fires "I79: a carrier that maps to no layout is REPORTED" \
@@ -789,7 +843,7 @@ A13_i79_carrier_maps_to_no_layout() {
 # SELECTED EXPLICITLY, for A08's reason: the predicate matches a phrase I79 itself emits, so
 # an I79-only run is the whole population it reads.
 A14_i79_gap_count_is_reported() {
-  t="$(fresh)"
+  fresh_t
   local out rc
   out="$(run_map I79)"; rc=$?
   sel_guard "$rc" I79 "$out"
@@ -815,7 +869,7 @@ A14_i79_gap_count_is_reported() {
 
 # (a) Rule 23's body moves under an unchanged carrier -> exactly one finding, naming the body.
 A43_i79_rule_body_drift_is_reported() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$SKILL_REL" \
         '/^\*\*\(b\) Sliced re-read of large step files\.\*\* / && !d { print $0 " A clause the carrier does not carry."; d=1; next } { print }'; then
     assert_fires_n "I79: an edit to Rule 23's body under an unchanged carrier is REPORTED as the rule body moving" \
@@ -827,7 +881,7 @@ A43_i79_rule_body_drift_is_reported() {
 # The carrier's path is the one the rule DECLARES, mapped the way I79 maps it; it is not a
 # second list of carriers.
 A44_i79_carrier_drift_is_reported() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/rules/ai-dlc-resident-discipline.md" \
         '/^\*\*\(b\) Sliced re-read\.\*\* / && !d { print $0 " A clause the rule does not have."; d=1; next } { print }'; then
     assert_fires_n "I79: an edit to Rule 23's carrier under an unchanged rule is REPORTED as the carrier moving" \
@@ -842,7 +896,7 @@ A44_i79_carrier_drift_is_reported() {
 # only beside a POSITIVE conjunct I79 itself prints -- the stamp-bound count, at least one --
 # so a corpus loop that never reached the stamp comparison cannot pass this as a clean run.
 A45_i79_neighbour_rule_edit_is_silent() {
-  t="$(fresh)"
+  fresh_t
   local out rc n
   if edit "$t/$SKILL_REL" \
         '/^Read-heavy exploration in the planning and retro steps / && !d { print $0 " An edit to the neighbouring rule."; d=1; next } { print }'; then
@@ -876,7 +930,7 @@ A45_i79_neighbour_rule_edit_is_silent() {
 # protect hook's component-keyed pattern put back the way it was, which is the copy that
 # would have gone inert — a protected-path pattern matching nothing ALLOWS.
 A15_i84_restatement_is_reported() {
-  t="$(fresh)"
+  fresh_t
   # THE PATH IS ASSEMBLED, NOT SPELLED, and spelling it is what this fixture's own control
   # caught: the retired I10 scored a fixture that NAMES a hook as one that DRIVES a hook, and this file
   # deliberately sat outside that set (H8 of validate-fixture-hygiene.sh now holds it) because the scrub loop wanted
@@ -896,7 +950,7 @@ A15_i84_restatement_is_reported() {
 # and it resolves to a directory that EXISTS — so every reader reports a full corpus and none
 # of them is looking at this sprint.
 A16_i84_template_without_slot() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/schemas/sprint-status.json" \
        '!done && /"stories_dir":/ { sub(/s\{sprint\}\//, ""); done=1 } { print }'; then
     assert_fires "I84 a stories_dir template with no sprint slot is REPORTED" \
@@ -908,7 +962,7 @@ A16_i84_template_without_slot() {
 # containing a literal `{sprint}`, which exists nowhere, so it finds an empty corpus — and an
 # empty corpus is what a clean one looks like.
 A17_i84_reader_never_substitutes() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/scripts/validate-mandatory-rules.sh" \
        '/stories_dir_sprint_placeholder/ { next } { print }'; then
     assert_fires "I84 a reader of stories_dir that never names the slot is REPORTED" \
@@ -920,7 +974,7 @@ A17_i84_reader_never_substitutes() {
 # key is replaced by a comment spelling the slot, so the file still contains `{sprint}` and no
 # code line does -- the shape a whole-file grep acquits.
 A17b_i84_slot_only_in_a_comment_is_reported() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/scripts/validate-mandatory-rules.sh" \
        '/stories_dir_sprint_placeholder/ { print "# composes s{sprint} from the template"; next } { print }'; then
     assert_fires "I84 a reader that names the slot only in a COMMENT is REPORTED" \
@@ -932,7 +986,7 @@ A17b_i84_slot_only_in_a_comment_is_reported() {
 # validator's own probe must then report the comment-only seed as scored-as-naming, so the
 # revert dies on a message only the reverted predicate can produce.
 A17c_i84_whole_file_slot_grep_mutant_is_reported() {
-  t="$(fresh)"
+  fresh_t
   mutant_case i84-slot-whole-file-grep \
     "I84 mutant: i84_names_slot reverted to a whole-file grep is REPORTED by the slot probe" \
     "appears ONLY in a comment" 0
@@ -941,7 +995,7 @@ A17c_i84_whole_file_slot_grep_mutant_is_reported() {
 # The declaration going missing from its home is REPORTED, rather than leaving every reader
 # resolving an empty template — which composes the repo root, not nothing.
 A18_i84_declaration_missing() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/schemas/sprint-status.json" \
        '/"stories_dir":/ { next } { print }'; then
     assert_fires "I84 stories_dir absent from its declared home is REPORTED" \
@@ -959,7 +1013,7 @@ A18_i84_declaration_missing() {
 # passes for a reason unrelated to anything being right — so what replaced it is an
 # assertion that the derivation is THERE. Break the tree read.
 A19_i74_install_derives() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/scripts/install.sh" \
        '{ gsub(/core\/fixtures\/"\*\//, "core/schemas/\"*/") } { print }'; then
     assert_fires "I74 install.sh no longer deriving the ship set from core/fixtures/ is REPORTED" \
@@ -974,7 +1028,7 @@ A19_i74_install_derives() {
 # where a distribution-only battery became the reference consumer's pole, and no join can
 # see it because every join resolves the same marker this loop stopped resolving.
 A20_i74_install_excludes_marker() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/scripts/install.sh" \
        '{ sub(/\[ -f "\$_fd\.dist-only" \] && continue/, "") } { print }'; then
     assert_fires "I74 an install derivation that stops excluding .dist-only is REPORTED" \
@@ -989,7 +1043,7 @@ A20_i74_install_excludes_marker() {
 # mutation, so `edit` is not the helper — it rewrites through awk and an empty result is
 # what we want.
 A21_i74_marker_with_no_reason() {
-  t="$(fresh)"
+  fresh_t
   local m="$t/core/fixtures/plan-shape/.dist-only"
   if [ ! -s "$m" ]; then
     bad "FIXTURE BROKEN — plan-shape/.dist-only is already empty in the seed, so truncating it is not a mutation and the assertion below would test an unchanged tree."
@@ -1006,7 +1060,7 @@ A21_i74_marker_with_no_reason() {
 # consumer's own tests/fixtures/. That is why it is the side I8 joins now that install.sh
 # derives. Drop one name and the fixture is orphaned in every consumer's tree forever.
 A22_i8_uninstall_orphan() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/scripts/uninstall.sh" \
        '{ sub(/ check-23-draft-stamps /, " ") } { print }'; then
     assert_fires "I8  a fixture install ships that uninstall.sh does not name is REPORTED" \
@@ -1022,7 +1076,7 @@ A22_i8_uninstall_orphan() {
 # operator must record to clear a BLOCKING adjudication row. The row told them a verdict
 # clears the block and deleted which verdict.
 A23_i85_backtick_in_message() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/skills/ai-dlc-update/reconcile/layer-drift.sh" \
        '{ gsub(/\\`still-additive\\`/, "`still-additive`") } { print }'; then
     assert_fires "I85 an unescaped backtick inside an operator-facing message is REPORTED" \
@@ -1037,7 +1091,7 @@ A23_i85_backtick_in_message() {
 # in the same run, because "no findings" and "an instrument that cannot find anything"
 # are the same output otherwise.
 A24_i85_fails_closed_when_blind() {
-  t="$(fresh)"
+  fresh_t
   mutant_case i85-blinded-scanner \
     "I85 a BLINDED scanner reports its own probe rather than a clean tree" \
     "positive probe was NOT reported" 0
@@ -1049,7 +1103,7 @@ A24_i85_fails_closed_when_blind() {
 # tracking and those six correct files enter the finding set — which is how a lint gets
 # turned off. The negative probe is what refuses that, so break the skip and require it.
 A25_i85_heredoc_narrowing_holds() {
-  t="$(fresh)"
+  fresh_t
   mutant_case i85-heredoc-unnarrowed \
     "I85 losing the quoted-heredoc narrowing is REPORTED by its own negative probe" \
     "negative probe WAS reported" 0
@@ -1062,7 +1116,7 @@ A25_i85_heredoc_narrowing_holds() {
 # SPLIT by install.sh on every consumer, so the fixture was green here and exited 2 there —
 # a permanent stop on the consumer's pre-push, which is how it was found (PC-S326).
 A26_i33b_two_step_walk() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/fixtures/whole-read-pool/run.sh" \
        '{ sub(/^  SPRINT_SCHEMA="\$ROOT\/core\/schemas\/sprint-status\.json"$/, "  SPRINT_SCHEMA=\"$SCRIPTS_DIR/../schemas/sprint-status.json\"") } { print }'; then
     assert_fires "I33b a dirname VARIABLE walked up into a sibling subtree is REPORTED" \
@@ -1085,7 +1139,7 @@ A26_i33b_two_step_walk() {
 # The seed puts the OFFENDER SECOND, behind a file declaring the same name, because a
 # one-file seed cannot tell "scans every file" from "scans the first one".
 A27b_i33b_resets_state_per_file() {
-  t="$(fresh)"
+  fresh_t
   # Two files, same variable name. The FIRST declares `d` and never walks up; the SECOND
   # declares `d` and does walk up. Only the second is a finding, and it is only reachable if
   # the scan cleared `seen` at the boundary.
@@ -1114,7 +1168,7 @@ A27b_i33b_resets_state_per_file() {
 # walk-up beside it — same variable, same braces, differing only in whether the brace closes
 # before `/../` — must be. A29's own remedy text is the model.
 A27c_i33b_pattern_substitution_is_not_a_walk() {
-  t="$(fresh)"
+  fresh_t
   mkdir -p "$t/core/fixtures/zz-i33b-patsub" 2>/dev/null
   # The near-miss: a dirname variable used in pattern substitution. Not a walk.
   printf 'A="$(dirname "$X")"\nB="${A/../foo}"\n' > "$t/core/fixtures/zz-i33b-patsub/run.sh"
@@ -1162,7 +1216,7 @@ A27c_i33b_pattern_substitution_is_not_a_walk() {
 # exactly ONE line (control: an impossible anchor returns 0), the mutant fires this arm and
 # no other, and the unmutated subject stays silent.
 A27_i33b_fails_closed_when_blind() {
-  t="$(fresh)"
+  fresh_t
   mutant_case i33b-blinded-predicate \
     "I33b a BLINDED predicate reports its own probe rather than a clean tree" \
     "positive probe was NOT reported" 0
@@ -1174,7 +1228,7 @@ A27_i33b_fails_closed_when_blind() {
 # prescribing the retire sequence. A restated literal drifts silently — the case arm stops
 # matching and a pull carrying an adjudicated row reads exactly like one carrying none.
 A28_i86_apply_restates_token() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/skills/ai-dlc-update/reconcile/apply.sh" \
        '{ if (!done && index($0, "ADJ_ROW_TOKEN=\"$(sed")) { print "ADJ_ROW_TOKEN=\"adjudicated\""; done=1; next } } { print }'; then
     assert_fires "I86 apply.sh restating the row token literal is REPORTED" \
@@ -1187,7 +1241,7 @@ A28_i86_apply_restates_token() {
 # leaves apply.sh's suppression unable to fire on any pull, forever — which is this repo's
 # recurring class arriving inside the guard against it.
 A29_i86_writer_stops_emitting() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/core/skills/ai-dlc-update/reconcile/layer-drift.sh" \
        '{ gsub(/\$\{ADJ_ROW_TOKEN\}=/, "adjudicatedX=") } { print }'; then
     assert_fires "I86 a declared row token that is never written into a row is REPORTED" \
@@ -1231,7 +1285,7 @@ A29_i86_writer_stops_emitting() {
 # the owner does not declare". Direction 1 cannot also fire here -- the owner's set shrank, so
 # every remaining member is still named -- and the count is what says so.
 A30_i112_owner_loses_a_member() {
-  t="$(fresh)"
+  fresh_t
   local members last
   members="$(cr_owner_members "$t/$CR_OWNER")"
   last="$(printf '%s\n' "$members" | tail -1)"
@@ -1251,7 +1305,7 @@ A30_i112_owner_loses_a_member() {
 # explains is a value a reviewer can write and the gate has no stated behaviour for. The token
 # is assembled: written whole it would be a fourth verdict name sitting in the tree.
 A31_i112_owner_gains_an_untaught_member() {
-  t="$(fresh)"
+  fresh_t
   local newm
   newm="DEF"; newm="${newm}ERRED"
   if edit "$t/$CR_OWNER" \
@@ -1267,7 +1321,7 @@ A31_i112_owner_gains_an_untaught_member() {
 # set comparison alone could never have seen it and the span scan exists. The SPAN finding
 # fires and neither set direction moves, because the bullet and the template are untouched.
 A32_i112_nonmember_in_check1_prose() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="CHANGES"; tok="${tok}-REQUESTED"
   if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
@@ -1282,7 +1336,7 @@ A32_i112_nonmember_in_check1_prose() {
 # history: it is assembled from two ordinary words, and the arm must report it for the shape of
 # the token rather than for its identity.
 A33_i112_unknown_compound_in_check1_prose() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="NOT_A"; tok="${tok}_VERDICT"
   if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
@@ -1306,7 +1360,7 @@ A33_i112_unknown_compound_in_check1_prose() {
 # indented comment is a shape a markdown author writes, it keeps the baseline clean, and it is
 # the only seed in this file that dies alone when that clause is dropped.
 A34_i112_comment_wrapped_token_is_acquitted() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="NOT_A"; tok="${tok}_VERDICT"
   if edit "$t/$CR_READER" "$(cr_after_check1 "  <!-- $tok -->")"; then
@@ -1325,7 +1379,7 @@ A34_i112_comment_wrapped_token_is_acquitted() {
 # enum member stops being one the day it is renamed, and this assertion would then fail reading
 # exactly like the exclusion breaking.
 A35_i112_schema_enum_token_is_acquitted() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="$(cr_enum_unseen "$t")"
   if [ -z "$tok" ]; then
@@ -1343,7 +1397,7 @@ A35_i112_schema_enum_token_is_acquitted() {
 # agreement forever. Renaming the heading is how that happens in practice -- a role file
 # reorganised by someone who never heard of this arm.
 A36_i112_owner_heading_renamed() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$CR_OWNER" \
        '/^## Verdict$/ && !d { $0 = $0 " Values"; d=1 } { print }'; then
     assert_fires_n "I112 an owner whose \`## Verdict\` heading moved REPORTS rather than comparing two empty sets" \
@@ -1357,7 +1411,7 @@ A36_i112_owner_heading_renamed() {
 # So this asserts all three names, derived from the template rather than written here -- an
 # assertion naming one of them would pass against a bullet that lost two.
 A37_i112_reader_bullet_deleted() {
-  t="$(fresh)"
+  fresh_t
   local members want n
   members="$(cr_owner_members "$t/$CR_OWNER")"
   n="$(printf '%s\n' "$members" | grep -c .)"
@@ -1382,7 +1436,7 @@ A37_i112_reader_bullet_deleted() {
 # must fire anyway, because the arm reads the delimited form and nothing else. A widening of
 # that grammar to bare words passes every other assertion in this file.
 A38_i112_bullet_member_loses_its_delimiters() {
-  t="$(fresh)"
+  fresh_t
   local members last
   members="$(cr_owner_members "$t/$CR_OWNER")"
   last="$(printf '%s\n' "$members" | LC_ALL=C sort -u | tail -1)"
@@ -1410,7 +1464,7 @@ A38_i112_bullet_member_loses_its_delimiters() {
 # seeds a COMPOUND token: without this one, the half of the arm that covers the uncatchable
 # shape has no subject at all.
 A39_i112_noncompound_nonmember_on_the_bullet() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="REJ"; tok="${tok}ECTED"
   if edit "$t/$CR_READER" \
@@ -1428,7 +1482,7 @@ A39_i112_noncompound_nonmember_on_the_bullet() {
 # a later author widening the grammar to bare words finds this assertion failing and reads the
 # refutation before shipping the false positives it predicts.
 A40_i112_noncompound_nonmember_in_prose_is_the_limit() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="REJ"; tok="${tok}ECTED"
   if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
@@ -1458,7 +1512,7 @@ A40_i112_noncompound_nonmember_in_prose_is_the_limit() {
 # result, so a seed that broke the file would be reported as a broken fixture rather than
 # scored as this assertion's kill.
 A41_i112_enum_exclusion_is_derived() {
-  t="$(fresh)"
+  fresh_t
   local schema tok
   schema="$(cr_enum_schema "$t")"
   if [ -z "$schema" ]; then
@@ -1513,7 +1567,7 @@ sys.stdout.write(s)
 # stops being a discriminating seed and quietly becomes a second copy of A36, so the mutated
 # owner is required to still CONTAIN an unanchored match before the verdict is read.
 A42_i112_owner_grammar_is_anchored() {
-  t="$(fresh)"
+  fresh_t
   local anchored unanchored
   anchored="$(grep -cE '^[A-Z_]+( \| [A-Z_]+)+$' "$t/$CR_OWNER")" || anchored=0
   if [ "$anchored" -ne 1 ]; then
@@ -1601,7 +1655,7 @@ qa_bullets_present() {
 # gone the QA set is empty and so is nothing on the bullet's side of the comparison that could
 # say so. The refusal is the QA-specific one, not the member-count one beneath it.
 A58_i112_qa_owner_loses_verdict_heading() {
-  t="$(fresh)"
+  fresh_t
   qa_control "I112 QA control: the unmutated copy is silent before qa.md loses \`## Verdict\`" || return 0
   if edit "$t/$QA_OWNER" '/^## Verdict$/ && !d { d=1; next } { print }'; then
     assert_fires_n "I112 qa.md losing its bare \`## Verdict\` heading REPORTS rather than comparing an empty set" \
@@ -1614,7 +1668,7 @@ A58_i112_qa_owner_loses_verdict_heading() {
 # QA can write and the gate has no stated behaviour for. The message names the QA owner, and the
 # count says the code-review comparison did not also move.
 A59_i112_qa_owner_gains_an_untaught_member() {
-  t="$(fresh)"
+  fresh_t
   local newm
   newm="WAI"; newm="${newm}VED"
   qa_control "I112 QA control: the unmutated copy is silent before qa.md gains a member" || return 0
@@ -1630,7 +1684,7 @@ A59_i112_qa_owner_gains_an_untaught_member() {
 # that POOLED the two bullets, or an owner set built as the union, would read it as declared and
 # stay silent. Per owner, the QA bullet teaches a value qa.md does not declare.
 A60_i112_cr_member_on_the_qa_bullet() {
-  t="$(fresh)"
+  fresh_t
   local tok
   qa_bullets_present "$t" || return 0
   tok="$(qa_first_only_in "$t/$CR_OWNER" "$t/$QA_OWNER")"
@@ -1650,7 +1704,7 @@ A60_i112_cr_member_on_the_qa_bullet() {
 # A60's mirror: the QA-only member on the code-review bullet. Same pooled-reader blindness, the
 # other owner's message.
 A61_i112_qa_member_on_the_cr_bullet() {
-  t="$(fresh)"
+  fresh_t
   local tok
   qa_bullets_present "$t" || return 0
   tok="$(qa_first_only_in "$t/$QA_OWNER" "$t/$CR_OWNER")"
@@ -1673,7 +1727,7 @@ A61_i112_qa_member_on_the_cr_bullet() {
 # QA member is unnamed. The count is 2 by construction, so both messages are asserted -- one
 # message at that count would leave the other cell unread.
 A62_i112_bullets_merged_into_one() {
-  t="$(fresh)"
+  fresh_t
   local extra qall
   qa_bullets_present "$t" || return 0
   extra="$(qa_only_in "$t/$QA_OWNER" "$t/$CR_OWNER" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')"
@@ -1705,7 +1759,7 @@ A62_i112_bullets_merged_into_one() {
 # this token, so a comparison pooling the two bullets would read it as named; per owner, the
 # code-review bullet does not, and the code-review owner's direction 1 fires.
 A63_i112_qa_member_in_cr_template() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="$(qa_first_only_in "$t/$QA_OWNER" "$t/$CR_OWNER")"
   if [ -z "$tok" ]; then
@@ -1733,7 +1787,7 @@ qa_dup_bullet() {
 # teach a code-review member as a gate-2 pass with every comparison green. The count is what
 # says so. One finding: the second bullet's token is not compound, so the span scan cannot move.
 A64_i112_second_qa_bullet() {
-  t="$(fresh)"
+  fresh_t
   local tok
   qa_bullets_present "$t" || return 0
   tok="$(qa_first_only_in "$t/$CR_OWNER" "$t/$QA_OWNER")"
@@ -1751,7 +1805,7 @@ A64_i112_second_qa_bullet() {
 # --- Assertion 65: I112 — a second code-review bullet -------------------------
 # A64's mirror, teaching the QA-only member on a second code-review bullet.
 A65_i112_second_cr_bullet() {
-  t="$(fresh)"
+  fresh_t
   local tok
   qa_bullets_present "$t" || return 0
   tok="$(qa_first_only_in "$t/$QA_OWNER" "$t/$CR_OWNER")"
@@ -1786,7 +1840,7 @@ qa_seed_compound_member() {
 # the union, which is what ships, does not. Its FIRE twin is A33: the same insertion point and the
 # same compound shape, belonging to no set.
 A66_i112_qa_compound_member_in_prose_is_acquitted() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="HOLD_FOR"; tok="${tok}_PVC"
   qa_bullets_present "$t" || return 0
@@ -1798,7 +1852,7 @@ A66_i112_qa_compound_member_in_prose_is_acquitted() {
 # --- Assertion 67: I112 — a compound code-review member in prose is acquitted -
 # A66's mirror: a span scan excusing only the QA set reports this one.
 A67_i112_cr_compound_member_in_prose_is_acquitted() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="APPROVED_WITH"; tok="${tok}_NITS"
   qa_bullets_present "$t" || return 0
@@ -1812,7 +1866,7 @@ A67_i112_cr_compound_member_in_prose_is_acquitted() {
 # gone, the QA set is empty; without the guard the comparison runs and reports the bullet's members
 # as undeclared, which is a finding about the wrong thing. The refusal is the count one.
 A68_i112_qa_template_line_deleted() {
-  t="$(fresh)"
+  fresh_t
   local n
   n="$(grep -cE '^[A-Z_]+( \| [A-Z_]+)+$' "$t/$QA_OWNER")" || n=0
   if [ "$n" -ne 1 ]; then
@@ -1832,7 +1886,7 @@ A68_i112_qa_template_line_deleted() {
 # and reports the member as undeclared by qa.md; anchored at column one it reads the real bullet
 # and the bullet counter does not count the sentence. Silent.
 A69_i112_midline_qa_prefix_is_not_the_bullet() {
-  t="$(fresh)"
+  fresh_t
   local tok bt
   bt="$(printf '\140')"
   qa_bullets_present "$t" || return 0
@@ -1879,7 +1933,7 @@ cv_append() { # <line built with q as the quote> -> awk program appending it
 # green before this arm. One finding: the stray compare. The rename stays in the verdict shape,
 # so finding 2 cannot also fire.
 A46_i117_compared_member_renamed() {
-  t="$(fresh)"
+  fresh_t
   local was now
   was="${CV_NM}-NO-RECORDS"; now="${CV_NM}-EMPTY-CORPUS"
   if edit "$t/$CV_OWNER" "{ sub(/\"${was}\" :/, \"\\\"${now}\\\" :\") } { print }"; then
@@ -1890,7 +1944,7 @@ A46_i117_compared_member_renamed() {
 
 # --- Assertion 47: I117 — an emitter the grammar cannot spell --------------
 A47_i117_variable_emitter() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$CV_OWNER" "$(cv_insert_in_block '"  if (z) { console.log(cv_v); process.exit(2); }"')"; then
     assert_fires_n "I117 a console.log of a variable inside the --cite block is REPORTED, not dropped" \
                    "prints no literal verdict" 1
@@ -1901,7 +1955,7 @@ A47_i117_variable_emitter() {
 # A NEW emitter rather than a rename, so no reader compares it and the stray finding cannot
 # also fire: the off-shape cell moves alone.
 A48_i117_offshape_member() {
-  t="$(fresh)"
+  fresh_t
   if edit "$t/$CV_OWNER" "$(cv_insert_in_block '"  if (z) { console.log(" q "Unverified" q "); process.exit(2); }"')"; then
     assert_fires_n "I117 a verdict outside the MATCH / NOMATCH-<WORD> shape is REPORTED" \
                    "shape: Unverified" 1
@@ -1910,7 +1964,7 @@ A48_i117_offshape_member() {
 
 # --- Assertion 49: I117 — a reader comparing a non-member ------------------
 A49_i117_reader_compares_nonmember() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="${CV_NM}-NOT-A-VERDICT"
   if edit "$t/$CV_READER" "$(cv_append "\"[ \" q \"\$o\" q \" = \" q \"${tok}\" q \" ] && :\"")"; then
@@ -1923,7 +1977,7 @@ A49_i117_reader_compares_nonmember() {
 # One property apart from A49: the token is now a member, because the owner prints it inside
 # the block. A scan that reported every quoted verdict-shaped literal would fire here.
 A50_i117_new_member_compared_is_silent() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="${CV_NM}-NOT-A-VERDICT"
   if edit "$t/$CV_OWNER" "$(cv_insert_in_block "\"  if (z) { console.log(\" q \"${tok}\" q \"); process.exit(2); }\"")" \
@@ -1937,7 +1991,7 @@ A50_i117_new_member_compared_is_silent() {
 # comment mentioning a verdict. This is the narrowing that took the false-positive set to
 # zero, asserted so it cannot be widened back without a red here.
 A51_i117_unquoted_mention_is_silent() {
-  t="$(fresh)"
+  fresh_t
   local tok
   tok="${CV_NM}-NOT-A-VERDICT"
   if edit "$t/$CV_READER" "$(cv_append "\"# ${tok} is only mentioned here\"")"; then
@@ -1974,7 +2028,7 @@ rs_drop_row() { printf '%s' "!(\$1 == \"$RS_FX\" && \$2 == \"$RS_CORE\") { print
 # --- Assertion 52: I118 — the motivating omission ---------------------------
 # A mapped fixture runs a core hook from run.sh and its rows lose that hook. Exactly one finding.
 A52_i118_row_omitted() {
-  t="$(fresh)"
+  fresh_t
   rs_world "bash \"\$D_ROOT/${RS_CORE}\" < in.json"
   if edit "$t/.ai-dlc-fixture-readsets.tsv" "BEGIN { FS = \"\\t\" } $(rs_drop_row)"; then
     assert_fires_n "I118 a mapped fixture whose rows omit a core hook its run.sh runs is REPORTED" \
@@ -1987,7 +2041,7 @@ A52_i118_row_omitted() {
 # comment rule is the narrowing that took 22 comment-only mentions out of the false-positive
 # set, asserted so it cannot be widened back without a red here.
 A53_i118_commented_mention_is_silent() {
-  t="$(fresh)"
+  fresh_t
   rs_world "  # bash \"\$D_ROOT/${RS_CORE}\" < in.json"
   if edit "$t/.ai-dlc-fixture-readsets.tsv" "BEGIN { FS = \"\\t\" } $(rs_drop_row)"; then
     assert_silent "I118 the same core hook path on a comment line is silent with its row dropped (A52's twin)"
@@ -1999,7 +2053,7 @@ A53_i118_commented_mention_is_silent() {
 # the postcompact-rulebook-recovery shape, and it dies if seed.sh leaves the corpus or the
 # `../..` spelling leaves the grammar.
 A54_i118_seed_resolved_omission() {
-  t="$(fresh)"
+  fresh_t
   rs_world "echo \"FAIL: ${RS_HOOK} did not fire\"" "HOOK=\"\$HERE/${RS_UP}\""
   if edit "$t/.ai-dlc-fixture-readsets.tsv" "BEGIN { FS = \"\\t\" } $(rs_drop_row)"; then
     assert_fires_n "I118 a hook resolved in seed.sh through ../../hooks/ with no row is REPORTED" \
@@ -2032,7 +2086,7 @@ WT_UNPRUNE='$0 ~ /^i54_files=/ { s = "\\( -name .git -o -path \"$REPO_ROOT/.clau
 
 # --- Assertion 55: I54 — an offender under .claude/worktrees/ is silent ------
 A55_i54_agent_worktree_offender_is_silent() {
-  t="$(fresh)"
+  fresh_t
   wt_seed ".claude/worktrees/agent-x"
   assert_silent "I54 an offender inside .claude/worktrees/agent-x/ is not scanned (BL-401)"
 }
@@ -2041,7 +2095,7 @@ A55_i54_agent_worktree_offender_is_silent() {
 # One property apart from A55: the same offender in a sibling whose name merely STARTS with
 # `worktrees`. A prune keyed on a name prefix or a glob would silence this too.
 A56_i54_worktrees_sibling_still_fires() {
-  t="$(fresh)"
+  fresh_t
   wt_seed ".claude/worktrees-not"
   assert_fires_n "I54 the same offender in .claude/worktrees-not/ is still REPORTED (A55's twin)" \
                  ".claude/worktrees-not/scripts/zz.sh:3:" 1
@@ -2053,7 +2107,7 @@ A56_i54_worktrees_sibling_still_fires() {
 # own reasons cannot score the mutant below as a kill. Then `edit` restores the old find line
 # under its `cmp -s` guard, and the agent-x offender must be reported.
 A57_i54_unpruned_find_mutant_reports_worktree() {
-  t="$(fresh)"
+  fresh_t
   wt_seed ".claude/worktrees/agent-x"
   mutant_case i54-unpruned-find \
     "I54 mutant: restoring the unpruned find line REPORTS the agent-x offender" \
@@ -2065,7 +2119,7 @@ A57_i54_unpruned_find_mutant_reports_worktree() {
 # rather than I58 skipping a tree with no HEAD. The mutant reader answers HEAD's set for the probe
 # commit too, and only the negative probe can see that.
 A70_i58_reader_ignoring_its_ref_is_reported() {
-  t="$(fresh)"
+  fresh_t
   i58_git_world "$t" || exit 2
   mutant_case i58-reader-ignores-ref \
     "I58 mutant: a layer-drift.sh whose --adjudicated-codes ignores its ref is REPORTED by the negative probe" \
@@ -2079,7 +2133,7 @@ A70_i58_reader_ignoring_its_ref_is_reported() {
 # from the reused value and not from some other row. Its header row is i17-reuse-hardcoded.
 A71_i17_misplaced_team_roles_is_reported() {
   local out rc
-  t="$(fresh)"
+  fresh_t
   mutant_case i17-teamroles-misplaced \
     "I17 mutant: consumer_path sending team-roles/ to a wrong non-empty path is REPORTED on the row that reuses the probe's answer" \
     "sends core/team-roles/ to '/nonexistent-consumer/.claude/team-rolesX/PROBE'" 1
@@ -2105,7 +2159,7 @@ A71_i17_misplaced_team_roles_is_reported() {
 # against itself, and the shortfall. The count is the point -- every unanswered row already fails
 # its own check, so a validator with the shortfall guard deleted reports one finding, not two.
 A72_i17_batch_dying_midway_is_reported() {
-  t="$(fresh)"
+  fresh_t
   mutant_case i17-batch-dies-midway \
     "I17 mutant: the batched evaluation dying partway is REPORTED as a shortfall, never read as the rows after it passing" \
     "it died partway, and every row it never answered is reported above as its own finding" 2
@@ -2114,7 +2168,7 @@ A72_i17_batch_dying_midway_is_reported() {
 # I17'S PROBE READS ITS ANSWER OUT OF THE ONE BATCHED BASH. With consumer_path() gone from apply.sh
 # that answer is empty, and the probe must report the check as vacuous -- exactly one finding, its own.
 A73_i17_unevaluable_writer_is_reported() {
-  t="$(fresh)"
+  fresh_t
   mutant_case i17-probe-unevaluable \
     "I17 mutant: apply.sh with no consumer_path() is REPORTED by the probe as an unevaluable writer" \
     "I17 could not evaluate apply.sh's consumer_path()" 1
@@ -2157,15 +2211,16 @@ if [ "$N_DEFINED" -ne "$N_LISTED" ]; then
   exit 2
 fi
 
-# `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
-# tree. It is the unit the pool schedules and it is also how a human runs a single
-# assertion while working on it.
+# emd_run_one <assertion> — one assertion against one freshly copied tree, in the CALLER's
+# subshell. It is the unit the in-process pool schedules, `( emd_run_one <name> )`, and the body
+# of `--run-one`, which is how a human runs a single assertion while working on it. It ends in
+# `exit`, so it is only ever called inside a subshell or as the last thing a process does.
 #
-# IT RUNS ONLY WHAT THE SHARDS WOULD. A name that is a defined function but not in $NAMES is
+# IT RUNS ONLY WHAT THE POOL WOULD. A name that is a defined function but not in $NAMES is
 # refused, so a hand-run of an undispatched arm fails instead of printing `ok` for a guard the
 # suite never executes.
-if [ "${1:-}" = "--run-one" ]; then
-  FN="${2:-}"
+emd_run_one() {
+  FN="${1:-}"
   declare -F "$FN" >/dev/null 2>&1 || {
     echo "FIXTURE ERROR: --run-one needs an assertion function name; '$FN' is not one" >&2
     exit 2
@@ -2181,6 +2236,7 @@ $FN
   esac
   seed_tree
   trap 'rm -rf "$WORK"' EXIT
+  seed_once "$WORK"
   : > "$WORK/calls"
   "$FN"
   fn_rc=$?
@@ -2192,7 +2248,7 @@ $FN
   fi
 
   # THE POSITIVE CONTROL THAT SELECTION ACTUALLY HAPPENED, and it is here rather than only in
-  # the parent because this is the process that made the calls.
+  # the parent because this is the subshell that made the calls.
   #
   # A conversion that silently stops selecting must turn the fixture RED, not merely make it
   # slow. Both sides are derived from the same string: what this assertion SHOULD have done
@@ -2218,6 +2274,56 @@ $FN
   fi
   [ "$fails" -eq 0 ] || exit 1
   exit 0
+}
+
+# emd_twins — THE CLI TWIN CELLS, and the only places this fixture starts the validator as a
+# program. Every other run is `( vem_entry … )`; these prove that answer IS the CLI's, one cell
+# per distinct CLI outcome the assertions exercise: the whole-file pass (A00's mode), a selected
+# `--arms` pass, and a selected `--arms` refusal (rc 1). Each cell runs the in-process entry and
+# `FXCELL=cli-<k> bash <validator>` on the SAME tree with the same arguments, under this file's
+# own shell options, and compares stdout, stderr and exit byte for byte. The refusal input is
+# A01's seeded offender, so the passing and the refusing inputs differ by one manifest token,
+# and the two `--arms` answers are required to differ, so two empty runs cannot agree into a pass.
+emd_twins() {
+  local k ok_all=1 why=""
+  seed_tree
+  trap 'rm -rf "$WORK"' EXIT
+  seed_once "$WORK"
+  : > "$WORK/calls"
+  fresh_t
+  tw_cmp() { # tw_cmp <cell suffix> [validator args...]
+    local k="$1" ur=0 cr=0; shift
+    ( vem_entry "$@" ) > "$WORK/tw.$k.uo" 2> "$WORK/tw.$k.ue" || ur=$?
+    FXCELL="cli-$k" bash "$t/scripts/validate-enforcement-map.sh" "$@" > "$WORK/tw.$k.co" 2> "$WORK/tw.$k.ce" || cr=$?
+    printf '%s' "$cr" > "$WORK/tw.$k.rc"
+    if cmp -s "$WORK/tw.$k.uo" "$WORK/tw.$k.co" && cmp -s "$WORK/tw.$k.ue" "$WORK/tw.$k.ce" && [ "$ur" = "$cr" ]; then
+      return 0
+    fi
+    ok_all=0; why="$why $k(in-process rc=$ur cli rc=$cr)"
+  }
+  tw_cmp full-pass
+  tw_cmp arms-pass --arms I3
+  if ! edit "$t/core/skills/ai-dlc/steps/gate-validation.md" \
+       '!done && /^\| universal +\| / { sub(/^\| universal +\| /, "&zz9, "); done=1 } { print }'; then
+    exit 2
+  fi
+  tw_cmp arms-refuse --arms I3
+  [ "$(cat "$WORK/tw.full-pass.rc")" = 0 ] && grep -qF "OK: enforcement-map.yaml in sync with" "$WORK/tw.full-pass.co" \
+    && [ "$(cat "$WORK/tw.arms-pass.rc")" = 0 ] && grep -qF "OK: enforcement-map.yaml in sync with" "$WORK/tw.arms-pass.co" \
+    && [ "$(cat "$WORK/tw.arms-refuse.rc")" = 1 ] && grep -qF "FAIL: GATE_MANIFEST names check zz9" "$WORK/tw.arms-refuse.ce" \
+    && ! cmp -s "$WORK/tw.arms-pass.ce" "$WORK/tw.arms-refuse.ce" \
+    || { ok_all=0; why="$why outcomes(full=$(cat "$WORK/tw.full-pass.rc") pass=$(cat "$WORK/tw.arms-pass.rc") refuse=$(cat "$WORK/tw.arms-refuse.rc"))"; }
+  if [ "$ok_all" = 1 ]; then
+    ok "TWIN the in-process vem_entry equals bash <validator> byte-for-byte (stdout, stderr, exit) on a whole-file pass (rc 0), an --arms I3 pass (rc 0) and an --arms I3 refusal (rc 1)"
+  else
+    bad "TWIN the in-process vem_entry differs from the CLI:$why"
+  fi
+  [ "$fails" -eq 0 ] || exit 1
+  exit 0
+}
+
+if [ "${1:-}" = "--run-one" ]; then
+  emd_run_one "${2:-}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -2247,16 +2353,19 @@ if [ "${1:-}" = "--matrix" ]; then
   echo "enforcement-map-derivations mode: FULL"
   seed_tree
   trap 'rm -rf "$WORK"' EXIT
+  seed_once "$WORK"
   : > "$WORK/calls"
   MX_ARMS="$(printf '%s\n' "$NAMES" | while IFS= read -r _n; do arm_id_of "$_n"; done | grep . | sort -u | paste -sd, -)"
   MX_NARMS="$(tr ',' '\n' <<<"$MX_ARMS" | grep -c .)" || MX_NARMS=0
   [ "$MX_NARMS" -ge 10 ] || { echo "FIXTURE ERROR: derived $MX_NARMS arm id(s) from the assertion names" >&2; exit 2; }
 
   # mx_grid <label> <tree> — one validator run listing every arm; sets MX_TRIPPED to the arms
-  # that reported. rc 2 is a selection failure and nothing was measured.
+  # that reported. rc 2 is a selection failure and nothing was measured. In process, out of the
+  # copy vem_load sourced from <tree> (once per tree, after its mutation landed).
   mx_grid() {
     local out rc a c
-    out="$(bash "$2/scripts/validate-enforcement-map.sh" --arms "$MX_ARMS" 2>&1)"
+    [ "${VEM_TREE:-}" = "$2" ] || { bad "FIXTURE BROKEN — mx_grid on '$2' but the loaded validator copy is '${VEM_TREE:-none}'"; exit 2; }
+    out="$( ( vem_entry --arms "$MX_ARMS" ) 2>&1)"
     rc=$?
     sel_guard "$rc" "$MX_ARMS" "$out"
     MX_TRIPPED=""
@@ -2274,6 +2383,7 @@ if [ "${1:-}" = "--matrix" ]; then
   }
 
   t="$(fresh "$WORK/mx-base")" || exit 2
+  vem_load "$t"
   mx_grid unmutated "$t"
   if [ -z "$MX_TRIPPED" ] && case "$MX_OUT" in *"OK: enforcement-map.yaml in sync with"*) true ;; *) false ;; esac; then
     ok "MATRIX base: the unmutated tree is green on all $MX_NARMS arms"
@@ -2290,6 +2400,7 @@ if [ "${1:-}" = "--matrix" ]; then
     t="$(fresh "$WORK/mx-$mx_n")" || exit 2
     [ "$mx_m" != i54-unpruned-find ] || wt_seed ".claude/worktrees/agent-x"
     mutant_apply "$mx_m" "$t" || continue
+    vem_load "$t"
     mx_grid "$mx_m" "$t"
     printf '  MATRIX-MUTANT %s tripped=[%s]\n' "$mx_m" "${MX_TRIPPED# }"
     mx_bad=""
@@ -2321,12 +2432,16 @@ echo "enforcement-map-derivations mode: PUSH"
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$OUT"' EXIT
-SELF="$HERE/$(basename "$0")"
+EMD_OUT="$OUT"
+# ONE seed for the whole run, inside $OUT; every assertion copies it.
+seed_once "$OUT"
 
 # The control, first and alone. Its verdict licenses every assertion after it, so a failure
-# here stops the run rather than reporting unattributable kills.
+# here stops the run rather than reporting unattributable kills. Like every assertion it runs
+# in a SUBSHELL of this process, never a re-entry of this file: `exit` stays the worker's verdict
+# channel and nothing it defines or counts leaks back here.
 CTL="$(printf '%s\n' "$NAMES" | head -1)"
-EMD_OUT="$OUT" bash "$SELF" --run-one "$CTL" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
+( emd_run_one "$CTL" ) > "$OUT/$CTL" 2>"$OUT/$CTL.err" < /dev/null
 ctl_rc=$?
 cat "$OUT/$CTL"
 if [ "$ctl_rc" -ne 0 ]; then
@@ -2340,10 +2455,17 @@ fi
 # a knob there. The fixture ran as two directories of four workers each; one directory of eight
 # is the same demand on the machine.
 #
-# The worker wrapper's two variables are NOT named AI_DLC_*. Arm H8 of validate-fixture-hygiene.sh
-# requires a fixture to scrub every ambient AI_DLC_* name, and a scrub is a `unset` loop that
-# would have to be ordered ahead of values this wrapper has already resolved; naming these two
-# outside the AI_DLC_ namespace means the scrub can never erase them.
+# THE POOL IS EIGHT BACKGROUND SUBSHELLS OF THIS PROCESS, NOT `xargs` RE-ENTERING THIS FILE.
+# Each lane is dealt a fixed slice of the list round-robin in source order and runs it serially,
+# one `( emd_run_one <name> )` per assertion; the parent `wait`s for every lane. A subshell is a
+# fork, not a bash start, so the start count is the same for any JOBS value and does not move with
+# load (BL-868): no lane polls, sleeps or retries, and the deal is a pure function of the list.
+# The twin cells run as a ninth background job beside the lanes.
+#
+# The pool's variables are NOT named AI_DLC_*. Arm H8 of validate-fixture-hygiene.sh requires a
+# fixture to scrub every ambient AI_DLC_* name, and a scrub is a `unset` loop that would have to be
+# ordered ahead of values this driver has already resolved; naming them outside the AI_DLC_
+# namespace means the scrub can never erase them.
 JOBS=8
 # Every non-control assertion, in source order, derived from the same list the control came off.
 printf '%s\n' "$NAMES" | tail -n +2 > "$OUT/list"
@@ -2352,13 +2474,27 @@ if [ "$N_MINE" -ne "$((N_LISTED - 1))" ] || [ "$N_MINE" -eq 0 ]; then
   echo "$NAME: FIXTURE ERROR — dispatching $N_MINE assertion(s) where $((N_LISTED - 1)) non-control assertions are defined" >&2
   exit 2
 fi
-EMD_SELF="$SELF" EMD_OUT="$OUT" \
-  xargs -P "$JOBS" -I{} bash -c '
-    n="$1"
-    bash "$EMD_SELF" --run-one "$n" \
-      > "$EMD_OUT/$n" 2> "$EMD_OUT/$n.err"
-    printf %s $? > "$EMD_OUT/$n.rc"
-  ' _ {} < "$OUT/list"
+emd_i=0
+while IFS= read -r n; do
+  [ -n "$n" ] || continue
+  printf '%s\n' "$n" >> "$OUT/lane.$((emd_i % JOBS))"
+  emd_i=$((emd_i + 1))
+done < "$OUT/list"
+emd_l=0
+while [ "$emd_l" -lt "$JOBS" ]; do
+  if [ -f "$OUT/lane.$emd_l" ]; then
+    (
+      while IFS= read -r n; do
+        ( emd_run_one "$n" ) > "$OUT/$n" 2> "$OUT/$n.err" < /dev/null
+        printf %s $? > "$OUT/$n.rc"
+      done < "$OUT/lane.$emd_l"
+    ) &
+  fi
+  emd_l=$((emd_l + 1))
+done
+( ( emd_twins ) > "$OUT/emd_twins" 2> "$OUT/emd_twins.err" < /dev/null
+  printf %s $? > "$OUT/emd_twins.rc" ) &
+wait
 
 # Rendered in SOURCE order, never completion order, so the output is byte-comparable
 # against the serial version and diffable across runs.
@@ -2388,7 +2524,9 @@ while IFS= read -r n; do
     [ "$c" -gt 0 ] || { printf '  FAIL  %s exited nonzero without an assertion line — the assertion did not run to a verdict\n' "$n"; c=1; }
     fails=$((fails + c))
   fi
-done < "$OUT/list"
+done <<EOF_RENDER
+$(cat "$OUT/list"; echo emd_twins)
+EOF_RENDER
 
 # THE SELECTION JOIN, ACROSS THIS SHARD'S WHOLE DISPATCHED SET.
 #
