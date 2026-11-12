@@ -36,6 +36,37 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # MUTANT-MATRIX b9-m2-quoted decides=kq twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
 # MUTANT-MATRIX b9-m3-no-exempt decides=red twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
 # MUTANT-MATRIX b9-m4-refusal decides=rc twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q1-no-warn decides=qoff twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q2-all-kinds decides=qkind twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q3-no-cap-partition decides=qcap twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q4-bare-silent decides=qbareoff twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q5-no-basename decides=qbare twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q6-no-ext decides=qext twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q7-abs-read decides=qabs twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q8-elided-read decides=qel twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q9-glob-read decides=qglob twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q10-no-norm decides=qdot twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q11-path-always decides=qtrk twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q12-refusal decides=qlvl twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q13-refused-bump decides=qrc twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q14-abs-in-top-silent decides=qabsin twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q15-elide-after-strip decides=qtel twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q16-all-words decides=qnl twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q17-no-line-cut decides=qln twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q18-section-read decides=qsec twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q19-sticky-header decides=qac twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q20-empty-cell decides=qemp twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q21-wt-acquit-removed decides=qwtb twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# MUTANT-MATRIX b9-q22-wt-top-rest decides=qwt twins=- why=its twin is bl809 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
+# (q) tripped sets, MEASURED by the --matrix run, 22 of 22 b9-q rows equal these sets: q1 [qabsin qbareoff qdel qdot
+# qemp qign qln qlvl qoff qrc qwtf qwtun]; q2 [qkind]; q3 [qcap]; q4 [qbareoff]; q5 [qbare];
+# q6 [qext]; q7 [qabs]; q8 [qel qtel] (inherent: one elision test serves both cells); q9 [qglob]; q10 [qdot]; q11
+# [qtrk qwt] (inherent: one tracked lookup serves both); q12 [qlvl qrc]
+# (inherent: a refusal moves the exit qrc holds); q13 [qrc]; q14 [qabsin qwtun]
+# (re-anchored on the no-worktree branch, which both cells reach); q15 [qtel]; q16 [qnl]; q17 [qln]; q18 [qsec]; q19
+# [qac]; q20 [qemp]; q21 [qwtb]; q22 [qwt
+# qwtf] (inherent: one worktree-relative rest serves both, and qwtf's line
+# then names the toplevel-relative rest).
 # MUTANT-MATRIX b43-path-only decides=r2 twins=- why=its twin is bl843 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
 # MUTANT-MATRIX b43-legacy-any decides=r3 twins=- why=its twin is bl843 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
 # MUTANT-MATRIX b43-und-binds decides=und twins=- why=its twin is bl843 ctl, run in the same receipt call and refused by the FAIL ctl check; no label here emits it
@@ -94,7 +125,7 @@ CN_GATED="$(want_cells "$R815")"
 if c3_msg="$(c3_check "$R815" "$cn_out")"; then ok "RAN SET bl815: the full control call ran exactly the cells the receipt's code gates ($(tr '\n' ' ' <<<"$CN_GATED"))"
 else bad "$c3_msg"; fi
 b9_out="$(b9_run "$HECTL")"; b9_rc=$?
-if [ "$b9_rc" -eq 0 ]; then ok "BL-809 ARMS: an unquoted multi-word -k is REFUSED k-unquoted, quoted and single-word -k are quiet, a <tree> placeholder WARNs without moving the exit, <redacted> and <base-worktree> are quiet"; B_b9=1
+if [ "$b9_rc" -eq 0 ]; then ok "BL-809 ARMS: an unquoted multi-word -k is REFUSED k-unquoted, quoted and single-word -k are quiet, a <tree> placeholder WARNs without moving the exit, <redacted> and <base-worktree> are quiet; (q) WARNs ac-citation-unresolved on an untracked, deleted, ignored or outside test-row citation, an untracked bare basename, an untracked absolute path under the toplevel, under a registered worktree at <frozen> or under an unregistered .claude/worktrees directory, an untracked citation in a row with an empty Case cell (printed as case -) and an untracked path with a :line suffix, exits 0 on a story with no refusal, and is quiet on a tracked path (also spelt under a registered worktree at <frozen>), a path under a registered worktree whose HEAD is not <frozen>, a basename tracked elsewhere, a non-test row, a capture (capture-unresolved instead), absolute tokens outside the toplevel, inner and trailing elided and glob tokens, a dotted identifier, an unbackticked non-leading token, an AC-keyed table and a table under a later heading"; B_b9=1
 else bad "BL-809 ARMS: receipt-bl809.sh exited $b9_rc on the shipped validator: $(tr '\n' ' ' <<<"$b9_out")"; fi
 B9_GATED="$(want_cells "$R809")"
 if c3_msg="$(c3_check "$R809" "$b9_out")"; then ok "RAN SET bl809: the full control call ran exactly the cells the receipt's code gates ($(tr '\n' ' ' <<<"$B9_GATED"))"
@@ -202,6 +233,30 @@ b9_mutant b9-m1-no-kunq 'if [ -n "$kl" ]; then' 'if false; then' kunq "M1: arm (
 b9_mutant b9-m2-quoted $'[^[:space:]"\'"\'"\']+[[:space:]]+(or' '[^[:space:]]+[[:space:]]+(or' kq "M2: arm (m) accepts a quoted expression as unquoted"
 b9_mutant b9-m3-no-exempt 'if (p != "<redacted>" && p != "<base-worktree>") print' 'print' red "M3: arm (n)'s <redacted>/<base-worktree> exemptions removed"
 b9_mutant b9-m4-refusal 'warn "placeholder' 'refuse "placeholder' rc "M4: arm (n) made a refusal, so a placeholder moves the exit"
+# Arm (q) AC-CITATION-UNRESOLVED (receipt-bl809.sh's q-cells): its WARN, its tier, the test-row narrowing, the capture
+# partition, the basename and extension rules, the not-read token shapes and the normaliser, one deciding cell each.
+b9_mutant b9-q1-no-warn 'warn "ac-citation-unresolved $STORY: $a_id' ': "ac-citation-unresolved $STORY: $a_id' qoff "Q1: the (q) WARN removed, an untracked test-row citation is silent"
+b9_mutant b9-q2-all-kinds 'if (kind != "test") next' 'if (0) next' qkind "Q2: the test-row narrowing removed, a predicate row's path is judged"
+b9_mutant b9-q3-no-cap-partition 'case "$acq_caps" in *" $a_t "*) continue ;; esac' ':' qcap "Q3: the capture partition removed, an untracked capture is reported by (q) too"
+b9_mutant b9-q4-bare-silent 'print "bare\t" L[i]; continue' 'continue' qbareoff "Q4: a bare basename tracked nowhere is acquitted"
+b9_mutant b9-q5-no-basename '|| (p in base)) continue' ') continue' qbare "Q5: the basename rule removed, a bare basename tracked under another directory fires"
+b9_mutant b9-q6-no-ext ' || !(substr(p, RSTART + 2) in ext)' '' qext "Q6: the extension rule removed, a dotted identifier is judged as a basename"
+b9_mutant b9-q7-abs-read '/*) continue ;;' '/*) cap_norm "$a_t" || CN="" ;;' qabs "Q7: absolute tokens outside the toplevel read, an API route fires"
+b9_mutant b9-q8-elided-read 'if (index(w, "...")) return ""; ' '' qel "Q8: elided tokens read, a ... path fires"
+b9_mutant b9-q9-glob-read 'if (w !~ /^[A-Za-z0-9_.\/-]+$/' 'if (w !~ /^[A-Za-z0-9_.\/*-]+$/' qglob "Q9: glob tokens read, a glob fires"
+b9_mutant b9-q10-no-norm '*) cap_norm "$a_t" || CN="" ;;' '*) CN="$a_t" ;;' qdot "Q10: the normaliser removed, a leading ../ is judged as a path instead of outside the repository"
+b9_mutant b9-q11-path-always 'if (!(p in have)) print "path\t" L[i]' 'print "path\t" L[i]' qtrk "Q11: the tracked lookup removed, a tracked test file fires"
+b9_mutant b9-q12-refusal 'warn "ac-citation-unresolved $STORY: $a_id' 'refuse "ac-citation-unresolved $STORY: $a_id' qlvl "Q12: (q) made a refusal, so an unresolved citation moves the exit"
+b9_mutant b9-q13-refused-bump 'warn "ac-citation-unresolved $STORY: $a_id' 'refused=1; warn "ac-citation-unresolved $STORY: $a_id' qrc "Q13: the WARN kept and the refusal counter bumped, so a story with no other refusal exits 1"
+b9_mutant b9-q14-abs-in-top-silent 'if [ -z "$a_wm" ]; then cap_norm "${a_t#"$TOP"/}" || CN=""' 'if [ -z "$a_wm" ]; then continue' qabsin "Q14: an absolute token under the toplevel not read, an untracked in-toplevel citation is silent"
+b9_mutant b9-q15-elide-after-strip 'if (index(w, "...")) return ""; sub(/^[(<\[]+/, "", w); sub(/::.*/, "", w); sub(/[.,;:)>\]]+$/, "", w)' 'sub(/^[(<\[]+/, "", w); sub(/::.*/, "", w); sub(/[.,;:)>\]]+$/, "", w); if (index(w, "...")) return ""' qtel "Q15: the elision test after the punctuation strip, a trailing ... is stripped and the path read"
+b9_mutant b9-q16-all-words 'split(lead, W, /[[:space:]]+/); acq_emit(W[1])' 'm = split(lead, W, /[[:space:]]+/); for (x = 1; x <= m; x++) acq_emit(W[x])' qnl "Q16: every unbackticked word read, the acquitted non-leading node token fires"
+b9_mutant b9-q17-no-line-cut '; sub(/:[0-9]+(-[0-9]+)?$/, "", w)' '' qln "Q17: the :line cut removed, an untracked path with a line suffix is silent"
+b9_mutant b9-q18-section-read 'on && /^## / { exit }' 'on && /^## / { next }' qsec "Q18: a later ## heading does not end the read, a strategy table under it is judged"
+b9_mutant b9-q19-sticky-header '{ hasres = (ph == "Strategy id" && pres); next }' '{ if (ph == "Strategy id" && pres) hasres = 1; next }' qac "Q19: the header binding kept past the strategy table, an AC-keyed table row is judged"
+b9_mutant b9-q20-empty-cell '(cs == "" ? "-" : cs)' 'cs' qemp "Q20: an empty Case cell printed empty, so the tab-IFS read shifts the columns of its WARN"
+b9_mutant b9-q21-wt-acquit-removed '          else continue' '          else cap_norm "${a_t#"$TOP"/}" || CN=""' qwtb "Q21: the registered-worktree acquittal removed, a citation under a worktree whose HEAD is not <frozen> is judged by its toplevel-relative rest and fires"
+b9_mutant b9-q22-wt-top-rest 'then cap_norm "${a_t#"$a_wm"/}" || CN=""' 'then cap_norm "${a_t#"$TOP"/}" || CN=""' qwt "Q22: a citation under the <frozen> worktree judged by its toplevel-relative rest, a tracked file fires (the defect)"
 # --- end BL-809 ARMS ------------------------------------------------------------------------------
 
 # --- BL-843 CAPTURE-HEADS BLOCK (b43_*) -----------------------------------------------------------

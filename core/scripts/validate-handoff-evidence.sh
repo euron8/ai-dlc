@@ -287,6 +287,133 @@
 #       naming only a capture path, or the phrase with no fresh block, is held to (k) as before; so is
 #       one citing only a replay capture, which the render never counts (REFUSED full-collection-none
 #       on a range that is not record-only).
+#   (q) AC-CITATION-UNRESOLVED (WARN, never a refusal, exit unchanged). POPULATION: the rows of the
+#       story's level-2 `## Strategy Test IDs` table (`| Strategy id | Case | Kind | Resolves to |`, the
+#       grammar stories-test-strategy.md's Story-Authoring Pre-Flight Checklist prescribes and
+#       gate-validation.md Check 21 resolves at the sprint-review gate; the row reader is strategy mode's,
+#       ACQ_ROWS_AWK, with the cell's backticks kept, and one difference: a table's header is bound at its
+#       separator row, where strategy mode keeps the first header's binding for the rest of the section, so
+#       an AC-keyed table later in the section is read there and not here), read at <frozen> as the capture
+#       arms read the story.
+#       This pulls Check 21's path resolution forward to gate 1, PATH PART ONLY: whether the node is
+#       collectable stays Check 21's, and strategy mode (e)'s. Only rows whose `Kind` is exactly `test`
+#       are read (the narrowing below); `predicate`, `deploy-time` and every off-vocabulary Kind are not.
+#       Any other AC-keyed table (`| AC | Kind | Status | ... |`, s319 1-5) is not this population and is
+#       not read (receipt cell qac: inside the section, after the strategy table); a `## ` heading after
+#       the section ends the read (cell qsec); a story with no such table prints nothing. TOKENS of a
+#       `Resolves to` cell: its leading word when not backticked, and every whitespace-separated word of
+#       every backticked span; each with quotes removed, then tested for `...` (elided: not read, and the
+#       test runs BEFORE the strip below, so a trailing `...` is not stripped into a path; cells qel and
+#       qtel; a `…` fails the charset and is not read either), then one or more leading `(`/`<`/`[` and one
+#       or more trailing `.,;:)>]` stripped, the `::<node>` suffix cut (the path part is judged) and a
+#       trailing `:<line>` or `:<line>-<line>` cut (cell qln untracked, and qtrk's tracked `:12` twin). A token is read only when it is
+#       made of `[A-Za-z0-9_./-]`, carries no glob character (charset), and its last segment carries an
+#       extension. A token starting with `/` is read only when it starts with the physical toplevel and a
+#       `/`, a lexical prefix test with no fork, and is then judged by its toplevel-relative rest (cell
+#       qabsin); every other absolute token is not read (API routes, another tree, cell qabs), and that
+#       includes a non-physical spelling of this toplevel (`/tmp/...` for `/private/tmp/...`, a symlinked
+#       parent), which cap_norm would resolve for a capture and (q) does not: a known gap.
+#       WORKTREES. Validation runs from the main checkout, and Claude Code nests its worktrees inside it at
+#       `<top>/.claude/worktrees/<x>/`, so a citation spelt in such a worktree has a toplevel-relative rest
+#       `.claude/worktrees/<x>/tests/...` that is never tracked and WARNed on a tracked file (the
+#       pre-worktree validator fails cells qwt, qwtf and qwtb). A token under the path of a REGISTERED worktree of this
+#       repository that sits inside the toplevel (the longest such path wins, which has NO receipt cell and is unprobed; the main worktree is the
+#       toplevel and never matches) is judged by its WORKTREE-relative rest when that worktree's `HEAD` is
+#       <frozen> (cells qwt silent, qwtf fires), because that tree is exactly the frozen listing already
+#       held; under any other registered worktree it is NOT READ (cell qwtb), because judging it would
+#       need a second listing of a tree that is not the one under review. Chosen by what is constructible:
+#       a worktree carries no record of a frozen sha of its own, and its `HEAD` is the one fact the
+#       listing gives. A path under `.claude/worktrees/` that is not a registered worktree gets no special
+#       case and is judged by its toplevel-relative rest (cell qwtun). COST: one `git worktree list
+#       --porcelain` per handoff, taken only at the first token under the toplevel, so a handoff citing
+#       none forks nothing new; a listing that fails reads as no worktree (the pre-worktree behaviour), which has NO receipt cell and is unprobed.
+#       MEASURED FP SET, on the population below: 0 `/`-leading tokens in any Strategy Test IDs row of any
+#       Kind (0 under the toplevel, 0 under a worktree path, 0 elsewhere; 1621 `test`-row and 2053
+#       all-Kinds tokens, both equal to the records below); the reference consumer's worktrees are siblings
+#       (`<top>-s3NN-story-N`), outside the toplevel and not read, and `/.claude/worktrees/` occurs in 0 of
+#       the 212 story texts. Controls: in the same run the token totals equal the records, the toplevel's
+#       absolute spelling occurs somewhere in the story text of 188 of the 212 passes (where was not
+#       measured) and an impossible token reads 0; in a separate run a synthetic `test` row citing a nested
+#       worktree path is emitted by the same extracted awk. The narrowing is therefore constructed, not
+#       observed: no consumer FP was removed by it, and it acquits nothing the corpus cites. A token cap_tokens reads as a
+#       CAPTURE (`/` and `.txt`/`.log`/`.out`) is CAPTURE-UNRESOLVED's and never (q)'s: the partition is
+#       cap_tokens itself, run once over the token list. The rest go through cap_norm (a leading `../`
+#       is UNRESOLVABLE and WARNs). PREDICATE, against ONE listing of the paths tracked at <frozen>
+#       (frozen_ls, shared with ignored_at_frozen): a token with a `/` resolves iff that path is tracked;
+#       a BARE basename resolves iff SOME tracked path has that basename, and is not a path at all when no
+#       tracked file carries its extension (`result.tx_hashes`, `self.x`): an extension no tracked file
+#       carries is not a path. Both are acquittals, stated so nobody mistakes them for coverage
+#       (receipt-bl809.sh cells qbare and qext probe them); the basename one acquits a bare `test_x.py`
+#       whenever any tracked file anywhere is named `test_x.py`. More ACQUITTALS: an unbackticked word
+#       that is not the cell's leading word is not read, even a `<path>.py::<node>` one, which strategy
+#       mode (e) does read (its `.py::` grep runs over the whole cell), so (q) reads less of a cell than
+#       Check 21 does (cell qnl: `see tests/x.py::test_x`, untracked, silent); and a double-backtick span
+#       (two backticks each side) is not read, because the backtick split pairs its delimiters as two empty
+#       spans. KNOWN GAPS that fire: a path inside a submodule is not in the frozen listing (`ls-tree -r`
+#       lists the gitlink, not its contents), so a cited submodule file WARNs as not tracked; and attribute
+#       access spelt with a tracked extension (`response.json`) is judged as a bare basename and WARNs when
+#       no tracked file has that name. No `.gitignore` acquittal: a `test` row's citation is the
+#       reviewer's evidence, and an ignored file is as unreadable as an absent one. One `WARN
+#       ac-citation-unresolved <story>: <id> case <c> (test) cites <token>, and <reason>` line per row
+#       token; a listing that fails, a row awk that fails, a capture partition (cap_tokens) that fails and a
+#       lookup awk that fails each print one WARN naming that and judge nothing (the listing WARN has no
+#       receipt cell: a frozen sha whose story `git show` reads while `ls-tree -r` fails needs a tree object
+#       missing from the store, which the shared receipt world cannot hold without breaking every other
+#       cell; the partition WARN has none either, and is unprobed).
+#       MEASURED (this script, read only, on a `--no-hardlinks` clone of the reference consumer's committed
+#       refs, graph `main` 6ee289617): every gate-1 pass of s317-s322, frozen = the code review's
+#       `reviewed-sha:` (s317-s320) or the gate-1 plan's `sha:` (s321-s322), base = the review's stated
+#       range or the plan's `base:`, the frozen sha's first parent where a review states none (16 passes;
+#       (q) reads <frozen> only). 212 passes over 92 stories. 14 UNEVALUABLE and not run: 8 reviews record
+#       no `reviewed-sha:` (s317 1-4, 1-6, 2-2 p1 and p2, 3-2, 4-2b, 4-3b; s318 2-2) and 6 review no story
+#       file (s318 sprint-review-fix, s319 party-fix-a, party-fix-b, party-fix-c p1 and p2, s320
+#       sprint-review-fixes). Per sprint, passes/stories/rows/`test`-row tokens/hits:
+#       s317 27/15/432/344/1, s318 28/12/304/172/0, s319 63/20/699/651/0, s320 23/13/227/172/0,
+#       s321 51/24/378/253/0, s322 20/8/133/29/0. TP 1: s317 2-3 p2 at a844b346f413, S317-2.3-AC6 d cites
+#       `2-3-ac6-marker-persist-failed.evidence.md`, tracked nowhere at that sha or at graph `main` (the
+#       entry's one TP). Negative controls in that story: the cited test file is tracked at that sha and
+#       is silent, and `2-3-ac4-l1-subscribe.evidence.md`, tracked there under another directory, is
+#       silent by the basename rule. FP 0. HOW EACH SPRINT WAS RUN: s317-s318 ran the shipping script, the
+#       base script and the all-Kinds variant on every pass; s319-s322 ran the all-Kinds variant on every
+#       pass and the shipping script only on the passes where the variant hit, which is exact, because the
+#       two differ only by the `kind != "test"` skip and that skip only subtracts. The per-sprint `test`-row
+#       token counts are the lines ACQ_ROWS_AWK, extracted from the shipping script, prints per pass (before
+#       the capture partition), summed per sprint, from the driver's per-pass records (rows 432/304/699/227/
+#       378/133 re-derive there; the all-Kinds variant's records read 364/242/717/305/331/94 tokens). They
+#       predate the tip awk, which also emits absolute tokens. Exit code unchanged on all 212 against the base script:
+#       that compare is the PRE-FIX run (before the reason-column fix and the leading-`../` report); the
+#       post-fix run compared exits on s317-s318 only. NOT RE-MEASURED after the tip review: the separator
+#       binding, the elision order, the `-` for an empty cell and the absolute-token rule. The first three
+#       only subtract, and the TP token carries no `...` and sits in the first table, so TP 1 holds; the
+#       absolute-token rule ADDS tokens, and a scratch clone cannot show its hits, because the clone is not
+#       at the path a story spells; the bound is measured instead (WORKTREES above): no row of any Kind in
+#       the 212 passes carries a `/`-leading token, so the rule adds 0 tokens there.
+#       NARROWING. With every Kind read (the same script with the Kind test removed): 11 hits, 1 TP and
+#       10 FP, every FP in a non-`test` row. Hits per Kind: `test` 1 (the TP), `predicate` 5, `unit` 4,
+#       `live_ops` 1; `integration`, `e2e`, `bash fixture`, `deploy-time` and every other Kind 0. The
+#       10 FP fall in two shapes. (i) A path the cell ASSERTS ABSENT: s321 2-1 p1 and p2 ST321-47 (`predicate`, `git ls-files
+#       config/rebalancer-base.yaml ...` prints nothing; 4 lines), s321 4-2 p1 ST321-104 (`predicate`,
+#       the diff lists no `config/rebalancer-base.yaml`; 1), s320 3-1 p1 and p2 S3.1-AC1 and AC4 (`unit`,
+#       "predicate, no node id", a test file the story retires; 4). (ii) An ops artifact deferred: s320 3-3
+#       S3.3-AC4 (`live_ops`, `Missing: REMAINING for ops`, `test-results/smoke-junit.xml`; 1). Reading
+#       only `test` rows (the Kind strategy mode (e) already keys on) removed all 10 and kept the TP.
+#       ACQUITTED KINDS, not read: `predicate` and `deploy-time` (the prescribed non-test Kinds) and every
+#       off-vocabulary Kind (`unit`, `integration`, `e2e`, `bash fixture`, `live_ops`, `manual_operator`,
+#       ...: `Kind` is open). The code-citing off-vocabulary Kinds `integration`, `e2e` and `bash fixture`
+#       read 0 hits, so the narrowing acquits them with no measured FP and no measured TP. Kept at `test`
+#       rather than widened: `unit`, the commonest code-citing off-vocabulary Kind, carries 4 of the FP,
+#       so the code-citing class is not FP-free, and widening to the three FP-free names alone is a
+#       hand-written list over an open vocabulary that nothing derives, with no measured gain.
+#       EXCLUSIONS NOT SHIPPED, each because its subject is empty in this population: a deploy-validate
+#       deferral row (2 `test` rows of 2595 distinct table rows carry `deploy-validate`; neither produces a
+#       hit) and a `git rm` disposition (0 table rows carry it). The earlier measurement's 22 FP were read
+#       outside this population (AC-keyed status tables and bullets).
+#       TIER: WARN. The FP set is empty, but on a TP population of one, and FP paths remain by
+#       construction: a `test` row that cites a file its story deletes, or asserts one absent, fires.
+#       A refusal would wedge such a handoff with no in-story remedy but rewording the cell.
+#       COST: per handoff whose story text names `Strategy Test IDs`, the row awk; when a `test` row
+#       yields a token, one cap_tokens awk, one `ls-tree -r` (frozen_ls, shared with ignored_at_frozen,
+#       so 0 when a capture already listed it) and one lookup awk. No fork per token.
 #
 # HANDOFF MODE, BOOKKEEPING — three refusals and a SKIP line, every one read AT <frozen> via
 # `git show`, never the working tree.
@@ -903,13 +1030,22 @@ ign_ask() { # <subdir> <check-ignore args...> -> check-ignore's own stdout and e
   GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$IGN_ROOT/$sub" -c core.excludesFile=/dev/null \
     check-ignore --no-index "$@" 2>/dev/null
 }
+# frozen_ls: the ONE listing of every path tracked at <frozen> (`ls-tree -r --name-only --full-tree`), taken
+# once per run and shared by ignored_at_frozen and (q). Sets FLS (empty on failure) and FLS_RC (its exit).
+# In the current shell, never `$( )`, or the memo is lost.
+frozen_ls() {
+  [ "$FLS_DONE" -eq 1 ] && return 0
+  FLS_DONE=1; FLS_RC=0
+  FLS="$(G ls-tree -r --name-only --full-tree "$FROZEN" 2>/dev/null)" || { FLS=""; FLS_RC=1; }
+}
 ignored_at_frozen() {
   local gi gis
   if [ "$IGN_FULL" -eq 0 ]; then
     ign_repo full || return 1
     IGN_FULL=1
     # ls-tree failed: the exemption set is UNKNOWN, so name the cause once and treat it as EMPTY (every untracked citation WARNs; never "all ignored").
-    if ! gis="$(G ls-tree -r --name-only --full-tree "$FROZEN" 2>/dev/null)"; then
+    frozen_ls; gis="$FLS"
+    if [ "$FLS_RC" -ne 0 ]; then
       warn "gitignore-unreadable ${FROZEN:0:12}: exemption set unknown"; gis=""
     fi
     while IFS= read -r gi; do
@@ -1211,6 +1347,7 @@ SMOKE_SURFACE_LC=""
 IGN_ROOT=""
 IGN_FULL=0
 IGN_CHAIN=" "
+FLS=""; FLS_RC=0; FLS_DONE=0
 smoke_surface_path() { # <rev> -> sets SMOKE_SURFACE (empty: key declared empty) and SMOKE_SURFACE_LC; 2 when unreadable
   local rev="$1" lc decl
   SMOKE_SURFACE="$SMOKE_SURFACE_DEFAULT"; SMOKE_SURFACE_LC=""
@@ -1372,6 +1509,139 @@ if [ -n "$GLOBS" ]; then
     [ "$hit" -eq 1 ] && ! glob_resolves "$g" && refuse "glob-cited $g: a brace or glob token cited as a capture path, and some alternative matches no file tracked at ${FROZEN:0:12}; commit the captures and cite each by its own path"
   done <<<"$GLOBS"
 fi
+
+# (q) AC-CITATION-UNRESOLVED (header: HANDOFF MODE (q)). WARN, never a refusal, exit unchanged.
+# ACQ_ROWS_AWK prints one line per candidate path token of a `## Strategy Test IDs` row's `Resolves to`
+# cell: "<id>\t<case>\t<kind>\t<token>", an empty id or case printed as `-` so a tab-IFS read cannot shift a
+# column. The table grammar is strategy_one's (the same header row, the same separator, the cells after the
+# third joined by `|`), with one difference: a table's header is bound at its SEPARATOR row, so a later table
+# in the section whose header is not `Strategy id` ... `Resolves to` (an AC-keyed status table) is not read,
+# where strategy_one keeps the first header's binding for the rest of the section. Here the cell keeps its
+# backticks, because a backticked span is where a citation sits. The elision test runs BEFORE the
+# punctuation strip, so a trailing `...` is never stripped into a readable path.
+ACQ_ROWS_AWK='
+function acq_cand(w,   s) {
+  gsub("\047", "", w); gsub(/"/, "", w)
+  if (index(w, "...")) return ""; sub(/^[(<\[]+/, "", w); sub(/::.*/, "", w); sub(/[.,;:)>\]]+$/, "", w); sub(/:[0-9]+(-[0-9]+)?$/, "", w)
+  if (w !~ /^[A-Za-z0-9_.\/-]+$/) return ""
+  s = w; sub(/.*\//, "", s)
+  if (s !~ /[^.]\.[A-Za-z0-9_]+$/) return ""
+  return w
+}
+function acq_emit(w) { w = acq_cand(w); if (w != "" && !(w in done)) { done[w] = 1; printf "%s\t%s\t%s\t%s\n", (id == "" ? "-" : id), (cs == "" ? "-" : cs), kind, w } }
+ev_level($0, "Strategy Test IDs") == 2 { on = 1; next }
+on && /^## / { exit }
+on && /^[[:space:]]*\|/ {
+  line = $0; sub(/\r$/, "", line); sub(/^[[:space:]]*\|/, "", line); sub(/\|[[:space:]]*$/, "", line)
+  n = split(line, c, "|")
+  for (i = 1; i <= n; i++) { b[i] = c[i]; gsub(/`/, "", b[i]); gsub(/^[[:space:]]+|[[:space:]]+$/, "", b[i]) }
+  sep = 1; for (i = 1; i <= n; i++) if (b[i] !~ /^:?-+:?$/) sep = 0
+  if (sep) { hasres = (ph == "Strategy id" && pres); next }
+  if (b[1] ~ /^:?-+:?$/) next
+  ph = b[1]; pres = 0; for (i = 1; i <= n; i++) if (b[i] == "Resolves to") pres = 1
+  if (!hasres || n < 4) next
+  id = b[1]; cs = b[2]; kind = b[3]; if (kind != "test") next
+  r = c[4]; for (i = 5; i <= n; i++) r = r "|" c[i]
+  split("", done)
+  lead = r; sub(/^[[:space:]]+/, "", lead)
+  if (substr(lead, 1, 1) != "`") { split(lead, W, /[[:space:]]+/); acq_emit(W[1]) }
+  k = split(r, S, "`")
+  for (j = 2; j <= k; j += 2) { m = split(S[j], W, /[[:space:]]+/); for (x = 1; x <= m; x++) acq_emit(W[x]) }
+}'
+# ACQ_LOOK_AWK: the frozen listing on stdin, the judged tokens in ENVIRON["HE_Q"] as
+# "<id>\t<case>\t<kind>\t<token>\t<toplevel path, empty when UNRESOLVABLE>". Prints each line that does not
+# resolve behind a reason column: out (UNRESOLVABLE), path (a path not tracked), bare (a basename no tracked
+# path carries). The reason comes FIRST and the possibly-empty path last, so a tab-IFS read keeps the columns. A bare token whose extension no tracked file carries is not a path and is not judged.
+ACQ_LOOK_AWK='
+{ have[$0] = 1; bn = $0; sub(/.*\//, "", bn); base[bn] = 1; if (match(bn, /[^.]\.[^.]+$/)) ext[substr(bn, RSTART + 2)] = 1 }
+END {
+  n = split(ENVIRON["HE_Q"], L, "\n")
+  for (i = 1; i <= n; i++) {
+    if (L[i] == "") continue
+    split(L[i], F, "\t"); p = F[5]
+    if (p == "") { print "out\t" L[i]; continue }
+    if (p !~ /\//) {
+      if (!match(p, /[^.]\.[^.]+$/) || !(substr(p, RSTART + 2) in ext) || (p in base)) continue
+      print "bare\t" L[i]; continue
+    }
+    if (!(p in have)) print "path\t" L[i]
+  }
+}'
+case "$TEXT" in *"Strategy Test IDs"*)
+  acq_toks="$(LC_ALL=C awk "$HEADING_AWK$ACQ_ROWS_AWK" <<<"$TEXT")" \
+    || { warn "ac-citation-unresolved $STORY: the Strategy Test IDs rows could not be read (awk exit $?), so no citation is judged"; acq_toks=""; }
+  if [ -n "$acq_toks" ]; then
+    # The capture partition: a token cap_tokens reads as a capture is CAPTURE-UNRESOLVED's, never (q)'s.
+    acq_list=""
+    while IFS="$TAB" read -r a_id a_cs a_kd a_t; do acq_list="$acq_list$a_t"$'\n'; done <<<"$acq_toks"
+    # Captured first, so cap_tokens's status is read: a partition that fails WARNs and judges nothing,
+    # because without it a capture token would be judged by (q) as well as by CAPTURE-UNRESOLVED.
+    acq_caps=" "
+    if acq_ct="$(cap_tokens 0 <<<"$acq_list")"; then
+      while IFS="$TAB" read -r a_red a_t; do [ -n "$a_t" ] && acq_caps="$acq_caps$a_t "; done <<<"$acq_ct"
+    else
+      warn "ac-citation-unresolved $STORY: the capture partition failed (awk exit $?), so no Strategy Test IDs citation is judged"
+      acq_toks=""
+    fi
+    acq_q=""; acq_wt=""; acq_wtl=0
+    while IFS="$TAB" read -r a_id a_cs a_kd a_t; do
+      [ -n "$a_t" ] || continue
+      case "$acq_caps" in *" $a_t "*) continue ;; esac
+      # An absolute token is judged only under the toplevel, by a lexical prefix test (no fork): its
+      # toplevel-relative rest goes through cap_norm. Any other absolute token (an API route, another tree,
+      # a non-physical spelling of this one) is not read. A token under a REGISTERED worktree of this
+      # repository nested in the toplevel (`<top>/.claude/worktrees/<x>/...`) is judged by its
+      # worktree-relative rest when that worktree's HEAD is <frozen>, and is otherwise not read (header:
+      # HANDOFF MODE (q), WORKTREES). The listing is taken once, at the first in-toplevel token.
+      case "$a_t" in
+        "$TOP"/*)
+          if [ "$acq_wtl" -eq 0 ]; then
+            acq_wtl=1; a_wp=""
+            # A listing that fails reads as no worktree (the pre-worktree behaviour): an explicit branch on
+            # the captured status, so the empty listing is chosen here and never inherited from a lost one.
+            if ! a_wls="$(G worktree list --porcelain 2>/dev/null)"; then a_wls=""; fi
+            while IFS= read -r a_l; do
+              case "$a_l" in
+                "worktree $TOP"/*) a_wp="${a_l#worktree }" ;;
+                "worktree "*) a_wp="" ;;
+                "HEAD "*) [ -z "$a_wp" ] || acq_wt="$acq_wt$a_wp$TAB${a_l#HEAD }"$'\n'; a_wp="" ;;
+              esac
+            done <<<"$a_wls"
+          fi
+          a_wm=""; a_wh=""
+          while IFS="$TAB" read -r a_wp a_h; do
+            [ -n "$a_wp" ] || continue
+            case "$a_t" in "$a_wp"/*) [ "${#a_wp}" -le "${#a_wm}" ] || { a_wm="$a_wp"; a_wh="$a_h"; } ;; esac
+          done <<<"$acq_wt"
+          if [ -z "$a_wm" ]; then cap_norm "${a_t#"$TOP"/}" || CN=""
+          elif [ "$a_wh" = "$FROZEN" ]; then cap_norm "${a_t#"$a_wm"/}" || CN=""
+          else continue
+          fi ;;
+        /*) continue ;;
+        *) cap_norm "$a_t" || CN="" ;;
+      esac
+      acq_q="$acq_q$a_id$TAB$a_cs$TAB$a_kd$TAB$a_t$TAB$CN"$'\n'
+    done <<<"$acq_toks"
+    if [ -n "$acq_q" ]; then
+      frozen_ls
+      if [ "$FLS_RC" -ne 0 ]; then
+        warn "ac-citation-unresolved $STORY: the paths tracked at ${FROZEN:0:12} cannot be listed, so no Strategy Test IDs citation is judged"
+      else
+        acq_bad="$(HE_Q="$acq_q" LC_ALL=C awk "$ACQ_LOOK_AWK" <<<"$FLS")" \
+          || { warn "ac-citation-unresolved $STORY: the tracked-path lookup failed (awk exit $?), so no Strategy Test IDs citation is judged"; acq_bad=""; }
+        while IFS="$TAB" read -r a_why a_id a_cs a_kd a_t a_p; do
+          [ -n "$a_why" ] || continue
+          case "$a_why" in
+            out) a_why="resolves outside the repository" ;;
+            bare) a_why="no path tracked at ${FROZEN:0:12} has that basename" ;;
+            *) a_why="$a_p is not tracked at ${FROZEN:0:12}" ;;
+          esac
+          warn "ac-citation-unresolved $STORY: $a_id case ${a_cs:--} ($a_kd) cites $a_t, and $a_why"
+        done <<<"$acq_bad"
+      fi
+    fi
+  fi ;;
+esac
 
 # ------------------------------------------------------------------------- run record
 # (k) FULL-COLLECTION and (l) DEPENDENCY-SETUP (header: HANDOFF MODE, RUN RECORD). The record-only
