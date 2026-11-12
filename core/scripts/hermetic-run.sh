@@ -592,11 +592,12 @@ fi
 # pre-push sets them at depth 0; nothing on a consumer does). Any of the three unset: nothing below changes the run.
 # All three set but unusable is exit 2, never an uncounted pass. Armed, the fixture gets BASH_ENV naming the rc
 # and FXCOUNT_LOG naming its start log through the same list as the git variables, and the judge runs after it.
+# The start log and its two sidecars, `.mutants` (mutant_killed) and `.inproc` (fx_inproc), are truncated here.
 hr_fxc=0
 if [ -n "${FXCOUNT_RC:-}" ] && [ -n "${FXCOUNT_DIR:-}" ] && [ -n "${FXCOUNT_JUDGE:-}" ]; then
   [ -f "$FXCOUNT_RC" ] && [ -r "$FXCOUNT_RC" ] && [ -d "$FXCOUNT_DIR" ] && [ -f "$FXCOUNT_JUDGE" ] && [ -r "$FXCOUNT_JUDGE" ] \
     || { printf 'hermetic-run: %s: invocation counter armed but unusable: FXCOUNT_RC and FXCOUNT_JUDGE must be readable files, FXCOUNT_DIR a directory\n' "$HR_FX" >&2; exit 2; }
-  : > "$FXCOUNT_DIR/$HR_FX" && : > "$FXCOUNT_DIR/$HR_FX.mutants" || exit 2
+  : > "$FXCOUNT_DIR/$HR_FX" && : > "$FXCOUNT_DIR/$HR_FX.mutants" && : > "$FXCOUNT_DIR/$HR_FX.inproc" || exit 2
   hr_fxc=1
 fi
 set --

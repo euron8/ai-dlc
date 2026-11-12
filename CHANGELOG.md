@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1075.0] - 2026-11-12
+
+### BL-982 — an in-process validator pass is counted, and the efficiency-close block runs in its own fixture (PARTIAL)
+
+- `core/fixtures/lib/mutant.sh` gains `fx_inproc`, which appends one row per in-process pass to `"$FXCOUNT_LOG.inproc"`. It is called at all five in-process source sites of the two opted-in fixtures: `vin` and the three `r1*_probe_only` drives in `backlog-receipt-binding`, and the sibling's source of that run.sh. `core/scripts/hermetic-run.sh` truncates `$FXCOUNT_DIR/$HR_FX.inproc` when the counter is armed and is inert unarmed.
+- `scripts/validate-fixture-invocations.sh` reads a new `<N> inproc:<path>` decl row. It is judged exact under J3, and the new arm J7 fails `.inproc` rows logged for a fixture whose decl has no `inproc:` row. Opt-in: a fixture with no `inproc:` row is judged as before. The new static arm P1 (in `--static-join`): in an opted-in fixture, a non-comment `.`/`source` of a declared bash subject must be paired with an `fx_inproc` call, else FAIL.
+- The whole efficiency-close block moves from `core/fixtures/backlog-receipt-binding/` into the new `.dist-only` fixture `core/fixtures/backlog-receipt-efficiency/`. The set of cell, mutant, `arm_*` and MUTANT-MATRIX names across the two files equals the old file's set (231 names at base 7ad8e93e5; 145 old plus 86 sibling). The twelve mutants E0 refuses before any world is read twin on `m_vprose` instead of `m6`, because validate-fixture-hygiene H7 rejects a twin label the fixture does not emit.
+- Measured, two agreeing counted runs each. In-process validator passes: 174 at base 7ad8e93e5 (also 174 at 0.1073.0); at the tip `backlog-receipt-binding` logs 117 and `backlog-receipt-efficiency` logs 57. The old fixture falls by 57 and the total is unchanged: the work is split across two fixtures that run in parallel, not removed. 0.1070.0 added 30 of the 57 (27 at 0.1069.0 by call-site count; ten `ef_world` worlds, two `ef_sac`, two `ef_arch`, sixteen mutants). The filing's "32" was not a measured count.
+- Counted starts: `backlog-receipt-binding` 3305 / 2352 validator to 3303 / 2350; `backlog-receipt-efficiency` 3 / 2. Fork TOTAL 2843 to 2843, so FORK_BUDGET is unchanged. validator-fork-budget: A3 2843 <= 2926 (276 fixture dirs), J3 1111.
+- The suite pole's wall clock is not timed and no change in it is claimed.
+- Owed: the tree-wide static arm that fails an unrouted in-process drive in a fixture that has not opted in. BL-982 stays open (`verify: manual`).
+- Filed: BL-982.
+
 ## [0.1074.0] - 2026-11-12
 
 ### BL-878 PARTIAL: `validate-enforcement-map.sh` can be sourced and called in process through `vem_entry`, and 12 fixture rows in 8 families are converted (176 -> 164 allowlist rows remain)

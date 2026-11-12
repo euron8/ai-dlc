@@ -15,6 +15,14 @@
 # derived-receipt runs moved to core/fixtures/backlog-receipt-fixture-join/; no validator start moved.
 # b255 F2b: unchanged, two agreeing counted runs (6151 / 2342 each). The verdict-grammar and value-citation
 # worlds and their sixteen mutants all drive the validator in process (vin), which starts no bash.
-3305 *
-2352 scripts/validate-backlog-receipts.sh
 # Re-measured from two agreeing counted runs at cbac58510 on the combined F11 tree (after 0.1070.0): 6151 -> 3305 and 2342 -> 2352.
+# BL-982: -2 / -2 from 3305 / 2352, two agreeing counted runs on the F14 stack over 7ad8e93e5 (F9), unchanged from the same runs over 808918467 (F11). The efficiency-close block
+# moved to core/fixtures/backlog-receipt-efficiency/ (which sources this file); its only starts were VEQ-eff's two
+# `bash <copy>` runs on ef-good and ef-noclose, now that fixture's two cli cells (3305 = 3303 + its 3 - its own 1).
+# BL-982 inproc row (fx_inproc, one row per in-process pass), the same two runs, 117 rows each: vin from run_v 57,
+# pr_two 22 and c5_run 19, and the probe-only drives r10 14, r11 3 and r12 2. A scratch copy of the push base
+# 7ad8e93e5 (before the split; 808918467 likewise) with fx_inproc at the same four sites logged 174: these 117 plus the 57 the
+# efficiency-close block drove, which moved to backlog-receipt-efficiency.
+3303 *
+2350 scripts/validate-backlog-receipts.sh
+117 inproc:scripts/validate-backlog-receipts.sh

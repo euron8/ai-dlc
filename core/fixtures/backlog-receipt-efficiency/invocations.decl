@@ -1,0 +1,12 @@
+# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J2 output). BL-982 split
+# this fixture out of backlog-receipt-binding. Its starts are run.sh itself (1) and VEQ-eff's two end-to-end
+# `bash <copy>` runs of the validator (its two `cli` cells); every other drive of the validator is in process (vin),
+# which starts no bash. backlog-receipt-binding/run.sh is SOURCED for its harness, never started.
+# BL-982 inproc rows (fx_inproc, one row per in-process pass), two agreeing counted runs, 58 rows each: 57 vin passes
+# of the validator (ef_world 21, ef_mutg 7, ef_mut0 6, ef_mutd 6, ef_mut 5, ef_filing, ef_sac, ef_arch and ef_archmut
+# 2 each, VEQ-eff's loop 2, m-nopathnarrow and m-nosacderive 1 each) and the one source of backlog-receipt-binding/run.sh.
+3 *
+2 scripts/validate-backlog-receipts.sh
+0 core/fixtures/backlog-receipt-binding/run.sh
+57 inproc:scripts/validate-backlog-receipts.sh
+1 inproc:core/fixtures/backlog-receipt-binding/run.sh
