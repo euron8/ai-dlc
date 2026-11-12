@@ -18,6 +18,9 @@
 #   m9  A3b an `unconditional:` marker with an EMPTY reason      -> must FAIL
 #   m10 A5  a bold **I<n>** citation the index does not list     -> must FAIL
 #   m11 A6  durable channel over its byte ceiling                -> must FAIL
+#   mA1 A1  the probe seeds no `.claude/settings.json`           -> must FAIL (A1's own probe)
+#   mA2 A2  the probe's typo-glob prefix judgement inverted      -> must FAIL (A2's own probe)
+#   mA2b A2 glob_matches ignores its pattern (every tracked path) -> must FAIL (A2's own probe)
 #
 # WHY THE CONTROL IS NOT DECORATION. Each mutant is a fresh seed plus one edit, and the
 # validator resolves its own root by walking up for VERSION. A seed that fails to build
@@ -399,5 +402,28 @@ else
   fi
 fi
 
-if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 13/13 mutants refused by their own arm"; fi
+# mA1 -- A1's OWN PROBE cannot fire. The probe's offender is dropped from its seeded index, so
+# the extraction finds no `settings.json` and the arm must say so rather than report a clean
+# corpus. m1 seeds the CORPUS; this seeds the probe.
+seed "$TMP/mA1"
+if mutate "$TMP/mA1/scripts/validate-claude-rules.sh" 's|--cacheinfo 100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,\.claude/settings\.json||'; then
+  kill_check "mA1 A1 probe seeds no offender" "$TMP/mA1" "A1's own probe did not fire"
+else note "SKIP  mA1 -- sed matched nothing; no mutation occurred"; rc=1; fi
+
+# mA2 -- A2's OWN PROBE cannot fire. The prefix judgement for the typo glob is inverted onto the
+# real glob's prefix, so the typo reads as matching. m2 types the CORPUS glob; this breaks the probe.
+seed "$TMP/mA2"
+if mutate "$TMP/mA2/scripts/validate-claude-rules.sh" "s|a2_typo=\"\$(grep -v -m1 '^core/fixtures/'|a2_typo=\"\$(grep -m1 '^core/fixtures/'|"; then
+  kill_check "mA2 A2 probe typo judgement inverted" "$TMP/mA2" "A2's own probe did not fire"
+else note "SKIP  mA2 -- sed matched nothing; no mutation occurred"; rc=1; fi
+
+# mA2b -- the pattern-ignoring subject: glob_matches returns EVERY tracked path whatever it is
+# asked. The real glob still "matches", and the typo glob returns paths outside the real prefix;
+# a prefix filter keyed on the typo's own spelling would stay silent here.
+seed "$TMP/mA2b"
+if mutate "$TMP/mA2b/scripts/validate-claude-rules.sh" 's|^glob_matches() {.*|glob_matches() { git ls-files 2>/dev/null; }|'; then
+  kill_check "mA2b A2 probe glob_matches ignores its pattern" "$TMP/mA2b" "A2's own probe did not fire"
+else note "SKIP  mA2b -- sed matched nothing; no mutation occurred"; rc=1; fi
+
+if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 16/16 mutants refused by their own arm"; fi
 exit "$rc"

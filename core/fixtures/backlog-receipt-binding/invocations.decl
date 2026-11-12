@@ -15,5 +15,6 @@
 # derived-receipt runs moved to core/fixtures/backlog-receipt-fixture-join/; no validator start moved.
 # b255 F2b: unchanged, two agreeing counted runs (6151 / 2342 each). The verdict-grammar and value-citation
 # worlds and their sixteen mutants all drive the validator in process (vin), which starts no bash.
-6151 *
-2342 scripts/validate-backlog-receipts.sh
+3305 *
+2352 scripts/validate-backlog-receipts.sh
+# Re-measured from two agreeing counted runs at cbac58510 on the combined F11 tree (after 0.1070.0): 6151 -> 3305 and 2342 -> 2352.

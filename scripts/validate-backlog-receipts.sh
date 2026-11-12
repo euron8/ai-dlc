@@ -2124,82 +2124,103 @@ r2_alldriver() {
     END { exit ((sc + 0) == 0 && (dr + 0) > 0 && (ok + 0) == sh + 0 ? 0 : 1) }'
 }
 vbr_probe_r1() {
+# TWO PROBE REPOSITORIES, ONE FILE SET. $PH carries the post-checkout hook below and holds ONLY
+# the two seeds that read what it writes (BL-906's 444 locked.txt, BL-912's untracked driver);
+# $P carries no hook and holds the other ten. The hook is a bash start in EVERY checkout of the
+# repository that has it, and the checkouts are made in parallel by the shipping workers, so it
+# cannot be switched per receipt -- only per repository. Both repositories carry the SAME files,
+# so the two ledgers differ only in which seeds they hold, and a seed placed in the wrong one
+# fails on its own assertion below, never on a missing subject. Both are scored by the same
+# score_ledger the corpus uses, and every assertion reads the UNION of their rows.
 P="$WORK/probe"
-mkdir -p "$P/probe" "$P/docs"
-echo "0.0.0" > "$P/VERSION"
-printf 'alpha\nbeta\n' > "$P/probe/subject.txt"
-printf 'alpha\n' > "$P/probe/flip.txt"
-printf 'locked\n' > "$P/probe/locked.txt"
-printf '{\n  "k": "alpha"\n}\n' > "$P/probe/doc.json"
+PH="$WORK/probeh"
+r1_files() { # r1_files <dir> -- the probe subject files, written identically into each repository
+mkdir -p "$1/probe" "$1/docs"
+echo "0.0.0" > "$1/VERSION"
+printf 'alpha\nbeta\n' > "$1/probe/subject.txt"
+printf 'alpha\n' > "$1/probe/flip.txt"
+printf 'locked\n' > "$1/probe/locked.txt"
+printf '{\n  "k": "alpha"\n}\n' > "$1/probe/doc.json"
 # BL-909's two subjects. Neither carries its literal, so the receipt's base is 1 and it can
 # only reach 0 when BOTH files take BOTH tokens.
-printf 'first\n' > "$P/probe/one.txt"
-printf 'second\n' > "$P/probe/two.txt"
+printf 'first\n' > "$1/probe/one.txt"
+printf 'second\n' > "$1/probe/two.txt"
+printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$1/probe/tool.sh"
+# BL-911/BL-912's driven script. It exits 1, so both receipts reach the DRIVER test at base 1:
+# BL-912's absent second segment is then refused by the TRACKED check alone, never by a 127.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$1/probe/drive.sh"
+# BL-912's second script is PRESENT in every checkout of $PH and UNTRACKED: the post-checkout hook
+# below writes it, and this ignore line keeps the checkout's porcelain clean so tree_complete
+# accepts it. Present-but-untracked is the input that separates a TRACKED check from an `[ -f ]`
+# one; an absent file would be refused by both and the probe could not tell them apart -- which is
+# why BL-912's row is asserted below to have SEEN the file (paths=2), not only to be UNSCORABLE.
+printf 'probe/untracked-driver.sh\n' > "$1/.gitignore"
+}
+r1_files "$P"
+r1_files "$PH"
 # BL-910's counter lives OUTSIDE the checkout on purpose: each reading gets a fresh tree, so
 # state kept inside one cannot survive into the next and the receipt could not differ.
 BR_PROBE_COUNTER="$WORK/probe.counter"
 printf 0 > "$BR_PROBE_COUNTER"
 export BR_PROBE_COUNTER
-printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$P/probe/tool.sh"
-# BL-911/BL-912's driven script. It exits 1, so both receipts reach the DRIVER test at base 1:
-# BL-912's absent second segment is then refused by the TRACKED check alone, never by a 127.
-printf '#!/usr/bin/env bash\nexit 1\n' > "$P/probe/drive.sh"
-# BL-912's second script is PRESENT in every checkout and UNTRACKED: the post-checkout hook below
-# writes it, and this ignore line keeps the checkout's porcelain clean so tree_complete accepts it.
-# Present-but-untracked is the input that separates a TRACKED check from an `[ -f ]` one; an
-# absent file would be refused by both and the probe could not tell them apart.
-printf 'probe/untracked-driver.sh\n' > "$P/.gitignore"
+# THE HOOKED LEDGER: exactly the seeds whose subject the post-checkout hook writes.
+{
+  printf '# Probe ledger (hooked)\n\n'
+  printf '## BL-906\n\nverify: sh grep -q %s probe/locked.txt\n\n' "'LOCKMARK'"
+  printf '## BL-912\n\nverify: sh bash probe/drive.sh && bash probe/untracked-driver.sh\n\n'
+} > "$PH/docs/backlog.md"
 {
   printf '# Probe ledger\n\n'
   printf '## BL-901\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'PROBEMARKER'"
   # A PROSE LEAD-IN BULLET INSIDE THE HOST, BEFORE ITS RECEIPT. Under a loose label rule it opens
   # a phantom BL-632 that takes BL-902's receipt, BL-902 has no row, and the sh-receipt COUNT is
-  # still 12 -- so the count arm cannot see it; the per-id asserts below can.
+  # still 10 -- so the count arm cannot see it; the per-id asserts below can.
   printf '## BL-902\n\n- **BL-632 is LANDED** prose about another entry\n\nverify: sh out="$(bash probe/tool.sh)"; grep -q %s <<<"$out"\n\n' "'READY'"
   printf '## BL-903\n\nverify: sh grep -q %s probe/subject.txt || exit 9\n\n' "'NINEMARK'"
   printf '## BL-904\n\nverify: sh test -f probe/absent-file.txt\n\n'
   printf '## BL-905\n\nverify: sh ! grep -q %s probe/flip.txt\n\n' "'ZEROFLIP'"
-  printf '## BL-906\n\nverify: sh grep -q %s probe/locked.txt\n\n' "'LOCKMARK'"
   printf '## BL-907\n\nverify: sh grep -q %s probe/doc.json || awk %s probe/doc.json\n\n' \
     "'JSONMARK'" "'END { exit (NR == 3 ? 1 : 0) }'"
   printf '## BL-908\n\nverify: sh git rev-parse HEAD >/dev/null 2>&1 || exit 9; grep -q %s probe/subject.txt\n\n' "'GITMARK'"
   printf '## BL-909\n\nverify: sh grep -q %s probe/one.txt && grep -q %s probe/two.txt\n\n' "'MARKONE'" "'MARKTWO'"
   printf '## BL-910\n\nverify: sh C="$BR_PROBE_COUNTER"; n=$(cat "$C" 2>/dev/null || echo 0); printf %%s $((n+1)) > "$C"; [ "$n" = "0" ] && exit 9; exit 1\n\n'
   printf '## BL-911\n\nverify: sh bash probe/drive.sh\n\n'
-  printf '## BL-912\n\nverify: sh bash probe/drive.sh && bash probe/untracked-driver.sh\n\n'
 } > "$P/docs/backlog.md"
 
-# A THROWAWAY REPOSITORY, and the git environment is scrubbed first: git exports GIT_DIR
+# TWO THROWAWAY REPOSITORIES, and the git environment is scrubbed first: git exports GIT_DIR
 # ABSOLUTE into any hook run from a linked worktree, and a `git init` under an inherited one
 # SILENTLY SUCCEEDS WITHOUT CREATING A REPOSITORY, redirecting every later call at the
 # caller's index. That is the exact defect core/fixtures/lib/preamble.sh exists for.
+for _r1d in "$P" "$PH"; do
 (
   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-  cd "$P" && git init -q . >/dev/null 2>&1 \
+  cd "$_r1d" && git init -q . >/dev/null 2>&1 \
     && git add -A >/dev/null 2>&1 \
-    && git -c user.email=probe@local -c user.name=probe commit -q -m probe >/dev/null 2>&1
-) || { echo "$(me): SELF-PROBE FAILED -- the probe repository did not build, so nothing below was proven." >&2; exit 2; }
-[ -d "$P/.git" ] || { echo "$(me): SELF-PROBE FAILED -- the probe directory is not a repository (an inherited GIT_DIR makes \`git init\` succeed without creating one), so every probe below would have run against the caller's tree." >&2; exit 2; }
+    && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m probe >/dev/null 2>&1
+) || { echo "$(me): SELF-PROBE FAILED -- the probe repository $_r1d did not build, so nothing below was proven." >&2; exit 2; }
+[ -d "$_r1d/.git" ] || { echo "$(me): SELF-PROBE FAILED -- the probe directory $_r1d is not a repository (an inherited GIT_DIR makes \`git init\` succeed without creating one), so every probe below would have run against the caller's tree." >&2; exit 2; }
+done
 
 # BL-906's subject must be UNWRITABLE IN THE CHECKOUT, which is what makes its seed refuse
 # rather than apply -- and a `chmod` here does not survive, because git records only the
 # executable bit and materialises every checkout at the umask default. A `post-checkout`
 # hook inside the probe repository is the only place the mode can be set after the files
 # exist and before a worker touches them. Asserted below rather than assumed: a probe whose
-# subject is writable is a probe whose UNSEEDED branch has no subject at all.
-mkdir -p "$P/.probehooks"
+# subject is writable is a probe whose UNSEEDED branch has no subject at all. It is installed in
+# $PH ONLY: $P's checkouts start no hook.
+mkdir -p "$PH/.probehooks"
 { echo '#!/usr/bin/env bash'
   echo '[ -f probe/locked.txt ] && chmod 444 probe/locked.txt'
   echo 'printf "#!/usr/bin/env bash\nexit 1\n" > probe/untracked-driver.sh'
   echo 'exit 0'
-} > "$P/.probehooks/post-checkout"
-chmod +x "$P/.probehooks/post-checkout"
+} > "$PH/.probehooks/post-checkout"
+chmod +x "$PH/.probehooks/post-checkout"
 # SCRUBBED LIKE THE `git init` ABOVE, AND FOR A WORSE REASON THAN THAT ONE HAD.
 #
 # `git -C <dir>` DOES NOT OVERRIDE AN INHERITED `GIT_DIR`; the environment wins, for reads and
 # for WRITES. MEASURED on two throwaway repositories: `GIT_DIR=A/.git git -C B log` reports A's
 # commit, and `GIT_DIR=A/.git git -C B config probe.marker x` writes the key into A/.git/config
-# and leaves B's untouched. So this line -- unscrubbed, `-C "$P"` notwithstanding -- wrote
+# and leaves B's untouched. So this line -- unscrubbed, `-C "$PH"` notwithstanding -- wrote
 # `core.hooksPath=<a mktemp probe directory>` into the CALLER'S repository whenever the gate ran
 # from a linked worktree, where git exports GIT_DIR into every hook. The caller's own pre-push
 # hook was then pointed at a directory this run deletes on exit, and a later push ran NO GATE AT
@@ -2213,29 +2234,38 @@ chmod +x "$P/.probehooks/post-checkout"
 # and a `sed` that catches only some of them yields a mutant that does not PARSE -- which fails
 # every arm for a reason the mutation does not own and scores as a kill nobody earned.
 _br_scrub_config() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; git -C "$1" config "$2" "$3" ); }
-_br_scrub_config "$P" core.hooksPath "$P/.probehooks" >/dev/null 2>&1 || {
+_br_scrub_config "$PH" core.hooksPath "$PH/.probehooks" >/dev/null 2>&1 || {
   echo "$(me): SELF-PROBE FAILED -- the probe repository would not take a hooks path, so its unwritable-subject probe has no subject." >&2; exit 2; }
-# AND IT LANDED IN THE PROBE'S OWN CONFIG, ASSERTED BY PATH. `--file "$P/.git/config"` cannot be
+# AND IT LANDED IN THE PROBE'S OWN CONFIG, ASSERTED BY PATH. `--file "$PH/.git/config"` cannot be
 # redirected by an environment variable, which is the whole point: a read that goes through
 # GIT_DIR would confirm the write by looking at the very repository the write may have gone to
 # by mistake, and would read as a pass in exactly the case this guard exists to catch.
-_probe_hp="$(git config --file "$P/.git/config" --get core.hooksPath 2>/dev/null)" || _probe_hp=""
-[ "$_probe_hp" = "$P/.probehooks" ] || {
-  echo "$(me): SELF-PROBE FAILED -- the probe repository's own .git/config does not carry core.hooksPath (read by path: '${_probe_hp:-<unset>}', expected '$P/.probehooks'). The write went somewhere else -- under an inherited GIT_DIR that somewhere is the CALLER'S repository, whose pre-push hook would then point at a directory this run deletes." >&2; exit 2; }
+_probe_hp="$(git config --file "$PH/.git/config" --get core.hooksPath 2>/dev/null)" || _probe_hp=""
+[ "$_probe_hp" = "$PH/.probehooks" ] || {
+  echo "$(me): SELF-PROBE FAILED -- the probe repository's own .git/config does not carry core.hooksPath (read by path: '${_probe_hp:-<unset>}', expected '$PH/.probehooks'). The write went somewhere else -- under an inherited GIT_DIR that somewhere is the CALLER'S repository, whose pre-push hook would then point at a directory this run deletes." >&2; exit 2; }
 
 probe_status() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $1 }'; }
 probe_detail() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $3 }'; }
 probe_count()  { printf '%s\n' "$1" | awk -F'\t' '$1 == "PROSE-CLOSABLE"' | grep -c . ; }
 
+# Each repository is scored as its own ledger, then the rows are joined: every assertion below
+# reads the UNION, so a seed is judged the same whichever repository holds it -- and a seed moved
+# out of $PH loses the hook's subject and fails its own row (BL-906 stops reading UNSEEDED;
+# BL-912's row stops seeing its untracked driver).
 BR_GENERIC_SEED=0
 R1_OUT="$(score_ledger "$P/docs/backlog.md" "$P")" || exit 2
-R1_N="$(probe_count "$R1_OUT")" || R1_N=0
 read_counts
 R1_SH="$SH_RECEIPTS"
+R1H_OUT="$(score_ledger "$PH/docs/backlog.md" "$PH")" || exit 2
+read_counts
+R1H_SH="$SH_RECEIPTS"
+R1_OUT="$R1_OUT
+$R1H_OUT"
+R1_N="$(probe_count "$R1_OUT")" || R1_N=0
 
 r1_fail() { echo "$(me): SELF-PROBE FAILED -- $1" >&2; printf '%s\n' "$R1_OUT" | sed 's/^/    /' >&2; exit 2; }
 
-[ "$R1_SH" -eq 12 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 12, so the entry grammar did not read the probe and nothing below is about the scorer."
+[ "$R1_SH" -eq 10 ] && [ "$R1H_SH" -eq 2 ] || r1_fail "the probe ledgers parsed to $R1_SH and $R1H_SH sh receipts, not 10 and 2, so the entry grammar did not read the probe and nothing below is about the scorer."
 [ "$(probe_status "$R1_OUT" BL-901)" = "PROSE-CLOSABLE" ] || r1_fail "the seeded prose-closable receipt did NOT flip under a seed carrying its own grep literal (got: $(probe_status "$R1_OUT" BL-901)). The scorer cannot produce a finding, so a clean corpus below would mean only that it ran."
 # BEFORE BL-902's check, deliberately: a phantom that took BL-902's receipt also empties BL-902's
 # row, so the BOUND check below would exit first and this arm could never speak.
@@ -2278,6 +2308,13 @@ esac
 # reads BOUND: a one-liner that also greps is not a driver.
 [ "$(probe_status "$R1_OUT" BL-911)" = "DRIVER" ] || r1_fail "the receipt that only runs a TRACKED script was reported $(probe_status "$R1_OUT" BL-911), not DRIVER. Every receipt rewritten the way R2's own remedy says would then be unscorable, and a ledger of them fails R2 as a zero."
 [ "$(probe_status "$R1_OUT" BL-912)" = "UNSCORABLE" ] || r1_fail "the receipt whose second script is present but UNTRACKED was reported $(probe_status "$R1_OUT" BL-912), not UNSCORABLE. A driver whose subject is not in the tree is not a driver; this is an arm that reads the disk, not the index."
+# ...AND THE UNTRACKED SCRIPT WAS PRESENT when it was refused. An ABSENT one is refused by an `[ -f ]`
+# check too, so UNSCORABLE alone cannot say the TRACKED check was the one that decided. The path
+# count is the number of named files ON DISK in the checkout: 2 only when the hook wrote the driver.
+case "$(probe_detail "$R1_OUT" BL-912)" in
+  *-paths=2-*) ;;
+  *) r1_fail "the untracked-driver receipt saw $(probe_detail "$R1_OUT" BL-912) -- its second script was NOT on disk in the checkout, so its UNSCORABLE verdict could have come from an on-disk test and the TRACKED check is unproven. The post-checkout hook in the probe repository that holds it did not run." ;;
+esac
 # R2's ALL-DRIVER ESCAPE, BOTH DIRECTIONS, ON THE SCORER'S OWN ROWS. A ledger whose only `sh`
 # receipt is BL-911 must pass; the same ledger plus BL-904 (UNSCORABLE, not a driver) must refuse.
 # The two inputs are asserted to DIFFER first, or the pair is one measurement taken twice.
@@ -2294,7 +2331,10 @@ fi
 # the identical finding above.
 BR_GENERIC_SEED=1
 R1G_OUT="$(score_ledger "$P/docs/backlog.md" "$P")" || exit 2
+R1GH_OUT="$(score_ledger "$PH/docs/backlog.md" "$PH")" || exit 2
 BR_GENERIC_SEED=0
+R1G_OUT="$R1G_OUT
+$R1GH_OUT"
 # BL-907 is EXPECTED to flip here and is excluded by name: it is the probe whose subject is
 # a structured document, so it flips on ANY appended line -- which is the very property the
 # format control exists to detect, and asserting it does not flip would assert the opposite
@@ -2351,12 +2391,14 @@ vbr_probe_r7r8() {
 #   BL-991 the same subject, unanchored: exit 1, NO marker -- R7 is blind, and R10 refuses it
 # ---------------------------------------------------------------------------
 r7_fail() { echo "$(me): SELF-PROBE FAILED -- $1" >&2; exit 2; }
+# R7 checks out $P, the probe repository that carries NO post-checkout hook (R1's hook lives in
+# $PH only, for BL-906's 444 locked.txt and BL-912's untracked driver), so no checkout below starts one.
 mkdir -p "$WORK/r7probe"
 printf '#!/usr/bin/env bash\nsubject_helper_never_shipped_zz\n' > "$P/probe/calls-missing.sh"
 printf '%s' "$R10_SUBJECT_BODY" > "$P/probe/r10-subject.sh"
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
   cd "$P" && git add probe/calls-missing.sh probe/r10-subject.sh >/dev/null 2>&1 \
-    && git -c user.email=probe@local -c user.name=probe commit -q -m probe2 >/dev/null 2>&1 ) \
+    && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m probe2 >/dev/null 2>&1 ) \
   || r7_fail "the probe repository would not take the R7 subject commit."
 {
   printf '## BL-971\n\nverify: sh exit 2\n\n'
@@ -2389,7 +2431,7 @@ R7_SEEN="$(cat "$WORK/r7probe/seen" 2>/dev/null)" || R7_SEEN=""
 mkdir -p "$WORK/r7other"
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
   cd "$WORK/r7other" && git init -q . >/dev/null 2>&1 && printf '# other\n' > backlog.md && git add -A >/dev/null 2>&1 \
-    && git -c user.email=probe@local -c user.name=probe commit -q -m other >/dev/null 2>&1 ) \
+    && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m other >/dev/null 2>&1 ) \
   || r7_fail "seed BL-979: the foreign-ledger probe repository did not build."
 [ -z "$(re_entry_of "$R7_SEEN" "$(ledger_key "$WORK/r7other/backlog.md" "$WORK/r7other")")" ] || r7_fail "seed BL-979: a validator a receipt starts over a ledger of its OWN seeding read as a re-entry, so it would skip R2-R8 and score nothing."
 [ -z "$(re_entry_of "$R7_SEEN" "$(ledger_key "$P/other-ledger.md" "$P")")" ] || r7_fail "seed BL-979: a different ledger in the SAME repository read as a re-entry."
@@ -2442,7 +2484,7 @@ r8_ledger 0 > "$Q/docs/backlog.md"
 printf '# Archive\n\n## BL-985\n\nverify: sh exit 1\n\n## BL-988 — old title\n\nverify: sh exit 1\n\n' > "$Q/docs/backlog.archive.md"
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
   cd "$Q" && git init -q . >/dev/null 2>&1 && git add -A >/dev/null 2>&1 \
-    && git -c user.email=probe@local -c user.name=probe commit -q -m base >/dev/null 2>&1 ) \
+    && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m base >/dev/null 2>&1 ) \
   || r7_fail "the closed-population probe repository did not build."
 [ -d "$Q/.git" ] || r7_fail "the closed-population probe directory is not a repository."
 R8_MB="$(git -C "$Q" rev-parse HEAD 2>/dev/null)" || R8_MB=""
@@ -2458,7 +2500,7 @@ r8_ledger 1 > "$Q/docs/backlog.md"
 printf '# Archive\n\n## BL-985\n\nverify: sh exit 1\n\n## BL-988 — new title\n\nverify: sh exit 1\n\n## BL-983\n\n**LANDED (v0.0.1, verified probe).**\n\nverify: sh exit 1\n\n## BL-989\n\n**LANDED (v0.0.1, verified probe).**\n\nverify: sh exit 0\n\n' > "$Q/docs/backlog.archive.md"
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
   cd "$Q" && git add -A >/dev/null 2>&1 \
-    && git -c user.email=probe@local -c user.name=probe commit -q -m branch >/dev/null 2>&1 ) \
+    && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m branch >/dev/null 2>&1 ) \
   || r7_fail "the closed-population probe's branch commit did not build."
 R8_OUT="$(score_closed "$Q/docs/backlog.md" "$Q" "$R8_MB")" || exit 2
 c8_of() { printf '%s\n' "$R8_OUT" | awk -F'\t' -v id="$1" '$2 == id { print $1 "|" $3 }'; }
@@ -3291,7 +3333,7 @@ mkdir -p "$q/docs"
 printf '# p\n' > "$q/docs/backlog.md"; printf '# a\n' > "$q/docs/backlog.archive.md"
 o="$( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
   cd "$q" && git init -q . >/dev/null 2>&1 && git add -A >/dev/null 2>&1 \
-    && git -c user.email=probe@local -c user.name=probe commit -q -m c0 >/dev/null 2>&1 || exit 1
+    && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m c0 >/dev/null 2>&1 || exit 1
   c0="$(git rev-parse HEAD)" || exit 1
   for i in 0 1 2; do git -c user.email=probe@local -c user.name=probe commit-tree "HEAD^{tree}" -p HEAD -m "side$i" || exit 1; done
   printf '%s\n' "$c0" )" || r11_fail "R11's probe repository did not build."
@@ -3300,7 +3342,7 @@ c0="$(sed -n '4p' <<<"$o")"; s0="$(sed -n '1p' <<<"$o")"; s1="$(sed -n '2p' <<<"
 printf '# a\n\n## BL-1101\n\n**LANDED (v0.0.1, verified %s).**\n\nverify: manual\n' "$s0" > "$q/docs/backlog.archive.md"
 printf '# p\n\n## BL-1102\n\n**LANDED (v0.0.2, verified %s).**\n\nverify: manual\n' "$s1" > "$q/docs/backlog.md"
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-  cd "$q" && git add -A >/dev/null 2>&1 && git -c user.email=probe@local -c user.name=probe commit -q -m m1 >/dev/null 2>&1 ) \
+  cd "$q" && git add -A >/dev/null 2>&1 && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m m1 >/dev/null 2>&1 ) \
   || r11_fail "R11's probe base commit did not build."
 m1="$(git -C "$q" rev-parse HEAD 2>/dev/null)" || r11_fail "R11's probe has no base commit."
 printf '# a\n\n## BL-1101\n\n**LANDED (v0.0.1, verified %s).**\n\nverify: manual\n\n## BL-1102\n\n<br>**LANDED (v0.0.2, verified %s).** moved.\n\nverify: manual\n' "$s0" "$s1" > "$q/docs/backlog.archive.md"
@@ -3309,7 +3351,7 @@ printf '# a\n\n## BL-1101\n\n**LANDED (v0.0.1, verified %s).**\n\nverify: manual
   printf '## BL-1105\n\n<br>**LANDED (v0.0.5, verified %s).** pre-squash.\n\nverify: manual\n\n' "$s2"
   printf '## BL-1106\n\n**LANDED (v0.0.6, verified 0badc0ffee1).**\n\nverify: manual\n'; } > "$q/docs/backlog.md"
 ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-  cd "$q" && git add -A >/dev/null 2>&1 && git -c user.email=probe@local -c user.name=probe commit -q -m h1 >/dev/null 2>&1 ) \
+  cd "$q" && git add -A >/dev/null 2>&1 && git -c user.email=probe@local -c user.name=probe -c maintenance.auto=false commit -q -m h1 >/dev/null 2>&1 ) \
   || r11_fail "R11's probe branch commit did not build."
 o="$(r11_judge "$q" docs/backlog.md "$m1" HEAD)" || r11_fail "r11_judge refused its probe repository."
 # ORDER IS LOAD-BEARING: each mutant of this arm is killed by the FIRST seed it breaks, named `seed <id>:`.

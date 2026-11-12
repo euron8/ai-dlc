@@ -367,9 +367,14 @@
 #
 # COST: a constant number of forks -- one git ls-files, one resolver call, one awk scan (two passes over the corpus),
 # one judge awk, sorts -- the same again for the probe tree, and the M4 probe repos. E1 adds one probe repository
-# (one commit), two e1_run passes (one over the probe, one over the tree), each a git ls-files, the inert() awk and
+# (index only, no commit), two e1_run passes (one over the probe, one over the tree), each a git ls-files, the inert() awk and
 # the judge awk, and one ledger-mode inert() over the probe: measured with PATH shims in clean worktrees inside the
 # repo, 213 execs on bb9284bcc and 322 with E1; with the archive clause removed, 306 against 325 on the same tree.
+# The M4 probe repos are `git init` plus one fast-import each (m4_probe_repo), and the probe runs the whole of m4 once
+# per origin/main state plus once for the hand-off, m4cmp alone for the rest: step argv
+# `bash scripts/validate-fixture-hygiene.sh`, same-tree swap at 3f3b99ae1 with GIT_DIR exported, two agreeing runs per
+# side, by the hook's own counter and GIT_TRACE2_EVENT: bash starts 3 -> 3, git processes 47 -> 37 (under the M4 probe
+# repos 24 -> 14); stdout and stderr byte-identical.
 set -uo pipefail
 
 MODE=check
@@ -1225,16 +1230,32 @@ run_all() {
 # all three, so the two down-only fixture lists run one function.
 # validate-mutant-kills.sh's m4 is NOT this copy and is not bound to it: it keys on the WHOLE trimmed row, so a
 # reworded reason is an added row there and would flip this file's `reworded` probe case here.
+# m4 is m4base (the git half: origin/main's <rel> written to <scratch>, rc 3, else the SKIP or FAIL text) then m4cmp
+# (the compare half over that base), so each self-probe runs the whole of m4 once per origin/main state and m4cmp
+# alone for every further list over the same base. m4_probe_repo builds those self-probes' scratch repos; it calls the
+# caller's own `pgit`.
 # M4_BEGIN
 m4() {
-  local repo="$1" cur="$2" base="$3" rel="${4:-$ALLOW_REL}" arm="${5:-M4}" sha added
+  local rel="${4:-$ALLOW_REL}" arm="${5:-M4}" rc
   local remedy="${6:-do not list the fixture; give it its MUTANT-MATRIX block (fixture-mutants.md) and delete the row.}"
   local noun="${7:-fixture}"
+  m4base "$1" "$3" "$rel" "$arm"; rc=$?
+  [ "$rc" -eq 3 ] || return "$rc"
+  m4cmp "$2" "$3" "$rel" "$arm" "$remedy" "$noun"
+}
+# m4base <repo> <scratch> <rel> <arm>
+m4base() {
+  local repo="$1" base="$2" rel="$3" arm="$4" sha
   sha="$(git -C "$repo" rev-parse -q --verify 'origin/main^{commit}' 2>/dev/null)" || sha=""
   if [ -z "$sha" ]; then echo "SKIP $arm: origin/main does not resolve here, so there is no base allowlist to compare against"; return 0; fi
   if ! git -C "$repo" cat-file -e "${sha}:${rel}" 2>/dev/null; then
     echo "SKIP $arm: origin/main carries no $rel -- this is the release that first ships it"; return 0; fi
   git -C "$repo" show "${sha}:${rel}" > "$base" 2>/dev/null || { echo "FAIL $arm: origin/main carries $rel but it could not be read"; return 1; }
+  return 3
+}
+# m4cmp <current list> <base> <rel> <arm> <remedy> <noun> -> the OK or FAIL text; rc 0 or 1
+m4cmp() {
+  local cur="$1" base="$2" rel="$3" arm="$4" remedy="$5" noun="$6" added
   added="$(awk -F'\t' '/^[[:space:]]*(#|$)/ { next } { x = $1; gsub(/[[:space:]]/, "", x) }
     FNR == NR { b[x] = 1; next } !(x in b) && !(x in seen) { seen[x] = 1; print x }' "$base" "$cur" | LC_ALL=C sort)"
   if [ -n "$added" ]; then
@@ -1244,6 +1265,19 @@ m4() {
     return 1
   fi
   echo "OK $arm: no allowlist row added against origin/main"; return 0
+}
+# m4_probe_repo <dir> [<path> <content>]... -> a scratch repo; with files, ONE `git fast-import` writes one commit
+# carrying them straight to refs/remotes/origin/main. m4base reads origin/main's objects only (never HEAD, the index or
+# the worktree), so no add, commit or update-ref is needed; the commit runs no hook and spawns no auto-maintenance, and
+# fastimport.unpackLimit=0 keeps its pack instead of spawning unpack-objects.
+m4_probe_repo() {
+  local d="$1" LC_ALL=C
+  pgit init -q "$d" || return 1
+  shift
+  [ $# -gt 0 ] || return 0
+  { printf 'commit refs/remotes/origin/main\ncommitter probe <probe@invalid> 0 +0000\ndata 5\nbase\n'
+    while [ $# -ge 2 ]; do printf 'M 100644 inline %s\ndata %d\n%s\n' "$1" "${#2}" "$2"; shift 2; done
+  } | pgit -c fastimport.unpackLimit=0 -C "$d" fast-import --quiet
 }
 # M4_END
 
@@ -1326,7 +1360,7 @@ e1_run() {
 # --- self-probe, before the corpus ---------------------------------------------------------------------------------
 pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
   git -c user.name=probe -c user.email=probe@invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null \
-  -c init.defaultBranch=main "$@"; }
+  -c init.defaultBranch=main -c maintenance.auto=false "$@"; }
 P="$WORK/probe"
 seed() { mkdir -p "$(dirname "$P/$1")" && cat > "$P/$1"; }
 mkdir -p "$P/scripts" && : > "$P/VERSION"
@@ -1764,7 +1798,7 @@ printf '%s\n' '# probe' m5h > "$P/$MKA_REL"
 # m5n is a member through the M8 verdict list alone (MVA); the commented row names nothing
 printf '# probe\nm5n\t2\n# m5o\t1\n' > "$P/$MVA_REL"
 printf '# probe allowlist\nm5b\tS1\nm5f\tS1\nm5e\tS1\ngone\tS1\nm5b\tdup\nm5x\n' > "$P/$ALLOW_REL"
-{ pgit init -q "$P" && pgit -C "$P" add -A && pgit -C "$P" commit -q -m probe; } >/dev/null 2>&1 \
+{ pgit init -q "$P" && pgit -C "$P" add -A; } >/dev/null 2>&1 \
   || { echo "validate-fixture-hygiene: REFUSED -- could not build the probe repository under $WORK" >&2; exit 2; }
 
 SP_RED=0
@@ -1823,31 +1857,43 @@ der="$(awk -F'\t' '$1 == "DERIVE" { print $2 }' "$WORK/p.verdict" | LC_ALL=C sor
 if [ "$der" = "m5a m5b m5f m5g m5h m5i m5l m5n " ]; then sp_line DERIVE "ok (derived rows m5a m5b m5f m5g m5h m5i m5l m5n; the stubs m5f-b and m5f-c mapped to their IMPL)"
 else SP_RED=1; sp_line DERIVE "FAIL -- derived '$der', want 'm5a m5b m5f m5g m5h m5i m5l m5n '"; fi
 
-m4_case() {  # <label> <repo> <want-rc> <want-first-line> <rows...>
+# m4_case <label> <repo | +repo | -> <want-rc> <want-first-line> <rows...>. With <repo>, the whole of m4 called with NO
+# rel, arm, remedy or noun, exactly as the corpus's M4 call is, so m4's defaults are what the case reads. With +<repo>,
+# the whole of m4 with an explicit rel ($M4XREL, a second list in the same repo), arm, remedy and noun, as the H7-M4,
+# H8-M4 and E1-M4 corpus calls pass them, so m4's hand-off of each to m4base and m4cmp is read: $R's $ALLOW_REL
+# carries the row d that $M4XREL lacks, so the swap rows a and d FAIL against $M4XREL and would pass against
+# $ALLOW_REL, and the FAIL line names the arm, the noun and the rel m4cmp was handed. With -, m4cmp alone
+# over the base the `added` case wrote from $R (the same objects a re-read returns). The whole of m4 thus runs once per
+# origin/main state (added, nofile, noorigin), swap and nofile in the + form: swap reads the hand-off to m4cmp, and
+# nofile's SKIP line, printed by m4base, reads the arm and rel handed to m4base. shrink and reworded read m4cmp alone.
+m4_case() {
   local lab="$1" repo="$2" wrc="$3" want="$4" got rc
   shift 4; printf '# probe list\n' > "$WORK/m4-cur.txt"; printf '%s\n' "$@" >> "$WORK/m4-cur.txt"
-  got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-base.txt")"; rc=$?
+  case "$repo" in
+    -) got="$(m4cmp "$WORK/m4-cur.txt" "$WORK/m4-base.added.txt" "$ALLOW_REL" M4 - fixture)"; rc=$? ;;
+    +*) got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+               m4 "${repo#+}" "$WORK/m4-cur.txt" "$WORK/m4-base.$lab.txt" "$M4XREL" P-M4 "probe remedy" "probe key")"; rc=$? ;;
+    *) got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY; m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-base.$lab.txt")"; rc=$? ;;
+  esac
   [ "$rc" = "$wrc" ] && [ "$(printf '%s\n' "$got" | head -1)" = "$want" ] && return 0
   sp_line M4 "FAIL -- case $lab got rc $rc, want $wrc: $(printf '%s' "$got" | head -2 | tr '\n' ' ')"; SP_RED=1; return 1
 }
-R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"
-mkdir -p "$R/scripts" "$RN" "$RX"
-{ pgit init -q "$R" && printf '# base\na\tr1\nb\tr2\n' > "$R/$ALLOW_REL" && pgit -C "$R" add "$ALLOW_REL" \
-  && pgit -C "$R" commit -q -m base && pgit -C "$R" update-ref refs/remotes/origin/main HEAD \
-  && pgit init -q "$RN" && printf 'x\n' > "$RN/other" && pgit -C "$RN" add other && pgit -C "$RN" commit -q -m n \
-  && pgit -C "$RN" update-ref refs/remotes/origin/main HEAD && pgit init -q "$RX"; } >/dev/null 2>&1 \
+R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"; M4XREL="scripts/m4-probe-list.txt"
+{ m4_probe_repo "$R" "$ALLOW_REL" $'# base\na\tr1\nb\tr2\nd\tr4\n' "$M4XREL" $'# base\na\tr1\nb\tr2\n' \
+  && m4_probe_repo "$RN" other $'x\n' && m4_probe_repo "$RX"; } >/dev/null 2>&1 \
   || { echo "validate-fixture-hygiene: REFUSED -- could not build the M4 probe repos" >&2; exit 2; }
 M4F="FAIL M4: allowlist row(s) whose fixture is not on $ALLOW_REL at origin/main -- the list is DOWN-ONLY:"
 m4ok=0
 m4_case added "$R" 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'b\tr2')" "$(printf 'c\tr3')" || m4ok=1
-m4_case swap "$R" 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'c\tr3')" || m4ok=1
-m4_case shrink "$R" 0 "OK M4: no allowlist row added against origin/main" "$(printf 'a\tr1')" || m4ok=1
-m4_case reworded "$R" 0 "OK M4: no allowlist row added against origin/main" "$(printf 'a\tother words')" "$(printf 'b\tr2')" || m4ok=1
-m4_case nofile "$RN" 0 "SKIP M4: origin/main carries no $ALLOW_REL -- this is the release that first ships it" "$(printf 'c\tr')" || m4ok=1
+m4_case swap "+$R" 1 "FAIL P-M4: allowlist row(s) whose probe key is not on $M4XREL at origin/main -- the list is DOWN-ONLY:" \
+  "$(printf 'a\tr1')" "$(printf 'd\tr4')" || m4ok=1
+m4_case shrink - 0 "OK M4: no allowlist row added against origin/main" "$(printf 'a\tr1')" || m4ok=1
+m4_case reworded - 0 "OK M4: no allowlist row added against origin/main" "$(printf 'a\tother words')" "$(printf 'b\tr2')" || m4ok=1
+m4_case nofile "+$RN" 0 "SKIP P-M4: origin/main carries no $M4XREL -- this is the release that first ships it" "$(printf 'c\tr')" || m4ok=1
 m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" "$(printf 'c\tr')" || m4ok=1
 [ "$m4ok" = 0 ] && sp_line M4 "ok (added and swapped rows refused; shrink and a reworded reason pass; both no-base states SKIP)"
 
-# E1's probe: one repository, one commit (E1 lists tracked files). Fires: zz1 (named by nothing), zz5 (named only by
+# E1's probe: one repository, index only, no commit (E1 lists tracked files, and nothing here reads HEAD). Fires: zz1 (named by nothing), zz5 (named only by
 # a live `verify:` line of docs/backlog.md -- NOT a reader for E1), zz8's twin zza (named only in a comment),
 # zd/receipt.sh (its bare name called from ANOTHER fixture), scripts/receipt-zz10 (named by nothing) and
 # scripts/receipt-zz12 (named only by itself). Quiet: zz2 (`bash "$HERE/receipt-zz2.sh"`), zz3 (`R="$HERE/…"` then
@@ -1901,7 +1947,7 @@ EOF
 printf '%s\n' '# ledger' '' '## BL-1 -- live' '' 'verify: sh bash core/fixtures/zb/receipt-zz5.sh' > "$E/docs/backlog.md"
 printf '%s\n' '# probe' "core/fixtures/zb/receipt-zz8.sh	held" "core/fixtures/zb/receipt-zz8.sh	again" \
   "core/fixtures/za/receipt-zz2.sh	read" "core/fixtures/gone/receipt.sh	absent" "scripts/receipt-zz12.sh" > "$E/scripts/inert-receipt-allowlist.txt"
-{ pgit init -q "$E" && pgit -C "$E" add -A && pgit -C "$E" commit -q -m base; } >/dev/null 2>&1 \
+{ pgit init -q "$E" && pgit -C "$E" add -A; } >/dev/null 2>&1 \
   || { echo "validate-fixture-hygiene: REFUSED -- could not build the E1 probe repository" >&2; exit 2; }
 printf '%s\n' 'DUP	core/fixtures/zb/receipt-zz8.sh' 'INERT	core/fixtures/za/receipt-zz1.sh' \
   'INERT	core/fixtures/zb/receipt-zz5.sh' 'INERT	core/fixtures/zb/receipt-zza.sh' 'INERT	core/fixtures/zd/receipt.sh' \

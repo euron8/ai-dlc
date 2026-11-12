@@ -213,8 +213,8 @@ set -uo pipefail
 # absolute into a hook run from a linked worktree, and this program is both
 # hook-dispatched and run directly. Arm E's self-probe builds a scratch repository
 # under mktemp and relies on git's upward DISCOVERY to find it -- the branch git
-# takes only when this environment is unset -- and its `git add` would otherwise
-# write the CALLER's index. The corpus reads below take the same redirection
+# takes only when this environment is unset -- and its `git fast-import` would
+# otherwise write the CALLER's object store and refs/heads/probe. The corpus reads below take the same redirection
 # silently. NOTHING ABOVE THIS LINE MAY CALL GIT.
 rv_init() {
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
@@ -463,6 +463,32 @@ conflict_files_in() { # <repo-dir> -> tracked paths at HEAD carrying BOTH marker
     <(git -C "$d" grep -l -e '^>>>>>>> ' HEAD 2>/dev/null | sed 's|^HEAD:||' | sort -u)
 }
 
+# THE PROBE REPOSITORIES OF ARMS E AND F ARE WRITTEN BY ONE `git fast-import` EACH, not by a
+# `git config` and `git commit` per case. Every commit carries the identity in the stream, so no
+# config is read or written, and fast-import neither runs a hook nor spawns the auto-maintenance
+# process each `git commit` did; `fastimport.unpackLimit=0` keeps its pack as written instead of
+# spawning `unpack-objects` for a handful of objects. Each `data` block is byte-counted in the C locale, so a message
+# carrying a \001 byte (arm F's forged-boundary offender) is stored exactly as written. The
+# commits chain on refs/heads/probe, which `git init --initial-branch=probe` makes HEAD.
+rv_fi_data() { # <bytes> -> a fast-import `data` command carrying <bytes> exactly
+  local LC_ALL=C
+  printf 'data %d\n%s\n' "${#1}" "$1"
+}
+rv_fi_commit() { # <subject> [body] -> a commit on refs/heads/probe, message as `git commit -m -m` writes it
+  printf 'commit refs/heads/probe\ncommitter probe <probe@example.com> 0 +0000\n'
+  if [ $# -ge 2 ]; then rv_fi_data "$1
+
+$2
+"
+  else rv_fi_data "$1
+"
+  fi
+}
+rv_fi_file() { # <path> <content ending in a `_` sentinel> -> an inline file in the current commit
+  printf 'M 100644 inline %s\n' "$1"
+  rv_fi_data "${2%_}"
+}
+
 # THE SELF-PROBE RUNS BEFORE THE CORPUS, and it fires in both directions. An arm
 # reporting no offenders without first proving it can produce one has established
 # that it ran, not that the tree is clean. Built under mktemp, never on the real
@@ -477,28 +503,33 @@ conflict_files_in() { # <repo-dir> -> tracked paths at HEAD carrying BOTH marker
 # in the header, pinned here so a later author reads it as a measured limit rather
 # than as coverage. A near-miss short of two properties discriminates against
 # neither.
+#
+# The tree is written by rv_probe_e_tree alone, so the release-version-triple fixture can build
+# it the same way and list its four paths: a near-miss that never reached the tree is quiet too.
+rv_probe_e_tree() { # <empty dir> -> a repository whose HEAD tree holds the four probe files
+(
+  cd "$1" || exit 1
+  git init -q --initial-branch=probe . || exit 1
+  {
+    rv_fi_commit 'probe corpus'
+    rv_fi_file offender.md "$(printf '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other-branch\n_')"
+    # A setext H1 underline. This is the shape that would join the population if
+    # `^=======$` were in the grammar, and it is why it is not.
+    rv_fi_file setext.md   "$(printf 'A Heading\n=======\n\nbody text\n_')"
+    rv_fi_file nospace.md  "$(printf '<<<<<<<\nours\n>>>>>>> other-branch\n_')"
+    # A TRUNCATED conflict: a real open marker, trailing space and all, with no
+    # closing marker. The arm is silent on it BY CONSTRUCTION, and that silence is
+    # asserted so the gap is on the record.
+    rv_fi_file openonly.md "$(printf '<<<<<<< HEAD\nours\n_')"
+  } | git -c fastimport.unpackLimit=0 fast-import --quiet
+) >/dev/null 2>&1
+}
+
 arm_e() {
 probe_e="$(mktemp -d 2>/dev/null)" || {
   echo "FAIL: arm E could not create its probe directory" >&2; exit 1; }
 trap 'rm -rf "$probe_e"' EXIT
-(
-  cd "$probe_e" || exit 1
-  git init -q . || exit 1
-  git config user.email probe@example.com
-  git config user.name probe
-  git config commit.gpgsign false
-  printf '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other-branch\n' > offender.md
-  # A setext H1 underline. This is the shape that would join the population if
-  # `^=======$` were in the grammar, and it is why it is not.
-  printf 'A Heading\n=======\n\nbody text\n'                          > setext.md
-  printf '<<<<<<<\nours\n>>>>>>> other-branch\n'                      > nospace.md
-  # A TRUNCATED conflict: a real open marker, trailing space and all, with no
-  # closing marker. The arm is silent on it BY CONSTRUCTION, and that silence is
-  # asserted so the gap is on the record.
-  printf '<<<<<<< HEAD\nours\n'                                       > openonly.md
-  git add -A
-  git commit -q -m 'probe corpus'
-) >/dev/null 2>&1
+rv_probe_e_tree "$probe_e"
 
 probe_hits="$(conflict_files_in "$probe_e")"
 probe_bad=""
@@ -529,11 +560,8 @@ fi
 # See the header for the grammar, its pairing with `named_cited_filter`, and the
 # measured false-positive set. Evaluated over the same commit list as A and B.
 # ---------------------------------------------------------------------------
-form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" per finding
-  local d="$1" c msg
-  for c in $2; do
-    msg="$(git -C "$d" log -1 --format=%B "$c" 2>/dev/null)" || { printf '%s <message could not be read>\n' "$c"; continue; }
-    printf '%s\n' "$msg" | C="$(git -C "$d" rev-parse --short "$c" 2>/dev/null)" LC_ALL=C awk '
+form_scan() { # <short sha>, one message on stdin -> "<short> <line>" per finding
+    C="$1" LC_ALL=C awk '
       # A \001 byte opens a record in the engine`s message stream, so a message carrying one
       # can forge a commit boundary. Refused wherever it appears.
       index($0, "\001") { print ENVIRON["C"] " carries a \\001 byte (the engine record separator) on line " NR; next }
@@ -542,6 +570,44 @@ form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" p
         if (NR == 1) { print ENVIRON["C"] " subject: " $0; next }
         if ($0 !~ /^Not-discharged: PC-S[0-9]+(-[A-Za-z0-9_.-]+)*$/) print ENVIRON["C"] " body: " $0
       }'
+}
+
+# ONE `git log -z` READS EVERY MESSAGE, never a `log -1` and a `rev-parse --short` per commit.
+# Records are NUL-terminated, so a \001 in a message is ordinary data to this read. Whatever the
+# stream holds, a record that does not name its own argument as its %H discards the whole pass,
+# so a misaligned read can never be scored. The pass is taken only when every
+# argument is a full object name, and its answer only when it returned exactly one record per
+# argument, in order, each naming that argument as its %H; anything else (`HEAD`, a tag, an
+# unreadable sha, a short sha) goes through the per-commit reads below, whose output is the
+# reference this pass reproduces -- `%h` is the abbreviation `rev-parse --short` prints.
+form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" per finding
+  local d="$1" c msg rec n=0 got=0 fast=1 found="" hit
+  local -a want=()
+  for c in $2; do
+    want[n]="$c"; n=$((n+1))
+    case "${#c}" in 40|64) ;; *) fast=0 ;; esac
+    case "$c" in *[!0-9a-f]*) fast=0 ;; esac
+  done
+  [ "$n" -gt 0 ] || return 0
+  if [ "$fast" = 1 ]; then
+    while IFS= read -r -d '' rec || [ -n "$rec" ]; do
+      c="${rec%%$'\n'*}"
+      [ "$got" -lt "$n" ] && [ "${c%% *}" = "${want[got]}" ] || { fast=0; break; }
+      msg="${rec#*$'\n'}"
+      while [ "${msg%$'\n'}" != "$msg" ]; do msg="${msg%$'\n'}"; done
+      hit="$(printf '%s\n' "$msg" | form_scan "${c#* }")"
+      [ -z "$hit" ] || found="${found}${hit}
+"
+      got=$((got+1))
+    done < <(git -C "$d" log -z --no-walk=unsorted --format='%H %h%n%B' "${want[@]}" 2>/dev/null)
+    if [ "$fast" = 1 ] && [ "$got" = "$n" ]; then
+      printf '%s' "$found"
+      return 0
+    fi
+  fi
+  for c in $2; do
+    msg="$(git -C "$d" log -1 --format=%B "$c" 2>/dev/null)" || { printf '%s <message could not be read>\n' "$c"; continue; }
+    printf '%s\n' "$msg" | form_scan "$(git -C "$d" rev-parse --short "$c" 2>/dev/null)"
   done
 }
 
@@ -558,27 +624,39 @@ probe_f="$(mktemp -d 2>/dev/null)" || {
 trap 'rm -rf "${probe_e:-}" "$probe_f"' EXIT
 (
   cd "$probe_f" || exit 1
-  git init -q . || exit 1
-  git config user.email probe@example.com
-  git config user.name probe
-  git config commit.gpgsign false
-  git commit -q --allow-empty -m 'rel: bulleted' -m '  - not discharged: PC-S1-BULLET'
-  git commit -q --allow-empty -m 'rel: backticked' -m 'Not-discharged: `PC-S1-TICK`'
-  git commit -q --allow-empty -m 'Not-discharged: PC-S1-SUBJECT'
-  # TRAILING TEXT after a canonical-looking id: the engine reads this line as an ORDINARY mention,
-  # so it must be reported. It is the offender that kills a canonical regex missing its `$`.
-  git commit -q --allow-empty -m 'rel: trailing' -m 'Not-discharged: PC-S1-TRAIL (rejected, see BL-9)'
-  git commit -q --allow-empty -m 'rel: separator' -m "$(printf 'Body PC-S1-SEPBYTE \001 forged')"
-  git commit -q --allow-empty -m 'rel: canonical' -m 'Not-discharged: PC-S1-CANON'
-  # THE SHARED ID CLASS, `[A-Za-z0-9_.-]` as in lib.sh `ledger_entry_id()`. A dotted canonical id
-  # must NOT be reported -- the narrow `[A-Z0-9]` spelling refused it -- and the same dotted id with
-  # trailing text MUST be, so widening the class cannot drop the `$` anchor unseen.
-  git commit -q --allow-empty -m 'rel: canonical dotted' -m 'Not-discharged: PC-S1-3.2-DOT_CANON'
-  git commit -q --allow-empty -m 'rel: trailing dotted' -m 'Not-discharged: PC-S1-3.2-DOT_TRAIL (see 0.1.0)'
-  git commit -q --allow-empty -m 'rel: midline' -m 'This entry was not discharged by this release.'
+  git init -q --initial-branch=probe . || exit 1
+  {
+    rv_fi_commit 'rel: bulleted' '  - not discharged: PC-S1-BULLET'
+    rv_fi_commit 'rel: backticked' 'Not-discharged: `PC-S1-TICK`'
+    rv_fi_commit 'Not-discharged: PC-S1-SUBJECT'
+    # TRAILING TEXT after a canonical-looking id: the engine reads this line as an ORDINARY mention,
+    # so it must be reported. It is the offender that kills a canonical regex missing its `$`.
+    rv_fi_commit 'rel: trailing' 'Not-discharged: PC-S1-TRAIL (rejected, see BL-9)'
+    rv_fi_commit 'rel: separator' "$(printf 'Body PC-S1-SEPBYTE \001 forged')"
+    rv_fi_commit 'rel: canonical' 'Not-discharged: PC-S1-CANON'
+    # THE SHARED ID CLASS, `[A-Za-z0-9_.-]` as in lib.sh `ledger_entry_id()`. A dotted canonical id
+    # must NOT be reported -- the narrow `[A-Z0-9]` spelling refused it -- and the same dotted id with
+    # trailing text MUST be, so widening the class cannot drop the `$` anchor unseen.
+    rv_fi_commit 'rel: canonical dotted' 'Not-discharged: PC-S1-3.2-DOT_CANON'
+    rv_fi_commit 'rel: trailing dotted' 'Not-discharged: PC-S1-3.2-DOT_TRAIL (see 0.1.0)'
+    rv_fi_commit 'rel: midline' 'This entry was not discharged by this release.'
+  } | git -c fastimport.unpackLimit=0 fast-import --quiet
 ) >/dev/null 2>&1
-probe_f_hits="$(form_findings_in "$probe_f" "$(git -C "$probe_f" rev-list HEAD 2>/dev/null)")"
+probe_f_shas="$(git -C "$probe_f" rev-list HEAD 2>/dev/null)"
+probe_f_hits="$(form_findings_in "$probe_f" "$probe_f_shas")"
+# AN UNREADABLE MEMBER, IN A CALL OF ITS OWN. `git log --no-walk` given a full name that
+# names no object prints no record at all, so only the record count keeps the single read
+# from answering "no findings" for the whole list. One real offender (the first commit, the
+# bulleted spelling) beside one absent name: both findings must come back. It is not in the
+# list above, which would then never take the single read and lose its \001 case.
+probe_f_gone=0000000000000000000000000000000000000001
+probe_f_mixed="$(form_findings_in "$probe_f" "$(printf '%s\n' "$probe_f_shas" | tail -n 1)
+$probe_f_gone")"
 probe_f_bad=""
+grep -qxF -- "$probe_f_gone <message could not be read>" <<<"$probe_f_mixed" \
+  || probe_f_bad="the unreadable member $probe_f_gone was NOT reported"
+grep -qF -- PC-S1-BULLET <<<"$probe_f_mixed" \
+  || probe_f_bad="${probe_f_bad:+$probe_f_bad; }the offender PC-S1-BULLET beside an unreadable member was NOT reported"
 for tok in PC-S1-BULLET PC-S1-TICK PC-S1-SUBJECT PC-S1-TRAIL PC-S1-3.2-DOT_TRAIL 'carries a \001 byte'; do
   grep -qF -- "$tok" <<<"$probe_f_hits" || probe_f_bad="${probe_f_bad:+$probe_f_bad; }the offender $tok was NOT reported"
 done

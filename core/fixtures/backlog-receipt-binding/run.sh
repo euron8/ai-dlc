@@ -59,6 +59,7 @@
 # MUTANT-MATRIX m8e-mut decides=m8e_mut twins=m8c_mut
 # MUTANT-MATRIX m17 decides=m17 twins=m18
 # MUTANT-MATRIX m18 decides=m18 twins=m17
+# MUTANT-MATRIX m19 decides=m19 twins=m1
 # MUTANT-MATRIX m-loose decides=m_loose twins=m_heading_only
 # MUTANT-MATRIX m-heading-only decides=m_heading_only twins=m_loose
 # MUTANT-MATRIX m-memo-unset decides=m_memo_unset twins=m_memo_name
@@ -328,6 +329,9 @@ arm_c1_whole() { r_line "$1" "SIDE added=1" && [ "$(r_rc "$1")" = 2 ] && r_has "
 arm_m16() { ! r_has "$1" "SIDE porc=0" && r_has "$1" "SIDE porc=" && ! { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "working tree changed"; }; }
 arm_m17() { [ "$(r_rc "$1")" != 0 ] && ! r_has "$1" "OK: validate-backlog-receipts" && r_has "$1" "not UNSTABLE"; }
 arm_m18() { ! { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED"; } && r_has "$1" "SIDE tree_complete=gone"; }
+# m19 reads only R1's refusal about BL-912's driver NOT being on disk: the hook still sets BL-906's 444
+# mode under it, so every other R1 row is unchanged and only this one sentence can trip.
+arm_m19() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED -- the untracked-driver receipt saw base-exit=1-paths=1-" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_gitdir_mutant() { r_has "$1" "SIDE hookspath=" && { { [ "$(r_rc "$1")" != 0 ] && r_has "$1" "OUT-OF-POPULATION"; } || r_has "$1" "SIDE hookspath=changed"; }; }
 arm_m_loose() { [ "$(r_rc "$1")" = 2 ] && r_has "$1" "SELF-PROBE FAILED" && r_has "$1" "BL-632" && ! r_has "$1" "OK: validate-backlog-receipts"; }
 arm_m_heading_only() { [ -z "$(r_cls "$1" BL-851)" ] && [ "$(r_cls "$1" BL-850)" = "PROSE-CLOSABLE" ] && grep -qE '^SUMMARY entries=1 sh-receipts=1 ' "$REC/$1.out"; }
@@ -1389,6 +1393,17 @@ if mut "$TMP/m18" 's|^        if tree_complete "$_d"; then|        if true; then
   m18_still="$(grep -c 'if tree_complete' "$TMP/m18/scripts/validate-backlog-receipts.sh")" || m18_still=0
   if [ "$m18_still" -eq 0 ]; then side m18 "tree_complete=gone"; else side m18 "tree_complete=present"; fi
   score m18 "$B_CTRL" "m18 -- the completeness assertion is a distinct branch and its removal is observable, and the self-probe does not refuse"
+fi
+
+# m19 -- R1'S UNTRACKED DRIVER MUST BE ON DISK WHEN BL-912 IS REFUSED. BL-912 runs a TRACKED script
+# `&&` one present in the checkout but UNTRACKED, written by the post-checkout hook of the probe
+# repository that holds it. Absent, an `[ -f ]` test refuses it too, so UNSCORABLE alone cannot say
+# the TRACKED check decided. The mutant deletes the hook's write: the self-probe must refuse on the
+# receipt's path count, which is also what fires if BL-912 is moved to the probe repository with no hook.
+seed "$TMP/m19"
+if mut "$TMP/m19" '\|^  echo .printf ".*" > probe/untracked-driver\.sh.$|d'; then
+  drive m19 "$TMP/m19" "" $DEF
+  score m19 "$B_CTRL" "m19 -- with the hook no longer writing BL-912's untracked driver, R1 refuses on the receipt's on-disk path count"
 fi
 
 # ===== Q1. --quiet SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. ======================
@@ -2963,6 +2978,7 @@ twin_of() {
     m8e-mut) echo m8c_mut ;;
     m17) echo m18 ;;
     m18) echo m17 ;;
+    m19) echo m1 ;;
     m-loose) echo m_heading_only ;;
     m-heading-only) echo m_loose ;;
     m-memo-unset) echo m_memo_name ;;

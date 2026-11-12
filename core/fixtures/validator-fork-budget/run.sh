@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # Hold scripts/validate-enforcement-map.sh to the FORK_BUDGET declared for it in fork-budget.txt.
 #
 # WHY THIS FIXTURE EXISTS. That script stated its own cost in a comment -- a fork count, a
@@ -32,6 +33,8 @@
 #   A6  BL-898       receipt-bl898.sh against the shipped validator: I83/I84's grep count does not
 #                    move with the corpus, an unreadable corpus file errs, and the validator is not
 #                    its own `stories_dir` reader
+#   A7  BL-981       receipt-bl981.sh, an OPEN entry's receipt: it must measure (exit 0 or 1, both
+#                    CELL lines), and exit 9 is FIXTURE BROKEN
 #
 # A1 AND A5 ARE THE TWO THAT MAKE THE OTHERS MEAN ANYTHING. A validator that dies at line 400
 # forks almost nothing and sails under any ceiling; an unbounded-below gate reads that as an
@@ -752,6 +755,25 @@ rcpt_mut m18-self-reader selfreader,unread "$TMP/m18.sh" "m18-self-reader: the v
 sed '/^i84_reads() {/,/^}/s/^  \[ "\$?" -le 1 \] || return 2$/  return 0/' "$VAL" > "$TMP/m19.sh" || : > "$TMP/m19.sh"
 rcpt_mut m19-unread-probe-return clean,count "$TMP/m19.sh" "m19-unread-probe-return: an i84_reads that loses grep's read failure is refused by the validator's own unread probe"
 
+# ==========================================================================================
+# A7 -- BL-981's RECEIPT, OPEN. It counts git starts from GIT_TRACE2_EVENT: release-version's arm_ab
+# per commit in a scratch repository, and this validator's `--arms I14` run against this tree. Both
+# costs are present while BL-981 is open, so its exit is 1 today and 0 once both are fixed; either is a
+# measurement, and the arm requires both CELL lines. Exit 9 is a refusal to measure: FIXTURE BROKEN.
+# ==========================================================================================
+RCPT981="$DIR/receipt-bl981.sh"
+[ -f "$RCPT981" ] || { echo "FIXTURE ERROR: missing $RCPT981" >&2; exit 2; }
+# NECESSITY: one `--arms I14` run of the validator is the only call that shows I14's per-hook git starts.
+bash "$DIR/receipt-bl981.sh" > "$TMP/r981.out" 2>"$TMP/r981.err"; r981_rc=$?
+r981_cells="$(grep -cE '^CELL (rv|em) (PASS|FAIL) ' "$TMP/r981.out")" || r981_cells=0
+if [ "$r981_rc" = 9 ]; then
+  bad "FIXTURE BROKEN: receipt-bl981.sh refused to measure: $(head -1 "$TMP/r981.err")"
+elif { [ "$r981_rc" = 0 ] || [ "$r981_rc" = 1 ]; } && [ "$r981_cells" = 2 ]; then
+  note "ok    A7 BL-981      -- receipt exit $r981_rc: $(grep '^CELL ' "$TMP/r981.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
+else
+  bad "A7 BL-981 -- receipt-bl981.sh exited $r981_rc with $r981_cells of 2 CELL lines: $(head -c 400 "$TMP/r981.err" | tr '\n' ' ')"
+fi
+
 # RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
 # empty matrix count cannot come from a ledger nothing writes.
 mx_only="$(mx_count mx)"; mx_ctl="$(mx_count dec)"
@@ -774,6 +796,6 @@ if [ "$rc" -eq 0 ] && [ "$N_SCORED" -lt "$EXPECTED_MUTANTS" ]; then
 fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 8 arms green, $N_SCORED/$EXPECTED_MUTANTS mutants scored"
+  note "PASS  validator-fork-budget -- $T1 fork(s) of FORK_BUDGET=$BUDGET across $NFX fixture dirs; 9 arms green, $N_SCORED/$EXPECTED_MUTANTS mutants scored"
 fi
 exit "$rc"

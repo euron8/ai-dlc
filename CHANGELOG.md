@@ -19,6 +19,37 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1073.0] - 2026-11-11
+
+### BL-880 PARTIAL: every pre-suite step is dispositioned, the M4 probe and the R1 hook are built, and one item stays owed
+
+Of the 23 pre-suite steps behind `pk_step`, 17 are at the floor and 6 were fixed, each with its self-probe still firing in both directions. The operator struck "the pre-push step's own probe replay". Bash starts S and git processes G are from the hook's counter and `GIT_TRACE2_EVENT`, same-tree swaps, each pair on the tree named. Enforcement-map integrity is S 38, G 51 to S 17, G 49 (I17 evaluates every site row in one bash start; the first swap, S 38 to 36 and G 51 to 49, is at 09bec4bc3). Release version is G 74 to 31. Claude-rules joins are G 12 to 10. Mutant kills are G 54 to 27. Fixture hygiene is G 53 to 47 at 09bec4bc3, then G 47 to 37 at 3f3b99ae1 (the M4 probe 24 to 14). Fixture-inprocess `--complete` is G 35 to 14 at 3f3b99ae1. Backlog receipts are S 179 to 159 and G 512 to 504 at the 0.1063.0 base (09bec4bc3). From the 0.1069.0 base (3f3b99ae1) there are two swaps, each starting at G 472: the M4 reshape moves G 472 to 430, and the R1 split moves S 113 to 76 and G 472 to 481 (hook starts 43 to 6).
+
+The M4 probe repos in fixture-hygiene and fixture-inprocess are one `git fast-import` each. The inprocess whole-m4 cases drop `GIT_DIR`, a latent defect fixed. R1's post-checkout hook now runs only in the probe repository whose seeds read it, and BL-912's row is asserted to have seen its driver (`-paths=2-`), closing a latent gap. New mutants: MM4, MM4R, MM4A, MM4P, MM4B, MM4M, m19 and others. The MUTANT-MATRIX row of m19 in `core/fixtures/backlog-receipt-binding` is derived from the capture, not from a `--matrix` run, by lead ruling: its anchor hits 1 line, the impossible-anchor control hits 0, and a scratch run gives exactly one SELF-PROBE FAILED, with BL-906 still UNSEEDED.
+
+Re-measured `invocations.decl` `*` rows, each base reading to final value. The sharded rows are from two agreeing counted runs at 9076646da, confirmed on the combined tree at cbac58510. The base readings are at 09bec4bc3, the first four measured there by the tip adversary:
+- enforcement-map-sites 291 to 208, -b 176 to 115, -c 176 to 135
+- validator-arm-selection 549 to 486, -b 604 to 499
+- layer-contract-conformance 89 to 68
+- ledger-status-vocabulary 68 to 47
+
+The other rows are on the combined tree at cbac58510 unless noted, with base readings at 09bec4bc3:
+- enforcement-map-derivations 439 to 459
+- derived-fence-binding 225 to 206
+- validator-fork-budget 1125 to 1111 (twice at 2ad79ae89)
+- backlog-receipt-binding 6151 to 3305
+- backlog-real-ledger 254 to 140
+- fixture-hygiene 70 to 85 (eebd8f0)
+- fixture-inprocess 50 to 53
+- claude-rules-joins 17 to 20
+- mutant-kills-selfprobe new at 18
+
+Three close verifiers all said KEEP-PARTIAL. The first named I17's per-row starts, the second the M4 probe and the R1 hook (both then built), and the third R1's generic-seed pass. That item is owed. The generic-seed pass re-scores receipts the seed cannot reach, costing 36 G / 11 S per push (R1GH 17 G / 6 S, R1G pre-seed rows 19 G / 5 S). The shape: a separate generic probe ledger holding only BL-901, 902, 905, 907, 908 and 909, scored through the unchanged `score_ledger` with root `$P`, and the R1GH call dropped. This closes nothing.
+
+### BL-981 filed: arm_ab starts four git processes per commit and I14 one per hook
+
+`validate-release-version.sh` `arm_ab` runs four git commands per commit, costing 4 starts per commit over a fixed 22 (N=1 26, N=3 34, N=17 90). `validate-enforcement-map.sh` I14 runs one `git ls-files -s` per registered hook and per bare-path file; `--arms I14` makes 27 git starts. The receipt `core/fixtures/validator-fork-budget/receipt-bl981.sh` exits 1 today (rv 4 and 12, em 27 with 25 hooks).
+
 ## [0.1072.0] - 2026-11-11
 
 ### BL-980 CLOSED: the review-shard-merge pole rise on 0.1064.0's push was load; the four receipt G wrappers gain -c maintenance.auto=false, and GM1 now runs every receipt and counts the maintenance children its commits spawn
