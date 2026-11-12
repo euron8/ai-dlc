@@ -1,0 +1,7 @@
+     ( e="$(mktemp)" && o="$(mktemp)" || { echo "REMOTE-KEPT <skill-branch>: mktemp failed"; exit; }
+       if ! gh api "repos/{owner}/{repo}/git/ref/heads/<skill-branch>" --jq .object.sha >"$o" 2>"$e"; then
+         grep -qF '(HTTP 404)' "$e" || echo "REMOTE-KEPT <skill-branch>: remote tip unreadable: $(tail -1 "$e")"
+       elif [ "$(cat "$o")" != "<headRefOid>" ]; then echo "REMOTE-KEPT <skill-branch>: remote tip moved"
+       elif ! gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/<skill-branch>" >/dev/null 2>"$e"; then
+         grep -qF 'Reference does not exist' "$e" || echo "REMOTE-DELETE-FAILED <skill-branch>: $(tail -1 "$e")"
+       fi )

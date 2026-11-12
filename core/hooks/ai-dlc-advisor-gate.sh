@@ -105,7 +105,7 @@
 #   - ALLOWED, AND KNOWN: a cwd already on `ai-dlc-update/*` plus `cd <elsewhere> && git push`.
 #     The exclusion reads the cwd, not where the command moves to; a session on an update branch
 #     that pushes a different checkout in the same command is not gated.
-#   - STILL GATED: step 1's AUTO-PUSH, :192 `git push -u origin <branch>` and :200 `git push`.
+#   - STILL GATED: step 1's AUTO-PUSH, :273 `git push -u origin <branch>` and :281 `git push`.
 #     Both run on the consumer's current branch before any `ai-dlc-update/*` branch exists, and
 #     no refspec or branch property separates them from a sprint push. RESIDUAL COST: that step
 #     reads a failed push as UN-SYNCED and continues, so a lead that does not act on the deny

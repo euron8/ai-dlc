@@ -41547,3 +41547,148 @@ Provenance: batch 256, release cluster b256-C5, from a consumer report; id alloc
 
 verify: sh bash core/fixtures/gate-remediation-deny/receipt-bl989.sh
 
+## BL-986 — `/ai-dlc-update` never returns the checkout to the working branch after a merge, so the next invocation starts on a merged, dead skill branch
+
+**LANDED (v0.1084.0).** **DEFECT.** Filed 2026-11-12 from a consumer push-candidate (the reference consumer, graph). Subject: `core/skills/ai-dlc-update/SKILL.md`, which ships alone. Step 8 (Deliver) merges the reconcile PR, step 2 auto-merges the self-update PR, and neither moves the checkout back to the branch the work was cut from. Every return graph had before 2026-11-11 came from a side effect of the merge tool, not from the skill: `gh pr merge --delete-branch` switches to the base and pulls locally. When that side effect did not run, the next `/ai-dlc-update` started on the merged branch, read it IN SYNC through its surviving remote-tracking ref, and cut the next pull's reconcile branch off it.
+
+Premise, derived at 0.1078.0 (e3d2dfc35) by the contract hand, each with its control. These figures are carried from that derivation and were not re-derived by this entry's author. Every line number in P1-P3 is a line at e3d2dfc35, named beside it. Every SKILL.md line cited after the premise is a line at the release.
+
+P1 (holds). Step 8, extracted from `^8\. \*\*Deliver` to `^9\. \*\*Safety` (SKILL.md:2690-2850 at e3d2dfc35), holds 0 lines matching `git (checkout|switch)`. Control in the same extraction: `grep -c 'Only then merge'` = 1. The whole-file grep finds SKILL.md:600 and :618 at e3d2dfc35 (step 2's failure exits), :730 (a file restore), :1709 (step 6's cut) and :2952 (the untangle cut), so the regex can match.
+
+P2 (holds, and wider than the filing). Step 2's SUCCESS path (the cycle bullet at SKILL.md:550-568 at e3d2dfc35, then the re-invoke bullet at :739-773 at e3d2dfc35) auto-merges "(squash, delete branch)" and re-invokes with no return. Its only `git checkout <original-branch>` lines are the TRANSPORT (SKILL.md:600 at e3d2dfc35) and HOOK-REFUSED (:618 at e3d2dfc35) failure exits.
+
+P3 (the mechanism; why the tool step did not run is an inference). Graph's reflog shows `checkout: moving from ai-dlc-update/<x> to <working>` followed one second later by `pull --ff-only origin <working>: Fast-forward` for reconcile branches (0.1005, 0.1019, 0.1023, 0.1027, 0.1028, 0.1036, 0.1044, 0.1058, 0.1061) and for self-update branches (0.1023 at 2026-11-06 10:09:10 and 0.1027 at 16:25:25, graph-local, UTC-5). That is the shape of `gh pr merge --delete-branch`'s local switch-and-pull. For graph PR #1311 (merged 2026-11-11T15:06:49Z UTC, `autoMergeRequest` null, `headRefOid` c7a24b70c) the reflog has no checkout after the merge, and the next entry is the 13:57:22 graph-local cut of 0.1056.0 off the 0.1049.0 branch. Why gh's local step did not run is UNKNOWN: a merge from another cwd or worktree, the UI, or a failed local step (`core/hooks/ai-dlc-advisor-gate.sh:208` at e3d2dfc35 records one `gh pr merge --delete-branch` that "merged and then failed to delete the local branch").
+
+P4 (holds). Graph sets neither `fetch.prune` nor `remote.origin.prune`, so a dead branch keeps `refs/remotes/origin/<it>` (graph: 138 such refs under `origin/ai-dlc-update/`, 0 local heads). `@{u}` resolves, the branch reads IN SYNC, and step 1 proceeds. Under pruning `@{u}` fails, the branch reads "no upstream", and step 1's AUTO-PUSH bullet would `git push -u` the deleted branch back to origin. So a step-1 guard has to be evaluated BEFORE both AUTO-PUSH bullets.
+
+P5 (the consumer's proposed guard has a measured false-positive set). `gh pr list --head <b> --state merged` returns 1 merged PR each for graph's two long-lived working branches, `ai-dlc/carry-over/epic5-closeout` and `ai-dlc/feature/per-chain-rebalancer-instances`. Control `ai-dlc/retro/sprint-322`: 0. A guard keyed on that query alone refuses the working branch.
+
+P6 (the branch-name grammar's false-positive set). Over graph's 138 `origin/ai-dlc-update/*` refs, `^ai-dlc-update/([0-9]+\.[0-9]+\.[0-9]+-reconcile-|self-update-|untangle-)` matches 132. The 6 non-matches are operator-named (`0.674.0-ledger-close-…`, `file-pc-s317-…`, `file-readset-push-candidates`, `pc-s315-…`, `pc-serial-self-update-fixtures-20261020`, `pc-update-deliver-no-return-20261111`), and none is a branch this skill cuts. Graph's reflog ever checked out only 2 non-grammar `ai-dlc-update/*` names, both among those 6.
+
+P7 (the motivating PR set). `--head ai-dlc-update/0.1049.0-reconcile-…` returns TWO merged PRs, #1311 and #1313, both based on `ai-dlc/carry-over/epic5-closeout`. #1312 (head 0.1056.0) is based on the 0.1049.0 branch, a skill-named dead branch. Returning to "the PR's base" for #1312 would land on a dead branch, and walking on to epic5 would strand the 0.1056.0 work, which has not reached the working branch. That state is a STOP, never a return.
+
+The filing's claims and their dispositions. (1) Step 8 has no return: HOLDS, fixed. (2) Step 2 returns on both its exit paths: true for the FAILURE exits only. The success path has the same gap (P2) and is fixed in this release. (3) A merged-and-kept local branch reads as reconcilable to step 1: HOLDS (P4), fixed. (4) The proposed fix, checkout, `merge --ff-only`, delete the local branch and STOP on a dirty overlap: TAKEN, overlap check included. The contract's first reading, that git's own checkout refusal makes the check redundant, was corrected: git refuses atomically per command, not across the checkout and the fast-forward together, and it overwrites an ignored file without refusing. The check's final form is the working-tree check below. (5) The optional step-1 refusal keyed on `gh pr list --state merged`: REJECTED as stated, on P5's measured false-positive set (1 merged PR on each of graph's two long-lived working branches, control 0). Reshaped as a key on this skill's own branch-name grammar (P6). (6) "Future pulls end with that switch by hand until the fix lands": answered by the delivering-pull statement below.
+
+Widenings the lead accepted: (a) the step-2 success-path return, the same defect in the same file; (b) the reshaped step-1 guard keyed on the branch-name grammar in place of the merged-PR query.
+
+THE MECHANISM, at the release.
+
+gh moves nothing. Both literal merges are `gh pr merge <n> --squash --delete-branch=false --match-head-commit <sha>`: step 2's at SKILL.md:803-804 and step 8's at :2946-2947. Step 9 states the rule at :3051. The source is gh v2.103.3 `pkg/cmd/pr/merge/merge.go`, the installed version, fetched raw from the v2.103.3 tag:
+1. `Changed("delete-branch")` (:123) is true whenever the flag is given, `=false` included.
+2. The only interactive delete-branch survey, `deleteBranchSurvey` (:325), is reached only under `MergeStrategyEmpty`, so never when `--squash` is given.
+3. The already-merged prompt "Delete the branch locally?" (:385-392) needs `IO.CanPrompt()` and is skipped when the flag was given.
+4. `deleteLocalBranch()` returns at :398 (`if !m.deleteBranch …`) BEFORE the `CheckoutBranch` (:471) and `Pull` (:480) calls.
+5. `deleteBranch: opts.DeleteBranch` (:591) carries the flag's value.
+So the merge performs no local git operation and asks nothing, and the RETURN PROCEDURE makes the move.
+
+ONE procedure makes every move from a skill branch onto a working branch. The RETURN PROCEDURE is at SKILL.md:2953-3036, (a)-(f), and its ABANDON form is at :3037-3043. Every remedy in the skill that moves the checkout from a skill branch onto a working branch names one of the two, never a bare `git checkout` (:3044-3045). That includes step 2's TRANSPORT and HOOK-REFUSED discard checkouts (:662, :681), which run the ABANDON form. When ABANDON STOPs there, the invocation STOPs: steps 3-5 do not run on the self-update branch, the branch is kept and named, and step 2 reports DEFERRED or `SELF-UPDATE-DEFER`.
+
+The clauses:
+(a) `gh pr view <n> --json state,baseRefName,headRefName,headRefOid` (:2958). `<working>` is `baseRefName` and `<skill-branch>` is `headRefName`, never remembered. It STOPs when the state is not `MERGED` or when `<working>` matches the skill-branch grammar.
+(b) `git fetch origin "+refs/heads/<working>:refs/remotes/origin/<working>"` (:2963). A failed fetch STOPs.
+(c) The working-tree check (:2965-2997; the block itself is :2975-2983).
+(d) `git checkout <working>`, never `-f`, a stash or `--discard-changes` (:2997-2999).
+(e) `git merge --ff-only origin/<working>` (:3002). Step 1's diverged remedy is added only when local `<working>` is ahead.
+(f) `git branch -D <skill-branch>` ONLY when its tip equals the PR's `headRefOid` (:3006). Otherwise it STOPs, because the branch holds commits the merge did not take.
+Every clause reads state before it acts, so a run after a return already happened is a no-op.
+
+ABANDON moves off an UNMERGED skill branch. It runs (b) when a remote exists, then (c), (d) and (e), with `<working>` set to the reflog-derived branch. It skips (a) and never runs (f). With no remote, (b) and (e) are skipped. A failed fetch is a note, never an ABANDON STOP: ABANDON skips (b) and (e) and goes on with (c) and (d) against local `<working>`.
+
+The working-tree check is a named, self-contained block that another procedure may cite and run as written. Its one input is `<working>`. Its output contract is that ANY output line is a STOP and an empty output means the move may proceed. It runs in a subshell from the repository toplevel. Its changed set is the UNION of `git diff -z --name-only --no-renames HEAD <working>` (what the checkout of local `<working>` writes) and the same diff against `origin/<working>` (what the fast-forward writes). A ref that does not exist is skipped, and the set is `sort -zu`'d. For each path, NUL-delimited, it prints `DIRTY <path>` when `git diff --quiet HEAD -- ":(literal)<path>"` fails (tracked and dirty, staged or not). It prints `ON-DISK <path>` when the path is absent from HEAD (`git cat-file -e` fails) yet present on disk (`[ -e ] || [ -L ]`), which covers untracked AND ignored files.
+
+The one reflog derivation, at SKILL.md:261-271, is stated once in step 1 and cited by steps 2 and 8. It gives the branch a skill branch was cut from: `<cut-from>` in steps 1 and 8, `<original-branch>` in step 2. It is the OLDEST line of `git reflog --format=%gs` that begins with `checkout: moving from ` and ends with the fixed string ` to <skill-branch>`, compared as a string and never as a pattern (the awk at :268). That line is the record git wrote for step 6's `git checkout -b`. No skill-written record and no remembered value is used. With no matching line, step 1's STOPs say the origin is unknown, step 2 uses the branch step 1 confirmed in sync on this invocation, and step 8 states the chosen base in the PR presentation for the operator to confirm. All three are the prior behaviour.
+
+Step 1 (skill-branch bullet at SKILL.md:226-271, evaluated before either AUTO-PUSH bullet, :312). The skill-branch grammar reads the branch name only. A branch that does not match makes no `gh` call. On a match, one `gh pr list --head <b> --state all … @tsv` command (:234) runs, then four tests in order (:235-248):
+(1) any OPEN row STOPs;
+(2) the MERGED rows' distinct `baseRefName` set is exactly one non-skill branch;
+(3) the local tip equals one MERGED row's `headRefOid`;
+(4) when the reflog derivation yields a branch, that row's `baseRefName` equals it.
+When all pass, it runs the RETURN PROCEDURE, then STOPs and re-invokes with the operator's original arguments in full. Anything else STOPs and names every row's PR and base. That STOP also reports whether `.claude/.ai-dlc-applying` marks an unfinished apply, and names the continuations without running any.
+
+Step 2 opens its PR with `gh pr create --base <original-branch>` (SKILL.md:815). Without `--base`, gh targets the repository's default branch (graph's is `main`). The return after the merge STOPs when `baseRefName` is not `<original-branch>`, naming both.
+
+Step 8 opens its PR with `gh pr create --base <cut-from>` (SKILL.md:2927). Before any merge it refuses when `<cut-from>` matches the skill-branch grammar, which is #1312's state.
+
+WHAT THE OPERATOR SEES AND DOES AT EACH STOP:
+- `DIRTY <path>`: copy the file elsewhere, then `git restore --staged --worktree -- <path>`, then re-run the check. Never commit on the skill branch to clear it, because a new commit breaks (f)'s tip gate.
+- `ON-DISK <path>`: move the file aside, then re-run the check.
+- When the re-run prints nothing, the procedure goes on to (d). The procedure itself never stashes or forces (SKILL.md:2985-2990).
+- An OPEN PR (test (1)): the operator sees "PR #N from <branch> is still open: merge or close it, then re-invoke from this branch." Merging in the UI, or with the literal merge command, moves no checkout, and the re-invoke from THIS branch makes the move. The operator never checks out the base by hand. To leave the branch unmerged, the operator names the ABANDON form instead.
+- Test (4): the STOP names both branches and offers the RETURN PROCEDURE to `baseRefName` or the ABANDON form to `<cut-from>`, running neither. A bare re-invoke repeats the STOP, so the operator names one.
+- No remote: the STOP (SKILL.md:218-224) names the branch and gives the local merge remedy: the ABANDON form to `<cut-from>`, then `git merge --ff-only <skill-branch>`, then `git branch -d <skill-branch>`.
+
+THE MEASURED DATA-LOSS PATHS THAT DROVE THE DESIGN. Each was measured on a `file://` scratch clone or a synthetic repository, never on graph.
+1. An ignored file overwritten by the fast-forward. An earlier text listed untracked files with `git ls-files --others --exclude-standard`, which never lists an ignored file. An ignored operator file at a path origin gained independently was overwritten by the fast-forward (`cmp` CHANGED), and the procedure reported a clean RETURN. Hence the ON-DISK arm, which tests absence from HEAD plus presence on disk.
+2. A path tracked only by local `<working>`. An earlier changed set compared HEAD with `origin/<working>` alone, while (d) checks out LOCAL `<working>` first. A path `g` tracked only by local `<working>` and ignored on HEAD was absent from the set: the checkout overwrote it and the fast-forward removed it, so operator content was LOST. Hence the union over both checkout targets.
+3. gh `--delete-branch`'s own checkout and pull. Run from the skill branch, gh checks out the base and runs `pull --ff-only` BEFORE any check of the skill's own can run; graph's log shows 61 of 91 such checkouts followed by gh's pull. Rehearsal W1, with a gh stand-in performing gh's real local step, was RED on the text that still passed `--delete-branch`: an ignored operator file at a path origin gained independently was CHANGED by the merge itself. It was GREEN on the reshaped text: after the merge HEAD stays on the skill branch, the RETURN's check STOPs `ON-DISK` on that path, the file is `cmp` IDENTICAL, and neither the local nor the remote branch is deleted. Hence `--delete-branch=false` on both merges.
+4. STOP remedies that handed out raw checkouts. Every leak through three adversary rounds had one shape: a move onto the working branch that bypassed the procedure, either gh's local step or a raw `git checkout` a STOP remedy handed to the operator. Guarding each route separately failed three rounds running. The remedy removed the affordance: every such move goes through the RETURN PROCEDURE or its ABANDON form.
+5. Non-ASCII and quoted paths. With git's default `core.quotePath`, a file `é.log` was printed quoted, missed by the existence test, and clobbered. Run from a subdirectory, the check missed ON-DISK entirely, because git prints toplevel-relative paths. A later quoting guard looped on a clean, tracked `q"uote`. Hence the toplevel subshell, NUL-delimited paths (`-z`, `sort -zu`, `read -d ''`) and `:(literal)` pathspecs. A name carrying a quote, a backslash, a tab or a newline reaches the tests intact.
+
+THE L2 LOOSENING, in plain words. With `--delete-branch` the REMOTE skill-branch delete rode inside the `gh pr merge` call, which `core/hooks/ai-dlc-advisor-gate.sh` gates on an advisor consult. The delete is now a separate `gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/<skill-branch>"` in (f) (SKILL.md:3013-3019). That call matches none of the gate's lead kinds (`leadkind`, gate.sh:370-382), so the hook exits at gate.sh:503. It is therefore OUTSIDE the advisor gate in both states, with and without a consult. The merge itself is still gated, because the hook keys on `gh … pr merge`, not on the flag.
+
+This is acceptable because the delete runs only in (f) of the post-merge RETURN, after (a) has confirmed `MERGED` and after the local-delete tip gate has passed. It never runs before (a), never in ABANDON, and never when the local branch was already gone (SKILL.md:3030-3033). Before the DELETE it reads the remote tip and deletes only when that tip is still the merged `headRefOid`. So it can never delete an unmerged branch. It is not a git push, so no consumer pre-push hook runs.
+
+The cost: a remote skill branch can now outlive a merged PR, where `--delete-branch` used to remove it. Each such case prints a line that is never silent and never a STOP, because the local return has already succeeded:
+- `REMOTE-KEPT <b>: no local branch to gate on`;
+- `REMOTE-KEPT <b>: remote tip moved`;
+- `REMOTE-KEPT <b>: remote tip unreadable: <msg>`;
+- `REMOTE-DELETE-FAILED <b>: <gh's message>`.
+A lookup failing with `(HTTP 404)` means the ref is already gone and prints nothing. A DELETE failing with `Reference does not exist (HTTP 422)` means it is already deleted and prints nothing.
+
+Live probes on the ai-dlc remote. These were reported by the probe hand to the lead and are not re-derived here. A DELETE of an already-gone ref returned HTTP 422 "Reference does not exist". The same call with `GH_TOKEN=invalid` returned HTTP 401 "Bad credentials". The probe deviated from its brief at three boundaries:
+- it used a branch-name prefix other than the one briefed;
+- it checked the ref's absence through the API rather than as briefed;
+- it sent the valid DELETE twice.
+A protected branch was NOT measured, because measuring it would need a mutation of a real protected ref. Its response is GitHub's documented 422, unmeasured here.
+
+The residual window. Origin can move between the fetch (b) and the checkout (d). The check reads the fetched tracking ref, so the window is narrowed, not closed.
+
+Delivering pull. The consumer's INSTALLED engine runs steps 1-2 of the pull that delivers this fix. The old step 1 has no skill-branch guard, so the operator must start on the working branch, as graph now does by hand. The old step 2 lands the new SKILL.md in the self-update slice and auto-merges by the OLD text, so it returns only if `gh` does so as a side effect. The main residual is that the INSTALLED text still merges with `gh pr merge … --delete-branch`. It does so in the old step 2's auto-merge and, on the DEFER branch, in that pull's old step 8. At those merges gh's own unguarded checkout of the base plus `pull --ff-only` still runs, before any working-tree check exists to run. So the overwrite path this release closes (data-loss path 3 above) is still open for that one pull. If the self-update LANDS, the re-invocation runs the new text, and the new step 8 guards the reconcile merge. The new step 1 returns a left-behind self-update branch only when gh did NOT switch. If step 2 DEFERs, the new SKILL.md rides the gated apply, that pull's step 8 is the OLD text, and its return is manual one last time. In both branches, "the new step 1 catches the state on the next invocation" holds only when gh did NOT switch. When gh's local step ran, the checkout is already on the working branch, not a skill branch, so step 1 has nothing to catch, and any overwrite has already happened. The fix is live for every later pull, from the first one that runs the new step 8. Graph's last four pulls each logged `SELF-UPDATE-DEFER`: one line in each of `_bmad-output/ai-dlc-update/reconcile-log-20261111T141706Z.md`, `…T190022Z.md`, `…T214433Z.md` and `…T223043Z.md` on graph's `origin/main`, re-derived for this entry (an impossible-token control in the same run read 0). Graph's expected delivering path is therefore the DEFER branch.
+
+REHEARSAL ON THE FINAL TEXT. Graph's 2026-11-11 states were replayed on `file://` scratch clones (graph read-only throughout), with a gh stand-in answering from graph's recorded PR JSON. That JSON was byte-identical to a live read-only `gh pr list` and `gh pr view` against graph. Each row's verdict is the result of executing the release's literal commands.
+
+Round 8, all 13 rows MATCH:
+
+| case | state replayed | outcome on the release text |
+|---|---|---|
+| W0 0.1049, literal merge, TTY set | graph's real pre-merge state, clean | merge: 0 local steps, 0 prompts, HEAD still on the skill branch; then RETURN to epic5-closeout equal to origin; local and remote skill branch deleted (1 lookup, 1 DELETE); nothing printed |
+| already-merged PR, TTY set, literal merge | the 0.1049 branch after #1311 merged | 0 local steps, 0 prompts; HEAD and both branches unchanged |
+| already-merged PR, TTY set, no flag (control) | the same | 1 prompt ("Delete the branch locally?"), 0 local steps |
+| already-merged PR, TTY set, `--delete-branch` (control) | the same | 1 local step: HEAD moved to epic5-closeout and the local branch deleted, outside the procedure |
+| OPEN PR, `--delete-branch` (control) | the 0.1049 branch before the merge | 1 local step: HEAD moved to epic5-closeout |
+| W1, literal merge | an ignored operator file at a path origin gained independently | 0 local steps; HEAD stays on the skill branch; STOP (c) `ON-DISK _bmad-output/ai-dlc-update/blocker-adjudication-20261111T184825Z.md`; file `cmp` IDENTICAL; 0 DELETEs; both branches kept |
+| remote ref already gone | lookup 404 | RETURN; nothing printed; 0 DELETE calls |
+| remote lookup unreadable | lookup 401 | RETURN; `REMOTE-KEPT <b>: remote tip unreadable: gh: Bad credentials (HTTP 401)`; 0 DELETE calls; remote kept |
+| remote tip moved | lookup sha differs from `headRefOid` | RETURN; `REMOTE-KEPT <b>: remote tip moved`; 0 DELETE calls; remote kept |
+| remote tip matches | lookup sha equals `headRefOid` | RETURN; nothing printed; 1 DELETE; remote deleted |
+| match, then DELETE 422 | the ref vanishes between lookup and DELETE | RETURN; nothing printed; 1 DELETE call |
+| TRANSPORT, clean (SKILL.md:662) | self-update push failed, clean tree | ABANDON lands on per-chain-rebalancer-instances; DEFERRED (UN-SYNCED); steps 3-5 run; self-update branch deleted by its gate |
+| TRANSPORT, ignored file (SKILL.md:662) | the same with an ignored file at a path the move writes | ABANDON STOPs and the invocation STOPs; DEFERRED; steps 3-5 do not run; the self-update branch is kept and named |
+
+Two caveats on round 8:
+1. The gh stand-in models merge.go's local step and prompt as the source citation above describes. That citation, read from the v2.103.3 source, is the evidence for real gh; the stand-in rows show only that the procedure behaves correctly given that behaviour.
+2. The two TRANSPORT rows drive the control flow at SKILL.md:662 from a small driver, not from a real run of steps 3-5.
+
+Measured on earlier texts of the same design (rounds 6 and 7). They are recorded because each row drove or confirmed a clause. Round 8 re-measured the rows that the later text changed.
+
+| case | state replayed | outcome |
+|---|---|---|
+| W0 0.1049, 0.1058, 0.1061, #1300 | graph's real pre-merge states, clean | merge, then RETURN: HEAD equal to origin `<working>`, local and remote skill branch deleted (clean-delivery control) |
+| W1 ignored / untracked | an operator file at a path origin gained independently | after the merge HEAD stays on the skill branch; STOP (c) `ON-DISK`; file IDENTICAL; nothing deleted. After a move-aside: RETURN, both branches deleted |
+| DIRTY remedy | a dirty tracked path origin changes | STOP (c) `DIRTY`; after copy and `git restore --staged --worktree`: RETURN, copy IDENTICAL |
+| `q"uote` and a newline name | tracked clean / tracked dirty / untracked | RETURN / STOP `DIRTY` / STOP `ON-DISK`; file IDENTICAL |
+| `é.log` from the toplevel and from a subdirectory | untracked | STOP (c) `ON-DISK é.log` both times; file IDENTICAL |
+| test (4) | MERGED row based on `main`, reflog says epic5-closeout | STOP naming both; nothing moved. Control with the bases agreeing: RETURN |
+| ABANDON | ignored file / clean | STOP (c) `ON-DISK`, branch kept / lands on epic5-closeout, skill branch kept, no API delete |
+| TRANSPORT | clean / dirty slice / ignored at a stale tracking ref / offline | lands / STOP `DIRTY` / STOP `ON-DISK` / with ABANDON's failed fetch a note: lands clean, or STOP `ON-DISK` with the self-update branch kept |
+| remote delete | moved remote tip / no local branch / DELETE 422 race / 401 token | `REMOTE-KEPT … remote tip moved` / `REMOTE-KEPT … no local branch to gate on` / nothing printed / `REMOTE-DELETE-FAILED … gh: Bad credentials (HTTP 401)`; the local return succeeded in every case |
+| remote already gone (lookup 404) | round 7 | printed `REMOTE-KEPT … remote tip moved`, a wrong line. The release reads the lookup's exit and stderr first, and round 8 measured that a 404 now prints nothing |
+| `<cut-from>` on graph's real reflog (1688 lines, read-only) | 0.1049 / 0.1056 / 0.1058 / 0.1061 / self-update 0.1027 / an absent branch | epic5-closeout / the 0.1049 skill branch, so step 8 REFUSES / epic5-closeout / epic5-closeout / per-chain-rebalancer-instances / no line, so the prior fallback applies |
+
+Not taken here. `core/skills/ai-dlc/steps/retro.md:1305` (at e3d2dfc35) relies on the same `gh` side effect and is routed to a separate filing by the lead. The remote-side "Update branch" commit refinement is not taken either: the tip-mismatch STOP is safe, and the consumer never hit that state.
+
+Receipt: the `update-preflight-push` fixture, run through `core/scripts/hermetic-run.sh` with a fresh verdict store, must print its R1 arm's `ok` line, the step-8 RETURN PROCEDURE arm. A SKILL.md before this fix prints FAIL for that arm in the distribution layout, so the `ok` line is absent. What else would satisfy a weaker receipt: a `has` on SKILL.md for `RETURN PROCEDURE` is closable by a heading alone and asserts none of the clauses. What this does not establish: that a model executing the prose runs the commands in order; the rehearsal executed them by hand.
+
+Provenance: batch 256, release C2; id allocated by the lead.
+
+verify: sh V="$(mktemp -d "${TMPDIR:-/tmp}/bl986.XXXXXX")" || exit 9; AI_DLC_VERDICT_STORE="$V" bash core/scripts/hermetic-run.sh update-preflight-push > "$V/out" 2>&1 && grep -q '  ok    R1 step 8 RETURN PROCEDURE: ' "$V/out"
