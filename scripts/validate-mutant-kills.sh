@@ -277,7 +277,18 @@
 # count-keeping swap are refused (rc 1, the rendered FAIL text compared whole), a shrink and an
 # identical list pass, an origin/main without the file and a repo with no origin/main each
 # SKIP with their reason (rc 0). Each assertion is the exact verdict text plus rc, so a mutant
-# that makes M4 always SKIP fails the probe rather than passing the tree.
+# that makes M4 always SKIP fails the probe rather than passing the tree. Each scratch repo is
+# `git init` plus, where origin/main must resolve, ONE `git fast-import` writing that ref (no add,
+# commit, update-ref or auto-maintenance: nothing reads HEAD, the index or the worktree). The whole
+# of m4 (m4base, then m4cmp) runs once per origin/main state -- added on the base repo, nofile,
+# noorigin, each called with NO rel or arm exactly as the corpus's M4 call is, so m4's defaults are
+# read -- and once more for M7's added row on the base repo with "$ALLOW_REL" M7, so m4's hand-off of
+# rel and arm to m4base and m4cmp is read; swap, shrink and same run m4cmp alone over the base
+# `added` read. The M10 cases do the same with m10base: once per repo, then judge8 and m10_verdict
+# per list. Step argv `bash scripts/validate-mutant-kills.sh`, same-tree swap at a281ba8b3, two
+# agreeing runs per side, counted by the hook's own counter and GIT_TRACE2_EVENT: bash starts 1 -> 1,
+# git processes 54 -> 24 (before the corpus 46 -> 16, the corpus 8 -> 8); stdout and stderr
+# byte-identical. The whole-m4 m7added case then added 3 (24 -> 27, same-tree swap at acee3712c).
 #
 # THE M8 GRAMMAR (BL-909). M1 asks a kill to go through mutant_killed only when its line carries
 # KILLED|killed. A verdict worded without the keyword (`ok "mutant: a protocol without the mandate
@@ -418,7 +429,9 @@
 # COST, by fork-profile.sh --target this file: 105 at aa4aea836, 119 at this change. The corpus
 # read adds none (M8_FN rides m1line); the corpus path adds 3 (judge8, origin/main rev-parse, show
 # -- m10base skips m4's cat-file, at the price that an unreadable base object SKIPs); the other 11
-# are the probe (judge8 and two sorts, and the M10 cases' git and judge8 calls).
+# are the probe (judge8 and two sorts, and the M10 cases' git and judge8 calls). The probe repos'
+# fast-import build and the once-per-repo m4base and m10base reads (above, THE M4 self-probe) took
+# it from 119 to 106; the whole-m4 m7added case (m4's arm hand-off) took it to 109.
 #
 # COST. A constant number of forks: ONE awk reads the corpus for M1, M5 and M8 together (m5scan
 # with an M1 output file), two sorts, one comm-style awk join; the probe trees add one awk each.
@@ -700,8 +713,18 @@ m10_verdict() {
 # m4 <repo-dir> <current-allowlist-file> <scratch-file> -> prints the M4 verdict text; rc 0 on
 # OK or SKIP, 1 on an added row. The base is read from origin/main of <repo-dir>, braced.
 # With <rel> and <arm> it judges another down-only list the same way (M7 over $M5_ALLOW_REL).
+# It is m4base (the git half) then m4cmp (the compare half), so the self-probe can run the whole
+# of m4 once per origin/main state and m4cmp alone for every further list over the same base.
 m4() {
-  local repo="$1" cur="$2" base="$3" rel="${4:-$ALLOW_REL}" arm="${5:-M4}" sha added
+  local rel="${4:-$ALLOW_REL}" arm="${5:-M4}" rc
+  m4base "$1" "$3" "$rel" "$arm"; rc=$?
+  [ "$rc" -eq 3 ] || return "$rc"
+  m4cmp "$2" "$3" "$rel" "$arm"
+}
+# m4base <repo-dir> <scratch-file> <rel> <arm> -> rc 3 with origin/main's <rel> written to
+# <scratch-file>; else prints the SKIP (rc 0) or FAIL (rc 1) text.
+m4base() {
+  local repo="$1" base="$2" rel="$3" arm="$4" sha
   sha="$(git -C "$repo" rev-parse -q --verify 'origin/main^{commit}' 2>/dev/null)" || sha=""
   if [ -z "$sha" ]; then
     echo "SKIP $arm: origin/main does not resolve here, so there is no base allowlist to compare against"
@@ -715,6 +738,11 @@ m4() {
     echo "FAIL $arm: origin/main carries $rel but it could not be read"
     return 1
   fi
+  return 3
+}
+# m4cmp <current-allowlist-file> <base-file> <rel> <arm> -> prints the OK or FAIL text; rc 0 or 1
+m4cmp() {
+  local cur="$1" base="$2" rel="$3" arm="$4" added
   added="$(awk '
     /^[[:space:]]*(#|$)/ { next }
     { x = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", x) }
@@ -1449,14 +1477,41 @@ fi
 # and point the probe at the real repo; the probe drops it, the corpus call below keeps it.
 m4_probe_git() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
   git -c user.name=probe -c user.email=probe@invalid -c commit.gpgsign=false \
-  -c core.hooksPath=/dev/null -c init.defaultBranch=main "$@"; }
-m4_case() {  # <label> <repo> <want-rc> <want-text> <cur rows...>
-  local lab="$1" repo="$2" wrc="$3" want="$4" got rc
+  -c core.hooksPath=/dev/null -c init.defaultBranch=main -c maintenance.auto=false \
+  -c fastimport.unpackLimit=0 "$@"; }
+# m4_probe_repo <dir> [<path> <content>]... -> a scratch repo; with files, ONE `git fast-import`
+# writes one commit carrying them straight to refs/remotes/origin/main. Nothing here reads HEAD, the
+# index or the worktree (m4base and m10base read origin/main's objects only), so no add, commit or
+# update-ref is needed; the commit carries its identity in the stream, runs no hook and spawns no
+# auto-maintenance, and fastimport.unpackLimit=0 keeps its pack instead of spawning unpack-objects.
+m4_probe_repo() {
+  local d="$1" LC_ALL=C
+  m4_probe_git init -q "$d" || return 1
+  shift
+  [ $# -gt 0 ] || return 0
+  { printf 'commit refs/remotes/origin/main\ncommitter probe <probe@invalid> 0 +0000\ndata 5\nbase\n'
+    while [ $# -ge 2 ]; do printf 'M 100644 inline %s\ndata %d\n%s\n' "$1" "${#2}" "$2"; shift 2; done
+  } | m4_probe_git -C "$d" fast-import --quiet
+}
+# m4_case <label> <repo | -> <want-rc> <want-text> <cur rows...>: with a repo, the whole of m4
+# (m4base then m4cmp) against that repo's origin/main, the base written to m4-base.<label>.txt; with
+# -, m4cmp alone against the base the `added` case wrote from $R, the same objects a re-read returns.
+# An M4 case calls m4 with NO rel or arm, exactly as the corpus's M4 call does, so m4's defaults are
+# what the case reads; an m7 case passes "$ALLOW_REL" M7, so m4's hand-off of its arm to m4cmp is read.
+m4_case() {
+  local lab="$1" repo="$2" wrc="$3" want="$4" got rc arm=M4
   shift 4
+  [ "${lab#m7}" != "$lab" ] && arm=M7
   printf '%s\n' '# probe list' "$@" > "$WORK/m4-cur.txt"
-  got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
-         if [ "${lab#m7}" != "$lab" ]; then m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-base.txt" "$ALLOW_REL" M7
-         else m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-base.txt"; fi)"; rc=$?
+  if [ "$repo" = - ]; then
+    got="$(m4cmp "$WORK/m4-cur.txt" "$WORK/m4-base.added.txt" "$ALLOW_REL" "$arm")"; rc=$?
+  elif [ "$arm" = M4 ]; then
+    got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+           m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-base.$lab.txt")"; rc=$?
+  else
+    got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+           m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-base.$lab.txt" "$ALLOW_REL" "$arm")"; rc=$?
+  fi
   if [ "$rc" != "$wrc" ] || [ "$got" != "$want" ]; then
     echo "validate-mutant-kills: REFUSED -- M4 self-probe case '$lab' got rc $rc, want rc $wrc." >&2
     printf '%s\n' "$got" | sed 's/^/    got  /' >&2
@@ -1466,27 +1521,22 @@ m4_case() {  # <label> <repo> <want-rc> <want-text> <cur rows...>
   fi
 }
 R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"
-mkdir -p "$R/scripts" "$RN" "$RX"
-{ m4_probe_git init -q "$R" && printf '%s\n' '# base' a b > "$R/$ALLOW_REL" \
-  && printf '%s\n' '# base' "a${TAB}2" "b${TAB}1" > "$R/$M8_ALLOW_REL" \
-  && m4_probe_git -C "$R" add "$ALLOW_REL" "$M8_ALLOW_REL" && m4_probe_git -C "$R" commit -q -m base \
-  && m4_probe_git -C "$R" update-ref refs/remotes/origin/main HEAD \
-  && m4_probe_git init -q "$RN" && printf 'x\n' > "$RN/other" \
-  && m4_probe_git -C "$RN" add other && m4_probe_git -C "$RN" commit -q -m nofile \
-  && m4_probe_git -C "$RN" update-ref refs/remotes/origin/main HEAD \
-  && m4_probe_git init -q "$RX"; } >/dev/null 2>&1 || {
+{ m4_probe_repo "$R" "$ALLOW_REL" $'# base\na\nb\n' "$M8_ALLOW_REL" $'# base\na\t2\nb\t1\n' \
+  && m4_probe_repo "$RN" other $'x\n' && m4_probe_repo "$RX"; } >/dev/null 2>&1 || {
   echo "validate-mutant-kills: REFUSED -- could not build the M4 probe repos under $WORK" >&2; exit 2; }
 M4_REMEDY="  Remedy: do not list the fixture. Route its kills through mutant_killed <flag> <name> \"<message>\"
   (core/fixtures/lib/mutant.sh) and delete the row."
 M4_FAILHEAD="FAIL M4: allowlist row(s) whose fixture is not on $ALLOW_REL at origin/main -- the list is DOWN-ONLY:"
+# the whole of m4 once per origin/main state (added on $R, nofile on $RN, noorigin on $RX), and for
+# m7added on $R below; swap, shrink and same go through m4cmp alone, against the base `added` wrote
 m4_case added    "$R"  1 "$M4_FAILHEAD
     c
 $M4_REMEDY" a b c
-m4_case swap     "$R"  1 "$M4_FAILHEAD
+m4_case swap     -     1 "$M4_FAILHEAD
     c
 $M4_REMEDY" a c
-m4_case shrink   "$R"  0 "OK M4: no allowlist row added against origin/main" a
-m4_case same     "$R"  0 "OK M4: no allowlist row added against origin/main" a b
+m4_case shrink   -     0 "OK M4: no allowlist row added against origin/main" a
+m4_case same     -     0 "OK M4: no allowlist row added against origin/main" a b
 m4_case nofile   "$RN" 0 "SKIP M4: origin/main carries no $ALLOW_REL -- this is the release that first ships it" a b c
 m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" a b c
 
@@ -1494,14 +1544,16 @@ m4_case noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there i
 # keyed on the fixture with a numeric compare: an added row, a raised count and a count-keeping
 # swap FAIL; a lowered count, a deleted row and an identical list pass; no origin/main and no base
 # list SKIP; a tree without the list while origin/main carries one FAILs. Exact text plus rc.
-m10_case() {  # <label> <repo> <want-rc> <want-text> <cur rows... | -MISSING>
-  local lab="$1" repo="$2" wrc="$3" want="$4" rc cur="$WORK/m10-cur.txt"
+# m10_case <label> <repo | -> ...: with a repo, m10base reads that repo's origin/main into
+# m10-base.<label>.txt; with -, the cases reuse the base the `added` case read from $R.
+m10_case() {  # <label> <repo | -> <want-rc> <want-text> <cur rows... | -MISSING>
+  local lab="$1" repo="$2" wrc="$3" want="$4" rc=3 cur="$WORK/m10-cur.txt" base="$WORK/m10-base.added.txt"
   shift 4
   if [ "$1" = -MISSING ]; then cur="$WORK/m10-absent.txt"; else printf '%s\n' '# probe list' "$@" > "$cur"; fi
   M10_OUT=""
-  m10base "$repo" "$WORK/m10-base.txt" probe; rc=$?
+  if [ "$repo" != - ]; then base="$WORK/m10-base.$lab.txt"; m10base "$repo" "$base" probe; rc=$?; fi
   if [ "$rc" = 3 ]; then
-    judge8 /dev/null "$cur" "$WORK/m10-base.txt" > "$WORK/m10-v.txt"
+    judge8 /dev/null "$cur" "$base" > "$WORK/m10-v.txt"
     m10_verdict "$WORK/m10-v.txt"; rc=$?
   else M10_OUT="$M10_SKIP"; fi
   if [ "$rc" != "$wrc" ] || [ "$M10_OUT" != "$want" ]; then
@@ -1519,16 +1571,16 @@ M10_OK="OK M10: no $M8_ALLOW_REL row added or raised against origin/main"
 m10_case added    "$R"  1 "$M10_FAILHEAD
     c: 1 (no row at origin/main)
 $M10_REMEDY" "a${TAB}2" "b${TAB}1" "c${TAB}1"
-m10_case raised   "$R"  1 "$M10_FAILHEAD
+m10_case raised   -     1 "$M10_FAILHEAD
     a: 3 (origin/main lists 2)
 $M10_REMEDY" "a${TAB}3" "b${TAB}1"
-m10_case swap     "$R"  1 "$M10_FAILHEAD
+m10_case swap     -     1 "$M10_FAILHEAD
     c: 1 (no row at origin/main)
 $M10_REMEDY" "a${TAB}2" "c${TAB}1"
-m10_case lowered  "$R"  0 "$M10_OK" "a${TAB}1" "b${TAB}1"
-m10_case deleted  "$R"  0 "$M10_OK" "a${TAB}2"
-m10_case same     "$R"  0 "$M10_OK" "a${TAB}2" "b${TAB}1"
-m10_case absent   "$R"  1 "FAIL M10: origin/main carries $M8_ALLOW_REL and this tree does not -- regenerate its rows with --derive-m8." -MISSING
+m10_case lowered  -     0 "$M10_OK" "a${TAB}1" "b${TAB}1"
+m10_case deleted  -     0 "$M10_OK" "a${TAB}2"
+m10_case same     -     0 "$M10_OK" "a${TAB}2" "b${TAB}1"
+m10_case absent   -     1 "FAIL M10: origin/main carries $M8_ALLOW_REL and this tree does not -- regenerate its rows with --derive-m8." -MISSING
 m10_case nofile   "$RN" 0 "SKIP M10: git show origin/main:$M8_ALLOW_REL read nothing -- origin/main carries no list at that path (the release that first ships it), or the object is unreadable" "a${TAB}2"
 m10_case noorigin "$RX" 0 "SKIP M10: origin/main does not resolve here, so there is no base list to compare against" "a${TAB}2"
 

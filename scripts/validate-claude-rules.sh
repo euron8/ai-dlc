@@ -130,14 +130,17 @@ fm_keys() {
 a1_offenders() { git ls-files -- '.claude' | grep -vE '^\.claude/rules/.*\.md$' || true; }
 
 probe="$(mktemp -d)"; trap 'rm -rf "$probe"' EXIT
-# This subshell builds a scratch repository and relies on git's upward DISCOVERY to find
-# it. The environment that would defeat that is scrubbed at the top of this file, covering
-# this write and the corpus READS below together; a second unset here would be a guard whose
-# removal changes nothing, and the top-of-file comment is where the measurement lives.
+# This subshell builds no repository: it seeds a private index file and reads it back, so
+# only the index it names can be written. The environment that would redirect the git calls
+# (GIT_DIR and the rest) is scrubbed at the top of this file, covering this write and the
+# corpus READS below together; a second unset here would be a guard whose removal changes
+# nothing, and the top-of-file comment is where the measurement lives.
 (
-  cd "$probe" && git init -q . && mkdir -p .claude/rules
-  printf 'x\n' > .claude/rules/ok.md && printf 'x\n' > .claude/settings.json
-  git add -A -f >/dev/null 2>&1
+  # One update-index into a private index file seeds the offender and the near-miss; no
+  # scratch repository is needed because ls-files reads only the index. e69de29 is the empty
+  # blob, and --info-only means the object need not exist.
+  export GIT_INDEX_FILE="$probe/idx"
+  git update-index --add --info-only --cacheinfo 100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,.claude/rules/ok.md --cacheinfo 100644,e69de29bb2d1d6434b8b29ae775ad8c2e48c5391,.claude/settings.json
   git ls-files -- '.claude' | grep -vE '^\.claude/rules/.*\.md$'
 ) > "$probe/out" 2>/dev/null
 if ! grep -q 'settings.json' "$probe/out"; then
@@ -157,12 +160,18 @@ fi
 # Uses git's OWN pathspec matching, because the loader matches with gitignore
 # semantics against repo-root-relative paths. `fnmatch` would disagree on `**`.
 # ---------------------------------------------------------------------------
-glob_matches() { git ls-files -- ":(glob)$1" 2>/dev/null | head -1; }
+glob_matches() { git ls-files -- ":(glob)$1" ${2:+":(glob)$2"} 2>/dev/null; }
 
-if [ -n "$(glob_matches 'core/fixtures/**')" ] && [ -z "$(glob_matches 'core/fixture/**')" ]; then
+# ONE call, TWO globs, through the arm's own function. The real glob must return a path under
+# core/fixtures/, and ANY returned path outside it is the typo glob matching -- judged by what
+# is NOT the real prefix, so a glob_matches that ignores its pattern (returns every tracked
+# path) is caught as well as one that matches the typo's own prefix.
+a2p="$(glob_matches 'core/fixtures/**' 'core/fixture/**')"
+a2_hit="$(grep -m1 '^core/fixtures/' <<<"$a2p")"; a2_typo="$(grep -v -m1 '^core/fixtures/' <<<"$a2p")"
+if [ -n "$a2_hit" ] && [ -z "$a2_typo" ]; then
   : # probe fired: a real glob matches, a typo'd one does not
 else
-  err "A2's own probe did not fire: \`core/fixtures/**\` must match and \`core/fixture/**\` (typo) must not. Got match=[$(glob_matches 'core/fixtures/**')] typo=[$(glob_matches 'core/fixture/**')]. Every orphan-glob verdict below is then unreadable."
+  err "A2's own probe did not fire: \`core/fixtures/**\` must match and \`core/fixture/**\` (typo) must not. Got match=[$a2_hit] typo=[$a2_typo]. Every orphan-glob verdict below is then unreadable."
 fi
 while IFS=$'\t' read -r f g; do
   [ -z "${f:-}" ] && continue

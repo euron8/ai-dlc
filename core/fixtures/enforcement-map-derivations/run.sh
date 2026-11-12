@@ -5,8 +5,10 @@
 # Usage: run.sh [--run-one <assertion>] [--matrix]
 # Exit:  0 = every assertion holds, 1 = a check regressed, 2 = fixture broken.
 #
-# MUTANT BATTERY. Five assertions mutate the VALIDATOR itself (every other assertion seeds an
-# offender into the tree the validator walks, which is a seed and not a mutant). Per push each
+# MUTANT BATTERY. Five assertions mutate the VALIDATOR itself and two mutate a reconcile program
+# whose answer the validator's own probe evaluates -- layer-drift.sh for I58, apply.sh for I17
+# (every other assertion seeds an offender into the tree the validator walks, which is a seed and
+# not a mutant). Per push each
 # mutant runs on its DECIDING arm, which must report it, plus its named TWIN, an arm the measured
 # matrix shows GREEN under that mutant, which must stay green: the kill is confined to its arm.
 # `--matrix` replays every mutant against every arm this file drives and prints one row per cell;
@@ -18,6 +20,11 @@
 # MUTANT-MATRIX i85-heredoc-unnarrowed decides=I85 twins=I86
 # MUTANT-MATRIX i33b-blinded-predicate decides=I33b twins=I86
 # MUTANT-MATRIX i54-unpruned-find decides=I54 twins=I86
+# MUTANT-MATRIX i58-reader-ignores-ref decides=I58 twins=I86
+# MUTANT-MATRIX i17-teamroles-misplaced decides=I17 twins=I86
+# MUTANT-MATRIX i17-batch-dies-midway decides=I17 twins=I86
+# MUTANT-MATRIX i17-probe-unevaluable decides=I17 twins=I86
+# MUTANT-MATRIX-CONTROL i17-reuse-hardcoded why=proves the i17-teamroles-misplaced kill comes from the reused team-roles answer
 # MUTANT-MATRIX-DYNAMIC mutant_case why=mutant_case passes its first argument to mutant_killed; every mutant_case call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/enforcement-map-derivations/run.sh --matrix
 #
@@ -119,8 +126,47 @@ mutant_apply() {
       edit "$f" '{ if ($0 ~ /\^\[\[:space:\]\]\*\[A-Za-z_\]\[A-Za-z0-9_\]\*="\\\$\\\(dirname/ && !done) { sub(/\/\^.*\/ \{/, "/ZZNOMATCHZZ/ {"); done=1 } } { print }' ;;
     i54-unpruned-find)
       edit "$f" "$WT_UNPRUNE" ;;
+    i58-reader-ignores-ref)
+      # The reader answers HEAD's ADJUDICATED set whatever ref it is asked about, so the probe
+      # commit's mutated level token changes nothing it says. One line after the shebang rewrites
+      # the ref of the --adjudicated-codes form only, in place: no file is added to the tree and
+      # every other mode reads its arguments as shipped.
+      i58_git_world "$2" || return 1
+      edit "$2/$I58_LD" '{ print } NR == 1 { print "if [ \"${1:-}\" = --adjudicated-codes ] && [ \"$#\" -eq 3 ]; then set -- \"$1\" \"$2\" HEAD; fi" }' ;;
+    i17-teamroles-misplaced)
+      # apply.sh's consumer_path sends team-roles/* to a WRONG, NON-EMPTY path: the probe still
+      # resolves, so only the team-roles row -- the row that reuses the probe's answer -- can see it.
+      edit "$2/$I17_AP" '{ print } /^consumer_path\(\) \{/ { print "  case \"$1\" in team-roles/*) printf \"%s/.claude/team-rolesX/%s\" \"$CONSUMER\" \"${1#team-roles/}\"; return 0 ;; esac" }' ;;
+    i17-batch-dies-midway)
+      # The ONE bash that answers every I17 row is killed partway through, on the skills row's
+      # consumer_path call: `$$` inside the row's `$( )` names that bash, not the validator.
+      edit "$2/$I17_AP" '{ print } /^consumer_path\(\) \{/ { print "  [ \"$1\" = skills/PROBE ] && kill -9 $$" }' ;;
+    i17-probe-unevaluable)
+      # apply.sh loses consumer_path() altogether: the probe's batched answer is empty, and I17
+      # must say it could not evaluate the writer rather than skip every row as though it had.
+      edit "$2/$I17_AP" '/^consumer_path\(\) \{/ { skip = 1 } skip { if ($0 ~ /^\}/) skip = 0; next } { print }' ;;
     *) bad "FIXTURE BROKEN — no mutant named '$1' is defined"; return 1 ;;
   esac
+}
+
+# I58 reads the contract and asks the reader about HEAD and a probe commit, so its world must be a
+# git repository whose HEAD carries layer-contract.yaml; the seed is a plain copy, where I58 skips.
+# One commit of that one file, in a repository this fixture builds, with its identity set on the
+# command line. Idempotent, so the per-push assertion can build it before the unmutated run and the
+# matrix can build it inside mutant_apply. Inherited GIT_* variables would point git, and the
+# validator after it, at another repository, so they are dropped for this worker.
+I58_LD="core/skills/ai-dlc-update/reconcile/layer-drift.sh"
+I58_LC="core/skills/ai-dlc/layer-contract.yaml"
+I17_AP="core/skills/ai-dlc-update/reconcile/apply.sh"
+i58_git_world() {
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  [ -d "$1/.git" ] && return 0
+  git -C "$1" init -q 2>/dev/null \
+    && git -C "$1" add -- "$I58_LC" \
+    && git -C "$1" -c user.name=fixture -c user.email=fixture@invalid -c commit.gpgsign=false \
+         commit -q -m "I58 world" >/dev/null 2>&1 \
+    && git -C "$1" cat-file -e "HEAD:$I58_LC" 2>/dev/null \
+    || { bad "FIXTURE BROKEN — could not build I58's git world (HEAD carrying $I58_LC)"; return 1; }
 }
 
 # mutant_case <name> <label> <want> <want_n> [control label] — one mutant, on its DECIDING arm and
@@ -2012,6 +2058,66 @@ A57_i54_unpruned_find_mutant_reports_worktree() {
   mutant_case i54-unpruned-find \
     "I54 mutant: restoring the unpruned find line REPORTS the agent-x offender" \
     ".claude/worktrees/agent-x/scripts/zz.sh:3:" 1
+}
+
+# I58's NEGATIVE PROBE. The world is a git repository whose HEAD carries the contract, built
+# BEFORE the unmutated run, so the base pass is I58 actually running its probe and staying quiet
+# rather than I58 skipping a tree with no HEAD. The mutant reader answers HEAD's set for the probe
+# commit too, and only the negative probe can see that.
+A70_i58_reader_ignoring_its_ref_is_reported() {
+  t="$(fresh)"
+  i58_git_world "$t" || exit 2
+  mutant_case i58-reader-ignores-ref \
+    "I58 mutant: a layer-drift.sh whose --adjudicated-codes ignores its ref is REPORTED by the negative probe" \
+    "I58 negative probe: the level token was mutated to ADJUDICATEDX" 1
+}
+
+# I17'S TEAM-ROLES ROW REUSES THE PROBE'S ANSWER, and this is the world that tests the reuse:
+# consumer_path misplaces team-roles/* at a non-empty path, so the probe still resolves and the
+# team-roles row is the only one that can report it. The CONTROL then hard-codes that row's answer
+# to the correct path in the same mutated tree; it must go GREEN, which shows the kill above came
+# from the reused value and not from some other row. Its header row is i17-reuse-hardcoded.
+A71_i17_misplaced_team_roles_is_reported() {
+  local out rc
+  t="$(fresh)"
+  mutant_case i17-teamroles-misplaced \
+    "I17 mutant: consumer_path sending team-roles/ to a wrong non-empty path is REPORTED on the row that reuses the probe's answer" \
+    "sends core/team-roles/ to '/nonexistent-consumer/.claude/team-rolesX/PROBE'" 1
+  [ -f "$t/$I17_AP" ] && grep -q 'team-rolesX' "$t/$I17_AP" || return 0
+  edit "$t/scripts/validate-enforcement-map.sh" \
+    '$0 == "        got_a=\"$APPLIES_TO_PROBE_GOT\"" { print "        got_a=\"/nonexistent-consumer/.claude/team-roles/PROBE\""; next } { print }' || return 0
+  out="$(run_map "I17,I86")"
+  rc=$?
+  sel_guard "$rc" "I17,I86" "$out"
+  case "$out" in
+    *"sends core/team-roles/ to"*)
+      bad "CONTROL i17-reuse-hardcoded: with the team-roles answer hard-coded, I17 STILL reported the misplaced team-roles path, so the kill above did not come from the reused value" ;;
+    *"OK: enforcement-map.yaml in sync with"*)
+      ok "CONTROL i17-reuse-hardcoded: hard-coding the reused team-roles answer goes GREEN in the same world, so the kill above is the reuse's" ;;
+    *)
+      bad "CONTROL i17-reuse-hardcoded: the hard-coded run reached no verdict (rc=$rc)" ;;
+  esac
+}
+
+# I17 EVALUATES EVERY SITE ROW IN ONE BASH, so a bash that dies partway must not read as the rows
+# after it passing. The mutant kills that bash on the skills row's consumer_path call, the LAST
+# record it prints, so exactly two findings must appear, both naming I17: the skills row reported
+# against itself, and the shortfall. The count is the point -- every unanswered row already fails
+# its own check, so a validator with the shortfall guard deleted reports one finding, not two.
+A72_i17_batch_dying_midway_is_reported() {
+  t="$(fresh)"
+  mutant_case i17-batch-dies-midway \
+    "I17 mutant: the batched evaluation dying partway is REPORTED as a shortfall, never read as the rows after it passing" \
+    "it died partway, and every row it never answered is reported above as its own finding" 2
+}
+
+# I17'S PROBE READS ITS ANSWER OUT OF THE ONE BATCHED BASH. With consumer_path() gone from apply.sh
+# that answer is empty, and the probe must report the check as vacuous -- exactly one finding, its own.
+A73_i17_unevaluable_writer_is_reported() {
+  t="$(fresh)"
+  mutant_case i17-probe-unevaluable \
+    "I17 mutant: apply.sh with no consumer_path() is REPORTED by the probe as an unevaluable writer" \
+    "I17 could not evaluate apply.sh's consumer_path()" 1
 }
 
 # THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A

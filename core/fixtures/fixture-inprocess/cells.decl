@@ -14,3 +14,4 @@ e2e scripts/validate-fixture-inprocess.sh MKC why=mutant MK's twin, the clean wo
 # The validator starts the judge for --static-join and --b2-census, twice per run that passes its self-probe.
 nested scripts/validate-fixture-inprocess.sh scripts/validate-fixture-invocations.sh why=the validator reads every fixture through the judge's own parses
 e2e scripts/validate-fixture-inprocess.sh MNP why=mutant MNP, refused by the validator's own self-probe
+e2e scripts/validate-fixture-inprocess.sh MM4M why=mutant MM4M, refused by the validator's own self-probe (its M4 remedy check)

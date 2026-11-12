@@ -1,6 +1,8 @@
 # release-version-triple reads three things outside its own directory.
 # The preamble is sourced on line 2; the runner copies only the fixture's own directory.
 core/fixtures/lib/preamble.sh
+# The kill helper the arm E and arm F probe mutants score through.
+core/fixtures/lib/mutant.sh
 # The validator under test. Distribution tooling in scripts/, not core/scripts/. The fixture
 # SKIP-and-PASSes when it is absent, so it is REQUIRED: absent, the verdict would still read PASS.
 !scripts/validate-release-version.sh

@@ -1,0 +1,7 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-mutant-kills.sh, which lives in the repo-root scripts/ that install.sh never copies,
+so on a consumer this fixture could resolve no subject. Its corpus, every core/fixtures/*/run.sh and the three
+allowlists beside the validator, is one only this repo holds.
+
+It is also a MUTATION BATTERY: it edits copies of that validator, sixteen times per run.

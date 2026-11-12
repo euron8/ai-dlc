@@ -1,0 +1,1 @@
+ok "mutant m3: arm A2 fires on the seeded offender"

@@ -323,8 +323,8 @@ MUT_W4='
 # where it carries `path:` and satisfies the very substring test that asks whether the file
 # opened -- so the arm fails OPEN on its own evidence while the stderr channel reads empty.
 MUT_W5='
-{ if ($0 == "i108_list() { : > \"$2\"; bash \"$1\" --list \"$3\" 2>\"$2\"; }") {
-    print "i108_list() { : > \"$2\"; bash \"$1\" --list \"$3\" 2>\&1; }"; next }
+{ if ($0 == "i108_list() { : > \"$2\"; i108_lr=\"$1\"; i108_le=\"$2\"; shift 2; bash \"$i108_lr\" --list \"$@\" 2>\"$i108_le\"; }") {
+    print "i108_list() { : > \"$2\"; i108_lr=\"$1\"; i108_le=\"$2\"; shift 2; bash \"$i108_lr\" --list \"$@\" 2>\&1; }"; next }
   print }'
 
 # The taught passage`s opening sentence, held here so half B`s core/fixtures/ exclusion has a

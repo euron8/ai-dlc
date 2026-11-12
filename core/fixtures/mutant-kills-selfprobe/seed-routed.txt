@@ -1,0 +1,2 @@
+if t; then ok "a"; B_x=1; fi
+mutant_killed "${B_x:-0}" x "MUTANT x killed by arm A1"

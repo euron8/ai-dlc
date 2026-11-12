@@ -40,6 +40,7 @@
 # MUTANT-MATRIX MK decides=K twins=C
 # MUTANT-MATRIX MNP decides=DR,D4,D5,DQ,C,N,DV,K twins=- why=the self-probe refuses the whole run when the NP row is dropped
 # MUTANT-MATRIX MDG decides=DG twins=DS
+# MUTANT-MATRIX MM4M decides=DR,D4,D5,DQ,C,N,DV,K twins=- why=the self-probe refuses the whole run when m4 hands m4cmp no remedy
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-inprocess/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed.
 #   MR   the unlisted-refusal R row is never printed         -> DR reads the self-probe refusal on the probe verdict
@@ -50,6 +51,8 @@
 #   MNP  np_rows' core/fixtures/ parent test made false      -> DR reads the self-probe refusal (anp no longer FIRES)
 #   MDG  readset_vs_input's `readset_vs_inproc` call replaced by `:` in BOTH hooks -> DG reads no #inproc row in
 #        either hook (twin DS holds: the span still extracts with every function defined)
+#   MM4M the shared m4 (in $HREL) hands m4cmp an empty remedy, not its own -> DR reads the self-probe refusal: the M4
+#        `added` case, the whole of m4 with this validator's corpus arguments, no longer carries this list's remedy
 #
 # THE IN-PROCESS CELLS of this fixture are its own cells.decl: every validator start is one e2e cell, tagged at its
 # start, and the judge starts the validator makes are covered by one nested row.
@@ -132,6 +135,8 @@ mk_mutant MKC clean "$VREL" 'elif [ "$nal" -gt 0 ]; then' 'elif false; then' \
   || { echo "FIXTURE BROKEN: mutant MK's clean twin DID NOT APPLY" >&2; exit 2; }
 mk_mutant MNP dirty "$VREL" 'if (substr(p, 1, 14) == "core/fixtures/") print "NP "' 'if (0) print "NP "' \
   || { echo "FIXTURE BROKEN: mutant MNP DID NOT APPLY (the NP row moved in $VREL)" >&2; exit 2; }
+mk_mutant MM4M dirty "$HREL" '"$rel" "$arm" "$remedy" "$noun"' '"$rel" "$arm" "" "$noun"' \
+  || { echo "FIXTURE BROKEN: mutant MM4M DID NOT APPLY (m4's call of m4cmp moved in $HREL)" >&2; exit 2; }
 
 # --- THE #inproc DIGEST ROW (arms DG, DS), read through each hook's READSET_VS span ----------------------------------
 # dg.sh <hooks dir> <seed root>: for each of the two hooks, the span is extracted and sourced exactly as
@@ -204,10 +209,10 @@ REFUSAL='validate-fixture-inprocess: REFUSED -- the self-probe is red'
 
 if [ "$MODE" = matrix ]; then
   : > "$WORK/mx.ran"
-  for m in MR MC5 MN MK MNP; do
+  for m in MR MC5 MN MK MNP MM4M; do
     drive "$m.dirty" "$WORK/mut-$m" & drive "$m.clean" "$WORK/mut-$m" & drive "$m.k" "$WORK/mut-$m" --complete &
   done; wait
-  for m in MR MC5 MN MK MNP; do
+  for m in MR MC5 MN MK MNP MM4M; do
     printf 'MATRIX %s dirty-rc=%s clean-rc=%s complete-rc=%s refused=%s\n' "$m" "$(cat "$WORK/c.$m.dirty.rc")" "$(cat "$WORK/c.$m.clean.rc")" \
       "$(cat "$WORK/c.$m.k.rc")" "$(grep -qF "$REFUSAL" "$WORK/c.$m.dirty.err" && echo yes || echo no)"
   done
@@ -249,7 +254,7 @@ fi
 
 # --- the mutants, each on its deciding arm ----------------------------------------------------------------------------
 drive MR "$WORK/mut-MR" & drive MC5 "$WORK/mut-MC5" & drive MN "$WORK/mut-MN" & drive MK "$WORK/mut-MK" --complete &
-drive MKC "$WORK/mut-MKC" & drive MNP "$WORK/mut-MNP" &
+drive MKC "$WORK/mut-MKC" & drive MNP "$WORK/mut-MNP" & drive MM4M "$WORK/mut-MM4M" &
 bash "$WORK/dg.sh" "$DGM" "$DGS" > "$WORK/c.MDG.out" 2>&1 &
 wait
 refused() { rcis "$1" 2 && grep -qF "$REFUSAL" "$WORK/c.$1.err"; }
@@ -261,6 +266,7 @@ if verdict K MK; then bad "MK SURVIVED: K still holds"
 elif rcis MK 0 && verdict C MKC; then mutant_killed "$(( ${B_K:-0} && ${B_C:-0} ))" MK "MK: arm K reads rc 0 on a non-empty allowlist; twin C holds"
 else bad "MK: K fails but not for its reason (rc $(cat "$WORK/c.MK.rc")), or twin C fails too"; fi
 if verdict DR MNP; then bad "MNP SURVIVED: DR still holds"; elif refused MNP && has MNP 'FAIL  self-probe the probe verdict (rc 1) was:'; then mutant_killed "${B_DR:-0}" MNP "MNP: arm DR fails by the self-probe refusal (the NP row of anp is missing)"; else bad "MNP: DR fails but not by the self-probe refusal $(why MNP)"; fi
+if verdict DR MM4M; then bad "MM4M SURVIVED: DR still holds"; elif refused MM4M && has MM4M "FAIL  self-probe M4 the added-row failure does not carry this list's remedy"; then mutant_killed "${B_DR:-0}" MM4M "MM4M: arm DR fails by the self-probe refusal (m4 hands m4cmp no remedy)"; else bad "MM4M: DR fails but not by the self-probe refusal on the remedy $(why MM4M)"; fi
 if verdict DG MDG; then bad "MDG SURVIVED: DG still holds with readset_vs_inproc's call replaced by : in both hooks"
 elif grep -qF 'DG BAD .githooks/pre-push [] []' "$WORK/c.MDG.out" && grep -qF 'DG BAD core/git-hooks/pre-push [] []' "$WORK/c.MDG.out" && verdict DS MDG; then
   mutant_killed "$(( ${B_DG:-0} && ${B_DS:-0} ))" MDG "MDG: arm DG reads no #inproc row in either hook; twin DS holds"

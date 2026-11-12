@@ -1,3 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-291 *
+208 *
 61 scripts/validate-enforcement-map.sh
+# Re-measured from two agreeing counted tip runs after each validate-enforcement-map run selecting I17 or I108 made one fewer bash start (I17 reuses its probe answer for the team-roles row; I108 reads probe and corpus in one reader start).
+# Re-measured from two agreeing counted runs at 9076646da after I17 evaluates every site row in one bash start (the batch replaces one start per row).

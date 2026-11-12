@@ -1,0 +1,20 @@
+# mutant-kills-selfprobe's in-process cells (BL-879). Every start of the validator is one end-to-end cell, tagged at
+# its start by drive() (FXCELL=<tag>). The validator IS the subject end to end: its self-probe's refusal is its exit
+# code and its stderr, and its root walk is part of what arm C reads, which no sourced function call reproduces.
+e2e scripts/validate-mutant-kills.sh control why=the unmutated validator over the seeded world, arm C
+e2e scripts/validate-mutant-kills.sh MM1 why=mutant MM1, refused by the validator's own self-probe (M1)
+e2e scripts/validate-mutant-kills.sh MM2 why=mutant MM2, refused by the validator's own self-probe (M2)
+e2e scripts/validate-mutant-kills.sh MM3 why=mutant MM3, refused by the validator's own self-probe (M3)
+e2e scripts/validate-mutant-kills.sh MM4 why=mutant MM4, refused by the M4 probe case added
+e2e scripts/validate-mutant-kills.sh MM4N why=mutant MM4N, refused by the M4 probe case nofile
+e2e scripts/validate-mutant-kills.sh MM5 why=mutant MM5, refused by the M5 self-probe
+e2e scripts/validate-mutant-kills.sh MM6 why=mutant MM6, refused by the M5 site-allowlist self-probe (M6)
+e2e scripts/validate-mutant-kills.sh MM7 why=mutant MM7, refused by the M4 probe case m7added (M7)
+e2e scripts/validate-mutant-kills.sh MM8 why=mutant MM8, refused by the M8/M9 self-probe
+e2e scripts/validate-mutant-kills.sh MM9 why=mutant MM9, refused by the M8/M9 self-probe
+e2e scripts/validate-mutant-kills.sh MM10 why=mutant MM10, refused by the M10 probe case raised
+e2e scripts/validate-mutant-kills.sh MM10A why=mutant MM10A, refused by the M10 probe case added
+e2e scripts/validate-mutant-kills.sh MM10X why=mutant MM10X, refused by the M10 probe case noorigin
+e2e scripts/validate-mutant-kills.sh MM4R why=mutant MM4R, refused by the M4 probe case added (m4's rel default)
+e2e scripts/validate-mutant-kills.sh MM4A why=mutant MM4A, refused by the M4 probe case added (m4's arm default)
+e2e scripts/validate-mutant-kills.sh MM4P why=mutant MM4P, refused by the M4 probe case m7added (m4's arm hand-off)

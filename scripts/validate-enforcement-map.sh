@@ -2352,11 +2352,16 @@ EOF
   lc_rel="core/skills/ai-dlc/layer-contract.yaml"
   lc_drift="core/skills/ai-dlc-update/reconcile/layer-drift.sh"
   if [ "$lc_file" = "$REPO_ROOT/$lc_rel" ] && git -C "$REPO_ROOT" cat-file -e "HEAD:$lc_rel" 2>/dev/null; then
-    lc_adj_declared="$(git -C "$REPO_ROOT" show "HEAD:$lc_rel" | awk '
+    # HEAD's contract is read ONCE into the probe dir and every reader below takes that copy: the
+    # declaration's awk, the negative probe's sed mutation, and the cmp proving the mutation hit.
+    # All three asked git for the same blob at the same ref, so one read is the same bytes.
+    lc_probe_tmp="$(mktemp -d)"
+    git -C "$REPO_ROOT" show "HEAD:$lc_rel" > "$lc_probe_tmp/head.yaml"
+    lc_adj_declared="$(awk '
       /^  - id:/    { lvl=""; next }
       /^    level:/ { lvl=$2; next }
       /^    code:/  { if (lvl == "ADJUDICATED") print $2; next }
-    ' | sort)"
+    ' "$lc_probe_tmp/head.yaml" | sort)"
     lc_adj_read="$(bash "$REPO_ROOT/$lc_drift" --adjudicated-codes "$REPO_ROOT" HEAD 2>/dev/null | sort)"
 
     if [ "$lc_adj_declared" != "$lc_adj_read" ]; then
@@ -2370,9 +2375,8 @@ EOF
     # of the contract, publish that copy as a throwaway commit (a dangling object; nothing is
     # written to any ref), and re-ask. A reader keying on the token answers empty. A reader that
     # answers the same thing is not reading the level at all.
-    lc_probe_tmp="$(mktemp -d)"
-    git -C "$REPO_ROOT" show "HEAD:$lc_rel" | sed 's/^\(    level:\) ADJUDICATED$/\1 ADJUDICATEDX/' > "$lc_probe_tmp/c.yaml"
-    if git -C "$REPO_ROOT" show "HEAD:$lc_rel" | cmp -s - "$lc_probe_tmp/c.yaml"; then
+    sed 's/^\(    level:\) ADJUDICATED$/\1 ADJUDICATEDX/' "$lc_probe_tmp/head.yaml" > "$lc_probe_tmp/c.yaml"
+    if cmp -s "$lc_probe_tmp/head.yaml" "$lc_probe_tmp/c.yaml"; then
       err "I58 negative probe: the level-token mutation matched nothing in layer-contract.yaml, so the probe never mutated anything and its silence proves nothing about the reader."
     else
       lc_probe_blob="$(git -C "$REPO_ROOT" hash-object -w "$lc_probe_tmp/c.yaml")"
@@ -3553,26 +3557,7 @@ fi
 # Evaluate the real function rather than trusting a grep of it.
 PRECLASS="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"
 if [ -f "$PRECLASS" ]; then
-  maps_to() { bash -c "CONS=/nonexistent; $(awk '/^map_consumer\(\) \{/,/^\}/' "$PRECLASS"); map_consumer '$1'" 2>/dev/null; }
-
-  # I17's probe. Compose the two functions exactly as apply.sh does at runtime — map_consumer
-  # from preclassify, consumer_path from apply — and evaluate the result. Composing rather
-  # than grepping means this stays honest whether apply.sh delegates (as it must) or someone
-  # reintroduces a private case list: either way we measure where a real path LANDS.
   APPLY_SH="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
-  APPLIES_TO_OK=""
-  if [ -f "$APPLY_SH" ]; then
-    applies_to() { bash -c "
-      CONSUMER=/nonexistent-consumer
-      $(awk '/^map_consumer\(\) \{/,/^\}/' "$PRECLASS")
-      $(awk '/^consumer_path\(\) \{/,/^\}/' "$APPLY_SH")
-      consumer_path '$1'" 2>/dev/null; }
-    if [ -n "$(applies_to 'team-roles/PROBE')" ]; then
-      APPLIES_TO_OK=yes
-    else
-      err "I17 could not evaluate apply.sh's consumer_path() — the check that binds the pull's WRITER to install.sh just went vacuous, and a vacuous check reads exactly like a passing one. Expected 'consumer_path() {' in $APPLY_SH and 'map_consumer() {' in $PRECLASS, each with its closing brace in column 0."
-    fi
-  fi
   # <core dir>|<the destination install.sh writes>. Every core/ subtree the installer
   # ALSO places must be listed, or the catch-all silently invents a second home for it.
   # Three entries here were live bugs: fixtures landed in .claude/fixtures/ (dead, while
@@ -3603,6 +3588,85 @@ skills|.claude/skills
 team-roles|.claude/team-roles
 SITES
 )"
+  # EVERY ROW'S ANSWER COMES FROM ONE `bash -c`, AND EACH ROW STILL GETS A CLEAN NAMESPACE.
+  # The two functions are extracted ONCE, as the shipped text, and handed to that bash as
+  # arguments; nothing from this script's own scope is defined in it. Each row is evaluated
+  # in its own `$( )` subshell that evals the text afresh, so a function that wrote state
+  # could not carry it into the next row, and a maps row never sees apply.sh's text — a
+  # broken apply.sh cannot manufacture agreement findings against map_consumer(). The bash
+  # prints one record per row, `<tagged argument><TAB><answer>`, newlines in an answer
+  # flattened to a literal `\n` so a multi-line answer cannot pass on its first line. A row
+  # with no record reads as an empty answer and is reported against ITSELF by the loop
+  # below, and a batch that returned fewer records than it was given is its own finding:
+  # a bash that died partway must never read as the rows after it passing.
+  I17_NL='
+'
+  I17_TAB='	'
+  I17_MC_TEXT="$(awk '/^map_consumer\(\) \{/,/^\}/' "$PRECLASS")"
+  I17_CP_TEXT=""
+  [ -f "$APPLY_SH" ] && I17_CP_TEXT="$(awk '/^consumer_path\(\) \{/,/^\}/' "$APPLY_SH")"
+  # I17's probe. Compose the two functions exactly as apply.sh does at runtime — map_consumer
+  # from preclassify, consumer_path from apply — and evaluate the result. Composing rather
+  # than grepping means this stays honest whether apply.sh delegates (as it must) or someone
+  # reintroduces a private case list: either way we measure where a real path LANDS.
+  # The probe's argument is also the team-roles row's argument in the loop below, so that row
+  # reads the probe's answer rather than evaluating the identical call a second time: same
+  # text, same environment, a function of its argument and two files neither call writes.
+  APPLIES_TO_PROBE_ARG='team-roles/PROBE'
+  # The probe first, then every map_consumer row, then every consumer_path row: the LAST record
+  # the bash prints is the last table row's consumer_path answer, so a bash that dies there loses
+  # exactly one row, and the shortfall finding is the only thing beside that row's own report.
+  I17_ARGS=()
+  I17_AROWS=()
+  [ -f "$APPLY_SH" ] && I17_ARGS+=("A $APPLIES_TO_PROBE_ARG")
+  while IFS='|' read -r cdir dest; do
+    [ -n "$cdir" ] || continue
+    [ -d "$REPO_ROOT/core/$cdir" ] || continue
+    I17_ARGS+=("M core/$cdir/PROBE")
+    [ -f "$APPLY_SH" ] && [ "$cdir/PROBE" != "$APPLIES_TO_PROBE_ARG" ] && I17_AROWS+=("A $cdir/PROBE")
+  done <<< "$SITES_TABLE"
+  I17_ARGS+=(${I17_AROWS[@]+"${I17_AROWS[@]}"})
+  I17_WANT=${#I17_ARGS[@]}
+  I17_OUT=""
+  if [ "$I17_WANT" -gt 0 ]; then
+    I17_OUT="$(bash -c '
+__i17_mc=$1; __i17_cp=$2; shift 2
+__i17_nl="
+"
+for __i17_q in "$@"; do
+  case $__i17_q in
+    "M "*) __i17_v=$(CONS=/nonexistent; eval "$__i17_mc"; map_consumer "${__i17_q#M }") ;;
+    "A "*) __i17_v=$(CONSUMER=/nonexistent-consumer; eval "$__i17_mc"; eval "$__i17_cp"; consumer_path "${__i17_q#A }") ;;
+    *) continue ;;
+  esac
+  printf "%s\t%s\n" "$__i17_q" "${__i17_v//"$__i17_nl"/\\n}"
+done' i17-sites "$I17_MC_TEXT" "$I17_CP_TEXT" "${I17_ARGS[@]}" </dev/null 2>/dev/null)"
+  fi
+  # i17_answer <tagged argument> — that row's answer into I17_GOT, by key; 1 when the batch
+  # printed no record for it. Parameter expansion only, so a lookup starts nothing.
+  i17_answer() {
+    local s="$I17_NL$I17_OUT$I17_NL"
+    case "$s" in
+      *"$I17_NL$1$I17_TAB"*) ;;
+      *) I17_GOT=""; return 1 ;;
+    esac
+    s="${s#*"$I17_NL$1$I17_TAB"}"
+    I17_GOT="${s%%"$I17_NL"*}"
+  }
+  I17_HAVE=0
+  for I17_Q in ${I17_ARGS[@]+"${I17_ARGS[@]}"}; do
+    i17_answer "$I17_Q" && I17_HAVE=$((I17_HAVE + 1))
+  done
+  APPLIES_TO_OK=""
+  if [ -f "$APPLY_SH" ]; then
+    i17_answer "A $APPLIES_TO_PROBE_ARG"
+    APPLIES_TO_PROBE_GOT="$I17_GOT"
+    if [ -n "$APPLIES_TO_PROBE_GOT" ]; then
+      APPLIES_TO_OK=yes
+    else
+      err "I17 could not evaluate apply.sh's consumer_path() — the check that binds the pull's WRITER to install.sh just went vacuous, and a vacuous check reads exactly like a passing one. Expected 'consumer_path() {' in $APPLY_SH and 'map_consumer() {' in $PRECLASS, each with its closing brace in column 0."
+    fi
+  fi
   # (a) Completeness: every core/<dir>/ on disk is accounted for.
   for d in "$REPO_ROOT"/core/*/; do
     [ -d "$d" ] || continue
@@ -3613,7 +3677,7 @@ SITES
   while IFS='|' read -r cdir dest; do
     [ -n "$cdir" ] || continue
     [ -d "$REPO_ROOT/core/$cdir" ] || continue
-    got="$(maps_to "core/$cdir/PROBE")"
+    i17_answer "M core/$cdir/PROBE"; got="$I17_GOT"
     [ "$got" = "$dest/PROBE" ] || err "the pull and the installer disagree on where core/$cdir/ goes: map_consumer() sends it to '$got', install.sh writes '$dest/'. The consumer gets two copies at two paths, and the one the pull keeps fresh is not the one anything reads."
     # Anchored at a path boundary, deliberately. A bare substring match is satisfied by
     # any destination that merely STARTS with this one (`.githooks-REMOVED` contains
@@ -3629,10 +3693,16 @@ SITES
     # session-driver hid for releases because its only delta was ever a mode bit install.sh
     # had already set. Evaluate the real composed function; a grep would not have caught it.
     if [ -n "$APPLIES_TO_OK" ]; then
-      got_a="$(applies_to "$cdir/PROBE")"
-      [ "$got_a" = "/nonexistent-consumer/$dest/PROBE" ] || err "reconcile/apply.sh — the thing that WRITES on a pull — sends core/$cdir/ to '${got_a:-<nothing>}', but I8's table and install.sh say '$dest/'. A subtree apply.sh cannot place is silently skipped while the run still re-stamps, leaving a consumer whose .ai-dlc-version claims a version its tree lacks. apply.sh must derive every path from preclassify.sh's map_consumer(), never from a private table."
+      if [ "$cdir/PROBE" = "$APPLIES_TO_PROBE_ARG" ]; then
+        got_a="$APPLIES_TO_PROBE_GOT"
+      else
+        i17_answer "A $cdir/PROBE"; got_a="$I17_GOT"
+      fi
+      [ "$got_a" = "/nonexistent-consumer/$dest/PROBE" ] || err "I17: reconcile/apply.sh — the thing that WRITES on a pull — sends core/$cdir/ to '${got_a:-<nothing>}', but I8's table and install.sh say '$dest/'. A subtree apply.sh cannot place is silently skipped while the run still re-stamps, leaving a consumer whose .ai-dlc-version claims a version its tree lacks. apply.sh must derive every path from preclassify.sh's map_consumer(), never from a private table."
     fi
   done <<< "$SITES_TABLE"
+  # D7's scanned-against-listed guard; A72 in enforcement-map-derivations holds its exact finding count.
+  [ "$I17_HAVE" -eq "$I17_WANT" ] || err "I17: the one bash that evaluates map_consumer() and consumer_path() for every site row answered $I17_HAVE of the $I17_WANT rows it was given — it died partway, and every row it never answered is reported above as its own finding. A short batch must never read as the rows after it passing."
 fi
 
 # --- I4: no dormant binding ---------------------------------------------------
@@ -11918,7 +11988,14 @@ i108_pop() { { grep -rlF -- "$i108_needle" "$1" 2>/dev/null
 # STDERR GOES TO ITS OWN FILE, TRUNCATED FIRST. The header records why it must not be merged
 # into stdout; the truncation is so that a caller reading the file after a run that wrote
 # nothing to it reads an empty channel rather than the previous run's.
-i108_list() { : > "$2"; bash "$1" --list "$3" 2>"$2"; }
+#
+# ONE START READS THE PROBE TREE AND THE CORPUS, PROBE FIRST. The reader takes several targets
+# and walks them in argument order, every per-file variable local to check_file, so the probe's
+# rows and the corpus's rows are told apart by the PATH each line carries -- which is what
+# i108_opened and i108_grammar already key on -- and a corpus fault that aborts the run (a
+# REFUSED walk is exit 2) comes after every probe row is already written. The probe still gates
+# the corpus: its rows are consulted only when the probe scores 0.
+i108_list() { : > "$2"; i108_lr="$1"; i108_le="$2"; shift 2; bash "$i108_lr" --list "$@" 2>"$i108_le"; }
 # WHETHER THE READER OPENED A BLOCK IN A FILE is a substring question about its --list output,
 # and it is asked once per file in the population. `in_body` answers it with a bash `case` and
 # no fork, for the reason recorded at that helper: the forking form measured ~530x the cost,
@@ -11950,7 +12027,8 @@ fi
 # a population scan that stops matching reports no file left to ask the reader about, and a
 # stderr channel that stops being captured reports no broken block. Every one of those silences
 # reads exactly like a conforming tree. So the functions above are first driven over a tree with
-# one right answer, and the corpus is not read at all unless they produce it. The tree fires in
+# one right answer, and the corpus is not judged at all unless they produce it (half C's reader
+# walks the corpus in the probe's own start; those rows are read only on a 0 score). The tree fires in
 # BOTH directions: a seeded offender must be reported and a seeded near-miss must not.
 #
 # HALF C'S SEEDS ARE THE PRODUCER'S SHAPES, NOT THE READER'S. The two record templates emit a
@@ -12039,8 +12117,9 @@ i108_pp="$(i108_pop "$i108_pd/p")"
 i108_pp_want="$i108_pd/p/record.md
 $i108_pd/p/teach.md"
 i108_pl=""; i108_pe=""
+i108_roles="$REPO_ROOT/core/team-roles"
 if [ "$i108_reader_ok" -eq 1 ]; then
-  i108_pl="$(i108_list "$i108_reader" "$i108_ef" "$i108_pd/c")"
+  i108_pl="$(i108_list "$i108_reader" "$i108_ef" "$i108_pd/c" "$i108_roles")"
   i108_pe="$(cat "$i108_ef" 2>/dev/null)"
 fi
 i108_score=0
@@ -12120,7 +12199,6 @@ EOF
   # only one that can see the taught EXAMPLE drifting away from the grammar that is enforced.
   # It is skipped only when the reader is absent, which was already reported above.
   if [ "$i108_reader_ok" -eq 1 ]; then
-    i108_roles="$REPO_ROOT/core/team-roles"
     i108_set="$(i108_pop "$i108_roles")"
     i108_missing=''
     while IFS= read -r i108_rel; do
@@ -12132,15 +12210,13 @@ EOF
     if [ -n "$i108_missing" ]; then
       err "I108's population scan over core/team-roles/ did not find:$i108_missing. Those five are declared above as carrying the taught passage, which is one of the two keys the scan reads, so their absence is the scan failing rather than a finding about the tree. Every count read below would have been taken over a population missing its own known members."
     else
-      i108_cef="$(mktemp "${TMPDIR:-/tmp}/i108c-XXXXXX")"
-      i108_out="$(i108_list "$i108_reader" "$i108_cef" "$i108_roles")"
-      i108_cerr="$(cat "$i108_cef" 2>/dev/null)"
-      rm -f "$i108_cef"
+      # The corpus rows were written by the probe's own start (i108_list above); each lookup
+      # below is keyed on a corpus path, so no probe row can answer for one.
       i108_blind=''; i108_broken=''
       while IFS= read -r i108_f; do
         [ -n "$i108_f" ] || continue
-        i108_opened "$i108_f" "$i108_out"  || i108_blind="$i108_blind ${i108_f#"$REPO_ROOT"/}"
-        i108_grammar "$i108_f" "$i108_cerr" && i108_broken="$i108_broken ${i108_f#"$REPO_ROOT"/}"
+        i108_opened "$i108_f" "$i108_pl"  || i108_blind="$i108_blind ${i108_f#"$REPO_ROOT"/}"
+        i108_grammar "$i108_f" "$i108_pe" && i108_broken="$i108_broken ${i108_f#"$REPO_ROOT"/}"
       done <<EOF
 $i108_set
 EOF

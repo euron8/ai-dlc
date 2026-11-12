@@ -214,20 +214,28 @@ verdict "$P" "$WORK/n" /dev/null > "$WORK/n.v"; nv=$?
 [ "$nv" = 2 ] && grep -qF 'REFUSED N: listed 1 run.sh, the join scanned 2' "$WORK/n.v" && spl ok "N: a scanned count unequal to the listed count is REFUSED" || spl FAIL "N: rc $nv"
 mkdir -p "$WORK/empty/core/fixtures/x"
 judge_tree "$WORK/empty" "$WORK/e"; [ $? = 3 ] && spl ok "N: zero run.sh listed is REFUSED before any join" || spl FAIL "N: an empty corpus was not refused"
-# M4's six cases on THIS list, through the shared m4 with this file's rel, arm and remedy.
+# COST, with GIT_DIR unset (`--complete`, same-tree swap at 3f3b99ae1, two agreeing runs per side): bash starts 5 -> 5,
+# git processes 35 -> 14 (under the M4 probe repos 30 -> 11, two auto-maintenance children 2 -> 0); output byte-identical.
+# M4's six cases on THIS list, through the shared m4 with this file's rel, arm and remedy. The scratch repos come from
+# the shared m4_probe_repo (one fast-import each). A case with a repo runs the whole of m4 with the corpus call's own
+# arguments (once per origin/main state: added, nofile, noorigin); a case with - runs m4cmp alone over the base the
+# `added` case wrote. The remedy check reads the `added` case's own whole-m4 output, so m4's hand-off of this file's
+# remedy to m4cmp is what it reads. A whole-m4 case drops GIT_DIR and its siblings, as validate-fixture-hygiene.sh's
+# M4 cases do: a pushing linked worktree exports GIT_DIR, and `git -C <probe repo>` then reads the real repository.
 pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
-  git -c user.name=probe -c user.email=probe@invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null -c init.defaultBranch=main "$@"; }
+  git -c user.name=probe -c user.email=probe@invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null -c init.defaultBranch=main \
+  -c maintenance.auto=false "$@"; }
 R="$WORK/m4-base"; RN="$WORK/m4-nofile"; RX="$WORK/m4-noorigin"
-mkdir -p "$R/scripts" "$RN" "$RX"
-{ pgit init -q "$R" && printf '# base\na\tr1\nb\tr2\n' > "$R/$ALLOW_REL" && pgit -C "$R" add "$ALLOW_REL" \
-  && pgit -C "$R" commit -q -m base && pgit -C "$R" update-ref refs/remotes/origin/main HEAD \
-  && pgit init -q "$RN" && printf 'x\n' > "$RN/other" && pgit -C "$RN" add other && pgit -C "$RN" commit -q -m n \
-  && pgit -C "$RN" update-ref refs/remotes/origin/main HEAD && pgit init -q "$RX"; } >/dev/null 2>&1 \
+{ m4_probe_repo "$R" "$ALLOW_REL" $'# base\na\tr1\nb\tr2\n' && m4_probe_repo "$RN" other $'x\n' && m4_probe_repo "$RX"; } >/dev/null 2>&1 \
   || { echo "validate-fixture-inprocess: REFUSED -- could not build the M4 probe repos" >&2; exit 2; }
-m4c() { # <label> <repo> <want rc> <want first line> <rows...>
+M4GOT=""
+m4c() { # <label> <repo | -> <want rc> <want first line> <rows...>
   local lab="$1" repo="$2" wrc="$3" want="$4" got rc; shift 4
   printf '# probe list\n' > "$WORK/m4-cur.txt"; printf '%s\n' "$@" >> "$WORK/m4-cur.txt"
-  got="$(m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-b.txt" "$ALLOW_REL" M4 "$M4_REMEDY")"; rc=$?
+  if [ "$repo" = - ]; then got="$(m4cmp "$WORK/m4-cur.txt" "$WORK/m4-b.added.txt" "$ALLOW_REL" M4 "$M4_REMEDY" fixture)"; rc=$?
+  else got="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+              m4 "$repo" "$WORK/m4-cur.txt" "$WORK/m4-b.$lab.txt" "$ALLOW_REL" M4 "$M4_REMEDY")"; rc=$?; fi
+  M4GOT="$got"
   [ "$rc" = "$wrc" ] && [ "$(printf '%s\n' "$got" | head -1)" = "$want" ] && return 0
   spl FAIL "M4 case $lab: rc $rc, want $wrc: $(printf '%s' "$got" | head -2 | tr '\n' ' ')"; return 1
 }
@@ -235,14 +243,12 @@ M4F="FAIL M4: allowlist row(s) whose fixture is not on $ALLOW_REL at origin/main
 M4O="OK M4: no allowlist row added against origin/main"
 m4ok=0
 m4c added "$R" 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'b\tr2')" "$(printf 'c\tr3')" || m4ok=1
-m4c swap "$R" 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'c\tr3')" || m4ok=1
-m4c shrink "$R" 0 "$M4O" "$(printf 'a\tr1')" || m4ok=1
-m4c reworded "$R" 0 "$M4O" "$(printf 'a\tother words')" "$(printf 'b\tr2')" || m4ok=1
+grep -qxF "  Remedy: $M4_REMEDY" <<<"$M4GOT" || { spl FAIL "M4 the added-row failure does not carry this list's remedy"; m4ok=1; }
+m4c swap - 1 "$M4F" "$(printf 'a\tr1')" "$(printf 'c\tr3')" || m4ok=1
+m4c shrink - 0 "$M4O" "$(printf 'a\tr1')" || m4ok=1
+m4c reworded - 0 "$M4O" "$(printf 'a\tother words')" "$(printf 'b\tr2')" || m4ok=1
 m4c nofile "$RN" 0 "SKIP M4: origin/main carries no $ALLOW_REL -- this is the release that first ships it" "$(printf 'c\tr')" || m4ok=1
 m4c noorigin "$RX" 0 "SKIP M4: origin/main does not resolve here, so there is no base allowlist to compare against" "$(printf 'c\tr')" || m4ok=1
-got="$(m4 "$R" "$WORK/m4-cur.txt" "$WORK/m4-b.txt" "$ALLOW_REL" M4 "$M4_REMEDY")"
-printf '# probe list\nz\tr\n' > "$WORK/m4-cur.txt"; got="$(m4 "$R" "$WORK/m4-cur.txt" "$WORK/m4-b.txt" "$ALLOW_REL" M4 "$M4_REMEDY")"
-grep -qxF "  Remedy: $M4_REMEDY" <<<"$got" || { spl FAIL "M4 the added-row failure does not carry this list's remedy"; m4ok=1; }
 [ "$m4ok" = 0 ] && spl ok "M4 on $ALLOW_REL: added and swapped rows refused with this list's remedy; shrink and a reworded reason pass; both no-base states SKIP"
 if [ "$SP_RED" != 0 ]; then echo "validate-fixture-inprocess: REFUSED -- the self-probe is red, so a verdict over the tree is unattributable" >&2; exit 2; fi
 

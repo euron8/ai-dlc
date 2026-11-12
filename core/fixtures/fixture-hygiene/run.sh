@@ -46,6 +46,11 @@
 # MUTANT-MATRIX MH8C decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 accepts a commented loop
 # MUTANT-MATRIX MH8S decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 judges a stub by itself
 # MUTANT-MATRIX MH8R decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when H8 drops its stale-row check
+# MUTANT-MATRIX MM4 decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when M4 never refuses an added row
+# MUTANT-MATRIX MM4R decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4's rel default is another list
+# MUTANT-MATRIX MM4A decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4's arm default is another arm
+# MUTANT-MATRIX MM4P decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4 hands m4cmp a fixed M4
+# MUTANT-MATRIX MM4B decides=D1,D2,D3,D5,D6,DE1,D7,D8,D9,C,R,DV twins=- why=the self-probe refuses the whole run when m4 hands m4base a fixed M4
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/fixture-hygiene/run.sh --matrix
 # Re-measure it whenever an arm or a mutant is added or changed.
 #   MH1  H1's branch verdict made false        -> D1 reads the self-probe refusal naming H1
@@ -65,6 +70,16 @@
 #        loop accepted), the loop located on the unmasked line (a comment accepted), a stub not resolved to its IMPL,
 #        the stale-row check removed -> D8 (receipt-bl929.sh driving the mutant copy) reads the self-probe refusal
 #        naming H8, each scored on its OWN seed's diff row (h8srcb, h8git, h8cmt, h8stubok, h8stl)
+#   MM4  M4's added-row refusal made false (m4 passes every list) -> D1 reads the self-probe refusal naming M4, on
+#        the `added` case, so the M4 probe repos the validator builds are proven read by a case that can fail
+#   MM4R m4()'s rel default reads the H7 list    -> D1 reads the self-probe refusal naming M4, on the `added` case
+#        (the whole of m4 called with no rel, as the corpus's M4 call is: origin/main carries no H7 list, so it SKIPs)
+#   MM4A m4()'s arm default reads H7-M4          -> D1 reads the self-probe refusal naming M4, on the `added` case
+#        (rc 1 as wanted, its first line headed H7-M4)
+#   MM4P m4() hands m4cmp a fixed M4, not its arm -> D1 reads the self-probe refusal naming M4, on the `swap` case
+#        (the whole of m4 with an explicit arm, as the H7-M4, H8-M4 and E1-M4 corpus calls pass it)
+#   MM4B m4() hands m4base a fixed M4, not its arm -> D1 reads the self-probe refusal naming M4, on the `nofile`
+#        case (the whole of m4 with an explicit arm; its SKIP line is m4base's, headed M4 instead of P-M4)
 #
 # D8  IS receipt-bl929.sh, D9 IS receipt-bl930.sh: each seeds its OWN world and drives the validator (BL-929: a
 #     scrubbed fixture and a scrubbed-IMPL stub read SCRUBBED, an unscrubbed unlisted one FAILs H8, a listed one
@@ -194,6 +209,16 @@ mk_mutant MH8S 't = (f in IMPL && IMPL[f] != "!") ? IMPL[f] : f' 't = f' \
   || { echo "FIXTURE BROKEN: mutant MH8S DID NOT APPLY" >&2; exit 2; }
 mk_mutant MH8R 'if (f in LISTED) print "H8STALE\t" f "\tthe fixture is SCRUBBED' 'if (0) print "H8STALE\t" f "\tthe fixture is SCRUBBED' \
   || { echo "FIXTURE BROKEN: mutant MH8R DID NOT APPLY" >&2; exit 2; }
+mk_mutant MM4 'if [ -n "$added" ]; then' 'if [ -n "" ]; then' \
+  || { echo "FIXTURE BROKEN: mutant MM4 DID NOT APPLY" >&2; exit 2; }
+mk_mutant MM4R 'local rel="${4:-$ALLOW_REL}" arm="${5:-M4}" rc' 'local rel="${4:-$H7_ALLOW_REL}" arm="${5:-M4}" rc' \
+  || { echo "FIXTURE BROKEN: mutant MM4R DID NOT APPLY" >&2; exit 2; }
+mk_mutant MM4A 'arm="${5:-M4}" rc' 'arm="${5:-H7-M4}" rc' \
+  || { echo "FIXTURE BROKEN: mutant MM4A DID NOT APPLY" >&2; exit 2; }
+mk_mutant MM4P 'm4cmp "$2" "$3" "$rel" "$arm" "$remedy" "$noun"' 'm4cmp "$2" "$3" "$rel" M4 "$remedy" "$noun"' \
+  || { echo "FIXTURE BROKEN: mutant MM4P DID NOT APPLY" >&2; exit 2; }
+mk_mutant MM4B 'm4base "$1" "$3" "$rel" "$arm"' 'm4base "$1" "$3" "$rel" M4' \
+  || { echo "FIXTURE BROKEN: mutant MM4B DID NOT APPLY" >&2; exit 2; }
 
 # --- one validator run per distinct state -------------------------------------------------------------------------
 drive() { # <tag> <world dir> [--derive]
@@ -244,13 +269,13 @@ REFUSAL() { printf 'self-probe %s: FAIL' "$1"; }
 
 if [ "$MODE" = matrix ]; then
   : > "$WORK/mx.ran"
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B; do
     cp -R "$WORK/w-clean" "$WORK/mclean-$m" && cp -p "$WORK/mut-$m/$VREL" "$WORK/mclean-$m/$VREL" \
       || { echo "FIXTURE BROKEN: could not build the clean world for $m" >&2; exit 2; }
     drive "$m.d" "$WORK/mut-$m" & drive "$m.v" "$WORK/mut-$m" --derive & drive "$m.c" "$WORK/mclean-$m" &
     d7drive "$m.7" "$WORK/mut-$m/$VREL" & d8drive "$m.8" "$WORK/mut-$m/$VREL" & d9drive "$m.9" "$WORK/mut-$m/$VREL" &
   done; wait
-  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R; do
+  for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MH7 MH8O MH8G MH8C MH8S MH8R MM4 MM4R MM4A MM4P MM4B; do
     dec=""; tw=""
     for a in D1 D2 D3 D5 D6 DE1; do if verdict "$a" "$m.d"; then tw="$tw,$a"; else dec="$dec,$a"; fi; done
     if verdict D7 "$m.7"; then tw="$tw,D7"; else dec="$dec,D7"; fi
@@ -264,7 +289,7 @@ if [ "$MODE" = matrix ]; then
 fi
 
 drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & drive derive "$WORK/w-dirty" --derive &
-for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6; do drive "$m" "$WORK/mut-$m" & done
+for m in MH1 MH2 MH3 MH3S MH5 MH5N ME1 MH6 MM4 MM4R MM4A MM4P MM4B; do drive "$m" "$WORK/mut-$m" & done
 d7drive d7 & d7drive MH7 "$WORK/mut-MH7/$VREL" &
 d8drive d8 & d9drive d9 &
 for m in MH8O MH8G MH8C MH8S MH8R; do d8drive "$m" "$WORK/mut-$m/$VREL" & done
@@ -318,6 +343,23 @@ if score MH5N D5 H5; then
   if has MH5N "$WL_ROW"; then mutant_killed "$([ "$BASE_D5" = 1 ] && echo 1 || echo 0)" MH5N "MH5N: arm D5 fails by the self-probe refusal naming H5, on the world-letter JOIN row m5m:5"
   else bad "MH5N: the self-probe refused, but not on the world-letter JOIN row m5m:5"; fi
 fi
+# MM4 must die on M4's `added` case: the refusal names M4 and the case that read the built M4 probe repo.
+if score MM4 D1 M4; then
+  if has MM4 'self-probe M4: FAIL -- case added got rc 0, want 1'; then mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MM4 "MM4: arm D1 fails by the self-probe refusal naming M4, on its added case"
+  else bad "MM4: the self-probe refused, but not on M4's added case"; fi
+fi
+# MM4R, MM4A and MM4P each die on the M4 case that reads what they break: m4's rel default (added SKIPs, rc 0), its arm
+# default (added's first line headed H7-M4) and its hand-off of an explicit arm to m4cmp (swap's first line headed M4);
+# MM4B its hand-off of that arm to m4base (nofile's SKIP line headed M4).
+m4row() { # <mutant> <refusal text> <what>
+  score "$1" D1 M4 || return 1
+  has "$1" "$2" && return 0
+  bad "$1: the self-probe refused, but not on $3"; return 1
+}
+m4row MM4R 'self-probe M4: FAIL -- case added got rc 0, want 1' "M4's added case at rc 0" && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MM4R "MM4R: arm D1 fails by the self-probe refusal naming M4, on its added case (m4's rel default)"
+m4row MM4A 'self-probe M4: FAIL -- case added got rc 1, want 1: FAIL H7-M4:' "M4's added case headed H7-M4" && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MM4A "MM4A: arm D1 fails by the self-probe refusal naming M4, on its added case (m4's arm default)"
+m4row MM4P 'self-probe M4: FAIL -- case swap got rc 1, want 1: FAIL M4:' "M4's swap case headed M4" && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MM4P "MM4P: arm D1 fails by the self-probe refusal naming M4, on its swap case (m4's arm hand-off)"
+m4row MM4B 'self-probe M4: FAIL -- case nofile got rc 0, want 0: SKIP M4:' "M4's nofile case headed M4" && mutant_killed "$([ "$BASE_D1" = 1 ] && echo 1 || echo 0)" MM4B "MM4B: arm D1 fails by the self-probe refusal naming M4, on its nofile case (m4's arm hand-off to m4base)"
 
 # The five H8 mutants, each on D8 (receipt-bl929.sh driving the mutant copy), each killed on its OWN seed's row of the
 # self-probe diff -- the refusal alone is every H8 mutant's signal, so the row is what tells one from another:

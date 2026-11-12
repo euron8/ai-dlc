@@ -32,6 +32,8 @@
 # MUTANT-MATRIX m-exempt-all decides=R4 twins=R2
 # MUTANT-MATRIX m-exempt-none decides=R3 twins=R2
 # MUTANT-MATRIX m-search-tip decides=R5 twins=R2
+# MUTANT-MATRIX m-e-nospace decides=assertion-23 twins=assertion-2
+# MUTANT-MATRIX m-f-no-count decides=assertion-25 twins=assertion-2
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/release-version-triple/run.sh --matrix
 
 set -uo pipefail
@@ -66,6 +68,11 @@ fails=0
 made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
+# B_A1 is set only beside assertion 1's ok: the unmutated program executed with arms E and F both
+# reporting their probes fired both ways. The arm E and arm F probe mutants score through it.
+B_A1=0
 
 # EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant
 # when a helper call was mis-spaced: `set -u` killed the `$( )` subshell, the `if`
@@ -73,7 +80,7 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=39
+EXPECTED_ASSERTIONS=42
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -229,6 +236,7 @@ if [ "$status" = "0" ] \
    && grep -q 'no committed conflict markers (probe fired both ways)' "$WORK/out.txt" \
    && grep -q 'no misspelled not-discharged citation (probe fired both ways)' "$WORK/out.txt"; then
   ok "subject, VERSION and CHANGELOG all agreeing passes, with arms E and F evaluated end to end"
+  B_A1=1
 else
   bad "an agreeing commit failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
@@ -869,6 +877,59 @@ else
   bad "MUTATION m-search-tip: R5's input still fails (exit $status) with the search from the tip"; sed 's/^/        /' "$WORK/mut-r.txt"
 fi
 regmut m-search-tip "$WORK/m-search-tip.sh"
+
+# --- 23. ARM E'S OWN PROBE TREE CARRIES ITS NEAR-MISS ----------------------------
+# Assertion 1 proves the probe reports its offender; it cannot prove the near-misses were
+# written, because a near-miss that is absent is quiet too. An open-marker grammar that lost
+# its trailing space reads `nospace.md` as a conflict, so this mutant is refused by arm E's
+# probe only if the probe tree really holds that file, byte for byte.
+cd "$WORK" || exit 2
+git checkout -q main
+mkmut "$WORK/m-e-nospace.sh" "git -C \"\$d\" grep -l -e '^<<<<<<< ' HEAD" "git -C \"\$d\" grep -l -e '^<<<<<<<' HEAD"
+# Sourced, the way drive_src drives the other arms, and arm E called by name: the probe is the
+# subject here, not the program's entry, which assertion 1 executes. --matrix replays it executed.
+( . "$WORK/m-e-nospace.sh" || exit 97; rv_init --commit HEAD; arm_e; echo "conflict_fail=$conflict_fail" ) >"$WORK/out.txt" 2>&1; status=$?
+if [ "$status" = 0 ] && grep -qx 'conflict_fail=1' "$WORK/out.txt" \
+   && grep -q "arm E's own probe did not discriminate" "$WORK/out.txt" \
+   && grep -q 'the near-miss nospace.md WAS reported' "$WORK/out.txt"; then
+  mutant_killed "$B_A1" m-e-nospace "MUTATION m-e-nospace: an open marker without its trailing space is refused by arm E's probe (nospace.md)"
+else
+  bad "MUTATION m-e-nospace: arm E's probe did not refuse the widened open marker -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg assertion-23 exec 0 'no committed conflict markers (probe fired both ways)' --commit HEAD
+regmut m-e-nospace "$WORK/m-e-nospace.sh"
+
+# --- 24. EVERY NEAR-MISS REACHES ARM E'S PROBE TREE -----------------------------
+# m-e-nospace proves one near-miss arrived. setext.md and openonly.md are written the same way,
+# and a near-miss that never reached the tree is quiet exactly as a correctly-acquitted one is.
+# rv_probe_e_tree is the function arm E calls, sourced and run here on a fresh directory, and its
+# HEAD tree must list exactly the offender and the three near-misses.
+E_TREE="$WORK/e-tree"
+mkdir -p "$E_TREE" || exit 2
+( . "$VALIDATOR" || exit 97; rv_probe_e_tree "$E_TREE" ) >/dev/null 2>&1
+e_names="$(git -C "$E_TREE" ls-tree -r --name-only HEAD 2>/dev/null | tr '\n' ' ')"
+if [ "$e_names" = "nospace.md offender.md openonly.md setext.md " ]; then
+  ok "arm E's probe tree, built by the function arm E calls, holds the offender and all three near-misses: $e_names"
+else
+  bad "arm E's probe tree lists [$e_names], want the offender and the three near-misses"
+fi
+
+# --- 25. THE SINGLE READ'S RECORD COUNT IS LOAD-BEARING --------------------------
+# form_findings_in reads a list in one `git log -z` and keeps that answer only when it returned
+# one record per argument. An absent full name makes git print no record at all, so without the
+# count the whole list reads as "no findings". Arm F's probe holds a call with one real offender
+# beside one absent name; this mutant drops the count and must be refused by that probe.
+mkmut "$WORK/m-f-no-count.sh" 'if [ "$fast" = 1 ] && [ "$got" = "$n" ]; then' 'if [ "$fast" = 1 ]; then'
+( . "$WORK/m-f-no-count.sh" || exit 97; rv_init --commit HEAD; arm_f; echo "form_fail=$form_fail" ) >"$WORK/out.txt" 2>&1; status=$?
+if [ "$status" = 0 ] && grep -qx 'form_fail=1' "$WORK/out.txt" \
+   && grep -q "arm F's own probe did not discriminate" "$WORK/out.txt" \
+   && grep -q 'the unreadable member 0000000000000000000000000000000000000001 was NOT reported' "$WORK/out.txt"; then
+  mutant_killed "$B_A1" m-f-no-count "MUTATION m-f-no-count: a single read kept without its record count is refused by arm F's probe (the unreadable member)"
+else
+  bad "MUTATION m-f-no-count: arm F's probe did not refuse the count-less single read -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+reg assertion-25 exec 0 'no misspelled not-discharged citation (probe fired both ways)' --commit HEAD
+regmut m-f-no-count "$WORK/m-f-no-count.sh"
 
 # --- PER-PUSH TWINS, OR THE FULL MATRIX --------------------------------------------------------
 # The assertions above drive each mutant on its deciding input. Each mutant's one named TWIN (the
