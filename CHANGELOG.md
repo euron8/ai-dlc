@@ -19,6 +19,105 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1091.0] - 2026-11-12
+
+### BL-809 (PARTIAL) — arm (q) AC-CITATION-UNRESOLVED, a WARN
+- `validate-handoff-evidence.sh` handoff mode WARNs on a path in a `test`-Kind row of `## Strategy Test IDs` (stories-test-strategy.md; Check 21's path resolution pulled forward to gate 1) that is neither tracked at the frozen sha nor, as a bare basename, the basename of any tracked path. The arm reads absolute tokens that start with the physical toplevel (judged by their toplevel-relative rest), skips a token with trailing elision before the punctuation strip, and binds the strategy header at its separator row. Captures stay with CAPTURE-UNRESOLVED via `cap_tokens`; no `.gitignore` acquittal; no exclusions ship.
+- Worktree rule: a token under a registered worktree nested in the toplevel is judged by its worktree-relative rest when that worktree's `HEAD` is the frozen sha, and is not read under any other registered worktree. Measured at the final code: 0 `/`-leading tokens of 1621 `test`-row tokens (0 of 2053 across all Kinds) over the 212 passes; a synthetic worktree token is emitted and an impossible token reads 0. The FP is constructible but unobserved, and fixed. Cost: at most one lazy `git worktree list --porcelain` per handoff, only when an in-toplevel `/`-leading token is present.
+- 22 b9-q mutants (b9-q1..q22), all killed; the `--matrix` run's 22 of 22 tripped sets equal the recorded sets.
+- Measured on graph s317-s322, 212 gate-1 passes over 92 stories (+14 UNEVALUABLE): all Kinds 11 hits = 1 TP + 10 FP (predicate 5, unit 4, live_ops 1); as shipped (`test` only) 1 TP, 0 FP.
+- Refusal-grade form owed (lead ruling, batch 256). Promoted to a refusal only when (i) the window holds at least 1 adjudicated TP, (ii) FP 0 over every pass in the window, pass count stated beside the zero (212 today), extended one sprint at a time, and (iii) no constructible FP is known open (the worktree token is the example). No hit-count floor: at 1 hit in 6 sprints a floor of 5 is about 30 sprints. Promotion is a later release's decision, made by the operator. Outcome not met (s321 1.08, s322 1.50 re-review passes per story).
+- Consumer reach / cost: WARN only, exit unchanged. One memoised `git ls-tree` of the frozen tree per handoff, shared with the ignore check; 0 per-token forks; the lazy worktree listing above. Fork TOTAL 2790, equal to base against FORK_BUDGET 2926 (base 2790); story-evidence-receipts 36 and story-evidence-receipts-mutants 106, each by two agreeing counted runs, unchanged.
+
+### BL-812 (PARTIAL) — step-value readings and projections
+- Item 1: sprint-review (both labels $209.09, 15 step-unique survivors at $13.94, KEEP), deploy-validate ($100.18, 3 survivors at $33.39, KEEP), stories adversarial p1-p3 ($104.17; p1 9 survivors at $5.74, KEEP; p2/p3 KEEP while repairs write defects). s319 sprint-review baseline $1.93 recorded, $4.95 with both labels.
+- Carry-over-evaluation on s322: width moved as projected, cross $ less, per story rose (11.50 spawns, $23.02). The `gate-validation[carry-over-evaluation]` exclusion is MIXED: 20 spawns are genuine planning-gate work ($7.06), 61 are requirements-step work ($167.41); mechanism BL-1003. Whole-sprint s322 row owed until the s322 retro.
+- Item 3: arm (q) projection row, $0 (0 passes settled; a WARN removes no pass). Item 2 open: BL-810 is PARTIAL.
+
+### BL-1003 (OPEN) — extractor gate span
+- Filed. The analysis extractor ends a gate span only on `gate-checkpoint.sh ... close`, so a gate the lead never closes charges every later step's spawns to `gate-validation[<step>]` (s322, from a peer hand's re-extraction: 61 requirements-step spawns, $167.41, labelled `gate-validation[carry-over-evaluation]`).
+
+### BL-1004 (OPEN) — s321 sprint-review pm seats
+- Filed. The pm seats made 0 of the step's 15 step-unique survivors, at $17.00 (26 spawns, 0.75 agent-h). One sprint's reading; the next measured sprint decides.
+
+### BL-1005 (OPEN) — s321 stories adversarial p2/p3 re-reads
+- Filed. 19 shard reads of story text unchanged since the prior pass, $7.57 and 0.48 spawn-hours, for 0 CRITICAL or MAJOR. One sprint's reading; the next measured sprint decides.
+
+### BL-1009 (OPEN) — gate left without `close`
+- Filed. The lead can leave a gate without `gate-checkpoint.sh ... close`, so the OPEN marker outlives the gate and a compaction resumes a finished gate (the recover hook's "RESUME it" injection, seen once, s318). No fix in this release.
+
+### BL-842 PARTIAL: s321 and s322 Check 22 reading
+
+The entry now carries a reading on s321 complete and on s322 up to 2026-11-12T10:00Z, replacing the batch b255 provisional reading (24 questions to 11-12T00:00Z, now 26 to 10:00Z). The window ends 2h33m before the s322 close at 12:32:58Z, so the reading does not cover all of s322. Neither sprint has a genuine Check 22 failure question, nor a Check 22 failure of any class, so the zero has no subject; the BL-887 fix would also confound any non-zero count. The entry stays PARTIAL. It gains `Step: gate-validation[implementation]` and still owes the efficiency tag and the Decision rule line at close.
+
+### BL-843 PARTIAL: s321 and s322 gate-2 reading
+
+The entry carries the s321 and s322 reading. Gate-2 NEEDS_REWORK passes that failed only on capture-head, count or Dev Agent Record metadata were 7 of 15 in s320 and are 6 of 15 across s321 and s322. The `capture-heads` block was adopted in that period (23 of 25 stories in s321, 6 of 8 in s322), but the record-metadata class did not collapse. The entry stays PARTIAL and gains `Step: implementation`.
+
+### BL-844 PARTIAL: s321 and s322 gate-2 reading
+
+The entry carries the s321 and s322 reading and withdraws its old close measure, gate-2 passes per story, because that measure cannot see routing. After the change, 2 of 18 re-validations were routed record-only, and 11 of the 18 cannot be classified (s321 8, s322 3). The replacement measure, seats per gate-2 re-validation for routed against fan-out passes, is owed on a sprint with more routed re-validations. The entry stays PARTIAL and gains `Step: implementation`.
+
+### BL-846 PARTIAL: s321 and s322 gate-2 reading
+
+The entry carries the s321 and s322 reading. After the change, every gate-2 file with a Critical or Important finding carries `Instances:`: 16 of 16 in s321 and 7 of 7 in s322, against 0 of 21 in s320. Consecutive failing pairs of the same class were 6 of 7 in s320, 2 of 3 in s321 and none in s322, too small a sample to call a rate. The entry stays PARTIAL and gains `Step: implementation`.
+
+### BL-847 PARTIAL: s321 and s322 gate-2 leg reading
+
+The entry carries the s321 and s322 reading for its gate-2 leg. The 0 contradiction cases come from s322's 7 mapped stories only, and the silent shape persists (s321 3, s322 2), so the gate-2 leg is not shown holding. The smoke leg is also still owed. The entry stays PARTIAL with no Step line, because its scope spans two steps, and it owes the efficiency tag and the Decision rule line at close.
+
+### BL-508 — graph s322 against the s317+s318 pooled baseline: the four planning steps did not fall; the entry stays PARTIAL
+
+A progress paragraph records the s322 whole-sprint reading. The four planning steps cost more as labelled, reattributed for BL-1003 and BL-1009, and at the upper bound: 4.38 h and $76.9 per story as labelled, against 2.31 h and $64.1 for the committed b244 snapshot. The live corpus can no longer reproduce the s317+s318 figure, because s317's planning transcripts are gone, so the snapshot serves as the baseline and the comparison mixes extractor versions. A close needs a one-token `Step:` line, and this entry's measured scope is four steps.
+
+### BL-541 — the serial remediator's join: the s322 step-group reading is recorded; the entry stays PARTIAL
+
+A progress paragraph records graph s322 against s319. The step group rose on hours, token-equivalent dollars and each seat: 4.38 h and $76.9 as labelled against s319's 2.09 h and $55.4. The only figure that fell is the lead seat's API dollars, because the s322 lead ran local models. The reading measures the group's cost, not the serial join's wake count.
+
+### BL-543 — the serial remediator re-timed: serial minutes fell, the step group did not; the entry stays PARTIAL
+
+A progress paragraph records the re-time, graph s322 against s319. The four rounds matching s319's timed passes went from 162.1 min to 87.9 min, and the control timing reproduced to the second. Serial minutes fell because the work was split into lanes plus a fan-in rather than through the worklist. The figures are sprint totals, not normalised (8 stories against 20). The longest single wait is flat at 73.0 -> 72.6 min, and the step group's cost did not fall.
+
+### BL-550 — party seats grep missing paths: no like-for-like fall; the entry stays PARTIAL
+
+A progress paragraph records graph s322 against s319. The recorded baseline of 105 lines over 134 transcripts does not reproduce. On the one rule applied to both sprints, the miss rate per seat transcript rose from 0.46 to 0.76 for party plus elicitation and from 0.26 to 0.71 for adversarial. That rate is indicative only, because the composition differs. A close-form reading owes a committed counter and a baseline re-derived with it.
+
+### BL-552 — status lines per finished seat: the volume moved to the round-dispatcher, with no fall per arrival; the entry stays PARTIAL
+
+A progress paragraph records graph s322 against s319. The lead's status lines fell from 264 to 4 only because party arrivals were re-routed to the 0.1000.0 round-dispatcher. Per arrival, the status-line rate went from 0.96 to 0.80 at the lead and 0.78 at the dispatcher. The signature rate is mixed: 0.53 -> 0.60 at the lead on 5 arrivals, and 0.26 at the dispatcher on 23 arrivals. Live `--complete` coverage was not verified.
+
+### BL-808 PARTIAL: the width clause's outcome reads MET on s322, and the entry stays open on its second subject
+
+The width-clause reading was taken on s322 with s319 and s321 reproduced as controls in the same run. All 6 s322 sharded passes are the one-cross-shard shape. Three are gate-1 code-review passes, and those are the ones scored. The three gate-2 qa-validation passes are not the gate-1 partition this clause concerns, so they are unscored.
+
+- **Outcome clause MET on s322.** The clause is "any reviewer width it keeps names the catches that width alone made". The cross shards made 2 named catches that no part shard raised: `server/test_live_smoke.py:5850` and `scripts/test-pytest-admission.sh:48`. In both passes every part shard read `shard-verdict: APPROVED` with 0 findings under its Critical and Important headings.
+- **Observed:** 3 gate-1 code-review passes, 12 part and 3 cross shards, 6 Critical and Important findings, 3 unique (part 1, cross 2), 3 unanchored and unscored.
+- **Item (1)'s same-shape expectation stays as the test for a future zero.** The earlier same-shape population is s320 and s321, with 0 cross-unique over 9 cross shards, so its expected count is 0 and is degenerate. A zero on s322 could not have been read against it. This reading is not a zero.
+  - The scorable-only rate is 2/8 (s321 5 cross shards, s322 3).
+  - The cumulative floor is 12 cross shards at that 2/8 rate, an expected count of 3. At an expected count of 1, a Poisson zero still has probability about 0.37. At 3 it is about 0.05.
+  - At the observed 3 to 5 such shards per sprint, that is about three sprints.
+- **The second subject stays open.** The b255 joint-outcome hours and dollars are suspect under BL-1003. They close when BL-1003's per-sprint count of gate opens with no close reads 0 for s319 to s321, or when its re-derivation on the fixed extractor is recorded beside them. This width reading reads merged review files at a graph ref and no extractor step label, so it does not depend on that label.
+- Records only. BL-808 stays open, with no LANDED line and no closed entry.
+
+### BL-810 PARTIAL: the s322 per-width reading is recorded beside s319 and s320, and the entry stays open on the `Step:` line
+
+s322 is the first sprint measured after the width change. `docs/analysis/step-value-carry-over-s319-s320/scripts/cost2.py` and `docs/analysis/step-value-carry-over-s319-s320/scripts/width.py` read the sprint set from `COE_SPRINTS`, a comma-separated list such as `319,320,322`. With it unset they default to 319,320, and stdout and `out.json` are byte-identical to the scripts before this change (cmp).
+
+- **`width.py`** takes each sprint's shipped text from `COE_SHIPPED_<N>` and maps each sprint to its elicitation shard dir through `ELIC`.
+- **`cost2.py`** keeps the s320 route re-add and its printed route control pinned to s320.
+- **Spawns, dollars and agent-hours per width are measured for party and p1 to p3.** They are recorded for s322 beside s319 and s320, from one pinned extractor run. p2 and p3 now rest on two sprints. s322's buckets sum to 92 spawns, equal to the step's 92 rows, with 0 null dollars.
+- **Elicitation was not run.** s322 has 0 `coe-elicitation` shards, against a control of 6 `stories-elicitation`. The gate section records `validation_intensity: carry-over-single`, whose minimum is Party Mode then Adversarial Review. Elicitation's cross width therefore has no reading after the change. That is an absence, not a zero cost. It stays owed until a sprint runs that round or the operator rules it not owed.
+- **Cost comparison.**
+  - Projected remaining cross spend is about $13.16, which is s320's $65.17 less the projected $52.01 of removals.
+  - s322's actual cross spend is $34.82 over 9 spawns, against s320's $65.17 over 45.
+  - The realised drop is $30.35, against the projected $52.01.
+  - s322 ran no elicitation, so $4.50 of the projection had no round to save on. p2's cross was dispatched three times ($22.20), and the step total rose from $158.55 to $184.13. The narrowing is not shown as a cost win.
+- **Catches (`width.py`, cross-only counts are ceilings).**
+  - s322 has 98 findings. Party cross has 2 cross-only. p1 cross has 2 cross-only. p2 cross has 1. p3 cross has 1.
+  - The consequence of these catches is not classified here.
+- **Gate-validation spend.** `gate-validation[carry-over-evaluation]` reads 81 spawns, $174.47 and 27.19 agent-h. This is reported beside the table and is not carry-over spend, split per BL-1003. The gate's own share is 20 spawns, $7.06 and 0.37 agent-h. The remaining 61 spawns and $167.41 belong to requirements.
+- **The `Step:` line is the remaining close precondition.** The field takes one token, and the entry's Basis covers four planning steps. Until the `Step:` line has a resolution, BL-810 is not closed. It stays open with `verify: manual`, no LANDED line and no closed entry.
+
 ## [0.1090.0] - 2026-11-12
 
 ### BL-988: a conventions-declared wrapper is one canonical-run language for record and check

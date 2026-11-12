@@ -1,8 +1,14 @@
 """Per-width carry-over findings: cross vs part, REFOUND by token overlap, survival by shipped-text token presence.
-Usage: python3 -I width.py <graph> <shipped319> <shipped320> <out.json>"""
+Usage: python3 -I width.py <graph> <shipped319> <shipped320> <out.json>
+Sprints: $COE_SPRINTS, comma-separated (e.g. 319,320,322), default 319,320. Each sprint past 319 and 320
+takes its shipped text from $COE_SHIPPED_<N> (a path). ELIC maps each sprint to its elicitation shard dir."""
 import re, glob, os, sys, json, collections
 G = sys.argv[1].rstrip("/") + "/_bmad-output"
 SH = {319: open(sys.argv[2], errors="replace").read(), 320: open(sys.argv[3], errors="replace").read()}
+SPR = tuple(int(x) for x in os.environ.get("COE_SPRINTS", "319,320").split(","))
+for sp in SPR:
+    if sp not in SH: SH[sp] = open(os.environ[f"COE_SHIPPED_{sp}"], errors="replace").read()
+ELIC = {319: "carry-over-evaluation-elicitation", 320: "coe-elicitation", 322: "coe-elicitation"}
 norm = lambda s: re.sub(r"\s+", " ", s)
 HP = re.compile(r"^(#{2,4})\s+(F-\d+)\s*[\(—-]+\s*\(?(critical|major|minor)\b", re.I)
 HP2 = re.compile(r"^(#{2,4})\s+(F-\d+)\b.*?\b(CRITICAL|MAJOR|MINOR)\b", re.I)
@@ -30,13 +36,13 @@ def parse(path):
         i = j
     return out
 rounds = []
-for sp in (319, 320):
+for sp in SPR:
     pm = f"{G}/party-mode/s{sp}"
     for f in sorted(glob.glob(pm + "/carry-over-evaluation-*.md")):
         b = os.path.basename(f)[len("carry-over-evaluation-"):-3]
         seat, rest = b.split("-", 1)
         rounds.append((sp, "party", seat, "cross" if rest.startswith("cross") else "part", rest, f))
-    for rn, d in (("elic", "coe-elicitation" if sp == 320 else "carry-over-evaluation-elicitation"), ("p1", "coe-p1"), ("p2", "coe-p2"), ("p3", "coe-p3")):
+    for rn, d in (("elic", ELIC.get(sp, "coe-elicitation")), ("p1", "coe-p1"), ("p2", "coe-p2"), ("p3", "coe-p3")):
         for f in sorted(glob.glob(f"{G}/planning-artifacts/s{sp}/shards/{d}/*.md")):
             b = os.path.basename(f)[:-3]
             rounds.append((sp, rn, "adv", "cross" if b.startswith("cross") else "part", b, f))

@@ -5,9 +5,12 @@ Usage: python3 -I cost2.py <extract-out-dir>
   docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py (it reads spawns.jsonl).
 s320's adversarial p1 spawns the extractor charged to `route` (BL-813) are re-added here.
 Control: the last line prints the s320 `route` row total.
+Sprints: $COE_SPRINTS, comma-separated (e.g. 319,320,322), default 319,320. The route re-add and its
+control stay pinned to s320 whatever the sprint set.
 """
-import json, sys, collections, re
+import json, sys, collections, re, os
 OUT = sys.argv[1]
+SPR = tuple(int(x) for x in os.environ.get("COE_SPRINTS", "319,320").split(","))
 rows = [json.loads(l) for l in open(OUT + "/spawns.jsonl")]
 def rnd(d, role):
     d = (d or "").lower()
@@ -25,7 +28,7 @@ def rnd(d, role):
     return "1 party " + ("cross" if "cross" in d else "part")
 agg = collections.defaultdict(lambda: [0, 0.0, 0.0, "9", "0"])
 for r in rows:
-    if r["sprint"] not in (319, 320): continue
+    if r["sprint"] not in SPR: continue
     st = r["step"]
     if not ("carry" in st and not st.startswith("gate")) and not (r["sprint"] == 320 and st == "route"): continue
     k = (r["sprint"], rnd(r.get("description"), r.get("role")))
