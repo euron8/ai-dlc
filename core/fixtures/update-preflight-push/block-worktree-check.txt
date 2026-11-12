@@ -1,0 +1,9 @@
+     ( cd "$(git rev-parse --show-toplevel)" || { echo "STOP cannot cd to the repository toplevel"; exit; }
+       { git rev-parse -q --verify "refs/heads/<working>" >/dev/null && git diff -z --name-only --no-renames HEAD <working>
+         git rev-parse -q --verify "refs/remotes/origin/<working>" >/dev/null && git diff -z --name-only --no-renames HEAD origin/<working>; } |
+       sort -zu |
+       while IFS= read -r -d '' p; do
+         if ! git diff --quiet HEAD -- ":(literal)$p"; then echo "DIRTY $p"
+         elif ! git cat-file -e "HEAD:$p" 2>/dev/null && { [ -e "$p" ] || [ -L "$p" ]; }; then echo "ON-DISK $p"
+         fi
+       done )

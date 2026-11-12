@@ -215,7 +215,60 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    - **No remote configured** (`git remote` empty) → non-blocking note; the
      origin-sync guarantees below do not apply. Proceed — step 2 falls back to
      its commit-locally path.
+     On a skill branch (the grammar in the skill-branch bullet below) there is no PR to read
+     and its work has not reached the working branch: STOP, name the branch, and give the
+     local merge remedy: step 8's RETURN PROCEDURE in its ABANDON form to `<cut-from>` (the
+     branch it was cut from, derived from the reflog as the skill-branch bullet below
+     states), then `git merge --ff-only <skill-branch>`, then `git branch -d <skill-branch>`,
+     the same hand-merge step 8's local-only STOP already handed the operator. Every other
+     branch proceeds as above.
    - **Detached HEAD** → STOP; there is no branch to track or return to.
+   - **Current branch is a skill branch** — a name matching
+     `^ai-dlc-update/([0-9]+\.[0-9]+\.[0-9]+-reconcile-|self-update-|untangle-)`, the three
+     names this skill cuts (step 6's reconcile branch, step 2's self-update branch, untangle
+     mode's isolate branch). This is the skill-branch grammar, defined here once and cited
+     elsewhere; it reads the branch NAME only and needs no network. A branch that does not
+     match makes no `gh` call here and nothing in this bullet applies to it. On a match, run
+     this one command, `<b>` being the current branch, which prints one row per
+     same-repository PR from it:
+     `gh pr list --head <b> --state all --json number,state,baseRefName,headRefOid,isCrossRepository --jq '.[]|select(.isCrossRepository|not)|[.number,.state,.baseRefName,.headRefOid]|@tsv'`
+     Then four tests, in order. (1) Any row whose state is `OPEN`: STOP with "PR #N from
+     <branch> is still open: merge or close it, then re-invoke from this branch." Merging
+     it in the UI, or with the literal merge command, moves no checkout; on the re-invoke
+     from THIS branch the merged-PR return below makes the move. Never check out the base
+     yourself; to leave the branch unmerged, name step 8's RETURN PROCEDURE in its ABANDON
+     form instead.
+     (2) The `MERGED` rows' distinct `baseRefName` set is exactly one branch, and that branch
+     does not match the skill-branch grammar. (3) The local tip, `git rev-parse HEAD`, equals
+     the `headRefOid` of one `MERGED` row.
+     (4) When the reflog derivation below yields the branch this one was cut from, that
+     `MERGED` row's `baseRefName` equals it; otherwise STOP naming both, before any return,
+     and offer step 8's RETURN PROCEDURE to that `baseRefName` or its ABANDON form to the
+     branch it was cut from, running neither; a bare re-invoke repeats this STOP, so the operator names one.
+     With no matching reflog line, (2) alone decides the base, as before.
+     When (2) and (3) both hold and (4) passed, run step 8's RETURN
+     PROCEDURE for that PR; when it succeeds, STOP this invocation and re-invoke
+     `/ai-dlc-update` with the operator's original arguments in full, under step 2's
+     re-invoke rule, because the stamp, `<dist>` and this SKILL.md were all read on the
+     skill branch. Anything else (no row, closed-unmerged rows only, more than one base, a
+     base that matches the grammar, a tip equal to no merged head, or `gh` unavailable or
+     failing) is a STOP that names the branch and every row's PR number and base, and
+     returns nowhere. That STOP also checks for `.claude/.ai-dlc-applying` and says whether
+     an apply is unfinished, then names the continuations and runs none of them:
+     `reconcile/apply.sh --finish …` as step 7's finish text gives it, step-8 delivery of
+     this branch, or step 8's RETURN PROCEDURE in its ABANDON form to `<cut-from>` (the
+     branch it was cut from, derived as the next sentences state) to abandon it.
+     **The branch a skill branch was cut from is derived one way, here**, and steps 2 and 8
+     cite it: it is `<cut-from>` in steps 1 and 8 and `<original-branch>` in step 2, and a
+     remembered value is never used. Read it from HEAD's reflog, the record git wrote for
+     the `git checkout -b` that cut the branch: in `git reflog --format=%gs`, take the
+     OLDEST line that begins with `checkout: moving from ` and ends with the fixed string
+     ` to <skill-branch>`, compared as a string and never as a pattern, so the dots in a
+     version cannot match other characters:
+     `git reflog --format=%gs | awk -v s=" to <skill-branch>" 'index($0, "checkout: moving from ") == 1 && length($0) > length(s) && substr($0, length($0) - length(s) + 1) == s' | tail -1`.
+     The text between `checkout: moving from ` and ` to <skill-branch>` is the branch. When
+     no reflog line matches (the reflog expired or is disabled), step 1's STOPs above name
+     the branch and say that its origin is unknown; steps 2 and 8 state their own fallback.
    - **Remote exists but the current branch has no upstream** (never pushed) →
      **AUTO-PUSH**: run `git push -u origin <branch>` to publish it, then proceed.
      Its commits are absent from `origin`, so a branch cut off it and merged to
@@ -253,6 +306,13 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    read-only report wrong. A dirty tree is refused for `apply` at step 6, and step 2
    never commits a path it did not write: it stages by explicit pathspec, so an
    uncommitted consumer edit is never swept into the self-update commit.
+   On a skill branch, step 1's return runs the RETURN PROCEDURE, and that procedure's
+   clause (c) reads the working tree for dirty and on-disk paths first.
+
+   The skill-branch test is one more of these, evaluated before either AUTO-PUSH bullet:
+   `git symbolic-ref --short -q HEAD` matched against the skill-branch grammar, with no
+   network. Evaluated later, a merged skill branch whose remote ref was pruned reads as
+   having no upstream, and the AUTO-PUSH would publish the deleted branch back to `origin`.
 
    **An UN-SYNCED branch, one whose step-1 auto-push failed on THIS invocation,
    proceeds to the dry-run only.** Step 2 DEFERS on it: it cuts no self-update
@@ -567,6 +627,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      once; that hook is the only fixture run this cycle makes. Exit 0 means pushed: open a PR, and
      **auto-merge (squash, delete branch)** — no operator gate.
      If you hold the advisor tool, call it in a message of its own before `gh pr merge`.
+     The literal `gh pr create` and `gh pr merge` commands are in the bullet below that
+     opens "After the auto-merge".
      Exit 4 (`TRANSPORT`) and exit 3
      (`HOOK-REFUSED`) are the next paragraph's two cases; exit 2 with a `GATE-RECORD-REFUSED`
      stdout line is the RED-PUSH paragraph's case below; any other exit 2 is a refusal with nothing
@@ -597,6 +659,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      stamp, and the gate record. Never `git add -A` or `git add .`, which sweep an uncommitted
      consumer edit into the commit. On a `TRANSPORT` exit, in this order: report the `TRANSPORT`
      line and the push error above it in one line;
+     make the next move as step 8's RETURN PROCEDURE in its ABANDON form, whose `<working>` is `<original-branch>` (the reflog-derived branch, or the branch step 1 confirmed in sync when no reflog line matches): its working-tree check runs first, the checkout on the next line IS that form's (d), run once and never as an extra step, and its (e) follows; if the check prints a line, ABANDON STOPs and so does this invocation, so steps 3–5 do not run on the self-update branch: the branch is kept and named, step 2 reports DEFERRED, and the next invocation's step 1 offers ABANDON;
      run `git checkout <original-branch>`, the branch step 1 confirmed in sync;
      list every file the self-update branch's commits touch with `git diff --name-only <original-branch> <self-update-branch>`;
      only when every listed path is in the written set above, delete it with `git branch -D <self-update-branch>`.
@@ -615,6 +678,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      wrote — a refusal that may predate the pull, which no differential arm of the gate can see —
      so the remedy is the operator's, at the gated apply, exactly as for a gate DEFER. In this
      order: report the `HOOK-REFUSED <rc> <phases>` line;
+     make the next move as step 8's RETURN PROCEDURE in its ABANDON form, whose `<working>` is `<original-branch>` exactly as on a `TRANSPORT` exit: the checkout on the next line IS that form's (d), run once and never as an extra step; if its working-tree check prints a line, ABANDON STOPs and so does this invocation, so steps 3–5 do not run on the self-update branch: the branch is kept and named, step 2 reports `SELF-UPDATE-DEFER`, and the next invocation's step 1 offers ABANDON;
      run `git checkout <original-branch>`;
      restore the gate record from the self-update commit, through a temporary file so a record
      the branch does not hold is never truncated:
@@ -736,6 +800,24 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      carried whole to the step-7 gated apply under the ONE-UNIT rule. This re-runs the wrapper,
      not the gate, so the rule against re-running the gate on the written tree still holds. The
      HOOK-REFUSED sequence with `SELF-UPDATE-DEFER` remains a safe fallback.
+   - **After the auto-merge, return the checkout before the re-invoke.** The auto-merge is
+     `gh pr merge <n> --squash --delete-branch=false --match-head-commit <sha>`, where `<sha>` is
+     `git rev-parse <self-update-branch>`, so the merge takes exactly the commit the wrapper
+     pushed; `--delete-branch=false` means gh moves no checkout and asks nothing. Then run step 8's
+     RETURN PROCEDURE for that PR. With no remote configured there is no PR: run step 8's
+     RETURN PROCEDURE in its ABANDON form to `<original-branch>`, then
+     `git merge --ff-only <self-update-branch>` (always a fast-forward, because the branch
+     was cut from `<original-branch>`), then `git branch -d <self-update-branch>`. A STOP
+     from the procedure stops the re-invoke too: report that the self-update merged but the
+     checkout did not return, with the procedure's STOP line. When the PR is not `MERGED`
+     (a merge queue or `--auto` leaves it open), report that the self-update is not merged,
+     never that it landed, and do not re-invoke.
+     The PR is opened with `gh pr create --base <original-branch>`; without `--base`, gh
+     targets the repository's default branch. `<original-branch>` is the branch the
+     self-update branch was cut from, derived from HEAD's reflog as step 1's skill-branch
+     bullet states; with no matching reflog line it is the branch step 1 confirmed in sync
+     on this invocation, which is the prior behaviour. The return after the merge STOPs
+     when the PR's `baseRefName` is not `<original-branch>`, naming both.
    - **Then STOP this invocation and re-invoke `/ai-dlc-update` automatically —
      do NOT ask whether to.** The self-update landed, but THIS invocation is
      still executing the PRE-update logic — its reconcile/classify/apply behavior
@@ -789,8 +871,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      `.github/workflows/`, which `install.sh` has always written *only* if the directory
      already exists) → **noop**. Updating a workflow a consumer HAS is a fix; creating
      CI on a consumer that has none is a change nobody asked the pull to make.
-   - `ORPHANED-RELOCATED` (status `O`) — a file at a consumer path this distribution
-     **used to** write and no longer targets, whose content still hash-matches the blob
+   - `ORPHANED-RELOCATED` (status `O`) — a file at a consumer path an earlier release of
+     this distribution wrote and the current one no longer targets, whose content still hash-matches the blob
      we shipped, so it is provably our copy → **delete the consumer file (gated —
      destructive, see step 7)**. When a core subtree's destination changes, the copies
      already written to the old path do not move and do not vanish; every later pull
@@ -2529,6 +2611,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
         already merged never becomes the reference. `UPSTREAM-DELETED+consumer-modified` and
         `ORPHANED-UNKNOWN` files are still handed back but are NOT recorded, because keeping the
         consumer's copy is their normal disposition.
+        Such a later pull runs from the working branch, never from the reconcile branch an
+        unfinished apply left checked out: step 1 stops on a skill branch whose PR is not
+        merged and names the continuations.
 
         **If keeping a recorded copy as it is IS the disposition** — the merge is deliberately a
         no-op, which is common for `BOTH-ADDED` — delete that file's own `classify: … <path>`
@@ -2839,6 +2924,15 @@ declared sites, not everywhere unconditionally.
      the work.
    - **Open a PR** into the working branch (`gh pr create`), body = the reconcile
      report summary (buckets, conflicts, push-candidates).
+   - **The PR's base is named, never defaulted:** `gh pr create --base <cut-from>`, where
+     `<cut-from>` is the branch this one was cut from, derived from HEAD's reflog exactly as
+     step 1's skill-branch bullet states, never remembered. Untangle mode derives it the same
+     way, because its step 6 is also a `git checkout -b`. Before any merge, refuse to create the
+     PR when `<cut-from>` matches step 1's skill-branch grammar, and report that this branch
+     was cut from another skill branch whose work has not reached the working branch. When
+     no reflog line matches (the reflog expired or is disabled), the prior behaviour applies:
+     state the base in the PR presentation for the operator to confirm; nothing refuses on
+     that account.
    - **Merge ONLY on explicit operator approval of the PR.** This is a second,
      independent gate — separate from the `apply` arg that authorized the write.
      The skill does NOT auto-merge. None of the following authorize a merge: zero
@@ -2848,10 +2942,121 @@ declared sites, not everywhere unconditionally.
      Only then merge
      (squash, delete branch). On merge, the re-stamp + log + changes reach the
      working branch.
+     The literal merge command is the next bullet.
+   - **The merge command is literal:**
+     `gh pr merge <n> --squash --delete-branch=false --match-head-commit <sha>`, where `<sha>` is
+     `git rev-parse <reconcile-branch>` taken
+     when the operator approves, so the merge takes exactly the commit that was approved
+     and the RETURN PROCEDURE's tip gate below holds by construction. It passes
+     `--delete-branch=false`, so gh moves no checkout and asks nothing; the RETURN PROCEDURE
+     below makes the move and deletes the branch.
+   - **RETURN PROCEDURE — after every merge, return the checkout to the working branch.**
+     Defined here once; step 1's skill-branch bullet, step 2's return bullet and untangle
+     mode cite it. Every clause reads state before it acts, so a run after the merge tool
+     already switched and pulled is a no-op that reports "already on <working> at
+     origin/<working>". (a) Run
+     `gh pr view <n> --json state,baseRefName,headRefName,headRefOid`. `<working>` is its
+     `baseRefName` and `<skill-branch>` is its `headRefName`, never remembered values, and a
+     compacted or resumed session derives them the same way. STOP, naming the state and the
+     base, when the state is not `MERGED` or when `<working>` matches step 1's skill-branch
+     grammar. (b) Run
+     `git fetch origin "+refs/heads/<working>:refs/remotes/origin/<working>"`; a failed fetch
+     STOPs with its error (the ABANDON form below treats it as a note instead). (c) After that fetch and before any checkout, run **the
+     working-tree check**, a named, self-contained block that another procedure may cite and
+     run as written. Its one input is `<working>`, the branch the checkout is about to move
+     onto; its output contract is that ANY output line is a STOP, and an empty output
+     means the move may proceed. Its changed set is the UNION of the paths the checkout of local `<working>`
+     writes and the paths the fast-forward to `origin/<working>` writes (`--no-renames`
+     keeps both halves of a rename); a ref that does not exist is skipped, so nothing goes
+     to stderr. It prints `DIRTY <path>` for a changed path that is tracked and dirty,
+     staged or not, and `ON-DISK <path>` for one absent from HEAD yet present on disk, which
+     covers untracked AND ignored files:
+     ```
+     ( cd "$(git rev-parse --show-toplevel)" || { echo "STOP cannot cd to the repository toplevel"; exit; }
+       { git rev-parse -q --verify "refs/heads/<working>" >/dev/null && git diff -z --name-only --no-renames HEAD <working>
+         git rev-parse -q --verify "refs/remotes/origin/<working>" >/dev/null && git diff -z --name-only --no-renames HEAD origin/<working>; } |
+       sort -zu |
+       while IFS= read -r -d '' p; do
+         if ! git diff --quiet HEAD -- ":(literal)$p"; then echo "DIRTY $p"
+         elif ! git cat-file -e "HEAD:$p" 2>/dev/null && { [ -e "$p" ] || [ -L "$p" ]; }; then echo "ON-DISK $p"
+         fi
+       done )
+     ```
+     A STOP from the working-tree check names each printed path; the procedure itself never
+     stashes or forces. The remedy depends on the tag. `ON-DISK <path>`: move the file
+     aside, then re-run the block. `DIRTY <path>`: copy the file elsewhere, then run
+     `git restore --staged --worktree -- <path>`, then re-run the block. Never commit on the
+     skill branch to clear a path, because a new commit breaks (f)'s tip gate. When the
+     re-run prints nothing, go on to (d). The block runs in a subshell from the repository
+     toplevel, because the paths git prints are toplevel-relative. Paths travel
+     NUL-delimited, so a name carrying a quote, a backslash, a tab or a newline reaches the
+     tests unquoted, and `:(literal)` stops pathspec magic in a file name. An empty union
+     prints nothing and the procedure goes on. Never cut paths out of
+     `git status --porcelain` columns. Git refuses atomically per command, not across the
+     checkout and the fast-forward together, and it overwrites an ignored file without
+     refusing, so this block guards the pair and the ignored case. (d) When the
+     current branch is not `<working>`, run
+     `git checkout <working>`: never `-f`, never a stash, never
+     `git switch --discard-changes`. On a refusal, STOP with git's error verbatim and the
+     `git status --porcelain` output; the skill branch stays checked out and nothing is
+     lost. (e) Run `git merge --ff-only origin/<working>`. On a refusal, STOP with git's
+     error verbatim and the counts from
+     `git rev-list --left-right --count origin/<working>...<working>` (behind first, then
+     ahead), and add step 1's diverged remedy only when ahead is above 0. (f) When the local
+     skill branch still exists, delete it with `git branch -D <skill-branch>` ONLY when
+     `git rev-parse <skill-branch>` equals the PR's `headRefOid`; otherwise STOP naming it,
+     because it holds commits the merge did not take. When the local branch is already
+     gone, print `REMOTE-KEPT <skill-branch>: no local branch to gate on` and delete nothing
+     remote. After the local delete gate passes, delete the REMOTE skill branch only when
+     its tip is still the merged head, with this one block, `<headRefOid>` being the PR's:
+     ```
+     ( e="$(mktemp)" && o="$(mktemp)" || { echo "REMOTE-KEPT <skill-branch>: mktemp failed"; exit; }
+       if ! gh api "repos/{owner}/{repo}/git/ref/heads/<skill-branch>" --jq .object.sha >"$o" 2>"$e"; then
+         grep -qF '(HTTP 404)' "$e" || echo "REMOTE-KEPT <skill-branch>: remote tip unreadable: $(tail -1 "$e")"
+       elif [ "$(cat "$o")" != "<headRefOid>" ]; then echo "REMOTE-KEPT <skill-branch>: remote tip moved"
+       elif ! gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/<skill-branch>" >/dev/null 2>"$e"; then
+         grep -qF 'Reference does not exist' "$e" || echo "REMOTE-DELETE-FAILED <skill-branch>: $(tail -1 "$e")"
+       fi )
+     ```
+     The lookup's own exit and its stderr file are read FIRST, never a pipeline's status:
+     a failed lookup ending `gh: Not Found (HTTP 404)` means the ref is already gone and
+     prints nothing, and any other failed lookup prints `REMOTE-KEPT … remote tip unreadable`;
+     neither runs the DELETE. Only a successful lookup compares the sha, and only a match
+     runs the DELETE. A DELETE failing with `gh: Reference does not exist (HTTP 422)` means
+     the ref is already deleted and prints nothing; any other, such as
+     `gh: Bad credentials (HTTP 401)`, prints the `REMOTE-DELETE-FAILED` line. It is not a git push, so no pre-push hook runs. A
+     `REMOTE-KEPT` or `REMOTE-DELETE-FAILED` line is never silent and never a STOP, because
+     the local return has already succeeded.
+     **The remote delete runs ONLY in (f) of this post-merge procedure, after (a) has
+     confirmed the PR is `MERGED` and after the local-delete tip gate above has passed: never
+     before (a), never in the ABANDON form, and never when the local branch was already gone,
+     because then no tip gate passed.** The merge
+     can happen after this session ends, in the UI or by the operator, so this bullet is not
+     the only carrier of the return: step 1's skill-branch bullet runs the same procedure on
+     the next invocation.
+     **Its ABANDON form** moves the checkout off an UNMERGED skill branch: (b) when a remote
+     exists, then (c), (d) and (e), with `<working>` set to the branch it was cut from, as
+     step 1's reflog derivation gives it, or the branch step 1 confirmed in sync on this
+     invocation when no reflog line matches. It skips (a) and never runs (f), because the
+     skill branch is unmerged and stays. With no remote, (b) and (e) are skipped. When (b)'s
+     fetch fails, ABANDON reports the fetch error as a note, skips (b) and (e), and goes on
+     with (c) and (d) against local `<working>`; a failed fetch is never an ABANDON STOP.
+     Every remedy in this skill that moves the checkout from a skill branch onto a working
+     branch names this procedure or its ABANDON form, never a bare `git checkout`.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
    dry-run report. Nothing is destroyed without an operator confirm.
+
+   Both literal `gh pr merge` commands pass `--delete-branch=false`, so gh's merge moves no
+   checkout, and the RETURN PROCEDURE in step 8 is the only move onto a working branch.
+   gh runs its local branch switch and pull only when its delete-branch value is true, and
+   `--delete-branch=false` fixes that value without a prompt, including the prompt gh
+   offers on a terminal for a PR that is already merged.
+   The procedure's gated
+   `git branch -D` deletes only a tip the merge took, one equal to the merged PR's
+   `headRefOid`, which is why it needs no operator confirm; the branch is restored
+   with `git branch <skill-branch> <headRefOid>`.
 
 ## Layered consumers (Rule 27 / spec §7) — the reconcile shrinks
 
@@ -3063,6 +3268,9 @@ operator-approved merge (PR body = the migration plan summary + the 7v gate
 results); the same three recover layers (branch, `_divergence/` archive,
 dry-run report — here, `untangle-plan.md`).
 
+After the merge, step 8's RETURN PROCEDURE returns the checkout from
+`ai-dlc-update/untangle-<ts>` to the working branch, exactly as on an ordinary pull.
+
 ## Shared engine, thin orchestrator
 
 The per-block classifier (`reconcile/classify-block.md`) is a SHARED engine
@@ -3095,3 +3303,5 @@ free of pull-only assumptions so the other three jobs can reuse it.
   logic — no operator prompt. The in-flight agent can't hot-reload its own
   instructions, so the re-invocation is the only way to run the fresh logic;
   continuing on stale logic is forbidden.
+  Before that re-invoke, step 2 runs step 8's RETURN PROCEDURE for the merged
+  self-update PR, so the re-invocation starts on the working branch.

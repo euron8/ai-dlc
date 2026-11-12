@@ -2,7 +2,7 @@
 # backlog-rotate.sh -- move CLOSED entries out of docs/backlog.md into docs/backlog.archive.md.
 #
 # WHY THIS EXISTS, MEASURED ON THE PATTERN THIS BORROWS FROM. A ledger is append-only, so it
-# grows every cycle and never shrinks: `core/skills/ai-dlc-update/SKILL.md:1678` records the
+# grows every cycle and never shrinks: `core/skills/ai-dlc-update/SKILL.md:2893` records the
 # reference consumer's push-candidate ledger at 2830 lines / 220 KB / 50 entries, of which only
 # 39 still classified. Every read parses the closed ones and every edit pays for their bytes.
 # Nothing in this repo bounds a file that way -- `scripts/validate-plan-shape.sh` has no size
