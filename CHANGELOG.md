@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1086.0] - 2026-11-12
+
+### BL-991: the consumer rule-file audit's `used to` history is gone from four core rule lines, and the audit reads `[core 11]` before and `[core 7]` after
+
+Filed from the consumer's s322 retro re-measure, which reported 11 `[core]` NARRATIVE_DRIFT rows (down from 37 at S313). Re-derived on a fresh consumer install: `audit-rule-files.sh --fail-on=local` exited 0 with `[core 11 / local 0]` over 77 files. All 11 rows join one-to-one, by file plus substring, to BL-888's KEEP list (recovered by `git show 49b923e94^:scripts/receipt-bl888-narrative-drift.sh`); a negative-control substring joined 0.
+
+- **4 core rows rewritten, 7 `Measured:` calibrations kept.**
+  - `discovery.md`: "Where the blocks used to sit, write:" now tells the reader to leave any per-sprint block already in the brief where it is, because legacy citations still resolve against it, and to write the pointer "In the brief's locked-requirements section, above any such block". The template says "no new block is copied here."
+  - `stories-test-strategy.md`: "that used to collide with it now sit under `s<N>/`" is now a present-tense statement with the same tokens and paths.
+  - `stories-test-strategy.md`: "§4a used to append each sprint's block to the durable brief" now reads "It is the legacy anchor: §4a writes each sprint's block to its own slot ... cite `product-brief.md`". The 31-of-62 figure, the validator sentence and the bold imperative stay.
+  - `ai-dlc-update/SKILL.md`: the ORPHANED-RELOCATED row's "**used to** write" was rewritten by 0.1084.0.
+- **2 history lines the audit does not flag, rewritten alongside** (BL-1001 files why it misses them):
+  - `requirements.md`: "Where a per-sprint block used to sit, write:" now reads identically to `discovery.md`.
+  - `ai-dlc-update/SKILL.md`, the self-update gate paragraph: "a failed push used to commit locally" is now the present-tense rule that a failed push discards the cycle rather than committing locally, with the reason kept. The removed sentence named the consumer filing `PC-S308-SELF-UPDATE-INSTALLS-THE-VALIDATOR-THAT-BLOCKS-ITS-OWN-PUSH`.
+- **BL-888's KEEP is reversed for the four `used to` lines.** The 7 `Measured:` calibrations in `gate-validation.md`, `handoff.md`, `adversary.md`, `remediator.md` (2), `ai-dlc-update/SKILL.md` and `reconcile/predicate-sites.md` stay under BL-888's KEEP: each is the measurement its rule needs.
+- **The removed history is recorded in `docs/context-hardening-notes.md` section R39.**
+- **Measured at the tip on a fresh consumer install:**
+  - `audit-rule-files.sh --fail-on=local` exits 0 with `[core 7 / local 0]`.
+  - The 7 rows join one-to-one to the 7 `Measured:` KEEP substrings.
+  - The base 0.1084.0 reads `[core 10]`.
+  - A seeded "The step used to stop here." in the consumer's `docs/coding-conventions.md` reports `[local]` with exit 1.
+- Records and prose only: no script, fixture, arm, receipt or hook changes. `stories-test-strategy.md` and `ai-dlc-update/SKILL.md` keep their physical line counts. `discovery.md` and `requirements.md` gain 3 lines each, and no live line citation points past either edit.
+
+### BL-1001: `audit-rule-files.sh`'s habitual `used to` detector acquits a history clause whose subject carries an indefinite article (filed OPEN)
+
+Clause 2 of `PURPOSE_BEFORE` in `core/scripts/audit-rule-files.sh`, `\b(a|an)\b(\s+[^\s.;:!?]+){0,3}\s*$`, reads any indefinite article within four words before `used to` as a purpose clause and clears the line. The script's header comment names this as a stated limit. Two measured instances it missed are the `requirements.md` and `ai-dlc-update/SKILL.md` lines BL-991 rewrites in this release.
+
+- **Count:** over the audit's `--list` corpus (88 files), lines where `used to` follows `a` or `an` within four words, same line:
+  - 3 at `e3d2dfc35`, including both cited lines (positive control);
+  - 1 at this release's tip;
+  - 0 for the impossible-token control.
+  The count covers purpose and habitual clauses alike, so it is an upper bound on the habitual ones.
+- Not fixed here, and no other instance was hunted. Receipt: `verify: manual`.
+
 ## [0.1085.0] - 2026-11-12
 
 ### BL-987 — derivation-differential no longer scores a consumer's pre-existing ignored files as a broken derivation

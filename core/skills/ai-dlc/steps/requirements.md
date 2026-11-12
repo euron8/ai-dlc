@@ -111,14 +111,17 @@ sprint's block and nothing else:
 **Every block MUST be closed** — `validate-locked-anchor.sh` (Check 3b) parses blocks by
 their sentinels and an unpaired opener extracts as nothing. Keep to the sentinel pair above.
 
-**The brief keeps a POINTER, not a copy.** Where a per-sprint block used to sit, write:
+**The brief keeps a POINTER, not a copy.** Leave any per-sprint block already in the
+brief where it is — stories written before §4a wrote to the slot cite it as
+`product-brief.md`, and `validate-locked-anchor.sh` still resolves those citations
+against it. In the brief's locked-requirements section, above any such block, write:
 
 ```markdown
 ## Locked requirements
 
 Each sprint's `LOCKED_REQUIREMENTS` block lives in that sprint's slot,
 `_bmad-output/planning-artifacts/s<N>/locked-requirements.md`. The in-force set is
-the union across slots; no block is copied here.
+the union across slots; no new block is copied here.
 ```
 
 Sources to extract from: the user's original input to `/ai-dlc`, any carry-over items
