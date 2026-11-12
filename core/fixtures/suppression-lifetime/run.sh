@@ -36,22 +36,28 @@
 # re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
 # decides= is the minimal set the mutant is about; co-tripping cells are recorded in the comments above, not driven per push.
 # a_whitespace_tolerance_dropped also trips 16 further arms in the measured matrix (the metrics reader goes blind, so every lifetime read moves).
-# c_ifs_delimiter also trips 70 further arms in the measured matrix (wholesale delimiter break).
+# c_ifs_delimiter also trips 73 further arms in the measured matrix (wholesale delimiter break).
 # Each mutant's decides cells read 1 and its twin reads 0 in the measured matrix; wide co-trips are listed above.
 # k_ts_dropped also trips t18b and t18d in the measured matrix (the dropped ts is seen through three timelines; t18a is the one it targets).
 # d_identity_lines_deleted and e_identity_nonce also trip cand in the measured matrix (the candidate-walk identity reads the same block).
 # f_attempt_demoted also trips att20 and sl3b in the measured matrix (the RESOLVED branch world; T3b's OVERRIDDEN attempt).
 # i_join_guard_removed also trips s16, s17 and t18b in the measured matrix (a dropped catalog join moves every join world; s14 is the one it targets).
-# w_resolve also trips w7, c1u, c2a, c2x, c2xi, c2xu, c2xt, sl11b, slq1, slq2, slq3 and slq4 in the measured matrix (each world reaches the skipped resolution).
+# w_resolve also trips w7, c1u, c2a, c2x, c2xi, c2x18, c2xu, c2xt, sl11b, slq1, slq2, slq3, slq4, arch_sup, arch_over, arch_mis and arch_ovr in the measured matrix (each world reaches the skipped resolution).
 # w_overridden also trips c1, c2ab and c2ba in the measured matrix (each carries an OVERRIDDEN waiver 6c reads).
-# w_lifetime also trips sl1, sl2, sl3, sl3b, sl4, sl5, sl5e, sl5s, sl6, sl6b, sl6c, sl7, sl8a, sl8b, slf3, sl9, sl11, sl11c, sl11d, sl12 and slvd in the measured matrix (every supersession world's latest row is OLD's own FAIL_WAIVED, which no longer reaches the expiry arm).
+# w_lifetime also trips sl1, sl2, sl3, sl3b, sl4, sl5, sl5e, sl5s, sl6, sl6b, sl6c, sl7, sl8a, sl8b, slf3, sl9, sl11, sl11c, sl11d, sl12, slvd and clksup in the measured matrix (every supersession world's latest row is OLD's own FAIL_WAIVED, which no longer reaches the expiry arm).
 # c1_revert trips no supersession arm in the measured matrix.
-# c2_noprepass also trips w7, c2a, c2s, c2x, c2xi, c2xu, c2xt, sl1, sl1b, sl5e, sl5s, sl8b, sl11, sl11b, sl11d, sl11e, slq1, slq2, slq3, slq4, sl12 and slvd in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass, and so does every superseder).
-# c2_any also trips c2x, c2xu, c2xt, sl11, sl11b, sl11c, slq1, slq2, slq3 and slq4 in the measured matrix (any FAIL_WAIVED stands down, so the expired or unreadable archived suppression does too, and the terminal twin is never reached).
+# c2_noprepass also trips w7, c2a, c2s, c2x, c2xi, c2x18, c2xu, c2xt, sl1, sl1b, sl5e, sl5s, sl8b, sl11, sl11b, sl11d, sl11e, slq1, slq2, slq3, slq4, sl12, slvd, arch_sup and arch_ovr in the measured matrix (the archive and the SUPPRESSED target leave the table with the pre-pass, and so does every superseder).
+# c2_any also trips c2x, c2x18, c2xu, c2xt, sl11, sl11b, sl11c, slq1, slq2, slq3 and slq4 in the measured matrix (any FAIL_WAIVED stands down, so the expired or unreadable archived suppression does too, and the terminal twin is never reached).
 # c2_exact also trips c2xi, sl11, sl11b and slq4 in the measured matrix (the in-force archived suppression no longer stands the OVERRIDDEN entry down; nor does the terminal twin, which sits inside the same branch).
 # c2_resolved also trips sl11d in the measured matrix (with C2 extended to RESOLVED, the terminal twin stands the RESOLVED entry down too).
-# c2_nolife also trips c2xu, c2xt, sl11, sl11b, sl11c and slq4 in the measured matrix (with the lifetime gone an unreadable lifetime acquits too, before the terminal twin).
-# c2_noguard also trips slq4 in the measured matrix (its archived waiver has no **Expires after:**, so the dropped guard acquits it before the terminal twin).
+# c2_nolife also trips c2x18, c2xu, c2xt, sl11, sl11b, sl11c and slq4 in the measured matrix (with the lifetime gone an unreadable lifetime acquits too, before the terminal twin).
+# c2_noguard also trips c2x18 and slq4 in the measured matrix (slq4's archived waiver has no **Expires after:**, so the dropped guard acquits it before the terminal twin; c2x18's 18 is inside its count, and the mutant keeps no cap).
+# m_zero_records also trips arch_over and arch_mis in the measured matrix (their pending.md holds no entry, so the mutant exits before section 6c).
+# The arch_earlyexit and arch_norefuse rows (absent or blank pending.md beside an archive) are declared from the per-push run and await the integrator's --matrix re-measure.
+# sd_noshape and sd_nolife also trip clksup in the measured matrix (each replaces sl_in_force in the superseder test, so the future-dated NEW supersedes).
+# arch_nosup also trips sl11b and slq4 (their archived OLD is stood down by section 6c too); arch_overbroad also trips w7 and c2a (the other archived OVERRIDDEN worlds).
+# arch_notarget also trips slq1, slq2 and slq3, and arch_superfirst slq2 and slq3 (each TQ world's archived waiver targets another check or catalog).
+# clk_unbounded also trips clkself and clksup (the 2099 entry is in time); clk_reversed also trips 50 further arms (every past authorization reads as future).
 # sd_term_removed also trips slq4 in the measured matrix (the unreadable-lifetime waiver is stood down by the terminal twin alone).
 # c2_srclive also trips sl11 and sl11c in the measured matrix (the live expired OLD acquits by source, before the terminal twin).
 # sd_removed also trips sl5e, sl5s, sl8b, sl11, sl11d, sl11e, sl12 and slvd in the measured matrix (each is a world where the expiry arm must stand down).
@@ -88,6 +94,7 @@
 # MUTANT-MATRIX c2_nolife decides=c2x twins=c2s
 # MUTANT-MATRIX c2_srclive decides=c2xi twins=c2s
 # MUTANT-MATRIX c2_noguard decides=c2xu,c2xt twins=c2x
+# MUTANT-MATRIX c2_pastlife decides=c2x18 twins=c2xi
 # MUTANT-MATRIX sd_removed decides=sl1,sl1b twins=sl11b
 # MUTANT-MATRIX sd_term_removed decides=sl11,sl11b twins=sl1
 # MUTANT-MATRIX sd_archive decides=sl2 twins=sl1
@@ -103,6 +110,18 @@
 # MUTANT-MATRIX sd_term_anytarget decides=slq1,slq3 twins=sl11b
 # MUTANT-MATRIX sd_term_anycat decides=slq2 twins=sl11b
 # MUTANT-MATRIX sd_term_strictlife decides=slq4 twins=sl11b
+# MUTANT-MATRIX arch_nosup decides=arch_sup twins=arch_over
+# MUTANT-MATRIX arch_overbroad decides=arch_ovr twins=arch_sup
+# MUTANT-MATRIX arch_pastlife decides=arch_over twins=arch_sup
+# MUTANT-MATRIX arch_notarget decides=arch_mis twins=arch_over
+# MUTANT-MATRIX arch_superfirst decides=slq1 twins=arch_mis
+# MUTANT-MATRIX arch_earlyexit decides=arch_gx,arch_bx,arch_gi twins=sen_C
+# MUTANT-MATRIX arch_norefuse decides=arch_gd twins=sen_C
+# MUTANT-MATRIX clk_shape_removed decides=clkself twins=clksup
+# MUTANT-MATRIX clk_inforce_removed decides=clksup,clk_far twins=clkself
+# MUTANT-MATRIX clk_tol0 decides=clk_tol twins=clk_past
+# MUTANT-MATRIX clk_unbounded decides=clk_far twins=clk_tol
+# MUTANT-MATRIX clk_reversed decides=clk_past twins=s8
 # MUTANT-MATRIX-DYNAMIC mutant-loop why=the per-push mutant loop passes ${MN[$mut_i]} from the defm table; every defm name has its own MUTANT-MATRIX row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suppression-lifetime/run.sh --matrix
 set -uo pipefail
@@ -246,6 +265,14 @@ drive_run() { # <validator path> <drive> -> O E RC X
     c2s)     c=c2-suppressed-32; gm="$GM_W_C2" ;;
     c2x)     c=c2-archived-expired; gm="$GM_W_C2" ;;
     c2xi)    c=c2-archived-inforce; gm="$GM_W_C2" ;;
+    c2x18)   c=c2-archived-overcap; gm="$GM_W_C2" ;;
+    archsup) c=arch-sup; gm="$GM_SL_W" ;;
+    archover) c=arch-over; gm="$GM_W_C2" ;;
+    archmis) c=arch-mis; gm="$GM_W_C2" ;;
+    archgx)  c=arch-gone-exp; gm="$GM_W_C2" ;;
+    archgi)  c=arch-gone-inf; gm="$GM_W_C2" ;;
+    archbx)  c=arch-blank-exp; gm="$GM_W_C2" ;;
+    archgd)  c=arch-gone-dir; gm="$GM_W_C2" ;;
     c2xu)    c=c2-archived-noexpiry; gm="$GM_W_C2" ;;
     c2xt)    c=c2-archived-nots; gm="$GM_W_C2" ;;
     c2u)     c=c2-unresolvable; gm="$GM_W_C2" ;;
@@ -312,6 +339,17 @@ drive_run() { # <validator path> <drive> -> O E RC X
             --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>"$SR/err")"; RC=$?
       E="$(cat "$SR/err")"
       X=0; [ -s "$SR_STUB/LOG" ] && X=1 ;;
+    clkself)
+      O="$(bash "$v" --now "$CLK_NOW" --escalations "$CASES/clk-self/pending.md" --gate-metrics "$GM_CLK" \
+            --enforcement-map "$MAP" 2>&1)"; RC=$? ;;
+    clksup)
+      O="$(bash "$v" --now "$CLK_NOW" --escalations "$CASES/clk-sup/pending.md" --gate-metrics "$GM_SL_W" \
+            --enforcement-map "$MAP" 2>&1)"; RC=$? ;;
+    clkinf)
+      # The clock worlds' query drive: stdout (the rows) in O, stderr in E.
+      E="$( bash "$v" --in-force --now "$CLK_NOW" --escalations "$CASES/clk-inf/pending.md" --gate-metrics "$GM_SL_W" \
+              --enforcement-map "$MAP" 2>&1 >"$WORK/clk-inf.out" )"; RC=$?
+      O="$(cat "$WORK/clk-inf.out")" ;;
     sli_*|slw_*)
       # The two query modes on a supersession world: stdout (the rows) in O, stderr in E.
       m="--in-force"; [ "${d%%_*}" = slw ] && m="--waivers"
@@ -489,6 +527,7 @@ ar_c2a()  { dv "$1" c2a;  ! hasF 'recorded FAILING' && has 'names an entry archi
 ar_c2s()  { dv "$1" c2s;  ! hasF 'recorded FAILING' && hasF 'suppressed=1 ' && w_quiet 1; }
 ar_c2x()  { dv "$1" c2x;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
 ar_c2xi() { dv "$1" c2xi; ! hasF "$C2_HIT" && has 'names an entry archived' && w_quiet 1; }
+ar_c2x18() { dv "$1" c2x18; [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
 ar_c2xu() { dv "$1" c2xu; [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
 ar_c2xt() { dv "$1" c2xt; [ "$DV_RC" = "1" ] && hasF "$C2_HIT" && has 'names an entry archived'; }
 ar_c2u()  { dv "$1" c2u;  [ "$DV_RC" = "1" ] && hasF "$C2_HIT"; }
@@ -534,7 +573,14 @@ ar_sl8b()  { sl_stood "$1" sl_t8b; }
 ar_slf3()  { sl_near "$1" sl_f3; }
 ar_sl9()   { sl_near "$1" sl_t9; }
 ar_sl11()  { dv "$1" sl_t11;  [ "$DV_RC" = 0 ] && sl_sup && sl_term && sl_n 2; }
-ar_sl11b() { dv "$1" sl_t11b; [ "$DV_RC" = 0 ] && sl_term && sl_n 1 && has 'names an entry archived'; }
+# BL-961: OLD is archived in T11b and TQ4, so section 6c now judges it too and NEW stands it down there
+# as well -- two WARN lines, superseded=2: the terminal twin's, and the archived waiver's (sl_archsup).
+sl_archsup() {
+  local l
+  l="$(grep -F "WARN: superseded: check '32' [core] -- archived waiver '$SL_OLD'" <<<"$DV_O")" || return 1
+  grep -qF "stood down by the in-force SUPPRESSED entry '$SLN_S'." <<<"$l"
+}
+ar_sl11b() { dv "$1" sl_t11b; [ "$DV_RC" = 0 ] && sl_term && sl_archsup && sl_n 2 && has 'names an entry archived'; }
 ar_sl11c() { dv "$1" sl_t11c; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" && sl_expfail && sl_n 0; }
 ar_sl11d() { dv "$1" sl_t11d; [ "$DV_RC" = 1 ] && hasF 'a RESOLVED entry names check(s) 32,' && sl_sup && sl_n 1; }
 ar_sl11e() { dv "$1" sl_t11e; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" && sl_sup && sl_n 1; }
@@ -544,7 +590,19 @@ sl_tqfail() { dv "$1" "$2"; [ "$DV_RC" = 1 ] && hasF "$C2_HIT" && sl_n 0 && ! ha
 ar_slq1()  { sl_tqfail "$1" sl_tq1; }
 ar_slq2()  { sl_tqfail "$1" sl_tq2; }
 ar_slq3()  { sl_tqfail "$1" sl_tq3; }
-ar_slq4()  { dv "$1" sl_tq4; [ "$DV_RC" = 0 ] && sl_term && sl_n 1 && has 'names an entry archived'; }
+ar_slq4()  { dv "$1" sl_tq4; [ "$DV_RC" = 0 ] && sl_term && sl_archsup && sl_n 2 && has 'names an entry archived'; }
+# ---- THE ARCHIVED SUPPRESSED WAIVER (BL-961): section 6c judges it; no OVERRIDDEN entry masks it ----
+ar_arch_sup()  { dv "$1" archsup; [ "$DV_RC" = 0 ] && sl_archsup && sl_n 1 && has 'names an entry archived' && ! hasF 'is not in force'; }
+ar_arch_over() { dv "$1" archover; [ "$DV_RC" = 1 ] && hasF 'under the ARCHIVED SUPPRESSED' && hasF '**Expires after:** 18,' && hasF 'which is not in force'; }
+ar_arch_mis()  { dv "$1" archmis; [ "$DV_RC" = 1 ] && hasF "which suppresses [core] '16' and nothing else" && hasF 'The entry is archived to'; }
+ar_arch_ovr()  { dv "$1" warch; w_quiet 1 && hasF 'Not adjudicated.' && ! hasF 'judged as a live'; }
+# The LAST entry moved out: an absent or zero-byte pending.md beside an archive does not exit through
+# EXAMINED NOTHING; section 6c judges the archived waiver. sen_C is the no-archive twin.
+arch_gone_fail() { [ "$DV_RC" = 1 ] && hasF 'under the ARCHIVED SUPPRESSED' && hasF 'which is not in force' && ! hasF 'EXAMINED NOTHING'; }
+ar_arch_gx() { dv "$1" archgx; arch_gone_fail && hasF 'NOTE: no escalations file'; }
+ar_arch_bx() { dv "$1" archbx; arch_gone_fail && hasF 'NOTE: escalations file present but empty'; }
+ar_arch_gi() { dv "$1" archgi; w_quiet 1 && hasF 'judged as a live' && ! hasF 'EXAMINED NOTHING' && ! hasF 'not in force'; }
+ar_arch_gd() { dv "$1" archgd; [ "$DV_RC" = 2 ] && grep -q '^REFUSED: escalation archive .* is not a readable regular file' <<<"$DV_O" && ! hasF 'EXAMINED NOTHING'; }
 ar_sl12()  { dv "$1" sl_t12;  [ "$DV_RC" = 1 ] && hasF 'no longer reproduces: EXPIRED:32' && sl_sup && sl_n 1; }
 ar_slvd()  { # verdict.sh surfaces the WARN line at exit 0, so the gate's evidence names both entries
   local l
@@ -568,9 +626,25 @@ ar_slinf()  { sl_lists_new "$1" sli_t1 && sl_lists_new "$1" sli_t4 && sl_lists_n
 ar_slinfx() { sl_omits_new "$1" sli_t6 && sl_omits_new "$1" sli_t6b && sl_omits_new "$1" sli_t6c && sl_omits_new "$1" sli_t7; }
 # T3's NEW is OVERRIDDEN, which --in-force never lists: --waivers lists it as an OVERRIDDEN row.
 ar_slw3()   { dv "$1" slw_t3; [ "$DV_RC" = 0 ] && grep -qxF "OVERRIDDEN${SL_TAB}${SL_TAB}${SL_TAB}${SL_TAB}${A1} | ${SL_Q_NEW}${SL_TAB}${SL_NEW}" <<<"$DV_O"; }
+# ---- THE CLOCK (BL-966): every drive passes --now $CLK_NOW, a fixed literal ------------------------
+# clkself: the future-dated self-waiver fails by the gate-mode shape arm's own line, and the summary
+# names the clock and its source. clksup: a future-dated NEW supersedes nothing (OLD's expiry FAIL,
+# superseded=0). clk_past/clk_tol/clk_far: --in-force lists the past and the one-hour-ahead entries
+# and not the 2099 one, each arm asking about ONE entry and the past one as its positive conjunct.
+clk_lists() { grep -qF "${SL_TAB}## $1" <<<"$DV_O"; }
+clk_q() { dv "$1" clkinf; [ "$DV_RC" = 0 ] && grep -q "^IN-FORCE: .* now=$CLK_NOW clock=--now " <<<"$DV_E"; }
+ar_clkself() { dv "$1" clkself; [ "$DV_RC" = 1 ] && hasF "**Operator authorization:** ${CLK_F%Z} is later than the clock, $CLK_NOW (--now)," \
+                && hasF "entry: ## [S402 gate — a self-waiver dated in the future]" && hasF " now=$CLK_NOW clock=--now"; }
+ar_clksup()  { dv "$1" clksup; [ "$DV_RC" = 1 ] && sl_expfail && sl_n 0 && ! has '^WARN: superseded:'; }
+ar_clk_past() { clk_q "$1" && clk_lists "$CLK_HP"; }
+ar_clk_tol()  { clk_q "$1" && clk_lists "$CLK_HP" && clk_lists "$CLK_HT"; }
+ar_clk_far()  { clk_q "$1" && clk_lists "$CLK_HP" && ! clk_lists "$CLK_HF"; }
+CLK_ARMS="clkself clksup clk_past clk_tol clk_far"
+ARCH_ARMS="arch_sup arch_over arch_mis arch_ovr"
+ARCHG_ARMS="arch_gx arch_bx arch_gi arch_gd"
 SL_ARMS="sl1 sl1b sl2 sl3 sl3b sl4 sl5 sl5e sl5s sl6 sl6b sl6c sl7 sl8a sl8b slf3 sl9 sl11 sl11b sl11c sl11d sl11e slq1 slq2 slq3 slq4 sl12 slvd sl10i sl10w slinf slinfx slw3"
 
-ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2xi c2xu c2xt c2u c2r c2m wsd $SL_ARMS"
+ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2xi c2x18 c2xu c2xt c2u c2r c2m wsd $SL_ARMS $CLK_ARMS $ARCH_ARMS $ARCHG_ARMS"
 
 reg() { printf -v "OK_$1" '%s' "$2"; printf -v "BAD_$1" '%s' "$3"; }
 reg s1 "a SUPPRESSED entry inside its lifetime does not fire (exit 0)" "in-force suppression FAILED — the arm has no green state and would wedge every gate"
@@ -651,6 +725,20 @@ reg c2a "C2: the same, with the OVERRIDDEN waiver archived to pending-archive.md
 reg c2s "C2: an OVERRIDDEN entry naming 32 is quiet when 32 is waived by a SUPPRESSED entry targeting [core] 32" "C2: a matching SUPPRESSED waiver did not stand the OVERRIDDEN entry down"
 reg c2x "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an ARCHIVED SUPPRESSED entry of 32 past its own lifetime" "C2: an expired archived suppression stood an OVERRIDDEN entry down -- its lifetime was never checked"
 reg c2xi "C2: an OVERRIDDEN entry naming 32 is quiet when the row's waiver is an ARCHIVED SUPPRESSED entry of 32 still inside its own lifetime" "C2: an archived in-force suppression did not stand the OVERRIDDEN entry down -- the lifetime clause was read as a live-file test"
+reg arch_sup "ARCHIVE (BL-961): an archived expired SUPPRESSED waiver is stood down by an in-force re-suppression in pending.md, with the WARN: superseded: line naming both, superseded=1, rc 0" "ARCHIVE (BL-961): an archived expired waiver with a live in-force re-suppression was not stood down -- section 6c skipped supersession"
+reg arch_over "ARCHIVE (BL-961): an archived SUPPRESSED waiver with **Expires after:** 18, inside that count, FAILS as not in force" "ARCHIVE (BL-961): an archived over-cap waiver passed -- section 6c judged it by sl_past_lifetime, or not at all"
+reg arch_mis "ARCHIVE (BL-961): an archived in-force SUPPRESSED waiver of [core] 16 on check 32's row FAILS the target test" "ARCHIVE (BL-961): an archived waiver of another check passed -- section 6c skipped the target test for an archived entry"
+reg arch_ovr "ARCHIVE (BL-961): an archived OVERRIDDEN waiver keeps its NOTE and passes (Not adjudicated.)" "ARCHIVE (BL-961): an archived OVERRIDDEN waiver was judged -- the archive branch is over-broad"
+reg arch_gx "ARCHIVE: pending.md ABSENT beside an archived SUPPRESSED waiver past its lifetime FAILS -- section 6c runs, no EXAMINED NOTHING" "ARCHIVE: an absent pending.md acquitted an expired archived waiver -- the early exit returned before section 6c"
+reg arch_bx "ARCHIVE: pending.md ZERO BYTES beside an archived SUPPRESSED waiver past its lifetime FAILS -- section 6c runs, no EXAMINED NOTHING" "ARCHIVE: a blank pending.md acquitted an expired archived waiver -- the early exit returned before section 6c"
+reg arch_gi "ARCHIVE: pending.md ABSENT beside an archived SUPPRESSED waiver inside its lifetime passes after section 6c judged it (waived_rows=1)" "ARCHIVE: an absent pending.md beside an in-force archived waiver did not pass through section 6c"
+reg arch_gd "ARCHIVE: pending.md ABSENT and pending-archive.md a DIRECTORY is REFUSED, exit 2" "ARCHIVE: a non-regular archive was not refused -- a skipped read reads as clean"
+reg clkself "CLOCK (BL-966): a future-dated SUPPRESSED entry that is itself the waiver on its check's FAIL_WAIVED row FAILS by name at the gate, and the summary names the clock (--now)" "CLOCK (BL-966): a self-waiver authorized in 2099 passed the gate -- it counts 0 gates until 2099 and would stay green forever"
+reg clksup "CLOCK (BL-966): a future-dated NEW supersedes nothing -- OLD's expiry FAIL stands, superseded=0" "CLOCK (BL-966): an entry authorized in 2099 stood an expired one down -- sl_in_force took it as in force"
+reg clk_past "CLOCK (BL-966): --in-force lists an entry authorized in the past, inside its lifetime" "CLOCK (BL-966): a past-dated in-force entry was not listed -- the clock comparison is reversed"
+reg clk_tol "CLOCK (BL-966): --in-force lists an entry authorized one hour ahead of the clock, inside the 7200 s tolerance" "CLOCK (BL-966): an entry one hour ahead was refused -- the tolerance for hand-typed stamps is gone"
+reg clk_far "CLOCK (BL-966): --in-force does not list an entry authorized in 2099" "CLOCK (BL-966): an entry authorized in 2099 was listed in force -- the clock does not bound sl_in_force, or the tolerance is unbounded"
+reg c2x18 "C2 (BL-968): an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an ARCHIVED SUPPRESSED entry of 32 with **Expires after:** 18, inside that count but outside the 1..3 cap" "C2 (BL-968): an archived over-cap suppression stood an OVERRIDDEN entry down -- the acquittal skipped the 1..3 cap sl_in_force holds"
 reg c2xu "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an archived SUPPRESSED entry of 32 with NO Expires after line" "C2: a suppression whose expiry cannot be read stood an OVERRIDDEN entry down -- the lifetime guard fails open"
 reg c2xt "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an archived SUPPRESSED entry of 32 with NO authorization timestamp" "C2: a suppression whose authorization cannot be dated stood an OVERRIDDEN entry down -- the lifetime guard fails open"
 reg c2u "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver resolves nowhere" "C2: an unresolvable waiver stood an OVERRIDDEN entry down"
@@ -675,14 +763,14 @@ reg sl8b "T8b (f): a new timestamp with OLD's quote IS a fresh turn and stands O
 reg slf3 "F3 (b): a second entry under OLD's own header (OLD's waiver key) supersedes nothing" "F3 (b): an entry sharing the expired entry's waiver key stood it down -- the entry superseded itself"
 reg sl9 "T9: OLD alone on the same timeline still FAILS past its lifetime, superseded=0 (the control)" "T9: OLD alone no longer fails -- every stand-down arm above agrees for free"
 reg sl11 "T11: the OVERRIDDEN entry naming 32 under OLD's expired waiver is stood down by NEW too -- exit 0, superseded=2 (the expiry arm and the terminal twin each count one)" "T11: the terminal twin did not stand down (or the count is not 2)"
-reg sl11b "T11b: with OLD archived the terminal twin alone stands down -- exit 0, superseded=1" "T11b: the terminal twin did not stand down through an archived expired waiver"
+reg sl11b "T11b: with OLD archived the terminal twin stands down, and section 6c stands the archived waiver down too (BL-961) -- exit 0, superseded=2" "T11b: the terminal twin did not stand down through an archived expired waiver"
 reg sl11c "T11c: with no fresh entry the OVERRIDDEN entry and the expiry both still FAIL" "T11c: without a superseder the OVERRIDDEN entry or the expiry stopped firing"
 reg sl11d "T11d: a RESOLVED entry naming 32 still FAILS with NEW present -- RESOLVED keeps exact match only" "T11d: a fresh suppression acquitted a RESOLVED entry naming a still-failing check"
 reg sl11e "T11e: over a plain FAIL row the OVERRIDDEN entry naming 32 still FAILS; only the expiry stands down" "T11e: a plain FAIL row acquitted the OVERRIDDEN entry -- the terminal twin is not keyed on FAIL_WAIVED"
 reg slq1 "TQ1: a waiver suppressing [core] 16, expired, stands nothing down for 32 -- the OVERRIDDEN entry FAILS" "TQ1: the terminal twin stood down through a waiver whose target is another check"
 reg slq2 "TQ2: a waiver suppressing [extension:x] 32 stands nothing down for [core] 32 -- the OVERRIDDEN entry FAILS" "TQ2: the terminal twin stood down through a waiver in another catalog"
 reg slq3 "TQ3: a waiver suppressing [core] 16, in force, stands nothing down for 32 -- the OVERRIDDEN entry FAILS" "TQ3: the terminal twin stood down through an in-force waiver of another check"
-reg slq4 "TQ4: a [core] 32 waiver with no readable lifetime reads as expired -- the terminal twin stands down, superseded=1" "TQ4: an unreadable waiver lifetime was not read as expired, so the twin did not stand down"
+reg slq4 "TQ4: a [core] 32 waiver with no readable lifetime reads as expired -- the terminal twin stands down, and so does section 6c on the archived waiver (BL-961), superseded=2" "TQ4: an unreadable waiver lifetime was not read as expired, so the twin did not stand down"
 reg sl12 "T12: a baselined EXPIRED:32 whose only cause was superseded reports 'no longer reproduces'" "T12: a stood-down entry matched its EXPIRED baseline key, so the stale baseline line was tolerated"
 reg slvd "the T1 world through verdict.sh: PASS at exit 0, and one surfaced line names both entries" "verdict.sh did not surface the stand-down at exit 0 -- the gate's evidence is silent on the supersession"
 reg sl10i "T10: --in-force on the T1 and T11 trees prints exactly NEW's row" "T10: --in-force output moved -- E must stay absent and NEW's row unchanged"
@@ -750,6 +838,15 @@ fi
 if in_set sl1 "$SHIP_FAIL" && in_set sl9 "$SHIP_PASS" && ! grep -qF 'superseded=' "$VALIDATOR" && [ "$SEN_IS_DIST" -ne 1 ]; then
   printf '  SKIP  the supersession arms -- the installed validator predates BL-959; this fixture ships one pull ahead of it\n'
   SKIPPED="$SKIPPED $SL_ARMS "
+fi
+# The last-entry archive arms likewise: an installed validator that predates them exits through
+# EXAMINED NOTHING beside an archive, so all four read 0 while the no-archive twin sen_C holds.
+SAG_PRE=1
+for a in $ARCHG_ARMS; do in_set "$a" "$SHIP_FAIL" || SAG_PRE=0; done
+in_set sen_C "$SHIP_PASS" || SAG_PRE=0
+if [ "$SAG_PRE" = 1 ] && ! grep -qF 'SL_ARCH_GATE' "$VALIDATOR" && [ "$SEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the last-entry archive arms -- the installed validator predates them; this fixture ships one pull ahead of it\n'
+  SKIPPED="$SKIPPED $ARCHG_ARMS "
 fi
 for a in $ARMS; do
   in_set "$a" "$SKIPPED" && continue
@@ -950,7 +1047,7 @@ build_c2_noprepass() {
 "'
 }
 # c2_nolife: C2 resolves through a SUPPRESSED waiver without asking its lifetime (tip adversary N5).
-SL_C2L='&& [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ] && ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;'
+SL_C2L='&& sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"; then continue; fi ;;'
 build_c2_nolife() { mk_sub "$1" "$SL_C2L" '; then continue; fi ;;'; }
 # c2_srclive: the lifetime clause replaced by a LIVE-FILE source test -- a wrong fix every
 # expired-archived world agrees with; only the archived in-force waiver (c2xi) separates them.
@@ -958,6 +1055,9 @@ build_c2_srclive() { mk_sub "$1" "$SL_C2L" '&& [ "$LK_SRC" = P ]; then continue;
 # c2_noguard: the fail-closed guard dropped, the lifetime predicate kept. An empty expiry makes
 # `[ N -gt "" ]` error, the negation acquits; an empty timestamp counts every gate and acquits.
 build_c2_noguard() { mk_sub "$1" "$SL_C2L" '&& ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;'; }
+# c2_pastlife (BL-968): the acquittal as it shipped before sl_in_force -- the readable-lifetime guard and
+# the expiry count, without the 1..3 cap. Only the archived over-cap waiver (c2x18) separates them.
+build_c2_pastlife() { mk_sub "$1" "$SL_C2L" '&& [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ] && ! sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then continue; fi ;;'; }
 build_w_overridden() { mk_sub "$1" '    OVERRIDDEN) : ;;' '    OVERRIDDEN) bad=$((bad + 1)) ;;'; }
 # SD-*: the supersession (BL-959). Each condition of the superseder filter dropped alone, on its own
 # grep-unique term of the awk filter; d and e at the CALL SITE in sl_superseder, never inside
@@ -984,6 +1084,26 @@ build_sd_term_anytarget()  { mk_sub "$1" "$SL_TW_G" 'if [ core = "${LK_SUPPCAT:-
 build_sd_term_anycat()     { mk_sub "$1" "$SL_TW_G" 'if [ "$id" = "$LK_SUPP" ]; then'; }
 # The strict reading, a wrong fix: an unreadable waiver lifetime no longer counts as expired.
 build_sd_term_strictlife() { mk_sub "$1" "$SL_TW_G" 'if [ "$id" = "$LK_SUPP" ] && [ core = "${LK_SUPPCAT:-core}" ] && [ -n "$LK_EXPIRES" ] && [ -n "$LK_AUTHTS" ]; then'; }
+# ARCH-*: the archived SUPPRESSED waiver (BL-961). The target-test line is the anchor of two: notarget
+# drops it, superfirst runs it only when no superseder exists (supersession before the target test).
+SL_AR_T='if [ "$LK_SUPP" != "$wcheck" ] || [ "${LK_SUPPCAT:-core}" != "$wcat" ]; then'
+build_arch_nosup()     { mk_sub "$1" 'if sl_superseder "$wcheck" "$wcat" "$wid" "$LK_AUTHTS"; then' 'if false; then'; }
+build_arch_overbroad() { mk_sub "$1" 'if [ "$LK_STATUS" != SUPPRESSED ]; then' 'if false; then'; }
+build_arch_pastlife()  { mk_sub "$1" 'if ! sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"; then' 'if [ -z "$LK_EXPIRES" ] || [ -z "$LK_AUTHTS" ] || sl_past_lifetime "$LK_AUTHTS" "$LK_EXPIRES"; then'; }
+build_arch_notarget()  { mk_sub "$1" "$SL_AR_T" 'if false; then'; }
+# The last-entry archive (absent or blank pending.md): arch_earlyexit never records the archive, so both
+# early exits return before section 6c again; arch_norefuse drops the non-regular-archive refusal.
+build_arch_earlyexit() { mk_sub "$1" '[ -f "$ARCHIVE" ] && SL_ARCH_GATE=1' ':'; }
+build_arch_norefuse()  { mk_sub "$1" 'if { [ -e "$ARCHIVE" ] || [ -L "$ARCHIVE" ]; } && { [ ! -f "$ARCHIVE" ] || [ ! -r "$ARCHIVE" ]; }; then' 'if false; then'; }
+build_arch_superfirst() { mk_sub "$1" "$SL_AR_T" 'if ! sl_superseder "$wcheck" "$wcat" "$wid" "$LK_AUTHTS" && { [ "$LK_SUPP" != "$wcheck" ] || [ "${LK_SUPPCAT:-core}" != "$wcat" ]; }; then'; }
+# CLK-*: the clock (BL-966). clk_shape_removed keeps the clock only in sl_in_force; clk_inforce_removed
+# keeps it only in the gate-mode shape arm; clk_tol0 and clk_unbounded move the hard tolerance to 0 and
+# to 10^10 s; clk_reversed flips the one comparison.
+build_clk_shape_removed()   { mk_sub "$1" 'if [ "$IN_FORCE" -ne 1 ] && sl_auth_future "$authts"; then' 'if false; then'; }
+build_clk_inforce_removed() { mk_sub "$1" '! sl_auth_future "$2" || return 1' ':'; }
+build_clk_tol0()            { mk_sub "$1" 'SL_CLOCK_TOL_S=7200' 'SL_CLOCK_TOL_S=0'; }
+build_clk_unbounded()       { mk_sub "$1" 'SL_CLOCK_TOL_S=7200' 'SL_CLOCK_TOL_S=10000000000'; }
+build_clk_reversed()        { mk_sub "$1" '-gt "$SL_CLOCK_LIMIT_N" ]' '-lt "$SL_CLOCK_LIMIT_N" ]'; }
 # sd_noshape keeps the lifetime and drops the readable-lifetime guard; sd_nolife keeps the shape and
 # drops the lifetime. Each is the other's twin.
 build_sd_noshape()      { mk_sub "$1" "$SL_SS_IF" 'if ! sl_past_lifetime "$a" "$x"; then'; }
@@ -1045,6 +1165,7 @@ defm c2_noprepass c2ba c2ab
 defm c2_nolife c2x c2s
 defm c2_srclive c2xi c2s
 defm c2_noguard c2xu,c2xt c2x
+defm c2_pastlife c2x18 c2xi
 # SD: the supersession (BL-959), one per condition of the superseder test and one per stand-down.
 defm sd_removed sl1,sl1b sl11b
 defm sd_term_removed sl11,sl11b sl1
@@ -1061,6 +1182,20 @@ defm sd_recite sl8a sl8b
 defm sd_term_anytarget slq1,slq3 sl11b
 defm sd_term_anycat slq2 sl11b
 defm sd_term_strictlife slq4 sl11b
+# ARCH: the archived SUPPRESSED waiver (BL-961).
+defm arch_nosup arch_sup arch_over
+defm arch_overbroad arch_ovr arch_sup
+defm arch_pastlife arch_over arch_sup
+defm arch_notarget arch_mis arch_over
+defm arch_superfirst slq1 arch_mis
+defm arch_earlyexit arch_gx,arch_bx,arch_gi sen_C
+defm arch_norefuse arch_gd sen_C
+# CLK: the clock (BL-966).
+defm clk_shape_removed clkself clksup
+defm clk_inforce_removed clksup,clk_far clkself
+defm clk_tol0 clk_tol clk_past
+defm clk_unbounded clk_far clk_tol
+defm clk_reversed clk_past s8
 
 MUT="$WORK/mut"; mkdir -p "$MUT"
 # The unmutated control: a lone copy. This validator resolves no sibling beside itself and its root by

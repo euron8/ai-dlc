@@ -20,12 +20,18 @@
 # session transcript. Verification delegates to validate-steering-budget.sh --cite, THE
 # genuine-operator predicate (shared with Rule 29 Check B and the convergence validator's F6),
 # so there is one definition of "a real human said this", never several that can drift.
+# The gate mode also verifies a SUPPRESSED entry's citation, in pending.md and in the sibling
+# pending-archive.md, when its header names the current sprint OR validate-suppression-lifetime.sh
+# lists it in force at this gate, whatever sprint its header names; the note above the parser
+# carries that scope.
 #
 # SCOPE IS THE CURRENT SPRINT, and that is load-bearing. pending.md accumulates RESOLVED entries
 # from many prior sprints, resolved in sessions this transcript never saw. Requiring a
 # current-transcript citation for all of them would fail every gate on legacy data. The entry
 # headers carry the sprint (`## S290-...`, `### HB-S290-...`), so we check only this sprint's
-# resolutions -- the ones whose operator adjudication, if real, is in THIS transcript.
+# resolutions -- the ones whose operator adjudication, if real, is in THIS transcript. The one
+# widening is a SUPPRESSED entry still in force at this gate, whatever sprint it names: it still
+# waives a FAIL, and its authorization is at most a few gates old (the note above the parser).
 #
 # DECIDED_AUTONOMOUSLY is deliberately NOT required to cite. It is the honest-attribution escape
 # valve: a decision the lead genuinely made on its own is labeled as such (and Check 2 treats it
@@ -82,13 +88,15 @@
 #   alone is the degraded form this tool accepts for a corpus with no readable JSONL)
 #
 # EXIT
-#   0  every current-sprint RESOLVED/OVERRIDDEN entry cites a verified operator message (or none
-#      are in scope); --any-authorized: at least one well-formed citation on a terminal entry
-#   1  a current-sprint resolution cites no genuine operator message, or omits the citation, or
+#   0  every entry in scope (current-sprint RESOLVED/OVERRIDDEN/SUPPRESSED, and every in-force
+#      SUPPRESSED) cites a verified operator message (or none are in scope); --any-authorized: at
+#      least one well-formed citation on a terminal entry
+#   1  an entry in scope cites no genuine operator message, or omits the citation, or
 #      (gate mode) no transcript was provided to verify against; --any-authorized: no entry in
 #      the file carries a well-formed operator citation
 #   2  bad arguments / (gate mode) an escalations path that exists but is not a regular
-#      file, or could not be read -- `REFUSED:` on stderr
+#      file, or could not be read, or the in-force set was owed and could not be read (the
+#      sibling validate-suppression-lifetime.sh absent or refusing) -- `REFUSED:` on stderr
 set -u
 
 # A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
@@ -247,7 +255,19 @@ SPRINT=""
 TRANSCRIPT=""
 TRANSCRIPT_DIR=""
 ANY_AUTHORIZED=0
+# EVERY PASS OF THIS LOOP CONSUMES AN ARGUMENT, OR THE RUN REFUSES. Each flag below takes a value
+# and leaves with `shift 2`; with the flag as the LAST argument there is one positional left, and
+# bash's `shift 2` then changes nothing and returns 1 without stopping the script. `$#` never
+# drops, and the loop re-reads the same flag forever at 100% CPU. Observed on the reference
+# consumer's pending.md, base build, `--escalations <f> --sprint 322 --any-authorized`: 12+
+# minutes at full CPU and no output; reproduced as an xtrace that repeats the dispatch until a
+# file-size cap kills it. It is non-termination keyed on the ARGUMENT LIST, not on the input's
+# size: the same file with a value after the flag finishes at once. The guard
+# compares the count before and after the dispatch, so it holds for every flag that takes a value,
+# including one added later, and it never reads the value -- `--transcript ""` stays legal.
+# It sits OUTSIDE the MODE_DISPATCH markers, which I53 parses as the list of modes.
 while [ $# -gt 0 ]; do
+  _argc=$#
   case "$1" in
 # MODE_DISPATCH_BEGIN
     --escalations) ESCALATIONS="${2:-}"; shift 2 ;;
@@ -259,6 +279,7 @@ while [ $# -gt 0 ]; do
     -h|--help)     sed -n '2,40p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
+  [ $# -lt "$_argc" ] || { echo "REFUSED: $1 needs a value and none follows it; nothing was examined." >&2; exit 2; }
 done
 
 # The sibling steering-budget validator owns THE genuine-operator predicate (--cite). Resolve it
@@ -271,6 +292,8 @@ if [ "$ANY_AUTHORIZED" -eq 1 ]; then
   # citation, and a caller asking "was this authorized?" must not read "nothing to check" as yes.
   [ -f "$ESCALATIONS" ] || { echo "NONE: no escalations file ($ESCALATIONS), so no operator citation exists."; exit 1; }
   SPRINT_NUM=""
+  # The archive is never read here: this mode asks about the ONE file its caller named.
+  ESC_MAIN="$ESCALATIONS"; ESC_ARCH=/dev/null
 else
   if [ -z "$ESCALATIONS" ] || [ -z "$SPRINT" ]; then
     echo "FAIL: --escalations <pending.md> and --sprint <N> are required" >&2
@@ -283,8 +306,19 @@ else
     echo "REFUSED: escalations path $ESCALATIONS exists but is not a regular file; nothing was examined." >&2
     exit 2
   fi
+  # THE SIBLING ARCHIVE IS READ FOR ITS CURRENT-SPRINT SUPPRESSED ENTRIES (see the SUPPRESSED note
+  # at the parser below). It is resolved HERE, above the absent- and empty-file exits, because a
+  # fabricated waiver written straight into the archive beside an empty or absent pending.md must
+  # not exit through `EXAMINED NOTHING` before the archive is read. An archive that exists and
+  # cannot be read refuses, for the reason the escalations file does: a skipped read reads as clean.
+  ESC_ARCH="$(dirname "$ESCALATIONS")/pending-archive.md"
+  if { [ -e "$ESC_ARCH" ] || [ -L "$ESC_ARCH" ]; } && { [ ! -f "$ESC_ARCH" ] || [ ! -r "$ESC_ARCH" ]; }; then
+    echo "REFUSED: escalation archive $ESC_ARCH exists but is not a readable regular file; nothing was examined." >&2
+    exit 2
+  fi
+  [ -f "$ESC_ARCH" ] || ESC_ARCH=/dev/null
   # No escalations file is a legitimate clean state -- nothing to adjudicate.
-  [ -f "$ESCALATIONS" ] || { echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
+  [ -f "$ESCALATIONS" ] || [ "$ESC_ARCH" != /dev/null ] || { echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
   # A FILE THAT EXISTS AND HOLDS NO NON-WHITESPACE BYTE IS THE ABSENT STATE, AND SAYS SO. It
   # used to fall through to the parser, parse zero records, and print the ordinary
   # "no S<N> ... requires an operator citation" line -- a verdict over entries when there were
@@ -303,11 +337,13 @@ else
   #
   # BELOW THE --any-authorized SPLIT, deliberately. There an empty file is no citation and
   # must stay `NONE:` / exit 1; a check hoisted above the split would answer "authorized".
-  grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null
+  # An absent pending.md reaches here only beside an archive, and is read as /dev/null.
+  ESC_MAIN="$ESCALATIONS"
+  [ -f "$ESCALATIONS" ] || ESC_MAIN=/dev/null
+  grep -q '[^[:space:]]' "$ESC_MAIN" 2>/dev/null
   ESC_BLANK_RC=$?
   if [ "$ESC_BLANK_RC" -eq 1 ]; then
-    echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."
-    exit 0
+    [ "$ESC_ARCH" != /dev/null ] || { echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."; exit 0; }
   fi
   if [ "$ESC_BLANK_RC" -gt 1 ]; then
     if [ ! -r "$ESCALATIONS" ]; then
@@ -339,23 +375,115 @@ fi
 # reason: a tab in a `## ` line otherwise shifts every later field one variable right, so the
 # auth variable reads `dq<TAB>auth` and the quote cited is the Decision/Question text. Status
 # cannot carry a tab (it is `[A-Z_]+`), so these two replacements are the whole set.
-RECORDS="$(awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" '
-  function flush() {
+#
+# A CURRENT-SPRINT SUPPRESSED ENTRY IS VERIFIED TOO, IN THE GATE MODE ONLY. Its
+# `**Operator authorization:**` line has the RESOLVED/OVERRIDDEN grammar (escalations.md), and
+# for a check whose enforcement-map `adjudication` is `script` nothing else verifies it: Check 26
+# reads only `adjudication: llm` checks, and the remediation guard's arm 7b runs on an edit, not
+# at a gate. So the waiver that lets Check 2 pass a failing script check was an unverified quote.
+# `--any-authorized` stays RESOLVED/OVERRIDDEN only: core-paths.sh asks it whether the OPERATOR
+# DECIDED something, and a suppression is not that decision (the `anyauth != 1` conjunct).
+#
+# THE SIBLING `pending-archive.md` IS READ FOR SUPPRESSED ENTRIES ONLY, because an archived
+# in-force waiver acquits like a live one at the suppression-lifetime gate (BL-961), so a fabricated entry
+# written straight into the archive must not bypass this check. Its RESOLVED/OVERRIDDEN entries
+# were gated in the sprint that archived them and stay out of scope.
+#
+# HOW THE FALSE-POSITIVE SET REACHED ZERO, measured on byte copies of the reference consumer's
+# pending.md and pending-archive.md against its 153-transcript corpus. With every SUPPRESSED
+# entry in scope regardless of sprint, 17 of pending.md's 23 FAIL, and all 17 are authorized
+# 2026-08-10..2026-09-05, before the corpus's earliest transcript (2026-10-07): the operator's
+# words are gone from the corpus, not missing from the operator. Scoped to the current sprint by
+# header, as the RESOLVED/OVERRIDDEN check already is, the gate run at --sprint 322 checks 6
+# (4 RESOLVED/OVERRIDDEN, 1 SUPPRESSED in pending.md, 1 in the archive), rc 0, FP set empty.
+#
+# THE SCOPE IS A UNION, AND (c) CLOSED THE TWO GAPS THE HEADER SCOPE LEFT (BL-960, operator ruling
+# (c)). A header carrying no sprint token was never in scope (`## story-2.2 [lead] ...`), and a
+# previous sprint's SUPPRESSED entry still in force at this gate was not verified -- yet each could
+# waive a FAIL_WAIVED row, because validate-suppression-lifetime.sh does not filter by sprint. The
+# gate mode now checks (i) every entry whose header names THIS sprint, unchanged, and (ii) every
+# SUPPRESSED entry that sibling LISTS in force (`--waivers`, its SUPPRESSED rows, joined on the waiver
+# key: the header without `## `/`### `, trailing whitespace stripped), in pending.md and in the
+# archive, whatever sprint its header names. The in-force predicate is the sibling's own
+# (sl_in_force), asked with this gate's own inputs: the same script beside this one, the same
+# --escalations path Check 2 passes it, and its own default resolution of gate-metrics.jsonl and the
+# enforcement map, which Check 2 already trusts to grant passage -- so no new trust root, and no
+# call cycle (the sibling never invokes this script). A state that moves an entry OUT of the
+# in-force set moves it out of what the sibling acquits too: with no metrics file it lists nothing
+# and waives nothing. For the archive the set is a SUPERSET of what its section 6c acquits (that
+# also needs a FAIL_WAIVED row naming the entry, its own target, and no superseder): it checks more,
+# never less. The sibling's citation field is NOT re-parsed here; the key selects the entry and this
+# parser reads the citation, so the quoted-segment parser gains no copy.
+#
+# THE SIBLING IS ASKED ONLY WHEN IT COULD ANSWER: a probe pass (probe=1) names each file holding an
+# entry that carries a `**Suppresses:**` line (the sibling's own field regex, matched anywhere),
+# and an in-force entry always carries one. No such entry, no call. Owed and unanswerable -- the
+# sibling absent, or exiting non-zero -- REFUSES (exit 2): a skipped read reads as clean.
+# THE PROBE COVERS HEADER-SCOPE ENTRIES TOO, because the two scripts do not read a status alike:
+# this parser takes `**Status:**` only at line start, and the sibling falls back to a mid-line
+# mention. A current-sprint entry written `- **Status:** SUPPRESSED` read here as no status (out of
+# scope) while the sibling listed it in force and it waived a FAIL_WAIVED row, so a probe owed only
+# outside the header scope let a fabricated current-sprint waiver through with rc 0. Each entry is
+# still one record: the in-force join only decides whether it is emitted and under which status.
+#
+# HOW THE NEW SCOPE'S FALSE-POSITIVE SET WAS MEASURED, on a file:// clone of the reference
+# consumer at 19b4b327f against its 156-transcript corpus (oldest 2026-10-07). At HEAD the
+# in-force population is 1, and it names the current sprint (S322): off-sprint 0, no-sprint 0.
+# Replayed over 246 distinct (file, metrics, map) blob states of its history, with each state's
+# commit time as --now, 20 distinct (file, key) entries were ever in force; classified against the
+# sprint of the first gate recorded after each state (the gate that reads it), 18 are outside the
+# header scope: 15 a previous sprint's entry in pending.md, 1 in the archive, 2 with no sprint
+# token. 17 are authorized 2026-08-10..2026-09-06, before the corpus's oldest transcript, and FAIL
+# against it today (corpus retention, not the predicate: the longest any entry stayed in force
+# after its authorization was 15.9 days);
+# the 1 authorized inside the corpus horizon (S320's, read at S321's first gate) verifies. FP set
+# inside the horizon: 0 of 1. Driven end to end at real states: S321's first gate checks 1 more
+# entry than the header scope did, rc 0; the S306 state FAILs on 16 pre-horizon entries.
+er_records() { # $1 probe (1 = name the files owing the in-force set) -> records on stdout
+awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" -v probe="$1" '
+  function ekey(h,   x) {
+    x = h
+    if (!sub(/^### /, "", x)) sub(/^## /, "", x)
+    sub(/[[:space:]]+$/, "", x)
+    return x
+  }
+  BEGIN {
+    n = split(ENVIRON["ER_INF_P"], t, "\n"); for (i = 1; i <= n; i++) if (t[i] != "") infp[t[i]] = 1
+    n = split(ENVIRON["ER_INF_A"], t, "\n"); for (i = 1; i <= n; i++) if (t[i] != "") infa[t[i]] = 1
+  }
+  function flush(   hs, inf, st) {
     if (header == "") return
-    if (status != "RESOLVED" && status != "OVERRIDDEN") return
+    hs = (header ~ ("[Ss]" sprint "([^0-9]|$)"))
+    if (probe == 1) {
+      if (anyauth != 1 && hassupp && !(harch in owed)) { owed[harch] = 1; print (harch == 1 ? "A" : "P") }
+      return
+    }
+    # In force at this gate by the sibling, whatever its header names and whatever status this
+    # parser read: the sibling classified it SUPPRESSED, and that is the status it waives under.
+    inf = (anyauth != 1 && ((harch == 0 && (ekey(header) in infp)) || (harch == 1 && (ekey(header) in infa))))
+    st = (inf ? "SUPPRESSED" : status)
+    if (!inf) {
+    if (status != "RESOLVED" && status != "OVERRIDDEN" && !(status == "SUPPRESSED" && anyauth != 1)) return
+    # The archive contributes its SUPPRESSED entries only; its RESOLVED/OVERRIDDEN ones were
+    # gated in the sprint that archived them.
+    if (harch == 1 && status != "SUPPRESSED") return
     # --any-authorized asks about the FILE, so every terminal entry is in scope. The gate mode is
     # in scope only if the header names THIS sprint (S<N> not followed by another digit).
-    if (anyauth == 1 || header ~ ("[Ss]" sprint "([^0-9]|$)")) {
+    if (!(anyauth == 1 || hs)) return
+    }
       hh = header
       gsub(/\t/, " ", hh)
-      printf "%s\t%s\t%s\t%s\n", hh, status, (dq == "" ? "__NODQ__" : dq), (auth == "" ? "__MISSING__" : auth)
-    }
+      printf "%s\t%s\t%s\t%s\n", hh, st, (dq == "" ? "__NODQ__" : dq), (auth == "" ? "__MISSING__" : auth)
   }
+  # A FILE BOUNDARY ENDS AN ENTRY: the last entry of pending.md must not absorb the archive lines
+  # that precede its first header, and it keeps the origin it was read under.
+  FNR == 1 { flush(); header = "" }
   /^#{2,3} / {
     flush()
-    header = $0; status = ""; auth = ""; dq = ""; gotdq = 0
+    header = $0; status = ""; auth = ""; dq = ""; gotdq = 0; hassupp = 0; harch = inarch
     next
   }
+  /\*\*Suppresses:\*\*/ { hassupp = 1 }
   # Status token: first ALL-CAPS word after the label.
   /^\*\*[Ss]tatus:\*\*/ {
     s = $0
@@ -395,7 +523,35 @@ RECORDS="$(awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" '
     next
   }
   END { flush() }
-' "$ESCALATIONS")"
+' inarch=0 "$ESC_MAIN" inarch=1 "$ESC_ARCH"
+}
+
+# The in-force set, owed only where the probe named a file (see the scope note above).
+ER_INF_P=""; ER_INF_A=""
+if [ "$ANY_AUTHORIZED" -ne 1 ]; then
+  ER_OWED="$(er_records 1)"
+  if [ -n "$ER_OWED" ]; then
+    SUPP_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-suppression-lifetime.sh"
+    for ER_SIDE in P A; do
+      case "$ER_OWED" in *"$ER_SIDE"*) ;; *) continue ;; esac
+      ER_F="$ESCALATIONS"; [ "$ER_SIDE" = A ] && ER_F="$ESC_ARCH"
+      # rc and stdout only: in this mode the sibling reports malformed entries on stderr at exit 0.
+      # An ABSENT sibling is this same branch (bash exits 127), never a separate guard.
+      ER_ROWS="$(bash "$SUPP_SCRIPT" --waivers --escalations "$ER_F" 2>/dev/null)"
+      ER_RC=$?
+      if [ "$ER_RC" -ne 0 ]; then
+        echo "REFUSED: an entry in $ER_F carries **Suppresses:**, and" >&2
+        echo "         $SUPP_SCRIPT --waivers, which says whether it is in force at this gate," >&2
+        echo "         exited $ER_RC (127: it is not installed beside this script); nothing was verified." >&2
+        exit 2
+      fi
+      ER_KEYS="$(printf '%s\n' "$ER_ROWS" | awk -F '\t' '$1 == "SUPPRESSED" { k = $6; for (i = 7; i <= NF; i++) k = k "\t" $i; print k }')"
+      if [ "$ER_SIDE" = P ]; then ER_INF_P="$ER_KEYS"; else ER_INF_A="$ER_KEYS"; fi
+    done
+  fi
+fi
+export ER_INF_P ER_INF_A
+RECORDS="$(er_records 0)"
 
 # --- --any-authorized: shape only, no transcript, no sprint ------------------------------------
 # Reports the COUNTS it compared, because "no citation found" and "no entry was ever examined"
@@ -437,6 +593,7 @@ fi
 FAIL=0
 FAILN=0
 CHECKED=0
+CHECKED_S=0
 UNBOUNDED=0
 # LOOP-CARRIED, AND READ AFTER THE LOOP BY THE PASS LINE. A `while ... done <<EOF` is not a
 # subshell, so the last verified row's corpus report survives to the bottom of this file. It is
@@ -446,6 +603,7 @@ CITE_REPORT=""
 while IFS="$(printf '\t')" read -r header status dq authline; do
   [ -n "$header" ] || continue
   CHECKED=$((CHECKED + 1))
+  [ "$status" = SUPPRESSED ] && CHECKED_S=$((CHECKED_S + 1))
   short="$(printf '%s' "$header" | sed -E 's/^#+ //; s/ - [0-9].*$//' | cut -c1-60)"
 
   if [ "$authline" = "__MISSING__" ] || [ -z "$authline" ]; then
@@ -607,7 +765,10 @@ if [ "$FAIL" -ne 0 ]; then
   echo "FAIL: ${FAILN} of ${CHECKED} S${SPRINT_NUM} operator-resolved HARD_BLOCK(s) not backed by a real operator message." >&2
   exit 1
 fi
-echo "OK: all ${CHECKED} S${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation(s) cite a verified operator message. unbounded-citation: ${UNBOUNDED} verified with no timestamp bound."
+# THE STATUS SET IS NAMED WITH ITS COUNTS. This line said `RESOLVED/OVERRIDDEN` while it counted
+# SUPPRESSED entries too; the split is now printed, and the `OK: all <n> S<N> RESOLVED/OVERRIDDEN`
+# prefix is kept byte-stable for the readers that match on it.
+echo "OK: all ${CHECKED} S${SPRINT_NUM} RESOLVED/OVERRIDDEN/SUPPRESSED escalation(s) in scope cite a verified operator message (RESOLVED/OVERRIDDEN $((CHECKED - CHECKED_S)), SUPPRESSED ${CHECKED_S}). unbounded-citation: ${UNBOUNDED} verified with no timestamp bound."
 # NAME THE CORPUS ON THE PASS PATH TOO, WHICH IS THE FAIL-OPEN DIRECTION. The accusation branch
 # above already prints the sibling's corpus report; this branch captured the same string and
 # threw it away, so the ONE verdict an operator cannot falsify -- a pass -- was also the one that

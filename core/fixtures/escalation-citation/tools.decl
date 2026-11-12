@@ -23,6 +23,7 @@ mktemp
 mv
 rm
 sed
+sort
 tail
 tr
 wc

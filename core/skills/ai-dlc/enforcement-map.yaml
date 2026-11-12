@@ -140,7 +140,10 @@ checks:
         posture: "FAILS the gate (exit 0 required; exit 0 with `OK: EXAMINED NOTHING` — printed
           with entries_scanned=0 when no escalations file exists or it holds nothing — IS a pass,
           because no escalation exists to be unresolved; an unreadable or non-regular
-          `pending.md` is a REFUSAL, exit 2 with `REFUSED:` on stderr, never a pass)"
+          `pending.md` is a REFUSAL, exit 2 with `REFUSED:` on stderr, never a pass; beside an
+          existing `pending-archive.md` the script reads the archive instead of printing that
+          line, exiting 1 on an archived waiver that fails and 2 on an archive that is not a
+          readable regular file)"
         why: RESOLVED and OVERRIDDEN close a QUESTION and name no check, so an
           operator's one-time permission to proceed past a failing check has no
           target and no expiry. Measured on the reference consumer, a hard_block

@@ -153,7 +153,16 @@ transcript corpus before it will treat an entry as covering a failing check, and
 an entry it cannot verify covers nothing there. Check 26's validator applies the
 same predicate to the same rows against the corpus its `--transcript-dir` names,
 and an entry it cannot verify — or a gate run with no corpus at all — covers
-nothing there either. The guard's corpus comes from the harness; the gate's is
+nothing there either; it reads only checks whose enforcement-map `adjudication`
+is `llm`. For every check, `script`-adjudicated ones included, Check 2's
+`validate-escalation-resolution.sh` verifies the citation of each
+`SUPPRESSED` entry in its scope, in `pending.md` and in the sibling
+`pending-archive.md`, with the same predicate, and fails the gate on one it
+cannot verify. Its scope is every entry whose header names the current
+sprint, and every `SUPPRESSED` entry the lifetime script lists in force at
+this gate, whatever sprint its header names or none.
+`--any-authorized` never counts a `SUPPRESSED` entry, because a suppression does
+not authorize a core-layer change. The guard's corpus comes from the harness; the gate's is
 the directory the lead's call site names, which is a stated limit of every
 lead-run validator and not a second verification. Write the quote verbatim
 from the operator's own turn: a paraphrase is indistinguishable from an
@@ -189,7 +198,14 @@ latest row is `FAIL_WAIVED` under an expired `SUPPRESSED` waiver that targets
 the superseding entry expires, the expired one re-fires for a check the current
 gates do not re-run. The expired entry stays in `pending.md`: the terminal-entry
 archival rule below moves only `RESOLVED` and `OVERRIDDEN` entries, so no step
-moves a `SUPPRESSED` one, and moving it by hand is off-protocol.
+moves a `SUPPRESSED` one, and moving it by hand is off-protocol. It also buys
+nothing, even when it was the last entry and `pending.md` is left absent or empty
+beside the archive: when a check's latest row is `FAIL_WAIVED` under a `SUPPRESSED` entry
+found only in `pending-archive.md`, Check 2 judges that entry as it judges a live
+waiver. A waiver of another target fails; one stood down by an in-force
+re-suppression in `pending.md` prints the same `WARN: superseded:` line; any
+other that is not in force fails. An archived `OVERRIDDEN` waiver is still
+acquitted with a `NOTE`.
 
 **An escalated check is covered the same way.** The `adjudication: llm` checks
 are adopted only through Check 26, whose validator asks the same script
@@ -198,6 +214,14 @@ recorded stays recorded, and an in-force entry naming `[<catalog>] <check-id>`
 in the verdict's own catalog is what lets the gate proceed past it. An entry
 that names the wrong catalog, is malformed, or is past its lifetime covers
 nothing there, exactly as at Check 2.
+
+**In force also means not dated in the future.** The lifetime counts gates
+recorded after the authorization timestamp, so an entry authorized at a future
+date would count none until then and never expire. An entry whose
+`**Operator authorization:**` timestamp is more than two hours (7200 s, a fixed
+bound) later than the clock is not in force anywhere: `--in-force` does not list
+it, it supersedes nothing, it acquits no terminal entry, and at Check 2 it fails
+by name. Write the timestamp of the operator turn itself.
 
 **AC verification-category-change disclosure.** When resolving a
 HARD_BLOCK changes how an acceptance criterion is verified — moving it

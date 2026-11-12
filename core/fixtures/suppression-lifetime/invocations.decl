@@ -6,6 +6,17 @@
 # The terminal twin's own-target guard raised the validator from 109 to 113 by the 4 TQ drives (slq1..slq4),
 # and the `*` total 268 -> 279 by those 4 and the 7 drives of its 3 mutants (sd_term_anytarget slq1, slq3
 # and twin sl11b; sd_term_anycat slq2 and sl11b; sd_term_strictlife slq4 and sl11b).
-279 *
-113 core/scripts/validate-suppression-lifetime.sh
+# BL-968 raised the validator from 113 to 114 by the c2x18 drive (the archived over-cap waiver), and the `*`
+# total 279 -> 282 by that drive and the 2 drives of mutant c2_pastlife (c2x18 and its twin c2xi).
+# BL-966 raised the validator from 114 to 117 by the three clock drives (clkself, clksup, clkinf; the three
+# --in-force arms share clkinf), and the `*` total 282 -> 294 by those 3 and the 9 drives of the 5 clock
+# mutants (clk_shape_removed 2, clk_inforce_removed 3, clk_tol0 1, clk_unbounded 1, clk_reversed 2).
+# BL-961 raised the validator from 117 to 120 by the three archive drives (archsup, archover, archmis; arm
+# arch_ovr reads the existing warch drive), and the `*` total 294 -> 307 by those 3 and the 10 drives of the
+# 5 archive mutants (2 each: arch_nosup, arch_overbroad, arch_pastlife, arch_notarget, arch_superfirst).
+# The last-entry archive worlds raised the validator from 120 to 124 by four drives (archgx, archbx, archgi,
+# archgd), and the `*` total 307 -> 317 by those 4 and the 6 drives of 2 mutants (arch_earlyexit: its 3
+# deciding arms and twin sen_C; arch_norefuse: arch_gd and sen_C). Two agreeing counted runs.
+317 *
+124 core/scripts/validate-suppression-lifetime.sh
 1 core/scripts/verdict.sh
