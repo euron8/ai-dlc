@@ -1,0 +1,5 @@
+# backlog-receipt-efficiency's validator starts (BL-879 grammar). Every other drive of the validator is in process
+# (vin, the sourced harness's). VEQ-eff keeps one end-to-end `bash <copy>` run per distinct --efficiency-only
+# outcome, each tagged at its start through cli_v's env words (FXCELL=veq-eff-<world>).
+cli scripts/validate-backlog-receipts.sh veq-eff-efgood
+cli scripts/validate-backlog-receipts.sh veq-eff-efnc

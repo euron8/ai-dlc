@@ -1,0 +1,16 @@
+# backlog-receipt-efficiency sources core/fixtures/backlog-receipt-binding/run.sh for its harness (seed, vin, cli_v,
+# mut and the capture readers; that file's guard returns before any world is built), so it declares that file plus
+# every file the sourced harness locates and copies into each seeded world. The efficiency worlds write their own
+# docs/analysis/ evidence into each world; they read nothing else from the tree.
+!core/fixtures/backlog-receipt-binding/run.sh
+!scripts/validate-backlog-receipts.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+scripts/backlog-reverify.sh
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
++docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py
++docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py
+scripts/backlog-receipt-lib.sh
+# The mutation and matrix helpers the sourced harness loads.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/matrix.sh

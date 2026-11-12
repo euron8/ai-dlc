@@ -24,6 +24,9 @@
 #   C5  a subject with a `cli` row whose file carries neither column-0 whole-line source guard statement
 #       `[ "${BASH_SOURCE[0]}" = "$0" ] || return 0` nor `if [ "${BASH_SOURCE[0]}" = "$0" ]; then` -> FAIL. A data
 #       string, a comment or an indented copy carrying the token does not satisfy it.
+#   P1  (the join's, BL-982) in a fixture opted in by an `<N> inproc:<path>` row of invocations.decl, a `.`/`source`
+#       drive of a declared bash subject with no fx_inproc call on it -> FAIL, allowlisted or not. Its grammar, pairing
+#       rule and false-positive set are fxc_inproc_pairs' in the judge; a fixture not opted in is never scanned.
 #   NP  a `nested` row whose parent path lies under core/fixtures/ -> FAIL, allowlisted or not: one e2e cell on a
 #       fixture-local driver plus one nested row would cover any number of the child's starts. The parent must be
 #       shipped code. Its narrowing is beside np_rows.

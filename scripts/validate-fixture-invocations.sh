@@ -47,7 +47,8 @@
 # It then restores the default XFSZ action (a disposition ignored on entry stays ignored; bash cannot reset it). The
 # judge reads the log plus one row per marker. The markers are not truncated by hermetic-run.sh with the log, so a
 # start log is judged once per FXCOUNT_DIR: the hook makes a fresh `mktemp -d` run dir per push. Still unseen there: a
-# mutant_killed name appended to `<log>.mutants` under the limit is lost (J5 sees fewer names, never a false FAIL).
+# mutant_killed name appended to `<log>.mutants` under the limit is lost (J5 sees fewer names, never a false FAIL); an fx_inproc row appended to `<log>.inproc` under the limit is lost
+# too, and there the `inproc:` row reads LOW and FAILs J3 -- a false FAIL, never an acquittal.
 #
 # THE DECLARATION: core/fixtures/<f>/invocations.decl. `#` comments and blank lines ignored. Rows:
 #   <count> *              every bash start of the run, run.sh included. REQUIRED, exactly one.
@@ -74,6 +75,16 @@
 #                          `*` never crosses a `/` (there is no globstar), so a nested corpus spells one glob per level.
 #                          Every row is exact. There is no tolerance form: a count carrying `±`, with or without a `why=`
 #                          clause, is a malformed row and FAILs J4. A count that follows load is a fixture defect (BL-868).
+#   <count> inproc:<path>  (BL-982, THE IN-PROCESS PASSES) <path> is a `!` line of inputs.decl, root-relative, no `..`, the
+#                          count plain (no `c+kxglob`). It counts the rows core/fixtures/lib/mutant.sh's fx_inproc appended
+#                          to <log>.inproc -- one per pass that SOURCES the subject and calls it, which starts no bash
+#                          and so never reaches the start log -- matched as a path row matches a start (normalised, equal
+#                          or ending in /<path>); a missing <log>.inproc counts 0. It is carried by fxc_decl_rows as its
+#                          own row kind, so it never satisfies J6, J4's `!`-line check of a path row, or C2's path-row
+#                          lookup, and a fixture whose subject is both started and sourced carries both rows.
+#                          OPT-IN: a fixture with no `inproc:` row and no logged row is judged exactly as before -- no
+#                          inproc arm runs or prints. hermetic-run.sh truncates <log>.inproc when armed, so the gate reads
+#                          a NON-EMPTY log, never its existence.
 # THE ARMS.
 #   J1  the start log absent or empty -> BROKEN. run.sh is itself a start, so a counted run logs at least one row; an
 #       empty log means the counter never loaded and nothing below would be a measurement.
@@ -95,6 +106,17 @@
 #       never dropped silently. J2's printed declaration carries a `0` row for each unstarted bash subject.
 #       `.undeclarable` fixtures never reach the judge; --b2-census walks the tree statically, printing
 #       `EXEMPT (undeclarable) <fixture>` for each and `B2 GAP <fixture> <path>` for each J6 finding.
+#   J3 on an `inproc:` row  the count of <log>.inproc rows for its path != declared -> FAIL (the same J3 message).
+#   J4 on an `inproc:` row  malformed (a glob count, an absolute or `..` path, an empty path), a path that is no `!`
+#       file line, or one path on two `inproc:` rows -> FAIL.
+#   J7  (BL-982, R1) every row fx_inproc logged must match an `inproc:` row's path, else FAIL naming the paths; and
+#       rows logged by a fixture whose declaration carries NO `inproc:` row FAIL too, so a fixture cannot opt itself
+#       out of counting by deleting its row while it still logs. Passing, an opted-in fixture prints `ok J7: ...`.
+#       Its match reuses fxc_cells_judge's longest-target match (no cells declared: every matched row is a C1 row).
+#   P1  (BL-982, R2; static, --static-join, so validate-fixture-inprocess.sh FAILs it as a join E row whether or not
+#       the fixture is allowlisted) in a fixture OPTED IN by an `inproc:` row, every command-position `.`/`source` of a
+#       drive of a declared bash subject is paired with an fx_inproc call on that drive. Grammar, pairing rule and
+#       false-positive set: fxc_inproc_pairs. A fixture that is not opted in is never scanned (the tree-wide arm is owed).
 #
 #   C1  (BL-879, THE IN-PROCESS CELLS; grammar above fxc_cells_parse) every start of a subject -- a path row of
 #       invocations.decl, matched under its DECLARED path with the fxc_count normalisation -- carries an FXCELL tag or
@@ -139,7 +161,8 @@
 #       arming variables. An UNDECLARED fixture's direct run is not under that `env -i`, so FXCOUNT_RC, FXCOUNT_DIR and
 #       FXCOUNT_JUDGE all reach it from the hook's environment; a hermetic-run.sh it starts would then be armed. A
 #       nested copy of the distribution hook is inert by its PREPUSH_POOL_DEPTH gate.
-#   B6  a SOURCED subject is not a start. B7 a subshell, `( )` or `$( )` without a new bash, is not a start.
+#   B6  a SOURCED subject is not a start; it is counted only where the drive calls fx_inproc and the fixture declares an
+#       `inproc:` row (J3, J7), and P1 binds the drive to the call only in such an opted-in fixture. B7 a subshell, `( )` or `$( )` without a new bash, is not a start.
 #   B8  a start killed before its first command records nothing. A fixture that backgrounds `bash ... &` and kills
 #       it, or runs one under `timeout`, can therefore count fewer starts on a slow run; it makes the kill wait for the
 #       child's first command or is listed with its reason. The two-pass counting slot catches only rates high
@@ -288,7 +311,9 @@ fxc_req() {
 }
 
 # fxc_decl_rows <invocations.decl>: J4's parse, one normalised row per line: `<c>\t<k>\t<glob or ->\t<target>\t<raw>`,
-# or `ERR\t<raw>`. The judge and --b2-census read the same parse.
+# `INPROC\t<count>\t<path>\t<raw>` for an `<N> inproc:<path>` row (its OWN first field, so no reader of field 4 -- J6's
+# targets, J4's `!` check, the C arms, --static-join's path-row lookup -- ever sees it as a path row; each reader
+# skips it by name), or `ERR\t<raw>`. The judge, --static-join and --b2-census read the same parse.
 fxc_decl_rows() {
   awk '{ sub(/\r$/, "") } $0 ~ /^[[:blank:]]*$/ || $0 ~ /^[[:blank:]]*#/ { next }
       { raw = $0
@@ -297,6 +322,11 @@ fxc_decl_rows() {
         # A count with a leading zero (`09`, `1+08x…`) is refused here: bash arithmetic reads it as octal and dies.
         lz = cnt; sub(/x.*/, "", lz)
         if (lz ~ /(^|\+)0[0-9]/) { print "ERR\t" raw; next }
+        # An inproc: row is a plain count over a root-relative path with no `..`; the corpus form is not allowed on it.
+        if (substr(t, 1, 7) == "inproc:") {
+          p = substr(t, 8)
+          if (cnt !~ /^[0-9]+$/ || p == "" || p ~ /^\// || p ~ /(^|\/)\.\.(\/|$)/) { print "ERR\t" raw; next }
+          print "INPROC\t" cnt "\t" p "\t" raw; next }
         if (cnt ~ /^[0-9]+$/) { print cnt "\t0\t-\t" t "\t" raw; next }
         if (cnt ~ /^[0-9]+\+[0-9]+x[^[:blank:]]+$/) {
           p = index(cnt, "+"); x = index(cnt, "x"); g = substr(cnt, x + 1)
@@ -378,7 +408,7 @@ fxc_census() {
     if [ ! -f "$d/inputs.decl" ]; then printf 'UNDECLARED %s\n' "$fx"; und=$((und + 1)); continue; fi
     fxc_req "$d/inputs.decl" > "$w/req"
     : > "$w/tgts"
-    [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" | awk -F'\t' '$1 != "ERR" { print $4 }' > "$w/tgts"
+    [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" | awk -F'\t' '$1 != "ERR" && $1 != "INPROC" { print $4 }' > "$w/tgts"
     fxc_b2 "$root" "$w/req" "$w/tgts" > "$w/b2"
     g=0
     while IFS="$(printf '\t')" read -r k p; do
@@ -484,13 +514,91 @@ fxc_cells_judge() {
           print "SUM\t" ns + 0 "\t" nt2 + 0 "\t" nn + 0 }' "$1" "$2" "$3"
 }
 
+# fxc_inproc_pairs <run.sh> <bash subjects file>: ARM P1's scan, one awk, run by fxc_static_join ONLY for a fixture
+# opted in by an `inproc:` row. Prints `E\t<run.sh>\t<line>\tP1\t<reason>\t-` (the cells parse's E shape) for every
+# `.`/`source` in COMMAND POSITION -- line start, or after `;` `&` `|` `(` `{` `!`, `then`, `do`, `else`, outside quotes
+# and comments -- whose operand is a DRIVE and is not PAIRED.
+#   DRIVE: the operand (quotes removed) has the basename of one of the fixture's `!` bash subjects (fxc_subject_kind),
+#     or it is OPAQUE -- it carries an expansion with no literal `/` after the last `$` (`. "$v"`, `. "$(f)"`), so no
+#     text names the file it sources. Opaque is FAIL-CLOSED: a pass of a declared subject through a variable is exactly
+#     the drive this arm exists for. A literal tail naming another file (`. "$DIR/../lib/mutant.sh"`) is no drive.
+#   PAIRED: an `fx_inproc` call earlier on the same line, or as the first word of the nearest preceding line that is
+#     neither blank nor a comment and carries no drive itself. Each call pairs ONE drive, and an fx_inproc anywhere
+#     else in the file or function pairs nothing.
+# KNOWN ROUTES: a heredoc body is not masked, so a body line spelled as a drive reads as one (fail-closed, never an
+# acquittal: the body's delimiter line sits between it and any later drive); a drive in another file the fixture
+# sources (a sibling sourcing this run.sh) is that file's fixture's to declare; an operand whose literal tail names a
+# file other than its real target (a nested `$( )` printing a subject's path) reads by that tail, fail-OPEN.
+# HOW ITS FALSE-POSITIVE SET WAS ENUMERATED (R2): the population is every opted-in fixture, and at this change none is
+# opted in, so the arm prints nothing over the tree (--static-join byte-identical to its base). The one fixture the
+# wiring opts in, backlog-receipt-binding, carries six command-position sources in its run.sh, measured by this scan on a
+# scratch copy with one `inproc:` row seeded and no fx_inproc call: the four drives FIRE -- vin's `. "$v"` (opaque) and
+# r10_probe_only, r11_probe_only and r12_probe_only's `. "$d/scripts/validate-backlog-receipts.sh"` (the subject's
+# basename) -- and lib/mutant.sh and lib/matrix.sh stay quiet; its `git init -q .` and `grep -c .` lines are not in
+# command position. With fx_inproc on the line before each of the four, the scan prints nothing. The NARROWING: a
+# first form keyed on the subject's literal tail missed vin's opaque drive, the motivating case; keyed on any
+# `.`/`source` it would flag the two lib sources; keyed on a whole-file fx_inproc presence it would acquit an unpaired
+# drive beside a paired one; an operand cut at the first blank inside a nested `$( )` read the preamble.sh source
+# (`. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"`) as opaque, so blanks inside `$( )` do not end it.
+# PREDICTED, NOT YET MEASURED (U1's sibling backlog-receipt-efficiency is not committed at this change): a sibling
+# that sources the old run.sh through a variable (`. "$BRB"`) and declares that run.sh `!` fires P1 there once opted in,
+# as does any lib sourced through a variable (`. "$MUT_LIB"`); the remedy is fx_inproc plus an `inproc:` row for the
+# run.sh, and a literal path for a lib. Measured on a synthetic tree of that shape: those two fire, the preamble does not.
+# The tree-wide arm (a fixture that is NOT opted in) is owed in BL-982.
+fxc_inproc_pairs() {
+  awk -v SQ="'" 'function qmask(s,   o, i, n, c, q) {
+      o = ""; q = ""; n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (q == "") { if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:];&|]/)) break
+                       if (c == SQ || c == "\"") q = c; o = o c; continue }
+        if (q == "\"" && c == "\\") { o = o "XX"; i++; continue }
+        if (c == q) { q = ""; o = o c } else o = o "X"
+      }
+      return o
+    }
+    function cmdpos(m, i,   pre) { pre = substr(m, 1, i - 1); sub(/[[:blank:]]+$/, "", pre)
+      return (pre == "" || pre ~ /[;&|({!]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|do|else)$/) }
+    function opnd(s, i,   r, w, c, q, j, n, dp) {
+      r = substr(s, i); sub(/^[[:blank:]]+/, "", r); w = ""; q = ""; n = length(r); dp = 0
+      for (j = 1; j <= n; j++) { c = substr(r, j, 1)
+        if (c == "$" && substr(r, j + 1, 1) == "(") dp++
+        else if (c == ")" && dp > 0) { dp--; w = w c; continue }
+        if (q == "") { if (dp == 0 && c ~ /[[:blank:];&|)]/) break; if (c == SQ || c == "\"") { q = c; continue }; w = w c; continue }
+        if (c == q) { q = ""; continue }; w = w c }
+      return w }
+    function base(p) { sub(/.*\//, "", p); return p }
+    FILENAME == ARGV[1] { if ($0 != "") BN[base($0)] = 1; next }
+    { s = $0; sub(/\r$/, "", s) }
+    s ~ /^[[:blank:]]*(#|$)/ { next }
+    { m = qmask(s); n = length(m); avail = prevfx; same = 0; drives = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(m, i, 1); kw = 0
+        if (c == "." && substr(m, i + 1, 1) ~ /[[:blank:]]/) kw = 1
+        else if (substr(m, i, 7) ~ /^source[[:blank:]]/ && (i == 1 || substr(m, i - 1, 1) !~ /[A-Za-z0-9_.\/-]/)) kw = 6
+        if (!kw || !cmdpos(m, i)) continue
+        o = opnd(s, i + kw); t = o; sub(/.*\$/, "", t)
+        why = (o ~ /\$/ && t !~ /\//) ? "opaque: no literal path names the file" : ""
+        if (why == "" && (base(o) in BN)) why = "the basename of a declared bash subject"
+        if (why == "") continue
+        drives++
+        # Each fx_inproc pairs ONE drive: an unused call earlier on this line, else the call that opened the line before.
+        pre = substr(m, 1, i - 1); nfx = gsub(/fx_inproc/, "", pre)
+        if (nfx > same) { same++; continue }
+        if (avail) { avail = 0; continue }
+        print "E\t" FILENAME "\t" FNR "\tP1\tthe source of " o " (" why ") in a fixture opted in by an inproc: row has no fx_inproc call on its drive -- call fx_inproc <subject> on the line before it, so the in-process pass is counted\t-"
+      }
+      prevfx = (drives == 0 && m ~ /^[[:blank:]]*fx_inproc([[:blank:]]|$)/) }' "$2" "$1"
+}
+
 # fxc_static_join <root>: THE STATIC HALF OF C1-C5, over <root>/core/fixtures/*/run.sh, read through THIS file's own
 # parses (fxc_decl_rows, fxc_cells_parse, fxc_guarded) so no grammar is restated. One row per fixture:
 #   F\t<fx>                              scanned (every listed run.sh; .undeclarable and undeclared ones too)
 #   X\t<fx>\t<reason>                    REFUSED: the dynamic arms cannot pass this tree
 #   P\t<fx>                              predicted to pass (the counted run decides)
 #   O\t<fx>\t<why>                       out of population (`.undeclarable`, or no inputs.decl)
-#   E\t<fx>\t<arm>\t<line>\t<reason>     a static finding: C2 (grammar, a cell subject that is no path row), C4, C5
+#   E\t<fx>\t<arm>\t<line>\t<reason>     a static finding: C2 (grammar, a cell subject that is no path row), C4, C5,
+#                                        and P1 (fxc_inproc_pairs, only in a fixture opted in by an `inproc:` row)
 # THE PREDICATE, per subject S (a path row of invocations.decl declaring n starts, a `c+kxglob` row expanded under
 # <root>): S passes when n equals its cli+e2e cell count, or when S is the child of a `nested` row and n is at least
 # that count; n = 0 always passes. A fixture passes when every S does and it carries no static finding. A REFUSAL IS
@@ -498,7 +606,7 @@ fxc_cells_judge() {
 # nested cover leaves a start untagged (C1) or a cell over- or under-used (C3). A PASS IS A PREDICTION only: which
 # start carries which tag is not visible without a run, which is the dynamic judge's job.
 fxc_static_join() {
-  local root="$1" d fx w p n c k g tgt raw cf nn guarded
+  local root="$1" d fx w p n c k g tgt raw cf nn guarded ip
   w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-sj.XXXXXX")" || return 2
   for d in "$root"/core/fixtures/*/; do
     d="${d%/}"; fx="${d##*/}"
@@ -510,13 +618,26 @@ fxc_static_join() {
     if [ -f "$cf" ]; then fxc_cells_parse "$cf" > "$w/c"; else : > "$w/c"; fi
     : > "$w/r"; [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" > "$w/r"
     : > "$w/n"
+    ip=0
     while IFS="$(printf '\t')" read -r c k g tgt raw; do
       [ "$c" = ERR ] && continue
+      [ "$c" = INPROC ] && { ip=1; continue; }
       [ -n "$tgt" ] && [ "$tgt" != '*' ] || continue
       n="$c"
       if [ "$g" != - ]; then n=$((c + k * $(fxc_glob_n "$root" "$g"))); fi
       printf '%s\t%s\n' "$tgt" "$n" >> "$w/n"
     done < "$w/r"
+    # P1, only in a fixture OPTED IN by an `inproc:` row: its findings join the cells parse as E rows.
+    if [ "$ip" = 1 ]; then
+      : > "$w/subj"
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        fxc_subject_kind "$root/$p"; [ "$FXC_KIND" = bash ] && printf '%s\n' "$p" >> "$w/subj"
+      done <<EOF
+$(fxc_req "$d/inputs.decl")
+EOF
+      fxc_inproc_pairs "$d/run.sh" "$w/subj" >> "$w/c"
+    fi
     awk -F'\t' '$1 == "R" && $3 == "cli" { print $4 }' "$w/c" | LC_ALL=C sort -u > "$w/cli"
     : > "$w/g"
     while IFS= read -r p; do [ -n "$p" ] && printf '%s\t%s\n' "$p" "$(fxc_guarded "$root/$p" | cut -f1)" >> "$w/g"; done < "$w/cli"
@@ -584,7 +705,7 @@ fxc_judge() {
       [ "$kind" = ERR ] || continue
       printf '%s: FAIL (J4): malformed invocations.decl row: %s (want `<count> *`, `<count> <path>`, or `<c>+<k>x<glob> <target>`; every row is exact)\n' "$fx" "$raw"; rc=1
     done < "$w/rows"
-    awk -F'\t' '$1 != "ERR" { print $4 }' "$w/rows" > "$w/tgts"
+    awk -F'\t' '$1 != "ERR" && $1 != "INPROC" { print $4 }' "$w/rows" > "$w/tgts"
     n="$(grep -cxF '*' "$w/tgts")" || n=0
     [ "$n" -eq 1 ] || { printf '%s: FAIL (J4): invocations.decl carries %s `*` rows; exactly one is required\n' "$fx" "$n"; rc=1; }
     while IFS= read -r t; do
@@ -596,7 +717,14 @@ EOF
     while IFS="$(printf '\t')" read -r c k g tgt raw; do
       [ "$c" = ERR ] && continue
       [ -n "$c" ] || continue
-      if [ "$tgt" != '*' ]; then
+      if [ "$c" = INPROC ]; then
+        # An `inproc:` row (THE IN-PROCESS PASSES): measured over <log>.inproc, never the start log; a missing log is 0.
+        raw="$tgt${raw:+	$raw}"; c="$k"; tgt="$g"; g=-
+        if ! grep -qxF -- "$tgt" "$w/req"; then
+          printf '%s: FAIL (J4): row "%s" names %s, which is not a `!` (REQUIRED) file line of %s -- an inproc: row binds to the declaration, never a second list\n' "$fx" "$raw" "$tgt" "${inp#"$root"/}"; rc=1; continue
+        fi
+        m=0; [ -f "$log.inproc" ] && m="$(fxc_count "$log.inproc" "$tgt")"
+      elif [ "$tgt" != '*' ]; then
         if ! grep -qxF -- "$tgt" "$w/req"; then
           printf '%s: FAIL (J4): row "%s" names %s, which is not a `!` (REQUIRED) file line of %s -- a path row binds to the declaration, never a second list\n' "$fx" "$raw" "$tgt" "${inp#"$root"/}"; rc=1; continue
         fi
@@ -626,6 +754,33 @@ EOF
       esac
     done < "$w/b2"
     printf 'J6: %s: %s bash subject(s) rowed; outside the population: %s data file(s), %s non-shell script(s)\n' "$fx" "$nb" "$nd" "$ns"
+    # THE IN-PROCESS PASSES (J4's duplicate half and J7), judged only when the declaration carries an `inproc:` row or
+    # fx_inproc logged a row: with neither, nothing here runs or prints, so the fixture is judged as before (opt-in).
+    awk -F'\t' '$1 == "INPROC" { print $3 }' "$w/rows" > "$w/ipt"
+    if [ -s "$w/ipt" ] || [ -s "$log.inproc" ]; then
+      while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        printf '%s: FAIL (J4): invocations.decl names inproc:%s on more than one row\n' "$fx" "$t"; rc=1
+      done <<EOF
+$(LC_ALL=C sort "$w/ipt" | uniq -d)
+EOF
+      n=0; [ -f "$log.inproc" ] && n="$(awk 'END { print NR }' "$log.inproc")"
+      # J7: every logged pass names an `inproc:` row's path, matched as a path row matches a start (normalised, equal
+      # or ending in /<path>), through fxc_cells_judge's longest-target match: with no cells declared, every matched
+      # row is printed as one C1 row naming its logged path, and an unmatched row prints nothing.
+      : > "$w/ipc"
+      fxc_cells_judge "$w/ipt" "$w/ipc" "$log.inproc" > "$w/ipj" 2>/dev/null
+      awk -F'\t' 'FILENAME == ARGV[1] { if ($1 == "C1") M[$3] = 1; next } !($1 in M) && !S[$1]++ { print }' "$w/ipj" "$log.inproc" 2>/dev/null > "$w/ipu"
+      if [ ! -s "$w/ipt" ]; then
+        printf '%s: FAIL (J7): fx_inproc logged %s in-process pass(es) (%s) and invocations.decl carries no `inproc:` row -- declare each subject as `<N> inproc:<path>`; a fixture never opts out of counting while it still logs\n' \
+          "$fx" "$n" "$(head -3 "$w/ipu" | tr '\n' ' ' | sed 's/ $//')"; rc=1
+      elif [ -s "$w/ipu" ]; then
+        printf '%s: FAIL (J7): %s in-process pass(es) logged by fx_inproc name no `inproc:` row'"'"'s path (%s) -- add the row, or route the pass through a declared subject\n' \
+          "$fx" "$(awk -F'\t' 'FILENAME == ARGV[1] { if ($1 == "C1") M[$3] = 1; next } !($1 in M) { u++ } END { print u + 0 }' "$w/ipj" "$log.inproc")" "$(head -3 "$w/ipu" | tr '\n' ' ' | sed 's/ $//')"; rc=1
+      else
+        printf 'ok J7: %s: %s in-process pass(es) over %s inproc: row(s)\n' "$fx" "$n" "$(awk 'END { print NR }' "$w/ipt")"
+      fi
+    fi
   fi
   # J5
   local key="${fd##*/}"
@@ -707,7 +862,7 @@ sp_cell() {
 # THE C-ARM CELLS, both directions, run by fxc_self_probe after the J cells. <S> its scratch dir, <rc> the generated
 # counter rc, <bash>. Every world is a fixture dir under $SPR judged in-process by sp_cell with the C arms on; the
 # synthetic logs carry the rc's four fields (path, pid, FXCELL, parent pid), and one leg drives the REAL rc.
-FXC_SP_CELLS=102
+FXC_SP_CELLS=118
 fxc_cells_self_probe() {
   local S="$1" rcf="$2" bash_bin="$3" T=$'\t' g out n
   FXC_CELLS=1
@@ -826,6 +981,82 @@ fxc_cells_self_probe() {
   [ "$g" = "4:4" ] && sp_ok "E2E the real rc logs the tag and the parent pid, and a grandchild of a tagged start logs an empty tag" \
     || sp_bad "E2E the real rc's cell fields: rows:matched = $g, want 4:4"
   FXC_CELLS=1
+}
+
+# THE IN-PROCESS PASS CELLS (J3, J4 and J7 on `inproc:` rows, and the static P1), both directions, run by fxc_self_probe
+# with the C arms off. <S> its scratch dir, <fd> its probe fixture (inputs.decl: !core/scripts/sub.sh, +core/scripts/two.sh),
+# <rc> the generated counter rc, <bash>, <mutant.sh> the real core/fixtures/lib/mutant.sh. $SPR/log measures 6 starts,
+# 2 of them of sub.sh; ipl is that log plus three passes of sub.sh in its .inproc: the declared path, a mutant copy ending
+# in the suffix, and a `..`-spelled path.
+fxc_inproc_self_probe() {
+  local S="$1" fd="$2" rcf="$3" bash_bin="$4" mlib="$5" o1 o2 r1 r2 g PR
+  cp "$SPR/log" "$SPR/ipl"
+  printf '%s\n' "$SPR/core/scripts/sub.sh" "/elsewhere/m2/core/scripts/sub.sh" "$SPR/core/fixtures/x/../../scripts/sub.sh" > "$SPR/ipl.inproc"
+  ipw() { mkdir -p "$SPR/$1"; cp "$fd/inputs.decl" "$SPR/$1/"; printf '%s\n' "$2" | tr '|' '\n' > "$SPR/$1/invocations.decl"; }
+  ipw ipa '6 *|3 inproc:core/scripts/sub.sh'
+  sp_cell "IP a decl with only an inproc: row for a started subject FAILs J6 (an inproc: row is no path row)" 1 ipa "$SPR/ipl" "p: FAIL (J6): core/scripts/sub.sh is a"
+  ipw ipok '6 *|2 core/scripts/sub.sh|3 inproc:core/scripts/sub.sh'
+  sp_cell "IP the correct declaration (path row and inproc: row) passes, all three passes counted" 0 ipok "$SPR/ipl" "ok J7: p: 3 in-process pass(es) over 1 inproc: row(s)"
+  ipw ipoff '6 *|2 core/scripts/sub.sh|4 inproc:core/scripts/sub.sh'
+  sp_cell "IP an inproc: count off by one FAILs J3" 1 ipoff "$SPR/ipl" 'p: FAIL (J3): row "4 inproc:core/scripts/sub.sh": measured 3, declared 4'
+  ipw ipr1 '6 *|2 core/scripts/sub.sh'
+  sp_cell "IP passes logged by a fixture with no inproc: row FAIL J7" 1 ipr1 "$SPR/ipl" "p: FAIL (J7): fx_inproc logged 3 in-process pass(es)"
+  # The near-miss: no logged row and no inproc: row is quiet, prints nothing of this arm, and an EMPTY .inproc (what
+  # hermetic-run.sh leaves on every armed run) judges byte-identically to an absent one.
+  cp "$SPR/log" "$SPR/ipe"; : > "$SPR/ipe.inproc"
+  o1="$(fxc_judge p "$SPR/ipr1/invocations.decl" "$SPR/log" "$SPR")"; r1=$?
+  o2="$(fxc_judge p "$SPR/ipr1/invocations.decl" "$SPR/ipe" "$SPR")"; r2=$?
+  if [ "$r1" = 0 ] && [ "$r2" = 0 ] && [ "$o1" = "$o2" ] && ! grep -q 'J7\|inproc' <<<"$o1"; then
+    sp_ok "IP no logged pass and no inproc: row stays QUIET, and an empty .inproc judges byte-identically to none"
+  else sp_bad "IP the opt-out near-miss: rc $r1/$r2, identical $([ "$o1" = "$o2" ] && echo yes || echo no): $(printf '%s' "$o2" | tr '\n' ' ')"; fi
+  cp "$SPR/log" "$SPR/ipu"; { cat "$SPR/ipl.inproc"; printf '%s\n' "$SPR/core/scripts/xsub.sh"; } > "$SPR/ipu.inproc"
+  sp_cell "IP a logged pass of the near-miss xsub.sh names no inproc: row and FAILs J7" 1 ipok "$SPR/ipu" "p: FAIL (J7): 1 in-process pass(es) logged by fx_inproc name no"
+  ipw ipmiss '6 *|2 core/scripts/sub.sh|1 inproc:core/scripts/sub.sh'
+  sp_cell "IP a declared pass with no .inproc log reads 0 and FAILs J3" 1 ipmiss "$SPR/log" 'row "1 inproc:core/scripts/sub.sh": measured 0, declared 1'
+  ipw ipz '6 *|2 core/scripts/sub.sh|0 inproc:core/scripts/sub.sh'
+  sp_cell "IP a 0 inproc: row with no .inproc log passes" 0 ipz "$SPR/log" "ok J7: p: 0 in-process pass(es) over 1 inproc: row(s)"
+  ipw ipglob '6 *|2 core/scripts/sub.sh|1+1xcore/* inproc:core/scripts/sub.sh'
+  sp_cell "IP J4 an inproc: row with a corpus count is malformed" 1 ipglob "$SPR/ipl" "(J4): malformed invocations.decl row: 1+1xcore/* inproc:core/scripts/sub.sh"
+  ipw ipdd '6 *|2 core/scripts/sub.sh|3 inproc:core/../core/scripts/sub.sh'
+  sp_cell "IP J4 an inproc: path carrying .. is malformed" 1 ipdd "$SPR/ipl" "(J4): malformed invocations.decl row: 3 inproc:core/../core/scripts/sub.sh"
+  ipw ipnb '6 *|2 core/scripts/sub.sh|3 inproc:core/scripts/sub.sh|0 inproc:core/scripts/two.sh'
+  sp_cell "IP J4 an inproc: row naming a + line, not a ! line, FAILs" 1 ipnb "$SPR/ipl" "names core/scripts/two.sh, which is not a \`!\` (REQUIRED) file line"
+  ipw ipdup '6 *|2 core/scripts/sub.sh|3 inproc:core/scripts/sub.sh|3 inproc:core/scripts/sub.sh'
+  sp_cell "IP J4 one path on two inproc: rows FAILs" 1 ipdup "$SPR/ipl" "p: FAIL (J4): invocations.decl names inproc:core/scripts/sub.sh on more than one row"
+  # END TO END through the REAL mutant.sh fx_inproc under the real rc: a relative and an absolute pass both log the
+  # absolute path; a pass with FXCOUNT_LOG unset logs nothing; an unwritable log fails nothing; the script exits 0.
+  mkdir -p "$SPR/lpi"; cp "$fd/inputs.decl" "$SPR/lpi/"; printf '2 *\n0 core/scripts/sub.sh\n2 inproc:core/scripts/sub.sh\n' > "$SPR/lpi/invocations.decl"
+  printf 'ok() { :; }\nbad() { :; }\n. %s\ncd %s || exit 8\nfx_inproc core/scripts/sub.sh\nfx_inproc %s\n( unset FXCOUNT_LOG; fx_inproc core/scripts/sub.sh ) || exit 9\nFXCOUNT_LOG=%s fx_inproc core/scripts/sub.sh || exit 7\nbash -c :\n' \
+    "$mlib" "$SPR" "$SPR/core/scripts/sub.sh" "$S/absent-dir/l" > "$S/inp.sh"
+  env -i PATH="/usr/bin:/bin" BASH_ENV="$rcf" FXCOUNT_LOG="$S/inp.log" "$bash_bin" "$S/inp.sh" >/dev/null 2>&1; r1=$?
+  g="$(awk -v p="$SPR/core/scripts/sub.sh" '$0 == p { n++ } END { print NR ":" n + 0 }' "$S/inp.log.inproc" 2>/dev/null)"
+  if [ "$r1" = 0 ] && [ "$g" = "2:2" ] && [ ! -e "$S/absent-dir" ]; then
+    sp_ok "E2E the real fx_inproc logs a relative and an absolute pass as one absolute path each, logs nothing unset, and fails nothing unwritable"
+  else sp_bad "E2E the real fx_inproc: rc $r1, rows:matched $g, want 0 and 2:2"; fi
+  sp_cell "E2E the real fx_inproc's two passes satisfy a 2 inproc: row" 0 lpi "$S/inp.log" "ok J7: p: 2 in-process pass(es) over 1 inproc: row(s)"
+  # P1, THE STATIC PAIRING, through fxc_static_join on its own root. FIRES at lines 8 (an opaque drive inside a
+  # function), 15 (a subject named by basename, the line after a call that paired its own line), 16 (after `(`), 21
+  # (fx_inproc two lines up, not on the drive), 22 (after `then`), 24 and 25 (the second drive after one call on the line before, and on its own line). QUIET: a lib source naming another file (2, and 27 through a nested
+  # `$( )` whose blanks do not end the operand), a `.`
+  # out of command position (3, and 26 whose operand is opaque) and inside quotes (4, 18), a drive paired by the line before across a comment (13), on
+  # its own line (14), and a non-subject source after `;` (17). The same run.sh in a fixture NOT opted in prints none.
+  PR="$S/proot"; mkdir -p "$PR/core/fixtures/pin" "$PR/core/fixtures/pno" "$PR/core/scripts"
+  printf ':\n' > "$PR/core/scripts/vbr.sh"
+  printf '%s\n' '#!/usr/bin/env bash' '. "$DIR/../lib/mutant.sh"' 'git init -q . >/dev/null' 'n="$(grep -c . f)"' 'vin() {' \
+    '  ( cd "$c" || exit 2' '    # shellcheck source=/dev/null' '    . "$v" || exit 2' '    vbr_main "$@" ) 2>&1' '}' 'fx_inproc "$v"' \
+    '# a comment between' '. "$v"' 'fx_inproc "$d/core/scripts/vbr.sh"; source "$d/core/scripts/vbr.sh"' '. "$d/core/scripts/vbr.sh" || exit 2' \
+    '( . "$w" )' 'foo; source "$x/lib/other.sh"' 'echo ". $v"' 'fx_inproc a' 'true' '. "$u"' 'if true; then . "$q"; fi' 'fx_inproc "$v"' '. "$v"; . "$v2"' 'fx_inproc a; . "$v"; . "$v2"' 'echo . "$v"' '. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || exit 2' > "$PR/core/fixtures/pin/run.sh"
+  cp "$PR/core/fixtures/pin/run.sh" "$PR/core/fixtures/pno/run.sh"
+  printf '!core/scripts/vbr.sh\n' > "$PR/core/fixtures/pin/inputs.decl"; cp "$PR/core/fixtures/pin/inputs.decl" "$PR/core/fixtures/pno/"
+  printf '1 *\n0 core/scripts/vbr.sh\n0 inproc:core/scripts/vbr.sh\n' > "$PR/core/fixtures/pin/invocations.decl"
+  printf '1 *\n0 core/scripts/vbr.sh\n' > "$PR/core/fixtures/pno/invocations.decl"
+  o1="$(fxc_static_join "$PR")"
+  g="$(awk -F'\t' '$1 == "E" && $2 == "pin" && $3 == "P1" { printf "%s ", $4 }' <<<"$o1")"
+  [ "$g" = "8 15 16 21 22 24 25 " ] && grep -qxF "X	pin	static finding(s) above" <<<"$o1" \
+    && sp_ok "P1 an unpaired drive FIRES (opaque, by basename, after ( and then, a call not on the drive, a second drive after one call), and a paired one, a lib source and a . out of command position stay QUIET" \
+    || sp_bad "P1 the opted-in fixture's findings were at lines [$g], want [8 15 16 21 22 24 25 ]"
+  if grep -q '	pno	P1	' <<<"$o1" || ! grep -qxF "P	pno" <<<"$o1"; then sp_bad "P1 a fixture NOT opted in was scanned: $(grep '	pno' <<<"$o1" | tr '\n' ' ')"
+  else sp_ok "P1 the same run.sh in a fixture with no inproc: row is never scanned (predicted to pass)"; fi
 }
 
 fxc_self_probe() {
@@ -1043,6 +1274,7 @@ fxc_self_probe() {
     printf '# MUTANT-MATRIX Lb decides=A twins=B\n' >> "$SPR/lp/run.sh"
     sp_cell "E2E the same loop with its row passes" 0 lp "$S/lp.log" "ok"
   fi
+  fxc_inproc_self_probe "$S" "$fd" "$rcf" "$bash_bin" "$mlib"
   fxc_cells_self_probe "$S" "$rcf" "$bash_bin"
   rm -rf "$S"
   # The cell count is fixed by construction above; fewer means a cell was skipped without a verdict.
