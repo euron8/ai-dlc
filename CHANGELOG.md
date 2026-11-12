@@ -19,6 +19,23 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1085.0] - 2026-11-12
+
+### BL-987 — derivation-differential no longer scores a consumer's pre-existing ignored files as a broken derivation
+
+`reconcile/derivation-differential.sh` compared the validator's result at a mktemp base worktree with its result at the consumer root. The base worktree holds no ignored file, so a recorded `grep -rn` over a directory containing an ignored `__pycache__/*.pyc` passed there and failed at the consumer (BSD grep prints `Binary file P matches` on stdout). The row read NEWLY-FAILING, was recorded OWED, and no artifact edit could close it. Measured on a consumer reconcile: two rows hit, with a real-finding control row beside them (PC-S322-DERIVATION-DIFFERENTIAL-FALSE-NEWLY-FAILING-ON-UNTRACKED-PYCACHE).
+
+`core/scripts/validate-artifact-derivations.sh` gains an opt-in. When `AI_DLC_VD_FULL_OUT_DIR` names a directory, each compared derivation's whole normalised actual output is written to one numbered side file there, `<n>.out`, with an index file mapping each number to its artifact file and fence line. Unset, its stdout, stderr and exit are byte-identical to before.
+
+The differential makes a second pass only when the first yields a NEWLY-FAILING row, and only in its own base worktree. It copies the ignored-only (`!!`) files under that fence's operands, outside the pull's install roots and the four template-site paths (CLAUDE.md, docs/coding-conventions.md, QUICKSTART.md and .claude/settings.json, derived from the `template_manifest:` block of `reconcile/template-sites.md`; the fourth already sits under the `.claude/` install root, so excluding it changes no behaviour), never through a symlink, and capped at 4096 files (override AI_DLC_DD_OVERLAY_CAP), into the base worktree, re-runs both roots with the opt-in set, and relabels the key STALE-BOTH, with a NOTE giving the count of copied files and at most the first 5 paths in byte order, then `… and N more` (the relabel, missing-output, still-differ and re-run-exit NOTEs are all bounded this way; unbounded, one row measured 33,620 bytes for 381 paths, about 360 KB at the 4096 cap), only when both full outputs are byte-equal. A skip leaves the row NEWLY-FAILING and is never silent: every skip reason, among them over-cap (with count and cap), root operand, --base-root, symlink, unreadable template manifest, missing full output and outputs-still-differ, prints a named `NOTE <file:line>` row; a plain finding with no ignored file prints none, and the over-cap form reads "overlay skipped: N ignored file(s) under this fence's operands exceed the overlay cap C (AI_DLC_DD_OVERLAY_CAP); the row keeps NEWLY-FAILING." The cap bounds only the copy cost and disk use in the base worktree, not the second validator pass. The consumer rehearsal measured 381 ignored files in one `__pycache__` directory, above the first cap of 256 (since raised to 4096). That consumer holds 118256 ignored files; its operand directories over the cap (`rebalancer/` 5801, `web/` 10997, `infra/` 14217, `subgraph/` 13478, mostly `node_modules/`) skip with the named row, while a rehearsal at the default cap relabelled both false rows STALE-BOTH and left the 3 real rows NEWLY-FAILING. Exit codes are unchanged.
+
+Not fixed: a pre-existing file that is untracked and not ignored still reads NEWLY-FAILING, and a consumer's already-recorded OWED rows from this shape stay open until the ignored file is deleted.
+
+### BL-995 FILED (OPEN): check-owed-derivations.sh --scope leaves a scratch directory per successful call under bash 3.2
+
+`core/scripts/check-owed-derivations.sh:349` pipes into `scope_batch` (`printf '%s\n' "$2" | scope_batch tokens`), so `scope_batch` runs in the pipeline's subshell and its `mktemp -d` directory is not removed, because under bash 3.2 a subshell that ends by returning does not fire its EXIT trap. Measured on host bash 3.2.57: `--scope` with rc 0 left 1 `check-owed-scope-*` directory, while a REFUSED exit and `--scope-batch` left 0; measured under 5.2.37 in a container by ai-dlc-53: 0, not measured on a host bash 5. The fix shape is a here-string reader plus a fixture arm; until it lands, this release's `derivation-differential` fixture routes world ii's record-mode run to its own TMPDIR.
+
+
 ## [0.1084.0] - 2026-11-12
 
 ### BL-986: `/ai-dlc-update` returns the checkout to the working branch after every merge, and gh's merge no longer moves it
