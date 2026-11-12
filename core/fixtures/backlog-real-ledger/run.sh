@@ -206,6 +206,11 @@ seed_r() { # seed_r <dir>
   printf '%s\n' 'STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")' \
     'SUBPROC = {"_gate-procedures", "_dispatch-protocol"}' \
     > "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py"
+  # A seeded roll.py: the validator reads only its GROUPS list, the rows whose step set is None being
+  # the Verdict/Step grammar's bucket tokens (b255 F2b); without one it refuses with exit 2.
+  printf '%s\n' 'GROUPS = [' "    ('one step', 'pipeline', {'implementation'})," \
+    "    ('the whole pipeline bucket', 'pipeline', None)," ']' \
+    > "$d/docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py"
   : > "$d/core/skills/ai-dlc/steps/implementation.md"
   cp "$RLIB" "$d/scripts/backlog-receipt-lib.sh"
   printf 'alpha\nbeta\n' > "$d/probe/subject.txt"

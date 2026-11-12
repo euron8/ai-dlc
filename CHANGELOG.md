@@ -19,6 +19,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1070.0] - 2026-11-11
+
+### BL-817 stays PARTIAL: owed items (a)-(d) are built in this release, and `--archive` judges newly added archive entries by the live rules
+
+On the live ledger an efficiency close now needs a token figure (`NO-TOKENS`), a `Step:` line naming a step (`NO-STEP-BOUND`), a `Verdict: <group> fell|did not fall` field (`NO-DIRECTION`; prose `fell` no longer counts), a group naming that step alone (`OFF-STEP`), and a step unchanged at the merge-base (`STEP-AT-CLOSE`). A `fell` field beside prose `did not fall` is `VERDICT-CONFLICT`; a cited phrase must hit exactly one qualifying line, else `VALUE-NULL`.
+
+`--archive` closes each archive entry added since the merge-base by those rules; entries already there keep the archive rule (BL-507, 509, 511, 513, 515, 568, 569, 694 fail `NO-STEP-BOUND`, BL-594 `NO-TOKENS`). The `NO-STEP-BOUND` header corrects its `Basis` measurement: a blind 0 became 5 live pricing-scope lines, so a close binds only through `Step:`. Dead pre-squash sha pins are re-pinned to 0.1060.0 (fc292b591) or reworded to a shape plus E0 seeds BL-1000, 1005, 1008. This closes nothing.
+
+### BL-808 stays PARTIAL: the partitioner before and after is recorded as a count
+
+Item (2) is discharged as a count, not a timing: `partition-review-diff.sh` inside `review-shard-merge`, xtrace at `ce275f7e9^` and `ce275f7e9`, classified with `fork-profile.sh`'s own classifier, two agreeing runs per side. The partitioner is invoked 659 times costing 11883 external commands before and 686 times costing 12332 after (mean 18.0 per invocation on both sides; +27 invocations from the fixture's new arms), and 0 times in the `plan-shape` control at both shas. Recorded, not resolved: the per-invocation change on identical inputs is not isolated, and subshell forks are uncounted. Item (1) stays owed. BL-808's `Step:` line moves out of BL-810, where 0.1060.0 misplaced it.
+
+### BL-810 and BL-809, BL-812: Step lines
+
+BL-809 gains `Step: implementation` and BL-812 gains `Step: pipeline`, each from the entry's own Basis scope. BL-810 gets none: its scope is four planning steps and the `Step:` field takes one token. BL-810's `Step:` line is OWED before the release that closes it, which otherwise fails closed with `NO-STEP-BOUND`.
+
+### BL-811 stays PARTIAL: the s321 stories elicitation unique-survivor yield is measured, and elicitation rose
+
+`docs/analysis/step-value-stories-elicitation-s321.md` classifies all 87 CRITICAL and MAJOR findings, one table row each. Control on s319 r1: 23 of 27 sampled findings agree; the mechanical split agrees on 43 of 44. Per-story shards: 9 REFOUND, 28 REPAIR-INTRODUCED, 36 UNIQUE-SURVIVED, 11 UNIQUE-unverified, $3.10 per unique survivor (s319 $2.92 and $2.88). The cross shard made none ($11.33). On the step's own population, elicitation rose from $4.76 to $5.96 per story (45 to 70 spawns) while the step rose from $25.0 to $26.9; the gate population ($8.11, 92 spawns) is labelled and excluded. BL-811 owes the cross-shard decision to F2c-cross-shard-removal.
+
+### BL-812 stays PARTIAL: item 1's clause is discharged for stories-test-strategy elicitation only
+
+Item 1's step-value clause for stories-test-strategy rests on the s321 reading (36 per-story survivors at $3.10 each, none from the cross shard), and BL-811 carries the `did not fall` line citing it. Elicitation rose from $4.76 to $5.96 per story on the step's own population, and the step rose from $25.0 to $26.9. Different scripts price the two, so no share of the rise is assigned to either part. The adversarial passes p1 to p3 and their repairs carry no value reading; item 3's reopening sentence still applies to them, and in full to sprint-review and deploy-validate.
+
 ## [0.1069.0] - 2026-11-11
 
 ### BL-979 CLOSED: want() is live in all four story-evidence receipts, each prints RAN for the cells it evaluates, so three vacuous mutant kills are re-scored; the receipt control calls and mutants move off story-evidence-scaffold into three new fixtures
