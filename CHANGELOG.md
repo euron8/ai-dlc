@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1078.0] - 2026-11-12
+
+### Rotation command made runnable
+
+`docs/plans/graph-ledger-full-drain.md` told the reader to "run `plan-rotate.sh`", which names no path and no argument. `scripts/plan-rotate.sh` with no argument exits 2, and it writes nothing without `--apply`. The plan now gives `bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md --apply`.
+
+### Action 6b worktree handling
+
+The fresh-checkout step now creates its directory with `mktemp -d <scratchpad>/XXX` instead of a bare `mktemp -d`. The closing step no longer runs `git worktree remove --force "$W"`. It records `git -C "$W" status --porcelain` first, then removes the worktree without `--force` if clean, or lists it to the lead if dirty.
+
+### Citations re-pinned by line text
+
+Four citations now carry the line where their text sits at BASE:
+- `core/skills/ai-dlc-update/reconcile/lib.sh:278` is now `:429`.
+- `ledger-reverify.sh:402` is now `:707`.
+- `ledger-reverify.sh:927-948` is now `:2931-2952`.
+- `ledger-reverify.sh:312` (`theirs_show()`) is now `:413`.
+
+`ledger-reverify.sh:461` is left unchanged: the text it cited no longer exists at that line, and no other line has been substituted for it.
+
 ## [0.1077.0] - 2026-11-12
 
 ### Plan action 0 and the 45-minute roll call
