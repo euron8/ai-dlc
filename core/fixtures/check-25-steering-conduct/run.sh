@@ -219,13 +219,13 @@ else
 fi
 
 # --- scanned-line-bytes: what must NOT change --------------------------------
-# steps/retro.md:618 reads `transcripts scanned : N` BY LABEL and requires N > 1
+# steps/retro.md:885 reads `transcripts scanned : N` BY LABEL and requires N > 1
 # on any sprint that handed off. A byte change on that line breaks a live gate,
 # so identity goes on a line AFTER it and this arm pins its bytes.
 if grep -qxF "transcripts scanned : 1" <<<"$OA" && grep -qxF "transcripts scanned : 2" <<<"$OC"; then
   ok_ scanned-line-bytes "'transcripts scanned : N' is byte-unchanged and still a bare count (retro.md reads it by label)"
 else
-  bad_ scanned-line-bytes "'transcripts scanned : N' changed bytes -- steps/retro.md:618 reads this line by label"
+  bad_ scanned-line-bytes "'transcripts scanned : N' changed bytes -- steps/retro.md:885 reads this line by label"
 fi
 
 # --- id-cite-match: the MATCH diagnostic names its corpus --------------------
@@ -338,8 +338,11 @@ else
 fi
 
 # --- dir-since-excluded-identity: same branch, on the LIVE call site ---------
-# steps/retro.md:613-616 invokes `--dir <slug> --since <sprint start>`. When the
-# window excludes every member the file list is empty and the same `(none)`
+# steps/retro.md:882-883 invokes `--since <sprint start>` with no path; the
+# validator derives this session's project directory itself (validate-steering-budget.sh
+# :287-288 sets DIR) and names it on its `corpus :` line. This arm drives the explicit
+# `--dir <x> --since` equivalent, which reaches the same code after that derivation.
+# When the window excludes every member the file list is empty and the same `(none)`
 # branch runs, so the audit the retro records cannot say which project directory
 # it was pointed at. Same owner as the arm above; one fix closes both.
 SINCE_CUT="2026-01-01T00:00:00Z"

@@ -200,7 +200,7 @@ sprint_split() {
 #   - THE FOUR HISTORY COMPANIONS, on their own line of the case below: `prd-history.md`,
 #     `product-brief-history.md`, `carry-over-backlog-archive.md` and `architecture-history.md`. The writer
 #     names them at core/skills/ai-dlc/SKILL.md (the `<live> -> <history>` pairs under "Current-state live,
-#     history archive") and core/skills/ai-dlc/steps/artifact-consolidation.md:128; retro.md:651 cuts carry-over
+#     history archive") and core/skills/ai-dlc/steps/artifact-consolidation.md:128; retro.md:721 cuts carry-over
 #     items into the third. The dist-only battery derives that pair list from SKILL.md and fails when a
 #     companion is missing here. Each LIVE side (`prd.md`, `carry-over-backlog.md`, ...) is NOT history.
 #   - `push-candidate-ledger.archive.md`: core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:136.

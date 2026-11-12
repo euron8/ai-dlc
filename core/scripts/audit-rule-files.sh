@@ -658,7 +658,7 @@ else:
 print("--- Class 1: Narrative Drift (tier 2) ---")
 # `the reason is` is NOT an alternative. How its false-positive set reached zero:
 # over the distribution's `--list` corpus (88 files) the token matched exactly 4
-# lines -- handoff.md:86, retro.md:403 and :1216, route.md:289 -- every one a
+# lines -- handoff.md:86, retro.md:461 and :1283, route.md:289 -- every one a
 # POINTER ("the reason is not restated here", "the reason is Rule 27", an
 # uppercase heading wrapping at "AND THE REASON IS"), against a control of 46
 # `measured:` lines the same run flagged (a raw grep counts 49; the other 3 are a
