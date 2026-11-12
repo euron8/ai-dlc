@@ -2179,3 +2179,43 @@ Outside this release's scope: item 8 of this file's real-time-waits list cites b
 Provenance: batch 255, fixture cluster F14; id allocated by the lead.
 
 verify: manual
+
+## BL-984 — nothing owns `tools.decl` completeness, so an undeclared tool silently kills a check
+
+**DEFECT.** `core/scripts/hermetic-run.sh:608` runs every fixture under `env -i PATH="$HR_BIN"`, and `$HR_BIN` (`:556-565`) is a farm of the tools that fixture's `tools.decl` declares, in both layouts. A tool the fixture calls and does not declare is `command not found`, rc 127. Where that call sits in a branch condition (`if cmp -s`, `||`, `!`, `$( )`) or under `2>/dev/null`, the 127 is read as an ordinary answer and the check it feeds stops checking, while the fixture still prints PASS. BL-983 is the measured instance: both of advisor-gate-deny's DID-NOT-APPLY guards were dead. Nothing refuses this. hermetic-run resolves DECLARED tools only, and exits 2 on one that is declared and absent. `scripts/validate-fixture-hygiene.sh` H2 covers only `command -v <declared tool>` skips. `scripts/census-hermetic-coverage.sh` is a census, not a gate, and it compares ok-line sets, so it would read advisor-gate-deny EQUAL.
+
+Proposed mechanism, not built (lead ruling, F15): a hermetic-run.sh arm that fails a fixture whose run log carries `command not found`. Its known limits. Consumer cost: hermetic-run.sh is the shipped engine, so the arm runs on every consumer push and can fail a consumer's own fixtures. False-positive set: unmeasured, for example a fixture that deliberately runs a missing command and does not redirect it. Blind spots: it is blind to redirected stderr (`2>/dev/null`, `2>&1` into a capture), which is exactly the SWALLOWED shape. It is also blind to code that runs only on a failing branch, or only under `--matrix`, which a green run never executes. So a clean log is a FLOOR, not a proof, and the static half of the census below has to stand beside it.
+
+Starting population (the F15 census, static candidates plus executing confirmation under hermetic-run; every instance is OPEN here, and its declaration is a later release):
+
+CENSUS (taken at f76449762 by the F15 census hand; re-checked at the F15 tip). The method: every fixture with a static candidate, 179 of 270, was run through `core/scripts/hermetic-run.sh` with a fresh mktemp verdict store, 4 in parallel. A hit counts only when execution confirms it. PLAIN means an ANSI-stripped `command not found` line in a plain run. TRAP means a BASH_ENV DEBUG trap logged a command whose first word failed `type -t`, which also catches stderr-redirected sites. FORCED means the branch was forced in a scratch copy and that copy run through hermetic-run. Controls in the same runs: advisor-gate-deny read PLAIN 2 and TRAP 2, and absorbed-specifics-survive, whose decl is complete, read PLAIN 0 and TRAP 0. The executing count is a FLOOR. NONE of the census fixtures below is declared yet: the `tools.decl` fix for them is a later release, and only advisor-gate-deny's `cmp` is fixed (BL-983). Operator ruling (b255): the declarations ship as a follow-up release, b256's opener by default.
+- LOUD (PLAIN, the fixture still rc 0): advisor-gate-deny `cmp` (BL-983); prepush-ssh-keepalive `tr` (run.sh:253); readset-stage1-verdict `basename` (run.sh:262, :474, :478) and `cksum` (:466).
+- FAILING-BRANCH-ONLY (FORCED): apply-legacy-script-path `diff` (run.sh:339); wait-beat-liveness `uniq` (run.sh:4450; the FAIL message loses its content).
+- --MATRIX-ONLY (FORCED with MATRIX=1; 0 in a default run): retro-branch-behind-main `wc` (run.sh:474, :587); fold-architect-ledger-join `cut` (run.sh:580-581).
+- SWALLOWED (TRAP, plain rc 0): escalation-citation and transient-ignore-block `md5` (`md5 -q … 2>/dev/null || md5sum`, so the before and after hashes were both empty and compared equal); pause-hook-origin `shasum` (ai-dlc-pause.sh:250, so REQ_SHA was empty); spec-join-integrity `wc` (settled-net.sh:18); dispatch-model-guard `date` and `od`; answer-handoff-routing, core-write-guard and operator-request-capture `od`, `tail` and `mv`, and upstream-routing the same plus `date` (ai-dlc-context-provenance.sh:95/120/125, `2>/dev/null || true`); askuserquestion-citation `git` (run.sh:278, `git -C … >/dev/null 2>&1` inside an `if`, BL-983's shape); adversarial-shard-merge and process-rule-pins `stat` (wait-for-deliverable.sh:528, where STAT_FLAVOR falls to gnu); apply-restamp-theirs, apply-machinery-stamp, apply-relabel-noop-row, emit-report-refusal, layer-crosswalk-home and self-update-fixture-log `uniq` (layer-drift.sh:1773); apply-relabel-noop-row `chmod` (apply.sh:571); apply-worklist-rows and layer-qualifier-grain `mv`; backlog-ledger `sort` (backlog-rotate.sh:541-542); cycle-commits-enforce `sort`; shell-portability `sort` and `paste`; adversarial-citation, backlog-real-ledger, backlog-receipt-binding and bmad-invocation-resolve `rmdir`; h2-attest-scripts-dir `seq` (check-17-bypass/run.sh:260); owed-derivations `ls`; prepush-pool-depth `diff`, `head` and `tee`; readset-skip-b `perl`; remediator-shard-join and validator-arm-selection-b `jq`; retro-branch-behind-main `find` (in a mutated copy of validate-mandatory-rules.sh); wait-beat-liveness and wait-stale-deliverable `perl`.
+
+FIXED: advisor-gate-deny `cmp` only (BL-983). No other fixture above is fixed. A measurement for the later release: with every missing tool above declared, each fixture was re-run through hermetic-run with the invocation counter armed, and all but one read rc 0 with an unchanged budget. That one is prepush-ssh-keepalive.
+
+OUTSIDE A PLAIN DECLARATION, and why:
+- prepush-ssh-keepalive `tr`: OPEN. With `tr` declared the fixture prints `ok (19 assertions)`, but the invocation judge fails it: `FAIL (J3): row "19 *": measured 22, declared 19`. The 3 extra starts are attributed, unverified, to the `$( )` sites at run.sh:258, :279 and :282, which run once `tr` resolves.
+- Already declared, so the hit comes from a site that sets its own PATH, not from tools.decl: wait-beat-liveness `perl` (run.sh:2861 deliberately hides perl from a constructed PATH), readset-skip-b `perl`, remediator-shard-join `jq`, and core-write-guard, operator-request-capture and upstream-routing `tail`.
+- readset-stage1-verdict `rs_sleep`, a side finding: noted, not a close condition of this entry. It is a function (`core/scripts/derive-fixture-readsets.sh:1778`), not a tool. A generated deriver.sh calls it and never defines it, so a plain run prints 6 `rs_sleep: command not found` lines.
+
+LEFT OPEN:
+- `xcode-select` in readset-skip-b: macOS-only, with 0 precedent declarations.
+- `claude` in shipped-rule-version-floor: deliberate, and in READSET_UNKEYED_TOOLS.
+- `pgrep` in consumer-suite-pool: unchecked.
+- `md5sum` and `sha256sum`: second legs of alternations, left undeclared. Precedent declares the first leg (`md5` in 18 fixtures, `shasum` in 81).
+- hook-registration-join and retro-compliance-workflow: no tools.decl and no inputs.decl, so hermetic-run refuses them with rc 2 and nothing was executed.
+- 94 fixtures were scanned statically only (0 hits), which is not an executing proof.
+- 7 fixtures set `PATH=/usr/bin:/bin:…` and are unaudited.
+- The trap changed the verdict of 14 fixtures, so their tags come from plain runs only.
+- Generated-at-runtime .sh files were only partly scanned.
+- False positive: fanout-untracked-corpus's only `cmp` is a comment (run.sh:192).
+- The executing count is a FLOOR.
+
+Receipt: `verify: manual`. No runner-wired receipt exists for an unbuilt hermetic-run arm. A `has` on `hermetic-run.sh` for `command not found` is closable by a comment. A fixture arm that seeds a fixture calling an undeclared tool and asserts hermetic-run refuses it is the receipt shape, and it lands with the arm. What else would satisfy a weaker receipt: declaring every tool the census found, which fixes today's population and leaves the next undeclared tool as silent as this one.
+
+Provenance: batch 255, release F15 (BL-983's population question); id allocated by lead ruling.
+
+verify: manual
