@@ -47,10 +47,11 @@ a batch record.
 
 **BATCH 256 — OPEN.** Lead `ai-dlc-a7`, accepted from `ai-dlc-f3` at `0.1078.0` `e3d2dfc35`. No `graph-*` session is ever messaged.
 - **Graph at open:** `main` `6ee289617`, stamp `0.1061.0` (`e0ebaf019` is an ancestor), 17 behind; s322 has 8/8 stories done, its retro still running; ledger live 4 at `main`, all unfiled at open; one further filing uncommitted in graph's working tree (`PC-S322-RETRO-CARRY-DERIVATION-REPOINT-BLINDS-TREE-MATCH`). Action 7 at open: PENDING 0, no rc regression, banked.
-- **Owners:** 28 sessions, one release each. C1 BL-984 decls; C2 BL-986; C3 BL-987; C4 BL-988; C5 BL-989; C6 BL-981/976/974; N1 BL-978; N2 BL-985; N3 BL-809; N4 BL-819; N5 BL-880; N6 BL-695; N7 BL-510/514; N8 BL-909; N9 BL-990, also files BL-993; N10 BL-972; N11 BL-878; N12 BL-899; N13 core narrative drift (BL-991 reserved); M1 BL-508/541/543/550/552 planning re-audit; M2 BL-842/843/844/846/847 gate-2 outcomes; M3 BL-838/839/912/913; M4 BL-808/810; M5 BL-397/398/512/615; M6 BL-806/583/914/868; B1 BL-915 audit; B2 BL-911 narrowing; B3 BL-992 `install.sh`. UNASSIGNED at this record: BL-982's tree-wide static arm.
+- **Owners:** 29 sessions, one release each. C1 BL-984 decls; C2 BL-986; C3 BL-987; C4 BL-988; C5 BL-989; C6 BL-981/976/974; N1 BL-978; N2 BL-985; N3 BL-809; N4 BL-819; N5 BL-880; N6 BL-695; N7 BL-510/514; N8 BL-909; N9 BL-990, also files BL-993; N10 BL-972; N11 BL-878; N12 BL-899; N13 core narrative drift (BL-991 reserved); M1 BL-508/541/543/550/552 planning re-audit; M2 BL-842/843/844/846/847 gate-2 outcomes; M3 BL-838/839/912/913; M4 BL-808/810; M5 BL-397/398/512/615; M6 BL-806/583/914/868; B1 BL-915 audit; B2 BL-911 narrowing; B3 BL-992 `install.sh`; B4 BL-982 static arm (`ai-dlc-d8`).
+- **Load:** the operator paused 24 of 29 sessions (05:37-05:45); active C1, C2, C3, C5, N9.
 - **Operator rulings:** BL-615 item 2 WAIVED (closes on its outcome line alone); BL-972 contact shape is option 1, "dispatch, then ask"; `AI_DLC_FIXTURE_JOBS=9` for this batch; PRE-SEED BEHIND THE GATE made a standard operating rule (action 0, this release).
 - **Lead rulings:** BL-974 term 7 is records-only (option B, a seal-time check, is on the operator list for its consumer cost); BL-978 fixes all six `apply.sh` scaffold arms; L3 (BL-899's driver-absent-at-base exclusion) has recorded text a/b/c/d, in the entry; STEP-AT-CLOSE: an efficiency entry cannot close in the release that measures it, so each gets a Step line now and closes in a follow-up release; the BL-972 receipt is re-keyed at the ask's position, column definitions in the entry; no object-writing git command inside `/Users/n8/git/graph`.
-- **Carried from batch 255 (binding if the subject is picked):** BL-847 strict blocking is NOT built; the BL-514 and BL-841 goals stay open; BL-880: strike the pre-push step's own probe replay; `apply.sh` "ships alone" is KEPT (operator); a pull is never dispatched by this program; the durable channel's A6 reads 74773/74800 B, so the next durable-channel addition needs a vestigial cut first; kept branches `b255-F2-*`/`F2b-*`, `b255-F2c-*`, `b255-F9-code-tip-7ad8e93e5`, `255-b255-F15-bl983-cmp-tools-decl-census-decls`; archived BL-927 keeps `d0b523eaf` un-re-pinned.
+- **Carried from batch 255 (binding if the subject is picked):** BL-847 strict blocking is NOT built; the BL-514 and BL-841 goals stay open; BL-880: strike the pre-push step's own probe replay; `apply.sh` "ships alone" is KEPT (operator); a pull is never dispatched by this program; the durable channel's A6 reads 74773/74800 B, so the next durable-channel addition needs a vestigial cut first; kept branches `b255-F2-*`/`F2b-*`, `b255-F2c-*`, `b255-F9-code-tip-7ad8e93e5`, `255-b255-F15-bl983-cmp-tools-decl-census-decls`.
 
 ### Derive the state; do not trust the numbers below
 
@@ -772,7 +773,10 @@ candidate's surviving half is upstream's to file and build, never a question for
      operator as silent. When designated, the lead arms ONE non-recurring job at now+45 minutes
      (cron cannot say 45 minutes, and recurring jobs drift: measured next fires 18 then 63 minutes
      apart); each fire re-arms the next job first. It re-arms after a compaction and stops when no
-     session remains active.
+     session remains active. A session the lead has paused stays in the roll call and answers with
+     its one line, and is not told to call `advisor` while paused (operator instruction at batch
+     256). The lead asks active sessions for advisor calls a few at a time: 28 at once at batch 256
+     returned rate-limited.
    - **A graph-watch session.** When the operator assigns one, a peer `ai-dlc-*` session watches
      the consumer READ ONLY for the batch: it reads graph's artifacts, transcripts and ledger; it
      never edits, commits or pushes there; it never messages a `graph-*` session. It reports to the
