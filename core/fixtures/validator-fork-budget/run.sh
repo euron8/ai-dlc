@@ -33,8 +33,8 @@
 #   A6  BL-898       receipt-bl898.sh against the shipped validator: I83/I84's grep count does not
 #                    move with the corpus, an unreadable corpus file errs, and the validator is not
 #                    its own `stories_dir` reader
-#   A7  BL-981       receipt-bl981.sh, an OPEN entry's receipt: it must measure (exit 0 or 1, both
-#                    CELL lines), and exit 9 is FIXTURE BROKEN
+#   A7  BL-981       receipt-bl981.sh, the closing guard: exit 0 with a `CELL rv PASS` and a
+#                    `CELL em PASS` line, anything else red, and exit 9 is FIXTURE BROKEN
 #
 # A1 AND A5 ARE THE TWO THAT MAKE THE OTHERS MEAN ANYTHING. A validator that dies at line 400
 # forks almost nothing and sails under any ceiling; an unbounded-below gate reads that as an
@@ -72,7 +72,7 @@
 # PER PUSH a mutant is scored on its DECIDING cell, which must show the arm's message on the mutated input, and
 # its named TWIN, a different cell it could plausibly co-trip but must leave GREEN. Every cell is a text match on
 # the one mutated reading the mutant already produces, so a cell costs no profiler run and no validator run.
-# `run.sh --matrix` scores each mutant against all twelve cells and prints one MATRIX line per mutant. The matrix
+# `run.sh --matrix` scores each mutant against every cell in MX_CELLS (eighteen) and prints one MATRIX line per mutant. The matrix
 # is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the
 # repo root.
 # m7-field-1 decides two cells because its one fault, a classifier that reads field 1 only, is aimed at both the
@@ -101,8 +101,10 @@
 # MUTANT-MATRIX m17-unread-flag-dropped decides=Runread twins=Rsel
 # MUTANT-MATRIX m18-self-reader decides=Rsel twins=Runread
 # MUTANT-MATRIX m19-unread-probe-return decides=Rprobe twins=Rcount
+# m20 drives a copy of A7's a7_verdict relaxed to accept receipt exit 1; R7fail and R7pass read its two A7PROBE lines.
+# MUTANT-MATRIX m20-a7-accepts-exit-1 decides=R7fail twins=R7pass
 # Every mutant reaches mutant_killed through one helper, as a variable:
-# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all twenty mutants and every name keeps its own row
+# MUTANT-MATRIX-DYNAMIC mx_score why=passes the mutant name as a variable for all twenty-one mutants and every name keeps its own row
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/validator-fork-budget/run.sh --matrix
 #
 # Usage: run.sh [--matrix]
@@ -439,7 +441,7 @@ esac
 # ---- matrix plumbing. The header rows are the only source of a mutant's deciding cells and twin. ----
 # MXL is the rule-9 ledger: a deciding or twin cell appends "dec", a matrix-only cell appends "mx".
 MXL="$TMP/mx.ledger"; : > "$MXL"
-MX_CELLS="Jfloor Jexit Jlast Jceil Jhead Jstale Agap Adisp Psplice Passign Pbase Mpipe Rcount Runread Rsel Rprobe"
+MX_CELLS="Jfloor Jexit Jlast Jceil Jhead Jstale Agap Adisp Psplice Passign Pbase Mpipe Rcount Runread Rsel Rprobe R7fail R7pass"
 mx_row() { # <mutant> <decides|twins> -> that field of the mutant's single header row
   awk -v n="$1" -v f="$2" '
     $1 == "#" && $2 == "MUTANT-MATRIX" && $3 == n {
@@ -470,6 +472,9 @@ mx_red() {
     Runread)  grep -q '^CELL unread FAIL' "$f" ;;
     Rsel)     grep -q '^CELL selfreader FAIL' "$f" ;;
     Rprobe)   grep -q '^CELL clean FAIL' "$f" && grep -qF "own probe: i84_reads scored a corpus holding one unreadable file as fully read" "$f" ;;
+    # A7's cells read the A7PROBE lines m20 writes: a failing receipt run read OK, and the live run read other than OK.
+    R7fail)   grep -qx 'A7PROBE fail OK' "$f" ;;
+    R7pass)   grep -q '^A7PROBE pass ' "$f" && ! grep -qx 'A7PROBE pass OK' "$f" ;;
     *) return 2 ;;
   esac
 }
@@ -756,22 +761,70 @@ sed '/^i84_reads() {/,/^}/s/^  \[ "\$?" -le 1 \] || return 2$/  return 0/' "$VAL
 rcpt_mut m19-unread-probe-return clean,count "$TMP/m19.sh" "m19-unread-probe-return: an i84_reads that loses grep's read failure is refused by the validator's own unread probe"
 
 # ==========================================================================================
-# A7 -- BL-981's RECEIPT, OPEN. It counts git starts from GIT_TRACE2_EVENT: release-version's arm_ab
-# per commit in a scratch repository, and this validator's `--arms I14` run against this tree. Both
-# costs are present while BL-981 is open, so its exit is 1 today and 0 once both are fixed; either is a
-# measurement, and the arm requires both CELL lines. Exit 9 is a refusal to measure: FIXTURE BROKEN.
+# A7 -- BL-981's RECEIPT, as the CLOSING GUARD. It counts git starts from GIT_TRACE2_EVENT:
+# release-version's arm_ab per commit in a scratch repository, and this validator's `--arms I14` run
+# against this tree. Once BL-981 rotates its receipt is archived and inert, so this arm is what keeps
+# either per-item cost from regrowing: it requires exit 0 AND a `CELL rv PASS` line AND a `CELL em PASS`
+# line, and anything else is red. Exit 9 is a refusal to measure: FIXTURE BROKEN.
 # ==========================================================================================
 RCPT981="$DIR/receipt-bl981.sh"
 [ -f "$RCPT981" ] || { echo "FIXTURE ERROR: missing $RCPT981" >&2; exit 2; }
 # NECESSITY: one `--arms I14` run of the validator is the only call that shows I14's per-hook git starts.
 bash "$DIR/receipt-bl981.sh" > "$TMP/r981.out" 2>"$TMP/r981.err"; r981_rc=$?
-r981_cells="$(grep -cE '^CELL (rv|em) (PASS|FAIL) ' "$TMP/r981.out")" || r981_cells=0
-if [ "$r981_rc" = 9 ]; then
-  bad "FIXTURE BROKEN: receipt-bl981.sh refused to measure: $(head -1 "$TMP/r981.err")"
-elif { [ "$r981_rc" = 0 ] || [ "$r981_rc" = 1 ]; } && [ "$r981_cells" = 2 ]; then
-  note "ok    A7 BL-981      -- receipt exit $r981_rc: $(grep '^CELL ' "$TMP/r981.out" | cut -d' ' -f2-3 | tr '\n' ' ')"
+# a7_verdict <receipt exit> <receipt stdout> -> OK | BROKEN | RED <why>. A7's whole condition, one implementation,
+# which m20 below drives in a relaxed copy.
+a7_verdict() {
+  local rvp emp cells
+  rvp="$(grep -c '^CELL rv PASS ' "$2")" || rvp=0
+  emp="$(grep -c '^CELL em PASS ' "$2")" || emp=0
+  cells="$(grep -cE '^CELL (rv|em) (PASS|FAIL) ' "$2")" || cells=0
+  if [ "$1" = 9 ]; then echo BROKEN
+  elif [ "$1" = 0 ] && [ "$rvp" = 1 ] && [ "$emp" = 1 ]; then echo OK
+  else echo "RED exit $1, rv PASS x$rvp, em PASS x$emp, $cells of 2 CELL lines"; fi
+}
+r981_v="$(a7_verdict "$r981_rc" "$TMP/r981.out")"
+case "$r981_v" in
+  BROKEN) bad "FIXTURE BROKEN: receipt-bl981.sh refused to measure: $(head -1 "$TMP/r981.err")" ;;
+  OK) note "ok    A7 BL-981      -- receipt exit 0: $(grep '^CELL ' "$TMP/r981.out" | cut -d' ' -f2-3 | tr '\n' ' ')" ;;
+  *) bad "A7 BL-981 -- receipt-bl981.sh ${r981_v#RED } (exit 0 and one PASS of each owed): $(grep '^CELL ' "$TMP/r981.out" | tr '\n' ' ')$(head -c 400 "$TMP/r981.err" | tr '\n' ' ')" ;;
+esac
+
+# m20 -- A7 RELAXED BACK to the open-entry form (exit 0 OR 1 with both CELL lines). Its deciding cell R7fail feeds the
+# relaxed copy ONE FAILING receipt run, the real receipt-bl981.sh in a scratch root whose enforcement-map validator is a
+# stub making three git starts, so em reads FAIL and the receipt exits 1 with both CELL lines; R7fail is RED when the
+# copy reads that run OK. Its twin R7pass is RED when the copy reads the live receipt run above anything but OK. The
+# control: the unmutated a7_verdict must read the failing run RED, and that run must be exit 1 with an em FAIL line.
+R7S="$TMP/r981m"
+mkdir -p "$R7S/scripts" "$R7S/templates" "$R7S/core/hooks" "$R7S/core/fixtures/validator-fork-budget"
+cp "$RCPT981" "$R7S/core/fixtures/validator-fork-budget/receipt-bl981.sh"
+cp "$REPO/scripts/validate-release-version.sh" "$R7S/scripts/validate-release-version.sh"
+printf '%s\n' 'git rev-parse HEAD >/dev/null; git rev-parse HEAD >/dev/null; git rev-parse HEAD >/dev/null' 'echo "OK: stub"' > "$R7S/scripts/validate-enforcement-map.sh"
+for h in a b c; do printf '#!/bin/sh\n' > "$R7S/core/hooks/ai-dlc-r7$h.sh"; done
+printf 'ai-dlc-r7a.sh ai-dlc-r7b.sh ai-dlc-r7c.sh\n' > "$R7S/templates/settings.json.template"
+{ git init -q "$R7S" && git -C "$R7S" add -A && git -C "$R7S" -c user.name=r -c user.email=r@r -c commit.gpgsign=false \
+    -c core.hooksPath=/dev/null commit -qm r7; } >/dev/null 2>&1
+# NECESSITY: one receipt run over a seeded failing subject is the only input on which the relaxed A7 and the shipped A7 differ.
+bash "$R7S/core/fixtures/validator-fork-budget/receipt-bl981.sh" > "$TMP/r981m.out" 2>"$TMP/r981m.err"; r981m_rc=$?
+B_a7=0
+if [ "$r981m_rc" = 1 ] && grep -q '^CELL em FAIL ' "$TMP/r981m.out" && case "$(a7_verdict 1 "$TMP/r981m.out")" in RED*) true ;; *) false ;; esac; then
+  B_a7=1
 else
-  bad "A7 BL-981 -- receipt-bl981.sh exited $r981_rc with $r981_cells of 2 CELL lines: $(head -c 400 "$TMP/r981.err" | tr '\n' ' ')"
+  bad "m20 control -- the seeded failing receipt run read exit $r981m_rc, $(grep '^CELL ' "$TMP/r981m.out" | tr '\n' ' ')$(head -1 "$TMP/r981m.err"); it must exit 1 with an em FAIL line that the shipped A7 reads RED"
+fi
+a7_m20_src="$(declare -f a7_verdict)"
+a7_m20_old='[ "$1" = 0 ] && [ "$rvp" = 1 ] && [ "$emp" = 1 ]'
+a7_m20_new='{ [ "$1" = 0 ] || [ "$1" = 1 ]; } && [ "$cells" = 2 ]'
+# The replacement carries `&&`, which bash 5.2's patsub_replacement would read as the matched text; bash 3.2 has
+# no such option, so the shopt is silent there.
+shopt -u patsub_replacement 2>/dev/null
+a7_m20_mut="${a7_m20_src/"$a7_m20_old"/$a7_m20_new}"
+if [ "$a7_m20_mut" = "$a7_m20_src" ]; then
+  bad "m20-a7-accepts-exit-1 DID NOT APPLY -- the A7 condition was not found in a7_verdict, so no mutation occurred"
+else
+  eval "${a7_m20_mut/a7_verdict/a7_verdict_m20}"
+  { echo "A7PROBE fail $(a7_verdict_m20 "$r981m_rc" "$TMP/r981m.out")"
+    echo "A7PROBE pass $(a7_verdict_m20 "$r981_rc" "$TMP/r981.out")"; } > "$TMP/mx.m20-a7-accepts-exit-1.txt"
+  mx_score m20-a7-accepts-exit-1 "$B_a7" "m20-a7-accepts-exit-1: an A7 that accepts receipt exit 1 reads a failing receipt run OK"
 fi
 
 # RULE 9: a plain run executes NO matrix-only cell. Deciding and twin cells write the same ledger, so an
@@ -789,7 +842,7 @@ fi
 # reads when a refactor deletes the mutants -- two inert runs compare equal. The floor is the
 # count this file is known to carry; it rises with a new mutant and refuses a run that
 # silently lost one.
-EXPECTED_MUTANTS=20
+EXPECTED_MUTANTS=21
 if [ "$rc" -eq 0 ] && [ "$N_SCORED" -lt "$EXPECTED_MUTANTS" ]; then
   note "FAIL  validator-fork-budget -- only $N_SCORED of $EXPECTED_MUTANTS mutants were scored. A battery that lost a mutant reports the same green line as one that scored them all."
   rc=1

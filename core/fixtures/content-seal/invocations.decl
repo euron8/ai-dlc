@@ -2,8 +2,9 @@
 # Re-measured for BL-974 on 0.1056.0 by two agreeing counted runs (570 and 196 both times; base 510 and 136, read on a clean worktree of 70818fba5): the 60 added starts are all content-seal.sh, the merge and wait-for-deliverable.sh rows unmoved, which is the shape of --mark's term 7 (the merge's --check-shard asked in process, its sealed-sibling admissions by content-seal.sh --admit-marker); no per-start attribution was taken.
 # Re-measured for BL-716 on 0.1057.0 by a counted run (571, budget ok): one start over 974's 570 and one hook start over 84, both CS-K2a (its seal_hook Write and its --mark of an amended adjudicator batch file).
 # Re-measured for the BL-976 follow-up (CS-CSD) by two agreeing counted runs (573 and 27 both times, over 571 and 26): one --check-shard-dir run of the shipped merge (the merge row) and one of the CSD mutant copy under the fixture's WORK (counted in * only).
-573 *
-196 core/scripts/content-seal.sh
+# Re-measured for the BL-976 merge_locate follow-up (CS-CSL) by two agreeing counted runs (579 and 200 both times, over 573 and 196; the merge row unmoved at 27): no CLI start is added. The cell asks four in-process ip runs, and each one that passes the seal phase starts content-seal.sh twice (--check, --last-tool-row): the shipped merge's locx and locy add 4 to the content-seal.sh row, and the CSL mutant's locy adds 2 starts of the copy's content-seal.sh under the fixture's WORK, counted in * only. The mutant's locx refuses at merge_locate and starts nothing.
+579 *
+200 core/scripts/content-seal.sh
 85 core/hooks/ai-dlc-content-seal.sh
 27 core/scripts/merge-adversarial-shards.sh
 8 core/scripts/join-remediator-shards.sh

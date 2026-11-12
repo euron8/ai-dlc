@@ -1607,14 +1607,19 @@ fi
 # installs hid it because install.sh chmods the whole glob after copying; only a PULLING consumer
 # ever saw the real mode. Assert the source mode, so the fix in reconcile/apply.sh (which now
 # derives the bit from git's tree) has a correct bit to derive FROM.
+#
+# ONE index read for the whole unit (BL-981): both loops below only COLLECT the paths, then a single
+# `git ls-files -s -z -- <paths>` answers every mode, never one git start per hook. No paths, no call:
+# `ls-files -s --` with no path lists the whole index. Each path's modes are matched on the WHOLE
+# path field (never a substring: ai-dlc-gate.sh is a suffix of ai-dlc-advisor-gate.sh), every
+# matching line kept in index order and newline-joined, so a conflicted path's stage modes read as
+# the old per-path `| awk '{print $1}'` printed them. The errs then fire in collection order.
+i14_nc=0 i14_rn=0 i14_tab=$'\t' i14_nl=$'\n'
 for h in "$REPO_ROOT"/core/hooks/ai-dlc-*.sh; do
   [ -f "$h" ] || continue
   hb="$(basename "$h")"
   grep -q "$hb" "$TEMPLATE" 2>/dev/null || continue          # unregistered -> I13 already errs
-  m="$(git -C "$REPO_ROOT" ls-files -s -- "core/hooks/$hb" 2>/dev/null | awk '{print $1}')"
-  [ -n "$m" ] || continue                                     # untracked -> not shippable yet
-  [ "$m" = "100755" ] \
-    || err "hook '$hb' is registered in templates/settings.json.template but is COMMITTED $m, not 100755. settings.json invokes it as a bare path, so every consumer that PULLS it gets it non-executable and INERT — its enforcement silently absent while every content check reports green. Fix with: git update-index --chmod=+x core/hooks/$hb"
+  i14_kind[i14_nc]=h i14_rel[i14_nc]="core/hooks/$hb" i14_nc=$((i14_nc + 1))
 done
 
 # Same rule for anything else a consumer executes as a bare path. The session driver and the
@@ -1622,10 +1627,28 @@ done
 # construction: core/git-hooks/pre-push runs them as `bash "$d/run.sh"`, so their mode is inert.)
 for rel in session-driver/ai-dlc-session-driver.sh git-hooks/pre-push; do
   [ -e "$REPO_ROOT/core/$rel" ] || continue
-  m="$(git -C "$REPO_ROOT" ls-files -s -- "core/$rel" 2>/dev/null | awk '{print $1}')"
-  [ -n "$m" ] || continue
-  [ "$m" = "100755" ] \
-    || err "core/$rel is executed as a bare path by consumers but is COMMITTED $m, not 100755. A pulling consumer gets it non-executable. Fix with: git update-index --chmod=+x core/$rel"
+  i14_kind[i14_nc]=b i14_rel[i14_nc]="core/$rel" i14_nc=$((i14_nc + 1))
+done
+if [ "$i14_nc" -gt 0 ]; then
+  while IFS= read -r -d '' i14_rec; do
+    i14_rm[i14_rn]="${i14_rec%% *}" i14_rp[i14_rn]="${i14_rec#*"$i14_tab"}" i14_rn=$((i14_rn + 1))
+  done < <(git -C "$REPO_ROOT" ls-files -s -z -- "${i14_rel[@]}" 2>/dev/null)
+fi
+i14_k=0
+while [ "$i14_k" -lt "$i14_nc" ]; do
+  i14_p="${i14_rel[i14_k]}" m="" i14_j=0
+  while [ "$i14_j" -lt "$i14_rn" ]; do
+    if [ "${i14_rp[i14_j]}" = "$i14_p" ]; then m="${m:+$m$i14_nl}${i14_rm[i14_j]}"; fi
+    i14_j=$((i14_j + 1))
+  done
+  i14_k=$((i14_k + 1))
+  [ -n "$m" ] || continue                                     # untracked -> not shippable yet
+  [ "$m" = "100755" ] && continue
+  if [ "${i14_kind[i14_k - 1]}" = h ]; then
+    err "hook '${i14_p#core/hooks/}' is registered in templates/settings.json.template but is COMMITTED $m, not 100755. settings.json invokes it as a bare path, so every consumer that PULLS it gets it non-executable and INERT — its enforcement silently absent while every content check reports green. Fix with: git update-index --chmod=+x $i14_p"
+  else
+    err "$i14_p is executed as a bare path by consumers but is COMMITTED $m, not 100755. A pulling consumer gets it non-executable. Fix with: git update-index --chmod=+x $i14_p"
+  fi
 done
 
 # --- I15: ONE anchor grammar. layer-drift.sh REPORTS a heading-number collision and
@@ -6513,7 +6536,16 @@ i75_norm() {
 # The chain only: from the override read to the cwd walk. The terminal guard is asserted
 # separately because its two forms are both correct.
 i75_chain() { i75_norm "$1" | sed -n '/^ROOTVAR="\${AI_DLC_PROJECT_ROOT:-}"$/,/ai_dlc_resolve_root "\$(pwd)"/p'; }
-i75_failsclosed() { i75_norm "$1" | grep -qE 'exit [0-9]|:-/nonexistent'; }
+# The reader DRAINS its pipe: an awk that records the match and decides in END. Never `grep -q`,
+# and never `grep > /dev/null` either, which GNU grep treats as `-q`. An early-exit reader leaves
+# at the first match while grep and sed are still writing the span, and git runs a pre-push hook
+# with SIGPIPE IGNORED, so each writer prints `stdout: Broken pipe` to this validator's stderr.
+# merge-review-shards.sh's span strips to 76042 bytes and matches at byte 8003, so 68039 are left
+# to write, past the 64 KiB pipe buffer. Measured on the old reader with SIGPIPE ignored, two
+# batches of 40 runs: the sed line 40 and 40 times, the grep line 34 and 23 times, so two runs of
+# one tree differed by the grep line.
+# The verdict never changed, but validator-arm-selection compares stderr byte for byte.
+i75_failsclosed() { i75_norm "$1" | awk '/exit [0-9]|:-\/nonexistent/ { f = 1 } END { exit (f ? 0 : 1) }'; }
 
 i75_subjects="$(grep -lE 'AI_DLC_PROJECT_ROOT|CLAUDE_PROJECT_DIR|ai_dlc_resolve_root' \
   "$REPO_ROOT"/core/scripts/*.sh 2>/dev/null | sort)"

@@ -677,10 +677,50 @@ else
 fi
 }
 
+# ONE `git log -z` READS EVERY SHORT NAME AND SUBJECT, as `form_findings_in` reads its messages:
+# taken only when every member is a full object name, and its answer kept only when it returned
+# exactly one record per member, in order, each naming that member as its %H. Anything else
+# (`HEAD`, a tag, a short or unreadable sha) runs the two per-commit reads below for the WHOLE
+# list, which are the reference this pass reproduces, stderr included. The lookup per commit is
+# an array index, never a fork. An empty list makes no git call here at all.
 arm_ab() {
+local ab_n=0 ab_got=0 ab_i=0 ab_fast=1 ab_rec ab_rest
+local -a ab_want=() ab_short=() ab_subj=()
 for c in $COMMITS; do
+  ab_want[ab_n]="$c"; ab_n=$((ab_n+1))
+  case "${#c}" in 40|64) ;; *) ab_fast=0 ;; esac
+  case "$c" in *[!0-9a-f]*) ab_fast=0 ;; esac
+done
+if [ "$ab_n" = 0 ]; then
+  ab_fast=0
+elif [ "$ab_fast" = 1 ]; then
+  while IFS= read -r -d '' ab_rec || [ -n "$ab_rec" ]; do
+    [ "$ab_got" -lt "$ab_n" ] && [ "${ab_rec%% *}" = "${ab_want[ab_got]}" ] || { ab_fast=0; break; }
+    ab_rest="${ab_rec#* }"
+    case "$ab_rest" in
+      *' '*) ab_short[ab_got]="${ab_rest%% *}"; ab_rest="${ab_rest#* }" ;;
+      *) ab_short[ab_got]="$ab_rest"; ab_rest="" ;;
+    esac
+    while [ "${ab_rest%$'\n'}" != "$ab_rest" ]; do ab_rest="${ab_rest%$'\n'}"; done
+    ab_subj[ab_got]="$ab_rest"
+    ab_got=$((ab_got+1))
+  # ITS STDERR IS CAPTURED, NEVER DISCARDED: any byte there (git's `refname is ambiguous` warning
+  # for a branch named after a full sha is one) is a warning the per-commit reads would print, so
+  # it appends a NUL and a stray record, the count check above rejects the pass, and the per-commit
+  # reads run and print it. Records still reach this loop on the pipe; only stderr is captured.
+  done < <({ ab_err="$(git log -z --no-walk=unsorted --format='%H %h %s' "${ab_want[@]}" 2>&1 >&3)"
+             [ -z "$ab_err" ] || printf '\0stderr'; } 3>&1)
+  [ "$ab_fast" = 1 ] && [ "$ab_got" = "$ab_n" ] || ab_fast=0
+fi
+for c in $COMMITS; do
+  if [ "$ab_fast" = 1 ]; then
+    short="${ab_short[ab_i]}"
+    subject="${ab_subj[ab_i]}"
+    ab_i=$((ab_i+1))
+  else
   short="$(git rev-parse --short "$c")"
   subject="$(git log -1 --format=%s "$c" 2>/dev/null)"
+  fi
 
   version="$(git show "$c:VERSION" 2>/dev/null | tr -d '[:space:]')"
   if [ -z "$version" ]; then

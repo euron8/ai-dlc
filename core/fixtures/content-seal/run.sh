@@ -38,6 +38,10 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # CSD (merge-arms.sh CS-CSD) drops `--` from the merge's basename/dirname; its cells are --check-shard-dir dirs
 # asked of the CLI in one run per program, and the plain dir is the twin that answers OK under both.
 # MUTANT-MATRIX CSD decides=dashx,stderr twins=plain
+# CSL (merge-arms.sh CS-CSL) restores merge_locate's bare `cd "$SHARD_DIR"`; its cells are in-process merges of one world
+# copied under a root named -x… (locx) and y… (locy), each handed RELATIVE from the copies' parent. The two mutants are
+# disjoint: CSL trips no CSD cell and CSD trips neither CSL cell (merge_place reads the dir after locate made it absolute).
+# MUTANT-MATRIX CSL decides=locx twins=locy
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/content-seal/run.sh --matrix
 #
 # Exit: 0 every arm passed, 1 an arm failed, 2 the fixture could not run.

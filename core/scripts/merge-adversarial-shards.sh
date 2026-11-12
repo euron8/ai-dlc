@@ -1242,6 +1242,10 @@ derived_set_main() {
 merge_locate() {
 SHARD_DIR="${1%/}"
 [ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
+# A RELATIVE operand is entered as ./<dir>: a bare `cd -x/...` reads `-x` as an option, `cd -- -` goes to
+# OLDPWD, and an exported CDPATH redirects both a bare and a `--` operand. `./` is immune to all three, so the
+# cd enters the very directory `[ -d ]` tested; with CDPATH unset the resolved SHARD_DIR string is unchanged.
+case "$SHARD_DIR" in /*) ;; *) SHARD_DIR="./$SHARD_DIR" ;; esac
 SHARD_DIR="$(cd "$SHARD_DIR" && pwd)" || refuse "shard directory $1 is not enterable"
 merge_place
 }
