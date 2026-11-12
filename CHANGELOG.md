@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1089.0] - 2026-11-12
+
+### BL-912 stays PARTIAL: the 9-call gap is traced (444 = 435 + 9), the hooks ran start to close in s322
+
+BL-912 gains a `**Reading on s322 (batch b256; provisional, not an `Outcome measured:` line).**` paragraph. `verify: manual` is unchanged and the entry gets no LANDED line. The 435 counts Edit, Write, MultiEdit or NotebookEdit calls on `pipeline-snapshot.md` over the 8 s321 lead transcripts (428 Edit, 7 Write), and it is also 435 over assistant records alone. A scan over every record type gives 844 (831 Edit, 13 Write), because 409 timestamp-less api-request-blob records repeat calls. 444 = 435 + 9 Edits in the s320 lead transcript dd2df1d7, and the 1,062 `snapshot-update.sh` lead Bash calls in s322 reproduce (s321 938, s320 2). The window is partial (graph `ed61de745`, s322 retro still running), so the `Outcome measured:` line stays owed to s322's close. A second close precondition remains: the expected movement spans every planning step plus implementation, while `Step:` is the single token `stories-test-strategy`.
+
+### BL-913 stays PARTIAL: 898 and 529 reproduce, 1,052 and 2.9 h do not
+
+BL-913 gains a `**Reading on s322 (batch b256; provisional, not an `Outcome measured:` line).**` paragraph. `verify: manual` is unchanged and the entry gets no LANDED line. On the s320 baseline the 898 reproduces exactly on the same 7 transcripts, and so do the 529 commands naming a gate script. The 1,052 does not reproduce (the 10 sprint_id 320 transcripts give 1,031), and the 2.9 h of 15.8 h does not (the implementation window gives 2.71 h of 13.56 h, 20.0%). Calls per story fell from 56.5 to 41.8 and the gate-script class from 12.5 to 7.4 min per story (41% lower), but total lead active time per story rose from 1.04 h to 1.55 h. Still owed: the `Outcome measured:` line after s322's retro closes, the whole-sprint count, confirmation that no later resume re-enters implementation, and the 21-call residual and the 15.8 h window, both untraced.
+
+### BL-838 stays PARTIAL: the opus/medium half of the dev-escalated ruling has now run, as 3 re-dispatches in s322
+
+BL-838 gains a `**Reading on s322 (batch b256; provisional, not an `Outcome measured:` line).**` paragraph. `verify: manual` is unchanged and the entry gets no LANDED line. The spawn ledger (9569 rows) reads for s322 dev sonnet/medium 66, qa sonnet/medium 31, dev-escalated sonnet/high 6 and opus/medium 3, so the b255 paragraph's "has not run in any graph sprint" predates it. Only stories 1, 2 and 5 ran dev-escalated, each at sonnet/high first and then re-dispatched at opus/medium. To window end s322 has 8 stories, gate-1 2.50 and gate-2 1.75 passes per story, with 2 of 8 at pass 1 through both gates. Still owed: the close-form `Outcome measured:` line on the first sprint clean on `dev-escalated` at opus/medium, with the seat-hour and dollar figures (not derived here), and s322's whole-sprint figures.
+
+### BL-839 stays PARTIAL: the `held:` grammar went unused in s322 (0 holds) and the validator ran once, at the exit site
+
+BL-839 gains a `**Reading on s322 (batch b256; provisional, not an `Outcome measured:` line).**` paragraph. `verify: manual` is unchanged and the entry gets no LANDED line. In `snapshot-update.sh` calls from the 14 transcripts with records from 2026-11-09, s322 has 0 `held:` open calls and 0 close calls. The s321 control is 8 open calls carrying 10 items and 15 close calls carrying 20 items. The s322 lead ran `validate-held-stories.sh` once, at the `implementation.md:726` exit site (2026-11-12T03:32:49Z in e444bf13), and 0 times at the `_gate-procedures.md:50` sub-step site. The s321 lead transcripts show 98 deduped runs. The scope probe's ~69 does not reproduce as invocations, since it was a substring count of mentions. Whether the s320 failure recurred is not established, and s322 carries 0 holds in the `held:` grammar, so the `Outcome measured:` line, owed to a sprint that holds stories, stays owed.
+
+### BL-1015 filed OPEN: the s322 lead never ran `validate-held-stories.sh` at the sub-step snapshot site
+
+BL-1015 is filed OPEN as a DEFECT, with `verify: manual` and no LANDED line. Graph's `_gate-procedures.md:50`, inside "Sub-step snapshot update", runs the validator unconditionally after every story transition. In s322 the lead made 145 `snapshot-update.sh --activity` writes (an upper bound on reaches; 106 name a story transition) and ran the validator there 0 times. Its only run was at the `implementation.md:726` exit site. The controls: s321 made 226 such writes (168 naming a story transition) and ran the validator 98 times, 88 of them at the sub-step site, and the impossible token `ZQXV-held-never-9471` reads 0. The instruction was byte-equal at both sprint starts (`_gate-procedures.md` lines 16-60 hash equal at all six commits compared), and the cause of the stop is not established. Not derived: whether a `ready-for-dev` story existed at each s322 write, so the entry does not claim a skipped run missed a finding. Related: BL-839.
+
 ## [0.1088.0] - 2026-11-12
 
 ### BL-695 CLOSED: the party-wave-barrier detector follows delegated coordinator rounds, and the s321 elicitation yield is cited; BL-1011 filed OPEN
