@@ -58,9 +58,10 @@ ip() {
   ( . "$1" || exit 90
     SUBJECT="${IP_SUBJECT:-}"; ELICIT="${IP_ELICIT:-0}" # set by the merge's argument parse, which sourcing stops short of
     T="$(mktemp -d "$WORK/ip.XXXXXX")" || exit 91
-    ip_stage "$2"
+    ip_stage "${IP_STAGE:-$2}" # IP_STAGE: the same dir spelled absolute, for an operand the test's own cd cannot take
     merge_locate "$2"; merge_rec_paths; merge_seal_path "$1"
-    merge_seal_phase; merge_complete_scan; merge_admission_phase ) > "$MO" 2>&1; RC=$?
+    merge_seal_phase; merge_complete_scan; merge_admission_phase
+    [ -z "${IP_SHOW:-}" ] || printf 'LOCATED %s\n' "$SHARD_DIR" ) > "$MO" 2>&1; RC=$?
 }
 ipref() { [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1"; } # in-process refusal naming <token>
 ippass() { [ "$RC" -eq 0 ] && [ ! -s "$MO" ]; }                         # in-process: every phase passed, nothing printed
@@ -481,6 +482,78 @@ if [ -z "$mCSD" ]; then bad "CS-CSD-mut: DID NOT APPLY -- the copy still carries
 elif ! csd_cell mut dashx && ! csd_cell mut stderr && csd_cell mut plain; then
   mutant_killed "$s_csd" CSD "CS-CSD-mut: killed -- without \`--\` the -x/ dir is refused for the wrong reason with stderr; the plain dir (twin) still answers OK"
 else bad "CS-CSD-mut: the mutant without \`--\` was not killed at dashx with the plain twin OK: $(head -3 "$WORK/csd.mut.out" | tr '\t\n' '  ')"; fi
+
+# CS-CSL: merge_locate ENTERS a RELATIVE shard dir whose first component begins with `-` (BL-976 follow-up). Its cd
+# takes a relative operand as ./<dir>; a bare `cd -x…/…` reads `-x` as an option and the merge refuses a real dir as
+# "not enterable". Two copies of the CS-M0 world are made the one way wc_get makes a copy (cp, then every recorded
+# root path rewritten), side by side under WORK, one property apart: the root's NAME begins with `-x` or with `y`.
+# Each is asked IN PROCESS (ip: locate, record paths, seal phase, marker-set check, admission) from a subshell cd'd
+# to WORK with the RELATIVE dir, and must pass every phase and print exactly `LOCATED <WORK>/<that relative dir>`:
+#   locx  -x<root>/<shard dir>  the decider (the mutant refuses it, `cd: -x: invalid option` then "not enterable")
+#   locy  y<root>/<shard dir>   the twin: the same answer under both programs, and the proof the mutant ran
+# The mutant CSL deletes the ./ line, restoring the bare `cd "$SHARD_DIR"`. --check-shard on a relative -x… shard
+# FILE is not a cell: check_shard_main hands that path to a bare `basename` (and `dirname`) before merge_locate.
+csl_old="${d0#"$WORK"/}"; csl_old="${csl_old%%/*}"; csl_rest="${d0#"$WORK/$csl_old"/}"
+csl_copy() { # <prefix> -> 0 when $WORK/<prefix><root> is a copy of d0's world with its recorded root rewritten
+  local nr="$WORK/$1$csl_old" f
+  cp -Rp "$WORK/$csl_old" "$nr" || return 1
+  for f in $(grep -rlF -- "/$csl_old" "$nr" 2>/dev/null); do
+    O="/$csl_old" N="/$1$csl_old" perl -pi -e 's/\Q$ENV{O}\E/$ENV{N}/g' "$f" || return 1
+  done
+}
+csl_run() { # <merge> <prefix> <tag> -> $WORK/csl.<tag>.out, .rc
+  ( cd "$WORK" || exit 92
+    MO="$WORK/csl.$3.out"; IP_SHOW=1 IP_STAGE="$WORK/$2$csl_old/$csl_rest" ip "$1" "$2$csl_old/$csl_rest"
+    echo "$RC" > "$WORK/csl.$3.rc" )
+}
+csl_cell() { # <tag> <cell> -> 0 when the run passed every phase and located the dir it was handed
+  local p; case "$2" in locx) p=-x ;; locy) p=y ;; *) return 1 ;; esac
+  [ "$(cat "$WORK/csl.$1.$2.rc" 2>/dev/null)" = 0 ] && [ "$(cat "$WORK/csl.$1.$2.out")" = "LOCATED $csl_cwd/$p$csl_old/$csl_rest" ]
+}
+csl_cwd="$(cd "$WORK" && pwd)" # the cell's cwd as pwd spells it: a TMPDIR ending in / leaves WORK holding a //
+csl_md="$WORK/mut-CSL"; mCSL=""; csl_n0=0; csl_n1=1
+if [ -n "$csl_old" ] && [ -d "$WORK/$csl_old/$csl_rest" ] && csl_copy -x && csl_copy y && [ ! -e "$csl_md" ] && cp -R "$SRCDIR" "$csl_md"; then
+  csl_n0="$(grep -c -F 'SHARD_DIR="./$SHARD_DIR"' "$SRCDIR/merge-adversarial-shards.sh")" || csl_n0=0
+  sed -e '/SHARD_DIR="\.\/\$SHARD_DIR"/d' "$SRCDIR/merge-adversarial-shards.sh" > "$csl_md/merge-adversarial-shards.sh"
+  csl_n1="$(grep -c -F 'SHARD_DIR="./$SHARD_DIR"' "$csl_md/merge-adversarial-shards.sh")" || csl_n1=0
+  [ "$csl_n0" = 1 ] && [ "$csl_n1" = 0 ] && ! cmp -s "$SRCDIR/merge-adversarial-shards.sh" "$csl_md/merge-adversarial-shards.sh" \
+    && mCSL="$csl_md/merge-adversarial-shards.sh"
+fi
+csl_run "$MERGE" -x ship.locx; csl_run "$MERGE" y ship.locy
+if [ -n "$mCSL" ]; then csl_run "$mCSL" -x mut.locx; csl_run "$mCSL" y mut.locy; fi
+if [ "$MX" = 1 ]; then
+  [ -n "$mCSL" ] || { echo "MATRIX CSL DID-NOT-APPLY"; exit 2; }
+  csd_run "$mCSL" csl; csl_run "$mCSD" -x csd.locx; csl_run "$mCSD" y csd.locy
+  _trip=""
+  for _cw in locx locy; do
+    if csl_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
+    if csl_cell mut "$_cw"; then _mv=ok; else _mv=FAIL; fi
+    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
+    echo "MATRIX CSL $_cw shipped=$_sh mutant=$_mv killed=$_k"
+  done
+  for _cw in dashx dashn plain stderr; do
+    if csd_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
+    if csd_cell csl "$_cw"; then _mv=ok; else _mv=FAIL; fi
+    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
+    echo "MATRIX CSL $_cw shipped=$_sh mutant=$_mv killed=$_k"
+  done
+  echo "MATRIX-ROW CSL tripped=[${_trip# }]"
+  _trip=""
+  for _cw in locx locy; do
+    if csl_cell ship "$_cw"; then _sh=ok; else _sh=FAIL; fi
+    if csl_cell csd "$_cw"; then _mv=ok; else _mv=FAIL; fi
+    if [ "$_sh" != "$_mv" ]; then _k=yes; _trip="$_trip $_cw"; else _k=no; fi
+    echo "MATRIX CSD $_cw shipped=$_sh mutant=$_mv killed=$_k"
+  done
+  echo "MATRIX-ROW CSD+loc tripped=[${_trip# }]"
+fi
+s_csl=0; csl_cell ship locx && csl_cell ship locy && s_csl=1
+if [ "$s_csl" = 1 ]; then ok "CS-CSL: merge_locate enters a relative -x… shard dir and passes every phase, locating the same dir its y… twin locates"
+else bad "CS-CSL: merge_locate over a relative -x… dir and its y… twin (rc=$(cat "$WORK/csl.ship.locx.rc" 2>/dev/null)/$(cat "$WORK/csl.ship.locy.rc" 2>/dev/null)): $(head -3 "$WORK/csl.ship.locx.out" 2>/dev/null | tr '\n' ' ') | $(head -3 "$WORK/csl.ship.locy.out" 2>/dev/null | tr '\n' ' ')"; fi
+if [ -z "$mCSL" ]; then bad "CS-CSL-mut: DID NOT APPLY -- the ./ line is not in merge-adversarial-shards.sh exactly once ($csl_n0, $csl_n1 after), the copy did not change, or the -x…/y… world copies were not made"
+elif ! csl_cell mut locx && csl_cell mut locy; then
+  mutant_killed "$s_csl" CSL "CS-CSL-mut: killed -- with the bare cd the relative -x… dir is refused as not enterable; the y… twin still locates"
+else bad "CS-CSL-mut: the bare-cd mutant was not killed at locx with the locy twin passing: $(head -3 "$WORK/csl.mut.locx.out" 2>/dev/null | tr '\n' ' ')"; fi
 
 # ---- THE MUTANT x CASE MATRIX. A cell is one mutant's merge over one world; it prints `killed=yes` when its
 # verdict diverges from the shipped one on the same world. `--matrix` (argv, never the environment) runs EVERY

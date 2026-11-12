@@ -7,16 +7,25 @@
 #       release commits, `rv_init --range` resolves the list, and only `arm_ab` is traced, over the last
 #       1 and the last 3 commits. PASS when the two runs differ by at most 4 starts, that is at most 2
 #       per commit: the two `git show` blob reads of VERSION and CHANGELOG.md at that commit, which
-#       BL-981 does not owe. Today `rev-parse --short` and `log -1` add 2 more per commit, so the cost is 4 per commit.
+#       BL-981 does not owe. At base `rev-parse --short` and `log -1` added 2 more per commit, so the cost was 4 per commit (4 and 12 over 1 and 3 commits); at the tip it reads 3 and 7.
 #       Keyed on the TOTAL per-commit start count, so a swap of one per-commit call for another reads FAIL.
 #   em  scripts/validate-enforcement-map.sh I14 pays one `git ls-files -s` per registered hook and one
 #       per bare-path file. Driven as `--arms I14` against this tree. PASS when that run makes at most 2
-#       git starts in all, of any command. Today it makes one per registered tracked hook plus 2.
+#       git starts in all, of any command. At base it made one per registered tracked hook plus 2 (27 with 25 hooks); at the tip it makes 1.
+#       AND I14 must still SEE a mode: the start count alone passes a rewrite that never errs (a mode that
+#       parses empty skips every hook as untracked, at 1 start). So a second `--arms I14` run reads a COPY of
+#       the index (GIT_INDEX_FILE, which reaches the validator's `git -C "$REPO_ROOT" ls-files`; the index is
+#       found by `rev-parse --git-path index`, so a linked worktree's works) in which the registered tracked
+#       hook in the MIDDLE of the sort order is `update-index --chmod=-x`; the run must print exactly one
+#       `COMMITTED 100644` line, a `FAIL: hook '<that hook>' ...` line, and the unseeded run, the control,
+#       none. Both outputs are read from captured files. The start count is taken on the unseeded run only.
 #
 # Exit 0 when both cells pass, 1 when one fails, 9 when it cannot measure: no root, a trace that recorded
 # nothing, a scratch repository that did not build, an arm_ab pass that did not check exactly the commits
-# asked for, an I14 run that never reached its verdict line, or a tree with fewer than 3 registered tracked
-# hooks (where the per-hook shape could not exceed the em bound, so a pass would prove nothing).
+# asked for, an I14 run that never reached its verdict line, a tree with fewer than 3 registered tracked
+# hooks (where the per-hook shape could not exceed the em bound, so a pass would prove nothing), or a mode
+# probe that could not run (no index to copy, a seed that did not land at 100644, or an unseeded run that
+# already reports a 0644 hook and so leaves the probe no clean control).
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # An inherited git environment would point the scratch repository's writes at the caller's store.
@@ -77,21 +86,40 @@ fi
 # --- em: git starts of the I14 unit ---------------------------------------------------------------------
 TEMPLATE="$root/templates/settings.json.template"
 [ -f "$TEMPLATE" ] || { echo "receipt-bl981: no $TEMPLATE" >&2; exit 9; }
-reg=0
+reg=0 regl=""
 while IFS= read -r p; do
   [ -n "$p" ] || continue
-  grep -q "${p##*/}" "$TEMPLATE" && reg=$((reg + 1))
+  if grep -q "${p##*/}" "$TEMPLATE"; then reg=$((reg + 1)); regl="$regl$p
+"; fi
 done <<<"$(git -C "$root" ls-files -- 'core/hooks/ai-dlc-*.sh' 2>/dev/null)"
+# The mode probe's hook sits in the MIDDLE of the sort order, never first or last.
+probe="$(printf '%s' "$regl" | sed -n "$(( (reg + 1) / 2 ))p")"
 [ "$reg" -ge 3 ] || { echo "receipt-bl981: only $reg registered tracked hook(s); the per-hook shape cannot exceed the bound here" >&2; exit 9; }
 : > "$W/em.ev"
 ( cd "$root" && GIT_TRACE2_EVENT="$W/em.ev" bash "$EM" --arms I14 ) < /dev/null > "$W/em.out" 2>&1; em_rc=$?
 case "$em_rc" in 0|1) ;; *) echo "receipt-bl981: --arms I14 exited $em_rc" >&2; exit 9 ;; esac
 grep -qE '^(OK|FAIL): ' "$W/em.out" || { echo "receipt-bl981: the --arms I14 run never reached its verdict line" >&2; exit 9; }
 e="$(starts "$W/em.ev")"
-if [ "$e" -le 2 ]; then
-  echo "CELL em PASS --arms I14 git starts: $e with $reg registered tracked hooks (bound 2)"
+# The mode probe: the same run over an index copy with one registered hook seeded 0644.
+pb="${probe##*/}"
+ctl="$(grep -c 'COMMITTED 100644' "$W/em.out")" || ctl=0
+[ "$ctl" = 0 ] || { echo "receipt-bl981: the unseeded --arms I14 run already reports $ctl COMMITTED 100644 line(s), so the mode probe has no clean control" >&2; exit 9; }
+idx="$(git -C "$root" rev-parse --path-format=absolute --git-path index 2>/dev/null)" && [ -f "$idx" ] \
+  || { echo "receipt-bl981: cannot locate the index of $root" >&2; exit 9; }
+cp "$idx" "$W/em.index" && GIT_INDEX_FILE="$W/em.index" git -C "$root" update-index --chmod=-x "$probe" \
+  || { echo "receipt-bl981: could not seed $probe at 100644 in an index copy" >&2; exit 9; }
+case "$(GIT_INDEX_FILE="$W/em.index" git -C "$root" ls-files -s -- "$probe")" in
+  "100644 "*) ;; *) echo "receipt-bl981: the seeded index copy does not carry $probe at 100644" >&2; exit 9 ;;
+esac
+( cd "$root" && GIT_INDEX_FILE="$W/em.index" bash "$EM" --arms I14 ) < /dev/null > "$W/emp.out" 2>&1; emp_rc=$?
+case "$emp_rc" in 0|1) ;; *) echo "receipt-bl981: the seeded --arms I14 run exited $emp_rc" >&2; exit 9 ;; esac
+grep -qE '^(OK|FAIL): ' "$W/emp.out" || { echo "receipt-bl981: the seeded --arms I14 run never reached its verdict line" >&2; exit 9; }
+hit="$(grep -cF "FAIL: hook '$pb' is registered in templates/settings.json.template but is COMMITTED 100644" "$W/emp.out")" || hit=0
+all="$(grep -c 'COMMITTED 100644' "$W/emp.out")" || all=0
+if [ "$e" -le 2 ] && [ "$hit" = 1 ] && [ "$all" = 1 ]; then
+  echo "CELL em PASS --arms I14 git starts: $e with $reg registered tracked hooks (bound 2); $pb seeded 0644 named by $hit of $all COMMITTED 100644 line(s), unseeded 0"
 else
-  echo "CELL em FAIL --arms I14 git starts: $e with $reg registered tracked hooks (bound 2): per-file index reads remain"
+  echo "CELL em FAIL --arms I14 git starts: $e with $reg registered tracked hooks (bound 2); $pb seeded 0644 named by $hit of $all COMMITTED 100644 line(s) (want 1 of 1), unseeded 0"
   fail=1
 fi
 
