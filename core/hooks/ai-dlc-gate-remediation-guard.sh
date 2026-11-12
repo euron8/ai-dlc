@@ -110,13 +110,22 @@
 #   is the entire claim; there is no second piece of evidence to fall back on.
 #
 #   ARM 8 IS DELIBERATELY MIXED, AND THIS IS THE ONE JUDGEMENT CALL IN THE FILE.
-#   Its STRUCTURAL requirements are mandatory (nonce bound, non-empty
+#   Its STRUCTURAL requirements are mandatory (nonce bound, an agent-id-shaped
 #   `remediator_agent_id`, `repaired_checks` covering at least one live FAIL). Its
 #   transcript CORROBORATION -- does that agent_id appear anywhere in the session
 #   corpus -- is fail-closed when the transcript is READABLE and the id is absent
 #   (that is a forgery signal and must not lift), and fail-open when no transcript
 #   is readable at all (refusing every lift on a harness that omitted the field
 #   would wedge the pipeline on the honest path). The fail-open case is logged.
+#   Its two fields are read in arm H's repair-record grammar: `remediator_agent_id` by
+#   `repair_value`, byte-identical to `validate-adversarial-convergence.sh`'s, and
+#   `repaired_checks` by `repair_list`, which opens with repair_value's match line; both
+#   bound by gate-remediation-deny arms RR-B-value and RR-B-list. The label is the line's
+#   first token after any leading whitespace or `-` (a `- ` bullet), emphasis allowed, the
+#   colon straight after it or its emphasis, the first such row wins, and a quoted (`> `) row
+#   or a label that is not the first token is not read. The grammar authenticates nothing (a
+#   bullet row's writer can write a column-0 one); what binds is the nonce, the live-FAIL token
+#   match and the transcript substring corroboration as before, plus a NEW agent-id shape floor.
 #
 #   ARM 7b FAILS CLOSED, AND ITS CITATION IS VERIFIED LIKE ARM 9'S.
 #   Arm 6 lets the lead write `docs/escalations/pending.md` while denied, so a suppression is
@@ -1852,6 +1861,30 @@ esac
 # in the file's own text, which is the same exactness by a different route. What is
 # never accepted is proximity -- the 5-line-window defect `validate-mandatory-rules.sh`
 # carries for the self-execution waiver, where any nearby record satisfies the match.
+#
+# THE FIELD GRAMMAR IS ARM H'S. `repair_value` below is byte-identical to the definition in
+# `validate-adversarial-convergence.sh`, and `repair_list` opens with the same `match(...)` line;
+# gate-remediation-deny holds both bindings. Copied, never sourced: a hook that failed closed on
+# an absent sibling script would wedge every remediation on that consumer.
+repair_value() {  # $1 label  $2 file
+  awk -v l="$1" '
+    { if (match($0, "^[[:space:]-]*[*_`]?[*_`]?" l "[*_`]?[*_`]?:")) {
+        v = substr($0, RSTART + RLENGTH)
+        sub(/^[*_`]+[[:space:]]+/, "", v); sub(/^[[:space:]]+/, "", v); gsub(/[`*]/, "", v)
+        sub(/[[:space:]].*$/, "", v); print v; exit } }' "$2"
+}
+# The WHOLE value of the first row bearing the label, as a space-separated token list: same line
+# match and leading strip as repair_value, then backticks, `*`, brackets and both quote marks
+# removed and commas read as separators. The quote mark arrives by -v: the awk text is in a
+# single-quoted literal and cannot carry one.
+repair_list() {  # $1 label  $2 file
+  awk -v l="$1" -v q="'" '
+    { if (match($0, "^[[:space:]-]*[*_`]?[*_`]?" l "[*_`]?[*_`]?:")) {
+        v = substr($0, RSTART + RLENGTH)
+        sub(/^[*_`]+[[:space:]]+/, "", v); sub(/^[[:space:]]+/, "", v); gsub(/[`*"]/, "", v)
+        gsub(/\[/, "", v); gsub(/\]/, "", v); gsub(q, "", v); gsub(/,/, " ", v)
+        print v; exit } }' "$2"
+}
 repair_record_lifts() { # -> 0 lifts, 1 does not; sets LIFT_REC / LIFT_WHY
   local cand rid checks c f
   LIFT_REC=""; LIFT_WHY=""
@@ -1860,13 +1893,20 @@ repair_record_lifts() { # -> 0 lifts, 1 does not; sets LIFT_REC / LIFT_WHY
     [ -f "$cand" ] || continue
     grep -qF "$LIVE_NONCE" "$cand" 2>/dev/null || continue
 
-    rid="$(sed -n 's/^[[:space:]]*remediator_agent_id:[[:space:]]*//p' "$cand" 2>/dev/null | head -1)"
-    rid="$(printf '%s' "$rid" | sed 's/[[:space:]]*$//')"
+    rid="$(repair_value remediator_agent_id "$cand" 2>/dev/null)"
     [ -n "$rid" ] || { LIFT_WHY="${cand}: no remediator_agent_id"; continue; }
+    # SHAPE FLOOR. First-token extraction turns prose such as `none available (...)` into
+    # `none`, which every transcript contains; an id is >= 8 chars, carries a digit, and is
+    # drawn from the id alphabet.
+    case "$rid" in *[0-9]*) c=1 ;; *) c=0 ;; esac
+    if [ "${#rid}" -lt 8 ] || [ "$c" -eq 0 ] || \
+       ! LC_ALL=C grep -Eq '^[A-Za-z0-9][A-Za-z0-9_@.:-]*$' <<< "$rid"; then
+      LIFT_WHY="${cand}: remediator_agent_id '${rid}' is not an agent id; a passing id is one token of at least 8 characters carrying a digit, letters/digits/_@.:- only, first character a letter or digit: the teammate name the remediator was dispatched under (e.g. remediator-s322-gate3) or the agentId the spawn returned; the bare role name remediator does not pass (.claude/team-roles/remediator.md)"; continue
+    fi
 
     # The record must claim a check that is ACTUALLY failing right now. Token
     # match, not substring: `3` must not satisfy a record that repaired `3a`.
-    checks="$(sed -n 's/^[[:space:]]*repaired_checks:[[:space:]]*//p' "$cand" 2>/dev/null | head -1 | tr ',' ' ')"
+    checks="$(repair_list repaired_checks "$cand" 2>/dev/null)"
     f=0
     for c in $checks; do
       case " $FAILED_CHECKS " in *" $c "*) f=1; break ;; esac
@@ -2028,9 +2068,9 @@ WHY YOU AND NOT SOMEONE ELSE. You are the most context-saturated agent in the pi
 DO THIS INSTEAD:
 1. DISPATCH a \`remediator\` (\`.claude/team-roles/remediator.md\`), one per failing check or one for the set, with the failing check_ids, the verdict's own evidence strings, and the artifact paths. The dispatch procedure is \`_gate-procedures.md\` -- 'Adversarial repair dispatch', which covers gate remediation too.
 2. JOIN it on its deliverable, the bounded file-wait beat (Rule 29). Do not block on a foreground Agent call.
-3. The remediator writes the REPAIR RECORD at:
-     ${STATE_DIR_NAME}/gate-adjudication/${LIVE_NONCE}.repair.md
-   naming \`${LIVE_NONCE}\`, its own \`remediator_agent_id:\`, and \`repaired_checks:\`. That record is what lifts this denial. A dispatched teammate carries an \`agent_id\` and is never denied by this hook -- it can edit anything.
+3. The remediator puts \`gate_nonce: ${LIVE_NONCE}\`, its own \`remediator_agent_id:\` and \`repaired_checks:\` (naming a FAILed check) in its REPAIR RECORD:
+     ${STATE_DIR_NAME}/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md
+   When the repair was sharded, the one serial-round remediator writes them to \`${STATE_DIR_NAME}/gate-adjudication/${LIVE_NONCE}.repair.md\` instead. Each field opens its own line at column 0 or after a \`- \` bullet, the grammar every repair record uses (\`.claude/team-roles/remediator.md\`). Either record, bound to \`${LIVE_NONCE}\`, lifts this denial. A dispatched teammate carries an \`agent_id\` and is never denied by this hook -- it can edit anything.
 4. THEN re-run the derivations before the next pass, and re-run the failed check PLUS every check whose inputs the repair touched.
 
 WHAT DOES NOT LIFT THIS:

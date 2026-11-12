@@ -19,6 +19,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1083.0] - 2026-11-12
+
+### BL-989 CLOSED: gate repair record field grammar, arm 8 now reads the same grammar the validator does
+
+Consumer candidate `PC-S322-REPAIR-RECORD-FIELD-GRAMMAR-UNDOCUMENTED-BULLET-ROWS-DEFEAT-ARM-8`. LIFT ARM 8 of `core/hooks/ai-dlc-gate-remediation-guard.sh` read `remediator_agent_id` and `repaired_checks` with a column-0 `sed`, so a bullet row such as `- repaired_checks: 3` extracted nothing and the deny stood. `core/team-roles/remediator.md` never named the record, and every other repair record the role writes is bullet-shaped, so a remediator following its own role file wrote the form the hook could not read.
+
+- **Hook.** Arm 8 carries a copy of `repair_value()` that is byte-identical to the one in `core/scripts/validate-adversarial-convergence.sh` (arm H's grammar: the label opens the line after `[[:space:]-]*`, optional 1-2 character `*`, `_` or backtick emphasis, colon immediately after, first token of the value with backticks and `*` stripped). It adds `repair_list()`, which uses `repair_value()`'s match line, to read `repaired_checks`. A fail-closed shape floor on the id (8 characters or more, a digit, `[A-Za-z0-9_@.:-]` only, first character alphanumeric) is added because first-token reading turns `none available (...)` into `none`, which any transcript contains. The refusal text names the shape of a passing id, and the arm 8 header comments name the new pieces. The nonce bind, first-row reading, live-FAIL token match and transcript corroboration are unchanged.
+- **Docs.** `core/team-roles/remediator.md` gains a paragraph and an example block naming both record homes, the three fields and the line grammar, and says the record binds the unsharded or serial remediator, never a shard (one writer in the sharded case). `core/skills/ai-dlc/steps/_gate-procedures.md` "Adversarial repair dispatch" tells the gate caller to give that remediator its own agent id. Both say the guard reads either home and the gate reads only the sprint-directory record.
+- **Fixture.** `core/fixtures/gate-remediation-deny` gains arm RR (a bullet record and an emphasis-wrapped label lift where the column-0 record does; byte identity of `repair_value()` and `repair_list()`'s match line with the validator's; the remediator.md example block lifts, with a PENDING row in the consumer window before the role file reconciles; six near-misses still deny; first-match) and the runner-wired receipt `receipt-bl989.sh`. Nine mutants score arm RR. The receipt classifies the bare-form runner: CLOSE-CANDIDATE at the tip, STILL-LIVE on a tree carrying the base hook.
+- **Citation re-pins.** Nine citations of `ai-dlc-gate-remediation-guard.sh` lines, in six files (`gate-repair-record` `run.sh` and `seed.sh`, `ai-dlc-acknowledge.sh`, `check-owed-derivations.sh`, `gate_adjudication.py`, `docs/plans/pipeline-step-review-s309.md`), are re-pinned to the moved lines. All eleven line-numbered citations of the hook outside the ledgers and this file are within its 2101 lines.
+- **Invocation budget.** `gate-remediation-deny/invocations.decl` moves from 824 to 860 starts and its hook row from 185 to 200, accounted for by arm RR's cells, its mutants and the receipt.
+
+Consumer measurement, read-only, on the reference consumer at graph main `6ee289617`: 98 distinct blobs across both record homes and the three sprint-322 commits, 19 label-bearing. Old reader against new: SAME 10, FIXED 8, CHANGED 0, FLOOR-REJECTED 1 (the sprint-322 `none available` form, which the old reader also denies). The real hook driven at both revisions in a scratch world flips only the sprint-322 bullet record, DENY to ALLOW.
+
+Consumer cost: the bare role name `remediator` is now refused as an id (10 characters, no digit, present in every transcript, so it never corroborated anything). No step or role file documents a dispatch-name convention for the id; the lead supplies one, and the refusal text says what shape passes.
+
+The first gated push went red on handoff-record-carries-return arm (d): the new remediator.md paragraph said `in your return`, the phrase R3 keys on; the clause is reworded and the arm read by name at the rebuilt tip before the re-push. That push ran 70 units in about 31 minutes because only one fixture (validator-arm-selection) was seeded outside the gate, the first live proof that such a seed yields a skip; the re-push seeds the whole carrier list.
+
+### BL-996 FILED (OPEN): a sharded gate repair with no serial round leaves the remediation guard no record to lift on
+
+When the shard join prints `SERIAL-REQUIRED: 0` and `ESCALATED-COUNT: 0`, no serial remediator runs, so no agent receives a gate nonce and an id and nobody writes `gate-adjudication/<nonce>.repair.md`. The joined sprint-directory record carries no gate nonce, so LIFT ARM 8 skips it at the nonce bind and has nothing to lift on. The real hook driven on a world built with the real `join-remediator-shards.sh` reads DENY at base `f11a8e566` and at the tip, so this release adds no new refusal. On the reference consumer at graph main `6ee289617`, 0 of 3 sharded gate repairs fall in this shape. The deny lifts today only by a clean re-run of the failed check or an operator authorization, both of which leave the defect in place.
+
+OPEN, `verify: manual`. No fix is proposed and no runner-wired receipt exists for an unchosen fix.
+
 ## [0.1082.0] - 2026-11-12
 
 ### BL-990 filed and closed
