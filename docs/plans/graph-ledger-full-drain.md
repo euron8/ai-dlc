@@ -39,7 +39,7 @@ pointer at the top. **Go there for evidence.**
 **A CITATION INTO THE ARCHIVE IS A PLAIN PATH, NEVER `path:line`.** A rotation re-numbers
 that file.
 
-**To rotate, write the new batch record above the newest one FIRST, then run `plan-rotate.sh`;
+**To rotate, write the new batch record above the newest one FIRST, then run `bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md --apply`;
 the newest record is never taken.** **Never a discharge banner in the head window** — that
 silences P9 through P13 on this file. **A record is moved whole, including any standing rule
 written inside it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in
@@ -140,7 +140,7 @@ filed" was TRUE, and the GRAMMAR is what failed. **A sweep that reports no new w
 claim about its own grammar first.**
 
 The arm is `^#{2,6}` for that reason, which is also the range `ledger_entry_shape()` in
-`core/skills/ai-dlc-update/reconcile/lib.sh:278` has always used. **The SHIPPING tooling was never
+`core/skills/ai-dlc-update/reconcile/lib.sh:429` has always used. **The SHIPPING tooling was never
 blind to this form; only this file's hand-rolled copy of its grammar was.** Check any change to it
 against `ledger_entry_shape()`, not your own reading of the ledger.
 
@@ -1612,7 +1612,7 @@ given at batch 90.
    - **Merge the docs commit FIRST.** A resume block that lives only on a branch is invisible
      to a fresh session. `git log -1 --format=%h origin/main -- docs/plans/graph-ledger-full-drain.md`
      must name the commit that carries the new block.
-   - **Read it from a FRESH CHECKOUT, as a stranger.** `W="$(mktemp -d)/wt"; git worktree add --detach
+   - **Read it from a FRESH CHECKOUT, as a stranger.** `W="$(mktemp -d <scratchpad>/XXX)/wt"; git worktree add --detach
      "$W" origin/main`, then in `$W` read ONLY the five live sections `## RESUME HERE` names,
      in the order it names them, with no memory of this session. If any sentence needs this
      session's context to make sense, it is not resumable; fix it and go back to action 6.
@@ -1636,7 +1636,7 @@ given at batch 90.
      shipped work is the whole failure this step exists for, and it is the one a green validator
      cannot see.
    - **`bash scripts/validate-plan-shape.sh` from `$W`.** PASS is the floor, not the answer.
-   - **Remove the worktree** (`git worktree remove --force "$W"`) and report one line:
+   - **Record `git -C "$W" status --porcelain`; clean: `git worktree remove "$W"`, dirty: list to lead;** report one line:
      `resumable from origin/main at <sha>` with the figures compared, or the mismatch and what
      was done about it.
 
@@ -1812,7 +1812,7 @@ entry's `PC-` id **verbatim**, and (b) a brief the operator carries into a graph
 else.
 
 **THIS FILE SAID THE CITATION GOES IN `CHANGELOG.md` AND THAT IS FALSE.** `named_absorbed()`
-(`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:402`) resolves the signal with
+(`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:707`) resolves the signal with
 `git log -F --grep`, which reads **COMMIT MESSAGES**. A `###` section in `CHANGELOG.md` is in the
 commit's DIFF, never its message, so it produces no `NAMED-UPSTREAM` row at all. Measured over the
 25 citable closes against `origin/main`, both channels in the same invocation: 4 appear in a commit
@@ -1834,7 +1834,7 @@ two commits for that reason. Keep ids out of commits that precede the release co
 (action 8); a shorter list is a clearer row.
 
 **Never run `ledger-reverify.sh` with the process cwd at the ai-dlc root.** Measured and
-recorded at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:927-948`: a distribution-root
+recorded at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:2931-2952`: a distribution-root
 run turned a live `STILL-LIVE` into a `CLOSE-CANDIDATE`, and a false CLOSE is the worst output
 this tool has — it retires an entry that is still live. Always `cd /Users/n8/git/graph` first and
 pass the **absolute** consumer root:
@@ -1845,7 +1845,7 @@ cd /Users/n8/git/graph && bash .claude/skills/ai-dlc-update/reconcile/ledger-rev
 ```
 
 **BOTH REF ARGUMENTS ARE DISTRIBUTION REFS, AND PASSING A CONSUMER SHA AS `theirs` FAILS
-SILENTLY.** `theirs_show()` at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:312` is
+SILENTLY.** `theirs_show()` at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:413` is
 `git -C "$DIST" show "${THEIRS}:$1"` — the ref resolves against the DISTRIBUTION, never the
 consumer, and the script's own usage line at `:117` reads
 `<dist-repo> <base-sha> <consumer-root> <theirs-ref>`. A consumer sha in that slot resolves to
