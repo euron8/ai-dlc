@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76, 65..75. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76, 65..75, 66..75, 1796..1816. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -22,48 +22,36 @@ BEFORE ACTING:**
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
 5. **`### Derive the state; do not trust the numbers below`** — the command block actions 1b and 6
    both tell you to run, and the only place the figures in this file can be checked. It sits ABOVE
-   the numbered actions and above `## Context`, so it is LIVE despite its position; jump to it by
+   the numbered actions, so it is LIVE despite its position; jump to it by
    name like the others.
 
-**THE HISTORY BOUNDARY IS BY HEADING, NOT BY POSITION.** `## Start here`, `## Hazards`,
-`## Verdict vocabulary` and `### Done when` all sit BELOW `## Context`, so a rule reading
-"everything from `## Context` down is HISTORY" would skip this plan's own read/write boundary and
-write to the consumer.
+**THE HISTORY BOUNDARY IS BY HEADING, NOT BY POSITION.** `## Start here`, `## Hazards` and
+`## Done when` all sit BELOW the "Everything below is HISTORY" divider, so a rule reading by
+position would skip this plan's own read/write boundary and write to the consumer.
 
 So: the five sections above are LIVE. Everything else is HISTORY: measured episodes, refuted
 hypotheses, and status records THIS BLOCK REPLACES. Read those for evidence, never for instruction.
 
-**MOST OF THAT HISTORY IS NO LONGER IN THIS FILE.** The per-batch records, the adjudication register, `## Status record`, `## Phases` and
-`## Verdict vocabulary` moved to `docs/plans/archive/graph-ledger-full-drain.md`, named by the
-pointer at the top. **Go there for evidence.** `## Context` and
-`## What the pull produced` are still in this file.
+**MOST OF THAT HISTORY IS NO LONGER IN THIS FILE.** The per-batch records, the adjudication register, `## Status record`, `## Phases`,
+`## What the pull produced`, `## Verdict vocabulary` and the body of `## Context` moved to `docs/plans/archive/graph-ledger-full-drain.md`, named by the
+pointer at the top. **Go there for evidence.**
 
 **A CITATION INTO THE ARCHIVE IS A PLAIN PATH, NEVER `path:line`.** A rotation re-numbers
 that file.
 
-**ROTATE THIS FILE AFTER YOU WRITE YOUR OWN BLOCK — IT IS SOMETHING EVERY BATCH FROM HERE
-OWES.** Each new resume block takes the file over P8's ceiling. `plan-rotate.sh` moves nothing
-while the file is UNDER the ceiling, so let the arm fire, then `bash
-scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves and `--apply` to
-move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
-file.
+**To rotate, write the new batch record above the newest one FIRST, then run `plan-rotate.sh`;
+the newest record is never taken.** **Never a discharge banner in the head window** — that
+silences P9 through P13 on this file. **A record is moved whole, including any standing rule
+written inside it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in
+a batch record.
 
-**THE ROTATOR NOW SEES THIS BLOCK'S BATCH RECORDS, SO DO NOT ROTATE BY HAND.** Each column-0
-`**BATCH <n>` paragraph opens a record that runs to the next one. Once the spent sections are
-exhausted, the rotator takes records OLDEST-FIRST, and it never takes the newest record or the first
-one in the section. It refuses with exit 2 when it cannot reach the ceiling. **A record is moved
-whole, including any standing rule written inside it**, so a rule that must outlive its batch
-belongs in `### NEXT ACTIONS`, not in a batch record.
-
-**BATCH 254 IS CLOSED: RELEASES `v0.1045.0` THROUGH `v0.1058.0`, none skipped. THE NEXT SESSION STARTS BATCH 255.**
-`ai-dlc-7f` led; its rulings and NOTEs are in the batch-254 close commit message. No `graph-*` session is ever messaged.
-- **Next VERSION `0.1059.0`; next free id `BL-977` (970/973 remain free).** Live 60, archive 885. The batch closed 13 — `BL-949/950/951/952/953` (D efficiency), `BL-955/956/957` (A waiver-spelling), `BL-958/959/962/969` (filed-closed), `BL-971` (rebind) — and filed 20 (`BL-955`–`BL-976`); net **+7**. **The batch's LAST SIX RELEASES (819/841/976/975/974/716) are ALL PARTIAL** — the rotate gate's OUTCOME GUARD (`backlog-rotate.sh:357-374`) refuses any close without a consumer `Outcome measured:` line, and the six entries each carry their own exit condition in the entry. The `0.1054.0` number is DEAD (975's first push died before the squash; the validator never checks sequence continuity).
-- **The PC-BACKED WORKLIST is 0** (join re-run at close: no live entry cites a live candidate). All 5 UNNAMED `PC-S322-` candidates shipped as the 955–959 cluster closes AND the consumer has ARCHIVED all five on its 0.1056.0 reconcile. The consumer's ledger is now **1 live candidate, UNNAMED**: `PC-S322-PRE-PUSH-RULE-AUDIT-ARM-GATES-CONSUMER-ON-CORE-OWNED-TIER-1-FINDINGS` — no backlog entry cites it and no release names it: the next batch's unfiled work. Re-derive anyway.
-- **WHOLE-BACKLOG ADJUDICATION: 44 PARTIAL / 9 LIVE / 0 CLOSE / 0 DEAD-PREMISE** (4 opus hands; report bodies authoritative). BUILT BUT NOT CLOSED this batch: **BL-809 per-AC arm, BL-878, BL-868 items 5/14, BL-909** — the 14-release queue and the six PARTIAL turns consumed the batch; each needs its FP measurement first (809/909) or its own build (878/868). BL-514/910 exits not met (s322 open / no occurrence since cwd_why).
-- **OPEN FILINGS (unbuilt, from this batch):** 974 seat-complete belt gap (join `:537/:565/:2266/:3246`; `--check-part` needs `seat_complete_check` in the party branch); fanin placement NOTE (1 of 98); BL-819 row-add decision deferred; review-shard-merge flake DEFECT (`lib.sh:2893` cp race; gc.auto hypothesis unverified); handoff-completion-assertion coin-flip DEFECT (chmod absent in sandbox → shim never executable → passes only on the epoch-second fallback); 974 DEFECT B (block-deleted document-mode SKIP at seal); 976 `--check-shard-dir` extra-args-to-`basename` NOTE (stderr only, rc unaffected); 974 `--mark` term-7 can never refuse an adjudicator batch file (batch-name grammar always carries a non-digit); 716 no mutant covers `lanes never merge` (LN14 seed kills it) and no engine check covers an adjudicator that writes nothing before a mis-chosen window (the procedure's `--since` rule covers it).
-- **HELD REFS: none from 254** — all `b254-F*` and cluster branches deleted at close. The b253-held `b253-bl947` (owner `e4`, closed) is the lead's to sweep.
-- **Graph.** The consumer PULLED DURING the batch: `ai-dlc-update/0.1049.0-reconcile-…` and `0.1056.0-reconcile-…` branches exist (both dated today), checked-out branch installed `0.1056.0`, `main` `0.1028.0`, s322 open. Only `0.1057.0`/`0.1058.0` remain PENDING on the next pull — re-derive the delivery gap (action 7). **A pull is never dispatched by this program.**
-- **HAZARD.** `sed … f >> f` filled the disk with 1.1 TB. Never read and append one file; `ulimit -f` in scratch scripts.
+**BATCH 255 — CLOSED.** Landed: `v0.1059.0` to `v0.1077.0`.
+`ai-dlc-33` led; its rulings and NOTEs go in the batch-255 close commit message. No `graph-*` session is ever messaged.
+- **Landed (`git log origin/main`):** `0.1059.0` BL-977 (`--fail-on=local-deterministic`); `0.1060.0` BL-538/808/811/812/817/819/838/842/911 PARTIAL; `0.1061.0` BL-841 PARTIAL (idle share did not fall); `0.1062.0` BL-963/964/965/967 closed; `0.1063.0` BL-507 CLOSED, BL-510/804/397/514/695 PARTIAL; `0.1064.0` BL-868 and BL-909 PARTIAL; `0.1065.0` BL-845 and BL-847 PARTIAL, BL-978 filed; `0.1066.0` BL-909 PARTIAL (M8-M10); `0.1067.0` BL-960/961/966/968 closed; `0.1068.0` BL-974 PARTIAL; `0.1069.0` BL-979 closed; `0.1070.0` 0 closed; BL-808/811/812/817 PARTIAL; `0.1071.0` BL-811, BL-817 closed; BL-695 PARTIAL; `0.1072.0` BL-980 filed+closed; `0.1073.0` BL-880 PARTIAL, BL-981 filed; `0.1074.0` BL-878 PARTIAL; `0.1075.0` BL-982 filed, PARTIAL; `0.1076.0` BL-983 filed+closed, BL-984 filed; `0.1077.0` docs close. Next VERSION `0.1078.0`; live 54, archive 900; next free id `BL-986` (970/973 also free; F11 filed BL-981, two corpus items).
+- **Rulings:** F5/BL-961 "Ship it". BL-847 strict blocking is NOT built. The BL-514 and BL-841 goals stay open. BL-880: "strike the pre-push step's own probe replay". BL-980 diagnosed by a fresh session. `apply.sh` "ships alone" is KEPT (operator); BL-978's evidence is recorded as a NOTE.
+- **F5 BREACH.** Hand `f5-c-inforce` ran `rm -rf "$ROOT"` once, in its own scratch script; `$ROOT` came from escalation-citation `seed.sh`'s `mktemp -d`; nothing outside it was lost.
+- **OPEN NOTEs:** askuserquestion-citation's G1-completeness never runs under the sandbox; BL-695's detector must follow coordinator-subagent sidechains; BL-810 needs its Step line; BL-909 residual (wrapper reporters); BL-972 needs an operator contact-shape ruling; BL-974/716 consumer outcomes owed; the batch-254 fanin placement NOTE (1 of 98) has no live entry; the durable channel's A6 reads 74773/74800 B (`validate-claude-rules.sh`), so the next durable-channel addition needs a vestigial cut first; kept branches: b7's 16 drafts (`b255-F2-*`/`F2b-*`), 1d's 10 (`b255-F2c-*`), `b255-F9-code-tip-7ad8e93e5` (keeps a sha cited by 0.1074.0/0.1075.0 reachable), and `255-b255-F15-bl983-cmp-tools-decl-census-decls` (BL-984 follow-up); cleanups force-removed dirty scratch worktrees (F13 without recorded porcelain; others after recording it); uncommitted scratch edits were lost, landed work was not; archived BL-927 keeps `d0b523eaf` inside a recorded command, deliberately not re-pinned; F2b (`0.1070.0`) put 30 in-process validator passes into backlog-receipt-binding, invisible to `invocations.decl` (BL-982), and the pole went 412 to 1564 s loaded; F14 (`0.1075.0`) left BL-982 PARTIAL, the tree-wide static arm owed. Pole, timer-drift and worktree counts are lead-reported from push output and session reports; no in-tree source.
+- **Graph (action 7).** Graph pulled `0.1061.0` onto the UNMERGED branch `ai-dlc-update/0.1061.0-reconcile-20261111T223500Z`, tip `0953c59f7`, whose `.githooks/pre-push:128` gates `--fail-on=local-deterministic`; graph `main` `5596361ce` is installed at `0.1028.0` and still gates `--fail-on=deterministic`. Unseeded, the audit exits 0 under both thresholds at that tip (0 tier-1 findings). **BL-977 seeded probe** (scratch clone at `0953c59f7`, a tier-1 `ORIGIN_TAG` seeded): a core-owned seed (`.claude/team-roles/adversary.md`, `[core 1 / local 0]`) exits 0 under `--fail-on=local-deterministic` and 1 under `--fail-on=deterministic`; a locally owned seed (`CLAUDE.md`, `[core 0 / local 1]`) exits 1 under both; the unseeded control exits 0 under both. The unresolved-owner case is NOT probed on graph (only retro-audit-scans' `LDu` world covers it), and none of this is observable on graph's `main` until the reconcile branch merges. Graph porcelain count 13 (observation only). **A pull is never dispatched by this program.**
 
 ### Derive the state; do not trust the numbers below
 
@@ -771,9 +759,21 @@ candidate's surviving half is upstream's to file and build, never a question for
      call is `ListAgents`.
    - **Roll call.** In ONE parallel block with action 0a's first spawns, `SendMessage` every other
      `ai-dlc-*` session in the listing (never a `graph-*` session, not even a read-only question),
-     asking for its current state and whether it is free to own a release. A session that finished
-     an earlier release is a valid owner. A session that has not answered after one re-ask and one
-     more timer counts as no session.
+     asking for its current state and whether it is free to own a release. A session whose
+     release landed is never re-assigned, and is CLOSABLE only by operator-rulings.md's test. A
+     session that has not answered after one re-ask and one more timer counts as no session.
+   - **Roll call every 45 minutes, with an advisor call.** Operator instruction at batch 255: "the
+     lead session performs a roll call once every 45 minutes and instructs any session that isn't
+     marked as closeable to call the advisor. Once all sessions return roll call advisor results
+     then the lead session calls the advisor." Every 45 minutes the lead sends each `ai-dlc-*`
+     session not yet stated CLOSABLE one `SendMessage`. It asks for one line (release, state, next
+     step, anything blocked or owed) and tells the session to call `advisor`, act on it, and report
+     what the call changed. When every such session has answered, the lead calls `advisor` itself.
+     A session that has not answered after one re-ask and one more timer is reported to the
+     operator as silent. When designated, the lead arms ONE non-recurring job at now+45 minutes
+     (cron cannot say 45 minutes, and recurring jobs drift: measured next fires 18 then 63 minutes
+     apart); each fire re-arms the next job first. It re-arms after a compaction and stops when no
+     session remains active.
    - **A graph-watch session.** When the operator assigns one, a peer `ai-dlc-*` session watches
      the consumer READ ONLY for the batch: it reads graph's artifacts, transcripts and ledger; it
      never edits, commits or pushes there; it never messages a `graph-*` session. It reports to the
@@ -794,7 +794,11 @@ candidate's surviving half is upstream's to file and build, never a question for
      owner replies exactly `ACCEPTED <cluster>` or `REFUSED: <reason>`; only an explicit refusal
      moves the cluster to the next session. The roster (every session's reported state and its
      assignment) goes into the lead's FIRST operator ping as a report, not a question.
-   - **The lead ORCHESTRATES and NEVER BUILDS.** Operator, when a lead built: "this is the lead
+   - **The lead ORCHESTRATES and NEVER BUILDS, full stop** (batch 255). A BUSY `ai-dlc-*` peer
+     counts as available: the lead waits for it or asks the operator for fresh sessions, and never
+     builds because owners are busy. The lead's hands never
+     build a cluster an owner holds; with owners present they run only the opening sweep,
+     adjudication and the docs close. Operator, when a lead built: "this is the lead
      session and should be orchestrating, not building." The lead's work is: scoping and the
      rulings record; backlog-id and VERSION allocation, lead only, owners ask (measured at batch
      210: sessions each took the next VERSION with no allocator, and releases collided); one push
@@ -809,11 +813,13 @@ candidate's surviving half is upstream's to file and build, never a question for
    - **With owners present, the OWNER cuts, gates and merges its own release**, and the lead
      verifies the landing by content. Where action 0a, action 3 or a standing ruling above says the
      lead cuts the release, it describes the shape with no owner.
-   - **Owners build through hands.** Each owner owns ONE cluster as ONE release, end to end, and
+   - **Owners build through hands.** Each owner owns ONE cluster as ONE release per session, end to end
+     (never queue a second cluster to an owner; extra clusters need fresh sessions from the
+     operator), and
      makes NO edits: every edit (code, fixture, receipt, entry prose, comment, script) goes to a
      hand. Operator, twice, of owners that built alone: "<owner> is not using subagents".
-   - **With no other session available, the lead still NEVER BUILDS.** It dispatches hands per
-     action 0a and runs the no-owner shape.
+   - **The no-owner shape applies only when no `ai-dlc-*` peer session exists at all.** The lead
+     still NEVER BUILDS: it dispatches hands per action 0a.
    - **The release schedule.** Operator instruction at batch 236, after "what's taking so long for
      releases?": "better make it so the plan dictates that, I don't want to discover it the hard
      way again."
@@ -825,7 +831,7 @@ candidate's surviving half is upstream's to file and build, never a question for
      read-set skip's answer, every fixture whose `inputs.decl` names a changed path. Read it in
      the push's `read-set keys:` line; never quote a count.
    - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
-     item goes to an idle session at once. Build work (hands, edits only) never waits on box load;
+     item goes at once to an idle session that has not owned a release this batch. Build work (hands, edits only) never waits on box load;
      only runs load the box.
    - NO TIMING RUNS. Operator at batch 236: "box load should not matter. Stop timing things that
      don't need to be timed." and "bake it into the plan, no timing runs unless it's absolutely
@@ -879,6 +885,8 @@ candidate's surviving half is upstream's to file and build, never a question for
    - Verify a receipt the way R8 and `scripts/backlog-rotate.sh` run it: from inside the hook's step
      environment (the extracted pre-suite prefix of action "Gate it the way the hook runs it, and
      read the GATE's own exit."), not only standalone.
+   - An added-lines reachability join uses `/usr/bin/grep` beside a must-miss control: the
+     interactive `grep` is a ugrep shim that prints a false 0 on a big `-F -f` list.
    - When a fixture's counted starts rise, name the new arms that account for the rise. A reshape
      or a per-script split is owed only for a rise NOT accounted for by the release's own new
      arms, meaning one from the engine or a shared lib.
@@ -886,8 +894,9 @@ candidate's surviving half is upstream's to file and build, never a question for
      root-resolving `core/scripts/*.sh` measured +10. Put a receipt under its fixture
      (`core/fixtures/<f>/receipt-bl<N>.sh`); `bash scripts/fork-profile.sh --section total` in
      your worktree, against `FORK_BUDGET`, decides. A3b fires when TOTAL + 2 exceeds the budget.
-     TOTAL cannot see validator-fork-budget's own row: every file added under `scripts/`,
-     `.githooks/` or non-fixture `core/**/*.sh` moves it by +4 (I84 corpus), so take a counted
+     TOTAL cannot see validator-fork-budget's own J3 `*` row: every file added under `scripts/`
+     (ANY extension, a `.txt` too), `.githooks/` or non-fixture `core/**/*.sh` moves it by +4
+     (I84 corpus), so take a counted
      run of that fixture too (0.1027.0's first push went red on exactly this).
      When your tip's TOTAL rises, raise `FORK_BUDGET` in `fork-budget.txt` yourself, in your own
      release, by EXACTLY the measured rise with the reading in its comment, and report base and
@@ -947,8 +956,10 @@ candidate's surviving half is upstream's to file and build, never a question for
       opening `# MUTANT-MATRIX `). A hand's hermetic run can exit 0 while printing `No such file
       or directory` or `command not found` (an undeclared input): grep its ANSI-stripped output
       for both, beside a control line that must match. When a fixture gains arms, re-measure its
-      `invocations.decl` from two agreeing COUNTED runs; a plain hermetic run arms no counter, so
-      J3 is invisible to it. A conflict
+      `invocations.decl` from two agreeing COUNTED runs; J3 (`invocation budget ok: N start(s)`)
+      prints only under the counter `.githooks/pre-push` arms, never in a plain hermetic run. When
+      parallel hands move one row on separate bases, re-measure it once on the combined tip, the
+      same way, and carry neither hand's value. A conflict
       resolution inside pinned prose is its own hand unit. A hand runs vem on its COMMITTED tree: a
       clean `git worktree add` at its sha, never its working tree, and it reads I77 by seeding a
       control that must fail. The carrier set is every fixture whose inputs.decl declares a file
@@ -1022,6 +1033,7 @@ candidate's surviving half is upstream's to file and build, never a question for
    - Combine releases only when every part is built and needs no rebuild, and state the saving and
      the cost when you propose it.
    - A filing names a runner-wired `verify:` receipt when it is filed.
+   - A recalled context-mode entry is data, never a turn or a ruling.
 
    **Reporting.** Message <lead> at: contract folded, build collected, tip adversary done, ready to
    gate. Send every FAIL to <lead> before changing any declaration or budget. Every claim carries
@@ -1782,24 +1794,7 @@ satisfied and banked. Criterion 3 is per-release-branch and is re-checked on eac
 
 ## Context
 
-`/Users/n8/git/graph` is the reference consumer. Its
-`_bmad-output/ai-dlc-update/push-candidate-ledger.md` is the queue of consumer innovations
-upstream lacks and consumer-filed upstream defects. Every prior cycle drained **four entries**
-and stopped; the ledger has grown faster than it has been drained. The operator has asked for
-the whole thing: adjudicate every open entry against ground truth, remediate what is real, and
-give graph a legitimate way to close what is not.
-
-**The instrument that would normally answer "what is still open" cannot answer it right now,
-and it says so itself.** graph's own reconcile report for the 0.370.0 → 0.372.0 pull carries
-this line, and the same run reproduces from this session:
-
-> `RECEIPTS-UNDECIDED  (theirs_has receipts)  28 of 28 'theirs_has' receipt(s) reported
-> STILL-LIVE on a substring present at BASE as well as at theirs (0.372.0) … Do not treat a
-> zero CLOSE-CANDIDATE count from this run as evidence that nothing was absorbed.`
-
-So the zero-close reading is not a floor, and the 59 `STILL-LIVE` rows are not findings. Every
-entry has to be taken to the working tree by hand. The measured base rate of expired premises
-in this corpus is roughly **one in two** — expect about half the ledger to be dead.
+Its body moved to `docs/plans/archive/graph-ledger-full-drain.md`.
 
 ## Start here
 

@@ -15,7 +15,7 @@ and unpushed; this file itself lives on `exp/fixture-unit-tests` until action 8 
 `exp/*` branches until the release push in action 7. A consumer tree is never written: read it,
 never write it. A consumer pull is not preapproved (`.claude/rules/operator-rulings.md`).
 
-**The proven pattern** is BL-878's done-criteria (`docs/backlog.md:1588`) and the enforcer is
+**The proven pattern** is BL-878's done-criteria (`docs/backlog.md`, the `**Done, per fixture.**` list under `## BL-878`) and the enforcer is
 BL-879 (`docs/backlog.archive.md:39287`). The pilots' in-process cell files are
 `core/fixtures/content-seal/unit-arms.sh` and `core/fixtures/remediator-shard-join/unit-parts.sh`.
 

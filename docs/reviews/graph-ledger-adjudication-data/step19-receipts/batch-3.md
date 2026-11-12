@@ -109,7 +109,7 @@ as APPROVED while its gate-1 review file on disk still read CHANGES-REQUESTED").
 grep-sources whatever value it finds and names no verdict set at all. `CHANGES-REQUESTED` occurs
 exactly once in all of `core/`. The two-mandates cause is dead; what survives is one level down —
 **the verdict set is unbound**, which is why a non-member sits in its reader unnoticed.
-`docs/backlog.md:1780-1820` (BL-044) records the same re-derivation independently and states it
+`docs/backlog.archive.md` (entry `## BL-044`, archived) records the same re-derivation independently and states it
 "Discharges the consumer entry PC-S299-… at pinned ledger line 1571".
 
 Reaches non-zero when: an arm binding the verdict set ships and `scripts/render-vocabulary-index.sh`

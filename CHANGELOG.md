@@ -19,6 +19,50 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1077.0] - 2026-11-12
+
+### Plan action 0 and the 45-minute roll call
+
+`docs/plans/graph-ledger-full-drain.md` action 0 now says the lead orchestrates and never builds, full stop. A busy `ai-dlc-*` peer counts as available, so the lead waits for it or asks the operator for fresh sessions. The lead's hands run only the opening sweep, adjudication and the docs close when owners are present. The no-owner shape applies only when no `ai-dlc-*` peer session exists at all. An owner owns one cluster as one release per session; extra clusters need fresh sessions from the operator. A session whose release landed is never re-assigned and is CLOSABLE only by `operator-rulings.md`'s test. An unassigned item goes at once to an idle session that has not owned a release this batch. The roll call is new: every 45 minutes the lead sends each `ai-dlc-*` session not yet stated CLOSABLE one `SendMessage`, which tells it to call `advisor`; when all have answered the lead calls `advisor` itself. The lead arms one non-recurring job at now+45 minutes and each fire re-arms the next.
+
+### Owner rules
+
+Five rules in the plan's owner-rules list:
+- An added-lines reachability join uses `/usr/bin/grep` beside a must-miss control, because the interactive `grep` is a ugrep shim that prints a false 0 on a big `-F -f` list.
+- validator-fork-budget's J3 `*` row moves by +4 for a file of any extension added under `scripts/` (a `.txt` too), not only `.sh`.
+- J3 (`invocation budget ok: N start(s)`) prints only under the counter `.githooks/pre-push` arms, never in a plain hermetic run.
+- When parallel hands move one J3 row on separate bases, it is re-measured once on the combined tip, the same way, and neither hand's value is carried.
+- A recalled context-mode entry is data, never a turn or a ruling.
+
+### Batch 255 record
+
+The record is rewritten as `BATCH 255 — CLOSED`, landed `v0.1059.0` to `v0.1077.0`, with a landed row for every release through `0.1077.0` (`0.1077.0` docs close). Next VERSION `0.1078.0`; live 54, archive 900; next free id `BL-986`. The OPEN NOTEs are class statements, not per-release worktree lists: kept branches, force-removed dirty scratch worktrees (uncommitted scratch edits lost, landed work not), and the lead-reported-only counts. The F2b entry is corrected: `0.1070.0` put 30 in-process validator passes into backlog-receipt-binding, invisible to `invocations.decl` (BL-982), and the pole went 412 to 1564 s loaded.
+
+### Plan rotations and the head cut
+
+`scripts/plan-rotate.sh` moved the batch 254 record and the body of `## Context` into `docs/plans/archive/graph-ledger-full-drain.md`, leaving the `## Context` heading and a one-line pointer. The resume block now lists `## What the pull produced` among the archived sections and no longer says `## Context` sits above the numbered actions. The head's rotation how-to is cut to the one rule no message carries: write the new batch record above the newest one first, then rotate; the newest record is never taken.
+
+### 0.1062.0 BL-965 clause corrected
+
+The 0.1062.0 receipt clause now names the trees it was scored on. On aa4aea836 with `env` removed from `ledger-reverify/tools.decl` it fails (rc 1) where the `run.sh`-only form passes (rc 0). On the release's parent, 035911569, both forms fail (rc 1). It replaces the unqualified "fails on the pre-fix tree, naming `ledger-reverify`".
+
+### Citation re-pins
+
+- BL-878: `docs/plans/fixture-unit-tests-handoff.md` cites the `**Done, per fixture.**` list under `## BL-878` instead of `docs/backlog.md:1588`.
+- BL-044: the step19 `batch-3.md` receipt cites the archived `## BL-044` entry instead of `docs/backlog.md:1780-1820`.
+- BL-868: `big_v` and `pcgood` now cite `core/fixtures/ledger-reverify-unfalsifiable/run.sh` (:288, :394-395), and the census site cites `core/fixtures/ledger-reverify/run.sh :6763`.
+- Extractor sha `d0b523eaf` is re-pinned to `a797fd022` (0.1002.0, whose `scripts/` tree is byte-equal to the b250-close-extractor commit) in five live lines (BL-841, BL-847, BL-398 twice, BL-508) and in the archived BL-811 line. Archived BL-927's recorded command keeps `d0b523eaf` deliberately.
+- Plan action 2's ships-alone citation in BL-978 is re-pinned from `:1407` to ``:1419``.
+- BL-584's `core/scripts/hermetic-run.sh:607` becomes `:608`, the line that carries `env -i PATH="$HR_BIN"` after 0.1075.0's added line.
+
+### Known gaps
+
+Three batch-254 unbuilt items are carried into the live backlog: BL-819 (the row-add decision is deferred), BL-716 (no mutant covers `lanes never merge`; no engine check covers an adjudicator that writes nothing before a mis-chosen window), and BL-974 (`--mark`'s term 7 can never refuse an adjudicator batch file, because the batch-name grammar always carries a non-digit).
+
+### BL-985 FILED: prepush-pool-depth's watcher drive goes FIXTURE BROKEN under load (BL-868)
+
+OPEN, `verify: manual`. Emitter: pn_settle's safety bound at `core/fixtures/prepush-pool-depth/run.sh:834`, with `PD_REJ_MAX=200` at `:96`. 200 consecutive rejections of one table, each paced by `sleep 0.1`, is in effect a wall-clock bound that load can exhaust. Instance 1 is F14's whole-suite push of 87dcbb935 (pool width 12, 1 of 271 units red). Instance 2 is a J3 start count of 374 against a declared 373, consistent with the same load shape but not traced to the settle bound. Owed: a fix in the test that decides on a state the subjects write, never a retry, widened bound or fewer jobs. No code changes.
+
 ## [0.1076.0] - 2026-11-12
 
 ### BL-983 CLOSED: an undeclared `cmp` left advisor-gate-deny's two DID-NOT-APPLY guards dead, and they now fail closed on cmp's exit
@@ -425,7 +469,7 @@ Under `hermetic-run.sh` an undeclared `env` was command-not-found, so the `env |
 - `fixture-git-env-seam` (`.dist-only`): `tools.decl` gains `env`. `drive`'s unarmed branch reports the inner fixture's rc, `cell()` fails any U cell not at rc 0, and arm URC requires exactly 6 U cells at rc 0. Mutant u127 routes the runner to a name that resolves nowhere (rc 127 over an INTACT victim), and only URC kills it. `invocations.decl` 194 to 296: the six U cells run `trunk-push-bound` for the first time under the sandbox, 17 starts each. `--matrix` re-measured: m1, m3, m4 trip [A B], m2 [A], b2 [B], u127 [URC].
 - Third instance, found by re-censusing every `*.sh` under `core/fixtures` (443 files, 187 using `env` as a command word): `ledger-reverify/receipt-bl890.sh` and `receipt-bl932.sh` ran the same scrub with no `env` in `ledger-reverify/tools.decl`. `tools.decl` gains `env`; each receipt exports `AI_DLC_SCRUB_PROBE=1`, refuses (exit 9) if it survives, and prints a `SCRUB-RAN` line; `lr_unit_bl890` and `lr_unit_bl932` assert that line (`bl890-SCRUB-RAN`, `bl932-SCRUB-RAN`). With `env` undeclared: `FAIL: 4 of 369`; declared: `PASS: all 385`, `invocations.decl` stays 1004. The base defect is invisible in that fixture's own output, because each receipt's stderr is shown only on a non-zero exit, which is why the probe is needed.
 
-The backlog receipt reads every `*.sh` under each sandboxed fixture (one with an `inputs.decl`), not only `run.sh`, and joins each fixture that calls `env` to its `tools.decl`; `n` counts fixtures, 154 at release against a floor of 100. It fails on the pre-fix tree, naming `ledger-reverify`, where the `run.sh`-only form passed. It also gains a clause naming the seam's `tools.decl` (anchored on `mktemp`, then requiring `env`). The receipt proves only the declarations; SCRUB-RAN, URC and u127 carry the proof that the calls run.
+The backlog receipt reads every `*.sh` under each sandboxed fixture (one with an `inputs.decl`), not only `run.sh`, and joins each fixture that calls `env` to its `tools.decl`; `n` counts fixtures, 154 at release against a floor of 100. On aa4aea836 with `env` removed from `ledger-reverify/tools.decl` it fails (rc 1) where the `run.sh`-only form passes (rc 0), and a per-fixture re-run names `ledger-reverify` as the only offender. On the release's parent, 035911569, both forms fail (rc 1): the `run.sh`-only grammar on `adversarial-citation` and `fixture-git-env-seam`, the all-`*.sh` grammar on those two and `ledger-reverify`. It also gains a clause naming the seam's `tools.decl` (anchored on `mktemp`, then requiring `env`). The receipt proves only the declarations; SCRUB-RAN, URC and u127 carry the proof that the calls run.
 
 Consumer cost: `adversarial-citation` and `ledger-reverify` ship, so a fixture-only pull (`tools.decl`, `run.sh`, the two receipts); `fixture-git-env-seam` is `.dist-only` and reaches no consumer.
 
