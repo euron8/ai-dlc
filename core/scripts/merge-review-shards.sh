@@ -213,6 +213,16 @@
 #   result carrying no `<n> passed|failed|collected|error(s)` count, or reading `not finished`, `in
 #   progress` or `still running`. Counts on any other line (a RED replay, a part's targeted run) are
 #   not read.
+#   THE DECLARED WRAPPER. A wrapper the conventions declare (record-only-diff.sh DECLARED WRAPPER: a
+#   backticked `<program> <options> -- <pytest args>` span) is a run when the run passes it only declared
+#   options, matched exactly, and a bare `--`; its payload after `--` is held to RUN-FILTER as
+#   `python -m pytest <payload>` is. With no conventions file, or no declaration, a wrapper is refused in
+#   both RUN-SHAPE and RUN-FILTER as before. The one language reaches every RUN-SHAPE and RUN-FILTER call
+#   here (canon_gate, run_bind, and the --record-run pre-check, which is RUN-FILTER only) and the dev's full-collection RUN-SHAPE in
+#   validate-handoff-evidence.sh. RESIDUAL: the wrapper's `--cwd`/`--python` can relocate the run to
+#   another checkout or interpreter, as a plain run's absolute path into another checkout already can, and
+#   `--cwd <repo>/<subdir>` narrows the collection to a subdirectory, as `--record-run --dir <subdir>` already can
+#   (its recorded .dir is not checked by run_bind).
 #   THE EXEMPTION. A `Canonical run:` value that is not a run (record-only-diff.sh RUN-SHAPE, given
 #   the conventions file so its declared canonical command counts as a runner) is a no-run claim, however it is spelled (`none,
 #   <reason>`, `N/A`, `TBD`, empty). It is accepted, with no result line, only when
@@ -322,7 +332,14 @@
 #   `worktree` and `sha`) or the review path (docs/reviews/s<N>/ in its repository) and --frozen, the full go-signal
 #   sha taken literally (nothing records it before the run, and the worktree's own HEAD would compare with itself); it
 #   REFUSES when the worktree's HEAD is not the frozen sha (untracked files never refuse) and a --dir that is absolute
-#   or carries `..`; it runs the invocation in <worktree>/<dir>, never refuses on its exit, and takes the summary line
+#   or carries `..`; RECORD = CHECK: before anything runs it holds the backticked rr_quote form of the invocation (the
+#   form run_bind later filters) to record-only-diff.sh RUN-FILTER, the same rule run_bind holds it to, and never to
+#   RUN-SHAPE, which the check reads on the review's `Canonical run:` value (a trailing count makes a runner-less
+#   invocation such as `bash tests/fixtures/x/run.sh` a run there), under <worktree>/docs/coding-conventions.md
+#   when readable -- the file the check half reads, as the merge's M_WT and this mode's shard-directory worktree are
+#   the one .manifest `worktree` line, and --check-serial's repository and this mode's serial worktree are the one
+#   toplevel of the review file's directory -- and REFUSES, nothing run or recorded, saying the check half would refuse
+#   the record and naming the reason; it runs the invocation in <worktree>/<dir>, never refuses on its exit, and takes the summary line
 #   (OSC, SGR and CR stripped; vitest's last `Test Files` line joined to the next `Tests` line with `; `, else
 #   pytest's last `=== ... in <n>s` session line, else the last line carrying the count grammar above that is no
 #   per-test line -- no `::`, no ` PASSED`/` FAILED` with a `[ NN%]` tail; `=` runs and blanks trimmed). No summary
@@ -340,7 +357,8 @@
 #   go-signal sha, else the review repository's HEAD) -- this pass's key first, then any earlier pass's key at the
 #   same sha, then (with --story only) an earlier pass's run whose change to the frozen sha is record-only by
 #   `record-only-diff.sh paths` (exit 0 only; 1 and 2 refuse) -- else REFUSED naming the shas found, the
-#   predicate's lines and the --record-run remedy. The recorded invocation is held to RUN-FILTER; the `Canonical
+#   predicate's lines and the --record-run remedy. The recorded invocation is held to RUN-FILTER (a declared
+#   wrapper's included, CANONICAL RUN's THE DECLARED WRAPPER); the `Canonical
 #   run:` invocation (the span RUN-FILTER reads, `record-only-diff.sh run-span`) must equal the recorded invocation,
 #   and the `Canonical result:` value the recorded result, each pair with backticks and `=` removed and whitespace
 #   collapsed, else REFUSED naming both. RESIDUAL: a seat that records a stub (`--record-run -- printf '5561 passed'`)
@@ -1034,13 +1052,25 @@ rr_record() {
     || refuse "--record-run: the frozen worktree $rr_wt_ is at HEAD ${rr_h_:-<none>}, not the frozen sha ${rr_s_:-<none>}, so the run would test other code; nothing was recorded. Check out the frozen sha there (nothing else mutates the frozen worktree) and run it again"
   rr_wd_="$rr_wt_${rr_sub_:+/$rr_sub_}"
   [ -d "$rr_wd_" ] || refuse "--record-run: $rr_wd_ is not a directory of the frozen worktree; nothing was recorded"
+  # RECORD = CHECK (header: THE RUN RECORD): the invocation is held, before it runs, to the RUN-FILTER run_bind
+  # applies to its record, under the conventions file the check half reads in this same frozen worktree.
+  rr_quote "$@"; rr_inv_="${RR_Q//$'\n'/ }"
+  # The check half's resolution (AI_DLC_SELF_DIR, RO): this script's own directory, made absolute, so mrs_sib's `.`
+  # never searches PATH for a slashless name.
+  case "${BASH_SOURCE[0]}" in */*) rr_ro_="${BASH_SOURCE[0]%/*}" ;; *) rr_ro_=. ;; esac
+  rr_ro_="$(cd "$rr_ro_" && pwd)/record-only-diff.sh" || refuse "--record-run: this script's directory is not enterable; nothing was run or recorded"
+  [ -f "$rr_ro_" ] || refuse "--record-run: record-only-diff.sh is not beside this script at $rr_ro_; the canonical-run check reads its grammar there; nothing was run or recorded"
+  rr_cv_=""; [ ! -r "$rr_wt_/docs/coding-conventions.md" ] || rr_cv_="$rr_wt_/docs/coding-conventions.md"
+  # RUN-FILTER only, the one rule run_bind holds the recorded invocation to; RUN-SHAPE is read at check time on the
+  # review's `Canonical run:` value, where a trailing count can make a runner-less invocation a run.
+  rr_pf_="$(mrs_sib "$rr_ro_" ro_main run-filter "\`$rr_inv_\`" ${rr_cv_:+"$rr_cv_"} 2>&1 < /dev/null)" \
+    || refuse "--record-run: the check half would refuse this record: \`$rr_inv_\` ${rr_pf_%%$'\n'*} (record-only-diff.sh RUN-FILTER, the rule run_bind holds the recorded invocation to); nothing was run or recorded"
   rr_t_="$(mktemp -d "${TMPDIR:-/tmp}/record-run.XXXXXX")" || refuse "--record-run: mktemp failed"
   rr_cap_="$rr_t_/capture.txt"
   ( cd "$rr_wd_" && exec "$@" ) > "$rr_cap_" 2>&1 < /dev/null; rr_rc_=$?
   # The exit is recorded and never refused on: a PASS may carry the story's permitted pre-existing failures.
   rr_res_="$(rr_summary "$rr_cap_")" \
     || refuse "--record-run: the run exited $rr_rc_ and its output ($rr_cap_) carries no summary line with a count, so it timed out, was interrupted or never finished; nothing was recorded. Run it again to completion"
-  rr_quote "$@"; rr_inv_="${RR_Q//$'\n'/ }"
   lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.sha" "$rr_s_" && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.exit" "$rr_rc_" \
     && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.dir" "$rr_wd_" && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.invocation" "$rr_inv_" \
     && lead_record_put "$rr_rp_" "$rr_nm_" "$rr_k_.result" "$rr_res_" \
@@ -1108,7 +1138,7 @@ canon_gate() {
     [ "$cg_nr_" -ne 1 ] \
       || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: $cg_run_' gives no reason; write 'none, <reason>' (accepted only on a record-only diff), 'none, <AC-id> waives it' (accepted only when the story at a lead-written base carries that AC's '## Canonical-run waivers' entry) or the run itself"
     [ -n "$STORY_F" ] && [ -n "$cg_b_" ] && [ -n "$cg_z_" ] \
-      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count), so it claims the record-only exemption, and no --story and --range were given to decide it; re-run with --story <story file> --range <base> <frozen>, or record the run"
+      || refuse_to "$cg_o_" "$cg_f_ 'Canonical run: ${cg_run_:-<empty>}' records no run (no backticked invocation, \`\$ \` line or count; a wrapper is a run only when docs/coding-conventions.md declares it, with its options and a bare \`--\` before \`<pytest args>\`, and the run passes it only declared options), so it claims the record-only exemption, and no --story and --range were given to decide it; re-run with --story <story file> --range <base> <frozen>, or record the run"
   fi
   # STORY-BIND ON BOTH BRANCHES (header: THE EXEMPTION): the index and view-row binding below runs for a no-run claim
   # and for a run claim alike whenever --story and a frozen sha are given (the merge always has the manifest's sha), so

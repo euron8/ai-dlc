@@ -4937,25 +4937,18 @@ p_run_rec() {
   fi
   # THE RECORDED INVOCATION (BL-905 fold). rr-replay: a run recorded through the awk runner, its RECORDED-RESULT copied,
   # and `Canonical run:` naming `python3 -m pytest -q` (a replayed capture standing behind the canonical command) ->
-  # REFUSED naming both invocations; rr-ok is its ALLOW twin, one property apart. rr-rfilter: the recorded invocation
-  # carries `--keyword=x` (RUN-FILTER refuses it) while `Canonical run:` carries `--keywordx`, which RUN-FILTER passes
-  # and which normalises (`=` removed) to the recorded one, so only the recorded invocation's RUN-FILTER can refuse it.
-  for c in rr-replay rr-rfilter; do
-    cell "$c" || continue
-    if [ "$c" = rr-replay ]; then blk="$(printf 'Canonical run: `python3 -m pytest -q` from the frozen worktree root\nCanonical result: %s' "$RR_RES")"
-    else blk="$(printf "Canonical run: \`awk 'BEGIN { print \"===== %s =====\"; exit }' --keywordx\`\\nCanonical result: %s" "$RR_RES" "$RR_RES")"; fi
+  # REFUSED naming both invocations; rr-ok is its ALLOW twin, one property apart.
+  if cell rr-replay; then
+    c=rr-replay; blk="$(printf 'Canonical run: `python3 -m pytest -q` from the frozen worktree root\nCanonical result: %s' "$RR_RES")"
     rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$blk" || return 1
-    if lr_prec "$sd" "$d"; then
-      if [ "$c" = rr-replay ]; then rr_good "$sd" "$d"; else rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk "BEGIN { print \"===== $RR_RES =====\"; exit }" --keyword=x; fi
+    if lr_prec "$sd" "$d"; then rr_good "$sd" "$d"
       if [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO"; then lr_merge "$sd" "$d" "$CRB_STORY"
-        if [ "$c" = rr-replay ]; then
-          refused_at "is not the recorded run's invocation" "$o" && has "$MO" "'Canonical run: \`python3 -m pytest -q\`'" && has "$MO" "\`$RR_INV\`" \
-            || WHY="$WHY $c{rc=$RC $(reline "$MO")}"
-        else refused_at "selects tests by name (--keyword=x)" "$o" || WHY="$WHY $c{rc=$RC $(reline "$MO")}"; fi
+        refused_at "is not the recorded run's invocation" "$o" && has "$MO" "'Canonical run: \`python3 -m pytest -q\`'" && has "$MO" "\`$RR_INV\`" \
+          || WHY="$WHY $c{rc=$RC $(reline "$MO")}"
       else WHY="$WHY $c{--record-run rc=$RRC $(head -2 "$MO" | tr '\n' ' ')}"; fi
     else WHY="$WHY $c{record not written: $(head -1 "$MO")}"; fi
     lr_done
-  done
+  fi
   # THE QUOTED INVOCATION (BL-905 fold). rr-mq: a run whose argv carries a quoted multi-word marker (`awk -f <program>
   # pytest -m 'a and b'`, the operands a BEGIN-only program never reads), under a conventions file declaring
   # `-m "a and b"` canonical: RECORDED-RUN, the record's invocation line and the `Canonical run:` copy are the one
@@ -4979,6 +4972,38 @@ p_run_rec() {
     else WHY="$WHY $c{record not written: $(head -1 "$MO")}"; fi
     rm -f "$REPO_RR/docs/coding-conventions.md"; lr_done
   done
+  # rr-rfilter (BL-988, RECORD = CHECK): an invocation RUN-FILTER refuses (`--keyword=x`, after a pytest operand the awk
+  # stub never reads, so RUN-SHAPE reads a run) is REFUSED by --record-run before it runs, in the shard-directory form:
+  # the stub's sentinel absent, nothing recorded. run_bind's own RUN-FILTER, which this cell used to reach, is rr-rbind's.
+  if cell rr-rfilter; then
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$RR_BLK" || return 1
+    if lr_prec "$sd" "$d"; then wr_stubs || return 1
+      rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk -f "$WORK/wr-sent.awk" pytest --keyword=x
+      [ "$RRC" = 2 ] && has "$MO" "$WR_PRE" && has "$MO" "selects tests by name (--keyword=x) (record-only-diff.sh RUN-FILTER, the rule run_bind holds the recorded invocation to); nothing was run or recorded" \
+        && ! has "$MO" RECORDED-RESULT && [ ! -e "$WR_SENT" ] && ! grep -q '^run\.' "$LR_PATH" \
+        || WHY="$WHY rr-rfilter{rc=$RRC sentinel=$([ -e "$WR_SENT" ] && echo present || echo absent) $(head -1 "$MO")}"
+    else WHY="$WHY rr-rfilter{record not written: $(head -1 "$MO")}"; fi
+    rm -f "$WR_SENT" "$REPO_RR/scripts/w.py" "$REPO_RR/scripts/other.py"; lr_done
+  fi
+  # rr-rbind (BL-988 fold D1): run_bind's own RUN-FILTER on the recorded invocation, which --record-run's pre-check now
+  # holds at record time too. The run is recorded under conventions declaring the marker `=unit` (`pytest -m=unit`),
+  # the declaration is then replaced by `pytest -m unit`, and the merge reads a `Canonical run:` spelling `-munit`, which
+  # RUN-FILTER reads as the declared marker `unit` and which normalises (`=` removed) to the recorded invocation: only
+  # the recorded invocation's RUN-FILTER can refuse it -> REFUSED naming the recorded run.
+  if cell rr-rbind; then
+    printf 'BEGIN { print "===== %s ====="; exit }\n' "$RR_RES" > "$WORK/rr-mq.awk" || return 1
+    rr_world "$sd" "$REPO_RR" "$RR_B" "$RR_F" "$(printf 'Canonical run: `awk -f %s pytest -munit`\nCanonical result: %s' "$WORK/rr-mq.awk" "$RR_RES")" || return 1
+    mkdir -p "$REPO_RR/docs" && printf -- '- canonical: `pytest -m=unit`\n' > "$REPO_RR/docs/coding-conventions.md" || return 1
+    if lr_prec "$sd" "$d"; then rr_rec "$sd" "$d" "${d%%/docs/reviews/*}" awk -f "$WORK/rr-mq.awk" pytest -m=unit
+      if [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO"; then
+        printf -- '- canonical: `pytest -m unit`\n' > "$REPO_RR/docs/coding-conventions.md" || return 1
+        lr_merge "$sd" "$d" "$CRB_STORY"
+        refused_at "selects by marker (-m =unit), which the conventions do not declare canonical" "$o" && has "$MO" "the recorded run (run.$RR_SB) invoked" \
+          || WHY="$WHY rr-rbind{rc=$RC $(reline "$MO") $(grep '^MERGED' "$MO")}"
+      else WHY="$WHY rr-rbind{--record-run rc=$RRC $(head -2 "$MO" | tr '\n' ' ')}"; fi
+    else WHY="$WHY rr-rbind{record not written: $(head -1 "$MO")}"; fi
+    rm -f "$REPO_RR/docs/coding-conventions.md"; lr_done
+  fi
   # THE EARLIER PASS. The run recorded, then its key and sha moved: rr-stale, this pass's own key at B (B..F touches
   # app/) -> REFUSED; rr-earlier-eq, another pass's key at F, merged with no --story -> MERGED (the equal-sha lookup
   # alone); rr-cross-ok, another key at X (X..F record-only) -> MERGED; rr-cross-code, another key at B -> REFUSED
@@ -5147,6 +5172,208 @@ p_run_rec() {
         || WHY="$WHY rr-c-lru{rc=$SRC canonical LEGACY lines: $n $(reline "$CO")}"
     else cr_no "$sd" "$f" rr-c-seat "$CR_NORUN"; fi
     rm -f "$f" "$REPO_CRL/.git/ai-dlc/stories/s1-1"
+  done
+  [ -z "$WHY" ]
+}
+
+# ---- BL-988, THE DECLARED WRAPPER (record-only-diff.sh DECLARED WRAPPER; merge-review-shards.sh --record-run RECORD =
+# CHECK). WR_CONV is a conventions file declaring the canonical path and marker, the reference consumer's wrapper line for
+# a STUB program scripts/w.py (options --cwd, --python, --artifact, one value each), and two spans that declare nothing
+# (`git checkout -- <file>`: no placeholder after the `--` names pytest; `npm test -- --watch`: a non-placeholder there).
+# The stub is never the consumer's watchdog: it writes WR_SENT and prints a pytest session line, copied as scripts/w.py
+# and scripts/other.py into REPO_RR, untracked (--record-run never refuses on an untracked file), so a record that ran it
+# leaves the sentinel and one refused before anything ran leaves none. wr-sent.awk is the same stub for awk.
+WR_CONV="$(printf -- '%s\n' '- canonical: `pytest suite/tests` and `<venv>/bin/python -m pytest -m unit`' \
+  '- the mandated wrapper: `python3 -u scripts/w.py --cwd <repo-root> --python <venv>/bin/python --artifact test-results/<name>.txt -- <pytest args>`' \
+  '- a wrapper with a no-value option: `python3 scripts/wq.py --quiet --cwd <repo-root> -- <pytest args>`' \
+  '- not wrappers: `git checkout -- <file>`, `npm test -- --watch` and `python3 scripts/w2.py --cwd <repo-root> -- --watch <pytest args>`')"
+WR_W="python3 -u scripts/w.py --cwd /r --python /v/bin/python --artifact test-results/a.txt --"
+# THE TERMINATION SEED: the conventions span an rw_wrap draft looped on forever, its outer match() loop advancing `line`
+# after decl() had reset RSTART and RLENGTH (0 and -1 on a miss, which re-reads the whole line).
+WR_C1='`python3 scripts/w.py --cwd <repo-root> -- <pytest args>`'
+WR_PRE="--record-run: the check half would refuse this record:"
+WR_DW="hands the declared wrapper scripts/w.py"
+# EVERY ASK IS BOUNDED BY CPU TIME, never by a wall clock (BL-868): a non-consuming loop in the declaration reader burns
+# CPU, and its awk dies of SIGXCPU whatever the box's load, so a mutant (m988-loop) or a regression that loops reads as
+# a wrong answer in the cell that asked, and `run.sh --matrix` completes under it. wr_ask runs ro_main under
+# `ulimit -t 5` and `ulimit -f 2048`; wr_rec and wr_crun run a --record-run and a --check-serial under `ulimit -t 10`
+# (the merge runs in process, in that subshell) and carry their exit back.
+wr_ask() { # <script-dir> <mode> <value> [conventions file] -> WRC, WRO (the whole output), $MO; in process, one subshell
+  ( ulimit -t 5; ulimit -f 2048; ip_run "$1/record-only-diff.sh" ro_main "$2" "$3" ${4:+"$4"} ) > "$MO" 2>&1 < /dev/null; WRC=$?
+  WRO=""; IFS= read -r -d '' WRO < "$MO"; WRO="${WRO%$'\n'}"
+}
+wr_rec() { # rr_rec's arguments -> RRC, $MO, under the CPU bound
+  ( ulimit -t 10; ulimit -f 20480; rr_rec "$@"; exit "$RRC" ); RRC=$?
+}
+wr_crun() { # cr_run's arguments -> SRC, $CO, under the CPU bound
+  ( ulimit -t 10; ulimit -f 20480; cr_run "$@"; exit "$SRC" ); SRC=$?
+}
+# wr_bounded <script-dir> <mode> <value> <conventions file> -> WRC, WRO: wr_ask behind a far-out wall backstop. The ask
+# runs in a background subshell under the same CPU bound; the backstop beside it kills THAT pid, the one this function
+# started, only if its 600-second sleep runs to its end, and no verdict a working subject can reach depends on it.
+# THE SLEEPER IS KILLED BY ITS RECORDED PID AND REAPED ON EVERY PATH, by a file handshake, never by a signal to the
+# watchdog (a TERM sent to a just-forked subshell was measured LOST, the watchdog waiting on a live `sleep 600`): the
+# watchdog starts it, writes its pid to <k>.pid, then kills it itself if <k>.done exists; this function writes <k>.done
+# once the ask is over, then kills the pid in <k>.pid if it is there. Whichever runs second sees the other's file, and
+# the watchdog, which waits on the sleeper, reaps it. WR_WD_PIDF (a probe's file, never set here) gets each pid.
+WR_WDN=0
+wr_bounded() {
+  local p w k sp=""
+  WR_WDN=$((WR_WDN + 1)); k="$WORK/wr-wd.$WR_WDN"
+  ( ulimit -t 5; ulimit -f 2048; ip_run "$1/record-only-diff.sh" ro_main "$2" "$3" "$4" ) > "$MO" 2>&1 < /dev/null &
+  p=$!
+  ( sleep 600 & s=$!
+    printf '%s\n' "$s" > "$k.pid"; [ -z "${WR_WD_PIDF:-}" ] || printf '%s\n' "$s" >> "$WR_WD_PIDF"
+    [ ! -e "$k.done" ] || kill "$s" 2> /dev/null
+    wait "$s" && kill -KILL "$p" 2> /dev/null; exit 0 ) > /dev/null 2>&1 < /dev/null &
+  w=$!
+  wait "$p"; WRC=$?
+  : > "$k.done"
+  [ ! -s "$k.pid" ] || { IFS= read -r sp < "$k.pid"; case "$sp" in [1-9]*) kill "$sp" 2> /dev/null ;; esac; }
+  wait "$w" 2> /dev/null; rm -f "$k.pid" "$k.done"
+  WRO=""; IFS= read -r -d '' WRO < "$MO"; WRO="${WRO%$'\n'}"
+}
+wr_cell() { # <cell> <script-dir> <mode> <value> <conventions file | -> <want exit> <want output, exact>
+  cell "$1" || return 0
+  if [ "$5" = - ]; then wr_ask "$2" "$3" "$4"; else wr_ask "$2" "$3" "$4" "$5"; fi
+  [ "$WRC" = "$6" ] && [ "$WRO" = "$7" ] || WHY="$WHY $1{rc=$WRC [$WRO], want rc=$6 [$7]}"
+}
+wr_stubs() { # REPO_RR's untracked stubs and the awk twin; WR_SENT removed
+  WR_SENT="$WORK/wr.sent"
+  case "$WORK" in *[!A-Za-z0-9_./-]*) WHY="$WHY FIXTURE ERROR: $WORK is not a bare word"; return 1 ;; esac
+  mkdir -p "$REPO_RR/scripts" \
+    && printf 'open("%s", "w").close()\nprint("===== %s =====")\n' "$WR_SENT" "$RR_RES" > "$REPO_RR/scripts/w.py" \
+    && cp "$REPO_RR/scripts/w.py" "$REPO_RR/scripts/other.py" \
+    && printf 'BEGIN { printf "" > "%s"; print "===== %s ====="; exit }\n' "$WR_SENT" "$RR_RES" > "$WORK/wr-sent.awk" \
+    && rm -f "$WR_SENT" || { WHY="$WHY FIXTURE ERROR: the BL-988 stubs were not written"; return 1; }
+}
+wr_pre() { # <cell> <want reason>: the last rr_rec was REFUSED by the pre-check with that reason, nothing run or recorded
+  [ "$RRC" = 2 ] && has "$MO" "$WR_PRE" && has "$MO" "$2" && has "$MO" "nothing was run or recorded" && ! has "$MO" RECORDED-RESULT \
+    && [ ! -e "$WR_SENT" ] && ! grep -q '^run\.' "$REPO_RR/.git/ai-dlc/stories/s1-1" 2> /dev/null \
+    || WHY="$WHY $1{rc=$RRC sentinel=$([ -e "$WR_SENT" ] && echo present || echo absent) $(head -1 "$MO")}"
+}
+p_wrap() {
+  local sd="$1" cv="$WORK/wr-conv.md" nd="$WORK/wr-nodecl.md" c1="$WORK/wr-c1.md" f pv c o rc
+  WHY=""; pv="$(printf '## Verdict\nPASS')"
+  printf '%s\n' "$WR_CONV" > "$cv" && printf -- '- canonical: `pytest suite/tests` and `<venv>/bin/python -m pytest -m unit`\n' > "$nd" \
+    && printf '%s\n' "$WR_C1" > "$c1" || { WHY="$WHY FIXTURE ERROR: the BL-988 conventions files were not written"; return 1; }
+  # wr-receipt: BL-988's receipt (receipt-bl988.sh, its header), run beside this fixture over the script directory's
+  # record-only-diff.sh (receipt-bl980.sh drives every receipt in exactly the "$sd/<file>" form its call site names).
+  if cell wr-receipt; then
+    o="$(bash "$LIB_DIR/receipt-bl988.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
+    [ "$rc" = 0 ] && [ "$(grep -c '^  ok    receipt-bl988 R[0-4] ' <<<"$o")" = 5 ] \
+      || WHY="$WHY wr-receipt{rc=$rc $(grep FAIL <<<"$o" | tr '\n' ' ')}"
+  fi
+  # RUN-FILTER and RUN-SHAPE asked directly (the function every caller asks). wr-ok: the declared wrapper with its three
+  # options and a declared payload passes both; wr-undecl, the same payload under scripts/other.py, reads exactly as
+  # without a wrapper (the base reading). wr-pos (B1): a positional before the bare -- is refused naming it, as
+  # argparse REMAINDER would start there. wr-adm: `--adm` is no prefix of --admit-only. wr-admit: an option the
+  # declaration does not carry. wr-subpath and wr-mslow (D2): the payload is read as pytest's arguments, so an undeclared
+  # sub-path and an undeclared marker refuse (a flags-only reading passes both). wr-kpay: -k in the payload.
+  wr_cell wr-ok "$sd" run-filter "\`$WR_W suite/tests -q -n 8\`" "$cv" 0 ""
+  wr_cell wr-ok-shape "$sd" run-shape "\`$WR_W suite/tests -q -n 8\`" "$cv" 0 ""
+  wr_cell wr-undecl "$sd" run-filter '`python3 -u scripts/other.py --cwd /r -- suite/tests -q`' "$cv" 1 "hands the runner a path after -- (suite/tests)"
+  wr_cell wr-pos "$sd" run-filter '`python3 -u scripts/w.py --cwd /r tests/test_x.py -- -q`' "$cv" 1 "$WR_DW an argument before its bare -- (tests/test_x.py), which narrows what it runs"
+  wr_cell wr-adm "$sd" run-filter '`python3 -u scripts/w.py --cwd /r --adm -- suite/tests`' "$cv" 1 "$WR_DW an option its conventions declaration does not carry (--adm)"
+  wr_cell wr-admit "$sd" run-filter '`python3 -u scripts/w.py --cwd /r --admit-only -- suite/tests`' "$cv" 1 "$WR_DW an option its conventions declaration does not carry (--admit-only)"
+  wr_cell wr-subpath "$sd" run-filter "\`$WR_W suite/tests/unit -q\`" "$cv" 1 "narrows the collection to the path suite/tests/unit, which the conventions do not declare canonical"
+  wr_cell wr-mslow "$sd" run-filter "\`$WR_W -m slow suite/tests\`" "$cv" 1 "selects by marker (-m slow), which the conventions do not declare canonical"
+  wr_cell wr-kpay "$sd" run-filter "\`$WR_W -k foo suite/tests\`" "$cv" 1 "selects tests by name (-k)"
+  # wr-prefix: options match exactly, so `--pyth` is not the declared --python (argparse would expand it).
+  wr_cell wr-prefix "$sd" run-filter '`python3 -u scripts/w.py --cwd /r --pyth /v/bin/python -- suite/tests`' "$cv" 1 "$WR_DW an option its conventions declaration does not carry (--pyth)"
+  # wr-fallback: a pytest token before the wrapper's payload hands the span back to the plain reading, so a filtered
+  # pytest run ahead of a declared wrapper run on the same line is still refused for its filter.
+  wr_cell wr-fallback "$sd" run-filter '`pytest -k x ; python3 -u scripts/w.py --cwd /r -- suite/tests`' "$cv" 1 "selects tests by name (-k)"
+  # wr-artpy1 and wr-artpy2: an option VALUE ending in pytest (`--artifact /x/pytest`, `--python /v/bin/pytest`) is
+  # no pytest token, so the plain reading never takes the span back and the undeclared option is refused naming it.
+  wr_cell wr-artpy1 "$sd" run-filter '`python3 -u scripts/w.py --cwd /r --prelude p --artifact /x/pytest -- suite/tests`' "$cv" 1 "$WR_DW an option its conventions declaration does not carry (--prelude)"
+  # The declaration's own rules, each on a program of its own. wr-ph: `-- --watch <pytest args>` carries a
+  # non-placeholder after its --, so scripts/w2.py is no declared wrapper and its run keeps the base reading. wr-arity:
+  # --quiet is declared with no value (another option follows it), so the token after it is a positional and refused.
+  # wr-eqval: the `--opt=value` spelling of that no-value option is refused. wr-slash: an absolute program matches by
+  # trailing PATH COMPONENTS, so /x/evilscripts/w.py is not scripts/w.py.
+  wr_cell wr-ph "$sd" run-filter '`python3 scripts/w2.py --cwd /r -- suite/tests`' "$cv" 1 "hands the runner a path after -- (suite/tests)"
+  wr_cell wr-arity "$sd" run-filter '`python3 scripts/wq.py --quiet tests/test_x.py -- -q`' "$cv" 1 "hands the declared wrapper scripts/wq.py an argument before its bare -- (tests/test_x.py), which narrows what it runs"
+  wr_cell wr-eqval "$sd" run-filter '`python3 scripts/wq.py --quiet=1 --cwd /r -- suite/tests`' "$cv" 1 "hands the declared wrapper scripts/wq.py a value for an option its conventions declaration gives none (--quiet=1)"
+  wr_cell wr-slash "$sd" run-filter '`/x/evilscripts/w.py --cwd /r -- suite/tests`' "$cv" 1 "hands the runner a path after -- (suite/tests)"
+  wr_cell wr-artpy2 "$sd" run-filter '`python3 -u scripts/w.py --cwd /r --artifact a --admit-only --python /v/bin/pytest -- suite/tests`' "$cv" 1 "$WR_DW an option its conventions declaration does not carry (--admit-only)"
+  # W5 is widen-only: the declared wrapper passed an undeclared option is read by RUN-SHAPE exactly as without a wrapper,
+  # so with a count beside it (the reference consumer's story-1-1:144 shape) it is a run, and RUN-FILTER names the option.
+  wr_cell wr-prelude "$sd" run-shape '`python3 -u scripts/w.py --cwd /r --prelude x -- suite/tests` 5 passed' "$cv" 0 ""
+  wr_cell wr-prelude-f "$sd" run-filter '`python3 -u scripts/w.py --cwd /r --prelude x -- suite/tests` 5 passed' "$cv" 1 "$WR_DW an option its conventions declaration does not carry (--prelude)"
+  # D3: `npm test -- --watch` and `git checkout -- <file>` declare nothing, so `npm test -- src/pages` keeps the base
+  # reason and `git -- -q` is no run.
+  wr_cell wr-d3npm "$sd" run-filter '`npm test -- src/pages`' "$cv" 1 "hands the runner a path after -- (src/pages)"
+  wr_cell wr-d3git "$sd" run-shape '`git -- -q`' "$cv" 1 ""
+  # D4: a quoted token (rr_quote writes `'--junitxml=x>y'`) is no shell operator, so the file after it is read: refused,
+  # where the base read the `>` as a redirect and passed. wr-d4w: the same on a wrapper's payload.
+  wr_cell wr-d4 "$sd" run-filter "\`python -m pytest '--junitxml=x>y' suite/tests/test_one.py\`" "$cv" 1 "names a file or test node (suite/tests/test_one.py)"
+  wr_cell wr-d4w "$sd" run-filter "\`$WR_W '--junitxml=x>y' suite/tests/test_one.py\`" "$cv" 1 "names a file or test node (suite/tests/test_one.py)"
+  # N5: a relative program matches by equality only, so evil/scripts/w.py is no declared wrapper (the base reading); an
+  # absolute one matches by its trailing components.
+  wr_cell wr-n5rel "$sd" run-filter '`python3 evil/scripts/w.py --cwd /r -- suite/tests`' "$cv" 1 "hands the runner a path after -- (suite/tests)"
+  wr_cell wr-n5abs "$sd" run-filter '`/w/s/scripts/w.py --cwd /r -- suite/tests`' "$cv" 0 ""
+  # No conventions file, and one declaring no wrapper: the base reading, byte for byte (measured at e3d2dfc35).
+  wr_cell wr-noconv "$sd" run-filter "\`$WR_W suite/tests -q -n 8\`" - 1 "hands the runner a path after -- (suite/tests)"
+  wr_cell wr-noconv-shape "$sd" run-shape "\`$WR_W suite/tests -q -n 8\`" - 1 ""
+  wr_cell wr-nodecl "$sd" run-filter "\`$WR_W suite/tests -q -n 8\`" "$nd" 1 "hands the runner a path after -- (suite/tests)"
+  # wr-term: THE TERMINATION SEED, bounded (wr_bounded). A declared wrapper run under it is a run (exit 0, no output); a
+  # declaration read that never ends is killed, rw_wrap then reads no wrapper, and the base reading (exit 1) or the
+  # kill's own exit fails the cell.
+  if cell wr-term; then
+    wr_bounded "$sd" run-shape '`python3 scripts/w.py --cwd /r -- -n 8`' "$c1"
+    [ "$WRC" = 0 ] && [ -z "$WRO" ] || WHY="$WHY wr-term{rc=$WRC [$WRO], want rc=0 and no output}"
+  fi
+  # wr-loop-twin: a conventions file holding a bare `--` in pytest spans only, so the declaration reader's awk runs over
+  # every span and decl() returns before its own match(): the loop's twin that runs the reader and must not hang.
+  if cell wr-loop-twin; then
+    printf -- '- canonical: `pytest -- suite/tests`\n' > "$WORK/wr-pyonly.md" || return 1
+    wr_ask "$sd" run-shape '`pytest suite/tests`' "$WORK/wr-pyonly.md"
+    [ "$WRC" = 0 ] && [ -z "$WRO" ] || WHY="$WHY wr-loop-twin{rc=$WRC [$WRO], want rc=0 and no output}"
+  fi
+  # RECORD = CHECK (W6), in the serial form over REPO_RR at F (rr_repos), its conventions WR_CONV.
+  rr_repos || return 1
+  f="$REPO_RR/docs/reviews/s1/1-qa-validation.md"; mkdir -p "${f%/*}" "$REPO_RR/docs"
+  for c in rr-w-decl rr-w-undecl rr-w-kfoo rr-w-shape; do
+    cell "$c" || continue
+    wr_stubs || return 1
+    rm -f "$REPO_RR/.git/ai-dlc/stories/s1-1"
+    printf '%s\n' "$WR_CONV" > "$REPO_RR/docs/coding-conventions.md" || return 1
+    case "$c" in
+      # rr-w-decl: the declared wrapper is RECORDED (its sentinel present), and --check-serial over a review copying
+      # the RECORDED-RUN line reads SERIAL-OK in the held era (PROJ_RUN), no LEGACY line: one language, record and check.
+      rr-w-decl) RR_FZ="$RR_F" wr_rec "$sd" "$f" "$REPO_RR" python3 -u scripts/w.py --cwd /r --python /v/bin/python --artifact test-results/a.txt -- suite/tests -q
+        if [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO" && has "$MO" "RECORDED-RUN: $WR_W suite/tests -q (in $REPO_RR, sha $RR_F)" && [ -e "$WR_SENT" ]; then
+          if [ -z "${PROJ_RUN:-}" ]; then
+            PROJ_RUN="$WORK/proj-run"; mkdir -p "$PROJ_RUN" && cp -R "$PROJ/." "$PROJ_RUN/" && cp "$QA_MD_RUN" "$PROJ_RUN/core/team-roles/qa.md" \
+              || { WHY="$WHY FIXTURE ERROR: PROJ_RUN was not built"; return 1; }
+          fi
+          SR_CANON="$(printf 'Canonical run: `%s suite/tests -q` from the frozen worktree root\nCanonical result: %s' "$WR_W" "$RR_RES")" sr_file "$f" "$pv" "reviewed-sha: $RR_F"
+          CR_ROOT="$PROJ_RUN" wr_crun "$sd" "$f"
+          # The LEGACY line's absence is read beside its control, the SERIAL-OK line, in the same output.
+          [ "$SRC" -eq 0 ] && has "$CO" "SERIAL-OK: $f" && ! has "$CO" "$RR_LEG" || WHY="$WHY rr-w-decl{check-serial rc=$SRC $(head -1 "$CO")}"
+          # Its negative, one property apart: the same record behind a `Canonical result:` whose count is tampered is
+          # REFUSED by run_bind's result compare, so the SERIAL-OK above is the binding's answer and not a pass-through.
+          SR_CANON="$(printf 'Canonical run: `%s suite/tests -q` from the frozen worktree root\nCanonical result: %s' "$WR_W" "${RR_RES/812/813}")" sr_file "$f" "$pv" "reviewed-sha: $RR_F"
+          CR_ROOT="$PROJ_RUN" wr_crun "$sd" "$f"
+          [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "$RR_NE" && has "$CO" "'Canonical result: ${RR_RES/812/813}'" && has "$CO" "$SR_OWN" \
+            && ! has "$CO" "SERIAL-OK" || WHY="$WHY rr-w-decl{tampered count rc=$SRC $(head -1 "$CO")}"
+          rm -f "$f"
+        else WHY="$WHY rr-w-decl{--record-run rc=$RRC sentinel=$([ -e "$WR_SENT" ] && echo present || echo absent) $(head -2 "$MO" | tr '\n' ' ')}"; fi ;;
+      # rr-w-undecl: the same payload under an undeclared wrapper is refused before it runs, its sentinel absent.
+      rr-w-undecl) RR_FZ="$RR_F" wr_rec "$sd" "$f" "$REPO_RR" python3 -u scripts/other.py --cwd /r -- suite/tests -q
+        wr_pre "$c" "hands the runner a path after -- (suite/tests) (record-only-diff.sh RUN-FILTER, " ;;
+      # The pre-check is RUN-FILTER alone, the mirror of run_bind's own check. rr-w-kfoo: a run RUN-FILTER refuses (a
+      # pytest operand, -k) is REFUSED before it runs, the awk stub's sentinel absent. rr-w-shape (its twin): a program
+      # RUN-FILTER passes and RUN-SHAPE reads as no run (no runner token, no count in its text) is RECORDED, the stub
+      # run and its sentinel present, as at base: a pre-check that also applied RUN-SHAPE would refuse it.
+      rr-w-kfoo) RR_FZ="$RR_F" wr_rec "$sd" "$f" "$REPO_RR" awk -f "$WORK/wr-sent.awk" pytest -k foo
+        wr_pre "$c" "selects tests by name (-k) (record-only-diff.sh RUN-FILTER, " ;;
+      rr-w-shape) RR_FZ="$RR_F" wr_rec "$sd" "$f" "$REPO_RR" awk -f "$WORK/wr-sent.awk"
+        [ "$RRC" = 0 ] && grep -qxF "RECORDED-RESULT: $RR_RES" "$MO" && [ -e "$WR_SENT" ] && grep -q '^run\.' "$REPO_RR/.git/ai-dlc/stories/s1-1" 2> /dev/null \
+          || WHY="$WHY rr-w-shape{rc=$RRC sentinel=$([ -e "$WR_SENT" ] && echo present || echo absent) $(head -1 "$MO")}" ;;
+    esac
+    rm -f "$REPO_RR/docs/coding-conventions.md" "$REPO_RR/.git/ai-dlc/stories/s1-1" "$WR_SENT" "$REPO_RR/scripts/w.py" "$REPO_RR/scripts/other.py"
   done
   [ -z "$WHY" ]
 }

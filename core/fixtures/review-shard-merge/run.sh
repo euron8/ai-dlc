@@ -99,14 +99,23 @@
 # also trips: m-letter-idx canon.cr-glob-literal
 # also trips: m-rec-base lead_rec.a2-redirect
 # also trips: m-lc-merge lead_rec.a2-cwd
-# also trips: M60 run_rec.rr-legacy,run_rec.rr-replay,run_rec.rr-rfilter,run_rec.rr-stale,run_rec.rr-cross-code,run_rec.rr-s-lrange,run_rec.rr-s-lead,run_rec.rr-s-leg,run_rec.rr-s-lrl,run_rec.rr-s-lru
+# also trips: M77 worst.w-bn
+# also trips: M60 run_rec.rr-legacy,run_rec.rr-replay,run_rec.rr-rbind,run_rec.rr-stale,run_rec.rr-cross-code,run_rec.rr-s-lrange,run_rec.rr-s-lead,run_rec.rr-s-leg,run_rec.rr-s-lrl,run_rec.rr-s-lru
 # also trips: M61 run_rec.rr-s-lrange
 # also trips: M62 run_rec.rr-s-lead,run_rec.rr-s-lru
 # also trips: M64 run_rec.rr-stale
 # also trips: M65 run_rec.rr-s-lru
-# also trips: M74 run_rec.rr-ok,run_rec.rr-replay,run_rec.rr-earlier-eq,run_rec.rr-cross-ok
 # also trips: M76 run_rec.rr-c-lru
-# also trips: M77 worst.w-bn
+# also trips: M74 run_rec.rr-ok,run_rec.rr-replay,run_rec.rr-earlier-eq,run_rec.rr-cross-ok
+# also trips: m988-w2 wrap.wr-receipt,wrap.wr-undecl,wrap.wr-ph,wrap.wr-arity,wrap.wr-eqval,wrap.wr-slash,wrap.wr-d3npm,wrap.wr-d3git,wrap.wr-n5rel,wrap.rr-w-kfoo,wrap.rr-w-shape
+# also trips: m988-w3 wrap.wr-receipt,wrap.wr-arity
+# also trips: m988-w4 wrap.wr-mslow,wrap.wr-d4w
+# also trips: m988-loop wrap.wr-receipt,wrap.wr-ok,wrap.wr-ok-shape,wrap.wr-pos,wrap.wr-adm,wrap.wr-admit,wrap.wr-subpath,wrap.wr-mslow,wrap.wr-prefix,wrap.wr-artpy1,wrap.wr-arity,wrap.wr-eqval,wrap.wr-artpy2,wrap.wr-prelude-f,wrap.wr-d4w,wrap.wr-n5abs,wrap.rr-w-decl
+# also trips: m988-w6 wrap.rr-w-undecl
+# also trips: m988-st2 wrap.wr-artpy2
+# also trips: m988-prefix wrap.wr-arity
+# also trips: m988-arity wrap.wr-eqval
+# also trips: m988-1041 run_rec.rr-sum-cut
 # MUTANT-MATRIX M1 decides=cs.partcite twins=cs.crossone
 # MUTANT-MATRIX M2 decides=owner.dup-merge twins=owner.dup-check-owner-unsealed
 # MUTANT-MATRIX M3 decides=mark.shard-3 twins=mark.caller-key
@@ -255,8 +264,8 @@
 # MUTANT-MATRIX M64 decides=run_rec.rr-cross-code twins=run_rec.rr-head
 # MUTANT-MATRIX M65 decides=run_rec.rr-s-lead twins=run_rec.rr-s-leg
 # MUTANT-MATRIX M67 decides=run_rec.rr-s-head twins=run_rec.rr-s-lrange
-# MUTANT-MATRIX M68 decides=run_rec.rr-replay twins=run_rec.rr-rfilter
-# MUTANT-MATRIX M69 decides=run_rec.rr-rfilter twins=run_rec.rr-mq
+# MUTANT-MATRIX M68 decides=run_rec.rr-replay twins=run_rec.rr-mq
+# MUTANT-MATRIX M69 decides=run_rec.rr-rbind twins=run_rec.rr-stale
 # MUTANT-MATRIX M70 decides=run_rec.rr-sum-cut twins=run_rec.rr-sum-log
 # MUTANT-MATRIX M71 decides=run_rec.rr-sum-log twins=run_rec.rr-sum-q
 # MUTANT-MATRIX M72 decides=run_rec.rr-s-lrl twins=run_rec.rr-s-lru
@@ -279,6 +288,23 @@
 # MUTANT-MATRIX M74 decides=run_rec.rr-mq twins=run_rec.rr-mu
 # MUTANT-MATRIX M75 decides=run_rec.rr-c-lrl twins=run_rec.rr-c-lru
 # MUTANT-MATRIX M76 decides=run_rec.rr-s-lru twins=run_rec.rr-c-lrl
+# MUTANT-MATRIX m988-w2 decides=wrap.rr-w-undecl twins=wrap.wr-ok
+# MUTANT-MATRIX m988-w3 decides=wrap.wr-pos twins=wrap.wr-adm
+# MUTANT-MATRIX m988-w4 decides=wrap.wr-subpath twins=wrap.wr-kpay
+# MUTANT-MATRIX m988-quote decides=wrap.wr-d4 twins=wrap.wr-d4w
+# MUTANT-MATRIX m988-loop decides=wrap.wr-term twins=wrap.wr-loop-twin
+# MUTANT-MATRIX m988-n2 decides=wrap.wr-prelude twins=wrap.wr-prelude-f
+# MUTANT-MATRIX m988-w6 decides=wrap.rr-w-kfoo twins=wrap.rr-w-shape
+# MUTANT-MATRIX m988-w6s decides=wrap.rr-w-shape twins=wrap.wr-receipt
+# MUTANT-MATRIX m988-d3 decides=wrap.wr-d3git twins=wrap.wr-d4
+# MUTANT-MATRIX m988-fb decides=wrap.wr-fallback twins=wrap.wr-artpy1
+# MUTANT-MATRIX m988-st2 decides=wrap.wr-artpy1 twins=wrap.wr-ph
+# MUTANT-MATRIX m988-prefix decides=wrap.wr-prefix twins=wrap.wr-fallback
+# MUTANT-MATRIX m988-arity decides=wrap.wr-arity twins=wrap.wr-slash
+# MUTANT-MATRIX m988-ph decides=wrap.wr-ph twins=wrap.wr-arity
+# MUTANT-MATRIX m988-slash decides=wrap.wr-slash twins=wrap.wr-artpy2
+# MUTANT-MATRIX m988-oper decides=wrap.wr-d4w twins=wrap.wr-n5rel
+# MUTANT-MATRIX m988-1041 decides=run_rec.rr-nosum twins=run_rec.rr-sum-log
 # MUTANT-MATRIX M77 decides=worst.w-disc twins=worst.w-ok
 # MUTANT-MATRIX M78 decides=miss_ord.miss-ord twins=cs.partcite
 # MUTANT-MATRIX M79 decides=a3.a3-two twins=cs.partcite
@@ -290,6 +316,9 @@
 #   for k in 0 1 2 3 4; do RSM_MATRIX_SLICE=$k/5 AI_DLC_VERDICT_STORE="$(mktemp -d)" \
 #     bash core/fixtures/review-shard-merge/run.sh --matrix > slice-$k.out 2>&1 & done; wait
 #   bash core/fixtures/review-shard-merge/run.sh --merge-slices slice-0.out slice-1.out slice-2.out slice-3.out slice-4.out
+# REMEASURE, OWED ROWS ONLY: RSM_MATRIX_IDS="<id> <id>..." with --matrix records every mutant as above and scores only
+# the rows named (MX1's whole-population counts then read short and it is not a verdict); a change re-measures the
+# rows whose predicate's population it moved and keeps the rest.
 # RSM_MATRIX_SLICE=k/n (integers, 0 <= k < n, --matrix only; anything else exits 2) is read only by matrix_score's
 # row loop: every slice still RECORDS all mutants, because a drive declaring fewer than two cells borrows the
 # deciding cell of every other mutant of its file from the full record, and it SCORES the rows whose 0-based index
@@ -341,14 +370,14 @@ rsm_merge_slices() {
 #                                         and GM1 (lib.sh's G wrapper spawns no auto-maintenance, BL-868)
 # The step and role prose pins (S0-S13, XC-STEP) run no subject and live in process-rule-pins section 4i.
 #   b  canon canon_merge files            CR1, CR2, FL1, BL-904's story history (receipt-bl904.sh, M58 M59 M66) and
-#      story_hist run_rec                 BL-905's RR1 (M60-M72, M74-M76), each with its mutants
+#      story_hist run_rec                 BL-905's RR1 (M60-M72, M74-M76) and BL-988's WR1 (m988-*), each with its mutants
 # M73 (MX1.slice) and K1-K3 (KS1-CTL) are hand-scored, never dealt: they have no mut_run call. MX1 is per-run accounting and runs in both shards.
 # THE COVERAGE JOIN (J0) runs in EVERY shard, and under --deal, before lib.sh builds anything: the declared units are
 # DERIVED from this file's `if sg <unit>; then` lines, the dealt lists must be disjoint and their union exact, every
 # arm line must sit inside a unit, every mutant (read off its mut_run call with a stub, the emission site) must map to
-# a dealt unit, the mutant total must be 160, and every declared shard must have a driver directory. It proves it can
+# a dealt unit, the mutant total must be 177, and every declared shard must have a driver directory. It proves it can
 # fire first, on a seeded duplicate and a seeded omission. --matrix runs every unit's arms and records every mutant;
-# alone it scores all 160 rows, with --group <x> only shard <x>'s dealt rows, printing every row's population as
+# alone it scores all 177 rows, with --group <x> only shard <x>'s dealt rows, printing every row's population as
 # MATRIX-ALLPOP so the two shards' MATRIX pairs join to the unsharded population. A plain run's KS1 asserts the shard
 # killed exactly the mutants it was dealt, and its KS1-CTL proves KS1 refuses that run's kill set less one id.
 # --deal prints each shard's dealt units, arms, mutants and its static unit-cell count (an arm's `cell` declarations in
@@ -441,8 +470,8 @@ MUT_ROWS="$(US="$_unitshard" awk -F'\t' 'BEGIN { n = split(ENVIRON["US"], l, "\n
 _mall="$(printf '%s\n' "$MUT_ROWS" | grep -c .)" || _mall=0
 _mnou="$(printf '%s\n' "$MUT_ROWS" | awk '$2 == "-"' | grep -c .)" || _mnou=0
 _mdup="$(printf '%s\n' "$MUT_ROWS" | awk '{ print $1 }' | sort | uniq -d | grep -c .)" || _mdup=0
-[ "$_mall" = 160 ] && [ "$_mnou" = 0 ] && [ "$_mdup" = 0 ] \
-  || { rm -rf "$RSM_JW"; rsm_broken "the mut_run calls name $_mall mutants (want 160), $_mdup id(s) twice, $_mnou whose predicate has no unit-guarded arm"; }
+[ "$_mall" = 177 ] && [ "$_mnou" = 0 ] && [ "$_mdup" = 0 ] \
+  || { rm -rf "$RSM_JW"; rsm_broken "the mut_run calls name $_mall mutants (want 177), $_mdup id(s) twice, $_mnou whose predicate has no unit-guarded arm"; }
 MUT_MINE=" "; MUT_MINE_N=0; MUT_MINE_SHARED=0
 while read -r _id _u _sh; do
   dg "$_u" || continue
@@ -835,6 +864,8 @@ fi # sg story_hist
 if sg run_rec; then
 arm2 run_rec "RR1 (BL-905): the canonical run is bound to a recorded run -- in a held era (qa.md at the base prescribes --record-run) a typed run and result with no record REFUSED [owner: cross], the same pair over a qa.md without the sentinel MERGED with one LEGACY line; --record-run's RECORDED-RESULT copied verbatim MERGED; a recorded run behind a Canonical run: naming another invocation REFUSED naming both, a recorded invocation RUN-FILTER narrows REFUSED; a verbose run cut off at a per-test progress line records nothing, pytest's session line is the summary over a later log line carrying a count, quiet output's own count line is the summary; this pass's run at another sha over code REFUSED, an earlier pass's run at the frozen sha MERGED with no --story, one at a sha whose change since is record-only MERGED, one whose change since touches code REFUSED naming the predicate's line; --record-run with the frozen worktree at another HEAD refused recording nothing, a runner exiting 1 after a summary recorded with exit 1, no summary refused recording nothing; a none claim needs no record;  serial --record-run with the worktree at another sha than --frozen refused recording nothing; the lead's --lead-range over a run recorded at another sha than the go-signal REFUSED; the lead's --lead-range over a base whose tracked qa.md lacks the sentinel SERIAL-OK with one LEGACY line though the installed qa.md carries it; a recorded run whose argv carries a quoted multi-word marker the conventions declare canonical recorded as the one shell line the Canonical run: copies, and MERGED, its bare-word twin MERGED; the lead's --lead-range over a base whose tracked qa.md lacks the canonical-run label SERIAL-OK with one canonical LEGACY line though the installed qa.md carries it, the seat's own form over the same file REFUSED" \
              "RR1: a canonical result was accepted with no run recorded at the frozen sha, or a recorded one refused"
+arm2 wrap "WR1 (BL-988): a conventions-declared wrapper is one canonical-run language for record and check -- RUN-FILTER passes the declared stub wrapper with its declared options and a declared payload and RUN-SHAPE reads it as a run; an undeclared wrapper, a relative evil/ spelling of the declared one, no conventions file and a conventions file declaring no wrapper each read exactly as at base; a positional before the bare --, --adm, the prefix --pyth of --python, --admit-only and --prelude (also beside an option value ending in pytest) are refused naming the token, a filtered pytest run ahead of a wrapper run on one line keeps its refusal, an undeclared payload sub-path, -m slow and -k refused as pytest's own arguments; --prelude beside a count is still a run (RUN-SHAPE only widens); git checkout -- <file> and npm test -- --watch declare nothing; a quoted '--junitxml=x>y' is no shell operator, so the test file after it is refused, plain and in a wrapper payload; the conventions span an earlier draft looped on reads a run under a CPU and wall kill switch; --record-run records the declared wrapper (its stub's sentinel present) and --check-serial over its RECORDED-RUN copy reads SERIAL-OK with no LEGACY line, the same record behind a tampered Canonical result: count REFUSED; an undeclared wrapper and a run RUN-FILTER refuses are each REFUSED before anything runs, the sentinel absent and nothing recorded, while a program only RUN-SHAPE refuses is recorded as at base (the pre-check is RUN-FILTER alone, run_bind's own check); BL-988's receipt passes" \
+          "WR1: a declared wrapper was refused, an undeclared or narrowed one accepted, the base reading moved without a declaration, the declaration read did not end, or --record-run ran or recorded what its check half refuses"
 fi # sg run_rec
 if sg files; then
 arm2 files "FL1: the Files: line -- a CODE finding naming two paths tracked at the frozen sha is SHARD-OK; Files: on an EVIDENCE finding, two Files: lines, an empty list, a backticked entry, a ':line' entry and a path tracked nowhere are each REFUSED by --check-shard naming the line; a path the range deleted is SHARD-OK (fl-del)" \
@@ -1061,6 +1092,9 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
         for q in $pop; do echo "MATRIX-ALLPOP $id $q"; done
         case "$MUT_MINE" in *" $id "*) ;; *) continue ;; esac
       fi
+      # RSM_MATRIX_IDS="<id>..." (--matrix only): score only the rows named, the re-measure of the rows a change owes
+      # (fixture-mutants.md clause 2: every mutant whose predicate's population moved); the rest keep their rows.
+      [ -z "${RSM_MATRIX_IDS:-}" ] || case " $RSM_MATRIX_IDS " in *" $id "*) ;; *) continue ;; esac
       ri=$((ri + 1))
       if [ -n "$RSM_SLICE_N" ]; then
         for q in $pop; do echo "MATRIX-POP $id $q"; MX_TPOP=$((MX_TPOP + 1)); done
@@ -1554,12 +1588,13 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     '    rr_s_="$(git --no-replace-objects -C "$rr_wt_" rev-parse -q --verify HEAD 2> /dev/null < /dev/null)"; rr_rp_="$rr_wt_"' \
     run_rec "rr-s-head{rc=0" "the serial --record-run's frozen sha read off the worktree's own HEAD"
   # M68 drops the compare of the `Canonical run:` invocation with the recorded one, so a recorded replay merges behind a
-  # review naming the canonical command. M69 drops the recorded invocation's RUN-FILTER, so a recorded `--keyword=x` run
-  # merges behind a `Canonical run:` line that RUN-FILTER passes and that normalises to the recorded invocation.
+  # review naming the canonical command. M69 drops the recorded invocation's RUN-FILTER, so a `-m=unit` run recorded
+  # under a declaration since removed merges behind a `Canonical run:` line (`-munit`) that RUN-FILTER passes and that
+  # normalises to the recorded invocation (rr-rbind; BL-988's pre-check now refuses rr-rfilter's run before it runs).
   CS_ONLY=rr-replay mut_run M68 merge-review-shards.sh '  [ "$(rr_norm "$rb_rs_")" = "$(rr_norm "$rb_ri_")" ] \' '  true \' \
     run_rec "rr-replay{rc=0" "the Canonical run: invocation not compared with the recorded invocation"
-  CS_ONLY=rr-rfilter mut_run M69 merge-review-shards.sh '  rb_rf_="$(mrs_sib "$RO" ro_main run-filter "\`$rb_ri_\`" ${4:+"$4"})" \' '  rb_rf_="" \' \
-    run_rec "rr-rfilter{rc=0" "the recorded invocation not held to RUN-FILTER"
+  CS_ONLY=rr-rbind mut_run M69 merge-review-shards.sh '  rb_rf_="$(mrs_sib "$RO" ro_main run-filter "\`$rb_ri_\`" ${4:+"$4"})" \' '  rb_rf_="" \' \
+    run_rec "rr-rbind{rc=0" "the recorded invocation not held to RUN-FILTER"
   # M70 restores the generic last-count-line rule over per-test lines, so a cut-off verbose run records `test_case_3
   # PASSED [ 99%]` as its summary. M71 drops the pytest session line's preference, so a log line after it is recorded.
   CS_ONLY=rr-sum-cut mut_run M70 merge-review-shards.sh ' && $0 !~ /::/ && $0 !~ /( PASSED| FAILED).*\[ *[0-9]+%\]/) c = NR' ') c = NR' \
@@ -1582,6 +1617,65 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   # which RUN-FILTER reads as the marker `a`, and a run the conventions declare canonical cannot merge.
   CS_ONLY=rr-mq mut_run M74 merge-review-shards.sh 'rr_quote "$@"; rr_inv_="${RR_Q' 'rr_inv_="$*"; rr_inv_="${rr_inv_' \
     run_rec "rr-mq{" "the recorded invocation joined with \$*, its quoting dropped"
+  # BL-988, THE DECLARED WRAPPER and RECORD = CHECK. m988-w2 matches any program to a declaration (W2), so an undeclared
+  # wrapper is recorded, its sentinel written. m988-w3 reads only the `-*` tokens before the bare -- (W3), so a positional
+  # there passes. m988-w4 reads a wrapper's payload flags-only, as the no-pytest branch reads every token (W4), so an
+  # undeclared payload sub-path passes. m988-quote drops the quote guard, so `'--junitxml=x>y'` reads as a redirect and
+  # the test file after it is never read. m988-loop advances the conventions line AFTER decl(), whose own match() reset
+  # RSTART and RLENGTH: the non-consuming loop an earlier draft shipped, scored only through wr_bounded's kill switch.
+  # m988-n2 restores RUN-SHAPE's refusal of a declared wrapper outside its declaration, so --prelude beside a count is
+  # no run. m988-w6 removes --record-run's pre-check (its RUN-FILTER ask answers 0 unasked), so a -k run is recorded;
+  # m988-w6s adds RUN-SHAPE to it, so a program only RUN-SHAPE refuses, recorded at base, is refused. m988-1041 deletes
+  # the no-summary refusal after the run, so a run with no count is recorded.
+  CS_ONLY=rr-w-undecl mut_run m988-w2 record-only-diff.sh 'for (d = 1; d <= nd; d++) { if (!pm(p, DP[d])) continue' 'for (d = 1; d <= nd; d++) { if (0) continue' \
+    wrap "rr-w-undecl{rc=0 sentinel=present" "W2 matching any program to a declaration"
+  CS_ONLY=wr-pos mut_run m988-w3 record-only-diff.sh '        if (t !~ /^-/) return "hands the declared wrapper "' '        if (t !~ /^-/) continue; if (0) return "hands the declared wrapper "' \
+    wrap "wr-pos{rc=0" "W3 reading only the -* tokens before the bare --"
+  CS_ONLY=wr-subpath mut_run m988-w4 record-only-diff.sh "        ok\$'\\n'*) rf_a=\"\${RW#ok\$'\\n'}\" ;;" \
+    "        ok\$'\\n'*) rf_a=\"\$(printf '%s' \"\${RW#ok\$'\\n'}\" | awk '/^-/ && \$0 != \"-m\" && \$0 != \"-c\"')\" ;;" \
+    wrap "wr-subpath{rc=0" "W4 reading a wrapper's payload flags-only, as the all-branch reads"
+  CS_ONLY=wr-d4 mut_run m988-quote record-only-diff.sh "        case \"\$w\" in \\'*|\\\"*) ;; '|'|" "        case \"\$w\" in '|'|" \
+    wrap "wr-d4{rc=0" "rf_args reading a quoted token as a shell operator"
+  CS_ONLY=wr-term mut_run m988-loop record-only-diff.sh 'line = substr(line, RSTART + RLENGTH); decl(sp) }' 'decl(sp); line = substr(line, RSTART + RLENGTH) }' \
+    wrap "wr-term{rc=1 [" "the conventions-line loop advancing after decl() clobbered RSTART and RLENGTH"
+  CS_ONLY=wr-prelude mut_run m988-n2 record-only-diff.sh "      case \"\$RW\" in ok|ok\$'\\n'*) exit 0 ;; esac" "      case \"\$RW\" in ok|ok\$'\\n'*) exit 0 ;; x*) exit 1 ;; esac" \
+    wrap "wr-prelude{rc=1" "RUN-SHAPE refusing a declared wrapper outside its declaration whatever count it carries"
+  CS_ONLY=rr-w-kfoo mut_run m988-w6 merge-review-shards.sh '  rr_pf_="$(mrs_sib "$rr_ro_" ro_main run-filter' '  rr_pf_="$(true "$rr_ro_" ro_main run-filter' \
+    wrap "rr-w-kfoo{rc=0 sentinel=present" "--record-run's RUN-FILTER pre-check removed"
+  CS_ONLY=rr-w-shape mut_run m988-w6s merge-review-shards.sh '  rr_t_="$(mktemp -d "${TMPDIR:-/tmp}/record-run.XXXXXX")"' \
+    '  mrs_sib "$rr_ro_" ro_main run-shape "\`$rr_inv_\`" ${rr_cv_:+"$rr_cv_"} > /dev/null 2>&1 < /dev/null || refuse "--record-run: RUN-SHAPE reads no run; nothing was run or recorded"; rr_t_="$(mktemp -d "${TMPDIR:-/tmp}/record-run.XXXXXX")"' \
+    wrap "rr-w-shape{rc=2 sentinel=absent" "--record-run's pre-check also applying RUN-SHAPE"
+  # m988-d3 drops the rule that a declaration's placeholders after -- name pytest, so `git checkout -- <file>` declares
+  # git. m988-fb removes the plain reading's claim on a span with a pytest token before the payload, so a filtered
+  # pytest run ahead of a wrapper run on one line passes. m988-prefix matches an option by prefix, so `--pyth` is --python.
+  CS_ONLY=wr-d3git mut_run m988-d3 record-only-diff.sh 'if (!nt || !py) return' 'if (!nt) return' \
+    wrap "wr-d3git{rc=0" "a placeholder-only span declaring a wrapper whether or not a placeholder names pytest"
+  CS_ONLY=wr-fallback mut_run m988-fb record-only-diff.sh '        if (st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
+    '        if (0 && st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
+    wrap "wr-fallback{rc=0" "a pytest token before the payload left to the wrapper reading"
+  # m988-st2 widens that claim to every token before the payload (`st < 2`, the shipped defect), so a declared option's
+  # VALUE ending in pytest (`--artifact /x/pytest`) hands the span to the plain reading and the undeclared option passes.
+  CS_ONLY=wr-artpy1 mut_run m988-st2 record-only-diff.sh '        if (st == 0 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
+    '        if (st < 2 && t ~ /^(.*\/)?(pytest|py\.test)$/) { print "none"; exit 0 }' \
+    wrap "wr-artpy1{rc=0" "a declared option's value ending in pytest read as a pytest run"
+  CS_ONLY=wr-prefix mut_run m988-prefix record-only-diff.sh '        if (index(os, "|" o "=1|")) { if (i < nw && W[i + 1] !~ /^-/) i++; continue }' \
+    '        if (index(os, "|" o)) { if (i < nw && W[i + 1] !~ /^-/) i++; continue }' \
+    wrap "wr-prefix{rc=0" "a wrapper option matched by prefix"
+  # m988-arity gives every declared option a value, so the positional after the no-value --quiet is swallowed as one.
+  # m988-ph drops the rule that every token after a declaration's -- is a placeholder, so `-- --watch <pytest args>`
+  # declares scripts/w2.py. m988-slash matches an absolute program by a bare suffix, so /x/evilscripts/w.py is
+  # scripts/w.py. m988-oper drops the quote guard of the wrapper reader's own operator test, so a wrapper payload's
+  # `'--junitxml=x>y'` ends the payload and the test file after it is never read.
+  CS_ONLY=wr-arity mut_run m988-arity record-only-diff.sh '        o = t; ar = 0' '        o = t; ar = 1' \
+    wrap "wr-arity{rc=0" "every declared wrapper option read as taking a value"
+  CS_ONLY=wr-ph mut_run m988-ph record-only-diff.sh 'nt++; if (!ph(t)) return;' 'nt++;' \
+    wrap "wr-ph{rc=0" "a declaration's tokens after -- not held to placeholders"
+  CS_ONLY=wr-slash mut_run m988-slash record-only-diff.sh 'substr(r, length(r) - length(d)) == "/" d' 'substr(r, length(r) - length(d) + 1) == d' \
+    wrap "wr-slash{rc=0" "an absolute wrapper program matched by a bare suffix, not by path components"
+  CS_ONLY=wr-d4w mut_run m988-oper record-only-diff.sh 'function oper(t) { if (quoted(t)) return 0; return' 'function oper(t) { return' \
+    wrap "wr-d4w{rc=0" "the wrapper reader taking a quoted token for a shell operator"
+  CS_ONLY=rr-nosum mut_run m988-1041 merge-review-shards.sh '    || refuse "--record-run: the run exited $rr_rc_ and its output' '    || : "--record-run: the run exited $rr_rc_ and its output' \
+    run_rec "rr-nosum{rc=0" "a run whose output carries no summary line recorded"
   # BL-918, THE FOUR CLAIMS (header: WHAT IS AT STAKE), one mutant each in the merge. M77 the last shard's verdict
   # wins, not the worst (W_disc's cross is APPROVED). M78 the part set read off the shard directory, not the
   # re-derived map, so a missing part is never named. M79 Check 1's exactly-once test widened to at least once, so a
@@ -1604,13 +1698,13 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
     ip_load "$SRCDIR/merge-review-shards.sh" || bad "MX1: FIXTURE ERROR -- SRCDIR's merge was not loaded back after the matrix"
     reuse_proof
     if [ -n "$RSM_SLICE_N" ]; then
-      # A slice records all 160 rows, scores exactly the cells of the rows its k/n selects among the rows this run is
-      # dealt (all 160 with no --group; the shard's with one), their populations read off the full record, and runs no twin.
+      # A slice records all 177 rows, scores exactly the cells of the rows its k/n selects among the rows this run is
+      # dealt (all 177 with no --group; the shard's with one), their populations read off the full record, and runs no twin.
       _mx_want=0; [ "$RSM_SLICE_K" -ge "$MUT_MINE_N" ] || _mx_want=$(( (MUT_MINE_N - 1 - RSM_SLICE_K) / RSM_SLICE_N + 1 ))
-      if [ "$_mx_n" = 160 ] && [ "$MX_SROWS" = "$_mx_want" ] && [ "$MX_CELLS" = "$MX_SPOP" ] && [ "$TWIN_N" = 0 ]; then
+      if [ "$_mx_n" = 177 ] && [ "$MX_SROWS" = "$_mx_want" ] && [ "$MX_CELLS" = "$MX_SPOP" ] && [ "$TWIN_N" = 0 ]; then
         ok "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS mutant x cell pairs, the populations of its $MX_SROWS of $_mx_n recorded mutants ($MX_TPOP pairs in all), and ran no twin"
-      else bad "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS pairs over $MX_SROWS rows (want $_mx_want rows and $MX_SPOP pairs, of $MX_TPOP), $_mx_n recorded mutants (want 160), twins run $TWIN_N"; fi
-    elif [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 160 ]; then
+      else bad "MX1: --matrix slice $RSM_SLICE_K/$RSM_SLICE_N scored $MX_CELLS pairs over $MX_SROWS rows (want $_mx_want rows and $MX_SPOP pairs, of $MX_TPOP), $_mx_n recorded mutants (want 177), twins run $TWIN_N"; fi
+    elif [ "$MX_CELLS" -gt "$_mx_n" ] && [ "$TWIN_N" = 0 ] && [ "$_mx_n" = 177 ]; then
       ok "MX1: --matrix scored $MX_CELLS mutant x cell pairs over $_mx_n mutants and ran no twin"
     else bad "MX1: --matrix scored $MX_CELLS pairs over $_mx_n recorded mutants, twins run $TWIN_N"; fi
   else
@@ -1620,14 +1714,14 @@ if [ -d "$LIB_DIR/../../scripts" ] && [ "$(cd "$LIB_DIR/../../scripts" && pwd)" 
   fi
   # VBCTL: every mutant's own cell passed over the unmutated derived copy first (mut_run), one per mutant.
   # The count is the shard's DEAL, derived by J0 from the mut_run calls before any mutant ran; under --matrix every unit
-  # records all 160, each control first (J0 refuses any other total).
-  if { [ "$RSM_MATRIX" = 0 ] && [ "$VB_CTL_N" = "$MUT_MINE_N" ]; } || { [ "$RSM_MATRIX" = 1 ] && [ "$VB_CTL_N" = 160 ]; }; then ok "VBCTL: CONTROL -- this shard's dealt mutants among each of M1-M72, M74-M80, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name, m-d1-abs, m-wv-skip, m-wv-frozen, m-wv-seat, m956-1102, m956-1132, m956-1145, m956-rekey, m956-rekey-ko, m956-window and m956-stem's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of the $MUT_MINE_N dealt here, 160 in all): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
+  # records all 177, each control first (J0 refuses any other total).
+  if { [ "$RSM_MATRIX" = 0 ] && [ "$VB_CTL_N" = "$MUT_MINE_N" ]; } || { [ "$RSM_MATRIX" = 1 ] && [ "$VB_CTL_N" = 177 ]; }; then ok "VBCTL: CONTROL -- this shard's dealt mutants among each of M1-M72, M74-M80, m-k2only, m-nomix, m-row-exit, m-no-index, m-worktree, m-single-file, m-digit-slug, m-serial-only, m-status-skip, m-index-grammar, m-endpoint-only, m-date-born, m-shallow-ok, m-replace, m-story-dir, m-crlf, m-sprint, m-view-sprint, m-schema-env, m-root-env, m-relpath, m-gwt, m-roll-drop-off, m-roll-drop-every, m-legacy-env, m-py-isolated, m-one-sprint, m-ro-mode, m-lead-anc, m-record-key, m-record-path, m-unrec-refuse, m-unrec-silent, m-record-ignored, m-rsha-eq, m-rsha-always, m-rsha-off, m-live-ref, m-qa-at-F, m-disk-qa, m-slot-loose, m-lead-slot, m-rec-write, m-rec-unkeyed, m-rec-base, m-rec-sha, m-rec-era, m-unrec, m-run-bind, m-rec-idx, m-letter-idx, m-idx-pattern, m-lc-serial, m-lc-record, m-lc-merge, m-d1-merge, m-d1-record, m-d1-name, m-d1-abs, m-wv-skip, m-wv-frozen, m-wv-seat, m956-1102, m956-1132, m956-1145, m956-rekey, m956-rekey-ko, m956-window and m956-stem's selected cells, and the twelve -merge rows, passed unmutated ($VB_CTL_N of the $MUT_MINE_N dealt here, 177 in all): by the same run's passing arm over the byte-identical source set, else over the unmutated copy of the derived sibling set every mutant is built from"
   else bad "VBCTL: FIXTURE ERROR -- $VB_CTL_N of the $MUT_MINE_N mutants dealt to this shard had their cells pass over the unmutated copy, so the other verdicts are not evidence"; fi
   # MS1 (BL-906): the twelve byte-identical pairs share one copy each; every other mutant built its own.
   # The pairs dealt here: J0 counts, per shard, each mutant whose (file, old, new) an earlier mutant of the same shard made.
-  # Under --matrix every mutant is recorded, so the whole fixture's 12 pairs share and 148 copies are built.
+  # Under --matrix every mutant is recorded, so the whole fixture's 12 pairs share and 165 copies are built.
   if { [ "$RSM_MATRIX" = 0 ] && [ "$MUT_SHARED" = "$MUT_MINE_SHARED" ] && [ "$MUT_KN" = $((MUT_MINE_N - MUT_MINE_SHARED)) ] && [ "$MUT_SHARED" -ge 1 ]; } \
-     || { [ "$RSM_MATRIX" = 1 ] && [ "$MUT_SHARED" = 12 ] && [ "$MUT_KN" = 148 ]; }; then ok "MS1: the $MUT_SHARED byte-identical mutant pair(s) dealt here drove one shared copy each ($MUT_KN copies built for $([ "$RSM_MATRIX" = 1 ] && echo 160 || echo "$MUT_MINE_N") mutants)"
+     || { [ "$RSM_MATRIX" = 1 ] && [ "$MUT_SHARED" = 12 ] && [ "$MUT_KN" = 165 ]; }; then ok "MS1: the $MUT_SHARED byte-identical mutant pair(s) dealt here drove one shared copy each ($MUT_KN copies built for $([ "$RSM_MATRIX" = 1 ] && echo 177 || echo "$MUT_MINE_N") mutants)"
   else bad "MS1: $MUT_SHARED mutants drove a shared copy and $MUT_KN copies were built, want $MUT_MINE_SHARED and $((MUT_MINE_N - MUT_MINE_SHARED))"; fi
   # KS1 (BL-906): the KILL SET of a plain run is exactly the shard's deal -- every mutant J0 dealt here was killed
   # through mutant_killed in THIS run, once, and nothing else was. J0 proves the deal covers the fixture; KS1 proves the
