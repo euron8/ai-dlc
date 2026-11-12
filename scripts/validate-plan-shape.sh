@@ -617,8 +617,9 @@ for f in "${FILES[@]}"; do
   # the time sentence: an operator instruction at batch 236 makes it a required brief line, it is
   # bound here because the designation action's window is the one place every live plan carries its
   # brief lines, and it is a fixed string (grep -qF after the whitespace collapse), so it has no
-  # false-positive path. (7) FIVE TRAIN-RULE LABELS: the operator's train rules, after "what's
-  # taking so long for releases?". They are bound by their labels. Labels are fixed strings, so
+  # false-positive path. (7) SIX TRAIN-RULE LABELS: the operator's train rules, after "what's
+  # taking so long for releases?", the sixth (PRE-SEED BEHIND THE GATE) an operator instruction at
+  # batch 256 to make it "a standard operating rule". They are bound by their labels. Labels are fixed strings, so
   # there is no false-positive path. A label carrying no rule text still passes, which is the same
   # limit as every other conjunct: P14 binds presence, never wording.
   if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
@@ -639,11 +640,11 @@ for f in "${FILES[@]}"; do
       grep -qiE 'through[[:space:]]+hands' <<<"$p14_win" || p14_m="$p14_m 'through hands'"
       grep -qiE 'no[[:space:]]+edits' <<<"$p14_win" || p14_m="$p14_m 'no edits'"
       grep -qF 'Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.' <<<"$p14_win" || p14_m="$p14_m 'the time sentence'"
-      # --- BEGIN five train-rule labels (one block, so one edit removes it) ---
-      for p14_lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'NO TIMING RUNS' 'RELEASE TEXT IS PREPARED IN ADVANCE'; do
+      # --- BEGIN six train-rule labels (one block, so one edit removes it) ---
+      for p14_lbl in 'RELEASES BEFORE MEASUREMENTS' 'SHORTEST GATE FIRST' 'NO IDLE SESSIONS' 'NO TIMING RUNS' 'RELEASE TEXT IS PREPARED IN ADVANCE' 'PRE-SEED BEHIND THE GATE'; do
         grep -qF "$p14_lbl" <<<"$p14_win" || p14_m="$p14_m '$p14_lbl'"
       done
-      # --- END five train-rule labels ---
+      # --- END six train-rule labels ---
       if [ -z "$p14_m" ]; then p14_ok=1; elif [ -z "$p14_missing" ]; then p14_missing="$p14_m"; fi
     done <<<"$p14_wins"
     if [ "$p14_seen" -eq 0 ]; then
@@ -651,7 +652,7 @@ for f in "${FILES[@]}"; do
     elif [ "$p14_pos" -gt 0 ]; then
       err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD before the first dispatch: the marker sits on action number ${p14_pos} (counting from 0), after ${p14_pos} earlier action(s). The lead is designated BEFORE any dispatch, so the marker action must be the FIRST numbered action of the Next actions section (0. or 0a. is accepted). Move it to the front."
     elif [ "$p14_ok" -eq 0 ]; then
-      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD completely: the marker action lacks${p14_missing} within its own window (the action line through the blank line before the next column-0 prose, the next action or the next heading, wrapped lines joined). A pointer to another plan is not a designation. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. State in the action itself: ListAgents roll call, the lead never builds, owners build through hands, owners make no edits (every edit goes to a hand), the time sentence, and the five train rules by label: RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE."
+      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD completely: the marker action lacks${p14_missing} within its own window (the action line through the blank line before the next column-0 prose, the next action or the next heading, wrapped lines joined). A pointer to another plan is not a designation. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. State in the action itself: ListAgents roll call, the lead never builds, owners build through hands, owners make no edits (every edit goes to a hand), the time sentence, and the six train rules by label: RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE, PRE-SEED BEHIND THE GATE."
     fi
   fi
 

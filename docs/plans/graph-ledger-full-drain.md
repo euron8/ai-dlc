@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76, 65..75, 66..75, 1796..1816. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76, 65..75, 66..75, 1796..1816, 55..62, 1814..1817. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -45,13 +45,13 @@ silences P9 through P13 on this file. **A record is moved whole, including any s
 written inside it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in
 a batch record.
 
-**BATCH 255 — CLOSED.** Landed: `v0.1059.0` to `v0.1077.0`.
-`ai-dlc-33` led; its rulings and NOTEs go in the batch-255 close commit message. No `graph-*` session is ever messaged.
-- **Landed (`git log origin/main`):** `0.1059.0` BL-977 (`--fail-on=local-deterministic`); `0.1060.0` BL-538/808/811/812/817/819/838/842/911 PARTIAL; `0.1061.0` BL-841 PARTIAL (idle share did not fall); `0.1062.0` BL-963/964/965/967 closed; `0.1063.0` BL-507 CLOSED, BL-510/804/397/514/695 PARTIAL; `0.1064.0` BL-868 and BL-909 PARTIAL; `0.1065.0` BL-845 and BL-847 PARTIAL, BL-978 filed; `0.1066.0` BL-909 PARTIAL (M8-M10); `0.1067.0` BL-960/961/966/968 closed; `0.1068.0` BL-974 PARTIAL; `0.1069.0` BL-979 closed; `0.1070.0` 0 closed; BL-808/811/812/817 PARTIAL; `0.1071.0` BL-811, BL-817 closed; BL-695 PARTIAL; `0.1072.0` BL-980 filed+closed; `0.1073.0` BL-880 PARTIAL, BL-981 filed; `0.1074.0` BL-878 PARTIAL; `0.1075.0` BL-982 filed, PARTIAL; `0.1076.0` BL-983 filed+closed, BL-984 filed; `0.1077.0` docs close. Next VERSION `0.1078.0`; live 54, archive 900; next free id `BL-986` (970/973 also free; F11 filed BL-981, two corpus items).
-- **Rulings:** F5/BL-961 "Ship it". BL-847 strict blocking is NOT built. The BL-514 and BL-841 goals stay open. BL-880: "strike the pre-push step's own probe replay". BL-980 diagnosed by a fresh session. `apply.sh` "ships alone" is KEPT (operator); BL-978's evidence is recorded as a NOTE.
-- **F5 BREACH.** Hand `f5-c-inforce` ran `rm -rf "$ROOT"` once, in its own scratch script; `$ROOT` came from escalation-citation `seed.sh`'s `mktemp -d`; nothing outside it was lost.
-- **OPEN NOTEs:** askuserquestion-citation's G1-completeness never runs under the sandbox; BL-695's detector must follow coordinator-subagent sidechains; BL-810 needs its Step line; BL-909 residual (wrapper reporters); BL-972 needs an operator contact-shape ruling; BL-974/716 consumer outcomes owed; the batch-254 fanin placement NOTE (1 of 98) has no live entry; the durable channel's A6 reads 74773/74800 B (`validate-claude-rules.sh`), so the next durable-channel addition needs a vestigial cut first; kept branches: b7's 16 drafts (`b255-F2-*`/`F2b-*`), 1d's 10 (`b255-F2c-*`), `b255-F9-code-tip-7ad8e93e5` (keeps a sha cited by 0.1074.0/0.1075.0 reachable), and `255-b255-F15-bl983-cmp-tools-decl-census-decls` (BL-984 follow-up); cleanups force-removed dirty scratch worktrees (F13 without recorded porcelain; others after recording it); uncommitted scratch edits were lost, landed work was not; archived BL-927 keeps `d0b523eaf` inside a recorded command, deliberately not re-pinned; F2b (`0.1070.0`) put 30 in-process validator passes into backlog-receipt-binding, invisible to `invocations.decl` (BL-982), and the pole went 412 to 1564 s loaded; F14 (`0.1075.0`) left BL-982 PARTIAL, the tree-wide static arm owed. Pole, timer-drift and worktree counts are lead-reported from push output and session reports; no in-tree source.
-- **Graph (action 7).** Graph pulled `0.1061.0` onto the UNMERGED branch `ai-dlc-update/0.1061.0-reconcile-20261111T223500Z`, tip `0953c59f7`, whose `.githooks/pre-push:128` gates `--fail-on=local-deterministic`; graph `main` `5596361ce` is installed at `0.1028.0` and still gates `--fail-on=deterministic`. Unseeded, the audit exits 0 under both thresholds at that tip (0 tier-1 findings). **BL-977 seeded probe** (scratch clone at `0953c59f7`, a tier-1 `ORIGIN_TAG` seeded): a core-owned seed (`.claude/team-roles/adversary.md`, `[core 1 / local 0]`) exits 0 under `--fail-on=local-deterministic` and 1 under `--fail-on=deterministic`; a locally owned seed (`CLAUDE.md`, `[core 0 / local 1]`) exits 1 under both; the unseeded control exits 0 under both. The unresolved-owner case is NOT probed on graph (only retro-audit-scans' `LDu` world covers it), and none of this is observable on graph's `main` until the reconcile branch merges. Graph porcelain count 13 (observation only). **A pull is never dispatched by this program.**
+**BATCH 256 — OPEN.** Lead `ai-dlc-a7`, accepted from `ai-dlc-f3` at `0.1078.0` `e3d2dfc35`. No `graph-*` session is ever messaged.
+- **Graph at open:** `main` `6ee289617`, stamp `0.1061.0` (`e0ebaf019` is an ancestor), 17 behind; s322 has 8/8 stories done, its retro still running; ledger live 4 at `main`, all unfiled at open; one further filing uncommitted in graph's working tree (`PC-S322-RETRO-CARRY-DERIVATION-REPOINT-BLINDS-TREE-MATCH`). Action 7 at open: PENDING 0, no rc regression, banked.
+- **Owners:** 29 sessions, one release each. C1 BL-984 decls; C2 BL-986; C3 BL-987; C4 BL-988; C5 BL-989; C6 BL-981/976/974; N1 BL-978; N2 BL-985; N3 BL-809; N4 BL-819; N5 BL-880; N6 BL-695; N7 BL-510/514; N8 BL-909; N9 BL-990, also files BL-993; N10 BL-972; N11 BL-878; N12 BL-899; N13 core narrative drift (BL-991 reserved); M1 BL-508/541/543/550/552 planning re-audit; M2 BL-842/843/844/846/847 gate-2 outcomes; M3 BL-838/839/912/913; M4 BL-808/810; M5 BL-397/398/512/615; M6 BL-806/583/914/868; B1 BL-915 audit; B2 BL-911 narrowing; B3 BL-992 `install.sh`; B4 BL-982 static arm (`ai-dlc-d8`).
+- **Load:** the operator paused 24 of 29 sessions (05:37-05:45); active C1, C2, C3, C5, N9.
+- **Operator rulings:** BL-615 item 2 WAIVED (closes on its outcome line alone); BL-972 contact shape is option 1, "dispatch, then ask"; `AI_DLC_FIXTURE_JOBS=9` for this batch; PRE-SEED BEHIND THE GATE made a standard operating rule (action 0, this release).
+- **Lead rulings:** BL-974 term 7 is records-only (option B, a seal-time check, is on the operator list for its consumer cost); BL-978 fixes all six `apply.sh` scaffold arms; L3 (BL-899's driver-absent-at-base exclusion) has recorded text a/b/c/d, in the entry; STEP-AT-CLOSE: an efficiency entry cannot close in the release that measures it, so each gets a Step line now and closes in a follow-up release; the BL-972 receipt is re-keyed at the ask's position, column definitions in the entry; no object-writing git command inside `/Users/n8/git/graph`.
+- **Carried from batch 255 (binding if the subject is picked):** BL-847 strict blocking is NOT built; the BL-514 and BL-841 goals stay open; BL-880: strike the pre-push step's own probe replay; `apply.sh` "ships alone" is KEPT (operator); a pull is never dispatched by this program; the durable channel's A6 reads 74773/74800 B, so the next durable-channel addition needs a vestigial cut first; kept branches `b255-F2-*`/`F2b-*`, `b255-F2c-*`, `b255-F9-code-tip-7ad8e93e5`, `255-b255-F15-bl983-cmp-tools-decl-census-decls`.
 
 ### Derive the state; do not trust the numbers below
 
@@ -773,7 +773,10 @@ candidate's surviving half is upstream's to file and build, never a question for
      operator as silent. When designated, the lead arms ONE non-recurring job at now+45 minutes
      (cron cannot say 45 minutes, and recurring jobs drift: measured next fires 18 then 63 minutes
      apart); each fire re-arms the next job first. It re-arms after a compaction and stops when no
-     session remains active.
+     session remains active. A session the lead has paused stays in the roll call and answers with
+     its one line, and is not told to call `advisor` while paused (operator instruction at batch
+     256). The lead asks active sessions for advisor calls a few at a time: 28 at once at batch 256
+     returned rate-limited.
    - **A graph-watch session.** When the operator assigns one, a peer `ai-dlc-*` session watches
      the consumer READ ONLY for the batch: it reads graph's artifacts, transcripts and ledger; it
      never edits, commits or pushes there; it never messages a `graph-*` session. It reports to the
@@ -844,6 +847,17 @@ candidate's surviving half is upstream's to file and build, never a question for
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
+   - PRE-SEED BEHIND THE GATE. Operator instruction at batch 256: owners queued behind a gate
+     pre-seed the verdict store at their final sha, as "a standard operating rule". While a release
+     gates, the lead names the two owners queued directly behind it. Each, once its tip is final and
+     the release ahead has pushed, pre-rebases onto that pushed commit and, from a clean worktree
+     detached at that exact sha, runs `scripts/seed-verdict-store.sh` over its changed fixtures and
+     its carrier set, in at most three seeder processes over disjoint lists. When the release ahead
+     lands, `git rebase --onto origin/main <its pushed commit>` must reproduce the seeded
+     `HEAD^{tree}`; where it does not, re-seed only the fixtures whose declared inputs moved. The
+     push's `verdict store: N fixture(s) skipped` line is the evidence, and the owner reports N with
+     its squash sha. A red seed records nothing and goes to the lead as a FAIL before the push turn.
+     A seed is a correctness run and is never timed; one push still runs at a time.
    - **The owner-rules block.** Send it verbatim; it cites the rulebooks and actions it depends on
      rather than restating them.
 
@@ -979,7 +993,8 @@ candidate's surviving half is upstream's to file and build, never a question for
       report the exact stopped state. <lead> checks the push turn about every 30 minutes.
    6. While another release gates, pre-rebase onto its pushed commit; once it lands, move with
       `git rebase --onto origin/main <that commit>` (a plain rebase replays it), and check the
-      landed tree equals the tree it PUSHED, which a red gate can change.
+      landed tree equals the tree it PUSHED, which a red gate can change. When <lead> names you as
+      queued behind the gate, pre-seed under the plan's PRE-SEED BEHIND THE GATE rule.
       In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
       `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
       `**LANDED (v<version>).**` line at the START of each closed entry's backlog body, sha-less
@@ -1791,10 +1806,6 @@ satisfied and banked. Criterion 3 is per-release-branch and is re-checked on eac
 ---
 
 *Everything below is HISTORY. It is evidence, not instruction.*
-
-## Context
-
-Its body moved to `docs/plans/archive/graph-ledger-full-drain.md`.
 
 ## Start here
 

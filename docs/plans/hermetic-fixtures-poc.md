@@ -239,6 +239,10 @@ actions 3 and 4 are COMPLETED (0.750.0); they are kept numbered so citations res
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
+   - PRE-SEED BEHIND THE GATE. Operator instruction at batch 256: owners queued behind a gate
+     pre-seed the verdict store at their final sha, as "a standard operating rule". The rule is
+     stated in full under that label in `docs/plans/graph-ledger-full-drain.md` action 0; follow it
+     there.
 1. **MAKE THE CLONE AND PIN IT** — completed each batch; repeat: a full clone under `mktemp -d`, a
    `github` remote pointing at GitHub, this branch checked out, `PIN` recorded as `github/main`.
    Never work in `/Users/n8/git/ai-dlc` or a linked worktree of it.
