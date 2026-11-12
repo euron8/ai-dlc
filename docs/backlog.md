@@ -2810,3 +2810,17 @@ Receipt: `verify: manual`. The fix decides the test: a delete fed to the real ho
 Provenance: batch 256, M6, from m6-583a's push census; id allocated by the lead.
 
 verify: manual
+
+## BL-1013 — fixture-hygiene `--matrix` fans out every mutant's drives unbounded, about 120 concurrent validator runs, past the box's process-group line, while a bounded width gives the same verdicts
+
+**DEFECT.** OPEN. Filed 2026-11-12. In `core/fixtures/fixture-hygiene/run.sh` the matrix block (`if [ "$MODE" = matrix ]; then`, `:285`) loops over 20 mutants (`for m in MH1 MH2 ... MM4B MH9; do`, `:287`). For each one it starts six background drives: `drive "$m.d"`, `drive "$m.v" ... --derive` and `drive "$m.c"` (`:290`), and `d7drive "$m.7"`, `d8drive "$m.8"` and `d9drive "$m.9"` (`:291`). It then waits once, after the loop (`done; wait`, `:292`). That is 20 x 6 = 120 drives in flight at once, each a full validator run, with nothing bounding the width. The run-rules line of 150 members per process group is crossed by construction. The plain run (`:306-311`) starts 26 concurrent drives the same way (3 at `:306`, 14 at `:307`, 2 at `:308`, 2 at `:309` and 5 at `:310`) before its one `wait` at `:311`.
+
+By construction, the width should not move a verdict. `drive()` (`:235-238`) writes `$WORK/c.<tag>.out`, `.err` and `.rc` per tag, and the matrix reads them only after the `wait`. One caveat: the `$m.d` and `$m.v` drives run in the same world directory, `mut-$m`, at the same time. Measured at width 6, once, by m6-h9 at the release tip. The run used a scratch copy whose only change is an added `wait` after each mutant's six backgrounded drives, so 20 rounds of 6. It was started as `bash core/fixtures/fixture-hygiene/run.sh --matrix` from the worktree root, because `core/scripts/hermetic-run.sh` passes the fixture no arguments. Result: rc 0, empty stderr, and a peak process group of 36 members (a watchdog at 100 never fired). It printed 20 `MATRIX` lines, and each equals its committed `# MUTANT-MATRIX` row once `twins=` is normalised to `twins=-`, the DW and MH9 rows included. The fixture-hygiene `# MUTANT-MATRIX` rows were measured through that width-6 scratch edit only, never by a plain matrix run, and the unbounded width was not run.
+
+Owed: the matrix and plain runs bound their concurrency to a fixed width, so a `--matrix` run stays inside one process-group budget. No fix in this release.
+
+Receipt: `verify: manual`. The fix decides the test, and a receipt written only to file this entry is what BL-915 forbids.
+
+Provenance: batch 256, M6; id allocated by the lead.
+
+verify: manual
