@@ -68,6 +68,14 @@ matches wins:
 7. `merge`: a Read, Grep, Glob or Bash call naming a path that an earlier Agent or Task prompt of the unit named, or
    a TaskOutput or BashOutput call.
 8. `other`: everything else.
+9. `idle-wait`: time only, outside the per-message precedence above. The interval OPENED by a `system` record with
+   subtype `turn_duration` (the interval the next record closes) is charged to it, exactly `lead_time.py`'s
+   `prev_end` rule. `stop_hook_summary` and `compact_boundary` records do not open one. It carries 0 calls and 0
+   tokens, and an interval over 300 s still counts as gap, charged as gap of `idle-wait`. **Precedence:**
+   `compaction-recovery` wins: a turn end inside a recovery window (from an `isCompactSummary` record until the first
+   tool_use that is not Read, Grep or Glob) stays `compaction-recovery`. Per (lead unit, step) the total active and
+   gap seconds are unchanged by this class; it only carves seconds out of the class they were charged to before, so
+   what was read as `other` active time is now `other` plus `idle-wait`.
 
 Time is charged to the class of the record that opened each interval, on a monotone clock. `--classes` asserts that
 the class tokens equal `segs.jsonl` tokens for every (lead unit, step). It prints `segs` active minus class-sum

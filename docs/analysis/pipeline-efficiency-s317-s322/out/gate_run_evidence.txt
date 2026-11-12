@@ -1,0 +1,383 @@
+CONTROL (window 2026-11-11T10:30:00Z, parsed from out/bash_by_sprint.txt):
+  D5 s321 gate-transition.sh                 parsed   149  recount   149  OK
+  D5 s322 gate-transition.sh                 parsed    41  recount    41  OK
+  D5 s321 validate-spawn-ledger.sh           parsed    16  recount    16  OK
+  D5 s321 verdict.sh                         parsed   103  recount   103  OK
+  D5 s322 verdict.sh                         parsed    27  recount    27  OK
+  D5 s321 validate-artifact-derivations.sh   parsed    76  recount    76  OK
+  D5 s322 sprint-status.sh                   parsed    10  recount    10  OK
+  D5 s322 validate-snapshot-conservation.sh  parsed    10  recount    10  OK
+  all 90 lead rows of the committed file recounted: 0 mismatch(es)
+  transcripts (informational, not window-bound): committed 6170  glob now 6315
+  sidechain records seen 0; duplicate Bash tool_use ids 0; invoked() parity mismatches 0
+CONTROL OK
+
+gate-transition.sh: /Users/n8/git/graph/scripts/ai-dlc/gate-transition.sh  (25 tuples; sibling list :136 has 13 scripts)
+VALIDATOR tuples (failure reaches refuse):
+  sprint-status.sh                 check-stories                gates 3      check check-5                recorded-exit -  lines [454]
+  sprint-status.sh                 derive-stories --check       gates 3      check check-5                recorded-exit -  lines [455]
+  validate-carried-findings.sh     --list                       gates 1,2    check carried-findings       recorded-exit -  lines [279]
+  validate-escalation-resolution.sh (default)                    gates 3      check check-2a               recorded-exit -  lines [453]
+  validate-h2-attestation.sh       --verify                     gates 3      check check-H2               recorded-exit -  lines [490]
+  validate-handoff-evidence.sh     (default)                    gates 1      check handoff-evidence       recorded-exit [2]  lines [248]
+  validate-handoff-evidence.sh     --gate2                      gates 2      check handoff-gate2          recorded-exit [2]  lines [248]
+  validate-handoff-evidence.sh     --list-captures              gates 1,2    check list-captures          recorded-exit [2]  lines [236]
+  validate-handoff-evidence.sh     --smoke                      gates 2      check handoff-smoke          recorded-exit [2]  lines [248]
+  validate-handoff-evidence.sh     --strategy                   gates 1      check handoff-strategy       recorded-exit [2]  lines [248]
+  validate-provenance-block.sh     --require-skill              gates 3      check check-17               recorded-exit -  lines [469]
+  validate-spawn-ledger.sh         (default)                    gates 3      check check-22               recorded-exit [3]  lines [480]
+  validate-spawn-ledger.sh         --fold-architect             gates 3      check check-17               recorded-exit -  lines [467, 473]
+  validate-stub-audit.sh           --changed-from               gates 3      check check-16               recorded-exit [4]  lines [456]
+  verdict.sh                       validate-escalation-status-vocabulary gates 3      check check-2                recorded-exit -  lines [451]
+  verdict.sh                       validate-suppression-lifetime gates 3      check check-2                recorded-exit -  lines [452]
+BOOKKEEPING bucket (never validators):
+  gate-checkpoint.sh               list                         gates close  bookkeeping script   lines [532]
+  gate-checkpoint.sh               open                         gates 3      bookkeeping script   lines [498]
+  merge-review-shards.sh           --read-verdict               gates 2      bookkeeping script   lines [365]
+  merge-review-shards.sh           --record-partition           gates 2      bookkeeping script   lines [436]
+  partition-review-diff.sh         --gate1-rerun                gates 2      non-refusing         lines [393]
+  partition-review-diff.sh         --map                        gates -      non-refusing         lines [264]
+  partition-review-diff.sh         --narrow                     gates 1      non-refusing         lines [326]
+  partition-review-diff.sh         --route                      gates 1,2    non-refusing         lines [317, 424]
+  validate-steering-budget.sh      --count                      gates 3      non-refusing         lines [488]
+cross-check: parsed scripts absent from the :136 sibling list: none
+
+window 2026-10-05T14:00:00Z .. 2026-11-11T10:30:00Z   root /Users/n8/.claude/projects/-Users-n8-git-graph   (step state from 2026-09-26T00:35:00Z)
+threshold: MERGE-candidate if same-verdict repeats >= 50% of in-step hand-run rows, else KEEP; N=5 and N=20
+
+== s317
+(0) gate-run calls 572  (distinct message.id 499)  refused 13  unresolved 12
+      gate-checkpoint.sh                           calls  142  refused    4
+      gate-slice.sh                                calls   27  refused    1
+      validate-ac-falsifiability.sh                calls   10  refused    0
+      validate-adversarial-convergence.sh          calls    8  refused    0
+      validate-artifact-budget.sh                  calls   60  refused    1
+      validate-artifact-derivations.sh             calls   57  refused    0
+      validate-artifact-paths.sh                   calls    1  refused    0
+      validate-artifact-paths\.sh                  calls    2  refused    1
+      validate-attestation.sh                      calls    1  refused    0
+      validate-audit-anchors.sh                    calls    5  refused    1
+      validate-escalation-resolution.sh            calls   41  refused    1
+      validate-escalation-status-vocabulary.sh     calls   10  refused    0
+      validate-gate-adjudication.sh                calls   94  refused    0
+      validate-gate-manifest.sh                    calls   26  refused    1
+      validate-h2-attestation.sh                   calls   38  refused    0
+      validate-harness-selftest.sh                 calls    1  refused    0
+      validate-hook-registration.sh                calls   10  refused    0
+      validate-layer-entries.sh                    calls    9  refused    0
+      validate-locked-anchor.sh                    calls   20  refused    0
+      validate-mandatory-rules.sh                  calls    3  refused    1
+      validate-provenance-block.sh                 calls   27  refused    2
+      validate-retro-evidence.sh                   calls    1  refused    0
+      validate-snapshot-conservation.sh            calls    3  refused    0
+      validate-spawn-ledger.sh                     calls   44  refused    1
+      validate-spawn-ledger\.sh                    calls    1  refused    1
+      validate-spec-join.sh                        calls    3  refused    0
+      validate-steering-budget.sh                  calls   38  refused    1
+      validate-story-status-consistency.sh         calls    3  refused    0
+      validate-stub-audit.sh                       calls   39  refused    1
+      validate-suppression-lifetime.sh             calls   12  refused    0
+(1) gate-transition.sh: as bash_by_sprint keys it 0  real invocation 0  any command containing 0
+(2)     refused 0 (0 REFUSED lines)  could-not-run 0  passed 0  UNRESOLVED bg 0 persisted 0 no-result 0  [index vs literal --story-file key agree 0/0; a call matches a hand-run on either key]
+(3) hand-run rows 317 (calls 189); in implementation/gate[implementation] 284; bookkeeping-script rows 101; unlisted-mode rows 231
+      step of all hand-run rows: gate-validation[implementation] 201, implementation 83, gate-validation[sprint-review] 15, gate-validation[stories-test-strategy] 8, stories-test-strategy 7, deploy-validate 2, handoff 1
+      in-step tuple sprint-status.sh check-stories: 67
+      in-step tuple sprint-status.sh derive-stories --check: 48
+      in-step tuple validate-escalation-resolution.sh (default): 35
+      in-step tuple validate-h2-attestation.sh --verify: 29
+      in-step tuple validate-spawn-ledger.sh (default): 43
+      in-step tuple validate-stub-audit.sh --changed-from: 26
+      in-step tuple verdict.sh validate-escalation-status-vocabulary: 18
+      in-step tuple verdict.sh validate-suppression-lifetime: 18
+(5) in-step hand-run exit meaning: found 2  clean 281  recorded-code 0  unknown 1
+(4) story not derivable 284 of 284
+      N= 5: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      N=20: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      side: n/a (no gate-transition.sh in this sprint)
+
+== s318
+(0) gate-run calls 423  (distinct message.id 368)  refused 4  unresolved 5
+      gate-checkpoint.sh                           calls   63  refused    2
+      gate-slice.sh                                calls   15  refused    1
+      validate-ac-falsifiability.sh                calls   20  refused    0
+      validate-adversarial-convergence.sh          calls   20  refused    0
+      validate-artifact-budget.sh                  calls   36  refused    0
+      validate-artifact-derivations.sh             calls  106  refused    0
+      validate-artifact-paths.sh                   calls    1  refused    0
+      validate-audit-anchors.sh                    calls    8  refused    0
+      validate-bmad-invocations.sh                 calls    1  refused    0
+      validate-cycle-commits.sh                    calls    2  refused    0
+      validate-draft-stamps.sh                     calls    1  refused    0
+      validate-enforcement-map.sh                  calls    1  refused    0
+      validate-escalation-resolution.sh            calls   17  refused    0
+      validate-escalation-status-vocabulary.sh     calls    1  refused    0
+      validate-gate-adjudication.sh                calls   35  refused    0
+      validate-gate-manifest.sh                    calls   11  refused    0
+      validate-h2-attestation.sh                   calls   15  refused    0
+      validate-hook-registration.sh                calls    7  refused    1
+      validate-layer-entries.sh                    calls    2  refused    1
+      validate-locked-anchor.sh                    calls    3  refused    0
+      validate-locked-requirements.sh              calls    1  refused    0
+      validate-mandatory-rules.sh                  calls    2  refused    0
+      validate-mutation-red.sh                     calls    3  refused    0
+      validate-provenance-block.sh                 calls   58  refused    0
+      validate-reattach-budget.sh                  calls    1  refused    0
+      validate-request-coverage.sh                 calls    2  refused    0
+      validate-retro-evidence.sh                   calls    3  refused    0
+      validate-scope-confirmation.sh               calls    2  refused    0
+      validate-snapshot-conservation.sh            calls    6  refused    0
+      validate-spawn-ledger.sh                     calls   12  refused    0
+      validate-spec-adoption.sh                    calls    1  refused    0
+      validate-spec-join.sh                        calls    3  refused    0
+      validate-steering-budget.sh                  calls   17  refused    0
+      validate-stub-audit.sh                       calls   17  refused    0
+      validate-suppression-lifetime.sh             calls    1  refused    0
+(1) gate-transition.sh: as bash_by_sprint keys it 0  real invocation 0  any command containing 0
+(2)     refused 0 (0 REFUSED lines)  could-not-run 0  passed 0  UNRESOLVED bg 0 persisted 0 no-result 0  [index vs literal --story-file key agree 0/0; a call matches a hand-run on either key]
+(3) hand-run rows 175 (calls 120); in implementation/gate[implementation] 97; bookkeeping-script rows 58; unlisted-mode rows 204
+      step of all hand-run rows: gate-validation[implementation] 54, implementation 43, stories-test-strategy 25, gate-validation[stories-test-strategy] 16, gate-validation[sprint-review] 11, architecture 6, carry-over-evaluation 5, gate-validation[requirements] 4, gate-validation[architecture] 4, deploy-validate 3, retro 2, pre-step 2
+      in-step tuple sprint-status.sh check-stories: 25
+      in-step tuple sprint-status.sh derive-stories --check: 20
+      in-step tuple validate-escalation-resolution.sh (default): 10
+      in-step tuple validate-h2-attestation.sh --verify: 7
+      in-step tuple validate-spawn-ledger.sh (default): 10
+      in-step tuple validate-stub-audit.sh --changed-from: 9
+      in-step tuple verdict.sh validate-escalation-status-vocabulary: 7
+      in-step tuple verdict.sh validate-suppression-lifetime: 9
+(5) in-step hand-run exit meaning: found 0  clean 96  recorded-code 0  unknown 1
+(4) story not derivable 97 of 97
+      N= 5: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      N=20: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      side: n/a (no gate-transition.sh in this sprint)
+
+== s319
+(0) gate-run calls 609  (distinct message.id 555)  refused 7  unresolved 16
+      gate-checkpoint.sh                           calls   88  refused    0
+      gate-slice                                   calls    1  refused    0
+      gate-slice.sh                                calls   23  refused    0
+      validate-ac-falsifiability.sh                calls    9  refused    0
+      validate-adversarial-convergence.sh          calls   33  refused    1
+      validate-artifact-budget.sh                  calls   48  refused    0
+      validate-artifact-budget\.sh                 calls    2  refused    0
+      validate-artifact-derivations.sh             calls   65  refused    1
+      validate-artifact-derivations\.sh            calls    1  refused    0
+      validate-artifact-paths.sh                   calls    1  refused    0
+      validate-audit-anchors.sh                    calls    6  refused    0
+      validate-bmad-invocations.sh                 calls    2  refused    1
+      validate-carried-findings.sh                 calls   76  refused    1
+      validate-cycle-commits.sh                    calls    1  refused    0
+      validate-cycle-commits\.sh                   calls    1  refused    0
+      validate-draft-stamps.sh                     calls    2  refused    1
+      validate-escalation-resolution.sh            calls   39  refused    1
+      validate-escalation-status-vocabulary.sh     calls   21  refused    1
+      validate-gate-adjudication.sh                calls   64  refused    2
+      validate-gate-manifest.sh                    calls   21  refused    1
+      validate-h2-attestation.sh                   calls   27  refused    1
+      validate-handoff-evidence.sh                 calls   71  refused    1
+      validate-hook-registration.sh                calls   14  refused    0
+      validate-layer-entries.sh                    calls   15  refused    0
+      validate-locked-anchor.sh                    calls    3  refused    0
+      validate-mandatory-rules.sh                  calls    6  refused    0
+      validate-provenance-block.sh                 calls   24  refused    1
+      validate-request-coverage.sh                 calls    6  refused    0
+      validate-scope-confirmation.sh               calls    3  refused    1
+      validate-snapshot-conservation.sh            calls   10  refused    1
+      validate-spawn-ledger.sh                     calls   30  refused    0
+      validate-spec-adoption.sh                    calls    2  refused    1
+      validate-spec-join.sh                        calls    9  refused    0
+      validate-steering-budget.sh                  calls   39  refused    1
+      validate-stub-audit.sh                       calls   23  refused    0
+      validate-suppression-lifetime.sh             calls   10  refused    0
+      validate-trunk-audit-gate.sh                 calls    1  refused    0
+(1) gate-transition.sh: as bash_by_sprint keys it 0  real invocation 0  any command containing 0
+(2)     refused 0 (0 REFUSED lines)  could-not-run 0  passed 0  UNRESOLVED bg 0 persisted 0 no-result 0  [index vs literal --story-file key agree 0/0; a call matches a hand-run on either key]
+(3) hand-run rows 427 (calls 237); in implementation/gate[implementation] 373; bookkeeping-script rows 153; unlisted-mode rows 464
+      step of all hand-run rows: implementation 193, gate-validation[implementation] 180, gate-validation[stories-test-strategy] 19, gate-validation[architecture] 6, gate-validation[carry-over-evaluation] 5, requirements 5, gate-validation[requirements] 5, gate-validation[sprint-review] 5, deploy-validate 5, sprint-review 2, retro 2
+      in-step tuple sprint-status.sh check-stories: 44
+      in-step tuple sprint-status.sh derive-stories --check: 33
+      in-step tuple validate-carried-findings.sh --list: 56
+      in-step tuple validate-escalation-resolution.sh (default): 30
+      in-step tuple validate-h2-attestation.sh --verify: 17
+      in-step tuple validate-handoff-evidence.sh (default): 68
+      in-step tuple validate-handoff-evidence.sh --strategy: 59
+      in-step tuple validate-spawn-ledger.sh (default): 29
+      in-step tuple validate-stub-audit.sh --changed-from: 7
+      in-step tuple verdict.sh validate-escalation-status-vocabulary: 15
+      in-step tuple verdict.sh validate-suppression-lifetime: 15
+(5) in-step hand-run exit meaning: found 3  clean 355  recorded-code 0  unknown 15
+(4) story not derivable 370 of 373
+      N= 5: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      N=20: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      side: n/a (no gate-transition.sh in this sprint)
+
+== s320
+(0) gate-run calls 498  (distinct message.id 437)  refused 4  unresolved 7
+      gate-checkpoint.sh                           calls   89  refused    0
+      gate-slice                                   calls    2  refused    1
+      gate-slice.sh                                calls   23  refused    0
+      validate-ac-falsifiability.sh                calls    8  refused    1
+      validate-adversarial-convergence.sh          calls   20  refused    0
+      validate-artifact-budget.sh                  calls   12  refused    0
+      validate-artifact-derivations.sh             calls   49  refused    0
+      validate-audit-anchors.sh                    calls    5  refused    0
+      validate-bmad-invocations.sh                 calls    1  refused    0
+      validate-carried-findings.sh                 calls   32  refused    0
+      validate-cycle-commits.sh                    calls    1  refused    0
+      validate-draft-stamps.sh                     calls    1  refused    0
+      validate-escalation-resolution.sh            calls   31  refused    0
+      validate-escalation-status-vocabulary.sh     calls    6  refused    0
+      validate-gate-adjudication.sh                calls   56  refused    0
+      validate-gate-manifest.sh                    calls    8  refused    0
+      validate-h2-attestation.sh                   calls   25  refused    0
+      validate-handoff-evidence.sh                 calls  105  refused    1
+      validate-held-stories.sh                     calls    1  refused    0
+      validate-layer-entries.sh                    calls    9  refused    0
+      validate-locked-anchor.sh                    calls    4  refused    0
+      validate-mandatory-rules.sh                  calls    4  refused    0
+      validate-provenance-block.sh                 calls   21  refused    1
+      validate-request-coverage.sh                 calls    1  refused    0
+      validate-scope-confirmation.sh               calls    1  refused    0
+      validate-snapshot-conservation.sh            calls    7  refused    0
+      validate-spawn-ledger.sh                     calls   20  refused    0
+      validate-spec-adoption.sh                    calls    1  refused    0
+      validate-spec-join.sh                        calls    3  refused    0
+      validate-steering-budget.sh                  calls   23  refused    0
+      validate-stub-audit.sh                       calls   15  refused    0
+      validate-suppression-lifetime.sh             calls   21  refused    0
+      validate-trunk-audit-gate.sh                 calls    1  refused    0
+(1) gate-transition.sh: as bash_by_sprint keys it 0  real invocation 0  any command containing 0
+(2)     refused 0 (0 REFUSED lines)  could-not-run 0  passed 0  UNRESOLVED bg 0 persisted 0 no-result 0  [index vs literal --story-file key agree 0/0; a call matches a hand-run on either key]
+(3) hand-run rows 394 (calls 223); in implementation/gate[implementation] 344; bookkeeping-script rows 117; unlisted-mode rows 280
+      step of all hand-run rows: implementation 234, gate-validation[implementation] 110, gate-validation[stories-test-strategy] 11, gate-validation[requirements] 8, gate-validation[deploy-validate] 7, stories-test-strategy 6, deploy-validate 6, retro 6, requirements 5, sprint-review 1
+      in-step tuple sprint-status.sh check-stories: 38
+      in-step tuple sprint-status.sh derive-stories --check: 36
+      in-step tuple validate-carried-findings.sh --list: 19
+      in-step tuple validate-escalation-resolution.sh (default): 12
+      in-step tuple validate-h2-attestation.sh --verify: 14
+      in-step tuple validate-handoff-evidence.sh (default): 60
+      in-step tuple validate-handoff-evidence.sh --gate2: 1
+      in-step tuple validate-handoff-evidence.sh --list-captures: 65
+      in-step tuple validate-handoff-evidence.sh --smoke: 1
+      in-step tuple validate-handoff-evidence.sh --strategy: 56
+      in-step tuple validate-spawn-ledger.sh (default): 19
+      in-step tuple validate-spawn-ledger.sh --fold-architect: 1
+      in-step tuple validate-stub-audit.sh --changed-from: 4
+      in-step tuple verdict.sh validate-escalation-status-vocabulary: 10
+      in-step tuple verdict.sh validate-suppression-lifetime: 8
+(5) in-step hand-run exit meaning: found 2  clean 342  recorded-code 0  unknown 0
+(4) story not derivable 326 of 344
+      N= 5: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      N=20: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 0 rows (0.0%) have a gate-transition at their gate within N]
+      side: n/a (no gate-transition.sh in this sprint)
+
+== s321
+(0) gate-run calls 877  (distinct message.id 817)  refused 39  unresolved 18
+      gate-checkpoint.sh                           calls  140  refused    1
+      gate-slice                                   calls    1  refused    0
+      gate-slice.sh                                calls   44  refused    0
+      gate-transition.sh                           calls  160  refused   35
+      validate-ac-falsifiability.sh                calls    9  refused    0
+      validate-adversarial-convergence.sh          calls   37  refused    0
+      validate-artifact-budget.sh                  calls   56  refused    0
+      validate-artifact-derivations.sh             calls   82  refused    0
+      validate-artifact-paths.sh                   calls    2  refused    0
+      validate-audit-anchors.sh                    calls    4  refused    0
+      validate-bmad-invocations.sh                 calls    5  refused    0
+      validate-carried-findings.sh                 calls   26  refused    0
+      validate-draft-stamps.sh                     calls    2  refused    0
+      validate-escalation-resolution.sh            calls   31  refused    0
+      validate-escalation-status-vocabulary.sh     calls    5  refused    0
+      validate-fixture-drivability.sh              calls    9  refused    0
+      validate-gate-adjudication.sh                calls   77  refused    0
+      validate-gate-manifest.sh                    calls    6  refused    0
+      validate-h2-attestation.sh                   calls   50  refused    0
+      validate-handoff-evidence.sh                 calls    7  refused    0
+      validate-held-stories.sh                     calls   99  refused    1
+      validate-layer-entries.sh                    calls    7  refused    0
+      validate-locked-anchor.sh                    calls    8  refused    0
+      validate-mandatory-rules.sh                  calls    4  refused    0
+      validate-provenance-block.sh                 calls   38  refused    1
+      validate-reattach-budget.sh                  calls    1  refused    0
+      validate-request-coverage.sh                 calls    2  refused    0
+      validate-retro-evidence.sh                   calls    3  refused    0
+      validate-scope-confirmation.sh               calls    1  refused    0
+      validate-snapshot-conservation.sh            calls   16  refused    1
+      validate-spawn-ledger.sh                     calls   24  refused    0
+      validate-spec-adoption.sh                    calls    1  refused    0
+      validate-spec-join.sh                        calls    7  refused    0
+      validate-steering-budget.sh                  calls   35  refused    0
+      validate-stub-audit.sh                       calls   29  refused    1
+      validate-suppression-lifetime.sh             calls   17  refused    0
+      validate-trunk-audit-gate.sh                 calls    1  refused    0
+(1) gate-transition.sh: as bash_by_sprint keys it 149  real invocation 160  any command containing 227
+(2)     refused 34 (72 REFUSED lines)  could-not-run 1  passed 115  UNRESOLVED bg 10 persisted 0 no-result 0  [index vs literal --story-file key agree 105/105; a call matches a hand-run on either key]
+(3) hand-run rows 298 (calls 174); in implementation/gate[implementation] 236; bookkeeping-script rows 33; unlisted-mode rows 342
+      step of all hand-run rows: gate-validation[implementation] 159, implementation 77, gate-validation[requirements] 20, gate-validation[stories-test-strategy] 12, stories-test-strategy 6, gate-validation[sprint-review] 5, retro 5, gate-validation[architecture] 4, deploy-validate 4, requirements 3, sprint-review 2, route 1
+      in-step tuple sprint-status.sh check-stories: 49
+      in-step tuple sprint-status.sh derive-stories --check: 53
+      in-step tuple validate-carried-findings.sh --list: 9
+      in-step tuple validate-escalation-resolution.sh (default): 24
+      in-step tuple validate-h2-attestation.sh --verify: 25
+      in-step tuple validate-handoff-evidence.sh (default): 1
+      in-step tuple validate-handoff-evidence.sh --strategy: 1
+      in-step tuple validate-provenance-block.sh --require-skill: 1
+      in-step tuple validate-spawn-ledger.sh (default): 23
+      in-step tuple validate-stub-audit.sh --changed-from: 19
+      in-step tuple verdict.sh validate-escalation-status-vocabulary: 21
+      in-step tuple verdict.sh validate-suppression-lifetime: 10
+(5) in-step hand-run exit meaning: found 0  clean 235  recorded-code 0  unknown 1
+(4) story not derivable 235 of 236
+      N= 5: repeats 1  same-verdict 1  differing 0  unresolved 0  share of in-step rows   0.4%  [sensitivity, story key IGNORED, gate kept: 13 rows (5.5%) have a gate-transition at their gate within N]
+      N=20: repeats 1  same-verdict 1  differing 0  unresolved 0  share of in-step rows   0.4%  [sensitivity, story key IGNORED, gate kept: 48 rows (20.3%) have a gate-transition at their gate within N]
+      side: N=5: KEEP; N=20: KEEP
+
+== s322   [s322 is LIVE: PARTIAL unless the window was pinned after its retro]
+(0) gate-run calls 215  (distinct message.id 213)  refused 21  unresolved 9
+      gate-checkpoint.sh                           calls   47  refused    1
+      gate-slice.sh                                calls    6  refused    0
+      gate-transition.sh                           calls   51  refused   18
+      validate-ac-falsifiability.sh                calls    7  refused    0
+      validate-adversarial-convergence.sh          calls    8  refused    0
+      validate-artifact-budget.sh                  calls   20  refused    2
+      validate-artifact-derivations.sh             calls   13  refused    0
+      validate-artifact-paths.sh                   calls    2  refused    0
+      validate-bmad-invocations.sh                 calls    1  refused    0
+      validate-draft-stamps.sh                     calls    1  refused    0
+      validate-escalation-resolution.sh            calls    6  refused    0
+      validate-escalation-status-vocabulary.sh     calls    2  refused    0
+      validate-gate-adjudication.sh                calls   18  refused    0
+      validate-h2-attestation.sh                   calls    5  refused    0
+      validate-handoff-evidence.sh                 calls    1  refused    0
+      validate-layer-entries.sh                    calls    1  refused    0
+      validate-locked-anchor.sh                    calls    8  refused    0
+      validate-provenance-block.sh                 calls   10  refused    0
+      validate-request-coverage.sh                 calls    1  refused    0
+      validate-scope-confirmation.sh               calls    2  refused    0
+      validate-snapshot-conservation.sh            calls    8  refused    0
+      validate-spawn-ledger.sh                     calls    6  refused    0
+      validate-spec-adoption.sh                    calls    1  refused    0
+      validate-spec-join.sh                        calls    2  refused    0
+      validate-steering-budget.sh                  calls    5  refused    0
+      validate-stub-audit.sh                       calls    5  refused    0
+      validate-suppression-lifetime.sh             calls    3  refused    0
+      validate-trunk-audit-gate.sh                 calls    1  refused    0
+(1) gate-transition.sh: as bash_by_sprint keys it 41  real invocation 51  any command containing 56
+(2)     refused 16 (36 REFUSED lines)  could-not-run 0  passed 26  UNRESOLVED bg 9 persisted 0 no-result 0  [index vs literal --story-file key agree 0/49; a call matches a hand-run on either key]
+(3) hand-run rows 34 (calls 25); in implementation/gate[implementation] 15; bookkeeping-script rows 3; unlisted-mode rows 65
+      step of all hand-run rows: gate-validation[implementation] 10, gate-validation[carry-over-evaluation] 8, implementation 5, requirements 4, bug-investigation 3, gate-validation[requirements] 3, gate-validation[stories-test-strategy] 1
+      in-step tuple sprint-status.sh check-stories: 1
+      in-step tuple sprint-status.sh derive-stories --check: 1
+      in-step tuple validate-handoff-evidence.sh (default): 3
+      in-step tuple validate-provenance-block.sh --require-skill: 3
+      in-step tuple validate-spawn-ledger.sh --fold-architect: 4
+      in-step tuple verdict.sh validate-escalation-status-vocabulary: 1
+      in-step tuple verdict.sh validate-suppression-lifetime: 2
+(5) in-step hand-run exit meaning: found 0  clean 15  recorded-code 0  unknown 0
+(4) story not derivable 12 of 15
+      N= 5: repeats 0  same-verdict 0  differing 0  unresolved 0  share of in-step rows   0.0%  [sensitivity, story key IGNORED, gate kept: 3 rows (20.0%) have a gate-transition at their gate within N]
+      N=20: repeats 3  same-verdict 3  differing 0  unresolved 0  share of in-step rows  20.0%  [sensitivity, story key IGNORED, gate kept: 6 rows (40.0%) have a gate-transition at their gate within N]
+      side: N=5: KEEP; N=20: KEEP
+
+== pooled s321+s322 ONLY (gate-transition.sh did not exist in s317..s320, so those sprints cannot show a repeat)
+N= 5: same-verdict repeats 1 of 251 in-step hand-run rows   0.4%  -> KEEP
+N=20: same-verdict repeats 4 of 251 in-step hand-run rows   1.6%  -> KEEP

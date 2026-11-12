@@ -117,7 +117,7 @@ in `docs/backlog.md` carries the reconciliation.
 | Denied polls followed by a backgrounded Bash or Monitor call within 120 s | control: 20 of 117 foreground-over-budget polls | 16 of 23 DENIED |
 | Denied polls followed by a poll-shaped backgrounded Bash or Monitor call within 120 s | control: 11 of 117 | 14 of 23 |
 | Subagent run_in_background Bash calls, then Monitor calls (6023 subagent files) | 230 and 134 of 60514 Bash calls | 264 and 66 of 45166 Bash calls |
-| Whole pipeline bucket, per story: subagent ACTIVE time, which excludes every wait over 300 s (extract.py:324), so it is not the wait | 7.09 h, $77.4 (s317 truncated, BL-514 item 6) | 6.94 h, $75.1 |
+| Whole pipeline bucket, per story: subagent ACTIVE time, which excludes every wait over 300 s (extract.py:333), so it is not the wait | 7.09 h, $77.4 (s317 truncated, BL-514 item 6) | 6.94 h, $75.1 |
 | Whole pipeline bucket, per story: lead active time | 2.38 h, $19.9 (s317 truncated, BL-514 item 6) | 2.28 h, $20.4 |
 | Whole pipeline bucket, per story: gap-inclusive, both seats | 4.58 h (s317 truncated, BL-514 item 6) | 4.82 h |
 | Subagent gap (waits over 300 s) per story, all buckets, unattributed scratch reading of segs.jsonl | 1.42 h pooled s317+s318, s317 truncated, BL-514 item 6 (s319 2.16, s320 1.63, s322 2.53) | 0.94 h |

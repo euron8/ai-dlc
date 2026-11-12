@@ -148,7 +148,15 @@ cfh = open(os.path.join(OUT, "classes.jsonl"), "w")
 # record until recovery ends, a non-assistant record opens a compaction-recovery interval. Tokens: each
 # usage-bearing message.id to its own class, at the step segs records it under, so per (unit, step) the class
 # tokens sum to segs tok exactly.
-CLASSES = ("compaction-recovery", "snapshot", "repair", "dispatch", "gate-run", "step-reread", "merge", "other")
+# idle-wait is a TIME-ONLY class and sits outside the precedence list above: the interval OPENED by a `system`
+# record with subtype `turn_duration` (the interval closed by the next record) is charged to it, exactly
+# lead_time.py's prev_end rule (pipeline-efficiency-s317-s322/scripts/lead_time.py, "if prev_end: key = idle-wait").
+# `stop_hook_summary` and `compact_boundary` do NOT open one. It carries 0 calls and 0 tokens (no message.id owns it);
+# an interval over 300 s is still charged to gap, as gap of this class. PRECEDENCE: compaction-recovery wins, because
+# record() returns for a recovery window before the turn_duration test, so a turn end inside a recovery window
+# stays compaction-recovery. Per (unit, step) the class totals of active and gap are unchanged by this class: it
+# only carves seconds out of the class they were charged to before.
+CLASSES = ("compaction-recovery", "snapshot", "repair", "dispatch", "gate-run", "step-reread", "merge", "other", "idle-wait")
 RANK = {c: i for i, c in enumerate(CLASSES)}
 REPAIR_RE = re.compile(r"(?i)\b(fix|fixes|repair|re-run|rerun|retry|redispatch|re-dispatch)\b")
 GATE_RUN_RE = re.compile(r"^(gate-checkpoint\.sh|gate-slice.*|gate-transition\.sh|validate-.*\.sh|.*-validator(\.sh|\.py)?)$")
@@ -259,7 +267,8 @@ class Classer:
                 self.best[mid] = min(self.best[mid], RANK[self.block(c, cwd)])
             self.key = ("mid", mid); return
         if self.recover: self.key = ("cls", "compaction-recovery"); return
-        c = (r.get("message") or {}).get("content") if typ == "user" else None
+        if typ == "system" and r.get("subtype") == "turn_duration": self.key = ("cls", "idle-wait"); return
+        c =(r.get("message") or {}).get("content") if typ == "user" else None
         tid = next((x.get("tool_use_id") for x in c if isinstance(x, dict) and x.get("type") == "tool_result"), None) if isinstance(c, list) else None
         m = self.tu_mid.get(tid) if tid else None
         m = m or self.last_mid
