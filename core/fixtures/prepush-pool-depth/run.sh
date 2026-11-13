@@ -79,11 +79,19 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 unset PREPUSH_POOL_DEPTH
 MATRIX=0; [ "${1:-}" = --matrix ] && MATRIX=1
 MX_RAN=0
-# NO WALL CLOCK AND NO ps SAMPLE DECIDES A CELL HERE (BL-868). Every cell is read at a state its subjects WRITE:
-# a pool's width at the barrier rendezvous (pd_rendezvous: the settled table's forked-worker count equal to the
-# flight files those workers wrote), a watcher verdict at its verdict file, and a watcher hung on a FIFO at the
-# sentinel its FIFO's writer leaves when the watcher opens it (pn_settle). A settled ps table (pd_settle) only
-# paces those waits and bounds them: a settle is a sample, not a proof, and on this box one read 5 of 6.
+# NO WALL CLOCK, NO ps SAMPLE AND NO COUNT OF POLLS DECIDES OR BOUNDS ANYTHING HERE (BL-868, BL-985). Every cell is
+# read at a state its subjects WRITE: a pool's width at the barrier rendezvous (pd_rendezvous: the flight files the
+# workers wrote reaching the width xargs was GIVEN, read off its own argv), a watcher verdict at its verdict file, and
+# a watcher hung on a FIFO at the event its FIFO's writer emits when the watcher opens it (pn_settle, which blocks on
+# the drives' events and never samples a process table). A `sleep 0.1` left in this file only PACES a wait for such a
+# state and carries no count. The ps-table settle this replaced bounded its waits by 200 rejected settles of one
+# table, a bound a deadlock reached and a slow box could too (BL-985).
+# NO PARTY OF A LOCKSTEP BLOCKS IN open() ON A FIFO. bash 3.2 does not retry an open that a signal interrupts: a
+# SIGCHLD landing while it is blocked opening a FIFO fails the redirection ("Interrupted system call"), the token is
+# never written or read, and the two parties then block opening different FIFOs for good -- measured, and forced by
+# one `kill -CHLD` (BL-985). So every lockstep FIFO is held open read-write by its drive for the drive's life: a write
+# lands in the buffer at once, a read blocks only in read(), which bash retries, and no token can be lost. A FIFO whose
+# open IS the event (the HOLD gate, the fifo witness) retries its open until it succeeds.
 # The watcher section's window. PN_STALL is the pool's own AI_DLC_POOL_STALL knob (still polls before a
 # refusal; the block reads it from the environment, so lowering it edits no hook). The watcher's `sleep 1`
 # is a gated stub there (pn.gbin/sleep), so ONE POLL IS ONE STEP OF THE UNIT, never one second: the unit
@@ -91,9 +99,6 @@ MX_RAN=0
 # many steps a unit takes before it exits, three windows, so a silent unit crosses the refusal threshold (poll
 # 1 + PN_STALL) while a growing one does not; a unit that is refused is killed at that poll, before its last step.
 PN_STALL=3; PN_STEPS=$((3 * PN_STALL))
-# The safety bound of the barrier poller (see drive) and of pn_settle, in REJECTED SETTLES of one unchanged table:
-# it can only turn a drive that never reaches its event into FIXTURE BROKEN, never into a pass or a value.
-PD_REJ_MAX=200
 
 asserts=0; fails=0
 ok()     { printf '  ok    %s\n' "$1"; asserts=$((asserts+1)); }
@@ -122,17 +127,19 @@ done
 [ -n "$HOOKS" ] || broken "no pre-push hook in either layout from $ROOT"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/prepush-pool-depth.XXXXXX")" || broken "mktemp failed"
-trap 'pn_reap_writers; pd_release_all; [ -s "$WORK/barrier.pid" ] && kill "$(cat "$WORK/barrier.pid")" 2>/dev/null; rm -rf "$WORK"' EXIT
+trap 'pn_reap_writers; pd_release_all; [ -s "$WORK/barrier.pid" ] && kill "$(cat "$WORK/barrier.pid")" 2>/dev/null; [ -s "$WORK/pn.ticker" ] && kill "$(cat "$WORK/pn.ticker")" 2>/dev/null; rm -rf "$WORK"' EXIT
 # pd_release_all: the EXIT trap's release, for a run that ends with a drive still holding (a FIXTURE BROKEN, a TERM).
 # The barrier gate is replaced by a regular file, so every later open of it reads EOF, and killing the poller closes
 # the only writer of the FIFO an earlier stub holds open. Each watcher-section FIFO is opened read-write once, which
-# wakes a party blocked opening it; a stepper woken that way reads EOF and exits. A normal run reaches this with
-# every drive already reaped, so it finds nothing to release.
+# wakes a party blocked opening it (the HOLD gate, a fifo .pool-parent); a `q` on each step gate ends its stepper. The
+# event FIFO pn.ev has no blocked opener to wake: its writers open it read-write (`1<>`) or write-only (`>`, the
+# exported shim and pn_step), and neither blocks, because this shell holds it open read-write on fd 4. A normal
+# run reaches this with every drive already reaped, so it finds nothing to release.
 pd_release_all() {
   local g
   [ -n "${WORK:-}" ] && [ -d "$WORK" ] || return 0
   if [ -p "$WORK/gate" ]; then : > "$WORK/gate.open" && mv -f "$WORK/gate.open" "$WORK/gate"; fi
-  for g in "$WORK"/pn.*/gate/stub-a/w "$WORK"/pn.*/gate/stub-b/hold "$WORK"/pn.*/hf/fx.fifo00/.pool-parent; do
+  for g in "$WORK"/pn.*/gate/stub-a/w "$WORK"/pn.*/gate/stub-b/hold "$WORK"/pn.*/hf/fx.fifo00/.pool-parent "$WORK/pn.ev"; do
     [ -p "$g" ] && { : <> "$g"; } 2>/dev/null
   done
   for g in "$WORK"/pn.*/gate/stub-a/p; do [ -p "$g" ] && { printf 'q\n' 1<> "$g"; } 2>/dev/null; done
@@ -149,70 +156,15 @@ pn_reap_writers() {
   : > "$WORK/pn.writers"
 }
 
-# ------------------------------------------------------------------ the settled-state primitive --
-# pd_tree <root pid> <excluded pid, or 0> -> one word, from ONE `ps` table: G (the root is gone), P (ps gave no
-# table, so the state cannot be read), R (a member is runnable, exiting, a zombie, or has a signal pending), or
-# S:<signature> (every member -- the root and every descendant by ppid, the excluded pid's subtree left out --
-# is blocked, state S or I, with nothing pending; the signature is each member's pid and state). The word is a
-# SAMPLE of one table, never proof that the tree cannot move: a member blocked on something the table does not
-# show still has work to do, and two tables alike read a barrier at 5 of 6 on a loaded box with no hook defect.
-# So no caller decides a cell on it: it paces a wait for an event the subjects write, and counts its rejections.
-# A member that is a `sleep` is a TIMER, which ends by itself, so it reads R: a tree holding one has not settled.
-# With a third argument the S word ends in `|X<n>:<k>`: n members of the tree whose command is xargs, and k
-# members that are a DIRECT child of one, read off the same table, so two tables that agree agree on k too.
-pd_tree() {
-  local t
-  t="$(ps -A -o pid=,ppid=,stat=,pending=,comm= 2>/dev/null)"
-  [ -n "$t" ] || { printf 'P'; return 0; }
-  awk -v root="$1" -v ex="$2" -v xc="${3:-}" '
-    { n++; p[n] = $1; pp[$1] = $2; st[$1] = $3; pd[$1] = $4; cm[$1] = $5; if ($5 ~ /(^|\/)sleep$/) pd[$1] = "timer" }
-    END {
-      if (!(root in st)) { printf "G"; exit }
-      m[root] = 1
-      do { ch = 0
-           for (i = 1; i <= n; i++) { q = p[i]; if (!(q in m) && q != ex && (pp[q] in m)) { m[q] = 1; ch = 1 } }
-      } while (ch)
-      sig = ""
-      for (i = 1; i <= n; i++) {
-        q = p[i]; if (!(q in m)) continue
-        if (st[q] !~ /^[SI]/ || pd[q] !~ /^0+$/) { printf "R"; exit }
-        sig = sig q ":" st[q] ","
-      }
-      if (xc != "") {
-        nx = 0; k = 0
-        for (i = 1; i <= n; i++) { q = p[i]; if ((q in m) && cm[q] ~ /(^|\/)xargs$/) { nx++; xp[q] = 1 } }
-        for (i = 1; i <= n; i++) { q = p[i]; if ((q in m) && (pp[q] in xp)) k++ }
-        sig = sig "|X" nx ":" k
-      }
-      printf "S:%s", sig
-    }' <<< "$t"
-}
-# pd_settle <root pid> <excluded pid, or 0> <done command> -> 0 the done command held; 1 SETTLED: two consecutive
-# tables read the same blocked member set and the done command still does not hold; 2 ps gave no table; 3 the
-# root is gone and the done command does not hold. It ends on the event or on a settle, never on a count of polls
-# or on elapsed time (the `sleep 0.1` only paces it); every caller treats a return of 1 as a rejection, not a value.
-# A fourth argument is passed to pd_tree as its third; the settled table's word is left in PD_SETTLED.
-pd_settle() {
-  local s prev=""
-  PD_SETTLED=""
-  while :; do
-    eval "$3" && return 0
-    s="$(pd_tree "$1" "$2" "${4:-}")"
-    case "$s" in
-      G) eval "$3" && return 0; return 3 ;;
-      P) return 2 ;;
-      S:*) if [ "$s" = "$prev" ]; then PD_SETTLED="$s"; eval "$3" && return 0; return 1; fi; prev="$s" ;;
-      *) prev="" ;;
-    esac
-    sleep 0.1
-  done
-}
 # pd_gate_sleep: gives a drive's subshell a `sleep` FUNCTION, exported, so every bash the pool starts imports it and
 # no process is added. It acts only on a pool WATCHER's `sleep 1` -- the only `sleep 1` with the worker's `$b`
 # (its unit's name) in scope -- and passes every other call to the real sleep:
-#   PD_GATE (the barrier): while the gate is a FIFO the watcher blocks reading it, so a held unit's watcher never
-#     polls and the drive's tree can settle; once the poller has put a regular file there it sleeps as shipped.
+#   PD_GATE (the barrier): while the gate is a FIFO the watcher blocks reading it (the poller holds its write end, so
+#     the open never blocks), so a held unit's watcher never polls; once the poller has put a regular file there it
+#     sleeps as shipped.
 #   PN_GATE (the watcher section): see the lockstep comment there. Its counter is the watcher's own shell variable.
+#     The step gate's FIFOs are held open read-write by the drive, so neither the `p` write nor the `w` read can block
+#     in open(); the HOLD gate's open IS its event, so an open a signal interrupts is retried until it succeeds.
 pd_gate_sleep() {
   sleep() {
     local pn_g pn_t
@@ -221,13 +173,23 @@ pd_gate_sleep() {
       if [ -n "${PN_GATE:-}" ] && [ -d "$PN_GATE/$b" ]; then
         pn_g="$PN_GATE/$b"
         if [ -p "$pn_g/hold" ]; then
-          read -r pn_t < "$pn_g/hold"
+          pn_o=0
+          while [ "$pn_o" = 0 ] && [ -p "$pn_g/hold" ]; do { pn_o=1; read -r pn_t <&3; } 3< "$pn_g/hold" 2> /dev/null; done
           while kill -0 "$$" 2>/dev/null; do command sleep 1; done
           return 0
         fi
         pn_k=$(( ${pn_k:-0} + 1 ))
-        [ "$pn_k" -gt 1 ] && printf 'p\n' > "$pn_g/p"
-        read -r pn_t < "$pn_g/w"
+        # `>` everywhere here, never `1<>`: bash 3.2 re-prints an exported function's `1<>` as `0<>`, which would send
+        # the token to /dev/null (BL-985). The drive holds p open read-write, so this write-only open finds a reader and
+        # never blocks. Each operation is RECORDED (see the wait-for records at pn_settle); an ENTER also wakes pn_settle.
+        if [ "$pn_k" -gt 1 ]; then
+          { printf 'watcher enter write p %s\n' "$pn_k" >> "$PN_REC"; printf 'rec %s\n' "$PN_TAG" > "$PN_EV"; } 2> /dev/null
+          printf 'p\n' > "$pn_g/p"; pn_c=$?
+          printf 'watcher leave write p %s %s\n' "$pn_k" "$pn_c" >> "$PN_REC" 2> /dev/null
+        fi
+        { printf 'watcher enter read w %s\n' "$pn_k" >> "$PN_REC"; printf 'rec %s\n' "$PN_TAG" > "$PN_EV"; } 2> /dev/null
+        read -r pn_t < "$pn_g/w"; pn_c=$?
+        printf 'watcher leave read w %s %s\n' "$pn_k" "$pn_c" >> "$PN_REC" 2> /dev/null
         return 0
       fi
     fi
@@ -267,34 +229,62 @@ FX
   ( cd "$t" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
 }
 
-# pd_rendezvous <drive root pid> <poller pid> -> writes the barrier count to $WORK/barrier.n.
-# THE RENDEZVOUS. A settled table is the pool's width only when every worker xargs has forked -- k, the direct
-# children of the drive's one xargs, read off that SAME settled table -- has written its flight file (f, counted
-# after it). A worker writes its flight file and then blocks on the gate, so once k = f every forked worker is
-# held and xargs, blocked too, forks no more: the count cannot move. Any other settle -- nothing forked yet, or a
-# forked worker that has not reached its flight file (a schedule a loaded box produced: settled at 5 of 6) -- is
-# rejected, one line to barrier.rej, and settled again. A drive whose pool finished first is read as it stands.
-# The one trust left: xargs blocked in two tables alike has dispatched every unit it will before a release.
-# THE SAFETY BOUND is a count, never a verdict: PD_REJ_MAX rejections in a row of one unchanged table and flight
-# count is a drive that will never rendezvous (a state that changes resets it). It writes barrier.hang, which
-# hang_check turns into FIXTURE BROKEN in the main shell before any cell is read.
+# pd_rendezvous -> writes the barrier count to $WORK/barrier.n.
+# THE RENDEZVOUS IS THE WIDTH xargs WAS GIVEN. The PATH shim pd_xshim records the value after `-P` on the pool's own
+# xargs command line, an immutable value the subject wrote, before it execs the real xargs; the rendezvous is the
+# flight files (each written by a worker's stub, which then blocks on the gate) reaching min(that width, 6), `-P 0`
+# (BSD: unlimited) read as 6. xargs never runs more than its width at once and every stub it forks writes its flight
+# file and holds, so at that count no further stub can start and none is on its way. The wait is a `sleep 0.1` PACING
+# a subject-written state, with no count and no bound: a slow box only delays it. While the width is known and the
+# count short, a look appends one line to barrier.rej only when the count CHANGED (a record of the look, never a
+# decider; a stuck barrier writes nothing, so the outer pool's stall refusal can see it). A drive whose pool
+# finished first is read as it stands. NO BOUND AND NO DEADLOCK VERDICT ARE OWED HERE, BY A DESIGN ARGUMENT (F-B4):
+# every hook mutant that narrows the pool does so through `-P`, which moves the width read here with it, and a pool
+# narrower than its own argv is real xargs failing its contract, which no subject here can construct. A cycle verdict
+# keyed on records would be UNSOUND: the fork xargs is about to make is recorded nowhere (a worker's `.pr/<unit>.k`
+# lands only after it starts), so "every dispatched worker holds at the gate, short of the width" is the ordinary
+# state between two of xargs' forks, and a loaded box would read it as a deadlock. KNOWN ROUTE, NOT BOUNDED IN-FIXTURE:
+# a barrier that never reaches its width (only real xargs breaking -P can do that) holds its drive and this fixture;
+# what bounds it is the outer pool's stall refusal, which can fire because barrier.rej is written only when the count
+# changes, so a stuck barrier writes nothing. The ps-table settle this replaced bounded the wait by 200 rejected settles of
+# one unchanged table (BL-985); the settle before that read 5 of 6 when a forked worker had not reached its flight file.
+# THE LOOK RECORD barrier.look is OVERWRITTEN IN PLACE (`1<>`, no truncation) on every look with a fixed-width `f=<NN> look=<NNNNNNNNNN>`, so its size
+# never changes and the outer stall refusal still sees a stuck barrier; BL-924's receipt reads it to hold a late stub
+# across one more look of the poller. The count written to barrier.n is the f the deciding look read (a recount after
+# the pool finished first).
 pd_rendezvous() {
-  local root="$1" me="$2" st rj=0 lr="" f x nx k n
+  local p="" t=6 f lf="" lk=0
   while :; do
-    pd_settle "$root" "$me" '[ "$(ls "$WORK/flight" | wc -l | tr -d " ")" -ge 6 ]' x; st=$?
-    [ "$st" = 1 ] || break
-    [ -e "$WORK/pool.done" ] && break
-    f="$(ls "$WORK/flight" | wc -l | tr -d ' ')"; x="${PD_SETTLED##*|X}"; nx="${x%%:*}"; k="${x#*:}"
-    [ "$nx" = 1 ] && [ "$k" -gt 0 ] && [ "$k" = "$f" ] && break
-    printf 'X%s:%s f=%s\n' "$nx" "$k" "$f" >> "$WORK/barrier.rej"
-    if [ "$PD_SETTLED f=$f" = "$lr" ]; then rj=$((rj + 1)); else rj=1; lr="$PD_SETTLED f=$f"; fi
-    [ "$rj" -ge "$PD_REJ_MAX" ] && { printf 'X%s:%s f=%s\n' "$nx" "$k" "$f" > "$WORK/barrier.hang"; st=hang; break; }
+    [ -e "$WORK/pool.done" ] && { f="$(ls "$WORK/flight" | wc -l | tr -d ' ')"; break; }
+    f="$(ls "$WORK/flight" | wc -l | tr -d ' ')"
+    lk=$((lk + 1)); printf 'f=%02d look=%010d\n' "$f" "$lk" 1<> "$WORK/barrier.look"
+    [ "$f" -ge 6 ] && break
+    if [ -z "$p" ] && [ -s "$WORK/xargs.P" ]; then
+      read -r p < "$WORK/xargs.P"
+      case "$p" in ''|*[!0-9]*|??????*) t=6 ;; *) t=$((10#$p)); { [ "$t" -eq 0 ] || [ "$t" -gt 6 ]; } && t=6 ;; esac
+    fi
+    if [ -n "$p" ]; then
+      [ "$f" -ge "$t" ] && break
+      [ "$f" = "$lf" ] || printf 'P=%s want=%s f=%s\n' "$p" "$t" "$f" >> "$WORK/barrier.rej"; lf="$f"
+    fi
+    sleep 0.1
   done
-  n="$(ls "$WORK/flight" | wc -l | tr -d ' ')"
-  [ "$st" = 2 ] && n=nops
-  [ "$st" = hang ] && n=hang
-  printf '%s\n' "$n" > "$WORK/barrier.n"
+  printf '%s\n' "$f" > "$WORK/barrier.n"
 }
+# pd_xshim: the PATH `xargs` of a barrier drive, a perl script (so it adds no bash start): it writes the argument
+# after `-P` to $PD_XARGV atomically, then execs the real xargs in place with its argv unchanged.
+PD_XREAL="$(command -v xargs)"; case "$PD_XREAL" in /*) ;; *) broken "no xargs binary on PATH for the barrier shim" ;; esac
+mkdir -p "$WORK/xshim" && cat > "$WORK/xshim/xargs" <<'PL' && chmod +x "$WORK/xshim/xargs" || broken "could not write the barrier's xargs shim"
+#!/usr/bin/env perl
+my ($real, $rec) = ($ENV{PD_XREAL}, $ENV{PD_XARGV});
+for my $i (0 .. $#ARGV) {
+  next unless $ARGV[$i] =~ /^-P(\d*)$/;
+  my $v = length($1) ? $1 : $ARGV[$i + 1];
+  if (defined $rec && defined $v && open(my $f, ">", "$rec.t")) { print $f "$v\n"; close $f; rename("$rec.t", $rec) }
+  last;
+}
+exec { $real } "xargs", @ARGV or exit 127;
+PL
 # drive <block> <world> <depth|-> <jobs|-> -> prints "<rc>" and leaves output in $WORK/last.out
 # The block is sourced in a subshell standing in the world; AI_DLC_READSET_LIVE_TRACE=0 keeps the
 # launcher out, and the log files are fresh per drive. The marker left in the sourcing shell after the
@@ -303,19 +293,19 @@ pd_rendezvous() {
 # PD_BARRIER=1 drives the six stubs through a BARRIER, so a pool's width is a count of stubs IN FLIGHT AT
 # ONCE that no scheduling can move. Each stub creates its flight file and then blocks reading the gate
 # FIFO $WORK/gate. A poller started beside run_fixtures holds the gate's only write end, and counts the
-# flight dir until either all six are in flight (the event, read off the stubs' own files) or the drive
-# reaches the RENDEZVOUS (pd_rendezvous: its process tree settled AND every worker xargs forked has written
-# its flight file, so no further stub can start and none is still on its way). Only then does it write the
-# count to $WORK/barrier.n, put a regular file in the gate's place and exit, which ends every held read. A
-# pool narrower than six holds 5 or fewer at the rendezvous; a slow box only delays the count and never
-# changes it. No clock decides it: a settle alone (the form this replaced) read 5 of 6 when a forked worker
-# had not yet reached its flight file, the PD_BARRIER_CEIL ceiling before it read 5 of 6 on a box loaded past
-# it, and the sleep-overlap read before that read 3 and 5 against 6 under load with no hook defect. The poller's pid is
-# recorded in $WORK/barrier.pid for the EXIT trap, whose pd_release_all ends any read still held.
+# flight dir until it reaches the RENDEZVOUS (pd_rendezvous: as many flight files as the width the pool's xargs
+# was given, read off its argv by the PATH shim, capped at six), so no further stub can start and none is still on
+# its way. Only then does it write the count to $WORK/barrier.n, put a regular file in the gate's place and exit,
+# which ends every held read. A pool narrower than six holds 5 or fewer at the rendezvous; a slow box only delays
+# the count and never changes it. No clock decides it: a ps-table settle (the form before this) read 5 of 6 when a
+# forked worker had not yet reached its flight file and was bounded by a count of settles, the PD_BARRIER_CEIL
+# ceiling before it read 5 of 6 on a box loaded past it, and the sleep-overlap read before that read 3 and 5 against
+# 6 under load with no hook defect. The poller's pid is recorded in $WORK/barrier.pid for the EXIT trap, whose
+# pd_release_all ends any read still held.
 drive() {
   local blk="$1" t="$2" depth="$3" jobs="$4" rc
   rm -rf "$WORK/flight"; mkdir -p "$WORK/flight"; : > "$WORK/log"
-  rm -f "$WORK/gate" "$WORK/pool.done" "$WORK/barrier.n" "$WORK/barrier.pid" "$WORK/barrier.rej" "$WORK/leak.v"
+  rm -f "$WORK/gate" "$WORK/pool.done" "$WORK/barrier.n" "$WORK/barrier.pid" "$WORK/barrier.rej" "$WORK/barrier.look" "$WORK/leak.v" "$WORK/xargs.P"
   rc="$( cd "$t" && {
     [ "$depth" = - ] || export PREPUSH_POOL_DEPTH="$depth"
     [ "$jobs" = - ] || export AI_DLC_FIXTURE_JOBS="$jobs"
@@ -324,12 +314,12 @@ drive() {
     bp=""
     if [ -n "${PD_BARRIER:-}" ]; then
       mkfifo "$WORK/gate" || { echo "nogate" > "$WORK/barrier.n"; echo 1; exit 0; }
-      export PD_GATE="$WORK/gate"; pd_gate_sleep
+      export PD_GATE="$WORK/gate" PATH="$WORK/xshim:$PATH" PD_XREAL PD_XARGV="$WORK/xargs.P"; pd_gate_sleep
       ( exec 9<> "$WORK/gate"
-        # the poller pid, as the drive recorded it; the tree it settles on is that of its parent, itself left out
+        # the poller pid, as the drive recorded it; its parent is the drive, whose death also ends the poller
         until [ -s "$WORK/barrier.pid" ]; do sleep 0.1; done
         read -r me < "$WORK/barrier.pid"; root="$(ps -o ppid= -p "$me" 2>/dev/null | tr -d ' ')"
-        pd_rendezvous "$root" "$me"
+        pd_rendezvous
         # THE RELEASE. A regular file replaces the gate for every later open; every party that opened the FIFO,
         # at most the six stubs and their six watchers, each reading one line, gets a line. The write end stays
         # open until the pool is done, so a party that resolved the FIFO path just before the rename never
@@ -348,8 +338,6 @@ drive() {
 }
 # barrier_count: the driver's count at release ("_" if the poller never wrote one)
 barrier_count() { local n; n="$(cat "$WORK/barrier.n" 2>/dev/null)"; printf '%s' "${n:-_}"; }
-# hang_check: run in the MAIN shell after every score, before any cell is read. barrier.hang is never removed by drive.
-hang_check() { [ -e "$WORK/barrier.hang" ] && broken "a barrier drive never rendezvoused: $PD_REJ_MAX rejected settles of one table ($(cat "$WORK/barrier.hang"))"; return 0; }
 raws() { sed -n 's/^raw=\([^ ]*\) .*/\1/p' "$WORK/log" | sort -u | tr '\n' ' ' | sed 's/ *$//'; }
 
 # ------------------------------------------------------------------ hooks and blocks ------------
@@ -543,7 +531,7 @@ for HOOK in $HOOKS; do
   BLK="$WORK/block$HN.sh"
   if [ "$HN" -gt 1 ]; then
     # EVERY HOOK AFTER THE FIRST keeps one end-to-end chain over its own fixture root (I66 binds the rest)
-    GOT="$(score "$BLK" nest_started)"; hang_check
+    GOT="$(score "$BLK" nest_started)"
     if [ "$(printf '%s\n' "$GOT" | grep -c .)" -eq 4 ]; then
       armcheck_label="[$TAG] the constructed chain over this hook's own fixture root: a and b start, c never does, a/b see depths 1 and 2 after the scrub, and the refusal line reaches the inner pool's output"
     else armcheck_label="[$TAG] the chain emitted $(printf '%s\n' "$GOT" | grep -c .) cells, want 4 -- a harness that died reads as clean"; fi
@@ -554,7 +542,7 @@ for HOOK in $HOOKS; do
   fi
   W="$WORK/w$HN"; mkworld "$W" "$(cat "$WORK/block$HN.fxr")" 6 || broken "could not seed the probe world"
 
-  GOT="$(score "$BLK" $ARM_CELLS)"; hang_check
+  GOT="$(score "$BLK" $ARM_CELLS)"
   # BASELINE ASSERTED BEFORE ANY MUTANT: a harness that died prints nothing and would score every
   # mutant as a kill.
   if [ "$(printf '%s\n' "$GOT" | grep -c .)" -eq "$(printf '%s\n' "$WANT" | grep -c .)" ]; then
@@ -612,7 +600,7 @@ for HOOK in $HOOKS; do
       cells="$ARM_CELLS"; n_all="$(printf '%s\n' $cells | grep -c .)"; n_run="$(printf '%s\n' $dec $tw | grep -c .)"
       MX_RAN=$((MX_RAN + n_all - n_run))
     else cells="$dec $tw"; fi
-    g="$(score "$m" $cells)"; hang_check
+    g="$(score "$m" $cells)"
     # only the cells this mutant is scored on reach the verdict (a no-op under --matrix, where cells is every arm cell)
     g="$(printf '%s\n' "$g" | awk -F= -v cs=" $cells " 'index(cs, " " $1 " ") > 0')"
     moved="$(moved_of "$g" "$WANT")"
@@ -658,12 +646,16 @@ done
 #   stub-a (STEP gate, FIFOs w and p): call k of the watcher writes p (poll k-1 is measured) and then reads w
 #     (step k is written). The unit's step writes its byte, then w, then reads p, so poll k sees exactly k steps.
 #     The last step waits too, so a unit that is never refused ends with its watcher blocked in call N+1, and
-#     its worker kills the watcher; a `q` read from p ends the unit (the fixture's release, below).
+#     its worker kills the watcher; a `q` read from p ends the unit (the fixture's release, below). w and p are
+#     HELD OPEN READ-WRITE by the drive (fds 5 and 6) for its whole life, so a token write lands in the buffer at
+#     once and a party blocks only in read(), waiting for its peer's token: an open a signal interrupted lost the
+#     token and deadlocked the pair (BL-985), and a held FIFO has no such open.
 #   stub-b (HOLD gate, FIFO hold): the inner watcher's first call blocks until stub B closes hold, so the inner
 #     pool's own bookkeeping -- its pid and still-count records, which sit inside the nested root the outer
 #     watcher counts -- never moves while it is measured. Stub B opens hold only once its worker's record is
 #     written. After stub B is gone the call returns only once its worker is gone too (else the worker kills it).
-# Every FIFO is opened per operation, so a party blocks in open() until its peer arrives and no wait has a bound.
+#     Its open is the rendezvous itself, so it is not held: each side retries an open a signal interrupted.
+# No wait has a bound, and none needs one: every lockstep wait is a read of a token its peer always writes.
 #   pn_grow   -- fix: ok. base (the three edits reverted): REFUSED. The pair must DIFFER in this run.
 #   pn_silent -- B takes its steps and writes nothing: REFUSED under the fix (a registered root is not progress).
 #   pn_hlink  -- A lists a symlink (spelled bare and with a trailing slash) to a dir it grows, whose
@@ -717,21 +709,29 @@ FX
 cat > "$PNT/b/$PFXR/stub-b/run.sh" <<'FX'
 #!/usr/bin/env bash
 # the inner worker's record is written once, just after it starts the inner watcher; wait for it, then
-# release the inner watcher's first call only by exiting (see PN_GATE: HOLD)
+# release the inner watcher's first call only by exiting (see PN_GATE: HOLD). The open is the rendezvous with that
+# call, so one a signal interrupts is retried rather than lost.
 until [ -s "${TMPDIR%/*}/.pr/stub-b.w" ]; do command sleep 0.1; done
-exec 9> "$PN_GATE/stub-b/hold"
+until { exec 9> "$PN_GATE/stub-b/hold"; } 2> /dev/null; do [ -p "$PN_GATE/stub-b/hold" ] || exit 0; done
 printf '%s\n' "$TMPDIR" > "$PN_DIR/btmp"
 g=""; [ "$PN_MODE" = grow ] && g="$TMPDIR/grow"
 . "$PN_DIR/step.sh"
 i=0; while [ "$i" -lt "$PN_STEPS" ]; do pn_step "$g"; i=$((i + 1)); done
 exit 0
 FX
-# pn_step <file or empty>: one step of the unit, with no fork: its byte, then the step token, then the poll token
+# pn_step <file or empty>: one step of the unit, with no fork: its byte, then the step token, then the poll token.
+# The drive holds w and p open read-write, so the token write cannot block and the read blocks only in read().
+# Each operation is RECORDED for the wait-for check (pn_settle); an ENTER also wakes pn_settle with one event line.
 cat > "$PNT/step.sh" <<'FX'
 pn_step() {
+  pn_i=$(( ${pn_i:-0} + 1 ))
   [ -z "$1" ] || printf x >> "$1"
-  printf 's\n' > "$PN_GATE/stub-a/w"
-  read -r pn_t < "$PN_GATE/stub-a/p"
+  { printf 'unit enter write w %s\n' "$pn_i" >> "$PN_REC"; printf 'rec %s\n' "$PN_TAG" > "$PN_EV"; } 2> /dev/null
+  printf 's\n' 1<> "$PN_GATE/stub-a/w"; pn_c=$?
+  printf 'unit leave write w %s %s\n' "$pn_i" "$pn_c" >> "$PN_REC" 2> /dev/null
+  { printf 'unit enter read p %s\n' "$pn_i" >> "$PN_REC"; printf 'rec %s\n' "$PN_TAG" > "$PN_EV"; } 2> /dev/null
+  read -r pn_t < "$PN_GATE/stub-a/p"; pn_c=$?
+  printf 'unit leave read p %s %s\n' "$pn_i" "$pn_c" >> "$PN_REC" 2> /dev/null
   [ "$pn_t" != q ] || exit 0
 }
 FX
@@ -747,24 +747,34 @@ pn_drive() { # pn_drive <block> <mode> <tag>: backgrounded; writes ok, REFUSED o
   mkdir -p "$d/gate/stub-a" "$d/gate/stub-b" && cp -R "$PNT/a" "$d/a" && cp -R "$PNT/b" "$d/b" && cp "$PNT/step.sh" "$d/step.sh" \
     && mkfifo "$d/gate/stub-a/w" "$d/gate/stub-a/p" "$d/gate/stub-b/hold" || { bad "watcher drive $tag: could not build its worlds and gates"; return 1; }
   # THE FIFO'S WRITER IS THE HANG'S WITNESS. It blocks opening .pool-parent for write, which returns only when a
-  # reader opens it -- a watcher that reads the FIFO -- and then writes fifo.opened and holds the FIFO open with
-  # nothing in it, so that watcher's read never returns. It is a child of this shell, outside the drive's tree.
+  # reader opens it -- a watcher that reads the FIFO -- and then writes fifo.opened, emits `hung pn.<tag>` on the
+  # event FIFO and holds the FIFO open with nothing in it, so that watcher's read never returns. Its open IS the
+  # event, so an open a signal interrupted is retried. It is a child of this shell, outside the drive's tree.
   if [ "$mode" = fifo ]; then
     mkdir -p "$d/hf/fx.fifo00" && mkfifo "$d/hf/fx.fifo00/.pool-parent" || { bad "watcher drive $tag: could not build its FIFO"; return 1; }
-    ( exec 3> "$d/hf/fx.fifo00/.pool-parent"; : > "$d/fifo.opened"; exec 4< "$d/hf/fx.fifo00/.pool-parent"; read -r _ <&4 ) > /dev/null 2>&1 &
+    ( f="$d/hf/fx.fifo00/.pool-parent"
+      until { exec 3> "$f"; } 2> /dev/null; do [ -p "$f" ] || exit 0; done
+      : > "$d/fifo.opened"; printf 'hung %s\n' "pn.$tag" 1<> "$WORK/pn.ev"
+      exec 8< "$f"; read -r _ <&8 ) > /dev/null 2>&1 &
     printf '%s\n' "$!" >> "$WORK/pn.writers"
   fi
-  ( cd "$d/a" && export AI_DLC_POOL_STALL="$PN_STALL" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PN_BLK="$blk" PN_MODE="$mode" PN_DIR="$d" PN_STEPS="$PN_STEPS" PN_GATE="$d/gate"
-    pd_gate_sleep
-    . "$blk" >/dev/null 2>&1; run_fixtures > "$d/out" 2>&1
-    if grep -q '^   ok    stub-a$' "$d/out"; then v=ok
-    elif grep -q '^   REFUSED  stub-a  ' "$d/out"; then v=REFUSED
-    else v=OTHER; fi
-    printf '%s\n' "$v" > "$WORK/pn.$tag.v"
-    if [ -s "$d/btmp" ]; then
-      p="$(cat "$d/btmp")"; p="${p%/*}"
-      case "${p##*/}" in fx.??????) [ -d "$p" ] && rm -rf -- "$p" ;; esac
-    fi ) > /dev/null 2>&1 &
+  # THE DRIVE'S EVENT: the OUTER subshell emits `done pn.<tag>` once the inner one has exited by any means, a SIGKILL
+  # included (the hook installs and clears its own EXIT trap, so a trap in the drive would not fire). The inner one
+  # holds the step gate's two FIFOs open read-write (fds 5 and 6) for the drive's life.
+  ( ( cd "$d/a" && export AI_DLC_POOL_STALL="$PN_STALL" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PN_BLK="$blk" PN_MODE="$mode" PN_DIR="$d" PN_STEPS="$PN_STEPS" PN_GATE="$d/gate" \
+        PN_REC="$WORK/pn.$tag.rec" PN_EV="$WORK/pn.ev" PN_TAG="pn.$tag"
+      exec 5<> "$d/gate/stub-a/w" 6<> "$d/gate/stub-a/p"
+      pd_gate_sleep
+      . "$blk" >/dev/null 2>&1; run_fixtures > "$d/out" 2>&1
+      if grep -q '^   ok    stub-a$' "$d/out"; then v=ok
+      elif grep -q '^   REFUSED  stub-a  ' "$d/out"; then v=REFUSED
+      else v=OTHER; fi
+      printf '%s\n' "$v" > "$WORK/pn.$tag.v"
+      if [ -s "$d/btmp" ]; then
+        p="$(cat "$d/btmp")"; p="${p%/*}"
+        case "${p##*/}" in fx.??????) [ -d "$p" ] && rm -rf -- "$p" ;; esac
+      fi )
+    printf 'done %s\n' "pn.$tag" 1<> "$WORK/pn.ev" ) > /dev/null 2>&1 &
   PN_PIDS="$PN_PIDS $!:pn.$tag"
 }
 pn_v() { local v; v="$(cat "$WORK/pn.$1.v" 2>/dev/null)"; printf '%s' "${v:-none}"; }
@@ -780,9 +790,10 @@ ord_drive() { # ord_drive <block> <tag>
   m="$(cd "$d/u/.t.abcde" && pwd -P)"
   i=0; while [ "$i" -lt 17 ]; do mkdir -p "$d/old/$i"; printf '%s\n' "$d/old/$i" >> "$d/seed"; i=$((i + 1)); done
   cp "$d/seed" "$m/.pool-nested"
-  ( cd "$d/w" && export TMPDIR="$m" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1
-    . "$blk" >/dev/null 2>&1; run_fixtures >/dev/null 2>&1
-    awk 'NR == FNR { s[$0] = 1; next } !($0 in s) { n++; at = FNR } END { print (n == 1 ? at : "none") }' "$d/seed" "$m/.pool-nested" > "$WORK/ord.$tag.v" ) > /dev/null 2>&1 &
+  ( ( cd "$d/w" && export TMPDIR="$m" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1
+      . "$blk" >/dev/null 2>&1; run_fixtures >/dev/null 2>&1
+      awk 'NR == FNR { s[$0] = 1; next } !($0 in s) { n++; at = FNR } END { print (n == 1 ? at : "none") }' "$d/seed" "$m/.pool-nested" > "$WORK/ord.$tag.v" )
+    printf 'done %s\n' "ord.$tag" 1<> "$WORK/pn.ev" ) > /dev/null 2>&1 &
   PN_PIDS="$PN_PIDS $!:ord.$tag"
 }
 ord_v() { local v; v="$(cat "$WORK/ord.$1.v" 2>/dev/null)"; printf '%s' "${v:-none}"; }
@@ -808,45 +819,105 @@ pn_val() { # pn_val <set> <cell> -> the cell's value after pn_settle
     *) pn_v "${1}_${2#pn_}" ;;
   esac
 }
-# EVERY DRIVE ENDS ON A STATE ITS SUBJECTS WRITE, NEVER ON A DEADLINE OR A ps SAMPLE (BL-868). pn_settle waits on
-# each drive in turn for one of two events: its verdict file, or fifo.opened -- the FIFO's writer (pn_drive) got
-# past its open, so a watcher opened the FIFO and now hangs reading it, and its unit blocks for its next step.
-# The two cannot both come first: a hung watcher never polls again, so its unit never ends and never writes a
-# verdict. It records in pf.<tag>.at `hung` on fifo.opened, else the verdict -- the cell pn_fifo reads. A hung
-# drive is then RELEASED: a `q` on its step gate ends the unit, its worker kills the watcher, and it writes the
-# verdict it reaches released (the m-nofifoguard control: a hung drive was only blocked, and reaches `ok`). Every
-# drive is then reaped by `wait`, and only then are the FIFO writers ended.
-# A settle with neither event is only a REJECTION (one line to pn.rej): the drive is waited on again. The safety
-# bound, PD_REJ_MAX rejections of one unchanged table, can only turn a drive that never reaches either event into
-# FIXTURE BROKEN. The settled table this replaced as the decider released a drive it caught between two steps,
-# whose `q` then ended a unit that should have been REFUSED as `ok`, and read a slow fix verdict as a hang; the
-# PF_DEADLINE=40 / PF_MIN=6 window before it did the latter on a loaded box.
+# EVERY DRIVE ENDS ON AN EVENT ITS SUBJECTS EMIT, NEVER ON A DEADLINE, A ps SAMPLE OR A COUNT (BL-868, BL-985).
+# pn_settle blocks reading the event FIFO pn.ev, which this shell holds open read-write on fd 4 for the whole watcher
+# section (so a line outlives its writer and a read never sees end of file), until every drive is accounted for by
+# one of two events: `done <tag>`, which the drive's outer subshell writes once the drive has exited by any means,
+# or `hung pn.<tag>`, which the FIFO's writer (pn_drive) writes once a watcher has opened the FIFO and so hangs
+# reading it. A hung drive cannot be done first: a hung watcher never polls again, so its unit never ends. pf.<tag>.at
+# records `hung`, else the verdict -- the cell pn_fifo reads. A hung drive is then RELEASED: a `q` on its step gate
+# ends the unit, its worker kills the watcher, and it writes the verdict it reaches released (the m-nofifoguard
+# control: a hung drive was only blocked, and reaches `ok`). Every drive is then reaped by `wait`, and only then are
+# the FIFO writers ended.
+# A DEADLOCK IS A VERDICT, DECIDED BY A WAIT-FOR CYCLE IN RECORDS THE PARTIES WRITE (F-B5), never by a count or a
+# clock. Each lockstep party appends `<party> <enter|leave> <read|write> <fifo> <seq> [rc]` to $WORK/pn.<tag>.rec --
+# the unit (pn_step) and the watcher (the PN_GATE shim) -- before and after each FIFO operation. The file sits outside
+# every root a watcher counts as progress, so it cannot move a REFUSED cell. Every ENTER also writes `rec <tag>` to
+# pn.ev, so pn_settle checks that drive after each state change that can complete a cycle (the last party to block
+# writes an ENTER). pn_cycle declares a cycle only when BOTH parties' last records are ENTERs on DIFFERENT FIFOs and,
+# on each FIFO, the tokens sent (leave write, rc 0) equal the tokens received (leave read, rc 0): then neither has a
+# token on its way, its only peer waits on the other FIFO, and neither can move. A buffered token (sent > received) is
+# a transient and is never a cycle. A cycle is FIXTURE BROKEN naming the drive and both records.
+# KNOWN ROUTE, NOT DETECTED: a write that returns 0 and puts its token NOWHERE (the `0<>` bash 3.2 re-prints for an
+# exported `1<>`, which hung this section silently in BL-985) reads as a buffered token, so it is never a cycle; the
+# shim's redirections are held to `>` and `>>` for that reason, as bash re-prints them.
+# THE REMAINING WAITS, each with its guaranteed peer, so a drive that is not in a cycle ends:
+#   watcher read of w   <- the unit's next step (held FIFO); a unit that exits or is killed: its worker KILLs the watcher
+#   unit read of p      <- the watcher's next call (held FIFO), or the fixture's `q`; the watcher always comes back
+#                          unless refused (the unit is then killed), killed, or hung on a FIFO .pool-parent (below)
+#   stub B's hold open  <- the inner watcher's first call, which follows its start; an interrupted open is retried
+#   inner hold read     <- stub B's open, then end of file when stub B exits; then its worker's exit. The retry is
+#                          sound for this READER side only. RESIDUAL on the writer side: a signal can fail stub B's open
+#                          after the reader's open has returned, so the inner watcher reads end of file at once; it then
+#                          waits for its worker's exit and still never polls, so the inner bookkeeping does not move.
+#   pn_settle's read    <- every drive's outer subshell (written on any exit of the drive) and the witness's `hung`
+#   a watcher's read of a FIFO .pool-parent <- nobody, on purpose: the hang the witness reports and `q` releases
+# KNOWN ROUTE, NOT BOUNDED HERE: a SUBJECT (the block or a mutant of it) that blocks forever outside the lockstep hangs
+# its drive and so this fixture; nothing in the fixture turns that into FIXTURE BROKEN, and only the runner outside it
+# bounds it: the outer pool's stall refusal, which fires because a stuck fixture writes nothing new (below). The witness's own open has no peer by design and is ended by pn_reap_writers. The ps-table settle this
+# replaced bounded each drive by 200 rejected settles of one table: a lockstep a signal had deadlocked (an interrupted
+# FIFO open, BL-985) reached it as FIXTURE BROKEN, and so could a slow box.
+# A TICK, written every 0.1s by a pacer pn_settle starts and stops, wakes it to LOOK at every drive not yet accounted
+# for: the same pn_cycle check, then pn.looked's completed-look counter (fixed width, in place: BL-924's receipt bounds
+# its watcher forcing on it), and a `<tag> looked: no cycle (...)` line in pn.rej ONLY WHEN that drive's line
+# differs from the last one written for it ($WORK/pn.<tag>.look) -- "this drive was looked at in a new state and had
+# not reached its event". The tick only wakes: it decides nothing, it is not a bound, nothing counts ticks, and every
+# line it writes is decided by the records. A STUCK FIXTURE THEREFORE WRITES NOTHING NEW (no look line repeats, no
+# barrier line repeats, pn.tick.due is empty), so the KNOWN ROUTES above -- a subject blocked outside the lockstep, a
+# stuck barrier -- are bounded by the outer pool's stall refusal, which counts the bytes under this unit's root.
+# pn_cycle <rec file> -> "none" or "CYCLE <unit last> | <watcher last> | sent/received per FIFO"
+pn_cycle() {
+  [ -s "$1" ] || { printf 'none'; return 0; }
+  awk '{ last[$1] = $0; k[$1] = $2; f[$1] = $4
+         if ($2 == "leave" && $6 == "0") { if ($3 == "write") sn[$4]++; else rc[$4]++ } }
+       END { if (k["unit"] == "enter" && k["watcher"] == "enter" && f["unit"] != f["watcher"] && sn["w"] + 0 == rc["w"] + 0 && sn["p"] + 0 == rc["p"] + 0)
+               printf "CYCLE unit [%s] | watcher [%s] | w %d/%d p %d/%d", last["unit"], last["watcher"], sn["w"], rc["w"], sn["p"], rc["p"]
+             else printf "none" }' "$1"
+}
 pn_settle() {
-  local e p t f d st rj lr
-  for e in $PN_PIDS; do
-    p="${e%%:*}"; t="${e#*:}"; f="$WORK/$t.v"; d="$WORK/$t"; rj=0; lr=""
-    while :; do
-      pd_settle "$p" 0 "[ -s \"$f\" ] || [ -e \"$d/fifo.opened\" ]"; st=$?
-      [ "$st" = 2 ] && broken "watcher drive $t: ps gives no process table, so the wait for its verdict cannot be paced"
-      [ "$st" = 1 ] || break
-      printf '%s %s\n' "${t#pn.}" "$PD_SETTLED" >> "$WORK/pn.rej"
-      if [ "$PD_SETTLED" = "$lr" ]; then rj=$((rj + 1)); else rj=1; lr="$PD_SETTLED"; fi
-      [ "$rj" -ge "$PD_REJ_MAX" ] && broken "watcher drive $t: neither a verdict nor a FIFO open after $PD_REJ_MAX rejected settles of one table ($lr)"
-    done
-    case "$t" in
-      pn.*) if [ -e "$d/fifo.opened" ]; then echo hung; else cat "$f" 2>/dev/null; fi > "$WORK/pf.${t#pn.}.at" ;;
+  local e t p2 pend="" hung="" ev tg tk cy ln lp nl=0
+  for e in $PN_PIDS; do pend="$pend ${e#*:}"; done
+  : > "$WORK/pn.ticking"; rm -f "$WORK/pn.tick.due"
+  # AT MOST ONE TICK IN FLIGHT: the pacer writes a tick only while pn.tick.due is absent, creating it first; pn_settle
+  # removes it when it handles that tick, so a slow reader never finds a backlog of ticks in the FIFO.
+  ( while [ -e "$WORK/pn.ticking" ]; do sleep 0.1; [ -e "$WORK/pn.tick.due" ] && continue; : > "$WORK/pn.tick.due"; printf 'tick -\n' 1<> "$WORK/pn.ev"; done ) > /dev/null 2>&1 &
+  tk=$!; printf '%s\n' "$tk" > "$WORK/pn.ticker"
+  while [ -n "${pend// /}" ]; do
+    read -r ev tg <&4 || broken "watcher section: the event FIFO could not be read, with drives pending:$pend"
+    case "$ev" in
+      tick)
+        rm -f "$WORK/pn.tick.due"
+        for t in $pend; do
+          cy="$(pn_cycle "$WORK/$t.rec")"
+          case "$cy" in CYCLE*) broken "watcher drive $t: DEADLOCK, a wait-for cycle in its lockstep records: ${cy#CYCLE }" ;; esac
+          ln="$(printf '%s looked: no cycle (unit [%s] watcher [%s])' "${t#pn.}" "$(grep '^unit ' "$WORK/$t.rec" 2>/dev/null | tail -1)" "$(grep '^watcher ' "$WORK/$t.rec" 2>/dev/null | tail -1)")"
+          lp=""; [ -f "$WORK/$t.look" ] && read -r lp < "$WORK/$t.look"
+          [ "$ln" = "$lp" ] || { printf '%s\n' "$ln" >> "$WORK/pn.rej"; printf '%s\n' "$ln" > "$WORK/$t.look"; }
+        done
+        # the COMPLETED-LOOK counter, fixed width and overwritten in place (no growth): written after every pending
+        # drive's line, so a reader that sees it advance twice past a moment knows a whole look began after it
+        nl=$((nl + 1)); printf 'looks=%010d\n' "$nl" 1<> "$WORK/pn.looked"; continue ;;
+      rec)
+        case "$pend " in *" $tg "*) ;; *) continue ;; esac
+        cy="$(pn_cycle "$WORK/$tg.rec")"
+        case "$cy" in CYCLE*) broken "watcher drive $tg: DEADLOCK, a wait-for cycle in its lockstep records: ${cy#CYCLE }" ;; esac
+        continue ;;
+      done|hung) case "$pend " in *" $tg "*) ;; *) continue ;; esac ;;
+      *) continue ;;
     esac
-    # HUNG: the stepper is blocked opening its step FIFO (its watcher never came back for the step) or reading its
-    # poll FIFO. Both are held open read-write here until the drive is reaped, so the step write lands in the
-    # buffer whichever open it is in, and the `q` waits in the poll FIFO until it is read; the stepper exits, its
-    # unit ends, and its worker kills the hung watcher.
-    if [ -e "$d/fifo.opened" ] && [ -p "$d/gate/stub-a/p" ]; then
-      exec 7<> "$d/gate/stub-a/w" 8<> "$d/gate/stub-a/p"
-      printf 'q\n' >&8
-      wait "$p"
-      exec 7>&- 8>&-
-    fi
+    [ "$ev" = hung ] && hung="$hung $tg"
+    p2=""; for t in $pend; do [ "$t" = "$tg" ] || p2="$p2 $t"; done; pend="$p2"
   done
+  rm -f "$WORK/pn.ticking"; kill "$tk" 2> /dev/null; wait "$tk" 2> /dev/null; rm -f "$WORK/pn.ticker" "$WORK/pn.tick.due"
+  for e in $PN_PIDS; do
+    t="${e#*:}"
+    case "$t" in
+      pn.*) case "$hung " in *" $t "*) echo hung ;; *) cat "$WORK/$t.v" 2>/dev/null ;; esac > "$WORK/pf.${t#pn.}.at" ;;
+    esac
+  done
+  # HUNG: the stepper is blocked reading its poll FIFO (its watcher never came back). The drive holds that FIFO open,
+  # so the `q` waits in it until it is read; the stepper exits, its unit ends, and its worker kills the hung watcher.
+  for t in $hung; do [ -p "$WORK/$t/gate/stub-a/p" ] && printf 'q\n' 1<> "$WORK/$t/gate/stub-a/p"; done
   for e in $PN_PIDS; do wait "${e%%:*}" 2>/dev/null; done
   pn_reap_writers
   PN_PIDS=""
@@ -902,6 +973,28 @@ pn_eval() {
     "MUTANT $name moved [${moved% }], want [$dec] (twin [${tw:--}]); released-fifo control read $(pn_v m-nofifoguard_fifo)"
 }
 PN_MUTS="m-appendreg m-nofifoguard m-nomark m-noread m-novalidate"
+# PN_CYCLE'S SELF-PROBE, before any drive: three seeded record files, each a state its verdict must match. A cycle
+# (a lost token: each party entered a write on a different FIFO, nothing in flight) must fire; a buffered token (sent >
+# received on w) and both parties on the SAME FIFO must not. A detector that cannot fire, or fires on a transient, is
+# reported here rather than read as a clean watcher section.
+printf '%s\n' 'watcher enter read w 1' 'unit enter write w 1' 'unit leave write w 1 0' 'unit enter read p 1' 'watcher leave read w 1 0' \
+  'unit leave read p 1 1' 'unit enter write w 2' 'watcher enter write p 2' > "$WORK/probe.cycle.rec"
+printf '%s\n' 'watcher enter read w 1' 'unit enter write w 1' 'unit leave write w 1 0' 'unit enter read p 1' > "$WORK/probe.buffered.rec"
+printf '%s\n' 'watcher enter read w 1' 'unit enter write w 1' > "$WORK/probe.samefifo.rec"
+printf '%s\n' 'watcher enter read w 1' 'unit enter write w 1' 'unit leave write w 1 0' 'watcher leave read w 1 0' 'unit enter read p 1' \
+  'watcher enter write p 2' 'watcher leave write p 2 1' 'watcher enter read w 2' > "$WORK/probe.readcycle.rec"
+printf '%s\n' 'watcher enter read w 1' 'unit enter write w 1' 'unit leave write w 1 0' 'watcher leave read w 1 0' > "$WORK/probe.leave.rec"
+case "$(pn_cycle "$WORK/probe.cycle.rec")" in CYCLE*) ok "[watcher] pn_cycle self-probe: a lost token (both parties entered writes on different FIFOs, nothing in flight) is a cycle" ;;
+  *) bad "[watcher] pn_cycle self-probe: a seeded deadlock read as no cycle, so the detector cannot fire" ;; esac
+case "$(pn_cycle "$WORK/probe.readcycle.rec")" in CYCLE*) ok "[watcher] pn_cycle self-probe: both parties entered READS on different FIFOs with equal counts (the watcher's p write failed, rc 1, so no token is on its way) is a cycle" ;;
+  *) bad "[watcher] pn_cycle self-probe: the read-read lost-token shape read as no cycle" ;; esac
+case "$(pn_cycle "$WORK/probe.leave.rec")" in none) ok "[watcher] pn_cycle self-probe: a party whose last record is a leave is not in a cycle" ;;
+  *) bad "[watcher] pn_cycle self-probe: a party on a leave read as a cycle" ;; esac
+case "$(pn_cycle "$WORK/probe.buffered.rec")" in none) ok "[watcher] pn_cycle self-probe: a buffered token (sent 1 > received 0 on w) is not a cycle" ;;
+  *) bad "[watcher] pn_cycle self-probe: a buffered token read as a cycle" ;; esac
+case "$(pn_cycle "$WORK/probe.samefifo.rec")" in none) ok "[watcher] pn_cycle self-probe: both parties on the same FIFO is not a cycle" ;;
+  *) bad "[watcher] pn_cycle self-probe: two parties on one FIFO read as a cycle" ;; esac
+mkfifo "$WORK/pn.ev" && exec 4<> "$WORK/pn.ev" || broken "could not make or hold the watcher section's event FIFO"
 if [ "$MATRIX" = 1 ]; then
   pn_launch fix "$PB" $PN_ALL; pn_launch base "$PBASE" pn_grow; pn_settle
   for _m in $PN_MUTS; do
@@ -916,6 +1009,7 @@ else
   done
   pn_settle
 fi
+exec 4<&-
 
 T="nested-root:${PB##*/}"; T="nested-root:$(basename "$(dirname "$(printf '%s\n' $HOOKS | sed -n 1p)")")/pre-push"
 f="$(pn_val fix pn_grow)"; b="$(pn_v base_grow)"
@@ -1165,9 +1259,18 @@ td_stubs() { cat "$1"/s.* 2>/dev/null | cut -d' ' -f1 | tr '\n' ' '; }
 td_wait2() { # td_wait2 <stub dir>: until two stubs have recorded; every stub starts (no mutant touches dispatch)
   while [ "$(ls "$1" | grep -c '^s\.')" -lt 2 ]; do sleep 0.1; done
 }
+# td_xwait <dir> <pids>: records the pids it waits on in <dir>/xwait, then blocks until each is gone, paced, with no
+# bound: the end of the subject's xargs, an event
+td_xwait() { local x d="$1"; shift; [ "$#" -gt 0 ] || { [ "${blk:-}" = "$PB" ] && bad "teardown drive: no xargs pid was read under the subject's parent, so nothing was waited for"; }; printf '%s\n' "$*" > "$d/xwait"; for x in "$@"; do while kill -0 "$x" 2>/dev/null; do sleep 0.1; done; done; }
 # td_drive <block> <set> <term|int> -> appends the mode's cells to $WORK/td.<set>.v
+# EVERY DRIVE ENDS WITH ITS SUBJECT'S xargs GONE (BL-985). xargs is the parent's only child once both stubs have
+# recorded (the parent then sits in its wait for it), so it is read there, once, by `pgrep -P`. A parent that exits
+# without tearing the pool down (td-old-traps: `exit 143` in place of pool_stop) leaves xargs orphaned, and after the
+# release it dispatches the queued unit -- one more worker started -- after this drive had stopped waiting: whether
+# that start was counted then depended on the fixture outliving it. So each mode waits for xargs to be gone before it
+# records its cells, and every start the drive causes has happened by then.
 td_drive() {
-  local blk="$1" set="$2" mode="$3" d="$WORK/td.$2.$3" p n st root ks k wp t dp dn
+  local blk="$1" set="$2" mode="$3" d="$WORK/td.$2.$3" p n st root ks k wp t dp dn xp
   mkdir -p "$d/s" && cp -R "$TDT" "$d/w" || { bad "teardown drive $set/$mode: could not copy the template"; return 1; }
   set -m
   ( cd "$d/w" && unset PREPUSH_POOL_DEPTH && export AI_DLC_FIXTURE_JOBS=2 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 TD_DIR="$d/s" \
@@ -1175,6 +1278,7 @@ td_drive() {
   p=$!
   set +m
   td_wait2 "$d/s"
+  xp="$(pgrep -P "$p" 2>/dev/null | tr '\n' ' ')"
   t="$(td_stubs "$d/s")"; root="$(sed -n '1s/^[0-9]* //p' "$d/s/$(ls "$d/s" | grep '^s\.' | sed -n 1p)")"
   # the readers' precondition, before any signal: both stubs read alive (a reader that reads everything dead fails here)
   q="$(td_alive $t)"
@@ -1189,7 +1293,7 @@ td_drive() {
     # until the parent is gone, or a third stub (a queued unit) has started
     while kill -0 "$p" 2>/dev/null && [ "$(ls "$d/s" | grep -c '^s\.')" -le 2 ]; do sleep 0.1; done
     n="$(td_alive $(td_stubs "$d/s"))"; dn="$(td_user "$dp")"
-    : > "$d/s/release"; wait "$p"; st=$?; wait "$dp"
+    : > "$d/s/release"; wait "$p"; st=$?; wait "$dp"; td_xwait "$d/s" $xp
     if [ -d "$root" ]; then root=present; else root=gone; fi
     printf 'td_term=%s\ntd_queue=%s\ntd_rc=%s:%s\ntd_decoy=%s\n' "$n" "$(ls "$d/s" | grep -c '^s\.')" "$st" "$root" "$dn" >> "$WORK/td.$set.v"
   else
@@ -1210,7 +1314,7 @@ td_drive() {
     kill -INT "$p"
     while kill -0 "$p" 2>/dev/null; do sleep 0.1; done
     dn="$(td_alive $(td_stubs "$d/s"))"
-    : > "$d/s/release"; wait "$p"; st=$?
+    : > "$d/s/release"; wait "$p"; st=$?; td_xwait "$d/s" $xp
     if [ -d "$root" ]; then root=present; else root=gone; fi
     printf 'td_intp=%s:%s:%s\n' "$st" "$root" "$dn" >> "$WORK/td.$set.v"
   fi
@@ -1550,8 +1654,9 @@ fi
 
 # ------------------------------------------------- BL-924's RECEIPT, against THIS run.sh ---------
 # The receipt builds ONE scratch copy of this file, forces the two schedules BL-924 names (fx6 writes its flight
-# file only after the barrier drive has settled; the first step of fix_hlink, fix_fifo and fix_silent waits until
-# the fixture has recorded or rejected that drive), and prints a `CELL <name> PASS|FAIL` line per cell. Its copy
+# file only after the barrier poller has counted or looked again after a look at five, read off barrier.look; the
+# first step of fix_hlink, fix_fifo and fix_silent records `unit hold` and waits until the fixture has recorded that
+# drive or written a new look line for it in pn.rej), and prints a `CELL <name> PASS|FAIL` line per cell. Its copy
 # ends at the watcher mutant loop, so it never reaches this arm. Exit 9 is a refusal to measure: FIXTURE BROKEN.
 # NECESSITY: the forced schedules are states no unforced drive above reaches, so no cheaper call shows them.
 RCPT924="$(dirname "$0")/receipt-bl924.sh"
