@@ -73,6 +73,158 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 echo "apply-worklist-rows:"
 
+# --- ARM C1: every row CLASS apply.sh emits has a step-7 bullet in SKILL.md (BL-1017) ------------
+# THE DEFECT ONE LEVEL UP. apply.sh prints rows as `<CLASS>\t<kind>\t<path>[\t<detail>]` and
+# SKILL.md step 7 tells the session what to do with each class, one `   - \`CLASS …\`` bullet per
+# class. NOTE (16 sites) had no bullet: step 7 said "Work only the WORKLIST and DECISION rows", so
+# a NOTE was read by nobody. A class added to apply.sh later would be the same defect again.
+# THE JOIN, both sides derived, nothing hand-listed:
+#   classes  every non-comment `say [A-Z]+` (or `say "[A-Z]+"`) site of apply.sh, PLUS the
+#            variable-class sites resolved: the one known site `say "$_k" staging-refused` takes
+#            the literals `_k` is assigned inside the same function; ANY other `say "$var"` site,
+#            or a non-literal `_k` assignment there, REFUSES -- its class is not derivable.
+#   bullets  every `^   - \`[A-Z]+ ` line strictly between the `^7. **` and `^8. **` headings of
+#            SKILL.md, each heading required exactly once and in that order.
+# It FAILS naming each class with no bullet, and REFUSES (never passes) on an unreadable file, an
+# empty class set, an empty bullet set, or a missing, duplicated or misordered heading.
+# CEILING, stated: it checks that a bullet for the class EXISTS in step 7, not what the bullet
+# says. A bullet reading "ignore these" satisfies it. What a session does with the bullet is model
+# behaviour and no tree predicate reaches it.
+# LAYOUT: SKILL.md is resolved as `$REC/../SKILL.md`, beside reconcile/. install.sh lands both
+# under one parent in a consumer (`.claude/skills/ai-dlc-update/SKILL.md` and
+# `.claude/skills/ai-dlc-update/reconcile/`), as they share `core/skills/ai-dlc-update/` here.
+# FALSE-POSITIVE SET: measured EMPTY at the tip that adds the NOTE bullet (classes DECISION NOTE
+# RESOLVED WORKLIST, bullets the same four); the only variable-class site at that tip is the known
+# `_k` one. The literal grammar requires a non-word character before `say` and a quote, blank, `;`
+# or end of line after the class, so `say() {`, `essay X` and `say Hello` are not sites.
+# SELF-PROBE first, in mktemp copies of the two real files, both directions, and each seeded copy
+# asserted to differ from the file it was seeded from so a seed that applied nothing cannot pass.
+# No subject is run, and no bash is started: awk, grep and sed over two files, so the verdict is a
+# function of their bytes alone and independent of load, timing and job count (BL-868).
+SKILL="$REC/../SKILL.md"
+cj_classes() { # cj_classes <apply.sh> -> rows `C <class>` and `R <reason>`
+  awk '
+    /^[[:blank:]]*#/ { next }
+    /^[A-Za-z_][A-Za-z0-9_]*\(\)/ { kl = ""; kbad = 0 }
+    {
+      rest = $0
+      while (match(rest, /(^|[^A-Za-z0-9_])_k=/)) {
+        v = substr(rest, RSTART + RLENGTH)
+        if (match(v, /^[A-Z][A-Z]*/) && (length(v) == RLENGTH || substr(v, RLENGTH + 1, 1) ~ /[[:blank:];]/)) kl = kl " " substr(v, 1, RLENGTH)
+        else kbad = 1
+        rest = v
+      }
+      rest = $0
+      while (match(rest, /(^|[^A-Za-z0-9_])say[[:blank:]]+"?[A-Z][A-Z]*/)) {
+        t = substr(rest, RSTART, RLENGTH); nx = substr(rest, RSTART + RLENGTH, 1)
+        rest = substr(rest, RSTART + RLENGTH)
+        if (nx != "" && nx !~ /["[:blank:];]/) continue
+        sub(/.*say[[:blank:]]+"?/, "", t); print "C " t
+      }
+      if ($0 ~ /(^|[^A-Za-z0-9_])say[[:blank:]]+"?\$/) {
+        if ($0 ~ /(^|[^A-Za-z0-9_])say "\$_k" staging-refused/) {
+          if (kl == "" || kbad) print "R line " NR ": the known say \"$_k\" site has no literal-only _k assignment in its function"
+          else { n = split(kl, a, " "); for (i = 1; i <= n; i++) print "C " a[i] }
+        } else print "R line " NR ": a variable-class say site whose class cannot be derived"
+      }
+    }' "$1"
+}
+cj_bullets() { # cj_bullets <SKILL.md> -> rows `B <class>`, then `H <step-7 count> <step-8 count> <order>`
+  awk '
+    /^7\. \*\*/ { h7++; if (h8) bad = 1; in7 = 1; next }
+    /^8\. \*\*/ { h8++; in7 = 0; next }
+    in7 && /^   - `[A-Z][A-Z]* / { t = $0; sub(/^   - `/, "", t); sub(/ .*/, "", t); print "B " t }
+    END { print "H " h7 + 0 " " h8 + 0 " " (bad ? "misordered" : "ordered") }' "$1"
+}
+# class_join <apply.sh> <SKILL.md> -> prints `MISSING <class>` / `REFUSE <why>`; 0 clean, 1 missing, 2 refuse
+CJ_CLASSES=""; CJ_BULLETS=""
+class_join() {
+  local a="$1" s="$2" co bo cls bul c rc=0
+  CJ_CLASSES=""; CJ_BULLETS=""
+  { [ -r "$a" ] && [ -r "$s" ]; } || { echo "REFUSE cannot read $a or $s"; return 2; }
+  co="$(cj_classes "$a")" || { echo "REFUSE the class scan of $a failed"; return 2; }
+  bo="$(cj_bullets "$s")" || { echo "REFUSE the bullet scan of $s failed"; return 2; }
+  if grep -q '^R ' <<<"$co"; then sed -n 's/^R /REFUSE /p' <<<"$co"; return 2; fi
+  case "$bo" in *"H 1 1 ordered") ;; *) echo "REFUSE the step-7/step-8 headings of $s are not each present once and in order ($(sed -n '$p' <<<"$bo"))"; return 2 ;; esac
+  cls="$(printf '%s\n' "$co" | sed -n 's/^C //p' | sort -u)"
+  bul="$(printf '%s\n' "$bo" | sed -n 's/^B //p' | sort -u)"
+  CJ_CLASSES="$(echo $cls)"; CJ_BULLETS="$(echo $bul)"
+  [ -n "$cls" ] || { echo "REFUSE no row class derived from $a"; return 2; }
+  [ -n "$bul" ] || { echo "REFUSE no class bullet found in step 7 of $s"; return 2; }
+  for c in $cls; do
+    grep -qxF "$c" <<<"$bul" || { echo "MISSING $c"; rc=1; }
+  done
+  return $rc
+}
+# cj_expect <label> <apply> <skill> <want rc> <want MISSING list, space-separated, or -> [<text the output must carry>]
+# The sixth argument pins WHY a refusal refused, so a refusal for some other reason cannot pass.
+CJ_PROBE_BAD=0
+cj_expect() {
+  local out rc got
+  out="$(class_join "$2" "$3")"; rc=$?
+  got="$(printf '%s\n' "$out" | sed -n 's/^MISSING //p' | sort | tr '\n' ' ' | sed 's/ $//')"
+  [ -n "$got" ] || got=-
+  if [ "$rc" = "$4" ] && [ "$got" = "$5" ] && { [ -z "${6:-}" ] || grep -qF "${6:-}" <<<"$out"; }; then
+    ok "C1 self-probe $1: rc=$rc missing=$got"
+  else
+    bad "C1 self-probe $1: want rc=$4 missing=$5, got rc=$rc missing=$got: $(printf '%s' "$out" | tr '\n' '|')"
+    CJ_PROBE_BAD=1
+  fi
+}
+# cj_differs <label> <seeded> <seeded-from>: a seed that changed nothing cannot stand as a probe.
+cj_differs() {
+  if cmp -s "$2" "$3"; then bad "C1 self-probe $1: the seeded copy is byte-identical to its source -- the seed did not apply"; CJ_PROBE_BAD=1; return 1; fi
+  return 0
+}
+CJ="$W/class-join"; mkdir -p "$CJ"
+CJ_A="$REC/apply.sh"
+if [ ! -f "$SKILL" ]; then
+  bad "FIXTURE BROKEN — SKILL.md not found beside reconcile/ at $SKILL"; echo "apply-worklist-rows: FIXTURE BROKEN" >&2; exit 2
+fi
+SKILL="$(cd "$REC/.." && pwd)/SKILL.md"
+echo "HERMETIC-CONSUMED $SKILL"
+# Base shape: the real SKILL.md with every step-7 NOTE bullet removed -- the tree before BL-1017.
+awk '/^7\. \*\*/{i=1} /^8\. \*\*/{i=0} i && /^   - `NOTE /{next} {print}' "$SKILL" > "$CJ/skill.base.md"
+if [ "$(cj_bullets "$CJ/skill.base.md" | grep -c '^B NOTE$')" != 0 ]; then
+  bad "C1 self-probe: the base-shaped copy still carries a step-7 NOTE bullet"; CJ_PROBE_BAD=1
+fi
+# Every seed is inserted on the line BEFORE the step-8 heading (still step 7) or AFTER it (step 8).
+cj_seed() { # cj_seed <before|after> <line> <in> <out>
+  awk -v w="$1" -v l="$2" '/^8\. \*\*/{ if (w == "before") print l; print; if (w == "after") print l; next } {print}' "$3" > "$4"
+}
+cj_seed before '   - `NOTE …` — probe bullet.' "$CJ/skill.base.md" "$CJ/skill.note.md"
+cj_seed before '   A `NOTE …` row named in prose, not a bullet.' "$CJ/skill.base.md" "$CJ/skill.prose.md"
+cj_seed after '   - `NOTE …` — probe bullet placed in step 8.' "$CJ/skill.base.md" "$CJ/skill.step8.md"
+cp "$CJ_A" "$CJ/apply.info.sh";  printf '%s\n' 'say INFO probe-kind "x" "y"' >> "$CJ/apply.info.sh"
+cp "$CJ_A" "$CJ/apply.var.sh";   printf '%s\n' 'say "$x" probe-kind "x" "y"' >> "$CJ/apply.var.sh"
+awk '/^[[:blank:]]*local _k=DECISION$/{sub(/DECISION/, "HALTQ")} {print}' "$CJ_A" > "$CJ/apply.kclass.sh"
+awk '/^[[:blank:]]*local _k=DECISION$/{sub(/DECISION/, "\"$_x\"")} {print}' "$CJ_A" > "$CJ/apply.kvar.sh"
+for _p in skill.note.md skill.prose.md skill.step8.md; do cj_differs "$_p" "$CJ/$_p" "$CJ/skill.base.md"; done
+for _p in apply.info.sh apply.var.sh apply.kclass.sh apply.kvar.sh; do cj_differs "$_p" "$CJ/$_p" "$CJ_A"; done
+cj_differs skill.note.md-vs-real "$CJ/skill.note.md" "$SKILL"
+cj_expect "1 base shape, no NOTE bullet (fires)"           "$CJ_A" "$CJ/skill.base.md"  1 NOTE
+cj_expect "2 seeded NOTE bullet (quiet)"                   "$CJ_A" "$CJ/skill.note.md"  0 -
+cj_expect "3 NOTE named only in prose (fires)"             "$CJ_A" "$CJ/skill.prose.md" 1 NOTE
+cj_expect "4 a new say INFO site (fires)"                  "$CJ/apply.info.sh" "$CJ/skill.note.md" 1 INFO
+cj_expect "5 the NOTE bullet placed in step 8 (fires)"     "$CJ_A" "$CJ/skill.step8.md" 1 NOTE
+cj_expect "6 an extra variable-class say site (refuses)"   "$CJ/apply.var.sh" "$CJ/skill.note.md" 2 - "class cannot be derived"
+cj_expect "7 a new literal assigned to _k (fires, derived)" "$CJ/apply.kclass.sh" "$CJ/skill.note.md" 1 HALTQ
+cj_expect "8 a non-literal _k assignment (refuses)"         "$CJ/apply.kvar.sh" "$CJ/skill.note.md" 2 - "no literal-only _k assignment"
+# The corpus read, only behind a self-probe that fired and stayed quiet where it should.
+if [ "$CJ_PROBE_BAD" = 0 ]; then
+  # Not in `$( )`: class_join sets CJ_CLASSES/CJ_BULLETS, which a subshell would discard.
+  class_join "$CJ_A" "$SKILL" > "$CJ/corpus.out"; CJ_RC=$?
+  CJ_OUT="$(cat "$CJ/corpus.out")"
+  case "$CJ_RC" in
+    0) ok "C1 every row class apply.sh emits ($CJ_CLASSES) has a step-7 bullet in SKILL.md ($CJ_BULLETS)" ;;
+    1) for _c in $(printf '%s\n' "$CJ_OUT" | sed -n 's/^MISSING //p'); do
+         bad "C1 row class $_c is emitted by apply.sh (say $_c) and has no \`   - \`$_c …\`\` bullet in step 7 of $SKILL (classes: $CJ_CLASSES; bullets: $CJ_BULLETS) -- add one saying what the session does with a $_c row"
+       done ;;
+    *) bad "C1 REFUSED -- the join cannot be computed: $(printf '%s' "$CJ_OUT" | tr '\n' '|')" ;;
+  esac
+else
+  bad "C1 corpus read NOT run: the self-probe above did not discriminate, so a clean corpus read would establish nothing"
+fi
 
 
 # --- the synthetic pull -------------------------------------------------------------------

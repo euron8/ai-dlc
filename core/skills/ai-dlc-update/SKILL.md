@@ -1919,12 +1919,26 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      or read-only `TMPDIR`, or a file-size limit), so the section that file feeds is **UNKNOWN,
      not clean**, and no row it would have produced was emitted. The detail names the section and
      the remedy that clears it. Under `--finish` the same row is a `WORKLIST` and withholds.
+   - `NOTE …` — never withholds the stamp, and is not counted with the handed-back rows. Read
+     every `NOTE` row of an `apply.sh` run BEFORE you work that run's `WORKLIST` rows: a `NOTE`
+     can cancel or subsume a `WORKLIST` row on the same path (`override-readopt-subsumed` against
+     `override-readopt`; `extension-retire` or `extension-contradicts-core` against
+     `extension-title-match`). Where a `NOTE`'s detail prescribes an act, do it in this pull as
+     owed work, even though the stamp did not wait for it. Relay EVERY `NOTE` row of every
+     `apply.sh` run of this pull, re-runs and `--finish` included, to the operator in the PR body
+     (step 8): give each kind once, with its row count and paths, and quote the full detail only
+     for a row whose detail, or this step, prescribes an act, saying whether that act was done.
+     `derivation-unassessable` is one such row: this step has you adjudicate each one by hand and
+     relay each one in full. **Do not read this bullet as the list of kinds.** The kinds are
+     declared at their emitting `say NOTE` sites in `reconcile/apply.sh`, except that the
+     `<kind>` of a `derivation-info-<kind>` row is field 2 of the `INFO` row
+     `derivation-differential.sh` printed.
 
-   **`apply.sh` runs the derivation differential on every ordinary pull and records what it finds; you do not run it for the record.** After its writes and before the stamp it executes `derivation-differential.sh --record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv --log-name <name>` itself (not under `--finish`). A derivation this pull broke is RECORDED OWED by that run and drawn as a `WORKLIST artifact-derivations` row (one row per cause: when a fence named a moved path it carries the finding; otherwise `WORKLIST artifact-derivations-owed`), so LEAVING it needs no further step. A refused measurement is a `DECISION artifact-derivations-differential` row and leaves the record ABSENT: a refusal is no measurement. An absent record means no reconcile measured the tree and a present one with 0 OWED rows means measured, nothing owed. **The log name:** `apply.sh` mints `reconcile-log-<UTC stamp>.md` once per pull, passes it as `--log-name`, and prints it as the path of a `NOTE reconcile-log-name` row; write your reconcile log at exactly that path (step 7), because the record's last field (field 7) carries that name and the reader's OPEN line points at it. A re-run of the same range reuses the name already on its OWED rows. Do not run the helper by hand with `--record-owed` unless a DECISION row tells you to, and then pass `--log-name` with the name you will use for your log: the record dedups on key and range, never on field 7, so a wrong name cannot be repaired by a later run. The record is append-only with no status cell; `scripts/ai-dlc/check-owed-derivations.sh` derives which rows are still open. Only CURRENT-sprint and living-document artifacts are recorded; a past sprint's file or a history file is named by an `INFO out-of-scope` row and is neither run, recorded nor enforced. To close a row, append `REPOINTED<TAB><old file:line><TAB><new file:line><TAB>$ <new command>` to the record: the reader re-derives the new derivation on every read, so the row closes only if it reproduces.
+   **`apply.sh` runs the derivation differential on every ordinary pull and records what it finds; you do not run it for the record.** After its writes and before the stamp it executes `derivation-differential.sh --record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv --log-name <name>` itself (not under `--finish`). A derivation this pull broke is RECORDED OWED by that run and drawn as a `WORKLIST artifact-derivations` row (one row per cause: when a fence named a moved path it carries the finding; otherwise `WORKLIST artifact-derivations-owed`), so LEAVING it needs no further step. A refused measurement is a `DECISION artifact-derivations-differential` row and leaves the record ABSENT: a refusal is no measurement. An absent record means no reconcile measured the tree and a present one with 0 OWED rows means measured, nothing owed. **The log name:** `apply.sh` mints `reconcile-log-<UTC stamp>.md` once per pull, passes it as `--log-name`, and prints it as the path of a `NOTE reconcile-log-name` row; write your reconcile log at exactly that path (step 7), because the record's last field (field 7) carries that name and the reader's OPEN line points at it. A re-run of the same range reuses the name already on its OWED rows. Do not run the helper by hand with `--record-owed` unless a DECISION row tells you to, and then pass `--log-name` with the name you will use for your log: the record dedups on key and range, never on field 7, so a wrong name cannot be repaired by a later run. The record is append-only with no status cell; `scripts/ai-dlc/check-owed-derivations.sh` derives which rows are still open. Only CURRENT-sprint and living-document artifacts are recorded; a past sprint's file or a history file is named by the differential's `INFO out-of-scope` row and is neither run, recorded nor enforced. **The differential's own rows reach the manifest as `NOTE` rows**, from every run whatever its exit: each `INFO <kind>` row as `NOTE derivation-info-<kind>` (the out-of-scope one as `NOTE derivation-info-out-of-scope`), each `NOTE` row as `NOTE derivation-note` with its key or path in the path field, each `UNASSESSABLE` row as `NOTE derivation-unassessable` with the derivation's key in the path field, and its `SUMMARY` row as `NOTE derivation-summary`. A `derivation-unassessable` row is a derivation the validator refused on either side, so no verdict cleared it: adjudicate each one by hand, and relay EACH IN FULL, one by one with its key and detail, never only as a count. To close a row, append `REPOINTED<TAB><old file:line><TAB><new file:line><TAB>$ <new command>` to the record: the reader re-derives the new derivation on every read, so the row closes only if it reproduces.
 
-   Do NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows. **This is
-   what makes the update end-to-end**: the operator runs it and it lands; you handle the semantic
-   remainder, not the mechanical bulk.
+   Do NOT re-do a `RESOLVED` row by hand. Work the `WORKLIST` and `DECISION` rows, and every
+   `NOTE` row as the NOTE bullet above says. **This is what makes the update end-to-end**: the
+   operator runs it and it lands; you handle the semantic remainder, not the mechanical bulk.
 
    **IF THE MANIFEST CARRIES ANY `WORKLIST` OR `DECISION` ROW, THE RE-STAMP WAS WITHHELD AND THE
    PULL IS NOT OVER WHEN THE ROWS ARE.** You will see `DECISION restamp-withheld` in place of
@@ -2672,7 +2686,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      A changed setup-sited file never byte-matches base or theirs, so it usually buckets
      CLASSIFY; `--finish` checks it with `setup-site-drift.sh --file` and, when that does not
      pass, names it on a `NOTE finish-unverified` row and does not withhold,
-     and check 4 does not record it. Confirm those by hand. Nothing here checks that a merge is
+     and check 4 does not record it. Confirm those by hand.
+     Every `NOTE` row `--finish` prints is read, worked and relayed as step 7's `NOTE` bullet says.
+     Nothing here checks that a merge is
      CORRECT — only that no file the ordinary run would have overwritten from theirs is still
      waiting for it, and that no handed-back file is still the copy the apply found.
 
@@ -2917,13 +2933,15 @@ declared sites, not everywhere unconditionally.
      `push-candidate-ledger.archive.md`), each staged by explicit pathspec and never with
      `git add -A` or `git add .`, on the step-6 reconcile branch, with a subject
      like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
-     and a body summarizing buckets applied + conflicts adjudicated + the log path.
+     and a body summarizing buckets applied + conflicts adjudicated + the log path + every
+     `NOTE` row of this pull's apply runs, as step 7's `NOTE` bullet says.
    - **Push** the reconcile branch to the consumer's remote (`origin`). If there
      is no remote or push fails (a local-only consumer), STOP here and hand the
      operator the local branch + diff to merge manually — do not silently drop
      the work.
    - **Open a PR** into the working branch (`gh pr create`), body = the reconcile
-     report summary (buckets, conflicts, push-candidates).
+     report summary (buckets, conflicts, push-candidates) and every `NOTE` row of this
+     pull's apply runs, as step 7's `NOTE` bullet says.
    - **The PR's base is named, never defaulted:** `gh pr create --base <cut-from>`, where
      `<cut-from>` is the branch this one was cut from, derived from HEAD's reflog exactly as
      step 1's skill-branch bullet states, never remembered. Untangle mode derives it the same

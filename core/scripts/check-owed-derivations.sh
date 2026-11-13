@@ -216,7 +216,7 @@ sprint_split() {
 #     `_bmad-output/gate-adjudication/` (SRC, :271) is NOT history as a directory: it classifies by the
 #     guard's live-nonce rule below (live stem and sidecars CURRENT, every other stem HISTORY).
 #   - `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, ts shaped `[0-9]{8}T[0-9]{4,6}Z`: written by the
-#     update session itself, one per run (core/skills/ai-dlc-update/SKILL.md:2699, "YOU write ... and
+#     update session itself, one per run (core/skills/ai-dlc-update/SKILL.md:2715, "YOU write ... and
 #     `apply.sh` does NOT"; apply.sh:3531 confirms).
 #   - `_bmad-output/planning-artifacts/implementation-readiness-report-<YYYY-MM-DD>.md`: written fresh per run by
 #     BMAD's pre-6.11 skill `bmad-check-implementation-readiness` (outputFile

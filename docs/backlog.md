@@ -2894,40 +2894,6 @@ Provenance: batch 256, filed by the BL-899 builder on the lead's word; id alloca
 
 verify: manual
 
-## BL-1017 — step 7 of `/ai-dlc-update` relays no `NOTE` row except `reconcile-log-name`, so any other `NOTE` that `apply.sh` prints can go unrelayed to the operator
-
-**DEFECT.** OPEN. Filed 2026-11-12. Step 7 of `core/skills/ai-dlc-update/SKILL.md` names three row kinds the session acts on: `RESOLVED` (`:1888`, "already done, no operator step"), `WORKLIST` (`:1895`, "the only things left for YOU. Work EVERY row") and `DECISION` (`:1910`, "a genuine operator call"). It then says "Do NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows" (`:1925`). Its only instruction for a `NOTE` row is the paragraph at `:1923`, which covers one kind, `NOTE reconcile-log-name` (write the reconcile log at that path); none of the other 13 kinds has one, so nothing tells the session to read them, relay them or ask about them. graph's installed 0.1061.0 `SKILL.md:1843` carries the same wording (read by the lead; not re-read here). Any `NOTE` of those 13 kinds that `apply.sh` prints can therefore go unrelayed.
-
-Population, re-derived at the tip of the BL-978 unit with `grep -n '^[^#]*say NOTE' core/skills/ai-dlc-update/reconcile/apply.sh`: 16 sites over 14 kinds, against a control of 46 `say WORKLIST` sites from the same pattern. origin/main carries 16 sites over 14 kinds; BL-978 adds none (its `scaffold-ignored` and `scaffold-ignore-unchecked` rows are WORKLIST at every tier). The count is a floor: a kind passed through a variable is invisible to the grep.
-
-Each site classified by READING its text, answering whether an operator wants it relayed:
-- 334 `report-verified`: no, it confirms the union-gate condition passed.
-- 463 `blockers-resolved`: no, the approval already covers the region.
-- 465 `blockers-resolved`: no, the unseen rows were already re-approved on record.
-- 483 `report-unverified`: yes, nothing confirmed an operator approved a region matching theirs.
-- 1271 `finish-template-unrecorded`: yes, the text asks for a by-hand confirmation of each template-derived file.
-- 1274 `finish-template-manifest-unreadable`: yes, a merge was not re-tested and the text names the restore.
-- 2155 `override-adjudicated`: no, a recorded verdict stands and nothing is prescribed.
-- 2233 `override-readopt-subsumed`: yes, it says to skip the readopt that an earlier row prints.
-- 2334 `extension-adjudicated`: no, "no re-read is prescribed".
-- 2338 `extension-retire`: yes, the recorded verdict authorizes deleting the entry.
-- 2340 `extension-contradicts-core`: yes, it asks for a refile.
-- 2342 `extension-adjudicated-unrouted`: yes, the register entry has to be checked against the verdict enum.
-- 2983 `reconcile-log-name`: covered, `SKILL.md:1923` instructs it.
-- 3170 `finish-unverified` (empty setup-sited set): yes, no changed setup-sited path could be verified.
-- 3203 `finish-unverified` (setup-sited bucket): yes, the text asks for a by-hand confirmation.
-- 3246 `finish-classify-unrecorded`: yes, each `semantic-merge` row needs a by-hand check.
-
-That is 10 sites an operator wants relayed and has no instruction for, 5 that need no relay, and 1 already covered.
-
-Owed: a step-7 instruction for the other `NOTE` kinds (which to relay and which to leave), or a move of the 10 relay-worthy sites to a kind step 7 already works. Which of the two is a design call for the builder.
-
-Receipt: `verify: manual`. The owed work is a judgment of which kinds an operator wants, and a tree predicate would read CLOSE-CANDIDATE on any edit to step 7's prose.
-
-Provenance: batch 256, filed by the BL-978 owner at the lead's ruling; id allocated by the lead.
-
-verify: manual
-
 ## BL-1021 — `FORK_BUDGET` carries 136 forks of headroom, so the fork ceiling cannot see a rise smaller than that
 
 **DEFECT.** OPEN. Filed 2026-11-12. The fork ceiling in `fork-budget.txt` is `FORK_BUDGET=2926` (line 69 at origin/main, the one line the reader's `^FORK_BUDGET=<digits>$` anchor accepts). The file's own convention is stated at lines 49, 54, 60 and 68: "The budget is the tip reading plus HEADROOM_MARGIN 2." The tip reading is 2790, so the convention gives 2792, and the committed budget sits 136 above it (2926 - 2790 = 136).

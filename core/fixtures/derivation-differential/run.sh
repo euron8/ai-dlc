@@ -27,7 +27,11 @@
 # MUTANT-MATRIX dd-lateowed decides=Pi_owed,Pii_sb twins=Pi_row
 # MUTANT-MATRIX dd-unbounded decides=Pi_bound twins=Pi_ctl
 # MUTANT-MATRIX vd-sidecar decides=Px_unset twins=Px_set
-# MUTANT-MATRIX-DYNAMIC pscore why=pscore passes its first argument to mutant_killed; each of its sixteen callers names a literal mutant carrying its own row above
+# MUTANT-MATRIX dd-noro decides=Pii_ro,Pi_ro,Prel_ro,Prelsl_ro twins=Pii_genuine
+# MUTANT-MATRIX dd-strfilter decides=Pi_ro,Prel_ro twins=Pi_row
+# MUTANT-MATRIX dd-emptyro decides=Pvi_unc twins=Pvi_nf
+# MUTANT-MATRIX dd-rawrec decides=Prel_ro,Prelsl_ro twins=Prel_ctl
+# MUTANT-MATRIX-DYNAMIC pscore why=pscore passes its first argument to mutant_killed; each of its twenty callers names a literal mutant carrying its own row above
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/derivation-differential/run.sh --matrix
 # Exit: 0 every assertion holds | 1 something regressed | 2 the harness could not run.
 #
@@ -858,6 +862,14 @@ ck "S2o and it names the broken derivation" "$(printf 'NEWLY-FAILING\t%s\t' "$K_
 #         Pi_bound: its relabel NOTE carries the count, exactly five paths and `… and 295 more`, under 1000 bytes;
 #         Pi_two: a second artifact with the same fence relabels too, each key with its own bounded NOTE
 #   Pii   Pi's fence beside a real line shift -> the shift NEWLY-FAILING and OWED, Pi's fence STALE-BOTH
+#         Pii_ro / Pii_genuine: apply.sh's in-flight marker and the owed record this run writes draw no
+#         uncommitted-path NOTE, while a genuine untracked file beside the record (its directory tracked) draws one
+#         Pi_ro: the FIRST-PULL shape, Pi's record directory untracked and holding only the record, so porcelain
+#         collapses it to `?? _bmad-output/ai-dlc-update/`; neither that row nor the record is named
+#   Prel  Pi driven as apply.sh is when given `.`: from inside the consumer, consumer `.`, record
+#         `./_bmad-output/...` -> the record and its collapsed directory are not named, the record is written
+#   Prelsl Pii driven with consumer `<abs>/` and record `<abs>//_bmad-output/...` -> Pii_ro holds there too
+#   Pvi_unc: with no --record-owed (so no run-owned record) Pvi's genuine untracked file IS named
 #   Piii  a pre-existing ignored file AND a pull-made line in ONE fence -> NEWLY-FAILING
 #   Piiip Piii with the pull-made line past column 160 of the joined output -> NEWLY-FAILING
 #   Piv   a file the RANGE ADDS (untracked at hand-back, tracked post-commit) -> NEWLY-FAILING both states
@@ -906,7 +918,10 @@ ov_seed() {
   case "$2:$3" in
     i:tracked|ii:tracked|ix:tracked)
       mkdir -p "$c/rebal/tests"; printf '__pycache__/\n' > "$c/.gitignore"
-      printf '# qqtok %s\n' "$P_LONG" > "$c/rebal/tests/test_a.py" ;;
+      printf '# qqtok %s\n' "$P_LONG" > "$c/rebal/tests/test_a.py"
+      # Pii_ro: the record's directory is TRACKED, as a consumer's is once it commits a reconcile log, so porcelain
+      # lists each untracked file in it by name and never collapses the record into a `?? <dir>/` row
+      if [ "$k" = ii ]; then mkdir -p "$c/_bmad-output/ai-dlc-update"; printf 'an earlier pull\n' > "$c/_bmad-output/ai-dlc-update/reconcile-log-old.txt"; fi ;;
     i:fences|ii:fences|ix:fences)
       printf 'The test files that carry the token.\n\n```derived\n$ grep -rn -F qqtok rebal/tests\nrebal/tests/test_a.py:1:# qqtok %s\n```\n\n' "$P_LONG"
       case "$k" in ii|ix) printf 'The line the gamma marker sits on.\n\n```derived\n$ grep -n qqgamma scripts/ai-dlc/toy.sh\n2:qqgamma\n```\n\n' ;; esac ;;
@@ -914,7 +929,9 @@ ov_seed() {
       mkdir -p "$c/rebal/tests/__pycache__"
       printf 'qqtok\000bin\n' > "$c/rebal/tests/__pycache__/test_a.cpython-311.pyc"
       printf 'qqtok cached\n' > "$c/rebal/tests/__pycache__/test_b.cpython-311.pyc"
-      i=1; while [ "$i" -le 298 ]; do printf -v n 'f%03d.cpython-311.pyc' "$i"; printf 'x\n' > "$c/rebal/tests/__pycache__/$n"; i=$((i + 1)); done ;;
+      i=1; while [ "$i" -le 298 ]; do printf -v n 'f%03d.cpython-311.pyc' "$i"; printf 'x\n' > "$c/rebal/tests/__pycache__/$n"; i=$((i + 1)); done
+      # Pii_ro: apply.sh's in-flight marker at its own path, and a GENUINE untracked consumer file beside the record
+      if [ "$k" = ii ]; then printf 'apply in flight\n' > "$c/.claude/.ai-dlc-applying"; printf 'hand note\n' > "$c/_bmad-output/ai-dlc-update/hand-note.txt"; fi ;;
     iii:tracked|iiip:tracked)
       mkdir -p "$c/src"; printf '__pycache__/\n' > "$c/.gitignore"
       if [ "$k" = iii ]; then printf 'qqtok here\n' > "$c/src/a.txt"; else printf '# qqtok %s\n' "$P_LONG" > "$c/src/a.txt"; fi ;;
@@ -1118,9 +1135,9 @@ fi
 P_RUNS=""
 ptree() { { g "$1" status --porcelain --ignored -uall; find "$1" -path "$1/.git" -prune -o -print | LC_ALL=C sort; } 2>/dev/null; }
 # ptpl <world> -> the template that world is copied from
-ptpl() { case "$1" in viii|capabc|capzero|nots) echo i ;; *) echo "$1" ;; esac; }
+ptpl() { case "$1" in viii|capabc|capzero|nots|rel) echo i ;; relsl) echo ii ;; *) echo "$1" ;; esac; }
 pw() {
-  local tag="$1" w="$2" s="$3" td="$4" src d o rec="" brd="" cap=""
+  local tag="$1" w="$2" s="$3" td="$4" src d o rec="" brd="" cap="" cwd=/ cons
   src="$(ptpl "$w")"
   mkdir -p "$WORK/o/$tag"; o="$WORK/o/$tag/$w"
   d="$WORK/run-$tag-$w"; mkdir -p "$d"; cp -R "$WORK/tpl-$src/." "$d/"
@@ -1134,8 +1151,14 @@ pw() {
     printf 'qqtok locked\n' > "$d/src/__pycache__/z.pyc"; chmod 000 "$d/src/__pycache__/z.pyc"
     if [ -r "$d/src/__pycache__/z.pyc" ]; then : > "$o.readable"; fi
   fi
-  set --
+  set --; cons="$d"
   case "$w" in
+    # rel and relsl spell the consumer and the record as apply.sh does (DD_RECORD="$CONSUMER/_bmad-output/...")
+    # when its own consumer argument was `.` (run from inside the consumer) or carried a trailing slash
+    rel) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; cwd="$d"; cons=.
+         set -- --record-owed "./_bmad-output/ai-dlc-update/owed-derivations.tsv" ;;
+    relsl) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; cons="$d/"
+           set -- --record-owed "$d//_bmad-output/ai-dlc-update/owed-derivations.tsv" ;;
     i) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; set -- --record-owed "$rec" ;;
     ii) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; set -- --record-owed "$rec" ;;
     viii) brd="$WORK/run-$tag-viii-root"; g "$WORK" clone -q "$d" "$brd" 2>/dev/null; ptree "$brd" > "$o.t0"; set -- --base-root "$brd" ;;
@@ -1143,9 +1166,9 @@ pw() {
     capabc) cap=abc ;;
     capzero) cap=0 ;;
   esac
-  (cd / || exit 2
+  (cd "$cwd" || exit 2
    [ -z "$cap" ] || { AI_DLC_DD_OVERLAY_CAP="$cap"; export AI_DLC_DD_OVERLAY_CAP; }
-   TMPDIR="$td" bash "$s" "$(cat "$d/.D")" "$(cat "$d/.B")" "$d" "$(cat "$d/.T")" "$@") > "$o.out" 2>&1
+   TMPDIR="$td" bash "$s" "$(cat "$d/.D")" "$(cat "$d/.B")" "$cons" "$(cat "$d/.T")" "$@") > "$o.out" 2>&1
   echo "$?" > "$o.rc"
   # what this run left in its TMPDIR, and how many worktrees its consumer lists, read right after it (Pi_two)
   find "$td" -mindepth 1 2>/dev/null | awk 'END { print NR + 0 }' > "$o.tmpleft"
@@ -1203,6 +1226,26 @@ p_bounded() { local r
   r="$(awk -F'\t' -v k="$3" '$1 == "NOTE" && $2 == k && index($3, "STALE-BOTH, not NEWLY-FAILING") { print; exit }' "$WORK/o/$1/$2.out")"
   [ -n "$r" ] && grep -qF -- "$P_BOUND_LIST" <<<"$r" && [ "$(printf '%s' "$r" | wc -c | tr -d ' ')" -lt 1000 ]; }
 p_skipcap() { local s="$P_SKIP_CAP_FMT"; s="${s/@N@/$4}"; s="${s/@C@/$5}"; p_note "$1" "$2" "$3" "$s"; }
+# p_uncnt <tag> <world> <key> -> how many uncommitted-path NOTE rows are keyed on <key>
+P_UNC="uncommitted in the consumer and outside this range's changed set"
+p_uncnt() { awk -F'\t' -v k="$3" -v s="$P_UNC" '$1 == "NOTE" && $2 == k && index($3, s) == 1 { n++ } END { print n + 0 }' "$WORK/o/$1/$2.out"; }
+# p_ro <tag> <world>: the run-owned paths draw no uncommitted-path NOTE, and each was THERE to be named: the marker
+# survives the run and the record is listed `??` by its own name in the run's tree (its directory is tracked)
+P_RO_REC="_bmad-output/ai-dlc-update/owed-derivations.tsv"
+p_ro() {
+  [ "$(p_uncnt "$1" "$2" .claude/.ai-dlc-applying)" = 0 ] && [ "$(p_uncnt "$1" "$2" "$P_RO_REC")" = 0 ] \
+    && [ "$(p_uncnt "$1" "$2" _bmad-output/ai-dlc-update/)" = 0 ] \
+    && [ -f "$WORK/run-$1-$2/.claude/.ai-dlc-applying" ] \
+    && [ "$(g "$WORK/run-$1-$2" status --porcelain -- "$P_RO_REC" 2>/dev/null)" = "?? $P_RO_REC" ]; }
+# p_rofp <tag> <world>: the FIRST-PULL shape -- the record's directory untracked and holding only the record, so plain
+# porcelain collapses it into one `?? _bmad-output/ai-dlc-update/` row (no string filter on the record path matches it)
+# -- and neither that row nor the record draws an uncommitted-path NOTE; the record was written, a verdict printed
+P_RO_DIR="_bmad-output/ai-dlc-update/"
+p_rofp() {
+  [ "$(p_uncnt "$1" "$2" "$P_RO_DIR")" = 0 ] && [ "$(p_uncnt "$1" "$2" "$P_RO_REC")" = 0 ] \
+    && [ "$(g "$WORK/run-$1-$2" status --porcelain -- "$P_RO_DIR" 2>/dev/null)" = "?? $P_RO_DIR" ] \
+    && [ "$(find "$WORK/run-$1-$2/${P_RO_DIR%/}" -mindepth 1 2>/dev/null)" = "$WORK/run-$1-$2/${P_RO_DIR}owed-derivations.tsv" ] \
+    && [ "$(head -1 "$WORK/o/$1/$2.rec" 2>/dev/null)" != '<absent>' ] && grep -q '^VERDICT' "$WORK/o/$1/$2.out"; }
 # pcell <label> <tag> -> 0 when that arm holds on that tag's output
 pcell() {
   case "$1" in
@@ -1216,6 +1259,13 @@ pcell() {
     Pi_ctl)    p_ctl "$2" i ;;
     Pii_nf)    p_nf "$2" ii "$P_KII" && p_owed "$2" ii "$P_KII" 1 && p_nonote "$2" ii "$P_KII" ;;
     Pii_sb)    p_sb "$2" ii "$P_KIIS" && p_owed "$2" ii "$P_KIIS" 0 ;;
+    Pii_ro)    p_ro "$2" ii && grep -q '^VERDICT' "$WORK/o/$2/ii.out" ;;
+    Pii_genuine) [ "$(p_uncnt "$2" ii _bmad-output/ai-dlc-update/hand-note.txt)" = 1 ] ;;
+    Pi_ro)     p_rofp "$2" i ;;
+    Prel_ro)   p_rofp "$2" rel ;;
+    Prel_ctl)  p_ctl "$2" rel ;;
+    Prelsl_ro) p_ro "$2" relsl && grep -q '^VERDICT' "$WORK/o/$2/relsl.out" ;;
+    Pvi_unc)   [ "$(p_uncnt "$2" vi lib/qqdata.blob)" = 1 ] ;;
     Piii_nf)   p_nf "$2" iii "$P_KIII" && p_note "$2" iii "$P_KIII" "$P_SKIP_DIFF" ;;
     Piii_ctl)  p_ctl "$2" iii ;;
     Piiip_nf)  p_nf "$2" iiip "$P_KIII" && p_note "$2" iiip "$P_KIII" "$P_SKIP_DIFF" ;;
@@ -1255,12 +1305,12 @@ pcell() {
     *) return 2 ;;
   esac
 }
-P_CELLS="Pi_row Pi_owed Pi_ctl Pi_bound Pi_two Pii_nf Pii_sb Piii_nf Piii_ctl Piiip_nf Piiip_ctl Piv_hb Piv_pc Pv_nf Pv_ctl Pvi_nf Pvi_ctl Pvii_nf Pvii_ctl Pviic_sb Pviic_ctl Pviii_nf Pviii_tree Pix_nf Pix_sb Proot_nf Ptpl_nf Ptpl_ctl Pnots_nf Pnoop_nf Plong_sb Pnosc_nf Psym_nf Pnest_nf Pcpfail_nf Pcapabc_sb Pcapabc_ctl Pcapzero_sb Pcapzero_ctl Px_unset Px_set"
-P_RUNWORLDS="i ii iii iiip iv ivpc v vi vii viic viii ix root tplsite long nosc sym nest cpfail noop capabc capzero"
+P_CELLS="Pi_row Pi_owed Pi_ctl Pi_bound Pi_two Pi_ro Pii_nf Pii_sb Pii_ro Pii_genuine Prel_ro Prel_ctl Prelsl_ro Pvi_unc Piii_nf Piii_ctl Piiip_nf Piiip_ctl Piv_hb Piv_pc Pv_nf Pv_ctl Pvi_nf Pvi_ctl Pvii_nf Pvii_ctl Pviic_sb Pviic_ctl Pviii_nf Pviii_tree Pix_nf Pix_sb Proot_nf Ptpl_nf Ptpl_ctl Pnots_nf Pnoop_nf Plong_sb Pnosc_nf Psym_nf Pnest_nf Pcpfail_nf Pcapabc_sb Pcapabc_ctl Pcapzero_sb Pcapzero_ctl Px_unset Px_set"
+P_RUNWORLDS="i ii iii iiip iv ivpc v vi vii viic viii ix root tplsite long nosc sym nest cpfail noop capabc capzero rel relsl"
 # pworld <label> -> the world that label reads
 pworld() { case "$1" in Pi_*) echo i ;; Pii_*) echo ii ;; Piii_*) echo iii ;; Piiip_*) echo iiip ;; Piv_hb) echo iv ;; Piv_pc) echo ivpc ;;
   Pv_*) echo v ;; Pvi_*) echo vi ;; Pvii_*) echo vii ;; Pviic_*) echo viic ;; Pviii_*) echo viii ;; Pix_*) echo ix ;;
-  Proot_*) echo root ;; Ptpl_*) echo tplsite ;; Pnots_*) echo nots ;; Pnoop_*) echo noop ;; Plong_*) echo long ;; Pnosc_*) echo nosc ;; Psym_*) echo sym ;;
+  Proot_*) echo root ;; Prel_*) echo rel ;; Prelsl_*) echo relsl ;; Ptpl_*) echo tplsite ;; Pnots_*) echo nots ;; Pnoop_*) echo noop ;; Plong_*) echo long ;; Pnosc_*) echo nosc ;; Psym_*) echo sym ;;
   Pnest_*) echo nest ;; Pcpfail_*) echo cpfail ;; Pcapabc_*) echo capabc ;; Pcapzero_*) echo capzero ;; Px_*) echo x ;; esac; }
 
 # px <tag> <validator copy> -- arm Px over a fresh copy of world x, with <validator copy> installed at the
@@ -1357,6 +1407,7 @@ pbad() {
 B_Pi_row=0; B_Pi_bound=0; B_Pi_two=0; B_Pi_owed=0; B_Pi_ctl=0; B_Piii_nf=0; B_Piii_ctl=0; B_Piiip_nf=0; B_Piiip_ctl=0; B_Pv_nf=0; B_Pv_ctl=0
 B_Pvi_nf=0; B_Pvi_ctl=0; B_Pvii_nf=0; B_Pvii_ctl=0; B_Pviic_sb=0; B_Pviic_ctl=0; B_Pviii_nf=0; B_Pviii_tree=0
 B_Pcapzero_sb=0; B_Pcapzero_ctl=0; B_Px_unset=0; B_Px_set=0; B_Pcapabc_sb=0; B_Pcapabc_ctl=0; B_Ptpl_nf=0; B_Ptpl_ctl=0; B_Pii_nf=0; B_Pii_sb=0
+B_Pii_ro=0; B_Pii_genuine=0; B_Pi_ro=0; B_Prel_ro=0; B_Prel_ctl=0; B_Prelsl_ro=0; B_Pvi_unc=0
 if pcell Pi_row tip; then ok "Pi_row the consumer's shape (300 ignored files in a tests __pycache__, under the default cap; recorded output over 160 columns) -> exit 0, STALE-BOTH base=STALE, a NOTE naming the copied file, no skip row"; B_Pi_row=1
 else pbad Pi_row "the consumer's shape (300 ignored files in a tests __pycache__, under the default cap; recorded output over 160 columns) -> exit 0, STALE-BOTH base=STALE, a NOTE naming the copied file, no skip row"; fi
 if pcell Pi_owed tip; then ok "Pi_owed and under --record-owed the record is written and holds no OWED row for it"; B_Pi_owed=1
@@ -1371,6 +1422,20 @@ if pcell Pii_nf tip; then ok "Pii_nf a real line shift beside it -> exit 1, NEWL
 else pbad Pii_nf "a real line shift beside it -> exit 1, NEWLY-FAILING, and recorded OWED"; fi
 if pcell Pii_sb tip; then ok "Pii_sb and in that same run the ignored-file fence is STALE-BOTH with its NOTE and no OWED row"; B_Pii_sb=1
 else pbad Pii_sb "and in that same run the ignored-file fence is STALE-BOTH with its NOTE and no OWED row"; fi
+if pcell Pii_ro tip; then ok "Pii_ro and in that same run neither run-owned file (apply.sh's in-flight marker, the owed record listed ?? by name) is named as uncommitted in the consumer"; B_Pii_ro=1
+else pbad Pii_ro "and in that same run neither run-owned file (apply.sh's in-flight marker, the owed record listed ?? by name) is named as uncommitted in the consumer"; fi
+if pcell Pii_genuine tip; then ok "Pii_genuine and a genuine untracked consumer file beside the record IS named, exactly once"; B_Pii_genuine=1
+else pbad Pii_genuine "and a genuine untracked consumer file beside the record IS named, exactly once"; fi
+if pcell Pi_ro tip; then ok "Pi_ro the first pull (record directory untracked, holding only the record, porcelain ?? _bmad-output/ai-dlc-update/) -> neither the directory nor the record is named as uncommitted"; B_Pi_ro=1
+else pbad Pi_ro "the first pull (record directory untracked, holding only the record, porcelain ?? _bmad-output/ai-dlc-update/) -> neither the directory nor the record is named as uncommitted"; fi
+if pcell Prel_ro tip; then ok "Prel_ro consumer '.' run from inside it, record './_bmad-output/...' (apply.sh's spelling) -> the record is written and neither it nor its directory is named"; B_Prel_ro=1
+else pbad Prel_ro "consumer '.' run from inside it, record './_bmad-output/...' (apply.sh's spelling) -> the record is written and neither it nor its directory is named"; fi
+if pcell Prel_ctl tip; then ok "Prel_ctl and the holding fence in that run gets no row"; B_Prel_ctl=1
+else pbad Prel_ctl "and the holding fence in that run gets no row"; fi
+if pcell Prelsl_ro tip; then ok "Prelsl_ro consumer '<abs>/' with record '<abs>//_bmad-output/...' -> neither the marker nor the record is named"; B_Prelsl_ro=1
+else pbad Prelsl_ro "consumer '<abs>/' with record '<abs>//_bmad-output/...' -> neither the marker nor the record is named"; fi
+if pcell Pvi_unc tip; then ok "Pvi_unc with no --record-owed, the genuine untracked lib/qqdata.blob IS named as uncommitted, exactly once"; B_Pvi_unc=1
+else pbad Pvi_unc "with no --record-owed, the genuine untracked lib/qqdata.blob IS named as uncommitted, exactly once"; fi
 if pcell Piii_nf tip; then ok "Piii_nf a pre-existing ignored file AND a pull-made line in one fence -> exit 1, NEWLY-FAILING"; B_Piii_nf=1
 else pbad Piii_nf "a pre-existing ignored file AND a pull-made line in one fence -> exit 1, NEWLY-FAILING"; fi
 if pcell Piii_ctl tip; then ok "Piii_ctl and the holding fence beside it gets no row"; B_Piii_ctl=1
@@ -1467,6 +1532,12 @@ pwrong() {
     # the unbounded list: the relabel NOTE for Pi's key is still printed, and runs to 1000 bytes or more
     Pi_bound) [ "$(awk -F'\t' -v k="$P_KI" '$1 == "NOTE" && $2 == k && index($3, "STALE-BOTH, not NEWLY-FAILING") { print length($0); exit }' "$WORK/o/$2/i.out")" -ge 1000 ] 2>/dev/null ;;
     Pcapabc_sb) grep -q 'integer expression expected' "$WORK/o/$2/capabc.out" ;;
+    # the run-owned exclusion dropped: the marker or the record is named as uncommitted in the consumer
+    Pii_ro) [ "$(p_uncnt "$2" ii .claude/.ai-dlc-applying)" != 0 ] || [ "$(p_uncnt "$2" ii "$P_RO_REC")" != 0 ] ;;
+    # the record, or the `?? <dir>/` row porcelain collapses it into, is named as uncommitted in the consumer
+    Pi_ro|Prel_ro) [ "$(p_uncnt "$2" "$w" "$P_RO_DIR")" != 0 ] || [ "$(p_uncnt "$2" "$w" "$P_RO_REC")" != 0 ] ;;
+    # every uncommitted-path NOTE dropped: the genuine untracked file is not named
+    Pvi_unc) [ "$(p_uncnt "$2" vi lib/qqdata.blob)" = 0 ] && grep -q '^VERDICT' "$WORK/o/$2/vi.out" ;;
     Pii_nf) awk -F'\t' -v k="$P_KII" '$1 == "NOTE" && $2 == k && index($3, "overlay skipped") { f = 1 } END { exit !f }' "$WORK/o/$2/ii.out" ;;
     Ptpl_nf) [ "$(prc "$2" tplsite)" = 0 ] && [ "$(rowst "$WORK/o/$2/tplsite.out" "$P_KTPL")" = STALE-BOTH ] ;;
     Px_unset) [ "$(cat "$WORK/o/$2/x.unset" 2>/dev/null)" != ok ] && ! cmp -s "$WORK/o/$2/x-tree0" "$WORK/o/$2/x-tree1" ;;
@@ -1554,6 +1625,23 @@ if pmutdir dd-lateowed '[ -s "$TMP/relabel" ] && dd_classify' \
      '[ -s "$TMP/relabel" ] && { cp "$TMP/owed" "$TMP/owed.first"; dd_classify; cp "$TMP/owed.first" "$TMP/owed"; rm -f "$TMP/owed.first"; }'; then
   pscore dd-lateowed Pi_owed Pi_row "$(( ${B_Pi_owed:-0} && ${B_Pi_row:-0} ))"
 else bad "dd-lateowed DID NOT APPLY: its anchor matched no line, or more than one"; fi
+if pmutdir dd-noro 'status --porcelain -- . ":(exclude,top)$RO_MARKER" ":(exclude,top)$_ro_rec" 2>/dev/null' 'status --porcelain 2>/dev/null'; then
+  pscore dd-noro Pii_ro Pii_genuine "$(( ${B_Pii_ro:-0} && ${B_Pii_genuine:-0} ))"
+else bad "dd-noro DID NOT APPLY: its anchor matched no line, or more than one"; fi
+# a STRING filter on the porcelain output in place of the pathspec: it drops `?? <record>` but not the `?? <dir>/` row
+# porcelain collapses a record-only untracked directory into
+if pmutdir dd-strfilter 'status --porcelain -- . ":(exclude,top)$RO_MARKER" ":(exclude,top)$_ro_rec" 2>/dev/null' \
+     'status --porcelain 2>/dev/null | grep -vxF -e "?? $RO_MARKER" -e "?? $_ro_rec"'; then
+  pscore dd-strfilter Pi_ro Pi_row "$(( ${B_Pi_ro:-0} && ${B_Pi_row:-0} ))"
+else bad "dd-strfilter DID NOT APPLY: its anchor matched no line, or more than one"; fi
+# the fallback removed: with no --record-owed the second exclude pathspec is EMPTY, which excludes the whole tree
+if pmutdir dd-emptyro '_ro_rec="$RO_MARKER"; case' '_ro_rec="$RO_RECORD"; case'; then
+  pscore dd-emptyro Pvi_unc Pvi_nf "$(( ${B_Pvi_unc:-0} && ${B_Pvi_nf:-0} ))"
+else bad "dd-emptyro DID NOT APPLY: its anchor matched no line, or more than one"; fi
+# the record path stripped as typed (no absolute, collapsed form): `./_bmad-output/...` keeps its `./` and never matches
+if pmutdir dd-rawrec 'RO_RECORD="${_ro_n#"$CONSUMER"/}"' 'RO_RECORD="${OWED_FILE#"$CONSUMER"/}"'; then
+  pscore dd-rawrec Prel_ro Prel_ctl "$(( ${B_Prel_ro:-0} && ${B_Prel_ctl:-0} ))"
+else bad "dd-rawrec DID NOT APPLY: its anchor matched no line, or more than one"; fi
 mkdir -p "$P_MDIR/vd-sidecar"
 if pmut "$VALIDATOR" "$P_MDIR/vd-sidecar/validate-artifact-derivations.sh" \
      'local d="$AI_DLC_VD_FULL_OUT_DIR" n' 'local d="${AI_DLC_VD_FULL_OUT_DIR:-.}" n' \

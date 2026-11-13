@@ -2983,6 +2983,21 @@ if [ -d "$VD_ART" ] && [ -f "$VD_VALIDATOR" ]; then
       say NOTE reconcile-log-name "_bmad-output/ai-dlc-update/${DD_LOG}" "write this pull's reconcile log at exactly this path: the owed-derivations record, when this run appends a row, carries this name in its last field so the reader's OPEN line points at the log you write."
       dd_out="$(unset VD_ALL; bash "$DD_HELPER" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" --record-owed "$DD_RECORD" --log-name "$DD_LOG" 2>&1)"
       dd_rc=$?
+      # THE DIFFERENTIAL'S INFO, NOTE, UNASSESSABLE AND SUMMARY ROWS REACH THE MANIFEST, on every exit, as NOTE rows:
+      # the case arms below read only NEWLY-FAILING and REFUSED, and nothing else of dd_out reached the operator.
+      # dd_out carries stderr, so only an exact <class><TAB> prefix is a row. The detail's TABs become spaces: the
+      # out-of-scope row carries a TAB inside its detail, and kept raw it would add a fifth field to the manifest row.
+      # Fields are split by parameter expansion, never `IFS=<TAB> read`, which drops an empty field and shifts the rest.
+      _T=$'\t'
+      while IFS= read -r _ddl; do
+        _ddr="${_ddl#*"$_T"}"; _ddk="${_ddr%%"$_T"*}"; _ddd="${_ddr#*"$_T"}"; _ddd="${_ddd//"$_T"/ }"
+        case "$_ddl" in
+          "INFO${_T}"*)         say NOTE "derivation-info-${_ddk}" "_bmad-output/" "$_ddd" ;;
+          "NOTE${_T}"*)         say NOTE derivation-note "$_ddk" "$_ddd" ;;
+          "UNASSESSABLE${_T}"*) say NOTE derivation-unassessable "$_ddk" "$_ddd" ;;
+          "SUMMARY${_T}"*)      say NOTE derivation-summary "_bmad-output/" "$_ddd" ;;
+        esac
+      done <<< "$dd_out"
       case "$dd_rc" in
         0) ;;
         1)
