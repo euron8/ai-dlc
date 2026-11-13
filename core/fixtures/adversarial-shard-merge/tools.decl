@@ -34,3 +34,4 @@ ls
 rmdir
 perl
 chmod
+stat

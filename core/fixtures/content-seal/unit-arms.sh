@@ -46,6 +46,7 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 . "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+CS_SUBJ=core/scripts/content-seal.sh # each call of a library function below is one in-process pass, logged by fx_inproc
 MX=0; [ "${1:-}" = --matrix ] && MX=1
 US="$(printf '\037')"
 TOKEN="changed after its last sealed write"
@@ -73,17 +74,17 @@ uworld() {
 rec() {
   local a=""
   [ -n "$4" ] && a=",\"agent_id\":\"$4\",\"agent_type\":\"fixture\""
-  ( CLAUDE_PROJECT_DIR="$1"; . "$SEALHOOK" ) > /dev/null 2>&1 <<EOF
+  ( CLAUDE_PROJECT_DIR="$1"; fx_inproc core/hooks/ai-dlc-content-seal.sh; . "$SEALHOOK" ) > /dev/null 2>&1 <<EOF
 {"session_id":"fx-session","hook_event_name":"PostToolUse","tool_name":"$2","tool_input":{"file_path":"$3"},"tool_use_id":"toolu_01FxSealWrite","transcript_path":"$1/.harness/fx-session.jsonl","tool_response":{}$a}
 EOF
 }
 seal_all() { local k; for k in 1 2 3 4; do rec "$UW" Write "$UD/$k.md" "a000000000000001$k"; done; }
 nrows() { NR_=0; [ -f "$UL" ] && { NR_="$(grep -c '"kind":"content-seal"' "$UL")" || NR_=0; }; }
-chk() { seal_check "$UST" "$@" > "$WORK/chk.out" 2>&1; RC=$?; }
+chk() { fx_inproc $CS_SUBJ; seal_check "$UST" "$@" > "$WORK/chk.out" 2>&1; RC=$?; }
 says() { grep -qF -- "$1" "${2:-$WORK/chk.out}"; }
 ltr() { # <file> -> LA LAID LT: the last TOOL seal row seal_last_tool_row reports for it, empty when none
   LA=""; LAID=""; LT=""
-  seal_last_tool_row "$UST" "$1" > "$WORK/ltr.out" 2>&1
+  fx_inproc $CS_SUBJ; seal_last_tool_row "$UST" "$1" > "$WORK/ltr.out" 2>&1
   IFS="$US" read -r _ LA LAID LT _ < "$WORK/ltr.out" || :
 }
 ss_edit() { # <file> <agent id or ""> -- an Edit that moves the bytes, sealed by the real recorder
@@ -150,7 +151,7 @@ uclone "$TPL_S"; ss_edit "$UD/2.md" ""; ltr "$UD/2.md"; chk "$UD/2.md"
 [ "$LA|$LT" = "session|Edit" ] && [ "$RC" = 0 ] || s1="${s1}a[$LA|$LT rc=$RC] "
 uclone "$TPL_S"; ss_edit "$UD/2.md" a0000000000000012; ltr "$UD/2.md"
 [ "$LA|$LAID|$LT" = "agent|a0000000000000012|Edit" ] || s1="${s1}b[$LA|$LAID|$LT] "
-uclone "$TPL_S"; ss_edit "$UD/2.md" ""; seal_record "$UST" program:wait-for-deliverable "$UD/2.md"; ltr "$UD/2.md"
+uclone "$TPL_S"; ss_edit "$UD/2.md" ""; fx_inproc $CS_SUBJ; seal_record "$UST" program:wait-for-deliverable "$UD/2.md"; ltr "$UD/2.md"
 { grep -qF '"actor":"program:wait-for-deliverable"' "$UL" && [ "$LA" = session ]; } || s1="${s1}c[$LA] "
 uclone "$TPL_S"; ss_edit "$UD/2.md" ""; rec "$UW" Write "$UD/2.md" a0000000000000012; ltr "$UD/2.md"
 [ "$LA|$LT" = "agent|Write" ] || s1="${s1}d[$LA|$LT] "
@@ -159,12 +160,12 @@ else bad "CS-U-S1: cases did not hold: $s1"; fi
 
 # CS-U-L1: --last-tool-row over several files. Agent Write, session Edit, program row -> the session's Edit;
 # a shard whose program row came last -> its agent Write; a tree with no seal row -> nothing.
-uclone "$TPL_S"; ss_edit "$UD/1.md" ""; seal_record "$UST" program:wait-for-deliverable "$UD/1.md" "$UD/3.md"
-seal_last_tool_row "$UST" "$UD/1.md" "$UD/3.md" > "$WORK/l1.out" 2>&1; cl=$?
+uclone "$TPL_S"; ss_edit "$UD/1.md" ""; fx_inproc $CS_SUBJ; seal_record "$UST" program:wait-for-deliverable "$UD/1.md" "$UD/3.md"
+fx_inproc $CS_SUBJ; seal_last_tool_row "$UST" "$UD/1.md" "$UD/3.md" > "$WORK/l1.out" 2>&1; cl=$?
 l1="$(awk -F "$US" -v f="$UD/1.md" '$1 == f { print $2 "|" $3 "|" $4 }' "$WORK/l1.out")"
 l3="$(awk -F "$US" -v f="$UD/3.md" '$1 == f { print $2 "|" $3 "|" $4 }' "$WORK/l1.out")"
 dn="$WORK/ltrn/_bmad-output"; mkdir -p "$dn/planning-artifacts/s1/shards/stories-p1"; printf 'x\n' > "$dn/planning-artifacts/s1/shards/stories-p1/1.md"
-seal_last_tool_row "$dn" "$dn/planning-artifacts/s1/shards/stories-p1/1.md" > "$WORK/ltrn.out" 2>&1; cn=$?
+fx_inproc $CS_SUBJ; seal_last_tool_row "$dn" "$dn/planning-artifacts/s1/shards/stories-p1/1.md" > "$WORK/ltrn.out" 2>&1; cn=$?
 if [ "$cl" = 0 ] && [ "$l1" = "session||Edit" ] && [ "$l3" = "agent|a0000000000000013|Write" ] && [ "$cn" = 0 ] && [ ! -s "$WORK/ltrn.out" ]; then
   ok "CS-U-L1: last tool rows: the session's Edit behind a later program row, the agent's Write behind a program row, nothing where no seal row exists"
 else bad "CS-U-L1: rc=$cl, 1.md [$l1] (want session||Edit), 3.md [$l3] (want agent|a0000000000000013|Write), unsealed rc=$cn [$(head -1 "$WORK/ltrn.out")]"; fi
@@ -173,14 +174,14 @@ else bad "CS-U-L1: rc=$cl, 1.md [$l1] (want session||Edit), 3.md [$l3] (want age
 uclone "$TPL_S"
 perl -0pi -e 's/Nothing further\./Nothing further, re-read after the first pass./' "$UD/1.md"
 rec "$UW" Edit "$UD/1.md" a0000000000000011
-seal_row "$UST" "$UD/1.md" > "$WORK/row.out" 2>&1; chk "$UD/1.md"
+fx_inproc $CS_SUBJ; seal_row "$UST" "$UD/1.md" > "$WORK/row.out" 2>&1; chk "$UD/1.md"
 if [ "$RC" = 0 ] && says '"tool":"Edit"' "$WORK/row.out" && says 'a0000000000000011' "$WORK/row.out"; then ok "CS-U-M4: an Edit rewrite after the Write seal re-seals: the newest row is the Edit's, --check passes"
 else bad "CS-U-M4: an Edit rewrite did not re-seal (rc=$RC, newest row: $(head -c 300 "$WORK/row.out"))"; fi
 
 # CS-U-M5: a NEAR-MISS path chosen by asking the declaration (seal_sealed), never by restating it: a file
 # directly under shards/, which passes the recorder's `/shards/` pre-filter and sits in no shard directory.
 uclone "$TPL_S"; nm="$UST/planning-artifacts/s1/shards/README.md"; printf '# shard index\n' > "$nm"
-if seal_sealed "planning-artifacts/s1/shards/README.md"; then bad "CS-U-M5: FIXTURE BROKEN -- the declaration now seals the near-miss; choose one it does not"
+fx_inproc $CS_SUBJ; if seal_sealed "planning-artifacts/s1/shards/README.md"; then bad "CS-U-M5: FIXTURE BROKEN -- the declaration now seals the near-miss; choose one it does not"
 else
   nrows; b5="$NR_"; rec "$UW" Write "$nm" ""; nrows; a5="$NR_"; printf 'amended by Bash\n' >> "$nm"; chk "$nm"
   if [ "$b5" = 4 ] && [ "$a5" = 4 ] && [ "$RC" = 0 ]; then ok "CS-U-M5: near-miss shards/README.md (outside the declared set): the recorder writes no row, a Bash rewrite passes --check"
@@ -203,7 +204,7 @@ else bad "CS-U-M6:$m6"; fi
 
 # CS-U-K5: a shard whose newest row is the --mark program row, amended through Bash -> reported, naming the
 # program and the restore-then-mark remedy (no second marker stacked).
-uclone "$TPL_S"; seal_record "$UST" program:wait-for-deliverable "$UD/1.md"; printf 'a line after the mark\n' >> "$UD/1.md"; chk "$UD/1.md"
+uclone "$TPL_S"; fx_inproc $CS_SUBJ; seal_record "$UST" program:wait-for-deliverable "$UD/1.md"; printf 'a line after the mark\n' >> "$UD/1.md"; chk "$UD/1.md"
 if [ "$RC" = 1 ] && says "$UD/1.md $TOKEN" && says "program wait-for-deliverable" && says "restore the bytes with Edit, then re-run wait-for-deliverable.sh --mark"; then
   ok "CS-U-K5: a program-sealed shard amended through Bash: reported, naming program wait-for-deliverable and the restore-then-mark remedy"
 else bad "CS-U-K5: a program-sealed shard amended through Bash was not reported with the --mark remedy (rc=$RC): $(head -2 "$WORK/chk.out")"; fi
@@ -212,7 +213,7 @@ else bad "CS-U-K5: a program-sealed shard amended through Bash was not reported 
 # --check through the link agree on that name.
 uclone "$TPL_U"; mv "$UST" "$UW/real-out" && ln -s real-out "$UST" || broken "CS-U-K6 cannot link the state dir"
 [ -L "$UST" ] && [ "$(cd "$UST" && pwd -P)" != "$(cd "$UST" && pwd)" ] || broken "CS-U-K6: $UST is not a link to a differently named dir"
-seal_all; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; chk "$UD"/*.md
+seal_all; fx_inproc $CS_SUBJ; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; chk "$UD"/*.md
 np="$(grep -c '"actor":"program:wait-for-deliverable".*"path":"_bmad-output/\|"path":"_bmad-output/[^"]*","actor":"program:wait-for-deliverable"' "$UL")" || np=0
 if [ "$RC" = 0 ] && [ "$np" = 4 ]; then ok "CS-U-K6: through a symlinked _bmad-output, program rows are named by the spelled state dir (4) and --check passes"
 else bad "CS-U-K6: through a symlinked state dir: --check rc=$RC, program rows under the spelled name $np (want 4)"; fi
@@ -226,7 +227,7 @@ bare_marks() { local k; for k in 1 2 3 4; do printf '\nseat-complete: stories ad
 sha_marks() { # the marker --mark appends: directly after the body, sha= the body's digest
   local k h
   for k in 1 2 3 4; do
-    h="$(seal_body_sha "$UD/$k.md" 1)"; [ -n "$h" ] || broken "no body digest for $UD/$k.md"
+    fx_inproc $CS_SUBJ; h="$(seal_body_sha "$UD/$k.md" 1)"; [ -n "$h" ] || broken "no body digest for $UD/$k.md"
     printf 'seat-complete: stories adversary %s findings=0 sha=%s\n' "$k" "$h" >> "$UD/$k.md"
   done
 }
@@ -235,11 +236,11 @@ uclone "$TPL_U" none; bare_marks; dN="$UD"
 uclone "$TPL_U" legacy; bare_marks; dL="$UD"
 uclone "$TPL_U" current; bare_marks; seal_all; dD="$UD"; dDst="$UST"
 uclone "$TPL_U" legacy; bare_marks; seal_all; dLs="$UD"
-uclone "$TPL_S" current; sha_marks; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; dE="$UD"
+uclone "$TPL_S" current; sha_marks; fx_inproc $CS_SUBJ; seal_record "$UST" program:wait-for-deliverable "$UD"/*.md; dE="$UD"
 uclone "$TPL_U" current; sha_marks; perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$UD/1.md"; dF="$UD"
 adm() { # <shard dir> [mutated library] -> ARC, $WORK/adm.out: seal_admit_marker over every shard in it
-  if [ -n "${2:-}" ]; then ( . "$2"; seal_admit_marker "$1"/*.md ) > "$WORK/adm.out" 2>&1
-  else seal_admit_marker "$1"/*.md > "$WORK/adm.out" 2>&1; fi
+  if [ -n "${2:-}" ]; then ( fx_inproc $CS_SUBJ; . "$2"; seal_admit_marker "$1"/*.md ) > "$WORK/adm.out" 2>&1
+  else fx_inproc $CS_SUBJ; seal_admit_marker "$1"/*.md > "$WORK/adm.out" 2>&1; fi
   ARC=$?
 }
 for w in dA dN dL dD dLs dE dF; do eval "adm \"\$$w\""; eval "SV_$w=$ARC"; cp "$WORK/adm.out" "$WORK/adm.$w"; done
@@ -247,7 +248,7 @@ a1=""
 { [ "$SV_dA" = 1 ] && says "the legacy window is closed" "$WORK/adm.dA"; } || a1="${a1}a "
 { [ "$SV_dN" = 1 ] && says "no readable role file for seat 'adversary'" "$WORK/adm.dN"; } || a1="${a1}b "
 { [ "$SV_dL" = 0 ] && [ ! -s "$WORK/adm.dL" ]; } || a1="${a1}c "
-chk_d=0; seal_check "$dDst" "$dD"/*.md > /dev/null 2>&1 || chk_d=$?
+chk_d=0; fx_inproc $CS_SUBJ; seal_check "$dDst" "$dD"/*.md > /dev/null 2>&1 || chk_d=$?
 { [ "$SV_dD" = 1 ] && [ "$chk_d" = 0 ] && says "the legacy window is closed" "$WORK/adm.dD"; } || a1="${a1}d "
 { [ "$SV_dE" = 0 ] && [ ! -s "$WORK/adm.dE" ]; } || a1="${a1}e "
 { [ "$SV_dF" = 1 ] && says "is not the body above it" "$WORK/adm.dF"; } || a1="${a1}f "
@@ -311,9 +312,9 @@ fi
 # CS-U-R1: the remedy for an adversary shard is the re-dispatch + --rerun one; a remediator part and a
 # non-shard sealed path keep the generic text.
 RD="re-dispatch the adversary for that shard, then merge with merge-adversarial-shards.sh --rerun"
-r_shard="$(_seal_remedy "" planning-artifacts/s1/shards/stories-p1/2.md)"
-r_part="$(_seal_remedy "" planning-artifacts/s1/shards/stories-repair-p1/1.md)"
-r_other="$(_seal_remedy "" planning-artifacts/s1/stories/a.md)"
+fx_inproc $CS_SUBJ; r_shard="$(_seal_remedy "" planning-artifacts/s1/shards/stories-p1/2.md)"
+fx_inproc $CS_SUBJ; r_part="$(_seal_remedy "" planning-artifacts/s1/shards/stories-repair-p1/1.md)"
+fx_inproc $CS_SUBJ; r_other="$(_seal_remedy "" planning-artifacts/s1/stories/a.md)"
 case "$r_shard" in "$RD"*) rs=1 ;; *) rs=0 ;; esac
 case "$r_part$r_other" in *"$RD"*) rg=0 ;; *) rg=1 ;; esac
 case "$r_part" in *"$REMEDY"*) rp=1 ;; *) rp=0 ;; esac
@@ -322,7 +323,7 @@ if [ "$rs" = 1 ] && [ "$rg" = 1 ] && [ "$rp" = 1 ] && [ "$ro" = 1 ]; then ok "CS
 else bad "CS-U-R1: remedy text wrong (shard=$rs generic-clean=$rg part=$rp other=$ro): $r_shard | $r_other"; fi
 # CS-U-R2: an adjudicator batch file (BL-716) is a shards/*/*.md path the generic adversary arm also matches, so the
 # ORDER is the property: it gets the delete-and-re-dispatch-that-batch remedy and never the adversary one.
-r_adj="$(_seal_remedy "" planning-artifacts/s1/shards/stories-serial-adjudicate-p1/fanin-b1.md)"
+fx_inproc $CS_SUBJ; r_adj="$(_seal_remedy "" planning-artifacts/s1/shards/stories-serial-adjudicate-p1/fanin-b1.md)"
 case "$r_adj" in "delete that batch file (its decisions are void) and re-dispatch that batch's adjudicator"*) ra=1 ;; *) ra=0 ;; esac
 case "$r_adj" in *"$RD"*) ra=0 ;; esac
 if [ "$ra" = 1 ] && [ "$rs" = 1 ]; then ok "CS-U-R2: an adjudicator batch file gets the delete-and-re-dispatch-that-batch remedy, never the adversary's; the adversary shard keeps its own"

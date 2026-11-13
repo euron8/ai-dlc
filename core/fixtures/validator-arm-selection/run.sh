@@ -219,6 +219,14 @@ inproc_source() { # inproc_source <validator> -- the one source of a worker or a
   . "$1" || { echo "FIXTURE BROKEN: sourcing $1 failed" >&2; exit 2; }
   declare -F vem_entry >/dev/null || { echo "FIXTURE BROKEN: sourcing $1 defined no vem_entry" >&2; exit 2; }
 }
+# THE CHUNK WORKERS COUNT THEIR PASSES. Each vem_entry call below is one in-process pass, logged by fx_inproc
+# (lib/mutant.sh) for the invocation judge. A worker re-enters this file and exits before the top level defines
+# ok/bad and sources that library, so it sources it here behind no-op stubs (the library refuses to load without them).
+case "${1:-}" in
+  --attrib-chunk|--sweep-chunk)
+    ok() { :; }; bad() { :; }
+    . "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; } ;;
+esac
 if [ "${1:-}" = "--attrib-chunk" ]; then
   # One selected run per id against a mutated tree, recording only whether it produced findings
   # and which. Split out from the sweep worker because the predicate is different -- here a
@@ -227,7 +235,7 @@ if [ "${1:-}" = "--attrib-chunk" ]; then
   inproc_source "$at_val"
   while IFS= read -r at_id; do
     [ -n "$at_id" ] || continue
-    vem_entry --arms "$at_id" >/dev/null 2>"$at_dir/raw.$at_id"
+    fx_inproc "$at_val"; vem_entry --arms "$at_id" >/dev/null 2>"$at_dir/raw.$at_id"
     if grep -q '^FAIL:' "$at_dir/raw.$at_id"; then
       grep '^FAIL:' "$at_dir/raw.$at_id" | sort > "$at_dir/f.$at_id"
     fi
@@ -241,7 +249,7 @@ if [ "${1:-}" = "--sweep-chunk" ]; then
   inproc_source "$sw_val"
   while IFS= read -r sw_id; do
   [ -n "$sw_id" ] || continue
-  vem_entry --arms "$sw_id" > "$sw_dir/o.$sw_id" 2> "$sw_dir/e.$sw_id"
+  fx_inproc "$sw_val"; vem_entry --arms "$sw_id" > "$sw_dir/o.$sw_id" 2> "$sw_dir/e.$sw_id"
   sw_rc=$?
   hits="$(grep -c -E 'unbound variable|command not found|syntax error' "$sw_dir/e.$sw_id" || true)"
   [ "${hits:-0}" -eq 0 ] || printf '%s\tbroken-slice\t%s\n' "$sw_id" "$(head -1 "$sw_dir/e.$sw_id" | cut -c1-120)"
@@ -384,7 +392,7 @@ mx_score() {
     outside=SKIPPED
   else
     printf 'mx-full %s\n' "$m" >> "$MXL"
-    ( inproc_source "$tv_"; vem_entry ) >/dev/null 2>"$TMP/mx.full.err"; frc=$?
+    ( inproc_source "$tv_"; fx_inproc "$tv_"; vem_entry ) >/dev/null 2>"$TMP/mx.full.err"; frc=$?
     if { [ "$frc" -ne 0 ] && [ "$frc" -ne 1 ]; } || grep -qE -- "$MX_CRASH" "$TMP/mx.full.err"; then crash=1; fi
     extra="$(comm -3 <(LC_ALL=C sort -u "$TMP/seeded.fails") <(grep '^FAIL:' "$TMP/mx.full.err" | LC_ALL=C sort -u) | grep -c . || true)"
     if [ "${extra:-0}" -eq 0 ]; then outside=EQUAL; else outside="DIFF-${extra}"; fi
@@ -592,7 +600,7 @@ fi
 # IT IS A PREREQUISITE, NOT A PHASE, and it is paid only by the shard that holds a phase
 # needing it. Shard 'b' differentials against the seeded tree instead and never runs this.
 if want_any all-ids sweep; then
-vem_entry > "$TMP/full.out" 2> "$TMP/full.err"; FULL_RC=$?
+fx_inproc "$VAL"; vem_entry > "$TMP/full.out" 2> "$TMP/full.err"; FULL_RC=$?
 if [ "$FULL_RC" -eq 0 ]; then
   ok "plain run of validate-enforcement-map.sh exits 0 (the differentials below are attributable)"
 else
@@ -609,8 +617,8 @@ if want unknown-id; then
 RAN="$RAN unknown-id"
 # Each run is captured as separate stdout and stderr, because each is also the in-process half of a
 # command-line twin below; the arm reads the two concatenated.
-vem_entry --arms I999 > "$TMP/sel.i.out" 2> "$TMP/sel.i.err"; sel_rc=$?
-vem_entry --arms "$first_id" > "$TMP/ctl.i.out" 2> "$TMP/ctl.i.err"; ctl_rc=$?
+fx_inproc "$VAL"; vem_entry --arms I999 > "$TMP/sel.i.out" 2> "$TMP/sel.i.err"; sel_rc=$?
+fx_inproc "$VAL"; vem_entry --arms "$first_id" > "$TMP/ctl.i.out" 2> "$TMP/ctl.i.err"; ctl_rc=$?
 sel_out="$(cat "$TMP/sel.i.out" "$TMP/sel.i.err")"
 ctl_out="$(cat "$TMP/ctl.i.out" "$TMP/ctl.i.err")"
 # THE COMMAND-LINE TWINS of the two runs above (BL-878 item 1): one refusing (exit 2) and one
@@ -637,9 +645,9 @@ fi
 # silently pay the full cost and prove nothing about selection.
 if want grammar; then
 RAN="$RAN grammar"
-vem_entry --arms >/dev/null 2>&1; u1_rc=$?
-vem_entry --not-a-flag >/dev/null 2>&1; u2_rc=$?
-vem_entry --arms "$first_id" extra >/dev/null 2>&1; u3_rc=$?
+fx_inproc "$VAL"; vem_entry --arms >/dev/null 2>&1; u1_rc=$?
+fx_inproc "$VAL"; vem_entry --not-a-flag >/dev/null 2>&1; u2_rc=$?
+fx_inproc "$VAL"; vem_entry --arms "$first_id" extra >/dev/null 2>&1; u3_rc=$?
 if [ "$u1_rc" -eq 2 ] && [ "$u2_rc" -eq 2 ] && [ "$u3_rc" -eq 2 ]; then
   ok "--arms with no value, an unknown flag and a trailing operand all exit 2"
 else
@@ -686,8 +694,8 @@ fi
 cmp -s "$TMP/i66c/core/git-hooks/pre-push" "$TMP/i66m/core/git-hooks/pre-push" \
   || broke "the one-hook I66 mutant touched the consumer hook too; it must widen ONE copy only"
 # Each copy is its own validator, so each is sourced once in the subshell that runs its one cell.
-i66c_out="$(inproc_source "$TMP/i66c/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 2>&1)"; i66c_rc=$?
-( inproc_source "$TMP/i66m/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 ) > "$TMP/i66m.i.out" 2> "$TMP/i66m.i.err"; i66m_rc=$?
+i66c_out="$(inproc_source "$TMP/i66c/scripts/validate-enforcement-map.sh"; fx_inproc "$TMP/i66c/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 2>&1)"; i66c_rc=$?
+( inproc_source "$TMP/i66m/scripts/validate-enforcement-map.sh"; fx_inproc "$TMP/i66m/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 ) > "$TMP/i66m.i.out" 2> "$TMP/i66m.i.err"; i66m_rc=$?
 i66m_out="$(cat "$TMP/i66m.i.out" "$TMP/i66m.i.err")"
 # THE EXIT-1 TWIN of this shard (BL-878 item 1): the mutant copy's refusal from the command line,
 # byte-compared with the in-process run above.
@@ -720,7 +728,7 @@ i66_one() { # <tag> <from> <to> <want message> <what> -- scored as mutant i66-<t
     broke "the one-hook READSET_KEYROWS mutant $1 DID NOT APPLY: the anchor matched ${n:-?} line(s) of .githooks/pre-push, not 1"
   fi
   cmp -s "$TMP/i66c/core/git-hooks/pre-push" "$d/core/git-hooks/pre-push" || broke "the KEYROWS mutant $1 touched the consumer hook too"
-  out="$(inproc_source "$d/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 2>&1)"; rc=$?
+  out="$(inproc_source "$d/scripts/validate-enforcement-map.sh"; fx_inproc "$d/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 2>&1)"; rc=$?
   if mx_kill "i66-$1" "$out"$'\n'"__rc=$rc" strict; then ok "MUTANT i66-$1: $5 in .githooks/pre-push alone makes --arms I66 exit $rc with '$4'"
   else bad "MUTANT SURVIVED i66-$1: $5 in .githooks/pre-push alone left --arms I66 at rc $rc without '$4': $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
 }
@@ -746,7 +754,7 @@ i66_dv() { # the deriver's extraction literal renamed in a fresh copy of the con
   if [ "$n" != 1 ] || cmp -s "$TMP/i66c/$f" "$d/$f"; then
     broke "the READSET_LOCK deriver mutant ld DID NOT APPLY: the anchor matched ${n:-?} line(s) of $f, not 1"
   fi
-  out="$(inproc_source "$d/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 2>&1)"; rc=$?
+  out="$(inproc_source "$d/scripts/validate-enforcement-map.sh"; fx_inproc "$d/scripts/validate-enforcement-map.sh"; vem_entry --arms I66 2>&1)"; rc=$?
   if mx_kill i66-ld "$out"$'\n'"__rc=$rc" strict; then mutant_killed "$B_i66_deriver" i66-ld "MUTANT i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh makes --arms I66 exit $rc naming the sentinels"
   else bad "MUTANT SURVIVED i66-ld: renaming the READSET_LOCK extraction literal in derive-fixture-readsets.sh left --arms I66 at rc $rc without the sentinel message: $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"; fi
 }
@@ -760,7 +768,7 @@ fi
 if want all-ids; then
 RAN="$RAN all-ids"
 ALL="$(tr '\n' ',' < "$IDS" | sed 's/,$//')"
-vem_entry --arms "$ALL" > "$TMP/all.out" 2> "$TMP/all.err"; ALL_RC=$?
+fx_inproc "$VAL"; vem_entry --arms "$ALL" > "$TMP/all.out" 2> "$TMP/all.err"; ALL_RC=$?
 if [ "$ALL_RC" -eq "$FULL_RC" ] && cmp -s "$TMP/full.out" "$TMP/all.out" && cmp -s "$TMP/full.err" "$TMP/all.err"; then
   ok "--arms with all $N_IDS declared ids is byte-identical to a plain run (stdout, stderr, exit $FULL_RC)"
 else
@@ -871,7 +879,7 @@ if want_any attrib union partition m2; then
 # This attribution sweep runs against the SEEDED tree ($TV), a different state from arm 4's
 # clean-tree sweep, so the two cannot share outputs. Attribution is by asking the selector per
 # id, never by reading message text, so it cannot be batched into one call.
-( inproc_source "$TV"; vem_entry ) > /dev/null 2>"$TMP/seeded.err" &
+( inproc_source "$TV"; fx_inproc "$TV"; vem_entry ) > /dev/null 2>"$TMP/seeded.err" &
 seeded_pid=$!
 attrib "$TV" sel "$IDS" &
 attrib_pid=$!
@@ -914,8 +922,8 @@ tw_pass="$(grep -vxF -f "$TMP/sel.ids" "$IDS" | head -1)"
 if [ -z "$tw_ref" ] || [ -z "$tw_pass" ]; then
   bad "TWIN: the seeded tree yields no refusing id ('$tw_ref') or no passing id ('$tw_pass'), so the seeded twin pair cannot be built"
 else
-  ( inproc_source "$TV"; vem_entry --arms "$tw_ref" ) > "$TMP/twr.out" 2> "$TMP/twr.err"; tw_ref_rc=$?
-  ( inproc_source "$TV"; vem_entry --arms "$tw_pass" ) > "$TMP/twp.out" 2> "$TMP/twp.err"; tw_pass_rc=$?
+  ( inproc_source "$TV"; fx_inproc "$TV"; vem_entry --arms "$tw_ref" ) > "$TMP/twr.out" 2> "$TMP/twr.err"; tw_ref_rc=$?
+  ( inproc_source "$TV"; fx_inproc "$TV"; vem_entry --arms "$tw_pass" ) > "$TMP/twp.out" 2> "$TMP/twp.err"; tw_pass_rc=$?
   if [ "$tw_ref_rc" != 1 ] || [ "$tw_pass_rc" != 0 ]; then
     bad "TWIN: on the seeded tree --arms $tw_ref exited $tw_ref_rc (expected 1) and --arms $tw_pass exited $tw_pass_rc (expected 0), so the pair does not hold a refusing and a passing input"
   fi
@@ -975,7 +983,7 @@ if cmp -s "$TV" "$TM1/scripts/validate-enforcement-map.sh.mut"; then
   broke "the arm-4 mutant changed nothing — the hoisted TEMPLATE assignment was not found, so this control tests a clean file"
 fi
 mv "$TM1/scripts/validate-enforcement-map.sh.mut" "$TM1/scripts/validate-enforcement-map.sh"
-( inproc_source "$TM1/scripts/validate-enforcement-map.sh"; vem_entry --arms I14 ) >/dev/null 2>"$TMP/m1.err"
+( inproc_source "$TM1/scripts/validate-enforcement-map.sh"; fx_inproc "$TM1/scripts/validate-enforcement-map.sh"; vem_entry --arms I14 ) >/dev/null 2>"$TMP/m1.err"
 if mx_kill m1 "$(cat "$TMP/m1.err")" none; then
   ok "MUTANT m1: un-hoisting TEMPLATE makes --arms I14 report 'TEMPLATE: unbound variable', so arm 4's predicate can fire"
 else
@@ -1044,7 +1052,7 @@ TM3="$TMP/m3"
 cp -R "$T" "$TM3"
 { cat "$TV"; printf '\n# --- I998: a declared arm with no emitter ------------------------------------\n:\n'; } \
   > "$TM3/scripts/validate-enforcement-map.sh"
-( inproc_source "$TM3/scripts/validate-enforcement-map.sh"; vem_entry --arms I998 ) > "$TMP/m3.out" 2>"$TMP/m3.err"; m3_rc=$?
+( inproc_source "$TM3/scripts/validate-enforcement-map.sh"; fx_inproc "$TM3/scripts/validate-enforcement-map.sh"; vem_entry --arms I998 ) > "$TMP/m3.out" 2>"$TMP/m3.err"; m3_rc=$?
 # THE EXIT-2 TWIN of this shard (BL-878 item 1): the same refusal from the command line.
 cli_twin cli-m3-silent-arm "$TMP/m3" "$m3_rc" "$TM3/scripts/validate-enforcement-map.sh" --arms I998
 if mx_kill m3 "$(cat "$TMP/m3.err")"$'\n'"__rc=$m3_rc" shapes "$TM3/scripts/validate-enforcement-map.sh"; then

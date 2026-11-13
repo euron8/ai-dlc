@@ -28,3 +28,4 @@ tail
 tr
 wc
 xargs
+uniq

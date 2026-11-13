@@ -1,2 +1,8 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-19 *
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's J3 reading `measured 22, declared 19`),
+# then verified by a second counted run reading 22. The +3 over the earlier 19 is run.sh:258, mx_twins's
+# `$(printf | tr ',' ' ')` loop, live once `tr` is declared (an undeclared `tr` is 127 and the loop iterated over no
+# word): one twin drive each for m_nourlgate.sh (M2), m_novalue.sh (M3) and m_nosshname.sh (M4), 1 -> 2 starts per
+# mutant in the start-log diff. M1's twin drive is live too and uncounted, as is its deciding drive: m_nocall.sh's
+# only top-level line is the deleted call, so the copy runs a function definition and no simple command, and the
+# counter's DEBUG trap never fires (0 start rows on both sides).
+22 *

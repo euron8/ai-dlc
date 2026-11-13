@@ -13,3 +13,5 @@
 0 core/hooks/ai-dlc-content-seal.sh
 0 core/scripts/record-only-diff.sh
 0 core/scripts/sprint-status.sh
+8 inproc:core/scripts/sprint-status.sh
+6 inproc:core/scripts/merge-review-shards.sh

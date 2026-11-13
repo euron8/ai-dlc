@@ -22,3 +22,4 @@ wc
 mv
 shasum
 env
+stat

@@ -1,4 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 62 *
 3 scripts/validate-enforcement-map.sh
+3 inproc:scripts/validate-enforcement-map.sh
 # Re-measured on the combined tree (b255 F9 rebased onto 0.1073.0, c6bea60f4) from two agreeing counted hermetic-run.sh runs: 146 -> 62; the validate-enforcement-map.sh row unchanged.
+# The inproc: row counts every in-process vem_entry pass of the IMPL this stub execs (fx_inproc beside each call, BL-982 P2), from one counted hermetic-run.sh run; the other rows unchanged.

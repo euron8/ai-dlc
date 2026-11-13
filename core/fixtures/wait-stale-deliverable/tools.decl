@@ -29,3 +29,4 @@ mv
 cp
 ln
 readlink
+perl

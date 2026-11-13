@@ -11,6 +11,8 @@ _asm="$CS_HERE/../adversarial-shard-merge/lib.sh"
 [ -f "$_asm" ] || { echo "FIXTURE BROKEN: $_asm is absent; nothing was asserted" >&2; exit 2; }
 . "$_asm"
 . "$CS_HERE/seal-lib.sh"
+# Sourced here, before the first in-process pass (in_set below), so fx_inproc is defined for every one of them.
+. "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED $MERGE"
 
 world_root() { dirname "$(hr_state "$1/1.md")"; } # <shard dir> -> the project root of its world
@@ -54,13 +56,14 @@ ip_stage() { # <shard dir> -> $T/shards
     case "$b" in ""|*[!0-9]*) k="$b" ;; *) k=$((10#$b)) ;; esac
     printf '%s\t%s\n' "$k" "$f" >> "$T/shards"; done
 }
-ip() {
-  ( . "$1" || exit 90
+ip() { # each phase function called below is one in-process pass of the merge: one fx_inproc apiece
+  ( fx_inproc core/scripts/merge-adversarial-shards.sh; . "$1" || exit 90
     SUBJECT="${IP_SUBJECT:-}"; ELICIT="${IP_ELICIT:-0}" # set by the merge's argument parse, which sourcing stops short of
     T="$(mktemp -d "$WORK/ip.XXXXXX")" || exit 91
     ip_stage "${IP_STAGE:-$2}" # IP_STAGE: the same dir spelled absolute, for an operand the test's own cd cannot take
-    merge_locate "$2"; merge_rec_paths; merge_seal_path "$1"
-    merge_seal_phase; merge_complete_scan; merge_admission_phase
+    _m=core/scripts/merge-adversarial-shards.sh
+    merge_locate "$2"; fx_inproc $_m; merge_rec_paths; fx_inproc $_m; merge_seal_path "$1"
+    fx_inproc $_m; merge_seal_phase; fx_inproc $_m; merge_complete_scan; fx_inproc $_m; merge_admission_phase
     [ -z "${IP_SHOW:-}" ] || printf 'LOCATED %s\n' "$SHARD_DIR" ) > "$MO" 2>&1; RC=$?
 }
 ipref() { [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1"; } # in-process refusal naming <token>
@@ -154,9 +157,9 @@ mark_one() { # <engine> <shard file> -> MRC, $WORK/mark.out; marked with the sha
   # IN PROCESS: the engine is sourced in a subshell (its BASH_SOURCE guard returns before wfd_mark_main) and wfd_mark_main is
   # called with the arguments the CLI takes; its `exit` ends the subshell. pipefail is off, as the CLI runs it.
   local n; n="$(grep -c '^### ' "$2")" || n=0
-  ( set +o pipefail; . "$1"; wfd_mark_main --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" ) > "$WORK/mark.out" 2>&1; MRC=$?
+  ( set +o pipefail; fx_inproc core/scripts/wait-for-deliverable.sh; . "$1"; wfd_mark_main --mark "$2" stories adversary "$(basename "$2" .md)" "findings=$n" ) > "$WORK/mark.out" 2>&1; MRC=$?
 }
-sk() { ( . "$SEAL"; "$@" ); } # the library function a reader's mode calls, asked in a subshell: sk seal_check <state> <files>
+sk() { ( . "$SRCDIR/content-seal.sh"; fx_inproc core/scripts/content-seal.sh; "$@" ); } # the library function a reader's mode calls, asked in a subshell: sk seal_check <state> <files>
 PROW='"actor":"program:wait-for-deliverable"'
 # ONE SEALED WORLD, BUILT ONCE, restored per cell. Seal rows record the world's physical root, so a copy at another
 # path would be foreign to the ledger; the dirty world is moved aside and the pristine copy put back at the SAME path.
@@ -194,7 +197,7 @@ else bad "CS-K2: --mark over a Bash-amended sealed shard: rc=$MRC, rows $nb2 -> 
 ka="$(dirname "$dk2")/stories-serial-adjudicate-p1"; mkdir -p "$ka" || { echo "FIXTURE BROKEN: cannot make $ka" >&2; exit 2; }
 printf '### 01.md F-1 — MINOR\n- decision: no change\n' > "$ka/fanin-b1.md"; seal_hook "$KWR" Write "$ka/fanin-b1.md" a0adjudicator000001
 perl -0pi -e 's/no change/repair/' "$ka/fanin-b1.md"; cp "$ka/fanin-b1.md" "$WORK/ka.before"
-( set +o pipefail; . "$WFD"; wfd_mark_main --mark "$ka/fanin-b1.md" stories adjudicator 1/2 findings=1 ) > "$WORK/mark.out" 2>&1; MRC=$?
+( set +o pipefail; fx_inproc core/scripts/wait-for-deliverable.sh; . "$WFD"; wfd_mark_main --mark "$ka/fanin-b1.md" stories adjudicator 1/2 findings=1 ) > "$WORK/mark.out" 2>&1; MRC=$?
 if [ "$MRC" = 64 ] && cmp -s "$ka/fanin-b1.md" "$WORK/ka.before" && has "$WORK/mark.out" "changed through Bash after its last Write or Edit" \
    && has "$WORK/mark.out" "re-dispatch that batch's adjudicator" && ! has "$WORK/mark.out" "re-dispatch the adversary"; then
   ok "CS-K2a: a Bash-amended sealed ADJUDICATOR batch file: --mark refuses (64) with the delete-and-re-dispatch-that-batch remedy, never the adversary's"
@@ -247,7 +250,7 @@ else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: 
 # two answers differ. The passing file is restored between the two runs so both mark the same bytes at the same path.
 sm="$WORK/seam"; mkdir -p "$sm"; printf '# stories -- adversarial shard 1\n\n### M1 -- MAJOR -- a finding\n\nBody.\n' > "$sm/1.md"; cp "$sm/1.md" "$sm/1.orig"
 seam_cli() { bash "$WFD" "$@" > "$sm/cli.out" 2> "$sm/cli.err"; echo $? > "$sm/cli.rc"; }
-seam_inp() { ( set +o pipefail; . "$WFD"; wfd_mark_main "$@" ) > "$sm/inp.out" 2> "$sm/inp.err"; echo $? > "$sm/inp.rc"; }
+seam_inp() { ( set +o pipefail; fx_inproc core/scripts/wait-for-deliverable.sh; . "$WFD"; wfd_mark_main "$@" ) > "$sm/inp.out" 2> "$sm/inp.err"; echo $? > "$sm/inp.rc"; }
 seam_same() { cmp -s "$sm/cli.out" "$sm/inp.out" && cmp -s "$sm/cli.err" "$sm/inp.err" && cmp -s "$sm/cli.rc" "$sm/inp.rc"; }
 seam_cli --mark "$sm/1.md" stories adversary; cp "$sm/cli.out" "$sm/ref.out"; cp "$sm/cli.err" "$sm/ref.err"; cp "$sm/cli.rc" "$sm/ref.rc"
 seam_inp --mark "$sm/1.md" stories adversary; sk1=0; seam_same && sk1=1; rr="$(cat "$sm/inp.rc")"; cp "$sm/inp.err" "$sm/refuse.err"
@@ -340,7 +343,7 @@ perl -0pi -e 's/Nothing further\./Nothing further, after the mark./' "$dF/1.md"
 # IN PROCESS: the subject is sourced in a subshell and its wfd_beat_main is called with the --status argv
 # (pipefail off, as the CLI runs it); --status writes nothing, so the world is the same for the next call.
 a2_raw() { # <world root> <target> -> the whole --status answer, stdout and stderr
-  ( cd "$1" && export AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 && set +o pipefail && . "$WFD" && wfd_beat_main --status --complete --since 1 "$2" ) 2>&1
+  ( fx_inproc core/scripts/wait-for-deliverable.sh; cd "$1" && export AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 && set +o pipefail && . "$WFD" && wfd_beat_main --status --complete --since 1 "$2" ) 2>&1
 }
 a2_status() { # <world root> <target> -> the --status line for it
   a2_raw "$1" "$2" | grep -F -- "$2" | head -1
@@ -373,7 +376,6 @@ else bad "CS-A2: current=[$sA] none=[$sN] legacy=[$sL] epics=[$sE] (epics in set
 # compared against (rule: a cell is `killed=yes` when the mutant's verdict diverges from the shipped verdict on
 # the SAME world). Order: refusals (they write nothing), then the merging runs, each followed by removing the
 # merged output so the next driver of that world reads it clean.
-. "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 MX=0; [ "${1:-}" = --matrix ] && MX=1
 mx_pp=0; mx_only=0
 vrd() { # <merge> <world dir> -> VRD (MERGED|REFUSED), RSN; asked IN PROCESS (ip), or end to end when MXE=1, whose merged output is removed afterwards
@@ -398,7 +400,7 @@ ipv dA "the legacy window is closed"; s_a=$I_OK; m_a="$(head -3 "$MO")"
 ipv dN "no readable role file for seat 'adversary'"; s_b=$I_OK; m_b="$(head -3 "$MO")"
 # (d) the BL-738 fallback shape: a bare line appended and then SEALED as an Edit, so --check cannot see it
 # (the seal-check probe asks this world), under the CURRENT role file -> REFUSED.
-( . "$SEAL" && seal_check "$(hr_state "$dD/1.md")" "$dD"/*.md ) >/dev/null 2>&1; d_chk=$?
+( fx_inproc core/scripts/content-seal.sh; . "$SEAL" && seal_check "$(hr_state "$dD/1.md")" "$dD"/*.md ) >/dev/null 2>&1; d_chk=$?
 ipv dD "the legacy window is closed"; s_d=$I_OK; m_d="$(head -3 "$MO")"
 # (f) a sha= marker whose body was changed through Bash on a shard with NO seal row: --check has nothing
 # to compare, the digest does -> REFUSED.

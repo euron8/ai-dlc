@@ -6,3 +6,4 @@ core/
 scripts/
 .githooks/
 templates/
+core/fixtures/lib/mutant.sh

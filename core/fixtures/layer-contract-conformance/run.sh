@@ -140,6 +140,13 @@ if [ -z "$VAL" ] || [ -z "$CONTRACT" ]; then
 fi
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
+# fx_inproc (one row per in-process vem_entry pass, BL-982) comes from lib/mutant.sh, which refuses to load
+# without ok() and bad(); this file defines neither, so it is sourced behind stubs that are then removed.
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "$NAME: FIXTURE ERROR -- lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+ok() { :; }; bad() { :; }
+. "$DIR/../lib/mutant.sh"
+unset -f ok bad
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 [ "$MATRIX" = 1 ] && echo "MATRIX-MODE on"
 
 # ---------------------------------------------------------------------------
@@ -863,9 +870,11 @@ lcc_run_one() {
   fi
   if [ "$_lcc_s" = FULL ]; then
     _lcc_m=full
+    fx_inproc "$VAL_ABS"
     ( export AI_DLC_LAYER_CONTRACT="$_lcc_f"; vem_entry ) > "$_lcc_o.o" 2> "$_lcc_o.e"
   else
     _lcc_m=sel
+    fx_inproc "$VAL_ABS"
     ( export AI_DLC_LAYER_CONTRACT="$_lcc_f"; vem_entry --arms "$_lcc_s" ) > "$_lcc_o.o" 2> "$_lcc_o.e"
   fi
   _lcc_rc=$?
@@ -1032,6 +1041,7 @@ case "$_lcc_rs" in
 esac
 (
   . "$VAL_ABS" || exit 2
+  fx_inproc "$VAL_ABS"
   ( ( export AI_DLC_LAYER_CONTRACT="$TMP/control.yaml"; vem_entry --arms "$_lcc_rs" ) \
       > "$TWD/pass.ip.o" 2> "$TWD/pass.ip.e"
     printf '%s' "$?" > "$TWD/pass.ip.rc" ) &

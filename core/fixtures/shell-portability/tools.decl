@@ -13,3 +13,5 @@ mkdir
 mktemp
 rm
 sed
+sort
+paste

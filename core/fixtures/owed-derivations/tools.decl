@@ -32,3 +32,4 @@ uniq
 date
 tail
 jq
+ls

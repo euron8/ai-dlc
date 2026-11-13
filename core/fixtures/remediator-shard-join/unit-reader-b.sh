@@ -44,6 +44,8 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$MUT_LIB"
+# each in-process pass of a subject below is logged by fx_inproc (lib/mutant.sh) under its root-relative path
+RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 N_MROWS=0
 mrow() { [ "$MATRIX" = 1 ] || return 0; N_MROWS=$((N_MROWS + 1)); echo "  MATRIX $*"; }
 
@@ -85,9 +87,9 @@ bash() {
   (
     UB_IN=1; set +o pipefail
     case "$UB_K" in
-      join) ub_scrub "$UB_JV" "$UB_JF"; join_main "$@" ;;
-      jcopy) ub_scrub "" ""; . "$UB_F"; join_main "$@" ;;
-      hook) ub_scrub "" ""; set --; . "$UB_F"; hook_pretool_head ;;
+      join) fx_inproc $RSJ_J; ub_scrub "$UB_JV" "$UB_JF"; join_main "$@" ;;
+      jcopy) fx_inproc $RSJ_J; ub_scrub "" ""; . "$UB_F"; join_main "$@" ;;
+      hook) fx_inproc $RSJ_H; ub_scrub "" ""; set --; ( . "$UB_F"; hook_pretool_head ) ;;
       cap) ub_scrub "" ""; set --; . "$UB_F" ;;
       dval) ub_scrub "" ""
         case "$UB_F" in

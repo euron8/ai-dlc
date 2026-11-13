@@ -373,11 +373,11 @@ run_map() {
   fi
   if [ -z "$id" ]; then
     printf 'f\n' >> "$WORK/calls"
-    ( vem_entry ) 2>&1
+    ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry ) 2>&1
     return $?
   fi
   printf 's %s\n' "$id" >> "$WORK/calls"
-  ( vem_entry --arms "$id" ) 2>&1
+  ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry --arms "$id" ) 2>&1
 }
 
 # sel_guard <rc> <id> <output> — a validator exit of 2 is a SELECTION failure and never an
@@ -2293,7 +2293,7 @@ emd_twins() {
   fresh_t
   tw_cmp() { # tw_cmp <cell suffix> [validator args...]
     local k="$1" ur=0 cr=0; shift
-    ( vem_entry "$@" ) > "$WORK/tw.$k.uo" 2> "$WORK/tw.$k.ue" || ur=$?
+    ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry "$@" ) > "$WORK/tw.$k.uo" 2> "$WORK/tw.$k.ue" || ur=$?
     FXCELL="cli-$k" bash "$t/scripts/validate-enforcement-map.sh" "$@" > "$WORK/tw.$k.co" 2> "$WORK/tw.$k.ce" || cr=$?
     printf '%s' "$cr" > "$WORK/tw.$k.rc"
     if cmp -s "$WORK/tw.$k.uo" "$WORK/tw.$k.co" && cmp -s "$WORK/tw.$k.ue" "$WORK/tw.$k.ce" && [ "$ur" = "$cr" ]; then
@@ -2365,7 +2365,7 @@ if [ "${1:-}" = "--matrix" ]; then
   mx_grid() {
     local out rc a c
     [ "${VEM_TREE:-}" = "$2" ] || { bad "FIXTURE BROKEN — mx_grid on '$2' but the loaded validator copy is '${VEM_TREE:-none}'"; exit 2; }
-    out="$( ( vem_entry --arms "$MX_ARMS" ) 2>&1)"
+    out="$( ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry --arms "$MX_ARMS" ) 2>&1)"
     rc=$?
     sel_guard "$rc" "$MX_ARMS" "$out"
     MX_TRIPPED=""

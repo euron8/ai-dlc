@@ -162,12 +162,15 @@ chk() { # chk <arm-id> <text> <command...>  -- ok when the command exits 0
 # `set -uo pipefail` all end with the subshell. A reader that predates the guard (a consumer one pull
 # behind this fixture) has no pd_main and would RUN on being sourced, so it is driven through
 # `bash <reader>` instead; that is the CLI, and the arms read the same rows either way.
-# PEQ below proves the two drives answer byte-for-byte alike.
+# PEQ below proves the two drives answer byte-for-byte alike. fx_inproc is given an ABSOLUTE subject path under
+# $ROOT: the reader may be a control copy or a mutant, and one drive runs from `cd /`, where a relative path logs
+# as `//core/...` and the judge's count does not match it.
 pdx() {
   local r="$1"; shift
   if grep -q '^pd_main() {$' "$r"; then
     ( # shellcheck source=/dev/null
       . "$r" || exit 2
+      fx_inproc "$ROOT/core/skills/ai-dlc-update/reconcile/push-drain.sh"
       pd_main "$@" )
   else
     bash "$r" "$@"

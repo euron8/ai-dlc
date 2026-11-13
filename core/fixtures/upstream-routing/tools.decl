@@ -19,3 +19,6 @@ rm
 sed
 tail
 tr
+od
+mv
+date

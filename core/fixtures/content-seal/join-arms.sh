@@ -10,6 +10,7 @@ _rsj="$CS_HERE/../remediator-shard-join/lib.sh"
 [ -f "$_rsj" ] || { echo "FIXTURE BROKEN: $_rsj is absent; nothing was asserted" >&2; exit 2; }
 . "$_rsj"
 . "$CS_HERE/seal-lib.sh"
+. "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; } # fx_inproc, for the in-process passes
 echo "HERMETIC-CONSUMED $JOIN"
 TOKEN="changed after its last sealed write"
 PD=_bmad-output/planning-artifacts/s305/shards/stories-repair-p1
@@ -98,8 +99,8 @@ joined() { # -> a world whose record the join wrote and sealed with its program 
   RW="$JW"; RREC="$(out_of "$RW")"
 }
 # IN PROCESS: the engine is sourced in a subshell (its guard returns before wfd_mark_main); wfd_mark_main takes the CLI's arguments.
-mark_rep() { ( set +o pipefail; . "$1"; wfd_mark_main --mark-repair "$2" 1 ) > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
-sk() { ( . "$SEAL"; "$@" ); } # a library function a reader's mode calls, asked in a subshell
+mark_rep() { ( set +o pipefail; fx_inproc core/scripts/wait-for-deliverable.sh; . "$1"; wfd_mark_main --mark-repair "$2" 1 ) > "$WORK/mark.out" 2>&1; MRC=$?; } # <engine> <record> -> MRC
+sk() { ( . "$SRCDIR/content-seal.sh"; fx_inproc core/scripts/content-seal.sh; "$@" ); } # a library function a reader's mode calls, asked in a subshell
 
 # CS-J6: the program-sealed record closed with --mark-repair -> the program re-seals it and
 # --escalations reads it. The serial remediator first appends its OWN block with Edit -- its sha

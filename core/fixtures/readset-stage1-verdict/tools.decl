@@ -30,3 +30,5 @@ tail
 tr
 sysctl
 mkfifo
+basename
+cksum

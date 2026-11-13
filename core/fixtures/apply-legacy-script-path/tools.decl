@@ -19,3 +19,4 @@ tr
 uniq
 bash
 cksum
+diff

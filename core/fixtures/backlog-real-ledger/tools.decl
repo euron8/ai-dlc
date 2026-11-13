@@ -28,3 +28,4 @@ sort
 tail
 tr
 xargs
+rmdir

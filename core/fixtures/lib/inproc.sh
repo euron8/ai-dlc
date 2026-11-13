@@ -24,6 +24,22 @@
 #
 # WHAT THIS CANNOT REPRODUCE is anything a subject decides from being the TOP of a process: `$BASH_SUBSHELL` is 1 here,
 # never 0, and `$$` is the caller's pid. A caller asking such a question keeps the CLI run.
+#
+# EVERY inproc_run IS ONE IN-PROCESS PASS (BL-982): fx_inproc (core/fixtures/lib/mutant.sh) logs it under
+# INPROC_LOADED's path -- a mutant copy is a pass of the subject it copies -- so a declaring fixture carries an
+# `<N> inproc:<subject>` row. fx_inproc is kept through the function strip and unset on the line that calls the
+# entry, so the entry still sees a fresh bash's function set. When the caller has not sourced mutant.sh it is
+# sourced here, behind ok/bad stubs that are removed again when the caller had none.
+if ! declare -F fx_inproc >/dev/null 2>&1; then
+  _inproc_stub=""
+  declare -F ok >/dev/null 2>&1 || { ok() { :; }; _inproc_stub="$_inproc_stub ok"; }
+  declare -F bad >/dev/null 2>&1 || { bad() { :; }; _inproc_stub="$_inproc_stub bad"; }
+  # shellcheck source=/dev/null
+  . "${BASH_SOURCE[0]%/*}/mutant.sh" || return 1
+  # shellcheck disable=SC2086 # names carry no whitespace; the split is the point
+  [ -z "$_inproc_stub" ] || unset -f $_inproc_stub
+  unset _inproc_stub
+fi
 INPROC_LOADED=""
 INPROC_FNS=" "
 INPROC_DEFS=""
@@ -47,6 +63,7 @@ inproc_run() { # <subject> <entry> [args...] -> the entry's stdout, stderr and s
   (
     IFS=$' \t\n'
     _inproc_s="$1"; _inproc_e="$2"; shift 2
+    _inproc_p="${INPROC_LOADED:-$_inproc_s}"
     if [ -n "$INPROC_LOADED" ] && [ "$_inproc_s" = "$INPROC_LOADED" ]; then
       # shellcheck disable=SC2086
       [ "$(declare -f $INPROC_FNS)" = "$INPROC_DEFS" ] \
@@ -58,12 +75,13 @@ inproc_run() { # <subject> <entry> [args...] -> the entry's stdout, stderr and s
     _inproc_x=" $(compgen -e) "; _inproc_x="${_inproc_x//$'\n'/ }"
     for _inproc_f in $(compgen -A function); do
       case "$_inproc_k" in *" $_inproc_f "*) continue ;; esac
+      [ "$_inproc_f" != fx_inproc ] || continue
       unset -f "$_inproc_f"
     done
     for _inproc_v in $(compgen -v); do
       case "$_inproc_x" in *" $_inproc_v "*) continue ;; esac
       case "$_inproc_v" in
-        _inproc_s|_inproc_e|_inproc_x|_inproc_v|_inproc_k) continue ;;
+        _inproc_s|_inproc_e|_inproc_x|_inproc_v|_inproc_k|_inproc_p) continue ;;
         BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
         IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
         SHLVL|TERM|UID|_) continue ;;
@@ -78,6 +96,7 @@ inproc_run() { # <subject> <entry> [args...] -> the entry's stdout, stderr and s
       . "$_inproc_s" || exit 126
     fi
     unset _inproc_s _inproc_x _inproc_v _inproc_f _inproc_k
+    fx_inproc "$_inproc_p"; unset -f fx_inproc; unset _inproc_p
     "$_inproc_e" "$@"
   )
 }

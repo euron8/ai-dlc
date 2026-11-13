@@ -23,6 +23,9 @@ broken() { echo "FIXTURE BROKEN: $NAME: $1" >&2; exit 2; }
 # lib.sh resolves JOIN by walking UP in both layouts, scrubs AI_DLC_*, owns WORK and the one EXIT trap.
 # shellcheck source=/dev/null
 . "$UR_HERE/lib.sh" > /dev/null || broken "sourcing lib.sh failed"
+. "$(cd "$UR_HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+# each in-process pass of a subject below is logged by fx_inproc (lib/mutant.sh) under its root-relative path
+RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 JO="$WORK/unit.out"
 # shellcheck source=/dev/null
 . "$JOIN" || broken "sourcing $JOIN failed"
@@ -38,7 +41,7 @@ uenter() {
     JR_ROOT="$1"; _STATE_DIR="_bmad-output"; STATE="${JR_ROOT}/${_STATE_DIR}"
     STATE_PARENT="${STATE%/*}/"; STATE_PARENT_P="$STATE_PARENT"
     PA="${STATE}/planning-artifacts"; SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
-    record_tail "$2"
+    fx_inproc $RSJ_J; record_tail "$2"
   ) > "$JO" 2>&1; RC=$?
 }
 esc_rec() { # <join, unused> <body> -> RC, $JO

@@ -34,3 +34,6 @@ tail
 tr
 wc
 xargs
+diff
+head
+tee

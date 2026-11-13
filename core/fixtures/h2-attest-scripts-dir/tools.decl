@@ -25,3 +25,4 @@ tail
 wc
 rm
 env
+seq
