@@ -33,6 +33,9 @@
 # 12, NDP 4, NDC 4, and 13 from the earlier arms. The content-seal row's +29, counted per segment: PCR 12, the 80/260
 # world 3, the 3/20 world 3, PCSR 3, NDP's p3 merge 3, NDC's p3 merge 3, PCMV's unhooked re-merge 2 (the hooked one
 # refuses before it seals).
-3101 *
+# Re-measured for BL-974 (the sealed-sibling document fallback: CS13, CS14 and CSM-docfb's deciding and twin runs) by two agreeing
+# counted runs on a clean worktree of its commit (3125 and 510 both times, over 3101 and 503; the merge row unmoved at 53):
+# the * rise of 24 and the content-seal.sh rise of 7 are the --mark seals, the sealed-sibling admissions and the copies' starts, not attributed per start.
+3125 *
 53 core/scripts/merge-adversarial-shards.sh
-503 core/scripts/content-seal.sh
+510 core/scripts/content-seal.sh

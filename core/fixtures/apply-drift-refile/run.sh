@@ -32,7 +32,8 @@
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-drift-refile/run.sh --matrix
 #
 # The matrix is MEASURED by that command (every world of each mutant's unit, plus the named cross-unit twin,
-# one MATRIX row per arm) and is re-measured whenever an arm or a mutant changes. A plain run scores only the
+# one MATRIX row per arm). The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires. A plain run scores only the
 # deciding arm and its twin and asserts deciding FAILS and twin stays green; the recorded matrix plus the twin
 # replaces the exact-vector assertion. Arms are the worlds of a unit (qW qH qX; tAn tAp tBk tBn; vU vM vR vO;
 # yM yP yS yD yX yL yN yF; xA xB xC; uCtl u14 u20; wCtl w14 w20), plus r, s, h, f and base7 (assertion 7).

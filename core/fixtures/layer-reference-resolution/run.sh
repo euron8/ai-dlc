@@ -50,7 +50,8 @@
 # the twin must hold at the pristine value. "Each mutant moves only its own cells" is a
 # test-quality property established by `--matrix`, which scores every mutant on the full vector
 # and prints one `MATRIX<TAB><mutant><TAB><cell><TAB><FAIL|ok>` line per cell. The matrix is
-# re-measured whenever an arm or a mutant is added or changed. The rows below are read back by
+# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# The rows below are read back by
 # this script at run time (mk_mutant), so a mutant without a row, or a row without a mutant,
 # is a FIXTURE ERROR rather than a drift.
 #

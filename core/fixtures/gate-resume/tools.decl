@@ -23,6 +23,7 @@ kill
 ln
 ls
 mkdir
+mkfifo
 mktemp
 mv
 od

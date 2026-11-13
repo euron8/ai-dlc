@@ -40,8 +40,9 @@
 
 # MUTANT MATRIX. Case 12's x_vec scores four cells (i, ii, iii, r) in ONE run, so every mutant is
 # measured against every cell on every push: the exact vector asserted per mutant IS the recorded
-# matrix (deciding cell red, twins green), and the matrix is re-measured whenever an arm or a mutant
-# is added or changed. Case 10 has the single arm "legacy rows"; its twin is the no-DECISION-row arm, green under the mutant.
+# matrix (deciding cell red, twins green). The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires. Case 10 has the single arm "legacy rows"; its twin is the no-DECISION-row arm, green under
+# the mutant.
 # MUTANT-MATRIX-CONTROL legacy-loop why=neutering the loop's file test must emit no legacy-script row at all, so absence of those rows is the pass
 # MUTANT-MATRIX XE-M1 decides=ii twins=i,iii,r
 # MUTANT-MATRIX XE-M2 decides=i twins=iii,r

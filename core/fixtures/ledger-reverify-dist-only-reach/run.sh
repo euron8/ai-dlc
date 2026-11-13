@@ -55,8 +55,9 @@
 # The part-A mutants edit the engine's non-comment lines, which is exactly what the spelling scan C reads, and C costs
 # no engine run, so C is their twin; the part-E and E5 mutants must leave part A's seven ASCII kinds where they were,
 # and M-B1 likewise, which is the property each of those scorers already asserted. A plain run scores each mutant
-# on its deciding cells and its twin only. The matrix is re-measured whenever an arm or a mutant is added or changed,
-# by the REMEASURE command below, run from the repo root. It scores every mutant on every cell and prints one MATRIX
+# on its deciding cells and its twin only. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2
+# ("One run per distinct state") requires. Run the REMEASURE command below, from the repo root. It scores every
+# mutant on every cell and prints one MATRIX
 # line each. No validator unit is selected here, so there is no outside-unit diff.
 # MUTANT-MATRIX M-A1 decides=A twins=C
 # MUTANT-MATRIX M-A2 decides=A twins=C

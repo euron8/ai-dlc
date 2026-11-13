@@ -38,8 +38,9 @@
 #
 # The mutant matrix: each mutant is scored on its DECIDING ARM plus ONE named TWIN, an arm the measured matrix shows GREEN under
 # it, read off the same capture. `--matrix` captures every mutant once and scores it on EVERY arm. The recorded matrix plus the twin
-# replaces the exact-vector assertion that a mutant fails only its own assertion. The matrix is re-measured whenever an arm or a mutant
-# is added or changed. c5-m4-open is the same mutation as c5-m4 over an OPEN receipt and is its own mutant, run per push.
+# replaces the exact-vector assertion that a mutant fails only its own assertion. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. c5-m4-open is the same mutation as c5-m4 over an
+# OPEN receipt and is its own mutant, run per push.
 # MUTANT-MATRIX m1 decides=m1 twins=m6
 # MUTANT-MATRIX m3 decides=m3 twins=m6
 # MUTANT-MATRIX m2c decides=m2c twins=m3
@@ -2290,7 +2291,8 @@ unset BR_PROBE_RECORD
 # --- per-push twins ----------------------------------------------------------------------------
 # A TWIN is a different arm that the MEASURED matrix shows GREEN for the mutant. Every push reads it
 # off the mutant's own capture, so a kill that spreads past its deciding arm is seen at no cost.
-# The table is generated from a `--matrix` run; re-measure whenever an arm or a mutant changes.
+# The table is generated from a `--matrix` run. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 twin_of() {
   case "$1" in
 # TWINS-BEGIN

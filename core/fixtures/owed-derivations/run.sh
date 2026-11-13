@@ -61,7 +61,8 @@
 # UNASSESSED over a file whose own run gave no verdict, M20 a reproducing LIVING fence opened, M21 LIVING
 # verdicts leaking into --scope-batch, M22 every validator exit refused, M23 the piped `--scope` dispatch restored (its
 # scope_batch runs in a pipeline subshell whose EXIT trap never fires on rc 0, so the scratch dir is left).
-# THE MUTANT x ARM MATRIX, re-measured whenever an arm or a mutant is added or changed. `--matrix` runs every
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. `--matrix` runs every
 # mutant over every LIVING world and prints a `MATRIX<TAB><mutant><TAB><arm><TAB><FAIL|ok>` row per arm.
 # Per push each mutant runs only its DECIDING arm (which must FAIL) and its TWINS (arms the matrix shows
 # GREEN under it, which must HOLD), so only the worlds holding them. Whether a mutant kills its own arm alone

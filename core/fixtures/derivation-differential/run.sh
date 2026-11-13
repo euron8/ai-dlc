@@ -8,8 +8,9 @@
 #   mutated copies. With no argument the subject is found beside this fixture in either layout.
 #   `--matrix` runs every P mutant over every P world and prints one MATRIX row each.
 #
-# THE P MUTANT MATRIX (the P section's header says how each is built and scored). Re-measured whenever a P
-# arm or mutant is added or changed, from the repo root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir.
+# THE P MUTANT MATRIX (the P section's header says how each is built and scored). The matrix is re-measured
+# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo
+# root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir.
 # Per push each mutant runs its FIRST decides arm's world only; `decides` lists every arm the matrix found red.
 # MUTANT-MATRIX dd-nocmp decides=Piii_nf,Piiip_nf twins=Piii_ctl
 # MUTANT-MATRIX dd-trunc decides=Piiip_nf twins=Piiip_ctl

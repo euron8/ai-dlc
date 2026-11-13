@@ -336,3 +336,18 @@ Controls, same invocations:
   it that way.
 - **MINOR findings (186).** Not classified, by the method. The triage file classes them: 54
   TRIVIAL-FIX (applied), 46 DUPLICATE, 7 NOISE, 71 REAL-BUT-NOT-SPRINT-SCOPE, 8 NEEDS-DECISION.
+
+## Re-derivation on the fixed extractor (batch 257, BL-1003 item 3)
+
+This document's population counts `gate-validation[sprint-review]` into the step, so BL-1003 lists it
+as a suspect reading. It is re-taken at its own window, `EXTRACT_WIN_END=2026-11-09T00:00:00Z`, by
+`sr_dv_yield.py` over two extracts that differ only in `extract.py` (e3cb7710f, the parent of
+0.1100.0, against the fixed one), driven by
+`docs/analysis/pipeline-efficiency-s317-s322/scripts/bl1003_rederive.py`, with output in
+`docs/analysis/pipeline-efficiency-s317-s322/out/bl1003_rederive.txt`. Control, same invocation: the
+old extract carries the step's 169 spawns and $209.09. The fixed extract's output is byte-identical,
+all 79 lines, because 0 of 5498 spawns change owner at this window. The fixed extractor reads
+left=1 for s321, and that one LEFT event (2026-11-04T04:48:18Z, from the architecture gate to
+`stories-test-strategy`) moves lead-side rows only, none of them in sprint-review or deploy-validate.
+Every count, cost and per-survivor figure above stands, and so does BL-1004's pm-seat reading taken
+from it. `elicitation_yield.py` is re-taken the same way and is byte-identical, all 7 lines.

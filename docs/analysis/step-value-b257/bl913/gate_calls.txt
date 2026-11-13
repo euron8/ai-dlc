@@ -1,0 +1,97 @@
+# graph ref f7e60625b, EXTRACT_WIN_END=2026-11-12T12:32:58Z, current (v0.1100.0) extractor. Command:
+#   EXTRACT_WIN_END=2026-11-12T12:32:58Z python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT
+#   python3 -I docs/analysis/step-value-b257/bl913/gate_calls.py $OUT $OUT_FILING   ($OUT_FILING: see the script's docstring)
+== controls: the b256 BL-913 figures, reproduced before any new figure
+CONTROL MATCH s320 7 files, nine-script occurrences (the 898): 898 (recorded 898)
+CONTROL MATCH s320 7 files, lead commands naming a gate script (the 529): 529 (recorded 529)
+CONTROL MATCH s320 10 sprint_id files, nine-script occurrences (the 1,031): 1031 (recorded 1031)
+CONTROL MATCH   10 files, verdict.sh: 262 (recorded 262)
+CONTROL MATCH   10 files, gate-checkpoint.sh: 185 (recorded 185)
+CONTROL MATCH   10 files, validate-escalation-resolution.sh: 50 (recorded 50)
+CONTROL MATCH s320 implementation window, occurrences: 735 (recorded 735)
+CONTROL MATCH s320 implementation window, commands: 394 (recorded 394)
+CONTROL MATCH s320 implementation window, gate-class h: 2.71 (recorded 2.71)
+CONTROL MATCH s320 implementation window, lead active h: 13.56 (recorded 13.56)
+CONTROL MATCH s322 implementation window, nine-script occurrences: 242 (recorded 242)
+CONTROL MATCH s322 implementation window, gate-transition.sh occurrences: 92 (recorded 92)
+CONTROL MATCH s322 implementation window, commands: 237 (recorded 237)
+CONTROL MATCH s322 implementation window, commands naming only gate-transition.sh: 85 (recorded 85)
+CONTROL MATCH s322 implementation window, gate-class h: 0.98 (recorded 0.98)
+CONTROL MATCH s322 implementation window, lead active h: 12.36 (recorded 12.36)
+CONTROL MATCH   per script s320 -> s322 window, validate-handoff-evidence.sh: (194, 7) (recorded (194, 7))
+CONTROL MATCH   per script s320 -> s322 window, partition-review-diff.sh: (99, 2) (recorded (99, 2))
+CONTROL MATCH   per script s320 -> s322 window, verdict.sh: (165, 31) (recorded (165, 31))
+CONTROL MATCH   per script s320 -> s322 window, gate-checkpoint.sh: (140, 102) (recorded (140, 102))
+CONTROL MATCH   per script s320 -> s322 window, validate-gate-adjudication.sh: (62, 24) (recorded (62, 24))
+CONTROL MATCH   per script s320 -> s322 window, validate-escalation-resolution.sh: (24, 2) (recorded (24, 2))
+CONTROL MATCH   per script s320 -> s322 window, validate-artifact-derivations.sh: (7, 2) (recorded (7, 2))
+CONTROL MATCH   per script s320 -> s322 window, validate-adversarial-convergence.sh: (3, 0) (recorded (3, 0))
+CONTROL MATCH   per script s320 -> s322 window, merge-review-shards.sh: (41, 72) (recorded (41, 72))
+CONTROL MATCH impossible token zqxj-never-913.sh, every lead Bash command of every graph transcript: 0 (recorded 0)
+   present-token control beside it: lead Bash commands scanned 36080, of them naming verdict.sh 1287
+
+== window control (F-B1)
+first lead record of 0ef7ba46 (the s323 session) 2026-11-13T08:16:50.213Z; window end 2026-11-12T12:32:58Z; after the window: True
+
+== the filed 1,052 and the 21-call residual
+every graph lead transcript, Bash commands timestamped in [2026-10-23T09:53:00Z, 2026-10-29T23:20:00Z), deduped on tool_use id: 1052 occurrences
+   per script against the filing: verdict.sh 262 (+0), validate-handoff-evidence.sh 209 (+0), gate-checkpoint.sh 185 (+0), partition-review-diff.sh 101 (+0), validate-gate-adjudication.sh 77 (+0), validate-artifact-derivations.sh 70 (+0), validate-adversarial-convergence.sh 54 (+0), validate-escalation-resolution.sh 50 (+0), merge-review-shards.sh 44 (+0)
+   same invocation, b256 rule (10 sprint_id-320 files, whole): 1031
+   occurrences in-window from transcripts carrying no sprint_id 320: 22 {'05025479': 2, '4b1ecf7e': 2, '563101d2': 7, '6b3d6491': 3, '825f30b3': 3, 'dbb48b21': 2, 'eeba6ae4': 3}
+   occurrences in the 10 sprint_id-320 files OUTSIDE that window: 1 {'dd2df1d7': 1}
+   identity: 1,031 - 1 + 22 = 1052
+   the 154 (1,052 - 898): 3 earlier sprint_id-320 files in-window 133 + no-sprint_id files 22 - 7 files outside the window 1 = 154
+
+== the filed 15.8 h (s320 implementation step total)
+current extractor ($OUT, EXTRACT_WIN_END=2026-11-12T12:32:58Z): s320 lead active implementation 10.177 h + gate-validation[implementation] 5.418 h = 15.594 h
+filing-era extractor 9d0bca846 at 2026-10-29T23:20:00Z ($OUT_FILING): 9.840 h + 5.754 h = 15.594 h
+   15.8 h reproduced by neither: UNRESOLVED
+current extractor, s320 lead active implementation + gate-validation[implementation]: 15.594 h, per story (13) 1.20 h
+current extractor, s322 lead active implementation + gate-validation[implementation]: 10.468 h, per story (8) 1.31 h
+
+== re-entry after the s322 implementation window (03:35:48Z .. window end)
+extractor: last s322 lead segment record of implementation: 2026-11-12T03:35:48.990Z
+extractor: last s322 lead segment record of gate-validation[implementation]: 2026-11-12T03:23:09.813Z
+before (control) [2026-11-10T18:47:12Z, 2026-11-12T03:35:48Z): gate-transition runs by gate {'1': 29, '2': 28, '3': 27, 'close': 3}; dispatches with gate-plan: 81, shard: without gate-plan: 7; tool inputs naming steps/implementation.md 120; naming steps/sprint-review.md 1
+after [2026-11-12T03:35:48Z, 2026-11-12T12:32:58Z): gate-transition runs by gate {}; dispatches with gate-plan: 0, shard: without gate-plan: 24; tool inputs naming steps/implementation.md 1; naming steps/sprint-review.md 10
+   implementation.md ref: 2026-11-12T08:32:39.954Z e444bf13 Bash {"command": "grep -rn \"deferred_acs\" .claude/skills/ai-dlc/steps/implementation.md | head -4; grep -rn \"def
+   shard: dispatches without gate-plan, by shard value or description: {'retro': 24}
+
+== whole-sprint lead gate-script calls, one rule both sides (every graph lead transcript, timestamp-bounded, deduped on tool_use id)
+s320 (filing edge) [2026-10-23T09:53:00Z, 2026-10-29T23:20:00Z): nine 1052, gate-transition.sh 0, together 1052 over 638 commands; per story (13) nine 80.9, together 80.9; sprint_id files only: nine 1030, gate-transition.sh 0
+   per script: verdict.sh 262, validate-handoff-evidence.sh 209, gate-checkpoint.sh 185, partition-review-diff.sh 101, validate-gate-adjudication.sh 77, validate-artifact-derivations.sh 70, validate-adversarial-convergence.sh 54, validate-escalation-resolution.sh 50, merge-review-shards.sh 44, gate-transition.sh 0
+s320 (current extractor edge) [2026-10-23T09:53:00Z, 2026-10-30T00:10:03Z): nine 1053, gate-transition.sh 0, together 1053 over 639 commands; per story (13) nine 81.0, together 81.0; sprint_id files only: nine 1031, gate-transition.sh 0
+   per script: verdict.sh 262, validate-handoff-evidence.sh 209, gate-checkpoint.sh 185, partition-review-diff.sh 101, validate-gate-adjudication.sh 78, validate-artifact-derivations.sh 70, validate-adversarial-convergence.sh 54, validate-escalation-resolution.sh 50, merge-review-shards.sh 44, gate-transition.sh 0
+s322 [2026-11-09T00:00:00Z, 2026-11-12T12:32:58Z): nine 518, gate-transition.sh 93, together 611 over 443 commands; per story (8) nine 64.8, together 76.4; sprint_id files only: nine 512, gate-transition.sh 92
+   per script: verdict.sh 93, validate-handoff-evidence.sh 13, gate-checkpoint.sh 206, partition-review-diff.sh 2, validate-gate-adjudication.sh 50, validate-artifact-derivations.sh 18, validate-adversarial-convergence.sh 44, validate-escalation-resolution.sh 19, merge-review-shards.sh 73, gate-transition.sh 93
+   s322 sprint_id-322 files: ['6249c621', '6c14d949', '70fd1d6d', '80c96d42', '9a646a3b', 'e444bf13', 'fdc4249a']
+
+== gate-transition plans at graph f7e60625b
+.plan 51, .captures 34, by gate {'1': 20, '2': 14, '3': 15, 'close': 2}; gate passes (g1+g2+g3) 49; must-miss path entries 0
+whole-sprint s322 per gate pass: nine 10.6, together 12.5
+
+== gate-transition.sh refusals by id, s322 whole sprint
+runs 87; refusal lines by id {'check-16': 1, 'check-2': 2, 'check-5': 3, 'close': 1, 'dar-fold': 4, 'handoff-evidence': 6, 'handoff-strategy': 1, 'prior-validation': 2}; dar-fold 4
+
+== s321 against s320 and s322, one edge rule (the current extractor's sprint edges) for every side
+first lead gate-transition.sh run on any graph transcript: 2026-11-06T03:30:49.975Z (0ec8b044)
+s320 [2026-10-23T09:53:00Z, 2026-10-30T00:10:03Z): nine 1053, gate-transition.sh occurrences 0, together 1053; per story (13) 81.0; story review files at f7e60625b matching <e>-<s>-code-review|qa-validation[-pM].md: code-review 23, qa-validation 29, of 64 entries (NOT a gate-pass count: the naming differs per sprint); gate-transition.sh runs 0; dar-fold refusals 0 over 0 story indexes []
+   per script: verdict.sh 262, validate-handoff-evidence.sh 209, gate-checkpoint.sh 185, partition-review-diff.sh 101, validate-gate-adjudication.sh 78, validate-artifact-derivations.sh 70, validate-adversarial-convergence.sh 54, validate-escalation-resolution.sh 50, merge-review-shards.sh 44, gate-transition.sh 0
+s321 [2026-10-30T00:10:03Z, 2026-11-09T00:00:00Z): nine 1275, gate-transition.sh occurrences 253, together 1528; per story (25) 61.1; story review files at f7e60625b matching <e>-<s>-code-review|qa-validation[-pM].md: code-review 2, qa-validation 36, of 110 entries (NOT a gate-pass count: the naming differs per sprint); gate-transition.sh runs 184; dar-fold refusals 9 over 9 story indexes ['$k', '1-4', '3.1', '4-3', '4.2', '4.3', '5-2', '5.5', '6.2']
+   per script: verdict.sh 366, validate-handoff-evidence.sh 28, gate-checkpoint.sh 287, partition-review-diff.sh 20, validate-gate-adjudication.sh 152, validate-artifact-derivations.sh 122, validate-adversarial-convergence.sh 94, validate-escalation-resolution.sh 53, merge-review-shards.sh 153, gate-transition.sh 253
+s322 [2026-11-09T00:00:00Z, 2026-11-12T12:32:58Z): nine 518, gate-transition.sh occurrences 93, together 611; per story (8) 76.4; story review files at f7e60625b matching <e>-<s>-code-review|qa-validation[-pM].md: code-review 0, qa-validation 3, of 37 entries (NOT a gate-pass count: the naming differs per sprint); gate-transition.sh runs 87; dar-fold refusals 4 over 3 story indexes ['3', '4', '7']
+   per script: verdict.sh 93, validate-handoff-evidence.sh 13, gate-checkpoint.sh 206, partition-review-diff.sh 2, validate-gate-adjudication.sh 50, validate-artifact-derivations.sh 18, validate-adversarial-convergence.sh 44, validate-escalation-resolution.sh 19, merge-review-shards.sh 73, gate-transition.sh 93
+   must-miss review directory s999 entries: 0
+
+== seat figures per story, roll.py seat_sum/seat_line on $OUT (pipeline bucket)
+CONTROL MATCH roll.py seat_line, s321 stories-test-strategy (BL-811 outcome row): 0.79 h gap-inclusive (gap 0.42 h), token-equivalent $26.9 (API $26.1), 47.5M tokens (recorded 0.79 h gap-inclusive (gap 0.42 h), token-equivalent $26.9 (API $26.1), 47.5M tokens)
+implementation s320 (13 stories): 1.36 h gap-inclusive (gap 0.57 h), token-equivalent $14.7 (API $14.7), 58.9M tokens; lead active 0.78 h, lead $6.4, subagent active 1.20 h, subagent $8.4; lead-seat local share 0% of 1158 calls
+implementation s321 (25 stories): 0.68 h gap-inclusive (gap 0.17 h), token-equivalent $15.8 (API $15.8), 41.7M tokens; lead active 0.52 h, lead $4.3, subagent active 0.92 h, subagent $11.5; lead-seat local share 0% of 1562 calls
+implementation s322 (8 stories): 1.07 h gap-inclusive (gap 0.27 h), token-equivalent $14.8 (API $8.2), 42.9M tokens; lead active 0.79 h, lead $6.6 (API $0.0), subagent active 0.61 h, subagent $8.2; lead-seat local share 100% of 1413 calls
+gate-validation[implementation] s320 (13 stories): 0.58 h gap-inclusive (gap 0.16 h), token-equivalent $6.0 (API $6.0), 21.0M tokens; lead active 0.42 h, lead $3.5, subagent active 0.49 h, subagent $2.5; lead-seat local share 0% of 552 calls
+gate-validation[implementation] s321 (25 stories): 0.45 h gap-inclusive (gap 0.11 h), token-equivalent $9.7 (API $9.7), 25.2M tokens; lead active 0.34 h, lead $3.3, subagent active 0.56 h, subagent $6.4; lead-seat local share 0% of 946 calls
+gate-validation[implementation] s322 (8 stories): 0.95 h gap-inclusive (gap 0.43 h), token-equivalent $13.1 (API $8.9), 37.1M tokens; lead active 0.52 h, lead $4.2 (API $0.0), subagent active 0.60 h, subagent $8.9; lead-seat local share 100% of 848 calls
+implementation plus gate-validation[implementation] s320 (13 stories): 1.94 h gap-inclusive (gap 0.74 h), token-equivalent $20.7 (API $20.7), 80.0M tokens; lead active 1.20 h, lead $9.9, subagent active 1.69 h, subagent $10.8; lead-seat local share 0% of 1710 calls
+implementation plus gate-validation[implementation] s321 (25 stories): 1.13 h gap-inclusive (gap 0.28 h), token-equivalent $25.5 (API $25.5), 66.9M tokens; lead active 0.85 h, lead $7.6, subagent active 1.48 h, subagent $17.9; lead-seat local share 0% of 2508 calls
+implementation plus gate-validation[implementation] s322 (8 stories): 2.02 h gap-inclusive (gap 0.71 h), token-equivalent $27.9 (API $17.1), 80.0M tokens; lead active 1.31 h, lead $10.8 (API $0.0), subagent active 1.21 h, subagent $17.1; lead-seat local share 100% of 2261 calls
+# exit 0

@@ -15,8 +15,9 @@
 #
 # THE MUTANT MATRIX. m1 is scored per push on its DECIDING arm (arm4) and its named TWIN (arm3), which
 # reads the same awk with a prior record present and must stay GREEN under it. `run.sh --matrix` scores m1
-# against all eight arms and prints one MATRIX line. The matrix is re-measured whenever an arm or a mutant
-# is added or changed, by the REMEASURE command below, run from the repo root.
+# against all eight arms and prints one MATRIX line. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
+# command below, from the repo root.
 # MUTANT-MATRIX m1 decides=arm4 twins=arm3
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/suite-pole-info/run.sh --matrix
 #

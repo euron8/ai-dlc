@@ -17,7 +17,8 @@
 # Mutant matrix: mutant -> deciding arm and green twins. Per push (the default mode) each mutant
 # runs only its deciding arm plus its twins; `--matrix` measures every cell once and prints a
 # `MATRIX<TAB>mutant<TAB>arm<TAB>FAIL|ok` line per cell (the b457 mutants over all seven arms).
-# Re-measured whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 # MUTANT-MATRIX m1 decides=done-fail twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m2 decides=verdict-vocab twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m3 decides=missing-anchor twins=- why=single-arm mutant, its one measured cell is FAIL
@@ -33,6 +34,11 @@
 # MUTANT-MATRIX m13 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m14 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m15 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX ck1 decides=ckpt-forced-interleave twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX ck2 decides=ckpt-seam-fires twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX ck3 decides=ckpt-unseamed-bound twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX ck4 decides=ckpt-no-silent-wait twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX ck5 decides=ckpt-no-silent-hold twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX b457-a decides=S1 twins=S2
 # MUTANT-MATRIX b457-b decides=RB twins=WC
 # MUTANT-MATRIX b457-c decides=S2 twins=NC
@@ -89,7 +95,7 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
-B_E_DONE=0; B_F_VERDICT=0; B_F2A=0; B_F2B=0; B_F2C=0; B_F2D=0; B_F2E=0
+B_CKPT_SEAM=0; B_E_DONE=0; B_F_VERDICT=0; B_F2A=0; B_F2B=0; B_F2C=0; B_F2D=0; B_F2E=0
 mcell() { # mcell <mutant> <arm> <1=held|0=broken> -- one MATRIX line per cell, matrix mode only
   if [ "$MATRIX" = 1 ]; then printf 'MATRIX\t%s\t%s\t%s\n' "$1" "$2" "$([ "$3" = 1 ] && echo ok || echo FAIL)"; fi
 }
@@ -141,8 +147,13 @@ fi
 
 if [ -n "$CKPT" ]; then
   echo "HERMETIC-CONSUMED core/scripts/gate-checkpoint.sh"
-  if bash "$CKPT" --self-probe >/dev/null 2>&1; then
-    ok "gate-checkpoint.sh --self-probe exits 0 (its own nine-direction probe passed)"
+  # The PASS line is captured, not discarded: ck1-ck5 below are scored only against a base
+  # whose probe ran the seamed Directions 10-12 (B_CKPT_SEAM), never against an older probe.
+  if _ckpt_probe="$(bash "$CKPT" --self-probe 2>/dev/null)"; then
+    ok "gate-checkpoint.sh --self-probe exits 0 (its own thirteen-direction probe passed)"
+    case "$_ckpt_probe" in
+      *"a forced read-rename interleaving keeps both rows"*"an unseamed writer keeps the shipped 200-try refusal"*) B_CKPT_SEAM=1 ;;
+    esac
   else
     bad "gate-checkpoint.sh --self-probe FAILED -- every checkpoint assertion below is unproven"
   fi
@@ -1577,6 +1588,96 @@ else
 fi
 else
   skip "mutant m5 (current reverts to mtime scan)" "gate-checkpoint.sh is not present in this tree"
+fi
+
+# --- ck1-ck5: gate-checkpoint.sh's record lock and its probe seam (BL-1006) -------------
+# The self-probe's Directions 10-12 are scored by running each mutant copy's OWN --self-probe
+# and requiring the one FAIL line its deciding direction prints -- never rc 2 alone, which a
+# copy dying for any other reason also returns. Every step of Direction 10 waits on an event,
+# so each kill is deterministic at any load (BL-868).
+#   ck1  the lock removed (writers append unlocked): Direction 10's writer B reads the stale
+#        ledger while A holds between its read and rename -> first event 'R fb', 1 of 2 rows.
+#   ck2  both PROBE-SEAM blocks removed: writer A exits without holding -> 'X fa 0', and the
+#        probe refuses instead of passing a run in which no interleaving was forced.
+#   ck3  the shipped bound widened 200 -> 201: Direction 12 reads 'after 201 tries'.
+#   ck4  seam point (2)'s L event line deleted: writer B may not wait unannounced, exits 2,
+#        and Direction 10 reads 'X fb 2' as B's first event -- a refusal, never a hang.
+#   ck5  seam point (1)'s R event line deleted: writer A may not hold unannounced -> 'X fa 2'.
+if [ -n "$CKPT" ]; then
+_m15d="$WORK/ckpt-ck1-5"; mkdir -p "$_m15d"
+python3 - "$CKPT" "$_m15d" <<'PY'
+import re, sys
+src = open(sys.argv[1]).read(); d = sys.argv[2]
+lock = 'until mkdir "$_lock" 2>/dev/null; do'
+bound = 'if [ "$_tries" -ge 200 ]; then'
+if src.count(lock) != 1 or src.count(bound) != 1:
+    sys.exit(1)
+# One run per distinct state: no mutant decides on Directions 1-9, so every copy drops them
+# (and ck3, decided at Direction 12, drops Direction 11 too). Directions 10-12 read none of
+# their state; Direction 13 does, and no mutant reaches it. Each cut is anchored on its two
+# headers, each present exactly once, and must shorten the copy.
+def cut(t, a, b):
+    if t.count(a) != 1 or t.count(b) != 1 or t.index(a) > t.index(b):
+        sys.exit(1)
+    i, j = t.index(a), t.index(b)
+    i = t.rindex("\n", 0, i) + 1; j = t.rindex("\n", 0, j) + 1
+    return t[:i] + "  # MUTANT COPY: cut " + a.strip() + " .. before " + b.strip() + "\n" + t[j:]
+def w(name, t, d11=False):
+    t = cut(t, "# Direction 1: ", "# Direction 10: ")
+    if d11:
+        t = cut(t, "# Direction 11: ", "# Direction 12: ")
+    open(d + "/" + name + ".sh", "w").write(t)
+w("ck1", src.replace(lock, 'until true; do  # MUTATED ck1: no lock', 1))
+m_ck2, n = re.subn(r'\n *# PROBE-SEAM\((1|2)\) begin\n.*?# PROBE-SEAM\(\1\) end', '\n    # MUTATED ck2: seam removed', src, flags=re.S)
+if n != 2:
+    sys.exit(1)
+w("ck2", m_ck2)
+w("ck3", src.replace(bound, 'if [ "$_tries" -ge 201 ]; then  # MUTATED ck3: bound widened', 1), d11=True)
+lev = '''[ "$_tries" -gt 0 ] || { printf 'L %s\\n' "$_id" >> "${_seam}/ev" && _seam_ev=L; }'''
+rev = '''printf 'R %s\\n' "$_id" >> "${_seam}/ev" && _seam_ev=R'''
+if src.count(lev) != 1 or src.count(rev) != 1:
+    sys.exit(1)
+w("ck4", src.replace(lev, ':  # MUTATED ck4: L event line deleted', 1))
+w("ck5", src.replace(rev, ':  # MUTATED ck5: R event line deleted', 1))
+PY
+_m15b=$?
+for _mm in ck1:ckpt-forced-interleave ck2:ckpt-seam-fires ck3:ckpt-unseamed-bound ck4:ckpt-no-silent-wait ck5:ckpt-no-silent-hold; do
+  _mn="${_mm%%:*}"; _ma="${_mm#*:}"; _mf="$_m15d/$_mn.sh"
+  case "$_mn" in
+    ck1) _mexp="writer B's first event was 'R fb' (expected 'L fb', waiting on the lock) and the ledger kept 1 of 2 rows"
+         _mclaim="mutant ck1: with the record lock removed, Direction 10's forced interleaving makes writer B read the ledger A already read, and one row of two is lost" ;;
+    ck2) _mexp="writer A's first event was 'X fa 0', expected 'R fa'"
+         _mclaim="mutant ck2: with both probe seam points removed, Direction 10 refuses (no interleaving was forced) instead of passing a race it never staged" ;;
+    ck3) _mexp="after 201 tries.' -- the shipped bound (200 tries, sleep 0.05, refusal, exit 2, no write) moved."
+         _mclaim="mutant ck3: widening the unseamed lock bound to 201 tries is caught by Direction 12's held-lock refusal" ;;
+    ck4) _mexp="writer B's first event was 'X fb 2' (expected 'L fb', waiting on the lock)"
+         _mclaim="mutant ck4: with seam point (2)'s L event line deleted, writer B exits at its unannounced lock wait and Direction 10 refuses instead of hanging" ;;
+    ck5) _mexp="writer A's first event was 'X fa 2', expected 'R fa'"
+         _mclaim="mutant ck5: with seam point (1)'s R event line deleted, writer A exits at its unannounced hold and Direction 10 refuses instead of hanging" ;;
+  esac
+  if [ "$_m15b" -ne 0 ]; then
+    bad "FIXTURE STALE: $_mn -- the lock, bound or PROBE-SEAM literal was reworded; could not build the mutant"
+  elif cmp -s "$CKPT" "$_mf"; then
+    bad "FIXTURE STALE: $_mn mutant is byte-identical to gate-checkpoint.sh"
+  elif ! bash -n "$_mf" 2>/dev/null; then
+    bad "FIXTURE STALE: $_mn mutant is not valid shell"
+  elif ! grep -q "# MUTATED $_mn" "$_mf"; then
+    bad "FIXTURE STALE: $_mn mutant's edit did not land"
+  elif ! grep -q '# MUTANT COPY: cut # Direction 1: \.\. before # Direction 10:' "$_mf" || grep -q '^  # Direction [1-9]: ' "$_mf"; then
+    bad "FIXTURE STALE: $_mn mutant copy still carries Directions 1-9 -- the cut did not land"
+  else
+    _mrc=0; _merr="$(bash "$_mf" --self-probe 2>&1 >/dev/null)" || _mrc=$?
+    case "$_merr" in *"$_mexp"*) _mhit=1 ;; *) _mhit=0 ;; esac
+    mcell "$_mn" "$_ma" "$([ "$_mrc" = 2 ] && [ "$_mhit" = 1 ] && echo 0 || echo 1)"
+    if [ "$_mrc" = 2 ] && [ "$_mhit" = 1 ]; then
+      mutant_killed "$B_CKPT_SEAM" "$_mn" "$_mclaim"
+    else
+      bad "MUTANT DID NOT FAIL AS EXPECTED: $_mn -- self-probe rc ${_mrc}, stderr '$(printf '%s' "$_merr" | head -1)'"
+    fi
+  fi
+done
+else
+  skip "mutants ck1-ck5 (record lock and probe seam)" "gate-checkpoint.sh is not present in this tree"
 fi
 
 # --- m6: gate-slice.sh's extension anchor regex loses its ^ anchor ----------------------

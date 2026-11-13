@@ -73,4 +73,9 @@
 # base origin/main 74f2cbcf0 read 2790, EXIT 0; the release tip read 2794, EXIT 0. An earlier tip
 # reading of 2793 is void: it was taken before the file carried its I105 exemption marker, and the
 # traced validator exited 1 there.
-FORK_BUDGET=2930
+#
+# Ratcheted 2930 -> 2675 for BL-1021, the drained batch queue's release. Measured with
+# `scripts/fork-profile.sh --section total`, each run from inside its own clean detached worktree:
+# base origin/main 323ce0939 read 2794, EXIT 0; the release tip b6ab71906 read 2673, EXIT 0. The
+# budget is the tip reading plus HEADROOM_MARGIN 2.
+FORK_BUDGET=2675

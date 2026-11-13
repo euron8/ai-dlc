@@ -32,7 +32,8 @@
 # assertions above, S9..S13 the subsumption arms). The deciding arm FAILS and each twin stays GREEN
 # under the mutant, asserted every run; the other arms are not run per push, so the exact-vector
 # assertion this file used to make per mutant is replaced by the recorded matrix plus the twin.
-# The matrix is re-measured whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 # MUTANT-MATRIX M1 decides=A2 twins=A1
 # MUTANT-MATRIX M2 decides=A1 twins=A2
 # MUTANT-MATRIX M3 decides=A3 twins=A1,A2

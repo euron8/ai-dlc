@@ -58,8 +58,9 @@
 # gate-validation.md) and j-refuse (the B4 refusal bullet of requirements.md). PER PUSH a mutant is scored on
 # its DECIDING cell, which must fail on it, and its named TWIN, a different cell it could plausibly co-trip but
 # must leave GREEN. `run.sh --matrix` scores each mutant against all six cells and prints one MATRIX line per
-# mutant. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command
-# below, run from the repo root. The (i) and (j) mutants carry an i- or j- prefix because the bare names are
+# mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run the REMEASURE command below, from the repo root. The (i) and (j) mutants carry an i-
+# or j- prefix because the bare names are
 # prefixes of drop-from-one and drop-from-all.
 # MUTANT-MATRIX drop-from-one decides=h twins=i-axis
 # MUTANT-MATRIX drop-from-all decides=h twins=i-axis

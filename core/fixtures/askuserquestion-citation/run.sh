@@ -15,7 +15,8 @@
 # S290 through the repair of its mirror image. Assertion 2 is the one that guards that.
 #
 # The mutant matrix replaces an exact-vector assertion per mutant: per push each mutant runs its
-# deciding arm and its twin, and the matrix is re-measured whenever an arm or a mutant changes.
+# deciding arm and its twin. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2
+# ("One run per distinct state") requires.
 # Arm names are A1-A5 (assertions 1-5), P1-P6 (the pruned-world arms), F1-F17 (the --accept-captured worlds) and D1-D8 (the
 # disposition-shaped quotes, BL-950); they are the column names `--matrix` prints.
 # MUTANT-MATRIX whole-string decides=A2 twins=A1

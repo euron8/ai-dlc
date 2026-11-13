@@ -30,8 +30,9 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 #
 # THESE ARMS REPORT THROUGH FAILURES OR EXIT 2, NEVER THROUGH ASSERTIONS.
 # --- THE MUTANT x ARM MATRIX -----------------------------------------------------------------
-# Measured ONCE by the REMEASURE command below, and re-measured whenever an arm or a mutant is added
-# or changed. In this battery every mutant is run once by its own drive and scored by its own ok
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Measured ONCE by the REMEASURE command below. In this battery every mutant is run once by
+# its own drive and scored by its own ok
 # line, so that line's label is both <mutant> and the first decides= token; further decides= tokens
 # are the hoisted $OUT-reading arms the matrix replay shows RED under the mutant over the full seeded
 # ledger (one fault seen through several arms). twins= is one hoisted arm the replay shows GREEN.
@@ -244,6 +245,18 @@ done
 [ -n "$CLOSER" ] || { printf 'FAIL: cannot locate ledger-reverify.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$CLOSER")" && pwd)/$(basename "$CLOSER")"
 
+# A kill is emitted through lib/mutant.sh's mutant_killed, which refuses unless the unmutated arm the mutant
+# guards passed in this run. It needs ok() and bad(): ok prints its line as given, and bad counts a refused
+# base in FAILURES, so the verdict lines, the counters and the PASS total are those of the printf it replaced.
+# Sourced here, before inproc.sh, which then finds fx_inproc defined and sources nothing; inproc_run strips
+# ok, bad and the mutant helpers from the subject's subshell like every other fixture function. row_is,
+# row_has and row_lacks return 1 on a FAIL, so a caller capturing $? holds that arm's own verdict.
+ok() { printf '%s\n' "$1"; }
+bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh"
+
 # --- THE SUBJECT IS ASKED IN PROCESS ---------------------------------------------------------------
 # ledger-reverify.sh is loadable: sourcing it defines functions and runs nothing (its source guard stops
 # before `lr_main`). It is sourced ONCE here, and `lr_eng <engine> <args>` answers what `bash <engine>
@@ -369,6 +382,7 @@ row_is() {
     else
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-22s got=%s want=no-row  (%s)\n' "$label" "$got" "$why"
+      return 1
     fi
   elif [ "$got" = "$want" ]; then
     printf '  ok    %-22s %s  (%s)\n' "$label" "$got" "$why"
@@ -376,6 +390,7 @@ row_is() {
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s got=%s want=%s  (%s)\n' "$label" "${got:-<none>}" "$want" "$why"
     printf '%s\n' "$OUT" | sed 's/^/          | /'
+    return 1
   fi
 }
 
@@ -394,6 +409,7 @@ row_has() {
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s %s MISSING  (%s)\n' "$label" "$want" "$why"
     printf '%s\n' "$OUT" | sed 's/^/          | /'
+    return 1
   fi
 }
 row_lacks() {
@@ -404,6 +420,7 @@ row_lacks() {
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s %s present but must not be  (%s)\n' "$label" "$bad" "$why"
     printf '%s\n' "$OUT" | sed 's/^/          | /'
+    return 1
   else
     printf '  ok    %-22s no %s  (%s)\n' "$label" "$bad" "$why"
   fi
@@ -783,12 +800,12 @@ row_is "Entry SH-REAL"  CLOSE-CANDIDATE "OVER-FIRE CONTROL: a plain non-zero exi
 # residue used to be a NOTE in the CLOSE-CANDIDATE detail telling the operator to check the paths
 # themselves. SH-REAL above is the paired control: a non-zero exit whose receipt names no
 # consumer-relative path at all must still CLOSE, or this guard pins every sh entry open.
-row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a MOVED subject must not read as a fix"
+row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a MOVED subject must not read as a fix"; R_subjgone=$?
 # A DISTRIBUTION PATH IS NOT A CONSUMER SUBJECT. The pair with SH-SUBJECT-GONE is the whole
 # assertion: that entry names a consumer path that is genuinely absent and must stay flagged,
 # this one names a distribution path inside a rev-spec and must not be. An extractor that sees
 # neither passes the first arm alone; one that sees both passes the second alone.
-row_is "Entry SH-DIST-BARE-CORE" CLOSE-CANDIDATE "a bare \`core/scripts/<x>\` pathspec is a distribution path; the whitelist's first-character test is what keeps it out"
+row_is "Entry SH-DIST-BARE-CORE" CLOSE-CANDIDATE "a bare \`core/scripts/<x>\` pathspec is a distribution path; the whitelist's first-character test is what keeps it out"; R_distbare=$?
 # A `docs/` PATH AT A REF IS A DISTRIBUTION PATH TOO, AND `docs/` IS A CONSUMER PREFIX. Splitting
 # the rev-spec at its colon left `docs/zz-dist-only-a.md` standing, the whitelist admitted it, it is
 # absent on the consumer, and a receipt that works read as naming a missing subject. Five spellings
@@ -797,7 +814,7 @@ row_is "Entry SH-DIST-BARE-CORE" CLOSE-CANDIDATE "a bare \`core/scripts/<x>\` pa
 # OFTEN LACKS. `git clone` does not carry `.git/hooks/`, so the receipt exits non-zero for the
 # ABSENCE and the tip read it as a fix. Measured on the reference consumer: the 0.471.0→0.479.0
 # rehearsal recorded 2 CLOSE-CANDIDATE where the live run correctly reported 1.
-row_is "Entry SH-GITHOOK-GONE" NEEDS-REVIEW "an absent \`.git/hooks/<x>\` subject is a missing subject like any other — the tip skipped the token and read the absence as an absorption"
+row_is "Entry SH-GITHOOK-GONE" NEEDS-REVIEW "an absent \`.git/hooks/<x>\` subject is a missing subject like any other — the tip skipped the token and read the absence as an absorption"; R_githook=$?
 # THE TWO OVER-FIRE CONTROLS FOR THE WIDENING, and they are what keep it from being the
 # bare-root-dotfile form measured as broken. A bare `.git` is a DIRECTORY on any real consumer, so
 # admitting it puts a token nobody wrote into the accusing population; the tokenizer strips `*`
@@ -805,7 +822,7 @@ row_is "Entry SH-GITHOOK-GONE" NEEDS-REVIEW "an absent \`.git/hooks/<x>\` subjec
 # turns every `*.ext` in every receipt into a spurious NEEDS-REVIEW — which SUPPRESSES A REAL
 # CLOSE. The surviving control, the glob-bare-extension entry below, must still close, or the fix is
 # the wider one this entry exists to refuse.
-row_is "Entry SH-GLOB-BARE-EXT" CLOSE-CANDIDATE "\`core/hooks/*.sh\` tokenizes to the bare \`.sh\`, which carries no glob character for the glob guard to refuse — admitting it files every \`*.ext\` receipt as unresolved"
+row_is "Entry SH-GLOB-BARE-EXT" CLOSE-CANDIDATE "\`core/hooks/*.sh\` tokenizes to the bare \`.sh\`, which carries no glob character for the glob guard to refuse — admitting it files every \`*.ext\` receipt as unresolved"; R_globext=$?
 
 row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"
 
@@ -856,7 +873,7 @@ ASSERTIONS=$((ASSERTIONS + 1))
 vrow="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /Entry V/ {print $3; exit}')"
 case "$vrow" in
   *'absorbed this at 0.102.0'*)
-    printf '  ok    %-22s names 0.102.0  (the release CONTAINING the fix, not the blob at it)\n' "release-containing" ;;
+    printf -v _m '  ok    %-22s names 0.102.0  (the release CONTAINING the fix, not the blob at it)' "release-containing"; ok "$_m"; B_relcont=1 ;;
   *'absorbed this at 0.101.0'*)
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s names 0.101.0 — the VERSION blob AT the absorbing commit, one release early\n' "release-containing" ;;
@@ -952,7 +969,7 @@ else
     printf '  FAIL  %-22s the mutant also moved Entry B — the fix-is-release shape is not being held fixed\n' "mutation-version"
   else
     lr_mx "mutation-version" "$MUTV"
-    printf '  ok    %-22s the blob read regresses Entry V to 0.101.0 and leaves Entry B at 0.101.0\n' "mutation-version"
+    printf -v _m '  ok    %-22s the blob read regresses Entry V to 0.101.0 and leaves Entry B at 0.101.0' "mutation-version"; mutant_killed "${B_relcont:-0}" mutation-version "$_m"
   fi
 fi
 
@@ -1118,7 +1135,7 @@ ASSERTIONS=$((ASSERTIONS + 1))
 bad5="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null)"; b5_rc=$?
 bad5_n="$(printf '%s\n' "$bad5" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
 if [ "$bad5_n" -eq 1 ] && grep -qF 'nonexistent-ledger.md' <<<"$bad5"; then
-  printf '  ok    %-22s one INPUT-UNRESOLVED row naming the arg-5 path\n' "bad-arg5"
+  printf -v _m '  ok    %-22s one INPUT-UNRESOLVED row naming the arg-5 path' "bad-arg5"; ok "$_m"; B_bad5=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s got %s INPUT-UNRESOLVED row(s); an unreadable arg-5 path must not read as a clean corpus\n' "bad-arg5" "$bad5_n"
@@ -1135,7 +1152,7 @@ ASSERTIONS=$((ASSERTIONS + 1))
 swapped="$(lr_eng "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; sw_rc=$?
 sw_n="$(printf '%s\n' "$swapped" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
 if [ "$sw_n" -eq 1 ]; then
-  printf '  ok    %-22s swapped args report, though the ledger path is the DEFAULT one\n' "swapped-args"
+  printf -v _m '  ok    %-22s swapped args report, though the ledger path is the DEFAULT one' "swapped-args"; ok "$_m"; B_swapped=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s got %s INPUT-UNRESOLVED row(s) — an arg-5-only check cannot see this case\n' "swapped-args" "$sw_n"
@@ -1173,7 +1190,7 @@ if [ "$rel_n" -eq 0 ] || [ "$abs_n" -eq 0 ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s one side produced NO rows (rel=%s abs=%s) — two empty sets agree, which proves nothing\n' "consumer-form" "$rel_n" "$abs_n"
 elif [ "$rel_out" = "$abs_out" ]; then
-  printf '  ok    %-22s %s rows, byte-identical whether the root arrives as "." or absolute\n' "consumer-form" "$rel_n"
+  printf -v _m '  ok    %-22s %s rows, byte-identical whether the root arrives as "." or absolute' "consumer-form" "$rel_n"; ok "$_m"; B_consform=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the ROOT ARGUMENT decided a verdict:\n' "consumer-form"
@@ -1229,7 +1246,7 @@ else
     printf '  FAIL  %-22s the mutant also moved the ABSOLUTE run, so it is not a clean mutation of the normalization alone\n' "mutation-normalize"
   else
     lr_mx "mutation-normalize" "$MUTN"
-    printf '  ok    %-22s without normalization "." produces a FALSE CLOSE on SH-CWD, and nothing else moves\n' "mutation-normalize"
+    printf -v _m '  ok    %-22s without normalization "." produces a FALSE CLOSE on SH-CWD, and nothing else moves' "mutation-normalize"; mutant_killed "${B_consform:-0}" mutation-normalize "$_m"
   fi
 fi
 
@@ -1282,7 +1299,7 @@ else
     printf '  FAIL  %-22s the mutant moved SH-GITHOOK-GONE to %s — it did not widen the `.git/` alternation with the others, so this mutation is a PARTIAL one and its kill is not the anchoring\n' "mutation-prefix" "${mp_hook:-<none>}"
   else
     lr_mx "mutation-prefix" "$MUTP"
-    printf '  ok    %-22s a substring prefix test reads a consumer subject out of a bare distribution pathspec, and only SH-DIST-BARE-CORE moves\n' "mutation-prefix"
+    printf -v _m '  ok    %-22s a substring prefix test reads a consumer subject out of a bare distribution pathspec, and only SH-DIST-BARE-CORE moves' "mutation-prefix"; mutant_killed "$([ "$R_distbare" = 0 ] && echo 1)" mutation-prefix "$_m"
   fi
 fi
 
@@ -1317,7 +1334,7 @@ else
     printf '  FAIL  %-22s the mutant also moved SH-SUBJECT-GONE to %s — it blinded the extractor instead of removing one prefix\n' "mutation-nogit" "${mg2_gone:-<none>}"
   else
     lr_mx "mutation-nogit" "$MUTG"
-    printf '  ok    %-22s without the `.git/` prefix an absent hook subject reads CLOSE-CANDIDATE — the measured false close, reproduced — while SH-SUBJECT-GONE is unmoved\n' "mutation-nogit"
+    printf -v _m '  ok    %-22s without the `.git/` prefix an absent hook subject reads CLOSE-CANDIDATE — the measured false close, reproduced — while SH-SUBJECT-GONE is unmoved' "mutation-nogit"; mutant_killed "$([ "$R_githook" = 0 ] && echo 1)" mutation-nogit "$_m"
   fi
 fi
 
@@ -1357,7 +1374,7 @@ else
     printf '  FAIL  %-22s the wider mutant ALSO lost SH-GITHOOK-GONE (%s) — it broke the whitelist rather than widening it, so its two kills above are not about the dotfile arm\n' "mutation-dotfile" "${md_hook:-<none>}"
   else
     lr_mx "mutation-dotfile" "$MUTD"
-    printf '  ok    %-22s a bare-root-dotfile arm flips BOTH over-fire controls to NEEDS-REVIEW — every `*.ext` receipt filed as unresolved, suppressing real closes — while the motivating hook case is unmoved\n' "mutation-dotfile"
+    printf -v _m '  ok    %-22s a bare-root-dotfile arm flips BOTH over-fire controls to NEEDS-REVIEW — every `*.ext` receipt filed as unresolved, suppressing real closes — while the motivating hook case is unmoved' "mutation-dotfile"; mutant_killed "$([ "$R_globext" = 0 ] && echo 1)" mutation-dotfile "$_m"
   fi
 fi
 
@@ -1392,7 +1409,7 @@ else
     printf '  FAIL  %-22s the mutant produced no rows on a GOOD invocation either, so it is not a clean mutation of the bail alone\n' "mutation-bail"
   else
     lr_mx "mutation-bail" "$MUTL"
-    printf '  ok    %-22s the unconditional bail silences both caller errors and nothing else (%s rows on a good run)\n' "mutation-bail" "$ml_ok"
+    printf -v _m '  ok    %-22s the unconditional bail silences both caller errors and nothing else (%s rows on a good run)' "mutation-bail" "$ml_ok"; mutant_killed "$(( ${B_bad5:-0} && ${B_swapped:-0} ))" mutation-bail "$_m"
   fi
 fi
 
@@ -1971,7 +1988,7 @@ lr_unit_close_anchor() {
 # STRUCTURE — an annotation opens its line (bare, or opening a bold span, optionally behind the
 # <br> the entry bodies use); a mention sits inside a sentence.
 row_is "PROSE-MENTIONS-THE-VOCABULARY" STILL-LIVE \
-  "an OPEN entry quoting the close markers in prose, a blockquote and a code span still reports"
+  "an OPEN entry quoting the close markers in prose, a blockquote and a code span still reports"; R_prose=$?
 
 # MUTATION — restore the unanchored predicate. The prose entry must vanish, and it must be the
 # ONLY thing that changes: an anchor that also drops a real close is a different bug.
@@ -2028,7 +2045,7 @@ else
     printf '  FAIL  %-22s the mutant also un-closed a REAL annotation, so it is not a clean mutation of the anchor alone\n' "mutation"
   else
     lr_mx "mutation" "$MUTD"
-    printf '  ok    %-22s unanchoring swallows the prose entry and nothing else\n' "mutation"
+    printf -v _m '  ok    %-22s unanchoring swallows the prose entry and nothing else' "mutation"; mutant_killed "$([ "$R_prose" = 0 ] && echo 1)" mutation "$_m"
   fi
 fi
 
@@ -2043,7 +2060,7 @@ lr_unit_every_receipt() {
 #
 # This pair disagrees on purpose: a close and a still-live in one entry. The scalar kept the close.
 row_has "PC-FIXTURE-TWO-RECEIPTS" STILL-LIVE \
-  "receipt 1 of 2 is genuinely live and must not be swallowed by the close that follows it"
+  "receipt 1 of 2 is genuinely live and must not be swallowed by the close that follows it"; R_tworcpt=$?
 
 # The ordinal has to be on the row, or two rows for one entry are unattributable.
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -2085,7 +2102,7 @@ else
   ms_close="$(printf '%s\n' "$ms" | awk -F'\t' '$2 ~ /TWO-RECEIPTS/ && $1 == "CLOSE-CANDIDATE" {c++} END{print c+0}')"
   if [ "$ms_live" -eq 0 ] && [ "$ms_close" -gt 0 ]; then
     lr_mx "mutation-scalar" "$MUTS"
-    printf '  ok    %-22s the scalar handoff swallows the live receipt and keeps the close\n' "mutation-scalar"
+    printf -v _m '  ok    %-22s the scalar handoff swallows the live receipt and keeps the close' "mutation-scalar"; mutant_killed "$([ "$R_tworcpt" = 0 ] && echo 1)" mutation-scalar "$_m"
   elif [ "$ms_live" -ne 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant still emitted the live receipt, so the assertions above are vacuous\n' "mutation-scalar"
@@ -2109,7 +2126,7 @@ lr_unit_name_signal() {
 row_has "PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK" STILL-LIVE \
   "the receipt's own verdict still prints — the pair IS the finding, and suppressing either half loses a fact"
 row_has "PC-FIXTURE-NAMED-MANUAL" NAMED-UPSTREAM \
-  "fires for verify: manual, the shape with no other mechanical signal at all"
+  "fires for verify: manual, the shape with no other mechanical signal at all"; R_namedmanual=$?
 row_has "PC-FIXTURE-NAMED-MANUAL" HAND-REVIEW \
   "manual is still a declaration, not downgraded by the extra row"
 
@@ -2118,7 +2135,7 @@ row_has "PC-FIXTURE-NAMED-MANUAL" HAND-REVIEW \
 row_lacks "PC-FIXTURE-HEADING-ABSORBED" NAMED-UPSTREAM \
   "id-shaped but never named upstream -> silent, so the signal is a discriminator"
 row_lacks "Entry A" NAMED-UPSTREAM \
-  "prose label quoted verbatim in the history -> the id-shape guard refuses to join on words"
+  "prose label quoted verbatim in the history -> the id-shape guard refuses to join on words"; R_a_nonamed=$?
 
 } # end lr_unit_name_signal
 lr_unit_short_id() {
@@ -2195,7 +2212,7 @@ else
   case "$s902_row" in
     *"in 2 commits, ALL of them:"*"and 2 entries in this ledger carry it"*)
       if [ "$_miss" -eq 0 ]; then
-        printf '  ok    %-22s PC-S902 names BOTH citing commits and the commit count, and keeps the entry-count phrase ledger-rotate parses\n' "ambiguous-lists-all"
+        printf -v _m '  ok    %-22s PC-S902 names BOTH citing commits and the commit count, and keeps the entry-count phrase ledger-rotate parses' "ambiguous-lists-all"; ok "$_m"; B_amb=1
       else
         FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S902 says two commits but lacks %s of their shas\n' "ambiguous-lists-all" "$_miss"
       fi ;;
@@ -2233,7 +2250,7 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
    && [ "$(reach_kind "$rc_ctl" PC-S952-MERGE-NAMING)" = NAMED-UPSTREAM ] \
    && [ "$(reach_kind "$rc_ctl" PC-S954-RELEASE-COMMIT-NAMING)" = NAMED-UPSTREAM ] \
    && grep -q "in 2 commits, ALL of them:" <<<"$rc_ctl"; then
-  printf '  ok    %-22s the UNMUTATED engine over the small ledger reproduces S950/S951/S952/S954 and the two-commit S902 row\n' "reach-control"
+  printf -v _m '  ok    %-22s the UNMUTATED engine over the small ledger reproduces S950/S951/S952/S954 and the two-commit S902 row' "reach-control"; ok "$_m"; B_reachctl=1
   # <tag> <anchor> <replacement> <entry> <kind it must take under the mutant> <what it proves>
   reach_case() {
     local _m _r _k
@@ -2242,7 +2259,7 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
     if [ -z "$_m" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY (anchor matched nothing or twice)\n' "mutation-$1"; return; fi
     _r="$(reach_rows "$_m")"; _k="$(reach_kind "$_r" "$4")"
     lr_mx "mutation-$1" "$_m"
-    if [ "$_k" = "$5" ]; then printf '  ok    %-22s %s\n' "mutation-$1" "$6"
+    if [ "$_k" = "$5" ]; then printf -v _m '  ok    %-22s %s' "mutation-$1" "$6"; mutant_killed "${B_reachctl:-0}" "mutation-$1" "$_m"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant, want %s — the arm cannot see it\n' "mutation-$1" "$4" "${_k:-<no row>}" "$5"; fi
   }
   reach_case reach-off "    *) printf 'docs' ;;" "    *) printf 'code' ;;" PC-S950-DOCS-ONLY-NAMING NAMED-UPSTREAM \
@@ -2271,7 +2288,7 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
     _v2="$(reach_kind "$_vr" PC-S952-MERGE-NAMING)"
     if [ "$_v4" = NAMED-UPSTREAM-DOCS-ONLY ] && [ "$_v0" = NAMED-UPSTREAM-DOCS-ONLY ] \
        && [ "$_v1" = NAMED-UPSTREAM ] && [ "$_v2" = NAMED-UPSTREAM ]; then
-      printf '  ok    %-22s %s\n' "mutation-reach-no-version" "without the VERSION conjunct the release-only naming reads docs-only, S954 is what sees it, and S950/S951/S952 keep their kinds"
+      printf -v _m '  ok    %-22s %s' "mutation-reach-no-version" "without the VERSION conjunct the release-only naming reads docs-only, S954 is what sees it, and S950/S951/S952 keep their kinds"; mutant_killed "${B_reachctl:-0}" mutation-reach-no-version "$_m"
     else
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-22s want S954 docs-only and S950/S951/S952 unchanged; read S954=%s S950=%s S951=%s S952=%s\n' "mutation-reach-no-version" "${_v4:-<no row>}" "${_v0:-<no row>}" "${_v1:-<no row>}" "${_v2:-<no row>}"
@@ -2288,7 +2305,7 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
   else
     _ar="$(reach_rows "$_am" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S902" {print $3; exit}')"
     case "$_ar" in
-      *"in one commit,"*"and 2 entries in this ledger carry it"*) printf '  ok    %-22s newest-only names one of PC-S902'"'"'s two citing commits, and ambiguous-lists-all is what sees it\n' "mutation-ambig-newest" ;;
+      *"in one commit,"*"and 2 entries in this ledger carry it"*) printf -v _m '  ok    %-22s newest-only names one of PC-S902'"'"'s two citing commits, and ambiguous-lists-all is what sees it' "mutation-ambig-newest"; mutant_killed "${B_amb:-0}" mutation-ambig-newest "$_m" ;;
       *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the newest-only mutant did not read as one commit: %s\n' "mutation-ambig-newest" "${_ar:-<no row>}" ;;
     esac
   fi
@@ -2354,7 +2371,7 @@ co_ctl_read="$(co_read "$co_ctl")"
 co_ctl_want=""; for _i in $CO_IDS; do co_ctl_want="$co_ctl_want $_i=$(co_expect "$_i")"; done; co_ctl_want="${co_ctl_want# }"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$co_ctl_read" = "$co_ctl_want" ]; then
-  printf '  ok    %-22s the UNMUTATED engine over the six-entry ledger reproduces every S955-S959 kind\n' "cited-control"
+  printf -v _m '  ok    %-22s the UNMUTATED engine over the six-entry ledger reproduces every S955-S959 kind' "cited-control"; ok "$_m"; B_coctl=1
   # <tag> <anchor> <replacement> <cell that must move> <kind it must take> <cells that must hold> <why>
   co_case() {
     local _m _r _k _h _bad=""
@@ -2364,7 +2381,7 @@ if [ "$co_ctl_read" = "$co_ctl_want" ]; then
     _r="$(co_rows "$_m")"; _k="$(co_kind "$_r" "$4")"
     for _h in $6; do [ "$(co_kind "$_r" "$_h")" = "$(co_expect "$_h")" ] || _bad="$_bad $_h=$(co_kind "$_r" "$_h")"; done
     lr_mx "mutation-$1" "$_m"
-    if [ "$_k" = "$5" ] && [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$1" "$7"
+    if [ "$_k" = "$5" ] && [ -z "$_bad" ]; then printf -v _m '  ok    %-22s %s' "mutation-$1" "$7"; mutant_killed "${B_coctl:-0}" "mutation-$1" "$_m"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant (want %s); cells that should hold but moved:%s\n' "mutation-$1" "$4" "${_k:-<no row>}" "$5" "${_bad:- none}"; fi
   }
   co_case filter-off \
@@ -2417,7 +2434,7 @@ co_failopen() { # <engine> -> S955's kind with the filter's git call failing, or
 ASSERTIONS=$((ASSERTIONS + 1))
 co_fo="$(co_failopen "$CLOSER")"
 if [ "$co_fo" = NAMED-UPSTREAM ]; then
-  printf '  ok    %-22s with the filter'"'"'s git call failing, S955 reads the pre-filter NAMED-UPSTREAM -- a tool error is never a CITED-ONLY row\n' "cited-fail-open"
+  printf -v _m '  ok    %-22s with the filter'"'"'s git call failing, S955 reads the pre-filter NAMED-UPSTREAM -- a tool error is never a CITED-ONLY row' "cited-fail-open"; ok "$_m"; B_cofo=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s with the filter'"'"'s git call failing S955 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "cited-fail-open" "${co_fo:-<no row>}"
@@ -2432,7 +2449,7 @@ else
   co_fok="$(co_failopen "$co_fom")"
   if [ "$co_fok" = NAMED-UPSTREAM-CITED-ONLY ]; then
     lr_mx "mutation-fail-closed" "$co_fom"
-    printf '  ok    %-22s a fallback returning EMPTY turns the git failure into a CITED-ONLY row, and cited-fail-open is what sees it\n' "mutation-fail-closed"
+    printf -v _m '  ok    %-22s a fallback returning EMPTY turns the git failure into a CITED-ONLY row, and cited-fail-open is what sees it' "mutation-fail-closed"; mutant_killed "${B_cofo:-0}" mutation-fail-closed "$_m"
   else
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s under the fail-closed mutant S955 read %s, want NAMED-UPSTREAM-CITED-ONLY\n' "mutation-fail-closed" "${co_fok:-<no row>}"
   fi
@@ -2625,8 +2642,9 @@ if [ "$os_ctl_read" != "$os_ctl_want" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the shipped engine over the S960-S970 world read {%s}, want {%s}; no mutant below is attributable\n' "off-subject-control" "$os_ctl_read" "$os_ctl_want"
   return 0
+else
+  printf -v _m '  ok    %-22s the shipped engine reproduces every S960-S970 kind: third class, over-expansion, untouched consumer path and listing cell OFF-SUBJECT; squash, branch and merge releases, second-path, touched consumer path, ambiguous basename and manual NAMED-UPSTREAM' "off-subject-control"; ok "$_m"; B_osctl=1
 fi
-printf '  ok    %-22s the shipped engine reproduces every S960-S970 kind: third class, over-expansion, untouched consumer path and listing cell OFF-SUBJECT; squash, branch and merge releases, second-path, touched consumer path, ambiguous basename and manual NAMED-UPSTREAM\n' "off-subject-control"
 # THE ROW TEXT NAMES THE SUBJECT, and a basename-resolved one by BOTH spellings.
 os_det() { printf '%s\n' "$os_ctl" | awk -F'\t' -v l="$1" '$1 == "NAMED-UPSTREAM-OFF-SUBJECT" && $2 == l {print $3; exit}'; }
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -2657,7 +2675,7 @@ os_lf() { # <engine> -> S969's kind with the subject listing failing, or BROKEN
 ASSERTIONS=$((ASSERTIONS + 1))
 os_lfk="$(os_lf "$CLOSER")"
 if [ "$os_lfk" = NAMED-UPSTREAM ]; then
-  printf '  ok    %-22s with the subject listing failing, S969 keeps the old kind NAMED-UPSTREAM -- a git error is never an OFF-SUBJECT row\n' "off-subject-listfail"
+  printf -v _m '  ok    %-22s with the subject listing failing, S969 keeps the old kind NAMED-UPSTREAM -- a git error is never an OFF-SUBJECT row' "off-subject-listfail"; ok "$_m"; B_oslf=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s with the subject listing failing S969 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "off-subject-listfail" "${os_lfk:-<no row>}"
@@ -2685,7 +2703,7 @@ os_case() {
   _r="$(os_rows "$_m")"; _k="$(os_kind "$_r" "$2")"
   for _h in $4; do [ "$(os_kind "$_r" "$_h")" = "$(os_expect "$_h")" ] || _bad="$_bad $_h=$(os_kind "$_r" "$_h")"; done
   lr_mx "mutation-$1" "$_m"
-  if [ "$_k" = "$3" ] && [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$1" "$5"
+  if [ "$_k" = "$3" ] && [ -z "$_bad" ]; then printf -v _m '  ok    %-22s %s' "mutation-$1" "$5"; mutant_killed "${B_osctl:-0}" "mutation-$1" "$_m"
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant (want %s); cells that should hold but moved:%s\n' "mutation-$1" "$2" "${_k:-<no row>}" "$3" "${_bad:- none}"; fi
 }
 os_case subject-off PC-S960-THIRD-CLASS NAMED-UPSTREAM \
@@ -2725,7 +2743,7 @@ else
   os_lfmk="$(os_lf "$os_lfm")"
   if [ "$os_lfmk" = NAMED-UPSTREAM-OFF-SUBJECT ]; then
     lr_mx "mutation-listing-fail-new-kind" "$os_lfm"
-    printf '  ok    %-22s a listing failure answered with the new kind turns a git error into an OFF-SUBJECT row, and off-subject-listfail is what sees it\n' "mutation-listing-fail-new-kind"
+    printf -v _m '  ok    %-22s a listing failure answered with the new kind turns a git error into an OFF-SUBJECT row, and off-subject-listfail is what sees it' "mutation-listing-fail-new-kind"; mutant_killed "${B_oslf:-0}" mutation-listing-fail-new-kind "$_m"
   else
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s under the mutant and the shim S969 read %s, want NAMED-UPSTREAM-OFF-SUBJECT (BROKEN = the shim never fired)\n' "mutation-listing-fail-new-kind" "${os_lfmk:-<no row>}"
   fi
@@ -3026,8 +3044,9 @@ if [ "$sb_ctl_read" != "$sb_ctl_want" ] || [ "$(sb_kind "$sb_ctl" PC-S1006-INCOM
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the shipped engine over S1001-S1041 read {%s} S1006=%s never=%s/%s, want {%s} S1006=%s never>=1/0; no mutant below is attributable\n' "sibling-control" "$sb_ctl_read" "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" "$sb_never_rows" "$sb_never_named" "$sb_ctl_want" "$NU"
   return 0
+else
+  printf -v _m '  ok    %-22s the shipped engine reproduces every S1001-S1041 kind; closed and archived siblings attribute nothing, the in-commit sibling stays NAMED-UPSTREAM and the never-named control has a row and no NAMED- row' "sibling-control"; ok "$_m"; B_sbctl=1
 fi
-printf '  ok    %-22s the shipped engine reproduces every S1001-S1041 kind; closed and archived siblings attribute nothing, the in-commit sibling stays NAMED-UPSTREAM and the never-named control has a row and no NAMED- row\n' "sibling-control"
 # THE ROW NAMES ONLY THE SIBLING WHOSE ANCHOR SAT ON THE CHANGED LINE.
 ASSERTIONS=$((ASSERTIONS + 1))
 sb_det="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$1 == "NAMED-UPSTREAM-SIBLING-ATTRIBUTED" && $2 == "PC-S1041-OFFENDER-OPEN" {print $3; exit}')"
@@ -3092,7 +3111,7 @@ sb_score() {
       [ "$(sb_kind "$_r" "$_h")" = "$(sb_expect "$_h")" ] || _bad="$_bad $_h=$(sb_kind "$_r" "$_h")"
     done
     lr_mx "mutation-$_t" "$_d"
-    if [ "$_k" = "$_want" ] && [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$_t" "$(cat "$_d/why")"
+    if [ "$_k" = "$_want" ] && [ -z "$_bad" ]; then printf -v _m '  ok    %-22s %s' "mutation-$_t" "$(cat "$_d/why")"; mutant_killed "${B_sbctl:-0}" "mutation-$_t" "$_m"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant (want %s); cells that should hold but moved:%s\n' "mutation-$_t" "$_cell" "${_k:-<no row>}" "$_want" "${_bad:- none}"; fi
   done
 }
@@ -3251,7 +3270,7 @@ else
   U_S="$(u_score "$CLOSER")"
   ASSERTIONS=$((ASSERTIONS + 1))
   if [ "$U_S" = "R R R R R" ]; then
-    printf '  ok    %-22s missing blob, missing subtree, unread blob behind a cached has, unread base blob, unread VERSION: all refused (%s)\n' "unreadable-refused" "$U_S"
+    printf -v _m '  ok    %-22s missing blob, missing subtree, unread blob behind a cached has, unread base blob, unread VERSION: all refused (%s)' "unreadable-refused" "$U_S"; ok "$_m"; B_unread=1
   else
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s want R R R R R (blob tree cached base ver), got %s\n' "unreadable-refused" "$U_S"
   fi
@@ -3276,7 +3295,7 @@ else
     fi
     _s="$(u_score "$_d/ledger-reverify.sh")"
     lr_mx "mutation-$1" "$_d"
-    if [ "$_s" = "$4" ]; then printf '  ok    %-22s %s (%s)\n' "mutation-$1" "$5" "$_s"
+    if [ "$_s" = "$4" ]; then printf -v _m '  ok    %-22s %s (%s)' "mutation-$1" "$5" "$_s"; mutant_killed "${B_unread:-0}" "mutation-$1" "$_m"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s want %s, got %s — the layer is not what its world sees\n' "mutation-$1" "$4" "$_s"; fi
   }
   u_mut unread-has '      if [ "$_hp" -eq 125 ]; then' '      if [ "$_hp" -eq 9999 ]; then' "R NEEDS-REVIEW R R R" \
@@ -3314,7 +3333,7 @@ else
   mg_out="$(lr_eng "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$UR_LED" 2>&1)"
   if printf '%s\n' "$mg_out" | awk -F'\t' '$2 ~ /Entry A/ && $1 == "NAMED-UPSTREAM" {f=1} END{exit !f}'; then
     lr_mx "mutation-guard" "$MUTG"
-    printf '  ok    %-22s without the guard a prose label word-matches — the guard is load-bearing\n' "mutation-guard"
+    printf -v _m '  ok    %-22s without the guard a prose label word-matches — the guard is load-bearing' "mutation-guard"; mutant_killed "$([ "$R_a_nonamed" = 0 ] && echo 1)" mutation-guard "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s guardless closer did NOT match the prose label, so row_lacks above is vacuous\n' "mutation-guard"
@@ -3375,7 +3394,7 @@ else
     printf '  FAIL  %-22s the mutant also lost the receipt verdict, so it is not a clean mutation of the search bound alone\n' "mutation-bound"
   else
     lr_mx "mutation-bound" "$MUTB"
-    printf '  ok    %-22s bounding the search loses the pre-base absorption and nothing else\n' "mutation-bound"
+    printf -v _m '  ok    %-22s bounding the search loses the pre-base absorption and nothing else' "mutation-bound"; mutant_killed "$([ "$R_namedmanual" = 0 ] && echo 1)" mutation-bound "$_m"
   fi
 fi
 
@@ -3503,7 +3522,7 @@ if [ "$m904" = NOROW ] || [ "$m905" = NOROW ] || [ "$m906" = NOROW ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s a NAMED-UPSTREAM row is MISSING (904=%s 905=%s 906=%s) — a row that never appeared hides nothing and reports nothing, so this arm cannot discriminate\n' "named-lists-all" "$m904" "$m905" "$m906"
 elif [ "$m904" -eq 0 ] && [ "$m905" -eq 0 ] && [ "$m906" -eq 0 ]; then
-  printf '  ok    %-22s every naming sha is on its row — 3 for PC-S904 (the middle one included), 2 for PC-S906, 1 for PC-S905\n' "named-lists-all"
+  printf -v _m '  ok    %-22s every naming sha is on its row — 3 for PC-S904 (the middle one included), 2 for PC-S906, 1 for PC-S905' "named-lists-all"; ok "$_m"; B_namedall=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s naming shas ABSENT from their rows: PC-S904 %s of 3, PC-S906 %s of 2, PC-S905 %s of 1. A commit the row does not name is a commit the operator never reads\n' "named-lists-all" "$m904" "$m906" "$m905"
@@ -3603,7 +3622,7 @@ elif [ "$(named_missing "$ma_out" "$s905_id")" != "0" ]; then
   printf '  FAIL  %-22s the mutant also dropped the single-commit id PC-S905, so it broke the search instead of truncating it\n' "mutation-named-head"
 elif [ "$(named_missing "$ma_out" "$s906_id")" = "1" ] && named_has_sha "$ma_out" "$s906_id" "$s906_new" ; then
   lr_mx "mutation-named-head" "$(dirname "$DIST")/mut-named-head"
-  printf '  ok    %-22s newest-only: PC-S906 keeps %s and loses %s, PC-S905 unmoved — the arm sees a dropped sha\n' "mutation-named-head" "$s906_new" "$s906_old"
+  printf -v _m '  ok    %-22s newest-only: PC-S906 keeps %s and loses %s, PC-S905 unmoved — the arm sees a dropped sha' "mutation-named-head" "$s906_new" "$s906_old"; mutant_killed "${B_namedall:-0}" mutation-named-head "$_m"
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s newest-only left PC-S906 missing %s sha(s) and newest-present=%s (want 1 and yes) — named-lists-all cannot see an election\n' \
@@ -3623,7 +3642,7 @@ elif [ "$(named_missing "$mb2_out" "$s905_id")" != "0" ]; then
   printf '  FAIL  %-22s the mutant also dropped the single-commit id PC-S905, so it broke the search instead of truncating it\n' "mutation-named-tail"
 elif [ "$(named_missing "$mb2_out" "$s906_id")" = "1" ] && named_has_sha "$mb2_out" "$s906_id" "$s906_old" ; then
   lr_mx "mutation-named-tail" "$(dirname "$DIST")/mut-named-tail"
-  printf '  ok    %-22s oldest-only (the shipped defect): PC-S906 keeps %s and loses %s, PC-S905 unmoved\n' "mutation-named-tail" "$s906_old" "$s906_new"
+  printf -v _m '  ok    %-22s oldest-only (the shipped defect): PC-S906 keeps %s and loses %s, PC-S905 unmoved' "mutation-named-tail" "$s906_old" "$s906_new"; mutant_killed "${B_namedall:-0}" mutation-named-tail "$_m"
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s oldest-only left PC-S906 missing %s sha(s) and oldest-present=%s (want 1 and yes)\n' \
@@ -3647,7 +3666,7 @@ elif [ "$(named_missing "$mc2_out" "$s906_id")" != "0" ] || [ "$(named_missing "
     "mutation-named-maxcount" "$(named_missing "$mc2_out" "$s906_id")" "$(named_missing "$mc2_out" "$s905_id")"
 elif [ "$(named_missing "$mc2_out" "$s904_id")" = "1" ] && ! named_has_sha "$mc2_out" "$s904_id" "$s904_old" ; then
   lr_mx "mutation-named-maxcount" "$(dirname "$DIST")/mut-named-maxcount"
-  printf '  ok    %-22s truncating at two loses PC-S904'"'"'s oldest naming commit %s while PC-S906 and PC-S905 do not move — only n>2 can see this\n' "mutation-named-maxcount" "$s904_old"
+  printf -v _m '  ok    %-22s truncating at two loses PC-S904'"'"'s oldest naming commit %s while PC-S906 and PC-S905 do not move — only n>2 can see this' "mutation-named-maxcount" "$s904_old"; mutant_killed "${B_namedall:-0}" mutation-named-maxcount "$_m"
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s PC-S904 lost %s sha(s) under a two-commit truncation (want 1, and it must be the oldest %s) — the n>2 half of the arm is vacuous\n' \
@@ -3676,7 +3695,7 @@ elif [ "$(named_missing "$md2_out" "$s906_id")" != "0" ] || [ "$(named_missing "
 elif [ "$(named_missing "$md2_out" "$s904_id")" = "1" ] && ! named_has_sha "$md2_out" "$s904_id" "$s904_mid" \
      && named_has_sha "$md2_out" "$s904_id" "$s904_new" && named_has_sha "$md2_out" "$s904_id" "$s904_old" ; then
   lr_mx "mutation-named-twoends" "$(dirname "$DIST")/mut-named-twoends"
-  printf '  ok    %-22s the two-ends election hides exactly the ABSORBING commit %s while advertising the withdrawal %s and the handoff %s — PC-S906 and PC-S905 do not move\n' "mutation-named-twoends" "$s904_mid" "$s904_new" "$s904_old"
+  printf -v _m '  ok    %-22s the two-ends election hides exactly the ABSORBING commit %s while advertising the withdrawal %s and the handoff %s — PC-S906 and PC-S905 do not move' "mutation-named-twoends" "$s904_mid" "$s904_new" "$s904_old"; mutant_killed "${B_namedall:-0}" mutation-named-twoends "$_m"
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s PC-S904 lost %s sha(s) under the two-ends election and middle-present=%s (want 1 missing, and it must be the middle %s) — the arm is not watching the commit that did the work\n' \
@@ -3742,7 +3761,7 @@ fi
 row_lacks "PC-FIXTURE-COLON-CONTROL" ENTRY-SWALLOWED \
   "a normal entry in the same section stays silent"
 row_lacks "a-real-entry.sh" ENTRY-SWALLOWED \
-  "a PROSE-titled entry legitimately carrying a receipt stays silent — the measured 6-of-7 false-positive class"
+  "a PROSE-titled entry legitimately carrying a receipt stays silent — the measured 6-of-7 false-positive class"; R_realentry=$?
 
 # MUTATION — drop the colon discriminator. The prose-titled control must then be reported,
 # which is the exact false-positive set that killed the earlier predicate. Nothing else changes.
@@ -3779,7 +3798,7 @@ else
   mc_tp="$(printf '%s\n' "$mc_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /The derivation/{f=1} END{print f+0}')"
   if [ "$mc_fp" = 1 ] && [ "$mc_tp" = 1 ]; then
     lr_mx "mutation-colon" "$MUTC"
-    printf '  ok    %-22s without the colon test a prose-titled entry is falsely reported — it is load-bearing\n' "mutation-colon"
+    printf -v _m '  ok    %-22s without the colon test a prose-titled entry is falsely reported — it is load-bearing' "mutation-colon"; mutant_killed "$([ "$R_realentry" = 0 ] && echo 1)" mutation-colon "$_m"
   elif [ "$mc_tp" != 1 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant lost the genuine colon row too, so it is not a clean mutation of the colon test alone\n' "mutation-colon"
@@ -3812,12 +3831,12 @@ fi
 # reports 11 rows on the reference consumer's live ledger; the conjunction reports 1. These
 # three are the classes the conjunction subtracts, and each is a REAL entry.
 row_lacks "legacy-entry.sh" ENTRY-SWALLOWED \
-  "a real id-less entry below a CLOSED one stays silent: a closed entry emits no row BY DESIGN, so 'no row above' is true of every entry that follows a close"
+  "a real id-less entry below a CLOSED one stays silent: a closed entry emits no row BY DESIGN, so 'no row above' is true of every entry that follows a close"; R_legacysw=$?
 
 # ...and that last one is a REAL entry, so it must still report its own verdict. A silence
 # bought by the entry disappearing from the classifier is not the silence being asserted.
 row_is "PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0" STILL-LIVE \
-  "and it is classified normally — the id rule keeps it visible rather than merely unreported"
+  "and it is classified normally — the id rule keeps it visible rather than merely unreported"; R_idpunct=$?
 
 # MUTATION — the ID RULE'S ANCHOR. `idshape()` required `^[A-Z0-9-]+$`: a FULL-STRING match
 # that admits neither `_` nor `.`. Restoring it makes a real entry read as an annotation and
@@ -3859,7 +3878,7 @@ else
     printf '  FAIL  %-22s the mutated lib.sh broke the classifier outright (Entry B lost its verdict), so its silence is not attributable\n' "mutation-idrule"
   elif [ "$mi_hit" = 1 ]; then
     lr_mx "mutation-idrule" "$MUTI"
-    printf '  ok    %-22s the anchored id rule reads a real _-bearing entry as an annotation — the fix is load-bearing\n' "mutation-idrule"
+    printf -v _m '  ok    %-22s the anchored id rule reads a real _-bearing entry as an annotation — the fix is load-bearing' "mutation-idrule"; mutant_killed "$([ "$R_idpunct" = 0 ] && echo 1)" mutation-idrule "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s restoring the anchored id rule did NOT misread the _-bearing entry, so the id assertion is vacuous\n' "mutation-idrule"
@@ -3892,7 +3911,7 @@ else
     printf '  FAIL  %-22s the mutant lost the genuine no-colon row too, so it is not a clean revert of the clause alone\n' "mutation-prevclosed"
   elif [ "$mp_hit" = 1 ]; then
     lr_mx "mutation-prevclosed" "$MUTP"
-    printf '  ok    %-22s without !prev_id_closed a real entry below a close is falsely reported — the clause is load-bearing\n' "mutation-prevclosed"
+    printf -v _m '  ok    %-22s without !prev_id_closed a real entry below a close is falsely reported — the clause is load-bearing' "mutation-prevclosed"; mutant_killed "$([ "$R_legacysw" = 0 ] && echo 1)" mutation-prevclosed "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s dropping !prev_id_closed did NOT re-fire the entry below the close, so that control is vacuous\n' "mutation-prevclosed"
@@ -3922,7 +3941,7 @@ else
     printf '  FAIL  %-22s the mutant lost the genuine no-colon row too, so it is not a clean revert of the clause alone\n' "mutation-prevhadv"
   elif [ "$mh_hit" = 1 ]; then
     lr_mx "mutation-prevhadv" "$MUTH"
-    printf '  ok    %-22s without !prev_id_hadv the benign direction is falsely reported — the clause is load-bearing\n' "mutation-prevhadv"
+    printf -v _m '  ok    %-22s without !prev_id_hadv the benign direction is falsely reported — the clause is load-bearing' "mutation-prevhadv"; mutant_killed "$([ "$R_realentry" = 0 ] && echo 1)" mutation-prevhadv "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s dropping !prev_id_hadv did NOT re-fire the benign case, so that control is vacuous\n' "mutation-prevhadv"
@@ -4231,7 +4250,7 @@ else
   mg_real="$(printf '%s\n' "$mg" | awk -F'\t' '$2 ~ /SH-REAL/ {print $1; exit}')"
   if [ "$mg_gone" = "CLOSE-CANDIDATE" ] && [ "$mg_real" = "CLOSE-CANDIDATE" ]; then
     lr_mx "mutation-subject" "$MUTG"
-    printf '  ok    %-22s guard removed: the moved subject proposes a close again, and only it moved\n' "mutation-subject"
+    printf -v _m '  ok    %-22s guard removed: the moved subject proposes a close again, and only it moved' "mutation-subject"; mutant_killed "$([ "$R_subjgone" = 0 ] && echo 1)" mutation-subject "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s guard removed but SH-SUBJECT-GONE=%s SH-REAL=%s (want CLOSE-CANDIDATE/CLOSE-CANDIDATE) — the assertion is vacuous or the mutant broke the whole branch\n' "mutation-subject" "${mg_gone:-none}" "${mg_real:-none}"
@@ -4340,7 +4359,7 @@ elif [ "$ue_nm" -eq 0 ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the PC-FIXTURE-UESCAPE-NEAR-MISS detail is not among the %s scanned rows, so a zero here does not establish that the pattern separates a real escape from an adjacent one\n' "detail-no-uescape" "$ue_rows"
 elif [ "$ue_off" -eq 0 ]; then
-  printf '  ok    %-22s no detail in %s rows (%s ENTRY-SWALLOWED) carries backslash-u-HHHH, and the near-miss row carrying a lone backslash, the token u2026 and a 3-hex backslash-u did NOT trip it\n' "detail-no-uescape" "$ue_rows" "$ue_sw"
+  printf -v _m '  ok    %-22s no detail in %s rows (%s ENTRY-SWALLOWED) carries backslash-u-HHHH, and the near-miss row carrying a lone backslash, the token u2026 and a 3-hex backslash-u did NOT trip it' "detail-no-uescape" "$ue_rows" "$ue_sw"; ok "$_m"; B_uesc=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s %s detail field(s) carry a literal backslash-u-HHHH escape. emit() prints a detail through a %%s conversion, which does not interpret escapes, so those six characters reach the operator and the byte-compared report verbatim. Write the character itself\n' "detail-no-uescape" "$ue_off"
@@ -4387,7 +4406,7 @@ else
   read -r mu_off mu_rows mu_sw mu_nm < <(printf '%s\n' "$mu_out" | uescape_scan)
   if [ "$mu_off" -gt 0 ] && [ "$mu_sw" -gt 0 ] && [ "$mu_nm" -gt 0 ]; then
     lr_mx "mutation-uescape" "$MUTE"
-    printf '  ok    %-22s the escape restored on the emitting line is REPORTED (%s offending detail(s)), while the mutant still emits %s ENTRY-SWALLOWED row(s) and the near-miss row — the arm fires, and it fired on the mutation rather than on wreckage\n' "mutation-uescape" "$mu_off" "$mu_sw"
+    printf -v _m '  ok    %-22s the escape restored on the emitting line is REPORTED (%s offending detail(s)), while the mutant still emits %s ENTRY-SWALLOWED row(s) and the near-miss row — the arm fires, and it fired on the mutation rather than on wreckage' "mutation-uescape" "$mu_off" "$mu_sw"; mutant_killed "${B_uesc:-0}" mutation-uescape "$_m"
   elif [ "$mu_sw" -eq 0 ] || [ "$mu_nm" -eq 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant emitted %s ENTRY-SWALLOWED row(s) and %s near-miss row(s) over %s rows — it broke the emitter rather than restoring the escape, so any verdict from it is about wreckage\n' "mutation-uescape" "$mu_sw" "$mu_nm" "$mu_rows"
@@ -5227,7 +5246,7 @@ elif [ -d "$tt_path" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the materialized tree %s SURVIVED the run — the EXIT trap did not remove it, and a pool twelve-wide leaks one per invocation with no symptom\n' "theirs-tree-cleanup" "$tt_path"
 else
-  printf '  ok    %-22s the materialized tree was removed on EXIT (recorded path is gone, and the receipt asserted it existed while running)\n' "theirs-tree-cleanup"
+  printf -v _m '  ok    %-22s the materialized tree was removed on EXIT (recorded path is gone, and the receipt asserted it existed while running)' "theirs-tree-cleanup"; ok "$_m"; B_ttclean=1
 fi
 # ...and a DISTRIBUTION path under $THEIRS_TREE is not a consumer subject. The SH-DIST-PATH
 # pairing one spelling along: an extractor reading `$THEIRS_TREE/core/...` as a missing consumer
@@ -5357,7 +5376,7 @@ lz_verdict() { # <closer>
   printf '  ok    %-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, this engine'"'"'s own theirs-tree count delta %+d) while its control row still reports\n' "theirs-tree-lazy" "$delta"
 }
 ASSERTIONS=$((ASSERTIONS + 1))
-lz_verdict "$CLOSER" || FAILURES=$((FAILURES + 1))
+lz_verdict "$CLOSER"; R_lazy=$?; [ "$R_lazy" = 0 ] || FAILURES=$((FAILURES + 1))
 # THE OTHER DIRECTION, AND WITHOUT IT THE ARM ABOVE IS SATISFIED BY A PREFIX NOTHING EVER USES.
 # A count that is always zero reads exactly like a count that is correctly zero, so the same
 # counter must be shown to RISE while a $THEIRS_TREE receipt is being evaluated. The receipt
@@ -5510,7 +5529,7 @@ else
     printf '  FAIL  %-22s the control row is gone too — the mutant broke the closer rather than the trap\n' "mutation-tt-no-cleanup"
   elif [ -n "$leak_path" ] && [ -d "$leak_path" ]; then
     lr_mx "mutation-tt-no-cleanup" "$dp_mut_leak"
-    printf '  ok    %-22s without the extended trap the tree SURVIVES (%s) — the cleanup arm reads the directory, which no row can\n' "mutation-tt-no-cleanup" "$leak_path"
+    printf -v _m '  ok    %-22s without the extended trap the tree SURVIVES (%s) — the cleanup arm reads the directory, which no row can' "mutation-tt-no-cleanup" "$leak_path"; mutant_killed "${B_ttclean:-0}" mutation-tt-no-cleanup "$_m"
     rm -rf "$leak_path"
   else
     FAILURES=$((FAILURES + 1))
@@ -5554,7 +5573,7 @@ else
     printf '%s\n' "$eg_ctl" | sed 's/^/          | /'
   elif grep -q 'could not be materialized' <<<"$eg_out"; then
     lr_mx "mutation-tt-eager" "$dp_mut_eager"
-    printf '  ok    %-22s eager materialization attempts a tree for a ledger that names none and refuses on the unresolvable ref, where the shipped closer attempts nothing — a verdict the cleanup trap cannot erase\n' "mutation-tt-eager"
+    printf -v _m '  ok    %-22s eager materialization attempts a tree for a ledger that names none and refuses on the unresolvable ref, where the shipped closer attempts nothing — a verdict the cleanup trap cannot erase' "mutation-tt-eager"; mutant_killed "$([ "$R_lazy" = 0 ] && echo 1)" mutation-tt-eager "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the gate was widened to every receipt and no materialization was attempted anyway — the laziness arm cannot fire\n' "mutation-tt-eager"
@@ -6008,13 +6027,13 @@ MS_R="$(dirname "$CLOSER")"
 ASSERTIONS=$((ASSERTIONS + 1))
 ms_v="$(memo_standalone "$MS_R")"
 case "$ms_v" in
-  ok*) printf '  ok    %-22s a standalone run with AI_DLC_RECONCILE_MEMO unset leaves 0 reconcile-memo.* in its private TMPDIR, while its control row still reports\n' "memo-standalone-clean" ;;
+  ok*) printf -v _m '  ok    %-22s a standalone run with AI_DLC_RECONCILE_MEMO unset leaves 0 reconcile-memo.* in its private TMPDIR, while its control row still reports' "memo-standalone-clean"; ok "$_m"; B_ms_std=1 ;;
   *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s — the memo directory outlives the run, and nothing in the row set can show it\n' "memo-standalone-clean" "$ms_v" ;;
 esac
 ASSERTIONS=$((ASSERTIONS + 1))
 mc_v="$(memo_composed "$MS_R")"
 case "$mc_v" in
-  ok*) printf '  ok    %-22s a sourcer that arms its own trap … EXIT after lib.sh, with a handler that calls exit 3, still removes the memo (%s)\n' "memo-trap-composed" "$mc_v" ;;
+  ok*) printf -v _m '  ok    %-22s a sourcer that arms its own trap … EXIT after lib.sh, with a handler that calls exit 3, still removes the memo (%s)' "memo-trap-composed" "$mc_v"; ok "$_m"; B_ms_comp=1 ;;
   *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s — a later trap X EXIT in a sourcer dropped lib.sh'"'"'s cleanup\n' "memo-trap-composed" "$mc_v" ;;
 esac
 # m-own — ownership NOT recorded at source time. The directory is built and exported, the
@@ -6029,7 +6048,7 @@ else
   case "$ms_k" in
     FAIL\ left=*)
       case "$ms_o" in
-        ok*) printf '  ok    %-22s dropping the source-time ownership record leaks (%s) and ONLY memo-standalone-clean moves\n' "mutation-memo-unowned" "$ms_k" ;;
+        ok*) printf -v _m '  ok    %-22s dropping the source-time ownership record leaks (%s) and ONLY memo-standalone-clean moves' "mutation-memo-unowned" "$ms_k"; mutant_killed "${B_ms_std:-0}" mutation-memo-unowned "$_m" ;;
         *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-trap-composed (%s), so the two arms are entangled\n' "mutation-memo-unowned" "$ms_o" ;;
       esac ;;
     *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s ownership was not recorded and memo-standalone-clean still read "%s" — the arm cannot fire\n' "mutation-memo-unowned" "$ms_k" ;;
@@ -6048,7 +6067,7 @@ else
   case "$ms_k" in
     FAIL\ left=*)
       case "$ms_o" in
-        ok*) printf '  ok    %-22s composing the caller'"'"'s exiting handler BEFORE the cleanup leaks (%s) and ONLY memo-trap-composed moves\n' "mutation-memo-handler-first" "$ms_k" ;;
+        ok*) printf -v _m '  ok    %-22s composing the caller'"'"'s exiting handler BEFORE the cleanup leaks (%s) and ONLY memo-trap-composed moves' "mutation-memo-handler-first" "$ms_k"; mutant_killed "${B_ms_comp:-0}" mutation-memo-handler-first "$_m" ;;
         *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-standalone-clean (%s), so the two arms are entangled\n' "mutation-memo-handler-first" "$ms_o" ;;
       esac ;;
     *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the handler ran before the cleanup and memo-trap-composed still read "%s" — the arm cannot fire\n' "mutation-memo-handler-first" "$ms_k" ;;
@@ -6098,13 +6117,13 @@ memo_errexit() { # <reconcile-dir> -> "ok ..." / "FAIL ..."
 ASSERTIONS=$((ASSERTIONS + 1))
 st_v="$(memo_subshell_trap "$MS_R")"
 case "$st_v" in
-  ok*) printf '  ok    %-22s x=$(trap : EXIT; :) in a sourcer leaves the main shell'"'"'s memo directory in place\n' "memo-subshell-trap" ;;
+  ok*) printf -v _m '  ok    %-22s x=$(trap : EXIT; :) in a sourcer leaves the main shell'"'"'s memo directory in place' "memo-subshell-trap"; ok "$_m"; B_ms_sub=1 ;;
   *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s\n' "memo-subshell-trap" "$st_v" ;;
 esac
 ASSERTIONS=$((ASSERTIONS + 1))
 ee_v="$(memo_errexit "$MS_R")"
 case "$ee_v" in
-  ok*) printf '  ok    %-22s under set -e a failing sourcer still runs its own EXIT handler with the original status (%s)\n' "memo-errexit-handler" "$ee_v" ;;
+  ok*) printf -v _m '  ok    %-22s under set -e a failing sourcer still runs its own EXIT handler with the original status (%s)' "memo-errexit-handler" "$ee_v"; ok "$_m"; B_ms_ee=1 ;;
   *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s\n' "memo-errexit-handler" "$ee_v" ;;
 esac
 # m-setguard — the set-time level guard removed. Only memo-subshell-trap may move.
@@ -6118,7 +6137,7 @@ else
   case "$ms_k" in
     FAIL*)
       case "$ms_o" in
-        ok*) printf '  ok    %-22s without the set-time guard a subshell trap deletes the parent memo (%s) and ONLY memo-subshell-trap moves\n' "mutation-memo-no-setguard" "$ms_k" ;;
+        ok*) printf -v _m '  ok    %-22s without the set-time guard a subshell trap deletes the parent memo (%s) and ONLY memo-subshell-trap moves' "mutation-memo-no-setguard" "$ms_k"; mutant_killed "${B_ms_sub:-0}" mutation-memo-no-setguard "$_m" ;;
         *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-errexit-handler (%s), so the two arms are entangled\n' "mutation-memo-no-setguard" "$ms_o" ;;
       esac ;;
     *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the guard was removed and memo-subshell-trap still read "%s" — the arm cannot fire\n' "mutation-memo-no-setguard" "$ms_k" ;;
@@ -6135,7 +6154,7 @@ else
   case "$ms_k" in
     FAIL*)
       case "$ms_o" in
-        ok*) printf '  ok    %-22s a bare cleanup call ends the handler under set -e (%s) and ONLY memo-errexit-handler moves\n' "mutation-memo-errexit-bare" "$ms_k" ;;
+        ok*) printf -v _m '  ok    %-22s a bare cleanup call ends the handler under set -e (%s) and ONLY memo-errexit-handler moves' "mutation-memo-errexit-bare" "$ms_k"; mutant_killed "${B_ms_ee:-0}" mutation-memo-errexit-bare "$_m" ;;
         *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-subshell-trap (%s), so the two arms are entangled\n' "mutation-memo-errexit-bare" "$ms_o" ;;
       esac ;;
     *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the && : was removed and memo-errexit-handler still read "%s" — the arm cannot fire\n' "mutation-memo-errexit-bare" "$ms_k" ;;
@@ -6322,8 +6341,9 @@ if [ "$idc_ctl" != "$(idc_want)" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s FIXTURE BROKEN -- the unmutated engine over the cut read {%s}, want {%s}; no mutant below is attributable\n' "id-class-control" "$idc_ctl" "$(idc_want)"
   return 0
+else
+  printf -v _m '  ok    %-22s the unmutated engine over the cut reproduces every id-class cell' "id-class-control"; ok "$_m"; B_idcctl=1
 fi
-printf '  ok    %-22s the unmutated engine over the cut reproduces every id-class cell\n' "id-class-control"
 # <tag> <moved cells "t=kind ..."> <why> then (<old> <new> <count>)... -> scored
 idc_case() {
   local _tag="$1" _mv="$2" _why="$3" _d _r _c _t _w _g _bad=""
@@ -6343,7 +6363,7 @@ idc_case() {
     [ "$_g" = "$_w" ] || _bad="$_bad $_t=$_g"
   done
   lr_mx "mutation-$_tag" "$_d"
-  if [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$_tag" "$_why"
+  if [ -z "$_bad" ]; then printf -v _m '  ok    %-22s %s' "mutation-$_tag" "$_why"; mutant_killed "${B_idcctl:-0}" "mutation-$_tag" "$_m"
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the cells did not move exactly as declared {%s}; off by:%s\n' "mutation-$_tag" "$_mv" "$_bad"; fi
 }
 IDC_NA_CASE='    PC-*|BL-*) : ;;'

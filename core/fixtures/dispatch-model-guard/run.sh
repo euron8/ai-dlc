@@ -18,8 +18,9 @@
 # unmutated guard gave in the same run. Per push a mutant runs its DECIDING cells (which must trip) and
 # its TWIN cells (which the measured matrix shows stay green, so the kill is confined to the deciding
 # cells). `--matrix` evaluates every cell of the drive and prints MATRIX rows (from matrix.sh) under the
-# cell names below. This recorded matrix plus the twin replaces the earlier exact-vector assertions, and
-# it is re-measured whenever an arm or a mutant is added or changed.
+# cell names below. This recorded matrix plus the twin replaces the earlier exact-vector assertions. The
+# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/dispatch-model-guard/run.sh --matrix
 # MUTANT-MATRIX effort-trigger decides=emit twins=- why=its drive has one cell (does the already-correct dispatch emit), and the mutation flips it
 # MUTANT-MATRIX prompt-append decides=pverb,pprose twins=- why=both cells of its drive (byte identity, effort prose) trip together by construction

@@ -33,8 +33,9 @@
 # names the cell that kills it (decides) and the cell it could plausibly co-trip but must leave GREEN (twins).
 # A plain run drives each mutant on its deciding cell and its twin only. W-MK also moves W2 (the run would
 # start at pass 1, not pass 4); W2 is a second arm that kills it, so it is not a twin and is measured only
-# by the REMEASURE command. The matrix is re-measured whenever an arm or a mutant is added or changed, by the
-# command below, run from the repo root. It drives every mutant on every cell and prints one MATRIX line each.
+# by the REMEASURE command. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires. Run the command below, from the repo root. It drives every mutant on every
+# cell and prints one MATRIX line each.
 # MUTANT-MATRIX W-MK decides=W1 twins=W3
 # MUTANT-MATRIX W-MA decides=W3 twins=W1
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-series-rung/run.sh --matrix

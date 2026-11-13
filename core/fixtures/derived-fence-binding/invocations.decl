@@ -1,6 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-126 *
+130 *
 2 scripts/validate-enforcement-map.sh
-92 inproc:scripts/validate-enforcement-map.sh
+96 inproc:scripts/validate-enforcement-map.sh
 # Re-measured on the combined tree (b255 F9 rebased onto 0.1073.0, c6bea60f4) from two agreeing counted hermetic-run.sh runs: 149 -> 126; the validate-enforcement-map.sh row unchanged.
 # inproc row (BL-982): measured by one counted hermetic-run.sh run on the r3 branch (origin/main 65bbbedad merged); the * and validate-enforcement-map.sh start rows unchanged.
+# BL-1000 (A51, A52, T-W12, A53: four more in-process --arms I75 cells): * 126 -> 130 and inproc 92 -> 96, from two agreeing counted hermetic-run.sh runs on 257-S1-g7 (base 0569579f4); the validate-enforcement-map.sh start row unchanged.

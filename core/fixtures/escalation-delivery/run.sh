@@ -26,8 +26,9 @@
 # TWIN are asserted and nothing else; with --matrix every arm is read and printed as one
 # `MATRIX <mutant> <arm> KILLED|GREEN` row per pair. The block below is the one source; a plain run refuses a
 # mutant with no row, and a cell that disagrees with its row is a failure. Arm tokens (slug of the FAIL line):
-# offender recipient errnote delivered nosuccess nullsuccess stringsuccess othertool legend legendfp
-# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh runs a fixture under `env -i` and
+# offender recipient errnote delivered nosuccess nullsuccess stringsuccess othertool legend legendfp. The
+# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# hermetic-run.sh runs a fixture under `env -i` and
 # forwards no argument, so the matrix is NOT reached through it; run.sh is invoked directly from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/escalation-delivery/run.sh --matrix
 # MUTANT-MATRIX typestrict decides=stringsuccess twins=nullsuccess

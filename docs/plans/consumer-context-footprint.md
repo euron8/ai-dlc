@@ -200,10 +200,9 @@ run deflected before step 2 and the operator dropped the lever there. Episode:
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
-   - PRE-SEED BEHIND THE GATE. Operator instruction at batch 256: owners queued behind a gate
-     pre-seed the verdict store at their final sha, as "a standard operating rule". The rule is
-     stated in full under that label in `docs/plans/graph-ledger-full-drain.md` action 0; follow it
-     there.
+   - BUNDLE BY DEFAULT. Ready releases are collected by the lead onto one integration branch and
+     gated once. The rule is stated in full under that label in
+     `docs/plans/graph-ledger-full-drain.md` action 0; follow it there.
 1. **No lever work remains. Do not start one.** B, C, D and E have shipped and A is dropped
    by operator ruling; each is recorded in the Status block above with its release. A session
    resuming here starts at action 0, then action 2.

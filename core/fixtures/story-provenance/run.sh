@@ -26,8 +26,8 @@
 #   b729  S1, S2, S3 (--series resolves p10 under each of the three prefix spellings)
 # PER PUSH a mutant is scored on its DECIDING cells, which must detect it, and its named TWIN, a cell of the same
 # family it could plausibly co-trip but must leave GREEN. `run.sh --matrix` scores each mutant on every cell of its
-# family and prints one MATRIX line per mutant. The matrix is re-measured whenever an arm or a mutant is added or
-# changed, by the REMEASURE command below, run from the repo root.
+# family and prints one MATRIX line per mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md
+# clause 2 ("One run per distinct state") requires. Run the REMEASURE command below, from the repo root.
 # MC decides two cells because its one fault, a content check that compares nothing, is aimed at both comparisons.
 # B729-b decides S1 and S2 because its one fault, the exclusion list removed, is aimed at both short spellings.
 # B729-c decides all three spellings because the last-in-glob-order resolver is wrong under every spelling.

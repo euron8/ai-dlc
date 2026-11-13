@@ -108,8 +108,8 @@ it was handed off:
   `docs/analysis/b236-release-train.md`. The action also carries the six train rules by label:
   RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS ("box load
   should not matter. Stop timing things that don't need to be timed."; one push at a time, no
-  slots), RELEASE TEXT IS PREPARED IN ADVANCE and PRE-SEED BEHIND THE GATE (owners queued behind
-  a gate pre-seed the verdict store at their final sha, "a standard operating rule"). Carried by
+  slots), RELEASE TEXT IS PREPARED IN ADVANCE and BUNDLE BY DEFAULT (ready releases are collected
+  onto one integration branch and gated once). Carried by
   **P14**, scoped to live plans.
 - **A dispatch action that FANS OUT by deliverable, with the adversary's contract pass BEFORE the
   builders spawn.** Operator instruction at batch 101, on a build measured at over an hour serial:

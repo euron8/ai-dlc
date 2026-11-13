@@ -11,8 +11,9 @@
 # count of I69 lines only (the mirror carries no .githooks/, VERSION or CHANGELOG, so the exit
 # code says nothing). m4 is the knock-out: I69's own err line disabled, count 0. `--matrix` runs
 # every mirror through the WHOLE validator and prints one MATRIX row per world naming every arm
-# that reported FAIL; the control row is the baseline. The matrix is re-measured whenever an arm
-# or a mutant is added or changed. Measured (control subtracted): every mutant adds exactly I69
+# that reported FAIL; the control row is the baseline. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Measured (control
+# subtracted): every mutant adds exactly I69
 # and nothing else, so I68 is green for each. The per-push run also selects I68 and fails any
 # mutant world on which it reports.
 # must name a file that carries it.

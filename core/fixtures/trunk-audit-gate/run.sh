@@ -39,8 +39,8 @@
 # verdict text its arm requires (the table in wspec below). PER PUSH a mutant is scored on its DECIDING world,
 # which must fail on the mutated copy, and its named TWIN, a different world it could plausibly co-trip but
 # must leave GREEN. `run.sh --matrix` drives each mutant over all twelve worlds and prints one MATRIX line per
-# mutant. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
-# command below, run from the repo root.
+# mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires. Run the REMEASURE command below, from the repo root.
 # also trips: M1-exit1-is-pass -> wedge-noexit,wedge-othersha
 # also trips: M2-exit2-is-pass -> shallow
 # MUTANT-MATRIX M1-exit1-is-pass decides=finding twins=nogenesis

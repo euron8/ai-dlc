@@ -45,8 +45,9 @@
 #     and of the whole unmutated copy. The twin proves the kill stays confined to the deciding arm.
 #   - `--matrix` runs every unit of every program and prints one MATRIX row per (program, arm) cell,
 #     `killed=yes` iff THAT arm tripped under THAT program.
-# The matrix is re-measured whenever an arm or a mutant is added or changed, from the repo root, by the
-# command on the MUTANT-MATRIX-REMEASURE line, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Run it from the repo root, by the command on the MUTANT-MATRIX-REMEASURE line, with
+# AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is
 # not run through hermetic-run.sh, which forwards no argument.
 # also trips beyond decides= (measured, --matrix at the committed tip): m-diff-rc A6; m-samp-rc A4b; a8-stable-filter A0; a9-counts-in-projection A0 A8
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/emit-report-refusal/run.sh --matrix

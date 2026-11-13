@@ -35,8 +35,9 @@
 # REFUSING cannot tell the arms apart (see the section on which arm refused). A mutant's row names the cell that
 # kills it (decides) and a cell it could plausibly co-trip but must leave GREEN (twins). A plain run scores each
 # mutant on its deciding arm and its twin only, running just the seed world the twin lives in. The matrix is
-# re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo
-# root. It runs every seed world on every mutant copy and on the unmutated copy, and prints one MATRIX line each.
+# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the
+# REMEASURE command below, from the repo root. It runs every seed world on every mutant copy and on the unmutated
+# copy, and prints one MATRIX line each.
 # No validator unit is selected here, so there is no outside-unit diff. Two deciding cells (m12) mean the kill needs
 # both of them to move.
 # MUTANT-MATRIX m1-guard-off decides=fires-heading twins=near-miss

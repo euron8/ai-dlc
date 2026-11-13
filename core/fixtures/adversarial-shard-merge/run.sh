@@ -51,7 +51,8 @@
 # changed. PER PUSH a mutant runs its DECIDING arm, which must FAIL, and one TWIN, an arm the measured matrix
 # shows GREEN for it, which must PASS; the kill is emitted through mutant_killed behind the same-run base pass
 # of both arms and of the unmutated copy (MX0). `--matrix` scores MX0 and every mutant against EVERY arm and
-# prints one MATRIX row per cell; the matrix is re-measured whenever an arm or a mutant changes. The matrix is
+# prints one MATRIX row per cell. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
+# run per distinct state") requires. The matrix is
 # not run through hermetic-run.sh, which forwards no argument. Worlds are per-use: the merge refuses a world
 # whose write-ledger rows name another root, so no world is shared across arms or mutants.
 #
@@ -142,6 +143,7 @@
 # MUTANT-MATRIX CSM-order decides=CS9 twins=A1
 # MUTANT-MATRIX CSM-docsel decides=CS10 twins=A1
 # MUTANT-MATRIX CSM-noblock decides=CS11 twins=A1
+# MUTANT-MATRIX CSM-docfb decides=CS13 twins=CS14
 # MUTANT-MATRIX CSM-flagswap decides=CS12 twins=A1
 # MUTANT-MATRIX CSM-flagglob decides=CS12 twins=A1
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/adversarial-shard-merge/run.sh --matrix
@@ -725,6 +727,53 @@ p_cs_noblock() { # a file with NO provenance block (0 openings, 0 closings) in a
 }
 p_cs_noblock "$MERGE" && ok "CS11: a file carrying no provenance block (0 openings, 0 closings) in stories-fences-p1 and stories-amend-p1 -> SKIP, exit 3; one opening and no closing in the same dir -> REFUSED naming the block count (CS9 holds 0 openings, 1 closing)" \
   || bad "CS11: (rc=$RC) $(head -3 "$MO")"
+# CS13/CS14: THE DOCUMENT FROM A SEALED SIBLING (BL-974). A document-mode shard whose WHOLE provenance block is
+# deleted carries no `artifact:`, so its own bytes name no document; the merge's join refuses it on the block count.
+# --check-shard takes the document from the SEALED siblings (cs_sealed, the agreement's definition: a sha= marker
+# the merge's own admission admits) when every one that declares an `artifact:` declares the same one. Worlds are
+# CS10's (doc_b3_world: sections: shards of test-strategy.md) and CS11's (stories-fences-p1 repair parts); every
+# seal is the REAL --mark. cs_noblk deletes the block's lines, opener to closer, and nothing else.
+cs_noblk() { awk '/SKILL_INVOCATION_PROVENANCE v1/ { skip = 1 } !skip { print } /SKILL_INVOCATION_PROVENANCE_END/ { skip = 0 }' "$1" > "$1.t" && mv "$1.t" "$1"; }
+p_cs_docfb() { # CS13: 2.md, block deleted, beside a SEALED 1.md -> REFUSED with the block-count line the merge's join prints;
+  # beside two SEALED siblings that disagree on artifact: -> SKIP with the disagreement WARN
+  # The merge is asked BEFORE 1.md is sealed: with one shard marked and 2.md not, its marker-set check refuses first.
+  local m="$1" d j
+  d="$(doc_b3_world)" || return 1
+  cs_noblk "$d/2.md"; ! has "$d/2.md" "SKILL_INVOCATION_PROVENANCE" && has "$d/2.md" "## Findings" || return 1
+  run_doc_merge "$m" "$d"; j="$(grep -F "REFUSED: $d/2.md carries 0 provenance block opening(s)" "$MO" | head -1)"
+  [ "$RC" -eq 2 ] && [ -n "$j" ] || return 1
+  cs_seal "$d/1.md" 1 2 || return 1
+  cs "$m" "$d/2.md" 2
+  [ "$RC" -eq 2 ] && has "$MO" "$j" && ! has "$MO" "SKIP" || return 1
+  # (c) two SEALED siblings disagree on artifact: no document is taken, SKIP as before, and the WARN only the
+  # fallback prints names the disagreement
+  d="$(doc_b3_world)" || return 1
+  cs_seal "$d/1.md" 1 2 || return 1
+  sed 's|^artifact: .*|artifact: _bmad-output/planning-artifacts/s1/other.md|' "$d/3.md" > "$d/3.t" && mv "$d/3.t" "$d/3.md"
+  cs_seal_presib "$d/3.md" 3 2 || return 1
+  cs_noblk "$d/2.md"; cs "$m" "$d/2.md" 2
+  [ "$RC" -eq 3 ] && has "$MO" "SKIP: $d/2.md carries no provenance block" && has "$MO" "WARN: the sealed shards in" \
+    && has "$MO" "disagree on artifact among themselves" && ! has "$MO" "REFUSED"
+}
+p_cs_docfb_near() { # CS14: the same block-less 2.md keeps today's SKIP wherever no sealed sibling declares a document
+  local m="$1" d s ok=1
+  d="$(doc_b3_world)" || return 1                                    # (b) every sibling carries artifact:, none sealed
+  cs_noblk "$d/2.md"; cs "$m" "$d/2.md" 2
+  [ "$RC" -eq 3 ] && has "$MO" "SKIP: $d/2.md carries no provenance block" && ! has "$MO" "REFUSED" || ok=0
+  d="$(b3_world)" || return 1; s="$(dirname "$d")/stories-fences-p1"  # (d) CS11's dir: a SEALED sibling with no artifact:
+  mkdir -p "$s" || return 1
+  printf '# repair part\n\n- **disposition:** repaired\n- **edit:** `stories/story-1.md:3`\n' > "$s/1.md"
+  printf '# repair part\n\n- **disposition:** repaired\n- **edit:** `stories/story-1.md:4`\n' > "$s/2.md"
+  cs_seal_presib "$s/2.md" 2 0 || return 1
+  has "$s/2.md" "sha=" && bash "$(dirname "$m")/content-seal.sh" --admit-marker "$s/2.md" >/dev/null 2>&1 || return 1 # sealed as cs_sealed reads it
+  cs "$m" "$s/1.md" 0
+  [ "$RC" -eq 3 ] && has "$MO" "SKIP: $s/1.md carries no provenance block" && ! has "$MO" "REFUSED" || ok=0
+  [ "$ok" = 1 ]
+}
+p_cs_docfb "$MERGE" && ok "CS13: a document-mode shard with its whole provenance block deleted, beside a SEALED sibling naming the document -> --check-shard exit 2 with the merge join's own block-count refusal line, never SKIP; beside two SEALED siblings disagreeing on artifact: -> SKIP and the disagreement WARN" \
+  || bad "CS13: (rc=$RC) $(head -3 "$MO")"
+p_cs_docfb_near "$MERGE" && ok "CS14: the same block-less shard beside UNSEALED siblings only, and in stories-fences-p1 beside a SEALED (admitted) sibling with no artifact: -> SKIP, exit 3, as before" \
+  || bad "CS14: (rc=$RC) $(head -3 "$MO")"
 p_cs_flags() { # --check-shard-dir and --check-shard are two modes, told apart in both directions in one world.
   # (a) --check-shard-dir on a dir holding a shard --check-shard refuses (2.md, no verdict:): exactly the one
   #     `OK<TAB><dir>` line, rc 0, and none of --check-shard's lines (REFUSED:, SHARD-OK, SKIP:, its usage).
@@ -1133,7 +1182,7 @@ fi
 # the unmutated copy (MX0). --matrix scores the unmutated copy and every mutant against EVERY arm and
 # prints one MATRIX row per cell (matrix_row, core/fixtures/lib/matrix.sh), `killed=yes` iff THAT arm tripped.
 n_mut=0; n_kill=0
-ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 FI1 FI2 FI3a FI3b FIF FIE FIS FISa B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS PC1 PCD PCT PCT2 PCC PCSR PCS PCS2 PCK PCKa PCKb PCKc PCKd PCKe PCKf PCKg PCKh PCE PCR PCKm PCMV PCN2 NDP NDC TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g CS1 CS2 CS3 CS4 CS5 CS6 CS8 CS9 CS10 CS11 CS12"
+ARMS_ALL="A1 M0 R6 D2 D3 D4 D5 D6 X1 X4 RS1 CH2 FI1 FI2 FI3a FI3b FIF FIE FIS FISa B726B B726C B726F B726H P1 PBARE DV2 DV3 DV4 DV4D DV5 DV10 DVRS DVRSS PC1 PCD PCT PCT2 PCC PCSR PCS PCS2 PCK PCKa PCKb PCKc PCKd PCKe PCKf PCKg PCKh PCE PCR PCKm PCMV PCN2 NDP NDC TR1 FG2 RR3 RR6a RR6n RR6b RR6c RR6d RR6e RR6f RR6g CS1 CS2 CS3 CS4 CS5 CS6 CS8 CS9 CS10 CS11 CS12 CS13 CS14"
 [ "$KOK" = 1 ] && ARMS_ALL="$ARMS_ALL K1_inst K1_core K2vac_inst K2vac_core KEnone_inst KEvac_inst KEps_inst KEnone_core KEvac_core KEsch_core"
 karm() { # <merge file> <swap> <layout> <want> -- --pair-sep answer in that world
   local w a
@@ -1221,6 +1270,8 @@ arm_run() { # <arm> <merge file> -> 0 iff the arm HOLDS
     CS9) p_cs_selffirst "$2" ;;
     CS10) p_cs_docsel "$2" ;;
     CS11) p_cs_noblock "$2" ;;
+    CS13) p_cs_docfb "$2" ;;
+    CS14) p_cs_docfb_near "$2" ;;
     CS12) p_cs_flags "$2" ;;
     K1_*) karm "$2" none "${1#K1_}" "@" ;;
     K2vac_*) karm "$2" vac "${1#K2vac_}" "=" ;;
@@ -1581,6 +1632,8 @@ mutm CSM-docsel CS10 A1 '    for v in "$SPRINT_DIR"/*; do [ "${v##*/}" = "$ARTIF
 '
 # The no-block SKIP gone: a repair-style part with no provenance block is refused by check_header's block count.
 mutm CSM-noblock CS11 A1 '|| cs_skip "$sf carries no provenance block' '|| : "$sf carries no provenance block'
+# The sealed-sibling document fallback gone: a block-less document-mode shard SKIPs again (CS13); CS14's SKIPs hold.
+mutm CSM-docfb CS13 CS14 '[ -n "$cs_art" ] || cs_art="$(cs_sib_artifact "$cs_dir" "$bn")"' ':'
 mutm CSM-bytes CS6 A1 '    by="$AI_DLC_CHECK_BYTES"' '    :'
 # CS12's two: the two case labels SWAPPED, and the dir label widened to a glob that takes --check-shard too.
 mutm CSM-flagswap CS12 A1 '    shift; check_shard_dirs "$@"; exit $? ;;

@@ -12,3 +12,11 @@
 2 core/hooks/ai-dlc-content-seal.sh
 0 core/scripts/record-only-diff.sh
 0 core/scripts/sprint-status.sh
+# BL-982 (one counted run): the in-process passes fx_inproc logs in lib.sh's ip_run and ip_load and in the receipts,
+# each at a subject's own path; a mutant script directory's copy is no pass.
+144 inproc:core/scripts/partition-review-diff.sh
+472 inproc:core/scripts/merge-review-shards.sh
+18 inproc:core/scripts/content-seal.sh
+48 inproc:core/scripts/wait-for-deliverable.sh
+36 inproc:core/hooks/ai-dlc-content-seal.sh
+69 inproc:core/scripts/record-only-diff.sh

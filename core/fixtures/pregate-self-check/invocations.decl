@@ -2,6 +2,7 @@
 # 44 to 75 and 21 to 27, BL-1026: section d now arms the counter (one judge --gen-rc start and one hermetic-run.sh
 # start per run that reaches it, stubs in the receipt's roots), and the receipt drives two more roots, U and J, in each of
 # its three runs (control, m1, m2): 6 more self-check starts. From one counted hermetic-run.sh run on the release tree.
-75 *
-27 scripts/pregate-self-check.sh
-3 core/fixtures/pregate-self-check/receipt-bl643.sh
+161 *
+56 scripts/pregate-self-check.sh
+4 core/fixtures/pregate-self-check/receipt-bl643.sh
+# 75 to 161, 27 to 56 and 3 to 4, BL-1020: the receipt drives five more roots (Hcwd, Hres, Htree, Hbehind, Habs) in each of its runs, and run.sh gains the m3 mutant run. From two agreeing counted runs.

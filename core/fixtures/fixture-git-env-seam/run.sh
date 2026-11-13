@@ -48,7 +48,8 @@
 # and the TWIN cell U (the same driven fixture with GIT_DIR unset, which no seam mutation can reach, so it stays
 # green for every mutant). `--matrix` (an argv flag) runs every mutant over every cell A B U and prints one
 # MATRIX row per cell with killed=yes|no plus a MATRIX-ROW with tripped=[...], from matrix-lib.sh, then stops.
-# The matrix is re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. The recorded matrix plus the twin
 # replaces a per-push exact-vector assertion.
 # MUTANT-MATRIX m1 decides=A twins=U
 # MUTANT-MATRIX m2 decides=A twins=U

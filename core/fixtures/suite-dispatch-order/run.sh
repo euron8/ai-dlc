@@ -30,8 +30,9 @@
 # taken from the unordered list — so proving it is the distribution's job.
 # THE MUTANT MATRIX. Each mutant runs per push on its DECIDING arm plus ONE measured-GREEN twin, and the
 # kill must stay confined: the deciding arm FAILS under the mutant, the twin PASSES. The full mutant x arm
-# matrix is measured by `--matrix` (an argv flag; every mutant against every arm, one MATRIX row each) and
-# is re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
+# matrix is measured by `--matrix` (an argv flag; every mutant against every arm, one MATRIX row each).
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. The recorded matrix plus the twin
 # replaces a per-push check that no OTHER arm trips. The arms are the columns of the MATRIX rows:
 #   order glob format outside (world lpt), badrec, merge mergeorder (world merge), prune, red redlast green (world red).
 # MUTANT-MATRIX m1 decides=order twins=badrec

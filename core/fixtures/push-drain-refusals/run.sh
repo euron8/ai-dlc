@@ -40,8 +40,8 @@
 # costs (a world is a full 21-arm drive and has no cheaper form), so a plain run scores each mutant on its deciding
 # arm and its twin off that same arms file, and the matrix adds only the scoring of the other arms. Where a mutant
 # also turns a second arm RED, that arm is a second killer and not a twin; it shows in the others= figure of the
-# REMEASURE command. The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
-# command below, run from the repo root.
+# REMEASURE command. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires. Run the REMEASURE command below, from the repo root.
 # MUTANT-MATRIX M1 decides=A3b twins=A11
 # MUTANT-MATRIX M2 decides=A2 twins=A11
 # MUTANT-MATRIX M3 decides=A12 twins=A11

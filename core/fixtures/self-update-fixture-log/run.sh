@@ -35,7 +35,8 @@
 # Mutant-matrix battery. Measured with `--matrix` (every mutant driven against EVERY cell, every cell printed as
 # a MATRIX-ROW); a plain run drives each mutant's deciding cells plus the named twin only, and for a d12- mutant
 # only the FIRST cell of its decides list plus its twin, each first cell killing it alone. Each mutant co-trips no
-# other arm, measured at authoring. The matrix is re-measured whenever an arm or a mutant is added or changed.
+# other arm, measured at authoring. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2
+# ("One run per distinct state") requires.
 # Cells: J mutants score the verdict cells DEFER/OK/UNDECIDED/STRANDED (1 = the reader reports that verdict
 # unclaimed), WM mutants score W1-W9 (1 = that cell moved off 1), BH-mut scores BH (1 = the 5-argument drive
 # differs from the shipped refusal) and BH-ctl (1 = the 4-argument drive differs from the shipped verdict).

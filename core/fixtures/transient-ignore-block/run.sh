@@ -18,9 +18,10 @@
 # MUTANT x ARM MATRIX. Each mutant co-trips no other arm, measured at authoring (all ten arms run on
 # every mutant). Per push a mutant runs only its deciding arm plus ONE twin: an arm that stays GREEN
 # under the mutant and is the one it could most plausibly co-trip, so a twin that trips still fails
-# the fixture. The matrix is re-measured whenever an arm or a mutant is added or changed, from the
-# repo root (hermetic-run.sh uses env -i, which would drop the switch, so run.sh is driven directly):
-# Twin reasons: idempotent for cut-runs-to-eof (the cut eats the block); renders_declared_set for
+# the fixture. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires. Run it from the repo root (hermetic-run.sh uses env -i, which would drop
+# the switch, so run.sh is driven directly): Twin reasons: idempotent for cut-runs-to-eof (the cut
+# eats the block); renders_declared_set for
 # renders-durable-too (the superset direction of the same render), no-install-fallback (the
 # pinned-schema path) and no-out-of-root (the other half of the block); cut_is_bounded for
 # no-empty-marker-guard (the other consumer of the markers); check_discriminates for

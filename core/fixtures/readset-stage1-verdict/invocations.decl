@@ -2,3 +2,7 @@
 41 *
 4 scripts/readset-stage1-verdict.sh
 8 scripts/readset-stage1-run.sh
+# BL-982 (one counted run): the in-process passes fx_inproc logs at the paired call sites, each at a subject's own path
+# (the sandbox's, or a seeded repository's copy at scripts/); a renamed mutant copy ($WORK/mut/<name>.sh) is no pass.
+51 inproc:scripts/readset-stage1-verdict.sh
+37 inproc:scripts/readset-stage1-run.sh

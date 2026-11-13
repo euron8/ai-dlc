@@ -33,8 +33,11 @@
 # the grammar and probe are always loaded from THIS script's own tree. That split is what lets the self-check
 # be pointed at an older checkout (its validators judge that tree) while the grammar stays the current one.
 #
+# The hook run is the one git resolves for a push (core.hooksPath honoured); it must exist and be byte-identical to
+# $ROOT/.githooks/pre-push, else exit 2. A scratch root with no core.hooksPath therefore refuses (no hook would run).
+#
 # Usage: pregate-self-check.sh [<base>]     (default base: origin/main)
-# Exit:  0 = clean, 1 = at least one finding (the check and the lines are named), 2 = cannot run.
+# Exit: 0 = clean, 1 = at least one finding (the check and the lines are named), 2 = cannot run.
 set -uo pipefail
 export LC_ALL=C
 
@@ -106,7 +109,48 @@ fi
 # --- (a) every hook step above the fixture suite, DERIVED from the hook ---------------------------------
 # The prefix is cut from $ROOT's own hook, so AI_DLC_PREGATE_ROOT judges that tree's hook.
 printf '== a. hook steps above the fixture suite (derived from .githooks/pre-push)\n'
-HOOK="$ROOT/.githooks/pre-push"
+# HOOK-RESOLVE-BEGIN
+# The hook a push from $ROOT would run is git's own answer (core.hooksPath honoured, absolute or relative, from a
+# linked worktree too), never a hand-built $ROOT/.githooks path. A relative answer is relative to the cwd `-C` sets,
+# so it is joined to $ROOT. That join is DEFENSIVE: the script has already `cd "$ROOT"`, so git's relative answer
+# would resolve the same either way, and no receipt cell can fail it. When the resolved hook equals the base blob and
+# only the tree hook differs, the tree hook is also compared with the MERGE-BASE copy of the hook: equal means the
+# branch is behind ("rebase onto <base>"); different means the branch EDITED the hook, so rebasing would repeat the
+# refusal, and the message says the push runs the resolved hook, not the edit, and that the checkout holding it must be
+# updated or the push made from it. When no merge-base (or no hook blob at it) exists, the message says so and gives
+# both remedies. An ABSENT resolved hook means a push runs no pre-push hook: refused. A resolved hook that
+# is not byte-identical to $ROOT/.githooks/pre-push is refused, naming both paths and which side moved relative to
+# <BASE>:.githooks/pre-push (BASE is the positional argument; when that blob is absent the side is reported unknown).
+TREE_HOOK="$ROOT/.githooks/pre-push"
+HOOK_REL="$(git -C "$ROOT" rev-parse --git-path hooks/pre-push 2>/dev/null)" && [ -n "$HOOK_REL" ] \
+  || { printf 'pregate-self-check: git could not resolve the pre-push hook path of %s\n' "$ROOT" >&2; exit 2; }
+case "$HOOK_REL" in /*) HOOK="$HOOK_REL" ;; *) HOOK="$ROOT/$HOOK_REL" ;; esac
+[ -f "$HOOK" ] \
+  || { printf 'pregate-self-check: a push from %s would run no pre-push hook (resolved %s is absent; set core.hooksPath .githooks)\n' "$ROOT" "$HOOK" >&2; exit 2; }
+if ! cmp -s "$HOOK" "$TREE_HOOK"; then
+  if git -C "$ROOT" show "${BASE}:.githooks/pre-push" > "$W/base-hook" 2>/dev/null; then
+    r_moved=1; t_moved=1; remedy=""
+    cmp -s "$HOOK" "$W/base-hook" && r_moved=0
+    cmp -s "$TREE_HOOK" "$W/base-hook" && t_moved=0
+    if [ "$r_moved" = 1 ] && [ "$t_moved" = 0 ]; then side="the resolved hook moved"
+    elif [ "$r_moved" = 0 ] && [ "$t_moved" = 1 ]; then
+      side="the tree hook moved"
+      mb="$(git -C "$ROOT" merge-base HEAD "$BASE" 2>/dev/null)" || mb=""
+      if [ -n "$mb" ] && git -C "$ROOT" show "${mb}:.githooks/pre-push" > "$W/mb-hook" 2>/dev/null; then
+        if cmp -s "$TREE_HOOK" "$W/mb-hook"; then remedy="; the branch is behind: rebase onto ${BASE}"
+        else remedy="; the branch edited the hook, but the push will run ${HOOK}, not the edit: update the checkout holding it (the main checkout) or push from that checkout"; fi
+      else
+        remedy="; the merge-base with ${BASE} is unavailable, so behind cannot be told from edited: rebase onto ${BASE}, or update the checkout holding ${HOOK} if the edit is intended"
+      fi
+    else side="both hooks moved"; fi
+    side="$side relative to ${BASE}:.githooks/pre-push${remedy}"
+  else
+    side="which side moved is unknown: ${BASE}:.githooks/pre-push is absent"
+  fi
+  printf 'pregate-self-check: the hook a push would run (%s) is not byte-identical to the tree hook (%s): %s\n' "$HOOK" "$TREE_HOOK" "$side" >&2
+  exit 2
+fi
+# HOOK-RESOLVE-END
 # A NUL byte makes grep read the hook as binary: -c still counts the marker, but -n prints "Binary file ...
 # matches" in place of the line number. Refuse it before either grep runs.
 tr -d '\000' < "$HOOK" | cmp -s - "$HOOK" \

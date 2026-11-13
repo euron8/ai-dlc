@@ -37,7 +37,8 @@
 # (a declared section is out of scope). E3 and E5 also require exit 0, because a mutant the self-probe refuses
 # exits 1 before the corpus is read. The litter arm and arm E9 are not separate dimensions of a mutated
 # validator: E9 drives the real verdict.sh, which cannot be pointed at a mutant copy. The matrix is re-measured
-# whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root.
+# as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
+# command below, from the repo root.
 # also trips: nocheck -> S3,warn,Dun,Doth
 # also trips: dead -> S1,S4,warn,over,Dun,Dyes,Doth,E2,E2f,E3,E5,E7,E8 (the self-probe refuses the silent arm with exit 1 before the corpus is read, so every cell that needs exit 0 or a row is red)
 # also trips: nostamp -> S1,S4,warn,over,Dun,Dyes,Doth,E1,E2,E2f,E5,E7,E8 (the self-probe refuses with exit 1, as for dead)

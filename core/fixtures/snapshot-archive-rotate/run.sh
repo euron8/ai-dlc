@@ -16,8 +16,9 @@
 # Exit:  0 = every assertion holds, 1 = the check regressed, 2 = fixture broken.
 #
 # THE MUTANT x ARM MATRIX. "Each mutant is killed by its own arm ALONE" is a property of the
-# battery's QUALITY, not of a push, so it is MEASURED once by `--matrix` and recorded below. It is
-# re-measured whenever an arm or a mutant is added or changed. Per push each mutant runs only its
+# battery's QUALITY, not of a push, so it is MEASURED once by `--matrix` and recorded below. The
+# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. Per push each mutant runs only its
 # DECIDING arm, which must FAIL, and its TWIN: a different arm the measured matrix shows GREEN under
 # that mutant, chosen as the arm nearest it in subject. The twin must PASS, which proves the kill
 # stays confined to the deciding arm. This recorded matrix plus the per-push twin replaces the

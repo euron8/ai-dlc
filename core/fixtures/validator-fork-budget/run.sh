@@ -73,8 +73,8 @@
 # its named TWIN, a different cell it could plausibly co-trip but must leave GREEN. Every cell is a text match on
 # the one mutated reading the mutant already produces, so a cell costs no profiler run and no validator run.
 # `run.sh --matrix` scores each mutant against every cell in MX_CELLS (eighteen) and prints one MATRIX line per mutant. The matrix
-# is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the
-# repo root.
+# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the
+# REMEASURE command below, from the repo root.
 # m7-field-1 decides two cells because its one fault, a classifier that reads field 1 only, is aimed at both the
 # profiler's splice probe and the A2 gap clause.
 # also trips: m1-marker-neutered -> Pbase

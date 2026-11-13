@@ -30,8 +30,9 @@
 # program and the twin must not, so the kill stays CONFINED to its own world and a change in
 # co-tripping is caught. The full mutant x world matrix was measured once with the command below,
 # and the recorded matrix plus the twin replaces any per-push exact-vector assertion (only the two
-# unmutated controls still assert a full vector). The matrix is re-measured whenever an arm (a
-# world) or a mutant is added or changed. A "world" is the arm here: each is one seeded tree.
+# unmutated controls still assert a full vector). The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. A "world" is the
+# arm here: each is one seeded tree.
 # MUTANT-MATRIX base decides=W10 twins=W3
 # MUTANT-MATRIX sort decides=W3 twins=W7
 # MUTANT-MATRIX tail decides=W2,W2h,W9 twins=W3

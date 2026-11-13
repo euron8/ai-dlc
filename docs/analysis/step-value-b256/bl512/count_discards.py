@@ -41,8 +41,11 @@ and no later nonce for the story), s322 implementation 8/15 -> 7/15 (`implementa
 only by a refused call and re-minted as `...T015823Z`). Every before-side discard has no story slug, so its
 successor test is the same-type fallback, which any later nonce of the gate type satisfies: the requirement
 cannot remove a before-side discard. No LOWER/NOT LOWER reading changed.
-  Gate types counted: planning and story (the planning gates) and implementation. sprint-review and retro are
-    not counted: the every-gate total waits for s322's retro.
+  Gate types counted: planning, story and implementation by default, which is what the b256 command line
+    reproduces. `--gates planning,story,implementation,sprint-review,retro` is the every-gate set (the b257 run;
+    the s322 retro parts exist in the graph tree from a7eeca5e8). It prints the every-gate total with and
+    without retro, the sprint-review control and a CONTROL line deriving the three-type s322 rows from the same
+    figures. retro has NO before side (s317 and s318 hold none), so the RULE prints it NO-BEFORE.
   ISSUED nonce: in ARTIFACTS or ISSUED in TRANSCRIPTS, with its own timestamp <= --win-end.
   VERDICT: a nonce with a merged `.verdict.json`. This is the per-verdict denominator.
   DISCARDED: an issued nonce that did not pass: no merged verdict (abandoned, or re-issued before the merge),
@@ -236,6 +239,8 @@ def main():
     tdir = arg("--transcripts", os.path.expanduser("~/.claude/projects/-Users-n8-git-graph"))
     extract = arg("--extract", "docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py")
     sprints = [int(x) for x in arg("--sprints", "317,318,319,320,321,322").split(",")]
+    global GATES
+    GATES = tuple(arg("--gates", ",".join(GATES)).split(","))
     if not (graph and ref and win_end):
         raise SystemExit(__doc__)
     edges = load_edges(extract)
@@ -478,10 +483,31 @@ def main():
         before = bd / bv if bv else None
         reads = [(sp,) + fig.get((sp, g), (0, 0)) for sp in (321, 322)]
         lower = before is not None and all(v and d / v < before for _, d, v in reads)
+        if before is None:
+            print("  %-14s before s317+s318 %d/%d=n/a | %s -> NO-BEFORE" % (g, bd, bv, " | ".join(
+                "s%d %d/%d" % (sp, d, v) for sp, d, v in reads)))
+            continue
         print("  %-14s before s317+s318 %d/%d=%s | %s -> %s" % (
             g, bd, bv, ("%.3f" % before) if before is not None else "n/a",
             " | ".join("s%d %d/%d=%s" % (sp, d, v, ("%.3f" % (d / v)) if v else "n/a") for sp, d, v in reads),
             "LOWER" if lower else "NOT LOWER"))
+    if "retro" in GATES or "sprint-review" in GATES:  # the b257 five-type run; the default three-type output is unchanged
+        print("\nEVERY-GATE TOTAL (discards/verdicts) over the gates named in --gates; with retro and without retro")
+        for sp in sprints:
+            for lab, gs in (("with retro", GATES), ("without retro", tuple(g for g in GATES if g != "retro"))):
+                d = sum(fig.get((sp, g), (0, 0))[0] for g in gs)
+                v = sum(fig.get((sp, g), (0, 0))[1] for g in gs)
+                print("  s%d %-13s %d/%d=%s" % (sp, lab, d, v, ("%.3f" % (d / v)) if v else "n/a"))
+        for lab, gs in (("with retro", GATES), ("without retro", tuple(g for g in GATES if g != "retro"))):
+            d = sum(fig.get((sp, g), (0, 0))[0] for sp in sprints for g in gs)
+            v = sum(fig.get((sp, g), (0, 0))[1] for sp in sprints for g in gs)
+            print("  all sprints %-13s %d/%d=%s" % (lab, d, v, ("%.3f" % (d / v)) if v else "n/a"))
+        sr = [r for r in rows if r["nonce"] == "sprint-review-20261014T105054Z"]
+        print("CONTROL sprint-review-20261014T105054Z in the population: %s"
+              % (("yes, sprint s%s discarded=%s reason=%s" % (sr[0]["sprint"], sr[0]["discarded"], sr[0]["reason"]))
+                 if sr and "sprint-review" in GATES else "no (rows %d, gate counted %s)" % (len(sr), "sprint-review" in GATES)))
+        t = {g: [fig.get((sp, g), (0, 0)) for sp in (322,)][0] for g in ("planning", "implementation")}
+        print("CONTROL three-type rows, derived in this run from the same figures (b256 recorded s322 planning 2/3, implementation 7/15): planning %d/%d, implementation %d/%d -> %s" % (t["planning"] + t["implementation"] + ("OK" if (t["planning"], t["implementation"]) == ((2, 3), (7, 15)) else "FAILED",)))
     if pc != 3 or hits["impossible"] or not hits["present"]:
         sys.exit(1)
 

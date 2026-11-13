@@ -35,8 +35,9 @@
 #
 # Mutant matrix: mutant -> deciding arm and green twins. Per push (the default mode) each mutant
 # runs only its deciding arm plus its twins; `--matrix` measures every cell once and prints a
-# `MATRIX<TAB>mutant<TAB>arm<TAB>FAIL|ok` line per cell. It is re-measured whenever an arm or a
-# mutant is added or changed. echo0-fallback also trips noop-stderr-clean and noop-archive-absent;
+# `MATRIX<TAB>mutant<TAB>arm<TAB>FAIL|ok` line per cell. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. echo0-fallback
+# also trips noop-stderr-clean and noop-archive-absent;
 # q-bold's decides set is the two arms its one property moves.
 #
 # MUTANT-MATRIX sweep-anchor decides=sw-rowset-stable twins=sw-closed-archived

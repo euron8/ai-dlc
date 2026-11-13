@@ -2,3 +2,4 @@
 !core/scripts/validate-layer-entries.sh
 !core/scripts/artifact-path-config.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/mutant.sh

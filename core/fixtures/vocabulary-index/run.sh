@@ -87,8 +87,9 @@
 # conditions its own world must satisfy (the refusal text its kill_check names, plus the absences);
 # the per-push run asserts the deciding arm holds on the mutant's own world and that ONE named twin,
 # a different mutant's arm, stays green on that same output. The full mutant x arm matrix is MEASURED
-# by the --matrix argv mode (every mutant's captured output scored against every arm) and is
-# re-measured whenever an arm or a mutant is added or changed. The recorded matrix plus the twin
+# by the --matrix argv mode (every mutant's captured output scored against every arm). The matrix is
+# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# The recorded matrix plus the twin
 # replaces the exact-vector assertion that each mutant fails only its own assertion.
 # MUTANT-MATRIX m1 decides=m1 twins=m2
 # MUTANT-MATRIX m2 decides=m2 twins=m3

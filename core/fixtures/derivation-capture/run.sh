@@ -23,7 +23,8 @@
 # must stay green (sup_twin), so the kill is confined. `--matrix` runs ctl and every mutant on every arm, each cell in
 # a fresh project, and prints one `MATRIX <mutant> <arm> GREEN|TRIPPED` row per cell. Measured: ctl GREEN on all nine;
 # M1 and M2 trip r1-r4 (M2 is scored on r1 alone); M3 trips join; M4 and M5 trip jg; M6 trips pre2 and preM; every
-# other cell GREEN. RE-MEASURE whenever an arm or a mutant is added or changed, from the repo root:
+# other cell GREEN. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires. Run it from the repo root:
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/derivation-capture/run.sh --matrix
 # MUTANT-MATRIX M1 decides=r1,r2,r3,r4 twins=r5
 # MUTANT-MATRIX M2 decides=r1 twins=r5

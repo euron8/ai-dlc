@@ -32,9 +32,10 @@
 # mutant_killed (lib/mutant.sh) behind the same-run pass of the unmutated deciding arm, of the twin, and
 # of the unmutated copy MX0. `--matrix` runs every mutant (and MX0) on EVERY arm and prints one MATRIX
 # row per cell, polarity explicit, from the sourced lib/matrix.sh. These header lines ARE the table the
-# driver reads, so there is no second copy to drift. The matrix is re-measured whenever an arm or a
-# mutant is added or changed, from the repo root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir;
-# it is not run through hermetic-run.sh, which runs under env -i and forwards no argument.
+# driver reads, so there is no second copy to drift. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the
+# repo root, with AI_DLC_VERDICT_STORE set to a fresh mktemp dir; it is not run through
+# hermetic-run.sh, which runs under env -i and forwards no argument.
 # C31 is not an arm: it re-launches C23 from / and takes no subject.
 #
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/wait-stale-deliverable/run.sh --matrix

@@ -71,6 +71,11 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 [ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
 [ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
 [ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+# FAIL CLOSED WITHOUT EXITING. An unresolved root becomes a path that cannot exist, so the
+# default register below is reported absent (DISARMED, exit 2) instead of being looked up from
+# `/`. Not an `exit 2` here: a caller passing --register needs no project root at all.
+AI_DLC_ROOT="${AI_DLC_ROOT:-/nonexistent}"
+# --- end AI_DLC_ROOT --------------------------------------------------------
 
 [ -n "$REGISTER" ] || REGISTER="$AI_DLC_ROOT/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
 

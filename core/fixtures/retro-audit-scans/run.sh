@@ -19,6 +19,23 @@
 # MUTANT-MATRIX um7 decides=U twins=P1
 # MUTANT-MATRIX um8 decides=U twins=P1
 # MUTANT-MATRIX umr decides=U twins=P1
+# MUTANT-MATRIX uq1 decides=UQ twins=P1
+# MUTANT-MATRIX uq2 decides=UQ twins=P1
+# MUTANT-MATRIX uq3 decides=UQ twins=P1
+# MUTANT-MATRIX uq4 decides=UQ twins=P1
+# MUTANT-MATRIX uq5 decides=UQ twins=P1
+# MUTANT-MATRIX uq6 decides=UQ twins=P1
+# MUTANT-MATRIX uq7 decides=UQ twins=P1
+# MUTANT-MATRIX uq8 decides=UQ twins=P1
+# MUTANT-MATRIX uq9 decides=UQ twins=P1
+# MUTANT-MATRIX uq10 decides=UQ twins=P1
+# MUTANT-MATRIX uq11 decides=UQ twins=P1
+# MUTANT-MATRIX uq12 decides=UQ twins=P1
+# MUTANT-MATRIX uq13 decides=UQ twins=P1
+# MUTANT-MATRIX uq14 decides=UQ twins=P1
+# MUTANT-MATRIX uq15 decides=UQ twins=P1
+# MUTANT-MATRIX uq16 decides=UQ twins=P1
+# MUTANT-MATRIX uq17 decides=UQ twins=P1
 # MUTANT-MATRIX umf decides=P1 twins=U
 # MUTANT-MATRIX umo decides=P1 twins=U
 # MUTANT-MATRIX m1 decides=D twins=P1
@@ -30,15 +47,16 @@
 # MUTANT-MATRIX ld-unresdrop decides=LDu twins=- why=it edits only the t1-local counter, so no class row moves in any world; LDc, LDl and LD2 read unchanged under it (measured)
 # MUTANT-MATRIX hook-det decides=HKc twins=- why=it edits only the consumer hook argv; the receipt's local-t1 and local-t2 cells read unchanged under it (measured)
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/retro-audit-scans/run.sh --matrix
-# Names above are WORLDS, the same tokens the MATRIX-ROW lines print: U the used-to corpus, P1 the tier-2
+# Names above are WORLDS, the same tokens the MATRIX-ROW lines print: U the used-to corpus, UQ the clause-opening used-to corpus, P1 the tier-2
 # corpus, T the tier-1 origin corpus, G the identifier-grant corpus, D the distribution tree; LDc, LDl, LD2 and LDu
 # the four --fail-on=local-deterministic worlds, HKc the whole consumer hook's core-owned tier-1 cell. A twin is a world
 # where the mutant changes no class row (0 in its row), driven every push beside the deciding world.
 # Measured co-trips, stated plainly: tier1-strip and grant-strip are ONE env switch (AI_DLC_AUDIT_MUTANT=1)
 # that strips every tier-1 class, so each moves T, G and D; each is DECIDED by the world whose arm scores it
 # (T by 12f, G by 12m) and its other two dead worlds are the same fault seen again, not separate kills.
-# Every other mutant changes rows in exactly its deciding world. The matrix is re-measured whenever an arm
-# or mutant is added or changed, by the command above. A plain run never drives a matrix-only cell.
+# Every other mutant changes rows in exactly its deciding world. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the command
+# above. A plain run never drives a matrix-only cell.
 set -uo pipefail
 # Clear every inherited AI_DLC_* tunable and CLAUDE_PROJECT_DIR so a bare run judges the code, not the caller environment.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -717,11 +735,13 @@ fi
 # --- Assertion 12u15: m5, the WRONG FIX, built rather than described ---------
 # The plausible over-wide fix: acquit on ANY article rather than an indefinite
 # one. It clears all three purpose sites, which is what makes it look finished,
-# and takes "The step used to" and "the blocks used to" with it. Seeding the
+# and takes "The step used to" and "the blocks used to" with it. m5, m6 and m7 also switch off
+# the BL-1001 indefinite-subject test (the `if False:` line), because that test now flags what each of
+# them acquits or re-acquits and would hide their footprint. Seeding the
 # absent fix proves the arms fire; seeding the WRONG one proves they discriminate.
-if mkmut um5 's#(a|an)#(a|an|the)#'; then
+if mkmut um5 's#(a|an)#(a|an|the)#;s#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
   if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2\]" "$(audit_at "$WORK/um5.sh")"; then
-    mutant_killed "${B_u10:-0}" um5 "MUTANT m5 (definite article acquits too) -> ua, uh1 and uh2 go CLEAN; killed"
+    mutant_killed "${B_u10:-0}" um5 "MUTANT m5 (definite article acquits too, indefinite-subject test off) -> ua, uh1 and uh2 go CLEAN; killed"
   else
     bad "um5 SURVIVED: MUTANT m5 widened the article class and no habitual arm moved — the a/an narrowing is unbound"
   fi
@@ -736,7 +756,7 @@ fi
 # site (`be` is two letters, not a noun) and ACQUITS `The step used to`,
 # `the blocks used to` and `This paragraph used to`, whose preceding words are
 # nouns. Only the seeds whose cue ends in punctuation or in a blank survive it.
-if mkmut um6 $'s#.*am|is|are.*#    r"([a-z]{3,}\\\\s*$)", re.I)#\n/directly|solely/d\n/explicitly|first/d\n/(a|an)/d'; then
+if mkmut um6 $'s#.*am|is|are.*#    r"([a-z]{3,}\\\\s*$)", re.I)#\n/directly|solely/d\n/explicitly|first/d\n/(a|an)/d\ns#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
   if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh4.md:2,$TR/up2.md:2\]" "$(audit_at "$WORK/um6.sh")"; then
     mutant_killed "${B_u10:-0}" um6 "MUTANT m6 (noun-looking token before) -> up2 flips AND uh1/uh2/uh3/ua go CLEAN; killed"
   else
@@ -751,7 +771,7 @@ fi
 # subject reads as line-initial and borrows the previous line's verdict. It moves
 # exactly one cell, ub2, which is why ub2 had to be seeded — ub is FLAGGED under
 # both rules and could never have shown this.
-if mkmut um7 's#if not text#if not before#'; then
+if mkmut um7 's#if not text#if not before#;s#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
   if has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1,$TR/ub.md:2,$HAB\]" "$(audit_at "$WORK/um7.sh")"; then
     mutant_killed "${B_u10:-0}" um7 "MUTANT m7 (fall-through on blanked text) -> ub2 alone goes CLEAN; killed"
   else
@@ -773,6 +793,216 @@ if mkmut um8 $'/directly|solely/d\ns#.*explicitly|first.*#    r"\\\\s*$"#'; then
 else
   bad "MUTANT m8 DID NOT APPLY — its anchor moved; 12u9d is unproven"
 fi
+
+# --- World UQ (BL-1001): an indefinite-subject habitual clause is flagged, a purpose clause is not --
+# The audit's header (CLAUSE 2 AS SHIPPED) carries the rule; this world holds its arms. SELF-PROBE FIRST:
+# every offender is producer text (the two lines BL-1001 cites and the verifier's probe lines) and every
+# near-miss carries the property a wrong fix keys on. OFFENDERS (flagged): uqa "Where a ... used to sit",
+# uqb "— a ... used to" (wrapped), uqe the wrapped cue, uqh1-uqh3 ", and" / ", but" / "and", uqi
+# "Before 0.9,", uqj "Before:", uqk "(...)", uql sentence-initial, uqn1-uqn3 a finite verb that only
+# follows a cut (and / where / which). NEAR-MISSES (clear): uqc a comma-initial noun with a modal after,
+# uqd a cue before a passive, uqm1/uqm2 an imperative object (one line and wrapped), uqp1-uqp5 a purpose
+# noun after a verb or a copula (the verifier's B2 shapes, one wrapped), uqp6 a cue with a finite verb
+# after, plus the producer purpose lines up1, up2, up3.
+wq_world() { fresh
+  printf '%s\n' 'Where a per-sprint block used to sit, write a pointer.' > "$WORK/t/$TR/uqa.md"
+  printf '%s\n' 'Before this gate it did not deadlock — a failed push used to' 'commit locally and not block the run.' > "$WORK/t/$TR/uqb.md"
+  printf '%s\n' 'Where it fails, a health signal used to clear the operation MUST be absolute.' > "$WORK/t/$TR/uqc.md"
+  printf '%s\n' 'Where a probe is used to validate a total, read it twice.' > "$WORK/t/$TR/uqd.md"
+  printf '%s\n' 'Write the pointer where' 'a block used to sit here.' > "$WORK/t/$TR/uqe.md"
+  printf '%s\n' 'Pushes are slow, and a failed push used to commit locally.' > "$WORK/t/$TR/uqh1.md"
+  printf '%s\n' 'Pushes are slow, but a failed push used to commit locally.' > "$WORK/t/$TR/uqh2.md"
+  printf '%s\n' 'Pushes are slow and a failed push used to commit locally.' > "$WORK/t/$TR/uqh3.md"
+  printf '%s\n' 'Before 0.9, a failed push used to commit locally.' > "$WORK/t/$TR/uqi.md"
+  printf '%s\n' 'Before: a failed push used to commit locally.' > "$WORK/t/$TR/uqj.md"
+  printf '%s\n' '(a failed push used to commit locally)' > "$WORK/t/$TR/uqk.md"
+  printf '%s\n' 'A step used to say nothing.' > "$WORK/t/$TR/uql.md"
+  printf '%s\n' 'Use a token used to identify the run.' > "$WORK/t/$TR/uqm1.md"
+  printf '%s\n' 'Use' 'a token used to identify the run.' > "$WORK/t/$TR/uqm2.md"
+  printf '%s\n' 'A step used to say nothing and the lead has to guess.' > "$WORK/t/$TR/uqn1.md"
+  printf '%s\n' 'A step used to fail where it now must pass.' > "$WORK/t/$TR/uqn2.md"
+  printf '%s\n' 'A failed push used to commit locally which is worse.' > "$WORK/t/$TR/uqn3.md"
+  printf '%s\n' 'The hook reads a variable used to override the root.' > "$WORK/t/$TR/uqp1.md"
+  printf '%s\n' 'It takes an argument used to name the file.' > "$WORK/t/$TR/uqp2.md"
+  printf '%s\n' 'You can pass a flag used to select the root.' > "$WORK/t/$TR/uqp3.md"
+  printf '%s\n' 'This is a flag used to select the root.' > "$WORK/t/$TR/uqp4.md"
+  printf '%s\n' 'The hook reads' 'a variable used to override the root.' > "$WORK/t/$TR/uqp5.md"
+  printf '%s\n' 'Where a flag used to select the root is set, read it.' > "$WORK/t/$TR/uqp6.md"
+  printf '%s\n' 'The hook reads the root.' 'A step used to say nothing here.' > "$WORK/t/$TR/uqr.md"
+  printf '%s\n' 'Pushes are slow - a failed push used to commit locally.' > "$WORK/t/$TR/uqs1.md"
+  printf '%s\n' 'Pushes are slow – a failed push used to commit locally.' > "$WORK/t/$TR/uqs2.md"
+  printf '%s\n' 'Pass a token, e.g. a variable used to override the root.' > "$WORK/t/$TR/uqt1.md"
+  printf '%s\n' 'Pass a token, i.e. a path used to name the file.' > "$WORK/t/$TR/uqt2.md"
+  printf '%s\n' 'A file used to record the verdicts was removed in 0.9.' > "$WORK/t/$TR/uqu1.md"
+  printf '%s\n' "A script used to seed the store won't move." > "$WORK/t/$TR/uqu2.md"
+  u_p1; u_p2; u_p3
+}
+wq_world
+Q="$TR/uq"
+U1="${Q}a.md:1,${Q}b.md:1,${Q}e.md:2,${Q}h1.md:1,${Q}h2.md:1,${Q}h3.md:1,${Q}i.md:1,${Q}j.md:1,${Q}k.md:1,${Q}l.md:1"
+U2="${Q}n1.md:1,${Q}n2.md:1,${Q}n3.md:1"
+U3="${Q}r.md:2,${Q}s1.md:1,${Q}s2.md:1"
+UQALL="$U1,$U2,$U3"
+uqout="$(audit)"
+if has "NARRATIVE_DRIFT: FLAGGED  n=\[$UQALL\]" "$uqout"; then
+  ok "CONTROL UQ: the 16 habitual indefinite-subject lines -> exactly those; the 16 purpose near-misses and 3 producer purpose lines CLEAN"; B_uq=1
+else
+  bad "World UQ did not flag exactly the sixteen habitual lines — an indefinite-subject habitual clause is acquitted or a purpose clause flagged"
+fi
+{ ! has "$TR/uqc.md" "$uqout"; } && { ! has "$TR/uqd.md" "$uqout"; } && { ! has "$TR/uqm1.md" "$uqout"; } && { ! has "$TR/uqm2.md" "$uqout"; } \
+  && { ! has "$TR/uqp[1-6].md" "$uqout"; } && { ! has "$TR/uqt[12].md" "$uqout"; } && { ! has "$TR/uqu[12].md" "$uqout"; } && { ! has "$TR/up1.md" "$uqout"; } && { ! has "$TR/up2.md" "$uqout"; } && { ! has "$TR/up3.md" "$uqout"; } \
+  && ok "comma-initial with a modal, cue before a passive, imperative objects, purpose nouns after a verb or copula (one wrapped), cue with a finite verb, and the three producer purpose lines -> CLEAN" \
+  || bad "a purpose clause was flagged by the indefinite-subject test"
+
+# Mutants, each moving the cells of its own property only (the expected set is asserted exactly).
+# uq1 whole test off; uq2 previous line not read (uqm2 and the wrapped uqp5 flip); uq3 passive rescue off (uqd);
+# uq4 sentence-initial test off (uql and uqn1-uqn3); uq5 `:` / uq6 `(` / uq7 `,` / uq8 `and|but` dropped from
+# the clause-initial test (uqj / uqk / uqi / uqh1-uqh3, each decided by that one token; a comma before `and` does not end the segment); uq9 finite-verb rescue off
+# (uqc, up1, up3 flip to flagged); uq10 clause cut at and/where/which off (uqn1-uqn3 clear); uq11 cue rescue off
+# (uqp6 flips); uq12 clause-initial gate off (the imperative and B2 near-misses flip).
+uqscore() { # <mutant> <sed script> <expected n list>: 0 = the expected set, 1 = another set, 2 = DID NOT APPLY
+  mkmut "$1" "$2" || return 2
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$3\]" "$(audit_at "$WORK/$1.sh")" && return 0
+  return 1
+}
+if mkmut uq1 's#if article_opens_clause(before, prev, bool(text\[:m.start()\].strip()), after_clause(t\[m.end():\], used(nxt))):#if False:#'; then
+  if has "NARRATIVE_DRIFT: CLEAN" "$(audit_at "$WORK/uq1.sh")"; then
+    mutant_killed "${B_uq:-0}" uq1 "MUTANT uq1 (old clause 2: any article acquits) -> all sixteen habitual lines go CLEAN; killed"
+  else
+    bad "uq1 SURVIVED: the old clause 2 restored and an indefinite-subject habitual line still flagged"
+  fi
+else
+  bad "MUTANT uq1 DID NOT APPLY — its anchor moved; the indefinite-subject test is unproven"
+fi
+uqscore uq2 's#        pre = used(prev)#        pre = ""#' "$U1,${Q}m2.md:2,$U2,${Q}p5.md:2,$U3"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq2 "MUTANT uq2 (previous line not read) -> the wrapped uqm2 and uqp5 flip to FLAGGED; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq2 SURVIVED: the previous-line read removed and no wrapped arm moved"
+else
+  bad "MUTANT uq2 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq3 's#if q.groupdict().get("be"):#if False:#' "${Q}a.md:1,${Q}b.md:1,${Q}d.md:1,${UQALL#${Q}a.md:1,${Q}b.md:1,}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq3 "MUTANT uq3 (passive rescue removed) -> uqd alone flips to FLAGGED; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq3 SURVIVED: the passive rescue removed and the cue-before-passive near-miss did not move"
+else
+  bad "MUTANT uq3 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq4 's#return seg == "" or bool#return bool#' "${U1%,${Q}l.md:1},${Q}s1.md:1,${Q}s2.md:1"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq4 "MUTANT uq4 (sentence-initial test off) -> uql, uqn1-uqn3 and the wrapped uqr go CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq4 SURVIVED: the sentence-initial test removed and its arms did not move"
+else
+  bad "MUTANT uq4 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq5 's#\[,;:(#[,;(#' "${UQALL/,${Q}j.md:1/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq5 "MUTANT uq5 (':' dropped from the clause-initial test) -> uqj alone goes CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq5 SURVIVED: ':' dropped and uqj did not move"
+else
+  bad "MUTANT uq5 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq6 's#\[,;:(#[,;:#' "${UQALL/,${Q}k.md:1/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq6 "MUTANT uq6 (open paren dropped from the clause-initial test) -> uqk alone goes CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq6 SURVIVED: the open paren dropped and uqk did not move"
+else
+  bad "MUTANT uq6 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq7 's#\[,;:(#[;:(#' "${UQALL/,${Q}i.md:1/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq7 "MUTANT uq7 (comma dropped from the clause-initial test) -> uqi alone goes CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq7 SURVIVED: the comma dropped and uqi did not move"
+else
+  bad "MUTANT uq7 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq8 's#|\\b(and|but))#)#' "${UQALL/,${Q}h1.md:1,${Q}h2.md:1,${Q}h3.md:1/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq8 "MUTANT uq8 (and/but dropped from the clause-initial test) -> uqh1-uqh3 go CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq8 SURVIVED: and/but dropped and uqh3 did not move"
+else
+  bad "MUTANT uq8 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq9 's#^    if finite:$#    if False:#' "$TR/up1.md:1,${Q}a.md:1,${Q}b.md:1,${Q}c.md:1,${UQALL#${Q}a.md:1,${Q}b.md:1,},${Q}u1.md:1,${Q}u2.md:1"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq9 "MUTANT uq9 (finite-verb rescue off) -> uqc, up1, uqu1 and uqu2 flip to FLAGGED (up3 stays clear: its e.g. is no sentence end); killed"
+elif [ "$r" = 1 ]; then
+  bad "uq9 SURVIVED: the finite-verb rescue removed and no purpose arm moved"
+else
+  bad "MUTANT uq9 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq10 's#|\\b(?:and|but|which|where|while|whereas|because|although|though)\\b##' "${UQALL/,$U2/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq10 "MUTANT uq10 (clause not cut at and/where/which) -> uqn1-uqn3 go CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq10 SURVIVED: the clause cut removed and uqn1-uqn3 did not move"
+else
+  bad "MUTANT uq10 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq11 's#return not finite#return True#' "$U1,$U2,${Q}p6.md:1,$U3"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq11 "MUTANT uq11 (cue rescue off) -> uqp6 alone flips to FLAGGED; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq11 SURVIVED: the cue rescue removed and uqp6 did not move"
+else
+  bad "MUTANT uq11 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq12 's#return seg == "" or bool(CLAUSE_INIT.search(seg))#return True#' "$U1,${Q}m1.md:1,${Q}m2.md:2,$U2,${Q}p1.md:1,${Q}p2.md:1,${Q}p3.md:1,${Q}p4.md:1,${Q}p5.md:2,$U3,${Q}t1.md:1,${Q}t2.md:1"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq12 "MUTANT uq12 (clause-initial gate off) -> the imperative objects, uqp1-uqp5 and the e.g./i.e. near-misses flip to FLAGGED; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq12 SURVIVED: the clause-initial gate removed and no purpose-after-a-verb arm moved"
+else
+  bad "MUTANT uq12 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq13 's#\\u2013##' "${UQALL/,${Q}s2.md:1/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq13 "MUTANT uq13 (en dash dropped from the clause-initial test) -> uqs2 alone goes CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq13 SURVIVED: the en dash dropped and uqs2 did not move"
+else
+  bad "MUTANT uq13 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq14 's#|\\s-|#|#' "${UQALL/,${Q}s1.md:1/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq14 "MUTANT uq14 (spaced hyphen dropped from the clause-initial test) -> uqs1 alone goes CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq14 SURVIVED: the spaced hyphen dropped and uqs1 did not move"
+else
+  bad "MUTANT uq14 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq15 's#(?<!\\be\\.g)(?<!\\bi\\.e)##' "$UQALL,${Q}t1.md:1,${Q}t2.md:1"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq15 "MUTANT uq15 (e.g./i.e. read as a sentence end) -> uqt1 and uqt2 flip to FLAGGED; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq15 SURVIVED: the abbreviation lookbehinds removed and no e.g./i.e. near-miss moved"
+else
+  bad "MUTANT uq15 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq16 's#(?:\\s+|\$)#\\s+#' "${UQALL/,${Q}r.md:2/}"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq16 "MUTANT uq16 (a sentence end needs a trailing space) -> the wrapped uqr goes CLEAN; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq16 SURVIVED: the line-end sentence boundary removed and uqr did not move"
+else
+  bad "MUTANT uq16 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+uqscore uq17 's#|was|were|had|\\w\*n.t##' "$UQALL,${Q}u1.md:1,${Q}u2.md:1"; r=$?
+if [ "$r" = 0 ]; then
+  mutant_killed "${B_uq:-0}" uq17 "MUTANT uq17 (past and contracted forms out of FINITE_AFTER) -> uqu1 and uqu2 flip to FLAGGED; killed"
+elif [ "$r" = 1 ]; then
+  bad "uq17 SURVIVED: the widened finite list reverted and no past-tense near-miss moved"
+else
+  bad "MUTANT uq17 DID NOT APPLY — its anchor moved; its property is unproven"
+fi
+wu_world
 
 # --- Assertion 12u21: mr, `the reason is` restored to NARRATIVE --------------
 # Moves exactly the three pointer lines of uhr.md; line 4 is flagged either way.
@@ -1643,8 +1873,9 @@ twin() { # <twin arm> <mutant id> <world fn> <script> <env>
     bad "TWIN world $1: mutant $2 moved rows [$c] in world $3 — the mutation is not confined to its deciding arm"
   fi
 }
-if [ -f "$WORK/um1.sh" ] && [ -f "$WORK/umo.sh" ] && [ -f "$DM/m2.sh" ]; then
+if [ -f "$WORK/um1.sh" ] && [ -f "$WORK/uq17.sh" ] && [ -f "$WORK/umo.sh" ] && [ -f "$DM/m2.sh" ]; then
   for _m in um1 um2 um3 um4 um5 um6 um7 um8 umr; do twin P1 "$_m" p1_world "$WORK/$_m.sh" 0; done
+  for _m in uq1 uq2 uq3 uq4 uq5 uq6 uq7 uq8 uq9 uq10 uq11 uq12 uq13 uq14 uq15 uq16 uq17; do twin P1 "$_m" p1_world "$WORK/$_m.sh" 0; done
   twin U umf wu_world "$WORK/umf.sh" 0
   twin U umo wu_world "$WORK/umo.sh" 0
   twin P1 m1 p1_world "$DM/m1.sh" 0
@@ -1660,19 +1891,19 @@ if [ "$MATRIX" = 1 ]; then
   echo "MATRIX: one row per mutant; dead= the worlds (arms) where it changes a row, green= where it changes none"
   for _e in "um1|$WORK/um1.sh|0" "um2|$WORK/um2.sh|0" "um3|$WORK/um3.sh|0" "um4|$WORK/um4.sh|0" \
             "um5|$WORK/um5.sh|0" "um6|$WORK/um6.sh|0" "um7|$WORK/um7.sh|0" "um8|$WORK/um8.sh|0" \
-            "umr|$WORK/umr.sh|0" "umf|$WORK/umf.sh|0" "umo|$WORK/umo.sh|0" "m1|$DM/m1.sh|0" "m2|$DM/m2.sh|0" \
+            "umr|$WORK/umr.sh|0" "uq1|$WORK/uq1.sh|0" "uq2|$WORK/uq2.sh|0" "uq3|$WORK/uq3.sh|0" "uq4|$WORK/uq4.sh|0" "uq5|$WORK/uq5.sh|0" "uq6|$WORK/uq6.sh|0" "uq7|$WORK/uq7.sh|0" "uq8|$WORK/uq8.sh|0" "uq9|$WORK/uq9.sh|0" "uq10|$WORK/uq10.sh|0" "uq11|$WORK/uq11.sh|0" "uq12|$WORK/uq12.sh|0" "uq13|$WORK/uq13.sh|0" "uq14|$WORK/uq14.sh|0" "uq15|$WORK/uq15.sh|0" "uq16|$WORK/uq16.sh|0" "uq17|$WORK/uq17.sh|0" "umf|$WORK/umf.sh|0" "umo|$WORK/umo.sh|0" "m1|$DM/m1.sh|0" "m2|$DM/m2.sh|0" \
             "tier1-strip|$AUDIT|1" "grant-strip|$AUDIT|1"; do
     _id="${_e%%|*}"; _r="${_e#*|}"; _sc="${_r%%|*}"; _ev="${_r##*|}"
     _dead=""; _green=""
-    for _w in wu_world:U p1_world:P1 wt_world:T wg_world:G dworld:D; do
+    for _w in wu_world:U wq_world:UQ p1_world:P1 wt_world:T wg_world:G dworld:D; do
       _c="$(cell "${_w%%:*}" "$_sc" "$_ev")"; mcells=$((mcells+1))
       if [ "$_c" = none ]; then _green="$_green ${_w##*:}=0"; else _dead="$_dead ${_w##*:}=1[$_c]"; fi
     done
     echo "MATRIX-ROW $_id dead:${_dead:- -} green:${_green:- -}"
   done
-  [ "$mcells" = 75 ] \
-    && ok "matrix mode: 75 mutant x world cells measured (15 mutants x 5 worlds)" \
-    || bad "matrix mode measured $mcells cells, not 75"
+  [ "$mcells" = 192 ] \
+    && ok "matrix mode: 192 mutant x world cells measured (32 mutants x 6 worlds)" \
+    || bad "matrix mode measured $mcells cells, not 192"
 else
   [ "$mcells" = 0 ] \
     && ok "plain run: no matrix-only cell was driven" \

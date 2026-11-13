@@ -1,10 +1,10 @@
 # Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
-# are run.sh itself (1), seed.sh (1), the four cli cells of cells.decl (4), and the forced-failure grep stub (22: a
+# are run.sh itself (1), seed.sh (1), the four cli cells of cells.decl (4), and the forced-failure grep stub (24: a
 # #!/bin/bash script the refusal cells put first on PATH, so every grep the validator runs under it is a start).
 # inproc rows (fx_inproc, one per source, 21): the shipped validator 4 times (each time a drive group returns to it),
 # the lone copy, the script-relative copy, the mutant control and four reader mutants, the empty-file control and two
 # mutants, and the refusal control and six mutants, each copy at a path ending in
 # core/scripts/validate-escalation-status-vocabulary.sh.
-28 *
+30 *
 4 core/scripts/validate-escalation-status-vocabulary.sh
 21 inproc:core/scripts/validate-escalation-status-vocabulary.sh

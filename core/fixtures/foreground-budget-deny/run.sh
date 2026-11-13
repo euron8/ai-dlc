@@ -120,9 +120,10 @@
 # The columns are the 29 names in ALL_ARMS. REASON is read off the OVER call, FAILOPEN off the
 # WAITER seeds and EXIT off every call's exit status, so those three are driven through the unit
 # that carries them (unit_of).
-# THE MATRIX IS RE-MEASURED WHENEVER AN ARM OR A MUTANT IS ADDED OR CHANGED, from the repo root,
-# by the command on the MUTANT-MATRIX-REMEASURE line, with AI_DLC_VERDICT_STORE set to a fresh
-# mktemp dir. It is not run through hermetic-run.sh, which forwards no argument.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run it from the repo root, by the command on the MUTANT-MATRIX-REMEASURE line,
+# with AI_DLC_VERDICT_STORE set to a fresh mktemp dir. It is not run through hermetic-run.sh, which
+# forwards no argument.
 #
 # MUTANT-MATRIX-DYNAMIC mut-name why=mut() passes its first argument "$name" to mutant_killed; each mut call (warn-only, denies-background, ...) names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/foreground-budget-deny/run.sh --matrix

@@ -29,19 +29,31 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # admission answer; A6miss and A6 edit the merge and live in merge-arms.sh. Each is run per push on its DECIDING
 # world plus a TWIN world that stays green for it; the full mutant x world matrix is measured by `--matrix`
 # (an argv flag, forwarded to both), which prints one MATRIX row per cell with killed=yes|no and one
-# MATRIX-ROW per mutant with tripped=[...], then stops. The matrix is re-measured whenever an arm or a mutant
-# is added or changed. The recorded matrix plus the twin replaces a per-push exact-vector assertion.
+# MATRIX-ROW per mutant with tripped=[...], then stops. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The recorded matrix plus
+# the twin replaces a per-push exact-vector assertion.
 # MUTANT-MATRIX A3 decides=dN twins=dA
 # MUTANT-MATRIX A4 decides=dL twins=dA
 # MUTANT-MATRIX A6miss decides=dE twins=dF
 # MUTANT-MATRIX A6 decides=dF twins=dE
 # CSD (merge-arms.sh CS-CSD) drops `--` from the merge's basename/dirname; its cells are --check-shard-dir dirs
 # asked of the CLI in one run per program, and the plain dir is the twin that answers OK under both.
-# MUTANT-MATRIX CSD decides=dashx,stderr twins=plain
+# MUTANT-MATRIX CSD decides=dashx,stderr,csfx,dsx,docx twins=plain,csfy,dsy,docy
 # CSL (merge-arms.sh CS-CSL) restores merge_locate's bare `cd "$SHARD_DIR"`; its cells are in-process merges of one world
 # copied under a root named -x… (locx) and y… (locy), each handed RELATIVE from the copies' parent. The two mutants are
 # disjoint: CSL trips no CSD cell and CSD trips neither CSL cell (merge_place reads the dir after locate made it absolute).
-# MUTANT-MATRIX CSL decides=locx twins=locy
+# MUTANT-MATRIX CSL decides=locx,csfx,docx twins=locy,csfy,docy
+# CSF and CSFD (merge-arms.sh CS-CSF) are the CLI modes taking a FILE operand: --check-shard (csfx/csfy), --derived-set
+# (dsx/dsy) and --document (docx/docy), each handed a relative -x… path and its y… twin. CSF drops `--` from
+# check_shard_main's shard-name basename and merge_locate dirname; CSFD drops the ./ prefix of --derived-set and
+# --document. Measured by --matrix: CSF trips [csfx], CSFD [dsx docx], and neither trips a CSD or CSL cell; over the CSF
+# cells CSD also trips [csfx dsx docx] and CSL [csfx docx], recorded on their rows as also deciding them (per push CSD is scored at dashx/stderr and CSL at locx only).
+# MUTANT-MATRIX CSF decides=csfx twins=csfy
+# MUTANT-MATRIX CSFD decides=dsx,docx twins=dsy,docy
+# CSA (merge-arms.sh CS-CSA) drops the `--` from resolve_artifact's basename of the shard-written artifact: token; its
+# cells are --check-shard runs on one document world, rx (token -xdoc/…) deciding and ry (token ydoc/…) the twin, both
+# scored by the plain run.
+# MUTANT-MATRIX CSA decides=rx twins=ry
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/content-seal/run.sh --matrix
 #
 # Exit: 0 every arm passed, 1 an arm failed, 2 the fixture could not run.

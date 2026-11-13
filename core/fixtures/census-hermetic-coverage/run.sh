@@ -80,8 +80,8 @@
 # each mutant runs its deciding cell (must flip) and a twin cell (measured GREEN under that mutant, must hold).
 # `--matrix` censuses every world-A fixture under each mutant that allows it and prints one MATRIX row per arm.
 # A mutant whose census refuses before any fixture runs, or whose observable is a scratch layout or a marker
-# walk, is measured on its own observable only. Re-measure whenever a mutant or a world fixture is added or
-# changed.
+# walk, is measured on its own observable only. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/census-hermetic-coverage/run.sh --matrix
 # MUTANT-MATRIX-DYNAMIC probe_dies why=passes M1 M2 M7 M8 M9 M10 M11 M12 M13 M21 and their -np twins as one variable
 # MUTANT-MATRIX-DYNAMIC world_dies why=passes M3 M4 M5 M6 as one variable

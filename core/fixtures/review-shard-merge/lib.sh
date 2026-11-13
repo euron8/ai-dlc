@@ -90,6 +90,7 @@ ip_run() {
     compgen -A function > "$_ip_t"
     while IFS= read -r _ip_v; do
       case "$_ip_v" in ip_run) continue ;; esac
+      [ "$_ip_v" != fx_inproc ] || continue
       [ "$_ip_s" = "$_ip_l" ] && case "$_ip_f" in *" $_ip_v "*) continue ;; esac
       unset -f "$_ip_v"
     done < "$_ip_t"
@@ -101,11 +102,16 @@ ip_run() {
     done < "$_ip_t"
     while IFS= read -r _ip_v; do [ -z "$_ip_v" ] || export "$_ip_v"; done <<< "$_ip_x"
     set --
+    # A pass is logged only for a file at a declared subject's own path (a core/scripts or core/hooks directory: the
+    # sandbox's, or a seeded tree's copy at that tail); a mutant script directory's copy is no pass of the subject, and
+    # partition-document.sh is no `!` line of inputs.decl, which an inproc: row must name (validate-fixture-invocations.sh J4).
+    case "${_ip_s%/*}" in */core/scripts|*/core/hooks) _ip_p=1 ;; *) _ip_p=0 ;; esac
+    [ "${_ip_s##*/}" != partition-document.sh ] || _ip_p=0
     # shellcheck source=/dev/null
-    [ "$_ip_s" = "$_ip_l" ] || . "$_ip_s"
+    [ "$_ip_s" = "$_ip_l" ] || { [ "$_ip_p" = 0 ] || fx_inproc "$_ip_s"; . "$_ip_s"; }
     [ "$_ip_m" = - ] && exit 0
     declare -F "$_ip_m" > /dev/null || { echo "FIXTURE BROKEN: $_ip_s defined no $_ip_m when sourced" >&2; exit 97; }
-    "$_ip_m" ${_ip_a[@]+"${_ip_a[@]}"}
+    [ "$_ip_p" = 0 ] || fx_inproc "$_ip_s"; unset -f fx_inproc; "$_ip_m" ${_ip_a[@]+"${_ip_a[@]}"}
   )
 }
 # SOURCED ONCE: the merge, the subject most cells ask, is loaded into THIS shell once per script directory
@@ -119,9 +125,12 @@ ip_load() { # <merge-review-shards.sh path>
   local b a f
   [ "$1" = "$IP_LOADED" ] && return 0
   b=" $(compgen -A function | tr '\n' ' ') "
-  local _p="$1"; set --
+  local _p="$1" _pp; set --
+  # Logged as a pass only at the subject's own path (see ip_run). The first load, lib.sh's own below, runs before
+  # run.sh sources lib/mutant.sh, so fx_inproc is not yet defined and that load is no logged pass.
+  _pp=0; case "${_p%/*}" in */core/scripts) declare -F fx_inproc > /dev/null && _pp=1 ;; esac
   # shellcheck source=/dev/null
-  . "$_p" || return 1
+  [ "$_pp" = 0 ] || fx_inproc "$_p"; . "$_p" || return 1
   declare -F mrs_main > /dev/null || return 1
   IP_FNS=" $(sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)() *{.*/\1/p' "$_p" | tr '\n' ' ') "
   for f in $IP_FNS; do case "$b" in *" $f "*) case "$IP_FNS_OWN" in *" $f "*) ;; *) echo "FIXTURE BROKEN: $_p defines $f, which the fixture also defines" >&2; return 1 ;; esac ;; esac; done

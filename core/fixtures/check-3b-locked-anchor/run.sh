@@ -24,6 +24,15 @@ fi
 
 rc=0
 
+# A kill is emitted through lib/mutant.sh's mutant_killed, which refuses unless the unmutated arm the mutant
+# guards passed in this run. It needs ok() and bad(): ok prints its line as given, and bad reports a refused
+# base the way every FAIL here is reported (stderr, rc=1), so the verdict lines and the exit are unchanged.
+ok() { printf '%s\n' "$1"; }
+bad() { printf 'FAIL: %s\n' "$1" >&2; rc=1; }
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh"
+
 if "$VALIDATOR" "$DIR/bad-story.md" >/dev/null 2>&1; then
   echo "FAIL: bad-story.md should have been rejected but passed" >&2
   rc=1
@@ -42,7 +51,7 @@ if "$VALIDATOR" "$DIR/uncheckable-story.md" >/dev/null 2>&1; then
   echo "FAIL: uncheckable-story.md should have been rejected but passed" >&2
   rc=1
 else
-  echo "ok: uncheckable-story.md rejected"
+  ok "ok: uncheckable-story.md rejected"; B_unchk=1
 fi
 
 if "$VALIDATOR" "$DIR/requires-context-story.md" >/dev/null 2>&1; then
@@ -67,7 +76,7 @@ if cmp -s "$VALIDATOR" "$MUTANT"; then
   echo "  update the sed pattern in run.sh to match the real guard condition." >&2
   rc=2
 elif bash "$MUTANT" "$DIR/uncheckable-story.md" >/dev/null 2>&1; then
-  echo "ok: MUTATION — neutering the guard lets uncheckable-story.md pass (guard fires)"
+  mutant_killed "${B_unchk:-0}" mutant-uncheckable-guard "ok: MUTATION — neutering the guard lets uncheckable-story.md pass (guard fires)"
 else
   echo "FAIL: MUTATION — uncheckable-story.md still rejected without the guard; the FAIL above proves nothing" >&2
   rc=1
@@ -100,7 +109,7 @@ spell_case() { # spell_case <label> <opener> <closer> <bullet> <expected-rc>
   bash "$VALIDATOR" "$SP/s.md" >/dev/null 2>&1
   local got=$?
   if [ "$got" -eq "$5" ]; then
-    echo "ok: spelling '$1' — $6"
+    ok "ok: spelling '$1' — $6"; [ "$1|$5" = "sprint-suffixed closer|1" ] && B_spell_sfx=1
   else
     echo "FAIL: spelling '$1' — $6: expected rc=$5, got rc=$got" >&2
     rc=1
@@ -158,7 +167,7 @@ else
     ( cd "$3" && bash "$1" "$4" >/dev/null 2>&1 )
     local got=$?
     if [ "$got" -eq "$5" ]; then
-      echo "ok: CWD INVARIANCE — $6 from cwd '$2'"
+      ok "ok: CWD INVARIANCE — $6 from cwd '$2'"; [ "$3|$5" = "$DECOY|0" ] && B_cwd_decoy=1
       return 0
     fi
     echo "FAIL: CWD INVARIANCE — $6 from cwd '$2': expected rc=$5, got rc=$got" >&2
@@ -193,7 +202,7 @@ CWDS
       echo "FAIL: MUTATION — cwd-first resolution still accepted the honest story from the decoy cwd; the invariance assertions prove nothing" >&2
       rc=1
     else
-      echo "ok: MUTATION — cwd-first resolution reds the honest story from the decoy cwd (the ORDER is what the assertions test)"
+      mutant_killed "${B_cwd_decoy:-0}" mutant-cwd-order "ok: MUTATION — cwd-first resolution reds the honest story from the decoy cwd (the ORDER is what the assertions test)"
     fi
     # Pairing: the same mutant must still accept it from a cwd with no decoy. A mutant
     # that reds everything would satisfy the assertion above while testing nothing.
@@ -251,7 +260,7 @@ else
   printf '# story\n\n<!-- LOCKED_REQUIREMENTS -->\nfull_text_source: product-brief.md:LR-S1-1\n- LR-S1-1 pool fee is 500 FABRICATED\n<!-- END S1 LOCKED requirements -->\n' \
     > "$SP/s.md"
   if bash "$MUT2" "$SP/s.md" >/dev/null 2>&1; then
-    echo "ok: MUTATION — with core's single closer spelling, a FABRICATED requirement passes (the widening is what catches it)"
+    mutant_killed "${B_spell_sfx:-0}" mutant-grammar "ok: MUTATION — with core's single closer spelling, a FABRICATED requirement passes (the widening is what catches it)"
   else
     echo "FAIL: MUTATION — the narrowed grammar still caught it; the spelling matrix proves nothing" >&2
     rc=1
@@ -285,7 +294,7 @@ if "$VALIDATOR" "$DIR/dangling-pointer-story.md" >/dev/null 2>&1; then
   echo "FAIL: dangling-pointer-story.md passed — a requires_context: anchor absent from the artifact is a load pointer to nothing" >&2
   rc=1
 else
-  echo "ok: dangling-pointer-story.md rejected (dangling load pointer)"
+  ok "ok: dangling-pointer-story.md rejected (dangling load pointer)"; B_dangling=1
 fi
 
 MUT3="$WORK/mut-no-pointer-resolution.sh"; cp "$VALIDATOR" "$MUT3"
@@ -295,7 +304,7 @@ if cmp -s "$VALIDATOR" "$MUT3"; then
   rc=1
 else
   if bash "$MUT3" "$DIR/dangling-pointer-story.md" >/dev/null 2>&1; then
-    echo "ok: MUTATION — with pointer resolution reverted, the dangling pointer goes GREEN (resolution is what catches it)"
+    mutant_killed "${B_dangling:-0}" mut-no-pointer-resolution "ok: MUTATION — with pointer resolution reverted, the dangling pointer goes GREEN (resolution is what catches it)"
   else
     echo "FAIL: MUTATION — the dangling pointer still red with resolution reverted; some OTHER rejection is doing the work" >&2
     rc=1
@@ -337,7 +346,7 @@ if bash "$VALIDATOR" "$AW/off-anchor.md" >/dev/null 2>&1; then
   echo "FAIL: off-anchor story passed — the bullet lives under Section B and the block cites Section A" >&2
   rc=1
 else
-  echo "ok: off-anchor story rejected (byte-match is scoped to the cited anchor, not the whole file)"
+  ok "ok: off-anchor story rejected (byte-match is scoped to the cited anchor, not the whole file)"; B_offanchor=1
 fi
 
 MUT4="$WORK/mut-whole-file-bytematch.sh"; cp "$VALIDATOR" "$MUT4"
@@ -347,7 +356,7 @@ if cmp -s "$VALIDATOR" "$MUT4"; then
   rc=1
 else
   if bash "$MUT4" "$AW/off-anchor.md" >/dev/null 2>&1; then
-    echo "ok: MUTATION — with the byte-match reverted to whole-file, the off-anchor story goes GREEN (the shipped defect, on demand)"
+    mutant_killed "${B_offanchor:-0}" mut-whole-file-bytematch "ok: MUTATION — with the byte-match reverted to whole-file, the off-anchor story goes GREEN (the shipped defect, on demand)"
   else
     echo "FAIL: MUTATION — the off-anchor story still red against a whole-file match; the scoping is not what catches it" >&2
     rc=1
@@ -368,7 +377,7 @@ fi
 NV_OUT="$("$VALIDATOR" "$DIR/nothing-verified-story.md" 2>&1)"
 GD_OUT="$("$VALIDATOR" "$DIR/good-story.md" 2>&1)"
 case "$NV_OUT" in
-  *"EXAMINED NOTHING"*) echo "ok: a zero-verification story reports PASS — EXAMINED NOTHING" ;;
+  *"EXAMINED NOTHING"*) ok "ok: a zero-verification story reports PASS — EXAMINED NOTHING"; B_tworoads=1 ;;
   *) echo "FAIL: a zero-verification story reports the same line as a verified one: $NV_OUT" >&2; rc=1 ;;
 esac
 case "$GD_OUT" in
@@ -386,7 +395,7 @@ else
     echo "FAIL: MUTATION — the collapsed branch still distinguishes the two roads; the branch is not what does it" >&2
     rc=1
   else
-    echo "ok: MUTATION — with the branch collapsed, a zero-verification story spells like a verified one (the defect, on demand)"
+    mutant_killed "${B_tworoads:-0}" mut-one-pass-line "ok: MUTATION — with the branch collapsed, a zero-verification story spells like a verified one (the defect, on demand)"
   fi
 fi
 
@@ -439,7 +448,7 @@ else
 fi
 if LEG_OUT="$("$VALIDATOR" "$SOR/s302/stories/legacy-sor.md" 2>&1)" \
    && grep -q "legacy 'product-brief.md'" <<<"$LEG_OUT"; then
-  echo "ok: SoR — the legacy product-brief.md is still accepted AND counted on the PASS line"
+  ok "ok: SoR — the legacy product-brief.md is still accepted AND counted on the PASS line"; B_legacy=1
 else
   echo "FAIL: SoR — the legacy citation was refused or went uncounted: $LEG_OUT" >&2
   rc=1
@@ -520,7 +529,7 @@ co_story "$COB/s302/stories/carry-over-index.md"  "prd.md"                "$CO_F
 co_story "$COB/s302/stories/carry-over-cross.md"  "carry-over-backlog.md" "$CO_FOREIGN"
 
 if "$VALIDATOR" "$COB/s302/stories/carry-over-sor.md" >/dev/null 2>&1; then
-  echo "ok: carry-over — a closure-condition quotation citing carry-over-backlog.md is ACCEPTED"
+  ok "ok: carry-over — a closure-condition quotation citing carry-over-backlog.md is ACCEPTED"; B_cosor=1
 else
   echo "FAIL: carry-over — a byte-verbatim closure-condition quotation was refused" >&2
   rc=1
@@ -563,7 +572,7 @@ if CX_OUT="$("$VALIDATOR" "$COB/s302/stories/carry-over-cross.md" 2>&1)"; then
   echo "FAIL: carry-over — a bullet from a section the citation does not name PASSED; the window is the whole file and the byte-match proves only co-presence" >&2
   rc=1
 elif grep -qF "not byte-present" <<<"$CX_OUT"; then
-  echo "ok: carry-over — a cross-section quotation is REJECTED (the window is the cited heading's section)"
+  ok "ok: carry-over — a cross-section quotation is REJECTED (the window is the cited heading's section)"; B_cross=1
 else
   echo "FAIL: carry-over — the cross-section quotation was refused for the WRONG reason: $CX_OUT" >&2
   rc=1
@@ -595,7 +604,7 @@ elif grep -q 'if not i_is_heading' "$MUT9"; then
   echo "FIXTURE ERROR: only ONE of the two window layers was reverted — the mutant would prove the layer left in place" >&2
   rc=2
 elif bash "$MUT9" "$COB/s302/stories/carry-over-cross.md" >/dev/null 2>&1; then
-  echo "ok: MUTATION — with every hit line opening a section, the preamble mention widens the window to EOF and the cross-section quotation passes (the defect, on demand)"
+  mutant_killed "${B_cross:-0}" mut-all-hit-window "ok: MUTATION — with every hit line opening a section, the preamble mention widens the window to EOF and the cross-section quotation passes (the defect, on demand)"
 else
   echo "FAIL: MUTATION — the cross-section story still reds with the narrowing reverted; the narrowing is not what catches it" >&2
   rc=1
@@ -640,7 +649,7 @@ if FC_OUT="$("$VALIDATOR" "$COB/s302/stories/flat-cross.md" 2>&1)"; then
   echo "FAIL: carry-over — FALLBACK: a bullet past a later heading was accepted under a heading-less anchor; the fallback window is unbounded" >&2
   rc=1
 elif grep -qF "not byte-present" <<<"$FC_OUT"; then
-  echo "ok: carry-over — FALLBACK: a bullet past the next heading is REJECTED (a mention's window stops at the next heading of ANY depth)"
+  ok "ok: carry-over — FALLBACK: a bullet past the next heading is REJECTED (a mention's window stops at the next heading of ANY depth)"; B_flatcross=1
 else
   echo "FAIL: carry-over — FALLBACK: the cross-region quotation was refused for the WRONG reason: $FC_OUT" >&2
   rc=1
@@ -657,7 +666,7 @@ if cmp -s "$VALIDATOR" "$MUT10"; then
   echo "FAIL: MUTATION setup — the fallback bound was not reverted, so the fallback arms prove nothing" >&2
   rc=1
 elif bash "$MUT10" "$COB/s302/stories/flat-cross.md" >/dev/null 2>&1; then
-  echo "ok: MUTATION — with a mention walking to the next same-or-shallower heading, the cross-region quotation passes (the whole-file window, on demand)"
+  mutant_killed "${B_flatcross:-0}" mut-unbounded-mention "ok: MUTATION — with a mention walking to the next same-or-shallower heading, the cross-region quotation passes (the whole-file window, on demand)"
 else
   echo "FAIL: MUTATION — the cross-region story still reds with the bound reverted; the bound is not what catches it" >&2
   rc=1
@@ -718,7 +727,7 @@ full_text_source: locked-requirements.md#LR-S299-1
 <!-- END LOCKED_REQUIREMENTS -->
 STOREOF
 if "$VALIDATOR" "$SOR/s302/stories/cross-sprint.md" >/dev/null 2>&1; then
-  echo "ok: cross-sprint — an anchor naming s299 resolves to s299/, not to the story's own slot"
+  ok "ok: cross-sprint — an anchor naming s299 resolves to s299/, not to the story's own slot"; B_xsprint=1
 else
   echo "FAIL: cross-sprint — a legal earlier-sprint anchor was rejected" >&2
   rc=1
@@ -744,7 +753,7 @@ elif bash "$MUT7" "$SOR/s302/stories/cross-sprint.md" >/dev/null 2>&1; then
   echo "FAIL: MUTATION — the cross-sprint story passed with slot resolution disabled; something else resolves it" >&2
   rc=1
 else
-  echo "ok: MUTATION — disabling sprint-slot resolution reds the cross-sprint story"
+  mutant_killed "${B_xsprint:-0}" mut-no-slot-resolve "ok: MUTATION — disabling sprint-slot resolution reds the cross-sprint story"
 fi
 # PAIRING: the same mutant must still accept a SAME-sprint story, or it died elsewhere.
 if bash "$MUT7" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
@@ -767,7 +776,7 @@ elif bash "$MUT8" "$COB/s302/stories/carry-over-sor.md" >/dev/null 2>&1; then
   echo "FAIL: MUTATION — the carry-over citation passed with carry-over-backlog.md removed; the name set is not what admits it" >&2
   rc=1
 else
-  echo "ok: MUTATION — dropping carry-over-backlog.md reds the carry-over story (the acceptance is the tuple, not the resolver)"
+  mutant_killed "${B_cosor:-0}" mut-no-carryover-sor "ok: MUTATION — dropping carry-over-backlog.md reds the carry-over story (the acceptance is the tuple, not the resolver)"
 fi
 # PAIRING: the same mutant must still accept the NEW name, or it died of something else.
 if bash "$MUT8" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
@@ -788,7 +797,7 @@ elif bash "$MUT6" "$SOR/s302/stories/legacy-sor.md" >/dev/null 2>&1; then
   echo "FAIL: MUTATION — the legacy citation passed with the legacy name removed; the pair is not what accepts it" >&2
   rc=1
 else
-  echo "ok: MUTATION — dropping the legacy name reds the legacy citation (the acceptance is the pair, not the resolver)"
+  mutant_killed "${B_legacy:-0}" mut-single-sor "ok: MUTATION — dropping the legacy name reds the legacy citation (the acceptance is the pair, not the resolver)"
 fi
 # PAIRING: the same mutant must still accept the NEW name, or it died of something else.
 if bash "$MUT6" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
@@ -904,8 +913,8 @@ ctx_case() { # ctx_case <validator> <story> <want-rc> <want-counts> <what>
 
 ctx_case "$VALIDATOR" "$CTX/h.md" 0 "1/0" "a VERBATIM bullet is counted byte-present"
 ctx_case "$VALIDATOR" "$CTX/f.md" 0 "0/1" "a FABRICATED bullet is counted not byte-present AND STILL EXITS 0"
-ctx_case "$VALIDATOR" "$CTX/a.md" 0 "0/1" "an ABRIDGED HONEST bullet is counted not byte-present AND STILL EXITS 0 — the observation is a report, not a verdict"
-ctx_case "$VALIDATOR" "$CTX/x.md" 0 "0/1" "a bullet from a section the pointer does not name is not byte-present at the CITED anchor"
+ctx_case "$VALIDATOR" "$CTX/a.md" 0 "0/1" "an ABRIDGED HONEST bullet is counted not byte-present AND STILL EXITS 0 — the observation is a report, not a verdict"; R_ctx_a=$?
+ctx_case "$VALIDATOR" "$CTX/x.md" 0 "0/1" "a bullet from a section the pointer does not name is not byte-present at the CITED anchor"; R_ctx_x=$?
 
 # THE FABRICATED/HONEST SPLIT, ASSERTED ON THE COUNTS THEMSELVES. Two stories one bullet
 # apart must disagree on the count fields. This is the assertion the entry's receipt
@@ -919,7 +928,7 @@ elif [ "${ctx_h#* }" = "${ctx_f#* }" ]; then
   echo "FAIL: ctx observation — a verbatim and a fabricated block report the SAME count fields ('${ctx_h#* }'); nothing downstream of this validator can tell them apart" >&2
   rc=1
 else
-  echo "ok: ctx observation — the fabricated and honest blocks SPLIT on the count fields ('${ctx_f#* }' vs '${ctx_h#* }')"
+  ok "ok: ctx observation — the fabricated and honest blocks SPLIT on the count fields ('${ctx_f#* }' vs '${ctx_h#* }')"; B_split=1
 fi
 # ... and the exit codes must NOT split. The whole constraint on this road.
 if [ "${ctx_h%% *}" = "0" ] && [ "${ctx_f%% *}" = "0" ]; then
@@ -950,7 +959,7 @@ else
   mb1_h="$(ctx_counts "$MB1" "$CTX/h.md")"
   mb1_f="$(ctx_counts "$MB1" "$CTX/f.md")"
   if [ "${mb1_h#* }" = "NONE" ] && [ "${mb1_f#* }" = "NONE" ]; then
-    echo "ok: MUTATION MB1 — a per-story run marker prints NO count fields, so the arms above score it RED (they read the counts, not the line)"
+    mutant_killed "${B_split:-0}" MB1 "ok: MUTATION MB1 — a per-story run marker prints NO count fields, so the arms above score it RED (they read the counts, not the line)"
   else
     echo "FAIL: MUTATION MB1 — the run-marker mutant still satisfies the count arms (h='$mb1_h' f='$mb1_f'); they are reading something a marker can forge" >&2
     rc=1
@@ -990,7 +999,7 @@ else
     echo "FAIL: MUTATION MB2 — with the observation appended to failures, the ABRIDGED HONEST story still exits 0; the report-only assertion is not what keeps it green" >&2
     rc=1
   else
-    echo "ok: MUTATION MB2 — enforcing the observation REDS the abridged honest story (report-only is what keeps it green, and an enforcing regression is visible)"
+    mutant_killed "$([ "$R_ctx_a" = 0 ] && echo 1)" MB2 "ok: MUTATION MB2 — enforcing the observation REDS the abridged honest story (report-only is what keeps it green, and an enforcing regression is visible)"
   fi
   # PAIRING: the same mutant must still accept the VERBATIM story, or it reds everything
   # and its verdict is unattributable.
@@ -1018,7 +1027,7 @@ if cmp -s "$VALIDATOR" "$MB3"; then
 else
   mb3_x="$(ctx_counts "$MB3" "$CTX/x.md")"
   if [ "${mb3_x#* }" = "1/0" ]; then
-    echo "ok: MUTATION MB3 — matching the whole artifact counts a bullet from an uncited section as byte-present (the window is what scopes the observation)"
+    mutant_killed "$([ "$R_ctx_x" = 0 ] && echo 1)" MB3 "ok: MUTATION MB3 — matching the whole artifact counts a bullet from an uncited section as byte-present (the window is what scopes the observation)"
   else
     echo "FAIL: MUTATION MB3 — the cross-section bullet is still not byte-present with the window widened to the whole file (got '$mb3_x'); the window is not what the cross-section arm tests" >&2
     rc=1

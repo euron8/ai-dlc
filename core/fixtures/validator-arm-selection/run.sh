@@ -48,8 +48,9 @@
 # construction and the diff would measure the crash). The two twins on the m1 row are the
 # other two crash shapes arm 4 matches: a broken slice could plausibly surface as any of the
 # three, and only the unbound variable is the one this mutant must produce.
-# The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
-# command, run from the repository root; hermetic-run.sh forwards no argument, so it does not
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run the REMEASURE command, from the repository root; hermetic-run.sh forwards no
+# argument, so it does not
 # reach that mode and the per-push run never executes a matrix-only cell (the ledger arm at
 # the end of a plain run asserts it).
 # MUTANT-MATRIX i66-widen decides=i66-fork twins=i66-keyrows-unsound

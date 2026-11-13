@@ -3,3 +3,6 @@
 778 *
 0 core/git-hooks/pre-push
 2 core/scripts/derive-fixture-readsets.sh
+# BL-982: every drive of the deriver through the runner inproc() logs one in-process pass, keyed on the path (a mutant
+# copy at the subject path counts, as lib/inproc.sh states); measured by one counted run.
+83 inproc:core/scripts/derive-fixture-readsets.sh

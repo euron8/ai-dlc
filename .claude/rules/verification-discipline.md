@@ -1,245 +1,165 @@
-<!-- unconditional: method binds every task here and leaves no artifact a `paths:` glob could match — there is no file whose reading means "you are about to measure something". A scoped rule would also be gone after the first compaction, which is exactly when a long session starts trusting its own earlier numbers. -->
+<!-- unconditional: method binds every task here and leaves no artifact a `paths:` glob could match; a scoped rule would be gone after the first compaction. -->
 
 # Verification discipline
 
-How to establish that a thing is true here. `CLAUDE.md` carries the two rules with the
-longest scar histories — a zero needs a control, and a check that cannot fire reads like one
-that passed. These are the rest.
+How to establish that a thing is true here. `CLAUDE.md` carries two rules: a zero needs a control, and a check
+that cannot fire reads like one that passed. These are the rest.
 
 ## Every arm carries a self-probe, and the probe runs BEFORE the corpus
 
-An arm reporting zero findings without first proving it can produce one has established that
-it ran, not that the corpus is clean. Build probe trees under `mktemp`, never the real
-corpus, and fire the probe in **both** directions: the arm reports a seeded offender, and
-stays quiet on a seeded near-miss. One direction alone leaves a scan that flags everything
-looking identical to a scan that discriminates.
+Build probe trees under `mktemp`, never the real corpus, and fire the probe in **both** directions: the arm
+reports a seeded offender and stays quiet on a seeded near-miss.
 
-This is the most-repeated rule in the repo and the one most often skipped in new work.
+## Run the control on the input that DISCRIMINATES
 
-## Run the control on the input that DISCRIMINATES, and assert it discriminates first
-
-A control passing on an input ADJACENT to the one that matters reads exactly like one that works.
-Measured: an inclusive and an exclusive range return the same commit when walked from one step ahead
-of the discriminating input, so the control passed under both the broken and the fixed
-implementation. Where two candidate semantics exist, compute both and REFUSE unless they differ.
+A control on an input ADJACENT to the one that matters reads as working. Where two candidate semantics exist
+(inclusive/exclusive range), compute both and REFUSE unless they differ.
 
 ## Count a suite's distinct input SHAPES, not its arms
 
-Channels written by different hands converge on the obvious way to build the input and then
-agree for that reason rather than because the subject is right. Measured: a wrong fix passed a
-self-probe, a receipt and twenty-one mutants, because every one seeded the duplicate ADJACENT to
-the original — the receipt could only ever do so. The gap is in the SEED; the repair is one seed
-per channel, never another arm.
+Channels converge on the obvious input and agree for that reason. Give each channel its own seed shape (for
+example a duplicate NOT adjacent to the original); never add another arm instead.
 
-**A MUTANT THAT SCORES IDENTICAL MAY MEAN THE CORPUS LACKS THE DISCRIMINATING INPUT.** The
-reading that comes first — "the property is not load-bearing, drop the guard" — is the wrong
-direction, and it is the direction that deletes a correct guard. Measured: a memo separating a
-cache MISS from an EMPTY BLOB was probed by a mutant conflating the two, which returned
-byte-identical output AND the identical call count, because the seeded corpus contained no
-empty blob. Constructed one: 5 lookups cost 1 call under the guard and 5 under the mutant, with
-a non-empty blob as the same-invocation control at 1 either way. Ask what input would separate
-them and whether the corpus can hold it, BEFORE reading a null as an acquittal.
+A mutant that scores identical may mean the corpus lacks the discriminating input. Before reading a null as
+"not load-bearing, drop the guard", construct the input that would separate them (for a miss-vs-empty-blob
+memo, a corpus with an empty blob) and compare behaviour and call counts.
 
 ## Point a search grammar at its own subject before trusting its zero
 
-`CLAUDE.md`'s "prove it can fail" applied to a SCAN, where the failure is silent: the grammar
-cannot spell the thing it hunts, so it scores its own subject as a non-instance. Measured twice
-in one sweep — a scan keyed on `awk` pattern-action rules could not express `if (line ~ /…/)`
-bodies, and `[^:]*` could not cross the colons inside `[[:blank:]]`. Both returned clean. That
-zero is a floor of unknown depth; discard it rather than report it.
+A scan whose grammar cannot spell its subject (awk pattern-action rules against `if (line ~ /…/)` bodies;
+`[^:]*` against `[[:blank:]]`) scores it as a non-instance. Discard such a zero.
 
 ## Text about a program is not the program
 
-Six instances in one program, by two parties both watching for it: a path a receipt READS vs
-MENTIONS; a grep hit counted as a call site; a report's own sentence counted as a data row; a guard
-testing that extracted text CONTAINED a function name, which mangled unparseable text still does.
-Reading harder does not fix it — reading is the faculty that fails. Recompute and compare two
+A path a receipt READS vs MENTIONS, a grep hit counted as a call site, a report's sentence counted as a data
+row, extracted text CONTAINING a function name: reading harder does not fix it. Recompute and compare two
 independently derived values; a count read off a rendering is not a derived count.
 
 **A transcript replay counts EXECUTED calls, not attempted ones.** Pair each `tool_use` with its
 `tool_result` by id and drop denied or `is_error` calls: a PreToolUse deny means PostToolUse never
-fires. Measured: context-mode denied 105 of 220 whole step Reads, and a replay counting attempts
-claimed 4 prevented wrong closes where executed Reads gave 1.
+fires.
 
 ## A coverage proof over a DERIVED population cannot see outside it
 
-Measured: a census from a pinned snapshot was fully accounted for and blind to entries filed after
-the pin; a bucket labelled "nothing to compare" held the set's largest disagreement, because the
-parser's grammar could not spell it. Ask separately what the population EXCLUDED.
+Ask separately what the population EXCLUDED: entries filed after a pinned snapshot, and a bucket labelled
+"nothing to compare" that the parser's grammar cannot spell.
 
 ## A prediction sent without its preconditions is a false finding
 
-Measured: an expected-outcome row went to another session without stating that its population was an
-unapplied document and its guard unreachable in the current state. That session measured zero,
-correctly, and nearly filed a defect against a working engine.
+State the population and reachability of the guard (for example "unapplied document, guard unreachable")
+alongside any expected-outcome row sent to another session.
 
 ## A receipt that reads a RENDERED artifact is closable by prose
 
-Drive the shipping program; do not grep the document it produced. Measured: a backlog receipt
-keyed on a row of a generated index, where that row's cell rendered from a COMMENT no arm
-validates — three names appended to that one line returned receipt 0, render 0 and gate 0 with
-no owner, no invariant and no behaviour changed. Ask of every receipt what ELSE satisfies it,
-and prefer the arm that RUNS the subject over the one that reads its output.
-Isolating the subject is not the PROGRAM: a CALLER defect stays invisible, and a movement it never reaches reads as behaviour.
+Drive the shipping program; do not grep the document it produced. Ask what ELSE satisfies a receipt, and prefer
+the arm that RUNS the subject over the one that reads its output. Isolating the subject is not the PROGRAM: a
+CALLER defect stays invisible.
 
-**A receipt that accepts TWO candidate fixes has established neither.** Measured: an entry said
-its receipt "takes either fix" and it did — one of the two was a regression that shipped nothing.
-Build both and score them. Once an entry rotates its receipt is ARCHIVED and inert while the
-FIXTURE still runs, so score a proposed receipt-weakness against the fixture before reading it as
-a coverage gap: four implementations satisfied one receipt and the fixture killed three.
+A receipt that accepts TWO candidate fixes has established neither: build both and score them. An archived
+receipt is inert while the FIXTURE still runs, so score a proposed receipt-weakness against the fixture before
+reading it as a coverage gap.
 
 ## A control that agrees with the verdict is not a control
 
-Run the control against the thing the verdict claims is ABSENT, and read its output. A
-control that proves only that the RUN happened says nothing about whether the ARM could have
-fired; those are two separate claims and both need establishing. When a search returns
-nothing, the control must be a token you already know is present in the same corpus, in the
-same invocation.
+Run the control against the thing the verdict claims is ABSENT, and read its output; it must prove the ARM
+could have fired, not only that the RUN happened. For an empty search the control is a token known present in
+the same corpus, in the same invocation.
 
-**A landed branch is no positive control for a blob-equality "did it land" check**: later main edits to shared files make it read DIFF (two 0.968.0 branches did, on `docs/backlog.md` and the allowlists). The control is synthetic, `git commit-tree -p <old base> origin/main^{tree}`, which must read EQUAL, paired with an unlanded sha as the negative. The check keeps landed work that touched shared files and never deletes unlanded work.
+A landed branch is no positive control for a blob-equality "did it land" check (later main edits make it read
+DIFF). Use a synthetic one, `git commit-tree -p <old base> origin/main^{tree}`, which must read EQUAL, paired
+with an unlanded sha as the negative. The check keeps landed work that touched shared files and never deletes
+unlanded work.
 
 ## A differential must prove its two sides differ
 
-Both runs reading the same tree establishes nothing. Measured: a `sed` making a probe's root
-overridable expanded to the identical line, so both runs used the fixed copy and the outputs
-matched perfectly — which reads as "no regression". Assert the sides differ, in the same
-invocation, before reading the comparison.
-
-**AND IT MUST BE ABLE TO RESOLVE THE EFFECT.** A differential whose spread across reps is the
-size of the thing being measured reports a null that means nothing. Measured: a removal
-differential read 7130 against 7130 with a spread of ±2 and shipped the claim "costs ZERO",
-which a per-line attribution table then contradicted directly. Ask what a differential can
-RESOLVE before reading a null off it.
-
-**DIFFERING SIDES ARE NOT ENOUGH: ASK WHAT MAKES BOTH FAIL.** Two different programs both failing
-for a reason NEITHER owns is non-discriminating and its null reads as agreement. Measured: 16
-series, 16 identical `1 -> 1` pairs, 0 findings — the subject fails CLOSED without a flag the probe
-cannot pass. The signal was the ARM each side NAMED, not its status.
+- Assert the sides differ in the same invocation, before reading the comparison (a `sed` that expands to the
+  identical line makes both runs use the same copy).
+- It must be able to RESOLVE the effect: a spread across reps the size of the effect makes a null meaningless.
+- Ask what makes BOTH fail: two programs failing for a reason neither owns is non-discriminating; read the ARM
+  each side NAMED, not its status.
 
 ## Count both sides the same way
 
-A `mktemp` extraction counted against the live repo compares two TREES, not two revisions.
-Extract both sides alike before comparing counts.
+A `mktemp` extraction counted against the live repo compares two TREES. Extract both sides alike.
 
-**A COUNT OVER A DERIVED CORPUS IS A FUNCTION OF WHAT IS ON DISK, AND IT GOES WRONG IN BOTH
-DIRECTIONS.** Arms that walk the shipped-`.sh` set — and one that walks the whole tree — count
-any extra copy, so a fork total moves with files nobody meant to measure. Measured in one batch:
-a builder kept a second copy of the subject on disk so each side could trace its own file and
-read 8317; I measured the other side in the main checkout, where 35 agent worktrees each carry a
-full tree. Both re-taken in clean `git worktree` checkouts: 8219 and 6425. Take such a count in a
-clean worktree and name the tree beside the number.
+A count over a derived corpus is a function of what is on disk, in both directions: extra copies of the subject
+and agent worktrees (each carrying a full tree) move it. Take such a count in a clean `git worktree` checkout
+and name the tree beside the number.
 
 ## Run the shipping code against the real corpus
 
-A hand-written probe is a second implementation whose bugs nobody finds. When a probe and
-the shipping code disagree, the probe is wrong until proven otherwise. Reach for the real
-program and the real tree; where that is impossible, say so in the same breath as the number.
+A hand-written probe is a second implementation whose bugs nobody finds. When probe and shipping code disagree,
+the probe is wrong until proven otherwise. Where the real program cannot be used, say so beside the number.
 
-## Cross-check a parser against what EXECUTES it, never against another parser
+## Cross-check a parser against what EXECUTES it, never another parser
 
-A second implementation of a grammar is an opinion; the thing that runs the input is the
-answer. Measured on a shell quote scanner over 3408 real commands: checked against python
-`shlex` AND against `bash -n -c`, the two oracles disagreed on 23. `shlex` was wrong on 20 of
-them, and the 2 the scanner itself got wrong were a real defect it was about to ship. Taking
-`shlex` as the oracle buys 21 phantom cases and misses both true ones.
+Use the executor (`bash -n -c` for shell) as the oracle; `shlex` and similar second parsers disagree with it.
 
 ## Read the CONSUMING mechanism's own remedy text before calling its input wrong
 
-The contract is usually written inside whatever reads the value. Measured: a fix made
-`--is-core` refuse a path naming no file, and the guard that consumes that answer already said
-the deny "stands whether or not the distribution ships a file by that name". Reverted one release
-later. A byte-comparison of two programs' shared HELPERS is not a binding on their ANSWER, which
-is why that gate stayed green throughout.
+The contract is usually written inside whatever reads the value. A byte-comparison of two programs' shared
+HELPERS is not a binding on their ANSWER.
 
 ## Verify the premise before building
 
-Every plan, catalog entry, ledger row, handoff tag and consumer report is a HYPOTHESIS about
-a tree that has moved since it was written. The measured base rate of expired premises here
-is roughly one in two. A claim that names a real file reads as verified and is not — the
-file existing is not the claim.
+Every plan, catalog entry, ledger row, handoff tag and consumer report is a hypothesis about a tree that has
+moved. A claim that names a real file is not verified: the file existing is not the claim.
 
 ## Ask what SET a number was taken over
 
-For every figure: what population produced this, and is it the population the mechanism
-actually runs on? A recorded instance count is a FLOOR. Most failures of this kind are
-failures of scope, not of arithmetic, and they read as precision.
+For every figure, ask what population produced it and whether it is the population the mechanism runs on. A
+recorded instance count is a FLOOR.
 
 ## A correction is itself a measurement, and NARROWING is not the safe direction
 
-Correcting a claim toward "narrower" reads as honesty and is just as capable of being wrong.
-Measured, inside one release: a shipped entry was corrected mid-batch to say a gate's blindness
-held only outside one file class — which was one ROW of a two-row table read as the whole table.
-On the other row the gate caught nothing at all, and a second hand had to WIDEN the claim back.
-Ask which row a correction was measured on before believing it.
+Ask which row (of a multi-row table) a correction was measured on before believing it; a narrowed claim can be
+wrong as easily as a wide one.
 
 ## Key a binding on the emission site
 
-A whole-file `grep -qF` is satisfied by a comment. A grep hit inside a file is not a
-statement about that file, a prose statement of provenance is not a reader, and a declaration
-of intent is never evidence about content. Bind to the line that EMITS the thing, not to a
-file that mentions it.
+A whole-file `grep -qF` is satisfied by a comment. Bind to the line that EMITS the thing; a declaration of
+intent is never evidence about content.
 
 ## How a false-positive set reached zero is part of the arm
 
-`CLAUDE.md` requires the FP set measured before a check ships. Record the narrowing that got
-it there, beside the arm. An arm with no narrowing story is unfinished, and the next author
-widens it back.
+Record the narrowing that got it there, beside the arm.
 
 ## Resolve the repo root by walking up for a marker
 
-Never count `..` hops. A validator that counts hops answers differently from the repo root,
-from a subdirectory, and from a fixture sandbox that copied it — and the sandbox answer is
-usually the silent one. `VERSION` exists only in the distribution, so a walk keyed on it cannot
-resolve an installed tree. Walk up the way `ai_dlc_resolve_root()` at
-`core/scripts/validate-provenance-block.sh:138` does; `core/fixtures/validator-path-resolution`
-holds both layouts to one answer. No shipping fixture walks up for `VERSION`; the ones that name it
-write or read a tree they seeded.
+Never count `..` hops. `VERSION` exists only in the distribution, so a walk keyed on it cannot resolve an
+installed tree. Walk up the way `ai_dlc_resolve_root()` at `core/scripts/validate-provenance-block.sh:138`
+does; `core/fixtures/validator-path-resolution` holds both layouts to one answer.
 
 ## A glob that matches nothing must not report success
 
-`for f in docs/plans/*.md` with no matches iterates once over the literal pattern in some
-shells and zero times in others. Either way an empty corpus exits 0 and reads exactly like
-"every file passed". Count the corpus and fail on zero.
+Count the corpus and fail on zero; an empty `for f in docs/plans/*.md` may iterate once over the literal
+pattern or zero times, and either way exits 0.
 
 ## A calibration is a property of its text, not of its divisor
 
-A bytes-per-token figure measured on one population under-counts on another. Carrying a
-divisor across populations produces the same number with the opposite error, and it survives
-review because the arithmetic is right. Re-measure the calibration whenever the corpus
-changes.
+Re-measure a bytes-per-token figure whenever the corpus changes; carrying a divisor across populations gives
+the same number with the opposite error.
 
 ## Ask what rate a hypothesis PREDICTS before a zero refutes it
 
-A zero consistent with the hypothesis is not evidence against it. Measured: 48 runs hunting a
-0.83%-rate defect returned nothing, the expected count was 0.4, and that clean sweep read as a
-refutation. Compute the predicted count FIRST; below one the run cannot discriminate, and a
-forced input beats a larger N.
+Compute the predicted count FIRST; below one the run cannot discriminate, and a forced input beats a larger N.
 
 ## Verify a release the way the gate runs it
 
-Push, and let the hook's own run be the single gate. Do not force a full run with
-`AI_DLC_FIXTURE_NO_SKIP` to verify a release. A measurement sweep on an unpushed throwaway
-branch may force it; that is the operator's ruling. Read each changed fixture by NAME in that run's output. The
-CONSUMER's hook `core/git-hooks/pre-push` prints a green banner here having run almost
-nothing; the content-key skip prints one too, correctly — neither is evidence your change ran.
-A changed fixture that is ABSENT from the run's output was skipped, which is a read-set gap to
-chase and never a pass. A fixture named on the `verdict store: N fixture(s) skipped` line was skipped on
-a recorded pass; that is not a read-set gap.
-The TALLY is not the verdict either: 159 ok / 0 FAIL while the gate exited 1 on a phase outside
-the suite. Read the gate's exit, never a backgrounded wrapper's.
-
-**And a green gate is not a landed push.** Twice, every phase PASS, `pre-push: all gates green`,
-exit 141 from the transport, and the ref NOT on origin — `git ls-remote --heads origin <branch>`
-empty against a control. Confirm the remote ref moved before opening a PR or reporting a release.
-The cause is outside the tree: `git push` opens the SSH connection BEFORE the hook runs, the
-suite idles it for minutes, GitHub drops it, and the pack write gets SIGPIPE. Three pushes in a
-row dropped mid-suite; `ServerAliveInterval 60` / `ServerAliveCountMax 30` on the alias in
-`~/.ssh/config` was the one change, and the next three ran 8m04s, 8m41s, 8m08s with zero drops.
+- Push, and let the hook's own run be the single gate. Do not force a full run with `AI_DLC_FIXTURE_NO_SKIP`
+  to verify a release; only a measurement sweep on an unpushed throwaway branch may.
+- Read each changed fixture by NAME in that run's output. A changed fixture ABSENT from the output was skipped:
+  a read-set gap to chase, never a pass. One named on the `verdict store: N fixture(s) skipped` line was
+  skipped on a recorded pass, which is not a gap.
+- The CONSUMER's hook `core/git-hooks/pre-push` and the content-key skip print green banners having run almost
+  nothing; neither is evidence your change ran.
+- The TALLY is not the verdict: read the gate's exit, never a backgrounded wrapper's.
+- A green gate is not a landed push. Confirm the remote ref moved (`git ls-remote --heads origin <branch>`
+  non-empty, against a control) before opening a PR or reporting a release. Exit 141 is the transport dropping
+  the idle SSH connection; the fix is `ServerAliveInterval 60` / `ServerAliveCountMax 30` on the alias in
+  `~/.ssh/config`.
 
 ## An entry with two subjects expires only when both do
 
-Measured on a proposed close: two verifiers agreed on every measurement and split on what the
-entry CLAIMED. The named fix was real, the cited code was genuinely gone, and a second subject
-one paragraph down was untouched. Enumerate the entry's distinct claims BEFORE reading a good
-measurement as a close, and say which survive. A release note asserting the fix is not evidence
-either — the one that shipped this half-landed fix says "both" in as many words.
+Enumerate an entry's distinct claims BEFORE reading a good measurement as a close, and say which survive. A
+release note asserting the fix is not evidence.

@@ -24,8 +24,8 @@
 # scored on its DECIDING arm (its finding must be present) and its named TWIN (a different arm of the same
 # checker, which must stay GREEN); `run.sh --matrix` scores it against every arm of its checker and prints
 # one MATRIX line. The arms of the other checker read the other subject, which the mutation never touches, so
-# they are not cells of this mutant. The matrix is re-measured whenever an arm or a mutant is added or changed,
-# by the REMEASURE command below, run from the repo root.
+# they are not cells of this mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2
+# ("One run per distinct state") requires. Run the REMEASURE command below, from the repo root.
 # MUTANT-MATRIX env-no-duty decides=ENV twins=BRANCH
 # MUTANT-MATRIX del-branch decides=BRANCH twins=ENV
 # MUTANT-MATRIX move-branch decides=BRANCH twins=ENV

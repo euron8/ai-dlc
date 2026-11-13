@@ -17,6 +17,13 @@
 # whatever the load), and `ulimit -f 2048`, its stdin /dev/null; no wall clock bounds it (BL-868).
 # Exit: 0 every row holds, 1 a row failed, 2 no subject was found.
 set -u
+# fx_inproc (core/fixtures/lib/mutant.sh) logs this receipt's in-process passes under the fixture's counted run.
+# mutant.sh refuses to load without ok() and bad(), so it is sourced behind stubs that are removed again, as
+# lib/inproc.sh sources it.
+case "${BASH_SOURCE[0]}" in */*) _rl="${BASH_SOURCE[0]%/*}/../lib" ;; *) _rl=../lib ;; esac
+ok() { :; }; bad() { :; }
+. "$_rl/mutant.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/mutant.sh" >&2; exit 2; }
+unset -f ok bad; unset _rl
 D="${1:-$(cd "$(dirname "$0")" && pwd)}"
 LIB_DIR=""; [ -f "$D" ] || LIB_DIR="$(cd "$D" 2> /dev/null && pwd)" || LIB_DIR=""
 # lib.sh's find_up, byte for byte, walking up from <fixture-dir> as lib.sh walks up from its own directory.
@@ -30,6 +37,9 @@ find_up() { # <rel-dist> <rel-consumer> -> first existing path walking up from $
 }
 if [ -f "$D" ]; then RO="$D"
 else RO="$(find_up core/scripts/record-only-diff.sh scripts/ai-dlc/record-only-diff.sh)" || RO=""; fi
+# A pass is logged only for a subject at its own path (a core/scripts directory); a mutant script directory's
+# copy is no pass of the subject.
+case "${RO%/*}" in */core/scripts) RO_PASS=1 ;; *) RO_PASS=0 ;; esac
 [ -n "$RO" ] || { echo "  FAIL  receipt-bl988: no core/scripts/record-only-diff.sh or scripts/ai-dlc/record-only-diff.sh above $D"; exit 2; }
 rfail=0
 rok()  { printf '  ok    receipt-bl988 %s\n' "$1"; }
@@ -45,7 +55,7 @@ printf -- '%s\n' '- canonical: `pytest suite/tests`' \
 # starts no background child and opens no network. So a hang that remains would be a new defect, and it now shows as
 # a hang -- the push's own watchdog reports a stalled fixture -- rather than as a silent pass or fail real time decided.
 ask() {
-  ( ulimit -t 5; ulimit -f 2048; set +u; . "$RO" && ro_main "$1" "$2" "$CV" ) > "$W/out" 2>&1 < /dev/null &
+  ( ulimit -t 5; ulimit -f 2048; set +u; [ "$RO_PASS" = 0 ] || fx_inproc "$RO"; . "$RO" && ro_main "$1" "$2" "$CV" ) > "$W/out" 2>&1 < /dev/null &
   wait "$!"; AR=$?
   AO=""; IFS= read -r -d '' AO < "$W/out"; AO="${AO%$'\n'}"
 }
@@ -59,7 +69,7 @@ row() { # <id> <value> <want run-shape exit> <want run-filter exit> <run-filter 
 }
 # R0: sourced, the subject defines ro_main and returns to the caller (a subject that exits while sourced, or defines
 # nothing, would answer every ask with its own exit and pass the 0/0 rows having read nothing).
-r0="$( ( ulimit -t 5; ulimit -f 2048; set +u; . "$RO" > /dev/null 2>&1 < /dev/null; declare -F ro_main > /dev/null && echo RO-MAIN ) 2> /dev/null )"
+r0="$( ( ulimit -t 5; ulimit -f 2048; set +u; [ "$RO_PASS" = 0 ] || fx_inproc "$RO"; . "$RO" > /dev/null 2>&1 < /dev/null; declare -F ro_main > /dev/null && echo RO-MAIN ) 2> /dev/null )"
 if [ "$r0" = RO-MAIN ]; then rok "R0 $RO defines ro_main when sourced"
 else rbad "R0 $RO, sourced, did not return defining ro_main; no row below reads it"; fi
 row R1 '`python3 -u scripts/w.py --cwd /r --python /v/bin/python -- suite/tests -q -n 8`' 0 0 ""

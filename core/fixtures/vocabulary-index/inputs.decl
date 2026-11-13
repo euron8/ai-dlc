@@ -5,7 +5,7 @@ scripts/
 templates/
 # reason: core/ is read by content -- the renderer globs core/schemas/*.json (scripts/render-vocabulary-index.sh:74) and opens owners derived from validator headers, which may live anywhere under core/ (scripts/render-vocabulary-index.sh:1256, :1290).
 core/
-# copy-only: core/fixtures/vocabulary-index/run.sh:131 run.sh tests for the marker beside the renderer; nothing reads its content
+# copy-only: core/fixtures/vocabulary-index/run.sh:132 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
 # The mutation helpers run.sh sources.
 core/fixtures/lib/mutant.sh

@@ -105,7 +105,8 @@
 # GREEN under that mutant, must pass). `--matrix` runs every arm against every mutant, enforces the exact vector
 # the base asserted (every named arm dead, the rest green) and prints one MATRIX row per mutant and arm.
 # That recorded matrix plus the twin replaces the per-push exact-vector assertion. The unmutated pass and the
-# exit-0 stub still run every arm. Re-measure whenever an arm or a mutant is added or changed.
+# exit-0 stub still run every arm. The matrix is re-measured as .claude/rules/fixture-mutants.md
+# clause 2 ("One run per distinct state") requires.
 # selfloc's vector is W1 S6 G1 G2 H1, not W1 alone, ON PURPOSE: the mutated property is location-dependence (the copy
 # returns 1 from locate() when it does not sit under the review's TOP), and one sourced copy -- placed in R -- sits
 # under one TOP, so every arm whose review lives in another world trips on it. Do not narrow it back to W1; the

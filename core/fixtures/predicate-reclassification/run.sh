@@ -29,8 +29,9 @@
 # reclassification, 11c the extension series moves [] -> [B], ran the toy predicate appears at all), RED on a
 # mutant when the mutated engine's output no longer meets it. A mutant's row names the cell that kills it (decides)
 # and the cell it could plausibly co-trip but must leave GREEN (twins). A plain run scores each mutant on its
-# deciding cell and its twin only, off the one drive it already makes. The matrix is re-measured whenever an arm or
-# a mutant is added or changed, by the REMEASURE command below, run from the repo root. It scores every mutant on
+# deciding cell and its twin only, off the one drive it already makes. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
+# below, from the repo root. It scores every mutant on
 # every cell of the drive it ran on and prints one MATRIX line each. Four drives carry the mutants: part 11's
 # (11a 11c ran), part 16's dist16 drive (UNDEC RECL PASSONLY SILENT0 DASH PARTIAL NONBARE BSILENT NOTETOK), part 17's shipped
 # gate-adjudication drive (GA GAran) and part 18's FAIL_WAIVED drive (WV WVran). No validator unit is selected here, so there is no outside-unit diff.

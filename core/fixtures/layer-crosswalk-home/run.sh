@@ -31,7 +31,8 @@
 # the retired location) and REFUSE (declaration removed); PSCAF and PPRES are the pull-side scaffold and
 # preserve arms. `bash core/fixtures/layer-crosswalk-home/run.sh --matrix` measures every mutant against
 # every arm of its subject and prints one MATRIX line per cell. A twin is an arm the matrix shows green
-# under the mutant. Re-measured whenever an arm or a mutant is added or changed.
+# under the mutant. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run
+# per distinct state") requires.
 # MUTANT-MATRIX fence decides=S0 twins=S2
 # MUTANT-MATRIX warn decides=S2 twins=S0
 # MUTANT-MATRIX refuse decides=REFUSE twins=S0

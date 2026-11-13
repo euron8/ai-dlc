@@ -46,7 +46,8 @@
 # the same-run base-pass flag of the deciding arm, and the arm is also replayed against the shipped hooks
 # first. The live pass keeps every base arm and world. `bash core/fixtures/handoff-completion-assertion/run.sh
 # --matrix` measures every mutant against every arm and prints one MATRIX line per cell. A twin is an arm
-# the matrix shows green under the mutant. Re-measured whenever an arm or a mutant is added or changed.
+# the matrix shows green under the mutant. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 # MUTANT-MATRIX m1 decides=b twins=k
 # MUTANT-MATRIX m2a decides=d twins=k
 # MUTANT-MATRIX m2b decides=e twins=k

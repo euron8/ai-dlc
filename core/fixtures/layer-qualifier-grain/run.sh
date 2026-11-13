@@ -187,7 +187,8 @@ fi
 # MUTANT-MATRIX m10-empty-parts-accepted decides=e11-emptyparts twins=e11-noanchor
 # MUTANT-MATRIX-DYNAMIC score why=score passes its first argument to mutant_killed; every score call names a literal mutant that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-qualifier-grain/run.sh --matrix
-# Re-measured whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 #
 # COPIES, never in-place edits, each guarded by `cmp -s` so a sed that matched
 # nothing cannot pass as a mutation.

@@ -39,7 +39,8 @@
 # refuses a mutant with no row, and a cell that disagrees with its row is a failure. An arm reads the mutant tree
 # in its own mode (a copy of the tree, so one reading never alters another) and is KILLED when the renderer exits
 # non-zero AND prints the arm's message.
-# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh runs a fixture under `env -i` and
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. hermetic-run.sh runs a fixture under `env -i` and
 # forwards no argument, so the matrix is NOT reached through it; run.sh is invoked directly from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/invariant-index/run.sh --matrix
 # MUTANT-MATRIX m1 decides=drift twins=missing

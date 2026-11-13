@@ -30,7 +30,8 @@
 # is one seeded world plus its predicate, run against a root assembled from the real components with
 # that one substituted. Per push each mutant runs its deciding arm (it must trip) and its twin (it must
 # stay green, which proves the effect is confined). The full mutant x arm matrix is MEASURED by the
-# --matrix argv mode and is re-measured whenever an arm or a mutant is added or changed. The recorded
+# --matrix argv mode. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
+# run per distinct state") requires. The recorded
 # matrix plus the twin replaces the exact-vector assertion that a mutant fails only its own assertion.
 # MUTANT-MATRIX mutation-no-parse decides=parse twins=route
 # MUTANT-MATRIX mutation-parse-bare decides=parse twins=route

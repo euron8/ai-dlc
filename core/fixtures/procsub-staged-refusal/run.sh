@@ -208,8 +208,9 @@
 # MUTANT-MATRIX NOSTUB-wt_prov decides=wt_prov twins=wt_healthy
 # MUTANT-MATRIX-DYNAMIC score-mutant-id why=score_mutant passes its "$id" argument to mutant_killed, and its callers mutant, libmutant, lmutant, the self-update-gate preclassify mutant function and nostub (as NOSTUB-<arm>) are each called with a mutant name; score_mutant reads that id's decides and twins from the MUTANT-MATRIX rows via mt_get and reports it as bad when the block has no row for it, so every id mutant_killed is called with carries its own MUTANT-MATRIX row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/procsub-staged-refusal/run.sh --matrix
-# The matrix is measured by that command (every mutant against every arm of its subject's battery, one MATRIX row per cell) and is
-# re-measured whenever an arm or a mutant is added or changed. A plain run drives each mutant's decides arms and its twin only, and
+# The matrix is measured by that command (every mutant against every arm of its subject's battery, one MATRIX row per cell). The
+# matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. A plain run drives
+# each mutant's decides arms and its twin only, and
 # one arm asserts that a plain run executed no matrix-only cell.
 set -uo pipefail
 

@@ -53,8 +53,8 @@
 # (probe-line, bak-seed, nonbang-seed, top-seed over fixa's world; w4 over bak's world; hc_arm below). PER PUSH a
 # mutant builds only the world its deciding arm reads, which it must trip, and reads its twin from that same world,
 # which it must leave GREEN; `--matrix` builds both worlds and prints `MATRIX <mutant> <arm> TRIPPED|GREEN` for all
-# five arms. The rows below are the one source: hc_score reads them from this file. RE-MEASURE whenever an arm or a
-# mutant is added or changed, from the repo root:
+# five arms. The rows below are the one source: hc_score reads them from this file. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run it from the repo root:
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/hermetic-consumption/run.sh --matrix
 # MUTANT-MATRIX m1 decides=probe-line twins=bak-seed
 # MUTANT-MATRIX m2 decides=bak-seed twins=top-seed

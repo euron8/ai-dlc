@@ -35,8 +35,9 @@
 # predicate (a1warn, f_five, lg, ...), built fresh for every cell and driven through a validator
 # directory and a verdict wrapper. Per push a mutant runs its deciding arm (it must trip) and its twin
 # (an arm the measured matrix shows GREEN for it), so the kill is confined to the arm that owns it. The
-# full mutant x arm matrix is MEASURED by the --matrix argv mode and is re-measured whenever an arm or a
-# mutant is added or changed. The recorded matrix plus the twin replaces the exact-vector assertion
+# full mutant x arm matrix is MEASURED by the --matrix argv mode. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. The recorded matrix
+# plus the twin replaces the exact-vector assertion
 # that a mutant fails only its own assertion. Kills go through mutant_killed behind the same-run pass
 # of the unmutated arm (B_<arm>), and an unmutated copy of the LATE validator is asserted green first.
 # MUTANT-MATRIX M1 decides=a1warn twins=a3noflag

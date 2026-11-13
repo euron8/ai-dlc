@@ -35,8 +35,9 @@
 # the mutant's own name. A plain run scores each mutant on its deciding arm and checks its twins
 # against the SAME validator output, so a twin costs no validator run. The kill predicate of
 # every row is single-sourced in `mx_sig`, and both the site and the twin check read it there.
-# The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
-# command below, run from the repo root. It scores every mutant against every arm of its own
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run the REMEASURE command below, from the repo root. It scores every mutant
+# against every arm of its own
 # selected unit, and against every arm outside it by one full validator run of the same
 # mutated tree, whose sorted FAIL: set must equal the selected run's.
 # The cwd rows name every cell other than the deciding one as a twin: all four cells run on
@@ -563,12 +564,24 @@ vrun() {
 # is an ABSENCE over EVERY arm, not over one, so `--arms` would license only the arm it
 # selected and the licence the assertions below rely on would be narrower than the set of
 # arms they use. A selected run says nothing whatever about the arms it did not run.
+#
+# THE FAILING RUN'S OWN WORDS ARE KEPT (BL-1008). This arm once read FIXTURE BROKEN under box
+# overload and ok solo, with nothing to say which arm failed, because the run's output went to
+# /dev/null. Its stderr (every `FAIL:` line the validator's err() writes) is captured and printed
+# under the broken verdict, indented off `^  FAIL`, so the next occurrence names its arm.
 A00_sanity() {
+local a00_err a00_rc
 fx_inproc "$V"
-if vem_entry >/dev/null 2>&1; then
+a00_err="$(vem_entry 2>&1 >/dev/null)"; a00_rc=$?
+if [ "$a00_rc" -eq 0 ]; then
   ok "pristine distribution tree passes (the negatives below mean something)"
 else
-  bad "FIXTURE BROKEN — the pristine tree does not pass validate-enforcement-map.sh. Every assertion below would be a false pass."
+  bad "FIXTURE BROKEN — the pristine tree does not pass validate-enforcement-map.sh (rc=$a00_rc). Every assertion below would be a false pass."
+  if [ -n "$a00_err" ]; then
+    awk 'NR <= 40 { print "      | " $0 }' <<<"$a00_err"
+  else
+    printf '      | (the validator wrote nothing to stderr)\n'
+  fi
 fi
 }
 

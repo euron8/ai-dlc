@@ -65,8 +65,9 @@
 # THE MUTANT x ARM MATRIX. Per push each mutant drives only its DECIDING arm and one TWIN: an arm
 # that stays GREEN under it, run to prove the kill stays confined to the deciding arm. A tripped
 # twin fails the fixture. `--matrix` drives every arm of every mutant and prints one MATRIX-ROW
-# per mutant (cell 1 = the arm is dead under the mutant, 0 = green). Re-measure it whenever an arm
-# or a mutant is added or changed, with the REMEASURE command below. mutate() and mutate2() READ
+# per mutant (cell 1 = the arm is dead under the mutant, 0 = green). The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE
+# command below. mutate() and mutate2() READ
 # their decides/twins from these very lines, so the header is the behaviour, not a copy of it.
 # Arms of part 1 are the worlds a..h; arms of part 2 are the worlds carry..head-absent; arms of
 # part 3 are the worlds land-ok..land-tag; arms of part 4 are the worlds merge-ok..merge-view-lowercase.

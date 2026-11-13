@@ -56,8 +56,9 @@
 # leave GREEN (twins). A1 also goes RED on every mutant, since each lets GIT_DIR reach the worker; it is a second
 # killer, not a twin, and shows in the others= figure of the REMEASURE command. A plain run scores each mutant on its
 # deciding cell and its twin only, off the one drive it already makes; every mutant is named <subject>-<variant>
-# (s1 the distribution runner, s2 the consumer hook). The matrix is re-measured whenever an arm or a mutant is added
-# or changed, by the REMEASURE command below, run from the repo root. It scores every mutant on every cell.
+# (s1 the distribution runner, s2 the consumer hook). The matrix is re-measured as .claude/rules/fixture-mutants.md
+# clause 2 ("One run per distinct state") requires. Run the REMEASURE command below, from the repo root. It scores
+# every mutant on every cell.
 # MUTANT-MATRIX s1-no-scrub decides=A2 twins=ran
 # MUTANT-MATRIX s1-comment-only decides=A2 twins=ran
 # MUTANT-MATRIX s1-scrub-after-dispatch decides=A2 twins=ran

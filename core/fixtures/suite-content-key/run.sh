@@ -34,8 +34,8 @@
 # (k1, k2, k5, k6.hook); M-docs mutates the outer key script, so its cells are the arms driving it after the
 # `+` fixture is built (k3.plans, k3.backlog, k4, k6.key, k7, and a well-formed-key sanity cell). Arms 0-9
 # run against the unmutated key script and the unmutated span, so neither mutant reaches them. The matrix is
-# re-measured whenever an arm or a mutant is added or changed, by the REMEASURE command below, run from the
-# repo root.
+# re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the
+# REMEASURE command below, from the repo root.
 # MUTANT-MATRIX M-plus decides=k1 twins=k2
 # MUTANT-MATRIX M-docs decides=k3.plans twins=k3.backlog
 # Both mutants reach mutant_killed through one helper, as a variable:

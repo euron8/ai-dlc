@@ -1,0 +1,180 @@
+== members: 11 suspect-reading bullets, 5 item-3 bullets
+   S [here] `docs/backlog.md` BL-808, "Outcome reading (PARTIAL, batch b255)": implementation plus `gate-validation[implementation]` per story, s319 to s321, EXTR
+   S [U5 (BL-812)] BL-812, "Progress (batch b255, item 1 measured on s321)", the "Whole sprint, per story, s321 against s319" paragraph that follows it (`gate-validation
+   S [U5 (BL-812)] BL-812, "Progress (batch b256)": the sprint-review "both labels" figures, which count `gate-validation[sprint-review]` into the step (s319 75 spawns, 
+   S [U5 (BL-812)] BL-812, "Projection (c), carry-over-evaluation, against s322": the step population EXCLUDES `gate-validation[carry-over-evaluation]` (81 spawns, $174.
+   S [here] BL-397, "Progress (2026-11-11, batch b255 F4)": implementation plus `gate-validation[implementation]`, s317 to s321.
+   S [here] BL-510, "Outcome measured" (EXTRACT_WIN_END=2026-11-11T10:30:00Z), and the same paragraph archived under BL-507 in `docs/backlog.archive.md`.
+   S [here] BL-975, `Step: gate-validation[carry-over-evaluation]` with `Baseline: s322`, and its body. The five remediators it dates to 17:54Z on 2026-11-09 fall
+   S [here] BL-972, `Step: gate-validation[implementation]` with `Baseline: s321`. Its per-ask step column comes from `ask_split.py` over this extractor's output.
+   S [here] `docs/backlog.archive.md` BL-811, the s319 cross counts by step in its "Cross-collapse half" paragraph (`gate-validation[sprint-review]` 30, `gate-val
+   S [here] `docs/analysis/pipeline-efficiency-s317-s322/out/ask_split.txt`, `docs/analysis/pipeline-efficiency-s317-s322/out/poles.txt` and `docs/analysis/pipeli
+   S [here] `docs/analysis/step-value-sprint-review-deploy-validate-s321.md` (the both-label population, and every cost and per-survivor figure over it) with its 
+   I [U5 (BL-812)] BL-812 "Projection (c)".
+   I [here] BL-975, whose 17:54Z remediators now read `requirements`. Settled in batch 257: BL-975 is relabelled to `Step: requirements`, its briefs reading "spri
+   I [here] The s322 rows of `ask_split.txt`, `poles.txt` and `seats_adversary.txt`.
+   I [here] BL-972's per-ask step column.
+   I [here] Every lead-side `step` reading (segs, hours, hooks, tools) at the LEFT events.
+CONTROL OK: the member list parses non-empty (11 + 5)
+== W1 2026-11-11T10:30:00Z
+   joint_impl: s317 SEATS old: 2.02 h gap-inclusive (gap 0.71 h), token-equivalent $37.0 (API $31.5), 71.9M tokens; lead active 1.32 h, lead $9.3 (API $3.8), subagent active 2.15 h, subagent $27.7; lead-seat local share 65% of 3284 calls
+   joint_impl: s317 SEATS new: 2.01 h gap-inclusive (gap 0.71 h), token-equivalent $36.9 (API $31.4), 71.3M tokens; lead active 1.31 h, lead $9.2 (API $3.7), subagent active 2.15 h, subagent $27.7; lead-seat local share 66% of 3251 calls  <- DIFFER
+   joint_impl: s317 SPAWNS old: 14.1 spawns per story, subagent spawn $24.3 per story (296 spawns)
+   joint_impl: s317 SPAWNS new: SAME
+   joint_impl: s317 PASSES old: gate-1 code-review shards per pass 3.3 over 29 passes; pass-2-and-later review spend $10.8 per story ($227 whole-dollar sum)
+   joint_impl: s317 PASSES new: SAME
+   joint_impl: s318 SEATS old: 0.91 h gap-inclusive (gap 0.17 h), token-equivalent $32.5 (API $32.5), 71.7M tokens; lead active 0.74 h, lead $6.5, subagent active 2.20 h, subagent $26.0; lead-seat local share 0% of 1228 calls
+   joint_impl: s318 SEATS new: SAME
+   joint_impl: s318 SPAWNS old: 17.2 spawns per story, subagent spawn $26.0 per story (223 spawns)
+   joint_impl: s318 SPAWNS new: SAME
+   joint_impl: s318 PASSES old: gate-1 code-review shards per pass 3.3 over 29 passes; pass-2-and-later review spend $8.8 per story ($114 whole-dollar sum)
+   joint_impl: s318 PASSES new: SAME
+   joint_impl: s317+s318 SEATS old: 1.60 h gap-inclusive (gap 0.50 h), token-equivalent $35.3 (API $31.9), 71.8M tokens; lead active 1.10 h, lead $8.2 (API $4.9), subagent active 2.17 h, subagent $27.0; lead-seat local share 48% of 4512 calls
+   joint_impl: s317+s318 SEATS new: 1.59 h gap-inclusive (gap 0.50 h), token-equivalent $35.2 (API $31.8), 71.5M tokens; lead active 1.09 h, lead $8.2 (API $4.8), subagent active 2.17 h, subagent $27.0; lead-seat local share 48% of 4479 calls  <- DIFFER
+   joint_impl: s317+s318 SPAWNS old: 15.3 spawns per story, subagent spawn $24.9 per story (519 spawns)
+   joint_impl: s317+s318 SPAWNS new: SAME
+   joint_impl: s317+s318 PASSES old: gate-1 code-review shards per pass 3.3 over 58 passes; pass-2-and-later review spend $10.0 per story ($341 whole-dollar sum)
+   joint_impl: s317+s318 PASSES new: SAME
+   joint_impl: s319 SEATS old: 2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3), 119.2M tokens; lead active 1.31 h, lead $10.6, subagent active 3.51 h, subagent $30.7; lead-seat local share 0% of 2900 calls
+   joint_impl: s319 SEATS new: SAME
+   joint_impl: s319 SPAWNS old: 31.5 spawns per story, subagent spawn $30.7 per story (630 spawns)
+   joint_impl: s319 SPAWNS new: SAME
+   joint_impl: s319 PASSES old: gate-1 code-review shards per pass 5.5 over 59 passes; pass-2-and-later review spend $16.5 per story ($329 whole-dollar sum)
+   joint_impl: s319 PASSES new: SAME
+   joint_impl: s320 SEATS old: 1.94 h gap-inclusive (gap 0.74 h), token-equivalent $20.7 (API $20.7), 80.0M tokens; lead active 1.20 h, lead $9.9, subagent active 1.69 h, subagent $10.8; lead-seat local share 0% of 1710 calls
+   joint_impl: s320 SEATS new: SAME
+   joint_impl: s320 SPAWNS old: 16.3 spawns per story, subagent spawn $10.8 per story (212 spawns)
+   joint_impl: s320 SPAWNS new: SAME
+   joint_impl: s320 PASSES old: gate-1 code-review shards per pass 1.9 over 23 passes; pass-2-and-later review spend $1.5 per story ($19 whole-dollar sum)
+   joint_impl: s320 PASSES new: SAME
+   joint_impl: s321 SEATS old: 1.13 h gap-inclusive (gap 0.28 h), token-equivalent $25.5 (API $25.5), 66.9M tokens; lead active 0.85 h, lead $7.6, subagent active 1.48 h, subagent $17.9; lead-seat local share 0% of 2508 calls
+   joint_impl: s321 SEATS new: SAME
+   joint_impl: s321 SPAWNS old: 11.2 spawns per story, subagent spawn $17.9 per story (280 spawns)
+   joint_impl: s321 SPAWNS new: SAME
+   joint_impl: s321 PASSES old: gate-1 code-review shards per pass 1.4 over 51 passes; pass-2-and-later review spend $3.2 per story ($80 whole-dollar sum)
+   joint_impl: s321 PASSES new: SAME
+   joint_impl: DIFFER lines: 2
+   joint_impl: CONTROL OK: s319 SEATS old carries '2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3)'
+   joint_impl: CONTROL OK: s319 SEATS old carries 'lead active 1.31 h, lead $10.6, subagent active 3.51 h, subagent $30.7'
+   joint_impl: CONTROL OK: s321 SEATS old carries '1.13 h gap-inclusive (gap 0.28 h), token-equivalent $25.5 (API $25.5)'
+   joint_impl: CONTROL OK: s321 SEATS old carries 'lead active 0.85 h, lead $7.6, subagent active 1.48 h, subagent $17.9'
+   joint_impl: CONTROL OK: s320 SEATS old carries '1.94 h gap-inclusive'
+   joint_impl: CONTROL OK: s320 SEATS old carries 'token-equivalent $20.7'
+   joint_impl: CONTROL OK: s317 SPAWNS old carries '14.1 spawns per story, subagent spawn $24.3 per story'
+   joint_impl: CONTROL OK: s319 SPAWNS old carries '31.5 spawns per story'
+   joint_impl: CONTROL OK: s321 SPAWNS old carries '11.2 spawns per story'
+   joint_impl: CONTROL OK: s319 PASSES old carries 'shards per pass 5.5'
+   joint_impl: CONTROL OK: s320 PASSES old carries 'shards per pass 1.9'
+   joint_impl: CONTROL OK: s321 PASSES old carries 'shards per pass 1.4'
+   joint_impl: CONTROL OK: s319 PASSES old carries 'spend $16.5 per story'
+   joint_impl: CONTROL OK: s320 PASSES old carries 'spend $1.5 per story'
+CONTROL OK: joint_impl.py reproduces the b255 figures on the old extract (exit 0)
+CONTROL OK: old roll.py output == committed out/roll.txt (BL-397, BL-510 cite it)
+   BL-975: 9 spawns started 2026-11-09T17:50Z-18:00Z
+   BL-975 agent-ac4b451217711d991 2026-11-09T17:54:56Z remediator 'Repair part 5 SPEC brief' old=gate-validation[carry-over-evaluation] new=requirements DEAD-SEAT
+   BL-975 agent-affae285a356f1e3d 2026-11-09T17:54:56Z remediator 'Repair part 1 brief' old=gate-validation[carry-over-evaluation] new=requirements
+   BL-975 agent-a35c2f46ce6da29b6 2026-11-09T17:54:56Z remediator 'Repair part 7 brief' old=gate-validation[carry-over-evaluation] new=requirements DEAD-SEAT
+   BL-975 agent-a5e2f2328ad7e79a6 2026-11-09T17:54:56Z remediator 'Repair part 2 brief' old=gate-validation[carry-over-evaluation] new=requirements
+   BL-975 agent-a769b49a42190ca1f 2026-11-09T17:54:57Z remediator 'Repair part 3 brief' old=gate-validation[carry-over-evaluation] new=requirements
+   BL-975 agent-a4993bb965978e3cc 2026-11-09T17:54:57Z remediator 'Repair part 8 brief' old=gate-validation[carry-over-evaluation] new=requirements DEAD-SEAT
+   BL-975 agent-adaecd07b81a5a009 2026-11-09T17:54:57Z remediator 'Repair part 4 brief' old=gate-validation[carry-over-evaluation] new=requirements
+   BL-975 agent-a772b5677a2928ea9 2026-11-09T17:54:57Z remediator 'Repair part 9 brief' old=gate-validation[carry-over-evaluation] new=requirements
+   BL-975 agent-af5fbf05bbbf3f481 2026-11-09T17:54:57Z remediator 'Repair part 6 brief' old=gate-validation[carry-over-evaluation] new=requirements DEAD-SEAT
+CONTROL OK: BL-975: all four dead-seat agent ids are in the selection
+   spawn label changes at W1: 29 of 6017 spawns; old units 6017, new units 6017
+      s322 gate-validation[carry-over-evaluation] -> requirements: 29
+CONTROL OK: old ask_split.py output == committed out/ask_split.txt
+CONTROL OK: ask rows parse on both sides (246 old, 246 new)
+   ask_split: 2 of 246 asks change step column
+      s322 2026-11-09T19:13:39.000Z gate-validation[carry-over-evaluation] -> requirements (22 min, RUNNING-NO-FINISH)
+      s322 2026-11-09T20:18:03.004Z gate-validation[carry-over-evaluation] -> handoff (0 min, NONE-RUNNING)
+   ask_split: 0 asks change any column other than step
+   ask_split summary lines: 1 old-only, 1 new-only
+      old: s322: NONE-RUNNING minutes by step: route 8, gate-validation[requirements] 7, stories-test-strategy 2, handoff 1, gate-validation[carry-over-evaluation] 0
+      new: s322: NONE-RUNNING minutes by step: route 8, gate-validation[requirements] 7, stories-test-strategy 2, handoff 1
+CONTROL OK: old poles.py output == committed out/poles.txt
+   poles: 2 old-only lines, 2 new-only lines
+      old: s322 gate-validation[carry-over-evaluation] intervals   98 busy    3.9 h serial   17.1 h width  4.4 one-agent   1.8 h | solo-role h: remediator 1.6, adversary 1.2, pm-escalated 0.4
+      old: s322 requirements                           intervals   46 busy    2.2 h serial    7.1 h width  3.2 one-agent   0.9 h | solo-role h: adversary 1.3, remediator 1.0
+      new: s322 gate-validation[carry-over-evaluation] intervals   52 busy    1.4 h serial    6.9 h width  5.1 one-agent   0.6 h | solo-role h: pm-escalated 0.4, remediator 0.2, analyst 0.1
+      new: s322 requirements                           intervals   92 busy    4.8 h serial   17.3 h width  3.6 one-agent   2.0 h | solo-role h: adversary 2.5, remediator 2.3
+CONTROL OK: old seats.py output == committed out/seats_adversary.txt
+   seats_adversary: 2 old-only lines, 2 new-only lines
+      old: s322 gate-validation[carry-over-evaluation]: adversary:p1 n10 11.8h $65; remediator:other n28 9.4h $37
+      old: s322 requirements: adversary:p2 n10 2.5h $22; adversary:p3 n10 2.0h $19; adversary:p4 n10 1.5h $15; remediator:other n9 0.5h $7; remediator:p1 n1 0.4h $5; remediator:p2 n5 0.3h $5
+      new: s322 gate-validation[carry-over-evaluation]: remediator:other n9 0.9h $11
+      new: s322 requirements: adversary:p1 n10 11.8h $65; adversary:p2 n10 2.5h $22; adversary:p3 n10 2.0h $19; adversary:p4 n10 1.5h $15; remediator:other n28 9.0h $33; remediator:p1 n1 0.4h $5; remediator:p2 n
+== W2 2026-11-09T00:00:00Z
+   cross_spawns: 10 lines; 0 old-only, 0 new-only
+CONTROL OK: BL-811's s319 cross counts by step reproduce on the old extract (gate-validation[sprint-review] 30, gate-validation[stories-test-strategy] 6)
+      s319: spawns 1561 cross 360 per-story 18.00 usd 512.1 usd/story 25.60 share 29% stories 20 (regex)
+   cross_spawns --broad: 10 lines; 0 old-only, 0 new-only
+   sr_dv_yield: 79 lines; 0 old-only, 0 new-only
+CONTROL OK: sr_dv_yield old carries the document's 169 spawns and $209.09
+   elicitation_yield: 7 lines; 0 old-only, 0 new-only
+   spawn label changes at W2: 0 of 5498
+== W3 2026-11-12T18:53:06Z
+CONTROL OK: the fixed extractor's gate-terminator lines reproduce item 2's table exactly
+   sprints with LEFT > 0: s317, s318, s321, s322
+   segs.jsonl: 15 (sprint, step) rows differ
+      s317 gate-validation[implementation]: active_h 9.68 -> 9.42, tok 190.84M -> 178.70M
+      s317 handoff: active_h 3.37 -> 3.63, rows 12.00 -> 13.00, tok 83.41M -> 95.55M
+      s318 gate-validation[architecture]: active_h 0.45 -> 0.45
+      s318 gate-validation[sprint-review]: active_h 1.08 -> 0.76, gap_h 4.23 -> 3.39, tok 32.55M -> 17.96M
+      s318 handoff: active_h 0.72 -> 1.04, gap_h 1.47 -> 2.31, rows 6.00 -> 7.00, tok 32.75M -> 47.34M
+      s318 stories-test-strategy: active_h 6.46 -> 6.46
+      s321 gate-validation[architecture]: active_h 0.31 -> 0.31
+      s321 stories-test-strategy: active_h 9.40 -> 9.40
+      s322 deploy-validate: active_h 1.80 -> 1.83, tok 83.34M -> 84.11M
+      s322 gate-validation[architecture]: active_h 1.01 -> 1.00, tok 34.31M -> 34.06M
+      s322 gate-validation[carry-over-evaluation]: active_h 3.02 -> 1.22, gap_h 4.36 -> 0.33, tok 95.69M -> 35.94M
+      s322 gate-validation[sprint-review]: active_h 0.59 -> 0.57, tok 38.62M -> 37.84M
+      s322 handoff: active_h 1.48 -> 1.61, gap_h 0.62 -> 1.20, rows 3.00 -> 4.00, tok 43.21M -> 47.78M
+      s322 requirements: active_h 2.57 -> 4.23, gap_h 1.27 -> 4.72, rows 2.00 -> 3.00, tok 82.17M -> 137.35M
+      s322 stories-test-strategy: active_h 4.14 -> 4.15, tok 171.19M -> 171.44M
+CONTROL OK: segs.jsonl: no row differs in a sprint with left=0 (s319, s320)
+   hooks.jsonl: 9 (sprint, step) rows differ
+      s317 gate-validation[implementation]: bytes 239218.00 -> 236167.00, rows 628.00 -> 603.00
+      s317 handoff: bytes 65371.00 -> 68422.00, rows 201.00 -> 226.00
+      s318 gate-validation[sprint-review]: bytes 35679.00 -> 14065.00, rows 98.00 -> 76.00
+      s318 handoff: bytes 8528.00 -> 30142.00, rows 47.00 -> 69.00
+      s322 deploy-validate: bytes 155511.00 -> 155975.00, rows 142.00 -> 146.00
+      s322 gate-validation[carry-over-evaluation]: bytes 344411.00 -> 109450.00, rows 298.00 -> 94.00
+      s322 gate-validation[sprint-review]: bytes 56123.00 -> 55659.00, rows 56.00 -> 52.00
+      s322 handoff: bytes 89865.00 -> 102435.00, rows 100.00 -> 114.00
+      s322 requirements: bytes 169914.00 -> 392305.00, rows 200.00 -> 390.00
+CONTROL OK: hooks.jsonl: no row differs in a sprint with left=0 (s319, s320)
+   tools.jsonl: 15 (sprint, step) rows differ
+      s317 gate-validation[implementation]: bytes 4553898.00 -> 4545901.00, rows 1535.00 -> 1511.00
+      s317 handoff: bytes 353594.00 -> 361591.00, rows 422.00 -> 446.00
+      s318 gate-validation[architecture]: bytes 446850.00 -> 446801.00, rows 153.00 -> 152.00
+      s318 gate-validation[sprint-review]: bytes 536782.00 -> 456112.00, rows 176.00 -> 122.00
+      s318 handoff: bytes 86284.00 -> 166954.00, rows 125.00 -> 179.00
+      s318 stories-test-strategy: bytes 1579568.00 -> 1579617.00, rows 1125.00 -> 1126.00
+      s321 gate-validation[architecture]: bytes 504407.00 -> 503205.00, rows 89.00 -> 88.00
+      s321 stories-test-strategy: bytes 3669827.00 -> 3671029.00, rows 1660.00 -> 1661.00
+      s322 deploy-validate: bytes 742402.00 -> 803758.00, rows 506.00 -> 520.00
+      s322 gate-validation[architecture]: bytes 743685.00 -> 707467.00, rows 234.00 -> 229.00
+      s322 gate-validation[carry-over-evaluation]: bytes 1581955.00 -> 957913.00, rows 694.00 -> 281.00
+      s322 gate-validation[sprint-review]: bytes 630199.00 -> 568843.00, rows 284.00 -> 270.00
+      s322 handoff: bytes 290465.00 -> 321160.00, rows 245.00 -> 292.00
+      s322 requirements: bytes 1321111.00 -> 1914458.00, rows 582.00 -> 948.00
+      s322 stories-test-strategy: bytes 2470268.00 -> 2506486.00, rows 1162.00 -> 1167.00
+CONTROL OK: tools.jsonl: no row differs in a sprint with left=0 (s319, s320)
+   lead segments relabelled out of a gate: 8
+      s317 2026-10-09T21:17:13Z 562ac82a gate-validation[implementation] -> handoff
+      s318 2026-10-12T23:30:18Z 09dc13f7 gate-validation[architecture] -> stories-test-strategy
+      s318 2026-10-14T11:10:06Z 20bd359c gate-validation[sprint-review] -> handoff
+      s321 2026-11-04T04:48:18Z 189712ad gate-validation[architecture] -> stories-test-strategy
+      s322 2026-11-09T15:08:37Z 6c14d949 gate-validation[carry-over-evaluation] -> requirements
+      s322 2026-11-09T19:37:18Z 6c14d949 gate-validation[carry-over-evaluation] -> handoff
+      s322 2026-11-10T08:30:10Z 9a646a3b gate-validation[architecture] -> stories-test-strategy
+      s322 2026-11-12T05:41:30Z e444bf13 gate-validation[sprint-review] -> deploy-validate
+      s317: left=1, relabelled segments 1
+      s318: left=2, relabelled segments 2
+      s319: left=0, relabelled segments 0
+      s320: left=0, relabelled segments 0
+      s321: left=1, relabelled segments 1
+      s322: left=3, relabelled segments 4
+CONTROL OK: every sprint with left > 0 has a relabelled segment, and no sprint with left = 0 has one
+CONTROLS FAILED: 0

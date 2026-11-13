@@ -1,233 +1,128 @@
-<!-- unconditional: these govern ad-hoc tool calls, which leave no file behind — there is no path to scope to, and `CLAUDE.md` already records that a rule about a Bash behaviour cannot be carried by a file-read trigger. The tracked-file half of the same subject is enforced by invariants instead; only the unmechanizable remainder is here. -->
+<!-- unconditional: these govern ad-hoc tool calls, which leave no file behind, so no path can scope them; the tracked-file half is enforced by invariants. -->
 
 # Tool hazards on this machine
 
-Behaviours that return a WRONG answer rather than an error. Each has produced a shipped
-false conclusion here. The half of this subject that lives in tracked files is mechanized —
-`I54`/`I54b` for the pipeline cases, `I71` for the bracket-class case — and is not restated
-here. What follows has no corpus to scan because it happens in tool calls.
+Behaviours that return a WRONG answer rather than an error. The tracked-file half is mechanized (`I54`/`I54b`
+for pipelines, `I71` for the bracket-class case) and is not restated.
 
 ## The Bash tool's shell is zsh
 
-- **No `PIPESTATUS`.** A pipeline's component statuses are simply unavailable, so
-  `cmd | tail` reports the status of `tail`. A failing `git push` piped anywhere reports 0.
-- **Unquoted `$var` is not word-split**, so a loop written for bash iterates once over the
-  whole string.
-- **Modifiers eat unbraced references, and QUOTING DOES NOT SAVE YOU** — they fire inside the
-  quotes. `:c`/`:t` are 2 of 17 letter-cases (`acefghlqrstuwAFPQ`) consuming the next char. A
-  LITERAL ref works everywhere, so a rendering reads correct until a variable is bound.
+- No `PIPESTATUS`: `cmd | tail` reports `tail`'s status, so a failing `git push` piped anywhere reports 0.
+- Unquoted `$var` is not word-split.
+- Modifiers eat unbraced references, inside quotes too (`:c`/`:t` are 2 of 17 letter-cases `acefghlqrstuwAFPQ`).
   Always `"${r}:core/..."`.
-- **`case` patterns are not glob-substituted** the way a bash author expects.
-- **The working directory PERSISTS across calls.** A `cd` inside one compound command
-  relocates every later call, so a correct relative path then reports **No such file** —
-  which reads as a deleted file rather than a moved shell. Subshell it: `( cd x && ... )`.
-
-**Force `bash -c` for any loop, heredoc or hook test** — do not author shell logic in the
-interactive shell at all.
-
-**But a heredoc INSIDE `bash -c '…'` whose body carries a backtick or a single quote breaks the
-outer quoting silently**: the body executes as commands, the consumer of the heredoc gets a
-truncated fragment, and the call exits 0. Measured twice, both times on a commit message — five
-lines landed of twenty-four. Write the body with the Write tool and pass it by `-F` or redirect.
-
-**A renderer that changes nothing exits 0.** `render-postcompact-digest.sh` without `--write`
-reports and writes nothing, and the run reads as "re-rendered". Run `--check` after, never
-instead.
-
-**A `$(date)` INSIDE `PS4` CHARGES ONE FORK PER TRACED LINE, so a per-line timing profile ranks
-loops by ITERATION COUNT — the artifact is the quantity being read.** Measured on the
-enforcement-map validator: the trace put 37s of a 47s run on two fork-free loops, 9498 and 2071
-iterations, and an ablation differential in CPU-seconds over 4 interleaved reps refuted both —
-base 29.75-30.30, the two ablations 29.30-30.34 and 28.97-30.39, every range overlapping. Use
-that PS4 to COUNT invocations
+- `case` patterns are not glob-substituted as a bash author expects.
+- The working directory PERSISTS across calls; subshell it: `( cd x && ... )`. A relative path failing with
+  **No such file** may be a moved shell.
+- Force `bash -c` for any loop, heredoc or hook test. A heredoc INSIDE `bash -c '…'` whose body carries a
+  backtick or single quote breaks the outer quoting silently and exits 0; write the body with the Write tool
+  and pass it by `-F` or redirect (commit messages especially).
+- A renderer that changes nothing exits 0 (`render-postcompact-digest.sh` without `--write`). Run `--check`
+  after, never instead.
+- A `$(date)` inside `PS4` forks per traced line, so a per-line timing profile ranks loops by iteration count.
+  Use that PS4 to COUNT invocations only.
 
 ## The Bash tool's OUTPUT is rewritten before you read it
 
-A compressor sits on Bash results and edits the text inside them, CODE INCLUDED. Measured on
-a `cat -n` of a shipped hook: `[ -n "${A_ESC:-}" ] || continue` came back as
-`[ -n "${A_ESC:-}" || continue`, and heredoc bodies came back short. The damage is
-syntactically plausible, so a wrong reading of a file is indistinguishable from a right one
-and no error is raised.
+A compressor edits text in Bash results, code included (`|| continue` lost its `]`, heredoc bodies came back
+short), and the damage is syntactically plausible. Read source with **Read** or `ctx_execute_file` printing
+indexed lines. Keep Bash for output whose SHAPE is the answer (exit codes, counts, `git status`) and for
+mutations. Where a Bash result has to be exact, DERIVE it: `md5`, `wc -c`, `cmp -s`, `grep -c`.
 
-Read source with **Read**, or with `ctx_execute_file` printing indexed lines. Keep Bash for
-output whose SHAPE is the answer — exit codes, counts, `git status` — and for mutations.
-Where a Bash result has to be exact, DERIVE it instead of reading it: `md5`, `wc -c`,
-`cmp -s`, `grep -c`.
+## Delegation hazards
 
-## Delegation hazards: eight ways a tool call lies about another agent
-
-**Never kill by pattern.** `pkill -f hermetic-run.sh` from one hand SIGTERMed a consumer's push mid-suite.
-Stop only a process you started, by the pid or group you recorded. **And a run that invokes `hermetic-run.sh`
-sets `AI_DLC_VERDICT_STORE` to a mktemp dir**: one test run without it wrote 184 entries into the real store.
-
-**A backgrounded `sleep` returns immediately**, so chained "waits" are rapid polling granting no
-wall clock. Measured: apparent ten-minute waits spanned one minute, four agents were called silent
-having barely started, one agent's finished work was redone. Block on the condition instead.
-
-**A CLAIM about a call's output must not share a parallel block with the call** — both dispatch
-together, so the claim predates the result. Measured: "a `find` returns nothing" was sent in the
-same block as that find, which returned the file. Cleanup presupposing an action's success is the
-same hazard: a branch delete sent beside its merge ran though the merge was denied.
-
-**An untracked file is not a missing file.** `git ls-files`, `git show HEAD:` and any tree grep
-cannot see one, and the clean run reads as a real absence. Measured: three delegated deliverables
-declared missing while on disk as `??`. `ls` it, check `git status --porcelain`, ask the agent by
-name. An idle notification is not a result; silence is not death, and "it stopped reporting" is not a
-reason to merge: measured, two hands idle twice each, a release shipped, both then reported, both
-right, payloads TRUNCATED at ~16000 characters. Ask again for the tail.
-
-**A hook DENIES a subagent writing a report file** — `Subagents should return findings as text,
-not write report files`. A brief naming a report path as the deliverable spends the hand:
-measured across four, the most valuable report arrived after the lead had committed. Ask for
-findings AS TEXT; the TREE is the deliverable for code.
-
-**A teammate's `SendMessage` can QUEUE for hours and then land in a burst.** Measured: three
-hands went idle, three direct requests each got nothing, a merge went ahead on the operator's
-ruling, and forty minutes later all three reports arrived at once — each saying its sends had
-"returned success" hours earlier. One carried a real shipped regression and cost a correction
-release. An idle hand with an unanswered request is a hand whose report is IN TRANSIT: ask once
-more, then wait one more timer before merging without it.
-
-**A delegate's CLOSING SUMMARY can be stale.** It reports what it found when it looked, not
-what is true now. Measured: a hand's final message listed four defects as outstanding that had
-already been fixed, because it had not re-read the files between finding them and reporting.
-Check the tree, not the report.
-
-**AN ANSWER COMPOSED IN SESSION OUTPUT REACHES NOBODY, AND MY TRANSCRIPT READS THE SAME EITHER
-WAY.** A peer's question is answered only by `SendMessage`, with the incoming message's `from`
-copied as `to`; plain output is not visible to other agents. Measured: a full adjudication was
-derived against the tree and written as prose, the peer blocked for an hour at ~97% of its
-window and had to chase it, and no error was raised because there is no failure arm on a send
-never made. A turn that opens with a `<cross-session-message>` does not end without one.
-
-**A LOAD GENERATOR IN A BRIEF OUTLIVES THE HAND.** Measured: a hand told to run `yes > /dev/null`
-"killed by pid" orphaned 36 of them to init for 38 minutes at load ~118 until the operator asked,
-voiding every timing on the box, and found no flake anyway. Never brief one. Force the suspected
-interleaving in a scratch copy instead — that is also the discriminating experiment.
+- **Never kill by pattern.** Stop only a process you started, by a recorded pid or group. A run that invokes
+  `hermetic-run.sh` sets `AI_DLC_VERDICT_STORE` to a mktemp dir; without it the run writes the real store.
+- **A backgrounded `sleep` returns immediately.** Block on the condition instead.
+- **A claim about a call's output must not share a parallel block with the call**, and cleanup that
+  presupposes an action's success (a branch delete beside its merge) must not either.
+- **An untracked file is not a missing file.** `git ls-files`, `git show HEAD:` and tree greps cannot see one:
+  `ls` it, check `git status --porcelain`, ask the agent by name. An idle notification is not a result, and
+  silence is not death. A payload can be TRUNCATED at ~16000 characters; ask again for the tail.
+- **A hook DENIES a subagent writing a report file.** Ask for findings AS TEXT; the TREE is the deliverable for
+  code.
+- **A teammate's `SendMessage` can QUEUE for hours and land in a burst.** An idle hand with an unanswered
+  request has a report in transit: ask once more, then wait one more timer before merging without it.
+- **A delegate's closing summary can be stale.** Check the tree, not the report.
+- **A peer's question is answered only by `SendMessage`**, with the incoming message's `from` copied as `to`;
+  plain output reaches nobody. A turn that opens with a `<cross-session-message>` does not end without one.
+- **Never brief a load generator** (`yes > /dev/null` and the like); it outlives the hand. Force the suspected
+  interleaving in a scratch copy instead.
 
 ## awk's `getline < file` reads an unopenable file as an empty one
 
-It returns **-1** where an empty file returns 0, and raises nothing. `while ((getline l < f) > 0)`
-— the idiom at every site in this tree — cannot tell "read nothing" from "could not open", so a
-corpus a caller LISTED and the scan never opened reports the same clean line as a scanned one.
-Measured: 3 files listed, 2 scanned, awk exit 0, stderr EMPTY; the shell loop it replaced could
-not hide this, because `grep` wrote to stderr. **A batched rewrite can lose a diagnostic channel
-the per-item loop got for free.** Count what was SCANNED and compare it against the list; a floor
-guard over the list is a claim about the `find`, not about the read.
-
-**And an awk program in a single-quoted shell literal cannot contain an APOSTROPHE, including in
-its comments** — one closes the literal and the remainder executes as shell. Done twice in one
-file, the second time in the sentence warning about it, by quoting the offending word.
+It returns **-1** where an empty file returns 0 and raises nothing, so `while ((getline l < f) > 0)` cannot
+tell "read nothing" from "could not open". Count what was SCANNED and compare it against the list. A batched
+rewrite can lose the diagnostic channel the per-item loop had. An awk program in a single-quoted shell literal
+cannot contain an apostrophe, comments included.
 
 ## `grep -c` prints its zero AND exits 1
 
-`n=$(grep -c … || echo 0)` is `0` followed by a newline and another `0` on zero matches, and
-`$((n % 2))` then aborts the enclosing `if` with a syntax error and NO verdict — a fixture arm
-shipped dead on every green run, in both layouts, and read PASS. The `|| echo 0` is right only
-for a MISSING file. Capture first, default on failure: `n="$(grep -c …)" || n=0`.
+`n=$(grep -c … || echo 0)` yields `0` then `0` on zero matches and breaks `$((n % 2))`. Capture first, default
+on failure: `n="$(grep -c …)" || n=0`. `|| echo 0` is right only for a MISSING file.
 
 ## Never read `$?` after a pipe, and never feed `grep -q` from one
 
-`grep -q` leaves at its first match while the writer is still pushing. Under `pipefail` the
-pipeline then answers with the writer's EPIPE and reports NOT-FOUND on input that contains
-the pattern. **It is a size threshold, not a race** — correct until the output after the
-match fills the pipe buffer, then wrong permanently and with no symptom. Put the upstream in
-a command substitution and feed the reader a here-string.
-
-Assignments and exit codes made inside `$( )` or in a pipeline's last stage are lost to a
-subshell. Write them to a file, or restructure.
-
-**And a `while … done | grep -c .` inside `$( )` answers with the loop's LAST iteration.**
-Under `pipefail` a final non-matching file makes the substitution "fail", and the `|| n=0`
-beside it overwrites a correct 54 with 0. Measured in a census over 150 files, caught only
-because a loose control read non-zero in the same run.
+`grep -q` leaves at its first match while the writer still pushes; under `pipefail` the pipeline reports the
+writer's EPIPE as NOT-FOUND once output past the match exceeds the pipe buffer. Put the upstream in a command
+substitution and feed the reader a here-string. Assignments and exit codes made inside `$( )` or a pipeline's
+last stage are lost to a subshell: write them to a file or restructure. A `while … done | grep -c .` inside
+`$( )` answers with the loop's LAST iteration, and `|| n=0` beside it overwrites a correct count.
 
 ## BSD tools are not GNU tools, and they fail silently
 
-In a tracked file, arms `S1`–`S12` of `scripts/validate-shell-portability.sh` and `I71` mechanize
-this and it is not restated here — read those arms for the grammars. In an ad-hoc tool call
-nothing is watching, and the traps below no arm covers there, because correct and incorrect
-use are the same shape to a regex:
+In a tracked file arms `S1`–`S12` of `scripts/validate-shell-portability.sh` and `I71` mechanize this. In an
+ad-hoc call:
 
-- **`awk -v` strips one level of escaping** and carries no newline at all. A regex passed
-  through it needs doubled backslashes, so a correct site looks wrong.
-- **A multibyte character needs an alternation, not a bracket class.** `S10` refuses the class
-  in a tracked file; the C locale is where the class comes apart, and a tool call never runs there.
-- **`"\."` inside an awk DYNAMIC string is a bare `.`.** A regex built by concatenation needs
-  `"\\."`; the single-backslash form matched `24X` for `24.` on three shipped lines before a probe caught it.
-- **An `&` in a `sed` replacement is the whole match**, so editing a script whose new text
-  carries `&&` re-inserts the matched line inside itself. Measured: two lines of a scorer
-  mangled silently, the run reporting "mutant did not apply". Rewrite such a line with the
-  Edit tool instead.
-
-Reach for `awk` over `sed` when the expression does real work, and verify every new expression
-against a positive control before trusting a zero from it.
+- `awk -v` strips one level of escaping and carries no newline; a regex through it needs doubled backslashes.
+- A multibyte character needs an alternation, not a bracket class.
+- `"\."` inside an awk DYNAMIC string is a bare `.`; concatenated regexes need `"\\."`.
+- An `&` in a `sed` replacement is the whole match; rewrite such a line with the Edit tool.
+- `sed -i` on BSD takes a suffix argument; use `sed -i ''`.
+- Reach for `awk` over `sed` when the expression does real work, and verify every new expression against a
+  positive control.
 
 ## A `git stash` inside a diagnostic command takes the working tree with it
 
-`git stash --keep-index` with nothing staged stashes EVERY uncommitted change, exits 0, and the
-probe it was pasted into keeps running against a clean tree. Measured: five edited files
-vanished from `git status` between two tool calls, and only the Edits made after the stash
-survived. `git stash list` is the tell; `git stash pop` recovered all five. A stash is a
-mutation and never belongs in a read-only probe; when `git status` reads cleaner than the
-session's work, check the stash list before concluding anything.
+`git stash --keep-index` with nothing staged stashes EVERY uncommitted change and exits 0. A stash is a
+mutation and never belongs in a read-only probe. When `git status` reads cleaner than the session's work, check
+`git stash list` first.
 
 ## Git lies by default
 
-- Pass `-M` or renames read as a delete plus an unrelated add.
+- Pass `-M` or renames read as a delete plus an add.
 - Brace every rev-path: `"${SHA}:path"`.
-- Never depth-filter with a pathspec glob, and `set -f` before iterating pathspecs.
-- **`ls-tree` does not glob a pathspec; `ls-files` does.** It matches by literal prefix, returns
-  EMPTY, raises nothing, and refuses `:(glob)`. Use `git ls-files --with-tree=<ref> -- <glob>`,
-  also the only way to resolve a glob at a ref where the path was DELETED. Resolved wrongly, a
-  glob list collapses to the entries carrying no glob character — a silent partial answer.
-- **A glob pathspec ending in `/` matches nothing, silently.** `'dir*/'` returns 0 files, exit 0,
-  in `git grep` and `ls-files`; use the bare glob, the plain dir, or `:(glob)<dir>*/**`.
-- **`git grep -E` is not the `grep -E` beside it.** It implements neither `\b` nor `\s` and
-  returns a CLEAN ZERO, never an error. Measured: `\bMODEL_MAX\b` answered 0 against a control
-  of 11, while `/usr/bin/grep -E` matches both escapes happily — so the habit that works in one
-  command silently empties the other. Use POSIX classes or `git grep -P`. `S9` of
-  `validate-shell-portability.sh` catches this in a tracked file; in a tool call nothing does.
-- **Never test whether work landed by ancestry** in a squash-merge repo — the commits that
-  would answer are the ones a squash removed. Test by content.
-- **`--follow` answers about ONE path and reads as a rename census.** Measured: it scored 1 of
-  73 paths as renamed where a rename MAP — `-M --diff-filter=R --name-status` over all refs,
-  1192 pairs, joined by key — scored 62. The 1 inverted the conclusion it was quoted for.
-  Derive the map and join it; never walk `--follow` per path.
+- Never depth-filter with a pathspec glob; `set -f` before iterating pathspecs.
+- `ls-tree` does not glob a pathspec (matches by literal prefix, empty, silent, refuses `:(glob)`); `ls-files`
+  does. Use `git ls-files --with-tree=<ref> -- <glob>`, the only way to resolve a glob at a ref where the path
+  was deleted.
+- A glob pathspec ending in `/` matches nothing, silently; use the bare glob, the plain dir, or
+  `:(glob)<dir>*/**`.
+- `git grep -E` implements neither `\b` nor `\s` and returns a CLEAN ZERO. Use POSIX classes or `git grep -P`.
+  `S9` of `validate-shell-portability.sh` catches this in a tracked file.
+- Never test whether work landed by ancestry in a squash-merge repo; test by content.
+- `--follow` answers about ONE path. Derive a rename map (`-M --diff-filter=R --name-status` over all refs) and
+  join it.
 - Commit or stash before any `git checkout` that names a path.
 
 ## A validator that resolves its own root ignores the probe tree you built for it
 
-Several shipped validators `cd` to a root found by walking up from the SCRIPT's directory, so a
-`mktemp` probe repo entered with `cd` is discarded and the run answers about the DISTRIBUTION.
-Measured twice in one release, on `report-propagation-fanout.sh` and
-`validate-gate-adjudication.sh`: the first receipt read green and its worklist cited
-`docs/backlog.archive.md`. Set `AI_DLC_PROJECT_ROOT`, and read the OUTPUT for a path that could
-only have come from the wrong tree. A copied validator also needs its siblings beside it —
-`core-paths.sh` absent is exit 2, which is a refusal and not a finding.
+Several validators `cd` to a root found by walking up from the SCRIPT's directory, so a `mktemp` probe repo is
+discarded and the run answers about the DISTRIBUTION (known: `report-propagation-fanout.sh`,
+`validate-gate-adjudication.sh`). Set `AI_DLC_PROJECT_ROOT`, and read the OUTPUT for a path that could only come
+from the wrong tree; a `docs/backlog.archive.md` path there means the wrong tree. A copied validator needs its siblings beside it (`core-paths.sh`
+absent is exit 2, a refusal and not a finding).
 
 ## Environment floor
 
-`bash` is 3.2, and an empty array under `set -u` is an error. `mapfile`, `readarray`,
-`declare -A` and `setsid` are unavailable, and the validator above fails the push on all four
-in a tracked file. SIP blocks `dtruss` but not `fs_usage`. The
-interactive `grep` is a `ugrep` shim that honours `.gitignore`, so an interactive search and
-a scripted one scan different sets. Measure under `env -i PATH=/usr/bin:/bin bash` when the
-answer has to hold for a shipped script.
-
-**`find` IS A SHIM TOO, AND IT ANSWERS IN A DIFFERENT ORDER.** Interactively it is a shell
-function wrapping `bfs -S dfs`; a shipped script gets `/usr/bin/find`. Measured on one tree,
-the two returned DIFFERENT first paths while their counts agreed 3/3 and a negative control
-answered 0/0 both ways — so the natural control passed and the only property being read was
-wrong. **A count control does not validate an ORDER claim.** Any `find`-ordering figure taken
-in a tool call is void; re-take it with `/usr/bin/find` and name the binary beside the number.
-
-**A PROCESS-TABLE LIVENESS PROBE SCORES A SUBJECT THAT WAS NEVER STARTED AS RUNNING.** Measured
-both spellings against an impossible-token control in the same invocation: `ps ax -o command= |
-grep -c` answered 4 for a real token and 4 for one existing nowhere, because the `bash -c`
-wrapper's argv holds the ENTIRE script text, so every token the script merely mentions is in a
-live process. `pgrep -f` excludes `self` and nothing else — clean at one watcher, but a SECOND
-concurrently-armed watcher carries the pattern in its own argv, each matches the other, and
-neither loop can terminate. A single-watcher probe cannot see that and returns a zero
-indistinguishable from an absence. Block on the CONDITION — `wait`, a pid file, a sentinel the
-subject writes on exit — never on a process-table grep.
+- `bash` is 3.2; an empty array under `set -u` is an error. `mapfile`, `readarray`, `declare -A` and `setsid`
+  are unavailable, and the portability validator fails the push on all four in a tracked file.
+- SIP blocks `dtruss` but not `fs_usage`.
+- Interactive `grep` is a `ugrep` shim honouring `.gitignore`; a scripted one scans a different set.
+- `find` is interactively a shell function wrapping `bfs -S dfs` and orders differently from `/usr/bin/find`; a
+  count control does not validate an ORDER claim. Take ordering figures with `/usr/bin/find` and name the
+  binary beside the number.
+- Measure under `env -i PATH=/usr/bin:/bin bash` when the answer has to hold for a shipped script.
+- A process-table liveness probe (`ps ax | grep -c`, `pgrep -f`) scores a subject never started as running,
+  because the wrapper's argv holds the script text, and two concurrent watchers match each other. Block on the
+  CONDITION: `wait`, a pid file, or a sentinel the subject writes on exit.

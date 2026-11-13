@@ -37,7 +37,8 @@
 # prose-gate-on-raw-line also trips V20 V22 V23 V24 V34; negation-window-not-adjacency also trips
 # V27 V31 V32; tests-path-skipped also trips V33; carve-outs-disarmed also trips V24 V34; the two
 # element-2 mutants trip V35 and V36 together. Every other mutant trips only its deciding arm.
-# The matrix is re-measured whenever an arm or a mutant is added or changed.
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 # MUTANT-MATRIX phase-alternative-restored decides=V13 twins=V14
 # MUTANT-MATRIX phase-marker-dropped decides=V14 twins=V15
 # MUTANT-MATRIX absence-widened decides=V16 twins=V14

@@ -739,10 +739,9 @@ otherwise.**
   in scope, alongside the candidates; bootstrapping ones ship one file set per release, back to back.
   A batch that closes with a buildable entry unbuilt names it and the measured reason.
 - **Read-set traces run with the sandbox tracer, by the session** (`operator-rulings.md`).
-- **Call the advisor as often as needed and without hesitation.** Operator instruction, batch 179:
-  call `advisor` before scoping a batch, before each contract is handed to a builder, whenever a
-  result does not fit what was expected, before each release is cut, and before the batch is
-  declared closed. A call is never weighed against the work it protects.
+- **The advisor is a tool for a session that is stuck, not a step of the release flow.** Call it
+  when a result does not fit what was expected. The one flow step that requires it: Call the advisor once immediately before every push: a hook outside the repo denies the push otherwise.
+  The roll call requires one too (action 0). Pre-merge requires none.
 
 **STANDING OPERATOR RULING FROM BATCH 198: NO PARTIAL SHARDING.** In the operator's words: "I dont' want 'partial
 implementations' of sharding. If it can be sharded, then it should be sharded." A release that shards part of a
@@ -813,9 +812,9 @@ candidate's surviving half is upstream's to file and build, never a question for
      Re-detach the main checkout at each verified squash: `core.hooksPath` is ABSOLUTE
      (`/Users/n8/git/ai-dlc/.githooks`), so every linked worktree's push runs the main checkout's
      hook bytes.
-   - **With owners present, the OWNER cuts, gates and merges its own release**, and the lead
-     verifies the landing by content. Where action 0a, action 3 or a standing ruling above says the
-     lead cuts the release, it describes the shape with no owner.
+   - **With owners present, the OWNER builds and the LEAD integrates**: the lead collects READY
+     releases onto one integration branch, gates the bundle, merges it and verifies the landing by
+     content. Owners send the sha and do not re-verify.
    - **Owners build through hands.** Each owner owns ONE cluster as ONE release per session, end to end
      (never queue a second cluster to an owner; extra clusters need fresh sessions from the
      operator), and
@@ -829,10 +828,8 @@ candidate's surviving half is upstream's to file and build, never a question for
    - RELEASES BEFORE MEASUREMENTS. A ready release gates before any measurement. A measurement
      happens only when NO TIMING RUNS allows it, and then after every release in the batch that is
      ready or in flight, unless a release depends on the result.
-   - SHORTEST GATE FIRST. Among ready releases, a docs-only release gates first, then the others in
-     order of readiness. A docs-only push still runs the gate; which fixtures it re-runs is the
-     read-set skip's answer, every fixture whose `inputs.decl` names a changed path. Read it in
-     the push's `read-set keys:` line; never quote a count.
+   - SHORTEST GATE FIRST. Among ready releases, the bundle gates first. A docs-only release never
+     gets a gate of its own; it rides the next bundle (BUNDLE BY DEFAULT).
    - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
      item goes at once to an idle session that has not owned a release this batch. Build work (hands, edits only) never waits on box load;
      only runs load the box.
@@ -847,203 +844,71 @@ candidate's surviving half is upstream's to file and build, never a question for
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
-   - PRE-SEED BEHIND THE GATE. Operator instruction at batch 256: owners queued behind a gate
-     pre-seed the verdict store at their final sha, as "a standard operating rule". While a release
-     gates, the lead names the two owners queued directly behind it. Each, once its tip is final and
-     the release ahead has pushed, pre-rebases onto that pushed commit and, from a clean worktree
-     detached at that exact sha, runs `scripts/seed-verdict-store.sh` in at most three seeder processes over disjoint lists. The
-     seed set is DERIVED by the hook's own read-set join, `apply_readset_skip` extracted from
-     `.githooks/pre-push`, never retyped and never a hand query of the map and `inputs.decl`: at
-     0.1103.0 a hand set missed the one real carrier and over-seeded 15. Every seeder and every
-     census runs with stdin from `/dev/null`: a SIGTTIN tty stop stalled a census. When the release ahead
-     lands, `git rebase --onto origin/main <its pushed commit>` must reproduce the seeded
-     `HEAD^{tree}`; where it does not, re-seed only the fixtures whose declared inputs moved. The
-     push's `verdict store: N fixture(s) skipped` line is the evidence, and the owner reports N with
-     its squash sha. A red seed records nothing and goes to the lead as a FAIL before the push turn.
-     A seed is a correctness run and is never timed; one push still runs at a time.
-   - BUNDLE FOR WALL CLOCK. `.claude/rules/operator-rulings.md`, "Bundle releases only to cut wall
-     clock": when 2 or more READY releases wait behind the gate, the lead checks whether one
-     combined release cuts overall wall clock (push slots saved against integration cost and any
-     slip moved onto another release) and states the numbers. "you are not bundling for bundling's
-     sake. You are doing it because we can reduce overall wall clock time. If bundling were to have
-     the opposite effect then we don't bundle."
-   - **The owner-rules block.** Send it verbatim; it cites the rulebooks and actions it depends on
-     rather than restating them.
+   - BUNDLE BY DEFAULT. Ready releases are collected by the lead onto ONE integration branch and
+     gated once; pushes stay serialized, one at a time. A red caused only by one release drops that
+     release from the bundle, and the rest re-gate without it; the dropped owner fixes it and rides
+     the next bundle. A release that turns ready after a bundle starts gating rides the next one. A
+     docs-only release (only `docs/`, `CHANGELOG.md`, `VERSION`) never gets a gate of its own: its
+     owner runs `bash scripts/pregate-self-check.sh` (the hook's pre-suite prefix alone) and it rides
+     the next bundle. `scripts/seed-verdict-store.sh` stays available as an optional tool; seeding
+     is not a step of the flow.
+   - **The owner-rules block.** Send it verbatim. It cites the rulebooks and actions it depends on
+     and restates none of them.
 
    ```
    **Release owner rules — batch <batch>, lead <lead>, cluster <cluster>**
 
-   You own ONE cluster end to end, as ONE release. <lead> lets one push run at a time, allocates
-   every VERSION and backlog id, and owns the plan and the batch close.
+   You own ONE cluster end to end, as ONE release. <lead> allocates every VERSION and backlog id,
+   bundles ready releases and runs one push at a time, and owns the plan and the batch close.
 
    **Reply first.** Reply to <lead> now with exactly `ACCEPTED <cluster>` or `REFUSED: <reason>`.
 
-   **Base and boundaries.**
-   - Base: `origin/main`. `git fetch origin` first; another release may have landed.
-   - Branch `<batch>-<cluster>`, built in your own worktree. NEVER use or check out the main
-     checkout: <lead> gates from it.
-   - The consumer repo is READ ONLY, per the plan's `## Start here`. Never message a `graph-*`
-     session, not even a read-only question.
-   - <lead>'s rulings record holds the batch's operator rulings. Do not re-litigate them. Scope is
-     the operator's: build every entry in your cluster, or say exactly which one you did not and why.
+   **Base and boundaries.** Base `origin/main` (`git fetch origin` first); branch
+   `<batch>-<cluster>` in your own worktree, never the main checkout. The consumer is READ ONLY
+   (`## Start here`); never message a `graph-*` session. The rulings record binds; scope is the
+   operator's, so build every entry or say exactly which one you did not and why.
 
-   **Runs.** Box load gates nothing, and nothing is timed unless the plan's NO TIMING RUNS rule
-   allows it. One push runs at a time: tell <lead> by SendMessage when you are ready to push, and
-   push when <lead> says it is your turn. A hand verifies ONLY its own change, per
-   `.claude/rules/operator-rulings.md`, "The burden of verifying a change is proportional to the
-   change": `bash -n`, its discriminating probe, and the one unit it edited, through
-   `core/scripts/hermetic-run.sh` with a `mktemp` verdict store, named in its report; no fixture
-   suite, carrier set, validator list, mutant scorer or corpus sweep. Killing and the verdict store:
-   `.claude/rules/tool-hazards.md`.
-
-   **Verification step, every unit.** A unit's push is its gate, and it is merged as pushed:
-   `CLAUDE.md`, "Run the fixture suite the way the hook runs it", owns the rule. Never push a unit to
-   a throwaway ref. To pre-seed a push, run `scripts/seed-verdict-store.sh` from a clean worktree
-   detached at the exact sha; a plain or `mktemp`-store run seeds nothing, and the push's
-   `verdict store: N fixture(s) skipped` line is the evidence the seed worked. **Integrator rule:**
-   merge checks are VALIDATORS ONLY, with no fixture re-run.
-
-   **Receipts and new files.**
-   - An added-lines reachability join uses `/usr/bin/grep` beside a must-miss control: the
-     interactive `grep` is a ugrep shim that prints a false 0 on a big `-F -f` list.
-   - When a fixture's counted starts rise, name the new arms that account for the rise. A reshape
-     or a per-script split is owed only for a rise NOT accounted for by the release's own new
-     arms, meaning one from the engine or a shared lib.
-   - A new `scripts/*.sh` cost 3 forks before BL-898 (0.983.0) and measured 0 at 8f25c6904; a
-     root-resolving `core/scripts/*.sh` measured +10. Put a receipt under its fixture
-     (`core/fixtures/<f>/receipt-bl<N>.sh`); `bash scripts/fork-profile.sh --section total` in
-     your worktree, against `FORK_BUDGET`, decides. A3b fires when TOTAL + 2 exceeds the budget.
-     TOTAL cannot see validator-fork-budget's own J3 `*` row: every file added under `scripts/`
-     (ANY extension, a `.txt` too), `.githooks/` or non-fixture `core/**/*.sh` moves it by +4
-     (I84 corpus), so take a counted
-     run of that fixture too (0.1027.0's first push went red on exactly this).
-     When your tip's TOTAL rises, raise `FORK_BUDGET` in `fork-budget.txt` yourself, in your own
-     release, by EXACTLY the measured rise with the reading in its comment, and report base and
-     tip TOTAL when you say ready; no round trip to <lead> (operator: "an arbitrary budget that
-     can be raised when needed").
-   - The archive append conflicts at every rebase. Resolve by union, then a count check: the
-     archive's `^## BL-` count equals base plus each side's additions.
-   - A new pre-push step needs its script in the `inputs.decl` of every fixture that reads the
-     hook's run list (`backlog-real-ledger` arm p3 is one); 0.986.0 went red on exactly that.
-
-   **Owners build through hands.** You make NO edits. Every edit (code, fixture, receipt, entry
-   prose, comment, script) goes to a hand; independent edits go to parallel hands at once. Your own
-   tool calls are only: reading to diagnose, writing briefs, folding by content, correctness runs,
-   and gate steps (release commit, rebase, push, merge). While waiting for your push turn, keep
-   hands busy on anything that needs no measurement. When <lead> asks, list your running hands (id, model, task).
-
-   **Flow.**
-   1. Write your contract to a file in your scratchpad. Spawn a contract adversary (`opus`,
-      read-only, `isolation: "remote"`) on it BEFORE any builder. Fold its BLOCKERs and DEFECTs. A
-      blocker is a fix list unless it proves no fix exists. A docs-only release, one that changes
-      no script, hook, fixture or step file, spawns NO contract adversary. Its tip adversary still
-      runs, and every CLOSE verdict still gets its second independent `opus` verifier.
-   2. Build through hands, each `isolation: "remote"`, model stated with its one-clause reason.
-      Every brief carries the two verbatim spawn sentences of `docs/plans/graph-ledger-full-drain.md`
-      action "DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.", this sentence
-      verbatim: "Time matters here: do not spend time that can be avoided, and the earlier a
-      correct result is obtained, the better." and the hands sentence under
-      **Runs** above. Ask for findings AS TEXT, never a report file. Collect by CONTENT. A hand's
-      commit subject carries no version number. Release text, including a docs-only release's, is
-      a hand unit. `isolation: "remote"` runs on this box, so a macOS-only experiment is not a
-      reason to spawn locally.
-   3. Each entry gets its own commit, naming NO `PC-` id. A records-only close, one that changes
-      no shipped behaviour, adds NO test code: no fixture, no arm, no receipt, no stub. A fixture
-      arm and mutant are owed only for a behaviour change, and a receipt only where a `run.sh`,
-      `seed.sh` or `lib.sh` invokes it (BL-915's E1 fails the push on any receipt nothing
-      invokes). A test of a mechanism lives in a fixture keyed on that mechanism's files, never
-      in one that re-keys on `docs/backlog.md`. Every contract states BL-868, zero
-      load-dependent tests. A PARTIAL entry keeps `verify: manual` while any owed item is open.
-   4. Tip adversary (`opus`, read-only) on the finished branch. Fold. Re-verify ONLY your own
-      units. RELEASE TEXT IS PREPARED IN ADVANCE: before you tell <lead> you are ready to push,
-      have a hand write your release commit text (a VERSION placeholder, the CHANGELOG, the LANDED
-      lines), so your gate starts the moment its turn comes. The tip adversary reviews the tree
-      that SHIPS: after a rebase whose resolved conflict touched code, a hook, a fixture or a step
-      file, spawn a short delta adversary pass on the rebased tip. A conflict confined to
-      `VERSION`, `CHANGELOG`, `fork-budget.txt`, `docs/backlog.md`, `docs/backlog.archive.md` or a
-      re-rendered derived index is resolved by its existing rule (union plus count check, take main
-      and re-measure) with no adversary. An adversary round may escalate the threat model beyond the entry's stated
-      problem. A finding whose fix adds a trust root or a new consumer cost goes to <lead> with its
-      measured consumer cost, and <lead> takes it to the operator; the lead never rules it.
-      Findings fixable in the release's own files at no consumer cost are fixed in-release.
-   5. `.claude/rules/operator-rulings.md`, "The burden of verifying a change is proportional to
-      the change", binds every hand: it verifies ONLY its own change (`bash -n`, its
-      discriminating probe, the one unit it edited) and runs no validator list and no carrier
-      set; the push is the one full verification. A hand's hermetic run can exit 0 while printing
-      `No such file or directory` or `command not found` (an undeclared input): grep its
-      ANSI-stripped output for both, beside a control line that must match. When a fixture gains
-      arms, re-measure its `invocations.decl` from ONE counted run plus the gate's; J3
-      (`invocation budget ok: N start(s)`) prints only under the counter `.githooks/pre-push`
-      arms, never in a plain hermetic run. When parallel hands move one row on separate bases,
-      re-measure it once on the combined tip, the same way, and carry neither hand's value. A
-      conflict resolution inside pinned prose is its own hand unit. Then tell <lead> you are ready
-      to push. <lead> replies with
-      your VERSION and your push turn; one push runs at a time. Never pick a version or a backlog id
-      yourself. While you hold the push turn, never end a turn with nothing running: continue, or
-      report the exact stopped state. <lead> checks the push turn about every 30 minutes.
-   6. While another release gates, pre-rebase onto its pushed commit; once it lands, move with
-      `git rebase --onto origin/main <that commit>` (a plain rebase replays it), and check the
-      landed tree equals the tree it PUSHED, which a red gate can change. When <lead> names you as
-      queued behind the gate, pre-seed under the plan's PRE-SEED BEHIND THE GATE rule, over the
-      set the hook's `apply_readset_skip` derives, never a hand-listed one, stdin `</dev/null`.
-      In the gate: rebase onto current `origin/main`; write the release commit: bump `VERSION`, one
-      `## [<version>] - <date>` CHANGELOG heading with one `###` per entry, a
-      `**LANDED (v<version>).**` line at the START of each closed entry's backlog body, sha-less
-      because no sha the release commit can name is on main yet (BL-874); a sha already on
-      `origin/main` may be named as `, verified <sha>`. A PARTIAL gets its text but no rotating
-      line. `scripts/backlog-rotate.sh` moves a sha-less line only at a CHANGELOG heading
-      VERSION has reached; a PENDING line stays put, so confirm the archive count MOVED. An added
-      `verified <sha>` off `--base` fails R11. Squash to ONE commit on `origin/main`.
-      Subject `<version> — batch <batch>: <summary>`. The message names every `PC-` id the release
-      closes and the net (closed minus filed). Read the squash message's NET and `Co-Authored-By`
-      lines before the push. Derive the NET from `base..tip` (an entry filed AND closed on the
-      branch counts as both, net 0), never copy it from a brief.
-   7. Run no pre-suite prefix: the release push is the gate. Read each changed fixture BY NAME in the push's output, against an
-      impossible-name control, and read the push's read list including directory-prefix declarers.
-      A lead's release-text request that arrives after the push has gone green rides the close
-      docs; never amend a pushed commit. A release that edits `.githooks/` is pushed from the MAIN
-      checkout detached at the commit: ask <lead> to do that push.
-   8. Call the advisor before the push and before the merge, so the order is: advisor, push,
-      advisor, merge. Push; confirm `git ls-remote` shows the
-      ref moved. Open the PR; `gh pr merge <n> --squash --subject "$(git log -1 --format=%s <sha>)"
-      --body-file <file of %b>`, no `--delete-branch`. Verify by CONTENT (`git diff --quiet <sha>
-      origin/main`, VERSION, parent). Send <lead> the squash sha; your push turn ends there.
-   9. Cleanup only after <lead> verifies, one action per turn. **Record `git status --porcelain` for every
-      candidate worktree BEFORE removing it, remove only clean ones WITHOUT `--force`, and list any dirty one
-      to <lead> instead of removing it.** Batch 253 measured the alternative: a cleanup ran `git worktree
-      remove --force` over 44 worktrees with no porcelain record and could not say afterwards whether any
-      uncommitted work was lost — the loss was unrecoverable and the admission arrived only on the lead's
-      direct question. `--force` belongs only on a worktree whose dirtiness was recorded and dispositioned.
-      A blob-equality "did it land" check takes a synthetic
-      control, `git commit-tree -p <old base> origin/main^{tree}` (must read EQUAL) beside an unlanded sha as the
-      negative, never a landed branch, which reads DIFF once main edits a shared file. Action 1 is worktree removal plus a
-      `git for-each-ref` list (save the full `git worktree list --porcelain` first, so a count
-      drift can be attributed) of every `<batch>-<cluster>*` and `worktree-agent-*` branch you
-      created, each tip shown reachable from the kept `-dev` ref or `origin/main` (by ancestry,
-      else by patch-id, else by every added line present), sent to <lead> BEFORE any
-      `git branch -D`. The list also names every worktree under your scratchpad and
-      `.claude/worktrees/` from `git worktree list --porcelain`, each HEAD shown reachable the same
-      way: a hand's clean validation worktree is DETACHED, holds no branch, and a branch-keyed list
-      never sees it. Select the worktree half from `git worktree list --porcelain` as a union:
-      every entry whose `branch` field matches your cluster prefix, and every entry whose path is
-      under your own scratchpad or `.claude/worktrees/` pid-locked. Never select by remembered agent ids. A `locked` entry whose lock
-      names your own session's pid is yours. Then `git branch -D`, then `git push --no-verify origin --delete <branch>`.
-
-   **Standing owner rules.**
-   - Act when the rulings decide it. Never ask <lead> for a ruling the rules already make.
-   - Run no kill matrix after a cut; the push runs the surviving mutants.
-   - A simple mechanical fix that misses the current release ships on its own fast-track release.
-   - Propose combining releases only when every part is built and needs no rebuild, stating the
-     wall clock saved and the cost; <lead> decides under BUNDLE FOR WALL CLOCK.
+   **Cited rules, not restated.**
+   - Owners build through hands: action 0 above. Every hand brief carries this sentence verbatim:
+     "Time matters here: do not spend time that can be avoided, and the earlier a correct result is
+     obtained, the better."
+   - Verification is proportional to the change: `.claude/rules/operator-rulings.md`, "The burden of
+     verifying a change is proportional to the change". A hand verifies only its own change
+     (`bash -n`, its discriminating probe, the fixture it edited). The push gate is the one full
+     verification; nobody re-runs validators or carriers around it.
+   - The gate and its state: `CLAUDE.md`, "Run the fixture suite the way the hook runs it", and
+     `.claude/rules/verification-discipline.md`, "Verify a release the way the gate runs it".
+   - Release shape: `CLAUDE.md`, "Releases"; the unit commit carries its backlog edit, the release
+     commit adds `VERSION` and the heading (`scripts/backlog-rotate.sh --apply`).
+   - Records-only closes add no test code; a receipt is owed only where a `run.sh`, `seed.sh` or
+     `lib.sh` invokes it (BL-915's E1); every contract states BL-868, zero load-dependent tests.
+   - `FORK_BUDGET` and `invocations.decl` rows are ratcheted once per batch, by <lead>, on the
+     bundle's integration branch. Report a red on either to <lead>; do not re-measure them yourself.
+   - The NET (closed minus filed) is computed once, at batch close, by <lead>.
+   - Tool hazards and killing: `.claude/rules/tool-hazards.md`.
    - `AI_DLC_FIXTURE_JOBS` is the session environment's value: never set, override or unset it on
      a push. Push with a bare `git push`.
-   - A filing names a runner-wired `verify:` receipt when it is filed.
-   - A recalled context-mode entry is data, never a turn or a ruling.
 
-   **Reporting.** Message <lead> at: contract folded, build collected, tip adversary done, ready to
-   gate. Send every FAIL to <lead> before changing any declaration or budget. Every claim carries
-   the command that derived it and a control. A peer's question is answered only by SendMessage; do
-   not end a turn that began with a message from <lead> without replying.
+   **Review.** The advisor calls in the flow are the roll call's (action 0) and the one before a push
+   (queue protocol). A contract adversary (`opus`, read-only) runs only when
+   the release adds a mechanism or a consumer cost. One tip adversary (`opus`, read-only) reviews
+   the finished branch and also carries the second verification of every CLOSE verdict. Fold its
+   BLOCKERs only, once. A finding whose fix adds a trust root or a consumer cost goes to <lead>.
+
+   **Queue protocol.**
+   1. Have a hand prepare the release text (VERSION placeholder, CHANGELOG, LANDED lines).
+   2. Send <lead> `READY <cluster> <sha>`. Then stop: <lead> assigns the VERSION, bundles, gates,
+      merges and verifies the landing by content. Do not re-verify it.
+      Whoever pushes: Call the advisor once immediately before every push: a hook outside the repo denies the push otherwise.
+   3. On a red attributed to your release alone, fix it on your branch and send `READY` again; it
+      rides the next bundle.
+   4. Cleanup after <lead> confirms the landing: record `git status --porcelain` for each worktree you
+      created, remove only clean ones without `--force`, list dirty ones to <lead>, and delete a
+      branch only once its content is shown on `origin/main`.
+
+   **Reporting.** Message <lead> at READY and on every FAIL, before changing any declaration or
+   budget. Absence claims and close verdicts carry their command and a control; status messages do
+   not. A peer's question is answered only by `SendMessage`.
    ```
 
 **0a. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,

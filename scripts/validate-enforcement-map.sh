@@ -6522,7 +6522,9 @@ fi
 #       precedent: compare executable lines so no comment can satisfy the check);
 #   (2) the chain FAILS CLOSED. Four scripts had no terminal guard at all: an
 #       unresolved root left the variable empty and every derived path became absolute
-#       from `/`. Both idioms are accepted; having neither is not.
+#       from `/`. Both idioms are accepted; having neither is not. The token is read ONLY
+#       from the TERMINAL GUARD -- the executable lines after the cwd-walk line, up to the
+#       end marker -- and a start marker with no end marker is a finding of its own.
 i75_norm() {
   awk '/^# --- AI_DLC_ROOT ---/,/^# --- end AI_DLC_ROOT ---/' "$1" 2>/dev/null \
     | grep -vE '^[[:space:]]*(#|$)' \
@@ -6536,16 +6538,26 @@ i75_norm() {
 # The chain only: from the override read to the cwd walk. The terminal guard is asserted
 # separately because its two forms are both correct.
 i75_chain() { i75_norm "$1" | sed -n '/^ROOTVAR="\${AI_DLC_PROJECT_ROOT:-}"$/,/ai_dlc_resolve_root "\$(pwd)"/p'; }
-# The reader DRAINS its pipe: an awk that records the match and decides in END. Never `grep -q`,
-# and never `grep > /dev/null` either, which GNU grep treats as `-q`. An early-exit reader leaves
-# at the first match while grep and sed are still writing the span, and git runs a pre-push hook
-# with SIGPIPE IGNORED, so each writer prints `stdout: Broken pipe` to this validator's stderr.
-# merge-review-shards.sh's span strips to 76042 bytes and matches at byte 8003, so 68039 are left
-# to write, past the 64 KiB pipe buffer. Measured on the old reader with SIGPIPE ignored, two
-# batches of 40 runs: the sed line 40 and 40 times, the grep line 34 and 23 times, so two runs of
-# one tree differed by the grep line.
-# The verdict never changed, but validator-arm-selection compares stderr byte for byte.
-i75_failsclosed() { i75_norm "$1" | awk '/exit [0-9]|:-\/nonexistent/ { f = 1 } END { exit (f ? 0 : 1) }'; }
+# THE FAILS-CLOSED TOKEN IS READ FROM THE TERMINAL GUARD ONLY (BL-1000). The span between the
+# markers is not the block: merge-review-shards.sh's runs ~1390 lines, its resolver at the top and
+# its chain at the bottom, and measured on the whole-span reader 10 lines in it carried the token,
+# so deleting its one real guard line left I75 green. And audit-layer-debt.sh had NO end marker, so
+# the range ran to EOF and its absent-register `exit 2` acquitted a chain with no guard at all. So:
+# only executable lines AFTER the cwd-walk line (`ai_dlc_resolve_root "$(pwd)"`, re-armed at each
+# one) and BEFORE the end marker count. Exit 0 = fails closed, 3 = a start marker with no end
+# marker, anything else (1, or awk's own 2 on an unreadable file) = does not fail closed.
+# ONE awk reading the FILE: no pipe, so no writer is left mid-span when the reader decides (the
+# old pipeline printed `stdout: Broken pipe` under git's ignored SIGPIPE, which
+# validator-arm-selection's byte-for-byte stderr compare can see).
+i75_failsclosed() {
+  awk '
+    /^# --- AI_DLC_ROOT ---/     { inb = 1; s = 1; next }
+    /^# --- end AI_DLC_ROOT ---/ { if (inb) e = 1; inb = 0; next }
+    !inb || /^[[:space:]]*(#|$)/ { next }
+    /ai_dlc_resolve_root "\$\(pwd\)"/ { w = 1; f = 0; next }
+    w && /exit [0-9]|:-\/nonexistent/ { f = 1 }
+    END { if (s && !e) exit 3; exit (f ? 0 : 1) }' "$1" 2>/dev/null
+}
 
 i75_subjects="$(grep -lE 'AI_DLC_PROJECT_ROOT|CLAUDE_PROJECT_DIR|ai_dlc_resolve_root' \
   "$REPO_ROOT"/core/scripts/*.sh 2>/dev/null | sort)"
@@ -6553,6 +6565,76 @@ i75_n="$(grep -c . <<<"$i75_subjects" || true)"
 if [ "$i75_n" -lt 5 ]; then
   err "I75's subject extractor found $i75_n script(s) consulting a project root. Fewer than five means the extractor stopped matching, not that the population shrank — and an empty subject set agrees with every requirement, so this fails closed."
 else
+  # SELF-PROBES, written here rather than assumed, and run BEFORE the corpus loop. Without them, a
+  # run whose extractor returns nothing for every subject prints the same clean line as a real
+  # pass. The fail-closed reader is probed on two block sizes, because a reader that is right on a
+  # small block and wrong on a large one is the defect BL-1000 measured:
+  #   small: good.sh (validate-ci-gates.sh's real block, guarded) must PASS -- the near-miss;
+  #          bad.sh (no guard) and good-ng.sh (the same real block, its guard token lines
+  #          deleted) must FAIL.
+  #   REAL-SIZED: big-ok.sh (merge-review-shards.sh, padded) must PASS; big-ng.sh (its guard
+  #          token lines deleted) must FAIL; big-open.sh (its end marker deleted) must read 3.
+  # The big copies are built by ONE awk that also counts what it removed: the guard token lines
+  # (>= 1) and the end marker (exactly 1), the two things the live file must supply.
+  # THE SIZE AND THE PRE-WALK TOKENS ARE CONSTRUCTED, NOT INHERITED, and so are not re-checked: a
+  # count of what the padder was told to write cannot come out differently. The pre-walk tokens are
+  # what make big-ng.sh discriminate a whole-span reader, which accepts it. Every copy gets 500 real-shaped
+  # executable lines (`|| exit 2`, `:-/nonexistent`, a `case`, a no-op) inserted right after its
+  # start marker, so the probe holds for ANY layout of the live file -- including the correct
+  # refactor that moves its chain up beside its resolver and leaves a span of a few dozen lines.
+  # The live file supplies only what I75 already requires of every subject: a cwd walk, a guard
+  # after it, and an end marker.
+  i75_pd="$(mktemp -d)"
+  awk -v d="$i75_pd" '
+    /^# --- AI_DLC_ROOT ---/ { inb = 1 }
+    inb && /ai_dlc_resolve_root "\$\(pwd\)"/ { w = 1 }
+    inb && w && !/^[[:space:]]*#/ && /exit [0-9]|:-\/nonexistent/ { ng++; print > (d "/good.sh"); next }
+    inb { print > (d "/good.sh"); print > (d "/good-ng.sh") }
+    /^# --- end AI_DLC_ROOT ---/ { inb = 0 }
+    END { print ng + 0 }' "$REPO_ROOT/core/scripts/validate-ci-gates.sh" > "$i75_pd/good.n" 2>/dev/null
+  i75_big="$REPO_ROOT/core/scripts/merge-review-shards.sh"
+  awk -v d="$i75_pd" '
+    function out(l) { print l > (d "/big-ok.sh"); print l > (d "/big-ng.sh"); print l > (d "/big-open.sh") }
+    /^# --- AI_DLC_ROOT ---/ && !s {
+      inb = 1; s = NR; out($0)
+      for (i = 1; i <= 125; i++) {
+        out("[ -e \"${T:-}/pad." i "\" ] || exit 2")
+        out("PAD" i "=\"${PAD" i ":-/nonexistent}\"")
+        out("case \"${1:-}\" in --pad" i ") shift ;; esac")
+        out(": \"pad " i "\"")
+      }
+      next
+    }
+    /^# --- end AI_DLC_ROOT ---/ && inb { inb = 0; eo++; print > (d "/big-ok.sh"); print > (d "/big-ng.sh"); next }
+    inb && /ai_dlc_resolve_root "\$\(pwd\)"/ { w = 1 }
+    inb && w && !/^[[:space:]]*#/ && /exit [0-9]|:-\/nonexistent/ { ng++; print > (d "/big-ok.sh"); print > (d "/big-open.sh"); next }
+    { out($0) }
+    END { print ng + 0, eo + 0 }' "$i75_big" > "$i75_pd/big.n" 2>/dev/null
+  { echo '#!/usr/bin/env bash'; echo '# --- AI_DLC_ROOT ---'
+    echo 'ROOT="${CLAUDE_PROJECT_DIR:-.}"'; echo '# --- end AI_DLC_ROOT ---'; } > "$i75_pd/bad.sh"
+  i75_fcv=""
+  for _p in good bad good-ng; do
+    _r=0; i75_failsclosed "$i75_pd/$_p.sh" || _r=$?; i75_fcv="$i75_fcv$_r"
+  done
+  for _p in "$i75_pd/big-ok.sh" "$i75_pd/big-ng.sh" "$i75_pd/big-open.sh"; do
+    _r=0; i75_failsclosed "$_p" || _r=$?; i75_fcv="$i75_fcv$_r"
+  done
+  i75_gn=""; i75_bn=""
+  read -r i75_gn < "$i75_pd/good.n" 2>/dev/null; read -r i75_bn < "$i75_pd/big.n" 2>/dev/null
+  # The canonical-chain probe: a script carrying good.sh's chain. Kept as a file for the hash probe
+  # after the corpus hashes, which is the only point the modal chain exists.
+  i75_pg="$(i75_chain "$i75_pd/good.sh" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
+  i75_pb="$(i75_chain "$i75_pd/bad.sh"  | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
+  rm -rf "$i75_pd"
+  # good.n: guard token lines removed from the small copy (>= 1). big.n: guard token lines
+  # removed (>= 1) and end markers removed (exactly 1), both supplied by the live file.
+  read -r i75_b1 i75_b2 <<<"${i75_bn:-}"
+  if [ "${i75_gn:-0}" -lt 1 ] || [ "${i75_b1:-0}" -lt 1 ] || [ "${i75_b2:-0}" -ne 1 ]; then
+    err "I75 self-probe FAILED: the probe copies were not built as declared (small guard lines removed=${i75_gn:-none}; big guard lines removed, end markers removed=${i75_bn:-none}). merge-review-shards.sh must carry a guard after its cwd walk and exactly one end marker, or big-ng.sh and big-open.sh are not mutants of anything."
+  elif [ "$i75_fcv" != "011013" ]; then
+    err "I75 self-probe FAILED: the fail-closed reader scored $i75_fcv on good.sh, bad.sh, good-ng.sh, big-ok.sh, big-ng.sh, big-open.sh, where 011013 is required (0 = fails closed, 1 = does not, 3 = a start marker with no end marker). A reader that accepts a guard-less real-sized block reads the token from the whole span; that arm cannot fire on the subjects it exists for."
+  fi
+
   # Each subject's chain is hashed ONCE, as `<hash> <file>`, and both the modal count and the
   # drift loop below read that list. The drift loop used to re-run the chain pipeline per
   # subject, which doubled this arm's per-subject cost for an identical value.
@@ -6565,34 +6647,31 @@ else
   if [ -z "$i75_modal" ] || [ "$i75_modal" = "$i75_empty" ]; then
     err "I75 could not derive a canonical precedence chain: the most common chain across $i75_n subject script(s) is EMPTY, and an empty chain matches every subject. Failing closed rather than reporting an agreement it did not compute."
   else
-    i75_drift=""; i75_open=""
+    # The chain probes, judged here because the modal chain exists only after the corpus hashes;
+    # good.sh and bad.sh were hashed above, before the corpus loop.
+    [ "$i75_pg" = "$i75_modal" ] || err "I75 self-probe FAILED: a synthetic script carrying the canonical chain did not match the derived one. The comparison is broken, so every verdict below is unattributable."
+    [ "$i75_pb" != "$i75_modal" ] || err "I75 self-probe FAILED: a synthetic script carrying only a bare \`\${CLAUDE_PROJECT_DIR:-.}\` MATCHED the derived chain. The check cannot fire and would report every tree clean."
+
+    i75_drift=""; i75_open=""; i75_unclosed=""
     while IFS=' ' read -r _s _f; do
       [ -n "$_f" ] || continue
       [ "$_s" = "$i75_modal" ]   || i75_drift="${i75_drift}${_f##*/} "
-      i75_failsclosed "$_f"      || i75_open="${i75_open}${_f##*/} "
+      _r=0; i75_failsclosed "$_f" || _r=$?
+      case "$_r" in
+        0) ;;
+        3) i75_unclosed="${i75_unclosed}${_f##*/} " ;;
+        *) i75_open="${i75_open}${_f##*/} " ;;
+      esac
     done <<<"$i75_hashed"
-
-    # SELF-PROBES, written here rather than assumed. Without them, a run whose extractor
-    # returns nothing for every subject prints the same clean line as a real pass.
-    i75_pd="$(mktemp -d)"
-    awk '/^# --- AI_DLC_ROOT ---/,/^# --- end AI_DLC_ROOT ---/' \
-      "$REPO_ROOT/core/scripts/validate-ci-gates.sh" > "$i75_pd/blk.txt"
-    { echo '#!/usr/bin/env bash'; cat "$i75_pd/blk.txt"; } > "$i75_pd/good.sh"
-    { echo '#!/usr/bin/env bash'; echo '# --- AI_DLC_ROOT ---'
-      echo 'ROOT="${CLAUDE_PROJECT_DIR:-.}"'; echo '# --- end AI_DLC_ROOT ---'; } > "$i75_pd/bad.sh"
-    i75_pg="$(i75_chain "$i75_pd/good.sh" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
-    i75_pb="$(i75_chain "$i75_pd/bad.sh"  | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
-    i75_pbo=0; i75_failsclosed "$i75_pd/bad.sh" || i75_pbo=1
-    rm -rf "$i75_pd"
-    [ "$i75_pg" = "$i75_modal" ] || err "I75 self-probe FAILED: a synthetic script carrying the canonical chain did not match the derived one. The comparison is broken, so every verdict below is unattributable."
-    [ "$i75_pb" != "$i75_modal" ] || err "I75 self-probe FAILED: a synthetic script carrying only a bare \`\${CLAUDE_PROJECT_DIR:-.}\` MATCHED the derived chain. The check cannot fire and would report every tree clean."
-    [ "$i75_pbo" -eq 1 ] || err "I75 self-probe FAILED: the fail-closed reader accepted a block with no terminal guard. That arm cannot fire."
 
     if [ -n "${i75_drift// /}" ]; then
       err "I75 script(s) whose root-resolution precedence chain differs from the canonical one: ${i75_drift}. The chain is override -> walk up from the script's own location -> CLAUDE_PROJECT_DIR -> walk up from cwd. A script that reads CLAUDE_PROJECT_DIR before its own install path answers about whichever repository the session started in; measured on a real pair of trees, two such scripts returned 0 on the wrong repository where they return 1 on the right one. \`core/fixtures/validator-path-resolution\` asserts every subject ignores a CLAUDE_PROJECT_DIR pointing at another tree."
     fi
     if [ -n "${i75_open// /}" ]; then
-      err "I75 script(s) whose root resolution does not fail closed: ${i75_open}. With no terminal guard an unresolved root leaves the variable EMPTY, every derived path becomes absolute from \`/\`, and the script reports about a tree that does not exist rather than saying it cannot find one. End the chain with an \`exit\` guard, or substitute an unresolvable path as \`validate-gate-adjudication.sh\` does."
+      err "I75 script(s) whose root resolution does not fail closed: ${i75_open}. With no terminal guard an unresolved root leaves the variable EMPTY, every derived path becomes absolute from \`/\`, and the script reports about a tree that does not exist rather than saying it cannot find one. End the chain with an \`exit\` guard, or substitute an unresolvable path as \`validate-gate-adjudication.sh\` does. The guard must sit AFTER the cwd-walk line and before \`# --- end AI_DLC_ROOT ---\`: an \`exit\` elsewhere in the span is not the chain's guard."
+    fi
+    if [ -n "${i75_unclosed// /}" ]; then
+      err "I75 script(s) whose \`# --- AI_DLC_ROOT ---\` block has NO end marker: ${i75_unclosed}. Without \`# --- end AI_DLC_ROOT ---\` the block runs to the end of the file, so the chain and its guard cannot be told from the program body, and any \`exit\` anywhere below would read as the guard. Close the block after its terminal guard."
     fi
   fi
 fi

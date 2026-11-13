@@ -33,7 +33,8 @@
 # MUTANT MATRIX. "A mutant fails only its own assertion" (.claude/rules/fixture-mutants.md) is a
 # test-quality property, measured ONCE for every mutant against EVERY arm and recorded below; per
 # push each mutant runs its deciding arm(s) (must flip) and one twin (must stay green). The matrix
-# is re-measured whenever an arm or a mutant is added or changed, with the REMEASURE command below.
+# is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
+# Run the REMEASURE command below.
 # Outside its declared decides set, each mutant co-trips no other arm, measured at authoring.
 # MUTANT-MATRIX a4-corpus-control-narrowed-to-slot decides=A4 twins=A3
 # MUTANT-MATRIX a7-flat-count-counts-other-slots decides=A7 twins=A5

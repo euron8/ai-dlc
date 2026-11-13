@@ -43,7 +43,17 @@ OUT="$(bash "$VLE" "$CONS" 2>&1)"
 FAILURES=0
 ASSERTIONS=0
 
-# $1 entry-substring  $2 expected-substring in the row (or "CLEAN")  $3 why
+# A kill is emitted through lib/mutant.sh's mutant_killed, which refuses unless the unmutated arm the mutant
+# guards passed in this run. It needs ok() and bad(): ok prints its line as given, and bad counts a refused
+# base in FAILURES, so the verdict lines, the counters and the PASS total are those of the printf it replaced.
+ok() { printf '%s\n' "$1"; }
+bad() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %s\n' "$1"; }
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh"
+
+# $1 entry-substring  $2 expected-substring in the row (or "CLEAN")  $3 why. Returns 1 when the row FAILs, so a
+# caller capturing $? holds the row's own verdict (a mutant's base-pass flag below).
 row() {
   local ent="$1" want="$2" why="$3" got
   ASSERTIONS=$((ASSERTIONS + 1))
@@ -55,6 +65,7 @@ row() {
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-26s errored but must not  (%s)\n' "$ent" "$why"
       printf '%s\n' "$got" | sed 's/^/          | /'
+      return 1
     fi
   elif grep -qF "$want" <<<"$got"; then
     printf '  ok    %-26s %s  (%s)\n' "$ent" "$want" "$why"
@@ -62,6 +73,7 @@ row() {
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-26s wanted "%s"  (%s)\n' "$ent" "$want" "$why"
     printf '%s\n' "${got:-<no error row>}" | sed 's/^/          | /'
+    return 1
   fi
 }
 
@@ -90,7 +102,7 @@ row "steps__retro__ghost.md"           "matches no heading" \
 
 # THE BLIND SPOT. Part one is valid; part two is not. A first-part-only reader sees nothing.
 row "steps__retro__multi.md"           "Empirical gate validation" \
-  "E3 — every comma-part is validated, not just the first"
+  "E3 — every comma-part is validated, not just the first"; R_multi=$?
 
 # THE SECOND BLIND SPOT, inside the fix for the first. The per-part widening still computed the
 # target per part, so a part that inherits its file computed an EMPTY one and was skipped before
@@ -100,9 +112,9 @@ row "steps__retro__multi.md"           "Empirical gate validation" \
 # an entry that resolved no file at all, and the assertion would pass while the fix was reverted.
 # Mutation 3 caught exactly that.
 row "steps__retro__inherit.md"         "Inherited Heading' matches no heading in steps/retro.md" \
-  "E3 — a bare '#anchor' part inherits the file from the part before it and is still anchor-checked"
+  "E3 — a bare '#anchor' part inherits the file from the part before it and is still anchor-checked"; R_inherit=$?
 row "steps__retro__orphan.md"          "names no target file" \
-  "E3 — a first part with no file has nothing to inherit, and silence there skips every check on the entry"
+  "E3 — a first part with no file has nothing to inherit, and silence there skips every check on the entry"; R_orphan=$?
 
 row "SKILL__Rule-9.md"                 "missing 'reason:'" \
   "E8 — reason: was declared by the contract and read by nothing"
@@ -118,7 +130,8 @@ lines="$(printf '%s\n' "$OUT" | grep -c '^ERROR' || true)"
 counted="$(printf '%s\n' "$OUT" | sed -n 's/^validate-layer-entries: \([0-9]*\) error(s).*/\1/p')"
 bash "$VLE" "$CONS" >/dev/null 2>&1; rc=$?
 if [ "$lines" = "$counted" ] && [ "$rc" -ne 0 ]; then
-  printf '  ok    %-26s %s ERROR lines, footer says %s, exit %s\n' "count-matches-lines" "$lines" "$counted" "$rc"
+  printf -v _m '  ok    %-26s %s ERROR lines, footer says %s, exit %s' "count-matches-lines" "$lines" "$counted" "$rc"
+  ok "$_m"; B_count=1
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-26s %s ERROR lines but footer says %s and exit is %s — a reported violation that does not block\n' "count-matches-lines" "$lines" "$counted" "$rc"
@@ -158,7 +171,8 @@ else
   # It must lose part two AND nothing else: the single-anchor entries still error.
   m1keep="$(printf '%s\n' "$m1all" | grep -F 'team-roles__tea__escalation.md' | grep -c '^ERROR' || true)"
   if [ "$m1" -eq 0 ] && [ "$m1keep" -gt 0 ]; then
-    printf '  ok    %-26s first-part-only read goes blind to the second anchor, and only that\n' "mutation-firstpart"
+    printf -v _m '  ok    %-26s first-part-only read goes blind to the second anchor, and only that' "mutation-firstpart"
+    mutant_killed "$([ "$R_multi" = 0 ] && echo 1)" mutation-firstpart "$_m"
   elif [ "$m1" -ne 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-26s the mutant still caught part two, so the assertion above is vacuous\n' "mutation-firstpart"
@@ -186,7 +200,8 @@ else
   m2lines="$(printf '%s\n' "$m2out" | grep -c '^ERROR' || true)"
   m2count="$(printf '%s\n' "$m2out" | sed -n 's/^validate-layer-entries: \([0-9]*\) error(s).*/\1/p')"
   if [ -n "$m2count" ] && [ "$m2lines" != "$m2count" ]; then
-    printf '  ok    %-26s pipeline loses the count in a subshell (%s lines, footer %s)\n' "mutation-subshell" "$m2lines" "$m2count"
+    printf -v _m '  ok    %-26s pipeline loses the count in a subshell (%s lines, footer %s)' "mutation-subshell" "$m2lines" "$m2count"
+    mutant_killed "${B_count:-0}" mutation-subshell "$_m"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-26s the pipeline mutant counted correctly (%s lines, footer %s), so the guard is vacuous\n' "mutation-subshell" "$m2lines" "${m2count:-<none>}"
@@ -216,7 +231,8 @@ else
   m3keep="$(printf '%s\n' "$m3all" | grep -F 'steps__retro__multi.md' | grep -c '^ERROR' || true)"
   m3orph="$(printf '%s\n' "$m3all" | grep -F 'steps__retro__orphan.md' | grep -c '^ERROR' || true)"
   if [ "$m3" -eq 0 ] && [ "$m3keep" -gt 0 ] && [ "$m3orph" -gt 0 ]; then
-    printf '  ok    %-26s an inheriting part loses its anchor check, and only that\n' "mutation-noinherit"
+    printf -v _m '  ok    %-26s an inheriting part loses its anchor check, and only that' "mutation-noinherit"
+    mutant_killed "$([ "$R_inherit" = 0 ] && echo 1)" mutation-noinherit "$_m"
   elif [ "$m3" -ne 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-26s the mutant still anchor-checked the inherited part, so the assertion above is vacuous\n' "mutation-noinherit"
@@ -241,7 +257,8 @@ else
   m4="$(printf '%s\n' "$m4all" | grep -F 'steps__retro__orphan.md' | grep -c '^ERROR' || true)"
   m4keep="$(printf '%s\n' "$m4all" | grep -F 'steps__retro__inherit.md' | grep -c '^ERROR' || true)"
   if [ "$m4" -eq 0 ] && [ "$m4keep" -gt 0 ]; then
-    printf '  ok    %-26s a target-less first part disappears in silence, and only that\n' "mutation-noorphan"
+    printf -v _m '  ok    %-26s a target-less first part disappears in silence, and only that' "mutation-noorphan"
+    mutant_killed "$([ "$R_orphan" = 0 ] && echo 1)" mutation-noorphan "$_m"
   elif [ "$m4" -ne 0 ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-26s the mutant still reported the orphan, so the assertion above is vacuous\n' "mutation-noorphan"

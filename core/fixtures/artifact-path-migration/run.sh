@@ -25,7 +25,8 @@
 # that printed "2670 verified" while moving nothing would pass a report-reading fixture.
 #
 # Per push each mutant runs its deciding arm and one twin; the measured matrix replaces an
-# exact-vector assertion and is re-measured whenever an arm or a mutant changes. Arm names are the
+# exact-vector assertion. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
+# run per distinct state") requires. Arm names are the
 # column names `--matrix` prints (T-* read the tree after --apply, R-* read the report).
 # MUTANT-MATRIX ambiguity-allowed decides=T-ambig twins=T-conform
 # MUTANT-MATRIX stories-half-migrated decides=T-storybeta twins=T-storyalpha

@@ -123,7 +123,8 @@
 # Columns: S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12 S13 S14 S15 PROBE (any arm's own probe) EMPTY_SHELL
 # EMPTY_CORE EMPTY_DOC EMPTY_FIXTURE (the four fail-closed corpus refusals) REFUSED (exit 2).
 # The decides=/twins= below are the recorded matrix; this file reads them back from its own header, so
-# there is one copy. The matrix is re-measured whenever an arm or a mutant changes. The exact-vector
+# there is one copy. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
+# run per distinct state") requires. The exact-vector
 # assertion this battery used to make per mutant (kill_check: exactly one FAIL line, its own) is kept.
 # m14 (the S13 bash-3.2 oracle agreement) and n1-n9 (negative seeds that must stay silent) mutate
 # nothing and are not mutants, so they carry no row.

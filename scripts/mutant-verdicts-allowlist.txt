@@ -24,8 +24,7 @@ askuserquestion-citation	1
 backlog-receipt-binding	1
 backlog-rotate-fence-guard	1
 check-22-spawn-ledger	1
-check-24-adversarial-convergence	10
-check-3b-locked-anchor	14
+check-24-adversarial-convergence	2
 ci-gates-resolution	2
 command-args-citation	1
 context-sensor	1
@@ -47,11 +46,9 @@ handoff-completion-assertion	1
 handoff-resume-guard	1
 hermetic-runner	1
 implementation-join-yield	3
-layer-anchor-declaration	4
-layer-contract-conformance	1
 layer-readopt-gate	8
 layer-reference-resolution	1
-ledger-reverify	40
+ledger-reverify	4
 ledger-reverify-dist-only-reach	1
 ledger-rotate	1
 ledger-status-vocabulary	1

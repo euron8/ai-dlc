@@ -85,8 +85,8 @@
 # THE MUTANT MATRIX. Every mutant is an exact-once string replacement in a COPY of the hook (`hmut`, guarded by
 # the anchor occurring exactly once, `cmp -s`, `bash -n` of the copy, and its pk.py still parsing). It is scored
 # on its deciding cell(s) and its named twin(s) only; `run.sh --matrix` scores every mutant on every cell and
-# prints one MATRIX line per cell. Re-measure whenever an arm or a mutant is added or changed, from the repo root,
-# with the REMEASURE command below.
+# prints one MATRIX line per cell. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
+# run per distinct state") requires. Run it from the repo root, with the REMEASURE command below.
 #   n1  the present key from names only: the esc()'d kind and target dropped from each line
 #   n2  check skips the `@present` comparison
 #   n3  check ignores the `#format` line, so k1 is accepted

@@ -149,7 +149,7 @@ GROUP=a
 # `--matrix` is the RE-MEASUREMENT mode: every unit of every shard, each mutant battery scored across
 # every world of its battery. Never per push. A unit carrying a full-vector mode adds itself to
 # MATRIX_UNITS; every other unit prints that it has none, so a partial matrix cannot read as complete.
-# The matrix is measured once and re-measured whenever an arm or a mutant is added or changed, and per push each mutant runs its deciding arm(s).
+# The matrix is measured once. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Per push each mutant runs its deciding arm(s).
 #   also trips (consequence, not decided): m1 C6,C7; m2 F1; m5 C6,C7; m6 F1,F2,U4; m7 F1; A1 RA2,RA9a,RA9f;
 #   A2 RA1,RA2,RA3,RA8,RA9a,RA9f; MR1 U5,RA3; M1 R2,A,F1,J1,KF2,N1,N3; M2 A,F1; M3 F1,N1,N3; M6 N3;
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/apply-restamp-worklist/run.sh --matrix
@@ -2938,7 +2938,8 @@ fi
 # --- BL MUTANT-BY-ARM MATRIX: a re-measurement mode, never run per push ------------------------
 # `bash core/fixtures/apply-restamp-worklist/run.sh --matrix` drives the unmutated copy and every
 # BL mutant across every BL world and prints one `MATRIX` row each. The per-push twins above are
-# read off it; the matrix is re-measured whenever an arm or mutant is added or changed.
+# read off it. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per
+# distinct state") requires.
 if [ "$MATRIX" = 1 ]; then
   MX_CELLS=$((MX_CELLS + 1))
   mx_world() { # mx_world <rec> <name> -> "<name>=<vector>[/stamp/marker]"

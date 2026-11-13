@@ -34,8 +34,9 @@
 # mutant's output). A plain run scores each mutant on its deciding cell and checks its twin
 # against the SAME `--arms I39` output, so a twin costs no validator run. Each twin pair sits on
 # the same extraction or the same step, which is where one mutation could trip its neighbour.
-# The matrix is re-measured whenever an arm or a mutant is added or changed, by the REMEASURE
-# command below, run from the repo root. It scores every mutant against every cell, and against
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires. Run the REMEASURE command below, from the repo root. It scores every mutant
+# against every cell, and against
 # every validator arm outside I39 by one full validator run of the same mutated tree, whose
 # sorted FAIL: set must equal the `--arms I39` run's.
 # MUTANT-MATRIX emit-undocumented decides=emit-undocumented twins=documented-unemitted

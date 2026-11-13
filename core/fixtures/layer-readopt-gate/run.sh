@@ -25,7 +25,8 @@
 # the 16 E2 arms, one MATRIX line per cell) by the re-measure command below; per push each runs only
 # its deciding arms plus its named twins (arms that stay green under it). Every other mutant is
 # scored by ONE drive, so its matrix is that drive's own cells and a plain run already reads all of
-# them. The matrix is re-measured whenever an arm or a mutant is added or changed.
+# them. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct
+# state") requires.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/layer-readopt-gate/run.sh --matrix
 # MUTANT-MATRIX e2-M1 decides=a twins=n,e
 # MUTANT-MATRIX e2-M1plus decides=a twins=e,c

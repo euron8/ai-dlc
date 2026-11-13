@@ -24,7 +24,8 @@
 # drift into disagreeing with the other about which paths this convention governs.
 #
 # Per push each mutant runs its deciding arm and one twin; the measured matrix replaces an
-# exact-vector assertion and is re-measured whenever an arm or a mutant changes. Arm names are the
+# exact-vector assertion. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
+# run per distinct state") requires. Arm names are the
 # column names `--matrix` prints (V-* read the validator on a seeded tree, G-* the gate probes).
 # MUTANT-MATRIX declared-areas-only decides=V-allows-inferred twins=V-empty
 # MUTANT-MATRIX empty-subject-passes decides=V-empty twins=V-allows-inferred

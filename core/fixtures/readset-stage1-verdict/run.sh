@@ -46,8 +46,8 @@
 #
 # The mutant matrix: outside its declared decides set, each mutant co-trips no other arm, measured at authoring; a
 # twins=- row is dead in every cell by construction, as its why= states. Per push a mutant drives its
-# deciding cell(s) and one named twin that the matrix shows green for it. The matrix is re-measured whenever
-# an arm or a mutant is added or changed.
+# deciding cell(s) and one named twin that the matrix shows green for it. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires.
 #
 # MUTANT-MATRIX del-A1 decides=a1,a3u twins=met
 # MUTANT-MATRIX del-A2 decides=a2 twins=met
@@ -250,7 +250,7 @@ score_in() {
     TMPDIR="$2/tmp"; AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export TMPDIR AI_DLC_READSET_STAGE1_LEDGER
     . "$1" || exit 2
     [ "${4:-}" = probe ] && stage1_entry
-    stage1_score ) 2>&1
+    [ "$1" = "$SCORER" ] && fx_inproc "$SCORER"; stage1_score ) 2>&1
 }
 # score_cli <scorer> <world> <cwd>: the same question through the CLI, for the equivalence cell and one run per outcome.
 score_cli() { ( cd "$3" && TMPDIR="$2/tmp" AI_DLC_READSET_STAGE1_LEDGER="$2/ledger" bash "$1" 2>&1 ); }
@@ -947,7 +947,7 @@ if wrap_kill9 "$WRAPPER" kill9; then B_wr_kill9=1; ok "SIGKILL: exit 137, the st
 # function the CLI calls first -- from the repo's own copy of the wrapper, sourced in a subshell, so the
 # root it resolves is the copy's, exactly as the CLI's BASH_SOURCE walk resolves it.
 # pre_in <wrapper copy> <ledger> <rundir>: stage1_preflight in process; prints its output, returns its exit.
-pre_in() { ( AI_DLC_READSET_STAGE1_LEDGER="$2"; export AI_DLC_READSET_STAGE1_LEDGER; . "$1" || exit 9; stage1_preflight "$3" ) 2>&1; }
+pre_in() { ( AI_DLC_READSET_STAGE1_LEDGER="$2"; export AI_DLC_READSET_STAGE1_LEDGER; . "$1" || exit 9; fx_inproc "$1"; stage1_preflight "$3" ) 2>&1; }
 refusal() { # refusal <tag> <reason> <rundir> <wrapper> [cli] -- run with the ledger override
   local L="$WORK/wr/$1.ledger" out rc
   if [ "${5:-}" = cli ]; then out="$(FXCELL=wrap-refuse-dirty-tree AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$4" "$3" 2>&1)"; rc=$?
@@ -974,7 +974,7 @@ refusal run-dir-inside-checkout "is inside the checkout" "$R/repo/run" "$R/repo/
 # file, and stage1_started writes its started line there (control: the override cell above wrote to its own file).
 R="$WORK/wr/default"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo default"
 out="$( ( unset AI_DLC_READSET_STAGE1_LEDGER; . "$R/repo/scripts/readset-stage1-run.sh" || exit 9
-          stage1_preflight "$R/run" && stage1_state && stage1_started && printf 'LEDGER=%s\n' "$LEDGER" ) 2>&1)"; rc=$?
+          fx_inproc "$R/repo/scripts/readset-stage1-run.sh"; stage1_preflight "$R/run" && fx_inproc "$R/repo/scripts/readset-stage1-run.sh" && stage1_state && fx_inproc "$R/repo/scripts/readset-stage1-run.sh" && stage1_started && printf 'LEDGER=%s\n' "$LEDGER" ) 2>&1)"; rc=$?
 n="$(grep -c . "$R/repo/.git/ai-dlc-readset-stage1.ledger" 2>/dev/null)" || n=0
 want="$(cd "$R/repo/.git" && pwd -P)/ai-dlc-readset-stage1.ledger"
 if [ "$rc" = 0 ] && [ "$n" = 1 ] && [ "$out" = "LEDGER=$want" ]; then ok "with no override the ledger is the git common dir's (stage1_preflight resolves it; stage1_started writes its line there)"
@@ -991,7 +991,7 @@ else bad "default ledger: rc=$rc lines=$n out=[$out] want LEDGER=$want"; fi
 ic_repo() { mkrepo "$1" "$2" >/dev/null 2>&1 || broken "mkrepo $1"; }
 ic_sample() { # sample() appends `<epoch>\t<1-min load>` to RUN_DIR/load.tsv, never under root/
   ( RUN_DIR="$2/run"; mkdir -p "$RUN_DIR/root"; PATH="$SBIN:$PATH"; . "$1" || exit 9
-    sample; sample
+    [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; sample; [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; sample
     awk -F'\t' 'NF == 2 && $1 ~ /^[0-9]+$/ && $2 == "1.11" { n++ } END { exit !(n == 2 && NR == 2) }' "$RUN_DIR/load.tsv" 2>/dev/null \
       || { echo "load.tsv column 2 is not the stub's 1-minute load 1.11 on both samples, beside root/: $(cut -f2 "$RUN_DIR/load.tsv" 2>/dev/null | tr '\n' ' ')"; exit 1; }
     [ ! -e "$RUN_DIR/root/load.tsv" ] || { echo "load.tsv was written under root/"; exit 1; } )
@@ -999,14 +999,14 @@ ic_sample() { # sample() appends `<epoch>\t<1-min load>` to RUN_DIR/load.tsv, ne
 ic_profile() { # stage1_profile removes an inherited AI_DLC_READSET_SANDBOX_PROFILE from what the deriver inherits
   ( AI_DLC_READSET_SANDBOX_PROFILE="$WORK/narrow.sb"; export AI_DLC_READSET_SANDBOX_PROFILE; . "$1" || exit 9
     [ -n "${AI_DLC_READSET_SANDBOX_PROFILE:-}" ] || { echo "control: the profile variable was not set before the call"; exit 1; }
-    stage1_profile
+    [ "$1" = "$WRAPPER" ] && fx_inproc "$1"; stage1_profile
     ! env | grep -q '^AI_DLC_READSET_SANDBOX_PROFILE=' || { echo "AI_DLC_READSET_SANDBOX_PROFILE reached the deriver's environment"; exit 1; } )
 }
 ic_started() { # stage1_started writes exactly `<rd> started <epoch> <HEAD>` before any launch
   ic_repo "$2/repo" "$1"
   ( L="$2/ledger"; AI_DLC_READSET_STAGE1_LEDGER="$L"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
-    stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
-    stage1_state; stage1_started
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_state; fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_started
     awk -F'\t' -v rd="$RUN_DIR" -v sha="$HEAD_SHA" -v s="$START" \
         'NR == 1 && NF == 4 && $1 == rd && $2 == "started" && $3 == s && $4 == sha { n++ } END { exit !(n == 1 && NR == 1) }' "$L" 2>/dev/null \
       || { echo "the ledger does not hold exactly the started line after stage1_started"; exit 1; } )
@@ -1033,10 +1033,10 @@ ic_orphan() { # <wrapper copy> <dir> <live|dead>
 ic_restore() { # finish() copies map.before back over a map the deriver rewrote, byte-identically
   ic_repo "$2/repo" "$1"
   ( AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
-    stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
-    stage1_state
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_state
     printf 'stub-wrote\n' >> "$MAP"; cmp -s "$SNAP" "$MAP" && { echo "control: the map rewrite changed nothing"; exit 1; }
-    finish > /dev/null 2>&1
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; finish > /dev/null 2>&1
     cmp -s "$2/repo.map.orig" "$MAP" || { echo "the map was not restored by finish"; exit 1; } )
   local r=$?
   [ "$r" = 3 ] && echo "finish exited 3: the map was not restored by finish"
@@ -1046,8 +1046,8 @@ ic_groupkill() { # finish() TERMs the deriver's whole process group: a trap-less
   ic_repo "$2/repo" "$1"
   : > "$2/pids"
   ( AI_DLC_READSET_STAGE1_LEDGER="$2/ledger"; export AI_DLC_READSET_STAGE1_LEDGER; . "$2/repo/scripts/readset-stage1-run.sh" || exit 9
-    stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
-    stage1_state
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_preflight "$2/run" > /dev/null 2>&1 || { echo "control: preflight refused a clean repo"; exit 1; }
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; stage1_state
     # The leader is a fresh trap-less bash with two background children, as the stub deriver is; `set -m` around
     # its launch gives it its own process group, exactly as stage1_launch does.
     set -m
@@ -1063,7 +1063,7 @@ ic_groupkill() { # finish() TERMs the deriver's whole process group: a trap-less
     await "$2" "$DPID" "both seeded children blocked on the hang fifo" st_settled "$2/kids" \
       || { echo "control: the seeded children are not both blocked on the hang fifo: $AWAIT_WHY"; exit 1; }
     while IFS= read -r p; do kill -0 "$p" 2>/dev/null || { echo "control: seeded child $p is not alive before the kill"; exit 1; }; done < "$2/kids"
-    finish > /dev/null 2>&1 )
+    fx_inproc "$2/repo/scripts/readset-stage1-run.sh"; finish > /dev/null 2>&1 )
   local r=$? p alive="" n=0
   cat "$2/pids" >> "$ORPHANS"
   [ "$r" = 0 ] || { echo "finish failed in the group-kill world (rc $r)"; return 1; }

@@ -33,7 +33,8 @@
 # mutant runs its deciding arm (must fail) and a twin arm the measured matrix shows green (must
 # stay green). The recorded matrix plus the twin replaces a per-push exact-vector assertion.
 # Measured: term-off also trips bad-continuation (same term check); every other mutant trips
-# only its deciding arm. The matrix is re-measured whenever an arm or a mutant is added or changed.
+# only its deciding arm. The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One
+# run per distinct state") requires.
 # Clause (c), the run window: its four mutants are scored by rw_expect_kill on their deciding arms
 # plus the twin below; --matrix drives each against all ten rw arms and prints its MATRIX row.
 # MUTANT-MATRIX defer-ignored decides=w2 twins=w1

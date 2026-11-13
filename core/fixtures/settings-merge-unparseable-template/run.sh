@@ -48,8 +48,9 @@
 #
 # THE MUTANT MATRIX. A CELL is one arm. PER PUSH a mutant is scored on its DECIDING arm(s) (which must fail on
 # it) and its named TWIN (a different arm it could plausibly co-trip but must leave GREEN); `run.sh --matrix`
-# scores it against all three arms and prints one MATRIX line per mutant. The matrix is re-measured whenever an
-# arm or a mutant is added or changed, by the REMEASURE command below, run from the repo root. Twins: each
+# scores it against all three arms and prints one MATRIX line per mutant. The matrix is re-measured as
+# .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state") requires. Run the REMEASURE command
+# below, from the repo root. Twins: each
 # single-layer revert is confined to the arm its layer owns, so its twin is the OTHER absence-shaped arm of
 # the pair that the layer must leave closed; the composite reverts both layers and its twin is the positive
 # control arm 1, which neither layer touches; the wrong fix leaves the cheap absence-shaped arm 2 satisfied.

@@ -27,7 +27,8 @@
 # source: mx_cell reads it from this file, a plain run refuses a mutant with no row, and a cell whose result
 # disagrees with its row is a failure. An arm token is the arm's base-pass flag name without the B_ prefix.
 #
-# RE-MEASURE whenever an arm or a mutant is added or changed. hermetic-run.sh runs a fixture under `env -i` and
+# The matrix is re-measured as .claude/rules/fixture-mutants.md clause 2 ("One run per distinct state")
+# requires. hermetic-run.sh runs a fixture under `env -i` and
 # forwards no argument, so the matrix is NOT reached through it; run.sh is invoked directly from the repo root.
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/file-mtime/run.sh --matrix
 # MUTANT-MATRIX nolocal decides=ny,num twins=utc

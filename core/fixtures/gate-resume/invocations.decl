@@ -4,9 +4,13 @@
 # Re-measured for the forced-Read STEP record from two agreeing counted runs, 506 -> 533 (+27): world forced-noopen (close, the recover hook, two recover-gate PreToolUse calls, four handoff-entry Reads, open) and mutant g3m-nob0step driving it and its twin forced (68 handoff-entry, 28 recover-gate, 29 recover, 78 gate-checkpoint starts under G3's scratch tree in all).
 # Re-measured for the backstop's LEFT write from two agreeing counted runs, 533 -> 549 (+16): world backstop-left (two recover-hook runs over a leave transcript and a record) and mutant g3m-nobackstopleft driving it and its twin leave (69 handoff-entry, 28 recover-gate, 34 recover, 88 gate-checkpoint starts under G3's scratch tree in all).
 # Re-measured for the tip fixes from two agreeing counted runs, 549 -> 583 (+34): G2's worlds handoff and route and mutant m15 (handoff, route, left) drive the recover hook in five more worlds; G3's world return-own and mutant g3m-norestore (return-own, return) add handoff-entry Reads and records; and core/scripts/gate-checkpoint.sh's --self-probe gains direction 14 (the STEP restore, and none invented with no STEP), 135 -> 147.
-583 *
+# Re-measured for BL-1006 from two agreeing counted hermetic-run.sh runs: the self-probe's Direction 10 forces a two-writer interleaving (2 writers, 1 list) and Direction 12 runs one unseamed writer against a held lock, +4 gate-checkpoint.sh starts; mutants ck1 to ck3 each run their mutant copy's whole --self-probe, +101 starts of the copies, none of them core/scripts/gate-checkpoint.sh.
+# Re-measured for BL-1006's seam-announcement fix from two agreeing counted hermetic-run.sh runs: mutants ck4 and ck5 each run their copy's --self-probe up to Direction 10's refusal, +52 starts of the copies, none of them core/scripts/gate-checkpoint.sh.
+# Re-measured for BL-1006 from two agreeing counted hermetic-run.sh runs: every ck1-ck5 copy drops the self-probe's Directions 1-9 (ck3 also Direction 11), which no mutant decides on, -136 starts of the copies.
+# Re-based onto BL-1009 (0.1105.0): BL-1006's self-probe directions and mutants ck1-ck5 (renamed from m15-m19, which BL-1009's m15 holds) on top of 583/147; re-measured from one counted run, 583 -> 604 (+21) and 147 -> 151 (+4), the same deltas BL-1006 measured on its own base (319 -> 340, 124 -> 128).
+604 *
 0 core/hooks/ai-dlc-recover.sh
 0 core/hooks/ai-dlc-handoff-entry.sh
 0 core/hooks/ai-dlc-recover-gate.sh
-147 core/scripts/gate-checkpoint.sh
+151 core/scripts/gate-checkpoint.sh
 21 core/scripts/gate-slice.sh
