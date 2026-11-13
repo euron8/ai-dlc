@@ -32,6 +32,7 @@
 # MUTANT-MATRIX m12 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m13 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX m14 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
+# MUTANT-MATRIX m15 decides=gate-left twins=- why=single-arm mutant, its one measured cell is FAIL
 # MUTANT-MATRIX b457-a decides=S1 twins=S2
 # MUTANT-MATRIX b457-b decides=RB twins=WC
 # MUTANT-MATRIX b457-c decides=S2 twins=NC
@@ -40,6 +41,26 @@
 # MUTANT-MATRIX b457-f decides=NC twins=S2
 # MUTANT-MATRIX b457-g decides=WC twins=S2
 # MUTANT-MATRIX b457-h decides=WC twins=S2
+# MUTANT-MATRIX g3m-noclose decides=leave twins=own
+# MUTANT-MATRIX g3m-nostepeq decides=own twins=leave
+# MUTANT-MATRIX g3m-nowhole decides=slice twins=leave
+# MUTANT-MATRIX g3m-noaid decides=sub twins=leave
+# MUTANT-MATRIX g3m-noroute decides=route twins=gv
+# MUTANT-MATRIX g3m-nohandoff decides=handoff twins=route
+# MUTANT-MATRIX g3m-nob0 decides=forced twins=leave
+# MUTANT-MATRIX g3m-noconsume decides=forced twins=leave
+# MUTANT-MATRIX g3m-b0whole decides=forced-offset1 twins=forced
+# MUTANT-MATRIX g3m-nob0step decides=forced-noopen twins=forced
+# MUTANT-MATRIX g3m-nostateguard decides=forced-statedir twins=forced
+# MUTANT-MATRIX g3m-nosess decides=new-session twins=leave
+# MUTANT-MATRIX g3m-norebind decides=rebind twins=leave
+# MUTANT-MATRIX g3m-noreopen decides=return,return-done twins=other
+# MUTANT-MATRIX g3m-norestore decides=return-own twins=return
+# MUTANT-MATRIX g3m-nononce decides=other twins=return
+# MUTANT-MATRIX g3m-listreopen decides=transition-close twins=return
+# MUTANT-MATRIX g3m-noleftread decides=leave twins=forced
+# MUTANT-MATRIX g3m-nobackstopleft decides=backstop-left twins=leave
+# MUTANT-MATRIX g3m-nooneshot decides=left-compact-twice twins=leave
 # MUTANT-MATRIX-DYNAMIC b457-tag why=b457_score() passes "b457-$tag" to mutant_killed, built from its first argument; each b457_score call (a, b, ...) yields a b457-<tag> name that carries its own row in this block
 # MUTANT-MATRIX-REMEASURE bash core/fixtures/gate-resume/run.sh --matrix
 #
@@ -574,22 +595,25 @@ fi
 #   other    as left, but its open was at 11:00:00Z with an 11:00 nonce: the marker was minted by
 #            another session after this transcript's open -> RESUME block, marker kept
 #   nolines  a transcript with no gate or step line -> RESUME block, marker kept
+#   handoff  as left, but the whole Read after the `done` is handoff.md -> RESUME block, marker kept
+#   route    as left, but the whole Read after the `done` is route.md   -> RESUME block, marker kept
 #   older    as left, but its open (a gate-transition.sh … 3) was at 14:00:01Z, an hour after the
 #            marker was minted: a refused transition left another session's marker -> RESUME, kept
 # TOKEN per world: <resume y|n><note y|n><marker y|n>. Mutants on the hook, each driving its deciding
 # world and one twin: m10 drops the close (left keeps its marker), m11 drops the leave rule (left
 # resumes), m12 drops the mint-time binding (other is closed), m13 drops the verb return (record is
-# closed), m14 drops the binding's lower bound (older is closed). The subject is the hook's GATE_LEFT rule: a hook without it is SKIP (HARD in the
+# closed), m14 drops the binding's lower bound (older is closed), m15 drops the route/handoff exclusion
+# (handoff and route are closed; twin left). The subject is the hook's GATE_LEFT rule: a hook without it is SKIP (HARD in the
 # distribution).
 # ============================================================================
 if [ -n "$CKPT" ] && grep -q 'GATE_LEFT' "$HOOK"; then
-  _GL_N=6
+  _GL_N=7
   _gl_rd() { printf '{"type":"assistant","timestamp":"2026-09-21T13:05:00.000Z","message":{"content":[{"type":"tool_use","id":"x","name":"Read","input":{"file_path":"/p/.claude/skills/ai-dlc/steps/%s.md"%s}}]}}\n' "$1" "${2:-}"; }
   _gl_bs() { printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"x","name":"Bash","input":{"command":"%s"}}]}}\n' "${2:-2026-09-21T13:05:00.000Z}" "$1"; }
   _gl_nonce="planning-20260921T130000Z"
   gl_battery() { # gl_battery <hook> <tag> [worlds] -> "<world>:<tok> ..." (default: all seven)
     local hook="$1" tag="$2" w d c r k m out=""
-    for w in ${3:-left live return wholeM record other nolines older}; do
+    for w in ${3:-left live return wholeM record other nolines older handoff route}; do
       d="$WORK/g2-$tag-$w"; _mkconsumer "$d"
       cp "$hook" "$d/.claude/hooks/ai-dlc-recover.sh"
       bash "$CKPT" --root "$d" --nonce "$_gl_nonce" open >/dev/null 2>&1
@@ -611,6 +635,8 @@ if [ -n "$CKPT" ] && grep -q 'GATE_LEFT' "$HOOK"; then
           return) _gl_rd stories-test-strategy; _gl_rd gate-validation ',"offset":40,"limit":10' ;;
           record) _gl_rd stories-test-strategy; _gl_bs 'scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" record 15 PASS' ;;
           wholeM) _gl_rd architecture ;;
+          handoff) _gl_rd handoff ;;
+          route) _gl_rd route ;;
         esac; } > "$d/t.jsonl"
       fi
       c="$(printf '{"source":"compact","session_id":"fixture","transcript_path":"%s"}' "$d/t.jsonl" \
@@ -625,12 +651,12 @@ except Exception: pass')"
     done
     printf '%s' "${out# }"
   }
-  _gl_want="left:nyn live:yny return:yny wholeM:yny record:yny other:yny nolines:yny older:yny"
+  _gl_want="left:nyn live:yny return:yny wholeM:yny record:yny other:yny nolines:yny older:yny handoff:yny route:yny"
   _gl_got="$(gl_battery "$HOOK" ship)"
   B_GL=0
   if [ "$_gl_got" = "$_gl_want" ]; then
     B_GL=1
-    ok "a gate left at a whole read of another step is closed and not resumed; a live gate, a return to it by a read or a record, a re-read of its own step, a marker minted outside 120 s of this transcript's open on either side, and a transcript with no gate line still resume [$_gl_got]"
+    ok "a gate left at a whole read of another step is closed and not resumed; a live gate, a return to it by a read or a record, a re-read of its own step, a marker minted outside 120 s of this transcript's open on either side, a transcript with no gate line, and a whole Read of handoff.md or route.md after the open still resume [$_gl_got]"
   else
     bad "gate-left battery: expected [$_gl_want], got [$_gl_got]"
   fi
@@ -640,7 +666,9 @@ except Exception: pass')"
   sed 's/if \$m >= \$o - 120 and \$m <= \$o + 120 then "bound" else "other" end/"bound"/' "$HOOK" > "$_m12"
   sed 's/if \$m >= \$o - 120 and \$m <= \$o + 120 then/if $m <= $o + 120 then/' "$HOOK" > "$_m14"
   grep -vF '$1 == "V" { left = ""; next }' "$HOOK" > "$_m13"
-  for _mm in m10 m11 m12 m13 m14; do
+  _m15="$WORK/recover-m15.sh"
+  grep -vF 'if (s == "route" || s == "handoff") next' "$HOOK" > "$_m15"
+  for _mm in m10 m11 m12 m13 m14 m15; do
     eval "_mf=\$_$_mm"
     if cmp -s "$HOOK" "$_mf" || ! bash -n "$_mf" 2>/dev/null; then
       bad "FIXTURE STALE: $_mm -- its line is gone from the hook, or the mutant does not parse"; continue
@@ -654,6 +682,8 @@ except Exception: pass')"
            _mclaim="mutant m12: without the mint-time binding a marker another session opened later is closed" ;;
       m13) _mw="record live"; _mok="record:yny live:yny"; _mexp="record:nyn live:yny"
            _mclaim="mutant m13: without the verb return a gate the lead went back to and recorded in is closed" ;;
+      m15) _mw="handoff route left"; _mok="handoff:yny route:yny left:nyn"; _mexp="handoff:nyn route:nyn left:nyn"
+           _mclaim="mutant m15: without the route/handoff exclusion the backstop closes a live gate the lead paused or resumed" ;;
       m14) _mw="older left"; _mok="older:yny left:nyn"; _mexp="older:nyn left:nyn"
            _mclaim="mutant m14: without the lower bound a marker minted before a refused transition is closed" ;;
     esac
@@ -664,6 +694,389 @@ except Exception: pass')"
   done
 else
   skip "a gate left without close is closed, not resumed (BL-1009)" "gate-checkpoint.sh or the recover hook's GATE_LEFT rule is not present in this tree"
+fi
+
+# ============================================================================
+# G3. THE NEXT STEP'S ENTRY CLOSES A GATE THE LEAD LEFT, A RETURN RE-OPENS IT, AND THE RECOVER
+# HOOK CARRIES THE WAY BACK ONCE (BL-1009's two remainders). Three subjects: the PostToolUse Read
+# hook ai-dlc-handoff-entry.sh (M1: STEP, the close, LEFT, the one note), gate-checkpoint.sh (M2:
+# `record`/`done` at LEFT's nonce re-open; `list` does not; `close` clears LEFT) and the recover
+# hook (M3: with no OPEN it reports LEFT once, then marks it `noted`).
+#
+# Every world copies one of two templates built ONCE with the shipped files: T0 (a prior gate made
+# `.gate-checkpoint/`, session S whole-read create-story.md -> STEP, then `open` at N) and TL (T0
+# after S whole-read dev-story.md -> the leave: OPEN gone, LEFT = N). The three subject files are then
+# copied over the world's own, so a mutant drives its own copy and nothing else.
+#   leave            S whole-reads dev-story; the recover hook on a transcript with no gate line
+#   left-compact-twice  as leave, the recover hook twice: the note once, then neither note nor RESUME
+#   own gv route under slice sub   S whole-reads create-story / gate-validation / route / _x; S reads
+#                    dev-story with offset+limit; a teammate (agent_id) whole-reads dev-story -> kept
+#   handoff          S whole-reads handoff.md -> kept, and `.handoff-in-progress` armed
+#   nostep / nodir   no STEP -> kept; no `.gate-checkpoint/` -> a Read writes nothing and makes no dir
+#   forced           the REAL chain: the recover hook (compact), then ai-dlc-recover-gate.sh PreToolUse on
+#                    the snapshot Read and on the step Read (it writes `.recover-satisfied` naming
+#                    dev-story.md), then the handoff-entry PostToolUse on that same Read -> kept, the
+#                    breadcrumb consumed; a SECOND whole Read of dev-story closes. The second Read's
+#                    PreToolUse is not driven: with `.recover-fired` gone recover-gate exits at its marker test.
+#   forced-offset1   as forced, both forced hooks see offset 1 (recover-gate's is_full_read accepts it)
+#   forced-noopen    T0 with N closed (STEP create-story, no OPEN), then the real chain's compelled
+#                    Read of dev-story: STEP becomes dev-story; `open` N, a whole re-read of dev-story
+#                    keeps N, and a whole Read of code-review closes it
+#   backstop-left    T0 driven by the recover hook alone over a transcript showing the leave (G2's shape):
+#                    its backstop closes N and writes LEFT `noted`; a second recovery emits no note;
+#                    `record c1 PASS` at N re-opens N
+#   forced-statedir  AI_DLC_STATE_DIR=state for every hook and the checkpoint, the real chain: the
+#                    recover hook writes `.recover-fired` under the state dir, recover-gate reads it under
+#                    _bmad-output and never arms, so no breadcrumb exists; M1 stands down whenever the state
+#                    dir is not _bmad-output, so neither the whole Read of dev-story nor a later one of
+#                    code-review closes N or writes STEP (STEP was seeded by T0 before the variable was set)
+#   sub-forced       as forced, a teammate's PostToolUse on the forced Read lands before the lead's
+#   new-session      session T whole-reads dev-story -> kept (STEP is bound to S)
+#   rebind           T whole-reads create-story (rebinds), then dev-story -> closed
+#   return-own       TL, `record` at N, then a whole Read of create-story (the gate's own step) keeps N
+#                    because the re-open restored STEP from LEFT's third field; code-review then closes
+#   return return-done other transition-close close-clears   TL, then `record c1 PASS` / `done` at N,
+#                    `record` at N2, `list` at N, `close` at N
+# BL-868: fixed nonces, sessions and paths; no sleep, no clock.
+# Mutants, each built as a copy by g3_mut (exactly one site, cmp -s, bash -n), each driving its
+# deciding world(s) and one twin; the MUTANT-MATRIX rows in the header are the table.
+# ============================================================================
+_G3_SKIP=""
+[ -n "$CKPT" ] || _G3_SKIP="gate-checkpoint.sh is not present in this tree"
+if [ -z "$_G3_SKIP" ] && { [ -z "$HED" ] || [ -z "$RGATE" ]; }; then
+  _G3_SKIP="ai-dlc-handoff-entry.sh or ai-dlc-recover-gate.sh is not present beside the recover hook"
+fi
+if [ -z "$_G3_SKIP" ] && ! grep -q 'gate-checkpoint' "$HED"; then
+  _G3_SKIP="the handoff-entry hook under test predates the gate-leave close (it never names gate-checkpoint)"
+fi
+if [ -z "$_G3_SKIP" ]; then
+  echo "HERMETIC-CONSUMED core/hooks/ai-dlc-handoff-entry.sh"
+  echo "HERMETIC-CONSUMED core/hooks/ai-dlc-recover-gate.sh"
+  _G3_N=50
+
+  # --- the step regex: one copy in each of the two hooks, byte-identical, and no third ---------
+  g3_rx_join() { # g3_rx_join <hook dir> -> ok | differ | copies <n>
+    local l n=0 first="" v=ok
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      n=$((n+1)); l="${l#*:}"
+      if [ -z "$first" ]; then first="$l"; elif [ "$l" != "$first" ]; then v=differ; fi
+    done <<<"$(grep -o 'capture("skills/ai-dlc[^"]*")' "$1"/*.sh 2>/dev/null)"
+    [ "$n" -eq 2 ] || v="copies $n"
+    printf '%s' "$v"
+  }
+  _rx_real="$(g3_rx_join "$_HOOKDIR")"
+  _rx_c3="$WORK/g3-rx-third"; _rx_cd="$WORK/g3-rx-differ"; mkdir -p "$_rx_c3" "$_rx_cd"
+  cp "$HED" "$HOOK" "$_rx_c3/"; cp "$HED" "$HOOK" "$_rx_cd/"
+  grep -o 'capture("skills/ai-dlc[^"]*")' "$HED" > "$_rx_c3/ai-dlc-third.sh"
+  sed 's/A-Za-z0-9_\.-\]+)\\\\\.md\$")/A-Za-z0-9_-]+)\\\\.md$")/' "$HOOK" > "$_rx_cd/ai-dlc-recover.sh"
+  _rx_v3="$(g3_rx_join "$_rx_c3")"; _rx_vd="$(g3_rx_join "$_rx_cd")"
+  if [ "$_rx_real" = ok ]; then
+    ok "g3-regex: the step regex in ai-dlc-handoff-entry.sh and ai-dlc-recover.sh is byte-identical, and no third hook carries one"
+  else
+    bad "g3-regex: the step regex join over $_HOOKDIR read [$_rx_real], expected [ok]"
+  fi
+  if [ "$_rx_v3" = "copies 3" ]; then
+    ok "g3-regex-control-third: a seeded third copy is refused [$_rx_v3]"
+  else
+    bad "g3-regex-control-third: a seeded third copy read [$_rx_v3], expected [copies 3] -- the join cannot fire"
+  fi
+  if [ "$_rx_vd" = differ ] && ! cmp -s "$HOOK" "$_rx_cd/ai-dlc-recover.sh"; then
+    ok "g3-regex-control-differ: a recover hook whose copy drops the dot from the class is refused [$_rx_vd]"
+  else
+    bad "g3-regex-control-differ: a differing copy read [$_rx_vd], expected [differ] (or the seed did not change the hook)"
+  fi
+
+  # --- the worlds -------------------------------------------------------------------------------
+  _g3N="story-20261113T000000Z"; _g3N2="story-20261113T000500Z"; _g3N0="story-20261112T000000Z"
+  _g3_sd=""
+  g3_mk() { # g3_mk <dir> -- a consumer tree carrying the shipped subjects
+    mkdir -p "$1/_bmad-output" "$1/.claude/skills/ai-dlc/steps" "$1/.claude/hooks" "$1/scripts/ai-dlc"
+    cp "$HOOK" "$1/.claude/hooks/ai-dlc-recover.sh"
+    cp "$HED" "$1/.claude/hooks/ai-dlc-handoff-entry.sh"
+    cp "$RGATE" "$1/.claude/hooks/ai-dlc-recover-gate.sh"
+    _cp_hook_libs "$1"
+    cp "$CKPT" "$1/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$1/scripts/ai-dlc/gate-checkpoint.sh"
+    printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: `dev-story.md`\ncurrent_branch: main\n\n## Sprint Context\nsprint_id: 300\n' \
+      > "$1/_bmad-output/pipeline-snapshot.md"
+    for _s in create-story dev-story code-review route handoff gate-validation _x; do
+      printf '# %s\n\nstep body\n' "$_s" > "$1/.claude/skills/ai-dlc/steps/$_s.md"
+    done
+  }
+  g3_rd() { # g3_rd <dir> <step> <session> [extra tool_input] [agent_id] -> the PostToolUse hook's stdout
+    local a=""; [ -n "${5:-}" ] && a=",\"agent_id\":\"$5\""
+    printf '{"session_id":"%s","hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"%s/.claude/skills/ai-dlc/steps/%s.md"%s},"tool_response":{}%s}' \
+      "$3" "$1" "$2" "${4:-}" "$a" \
+      | CLAUDE_PROJECT_DIR="$1" AI_DLC_STATE_DIR="$_g3_sd" bash "$1/.claude/hooks/ai-dlc-handoff-entry.sh" 2>/dev/null
+  }
+  g3_pre() { # g3_pre <dir> <abs path> [extra tool_input] -- recover-gate's PreToolUse on session S's Read
+    printf '{"session_id":"S","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"%s"%s}}' "$2" "${3:-}" \
+      | CLAUDE_PROJECT_DIR="$1" AI_DLC_STATE_DIR="$_g3_sd" bash "$1/.claude/hooks/ai-dlc-recover-gate.sh" >/dev/null 2>&1
+  }
+  g3_fire() { # g3_fire <dir> [transcript] -> N<note>R<resume> from the recover hook (compact, session S)
+    local tp="" c; [ -n "${2:-}" ] && tp=",\"transcript_path\":\"$2\""
+    c="$(printf '{"source":"compact","session_id":"S"%s}' "$tp" \
+      | CLAUDE_PROJECT_DIR="$1" AI_DLC_STATE_DIR="$_g3_sd" bash "$1/.claude/hooks/ai-dlc-recover.sh" 2>/dev/null)"
+    local n=n r=n
+    case "$c" in *'A gate left open was closed'*"$_g3N"*'record|done'*) n=y ;; esac
+    case "$c" in *'RESUME it, do not restart it'*) r=y ;; esac
+    printf 'N%sR%s' "$n" "$r"
+  }
+  g3_ck() { local d="$1"; shift; AI_DLC_STATE_DIR="$_g3_sd" bash "$d/scripts/ai-dlc/gate-checkpoint.sh" --root "$d" "$@" >/dev/null 2>&1; }
+  g3_ol() { # g3_ol <dir> -> O<y|n|x>L<y|n|x>: OPEN / LEFT name N (y), are absent (n), or name another (x)
+    local g="$1/${_g3_sd:-_bmad-output}/.gate-checkpoint" o=n l=n v="" rest
+    if [ -f "$g/OPEN" ]; then read -r v < "$g/OPEN"; if [ "$v" = "$_g3N" ]; then o=y; else o=x; fi; fi
+    if [ -f "$g/LEFT" ]; then IFS=$'\t' read -r v rest < "$g/LEFT"; if [ "$v" = "$_g3N" ]; then l=y; else l=x; fi; fi
+    printf 'O%sL%s' "$o" "$l"
+  }
+  g3_st() { # g3_st <dir> <hook stdout> [step the note must name, default dev-story] -> O?L?J<notes>S<STEP step>.<STEP session>
+    local g="$1/${_g3_sd:-_bmad-output}/.gate-checkpoint" pat='"hookEventName": "PostToolUse"' rem j st="-" ss="" nx="${3:-dev-story}"
+    rem="${2//"$pat"/}"; j=$(( (${#2} - ${#rem}) / ${#pat} ))
+    if [ "$j" -gt 0 ]; then case "$2" in *"$_g3N"*"$nx.md"*'record|done'*) : ;; *) j="X$j" ;; esac; fi
+    [ -f "$g/STEP" ] && IFS=$'\t' read -r st ss < "$g/STEP"
+    printf '%sJ%sS%s.%s' "$(g3_ol "$1")" "$j" "$st" "$ss"
+  }
+  g3_bc() { # g3_bc <dir> -> y when a breadcrumb stands under _bmad-output or the state dir
+    if [ -f "$1/_bmad-output/.recover-satisfied" ] || [ -f "$1/${_g3_sd:-_bmad-output}/.recover-satisfied" ]; then printf y; else printf n; fi
+  }
+  _g3_tp="$WORK/g3-nolines.jsonl"
+  # backstop-left's transcript: G2's `left` shape at this arm's nonce -- create-story whole, the open at
+  # 00:00:01Z (1 s after N's mint time), a gate-validation slice, a `done`, then dev-story whole.
+  _g3_tb="$WORK/g3-backstop.jsonl"
+  {
+    _g3_l() { printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"x","name":"%s","input":%s}]}}\n' "$1" "$2" "$3"; }
+    _g3_l 2026-11-13T00:05:00.000Z Read '{"file_path":"/p/.claude/skills/ai-dlc/steps/create-story.md"}'
+    _g3_l 2026-11-13T00:00:01.000Z Bash "{\"command\":\"N=$_g3N; scripts/ai-dlc/gate-checkpoint.sh --nonce \\\"\$N\\\" open\"}"
+    _g3_l 2026-11-13T00:05:00.000Z Read '{"file_path":"/p/.claude/skills/ai-dlc/steps/gate-validation.md","offset":1,"limit":40}'
+    _g3_l 2026-11-13T00:05:00.000Z Bash '{"command":"scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" done"}'
+    _g3_l 2026-11-13T00:05:00.000Z Read '{"file_path":"/p/.claude/skills/ai-dlc/steps/dev-story.md"}'
+  } > "$_g3_tb"
+  printf '{"type":"assistant","timestamp":"2026-11-13T00:05:00.000Z","message":{"content":[{"type":"text","text":"no tool"}]}}\n' > "$_g3_tp"
+  # T0 and TL, built once with the shipped subjects.
+  _g3_T0="$WORK/g3-T0"; g3_mk "$_g3_T0"
+  g3_ck "$_g3_T0" --nonce "$_g3N0" open; g3_ck "$_g3_T0" --nonce "$_g3N0" close
+  g3_rd "$_g3_T0" create-story S >/dev/null
+  g3_ck "$_g3_T0" --nonce "$_g3N" open
+  _g3_t0="$(g3_st "$_g3_T0" "")"
+  _g3_TL="$WORK/g3-TL"; cp -R "$_g3_T0" "$_g3_TL"
+  _g3_tl="$(g3_st "$_g3_TL" "$(g3_rd "$_g3_TL" dev-story S)")"
+  if [ "$_g3_t0" = "OyLnJ0Screate-story.S" ] && [ "$_g3_tl" = "OnLyJ1Sdev-story.S" ]; then
+    ok "g3-seed: T0 holds STEP create-story bound to S with N open, and TL (S whole-read dev-story) closed N, wrote LEFT and printed one note [$_g3_t0 -> $_g3_tl]"
+  else
+    bad "g3-seed: templates read [$_g3_t0 -> $_g3_tl], expected [OyLnJ0Screate-story.S -> OnLyJ1Sdev-story.S] -- every world below copies them"
+  fi
+
+  G3_WORLDS="leave left-compact-twice own gv route handoff under slice sub nostep nodir forced forced-offset1 forced-noopen forced-statedir backstop-left sub-forced new-session rebind return return-own return-done other transition-close close-clears"
+  g3_battery() { # g3_battery <hed> <ckpt> <recover> <tag> <world...> -> "<world>=<token> ..."
+    local hed="$1" ck="$2" rec="$3" tag="$4" w d o t ex out=""; shift 4
+    for w in "$@"; do
+      d="$WORK/g3-$tag-$w"; _g3_sd=""
+      case "$w" in
+        nodir) g3_mk "$d" ;;
+        return|return-own|return-done|other|transition-close|close-clears) cp -R "$_g3_TL" "$d" ;;
+        *) cp -R "$_g3_T0" "$d" ;;
+      esac
+      cp "$hed" "$d/.claude/hooks/ai-dlc-handoff-entry.sh"; cp "$rec" "$d/.claude/hooks/ai-dlc-recover.sh"
+      cp "$ck" "$d/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$d/scripts/ai-dlc/gate-checkpoint.sh"
+      case "$w" in
+        leave) o="$(g3_rd "$d" dev-story S)"; t="$(g3_st "$d" "$o")/$(g3_fire "$d" "$_g3_tp")" ;;
+        left-compact-twice)
+          g3_rd "$d" dev-story S >/dev/null
+          t="$(g3_fire "$d" "$_g3_tp")/$(g3_fire "$d" "$_g3_tp")/$(g3_ol "$d")" ;;
+        own) t="$(g3_st "$d" "$(g3_rd "$d" create-story S)")" ;;
+        gv) t="$(g3_st "$d" "$(g3_rd "$d" gate-validation S)")" ;;
+        route) t="$(g3_st "$d" "$(g3_rd "$d" route S)")" ;;
+        under) t="$(g3_st "$d" "$(g3_rd "$d" _x S)")" ;;
+        handoff)
+          o="$(g3_rd "$d" handoff S)"; t="$(g3_st "$d" "$o")/H"
+          if [ -f "$d/_bmad-output/.handoff-in-progress" ]; then t="${t}y"; else t="${t}n"; fi ;;
+        slice) t="$(g3_st "$d" "$(g3_rd "$d" dev-story S ',"offset":1,"limit":40')")" ;;
+        sub) t="$(g3_st "$d" "$(g3_rd "$d" dev-story S '' agent-1)")" ;;
+        nostep) rm -f "$d/_bmad-output/.gate-checkpoint/STEP"; t="$(g3_st "$d" "$(g3_rd "$d" dev-story S)")" ;;
+        nodir)
+          g3_rd "$d" create-story S >/dev/null
+          if [ -e "$d/_bmad-output/.gate-checkpoint" ]; then t=Dy; else t=Dn; fi ;;
+        forced|forced-offset1|sub-forced)
+          ex=""; [ "$w" = forced-offset1 ] && ex=',"offset":1'
+          t="$(g3_fire "$d")"
+          g3_pre "$d" "$d/_bmad-output/pipeline-snapshot.md"
+          g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md" "$ex"
+          t="$t/B$(g3_bc "$d")"
+          if [ "$w" = sub-forced ]; then
+            t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S "$ex" agent-1)")/b$(g3_bc "$d")"
+          fi
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S "$ex")")/b$(g3_bc "$d")"
+          [ "$w" = sub-forced ] || t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")" ;;
+        forced-noopen)
+          g3_ck "$d" --nonce "$_g3N" close
+          t="$(g3_fire "$d")"
+          g3_pre "$d" "$d/_bmad-output/pipeline-snapshot.md"
+          g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md"
+          t="$t/B$(g3_bc "$d")"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")/b$(g3_bc "$d")"
+          g3_ck "$d" --nonce "$_g3N" open
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" code-review S)" code-review)" ;;
+        backstop-left)
+          t="$(g3_fire "$d" "$_g3_tb")/L"
+          if [ -f "$d/_bmad-output/.gate-checkpoint/LEFT" ]; then
+            IFS=$'\t' read -r o ex ex o < "$d/_bmad-output/.gate-checkpoint/LEFT"; t="$t${ex:--}${o:--}"
+          else t="${t}-"; fi
+          t="$t/$(g3_fire "$d" "$_g3_tb")"
+          g3_ck "$d" --nonce "$_g3N" record c1 PASS; t="$t/$(g3_ol "$d")" ;;
+        forced-statedir)
+          mkdir -p "$d/state"; mv "$d/_bmad-output/.gate-checkpoint" "$d/_bmad-output/pipeline-snapshot.md" "$d/state/"
+          _g3_sd=state
+          t="$(g3_fire "$d")"
+          g3_pre "$d" "$d/state/pipeline-snapshot.md"
+          g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md"
+          t="$t/B$(g3_bc "$d")"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" code-review S)")" ;;
+        new-session) t="$(g3_st "$d" "$(g3_rd "$d" dev-story T)")" ;;
+        rebind)
+          t="$(g3_st "$d" "$(g3_rd "$d" create-story T)")"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story T)")" ;;
+        return) g3_ck "$d" --nonce "$_g3N" record c1 PASS; t="$(g3_ol "$d")" ;;
+        return-own)
+          g3_ck "$d" --nonce "$_g3N" record c1 PASS
+          t="$(g3_st "$d" "$(g3_rd "$d" create-story S)")"
+          t="$t/$(g3_st "$d" "$(g3_rd "$d" code-review S)" code-review)" ;;
+        return-done) g3_ck "$d" --nonce "$_g3N" done; t="$(g3_ol "$d")" ;;
+        other) g3_ck "$d" --nonce "$_g3N2" record c1 PASS; t="$(g3_ol "$d")" ;;
+        transition-close) g3_ck "$d" --nonce "$_g3N" list; t="$(g3_ol "$d")" ;;
+        close-clears) g3_ck "$d" --nonce "$_g3N" close; t="$(g3_ol "$d")" ;;
+        *) t="UNKNOWN-WORLD" ;;
+      esac
+      _g3_sd=""
+      out="$out $w=$t"
+    done
+    printf '%s' "${out# }"
+  }
+  g3_tok() { # g3_tok <battery output> <world> -> that world's token
+    local p
+    for p in $1; do case "$p" in "$2="*) printf '%s' "${p#*=}"; return ;; esac; done
+  }
+  # The shipped expectation per world, and the reason each holds.
+  g3_want() {
+    case "$1" in
+      leave) echo "OnLyJ1Sdev-story.S/NyRn|S's whole Read of dev-story closed N, wrote LEFT, printed one note; the recover hook then names N as closed and does not resume it" ;;
+      left-compact-twice) echo "NyRn/NnRn/OnLy|the first compaction after the leave carries the closed note, the second carries neither note nor RESUME, and LEFT stays for a return" ;;
+      own) echo "OyLnJ0Screate-story.S|a whole re-read of the gate's own step keeps N open" ;;
+      gv) echo "OyLnJ0Screate-story.S|a whole Read of gate-validation.md keeps N open" ;;
+      route) echo "OyLnJ0Screate-story.S|a whole Read of route.md keeps N open and STEP unchanged" ;;
+      handoff) echo "OyLnJ0Screate-story.S/Hy|a whole Read of handoff.md keeps N open and still arms .handoff-in-progress" ;;
+      under) echo "OyLnJ0Screate-story.S|a whole Read of an underscore step keeps N open" ;;
+      slice) echo "OyLnJ0Screate-story.S|a sliced Read of another step keeps N open" ;;
+      sub) echo "OyLnJ0Screate-story.S|a teammate's whole Read of another step keeps N open" ;;
+      nostep) echo "OyLnJ0S-.|with no STEP record a whole Read of another step keeps N open and writes none" ;;
+      nodir) echo "Dn|with no .gate-checkpoint/ a step Read creates no pipeline state" ;;
+      forced|forced-offset1) echo "NnRy/By/OyLnJ0Screate-story.S/bn/OnLyJ1Sdev-story.S|the real recover-gate wrote the breadcrumb on the compelled Read, the entry hook kept N and consumed it, and the next whole Read of dev-story closed N" ;;
+      forced-noopen) echo "NnRn/By/OnLnJ0Sdev-story.S/bn/OyLnJ0Sdev-story.S/OnLyJ1Scode-review.S|with no gate open the compelled Read of dev-story records STEP there, so after N opens a whole re-read of dev-story keeps it, and a whole Read of code-review closes it" ;;
+      backstop-left) echo "NyRn/Lcreate-storynoted/NnRn/OyLn|the recover hook's transcript backstop closed a gate the lead left, wrote LEFT already noted, a second recovery emits no note, and a record at N re-opens N" ;;
+      forced-statedir) echo "NnRy/Bn/OyLnJ0Screate-story.S/OyLnJ0Screate-story.S|under AI_DLC_STATE_DIR recover-gate never arms (it reads .recover-fired under _bmad-output), and M1 stands down there: neither the step Read the recovery names nor a later whole Read of another step closes N or writes STEP" ;;
+      sub-forced) echo "NnRy/By/OyLnJ0Screate-story.S/by/OyLnJ0Screate-story.S/bn|a teammate's Read leaves the breadcrumb and N in place for the lead's compelled Read, which then consumes it" ;;
+      new-session) echo "OyLnJ0Screate-story.S|another session's whole Read of another step keeps N open" ;;
+      rebind) echo "OyLnJ0Screate-story.T/OnLyJ1Sdev-story.T|session T's whole Read of the gate's step rebinds STEP to T, and T's whole Read of dev-story then closes N" ;;
+      return-own) echo "OyLnJ0Screate-story.S/OnLyJ1Scode-review.S|after the leave and a record at N, STEP is back on the gate's own step: a whole re-read of create-story keeps N, and a whole Read of code-review closes it" ;;
+      return|return-done) echo "OyLn|after the leave, a $1 at N re-opens N and removes LEFT" ;;
+      other) echo "OnLy|after the leave, a record at another nonce re-opens nothing and LEFT stays" ;;
+      transition-close) echo "OnLy|after the leave, list at N re-opens nothing" ;;
+      close-clears) echo "OnLn|after the leave, close at N removes LEFT" ;;
+    esac
+  }
+  _g3_got="$(g3_battery "$HED" "$CKPT" "$HOOK" ship $G3_WORLDS)"
+  B_G3=0; _g3_okn=0; _g3_wn=0
+  for _w in $G3_WORLDS; do
+    _g3_wn=$((_g3_wn+1))
+    _wv="$(g3_want "$_w")"; _wt="$(g3_tok "$_g3_got" "$_w")"
+    if [ "$_wt" = "${_wv%%|*}" ]; then
+      _g3_okn=$((_g3_okn+1)); ok "g3-$_w: ${_wv#*|} [$_wt]"
+    else
+      bad "g3-$_w: expected [${_wv%%|*}], got [$_wt]"
+    fi
+  done
+  if [ "$_g3_okn" -eq "$_g3_wn" ] && [ "$_g3_wn" -eq 25 ]; then
+    B_G3=1; ok "g3-battery: unmutated baseline, all $_g3_wn worlds held under the shipped subjects"
+  else
+    bad "g3-battery: $_g3_okn of $_g3_wn worlds held (25 declared) -- no g3 mutant can score a kill"
+  fi
+
+  # --- the mutants ------------------------------------------------------------------------------
+  g3_mut() { # g3_mut <src> <dst> <sub|line> <find> <replace> -- exactly one site changed, and it parses
+    F="$4" R="$5" M="$3" awk 'BEGIN { f = ENVIRON["F"]; r = ENVIRON["R"]; m = ENVIRON["M"] }
+      m == "line" && $0 == f { n++; print r; next }
+      m == "sub" { i = index($0, f); if (i) { n++; $0 = substr($0, 1, i - 1) r substr($0, i + length(f)) } }
+      { print }
+      END { exit (n == 1 ? 0 : 3) }' "$1" > "$2" || return 1
+    ! cmp -s "$1" "$2" && bash -n "$2" 2>/dev/null
+  }
+  for _mm in noclose nostepeq nowhole noaid noroute nohandoff nob0 noconsume b0whole nob0step nostateguard nosess norebind noreopen norestore nononce listreopen noleftread nooneshot nobackstopleft; do
+    _src="$HED"; _md=sub
+    case "$_mm" in
+      noclose) _f='&& bash "$_m1_ckp" --root "$PROJECT_DIR" --nonce "$_m1_open" close >/dev/null 2>&1 \'; _r='&& true \'
+        _dw="leave"; _tw=own; _mexp="OyLnJ0Screate-story.S/NnRy"; _mclaim="without M1's close a whole Read of the next step leaves N open and the next compaction resumes it" ;;
+      nostepeq) _f='elif [ "$_m1_x" = "$_m1_st" ]; then'; _r='elif false; then'
+        _dw="own"; _tw=leave; _mexp="OnLyJX1Screate-story.S"; _mclaim="without the STEP-inequality a whole re-read of the gate's own step closes it" ;;
+      nowhole) _f='elif [ -z "$_m1_st" ] || [ "$_m1_shape" != "W" ]; then'; _r='elif [ -z "$_m1_st" ]; then'
+        _dw="slice"; _tw=leave; _mexp="OnLyJ1Sdev-story.S"; _mclaim="without the whole-Read test a sliced Read of another step closes the gate" ;;
+      noaid) _f='[ -z "$_m1_aid" ] || _m1_x=""'; _r=':'
+        _dw="sub"; _tw=leave; _mexp="OnLyJ1Sdev-story.S"; _mclaim="without M1's agent_id guard a teammate's Read of another step closes the lead's gate" ;;
+      noroute) _f='gate-validation|route|handoff|_*) _m1_excl=1 ;;'; _r='gate-validation|handoff|_*) _m1_excl=1 ;;'
+        _dw="route"; _tw=gv; _mexp="OnLyJX1Sroute.S"; _mclaim="without the route exclusion the Read every /ai-dlc resume starts with closes a live gate" ;;
+      nohandoff) _f='gate-validation|route|handoff|_*) _m1_excl=1 ;;'; _r='gate-validation|route|_*) _m1_excl=1 ;;'
+        _dw="handoff"; _tw=route; _mexp="OnLyJX1Shandoff.S/Hy"; _mclaim="without the handoff exclusion the pause procedure closes the gate it pauses" ;;
+      nob0) _f='_m1_forced=1'; _r='_m1_forced=0'
+        _dw="forced"; _tw=leave; _mexp="NnRy/By/OnLyJ1Sdev-story.S/bn/OnLyJ0Sdev-story.S"; _mclaim="without b0 the Read recover-gate compelled after a compaction closes a live gate" ;;
+      noconsume) _f='[ "$_m1_x" = "handoff" ] || rm -f "$_m1_rs" 2>/dev/null || true'; _r=':'
+        _dw="forced"; _tw=leave; _mexp="NnRy/By/OyLnJ0Screate-story.S/by/OyLnJ0Screate-story.S"; _mclaim="without b0's consume the breadcrumb exempts every later Read of the step, and a genuine leave never closes" ;;
+      b0whole) _f='[ -n "$_m1_x" ] && [ -f "$_m1_rs" ] || continue'; _r='[ -n "$_m1_x" ] && [ -f "$_m1_rs" ] && [ "$_m1_shape" = W ] || continue'
+        _dw="forced-offset1"; _tw=forced; _mexp="NnRy/By/OyLnJ0Screate-story.S/by/OyLnJ0Screate-story.S"; _mclaim="b0 keyed on whole Reads leaves the breadcrumb behind an offset-1 compelled Read, so the next genuine leave is exempted" ;;
+      nob0step) _f='elif [ "$_m1_excl" = 0 ]; then'; _r='elif false; then'
+        _dw="forced-noopen"; _tw=forced; _mexp="NnRn/By/OnLnJ0Screate-story.S/bn/OnLyJ1Sdev-story.S/OnLyJ0Scode-review.S"; _mclaim="without the STEP write on a compelled Read with no gate open STEP keeps the older step, and the next gate's whole re-read of its own step closes it" ;;
+      nostateguard) _f='[ "$STATE_DIR" = "${PROJECT_DIR}/_bmad-output" ] || _m1_x=""'; _r=':'
+        _dw="forced-statedir"; _tw=forced; _mexp="NnRy/Bn/OnLyJ1Sdev-story.S/OnLyJ0Scode-review.S"; _mclaim="without M1's state-dir guard a whole Read of the next step under AI_DLC_STATE_DIR, where recover-gate never arms and no breadcrumb can exist, closes a live gate" ;;
+      nosess) _f='elif [ "$_m1_ss" = "$_m1_sid" ]; then'; _r='elif true; then'
+        _dw="new-session"; _tw=leave; _mexp="OnLyJ1Sdev-story.T"; _mclaim="without the session binding another session's Read of the next step closes a paused gate" ;;
+      norebind) _md=line; _f='      _m1_w="$_m1_st"'; _r='      :'
+        _dw="rebind"; _tw=leave; _mexp="OyLnJ0Screate-story.S/OyLnJ0Screate-story.S"; _mclaim="without the rebind a session that resumed the gate cannot close it on its leave" ;;
+      noreopen) _src="$CKPT"; _f='if ln "$_t" "$OPEN_MARKER" 2>/dev/null; then'; _r='if false; then'
+        _dw="return return-done"; _tw=other; _mexp="OnLy OnLy"; _mclaim="without M2's re-open a record or done at the left nonce leaves the gate closed" ;;
+      norestore) _src="$CKPT"; _md=line; _f='    _restore_step_from_left'; _r='    :'
+        _dw="return-own"; _tw=return; _mexp="OnLyJX1Screate-story.S/OnLyJ0Scode-review.S"; _mclaim="without M2's STEP restore the re-opened gate's STEP still names the step the lead left to, and its next whole Read of the gate's own step closes it again" ;;
+      nononce) _src="$CKPT"; _f='  [ "$(_left_nonce)" = "$NONCE" ] || return 0'; _r='  :'
+        _dw="other"; _tw=return; _mexp="OxLy"; _mclaim="without M2's nonce match a record at another nonce re-opens a gate" ;;
+      listreopen) _src="$CKPT"; _md=line; _f='  list)'; _r=$'  list)\n    _reopen_if_left'
+        _dw="transition-close"; _tw=return; _mexp="OyLn"; _mclaim="a list that re-opens resurrects a finished gate on every story close" ;;
+      noleftread) _src="$HOOK"; _f='if [ -z "$GATE_NONCE" ] && [ -n "$GATE_CKP" ] && [ -r "${STATE_DIR}/.gate-checkpoint/LEFT" ]; then'; _r='if false; then'
+        _dw="leave"; _tw=forced; _mexp="OnLyJ1Sdev-story.S/NnRn"; _mclaim="without M3's LEFT read the compaction after a leave carries no way back" ;;
+      nobackstopleft) _src="$HOOK"; _f='if [ -n "$GATE_LEFT" ] && [ ! -f "${STATE_DIR}/.gate-checkpoint/OPEN" ]; then'; _r='if false; then'
+        _dw="backstop-left"; _tw=leave; _mexp="NyRn/L-/NnRn/OnLn"; _mclaim="without the backstop's LEFT write a record after the recover hook's close re-opens nothing, against the note it just printed" ;;
+      nooneshot) _src="$HOOK"; _f=' && [ "${_lf_noted:-}" != noted ]'; _r=''
+        _dw="left-compact-twice"; _tw=leave; _mexp="NyRn/NyRn/OnLy"; _mclaim="without M3's one-shot every later compaction repeats the closed note about a finished gate" ;;
+    esac
+    _mf="$WORK/g3-mut-$_mm.sh"
+    if ! g3_mut "$_src" "$_mf" "$_md" "$_f" "$_r"; then
+      bad "FIXTURE STALE: g3 mutant $_mm -- its site is not exactly one line of $_src, or the mutant does not parse"; continue
+    fi
+    _mh="$HED"; _mc="$CKPT"; _mr="$HOOK"
+    case "$_src" in "$HED") _mh="$_mf" ;; "$CKPT") _mc="$_mf" ;; "$HOOK") _mr="$_mf" ;; esac
+    if [ "$MATRIX" = 1 ]; then _mws="$G3_WORLDS"; else _mws="$_dw $_tw"; fi
+    _mg="$(g3_battery "$_mh" "$_mc" "$_mr" "m-$_mm" $_mws)"
+    for _w in $_mws; do
+      _wt="$(g3_tok "$_mg" "$_w")"; _wv="$(g3_want "$_w")"
+      mcell "g3m-$_mm" "$_w" "$([ "$_wt" = "${_wv%%|*}" ] && echo 1 || echo 0)"
+    done
+    _mgot=""; for _w in $_dw; do _mgot="$_mgot $(g3_tok "$_mg" "$_w")"; done; _mgot="${_mgot# }"
+    _twv="$(g3_want "$_tw")"; _twt="$(g3_tok "$_mg" "$_tw")"
+    if [ "$_mgot" = "$_mexp" ] && [ "$_twt" = "${_twv%%|*}" ]; then
+      mutant_killed "$B_G3" "g3m-$_mm" "mutant g3m-$_mm: $_mclaim [$_dw: $_mgot; twin $_tw holds: $_twt]"
+    else
+      bad "MUTANT g3m-$_mm: expected [$_dw: $_mexp; twin $_tw: ${_twv%%|*}], got [$_dw: $_mgot; twin $_tw: $_twt]"
+    fi
+  done
+else
+  skip "g3: the next step's entry closes a gate the lead left, and a return re-opens it (BL-1009)" "$_G3_SKIP"
 fi
 
 # ============================================================================
@@ -1322,8 +1735,9 @@ else
 fi
 
 # ============================================================================
-# 63, plus the six gate-left assertions (G2) when its subject is present and the arm ran.
-EXPECTED_ASSERTIONS=$((63 + ${_GL_N:-0}))
+# 63, plus the seven gate-left assertions (G2) and the 50 gate-leave assertions (G3) when their subjects are
+# present and the arms ran.
+EXPECTED_ASSERTIONS=$((63 + ${_GL_N:-0} + ${_G3_N:-0}))
 echo
 if [ "$total" -lt "$EXPECTED_ASSERTIONS" ]; then
   bad "only ${total} assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"

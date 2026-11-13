@@ -1,6 +1,12 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # Re-measured for BL-1009 from one counted hermetic-run.sh run: arm G2 drives the recover hook over eight transcript worlds, and mutants m10 to m14 drive two worlds each (the deciding world and one twin), 18 worlds; each world opens the gate and reads `current`, the hook reads `current`, and it closes the left one, +78 starts, +36 of them gate-checkpoint.sh.
-319 *
+# Re-measured for BL-1009's gate-leave close from two agreeing counted hermetic-run.sh runs, 319 -> 506 (+187): arm G3 builds two templates and drives 22 worlds, and its 17 mutants drive their deciding world(s) and one twin (35 more), +176 starts, all of them copies under the fixture's scratch tree (60 ai-dlc-handoff-entry.sh, 22 ai-dlc-recover-gate.sh, 26 ai-dlc-recover.sh, 68 gate-checkpoint.sh); the other +11 are core/scripts/gate-checkpoint.sh's own --self-probe, whose directions 12 and 13 (the left-gate re-open, and open/close clearing LEFT) call the script 11 more times.
+# Re-measured for the forced-Read STEP record from two agreeing counted runs, 506 -> 533 (+27): world forced-noopen (close, the recover hook, two recover-gate PreToolUse calls, four handoff-entry Reads, open) and mutant g3m-nob0step driving it and its twin forced (68 handoff-entry, 28 recover-gate, 29 recover, 78 gate-checkpoint starts under G3's scratch tree in all).
+# Re-measured for the backstop's LEFT write from two agreeing counted runs, 533 -> 549 (+16): world backstop-left (two recover-hook runs over a leave transcript and a record) and mutant g3m-nobackstopleft driving it and its twin leave (69 handoff-entry, 28 recover-gate, 34 recover, 88 gate-checkpoint starts under G3's scratch tree in all).
+# Re-measured for the tip fixes from two agreeing counted runs, 549 -> 583 (+34): G2's worlds handoff and route and mutant m15 (handoff, route, left) drive the recover hook in five more worlds; G3's world return-own and mutant g3m-norestore (return-own, return) add handoff-entry Reads and records; and core/scripts/gate-checkpoint.sh's --self-probe gains direction 14 (the STEP restore, and none invented with no STEP), 135 -> 147.
+583 *
 0 core/hooks/ai-dlc-recover.sh
-124 core/scripts/gate-checkpoint.sh
+0 core/hooks/ai-dlc-handoff-entry.sh
+0 core/hooks/ai-dlc-recover-gate.sh
+147 core/scripts/gate-checkpoint.sh
 21 core/scripts/gate-slice.sh

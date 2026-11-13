@@ -1,9 +1,11 @@
 !core/hooks/ai-dlc-recover.sh
+!core/hooks/ai-dlc-handoff-entry.sh
+!core/hooks/ai-dlc-recover-gate.sh
 !core/skills/ai-dlc/steps/gate-validation.md
 !core/scripts/gate-slice.sh
 !core/scripts/gate-checkpoint.sh
 !core/schemas/gate-adjudication-verdict.json
-# The core/hooks/ and core/scripts/ rows are narrowed to the files the fixture reads (seed.sh:26,36,41; run.sh:489-499); the list is derived from those reads.
+# The core/hooks/ and core/scripts/ rows are narrowed to the files the fixture reads (seed.sh:26,36,41, and the HED/RGATE loop beside them; run.sh:489-499 and arm G3, which drives the recover-gate PreToolUse and the handoff-entry PostToolUse hooks); the list is derived from those reads.
 # The recover hook's two same-directory libraries, copied into each scratch consumer.
 core/hooks/ai-dlc-handoff-pending.sh
 core/hooks/ai-dlc-context-provenance.sh

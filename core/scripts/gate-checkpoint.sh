@@ -70,6 +70,24 @@ set -euo pipefail
 # failed; a `PENDING` is by definition unfinished. Narrowing on either would let a
 # resume skip the check whose state the gate still has to act on. `done` therefore emits
 # the settled set only, and the two vocabularies are separate on purpose.
+#
+# A GATE CLOSED AT A STEP ENTRY RE-OPENS ON ITS NEXT `record` OR `done`. ai-dlc-handoff-entry.sh
+# closes the OPEN marker when the lead whole-reads another step without a `close`, and
+# ai-dlc-recover.sh's transcript backstop closes one at a compaction. Each writes
+# `.gate-checkpoint/LEFT` = `<nonce><TAB><step left to><TAB><the gate's own step>[<TAB>noted]` only
+# after its close succeeded (the backstop's already noted, since it emits the section itself). A leave is not
+# always an ending: on the measured lead transcripts 7 of 9 leaves were followed by a return, and
+# every return that CONTINUED its gate did so with `record`, `done`, or a `list` followed by
+# `record` within two minutes. So `record` and `done` at the nonce LEFT names, with no OPEN marker,
+# write OPEN back, restore STEP to the gate's own step (LEFT's field 3) keeping the session STEP
+# carries -- writing nothing when there is no STEP, no session in it, or no gate step in LEFT --
+# and remove LEFT. `list` does NOT re-open: gate-transition.sh runs it on every
+# story close, and a re-open there would resurrect a finished gate. A Read of gate-validation.md
+# is not a return either -- both returns made only by such Reads were followed by a fresh `open`.
+# The re-open is a no-clobber link, so a concurrent `open` of a fresh nonce is never overwritten.
+# `open` removes LEFT (a fresh gate supersedes the left one) and `close` at LEFT's nonce removes it
+# whether or not a marker was open. `open` still overwrites an open marker silently: a refusal
+# there would break a re-dispatch, which mints a fresh nonce and opens it.
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Inline on purpose, in every script that needs it: a shared lib cannot fix this,
@@ -212,8 +230,63 @@ if [ "$PROBE" = "1" ]; then
   bash "$_me" --root "$_pr" --nonce "probe-free-form" record 1 PASS >/dev/null 2>&1 \
     || { echo "gate-checkpoint SELF-PROBE FAIL: a non-canonical record was refused; only open is gated." >&2; exit 2; }
 
+  # Direction 12: a gate LEFT at a step entry re-opens on `record` and on `done` at LEFT's
+  # nonce, and on nothing else. Each world starts closed, with LEFT naming _ln.
+  _ln="story-19700101T000006Z"; _lo="story-19700101T000007Z"
+  _left_world() {
+    _lw="$(mktemp -d)"; mkdir -p "${_lw}/_bmad-output/.gate-checkpoint"
+    printf '%s\t%s\t%s\n' "$_ln" "dev-story" "create-story" > "${_lw}/_bmad-output/.gate-checkpoint/LEFT"
+    printf '%s\t%s\n' "dev-story" "sess-a" > "${_lw}/_bmad-output/.gate-checkpoint/STEP"
+  }
+  _tab="$(printf '\t')"
+  _left_world
+  bash "$_me" --root "$_lw" --nonce "$_ln" record c1 PASS >/dev/null 2>&1 || _fail=1
+  _cur="$(bash "$_me" --root "$_lw" current 2>/dev/null || true)"
+  [ "$_cur" = "$_ln" ] && [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: record at LEFT's nonce did not re-open it (current '${_cur}')." >&2; exit 2; }
+  # Direction 14: the re-open puts STEP back on the gate's own step, keeping STEP's session.
+  _stp="$(cat "${_lw}/_bmad-output/.gate-checkpoint/STEP" 2>/dev/null || true)"
+  [ "$_stp" = "create-story${_tab}sess-a" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: the re-open did not restore STEP to the gate's step (STEP '${_stp}')." >&2; exit 2; }
+  _left_world
+  bash "$_me" --root "$_lw" --nonce "$_ln" done >/dev/null 2>&1 || _fail=1
+  _cur="$(bash "$_me" --root "$_lw" current 2>/dev/null || true)"
+  _stp="$(cat "${_lw}/_bmad-output/.gate-checkpoint/STEP" 2>/dev/null || true)"
+  [ "$_cur" = "$_ln" ] && [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] && [ "$_stp" = "create-story${_tab}sess-a" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: done at LEFT's nonce did not re-open it with STEP restored (current '${_cur}', STEP '${_stp}')." >&2; exit 2; }
+  _left_world
+  rm -f "${_lw}/_bmad-output/.gate-checkpoint/STEP"
+  bash "$_me" --root "$_lw" --nonce "$_ln" record c1 PASS >/dev/null 2>&1 || _fail=1
+  _cur="$(bash "$_me" --root "$_lw" current 2>/dev/null || true)"
+  [ "$_cur" = "$_ln" ] && [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/STEP" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: with no STEP the re-open failed or invented one (current '${_cur}')." >&2; exit 2; }
+  _left_world
+  bash "$_me" --root "$_lw" --nonce "$_lo" record c1 PASS >/dev/null 2>&1 || _fail=1
+  _cur="$(bash "$_me" --root "$_lw" current 2>/dev/null || true)"
+  _stp="$(cat "${_lw}/_bmad-output/.gate-checkpoint/STEP" 2>/dev/null || true)"
+  [ -z "$_cur" ] && [ -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] && [ "$_stp" = "dev-story${_tab}sess-a" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: a record at ANOTHER nonce re-opened, cleared LEFT or moved STEP (current '${_cur}', STEP '${_stp}')." >&2; exit 2; }
+  bash "$_me" --root "$_lw" --nonce "$_ln" list >/dev/null 2>&1 || _fail=1
+  _cur="$(bash "$_me" --root "$_lw" current 2>/dev/null || true)"
+  [ -z "$_cur" ] && [ -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: list re-opened a left gate (current '${_cur}'); gate-transition.sh runs list on every story close." >&2; exit 2; }
+  # Direction 13: open, and close in both of its branches, clear LEFT.
+  _left_world
+  bash "$_me" --root "$_lw" --nonce "$_lo" open >/dev/null 2>&1 || _fail=1
+  [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: open left a stale LEFT behind." >&2; exit 2; }
+  _left_world
+  bash "$_me" --root "$_lw" --nonce "$_ln" close >/dev/null 2>&1 || _fail=1
+  [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: close with no marker open kept LEFT at its nonce." >&2; exit 2; }
+  _left_world
+  printf '%s\n' "$_ln" > "${_lw}/_bmad-output/.gate-checkpoint/OPEN"
+  bash "$_me" --root "$_lw" --nonce "$_ln" close >/dev/null 2>&1 || _fail=1
+  [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/LEFT" ] && [ ! -f "${_lw}/_bmad-output/.gate-checkpoint/OPEN" ] \
+    || { echo "gate-checkpoint SELF-PROBE FAIL: close of the open marker kept LEFT at its nonce." >&2; exit 2; }
+
   [ "$_fail" = "0" ] || { echo "gate-checkpoint SELF-PROBE FAIL: a well-formed record returned non-zero." >&2; exit 2; }
-  echo "gate-checkpoint SELF-PROBE PASS: PASS/SKIP settle, FAIL/PENDING do not, a fresh nonce reads empty, bad verdicts and verdictless rows refuse, re-records replace, current reads the OPEN marker (not mtime) and open/close move it, open refuses a non-canonical nonce, 20 concurrent records land 20 rows."
+  echo "gate-checkpoint SELF-PROBE PASS: PASS/SKIP settle, FAIL/PENDING do not, a fresh nonce reads empty, bad verdicts and verdictless rows refuse, re-records replace, current reads the OPEN marker (not mtime) and open/close move it, open refuses a non-canonical nonce, 20 concurrent records land 20 rows, a LEFT gate re-opens on record and done at its nonce and not at another nonce or on list, the re-open restores STEP to the gate's own step (and invents none), open and close clear LEFT."
   exit 0
 fi
 
@@ -227,6 +300,60 @@ if [ -z "$ACTION" ]; then
 fi
 
 OPEN_MARKER="${LEDGER_DIR}/OPEN"
+LEFT_MARKER="${LEDGER_DIR}/LEFT"
+
+# LEFT is one line, `<nonce><TAB><step left to><TAB><the gate's own step>[<TAB>noted]`, written after a
+# close by ai-dlc-handoff-entry.sh (M1) or by ai-dlc-recover.sh's transcript backstop (already noted).
+# The nonce LEFT names, or nothing.
+_left_nonce() {
+  [ -f "$LEFT_MARKER" ] || return 0
+  head -1 "$LEFT_MARKER" 2>/dev/null | awk -F'\t' '{print $1}'
+}
+
+# The gate's own step LEFT names (field 3), or nothing.
+_left_gate_step() {
+  [ -f "$LEFT_MARKER" ] || return 0
+  head -1 "$LEFT_MARKER" 2>/dev/null | awk -F'\t' '{print $3}'
+}
+
+# A RE-OPEN PUTS STEP BACK ON THE GATE'S OWN STEP. The close that wrote LEFT moved STEP to the step the
+# lead left to, so with OPEN restored and STEP left there the lead's next whole Read of the gate's own
+# step reads as another leave and closes the re-opened gate. STEP becomes `<gate step><TAB><session>`,
+# keeping the session the current STEP carries; with no STEP, no session in it, or no gate step in
+# LEFT nothing is written. Written to a sibling temp and renamed, as every STEP writer does.
+_restore_step_from_left() {
+  local _g _s="" _ss="" _sf="${LEDGER_DIR}/STEP"
+  _g="$(_left_gate_step)"
+  case "$_g" in ""|-|noted) return 0 ;; esac
+  [ -f "$_sf" ] || return 0
+  IFS="$(printf '\t')" read -r _s _ss < "$_sf" 2>/dev/null || true
+  [ -n "$_ss" ] || return 0
+  { printf '%s\t%s\n' "$_g" "$_ss" > "${_sf}.$$" && mv "${_sf}.$$" "$_sf"; } 2>/dev/null || rm -f "${_sf}.$$" 2>/dev/null
+  return 0
+}
+
+# Remove LEFT when it names this nonce.
+_clear_left_at_nonce() {
+  [ "$(_left_nonce)" = "$NONCE" ] && rm -f "$LEFT_MARKER"
+  return 0
+}
+
+# Re-open the gate this nonce LEFT at a step entry: no OPEN marker, LEFT names this nonce.
+_reopen_if_left() {
+  [ -f "$OPEN_MARKER" ] && return 0
+  [ "$(_left_nonce)" = "$NONCE" ] || return 0
+  local _t="${OPEN_MARKER}.$$"
+  printf '%s\n' "$NONCE" > "$_t" 2>/dev/null || { rm -f "$_t"; return 0; }
+  if ln "$_t" "$OPEN_MARKER" 2>/dev/null; then
+    rm -f "$_t"
+    _restore_step_from_left
+    _clear_left_at_nonce
+    printf 'gate-checkpoint: re-opened %s (left at step entry)\n' "$NONCE" >&2
+  else
+    rm -f "$_t"
+  fi
+  return 0
+}
 
 if [ "$ACTION" = "current" ]; then
   # The open marker, or nothing. A directory with ledgers and no marker is a tree whose
@@ -291,6 +418,7 @@ case "$ACTION" in
     _t="${OPEN_MARKER}.$$"
     printf '%s\n' "$NONCE" > "$_t" && mv "$_t" "$OPEN_MARKER" \
       || { rm -f "$_t"; echo "gate-checkpoint: FAIL -- cannot write ${OPEN_MARKER}." >&2; exit 2; }
+    rm -f "$LEFT_MARKER"
     printf 'gate-checkpoint: opened %s\n' "$NONCE" >&2
     ;;
 
@@ -307,6 +435,7 @@ case "$ACTION" in
         exit 2
       fi
     fi
+    _clear_left_at_nonce
     ;;
 
   record)
@@ -368,12 +497,14 @@ case "$ACTION" in
     mv "$_tmp" "$LEDGER" || { rmdir "$_lock" 2>/dev/null; echo "gate-checkpoint: FAIL -- cannot replace ${LEDGER}." >&2; rm -f "$_tmp"; exit 2; }
     rmdir "$_lock" 2>/dev/null || true
     printf 'gate-checkpoint: %s recorded %s in %s\n' "$_id" "$_v" "$LEDGER" >&2
+    _reopen_if_left
     ;;
 
   done)
     # PASS and SKIP only. See the header: a FAIL routes to Gate Failure, which re-reads
     # the check it failed, and a PENDING is unfinished. Emitting either would narrow a
     # resume past a check the gate still has to act on.
+    _reopen_if_left
     if [ -f "$LEDGER" ]; then
       awk -F'\t' '$2 == "PASS" || $2 == "SKIP" { printf "%s%s", (n++ ? "," : ""), $1 } END { if (n) printf "\n" }' "$LEDGER"
     fi

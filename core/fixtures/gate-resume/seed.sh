@@ -42,6 +42,14 @@ if   [ -f "$ROOT/core/scripts/gate-checkpoint.sh" ]; then CKPT="$ROOT/core/scrip
 elif [ -f "$ROOT/scripts/ai-dlc/gate-checkpoint.sh" ]; then CKPT="$ROOT/scripts/ai-dlc/gate-checkpoint.sh"
 fi
 
+# The two Read hooks arm G3 drives beside the recover hook, resolved from the same directory pair.
+# Long-standing files, but G3 reads an empty value as SKIP (HARD in the distribution), never a die.
+HED=""; RGATE=""
+for _hd in "$ROOT/core/hooks" "$ROOT/.claude/hooks"; do
+  [ -z "$HED" ] && [ -f "$_hd/ai-dlc-handoff-entry.sh" ] && HED="$_hd/ai-dlc-handoff-entry.sh"
+  [ -z "$RGATE" ] && [ -f "$_hd/ai-dlc-recover-gate.sh" ] && RGATE="$_hd/ai-dlc-recover-gate.sh"
+done
+
 # IS_DIST: this repo carries core/skills/ai-dlc; a consumer does not. In the
 # distribution SLICE and CKPT must be present — a SKIP here would be this repo's own
 # suite staying green over a subject that never arrived (fixture-ship-decl.md).
@@ -53,6 +61,8 @@ cat > "$WORK/env.sh" <<ENV
 SLICE="$SLICE"
 CKPT="$CKPT"
 HOOK="$HOOK"
+HED="$HED"
+RGATE="$RGATE"
 GATEFILE="$GATEFILE"
 ROOT="$ROOT"
 IS_DIST="$IS_DIST"
