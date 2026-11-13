@@ -19,6 +19,37 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1103.0] - 2026-11-13
+
+### BL-615: CLOSED, Outcome measured and Verdict lines written
+
+Graph s321 and s322 against s319, per story, the four planning steps (carry-over-evaluation, requirements, architecture, stories-test-strategy), measured by `docs/analysis/step-value-b256/bl615/step_value.py`. The entry carries the `Outcome measured:` line and `Verdict: carry-over-evaluation plus requirements plus architecture plus stories-test-strategy did not fall.`; its `Step: requirements` was already declared. The "no committed measuring script" sentence is marked superseded by the Outcome measured line. A sha-less LANDED line opens the entry body.
+
+### BL-510: CLOSED on the operator's ruling "fell, hours mixed"
+
+The Outcome measured line now states the hours reading beside the dollars and tokens: graph s321 against the s317+s318 pooled baseline, implementation plus gate-validation[implementation] per story, the group fell on tokens and token-equivalent dollars per story, and its hours fell against the pooled baseline (1.60 h to 1.13 h) and rose 24% against s318 (0.91 h to 1.13 h, bounded between 23.0% and 25.4%; the earlier 25% has no committed unrounded source). The PARTIAL and Progress paragraphs carry a Superseded (batch 257) note, and the s319 "did not fall" reading is marked superseded by the Outcome measured line. The Value citation (the DAR-fold preflight) is scoped as the step's value, not this entry's evidence mechanism, `validate-handoff-evidence.sh`. The `Step: implementation` line was already at the merge-base, so STEP-AT-CLOSE is met; `Verdict: implementation plus gate-validation[implementation] fell.` BL-510's `fell` direction was confirmed BY HAND (14/14 figures MATCH, second independent opus verifier), because the efficiency close arm does not check a `fell` verdict. A sha-less LANDED line opens the entry body.
+
+### BL-508, BL-541, BL-543, BL-550, BL-552, BL-810, BL-912: Step line and four-step Verdict group declared, none closed
+
+Each entry gains the `Step:` member its measured round belongs to and `Verdict: carry-over-evaluation plus requirements plus architecture plus stories-test-strategy did not fall.`, and the stale one-step-token sentence is corrected (the `Step:` field takes one token, so a four-step group names one member). Members: BL-508 stories-test-strategy; BL-541 requirements; BL-543 carry-over-evaluation; BL-550 requirements; BL-552 requirements; BL-810 carry-over-evaluation; BL-912 stories-test-strategy (its pre-existing `Step:` is kept). BL-810's owed-Step bullet is replaced by the four-step group figures. BL-912's Verdict is marked provisional pending the close's Outcome measured line. All seven stay open.
+
+### BL-868: M6 item 8 resolved, stays PARTIAL
+
+The item 8 paragraph no longer says one site remains: the C14 guard worktree is on the injected clock. The entry stays PARTIAL, `verify: manual` unchanged, no LANDED line.
+
+### BL-975: Step relabelled to requirements, opening corrected
+
+`Step: gate-validation[carry-over-evaluation]` is now `Step: requirements` (the 17:54Z remediators are requirements-step work), and the opening is corrected to nine dispatched, four dead, five resumed. The earlier four-resume sentence is superseded by the premise-corrected count (five resumes; each of the four dead seats ended in `api-request`; dead parts 5 to 8).
+
+### BL-716: premise corrected, exit condition re-keyed
+
+The premise is dated: graph has reconciled through 0.1101.0, so the rulebook half arrived in graph mid-s322. The exit condition now keys on "the first graph sprint whose planning ran on v0.1058.0 or later".
+
+### BL-1003: item 3 BL-975 bullet annotated settled
+
+The bullet "BL-975, whose 17:54Z remediators now read `requirements`" carries "Settled in batch 257": BL-975 is relabelled to `Step: requirements`, and extract.py labels its nine remediators gate-validation[carry-over-evaluation] at 0.1099.0 and requirements at 0.1100.0. BL-1003 stays PARTIAL.
+
+
 ## [0.1102.0] - 2026-11-13
 
 ### BL-1029 CLOSED: retro.md 7a-post no longer says the retro appends no gate entry
