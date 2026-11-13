@@ -33,3 +33,4 @@ ln
 ls
 rmdir
 perl
+chmod

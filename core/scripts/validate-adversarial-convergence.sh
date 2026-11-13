@@ -460,6 +460,10 @@ VALID_RESOLUTIONS="REVERT_REPAIR CHANGE_APPROACH CUT_SCOPE RESTART_CYCLE REOPEN_
 # ONE IMPLEMENTATION. ERA_TOKEN, era_cmp and era_resolve are read by merge-adversarial-shards.sh from
 # this file (count-guarded, as it reads at_key), so the merge narrows exactly where arm N binds.
 ERA_TOKEN='A p3 that does not stamp'
+# THE NARROWING ERA (BL-911): document and subject passes are narrowed by part content only in a series
+# BOUND under this second token, resolved by the same era_resolve (the merge swaps it in for one call,
+# d_nera); a LEGACY or NOTOKEN series keeps the full map with a `full width:` reason. Read by the merge.
+NARROW_ERA_TOKEN='narrows by part content'
 ERA_STATE=""
 ERA_STAMP=""
 ERA_ROOT=""
@@ -2877,14 +2881,17 @@ fi
 #              from the pass's notarized record: the parts whose bytes changed since the series
 #              predecessor, and the parts the predecessor's CRITICAL and MAJOR findings cite. An input it
 #              cannot read widens the owed set to the full map, never narrows it. A document or subject
-#              pass always owes the full map (the merge does not narrow those modes).
+#              pass is narrowed by part CONTENT (its own and its predecessor's `part_sha:`), and owes
+#              the full map, with a `full width:` reason, where either list is absent or unjoinable or
+#              the series is not bound under NARROW_ERA_TOKEN.
 #   FAIL      (a) no `shard_set_derived_from:`; (b) it names another file than the series predecessor
 #              (the previous pass IN SERIES ORDER, never literal M-1); (c) the dispatched ordinal set is
 #              not EQUAL to the owed set -- a superset re-reviews what nothing changed, a subset (the
 #              false-MET direction) leaves a changed or still-open part unreviewed.
 #   PENDING    printed, never counted: the derivation refused, or the series is LEGACY (era_resolve).
 #   NOTOKEN    the installed rulebook carries no ERA_TOKEN: the arm is silent and forks nothing.
-# The self-probe stages a three-story series and fires the derivation both ways before the corpus.
+# The self-probe stages a three-story series and fires the derivation both ways before the corpus, then
+# a three-part DOCUMENT series that must come back narrowed (no FULL line) under NARROW_ERA_TOKEN.
 n_cand=""
 for ((i = 1; i < N; i++)); do
   k_has_ids "$(block_field "${P_FILE[$i]}" 'shard_tool_use_ids')" && n_cand="$n_cand $i"
@@ -2914,6 +2921,32 @@ if [ -n "$n_cand" ]; then
     if [ "$n_p1" != "2 3 " ] || [ "$n_p2" != 3 ] || [ "$(n_keys " 01=toolu_a 3=toolu_b cross=toolu_c")" != "1 3 " ] \
        || [ -n "$(n_keys " 1=xyz_a cross=toolu_c")" ]; then
       echo "validate-adversarial-convergence.sh: arm N self-probe failed (derived '$n_p1' want '2 3 ', first-pass rc '$n_p2' want 3); no verdict" >&2
+      exit 2
+    fi
+    # THE DOCUMENT SELF-PROBE. A three-part document series under its own installed rulebook carrying
+    # NARROW_ERA_TOKEN (no git above a mktemp tree: the era binds): p1 cites part 03 in a MAJOR, p2's
+    # `part_sha:` moves only part 2, so p2 owes {2, 3} with NO `FULL` line. Fails when document narrowing
+    # never fires (a FULL line, or the full map, comes back). A dispatch of every part is then refused by
+    # the loop's own equality test below, the one the files series exercises; it is not restated here.
+    nd="$AC_T/nd/s1"
+    mkdir -p "$nd" "$AC_T/nd/.claude/skills/ai-dlc/steps" \
+      && printf '%s\n' "$NARROW_ERA_TOKEN" > "$AC_T/nd/.claude/skills/ai-dlc/steps/_gate-procedures.md" \
+      || { echo "validate-adversarial-convergence.sh: arm N document self-probe could not stage; no verdict" >&2; exit 2; }
+    n_dpass() {  # $1 file, $2 part 2's digest digit, $3 findings body, $4 major count
+      printf '# p\n\n## Shard ordinal map\n\n```text\n1\t1\t3\t## A\n2\t4\t6\t## B\n3\t7\t9\t## C\n```\n\n## Findings\n\n%s\n<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-01-01T00:00:00Z\nartifact_sha: %064d\npart_sha: 1=%064d 2=%064d 3=%064d\npart_run: -\nfindings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
+        "$3" 9 1 "$2" 3 "$4" > "$1"
+    }
+    n_dpass "$nd/doc-adversarial-p1.md" 2 "$(printf '### F-1 — MAJOR — x\nsections: 03\n')" 1 \
+      && n_dpass "$nd/doc-adversarial-p2.md" 22 "" 0 \
+      || { echo "validate-adversarial-convergence.sh: arm N document self-probe could not stage; no verdict" >&2; exit 2; }
+    # GIT_CEILING_DIRECTORIES: a TMPDIR inside some git work tree must not turn the probe's era LEGACY.
+    # The ceiling is $AC_T, the PARENT of the rulebook root: era_resolve runs `git -C $AC_T/nd`, and git
+    # never excludes its working directory from discovery, only the ascent past a listed directory, so
+    # listing $AC_T/nd itself would still let git climb from it to an outer repository.
+    n_d="$(GIT_CEILING_DIRECTORIES="$AC_T" bash "$N_MERGE" --derived-set "$nd/doc-adversarial-p2.md" 2>&1)"
+    n_dset="$(printf '%s\n' "$n_d" | awk -F'\t' 'NF == 1 && /^[0-9]+$/' | tr '\n' ' ')"
+    if [ "$n_dset" != "2 3 " ] || [ -n "$(printf '%s\n' "$n_d" | awk -F'\t' '$1 == "FULL"')" ]; then
+      echo "validate-adversarial-convergence.sh: arm N document self-probe failed (derived '$n_dset' want '2 3 ' and no FULL line: $(printf '%s\n' "$n_d" | awk -F'\t' '$1 == "FULL" { print $2; exit }')); no verdict" >&2
       exit 2
     fi
     for i in $n_cand; do

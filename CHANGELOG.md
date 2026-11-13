@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1096.0] - 2026-11-12
+
+### BL-911 (PARTIAL): document and subject passes narrow by part content
+
+- **The mechanism.** By operator ruling at batch 256, `merge-adversarial-shards.sh --derived-map` narrows document and subject passes after the first, as files mode already did. The merge notarizes a `part_sha:` digest per part and the cut-table runs in `part_run:` (`-` when none) in each pass file. A pass owes the parts whose digest is not uniquely unchanged since its predecessor, the parts its CRITICAL and MAJOR findings cite, a cut table's whole run, and the cross shard. A missing, malformed or unjoinable list falls to the full map with a `full width:` reason on the header line. `partition-document.sh` gains `--part-sha`, taken in process by the merge.
+- **The era.** Narrowing binds from the `narrows by part content` sentence in the installed rulebook. A consumer's engine narrows nothing until its rulebook reconcile installs that sentence, and a series that predates it keeps the full map. An identical re-merge over an old-engine pass answers UNCHANGED as at base. Arm N of `validate-adversarial-convergence.sh` holds the dispatched set to the printed set in both modes, and its document self-probe is extended. The rule-28, `_dispatch-protocol.md`, `_gate-procedures.md`, `SKILL.md` and adversary-role prose that said document and subject modes print the full map now say they narrow by part content.
+- **Yield.** Replayed on the shipped engine with the era gate forced bound, on graph's pass pairs at ed61de745: document mode still owes 68 of 72 shards over 11 replayable pairs and subject mode 33 of 42 over 4 pairs; the run field added 0 owed shards in every pair. Unreplayable: document 3 pairs, subject 1.
+- **Consumer cost.** 67 B per part in `part_sha:` plus 10 B of label and newline per line; `part_run: -` is 12 B. 5,981 B over s322's 13 document and subject passes, 4,017 B of it measured by rendering on 9 passes and the rest arithmetic.
+- **Matrix evidence.** A MUTANT-MATRIX row records only `decides=` and `twins=`. The fixture's counted run at the release tip shows 87 of 87 declared mutants killed by their deciding arm with the twin holding, by name, and its second run is identical in start order. A partial `--matrix` pass (the control and 5 mutants × 90 arms, 540 rows) was run and stopped by decision; all 5 compared clean against their declared row, and it is supporting evidence only. The merge, partitioner and validator changed, so cells outside a row were not re-measured at this tip.
+- **The s322 reading.** The item-3 reading on graph s322 is recorded in the entry as the OLD engine's full-width behaviour, because s322 ran before this narrowing existed: 9 of 10 passes at or after p2 printed a full derived set, and only requirements ran past p3, through the cap's `resolves_divergence` p4.
+- **Status.** The entry stays PARTIAL with `verify: manual`. A new `Still owed:` line asks the first graph sprint whose document and subject series run under the new era token for spawns per pass at or after p2 against changed-part count plus cited plus cross.
+
+### Invocation budgets
+
+- `core/fixtures/adversarial-shard-merge` `*` 2789 to 3101 (+312), `merge-adversarial-shards.sh` 31 to 53, `content-seal.sh` 474 to 503, from two agreeing counted runs. New first-run arm segments 199, new mutant segments 103, residue +10 (arm N's document self-probe adds one `--derived-set` start to each bound gate run in the pre-existing arms, 11 counted, and -1 unsplittable). The per-merge `--part-sha` start runs in process.
+- `core/fixtures/divergence-hard-block` `*` 415 to 424 (+9): one extra `--derived-set` start in each of the 9 gate runs that reach a bound arm N.
+- Loaded durations, not comparable with a solo run: adversarial-shard-merge's stored duration is 978 s loaded.
+
+### BL-1014 (filed OPEN): the matrix re-measure cost
+
+A full `--matrix` re-measure of `adversarial-shard-merge` (87 mutants × 90 arms) is derived at about 4.8 to 8.3 hours in one invocation (a 701 s base phase plus 87 passes of 192 to 336 s, five passes measured), about 6.8 to 10.3 hours when run in 11 chunks. By operator ruling no full or scoped matrix run is a per-change duty. The matrix passes armed no invocation counter; the starts figure, 3101, comes from the counted runs' two identical per-start logs. The lever is the per-start cost (about 0.32 s) and the starts per cell.
+
+### BL-1022 (filed OPEN): fixture-mutants.md clause 2
+
+Clause 2 of `.claude/rules/fixture-mutants.md` no longer asks that the matrix be re-run on every arm or mutant change. When arms or mutants change, the required evidence is the fixture's counted run showing each declared mutant killed by its deciding arm with its twin holding, by name. Where a fixture's counted run does not itself score each mutant's deciding arm and twin, the change re-measures only the changed mutants' rows by running the fixture's `--matrix` narrowed to those mutants; a fixture whose `--matrix` takes no mutant list runs it whole. Apart from the case in the previous sentence, a full or partial `--matrix` is an operator instrument and never a per-change duty. For the 78 of the 79 matrix-capable fixtures whose `--matrix` takes no mutant list (only adversarial-shard-merge's takes `--mutants=`), the burden is unchanged; that remainder is what BL-1014's lever applies to. The heading "One run per distinct state" and the `MUTANT-MATRIX-REMEASURE` line are unchanged.
+
+NET -2 (closed 0, filed 2)
+
 ## [0.1095.0] - 2026-11-12
 
 Batch 256, release cluster b256-B1-bl915-audit, lead ai-dlc-a7. This release advances BL-915, closes nothing and files BL-1006 (net -1: closes 0, files 1). The only fixture edit is validator-fork-budget's declared `*` row, 1120 to 1124.

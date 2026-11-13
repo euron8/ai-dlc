@@ -243,7 +243,7 @@ and no `subagent_type`, and its own brief names no `team-roles/` path and
 carries no `shard:` line, since the dispatch guard binds a spawn to the
 first role file its prompt names. A convergence pass after the series'
 first lists only the briefs for the parts `merge-adversarial-shards.sh [--document | --subject] --derived-map` prints plus
-the cross agent (only files mode narrows; document and subject modes print the full map). Copy the block below, stable block
+the cross agent (files mode narrows to the repair; document and subject modes narrow by part digest and print the full map only with a `full width:` reason). Copy the block below, stable block
 first; only the tail varies per round.
 
     You are a round-dispatcher. Spawn every member below, the cross

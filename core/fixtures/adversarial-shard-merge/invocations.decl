@@ -10,6 +10,29 @@
 # and twin runs; the content-seal.sh starts are the sealed-sibling admissions and the --mark seals) by hands A-I on the
 # pre-BL-958 base, and re-measured on 0.1056.0 when BL-974 was carried onto it beside BL-958 and BL-976, with the CS12
 # flag-split cell and the CSM-flagswap/CSM-flagglob deciding and twin runs.
-2789 *
-31 core/scripts/merge-adversarial-shards.sh
-474 core/scripts/content-seal.sh
+# Re-measured for BL-911 (2789 -> 3101, merge 31 -> 53, content-seal 474 -> 503) by two agreeing counted runs on the
+# fixture text this decl ships with, both reading those three rows. The merge's per-part digests are taken IN PROCESS
+# (partition-document.sh sourced, pdoc_main --part-sha), so no document or subject merge starts a bash for them.
+# The +312, COUNTED from the per-start logs (the two runs start the same 3101 scripts in the same order), segmented by
+# their marker starts (each world's shard-record hooks and p1 merge, serial-remediation-worklist.sh, the gate); a
+# segment holding more than one arm is named as mixed, never split. New first-run segments, 199: PCSR 40 (its own
+# subject world with a cut table); PCR 26 (six re-merges); NDP 23 and NDC 23 (each a dvA copy with p3 merged, then
+# the gate on the shipped set and on a copy); PCS2 + PCK + PCKa-PCKh + PCE + the first of PCR's maps 20 (mixed); the
+# 80/260 table world 17 (PCT, shared by PCC and PCKe-PCKh); PCMV 13 (the unhooked and the hooked re-merge); the 3/20
+# table world 12 (PCT2); DV4D + PC1 + PCD 7 (mixed, DV4D's own pre-existing map included); PCS 6; PCKm 5; PCT2 + PCC
+# arms 4 (mixed); PCT 3; PCN2 0 (partition-document.sh sourced, no start). New mutant segments, 103: VAC-doc-probe-gone
+# 24 (NDP's world and both gates), PC-moved-tab-ifs 18, PC-no-table-run + PC-run-widen-neighbour + the seven fallback
+# mutants + PC-legacy-narrows + PC-prun-print-as-you-go 16 (mixed: one run of partition-document.sh starts),
+# VAC-ceiling-nd 14 (NDC's world; the copy step stops it before a gate), PC-ordinal-join + PC-cite-by-ordinal +
+# PC-dup-presence 10, PC-subject-digest-only 10, PC-remerge-strict 9, PC-scoped-map-continue 2. 199 + 103 = 302: the
+# residue, +10, is the net change of the segments that also existed at 2789 -- arm N's document self-probe adds one
+# --derived-set start to each bound gate run there (DV10 +2, DVRS +3, DVRSS +3, DV-gate-supersets-only +3: 11
+# counted), and -1 is the net no per-start log of the 2789 reading can split. The merge row's +22: the document
+# self-probe on the real merge (DV10 +2, DVRS +3, DVRSS +3), DVRS's and DVRSS's third gate run (superset and subset
+# halves, +3 each), and NDP's and NDC's shipped-validator gate runs (+4 each); the logs read DV10 8, DVRS 12, DVRSS
+# 12, NDP 4, NDC 4, and 13 from the earlier arms. The content-seal row's +29, counted per segment: PCR 12, the 80/260
+# world 3, the 3/20 world 3, PCSR 3, NDP's p3 merge 3, NDC's p3 merge 3, PCMV's unhooked re-merge 2 (the hooked one
+# refuses before it seals).
+3101 *
+53 core/scripts/merge-adversarial-shards.sh
+503 core/scripts/content-seal.sh

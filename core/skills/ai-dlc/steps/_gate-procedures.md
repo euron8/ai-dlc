@@ -702,7 +702,7 @@ artifact path under review, the canonical output path, the pass number, and — 
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
 again. A sharded pass after the series' first dispatches only the parts
 `scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>`
-prints (the mode flags are the ones the mode's join takes; only files mode narrows, and the other modes print the full map with
+prints (the mode flags are the ones the mode's join takes; every mode narrows, and a set that falls to the full map carries
 the engine's `full width:` reason on the header line), plus the cross shard
 (which still reads the whole subject); the merge refuses a shard outside that set and the convergence
 validator refuses a dispatched set that differs from it. Every adversary brief, sharded or not, also carries the early-write instruction of
@@ -773,7 +773,7 @@ review is one file, run `scripts/ai-dlc/partition-document.sh --map <artifact pa
 `SERIAL:` line means the document does not partition: dispatch ONE adversary whose brief carries
 `shard: none (serial-document)` (Rule 28 exception 4). Otherwise the map prints
 `<ordinal>\t<first-line>\t<last-line>\t<heading>` per part (a pass after the series' first dispatches only the
-rows `scripts/ai-dlc/merge-adversarial-shards.sh --document <artifact path> --derived-map <that dir>` prints, plus the cross shard; document mode is not narrowed, so that is the full map); run
+rows `scripts/ai-dlc/merge-adversarial-shards.sh --document <artifact path> --derived-map <that dir>` prints, plus the cross shard; document mode narrows by part content: the merge notarizes each part's `part_sha:` digest and the cut-table runs in `part_run:` (`-` when none), and a pass owes the parts whose digest is not uniquely unchanged since its predecessor, the parts its CRITICAL and MAJOR findings cite, and a cut table's whole run, with the full map and a `full width:` reason where a list is missing or unjoinable); run
 `scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` (creating form for the
 first creation of pass M, `--shard-dir --existing` once any member of pass M is dispatched, as in "Shard a
 multi-file artifact"), which creates the pass directory (shaped `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/`)
@@ -803,7 +803,7 @@ that printed path being `<that dir>` below, and run
 `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>`, with the base read from the
 subject manifest, never re-derived. The map prints
 `<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>` per part (a pass after the series' first dispatches only the
-rows `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> --derived-map <that dir>` prints, plus the cross shard; subject mode is not narrowed, so that is the full map). A subject that maps to one
+rows `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> --derived-map <that dir>` prints, plus the cross shard; subject mode narrows by part content as document mode does, keyed on each part's file, `part_sha:` digest and the `part_run:` runs, with the full map and a `full width:` reason where a list is missing or unjoinable). A subject that maps to one
 part gets ONE adversary whose brief carries `shard: none (serial-document)` (Rule 28 exception
 4); it writes `requirements-adversarial-p<M>.md` itself, with `artifact:` = the subject manifest
 and `artifact_sha:` as one `<stem>=<sha>` entry per subject file (write the separator as `@`
@@ -843,7 +843,7 @@ A p3 that does not stamp `EXIT_CONDITION_MET` CAPS the series (`--cycle-state` s
 and STOPS it exactly as a STALL does: its record is `s<N>/<artifact>-resolution-p3.md`, resolving
 `<artifact>-adversarial-p3.md`, and the next pass declares it in `resolves_divergence:`. Every sharded
 pass after a series' first reviews the REPAIR: dispatch it over the parts
-`scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>` prints (files mode narrows to the parts the engine derives from the repair; document and subject modes print the full map and name the reason) plus the cross shard,
+`scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>` prints (files mode narrows to the parts the engine derives from the repair; document and subject modes narrow by part digest, and a full map carries its `full width:` reason) plus the cross shard,
 and the merge stamps `shard_set_derived_from:`.
 
 **STOP → ADJUDICATE → RESOLVE → VERIFY**
