@@ -25,6 +25,9 @@ UP_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$UP_HERE/lib.sh" ] || { echo "FIXTURE BROKEN: lib.sh is absent beside $0; nothing was asserted" >&2; exit 2; }
 # lib.sh walks UP for the join in both layouts, scrubs AI_DLC_*, owns WORK, the EXIT trap, ok/bad/fails.
 . "$UP_HERE/lib.sh"
+. "$(cd "$UP_HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+# each in-process pass of a subject below is logged by fx_inproc (lib/mutant.sh) under its root-relative path
+RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 broken() { echo "FIXTURE BROKEN: $NAME: $1" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$JOIN" || broken "sourcing $JOIN failed"
@@ -58,12 +61,12 @@ useam_parts() {
   (
     refuse_n=0; PARTMODE=0; CF_DEFER=0
     JR_ROOT="$UW"; STATE_PARENT="$UW/"; SEAT_DIR="$UW/_bmad-output/party-mode/s305"
-    for p in "$@"; do checks_refusals "$(checks_field 0 "$p")"; done
+    for p in "$@"; do fx_inproc $RSJ_J; fx_inproc $RSJ_J; checks_refusals "$(checks_field 0 "$p")"; done
     if [ "$party" = 1 ]; then
-      src_refusals "$(src_check "$SEAT_DIR" "$@")"
-      seat_complete_check "$SEAT_DIR" "$@"
+      fx_inproc $RSJ_J; fx_inproc $RSJ_J; src_refusals "$(src_check "$SEAT_DIR" "$@")"
+      fx_inproc $RSJ_J; seat_complete_check "$SEAT_DIR" "$@"
     fi
-    contract_refusals 0 "$(contract_check 0 "$@")"
+    fx_inproc $RSJ_J; fx_inproc $RSJ_J; contract_refusals 0 "$(contract_check 0 "$@")"
     printf '%s' "$ESC_LINES"
     echo "ESC_N=$ESC_N SERIAL_N=$SERIAL_N"
     echo "USEAM-REFUSED: $refuse_n"
@@ -75,10 +78,10 @@ useam_src() {
   (
     refuse_n=0; PARTMODE=0
     JR_ROOT="$UW"; STATE_PARENT="$UW/"; SEAT_DIR="$UW/_bmad-output/party-mode/s305"
-    src_refusals "$(src_check "$SEAT_DIR" "$@")"
-    seat_complete_check "$SEAT_DIR" "$@"
-    contract_refusals 1 "$(contract_check 1 "$@")"
-    for r in "$@"; do checks_refusals "$(checks_field 1 "$r")"; done
+    fx_inproc $RSJ_J; fx_inproc $RSJ_J; src_refusals "$(src_check "$SEAT_DIR" "$@")"
+    fx_inproc $RSJ_J; seat_complete_check "$SEAT_DIR" "$@"
+    fx_inproc $RSJ_J; fx_inproc $RSJ_J; contract_refusals 1 "$(contract_check 1 "$@")"
+    for r in "$@"; do fx_inproc $RSJ_J; fx_inproc $RSJ_J; checks_refusals "$(checks_field 1 "$r")"; done
     printf '%s' "$ESC_LINES"; printf '%s' "$ESC_CLOSED"
     echo "ESC_N=$ESC_N ESC_X=$ESC_X"
     echo "USEAM-REFUSED: $refuse_n"

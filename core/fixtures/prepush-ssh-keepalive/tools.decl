@@ -18,3 +18,5 @@ chmod
 wc
 dirname
 basename
+tr
+sort

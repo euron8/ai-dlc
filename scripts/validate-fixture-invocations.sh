@@ -113,10 +113,13 @@
 #       rows logged by a fixture whose declaration carries NO `inproc:` row FAIL too, so a fixture cannot opt itself
 #       out of counting by deleting its row while it still logs. Passing, an opted-in fixture prints `ok J7: ...`.
 #       Its match reuses fxc_cells_judge's longest-target match (no cells declared: every matched row is a C1 row).
-#   P1  (BL-982, R2; static, --static-join, so validate-fixture-inprocess.sh FAILs it as a join E row whether or not
-#       the fixture is allowlisted) in a fixture OPTED IN by an `inproc:` row, every command-position `.`/`source` of a
-#       drive of a declared bash subject is paired with an fx_inproc call on that drive. Grammar, pairing rule and
-#       false-positive set: fxc_inproc_pairs. A fixture that is not opted in is never scanned (the tree-wide arm is owed).
+#   P2  (BL-982 (b); static, --static-join, so validate-fixture-inprocess.sh FAILs it as a join E row whether or not
+#       the fixture is allowlisted, when its ratchet reads the row NEW against the push base; an owed row prints) in EVERY
+#       declared fixture, opted in or not, every in-process drive of a declared
+#       bash subject -- a call of a guarded subject's entry function, a source of an unguarded one -- is paired with an
+#       fx_inproc call. P2 SUBSUMES P1, the opted-in-only arm it replaces, and keeps P1's pairing rule; the id P1 is
+#       retired. Counting unit, population, operands, masking, blind routes and false-positive floor: ARM P2 above
+#       fxc_p2_scan.
 #
 #   C1  (BL-879, THE IN-PROCESS CELLS; grammar above fxc_cells_parse) every start of a subject -- a path row of
 #       invocations.decl, matched under its DECLARED path with the fxc_count normalisation -- carries an FXCELL tag or
@@ -162,7 +165,7 @@
 #       FXCOUNT_JUDGE all reach it from the hook's environment; a hermetic-run.sh it starts would then be armed. A
 #       nested copy of the distribution hook is inert by its PREPUSH_POOL_DEPTH gate.
 #   B6  a SOURCED subject is not a start; it is counted only where the drive calls fx_inproc and the fixture declares an
-#       `inproc:` row (J3, J7), and P1 binds the drive to the call only in such an opted-in fixture. B7 a subshell, `( )` or `$( )` without a new bash, is not a start.
+#       `inproc:` row (J3, J7), and P2 binds the drive to the call in every declared fixture. B7 a subshell, `( )` or `$( )` without a new bash, is not a start.
 #   B8  a start killed before its first command records nothing. A fixture that backgrounds `bash ... &` and kills
 #       it, or runs one under `timeout`, can therefore count fewer starts on a slow run; it makes the kill wait for the
 #       child's first command or is listed with its reason. The two-pass counting slot catches only rates high
@@ -196,6 +199,64 @@ set -u
 
 FXC_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
 FXC_REMEDY_TAIL="otherwise this is the regrowth fixture-mutants.md 'One run per distinct state' forbids"
+# C5's two guard statements, ONE spelling read by fxc_guarded and by P2's scan (which stops collecting a subject's
+# entry functions at the first of them).
+FXC_GUARD_A='[ "${BASH_SOURCE[0]}" = "$0" ] || return 0'
+FXC_GUARD_B='if [ "${BASH_SOURCE[0]}" = "$0" ]; then'
+
+# THE HEREDOC TRACKER, one awk function string read by fxc_mutant_rows (J5) and by P2's scan; never copied. A heredoc
+# body is data. A `<<` outside quotes on a non-comment line, not `<<<`, opens a body whose delimiter is the next word
+# (quoted, backslashed or bare; `<<-` strips leading tabs); a word that cannot start a name opens nothing; several
+# heredocs on one line close in order. NO BODY OPENS INSIDE `((` OR `$((` (hd_arith masks the arithmetic span first):
+# `$((1<<n))` and `(( m = 1 << k ))` once opened a body delimited by `n`/`k`, which swallowed the rest of
+# shell-portability/run.sh from its line 1387, MUTANT-MATRIX rows included. The caller passes -v SQ=<apostrophe>,
+# calls hd_body(line) first (1: a body or delimiter line, consumed) and opens(line) on every other line -- or
+# opens_m(line, mask) with its own same-length mask, as P2 does with its cross-line one (a `<<` inside a multi-line
+# string opens nothing there). opens is opens_m over this file's line-local qmask.
+FXC_HEREDOC_AWK='
+function qmask(s,   o, i, n, c, q) {
+  o = ""; q = ""; n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (q == "") { if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:];&|]/)) break
+                   if (c == SQ || c == "\"") q = c; o = o c; continue }
+    if (q == "\"" && c == "\\") { o = o "XX"; i++; continue }
+    if (c == q) { q = ""; o = o c } else o = o "X"
+  }
+  return o
+}
+function hd_arith(m,   o, i, j, n, d, c) {
+  if (index(m, "((") == 0) return m
+  o = ""; n = length(m)
+  for (i = 1; i <= n; i++) {
+    if (substr(m, i, 2) != "((") { o = o substr(m, i, 1); continue }
+    o = o "(("; d = 2
+    for (j = i + 2; j <= n && d > 0; j++) { c = substr(m, j, 1); if (c == "(") d++; else if (c == ")") d--; o = o ((c == ")" && d < 2) ? ")" : "X") }
+    i = j - 1
+  }
+  return o
+}
+function opens(s) { if (index(s, "<<") > 0) opens_m(s, hd_arith(qmask(s))) }
+function opens_m(s, m,   p, r, c, w, dash) {
+  if (index(m, "<<") == 0) return
+  p = 0
+  while ((r = index(substr(m, p + 1), "<<")) > 0) {
+    p += r + 1
+    if (substr(m, p + 1, 1) == "<") { while (substr(m, p + 1, 1) == "<") p++; continue }
+    dash = (substr(s, p + 1, 1) == "-"); r = s; r = substr(r, p + 1 + dash)
+    sub(/^[[:space:]]+/, "", r); c = substr(r, 1, 1); w = ""
+    if (c == SQ || c == "\"") { r = substr(r, 2); if (index(r, c)) w = substr(r, 1, index(r, c) - 1) }
+    else { if (c == "\\") r = substr(r, 2); if (match(r, /^[A-Za-z_][A-Za-z0-9_]*/)) w = substr(r, 1, RLENGTH) }
+    if (w != "") { HN++; HW[HN] = w; HD[HN] = dash }
+  }
+  if (HN > 0) HI = 1
+}
+function hd_body(s,   l) {
+  if (!(HN > 0 && HI > 0)) return 0
+  l = s; if (HD[HI]) sub(/^\t+/, "", l); if (l == HW[HI]) { HI++; if (HI > HN) { HN = 0; HI = 0 } }
+  return 1
+}
+'
 
 fxc_gen_rc() { # <dir>: write <dir>/fxcount.rc, print its path
   mkdir -p "$1" || return 2
@@ -205,7 +266,8 @@ RC
   printf '%s\n' "$1/fxcount.rc"
 }
 
-# fxc_count <log> <path>: rows whose first field, NORMALISED, equals <path> or ends in /<path>.
+# fxc_count <log> <path>: rows whose first field, NORMALISED, equals <path> or /<path>, or ends in /<path> (a logged
+# `//core/x`, a relative fx_inproc path taken with cwd `/`, normalises to exactly `/core/x`: it counts).
 # NORMALISATION is pure string work on field 1, no filesystem call: empty and `.` segments are dropped (so `//` collapses),
 # and `..` removes the segment before it; a `..` with nothing before it is dropped on an absolute path (`/..` is `/`) and
 # kept on a relative one. A segment merely CONTAINING `..` (`x..`, `..b`) is a name, never a `..`. A field with no `.`/`..`
@@ -223,7 +285,7 @@ fxc_count() {
     }
     BEGIN { p = ENVIRON["P"]; s = "/" p; ls = length(s) }
     { f = ($1 ~ /(^|\/)\.\.?(\/|$)/ || index($1, "//") > 0) ? nrm($1) : $1 }
-    f == p || (length(f) > ls && substr(f, length(f) - ls + 1) == s) { n++ } END { print n + 0 }' "$1"
+    f == p || f == s || (length(f) > ls && substr(f, length(f) - ls + 1) == s) { n++ } END { print n + 0 }' "$1"
 }
 
 # fxc_glob_n <root> <glob>: number of paths the glob matches under root
@@ -240,7 +302,7 @@ fxc_glob_n() {
 # 22 stubs `exec` the IMPL, and ledger-reverify-b/c/d and reconcile-emit-report-b/c/d run it without `exec`.
 fxc_impl_of() {
   [ $# -gt 0 ] || return 0
-  awk 'function flush() { if (cur != "" && stub) print cur "\t" (impl == "" ? "!" : impl) }
+  LC_ALL=C awk 'function flush() { if (cur != "" && stub) print cur "\t" (impl == "" ? "!" : impl) }
     FNR == 1 { flush(); cur = FILENAME; stub = 0; impl = "" }
     /^[[:space:]]*(exec[[:space:]]+)?bash "\$IMPL" --group/ { stub = 1 }
     impl == "" && /^IMPL="\$HERE\/\.\.\/[A-Za-z0-9_.-]+\/run\.sh"$/ { s = $0; sub(/^IMPL="\$HERE\/\.\.\//, "", s); sub(/\/run\.sh"$/, "", s); impl = s }
@@ -269,45 +331,25 @@ fxc_mutant_rows() {
   # A heredoc body is data, never the header: a MUTANT-MATRIX line a battery SEEDS into a probe file (fixture-hygiene
   # does) is not this fixture's row. validate-fixture-hygiene.sh's H5 skips heredoc bodies through its masker, which
   # lives inside that script's `read -d ''` awk string behind a top-level self-probe and has no callable entry point,
-  # so this is a second, smaller tracker: a `<<` outside quotes on a non-comment line, not `<<<`, opens a body whose
-  # delimiter is the next word (quoted, backslashed or bare; `<<-` strips leading tabs); a word that cannot start a
-  # name (`$((1<<3))`) opens nothing. Several heredocs on one line are closed in order.
-  awk -v SQ="'" 'function qmask(s,   o, i, n, c, q) {
-      o = ""; q = ""; n = length(s)
-      for (i = 1; i <= n; i++) {
-        c = substr(s, i, 1)
-        if (q == "") { if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:];&|]/)) break
-                       if (c == SQ || c == "\"") q = c; o = o c; continue }
-        if (q == "\"" && c == "\\") { o = o "XX"; i++; continue }
-        if (c == q) { q = ""; o = o c } else o = o "X"
-      }
-      return o
-    }
-    function opens(s,   m, p, r, c, w, dash) {
-      m = qmask(s); p = 0
-      while ((r = index(substr(m, p + 1), "<<")) > 0) {
-        p += r + 1
-        if (substr(m, p + 1, 1) == "<") { while (substr(m, p + 1, 1) == "<") p++; continue }
-        dash = (substr(s, p + 1, 1) == "-"); r = s; r = substr(r, p + 1 + dash)
-        sub(/^[[:space:]]+/, "", r); c = substr(r, 1, 1); w = ""
-        if (c == SQ || c == "\"") { r = substr(r, 2); if (index(r, c)) w = substr(r, 1, index(r, c) - 1) }
-        else { if (c == "\\") r = substr(r, 2); if (match(r, /^[A-Za-z_][A-Za-z0-9_]*/)) w = substr(r, 1, RLENGTH) }
-        if (w != "") { HN++; HW[HN] = w; HD[HN] = dash }
-      }
-      if (HN > 0) HI = 1
-    }
+  # so this reads THE HEREDOC TRACKER (FXC_HEREDOC_AWK above), the one P2's scan reads too.
+  LC_ALL=C awk -v SQ="'" "$FXC_HEREDOC_AWK"'
     { orig = $0 }
-    HN > 0 && HI > 0 { l = $0; if (HD[HI]) sub(/^\t+/, "", l); if (l == HW[HI]) { HI++; if (HI > HN) { HN = 0; HI = 0 } } next }
+    hd_body(orig) { next }
     $1 == "#" && ($2 == "MUTANT-MATRIX" || $2 == "MUTANT-MATRIX-FULL") && NF >= 3 { print "M\t" $3 }
     $1 == "#" && $2 == "MUTANT-MATRIX-CONTROL" && NF >= 3 { print "C\t" $3 }
     { opens(orig) }' "$f"
 }
 
 # fxc_req <inputs.decl>: the `!` (REQUIRED) FILE lines, markers stripped, one per line. A directory line is never one.
-fxc_req() {
-  awk '{ sub(/\r$/, "") } $0 == "" || /^#/ { next }
+# FXC_REQ_AWK is that parse, ONE program: with -v tag=0 it prints the `!` file lines of one file (fxc_req); with
+# -v tag=1, over many files, `<!|+>\t<file>\t<path>` for every FILE line, `!` marking a REQUIRED one (P2's population).
+FXC_REQ_AWK='{ sub(/\r$/, "") } $0 == "" || /^#/ { next }
       { r = 0; while ((ch = substr($0, 1, 1)) == "!" || ch == "+") { if (ch == "!") r = 1; $0 = substr($0, 2) }
-        if (r && $0 !~ /\/$/) print }' "$1"
+        if ($0 ~ /\/$/) next
+        if (!tag) { if (r) print; next }
+        print (r ? "!" : "+") "\t" FILENAME "\t" $0 }'
+fxc_req() {
+  awk -v tag=0 "$FXC_REQ_AWK" "$1"
 }
 
 # fxc_decl_rows <invocations.decl>: J4's parse, one normalised row per line: `<c>\t<k>\t<glob or ->\t<target>\t<raw>`,
@@ -469,7 +511,7 @@ fxc_cells_parse() {
 # statement satisfies it. A file absent or empty prints nothing; the caller reads that as unguarded.
 fxc_guarded() {
   [ $# -gt 0 ] || return 0
-  awk -v SQ="'" 'BEGIN { a = "[ \"${BASH_SOURCE[0]}\" = \"$0\" ] || return 0"; b = "if [ \"${BASH_SOURCE[0]}\" = \"$0\" ]; then" }
+  GA="$FXC_GUARD_A" GB="$FXC_GUARD_B" LC_ALL=C awk 'BEGIN { a = ENVIRON["GA"]; b = ENVIRON["GB"] }
     FNR == 1 { if (cur != "") print (g ? "G" : "U") "\t" cur; cur = FILENAME; g = 0 }
     { l = $0; sub(/\r$/, "", l) } l == a || l == b { g = 1 }
     END { if (cur != "") print (g ? "G" : "U") "\t" cur }' "$@" 2>/dev/null
@@ -502,7 +544,7 @@ fxc_cells_judge() {
     FILENAME == ARGV[2] { if ($1 == "R") { if ($3 == "nested") N[$4 SUBSEP $5] = 1; else C[$4 SUBSEP $5] = 0 } next }
     { f = ($1 ~ /(^|\/)\.\.?(\/|$)/ || index($1, "//") > 0) ? nrm($1) : $1; s = ""; best = 0
       for (i = 1; i <= nt; i++) { p = T[i]; lp = length(p)
-        if ((f == p || (length(f) > lp + 1 && substr(f, length(f) - lp) == "/" p)) && lp > best) { best = lp; s = p } }
+        if ((f == p || f == "/" p || (length(f) > lp + 1 && substr(f, length(f) - lp) == "/" p)) && lp > best) { best = lp; s = p } }
       par = ($4 != "" && ($4 in LP)) ? LP[$4] : ""
       LP[$2] = s
       if (s == "") { if ($3 != "") print "C2\t-\t" $3 "\t" $1; next }
@@ -514,81 +556,507 @@ fxc_cells_judge() {
           print "SUM\t" ns + 0 "\t" nt2 + 0 "\t" nn + 0 }' "$1" "$2" "$3"
 }
 
-# fxc_inproc_pairs <run.sh> <bash subjects file>: ARM P1's scan, one awk, run by fxc_static_join ONLY for a fixture
-# opted in by an `inproc:` row. Prints `E\t<run.sh>\t<line>\tP1\t<reason>\t-` (the cells parse's E shape) for every
-# `.`/`source` in COMMAND POSITION -- line start, or after `;` `&` `|` `(` `{` `!`, `then`, `do`, `else`, outside quotes
-# and comments -- whose operand is a DRIVE and is not PAIRED.
-#   DRIVE: the operand (quotes removed) has the basename of one of the fixture's `!` bash subjects (fxc_subject_kind),
-#     or it is OPAQUE -- it carries an expansion with no literal `/` after the last `$` (`. "$v"`, `. "$(f)"`), so no
-#     text names the file it sources. Opaque is FAIL-CLOSED: a pass of a declared subject through a variable is exactly
-#     the drive this arm exists for. A literal tail naming another file (`. "$DIR/../lib/mutant.sh"`) is no drive.
-#   PAIRED: an `fx_inproc` call earlier on the same line, or as the first word of the nearest preceding line that is
-#     neither blank nor a comment and carries no drive itself. Each call pairs ONE drive, and an fx_inproc anywhere
-#     else in the file or function pairs nothing.
-# KNOWN ROUTES: a heredoc body is not masked, so a body line spelled as a drive reads as one (fail-closed, never an
-# acquittal: the body's delimiter line sits between it and any later drive); a drive in another file the fixture
-# sources (a sibling sourcing this run.sh) is that file's fixture's to declare; an operand whose literal tail names a
-# file other than its real target (a nested `$( )` printing a subject's path) reads by that tail, fail-OPEN.
-# HOW ITS FALSE-POSITIVE SET WAS ENUMERATED (R2): the population is every opted-in fixture, and at this change none is
-# opted in, so the arm prints nothing over the tree (--static-join byte-identical to its base). The one fixture the
-# wiring opts in, backlog-receipt-binding, carries six command-position sources in its run.sh, measured by this scan on a
-# scratch copy with one `inproc:` row seeded and no fx_inproc call: the four drives FIRE -- vin's `. "$v"` (opaque) and
-# r10_probe_only, r11_probe_only and r12_probe_only's `. "$d/scripts/validate-backlog-receipts.sh"` (the subject's
-# basename) -- and lib/mutant.sh and lib/matrix.sh stay quiet; its `git init -q .` and `grep -c .` lines are not in
-# command position. With fx_inproc on the line before each of the four, the scan prints nothing. The NARROWING: a
-# first form keyed on the subject's literal tail missed vin's opaque drive, the motivating case; keyed on any
-# `.`/`source` it would flag the two lib sources; keyed on a whole-file fx_inproc presence it would acquit an unpaired
-# drive beside a paired one; an operand cut at the first blank inside a nested `$( )` read the preamble.sh source
-# (`. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"`) as opaque, so blanks inside `$( )` do not end it.
-# PREDICTED, NOT YET MEASURED (U1's sibling backlog-receipt-efficiency is not committed at this change): a sibling
-# that sources the old run.sh through a variable (`. "$BRB"`) and declares that run.sh `!` fires P1 there once opted in,
-# as does any lib sourced through a variable (`. "$MUT_LIB"`); the remedy is fx_inproc plus an `inproc:` row for the
-# run.sh, and a literal path for a lib. Measured on a synthetic tree of that shape: those two fire, the preamble does not.
-# The tree-wide arm (a fixture that is NOT opted in) is owed in BL-982.
-fxc_inproc_pairs() {
-  awk -v SQ="'" 'function qmask(s,   o, i, n, c, q) {
-      o = ""; q = ""; n = length(s)
-      for (i = 1; i <= n; i++) {
-        c = substr(s, i, 1)
-        if (q == "") { if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:];&|]/)) break
-                       if (c == SQ || c == "\"") q = c; o = o c; continue }
-        if (q == "\"" && c == "\\") { o = o "XX"; i++; continue }
-        if (c == q) { q = ""; o = o c } else o = o "X"
-      }
-      return o
-    }
-    function cmdpos(m, i,   pre) { pre = substr(m, 1, i - 1); sub(/[[:blank:]]+$/, "", pre)
-      return (pre == "" || pre ~ /[;&|({!]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|do|else)$/) }
-    function opnd(s, i,   r, w, c, q, j, n, dp) {
-      r = substr(s, i); sub(/^[[:blank:]]+/, "", r); w = ""; q = ""; n = length(r); dp = 0
-      for (j = 1; j <= n; j++) { c = substr(r, j, 1)
-        if (c == "$" && substr(r, j + 1, 1) == "(") dp++
-        else if (c == ")" && dp > 0) { dp--; w = w c; continue }
-        if (q == "") { if (dp == 0 && c ~ /[[:blank:];&|)]/) break; if (c == SQ || c == "\"") { q = c; continue }; w = w c; continue }
-        if (c == q) { q = ""; continue }; w = w c }
-      return w }
-    function base(p) { sub(/.*\//, "", p); return p }
-    FILENAME == ARGV[1] { if ($0 != "") BN[base($0)] = 1; next }
-    { s = $0; sub(/\r$/, "", s) }
-    s ~ /^[[:blank:]]*(#|$)/ { next }
-    { m = qmask(s); n = length(m); avail = prevfx; same = 0; drives = 0
-      for (i = 1; i <= n; i++) {
-        c = substr(m, i, 1); kw = 0
-        if (c == "." && substr(m, i + 1, 1) ~ /[[:blank:]]/) kw = 1
-        else if (substr(m, i, 7) ~ /^source[[:blank:]]/ && (i == 1 || substr(m, i - 1, 1) !~ /[A-Za-z0-9_.\/-]/)) kw = 6
-        if (!kw || !cmdpos(m, i)) continue
-        o = opnd(s, i + kw); t = o; sub(/.*\$/, "", t)
-        why = (o ~ /\$/ && t !~ /\//) ? "opaque: no literal path names the file" : ""
-        if (why == "" && (base(o) in BN)) why = "the basename of a declared bash subject"
-        if (why == "") continue
-        drives++
-        # Each fx_inproc pairs ONE drive: an unused call earlier on this line, else the call that opened the line before.
-        pre = substr(m, 1, i - 1); nfx = gsub(/fx_inproc/, "", pre)
-        if (nfx > same) { same++; continue }
-        if (avail) { avail = 0; continue }
-        print "E\t" FILENAME "\t" FNR "\tP1\tthe source of " o " (" why ") in a fixture opted in by an inproc: row has no fx_inproc call on its drive -- call fx_inproc <subject> on the line before it, so the in-process pass is counted\t-"
-      }
-      prevfx = (drives == 0 && m ~ /^[[:blank:]]*fx_inproc([[:blank:]]|$)/) }' "$2" "$1"
+# ARM P2 (BL-982 subject (b), THE TREE-WIDE IN-PROCESS DRIVE; it subsumes P1, whose pairing rule it keeps). Every
+# fixture with an inputs.decl and no .undeclarable is scanned, opted in or not. fxc_p2_scan prints one row
+# `E\t<fx>\t<file>:<line>\t<reason>` per unpaired DRIVE of one of the fixture's `!` bash subjects (fxc_subject_kind),
+# and fxc_static_join joins it as an `E <fx> P2` row, which validate-fixture-inprocess.sh FAILs allowlisted or not
+# when its P2 ratchet reads the row NEW against the push base, the merge-base of HEAD and origin/main, scanned with this same scan (p2_ratchet there); a row present at the base is OWED.
+#   POPULATION, per fixture: its run.sh, every `.sh` in its own directory, and every `.sh` under core/fixtures/ its
+#     inputs.decl names on any file line (`!`, `+` or bare: story-evidence-scaffold/he-inproc.sh for its declarers). A
+#     shard stub (fxc_impl_of) adds its IMPL run.sh and the IMPL directory's `.sh`, judged under the STUB's subjects.
+#   THE COUNTING UNIT, keyed on fxc_guarded (C5's predicate) over the union of every fixture's subjects:
+#     a GUARDED subject counts per command-position CALL of a function it defines at column 0 (`name()`) above its
+#       guard statement; sourcing it is not itself a drive. No callable function-definition parse existed (the two in
+#       the tree, validate-shell-portability.sh's S15 and validate-mutant-kills.sh, sit inside their own awk strings
+#       with no entry point), so this one is written once, here. The guard spelling is FXC_GUARD_A/B, shared.
+#     an UNGUARDED subject with a shebang counts per SOURCE (`.`/`source` in command position), as P1 had it.
+#     a LIBRARY (no shebang, not guarded: lib/mutant.sh) is no drive. A guarded subject with no shebang is guarded.
+#     A declared subject absent from disk is read as unguarded with a shebang (fail-closed).
+#   ACTIVATION: a call counts only in a fixture whose population SOURCES that guarded subject (its basename), or
+#     sources an unresolvable operand (then every guarded subject of the fixture counts). A fixture that never sources
+#     a subject calls no entry of it in-process.
+#   OPERANDS: a literal operand, or one with a literal `/name` tail after its last `$`, is judged by basename. A bare
+#     `$VAR` is judged by EVERY same-file assignment of VAR (an empty one ignored): a literal tail by its basename; a
+#     value that is itself one `$OTHER` inherits OTHER's literal tails (one level). A POSITIONAL -- `$N`, `"$@"`,
+#     `${@:N}`, a variable assigned from one, or a `"$@"` forwarded to another function -- is judged INDEX-FREE (OPTION
+#     S, the lead ruling): by the UNION of EVERY argument of EVERY command-position call of the enclosing function in
+#     ANY file of the fixture's scanned population (each read in its caller file; each population file is listed twice
+#     to the one awk, the first read collecting every function definition). Which positional is read and any `shift`
+#     before it are not read, so no shift shape (conditional, in a loop, in a pipeline or the background, `shift N`)
+#     can move it. It FIRES if any argument is a guarded subject entry, is QUIET only when every argument resolves and
+#     none is, and stays GATED when any cannot be resolved (or there is no caller). Its cost is the PHANTOM: an entry
+#     passed at another index (`f() { shift; "$1"; }; f gmain x`) fires though the word never runs it. A `set --`
+#     makes the positionals read after it unresolvable (gated). `for VAR in` and `read ... VAR` are opaque. Anything left opaque is UNRESOLVABLE: a SOURCE drive when the
+#     fixture declares an unguarded subject, and an activation of every guarded subject.
+#   COMMAND WORDS (`"$x" ...`, `eval X`) -- the lead ruling N-prime: a word whose value RESOLVES to a guarded subject
+#     entry is a call drive, with no source gate; an UNRESOLVABLE word is a drive only after a source that resolves to a
+#     GUARDED subject (kind from fxc_guarded, never listed), or to a file of the fixture's population that itself
+#     sources one (one level deep), earlier in the same file, in a scope enclosing the word. An
+#     unguarded subject keeps the source unit alone. `command X`/`builtin X` is a call of X.
+#   PAIRING, P1's rule: one fx_inproc pairs ONE drive, earlier on the same line or as the first word of the nearest
+#     preceding line that is neither blank nor a comment and carries no drive. A SOURCE of a guarded (or unresolvable)
+#     operand takes a pairing too, and a paired one inside a function body or a `( )`/`$( )` subshell COVERS the first
+#     entry call that follows it in that body (nested scopes included); every further call there needs its own
+#     fx_inproc. A paired source at file level covers nothing: its calls may run any number of times.
+#   THE fx_inproc UNIT (this header is its authority): for a GUARDED subject one in-process pass is one CALL of a
+#     function the subject defines, so fx_inproc goes on the line before each such call (or earlier on the same line);
+#     one fx_inproc on the line before the `.`/`source` of the subject covers the FIRST such call after it inside the
+#     same function body or `( )`/`$( )` subshell, and every further call needs its own. For an UNGUARDED subject with
+#     a shebang one pass is one SOURCE. P2 judges call SITES (static lines), while an `inproc:` row counts EXECUTIONS
+#     (one fx_inproc row per run of a paired line, judged by J3). lib/mutant.sh's own comment ("Call it once per pass, on the line before the
+#     `.`/`source` of the subject", citing P1) is SUPERSEDED by this text; the later remediation release updates it.
+#   A UNIT CHANGE, stated: until this arm lib/mutant.sh documented one fx_inproc per SOURCE. Fixtures converted on that
+#     documented unit -- ai-dlc-31's unit-change rows, its in-process conversions -- pair their sources exactly as it
+#     said; under the per-CALL unit those calls are OWED, and the ratchet carries them as owed against the push base
+#     they land on.
+#   MASKING: one cross-line quote stack. Single-quoted text is data across lines (a jq filter `else . end`), except
+#     the body of `bash -c '...'`/`sh -c "..."`, which is code run by a child bash and is scanned; a heredoc body is
+#     skipped through THE HEREDOC TRACKER; comments are dropped. The scan runs under LC_ALL=C (a UTF-8 locale made the
+#     awk die on a multibyte byte and lose every file after it), its exit status is read, and the files it opened must
+#     equal the files listed, else the join is REFUSED (rc 2).
+#   REMEDY TEXT names fx_inproc on the line before the drive. Inside a `bash -c` worker fx_inproc is not defined (a
+#     child bash inherits no unexported function; FXCOUNT_LOG does cross): `export -f fx_inproc` in the parent, or
+#     source lib/mutant.sh in the worker behind ok/bad stubs.
+# BLIND ROUTES, stated, not prevented: a call through a name built at run time beyond the fail-closed expansion rule;
+#   a subject function defined below its guard (never defined when sourced, so a same-named call is not counted);
+#   a call of a name the SAME file defines as a function on an earlier line, with no source of one of the fixture's
+#   subjects on a line between that definition and the call in a scope enclosing the call (file level, or the function
+#   body or subshell the call sits in), is read as the local function (the text order, not the
+#   run order: a definition inside dead code, or one the call reaches through another path, still shadows);
+#   a function defined with the `function` keyword (not parsed); code EXTRACTED from a declared subject into a renamed
+#   file (readset-skip's `$WORK/pool.sh`, `merge.sh` spans) is no pass of that subject, as BL-878 item 3's renamed
+#   mutant copies are not; a `case`, `in` or `esac` spelled as a bare word outside a case statement can misread the next `)` (`local case=x` and `$case` are excluded); an operand whose
+#   literal tail names a file other than its real target reads by that tail, fail-OPEN;
+#   positional resolution follows a caller only when the function name is defined in the population (a same-named
+#   function in two files of one fixture pools their callers);
+#   an ALIAS of a subject entry (`alias gm=gmain; gm`) is read as the unknown word gm, not as gmain: aliases are not
+#   expanded, so a drive spelled through one reads QUIET;
+#   the helper gate is one level deep: a source of a file that sources a file that sources the subject gates nothing;
+# ROUTES LEFT OPEN, measured with scratch variants of this scan. The scan itself flags, at this release's combined
+#   tree, 348 rows over 116 sites in 25 fixtures after remediation (530 rows over 217 sites in 43 fixtures before it,
+#   on main 62a88119c with this change). The route lists below were measured on that main 62a88119c tree.
+#   THE B ROUTE, the LARGER open route (execution through an UNGUARDED subject's functions after its counted source
+#   is not counted): 312 call sites in 350 rows over 4 fixtures, against the 116 sites the scan flags --
+#   backlog-receipt-efficiency 221 (control: it sources the unguarded backlog-receipt-binding/run.sh, then
+#   calls vin, seed, mut, record, ok, bad, note ...), story-evidence-receipts-mutants 75 and
+#   story-evidence-smoke-mutants 36 (story-evidence-receipts/run.sh), smoke-surface-ignored-mutants 18
+#   (smoke-surface-ignored/run.sh).
+#   GATED unresolvable command words (a word that resolves to nothing literal, with no guarded source in scope),
+#   126 sites in 212 (fixture, site) rows. By file:line --
+#     adversarial-shard-merge/lib.sh:1045 apply-drift-after-write/run.sh:598,745 apply-restamp-theirs/run.sh:465
+#     apply-restamp-worklist/run.sh:3399,3669,3944,4136 artifact-derivations/run.sh:429,733,802,816,1052
+#     check-24-adversarial-convergence/run.sh:547,549,1627,1751,3441,3479 consumer-suite-pool/matrix.sh:31
+#     consumer-suite-pool/run.sh:269 context-sensor/run.sh:120,128,275,645,706 derivation-differential/run.sh:539
+#     dispatch-model-guard/matrix.sh:31,99,105 dispatch-model-guard/run.sh:2782
+#     enforcement-map-derivations/run.sh:2241 enforcement-map-sites/run.sh:3569 file-mtime/run.sh:168
+#     fold-architect-ledger-join/run.sh:517 gate-adjudication/seed.sh:80 gate-transition/run.sh:641,643
+#     h2-attest-scripts-dir/run.sh:975,979,1031 handoff-record-carries-return/run.sh:410,418
+#     implementation-join-yield/run.sh:531 layer-adjudication-tier/run.sh:216,781,2039
+#     layer-catalog-collision/run.sh:134 layer-conforms-to/run.sh:217 layer-entry-unreadable/run.sh:285,559
+#     ledger-reverify/run.sh:6600,6603,6763 ledger-rotate/run.sh:119 mutation-red-replay/run.sh:635,641,677,682
+#     preclassify-rename-row/run.sh:593 presuite-present-key/run.sh:299 provenance-flagless-default/run.sh:542
+#     readset-sandbox-root-clause/run.sh:155
+#     readset-skip/run.sh:637,666,1196,1209,1585,1627,1676,1731,1777,2623,4655,5439
+#     readset-stage1-verdict/run.sh:807,809,812,813,1189 reconcile-emit-report/run.sh:184,280,290,297,2153,2677
+#     remediator-shard-join/run.sh:1079 remediator-shard-join/unit-reader-a.sh:129,135,143,661
+#     remediator-shard-join/unit-reader-b.sh:202,208,216,398 retired-contract-token/run.sh:406
+#     retired-layer-token/run.sh:148 retro-audit-scans/run.sh:1628 review-shard-merge/lib.sh:1865,4262
+#     review-shard-merge/run.sh:463 self-update-gate/run.sh:638,641,3761,4451,5325,5414
+#     settings-merge-unparseable-template/run.sh:285 snapshot-update-stamps/run.sh:447
+#     sprint-status-lifecycle/run.sh:134 story-corpus-sprint-slot/run.sh:137
+#     story-evidence-receipts-mutants/run.sh:145 story-evidence-scaffold/run.sh:137,142,173,176,492
+#     story-evidence-smoke-mutants/run.sh:97 story-provenance/run.sh:109,1133
+#     wait-beat-liveness/run.sh:2355,2356,4258,4301,4308 wait-stale-deliverable/run.sh:1138
+#   THE A2 ROUTE (an unresolvable source followed, in an enclosing scope, by an unresolvable word; gated shut),
+#   16 sites in 40 rows: readset-skip/run.sh:637,1209,1585,1676,1731,2623,4655,5439
+#   remediator-shard-join/unit-reader-a.sh:129,135,143,661 remediator-shard-join/unit-reader-b.sh:202,208,216,398
+# HOW THE FALSE-POSITIVE SET REACHED ITS FLOOR: see P2_NARROWING below the scan.
+FXC_P2_AWK='
+function base(p) { sub(/.*\//, "", p); return p }
+function xs(r) { gsub(/./, "X", r); return r }
+function dm(r) { gsub(/./, "X", r); return r }
+function cpush(k, open, i) { CT++; CK[CT] = k
+  if (open) { NSID++; SPAR[FI, NSID] = (CT > 1 ? CSID[CT - 1] : 0); CSID[CT] = NSID; SKND[FI, NSID] = k } else CSID[CT] = (CT > 1 ? CSID[CT - 1] : 0)
+  NTR++; TRP[NTR] = i; TRS[NTR] = CSID[CT] }
+function cpop(i) { if (CT > 0) CT--; NTR++; TRP[NTR] = i; TRS[NTR] = (CT > 0 ? CSID[CT] : 0) }
+function scope_at(p,   k, s) { s = LSC; for (k = 1; k <= NTR; k++) { if (TRP[k] > p) break; s = TRS[k] } return s }
+# casekw <code text>: track case ... in ... esac across lines. After `in` (of a case) and after `;;`, CASEPAT holds
+# until the `)` that ends the pattern: that `)` closes no subshell and is marked in CTERM as a command position.
+# A keyword is a whole word after a blank, an operator or the start of a chunk that does not follow a `$` (pc, the
+# character before the chunk), and before a blank, `;` or the end: `local case=x` and `$case` are no keywords.
+function casekw(ch, pc,   w) {
+  while (match(ch, /(^|[[:blank:];&|(])(case|in|esac)([[:blank:];]|$)|;;/)) {
+    w = substr(ch, RSTART, RLENGTH)
+    if (RSTART == 1 && pc == "$" && w !~ /^;;/) { ch = substr(ch, RSTART + RLENGTH); pc = ""; continue }
+    ch = substr(ch, RSTART + RLENGTH); pc = ""
+    if (w ~ /;;/) { if (CASEN > 0) { CASEPAT = 1; CASEPD = CT } }
+    else if (w ~ /esac/) { if (CASEN > 0) CASEN--; CASEPAT = 0; CASEPEND = 0 }
+    else if (w ~ /case/) { CASEN++; CASEPEND = 1 }
+    else if (CASEPEND) { CASEPEND = 0; CASEPAT = 1; CASEPD = CT } } }
+function cmask(s,   o, n, i, t, r, c, j, d, wk, e) {
+  o = ""; n = length(s); i = 1; NTR = 0; LSC = (CT > 0 ? CSID[CT] : 0); delete CTERM
+  while (i <= n) {
+    t = (CT > 0) ? CK[CT] : "C"; r = substr(s, i)
+    if (t == "S") { j = index(r, SQ); if (j == 0) return o xs(r)
+      o = o xs(substr(r, 1, j - 1)) SQ; i += j; cpop(i - 1); continue }
+    if (t == "D") { if (!match(r, /["\\$`]/)) return o dm(r)
+      o = o dm(substr(r, 1, RSTART - 1)); i += RSTART - 1; c = substr(s, i, 1)
+      if (c == "\"") { o = o c; cpop(i); i++; continue }
+      if (c == "\\") { o = o "XX"; i += 2; continue }
+      if (c == "$" && substr(s, i + 1, 1) == "(") { o = o "$("; cpush("P", 1, i); i += 2; continue }
+      o = o (c == "`" ? "X" : c); i++; continue }
+    if (!match(r, CODE_RE)) { casekw(r, substr(s, i - 1, 1)); return o r }
+    j = RSTART; casekw(substr(r, 1, j - 1), substr(s, i - 1, 1)); o = o substr(r, 1, j - 1); i += j - 1; c = substr(s, i, 1)
+    if (c == "#") { if (i == 1 || substr(s, i - 1, 1) ~ /[[:blank:];&|(]/) return o; o = o c; i++; continue }
+    if (c == "\\") { o = o "XX"; i += 2; continue }
+    if (c == SQ) { if (t == "W") { o = o c; cpop(i); i++; continue }
+      wk = (o ~ WORKER_RE); cpush(wk ? "W" : "S", wk, i); o = o c; i++; continue }
+    if (c == "\"") { if (t == "V") { o = o c; cpop(i); i++; continue }
+      wk = (o ~ WORKER_RE); cpush(wk ? "V" : "D", wk, i); o = o c; i++; continue }
+    if (c == "$") { d = substr(s, i + 1, 1)
+      if (d == "(") { o = o "$("; cpush("P", 1, i); i += 2; continue }
+      if (d == SQ) { for (j = i + 2; j <= n; j++) { c = substr(s, j, 1); if (c == "\\") { j++; continue } if (c == SQ) break }
+        if (j > n) { cpush("S", 0, i); return o "$" SQ xs(substr(s, i + 2)) }
+        o = o "$" SQ xs(substr(s, i + 2, j - i - 2)) SQ; i = j + 1; continue }
+      if (d == "{") { e = 1; for (j = i + 2; j <= n && e > 0; j++) { c = substr(s, j, 1); if (c == "{") e++; else if (c == "}") e-- }
+        if (e == 0) { o = o "$" xs(substr(s, i + 1, j - i - 1)); i = j; continue } }
+      o = o c; i++; continue }
+    if (c == "(") { o = o c; if (!(CASEPAT && CT <= CASEPD)) cpush("Q", 1, i); i++; continue }
+    if (c == ")") { o = o c; if (CASEPAT && CT <= CASEPD) { CASEPAT = 0; CTERM[i] = 1; i++; continue } if (t == "P" || t == "Q") cpop(i); i++; continue }
+    if (c == "{") { o = o c; if ((i == 1 || substr(s, i - 1, 1) ~ /[[:blank:];&|(){]/) && (i == n || substr(s, i + 1, 1) ~ /[[:blank:]]/)) cpush("B", 1, i); i++; continue }
+    if (c == "}") { o = o c; if (t == "B" && (i == 1 || substr(s, i - 1, 1) ~ /[[:blank:];]/)) cpop(i); i++; continue }
+    o = o c; i++
+  }
+  return o
+}
+function cmdpos(m, i,   pre) { pre = substr(m, 1, i - 1)
+  while (sub(/(^|[[:blank:]])[A-Za-z_][A-Za-z0-9_]*=[^[:blank:]()`;&|]*[[:blank:]]+$/, "", pre)) ;
+  sub(/[[:blank:]]+$/, "", pre)
+  if (pre ~ /=\($/) return 0
+  # The `)` closing a case pattern (cmask marks it in CTERM) opens a command position: `a) gmain ;;`.
+  if (pre ~ /\)$/ && (length(pre) in CTERM)) return 1
+  # The first word of a worker body on the same line: `bash -c "gmain"`, `sh -c 'gmain'`.
+  if ((substr(pre, length(pre)) == "\"" || substr(pre, length(pre)) == SQ) && substr(pre, 1, length(pre) - 1) ~ WORKER_RE) return 1
+  return ((pre == "" && !CONT && LCODE) || pre ~ /[;&|({!`]$/ || pre ~ /(^|[[:blank:];&|(){}!`])(then|do|else|if|elif|while|until|time)$/) }
+function opnd(s, i,   r, w, c, q, j, n, dp, lead) {
+  r = substr(s, i); match(r, /^[[:blank:]]*/); lead = RLENGTH; r = substr(r, lead + 1); w = ""; q = ""; n = length(r); dp = 0
+  for (j = 1; j <= n; j++) { c = substr(r, j, 1)
+    if (c == "$" && substr(r, j + 1, 1) == "(") dp++
+    else if (c == ")" && dp > 0) { dp--; w = w c; continue }
+    if (q == "") { if (dp == 0 && c ~ /[[:blank:];&|)<>]/) break; if (c == SQ || c == "\"") { q = c; continue }; w = w c; continue }
+    if (c == q) { q = ""; continue }; w = w c }
+  OPEND = i + lead + j - 1
+  return w }
+function tailof(v,   t) { if (index(v, "$") == 0) return base(v); t = v; sub(/.*\$/, "", t); return (t ~ /\//) ? base(v) : "?" }
+function casepat(q, e,   t, a, b) { if (substr(M, e) !~ /^(\|[^[:blank:];&()]*)*\)/) return 0
+  t = substr(M, 1, q - 1); a = gsub(/\(/, "(", t); b = gsub(/\)/, ")", t); return a <= b }
+function valclass(v,   t) { t = v; sub(/[[:blank:]].*/, "", t)
+  if (t ~ /^[A-Za-z_][^=]*=/ || t ~ /\(\)$/) return "/"
+  if (v ~ /^\$\((command[[:blank:]]+-[vV]|which|type[[:blank:]]+-[Pp])[[:blank:]]/) return "/"
+  if (index(v, "$") == 0) { if (index(v, "/")) return "/"; sub(/[[:blank:]].*/, "", v); return v }
+  t = v; sub(/.*\$/, "", t); return (t ~ /\//) ? "/" : "?" }
+function vt(v) { return VMODE ? valclass(v) : tailof(v) }
+function opres_e(w, f) {
+  if (index(w, "$") == 0) return "R " valclass(w)
+  if (valclass(w) == "/") return "R /"
+  return "W" }
+function func_of(sc) { while (sc > 0) { if ((FI SUBSEP sc) in FUNSC) return FUNSC[FI, sc]; sc = SPAR[FI, sc] } return "" }
+function newfile() { CASEN = 0; CASEPAT = 0; CASEPEND = 0; CONT = 0; CT = 0; HN = 0; HI = 0; NSID = 0; LASTSIG = 0; }
+# shadowed <file index> <site>: a call of a name the SAME file defines as a function earlier, with no un-shadowing
+# source between that definition and the call, is the local function, not the subject entry. EVERY source un-shadows
+# (a subject, an unresolvable operand, a fixture-local file that may source one: fail-closed) except one resolving only
+# to declared LIBRARY subjects, and except one sitting inside a `( )`, `$( )` or worker body that does not also
+# enclose the call: a closed subshell cannot redefine the name for it. A `{ }` group or a function body is NOT closed:
+# `{ . g.sh; }` and `ld(){ . g.sh; }; ld` both redefine it in the calling shell.
+function posbad(f) { return ((CFI SUBSEP f) in SETB) && (POSLINE > SETB[CFI, f] || (POSLINE == SETB[CFI, f] && POSCOL >= SETBC[CFI, f])) }
+function isanc(fi, a, c) { while (c > 0 && c != a) c = SPAR[fi, c]; return c == a }
+# egate <file index> <site>: a source RESOLVING to a guarded subject of the fixture (kind from fxc_guarded), or to a
+# fixture-local population file that itself sources one (THE HELPER GATE, one level deep), earlier in the same file,
+# in a scope enclosing the site. An unguarded subject keeps the source unit alone; an unresolvable source gates
+# nothing here.
+function egate(fi, k,   j) {
+  for (j = 1; j < k; j++) if ((((fi SUBSEP j) in SSG) || ((fi SUBSEP j) in SSH2)) && isanc(fi, SC[fi, j], SC[fi, k])) return 1
+  return 0 }
+function shadowed(fi, k,   d, j, a, sub_) { d = SDEF[fi, k] + 0; if (d == 0) return 0
+  for (j = 1; j <= NS[fi]; j++) {
+    if (!((fi SUBSEP j) in SSRC) || SL[fi, j] <= d || SL[fi, j] > SL[fi, k]) continue
+    sub_ = 0; a = SC[fi, j]
+    while (a > 0 && !isanc(fi, a, SC[fi, k])) { if (SKND[fi, a] ~ /^[PQWV]$/) { sub_ = 1; break } a = SPAR[fi, a] }
+    if (!sub_) return 0 }
+  return 1 }
+function nrmt(s) { gsub(/[[:blank:]]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+function addsite(ty, q, w, res, f, raw,   k, pfx) { NS[FI]++; k = NS[FI]; SX[FI, k] = nrmt(S0); SDEF[FI, k] = NEXTDEF
+  ST[FI, k] = ty; SL[FI, k] = FNR; SW[FI, k] = w; SR[FI, k] = res; SC[FI, k] = scope_at(q); SFN[FI, k] = f; SRW[FI, k] = raw; SQC[FI, k] = q
+  pfx = substr(M, 1, q - 1); SNF[FI, k] = gsub(/fx_inproc/, "&", pfx); PREV[FI, FNR] = LASTSIG
+  if (WCT > 0) SWK[FI, k] = 1 }
+function opres(o) { return (index(o, "$") == 0 || tailof(o) != "?") ? "R " base(o) : "W" }
+function argn(s, i, n,   k, w) { for (k = 1; k <= n; k++) { if (i > length(s)) return "\001"; w = opnd(s, i); i = OPEND } return w }
+# vres <value> <enclosing function> <levels left> <the name being assigned>: the resolution of one shell word, as a
+# space-led list of tails (VMODE 0: basenames; VMODE 1: command classes, `/` a program path) with `?` for unresolvable.
+function vres(v, f, lvl, self,   x, d, r, k) {
+  if (v == "$@" || v == "$*" || v == "${@}" || v == "${*}" || v ~ /^\$\{[@*]:[0-9]+(:[0-9]+)?\}$/) v = "$1"
+  if (match(v, /^\$\{[A-Za-z_0-9]+:?[-=][^}]*\}$/)) { x = substr(v, 3); d = x; sub(/:?[-=].*/, "", x); sub(/^[A-Za-z_0-9]+:?[-=]/, "", d); sub(/\}$/, "", d)
+    r = (d != "") ? vres(d, f, 0, self) : ""
+    if (x != self) r = r vres("$" x, f, lvl, self)
+    return (r == "") ? " ?" : r }
+  if (match(v, /^\$\{?[1-9]\}?$/)) { x = v; gsub(/[${}]/, "", x); if (!(lvl > 0 && f != "")) return " ?"
+    if (posbad(f)) return " ?"
+    return posall(f, lvl - 1) }
+  if (match(v, /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/)) { x = v; gsub(/[${}]/, "", x)
+    if (VMODE && x == "BASH") return " /"
+    if (lvl <= 0) return " ?"
+    r = ""; for (k = 1; k <= BUFNF[CFI]; k++) r = r asg_tails(k, x, lvl - 1)
+    return (r == "") ? " ?" : r }
+  return " " vt(v) }
+# asg_tails/vres read the assignment buffers of file CFI (the context file); posall switches CFI to each caller file.
+function asg_tails(k, nm, lvl,   m, p, q, v, r, svl, svc) { m = BM[CFI, k]; r = ""; p = 0
+  while ((q = index(substr(m, p + 1), nm "=")) > 0) { q += p
+    if (q == 1 || substr(m, q - 1, 1) !~ /[A-Za-z0-9_$]/) { v = opnd(BS[CFI, k], q + length(nm) + 1); if (v != "") { svl = POSLINE; svc = POSCOL; POSLINE = BLN[CFI, k]; POSCOL = q; r = r vres(v, BF[CFI, k], lvl, nm); POSLINE = svl; POSCOL = svc } }
+    p = q + length(nm) }
+  if (m ~ ("(^|[^A-Za-z0-9_])for[[:blank:]]+" nm "([^A-Za-z0-9_]|$)")) r = r " ?"
+  if (m ~ /(^|[^A-Za-z0-9_])read[[:blank:]]/ && m ~ ("[[:blank:]]" nm "([^A-Za-z0-9_]|$)")) r = r " ?"
+  return r }
+# posall <function> <levels left>: OPTION S, index-free. EVERY argument of EVERY command-position call of the function
+# in ANY file of the current fixture scanned population (PJSET), each resolved in the context of its caller file, as
+# one union: which positional a word names, and any shift before it, are not read. An argument list ends at the first
+# operator or at the end of the line; an empty quoted argument adds nothing. No caller, or callers passing no argument:
+# unresolvable.
+function posall(f, lvl,   k, r, a, sv, c, m, i, t, svl, svc) { r = ""; sv = CFI; c = 0
+  for (k = 1; k <= GCN[f]; k++) { if (!(GC_FI[f, k] in PJSET)) continue; c++; CFI = GC_FI[f, k]; i = GC_P[f, k]; t = LTXT[CFI, GC_L[f, k]]
+    for (m = 1; m <= 64; m++) { a = argn(t, i, 1); if (a == "\001") break
+      if (a == "") { if (OPEND > length(t) || substr(t, OPEND, 1) ~ /[;&|)<>]/) break; i = OPEND; continue }
+      i = OPEND; svl = POSLINE; svc = POSCOL; POSLINE = GC_L[f, k]; POSCOL = GC_P[f, k]; r = r vres(a, GC_F[f, k], lvl, ""); POSLINE = svl; POSCOL = svc } }
+  CFI = sv
+  return (c == 0 || r == "") ? " ?" : r }
+# sres <file index> <site>: the site resolution for the CURRENT fixture (the population decides positional callers).
+function sres(fi, k,   r) { if (SR[fi, k] != "W") return SR[fi, k]
+  if ((fi SUBSEP k) in SRM) return SRM[fi, k]
+  CFI = fi; VMODE = (ST[fi, k] == "E"); POSLINE = SL[fi, k]; POSCOL = SQC[fi, k]; r = "R" vres(SRW[fi, k], SFN[fi, k], 2, ""); SRM[fi, k] = r; return r }
+function finalize() { }
+function kindof(p) { return (p in GSUB) ? "G" : ((p in MISS) ? "U" : ((p in SHB && SHB[p]) ? "U" : "L")) }
+function disp(p) { if (substr(p, 1, length(FXROOT)) == FXROOT) return substr(p, length(FXROOT) + 1); return p }
+function rdisp(p) { if (substr(p, 1, length(RROOT)) == RROOT) return substr(p, length(RROOT) + 1); return p }
+BEGIN { FS = "\t"; GA = ENVIRON["GA"]; GB = ENVIRON["GB"]; FXROOT = ""
+  CODE_RE = "[#\"\\\\$(){}`" SQ "]"
+  # A word boundary: an operator, a blank, or the quote that opens a `bash -c "..."`/`sh -c '...'` worker body (inside
+  # a plain string every character is masked to X, so a quote there never precedes a word).
+  BND = "[[:blank:];&|(){}!`\"" SQ "]"
+  WORKER_RE = "(^|[^A-Za-z0-9_])([Bb][Aa])?[Ss][Hh]\"?[[:blank:]]+(-[A-Za-z]+[[:blank:]]+)*-[A-Za-z]*c[[:blank:]]+$"
+  # OPENED counts the listed files this awk CAN open (an empty one included: it never reaches FNR == 1). getline
+  # answers -1 for an unopenable file, which the shell then sees as opened != listed.
+  # An unopenable file is DROPPED from ARGV (this awk would otherwise die on it), so opened != listed is what refuses.
+  for (i = 2; i < ARGC; i++) { if ((getline tl < ARGV[i]) < 0) { UNREAD++; ARGV[i] = "" } else close(ARGV[i]) } }
+FILENAME == ARGV[1] { if ($1 == "G") GSUB[$2] = 1; else if ($1 == "M") MISS[$2] = 1; else if ($1 == "Q") QSET[$2] = 1
+  else if ($1 == "S") { if (!(($2 SUBSEP $3) in SSEEN)) { SSEEN[$2, $3] = 1; NSB[$2]++; SBP[$2, NSB[$2]] = $3; if (!($2 in FXSEEN)) { FXSEEN[$2] = 1; FXS[++FXN] = $2 } } }
+  else if ($1 == "J") { if (!(($2 SUBSEP $3) in JSEEN)) { JSEEN[$2, $3] = 1; NJ[$2]++; JP[$2, NJ[$2]] = $3; if (!($2 in FXSEEN)) { FXSEEN[$2] = 1; FXS[++FXN] = $2 } } }
+  else if ($1 == "ROOT") { FXROOT = $2 "/core/fixtures/"; RROOT = $2 "/" }
+  next }
+FNR == 1 { OCC[FILENAME]++; o = OCC[FILENAME] - ((FILENAME in QSET) ? 1 : 0); POPF = (o <= 0) ? 0 : ((o == 1) ? 1 : 2); PH_STOP = 0
+  if (POPF == 0) SHB[FILENAME] = (substr($0, 1, 2) == "#!")
+  else if (POPF == 2) { FI = ++NPF; PIDX[FILENAME] = FI; PNAME[FI] = FILENAME; newfile() } }
+POPF == 0 { if (!(FILENAME in GSUB) || PH_STOP) next
+  l = $0; sub(/\r$/, "", l); if (l == GA || l == GB) { PH_STOP = 1; next }
+  if (l ~ /^[A-Za-z_][A-Za-z0-9_]*[[:blank:]]*\(\)/) { nm = l; sub(/[[:blank:]]*\(.*/, "", nm); FN[FILENAME, nm] = 1; FNU[nm] = 1 }
+  next }
+# THE DEFINITIONS PASS: each population file is listed twice; its first read only collects every name the file
+# defines as a function, so a call is recorded (for positional resolution) wherever in the population it appears.
+POPF == 1 { if ($0 ~ /^[[:blank:]]*(function[[:blank:]]+)?[A-Za-z_][A-Za-z0-9_]*[[:blank:]]*\(\)/) { nm = $0; sub(/^[[:blank:]]*(function[[:blank:]]+)?/, "", nm); sub(/[[:blank:]]*\(.*/, "", nm); DEFN[nm] = 1 } next }
+{ s = $0; sub(/\r$/, "", s); S0 = s }
+hd_body(s) { LASTSIG = FNR; next }
+{ st = (CT > 0) ? CK[CT] : "C"; LCODE = (st != "S" && st != "D")
+  M = hd_arith(cmask(s)); WCT = 0; for (k = 1; k <= CT; k++) if (CK[k] == "W" || CK[k] == "V") WCT = 1
+  opens_m(s, M)
+  if (M ~ /^[[:blank:]]*$/) next
+  if (index(M, "=") || M ~ /(for|read)[[:blank:]]/) { BUFNF[FI]++; BM[FI, BUFNF[FI]] = M; BS[FI, BUFNF[FI]] = s; BF[FI, BUFNF[FI]] = func_of(LSC); BLN[FI, BUFNF[FI]] = FNR }
+  # A function body opened on this line is the scope of that function before the `set --` below reads it (a one-line body).
+  if (match(M, /^[[:blank:]]*[A-Za-z_][A-Za-z0-9_]*[[:blank:]]*\(\)[[:blank:]]*[{(]/)) {
+    nm = M; sub(/^[[:blank:]]*/, "", nm); sub(/[[:blank:]]*\(.*/, "", nm)
+    for (k = 1; k <= NTR; k++) if (TRP[k] == RLENGTH) { FUNSC[FI, TRS[k]] = nm; break } }
+  # A `set --` in a function makes every positional of that function read after it unresolvable (gated). A `shift` is
+  # not read at all: OPTION S resolves a positional to the union of every caller argument, whatever its index.
+  if (match(M, /(^|[;&|({[:blank:]])set[[:blank:]]+--/)) { sf = func_of(scope_at(RSTART + 1)); if (!((FI SUBSEP sf) in SETB)) { SETB[FI, sf] = FNR; SETBC[FI, sf] = RSTART } }
+  if (M ~ /^[[:blank:]]*fx_inproc([[:blank:]]|$)/) FXL[FI, FNR] = 1
+  if (M ~ /^[[:blank:]]*[A-Za-z_][A-Za-z0-9_]*[[:blank:]]*\(\)/) { nm = M; sub(/^[[:blank:]]*/, "", nm); sub(/[[:blank:]]*\(.*/, "", nm); LDL[FI, nm] = FNR }
+  # sources
+  p = 0
+  while (match(substr(M, p + 1), /(\.|source)[[:blank:]]/)) { q = p + RSTART; kw = (substr(M, q, 1) == ".") ? 1 : 6; p = q + kw - 1
+    if (q > 1 && substr(M, q - 1, 1) ~ /[A-Za-z0-9_.\/-]/) continue
+    if (!cmdpos(M, q)) continue
+    o = opnd(s, q + kw); if (o == "") continue
+    f = func_of(scope_at(q)); addsite("S", q, o, opres(o), f, o) }
+  # command-position words: subject entries, local functions, eval, command/builtin, expansions
+  hit = 0; nw = split(M, WW, /[^A-Za-z0-9_]+/)
+  for (k = 1; k <= nw; k++) if ((WW[k] in FNU) || (WW[k] in DEFN) || WW[k] == "eval" || WW[k] == "command" || WW[k] == "builtin") { hit = 1; break }
+  if (hit) { p = 0
+    while (match(substr(M, p + 1), /[A-Za-z_][A-Za-z0-9_]*/)) { q = p + RSTART; w = substr(M, q, RLENGTH); p = q + RLENGTH - 1
+      if (q > 1 && substr(M, q - 1, 1) !~ BND) continue
+      nx = substr(M, p + 1, 1); if (nx == "=" || nx == "(" || nx == "." || nx == "/" || nx == "-") continue
+      if (!((w in FNU) || (w in DEFN) || w == "eval" || w == "command" || w == "builtin")) continue
+      if (!cmdpos(M, q) || casepat(q, p + 1)) continue
+      if (w == "command" || w == "builtin") { if (match(substr(M, p + 1), /^[[:blank:]]+[A-Za-z_][A-Za-z0-9_]*/)) { w = substr(M, p + 1, RLENGTH); sub(/^[[:blank:]]+/, "", w); if (w in FNU) { NEXTDEF = LDL[FI, w] + 0; addsite("C", q, w, "", ""); NEXTDEF = 0 } } continue }
+      if (w == "eval") { v = opnd(s, p + 1); sub(/^[[:blank:]]+/, "", v); sub(/[[:blank:]].*/, "", v)
+        f = func_of(scope_at(q)); addsite("E", q, "eval " v, (v == "") ? "R ?" : opres_e(v, f), f, v); continue }
+      if (w in DEFN) { GCN[w]++; gn = GCN[w]; GC_FI[w, gn] = FI; GC_L[w, gn] = FNR; GC_P[w, gn] = p + 1; GC_F[w, gn] = func_of(scope_at(q)); LTXT[FI, FNR] = s }
+      if (w in FNU) { NEXTDEF = LDL[FI, w] + 0; addsite("C", q, w, "", ""); NEXTDEF = 0 } } }
+  if (index(M, "$")) { p = 0
+    while (match(substr(M, p + 1), /"?\$[{A-Za-z_]/)) { q = p + RSTART; p = q + RLENGTH - 1
+      if (q > 1 && substr(M, q - 1, 1) !~ BND) continue
+      if (!cmdpos(M, q)) continue
+      w = opnd(s, q); if (casepat(q, OPEND)) continue
+      f = func_of(scope_at(q)); addsite("E", q, w, opres_e(w, f), f, w) } }
+  LASTSIG = FNR; CONT = (s ~ /\\$/) }
+function entry(fx, w,   k, p) { for (k = 1; k <= NSB[fx]; k++) { p = SBP[fx, k]; if (KD[p] == "G" && (ACTALL || (p in ACT)) && ((p SUBSEP w) in FN)) return p } return "" }
+END {
+  for (x = 1; x <= FXN; x++) { fx = FXS[x]; HASU = 0; HASG = 0; delete BK
+    for (k = 1; k <= NSB[fx]; k++) { p = SBP[fx, k]; KD[p] = kindof(p); if (KD[p] == "U") HASU = 1; if (KD[p] == "G") HASG = 1; BK[base(p)] = BK[base(p)] " " p }
+    if (!HASU && !HASG) continue
+    ACTALL = 0; delete ACT; delete FG; delete SSRC; delete SSG; delete SSU; delete PJSET; delete SRM
+    for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi != "") PJSET[fi] = 1 }
+    for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi == "") continue
+      for (k = 1; k <= NS[fi]; k++) { if (ST[fi, k] != "S") continue
+        n = split(substr(sres(fi, k), 2), RB, " ")
+        for (r = 1; r <= n; r++) { if (RB[r] == "?") { if (HASG) ACTALL = 1; FG[fi] = 1; SSRC[fi, k] = 1; SSU[fi, k] = 1; continue }
+          if (!(RB[r] in BK)) { SSRC[fi, k] = 1; continue }; m = split(BK[RB[r]], BP, " ")
+          for (i = 1; i <= m; i++) { FG[fi] = 1; if (KD[BP[i]] != "L") SSRC[fi, k] = 1; if (KD[BP[i]] == "G") { ACT[BP[i]] = 1; SSG[fi, k] = 1 } } } } }
+    # THE HELPER GATE, one level deep (fail-closed): a source whose operand resolves to another file of the
+    # fixture population that itself sources a guarded subject (anywhere in it) gates as a guarded source (SSH2, read by egate).
+    delete HSG; delete PBN; delete SSH2
+    for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi == "") continue; PBN[base(PNAME[fi])] = PBN[base(PNAME[fi])] " " fi
+      for (k = 1; k <= NS[fi]; k++) if ((fi SUBSEP k) in SSG) { HSG[fi] = 1; break } }
+    for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi == "") continue
+      for (k = 1; k <= NS[fi]; k++) { if (ST[fi, k] != "S" || ((fi SUBSEP k) in SSG)) continue
+        n = split(substr(sres(fi, k), 2), RB, " ")
+        for (r = 1; r <= n; r++) { if (!(RB[r] in PBN)) continue; m = split(PBN[RB[r]], BP, " ")
+          for (i = 1; i <= m; i++) if ((BP[i] in HSG) && BP[i] != fi) SSH2[fi, k] = 1 } } }
+    for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi == "") continue
+      delete DRV; delete USED; delete AVU; delete COV
+      for (k = 1; k <= NS[fi]; k++) { L = SL[fi, k]; ty = ST[fi, k]; w = SW[fi, k]; drive = 0; cov = 0; why = ""
+        if (ty == "S") { n = split(substr(sres(fi, k), 2), RB, " ")
+          for (r = 1; r <= n; r++) { if (RB[r] == "?") { cov = cov || HASG; if (HASU && why == "") { drive = 1; why = "the source of " w ", an operand no literal path, same-file assignment or caller in the population resolves, in a fixture declaring an unguarded bash subject" } continue }
+            if (!(RB[r] in BK)) continue; m = split(BK[RB[r]], BP, " ")
+            for (i = 1; i <= m; i++) { if (KD[BP[i]] == "G") cov = 1; else if (KD[BP[i]] == "U") { drive = 1; why = "the source of unguarded bash subject " rdisp(BP[i]) " (" w ")" } } } }
+        else if (ty == "C") { p = shadowed(fi, k) ? "" : entry(fx, w); if (p != "") { drive = 1; why = "the call of " w ", an entry function of guarded subject " rdisp(p) } }
+        else { n = split(substr(sres(fi, k), 2), RB, " "); ent = ""; unr = 0
+          for (r = 1; r <= n; r++) { if (RB[r] == "?") unr = 1; else if (entry(fx, RB[r]) != "") { ent = RB[r]; break } }
+          # N-prime: a word resolving to a guarded subject entry is a call, ungated; an unresolvable word is a drive only
+          # after a source resolving to a guarded subject in an enclosing scope (egate).
+          if (ent != "") { drive = 1; why = "the command word " w ", which resolves to " ent ", an entry function of a guarded subject" }
+          else if (unr && egate(fi, k)) { drive = 1; why = "the command word " w ", which resolves to nothing literal, after a source of a guarded subject in an enclosing scope (fail-closed)" } }
+        if (!drive && !cov) continue
+        paired = 0
+        if (SNF[fi, k] > USED[L] + 0) { USED[L]++; paired = 1 }
+        else { P = PREV[fi, L]; if (!(L in AVU) && P > 0 && ((fi SUBSEP P) in FXL) && !(P in DRV)) { AVU[L] = 1; paired = 1 } }
+        DRV[L]++
+        if (cov && paired && SC[fi, k] > 0 && !(SC[fi, k] in COV)) COV[SC[fi, k]] = 1
+        if (drive && !paired && ty == "C") { a = SC[fi, k]
+          while (a > 0) { if (a in COV) { if (COV[a] == 1) { COV[a] = 2; paired = 1 } break } a = SPAR[fi, a] } }
+        if (!drive || paired) continue
+        print "E\t" fx "\t" disp(PNAME[fi]) ":" L "\t" why " -- an unrouted in-process pass: call fx_inproc <subject> on the line before it and declare the pass as an inproc: row" ((fi SUBSEP k) in SWK ? "; this drive runs in a bash -c worker, where fx_inproc is undefined unless the parent runs export -f fx_inproc or the worker sources lib/mutant.sh behind ok/bad stubs" : "") "\t" SX[fi, k] } } }
+  print "OPENED\t" (ARGC - 2 - UNREAD) }
+'
+
+# P2_NARROWING -- HOW THE FALSE-POSITIVE SET REACHED ITS FLOOR, measured with this scan over the whole tree at the
+# change that shipped it (273 run.sh; rows are (fixture, site) pairs, a site shared by a shard stub or a declarer
+# counted once per fixture):
+#   4578  the contract grammar as first written. Two scanner errors carried it: the assignment-prefix strip in
+#         cmdpos ate `o="$(f "$d"` whole, so every argument inside a `$( )` read as a command word; and a
+#         backslash-continued line's first word read as a command.  -> 1133: the strip stops at `( ) \` ; & |`, and a
+#         continuation line opens no command position.
+#   1133  `"$X" args` program starts read as drives by the expansion rule. -> 774: arithmetic `$(( ))`/`(( ))` is
+#         masked, and an expansion command word is resolved through its assignments: a value with a `/` (a path, so a
+#         program start the counter already sees) or a non-entry word is no drive; only an entry name or an
+#         unresolvable value is.
+#   774   `eval NAME=...`, `eval "f() {...}"`, case patterns (`"$X"|y)`), `${X:-bash}`, `$(command -v date)`, `$BASH`.
+#         -> 674: eval is judged by the first word it evaluates (an assignment or a definition is inert); a word
+#         followed by `)` with no open `(` before it is a case pattern; `${X:-d}` reads d; `$(command -v X)`,
+#         `$(which X)` and `$BASH` are program paths.
+#   674   positional operands (`. "$1"`, `local v="$2"`) unresolvable. -> 595: P2-U, the leveled resolver (a variable,
+#         one level of `$OTHER` inheritance or of same-file call-site arguments).
+#   595   fixture-local functions sharing a subject function name (adversarial-shard-merge's sha_of, readset-stage1-
+#         verdict's seed_run), array literals `t=("$1")`, and `--until` read as the keyword. -> 571: a name the
+#         fixture's own files define is the local function; `=(` opens no command position; a keyword needs a blank
+#         or an operator before it.
+#   571   ANSI-C `$'...\'...'` read as a quote toggle, desynchronising the cross-line stack. -> 566.
+#   The stack was then audited for files ending inside a quote (an unbalanced end means a desync): 5 files. Fixing the
+#   three causes -- a `<<` inside a multi-line string opened a heredoc (opens_m now reads the cross-line mask), a nested
+#   `${a[@]+"${a[@]}"}` closed at its inner brace, and `( export A=1; f )` stripped as one assignment -- left 0 files
+#   unbalanced and UNCOVERED rows the desync had hidden (layer-contract-conformance:866/869/1035, the contract's
+#   `( vem_entry` spelling), for a floor of 579 rows over 242 distinct sites in 43 fixtures: 140 entry calls and 4
+#   unguarded sources (true unrouted passes, every one pre-existing), 62 unresolvable sources and 36 unresolvable
+#   command words (the contract's FAIL-CLOSED rule firing where no literal resolves; each is enumerated in the
+#   release's report, and none is a scanner misreading).
+#   THEN, the tip adversary's B1 (a `{ }` group or function body is no closed scope) and B2 (case arms read) moved it to
+#   582; the lead ruling N-prime (command words: an entry name fires ungated, an unresolvable word only after a guarded
+#   source in scope; positionals through callers anywhere in the population, read by index) to 522 rows over 214 sites
+#   in 42 fixtures: 357 TRUE (entry calls, entry-resolving words, unguarded sources) and 165 GATED (unresolvable sources
+#   in a fixture with an unguarded subject, and unresolvable words after a guarded source).
+#   THEN the one-level helper gate (13 sources on the corpus gate as helpers, the row set unchanged) and the lead
+#   ruling OPTION S (a positional reads the union of every caller argument, index-free) moved it to 524 rows over 215
+#   sites in 43 fixtures, 357 TRUE and 167 GATED, on this tree: 6 rows added, every one a PHANTOM -- readset-skip/run.sh:3242
+#   in its 4 fixtures and spec-join-integrity/run.sh:1651 (a `. "$1"` whose other caller arguments are unresolvable),
+#   remediator-shard-join/unit-reader-a.sh:113 (the `"$@"` after `shift` picks up the mutant path the shift drops) --
+#   and 4 removed, readset-skip/run.sh:7856 in its 4 fixtures (a `. "$3"` behind `${3:-}`: a caller passing no third
+#   argument read as unresolvable by index adds nothing to the union, and every third argument passed resolves).
+# fxc_p2_scan <root> <work dir>: ARM P2's scan over <root>/core/fixtures, writing <work>/p2.raw (its `E` rows and one
+# `OPENED\t<n>` row). Six execs whatever the fixture count, none per fixture: the inputs.decl parse (FXC_REQ_AWK over
+# every file), fxc_impl_of over every run.sh, two `sort -u`, ONE fxc_guarded over the union of subjects, and ONE scan
+# awk over the plan, the subjects and the population. Returns 2 (REFUSED) when the scan awk exits non-zero or opened a
+# number of files other than the number listed: an awk that died on one file silently drops every file after it.
+fxc_p2_scan() {
+  local root="$1" w="$2" d fx f p mark impl T=$'\t' nq rc k v opened=""
+  : > "$w/p2.plan"; : > "$w/p2.subj"; : > "$w/p2.pop"; : > "$w/p2.raw"
+  set --
+  for d in "$root"/core/fixtures/*/; do
+    d="${d%/}"
+    [ -f "$d/run.sh" ] && [ ! -e "$d/.undeclarable" ] && [ -f "$d/inputs.decl" ] || continue
+    if [ $# -eq 0 ]; then set -- "$d/inputs.decl"; else set -- "$@" "$d/inputs.decl"; fi
+  done
+  [ $# -gt 0 ] || { printf 'OPENED\t0\n' > "$w/p2.raw"; return 0; }
+  LC_ALL=C awk -v tag=1 "$FXC_REQ_AWK" "$@" > "$w/p2.req" || return 2
+  for f in "$@"; do
+    d="${f%/inputs.decl}"; fx="${d##*/}"
+    for p in "$d"/*.sh; do [ -f "$p" ] && printf 'J\t%s\t%s\n' "$fx" "$p" >> "$w/p2.plan" && printf '%s\n' "$p" >> "$w/p2.pop"; done
+  done
+  while IFS="$T" read -r mark f p; do
+    d="${f%/inputs.decl}"; fx="${d##*/}"
+    case "$p" in core/fixtures/*.sh) [ -f "$root/$p" ] && printf 'J\t%s\t%s\n' "$fx" "$root/$p" >> "$w/p2.plan" && printf '%s\n' "$root/$p" >> "$w/p2.pop" ;; esac
+    [ "$mark" = '!' ] || continue
+    fxc_subject_kind "$root/$p"; [ "$FXC_KIND" = bash ] || continue
+    printf 'S\t%s\t%s\n' "$fx" "$root/$p" >> "$w/p2.plan"
+    if [ ! -f "$root/$p" ]; then printf 'M\t%s\n' "$root/$p" >> "$w/p2.plan"
+    else printf '%s\n' "$root/$p" >> "$w/p2.subj"; fi
+  done < "$w/p2.req"
+  # Shard stubs: the IMPL's run.sh and its directory's .sh, judged under the stub's own subjects.
+  set --
+  for f in "$root"/core/fixtures/*/run.sh; do
+    d="${f%/run.sh}"
+    [ ! -e "$d/.undeclarable" ] && [ -f "$d/inputs.decl" ] || continue
+    if [ $# -eq 0 ]; then set -- "$f"; else set -- "$@" "$f"; fi
+  done
+  [ $# -gt 0 ] && { fxc_impl_of "$@" > "$w/p2.impl" || return 2; }
+  [ -f "$w/p2.impl" ] || : > "$w/p2.impl"
+  while IFS="$T" read -r f impl; do
+    [ "$impl" != '!' ] || continue
+    d="${f%/run.sh}"; fx="${d##*/}"
+    for p in "$root/core/fixtures/$impl"/*.sh; do [ -f "$p" ] && printf 'J\t%s\t%s\n' "$fx" "$p" >> "$w/p2.plan" && printf '%s\n' "$p" >> "$w/p2.pop"; done
+  done < "$w/p2.impl"
+  LC_ALL=C sort -u "$w/p2.subj" > "$w/p2.subjs" || return 2
+  LC_ALL=C sort -u "$w/p2.pop" > "$w/p2.pops" || return 2
+  set --
+  while IFS= read -r p; do printf 'Q\t%s\n' "$p" >> "$w/p2.plan"; if [ $# -eq 0 ]; then set -- "$p"; else set -- "$@" "$p"; fi; done < "$w/p2.subjs"
+  nq=$#
+  if [ "$nq" -gt 0 ]; then fxc_guarded "$@" >> "$w/p2.plan"; fi
+  # The population is listed TWICE: the first read collects function definitions, the second scans.
+  while IFS= read -r p; do if [ $# -eq 0 ]; then set -- "$p"; else set -- "$@" "$p"; fi; done < "$w/p2.pops"
+  while IFS= read -r p; do set -- "$@" "$p"; done < "$w/p2.pops"
+  printf 'ROOT\t%s\n' "$root" >> "$w/p2.plan"
+  GA="$FXC_GUARD_A" GB="$FXC_GUARD_B" LC_ALL=C awk -v SQ="'" "$FXC_HEREDOC_AWK$FXC_P2_AWK" "$w/p2.plan" "$@" > "$w/p2.raw"; rc=$?
+  while IFS="$T" read -r k v; do [ "$k" = OPENED ] && opened="$v"; done < "$w/p2.raw"
+  if [ "$rc" != 0 ] || [ "$opened" != "$#" ]; then
+    printf 'P2: REFUSED -- the scan awk exited %s and opened %s of the %s file(s) listed, so files after a failure were never scanned\n' "$rc" "${opened:-0}" "$#" >&2
+    return 2
+  fi
+  return 0
 }
 
 # fxc_static_join <root>: THE STATIC HALF OF C1-C5, over <root>/core/fixtures/*/run.sh, read through THIS file's own
@@ -598,7 +1066,11 @@ fxc_inproc_pairs() {
 #   P\t<fx>                              predicted to pass (the counted run decides)
 #   O\t<fx>\t<why>                       out of population (`.undeclarable`, or no inputs.decl)
 #   E\t<fx>\t<arm>\t<line>\t<reason>     a static finding: C2 (grammar, a cell subject that is no path row), C4, C5,
-#                                        and P1 (fxc_inproc_pairs, only in a fixture opted in by an `inproc:` row)
+#                                        and P2 (fxc_p2_scan, run once over the tree; <line> is `<file>:<line>`; a P2
+#                                        row carries a sixth field, the drive line's text with blank runs collapsed)
+#   BASEROOT\t<dir> and B\t<fx>\t<file:line>\t<text>   only under `--p2-base <dir>`: the SAME scan over <dir> (the
+#                                        push base, materialised by validate-fixture-inprocess.sh), one B row per
+#                                        unpaired drive there, for that script's P2 ratchet. No git runs here.
 # THE PREDICATE, per subject S (a path row of invocations.decl declaring n starts, a `c+kxglob` row expanded under
 # <root>): S passes when n equals its cli+e2e cell count, or when S is the child of a `nested` row and n is at least
 # that count; n = 0 always passes. A fixture passes when every S does and it carries no static finding. A REFUSAL IS
@@ -606,8 +1078,15 @@ fxc_inproc_pairs() {
 # nested cover leaves a start untagged (C1) or a cell over- or under-used (C3). A PASS IS A PREDICTION only: which
 # start carries which tag is not visible without a run, which is the dynamic judge's job.
 fxc_static_join() {
-  local root="$1" d fx w p n c k g tgt raw cf nn guarded ip
+  local root="$1" pbase="${2:-}" d fx w p n c k g tgt raw cf nn guarded T=$'\t' e1 e2 e3 e4 e5 e6
   w="$(mktemp -d "${TMPDIR:-/tmp}/fxc-sj.XXXXXX")" || return 2
+  # P2, once over the whole tree before the per-fixture loop; the join awk below reads its rows by fixture.
+  fxc_p2_scan "$root" "$w" || { rm -rf "$w"; return 2; }
+  if [ -n "$pbase" ]; then
+    mkdir "$w/base" && fxc_p2_scan "$pbase" "$w/base" || { rm -rf "$w"; return 2; }
+    printf 'BASEROOT\t%s\n' "$pbase"
+    while IFS="$T" read -r e1 e2 e3 e4 e5; do [ "$e1" = E ] && printf 'B\t%s\t%s\t%s\n' "$e2" "$e3" "$e5"; done < "$w/base/p2.raw"
+  fi
   for d in "$root"/core/fixtures/*/; do
     d="${d%/}"; fx="${d##*/}"
     [ -f "$d/run.sh" ] || continue
@@ -618,32 +1097,21 @@ fxc_static_join() {
     if [ -f "$cf" ]; then fxc_cells_parse "$cf" > "$w/c"; else : > "$w/c"; fi
     : > "$w/r"; [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" > "$w/r"
     : > "$w/n"
-    ip=0
     while IFS="$(printf '\t')" read -r c k g tgt raw; do
       [ "$c" = ERR ] && continue
-      [ "$c" = INPROC ] && { ip=1; continue; }
+      [ "$c" = INPROC ] && continue
       [ -n "$tgt" ] && [ "$tgt" != '*' ] || continue
       n="$c"
       if [ "$g" != - ]; then n=$((c + k * $(fxc_glob_n "$root" "$g"))); fi
       printf '%s\t%s\n' "$tgt" "$n" >> "$w/n"
     done < "$w/r"
-    # P1, only in a fixture OPTED IN by an `inproc:` row: its findings join the cells parse as E rows.
-    if [ "$ip" = 1 ]; then
-      : > "$w/subj"
-      while IFS= read -r p; do
-        [ -n "$p" ] || continue
-        fxc_subject_kind "$root/$p"; [ "$FXC_KIND" = bash ] && printf '%s\n' "$p" >> "$w/subj"
-      done <<EOF
-$(fxc_req "$d/inputs.decl")
-EOF
-      fxc_inproc_pairs "$d/run.sh" "$w/subj" >> "$w/c"
-    fi
     awk -F'\t' '$1 == "R" && $3 == "cli" { print $4 }' "$w/c" | LC_ALL=C sort -u > "$w/cli"
     : > "$w/g"
     while IFS= read -r p; do [ -n "$p" ] && printf '%s\t%s\n' "$p" "$(fxc_guarded "$root/$p" | cut -f1)" >> "$w/g"; done < "$w/cli"
     awk -F'\t' -v fx="$fx" '
       FILENAME == ARGV[1] { N[$1] = $2; next }
       FILENAME == ARGV[2] { G[$1] = $2; next }
+      FILENAME == ARGV[3] { if ($1 == "E" && $2 == fx) { print "E\t" fx "\tP2\t" $3 "\t" $4 "\t" $5; bad = 1 } next }
       $1 == "E" { print "E\t" fx "\t" $4 "\t" $3 "\t" $5; bad = 1; next }
       $1 == "R" { if (!($4 in N)) { print "E\t" fx "\tC2\t" $7 "\t" $3 " row names " $4 ", which is no path row of invocations.decl"; bad = 1 }
                   if ($3 == "nested") { if (!($5 in N)) { print "E\t" fx "\tC2\t" $7 "\tnested row names child " $5 ", which is no path row of invocations.decl"; bad = 1 } else NEST[$5] = 1 }
@@ -655,7 +1123,7 @@ EOF
               r = r (r == "" ? "" : "; ") s " declares " n " start(s) against " c " cell(s)" ((s in NEST) ? " and a nested row" : "") }
             if (r != "") print "X\t" fx "\t" r
             else if (bad) print "X\t" fx "\tstatic finding(s) above"
-            else print "P\t" fx }' "$w/n" "$w/g" "$w/c"
+            else print "P\t" fx }' "$w/n" "$w/g" "$w/p2.raw" "$w/c"
   done
   rm -rf "$w"
 }
@@ -859,6 +1327,9 @@ sp_cell() {
   if [ "$5" != - ] && ! grep -qF -- "$5" <<<"$out"; then sp_bad "$1 (output lacks: $5)"; return; fi
   sp_ok "$1"
 }
+# sp_seed: sp_cell that adds no cell when it passes and one FAILING cell when it fails, so the cell count is unchanged
+# while green (fixture-invocation-budget pins it) and the probe goes red, with the count off too, when it fails.
+sp_seed() { local n0="$SP_N" f0="$SP_FAIL"; sp_cell "$@"; [ "$SP_FAIL" = "$f0" ] && SP_N="$n0"; return 0; }
 # THE C-ARM CELLS, both directions, run by fxc_self_probe after the J cells. <S> its scratch dir, <rc> the generated
 # counter rc, <bash>. Every world is a fixture dir under $SPR judged in-process by sp_cell with the C arms on; the
 # synthetic logs carry the rc's four fields (path, pid, FXCELL, parent pid), and one leg drives the REAL rc.
@@ -1011,6 +1482,13 @@ fxc_inproc_self_probe() {
   else sp_bad "IP the opt-out near-miss: rc $r1/$r2, identical $([ "$o1" = "$o2" ] && echo yes || echo no): $(printf '%s' "$o2" | tr '\n' ' ')"; fi
   cp "$SPR/log" "$SPR/ipu"; { cat "$SPR/ipl.inproc"; printf '%s\n' "$SPR/core/scripts/xsub.sh"; } > "$SPR/ipu.inproc"
   sp_cell "IP a logged pass of the near-miss xsub.sh names no inproc: row and FAILs J7" 1 ipok "$SPR/ipu" "p: FAIL (J7): 1 in-process pass(es) logged by fx_inproc name no"
+  # A pass logged from cwd `/` (`//core/scripts/sub.sh`, normalised to exactly `/core/scripts/sub.sh`) and one logged as
+  # `/core/scripts/sub.sh` each match the inproc: row and count; the near miss `/xcore/scripts/sub.sh` matches none.
+  cp "$SPR/log" "$SPR/iprl"; printf '%s\n' "//core/scripts/sub.sh" "/core/scripts/sub.sh" > "$SPR/iprl.inproc"
+  ipw iproot '6 *|2 core/scripts/sub.sh|2 inproc:core/scripts/sub.sh'
+  sp_seed "IP passes logged as //core/scripts/sub.sh and /core/scripts/sub.sh both count for the inproc: row (J3 and J7)" 0 iproot "$SPR/iprl" "ok J7: p: 2 in-process pass(es) over 1 inproc: row(s)"
+  cp "$SPR/log" "$SPR/iprlx"; { cat "$SPR/iprl.inproc"; printf '%s\n' "/xcore/scripts/sub.sh"; } > "$SPR/iprlx.inproc"
+  sp_seed "IP the near miss /xcore/scripts/sub.sh names no inproc: row and FAILs J7" 1 iproot "$SPR/iprlx" "p: FAIL (J7): 1 in-process pass(es) logged by fx_inproc name no"
   ipw ipmiss '6 *|2 core/scripts/sub.sh|1 inproc:core/scripts/sub.sh'
   sp_cell "IP a declared pass with no .inproc log reads 0 and FAILs J3" 1 ipmiss "$SPR/log" 'row "1 inproc:core/scripts/sub.sh": measured 0, declared 1'
   ipw ipz '6 *|2 core/scripts/sub.sh|0 inproc:core/scripts/sub.sh'
@@ -1034,29 +1512,122 @@ fxc_inproc_self_probe() {
     sp_ok "E2E the real fx_inproc logs a relative and an absolute pass as one absolute path each, logs nothing unset, and fails nothing unwritable"
   else sp_bad "E2E the real fx_inproc: rc $r1, rows:matched $g, want 0 and 2:2"; fi
   sp_cell "E2E the real fx_inproc's two passes satisfy a 2 inproc: row" 0 lpi "$S/inp.log" "ok J7: p: 2 in-process pass(es) over 1 inproc: row(s)"
-  # P1, THE STATIC PAIRING, through fxc_static_join on its own root. FIRES at lines 8 (an opaque drive inside a
-  # function), 15 (a subject named by basename, the line after a call that paired its own line), 16 (after `(`), 21
-  # (fx_inproc two lines up, not on the drive), 22 (after `then`), 24 and 25 (the second drive after one call on the line before, and on its own line). QUIET: a lib source naming another file (2, and 27 through a nested
-  # `$( )` whose blanks do not end the operand), a `.`
-  # out of command position (3, and 26 whose operand is opaque) and inside quotes (4, 18), a drive paired by the line before across a comment (13), on
-  # its own line (14), and a non-subject source after `;` (17). The same run.sh in a fixture NOT opted in prints none.
-  PR="$S/proot"; mkdir -p "$PR/core/fixtures/pin" "$PR/core/fixtures/pno" "$PR/core/scripts"
-  printf ':\n' > "$PR/core/scripts/vbr.sh"
-  printf '%s\n' '#!/usr/bin/env bash' '. "$DIR/../lib/mutant.sh"' 'git init -q . >/dev/null' 'n="$(grep -c . f)"' 'vin() {' \
-    '  ( cd "$c" || exit 2' '    # shellcheck source=/dev/null' '    . "$v" || exit 2' '    vbr_main "$@" ) 2>&1' '}' 'fx_inproc "$v"' \
-    '# a comment between' '. "$v"' 'fx_inproc "$d/core/scripts/vbr.sh"; source "$d/core/scripts/vbr.sh"' '. "$d/core/scripts/vbr.sh" || exit 2' \
-    '( . "$w" )' 'foo; source "$x/lib/other.sh"' 'echo ". $v"' 'fx_inproc a' 'true' '. "$u"' 'if true; then . "$q"; fi' 'fx_inproc "$v"' '. "$v"; . "$v2"' 'fx_inproc a; . "$v"; . "$v2"' 'echo . "$v"' '. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || exit 2' > "$PR/core/fixtures/pin/run.sh"
-  cp "$PR/core/fixtures/pin/run.sh" "$PR/core/fixtures/pno/run.sh"
-  printf '!core/scripts/vbr.sh\n' > "$PR/core/fixtures/pin/inputs.decl"; cp "$PR/core/fixtures/pin/inputs.decl" "$PR/core/fixtures/pno/"
-  printf '1 *\n0 core/scripts/vbr.sh\n0 inproc:core/scripts/vbr.sh\n' > "$PR/core/fixtures/pin/invocations.decl"
-  printf '1 *\n0 core/scripts/vbr.sh\n' > "$PR/core/fixtures/pno/invocations.decl"
-  o1="$(fxc_static_join "$PR")"
-  g="$(awk -F'\t' '$1 == "E" && $2 == "pin" && $3 == "P1" { printf "%s ", $4 }' <<<"$o1")"
-  [ "$g" = "8 15 16 21 22 24 25 " ] && grep -qxF "X	pin	static finding(s) above" <<<"$o1" \
-    && sp_ok "P1 an unpaired drive FIRES (opaque, by basename, after ( and then, a call not on the drive, a second drive after one call), and a paired one, a lib source and a . out of command position stay QUIET" \
-    || sp_bad "P1 the opted-in fixture's findings were at lines [$g], want [8 15 16 21 22 24 25 ]"
-  if grep -q '	pno	P1	' <<<"$o1" || ! grep -qxF "P	pno" <<<"$o1"; then sp_bad "P1 a fixture NOT opted in was scanned: $(grep '	pno' <<<"$o1" | tr '\n' ' ')"
-  else sp_ok "P1 the same run.sh in a fixture with no inproc: row is never scanned (predicted to pass)"; fi
+  # P2, THE TREE-WIDE IN-PROCESS DRIVE, through fxc_static_join on its own root, BEFORE any corpus: every shape of the
+  # contract's list 1-14 but 12 (the unbuilt list), each with its quiet twin, and no fixture opted in by an inproc: row.
+  # Subjects: g.sh guarded with a shebang (gmain, gaux above the guard; below() under it), u.sh unguarded with a
+  # shebang, gns.sh guarded with NO shebang (gnmain), lib/mutant.sh a library (no shebang, unguarded), and
+  # scripts/validate-enforcement-map.sh guarded (vem_entry). pw <fixture> <subjects |-joined> <file> <lines...>.
+  PR="$S/proot"; mkdir -p "$PR/core/scripts" "$PR/core/fixtures/lib" "$PR/scripts"
+  # g.sh carries invalid UTF-8 bytes, so fxc_guarded reading it unpinned dies under the UTF-8 locale below.
+  printf '%s\n' '#!/usr/bin/env bash' $'# bytes \377 \303' 'gmain() { :; }' 'gaux() { :; }' 'gloc() { :; }' "$FXC_GUARD_A" 'below() { :; }' 'gmain' > "$PR/core/scripts/g.sh"
+  printf '%s\n' '#!/usr/bin/env bash' ':' > "$PR/core/scripts/u.sh"
+  printf '%s\n' 'gnmain() { :; }' "$FXC_GUARD_A" > "$PR/core/scripts/gns.sh"
+  printf '%s\n' 'lmain() { :; }' > "$PR/core/fixtures/lib/mutant.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'vem_entry() { :; }' "$FXC_GUARD_A" > "$PR/scripts/validate-enforcement-map.sh"
+  # Eight fixtures, the shapes as separate FILES so one static join reads them all: fG fires (each file one shape),
+  # fGq holds the paired twins, f10 never sources its subject, fU/fUq the unguarded-subject shapes, fL the library,
+  # no-shebang and resolved-variable shapes, and the shard stub sstub with its IMPL simpl. Built with builtins only.
+  pw() { local fx="$1" sb="$2" f="$3" d; shift 3; d="$PR/core/fixtures/$fx"
+    [ -d "$d" ] || mkdir "$d"
+    printf '!%s\n' ${sb//|/ } > "$d/inputs.decl"; printf '1 *\n' > "$d/invocations.decl"
+    [ -f "$d/run.sh" ] || printf ':\n' > "$d/run.sh"
+    printf '%s\n' "$@" > "$d/$f"; }
+  G=core/scripts/g.sh; U=core/scripts/u.sh
+  pw fG "$G" run.sh 'f() { . "$1"; }' 'f "$d/core/scripts/g.sh"' 'gmain'
+  pw fG "$G" s2.sh 'G="$d/core/scripts/g.sh"' 'f() {' '  fx_inproc "$G"' '  . "$G"' '  gmain' '  gmain' '  gaux' '}'
+  pw fG "$G" s3.sh '. "$d/core/scripts/g.sh"' "cat > p <<'EOF'" 'gmain' 'EOF' 'gmain' 'cat <<-EOF' $'\tgmain' $'\tEOF' 'gmain' \
+    'cat <<<"x"' 'gmain' 'x=$((1<<k))' 'gmain' '(( m = 1 << k ))' 'gmain' 'y=$((a+b)); cat <<EOF' 'gmain' 'EOF' \
+    "jq -n '" '  if . then . else . end' "  gmain'" "printf '%s\\n' a | xargs -I{} bash -c '" '  gmain' "'" \
+    $'echo "\303\251 \377 \303"; gmain' 'n="$(grep -c . "$x")"' 'echo ". gmain"'
+  pw fG "$G" helper.sh '. "$d/core/scripts/g.sh"' 'gmain'
+  pw fG "$G" s9.sh '. "$d/core/scripts/g.sh"' 'out="$(gmain x)"' '( export A=1; gmain )' '"$_m" "$@"' 'eval "$c"' 'command gaux' 'below' 'x="$_m"'
+  pw fG "$G" svx.sh 'vin() {' '  local c="$1" v="$2"' '  ( cd "$c" || exit 2' '    . "$v" || exit 2' \
+    '    declare -F gmain >/dev/null || exit 3' '    gmain "$@" ) 2>&1' '}' 'vin "$d" "$d/core/scripts/g.sh"'
+  pw fG "$G" s3c.sh 'fx_inproc "$d/core/scripts/g.sh"' '. "$d/core/scripts/g.sh"' 'run1() { ( gmain --arms "$1" ) 2>&1; }' 'run2() { ( gmain ) 2>&1; }'
+  pw fG "$G" sloc.sh '. "$d/core/scripts/g.sh"' 'gloc'
+  pw fG "$G" sdef.sh 'gloc() { :; }' '. "$d/core/scripts/g.sh"' 'gloc'
+  pw fGq "$G" sloc.sh '. "$d/core/scripts/g.sh"' 'gloc() { :; }' 'gloc'
+  pw fGq "$G" sscope.sh 'gloc() { :; }' '( . "$d/core/scripts/g.sh"; : )' 'gloc'
+  pw fGq "$G" sps.sh 'gmain() { :; }' 'x="$( . "$d/core/scripts/g.sh" )"' 'gmain'
+  pw fG "$G" s6a.sh 'gmain() { :; }' '{ . "$d/core/scripts/g.sh"; }' 'gmain'
+  pw fG "$G" s6b.sh 'gmain() { :; }' 'ld() { . "$d/core/scripts/g.sh"; }' 'ld' 'gmain'
+  pw fG "$G" s6f.sh 'gmain() { :; }' '. "$d/helper6x.sh"' 'gmain'
+  pw fG "$G" scase.sh '. "$d/core/scripts/g.sh"' 'case "$x" in' '  a) gmain ;;' '  b)' '    gmain ;;' 'esac'
+  pw fG "$G" swv.sh "printf '%s\\n' a | xargs -I{} bash -c \"" '  gmain' '"' 'sh -c "gmain"'
+  pw fU "$U" s1b.sh 'f() { . "$1"; }' 'f "$d/lib/two.sh"' 'f "$d/core/scripts/u.sh"'
+  # N-prime, each FIRES in fG and its twin stays QUIET in fGq (fUq for M4): caller resolution over the population,
+  # a word resolving to a subject entry (ungated), an unresolvable word gated by a guarded source in scope.
+  pw fG "$G" scl.sh '. "$d/core/scripts/g.sh"' 'fcl() { "$1"; }' 'loc1() { :; }' 'fcl loc1' 'fcl gmain'
+  pw fGq "$G" scl.sh '. "$d/core/scripts/g.sh"' 'fcl() { "$1"; }' 'loc1() { :; }' 'fcl loc1' 'fcl loc2'
+  pw fG "$G" scu.sh '. "$d/core/scripts/g.sh"' 'fcu() { "$1"; }' 'fcu loc1' 'fcu "$X"'
+  pw fGq "$G" scu.sh 'fcu() { "$1"; }' 'fcu loc1' 'fcu "$X"'
+  pw fG "$G" sxa.sh 'xrun() { . "$1"; "$2"; }'
+  pw fG "$G" sxb.sh 'xrun "$d/core/scripts/g.sh" gmain'
+  pw fGq "$G" sxa.sh 'xrun() { . "$1"; "$2"; }'
+  pw fGq "$G" sxb.sh 'xrun "$d/core/scripts/g.sh" loc1'
+  pw fG "$G" s2a.sh 'a=gmain' 'b="$a"' '"$b"'
+  pw fGq "$G" s2a.sh 'a=loc1' 'b="$a"' '"$b"'
+  pw fG "$G" sex.sh '. "$X"' 'fn=gmain' '"$fn"'
+  pw fGq "$G" sex.sh '. "$X"' '"$Y"'
+  pw fG "$G" sm4g.sh '. "$d/core/scripts/g.sh"' '"$Z" "$@"'
+  pw fUq "$U" sm4.sh 'fx_inproc u' '. "$d/core/scripts/u.sh"' 'fn=umain' '"$fn" "$@"' '"$Z" "$@"'
+  # OPTION S: a positional reads the union of every caller argument, whatever its index and whatever shift precedes it.
+  # FIRES: "$@" (sns), a loop whose read sits above its shift (srl), ${@:N} (ssl) and a "$@" forwarded to another
+  # function (sfw), none of them behind a source in their file. QUIET: the same loop, and a shifted read, whose every
+  # caller argument is a non-entry (fGq srl; squ after a guarded source, so it is resolved, not merely ungated). A `set --` reads unresolvable, gated open by a guarded source above it.
+  pw fG "$G" sns.sh 'fns() { "$@"; }' 'fns gmain'
+  pw fG "$G" srl.sh 'rl() {' '  while [ $# -gt 0 ]' '  do' '    "$1"' '    shift' '  done' '}' 'rl loc1 gmain'
+  pw fGq "$G" srl.sh 'rl() {' '  while [ $# -gt 0 ]' '  do' '    "$1"' '    shift' '  done' '}' 'rl loc1 loc2'
+  pw fG "$G" ssl.sh 'fa() { "${@:2}"; }' 'fa x gmain'
+  pw fG "$G" sfw.sh 'fv() { "$1"; }' 'fw() { fv "$@"; }' 'fw gmain'
+  pw fGq "$G" squ.sh '. "$d/core/scripts/g.sh"' 'fq2() {' '  shift' '  "$1"' '}' 'fq2 loc1 loc2' 'fq2 loc3'
+  pw fG "$G" sst.sh '. "$d/core/scripts/g.sh"' 'fs() {' '  set -- a' '  "$@"' '}' 'fs gmain'
+  pw fGq "$G" sst.sh 'fs() {' '  set -- a' '  "$@"' '}' 'fs gmain'
+  # A positional with NO caller, after a guarded source, is unresolvable and gated open (fires).
+  pw fG "$G" snc.sh '. "$d/core/scripts/g.sh"' 'fz() { "$1"; }'
+  # THE HELPER GATE: a source of the fixture-local helper.sh (which sources g.sh) gates an unresolvable word open; a
+  # source of a local file that sources nothing guarded does not. A guarded source inside a closed ( ) gates nothing
+  # outside it, and one BELOW the word gates nothing above it.
+  pw fG "$G" shh.sh '. "$d/helper.sh"' '"$X"'
+  pw fGq "$G" hnone.sh 'hz=1'
+  pw fGq "$G" shq.sh '. "$d/hnone.sh"' '"$X"'
+  pw fGq "$G" sns2.sh '( . "$d/core/scripts/g.sh" )' '"$X"'
+  pw fGq "$G" sord.sh '"$X"' '. "$d/core/scripts/g.sh"'
+  pw fUq "$U" sinh.sh 'B="$d/lib/two.sh"' 'A="$B"' '. "$A"'
+  pw fGq "$G" run.sh 'f() { fx_inproc "$1"; . "$1"; gmain; }' 'f "$d/core/scripts/g.sh"'
+  pw fGq "$G" s2.sh 'G="$d/core/scripts/g.sh"' 'f() {' '  fx_inproc "$G"' '  . "$G"' '  gmain' '  fx_inproc "$G"' '  gmain' '  fx_inproc "$G"' '  gaux' '}'
+  pw fGq "$G" helper.sh '. "$d/core/scripts/g.sh"' 'fx_inproc g' 'gmain'
+  pw fGq "$G" svin.sh 'vin() {' '  local c="$1" v="$2"' '  ( cd "$c" || exit 2' '    fx_inproc "$v"' '    . "$v" || exit 2' \
+    '    declare -F gmain >/dev/null || exit 3' '    gmain "$@" ) 2>&1' '}' 'vin "$d" "$d/core/scripts/g.sh"'
+  pw fGq "$G" svr.sh 'vin() {' '  local c="$1" v="$2"' '  ( cd "$c" || exit 2' '    . "$v" || exit 2' \
+    '    declare -F gmain >/dev/null || exit 3' '    fx_inproc "$v"' '    gmain "$@" ) 2>&1' '}' 'vin "$d" "$d/core/scripts/g.sh"'
+  pw f10 "$G" run.sh 'gmain'
+  pw fU "$U" run.sh 'W="$d/core/scripts/other.sh"' 'W="$X"' '. "$W"'
+  pw fU "$U" s8.sh 'f="$d/core/scripts/u.sh"' '. "$f" "$@"'
+  pw fU "$U" s1.sh 'f() { . "$1"; }' 'f "$d/core/scripts/u.sh"'
+  pw fUq "$U" s1.sh 'f() { . "$1"; }' 'f "$d/lib/two.sh"'
+  pw fUq "$U" run.sh 'W="$d/core/scripts/other.sh"' 'W="$d/lib/two.sh"' '. "$W"'
+  pw fUq "$U" s8.sh 'f="$d/core/scripts/u.sh"' 'fx_inproc "$f"' '. "$f" "$@"'
+  pw fL "core/fixtures/lib/mutant.sh|core/scripts/gns.sh|scripts/validate-enforcement-map.sh" run.sh '. "$d/../lib/mutant.sh"' 'lmain' '. "$d/core/scripts/gns.sh"' 'gnmain'
+  pw fL "core/fixtures/lib/mutant.sh|core/scripts/gns.sh|scripts/validate-enforcement-map.sh" s6.sh 'V="$d/scripts/validate-enforcement-map.sh"' '. "$V"' 'vem_entry' \
+    'MUT_LIB="$d/lib/mutant.sh"' '. "$MUT_LIB"'
+  pw simpl "$G" run.sh '. "$d/core/scripts/u.sh"'
+  pw sstub "$U" run.sh 'HERE="$(cd "$(dirname "$0")" && pwd)"' 'IMPL="$HERE/../simpl/run.sh"' 'exec bash "$IMPL" --group a'
+  # Run under a UTF-8 locale, so the multibyte and invalid bytes of fG/s3.sh:25 kill any awk on the scan path that
+  # is not pinned to LC_ALL=C (the scan then REFUSES and both cells go red). Where that locale is absent the awks fall
+  # back to C and the cell cannot fail on the pin: a stated limit, not a pass.
+  o1="$(LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 fxc_static_join "$PR")"; r1=$?
+  g="$(awk -F'\t' '$1 == "E" && $3 == "P2" { print $2 ":" $4 }' <<<"$o1" | LC_ALL=C sort | tr '\n' ' ')"
+  local want="fG:fG/helper.sh:2 fG:fG/run.sh:3 fG:fG/s2.sh:6 fG:fG/s2.sh:7 fG:fG/s2a.sh:3 fG:fG/s3.sh:11 fG:fG/s3.sh:13 fG:fG/s3.sh:15 fG:fG/s3.sh:23 fG:fG/s3.sh:25 fG:fG/s3.sh:5 fG:fG/s3.sh:9 fG:fG/s3c.sh:3 fG:fG/s3c.sh:4 fG:fG/s6a.sh:3 fG:fG/s6b.sh:4 fG:fG/s6f.sh:3 fG:fG/s9.sh:2 fG:fG/s9.sh:3 fG:fG/s9.sh:4 fG:fG/s9.sh:5 fG:fG/s9.sh:6 fG:fG/scase.sh:3 fG:fG/scase.sh:5 fG:fG/scl.sh:2 fG:fG/scu.sh:2 fG:fG/sdef.sh:3 fG:fG/sex.sh:3 fG:fG/sfw.sh:1 fG:fG/shh.sh:2 fG:fG/sloc.sh:2 fG:fG/sm4g.sh:2 fG:fG/snc.sh:2 fG:fG/sns.sh:1 fG:fG/srl.sh:4 fG:fG/ssl.sh:1 fG:fG/sst.sh:4 fG:fG/svx.sh:6 fG:fG/swv.sh:2 fG:fG/swv.sh:4 fG:fG/sxa.sh:1 fL:fL/run.sh:4 fL:fL/s6.sh:3 fU:fU/run.sh:3 fU:fU/s1.sh:1 fU:fU/s1b.sh:1 fU:fU/s8.sh:2 sstub:simpl/run.sh:1 "
+  [ "$r1" = 0 ] && [ "$g" = "$want" ] && grep -qF 'bash -c worker' <<<"$(awk -F'\t' '$2 == "fG" && $4 == "fG/s3.sh:23"' <<<"$o1")" \
+    && sp_ok "P2 FIRES on every seeded drive and names arm P2: a call after f(){ . \"\$1\"; } (1), two of three calls after one paired source (2), a drive after a heredoc, a <<- heredoc, a here-string, \$((1<<k)) and (( << )), inside a bash -c worker and after a multibyte byte (3), a shard stub under its own subjects (4), a guarded no-shebang subject (5), a resolved \$V and an unresolvable two-assignment operand (6), a fixture-local helper (7), an unguarded source (8) and one reached through a positional its same-file caller resolves to that subject (P2-U), a call in \$( ) and in ( export; ), an expansion, an eval and command X (9), vin with no fx_inproc, a subject function another file of the fixture defines (sloc.sh beside sdef.sh), a local definition followed by a source of the subject before the call (sdef.sh), and a file-level paired source feeding two call sites" \
+    || sp_bad "P2 the fired set (rc $r1) was [$g], want [$want]"
+  g="$(awk -F'\t' '$1 == "P" { print $2 }' <<<"$o1" | LC_ALL=C sort | tr '\n' ' ')"
+  # An UNREADABLE listed file refuses the join (rc 2): the scan drops it from its argv and opened != listed.
+  chmod a-r "$PR/core/fixtures/fG/helper.sh"; fxc_static_join "$PR" > /dev/null 2>&1; r2=$?; chmod u+r "$PR/core/fixtures/fG/helper.sh"
+  [ "$g" = "f10 fGq fUq simpl " ] && [ "$r2" = 2 ] \
+    && sp_ok "P2 stays QUIET: the paired twins of 1, 2, 7 and 8 (14), a library source and call (5), MUT_LIB (6), two literal non-subject assignments (6), a positional whose caller passes a lib (P2-U), a heredoc and jq body, grep -c . (10), a call below the guard, a call of a name the fixture defines itself, a fixture that never sources its subject, vin paired at its source and vin paired at its call, and the stub's IMPL under its own subjects" \
+    || sp_bad "P2 the quiet set was [$g], want [f10 fGq fUq simpl ]; an unreadable listed file gave rc $r2, want 2"
 }
 
 fxc_self_probe() {
@@ -1095,10 +1666,11 @@ fxc_self_probe() {
   for spec in "1:dotdot:$SPR/core/fixtures/f/../../scripts/sub.sh" "1:dot-and-slashes:$SPR/core/./scripts//sub.sh" \
               "1:relative-above-start:../../core/x/../scripts/sub.sh" "1:absolute-above-root:/../..$SPR/core/scripts/sub.sh" "0:name-dotdot-b:$SPR/core/scripts/q/..b/sub.sh" \
               "0:name-x-dotdot:$SPR/core/scripts/q/x../sub.sh" "0:dotdot-pops-scripts:$SPR/core/scripts/../sub.sh" \
-              "0:climbs-above-root:$SPR/core/../../scripts/sub.sh"; do
+              "0:climbs-above-root:$SPR/core/../../scripts/sub.sh" "1:root-double-slash://core/scripts/sub.sh" \
+              "1:root-absolute:/core/scripts/sub.sh" "0:root-near-miss:/xcore/scripts/sub.sh"; do
     w="${spec%%:*}"; r="${spec#*:}"; l="${r%%:*}"; r="${r#*:}"
     printf '%s\t1\n' "$SPR/f/run.sh" "$r" > "$SPR/lognrm-$l"
-    sp_cell "NRM $l counts $w" 0 "nrm$w" "$SPR/lognrm-$l" "ok"
+    case "$l" in root-*) sp_seed "NRM $l counts $w" 0 "nrm$w" "$SPR/lognrm-$l" "ok" ;; *) sp_cell "NRM $l counts $w" 0 "nrm$w" "$SPR/lognrm-$l" "ok" ;; esac
   done
   # J6 both directions. The probe's sub.sh is a `.sh` with no shebang (in the population by its name). Seeded beside
   # it: shb (`#!/bin/sh`, no extension) and envb (`#!/usr/bin/env -S bash -e`, no extension), both bash by their
@@ -1198,9 +1770,10 @@ fxc_self_probe() {
   mkdir -p "$SPR/j5h"; cp "$fd/inputs.decl" "$SPR/j5h/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5h/invocations.decl"
   printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\n# MUTANT-MATRIX Mb decides=A twins=B\nEOF\n' > "$SPR/j5h/run.sh"
   sp_cell "J5 a name rowed only inside a heredoc body FAILs" 1 j5h "$SPR/logm" "reported Mb, which has no"
-  # Its twin: the heredoc CLOSES, and `$((1<<3))` and `<<<` open nothing, so Mb rowed after all three counts.
-  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\nseed\nEOF\nx=$((1<<3))\ncat <<<"x"\n# MUTANT-MATRIX Mb decides=A twins=B\n' > "$SPR/j5h/run.sh"
-  sp_cell "J5 a name rowed after a closed heredoc, a shift and a here-string passes" 0 j5h "$SPR/logm" "ok"
+  # Its twin: the heredoc CLOSES, and `$((1<<3))`, `$((1<<k))`, `(( m = 1 << k ))` and `<<<` open nothing (the two
+  # name-shifted forms once opened a body delimited by `k`), so Mb rowed after all of them counts.
+  printf '#!/usr/bin/env bash\n# MUTANT-MATRIX Ma decides=A twins=B\ncat > p <<'"'"'EOF'"'"'\nseed\nEOF\nx=$((1<<3))\ny=$((1<<k))\n(( m = 1 << k ))\ncat <<<"x"\n# MUTANT-MATRIX Mb decides=A twins=B\n' > "$SPR/j5h/run.sh"
+  sp_cell "J5 a name rowed after a closed heredoc, shifts in \$(( )) and (( )), and a here-string passes" 0 j5h "$SPR/logm" "ok"
   # A non-exec shard stub (`bash "$IMPL" --group x > out`, the ledger-reverify-b form) resolves to its IMPL too.
   mkdir -p "$SPR/j5n"; cp "$fd/inputs.decl" "$SPR/j5n/"; printf '6 *\n2 core/scripts/sub.sh\n' > "$SPR/j5n/invocations.decl"
   printf '#!/usr/bin/env bash\nHERE="$(cd "$(dirname "$0")" && pwd)"\nIMPL="$HERE/../j5/run.sh"\nbash "$IMPL" --group b > "$HERE/o"\n' > "$SPR/j5n/run.sh"
@@ -1291,7 +1864,11 @@ case "${1:-}" in
   --cells-parse) shift; fxc_cells_parse "$@"; exit $? ;;
   --guarded) shift; fxc_guarded "$@"; exit 0 ;;
   --static-join)
-    [ -n "${2:-}" ] && [ -d "$2/core/fixtures" ] || { echo "usage: $0 --static-join <root>" >&2; exit 2; }
+    [ -n "${2:-}" ] && [ -d "$2/core/fixtures" ] || { echo "usage: $0 --static-join <root> [--p2-base <dir>]" >&2; exit 2; }
+    if [ "${3:-}" = --p2-base ]; then
+      [ -n "${4:-}" ] && [ -d "$4/core/fixtures" ] || { echo "usage: $0 --static-join <root> [--p2-base <dir>]" >&2; exit 2; }
+      fxc_static_join "$2" "$4"; exit $?
+    fi
     fxc_static_join "$2"; exit $? ;;
   --gen-rc) [ $# -eq 2 ] || { echo "usage: $0 --gen-rc <dir>" >&2; exit 2; }; fxc_gen_rc "$2"; exit $? ;;
   --self-probe)

@@ -31,3 +31,4 @@ python3
 ps
 kill
 jq
+uniq

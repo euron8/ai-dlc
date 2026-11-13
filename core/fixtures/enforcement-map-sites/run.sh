@@ -539,7 +539,7 @@ vrun() {
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: vrun found no A<nn>_i<id>_ frame to derive an --arms selector from (frames: %s). The naming grammar the selector is derived from has moved, and there is no full-run fallback on purpose.\n' "${FUNCNAME[*]}" >> "$VRUN_BROKEN"
     return 2
   fi
-  vout="$(vem_entry --arms "$id" 2>&1)"; rc=$?
+  vout="$(fx_inproc "$V"; vem_entry --arms "$id" 2>&1)"; rc=$?
   [ -n "$VRUN_RCF" ] && printf '%s\n' "$rc" > "$VRUN_RCF"
   if [ "$rc" = "2" ]; then
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: validate-enforcement-map.sh --arms %s exited 2. That is a SELECTION failure -- an unknown id, a malformed flag, or a generated subprogram that never reached the verdict -- not an invariant finding, so it is not scored as a mutant surviving or dying: %s\n' "$id" "$vout" >> "$VRUN_BROKEN"
@@ -550,7 +550,7 @@ vrun() {
   # arms outside the selected unit. A plain run never reaches it, and the driver asserts that.
   if [ "$MX_MODE" = matrix ] && [ -z "$VRUN_NOMX" ] && [ -n "$MX_DIR" ]; then
     printf 'mx-full %s\n' "$id" >> "$MX_LEDGER"
-    vem_entry > "$MX_DIR/full.out" 2>&1; printf '%s\n' "$?" > "$MX_DIR/full.rc"
+    fx_inproc "$V"; vem_entry > "$MX_DIR/full.out" 2>&1; printf '%s\n' "$?" > "$MX_DIR/full.rc"
   fi
   printf '%s\n' "$vout"
 }
@@ -564,6 +564,7 @@ vrun() {
 # selected and the licence the assertions below rely on would be narrower than the set of
 # arms they use. A selected run says nothing whatever about the arms it did not run.
 A00_sanity() {
+fx_inproc "$V"
 if vem_entry >/dev/null 2>&1; then
   ok "pristine distribution tree passes (the negatives below mean something)"
 else
@@ -2218,7 +2219,7 @@ else
   # mutant. Exit 2 is a selection failure and is routed to FIXTURE BROKEN, never scored; the
   # positive conjunct is the verdict block's `OK:` line, which a run that never reached it
   # cannot print.
-  a33_sib="$(vem_entry --arms I60,I83,I84 2>&1)"; a33_src=$?
+  a33_sib="$(fx_inproc "$V"; vem_entry --arms I60,I83,I84 2>&1)"; a33_src=$?
   if [ "$a33_src" = "2" ]; then
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: validate-enforcement-map.sh --arms I60,I83,I84 exited 2 under the I59 corpus mutant, a selection failure rather than a finding: %s\n' "$a33_sib" >> "$VRUN_BROKEN"
   elif [ "$a33_src" = "0" ] && grep -q '^OK: ' <<<"$a33_sib"; then
@@ -3303,7 +3304,7 @@ cwd_control() {
 # M5 moves the cd into the `--arms` block and must leave the four cells at 1111 and kill this.
 cwd_full_bit() { # cwd_full_bit <ERE> -> prints 1 or 0, and leaves the run in "$CW_DIR/full.out"
   local rc
-  (cd "$EMS_DECOY" && vem_entry) > "$CW_DIR/full.out" 2>&1; rc=$?
+  (cd "$EMS_DECOY" && fx_inproc "$V" && vem_entry) > "$CW_DIR/full.out" 2>&1; rc=$?
   if [ "$rc" = 1 ] && grep -qE -- "$1" "$CW_DIR/full.out"; then echo 1; else echo 0; fi
 }
 cwd_full() {
@@ -3787,7 +3788,7 @@ EQ_DIR=""
 eq_pair() { # eq_pair <tree> <tag> <cli cell id> [args...] -> $EQ_DIR/<tag>.{i,c}.{out,err,rc}
   local t="$1" tag="$2" cell="$3"; shift 3
   ( cd "$t" || exit 2
-    ( . "$t/scripts/validate-enforcement-map.sh" || exit 2; vem_entry "$@" ) > "$EQ_DIR/$tag.i.out" 2> "$EQ_DIR/$tag.i.err"
+    ( . "$t/scripts/validate-enforcement-map.sh" || exit 2; fx_inproc "$t/scripts/validate-enforcement-map.sh"; vem_entry "$@" ) > "$EQ_DIR/$tag.i.out" 2> "$EQ_DIR/$tag.i.err"
     printf '%s\n' "$?" > "$EQ_DIR/$tag.i.rc"
     FXCELL="$cell" bash "$t/scripts/validate-enforcement-map.sh" "$@" > "$EQ_DIR/$tag.c.out" 2> "$EQ_DIR/$tag.c.err"
     printf '%s\n' "$?" > "$EQ_DIR/$tag.c.rc" )

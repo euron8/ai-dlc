@@ -62,4 +62,4 @@ race_engine() {
 }
 # in_set <path relative to the state dir> -> the DECLARATION's answer (content-seal.sh seal_sealed),
 # read from the library itself, so no arm restates the sealed set.
-in_set() { ( . "$SEAL" && seal_sealed "$1" ); }
+in_set() { ( fx_inproc core/scripts/content-seal.sh; . "$SEAL" && seal_sealed "$1" ); }

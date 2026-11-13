@@ -20,3 +20,5 @@ tail
 touch
 tr
 wc
+od
+mv

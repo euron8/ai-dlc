@@ -20,3 +20,5 @@ git
 mv
 find
 env
+uniq
+chmod

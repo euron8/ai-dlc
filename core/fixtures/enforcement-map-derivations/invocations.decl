@@ -1,6 +1,8 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 164 *
 3 scripts/validate-enforcement-map.sh
+104 inproc:scripts/validate-enforcement-map.sh
 # Re-measured from two agreeing counted runs after the in-process conversion (BL-878): every assertion runs the validator as
 # `( vem_entry ... )` in a subshell, so the only validator starts left are the three `cli` twin cells in cells.decl.
 # Re-measured on the combined tree (b255 F9 rebased onto 0.1073.0) after A70-A73 load their tree in process: 207 -> 164 from two agreeing counted hermetic-run.sh runs; the validate-enforcement-map.sh row unchanged.
+# The inproc: row counts every in-process vem_entry pass (fx_inproc beside each call, BL-982 P2), from one counted hermetic-run.sh run; the other rows unchanged.

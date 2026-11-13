@@ -26,3 +26,5 @@ chmod
 python3
 mv
 sort
+date
+od

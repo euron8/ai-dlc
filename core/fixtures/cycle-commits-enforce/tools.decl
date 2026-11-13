@@ -16,3 +16,4 @@ head
 tail
 wc
 cp
+sort

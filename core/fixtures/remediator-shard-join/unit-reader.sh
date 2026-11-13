@@ -13,6 +13,9 @@ UR_HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$UR_HERE/lib.sh" ] || { echo "FIXTURE BROKEN: lib.sh is absent beside $0" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$UR_HERE/lib.sh" > /dev/null || { echo "FIXTURE BROKEN: sourcing lib.sh failed" >&2; exit 2; }
+. "$(cd "$UR_HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+# each in-process pass of a subject below is logged by fx_inproc (lib/mutant.sh) under its root-relative path
+RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 
 # SEAM-JOIN: the same argv through bash "$JOIN" and through join_main in a subshell that sourced the join.
 w="$(new_world)"; three_writers "$w"; part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1; stamp "$w"
@@ -28,7 +31,7 @@ sj_cli() { # <world> args... -> $SJ_OUT, $SJ_RC (the world's output record remov
 sj_inproc() {
   local d; d="$(mktemp -d "$WORK/sj.XXXXXX")" && cp -R "$1" "$d/w" || return 1
   shift
-  SJ_OUT="$( ( export AI_DLC_PROJECT_ROOT="$d/w"; . "$JOIN"; join_main "$@" ) 2>&1)"; SJ_RC=$?
+  SJ_OUT="$( ( fx_inproc $RSJ_J; export AI_DLC_PROJECT_ROOT="$d/w"; . "$JOIN"; join_main "$@" ) 2>&1)"; SJ_RC=$?
   SJ_OUT="${SJ_OUT//$d/WORLD}"
 }
 sj_cli "$w" "${pass_args[@]}"; p_o="$SJ_OUT"; p_rc=$SJ_RC
@@ -47,7 +50,7 @@ hk_row() { # <mode cli|inproc> <world> <agent> -> prints the ledger rows with ts
   local pl="$WORK/seam.payload" rc
   jq -nc --arg f "$2/$REL/$S21" --arg a "$3" '{session_id:"t", tool_name:"Edit", transcript_path:"", tool_input:{file_path:$f}} + (if $a == "" then {} else {agent_id:$a} end)' > "$pl"
   if [ "$1" = cli ]; then CLAUDE_PROJECT_DIR="$2" bash "$HOOK" < "$pl" >/dev/null 2>&1; rc=$?
-  else ( export CLAUDE_PROJECT_DIR="$2"; . "$HOOK"; hook_pretool_head < "$pl" ) >/dev/null 2>&1; rc=$?; fi
+  else ( fx_inproc $RSJ_H; export CLAUDE_PROJECT_DIR="$2"; . "$HOOK"; hook_pretool_head < "$pl" ) >/dev/null 2>&1; rc=$?; fi
   jq -c 'del(.ts)' "$2/_bmad-output/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null | sed "s#$2#WORLD#g"
   echo "rc=$rc"
 }

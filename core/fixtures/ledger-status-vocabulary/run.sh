@@ -77,6 +77,15 @@ if [ ! -f "$VAL" ]; then
   exit 0
 fi
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
+# fx_inproc (one row per in-process vem_entry pass, BL-982) comes from lib/mutant.sh, which refuses to load
+# without ok() and bad(); this file defines neither, so it is sourced behind stubs that are then removed. It is
+# exported because every pass runs in an xargs bash -c worker below.
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "ledger-status-vocabulary: FIXTURE ERROR -- lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+ok() { :; }; bad() { :; }
+. "$DIR/../lib/mutant.sh"
+unset -f ok bad
+export -f fx_inproc
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 
 # The mutation surface is the working tree, so the copy is of TRACKED files at their working-tree
@@ -332,6 +341,7 @@ LSV_BASE="$BASE" LSV_MUTD="$MUTD" LSV_OUT="$OUTD" LSV_WORK="$TMP" LSV_RUNS="$RUN
     # IN-PROCESS: the copy`s own validator is sourced ONCE by absolute path (defines vem_entry, runs
     # nothing) and every run below is a vem_entry subshell. Only the two cli cells start it as a program.
     . "$work/scripts/validate-enforcement-map.sh"
+    fx_inproc "$work/scripts/validate-enforcement-map.sh"
     ( vem_entry $sel ) > "$LSV_OUT/$l.so" 2> "$LSV_OUT/$l.se"
     printf %s $? > "$LSV_OUT/$l.rc"
     cat "$LSV_OUT/$l.so" "$LSV_OUT/$l.se" > "$LSV_OUT/$l.out"
@@ -349,6 +359,7 @@ LSV_BASE="$BASE" LSV_MUTD="$MUTD" LSV_OUT="$OUTD" LSV_WORK="$TMP" LSV_RUNS="$RUN
     fi
     if [ "$LSV_MODE" = matrix ] && [ "$l" != control ] && [ "$l" != cli-pass ]; then
       printf "mx-full %s\n" "$l" >> "$LSV_LEDGER"
+      fx_inproc "$work/scripts/validate-enforcement-map.sh"
       ( vem_entry ) > "$LSV_OUT/$l.full.out" 2>&1
       printf %s $? > "$LSV_OUT/$l.full.rc"
     fi

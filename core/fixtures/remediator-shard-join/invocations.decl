@@ -8,3 +8,5 @@
 94 core/hooks/ai-dlc-gate-remediation-guard.sh
 2 core/hooks/ai-dlc-derivation-capture.sh
 36 core/scripts/serial-remediation-worklist.sh
+471 inproc:core/scripts/join-remediator-shards.sh
+553 inproc:core/hooks/ai-dlc-gate-remediation-guard.sh

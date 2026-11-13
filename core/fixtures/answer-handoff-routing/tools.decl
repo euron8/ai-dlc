@@ -18,3 +18,6 @@ shasum
 touch
 tr
 wc
+od
+tail
+mv

@@ -2,3 +2,4 @@
 4 *
 0 core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
 2 scripts/validate-release-version.sh
+281 inproc:scripts/validate-release-version.sh

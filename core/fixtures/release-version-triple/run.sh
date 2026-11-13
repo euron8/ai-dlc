@@ -121,7 +121,14 @@ drive_src() {
     # shellcheck disable=SC1090
     . "$v" || exit 97
     command -v arm_ab >/dev/null 2>&1 || exit 98
-    rv_init "$@"; arm_c_range; arm_c; arm_d; arm_ab; rv_report
+    # One fx_inproc per entry call (P2's unit for a guarded subject); <v> may be a mutant copy whose path cannot end
+    # in the subject's root-relative path, so the literal subject path is passed.
+    fx_inproc scripts/validate-release-version.sh; rv_init "$@"
+    fx_inproc scripts/validate-release-version.sh; arm_c_range
+    fx_inproc scripts/validate-release-version.sh; arm_c
+    fx_inproc scripts/validate-release-version.sh; arm_d
+    fx_inproc scripts/validate-release-version.sh; arm_ab
+    fx_inproc scripts/validate-release-version.sh; rv_report
   ) >"$out" 2>&1
 }
 
@@ -890,7 +897,7 @@ git checkout -q main
 mkmut "$WORK/m-e-nospace.sh" "git -C \"\$d\" grep -l -e '^<<<<<<< ' HEAD" "git -C \"\$d\" grep -l -e '^<<<<<<<' HEAD"
 # Sourced, the way drive_src drives the other arms, and arm E called by name: the probe is the
 # subject here, not the program's entry, which assertion 1 executes. --matrix replays it executed.
-( . "$WORK/m-e-nospace.sh" || exit 97; rv_init --commit HEAD; arm_e; echo "conflict_fail=$conflict_fail" ) >"$WORK/out.txt" 2>&1; status=$?
+( . "$WORK/m-e-nospace.sh" || exit 97; fx_inproc scripts/validate-release-version.sh; rv_init --commit HEAD; fx_inproc scripts/validate-release-version.sh; arm_e; echo "conflict_fail=$conflict_fail" ) >"$WORK/out.txt" 2>&1; status=$?
 if [ "$status" = 0 ] && grep -qx 'conflict_fail=1' "$WORK/out.txt" \
    && grep -q "arm E's own probe did not discriminate" "$WORK/out.txt" \
    && grep -q 'the near-miss nospace.md WAS reported' "$WORK/out.txt"; then
@@ -908,7 +915,7 @@ regmut m-e-nospace "$WORK/m-e-nospace.sh"
 # HEAD tree must list exactly the offender and the three near-misses.
 E_TREE="$WORK/e-tree"
 mkdir -p "$E_TREE" || exit 2
-( . "$VALIDATOR" || exit 97; rv_probe_e_tree "$E_TREE" ) >/dev/null 2>&1
+( . "$VALIDATOR" || exit 97; fx_inproc scripts/validate-release-version.sh; rv_probe_e_tree "$E_TREE" ) >/dev/null 2>&1
 e_names="$(git -C "$E_TREE" ls-tree -r --name-only HEAD 2>/dev/null | tr '\n' ' ')"
 if [ "$e_names" = "nospace.md offender.md openonly.md setext.md " ]; then
   ok "arm E's probe tree, built by the function arm E calls, holds the offender and all three near-misses: $e_names"
@@ -922,7 +929,7 @@ fi
 # count the whole list reads as "no findings". Arm F's probe holds a call with one real offender
 # beside one absent name; this mutant drops the count and must be refused by that probe.
 mkmut "$WORK/m-f-no-count.sh" 'if [ "$fast" = 1 ] && [ "$got" = "$n" ]; then' 'if [ "$fast" = 1 ]; then'
-( . "$WORK/m-f-no-count.sh" || exit 97; rv_init --commit HEAD; arm_f; echo "form_fail=$form_fail" ) >"$WORK/out.txt" 2>&1; status=$?
+( . "$WORK/m-f-no-count.sh" || exit 97; fx_inproc scripts/validate-release-version.sh; rv_init --commit HEAD; fx_inproc scripts/validate-release-version.sh; arm_f; echo "form_fail=$form_fail" ) >"$WORK/out.txt" 2>&1; status=$?
 if [ "$status" = 0 ] && grep -qx 'form_fail=1' "$WORK/out.txt" \
    && grep -q "arm F's own probe did not discriminate" "$WORK/out.txt" \
    && grep -q 'the unreadable member 0000000000000000000000000000000000000001 was NOT reported' "$WORK/out.txt"; then

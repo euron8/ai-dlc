@@ -5,3 +5,4 @@ core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/preclassify.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

@@ -219,6 +219,7 @@ edit() {
 run_arm() {
   [ -n "${2:-}" ] || { echo "run_arm called with no arm"; return 2; }
   [ "$1" = "$TREE" ] || { echo "run_arm called on $1, but the entry was sourced from $TREE"; return 2; }
+  fx_inproc "$TREE/$ARM"
   ( vem_entry --arms "$2" ) 2>&1
 }
 
@@ -380,6 +381,7 @@ fi
 # (guard_sel treats it as FIXTURE BROKEN), so it has no twin.
 eq_cmp() { # eq_cmp <cell> <arm> — on $TREE as it stands; leaves eq.<cell>.{io,ie,co,ce,ir,cr}
   local c="$1" a="$2" ir=0 cr=0
+  fx_inproc "$TREE/$ARM"
   ( vem_entry --arms "$a" ) > "$WORK/eq.$c.io" 2> "$WORK/eq.$c.ie" || ir=$?
   FXCELL="$c" bash "$TREE/$ARM" --arms "$a" > "$WORK/eq.$c.co" 2> "$WORK/eq.$c.ce" || cr=$?
   echo "$ir" > "$WORK/eq.$c.ir"; echo "$cr" > "$WORK/eq.$c.cr"

@@ -279,8 +279,13 @@ arm_CV() {
   local d="$WORK/cv"; mkdir -p "$d" || return 1
   printf 'M\ta.py\nM\tb.py\n' > "$d/code"; printf 'a.py\n' > "$d/n"; printf 'b.py\n' > "$d/r"; : > "$d/e"
   printf 'a.py\nb.py\n' > "$d/both"; printf 'a.py\nc.py\n' > "$d/x"
-  ( . "$1/partition-review-diff.sh" && conserved "$d/n" "$d/r" "$d/code" && ! conserved "$d/n" "$d/e" "$d/code" \
-      && ! conserved "$d/both" "$d/r" "$d/code" && ! conserved "$d/x" "$d/e" "$d/code" )
+  # One fx_inproc per conserved call (P2's unit for a guarded subject); a mutant directory's copy cannot end in the
+  # subject's root-relative path, so the literal subject path is passed.
+  ( . "$1/partition-review-diff.sh" \
+      && fx_inproc core/scripts/partition-review-diff.sh && conserved "$d/n" "$d/r" "$d/code" \
+      && fx_inproc core/scripts/partition-review-diff.sh && ! conserved "$d/n" "$d/e" "$d/code" \
+      && fx_inproc core/scripts/partition-review-diff.sh && ! conserved "$d/both" "$d/r" "$d/code" \
+      && fx_inproc core/scripts/partition-review-diff.sh && ! conserved "$d/x" "$d/e" "$d/code" )
 }
 # NM: the narrowed map and its merge, over MIXED_APP (MIXED plus a web/app.js edit) and nprior-app
 # (`Files: web/app.js`, inside the repository). Flagless that delta is 2 parts (rebalancer/*, web/); narrowed

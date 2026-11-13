@@ -27,3 +27,4 @@ sleep
 sort
 tr
 wc
+cut

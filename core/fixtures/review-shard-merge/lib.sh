@@ -3631,8 +3631,8 @@ p_bind956() {
   # then, --base given, `window<TAB><key><TAB><value>` per pair some version of the view from --base to frozen carries.
   if cell bind956-withkey; then
     local vd vk wd wk
-    vd="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main view-history --ref "$CR_B6H" --base "$CR_BASE" --sprint 1 --root "$CR_REPO" "$CR_S956" 2>&1 < /dev/null )" || vd="rc=$? $vd"
-    vk="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main view-history --with-key --ref "$CR_B6H" --base "$CR_BASE" --sprint 1 --root "$CR_REPO" "$CR_S956" 2>&1 < /dev/null )" || vk="rc=$? $vk"
+    vd="$( fx_inproc core/scripts/sprint-status.sh; unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main view-history --ref "$CR_B6H" --base "$CR_BASE" --sprint 1 --root "$CR_REPO" "$CR_S956" 2>&1 < /dev/null )" || vd="rc=$? $vd"
+    vk="$( fx_inproc core/scripts/sprint-status.sh; unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main view-history --with-key --ref "$CR_B6H" --base "$CR_BASE" --sprint 1 --root "$CR_REPO" "$CR_S956" 2>&1 < /dev/null )" || vk="rc=$? $vk"
     wd="$(printf 'since\t%s\nfile\tstories/story-1-1-x.md\nfile\tstories/story-1-6-a.md\nfile\tstories/story-q.md' "$CR_BASE")"
     wk="$(printf 'since\t%s\nfile\tstory-1-1\tstories/story-1-1-x.md\nfile\tstory-1-6\tstories/story-1-6-a.md\nfile\tstory-1-6\tstories/story-q.md\nwindow\tstory-1-1\tstories/story-1-1-x.md\nwindow\tstory-1-6\tstories/story-1-6-a.md\nwindow\tstory-1-6\tstories/story-q.md' "$CR_BASE")"
     [ "$vd" = "$wd" ] || WHY="$WHY bind956-withkey{default: $(printf '%s' "$vd" | tr '\t\n' '> ')}"
@@ -3642,9 +3642,9 @@ p_bind956() {
   # story-3-3 names index 3 and story-3-1-3 names 1-3 (not 1); story-322-6 under sprint 322 names 6 (control).
   if cell bind956-stem; then
     local s3 s13 s322
-    s3="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 3 --keys "$(printf 'story-3-3\nstory-3-1-3\nstory-3-4')" 3 2>&1 < /dev/null )" || s3="rc=$? $s3"
-    s13="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 3 --keys "$(printf 'story-3-3\nstory-3-1-3')" 1-3 2>&1 < /dev/null )" || s13="rc=$? $s13"
-    s322="$( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 322 --keys "$(printf 'story-322-6\nstory-322-7')" 6 2>&1 < /dev/null )" || s322="rc=$? $s322"
+    s3="$( fx_inproc core/scripts/sprint-status.sh; unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 3 --keys "$(printf 'story-3-3\nstory-3-1-3\nstory-3-4')" 3 2>&1 < /dev/null )" || s3="rc=$? $s3"
+    s13="$( fx_inproc core/scripts/sprint-status.sh; unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 3 --keys "$(printf 'story-3-3\nstory-3-1-3')" 1-3 2>&1 < /dev/null )" || s13="rc=$? $s13"
+    s322="$( fx_inproc core/scripts/sprint-status.sh; unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$sd/sprint-status.sh" && ss_main stem-names --sprint 322 --keys "$(printf 'story-322-6\nstory-322-7')" 6 2>&1 < /dev/null )" || s322="rc=$? $s322"
     [ "$s3|$s13|$s322" = "story-3-3|story-3-1-3|story-322-6" ] \
       || WHY="$WHY bind956-stem{3=[$s3] 1-3=[$s13] 322=[$s322]}"
   fi
@@ -5063,7 +5063,7 @@ p_run_rec() {
     cell "$c" || continue
     if [ "$c" = rr-sum-log ]; then printf 'tests/a.py ....\n\033]0;pytest\007\033[32m===== 5 passed, 1 skipped in 1.20s =====\033[0m\nINFO cleaned 2 errors\n' > "$WORK/rr-sum.in"; n="5 passed, 1 skipped in 1.20s"
     else printf '....F...\n812 passed, 3 skipped in 1.0s\n' > "$WORK/rr-sum.in"; n="812 passed, 3 skipped in 1.0s"; fi
-    blk="$(rr_summary "$WORK/rr-sum.in")" || blk="<none>"
+    fx_inproc core/scripts/merge-review-shards.sh; blk="$(rr_summary "$WORK/rr-sum.in")" || blk="<none>"
     [ "$blk" = "$n" ] || WHY="$WHY $c{got '$blk'}"
   done
   # rr-none: a record-only pass (X..F) claiming `none, <reason>` in the held era needs no record -> MERGED.

@@ -110,6 +110,12 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# fx_inproc (one row per in-process vem_entry pass, BL-982) comes from lib/mutant.sh, exported because every
+# pass runs in an xargs bash -c worker below.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh"
+export -f fx_inproc
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # The five mutable surfaces, as paths RELATIVE to a seeded root — each worker seeds its own,
 # so an absolute path resolved here would point every worker at one tree and put back exactly
@@ -235,6 +241,7 @@ CMH_MATRIX="$MATRIX" CMH_HERE="$HERE" CMH_SEDS="$SEDS" CMH_OUT="$OUTD" CMH_RUNS=
     # The two cli cells (cells.decl) start it as a program on the pristine tree (a pass) and on
     # a1-reader-rename (a refusal) and must answer byte for byte as the in-process run did.
     . "$root/scripts/validate-enforcement-map.sh"
+    fx_inproc "$root/scripts/validate-enforcement-map.sh"
     ( vem_entry $_arms ) > "$CMH_OUT/$l.so" 2> "$CMH_OUT/$l.se"
     irc=$?
     printf %s $irc > "$CMH_OUT/$l.rc"

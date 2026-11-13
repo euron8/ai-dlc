@@ -1,3 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 15 *
 2 scripts/validate-enforcement-map.sh
+5 inproc:scripts/validate-enforcement-map.sh
+# inproc row (BL-982): measured by one counted hermetic-run.sh run on the r3 branch (origin/main 65bbbedad merged); the * and validate-enforcement-map.sh start rows unchanged.

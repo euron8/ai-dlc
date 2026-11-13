@@ -77,6 +77,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
+# fx_inproc counts each in-process vem_entry pass (BL-982); every pass runs in an xargs bash -c worker below.
+export -f fx_inproc
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 # 1 premise + 1 control + 4 mutants + 2 cli twins, plus (plain run only) 1 arm asserting no matrix-only cell ran.
@@ -204,6 +206,7 @@ CHD_MATRIX="$MATRIX" CHD_ROOT="$ROOT" CHD_WORK="$WORK" CHD_MUTS="$MUTS" CHD_OUT=
       # vem_entry subshell. The two cli cells (cells.decl) start it as a program on the control (a pass)
       # and on m1 (a refusal) and must answer byte for byte as the in-process run did.
       . "$m/scripts/validate-enforcement-map.sh"
+      fx_inproc "$m/scripts/validate-enforcement-map.sh"
       ( vem_entry $_arms ) > "$CHD_OUT/$l.so" 2> "$CHD_OUT/$l.se"
       irc=$?
       cat "$CHD_OUT/$l.so" "$CHD_OUT/$l.se" > "$CHD_OUT/$l.full"
