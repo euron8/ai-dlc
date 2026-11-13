@@ -1,0 +1,60 @@
+graph /Users/n8/git/graph ref main = c8ab65397b30bca2ee43e4bea663820f39b9376f
+listing: 5305 paths under _bmad-output/implementation-artifacts and docs/reviews
+negative control ZZNOPE-8f3a1q: 0 paths, 0 files carrying it (both must be 0); the same content grep for reviewed-sha: reads 1329 files (must be > 0)
+negative control shard-dir join on sprint ZZNOPE-8f3a1q: 0 .md files (must be 0)
+positive control docs/reviews/s320/shards/4-2-qa-validation-39921dda7498-p2: 5 .md files (must be 5)
+== s321 (after): route source = gate plan
+  1-2 p2 route=partitioned shard_lines=4 seats=5 shard_dir=1-2-qa-validation-114ca5053170-p2 md=5 AGREE review=1-2-qa-validation-p2.md
+  1-2 p3 route=partitioned shard_lines=4 seats=5 shard_dir=1-2-qa-validation-168a90b0306e-p3 md=5 AGREE review=1-2-qa-validation-p3.md
+  2-4 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=2-4-qa-validation-p2.md
+  3-1 p2 route=serial shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=3-1-qa-validation-p2.md
+  3-2 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=3-2-qa-validation-p2.md
+  3-4 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=3-4-qa-validation-p2.md
+  4-1 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=4-1-qa-validation-p2.md
+  4-3 p2 route=partitioned shard_lines=4 seats=5 shard_dir=4-3-qa-validation-8268d839bbc6-p2 md=5 AGREE review=4-3-qa-validation-p2.md
+  4-3 p3 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=4-3-qa-validation-p3.md
+  5-2 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=5-2-qa-validation-p2.md
+  6-1 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=6-1-qa-validation-p2.md
+  6-1 p3 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=6-1-qa-validation-p3.md
+  s321: 12 re-validations from plans: partitioned 3, record-only 8, serial 1, unknown 0; seats 24
+  seats per re-validation: 2.00 (24 seats / 12 classified)
+  plan/shard-dir agreement: 12 AGREE, 0 DISAGREE
+  review files at pass >= 2: 12; joined to a plan by reviewed-sha: 12
+  review files with no plan of that sha: none
+  .captures at pass >= 2: 4 under a dotted name of a hyphenated plan; with no plan at all (no route recorded, not counted): 3-3-g2-p2.captures
+== s322 (after): route source = gate plan
+  3 p2 route=serial shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=3-qa-validation-p2.md
+  4 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=1-4-qa-validation-p2.md,4-qa-validation-p2.md
+  4 p3 route=serial shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=1-4-qa-validation-p3.md,4-qa-validation-p3.md
+  4 p4 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=1-4-qa-validation-p4.md
+  7 p2 route=record-only shard_lines=0 seats=1 shard_dir=none md=0 AGREE review=NONE
+  8 p2 route=partitioned shard_lines=4 seats=5 shard_dir=8-qa-validation-baf4af187e9f-p2 md=5 AGREE review=8-qa-validation-p2.md
+    unjoined 7-qa-validation-p2.md: Gate-2 pass-2 re-validation, serial seat (`shard: 1/1 7`), route: record-only.
+    unjoined 7-qa-validation-p2.md: reviewed-sha: 229023288a64eac670980c664505105e2e85f6bf
+  s322: 6 re-validations from plans: partitioned 1, record-only 3, serial 2, unknown 0; seats 10
+  seats per re-validation: 1.67 (10 seats / 6 classified)
+  plan/shard-dir agreement: 6 AGREE, 0 DISAGREE
+  review files at pass >= 2: 8; joined to a plan by reviewed-sha: 7
+  review files with no plan of that sha: 7-qa-validation-p2.md
+  .captures at pass >= 2: 0 under a dotted name of a hyphenated plan; with no plan at all (no route recorded, not counted): none
+== s321+s322 pooled (after): 34 seats / 18 re-validations = 1.89 seats per re-validation
+== s320 (before): route source = shard dir and review file (no gate plan exists)
+  1-3 p2 FANOUT seats=5 shard_dir=1-3-qa-validation-22262ee669d5-p2 merged_header=1
+  1-3 p3 FANOUT seats=5 shard_dir=1-3-qa-validation-6969d0ec8f8d-p3 merged_header=1
+  2-1 p2 FANOUT seats=5 shard_dir=2-1-qa-validation-6a665733f34d-p2 merged_header=1
+  3-3 p2 SERIAL seats=1 shard_dir=none merged_header=0
+  3-4 p2 SINGLE seats=1..5 shard_dir=none merged_header=0
+  3-5 p2 SINGLE seats=1..5 shard_dir=none merged_header=0
+  3-5 p3 SINGLE seats=1..5 shard_dir=none merged_header=0
+  4-1 p2 FANOUT seats=5 shard_dir=4-1-qa-validation-238b161e4a49-p2 merged_header=1
+  4-1 p3 FANOUT seats=5 shard_dir=4-1-qa-validation-bbc5212b3184-p3 merged_header=1
+  4-1 p4 FANOUT seats=5 shard_dir=4-1-qa-validation-9edc0821db94-p4 merged_header=1
+  4-2 p2 FANOUT seats=5 shard_dir=4-2-qa-validation-39921dda7498-p2 merged_header=1
+  4-2 p3 FANOUT seats=5 shard_dir=4-2-qa-validation-da78ffc89d2e-p3 merged_header=1
+  4-2 p4 FANOUT seats=5 shard_dir=4-2-qa-validation-769b11793913-p4 merged_header=1
+  4-2 p5 FANOUT seats=5 shard_dir=4-2-qa-validation-4e919c9170a9-p5 merged_header=1
+  4-2 p6 FANOUT seats=5 shard_dir=4-2-qa-validation-2a0a36563174-p6 merged_header=1
+  4-2 p7 FANOUT seats=5 shard_dir=4-2-qa-validation-f208f92506f7-p7 merged_header=1
+  s320: 16 re-validations: FANOUT 12, SERIAL 1, SINGLE (seat count undeclared) 3
+  merged-header/shard-dir agreement: 0 shard dirs without a merged review file, 0 merged review files without a shard dir (both must be 0)
+  seats per re-validation: 4.00 (SINGLE as 1 seat) .. 4.75 (SINGLE as 5 seats); 61 seats on the 13 classified
